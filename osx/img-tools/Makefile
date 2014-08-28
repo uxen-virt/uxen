@@ -25,6 +25,7 @@ PROGRAMS += img-bootcode$(EXE_SUFFIX)
 PROGRAMS += img-create$(EXE_SUFFIX)
 PROGRAMS += img-hfs$(EXE_SUFFIX)
 PROGRAMS += img-noop$(EXE_SUFFIX)
+PROGRAMS += img-copy$(EXE_SUFFIX)
 PROGRAMS += img-shallow$(EXE_SUFFIX)
 PROGRAMS += img-rm$(EXE_SUFFIX)
 PROGRAMS += img-test$(EXE_SUFFIX)
@@ -50,6 +51,7 @@ IMG_TEST_OBJS = img-test.o mt19937-64.o
 IMG_HFS_OBJS = hfs.o shallow.o btree.o catalog.o extents.o fastunicodecompare.o flatfile.o \
     hfslib.o rawfile.o utility.o volume.o abstractfile.o cache.o
 IMG_NOOP_OBJS = img-noop.o block-swap.o
+IMG_DUMP_RAW_OBJS = img-copy.o block-swap.o
 IMG_SHALLOW_OBJS = img-shallow.o shallow.o btree.o catalog.o extents.o fastunicodecompare.o flatfile.o \
     hfslib.o rawfile.o utility.o volume.o abstractfile.o cache.o
 IMG_RM_OBJS = img-rm.o
@@ -96,6 +98,10 @@ img-hfs$(EXE_SUFFIX): $(IMG_HFS_OBJS) $(IMG_LIBS)
 	$(_V)$(LINK.o) -o $@ $^ $(LDLIBS) $(PROGRAMS_LDLIBS)
 
 img-noop$(EXE_SUFFIX): $(IMG_NOOP_OBJS) $(IMG_LIBS)
+	$(_W)echo Linking - $@
+	$(_V)$(LINK.o) -o $@ $^ $(LDLIBS) $(PROGRAMS_LDLIBS)
+
+img-copy$(EXE_SUFFIX): $(IMG_DUMP_RAW_OBJS) $(IMG_LIBS)
 	$(_W)echo Linking - $@
 	$(_V)$(LINK.o) -o $@ $^ $(LDLIBS) $(PROGRAMS_LDLIBS)
 
