@@ -46,6 +46,12 @@ static inline void lruCacheClose(LruCache *fc)
     free(fc->lines);
 }
 
+static inline void lruCacheClear(LruCache *fc)
+{
+    memset(fc->bits, 0, lruCacheInnerNodes(fc));
+    memset(fc->lines, 0, (1 << fc->log_lines) * sizeof(LruCacheLine));
+}
+
 static inline
 int lruCacheEvictLine(LruCache *fc)
 {

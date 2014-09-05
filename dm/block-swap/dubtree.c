@@ -683,6 +683,12 @@ int dubtreeInit(DUBTREE *t, const char *fn, char **fallbacks)
     }
 }
 
+void
+dubtreeQuiesce(DUBTREE *t)
+{
+    copyBufferClearCache(t->cb);
+}
+
 /* Only needed by swap-fsck. */
 uint64_t
 dubtreeGetVersionByIndex(const DUBTREE* t, int idx)
@@ -739,6 +745,11 @@ DUBTREECONTEXT *dubtreePrepareFind(DUBTREE *t, uint64_t version)
             dubtreeGetSlot(t, DUBTREE_CORELIMIT), 1);
 out:
     return cx;
+}
+
+void dubtreeQuiesceFind(DUBTREE *t, DUBTREECONTEXT *cx)
+{
+    copyBufferClearCache(cx->cb);
 }
 
 void dubtreeEndFind(DUBTREE *t, DUBTREECONTEXT *cx)

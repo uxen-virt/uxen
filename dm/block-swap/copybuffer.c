@@ -122,17 +122,7 @@ int copyBufferInit(COPYBUFFER *cb,
 #ifdef _WIN32
     for (i = 0; i < COPYBUFFER_NUM_OVERLAPPING; ++i) {
         cb->files[i] = DUBTREE_INVALID_HANDLE;
-        cb->events[i] = CreateEvent(NULL, TRUE, TRUE, NULL);
-        if (cb->events[i] == NULL) {
-
-            printf("unable to create event handle!\n");
-            /* Roll back handle creates. */
-            while (--i >= 0) {
-                CloseHandle(cb->events[i]);
-            }
-            free(cb->heap);
-            return -1;
-        }
+        cb->events[i] = NULL;
     }
 #endif
 
@@ -357,6 +347,29 @@ COPYBUFFERCACHELINE *copyBufferGetCacheMapping(COPYBUFFER *cb, uint64_t bottom, 
     return copyBufferTouchLine(cb, line, dirty, 1);
 }
 
+void
+copyBufferClearCache(COPYBUFFER *cb)
+{
+    int i;
+    for (i = 0; i < (1<<COPYBUFFER_LOGLINES); ++i) {
+        COPYBUFFERCACHELINE *cl = &cb->lines[i];
+        cl->page = 0;
+        cl->locked = 0;
+        cl->dirty = 0;
+        if (cl->file != DUBTREE_INVALID_HANDLE) {
+            dubtreeCloseFile(cl->file);
+            hashtableDelete(&cb->cacheIndex, cl->page);
+        }
+        cl->file = DUBTREE_INVALID_HANDLE;
+    }
+    for (i = 0; i < COPYBUFFER_NUM_OVERLAPPING; ++i) {
+#ifdef _WIN32
+        CloseHandle(cb->events[i]);
+        cb->events[i] = NULL;
+#endif
+    }
+}
+
 
 static inline
 void copyBufferPutCacheMapping(COPYBUFFERCACHELINE *cl)
@@ -386,6 +399,11 @@ static inline void *copyBufferGetIoContext(COPYBUFFER *cb, DUBTREE_FILE_HANDLE f
                     (uint32_t) GetLastError());
             return NULL;
         }
+    }
+
+    if (cb->events[i] == NULL) {
+        cb->events[i] = CreateEvent(NULL, TRUE, TRUE, NULL);
+        assert(cb->events[i]);
     }
 
     ResetEvent(cb->events[i]);

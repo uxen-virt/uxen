@@ -156,6 +156,7 @@ typedef struct BDRVSwapState {
     SwapRadix *radix[2];
     critical_section mutex;
     critical_section find_mutex;
+    critical_section shallow_mutex;
     volatile int active_radix;
     volatile int quit;
     volatile size_t buffered;
@@ -1079,6 +1080,7 @@ static int swap_open(BlockDriverState *bs, const char *filename, int flags)
 
     critical_section_init(&s->mutex); /* big lock. */
     critical_section_init(&s->find_mutex); /* protects s->find_context. */
+    critical_section_init(&s->shallow_mutex); /* protects shallow cache. */
 
     thread_event *events[] = {
         &s->write_event,
@@ -1401,6 +1403,7 @@ swap_early_init(void)
 static int swap_fill_read_holes(BDRVSwapState *s, uint64_t offset, uint64_t count, 
         uint8_t *buffer, uint64_t *map)
 {
+    critical_section_enter(&s->shallow_mutex);
     uint64_t start = offset / SWAP_SECTOR_SIZE;
     uint64_t end = (offset + count + SWAP_SECTOR_SIZE - 1) / SWAP_SECTOR_SIZE;
     uint64_t length = end - start;
@@ -1713,6 +1716,7 @@ next:
             j = i;
         }
     }
+    critical_section_leave(&s->shallow_mutex);
     return 0;
 }
 
@@ -2278,6 +2282,25 @@ static int swap_flush(BlockDriverState *bs)
     swap_unlock(s);
 #endif
 
+    /* Quiesce dubtree and release caches. */
+    swap_lock(s);
+    critical_section_enter(&s->shallow_mutex);
+    /* Close cached file mappings. */
+    for (i = 0; i < (1 << s->fc.log_lines); ++i) {
+        SwapMappedFile *mf = (SwapMappedFile*) s->fc.lines[i].value;
+        if (mf) {
+            swap_unmap_file(mf);
+            free(mf);
+        }
+    }
+    lruCacheClear(&s->fc);
+    hashtableClear(&s->open_files);
+    /* Close cached dubtree file handles. */
+    dubtreeQuiesce(&s->t);
+    dubtreeQuiesceFind(&s->t, s->find_context);
+    critical_section_leave(&s->shallow_mutex);
+    swap_unlock(s);
+
     debug_printf("%s done\n", __FUNCTION__);
     return 0;
 }
@@ -2316,6 +2339,7 @@ static void swap_close(BlockDriverState *bs)
 
     critical_section_free(&s->mutex);
     critical_section_free(&s->find_mutex);
+    critical_section_free(&s->shallow_mutex);
 
     /* Close cached file mappings. */
     for (i = 0; i < (1 << s->fc.log_lines); ++i) {

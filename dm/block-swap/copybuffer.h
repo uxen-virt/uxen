@@ -66,5 +66,6 @@ void copyBufferInsert(COPYBUFFER *cb, uint64_t from, uint64_t to, size_t size);
 int copyBufferFlush(COPYBUFFER *cb);
 void copyBufferForget(COPYBUFFER *cb, uint64_t start, uint64_t end);
 void copyBufferNuke(COPYBUFFER *cb, uint64_t end);
+void copyBufferClearCache(COPYBUFFER *cb);
 
 #endif /* __COPYBUFFER_H__ */

@@ -84,6 +84,8 @@ void dubtreeEndFind(DUBTREE *t, DUBTREECONTEXT *cx);
 
 int dubtreeInit(DUBTREE *t, const char *fn, char **fallbacks);
 void dubtreeClose(DUBTREE *t);
+void dubtreeQuiesce(DUBTREE *t);
+void dubtreeQuiesceFind(DUBTREE *t, DUBTREECONTEXT *cx);
 int dubtreeSanityCheck(DUBTREE *t);
 
 int dubtreeSeal(DUBTREE *t, int destLevel);
