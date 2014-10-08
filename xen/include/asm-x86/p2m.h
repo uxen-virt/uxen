@@ -582,6 +582,10 @@ p2m_pod_offline_or_broken_replace(struct page_info *p);
 int
 p2m_clone(struct p2m_domain *p2m, struct domain *nd);
 
+/* Remove page references on pages from other domains */
+int
+p2m_shared_teardown(struct p2m_domain *p2m);
+
 
 /*
  * Paging to disk and page-sharing

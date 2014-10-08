@@ -1120,6 +1120,8 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     p2m_access_t a;
     void *source, *target;
     int smfn_from_clone = 1;
+    mfn_t put_page_parent = _mfn(0);
+    mfn_t put_page_clone = _mfn(0);
     int ret;
 
     /* This is called from the p2m lookups, which can happen with or 
@@ -1236,8 +1238,10 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
 
     if (mfn_x(smfn) == 0) {
         struct p2m_domain *op2m = p2m_get_hostp2m(d->clone_of);
+        p2m_lock(op2m);
         smfn = op2m->get_entry(op2m, gfn_aligned, &t, &a, p2m_query, NULL);
         if (mfn_x(smfn) == INVALID_MFN) {
+            p2m_unlock(op2m);
             /* clear this ept entry since it's not present in the
              * template p2m -- this happens if the l1 is accessed/used
              * between when it's allocated and filled with pod entries
@@ -1250,9 +1254,20 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             p2m_unlock(p2m);
             return 1;
         }
+        if (mfn_valid_page(mfn_x(smfn)) &&
+            mfn_x(smfn) != mfn_x(shared_zero_page)) {
+            get_page_fast(mfn_to_page(smfn), d->clone_of);
+            put_page_parent = smfn;
+        }
+        p2m_unlock(op2m);
         if ((q == p2m_guest_r || q == p2m_alloc_r) &&
             mfn_valid_page(mfn_x(smfn))) {
             /* read-acces -- add pod entry, i.e. make the gpfn shared */
+            ASSERT((!mfn_x(put_page_parent) &&
+                    mfn_x(smfn) == mfn_x(shared_zero_page)) ||
+                   (mfn_x(put_page_parent) == mfn_x(smfn)));
+            /* install smfn in clone p2m, with template smfn page ref
+             * taken above */
             set_p2m_entry(p2m, gfn_aligned, smfn, 0,
                           p2m_populate_on_demand, p2m->default_access);
             if (mfn_x(smfn) == mfn_x(shared_zero_page))
@@ -1281,6 +1296,8 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         if (smfn_from_clone)
             atomic_dec(&d->tmpl_shared_pages);
 	check_immutable(q, d, gfn_aligned);
+        if (smfn_from_clone)
+            put_page_clone = smfn;
     } else {
         clear_page(target);
 	perfc_incr(pc14);
@@ -1292,6 +1309,12 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     set_p2m_entry(p2m, gfn_aligned, mfn, PAGE_ORDER_4K, p2m_ram_rw,
                   p2m->default_access);
     atomic_dec(&d->pod_pages);
+
+    if (mfn_x(put_page_clone))
+        put_page(mfn_to_page(put_page_clone));
+
+    if (mfn_x(put_page_parent))
+        put_page(mfn_to_page(put_page_parent));
 
     set_gpfn_from_mfn(mfn_x(mfn), gfn_aligned);
     paging_mark_dirty(d, mfn_x(mfn));
@@ -1363,6 +1386,7 @@ static int
 clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
                unsigned long *_gpfn, void *otable, void *table)
 {
+    struct domain *od = op2m->domain;
     struct domain *d = p2m->domain;
     unsigned long gpfn = *_gpfn;
     unsigned long index = gpfn & ((1UL << PAGETABLE_ORDER) - 1);
@@ -1383,7 +1407,12 @@ clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
                 atomic_inc(&d->pod_pages);
         }
         if (p2m_is_pod(t)) {
-            ret = !set_p2m_entry(p2m, gpfn, shared_zero_page, 0,
+            if (mfn_valid_page(mfn_x(mfn)) &&
+                mfn_x(mfn) != mfn_x(shared_zero_page) &&
+                unlikely(!get_page_fast(mfn_to_page(mfn), od)))
+                gdprintk(XENLOG_ERR, "%s: get_page failed mfn=%08lx\n",
+                         __FUNCTION__, mfn_x(mfn));
+            ret = !set_p2m_entry(p2m, gpfn, mfn, 0,
                                  p2m_populate_on_demand, p2m->default_access);
             if (ret) {
                 gdprintk(XENLOG_ERR, "%s: set_p2m_entry failed gpfn=%08lx\n",
@@ -1394,6 +1423,10 @@ clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
                 atomic_inc(&d->pod_pages);
             atomic_inc(&d->zero_shared_pages);
         } else if (p2m_is_ram(t)) {
+            if (mfn_valid_page(mfn_x(mfn)) &&
+                unlikely(!get_page_fast(mfn_to_page(mfn), od)))
+                gdprintk(XENLOG_ERR, "%s: get_page failed mfn=%08lx\n",
+                         __FUNCTION__, mfn_x(mfn));
             ret = !set_p2m_entry(p2m, gpfn, mfn, 0,
                                  p2m_populate_on_demand, p2m->default_access);
             if (ret) {
@@ -1522,6 +1555,37 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
         printk("domain %d: l1_pod_pages=%d\n",
                nd->domain_id, atomic_read(&nd->clone.l1_pod_pages));
     return ret;
+}
+
+int
+p2m_shared_teardown(struct p2m_domain *p2m)
+{
+    struct domain *d = p2m->domain, *owner;
+    unsigned long gpfn;
+    mfn_t mfn;
+    p2m_type_t t;
+    p2m_access_t a;
+    unsigned int page_order;
+    int count = 0;
+
+    for (gpfn = 0; gpfn <= p2m->max_mapped_pfn; gpfn++) {
+        mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, &page_order);
+        if (!mfn_valid_page(mfn_x(mfn))) {
+            gpfn |= ((1 << page_order) - 1);
+            continue;
+        }
+        if (!p2m_is_pod(t))
+            continue;
+        owner = page_get_owner(mfn_to_page(mfn));
+        if (!owner || owner == d)
+            continue;
+        put_page(mfn_to_page(mfn));
+        count++;
+    }
+
+    printk("%s: domain %d dropped %d template page references\n",
+           __FUNCTION__, d->domain_id, count);
+    return 1;
 }
 
 int

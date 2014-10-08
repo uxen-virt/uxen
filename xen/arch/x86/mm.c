@@ -2266,7 +2266,8 @@ void put_host_page(struct page_info *page, struct domain *d,
 }
 
 
-struct domain *page_get_owner_and_reference(struct page_info *page)
+static int always_inline
+_get_page(struct page_info *page)
 {
     unsigned long x, y = page->count_info;
 
@@ -2278,11 +2279,32 @@ struct domain *page_get_owner_and_reference(struct page_info *page)
          * Count == -2: Remaining unused ref is reserved for get_page_light().
          */
         if ( unlikely(((x + 2) & PGC_count_mask) <= 2) )
-            return NULL;
+            return 0;
     }
     while ( (y = cmpxchg(&page->count_info, x, x + 1)) != x );
 
+    return 1;
+}
+
+struct domain *page_get_owner_and_reference(struct page_info *page)
+{
+
+    if (!_get_page(page))
+        return NULL;
     return page_get_owner(page);
+}
+
+/* fast get page -- use when the caller knows the page owner and is
+ * already holding a reference to the page */
+int
+_get_page_fast(struct page_info *page
+#ifndef NDEBUG
+               , struct domain *domain
+#endif
+    )
+{
+
+    return _get_page(page);
 }
 
 

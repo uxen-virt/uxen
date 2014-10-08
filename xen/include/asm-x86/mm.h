@@ -410,6 +410,16 @@ struct page_list_head;
 void put_host_page(struct page_info *page, struct domain *d,
                    struct page_list_head *page_list);
 int  get_page(struct page_info *page, struct domain *domain);
+int _get_page_fast(struct page_info *page
+#ifndef NDEBUG
+                   , struct domain *domain
+#endif
+    );
+#ifndef NDEBUG
+#define get_page_fast(p, d) _get_page_fast(p, d)
+#else
+#define get_page_fast(p, d) ((void)d, _get_page_fast(p))
+#endif
 void put_page_type(struct page_info *page);
 int  get_page_type(struct page_info *page, unsigned long type);
 int  put_page_type_preemptible(struct page_info *page);

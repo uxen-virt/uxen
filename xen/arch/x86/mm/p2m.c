@@ -435,6 +435,9 @@ void p2m_teardown(struct p2m_domain *p2m)
 #endif
 #endif  /* __UXEN__ */
 
+    if (!p2m_shared_teardown(p2m))
+        gdprintk(XENLOG_ERR, "%s: p2m_shared_teardown failed\n", __FUNCTION__);
+
     if (p2m->ept.se_l1_table) {
         unmap_domain_page(p2m->ept.se_l1_table);
         p2m->ept.se_l1_table = NULL;
