@@ -280,6 +280,10 @@ struct domain
 
     union {
         struct {
+            atomic_t compressed_pages; /* number of compressed pages */
+            atomic_t compressed_pdata; /* number of pages w/ compressed data */
+        } template;
+        struct {
             atomic_t l1_pod_pages;    /* number of l1 pages pop on demand */
         } clone;
     };

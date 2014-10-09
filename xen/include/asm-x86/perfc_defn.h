@@ -198,6 +198,13 @@ PERFCOUNTER(dpc_ipis,                   "#IPIs through DPC")
 PERFCOUNTER(x86_emulate,                "instructions emulated")
 PERFCOUNTER(x86_emulate_restricted,     "instructions emulated restricted")
 
+PERFCOUNTER(compressed_pages, "compressed pages")
+PERFCOUNTER(compressed_pages_split, "split compressed pages")
+PERFCOUNTER(decompressed_pages, "decompressed pages")
+PERFCOUNTER(decompressed_pages_split, "split decompressed pages")
+PERFCOUNTER(populated_zero_pages, "populated zero pages")
+PERFCOUNTER(populated_clone_pages, "populated clone pages")
+
 PERFCOUNTER(pc0,                        "pc0")
 PERFCOUNTER(pc1,                        "pc1")
 PERFCOUNTER(pc2,                        "pc2")

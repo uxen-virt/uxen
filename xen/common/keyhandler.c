@@ -320,6 +320,11 @@ static void dump_domains(unsigned char key)
             if (!is_template_domain(d) && atomic_read(&d->clone.l1_pod_pages))
                 printk("    l1_pod_pages=%d\n",
                        atomic_read(&d->clone.l1_pod_pages));
+            if (is_template_domain(d) &&
+                atomic_read(&d->template.compressed_pdata))
+                printk("    comp_pages=%d comp_pdata=%d\n",
+                       atomic_read(&d->template.compressed_pages),
+                       atomic_read(&d->template.compressed_pdata));
         }
         printk("    handle=%" PRIuuid " vm_assist=%08lx\n",
                PRIuuid_arg(handle), d->vm_assist);

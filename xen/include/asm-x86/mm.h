@@ -611,8 +611,25 @@ extern bool_t machine_to_phys_mapping_valid;
 
 #define INVALID_MFN             (~0UL)
 
-#define P2M_MFN_MFN_MASK        ((1ULL << 28) - 1)
-#define P2M_MFN_SPECIAL_MASK    (((1ULL << 32) - 1) & ~((1ULL << 28) - 1))
+#ifdef __x86_64__
+#define P2M_MFN_MFN_BITS        28
+#define P2M_MFN_SPECIAL_BITS    4
+#define P2M_MFN_PAGE_STORE_OFFSET_BITS 8
+#define P2M_MFN_PAGE_STORE_OFFSET_INDEX 32
+#else  /* __x86_64__ */
+#define P2M_MFN_MFN_BITS        22
+#define P2M_MFN_SPECIAL_BITS    4
+#define P2M_MFN_PAGE_STORE_OFFSET_BITS 6
+#define P2M_MFN_PAGE_STORE_OFFSET_INDEX 26
+#endif /* __x86_64__ */
+#define PAGE_STORE_DATA_ALIGN   (PAGE_SHIFT - P2M_MFN_PAGE_STORE_OFFSET_BITS)
+
+#define P2M_MFN_MFN_MASK        ((1UL << P2M_MFN_MFN_BITS) - 1)
+#define P2M_MFN_SPECIAL_MASK                                    \
+    (((1UL << P2M_MFN_SPECIAL_BITS) - 1) << P2M_MFN_MFN_BITS)
+#define P2M_MFN_PAGE_DATA       (1UL << P2M_MFN_MFN_BITS)
+#define p2m_mfn_is_page_data(mfn)                               \
+    (((mfn) & P2M_MFN_SPECIAL_MASK) == P2M_MFN_PAGE_DATA)
 
 #define compat_pfn_to_cr3(pfn) (((unsigned)(pfn) << 12) | ((unsigned)(pfn) >> 20))
 #define compat_cr3_to_pfn(cr3) (((unsigned)(cr3) >> 12) | ((unsigned)(cr3) << 20))

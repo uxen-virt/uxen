@@ -288,6 +288,7 @@ XEN_SRCS += arch/x86/$(XEN_TARGET_ARCH)/pci.c
 XEN_SRCS += arch/x86/$(XEN_TARGET_ARCH)/traps.c
 
 COMMON_SRCS += lz4/lz4.c
+arch/x86/mm/p2m-pod.o: XEN_CPPFLAGS += -I$(TOPDIR)/common/lz4
 
 XEN_OBJS = $(patsubst %.S,%.o,$(patsubst %.c,%.o,$(XEN_SRCS)))
 #XEN_OBJS += arch/x86/mm/shadow/guest_2.o

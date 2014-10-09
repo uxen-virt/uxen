@@ -53,6 +53,7 @@
 #include <asm/hvm/nestedhvm.h>
 #include <asm/hvm/svm/amd-iommu-proto.h>
 #endif  /* __UXEN__ */
+#include <lz4.h>
 #include <uxen/memcache-dm.h>
 
 #include "mm-locks.h"
@@ -1108,6 +1109,237 @@ static void check_immutable(p2m_query_t q, struct domain *d, unsigned long gfn)
     }
 }
 
+struct page_data_info {
+    uint16_t size;
+    uint8_t data[];
+};
+
+static DEFINE_PER_CPU(uint8_t *, decompress_buffer);
+
+static always_inline int
+check_decompress_buffer(void)
+{
+
+    if (unlikely(!this_cpu(decompress_buffer))) {
+        this_cpu(decompress_buffer) = alloc_xenheap_page();
+        if (unlikely(!this_cpu(decompress_buffer)))
+            return 0;
+    }
+    return 1;
+}
+
+static void
+p2m_pod_add_compressed_page(struct p2m_domain *p2m, unsigned long gpfn,
+                            uint8_t *c_data, uint16_t c_size,
+                            struct page_info *new_page)
+{
+    struct domain *d = p2m->domain;
+    mfn_t new_mfn = page_to_mfn(new_page);
+    mfn_t mfn;
+    struct page_data_info *pdi;
+    uint8_t *data;
+    uint16_t size;
+
+    ASSERT(c_size <= PAGE_SIZE - sizeof(struct page_data_info));
+
+    /* is there a current data_mfn page to add the data to?  or is the
+     * current data_mfn page full? */
+    if (!mfn_x(p2m->page_store.data_mfn) || p2m->page_store.data_offset >
+        PAGE_SIZE - sizeof(struct page_data_info)) {
+        p2m->page_store.data_mfn = new_mfn;
+        p2m->page_store.data_offset = 0;
+        new_page = NULL;
+    }
+
+    /* data_offset is 12 bits but needs to fit in 8 bits (bits 40-32
+     * in ept mfn) -- ensure offset is aligned with low 4 bits cleared
+     * -- on 32b data_offset needs to fit in 6 bits (bits 26-32),
+     * i.e. low 6 bits cleared */
+    ASSERT(!(p2m->page_store.data_offset & ((1 << PAGE_STORE_DATA_ALIGN) - 1)));
+
+    /* compute mfn to install in p2m */
+    mfn = _mfn((mfn_x(p2m->page_store.data_mfn) & P2M_MFN_MFN_MASK) |
+               P2M_MFN_PAGE_DATA |
+               ((uint64_t)p2m->page_store.data_offset <<
+                (P2M_MFN_PAGE_STORE_OFFSET_INDEX - PAGE_STORE_DATA_ALIGN)));
+
+    /* store header and as much as fits in current data_mfn page */
+    data = map_domain_page_direct(mfn_x(p2m->page_store.data_mfn));
+    pdi = (struct page_data_info *)&data[p2m->page_store.data_offset];
+    pdi->size = c_size;
+    p2m->page_store.data_offset += sizeof(struct page_data_info);
+    size = pdi->size;
+    if (p2m->page_store.data_offset + size > PAGE_SIZE)
+        size = PAGE_SIZE - p2m->page_store.data_offset;
+    memcpy(pdi->data, c_data, size);
+    p2m->page_store.data_offset += size;
+
+    /* store what didn't fit in new_page page */
+    if (size != pdi->size) {
+        uint8_t *data2;
+
+        perfc_incr(compressed_pages_split);
+
+        /* if the data doesn't fit then we were filling a partial page
+         * and mfn/target was not used above */
+        ASSERT(new_page);
+
+        /* use page_list to allow access to new_page from data_mfn */
+        spin_lock(&d->page_alloc_lock);
+        page_list_del(new_page, &d->page_list);
+        page_list_add_after(new_page, mfn_to_page(p2m->page_store.data_mfn),
+                            &d->page_list);
+        spin_unlock(&d->page_alloc_lock);
+
+        data2 = map_domain_page_direct(mfn_x(new_mfn));
+        memcpy(data2, c_data + size, pdi->size - size);
+        unmap_domain_page_direct(data2);
+
+        p2m->page_store.data_mfn = new_mfn;
+        p2m->page_store.data_offset = pdi->size - size;
+
+        new_page = NULL;
+    }
+    unmap_domain_page_direct(data);
+
+    p2m->page_store.data_offset =
+        (p2m->page_store.data_offset + ((1 << PAGE_STORE_DATA_ALIGN) - 1)) &
+        ~((1 << PAGE_STORE_DATA_ALIGN) - 1);
+
+    set_p2m_entry(p2m, gpfn, mfn, 0, p2m_populate_on_demand,
+                  p2m->default_access);
+    atomic_inc(&d->pod_pages);
+
+    p2m_unlock(p2m);
+
+    /* page was not used? */
+    if (new_page)
+        free_domheap_page(new_page);
+    else
+        atomic_inc(&d->template.compressed_pdata);
+    atomic_inc(&d->template.compressed_pages);
+}
+
+static int
+p2m_pod_compress_page(struct p2m_domain *p2m, unsigned long gfn_aligned,
+                      mfn_t mfn, void *target)
+{
+    struct domain *d = p2m->domain;
+    struct page_info *new_page = NULL;
+    mfn_t checkmfn;
+    uint16_t c_size;
+    p2m_type_t t;
+    p2m_access_t a;
+
+    /* in case of failures, leave page uncompressed */
+
+    if (unlikely(!check_decompress_buffer()))
+        return 1;
+
+    c_size = LZ4_compress_limitedOutput(
+        target, (char *)this_cpu(decompress_buffer),
+        PAGE_SIZE, PAGE_SIZE - sizeof(struct page_data_info));
+    if (c_size == 0)            /* compressed output too big */
+        return 1;
+
+    new_page = alloc_domheap_page(d, PAGE_ORDER_4K);
+    if (!new_page)
+        return 1;
+
+    p2m_lock(p2m);
+
+    /* Check page is not compressed/replaced yet */
+    checkmfn = p2m->get_entry(p2m, gfn_aligned, &t, &a, p2m_query, NULL);
+    if (mfn_x(mfn) != mfn_x(checkmfn) || (mfn_x(checkmfn) & P2M_MFN_MFN_MASK)) {
+        p2m_unlock(p2m);
+        free_domheap_page(new_page);
+        return 1;
+    }
+
+    /* call with p2m locked, returns unlocked -- new_page is freed, if
+     * unused */
+    p2m_pod_add_compressed_page(p2m, gfn_aligned, this_cpu(decompress_buffer),
+                                c_size, new_page);
+
+    /* drop reference for page replaced in template p2m */
+    if (test_and_clear_bit(_PGC_allocated, &mfn_to_page(mfn)->count_info))
+        put_page(mfn_to_page(mfn));
+
+    perfc_incr(compressed_pages);
+    return 1;
+}
+
+static int
+p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
+                        struct domain *page_owner)
+{
+    struct domain *d = p2m->domain;
+    struct page_info *p = NULL, *pdi_cont;
+    uint8_t *data, *data_cont;
+    struct page_data_info *pdi;
+    uint16_t offset, size, uc_size;
+    void *source;
+    void *target = NULL;
+    int ret = 1;
+
+    data = map_domain_page_direct(mfn_x(mfn) & P2M_MFN_MFN_MASK);
+    offset = (mfn_x(mfn) >>
+              (P2M_MFN_PAGE_STORE_OFFSET_INDEX - PAGE_STORE_DATA_ALIGN)) &
+        ~((1 << PAGE_STORE_DATA_ALIGN) - 1);
+    pdi = (struct page_data_info *)&data[offset];
+
+    p = alloc_domheap_page(NULL, 0);
+    if (!p) {
+        ret = 0;
+        goto out;
+    }
+    *tmfn = page_to_mfn(p);
+    target = map_domain_page_direct(mfn_x(*tmfn));
+
+    size = pdi->size;
+    offset += sizeof(struct page_data_info);
+    if (offset + size > PAGE_SIZE) {
+        perfc_incr(decompressed_pages_split);
+        if (unlikely(!check_decompress_buffer())) {
+            ret = 0;
+            goto out;
+        }
+        memcpy(this_cpu(decompress_buffer), &data[offset], PAGE_SIZE - offset);
+        spin_lock(&d->page_alloc_lock);
+        pdi_cont = page_list_next(__mfn_to_page(mfn_x(mfn) & P2M_MFN_MFN_MASK),
+                                  &d->page_list);
+        spin_unlock(&d->page_alloc_lock);
+        ASSERT(pdi_cont);
+        data_cont = map_domain_page_direct(__page_to_mfn(pdi_cont));
+        memcpy(this_cpu(decompress_buffer) + PAGE_SIZE - offset,
+               data_cont, size - (PAGE_SIZE - offset));
+        unmap_domain_page(data_cont);
+        source = this_cpu(decompress_buffer);
+    } else
+        source = pdi->data;
+
+    uc_size = LZ4_uncompress((const char *)source, target, PAGE_SIZE);
+    if (uc_size != size) {
+        ret = 0;
+        goto out;
+    }
+
+    if (assign_pages(page_owner, p, 0, 0)) {
+        ret = 0;
+        goto out;
+    }
+    perfc_incr(decompressed_pages);
+
+    p = NULL;                   /* sucess -- don't free the page */
+  out:
+    if (target)
+        unmap_domain_page_direct(target);
+    unmap_domain_page(data);
+    if (p)
+        free_domheap_page(p);
+    return ret;
+}
+
 int
 p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                         unsigned int order, p2m_query_t q, void *entry)
@@ -1280,31 +1512,56 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         smfn_from_clone = 0;
     }
 
-#ifdef __UXEN__
-    p = alloc_domheap_page(d, PAGE_ORDER_4K);
-    if (!p)
-        goto out_of_memory;
-    mfn = page_to_mfn(p);
-#endif  /* __UXEN__ */
-
-    target = map_domain_page_direct(mfn_x(mfn));
-    if (mfn_x(smfn) != mfn_x(shared_zero_page)) {
+    if (mfn_x(smfn) == mfn_x(shared_zero_page)) {
+        p = alloc_domheap_page(d, PAGE_ORDER_4K);
+        if (!p)
+            goto out_of_memory;
+        mfn = page_to_mfn(p);
+        target = map_domain_page_direct(mfn_x(mfn));
+        clear_page(target);
+        perfc_incr(populated_zero_pages);
+        if (smfn_from_clone)
+            atomic_dec(&d->zero_shared_pages);
+        unmap_domain_page_direct(target);
+    } else if (p2m_mfn_is_page_data(mfn_x(smfn))) {
+        ASSERT(d->clone_of);
+        if (smfn_from_clone)
+            atomic_dec(&d->tmpl_shared_pages);
+        if (!p2m_pod_decompress_page(p2m_get_hostp2m(d->clone_of), smfn,
+                                     &mfn, d)) {
+            domain_crash(d);
+            goto out_fail;
+        }
+        check_immutable(q, d, gfn_aligned);
+    } else {
+        p = alloc_domheap_page(d, PAGE_ORDER_4K);
+        if (!p)
+            goto out_of_memory;
+        mfn = page_to_mfn(p);
+        target = map_domain_page_direct(mfn_x(mfn));
         source = map_domain_page(mfn_x(smfn));
         memcpy(target, source, PAGE_SIZE);
         unmap_domain_page(source);
-	perfc_incr(pc15);
+        perfc_incr(populated_clone_pages);
         if (smfn_from_clone)
             atomic_dec(&d->tmpl_shared_pages);
 	check_immutable(q, d, gfn_aligned);
         if (smfn_from_clone)
             put_page_clone = smfn;
-    } else {
-        clear_page(target);
-	perfc_incr(pc14);
-        if (smfn_from_clone)
-            atomic_dec(&d->zero_shared_pages);
+
+        /* compress template pages, if the page is write accessed
+         * within the time after start specified via
+         * HVM_PARAM_CLONE_PAGE_WRITE_COMPRESS_TIME */
+        if (!p2m_is_immutable(t) &&
+            NOW() - d->start_time < d->arch.hvm_domain.params[
+                HVM_PARAM_CLONE_PAGE_WRITE_COMPRESS_TIME] &&
+            !p2m_pod_compress_page(p2m_get_hostp2m(d->clone_of), gfn_aligned,
+                                   smfn, target)) {
+            domain_crash(d);
+            goto out_fail;
+        }
+        unmap_domain_page_direct(target);
     }
-    unmap_domain_page_direct(target);
 
     set_p2m_entry(p2m, gfn_aligned, mfn, PAGE_ORDER_4K, p2m_ram_rw,
                   p2m->default_access);
@@ -1415,13 +1672,17 @@ clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
             ret = !set_p2m_entry(p2m, gpfn, mfn, 0,
                                  p2m_populate_on_demand, p2m->default_access);
             if (ret) {
-                gdprintk(XENLOG_ERR, "%s: set_p2m_entry failed gpfn=%08lx\n",
+                gdprintk(XENLOG_ERR, "%s: set_p2m_entry "
+                         "copy_on_write failed gpfn=%08lx\n",
                          __FUNCTION__, gpfn);
                 goto out;
             }
             if (!table)
                 atomic_inc(&d->pod_pages);
-            atomic_inc(&d->zero_shared_pages);
+            if (mfn_x(mfn) == mfn_x(shared_zero_page))
+                atomic_inc(&d->zero_shared_pages);
+            else
+                atomic_inc(&d->tmpl_shared_pages);
         } else if (p2m_is_ram(t)) {
             if (mfn_valid_page(mfn_x(mfn)) &&
                 unlikely(!get_page_fast(mfn_to_page(mfn), od)))

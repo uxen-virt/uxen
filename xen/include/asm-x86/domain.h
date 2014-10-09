@@ -249,7 +249,8 @@ struct pv_domain
     (208 + 3 * sizeof(void *) +                                         \
      sizeof(unsigned long) + sizeof(void *) +                           \
      NR_GE_L1_CACHE * (sizeof(unsigned long) + sizeof(void *)) +        \
-     sizeof(mm_lock_t))
+     sizeof(mm_lock_t) + sizeof(mfn_t) + sizeof(uint16_t) +             \
+     /* align */ 3 * sizeof(uint16_t))
 #define SH_DIRTY_VRAM_SIZE 48
 struct domain_extra_1
 {

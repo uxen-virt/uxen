@@ -180,6 +180,10 @@
 /* lazy populate cloned l1 pages */
 #define HVM_PARAM_CLONE_L1_lazy_populate 0x2
 
-#define HVM_NR_PARAMS          33
+/* time in ns at start of a clone, during which to compress a template
+ * page when the clone write accesses the page */
+#define HVM_PARAM_CLONE_PAGE_WRITE_COMPRESS_TIME 33
+
+#define HVM_NR_PARAMS          34
 
 #endif /* __XEN_PUBLIC_HVM_PARAMS_H__ */

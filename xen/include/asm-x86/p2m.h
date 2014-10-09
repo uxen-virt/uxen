@@ -399,6 +399,11 @@ struct p2m_domain {
             mm_lock_t ge_l1_lock;
         } ept;
     };
+
+    struct {
+        mfn_t data_mfn;
+        uint16_t data_offset;
+    } page_store;
 };
 
 /* get host p2m table */
