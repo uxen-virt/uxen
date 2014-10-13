@@ -967,9 +967,17 @@ uxen_op_keyhandler(char *keys, unsigned int num)
 
     for (i = 0; i < num && keys[i]; i++) {
         unsigned char key = keys[i];
-        uxen_call(ret = , -EINVAL, HYPERCALL_RESERVE,
-                  uxen_do_handle_keypress, key);
-        ret = uxen_translate_xen_errno(ret);
+        switch (key) {
+        case 'r':
+            uxen_flush_rcu();
+            ret = 0;
+            break;
+        default:
+            uxen_call(ret = , -EINVAL, HYPERCALL_RESERVE,
+                      uxen_do_handle_keypress, key);
+            ret = uxen_translate_xen_errno(ret);
+            break;
+        }
         if (ret)
             break;
     }
