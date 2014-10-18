@@ -184,6 +184,11 @@
  * page when the clone write accesses the page */
 #define HVM_PARAM_CLONE_PAGE_WRITE_COMPRESS_TIME 33
 
-#define HVM_NR_PARAMS          34
+/* control decompressed pages from read accesses */
+#define HVM_PARAM_CLONE_DECOMPRESSED 34
+/* keep pages mapped read-only */
+#define HVM_PARAM_CLONE_DECOMPRESSED_read_only 0x1
+
+#define HVM_NR_PARAMS          35
 
 #endif /* __XEN_PUBLIC_HVM_PARAMS_H__ */

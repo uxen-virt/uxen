@@ -1348,7 +1348,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     struct page_info *p = NULL; /* Compiler warnings */
     unsigned long gfn_aligned;
     mfn_t mfn, smfn;
-    p2m_type_t t;
+    p2m_type_t t, pod_p2mt = p2m_ram_rw;
     p2m_access_t a;
     void *source, *target;
     int smfn_from_clone = 1;
@@ -1525,6 +1525,10 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         unmap_domain_page_direct(target);
     } else if (p2m_mfn_is_page_data(mfn_x(smfn))) {
         ASSERT(d->clone_of);
+        /* on read access -- map page pod */
+        if (d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] &&
+            (q == p2m_guest_r || q == p2m_alloc_r))
+            pod_p2mt = p2m_populate_on_demand;
         if (smfn_from_clone)
             atomic_dec(&d->tmpl_shared_pages);
         if (!p2m_pod_decompress_page(p2m_get_hostp2m(d->clone_of), smfn,
@@ -1533,6 +1537,12 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             goto out_fail;
         }
         check_immutable(q, d, gfn_aligned);
+    } else if (/* d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] && */
+               page_get_owner(mfn_to_page(smfn)) == d) {
+        /* read-only mapped page already belonging to the VM - write
+           access to previously decompressed page which was mapped
+           read-only */
+        mfn = smfn;
     } else {
         p = alloc_domheap_page(d, PAGE_ORDER_4K);
         if (!p)
@@ -1563,9 +1573,10 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         unmap_domain_page_direct(target);
     }
 
-    set_p2m_entry(p2m, gfn_aligned, mfn, PAGE_ORDER_4K, p2m_ram_rw,
+    set_p2m_entry(p2m, gfn_aligned, mfn, PAGE_ORDER_4K, pod_p2mt,
                   p2m->default_access);
-    atomic_dec(&d->pod_pages);
+    if (!p2m_is_pod(pod_p2mt))
+        atomic_dec(&d->pod_pages);
 
     if (mfn_x(put_page_clone))
         put_page(mfn_to_page(put_page_clone));
