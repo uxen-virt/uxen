@@ -1256,6 +1256,10 @@ p2m_pod_compress_page(struct p2m_domain *p2m, unsigned long gfn_aligned,
         return 1;
     }
 
+    if ((d->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] &
+         HVM_PARAM_CLONE_L1_dynamic) && p2m_is_pod(t))
+        atomic_dec(&d->tmpl_shared_pages);
+
     /* call with p2m locked, returns unlocked -- new_page is freed, if
      * unused */
     p2m_pod_add_compressed_page(p2m, gfn_aligned, this_cpu(decompress_buffer),
@@ -1486,6 +1490,15 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             p2m_unlock(p2m);
             return 1;
         }
+        if ((d->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] &
+             HVM_PARAM_CLONE_L1_dynamic) && !p2m_is_pod(t)) {
+            ASSERT(mfn_valid_page(mfn_x(smfn)));
+            ASSERT(mfn_x(smfn) != mfn_x(shared_zero_page));
+            set_p2m_entry(op2m, gfn_aligned, smfn, 0,
+                          p2m_populate_on_demand,
+                          op2m->default_access);
+            atomic_inc(&d->clone_of->tmpl_shared_pages);
+        }
         if (mfn_valid_page(mfn_x(smfn)) &&
             mfn_x(smfn) != mfn_x(shared_zero_page)) {
             get_page_fast(mfn_to_page(smfn), d->clone_of);
@@ -1661,6 +1674,8 @@ clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
     mfn_t mfn;
     p2m_type_t t;
     p2m_access_t a;
+    bool_t clone_l1_dynamic = !!(d->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] &
+                                 HVM_PARAM_CLONE_L1_dynamic);
     int ret = 0;
 
     if (d->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] && !table)
@@ -1695,6 +1710,8 @@ clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
             else
                 atomic_inc(&d->tmpl_shared_pages);
         } else if (p2m_is_ram(t)) {
+            if (clone_l1_dynamic && !p2m_is_immutable(t))
+                mfn = _mfn(0);
             if (mfn_valid_page(mfn_x(mfn)) &&
                 unlikely(!get_page_fast(mfn_to_page(mfn), od)))
                 gdprintk(XENLOG_ERR, "%s: get_page failed mfn=%08lx\n",
@@ -1708,7 +1725,8 @@ clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
             }
             if (!table)
                 atomic_inc(&d->pod_pages);
-            atomic_inc(&d->tmpl_shared_pages);
+            if (!clone_l1_dynamic || p2m_is_immutable(t))
+                atomic_inc(&d->tmpl_shared_pages);
         }
         index++;
         gpfn++;

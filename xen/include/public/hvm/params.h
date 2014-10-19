@@ -179,6 +179,8 @@
 #define HVM_PARAM_CLONE_L1_lazy          0x1
 /* lazy populate cloned l1 pages */
 #define HVM_PARAM_CLONE_L1_lazy_populate 0x2
+/* dynamically populate l1 pages */
+#define HVM_PARAM_CLONE_L1_dynamic       0x4
 
 /* time in ns at start of a clone, during which to compress a template
  * page when the clone write accesses the page */
