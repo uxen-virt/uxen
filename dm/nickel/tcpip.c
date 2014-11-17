@@ -2592,6 +2592,8 @@ static int tcp_socket_load(QEMUFile *f, struct nickel *ni, int version_id, uint3
 
     so->state = qemu_get_byte(f);
     so->flags = qemu_get_be32(f);
+    if (!(so->flags & TF_VMFWD))
+        so->flags |= (TF_RST_PENDING | TF_CLOSED);
 
     if (so != &_so && (so->flags & TF_NAV))
         atomic_inc(&ni->number_tcp_nav_sockets);
@@ -2740,9 +2742,6 @@ void tcpip_save(QEMUFile *f, struct nickel *ni)
         n1++;
         if (so->state != TS_ESTABLISHED)
             continue;
-
-        if (!(so->flags & TF_VMFWD))
-            so->flags |= (TF_RST_PENDING | TF_CLOSED);
 
         n2++;
         qemu_put_byte(f, 1); /* is a socket */
