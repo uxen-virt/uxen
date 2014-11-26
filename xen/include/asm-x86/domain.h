@@ -251,10 +251,16 @@ struct pv_domain
      NR_GE_L1_CACHE * (sizeof(unsigned long) + sizeof(void *)) +        \
      sizeof(mm_lock_t) + sizeof(mfn_t) + sizeof(uint16_t) +             \
      /* align */ 3 * sizeof(uint16_t))
+#ifndef NDEBUG
+#define P2M_DOMAIN_SIZE_DEBUG_EXTRA (sizeof(unsigned long))
+#else
+#define P2M_DOMAIN_SIZE_DEBUG_EXTRA 0
+#endif
 #define SH_DIRTY_VRAM_SIZE 48
 struct domain_extra_1
 {
-    /* struct p2m_domain */ uint8_t p2m[P2M_DOMAIN_SIZE]; /* d->arch.p2m */
+    /* struct p2m_domain */ uint8_t
+    p2m[P2M_DOMAIN_SIZE + P2M_DOMAIN_SIZE_DEBUG_EXTRA]; /* d->arch.p2m */
     cpuid_input_t cpuids[MAX_CPUID_INPUT]; /* d->arch.cpuids */
 
     /* XXX UXEN_MAX_VCPUS is sufficient */

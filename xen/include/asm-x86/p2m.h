@@ -404,6 +404,10 @@ struct p2m_domain {
         mfn_t data_mfn;
         uint16_t data_offset;
     } page_store;
+
+#ifndef NDEBUG
+    unsigned long compress_gpfn;
+#endif  /* NDEBUG */
 };
 
 /* get host p2m table */

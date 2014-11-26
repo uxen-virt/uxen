@@ -54,6 +54,7 @@
 #include <asm/hvm/svm/amd-iommu-proto.h>
 #endif  /* __UXEN__ */
 #include <lz4.h>
+#include <xen/keyhandler.h>
 #include <uxen/memcache-dm.h>
 
 #include "mm-locks.h"
@@ -2110,3 +2111,122 @@ out:
     return rc;
 }
 
+#ifndef NDEBUG
+static struct timer p2m_pod_compress_template_timer;
+
+static void
+p2m_pod_compress_template_work(void *_d)
+{
+    struct domain *d = (struct domain *)_d;
+    struct p2m_domain *p2m = p2m_get_hostp2m(d);
+    unsigned long gpfn;
+    mfn_t mfn;
+    p2m_type_t t;
+    p2m_access_t a;
+    unsigned int page_order;
+    struct page_info *page;
+    void *target;
+    int nr_comp_unused = 0;
+    int nr_comp_used = 0;
+    int nr_shared = 0;
+    int nr_compressed = 0;
+    s64 ct;
+
+    ct = -NOW();
+    for (gpfn = p2m->compress_gpfn; gpfn <= p2m->max_mapped_pfn; gpfn++) {
+        if (uxen_info->ui_host_needs_preempt(NULL))
+            break;
+        mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, &page_order);
+        if (!mfn_valid_page(mfn_x(mfn))) {
+            gpfn |= ((1 << page_order) - 1);
+            continue;
+        }
+        if (mfn_x(mfn) == mfn_x(shared_zero_page))
+            continue;
+        page = mfn_to_page(mfn);
+        if (p2m_is_ram(t))
+            nr_comp_unused++;
+        else if (p2m_is_pod(t)) {
+            if ((page->count_info & PGC_count_mask) > 1)
+                nr_shared++;
+            else
+                nr_comp_used++;
+        }
+        if (p2m_is_ram(t)) {
+            p2m_lock(p2m);
+            mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, &page_order);
+            if (mfn_valid_page(mfn_x(mfn)) &&
+                get_page(page = mfn_to_page(mfn), d)) {
+                p2m_unlock(p2m);
+                target = map_domain_page_direct(mfn_x(mfn));
+                (void)p2m_pod_compress_page(p2m, gpfn, mfn, target);
+                unmap_domain_page_direct(target);
+                nr_compressed++;
+                put_page(page);
+            } else
+                p2m_unlock(p2m);
+        }
+    }
+    p2m->compress_gpfn = gpfn;
+    ct += NOW();
+    if (0)
+        printk("%s: dom %d: comp unused %d used %d -- shared %d"
+               " -- compressed %d -- took %"PRIu64".%"PRIu64"ms\n",
+               __FUNCTION__, d->domain_id,
+               nr_comp_unused, nr_comp_used,
+               nr_shared, nr_compressed,
+               ct / 1000000UL, ct % 1000000UL);
+    if (p2m->compress_gpfn > p2m->max_mapped_pfn) {
+        p2m->compress_gpfn = 0;
+        printk("%s: dom %d: comp_pages=%d comp_pdata=%d non_comp=%d\n",
+               __FUNCTION__, d->domain_id,
+               atomic_read(&d->template.compressed_pages),
+               atomic_read(&d->template.compressed_pdata),
+               atomic_read(&d->template.non_compressible_pages));
+    } else
+        set_timer(&p2m_pod_compress_template_timer, NOW() + MILLISECS(10));
+}
+
+static void
+p2m_pod_compress_template(struct domain *d)
+{
+    static int once = 0;
+
+    if (!once) {
+        init_timer(&p2m_pod_compress_template_timer,
+                   p2m_pod_compress_template_work, d, 0);
+        once = 1;
+    }
+    set_timer(&p2m_pod_compress_template_timer, NOW() + MILLISECS(10));
+}
+
+static void
+p2m_pod_compress_templates_keyhandler_fn(unsigned char key)
+{
+    struct domain *d;
+
+    rcu_read_lock(&domlist_read_lock);
+    for_each_domain(d) {
+        if (!is_template_domain(d))
+            continue;
+        p2m_pod_compress_template(d);
+        break;
+    }
+    rcu_read_unlock(&domlist_read_lock);
+}
+
+static struct keyhandler
+p2m_pod_compress_templates_keyhandler = {
+    .diagnostic = 1,
+    .u.fn = p2m_pod_compress_templates_keyhandler_fn,
+    .desc = "compress templates"
+};
+
+static __init int
+p2m_pod_compress_templates_keyhandler_init(void)
+{
+    register_keyhandler('t', &p2m_pod_compress_templates_keyhandler);
+    return 0;
+}
+__initcall(p2m_pod_compress_templates_keyhandler_init);
+#endif  /* NDEBUG */
