@@ -630,6 +630,9 @@ extern bool_t machine_to_phys_mapping_valid;
 #define P2M_MFN_PAGE_DATA       (1UL << P2M_MFN_MFN_BITS)
 #define p2m_mfn_is_page_data(mfn)                               \
     (((mfn) & P2M_MFN_SPECIAL_MASK) == P2M_MFN_PAGE_DATA)
+#define P2M_MFN_NON_COMPRESSIBLE (2UL << P2M_MFN_MFN_BITS)
+#define p2m_mfn_is_non_compressible(mfn)                                \
+    (((mfn) & P2M_MFN_SPECIAL_MASK) == P2M_MFN_NON_COMPRESSIBLE)
 
 #define compat_pfn_to_cr3(pfn) (((unsigned)(pfn) << 12) | ((unsigned)(pfn) >> 20))
 #define compat_cr3_to_pfn(cr3) (((unsigned)(cr3) >> 12) | ((unsigned)(cr3) << 20))
