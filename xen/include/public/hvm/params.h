@@ -191,6 +191,13 @@
 /* keep pages mapped read-only */
 #define HVM_PARAM_CLONE_DECOMPRESSED_read_only 0x1
 
-#define HVM_NR_PARAMS          35
+/* time in ns at start of a clone, during which to mark a template
+ * page to be compressed when the clone write accesses the page */
+#define HVM_PARAM_CLONE_PAGE_WRITE_MARK_COMPRESS_TIME 35
+
+/* only compress a page on write, if the page is not shared */
+#define HVM_PARAM_CLONE_PAGE_WRITE_COMPRESS_UNSHARED_ONLY 36
+
+#define HVM_NR_PARAMS          37
 
 #endif /* __XEN_PUBLIC_HVM_PARAMS_H__ */

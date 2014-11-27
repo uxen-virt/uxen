@@ -633,6 +633,9 @@ extern bool_t machine_to_phys_mapping_valid;
 #define P2M_MFN_NON_COMPRESSIBLE (2UL << P2M_MFN_MFN_BITS)
 #define p2m_mfn_is_non_compressible(mfn)                                \
     (((mfn) & P2M_MFN_SPECIAL_MASK) == P2M_MFN_NON_COMPRESSIBLE)
+#define P2M_MFN_MARK_COMPRESS   (3UL << P2M_MFN_MFN_BITS)
+#define p2m_mfn_is_mark_compress(mfn)                           \
+    (((mfn) & P2M_MFN_SPECIAL_MASK) == P2M_MFN_MARK_COMPRESS)
 
 #define compat_pfn_to_cr3(pfn) (((unsigned)(pfn) << 12) | ((unsigned)(pfn) >> 20))
 #define compat_cr3_to_pfn(cr3) (((unsigned)(cr3) >> 12) | ((unsigned)(cr3) << 20))
