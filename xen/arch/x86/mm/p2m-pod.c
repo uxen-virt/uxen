@@ -1112,6 +1112,7 @@ static void check_immutable(p2m_query_t q, struct domain *d, unsigned long gfn)
 
 struct page_data_info {
     uint16_t size;
+    mfn_t mfn;                  /* protected by p2m lock */
     uint8_t data[];
 };
 
@@ -1168,6 +1169,7 @@ p2m_pod_add_compressed_page(struct p2m_domain *p2m, unsigned long gpfn,
     data = map_domain_page_direct(mfn_x(p2m->page_store.data_mfn));
     pdi = (struct page_data_info *)&data[p2m->page_store.data_offset];
     pdi->size = c_size;
+    pdi->mfn = _mfn(0);
     p2m->page_store.data_offset += sizeof(struct page_data_info);
     size = pdi->size;
     if (p2m->page_store.data_offset + size > PAGE_SIZE)
@@ -1306,6 +1308,17 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
         ~((1 << PAGE_STORE_DATA_ALIGN) - 1);
     pdi = (struct page_data_info *)&data[offset];
 
+    /* check if decompressed page exists */
+    p2m_lock(p2m);
+    if (page_owner == d && mfn_x(pdi->mfn)) {
+        *tmfn = pdi->mfn;
+        get_page_fast(mfn_to_page(*tmfn), page_owner);
+        p2m_unlock(p2m);
+        perfc_incr(decompressed_shared);
+        goto out;
+    }
+    p2m_unlock(p2m);
+
     p = alloc_domheap_page(NULL, 0);
     if (!p) {
         ret = 0;
@@ -1346,6 +1359,24 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
         ret = 0;
         goto out;
     }
+
+    if (page_owner == d) {
+        p2m_lock(p2m);
+        if (mfn_x(pdi->mfn)) {
+            /* page was decompressed concurrently, share it and free
+             * our page via goto out w/ p != NULL */
+            *tmfn = pdi->mfn;
+            get_page_fast(mfn_to_page(*tmfn), page_owner);
+            p2m_unlock(p2m);
+            perfc_incr(decompressed_in_vain);
+            goto out;
+        }
+        pdi->mfn = *tmfn;
+        atomic_inc(&d->template.decompressed_shared);
+        p2m_unlock(p2m);
+        get_page_fast(p, page_owner);
+    }
+
     perfc_incr(decompressed_pages);
 
     p = NULL;                   /* sucess -- don't free the page */
@@ -1557,15 +1588,30 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             atomic_dec(&d->zero_shared_pages);
         unmap_domain_page_direct(target);
     } else if (p2m_mfn_is_page_data(mfn_x(smfn))) {
+        struct domain *page_owner;
         ASSERT(d->clone_of);
         /* on read access -- map page pod */
         if (d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] &&
-            (q == p2m_guest_r || q == p2m_alloc_r))
+            (q == p2m_guest_r || q == p2m_alloc_r)) {
             pod_p2mt = p2m_populate_on_demand;
-        if (smfn_from_clone)
-            atomic_dec(&d->tmpl_shared_pages);
+            if (d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] &
+                HVM_PARAM_CLONE_DECOMPRESSED_shared) {
+                if (!smfn_from_clone)
+                    atomic_inc(&d->tmpl_shared_pages);
+                page_owner = d->clone_of;
+            } else {
+                /* decompressed page not owned by template, but read-only */
+                if (smfn_from_clone)
+                    atomic_dec(&d->tmpl_shared_pages);
+                page_owner = d;
+            }
+        } else {
+            if (smfn_from_clone)
+                atomic_dec(&d->tmpl_shared_pages);
+            page_owner = d;
+        }
         if (!p2m_pod_decompress_page(p2m_get_hostp2m(d->clone_of), smfn,
-                                     &mfn, d)) {
+                                     &mfn, page_owner)) {
             domain_crash(d);
             goto out_fail;
         }
@@ -1577,6 +1623,51 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
            read-only */
         mfn = smfn;
     } else {
+        /* check if template page is a decompressed page, only shared
+         * in one clone */
+        while (smfn_from_clone &&
+               (mfn_to_page(smfn)->count_info & PGC_count_mask) <= 2) {
+            struct p2m_domain *op2m = p2m_get_hostp2m(d->clone_of);
+            struct page_data_info *pdi;
+            uint8_t *data;
+            uint16_t offset;
+            mfn_t omfn;
+            int ret;
+            p2m_lock(op2m);
+            omfn = op2m->get_entry(op2m, gfn_aligned, &t, &a, p2m_query, NULL);
+            if (!p2m_mfn_is_page_data(mfn_x(omfn))) {
+                p2m_unlock(op2m);
+                break;
+            }
+            data = map_domain_page_direct(mfn_x(omfn) & P2M_MFN_MFN_MASK);
+            offset = (mfn_x(omfn) >> (P2M_MFN_PAGE_STORE_OFFSET_INDEX -
+                                      PAGE_STORE_DATA_ALIGN)) &
+                ~((1 << PAGE_STORE_DATA_ALIGN) - 1);
+            pdi = (struct page_data_info *)&data[offset];
+            if (mfn_x(pdi->mfn) == mfn_x(smfn)) {
+                ret = change_page_owner(mfn_to_page(pdi->mfn), d,
+                                        d->clone_of, 2);
+                if (ret == 1)
+                    /* failed to assign page */
+                    pdi->mfn = _mfn(0);
+            } else
+                ret = -1;
+            if (ret) {
+                unmap_domain_page(data);
+                p2m_unlock(op2m);
+                break;
+            }
+            pdi->mfn = _mfn(0);
+            mfn = smfn;
+            unmap_domain_page(data);
+            atomic_dec(&d->clone_of->template.decompressed_shared);
+            p2m_unlock(op2m);
+            perfc_incr(decompressed_unshared);
+            /* ASSERT(smfn_from_clone); */
+            atomic_dec(&d->tmpl_shared_pages);
+            goto out_reassigned;
+        }
+
         p = alloc_domheap_page(d, PAGE_ORDER_4K);
         if (!p)
             goto out_of_memory;
@@ -1630,6 +1721,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         unmap_domain_page_direct(target);
     }
 
+  out_reassigned:
     set_p2m_entry(p2m, gfn_aligned, mfn, PAGE_ORDER_4K, pod_p2mt,
                   p2m->default_access);
     if (!p2m_is_pod(pod_p2mt))

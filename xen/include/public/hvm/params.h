@@ -190,6 +190,8 @@
 #define HVM_PARAM_CLONE_DECOMPRESSED 34
 /* keep pages mapped read-only */
 #define HVM_PARAM_CLONE_DECOMPRESSED_read_only 0x1
+/* share decompressed pages */
+#define HVM_PARAM_CLONE_DECOMPRESSED_shared    0x2
 
 /* time in ns at start of a clone, during which to mark a template
  * page to be compressed when the clone write accesses the page */
