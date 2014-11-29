@@ -428,6 +428,10 @@ int  get_page_from_l1e(
     l1_pgentry_t l1e, struct domain *l1e_owner, struct domain *pg_owner);
 void put_page_from_l1e(l1_pgentry_t l1e, struct domain *l1e_owner);
 
+int
+change_page_owner(struct page_info *page, struct domain *to,
+                  struct domain *from, int refs);
+
 #ifndef __UXEN__
 static inline void put_page_and_type(struct page_info *page)
 {

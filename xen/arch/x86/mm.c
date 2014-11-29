@@ -2351,6 +2351,72 @@ static void get_page_light(struct page_info *page)
 }
 #endif  /* __UXEN__ */
 
+/* put page after dropping refs many references */
+static int always_inline
+put_page_last_ref(struct page_info *page, struct domain *d, int refs)
+{
+    unsigned long nx, x, y;
+    struct domain *owner = page_get_owner_and_reference(page);
+    int drop_dom_ref;
+
+    if (!owner)
+        return 0;
+    if (owner != d) {
+        put_page(page);
+        return 0;
+    }
+
+    /* also drop the ref taken above */
+    refs++;
+    y = page->count_info;
+    do {
+        if ((y & PGC_count_mask) < refs) {
+            put_page(page);
+            return 0;
+        }
+        ASSERT((y & PGC_count_mask) >= refs);
+        x  = y;
+        nx = (x - refs) & ~PGC_allocated;
+        if (nx) {
+            put_page(page);
+            return 0;
+        }
+    } while (unlikely((y = cmpxchg(&page->count_info, x, nx)) != x));
+
+    spin_lock_recursive(&d->page_alloc_lock);
+    page_list_del2(page, &d->page_list, &d->arch.relmem_list);
+    d->tot_pages -= 1;
+    drop_dom_ref = (d->tot_pages == 0);
+    spin_unlock_recursive(&d->page_alloc_lock);
+    if (drop_dom_ref)
+        put_domain(d);
+
+    return 1;
+}
+
+/* change page owner, if there are refs many references to it --
+ * returns 0 on success, -1 when unable to drop references, and 1 if
+ * page was lost when failing to assign the page to the to domain,
+ * either because the domain is dying or because it is beyond it's
+ * allowed memory usage */
+int
+change_page_owner(struct page_info *page, struct domain *to,
+                  struct domain *from, int refs)
+{
+    int ret;
+
+    if (!put_page_last_ref(page, from, refs))
+        return -1;
+
+    ASSERT(page->count_info == PGC_state_host);
+    page->count_info = PGC_state_inuse;
+    page_set_owner(page, NULL);
+    ret = assign_pages(to, page, 0, 0);
+    if (ret)
+        free_domheap_page(page);
+    return ret ? 1 : 0;
+}
+
 #ifndef __UXEN__
 static int alloc_page_type(struct page_info *page, unsigned long type,
                            int preemptible)
