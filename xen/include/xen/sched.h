@@ -468,6 +468,12 @@ struct domain
     struct v4v_domain *v4v;
 
     u64 start_time;
+
+#ifndef NDEBUG
+    spinlock_t p2m_stat_lock;
+    u64 p2m_stat_last;
+    int p2m_stat_ops;
+#endif  /* NDEBUG */
 };
 
 struct domain_setup_info

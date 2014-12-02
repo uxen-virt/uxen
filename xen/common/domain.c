@@ -282,6 +282,9 @@ struct domain *domain_create_internal(
         return NULL;
 
     d->start_time = NOW();
+#ifndef NDEBUG
+    spin_lock_init(&d->p2m_stat_lock);
+#endif  /* NDEBUG */
 
     d->domain_id = domid;
 
