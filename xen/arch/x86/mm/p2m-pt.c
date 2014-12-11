@@ -184,6 +184,76 @@ static void p2m_add_iommu_flags(l1_pgentry_t *p2m_entry,
 }
 
 static int
+npt_split_super_page(struct p2m_domain *p2m, l1_pgentry_t *p2m_entry,
+                     unsigned long type)
+{
+    l1_pgentry_t *l1_entry;
+    l1_pgentry_t new_entry;
+    int i;
+
+    switch (type) {
+    case PGT_l1_page_table: {
+        unsigned long flags, pfn;
+        struct page_info *pg;
+
+        pg = p2m_alloc_ptp(p2m, PGT_l1_page_table);
+        if ( pg == NULL )
+            return 0;
+
+        flags = l1e_get_flags(*p2m_entry);
+        if (p2m_is_pod(p2m_flags_to_type(flags))) {
+            /* when populating a populate on demand superpage, don't
+             * "split" the mfn value since it's in most cases 0 or some
+             * pod specific value, but not an actual mfn */
+#ifndef NDEBUG
+            pfn = l1e_get_pfn(*p2m_entry);
+            if (pfn)
+                WARN_ONCE();
+#else  /* NDEBUG */
+            pfn = 0;
+#endif /* NDEBUG */
+            /* new_entry is constant */
+            new_entry = l1e_from_pfn(pfn, flags);
+            p2m_add_iommu_flags(&new_entry, 0, 0);
+        } else {
+            /* New splintered mappings inherit the flags of the old superpage,
+             * with a little reorganisation for the _PAGE_PSE_PAT bit. */
+            pfn = l1e_get_pfn(*p2m_entry);
+            if ( pfn & 1 )           /* ==> _PAGE_PSE_PAT was set */
+                pfn -= 1;            /* Clear it; _PAGE_PSE becomes _PAGE_PAT */
+            else
+                flags &= ~_PAGE_PSE; /* Clear _PAGE_PSE (== _PAGE_PAT) */
+        }
+        l1_entry = __map_domain_page(pg);
+        for ( i = 0; i < L1_PAGETABLE_ENTRIES; i++ )
+        {
+            if (!p2m_is_pod(p2m_flags_to_type(flags))) {
+                new_entry = l1e_from_pfn(pfn + i, flags);
+                p2m_add_iommu_flags(&new_entry, 0, 0);
+            }
+            p2m->write_p2m_entry(p2m, -1, l1_entry+i, _mfn(INVALID_MFN),
+                                 new_entry, 1);
+        }
+        unmap_domain_page(l1_entry);
+
+        new_entry = l1e_from_pfn(mfn_x(page_to_mfn(pg)),
+                                 __PAGE_HYPERVISOR|_PAGE_USER);
+        p2m_add_iommu_flags(&new_entry, 1, IOMMUF_readable|IOMMUF_writable);
+        p2m->write_p2m_entry(p2m, -1, p2m_entry, _mfn(INVALID_MFN),
+                             new_entry, 2);
+        if (p2m_is_pod(p2m_flags_to_type(flags))) {
+            ASSERT(!is_template_domain(p2m->domain));
+            atomic_dec(&p2m->domain->clone.l1_pod_pages);
+            atomic_add(1 << PAGE_ORDER_2M, &p2m->domain->pod_pages);
+        }
+        return 1;
+    }
+    default:
+        return 0;
+    }
+}
+
+static int
 p2m_next_level(struct p2m_domain *p2m, mfn_t *table_mfn, void **table,
                unsigned long *gfn_remainder, unsigned long gfn, u32 shift,
                u32 max, unsigned long type)
@@ -265,61 +335,9 @@ p2m_next_level(struct p2m_domain *p2m, mfn_t *table_mfn, void **table,
 
 
     /* split single 2MB large page into 4KB page in P2M table */
-    if ( type == PGT_l1_page_table && (l1e_get_flags(*p2m_entry) & _PAGE_PSE) )
-    {
-        unsigned long flags, pfn;
-        struct page_info *pg;
-
-        pg = p2m_alloc_ptp(p2m, PGT_l1_page_table);
-        if ( pg == NULL )
+    if (type == PGT_l1_page_table && (l1e_get_flags(*p2m_entry) & _PAGE_PSE)) {
+        if (!npt_split_super_page(p2m, p2m_entry, PGT_l1_page_table))
             return 0;
-
-        flags = l1e_get_flags(*p2m_entry);
-        if (p2m_is_pod(p2m_flags_to_type(flags))) {
-            /* when populating a populate on demand superpage, don't
-             * "split" the mfn value since it's in most cases 0 or some
-             * pod specific value, but not an actual mfn */
-#ifndef NDEBUG
-            pfn = l1e_get_pfn(*p2m_entry);
-            if (pfn)
-                WARN_ONCE();
-#else  /* NDEBUG */
-            pfn = 0;
-#endif /* NDEBUG */
-            /* new_entry is constant */
-            new_entry = l1e_from_pfn(pfn, flags);
-            p2m_add_iommu_flags(&new_entry, 0, 0);
-        } else {
-            /* New splintered mappings inherit the flags of the old superpage,
-             * with a little reorganisation for the _PAGE_PSE_PAT bit. */
-            pfn = l1e_get_pfn(*p2m_entry);
-            if ( pfn & 1 )           /* ==> _PAGE_PSE_PAT was set */
-                pfn -= 1;            /* Clear it; _PAGE_PSE becomes _PAGE_PAT */
-            else
-                flags &= ~_PAGE_PSE; /* Clear _PAGE_PSE (== _PAGE_PAT) */
-        }
-        l1_entry = __map_domain_page(pg);
-        for ( i = 0; i < L1_PAGETABLE_ENTRIES; i++ )
-        {
-            if (!p2m_is_pod(p2m_flags_to_type(flags))) {
-                new_entry = l1e_from_pfn(pfn + i, flags);
-                p2m_add_iommu_flags(&new_entry, 0, 0);
-            }
-            p2m->write_p2m_entry(p2m, gfn,
-                l1_entry+i, *table_mfn, new_entry, 1);
-        }
-        unmap_domain_page(l1_entry);
-        
-        new_entry = l1e_from_pfn(mfn_x(page_to_mfn(pg)),
-                                 __PAGE_HYPERVISOR|_PAGE_USER);
-        p2m_add_iommu_flags(&new_entry, 1, IOMMUF_readable|IOMMUF_writable);
-        p2m->write_p2m_entry(p2m, gfn,
-            p2m_entry, *table_mfn, new_entry, 2);
-        if (p2m_is_pod(p2m_flags_to_type(flags))) {
-            ASSERT(!is_template_domain(p2m->domain));
-            atomic_dec(&p2m->domain->clone.l1_pod_pages);
-            atomic_add(1 << PAGE_ORDER_2M, &p2m->domain->pod_pages);
-        }
     }
 
     *table_mfn = _mfn(l1e_get_pfn(*p2m_entry));
@@ -328,6 +346,18 @@ p2m_next_level(struct p2m_domain *p2m, mfn_t *table_mfn, void **table,
     *table = next;
 
     return 1;
+}
+
+static int
+npt_split_super_page_one(struct p2m_domain *p2m, void *entry, int order)
+{
+    l1_pgentry_t *l1e = (l1_pgentry_t *)entry;
+    int level;
+
+    level = order / PAGETABLE_ORDER;
+    if (!level)
+        return 1;
+    return !npt_split_super_page(p2m, l1e, level);
 }
 
 // Returns 0 on error (out of memory)
@@ -436,7 +466,8 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
                                    0, L1_PAGETABLE_ENTRIES);
         ASSERT(p2m_entry);
         
-        if (mfn_valid(mfn) || p2m_is_mmio_direct(p2mt) || p2m_is_pod(p2mt))
+        if (mfn_valid_page(mfn_x(mfn)) ||
+            p2m_is_mmio_direct(p2mt) || p2m_is_pod(p2mt))
             entry_content = l1e_from_pfn(mfn_x(mfn),
                                          p2m_type_to_flags(p2mt, mfn));
         else
@@ -1168,6 +1199,7 @@ void p2m_pt_init(struct p2m_domain *p2m)
     p2m->get_l1_table = npt_get_l1_table;
     p2m->parse_entry = npt_parse_entry;
     p2m->change_entry_type_global = p2m_change_type_global;
+    p2m->split_super_page_one = npt_split_super_page_one;
     p2m->write_p2m_entry = paging_write_p2m_entry;
 }
 

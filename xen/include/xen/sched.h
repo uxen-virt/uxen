@@ -278,6 +278,11 @@ struct domain
 #endif  /* __UXEN__ */
     unsigned int     xenheap_pages;   /* # pages allocated from Xen heap    */
 
+    union {
+        struct {
+            atomic_t l1_pod_pages;    /* number of l1 pages pop on demand */
+        } clone;
+    };
     unsigned int     max_vcpus;
 
     /* Scheduling. */

@@ -54,6 +54,7 @@
 #include <xen/paging.h>
 #include <xen/cpu.h>
 #include <xen/wait.h>
+#include <asm/setup.h>
 #include <asm/shadow.h>
 #include <asm/hap.h>
 #include <asm/current.h>
@@ -1430,8 +1431,7 @@ int hvm_hap_nested_page_fault(unsigned long gpa,
                               access_w ? p2m_guest : p2m_guest_r, NULL);
 
     /* Check access permissions first, then handle faults */
-    if ( (mfn_x(mfn) != INVALID_MFN) )
-    {
+    if (mfn_valid_page(mfn_x(mfn))) {
         int violation = 0;
         /* If the access is against the permissions, then send to mem_event */
         switch (p2ma) 
@@ -1480,6 +1480,12 @@ int hvm_hap_nested_page_fault(unsigned long gpa,
     if (p2m_is_mmio_dm(p2mt) || p2m_is_readonly(p2mt)) {
         if ( !handle_mmio() )
             hvm_inject_exception(TRAP_gp_fault, 0, 0);
+        rc = 1;
+        goto out_put_gfn;
+    }
+
+    /* PoD fault: not present to read-shared */
+    if (p2m_is_pod(p2mt) && !access_w) {
         rc = 1;
         goto out_put_gfn;
     }

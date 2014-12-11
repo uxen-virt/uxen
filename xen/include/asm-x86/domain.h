@@ -246,7 +246,7 @@ struct pv_domain
 };
 
 #define P2M_DOMAIN_SIZE                                                 \
-    (208 + 2 * sizeof(void *) +                                         \
+    (208 + 3 * sizeof(void *) +                                         \
      sizeof(unsigned long) + sizeof(void *) +                           \
      NR_GE_L1_CACHE * (sizeof(unsigned long) + sizeof(void *)) +        \
      sizeof(mm_lock_t))

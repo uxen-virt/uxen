@@ -69,6 +69,10 @@
 #define superpage_aligned(_x)  (((_x)&(SUPERPAGE_PAGES-1))==0)
 #endif  /* __UXEN__ */
 
+static int
+p2m_clone_l1(struct p2m_domain *op2m, struct p2m_domain *p2m,
+             unsigned long gpfn, void *entry);
+
 /* Enforce lock ordering when grabbing the "external" page_alloc lock */
 static inline void lock_page_alloc(struct p2m_domain *p2m)
 {
@@ -1115,6 +1119,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     p2m_type_t t;
     p2m_access_t a;
     void *source, *target;
+    int smfn_from_clone = 1;
     int ret;
 
     /* This is called from the p2m lookups, which can happen with or 
@@ -1161,7 +1166,8 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             goto out_fail;
         }
 
-        ret = p2m_clone_l1(p2m_get_hostp2m(d->clone_of), d, gfn_aligned);
+        ret = p2m_clone_l1(p2m_get_hostp2m(d->clone_of), p2m, gfn_aligned,
+                           entry);
         p2m_unlock(p2m);
         return ret;
     }
@@ -1228,6 +1234,37 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         return 0;
     }
 
+    if (mfn_x(smfn) == 0) {
+        struct p2m_domain *op2m = p2m_get_hostp2m(d->clone_of);
+        smfn = op2m->get_entry(op2m, gfn_aligned, &t, &a, p2m_query, NULL);
+        if (mfn_x(smfn) == INVALID_MFN) {
+            /* clear this ept entry since it's not present in the
+             * template p2m -- this happens if the l1 is accessed/used
+             * between when it's allocated and filled with pod entries
+             * (xpt_split_super_page), and when its entries are copied
+             * from the template (clone_l1_table), or more often in
+             * the case where the l1 table is populated lazily
+             * (HVM_PARAM_CLONE_L1_lazy_populate) */
+            set_p2m_entry(p2m, gfn_aligned, _mfn(0), 0, 0, 0);
+            atomic_dec(&d->pod_pages);
+            p2m_unlock(p2m);
+            return 1;
+        }
+        if ((q == p2m_guest_r || q == p2m_alloc_r) &&
+            mfn_valid_page(mfn_x(smfn))) {
+            /* read-acces -- add pod entry, i.e. make the gpfn shared */
+            set_p2m_entry(p2m, gfn_aligned, smfn, 0,
+                          p2m_populate_on_demand, p2m->default_access);
+            if (mfn_x(smfn) == mfn_x(shared_zero_page))
+                atomic_inc(&d->zero_shared_pages);
+            else
+                atomic_inc(&d->tmpl_shared_pages);
+            p2m_unlock(p2m);
+            return 0;
+        }
+        smfn_from_clone = 0;
+    }
+
 #ifdef __UXEN__
     p = alloc_domheap_page(d, PAGE_ORDER_4K);
     if (!p)
@@ -1241,12 +1278,14 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         memcpy(target, source, PAGE_SIZE);
         unmap_domain_page(source);
 	perfc_incr(pc15);
-        atomic_dec(&d->tmpl_shared_pages);
+        if (smfn_from_clone)
+            atomic_dec(&d->tmpl_shared_pages);
 	check_immutable(q, d, gfn_aligned);
     } else {
         clear_page(target);
 	perfc_incr(pc14);
-        atomic_dec(&d->zero_shared_pages);
+        if (smfn_from_clone)
+            atomic_dec(&d->zero_shared_pages);
     }
     unmap_domain_page_direct(target);
 
@@ -1321,10 +1360,10 @@ remap_and_retry:
 }
 
 static int
-clone_l1_table(struct p2m_domain *p2m, struct p2m_domain *np2m,
-               unsigned long *_gpfn, void *table)
+clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
+               unsigned long *_gpfn, void *otable, void *table)
 {
-    struct domain *nd = np2m->domain;
+    struct domain *d = p2m->domain;
     unsigned long gpfn = *_gpfn;
     unsigned long index = gpfn & ((1UL << PAGETABLE_ORDER) - 1);
     mfn_t mfn;
@@ -1332,28 +1371,39 @@ clone_l1_table(struct p2m_domain *p2m, struct p2m_domain *np2m,
     p2m_access_t a;
     int ret = 0;
 
+    if (d->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] && !table)
+        atomic_sub(L1_PAGETABLE_ENTRIES - index, &d->pod_pages);
     while (index < L1_PAGETABLE_ENTRIES) {
-        mfn = p2m->parse_entry(table, index, &t, &a);
+        mfn = op2m->parse_entry(otable, index, &t, &a);
+        if (table && (p2m_is_pod(t) || p2m_is_ram(t))) {
+            p2m_type_t _t;
+            p2m_access_t _a;
+            p2m->parse_entry(table, index, &_t, &_a);
+            if (!p2m_is_pod(_t))
+                atomic_inc(&d->pod_pages);
+        }
         if (p2m_is_pod(t)) {
-            ret = !set_p2m_entry(np2m, gpfn, shared_zero_page, 0,
-                                 p2m_populate_on_demand, np2m->default_access);
+            ret = !set_p2m_entry(p2m, gpfn, shared_zero_page, 0,
+                                 p2m_populate_on_demand, p2m->default_access);
             if (ret) {
                 gdprintk(XENLOG_ERR, "%s: set_p2m_entry failed gpfn=%08lx\n",
                          __FUNCTION__, gpfn);
                 goto out;
             }
-            atomic_inc(&nd->pod_pages);
-            atomic_inc(&nd->zero_shared_pages);
+            if (!table)
+                atomic_inc(&d->pod_pages);
+            atomic_inc(&d->zero_shared_pages);
         } else if (p2m_is_ram(t)) {
-            ret = !set_p2m_entry(np2m, gpfn, mfn, 0,
-                                 p2m_populate_on_demand, np2m->default_access);
+            ret = !set_p2m_entry(p2m, gpfn, mfn, 0,
+                                 p2m_populate_on_demand, p2m->default_access);
             if (ret) {
                 gdprintk(XENLOG_ERR, "%s: set_p2m_entry failed gpfn=%08lx\n",
                          __FUNCTION__, gpfn);
                 goto out;
             }
-            atomic_inc(&nd->pod_pages);
-            atomic_inc(&nd->tmpl_shared_pages);
+            if (!table)
+                atomic_inc(&d->pod_pages);
+            atomic_inc(&d->tmpl_shared_pages);
         }
         index++;
         gpfn++;
@@ -1364,25 +1414,37 @@ clone_l1_table(struct p2m_domain *p2m, struct p2m_domain *np2m,
     return ret;
 }
 
-int
-p2m_clone_l1(struct p2m_domain *p2m, struct domain *nd, unsigned long gpfn)
+static int
+p2m_clone_l1(struct p2m_domain *op2m, struct p2m_domain *p2m,
+             unsigned long gpfn, void *entry)
 {
-    struct p2m_domain *np2m = p2m_get_hostp2m(nd);
-    void *table = NULL;
+    void *otable = NULL, *table = NULL;
     mfn_t mfn;
+    p2m_type_t t;
+    p2m_access_t a;
     int ret = 0;
 
-    ASSERT(p2m_locked_by_me(np2m));
+    ASSERT(p2m_locked_by_me(p2m));
 
-    mfn = p2m->get_l1_table(p2m, gpfn, NULL);
+    if ((p2m->domain->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] &
+         HVM_PARAM_CLONE_L1_lazy_populate) && p2m->split_super_page_one &&
+        !p2m->split_super_page_one(p2m, entry, PAGE_ORDER_2M))
+        return 0;
+
+    mfn = op2m->get_l1_table(op2m, gpfn, NULL);
     if (!mfn_valid_page(mfn_x(mfn)))
-        goto out;
-    table = map_domain_page(mfn_x(mfn));
-    ret = clone_l1_table(p2m, np2m, &gpfn, table);
+        return ret;
+    otable = map_domain_page(mfn_x(mfn));
 
-  out:
+    mfn = p2m->parse_entry(entry, 0, &t, &a);
+    if (mfn_valid_page(mfn_x(mfn)))
+        table = map_domain_page(mfn_x(mfn));
+
+    ret = clone_l1_table(op2m, p2m, &gpfn, otable, table);
+
     if (table)
         unmap_domain_page(table);
+    unmap_domain_page(otable);
     return ret;
 }
 
@@ -1390,10 +1452,12 @@ int
 p2m_clone(struct p2m_domain *p2m, struct domain *nd)
 {
     struct p2m_domain *np2m = p2m_get_hostp2m(nd);
+    struct domain *d = p2m->domain;
     unsigned long gpfn;
     mfn_t mfn = _mfn(0);        /* compiler */
+    mfn_t nmfn = _mfn(0);
     unsigned int page_order;
-    void *table = NULL;
+    void *table = NULL, *ntable = NULL;
     int ret = 0;
     s64 ct;
 
@@ -1407,12 +1471,42 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
                 gpfn++;
                 continue;
             }
+            nmfn = np2m->get_l1_table(np2m, gpfn, NULL);
+        }
+        if (hvm_hap_has_2mb(d) &&
+            d->arch.hvm_domain.params[HVM_PARAM_CLONE_L1]) {
+            /* if l1 exists already in clone, clone the rest of the l1
+             * immediately */
+            if (mfn_valid_page(mfn_x(nmfn)))
+                goto clone_now;
+            ret = !set_p2m_entry(np2m, gpfn, _mfn(0), PAGE_ORDER_2M,
+                                 p2m_populate_on_demand, np2m->default_access);
+            if (ret) {
+                gdprintk(XENLOG_ERR, "%s: set_p2m_entry "
+                         "shared l1 failed gpfn=%08lx\n",
+                         __FUNCTION__, gpfn);
+                continue;
+            }
+            gpfn += (1 << PAGE_ORDER_2M);
+            atomic_inc(&nd->clone.l1_pod_pages);
+            continue;
+        }
+      clone_now:
+        if (!(gpfn & ((1UL << PAGETABLE_ORDER) - 1))) {
+            if (ntable) {
+                unmap_domain_page(ntable);
+                ntable = NULL;
+            }
             if (table)
                 unmap_domain_page(table);
             table = map_domain_page(mfn_x(mfn));
+            if (mfn_valid_page(mfn_x(nmfn)))
+                ntable = map_domain_page(mfn_x(nmfn));
         }
-        ret = clone_l1_table(p2m, np2m, &gpfn, table);
+        ret = clone_l1_table(p2m, np2m, &gpfn, table, ntable);
     }
+    if (ntable)
+        unmap_domain_page(ntable);
     if (table)
         unmap_domain_page(table);
     ct += NOW();
@@ -1424,6 +1518,9 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
            nd->domain_id, atomic_read(&nd->pod_pages),
            atomic_read(&nd->zero_shared_pages),
            atomic_read(&nd->tmpl_shared_pages));
+    if (atomic_read(&nd->clone.l1_pod_pages))
+        printk("domain %d: l1_pod_pages=%d\n",
+               nd->domain_id, atomic_read(&nd->clone.l1_pod_pages));
     return ret;
 }
 
@@ -1509,7 +1606,10 @@ p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
     page_list_add_tail(mfn_to_page(smfn), &d->pod_free_list);
     unlock_page_alloc(p2m);
 #endif  /* __UXEN__ */
-    atomic_inc(&d->pod_pages);
+    if (!p2m_is_pod(p2mt))
+        atomic_inc(&d->pod_pages);
+    else if (mfn_valid_page(mfn_x(smfn)))
+        atomic_dec(&d->tmpl_shared_pages);
     atomic_inc(&d->zero_shared_pages);
 
     if ( tb_init_done )

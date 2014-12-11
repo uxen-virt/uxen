@@ -328,6 +328,8 @@ struct p2m_domain {
                                        unsigned int *page_order);
     mfn_t              (*parse_entry)(void *table, unsigned long index,
                                       p2m_type_t *t, p2m_access_t* a);
+    int                (*split_super_page_one)(struct p2m_domain *p2m,
+                                               void *entry, int order);
     void               (*change_entry_type_global)(struct p2m_domain *p2m,
                                                    p2m_type_t ot,
                                                    p2m_type_t nt);
@@ -474,7 +476,8 @@ static inline void __put_gfn(struct p2m_domain *p2m, unsigned long gfn)
  * this. */
 #define get_gfn_unlocked(d, g, t)         get_gfn_type((d), (g), (t), p2m_alloc)
 #define get_gfn_query_unlocked(d, g, t)   get_gfn_type((d), (g), (t), p2m_query)
-#define get_gfn_guest_unlocked(d, g, t)   get_gfn_type((d), (g), (t), p2m_guest)
+#define get_gfn_guest_unlocked(d, g, t)   get_gfn_type((d), (g), (t),   \
+                                                       p2m_guest_r)
 #define get_gfn_unshare_unlocked(d, g, t) get_gfn_type((d), (g), (t), p2m_unshare)
 
 /* General conversion function from mfn to gfn */
@@ -576,8 +579,6 @@ void
 p2m_pod_offline_or_broken_replace(struct page_info *p);
 
 /* Clone p2m */
-int
-p2m_clone_l1(struct p2m_domain *p2m, struct domain *nd, unsigned long gpfn);
 int
 p2m_clone(struct p2m_domain *p2m, struct domain *nd);
 

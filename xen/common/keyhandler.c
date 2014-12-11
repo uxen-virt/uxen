@@ -312,11 +312,15 @@ static void dump_domains(unsigned char key)
                , atomic_read(&d->hidden_pages)
 #endif
             );
-        if (is_hvm_domain(d))
+        if (is_hvm_domain(d)) {
             printk("    pod_pages=%d zero_shared=%d tmpl_shared=%d\n",
                    atomic_read(&d->pod_pages),
                    atomic_read(&d->zero_shared_pages),
                    atomic_read(&d->tmpl_shared_pages));
+            if (!is_template_domain(d) && atomic_read(&d->clone.l1_pod_pages))
+                printk("    l1_pod_pages=%d\n",
+                       atomic_read(&d->clone.l1_pod_pages));
+        }
         printk("    handle=%" PRIuuid " vm_assist=%08lx\n",
                PRIuuid_arg(handle), d->vm_assist);
 #ifndef __UXEN__

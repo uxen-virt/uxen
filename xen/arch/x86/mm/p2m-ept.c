@@ -187,14 +187,14 @@ static void ept_free_entry(struct p2m_domain *p2m, ept_entry_t *ept_entry, int l
     p2m_free_ptp(p2m, mfn_to_page(ept_entry->mfn));
 }
 
-static int ept_split_super_page(struct p2m_domain *p2m, ept_entry_t *ept_entry,
-                                int level, int target)
+static int
+_ept_split_super_page(struct p2m_domain *p2m, ept_entry_t *ept_entry,
+                      int level, int target)
 {
     ept_entry_t new_ept, *table;
     uint64_t trunk;
     int rv = 1;
 
-DEBUG();
     /* End if the entry is a leaf entry or reaches the target level. */
     if ( level == 0 || level == target )
         return rv;
@@ -218,7 +218,17 @@ DEBUG();
         epte->sp = (level > 1) ? 1 : 0;
         epte->access = ept_entry->access;
         epte->sa_p2mt = ept_entry->sa_p2mt;
-        epte->mfn = ept_entry->mfn + i * trunk;
+        /* when populating a populate on demand superpage, don't
+         * "split" the mfn value since it's in most cases 0 or some
+         * pod specific value, but not an actual mfn */
+        if (!p2m_is_pod(ept_entry->sa_p2mt))
+            epte->mfn = ept_entry->mfn + i * trunk;
+#ifndef NDEBUG
+        /* warn if mfn != 0 in pod case, since currently mfn is always
+         * 0 in the superpage pod case */
+        else if (ept_entry->mfn)
+            WARN_ONCE();
+#endif  /* NDEBUG */
 #ifndef __UXEN__
         epte->rsvd2_snp = ( iommu_enabled && iommu_snoop ) ? 1 : 0;
 #else   /* __UXEN__ */
@@ -232,7 +242,8 @@ DEBUG();
 
         ASSERT(is_epte_superpage(epte));
 
-        if ( !(rv = ept_split_super_page(p2m, epte, level - 1, target)) )
+        rv = _ept_split_super_page(p2m, epte, level - 1, target);
+        if (!rv)
             break;
     }
 
@@ -242,6 +253,52 @@ DEBUG();
     *ept_entry = new_ept;
 
     return rv;
+}
+
+static int
+ept_split_super_page(struct p2m_domain *p2m, ept_entry_t *ept_entry,
+                     int level, int target)
+{
+    ept_entry_t split_ept_entry;
+    int rv;
+
+    ASSERT(p2m_locked_by_me(p2m));
+    ASSERT(is_epte_superpage(ept_entry));
+
+    split_ept_entry = atomic_read_ept_entry(ept_entry);
+
+    rv = _ept_split_super_page(p2m, &split_ept_entry, level, target);
+    if (!rv) {
+        ept_free_entry(p2m, &split_ept_entry, level);
+        goto out;
+    }
+
+    if (p2m_is_pod(ept_entry->sa_p2mt) &&
+        !p2m_is_pod(split_ept_entry.sa_p2mt)) {
+        ASSERT(!is_template_domain(p2m->domain));
+        atomic_dec(&p2m->domain->clone.l1_pod_pages);
+        atomic_add(1 << PAGE_ORDER_2M, &p2m->domain->pod_pages);
+    }
+
+    /* now install the newly split ept sub-tree */
+    /* NB: please make sure domian is paused and no in-fly VT-d DMA. */
+    atomic_write_ept_entry(ept_entry, split_ept_entry);
+
+  out:
+    return rv;
+}
+
+static int
+ept_split_super_page_one(struct p2m_domain *p2m, void *entry, int order)
+{
+    ept_entry_t *ept_entry = (ept_entry_t *)entry;
+    int level;
+
+    level = order / PAGETABLE_ORDER;
+    if (!level)
+        return 1;
+
+    return !ept_split_super_page(p2m, ept_entry, level, level - 1);
 }
 
 /* Take the currently mapped table, find the corresponding gfn entry,
@@ -433,13 +490,12 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
          * Read-then-write is OK because we hold the p2m lock. */
         old_entry = *ept_entry;
 
-        if (mfn_valid(mfn_x(mfn)) || direct_mmio
+        if (mfn_valid_page(mfn_x(mfn)) || direct_mmio
 #ifndef __UXEN__
             || p2m_is_paged(p2mt)
             || p2m_is_paging_in_start(p2mt)
 #endif  /* __UXEN__ */
-             || p2m_is_pod(p2mt)
-            )
+            || p2m_is_pod(p2mt))
         {
             /* Construct the new entry, and then write it once */
             new_entry.emt = epte_get_entry_emt(p2m->domain, gfn, mfn, &ipat,
@@ -470,22 +526,10 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     else
     {
         /* We need to split the original page. */
-        ept_entry_t split_ept_entry;
         ept_entry_t new_entry = { .epte = 0 };
 
-        ASSERT(is_epte_superpage(ept_entry));
-
-        split_ept_entry = atomic_read_ept_entry(ept_entry);
-
-        if ( !ept_split_super_page(p2m, &split_ept_entry, i, target) )
-        {
-            ept_free_entry(p2m, &split_ept_entry, i);
+        if (!ept_split_super_page(p2m, ept_entry, i, target))
             goto out;
-        }
-
-        /* now install the newly split ept sub-tree */
-        /* NB: please make sure domian is paused and no in-fly VT-d DMA. */
-        atomic_write_ept_entry(ept_entry, split_ept_entry);
 
         /* then move to the level we want to make real changes */
         for ( ; i > target; i-- )
@@ -1109,6 +1153,7 @@ void ept_p2m_init(struct p2m_domain *p2m)
     p2m->get_entry = ept_get_entry;
     p2m->get_l1_table = ept_get_l1_table;
     p2m->parse_entry = ept_parse_entry;
+    p2m->split_super_page_one = ept_split_super_page_one;
     p2m->change_entry_type_global = ept_change_entry_type_global;
     p2m->ro_update_l2_entry = ept_ro_update_l2_entry;
 }

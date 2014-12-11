@@ -173,6 +173,13 @@
 
 #define HVM_PARAM_VPT_COALESCE_NS 31
 
-#define HVM_NR_PARAMS          32
+/* control how clone l1 pages are populated */
+#define HVM_PARAM_CLONE_L1     32
+/* lazy clone l1 pages */
+#define HVM_PARAM_CLONE_L1_lazy          0x1
+/* lazy populate cloned l1 pages */
+#define HVM_PARAM_CLONE_L1_lazy_populate 0x2
+
+#define HVM_NR_PARAMS          33
 
 #endif /* __XEN_PUBLIC_HVM_PARAMS_H__ */
