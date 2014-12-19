@@ -839,6 +839,7 @@ struct decompress_buf_ctx {
     void *compress_buf;
     int compress_size;
     int single_page;
+    int populate_compressed;
     xc_hypercall_buffer_t pp_buffer;
     xen_pfn_t *pfn_type;
     struct decompress_ctx *dc;
@@ -861,16 +862,21 @@ decompress_cb(void *opaque)
     struct decompress_buf_ctx *dbc = (struct decompress_buf_ctx *)opaque;
     int ret;
 
-    ret = decompress_batch(dbc->batch, dbc->pfn_type,
-                           HYPERCALL_BUFFER_ARGUMENT_BUFFER(&dbc->pp_buffer),
-                           dbc->compress_buf,
-                           dbc->compress_size, dbc->single_page,
-                           dbc->dc->err_msg);
-    if (ret)
-        goto out;
+    if (!dbc->populate_compressed) {
+        ret = decompress_batch(
+            dbc->batch, dbc->pfn_type,
+            HYPERCALL_BUFFER_ARGUMENT_BUFFER(&dbc->pp_buffer),
+            dbc->compress_buf, dbc->compress_size, dbc->single_page,
+            dbc->dc->err_msg);
+        if (ret)
+            goto out;
+    } else
+        memcpy(HYPERCALL_BUFFER_ARGUMENT_BUFFER(&dbc->pp_buffer),
+               dbc->compress_buf, dbc->compress_size);
 
     ret = xc_domain_populate_physmap_from_buffer(
         dbc->dc->xc_handle, dbc->dc->vm_id, dbc->batch, 0,
+        dbc->populate_compressed ? XENMEMF_populate_from_buffer_compressed :
         XENMEMF_populate_from_buffer, &dbc->pfn_type[0], &dbc->pp_buffer);
     if (ret)
         asprintf(dbc->dc->err_msg,
@@ -933,7 +939,7 @@ static int
 uxenvm_load_readbatch(struct filebuf *f, int batch, xen_pfn_t *pfn_type,
                       int *pfn_info, int *pfn_err, int decompress,
                       struct decompress_ctx *dc, int single_page,
-                      char **err_msg)
+                      int populate_compressed, char **err_msg)
 {
     uint8_t *mem = NULL;
     int j;
@@ -1044,6 +1050,7 @@ uxenvm_load_readbatch(struct filebuf *f, int batch, xen_pfn_t *pfn_type,
         dbc->compress_size = compress_size;
         dbc->batch = batch;
         dbc->single_page = single_page;
+        dbc->populate_compressed = populate_compressed;
         ret = async_op_add(dc->async_op_ctx, dbc, &dc->process_event,
                            decompress_cb, decompress_complete);
         if (ret) {
@@ -1051,20 +1058,26 @@ uxenvm_load_readbatch(struct filebuf *f, int batch, xen_pfn_t *pfn_type,
             goto out;
         }
 #else  /* DECOMPRESS_THREADED */
-        ret = decompress_batch(batch, pfn_type,
-                               HYPERCALL_BUFFER_ARGUMENT_BUFFER(dc->pp_buffer),
-                               compress_buf,
-                               compress_size, single_page, err_msg);
-        if (ret)
-            goto out;
+        if (!populate_compressed) {
+            ret = decompress_batch(
+                batch, pfn_type,
+                HYPERCALL_BUFFER_ARGUMENT_BUFFER(dc->pp_buffer),
+                compress_buf, compress_size, single_page, err_msg);
+            if (ret)
+                goto out;
+        } else
+            memcpy(HYPERCALL_BUFFER_ARGUMENT_BUFFER(dc->pp_buffer),
+                   compress_buf, compress_size);
 
         LOAD_DPRINTF("  populate %08"PRIx64":%08"PRIx64" = %03x pages",
                      pfn_type[0], pfn_type[batch - 1] + 1, batch);
         ret = xc_domain_populate_physmap_from_buffer(
-            xc_handle, domid, batch, 0, XENMEMF_populate_from_buffer,
-            &pfn_type[0], dc->pp_buffer);
+            xc_handle, domid, batch, 0, populate_compressed ?
+            XENMEMF_populate_from_buffer_compressed :
+            XENMEMF_populate_from_buffer, &pfn_type[0], dc->pp_buffer);
         if (ret) {
-            asprintf(err_msg, "xc_domain_populate_physmap_from_buffer failed");
+            asprintf(err_msg, "xc_domain_populate_physmap_from_buffer "
+                     "compressed failed");
             goto out;
         }
 #endif  /* DECOMPRESS_THREADED */
@@ -1131,6 +1144,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
     int decompress;
     struct decompress_ctx dc = { NULL, };
     int single_page;
+    int populate_compressed = (restore_mode == VM_RESTORE_TEMPLATE);
     int zero_batch;
     int marker;
     int ret;
@@ -1399,7 +1413,8 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
             else
                 ret = uxenvm_load_readbatch(f, marker, pfn_type, pfn_info,
                                             pfn_err, decompress, &dc,
-                                            single_page, err_msg);
+                                            single_page, populate_compressed,
+                                            err_msg);
 	    if (ret)
 		goto out;
 	    break;
