@@ -533,6 +533,11 @@ void guest_physmap_remove_page(struct domain *d,
 int guest_physmap_mark_populate_on_demand(struct domain *d, unsigned long gfn,
                                           unsigned int order);
 
+/* Set a p2m range as populate-on-demand with contents */
+int guest_physmap_mark_populate_on_demand_contents(
+    struct domain *d, unsigned long gpfn, XEN_GUEST_HANDLE(uint8) buffer,
+    unsigned int *pos);
+
 /* Change types across all p2m entries in a domain */
 void p2m_change_entry_type_global(struct domain *d, 
                                   p2m_type_t ot, p2m_type_t nt);

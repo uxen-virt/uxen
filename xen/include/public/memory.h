@@ -77,6 +77,7 @@
 #define XENMEMF_exact_node(n) (XENMEMF_node(n) | XENMEMF_exact_node_request)
 #endif   /* __UXEN__ */
 #define XENMEMF_populate_from_buffer (1<<17)
+#define XENMEMF_populate_from_buffer_compressed (1<<18)
 #endif
 
 struct xen_memory_reservation {

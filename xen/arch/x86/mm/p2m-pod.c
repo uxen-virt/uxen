@@ -53,6 +53,7 @@
 #include <asm/hvm/nestedhvm.h>
 #include <asm/hvm/svm/amd-iommu-proto.h>
 #endif  /* __UXEN__ */
+#include <xen/guest_access.h>
 #include <lz4.h>
 #include <xen/keyhandler.h>
 #include <uxen/memcache-dm.h>
@@ -2324,6 +2325,76 @@ out:
     p2m_unlock(p2m);
 
     return rc;
+}
+
+int
+guest_physmap_mark_populate_on_demand_contents(
+    struct domain *d, unsigned long gpfn, XEN_GUEST_HANDLE(uint8) buffer,
+    unsigned int *pos)
+{
+    struct p2m_domain *p2m = p2m_get_hostp2m(d);
+    struct page_info *new_page;
+    void *va;
+    uint16_t c_size, uc_size;
+    mfn_t mfn;
+
+    if (unlikely(!check_decompress_buffer()))
+        return -1;
+
+    if (unlikely(__copy_from_guest_offset((void *)&c_size, buffer, *pos,
+                                          sizeof(c_size))))
+        return -1;
+    *pos += sizeof(c_size);
+
+    if (c_size > PAGE_SIZE) {
+        printk("%s: gpfn %lx invalid compressed size %d\n", __FUNCTION__,
+               gpfn, c_size);
+        return -1;
+    }
+
+    if (unlikely(__copy_from_guest_offset(this_cpu(decompress_buffer),
+                                          buffer, *pos, c_size)))
+        return -1;
+    *pos += c_size;
+
+    new_page = alloc_domheap_page(d, PAGE_ORDER_4K);
+    if (!new_page)
+        return -1;
+
+    if (c_size > PAGE_SIZE - sizeof(struct page_data_info)) {
+        /* page data can't be stored compressed -- uncompress and
+         * install uncompressed page in p2m */
+        mfn = page_to_mfn(new_page);
+        va = map_domain_page(mfn_x(mfn));
+        if (c_size < PAGE_SIZE)
+            uc_size = LZ4_uncompress((const char *)this_cpu(decompress_buffer),
+                                     va, PAGE_SIZE);
+        else {
+            memcpy(va, this_cpu(decompress_buffer), PAGE_SIZE);
+            uc_size = c_size;
+        }
+        unmap_domain_page(va);
+        if (uc_size != c_size) {
+            printk("%s: gpfn %lx invalid compressed data\n", __FUNCTION__,
+                   gpfn);
+            free_domheap_page(new_page);
+            return -1;
+        }
+        guest_physmap_add_page(d, gpfn, mfn_x(mfn), PAGE_ORDER_4K);
+        if (!paging_mode_translate(d))
+            set_gpfn_from_mfn(mfn_x(mfn), gpfn);
+        atomic_inc(&d->template.non_compressible_pages);
+        return 0;
+    }
+
+    p2m_lock(p2m);
+    /* call with p2m locked, returns unlocked -- new_page is freed, if
+     * unused */
+    p2m_pod_add_compressed_page(p2m, gpfn, this_cpu(decompress_buffer),
+                                c_size, new_page);
+    p2m_pod_stat_update(d);
+
+    return 0;
 }
 
 #ifndef NDEBUG

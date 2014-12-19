@@ -106,7 +106,10 @@ int assign_pages(
 #else   /* __UXEN__ */
 #define _MEMF_populate_from_buffer 2
 #define  MEMF_populate_from_buffer (1U<<_MEMF_populate_from_buffer)
-#define _MEMF_host_page   3
+#define _MEMF_populate_from_buffer_compressed 3
+#define  MEMF_populate_from_buffer_compressed   \
+    (1U<<_MEMF_populate_from_buffer_compressed)
+#define _MEMF_host_page   4
 #define  MEMF_host_page   (1U<<_MEMF_host_page)
 #endif   /* __UXEN__ */
 #define _MEMF_xmalloc     5

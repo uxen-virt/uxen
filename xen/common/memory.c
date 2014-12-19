@@ -60,6 +60,7 @@ struct memop_args {
     unsigned int extent_order; /* Size of each extent. */
     unsigned int memflags;     /* Allocation flags. */
     XEN_GUEST_HANDLE(uint8) buffer;
+    unsigned int buffer_pos;
 
     /* INPUT/OUTPUT */
     unsigned int nr_done;    /* Number of extents processed so far. */
@@ -148,6 +149,14 @@ static void populate_physmap(struct memop_args *a)
         {
             if ( guest_physmap_mark_populate_on_demand(d, gpfn,
                                                        a->extent_order) < 0 )
+                goto out;
+        }
+        else if (a->memflags & MEMF_populate_from_buffer_compressed)
+        {
+            if (a->extent_order)
+                goto out;
+            if (guest_physmap_mark_populate_on_demand_contents(
+                    d, gpfn, a->buffer, &a->buffer_pos) < 0)
                 goto out;
         }
         else
@@ -629,6 +638,13 @@ long do_memory_op(unsigned long cmd, XEN_GUEST_HANDLE(void) arg)
             (reservation.mem_flags & XENMEMF_populate_from_buffer)) {
             args.memflags |= MEMF_populate_from_buffer;
             args.buffer = reservation.buffer;
+        }
+
+        if (op == XENMEM_populate_physmap &&
+            (reservation.mem_flags & XENMEMF_populate_from_buffer_compressed)) {
+            args.memflags |= MEMF_populate_from_buffer_compressed;
+            args.buffer = reservation.buffer;
+            args.buffer_pos = 0;
         }
 
         if ( likely(reservation.domid == DOMID_SELF) )
