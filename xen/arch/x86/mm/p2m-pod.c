@@ -1396,7 +1396,7 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
     pdi = (struct page_data_info *)&data[offset];
 
     /* check if decompressed page exists */
-    p2m_lock(p2m);
+    p2m_lock_recursive(p2m);
     if (page_owner == d && mfn_x(pdi->mfn)) {
         *tmfn = pdi->mfn;
         get_page_fast(mfn_to_page(*tmfn), page_owner);
@@ -1448,7 +1448,7 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
     }
 
     if (page_owner == d) {
-        p2m_lock(p2m);
+        p2m_lock_recursive(p2m);
         if (mfn_x(pdi->mfn)) {
             /* page was decompressed concurrently, share it and free
              * our page via goto out w/ p != NULL */
@@ -1682,10 +1682,14 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         unmap_domain_page_direct(target);
     } else if (p2m_mfn_is_page_data(mfn_x(smfn))) {
         struct domain *page_owner;
-        ASSERT(d->clone_of);
-        /* on read access -- map page pod */
-        if (d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] &&
-            (q == p2m_guest_r || q == p2m_alloc_r)) {
+        if (!d->clone_of) {
+            ASSERT(smfn_from_clone);
+            pod_p2mt = p2m_ram_rw;
+            page_owner = d;
+            atomic_inc(&d->template.decompressed_permanent);
+        } else if (d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] &&
+                   (q == p2m_guest_r || q == p2m_alloc_r)) {
+            /* on read access -- map page pod */
             pod_p2mt = p2m_populate_on_demand;
             if (d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] &
                 HVM_PARAM_CLONE_DECOMPRESSED_shared) {
@@ -1703,8 +1707,9 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                 atomic_dec(&d->tmpl_shared_pages);
             page_owner = d;
         }
-        if (!p2m_pod_decompress_page(p2m_get_hostp2m(d->clone_of), smfn,
-                                     &mfn, page_owner)) {
+        if (!p2m_pod_decompress_page(
+                d->clone_of ? p2m_get_hostp2m(d->clone_of) : p2m, smfn, &mfn,
+                page_owner)) {
             domain_crash(d);
             goto out_fail;
         }

@@ -323,11 +323,12 @@ static void dump_domains(unsigned char key)
             if (is_template_domain(d) &&
                 atomic_read(&d->template.compressed_pdata))
                 printk("    comp_pages=%d comp_pdata=%d non_comp=%d"
-                       " decomp_shared=%d\n",
+                       " decomp_shared=%d decomp_perm=%d\n",
                        atomic_read(&d->template.compressed_pages),
                        atomic_read(&d->template.compressed_pdata),
                        atomic_read(&d->template.non_compressible_pages),
-                       atomic_read(&d->template.decompressed_shared));
+                       atomic_read(&d->template.decompressed_shared),
+                       atomic_read(&d->template.decompressed_permanent));
         }
         printk("    handle=%" PRIuuid " vm_assist=%08lx\n",
                PRIuuid_arg(handle), d->vm_assist);
