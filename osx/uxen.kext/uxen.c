@@ -16,6 +16,7 @@
 #include <rbtree/rbtree.h>
 
 #include <xen/domctl.h>
+#include <xen/hvm/hvm_op.h>
 #include <xen/xen.h>
 
 #define UXEN_DEFINE_SYMBOLS_PROTO
@@ -946,6 +947,22 @@ _uxen_snoop_hypercall(void *udata, int mode)
         }
         break;
     }
+    case __HYPERVISOR_hvm_op:
+        switch (uhd->uhd_arg[0]) {
+        case HVMOP_set_mem_type: {
+            struct xen_hvm_set_mem_type a;
+            ret = copy(uhd->uhd_arg[1], &a, sizeof(a));
+            if (ret)
+                return -ret;
+            if (a.nr > 1024)
+                return -EINVAL;
+            pages += a.nr;
+            if (pages > 1)
+                mm_dprintk("snooped hvm_op set_mem_type: %d\n", pages);
+            break;
+        }
+        }
+        break;
     default:
         break;
     }

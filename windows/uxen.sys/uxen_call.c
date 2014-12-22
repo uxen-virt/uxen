@@ -17,6 +17,7 @@
 #include <xen/xen.h>
 #include <xen/domctl.h>
 #include <xen/event_channel.h>
+#include <xen/hvm/hvm_op.h>
 
 /* Awful hack to get xen-public header rather than xen private header */
 #include <../xen-public/xen/v4v.h>
@@ -162,6 +163,22 @@ _uxen_snoop_hypercall(void *udata, int mode)
         }
         break;
     }
+    case __HYPERVISOR_hvm_op:
+        switch (uhd->uhd_arg[0]) {
+        case HVMOP_set_mem_type: {
+            struct xen_hvm_set_mem_type a;
+            ret = copy((void *)uhd->uhd_arg[1], &a, sizeof(a));
+            if (ret)
+                return -ret;
+            if (a.nr > 1024)
+                return -EINVAL;
+            pages += a.nr;
+            if (pages > 1)
+                mm_dprintk("snooped hvm_op set_mem_type: %d\n", pages);
+            break;
+        }
+        }
+        break;
     case __HYPERVISOR_v4v_op: {
         switch (uhd->uhd_arg[0]) {
 	    case V4VOP_register_ring: {
