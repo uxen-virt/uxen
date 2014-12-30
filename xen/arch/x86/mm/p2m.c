@@ -520,6 +520,7 @@ p2m_remove_page(struct p2m_domain *p2m, unsigned long gfn, unsigned long mfn,
 #endif  /* __UXEN__ */
                 set_gpfn_from_mfn(mfn+i, INVALID_M2P_ENTRY);
             ASSERT( !p2m_is_valid(t) || mfn + i == mfn_x(mfn_return) );
+            p2m_update_pod_counts(p2m->domain, mfn_x(mfn_return), t);
         }
     }
     set_p2m_entry(p2m, gfn, _mfn(INVALID_MFN), page_order, p2m_invalid, p2m->default_access);
@@ -814,6 +815,7 @@ set_mmio_p2m_entry(struct domain *d, unsigned long gfn, mfn_t mfn)
 
     P2M_DEBUG("set mmio %lx %lx\n", gfn, mfn_x(mfn));
     rc = set_p2m_entry(p2m, gfn, mfn, PAGE_ORDER_4K, p2m_mmio_direct, p2m->default_access);
+    p2m_update_pod_counts(p2m->domain, mfn_x(omfn), ot);
     audit_p2m(p2m, 1);
     p2m_unlock(p2m);
     if ( 0 == rc )

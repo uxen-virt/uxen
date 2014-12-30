@@ -259,6 +259,16 @@ typedef enum {
 #define p2m_is_immutable(_t) (p2m_to_mask(_t) & p2m_to_mask(p2m_ram_immutable))
 #endif  /* __UXEN__ */
 
+#define p2m_update_pod_counts(d, mfn, t) do {           \
+        if (p2m_is_pod((t))) {                          \
+            if ((mfn) == mfn_x(shared_zero_page))       \
+                atomic_dec(&(d)->zero_shared_pages);    \
+            else                                        \
+                atomic_dec(&(d)->tmpl_shared_pages);    \
+            atomic_dec(&(d)->pod_pages);                \
+        }                                               \
+    } while (0)
+
 /* Per-p2m-table state */
 struct p2m_domain {
     /* Lock that protects updates to the p2m */
