@@ -2509,15 +2509,72 @@ p2m_pod_compress_template(struct domain *d)
 }
 
 static void
-p2m_pod_compress_templates_keyhandler_fn(unsigned char key)
+p2m_audit_pod_counts(struct domain *d)
+{
+    struct p2m_domain *p2m = p2m_get_hostp2m(d);
+    unsigned long gpfn;
+    mfn_t mfn;
+    p2m_type_t t;
+    p2m_access_t a;
+    unsigned int page_order;
+    int nr_pages = 0, nr_pod = 0, nr_zero = 0, nr_tmpl = 0, nr_empty = 0;
+    int nr_immutable = 0;
+
+    p2m_lock(p2m);
+    for (gpfn = 0; gpfn <= p2m->max_mapped_pfn; gpfn++) {
+        mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, &page_order);
+        if (mfn_x(mfn) == INVALID_MFN /* !mfn_valid(mfn) */) {
+            gpfn |= ((1 << page_order) - 1);
+            continue;
+        }
+        if (p2m_is_immutable(t))
+            nr_immutable++;
+        if (p2m_is_pod(t)) {
+            nr_pod++;
+            if (mfn_x(mfn) == mfn_x(shared_zero_page))
+                nr_zero++;
+            else if (mfn_x(mfn))
+                nr_tmpl++;
+            else
+                nr_empty++;
+            continue;
+        }
+        if (p2m_is_ram(t)) {
+            nr_pages++;
+            continue;
+        }
+    }
+    printk("vm%d: pages %d pod %d zero %d tmpl %d empty %d\n", d->domain_id,
+           nr_pages, nr_pod, nr_zero, nr_tmpl, nr_empty);
+    printk("vm%d: immutable %d\n", d->domain_id, nr_immutable);
+    printk("vm%d: nr_pages=%d pod_pages=%d zero_shared=%d tmpl_shared=%d\n",
+           d->domain_id, d->tot_pages, atomic_read(&d->pod_pages),
+           atomic_read(&d->zero_shared_pages),
+           atomic_read(&d->tmpl_shared_pages));
+    p2m_unlock(p2m);
+}
+
+static void
+p2m_pod_keyhandler_fn(unsigned char key)
 {
     struct domain *d;
 
     rcu_read_lock(&domlist_read_lock);
-    for_each_domain(d) {
-        if (!is_template_domain(d))
-            continue;
-        p2m_pod_compress_template(d);
+    switch (key) {
+    case 't':
+        for_each_domain(d) {
+            if (!is_template_domain(d))
+                continue;
+            p2m_pod_compress_template(d);
+            break;
+        }
+        break;
+    case 'C':
+        for_each_domain(d) {
+            if (!is_hvm_domain(d))
+                continue;
+            p2m_audit_pod_counts(d);
+        }
         break;
     }
     rcu_read_unlock(&domlist_read_lock);
@@ -2526,14 +2583,22 @@ p2m_pod_compress_templates_keyhandler_fn(unsigned char key)
 static struct keyhandler
 p2m_pod_compress_templates_keyhandler = {
     .diagnostic = 1,
-    .u.fn = p2m_pod_compress_templates_keyhandler_fn,
+    .u.fn = p2m_pod_keyhandler_fn,
     .desc = "compress templates"
+};
+
+static struct keyhandler
+p2m_pod_audit_counts_keyhandler = {
+    .diagnostic = 1,
+    .u.fn = p2m_pod_keyhandler_fn,
+    .desc = "audit pod counts"
 };
 
 static __init int
 p2m_pod_compress_templates_keyhandler_init(void)
 {
     register_keyhandler('t', &p2m_pod_compress_templates_keyhandler);
+    register_keyhandler('C', &p2m_pod_audit_counts_keyhandler);
     return 0;
 }
 __initcall(p2m_pod_compress_templates_keyhandler_init);
