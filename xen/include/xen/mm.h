@@ -303,6 +303,25 @@ page_list_splice(struct page_list_head *list, struct page_list_head *head)
     last->list.next = page_to_pdx(at);
     at->list.prev = page_to_pdx(last);
 }
+static inline void
+page_list_add_after(struct page_info *page, struct page_info *after,
+                    struct page_list_head *head)
+{
+    struct page_info *next;
+
+    if (head->tail == after) {
+        page->list.next = PAGE_LIST_NULL;
+        head->tail = page;
+    } else {
+        next = pdx_to_page(after->list.next);
+
+        page->list.next = page_to_pdx(next);
+        next->list.prev = page_to_pdx(page);
+    }
+
+    page->list.prev = page_to_pdx(after);
+    after->list.next = page_to_pdx(page);
+}
 
 #define page_list_for_each(pos, head) \
     for ( pos = (head)->next; pos; pos = page_list_next(pos, head) )
