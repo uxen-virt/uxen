@@ -133,6 +133,7 @@ DM_SRCS += dmpdev-rpc.c
 dm.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 dm.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
 dm.o: CPPFLAGS += $(LIBFILECRYPT_CPPFLAGS)
+DM_SRCS += edid.c
 DM_SRCS += filebuf.c
 DM_SRCS += firmware.c
 $(WINDOWS)DM_SRCS += guest-agent.c
