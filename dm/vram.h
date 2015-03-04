@@ -39,7 +39,18 @@ extern const VMStateInfo vmstate_info_vram;
     .flags        = VMS_SINGLE,                                 \
     .offset       = vmstate_offset_value(_state, _field,        \
                                          struct vram_desc),     \
-    .size         = -1,                                         \
+    .size         = sizeof(struct vram_desc),                   \
+}
+
+#define VMSTATE_VRAM_ARRAY(_field, _state, _num) {              \
+    .name         = (stringify(_field)),                        \
+    .info         = &vmstate_info_vram,                         \
+    .flags        = VMS_ARRAY,                                  \
+    .num          = (_num),                                     \
+    .offset       = vmstate_offset_array(_state, _field,        \
+                                         struct vram_desc,      \
+                                         _num),                 \
+    .size         = sizeof(struct vram_desc),                   \
 }
 
 #endif /* _VRAM_H_ */
