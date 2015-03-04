@@ -30,6 +30,7 @@
 #include "qemu_savevm.h"
 #include "vm.h"
 #include "vm-save.h"
+#include "uxen.h"
 #include "hw/uxen_platform.h"
 #include "mapcache.h"
 
@@ -1150,6 +1151,10 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
     int ret;
     int size;
 
+    /* XXX init debug option */
+    if (strstr(uxen_opt_debug, ",uncomptmpl,"))
+        populate_compressed = 0;
+
     pfn_type = malloc(MAX_BATCH_SIZE * sizeof(*pfn_type));
     if (pfn_type == NULL) {
 	asprintf(err_msg, "pfn_type = malloc(%"PRIdSIZE") failed",
@@ -1565,6 +1570,10 @@ vm_save(void)
 {
     char *err_msg = NULL;
     int ret;
+
+    /* XXX init debug option */
+    if (!strstr(uxen_opt_debug, ",compbatch,"))
+        vm_save_info.single_page = 1;
 
     vm_save_info.awaiting_suspend = 1;
     vm_set_run_mode(SUSPEND_VM);

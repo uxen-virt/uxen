@@ -206,6 +206,7 @@ vm.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 vm.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
 DM_SRCS += vm-save.c
 vm-save.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
+vm-save.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
 vm-save.o: CPPFLAGS += $(LZ4_CPPFLAGS)
 $(WINDOWS)DM_SRCS += win32.c
 DM_SRCS += xen.c

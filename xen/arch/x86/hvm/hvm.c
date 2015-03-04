@@ -640,6 +640,37 @@ int hvm_domain_initialise(struct domain *d)
 
     d->arch.hvm_domain.params[HVM_PARAM_HPET_ENABLED] = 1;
 
+    /* XXX init debug option */
+    if (!strstr(opt_debug, ",uncomptmpl,")) {
+        /* defaults for compressed template */
+        d->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] =
+            HVM_PARAM_CLONE_L1_lazy_populate |
+            HVM_PARAM_CLONE_L1_dynamic;
+        d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] =
+            HVM_PARAM_CLONE_DECOMPRESSED_shared;
+    }
+
+    /* XXX init debug option */
+    if (strstr(opt_debug, ",clonel1lazy,"))
+        d->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] |=
+            HVM_PARAM_CLONE_L1_lazy;
+    /* XXX init debug option */
+    if (strstr(opt_debug, ",popl1lazy,"))
+        d->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] |=
+            HVM_PARAM_CLONE_L1_lazy_populate;
+    /* XXX init debug option */
+    if (strstr(opt_debug, ",popl1dynamic,"))
+        d->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] |=
+            HVM_PARAM_CLONE_L1_dynamic;
+    /* XXX init debug option */
+    if (strstr(opt_debug, ",decompro,"))
+        d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] =
+            HVM_PARAM_CLONE_DECOMPRESSED_read_only;
+    /* XXX init debug option */
+    if (strstr(opt_debug, ",decompshare,"))
+        d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] =
+            HVM_PARAM_CLONE_DECOMPRESSED_shared;
+
 #ifndef __UXEN__
     hvm_init_cacheattr_region_list(d);
 #endif  /* __UXEN__ */
