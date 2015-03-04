@@ -293,7 +293,7 @@ pc_init_xen(void)
     intel_pch_init(pci_bus);
 #endif
 
-    uxen_vga_init(pci_bus);
+    uxendisp_init(pci_bus);
 
 #ifdef CONFIG_PASSTHROUGH
     /* Pass-through Initialization

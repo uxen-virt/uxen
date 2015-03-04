@@ -25,7 +25,7 @@ i2c_bus *piix4_pm_init(PCIBus *bus, int devfn, uint32_t smb_io_base,
                        qemu_irq sci_irq
                        /* , qemu_irq cmos_s3, qemu_irq smi_irq */);
 
-int uxen_vga_init(PCIBus *bus);
+int uxendisp_init(PCIBus *bus);
 
 SerialState *serial_init(int base, qemu_irq irq, int baudbase,
                          CharDriverState *chr);
