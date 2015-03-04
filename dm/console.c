@@ -16,7 +16,7 @@
 #include "qemu_glue.h"
 #include "uxen.h"
 
-DisplayState *display_state;
+DisplayState *display_state = NULL;
 
 uint32_t forwarded_keys = 0;
 
@@ -342,7 +342,8 @@ console_display_start(void)
 {
     if (gui_info && gui_info->start)
         gui_info->start(gui_state);
-    do_dpy_setup_refresh(display_state);
+    if (display_state)
+        do_dpy_setup_refresh(display_state);
 }
 
 DisplaySurface *
