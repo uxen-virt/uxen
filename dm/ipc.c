@@ -377,6 +377,9 @@ static HANDLE win32_pipe_share_handle(struct ipc_client *c, HANDLE handle)
     HANDLE proc, dup;
     BOOL rc;
 
+    if (c->disconnected)
+        return NULL;
+
     proc = OpenProcess(PROCESS_DUP_HANDLE, FALSE, c->pid);
     if (!proc)
         return NULL;
