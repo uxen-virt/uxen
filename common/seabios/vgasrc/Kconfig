@@ -40,6 +40,11 @@ menu "VGA ROM"
             bool "GeodeLX interface VGA BIOS"
             help
                 Build support for Geode LX vga.
+
+        config VGA_UXEN
+            bool "uXen VGA BIOS"
+            help
+                Build support for uXen vga.
     endchoice
 
     config BUILD_VGABIOS
