@@ -151,7 +151,7 @@ static int __send_bytes(struct sf_state *state, struct sf_msg *msg, int len)
     DWORD bytes = 0;
 
     if (!WriteFile(state->v4v.v4v_handle, (void *)msg, len, &bytes, NULL)) {
-        warnx("%s: WriteFile", __FUNCTION__);
+        Wwarn("%s: WriteFile", __FUNCTION__);
         return -1;
     }
 
@@ -189,7 +189,7 @@ static int __receive_req(struct sf_state *state)
                   state->request,
                   sizeof(struct sf_msg),
                   &bytes, NULL)) {
-        warnx("%s: ReadFile", __FUNCTION__);
+        Wwarn("%s: ReadFile", __FUNCTION__);
         return -1;
     }
     assert(bytes < RING_SIZE - 4096);
@@ -243,8 +243,6 @@ static void sf_save(QEMUFile *f, void *opaque)
 {
     struct sf_state *s = (struct sf_state*)opaque;
 
-    sf_service_stop_processing();
-
     critical_section_enter(&s->lock);
     debug_printf("sf save, request state %d\n", s->req_state);
     qemu_put_be32(f, s->req_state);
@@ -253,8 +251,6 @@ static void sf_save(QEMUFile *f, void *opaque)
     qemu_put_be32(f, s->response_bytes);
     qemu_put_buffer(f, (uint8_t*)s->response, sizeof(struct sf_msg));
     critical_section_leave(&s->lock);
-
-    sf_service_free();
 }
 
 static int sf_load(QEMUFile *f, void *opaque, int version)
