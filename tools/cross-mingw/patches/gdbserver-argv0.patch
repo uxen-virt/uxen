@@ -1,0 +1,17 @@
+diff -ru gdb-7.4.orig/gdb/gdbserver/win32-low.c gdb-7.4/gdb/gdbserver/win32-low.c
+--- gdb-7.4.orig/gdb/gdbserver/win32-low.c	2012-01-06 04:43:40.000000000 +0000
++++ gdb-7.4/gdb/gdbserver/win32-low.c	2012-12-07 23:22:00.000000000 +0000
+@@ -548,11 +548,12 @@
+   program = real_path;
+ #endif
+ 
+-  argslen = 1;
++  argslen = 1 + strlen (program);
+   for (argc = 1; program_args[argc]; argc++)
+     argslen += strlen (program_args[argc]) + 1;
+   args = alloca (argslen);
+   args[0] = '\0';
++  strcat (args, program);
+   for (argc = 1; program_args[argc]; argc++)
+     {
+       /* FIXME: Can we do better about quoting?  How does Cygwin

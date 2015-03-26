@@ -1,0 +1,92 @@
+#
+# Copyright 2012-2015, Bromium, Inc.
+# SPDX-License-Identifier: ISC
+#
+
+YAJL_SRCDIR = $(SRCROOT)/yajl/src
+
+TARGET = install/lib/libyajl.a
+
+SDK_include_files = $(SDKDIR_include)/yajl/yajl_version.h
+SDK_include_files += $(patsubst %,$(SDKDIR_include)/yajl/%,$(notdir $(YAJL_HDRS)))
+
+all: $(TARGET) $(SDK_include_files) $(SDKDIR_lib)/libyajl.a Makefile.lib-YAJL
+
+YAJL_SRCS =
+YAJL_SRCS += yajl.c
+YAJL_SRCS += yajl_alloc.c
+YAJL_SRCS += yajl_buf.c
+YAJL_SRCS += yajl_encode.c
+YAJL_SRCS += yajl_gen.c
+YAJL_SRCS += yajl_lex.c
+YAJL_SRCS += yajl_parser.c
+YAJL_SRCS += yajl_tree.c
+YAJL_SRCS += yajl_version.c
+
+YAJL_OBJS = $(patsubst %.m,%.o,$(patsubst %.c,%.o,$(YAJL_SRCS)))
+YAJL_OBJS := $(subst /,_,$(YAJL_OBJS))
+
+YAJL_HDRS =
+YAJL_HDRS += yajl_gen.h
+YAJL_HDRS += yajl_common.h
+YAJL_HDRS += yajl_parse.h
+YAJL_HDRS += yajl_tree.h
+
+YAJL_HDRS := $(patsubst %,$(YAJL_SRCDIR)/api/%,$(YAJL_HDRS))
+
+CFLAGS += -O2 -Werror -Wall
+
+CPPFLAGS += -Iinstall/include
+
+EXTRA_CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
+
+$(YAJL_OBJS): .deps/.exists install/.headers
+
+$(TARGET): $(YAJL_OBJS)
+	@mkdir -p $(@D)
+	$(_W)echo Linking - $(notdir $@)
+	$(_V)$(AR) rc $@ $(YAJL_OBJS)
+	$(_V)$(RANLIB) $@
+
+%.o: $(YAJL_SRCDIR)/%.c
+	$(_W)echo Compiling - $@
+	$(_V)$(COMPILE.c) $(EXTRA_CFLAGS) -c $< -o $@
+
+install/.exists:
+	@mkdir -p install/include/yajl install/lib
+	@touch $@
+
+install/.headers: install/.exists
+install/.headers: $(YAJL_HDRS) install/include/yajl/yajl_version.h
+	$(_W)echo Installing - $(notdir $(YAJL_HDRS))
+	$(_V)cp -a $(YAJL_HDRS) install/include/yajl/
+	@touch $@
+
+install/include/yajl/yajl_version.h: install/.exists
+install/include/yajl/yajl_version.h: $(YAJL_SRCDIR)/api/yajl_version.h.cmake
+	$(_W)echo Generating - $(notdir $@)
+	$(_V)sed -E -n 's,^SET \((YAJL_(MAJOR|MINOR|MICRO)) ([0-9]*)\)$$,s/$${\1}/\3/,p' $(YAJL_SRCDIR)/../CMakeLists.txt >yajl_version.sed
+	$(_V)sed -f yajl_version.sed $< >$@
+
+$(SDKDIR_lib)/libyajl.a: $(TARGET) $(SDKDIR_lib)/.exists
+	$(_W)echo Installing from $(abspath $(<D)) to $(SDKDIR_lib)
+	$(_W)echo Installing -- $(<F)
+	$(_V)$(call install_lib,$<,$(SDKDIR_lib))
+
+#sdk_include: install/include/yajl/yajl_version.h $(patsubst %,install/include/yajl/%,$(notdir $(YAJL_HDRS))) $(SDKDIR_include)/yajl/.exists
+
+$(SDK_include_files) : $(SDKDIR_include)/yajl/% : install/include/yajl/% $(SDKDIR_include)/yajl/.exists
+	$(_W)echo Installing from $(abspath $(<D)) to $(SDKDIR_include)/yajl
+	$(_W)echo Installing -- yajl_version.h
+	$(_V)$(call install_data,$(<D)/yajl_version.h,$(SDKDIR_include)/yajl)
+	$(_W)echo Installing -- $(notdir $(YAJL_HDRS))
+	$(_V)$(call install_data,$(patsubst %,$(<D)/%,$(notdir $(YAJL_HDRS))),$(SDKDIR_include)/yajl)
+
+Makefile.lib-YAJL:
+	@rm -f $@
+	@(echo "YAJL_CPPFLAGS = -I$(abspath install)/include" ;\
+	  echo "YAJL_LIBS = -L$(abspath install)/lib -lyajl" ;\
+	  echo "YAJL_DEPS = $(abspath install)/lib/libyajl.a" ;\
+	  echo "$(abspath install)/lib/libyajl.a: $(patsubst %,$(YAJL_SRCDIR)/%,$(YAJL_SRCS)) $(YAJL_HDRS)" ) >$@
+
+-include .deps/*.d

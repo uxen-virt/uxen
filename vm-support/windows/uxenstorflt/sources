@@ -1,0 +1,16 @@
+TARGETNAME = uxenstorflt
+TARGETTYPE = DRIVER
+
+!include ../common/sources.inc
+
+NTTARGETFILE0 = $(OBJ_PATH)\$(O)\$(INF_NAME).inf
+PASS0_BINPLACE = $(NTTARGETFILE0)
+
+NTTARGETFILE2 = POST
+
+INCLUDES=..\..\..\common\include\xen-public;..\common
+
+SOURCES = smbios.c          \
+          storflt.c         \
+          diag.c            \
+          uxenstorflt.rc

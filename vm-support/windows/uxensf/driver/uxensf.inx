@@ -1,0 +1,71 @@
+[Version]
+Signature="$Windows NT$"
+Class=NetService
+ClassGuid = {4d36e973-e325-11ce-bfc1-08002be10318}
+Provider=%uXenMfg%
+DriverVer=08/26/2008,2.00.0000
+DriverPackageType=KernelService
+
+[SourceDisksNames]
+1 = %uxensf.MediaDesc%
+
+[SourceDisksFiles]
+uxensf.sys = 1
+VBoxMRXNP.dll = 1
+VBoxMRXNP32.dll = 1
+
+[DestinationDirs]
+DefaultDestDir      = 11 ; system32
+uxensf_CopyFiles    = 12 ; drivers
+VBoxMRXNP_CopyFiles = 11 ; system32
+VBoxMRXNP32_CopyFiles = 10,SysWOW64 
+
+[DefaultInstall]
+CopyFiles = uxensf_CopyFiles, VBoxMRXNP_CopyFiles, VBoxMRXNP32_CopyFiles
+AddReg = VBoxMRXNP_Add_Reg
+
+[DefaultUninstall]
+DelFiles = uxensf_CopyFiles, VBoxMRXNP_CopyFiles
+DelReg = VBoxMRXNP_Add_Reg
+
+[uxensf_CopyFiles]
+uxensf.sys
+
+[VBoxMRXNP_CopyFiles]
+VBoxMRXNP.dll
+
+[VBoxMRXNP32_CopyFiles]
+VBoxMRXNP.dll,VBoxMRXNP32.dll
+
+[DefaultInstall.Services]
+AddService = uxensf, 0x00000802, uxensf_ServiceInstallSection
+
+[DefaultUninstall.Services]
+DelService = uxensf, 0x200
+DelReg = uxensf_Service_Add_Reg
+
+[uxensf_ServiceInstallSection]
+DisplayName    = %uxensf_svcdesc%
+ServiceType    = 0x00000002 ; service file system driver
+StartType      = 0x00000002 ; auto start
+ErrorControl   = 0x00000001 ; normal error handling
+ServiceBinary  = %12%\uxensf.sys
+LoadOrderGroup = NetworkProvider
+AddReg         = uxensf_Service_Add_Reg
+
+[uxensf_Service_Add_Reg]
+HKR, NetworkProvider, DeviceName, 0x00000000, "\Device\VBoxMiniRdr"
+HKR, NetworkProvider, Name, 0x00000000, "uXen Hypervisor Shared Folders"
+HKR, NetworkProvider, ProviderPath, 0x00000000, %11%\VBoxMRXNP.dll
+HKLM, System\CurrentControlSet\Control\NetworkProvider\Order, ProviderOrder, 0x00000000, "uxensf,RDPNP,LanmanWorkstation,webclient"
+
+[VBoxMRXNP_Add_Reg]
+HKLM, SOFTWARE\Microsoft\Windows\CurrentVersion\Run, VBoxMRXNP, 0x00000000, %11%\VBoxMRXNP.exe
+
+[Strings]
+uXenMfg = "uXen Project"
+uxensf.DeviceDesc = "uXen Shared Folder"
+uxensf_svcdesc = "uXen Shared Folders Driver"
+VBoxMRXNP_svcdesc = "VirtualBox Network Provider Service"
+uxensf.MediaDesc = "uXen installation Media"
+

@@ -1,0 +1,406 @@
+diff -ru gdb-1822.orig/src/gdb/dwarf2read.c gdb-1822/src/gdb/dwarf2read.c
+--- gdb-1822.orig/src/gdb/dwarf2read.c	2012-05-21 19:30:53.000000000 +0100
++++ gdb-1822/src/gdb/dwarf2read.c	2012-12-07 21:44:11.000000000 +0000
+@@ -329,24 +329,58 @@
+ 
+ /* names of the debugging sections */
+ 
++struct section_names {
++  char *INFO_SECTION;
++  char *ABBREV_SECTION;
++  char *LINE_SECTION;
++  char *PUBNAMES_SECTION;
++  char *PUBTYPES_SECTION;
++  char *INLINED_SECTION;
++  char *ARANGES_SECTION;
++  char *LOC_SECTION;
++  char *MACINFO_SECTION;
++  char *STR_SECTION;
++  char *FRAME_SECTION;
++  char *RANGES_SECTION;
++  char *EH_FRAME_SECTION;
++};
++
+ /* APPLE LOCAL: Different names, eh.  */
++static struct section_names apple_section_names = {
++  .INFO_SECTION     = "LC_SEGMENT.__DWARF.__debug_info",
++  .ABBREV_SECTION   = "LC_SEGMENT.__DWARF.__debug_abbrev",
++  .LINE_SECTION     = "LC_SEGMENT.__DWARF.__debug_line",
++  .PUBNAMES_SECTION = "LC_SEGMENT.__DWARF.__debug_pubnames",
++  /* APPLE LOCAL: pubtypes */
++  .PUBTYPES_SECTION = "LC_SEGMENT.__DWARF.__debug_pubtypes",
++  /* END APPLE LOCAL */
++  /* APPLE LOCAL debug inlined section */
++  .INLINED_SECTION  = "LC_SEGMENT.__DWARF.__debug_inlined",
++  .ARANGES_SECTION  = "LC_SEGMENT.__DWARF.__debug_aranges",
++  .LOC_SECTION      = "LC_SEGMENT.__DWARF.__debug_loc",
++  .MACINFO_SECTION  = "debug_macinfo_do_not_use"
++  /* "LC_SEGMENT.__DWARF.__debug_macinfo" */,
++  .STR_SECTION      = "LC_SEGMENT.__DWARF.__debug_str",
++  .FRAME_SECTION    = "LC_SEGMENT.__DWARF.__debug_frame",
++  .RANGES_SECTION   = "LC_SEGMENT.__DWARF.__debug_ranges",
++  .EH_FRAME_SECTION = "LC_SEGMENT.__TEXT.__eh_frame",
++};
+ 
+-#define INFO_SECTION     "LC_SEGMENT.__DWARF.__debug_info"
+-#define ABBREV_SECTION   "LC_SEGMENT.__DWARF.__debug_abbrev"
+-#define LINE_SECTION     "LC_SEGMENT.__DWARF.__debug_line"
+-#define PUBNAMES_SECTION "LC_SEGMENT.__DWARF.__debug_pubnames"
+-/* APPLE LOCAL: pubtypes */
+-#define PUBTYPES_SECTION "LC_SEGMENT.__DWARF.__debug_pubtypes"
+-/* END APPLE LOCAL */
+-/* APPLE LOCAL debug inlined section */
+-#define INLINED_SECTION  "LC_SEGMENT.__DWARF.__debug_inlined"
+-#define ARANGES_SECTION  "LC_SEGMENT.__DWARF.__debug_aranges"
+-#define LOC_SECTION      "LC_SEGMENT.__DWARF.__debug_loc"
+-#define MACINFO_SECTION  "LC_SEGMENT.__DWARF.__debug_macinfo"
+-#define STR_SECTION      "LC_SEGMENT.__DWARF.__debug_str"
+-#define FRAME_SECTION    "LC_SEGMENT.__DWARF.__debug_frame"
+-#define RANGES_SECTION   "LC_SEGMENT.__DWARF.__debug_ranges"
+-#define EH_FRAME_SECTION "LC_SEGMENT.__TEXT.__eh_frame"
++static struct section_names elf_section_names = {
++  .INFO_SECTION     = ".debug_info",
++  .ABBREV_SECTION   = ".debug_abbrev",
++  .LINE_SECTION     = ".debug_line",
++  .PUBNAMES_SECTION = "debug_pubnames_do_not_use" /* ".debug_pubnames" */,
++  .PUBTYPES_SECTION = "debug_pubtype_do_not_use" /* ".debug_pubtypes" */,
++  .INLINED_SECTION  = "debug_inlined_do_not_use" /* ".debug_inlined" */,
++  .ARANGES_SECTION  = ".debug_aranges",
++  .LOC_SECTION      = ".debug_loc",
++  .MACINFO_SECTION  = "debug_macinfo_do_not_use" /* ".debug_macinfo" */,
++  .STR_SECTION      = ".debug_str",
++  .FRAME_SECTION    = ".debug_frame",
++  .RANGES_SECTION   = ".debug_ranges",
++  .EH_FRAME_SECTION = ".eh_frame",
++};
+ 
+ /* APPLE LOCAL: We don't handle the macro information from
+    gcc correctly, e.g. v. <rdar://problem/7237783>, so until
+@@ -354,8 +388,9 @@
+    is using it intentionally -- it just gets pulled in when
+    someone uses "-g3" on their compile line thinking it will
+    provide a better debug experience.  */
+-#undef MACINFO_SECTION
+-#define MACINFO_SECTION "debug_macinfo_do_not_use"
++/* #undef MACINFO_SECTION */
++/* #define MACINFO_SECTION "debug_macinfo_do_not_use" */
++/* see above */
+ 
+ /* local data types */
+ 
+@@ -1381,66 +1416,70 @@
+ static void
+ dwarf2_locate_sections (bfd *ignore_abfd, asection *sectp, void *ignore_ptr)
+ {
+-  if (strcmp (sectp->name, INFO_SECTION) == 0)
++  int is_elf = ignore_abfd->xvec->flavour == bfd_target_elf_flavour;
++  struct section_names *s =
++    (is_elf ? &elf_section_names : &apple_section_names);
++
++  if (strcmp (sectp->name, s->INFO_SECTION) == 0)
+     {
+       dwarf2_per_objfile->info_size = bfd_get_section_size (sectp);
+       dwarf_info_section = sectp;
+     }
+-  else if (strcmp (sectp->name, ABBREV_SECTION) == 0)
++  else if (strcmp (sectp->name, s->ABBREV_SECTION) == 0)
+     {
+       dwarf2_per_objfile->abbrev_size = bfd_get_section_size (sectp);
+       dwarf_abbrev_section = sectp;
+     }
+-  else if (strcmp (sectp->name, LINE_SECTION) == 0)
++  else if (strcmp (sectp->name, s->LINE_SECTION) == 0)
+     {
+       dwarf2_per_objfile->line_size = bfd_get_section_size (sectp);
+       dwarf_line_section = sectp;
+     }
+-  else if (strcmp (sectp->name, PUBNAMES_SECTION) == 0)
++  else if (strcmp (sectp->name, s->PUBNAMES_SECTION) == 0)
+     {
+       dwarf2_per_objfile->pubnames_size = bfd_get_section_size (sectp);
+       dwarf_pubnames_section = sectp;
+     }
+   /* APPLE LOCAL: pubtypes */
+-  else if (strcmp (sectp->name, PUBTYPES_SECTION) == 0)
++  else if (strcmp (sectp->name, s->PUBTYPES_SECTION) == 0)
+     {
+       dwarf2_per_objfile->pubtypes_size = bfd_get_section_size (sectp);
+       dwarf_pubtypes_section = sectp;
+     }
+   /* END APPLE LOCAL */
+   /* APPLE LOCAL begin debug inlined section  */
+-  else if (strcmp (sectp->name, INLINED_SECTION) == 0)
++  else if (strcmp (sectp->name, s->INLINED_SECTION) == 0)
+     {
+       dwarf2_per_objfile->inlined_size = bfd_get_section_size (sectp);
+       dwarf_inlined_section = sectp;
+     }
+   /* APPLE LOCAL end debug inlined section */
+-  else if (strcmp (sectp->name, ARANGES_SECTION) == 0)
++  else if (strcmp (sectp->name, s->ARANGES_SECTION) == 0)
+     {
+       dwarf2_per_objfile->aranges_size = bfd_get_section_size (sectp);
+       dwarf_aranges_section = sectp;
+     }
+-  else if (strcmp (sectp->name, LOC_SECTION) == 0)
++  else if (strcmp (sectp->name, s->LOC_SECTION) == 0)
+     {
+       dwarf2_per_objfile->loc_size = bfd_get_section_size (sectp);
+       dwarf_loc_section = sectp;
+     }
+-  else if (strcmp (sectp->name, MACINFO_SECTION) == 0)
++  else if (strcmp (sectp->name, s->MACINFO_SECTION) == 0)
+     {
+       dwarf2_per_objfile->macinfo_size = bfd_get_section_size (sectp);
+       dwarf_macinfo_section = sectp;
+     }
+-  else if (strcmp (sectp->name, STR_SECTION) == 0)
++  else if (strcmp (sectp->name, s->STR_SECTION) == 0)
+     {
+       dwarf2_per_objfile->str_size = bfd_get_section_size (sectp);
+       dwarf_str_section = sectp;
+     }
+-  else if (strcmp (sectp->name, FRAME_SECTION) == 0)
++  else if (strcmp (sectp->name, s->FRAME_SECTION) == 0)
+     {
+       dwarf2_per_objfile->frame_size = bfd_get_section_size (sectp);
+       dwarf_frame_section = sectp;
+     }
+-  else if (strcmp (sectp->name, EH_FRAME_SECTION) == 0)
++  else if (strcmp (sectp->name, s->EH_FRAME_SECTION) == 0)
+     {
+       flagword aflag = bfd_get_section_flags (ignore_abfd, sectp);
+       if (aflag & SEC_HAS_CONTENTS)
+@@ -1449,7 +1488,7 @@
+           dwarf_eh_frame_section = sectp;
+         }
+     }
+-  else if (strcmp (sectp->name, RANGES_SECTION) == 0)
++  else if (strcmp (sectp->name, s->RANGES_SECTION) == 0)
+     {
+       dwarf2_per_objfile->ranges_size = bfd_get_section_size (sectp);
+       dwarf_ranges_section = sectp;
+@@ -1549,8 +1588,12 @@
+ static bfd_boolean
+ find_debug_inlined_section (bfd *ignore_abfd, asection *sectp, void *ignore)
+ {
++  int is_elf = ignore_abfd->xvec->flavour == bfd_target_elf_flavour;
++  struct section_names *s =
++    (is_elf ? &elf_section_names : &apple_section_names);
++
+   if (sectp->name
+-      && strcmp (sectp->name, INLINED_SECTION) == 0)
++      && strcmp (sectp->name, s->INLINED_SECTION) == 0)
+     {
+       return 1;
+     }
+@@ -1563,8 +1606,12 @@
+ static bfd_boolean
+ find_debug_str_section (bfd *ignore_abfd, asection *sectp, void *ignore)
+ {
++  int is_elf = ignore_abfd->xvec->flavour == bfd_target_elf_flavour;
++  struct section_names *s =
++    (is_elf ? &elf_section_names : &apple_section_names);
++
+   if (sectp->name
+-      && strcmp (sectp->name, STR_SECTION) == 0)
++      && strcmp (sectp->name, s->STR_SECTION) == 0)
+     {
+       return 1;
+     }
+@@ -1808,8 +1855,12 @@
+ static bfd_boolean
+ find_pubtypes (bfd *ignore_abfd, asection *sectp, void *ignore)
+ {
++  int is_elf = ignore_abfd->xvec->flavour == bfd_target_elf_flavour;
++  struct section_names *s =
++    (is_elf ? &elf_section_names : &apple_section_names);
++
+   if (sectp->name 
+-      && strcmp (sectp->name, PUBTYPES_SECTION) == 0)
++      && strcmp (sectp->name, s->PUBTYPES_SECTION) == 0)
+     {
+       return 1;
+     }
+diff -ru gdb-1822.orig/src/gdb/symfile.c gdb-1822/src/gdb/symfile.c
+--- gdb-1822.orig/src/gdb/symfile.c	2012-03-10 06:48:19.000000000 +0000
++++ gdb-1822/src/gdb/symfile.c	2012-12-07 21:55:54.000000000 +0000
+@@ -409,6 +409,7 @@
+   sap = (struct section_addr_info *) xmalloc (size);
+   memset (sap, 0, size);
+   sap->num_sections = num_sections;
++  sap->offset_section = -1;
+ 
+   return sap;
+ }
+@@ -493,6 +494,7 @@
+   asection *sect;
+   struct obj_section *osect;
+   int i;
++  int is_elf = objfile->obfd->xvec->flavour == bfd_target_elf_flavour;
+   
+   /* APPLE LOCAL: You can't actually just grab the bfd section index and
+      use that.  That's because we don't always make obj_sections for every
+@@ -504,7 +506,8 @@
+   objfile->sect_index_text = 0;
+   ALL_OBJFILE_OSECTIONS (objfile, osect)
+     {
+-      if (strcmp (osect->the_bfd_section->name, TEXT_SEGMENT_NAME) == 0)
++      if (strcmp (osect->the_bfd_section->name,
++                  is_elf ? ".text" : TEXT_SEGMENT_NAME) == 0)
+ 	{
+ 	  objfile->sect_index_text = i;
+ 	  break;
+@@ -516,7 +519,8 @@
+   objfile->sect_index_data = 0;
+   ALL_OBJFILE_OSECTIONS (objfile, osect)
+     {
+-      if (strcmp (osect->the_bfd_section->name, DATA_SECTION_NAME) == 0)
++      if (strcmp (osect->the_bfd_section->name,
++                  is_elf ? ".data" : DATA_SECTION_NAME) == 0)
+ 	{
+ 	  objfile->sect_index_data = i;
+ 	  break;
+@@ -528,7 +532,8 @@
+   objfile->sect_index_bss = 0;
+   ALL_OBJFILE_OSECTIONS (objfile, osect)
+     {
+-      if (strcmp (osect->the_bfd_section->name, BSS_SECTION_NAME) == 0)
++      if (strcmp (osect->the_bfd_section->name,
++                  is_elf ? ".bss" : BSS_SECTION_NAME) == 0)
+ 	{
+ 	  objfile->sect_index_bss = i;
+ 	  break;
+@@ -669,6 +674,7 @@
+ 			 struct section_addr_info *addrs)
+ {
+   int i;
++  int is_elf = objfile->obfd->xvec->flavour == bfd_target_elf_flavour;
+ 
+   objfile->num_sections = bfd_count_sections (objfile->obfd);
+   objfile->section_offsets = (struct section_offsets *)
+@@ -677,6 +683,22 @@
+   memset (objfile->section_offsets, 0,
+ 	  SIZEOF_N_SECTION_OFFSETS (objfile->num_sections));
+ 
++  /* Apply the offset of the special offset section (usually the .text
++     section) to all other sections. */
++  if (is_elf && addrs->num_sections && addrs->offset_section != -1)
++    {
++      struct other_sections *top;
++      CORE_ADDR offset;
++
++      top = &addrs->other[addrs->offset_section];
++      offset = top->addr;
++
++      for (i = 0; i < objfile->num_sections; i++)
++        {
++          (objfile->section_offsets)->offsets[i] += offset;
++        }
++    }
++
+   /* Now calculate offsets for section that were specified by the
+      caller. */
+   for (i = 0; i < addrs->num_sections && addrs->other[i].name; i++)
+@@ -865,6 +887,7 @@
+ 	  asection *sect;
+ 	  CORE_ADDR lower_offset;
+ 	  int i;
++          int is_elf = objfile->obfd->xvec->flavour == bfd_target_elf_flavour;
+ 	  
+ 	  /* APPLE LOCAL */
+ 	  gdb_assert (addrs->other[0].name);
+@@ -875,7 +898,8 @@
+ 	  /* APPLE LOCAL: Look for the text segment ("__TEXT"), not the section
+ 	     ("__TEXT.__text") because what we're really looking for is the load
+ 	     address of the image, and the section address is offset a bit. */
+-	  lower_sect = bfd_get_section_by_name (objfile->obfd, TEXT_SEGMENT_NAME);
++          lower_sect = bfd_get_section_by_name (objfile->obfd, is_elf ?
++                                                ".text" : TEXT_SEGMENT_NAME);
+ 	  if (lower_sect == NULL)
+ 	    bfd_map_over_sections (objfile->obfd, find_lowest_section,
+ 				   &lower_sect);
+@@ -2708,11 +2732,13 @@
+     char *value;
+   };
+ 
+-  struct section_addr_info *section_addrs;
++  struct section_addr_info *section_addrs = NULL;
+   struct sect_opt *sect_opts = NULL;
+   size_t num_sect_opts = 0;
+   struct cleanup *my_cleanups = make_cleanup (null_cleanup, NULL);
+ 
++  bfd *abfd;
++
+   num_sect_opts = 16;
+   sect_opts = (struct sect_opt *) xmalloc (num_sect_opts
+ 					   * sizeof (struct sect_opt));
+@@ -2791,22 +2817,29 @@
+  	}
+     }
+ 
++  if (filename == NULL)
++    error ("usage: must specify exactly one filename");
++
++  abfd = symfile_bfd_open (filename, 0 /* mainline */, GDB_OSABI_UNKNOWN);
++
+   if (address != NULL)
+     {
++      int is_elf = abfd->xvec->flavour == bfd_target_elf_flavour;
++
+       if (section_index >= 16)
+ 	error (usage_string, "too many sections specified.");
+ 
+       /* APPLE LOCAL: Look for the text segment ("__TEXT"), not the section
+          ("__TEXT.__text") because what we're really looking for is the load
+          address of the image, and the section address is offset a bit. */
+-      sect_opts[section_index].name = TEXT_SEGMENT_NAME;
++      sect_opts[section_index].name = is_elf ? ".text" : TEXT_SEGMENT_NAME;
+       sect_opts[section_index].value = address;
+       section_index++;
++      /* alloc section_addrs now to record offset_section */
++      section_addrs = alloc_section_addr_info (section_index);
++      section_addrs->offset_section = section_index - 1;
+     }
+  
+-  if (filename == NULL)
+-    error ("usage: must specify exactly one filename");
+-
+   /* APPLE LOCAL: Did the user do "add-symbol-file whatever.dSYM" when 
+      they really intended to do an add-dsym?
+      If there were any arguments to add-symbol-file in addition to the filename,
+@@ -2848,7 +2881,8 @@
+     }
+   else
+     {
+-      section_addrs = alloc_section_addr_info (section_index);
++      if (!section_addrs)
++        section_addrs = alloc_section_addr_info (section_index);
+       make_cleanup (xfree, section_addrs);
+       for (i = 0; i < section_index; i++)
+ 	{
+@@ -2878,8 +2912,8 @@
+     error (_("Not confirmed."));
+   
+   /* APPLE LOCAL: Save return'ed objfile, set the syms_only_objfile flag */
+-  o = symbol_file_add_name_with_addrs_or_offsets
+-    (filename, from_tty, section_addrs, NULL, 0, 0, flags, symflags, 
++  o = symbol_file_add_with_addrs_or_offsets
++    (abfd, from_tty, section_addrs, NULL, 0, 0, flags, symflags, 
+      mapaddr, prefix, NULL);
+   o->syms_only_objfile = 1; 
+ 
+diff -ru gdb-1822.orig/src/gdb/symfile.h gdb-1822/src/gdb/symfile.h
+--- gdb-1822.orig/src/gdb/symfile.h	2012-06-29 04:27:31.000000000 +0100
++++ gdb-1822/src/gdb/symfile.h	2012-12-07 21:44:11.000000000 +0000
+@@ -79,6 +79,10 @@
+   size_t num_sections;
+   /* APPLE LOCAL */
+   int addrs_are_offsets;
++  /* section whose offset will be added to all other sections,
++     i.e. specify the address of the .text section and all other
++     sections will be offset accordingly */
++  int offset_section;
+   /* Sections whose names are file format dependent. */
+   struct other_sections
+   {

@@ -1,0 +1,3 @@
+TARGETTYPE = LIBRARY
+
+!INCLUDE ..\sources.inc

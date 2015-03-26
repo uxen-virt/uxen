@@ -1,0 +1,114 @@
+; uxenmouse.inf
+;
+; COPYRIGHT
+;
+
+[Version]
+Signature = "$Windows NT$"
+Class = Mouse
+ClassGUID = {4D36E96F-E325-11CE-BFC1-08002BE10318}
+Provider = %uXenMfg%
+DriverVer = 03/15/2012, 1.0.0.0
+CatalogFile = uxenmouse.cat
+
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+;
+; Driver information
+;
+
+[Manufacturer]
+%uXenMfg% = uXenMfg,NT$ARCH$
+
+[uXenMfg.NT$ARCH$]
+%uxenmouse.DeviceDesc% = uxenmouse_Inst, *PNP0F13
+
+;
+; General installation section
+;
+
+[uxenmouse_Inst.NT]
+; perform port related actions from mouse.inf
+Include=msmouse.inf
+Needs=PS2_Inst
+
+; Copy the driver over
+CopyFiles=@uxenmouse.sys
+
+
+;
+; Service Installation
+;
+
+[uxenmouse_Inst.NT.Services]
+AddService = uxenmouse, , uxenmouse_Service_Inst
+; Install the port driver and mouclass from msmouse.inf
+Include=msmouse.inf
+Needs=PS2_Inst.Services
+
+[uxenmouse_Service_Inst]
+DisplayName    = %uxenmouse.SvcDesc%
+ServiceType    = 1                  ; SERVICE_KERNEL_DRIVER
+StartType      = 3                  ; SERVICE_DEMAND_START
+ErrorControl   = 0                  ; SERVICE_ERROR_IGNORE
+LoadOrderGroup = Pointer Port
+ServiceBinary  = %12%\uxenmouse.sys
+
+[uxenmouse_Inst.NT.HW]
+; Add the device upper filter
+AddReg = uxenmouse_Inst.HW.AddReg
+
+; run the directives need by the port driver
+Include=msmouse.inf
+Needs=PS2_Inst.HW
+
+[uxenmouse_Inst.HW.AddReg]
+HKR,,"UpperFilters",0x00010000,"uxenmouse"
+
+
+;
+; Source file information
+;
+
+[SourceDisksNames]
+1 = %DiskId1%,,,
+
+[SourceDisksFiles]
+uxenmouse.sys = 1,,
+
+
+;
+;--- uxenmouse Coinstaller installation ------
+;
+
+[DestinationDirs]
+uxenmouse_CoInstaller_CopyFiles = 11
+
+[uxenmouse_Inst.NT.CoInstallers]
+AddReg = uxenmouse_CoInstaller_AddReg
+CopyFiles = uxenmouse_CoInstaller_CopyFiles
+
+[uxenmouse_CoInstaller_AddReg]
+HKR,,CoInstallers32,0x00010000, "WdfCoInstaller$KMDFCOINSTALLERVERSION$.dll,WdfCoInstaller"
+
+[uxenmouse_CoInstaller_CopyFiles]
+WdfCoInstaller$KMDFCOINSTALLERVERSION$.dll
+
+[SourceDisksFiles]
+WdfCoInstaller$KMDFCOINSTALLERVERSION$.dll = 1
+
+[uxenmouse_Inst.NT.Wdf]
+KmdfService = uxenmouse, uxenmouse_wdfsect
+[uxenmouse_wdfsect]
+KmdfLibraryVersion = $KMDFVERSION$
+
+
+
+[Strings]
+
+uXenMfg = "uXen Project"
+uxenmouse.DeviceDesc = "uXen Mouse"
+uxenmouse.SvcDesc = "uXen absolute coordinate PS/2 mouse filter"
+DiskId1 = "uXen Project Installation Disk #1 (uxenmouse)"

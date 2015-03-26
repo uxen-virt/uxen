@@ -1,0 +1,51 @@
+#
+# Copyright 2012-2015, Bromium, Inc.
+# SPDX-License-Identifier: ISC
+#
+
+CPPFLAGS += -I$(TOPDIR)/common/include
+CPPFLAGS += -I$(TOPDIR)/common/include/xen-public
+
+CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
+
+$(WINDOWS)LDLIBS += -le2fsprogs-uuid
+$(OSX)LDLIBS += -framework IOKit -framework CoreFoundation
+
+all: uxenctl$(EXE_SUFFIX) libuxenctl.a
+
+libuxenctl_OBJS = uxenctllib.o uxenctllib-args.o uxenctllib-$(TARGET_HOST).o
+UXENCTL_OBJS = uxenctl.o libuxenctl.a
+$(WINDOWS)UXENCTL_OBJS += uxenctl-res.o
+
+$(UXENCTL_OBJS) $(libuxenctl_OBJS): .deps/.exists
+
+$(libuxenctl_OBJS): CFLAGS_ssp := # no ssp for link with !gcc compilers
+
+uxenctl$(EXE_SUFFIX): $(UXENCTL_OBJS)
+	$(_W)echo Linking - $@
+	$(_V)$(call link,$@,$^ $(LDLIBS))
+
+libuxenctl.a: $(libuxenctl_OBJS) Makefile.lib-LIBUXENCTL
+	$(_W)echo Archiving - $@
+	$(_V)$(AR) rc $@ $(libuxenctl_OBJS)
+	$(_V)$(RANLIB) $@
+
+%.o: %.c
+	$(_W)echo Compiling - $@
+	$(_V)$(COMPILE.c) $< -o $@
+
+%.o : %.rc
+	$(_W)echo Compiling - $@
+	$(_V)$(WINDRES) $(WINDRESFLAGS) $(WINDRES_TARGET_FORMAT_OPTION) $< -o $@
+
+Makefile.lib-LIBUXENCTL:
+	@rm -f $@
+	@(echo "LIBUXENCTL_CPPFLAGS = -I$(SRCROOT)" ;\
+	  echo "LIBUXENCTL_CPPFLAGS += -I$(TOPDIR)/common/include" ;\
+	  echo "LIBUXENCTL_LIBS = -L$(abspath .) -luxenctl" ;\
+	  echo "$(OSX)LDLIBS += -framework IOKit -framework CoreFoundation" ;\
+	  echo "LIBUXENCTL_DEPS = $(abspath .)/libuxenctl.a" ;\
+	  echo "LIBUXENCTL_SRCDIR = $(SRCROOT)" ;\
+	  echo "$(abspath .)/libuxenctl.a: $(patsubst %,$(SRCROOT)/%,$(libuxenctl_SRCS))" ) >$@
+
+-include .deps/*.d

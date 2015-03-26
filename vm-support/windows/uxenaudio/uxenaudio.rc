@@ -1,0 +1,22 @@
+/*
+ * Copyright 2013-2015, Bromium, Inc.
+ * SPDX-License-Identifier: ISC
+ */
+
+#include <windows.h>
+
+#include <ntverp.h>
+
+#define VER_FILETYPE                VFT_DRV
+#define VER_FILESUBTYPE             VFT2_DRV_SOUND
+#define VER_FILEDESCRIPTION_STR     "uXen PV audio driver"
+#define VER_INTERNALNAME_STR        "uxenaudio.sys"
+#define VER_ORIGINALFILENAME_STR    "uxenaudio.sys"
+
+#define VER_LEGALCOPYRIGHT_STR	    "Copyright © uXen Project. All rights reserved."
+#define VER_LEGALCOPYRIGHT_STR_WITH_YEARS "Copyright © 2013 uXen Project. All rights reserved."
+
+#include "common.ver"
+
+
+

@@ -1,0 +1,95 @@
+; uxendisp.inf
+
+[Version]
+Signature = "$Windows NT$"
+DriverVer = 09/28/2012, 1.0.0.0
+Provider = %uXenMfg%
+Class = Display
+ClassGUID = {4d36e968-e325-11ce-bfc1-08002be10318}
+CatalogFile = uxendisp.cat
+
+[DestinationDirs]
+DefaultDestDir = 11	; system32
+uxendisp.Miniport = 12	; drivers
+uxendisp.Display = 11	; system32
+
+[Manufacturer]
+%uXenMfg% = q, NTx86, NTamd64, NTx86.6.0, NTamd64.6.0
+
+; WinXP x86 and up
+[q.NTx86]
+%uxendisp.DeviceDesc% = uxendisp, PCI\VEN_5853&DEV_5101
+
+; WinXP x64 and up
+[q.NTamd64]
+%uxendisp.DeviceDesc% = uxendisp, PCI\VEN_5853&DEV_5101
+
+; Vista x86 and up
+[q.NTx86.6.0]
+%uxendisp.DeviceDesc% = uxendisp_vista, PCI\VEN_5853&DEV_5101
+
+; Vista x64 and up
+[q.NTamd64.6.0]
+%uxendisp.DeviceDesc% = uxendisp_vista, PCI\VEN_5853&DEV_5101
+
+[ControlFlags]
+ExcludeFromSelect = *
+
+[uxendisp]
+CopyFiles = uxendisp.Miniport, uxendisp.Display
+
+[uxendisp_vista]
+FeatureScore = FC
+CopyFiles = uxendisp.Miniport, uxendisp.Display
+
+[uxendisp.Miniport]
+uxendisp.sys
+
+[uxendisp.Display]
+uxendispdd.dll
+
+[SourceDisksNames]
+1 = %DiskId%
+
+[SourceDisksFiles]
+uxendisp.sys = 1
+uxendispdd.dll = 1
+
+[uxendisp.SoftwareSettings]
+AddReg = uxendisp_SoftwareDeviceSettings
+
+[uxendisp_vista.SoftwareSettings]
+AddReg = uxendisp_SoftwareDeviceSettings
+
+[uxendisp_SoftwareDeviceSettings]
+HKR,, InstalledDisplayDrivers,        %REG_MULTI_SZ%, uxendispdd
+HKR,, VgaCompatible,                  %REG_DWORD%,    0
+HKR,, DefaultSettings.BitsPerPel,     %REG_DWORD%,    32
+HKR,, DefaultSettings.XResolution,    %REG_DWORD%,    800
+HKR,, DefaultSettings.YResolution,    %REG_DWORD%,    600
+HKR,, Acceleration.Level,             %REG_DWORD%,    0
+
+[uxendisp.Services]
+AddService = uxendisp, 0x00000002, uxendisp_Service_Inst ; Assign the named service as the PnP function driver
+
+[uxendisp_vista.Services]
+AddService = uxendisp, 0x00000002, uxendisp_Service_Inst ; Assign the named service as the PnP function driver
+
+[uxendisp_Service_Inst]
+ServiceType    = 1                  ; SERVICE_KERNEL_DRIVER
+StartType      = 3                  ; SERVICE_DEMAND_START
+ErrorControl   = 0                  ; SERVICE_ERROR_IGNORE
+LoadOrderGroup = Video
+ServiceBinary  = %12%\uxendisp.sys
+
+[Strings]
+uXenMfg = "uXen Project"
+uxendisp.DeviceDesc = "uXen Display"
+DiskId = "Windows 2000 Driver Installation Disk"
+
+REG_SZ         = 0x00000000
+REG_MULTI_SZ   = 0x00010000
+REG_EXPAND_SZ  = 0x00020000
+REG_BINARY     = 0x00000001
+REG_DWORD      = 0x00010001
+FLG_ADDREG_DELVAL = 0x00000004

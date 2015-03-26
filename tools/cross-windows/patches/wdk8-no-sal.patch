@@ -1,0 +1,44 @@
+diff -ru wdk8/inc/dispmprt.h wdk8.new/inc/dispmprt.h
+--- wdk8/inc/dispmprt.h	2014-07-08 11:53:17 +0100
++++ wdk8.new/inc/dispmprt.h	2014-07-08 11:53:41 +0100
+@@ -866,32 +866,40 @@
+     PINTERFACE_REFERENCE InterfaceReference;
+     PINTERFACE_DEREFERENCE InterfaceDereference;
+ 
++#if 0
+     _IRQL_requires_DXGK_(PASSIVE_LEVEL)
+     _Success_(return >= 0 || return == STATUS_BUFFER_TOO_SMALL)
++#endif
+     NTSTATUS
+     (*EnumSystemFirmwareTables)(
+         _In_ VOID* Context,
+         _In_ ULONG ProviderSignature,
+         _In_ ULONG BufferSize,
++#if 0
+         _Pre_opt_bytecap_(BufferSize)
+          _When_(return == STATUS_BUFFER_TOO_SMALL, _Post_equal_to_(_Old_(Buffer)))
+          _When_(return != STATUS_BUFFER_TOO_SMALL, _Post_valid_)
++#endif
+         VOID* Buffer,
+         _Out_ ULONG* RequiredSize
+         );
+ 
++#if 0
+     _IRQL_requires_DXGK_(PASSIVE_LEVEL)
+     _Success_(return >= 0 || return == STATUS_BUFFER_TOO_SMALL)
+     _When_(Buffer == NULL, _At_(BufferSize, _In_range_(==, 0)))
++#endif
+     NTSTATUS
+     (*ReadSystemFirmwareTable)(
+         _In_ VOID* Context,
+         _In_ ULONG ProviderSignature,
+         _In_ ULONG TableId,
+         _In_ ULONG BufferSize,
++#if 0
+         _Pre_opt_bytecap_(BufferSize)
+          _When_(return == STATUS_BUFFER_TOO_SMALL, _Post_equal_to_(_Old_(Buffer)))
+          _When_(return != STATUS_BUFFER_TOO_SMALL, _Post_valid_)
++#endif
+          VOID* Buffer,
+         _Out_ ULONG* RequiredSize
+         );

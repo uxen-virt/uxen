@@ -1,0 +1,137 @@
+[version]
+Signature   = "$CHICAGO$"
+Class       = Net
+ClassGUID   = {4d36e972-e325-11ce-bfc1-08002be10318}
+Provider    = %MfgName%
+DriverVer   = 01/05/2014,6.1.7600.16385
+CatalogFile = uxennet.cat
+
+;[ControlFlags]
+;ExcludeFromSelect={b85b7c50-6a01-11d2-b841-00c04fad5171}\UXENNET
+
+[DestinationDirs]
+DefaultDestDir=12
+UXENNET.CopyList=12
+
+[UXENNET.CopyList]
+uxennet.sys,,,2
+uxenv4vlib.sys,,,2
+
+[SourceDisksNames]
+222 = %DiskDescription%,"",,
+
+[SourceDisksFiles]
+uxennet.sys  = 222,,
+uxenv4vlib.sys = 222,,
+
+[SourceDisksFiles.amd64]
+uxennet.sys  = 222,,
+uxenv4vlib.sys = 222,,
+
+[Manufacturer]
+%MfgName% = uXen,NTx86
+%MfgName% = uXen,NTAMD64
+
+
+[uXen.NTx86]
+%UXENNET.DeviceDesc%    = UXENNET, uxennet ; ACPI compatible device name
+;%UXENNET.DeviceDesc%    = UXENNET, root\UXENNET ; Root enumerated 
+
+[uXen.NTAMD64]
+%UXENNET.DeviceDesc%    = UXENNET, uxennet ; ACPI compatible device name
+;%UXENNET.DeviceDesc%    = UXENNET, root\UXENNET ; Root enumerated 
+;%UXENNET.DeviceDesc%    = UXENNET, {b85b7c50-6a01-11d2-b841-00c04fad5171}\UXENNET 
+
+[UXENNET]
+Characteristics = 0x1 ; NCF_VIRTUAL
+AddReg          = UXENNET.AddReg
+CopyFiles       = UXENNET.CopyList
+
+[UXENNET.Services]
+AddService      = uxennet, 2, UXENNET.Service
+; AddService      = uxennet, 2, UXENNET.Service, UXENNET.EventLog
+
+[UXENNET.AddReg]
+HKR,    ,                         BusNumber,           0, "0" 
+HKR, Ndi,                         Service,             0, "uxennet"
+HKR, Ndi\Interfaces,              UpperRange,          0, "ndis5"
+HKR, Ndi\Interfaces,              LowerRange,          0, "Ethernet"
+
+HKR, Ndi\params\*IPChecksumOffloadIPv4,           ParamDesc,  0, %IPChecksumOffloadIPv4%
+HKR, Ndi\params\*IPChecksumOffloadIPv4,           Type,       0, "enum"
+HKR, Ndi\params\*IPChecksumOffloadIPv4,           Default,    0, "1"
+HKR, Ndi\params\*IPChecksumOffloadIPv4,           Optional,   0, "0"
+HKR, Ndi\params\*IPChecksumOffloadIPv4\enum,      "0",        0, %Disabled%
+HKR, Ndi\params\*IPChecksumOffloadIPv4\enum,      "1",        0, %Enabled-Tx%
+
+HKR, Ndi\params\*TCPChecksumOffloadIPv4,          ParamDesc,  0, %TCPChecksumOffloadIPv4%
+HKR, Ndi\params\*TCPChecksumOffloadIPv4,          Type,       0, "enum"
+HKR, Ndi\params\*TCPChecksumOffloadIPv4,          Default,    0, "3"
+HKR, Ndi\params\*TCPChecksumOffloadIPv4,          Optional,   0, "0"
+HKR, Ndi\params\*TCPChecksumOffloadIPv4\enum,     "0",        0, %Disabled%
+HKR, Ndi\params\*TCPChecksumOffloadIPv4\enum,     "1",        0, %Enabled-Tx%
+HKR, Ndi\params\*TCPChecksumOffloadIPv4\enum,     "2",        0, %Enabled-Rx%
+HKR, Ndi\params\*TCPChecksumOffloadIPv4\enum,     "3",        0, %Enabled-TxRx%
+
+HKR, Ndi\params\*UDPChecksumOffloadIPv4,          ParamDesc,  0, %UDPChecksumOffloadIPv4%
+HKR, Ndi\params\*UDPChecksumOffloadIPv4,          Type,       0, "enum"
+HKR, Ndi\params\*UDPChecksumOffloadIPv4,          Default,    0, "3"
+HKR, Ndi\params\*UDPChecksumOffloadIPv4,          Optional,   0, "0"
+HKR, Ndi\params\*UDPChecksumOffloadIPv4\enum,     "0",        0, %Disabled%
+HKR, Ndi\params\*UDPChecksumOffloadIPv4\enum,     "1",        0, %Enabled-Tx%
+HKR, Ndi\params\*UDPChecksumOffloadIPv4\enum,     "2",        0, %Enabled-Rx%
+HKR, Ndi\params\*UDPChecksumOffloadIPv4\enum,     "3",        0, %Enabled-TxRx%
+
+
+HKR, Ndi\params\ReportedMTU,                      ParamDesc,  0, %Reported MTU%
+HKR, Ndi\params\ReportedMTU,                      Type,       0, "long"
+HKR, Ndi\params\ReportedMTU,                      Default,    0, "1500"
+HKR, Ndi\params\ReportedMTU,                      Optional,   0, "0"
+HKR, Ndi\params\ReportedMTU,                      Min,        0, "60"
+HKR, Ndi\params\ReportedMTU,                      Max,        0, "65536"
+HKR, Ndi\params\ReportedMTU,                      Step,       0, "4"
+
+
+[UXENNET.Service]
+DisplayName     = %UXENNET.SvcDesc%
+ServiceType     = 1 ;%SERVICE_KERNEL_DRIVER%
+StartType       = 3 ;%SERVICE_DEMAND_START%
+ErrorControl    = 1 ;%SERVICE_ERROR_NORMAL%
+ServiceBinary   = %12%\uxennet.sys
+LoadOrderGroup  = NDIS
+AddReg          = TextModeFlags.Reg
+
+;[UXENNET.EventLog]
+;AddReg = UXENNET.AddEventLog.Reg
+
+;[UXENNET.AddEventLog.Reg]
+;HKR, , EventMessageFile, 0x00020000, "%%SystemRoot%%\System32\netevent.dll"
+;HKR, , TypesSupported,   0x00010001, 7
+
+[TextModeFlags.Reg]
+HKR, , TextModeFlags,    0x00010001, 0x0001
+
+;-----------------------------------------------------------------------------
+; DestinationDirs
+;
+
+;-----------------------------------------------------------------------------
+; Localizable Strings
+;
+[Strings]
+MfgName="uXen project"
+
+UXEN                       = "uXen"                      
+UXENNET.DeviceDesc        = "uXen ndis5 ethernet adapter"
+UXENNET.SvcDesc    = "uXen ndis5 Miniport"
+DiskDescription="uXen PV network driver disk"
+
+IPChecksumOffloadIPv4  = "Offload IP Checksum"
+TCPChecksumOffloadIPv4 = "Offload TCP Checksum"
+UDPChecksumOffloadIPv4 = "Offload UDP Checksum"
+Disabled               = "Disabled"
+Enabled                = "Enabled"
+Enabled-Rx             = "Enabled (Receive Only)"
+Enabled-Tx             = "Enabled (Transmit Only)"
+Enabled-TxRx           = "Enabled (Transmit and Receive)"
+

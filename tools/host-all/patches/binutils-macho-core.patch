@@ -1,0 +1,384 @@
+diff -ru binutils-2.23.1.orig/bfd/mach-o.c binutils-2.23.1/bfd/mach-o.c
+--- binutils-2.23.1.orig/bfd/mach-o.c	2012-07-25 05:06:58.000000000 +0800
++++ binutils-2.23.1/bfd/mach-o.c	2013-09-18 16:50:50.000000000 +0800
+@@ -944,6 +944,7 @@
+   unsigned int i;
+   struct mach_o_thread_command_external raw;
+   unsigned int offset;
++  asection *ts;
+ 
+   BFD_ASSERT ((command->type == BFD_MACH_O_LC_THREAD)
+ 	      || (command->type == BFD_MACH_O_LC_UNIXTHREAD));
+@@ -962,6 +963,15 @@
+           || bfd_bwrite (&raw, sizeof (raw), abfd) != sizeof (raw))
+ 	return -1;
+ 
++      ts = bfd_get_section_by_name(abfd, "LC_THREAD.x86_THREAD_STATE.0");
++      if (!ts)
++        return -1;
++      if (bfd_seek (abfd, command->offset + offset + BFD_MACH_O_LC_SIZE,
++                    SEEK_SET) != 0
++          || bfd_bwrite (ts->contents, cmd->flavours[i].size, abfd) !=
++          cmd->flavours[i].size)
++	return -1;
++
+       offset += cmd->flavours[i].size + sizeof (raw);
+     }
+ 
+@@ -1442,6 +1452,10 @@
+       || bfd_bwrite (&raw, sizeof (raw), abfd) != sizeof (raw))
+     return -1;
+ 
++  /* Don't write sections in core files -- each segment has one section */
++  if (abfd->format == bfd_core)
++    return 0;
++
+   for (sec = seg->sect_head; sec != NULL; sec = sec->next)
+     if (bfd_mach_o_write_section_64 (abfd, sec))
+       return -1;
+@@ -1896,9 +1910,7 @@
+       && (mdata->nsects == 0 || mdata->sections != NULL))
+     return TRUE;
+ 
+-  mdata->nsects = nsect;
+-  mdata->sections = bfd_alloc (abfd, 
+-			       mdata->nsects * sizeof (bfd_mach_o_section *));
++  mdata->sections = bfd_alloc (abfd, nsect * sizeof (bfd_mach_o_section *));
+   if (mdata->sections == NULL)
+     return FALSE;
+ 
+@@ -1916,6 +1928,10 @@
+       unsigned bfd_align = bfd_get_section_alignment (abfd, sec);
+       bfd_mach_o_section *msect = bfd_mach_o_get_mach_o_section (sec);
+ 
++      if (sec->flags & SEC_LINKER_CREATED)
++        continue;
++      mdata->nsects++;
++
+       mdata->sections[target_index] = msect;
+ 
+       msect->addr = bfd_get_section_vma (abfd, sec);
+@@ -2217,6 +2233,143 @@
+   return TRUE;
+ }
+ 
++static bfd_boolean
++bfd_mach_o_build_core_seg_commands (const char *segment,
++                                    bfd_mach_o_data_struct *mdata,
++                                    int idx)
++{
++  unsigned i;
++  bfd_mach_o_segment_command *seg;
++  int is_mho = (segment == NULL || segment[0] == '\0');
++
++  for (i = idx; i < idx + mdata->nsects; i++) {
++    seg = &mdata->commands[i].command.segment;
++
++    /* Fill segment command.  */
++    if (is_mho)
++      memset (seg->segname, 0, sizeof (seg->segname));
++    else
++      strncpy (seg->segname, segment, sizeof (seg->segname));
++
++    do {
++      bfd_mach_o_section *s = mdata->sections[i];
++      asection *sec = s->bfdsection;
++      seg->vmaddr = sec->vma;
++      seg->vmsize = sec->size;
++    } while (0);
++
++    seg->fileoff = mdata->filelen;
++    seg->filesize = 0;
++    seg->maxprot = BFD_MACH_O_PROT_READ | BFD_MACH_O_PROT_WRITE
++      | BFD_MACH_O_PROT_EXECUTE;
++    seg->initprot = seg->maxprot;
++    seg->flags = 0;
++    seg->sect_head = NULL;
++    seg->sect_tail = NULL;
++
++    /*  Append sections to the segment.  
++
++        This is a little tedious, we have to honor the need to account zerofill
++        sections after all the rest.  This forces us to do the calculation of
++        total vmsize in three passes so that any alignment increments are 
++        properly accounted.  */
++
++    do {
++      bfd_mach_o_section *s = mdata->sections[i];
++      asection *sec = s->bfdsection;
++
++      /* If we're not making an MH_OBJECT, check whether this section is from
++	 our segment, and skip if not.  Otherwise, just add all sections.  */
++      if (! is_mho 
++	  && strncmp (segment, s->segname, BFD_MACH_O_SEGNAME_SIZE) != 0)
++	continue;
++
++      /* Although we account for zerofill section sizes in vm order, they are
++	 placed in the file in source sequence.  */
++      bfd_mach_o_append_section_to_segment (seg, sec);
++      s->offset = 0;
++      
++      /* Zerofill sections have zero file size & offset, 
++	 and are not written.  */
++      if ((s->flags & BFD_MACH_O_SECTION_TYPE_MASK) == BFD_MACH_O_S_ZEROFILL
++          || (s->flags & BFD_MACH_O_SECTION_TYPE_MASK) 
++	      == BFD_MACH_O_S_GB_ZEROFILL)
++        continue;
++
++      if (s->size > 0)
++        {
++	  seg->vmsize = FILE_ALIGN (seg->vmsize, s->align);
++	  seg->vmsize += s->size;
++
++	  seg->filesize = FILE_ALIGN (seg->filesize, s->align);
++	  seg->filesize += s->size;
++
++          mdata->filelen = FILE_ALIGN (mdata->filelen, s->align);
++          s->offset = mdata->filelen;
++        }
++
++      sec->filepos = s->offset;
++      mdata->filelen += s->size;
++    } while (0);
++
++    /* Now pass through again, for zerofill, only now we just update
++       the vmsize.  */
++    do {
++      bfd_mach_o_section *s = mdata->sections[i];
++
++      if ((s->flags & BFD_MACH_O_SECTION_TYPE_MASK) != BFD_MACH_O_S_ZEROFILL)
++        continue;
++
++      if (! is_mho 
++	  && strncmp (segment, s->segname, BFD_MACH_O_SEGNAME_SIZE) != 0)
++	continue;
++
++      if (s->size > 0)
++	{
++	  seg->vmsize = FILE_ALIGN (seg->vmsize, s->align);
++	  seg->vmsize += s->size;
++	}
++    } while (0);
++
++    /* Now pass through again, for zerofill_GB.  */
++    do {
++      bfd_mach_o_section *s = mdata->sections[i];
++ 
++      if ((s->flags & BFD_MACH_O_SECTION_TYPE_MASK) != BFD_MACH_O_S_GB_ZEROFILL)
++        continue;
++
++      if (! is_mho 
++	  && strncmp (segment, s->segname, BFD_MACH_O_SEGNAME_SIZE) != 0)
++	continue;
++
++      if (s->size > 0)
++	{
++	  seg->vmsize = FILE_ALIGN (seg->vmsize, s->align);
++	  seg->vmsize += s->size;
++	}
++    } while (0);
++
++    /* Allocate space for the relocations.  */
++    mdata->filelen = FILE_ALIGN(mdata->filelen, 2);
++
++    do {
++      bfd_mach_o_section *ms = mdata->sections[i];
++      asection *sec = ms->bfdsection;
++        
++      if ((ms->nreloc = sec->reloc_count) == 0)
++        {
++	  ms->reloff = 0;
++	  continue;
++        }
++      sec->rel_filepos = mdata->filelen;
++      ms->reloff = sec->rel_filepos;
++      mdata->filelen += sec->reloc_count * BFD_MACH_O_RELENT_SIZE;
++    } while (0);
++  }
++
++  return TRUE;
++}
++
+ /* Count the number of indirect symbols in the image.
+    Requires that the sections are in their final order.  */
+ 
+@@ -2367,6 +2520,7 @@
+   int segcmd_idx = -1;
+   int symtab_idx = -1;
+   int dysymtab_idx = -1;
++  int thread_idx = -1;
+   unsigned long base_offset = 0;
+ 
+   /* Return now if commands are already present.  */
+@@ -2377,7 +2531,9 @@
+ 
+   if (mdata->header.filetype == 0)
+     {
+-      if (abfd->flags & EXEC_P)
++      if (abfd->format == bfd_core)
++        mdata->header.filetype = BFD_MACH_O_MH_CORE;
++      else if (abfd->flags & EXEC_P)
+         mdata->header.filetype = BFD_MACH_O_MH_EXECUTE;
+       else if (abfd->flags & DYNAMIC)
+         mdata->header.filetype = BFD_MACH_O_MH_DYLIB;
+@@ -2410,13 +2566,16 @@
+   if (mdata->nsects > 0)
+     {
+       segcmd_idx = 0;
+-      mdata->header.ncmds = 1;
++      if (mdata->header.filetype != BFD_MACH_O_MH_CORE)
++        mdata->header.ncmds = 1;
++      else
++        mdata->header.ncmds = mdata->nsects;
+     }
+ 
+   if (bfd_get_symcount (abfd) > 0)
+     {
++      symtab_idx = mdata->header.ncmds; /* 0 if the seg command is absent.  */
+       mdata->header.ncmds++;
+-      symtab_idx = segcmd_idx + 1; /* 0 if the seg command is absent.  */
+     }
+ 
+   /* FIXME:
+@@ -2424,10 +2583,17 @@
+   if (bfd_mach_o_should_emit_dysymtab ()
+       && bfd_get_symcount (abfd))
+     {
+-      mdata->header.ncmds++;
+       /* If there should be a case where a dysymtab could be emitted without
+ 	 a symtab (seems improbable), this would need amending.  */
+-      dysymtab_idx = symtab_idx + 1;
++      dysymtab_idx = mdata->header.ncmds;
++      mdata->header.ncmds++;
++    }
++
++  if (mdata->header.filetype == BFD_MACH_O_MH_CORE &&
++      bfd_get_section_by_name(abfd, "LC_THREAD.x86_THREAD_STATE.0"))
++    {
++      thread_idx = mdata->header.ncmds;
++      mdata->header.ncmds++;
+     }
+ 
+   if (wide)
+@@ -2448,7 +2614,7 @@
+   if (mdata->commands == NULL)
+     return FALSE;
+ 
+-  if (segcmd_idx >= 0)
++  if (segcmd_idx >= 0 && mdata->header.filetype != BFD_MACH_O_MH_CORE)
+     {  
+       bfd_mach_o_load_command *cmd = &mdata->commands[segcmd_idx];
+       bfd_mach_o_segment_command *seg = &cmd->command.segment;
+@@ -2477,6 +2643,35 @@
+       mdata->header.sizeofcmds = cmd->len;
+       mdata->filelen += cmd->len;
+     }
++  else if (segcmd_idx >= 0 && mdata->header.filetype == BFD_MACH_O_MH_CORE)
++    {  
++      unsigned int i;
++      for (i = segcmd_idx; i < segcmd_idx + mdata->nsects; i++)
++        {
++          bfd_mach_o_load_command *cmd = &mdata->commands[i];
++
++          /* Init segment command.  */
++          if (i > 0)
++            cmd->offset = mdata->commands[i - 1].offset +
++              mdata->commands[i - 1].len;
++          else
++            cmd->offset = base_offset;
++          if (wide)
++            {
++              cmd->type = BFD_MACH_O_LC_SEGMENT_64;
++              cmd->len = BFD_MACH_O_LC_SEGMENT_64_SIZE;
++            }
++          else
++            {
++              cmd->type = BFD_MACH_O_LC_SEGMENT;
++              cmd->len = BFD_MACH_O_LC_SEGMENT_SIZE;
++            }
++
++          cmd->type_required = FALSE;
++          mdata->header.sizeofcmds += cmd->len;
++          mdata->filelen += cmd->len;
++        }
++    }
+ 
+   if (symtab_idx >= 0)
+     {
+@@ -2484,9 +2679,11 @@
+       bfd_mach_o_load_command *cmd = &mdata->commands[symtab_idx];
+   
+       cmd->type = BFD_MACH_O_LC_SYMTAB;
+-      cmd->offset = base_offset;
+-      if (segcmd_idx >= 0)
+-        cmd->offset += mdata->commands[segcmd_idx].len;
++      if (symtab_idx > 0)
++        cmd->offset = mdata->commands[symtab_idx - 1].offset +
++          mdata->commands[symtab_idx - 1].len;
++      else
++        cmd->offset = base_offset;
+ 
+       cmd->len = sizeof (struct mach_o_symtab_command_external)
+ 		 + BFD_MACH_O_LC_SIZE;
+@@ -2502,12 +2699,9 @@
+       bfd_mach_o_load_command *cmd = &mdata->commands[dysymtab_idx];
+ 
+       cmd->type = BFD_MACH_O_LC_DYSYMTAB;
+-      if (symtab_idx >= 0)
+-        cmd->offset = mdata->commands[symtab_idx].offset 
+-		    + mdata->commands[symtab_idx].len;
+-      else if (segcmd_idx >= 0)
+-        cmd->offset = mdata->commands[segcmd_idx].offset 
+-		    + mdata->commands[segcmd_idx].len;
++      if (dysymtab_idx > 0)
++        cmd->offset = mdata->commands[dysymtab_idx - 1].offset +
++          mdata->commands[dysymtab_idx - 1].len;
+       else
+ 	cmd->offset = base_offset;
+ 
+@@ -2519,12 +2713,44 @@
+       mdata->filelen += cmd->len;
+     }
+ 
++  if (thread_idx >= 0)
++    {  
++      bfd_mach_o_load_command *cmd = &mdata->commands[thread_idx];
++      bfd_mach_o_thread_command *thr = &cmd->command.thread;
++      asection *ts;
++
++      ts = bfd_get_section_by_name(abfd, "LC_THREAD.x86_THREAD_STATE.0");
++
++      if (thread_idx > 0)
++        cmd->offset = mdata->commands[thread_idx - 1].offset +
++          mdata->commands[thread_idx - 1].len;
++      else
++        cmd->offset = base_offset;
++      cmd->type = BFD_MACH_O_LC_THREAD;
++      cmd->len = BFD_MACH_O_LC_SIZE +
++        sizeof(struct mach_o_thread_command_external) +
++        bfd_section_size(abfd, ts);
++
++      thr->nflavours = 1;
++      thr->flavours = bfd_alloc (abfd, 1 * sizeof(bfd_mach_o_thread_flavour));
++      thr->flavours[0].flavour = BFD_MACH_O_x86_THREAD_STATE;
++      thr->flavours[0].offset = cmd->offset + BFD_MACH_O_LC_SIZE + 8;
++      thr->flavours[0].size = bfd_section_size(abfd, ts);
++
++      cmd->type_required = FALSE;
++      mdata->header.sizeofcmds += cmd->len;
++      mdata->filelen += cmd->len;
++    }
++
+   /* So, now we have sized the commands and the filelen set to that.
+      Now we can build the segment command and set the section file offsets.  */
+-  if (segcmd_idx >= 0
++  if (segcmd_idx >= 0 && mdata->header.filetype != BFD_MACH_O_MH_CORE
+       && ! bfd_mach_o_build_seg_command 
+ 		(NULL, mdata, &mdata->commands[segcmd_idx].command.segment))
+     return FALSE;
++  else if (segcmd_idx >= 0 && mdata->header.filetype == BFD_MACH_O_MH_CORE
++           && ! bfd_mach_o_build_core_seg_commands(NULL, mdata, segcmd_idx))
++    return FALSE;
+ 
+   /* If we're doing a dysymtab, cmd points to its load command.  */
+   if (dysymtab_idx >= 0

@@ -1,0 +1,104 @@
+; uxenplatform.inf
+;
+; COPYRIGHT
+;
+
+[Version]
+Signature      = "$WINDOWS NT$"
+Class          = System
+ClassGuid      = {8310B189-0F6F-41DC-892E-7030A7243D4E}
+Provider       = %uXenMfg%
+DriverVer      = 04/26/2013, 1.0.0.0
+CatalogFile    = uxenplatform.cat
+
+[DestinationDirs]
+DefaultDestDir  = 12
+
+;-------------------------------------------------------------------------
+; Class Section
+;-------------------------------------------------------------------------
+[ClassInstall32]
+Addreg         = SystemClassReg
+
+[SystemClassReg]
+HKR,,,0,%ClassName%
+HKR,,Icon,,-5
+HKR,,DeviceCharacteristics,0x10001,0x100     ;Use same security checks on relative opens
+HKR,,Security,,"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;IU)" ;Allow generic all access to system and built-in Admin.
+
+;-------------------------------------------------------------------------
+; Device Install Section
+;-------------------------------------------------------------------------
+[ControlFlags]
+ExcludeFromSelect = *
+
+[Manufacturer]
+%uXenMfg% = uXenMfg,NT$ARCH$
+
+[SourceDisksFiles]
+uxenplatform.sys     = 1
+uxenvmlib.sys        = 1
+
+[SourceDisksNames]
+1=%DISK_NAME%,
+
+[uXenMfg.NT$ARCH$]
+; DisplayName            Section           DeviceId
+; -----------            -------           --------
+%uXenPlatform.DRVDESC%=uXenPlatform_Inst, PCI\VEN_5853&DEV_5173
+
+[uXenPlatform_Inst.NT]
+CopyFiles      = uXenPlatform.CopyFiles
+
+
+[uXenPlatform.CopyFiles]
+uxenplatform.sys
+uxenvmlib.sys
+
+
+[uXenPlatform_Inst.NT.Services]
+AddService     = uXenPlatform,0x00000002,uXenPlatform_Service
+
+[uXenPlatform_Service]
+DisplayName    = %uXenPlatform.SVCDESC%
+ServiceType    = 1                  ; SERVICE_KERNEL_DRIVER
+StartType      = 0                  ; SERVICE_BOOT_START
+ErrorControl   = 1                  ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %12%\uxenplatform.sys
+
+;-------------------------------------------------------------------------
+; WDF Coinstaller installation
+;-------------------------------------------------------------------------
+[DestinationDirs]
+CoInstaller_CopyFiles = 11
+
+[uXenPlatform_Inst.NT.CoInstallers]
+AddReg         = CoInstaller_AddReg
+CopyFiles      = CoInstaller_CopyFiles
+
+[CoInstaller_CopyFiles]
+WdfCoInstaller$KMDFCOINSTALLERVERSION$.dll
+
+[SourceDisksFiles]
+WdfCoInstaller$KMDFCOINSTALLERVERSION$.dll = 1 ; make sure the number matches with SourceDisksNames
+
+[CoInstaller_AddReg]
+HKR,,CoInstallers32,0x00010000, "WdfCoInstaller$KMDFCOINSTALLERVERSION$.dll,WdfCoInstaller"
+
+[uXenPlatform_Inst.NT.Wdf]
+KmdfService    = uXenPlatform, uXenPlatform_wdfsect
+
+[uXenPlatform_wdfsect]
+KmdfLibraryVersion = $KMDFVERSION$
+
+;------------------------------------------------------------------------------
+;  String Definitions
+;------------------------------------------------------------------------------
+
+[Strings]
+uXenMfg = "uXen Project"
+ClassName      = "uXen Platform"
+uXenPlatform.SVCDESC = "uXen Platform Device"
+uXenPlatform.DRVDESC = "uXen Platform Device"
+DISK_NAME      = "uXen Project Installation Disk #1 (uxenplatform)"
+

@@ -1,0 +1,38 @@
+/*
+ * Copyright 2012-2015, Bromium, Inc.
+ * SPDX-License-Identifier: ISC
+ */
+
+#include "windows.h"
+
+1 RCDATA
+BEGIN
+// Machine dependent parameters
+    17,     // Height of vertical thumb
+    17,     // Width of horizontal thumb
+    2,      // Icon horiz compression factor
+    2,      // Icon vert compression factor
+    1,      // Cursor horz compression factor
+    1,      // Cursor vert compression factor
+    0,      // Kanji window height
+    1,      // cxBorder (thickness of vertical lines)
+    1       // cyBorder (thickness of horizontal lines)
+END
+
+#include <ntverp.h>
+
+#define VER_FILETYPE                VFT_DRV
+#define VER_FILESUBTYPE             VFT2_DRV_DISPLAY
+#define VER_FILEDESCRIPTION_STR     "uXen Display Driver"
+#define VER_INTERNALNAME_STR        "uxendispdd.dll"
+#define VER_ORIGINALFILENAME_STR    "uxendispdd.dll"
+#undef VER_PRODUCTNAME_STR
+#define VER_PRODUCTNAME_STR		"uXen Display"
+#undef VER_COMPANYNAME_STR
+#define VER_COMPANYNAME_STR		"uXen Project"
+#define VER_LEGALCOPYRIGHT_STR		"Copyright © uXen Project. All rights reserved."
+#define VER_LEGALCOPYRIGHT_STR_WITH_YEARS "Copyright © 2013 uXen Project. All rights reserved."
+
+#define VER_LANGNEUTRAL
+#include "common.ver"
+

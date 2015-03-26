@@ -1,0 +1,15 @@
+diff -ru gdb-1822.orig/src/gdb/macosx/macosx-nat-inferior.c gdb-1822/src/gdb/macosx/macosx-nat-inferior.c
+--- gdb-1822.orig/src/gdb/macosx/macosx-nat-inferior.c	2015-02-18 15:44:14.000000000 +0000
++++ gdb-1822/src/gdb/macosx/macosx-nat-inferior.c	2015-02-18 15:47:38.000000000 +0000
+@@ -50,7 +50,11 @@
+ 
+ #include <sys/ptrace.h>
+ #include <sys/signal.h>
++#if defined(__MAC_10_10)
++#include <setjmp.h>
++#else
+ #include <machine/setjmp.h>
++#endif
+ #include <sys/types.h>
+ #include <unistd.h>
+ #include <signal.h>

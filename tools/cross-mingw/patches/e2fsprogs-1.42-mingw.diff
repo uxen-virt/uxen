@@ -1,0 +1,113 @@
+diff -ru e2fsprogs-1.42.orig/lib/uuid/gen_uuid.c e2fsprogs-1.42/lib/uuid/gen_uuid.c
+--- e2fsprogs-1.42.orig/lib/uuid/gen_uuid.c	2011-09-18 11:20:44.000000000 -0700
++++ e2fsprogs-1.42/lib/uuid/gen_uuid.c	2012-01-25 17:59:29.921508000 -0800
+@@ -59,7 +59,9 @@
+ #ifdef HAVE_SYS_TIME_H
+ #include <sys/time.h>
+ #endif
++#if 0
+ #include <sys/wait.h>
++#endif
+ #include <sys/stat.h>
+ #ifdef HAVE_SYS_FILE_H
+ #include <sys/file.h>
+@@ -91,6 +93,7 @@
+ #ifdef HAVE_SYS_RESOURCE_H
+ #include <sys/resource.h>
+ #endif
++#include <sys/locking.h>
+ 
+ #include "uuidP.h"
+ #include "uuidd.h"
+@@ -112,6 +115,7 @@
+ #endif
+ 
+ #ifdef _WIN32
++#if 0
+ static void gettimeofday (struct timeval *tv, void *dummy)
+ {
+ 	FILETIME	ftime;
+@@ -128,6 +132,7 @@
+ 	tv->tv_sec = n / 1000000;
+ 	tv->tv_usec = n % 1000000;
+ }
++#endif
+ 
+ static int getuid (void)
+ {
+@@ -313,7 +318,9 @@
+ 	THREAD_LOCAL FILE		*state_f;
+ 	THREAD_LOCAL uint16_t		clock_seq;
+ 	struct timeval 			tv;
++#if 0
+ 	struct flock			fl;
++#endif
+ 	uint64_t			clock_reg;
+ 	mode_t				save_umask;
+ 	int				len;
+@@ -329,13 +336,16 @@
+ 			state_fd = -1;
+ 		}
+ 	}
++#if 0
+ 	fl.l_type = F_WRLCK;
+ 	fl.l_whence = SEEK_SET;
+ 	fl.l_start = 0;
+ 	fl.l_len = 0;
+ 	fl.l_pid = 0;
++#endif
+ 	if (state_fd >= 0) {
+ 		rewind(state_f);
++#if 0
+ 		while (fcntl(state_fd, F_SETLKW, &fl) < 0) {
+ 			if ((errno == EAGAIN) || (errno == EINTR))
+ 				continue;
+@@ -344,6 +354,10 @@
+ 			state_fd = -1;
+ 			break;
+ 		}
++#else
++		lseek(state_fd, 0, 0);
++		_locking(state_fd, LK_LOCK, 0);
++#endif
+ 	}
+ 	if (state_fd >= 0) {
+ 		unsigned int cl;
+@@ -406,9 +420,14 @@
+ 			fprintf(state_f, "                   \n");
+ 			fflush(state_f);
+ 		}
++#if 0
+ 		rewind(state_f);
+ 		fl.l_type = F_UNLCK;
+ 		fcntl(state_fd, F_SETLK, &fl);
++#else
++		lseek(state_fd, 0, 0);
++		_locking(state_fd, LK_UNLCK, 0);
++#endif
+ 	}
+ 
+ 	*clock_high = clock_reg >> 32;
+@@ -458,6 +477,9 @@
+ 	getrlimit(RLIMIT_NOFILE, &rl);
+ 	max = rl.rlim_cur;
+ #else
++#ifndef OPEN_MAX
++#define OPEN_MAX 1024
++#endif
+ 	max = OPEN_MAX;
+ #endif
+ 
+diff -ru e2fsprogs-1.42.orig/lib/uuid/uuid.h.in e2fsprogs-1.42/lib/uuid/uuid.h.in
+--- e2fsprogs-1.42.orig/lib/uuid/uuid.h.in	2010-02-05 19:39:02.000000000 -0800
++++ e2fsprogs-1.42/lib/uuid/uuid.h.in	2012-01-25 16:03:11.208988279 -0800
+@@ -36,9 +36,7 @@
+ #define _UUID_UUID_H
+ 
+ #include <sys/types.h>
+-#ifndef _WIN32
+ #include <sys/time.h>
+-#endif
+ #include <time.h>
+ 
+ typedef unsigned char uuid_t[16];

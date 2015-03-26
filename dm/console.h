@@ -1,0 +1,218 @@
+/*
+ * Copyright 2012-2015, Bromium, Inc.
+ * Author: Christian Limpach <Christian.Limpach@gmail.com>
+ * SPDX-License-Identifier: ISC
+ */
+
+#ifndef _CONSOLE_H_
+#define _CONSOLE_H_
+
+#include <stdint.h>
+
+#define DISPLAY_REFRESH_FPS_DEFAULT 31
+extern int display_refresh_period;
+
+#define MOUSE_EVENT_LBUTTON 0x01
+#define MOUSE_EVENT_RBUTTON 0x02
+#define MOUSE_EVENT_MBUTTON 0x04
+
+struct PixelFormat {
+    uint8_t bits_per_pixel;
+    uint8_t bytes_per_pixel;
+    uint8_t depth; /* color depth in bits */
+    uint32_t rmask, gmask, bmask, amask;
+    uint8_t rshift, gshift, bshift, ashift;
+    uint8_t rmax, gmax, bmax, amax;
+    uint8_t rbits, gbits, bbits, abits;
+};
+typedef struct PixelFormat PixelFormat;
+
+#define DISPLAYSURFACE_VRAM 0x1
+
+struct DisplaySurface {
+    uint8_t flags;
+    int width;
+    int height;
+    struct PixelFormat pf;
+    int (*lock)(struct DisplaySurface *, uint8_t **, int *);
+    void (*unlock)(struct DisplaySurface *);
+};
+typedef struct DisplaySurface DisplaySurface;
+
+DisplaySurface *create_displaysurface(int width, int height);
+DisplaySurface *resize_displaysurface(DisplaySurface *surface,
+				      int width, int height);
+void free_displaysurface(DisplaySurface *surface);
+DisplaySurface *create_vram_displaysurface(int width, int height,
+                                           int depth, int linesize,
+                                           void *vram_ptr,
+                                           unsigned int vram_offset);
+
+struct DisplayState {
+    struct DisplaySurface *surface;
+    struct Timer *gui_timer;
+    critical_section resize_lock;
+};
+
+struct vram_desc;
+
+void dpy_update(struct DisplayState *s, int x, int y, int w, int h);
+void dpy_resize(struct DisplayState *s);
+void dpy_refresh(struct DisplayState *s);
+void dpy_cursor_shape(struct DisplayState *s,
+                      int w, int h, int hot_x, int hot_y,
+                      uint8_t *mask, uint8_t *color);
+void dpy_cursor(struct DisplayState *s, int x, int y);
+void dpy_vram_change(struct DisplayState *ds, struct vram_desc *v);
+
+PixelFormat default_pixelformat(int bpp);
+
+static inline int is_surface_bgr(DisplaySurface *surface)
+{
+    if (surface->pf.bits_per_pixel == 32 && surface->pf.rshift == 0)
+        return 1;
+    else
+        return 0;
+}
+
+static inline int ds_vram_surface(DisplaySurface *surface)
+{
+    return surface->flags & DISPLAYSURFACE_VRAM;
+}
+
+static inline int ds_surface_lock(DisplayState *ds, uint8_t **data,
+                                  int *linesize)
+{
+    if (!ds || !ds->surface)
+        return -1;
+
+    return ds->surface->lock(ds->surface, data, linesize);
+}
+
+static inline void ds_surface_unlock(DisplayState *ds)
+{
+    ds->surface->unlock(ds->surface);
+}
+
+static inline int ds_get_width(DisplayState *ds)
+{
+    int w;
+
+    if (!ds || !ds->surface)
+        return 0;
+
+    critical_section_enter(&ds->resize_lock);
+    w = ds->surface->width;
+    critical_section_leave(&ds->resize_lock);
+
+    return w;
+}
+
+static inline int ds_get_height(DisplayState *ds)
+{
+    int h;
+
+    if (!ds || !ds->surface)
+        return 0;
+
+    critical_section_enter(&ds->resize_lock);
+    h = ds->surface->height;
+    critical_section_leave(&ds->resize_lock);
+
+    return h;
+}
+
+static inline int ds_get_bits_per_pixel(DisplayState *ds)
+{
+    int bpp;
+
+    if (!ds || !ds->surface)
+        return 0;
+
+    critical_section_enter(&ds->resize_lock);
+    bpp = ds->surface->pf.bits_per_pixel;
+    critical_section_leave(&ds->resize_lock);
+
+    return bpp;
+}
+
+typedef unsigned long console_ch_t;
+static inline void console_write_ch(console_ch_t *dest, uint32_t ch)
+{
+    if (!(ch & 0xff))
+        ch |= ' ';
+    *dest = ch;
+}
+
+#include "vga.h"
+
+DisplayState *graphic_console_init(vga_hw_update_ptr update,
+                                   vga_hw_invalidate_ptr invalidate,
+                                   vga_hw_text_update_ptr text_update,
+                                   void *opaque);
+
+void vga_hw_update(void);
+
+void console_resize(DisplayState *ds, int width, int height);
+void console_resize_from(DisplayState *ds, int width, int height,
+                         int depth, int linesize,
+                         void *vram_ptr,
+                         unsigned int vram_offset);
+
+int console_display_init(const char *name);
+void console_display_start(void);
+void console_display_exit(void);
+
+void do_dpy_trigger_refresh(void *opaque);
+void do_dpy_setup_refresh(DisplayState *ds);
+
+enum { FORWARD_CONTROL_KEYS = 1, };
+extern uint32_t forwarded_keys;
+struct yajl_val_s;
+int console_set_forwarded_keys(struct yajl_val_s *val);
+
+struct gui_state {
+    int width;
+    int height;
+};
+
+struct gui_info {
+    const char *name;
+    size_t size;
+
+    int (*init)(struct gui_state *s, char *optstr);
+    void (*exit)(struct gui_state *s);
+    void (*start)(struct gui_state *s);
+    DisplaySurface *(*create_surface)(struct gui_state *s,
+                                      int width, int height);
+    DisplaySurface *(*create_vram_surface)(struct gui_state *s,
+                                           int width, int height,
+                                           int depth, int linesize,
+                                           void *vram_ptr,
+                                           unsigned int vram_offset);
+    void (*free_surface)(struct gui_state *s,
+                         DisplaySurface *surface);
+    void (*vram_change)(struct gui_state *s, struct vram_desc *v);
+#ifdef MONITOR
+    void (*mon_resize_screen)(struct gui_state *s,
+                              Monitor *mon, const dict args);
+#endif
+    void (*display_update)(struct gui_state *s, int x, int y, int w, int h);
+    void (*display_resize)(struct gui_state *s, int w, int h);
+    void (*display_refresh)(struct gui_state *s);
+    void (*display_cursor)(struct gui_state *s, int x, int y);
+    void (*display_cursor_shape)(struct gui_state *s,
+                                 int w, int h, int hot_x, int hot_y,
+                                 uint8_t *mask, uint8_t *color);
+    struct gui_info *next;
+};
+
+void gui_register_info(struct gui_info *info);
+
+#define console_gui_register(gui)                                             \
+    static void __attribute__((constructor)) console_gui_register_##gui(void) \
+    {                                                                         \
+        gui_register_info(&(gui));                                            \
+    }
+
+#endif  /* _CONSOLE_H_ */

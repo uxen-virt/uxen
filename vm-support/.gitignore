@@ -1,0 +1,5 @@
+build*_win7_amd64.*
+*~
+obj*_win7_amd64
+project.xcworkspace
+xcuserdata

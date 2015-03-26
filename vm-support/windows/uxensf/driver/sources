@@ -1,0 +1,37 @@
+TARGETNAME=uxensf
+TARGETTYPE=DRIVER
+
+!include ../../common/sources.inc
+
+MSC_WARNING_LEVEL=
+
+NTTARGETFILE0 = $(OBJ_PATH)\$(O)\$(INF_NAME).inf
+PASS0_BINPLACE = $(NTTARGETFILE0)
+
+#NTTARGETFILE1 = COPY
+
+NTTARGETFILE2 = COPY POST
+
+VBOXSRC=../../../../dm/vbox-includes
+
+INCLUDES=$(VBOXSRC)/include;.;$(VBOXSRC)/src/VBox/Additions/common/VBoxGuestLib;..\..\..\..\common\include\xen-public;..\..\common;$(UXENV4VLIB_INC)
+
+C_DEFINES = $(C_DEFINES) -DVBOX -DVBOX_WITH_DEBUGGER -DLOG_ENABLED -DVBOX_OSE \
+    -DRT_OS_WINDOWS -D__WIN__ \
+    -DIN_RT_R0 \
+    -DGC_ARCH_BITS=64 -DIN_GUEST -DIN_GUEST_R0 -DLOG_TO_BACKDOOR \
+    -DVBOX_WITH_HGCM -DIN_RING0 -DVBOX_GUEST -DVBOX_ASYNC_RW \
+    -DVBOX_FAIL_FASTIO \
+    -DVBOX_WITH_64_BITS_GUESTS -DARCH_BITS=64
+
+VBOX_SOURCES=VBoxGuestR0LibSharedFolders.c \
+    VBoxSF.rc file.c \
+    info.c net.c path.c vbsf.c vbsfhlp.c 
+
+UXEN_SOURCES = hgcm-simple.c v4v-channel.c wskglue.c vbox-unused.c hgcmcall.c
+
+SOURCES = $(VBOX_SOURCES) $(UXEN_SOURCES)
+
+TARGETLIBS=$(DDK_LIB_PATH)\rxce.lib $(DDK_LIB_PATH)\netio.lib $(DDK_LIB_PATH)\ksecdd.lib  $(DDK_LIB_PATH)\rdbsslib.lib $(DDK_LIB_PATH)\copysup.lib \
+  $(UXENV4VLIB_LIB)
+

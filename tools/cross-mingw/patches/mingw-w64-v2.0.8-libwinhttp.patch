@@ -1,0 +1,103 @@
+diff -aburN mingw-w64-v2.0.8-orig/mingw-w64-crt/lib32/winhttp.def mingw-w64-v2.0.8/mingw-w64-crt/lib32/winhttp.def
+--- mingw-w64-v2.0.8-orig/mingw-w64-crt/lib32/winhttp.def	1970-01-01 01:00:00.000000000 +0100
++++ mingw-w64-v2.0.8/mingw-w64-crt/lib32/winhttp.def	2013-10-07 13:01:30.000000000 +0100
+@@ -0,0 +1,11 @@
++LIBRARY WINHTTP.dll
++EXPORTS
++WinHttpCloseHandle@4
++WinHttpConnect@16
++WinHttpOpen@20
++WinHttpOpenRequest@28
++WinHttpQueryOption@16
++WinHttpSendRequest@28
++WinHttpSetOption@16
++WinHttpSetStatusCallback@16
++WinHttpSetTimeouts@20
+diff -aburN mingw-w64-v2.0.8-orig/mingw-w64-crt/lib64/winhttp.def mingw-w64-v2.0.8/mingw-w64-crt/lib64/winhttp.def
+--- mingw-w64-v2.0.8-orig/mingw-w64-crt/lib64/winhttp.def	1970-01-01 01:00:00.000000000 +0100
++++ mingw-w64-v2.0.8/mingw-w64-crt/lib64/winhttp.def	2013-10-07 13:01:30.000000000 +0100
+@@ -0,0 +1,34 @@
++LIBRARY WINHTTP.dll
++EXPORTS
++DllCanUnloadNow
++DllGetClassObject
++Private1
++SvchostPushServiceGlobals
++WinHttpAddRequestHeaders
++WinHttpAutoProxySvcMain
++WinHttpCheckPlatform
++WinHttpCloseHandle
++WinHttpConnect
++WinHttpCrackUrl
++WinHttpCreateUrl
++WinHttpDetectAutoProxyConfigUrl
++WinHttpGetDefaultProxyConfiguration
++WinHttpGetIEProxyConfigForCurrentUser
++WinHttpGetProxyForUrl
++WinHttpOpen
++WinHttpOpenRequest
++WinHttpQueryAuthSchemes
++WinHttpQueryDataAvailable
++WinHttpQueryHeaders
++WinHttpQueryOption
++WinHttpReadData
++WinHttpReceiveResponse
++WinHttpSendRequest
++WinHttpSetCredentials
++WinHttpSetDefaultProxyConfiguration
++WinHttpSetOption
++WinHttpSetStatusCallback
++WinHttpSetTimeouts
++WinHttpTimeFromSystemTime
++WinHttpTimeToSystemTime
++WinHttpWriteData
+diff -aburN mingw-w64-v2.0.8-orig/mingw-w64-crt/Makefile.am mingw-w64-v2.0.8/mingw-w64-crt/Makefile.am
+--- mingw-w64-v2.0.8-orig/mingw-w64-crt/Makefile.am	2013-10-07 13:01:06.000000000 +0100
++++ mingw-w64-v2.0.8/mingw-w64-crt/Makefile.am	2013-10-07 13:01:30.000000000 +0100
+@@ -508,7 +508,9 @@
+   lib32/libxinput.a         lib32/libxaudio.a         lib32/libxaudiod.a   \
+   lib32/libxapofx.a         lib32/libx3daudio.a       lib32/libd3dx9.a     \
+   lib32/libd3dx10.a         lib32/libd3dx11.a         lib32/libd3dcsxd.a   \
+-  lib32/libd3dcompiler.a
++  lib32/libd3dcompiler.a    \
++  \
++  lib32/libwinhttp.a
+ 
+ # combine these two rules with the ones for lib64
+ # Use two patterns, one for 32/64 in lib32/ and lib64/
+@@ -964,7 +966,9 @@
+   lib64/libxinput.a         lib64/libxaudio.a         lib64/libxaudiod.a   \
+   lib64/libxapofx.a         lib64/libx3daudio.a       lib64/libd3dx9.a     \
+   lib64/libd3dx10.a         lib64/libd3dx11.a         lib64/libd3dcsxd.a   \
+-  lib64/libd3dcompiler.a
++  lib64/libd3dcompiler.a    \
++  \
++  lib64/libwinhttp.a
+ 
+ lib64/libcrtdll.a lib64/libmsvcrt.a lib64/libmsvcr80.a: lib64/lib%.a: lib64/%.def
+ 	$(DTDEF64) $< --dllname $*.dll
+diff -aburN mingw-w64-v2.0.8-orig/mingw-w64-crt/Makefile.in mingw-w64-v2.0.8/mingw-w64-crt/Makefile.in
+--- mingw-w64-v2.0.8-orig/mingw-w64-crt/Makefile.in	2013-10-07 13:01:06.000000000 +0100
++++ mingw-w64-v2.0.8/mingw-w64-crt/Makefile.in	2013-10-07 13:01:30.000000000 +0100
+@@ -3544,7 +3544,9 @@
+ @LIB32_TRUE@  lib32/libxinput.a         lib32/libxaudio.a         lib32/libxaudiod.a   \
+ @LIB32_TRUE@  lib32/libxapofx.a         lib32/libx3daudio.a       lib32/libd3dx9.a     \
+ @LIB32_TRUE@  lib32/libd3dx10.a         lib32/libd3dx11.a         lib32/libd3dcsxd.a   \
+-@LIB32_TRUE@  lib32/libd3dcompiler.a
++@LIB32_TRUE@  lib32/libd3dcompiler.a    \
++@LIB32_TRUE@  \
++@LIB32_TRUE@  lib32/libwinhttp.a
+ 
+ 
+ # End 32-bit runtime
+@@ -3902,7 +3904,9 @@
+ @LIB64_TRUE@  lib64/libxinput.a         lib64/libxaudio.a         lib64/libxaudiod.a   \
+ @LIB64_TRUE@  lib64/libxapofx.a         lib64/libx3daudio.a       lib64/libd3dx9.a     \
+ @LIB64_TRUE@  lib64/libd3dx10.a         lib64/libd3dx11.a         lib64/libd3dcsxd.a   \
+-@LIB64_TRUE@  lib64/libd3dcompiler.a
++@LIB64_TRUE@  lib64/libd3dcompiler.a    \
++@LIB64_TRUE@  \
++@LIB64_TRUE@  lib64/libwinhttp.a
+ 
+ 
+ # End 64-bit runtime

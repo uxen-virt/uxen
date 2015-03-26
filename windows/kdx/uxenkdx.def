@@ -1,0 +1,15 @@
+EXPORTS
+
+; uXen specific exports
+    domain
+    dumplog
+    hostpages
+    uxen
+    ugdb
+    udt
+
+; Required dbg extention exports
+    DebugExtensionInitialize
+    DebugExtensionUninitialize
+    DebugExtensionNotify
+    help

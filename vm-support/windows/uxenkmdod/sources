@@ -1,0 +1,31 @@
+TARGETNAME = uxenkmdod
+TARGETTYPE = DRIVER
+
+!include ../common/sources.inc
+
+NTTARGETFILE0 = $(OBJ_PATH)\$(O)\$(INF_NAME).inf
+PASS0_BINPLACE = $(NTTARGETFILE0)
+
+NTTARGETFILE2 = POST
+
+INCLUDES = ..\..\..\common\include\xen-public;..\common; $(WDK8_PATH)\inc;..\uxendisp\include
+
+!if $(AMD64)
+LIB_ARCH_PATH = x64
+!else
+LIB_ARCH_PATH = x86
+!endif
+
+TARGETLIBS = $(DDK_LIB_PATH)\wdmsec.lib \
+             $(WDK8_PATH)\lib\$(LIB_ARCH_PATH)\displib.lib
+
+SOURCES = bdd.cxx \
+          bdd_ddi.cxx \
+          bdd_dmm.cxx \
+          bdd_util.cxx \
+          bltfuncs.cxx \
+          blthw.cxx \
+          bochs.cxx \
+          Pointer.cxx \
+          perfcnt.cxx \
+          uxenkmdod.rc

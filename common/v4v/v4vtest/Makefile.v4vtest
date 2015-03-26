@@ -1,0 +1,30 @@
+#
+# Copyright 2015, Bromium, Inc.
+# SPDX-License-Identifier: ISC
+#
+
+CPPFLAGS += -I$(SRCROOT) $(LIBXC_CPPFLAGS) $(LIBUXENCTL_CPPFLAGS) -I$(TOPDIR)/common/include -I$(TOPDIR) -I$(TOPDIR)/common/include/xen-public
+LDLIBS +=
+CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
+
+all: v4vtest$(EXE_SUFFIX) v4vtestrr$(EXE_SUFFIX)
+
+V4VTEST_OBJS = v4vtest.o
+V4VTESTRR_OBJS = v4vtestrr.o
+
+OBJS = $(V4VTEST_OBJS) ${V4VTEST_OBJS}
+$(OBJS): .deps/.exists
+
+v4vtest$(EXE_SUFFIX): $(V4VTEST_OBJS) $(LIBXC_DEPS) $(LIBUXENCTL_DEPS)
+	$(_W)echo Linking - $@
+	$(_V)$(call link,$@,$(V4VTEST_OBJS) $(LDLIBS) $(LIBXC_LIBS) $(LIBUXENCTL_LIBS))
+
+v4vtestrr$(EXE_SUFFIX): $(V4VTESTRR_OBJS) $(LIBXC_DEPS) $(LIBUXENCTL_DEPS)
+	$(_W)echo Linking - $@
+	$(_V)$(call link,$@,$(V4VTESTRR_OBJS) $(LDLIBS) $(LIBXC_LIBS) $(LIBUXENCTL_LIBS))
+
+%.o: %.c
+	$(_W)echo Compiling - $@
+	$(_V)$(COMPILE.c) $< -o $@
+
+-include .deps/*.d

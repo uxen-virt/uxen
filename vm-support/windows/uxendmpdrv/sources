@@ -1,0 +1,19 @@
+TARGETNAME = uxendmpdrv
+TARGETTYPE = DRIVER
+
+!include ../common/sources.inc
+
+INCLUDES=$(INCLUDES);../../..;..\common
+
+NTTARGETFILE0 = $(OBJ_PATH)\$(O)\$(INF_NAME).inf
+PASS0_BINPLACE = $(NTTARGETFILE0)
+
+NTTARGETFILE2 = COPY POST
+
+TARGETLIBS = \
+    $(DDK_LIB_PATH)\ntoskrnl.lib \
+    $(DDK_LIB_PATH)\Wdmsec.lib \
+    $(DDK_LIB_PATH)\aux_klib.lib
+
+SOURCES = dmpdrv.cpp \
+          dmpdrv.rc

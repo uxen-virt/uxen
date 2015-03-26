@@ -1,0 +1,178 @@
+[Version]
+Signature="$CHICAGO$"
+Class=MEDIA
+ClassGUID={4d36e96c-e325-11ce-bfc1-08002be10318}
+Provider=%uXenMfg%
+DriverVer=07/08/2013,6.1.7600.16385
+CatalogFile=uxenaudio.cat
+
+[DestinationDirs]
+UXENAUDIO.CopyList=10,system32\drivers
+UXENAUDIO64.CopyList=10,system32\drivers
+
+[SourceDisksNames]
+222=%DiskDescription%,,,
+
+[SourceDisksFiles]
+uxenaudio.sys=222
+
+[SourceDisksFiles.amd64]
+uxenaudio.sys=222
+
+[Manufacturer]
+%uXenMfg%=uXenMfg,NTAMD64
+
+[uXenMfg]
+%UXENAUDIO_01.DeviceDesc%=UXENAUDIO, PCI\VEN_5853&DEV_C2AD
+
+[uXenMfg.NTAMD64]
+%UXENAUDIO_01.DeviceDesc%=UXENAUDIO64, PCI\VEN_5853&DEV_C2AD
+
+[UXENAUDIO]
+AlsoInstall=KS.Registration(ks.inf), WDMAUDIO.Registration(wdmaudio.inf)
+CopyFiles=UXENAUDIO.CopyList
+AddReg=UXENAUDIO.AddReg,UXENAUDIO_NAMES.AddReg,UXENAUDIO_OEM.AddReg
+
+[UXENAUDIO.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,UXENAUDIO.Interface.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,UXENAUDIO.Interface.Wave
+AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,UXENAUDIO.Interface.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,UXENAUDIO.Interface.Topology
+
+[UXENAUDIO.NTX86]
+Include=ks.inf,wdmaudio.inf
+Needs=KS.Registration,WDMAUDIO.Registration
+CopyFiles=UXENAUDIO.CopyList
+AddReg=UXENAUDIO.AddReg,UXENAUDIO_NAMES.AddReg,UXENAUDIO_OEM.AddReg
+
+[UXENAUDIO.NTX86.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,UXENAUDIO.Interface.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,UXENAUDIO.Interface.Wave
+AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,UXENAUDIO.Interface.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,UXENAUDIO.Interface.Topology
+
+[UXENAUDIO64]
+Include=ks.inf, wdmaudio.inf
+Needs=KS.Registration,WDMAUDIO.Registration
+CopyFiles=UXENAUDIO64.CopyList
+AddReg=UXENAUDIO64.AddReg,UXENAUDIO_NAMES.AddReg,UXENAUDIO_OEM.AddReg
+
+[UXENAUDIO64.Interfaces]
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Wave%,UXENAUDIO.Interface.Wave
+AddInterface=%KSCATEGORY_RENDER%,%KSNAME_Wave%,UXENAUDIO.Interface.Wave
+AddInterface=%KSCATEGORY_CAPTURE%,%KSNAME_Wave%,UXENAUDIO.Interface.Wave
+AddInterface=%KSCATEGORY_AUDIO%,%KSNAME_Topology%,UXENAUDIO.Interface.Topology
+
+[UXENAUDIO64.HW]
+AddReg=UXENAUDIO64.NTAMD64.HW.AddReg
+
+[UXENAUDIO64.NTAMD64.HW.AddReg]
+HKR,,DeviceType,0x10001,0x0000001D
+HKR,,Security,,"D:P(A;;GA;;;SY)(A;;GRGWGX;;;BA)(A;;GRGWGX;;;WD)(A;;GRGWGX;;;RC)"
+
+
+
+[UXENAUDIO.Interface.Wave]
+AddReg=UXENAUDIO.I.Wave.AddReg
+
+[UXENAUDIO.I.Wave.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%UXENAUDIO.Wave.szPname%
+
+[UXENAUDIO.Interface.Topology]
+AddReg=UXENAUDIO.I.Topo.AddReg
+
+[UXENAUDIO.I.Topo.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%UXENAUDIO.Topology.szPname%
+
+[UXENAUDIO.AddReg]
+HKR,,AssociatedFilters,,"wdmaud,swmidi,redbook"
+HKR,,Driver,,uxenaudio.sys
+HKR,,NTMPDriver,,"uxenaudio.sys,sbemul.sys"
+
+HKR,Drivers,SubClasses,,"wave,midi,mixer"
+
+HKR,Drivers\wave\wdmaud.drv,Driver,,wdmaud.drv
+HKR,Drivers\midi\wdmaud.drv,Driver,,wdmaud.drv
+HKR,Drivers\mixer\wdmaud.drv,Driver,,wdmaud.drv
+
+HKR,Drivers\wave\wdmaud.drv,Description,,%UXENAUDIO.DeviceDesc%
+HKR,Drivers\midi\wdmaud.drv, Description,,%UXENAUDIO.DeviceDesc%
+HKR,Drivers\mixer\wdmaud.drv,Description,,%UXENAUDIO.DeviceDesc%
+
+
+[UXENAUDIO64.AddReg]
+HKR,,AssociatedFilters,,"wdmaud,swmidi,redbook"
+HKR,,Driver,,uxenaudio.sys
+HKR,,NTMPDriver,,"uxenaudio.sys,sbemul.sys"
+
+HKR,Drivers,SubClasses,,"wave,midi,mixer"
+
+HKR,Drivers\wave\wdmaud.drv,Driver,,wdmaud.drv
+HKR,Drivers\midi\wdmaud.drv,Driver,,wdmaud.drv
+HKR,Drivers\mixer\wdmaud.drv,Driver,,wdmaud.drv
+
+HKR,Drivers\wave\wdmaud.drv,Description,,%UXENAUDIO.DeviceDesc%
+HKR,Drivers\midi\wdmaud.drv, Description,,%UXENAUDIO.DeviceDesc%
+HKR,Drivers\mixer\wdmaud.drv,Description,,%UXENAUDIO.DeviceDesc%
+
+[UXENAUDIO.CopyList]
+uxenaudio.sys
+
+[UXENAUDIO64.CopyList]
+uxenaudio.sys
+
+
+[UXENAUDIO_NAMES.AddReg]
+
+
+[UXENAUDIO_OEM.AddReg]
+
+[UXENAUDIO.Services]
+AddService = uxenaudio, 0x00000002, UXENAUDIO_Service_Inst
+
+[UXENAUDIO.NTX86.Services]
+AddService = uxenaudio, 0x00000002, UXENAUDIO_Service_Inst
+
+
+[UXENAUDIO_Service_Inst]
+DisplayName   = %UXENAUDIO.SvcDesc%
+ServiceType   = 1                  ; SERVICE_KERNEL_DRIVER
+StartType     = 3                  ; SERVICE_DEMAND_START
+ErrorControl  = 1                  ; SERVICE_ERROR_NORMAL
+ServiceBinary = %10%\system32\drivers\uxenaudio.sys
+
+
+[UXENAUDIO64.Services]
+AddService = uxenau64, 0x00000002, UXENAU64_Service_Inst
+
+[UXENAU64_Service_Inst]
+DisplayName   = %UXENAUDIO.SvcDesc%
+ServiceType   = 1                  ; SERVICE_KERNEL_DRIVER
+StartType     = 3                  ; SERVICE_DEMAND_START
+ErrorControl  = 1                  ; SERVICE_ERROR_NORMAL
+ServiceBinary = %10%\system32\drivers\uxenaudio.sys
+
+
+
+[Strings]
+uXenMfg = "uXen Project"
+DiskDescription="uXen PV audio driver disk"
+UXENAUDIO_01.DeviceDesc="uXen PV audio driver"
+UXENAUDIO.DeviceDesc="uXen PV audio"
+
+UXENAUDIO.Wave.szPname="uXen PV audio sound card"
+UXENAUDIO.Topology.szPname="uXen PV audio mixer"
+
+MediaCategories="SYSTEM\CurrentControlSet\Control\MediaCategories"
+
+Proxy.CLSID="{17CCA71B-ECD7-11D0-B908-00A0C9223196}"
+KSCATEGORY_AUDIO="{6994AD04-93EF-11D0-A3CC-00A0C9223196}"
+KSCATEGORY_RENDER="{65E8773E-8F56-11D0-A3B9-00A0C9223196}"
+KSCATEGORY_CAPTURE="{65E8773D-8F56-11D0-A3B9-00A0C9223196}"
+KSCATEGORY_REALTIME="{EB115FFC-10C8-4964-831D-6DCB02E6F23F}"
+KSNAME_Wave="Wave"
+KSNAME_Topology="Topology"
+
+UXENAUDIO.SvcDesc = "uXen PV audio driver service (WDM)"

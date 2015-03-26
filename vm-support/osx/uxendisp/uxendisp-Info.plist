@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>English</string>
+	<key>CFBundleExecutable</key>
+	<string>${EXECUTABLE_NAME}</string>
+	<key>CFBundleIconFile</key>
+	<string></string>
+	<key>CFBundleIdentifier</key>
+	<string>org.uxen.${PRODUCT_NAME:rfc1034identifier}</string>
+	<key>OSBundleCompatibleVersion</key>
+	<string>1.0.0</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>${PRODUCT_NAME}</string>
+	<key>CFBundlePackageType</key>
+	<string>KEXT</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.0</string>
+	<key>CFBundleSignature</key>
+	<string>????</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>IOKitPersonalities</key>
+	<dict>
+		<key>uXenDispFB</key>
+		<dict>
+			<key>CFBundleIdentifier</key>
+			<string>org.uxen.${PRODUCT_NAME:rfc1034identifier}</string>
+			<key>IOClass</key>
+			<string>uXenDispFB</string>
+                        <key>IOMatchCategory</key>
+                        <string>IOFramebuffer</string>
+                        <key>IOProbeScore</key>
+                        <integer>60000</integer>
+			<key>IOPCIMatch</key>
+			<string>0x51015853</string>
+			<key>IOProviderClass</key>
+			<string>IOPCIDevice</string>
+			<key>IOPCIClassMatch</key>
+			<string>0x03000000&amp;0xFF000000</string>
+		</dict>
+	</dict>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2013 uXen Project. All rights reserved.</string>
+	<key>OSBundleLibraries</key>
+	<dict>
+		<key>com.apple.iokit.IOPCIFamily</key>
+		<string>1.1</string>
+		<key>com.apple.iokit.IOGraphicsFamily</key>
+		<string>1.1</string>
+		<key>com.apple.iokit.IONDRVSupport</key>
+		<string>1.1</string>
+		<key>com.apple.kpi.bsd</key>
+		<string>9.0</string>
+		<key>com.apple.kpi.iokit</key>
+		<string>9.0</string>
+		<key>com.apple.kpi.libkern</key>
+		<string>9.0</string>
+		<key>com.apple.kpi.mach</key>
+		<string>9.0</string>
+	</dict>
+</dict>
+</plist>

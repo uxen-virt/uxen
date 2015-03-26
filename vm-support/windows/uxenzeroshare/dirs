@@ -1,0 +1,5 @@
+DIRS                    =   \
+  libinternals              \
+  uxenzeroshareconsole      \
+  uxenzeroshare
+  

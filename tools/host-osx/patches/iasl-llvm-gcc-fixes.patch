@@ -1,0 +1,21 @@
+diff -ru acpica-unix2-20120711.orig/source/compiler/Makefile acpica-unix2-20120711/source/compiler/Makefile
+--- acpica-unix2-20120711.orig/source/compiler/Makefile	2012-09-29 16:42:15.000000000 +0100
++++ acpica-unix2-20120711/source/compiler/Makefile	2012-09-29 16:44:24.000000000 +0100
+@@ -263,15 +263,13 @@
+     -Waggregate-return \
+     -Wchar-subscripts \
+     -Wempty-body \
+-    -Wlogical-op \
+     -Wmissing-declarations \
+     -Wmissing-field-initializers \
+-    -Wmissing-parameter-type \
+     -Wnested-externs \
+-    -Wold-style-declaration \
+     -Wold-style-definition \
+     -Wredundant-decls \
+-    -Wtype-limits
++    -Wtype-limits \
++    -Wno-format-nonliteral
+ 
+ #
+ # Bison/Flex configuration

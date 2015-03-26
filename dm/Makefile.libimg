@@ -1,0 +1,96 @@
+#
+# Copyright 2012-2015, Bromium, Inc.
+# SPDX-License-Identifier: ISC
+#
+
+all: libimg.a Makefile.lib-LIBIMG
+
+OSX ?= IGNORE_
+WINDOWS ?= IGNORE_
+
+LIBVHDDIR = $(SRCDIR)/../libvhd
+LIBVHDDIR_src = $(TOPDIR)/common/libvhd
+LIBVHDDIR_obj = $(call builddir,../libvhd)
+
+LIBUXENCTLDIR_src = $(TOPDIR)/common/uxenctl
+
+LZ4DIR = $(TOPDIR)/common/lz4
+LZ4DIR_include = $(TOPDIR)/common/lz4
+
+CFLAGS += -DLIBIMG=1
+$(DEBUG_ONLY)CFLAGS += -DDEBUG=1
+
+CFLAGS += -I$(YAJLDIR)/include
+
+LIBIMG_CFLAGS = -I$(TOPDIR)
+
+LIBIMG_SRCS =
+LIBIMG_SRCS += aio.c
+LIBIMG_SRCS += bh.c
+block.o: CPPFLAGS += -I$(LIBVHDDIR_src)
+LIBIMG_SRCS += block.c
+block-vhd.o: CPPFLAGS += -I$(LIBVHDDIR_src)
+LIBIMG_SRCS += block-vhd.c
+$(WINDOWS)LIBIMG_SRCS += block-raw-win32.c
+$(OSX)LIBIMG_SRCS += block-raw-posix.c
+$(OSX)LIBIMG_SRCS += osx.c
+osx.o: CPPFLAGS += -I$(LIBUXENCTLDIR_src)
+LIBIMG_SRCS += block-swap.c
+block-swap.o: CPPFLAGS += $(LZ4_CPPFLAGS)
+LIBIMG_SRCS +=   block-swap/copybuffer.c
+LIBIMG_SRCS +=   block-swap/dubtree.c
+block-swap_dubtree.o: CPPFLAGS += $(LZ4_CPPFLAGS)
+LIBIMG_SRCS +=   block-swap/md5.c
+LIBIMG_SRCS +=   block-swap/simpletree.c
+LIBIMG_SRCS +=   block-swap/hashtable.c
+LIBIMG_SRCS += clock.c
+LIBIMG_SRCS += ioh.c
+$(WINDOWS)LIBIMG_SRCS += ioh-win32.c
+$(OSX)LIBIMG_SRCS += ioh-osx.c
+LIBIMG_SRCS += iovec.c
+LIBIMG_SRCS += lib.c
+LIBIMG_SRCS += uuidgen.c
+$(WINDOWS)LIBIMG_SRCS += win32.c
+
+LIBIMG_OBJS = $(patsubst %.m,%.o,$(patsubst %.c,%.o,$(LIBIMG_SRCS)))
+LIBIMG_OBJS := $(subst /,_,$(LIBIMG_OBJS))
+
+EXTRA_CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
+
+LZ4_CPPFLAGS += -I$(LZ4DIR_include)
+LZ4_SRCS += lz4.c
+
+LZ4_OBJS = $(patsubst %.m,%.o,$(patsubst %.c,%.o,$(LZ4_SRCS)))
+LZ4_OBJS := $(subst /,_,$(patsubst %,lz4/%,$(LZ4_OBJS)))
+LIBIMG_OBJS += $(LZ4_OBJS)
+lz4_lz4.o: CFLAGS_debug := $(subst -O0,-O2,$(CFLAGS_debug))
+
+$(LIBIMG_OBJS): .deps/.exists
+
+libimg.a: $(LIBIMG_OBJS)
+	$(_W)echo Archiving - $@
+	$(_V)$(AR) rc $@ $^
+	$(_V)$(RANLIB) $@
+
+%.o: %.c
+	$(_W)echo Compiling - $@
+	$(_V)$(COMPILE.c) $(EXTRA_CFLAGS) $(LIBIMG_CFLAGS) -c $< -o $@
+
+block-swap_%.o: block-swap/%.c
+	$(_W)echo Compiling - $(subst _,/,$@)
+	$(_V)$(COMPILE.c) $(EXTRA_CFLAGS) $(LIBIMG_CFLAGS) -c $< -o $@
+
+$(LZ4_OBJS): CFLAGS += $(LZ4_CFLAGS)
+$(LZ4_OBJS): CPPFLAGS += $(LZ4_CPPFLAGS)
+lz4_%.o: $(LZ4DIR)/%.c
+	$(_W)echo Compiling - $(subst lz4_,lz4/,$@)
+	$(_V)$(COMPILE.c) $(EXTRA_CFLAGS) -c $< -o $@
+
+Makefile.lib-LIBIMG:
+	@rm -f $@
+	@(echo "LIBIMG_CPPFLAGS = -I$(SRCROOT)" ;\
+	  echo "LIBIMG_LIBS = -L$(abspath .) -limg" ;\
+	  echo "LIBIMG_DEPS = $(abspath .)/libimg.a" ;\
+	  echo "$(abspath .)/libimg.a: $(patsubst %,$(SRCROOT)/%,$(LIBIMG_SRCS))" ) >$@
+
+-include .deps/*.d

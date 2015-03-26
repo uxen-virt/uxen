@@ -1,0 +1,677 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		84045660161E3AC300D74D7F /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 8404565E161E3AC300D74D7F /* InfoPlist.strings */; };
+		84045663161E3AD800D74D7F /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 84045661161E3AD800D74D7F /* InfoPlist.strings */; };
+		84045666161E3AF900D74D7F /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = 84045664161E3AF900D74D7F /* InfoPlist.strings */; };
+		84167820161B55B2002C60E6 /* uXenPS2Controller.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8416781F161B55B2002C60E6 /* uXenPS2Controller.cpp */; };
+		84167836161B5613002C60E6 /* uXenPS2Keyboard.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 84167835161B5613002C60E6 /* uXenPS2Keyboard.cpp */; };
+		8416784A161B56A2002C60E6 /* uXenPS2Mouse.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 84167849161B56A2002C60E6 /* uXenPS2Mouse.cpp */; };
+		84833FA4161B627D00845294 /* ApplePS2KeyboardDevice.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 84833F9E161B627D00845294 /* ApplePS2KeyboardDevice.cpp */; };
+		84833FA6161B627D00845294 /* ApplePS2MouseDevice.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 84833FA0161B627D00845294 /* ApplePS2MouseDevice.cpp */; };
+		84833FA8161B627D00845294 /* IOSyncer.h in Headers */ = {isa = PBXBuildFile; fileRef = 84833FA2161B627D00845294 /* IOSyncer.h */; settings = {ATTRIBUTES = (); }; };
+		84833FAA161B629500845294 /* ApplePS2ToADBMap.h in Headers */ = {isa = PBXBuildFile; fileRef = 84833FA9161B629500845294 /* ApplePS2ToADBMap.h */; settings = {ATTRIBUTES = (); }; };
+		84833FC1161B69B800845294 /* uXenPS2Mouse.h in Headers */ = {isa = PBXBuildFile; fileRef = 84167848161B56A2002C60E6 /* uXenPS2Mouse.h */; settings = {ATTRIBUTES = (); }; };
+		84833FC2161B69C700845294 /* uXenPS2Keyboard.h in Headers */ = {isa = PBXBuildFile; fileRef = 84167834161B5613002C60E6 /* uXenPS2Keyboard.h */; settings = {ATTRIBUTES = (); }; };
+		84833FC3161B6A7E00845294 /* uXenPS2Controller.h in Headers */ = {isa = PBXBuildFile; fileRef = 8416781E161B55B2002C60E6 /* uXenPS2Controller.h */; settings = {ATTRIBUTES = (); }; };
+		84DD197B162D496E0044D061 /* AppleACPIPS2Nub.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 84DD1979162D496E0044D061 /* AppleACPIPS2Nub.cpp */; };
+		84DD197C162D496E0044D061 /* AppleACPIPS2Nub.h in Headers */ = {isa = PBXBuildFile; fileRef = 84DD197A162D496E0044D061 /* AppleACPIPS2Nub.h */; };
+		B9895CD7174A3CF500598C6C /* ApplePS2Device.h in Headers */ = {isa = PBXBuildFile; fileRef = B9895CD4174A3CF500598C6C /* ApplePS2Device.h */; };
+		B9895CDA174A3CF500598C6C /* ApplePS2KeyboardDevice.h in Headers */ = {isa = PBXBuildFile; fileRef = B9895CD5174A3CF500598C6C /* ApplePS2KeyboardDevice.h */; };
+		B9895CDD174A3CF500598C6C /* ApplePS2MouseDevice.h in Headers */ = {isa = PBXBuildFile; fileRef = B9895CD6174A3CF500598C6C /* ApplePS2MouseDevice.h */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		8404565F161E3AC300D74D7F /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		84045662161E3AD800D74D7F /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		84045665161E3AF900D74D7F /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		84167813161B55B2002C60E6 /* uXenPS2Controller.kext */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = uXenPS2Controller.kext; sourceTree = BUILT_PRODUCTS_DIR; };
+		84167817161B55B2002C60E6 /* Kernel.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Kernel.framework; path = System/Library/Frameworks/Kernel.framework; sourceTree = SDKROOT; };
+		8416781A161B55B2002C60E6 /* uXenPS2Controller-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "uXenPS2Controller-Info.plist"; sourceTree = "<group>"; };
+		8416781E161B55B2002C60E6 /* uXenPS2Controller.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = uXenPS2Controller.h; sourceTree = "<group>"; };
+		8416781F161B55B2002C60E6 /* uXenPS2Controller.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = uXenPS2Controller.cpp; sourceTree = "<group>"; };
+		84167821161B55B2002C60E6 /* uXenPS2Controller-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "uXenPS2Controller-Prefix.pch"; sourceTree = "<group>"; };
+		8416782D161B5613002C60E6 /* uXenPS2Keyboard.kext */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = uXenPS2Keyboard.kext; sourceTree = BUILT_PRODUCTS_DIR; };
+		84167830161B5613002C60E6 /* uXenPS2Keyboard-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "uXenPS2Keyboard-Info.plist"; sourceTree = "<group>"; };
+		84167834161B5613002C60E6 /* uXenPS2Keyboard.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = uXenPS2Keyboard.h; sourceTree = "<group>"; };
+		84167835161B5613002C60E6 /* uXenPS2Keyboard.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = uXenPS2Keyboard.cpp; sourceTree = "<group>"; };
+		84167837161B5613002C60E6 /* uXenPS2Keyboard-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "uXenPS2Keyboard-Prefix.pch"; sourceTree = "<group>"; };
+		84167841161B56A2002C60E6 /* uXenPS2Mouse.kext */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = uXenPS2Mouse.kext; sourceTree = BUILT_PRODUCTS_DIR; };
+		84167844161B56A2002C60E6 /* uXenPS2Mouse-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "uXenPS2Mouse-Info.plist"; sourceTree = "<group>"; };
+		84167848161B56A2002C60E6 /* uXenPS2Mouse.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = uXenPS2Mouse.h; sourceTree = "<group>"; };
+		84167849161B56A2002C60E6 /* uXenPS2Mouse.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; lineEnding = 0; path = uXenPS2Mouse.cpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
+		8416784B161B56A2002C60E6 /* uXenPS2Mouse-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "uXenPS2Mouse-Prefix.pch"; sourceTree = "<group>"; };
+		84833F9E161B627D00845294 /* ApplePS2KeyboardDevice.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = ApplePS2KeyboardDevice.cpp; sourceTree = "<group>"; };
+		84833FA0161B627D00845294 /* ApplePS2MouseDevice.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = ApplePS2MouseDevice.cpp; sourceTree = "<group>"; };
+		84833FA2161B627D00845294 /* IOSyncer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = IOSyncer.h; sourceTree = "<group>"; };
+		84833FA9161B629500845294 /* ApplePS2ToADBMap.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = ApplePS2ToADBMap.h; sourceTree = "<group>"; };
+		84833FCC161BA27700845294 /* IOKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOKit.framework; path = System/Library/Frameworks/IOKit.framework; sourceTree = SDKROOT; };
+		84C337A91698BC38009B8177 /* CoreFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreFoundation.framework; path = System/Library/Frameworks/CoreFoundation.framework; sourceTree = SDKROOT; };
+		84DD1979162D496E0044D061 /* AppleACPIPS2Nub.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = AppleACPIPS2Nub.cpp; sourceTree = "<group>"; };
+		84DD197A162D496E0044D061 /* AppleACPIPS2Nub.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = AppleACPIPS2Nub.h; sourceTree = "<group>"; };
+		84F424C3161B593D00777765 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = System/Library/Frameworks/Cocoa.framework; sourceTree = SDKROOT; };
+		84F424C5161B593D00777765 /* PreferencePanes.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = PreferencePanes.framework; path = System/Library/Frameworks/PreferencePanes.framework; sourceTree = SDKROOT; };
+		84F424C7161B593D00777765 /* AppKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppKit.framework; path = System/Library/Frameworks/AppKit.framework; sourceTree = SDKROOT; };
+		84F424C8161B593D00777765 /* CoreData.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreData.framework; path = System/Library/Frameworks/CoreData.framework; sourceTree = SDKROOT; };
+		84F424C9161B593D00777765 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = System/Library/Frameworks/Foundation.framework; sourceTree = SDKROOT; };
+		B9895CD4174A3CF500598C6C /* ApplePS2Device.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ApplePS2Device.h; path = uXenPS2Controller/ApplePS2Device.h; sourceTree = "<group>"; };
+		B9895CD5174A3CF500598C6C /* ApplePS2KeyboardDevice.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ApplePS2KeyboardDevice.h; path = uXenPS2Controller/ApplePS2KeyboardDevice.h; sourceTree = "<group>"; };
+		B9895CD6174A3CF500598C6C /* ApplePS2MouseDevice.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = ApplePS2MouseDevice.h; path = uXenPS2Controller/ApplePS2MouseDevice.h; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		8416780E161B55B2002C60E6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		84167828161B5613002C60E6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8416783C161B56A2002C60E6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		84167806161B55B2002C60E6 = {
+			isa = PBXGroup;
+			children = (
+				84833FC0161B636900845294 /* Common */,
+				84167818161B55B2002C60E6 /* uXenPS2Controller */,
+				8416782E161B5613002C60E6 /* uXenPS2Keyboard */,
+				84167842161B56A2002C60E6 /* uXenPS2Mouse */,
+				84167815161B55B2002C60E6 /* Frameworks */,
+				84167814161B55B2002C60E6 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		84167814161B55B2002C60E6 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				84167813161B55B2002C60E6 /* uXenPS2Controller.kext */,
+				8416782D161B5613002C60E6 /* uXenPS2Keyboard.kext */,
+				84167841161B56A2002C60E6 /* uXenPS2Mouse.kext */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		84167815161B55B2002C60E6 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				84C337A91698BC38009B8177 /* CoreFoundation.framework */,
+				84F424C3161B593D00777765 /* Cocoa.framework */,
+				84F424C5161B593D00777765 /* PreferencePanes.framework */,
+				84167816161B55B2002C60E6 /* Other Frameworks */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		84167816161B55B2002C60E6 /* Other Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				84833FCC161BA27700845294 /* IOKit.framework */,
+				84167817161B55B2002C60E6 /* Kernel.framework */,
+				84F424C7161B593D00777765 /* AppKit.framework */,
+				84F424C8161B593D00777765 /* CoreData.framework */,
+				84F424C9161B593D00777765 /* Foundation.framework */,
+			);
+			name = "Other Frameworks";
+			sourceTree = "<group>";
+		};
+		84167818161B55B2002C60E6 /* uXenPS2Controller */ = {
+			isa = PBXGroup;
+			children = (
+				84DD197A162D496E0044D061 /* AppleACPIPS2Nub.h */,
+				84DD1979162D496E0044D061 /* AppleACPIPS2Nub.cpp */,
+				84833F9E161B627D00845294 /* ApplePS2KeyboardDevice.cpp */,
+				84833FA0161B627D00845294 /* ApplePS2MouseDevice.cpp */,
+				84833FA2161B627D00845294 /* IOSyncer.h */,
+				8416781E161B55B2002C60E6 /* uXenPS2Controller.h */,
+				8416781F161B55B2002C60E6 /* uXenPS2Controller.cpp */,
+				84167819161B55B2002C60E6 /* Supporting Files */,
+			);
+			path = uXenPS2Controller;
+			sourceTree = "<group>";
+		};
+		84167819161B55B2002C60E6 /* Supporting Files */ = {
+			isa = PBXGroup;
+			children = (
+				84045664161E3AF900D74D7F /* InfoPlist.strings */,
+				8416781A161B55B2002C60E6 /* uXenPS2Controller-Info.plist */,
+				84167821161B55B2002C60E6 /* uXenPS2Controller-Prefix.pch */,
+			);
+			name = "Supporting Files";
+			sourceTree = "<group>";
+		};
+		8416782E161B5613002C60E6 /* uXenPS2Keyboard */ = {
+			isa = PBXGroup;
+			children = (
+				84833FA9161B629500845294 /* ApplePS2ToADBMap.h */,
+				84167834161B5613002C60E6 /* uXenPS2Keyboard.h */,
+				84167835161B5613002C60E6 /* uXenPS2Keyboard.cpp */,
+				8416782F161B5613002C60E6 /* Supporting Files */,
+			);
+			path = uXenPS2Keyboard;
+			sourceTree = "<group>";
+		};
+		8416782F161B5613002C60E6 /* Supporting Files */ = {
+			isa = PBXGroup;
+			children = (
+				84045661161E3AD800D74D7F /* InfoPlist.strings */,
+				84167830161B5613002C60E6 /* uXenPS2Keyboard-Info.plist */,
+				84167837161B5613002C60E6 /* uXenPS2Keyboard-Prefix.pch */,
+			);
+			name = "Supporting Files";
+			sourceTree = "<group>";
+		};
+		84167842161B56A2002C60E6 /* uXenPS2Mouse */ = {
+			isa = PBXGroup;
+			children = (
+				84167848161B56A2002C60E6 /* uXenPS2Mouse.h */,
+				84167849161B56A2002C60E6 /* uXenPS2Mouse.cpp */,
+				84167843161B56A2002C60E6 /* Supporting Files */,
+			);
+			path = uXenPS2Mouse;
+			sourceTree = "<group>";
+		};
+		84167843161B56A2002C60E6 /* Supporting Files */ = {
+			isa = PBXGroup;
+			children = (
+				8404565E161E3AC300D74D7F /* InfoPlist.strings */,
+				84167844161B56A2002C60E6 /* uXenPS2Mouse-Info.plist */,
+				8416784B161B56A2002C60E6 /* uXenPS2Mouse-Prefix.pch */,
+			);
+			name = "Supporting Files";
+			sourceTree = "<group>";
+		};
+		84833FC0161B636900845294 /* Common */ = {
+			isa = PBXGroup;
+			children = (
+				B9895CD4174A3CF500598C6C /* ApplePS2Device.h */,
+				B9895CD5174A3CF500598C6C /* ApplePS2KeyboardDevice.h */,
+				B9895CD6174A3CF500598C6C /* ApplePS2MouseDevice.h */,
+			);
+			name = Common;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		8416780F161B55B2002C60E6 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				84833FA8161B627D00845294 /* IOSyncer.h in Headers */,
+				84833FC3161B6A7E00845294 /* uXenPS2Controller.h in Headers */,
+				84DD197C162D496E0044D061 /* AppleACPIPS2Nub.h in Headers */,
+				B9895CD7174A3CF500598C6C /* ApplePS2Device.h in Headers */,
+				B9895CDA174A3CF500598C6C /* ApplePS2KeyboardDevice.h in Headers */,
+				B9895CDD174A3CF500598C6C /* ApplePS2MouseDevice.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		84167829161B5613002C60E6 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				84833FAA161B629500845294 /* ApplePS2ToADBMap.h in Headers */,
+				84833FC2161B69C700845294 /* uXenPS2Keyboard.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8416783D161B56A2002C60E6 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				84833FC1161B69B800845294 /* uXenPS2Mouse.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		84167812161B55B2002C60E6 /* uXenPS2Controller */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 84167824161B55B2002C60E6 /* Build configuration list for PBXNativeTarget "uXenPS2Controller" */;
+			buildPhases = (
+				8416780D161B55B2002C60E6 /* Sources */,
+				8416780E161B55B2002C60E6 /* Frameworks */,
+				8416780F161B55B2002C60E6 /* Headers */,
+				84167810161B55B2002C60E6 /* Resources */,
+				84167811161B55B2002C60E6 /* Rez */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = uXenPS2Controller;
+			productName = uXenPS2Controller;
+			productReference = 84167813161B55B2002C60E6 /* uXenPS2Controller.kext */;
+			productType = "com.apple.product-type.kernel-extension";
+		};
+		8416782C161B5613002C60E6 /* uXenPS2Keyboard */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 84167838161B5613002C60E6 /* Build configuration list for PBXNativeTarget "uXenPS2Keyboard" */;
+			buildPhases = (
+				84167827161B5613002C60E6 /* Sources */,
+				84167828161B5613002C60E6 /* Frameworks */,
+				84167829161B5613002C60E6 /* Headers */,
+				8416782A161B5613002C60E6 /* Resources */,
+				8416782B161B5613002C60E6 /* Rez */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = uXenPS2Keyboard;
+			productName = uXenPS2Keyboard;
+			productReference = 8416782D161B5613002C60E6 /* uXenPS2Keyboard.kext */;
+			productType = "com.apple.product-type.kernel-extension";
+		};
+		84167840161B56A2002C60E6 /* uXenPS2Mouse */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 8416784C161B56A2002C60E6 /* Build configuration list for PBXNativeTarget "uXenPS2Mouse" */;
+			buildPhases = (
+				8416783B161B56A2002C60E6 /* Sources */,
+				8416783C161B56A2002C60E6 /* Frameworks */,
+				8416783D161B56A2002C60E6 /* Headers */,
+				8416783E161B56A2002C60E6 /* Resources */,
+				8416783F161B56A2002C60E6 /* Rez */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = uXenPS2Mouse;
+			productName = uXenPS2Mouse;
+			productReference = 84167841161B56A2002C60E6 /* uXenPS2Mouse.kext */;
+			productType = "com.apple.product-type.kernel-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		84167808161B55B2002C60E6 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 0450;
+				ORGANIZATIONNAME = uXen;
+			};
+			buildConfigurationList = 8416780B161B55B2002C60E6 /* Build configuration list for PBXProject "uXenPS2Controller" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = English;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				English,
+			);
+			mainGroup = 84167806161B55B2002C60E6;
+			productRefGroup = 84167814161B55B2002C60E6 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				84167812161B55B2002C60E6 /* uXenPS2Controller */,
+				8416782C161B5613002C60E6 /* uXenPS2Keyboard */,
+				84167840161B56A2002C60E6 /* uXenPS2Mouse */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		84167810161B55B2002C60E6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				84045666161E3AF900D74D7F /* InfoPlist.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8416782A161B5613002C60E6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				84045663161E3AD800D74D7F /* InfoPlist.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8416783E161B56A2002C60E6 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				84045660161E3AC300D74D7F /* InfoPlist.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXRezBuildPhase section */
+		84167811161B55B2002C60E6 /* Rez */ = {
+			isa = PBXRezBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8416782B161B5613002C60E6 /* Rez */ = {
+			isa = PBXRezBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8416783F161B56A2002C60E6 /* Rez */ = {
+			isa = PBXRezBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXRezBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		8416780D161B55B2002C60E6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				84167820161B55B2002C60E6 /* uXenPS2Controller.cpp in Sources */,
+				84833FA4161B627D00845294 /* ApplePS2KeyboardDevice.cpp in Sources */,
+				84833FA6161B627D00845294 /* ApplePS2MouseDevice.cpp in Sources */,
+				84DD197B162D496E0044D061 /* AppleACPIPS2Nub.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		84167827161B5613002C60E6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				84167836161B5613002C60E6 /* uXenPS2Keyboard.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		8416783B161B56A2002C60E6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8416784A161B56A2002C60E6 /* uXenPS2Mouse.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		8404565E161E3AC300D74D7F /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				8404565F161E3AC300D74D7F /* en */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+		84045661161E3AD800D74D7F /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				84045662161E3AD800D74D7F /* en */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+		84045664161E3AF900D74D7F /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				84045665161E3AF900D74D7F /* en */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		84167822161B55B2002C60E6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				CLANG_CXX_LANGUAGE_STANDARD = "compiler-default";
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				GCC_C_LANGUAGE_STANDARD = "compiler-default";
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.6;
+				ONLY_ACTIVE_ARCH = NO;
+				PRODUCT_NAME = "";
+				SDKROOT = macosx10.9;
+				STRIP_STYLE = debugging;
+			};
+			name = Debug;
+		};
+		84167823161B55B2002C60E6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				CLANG_CXX_LANGUAGE_STANDARD = "compiler-default";
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_C_LANGUAGE_STANDARD = "compiler-default";
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.6;
+				PRODUCT_NAME = "";
+				SDKROOT = macosx10.9;
+				STRIP_STYLE = debugging;
+			};
+			name = Release;
+		};
+		84167825161B55B2002C60E6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1.0.0d1;
+				GCC_FAST_OBJC_DISPATCH = NO;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "uXenPS2Controller/uXenPS2Controller-Prefix.pch";
+				GCC_VERSION = "";
+				GCC_WARN_UNINITIALIZED_AUTOS = NO;
+				INFOPLIST_FILE = "uXenPS2Controller/uXenPS2Controller-Info.plist";
+				MODULE_NAME = org.uxen.uXenPS2Controller;
+				MODULE_VERSION = 1.0.0d1;
+				PRODUCT_NAME = uXenPS2Controller;
+				SDKROOT = macosx10.9;
+				STRIP_STYLE = debugging;
+				WRAPPER_EXTENSION = kext;
+			};
+			name = Debug;
+		};
+		84167826161B55B2002C60E6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1.0.0d1;
+				GCC_FAST_OBJC_DISPATCH = NO;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "uXenPS2Controller/uXenPS2Controller-Prefix.pch";
+				GCC_VERSION = "";
+				INFOPLIST_FILE = "uXenPS2Controller/uXenPS2Controller-Info.plist";
+				MODULE_NAME = org.uxen.uXenPS2Controller;
+				MODULE_VERSION = 1.0.0d1;
+				PRODUCT_NAME = uXenPS2Controller;
+				SDKROOT = macosx10.9;
+				STRIP_INSTALLED_PRODUCT = YES;
+				STRIP_STYLE = debugging;
+				WRAPPER_EXTENSION = kext;
+			};
+			name = Release;
+		};
+		84167839161B5613002C60E6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				COMBINE_HIDPI_IMAGES = YES;
+				CONFIGURATION_BUILD_DIR = "$(BUILD_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/uXenPS2Controller.kext/Contents/PlugIns";
+				CURRENT_PROJECT_VERSION = 1.0.0d1;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "uXenPS2Keyboard/uXenPS2Keyboard-Prefix.pch";
+				GCC_VERSION = "";
+				GCC_WARN_UNINITIALIZED_AUTOS = NO;
+				INFOPLIST_FILE = "uXenPS2Keyboard/uXenPS2Keyboard-Info.plist";
+				MODULE_NAME = org.uxen.uXenPS2Keyboard;
+				MODULE_VERSION = 1.0.0d1;
+				OTHER_CFLAGS = "";
+				OTHER_CPLUSPLUSFLAGS = (
+					"-DPROBOOK",
+					"$(OTHER_CFLAGS)",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx10.9;
+				STRIP_STYLE = debugging;
+				USER_HEADER_SEARCH_PATHS = "";
+				WRAPPER_EXTENSION = kext;
+			};
+			name = Debug;
+		};
+		8416783A161B5613002C60E6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				COMBINE_HIDPI_IMAGES = YES;
+				CONFIGURATION_BUILD_DIR = "$(BUILD_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/uXenPS2Controller.kext/Contents/PlugIns";
+				CURRENT_PROJECT_VERSION = 1.0.0d1;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "uXenPS2Keyboard/uXenPS2Keyboard-Prefix.pch";
+				GCC_VERSION = "";
+				INFOPLIST_FILE = "uXenPS2Keyboard/uXenPS2Keyboard-Info.plist";
+				MODULE_NAME = org.uxen.uXenPS2Keyboard;
+				MODULE_VERSION = 1.0.0d1;
+				OTHER_CFLAGS = "";
+				OTHER_CPLUSPLUSFLAGS = (
+					"-DPROBOOK",
+					"$(OTHER_CFLAGS)",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx10.9;
+				STRIP_INSTALLED_PRODUCT = YES;
+				STRIP_STYLE = debugging;
+				USER_HEADER_SEARCH_PATHS = "";
+				WRAPPER_EXTENSION = kext;
+			};
+			name = Release;
+		};
+		8416784D161B56A2002C60E6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				COMBINE_HIDPI_IMAGES = YES;
+				CONFIGURATION_BUILD_DIR = "$(BUILD_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/uXenPS2Controller.kext/Contents/PlugIns";
+				CURRENT_PROJECT_VERSION = 1.0.0d1;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "uXenPS2Mouse/uXenPS2Mouse-Prefix.pch";
+				GCC_VERSION = "";
+				GCC_WARN_UNINITIALIZED_AUTOS = NO;
+				INFOPLIST_FILE = "uXenPS2Mouse/uXenPS2Mouse-Info.plist";
+				MODULE_NAME = org.uxen.uXenPS2Mouse;
+				MODULE_VERSION = 1.0.0d1;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx10.9;
+				STRIP_STYLE = debugging;
+				WRAPPER_EXTENSION = kext;
+			};
+			name = Debug;
+		};
+		8416784E161B56A2002C60E6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				COMBINE_HIDPI_IMAGES = YES;
+				CONFIGURATION_BUILD_DIR = "$(BUILD_DIR)/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)/uXenPS2Controller.kext/Contents/PlugIns";
+				CURRENT_PROJECT_VERSION = 1.0.0d1;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "uXenPS2Mouse/uXenPS2Mouse-Prefix.pch";
+				GCC_VERSION = "";
+				INFOPLIST_FILE = "uXenPS2Mouse/uXenPS2Mouse-Info.plist";
+				MODULE_NAME = org.uxen.uXenPS2Mouse;
+				MODULE_VERSION = 1.0.0d1;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx10.9;
+				STRIP_INSTALLED_PRODUCT = YES;
+				STRIP_STYLE = debugging;
+				WRAPPER_EXTENSION = kext;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		8416780B161B55B2002C60E6 /* Build configuration list for PBXProject "uXenPS2Controller" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				84167822161B55B2002C60E6 /* Debug */,
+				84167823161B55B2002C60E6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		84167824161B55B2002C60E6 /* Build configuration list for PBXNativeTarget "uXenPS2Controller" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				84167825161B55B2002C60E6 /* Debug */,
+				84167826161B55B2002C60E6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		84167838161B5613002C60E6 /* Build configuration list for PBXNativeTarget "uXenPS2Keyboard" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				84167839161B5613002C60E6 /* Debug */,
+				8416783A161B5613002C60E6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		8416784C161B56A2002C60E6 /* Build configuration list for PBXNativeTarget "uXenPS2Mouse" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8416784D161B56A2002C60E6 /* Debug */,
+				8416784E161B56A2002C60E6 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 84167808161B55B2002C60E6 /* Project object */;
+}

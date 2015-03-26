@@ -1,0 +1,44 @@
+#
+# Copyright 2012-2015, Bromium, Inc.
+# SPDX-License-Identifier: ISC
+#
+
+CROSS_TARGET = x86_64-w64-mingw32
+
+NTFS_3G_SRCDIR = $(SRCROOT)/ntfs-3g
+
+TARGET = $(abspath install)/lib/libntfs-3g.a
+
+all: $(TARGET)
+
+.PHONY: $(TARGET)
+$(TARGET): built Makefile.lib-NTFS_3G
+	cd build && \
+	  $(MAKE) -C libntfs-3g install rootlibdir=$(abspath install)/lib && \
+	  $(MAKE) -C include/ntfs-3g install
+
+built: configured
+	cd build && \
+	  $(MAKE) libs
+	@touch $@
+
+configured: install/.exists
+	@mkdir -p build
+	cd build && \
+	  $(NTFS_3G_SRCDIR)/configure --prefix=$(abspath install) \
+	    --host=$(CROSS_TARGET) \
+	    --program-prefix=$(CROSS_TARGET)- \
+	    --disable-shared \
+	    CFLAGS="$(subst -Werror -Wall,,$(CFLAGS))" \
+	    LDFLAGS="$(LDFLAGS)"
+	@touch $@
+
+build-clean:
+	cd build && \
+	  $(MAKE) clean
+
+Makefile.lib-NTFS_3G:
+	@rm -f $@
+	@(echo "NTFS_3G_CPPFLAGS = -I$(abspath install)/include" ; \
+	  echo "NTFS_3G_LIBS = -L$(abspath install)/lib -lntfs-3g" ; \
+	  echo "NTFS_3G_SRCDIR = $(SRCROOT)") >$@

@@ -1,0 +1,59 @@
+[Version]
+Signature="$Windows NT$"
+Class=NetService
+ClassGuid = {4d36e973-e325-11ce-bfc1-08002be10318}
+DriverVer = 09/28/2012, 1.0.0.0
+Provider=%uXenMfg%
+DriverPackageType=KernelService
+CatalogFile = uxenzeroshare.cat
+
+[SourceDisksNames]
+1 = %uxenzeroshare.MediaDesc%
+
+[SourceDisksFiles]
+uxenzeroshare.sys = 1
+uxenzeroshareconsole.exe = 1
+dbghelp.dll = 1
+symsrv.dll = 1
+symsrv.yes = 1
+
+[DestinationDirs]
+DefaultDestDir      = 11 ; system32
+uxenzeroshare_CopyFiles    = 12 ; drivers
+uxenzeroshareconsole_CopyFiles = 30, uXen ; c:\
+
+[DefaultInstall]
+CopyFiles = uxenzeroshare_CopyFiles, uxenzeroshareconsole_CopyFiles
+
+[DefaultUninstall]
+DelFiles = uxenzeroshare_CopyFiles, uxenzeroshareconsole_CopyFiles
+
+[uxenzeroshare_CopyFiles]
+uxenzeroshare.sys
+
+[uxenzeroshareconsole_CopyFiles]
+uxenzeroshareconsole.exe
+dbghelp.dll
+symsrv.dll
+symsrv.yes
+
+[DefaultInstall.Services]
+AddService = uxenzeroshare, 0x00000802, uxenzeroshare_ServiceInstallSection
+
+[DefaultUninstall.Services]
+DelService = uxenzeroshare, 0x200
+DelReg = uxenzeroshare_Service_Add_Reg
+
+[uxenzeroshare_ServiceInstallSection]
+DisplayName    = %uxenzeroshare_svcdesc%
+ServiceType    = 0x00000001 ; service kernel driver
+StartType      = 0x00000003 ; manual start
+ErrorControl   = 0x00000001 ; normal error handling
+ServiceBinary  = %12%\uxenzeroshare.sys
+
+[Strings]
+uXenMfg = "uXen Project"
+uxenzeroshare.DeviceDesc = "uXen Zeroshare"
+uxenzeroshare_svcdesc = "uXen Zeroshare Driver"
+uxenzeroshare.MediaDesc = "uXen installation Media"
+

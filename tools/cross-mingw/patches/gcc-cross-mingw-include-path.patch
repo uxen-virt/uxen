@@ -1,0 +1,9 @@
+diff -ru gcc-4.7.3.orig/gcc/config/i386/t-mingw-w64 gcc-4.7.3/gcc/config/i386/t-mingw-w64
+--- gcc-4.7.3.orig/gcc/config/i386/t-mingw-w64	2011-11-02 23:23:48 +0800
++++ gcc-4.7.3/gcc/config/i386/t-mingw-w64	2013-10-30 11:56:50 +0800
+@@ -1,3 +1,5 @@
+ MULTILIB_OPTIONS = m64/m32
+ MULTILIB_DIRNAMES = 64 32
+ MULTILIB_OSDIRNAMES = ../lib ../lib32
++
++CROSS_SYSTEM_HEADER_DIR = $(TARGET_SYSTEM_ROOT)$${sysroot_headers_suffix}/$(target_subdir)/include

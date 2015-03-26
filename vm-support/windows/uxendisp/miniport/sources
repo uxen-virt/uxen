@@ -1,0 +1,27 @@
+TARGETNAME = uxendisp
+TARGETTYPE = MINIPORT
+
+!include ../../common/sources.inc
+
+TARGETLIBS=$(DDK_LIB_PATH)\videoprt.lib
+
+!if !defined(DDK_TARGET_OS) || "$(DDK_TARGET_OS)"=="Win2K"
+#
+# The driver is built in the Win2K build environment
+#
+TARGETLIBS=$(TARGETLIBS) $(DDK_LIB_PATH)\ntoskrnl.lib
+!endif
+
+MSC_WARNING_LEVEL = /W3 /WX
+
+NTTARGETFILE0 = $(OBJ_PATH)\$(O)\$(INF_NAME).inf
+PASS0_BINPLACE = $(NTTARGETFILE0)
+
+NTTARGETFILE1 = COPY
+
+NTTARGETFILE2 = POST
+
+SOURCES = pointer.c bochs.c uxendisp.c uxendisp.rc
+
+INCLUDES=..\include
+

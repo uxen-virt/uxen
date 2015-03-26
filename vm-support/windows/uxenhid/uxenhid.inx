@@ -1,0 +1,62 @@
+[version]
+signature="$WINDOWS NT$"
+Class=HIDClass
+ClassGuid={745a17a0-74d3-11d0-b6fe-00a0c90f57da}
+Provider=%uXenMfg%
+DriverVer= 11/12/2014, 1.0.0.0
+CatalogFile= uxenhid.cat
+
+[ControlFlags]
+ExcludeFromSelect=*
+
+[DestinationDirs]
+DefaultDestDir=11
+uXenHIDInst.NT.Copy=12
+uXenHIDInst.Win7.NT.Copy=12
+
+[Manufacturer]
+%uXenMfg%=uXenMfg,NT$ARCH$
+
+[SourceDisksFiles]
+uxenhid.sys=1
+
+[SourceDisksNames]
+1=%DISK_NAME%,
+
+[uXenMfg.NT$ARCH$]
+%uXenHID.DEVDESC%=uXenHIDInst,uxenhid; ACPI Compatible name
+
+[uXenMfg.NT$ARCH$.6.1]
+%uXenHID.DEVDESC%=uXenHIDInst.Win7,uxenhid; ACPI Compatible name
+
+[uXenHIDInst.NT]
+CopyFiles=uXenHIDInst.NT.Copy
+
+[uXenHIDInst.NT.Copy]
+uxenhid.sys,,,0x100
+
+[uXenHIDInst.NT.Services]
+AddService=uXenHID,0x00000002,uXenHIDServiceInst
+
+[uXenHIDInst.Win7.NT]
+CopyFiles=uXenHIDInst.Win7.NT.Copy
+
+[uXenHIDInst.Win7.NT.Copy]
+uxenhid.sys,,,0x100
+
+[uXenHIDInst.Win7.NT.Services]
+AddService=uXenHID,0x00000002,uXenHIDServiceInst
+
+[uXenHIDServiceInst]
+DisplayName=%uXenHID.SVCDESC%
+ServiceType=1; SERVICE_KERNEL_DRIVER
+StartType=3; SERVICE_DEMAND_START
+ErrorControl=1; SERVICE_ERROR_NORMAL
+ServiceBinary=%12%\uxenhid.sys
+LoadOrderGroup=Extended Base
+
+[Strings]
+uXenMfg="uXen Project"
+uXenHID.SVCDESC="uXen HID minidriver"
+uXenHID.DEVDESC="uXen Human Interface Device"
+DISK_NAME="uXen Project Installation Disk #1 (uxenhid)"

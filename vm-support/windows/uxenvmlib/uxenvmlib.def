@@ -1,0 +1,26 @@
+; uxenvmlib: uxenvmlib.def ;
+
+NAME uxenvmlib.sys
+
+EXPORTS
+    DllInitialize                       PRIVATE
+    DllUnload                           PRIVATE
+
+    uxen_DbgPrint
+    uxen_get_shared_info
+    uxen_hypercall_init
+    uxen_hypercall_memory_op
+    uxen_malloc_locked_pages
+    uxen_user_map_page_range
+
+    uxen_hypercall1
+    uxen_hypercall2
+    uxen_hypercall3
+    uxen_hypercall4
+    uxen_hypercall5
+    uxen_hypercall6
+
+    uxen_get_state_bar_ptr
+    uxen_set_state_bar
+
+; uxenvmlib: uxenvmlib.def ;

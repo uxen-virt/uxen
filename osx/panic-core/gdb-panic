@@ -1,0 +1,92 @@
+#! /bin/sh
+#
+# Copyright 2013-2015, Bromium, Inc.
+# Author: Christian Limpach <Christian.Limpach@gmail.com>
+# SPDX-License-Identifier: ISC
+#
+
+set -e
+
+: ${UXEN_KEXT_BUNDLE_IDENT:=org.uxen.uxen}
+
+usage () {
+  echo usage: $0 [-d debug-kit-dir] [-g gdb] [-u uxen-kext-dir] [-t tools-dir] panic.text
+  exit -1
+}
+
+while getopts d:g:u:t: o
+do
+  case "$o" in
+  d) debug_kit_dir="$OPTARG" ;;
+  g) gdb="$OPTARG" ;;
+  u) uxen_kext_dir="$OPTARG" ;;
+  t) tools_dir="$OPTARG" ;;
+  [?]) usage;;
+  esac
+done
+
+shift $(($OPTIND - 1))
+
+[ -n "$1" ] || usage
+[ -f "$1" ] || { echo $0: file $1 does not exist; exit -1; }
+[ -r "$1" ] || { echo $0: file $1 not readable; exit -1; }
+
+: ${debug_kit_dir:=/Volumes/KernelDebugKit}
+: ${gdb:=${UXEN_TOOLSDIR:+${UXEN_TOOLSDIR}/bin/}x86_64-apple-darwin-gdb}
+: ${uxen_kext_dir:=.}
+: ${tools_dir:=$(pwd)}
+: ${panic_core:=${tools_dir}/panic-core}
+: ${macho_edit:=${tools_dir}/macho-edit}
+
+case "$1" in
+  /*) panic_file="$1" ;;
+  *) panic_file=$(pwd)/"$1" ;;
+esac
+echo processing "${panic_file}"
+
+workdir=$(basename $0).$$
+
+[ ! -d "${workdir}" ] || { echo $0: workdir "${workdir}" exists; exit -1; }
+mkdir -p "${workdir}"
+
+kext_load_addr=$(sed -n 's/^ *org.uxen.uxen([^)]*)\[[^]]*\]@\(0x[0-9a-f]*\)->0x[0-9a-f]*$/\1/ p' "${panic_file}")
+kernel_text_base=$(sed -n 's/^Kernel text base: \(0x[0-9a-f]*\)$/\1/ p' "${panic_file}")
+
+cp -a "${uxen_kext_dir}"/uxen.kext "${workdir}"/
+cp -a "${uxen_kext_dir}"/uxen.kext.dSYM "${workdir}"/
+cp -a "${uxen_kext_dir}"/uxen.elf "${workdir}"/
+
+(cd "${workdir}"/uxen.kext.dSYM/Contents/Resources/DWARF/ &&
+    "${macho_edit}" -a "${kext_load_addr}" uxen)
+
+# XXX without sync/sleep, as well as with a .sym file in the
+# current directory, gdb somehow tries to access the original
+# or a wrong uxen.kext.dSYM dir
+sync
+sleep 1
+rm -f "${UXEN_KEXT_BUNDLE_IDENT}".sym
+
+(cd "${workdir}" &&
+    kextutil -s . -n -e -a "${UXEN_KEXT_BUNDLE_IDENT}"@"${kext_load_addr}" \
+             -r "${debug_kit_dir}"/ -k "${debug_kit_dir}"/mach_kernel \
+             -arch x86_64 $(pwd)/uxen.kext)
+
+(cd "${workdir}" &&
+    "${panic_core}" core "${panic_file}" "${debug_kit_dir}"/mach_kernel)
+
+cat >"${workdir}"/gdbinit <<EOF
+add-symbol-file "${debug_kit_dir}"/mach_kernel "${kernel_text_base}"
+add-kext uxen.kext
+add-symbol-file uxen.elf _uxen_core_text \
+                -s .rodata &_uxen_core_rodata \
+                -s .data.read_mostly &_uxen_core_data_read_mostly \
+                -s .data &_uxen_core_data \
+                -s .init.data &_uxen_core_init_data \
+                -s .init.setup &_uxen_core_init_setup \
+                -s .initcall.init &_uxen_core_initcall \
+                -s .bss &_uxen_core_bss
+EOF
+
+(cd "${workdir}" && "${gdb}" -x gdbinit org.uxen.uxen.sym core)
+
+rm -rf "${workdir}"

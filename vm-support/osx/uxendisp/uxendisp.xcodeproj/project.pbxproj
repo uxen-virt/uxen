@@ -1,0 +1,305 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		B939D9FD16E604F90017E868 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = B939D9FB16E604F90017E868 /* InfoPlist.strings */; };
+		B939DA0D16E606690017E868 /* uXenDispFB.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B939DA0B16E606690017E868 /* uXenDispFB.cpp */; };
+		B939DA0E16E606690017E868 /* uXenDispFB.h in Headers */ = {isa = PBXBuildFile; fileRef = B939DA0C16E606690017E868 /* uXenDispFB.h */; };
+		B9726C401743E28200C5EE31 /* uXenDispCtl.h in Headers */ = {isa = PBXBuildFile; fileRef = B9726C3F1743E28200C5EE31 /* uXenDispCtl.h */; };
+		B9726C431743E29C00C5EE31 /* uXenDispCtl.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B9726C421743E29C00C5EE31 /* uXenDispCtl.cpp */; };
+		B9E69A5316E68954008CC99A /* dispi.h in Headers */ = {isa = PBXBuildFile; fileRef = B9E69A5216E68954008CC99A /* dispi.h */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		B939D9F316E604F90017E868 /* uxendisp.kext */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = uxendisp.kext; sourceTree = BUILT_PRODUCTS_DIR; };
+		B939D9F716E604F90017E868 /* Kernel.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Kernel.framework; path = System/Library/Frameworks/Kernel.framework; sourceTree = SDKROOT; };
+		B939D9FA16E604F90017E868 /* uxendisp-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "uxendisp-Info.plist"; sourceTree = "<group>"; };
+		B939D9FC16E604F90017E868 /* en */ = {isa = PBXFileReference; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
+		B939DA0116E604F90017E868 /* uxendisp-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "uxendisp-Prefix.pch"; sourceTree = "<group>"; };
+		B939DA0B16E606690017E868 /* uXenDispFB.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = uXenDispFB.cpp; sourceTree = "<group>"; };
+		B939DA0C16E606690017E868 /* uXenDispFB.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = uXenDispFB.h; sourceTree = "<group>"; };
+		B9726C3F1743E28200C5EE31 /* uXenDispCtl.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = uXenDispCtl.h; sourceTree = "<group>"; };
+		B9726C421743E29C00C5EE31 /* uXenDispCtl.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = uXenDispCtl.cpp; sourceTree = "<group>"; };
+		B9E69A5216E68954008CC99A /* dispi.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = dispi.h; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		B939D9EE16E604F90017E868 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		B939D9E616E604F80017E868 = {
+			isa = PBXGroup;
+			children = (
+				B9E69A7E16E68CAD008CC99A /* Supporting Files */,
+				B939DA0B16E606690017E868 /* uXenDispFB.cpp */,
+				B939DA0C16E606690017E868 /* uXenDispFB.h */,
+				B9726C3F1743E28200C5EE31 /* uXenDispCtl.h */,
+				B9726C421743E29C00C5EE31 /* uXenDispCtl.cpp */,
+				B9E69A5216E68954008CC99A /* dispi.h */,
+				B939D9F516E604F90017E868 /* Frameworks */,
+				B939D9F416E604F90017E868 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		B939D9F416E604F90017E868 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B939D9F316E604F90017E868 /* uxendisp.kext */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		B939D9F516E604F90017E868 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				B939D9F616E604F90017E868 /* Other Frameworks */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		B939D9F616E604F90017E868 /* Other Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				B939D9F716E604F90017E868 /* Kernel.framework */,
+			);
+			name = "Other Frameworks";
+			sourceTree = "<group>";
+		};
+		B9E69A7E16E68CAD008CC99A /* Supporting Files */ = {
+			isa = PBXGroup;
+			children = (
+				B939D9FA16E604F90017E868 /* uxendisp-Info.plist */,
+				B939D9FB16E604F90017E868 /* InfoPlist.strings */,
+				B939DA0116E604F90017E868 /* uxendisp-Prefix.pch */,
+			);
+			name = "Supporting Files";
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		B939D9EF16E604F90017E868 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B939DA0E16E606690017E868 /* uXenDispFB.h in Headers */,
+				B9E69A5316E68954008CC99A /* dispi.h in Headers */,
+				B9726C401743E28200C5EE31 /* uXenDispCtl.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		B939D9F216E604F90017E868 /* uxendisp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B939DA0416E604F90017E868 /* Build configuration list for PBXNativeTarget "uxendisp" */;
+			buildPhases = (
+				B939D9ED16E604F90017E868 /* Sources */,
+				B939D9EE16E604F90017E868 /* Frameworks */,
+				B939D9EF16E604F90017E868 /* Headers */,
+				B939D9F016E604F90017E868 /* Resources */,
+				B939D9F116E604F90017E868 /* Rez */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = uxendisp;
+			productName = uxendisp;
+			productReference = B939D9F316E604F90017E868 /* uxendisp.kext */;
+			productType = "com.apple.product-type.kernel-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		B939D9E816E604F80017E868 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 0450;
+				ORGANIZATIONNAME = "Julian Pidancet";
+			};
+			buildConfigurationList = B939D9EB16E604F90017E868 /* Build configuration list for PBXProject "uxendisp" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = English;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = B939D9E616E604F80017E868;
+			productRefGroup = B939D9F416E604F90017E868 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B939D9F216E604F90017E868 /* uxendisp */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		B939D9F016E604F90017E868 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B939D9FD16E604F90017E868 /* InfoPlist.strings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXRezBuildPhase section */
+		B939D9F116E604F90017E868 /* Rez */ = {
+			isa = PBXRezBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXRezBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		B939D9ED16E604F90017E868 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B939DA0D16E606690017E868 /* uXenDispFB.cpp in Sources */,
+				B9726C431743E29C00C5EE31 /* uXenDispCtl.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXVariantGroup section */
+		B939D9FB16E604F90017E868 /* InfoPlist.strings */ = {
+			isa = PBXVariantGroup;
+			children = (
+				B939D9FC16E604F90017E868 /* en */,
+			);
+			name = InfoPlist.strings;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
+
+/* Begin XCBuildConfiguration section */
+		B939DA0216E604F90017E868 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.8;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		B939DA0316E604F90017E868 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.8;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		B939DA0516E604F90017E868 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1.0.0d1;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "uxendisp-Prefix.pch";
+				GCC_VERSION = "";
+				INFOPLIST_FILE = "uxendisp-Info.plist";
+				MODULE_NAME = org.uxen.uxendisp;
+				MODULE_VERSION = 1.0.0d1;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx10.9;
+				WRAPPER_EXTENSION = kext;
+			};
+			name = Debug;
+		};
+		B939DA0616E604F90017E868 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1.0.0d1;
+				GCC_PRECOMPILE_PREFIX_HEADER = YES;
+				GCC_PREFIX_HEADER = "uxendisp-Prefix.pch";
+				GCC_VERSION = "";
+				INFOPLIST_FILE = "uxendisp-Info.plist";
+				MODULE_NAME = org.uxen.uxendisp;
+				MODULE_VERSION = 1.0.0d1;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx10.9;
+				WRAPPER_EXTENSION = kext;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		B939D9EB16E604F90017E868 /* Build configuration list for PBXProject "uxendisp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B939DA0216E604F90017E868 /* Debug */,
+				B939DA0316E604F90017E868 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B939DA0416E604F90017E868 /* Build configuration list for PBXNativeTarget "uxendisp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B939DA0516E604F90017E868 /* Debug */,
+				B939DA0616E604F90017E868 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = B939D9E816E604F80017E868 /* Project object */;
+}

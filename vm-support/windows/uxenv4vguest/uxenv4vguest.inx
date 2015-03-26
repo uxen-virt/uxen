@@ -1,0 +1,106 @@
+; uxenv4vguest.inf
+;
+; COPYRIGHT
+;
+
+[Version]
+Signature      = "$WINDOWS NT$"
+Class          = System
+ClassGuid      = {8310B189-0F6F-41DC-892E-7030A7243D4E}
+Provider       = %uXenMfg%
+DriverVer      = 04/26/2013, 1.0.0.0
+CatalogFile    = uxenv4vguest.cat
+
+[DestinationDirs]
+DefaultDestDir  = 12
+
+;-------------------------------------------------------------------------
+; Class Section
+;-------------------------------------------------------------------------
+[ClassInstall32]
+Addreg         = SystemClassReg
+
+[SystemClassReg]
+HKR,,,0,%ClassName%
+HKR,,Icon,,-5
+HKR,,DeviceCharacteristics,0x10001,0x100     ;Use same security checks on relative opens
+HKR,,Security,,"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;IU)" ;Allow generic all access to system and built-in Admin.
+
+;-------------------------------------------------------------------------
+; Device Install Section
+;-------------------------------------------------------------------------
+[ControlFlags]
+ExcludeFromSelect = *
+
+[Manufacturer]
+%uXenMfg% = uXenMfg,NT$ARCH$
+
+[SourceDisksFiles]
+uxenv4vguest.sys     = 1
+uxenvmlib.sys        = 1
+uxenv4vlib.sys        = 1
+
+[SourceDisksNames]
+1=%DISK_NAME%,
+
+[uXenMfg.NT$ARCH$]
+; DisplayName            Section           DeviceId
+; -----------            -------           --------
+%uXenV4VGuest_Service.DRVDESC%=uXenV4VGuest_Service_Inst, uxenv4v
+
+[uXenV4VGuest_Service_Inst.NT]
+CopyFiles      = uXenV4VGuest_Service.CopyFiles
+
+
+[uXenV4VGuest_Service.CopyFiles]
+uxenv4vguest.sys
+uxenvmlib.sys
+uxenv4vlib.sys
+
+
+[uXenV4VGuest_Service_Inst.NT.Services]
+AddService     = uXenV4VGuest_Service,0x00000002,uXenV4VGuest_Service_Service
+
+[uXenV4VGuest_Service_Service]
+DisplayName    = %uXenV4VGuest_Service.SVCDESC%
+ServiceType    = 1                  ; SERVICE_KERNEL_DRIVER
+StartType      = 0                  ; SERVICE_BOOT_START
+ErrorControl   = 1                  ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %12%\uxenv4vguest.sys
+
+;-------------------------------------------------------------------------
+; WDF Coinstaller installation
+;-------------------------------------------------------------------------
+[DestinationDirs]
+CoInstaller_CopyFiles = 11
+
+[uXenV4VGuest_Service_Inst.NT.CoInstallers]
+AddReg         = CoInstaller_AddReg
+CopyFiles      = CoInstaller_CopyFiles
+
+[CoInstaller_CopyFiles]
+WdfCoInstaller$KMDFCOINSTALLERVERSION$.dll
+
+[SourceDisksFiles]
+WdfCoInstaller$KMDFCOINSTALLERVERSION$.dll = 1 ; make sure the number matches with SourceDisksNames
+
+[CoInstaller_AddReg]
+HKR,,CoInstallers32,0x00010000, "WdfCoInstaller$KMDFCOINSTALLERVERSION$.dll,WdfCoInstaller"
+
+[uXenV4VGuest_Service_Inst.NT.Wdf]
+KmdfService    = uXenV4VGuest_Service, uXenV4VGuest_Service_wdfsect
+
+[uXenV4VGuest_Service_wdfsect]
+KmdfLibraryVersion = $KMDFVERSION$
+
+;------------------------------------------------------------------------------
+;  String Definitions
+;------------------------------------------------------------------------------
+
+[Strings]
+uXenMfg = "uXen Project"
+ClassName      = "uXen v4v"
+uXenV4VGuest_Service.SVCDESC = "uXen v4v Device"
+uXenV4VGuest_Service.DRVDESC = "uXen v4v Device"
+DISK_NAME      = "uXen Project Installation Disk #1 (uxenv4vguest)"
+

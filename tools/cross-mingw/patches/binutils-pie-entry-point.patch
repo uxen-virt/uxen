@@ -1,0 +1,21 @@
+diff -ru binutils-2.23.1.orig/ld/emultempl/pep.em binutils-2.23.1/ld/emultempl/pep.em
+--- binutils-2.23.1.orig/ld/emultempl/pep.em	2012-09-04 15:14:18.000000000 +0100
++++ binutils-2.23.1/ld/emultempl/pep.em	2013-03-21 13:51:45.000000000 +0000
+@@ -459,7 +459,7 @@
+   /* Entry point name for arbitrary subsystem numbers.  */
+   static const char default_entry[] = "mainCRTStartup";
+ 
+-  if (link_info.shared || dll)
++  if ((link_info.shared && !link_info.pie) || dll)
+     {
+       entry = "DllMainCRTStartup";
+     }
+@@ -1218,7 +1218,7 @@
+     pep_fixup_stdcalls ();
+ 
+ #ifndef TARGET_IS_i386pep
+-  if (link_info.shared)
++  if (link_info.shared && !link_info.pie)
+ #else
+   if (!link_info.relocatable)
+ #endif

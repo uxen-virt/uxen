@@ -1,0 +1,26 @@
+TARGETNAME=uxenzeroshareconsole
+TARGETTYPE=PROGRAM
+
+DBGSDK_ROOT = $(PUBLIC_ROOT)\Debuggers\sdk
+
+INCLUDES=..\;$(DBGSDK_ROOT)\inc
+
+!if ("$(_BUILDARCH)" == "AMD64")
+DBGHELP_LIB = $(DBGSDK_ROOT)\lib\amd64\dbghelp.lib
+!else
+DBGHELP_LIB = $(DBGSDK_ROOT)\lib\i386\dbghelp.lib
+!endif
+
+TARGETLIBS= \
+ $(LIBINTERNALS_LIB) \
+ $(DBGHELP_LIB)
+
+SOURCES= \
+  uxenzeroshareconsole.c
+
+BUILD_PASS2_PRODUCES = catstuff
+
+NTTARGETFILE1 = COPY
+NTTARGETFILE2 = POST
+
+!INCLUDE ..\sources.inc

@@ -1,0 +1,32 @@
+#
+# Copyright 2013-2015, Bromium, Inc.
+# SPDX-License-Identifier: ISC
+#
+
+CPPFLAGS += $(YAJL_CPPFLAGS)
+LDLIBS += $(YAJL_LIBS)
+CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
+$(WINDOWS)LDLIBS += -liphlpapi
+$(OSX)LDLIBS += -framework IOKit -framework CoreFoundation
+
+all: hostconfig$(EXE_SUFFIX)
+
+HOSTCONFIG_OBJS = smbios.o base64.o
+$(WINDOWS)HOSTCONFIG_OBJS += win32.o hostconfig-res.o
+$(OSX)HOSTCONFIG_OBJS += smc.o osx.o
+
+$(HOSTCONFIG_OBJS): $(YAJL_DEPS) .deps/.exists
+
+hostconfig$(EXE_SUFFIX): $(HOSTCONFIG_OBJS)
+	$(_W)echo Linking - $@
+	$(_V)$(call link,$@,$^ $(LDLIBS))
+
+%.o: %.c
+	$(_W)echo Compiling - $@
+	$(_V)$(COMPILE.c) $< -o $@
+
+%.o : %.rc
+	$(_W)echo Compiling - $@
+	$(_V)$(WINDRES) $(WINDRESFLAGS) $(WINDRES_TARGET_FORMAT_OPTION) $< -o $@
+
+-include .deps/*.d

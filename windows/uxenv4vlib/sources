@@ -1,0 +1,52 @@
+TARGETNAME         = uxenv4vlib
+TARGETTYPE         = EXPORT_DRIVER
+
+
+!if $(AMD64)
+ARCH_C_FLAGS=/D__x86_64__
+C_DEFINES=$(C_DEFINES) /D__x86_64__
+!else
+ARCH_C_FLAGS=/D__i386__
+C_DEFINES=$(C_DEFINES) /D__i386__
+!endif
+
+
+#USER_C_FLAGS=$(USER_C_FLAGS) /D__MS_ABI__ /D__UXEN_SYS__
+USER_C_FLAGS=$(USER_C_FLAGS) /D__MS_ABI__ /D__UXEN_TOOLS__
+
+
+TARGET_DESTINATION = uxenv4vlib
+DLLDEF             = uxenv4vlib.def
+
+NTTARGETFILE2 = POST
+
+INCLUDES= ..\..\common; ..\..\common\include; ..\..\common\include\xen-public; ..\..\uxen\common
+
+TARGETLIBS = \
+    $(TARGETLIBS) \
+    $(DDK_LIB_PATH)\csq.lib \
+    $(DDK_LIB_PATH)\wdmsec.lib 
+
+LINKER_FLAGS=$(LINKER_FLAGS) /SECTION:.shared,RWS
+
+
+SOURCES =               \
+    main.c              \
+    hypercall.c		\
+    export.c		\
+    shared.c		\
+    plumbing.c 		\
+    hook.c		\
+    util.c 		\
+    pde.c		\
+    resume.c 		\
+    ring.c 		\
+    notify.c		\
+	gh_create.c \
+	gh_csq.c \
+	gh_hypercall.c \
+	gh_ioctl.c \
+	gh_ring.c \
+	gh_rw.c \
+	gh_xenv4v.c \
+    uxenv4vlib.rc

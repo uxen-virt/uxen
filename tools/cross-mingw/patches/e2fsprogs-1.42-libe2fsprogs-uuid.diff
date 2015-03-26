@@ -1,0 +1,221 @@
+diff -ru e2fsprogs-1.42.orig/configure e2fsprogs-1.42/configure
+--- e2fsprogs-1.42.orig/configure	2011-11-28 09:28:59.000000000 -0800
++++ e2fsprogs-1.42/configure	2012-02-06 15:20:14.867439084 -0800
+@@ -806,7 +806,7 @@
+ enable_jbd_debug
+ enable_blkid_debug
+ enable_testio_debug
+-enable_libuuid
++enable_libe2fsprogs-uuid
+ enable_libblkid
+ enable_quota
+ enable_debugfs
+@@ -1460,7 +1460,7 @@
+   --enable-jbd-debug  	  enable journal debugging
+   --enable-blkid-debug    enable blkid debugging
+   --disable-testio-debug  disable the use of the test I/O manager for debugging
+-  --disable-libuuid	  do not build private uuid library
++  --disable-libe2fsprogs-uuid	  do not build private uuid library
+   --disable-libblkid	  do not build private blkid library
+   --enable-libquota	  enable quota support
+   --disable-debugfs   	  disable support of debugfs program
+@@ -4792,21 +4792,21 @@
+ PROFILED_LIBUUID=
+ DEPPROFILED_LIBUUID=
+ UUID_CMT=
+-# Check whether --enable-libuuid was given.
+-if test "${enable_libuuid+set}" = set; then :
+-  enableval=$enable_libuuid; if test "$enableval" = "no"
++# Check whether --enable-libe2fsprogs-uuid was given.
++if test "${enable_libe2fsprogs-uuid+set}" = set; then :
++  enableval=$enable_libe2fsprogs-uuid; if test "$enableval" = "no"
+ then
+ 	if test -z "$PKG_CONFIG"; then
+ 		as_fn_error "pkg-config not installed; please install it." "$LINENO" 5
+ 	fi
+ 
+-	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for uuid_generate in -luuid" >&5
+-$as_echo_n "checking for uuid_generate in -luuid... " >&6; }
++	{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for uuid_generate in -le2fsprogs-uuid" >&5
++$as_echo_n "checking for uuid_generate in -le2fsprogs-uuid... " >&6; }
+ if test "${ac_cv_lib_uuid_uuid_generate+set}" = set; then :
+   $as_echo_n "(cached) " >&6
+ else
+   ac_check_lib_save_LIBS=$LIBS
+-LIBS="-luuid $LIBUUID $LIBS"
++LIBS="-le2fsprogs-uuid $LIBUUID $LIBS"
+ cat confdefs.h - <<_ACEOF >conftest.$ac_ext
+ /* end confdefs.h.  */
+ 
+@@ -4837,8 +4837,8 @@
+ { $as_echo "$as_me:${as_lineno-$LINENO}: result: $ac_cv_lib_uuid_uuid_generate" >&5
+ $as_echo "$ac_cv_lib_uuid_uuid_generate" >&6; }
+ if test "x$ac_cv_lib_uuid_uuid_generate" = x""yes; then :
+-  LIBUUID=`$PKG_CONFIG --libs uuid`;
+-		 STATIC_LIBUUID=`$PKG_CONFIG --static --libs uuid`
++  LIBUUID=`$PKG_CONFIG --libs e2fsprogs-uuid`;
++		 STATIC_LIBUUID=`$PKG_CONFIG --static --libs e2fsprogs-uuid`
+ else
+   as_fn_error "external uuid library not found" "$LINENO" 5
+ fi
+@@ -4847,22 +4847,22 @@
+ 	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: Disabling private uuid library" >&5
+ $as_echo "Disabling private uuid library" >&6; }
+ else
+-	LIBUUID='$(LIB)/libuuid'$LIB_EXT
++	LIBUUID='$(LIB)/libe2fsprogs-uuid'$LIB_EXT
+ 	DEPLIBUUID=$LIBUUID
+-	STATIC_LIBUUID='$(LIB)/libuuid'$STATIC_LIB_EXT
++	STATIC_LIBUUID='$(LIB)/libe2fsprogs-uuid'$STATIC_LIB_EXT
+ 	DEPSTATIC_LIBUUID=$STATIC_LIBUUID
+-	PROFILED_LIBUUID='$(LIB)/libuuid'$PROFILED_LIB_EXT
++	PROFILED_LIBUUID='$(LIB)/libe2fsprogs-uuid'$PROFILED_LIB_EXT
+ 	DEPPROFILED_LIBUUID=$PROFILED_LIBUUID
+ 	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: Enabling private uuid library" >&5
+ $as_echo "Enabling private uuid library" >&6; }
+ fi
+ 
+ else
+-  LIBUUID='$(LIB)/libuuid'$LIB_EXT
++  LIBUUID='$(LIB)/libe2fsprogs-uuid'$LIB_EXT
+ DEPLIBUUID=$LIBUUID
+-STATIC_LIBUUID='$(LIB)/libuuid'$STATIC_LIB_EXT
++STATIC_LIBUUID='$(LIB)/libe2fsprogs-uuid'$STATIC_LIB_EXT
+ DEPSTATIC_LIBUUID=$STATIC_LIBUUID
+-PROFILED_LIBUUID='$(LIB)/libuuid'$PROFILED_LIB_EXT
++PROFILED_LIBUUID='$(LIB)/libe2fsprogs-uuid'$PROFILED_LIB_EXT
+ DEPPROFILED_LIBUUID=$PROFILED_LIBUUID
+ { $as_echo "$as_me:${as_lineno-$LINENO}: result: Enabling private uuid library by default" >&5
+ $as_echo "Enabling private uuid library by default" >&6; }
+diff -ru e2fsprogs-1.42.orig/configure.in e2fsprogs-1.42/configure.in
+--- e2fsprogs-1.42.orig/configure.in	2011-11-28 09:28:22.000000000 -0800
++++ e2fsprogs-1.42/configure.in	2012-02-06 15:17:05.451981942 -0800
+@@ -431,36 +431,36 @@
+ PROFILED_LIBUUID=
+ DEPPROFILED_LIBUUID=
+ UUID_CMT=
+-AC_ARG_ENABLE([libuuid],
+-[  --disable-libuuid	  do not build private uuid library],
++AC_ARG_ENABLE([libe2fsprogs-uuid],
++[  --disable-libe2fsprogs-uuid	  do not build private uuid library],
+ if test "$enableval" = "no"
+ then
+ 	if test -z "$PKG_CONFIG"; then
+ 		AC_MSG_ERROR([pkg-config not installed; please install it.])
+ 	fi
+ 
+-	AC_CHECK_LIB(uuid, uuid_generate,
+-		[LIBUUID=`$PKG_CONFIG --libs uuid`;
+-		 STATIC_LIBUUID=`$PKG_CONFIG --static --libs uuid`],
+-		[AC_MSG_ERROR([external uuid library not found])],
++	AC_CHECK_LIB(e2fsprogs-uuid, uuid_generate,
++		[LIBUUID=`$PKG_CONFIG --libs e2fsprogs-uuid`;
++		 STATIC_LIBUUID=`$PKG_CONFIG --static --libs e2fsprogs-uuid`],
++		[AC_MSG_ERROR([external e2fsprogs-uuid library not found])],
+ 		[$LIBUUID])
+ 	UUID_CMT=#
+ 	AC_MSG_RESULT([Disabling private uuid library])
+ else
+-	LIBUUID='$(LIB)/libuuid'$LIB_EXT
++	LIBUUID='$(LIB)/libe2fsprogs-uuid'$LIB_EXT
+ 	DEPLIBUUID=$LIBUUID
+-	STATIC_LIBUUID='$(LIB)/libuuid'$STATIC_LIB_EXT
++	STATIC_LIBUUID='$(LIB)/libe2fsprogs-uuid'$STATIC_LIB_EXT
+ 	DEPSTATIC_LIBUUID=$STATIC_LIBUUID
+-	PROFILED_LIBUUID='$(LIB)/libuuid'$PROFILED_LIB_EXT
++	PROFILED_LIBUUID='$(LIB)/libe2fsprogs-uuid'$PROFILED_LIB_EXT
+ 	DEPPROFILED_LIBUUID=$PROFILED_LIBUUID
+ 	AC_MSG_RESULT([Enabling private uuid library])
+ fi
+ ,
+-LIBUUID='$(LIB)/libuuid'$LIB_EXT
++LIBUUID='$(LIB)/libe2fsprogs-uuid'$LIB_EXT
+ DEPLIBUUID=$LIBUUID
+-STATIC_LIBUUID='$(LIB)/libuuid'$STATIC_LIB_EXT
++STATIC_LIBUUID='$(LIB)/libe2fsprogs-uuid'$STATIC_LIB_EXT
+ DEPSTATIC_LIBUUID=$STATIC_LIBUUID
+-PROFILED_LIBUUID='$(LIB)/libuuid'$PROFILED_LIB_EXT
++PROFILED_LIBUUID='$(LIB)/libe2fsprogs-uuid'$PROFILED_LIB_EXT
+ DEPPROFILED_LIBUUID=$PROFILED_LIBUUID
+ AC_MSG_RESULT([Enabling private uuid library by default])
+ )
+diff -ru e2fsprogs-1.42.orig/lib/uuid/Makefile.in e2fsprogs-1.42/lib/uuid/Makefile.in
+--- e2fsprogs-1.42.orig/lib/uuid/Makefile.in	2011-11-29 12:58:14.000000000 -0800
++++ e2fsprogs-1.42/lib/uuid/Makefile.in	2012-02-06 15:11:39.486225539 -0800
+@@ -38,18 +38,18 @@
+ 		$(srcdir)/unparse.c \
+ 		$(srcdir)/uuid_time.c
+ 
+-LIBRARY= libuuid
++LIBRARY= libe2fsprogs-uuid
+ LIBDIR= uuid
+ 
+ ELF_VERSION = 1.2
+ ELF_SO_VERSION = 1
+-ELF_IMAGE = libuuid
++ELF_IMAGE = libe2fsprogs-uuid
+ ELF_MYDIR = uuid
+ ELF_INSTALL_DIR = $(root_libdir)
+ ELF_OTHER_LIBS = 
+ 
+ BSDLIB_VERSION = 1.1
+-BSDLIB_IMAGE = libuuid
++BSDLIB_IMAGE = libe2fsprogs-uuid
+ BSDLIB_MYDIR = uuid
+ BSDLIB_INSTALL_DIR = $(root_libdir)
+ 
+@@ -136,10 +136,10 @@
+ 		$(DESTDIR)$(libdir)/pkgconfig
+ 
+ install:: all installdirs 
+-	$(E) "	INSTALL_DATA $(libdir)/libuuid.a"
+-	$(Q) $(INSTALL_DATA) libuuid.a $(DESTDIR)$(libdir)/libuuid.a
+-	-$(Q) $(RANLIB) $(DESTDIR)$(libdir)/libuuid.a
+-	$(Q) $(CHMOD) $(LIBMODE) $(DESTDIR)$(libdir)/libuuid.a
++	$(E) "	INSTALL_DATA $(libdir)/libe2fsprogs-uuid.a"
++	$(Q) $(INSTALL_DATA) libe2fsprogs-uuid.a $(DESTDIR)$(libdir)/libe2fsprogs-uuid.a
++	-$(Q) $(RANLIB) $(DESTDIR)$(libdir)/libe2fsprogs-uuid.a
++	$(Q) $(CHMOD) $(LIBMODE) $(DESTDIR)$(libdir)/libe2fsprogs-uuid.a
+ 	$(E) "	INSTALL_DATA $(includedir)/uuid/uuid.h"
+ 	$(Q) $(INSTALL_DATA) uuid.h $(DESTDIR)$(includedir)/uuid/uuid.h
+ 	$(Q) for i in $(SMANPAGES); do \
+@@ -159,7 +159,7 @@
+ 	$(Q) $(INSTALL_DATA) uuid.pc $(DESTDIR)$(libdir)/pkgconfig/uuid.pc
+ 
+ uninstall::
+-	$(RM) -f $(DESTDIR)$(libdir)/libuuid.a \
++	$(RM) -f $(DESTDIR)$(libdir)/libe2fsprogs-uuid.a \
+ 		$(DESTDIR)$(libdir)/pkgconfig/uuid.pc
+ 	for i in $(SMANPAGES); do \
+ 		$(RM) -f $(DESTDIR)$(man3dir)/$$i; \
+@@ -168,7 +168,7 @@
+ 
+ clean::
+ 	$(RM) -f \#* *.s *.o *.a *~ *.bak core profiled/* checker/* uuid.h
+-	$(RM) -f ../libuuid.a ../libuuid_p.a tst_uuid uuid_time $(SMANPAGES)
++	$(RM) -f ../libe2fsprogs-uuid.a ../libe2fsprogs-uuid_p.a tst_uuid uuid_time $(SMANPAGES)
+ 
+ check:: tst_uuid
+ 	LD_LIBRARY_PATH=$(LIB) DYLD_LIBRARY_PATH=$(LIB) ./tst_uuid
+@@ -181,9 +181,9 @@
+ #
+ # Hack to parallel makes recognize dependencies correctly.
+ #
+-../../lib/libuuid.a: libuuid.a
+-../../lib/libuuid.so: image
+-../../lib/libuuid.dylib: image
++../../lib/libe2fsprogs-uuid.a: libe2fsprogs-uuid.a
++../../lib/libe2fsprogs-uuid.so: image
++../../lib/libe2fsprogs-uuid.dylib: image
+ 
+ $(OBJS): subdirs uuid.h
+ 
+diff -ru e2fsprogs-1.42.orig/lib/uuid/uuid.pc.in e2fsprogs-1.42/lib/uuid/uuid.pc.in
+--- e2fsprogs-1.42.orig/lib/uuid/uuid.pc.in	2009-08-12 18:39:57.000000000 -0700
++++ e2fsprogs-1.42/lib/uuid/uuid.pc.in	2012-02-06 15:13:16.122873072 -0800
+@@ -8,4 +8,4 @@
+ Version: @E2FSPROGS_VERSION@
+ Requires: 
+ Cflags: -I${includedir}/uuid
+-Libs: -L${libdir} -luuid
++Libs: -L${libdir} -le2fsprogs-uuid

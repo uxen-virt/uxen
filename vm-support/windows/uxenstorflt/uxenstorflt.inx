@@ -1,0 +1,40 @@
+[Version]
+Signature           = "$Windows NT$"
+Class               = DiskDrive
+ClassGUID           = {4d36e967-e325-11ce-bfc1-08002be10318}
+Provider            = %uXenMfg%
+DriverVer           = 06/07/2013, 1.0.0.0
+CatalogFile         = uxenstorflt.cat
+DriverPackageType   = ClassFilter
+
+[DefaultInstall.NT]
+CopyFiles = @uxenstorflt.sys
+Addreg    = uxenstorflt.AddReg
+
+[DestinationDirs]
+DefaultDestDir = 12
+
+[uxenstorflt.AddReg]
+HKLM, System\CurrentControlSet\Control\Class\{4d36e967-e325-11ce-bfc1-08002be10318}, UpperFilters, 0x00010008, uxenstorflt
+
+[DefaultInstall.NT.Services]
+AddService = uxenstorflt, , uxenstorflt.Service.Install
+
+[uxenstorflt.Service.Install]
+DisplayName    = %service_desc%
+ServiceType    = 1
+StartType      = 0
+ErrorControl   = 1
+ServiceBinary  = %12%\uxenstorflt.sys
+LoadOrderGroup = "PnP Filter"
+
+[SourceDisksFiles]
+uxenstorflt.sys=1
+
+[SourceDisksNames]
+1 = %diskid1%,,,
+
+[Strings]
+uXenMfg = "uXen Project"
+service_desc = "uXen Storage Filter Driver"
+DiskId1 = "uXen Project Installation Disk #1 (uxenstorflt)"

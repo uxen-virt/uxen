@@ -1,0 +1,26 @@
+diff --git a/binutils/strings.c b/binutils/strings.c
+index 3eed63a..6c2fd1a 100644
+--- a/binutils/strings.c
++++ b/binutils/strings.c
+@@ -456,7 +456,7 @@ get_char (FILE *stream, file_ptr *address, int *magiccount, char **magic)
+ {
+   int c, i;
+   long r = EOF;
+-  unsigned char buf[4];
++  unsigned char buf[4] = {0,};
+ 
+   for (i = 0; i < encoding_bytes; i++)
+     {
+diff --git a/ld/ldfile.c b/ld/ldfile.c
+index e9091e9..78da2d4 100644
+--- a/ld/ldfile.c
++++ b/ld/ldfile.c
+@@ -594,7 +594,7 @@ static void
+ ldfile_open_command_file_1 (const char *name, bfd_boolean default_only)
+ {
+   FILE *ldlex_input_stack;
+-  bfd_boolean sysrooted;
++  bfd_boolean sysrooted = FALSE;
+ 
+   ldlex_input_stack = ldfile_find_command_file (name, default_only, &sysrooted);
+ 

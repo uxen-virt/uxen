@@ -1,0 +1,44 @@
+TARGETNAME=VBoxMRXNP
+TARGETTYPE=DYNLINK
+
+!include ../../common/sources.inc
+
+DLLENTRY   = _DllMainCRTStartup
+
+
+# This sample only runs on Win7
+_NT_TARGET_VERSION=$(_NT_TARGET_VERSION_WIN7)
+
+USE_MSVCRT   = 1
+UMTYPE       = windows
+USE_ATL      = 1
+ATL_VER      = 70
+UNICODE      = 1
+#MSC_WARNING_LEVEL= /W4 /WX
+MSC_WARNING_LEVEL= 
+
+VBOXSRC=../../../../dm/vbox-includes
+C_DEFINES = -DVBOX -DIN_RING3 -DVBOX_WITH_HGCM -DUNICODE -D_UNICODE
+
+INCLUDES= $(INCLUDES);                  \
+          $(VBOXSRC)/include;           \
+          ../driver;                    \
+          $(SDK_INC_PATH);              \
+          $(DDK_INC_PATH);              \
+
+NTTARGETFILE2 = POST
+
+DLLDEF = vboxmrxnp.def
+SOURCES=\
+    vboxmrxnp.cpp          \
+    vboxrt.c               \
+    defroute.c             \
+    vboxmrxnp.rc         
+
+TARGETLIBS=\
+        $(SDK_LIB_PATH)\kernel32.lib    \
+        $(SDK_LIB_PATH)\user32.lib      \
+        $(SDK_LIB_PATH)\iphlpapi.lib    \
+        $(SDK_LIB_PATH)\advapi32.lib    
+
+

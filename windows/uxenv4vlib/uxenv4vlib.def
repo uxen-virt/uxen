@@ -1,0 +1,48 @@
+; uxenv4vlib: uxenv4vlib.def ;
+
+NAME uxenv4vlib.sys
+
+EXPORTS
+    DllInitialize                       PRIVATE
+    DllUnload                           PRIVATE
+
+	uxen_v4vlib_set_hypercall_func
+	uxen_v4vlib_set_page_notify_func
+	uxen_v4vlib_set_state_bar_ptr
+	uxen_v4vlib_we_are_dom0
+
+	uxen_v4vlib_set_resume_dpc
+	uxen_v4vlib_unset_resume_dpc
+
+	uxen_v4vlib_deliver_signal 
+	uxen_v4vlib_init_driver
+	uxen_v4vlib_free_driver
+
+
+	uxen_v4vlib_init_driver_hook
+	uxen_v4vlib_free_driver_unhook
+
+	uxen_v4v_ring_create
+
+	uxen_v4v_ring_bind
+	uxen_v4v_ring_free
+
+	uxen_v4v_recv 
+
+	uxen_v4v_send_async
+	uxen_v4v_sendv_async
+	uxen_v4v_send_from_ring_async
+	uxen_v4v_sendv_from_ring_async 
+	uxen_v4v_cancel_async
+
+	uxen_v4v_send 
+	uxen_v4v_sendv 
+	uxen_v4v_send_from_ring 
+	uxen_v4v_sendv_from_ring 
+
+	uxen_v4v_test
+	uxen_v4v_poke
+	uxen_v4v_notify
+
+
+; uxenv4vlib: uxenv4vlib.def ;

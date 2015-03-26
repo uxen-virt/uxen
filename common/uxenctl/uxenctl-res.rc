@@ -1,0 +1,25 @@
+/*
+ * Copyright 2014-2015, Bromium, Inc.
+ * SPDX-License-Identifier: ISC
+ */
+
+#include <uxen-resources.h>
+
+1 VERSIONINFO
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "CompanyName", COMPANY_NAME
+      VALUE "FileDescription", "uXen Control"
+      VALUE "LegalCopyright", COPYRIGHT
+      VALUE "ProductName", PRODUCT_NAME
+    END
+  END
+
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

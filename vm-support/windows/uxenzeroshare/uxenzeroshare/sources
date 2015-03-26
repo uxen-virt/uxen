@@ -1,0 +1,25 @@
+TARGETNAME = uxenzeroshare
+TARGETTYPE = DRIVER
+
+NTTARGETFILE0 = $(OBJ_PATH)\$(O)\$(INF_NAME).inf
+
+PASS0_BINPLACE = $(NTTARGETFILE0)
+PASS2_BINPLACE = $(OBJ_PATH)\$(O)\install.bat
+
+BUILD_PASS2_CONSUMES = catstuff
+
+NTTARGETFILE2 = COPY POST
+
+INCLUDES=..\;..\..\common;..\..\..\..\common\include\xen-public
+
+TARGETLIBS= \
+ $(LIBINTERNALS_LIB) \
+ $(UXENVMLIB_LIB) \
+ $(DDK_LIB_PATH)\aux_klib.lib \
+ 
+SOURCES= \
+  uxenzeroshare.c \
+  zerothread.c
+
+!INCLUDE ..\sources.inc
+

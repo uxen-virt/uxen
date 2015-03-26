@@ -1,0 +1,42 @@
+diff -ru gcc-4.7.3.orig/libssp/ssp.c gcc-4.7.3/libssp/ssp.c
+--- gcc-4.7.3.orig/libssp/ssp.c	2009-04-13 11:37:17 +0100
++++ gcc-4.7.3/libssp/ssp.c	2014-11-12 17:14:58 +0000
+@@ -64,6 +64,10 @@
+ # include <syslog.h>
+ #endif
+ 
++#if defined (_WIN32) && !defined (__CYGWIN__)
++# include <windows.h>
++#endif
++
+ void *__stack_chk_guard = 0;
+ 
+ static void __attribute__ ((constructor))
+@@ -75,6 +79,19 @@
+   if (__stack_chk_guard != 0)
+     return;
+ 
++#if defined (_WIN32) && !defined (__CYGWIN__)
++  {
++      void *cryptbase;
++      int __stdcall (*rand)(void *, unsigned long) = NULL;
++
++      cryptbase = LoadLibraryA("cryptbase.dll");
++      if (cryptbase) {
++          rand = (void *)GetProcAddress(cryptbase, "SystemFunction036");
++          if (rand && rand(&__stack_chk_guard, sizeof (__stack_chk_guard)))
++              return;
++      }
++  }
++#else
+   fd = open ("/dev/urandom", O_RDONLY);
+   if (fd != -1)
+     {
+@@ -84,6 +101,7 @@
+       if (size == sizeof(__stack_chk_guard) && __stack_chk_guard != 0)
+         return;
+     }
++#endif
+ 
+   /* If a random generator can't be used, the protector switches the guard
+      to the "terminator canary".  */

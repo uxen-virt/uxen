@@ -1,0 +1,37 @@
+TARGETNAME         = uxenvmlib
+TARGETTYPE         = EXPORT_DRIVER
+
+!include ../common/sources.inc
+
+TARGET_DESTINATION = uxenvmlib
+DLLDEF             = uxenvmlib.def
+
+NTTARGETFILE2 = POST
+
+INCLUDES=..\..\..\common\include\xen-public;..\common
+
+TARGETLIBS = \
+    $(TARGETLIBS) \
+    $(DDK_LIB_PATH)\aux_klib.lib
+
+LINKER_FLAGS=$(LINKER_FLAGS) /SECTION:.shared,RWS
+
+
+SOURCES =               \
+    main.c              \
+    shared_data.c       \
+	uxenvmlib.rc        \
+	uxen_hypercall.c    \
+	uxen_state.c    \
+	uxen_util.c
+
+AMD64_SOURCES = \
+ 	        uxen_hypercall_sup.asm
+
+I386_SOURCES = \
+ 	        uxen_hypercall_sup.asm
+
+		
+
+
+

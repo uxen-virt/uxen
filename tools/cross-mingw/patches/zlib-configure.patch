@@ -1,0 +1,14 @@
+diff -pruN -x '*~' zlib-1.2.5.orig/configure zlib-1.2.5/configure
+--- zlib-1.2.5.orig/configure	2010-04-19 21:15:19 -0700
++++ zlib-1.2.5/configure	2012-06-27 21:55:02 -0700
+@@ -122,10 +122,6 @@ if test "$gcc" -eq 1 && ($cc -c $cflags
+   CYGWIN* | Cygwin* | cygwin* | OS/2*)
+         EXE='.exe' ;;
+   MINGW*|mingw*)
+-# temporary bypass
+-        rm -f $test.[co] $test $test$shared_ext
+-        echo "Please use win32/Makefile.gcc instead."
+-        exit 1
+         LDSHARED=${LDSHARED-"$cc -shared"}
+         LDSHAREDLIBC=""
+         EXE='.exe' ;;

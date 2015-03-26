@@ -1,0 +1,975 @@
+/*
+ *  uxen_main.c
+ *  uxen
+ *
+ * Copyright 2012-2015, Bromium, Inc.
+ * Author: Christian Limpach <Christian.Limpach@gmail.com>
+ * SPDX-License-Identifier: ISC
+ * 
+ */
+
+#include <xen/config.h>
+#include <xen/types.h>
+#include <xen/hypercall.h>
+#include <xen/sched.h>
+#include <xen/sched-if.h>
+#include <xen/softirq.h>
+#include <xen/symbols.h>
+#include <xen/console.h>
+#include <xen/delay.h>
+#include <xen/keyhandler.h>
+#include <asm/bug.h>
+#include <asm/current.h>
+#include <asm/guest_access.h>
+#include <asm/hvm/hvm.h>
+#include <asm/mm.h>
+#include <asm/p2m.h>
+#include <asm/hap.h>
+#include <public/sched.h>
+
+#include <uxen/uxen.h>
+#include <uxen/uxen_desc.h>
+#include <uxen/memcache-dm.h>
+
+int uxen_verbose = 0;
+
+DEFINE_PER_CPU(uintptr_t, stack_top);
+
+static void _cpu_irq_disable(void);
+static void _cpu_irq_enable(void);
+static int _cpu_irq_is_enabled(void);
+static void _cpu_irq_save(unsigned long *x);
+static void _cpu_irq_restore(unsigned long x);
+
+struct _uxen_info _uxen_info = {
+        .ui_sizeof_struct_page_info = sizeof(struct page_info),
+
+        .ui_cli = _cpu_irq_disable,
+        .ui_sti = _cpu_irq_enable,
+        .ui_irq_is_enabled = _cpu_irq_is_enabled,
+        .ui_irq_save = _cpu_irq_save,
+        .ui_irq_restore = _cpu_irq_restore,
+};
+
+/* SSS: use per_cpu for this? */
+struct cpu_info uxen_cpu_info[UXEN_MAXIMUM_PROCESSORS];
+
+#if 0
+DEFINE_PER_CPU(uint32_t, host_cpu_preemption);
+#else
+uint32_t _host_cpu_preemption[NR_CPUS];
+#endif
+
+int hostsched_setup_vm(struct domain *, struct vm_info_shared *);
+struct vm_vcpu_info_shared *hostsched_setup_vcpu(struct vcpu *,
+                                                 struct vm_vcpu_info_shared *);
+extern void fpu_init(void);
+
+static void
+_cpu_irq_disable(void)
+{
+
+    asm volatile ( "cli" : : : "memory" );
+}
+
+static void
+_cpu_irq_enable(void)
+{
+
+    if (boot_cpu_data.x86_vendor ==  X86_VENDOR_INTEL)
+        asm volatile ( "sti" : : : "memory" );
+    else
+        asm volatile ( "stgi" : : : "memory" );
+}
+
+static void
+_cpu_irq_save_flags(unsigned long *x)
+{
+
+    asm volatile ( "pushf" __OS " ; pop" __OS " %0" : "=g" (*x));
+}
+
+static int
+_cpu_irq_is_enabled(void)
+{
+    unsigned long flags;
+
+    _cpu_irq_save_flags(&flags);
+    return !!(flags & (1<<9)); /* EFLAGS_IF */
+}
+
+static void
+_cpu_irq_save(unsigned long *x)
+{
+
+    _cpu_irq_save_flags(x);
+    _cpu_irq_disable();
+}
+
+static void
+_cpu_irq_restore(unsigned long x)
+{
+
+    asm volatile ( "push" __OS " %0 ; popf" __OS
+                   : : "g" (x) : "memory", "cc" );
+}
+
+static void
+_end_execution(struct vcpu *vcpu)
+{
+    int cpu = smp_processor_id();
+
+    if (rcu_pending(cpu))
+        rcu_check_callbacks(cpu);
+    process_pending_rcu_softirq();
+
+    uxen_set_current(vcpu);
+}
+#define end_execution() _end_execution(NULL)
+
+/* If the domain exists and has been setup, returns the vm_info_shared pointer
+   If the domain exists but has not been setup, returns NULL
+   Otherwise returns -1 */
+intptr_t
+do_lookup_vm(xen_domain_handle_t vm_uuid)
+{
+    struct domain *d;
+
+    d = rcu_lock_domain_by_uuid(vm_uuid);
+    if (d)
+        rcu_unlock_domain(d);
+
+    return d ? (intptr_t)d->vm_info_shared : -1;
+}
+
+intptr_t __interface_fn
+__uxen_lookup_vm(xen_domain_handle_t vm_uuid)
+{
+    intptr_t ret;
+
+    if (!dom0 || !dom0->vcpu)
+        return -1;
+
+    set_stack_top();
+    uxen_set_current(dom0->vcpu[smp_processor_id()]);
+
+    ret = do_lookup_vm(vm_uuid);
+
+    end_execution();
+
+    return ret;
+}
+
+intptr_t
+do_setup_vm(struct uxen_createvm_desc *ucd, struct vm_info_shared *vmi,
+            struct vm_vcpu_info_shared **vcis)
+{
+    struct domain *d = NULL;
+    struct vcpu *v;
+    unsigned int domcr_flags;
+    int ret;
+
+    while (!domctl_lock_acquire())
+        cpu_relax();
+
+    ret = -EINVAL;
+    domcr_flags = domctl_createdomain_parse_flags(ucd->ucd_create_flags);
+    if (domcr_flags == ~0) {
+        domctl_lock_release();
+        goto out;
+    }
+
+    ret = domain_create(ucd->ucd_domid, domcr_flags, ucd->ucd_create_ssidref,
+                        ucd->ucd_vmuuid, &d);
+    if (ret) {
+        domctl_lock_release();
+        goto out;
+    }
+
+    domctl_lock_release();
+
+    vmi->vmi_domid = d->domain_id;
+    atomic_read_uint128(&d->handle_atomic, (uint128_t *)vmi->vmi_uuid);
+
+    printk("%s: domain %d: %" PRIuuid "\n", 
+           __FUNCTION__, vmi->vmi_domid, PRIuuid_arg(vmi->vmi_uuid));
+
+    printk("domain %d: %p/%p\n", d->domain_id, d, vmi);
+    ret = hostsched_setup_vm(d, vmi);
+    if (ret)
+        goto out;
+
+    ret = domain_set_max_vcpus(d, ucd->ucd_max_vcpus);
+    if (ret)
+        goto out;
+
+    if (d->max_vcpus < 1) {
+	printk("domain has no vcpus\n");
+        ret = -EINVAL;
+        goto out;
+    }
+
+    v = d->vcpu[0];
+    if (v == NULL) {
+	printk("domain has no vcpu[0]\n");
+        ret = -EINVAL;
+        goto out;
+    }
+
+    for_each_vcpu(d, v) {
+        struct vm_vcpu_info_shared *vci = vcis[v->vcpu_id];
+        printk("domain %d vcpu %d: %p/%p on cpu %d\n", d->domain_id,
+               v->vcpu_id, v, vci, v->processor);
+        vci->vci_vcpuid = v->vcpu_id;
+
+        hostsched_setup_vcpu(v, vci);
+
+        rcu_unlock_domain(d);
+
+        local_irq_disable();
+        uxen_set_current(v);
+        vcpu_switch_host_cpu(v);
+        fpu_init();
+        uxen_set_current(dom0->vcpu[smp_processor_id()]);
+        local_irq_enable();
+
+        rcu_lock_domain(d);
+
+        vci->vci_run_mode = VCI_RUN_MODE_SETUP;
+    }
+
+  out:
+    if (d)
+        rcu_unlock_domain(d);
+    return ret;
+}
+
+intptr_t __interface_fn
+__uxen_setup_vm(struct uxen_createvm_desc *ucd, struct vm_info_shared *vmi,
+                struct vm_vcpu_info_shared **vcis)
+{
+    intptr_t ret;
+
+    if (!dom0 || !dom0->vcpu)
+        return -ENOENT;
+
+    set_stack_top();
+    uxen_set_current(dom0->vcpu[smp_processor_id()]);
+    current->always_access_ok = 1;
+    current->is_privileged = 1;
+
+    ret = do_setup_vm(ucd, vmi, vcis);
+
+    current->is_privileged = 0;
+    current->always_access_ok = 0;
+    end_execution();
+
+    return ret;
+}
+
+intptr_t
+do_run_vcpu(uint32_t domid, uint32_t vcpuid)
+{
+    struct domain *d;
+    struct vcpu *v;
+    struct vm_vcpu_info_shared *vci = NULL;
+    int ret = -EFAULT;
+
+    d = get_domain_by_id(domid);
+    if (d == NULL)
+        goto out;
+
+    v = d->vcpu[vcpuid];
+    if (v == NULL)
+        goto out;
+
+    vci = v->vm_vcpu_info_shared;
+    if (vci == NULL)
+        goto out;
+
+    switch (vci->vci_run_mode) {
+    case VCI_RUN_MODE_IDLE:
+        BUG();
+    case VCI_RUN_MODE_SETUP:
+        printk("vcpu %d.%d pause flags %lx count %x domain count %x\n",
+               v->domain->domain_id, v->vcpu_id,
+               v->pause_flags, atomic_read(&v->pause_count),
+               atomic_read(&v->domain->pause_count));
+
+        v->context_loaded = 0;
+
+        uxen_set_current(v);
+        if (!v->vcpu_id)
+            domain_unpause_by_systemcontroller(v->domain);
+
+        break;
+
+    case VCI_RUN_MODE_PROCESS_IOREQ:
+        uxen_set_current(v);
+        if (test_and_clear_bit(_VPF_blocked_in_xen, &v->pause_flags))
+            vcpu_wake(v);
+        break;
+
+    case VCI_RUN_MODE_HALT:
+        uxen_set_current(v);
+        break;
+
+    case VCI_RUN_MODE_YIELD:
+        clear_bit(_VPF_yield, &v->pause_flags);
+        /* fall through */
+    case VCI_RUN_MODE_PREEMPT:
+    case VCI_RUN_MODE_MEMCACHE_CHECK:
+    case VCI_RUN_MODE_FREEPAGE_CHECK:
+        uxen_set_current(v);
+        break;
+    }
+
+    v->need_hvm_resume = 1;
+
+    if (uxen_verbose) printk("running vm\n");
+    while (_uxen_info.ui_running && vci->vci_runnable) {
+
+      again:
+        if (atomic_read(&v->event_check)) {
+            uxen_info->ui_kick_vcpu_cancel(vci);
+            atomic_set(&v->event_check, 0);
+        }
+        if (v->force_preempt || uxen_info->ui_host_needs_preempt(vci)) {
+            v->force_preempt = 0;
+            vci->vci_run_mode = VCI_RUN_MODE_PREEMPT;
+            ret = 0;
+            goto out_reset_current;
+        }
+        if (test_bit(_VPF_yield, &v->pause_flags)) {
+            vci->vci_run_mode = VCI_RUN_MODE_YIELD;
+            ret = 0;
+            goto out_reset_current;
+        }
+        if (v->paused_for_shutdown && d->shutdown_code != SHUTDOWN_suspend) {
+            vci->vci_run_mode = VCI_RUN_MODE_SHUTDOWN;
+            ret = 0;
+            goto out_reset_current;
+        }
+        if (!d->is_dying && !page_list_empty(&d->pod_free_list))
+            p2m_pod_free_pages(d);
+        if (_uxen_info.ui_free_pages[smp_processor_id()].free_count < 20) {
+            vci->vci_run_mode = VCI_RUN_MODE_FREEPAGE_CHECK;
+            ret = 0;
+            goto out_reset_current;
+        }
+        if (_uxen_info.ui_memcache_needs_check &&
+            uxen_info->ui_memcache_check &&
+            uxen_info->ui_memcache_check()) {
+            vci->vci_run_mode = VCI_RUN_MODE_MEMCACHE_CHECK;
+            ret = 0;
+            goto out_reset_current;
+        }
+
+        if (test_bit(_VPF_blocked_in_xen, &v->pause_flags)) {
+            if (uxen_info->ui_check_ioreq(vci)) {
+                clear_bit(_VPF_blocked_in_xen, &v->pause_flags);
+                vcpu_wake(v);
+                v->need_hvm_resume = 1;
+            } else {
+                perfc_incr(blocked_in_xen);
+                vci->vci_run_mode = VCI_RUN_MODE_PROCESS_IOREQ;
+                ret = 0;
+                goto out_reset_current;
+            }
+        }
+
+        if (!vcpu_runnable(v) || v->runstate.state != RUNSTATE_running ||
+            !v->context_loaded) {
+            v->arch.ctxt_switch_from(v);
+            v->is_running = 0;
+
+            while ((v->runstate.state >= RUNSTATE_blocked &&
+                    (({ vcpu_schedule_lock_irq(v); 1; }))) ||
+                   !schedule_vcpu(v)) {
+                if (v->runstate.state >= RUNSTATE_blocked)
+                    v->need_hvm_resume = 1;
+
+                if (!vci->vci_runnable) {
+                    vcpu_schedule_unlock_irq(v);
+                    goto out_reset_current;
+                }
+                if (work_pending_vcpu(v)) {
+                    vcpu_schedule_unlock_irq(v);
+                    do_softirq_vcpu(v);
+                    goto again;
+                } else {
+                    perfc_incr(hostsched_halt_vm);
+                    atomic_write32(&vci->vci_host_halted, 1);
+                    vcpu_schedule_unlock_irq(v);
+                    if (!work_pending_vcpu(v) &&
+                        current->runstate.state >= RUNSTATE_blocked) {
+                        vci->vci_run_mode = VCI_RUN_MODE_HALT;
+                        ret = 0;
+                        goto out_reset_current;
+                    }
+                    atomic_write32(&vci->vci_host_halted, 0);
+                }
+            }
+
+            v->arch.ctxt_switch_to(v);
+        }
+
+        if (!vci->vci_runnable)
+            goto out_reset_current;
+
+        if (v->need_hvm_resume)
+            hvm_do_resume(v);
+        v->need_hvm_resume = 0;
+        hvm_do_resume_trap(v);
+
+        if (!vci->vci_runnable)
+            goto out_reset_current;
+
+        hvm_execute(v);
+    }
+
+  out_reset_current:
+    hvm_do_suspend(v);
+    v->arch.ctxt_switch_from(v);
+    v->is_running = 0;
+    _end_execution(NULL);
+
+  out:
+    if (d)
+        put_domain(d);
+    return ret;
+}
+
+intptr_t __interface_fn
+__uxen_run_vcpu(uint32_t domid, uint32_t vcpuid)
+{
+    intptr_t ret;
+
+    set_stack_top();
+    ret = do_run_vcpu(domid, vcpuid);
+
+    return ret;
+}
+
+intptr_t
+do_destroy_vm(xen_domain_handle_t vm_uuid)
+{
+    struct domain *d;
+    struct vcpu *v;
+    int ret = -ENOENT;
+
+    d = rcu_lock_domain_by_uuid(vm_uuid);
+    if (d == NULL)
+        goto out;
+
+    for_each_vcpu(d, v) {
+        cpumask_clear_cpu(v->processor, v->domain->domain_dirty_cpumask);
+        cpumask_clear_cpu(v->processor, v->vcpu_dirty_cpumask);
+    }
+
+    while (!domctl_lock_acquire())
+        cpu_relax();
+
+    ret = domain_kill(d);
+
+    domctl_lock_release();
+
+    rcu_unlock_domain(d);
+
+  out:
+    return ret;
+}
+
+intptr_t __interface_fn
+__uxen_destroy_vm(xen_domain_handle_t vm_uuid)
+{
+    int ret;
+
+    if (!dom0 || !dom0->vcpu)
+        return -ENOENT;
+
+    set_stack_top();
+    uxen_set_current(dom0->vcpu[smp_processor_id()]);
+
+    ret = do_destroy_vm(vm_uuid);
+
+    end_execution();
+
+    return ret;
+}
+
+void __interface_fn
+__uxen_shutdown_xen(void)
+{
+
+    if (!dom0 || !dom0->vcpu)
+        return;
+
+    set_stack_top();
+    uxen_set_current(dom0->vcpu[smp_processor_id()]);
+
+    console_start_sync();
+
+    smp_send_stop();
+
+    printk("clearing cpu_online_map\n");
+    cpumask_clear(&cpu_online_map);
+
+    end_execution();
+
+    /* freeing host pages makes dom0 current invalid */
+    free_all_host_pages();
+}
+
+static void
+do_hvm_cpu_down(void *arg)
+{
+
+    hvm_cpu_down();
+}
+
+void __interface_fn
+__uxen_suspend_xen_prepare(void)
+{
+    struct domain *d;
+
+    if (!dom0 || !dom0->vcpu)
+        return;
+
+    set_stack_top();
+    uxen_set_current(dom0->vcpu[smp_processor_id()]);
+    current->is_privileged = 1;
+
+    rcu_read_lock(&domlist_read_lock);
+    for_each_domain(d)
+        if (d != dom0)
+            domain_pause_for_suspend(d);
+    rcu_read_unlock(&domlist_read_lock);
+
+    current->is_privileged = 0;
+    end_execution();
+}
+
+void __interface_fn
+__uxen_suspend_xen(void)
+{
+
+    if (!dom0 || !dom0->vcpu)
+        return;
+
+    uxen_set_current(dom0->vcpu[smp_processor_id()]);
+    current->is_privileged = 1;
+
+    on_selected_cpus(&cpu_online_map, do_hvm_cpu_down, NULL, 1);
+
+    current->is_privileged = 0;
+    uxen_set_current(NULL); /* not end_execution, do not process rcu */
+}
+
+static cpumask_t hvm_cpu_up_mask;
+
+void
+do_hvm_cpu_up(void *arg)
+{
+
+    hvm_cpu_up();
+    mb();
+    cpumask_clear_cpu(smp_processor_id(), &hvm_cpu_up_mask);
+}
+
+void __interface_fn
+__uxen_resume_xen(void)
+{
+    struct domain *d;
+
+    if (!dom0 || !dom0->vcpu)
+        return;
+
+    set_stack_top();
+    uxen_set_current(dom0->vcpu[smp_processor_id()]);
+    current->is_privileged = 1;
+
+    reinit_platform_time();
+
+    cpumask_copy(&hvm_cpu_up_mask, &cpu_online_map);
+
+    /* use send_IPI_mask directly with dedicated vector, to avoid
+     * interactions with on_selected_cpus locks and skip processing
+     * rcu/softirq work */
+    send_IPI_mask(&hvm_cpu_up_mask, UXEN_RESUME_VECTOR);
+    local_irq_disable();
+    do_hvm_cpu_up(NULL);
+    local_irq_enable();
+
+    while (!cpumask_empty(&hvm_cpu_up_mask))
+        cpu_relax();
+
+    rcu_read_lock(&domlist_read_lock);
+    for_each_domain(d)
+        if (d != dom0)
+            domain_unpause_for_suspend(d);
+    rcu_read_unlock(&domlist_read_lock);
+
+    current->is_privileged = 0;
+    uxen_set_current(NULL); /* not end_execution, do not process rcu */
+}
+
+typedef unsigned long uxen_hypercall_t(unsigned long, unsigned long,
+				       unsigned long, unsigned long,
+				       unsigned long, unsigned long);
+
+#define HYPERCALL(x)						\
+    [ __HYPERVISOR_ ## x ] = (uxen_hypercall_t *) do_ ## x
+
+static uxen_hypercall_t *uxen_hypercall_table[NR_hypercalls] = {
+    HYPERCALL(memory_op),
+    HYPERCALL(xen_version),
+    HYPERCALL(hvm_op),
+    HYPERCALL(domctl),
+    HYPERCALL(sched_op),
+    HYPERCALL(event_channel_op),
+    HYPERCALL(v4v_op),
+};
+
+intptr_t
+do_hypercall(struct uxen_hypercall_desc *uhd)
+{
+
+    if (uhd->uhd_op >= NR_hypercalls ||
+	uxen_hypercall_table[uhd->uhd_op] == NULL)
+	return -ENOSYS;
+
+    return uxen_hypercall_table[uhd->uhd_op](uhd->uhd_arg[0], uhd->uhd_arg[1],
+                                             uhd->uhd_arg[2], uhd->uhd_arg[3],
+                                             uhd->uhd_arg[4], uhd->uhd_arg[5]);
+}
+
+intptr_t __interface_fn
+__uxen_hypercall(struct uxen_hypercall_desc *uhd,
+                 struct vm_info_shared *target_vmis,
+                 void *user_access_opaque,
+                 uint32_t privileged)
+{
+    intptr_t ret;
+
+    if (!dom0 || !dom0->vcpu)
+        return -ENOENT;
+
+    set_stack_top();
+    uxen_set_current(dom0->vcpu[smp_processor_id()]);
+    if (privileged & UXEN_UNRESTRICTED_ACCESS_HYPERCALL)
+        current->always_access_ok = 1;
+    if (privileged & UXEN_ADMIN_HYPERCALL)
+        current->is_privileged = 1;
+    current->target_vmis = target_vmis;
+    current->user_access_opaque = user_access_opaque;
+
+    ret = do_hypercall(uhd);
+
+    current->user_access_opaque = NULL;
+    current->target_vmis = NULL;
+    current->is_privileged = 0;
+    current->always_access_ok = 0;
+    end_execution();
+
+    return ret;
+}
+
+/* adapted from arch/x86/domain_build.c:alloc_dom0_vcpu0 */
+struct vcpu * __init
+alloc_dom0_vcpu0(void)
+{
+    int i;
+
+    dom0->max_vcpus = num_present_cpus();
+    dom0->vcpu = xzalloc_array(struct vcpu *, dom0->max_vcpus);
+    if ( !dom0->vcpu )
+        return NULL;
+
+    _uxen_info.ui_dom0_current = (void **)dom0->vcpu;
+    for (i = 0; i < dom0->max_vcpus; i++)
+	if (!alloc_vcpu(dom0, i, i))
+	    return NULL;
+    return dom0->vcpu[0];
+}
+
+void __interface_fn
+__uxen_add_heap_memory(uint64_t start, uint64_t end)
+{
+
+#ifdef __i386__
+    if (!idle_vcpu[smp_processor_id()])
+        return;
+
+    set_stack_top();
+    uxen_set_current(idle_vcpu[smp_processor_id()]);
+
+    init_domheap_pages(start, end);
+
+    end_execution();
+#endif
+}
+
+intptr_t __interface_fn
+__uxen_handle_keypress(unsigned char key)
+{
+
+    if (!idle_vcpu[smp_processor_id()])
+        return -ENOENT;
+
+    set_stack_top();
+    uxen_set_current(idle_vcpu[smp_processor_id()]);
+
+    handle_keypress(key, NULL);
+
+    end_execution();
+
+    return 0;
+}
+
+void __interface_fn
+__uxen_run_idle_thread(uint32_t had_timeout)
+{
+
+    if (!idle_vcpu[smp_processor_id()])
+        return;
+
+    set_stack_top();
+    uxen_set_current(idle_vcpu[smp_processor_id()]);
+
+    if (_uxen_info.ui_unixtime_generation != unixtime_generation)
+        update_xen_time();
+
+    do_run_idle_thread(had_timeout);
+
+    end_execution();
+}
+
+static atomic_t cpu_count = ATOMIC_INIT(0);
+
+struct rcu_barrier_data {
+    struct rcu_head head;
+    atomic_t *cpu_count;
+};
+
+static void rcu_barrier_callback(struct rcu_head *head)
+{
+    struct rcu_barrier_data *data = container_of(
+        head, struct rcu_barrier_data, head);
+    atomic_dec(data->cpu_count);
+}
+
+static DEFINE_PER_CPU(struct rcu_barrier_data, flush_rcu_data);
+
+intptr_t __interface_fn
+__uxen_flush_rcu(uint32_t complete)
+{
+    int cpu = host_processor_id();
+
+    set_stack_top();
+    uxen_set_current(idle_vcpu[smp_processor_id()]);
+
+    if (!complete) {
+        if (!cpu)
+            atomic_set(&cpu_count, cpumask_weight(&cpu_online_map));
+        this_cpu(flush_rcu_data).cpu_count = &cpu_count;
+        call_rcu(&this_cpu(flush_rcu_data).head, rcu_barrier_callback);
+    }
+
+    if (atomic_read(this_cpu(flush_rcu_data).cpu_count)) {
+        if (rcu_pending(cpu))
+            rcu_check_callbacks(cpu);
+        process_pending_rcu_softirq();
+    }
+
+    uxen_set_current(NULL);
+    return !!atomic_read(this_cpu(flush_rcu_data).cpu_count);
+}
+
+/* from common/kernel.c */
+static void __init
+assign_integer_param(struct kernel_param *param, uint64_t val)
+{
+    switch (param->len) {
+    case sizeof(uint8_t):
+        *(uint8_t *)param->var = val;
+        break;
+    case sizeof(uint16_t):
+        *(uint16_t *)param->var = val;
+        break;
+    case sizeof(uint32_t):
+        *(uint32_t *)param->var = val;
+        break;
+    case sizeof(uint64_t):
+        *(uint64_t *)param->var = val;
+        break;
+    default:
+        BUG();
+    }
+}
+
+void __init
+options_parse(const struct uxen_init_desc *init_options,
+              uint64_t init_options_size)
+{
+    struct kernel_param *param;
+    uint64_t mask;
+
+    /* printk("setup start %p end %p sizeof %lx\n", &__setup_start, */
+    /*        &__setup_end, sizeof(struct kernel_param)); */
+    for (param = &__setup_start; param < &__setup_end; param++) {
+        if (!param->opt_mask)
+            continue;
+        /* printk("checking option %s: ", param->name); */
+        mask = *(uint64_t *)((uintptr_t)init_options + param->mask_offset);
+        if (!(mask & param->opt_mask)) {
+            /* printk("not present\n"); */
+            continue;
+        }
+        if (param->value_offset + param->value_size > init_options_size) {
+            /* printk("out of bounds\n"); */
+            continue;
+        }
+        switch (param->type) {
+        case OPT_STR:
+            strllcpy(param->var, param->len,
+                     (char *)((uintptr_t)init_options + param->value_offset),
+                     param->value_size);
+            /* printk("set to %s\n", (char *)param->var); */
+            break;
+        case OPT_BOOL:
+        case OPT_INVBOOL:
+            assign_integer_param(param, *(uint64_t *)((uintptr_t)init_options +
+                                                      param->value_offset));
+            /* printk("set to %d\n", *(uint8_t *)param->var); */
+            break;
+        case OPT_UINT:
+            assign_integer_param(param, *(uint64_t *)((uintptr_t)init_options +
+                                                      param->value_offset));
+            /* printk("set to %" PRIx64 "\n", *(uint64_t *)param->var); */
+            break;
+
+        default:
+            /* printk("not handled\n"); */
+            break;
+        }
+    }
+}
+
+/* adapted from arch/x86/traps.c:do_invalid_op */
+intptr_t __interface_fn
+__uxen_process_ud2(struct cpu_user_regs *regs)
+{
+    struct bug_frame *bug;
+    struct bug_frame_str *bug_str;
+    const char *p, *filename, *predicate, *eip = (char *)regs->eip;
+    uint64_t fixup;
+    int id, lineno;
+
+    // print_symbol("eip is %s\n", eip);
+
+    bug = (struct bug_frame *)eip;
+    if (memcmp(bug->ud2, "\xf\xb", sizeof(bug->ud2)) ||
+        (bug->ret != 0xc2))
+        goto die;
+    eip += sizeof(*bug);
+
+    /* Decode first pointer argument. */
+    bug_str = (struct bug_frame_str *)eip;
+    if (bug_str->mov != 0xbc)
+        goto die;
+    p = bug_str(*bug_str, eip);
+    eip += sizeof(*bug_str);
+
+    id = bug->id & 7;
+
+    if ( id == BUGFRAME_run_fn )
+    {
+        void (*fn)(struct cpu_user_regs *) = (void *)p;
+        (*fn)(regs);
+        regs->eip = (unsigned long)eip;
+        return 0;
+    }
+
+    /* WARN, BUG or ASSERT: decode the filename pointer and line number. */
+    filename = p;
+    lineno = bug->id >> 3;
+
+    if ( id == BUGFRAME_warn )
+    {
+        show_execution_state(regs);
+        uxen_info->ui_printf(NULL, "Xen WARN at %.50s:%d\n", filename, lineno);
+        regs->eip = (unsigned long)eip;
+        return 0;
+    }
+
+    if ( id == BUGFRAME_bug )
+    {
+        show_execution_state(regs);
+        uxen_info->ui_printf(NULL, "Xen BUG at %.50s:%d\n", filename, lineno);
+        return 1;
+    }
+
+    if ( id == BUGFRAME_abort )
+    {
+#ifndef NDEBUG
+        show_stack(regs);
+        uxen_info->ui_printf(NULL, "Xen ABORT at %.50s:%d\n", filename, lineno);
+#endif
+        return 2;
+    }
+
+    /* ASSERT: decode the predicate string pointer. */
+    ASSERT(id == BUGFRAME_assert);
+    bug_str = (struct bug_frame_str *)eip;
+    if (bug_str->mov != 0xbc)
+        goto die;
+    predicate = bug_str(*bug_str, eip);
+    eip += sizeof(*bug_str);
+
+    show_execution_state(regs);
+    uxen_info->ui_printf(NULL, "Assertion '%s' failed at %.50s:%d\n",
+                         predicate, filename, lineno);
+    return 1;
+
+ die:
+    if ( (fixup = search_exception_table(regs->eip)) != 0 )
+    {
+        regs->eip = fixup;
+        return 0;
+    }
+    show_execution_state(regs);
+    uxen_info->ui_printf(NULL, "FATAL TRAP: vector = %d (invalid opcode)\n",
+                         TRAP_invalid_op);
+    return 1;
+}
+
+intptr_t __interface_fn
+__uxen_lookup_symbol(uint64_t address, char *buffer, uint32_t buflen)
+{
+    const char *name;
+    unsigned long offset, size, flags;
+
+    static DEFINE_SPINLOCK(lock);
+    static char namebuf[KSYM_NAME_LEN+1];
+#if 0
+#define BUFFER_SIZE sizeof("%s+%ld/%ld [%s]") + KSYM_NAME_LEN + \
+      2*(BITS_PER_LONG*3/10) + 1
+    static char buffer[BUFFER_SIZE];
+#else
+#define BUFFER_SIZE buflen
+#endif
+
+    spin_lock_irqsave(&lock, flags);
+
+    name = symbols_lookup(address, &size, &offset, namebuf);
+
+    if (!name)
+        snprintf(buffer, BUFFER_SIZE, "???");
+    else
+        snprintf(buffer, BUFFER_SIZE, "%s+%ld/%ld", name, offset, size);
+
+    spin_unlock_irqrestore(&lock, flags);
+
+    return name ? 0 : 1;
+}

@@ -1,0 +1,44 @@
+diff --git a/bfd/doc/bfd.texinfo b/bfd/doc/bfd.texinfo
+index 45ffa73..c3ca5e7 100644
+--- a/bfd/doc/bfd.texinfo
++++ b/bfd/doc/bfd.texinfo
+@@ -322,7 +322,7 @@ All of BFD lives in one directory.
+ @printindex cp
+ 
+ @tex
+-% I think something like @colophon should be in texinfo.  In the
++% I think something like @@colophon should be in texinfo.  In the
+ % meantime:
+ \long\def\colophon{\hbox to0pt{}\vfill
+ \centerline{The body of this manual is set in}
+@@ -333,7 +333,7 @@ All of BFD lives in one directory.
+ \centerline{{\sl\fontname\tensl\/}}
+ \centerline{are used for emphasis.}\vfill}
+ \page\colophon
+-% Blame: doc@cygnus.com, 28mar91.
++% Blame: doc@@cygnus.com, 28mar91.
+ @end tex
+ 
+ @bye
+diff --git a/ld/ld.texinfo b/ld/ld.texinfo
+index 879bcfc..0a0845d 100644
+--- a/ld/ld.texinfo
++++ b/ld/ld.texinfo
+@@ -7694,7 +7694,7 @@ If you have more than one @code{SECT} statement for the same
+ @printindex cp
+ 
+ @tex
+-% I think something like @colophon should be in texinfo.  In the
++% I think something like @@colophon should be in texinfo.  In the
+ % meantime:
+ \long\def\colophon{\hbox to0pt{}\vfill
+ \centerline{The body of this manual is set in}
+@@ -7705,7 +7705,7 @@ If you have more than one @code{SECT} statement for the same
+ \centerline{{\sl\fontname\tensl\/}}
+ \centerline{are used for emphasis.}\vfill}
+ \page\colophon
+-% Blame: doc@cygnus.com, 28mar91.
++% Blame: doc@@cygnus.com, 28mar91.
+ @end tex
+ 
+ @bye

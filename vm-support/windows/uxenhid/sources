@@ -1,0 +1,28 @@
+TARGETNAME = uxenhid
+TARGETTYPE = DRIVER
+
+!include ../common/sources.inc
+
+
+KMDF_VERSION_MAJOR = 1
+
+NTTARGETFILE0 = $(OBJ_PATH)\$(O)\$(INF_NAME).inf
+PASS0_BINPLACE = $(NTTARGETFILE0)
+
+NTTARGETFILE1 = COPY
+
+NTTARGETFILE2 = POST
+
+INCLUDES=..\..\..\common\include;..\..\..\common\include\xen-public;..\common;$(UXENV4VLIB_INC)
+
+TARGETLIBS = $(DDK_LIB_PATH)\hidclass.lib \
+             $(UXENVMLIB_LIB) \
+             $(UXENV4VLIB_LIB)
+
+SOURCES = hid.c \
+          uxenhid.c \
+	  uxenhid.rc
+		
+
+TARGET_DESTINATION = wdf
+

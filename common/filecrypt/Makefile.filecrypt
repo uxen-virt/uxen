@@ -1,0 +1,63 @@
+#
+# Copyright 2015, Bromium, Inc.
+# SPDX-License-Identifier: ISC
+#
+
+all: filecrypt$(EXE_SUFFIX) libfilecrypt.a
+
+libfilecrypt_SRCS  = filecrypt.c
+libfilecrypt_OBJS  = $(patsubst %.c,%.o,$(libfilecrypt_SRCS))
+libfilecrypt_OBJS := $(subst /,_,$(libfilecrypt_OBJS))
+libfilecrypt_CPPFLAGS =
+
+filecrypt_SRCS  = main.c
+filecrypt_OBJS  = $(patsubst %.c,%.o,$(filecrypt_SRCS))
+filecrypt_OBJS := $(subst /,_,$(filecrypt_OBJS))
+filecrypt_LIBS = $(LDLIBS) -L. -lfilecrypt
+
+EXTRA_CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
+
+install_filecrypt.h: filecrypt.h $(SDKDIR_include)/.exists
+	$(_W)echo Installing from $(abspath $(<D)) to $(SDKDIR_include)
+	$(_W)echo Installing -- $(<F)
+	$(_V)$(call install_data,$<,$(SDKDIR_include))
+
+install_libfilecrypt.a: libfilecrypt.a $(SDKDIR_lib)/.exists
+	$(_W)echo Installing from $(abspath $(<D)) to $(SDKDIR_lib)
+	$(_W)echo Installing -- $(<F)
+	$(_V)$(call install_lib,$<,$(SDKDIR_lib))
+
+dist: filecrypt$(EXE_SUFFIX) install_filecrypt.h
+	$(_W)echo Installing from $(abspath $(<D)) to $(DISTDIR)
+	$(_W)echo Installing -- $(<F)
+	$(_V)$(call install_exe,$<,$(DISTDIR))
+$(WINDOWS)dist: install_libfilecrypt.a
+
+libfilecrypt.a: $(libfilecrypt_OBJS) Makefile.lib-LIBFILECRYPT
+	$(_W)echo Archiving - $@
+	$(_V)$(AR) rc $@ $(libfilecrypt_OBJS)
+	$(_V)$(RANLIB) $@
+
+filecrypt$(EXE_SUFFIX): $(filecrypt_OBJS) libfilecrypt.a
+	$(_W)echo Linking - $@
+	$(_V)$(LINK.o) -o $@ $^ $(filecrypt_LIBS)
+
+$(libfilecrypt_OBJS): .deps/.exists
+$(libfilecrypt_OBJS): %.o : $(SRCROOT)/%.c
+	$(_W)echo Compiling - $@
+	$(_V)$(COMPILE.c) $(EXTRA_CFLAGS) $(libfilecrypt_CPPFLAGS) $< -o $@
+
+$(filecrypt_OBJS): .deps/.exists
+$(filecrypt_OBJS): %.o : $(SRCROOT)/%.c
+	$(_W)echo Compiling - $@
+	$(_V)$(COMPILE.c) $(EXTRA_CFLAGS) $(filecrypt_CPPFLAGS) $< -o $@
+
+Makefile.lib-LIBFILECRYPT:
+	@rm -f $@
+	@(echo "LIBFILECRYPT_CPPFLAGS = -I$(SRCROOT)" ;\
+	  echo "LIBFILECRYPT_LIBS = -L$(abspath .) -lfilecrypt" ;\
+	  echo "LIBFILECRYPT_DEPS = $(abspath .)/libfilecrypt.a" ;\
+	  echo "LIBFILECRYPT_SRCDIR = $(SRCROOT)" ;\
+	  echo "$(abspath .)/libfilecrypt.a: $(patsubst %,$(SRCROOT)/%,$(libfilecrypt_SRCS))" ) >$@
+
+-include .deps/*.d

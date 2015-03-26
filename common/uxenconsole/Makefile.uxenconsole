@@ -1,0 +1,45 @@
+#
+# Copyright 2014-2015, Bromium, Inc.
+# SPDX-License-Identifier: ISC
+#
+
+CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
+
+all: uxenconsole$(EXE_SUFFIX) libuxenconsole.a
+
+libuxenconsole_OBJS = uxenconsolelib.o 
+UXENCONSOLE_OBJS = uxenconsole-$(TARGET_HOST).o libuxenconsole.a
+$(WINDOWS)UXENCONSOLE_OBJS += uxenconsole-res.o hid.o
+$(WINDOWS)LDLIBS += -lgdi32
+$(WINDOWS)CPPFLAGS += -I$(SRCROOT) $(LIBXC_CPPFLAGS) $(LIBUXENCTL_CPPFLAGS) -I$(TOPDIR)/common/include -I$(TOPDIR) -I$(TOPDIR)/common/include/xen-public
+$(OSX)LDLIBS +=  -mmacosx-version-min=10.8 -fobjc-arc -fobjc-link-runtime -framework AppKit 
+$(OSX)CFLAGS += -fobjc-arc
+
+$(UXENCONSOLE_OBJS) $(libuxenconsole_OBJS): .deps/.exists
+
+uxenconsole$(EXE_SUFFIX): $(UXENCONSOLE_OBJS)
+	$(_W)echo Linking - $@
+	$(_V)$(call link,$@,$^ $(LDLIBS))
+
+libuxenconsole.a: $(libuxenconsole_OBJS) Makefile.lib-LIBUXENCONSOLE
+	$(_W)echo Archiving - $@
+	$(_V)$(AR) rc $@ $(libuxenconsole_OBJS)
+	$(_V)$(RANLIB) $@
+
+%.o: %.c
+	$(_W)echo Compiling - $@
+	$(_V)$(COMPILE.c) $< -o $@
+
+%.o : %.rc
+	$(_W)echo Compiling - $@
+	$(_V)$(WINDRES) $(WINDRESFLAGS) $(WINDRES_TARGET_FORMAT_OPTION) $< -o $@
+
+Makefile.lib-LIBUXENCONSOLE:
+	@rm -f $@
+	@(echo "LIBUXENCONSOLE_CPPFLAGS = -I$(SRCROOT)" ;\
+	  echo "LIBUXENCONSOLE_LIBS = -L$(abspath .) -luxenconsole" ;\
+	  echo "LIBUXENCONSOLE_DEPS = $(abspath .)/libuxenconsole.a" ;\
+	  echo "LIBUXENCONSOLE_SRCDIR = $(SRCROOT)" ;\
+	  echo "$(abspath .)/libuxenconsole.a: $(patsubst %,$(SRCROOT)/%,$(libuxenconsole_SRCS))" ) >$@
+
+-include .deps/*.d

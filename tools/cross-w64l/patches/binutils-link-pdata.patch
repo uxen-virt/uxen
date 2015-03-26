@@ -1,0 +1,11 @@
+--- binutils-2.21.1/bfd/peXXigen.c.orig	2011-11-30 00:05:31.000000000 -0800
++++ binutils-2.21.1/bfd/peXXigen.c	2011-11-30 00:06:08.000000000 -0800
+@@ -2444,7 +2444,7 @@
+ /* If there is a .pdata section and we have linked pdata finally, we
+      need to sort the entries ascending.  */
+ #if !defined(COFF_WITH_pep) && defined(COFF_WITH_pex64)
+-  {
++  if (!pfinfo->info->relocatable) {
+     asection *sec = bfd_get_section_by_name (abfd, ".pdata");
+ 
+     if (sec)

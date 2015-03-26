@@ -1,0 +1,28 @@
+diff --git a/src/bfd/libcoff-in.h b/src/bfd/libcoff-in.h
+index 490f2a8..9ce33ce 100644
+--- a/src/bfd/libcoff-in.h
++++ b/src/bfd/libcoff-in.h
+@@ -568,6 +568,9 @@ extern bfd_boolean _bfd_coff_reloc_link_order
+ #define coff_get_section_contents_in_window \
+   _bfd_generic_get_section_contents_in_window
+ 
++#define coff_get_section_contents_in_window_with_mode \
++  _bfd_generic_get_section_contents_in_window_with_mode
++
+ /* Functions in xcofflink.c.  */
+ 
+ extern long _bfd_xcoff_get_dynamic_symtab_upper_bound
+diff --git a/src/bfd/libcoff.h b/src/bfd/libcoff.h
+index 67ff404..a091c96 100644
+--- a/src/bfd/libcoff.h
++++ b/src/bfd/libcoff.h
+@@ -572,6 +572,9 @@ extern bfd_boolean _bfd_coff_reloc_link_order
+ #define coff_get_section_contents_in_window \
+   _bfd_generic_get_section_contents_in_window
+ 
++#define coff_get_section_contents_in_window_with_mode \
++  _bfd_generic_get_section_contents_in_window_with_mode
++
+ /* Functions in xcofflink.c.  */
+ 
+ extern long _bfd_xcoff_get_dynamic_symtab_upper_bound

@@ -1,0 +1,11 @@
+--- ./gcc/config/i386/cygming.h.orig	2011-11-25 15:08:16.844260665 -0800
++++ ./gcc/config/i386/cygming.h	2011-11-25 15:09:44.111164938 -0800
+@@ -174,7 +174,7 @@
+ 
+ /* Windows64 continues to use a 32-bit long type.  */
+ #undef LONG_TYPE_SIZE
+-#define LONG_TYPE_SIZE 32
++#define LONG_TYPE_SIZE (TARGET_64BIT ? 64 : 32)
+ 
+ union tree_node;
+ #define TREE union tree_node *

@@ -1,0 +1,63 @@
+#
+# Copyright 2013-2015, Bromium, Inc.
+# SPDX-License-Identifier: ISC
+#
+
+CPPFLAGS += -I$(SRCROOT)
+
+dist: all
+all: libxc.a Makefile.lib-LIBXC
+
+XENPUBLICDIR = $(TOPDIR)/common/include/xen-public
+XENDIR_include = $(TOPDIR)/xen/include
+UXENCTLDIR = $(TOPDIR)/common/uxenctl
+COMMONINCLUDEDIR = $(TOPDIR)/common/include
+XENFOREIGNDIR = $(TOPDIR)/common/xen-tools/include/xen-foreign
+FOREIGNINCLUDES = include/xen/foreign/x86_32.h \
+		  include/xen/foreign/x86_64.h
+
+CPPFLAGS += -I$(XENPUBLICDIR) -I$(XENDIR_include)
+libxc_CPPFLAGS += -D__XEN_TOOLS__ -D__UXEN_TOOLS__ -DQEMU_UXEN
+libxc_CPPFLAGS += -I$(abspath include)
+libxc_SRCS += xc_cpuid_x86.c
+libxc_SRCS += xc_domain.c
+libxc_SRCS += xc_hcall_buf.c
+libxc_SRCS += xc_hvm_build.c
+libxc_SRCS += xc_foreign_memory.c
+libxc_SRCS += xc_misc.c
+libxc_SRCS += xc_pagetab.c
+libxc_SRCS += xc_private.c
+libxc_SRCS += xc_uxen.c
+xc_uxen.o: CPPFLAGS += -I$(UXENCTLDIR) -I$(COMMONINCLUDEDIR)
+libxc_SRCS += xg_private.c
+libxc_SRCS += xtl_core.c
+libxc_SRCS += xtl_logger_stdio.c
+libxc_OBJS  = $(patsubst %.c,%.o,$(libxc_SRCS))
+libxc_OBJS := $(subst /,_,$(libxc_OBJS))
+
+EXTRA_CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
+
+libxc.a: $(libxc_OBJS)
+	$(_W)echo Archiving - $@
+	$(_V)$(AR) rc $@ $(libxc_OBJS)
+	$(_V)$(RANLIB) $@
+
+$(libxc_OBJS): .deps/.exists $(FOREIGNINCLUDES)
+$(libxc_OBJS): %.o : $(SRCROOT)/%.c
+	$(_W)echo Compiling - $@
+	$(_V)$(COMPILE.c) $(EXTRA_CFLAGS) $(libxc_CPPFLAGS) $< -o $@
+
+include/xen/foreign/%.h: $(XENFOREIGNDIR)/mkheader.py include/xen/foreign/.exists $(XENFOREIGNDIR)/structs.py $(XENDIR_include)/public/arch-x86/xen-%.h $(XENDIR_include)/public/arch-x86/xen.h $(XENDIR_include)/public/xen.h
+	$(_W)echo Generating - $@
+	$(_V)$(PYTHON) $< $(*F) $@ $(filter %.h,$^)
+
+Makefile.lib-LIBXC:
+	@rm -f $@
+	@(echo "LIBXC_CPPFLAGS = -I$(SRCROOT) -I$(XENPUBLICDIR)" ;\
+	  echo "LIBXC_CPPFLAGS += $(libxc_CPPFLAGS)" ;\
+	  echo "LIBXC_LIBS = -L$(abspath .) -lxc" ;\
+	  echo "LIBXC_DEPS = $(abspath .)/libxc.a" ;\
+	  echo "LIBXC_SRCDIR = $(SRCROOT)" ;\
+	  echo "$(abspath .)/libxc.a: $(patsubst %,$(SRCROOT)/%,$(libxc_SRCS))" ) >$@
+
+-include .deps/*.d

@@ -1,0 +1,2 @@
+# override the user's autocrlf since SDL build on mingw fails with crlf files
+* -text

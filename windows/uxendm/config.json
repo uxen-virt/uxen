@@ -1,0 +1,16 @@
+
+{
+  "name" : "VM1",
+  "boot-order" : "dc",
+  "block" :
+    { "id" : "hda", "proto" : "vhd",
+  	"path" : "c:/xt2/images/win7-8-snap.vhd" },
+  "block" :
+    { "id" : "cdrom", "proto" : "raw", "path" :
+      "c:/xt2/isos/en_windows_7_ultimate_with_sp1_x64_dvd_u_677332_auto.iso" },
+  "keyboard" : "en-us",
+  "monitor" : { "proto" : "tcp", "addr" : "192.168.137.1", "port" : 9000 },
+  "memory" : 1024,
+  "net" : { "type" : "nic", "model" : "e1000" },
+  "net" : { "type" : "user" }
+}

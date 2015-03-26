@@ -1,0 +1,51 @@
+diff --git a/gdb/doc/gdb.texinfo b/gdb/doc/gdb.texinfo
+index 95ae000..361ee01 100644
+--- a/gdb/doc/gdb.texinfo
++++ b/gdb/doc/gdb.texinfo
+@@ -4824,6 +4824,7 @@ invocations have returned.
+ 
+ 
+ @kindex advance @var{location}
++@item stepi
+ @itemx advance @var{location}
+ Continue running the program up to the given @var{location}.  An argument is
+ required, which should be of one of the forms described in
+@@ -5719,6 +5720,7 @@ function invocation, you end up at the beginning.
+ @kindex set exec-direction
+ @item set exec-direction
+ Set the direction of target execution.
++@item stepi
+ @itemx set exec-direction reverse
+ @cindex execute forward or backward in time
+ @value{GDBN} will perform all execution commands in reverse, until the
+@@ -38720,7 +38722,7 @@ A string in the constant pool is zero-terminated.
+ @printindex cp
+ 
+ @tex
+-% I think something like @colophon should be in texinfo.  In the
++% I think something like @@colophon should be in texinfo.  In the
+ % meantime:
+ \long\def\colophon{\hbox to0pt{}\vfill
+ \centerline{The body of this manual is set in}
+@@ -38732,7 +38734,7 @@ A string in the constant pool is zero-terminated.
+ \centerline{{\sl\fontname\tensl\/}}
+ \centerline{are used for emphasis.}\vfill}
+ \page\colophon
+-% Blame: doc@cygnus.com, 1991.
++% Blame: doc@@cygnus.com, 1991.
+ @end tex
+ 
+ @bye
+diff --git a/gdb/doc/gdbint.texinfo b/gdb/doc/gdbint.texinfo
+index 1845124..4d9c59a 100644
+--- a/gdb/doc/gdbint.texinfo
++++ b/gdb/doc/gdbint.texinfo
+@@ -34,7 +34,7 @@ This file documents the internals of the GNU debugger @value{GDBN}.
+ 
+ @titlepage
+ @title @value{GDBN} Internals
+-@subtitle{A guide to the internals of the GNU debugger}
++@subtitle A guide to the internals of the GNU debugger
+ @author John Gilmore
+ @author Cygnus Solutions
+ @author Second Edition:

@@ -1,0 +1,208 @@
+diff -pruN binutils-2.23.1.orig/binutils/nm.c binutils-2.23.1/binutils/nm.c
+--- binutils-2.23.1.orig/binutils/nm.c	2012-06-29 09:55:15.000000000 -0700
++++ binutils-2.23.1/binutils/nm.c	2013-12-09 18:02:20.000000000 -0800
+@@ -1691,7 +1691,7 @@ main (int argc, char **argv)
+ 
+   END_PROGRESS (program_name);
+ 
+-#ifdef HAVE_SBRK
++#if defined(HAVE_SBRK) && defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200112L
+   if (show_stats)
+     {
+       char *lim = (char *) sbrk (0);
+diff -pruN binutils-2.23.1.orig/binutils/readelf.c binutils-2.23.1/binutils/readelf.c
+--- binutils-2.23.1.orig/binutils/readelf.c	2012-11-05 08:27:35.000000000 -0800
++++ binutils-2.23.1/binutils/readelf.c	2013-12-09 18:02:02.000000000 -0800
+@@ -9041,7 +9041,7 @@ print_dynamic_symbol (bfd_vma si, unsign
+ 
+   n = print_vma (si, DEC_5);
+   if (n < 5)
+-    fputs ("     " + n, stdout);
++    fputs (&"     "[n], stdout);
+   printf (" %3lu: ", hn);
+   print_vma (psym->st_value, LONG_HEX);
+   putchar (' ');
+diff -pruN binutils-2.23.1.orig/binutils/winduni.c binutils-2.23.1/binutils/winduni.c
+--- binutils-2.23.1.orig/binutils/winduni.c	2011-10-25 01:03:17.000000000 -0700
++++ binutils-2.23.1/binutils/winduni.c	2013-12-09 18:01:36.000000000 -0800
+@@ -102,7 +102,7 @@ static const wind_language_t languages[]
+   { 0x040D, 862, 1255, "Hebrew", "Israel" },	      { 0x040E, 852, 1250, "Hungarian", "Hungary" },
+   { 0x040F, 850, 1252, "Icelandic", "Iceland" },      { 0x0410, 850, 1252, "Italian", "Italy" },
+   { 0x0411, 932,  932, "Japanese", "Japan" },	      { 0x0412, 949,  949, "Korean", "Korea (south)" },
+-  { 0x0413, 850, 1252, "Dutch", "Netherlands" },      { 0x0414, 850, 1252, "Norwegian (Bokmål)", "Norway" },
++  { 0x0413, 850, 1252, "Dutch", "Netherlands" },      { 0x0414, 850, 1252, "Norwegian (Bokmal)", "Norway" },
+   { 0x0415, 852, 1250, "Polish", "Poland" },	      { 0x0416, 850, 1252, "Portuguese", "Brazil" },
+   { 0x0418, 852, 1250, "Romanian", "Romania" },	      { 0x0419, 866, 1251, "Russian", "Russia" },
+   { 0x041A, 852, 1250, "Croatian", "Croatia" },	      { 0x041B, 852, 1250, "Slovak", "Slovakia" },
+diff -pruN binutils-2.23.1.orig/gas/as.c binutils-2.23.1/gas/as.c
+--- binutils-2.23.1.orig/gas/as.c	2012-06-07 05:47:23.000000000 -0700
++++ binutils-2.23.1/gas/as.c	2013-12-09 18:02:47.000000000 -0800
+@@ -966,14 +966,14 @@ This program has absolutely no warranty.
+ static void
+ dump_statistics (void)
+ {
+-#ifdef HAVE_SBRK
++#if defined(HAVE_SBRK) && defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200112L
+   char *lim = (char *) sbrk (0);
+ #endif
+   long run_time = get_run_time () - start_time;
+ 
+   fprintf (stderr, _("%s: total time in assembly: %ld.%06ld\n"),
+ 	   myname, run_time / 1000000, run_time % 1000000);
+-#ifdef HAVE_SBRK
++#if defined(HAVE_SBRK) && defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200112L
+   fprintf (stderr, _("%s: data size %ld\n"),
+ 	   myname, (long) (lim - (char *) &environ));
+ #endif
+diff -pruN binutils-2.23.1.orig/gas/config/atof-ieee.c binutils-2.23.1/gas/config/atof-ieee.c
+--- binutils-2.23.1.orig/gas/config/atof-ieee.c	2009-07-24 04:45:00.000000000 -0700
++++ binutils-2.23.1/gas/config/atof-ieee.c	2013-12-09 18:03:39.000000000 -0800
+@@ -419,7 +419,8 @@ gen_to_words (LITTLENUM_TYPE *words, int
+ 		     - generic_floating_point_number.low);
+ 
+   /* Seek (and forget) 1st significant bit.  */
+-  for (exponent_skippage = 0; !next_bits (1); ++exponent_skippage);;
++  for (exponent_skippage = 0; !next_bits (1); ++exponent_skippage)
++      ;
+   exponent_1 = (generic_floating_point_number.exponent
+ 		+ generic_floating_point_number.leader
+ 		+ 1
+diff -pruN binutils-2.23.1.orig/gas/symbols.c binutils-2.23.1/gas/symbols.c
+--- binutils-2.23.1.orig/gas/symbols.c	2012-05-04 20:05:26.000000000 -0700
++++ binutils-2.23.1/gas/symbols.c	2013-12-09 18:03:21.000000000 -0800
+@@ -1702,7 +1702,8 @@ dollar_label_name (register long n,	/* w
+       *q = i % 10 + '0';
+       i /= 10;
+     }
+-  while ((*p++ = *--q) != '\0');;
++  while ((*p++ = *--q) != '\0')
++      ;
+ 
+   /* The label, as a '\0' ended string, starts at symbol_name_build.  */
+   return symbol_name_build;
+@@ -1873,7 +1874,8 @@ fb_label_name (long n,	/* We just saw "n
+       *q = i % 10 + '0';
+       i /= 10;
+     }
+-  while ((*p++ = *--q) != '\0');;
++  while ((*p++ = *--q) != '\0')
++      ;
+ 
+   /* The label, as a '\0' ended string, starts at symbol_name_build.  */
+   return (symbol_name_build);
+diff -pruN binutils-2.23.1.orig/ld/ldmain.c binutils-2.23.1/ld/ldmain.c
+--- binutils-2.23.1.orig/ld/ldmain.c	2012-07-13 06:20:26.000000000 -0700
++++ binutils-2.23.1/ld/ldmain.c	2013-12-09 18:04:40.000000000 -0800
+@@ -495,7 +495,7 @@ main (int argc, char **argv)
+ 
+   if (config.stats)
+     {
+-#ifdef HAVE_SBRK
++#if defined(HAVE_SBRK) && defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200112L
+       char *lim = (char *) sbrk (0);
+ #endif
+       long run_time = get_run_time () - start_time;
+@@ -503,7 +503,7 @@ main (int argc, char **argv)
+       fflush (stdout);
+       fprintf (stderr, _("%s: total time in link: %ld.%06ld\n"),
+ 	       program_name, run_time / 1000000, run_time % 1000000);
+-#ifdef HAVE_SBRK
++#if defined(HAVE_SBRK) && defined(_POSIX_C_SOURCE) && _POSIX_C_SOURCE >= 200112L
+       fprintf (stderr, _("%s: data size %ld\n"), program_name,
+ 	       (long) (lim - (char *) &environ));
+ #endif
+diff -pruN binutils-2.23.1.orig/ld/ldmisc.c binutils-2.23.1/ld/ldmisc.c
+--- binutils-2.23.1.orig/ld/ldmisc.c	2012-04-02 20:37:26.000000000 -0700
++++ binutils-2.23.1/ld/ldmisc.c	2013-12-09 18:05:06.000000000 -0800
+@@ -361,7 +361,7 @@ vfinfo (FILE *fp, const char *fmt, va_li
+ 		    if (functionname != NULL && fmt[-1] == 'G')
+ 		      lfinfo (fp, "%T", functionname);
+ 		    else if (filename != NULL && linenumber != 0)
+-		      fprintf (fp, "%u%s", linenumber, ":" + done);
++		      fprintf (fp, "%u%s", linenumber, &":"[done]);
+ 		    else
+ 		      done = FALSE;
+ 		  }
+diff -pruN binutils-2.23.1.orig/ld/plugin.c binutils-2.23.1/ld/plugin.c
+--- binutils-2.23.1.orig/ld/plugin.c	2012-06-14 16:44:38.000000000 -0700
++++ binutils-2.23.1/ld/plugin.c	2013-12-09 18:05:32.000000000 -0800
+@@ -425,8 +425,8 @@ static enum ld_plugin_status
+ get_input_file (const void *handle, struct ld_plugin_input_file *file)
+ {
+   ASSERT (called_plugin);
+-  handle = handle;
+-  file = file;
++  (void)handle;
++  (void)file;
+   return LDPS_ERR;
+ }
+ 
+@@ -435,7 +435,7 @@ static enum ld_plugin_status
+ release_input_file (const void *handle)
+ {
+   ASSERT (called_plugin);
+-  handle = handle;
++  (void)handle;
+   return LDPS_ERR;
+ }
+ 
+diff -pruN binutils-2.23.1.orig/opcodes/i386-dis.c binutils-2.23.1/opcodes/i386-dis.c
+--- binutils-2.23.1.orig/opcodes/i386-dis.c	2012-07-19 06:41:03.000000000 -0700
++++ binutils-2.23.1/opcodes/i386-dis.c	2013-12-09 18:00:10.000000000 -0800
+@@ -12039,7 +12039,7 @@ dofloat (int sizeflag)
+ static void
+ OP_ST (int bytemode ATTRIBUTE_UNUSED, int sizeflag ATTRIBUTE_UNUSED)
+ {
+-  oappend ("%st" + intel_syntax);
++  oappend (&"%st"[(int)intel_syntax]);
+ }
+ 
+ static void
+@@ -12568,32 +12568,32 @@ append_seg (void)
+   if (prefixes & PREFIX_CS)
+     {
+       used_prefixes |= PREFIX_CS;
+-      oappend ("%cs:" + intel_syntax);
++      oappend (&"%cs:"[(int)intel_syntax]);
+     }
+   if (prefixes & PREFIX_DS)
+     {
+       used_prefixes |= PREFIX_DS;
+-      oappend ("%ds:" + intel_syntax);
++      oappend (&"%ds:"[(int)intel_syntax]);
+     }
+   if (prefixes & PREFIX_SS)
+     {
+       used_prefixes |= PREFIX_SS;
+-      oappend ("%ss:" + intel_syntax);
++      oappend (&"%ss:"[(int)intel_syntax]);
+     }
+   if (prefixes & PREFIX_ES)
+     {
+       used_prefixes |= PREFIX_ES;
+-      oappend ("%es:" + intel_syntax);
++      oappend (&"%es:"[(int)intel_syntax]);
+     }
+   if (prefixes & PREFIX_FS)
+     {
+       used_prefixes |= PREFIX_FS;
+-      oappend ("%fs:" + intel_syntax);
++      oappend (&"%fs:"[(int)intel_syntax]);
+     }
+   if (prefixes & PREFIX_GS)
+     {
+       used_prefixes |= PREFIX_GS;
+-      oappend ("%gs:" + intel_syntax);
++      oappend (&"%gs:"[(int)intel_syntax]);
+     }
+ }
+ 
+@@ -13924,7 +13924,7 @@ OP_ESreg (int code, int sizeflag)
+ 	  intel_operand_size (b_mode, sizeflag);
+ 	}
+     }
+-  oappend ("%es:" + intel_syntax);
++  oappend (&"%es:"[(int)intel_syntax]);
+   ptr_reg (code, sizeflag);
+ }
+ 

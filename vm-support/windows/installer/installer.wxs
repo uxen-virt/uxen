@@ -1,0 +1,195 @@
+<?xml version="1.0"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:difx="http://schemas.microsoft.com/wix/DifxAppExtension"
+     xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+    <?if $(var.Win64)=yes ?>
+      <?define ProgramFilesFolder="ProgramFiles64Folder" ?>
+    <?else ?>
+      <?define ProgramFilesFolder="ProgramFilesFolder" ?>
+    <?endif ?>
+    <Product Name="uXen VM support" Id="856AD792-7FC9-4A3F-83EA-BE15FA743AA7" UpgradeCode="14A05E48-824F-4A2A-9F44-ACB69825C649" Version="1.0.0" Manufacturer="uXen Project" Language="1033">
+        <Package Id="*" Keywords="Installer" Description="uXen VM support installer" Manufacturer="uXen Project" InstallerVersion="200" Compressed="yes" />
+        <Media Id='1' Cabinet='uXenDrvInstaller.cab' EmbedCab='yes' DiskPrompt='uXen Media' />
+        <Property Id='DiskPrompt' Value='uXen Install Media' />
+        <Directory Id='TARGETDIR' Name='SourceDir'>
+            <Directory Id="$(var.ProgramFilesFolder)">
+                <Directory Id='INSTALLDIR' Name='uXenGuest'>
+                    <Directory Id='uxendisp' Name='uxendisp'>
+                        <Component Id="uxendisp" Guid="263bd36e-b7df-45eb-a57a-0f8b7154ecae" Win64="$(var.Win64)">
+                            <Condition>
+                              <![CDATA[Installed OR (VersionNT < 602)]]>
+                            </Condition>
+                            <File Id="uxendisp.inf" Name="uxendisp.inf" DiskId="1" Source="$(var.uxendispdir)/uxendisp.inf" />
+                            <File Id="uxendisp.sys" Name="uxendisp.sys" DiskId="1" Source="$(var.uxendispdir)/uxendisp.sys" />
+                            <File Id="uxendisp.cat" Name="uxendisp.cat" DiskId="1" Source="$(var.uxendispdir)/uxendisp.cat" />
+                            <File Id="uxendispdd.dll" Name="uxendispdd.dll" DiskId="1" Source="$(var.uxendispdir)/uxendispdd.dll" />
+                            <difx:Driver Legacy='yes' ForceInstall='yes' Sequence='4' />
+                        </Component>
+                    </Directory>
+                    <Directory Id='uxenmouse' Name='uxenmouse'>
+                        <Component Id="uxenmouse" Guid="70a65e9d-4e90-4045-994c-df23d2a18130" Win64="$(var.Win64)">
+                            <File Id="uxenmouse.inf" Name="uxenmouse.inf" DiskId="1" Source="$(var.uxenmousedir)/uxenmouse.inf" />
+                            <File Id="uxenmouse.sys" Name="uxenmouse.sys" DiskId="1" Source="$(var.uxenmousedir)/uxenmouse.sys" />
+                            <File Id="uxenmouse.cat" Name="uxenmouse.cat" DiskId="1" Source="$(var.uxenmousedir)/uxenmouse.cat" />
+                            <File Id="uxenmouse_coinstaller" Name="WdfCoInstaller01009.dll" DiskId="1" Source="$(var.uxenmousedir)/WdfCoInstaller01009.dll" />
+                            <difx:Driver Legacy='yes' ForceInstall='yes' Sequence='4'/>
+                        </Component>
+                    </Directory>
+                    <Directory Id='uxenaudio' Name='uxenaudio'>
+                        <Component Id="uxenaudio" Guid="2918aef8-3812-3910-afbc-de9182ac1123" Win64="$(var.Win64)">
+                          <File Id="uxenaudio.inf" Name="uxenaudio.inf" DiskId="1" Source="$(var.uxenaudiodir)/uxenaudio.inf" />
+                          <File Id="uxenaudio.sys" Name="uxenaudio.sys" DiskId="1" Source="$(var.uxenaudiodir)/uxenaudio.sys" />
+                          <File Id="uxenaudio.cat" Name="uxenaudio.cat" DiskId="1" Source="$(var.uxenaudiodir)/uxenaudio.cat" />
+                          <difx:Driver Legacy='yes' ForceInstall='yes' Sequence='4'/>
+                        </Component>
+                    </Directory>
+                    <Directory Id='uxensf' Name='uxensf'>
+                        <Component Id="uxensf" Guid="53b5cb0a-b87e-41e9-867b-9904b941433b" Win64="$(var.Win64)">
+                            <File Id="uxensf.inf" Name="uxensf.inf" DiskId="1" Source="$(var.uxensfdir)/uxensf.inf" />
+                            <File Id="uxensf.sys" Name="uxensf.sys" DiskId="1" Source="$(var.uxensfdir)/uxensf.sys" />
+                            <File Id="VBoxMRXNP.dll" Name="VBoxMRXNP.dll" DiskId="1" Source="$(var.uxensfdir)/VBoxMRXNP.dll" />
+                            <File Id="VBoxMRXNP32.dll" Name="VBoxMRXNP32.dll" DiskId="1" Source="$(var.uxensfdir)/VBoxMRXNP32.dll" />
+                            <difx:Driver Legacy="yes" ForceInstall="yes" Sequence='4'/>
+                        </Component>
+                    </Directory>
+                    <Directory Id='uxenevent' Name='uxenevent'>
+                        <Component Id="uxenevent" Guid="de4086cb-0908-4065-a4ab-e618402bfdbc" Win64="$(var.Win64)">
+                            <File Id="uxensvc.exe" Name="uxensvc.exe" DiskId="1" Source="$(var.uxensvcdir)/uxensvc.exe" /> <!-- Needs to be first in the list -->
+                            <File Id="uxenevent.exe" Name="uxenevent.exe" DiskId="1" Source="$(var.uxeneventdir)/uxenevent.exe" />
+                            <File Id="elevate.exe" Name="elevate.exe" DiskId="1" Source="$(var.elevatedir)/elevate.exe" />
+                            <ServiceInstall Id="ServiceInstaller" Type="ownProcess" Vital="yes" Name="uxensvc" DisplayName="uXen Service" Start="auto" Account="LocalSystem" ErrorControl="ignore" Interactive="no" />
+                            <ServiceControl Id="StartService" Start="install" Stop="both" Remove="uninstall" Name="uxensvc" Wait="no" />
+                        </Component>
+                    </Directory>
+                    <Directory Id='uxenclipboard' Name='uxenclipboard'>
+                        <Component Id="uxenclipboard" Guid="47313697-4aa6-4406-a1fe-f91439bd6625" Win64="$(var.Win64)">
+                            <File Id="uXenClipboard.exe" Name="uXenClipboard.exe" DiskId="1" Source="$(var.uxenclipboarddir)/uXenClipboard.exe" />
+                            <RegistryValue Id="uxenclipboard.reg" Root="HKMU" Action="write" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="uxenclipboard" Value="[#uXenClipboard.exe]" Type="string" />
+                        </Component>
+                    </Directory>
+                    <Directory Id='uxendmpdrv' Name='uxendmpdrv'>
+                        <Component Id="uxendmpdrv" Guid="2d2e837c-7aeb-42cd-9f94-abc11335887b" Win64="$(var.Win64)">
+                            <File Id="uxendmpdrv.sys" Name="uxendmpdrv.sys" DiskId="1" Source="$(var.uxendmpdrvdir)/uxendmpdrv.sys" />
+                            <File Id="uxendmpdrv.cat" Name="uxendmpdrv.cat" DiskId="1" Source="$(var.uxendmpdrvdir)/uxendmpdrv.cat" />
+                            <File Id="uxendmpdrv.inf" Name="uxendmpdrv.inf" DiskId="1" Source="$(var.uxendmpdrvdir)/uxendmpdrv.inf" />
+                            <difx:Driver Legacy="yes" ForceInstall="yes" Sequence='1' />
+                        </Component>
+                    </Directory>
+                    <Directory Id='uxenkmdod' Name='uxenkmdod'>
+                        <Component Id="uxenkmdod" Guid="0812a642-1d1d-4f46-b50f-5e7760235014">
+                            <Condition>
+                              <![CDATA[Installed OR (VersionNT >= 602)]]>
+                            </Condition>
+                            <File Id="uxenkmdod.inf" Name="uxenkmdod.inf" DiskId="1" Source="$(var.uxenkmdoddir)/uxenkmdod.inf" />
+                            <File Id="uxenkmdod.sys" Name="uxenkmdod.sys" DiskId="1" Source="$(var.uxenkmdoddir)/uxenkmdod.sys" />
+                            <File Id="uxenkmdod.cat" Name="uxenkmdod.cat" DiskId="1" Source="$(var.uxenkmdoddir)/uxenkmdod.cat" />
+                            <difx:Driver Legacy='yes' ForceInstall='yes' />
+                        </Component>
+                    </Directory>
+                    <Directory Id='uxenplatform' Name='uxenplatform'>
+                        <Component Id="uxenplatform" Guid="665dbdb8-3d98-4c56-917c-ab71fbed13e6" Win64="$(var.Win64)">
+                            <File Id="uxenplatform.sys" Name="uxenplatform.sys" DiskId="1" Source="$(var.uxenplatformdir)/uxenplatform.sys" />
+                            <File Id="uxenplatform.inf" Name="uxenplatform.inf" DiskId="1" Source="$(var.uxenplatformdir)/uxenplatform.inf" />
+                            <File Id="uxenplatform.cat" Name="uxenplatform.cat" DiskId="1" Source="$(var.uxenplatformdir)/uxenplatform.cat" />
+                            <File Id="uxenplatform_coinstaller" Name="WdfCoInstaller01009.dll" DiskId="1" Source="$(var.uxenplatformdir)/WdfCoInstaller01009.dll" />
+                            <File Id="uxenvmlib.sys_0" Name="uxenvmlib.sys" DiskId="1" Source="$(var.uxenplatformdir)/uxenvmlib.sys" />
+                            <difx:Driver ForceInstall="yes" Sequence='0' />
+                        </Component>
+                    </Directory>
+                    <Directory Id='uxenstor' Name='uxenstor'>
+                        <Component Id="uxenstor" Guid="6fd2e258-3a98-428a-8504-2072af0229fc" Win64="$(var.Win64)">
+                            <File Id="uxenstor.sys" Name="uxenstor.sys" DiskId="1" Source="$(var.uxenstordir)/uxenstor.sys" />
+                            <File Id="uxenstor.cat" Name="uxenstor.cat" DiskId="1" Source="$(var.uxenstordir)/uxenstor.cat" />
+                            <File Id="uxenstor.inf" Name="uxenstor.inf" DiskId="1" Source="$(var.uxenstordir)/uxenstor.inf" />
+                            <difx:Driver Legacy="yes" ForceInstall="yes" Sequence='7' />
+                        </Component>
+                    </Directory>
+<!--
+                    <Directory Id='uxenstorflt' Name='uxenstorflt'>
+                        <Component Id="uxenstorflt" Guid="a7597652-3d1b-4520-a41a-c474eb1867d5" Win64="$(var.Win64)">
+                            <File Id="uxenstorflt.sys" Name="uxenstorflt.sys" DiskId="1" Source="$(var.uxenstorfltdir)/uxenstorflt.sys" />
+                            <File Id="uxenstorflt.cat" Name="uxenstorflt.cat" DiskId="1" Source="$(var.uxenstorfltdir)/uxenstorflt.cat" />
+                            <File Id="uxenstorflt.inf" Name="uxenstorflt.inf" DiskId="1" Source="$(var.uxenstorfltdir)/uxenstorflt.inf" />
+                            <difx:Driver Legacy="yes" ForceInstall="yes" Sequence='2' />
+                        </Component>
+                    </Directory>
+-->
+                    <Directory Id='uxenpreload' Name='uxenpreload'>
+                        <Component Id="uxenpreload" Guid="9e8c676d-135b-4e5f-985c-b8df2c9db90f" Win64="$(var.Win64)">
+                            <File Id="uxenpreload.dll" Name="uxenpreload.dll" DiskId="1" Source="$(var.uxenpreloaddir)/uxenpreload.dll" />
+                            <RegistryValue Root="HKLM" Action="write" Key="Software\Microsoft\Windows NT\CurrentVersion\Windows" Name="AppInit_DLLs" Value="[!uxenpreload.dll]" Type="string" />
+                            <RegistryValue Root="HKLM" Action="write" Key="Software\Microsoft\Windows NT\CurrentVersion\Windows" Name="LoadAppInit_DLLs" Value="1" Type="integer" />
+                            <?if $(var.Win64)=yes ?>
+                                <File Id="uxenpreload32.dll" Name="uxenpreload32.dll" DiskId="1" Source="$(var.uxenpreloaddir)/uxenpreload32.dll" />
+                                <RegistryValue Root="HKLM" Action="write" Key="Software\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Windows" Name="AppInit_DLLs" Value="[!uxenpreload32.dll]" Type="string" />
+                                <RegistryValue Root="HKLM" Action="write" Key="Software\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Windows" Name="LoadAppInit_DLLs" Value="1" Type="integer" />
+                            <?endif?>
+                            <File Id="inject.exe" Name="inject.exe" DiskId="1" Source="$(var.uxenpreloaddir)/inject.exe" />
+                        </Component>
+                    </Directory>
+                    <Directory Id='uxenv4vguest' Name='uxenv4vguest'>
+                        <Component Id="uxenv4vguest" Guid="3dba13b3-b439-46d1-914b-a2095218766a" Win64="$(var.Win64)">
+                            <File Id="uxenv4vguest.sys" Name="uxenv4vguest.sys" DiskId="1" Source="$(var.uxenv4vguestdir)/uxenv4vguest.sys" />
+                            <File Id="uxenv4vguest.cat" Name="uxenv4vguest.cat" DiskId="1" Source="$(var.uxenv4vguestdir)/uxenv4vguest.cat" />
+                            <File Id="uxenv4vguest.inf" Name="uxenv4vguest.inf" DiskId="1" Source="$(var.uxenv4vguestdir)/uxenv4vguest.inf" />
+                            <File Id="uxenv4vguestdir_coinstaller" Name="WdfCoInstaller01009.dll" DiskId="1" Source="$(var.uxenv4vguestdir)/WdfCoInstaller01009.dll" />
+                            <File Id="uxenv4vlib.sys_0" Name="uxenv4vlib.sys" DiskId="1" Source="$(var.uxenv4vguestdir)/uxenv4vlib.sys" />
+                            <File Id="uxenvmlib.sys_1" Name="uxenvmlib.sys" DiskId="1" Source="$(var.uxenv4vguestdir)/uxenvmlib.sys" />
+                            <difx:Driver ForceInstall="yes" Sequence='5' />
+                        </Component>
+                    </Directory>
+                    <Directory Id='uxennet' Name='uxennet'>
+                        <Component Id="uxennet" Guid="4b539cfb-ffac-4e42-96bf-35c9cc2b66aa">
+                            <File Id="uxennet.sys" Name="uxennet.sys" DiskId="1" Source="$(var.uxennetdir)/uxennet.sys" />
+                            <File Id="uxennet.cat" Name="uxennet.cat" DiskId="1" Source="$(var.uxennetdir)/uxennet.cat" />
+                            <File Id="uxennet.inf" Name="uxennet.inf" DiskId="1" Source="$(var.uxennetdir)/uxennet.inf" />
+                            <File Id="uxenv4vlib.sys_1" Name="uxenv4vlib.sys" DiskId="1" Source="$(var.uxennetdir)/uxenv4vlib.sys" />
+                            <difx:Driver Legacy="yes" ForceInstall="yes" Sequence='6' />
+                        </Component>
+                    </Directory>
+                    <Directory Id='uxenhid' Name='uxenhid'>
+                        <Component Id="uxenhid" Guid="888021b0-dbda-476e-9847-e5954cecc772" Win64="$(var.Win64)">
+                            <File Id="uxenhid.sys" Name="uxenhid.sys" DiskId="1" Source="$(var.uxenhiddir)/uxenhid.sys" />
+                            <File Id="uxenhid.cat" Name="uxenhid.cat" DiskId="1" Source="$(var.uxenhiddir)/uxenhid.cat" />
+                            <File Id="uxenhid.inf" Name="uxenhid.inf" DiskId="1" Source="$(var.uxenhiddir)/uxenhid.inf" />
+                            <difx:Driver Legacy="yes" ForceInstall="yes" Sequence='6' />
+                        </Component>
+                    </Directory>
+<!--
+                    <Directory Id='uxenzeroshare' Name='uxenzeroshare'>
+                        <Component Id="uxenzeroshare" Guid="F53A4E7d-03C1-48fA-92FE-E0AB224D084D">
+                            <File Id="uxenzeroshare.cat" Name="uxenzeroshare.cat" DiskId="1" Source="$(var.uxenzerosharedir)/uxenzeroshare.cat" />
+                            <File Id="uxenzeroshare.inf" Name="uxenzeroshare.inf" DiskId="1" Source="$(var.uxenzerosharedir)/uxenzeroshare.inf" />
+                            <File Id="uxenzeroshare.sys" Name="uxenzeroshare.sys" DiskId="1" Source="$(var.uxenzerosharedir)/uxenzeroshare.sys" />
+                            <File Id="uxenzeroshareconsole.exe" Name="uxenzeroshareconsole.exe" DiskId="1" Source="$(var.uxenzerosharedir)/uxenzeroshareconsole.exe" />
+                            <File Id="dbghelp.dll" Name="dbghelp.dll" DiskId="1" Source="$(var.uxenzerosharedir)/dbghelp.dll" />
+                            <File Id="symsrv.dll" Name="symsrv.dll" DiskId="1" Source="$(var.uxenzerosharedir)/symsrv.dll" />
+                            <File Id="symsrv.yes" Name="symsrv.yes" DiskId="1" Source="$(var.uxenzerosharedir)/symsrv.yes" />
+                            <difx:Driver Legacy="yes" ForceInstall="yes" Sequence="2" />
+                        </Component>
+                    </Directory>
+-->
+                </Directory>
+            </Directory>
+        </Directory>
+        <Feature Id='Complete' Level='1'>
+            <ComponentRef Id='uxendisp' />
+            <ComponentRef Id='uxenmouse' />
+            <ComponentRef Id='uxenaudio' />
+            <ComponentRef Id='uxensf' />
+            <ComponentRef Id='uxenclipboard' />
+            <ComponentRef Id='uxenevent' />
+            <ComponentRef Id='uxendmpdrv' />
+            <ComponentRef Id='uxenkmdod' />
+            <ComponentRef Id='uxenplatform' />
+            <ComponentRef Id='uxenstor' />
+<!--            <ComponentRef Id='uxenstorflt' /> -->
+            <ComponentRef Id='uxenv4vguest' />
+            <ComponentRef Id='uxennet' />
+            <ComponentRef Id='uxenpreload' />
+            <ComponentRef Id='uxenhid' />
+<!--            <ComponentRef Id='uxenzeroshare' /> -->
+        </Feature>
+        <UIRef Id="WixUI_Minimal" />
+    </Product>
+</Wix>

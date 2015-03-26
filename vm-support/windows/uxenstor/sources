@@ -1,0 +1,21 @@
+TARGETNAME = uxenstor
+TARGETTYPE = DRIVER
+
+!include ../common/sources.inc
+
+NTTARGETFILE0 = $(OBJ_PATH)\$(O)\$(INF_NAME).inf
+PASS0_BINPLACE = $(NTTARGETFILE0)
+
+NTTARGETFILE2 = POST
+
+INCLUDES=..\..\..\common\include\xen-public;..\common;$(UXENV4VLIB_INC);$(WDK8_PATH)\inc
+
+TARGETLIBS=$(TARGETLIBS) $(UXENV4VLIB_LIB)
+
+SOURCES = diag.c            \
+          perfcnt.c         \
+          readwrite.c       \
+          smbios.c          \
+          trace.c           \
+          uxenstor.c        \
+          uxenstor.rc

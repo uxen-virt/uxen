@@ -1,0 +1,46 @@
+[Version]
+Signature="$Windows NT$"
+Class=DumpDevice
+ClassGuid = {B9C2E0CA-AE95-4F4D-A53E-C695AD4BE730}
+Provider=%uXenMfg%
+DriverVer = 09/28/2012, 1.0.0.0
+DriverPackageType=KernelService
+CatalogFile = uxendmpdrv.cat
+
+[SourceDisksNames]
+1 = %uxendmpdrv.MediaDesc%
+
+[SourceDisksFiles]
+uxendmpdrv.sys = 1
+
+[DestinationDirs]
+DefaultDestDir          = 11 ; system32
+uxendmpdrv_CopyFiles    = 12 ; drivers
+
+[DefaultInstall]
+CopyFiles = uxendmpdrv_CopyFiles
+
+[DefaultUninstall]
+DelFiles = uxendmpdrv_CopyFiles
+
+[uxendmpdrv_CopyFiles]
+uxendmpdrv.sys
+
+[DefaultInstall.Services]
+AddService = uxendmpdrv, 0x00000802, uxendmpdrv_ServiceInstallSection
+
+[DefaultUninstall.Services]
+DelService = uxendmpdrv, 0x200
+
+[uxendmpdrv_ServiceInstallSection]
+DisplayName    = %uxendmpdrv_svcdesc%
+ServiceType    = 0x00000001 ; SERVICE_KERNEL_DRIVER
+StartType      = 0x00000000 ; SERVICE_BOOT_START
+ErrorControl   = 0x00000001 ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %12%\uxendmpdrv.sys
+
+[Strings]
+uXenMfg = "uXen Project"
+uxendmpdrv.DeviceDesc = "uXen Crash Dump"
+uxendmpdrv_svcdesc = "uXen Crash Dump Driver"
+uxendmpdrv.MediaDesc = "uXen installation Media"

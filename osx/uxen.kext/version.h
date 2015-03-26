@@ -1,0 +1,24 @@
+/*
+ * Copyright 2013-2015, Bromium, Inc.
+ * SPDX-License-Identifier: ISC
+ */
+
+#ifndef _VERSION_H_
+#define _VERSION_H_
+
+#include "build_info.h"
+
+#define	UXEN_DRIVER_VERSION_MAJOR	0x0000
+#define	UXEN_DRIVER_VERSION_MINOR	0x0005
+#define	UXEN_DRIVER_VERSION_REVISION	0x0000
+#define	UXEN_DRIVER_VERSION_BUILD	0x0000
+
+#define	UXEN_DRIVER_VERSION_TAG		"matricks"
+
+#define UXEN_DRIVER_PRODUCTVERSION_STR "0.5 " UXEN_DRIVER_VERSION_TAG
+
+#ifndef UXEN_DRIVER_VERSION_CHANGESET
+#define UXEN_DRIVER_VERSION_CHANGESET "undefined"
+#endif
+
+#endif  /* _VERSION_H_ */

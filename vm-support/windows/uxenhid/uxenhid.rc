@@ -1,0 +1,23 @@
+/*
+ * Copyright 2014-2015, Bromium, Inc.
+ * SPDX-License-Identifier: ISC
+ */
+
+#include <windows.h>
+
+#include <ntverp.h>
+
+#define	VER_FILETYPE	VFT_DRV
+#define	VER_FILESUBTYPE	VFT2_DRV_SYSTEM
+#define VER_FILEDESCRIPTION_STR    "uXen HID minidriver"
+#define VER_INTERNALNAME_STR       "uxenhid.sys"
+#undef VER_PRODUCTNAME_STR
+#define VER_PRODUCTNAME_STR		"uXen HID"
+#undef VER_COMPANYNAME_STR
+#define VER_COMPANYNAME_STR		"uXen Project"
+#define VER_LEGALCOPYRIGHT_STR		"Copyright © uXen Project. All rights reserved."
+#define VER_LEGALCOPYRIGHT_STR_WITH_YEARS "Copyright © 2014 uXen Project. All rights reserved."
+
+#define VER_LANGNEUTRAL
+#include "common.ver"
+

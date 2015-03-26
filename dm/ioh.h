@@ -1,0 +1,152 @@
+/*
+ * Copyright 2012-2015, Bromium, Inc.
+ * Author: Christian Limpach <Christian.Limpach@gmail.com>
+ * SPDX-License-Identifier: ISC
+ */
+
+#ifndef _IOH_H_
+#define _IOH_H_
+
+#include <stdint.h>
+
+#include "os.h"
+#include "queue.h"
+#include "typedef.h"
+
+enum {
+   WO_OK,
+   WO_PROTECT,
+   WO_GC
+};
+
+typedef void IOReadHandler(void *opaque, const uint8_t *buf, int size);
+typedef int IOCanRWHandler(void *opaque);
+typedef int IOCanWHandler(void *opaque, uint8_t **pbuf);
+typedef void IOHandler(void *opaque);
+typedef void IOEventHandler(void *opaque, int event);
+
+struct io_handlers_tailq;
+
+int ioh_set_fd_handler(int fd, struct io_handlers_tailq *iohq, IOHandler *fd_read, IOHandler *fd_write,
+                       void *opaque);
+int ioh_set_fd_handler2(int fd,
+                        struct io_handlers_tailq *iohq,
+                        IOCanRWHandler *fd_read_poll,
+                        IOHandler *fd_read,
+                        IOCanRWHandler *fd_write_poll,
+                        IOHandler *fd_write,
+                        void *opaque);
+
+void ioh_wait_for_objects(struct io_handlers_tailq *piohq,
+                          WaitObjects *w, TimerQueue *active_timers, int *timeout, int *ret_wait);
+
+void host_main_loop_wait(int *timeout);
+
+#if defined(DEBUG) && !defined(LIBIMG)
+#define DEBUG_WAITOBJECTS
+#endif
+
+struct WaitObjectsDesc {
+    union {
+        WaitObjectFunc *func;
+        WaitObjectFunc2 *func2;
+    };
+    void *opaque;
+    int del;
+#ifdef DEBUG_WAITOBJECTS
+    const char *func_name;
+    int triggered;
+#endif
+};
+
+struct WaitObjects {
+    int num;
+    int del_state;
+    ioh_wait_event *events;
+    WaitObjectsDesc *desc;
+    int max;
+#ifdef __APPLE__
+    int queue_fd;
+    int queue_len;
+#endif
+};
+
+#ifdef __APPLE__
+#define WAITOBJECTS_INITIALIZER_EXTRA .queue_fd = -1,       \
+                                      .queue_len = 0,
+#else
+#define WAITOBJECTS_INITIALIZER_EXTRA
+#endif
+
+#define WAITOBJECTS_INITIALIZER {			\
+    .num = 0, .events = NULL, .desc = NULL, .max = 0, .del_state = WO_OK, \
+    WAITOBJECTS_INITIALIZER_EXTRA }
+
+typedef struct IOHandlerRecord {
+    int fd;
+#if defined(_WIN32)
+    ioh_handle np;
+#endif
+    union {
+	struct {
+	    IOCanRWHandler *fd_read_poll;
+	    IOHandler *fd_read;
+	    IOCanRWHandler *fd_write_poll;
+	    IOHandler *fd_write;
+	};
+#if defined(_WIN32)
+	struct {
+	    IOCanRWHandler *np_read_poll;
+	    IOHandler *np_read;
+	    IOHandler *np_write;
+	};
+#endif
+    };
+    int deleted;
+    void *opaque;
+    TAILQ_ENTRY(IOHandlerRecord) queue;
+    union {
+#if defined(CONFIG_NETEVENT)
+	struct {
+	    int object_events;
+#if defined(_WIN32)
+	    WSAEVENT event;
+#endif
+	};
+#endif  /* CONFIG_NETEVENT */
+#if defined(_WIN32)
+	struct {
+#define NP_READ_POLL 0
+#define NP_READ_PENDING 1
+#define NP_READ_DONE 2
+	    int np_read_pending;
+	};
+#endif
+    };
+} IOHandlerRecord;
+
+TAILQ_HEAD(io_handlers_tailq, IOHandlerRecord);
+extern struct io_handlers_tailq io_handlers;
+
+#ifndef DEBUG_WAITOBJECTS
+int ioh_add_wait_object(ioh_event *event, WaitObjectFunc *func, void *opaque,
+                        WaitObjects *w);
+#else
+int _ioh_add_wait_object(ioh_event *event, WaitObjectFunc *func, void *opaque,
+                         WaitObjects *w, const char *func_name);
+#define ioh_add_wait_object(event, func, opaque, w) \
+    _ioh_add_wait_object(event, func, opaque, w, #func)
+#endif
+int ioh_add_wait_fd(int fd, int events, WaitObjectFunc2 *func2, void *opaque,
+                    WaitObjects *w);
+void ioh_del_wait_object(ioh_event *event, WaitObjects *w);
+void ioh_del_wait_fd(int fd, WaitObjects *w);
+
+int ioh_set_np_handler2(ioh_handle np,
+                         IOCanRWHandler *np_read_poll,
+                         IOHandler *np_read,
+                         IOHandler *np_write,
+                         void *opaque,
+                         struct io_handlers_tailq *ioh_q);
+
+#endif	/* _IOH_H_ */

@@ -1,0 +1,66 @@
+diff -x '*.o' -ru acpica-unix2-20120711.orig/source/compiler/aslstartup.c acpica-unix2-20120711/source/compiler/aslstartup.c
+--- acpica-unix2-20120711.orig/source/compiler/aslstartup.c	2012-07-11 16:55:38 +0100
++++ acpica-unix2-20120711/source/compiler/aslstartup.c	2012-08-15 19:32:41 +0100
+@@ -145,7 +145,7 @@
+     char                    *DirectoryPathname,
+     char                    *FileSpecifier)
+ {
+-#ifdef WIN32
++#if defined(WIN32) && !defined(__MINGW32__)
+     void                    *DirInfo;
+     char                    *Filename;
+     int                     FileCount;
+diff -x '*.o' -ru acpica-unix2-20120711.orig/source/include/platform/acwin.h acpica-unix2-20120711/source/include/platform/acwin.h
+--- acpica-unix2-20120711.orig/source/include/platform/acwin.h	2012-07-11 16:55:44 +0100
++++ acpica-unix2-20120711/source/include/platform/acwin.h	2012-08-15 19:22:54 +0100
+@@ -49,6 +49,10 @@
+ /* Windows uses VC */
+ #ifdef _MSC_VER
+ #include "acmsvc.h"
++#else
++#ifdef __MINGW32__
++#define ACPI_USE_NATIVE_DIVIDE
++#endif
+ #endif
+ /*! [End] no source code translation !*/
+ 
+diff -x '*.o' -ru acpica-unix2-20120711.orig/source/os_specific/service_layers/osunixxf.c acpica-unix2-20120711/source/os_specific/service_layers/osunixxf.c
+--- acpica-unix2-20120711.orig/source/os_specific/service_layers/osunixxf.c	2012-07-11 16:55:44 +0100
++++ acpica-unix2-20120711/source/os_specific/service_layers/osunixxf.c	2012-08-15 19:35:21 +0100
+@@ -59,8 +59,10 @@
+ #include <stdarg.h>
+ #include <unistd.h>
+ #include <sys/time.h>
++#ifndef ACPI_SINGLE_THREADED
+ #include <semaphore.h>
+ #include <pthread.h>
++#endif
+ #include <errno.h>
+ 
+ #define _COMPONENT          ACPI_OS_SERVICES
+@@ -875,17 +877,25 @@
+  *
+  *****************************************************************************/
+ 
++#if defined(WIN32) || defined(WIN64)
++extern void Sleep(UINT64);
++#endif
++
+ void
+ AcpiOsSleep (
+     UINT64                  milliseconds)
+ {
+ 
++#if defined(WIN32) || defined(WIN64)
++    Sleep (milliseconds);
++#else
+     sleep (milliseconds / 1000);    /* Sleep for whole seconds */
+ 
+     /*
+      * Arg to usleep() must be less than 1,000,000 (1 second)
+      */
+     usleep ((milliseconds % 1000) * 1000);      /* Sleep for remaining usecs */
++#endif
+ }
+ 
+ 

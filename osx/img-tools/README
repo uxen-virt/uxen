@@ -1,0 +1,17 @@
+img-tools for OSX. Loosely based on the Windows version of same, but kept in a
+separate repo until we decide how much of the code should be shared. Check out
+in your xen tree under osx/img-tools.
+
+The tools:
+* img-create: import a flat file into a uXen block format, e.g.,
+  img-create fs.raw fs.swap
+
+* img-shallow: import files from the host file system into an
+  existing uXen block backend (not fully functional yet).
+
+* img-hfs: port of existing HFS+ offline editing tool, run
+  without args for usage.
+
+Known bugs/limitations:
+
+ * Pipes and sockets are silently ignored.
