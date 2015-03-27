@@ -1637,11 +1637,8 @@ static int swap_fill_read_holes(BDRVSwapState *s, uint64_t offset, uint64_t coun
                         swap_stats.shallow_miss += os_get_clock() - t0;
 #endif
                     }
-                    swap_unlock(s);
 
                     if (evicted) {
-                        /* Unmap evicted file outside lock, in case it might
-                         * take long. */
                         swap_unmap_file(evicted);
                         free(evicted);
                     }
@@ -1683,6 +1680,7 @@ static int swap_fill_read_holes(BDRVSwapState *s, uint64_t offset, uint64_t coun
                         swap_stats.shallow_read += os_get_clock() - t0;
 #endif
                     }
+                    swap_unlock(s);
 
                     /* Increment j by how many blocks we were supposed to read,
                      * as we have zero-filled any blocks we did not manage to
