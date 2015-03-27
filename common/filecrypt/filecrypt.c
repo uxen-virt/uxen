@@ -8,6 +8,12 @@
 #include <stdlib.h>
 #include <time.h>
 
+#if __x86_64__
+typedef uint64_t word_t;
+#else
+typedef uint32_t word_t;
+#endif
+
 static int
 _read(HANDLE file, void *buf, int cnt)
 {
@@ -168,23 +174,23 @@ static void
 _crypt(filecrypt_hdr_t *h, void *buf, uint64_t off, uint32_t len)
 {
     int keylen = h->keylen;
-    uint32_t keyoff = (uint32_t)(off % keylen);
-    uint64_t *key = (uint64_t*)&h->key[keyoff];
-    uint64_t *p = buf;
-    uint64_t *pk, *pkend;
+    uint32_t keyoff = (uint32_t)(off & (h->keylen*8-1));
+    word_t *key = (word_t*)&h->key[keyoff];
+    word_t *p = buf;
+    word_t *pk, *pkend;
     uint32_t n = len / keylen;
-    uint32_t r64 = (len % keylen) >> 3;
-    uint32_t r8  = (len % keylen) % 8;
+    uint32_t rwords = (len % keylen) / sizeof(word_t);
+    uint32_t r8  = (len % keylen) % sizeof(word_t);
 
     while (n--) {
         pk = key;
-        pkend = key + (h->keylen >> 3);
+        pkend = key + (h->keylen / sizeof(word_t));
         while (pk != pkend)
             *p++ ^= *pk++;
     }
 
     pk = key;
-    while (r64--)
+    while (rwords--)
         *p++ ^= *pk++;
 
     if (r8) {
