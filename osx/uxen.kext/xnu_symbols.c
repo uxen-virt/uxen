@@ -26,38 +26,64 @@ uxen_load_xnu_symbols(struct uxen_syms_desc *usd)
     struct uxen_xnu_sym *syms;
     void *desc;
     uint32_t i;
+    int rc;
 
     if (xnu_symbols_loaded) {
         fail_msg("already loaded");
         return EINVAL;
     }
 
-    desc = usd->usd_xnu_syms;
-    if (desc == NULL) {
-        fail_msg("no address");
+    if (usd->usd_size < usd->usd_symnum * sizeof(struct uxen_xnu_sym)) {
+        fail_msg("invalid array");
         return EINVAL;
+    }
+
+    desc = kernel_malloc(usd->usd_size);
+    if (desc == NULL) {
+	fail_msg("out of memory");
+        return ENOMEM;
+    }
+
+    rc = copyin((user_addr_t)usd->usd_xnu_syms, desc, usd->usd_size);
+    if (rc) {
+        fail_msg("wrong user addr");
+        kernel_free(desc, usd->usd_size);
+        return EFAULT;
     }
     syms = desc;
 
     sym_tbl_sz = usd->usd_symnum * sizeof (struct xnu_symbol);
     symbols = kernel_malloc(sym_tbl_sz);
-    if (!symbols)
-        return ENOMEM;
+    if (symbols == NULL) {
+        fail_msg("symbols alloc, out of memory");
+        kernel_free(desc, usd->usd_size);
+	return ENOMEM;
+    }
+
     str_tbl_sz = usd->usd_size - usd->usd_symnum * sizeof (struct uxen_xnu_sym);
     string_table = kernel_malloc(str_tbl_sz);
-    if (!string_table) {
+    if (string_table == NULL) {
+        fail_msg("strtbl alloc, out of memory");
+        kernel_free(desc, usd->usd_size);
         kernel_free(symbols, sym_tbl_sz);
         return ENOMEM;
     }
-    memcpy(string_table, (char *)desc + sym_tbl_sz, str_tbl_sz);
 
-    for (i = 0; i < usd->usd_symnum; i++) {
+    memcpy(string_table,
+           (char *)desc + usd->usd_symnum * sizeof(struct uxen_xnu_sym),
+           str_tbl_sz);
+
+    for (i = 0, syms = desc; i < usd->usd_symnum; i++, syms++) {
+        /* This function essentially ask us to trust the issuer of ioctl,
+         * so security is pointless but, for the paranoid,
+         * we should check that syms->name is sane and that the address
+         * is a kernel address (belonging to Mach?). */
         symbols[i].addr = syms->addr;
         symbols[i].name = string_table + syms->name;
-        syms++;
     }
     symbol_count = i;
 
+    kernel_free(desc, usd->usd_size);
     xnu_symbols_loaded = 1;
     dprintk("%d XNU symbols loaded.\n", i);
 
