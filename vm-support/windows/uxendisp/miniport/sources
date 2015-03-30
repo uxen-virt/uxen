@@ -21,7 +21,7 @@ NTTARGETFILE1 = COPY
 
 NTTARGETFILE2 = POST
 
-SOURCES = pointer.c bochs.c uxendisp.c uxendisp.rc
+SOURCES = hw.c uxendisp.c uxendisp.rc
 
 INCLUDES=..\include
 

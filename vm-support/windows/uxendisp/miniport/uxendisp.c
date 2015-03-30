@@ -6,8 +6,7 @@
 
 #include "uxendisp.h"
 
-#include "bochs.h"
-#include "pointer.h"
+#include "hw.h"
 
 #include <uxendisp_ioctl.h>
 #include <uxendisp_esc.h>
@@ -52,7 +51,6 @@ BOOLEAN ResetHw(PVOID dev_ext, ULONG colums, ULONG Rows);
 #endif
 
 static VIDEO_ACCESS_RANGE legacyRanges[] = {
-    { 0x000001ce, 0x00000000, 0x00000002, 1, 1, 1, 0 },
     { 0x000003b0, 0x00000000, 0x0000000C, 1, 1, 1, 0 },
     { 0x000003c0, 0x00000000, 0x00000020, 1, 1, 1, 0 },
     { 0x000A0000, 0x00000000, 0x00020000, 0, 0, 1, 0 },
@@ -80,7 +78,7 @@ ULONG DriverEntry(PVOID context1, PVOID context2)
     init_data.HwInterrupt = Interrupt;
     init_data.HwResetHw = ResetHw;
     init_data.HwLegacyResourceList = legacyRanges;
-    init_data.HwLegacyResourceCount = 4;
+    init_data.HwLegacyResourceCount = 3;
 
     ret = VideoPortInitialize(context1, context2, &init_data, NULL);
 
@@ -98,26 +96,37 @@ VP_STATUS InitIO(PDEVICE_EXTENSION dev, PVIDEO_ACCESS_RANGE range);
 
 VP_STATUS InitIO(PDEVICE_EXTENSION dev, PVIDEO_ACCESS_RANGE range)
 {
-    PUCHAR io_base;
+    UINT8 *mmio = NULL;
+    ULONG mmio_size = range->RangeLength;
+    ULONG io_space = VIDEO_MEMORY_SPACE_MEMORY;
+    VP_STATUS ret;
 
     PAGED_CODE();
 
     DBG_INFO("range=%x/%x,io=%d", range->RangeStart,
-                                        range->RangeLength,
-                                        range->RangeInIoSpace);
+                                  range->RangeLength,
+                                  range->RangeInIoSpace);
 
-    io_base = VideoPortGetDeviceBase(dev, range->RangeStart, range->RangeLength,
-                                     range->RangeInIoSpace);
-
-    if (!io_base) {
-        return ERROR_NOT_ENOUGH_MEMORY;
+    ret = VideoPortMapMemory(dev, range->RangeStart,
+                             &mmio_size, &io_space, &mmio);
+    if (ret != NO_ERROR) {
+        return ret;
     }
 
-    dev->io_index = (PUSHORT)io_base;
-    dev->io_data = (PUSHORT)(io_base + 1);
-    dev->io_vga = NULL; /* Claimed as legacy range */
+    if (mmio_size < range->RangeLength) {
+        ret = ERROR_NOT_ENOUGH_MEMORY;
+        goto err_map;
+    }
+
+    dev->mmio_physical = range->RangeStart;
+    dev->mmio_start = mmio;
+    dev->mmio_size = mmio_size;
 
     return NO_ERROR;
+
+err_map:
+    VideoPortUnmapMemory(dev, mmio, NULL);
+    return ret;
 }
 
 #if defined(ALLOC_PRAGMA)
@@ -151,7 +160,7 @@ VP_STATUS InitVRAM(PDEVICE_EXTENSION dev, PVIDEO_ACCESS_RANGE range)
 
     dev->vram_physical = range->RangeStart;
     dev->vram_start = vram;
-    dev->vram_size = bochs_get_vram_size(dev);
+    dev->vram_size = hw_get_vram_size(dev);
 
     DBG_INFO("vram_size=%d RangeLength=%d",
              dev->vram_size, range->RangeLength);
@@ -195,11 +204,11 @@ VP_STATUS Prob(PDEVICE_EXTENSION dev, VIDEO_PORT_CONFIG_INFO *conf_info,
         return ERROR_INVALID_PARAMETER;
     }
 
-    if (pci_conf.VendorID != BOCHS_PCI_VEN) {
+    if (pci_conf.VendorID != UXENDISP_PCI_VEN) {
         return ERROR_INVALID_PARAMETER;
     }
 
-    if (pci_conf.DeviceID != BOCHS_PCI_DEV) {
+    if (pci_conf.DeviceID != UXENDISP_PCI_DEV) {
         return ERROR_INVALID_PARAMETER;
     }
 
@@ -227,7 +236,7 @@ VP_STATUS InitModes(PDEVICE_EXTENSION dev)
 
     DBG_INFO("");
 
-    n_modes = bochs_get_nmodes(dev);
+    n_modes = hw_get_nmodes(dev);
 
     /* Custom modes */
     dev->custom_mode = n_modes;
@@ -251,7 +260,7 @@ VP_STATUS InitModes(PDEVICE_EXTENSION dev)
     VideoPortZeroMemory(modes_info, sizeof(VIDEO_MODE_INFORMATION) * n_modes);
 
     for (i = 0; i < dev->custom_mode; i++) {
-        ret = bochs_get_mode_info(dev, i, &modes_info[i]);
+        ret = hw_get_mode_info(dev, i, &modes_info[i]);
         if (ret != NO_ERROR) {
             DBG_ERR("Error getting mode information (idx=%d): %d", i, ret);
             VideoPortFreePool(dev, modes_info);
@@ -328,7 +337,7 @@ VP_STATUS FindAdapter(PVOID dev_ext,
     }
 
     if ((status = Prob(dev, conf_info, ranges, 3)) != NO_ERROR ||
-        (status = InitIO(dev, &legacyRanges[0])) != NO_ERROR ||
+        (status = InitIO(dev, &ranges[1])) != NO_ERROR ||
         (status = InitVRAM(dev, &ranges[0])) != NO_ERROR ||
         (status = InitModes(dev)) != NO_ERROR) {
         DevExtensionCleanup(dev);
@@ -342,9 +351,6 @@ VP_STATUS FindAdapter(PVOID dev_ext,
     conf_info->VdmPhysicalVideoMemoryAddress.HighPart = 0;
     conf_info->VdmPhysicalVideoMemoryLength = 0;
 
-    VideoPortSetRegistryParameters(dev, L"HardwareInformation.DeviceType",
-                                   L"bochs", sizeof (L"bochs"));
-
     *again = 0;
 
     return NO_ERROR;
@@ -354,7 +360,7 @@ BOOLEAN ResetHw(PVOID dev_ext, ULONG colums, ULONG Rows)
 {
     PDEVICE_EXTENSION dev = dev_ext;
 
-    bochs_disable(dev);
+    hw_disable(dev);
 
     return FALSE;
 }
@@ -374,8 +380,7 @@ BOOLEAN Initialize(PVOID dev_ext)
     dev_desc.MaximumLength = 4096;
     dev->dma = VideoPortGetDmaAdapter(dev, &dev_desc);
 
-    bochs_init(dev);
-    hwptr_init(dev);
+    hw_init(dev);
 
     return TRUE;
 }
@@ -541,7 +546,7 @@ BOOLEAN StartIO(PVOID dev_ext, PVIDEO_REQUEST_PACKET packet)
                 goto err;
             }
 
-            error = bochs_set_mode(dev, m);
+            error = hw_set_mode(dev, m);
             if (error != NO_ERROR)
                 goto err;
 
@@ -649,8 +654,8 @@ BOOLEAN StartIO(PVOID dev_ext, PVIDEO_REQUEST_PACKET packet)
             ptr_cap->Flags = VIDEO_MODE_ASYNC_POINTER |
                              VIDEO_MODE_COLOR_POINTER |
                              VIDEO_MODE_MONO_POINTER;
-            ptr_cap->MaxWidth = HWPTR_WIDTH_MAX;
-            ptr_cap->MaxHeight = HWPTR_HEIGHT_MAX;
+            ptr_cap->MaxWidth = POINTER_WIDTH_MAX;
+            ptr_cap->MaxHeight = POINTER_HEIGHT_MAX;
             ptr_cap->HWPtrBitmapEnd = -1;
             ptr_cap->HWPtrBitmapStart = -1;
         }
@@ -663,19 +668,19 @@ BOOLEAN StartIO(PVOID dev_ext, PVIDEO_REQUEST_PACKET packet)
                 goto err;
             }
 
-            if (ptr_attr->Width > HWPTR_WIDTH_MAX ||
-                ptr_attr->Height > HWPTR_HEIGHT_MAX) {
+            if (ptr_attr->Width > POINTER_WIDTH_MAX ||
+                ptr_attr->Height > POINTER_HEIGHT_MAX) {
                 error = ERROR_INVALID_PARAMETER;
                 goto err;
             }
 
             if (ptr_attr->Enable)
-                hwptr_update(dev, ptr_attr->Width, ptr_attr->Height,
-                             ptr_attr->Column, ptr_attr->Row,
-                             ptr_attr->WidthInBytes, ptr_attr->Pixels,
-                             ptr_attr->Flags & VIDEO_MODE_COLOR_POINTER);
+                hw_pointer_update(dev, ptr_attr->Width, ptr_attr->Height,
+                                  ptr_attr->Column, ptr_attr->Row,
+                                  ptr_attr->WidthInBytes, ptr_attr->Pixels,
+                                  ptr_attr->Flags & VIDEO_MODE_COLOR_POINTER);
             else
-                hwptr_enable(dev, FALSE);
+                hw_pointer_enable(dev, FALSE);
         }
         break;
     case IOCTL_VIDEO_SET_POINTER_POSITION: {
@@ -686,15 +691,15 @@ BOOLEAN StartIO(PVOID dev_ext, PVIDEO_REQUEST_PACKET packet)
                 goto err;
             }
 
-            hwptr_setpos(dev, ptr_pos->Column, ptr_pos->Row);
+            hw_pointer_setpos(dev, ptr_pos->Column, ptr_pos->Row);
         }
         break;
     case IOCTL_VIDEO_DISABLE_POINTER: {
-            hwptr_enable(dev, FALSE);
+            hw_pointer_enable(dev, FALSE);
         }
         break;
     case IOCTL_VIDEO_ENABLE_POINTER: {
-            hwptr_enable(dev, TRUE);
+            hw_pointer_enable(dev, TRUE);
         }
         break;
     default:

@@ -13,12 +13,12 @@
 #include "ntddvdeo.h"
 #include "video.h"
 
+/* PCI vendor and device IDs. */
+#define UXENDISP_PCI_VEN    0x5853
+#define UXENDISP_PCI_DEV    0x5101
+
 typedef struct _DEVICE_EXTENSION {
     PVP_DMA_ADAPTER dma;
-
-    PUSHORT io_index;
-    PUSHORT io_data;
-    PUCHAR io_vga;
 
     PVOID rom;
     ULONG rom_size;
@@ -26,6 +26,10 @@ typedef struct _DEVICE_EXTENSION {
     PHYSICAL_ADDRESS vram_physical;
     ULONG vram_size;
     UINT8 *vram_start;
+
+    PHYSICAL_ADDRESS mmio_physical;
+    ULONG mmio_size;
+    UINT8 *mmio_start;
 
     PVIDEO_MODE_INFORMATION modes;
     ULONG n_modes;
