@@ -657,21 +657,27 @@ void dict_rpc_cb_exit(void)
 
 
     for (;;) {
+        void (*callback)(void *, dict);
+        void *callback_opaque;
+
         critical_section_enter(&dict_rpc_lock);
         if (LIST_EMPTY(&request_ids))
             break;
         ri = LIST_FIRST(&request_ids);
+        callback = ri->callback;
+        callback_opaque = ri->callback_opaque;
+        ri->callback = NULL;
+        ri->callback_opaque = NULL;
         LIST_REMOVE(ri, entry);
         critical_section_leave(&dict_rpc_lock);
 
-        if (ri->callback) {
+        if (callback) {
             dict d;
             d = dict_new();
             dict_put_boolean(d, "dict_rpc_exit", true);
             dict_put_string(d, "status", "error");
-            ri->callback(ri->callback_opaque, d);
+            callback(callback_opaque, d);
         }
-        free(ri);
     }
 
 out:
