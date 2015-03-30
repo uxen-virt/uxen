@@ -8,8 +8,9 @@ CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
 all: uxenconsole$(EXE_SUFFIX) libuxenconsole.a
 
 libuxenconsole_OBJS = uxenconsolelib.o 
+$(WINDOWS)libuxenconsole_OBJS += hid.o
 UXENCONSOLE_OBJS = uxenconsole-$(TARGET_HOST).o libuxenconsole.a
-$(WINDOWS)UXENCONSOLE_OBJS += uxenconsole-res.o hid.o
+$(WINDOWS)UXENCONSOLE_OBJS += uxenconsole-res.o
 $(WINDOWS)LDLIBS += -lgdi32
 $(WINDOWS)CPPFLAGS += -I$(SRCROOT) $(LIBXC_CPPFLAGS) $(LIBUXENCTL_CPPFLAGS) -I$(TOPDIR)/common/include -I$(TOPDIR) -I$(TOPDIR)/common/include/xen-public
 $(OSX)LDLIBS +=  -mmacosx-version-min=10.8 -fobjc-arc -fobjc-link-runtime -framework AppKit 
