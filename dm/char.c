@@ -375,18 +375,85 @@ int send_all(int fd, const void *buf, int len1)
 
 #ifndef _WIN32
 
+struct send_buf {
+    TAILQ_ENTRY(send_buf) link;
+    size_t off;
+    size_t len;
+    unsigned char data[];
+};
+
 typedef struct {
     int fd_in, fd_out;
     int max_size;
+    int eof;
+    int err;
+    TAILQ_HEAD(, send_buf) send_queue;
+    critical_section send_lock;
 } FDCharDriver;
 
 #define STDIO_MAX_CLIENTS 1
 static int stdio_nb_clients = 0;
 
+static void fd_chr_write_cb(void *opaque)
+{
+    CharDriverState *chr = opaque;
+    FDCharDriver *s = chr->opaque;
+    struct send_buf *b;
+
+    critical_section_enter(&s->send_lock);
+    b = TAILQ_FIRST(&s->send_queue);
+    if (b) {
+        int rc = write(s->fd_out, b->data + b->off, b->len);
+
+        switch (rc) {
+        case 0:
+            s->eof = 1;
+            TAILQ_REMOVE(&s->send_queue, b, link);
+            free(b);
+            break;
+        case -1:
+            s->err = errno;
+            TAILQ_REMOVE(&s->send_queue, b, link);
+            free(b);
+            break;
+        default:
+            b->len -= rc;
+            b->off += rc;
+            if (!b->len) {
+                TAILQ_REMOVE(&s->send_queue, b, link);
+                free(b);
+            }
+        }
+    } else
+        ioh_set_write_handler(s->fd_out, chr->iohq, NULL, chr);
+    critical_section_leave(&s->send_lock);
+}
+
 static int fd_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
 {
     FDCharDriver *s = chr->opaque;
-    return send_all(s->fd_out, buf, len);
+    struct send_buf *b;
+
+    if (s->eof)
+        return 0;
+    if (s->err) {
+        errno = s->err;
+        return -1;
+    }
+
+    b = malloc(sizeof(struct send_buf) + len);
+    if (!b)
+        return -1;
+    b->off = 0;
+    b->len = len;
+    memcpy(b->data, buf, len);
+
+    critical_section_enter(&s->send_lock);
+    TAILQ_INSERT_TAIL(&s->send_queue, b, link);
+    critical_section_leave(&s->send_lock);
+    ioh_set_write_handler(s->fd_out, chr->iohq, fd_chr_write_cb, chr);
+
+    return len;
 }
 
 static int fd_chr_read_poll(void *opaque)
@@ -433,7 +500,17 @@ static void fd_chr_update_read_handler(CharDriverState *chr)
 static void fd_chr_close(struct CharDriverState *chr)
 {
     FDCharDriver *s = chr->opaque;
+    struct send_buf *b;
 
+    critical_section_enter(&s->send_lock);
+    while ((b = TAILQ_FIRST(&s->send_queue))) {
+        TAILQ_REMOVE(&s->send_queue, b, link);
+        free(b);
+    }
+    critical_section_leave(&s->send_lock);
+
+    if (s->fd_out >= 0)
+        ioh_set_write_handler(s->fd_out, chr->iohq, NULL, chr);
     if (s->fd_in >= 0)
         ioh_set_read_handler(s->fd_in, chr->iohq, NULL, chr);
 
@@ -458,6 +535,10 @@ static CharDriverState *qemu_chr_open_fd(int fd_in, int fd_out, struct io_handle
     s = calloc(1, sizeof(FDCharDriver));
     s->fd_in = fd_in;
     s->fd_out = fd_out;
+    TAILQ_INIT(&s->send_queue);
+    critical_section_init(&s->send_lock);
+    s->eof = 0;
+    s->err = 0;
     chr->opaque = s;
     chr->chr_write = fd_chr_write;
     chr->chr_update_read_handler = fd_chr_update_read_handler;
