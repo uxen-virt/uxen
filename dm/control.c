@@ -63,11 +63,20 @@ static int
 control_send(void *send_opaque, char *buf, size_t len)
 {
     struct control_desc *cd = (struct control_desc *)send_opaque;
+    char *tmp;
+
+    tmp = realloc(buf, len + 1);
+    if (!tmp) {
+        free(buf);
+        return -1;
+    }
+    buf = tmp;
+
+    tmp[len] = '\n';
 
     critical_section_enter(&cd->send_lock);
 
-    qemu_chr_write(cd->chr, (const uint8_t *)buf, len);
-    qemu_chr_write(cd->chr, (const uint8_t *)"\n", 1);
+    qemu_chr_write(cd->chr, (const uint8_t *)buf, len + 1);
 
     critical_section_leave(&cd->send_lock);
 
