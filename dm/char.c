@@ -413,7 +413,7 @@ static void fd_chr_read(void *opaque)
     size = read(s->fd_in, buf, len);
     if (size == 0) {
         /* peer FD has been closed. Remove fd_in from the active list.  */
-        ioh_set_fd_handler2(s->fd_in, chr->iohq, NULL, NULL, NULL, NULL, NULL);
+        ioh_set_read_handler2(s->fd_in, chr->iohq, NULL, NULL, chr);
         qemu_chr_event(chr, CHR_EVENT_RESET);
         return;
     }
@@ -427,7 +427,7 @@ static void fd_chr_update_read_handler(CharDriverState *chr)
     FDCharDriver *s = chr->opaque;
 
     if (s->fd_in >= 0)
-	ioh_set_fd_handler2(s->fd_in, chr->iohq, fd_chr_read_poll, fd_chr_read, NULL, NULL, chr);
+        ioh_set_read_handler2(s->fd_in, chr->iohq, fd_chr_read_poll, fd_chr_read, chr);
 }
 
 static void fd_chr_close(struct CharDriverState *chr)
@@ -435,7 +435,7 @@ static void fd_chr_close(struct CharDriverState *chr)
     FDCharDriver *s = chr->opaque;
 
     if (s->fd_in >= 0)
-	ioh_set_fd_handler2(s->fd_in, chr->iohq, NULL, NULL, NULL, NULL, NULL);
+        ioh_set_read_handler(s->fd_in, chr->iohq, NULL, chr);
 
     free(s);
 }
@@ -568,7 +568,7 @@ static void stdio_read(void *opaque)
     size = read(0, buf, 1);
     if (size == 0) {
         /* stdin has been closed. Remove it from the active list.  */
-        ioh_set_fd_handler2(0, chr->iohq, NULL, NULL, NULL, NULL, NULL);
+        ioh_set_read_handler2(0, chr->iohq, NULL, NULL, chr);
         return;
     }
     if (size > 0) {
@@ -625,7 +625,7 @@ static void qemu_chr_close_stdio(struct CharDriverState *chr)
 {
     term_exit();
     stdio_nb_clients--;
-    ioh_set_fd_handler2(0, chr->iohq, NULL, NULL, NULL, NULL, NULL);
+    ioh_set_read_handler2(0, chr->iohq, NULL, NULL, chr);
     fd_chr_close(chr);
 }
 
@@ -637,7 +637,7 @@ static CharDriverState *qemu_chr_open_stdio(struct io_handler_queue *iohq)
         return NULL;
     chr = qemu_chr_open_fd(0, 1, iohq);
     chr->chr_close = qemu_chr_close_stdio;
-    ioh_set_fd_handler2(0, chr->iohq, stdio_read_poll, stdio_read, NULL, NULL, chr);
+    ioh_set_read_handler2(0, chr->iohq, stdio_read_poll, stdio_read, chr);
     stdio_nb_clients++;
     term_init();
 
@@ -764,8 +764,8 @@ static void pty_chr_update_read_handler(CharDriverState *chr)
 {
     PtyCharDriver *s = chr->opaque;
 
-    ioh_set_fd_handler2(s->fd, chr->iohq, pty_chr_read_poll,
-                        pty_chr_read, NULL, NULL, chr);
+    ioh_set_read_handler2(s->fd, chr->iohq, pty_chr_read_poll,
+                          pty_chr_read, chr);
     s->polling = 1;
     /*
      * Short timeout here: just need wait long enougth that qemu makes
@@ -783,7 +783,7 @@ static void pty_chr_state(CharDriverState *chr, int connected)
     PtyCharDriver *s = chr->opaque;
 
     if (!connected) {
-        ioh_set_fd_handler2(s->fd, chr->iohq, NULL, NULL, NULL, NULL, NULL);
+        ioh_set_read_handler2(s->fd, chr->iohq, NULL, NULL, NULL);
         s->connected = 0;
         s->polling = 0;
         /* (re-)connect poll interval for idle guests: once per second.
@@ -828,7 +828,8 @@ static void pty_chr_close(struct CharDriverState *chr)
 {
     PtyCharDriver *s = chr->opaque;
 
-    ioh_set_fd_handler2(s->fd, chr->iohq, NULL, NULL, NULL, NULL, NULL);
+    ioh_set_read_handler2(s->fd, chr->iohq, NULL, NULL, chr);
+
     close(s->fd);
     qemu_del_timer(s->timer);
     free_timer(s->timer);
@@ -1772,9 +1773,9 @@ static void tcp_chr_read(void *opaque)
         s->connected = 0;
         qemu_chr_event(chr, CHR_EVENT_EOF);
         if (s->listen_fd >= 0) {
-            ioh_set_fd_handler(s->listen_fd, chr->iohq, tcp_chr_accept, NULL, chr);
+            ioh_set_read_handler(s->listen_fd, chr->iohq, tcp_chr_accept, chr);
         }
-        ioh_set_fd_handler(s->fd, chr->iohq, NULL, NULL, NULL);
+        ioh_set_read_handler(s->fd, chr->iohq, NULL, chr);
         closesocket(s->fd);
         s->fd = -1;
     } else if (size > 0) {
@@ -1791,8 +1792,8 @@ static void tcp_chr_connect(void *opaque)
     TCPCharDriver *s = chr->opaque;
 
     s->connected = 1;
-    ioh_set_fd_handler2(s->fd, chr->iohq, tcp_chr_read_poll,
-                         tcp_chr_read, NULL, NULL, chr);
+    ioh_set_read_handler2(s->fd, chr->iohq, tcp_chr_read_poll,
+                          tcp_chr_read, chr);
     qemu_chr_reset(chr);
 }
 
@@ -1853,7 +1854,7 @@ static void tcp_chr_accept(void *opaque)
     if (s->do_nodelay)
         socket_set_nodelay(fd);
     s->fd = fd;
-    ioh_set_fd_handler(s->listen_fd, chr->iohq, NULL, NULL, NULL);
+    ioh_set_read_handler(s->listen_fd, chr->iohq, NULL, chr);
     tcp_chr_connect(chr);
 }
 
@@ -1861,11 +1862,11 @@ static void tcp_chr_close(CharDriverState *chr)
 {
     TCPCharDriver *s = chr->opaque;
     if (s->fd >= 0) {
-        ioh_set_fd_handler(s->fd, chr->iohq, NULL, NULL, NULL);
+        ioh_set_read_handler(s->fd, chr->iohq, NULL, chr);
         closesocket(s->fd);
     }
     if (s->listen_fd >= 0) {
-        ioh_set_fd_handler(s->listen_fd, chr->iohq, NULL, NULL, NULL);
+        ioh_set_read_handler(s->listen_fd, chr->iohq, NULL, chr);
         closesocket(s->listen_fd);
     }
     free(s);
@@ -1878,11 +1879,11 @@ static void tcp_chr_reconnect(void *opaque)
 
     s->connected = 0;
     if (s->listen_fd >= 0) {
-        ioh_set_fd_handler(s->listen_fd, chr->iohq, tcp_chr_accept, NULL, chr);
+        ioh_set_read_handler(s->listen_fd, chr->iohq, tcp_chr_accept, chr);
     }
     if (s->fd < 0)
         return;
-    ioh_set_fd_handler(s->fd, chr->iohq, NULL, NULL, NULL);
+    ioh_set_read_handler(s->fd, chr->iohq, NULL, chr);
     closesocket(s->fd);
     s->fd = -1;
 }
@@ -1974,7 +1975,7 @@ static CharDriverState *qemu_chr_open_tcp(const char *host_str,
 
     if (is_listen) {
         s->listen_fd = fd;
-        ioh_set_fd_handler(s->listen_fd, chr->iohq, tcp_chr_accept, NULL, chr);
+        ioh_set_read_handler(s->listen_fd, chr->iohq, tcp_chr_accept, chr);
         if (is_telnet)
             s->do_telnetopt = 1;
     } else {

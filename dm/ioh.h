@@ -29,15 +29,20 @@ struct io_handler_queue;
 
 void ioh_queue_init(struct io_handler_queue *iohq);
 
-int ioh_set_fd_handler(int fd, struct io_handler_queue *iohq, IOHandler *fd_read, IOHandler *fd_write,
-                       void *opaque);
-int ioh_set_fd_handler2(int fd,
-                        struct io_handler_queue *iohq,
-                        IOCanRWHandler *fd_read_poll,
-                        IOHandler *fd_read,
-                        IOCanRWHandler *fd_write_poll,
-                        IOHandler *fd_write,
-                        void *opaque);
+int ioh_set_read_handler2(int fd,
+                          struct io_handler_queue *iohq,
+                          IOCanRWHandler *fd_read_poll,
+                          IOHandler *fd_read,
+                          void *opaque);
+int ioh_set_write_handler2(int fd,
+                           struct io_handler_queue *iohq,
+                           IOCanRWHandler *fd_write_poll,
+                           IOHandler *fd_write,
+                           void *opaque);
+#define ioh_set_read_handler(fd, iohq, fd_read, opaque) \
+    ioh_set_read_handler2(fd, iohq, NULL , fd_read, opaque)
+#define ioh_set_write_handler(fd, iohq, fd_write, opaque) \
+    ioh_set_write_handler2(fd, iohq, NULL , fd_write, opaque)
 
 void ioh_wait_for_objects(struct io_handler_queue *piohq,
                           WaitObjects *w, TimerQueue *active_timers, int *timeout, int *ret_wait);

@@ -74,7 +74,7 @@ static void unix_socket_connect_handler(void *opaque)
 
     c->disconnected = 0;
     c->out_fd = c->in_fd = -1;
-    ioh_set_fd_handler(sock, NULL, unix_socket_read_handler, NULL, c);
+    ioh_set_read_handler(sock, NULL, unix_socket_read_handler, c);
     c->sock = sock;
     c->owner = s;
     TAILQ_INSERT_TAIL(&s->clients, c, link);
@@ -112,7 +112,7 @@ static int unix_socket_create(struct ipc_service *s)
         return -1;
     }
 
-    ioh_set_fd_handler(s->sock, NULL, unix_socket_connect_handler, NULL, s);
+    ioh_set_read_handler(s->sock, NULL, unix_socket_connect_handler, s);
 
     return 0;
 }
@@ -235,14 +235,14 @@ static void unix_socket_close(struct ipc_client *c)
         c->in_fd = -1;
     }
     close(c->sock);
-    ioh_set_fd_handler(c->sock, NULL, NULL, NULL, NULL);
+    ioh_set_read_handler(c->sock, NULL, NULL, c);
     c->sock = -1;
 }
 
 static void unix_socket_destroy(struct ipc_service *s)
 {
     close(s->sock);
-    ioh_set_fd_handler(s->sock, NULL, NULL, NULL, NULL);
+    ioh_set_read_handler(s->sock, NULL, NULL, s);
     s->sock = -1;
 }
 #elif defined(_WIN32)
