@@ -66,7 +66,6 @@
 #endif
 
 int ni_log_level = 1;
-static const WaitObjects wo_initializer = WAITOBJECTS_INITIALIZER;
 
 static heap_t ni_priv_heap;
 static unsigned int ni_priv_heap_err;
@@ -1389,7 +1388,7 @@ static void * ni_thread_run(void *opaque)
                         __FUNCTION__, (unsigned long) delay_ms);
         }
         delay_ms = get_clock_ms(vm_clock);
-        ioh_wait_for_objects(&ni->io_handlers, ni->wait_objects, ni->active_timers,
+        ioh_wait_for_objects(&ni->io_handlers, &ni->wait_objects, ni->active_timers,
                 &timeout, &wait_time);
     }
 
@@ -1432,14 +1431,14 @@ static int ni_add_wait_object(void *nopaque, ioh_event *event, WaitObjectFunc *f
 {
     struct nickel *ni = nopaque;
 
-    return ioh_add_wait_object(event, func, opaque, ni->wait_objects);
+    return ioh_add_wait_object(event, func, opaque, &ni->wait_objects);
 }
 
 static void ni_del_wait_object(void *nopaque, ioh_event *event)
 {
     struct nickel *ni = nopaque;
 
-    ioh_del_wait_object(event, ni->wait_objects);
+    ioh_del_wait_object(event, &ni->wait_objects);
 }
 
 #ifndef _WIN32
@@ -1447,14 +1446,14 @@ static int ni_add_wait_fd(void *nopaque, int fd, int events, WaitObjectFunc2 *fu
 {
     struct nickel *ni = nopaque;
 
-    return ioh_add_wait_fd(fd, events, func2, opaque, ni->wait_objects);
+    return ioh_add_wait_fd(fd, events, func2, opaque, &ni->wait_objects);
 }
 
 static void ni_del_wait_fd(void *nopaque, int fd)
 {
     struct nickel *ni = nopaque;
 
-    ioh_del_wait_fd(fd, ni->wait_objects);
+    ioh_del_wait_fd(fd, &ni->wait_objects);
 }
 #endif
 
@@ -1757,12 +1756,8 @@ int net_init_nickel(QemuOpts *opts, Monitor *mon, const char *name, VLANState *v
     if (!ni->active_timers)
         goto mem_err;
     timers_init(ni->active_timers);
-    ni->wait_objects = calloc(1, sizeof(WaitObjects));
-    if (!ni->wait_objects)
-        goto mem_err;
-    *(ni->wait_objects) = wo_initializer;
-    ni->wait_objects->del_state = WO_OK;
     ioh_queue_init(&ni->io_handlers);
+    ioh_init_wait_objects(&ni->wait_objects);
     ioh_event_init(&ni->deqin_ev);
     ioh_event_init(&ni->start_event);
     ioh_event_init(&ni->suspend_ev);
@@ -1772,9 +1767,9 @@ int net_init_nickel(QemuOpts *opts, Monitor *mon, const char *name, VLANState *v
         ret = -1;
         goto out;
     }
-    ioh_add_wait_object(&ni->deqin_ev, dequeue_input, ni, ni->wait_objects);
+    ioh_add_wait_object(&ni->deqin_ev, dequeue_input, ni, &ni->wait_objects);
 #endif
-    ioh_add_wait_object(&ni->event, NULL, NULL, ni->wait_objects);
+    ioh_add_wait_object(&ni->event, NULL, NULL, &ni->wait_objects);
 
     ni->tcp_disable_window_scale = 1;
     ni->mtu = NI_DEFAULT_MTU;

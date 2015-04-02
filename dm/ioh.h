@@ -73,17 +73,6 @@ struct WaitObjects {
 #endif
 };
 
-#ifdef __APPLE__
-#define WAITOBJECTS_INITIALIZER_EXTRA .queue_fd = -1,       \
-                                      .queue_len = 0,
-#else
-#define WAITOBJECTS_INITIALIZER_EXTRA
-#endif
-
-#define WAITOBJECTS_INITIALIZER {			\
-    .num = 0, .events = NULL, .desc = NULL, .max = 0, .del_state = WO_OK, \
-    WAITOBJECTS_INITIALIZER_EXTRA }
-
 typedef struct IOHandlerRecord {
     int fd;
 #if defined(_WIN32)
@@ -133,6 +122,9 @@ struct io_handler_queue {
 };
 
 extern struct io_handler_queue io_handlers;
+
+void ioh_init_wait_objects(WaitObjects *w);
+void ioh_cleanup_wait_objects(WaitObjects *w);
 
 #ifndef DEBUG_WAITOBJECTS
 int ioh_add_wait_object(ioh_event *event, WaitObjectFunc *func, void *opaque,

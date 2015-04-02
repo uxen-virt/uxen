@@ -44,7 +44,7 @@
 int control_ready = 0;
 
 static struct io_handler_queue control_io_handlers;
-static WaitObjects control_wait_objects = WAITOBJECTS_INITIALIZER;
+static WaitObjects control_wait_objects;
 static ioh_event control_ev;
 static uxen_thread control_thread;
 
@@ -894,6 +894,7 @@ control_open(char *path)
     }
 #endif
     ioh_queue_init(&control_io_handlers);
+    ioh_init_wait_objects(&control_wait_objects);
 
     control.chr = qemu_chr_open("control", path, NULL, &control_io_handlers);
     if (!control.chr)

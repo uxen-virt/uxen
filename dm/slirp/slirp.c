@@ -75,7 +75,7 @@ WaitObjects *slirp_wait_objects = NULL;
 #if defined(SLIRP_THREADED)
 int slirp_exit_now = 0;
 critical_section slirp_mx;
-static WaitObjects _slirp_wait_objects = WAITOBJECTS_INITIALIZER;
+static WaitObjects _slirp_wait_objects;
 static TimerQueue slirp_active_timers[2];
 #if defined(_WIN32)
 uxen_thread slirp_thread;
@@ -1216,7 +1216,7 @@ int slirp_loop_init(void)
 
     timers_init(slirp_active_timers);
     slirp_wait_objects = &_slirp_wait_objects;
-    slirp_wait_objects->del_state = WO_OK;
+    ioh_init_wait_objects(slirp_wait_objects);
     ioh_event_init(&slirp_deqin_ev);
     ioh_event_init(&slirp_deqout_ev);
     ioh_add_wait_object(&slirp_deqin_ev, slirp_dequeue_input, NULL,

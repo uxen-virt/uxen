@@ -79,7 +79,7 @@ struct nickel {
 #endif
     ioh_event event;
     struct io_handler_queue io_handlers;
-    WaitObjects *wait_objects;
+    WaitObjects wait_objects;
 
 #if defined (NICKEL_THREADED)
     uxen_thread threadh;

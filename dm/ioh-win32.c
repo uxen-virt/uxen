@@ -25,7 +25,7 @@
 #include "async-op.h"
 #endif
 
-static WaitObjects wait_objects = WAITOBJECTS_INITIALIZER;
+WaitObjects wait_objects;
 struct io_handler_queue io_handlers;
 
 #ifdef DEBUG_WAITOBJECTS
@@ -156,6 +156,20 @@ np_signalled(void *context)
 
     ioh->np_read(ioh->opaque);
     ioh->np_read_pending = NP_READ_DONE;
+}
+
+void ioh_init_wait_objects(WaitObjects *w)
+{
+    w->num = 0;
+    w->events = NULL;
+    w->desc = NULL;
+    w->max = 0;
+    w->del_state = WO_OK;
+}
+
+void ioh_cleanup_wait_objects(WaitObjects *w)
+{
+    CloseHandle((HANDLE)w->interrupt);
 }
 
 void ioh_wait_for_objects(struct io_handler_queue *iohq,

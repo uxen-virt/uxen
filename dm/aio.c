@@ -25,7 +25,7 @@
 #include "iovec.h"
 
 /* XXX per device */
-WaitObjects aio_wait_objects = WAITOBJECTS_INITIALIZER;
+WaitObjects aio_wait_objects;
 
 void *
 aio_get(AIOPool *pool, BlockDriverState *bs,
@@ -61,6 +61,7 @@ aio_release(void *p)
 void
 aio_init(void)
 {
+    ioh_init_wait_objects(&aio_wait_objects);
 }
 
 void

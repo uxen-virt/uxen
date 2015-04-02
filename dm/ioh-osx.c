@@ -9,6 +9,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <errno.h>
+#include <unistd.h>
 
 #include <sys/select.h>
 #include <sys/types.h>
@@ -35,7 +36,7 @@
 #include "async-op.h"
 #endif
 
-static WaitObjects wait_objects = WAITOBJECTS_INITIALIZER;
+WaitObjects wait_objects;
 struct io_handler_queue io_handlers;
 
 #ifdef DEBUG_WAITOBJECTS
@@ -126,12 +127,23 @@ ioh_event_queue_drain(WaitObjects *w, ioh_event_queue *list)
     } while (num == 64);
 }
 
-static void ioh_event_queue_init(WaitObjects *w)
+void ioh_init_wait_objects(WaitObjects *w)
 {
+    w->num = 0;
+    w->events = NULL;
+    w->desc = NULL;
+    w->max = 0;
+    w->del_state = WO_OK;
+    w->queue_len = 0;
     w->queue_fd = kqueue();
 
     if (w->queue_fd < 0)
         err(1, "%s: kqueue failed", __FUNCTION__);
+}
+
+void ioh_cleanup_wait_objects(WaitObjects *w)
+{
+    close(w->queue_fd);
 }
 
 #ifndef DEBUG_WAITOBJECTS
@@ -147,9 +159,6 @@ int _ioh_add_wait_object(ioh_event *event, WaitObjectFunc *func, void *opaque,
 
     if (w == NULL)
 	w = &wait_objects;
-
-    if (w->queue_fd == -1)
-        ioh_event_queue_init(w);
 
     event->func = func;
     event->opaque = opaque;

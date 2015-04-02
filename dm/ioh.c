@@ -114,7 +114,10 @@ int ioh_set_fd_handler(int fd,
 
 #endif  /* CONFIG_NETEVENT */
 
+extern WaitObjects wait_objects;
+
 static void __attribute__((constructor)) ioh_init(void)
 {
     ioh_queue_init(&io_handlers);
+    ioh_init_wait_objects(&wait_objects);
 }
