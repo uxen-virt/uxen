@@ -661,9 +661,16 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
     bool startThread = false;
     void * instance;
     int ret = -1;
+    int attempts = 30;
 
     uxenclipboard_gdi_startup();
-    if ((ret = ChannelConnect())) {
+    while (attempts-- > 0) {
+        ret = ChannelConnect();
+        if (!ret)
+            break;
+        Sleep(1000);
+    }
+    if (ret) {
         LogRel(("BrHVTray: ChannelConnect error 0x%x\n", ret));
         goto out;
     }
