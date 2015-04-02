@@ -43,8 +43,7 @@
 
 int control_ready = 0;
 
-static struct io_handlers_tailq control_io_handlers =
-    TAILQ_HEAD_INITIALIZER(control_io_handlers);
+static struct io_handler_queue control_io_handlers;
 static WaitObjects control_wait_objects = WAITOBJECTS_INITIALIZER;
 static ioh_event control_ev;
 static uxen_thread control_thread;
@@ -894,6 +893,8 @@ control_open(char *path)
             errx(1, "control_commands array is unsorted");
     }
 #endif
+    ioh_queue_init(&control_io_handlers);
+
     control.chr = qemu_chr_open("control", path, NULL, &control_io_handlers);
     if (!control.chr)
 	return;

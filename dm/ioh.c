@@ -11,9 +11,11 @@
 #include "queue.h"
 #include "ioh.h"
 
-#include "ioh.h"
-
-struct io_handlers_tailq io_handlers = TAILQ_HEAD_INITIALIZER(io_handlers);
+void ioh_queue_init(struct io_handler_queue *iohq)
+{
+    TAILQ_INIT(&iohq->queue);
+    critical_section_init(&iohq->lock);
+}
 
 #ifdef CONFIG_NETEVENT
 
@@ -23,7 +25,7 @@ struct io_handlers_tailq io_handlers = TAILQ_HEAD_INITIALIZER(io_handlers);
 /* XXX: fd_read_poll should be suppressed, but an API change is
    necessary in the character devices to suppress fd_can_read(). */
 int ioh_set_fd_handler2(int fd,
-                        struct io_handlers_tailq *iohq,
+                        struct io_handler_queue *iohq,
                         IOCanRWHandler *fd_read_poll,
                         IOHandler *fd_read,
                         IOCanRWHandler *fd_write_poll,
@@ -35,7 +37,8 @@ int ioh_set_fd_handler2(int fd,
     if (!iohq)
         iohq = &io_handlers;
 
-    TAILQ_FOREACH(ioh, iohq, queue)
+    critical_section_enter(&iohq->lock);
+    TAILQ_FOREACH(ioh, &iohq->queue, queue)
 	if (ioh->fd == fd)
 	    break;
 
@@ -45,13 +48,14 @@ int ioh_set_fd_handler2(int fd,
                          " from %p (%"PRIxSIZE")\n",
                          __FUNCTION__, __builtin_return_address(0),
                          CALL_OFFSET(ioh_set_fd_handler2));
+            critical_section_leave(&iohq->lock);
             return 0;
         }
 	ioh->deleted = 1;
     } else {
 	if (ioh == NULL) {
 	    ioh = calloc(1, sizeof(IOHandlerRecord));
-	    TAILQ_INSERT_HEAD(iohq, ioh, queue);
+	    TAILQ_INSERT_HEAD(&iohq->queue, ioh, queue);
 	}
         ioh->fd = fd;
         ioh->fd_read_poll = fd_read_poll;
@@ -61,11 +65,12 @@ int ioh_set_fd_handler2(int fd,
         ioh->opaque = opaque;
         ioh->deleted = 0;
     }
+    critical_section_leave(&iohq->lock);
     return 0;
 }
 
 int ioh_set_fd_handler(int fd,
-                       struct io_handlers_tailq *iohq,
+                       struct io_handler_queue *iohq,
                        IOHandler *fd_read,
                        IOHandler *fd_write,
                        void *opaque)
@@ -75,7 +80,8 @@ int ioh_set_fd_handler(int fd,
     if (!iohq)
         iohq = &io_handlers;
 
-    TAILQ_FOREACH(ioh, iohq, queue)
+    critical_section_enter(&iohq->lock);
+    TAILQ_FOREACH(ioh, &iohq->queue, queue)
 	if (ioh->fd == fd)
 	    break;
 
@@ -85,13 +91,14 @@ int ioh_set_fd_handler(int fd,
                          " from %p (%"PRIxSIZE")\n",
                          __FUNCTION__, __builtin_return_address(0),
                          CALL_OFFSET(ioh_set_fd_handler));
+            critical_section_leave(&iohq->lock);
             return 0;
         }
 	ioh->deleted = 1;
     } else {
 	if (ioh == NULL) {
 	    ioh = calloc(1, sizeof(IOHandlerRecord));
-	    TAILQ_INSERT_HEAD(iohq, ioh, queue);
+	    TAILQ_INSERT_HEAD(&iohq->queue, ioh, queue);
 	}
         ioh->fd = fd;
         ioh->fd_read_poll = NULL;
@@ -101,6 +108,13 @@ int ioh_set_fd_handler(int fd,
         ioh->opaque = opaque;
         ioh->deleted = 0;
     }
+    critical_section_leave(&iohq->lock);
     return 0;
 }
+
 #endif  /* CONFIG_NETEVENT */
+
+static void __attribute__((constructor)) ioh_init(void)
+{
+    ioh_queue_init(&io_handlers);
+}

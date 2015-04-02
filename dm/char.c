@@ -312,7 +312,7 @@ static int null_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
     return len;
 }
 
-static CharDriverState *qemu_chr_open_null(struct io_handlers_tailq *iohq)
+static CharDriverState *qemu_chr_open_null(struct io_handler_queue *iohq)
 {
     CharDriverState *chr;
 
@@ -441,7 +441,7 @@ static void fd_chr_close(struct CharDriverState *chr)
 }
 
 /* open a character device to a unix fd */
-static CharDriverState *qemu_chr_open_fd(int fd_in, int fd_out, struct io_handlers_tailq *iohq)
+static CharDriverState *qemu_chr_open_fd(int fd_in, int fd_out, struct io_handler_queue *iohq)
 {
     CharDriverState *chr;
     FDCharDriver *s;
@@ -468,7 +468,7 @@ static CharDriverState *qemu_chr_open_fd(int fd_in, int fd_out, struct io_handle
     return chr;
 }
 
-static CharDriverState *qemu_chr_open_file_out(const char *file_out, struct io_handlers_tailq *iohq)
+static CharDriverState *qemu_chr_open_file_out(const char *file_out, struct io_handler_queue *iohq)
 {
     int fd_out;
 
@@ -506,7 +506,7 @@ unix_chr_pipe_reconnect(void *opaque)
     s->fd_out = open(filename_out, O_RDWR | O_NONBLOCK | O_BINARY);
 }
 
-static CharDriverState *qemu_chr_open_pipe(const char *filename, struct io_handlers_tailq *iohq)
+static CharDriverState *qemu_chr_open_pipe(const char *filename, struct io_handler_queue *iohq)
 {
     int fd_in, fd_out;
     char filename_in[256], filename_out[256];
@@ -629,7 +629,7 @@ static void qemu_chr_close_stdio(struct CharDriverState *chr)
     fd_chr_close(chr);
 }
 
-static CharDriverState *qemu_chr_open_stdio(struct io_handlers_tailq *iohq)
+static CharDriverState *qemu_chr_open_stdio(struct io_handler_queue *iohq)
 {
     CharDriverState *chr;
 
@@ -835,7 +835,7 @@ static void pty_chr_close(struct CharDriverState *chr)
     free(s);
 }
 
-static CharDriverState *qemu_chr_open_pty(struct io_handlers_tailq *iohq)
+static CharDriverState *qemu_chr_open_pty(struct io_handler_queue *iohq)
 {
     CharDriverState *chr;
     PtyCharDriver *s;
@@ -1030,7 +1030,7 @@ static int tty_serial_ioctl(CharDriverState *chr, int cmd, void *arg)
     return 0;
 }
 
-static CharDriverState *qemu_chr_open_tty(const char *filename, struct io_handlers_tailq *iohq)
+static CharDriverState *qemu_chr_open_tty(const char *filename, struct io_handler_queue *iohq)
 {
     CharDriverState *chr;
     int fd;
@@ -1048,7 +1048,7 @@ static CharDriverState *qemu_chr_open_tty(const char *filename, struct io_handle
 }
 #elif defined(CONFIG_STUBDOM)
 #include <fcntl.h>
-static CharDriverState *qemu_chr_open_pty(struct io_handlers_tailq *iohq)
+static CharDriverState *qemu_chr_open_pty(struct io_handler_queue *iohq)
 {
     CharDriverState *chr;
     int fd;
@@ -1428,7 +1428,7 @@ static int win_chr_pipe_init(CharDriverState *chr, const char *filename,
 
 
 static CharDriverState *qemu_chr_open_win_pipe(const char *_filename,
-                                               struct io_handlers_tailq *iohq)
+                                               struct io_handler_queue *iohq)
 {
     CharDriverState *chr = NULL;
     WinCharState *s;
@@ -1477,7 +1477,7 @@ static CharDriverState *qemu_chr_open_win_pipe(const char *_filename,
 }
 
 static CharDriverState *
-qemu_chr_open_win_file(HANDLE fd_out, struct io_handlers_tailq *iohq)
+qemu_chr_open_win_file(HANDLE fd_out, struct io_handler_queue *iohq)
 {
     CharDriverState *chr;
     WinCharState *s;
@@ -1498,13 +1498,13 @@ qemu_chr_open_win_file(HANDLE fd_out, struct io_handlers_tailq *iohq)
 }
 
 static CharDriverState *
-qemu_chr_open_win_con(const char *filename, struct io_handlers_tailq *iohq)
+qemu_chr_open_win_con(const char *filename, struct io_handler_queue *iohq)
 {
     return qemu_chr_open_win_file(GetStdHandle(STD_OUTPUT_HANDLE), iohq);
 }
 
 static CharDriverState *
-qemu_chr_open_win_file_out(const char *file_out, struct io_handlers_tailq *iohq)
+qemu_chr_open_win_file_out(const char *file_out, struct io_handler_queue *iohq)
 {
     HANDLE fd_out;
 
@@ -1890,7 +1890,7 @@ static void tcp_chr_reconnect(void *opaque)
 static CharDriverState *qemu_chr_open_tcp(const char *host_str,
                                           int is_telnet,
 					  int is_unix,
-                                          struct io_handlers_tailq *iohq)
+                                          struct io_handler_queue *iohq)
 {
     CharDriverState *chr = NULL;
     TCPCharDriver *s = NULL;
@@ -2002,7 +2002,7 @@ static CharDriverState *qemu_chr_open_tcp(const char *host_str,
 
 CharDriverState *qemu_chr_open(const char *label, const char *filename,
                                void (*init)(struct CharDriverState *s),
-                               struct io_handlers_tailq *io_handlers)
+                               struct io_handler_queue *io_handlers)
 {
     const char *p;
     CharDriverState *chr;

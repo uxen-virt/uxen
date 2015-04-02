@@ -26,6 +26,7 @@
 #endif
 
 static WaitObjects wait_objects = WAITOBJECTS_INITIALIZER;
+struct io_handler_queue io_handlers;
 
 #ifdef DEBUG_WAITOBJECTS
 int trace_waitobjects = 0;
@@ -157,8 +158,9 @@ np_signalled(void *context)
     ioh->np_read_pending = NP_READ_DONE;
 }
 
-void ioh_wait_for_objects(struct io_handlers_tailq *iohq,
-                          WaitObjects *w, TimerQueue *active_timers, int *timeout, int *ret_wait)
+void ioh_wait_for_objects(struct io_handler_queue *iohq,
+                          WaitObjects *w, TimerQueue *active_timers,
+                          int *timeout, int *ret_wait)
 {
     IOHandlerRecord *ioh, *next;
     int ret, ev;
@@ -174,12 +176,13 @@ void ioh_wait_for_objects(struct io_handlers_tailq *iohq,
     ret = 0;
 
     if (iohq) {
-        TAILQ_FOREACH_SAFE(ioh, iohq, queue, next) {
+        critical_section_enter(&iohq->lock);
+        TAILQ_FOREACH_SAFE(ioh, &iohq->queue, queue, next) {
             if (ioh->np) {
                 if (ioh->deleted) {
                     if (ioh->np_read_pending == NP_READ_PENDING)
                         ioh_del_wait_object(&ioh->np, w);
-                    TAILQ_REMOVE(iohq, ioh, queue);
+                    TAILQ_REMOVE(&iohq->queue, ioh, queue);
                     free(ioh);
                     continue;
                 }
@@ -221,6 +224,7 @@ void ioh_wait_for_objects(struct io_handlers_tailq *iohq,
 #endif  /* CONFIG_NETEVENT */
             }
         }
+        critical_section_leave(&iohq->lock);
     }
 
 #ifndef LIBIMG
@@ -336,12 +340,13 @@ void ioh_wait_for_objects(struct io_handlers_tailq *iohq,
 
     /* remove deleted IO handlers */
     if (iohq) {
-        TAILQ_FOREACH_SAFE(ioh, iohq, queue, next) {
+        critical_section_enter(&iohq->lock);
+        TAILQ_FOREACH_SAFE(ioh, &iohq->queue, queue, next) {
             if (ioh->np) {
                 if (ioh->deleted) {
                     if (ioh->np_read_pending == NP_READ_PENDING)
                         ioh_del_wait_object(&ioh->np, w);
-                    TAILQ_REMOVE(iohq, ioh, queue);
+                    TAILQ_REMOVE(&iohq->queue, ioh, queue);
                     free(ioh);
                     continue;
                 }
@@ -356,7 +361,7 @@ void ioh_wait_for_objects(struct io_handlers_tailq *iohq,
 #if defined(CONFIG_NETEVENT)
             } else {
                 if (ioh->deleted) {
-                    TAILQ_REMOVE(iohq, ioh, queue);
+                    TAILQ_REMOVE(&iohq->queue, ioh, queue);
                     if (ioh->object_events)
                         ioh_del_wait_object(&ioh->event, w);
                     if (ioh->event)
@@ -366,6 +371,7 @@ void ioh_wait_for_objects(struct io_handlers_tailq *iohq,
 #endif  /* CONFIG_NETEVENT */
             }
         }
+        critical_section_leave(&iohq->lock);
     }
 
 #ifndef LIBIMG
@@ -455,14 +461,15 @@ int ioh_set_np_handler2(HANDLE np,
                         IOHandler *np_read,
                         IOHandler *np_write,
                         void *opaque,
-                        struct io_handlers_tailq *iohq)
+                        struct io_handler_queue *iohq)
 {
     IOHandlerRecord *ioh;
 
     if (!iohq)
         iohq = &io_handlers;
 
-    TAILQ_FOREACH(ioh, iohq, queue)
+    critical_section_enter(&iohq->lock);
+    TAILQ_FOREACH(ioh, &iohq->queue, queue)
 	if (ioh->np == np)
 	    break;
 
@@ -472,7 +479,7 @@ int ioh_set_np_handler2(HANDLE np,
     } else {
 	if (ioh == NULL) {
 	    ioh = calloc(1, sizeof(IOHandlerRecord));
-	    TAILQ_INSERT_HEAD(iohq, ioh, queue);
+	    TAILQ_INSERT_HEAD(&iohq->queue, ioh, queue);
 	}
         ioh->np = np;
         ioh->np_read_poll = np_read_poll;
@@ -481,6 +488,7 @@ int ioh_set_np_handler2(HANDLE np,
         ioh->opaque = opaque;
         ioh->deleted = 0;
     }
+    critical_section_leave(&iohq->lock);
 
     return 0;
 }

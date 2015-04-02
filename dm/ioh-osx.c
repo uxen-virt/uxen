@@ -36,6 +36,7 @@
 #endif
 
 static WaitObjects wait_objects = WAITOBJECTS_INITIALIZER;
+struct io_handler_queue io_handlers;
 
 #ifdef DEBUG_WAITOBJECTS
 int trace_waitobjects = 0;
@@ -101,7 +102,7 @@ ioh_add_wait_fd(int fd, int events, WaitObjectFunc2 *func2, void *opaque,
 }
 
 static void
-ioh_queue_drain(WaitObjects *w, ioh_event_queue *list)
+ioh_event_queue_drain(WaitObjects *w, ioh_event_queue *list)
 {
     struct kevent kev[64];
     struct timespec timeout = { .tv_sec = 0, .tv_nsec = 0 };
@@ -125,7 +126,7 @@ ioh_queue_drain(WaitObjects *w, ioh_event_queue *list)
     } while (num == 64);
 }
 
-static void ioh_queue_init(WaitObjects *w)
+static void ioh_event_queue_init(WaitObjects *w)
 {
     w->queue_fd = kqueue();
 
@@ -148,7 +149,7 @@ int _ioh_add_wait_object(ioh_event *event, WaitObjectFunc *func, void *opaque,
 	w = &wait_objects;
 
     if (w->queue_fd == -1)
-        ioh_queue_init(w);
+        ioh_event_queue_init(w);
 
     event->func = func;
     event->opaque = opaque;
@@ -287,8 +288,9 @@ ioh_object_signalled(void *context, int events)
 }
 #endif  /* CONFIG_NETEVENT */
 
-void ioh_wait_for_objects(struct io_handlers_tailq *iohq,
-               WaitObjects *w, TimerQueue *active_timers, int *timeout, int *ret_wait)
+void ioh_wait_for_objects(struct io_handler_queue *iohq,
+                          WaitObjects *w, TimerQueue *active_timers,
+                          int *timeout, int *ret_wait)
 {
     IOHandlerRecord *ioh, *next;
     int ret, ev;
@@ -302,7 +304,8 @@ void ioh_wait_for_objects(struct io_handlers_tailq *iohq,
         *ret_wait = 0;
 
     if (iohq) {
-        TAILQ_FOREACH_SAFE(ioh, iohq, queue, next) {
+        critical_section_enter(&iohq->lock);
+        TAILQ_FOREACH_SAFE(ioh, &iohq->queue, queue, next) {
 #if defined(CONFIG_NETEVENT)
             int events = 0;
 
@@ -329,6 +332,7 @@ void ioh_wait_for_objects(struct io_handlers_tailq *iohq,
             ioh->object_events = events;
 #endif  /* CONFIG_NETEVENT */
         }
+        critical_section_leave(&iohq->lock);
     }
 
 #ifndef LIBIMG
@@ -397,7 +401,7 @@ void ioh_wait_for_objects(struct io_handlers_tailq *iohq,
                 w->events[i].revents |= POLLERR;
         }
         if (w->queue_fd != -1 && FD_ISSET(w->queue_fd, &rfds))
-            ioh_queue_drain(w, &events);
+            ioh_event_queue_drain(w, &events);
     } while(0);
 
 #ifndef LIBIMG
@@ -497,16 +501,18 @@ void ioh_wait_for_objects(struct io_handlers_tailq *iohq,
 
     /* remove deleted IO handlers */
     if (iohq) {
-        TAILQ_FOREACH_SAFE(ioh, iohq, queue, next) {
+        critical_section_enter(&iohq->lock);
+        TAILQ_FOREACH_SAFE(ioh, &iohq->queue, queue, next) {
 #if defined(CONFIG_NETEVENT)
             if (ioh->deleted) {
-                TAILQ_REMOVE(iohq, ioh, queue);
+                TAILQ_REMOVE(&iohq->queue, ioh, queue);
                 if (ioh->object_events)
                     ioh_del_wait_fd(ioh->fd, w);
                 free(ioh);
             }
 #endif  /* CONFIG_NETEVENT */
         }
+        critical_section_leave(&iohq->lock);
     }
 
 #ifndef LIBIMG

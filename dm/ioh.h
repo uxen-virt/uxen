@@ -25,19 +25,21 @@ typedef int IOCanWHandler(void *opaque, uint8_t **pbuf);
 typedef void IOHandler(void *opaque);
 typedef void IOEventHandler(void *opaque, int event);
 
-struct io_handlers_tailq;
+struct io_handler_queue;
 
-int ioh_set_fd_handler(int fd, struct io_handlers_tailq *iohq, IOHandler *fd_read, IOHandler *fd_write,
+void ioh_queue_init(struct io_handler_queue *iohq);
+
+int ioh_set_fd_handler(int fd, struct io_handler_queue *iohq, IOHandler *fd_read, IOHandler *fd_write,
                        void *opaque);
 int ioh_set_fd_handler2(int fd,
-                        struct io_handlers_tailq *iohq,
+                        struct io_handler_queue *iohq,
                         IOCanRWHandler *fd_read_poll,
                         IOHandler *fd_read,
                         IOCanRWHandler *fd_write_poll,
                         IOHandler *fd_write,
                         void *opaque);
 
-void ioh_wait_for_objects(struct io_handlers_tailq *piohq,
+void ioh_wait_for_objects(struct io_handler_queue *piohq,
                           WaitObjects *w, TimerQueue *active_timers, int *timeout, int *ret_wait);
 
 void host_main_loop_wait(int *timeout);
@@ -125,8 +127,12 @@ typedef struct IOHandlerRecord {
     };
 } IOHandlerRecord;
 
-TAILQ_HEAD(io_handlers_tailq, IOHandlerRecord);
-extern struct io_handlers_tailq io_handlers;
+struct io_handler_queue {
+    TAILQ_HEAD(, IOHandlerRecord) queue;
+    critical_section lock;
+};
+
+extern struct io_handler_queue io_handlers;
 
 #ifndef DEBUG_WAITOBJECTS
 int ioh_add_wait_object(ioh_event *event, WaitObjectFunc *func, void *opaque,
@@ -147,6 +153,6 @@ int ioh_set_np_handler2(ioh_handle np,
                          IOHandler *np_read,
                          IOHandler *np_write,
                          void *opaque,
-                         struct io_handlers_tailq *ioh_q);
+                         struct io_handler_queue *ioh_q);
 
 #endif	/* _IOH_H_ */

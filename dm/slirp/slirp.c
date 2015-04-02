@@ -66,8 +66,7 @@ static QTAILQ_HEAD(slirp_instances, Slirp) slirp_instances =
 
 int slirp_log_level = 1;
 
-struct io_handlers_tailq slirp_io_handlers =
-    TAILQ_HEAD_INITIALIZER(slirp_io_handlers);
+struct io_handler_queue slirp_io_handlers;
 #ifdef _WIN32
 WSAEVENT slirp_event;
 #endif
@@ -242,6 +241,8 @@ static void slirp_init_once(void)
     if (initialized)
         return;
     initialized = 1;
+
+    ioh_queue_init(&slirp_io_handlers);
 
     slirp_async_op_ctx = async_op_init();
 

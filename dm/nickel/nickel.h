@@ -78,7 +78,7 @@ struct nickel {
     ioh_event so_event;
 #endif
     ioh_event event;
-    struct io_handlers_tailq *io_handlers;
+    struct io_handler_queue io_handlers;
     WaitObjects *wait_objects;
 
 #if defined (NICKEL_THREADED)

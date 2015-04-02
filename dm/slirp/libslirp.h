@@ -13,7 +13,7 @@ struct mbuf;
 typedef struct Slirp Slirp;
 #endif  /* _TYPEDEF_H_ */
 
-extern struct io_handlers_tailq slirp_io_handlers;
+extern struct io_handler_queue slirp_io_handlers;
 #ifdef _WIN32
 extern WSAEVENT slirp_event;
 #endif

@@ -503,7 +503,7 @@ pipe_open(struct nickel *ni, const char *pipe_name)
         return NULL;
     }
 
-    chr = qemu_chr_open("nickel-pipe", pipe_name, NULL, ni->io_handlers);
+    chr = qemu_chr_open("nickel-pipe", pipe_name, NULL, &ni->io_handlers);
     if (!chr) {
         free(pipe);
         return NULL;

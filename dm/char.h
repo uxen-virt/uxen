@@ -37,7 +37,7 @@ struct CharDriverState {
     BH *bh;
     char *label;
     char *filename;
-    struct io_handlers_tailq *iohq;
+    struct io_handler_queue *iohq;
     uint32_t refcnt;
     int reconnect_on_close;
     int closing;
@@ -48,7 +48,7 @@ void chardev_init(void);
 
 CharDriverState *qemu_chr_open(const char *label, const char *filename,
 			       void (*init)(struct CharDriverState *s),
-                               struct io_handlers_tailq *io_handlers);
+                               struct io_handler_queue *io_handlers);
 void qemu_chr_close(CharDriverState *s);
 void qemu_chr_get(CharDriverState *s);
 int qemu_chr_put(CharDriverState *s);

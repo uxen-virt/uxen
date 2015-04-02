@@ -871,7 +871,7 @@ vmfwd(struct nickel *ni, const yajl_val object)
         CharDriverState *chr;
         void *opaque;
 
-        chr = qemu_chr_open("nickel-file", host_file, NULL, ni->io_handlers);
+        chr = qemu_chr_open("nickel-file", host_file, NULL, &ni->io_handlers);
         if (!chr) {
             error_report("could not open file %s", host_file);
             return -1;
@@ -1389,7 +1389,7 @@ static void * ni_thread_run(void *opaque)
                         __FUNCTION__, (unsigned long) delay_ms);
         }
         delay_ms = get_clock_ms(vm_clock);
-        ioh_wait_for_objects(ni->io_handlers, ni->wait_objects, ni->active_timers,
+        ioh_wait_for_objects(&ni->io_handlers, ni->wait_objects, ni->active_timers,
                 &timeout, &wait_time);
     }
 
@@ -1762,10 +1762,7 @@ int net_init_nickel(QemuOpts *opts, Monitor *mon, const char *name, VLANState *v
         goto mem_err;
     *(ni->wait_objects) = wo_initializer;
     ni->wait_objects->del_state = WO_OK;
-    ni->io_handlers = calloc(1, sizeof(struct io_handlers_tailq));
-    if (!ni->io_handlers)
-        goto mem_err;
-    TAILQ_HEAD_INIT(ni->io_handlers);
+    ioh_queue_init(&ni->io_handlers);
     ioh_event_init(&ni->deqin_ev);
     ioh_event_init(&ni->start_event);
     ioh_event_init(&ni->suspend_ev);
