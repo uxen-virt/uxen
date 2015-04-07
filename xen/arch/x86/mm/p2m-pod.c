@@ -2203,6 +2203,11 @@ guest_physmap_mark_populate_on_demand(struct domain *d, unsigned long gfn,
     {
         p2m_access_t a;
         omfn = p2m->get_entry(p2m, gfn + i, &ot, &a, p2m_query, NULL);
+
+        if (unlikely(mfn_x(omfn) == mfn_x(shared_zero_page)) &&
+            p2m_is_pod(ot) && !order)
+            goto out;
+
         if ( p2m_is_ram(ot) )
         {
             ASSERT(mfn_valid(omfn));
