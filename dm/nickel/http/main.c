@@ -117,7 +117,7 @@ static const char *hp_states[] = {
 #define HF_CLT_FIN          U32BF(9)
 #define HF_CLT_FIN_OK       U32BF(10)
 #define HF_407_MESSAGE      U32BF(11)
-#define HF_407_MESSAGE_200  U32BF(12)
+#define HF_407_MESSAGE_OK   U32BF(12)
 #define HF_CLOSED           U32BF(13)
 #define HF_RESOLVED         U32BF(14)
 #define HF_BINARY_STREAM    U32BF(15)
@@ -134,7 +134,6 @@ static const char *hp_states[] = {
 #define IS_RESOLVED(hp) ((hp)->flags & HF_RESOLVED)
 #define IS_TUNNEL(hp)   ((hp)->flags & HF_TUNNEL)
 #define IS_LONGREQ(hp)  ((hp)->cx && ((hp)->cx->flags & CXF_LONG_REQ))
-#define IS_407_ALLOW(hp) ((hp)->flags & HF_407_MESSAGE)
 
 #define HMSG_DNS_LOOKUP_FAILED  1
 #define HMSG_CONNECT_FAILED     2
@@ -235,6 +234,7 @@ struct http_ctx {
     uint32_t flags;
     int reconn_retry;
     struct buff *clt_out;
+    struct buff *c407_buff;
 
     struct http_auth *auth;
     struct proxy_t *proxy;
@@ -317,6 +317,7 @@ static struct clt_ctx * cx_create(struct nickel *ni);
 static int cx_guest_write(struct clt_ctx *cx);
 static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now);
 static int cx_hp_disconnect(struct clt_ctx *cx);
+static int on_cx_hp_connect(struct clt_ctx *cx);
 static void cx_lava_connect(struct clt_ctx *cx);
 static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf);
 static int cx_proxy_response(struct clt_ctx *cx, int msg, bool close);
@@ -449,7 +450,7 @@ static int prepare_clt_out(struct http_ctx *hp, bool prx_auth)
     assert(hp->cx);
 
     hp->cx->flags &= ~CXF_HEAD_REQUEST_SENT;
-    if (!IS_407_ALLOW(hp) && prx_auth) {
+    if (prx_auth) {
         assert(hp->auth);
         auth_header = hp->auth->auth_header;
     }
@@ -488,20 +489,6 @@ static int prepare_clt_out(struct http_ctx *hp, bool prx_auth)
         if (BUFF_APPENDFROM(hp->clt_out, hp->cx->in, hlen) < 0)
             goto out;
         appended = true;
-    }
-
-    if (IS_407_ALLOW(hp)) {
-        if (!appended && hp->cx->in && BUFF_BUFFERED(hp->cx->in) > hlen) {
-            if (BUFF_APPENDFROM(hp->clt_out, hp->cx->in, hlen) < 0)
-                goto out;
-            appended = true;
-        }
-        BUFF_RESET(hp->cx->in);
-        hp->hstate = HP_AUTHENTICATED;
-        start_authenticate(hp);
-        wakeup_client(hp);
-        ret = 0;
-        goto out;
     }
 
     if (!prx_auth) {
@@ -588,8 +575,7 @@ out:
 
 static int start_authenticate(struct http_ctx *hp)
 {
-    if (!IS_407_ALLOW(hp))
-        http_auth_reset(hp->auth);
+    http_auth_reset(hp->auth);
 
     if (hp->cx)
         hp->cx->flags &= ~CXF_PROXY_SUSPEND;
@@ -605,7 +591,7 @@ static int start_http(struct http_ctx *hp)
     if (hp_cx_connect_buffs(hp, true) < 0)
         goto out;
     assert(hp->cx && hp->cx->in);
-    if (hp->proxy && !hp->auth && !IS_407_ALLOW(hp)) {
+    if (hp->proxy && !hp->auth) {
         assert(hp->proxy->name);
         hp->auth = http_auth_create(hp->ni, hp, hp->proxy);
         if (!hp->auth)
@@ -649,6 +635,61 @@ out:
     return ret;
 }
 
+static int end_407_message(struct http_ctx *hp)
+{
+    struct clt_ctx *cx;
+
+    cx = hp->cx;
+    if (!cx)
+        return -1;
+
+    assert((hp->flags & (HF_407_MESSAGE | HF_407_MESSAGE_OK)) ==
+           (HF_407_MESSAGE | HF_407_MESSAGE_OK));
+    assert(hp->c407_buff);
+
+    /* replace "HTTP 407" with "HTTP 200", not to confuse the guest browser */
+    do {
+        char *s, *p, *q;
+
+        s = BUFF_BEGINNING(hp->c407_buff);
+        p = strchr(s, '\r');
+        if (!p)
+            break;
+        q = strchr(s, ' ');
+        if (!q || q - s > p - s)
+            break;
+        q = strstr(q, "407");
+        if (q) {
+            if (q - s > p - s)
+                break;
+            memcpy(q, "200", 3);
+        }
+    } while (1 == 0);
+
+    if (cx->out) {
+        buff_put(cx->out);
+        cx->out = NULL;
+    }
+    cx->out = hp->c407_buff;
+    hp->c407_buff = NULL;
+
+    if (cx->hp) {
+        if (cx->hp->cx == cx) {
+            cx_put(cx->hp->cx);
+            cx->hp->cx = NULL;
+        }
+        hp_put(cx->hp);
+        hp_close(cx->hp);
+        cx->hp = NULL;
+    }
+
+    cx->flags |= (CXF_FLUSH_CLOSE | CXF_IGNORE);
+    cx->flags &= ((~CXF_SUSPENDED) & (~CXF_PROXY_SUSPEND));
+    BUFF_CONSUME_ALL(cx->out);
+
+    return cx_guest_write(cx);
+}
+
 static int start_407_message(struct http_ctx *hp)
 {
     int ret = 0;
@@ -658,30 +699,12 @@ static int start_407_message(struct http_ctx *hp)
     if (!hp->cx->in || IS_TUNNEL(hp) || (hp->flags & HF_TLS))
         goto out_close;
 
-    if (hp->clt_out)
-        buff_put(hp->clt_out);
-    hp->clt_out = NULL;
-    BUFF_UNCONSUME(hp->cx->in);
+    hp->cx->flags |= CXF_PROXY_SUSPEND;
 
-    if (start_http(hp)) {
-        NETLOG("%s: ERROR - start_http error", __FUNCTION__);
+    if ((hp->flags & HF_407_MESSAGE_OK)) {
+        end_407_message(hp);
         goto out_close;
     }
-
-    assert(hp->cx->out);
-    BUFF_RESET(hp->cx->out);
-    hp->cx->flags &= ~CXF_PROXY_SUSPEND;
-
-    if (hp->cx->srv_parser)
-        parser_reset(hp->cx->srv_parser);
-
-    HLOG4("");
-    if ((hp->flags & HF_NEEDS_RECONNECT))
-        hp->flags &= (~HF_NEEDS_RECONNECT);
-    srv_reconnect(hp);
-    wakeup_client(hp);
-    if (hp_clt_process(hp, NULL, 0) < 0)
-        goto out_close;
 
 out:
     return ret;
@@ -955,6 +978,10 @@ static void hp_close(struct http_ctx *hp)
         buff_put(hp->clt_out);
         hp->clt_out = NULL;
     }
+    if (hp->c407_buff) {
+        buff_put(hp->c407_buff);
+        hp->c407_buff = NULL;
+    }
 
     hp->flags |= HF_CLOSED;
     hp_put(hp);
@@ -1050,7 +1077,8 @@ static int hp_cx_connect_next(struct http_ctx *hp, struct proxy_t *proxy)
         if (!cx->hp) {
             hp_get(hp);
             cx->hp = hp;
-            cx_lava_connect(cx);
+            if (on_cx_hp_connect(cx) < 0)
+                return -1;
         }
         free(hp->sv_name);
         if (cx->sv_name)
@@ -1185,6 +1213,15 @@ mem_err:
     goto out;
 }
 
+static int on_cx_hp_connect(struct clt_ctx *cx)
+{
+    cx_lava_connect(cx);
+    if (cx->hp && (cx->flags & CXF_407_MESSAGE) && start_407_message(cx->hp) < 0)
+        return -1;
+
+    return 0;
+}
+
 static struct http_ctx *
 cx_hp_connect_proxy(struct clt_ctx *cx)
 {
@@ -1205,7 +1242,8 @@ cx_hp_connect_proxy(struct clt_ctx *cx)
     if (!cx->hp) {
         hp_get(hp);
         cx->hp = hp;
-        cx_lava_connect(cx);
+        if (on_cx_hp_connect(cx) < 0)
+            goto close_hp;
     }
 
     if (cx->sv_name)
@@ -1302,7 +1340,8 @@ static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now)
         if (!cx->hp) {
             hp_get(hp);
             cx->hp = hp;
-            cx_lava_connect(cx);
+            if (on_cx_hp_connect(cx) < 0)
+                goto err;
         }
 
         if (cx->sv_name)
@@ -1370,7 +1409,8 @@ static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now)
         if (!cx->hp) {
             hp_get(hp);
             cx->hp = hp;
-            cx_lava_connect(cx);
+            if (on_cx_hp_connect(cx) < 0)
+                goto err;
         }
 
         free(hp->sv_name);
@@ -1657,8 +1697,7 @@ static int srv_reconnect(struct http_ctx *hp)
         BUFF_RESET(hp->cx->out);
     if (hp->cx && hp->cx->srv_parser)
         parser_reset(hp->cx->srv_parser);
-    if (!IS_407_ALLOW(hp))
-        http_auth_reset(hp->auth);
+    http_auth_reset(hp->auth);
     if (hp->clt_out)
         BUFF_UNCONSUME(hp->clt_out);
 
@@ -1671,8 +1710,7 @@ static int srv_reconnect_wait(struct http_ctx *hp)
 {
     hp->flags |= HF_NEEDS_RECONNECT;
     hp->cstate = S_RECONNECT;
-    if (!IS_407_ALLOW(hp))
-        http_auth_reset(hp->auth);
+    http_auth_reset(hp->auth);
 
     if (!hp->so)
         return 0;
@@ -1760,7 +1798,7 @@ static int srv_connected(struct http_ctx *hp)
         ret = -1;
         goto out;
     }
-    if (hp->proxy && !IS_407_ALLOW(hp) && (hp->auth || (hp->auth = http_auth_create(hp->ni,
+    if (hp->proxy && (hp->auth || (hp->auth = http_auth_create(hp->ni,
                         hp, hp->proxy)))) {
 
         hp->auth->sessions++;
@@ -2342,8 +2380,6 @@ auth_srv_send:
     if (IS_TUNNEL(hp))
         nobuf_write = true;
     assert(nobuf_write || len_buf == ret);
-    if (IS_407_ALLOW(hp))
-        goto write_clt_out;
     if (prepare_clt_auth(hp) < 0)
         goto err;
     if (hp->auth->logon_required) {
@@ -2441,57 +2477,6 @@ static int hp_srv_process(struct http_ctx *hp)
     if (hp->hstate == HP_IGNORE || hp->hstate == HP_FLUSH_CLOSE)
         goto out;
 
-    if (IS_407_ALLOW(hp)) {
-        if (!hp->cx->out || !hp->cx->srv_parser || !hp->cx->out->len)
-            goto out;
-
-        lparsed = 0;
-        if (hp->cx->out->prev_len < hp->cx->out->len) {
-            lparsed = parser_execute(hp->cx->srv_parser, (const char *) hp->cx->out->m +
-                        hp->cx->out->prev_len, hp->cx->out->len - hp->cx->out->prev_len);
-            needs_consume = true;
-        }
-        if (lparsed != hp->cx->out->len - hp->cx->out->prev_len) {
-            HLOG("http parsing error");
-            goto err;
-        }
-
-        if (hp->cx->srv_parser->parse_state != PS_HCOMPLETE &&
-                hp->cx->srv_parser->parse_state != PS_MCOMPLETE) {
-
-            goto out;
-        }
-
-        if (!(hp->flags & HF_407_MESSAGE_200)) {
-
-            /* replace "HTTP 407" with "HTTP 200", not to confuse the guest browser */
-            do {
-                char *s, *p, *q;
-
-                s = BUFF_BEGINNING(hp->cx->out);
-                p = strchr(s, '\r');
-                if (!p)
-                    break;
-                q = strchr(s, ' ');
-                if (!q || q - s > p - s)
-                    break;
-                q = strstr(q, "407");
-                if (q) {
-                    if (q - s > p - s)
-                        break;
-                    memcpy(q, "200", 3);
-                }
-            } while (1 == 0);
-
-            hp->flags |= HF_407_MESSAGE_200;
-        }
-
-        if (hp->cx->srv_parser->parse_state == PS_MCOMPLETE)
-            hp->hstate = HP_FLUSH_CLOSE;
-
-        goto write_guest;
-    }
-
     /* do we need to parse here ? */
     if (((hp->flags & HF_RESTARTABLE) || hp->proxy) && hp->cx->out->len &&
             (hp->hstate != HP_TUNNEL)) {
@@ -2512,7 +2497,38 @@ static int hp_srv_process(struct http_ctx *hp)
 
             headers_just_received = true;
             hp->cx->srv_parser->headers_parsed = 1;
+
+            if (hp->cx->srv_parser->h.status_code != HTTP_STATUS_PROXY_AUTH &&
+                hp->c407_buff) {
+
+                hp->flags &= ~HF_407_MESSAGE_OK;
+                buff_free(&hp->c407_buff);
+            }
         }
+
+        if (hp->cx->srv_parser->headers_parsed && hp->cx->srv_parser->h.status_code ==
+            HTTP_STATUS_PROXY_AUTH) {
+
+            if (!hp->c407_buff && !buff_new_priv(&hp->c407_buff, SO_READBUFLEN))
+                goto mem_err;
+
+            if (headers_just_received) {
+                BUFF_RESET(hp->c407_buff);
+                if (BUFF_APPENDFROM(hp->c407_buff, hp->cx->out, 0) < 0)
+                    goto mem_err;
+            } else if (BUFF_APPENDB(hp->c407_buff, hp->cx->out) < 0) {
+                goto mem_err;
+            }
+
+            if (resp_complete) {
+                hp->flags |= HF_407_MESSAGE_OK;
+                if ((hp->flags & HF_407_MESSAGE)) {
+                    end_407_message(hp);
+                    goto out_close;
+                }
+            }
+        }
+
         /* the HTTP response to a HEAD request or a 1xx, 204 or 304 response must not contain
          * body */
         if ((resp_complete || hp->cx->srv_parser->parse_state == PS_HCOMPLETE) &&
@@ -2818,9 +2834,14 @@ out:
     return ret;
 err:
     HLOG("error");
+out_close:
+    needs_consume = false;
     hp_close(hp);
     ret = -1;
     goto out;
+mem_err:
+    warnx("%s: malloc", __FUNCTION__);
+    goto err;
 }
 
 static void srv_response_received(struct http_ctx *hp)
@@ -3670,6 +3691,12 @@ static void rpc_connect_proxy_cb(void *opaque, dict d)
     }
     proxy_cache_add(hp->ni, hp->sv_name, hp->daddr.sin_port, proxy);
 
+    if ((hp->flags & (HF_407_MESSAGE | HF_407_MESSAGE_OK)) ==
+        (HF_407_MESSAGE | HF_407_MESSAGE_OK) && end_407_message(hp) < 0) {
+
+        goto error;
+    }
+
 out:
     return;
 
@@ -3985,7 +4012,8 @@ cx_accept(void *opaque, struct nickel *ni, struct socket *so)
     if (!cx->hp) {
         hp_get(hp);
         cx->hp = hp;
-        cx_lava_connect(cx);
+        if (on_cx_hp_connect(cx) < 0)
+            goto cleanup;
     }
     hp->so = so;
     hp->cstate = S_CONNECTED;
