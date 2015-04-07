@@ -4940,7 +4940,10 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
             goto out_buffer; /* wait till message complete */
         }
 
-        if (!cx->hp && cx->clt_parser && strcasecmp(cx->clt_parser->h.method, S_HEAD) == 0) {
+        if ((cx->flags & (CXF_HTTP | CXF_BINARY | CXF_TLS)) == CXF_HTTP &&
+            !cx->hp && cx->clt_parser && cx->clt_parser->h.method &&
+            strcasecmp(cx->clt_parser->h.method, S_HEAD) == 0) {
+
             cx->flags |= CXF_HEAD_REQUEST;
             cx->flags &= ~CXF_HEAD_REQUEST_SENT;
         }
