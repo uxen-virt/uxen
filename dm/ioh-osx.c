@@ -119,6 +119,8 @@ ioh_event_queue_drain(WaitObjects *w, ioh_event_queue *list)
         for (ev = 0; ev < num; ev++) {
             ioh_event *event = kev[ev].udata;
 
+            if (!event)
+                continue;
             if (event->processq)
                 TAILQ_REMOVE(event->processq, event, link);
             event->processq = list;
@@ -129,6 +131,10 @@ ioh_event_queue_drain(WaitObjects *w, ioh_event_queue *list)
 
 void ioh_init_wait_objects(WaitObjects *w)
 {
+    struct kevent kev;
+    int rc;
+    ioh_event tmp;
+
     w->num = 0;
     w->events = NULL;
     w->desc = NULL;
@@ -136,9 +142,38 @@ void ioh_init_wait_objects(WaitObjects *w)
     w->del_state = WO_OK;
     w->queue_len = 0;
     w->queue_fd = kqueue();
-
     if (w->queue_fd < 0)
         err(1, "%s: kqueue failed", __FUNCTION__);
+
+    ioh_event_init(&tmp);
+    w->interrupt = tmp.ident;
+
+    EV_SET(&kev, w->interrupt, EVFILT_USER, EV_ADD | EV_CLEAR, 0, 0, NULL);
+    rc = kevent(w->queue_fd, &kev, 1, NULL, 0, NULL);
+    if (rc == -1)
+        err(1, "%s: kevent failed", __FUNCTION__);
+}
+
+void ioh_wait_interrupt(WaitObjects *w)
+{
+    struct kevent kev;
+    int rc;
+
+    EV_SET(&kev, w->interrupt, EVFILT_USER, EV_ENABLE, NOTE_TRIGGER, 0, NULL);
+    rc = kevent(w->queue_fd, &kev, 1, NULL, 0, NULL);
+    if (rc == -1)
+        err(1, "%s: kevent failed", __FUNCTION__);
+}
+
+static void interrupt_reset(WaitObjects *w)
+{
+    struct kevent kev;
+    int rc;
+
+    EV_SET(&kev, w->interrupt, EVFILT_USER, EV_CLEAR | EV_DISABLE, 0, 0, NULL);
+    rc = kevent(w->queue_fd, &kev, 1, NULL, 0, NULL);
+    if (rc == -1)
+        err(1, "%s: kevent failed", __FUNCTION__);
 }
 
 void ioh_cleanup_wait_objects(WaitObjects *w)
@@ -341,6 +376,8 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
             ioh->object_events = events;
 #endif  /* CONFIG_NETEVENT */
         }
+        assert(!iohq->wait_queue);
+        iohq->wait_queue = w;
         critical_section_leave(&iohq->lock);
     }
 
@@ -511,6 +548,8 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
     /* remove deleted IO handlers */
     if (iohq) {
         critical_section_enter(&iohq->lock);
+        assert(iohq->wait_queue);
+        iohq->wait_queue = NULL;
         TAILQ_FOREACH_SAFE(ioh, &iohq->queue, queue, next) {
 #if defined(CONFIG_NETEVENT)
             if (ioh->deleted) {
@@ -523,6 +562,7 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
         }
         critical_section_leave(&iohq->lock);
     }
+    interrupt_reset(w);
 
 #ifndef LIBIMG
     if (active_timers) {

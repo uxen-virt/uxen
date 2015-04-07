@@ -165,6 +165,12 @@ void ioh_init_wait_objects(WaitObjects *w)
     w->desc = NULL;
     w->max = 0;
     w->del_state = WO_OK;
+    w->interrupt = (uintptr_t)CreateEvent(NULL, TRUE, FALSE, NULL);
+}
+
+void ioh_wait_interrupt(WaitObjects *w)
+{
+    SetEvent((HANDLE)w->interrupt);
 }
 
 void ioh_cleanup_wait_objects(WaitObjects *w)
@@ -238,8 +244,11 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
 #endif  /* CONFIG_NETEVENT */
             }
         }
+        assert(!iohq->wait_queue);
+        iohq->wait_queue = w;
         critical_section_leave(&iohq->lock);
     }
+    ioh_add_wait_object((ioh_event *)&w->interrupt, NULL, NULL, w);
 
 #ifndef LIBIMG
     if (active_timers) {
@@ -352,9 +361,12 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
         }
     }
 
+    ioh_del_wait_object((ioh_event *)&w->interrupt, w);
     /* remove deleted IO handlers */
     if (iohq) {
         critical_section_enter(&iohq->lock);
+        assert(iohq->wait_queue);
+        iohq->wait_queue = NULL;
         TAILQ_FOREACH_SAFE(ioh, &iohq->queue, queue, next) {
             if (ioh->np) {
                 if (ioh->deleted) {
@@ -387,6 +399,7 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
         }
         critical_section_leave(&iohq->lock);
     }
+    ResetEvent((HANDLE)w->interrupt);
 
 #ifndef LIBIMG
     if (active_timers) {
@@ -502,6 +515,8 @@ int ioh_set_np_handler2(HANDLE np,
         ioh->opaque = opaque;
         ioh->deleted = 0;
     }
+    if (iohq->wait_queue) /* asleep in another thread */
+        ioh_wait_interrupt(iohq->wait_queue);
     critical_section_leave(&iohq->lock);
 
     return 0;

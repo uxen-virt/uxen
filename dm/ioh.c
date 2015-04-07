@@ -15,6 +15,7 @@ void ioh_queue_init(struct io_handler_queue *iohq)
 {
     TAILQ_INIT(&iohq->queue);
     critical_section_init(&iohq->lock);
+    iohq->wait_queue = NULL;
 }
 
 #ifdef CONFIG_NETEVENT
@@ -54,6 +55,8 @@ int ioh_set_read_handler2(int fd,
         ioh->fd_read = fd_read;
         ioh->deleted = 0;
     }
+    if (iohq->wait_queue) /* asleep in another thread */
+        ioh_wait_interrupt(iohq->wait_queue);
     critical_section_leave(&iohq->lock);
     return 0;
 }
@@ -90,6 +93,8 @@ int ioh_set_write_handler2(int fd,
         ioh->fd_write = fd_write;
         ioh->deleted = 0;
     }
+    if (iohq->wait_queue) /* asleep in another thread */
+        ioh_wait_interrupt(iohq->wait_queue);
     critical_section_leave(&iohq->lock);
     return 0;
 }

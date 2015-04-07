@@ -76,6 +76,7 @@ struct WaitObjects {
     int queue_fd;
     int queue_len;
 #endif
+    uintptr_t interrupt;
 };
 
 typedef struct IOHandlerRecord {
@@ -124,12 +125,15 @@ typedef struct IOHandlerRecord {
 struct io_handler_queue {
     TAILQ_HEAD(, IOHandlerRecord) queue;
     critical_section lock;
+    WaitObjects *wait_queue;
 };
 
 extern struct io_handler_queue io_handlers;
 
 void ioh_init_wait_objects(WaitObjects *w);
 void ioh_cleanup_wait_objects(WaitObjects *w);
+
+void ioh_wait_interrupt(WaitObjects *w);
 
 #ifndef DEBUG_WAITOBJECTS
 int ioh_add_wait_object(ioh_event *event, WaitObjectFunc *func, void *opaque,
