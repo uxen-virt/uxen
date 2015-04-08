@@ -251,7 +251,9 @@ int main(int argc, char **argv)
         goto fail_boot1;
     }
 
+    ioh_init();
     bh_init();
+    aio_init();
     bdrv_init();
 
     if (!(bs = bdrv_new(""))) {

@@ -26,7 +26,9 @@ int main(int argc, char **argv)
         exit(-1);
     }
 
+    ioh_init();
     bh_init();
+    aio_init();
     bdrv_init();
     bs = bdrv_new("");
 

@@ -267,7 +267,9 @@ io_func* openFlatFile(const char* fileName)
     } else
         strcpy(fn, fileName);
 
+    ioh_init();
     bh_init();
+    aio_init();
     bdrv_init();
     fd = (FileData*) malloc(sizeof(FileData));
     assert(fd);

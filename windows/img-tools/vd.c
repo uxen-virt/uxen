@@ -36,6 +36,7 @@ static void
 vd_init(void)
 {
 
+    ioh_init();
     bh_init();
     aio_init();
     bdrv_init();

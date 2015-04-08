@@ -49,7 +49,9 @@ int main(int argc, const char **argv)
     strcpy(src, "swap:");
     strcat(src, argv[argc_swapfile]);
 
+    ioh_init();
     bh_init();
+    aio_init();
     bdrv_init();
     bs = bdrv_new(src);
 

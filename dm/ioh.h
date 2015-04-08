@@ -128,8 +128,10 @@ struct io_handler_queue {
     WaitObjects *wait_queue;
 };
 
+extern WaitObjects wait_objects;
 extern struct io_handler_queue io_handlers;
 
+void ioh_init(void);
 void ioh_init_wait_objects(WaitObjects *w);
 void ioh_cleanup_wait_objects(WaitObjects *w);
 

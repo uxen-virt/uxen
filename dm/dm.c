@@ -238,6 +238,7 @@ main(int argc, char **argv)
 
     chardev_init();
     dict_rpc_init();
+    ioh_init();
     bh_init();
     timers_init(NULL);
     ioport_init();
