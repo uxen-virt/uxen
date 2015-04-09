@@ -50,6 +50,7 @@ struct nickel {
     uint32_t tcp_nav_tx;
     uint32_t number_tcp_established;
     uint32_t suspend_request;
+    uint32_t number_lava_events;
 
     void *nc_opaque;
     struct in_addr network_addr;
@@ -131,6 +132,7 @@ struct nickel {
     uint32_t ac_n_allowed_dns_ips;
     struct ac_network *ac_denied_networks[1<<BAC_HASHSIZE];
     struct ac_network *ac_allowed_networks[1<<BAC_HASHSIZE];
+    int lava_events_per_host;
     critical_section ac_lk;
 
     struct buff *bf_dbg;

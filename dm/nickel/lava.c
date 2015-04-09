@@ -26,6 +26,7 @@ PCSTR WSAAPI inet_ntop (INT Family, PVOID pAddr, PSTR pStringBuf, size_t StringB
 
 #define LVI_STARTED       U32BF(0)
 #define LVI_CONNECTED     U32BF(1)
+#define LVI_SUBMITTED     U32BF(2)
 
 #define LVF_TCP                 U32BF(0)
 #define LVF_ESTABLISHED         U32BF(1)
@@ -233,6 +234,21 @@ static void lv_set_remote(struct lava_event *lv, const struct net_addr *a, uint1
     lv->remote_port = port;
 }
 
+static struct lava_event *
+lv_create(struct nickel *ni)
+{
+    struct lava_event *lv;
+
+    lv = calloc(1, sizeof(*lv));
+    if (!lv) {
+        warnx("%s: malloc error", __FUNCTION__);
+        return NULL;
+    }
+
+    lv->ni = ni;
+    return lv;
+}
+
 static void lv_free(struct lava_event *lv)
 {
     ni_priv_free(lv->http_method);
@@ -290,6 +306,8 @@ static void lv_submit_and_reset(struct lava_event *lv)
     if (lava_rpc_count > NUMBER_EVENTS_TRIGGER)
         ioh_event_set(&lava_event);
 
+    lv->internal |= LVI_SUBMITTED;
+    lv->ni->number_lava_events++;
 out:
     lv->internal &= ~LVI_STARTED;
     lv->flags &= ((~LVF_DENIED) & (~LVF_PROXY) & (~LVF_REMOTE_ESTABLISHED));
@@ -318,11 +336,9 @@ lava_event_create(struct nickel *ni, struct sockaddr_in sa, struct sockaddr_in d
     if (!lava_initialized || !ni->ac_event_log_enabled)
         goto out;
 
-    lv = calloc(1, sizeof(*lv));
-    if (!lv) {
-         warnx("%s: malloc error", __FUNCTION__);
+    lv = lv_create(ni);
+    if (!lv)
          goto out;
-    }
     lv->internal |= LVI_STARTED;
     if (tcp)
         lv->flags |= LVF_TCP;
@@ -402,7 +418,7 @@ void lava_event_remote_disconnect(struct lava_event *lv)
 {
     if (!lv || !(lv->internal & LVI_CONNECTED))
         return;
-    if ((lv->internal & LVI_STARTED))
+    if ((lv->internal & LVI_STARTED) && !lv->ni->lava_events_per_host)
         lv_submit_and_reset(lv);
     lv->internal &= ~LVI_CONNECTED;
 }
@@ -431,8 +447,11 @@ void lava_event_complete(struct lava_event *lv, bool del)
     if (!lv)
         return;
 
-    if ((lv->internal & LVI_STARTED))
+    if ((lv->internal & LVI_STARTED) && (!lv->ni->lava_events_per_host ||
+         !(lv->internal & LVI_SUBMITTED))) {
+
         lv_submit_and_reset(lv);
+    }
     if (del)
         lv_free(lv);
 }
@@ -456,7 +475,7 @@ void lava_event_save_and_clear(QEMUFile *f, struct lava_event *lv)
 }
 
 struct lava_event *
-lava_event_restore(QEMUFile *f)
+lava_event_restore(struct nickel *ni, QEMUFile *f)
 {
     struct lava_event *lv = NULL;
     struct lava_event_sv lvs;
@@ -473,11 +492,9 @@ lava_event_restore(QEMUFile *f)
     }
 
     qemu_get_buffer(f, (uint8_t *) &lvs, sizeof(lvs));
-    lv = calloc(1, sizeof(*lv));
-    if (!lv) {
-        warnx("%s: malloc error", __FUNCTION__);
+    lv = lv_create(ni);
+    if (!lv)
         goto consume;
-    }
     lv->internal = lvs.internal;
     lv->internal &= (~LVI_CONNECTED) & (~LVI_STARTED);
     lv->flags = lvs.flags;
@@ -523,6 +540,10 @@ int lava_init(struct nickel *ni)
 
     lava_initialized = true;
     ni->ac_event_log_enabled = 1;
+
+    if (ni->lava_events_per_host)
+        NETLOG("%s: reduced number of LAVA events (per remote connection)", __FUNCTION__);
+
     NETLOG("%s: Event Log enabled", __FUNCTION__);
     return 0;
 
@@ -544,5 +565,5 @@ void lava_exit(struct nickel *ni)
     ioh_event_close(&lava_event);
     ioh_event_close(&lava_flushed_event);
     critical_section_free(&lava_list_lock);
-    NETLOG("%s: exit", __FUNCTION__);
+    NETLOG("%s: exit #events %u", __FUNCTION__, (unsigned) ni->number_lava_events);
 }

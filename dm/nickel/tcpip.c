@@ -2689,7 +2689,7 @@ static int tcp_socket_load(QEMUFile *f, struct nickel *ni, int version_id, uint3
     }
 
     if (version_id >= 16) {
-        so->lv = lava_event_restore(f);
+        so->lv = lava_event_restore(ni, f);
         if (so->lv && n_lv)
             (*n_lv)++;
     }

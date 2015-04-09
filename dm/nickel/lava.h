@@ -29,6 +29,6 @@ void lava_event_remote_set(struct lava_event *lv, const struct net_addr *a, uint
 void lava_event_remote_established(struct lava_event *lv, struct net_addr *a, uint16_t port);
 void lava_event_complete(struct lava_event *lv, bool del);
 void lava_event_save_and_clear(QEMUFile *f, struct lava_event *lv);
-struct lava_event * lava_event_restore(QEMUFile *f);
+struct lava_event * lava_event_restore(struct nickel *ni, QEMUFile *f);
 
 #endif /* _NICKEL_LAVA_LOG_ */

@@ -963,6 +963,10 @@ static int ac_config(struct nickel *ni, const yajl_val d)
     ni->ac_max_tcp_conn = yajl_object_get_integer_default(d, "max-tcp-connections", 0);
     ni->ac_block_other_udp_icmp = yajl_object_get_bool_default(d, "block-other-udp-icmp", 0);
 
+    ni->lava_events_per_host = 1;
+    if (yajl_object_get_bool_default(d, "lava-all-events", 0))
+        ni->lava_events_per_host = 0;
+
     ni->ac_enabled = 1;
     ac_init(ni);
 
