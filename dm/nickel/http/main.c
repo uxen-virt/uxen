@@ -4431,6 +4431,8 @@ static int cx_guest_write(struct clt_ctx *cx)
             CXL5("parse_state %d", (int) cx->srv_parser->parse_state);
             if (cx->srv_parser->parse_state == PS_MCOMPLETE) {
                 cx->hp->flags |= HF_RESTART_OK;
+                if (cx->hp->flags & HF_REUSABLE)
+                    cx->hp->flags |= HF_REUSE_READY;
                 CXL5("PS_MCOMPLETE");
 
                 if ((cx->hp->flags & HF_HTTP_CLOSE))
