@@ -10,8 +10,6 @@
 #include "uXenDispFB.h"
 #include "uXenDispCtl.h"
 
-#include "dispi.h"
-
 #define super IOFramebuffer
 
 OSDefineMetaClassAndStructors(uXenDispFB, IOFramebuffer);
@@ -24,15 +22,15 @@ OSDefineMetaClassAndStructors(uXenDispFB, IOFramebuffer);
  *  and there: http://bit.ly/WRTCwt (IOGraphicsTypes.h User-Space Reference)
  */
 
-/* Bochs */
-struct bochs_mode {
+/* HW */
+struct hw_mode {
     int id;
     unsigned int xres;
     unsigned int yres;
     unsigned int bpp;
 };
 
-static struct bochs_mode bochs_modes[] = {
+static struct hw_mode hw_modes[] = {
     { 0x143,  800,  600, 32 },
     { 0x148, 1024,  768, 32 },
     { 0x14d, 1024,  700, 32 },
@@ -57,17 +55,17 @@ static struct bochs_mode bochs_modes[] = {
     { 0x201, 1920 * 2, 1200 * 2, 32 }, // not in bochs - 15" MacBook Pro Retina scaled
 };
 
-#define bochs_mode_count (sizeof (bochs_modes) / sizeof (bochs_modes[0]))
+#define hw_mode_count (sizeof (hw_modes) / sizeof (hw_modes[0]))
 
-#define Bochs16bpp  "RRRRRGGGGGGRRRRR"
-#define Bochs24bpp  "RRRRRRRRGGGGGGGGBBBBBBBB"
-#define Bochs32bpp  IO32BitDirectPixels
+#define Mode16bpp  "RRRRRGGGGGGRRRRR"
+#define Mode24bpp  "RRRRRRRRGGGGGGGGBBBBBBBB"
+#define Mode32bpp  IO32BitDirectPixels
 
 static int get_mode_info(int index, struct mode_info *info)
 {
-    struct bochs_mode *mode = &bochs_modes[index];
+    struct hw_mode *mode = &hw_modes[index];
 
-    if (!info || index > bochs_mode_count)
+    if (!info || index > hw_mode_count)
         return -1;
 
     info->id = mode->id;
@@ -95,7 +93,7 @@ static int get_mode_info(int index, struct mode_info *info)
         info->pix.componentMasks[0] = 0x0000F800; /* R */
         info->pix.componentMasks[1] = 0x000007E0; /* G */
         info->pix.componentMasks[2] = 0x0000001F; /* B */
-        snprintf(info->pix.pixelFormat, sizeof (IOPixelEncoding), Bochs16bpp);
+        snprintf(info->pix.pixelFormat, sizeof (IOPixelEncoding), Mode16bpp);
         break;
     case 24:
     case 32:
@@ -104,7 +102,7 @@ static int get_mode_info(int index, struct mode_info *info)
         info->pix.componentMasks[1] = 0x0000FF00; /* G */
         info->pix.componentMasks[2] = 0x000000FF; /* B */
         snprintf(info->pix.pixelFormat, sizeof (IOPixelEncoding),
-                 (mode->bpp == 32) ? Bochs32bpp : Bochs24bpp);
+                 (mode->bpp == 32) ? Mode32bpp : Mode24bpp);
         break;
     default:
         return -1;
@@ -113,35 +111,55 @@ static int get_mode_info(int index, struct mode_info *info)
     return 0;
 }
 
-static int set_mode(unsigned int width, unsigned int height,
-                    unsigned int bpp, unsigned int stride)
+int uXenDispFB::set_mode(unsigned int width, unsigned int height,
+                         unsigned int bpp, unsigned int stride)
 {
+    uint32_t fmt;
+
     dprintk("%s: Setting mode %dx%d/%d, %dbpp\n", __func__,
             width, height, stride, bpp);
 
-    /* Program DISPI */
-    dispi_write(VBE_DISPI_INDEX_XRES, width);
-    dispi_write(VBE_DISPI_INDEX_YRES, height);
-    dispi_write(VBE_DISPI_INDEX_BPP, bpp);
-    dispi_write(VBE_DISPI_INDEX_BANK, 0);
+    switch (bpp) {
+    case 32:
+        fmt = UXDISP_CRTC_FORMAT_BGRX_8888;
+        break;
+    case 24:
+        fmt = UXDISP_CRTC_FORMAT_BGR_888;
+        break;
+    case 16:
+        fmt = UXDISP_CRTC_FORMAT_BGR_565;
+        break;
+    case 15:
+        fmt = UXDISP_CRTC_FORMAT_BGR_555;
+        break;
+    default:
+        return -1;
+    }
+
+    uxdisp_crtc_write(0, UXDISP_REG_CRTC_ENABLE, 1);
+    uxdisp_crtc_write(0, UXDISP_REG_CRTC_XRES, width);
+    uxdisp_crtc_write(0, UXDISP_REG_CRTC_YRES, height);
+    uxdisp_crtc_write(0, UXDISP_REG_CRTC_STRIDE, stride);
+    uxdisp_crtc_write(0, UXDISP_REG_CRTC_FORMAT, fmt);
 
     /* Flush */
-    dispi_write(VBE_DISPI_INDEX_ENABLE, VBE_DISPI_ENABLED |
-                                        VBE_DISPI_8BIT_DAC |
-                                        VBE_DISPI_NOCLEARMEM);
+    uxdisp_crtc_write(0, UXDISP_REG_CRTC_OFFSET, 0);
 
     return 0;
 }
 
-static int get_current_mode(unsigned int *width, unsigned int *height,
-                            unsigned int *bpp /*, unsigned int *stride */)
+int uXenDispFB::get_current_mode(unsigned int *width, unsigned int *height,
+                                 unsigned int *bpp /*, unsigned int *stride */)
 {
     if (width)
-        *width = dispi_read(VBE_DISPI_INDEX_XRES);
+        *width = uxdisp_crtc_read(0, UXDISP_REG_CRTC_XRES);
     if (height)
-        *height = dispi_read(VBE_DISPI_INDEX_YRES);
-    if (bpp)
-        *bpp = dispi_read(VBE_DISPI_INDEX_BPP);
+        *height = uxdisp_crtc_read(0, UXDISP_REG_CRTC_YRES);
+    if (bpp) {
+        uint32_t fmt = uxdisp_crtc_read(0, UXDISP_REG_CRTC_FORMAT);
+
+        *bpp = uxdisp_fmt_to_bpp(fmt);
+    }
 
     return 0;
 }
@@ -159,18 +177,18 @@ uXenDispFB::init_modes()
 
     current_mode = NULL;
 
-    modes = (struct mode_info *)IOMalloc((bochs_mode_count + 2) *
+    modes = (struct mode_info *)IOMalloc((hw_mode_count + 2) *
                                          sizeof (*modes));
     if (!modes)
         return -1;
 
     n_modes = 0;
-    for (i = 0; i < bochs_mode_count; i++) {
+    for (i = 0; i < hw_mode_count; i++) {
         struct mode_info *m = &modes[n_modes];
 
         ret = get_mode_info(i, m);
         if (ret) {
-            IOFree(modes, (bochs_mode_count + 2) * sizeof (*modes));
+            IOFree(modes, (hw_mode_count + 2) * sizeof (*modes));
             return ret;
         }
         /* Check if enough video mem is available */
@@ -255,53 +273,9 @@ uXenDispFB::get_vram_size() const
 {
     size_t len;
 
-    len = dispi_read(VBE_DISPI_INDEX_VIDEO_MEMORY_64K);
+    len = 1 << uxdisp_read(UXDISP_REG_BANK_ORDER);
 
     return len * (64 * 1024);
-}
-
-/* cursor */
-
-#define CURSOR_WIDTH_MAX            128
-#define CURSOR_HEIGHT_MAX           128
-#define CURSOR_MEM_MAX              (CURSOR_WIDTH_MAX * CURSOR_HEIGHT_MAX * 4)
-
-#define CURSOR_FLAG_HIDE            (1 << 0)
-#define CURSOR_FLAG_MONOCHROME      (1 << 1)
-
-#define VBE_DISPI_INDEX_HWCURSOR_HI     0xd
-#define VBE_DISPI_INDEX_HWCURSOR_LO     0xe
-#define VBE_DISPI_INDEX_HWCURSOR_FLUSH  0xf
-
-struct cursor_desc {
-    uint32_t x, y;
-    uint32_t width, height;
-    uint32_t hot_x, hot_y;
-    uint64_t bitmap_addr;
-    uint64_t bitmap_len;
-    uint32_t argb_offset;
-    uint32_t flags;
-};
-
-static size_t cursor_len(int w, int h, int color)
-{
-    size_t bitmap_len;
-
-    if (color) {
-        bitmap_len = ((w + 7) / 8) * h;
-        bitmap_len = (bitmap_len + 3) & ~3;
-        bitmap_len += w * 4 * h;
-    } else {
-        bitmap_len = 2 * ((w + 7) / 8) * h;
-    }
-
-    return bitmap_len + sizeof (struct cursor_desc);
-}
-
-static void cursor_addr_write(uint32_t addr)
-{
-    dispi_write(VBE_DISPI_INDEX_HWCURSOR_HI, addr >> 16);
-    dispi_write(VBE_DISPI_INDEX_HWCURSOR_LO, addr & 0xffff);
 }
 
 /* IOFramebuffer */
@@ -381,7 +355,7 @@ uXenDispFB::getPixelFormats()
 {
     dprintk("%s\n", __func__);
 
-    return Bochs16bpp "\0" Bochs24bpp "\0" Bochs32bpp "\0\0";
+    return Mode16bpp "\0" Mode24bpp "\0" Mode32bpp "\0\0";
 }
 
 IOReturn
@@ -467,7 +441,8 @@ uXenDispFB::getPixelInformation(IODisplayModeID id, IOIndex depth,
 void
 uXenDispFB::flushCursor(void)
 {
-    dispi_write(VBE_DISPI_INDEX_HWCURSOR_FLUSH, 0);
+    uxdisp_write(UXDISP_REG_CURSOR_ENABLE,
+                 cursor_visible ? UXDISP_CURSOR_SHOW : 0);
 }
 
 IOReturn
@@ -476,9 +451,6 @@ uXenDispFB::setCursorImage(void *image)
     bool convert;
     IOHardwareCursorDescriptor c_desc;
     IOHardwareCursorInfo c_info;
-    struct cursor_desc *desc;
-
-    desc = (struct cursor_desc *)cursor_desc->getBytesNoCopy();
 
     c_desc.majorVersion = kHardwareCursorDescriptorMajorVersion;
     c_desc.minorVersion = kHardwareCursorDescriptorMinorVersion;
@@ -494,7 +466,8 @@ uXenDispFB::setCursorImage(void *image)
 
     c_info.majorVersion = kHardwareCursorInfoMajorVersion;
     c_info.minorVersion = kHardwareCursorInfoMinorVersion;
-    c_info.hardwareCursorData = (UInt8 *)cursor_bitmap->getBytesNoCopy();
+    c_info.hardwareCursorData = ((uint8_t *)mmio->getVirtualAddress() +
+                                 UXDISP_REG_CURSOR_DATA);
 
     convert = convertCursorImage(image, &c_desc, &c_info);
     if (!convert) {
@@ -502,11 +475,12 @@ uXenDispFB::setCursorImage(void *image)
         return kIOReturnError;
     }
 
-    desc->width = c_info.cursorWidth;
-    desc->height = c_info.cursorHeight;
-    desc->hot_x = c_info.cursorHotSpotX;
-    desc->hot_y = c_info.cursorHotSpotY;
-    desc->argb_offset = 0;
+    uxdisp_write(UXDISP_REG_CURSOR_WIDTH, c_info.cursorWidth);
+    uxdisp_write(UXDISP_REG_CURSOR_HEIGHT, c_info.cursorHeight);
+    uxdisp_write(UXDISP_REG_CURSOR_HOT_X, c_info.cursorHotSpotX);
+    uxdisp_write(UXDISP_REG_CURSOR_HOT_Y, c_info.cursorHotSpotY);
+    uxdisp_write(UXDISP_REG_CURSOR_CRTC, 0);
+    uxdisp_write(UXDISP_REG_CURSOR_FLAGS, 0);
 
     return kIOReturnSuccess;
 }
@@ -514,17 +488,13 @@ uXenDispFB::setCursorImage(void *image)
 IOReturn
 uXenDispFB::setCursorState(SInt32 x, SInt32 y, bool visible)
 {
-    struct cursor_desc *desc;
+    uxdisp_write(UXDISP_REG_CURSOR_POS_X, x);
+    uxdisp_write(UXDISP_REG_CURSOR_POS_Y, y);
 
-    desc = (struct cursor_desc *)cursor_desc->getBytesNoCopy();
-
-    if (!visible) {
-        desc->flags |= CURSOR_FLAG_HIDE;
-    } else {
-        desc->flags &= ~CURSOR_FLAG_HIDE;
+    if (visible != cursor_visible) {
+        cursor_visible = visible;
+        flushCursor();
     }
-
-    dispi_write(VBE_DISPI_INDEX_HWCURSOR_FLUSH, 0);
 
     return kIOReturnSuccess;
 }
@@ -572,67 +542,6 @@ uXenDispFB::getTimingInfoForDisplayMode(IODisplayModeID displayMode,
     info->detailedInfo.v2.horizontalActive = modes[mode].pix.activeWidth;
     info->detailedInfo.v2.verticalActive = modes[mode].pix.activeHeight;
     return kIOReturnSuccess;
-}
-
-int
-uXenDispFB::cursor_init(void)
-{
-    struct cursor_desc *desc;
-
-    cursor_desc = IOBufferMemoryDescriptor::inTaskWithPhysicalMask(
-            kernel_task,
-            kIODirectionOut,
-            sizeof (struct cursor_desc),
-            0x00000000fffff000);
-    if (!cursor_desc)
-        goto fail_desc;
-    cursor_desc->prepare();
-
-    cursor_bitmap = IOBufferMemoryDescriptor::inTaskWithPhysicalMask(
-            kernel_task,
-            kIODirectionOut | kIOMemoryPhysicallyContiguous,
-            CURSOR_MEM_MAX,
-            0xfffffffffffff000);
-    if (!cursor_bitmap)
-        goto fail_bitmap;
-    cursor_bitmap->prepare();
-
-    desc = (struct cursor_desc *)cursor_desc->getBytesNoCopy();
-    if (!desc)
-        goto fail_bytes;
-
-    memset(desc, 0, sizeof (struct cursor_desc));
-    desc->bitmap_addr = (uint64_t)cursor_bitmap->getPhysicalAddress();
-    desc->bitmap_len = (uint64_t)cursor_bitmap->getLength();
-
-    cursor_addr_write((uint32_t)cursor_desc->getPhysicalAddress());
-
-    return 0;
-
-fail_bytes:
-    cursor_bitmap->complete();
-    cursor_bitmap->release();
-fail_bitmap:
-    cursor_desc->complete();
-    cursor_desc->release();
-fail_desc:
-    return -1;
-}
-
-void
-uXenDispFB::cursor_cleanup(void)
-{
-    if (cursor_bitmap) {
-        cursor_bitmap->complete();
-        cursor_bitmap->release();
-        cursor_bitmap = NULL;
-    }
-
-    if (cursor_desc) {
-        cursor_desc->complete();
-        cursor_desc->release();
-        cursor_desc = NULL;
-    }
 }
 
 /* IOService */
@@ -722,6 +631,11 @@ uXenDispFB::start(IOService *provider)
         cleanup();
         return false;
     }
+    mmio = pcidev->mapDeviceMemoryWithRegister(kIOPCIConfigBaseAddress1);
+    if (!mmio) {
+        cleanup();
+        return false;
+    }
     vram_size = get_vram_size();
     if (vram_size > vram->getLength())
         vram_size = vram->getLength();
@@ -757,13 +671,9 @@ uXenDispFB::start(IOService *provider)
         return false;
     }
 
-    ret = cursor_init();
-    if (ret) {
-        cleanup();
-        return false;
-    }
-
     connect_interrupt.set = false;
+
+    cursor_visible = true;
 
     return true;
 }
@@ -782,8 +692,6 @@ uXenDispFB::cleanup()
     if (modes)
         IOFree(modes, n_modes * sizeof (*modes));
 
-    cursor_cleanup();
-  
     if (vblank_timer) {
         vblank_timer->release();
         vblank_timer = NULL;

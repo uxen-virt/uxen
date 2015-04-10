@@ -12,6 +12,8 @@
 #include <IOKit/graphics/IOFramebuffer.h>
 #include <IOKit/IOBufferMemoryDescriptor.h>
 
+#include "../../../dm/hw/uxdisp_hw.h" /* XXX */
+
 #if DEBUG
 #define dprintk(fmt, ...) IOLog("uxendisp: " fmt, ## __VA_ARGS__)
 #else
@@ -93,8 +95,7 @@ private:
     unsigned int custom_mode;
     unsigned int n_modes;
 
-    IOBufferMemoryDescriptor *cursor_desc;
-    IOBufferMemoryDescriptor *cursor_bitmap;
+    bool cursor_visible;
 
     /* vblank timer */
     IOWorkLoop *vblank_workloop;
@@ -107,8 +108,6 @@ private:
     int init_modes(void);
     size_t get_fb_size(void);
     size_t get_vram_size(void) const;
-    int cursor_init(void);
-    void cursor_cleanup(void);
 
     void configureInterrupt(interrupt_info *interrupt,
                             IOFBInterruptProc proc,
@@ -123,6 +122,30 @@ private:
     void enableVBL(bool enable);
   
     void cleanup();
+
+    int set_mode(unsigned int width, unsigned int height,
+                 unsigned int bpp, unsigned int stride);
+    int get_current_mode(unsigned int *width, unsigned int *height,
+                         unsigned int *bpp /*, unsigned int *stride */);
+
+    IOMemoryMap *mmio;
+
+    uint32_t uxdisp_read(uint32_t reg) const
+    {
+        return *(uint32_t *)((uint8_t *)mmio->getVirtualAddress() + reg);
+    }
+    void uxdisp_write(uint32_t reg, uint32_t val)
+    {
+        *(uint32_t *)((uint8_t *)mmio->getVirtualAddress() + reg) = val;
+    }
+    uint32_t uxdisp_crtc_read(uint32_t crtc, uint32_t reg) const
+    {
+        return uxdisp_read(UXDISP_REG_CRTC(crtc) + reg);
+    }
+    void uxdisp_crtc_write(uint32_t crtc, uint32_t reg, uint32_t val)
+    {
+        return uxdisp_write(UXDISP_REG_CRTC(crtc) + reg, val);
+    }
 };
 
 #endif /* _UXENDISP_FB_H_ */
