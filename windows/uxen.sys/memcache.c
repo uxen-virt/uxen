@@ -356,6 +356,9 @@ memcache_enter(mc_mfn_t mfn)
                 offset = 0;
             BUG_ON(offset == mc->md_next_offset);
         }
+        if (mc->mapped_pfn[offset] != ~0U)
+            memcache_unmap_mfn(mc->md_va, offset << PAGE_SHIFT,
+                               mc->mapped_pfn[offset]);
         clear_offset = offset + 1;
         if (clear_offset >= memcache_pfn_per_idx)
             clear_offset = 0;
