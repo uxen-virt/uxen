@@ -25,7 +25,7 @@ typedef void (*so_accept_t) (void *opaque, struct socket *so);
 
 void so_prepare(struct nickel *ni, int *timeout);
 void so_fd_nonblock(int fd);
-struct socket * so_create(struct nickel *ni, so_event_t cb, void *opaque);
+struct socket * so_create(struct nickel *ni, bool udp, so_event_t cb, void *opaque);
 void so_update_event(struct socket *so, so_event_t cb, void *opaque);
 int so_init(struct nickel *ni);
 int so_close(struct socket *so);

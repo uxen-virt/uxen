@@ -10,6 +10,7 @@
 struct net_user;
 struct socket;
 struct prx_fwd {
+    int is_udp;
     const char *name;
 
     void (*init) (struct nickel *ni, yajl_val config);
@@ -51,13 +52,13 @@ int
 ni_add_hostfwd_pipe(struct nickel *ni, int is_udp, const char *host_pipe, struct in_addr host_addr,
      int host_port, struct in_addr guest_addr, int guest_port, int close_reconnect, int close_on_retry);
 int ni_proxyfwd(struct nickel *ni, const yajl_val object);
-int ni_proxyfwd_add(struct nickel *ni, const char *name);
+int ni_proxyfwd_add(struct nickel *ni, const char *name, bool udp);
 CharDriverState *
 ni_udp_vmfwd_open(struct nickel *ni, struct sockaddr_in saddr,
         struct sockaddr_in daddr, void *opaque);
 CharDriverState *
 ni_tcp_vmfwd_open(struct nickel *ni, struct sockaddr_in saddr, struct sockaddr_in daddr, void *opaque);
 CharDriverState *
-ni_prx_open(struct nickel *ni, struct sockaddr_in saddr, struct sockaddr_in daddr, void *opaque);
+ni_prx_open(struct nickel *ni, bool udp, struct sockaddr_in saddr, struct sockaddr_in daddr, void *opaque);
 
 #endif

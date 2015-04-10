@@ -3243,7 +3243,7 @@ static int srv_connect(struct http_ctx *hp, const struct net_addr *a, uint16_t p
         return -1;
     }
 
-    if (!hp->so && !(hp->so = so_create(hp->ni, hp_event, hp))) {
+    if (!hp->so && !(hp->so = so_create(hp->ni, false, hp_event, hp))) {
         HLOG("ERROR on so_create");
         return -1;
     }
@@ -3276,7 +3276,7 @@ static int srv_connect_list(struct http_ctx *hp, struct net_addr *a, uint16_t po
 
     HLOG4("");
 
-    if (!hp->so && !(hp->so = so_create(hp->ni, hp_event, hp))) {
+    if (!hp->so && !(hp->so = so_create(hp->ni, false, hp_event, hp))) {
         HLOG("ERROR on so_create");
         goto out;
     }
@@ -3970,6 +3970,7 @@ out:
 }
 
 static struct prx_fwd prx = {
+    .is_udp = 0,
     .name = "http-proxy",
     .init = hp_init,
     .open = cx_open,
@@ -5044,6 +5045,7 @@ cx_open(void *opaque, struct nickel *ni, struct sockaddr_in saddr, struct sockad
     const char *sv_name = NULL;
     struct clt_ctx *cx = NULL;
 
+    NETLOG5("%s: to %s:%hu", __FUNCTION__, inet_ntoa(daddr.sin_addr), ntohs(daddr.sin_port));
     if (daddr.sin_addr.s_addr == 0 || daddr.sin_port == 0)
         goto cleanup;
 

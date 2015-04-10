@@ -1124,15 +1124,29 @@ ni_tcp_connect(struct nickel *ni, struct sockaddr_in saddr,
     CharDriverState *chr = NULL;
 
     if (daddr.sin_addr.s_addr == ni->host_addr.s_addr) {
-        tcpip_set_sock_type(so, SS_VMFWD);
-        chr = ni_tcp_vmfwd_open(ni, saddr, daddr, so);
-        if (chr)
-            ni_event(so, CHR_EVENT_OPENED);
-    } else {
-        tcpip_set_sock_type(so, SS_NAV);
-        chr = ni_prx_open(ni, saddr, daddr, so);
+        if (ni_is_tcp_vmfwd(ni, daddr.sin_addr, daddr.sin_port)) {
+            tcpip_set_sock_type(so, SS_VMFWD);
+            chr = ni_tcp_vmfwd_open(ni, saddr, daddr, so);
+            if (chr)
+                ni_event(so, CHR_EVENT_OPENED);
+
+            goto out;
+        }
+
+        /* do not allow connections to the loopback address
+         * if there is access control in place */
+        if (ni->ac_enabled)
+            goto out;
+
+    } else if ((daddr.sin_addr.s_addr & ni->network_mask.s_addr) ==
+               ni->network_addr.s_addr) {
+
+        goto out;
     }
 
+    tcpip_set_sock_type(so, SS_NAV);
+    chr = ni_prx_open(ni, false, saddr, daddr, so);
+out:
     return chr;
 }
 
@@ -1140,14 +1154,19 @@ CharDriverState *
 ni_udp_open(struct nickel *ni, struct sockaddr_in gaddr,
         struct sockaddr_in faddr, void *opaque)
 {
+    struct ni_socket *so = opaque;
     CharDriverState *chr = NULL;
 
-    chr = ni_udp_vmfwd_open(ni, gaddr, faddr, opaque);
-    if (chr)
-        return chr;
+    if (ni_is_udp_vmfwd(ni, faddr.sin_addr, faddr.sin_port)) {
+        chr = ni_udp_vmfwd_open(ni, gaddr, faddr, opaque);
+    } else if ((!ni->ac_enabled && faddr.sin_addr.s_addr == ni->host_addr.s_addr) ||
+               (faddr.sin_addr.s_addr & ni->network_mask.s_addr) !=
+               ni->network_addr.s_addr) {
 
-    // XXX direct connect
-    return NULL;
+        chr = ni_prx_open(ni, true, gaddr, faddr, so);
+    }
+
+    return chr;
 }
 
 void ni_close(void *opaque)
@@ -1842,7 +1861,11 @@ int net_init_nickel(QemuOpts *opts, Monitor *mon, const char *name, VLANState *v
     }
 #endif
 
-    ni_proxyfwd_add(ni, "http-proxy");
+    ni_proxyfwd_add(ni, "http-proxy", false);
+    if (!ni->ac_enabled) {
+        ni_proxyfwd_add(ni, "udp-service", true);
+        NETLOG("udp service automatically enabled");
+    }
 
     if (ni->tcp_disable_window_scale)
         NETLOG("%s: TCP window scale option DISABLED", __FUNCTION__);

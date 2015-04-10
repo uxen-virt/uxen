@@ -266,12 +266,13 @@ ni_udp_vmfwd_open(struct nickel *ni, struct sockaddr_in saddr,
 }
 
 static struct prx_fwd *
-ni_prx_find_service(const char *name)
+ni_prx_find_service(const char *name, bool udp)
 {
+    int is_udp = udp ? 1 : 0;
     struct prx_fwd *prx = NULL;
 
     LIST_FOREACH(prx, &ni_prx_list, entry)
-        if (!strcmp(prx->name, name))
+        if (prx->is_udp == is_udp && !strcmp(prx->name, name))
             break;
 
     return prx;
@@ -303,12 +304,22 @@ out:
 }
 
 CharDriverState *
-ni_prx_open(struct nickel *ni, struct sockaddr_in saddr, struct sockaddr_in daddr, void *opaque)
+ni_prx_open(struct nickel *ni, bool udp, struct sockaddr_in saddr,
+            struct sockaddr_in daddr, void *opaque)
 {
     struct prx_fwd *prx;
+    int is_udp = udp ? 1 : 0;
     CharDriverState *chr = NULL;
 
+    if (daddr.sin_addr.s_addr == ni->host_addr.s_addr) {
+        if (!ni->ac_enabled)
+            daddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+        else
+            return NULL;
+    }
     LIST_FOREACH(prx, &ni->prx_fwd, entry) {
+        if (is_udp != prx->is_udp)
+            continue;
         chr = prx->open(opaque, ni, saddr, daddr);
         if (chr)
             break;
@@ -347,20 +358,21 @@ ni_add_proxy(struct nickel *ni, struct prx_fwd *prx)
     return prx0;
 }
 
-int ni_proxyfwd_add(struct nickel *ni, const char *name)
+int ni_proxyfwd_add(struct nickel *ni, const char *name, bool udp)
 {
     struct prx_fwd *prx = NULL;
+    int is_udp = udp ? 1 : 0;
     dict d;
 
     LIST_FOREACH(prx, &ni->prx_fwd, entry) {
-        if (strcmp(prx->name, name) == 0)
+        if (prx->is_udp == is_udp && strcmp(prx->name, name) == 0)
             break;
     }
 
     if (prx)
         return 0;
 
-    prx = ni_prx_find_service(name);
+    prx = ni_prx_find_service(name, udp);
     if (prx == NULL) {
         error_report("unknown service %s for vm proxy forwarding", name);
         return -1;
@@ -384,13 +396,15 @@ int ni_proxyfwd(struct nickel *ni, const yajl_val object)
 {
     struct prx_fwd *prx;
     const char *name;
+    int is_udp = 0;
 
     name = yajl_object_get_string(object, "name");
     if (!name) {
         error_report("'name' key missing in vm proxy fwd dict");
         return -1;
     }
-    prx = ni_prx_find_service(name);
+    is_udp = yajl_object_get_bool_default(object, "udp", 0);
+    prx = ni_prx_find_service(name, is_udp != 0);
     if (prx == NULL) {
         error_report("unknown service %s for vm proxy forwarding", name);
         return -1;
@@ -407,6 +421,7 @@ int ni_proxyfwd(struct nickel *ni, const yajl_val object)
 
 void _ni_prx_add_service(struct prx_fwd *prx)
 {
+    prx->is_udp = !!prx->is_udp;
     LIST_INSERT_HEAD(&ni_prx_list, prx, entry);
 }
 
@@ -655,7 +670,7 @@ int ni_add_hostfwd(struct nickel *ni, int is_udp, struct in_addr host_addr,
     }
     hfwd->ni = ni;
 
-    lso = so_create(ni, hostfwd_listen_event, (void*) hfwd);
+    lso = so_create(ni, false, hostfwd_listen_event, (void*) hfwd);
     if (!lso) {
         NETLOG("%s: so_create error", __FUNCTION__);
         return -1;

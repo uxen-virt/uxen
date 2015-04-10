@@ -68,6 +68,8 @@ struct nickel {
     uint32_t if_rx;
     uint32_t if_tx;
 
+    uint8_t *udps_buf;
+    size_t udps_maxlen;
     struct buff output_list;
     struct buff noarp_output_list;
     ioh_event deqout_ev;

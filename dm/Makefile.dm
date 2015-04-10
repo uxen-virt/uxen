@@ -355,6 +355,7 @@ $(WINDOWS)NICKEL_SRCS += http/ntlm.c
 NICKEL_SRCS += http/proxy.c
 NICKEL_SRCS += http/parser.c
 NICKEL_SRCS += http/tls.c
+NICKEL_SRCS += udp-service.c
 
 VBOXDRV_SRCS += server.c
 VBOXDRV_SRCS += hgcm-simple.c

@@ -2343,12 +2343,9 @@ static int udp_input(struct nickel *ni, const uint8_t *pkt, size_t len,
         da.sin_port = udp->uh_dport;
 
         lv = lava_event_create(ni, sa, da, false);
-        if ((daddr & ni->network_mask.s_addr) != ni->network_addr.s_addr && daddr != 0xffffffff)
-            goto out;
-        if (ni->disable_dhcp && (NI_NTOHS(udp->uh_dport) == BOOTP_SERVER ||
-                    daddr == 0xffffffff))
-            goto out;
-        if (NI_NTOHS(udp->uh_dport) == BOOTP_SERVER) {
+        if ((daddr == 0xffffffff || daddr == ni->host_addr.s_addr) && !ni->disable_dhcp &&
+            NI_NTOHS(udp->uh_dport) == BOOTP_SERVER) {
+
             dhcp_input(ni, pkt, len, saddr, daddr);
             goto out;
         }

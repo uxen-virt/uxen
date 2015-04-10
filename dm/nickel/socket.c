@@ -136,6 +136,7 @@
 struct socket {
     LIST_ENTRY(socket) entry;
     struct nickel *ni;
+    int is_udp;
     int s;
     int state;
     uint32_t flags;
@@ -392,7 +393,7 @@ static int list_connect_next(struct socket *so)
     if (!so->a_list || !so->a_list[so->a_idx].family)
         goto cleanup;
 
-    cso = so_create(so->ni, NULL, NULL);
+    cso = so_create(so->ni, false, NULL, NULL);
     if (!cso)
         goto cleanup;
 
@@ -422,7 +423,7 @@ cleanup:
     goto out;
 }
 
-struct socket * so_create(struct nickel *ni, so_event_t cb, void *opaque)
+struct socket * so_create(struct nickel *ni, bool udp, so_event_t cb, void *opaque)
 {
     struct socket *so = NULL;
 
@@ -434,6 +435,8 @@ struct socket * so_create(struct nickel *ni, so_event_t cb, void *opaque)
     so->s = -1;
     so->evt_cb = cb;
     so->evt_opaque = opaque;
+    if (udp)
+        so->is_udp = 1;
     LIST_INSERT_HEAD(&ni->defered_list, so, entry);
 #if VERBSTATS
     atomic_inc(&so->ni->number_remote_sockets);
@@ -760,7 +763,7 @@ static void _so_connect(struct socket *so)
     else if (so->parent)
         list_connect_connecting(so->parent);
 
-    r = qemu_socket(so->addr.family, SOCK_STREAM, 0);
+    r = qemu_socket(so->addr.family, so->is_udp ? SOCK_DGRAM : SOCK_STREAM, 0);
     err = errno;
     so->last_err = err;
     if (r < 0) {
@@ -771,8 +774,10 @@ static void _so_connect(struct socket *so)
     so_fd_nonblock(so->s);
     opt = 1;
     setsockopt(so->s, SOL_SOCKET, SO_REUSEADDR, (char *)&opt, sizeof(opt));
-    opt = 1;
-    setsockopt(so->s, IPPROTO_TCP, TCP_NODELAY, (char *)&opt, sizeof(opt));
+    if (!so->is_udp) {
+        opt = 1;
+        setsockopt(so->s, IPPROTO_TCP, TCP_NODELAY, (char *)&opt, sizeof(opt));
+    }
 
     if (ipv4) {
         struct sockaddr_in saddr;
@@ -798,6 +803,8 @@ static void _so_connect(struct socket *so)
         goto out;
     }
     so->state = NSO_SS_CREATED;
+    if (so->is_udp)
+        ni_wakeup_loop(so->ni);
 out:
     return;
 }
@@ -843,7 +850,7 @@ static int so_accept(struct socket *so)
         goto err;
     }
 
-    aso = so_create(so->ni, so->evt_cb, so->evt_opaque);
+    aso = so_create(so->ni, false, so->evt_cb, so->evt_opaque);
     if (!aso) {
         warnx("%s: malloc failure", __FUNCTION__);
         goto err;
@@ -1050,6 +1057,11 @@ void so_prepare(struct nickel *ni, int *timeout)
         if (so->state == NSO_SS_CREATED) {
             update_fdevents(so, POLLIN | POLLOUT);
             so->state = NSO_SS_CONNECTING;
+            if (so->is_udp) {
+                so->state = NSO_SS_CONNECTED;
+                if (so->evt_cb)
+                    so->evt_cb(so->evt_opaque, SO_EVT_CONNECTED, so->last_err);
+            }
             continue;
         }
 
