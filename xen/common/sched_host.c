@@ -84,6 +84,12 @@ hostsched_dom_destroy(const struct scheduler *ops, struct domain *d)
     }
 
     d->vm_info_shared = NULL;
+
+    /* clear uuid of template domains, so that the uuid can be
+     * re-used */
+    if (is_template_domain(d))
+        atomic_write_domain_handle(&d->handle_atomic,
+                                   &handle_dead_template_domain);
 }
 
 void

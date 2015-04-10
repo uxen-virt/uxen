@@ -116,6 +116,10 @@ struct vcpu *idle_vcpu[NR_CPUS] __read_mostly;
 
 vcpu_info_t dummy_vcpu_info;
 
+const uint128_t handle_dead_template_domain = {
+    .val_lo = 0x0000010000000000ULL, .val_hi = 0x0000000000000000ULL
+};
+
 int current_domain_id(void)
 {
     return current->domain->domain_id;

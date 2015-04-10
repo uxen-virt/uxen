@@ -90,4 +90,6 @@ int continue_hypercall_on_cpu(
 
 extern unsigned int xen_processor_pmbits;
 
+extern const uint128_t handle_dead_template_domain;
+
 #endif /* __XEN_DOMAIN_H__ */
