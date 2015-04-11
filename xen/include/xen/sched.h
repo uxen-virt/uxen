@@ -390,7 +390,7 @@ struct domain
     /* Control-plane tools handle for this domain. */
     union {
         xen_domain_handle_t _handle;
-        atomic_uint128_t handle_atomic;
+        atomic_domain_handle_t handle_atomic;
     };
 
     int32_t time_offset_seconds;

@@ -319,8 +319,8 @@ DO(xen_version)(int cmd, XEN_GUEST_HANDLE(void) arg)
     {
         xen_domain_handle_t handle;
 
-        atomic_read_uint128(&current->domain->handle_atomic,
-                            (uint128_t *)handle);
+        atomic_read_domain_handle(&current->domain->handle_atomic,
+                                  (uint128_t *)handle);
 
         if ( copy_to_guest(arg, handle, ARRAY_SIZE(handle)) )
             return -EFAULT;

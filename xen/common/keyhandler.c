@@ -297,7 +297,7 @@ static void dump_domains(unsigned char key)
 #endif  /* __UXEN__ */
         xen_domain_handle_t handle;
 
-        atomic_read_uint128(&d->handle_atomic, (uint128_t *)handle);
+        atomic_read_domain_handle(&d->handle_atomic, (uint128_t *)handle);
 
         printk("General information for domain %u:\n", d->domain_id);
         cpuset_print(tmpstr, sizeof(tmpstr), d->domain_dirty_cpumask);

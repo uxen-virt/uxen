@@ -173,7 +173,7 @@ void getdomaininfo(struct domain *d, struct xen_domctl_getdomaininfo *info)
 
     info->cpupool = d->cpupool ? d->cpupool->cpupool_id : CPUPOOLID_NONE;
 
-    atomic_read_uint128(&d->handle_atomic, (uint128_t *)info->handle);
+    atomic_read_domain_handle(&d->handle_atomic, (uint128_t *)info->handle);
 
     info->pause_time = d->pause_time;
 }
@@ -779,8 +779,8 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
             break;
         }
 
-        atomic_write_uint128(&d->handle_atomic,
-                             (uint128_t *)op->u.setdomainhandle.handle);
+        atomic_write_domain_handle(&d->handle_atomic,
+                                   (uint128_t *)op->u.setdomainhandle.handle);
         hostsched_set_handle(d, op->u.setdomainhandle.handle);
 
         spin_unlock(&domlist_update_lock);

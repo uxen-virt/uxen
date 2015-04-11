@@ -189,7 +189,7 @@ do_setup_vm(struct uxen_createvm_desc *ucd, struct vm_info_shared *vmi,
     domctl_lock_release();
 
     vmi->vmi_domid = d->domain_id;
-    atomic_read_uint128(&d->handle_atomic, (uint128_t *)vmi->vmi_uuid);
+    atomic_read_domain_handle(&d->handle_atomic, (uint128_t *)vmi->vmi_uuid);
 
     printk("%s: domain %d: %" PRIuuid "\n", 
            __FUNCTION__, vmi->vmi_domid, PRIuuid_arg(vmi->vmi_uuid));

@@ -507,7 +507,7 @@ domain_create(domid_t dom, unsigned int flags, uint32_t ssidref,
 
     rcu_lock_domain(d);
 
-    atomic_write_uint128(&d->handle_atomic, (uint128_t *)uuid);
+    atomic_write_domain_handle(&d->handle_atomic, (uint128_t *)uuid);
 
     spin_unlock(&domlist_update_lock);
 
@@ -735,7 +735,7 @@ struct domain *rcu_lock_domain_by_uuid(xen_domain_handle_t uuid)
           d != NULL;
           d = rcu_dereference(d->next_in_list) )
     {
-        atomic_read_uint128(&d->handle_atomic, &d_uuid);
+        atomic_read_domain_handle(&d->handle_atomic, &d_uuid);
         if ( uint128_t_equal((uint128_t *)uuid, &d_uuid) )
         {
             rcu_lock_domain(d);

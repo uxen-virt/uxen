@@ -237,7 +237,7 @@ typedef union {
 typedef __int128 int128_t;
 #endif
 
-typedef uint128_t __attribute__ ((aligned (16))) atomic_uint128_t;
+typedef uint128_t __attribute__ ((aligned (16))) atomic_domain_handle_t;
 
 #ifdef __x86_64__
 #define uint128_t_equal(a, b) ((a)->value == (b)->value)
@@ -248,25 +248,25 @@ typedef uint128_t __attribute__ ((aligned (16))) atomic_uint128_t;
 
 #ifdef __x86_64__
 static inline void
-atomic_read_uint128(atomic_uint128_t *src, uint128_t *dst)
+atomic_read_domain_handle(const atomic_domain_handle_t *src, uint128_t *dst)
 {
 
     asm volatile ("xor %%rax, %%rax;"
                   "xor %%rbx, %%rbx;"
                   "xor %%rcx, %%rcx;"
                   "xor %%rdx, %%rdx;"
-                  "lock cmpxchg16b %0" : "+m"(*src),
+                  "lock cmpxchg16b %0" : "+m"(*(atomic_domain_handle_t *)src),
                   "=a"(dst->val_lo), "=d"(dst->val_hi)
                   : : "rbx", "rcx");
 }
 
 static inline void
-atomic_write_uint128(atomic_uint128_t *dst, uint128_t *val)
+atomic_write_domain_handle(atomic_domain_handle_t *dst, const uint128_t *val)
 {
     uint128_t cur;
     int result;
 
-    atomic_read_uint128(dst, &cur);
+    atomic_read_domain_handle(dst, &cur);
     do {
         asm volatile ("lock cmpxchg16b %0; setz %b1" : "+m"(*dst), "=q"(result),
                       "+a"(cur.val_lo), "+d"(cur.val_hi)
@@ -275,17 +275,27 @@ atomic_write_uint128(atomic_uint128_t *dst, uint128_t *val)
 }
 #else
 static inline void
-atomic_read_uint128(atomic_uint128_t *src, uint128_t *dst)
+atomic_read_domain_handle(const atomic_domain_handle_t *src, uint128_t *dst)
 {
 
-    memcpy(dst, src, sizeof(atomic_uint128_t));
+    /* sufficiently atomic_read_domain_handle -- uuid is being written to if
+     * val_lo==0 -- v4 uuid's always have both val_lo!=0 and
+     * val_hi!=0 -- special uuid's have val_hi==0 and we don't care
+     * about val_hi atomicity */
+    do {
+        dst->val_lo = atomic_read64(&src->val_lo);
+        dst->val_hi = atomic_read64(&src->val_hi);
+    } while (dst->val_lo != atomic_read64(&src->val_lo) ||
+             (!dst->val_lo && dst->val_hi));
 }
 
 static inline void
-atomic_write_uint128(atomic_uint128_t *dst, uint128_t *val)
+atomic_write_domain_handle(atomic_domain_handle_t *dst, const uint128_t *val)
 {
 
-    memcpy(dst, val, sizeof(atomic_uint128_t));
+    atomic_write64(&dst->val_lo, 0);
+    atomic_write64(&dst->val_hi, val->val_hi);
+    atomic_write64(&dst->val_lo, val->val_lo);
 }
 #endif
 
