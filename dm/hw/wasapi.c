@@ -32,6 +32,7 @@ struct wasapi_voice {
     WAVEFORMATEX fmt;
     wasapi_data_cb_t cb;
     void *cb_opaque;
+    uint64_t pos;
     int quit_thread;
     int silence;
     int frames;
@@ -435,6 +436,7 @@ int wasapi_play(wasapi_voice_t v)
         return -1;
     }
     v->quit_thread = 0;
+    v->pos = 0;
     create_thread(&v->thread, voice_thread_run, v);
     atomic_inc(&num_voices);
     atomic_inc(&num_nonsilent_voices);
@@ -472,19 +474,21 @@ int wasapi_get_position(wasapi_voice_t v, uint64_t *p)
     uint64_t freq;
     HRESULT hr;
 
-    *p = 0;
     hr = v->clock->lpVtbl->GetFrequency(v->clock, &freq);
     if ( FAILED(hr) ) {
         WASAPI_FAIL(hr);
+        *p = v->pos; /* last valid pos */
         return -1;
     }
 
     hr = v->clock->lpVtbl->GetPosition(v->clock, p, NULL);
     if ( FAILED(hr) ) {
         WASAPI_FAIL(hr);
+        *p = v->pos; /* last valid pos */
         return -1;
     }
     *p = *p * 1000000000 / freq;
+    v->pos = *p;
     return 0;
 }
 
