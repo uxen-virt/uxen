@@ -66,6 +66,7 @@ static UXenAudioState *state = NULL;
 static int transfer_out(UXenAudioVoiceOut *v);
 static void set_out_mode(UXenAudioVoiceOut *v, uxenaudio_out_mode_t new);
 static uint32_t waveout_pos(UXenAudioVoiceOut *v);
+static uint32_t out_where(UXenAudioVoiceOut *v);
 
 /* Audio Interfaces */
 
@@ -170,10 +171,12 @@ out_start(UXenAudioVoiceOut *v, uint32_t fmt)
 }
 
 static void
-out_stop(UXenAudioVoiceOut *v)
+out_stop(UXenAudioVoiceOut *v, uint32_t *pos)
 {
     if (v->wv) {
         wasapi_stop(v->wv);
+        if (pos)
+            *pos = out_where(v);
         wasapi_release_voice(v->wv);
         v->wv = 0;
         resampler_16_2_free(v->resampler);
@@ -226,7 +229,7 @@ set_out_mode(UXenAudioVoiceOut *v, uxenaudio_out_mode_t new)
         /* mute host audio, switch to virtual position use */
         v->virt_pos_t0 = qemu_get_clock(rt_clock);
         v->position_offset += v->last_realpos;
-        out_stop(v);
+        out_stop(v, NULL);
     } else if (old == UXENAUDIO_OUT_NULL &&
                new == UXENAUDIO_OUT_HOST_VIRT_POS) {
         out_start(v, v->regs.fmt);
@@ -592,7 +595,7 @@ stop_voice_out(UXenAudioVoiceOut *v)
     if (!s->ram_ptr)
         return;
 
-    out_stop(v);
+    out_stop(v, NULL);
 
     v->running = 0;
     v->rptr = 0;
@@ -640,8 +643,7 @@ uxenaudio_pre_save(void *opaque)
             UXenAudioVoiceOut *v = &s->voiceout[i];
             v->wptr = v->buf->wptr;
             if (v->running)
-                v->position_offset=out_where(v);
-            out_stop(v);
+                out_stop(v, &v->position_offset);
         }
     }
 
@@ -694,8 +696,8 @@ test_voice_lost(UXenAudioVoiceOut *v)
     if (v->running) {
         if (v->wv && wasapi_lost_voice(v->wv)) {
             /* voice is lost on audio endpoint changes (ex. when plugging headphones) */
-            v->position_offset=out_where(v);
-            out_stop(v);
+            debug_printf("audio voice lost\n");
+            out_stop(v, &v->position_offset);
             re_start_voice_out(v);
             v->omode = UXENAUDIO_OUT_HOST_VIRT_POS;
         }
@@ -1062,7 +1064,7 @@ uxenaudio_exitfn(PCIDevice *dev)
 
     for (i = 0; i < NVOICEOUT; ++i) {
         UXenAudioVoiceOut *v = &s->voiceout[i];
-        out_stop(v);
+        out_stop(v, NULL);
         out_release(v);
     }
 
@@ -1119,7 +1121,7 @@ uxenaudio_exit(void)
     if (state) {
         for (i = 0; i < NVOICEOUT; ++i) {
             UXenAudioVoiceOut *v = &state->voiceout[i];
-            out_stop(v);
+            out_stop(v, NULL);
             out_release(v);
         }
     }
