@@ -181,6 +181,7 @@ NTSTATUS CVoice::Start(VOID)
 	m_bRunning=TRUE;
 
 	m_nTicks=0;
+        m_nSilence=0;
 
 	return STATUS_SUCCESS;
 }
