@@ -27,8 +27,7 @@
  */
 
 #include "BDD.hxx"
-#include "pointer.h"
-#include "bochs.h"
+#include "hw.h"
 #include "perfcnt.h"
 
 VOID BASIC_DISPLAY_DRIVER::Init(_In_ DEVICE_OBJECT* pPhysicalDeviceObject)
@@ -39,7 +38,7 @@ VOID BASIC_DISPLAY_DRIVER::Init(_In_ DEVICE_OBJECT* pPhysicalDeviceObject)
     RtlZeroMemory(&m_StartInfo, sizeof(m_StartInfo));
     RtlZeroMemory(m_CurrentModes, sizeof(m_CurrentModes));
     RtlZeroMemory(&m_DeviceInfo, sizeof(m_DeviceInfo));
-    RtlZeroMemory(&m_MouseResources, sizeof(m_MouseResources));
+    RtlZeroMemory(&m_HwResources, sizeof(m_HwResources));
 
     m_pPhysicalDevice = pPhysicalDeviceObject;
     m_MonitorPowerState = PowerDeviceD0;
@@ -53,6 +52,44 @@ VOID BASIC_DISPLAY_DRIVER::Init(_In_ DEVICE_OBJECT* pPhysicalDeviceObject)
 
     m_NextMode.width = 1024;
     m_NextMode.height = 768;
+}
+
+NTSTATUS BASIC_DISPLAY_DRIVER::GetResources(_In_ PCM_RESOURCE_LIST pResList)
+{
+    PCM_FULL_RESOURCE_DESCRIPTOR list = NULL;
+    BOOLEAN VideoMemoryReady = FALSE;
+    BOOLEAN MmioMemoryReady = FALSE;
+
+    ASSERT(NULL != pResList);
+    ASSERT(1 == pResList->Count);
+
+    list = pResList->List;
+    for (ULONG jx = 0; jx < list->PartialResourceList.Count; ++jx) {
+        PCM_PARTIAL_RESOURCE_DESCRIPTOR desc;
+
+        desc = list->PartialResourceList.PartialDescriptors + jx;
+        if (desc->Type == CmResourceTypeMemory) {
+            PHYSICAL_ADDRESS startAddress = {0};
+            ULONGLONG length = 0;
+
+            length = RtlCmDecodeMemIoResource(desc, (PULONGLONG)&startAddress.QuadPart);
+            if ((length > 0) && (startAddress.QuadPart > 0))
+            {
+                if (!VideoMemoryReady) {
+                    m_CurrentModes[0].VideoMemory = startAddress;
+                    m_CurrentModes[0].VideoMemoryLength = length;
+                    VideoMemoryReady = TRUE;
+                }
+                else if (!MmioMemoryReady) {
+                    m_HwResources.mmioPhysicalAddress = startAddress;
+                    m_HwResources.mmioLength = length;
+                    MmioMemoryReady = TRUE;
+                }
+            }
+        }
+    }
+
+    return (VideoMemoryReady && MmioMemoryReady) ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL;
 }
 
 NTSTATUS BASIC_DISPLAY_DRIVER::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
@@ -92,15 +129,29 @@ NTSTATUS BASIC_DISPLAY_DRIVER::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartIn
     *pNumberOfViews = MAX_VIEWS;
     *pNumberOfChildren = MAX_CHILDREN;
 
-    bochs_init();
-    UxenMousePointerInitialize(&m_DeviceInfo, &m_MouseResources);
+    Status = GetResources(m_DeviceInfo.TranslatedResourceList);
+    if (!NT_SUCCESS(Status))
+    {
+        uxen_err("GetResources failed. Unable to find all required resources.");
+        return Status;
+    }
+
+    // Sanity check. Address given to us by PnP manager is the POST framebuffer.
+    ASSERT(m_CurrentModes[0].DispInfo.PhysicAddress.QuadPart == m_CurrentModes[0].VideoMemory.QuadPart);
+
+    Status = hw_init(&m_HwResources);
+    if (!NT_SUCCESS(Status))
+    {
+        uxen_err("hw_init failed. Unable to communicate with hardware.");
+        return Status;
+    }
 
     return STATUS_SUCCESS;
 }
 
 NTSTATUS BASIC_DISPLAY_DRIVER::StopDevice(VOID)
 {
-    UxenMousePointerCleanup(&m_MouseResources);
+    hw_cleanup(&m_HwResources);
     CleanUp();
 
     m_Flags.DriverStarted = FALSE;
@@ -290,7 +341,7 @@ NTSTATUS BASIC_DISPLAY_DRIVER::QueryAdapterInfo(_In_ CONST DXGKARG_QUERYADAPTERI
             pDriverCaps->SupportNonVGA = TRUE;
             pDriverCaps->SupportSmoothRotation = TRUE;
 
-            UxenQueryMousePointerCaps(pDriverCaps);
+            hw_query_mouse_pointer_caps(pDriverCaps);
 
             return STATUS_SUCCESS;
         }
@@ -309,14 +360,14 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERP
     ASSERT(pSetPointerPosition != NULL);
     ASSERT(pSetPointerPosition->VidPnSourceId < MAX_VIEWS);
 
-    return UxenSetPointerPosition(pSetPointerPosition, &m_MouseResources);
+    return hw_pointer_setpos(&m_HwResources, pSetPointerPosition);
 }
 
 NTSTATUS BASIC_DISPLAY_DRIVER::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape)
 {
     ASSERT(pSetPointerShape != NULL);
 
-    return UxenSetPointerShape(pSetPointerShape, &m_MouseResources);
+    return hw_pointer_update(&m_HwResources, pSetPointerShape);
 }
 
 

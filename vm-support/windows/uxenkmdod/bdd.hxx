@@ -142,6 +142,9 @@ typedef struct _CURRENT_BDD_MODE
     PHYSICAL_ADDRESS ZeroedOutStart;
     PHYSICAL_ADDRESS ZeroedOutEnd;
 
+    PHYSICAL_ADDRESS VideoMemory;
+    ULONGLONG VideoMemoryLength;
+
     // Linear frame buffer pointer
     // A union with a ULONG64 is used here to ensure this struct looks the same on 32bit and 64bit builds
     // since the size of a VOID* changes depending on the build.
@@ -184,12 +187,12 @@ public:
 
 };
 
-typedef struct _UXEN_MOUSE_RESOURCES {
-    PVOID               pHwptrDesc;
-    PHYSICAL_ADDRESS    hwptrDescAddr;
-    PVOID               pHwptrBitmap;
-    PHYSICAL_ADDRESS    hwptrBitmapAddr;
-} UXEN_MOUSE_RESOURCES, *PUXEN_MOUSE_RESOURCES;
+typedef struct _UXEN_HW_RESOURCES {
+    PHYSICAL_ADDRESS mmioPhysicalAddress;
+    ULONGLONG mmioLength;
+    PCHAR pMmio;
+    ULONG hwptrFlags;
+} UXEN_HW_RESOURCES, *PUXEN_HW_RESOURCES;
 
 class BASIC_DISPLAY_DRIVER
 {
@@ -225,7 +228,7 @@ private:
     // Device information
     DXGK_DEVICE_INFO m_DeviceInfo;
 
-    UXEN_MOUSE_RESOURCES m_MouseResources;
+    UXEN_HW_RESOURCES m_HwResources;
 
 public:
     VOID Init(_In_ DEVICE_OBJECT* pPhysicalDeviceObject);
@@ -334,6 +337,7 @@ private:
 
     NTSTATUS GetEdid(D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId);
 
+    NTSTATUS GetResources(_In_ PCM_RESOURCE_LIST pResList);
 
     // Given pixel format, give back the bits per pixel. Only supports pixel formats expected by BDD
     // (i.e. the ones found below in PixelFormatFromBPP or that may come in from FallbackStart)

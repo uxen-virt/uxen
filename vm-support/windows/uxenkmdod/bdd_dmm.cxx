@@ -27,7 +27,7 @@
  */
 
 #include "BDD.hxx"
-#include "bochs.h"
+#include "hw.h"
 
 // Display-Only Devices can only return display modes of D3DDDIFMT_A8R8G8B8.
 // Color conversion takes place if the app's fullscreen backbuffer has different format.
@@ -729,8 +729,9 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_M
 
     mode.VisScreenWidth = pSourceMode->Format.Graphics.PrimSurfSize.cx;
     mode.VisScreenHeight = pSourceMode->Format.Graphics.PrimSurfSize.cy;
+    mode.ScreenStride = pSourceMode->Format.Graphics.Stride;
     mode.BitsPerPlane = 32;
-    bochs_set_mode(&mode);
+    hw_set_mode(&m_HwResources, &mode);
 
     if (!pCurrentBddMode->Flags.DoNotMapOrUnmap)
     {

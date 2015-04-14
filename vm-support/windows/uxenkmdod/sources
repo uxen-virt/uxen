@@ -25,7 +25,6 @@ SOURCES = bdd.cxx \
           bdd_util.cxx \
           bltfuncs.cxx \
           blthw.cxx \
-          bochs.cxx \
-          Pointer.cxx \
+          hw.cxx \
           perfcnt.cxx \
           uxenkmdod.rc

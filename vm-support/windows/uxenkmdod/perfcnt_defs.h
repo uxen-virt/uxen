@@ -33,4 +33,4 @@ PERFCNT(DxgkDdiEscape)
 
 PERFCNT(BlackOutScreen)
 PERFCNT(SetNextMode)
-PERFCNT(bochs_set_mode)
+PERFCNT(hw_set_mode)
