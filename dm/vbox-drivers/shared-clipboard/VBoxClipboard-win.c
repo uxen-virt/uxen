@@ -333,6 +333,7 @@ int render_all_formats(HWND hwnd)
 {
     UINT fmt = 0;
     int r = -1;
+
     critical_section_enter(&vm_pause_lock);
     if (GetClipboardOwner() != hwnd) {
         LogRel(("not clipboard owner, skip render\n"));
@@ -357,6 +358,7 @@ out:
     return r;
 }
 
+/* should be done only once before vm close */
 int vm_renderclipboard(int wait)
 {
     if (g_ctx.hwnd && deferred_clipboard) {
@@ -435,6 +437,11 @@ static LRESULT CALLBACK vboxClipboardWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 break;
             }
 
+            if (uxen_clipboard_remote_render_blocked()) {
+                LogRel(("clipboard rendering blocked, skipping\n"));
+                break;
+            }
+
             /* Announce available formats. Do not insert data, they will be inserted in WM_RENDER*. */
             uint32_t u32Formats = (uint32_t)lParam;
 
@@ -449,6 +456,7 @@ static LRESULT CALLBACK vboxClipboardWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 Log(("WM_USER emptied clipboard\n"));
 
                 while (!uxenclipboard_get_announced_format(i, &local, &remote)) {
+                    LogRel(("process announced format local %x remote %x\n"));
                     if (deferred_clipboard) {
                         status = 1;
                         SetClipboardData(local, NULL);
@@ -478,6 +486,9 @@ static LRESULT CALLBACK vboxClipboardWndProc(HWND hwnd, UINT msg, WPARAM wParam,
         } break;
 
         case WM_USER+1:
+            /* block any guest induced render operations from now on */
+            uxen_clipboard_block_remote_render(1);
+            /* render internally */
             render_all_formats(hwnd);
             break;
         default:

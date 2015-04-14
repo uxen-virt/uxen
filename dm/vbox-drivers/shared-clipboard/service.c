@@ -85,7 +85,8 @@
  *
  * This section may be written in the future :)
  */
-#include <windows.h>
+#include <dm/os.h>
+#include <dm/vbox-drivers/heap.h>
 #include "VBoxClipboardSvc.h"
 #include "VBoxClipboardExt.h"
 #include "clipboardformats.h"
@@ -94,7 +95,6 @@
 #include <iprt/string.h>
 #include <iprt/assert.h>
 
-#include <dm/vbox-drivers/heap.h>
 #include "VBoxClipboard.h"
 #include "clipboard-interface.h"
 
@@ -241,6 +241,7 @@ static uint64_t RTTimeSystemMilliTS()
 
 static bool click_seen, last_input_event_is_right_click;
 static int clicks_seen;
+static int remote_render_blocked;
 
 static uint64_t copy_allowed_timestamp, paste_allowed_timestamp;
 static uint64_t click_timestamp;
@@ -265,6 +266,16 @@ static uint64_t paste_allowed_timestamp_delta()
 void uxen_clipboard_allow_copy_access()
 {
     copy_allowed_timestamp = RTTimeSystemMilliTS();
+}
+
+int uxen_clipboard_remote_render_blocked(void)
+{
+    return remote_render_blocked;
+}
+
+void uxen_clipboard_block_remote_render(int block)
+{
+    remote_render_blocked = block;
 }
 
 enum {
@@ -508,7 +519,8 @@ static void vboxSvcClipboardPostQuit()
 static int svcInit (void)
 {
     int rc = VINF_SUCCESS;
-    
+
+    remote_render_blocked = 0;
     clicks_seen = 0;
     click_seen = false;
     last_input_event_is_right_click = false;
