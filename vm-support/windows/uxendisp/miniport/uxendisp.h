@@ -15,7 +15,7 @@
 
 /* PCI vendor and device IDs. */
 #define UXENDISP_PCI_VEN    0x5853
-#define UXENDISP_PCI_DEV    0x5101
+#define UXENDISP_PCI_DEV    0x5102
 
 typedef struct _DEVICE_EXTENSION {
     PVP_DMA_ADAPTER dma;

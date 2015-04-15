@@ -100,7 +100,8 @@ void pci_setup(void)
         case 0x0300:
             /* If emulated VGA is found, preserve it as primary VGA. */
             if ( ((vendor_id == 0x1234) && (device_id == 0x1111)) ||
-                 ((vendor_id == 0x5853) && (device_id == 0x5101)) )
+                 ((vendor_id == 0x5853) && (device_id == 0x5101)) ||
+                 ((vendor_id == 0x5853) && (device_id == 0x5102)) )
             {
                 vga_devfn = devfn;
                 virtual_vga = VGA_std;

@@ -19,12 +19,10 @@ uxenkmdod.sys = 0
 %uXenMfg% = uXenMfg,NTAMD64
 
 [uXenMfg]
-%uxenkmdodFriendlyName% = uxenkmdod_Inst, PCI\CC_0300
-%uxenkmdodFriendlyName% = uxenkmdod_Inst, PCI\CC_0301
+%uxenkmdodFriendlyName% = uxenkmdod_Inst, PCI\VEN_5853&DEV_5102
 
 [uXenMfg.NTAMD64]
-%uxenkmdodFriendlyName% = uxenkmdod_Inst, PCI\CC_0300
-%uxenkmdodFriendlyName% = uxenkmdod_Inst, PCI\CC_0301
+%uxenkmdodFriendlyName% = uxenkmdod_Inst, PCI\VEN_5853&DEV_5102
 
 [uxenkmdod_Inst]
 Include      = msdv.inf

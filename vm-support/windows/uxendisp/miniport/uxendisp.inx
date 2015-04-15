@@ -18,19 +18,19 @@ uxendisp.Display = 11	; system32
 
 ; WinXP x86 and up
 [q.NTx86]
-%uxendisp.DeviceDesc% = uxendisp, PCI\VEN_5853&DEV_5101
+%uxendisp.DeviceDesc% = uxendisp, PCI\VEN_5853&DEV_5102
 
 ; WinXP x64 and up
 [q.NTamd64]
-%uxendisp.DeviceDesc% = uxendisp, PCI\VEN_5853&DEV_5101
+%uxendisp.DeviceDesc% = uxendisp, PCI\VEN_5853&DEV_5102
 
 ; Vista x86 and up
 [q.NTx86.6.0]
-%uxendisp.DeviceDesc% = uxendisp_vista, PCI\VEN_5853&DEV_5101
+%uxendisp.DeviceDesc% = uxendisp_vista, PCI\VEN_5853&DEV_5102
 
 ; Vista x64 and up
 [q.NTamd64.6.0]
-%uxendisp.DeviceDesc% = uxendisp_vista, PCI\VEN_5853&DEV_5101
+%uxendisp.DeviceDesc% = uxendisp_vista, PCI\VEN_5853&DEV_5102
 
 [ControlFlags]
 ExcludeFromSelect = *
