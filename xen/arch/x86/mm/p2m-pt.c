@@ -274,20 +274,37 @@ p2m_next_level(struct p2m_domain *p2m, mfn_t *table_mfn, void **table,
         if ( pg == NULL )
             return 0;
 
-        /* New splintered mappings inherit the flags of the old superpage, 
-         * with a little reorganisation for the _PAGE_PSE_PAT bit. */
         flags = l1e_get_flags(*p2m_entry);
-        pfn = l1e_get_pfn(*p2m_entry);
-        if ( pfn & 1 )           /* ==> _PAGE_PSE_PAT was set */
-            pfn -= 1;            /* Clear it; _PAGE_PSE becomes _PAGE_PAT */
-        else
-            flags &= ~_PAGE_PSE; /* Clear _PAGE_PSE (== _PAGE_PAT) */
-        
+        if (p2m_is_pod(p2m_flags_to_type(flags))) {
+            /* when populating a populate on demand superpage, don't
+             * "split" the mfn value since it's in most cases 0 or some
+             * pod specific value, but not an actual mfn */
+#ifndef NDEBUG
+            pfn = l1e_get_pfn(*p2m_entry);
+            if (pfn)
+                WARN_ONCE();
+#else  /* NDEBUG */
+            pfn = 0;
+#endif /* NDEBUG */
+            /* new_entry is constant */
+            new_entry = l1e_from_pfn(pfn, flags);
+            p2m_add_iommu_flags(&new_entry, 0, 0);
+        } else {
+            /* New splintered mappings inherit the flags of the old superpage,
+             * with a little reorganisation for the _PAGE_PSE_PAT bit. */
+            pfn = l1e_get_pfn(*p2m_entry);
+            if ( pfn & 1 )           /* ==> _PAGE_PSE_PAT was set */
+                pfn -= 1;            /* Clear it; _PAGE_PSE becomes _PAGE_PAT */
+            else
+                flags &= ~_PAGE_PSE; /* Clear _PAGE_PSE (== _PAGE_PAT) */
+        }
         l1_entry = __map_domain_page(pg);
         for ( i = 0; i < L1_PAGETABLE_ENTRIES; i++ )
         {
-            new_entry = l1e_from_pfn(pfn + i, flags);
-            p2m_add_iommu_flags(&new_entry, 0, 0);
+            if (!p2m_is_pod(p2m_flags_to_type(flags))) {
+                new_entry = l1e_from_pfn(pfn + i, flags);
+                p2m_add_iommu_flags(&new_entry, 0, 0);
+            }
             p2m->write_p2m_entry(p2m, gfn,
                 l1_entry+i, *table_mfn, new_entry, 1);
         }
@@ -298,6 +315,11 @@ p2m_next_level(struct p2m_domain *p2m, mfn_t *table_mfn, void **table,
         p2m_add_iommu_flags(&new_entry, 1, IOMMUF_readable|IOMMUF_writable);
         p2m->write_p2m_entry(p2m, gfn,
             p2m_entry, *table_mfn, new_entry, 2);
+        if (p2m_is_pod(p2m_flags_to_type(flags))) {
+            ASSERT(!is_template_domain(p2m->domain));
+            atomic_dec(&p2m->domain->clone.l1_pod_pages);
+            atomic_add(1 << PAGE_ORDER_2M, &p2m->domain->pod_pages);
+        }
     }
 
     *table_mfn = _mfn(l1e_get_pfn(*p2m_entry));
@@ -786,7 +808,7 @@ npt_parse_entry(void *table, unsigned long index,
     mfn_t mfn;
     l1_pgentry_t *l1e = (l1_pgentry_t *)table + index;
 
-    if (l1e_get_flags(*l1e) & _PAGE_PRESENT) {
+    if (p2m_is_valid(p2m_flags_to_type(l1e_get_flags(*l1e)))) {
         *t = p2m_flags_to_type(l1e_get_flags(*l1e));
         /* Not implemented except with EPT */
         *a = p2m_access_rwx;
@@ -794,7 +816,7 @@ npt_parse_entry(void *table, unsigned long index,
     } else {
         *t = p2m_mmio_dm;
         /* Not implemented except with EPT */
-        *a = p2m_access_rwx;
+        *a = p2m_access_n;
         mfn = _mfn(INVALID_MFN);
     }
 
@@ -915,15 +937,18 @@ pod_retry_l2:
         mfn = _mfn(INVALID_MFN);
         /* PoD: Try to populate a 2-meg chunk */
         if (p2m_is_pod(p2m_flags_to_type(l2e_get_flags(*l2e)))) {
-            if ( q != p2m_query ) {
-                if (!p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_2M, q, l2e))
-                    goto pod_retry_l2;
-            } else {
+            if (q == p2m_query) {
                 mfn = _mfn(l2e_get_pfn(*l2e));
                 *t = p2m_populate_on_demand;
+                goto out_l2;
             }
+
+            if (!p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_2M, q, l2e))
+                goto pod_retry_l2;
+            goto out_l2;
         }
-    
+
+      out_l2:
         unmap_domain_page(l2e);
         if (page_order)
             *page_order = PAGE_ORDER_2M;
@@ -974,25 +999,24 @@ pod_retry_l2:
         break;
     }
 
-    if ((l1e_get_flags(*l1e) & _PAGE_PRESENT) == 0)
-        goto out;
+    if (p2m_is_valid(p2m_flags_to_type(l1e_get_flags(*l1e)))) {
+        *t = p2m_flags_to_type(l1e_get_flags(*l1e));
 
-    mfn = _mfn(l1e_get_pfn(*l1e));
-    *t = p2m_flags_to_type(l1e_get_flags(*l1e));
+        mfn = _mfn(l1e_get_pfn(*l1e));
 
-    if (is_p2m_zeroshare_any(q)) {
-        if (p2m_pod_zero_share(p2m, gfn, PAGE_ORDER_4K, q, l1e))
+        if (is_p2m_zeroshare_any(q)) {
+            if (p2m_pod_zero_share(p2m, gfn, PAGE_ORDER_4K, q, l1e))
+                goto out;
+            *t = p2m_populate_on_demand;
+            mfn = _mfn(INVALID_MFN);
             goto out;
-        *t = p2m_populate_on_demand;
-        mfn = _mfn(INVALID_MFN);
-        goto out;
+        }
     }
 
-    ASSERT(mfn_valid(mfn) || !p2m_is_ram(*t));
   out:
+    unmap_domain_page(l1e);
     if (page_order)
         *page_order = PAGE_ORDER_4K;
-    unmap_domain_page(l1e);
     return mfn;
 }
 
