@@ -173,8 +173,8 @@ fc_write_hdr(HANDLE file, filecrypt_hdr_t *h)
 static void
 _crypt(filecrypt_hdr_t *h, void *buf, uint64_t off, uint32_t len)
 {
-    int keylen = h->keylen;
-    uint32_t keyoff = (uint32_t)(off & (h->keylen*8-1));
+    uint32_t keylen = h->keylen;
+    uint32_t keyoff = (uint32_t)(off & (keylen-1));
     word_t *key = (word_t*)&h->key[keyoff];
     word_t *p = buf;
     word_t *pk, *pkend;
@@ -184,7 +184,7 @@ _crypt(filecrypt_hdr_t *h, void *buf, uint64_t off, uint32_t len)
 
     while (n--) {
         pk = key;
-        pkend = key + (h->keylen / sizeof(word_t));
+        pkend = key + (keylen / sizeof(word_t));
         while (pk != pkend)
             *p++ ^= *pk++;
     }
