@@ -69,7 +69,7 @@ _pad(HANDLE file, int sz)
 void FILECRYPT_API
 fc_init(void)
 {
-    seed = (uint32_t)(time(NULL) * 987654);
+    seed = (uint32_t)(time(NULL) * 987654 + GetCurrentProcessId() * 54321);
 }
 
 static uint32_t
