@@ -8,6 +8,8 @@
 #include <stdlib.h>
 #include <time.h>
 
+static uint32_t seed;
+
 #if __x86_64__
 typedef uint64_t word_t;
 #else
@@ -67,7 +69,14 @@ _pad(HANDLE file, int sz)
 void FILECRYPT_API
 fc_init(void)
 {
-    srand(time(NULL));
+    seed = (uint32_t)(time(NULL) * 987654);
+}
+
+static uint32_t
+random(uint32_t *seed)
+{
+    *seed = 1103515245 * *seed + 12345;
+    return *seed;
 }
 
 static void
@@ -93,7 +102,7 @@ fc_init_hdr(void)
     h->crypttype = CRYPT_TRIVIAL;
     h->keylen = FILECRYPT_KEYBYTES;
     for (i = 0; i < h->keylen; ++i) {
-        h->key[i] = 1 + rand() % 255;
+        h->key[i] = 1 + random(&seed) % 255;
     }
     extend_key(h);
     h->hdrversion = 0;
