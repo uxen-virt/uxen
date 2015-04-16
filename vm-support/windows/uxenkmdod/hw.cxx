@@ -37,7 +37,9 @@ NTSTATUS hw_init(_Inout_ PUXEN_HW_RESOURCES pHw)
 
     ASSERT(NULL != pHw);
 
-    pHw->pMmio = (PCHAR)MmMapIoSpace(pHw->mmioPhysicalAddress, pHw->mmioLength, MmNonCached);
+    pHw->pMmio = (PCHAR)MmMapIoSpace(pHw->mmioPhysicalAddress,
+                                     (SIZE_T)pHw->mmioLength,
+                                     MmNonCached);
     if (pHw->pMmio != NULL) {
         magic = uxdisp_read(pHw, UXDISP_REG_MAGIC);
         if (magic == UXDISP_MAGIC) {
@@ -52,7 +54,7 @@ NTSTATUS hw_init(_Inout_ PUXEN_HW_RESOURCES pHw)
 
 void hw_cleanup(_Inout_ PUXEN_HW_RESOURCES pHw)
 {
-    MmUnmapIoSpace(pHw->pMmio, pHw->mmioLength);
+    MmUnmapIoSpace(pHw->pMmio, (SIZE_T)pHw->mmioLength);
 }
 
 NTSTATUS hw_set_mode(
