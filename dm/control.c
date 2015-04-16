@@ -464,6 +464,33 @@ control_command_clipboard_render(void *opaque, const char *id, const char *opt,
     return 0;
 }
 
+#if defined(CONFIG_VBOXDRV)
+#include <dm/shared-folders.h>
+static int
+control_command_sf_set_subfolder_scramble_mode(
+    void *opaque,
+    const char *id,
+    const char *opt,
+    dict d,
+    void *command_opaque)
+{
+    struct control_desc *cd = (struct control_desc *)opaque;
+    const char *name = dict_get_string(d, "name");
+    const char *subfolder = dict_get_string(d, "subfolder");
+    int mode = dict_get_integer(d, "mode");
+    int rc;
+
+    rc =  mode < 0
+        ? sf_del_subfolder_crypt((char*)name, (char*)subfolder)
+        : sf_add_subfolder_crypt((char*)name, (char*)subfolder, mode);
+    if (rc)
+        control_send_error(cd, opt, id, rc, NULL);
+    else
+        control_send_ok(cd, opt, id, NULL);
+    return 0;
+}
+#endif
+
 #ifdef CONTROL_TEST
 static int
 control_command_test(void *opaque, const char *id, const char *opt,
@@ -769,6 +796,16 @@ struct dict_rpc_command control_commands[] = {
             { "max", DICT_RPC_ARG_TYPE_INTEGER, .optional = 0 },
             { NULL, },
       }, },
+#if defined(CONFIG_VBOXDRV)
+    { "sf-set-subfolder-scramble-mode", control_command_sf_set_subfolder_scramble_mode,
+      .args = (struct dict_rpc_arg_desc[]) {
+            { "name", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },
+            { "subfolder", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },
+            { "mode", DICT_RPC_ARG_TYPE_INTEGER, .optional = 0 },
+            { NULL, },
+        }
+    },
+#endif
     { "show-command-prompt", show_command_prompt, },
 #ifdef CONTROL_TEST
     { "test-int", control_command_test,

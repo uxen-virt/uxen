@@ -95,7 +95,7 @@ uint32_t        vbsfQueryHandleType(PSHFLCLIENTDATA pClient,
                                     SHFLHANDLE handle);
 int             vbsfQueryHandleFileExistence(SHFLHANDLE handle);
 int             vbsfQueryHandleFileScrambled(SHFLHANDLE handle);
-
+wchar_t*        vbsfQueryHandlePath(PSHFLCLIENTDATA pClient, SHFLHANDLE handle);
 uint32_t        vbsfQueryHandleFlags(PSHFLCLIENTDATA pClient,
                                      SHFLHANDLE handle);
 void            vbsfModifyHandleFlags(PSHFLCLIENTDATA pClient,

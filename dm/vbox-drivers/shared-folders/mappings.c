@@ -37,6 +37,7 @@
 #endif
 
 #include "mappings.h"
+#include "mappings-crypt.h"
 #include <iprt/alloc.h>
 #include <iprt/assert.h>
 #include <iprt/string.h>
@@ -56,10 +57,11 @@ void vbsfMappingInit(void)
 {
     unsigned root;
 
-    for (root = 0; root < RT_ELEMENTS(aIndexFromRoot); root++)
-    {
+    for (root = 0; root < RT_ELEMENTS(aIndexFromRoot); root++) {
         aIndexFromRoot[root] = SHFL_ROOT_NIL;
     }
+
+    sf_crypt_mapping_init();
 }
 
 int vbsfMappingLoaded(const PMAPPING pLoadedMapping, SHFLROOT root)
@@ -499,25 +501,6 @@ int vbsfMappingsQueryAutoMount(PSHFLCLIENTDATA pClient, SHFLROOT root, bool *fAu
     return rc;
 }
 
-int vbsfMappingsQueryCrypt(PSHFLCLIENTDATA pClient, SHFLROOT root, bool *fCrypt)
-{
-    int rc = VINF_SUCCESS;
-
-    LogFlow(("vbsfMappingsQueryCrypt: pClient = %p, root = %d\n", pClient, root));
-
-    MAPPING *pFolderMapping = vbsfMappingGetByRoot(root);
-    AssertReturn(pFolderMapping, VERR_INVALID_PARAMETER);
-
-    if (pFolderMapping->fValid == true)
-        *fCrypt = pFolderMapping->fCrypt;
-    else
-        rc = VERR_FILE_NOT_FOUND;
-
-    LogFlow(("vbsfMappingsQueryCrypt:Writable return rc = 0x%x\n", rc));
-
-    return rc;
-}
-
 int vbsfMappingsQuerySymlinksCreate(PSHFLCLIENTDATA pClient, SHFLROOT root, bool *fSymlinksCreate)
 {
     int rc = VINF_SUCCESS;
@@ -613,4 +596,25 @@ int vbsfUnmapFolder(PSHFLCLIENTDATA pClient, SHFLROOT root)
 
     Log(("vbsfUnmapFolder\n"));
     return rc;
+}
+
+int
+vbsfMappingsQueryCrypt(PSHFLCLIENTDATA pClient, SHFLROOT root, wchar_t *path, int *crypt_mode)
+{
+    MAPPING *pFolderMapping = vbsfMappingGetByRoot(root);
+    wchar_t *rootpath;
+
+    AssertReturn(pFolderMapping, VERR_INVALID_PARAMETER);
+
+    if (!pFolderMapping->fValid)
+        return VERR_FILE_NOT_FOUND;
+
+    *crypt_mode = pFolderMapping->fCrypt;
+    rootpath = (wchar_t*)vbsfMappingsQueryHostRoot(root);
+    if (path && rootpath && pFolderMapping->pMapName) {
+        sf_override_crypt_mode(pFolderMapping->pMapName->String.ucs2,
+                               rootpath, path, crypt_mode);
+    }
+
+    return VINF_SUCCESS;
 }

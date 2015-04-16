@@ -1420,8 +1420,8 @@ int vbsfDirList(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, SHFLS
 
         
         {
-            bool fCrypt;
-            int rc2;
+            filecrypt_hdr_t *hdr = NULL;
+            int cr_rc;
 
             pSFDEntry->name.String.ucs2[0] = 0;
             pwszString = pSFDEntry->name.String.ucs2;
@@ -1436,19 +1436,15 @@ int vbsfDirList(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, SHFLS
             // adjust cbNeeded (it was overestimated before)
             cbNeeded = RT_OFFSETOF(SHFLDIRINFO, name.String) + pSFDEntry->name.u16Size;
 
-            /* adjust length for crypted files */
-            rc2 = vbsfMappingsQueryCrypt(pClient, root, &fCrypt);
-            if (RT_SUCCESS(rc2) && fCrypt) {
-                filecrypt_hdr_t *hdr = NULL;
-                rc2 = fch_read_dir_entry_crypthdr(
-                    pClient, root, DirHandle->pwszPath,
-                    (wchar_t*)pDirEntry->szName, &hdr);
-                if (RT_FAILURE(rc2))
-                    return rc2;
-                if (hdr) {
-                    pSFDEntry->Info.cbObject -= hdr->hdrlen;
-                    free(hdr);
-                }
+            /* adjust reported file length for crypted files */
+            cr_rc = fch_read_dir_entry_crypthdr(
+                pClient, root, DirHandle->pwszPath,
+                (wchar_t*)pDirEntry->szName, &hdr);
+            if (RT_FAILURE(cr_rc))
+                return cr_rc;
+            if (hdr) {
+                pSFDEntry->Info.cbObject -= hdr->hdrlen;
+                free(hdr);
             }
         }
 
@@ -1689,9 +1685,10 @@ static int vbsfSetEndOfFile(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE H
     if (flags & SHFL_INFO_SIZE)
     {
         /* add crypt hdr if truncating to 0 len */
-        bool fCrypt;
-        rc = vbsfMappingsQueryCrypt(pClient, root, &fCrypt);
-        if (RT_SUCCESS(rc) && fCrypt) {
+        int crypt_mode;
+
+        rc = fch_query_crypt_by_handle(pClient, root, Handle, &crypt_mode);
+        if (RT_SUCCESS(rc) && crypt_mode) {
             if (pSFDEntry->cbObject == 0 &&
                 !(vbsfQueryHandleFlags(pClient, Handle) & SHFL_HF_ENCRYPTED)) {
                 rc = fch_create_crypt_hdr(pClient, root, Handle);

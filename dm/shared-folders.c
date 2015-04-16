@@ -20,11 +20,6 @@
 #define SF_PORT 44444
 #define RING_SIZE 262144
 
-extern int sf_server_process_request(char *req, int reqsize, char* respbuf, int* respsize);
-extern int sf_add_mapping(const char * path, const char *name, int writable, int crypt);
-extern int sf_init();
-extern int sf_quit();
-
 typedef enum {
     SF_WAIT,
     SF_RECEIVE,
@@ -73,16 +68,45 @@ static int __init(void)
     return 0;
 }
 
+static int
+sf_parse_subfolder_config(const char *folder_name, yajl_val folder)
+{
+    const char* subfolders_path[] = {"subfolders", NULL};
+    yajl_val subfolders, v;
+    int i;
+
+    subfolders = yajl_tree_get(folder, subfolders_path, yajl_t_array);
+    if (!YAJL_IS_OBJECT(subfolders) && !YAJL_IS_ARRAY(subfolders)) {
+        warnx("shared-folders: wrong type");
+        return -1;
+    }
+    YAJL_FOREACH_ARRAY_OR_OBJECT(v, subfolders, i) {
+        const char *path;
+        int crypt;
+
+        if (!YAJL_IS_OBJECT(v))
+            continue;
+        path  = yajl_object_get_string(v, "path");
+        if (!path) {
+            warnx("subfolder arg missing path");
+            return -1;
+        }
+
+        crypt = yajl_object_get_integer_default(v, "scramble", 0);
+        sf_add_subfolder_crypt((char*)folder_name, (char*)path, crypt);
+    }
+
+    return 0;
+}
+
 int sf_parse_config(yajl_val config)
 {
     yajl_val folders, v;
     int i;
     int rc;
-    const char *name;
-    const char *folder;
+    const char *name, *folder;
     const char* folders_path[] = {"folders", NULL};
-    int writable;
-    int crypt;
+    int writable, crypt_mode;
 
     __init();
 
@@ -104,13 +128,16 @@ int sf_parse_config(yajl_val config)
                 return -1;
             }
             writable = yajl_object_get_integer_default(v, "writable", 0);
-            crypt = yajl_object_get_integer_default(v, "scramble", 0);
-            rc = sf_add_mapping(folder, name, writable, crypt);
+            crypt_mode = yajl_object_get_integer_default(v, "scramble", 0);
+            rc = sf_add_mapping(folder, name, writable, crypt_mode);
             if (rc) {
                 warnx("sf_add_mapping folder=%s name=%s error %d", 
                     folder, name, rc);
                 return -1;
             }
+            rc = sf_parse_subfolder_config(name, v);
+            if (rc)
+                return -1;
         }
     }
     return 0;

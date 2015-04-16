@@ -5,6 +5,7 @@
  */
 
 #include "filecrypt_helper.h"
+#include "mappings.h"
 
 #include <iprt/alloc.h>
 #include <iprt/assert.h>
@@ -17,17 +18,39 @@
 #include <windows.h>
 #include <err.h>
 
+int
+fch_query_crypt_by_path(SHFLCLIENTDATA *client,
+                        SHFLROOT root,
+                        wchar_t *path,
+                        int *crypt_mode)
+{
+    *crypt_mode = 0;
+    if (!path)
+        return VERR_INVALID_PARAMETER;
+    return vbsfMappingsQueryCrypt(client, root, path, crypt_mode);
+}
+
+int
+fch_query_crypt_by_handle(SHFLCLIENTDATA *client,
+                          SHFLROOT root,
+                          SHFLHANDLE handle,
+                          int *crypt_mode)
+{
+    return fch_query_crypt_by_path(
+        client, root, vbsfQueryHandlePath(client, handle), crypt_mode);
+}
+
 int fch_create_crypt_hdr(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle)
 {
     filecrypt_hdr_t *hdr;
     SHFLFILEHANDLE *pHandle = vbsfQueryFileHandle(pClient, handle);
     int rc;
+    int crypt_mode;
 
-    bool fCrypt;
-    rc = vbsfMappingsQueryCrypt(pClient, root, &fCrypt);
+    rc = fch_query_crypt_by_handle(pClient, root, handle, &crypt_mode);
     if (RT_FAILURE(rc))
         return VERR_INVALID_PARAMETER;
-    if (!fCrypt)
+    if (!crypt_mode)
         return VINF_SUCCESS;
 
     if (!pHandle)
@@ -36,7 +59,6 @@ int fch_create_crypt_hdr(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE hand
     hdr = fc_init_hdr();
     if (!hdr)
         return VERR_NO_MEMORY;
-
     rc = fc_write_hdr(pHandle->file.Handle, hdr);
     if (rc) {
         fc_free_hdr(hdr);
@@ -54,16 +76,16 @@ int fch_read_crypt_hdr(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle
 {
     SHFLFILEHANDLE *pHandle = vbsfQueryFileHandle(pClient, handle);
     int rc;
-    int iscrypt;
+    int file_crypted;
+    int crypt_mode;
     filecrypt_hdr_t *h = NULL;
 
     if (hdr) *hdr = NULL;
 
-    bool fCrypt;
-    rc = vbsfMappingsQueryCrypt(pClient, root, &fCrypt);
+    rc = fch_query_crypt_by_handle(pClient, root, handle, &crypt_mode);
     if (RT_FAILURE(rc))
         return VERR_INVALID_PARAMETER;
-    if (!fCrypt)
+    if (!crypt_mode)
         return VINF_SUCCESS;
 
     if (!pHandle)
@@ -72,10 +94,10 @@ int fch_read_crypt_hdr(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle
     vbsfModifyHandleFlags(pClient, handle, 0, SHFL_HF_ENCRYPTED);
     vbsfSetHandleCrypt(pClient, handle, NULL);
 
-    rc = fc_read_hdr((HANDLE)(pHandle->file.Handle), &iscrypt, &h);
-    if (iscrypt && rc)
+    rc = fc_read_hdr((HANDLE)(pHandle->file.Handle), &file_crypted, &h);
+    if (file_crypted && rc)
         return RTErrConvertFromWin32(rc);
-    if (iscrypt) {
+    if (file_crypted) {
         vbsfModifyHandleFlags(pClient, handle, SHFL_HF_ENCRYPTED, 0);
         vbsfSetHandleCrypt(pClient, handle, h);
     }
@@ -89,13 +111,14 @@ uint64_t fch_host_fileoffset(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE 
                              uint64_t guest_off)
 {
     int rc;
-    bool fCrypt;
+    int crypt_mode;
+    filecrypt_hdr_t *hdr;
 
-    rc = vbsfMappingsQueryCrypt(pClient, root, &fCrypt);
-    if (RT_FAILURE(rc) || !fCrypt)
+    rc = fch_query_crypt_by_handle(pClient, root, handle, &crypt_mode);
+    if (RT_FAILURE(rc) || !crypt_mode)
         return guest_off;
 
-    filecrypt_hdr_t *hdr = vbsfQueryHandleCrypt(pClient, handle);
+    hdr = vbsfQueryHandleCrypt(pClient, handle);
 
     if (vbsfQueryHandleFlags(pClient, handle) & SHFL_HF_ENCRYPTED) {
         Assert(hdr);
@@ -116,13 +139,14 @@ void fch_guest_fsinfo(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle,
                       RTFSOBJINFO *info)
 {
     int rc;
-    bool fCrypt;
+    int crypt_mode;
+    filecrypt_hdr_t *hdr;
 
-    rc = vbsfMappingsQueryCrypt(pClient, root, &fCrypt);
-    if (RT_FAILURE(rc) || !fCrypt)
+    rc = fch_query_crypt_by_handle(pClient, root, handle, &crypt_mode);
+    if (RT_FAILURE(rc) || !crypt_mode)
         return;
 
-    filecrypt_hdr_t *hdr = vbsfQueryHandleCrypt(pClient, handle);
+    hdr = vbsfQueryHandleCrypt(pClient, handle);
     if (vbsfQueryHandleFlags(pClient, handle) & SHFL_HF_ENCRYPTED) {
         Assert(hdr);
         _guest_fsinfo_common(hdr, info);
@@ -134,10 +158,10 @@ void fch_guest_fsinfo_path(SHFLCLIENTDATA *pClient, SHFLROOT root, wchar_t *path
 {
     HANDLE h;
     int rc;
+    int crypt_mode;
 
-    bool fCrypt;
-    rc = vbsfMappingsQueryCrypt(pClient, root, &fCrypt);
-    if (RT_FAILURE(rc) || !fCrypt)
+    rc = fch_query_crypt_by_path(pClient, root, path, &crypt_mode);
+    if (RT_FAILURE(rc) || !crypt_mode)
         return;
 
     h = CreateFileW(path, GENERIC_READ,
@@ -160,7 +184,7 @@ int fch_writable_file(SHFLCLIENTDATA *pClient, SHFLROOT root,
                       bool *out_fWritable)
 {
     int rc;
-    bool fConfigCrypt = 0;
+    int crypt_mode;
     bool fWritable = 0;
     int filecrypted = 0;
 
@@ -168,7 +192,9 @@ int fch_writable_file(SHFLCLIENTDATA *pClient, SHFLROOT root,
 
     *out_fWritable = 0;
 
-    rc = vbsfMappingsQueryCrypt(pClient, root, &fConfigCrypt);
+    rc = handle != SHFL_HANDLE_NIL
+        ? fch_query_crypt_by_handle(pClient, root, handle, &crypt_mode)
+        : fch_query_crypt_by_path(pClient, root, (wchar_t*)path, &crypt_mode);
     if (RT_FAILURE(rc))
         return rc;
 
@@ -202,7 +228,7 @@ int fch_writable_file(SHFLCLIENTDATA *pClient, SHFLROOT root,
     }
 
     /* if encryption is active, non-encrypted files are readonly */
-    if (fConfigCrypt && !filecrypted) {
+    if (crypt_mode && !filecrypted) {
         warnx("Shared Folders - deny access to non-encrypted file %08x %ls",
               (uint32_t)handle, path ? path : L"");
         *out_fWritable = 0;
@@ -219,6 +245,7 @@ static int dir_entry_filename(wchar_t *dir, wchar_t *entry,
                               wchar_t *filename, size_t filename_sz)
 {
     size_t len = wcslen(dir);
+
     if (len + wcslen(entry) + 2 >= filename_sz)
         return VERR_NO_MEMORY;
     wcscpy(filename, dir);
@@ -237,12 +264,16 @@ int fch_read_dir_entry_crypthdr(SHFLCLIENTDATA *pClient, SHFLROOT root,
                                 wchar_t *dir, wchar_t *entry, filecrypt_hdr_t **crypt)
 {
     int rc;
+    int crypt_mode;
     int iscrypt;
-    HANDLE h;
     wchar_t filename[RTPATH_MAX];
+    HANDLE h;
 
     *crypt = NULL;
     if ((rc = dir_entry_filename(dir, entry, filename, RTPATH_MAX)))
+        return rc;
+    rc = fch_query_crypt_by_path(pClient, root, filename, &crypt_mode);
+    if (RT_FAILURE(rc) || !crypt_mode)
         return rc;
     h = CreateFileW(filename, GENERIC_READ,
                      FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,

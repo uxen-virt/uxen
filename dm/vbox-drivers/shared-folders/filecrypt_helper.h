@@ -11,6 +11,10 @@
 #include "shflhandle.h"
 #include "filecrypt.h"
 
+/* test whether particular handle/path needs crypting */
+int fch_query_crypt_by_handle(SHFLCLIENTDATA *client, SHFLROOT root, SHFLHANDLE handle, int *crypt_mode);
+int fch_query_crypt_by_path(SHFLCLIENTDATA *client, SHFLROOT root, wchar_t *path, int *crypt_mode);
+
 /* associate empty crypt context with handle */
 int fch_create_crypt_hdr(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle);
 /* read crypt context from disk */

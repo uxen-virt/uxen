@@ -551,6 +551,18 @@ filecrypt_hdr_t *vbsfQueryHandleCrypt(PSHFLCLIENTDATA pClient, SHFLHANDLE handle
         return NULL;
 }
 
+wchar_t *vbsfQueryHandlePath(PSHFLCLIENTDATA pClient, SHFLHANDLE handle)
+{
+    wait_handle_ready(handle);
+
+    if (   handle < SHFLHANDLE_MAX
+        && (pHandles[handle].uFlags & SHFL_HF_VALID)
+        && pHandles[handle].pClient == pClient)
+        return (wchar_t*)pHandles[handle].pwszFilename;
+    else
+        return NULL;
+}
+
 void vbsfSetHandleCrypt(PSHFLCLIENTDATA pClient, SHFLHANDLE handle, filecrypt_hdr_t *h)
 {
     wait_handle_ready(handle);
