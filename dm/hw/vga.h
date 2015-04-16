@@ -50,7 +50,7 @@
 #define CH_ATTR_SIZE (160 * 100)
 #define VGA_MAX_HEIGHT 2048
 
-#define VGA_RAM_SIZE (128 * 1024) /* 128k */
+#define VGA_RAM_SIZE (512 * 1024) /* 512k */
 #define VGA_DIRTY_BITMAP_SIZE ((((VGA_RAM_SIZE) >> UXEN_PAGE_SHIFT) + 7) / 8)
 
 typedef struct VGAState {
