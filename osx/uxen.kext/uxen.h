@@ -26,6 +26,8 @@ extern "C" {
 #include <kern/assert.h>
 #include <errno.h>
 
+#include <i386/eflags.h>
+
 #include <stdarg.h>
 #include <string.h>
 #include <inttypes.h>
@@ -190,9 +192,36 @@ intptr_t uxen_dom0_hypercall(struct vm_info_shared *, void *,
 #define SNOOP_KERNEL 1
 int32_t _uxen_snoop_hypercall(void *udata, int mode);
 #define uxen_snoop_hypercall(udata) _uxen_snoop_hypercall(udata, SNOOP_USER)
+
+static inline void uxen_smap_disable(uint64_t *flags)
+{
+
+    if (!xnu_pmap_smap_enabled())
+        return;
+
+    asm ("pushfq; popq %0\n\t" : "=r"(*flags));
+    if (!(*flags & EFL_AC))
+        asm volatile("stac\n\t");
+}
+
+static inline void uxen_smap_restore(uint64_t flags)
+{
+
+    if (!xnu_pmap_smap_enabled())
+        return;
+
+    if (!(flags & EFL_AC))
+        asm volatile("clac\n\t");
+
+}
+
 #define try_call(r, exception_retval, fn, ...) do {                 \
+        uint64_t flags;                                             \
+        uxen_smap_disable(&flags);                                  \
         r fn(__VA_ARGS__);                                          \
+        uxen_smap_restore(flags);                                   \
     } while (0)
+
 #define uxen_call(r, exception_retval, _pages, fn, ...) do {            \
         uint32_t x;                                                     \
         preemption_t i;                                                 \

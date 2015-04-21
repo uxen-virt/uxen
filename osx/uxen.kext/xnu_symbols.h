@@ -192,6 +192,7 @@ extern clock_gettimeofday_t xnu_clock_gettimeofday;
 
 vm_map_t xnu_kernel_map(void);
 unsigned xnu_pmap_memory_region_count(void);
+unsigned long xnu_pmap_smap_enabled(void);
 void *xnu_pmap_memory_regions(void);
 uint64_t xnu_physmap_base(void);
 uint64_t xnu_physmap_max(void);

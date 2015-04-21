@@ -512,21 +512,31 @@ uxen_ioctl(u_long cmd, struct fd_assoc *fda, struct vm_info *vmi,
         OP_CALL("UXENSIGNALEVENT", uxen_op_signal_event, void *,
                 &fda->user_events);
         break;
-    case UXENMEMCACHEINIT:
+    case UXENMEMCACHEINIT: {
+        uint64_t flags;
+
         IOCTL_VM_ADMIN_CHECK("UXENMEMCACHEINIT");
         CHECK_VMI("UXENMEMCACHEINIT", vmi);
         ret = init_fd_assoc_user_mappings("UXENMEMCACHEINIT", fda);
         if (ret)
             goto out;
+
+	uxen_smap_disable(&flags);
         OP_CALL("UXENMEMCACHEINIT", mdm_init,
                 struct uxen_memcacheinit_desc, fda);
+        uxen_smap_restore(flags);
         break;
-    case UXENMEMCACHEMAP:
+        }
+    case UXENMEMCACHEMAP: {
+        uint64_t flags;
         IOCTL_VM_ADMIN_CHECK("UXENMEMCACHEMAP");
         CHECK_VMI("UXENMEMCACHEMAP", vmi);
+	uxen_smap_disable(&flags);
         OP_CALL("UUXENMEMCACHEMAP", mdm_map,
                 struct uxen_memcachemap_desc, fda);
+        uxen_smap_restore(flags);
         break;
+    }
     case UXENQUERYVM:
         IOCTL_ADMIN_CHECK("UXENQUERYVM");
         DOM0_CALL("UXENQUERYVM", uxen_op_query_vm, struct uxen_queryvm_desc);
