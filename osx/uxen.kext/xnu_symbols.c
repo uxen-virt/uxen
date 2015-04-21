@@ -153,7 +153,7 @@ clock_gettimeofday_t xnu_clock_gettimeofday;
 static vm_map_t *kernel_map;
 static unsigned *pmap_memory_region_count;
 static void *pmap_memory_regions;
-static unsigned long *pmap_smap_enabled;
+static boolean_t *pmap_smap_enabled;
 static uint64_t *physmap_base;
 static uint64_t *physmap_max;
 static cpu_data_t **cpu_data_ptr;
@@ -236,7 +236,7 @@ xnu_pmap_memory_regions(void)
     return pmap_memory_regions;
 }
 
-unsigned long
+boolean_t
 xnu_pmap_smap_enabled(void)
 {
     if (pmap_smap_enabled == NULL)
