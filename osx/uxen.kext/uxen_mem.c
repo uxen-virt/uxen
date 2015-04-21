@@ -1749,12 +1749,15 @@ int
 uxen_mem_mmapbatch(struct uxen_mmapbatch_desc *ummapbd, struct fd_assoc *fda)
 {
     struct vm_info *vmi = fda->vmi;
-    void *addr;
+    void *addr, *buf = NULL;
     unsigned int i;
     union uxen_memop_arg umemopa;
+    int *errs = NULL;
     xen_pfn_t *mfns = NULL, *gpfns = NULL;
     unsigned int n, done;
     int ret = ENOENT;
+    size_t bufsz = ummapbd->umd_num * sizeof(errs[0]) +
+                   XENMEM_TRANSLATE_MAX_BATCH * sizeof(gpfns[0]);
 
     OSIncrementAtomic(&vmi->vmi_running_vcpus);
     if (vmi->vmi_shared.vmi_runnable == 0)
@@ -1774,20 +1777,22 @@ uxen_mem_mmapbatch(struct uxen_mmapbatch_desc *ummapbd, struct fd_assoc *fda)
         goto out;
     }
 
-    mfns = (xen_pfn_t *)kernel_malloc(ummapbd->umd_num * sizeof(mfns[0]));
+    mfns = kernel_malloc(sizeof(xen_pfn_t) * ummapbd->umd_num);
     if (mfns == NULL) {
         fail_msg("kernel_malloc(mfns) failed");
         ret = ENOMEM;
         goto out;
     }
 
-    gpfns = (xen_pfn_t *)kernel_malloc(XENMEM_TRANSLATE_MAX_BATCH *
-                                       sizeof(gpfns[0]));
-    if (gpfns == NULL) {
-        fail_msg("kernel_malloc(gpfns) failed");
+    buf = kernel_malloc(bufsz);
+    if (buf == NULL) {
+        fail_msg("kernel_malloc(buf) failed");
         ret = ENOMEM;
         goto out;
     }
+
+    gpfns = (xen_pfn_t *)buf;
+    errs = (int *)(gpfns + XENMEM_TRANSLATE_MAX_BATCH);
 
     done = 0;
     while (done < ummapbd->umd_num) {
@@ -1835,11 +1840,13 @@ uxen_mem_mmapbatch(struct uxen_mmapbatch_desc *ummapbd, struct fd_assoc *fda)
 
     for (i = 0; i < ummapbd->umd_num; i++) {
         if (mfns[i] >= uxen_info->ui_max_page) {
-            ummapbd->umd_err[i] = -ENOENT;
+            errs[i] = -ENOENT;
             mfns[i] = vmi->vmi_undefined_mfn;
         } else
-            ummapbd->umd_err[i] = 0;
+            errs[i] = 0;
     }
+    copyout(errs, (user_addr_t)ummapbd->umd_err,
+            ummapbd->umd_num * sizeof(errs[0]));
 
     addr = user_mmap_xen_mfns(ummapbd->umd_num, mfns, fda);
     if (!addr) {
@@ -1851,12 +1858,12 @@ uxen_mem_mmapbatch(struct uxen_mmapbatch_desc *ummapbd, struct fd_assoc *fda)
 
     ret = 0;
   out:
-    if (gpfns)
-        kernel_free(gpfns, XENMEM_TRANSLATE_MAX_BATCH * sizeof(gpfns[0]));
     if (ret && mfns) {
         release_user_mapping_range(mfns, done, fda);
-        kernel_free(mfns, ummapbd->umd_num * sizeof(mfns[0]));
+        kernel_free(mfns, sizeof(mfns[0]) * ummapbd->umd_num);
     }
+    if (buf)
+        kernel_free(buf, bufsz);
     if (OSDecrementAtomic(&vmi->vmi_running_vcpus) == 1)
         fast_event_signal(&vmi->vmi_notexecuting);
     return ret;
