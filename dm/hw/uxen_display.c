@@ -649,8 +649,12 @@ static int
 uxendisp_post_load(void *opaque, int version_id)
 {
     struct uxendisp_state *s = opaque;
+    int crtc_id;
 
     pci_ram_post_load(&s->dev, version_id);
+
+    for (crtc_id = 0; crtc_id < UXENDISP_NB_CRTCS; crtc_id++)
+        crtc_flush(s, crtc_id);
 
     return 0;
 }

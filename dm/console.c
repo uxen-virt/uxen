@@ -236,7 +236,8 @@ void do_dpy_trigger_refresh(void *opaque)
     DisplayState *ds = (DisplayState *)opaque;
     uint64_t now = get_clock_ms(vm_clock);
 
-    mod_timer(ds->gui_timer, now + REFRESH_TIMEOUT_MS);
+    if (ds->gui_timer)
+        mod_timer(ds->gui_timer, now + REFRESH_TIMEOUT_MS);
 }
 
 void do_dpy_setup_refresh(DisplayState *ds)
