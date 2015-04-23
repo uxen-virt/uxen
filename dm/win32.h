@@ -53,6 +53,7 @@ align_free(void *ptr)
 #define page_align_alloc(size) align_alloc(ALIGN_PAGE_ALIGN, size)
 
 int inet_aton(const char *cp, struct in_addr *ia);
+int inet_pton(int family, const char *cp, void *ia);
 
 int vasprintf(char **strp, const char *fmt, va_list ap)
     __attribute__ ((__format__ (printf, 2, 0)));

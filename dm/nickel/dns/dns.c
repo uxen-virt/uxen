@@ -34,7 +34,7 @@ static bool http_proxy_enabled = false;
 static bool proxy_used = false;
 static int proxy_forbid_nonexistent_dns_name = 0;
 static int debug_resolver = 0;
-static int ipv6_allowed = 0;
+static int ipv6_allowed = 1;
 
 static void ndns_close(CharDriverState *chr);
 

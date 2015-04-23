@@ -2945,6 +2945,23 @@ static int srv_connect_direct(struct http_ctx *hp)
     if (hp->cx)
         hp->cx->proxy = NULL;
 
+    if (hp->cx && (hp->cx->flags & CXF_GUEST_PROXY)) {
+        struct net_addr _a[2], *a;
+
+        a = &_a[0];
+        memset(&_a[0], 0, sizeof(_a));
+        if (inet_aton(hp->sv_name, &a->ipv4) != 0) {
+            hp->daddr.sin_addr = a->ipv4;
+            hp->flags |= HF_RESOLVED;
+        } else if (inet_pton(AF_INET6, hp->sv_name, (void *) &a->ipv6) == 1) {
+            a->family = AF_INET6;
+            hp->flags |= HF_RESOLVED;
+            hp->cstate = S_RESOLVED;
+            ret = srv_connect_dns_resolved(hp, a);
+            goto out;
+        }
+    }
+
     if (!IS_RESOLVED(hp)) {
         if (hp->a) {
             free(hp->a);
