@@ -149,11 +149,6 @@ void timers_init(TimerQueue *active_timers)
     }
     TAILQ_INIT(&active_timers[rt_clock->type]);
     TAILQ_INIT(&active_timers[vm_clock->type]);
-
-#if defined(_WIN32)
-    if (is_main)
-        timeBeginPeriod(1);
-#endif
 }
 
 /* save a timer */

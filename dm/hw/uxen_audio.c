@@ -104,6 +104,7 @@ update_process_priority(void)
                   state->saved_process_pri);
         state->saved_process_pri = 0;
         vm_set_vpt_coalesce(1);
+        timeEndPeriod(1);
     }
 
     if (playing && !state->saved_process_pri) {
@@ -115,6 +116,7 @@ update_process_priority(void)
             Wwarn("audio: failed to elevate process priority to %x", 
                   ABOVE_NORMAL_PRIORITY_CLASS);
         vm_set_vpt_coalesce(0);
+        timeBeginPeriod(1);
     }
 }
 
