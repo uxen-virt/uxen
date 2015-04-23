@@ -15,8 +15,12 @@
 #include <iprt/path.h>
 #include <iprt/string.h>
 
+#include <dm/vbox-drivers/rt/rt.h>
+#include <dm/debug.h>
 #include <windows.h>
 #include <err.h>
+
+#define TEMP_SUFFIX L".uxentmp~"
 
 int
 fch_query_crypt_by_path(SHFLCLIENTDATA *client,
@@ -71,22 +75,16 @@ int fch_create_crypt_hdr(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE hand
     return VINF_SUCCESS;
 }
 
-int fch_read_crypt_hdr(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle,
-                       filecrypt_hdr_t **hdr)
+int
+fch_read_crypt_hdr(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle,
+                   filecrypt_hdr_t **hdr)
 {
     SHFLFILEHANDLE *pHandle = vbsfQueryFileHandle(pClient, handle);
     int rc;
     int file_crypted;
-    int crypt_mode;
     filecrypt_hdr_t *h = NULL;
 
     if (hdr) *hdr = NULL;
-
-    rc = fch_query_crypt_by_handle(pClient, root, handle, &crypt_mode);
-    if (RT_FAILURE(rc))
-        return VERR_INVALID_PARAMETER;
-    if (!crypt_mode)
-        return VINF_SUCCESS;
 
     if (!pHandle)
         return VERR_INVALID_PARAMETER;
@@ -107,20 +105,14 @@ int fch_read_crypt_hdr(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle
     return VINF_SUCCESS;
 }
 
-uint64_t fch_host_fileoffset(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle,
-                             uint64_t guest_off)
+uint64_t
+fch_host_fileoffset(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle,
+                    uint64_t guest_off)
 {
-    int rc;
-    int crypt_mode;
     filecrypt_hdr_t *hdr;
 
-    rc = fch_query_crypt_by_handle(pClient, root, handle, &crypt_mode);
-    if (RT_FAILURE(rc) || !crypt_mode)
-        return guest_off;
-
-    hdr = vbsfQueryHandleCrypt(pClient, handle);
-
     if (vbsfQueryHandleFlags(pClient, handle) & SHFL_HF_ENCRYPTED) {
+        hdr = vbsfQueryHandleCrypt(pClient, handle);
         Assert(hdr);
         return guest_off + hdr->hdrlen;
     }
@@ -184,6 +176,24 @@ int fch_writable_file(SHFLCLIENTDATA *pClient, SHFLROOT root,
                       bool *out_fWritable)
 {
     int rc;
+    bool fWritable = 0;
+
+    Assert(handle != SHFL_HANDLE_NIL || path);
+
+    *out_fWritable = 0;
+    rc = vbsfMappingsQueryWritable(pClient, root, &fWritable);
+    if (RT_FAILURE(rc))
+        return rc;
+    *out_fWritable = fWritable;
+    return 0;
+}
+
+#if 0
+int fch_writable_file(SHFLCLIENTDATA *pClient, SHFLROOT root,
+                      SHFLHANDLE handle, const wchar_t *path,
+                      bool *out_fWritable)
+{
+    int rc;
     int crypt_mode;
     bool fWritable = 0;
     int filecrypted = 0;
@@ -236,6 +246,7 @@ int fch_writable_file(SHFLCLIENTDATA *pClient, SHFLROOT root,
         *out_fWritable = fWritable;
     return VINF_SUCCESS;
 }
+#endif
 
 /*
  * get entry filename for dirname and entry name, dirname typically includes
@@ -264,16 +275,12 @@ int fch_read_dir_entry_crypthdr(SHFLCLIENTDATA *pClient, SHFLROOT root,
                                 wchar_t *dir, wchar_t *entry, filecrypt_hdr_t **crypt)
 {
     int rc;
-    int crypt_mode;
     int iscrypt;
     wchar_t filename[RTPATH_MAX];
     HANDLE h;
 
     *crypt = NULL;
     if ((rc = dir_entry_filename(dir, entry, filename, RTPATH_MAX)))
-        return rc;
-    rc = fch_query_crypt_by_path(pClient, root, filename, &crypt_mode);
-    if (RT_FAILURE(rc) || !crypt_mode)
         return rc;
     h = CreateFileW(filename, GENERIC_READ,
                      FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
@@ -304,4 +311,158 @@ void fch_decrypt(SHFLCLIENTDATA *pClient, SHFLHANDLE handle,
         Assert(hdr);
         fc_decrypt(hdr, buf, off, len);
     }
+}
+
+static int
+chunk_write(filecrypt_hdr_t *hdr, HANDLE h, void *buf, int cnt)
+{
+    DWORD n = 0;
+    uint8_t *p = (uint8_t*)buf;
+
+    while (cnt>0) {
+        if (!(hdr ? fc_write(hdr, h, p, cnt, &n)
+                    : WriteFile(h, p, cnt, &n, NULL)))
+            return GetLastError();
+        if (n == 0)
+            return ERROR_WRITE_FAULT;
+        p += n;
+        cnt -= n;
+    }
+    return 0;
+}
+
+static int
+re_write_loop(wchar_t *srcname,
+              filecrypt_hdr_t *dsthdr, HANDLE dst)
+{
+    DWORD n, tot=0;
+    HANDLE src;
+    filecrypt_hdr_t *srchdr = NULL;
+    uint8_t buffer[32768];
+    int rc = 0;
+    int iscrypt;
+
+    src = CreateFileW(srcname, GENERIC_READ,
+                      FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL,
+                      OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (src == INVALID_HANDLE_VALUE) {
+        warnx("error opening file for rewrite %d", (int)GetLastError());
+        return RTErrConvertFromWin32(GetLastError());
+    }
+    rc = fc_read_hdr(src, &iscrypt, &srchdr);
+    if (iscrypt && rc)
+        return RTErrConvertFromWin32(rc);
+    SetFilePointer(src, srchdr ? srchdr->hdrlen : 0, NULL, FILE_BEGIN);
+    for (;;) {
+        BOOL read;
+
+        read = srchdr
+            ? fc_read(srchdr, src, buffer, sizeof(buffer), &n)
+            : ReadFile(src, buffer, sizeof(buffer), &n, NULL);
+        if (!read) {
+            rc = RTErrConvertFromWin32(GetLastError());
+            warnx("read failure %d", rc);
+            break;
+        }
+        if (!n)
+            break; //EOF
+        if ((rc = chunk_write(dsthdr, dst, buffer, n))) {
+            warnx("write failure %d", rc);
+            rc = RTErrConvertFromWin32(rc);
+            break;
+        }
+        tot += n;
+    }
+    CloseHandle(src);
+    fc_free_hdr(srchdr);
+    LogRel(("rewritten %d bytes\n", (int)tot));
+    return rc;
+}
+
+static int
+create_temp(wchar_t *name, wchar_t *tempname, int maxlen, HANDLE *temp)
+{
+    int l = wcslen(name);
+    HANDLE h;
+
+    if (l + wcslen(TEMP_SUFFIX) + 1 >= maxlen)
+        return VERR_INVALID_PARAMETER;
+    wcscpy(tempname, name);
+    wcscat(tempname, TEMP_SUFFIX);
+    h = CreateFileW(tempname, GENERIC_WRITE,
+                    FILE_SHARE_READ, NULL,
+                    CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE)
+        return RTErrConvertFromWin32(GetLastError());
+    *temp = h;
+    return 0;
+}
+
+int
+fch_re_write_file(SHFLCLIENTDATA *client, SHFLROOT root, SHFLHANDLE src)
+{
+    filecrypt_hdr_t *dsthdr = NULL;
+    wchar_t *srcname = vbsfQueryHandlePath(client, src);
+    wchar_t  dstname[RTPATH_MAX] = { 0 };
+    int cmode = 0;
+    int rc;
+    int temppresent = 0;
+    HANDLE dst = INVALID_HANDLE_VALUE;
+
+    /* desired crypt mode of target file */
+    rc = fch_query_crypt_by_handle(client, root, src, &cmode);
+    if (rc)
+        goto out;
+    if (cmode) {
+        dsthdr = fc_init_hdr();
+        if (!dsthdr) {
+            rc = VERR_NO_MEMORY;
+            goto out;
+        }
+    }
+
+    /* create temporary output file and possibly write crypt header */
+    rc = create_temp(srcname, dstname, sizeof(dstname) / sizeof(wchar_t),
+                     &dst);
+    if (rc) {
+        warnx("create_temp failure %x\n", rc);
+        goto out;
+    }
+    ++temppresent;
+    if (dsthdr) {
+        rc = fc_write_hdr(dst, dsthdr);
+        if (rc) {
+            rc = RTErrConvertFromWin32(rc);
+            warnx("fc_write_hdr failure %x\n", rc);
+            goto out;
+        }
+    }
+
+    /* re-write file contents with target encryption in mind */
+    rc = re_write_loop(srcname, dsthdr, dst);
+    if (rc) {
+        warnx("re_write_loop failure %x\n", rc);
+        goto out;
+    }
+    FlushFileBuffers(dst);
+    CloseHandle(dst);
+    dst = INVALID_HANDLE_VALUE;
+    if (!ReplaceFileW(srcname, dstname, NULL, 0, NULL, NULL)) {
+        rc = RTErrConvertFromWin32(GetLastError());
+        warnx("replace file failure %x\n", rc);
+        goto out;
+    }
+    rc = vbsfReopenHandle(client, src);
+    if (rc)
+        warnx("reopen handle failed %x\n", rc);
+
+out:
+    if (dst != INVALID_HANDLE_VALUE)
+        CloseHandle(dst);
+    if (temppresent)
+        RTFileDeleteUcs(dstname);
+    if (dsthdr)
+        fc_free_hdr(dsthdr);
+
+    return rc;
 }

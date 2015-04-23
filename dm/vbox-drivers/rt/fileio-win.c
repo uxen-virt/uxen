@@ -65,6 +65,7 @@
 *   Defined Constants And Macros                                               *
 *******************************************************************************/
 
+#include <dm/debug.h>
 
 /**
  * This is wrapper around the ugly SetFilePointer api.
@@ -222,10 +223,13 @@ RTR3DECL(int) RTFileOpenUcs(PRTFILE pFile, const wchar_t *pwszFilename, uint64_t
             dwDesiredAccess = FILE_GENERIC_READ; /* RTFILE_O_APPEND is ignored. */
             break;
         case RTFILE_O_WRITE:
+            /* we always permit read access, necessary for crypt code */
+#if 0
             dwDesiredAccess = fOpen & RTFILE_O_APPEND
                             ? FILE_GENERIC_WRITE & ~FILE_WRITE_DATA
                             : FILE_GENERIC_WRITE;
             break;
+#endif
         case RTFILE_O_READWRITE:
             dwDesiredAccess = fOpen & RTFILE_O_APPEND
                             ? FILE_GENERIC_READ | (FILE_GENERIC_WRITE & ~FILE_WRITE_DATA)
@@ -261,18 +265,19 @@ RTR3DECL(int) RTFileOpenUcs(PRTFILE pFile, const wchar_t *pwszFilename, uint64_t
             }
     }
 
+    /* we always share read access, necessary for crypt code */
     DWORD dwShareMode;
     switch (fOpen & RTFILE_O_DENY_MASK)
     {
         case RTFILE_O_DENY_NONE:                                dwShareMode = FILE_SHARE_READ | FILE_SHARE_WRITE; break;
-        case RTFILE_O_DENY_READ:                                dwShareMode = FILE_SHARE_WRITE; break;
+        case RTFILE_O_DENY_READ:                                dwShareMode = FILE_SHARE_READ | FILE_SHARE_WRITE; break;
         case RTFILE_O_DENY_WRITE:                               dwShareMode = FILE_SHARE_READ; break;
         case RTFILE_O_DENY_READWRITE:                           dwShareMode = 0; break;
 
         case RTFILE_O_DENY_NOT_DELETE | RTFILE_O_DENY_NONE:     dwShareMode = FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE; break;
-        case RTFILE_O_DENY_NOT_DELETE | RTFILE_O_DENY_READ:     dwShareMode = FILE_SHARE_DELETE | FILE_SHARE_WRITE; break;
+        case RTFILE_O_DENY_NOT_DELETE | RTFILE_O_DENY_READ:     dwShareMode = FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE; break;
         case RTFILE_O_DENY_NOT_DELETE | RTFILE_O_DENY_WRITE:    dwShareMode = FILE_SHARE_DELETE | FILE_SHARE_READ; break;
-        case RTFILE_O_DENY_NOT_DELETE | RTFILE_O_DENY_READWRITE:dwShareMode = FILE_SHARE_DELETE; break;
+        case RTFILE_O_DENY_NOT_DELETE | RTFILE_O_DENY_READWRITE:dwShareMode = FILE_SHARE_READ | FILE_SHARE_DELETE; break;
         default:
             AssertMsgFailed(("Impossible fOpen=%#llx\n", fOpen));
             return VERR_INVALID_PARAMETER;
@@ -299,9 +304,6 @@ RTR3DECL(int) RTFileOpenUcs(PRTFILE pFile, const wchar_t *pwszFilename, uint64_t
         dwFlagsAndAttributes |= FILE_FLAG_NO_BUFFERING;
         dwDesiredAccess &= ~FILE_APPEND_DATA;
     }
-
-//    if (wcsstr(pwszFilename, L"sharemodetest"))
-//        LogRel(("CreateFileW name %S sharemode %d\n", pwszFilename, dwShareMode));
 
     /*
      * Open/Create the file.

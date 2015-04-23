@@ -133,25 +133,38 @@ fc_read_hdr(HANDLE file, int *iscrypt, filecrypt_hdr_t **_h)
         return GetLastError();
     if ((rc = _read(file, &magic, 8)))
         return rc;
-    if (magic != FILECRYPT_MAGIC)
+    if (magic != FILECRYPT_MAGIC) {
+        SetFilePointer(file, 0, NULL, FILE_BEGIN);
         return ERROR_INVALID_DATA;
+    }
     *iscrypt = 1;
-    if ((rc = _read(file, &hdrversion, 4)))
+    if ((rc = _read(file, &hdrversion, 4))) {
+        SetFilePointer(file, 0, NULL, FILE_BEGIN);
         return rc;
-    if ((rc = _read(file, &hdrlen, 4)))
+    }
+    if ((rc = _read(file, &hdrlen, 4))) {
+        SetFilePointer(file, 0, NULL, FILE_BEGIN);
         return rc;
-    if (hdrlen > 4096)
+    }
+    if (hdrlen > 4096) {
+        SetFilePointer(file, 0, NULL, FILE_BEGIN);
         return ERROR_BUFFER_OVERFLOW;
-    if (hdrlen < 16)
+    }
+    if (hdrlen < 16) {
+        SetFilePointer(file, 0, NULL, FILE_BEGIN);
         return ERROR_INVALID_DATA;
+    }
     h = calloc(1, hdrlen);
     if (!h)
         return ERROR_NOT_ENOUGH_MEMORY;
     h->magic = magic;
     h->hdrversion = hdrversion;
     h->hdrlen = hdrlen;
-    if ((rc = _read(file, ((uint8_t*)h) + 16, h->hdrlen-16)))
+    if ((rc = _read(file, ((uint8_t*)h) + 16, h->hdrlen-16))) {
+        SetFilePointer(file, 0, NULL, FILE_BEGIN);
         return rc;
+    }
+    SetFilePointer(file, h->hdrlen, NULL, FILE_BEGIN);
     if (h->keylen != FILECRYPT_KEYBYTES)
         return ERROR_INVALID_DATA;
     extend_key(h);

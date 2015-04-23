@@ -35,5 +35,7 @@ int fch_read_dir_entry_crypthdr(SHFLCLIENTDATA *pClient, SHFLROOT root,
 void fch_crypt(SHFLCLIENTDATA *pClient, SHFLHANDLE handle, uint8_t *buf, uint64_t off, uint64_t len);
 /* decrypt buffer inplace, off = offset in file, not in buffer */
 void fch_decrypt(SHFLCLIENTDATA *pClient, SHFLHANDLE handle, uint8_t *buf, uint64_t off, uint64_t len);
+/* rewrite whole file, possibly with new encryption settings */
+int fch_re_write_file(SHFLCLIENTDATA *client, SHFLROOT root, SHFLHANDLE src);
 
 #endif

@@ -27,6 +27,8 @@ typedef struct crypt_mode_entry {
 static critical_section crypt_mode_lock;
 static TAILQ_HEAD(, crypt_mode_entry) crypt_mode_entries;
 
+extern void vbsfNotifyCryptChanged(void);
+
 static void
 clear_crypt_entries(void)
 {
@@ -222,6 +224,7 @@ sf_add_subfolder_crypt(char *mapname, char *subfolder, int crypt_mode)
     TAILQ_INSERT_TAIL(&crypt_mode_entries, m, entry);
     critical_section_leave(&crypt_mode_lock);
 
+    vbsfNotifyCryptChanged();
     debug_printf(
         "shared-folders: subfolder crypt override ADDED (folder %s subfolder %s mode %d)\n",
         mapname, subfolder, crypt_mode);
@@ -231,6 +234,7 @@ void
 sf_del_subfolder_crypt(char *mapname, char *subfolder)
 {
     del_subfolder_crypt(mapname, subfolder, 1);
+    vbsfNotifyCryptChanged();
     debug_printf(
         "shared-folders: subfolder crypt override REMOVED (folder %s subfolder %s)\n",
         mapname, subfolder);

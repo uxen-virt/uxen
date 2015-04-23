@@ -69,6 +69,7 @@ typedef struct
     uint8_t          bFileNotFound, bOpening;
     struct timeout_open_ctx *to_ctx;
     filecrypt_hdr_t *crypt;
+    uint8_t cryptchanged; /* do we need to re-verify crypt settings when writing */
     ioh_event ready_ev;
 } SHFLINTHANDLE, *PSHFLINTHANDLE;
 
@@ -120,9 +121,11 @@ static void wait_handle_ready(SHFLHANDLE h)
         wait_handle_ready_(&pHandles[h]);
 }
 
-static DWORD WINAPI timeout_open_run(LPVOID p)
+static DWORD WINAPI
+timeout_open_run(LPVOID p)
 {
     struct timeout_open_ctx *ctx = (struct timeout_open_ctx*) p;
+
     ctx->rc = RTFileOpenUcs(ctx->pFile, ctx->filename,
                             ctx->flags, ctx->pfAlreadyExists,
                             NULL, NULL);
@@ -130,7 +133,8 @@ static DWORD WINAPI timeout_open_run(LPVOID p)
         filecrypt_hdr_t *hdr = NULL;
         int iscrypt;
         int rc = fc_read_hdr((HANDLE)(*ctx->pFile), &iscrypt, &hdr);
-
+        if (rc)
+            LogRel(("fc_read_hdr failed %d when reopening file\n", rc));
         if (iscrypt) {
             if (rc) {
                 ctx->rc = RTErrConvertFromWin32(rc);
@@ -139,6 +143,7 @@ static DWORD WINAPI timeout_open_run(LPVOID p)
                 ctx->crypt = hdr;
         } else
             ctx->crypt = NULL;
+        RTFileSeek(*ctx->pFile, 0, RTFILE_SEEK_BEGIN, NULL);
     }
     return 0;
 }
@@ -153,6 +158,7 @@ timeout_open(DWORD timeoutms,
 {
     uxen_thread th;
     int rc;
+
     if (!h->to_ctx)
         h->to_ctx = calloc(1, sizeof(struct timeout_open_ctx));
     if (!h->to_ctx)
@@ -172,6 +178,7 @@ timeout_open(DWORD timeoutms,
     close_thread_handle(th);
     switch (rc) {
     case WAIT_OBJECT_0:
+        h->crypt = h->to_ctx->crypt;
         return h->to_ctx->rc;
     case WAIT_TIMEOUT:
         LogRel(("Shared folders: timeout waiting for %ws to reopen\n", filename));
@@ -184,7 +191,8 @@ timeout_open(DWORD timeoutms,
     }
 }
 
-static void reopen_file(SHFLINTHANDLE *h)
+static int
+reopen_file(SHFLINTHANDLE *h)
 {
     int delay, rc;
     uint32_t fOpen = h->uOpenFlags;
@@ -192,7 +200,7 @@ static void reopen_file(SHFLINTHANDLE *h)
     SHFLFILEHANDLE *fh = (SHFLFILEHANDLE *)RTMemAllocZ (sizeof (SHFLFILEHANDLE));
 
     if (!fh)
-        return;
+        return VERR_NO_MEMORY;
 
     fh->Header.u32Flags = SHFL_HF_TYPE_FILE;
 
@@ -238,8 +246,15 @@ static void reopen_file(SHFLINTHANDLE *h)
     }
 
 out:
+    /* crypt settings might've changed on reopen */
+    if (h->crypt)
+        h->uFlags |= SHFL_HF_ENCRYPTED;
+    else
+        h->uFlags &= ~SHFL_HF_ENCRYPTED;
+    h->cryptchanged = 0;
     h->bOpening = 0;
     ioh_event_set(&h->ready_ev);
+    return rc;
 }
 
 static DWORD WINAPI
@@ -254,6 +269,29 @@ reopen_files(LPVOID opaque)
     }
     LogRel(("Shared folders: done reopening handles\n"));
     return 0;
+}
+
+int
+vbsfReopenHandle(PSHFLCLIENTDATA client, SHFLHANDLE h)
+{
+    SHFLFILEHANDLE *fh;
+
+    if (!pHandles[h].pwszFilename)
+        return VERR_INVALID_PARAMETER;
+    ioh_event_reset(&pHandles[h].ready_ev);
+    fh = vbsfQueryFileHandle(client, h);
+    if (fh)
+        CloseHandle(fh->file.Handle);
+    if (pHandles[h].pvUserData) {
+        RTMemFree((void*)pHandles[h].pvUserData);
+        pHandles[h].pvUserData = 0;
+    }
+    pHandles[h].bOpening = 1;
+    if (pHandles[h].crypt) {
+        fc_free_hdr(pHandles[h].crypt);
+        pHandles[h].crypt = NULL;
+    }
+    return reopen_file(&pHandles[h]);
 }
 
 /* Br: When saving a VM we save the names and open flags of
@@ -348,6 +386,7 @@ int vbsfLoadHandleTable(QEMUFile *f)
         pHandles[idx].uOpenFlags = qemu_get_be32(f);
         pHandles[idx].bFileNotFound = 0;
         pHandles[idx].bOpening = 1;
+        pHandles[idx].cryptchanged = 0; /* will get handled in reopen */
         pHandles[idx].crypt = NULL;
         ioh_event_init(&pHandles[idx].ready_ev);
     }
@@ -409,6 +448,7 @@ SHFLHANDLE  vbsfAllocHandle(PSHFLCLIENTDATA pClient, uint32_t uType,
     pHandles[handle].pwszFilename = pwszFilename;
     pHandles[handle].uOpenFlags = uOpenFlags;
     pHandles[handle].bOpening = 0;
+    pHandles[handle].cryptchanged = 1; /* mark so that it's tested on 1st write */
     pHandles[handle].crypt = NULL;
     ioh_event_init(&pHandles[handle].ready_ev);
 
@@ -436,6 +476,7 @@ int vbsfFreeHandle(PSHFLCLIENTDATA pClient, SHFLHANDLE handle)
             fc_free_hdr(pHandles[handle].crypt);
             pHandles[handle].crypt = NULL;
         }
+        pHandles[handle].cryptchanged = 0;
 
         if (pHandles[handle].ready_ev) {
             ioh_event_close(&pHandles[handle].ready_ev);
@@ -443,7 +484,6 @@ int vbsfFreeHandle(PSHFLCLIENTDATA pClient, SHFLHANDLE handle)
         }
 
         pHandles[handle].uOpenFlags = 0;
-
         return VINF_SUCCESS;
     }
     return VERR_INVALID_HANDLE;
@@ -549,6 +589,43 @@ filecrypt_hdr_t *vbsfQueryHandleCrypt(PSHFLCLIENTDATA pClient, SHFLHANDLE handle
         return pHandles[handle].crypt;
     else
         return NULL;
+}
+
+int
+vbsfQueryHandleCryptChanged(PSHFLCLIENTDATA client, SHFLHANDLE handle)
+{
+    wait_handle_ready(handle);
+
+    if (   handle < SHFLHANDLE_MAX
+        && (pHandles[handle].uFlags & SHFL_HF_VALID)
+        && pHandles[handle].pClient == client)
+        return pHandles[handle].cryptchanged;
+    else
+        return 0;
+}
+
+void
+vbsfResetHandleCryptChanged(PSHFLCLIENTDATA client, SHFLHANDLE handle)
+{
+    wait_handle_ready(handle);
+
+    if (   handle < SHFLHANDLE_MAX
+        && (pHandles[handle].uFlags & SHFL_HF_VALID)
+        && pHandles[handle].pClient == client)
+        pHandles[handle].cryptchanged = 0;
+}
+
+void
+vbsfNotifyCryptChanged(void)
+{
+    uint32_t i;
+    /* Start from 1, 0 is the invalid file handle and we
+     * use it to mark the end of the saved list. */
+    for (i = 1; i < SHFLHANDLE_MAX; ++i) {
+        const wchar_t *pwszFilename = pHandles[i].pwszFilename;
+        if (pwszFilename != NULL)
+            pHandles[i].cryptchanged = 1;
+    }
 }
 
 wchar_t *vbsfQueryHandlePath(PSHFLCLIENTDATA pClient, SHFLHANDLE handle)

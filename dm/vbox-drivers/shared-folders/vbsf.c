@@ -1216,10 +1216,41 @@ void testWrite(RTTEST hTest)
     /* Add tests as required... */
 }
 #endif
+
+static int
+test_re_write(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle)
+{
+    int rc = 0;
+
+    /* maybe necessary to rewrite whole file for new crypt settings */
+    if (vbsfQueryHandleCryptChanged(pClient, Handle)) {
+        int current = (vbsfQueryHandleFlags(pClient, Handle) & SHFL_HF_ENCRYPTED) ? 1:0;
+        int desired;
+
+        rc = fch_query_crypt_by_handle(pClient, root, Handle, &desired);
+        if (RT_FAILURE(rc))
+            return rc;
+        if (desired)
+            desired = 1;
+        if (current != desired) {
+            LogRel(("shared-folders: crypt mode changed on file 0x%llx mode %d, rewriting\n", Handle, desired));
+            rc = fch_re_write_file(pClient, root, Handle);
+            if (RT_FAILURE(rc)) {
+                LogRel(("shared-folders: rewrite of %ls (%llx) failed with %x\n",
+                        vbsfQueryHandlePath(pClient, Handle), Handle, rc));
+                return rc;
+            }
+        }
+        vbsfResetHandleCryptChanged(pClient, Handle);
+    }
+    return 0;
+}
+
 int vbsfWrite(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, uint64_t offset, uint32_t *pcbBuffer, uint8_t *pBuffer)
 {
     SHFLFILEHANDLE *pHandle = vbsfQueryFileHandle(pClient, Handle);
     size_t count = 0;
+    uint64_t hostoffset;
     int rc;
 
     if (pHandle == 0 || pcbBuffer == 0 || pBuffer == 0)
@@ -1240,14 +1271,18 @@ int vbsfWrite(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, uint64_
     if (*pcbBuffer == 0)
         return VINF_SUCCESS; /** @todo correct? */
 
-    rc = RTFileSeek(pHandle->file.Handle,
-                    fch_host_fileoffset(pClient, root, Handle, offset),
-                    RTFILE_SEEK_BEGIN, NULL);
-    if (rc != VINF_SUCCESS)
-    {
-        AssertRC(rc);
+    /* maybe necessary to rewrite whole file for new crypt settings */
+    rc = test_re_write(pClient, root, Handle);
+    if (RT_FAILURE(rc))
         return rc;
-    }
+    /* need to requery handle, might've changed on rewrite */
+    pHandle = vbsfQueryFileHandle(pClient, Handle);
+    hostoffset = fch_host_fileoffset(pClient, root, Handle, offset);
+    rc = RTFileSeek(pHandle->file.Handle,
+                    hostoffset,
+                    RTFILE_SEEK_BEGIN, NULL);
+    if (RT_FAILURE(rc))
+        return rc;
 
     fch_crypt(pClient, Handle, pBuffer, offset, *pcbBuffer);
     rc = RTFileWrite(pHandle->file.Handle, pBuffer, *pcbBuffer, &count);
