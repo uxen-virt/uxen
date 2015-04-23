@@ -11,12 +11,16 @@
 #include <err.h>
 
 #include "uxenconsolelib.h"
+#include "uxenhid-common.h"
+
+#include "../../dm/win32-touch.h"
 
 DECLARE_PROGNAME;
 
 #define BUF_SZ 1024
 struct console {
     uxenconsole_context_t ctx;
+    hid_context_t hid;
     HANDLE channel_event;
     HWND window;
     HINSTANCE instance;
@@ -50,6 +54,150 @@ enum {
     KBD_STATE_COMPKEY_PRESSED,
     KBD_STATE_UNICODE,
 };
+
+#define SCALE_X(v) \
+        (((v) * UXENHID_XY_MAX) / (cons->width - 1))
+#define SCALE_Y(v) \
+        (((v) * UXENHID_XY_MAX) / (cons->height - 1))
+
+
+#if 0
+static int
+hid_mouse_event(struct console *cons, int x, int y, int wheel, int hwheel, int wParam)
+{
+    int buttons = 0;
+    int ret;
+    int scaled_x, scaled_y;
+
+    if (!cons->hid)
+        return -1;
+
+    if (wParam & MK_LBUTTON)
+        buttons |= UXENHID_MOUSE_BUTTON_1;
+    if (wParam & MK_RBUTTON)
+        buttons |= UXENHID_MOUSE_BUTTON_2;
+    if (wParam & MK_MBUTTON)
+        buttons |= UXENHID_MOUSE_BUTTON_3;
+    if (wParam & MK_XBUTTON1)
+        buttons |= UXENHID_MOUSE_BUTTON_4;
+    if (wParam & MK_XBUTTON2)
+        buttons |= UXENHID_MOUSE_BUTTON_5;
+
+    scaled_x = SCALE_X(x);
+    scaled_y = SCALE_Y(y);
+
+    ret = uxenconsole_hid_mouse_report(cons->hid, buttons, scaled_x, scaled_y,
+                                       wheel / 30, hwheel / 30);
+    if (!ret) {
+        cons->last_mouse_x = x;
+        cons->last_mouse_y = y;
+    }
+
+    return ret;
+}
+#endif
+
+static int
+hid_touch_event(struct console *cons, POINTER_TOUCH_INFO *info, UINT32 count)
+{
+    UINT32 i;
+    POINT pos = {0, 0};
+    RECT client;
+
+    if (!cons->hid)
+        return -1;
+
+    ClientToScreen(cons->window, &pos);
+    GetClientRect(cons->window, &client);
+
+    for (i = 0; i < count; i++) {
+        if ((info[i].pointerInfo.ptPixelLocation.x < pos.x) ||
+            (info[i].pointerInfo.ptPixelLocation.x >= (pos.x + client.right)) ||
+            (info[i].pointerInfo.ptPixelLocation.y < pos.y) ||
+            (info[i].pointerInfo.ptPixelLocation.y >= (pos.y + client.bottom)))
+            return -1;
+    }
+
+    for (i = 0; i < count; i++) {
+        int rc;
+        int x, y;
+        int width, height;
+        uint8_t flags = 0;
+        uint16_t pointer_id;
+
+        /* hash 32bit pointer id into 16bit value */
+        pointer_id = info[i].pointerInfo.pointerId & 0xffff;
+        pointer_id ^= info[i].pointerInfo.pointerId >> 16;
+
+        x = SCALE_X(info[i].pointerInfo.ptPixelLocation.x - pos.x);
+        y = SCALE_Y(info[i].pointerInfo.ptPixelLocation.y - pos.y);
+        width = SCALE_X(info[i].rcContact.right - info[i].rcContact.left);
+        height = SCALE_Y(info[i].rcContact.bottom - info[i].rcContact.top);
+
+        if (info[i].pointerInfo.pointerFlags & POINTER_FLAG_INRANGE)
+            flags |= UXENHID_FLAG_IN_RANGE;
+        if (info[i].pointerInfo.pointerFlags & POINTER_FLAG_INCONTACT)
+            flags |= UXENHID_FLAG_TIP_SWITCH;
+
+        /*
+         * The first touch report of a frame gets the number of contact
+         * points in the frame. Contact count is zero in the following
+         * reports.
+         */
+        rc = uxenconsole_hid_touch_report(cons->hid,
+                                          i == 0 ? count : 0,
+                                          pointer_id,
+                                          x, y, width, height,
+                                          flags);
+        if (rc == -1)
+            return -1;
+    }
+
+    return 0;
+}
+
+static int
+hid_pen_event(struct console *cons, POINTER_PEN_INFO *info, UINT32 count)
+{
+    UINT32 i;
+    POINT pos = {0, 0};
+
+    if (!cons->hid)
+        return -1;
+
+    ClientToScreen(cons->window, &pos);
+
+    for (i = 0; i < count; i++) {
+        int rc;
+        int x, y;
+        uint8_t flags = 0;
+        uint16_t pressure = 0;
+
+        x = SCALE_X(info[i].pointerInfo.ptPixelLocation.x - pos.x);
+        y = SCALE_Y(info[i].pointerInfo.ptPixelLocation.y - pos.y);
+
+        if (info[i].pointerInfo.pointerFlags & POINTER_FLAG_INRANGE)
+            flags |= UXENHID_FLAG_IN_RANGE;
+        if (info[i].pointerInfo.pointerFlags & POINTER_FLAG_INCONTACT)
+            flags |= UXENHID_FLAG_TIP_SWITCH;
+
+        if (info[i].penFlags & PEN_FLAG_BARREL)
+            flags |= UXENHID_PEN_FLAG_BARREL_SWITCH;
+        if (info[i].penFlags & PEN_FLAG_INVERTED)
+            flags |= UXENHID_PEN_FLAG_INVERT;
+        if (info[i].penFlags & PEN_FLAG_ERASER)
+            flags |= UXENHID_PEN_FLAG_ERASER;
+
+        if (info[i].penMask & PEN_MASK_PRESSURE)
+            pressure = info[i].pressure;
+
+        rc = uxenconsole_hid_pen_report(cons->hid, x, y, flags, pressure);
+        if (rc == -1)
+            return -1;
+   }
+
+    return 0;
+}
 
 static void
 reset_mouse_tracking(HWND hwnd)
@@ -315,6 +463,32 @@ sendkey:
             dst->bottom = dst->top + (src.bottom - src.top);
         }
         return TRUE;
+    case WM_POINTERENTER:
+    case WM_POINTERUP:
+    case WM_POINTERDOWN:
+    case WM_POINTERLEAVE:
+    case WM_POINTERUPDATE:
+        {
+            UINT32 id = GET_POINTERID_WPARAM(wParam);
+            POINTER_PEN_INFO pen_info[32];
+            POINTER_TOUCH_INFO touch_info[32];
+            UINT32 count;
+
+            count = 32;
+            if (GetPointerFrameTouchInfo(id, &count, touch_info) &&
+                !hid_touch_event(cons, touch_info, count)) {
+                SkipPointerFrameMessages(id);
+                return 0;
+            }
+
+            count = 32;
+            if (GetPointerFramePenInfo(id, &count, pen_info) &&
+                !hid_pen_event(cons, pen_info, count)) {
+                SkipPointerFrameMessages(id);
+                return 0;
+            }
+        }
+        break;
     default:
         break;
     }
@@ -627,13 +801,14 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     int wargc;
     wchar_t **wargv;
     char pipename[512];
+    int domid = -1;
 
     memset(&cons, 0, sizeof (cons));
     cons.instance = hInstance;
     cons.show = iCmdShow;
 
     wargv = CommandLineToArgvW(GetCommandLineW(), &wargc);
-    if (wargc != 2)
+    if (wargc < 2)
         return -1;
     rc = WideCharToMultiByte(CP_ACP, 0, wargv[1], -1,
                              pipename, sizeof (pipename),
@@ -644,6 +819,13 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     cons.ctx = uxenconsole_init(&console_ops, &cons, pipename);
     if (!cons.ctx)
         err(1, "uxenconsole_init");
+
+    if (wargc < 3 || 1 != swscanf(wargv[2], L"%d", &domid))
+        domid = -1;
+    if (domid >= 0)
+        cons.hid = uxenconsole_hid_init(domid);
+    else
+        cons.hid = NULL;
 
     printf("Connecting to %s\n", pipename);
     cons.channel_event = uxenconsole_connect(cons.ctx);
