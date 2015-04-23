@@ -35,6 +35,7 @@ static bool proxy_used = false;
 static int proxy_forbid_nonexistent_dns_name = 0;
 static int debug_resolver = 0;
 static int ipv6_allowed = 1;
+static int no_proxy_mode = 0;
 
 static void ndns_close(CharDriverState *chr);
 
@@ -213,6 +214,8 @@ static void dns_config(yajl_val config)
     ipv6_allowed = yajl_object_get_bool_default(config, "ipv6-allowed", 0);
     if (ipv6_allowed)
         debug_printf("%s: IPv6 addresses are allowed and will be processed\n", __FUNCTION__);
+    no_proxy_mode = yajl_object_get_bool_default(config, "no-proxy-mode", 0);
+    NETLOG("(dns) no-proxy-mode is %s", no_proxy_mode ? "ON" : "OFF");
 }
 
 bool dns_is_nickel_domain_name(const char *domain)
@@ -535,6 +538,8 @@ struct dns_response dns_lookup_containment(struct nickel *ni, const char *name, 
     dstate.nu = &ni->nu;
     dstate.dname = ni_priv_strdup(name);
     dstate.proxy_on = proxy_on;
+    if (no_proxy_mode)
+        dstate.proxy_on = 0;
 
     dns_sync_query((void *) &dstate);
 
@@ -894,7 +899,7 @@ ndns_chr_write(CharDriverState *chr, const uint8_t *buf, int blen)
 
     if (dstate->ni && (proxy_used || (proxy_used = ac_proxy_set(dstate->ni))))
         dstate->proxy_on = 1;
-    if (!http_proxy_enabled)
+    if (!http_proxy_enabled || no_proxy_mode)
         dstate->proxy_on = 0;
 
     if (dstate->proxy_on) {
