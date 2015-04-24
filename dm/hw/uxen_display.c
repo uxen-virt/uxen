@@ -31,6 +31,7 @@ struct crtc_state {
     uint32_t offset;
     struct crtc_regs *regs;
     DisplayState *ds;
+    int flush_pending;
 };
 
 struct uxendisp_state {
@@ -103,6 +104,8 @@ draw_line_15(uint8_t *d, uint8_t *s, size_t width)
     }
 }
 
+static void crtc_flush(struct uxendisp_state *s, int crtc_id);
+
 static void
 crtc_draw(struct uxendisp_state *s, int crtc_id)
 {
@@ -118,6 +121,11 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
     int y, y_start;
     uint32_t addr, addr1;
     uint32_t page0, page1, pagei, page_min, page_max;
+
+    if (crtc->flush_pending)
+        crtc_flush(s, crtc_id);
+    if (!crtc->ds)
+        return;
 
     npages = (crtc->offset + crtc->regs->p.stride * crtc->regs->p.yres +
               TARGET_PAGE_SIZE - 1) >> TARGET_PAGE_BITS;
@@ -312,6 +320,8 @@ crtc_flush(struct uxendisp_state *s, int crtc_id)
 
         do_dpy_trigger_refresh(crtc->ds);
     }
+
+    crtc->flush_pending = 0;
 }
 
 static void
@@ -654,7 +664,7 @@ uxendisp_post_load(void *opaque, int version_id)
     pci_ram_post_load(&s->dev, version_id);
 
     for (crtc_id = 0; crtc_id < UXENDISP_NB_CRTCS; crtc_id++)
-        crtc_flush(s, crtc_id);
+        s->crtcs[crtc_id].flush_pending = 1;
 
     return 0;
 }
@@ -743,6 +753,7 @@ static int uxendisp_initfn(PCIDevice *dev)
     s->crtcs[0].ds = graphic_console_init(uxendisp_update,
                                           uxendisp_invalidate,
                                           uxendisp_text_update, s);
+    s->crtcs[0].flush_pending = 0;
 
     vga_init(v, pci_address_space(dev), pci_address_space_io(dev), s->crtcs[0].ds);
 
