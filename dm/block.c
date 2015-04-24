@@ -121,6 +121,7 @@ bdrv_add(yajl_val arg)
 
     id = yajl_object_get_string(arg, "id");
     proto = yajl_object_get_string(arg, "proto") ?: "raw";
+    log_swap_fills = yajl_object_get_bool_default(arg, "log-swap-fill-reads", false);
     path = yajl_object_get_string(arg, "path");
 
 #ifndef LIBIMG

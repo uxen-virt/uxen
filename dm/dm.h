@@ -73,6 +73,7 @@ extern int display_refresh_event_mode;
 extern FILE *logfile;
 extern int loglevel;
 extern uint64_t hide_log_sensitive_data;
+extern uint64_t log_swap_fills;
 
 extern const char *serial_devices[MAX_SERIAL_PORTS];
 

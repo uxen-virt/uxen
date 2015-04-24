@@ -89,6 +89,8 @@ extern HRESULT WINAPI FilterConnectCommunicationPort(
 
 #endif
 
+uint64_t log_swap_fills = 0;
+
 // #define SWAP_NO_AIO 1
 
 #if !defined(LIBIMG)
@@ -170,6 +172,8 @@ typedef struct BDRVSwapState {
     int reads_outstanding;
     struct SwapAIOCB *read_queue_head;
     struct SwapAIOCB *read_queue_tail;
+
+    int log_swap_fills;
 
 #ifdef _WIN32
     HANDLE heap;
@@ -932,6 +936,8 @@ static int swap_open(BlockDriverState *bs, const char *filename, int flags)
     /* Start out with well-defined state. */
     memset(s, 0, sizeof(*s));
 
+    s->log_swap_fills = log_swap_fills;
+
 #ifdef _WIN32
     s->heap = HeapCreate(0, 0, 0);
 #endif
@@ -1650,6 +1656,15 @@ static int swap_fill_read_holes(BDRVSwapState *s, uint64_t offset, uint64_t coun
                                 map_offset, take);
 #endif
 #endif
+                        if (s->log_swap_fills) {
+                            const char *filename = s->map_strings + tuple->name_offset;
+                            debug_printf("swap_fill_read_holes {\"filename\":\"%s\","
+                                    " \"take\":0x%"PRIx64","
+                                    " \"offset\":0x%"PRIx64"}\n",
+                                    filename,
+                                    take,
+                                    map_offset);
+                        }
                         memcpy(buffer + readOffset,
                                 (uint8_t*)file->mapping + map_offset, take);
 #ifdef SWAP_STATS
