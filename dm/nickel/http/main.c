@@ -771,7 +771,9 @@ static int create_http_header(bool prx_auth, const char *sv_name, int use_head, 
     if (buff_append(buf, S_SPACE, STRLEN(S_SPACE)) < 0)
         goto mem_err;
 
-    if (prx_auth && strncasecmp((const char *)horig->url->m, S_SCHEME_HTTP, STRLEN(S_SCHEME_HTTP))) {
+    if (prx_auth && strncasecmp((const char *)horig->url->m, S_SCHEME_HTTP, STRLEN(S_SCHEME_HTTP)) &&
+        strncasecmp((const char *)horig->url->m, S_SCHEME_FTP, STRLEN(S_SCHEME_FTP))) {
+
         if (buff_append(buf, S_SCHEME_HTTP, STRLEN(S_SCHEME_HTTP)) < 0)
             goto mem_err;
         if (BUFF_APPENDSTR(buf, sv_name) < 0)

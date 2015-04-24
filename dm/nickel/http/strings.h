@@ -22,6 +22,7 @@
 #define S_CONNECTION "Connection"
 #define S_KEEPALIVE "Keep-Alive"
 #define S_SCHEME_HTTP "http://"
+#define S_SCHEME_FTP "ftp://"
 #define S_CLOSE "close"
 #define S_USER_AGENT "User-Agent"
 #define S_PROXY_CHALLENGE_HEADER "proxy-authenticate"
