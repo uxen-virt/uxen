@@ -76,6 +76,9 @@ sf_parse_subfolder_config(const char *folder_name, yajl_val folder)
     int i;
 
     subfolders = yajl_tree_get(folder, subfolders_path, yajl_t_array);
+    if (!subfolders)
+        return 0;
+
     if (!YAJL_IS_OBJECT(subfolders) && !YAJL_IS_ARRAY(subfolders)) {
         warnx("shared-folders: wrong type");
         return -1;
