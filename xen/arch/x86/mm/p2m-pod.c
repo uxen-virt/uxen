@@ -1378,7 +1378,7 @@ p2m_pod_compress_page(struct p2m_domain *p2m, unsigned long gfn_aligned,
 
 static int
 p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
-                        struct domain *page_owner)
+                        struct domain *page_owner, int share)
 {
     struct domain *d = p2m->domain;
     struct page_info *p = NULL, *pdi_cont;
@@ -1397,7 +1397,7 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
 
     /* check if decompressed page exists */
     p2m_lock_recursive(p2m);
-    if (page_owner == d && mfn_x(pdi->mfn)) {
+    if (share && page_owner == d && mfn_x(pdi->mfn)) {
         *tmfn = pdi->mfn;
         get_page_fast(mfn_to_page(*tmfn), page_owner);
         p2m_unlock(p2m);
@@ -1447,7 +1447,7 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
         goto out;
     }
 
-    if (page_owner == d) {
+    if (share && page_owner == d) {
         p2m_lock_recursive(p2m);
         if (mfn_x(pdi->mfn)) {
             /* page was decompressed concurrently, share it and free
@@ -1709,7 +1709,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         }
         if (!p2m_pod_decompress_page(
                 d->clone_of ? p2m_get_hostp2m(d->clone_of) : p2m, smfn, &mfn,
-                page_owner)) {
+                page_owner, p2m_is_pod(pod_p2mt))) {
             domain_crash(d);
             goto out_fail;
         }
