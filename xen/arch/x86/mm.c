@@ -2296,17 +2296,31 @@ struct domain *page_get_owner_and_reference(struct page_info *page)
 
 /* fast get page -- use when the caller knows the page owner and is
  * already holding a reference to the page */
-int
-_get_page_fast(struct page_info *page
 #ifndef NDEBUG
-               , struct domain *domain
-#endif
-    )
+int
+_get_page_fast(struct page_info *page, struct domain *domain)
+{
+    struct domain *owner;
+
+    if (!_get_page(page))
+        return 0;
+    owner = page_get_owner(page);
+    if (unlikely(domain != owner)) {
+        printk("%s: page %lx owner is %p/%d, expected %p/%d\n", __FUNCTION__,
+               page_to_mfn(page), owner, owner ? owner->domain_id : -1,
+               domain, domain ? domain->domain_id : -1);
+        DEBUG();
+    }
+    return 1;
+}
+#else  /* NDEBUG */
+int
+_get_page_fast(struct page_info *page)
 {
 
     return _get_page(page);
 }
-
+#endif  /* NDEBUG */
 
 int get_page(struct page_info *page, struct domain *domain)
 {
