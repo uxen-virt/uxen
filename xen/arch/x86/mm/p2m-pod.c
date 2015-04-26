@@ -1628,7 +1628,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             return 1;
         }
         if ((d->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] &
-             HVM_PARAM_CLONE_L1_dynamic) && !p2m_is_pod(t)) {
+             HVM_PARAM_CLONE_L1_dynamic) && p2m_is_ram_rw(t)) {
             ASSERT(mfn_valid_page(mfn_x(smfn)));
             ASSERT(mfn_x(smfn) != mfn_x(shared_zero_page));
             set_p2m_entry(op2m, gfn_aligned, smfn, 0,
