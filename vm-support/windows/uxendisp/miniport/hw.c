@@ -26,12 +26,12 @@ static BOCHSMode bochs_modes[] = {
 
 static ULONG uxdisp_read(PDEVICE_EXTENSION dev, ULONG reg)
 {
-    return *(ULONG *)(dev->mmio_start + reg);
+    return READ_REGISTER_ULONG((ULONG *)(dev->mmio_start + reg));
 }
 
 static void uxdisp_write(PDEVICE_EXTENSION dev, ULONG reg, ULONG val)
 {
-    *(ULONG *)(dev->mmio_start + reg) = val;
+    WRITE_REGISTER_ULONG((ULONG *)(dev->mmio_start + reg), val);
 }
 
 static ULONG uxdisp_crtc_read(PDEVICE_EXTENSION dev, ULONG crtc, ULONG reg)
