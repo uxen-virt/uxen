@@ -13,6 +13,10 @@
 #include "ntddvdeo.h"
 #include "video.h"
 
+#ifndef _M_AMD64
+#include "ioaccess.h"
+#endif  /* _M_AMD64 */
+
 /* PCI vendor and device IDs. */
 #define UXENDISP_PCI_VEN    0x5853
 #define UXENDISP_PCI_DEV    0x5102
