@@ -863,6 +863,9 @@ void paging_teardown(struct domain *d)
 #ifndef __UXEN__
     p2m_pod_empty_cache(d);
 #endif  /* __UXEN__ */
+
+    if (!p2m_shared_teardown(p2m_get_hostp2m(d)))
+        gdprintk(XENLOG_ERR, "%s: p2m_shared_teardown failed\n", __FUNCTION__);
 }
 
 /* Call once all of the references to the domain have gone away */
