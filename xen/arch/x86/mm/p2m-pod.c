@@ -2035,7 +2035,8 @@ p2m_shared_teardown(struct p2m_domain *p2m)
 {
     struct domain *d = p2m->domain, *owner;
     unsigned long gpfn;
-    mfn_t mfn;
+    mfn_t mfn, l1mfn;
+    void *l1table = NULL;
     p2m_type_t t;
     p2m_access_t a;
     unsigned int page_order;
@@ -2044,11 +2045,20 @@ p2m_shared_teardown(struct p2m_domain *p2m)
     if (!d->clone_of)
         return 1;
     for (gpfn = 0; gpfn <= p2m->max_mapped_pfn; gpfn++) {
-        mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, &page_order);
-        if (!mfn_valid_page(mfn_x(mfn))) {
-            gpfn |= ((1 << page_order) - 1);
-            continue;
+        if (!(gpfn & ((1UL << PAGETABLE_ORDER) - 1))) {
+            l1mfn = p2m->get_l1_table(p2m, gpfn, &page_order);
+            if (!mfn_valid_page(mfn_x(l1mfn))) {
+                gpfn |= ((1 << page_order) - 1);
+                continue;
+            }
+            if (l1table)
+                unmap_domain_page(l1table);
+            l1table = map_domain_page(mfn_x(l1mfn));
         }
+        mfn = p2m->parse_entry(l1table, gpfn & ((1UL << PAGETABLE_ORDER) - 1),
+                               &t, &a);
+        if (!mfn_valid_page(mfn_x(mfn)))
+            continue;
         if (!p2m_is_pod(t))
             continue;
         owner = page_get_owner(mfn_to_page(mfn));
@@ -2057,6 +2067,8 @@ p2m_shared_teardown(struct p2m_domain *p2m)
         put_page(mfn_to_page(mfn));
         count++;
     }
+    if (l1table)
+        unmap_domain_page(l1table);
 
     printk("%s: domain %d dropped %d template page references\n",
            __FUNCTION__, d->domain_id, count);
