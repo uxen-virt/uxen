@@ -1381,8 +1381,8 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
                         struct domain *page_owner, int share)
 {
     struct domain *d = p2m->domain;
-    struct page_info *p = NULL, *pdi_cont;
-    uint8_t *data, *data_cont;
+    struct page_info *p = NULL, *p_cont;
+    uint8_t *data, *data_cont = NULL;
     struct page_data_info *pdi;
     uint16_t offset, size, uc_size;
     void *source;
@@ -1416,7 +1416,16 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
 
     size = pdi->size;
     offset += sizeof(struct page_data_info);
-    if (offset + size > PAGE_SIZE) {
+    if (offset == PAGE_SIZE) {
+        perfc_incr(decompressed_pages_detached);
+        spin_lock(&d->page_alloc_lock);
+        p_cont = page_list_next(__mfn_to_page(mfn_x(mfn) & P2M_MFN_MFN_MASK),
+                                &d->page_list);
+        spin_unlock(&d->page_alloc_lock);
+        ASSERT(p_cont);
+        data_cont = map_domain_page_direct(__page_to_mfn(p_cont));
+        source = data_cont;
+    } else if (offset + size > PAGE_SIZE) {
         perfc_incr(decompressed_pages_split);
         if (unlikely(!check_decompress_buffer())) {
             ret = 0;
@@ -1424,14 +1433,13 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
         }
         memcpy(this_cpu(decompress_buffer), &data[offset], PAGE_SIZE - offset);
         spin_lock(&d->page_alloc_lock);
-        pdi_cont = page_list_next(__mfn_to_page(mfn_x(mfn) & P2M_MFN_MFN_MASK),
-                                  &d->page_list);
+        p_cont = page_list_next(__mfn_to_page(mfn_x(mfn) & P2M_MFN_MFN_MASK),
+                                &d->page_list);
         spin_unlock(&d->page_alloc_lock);
-        ASSERT(pdi_cont);
-        data_cont = map_domain_page_direct(__page_to_mfn(pdi_cont));
+        ASSERT(p_cont);
+        data_cont = map_domain_page_direct(__page_to_mfn(p_cont));
         memcpy(this_cpu(decompress_buffer) + PAGE_SIZE - offset,
                data_cont, size - (PAGE_SIZE - offset));
-        unmap_domain_page(data_cont);
         source = this_cpu(decompress_buffer);
     } else
         source = pdi->data;
@@ -1472,6 +1480,8 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
   out:
     if (target)
         unmap_domain_page_direct(target);
+    if (data_cont)
+        unmap_domain_page(data_cont);
     unmap_domain_page(data);
     if (p)
         free_domheap_page(p);
