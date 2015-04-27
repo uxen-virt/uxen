@@ -2108,6 +2108,8 @@ p2m_shared_teardown(struct p2m_domain *p2m)
     unsigned int page_order;
     int count = 0;
 
+    if (!d->clone_of)
+        return 1;
     for (gpfn = 0; gpfn <= p2m->max_mapped_pfn; gpfn++) {
         mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, &page_order);
         if (!mfn_valid_page(mfn_x(mfn))) {
@@ -2117,7 +2119,7 @@ p2m_shared_teardown(struct p2m_domain *p2m)
         if (!p2m_is_pod(t))
             continue;
         owner = page_get_owner(mfn_to_page(mfn));
-        if (!owner || owner == d)
+        if (owner != d->clone_of)
             continue;
         put_page(mfn_to_page(mfn));
         count++;
