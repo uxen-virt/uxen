@@ -862,8 +862,6 @@ void paging_teardown(struct domain *d)
     /* Move populate-on-demand cache back to domain_list for destruction */
 #ifndef __UXEN__
     p2m_pod_empty_cache(d);
-#else  /* __UXEN__ */
-    p2m_pod_final_free_pages(d);
 #endif  /* __UXEN__ */
 }
 

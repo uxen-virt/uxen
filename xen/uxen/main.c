@@ -350,8 +350,6 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
             ret = 0;
             goto out_reset_current;
         }
-        if (!d->is_dying && !page_list_empty(&d->pod_free_list))
-            p2m_pod_free_pages(d);
         if (_uxen_info.ui_free_pages[smp_processor_id()].free_count < 20) {
             vci->vci_run_mode = VCI_RUN_MODE_FREEPAGE_CHECK;
             ret = 0;

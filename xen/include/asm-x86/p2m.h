@@ -574,7 +574,6 @@ void p2m_pod_empty_cache(struct domain *d);
  * domain matches target */
 int p2m_pod_set_mem_target(struct domain *d, unsigned long target);
 
-void p2m_pod_free_pages(struct domain *d);
 void p2m_pod_final_free_pages(struct domain *d);
 
 /* Call when decreasing memory reservation to handle PoD entries properly.

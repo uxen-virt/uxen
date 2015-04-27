@@ -264,7 +264,6 @@ struct domain
     struct page_list_head page_list;  /* linked list */
     struct page_list_head xenpage_list; /* linked list (size xenheap_pages) */
     struct page_list_head mapcache_page_list; /* linked list */
-    struct page_list_head pod_free_list; /* linked list */
     unsigned int     tot_pages;       /* number of pages currently possesed */
     unsigned int     max_pages;       /* maximum value for tot_pages        */
     atomic_t         hidden_pages;    /* number of hidden pages             */

@@ -308,7 +308,6 @@ struct domain *domain_create_internal(
     INIT_PAGE_LIST_HEAD(&d->page_list);
     INIT_PAGE_LIST_HEAD(&d->xenpage_list);
     INIT_PAGE_LIST_HEAD(&d->mapcache_page_list);
-    INIT_PAGE_LIST_HEAD(&d->pod_free_list);
  
     rwlock_init(&d->v4v_lock);
 

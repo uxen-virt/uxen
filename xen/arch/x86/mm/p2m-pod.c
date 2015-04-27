@@ -359,73 +359,6 @@ p2m_pod_set_cache_target(struct p2m_domain *p2m, unsigned long pod_target, int p
 out:
     return ret;
 }
-#else  /* __UXEN__ */
-static void
-_p2m_pod_free_pages(struct domain *d)
-{
-    struct p2m_domain *p2m = p2m_get_hostp2m(d);
-    struct page_info *p;
-
-    lock_page_alloc(p2m);
-
-    while ((p = page_list_remove_head(&d->pod_free_list))) {
-        page_list_add_tail(p, &d->page_list);
-        unlock_page_alloc(p2m);
-
-        /* Copied from common/memory.c:guest_remove_page() */
-        if (unlikely(!get_page(p, d))) {
-            gdprintk(XENLOG_INFO, "Bad page free for domain %u\n",
-                     d->domain_id);
-            goto proceed;
-        }
-
-#ifndef __UXEN__
-        if (test_and_clear_bit(_PGT_pinned, &p->u.inuse.type_info))
-            put_page_and_type(p);
-#endif  /* __UXEN__ */
-            
-        if (test_and_clear_bit(_PGC_allocated, &p->count_info))
-            put_page(p);
-
-        put_page(p);
-
-      proceed:
-        lock_page_alloc(p2m);
-    }
-
-    unlock_page_alloc(p2m);
-}
-
-void
-p2m_pod_free_pages(struct domain *d)
-{
-    struct p2m_domain *p2m = p2m_get_hostp2m(d);
-
-    p2m_lock(p2m);
-
-    /* Don't do anything if the domain is being torn down */
-    if (d->is_dying)
-        goto out;
-
-    _p2m_pod_free_pages(d);
-
-out:
-    p2m_unlock(p2m);
-}
-
-void
-p2m_pod_final_free_pages(struct domain *d)
-{
-    struct p2m_domain *p2m = p2m_get_hostp2m(d);
-
-    p2m_lock(p2m);
-
-    ASSERT(d->is_dying);
-
-    _p2m_pod_free_pages(d);
-
-    p2m_unlock(p2m);
-}
 #endif  /* __UXEN__ */
 
 #ifndef __UXEN__
@@ -2173,6 +2106,7 @@ p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
     mfn_t smfn;
     p2m_type_t p2mt;
     p2m_access_t p2ma;
+    struct page_info *page;
     int ret = -1;
 
     /* This is called from the p2m lookups, which can happen with or 
@@ -2203,15 +2137,10 @@ p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
     set_p2m_entry(p2m, gfn, shared_zero_page, order,
 		  p2m_populate_on_demand, p2m->default_access);
 
-    /* Add to cache, and account for the new p2m PoD entry */
-#ifndef __UXEN__
-    p2m_pod_cache_add_zero(p2m, mfn_to_page(smfn), order);
-#else  /* __UXEN__ */
-    lock_page_alloc(p2m);
-    page_list_del(mfn_to_page(smfn), &d->page_list);
-    page_list_add_tail(mfn_to_page(smfn), &d->pod_free_list);
-    unlock_page_alloc(p2m);
-#endif  /* __UXEN__ */
+    /* Free page and account for the new p2m PoD entry */
+    page = mfn_to_page(smfn);
+    if (test_and_clear_bit(_PGC_allocated, &page->count_info))
+        put_page(page);
     if (!p2m_is_pod(p2mt))
         atomic_inc(&d->pod_pages);
     else if (mfn_valid_page(mfn_x(smfn)))
