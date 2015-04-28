@@ -142,20 +142,13 @@ void fch_guest_fsinfo(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle,
 void fch_guest_fsinfo_path(SHFLCLIENTDATA *pClient, SHFLROOT root, wchar_t *path,
                            RTFSOBJINFO *info)
 {
-    HANDLE h;
+    int iscrypt;
+    filecrypt_hdr_t *crypt;
 
-    h = CreateFileW(path, GENERIC_READ,
-                    FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
-                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (h != INVALID_HANDLE_VALUE) {
-        int iscrypt;
-        filecrypt_hdr_t *crypt;
-
-        fc_read_hdr(h, &iscrypt, &crypt);
-        if (crypt)
-            _guest_fsinfo_common(crypt, info);
+    fc_path_read_hdr(path, &iscrypt, &crypt);
+    if (crypt) {
+        _guest_fsinfo_common(crypt, info);
         fc_free_hdr(crypt);
-        CloseHandle(h);
     }
 }
 
@@ -175,66 +168,6 @@ int fch_writable_file(SHFLCLIENTDATA *pClient, SHFLROOT root,
     *out_fWritable = fWritable;
     return 0;
 }
-
-#if 0
-int fch_writable_file(SHFLCLIENTDATA *pClient, SHFLROOT root,
-                      SHFLHANDLE handle, const wchar_t *path,
-                      bool *out_fWritable)
-{
-    int rc;
-    int crypt_mode;
-    bool fWritable = 0;
-    int filecrypted = 0;
-
-    Assert(handle != SHFL_HANDLE_NIL || path);
-
-    *out_fWritable = 0;
-
-    rc = handle != SHFL_HANDLE_NIL
-        ? fch_query_crypt_by_handle(pClient, root, handle, &crypt_mode)
-        : fch_query_crypt_by_path(pClient, root, (wchar_t*)path, &crypt_mode);
-    if (RT_FAILURE(rc))
-        return rc;
-
-    rc = vbsfMappingsQueryWritable(pClient, root, &fWritable);
-    if (RT_FAILURE(rc))
-        return rc;
-
-    if (handle != SHFL_HANDLE_NIL) {
-        uint32_t type = vbsfQueryHandleType(pClient, handle)
-            & (SHFL_HF_TYPE_DIR|SHFL_HF_TYPE_FILE|SHFL_HF_TYPE_VOLUME);
-        /* non file handles are writable based on config setting */
-        if (type != SHFL_HF_TYPE_FILE) {
-            *out_fWritable = fWritable;
-            return VINF_SUCCESS;
-        }
-        filecrypted = vbsfQueryHandleFlags(pClient, handle) & SHFL_HF_ENCRYPTED;
-    } else {
-        filecrypt_hdr_t *crypt;
-        HANDLE h = CreateFileW(
-            path, GENERIC_READ,
-            FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
-            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-        if (h != INVALID_HANDLE_VALUE) {
-            rc = fc_read_hdr(h, &filecrypted, &crypt);
-            fc_free_hdr(crypt);
-            CloseHandle(h);
-            if (rc)
-                return RTErrConvertFromWin32(rc);
-        } else
-            rc = RTErrConvertFromWin32(GetLastError());
-    }
-
-    /* if encryption is active, non-encrypted files are readonly */
-    if (crypt_mode && !filecrypted) {
-        warnx("Shared Folders - deny access to non-encrypted file %08x %ls",
-              (uint32_t)handle, path ? path : L"");
-        *out_fWritable = 0;
-    } else
-        *out_fWritable = fWritable;
-    return VINF_SUCCESS;
-}
-#endif
 
 /*
  * get entry filename for dirname and entry name, dirname typically includes
@@ -265,18 +198,11 @@ int fch_read_dir_entry_crypthdr(SHFLCLIENTDATA *pClient, SHFLROOT root,
     int rc;
     int iscrypt;
     wchar_t filename[RTPATH_MAX];
-    HANDLE h;
 
     *crypt = NULL;
     if ((rc = dir_entry_filename(dir, entry, filename, RTPATH_MAX)))
         return rc;
-    h = CreateFileW(filename, GENERIC_READ,
-                     FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
-                     OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-    if (h != INVALID_HANDLE_VALUE) {
-        fc_read_hdr(h, &iscrypt, crypt);
-        CloseHandle(h);
-    }
+    fc_path_read_hdr(filename, &iscrypt, crypt);
     return VINF_SUCCESS;
 }
 

@@ -35,6 +35,8 @@ filecrypt_hdr_t* FILECRYPT_API fc_init_hdr(void);
 void FILECRYPT_API fc_free_hdr(filecrypt_hdr_t *h);
 /* allocate & read header. caller responsible for free */
 int  FILECRYPT_API fc_read_hdr(HANDLE file, int *iscrypt, filecrypt_hdr_t **hdr);
+/* allocate & read header. caller responsible for free */
+int  FILECRYPT_API fc_path_read_hdr(wchar_t *path, int *iscrypt, filecrypt_hdr_t **hdr);
 /* write header */
 int  FILECRYPT_API fc_write_hdr(HANDLE file, filecrypt_hdr_t *hdr);
 /* encrypt buffer in-place. off = offset in file (not in the buffer) */

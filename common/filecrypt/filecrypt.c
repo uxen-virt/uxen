@@ -160,7 +160,7 @@ fc_read_hdr(HANDLE file, int *iscrypt, filecrypt_hdr_t **_h)
     h->magic = magic;
     h->hdrversion = hdrversion;
     h->hdrlen = hdrlen;
-    if ((rc = _read(file, ((uint8_t*)h) + 16, h->hdrlen-16))) {
+    if ((rc = _read(file, ((uint8_t*)h) + 16, sizeof(filecrypt_hdr_t)-16))) {
         SetFilePointer(file, 0, NULL, FILE_BEGIN);
         return rc;
     }
@@ -175,6 +175,26 @@ fc_read_hdr(HANDLE file, int *iscrypt, filecrypt_hdr_t **_h)
 
     return 0;
 }
+
+int FILECRYPT_API
+fc_path_read_hdr(wchar_t *path, int *iscrypt, filecrypt_hdr_t **_hdr)
+{
+    HANDLE h;
+    int rc;
+
+    *iscrypt = 0;
+    *_hdr = NULL;
+
+    h = CreateFileW(path, GENERIC_READ,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
+                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE)
+        return GetLastError();
+    rc = fc_read_hdr(h, iscrypt, _hdr);
+    CloseHandle(h);
+    return rc;
+}
+
 
 int FILECRYPT_API
 fc_write_hdr(HANDLE file, filecrypt_hdr_t *h)
