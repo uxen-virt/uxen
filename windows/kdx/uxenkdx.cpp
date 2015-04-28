@@ -5,6 +5,9 @@
  */
 
 #include "kdx.h"
+#include "kdxinfo.h"
+
+#include <uxen/kdxinfo.h>
 
 #define PAGE_SHIFT 12
 
@@ -42,8 +45,6 @@ ULONG64 get_expr(char *expr_fmt, ...)
     return GetExpression(expr);
 }
 
-#define ___usym_sizeof__page_info 0x18
-
 void
 EXT_CLASS::dump_page_list(
     ULONG64 start_entry_addr,
@@ -70,7 +71,8 @@ EXT_CLASS::dump_page_list(
         }
 
         if (verbose_output) {
-            idx = (page_info_addr - frametable_addr) / ___usym_sizeof__page_info;
+            idx = (page_info_addr - frametable_addr) /
+                ___usym_sizeof___page_info;
             if (page_info_addr < frametable_addr) {
                 Dml("  !!! invalid [page_info @ 0x%p, <exec cmd=\"!db 0x%x l0x1000\">idx:0x%08x</exec>] next:0x%08x, prev:0x%08x"
                     ", count_info:%d, {last}:0x%08x\n",
@@ -100,10 +102,72 @@ EXT_CLASS::dump_page_list(
         }
 
         link = get_expr("poi(0x%p+0x%x)", page_info_addr, link_offset) & ~0UL;
-        page_info_addr = frametable_addr + ___usym_sizeof__page_info * link;
+        page_info_addr = frametable_addr + ___usym_sizeof___page_info * link;
         number_of_pages++;
     }
 
     Out("Total number of pages:0x%x (%d MB)\n",
         number_of_pages ? number_of_pages - 1 : 0, number_of_pages >> 8);
+}
+
+EXT_COMMAND(
+    kdxinfo,
+    "set uxen offsets from kdxinfo structure",
+    "")
+{
+    struct uxen_kdxinfo kdxinfo;
+    int ret;
+
+    RequireKernelMode();
+
+    ULONG64 kdxinfo_addr = GetExpression("uxen!uxen_kdxinfo");
+    uint16_t kdxinfo_size =
+        (uint16_t)GetExpression("poi(uxen!uxen_kdxinfo_size)");
+
+    ExtRemoteData kdxinfo_r(kdxinfo_addr, kdxinfo_size);
+
+    if (sizeof(kdxinfo) != kdxinfo_size) {
+        Out("kdxinfo incompatible size %d, supported %d\n", sizeof(kdxinfo),
+            kdxinfo_size);
+        return;
+    }
+
+    ret = kdxinfo_r.ReadBuffer(&kdxinfo, kdxinfo_size, false);
+    if (ret != kdxinfo_size) {
+        Out("kdxinfo incomplete read %d of %d\n", ret, kdxinfo_size);
+        return;
+    }
+
+    if (kdxinfo.version != KDXINFO_VERSION) {
+        Out("kdxinfo incompatible version %d, supported %d\n", kdxinfo.version,
+            KDXINFO_VERSION);
+        return;
+    }
+
+    Out("kdxinfo %p size %x version %x\n", kdxinfo_addr, kdxinfo_size,
+        kdxinfo.version);
+
+    set_usym_sizeof (page_info) = kdxinfo.sizeof_struct_page_info;
+
+    set_usym_sizeof (domain) = kdxinfo.sizeof_struct_domain;
+    set_usym        (domain, domain_id) = kdxinfo.domain_domain_id;
+    set_usym_addr   (domain, page_list_next) = kdxinfo.domain_page_list_next;
+    set_usym_addr   (domain, page_list_tail) = kdxinfo.domain_page_list_tail;
+    set_usym_addr   (domain, vm_info_shared) = kdxinfo.domain_vm_info_shared;
+    set_usym        (domain, max_vcpus) = kdxinfo.domain_max_vcpus;
+    set_usym_addr   (domain, next_in_list) = kdxinfo.domain_next_in_list;
+    set_usym_addr   (domain, vcpu) = kdxinfo.domain_vcpu;
+
+    set_usym_sizeof (vcpu) = kdxinfo.sizeof_struct_vcpu;
+    set_usym        (vcpu, vcpu_id) = kdxinfo.vcpu_vcpu_id;
+    set_usym        (vcpu, is_running) = kdxinfo.vcpu_is_running;
+    set_usym        (vcpu, arch_hvm_vmx_vmcs) = kdxinfo.vcpu_arch_hvm_vmx_vmcs;
+    set_usym        (vcpu, arch_hvm_vmx_vmcs_ma) =
+        kdxinfo.vcpu_arch_hvm_vmx_vmcs_ma;
+    set_usym        (vcpu, arch_hvm_vmx_vmcs_shadow) =
+        kdxinfo.vcpu_arch_hvm_vmx_vmcs_shadow;
+    set_usym        (vcpu, arch_hvm_vmx_active_cpu) =
+        kdxinfo.vcpu_arch_hvm_vmx_active_cpu;
+    set_usym        (vcpu, arch_hvm_vmx_launched) =
+        kdxinfo.vcpu_arch_hvm_vmx_launched;
 }

@@ -31,6 +31,8 @@ TARGETLIBS = \
         $(SDK_LIB_PATH)\advapi32.lib \
         $(DBGSDK_LIB_PATH)\dbgeng.lib
 
+INCLUDES = ..\..\xen\include;$(INCLUDES)
+
 USE_MSVCRT = 1
 USE_NATIVE_EH = 1
 
@@ -40,6 +42,7 @@ MSC_WARNING_LEVEL = /W4 /WX
 
 SOURCES = \
         uxenkdx.cpp \
+        kdxinfo.cpp \
         dumplog.cpp \
         domain.cpp \
         hostpages.cpp \

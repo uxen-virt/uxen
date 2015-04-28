@@ -5,15 +5,11 @@
  */
 
 #include "kdx.h"
+#include "kdxinfo.h"
 
 #define pos_of(x) ((x) & 0xffffffffULL)
 #define ovfl_of(x) ((x) & ~0xffffffffULL)
 #define wrap_of(x) (ovfl_of(x) + 0x100000000ULL)
-
-def_usym_sizeof (domain, 0x1000);
-def_usym        (domain, domain_id,         0x0000);
-def_usym_addr   (domain, vm_info_shared,         0x0090);
-def_usym_addr   (domain, next_in_list,      0x00a0);
 
 ULONG64 EXT_CLASS::get_domain_by_id(uint16_t id)
 {

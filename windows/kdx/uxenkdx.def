@@ -1,6 +1,7 @@
 EXPORTS
 
 ; uXen specific exports
+    kdxinfo
     domain
     dumplog
     hostpages

@@ -5,23 +5,7 @@
  */
 
 #include "kdx.h"
-
-def_usym_sizeof (domain, 0x1000);
-def_usym        (domain, domain_id,         0x0000);
-def_usym_addr   (domain, page_list_next,    0x0030);
-def_usym_addr   (domain, page_list_tail,    0x0038);
-def_usym        (domain, max_vcpus,         0x008c);
-def_usym_addr   (domain, next_in_list,      0x00a0);
-def_usym_addr   (domain, vcpu,              0x0278);
-
-def_usym_sizeof (vcpu, 0x1000);
-def_usym        (vcpu, vcpu_id,             0x0000);
-def_usym        (vcpu, is_running,          0x020b);
-def_usym        (vcpu, arch_hvm_vcpu_u_vmx_vmcs,        0x0680);
-def_usym        (vcpu, arch_hvm_vcpu_u_vmx_vmcs_ma,     0x0688);
-def_usym        (vcpu, arch_hvm_vcpu_u_vmx_vmcs_shadow, 0x0690);
-def_usym        (vcpu, arch_hvm_vcpu_u_vmx_active_cpu,  0x06b8);
-def_usym        (vcpu, arch_hvm_vcpu_u_vmx_launched,    0x06bc);
+#include "kdxinfo.h"
 
 EXT_COMMAND(
     domain,
@@ -80,11 +64,11 @@ EXT_COMMAND(
                     "vmcs:0x%p, vmcs_ma:0x%p, vmcs_shadow:0x%p\n",
                     i, usym_addr(vcpu), usym_read_u32(vcpu, vcpu_id),
                     usym_read_u8(vcpu, is_running),
-                    usym_read_u32(vcpu, arch_hvm_vcpu_u_vmx_active_cpu),
-                    usym_read_u32(vcpu, arch_hvm_vcpu_u_vmx_launched),
-                    usym_read_u64(vcpu, arch_hvm_vcpu_u_vmx_vmcs),
-                    usym_read_u64(vcpu, arch_hvm_vcpu_u_vmx_vmcs_ma),
-                    usym_read_u64(vcpu, arch_hvm_vcpu_u_vmx_vmcs_shadow));
+                    usym_read_u32(vcpu, arch_hvm_vmx_active_cpu),
+                    usym_read_u32(vcpu, arch_hvm_vmx_launched),
+                    usym_read_u64(vcpu, arch_hvm_vmx_vmcs),
+                    usym_read_u64(vcpu, arch_hvm_vmx_vmcs_ma),
+                    usym_read_u64(vcpu, arch_hvm_vmx_vmcs_shadow));
             }
 
             usym_free_arr(domain_vcpu);

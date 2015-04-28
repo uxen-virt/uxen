@@ -157,6 +157,8 @@ $(BUILDDIR:%=x)clean::
 XEN_SRCS =
 #XEN_SRCS += head.S
 XEN_SRCS += uxen/main.c
+
+XEN_SRCS += uxen/kdxinfo.c
 XEN_SRCS += uxen/memcache-dm.c
 XEN_SRCS += uxen/shadow_subst.c
 XEN_SRCS += uxen/time.c
