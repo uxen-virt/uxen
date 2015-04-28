@@ -108,6 +108,9 @@ void vbsfSetHandleCrypt(PSHFLCLIENTDATA pClient, SHFLHANDLE handle, filecrypt_hd
 int vbsfQueryHandleCryptChanged(PSHFLCLIENTDATA client, SHFLHANDLE handle);
 void vbsfResetHandleCryptChanged(PSHFLCLIENTDATA client, SHFLHANDLE handle);
 void vbsfNotifyCryptChanged(void);
-int vbsfReopenHandle(PSHFLCLIENTDATA client, SHFLHANDLE handle);
+
+/* reopen handle with action performed between close of existing one and reopen */
+int vbsfReopenHandleWith(PSHFLCLIENTDATA client, SHFLHANDLE handle,
+                         void *opaque, int (*action)(void *));
 
 #endif /* __SHFLHANDLE__H */

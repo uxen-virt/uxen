@@ -272,16 +272,21 @@ reopen_files(LPVOID opaque)
 }
 
 int
-vbsfReopenHandle(PSHFLCLIENTDATA client, SHFLHANDLE h)
+vbsfReopenHandleWith(PSHFLCLIENTDATA client, SHFLHANDLE h,
+                     void *opaque, int (*action)(void*))
 {
     SHFLFILEHANDLE *fh;
+    int rc;
 
     if (!pHandles[h].pwszFilename)
         return VERR_INVALID_PARAMETER;
-    ioh_event_reset(&pHandles[h].ready_ev);
     fh = vbsfQueryFileHandle(client, h);
     if (fh)
         CloseHandle(fh->file.Handle);
+    rc = action(opaque);
+    if (rc)
+        return rc;
+    ioh_event_reset(&pHandles[h].ready_ev);
     if (pHandles[h].pvUserData) {
         RTMemFree((void*)pHandles[h].pvUserData);
         pHandles[h].pvUserData = 0;
@@ -291,6 +296,7 @@ vbsfReopenHandle(PSHFLCLIENTDATA client, SHFLHANDLE h)
         fc_free_hdr(pHandles[h].crypt);
         pHandles[h].crypt = NULL;
     }
+
     return reopen_file(&pHandles[h]);
 }
 

@@ -130,13 +130,7 @@ static void _guest_fsinfo_common(filecrypt_hdr_t *crypt, RTFSOBJINFO *info)
 void fch_guest_fsinfo(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle,
                       RTFSOBJINFO *info)
 {
-    int rc;
-    int crypt_mode;
     filecrypt_hdr_t *hdr;
-
-    rc = fch_query_crypt_by_handle(pClient, root, handle, &crypt_mode);
-    if (RT_FAILURE(rc) || !crypt_mode)
-        return;
 
     hdr = vbsfQueryHandleCrypt(pClient, handle);
     if (vbsfQueryHandleFlags(pClient, handle) & SHFL_HF_ENCRYPTED) {
@@ -149,12 +143,6 @@ void fch_guest_fsinfo_path(SHFLCLIENTDATA *pClient, SHFLROOT root, wchar_t *path
                            RTFSOBJINFO *info)
 {
     HANDLE h;
-    int rc;
-    int crypt_mode;
-
-    rc = fch_query_crypt_by_path(pClient, root, path, &crypt_mode);
-    if (RT_FAILURE(rc) || !crypt_mode)
-        return;
 
     h = CreateFileW(path, GENERIC_READ,
                     FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
@@ -398,6 +386,23 @@ create_temp(wchar_t *name, wchar_t *tempname, int maxlen, HANDLE *temp)
     return 0;
 }
 
+struct replace_params {
+    wchar_t *from, *to;
+};
+
+static int
+replace_action(void *opaque)
+{
+    int rc = 0;
+    struct replace_params *p = (struct replace_params*)opaque;
+
+    if (!ReplaceFileW(p->to, p->from, NULL, 0, NULL, NULL)) {
+        rc = RTErrConvertFromWin32(GetLastError());
+        warnx("replace file failure %ls->%ls err=%x\n", p->from, p->to, rc);
+    }
+    return rc;
+}
+
 int
 fch_re_write_file(SHFLCLIENTDATA *client, SHFLROOT root, SHFLHANDLE src)
 {
@@ -408,6 +413,7 @@ fch_re_write_file(SHFLCLIENTDATA *client, SHFLROOT root, SHFLHANDLE src)
     int rc;
     int temppresent = 0;
     HANDLE dst = INVALID_HANDLE_VALUE;
+    struct replace_params rp;
 
     /* desired crypt mode of target file */
     rc = fch_query_crypt_by_handle(client, root, src, &cmode);
@@ -447,12 +453,10 @@ fch_re_write_file(SHFLCLIENTDATA *client, SHFLROOT root, SHFLHANDLE src)
     FlushFileBuffers(dst);
     CloseHandle(dst);
     dst = INVALID_HANDLE_VALUE;
-    if (!ReplaceFileW(srcname, dstname, NULL, 0, NULL, NULL)) {
-        rc = RTErrConvertFromWin32(GetLastError());
-        warnx("replace file failure %x\n", rc);
-        goto out;
-    }
-    rc = vbsfReopenHandle(client, src);
+
+    rp.from = dstname;
+    rp.to = srcname;
+    rc = vbsfReopenHandleWith(client, src, &rp, replace_action);
     if (rc)
         warnx("reopen handle failed %x\n", rc);
 
