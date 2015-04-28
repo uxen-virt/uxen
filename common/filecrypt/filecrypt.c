@@ -5,10 +5,10 @@
  */
 
 #include "filecrypt.h"
-#include <stdlib.h>
-#include <time.h>
+#include <wincrypt.h>
+#include <err.h>
 
-static uint32_t seed;
+static HCRYPTPROV cprov;
 
 #if __x86_64__
 typedef uint64_t word_t;
@@ -66,17 +66,12 @@ _pad(HANDLE file, int sz)
     return ret;
 }
 
-void FILECRYPT_API
+int FILECRYPT_API
 fc_init(void)
 {
-    seed = (uint32_t)(time(NULL) * 987654 + GetCurrentProcessId() * 54321);
-}
-
-static uint32_t
-random(uint32_t *seed)
-{
-    *seed = 1103515245 * *seed + 12345;
-    return *seed;
+    if (!CryptAcquireContextW(&cprov, 0, 0, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT | CRYPT_SILENT))
+        return -1;
+    return 0;
 }
 
 static void
@@ -101,9 +96,11 @@ fc_init_hdr(void)
     h->magic = FILECRYPT_MAGIC;
     h->crypttype = CRYPT_TRIVIAL;
     h->keylen = FILECRYPT_KEYBYTES;
-    for (i = 0; i < h->keylen; ++i) {
-        h->key[i] = 1 + random(&seed) % 255;
-    }
+    CryptGenRandom(cprov, h->keylen, (BYTE*)h->key);
+    /* swap out zeros, bad for xoring */
+    for (i = 0; i < h->keylen; ++i)
+        if (h->key[i] == 0)
+            h->key[i] = 0xff;
     extend_key(h);
     h->hdrversion = 0;
     h->hdrlen = FILECRYPT_HDR_PAD;

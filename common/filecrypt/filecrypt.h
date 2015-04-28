@@ -28,7 +28,7 @@ typedef struct filecrypt_hdr {
     uint8_t key[FILECRYPT_KEYBYTES*2];
 } filecrypt_hdr_t;
 
-void FILECRYPT_API fc_init(void);
+int FILECRYPT_API fc_init(void);
 /* allocate header */
 filecrypt_hdr_t* FILECRYPT_API fc_init_hdr(void);
 /* free header */

@@ -247,7 +247,8 @@ main(int argc, char **argv)
     aio_init();
 
 #ifdef _WIN32
-    fc_init();
+    if (fc_init())
+        warnx("filecrypt init FAILED");
     socket_init();
     uxenclipboard_gdi_startup_with_atexit();
 #endif
