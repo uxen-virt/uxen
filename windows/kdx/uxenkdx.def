@@ -5,6 +5,8 @@ EXPORTS
     domain
     dumplog
     hostpages
+    pageinfo
+    pagelist
     uxen
     ugdb
     udt

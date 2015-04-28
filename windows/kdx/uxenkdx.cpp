@@ -46,6 +46,34 @@ ULONG64 get_expr(char *expr_fmt, ...)
 }
 
 void
+EXT_CLASS::dump_page_info(
+    ULONG64 frametable_addr,
+    ULONG64 page_info_addr)
+{
+    ULONG64 idx;
+    bool invalid;
+
+    idx = (page_info_addr - frametable_addr) / ___usym_sizeof___page_info;
+    invalid = page_info_addr < frametable_addr;
+
+    Dml("%s[page_info @ 0x%p, <exec cmd=\"!db 0x%x l0x1000\">idx:0x%08x</exec>]"
+        " <exec cmd=\"!pageinfo 0x%x\">next:0x%08x</exec>"
+        ", <exec cmd=\"!pageinfo 0x%x\">prev:0x%08x</exec>"
+        ", count_info:%08x`%08x, {last}:%08x`%08x\n",
+        invalid ? "  !!! invalid " : "  ",
+        page_info_addr,
+        idx << PAGE_SHIFT, idx,
+        get_expr("poi(0x%p)", page_info_addr) & ~0UL,
+        get_expr("poi(0x%p)", page_info_addr) & ~0UL,
+        get_expr("poi(0x%p + 0x4)", page_info_addr) & ~0UL,
+        get_expr("poi(0x%p + 0x4)", page_info_addr) & ~0UL,
+        get_expr("poi(0x%p + 0xc)", page_info_addr) & ~0UL,
+        get_expr("poi(0x%p + 0x8)", page_info_addr) & ~0UL,
+        get_expr("poi(0x%p + 0x14)", page_info_addr) & ~0UL,
+        get_expr("poi(0x%p + 0x10)", page_info_addr) & ~0UL);
+}
+    
+void
 EXT_CLASS::dump_page_list(
     ULONG64 start_entry_addr,
     ULONG64 frametable_addr,
@@ -73,25 +101,7 @@ EXT_CLASS::dump_page_list(
         if (verbose_output) {
             idx = (page_info_addr - frametable_addr) /
                 ___usym_sizeof___page_info;
-            if (page_info_addr < frametable_addr) {
-                Dml("  !!! invalid [page_info @ 0x%p, <exec cmd=\"!db 0x%x l0x1000\">idx:0x%08x</exec>] next:0x%08x, prev:0x%08x"
-                    ", count_info:%d, {last}:0x%08x\n",
-                    page_info_addr,
-                    idx << PAGE_SHIFT, idx,
-                    get_expr("poi(0x%p)", page_info_addr) & ~0UL,
-                    get_expr("poi(0x%p + 0x4)", page_info_addr) & ~0UL,
-                    get_expr("poi(0x%p + 0x8)", page_info_addr) & ~0UL,
-                    get_expr("poi(0x%p + 0x10)", page_info_addr) & ~0UL);
-            } else {
-                Dml("  [page_info @ 0x%p, <exec cmd=\"!db 0x%x l0x1000\">idx:0x%08x</exec>] next:0x%08x, prev:0x%08x"
-                    ", count_info:%d, {last}:0x%08x\n",
-                    page_info_addr,
-                    idx << PAGE_SHIFT, idx,
-                    get_expr("poi(0x%p)", page_info_addr) & ~0UL,
-                    get_expr("poi(0x%p + 0x4)", page_info_addr) & ~0UL,
-                    get_expr("poi(0x%p + 0x8)", page_info_addr) & ~0UL,
-                    get_expr("poi(0x%p + 0x10)", page_info_addr) & ~0UL);
-            }
+            dump_page_info(frametable_addr, page_info_addr);
             if (bytes_to_display > 0)
                 Execute("!db 0x%x l0x%x", idx, bytes_to_display);
         }
@@ -108,6 +118,46 @@ EXT_CLASS::dump_page_list(
 
     Out("Total number of pages:0x%x (%d MB)\n",
         number_of_pages ? number_of_pages - 1 : 0, number_of_pages >> 8);
+}
+
+EXT_COMMAND(
+    pageinfo,
+    "display page information",
+    "{;ed,o;expr;page address}")
+{
+    RequireKernelMode();
+
+    if (HasUnnamedArg(0)) {
+        ULONG64 frametable_addr = GetExpression("poi(uxen!frametable)");
+        ULONG64 idx = GetUnnamedArgU64(0);
+        ULONG64 page_info_addr;
+
+        if (idx >= frametable_addr)
+            page_info_addr = idx;
+        else
+            page_info_addr = frametable_addr + ___usym_sizeof___page_info * idx;
+
+        dump_page_info(frametable_addr, page_info_addr);
+    }
+}
+
+EXT_COMMAND(
+    pagelist,
+    "display page list information",
+    "{;ed,o;expr;page list head/tail address}"
+    "{v;b;;show page details}"
+    "{b;b;;dump pages backwards}"
+    "{d;ed;;show given first number of bytes}")
+{
+    RequireKernelMode();
+
+    if (HasUnnamedArg(0)) {
+        ULONG64 frametable_addr = GetExpression("poi(uxen!frametable)");
+
+        dump_page_list(GetUnnamedArgU64(0),
+                       frametable_addr, HasArg("b"), HasArg("v"),
+                       HasArg("d") ? GetArgU64("d", false) : 0);
+    }
 }
 
 EXT_COMMAND(
