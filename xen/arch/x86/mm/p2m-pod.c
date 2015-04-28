@@ -2085,7 +2085,7 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
     ct += NOW();
     p2m_unlock(np2m);
 
-    printk("%s: domain %d took %"PRIu64".%"PRIu64"ms\n",
+    printk("%s: domain %d took %"PRIu64".%06"PRIu64"ms\n",
            __FUNCTION__, nd->domain_id, ct / 1000000UL, ct % 1000000UL);
     printk("domain %d: pod_pages=%d zero_shared=%d tmpl_shared=%d\n",
            nd->domain_id, atomic_read(&nd->pod_pages),
