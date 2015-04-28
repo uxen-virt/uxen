@@ -1245,18 +1245,20 @@ void *xc_map_foreign_bulk(xc_interface *xch, uint32_t dom, int prot,
                           const xen_pfn_t *arr, int *err, unsigned int num);
 
 /**
- * Translates a virtual address in the context of a given domain and
- * vcpu returning the GFN containing the address (that is, an MFN for 
- * PV guests, a PFN for HVM guests).  Returns 0 for failure.
+ * Translates a range of virtual addresses in the context of a given domain and
+ * vcpu returning GFNs containing the addresses (that is, an MFN for
+ * PV guests, a PFN for HVM guests).  Returns -1 for failure.
  *
  * @parm xch a handle on an open hypervisor interface
  * @parm dom the domain to perform the translation in
  * @parm vcpu the vcpu to perform the translation on
- * @parm virt the virtual address to translate
+ * @parm virt_begin start of virtual address range to translate
+ * @parm npages number of pages to translate
  */
-unsigned long xc_translate_foreign_address(xc_interface *xch, uint32_t dom,
-                                           int vcpu, unsigned long long virt);
-
+int xc_translate_foreign_address_range(
+    xc_interface *xch, uint32_t dom,
+    int vcpu, unsigned long long virt_begin, unsigned int npages,
+    uint64_t *gfn);
 
 #ifndef __UXEN_TOOLS__
 /**
