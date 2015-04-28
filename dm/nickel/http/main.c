@@ -42,6 +42,8 @@
 #include "lava.h"
 
 #define NTLM_MAKE_USERNAME_UPPERCASE
+#define MAX_N_SOCK_REUSED_PER_HOST  12
+#define HP_IDLE_MAX_TIMEOUT         (60 * 1000) /* 60 secs */
 
 #define U32BF(a)            (((uint32_t) 1) << (a))
 
@@ -130,6 +132,7 @@ static const char *hp_states[] = {
 #define HF_IP_CHECKED       U32BF(22)
 #define HF_LAVA_STUB_SENT   U32BF(23)
 #define HF_PINNED           U32BF(24)
+#define HF_KEEP_ALIVE       U32BF(25)
 
 #define IS_RESOLVED(hp) ((hp)->flags & HF_RESOLVED)
 #define IS_TUNNEL(hp)   ((hp)->flags & HF_TUNNEL)
@@ -241,6 +244,7 @@ struct http_ctx {
     struct tls_state_t *tls;
 
     uint32_t refcnt;
+    int64_t idle_ts;
 
 #if VERBSTATS
     int64_t srv_ts;
@@ -262,8 +266,8 @@ struct dns_connect_ctx {
 
 static int64_t prx_refresh_id = 0;
 static int max_socket_per_proxy = 12;
-static int max_hp_restart       = 2;
 static char *webdav_host_dir = NULL;
+static Timer *hp_idle_timer = NULL;
 
 static void hp_get(struct http_ctx *hp);
 static void hp_put(struct http_ctx *hp);
@@ -377,11 +381,11 @@ static int dbg_hp(int log_level, struct http_ctx *hp)
     if (hp->so && so_dbg(hp->ni->bf_dbg, hp->so) < 0)
         goto out;
     ret = buff_appendf(hp->ni->bf_dbg, " hp:%" PRIxPTR " cx:%" PRIxPTR " so:%"
-            PRIxPTR " f:%x %s %s %s p:%hu",
+            PRIxPTR " f:%x %s %s %s p:%hu %s",
             (uintptr_t) hp, (uintptr_t) hp->cx, (uintptr_t) hp->so, hp->flags,
             so_states[hp->cstate],
             hp_states[hp->hstate], hp->hstate == HP_WAIT ? hp_states[hp->hwait_state] : "",
-            ntohs(hp->daddr.sin_port));
+            ntohs(hp->daddr.sin_port), log_level > 4 && hp->sv_name ? hp->sv_name : "");
 out:
     return ret;
 }
@@ -410,9 +414,10 @@ static int cx_dbg(int log_level, struct clt_ctx *cx)
     netlog_prefix(log_level, cx->ni->bf_dbg);
     BUFF_APPENDSTR(cx->ni->bf_dbg, "(clt)");
     ret = buff_appendf(cx->ni->bf_dbg, " cx:%"PRIxPTR" hp:%"PRIxPTR" tcp:%"PRIxPTR
-            " c:%"PRIxPTR" f:%x p:%hu",
+            " c:%"PRIxPTR" f:%x p:%hu %s",
             (uintptr_t) cx, (uintptr_t) cx->hp, (uintptr_t) cx->ni_opaque,
-            (uintptr_t) cx->chr, cx->flags, ntohs(cx->daddr.sin_port));
+            (uintptr_t) cx->chr, cx->flags, ntohs(cx->daddr.sin_port),
+            log_level > 4 && cx->sv_name ? cx->sv_name : "");
 
 out:
     return ret;
@@ -714,7 +719,7 @@ out_close:
     goto out;
 }
 
-static int add_headers(struct buff *buf, struct http_header *h, bool use_head)
+static int add_headers(struct buff *buf, struct http_header *h, bool use_head, bool prx_headers)
 {
     int i, ret = -1;
 
@@ -724,8 +729,14 @@ static int add_headers(struct buff *buf, struct http_header *h, bool use_head)
             continue;
         if (use_head && !strcasecmp(BUFF_CSTR(h->headers[i].name), S_HEADER_CONTENT_LENGTH))
             continue;
-        if (BUFF_APPENDB(buf, h->headers[i].name) < 0)
+        if (prx_headers && !strncasecmp(BUFF_CSTR(h->headers[i].name), S_PROXY_CONNECTION,
+            STRLEN(S_PROXY_CONNECTION))) {
+
+            if (BUFF_APPENDSTR(buf, S_CONNECTION) < 0)
+                goto out;
+        } else if (BUFF_APPENDB(buf, h->headers[i].name) < 0) {
             goto out;
+        }
         if (buff_append(buf, S_COLON S_SPACE, STRLEN(S_COLON S_SPACE)) < 0)
             goto out;
         if (BUFF_APPENDB(buf, h->headers[i].value) < 0)
@@ -818,12 +829,11 @@ static int create_http_header(bool prx_auth, const char *sv_name, int use_head, 
         goto mem_err;
 
     /* header fields */
-    /* FIXME ! eliminate Proxy- header fields ! */
-    if (horig && add_headers(buf, horig, use_head) < 0)
+    if (horig && add_headers(buf, horig, use_head, !prx_auth) < 0)
         goto mem_err;
 
     /* additional headers */
-    if (hadd && add_headers(buf, hadd, use_head) < 0)
+    if (hadd && add_headers(buf, hadd, use_head, false) < 0)
         goto mem_err;
 
     if (buff_append(buf, S_END, STRLEN(S_END)) < 0)
@@ -890,7 +900,7 @@ static int create_connect_header(const char *sv_name, uint16_t sv_port, struct h
         goto out;
 
     /* additional headers */
-    if (hadd && add_headers(buf, hadd, false) < 0)
+    if (hadd && add_headers(buf, hadd, false, false) < 0)
         goto out;
 
     if (buff_append(buf, S_END, STRLEN(S_END)) < 0)
@@ -912,6 +922,7 @@ static struct http_ctx * hp_create(struct nickel *ni)
     hp->ni = ni;
 
     hp_get(hp);
+    hp->cstate = S_INIT;
     LIST_INSERT_HEAD(&http_list, hp, entry);
 out:
     return hp;
@@ -947,6 +958,10 @@ static void hp_close(struct http_ctx *hp)
         return;
 
     hp->flags |= HF_CLOSING;
+    hp->flags &= (~HF_RESTARTABLE & ~HF_REUSABLE);
+    if (hp->entry.le_prev)
+        LIST_REMOVE(hp, entry);
+    hp->entry.le_prev = NULL;
 #if VERBSTATS
     if (hp->srv_lat_idx) {
         char tmp_buf[(12 + 1) * 2 * LAT_STAT_NUMBER + 1];
@@ -972,9 +987,6 @@ static void hp_close(struct http_ctx *hp)
     if (hp->so)
         so_close(hp->so);
     hp->so = NULL;
-    if (hp->entry.le_prev)
-        LIST_REMOVE(hp, entry);
-    hp->entry.le_prev = NULL;
     hp->hstate = HP_IGNORE;
     if (hp->clt_out) {
         buff_put(hp->clt_out);
@@ -1029,6 +1041,7 @@ static void hp_free(struct http_ctx *hp)
 static int hp_reset(struct http_ctx *hp)
 {
     hp->hstate = HP_NEW;
+    hp->flags &= ~HF_KEEP_ALIVE;
 
     if (hp_cx_connect_buffs(hp, true) < 0)
         return -1;
@@ -1224,6 +1237,48 @@ static int on_cx_hp_connect(struct clt_ctx *cx)
     return 0;
 }
 
+static void hp_gc_idle_sockets(int64_t now, bool close)
+{
+    struct http_ctx *hp, *hp_next;
+    int64_t timeout = -1;
+
+    LIST_FOREACH_SAFE(hp, &http_list, entry, hp_next) {
+        int64_t diff;
+
+        if (hp->cx || !hp->idle_ts)
+            continue;
+        diff = now - hp->idle_ts;
+        if (close && diff >= HP_IDLE_MAX_TIMEOUT) {
+            HLOG5("HP_IDLE_MAX_TIMEOUT");
+            hp_close(hp);
+        } else if (timeout < 0 || timeout > diff) {
+            timeout = diff;
+        }
+    }
+
+    if (timeout >= 0)
+        mod_timer(hp_idle_timer, now + timeout);
+}
+
+static void hp_idle_timer_cb(void *unused)
+{
+    hp_gc_idle_sockets(get_clock_ms(vm_clock), true);
+}
+
+static int hp_set_idle_timer(struct http_ctx *hp)
+{
+    int now = get_clock_ms(vm_clock);
+
+    hp->idle_ts = now;
+    if (!hp_idle_timer) {
+        hp_idle_timer = ni_new_vm_timer(hp->ni, HP_IDLE_MAX_TIMEOUT, hp_idle_timer_cb, NULL);
+        return hp_idle_timer ? 0 : -1;
+    }
+
+    hp_gc_idle_sockets(now, false);
+    return 0;
+}
+
 static struct http_ctx *
 cx_hp_connect_proxy(struct clt_ctx *cx)
 {
@@ -1329,7 +1384,25 @@ static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now)
     if (!cx->proxy) {
         bool split_buffs = false;
 
-        hp = hp_create(cx->ni);
+        hp = NULL;
+        if ((cx->flags & CXF_GUEST_PROXY)) {
+            struct http_ctx *lhp;
+
+            LIST_FOREACH(lhp, &http_list, entry) {
+                if (!lhp->cx && !lhp->proxy && (lhp->flags & HF_REUSABLE) &&
+                    (lhp->flags & HF_REUSE_READY) && lhp->sv_name && lhp->daddr.sin_port &&
+                    strcasecmp(lhp->sv_name, cx->sv_name) == 0 && lhp->daddr.sin_port ==
+                    cx->daddr.sin_port) {
+
+                    hp = lhp;
+                    CXL5("DIRECT REUSED HP %"PRIxPTR, hp);
+                    break;
+                }
+            }
+        }
+
+        if (!hp)
+            hp = hp_create(cx->ni);
         if (!hp) {
             warnx("%s: cx %"PRIxPTR" malloc", __FUNCTION__, (uintptr_t) cx);
             goto err;
@@ -1346,7 +1419,7 @@ static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now)
                 goto err;
         }
 
-        if (cx->sv_name)
+        if (cx->sv_name && !hp->sv_name)
             hp->sv_name = strdup(cx->sv_name);
         hp->daddr.sin_port = cx->daddr.sin_port;
 
@@ -1362,18 +1435,20 @@ static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now)
             goto err;
 
         if ((cx->flags & CXF_GUEST_PROXY) &&
-                !(cx->flags & (CXF_TUNNEL_GUEST | CXF_TLS | CXF_BINARY))) {
+            !(cx->flags & (CXF_TUNNEL_GUEST | CXF_TLS | CXF_BINARY))) {
 
-            hp->flags |= (HF_RESTARTABLE | HF_RESTART_OK);
+            hp->flags |= (HF_RESTARTABLE | HF_RESTART_OK | HF_REUSABLE | HF_REUSE_READY);
             assert(cx->out);
             if (!cx->srv_parser && parser_create_response(&cx->srv_parser, cx))
                 goto err;
         }
 
-        hp->cstate = S_INIT;
-        if (srv_connect_direct(hp) < 0)
-            goto err;
-        *connect_now = false;
+        *connect_now = true;
+        if (hp->cstate == S_INIT) {
+            if (srv_connect_direct(hp) < 0)
+                goto err;
+            *connect_now = false;
+        }
 
         goto out;
     }
@@ -1489,11 +1564,16 @@ static int cx_hp_disconnect(struct clt_ctx *cx)
     struct http_ctx *hp = NULL;
     struct proxy_t *proxy = NULL;
     bool f_cx_close = false;
+    bool f_cx_closing = false;
+    bool f_hp_closing = false;
     bool f_cx_process = false;
     bool f_cx_guest_write = false;
 
     if (!cx->hp)
         goto out;
+
+    f_cx_closing = (cx->flags & CXF_CLOSING) != 0;
+    f_hp_closing = (cx->hp->flags & HF_CLOSING) != 0;
 
     cx->flags &= ((~CXF_HEAD_REQUEST) & (~CXF_HEAD_REQUEST_SENT));
     hp = cx->hp;
@@ -1512,7 +1592,7 @@ static int cx_hp_disconnect(struct clt_ctx *cx)
         hp->clt_out = NULL;
     }
 
-    if (cx->srv_parser) {
+    if (!f_cx_closing && cx->srv_parser) {
         CXL5("SRV_PARSER RESET");
         parser_reset(cx->srv_parser);
     }
@@ -1530,18 +1610,8 @@ static int cx_hp_disconnect(struct clt_ctx *cx)
         goto out;
     }
 
-    if ((hp->flags & HF_CLOSING)) {
-        if ((hp->flags & HF_RESTART_OK)) {
-            if (cx->restart_count < max_hp_restart) {
-                if (BUFF_BUFFERED(cx->in))
-                    cx->restart_count++;
-                f_cx_process = true;
-
-                goto out;
-            }
-            CXL5("max_hp_restart, closing");
-        }
-
+    if (f_hp_closing) {
+        HLOG5("f_hp_closing");
         f_cx_close = true;
         goto out;
     }
@@ -1549,6 +1619,38 @@ static int cx_hp_disconnect(struct clt_ctx *cx)
     if ((hp->flags & HF_CLOSED)) {
         f_cx_close = true;
         hp = NULL;
+        goto out;
+    }
+
+    if (!hp->proxy && !f_hp_closing && (hp->flags & HF_REUSABLE) &&
+        (hp->flags & HF_REUSE_READY) && (hp->flags & HF_KEEP_ALIVE) &&
+        hp->sv_name && hp->daddr.sin_port) {
+
+        struct http_ctx *lhp, *chp;
+        int number = 0;
+
+        LIST_FOREACH(lhp, &http_list, entry) {
+            if (lhp != hp && !lhp->cx && !lhp->proxy && (lhp->flags & HF_REUSABLE) &&
+                (lhp->flags & HF_REUSE_READY) && lhp->sv_name && lhp->daddr.sin_port &&
+                strcasecmp(lhp->sv_name, hp->sv_name) == 0 && lhp->daddr.sin_port ==
+                hp->daddr.sin_port) {
+
+                chp = lhp;
+                number++;
+            }
+        }
+
+        if (number >= MAX_N_SOCK_REUSED_PER_HOST) {
+            HLOG5("number %d >= MAX_N_SOCK_REUSED_PER_HOST", number);
+            hp_close(chp);
+        }
+
+        hp_reset(hp);
+        if (hp_set_idle_timer(hp) < 0) {
+            HLOG("hp_set_idle_timer FAILED!");
+            hp_close(hp);
+            hp = NULL;
+        }
         goto out;
     }
 
@@ -2499,6 +2601,14 @@ static int hp_srv_process(struct http_ctx *hp)
 
             headers_just_received = true;
             hp->cx->srv_parser->headers_parsed = 1;
+            hp->flags &= ~HF_KEEP_ALIVE;
+            if (!conn_close && ((hp->cx->srv_parser->h.http_major == 1 &&
+                hp->cx->srv_parser->h.http_minor > 0) || hp->cx->srv_parser->keep_alive)) {
+
+                hp->flags |= HF_KEEP_ALIVE;
+            } else {
+                HLOG5("NOT KEEP_ALIVE");
+            }
 
             if (hp->cx->srv_parser->h.status_code != HTTP_STATUS_PROXY_AUTH &&
                 hp->c407_buff) {
@@ -4114,8 +4224,6 @@ static void cx_close(struct clt_ctx *cx)
         cx_hp_disconnect(cx);
 
     if (!(cx->flags & CXF_FORCE_CLOSE)) {
-        if ((!cx->out || !BUFF_BUFFERED(cx->out)) && (cx->flags & CXF_GPROXY_REQUEST))
-            cx_proxy_response(cx, HMSG_CONNECT_FAILED, true);
         cx->flags &= ~CXF_GPROXY_REQUEST;
         if ((cx->flags & CXF_TUNNEL_RESPONSE_OK) && !(cx->flags & CXF_TUNNEL_GUEST_SENT)) {
             cx_proxy_response(cx, HMSG_CONNECT_ABORTED_SSL, true);
@@ -4712,6 +4820,7 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
     bool need_parse = (buf != NULL && len_buf);
     bool maybe_binary = false;
 
+    CXL5("len_buf %d", len_buf);
     if ((cx->flags & (CXF_CLOSED | CXF_IGNORE)))
         goto out;
 

@@ -51,6 +51,7 @@ struct parser_ctx {
     int header_state;
     int msg_complete;
     int conn_close;
+    int keep_alive;
     int http_close;
     int parse_state;
     int parse_error;

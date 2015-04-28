@@ -46,7 +46,6 @@ struct clt_ctx {
     struct parser_ctx *clt_parser;
     struct parser_ctx *srv_parser;
     char *alternative_proxies;
-    int restart_count;
     unsigned int restart_state;
 
 #if VERBSTATS

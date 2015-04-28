@@ -138,6 +138,8 @@ static int resp_on_headers_complete(struct http_parser *parser)
     struct parser_ctx *p = (struct parser_ctx *) parser->data;
 
     p->h.status_code = p->parser.status_code;
+    p->h.http_major = parser->http_major;
+    p->h.http_minor = parser->http_minor;
     if (parser->content_length != ULLONG_MAX)
         p->h.content_length = parser->content_length;
     p->parse_state = PS_HCOMPLETE;
@@ -149,7 +151,7 @@ static int resp_on_headers_complete(struct http_parser *parser)
         p->h.crt_header++;
 
     NETLOG5("%s: hx %"PRIxPTR, __FUNCTION__, (uintptr_t) p->hx);
-    if (!p->conn_close) {
+    if (!p->conn_close && !p->keep_alive) {
         int i;
 
         for (i = 0; i < p->h.crt_header; i++) {
@@ -163,6 +165,8 @@ static int resp_on_headers_complete(struct http_parser *parser)
 
             if (strcasecmp(BUFF_CSTR(p->h.headers[i].value), S_CLOSE) == 0)
                 p->conn_close = 1;
+            else if (strcasecmp(BUFF_CSTR(p->h.headers[i].value), S_KEEPALIVE) == 0)
+                p->keep_alive = 1;
 
             break;
         }
@@ -345,6 +349,7 @@ void parser_reset(struct parser_ctx *p)
     p->message_len = 0;
     p->msg_complete = 0;
     p->conn_close = 0;
+    p->keep_alive = 0;
     p->parse_error = 0;
     p->http_close = 0;
     p->headers_parsed = 0;
