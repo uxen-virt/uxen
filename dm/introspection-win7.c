@@ -288,8 +288,7 @@ static void get_immutable_pages_section(char * driver, struct Section * s)
     struct immutable_range *tmprange;
     int nranges;
     uint64_t *pfnbuf;
-    int size_needed;
-
+    int size_needed, i;
     if (s->writable || s->discardable || s->size == 0 || s->size > SANE_MAX_SECTION_SIZE)
         return;
     /* KeGetBugMessageText calls MmMakeKernelResourceSectionWritable
@@ -321,10 +320,11 @@ static void get_immutable_pages_section(char * driver, struct Section * s)
         immutable_pages = realloc(immutable_pages, new_size);
         pages_buffer_size = new_size;
     }
-
     pfnbuf = immutable_pages + pages_current_size / sizeof(uint64_t);
-    xc_translate_foreign_address_range(xc_handle, vm_id, 0, s->base,
-                                       s->size / XC_PAGE_SIZE, pfnbuf);
+    for (i = 0; i < s->size / XC_PAGE_SIZE; i++) {
+        pfnbuf[i] = 
+            xc_translate_foreign_address(xc_handle, vm_id, 0, s->base + i * XC_PAGE_SIZE);
+    }
     qsort((void*)pfnbuf, s->size / XC_PAGE_SIZE, sizeof(uint64_t), compare_uint64);
     tmprange = alloca(s->size / XC_PAGE_SIZE * sizeof(struct immutable_range));
     nranges = convert_list_to_ranges(pfnbuf, s->size / XC_PAGE_SIZE, tmprange);
