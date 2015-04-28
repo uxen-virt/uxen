@@ -1259,6 +1259,9 @@ int xc_translate_foreign_address_range(
     xc_interface *xch, uint32_t dom,
     int vcpu, unsigned long long virt_begin, unsigned int npages,
     uint64_t *gfn);
+unsigned long xc_translate_foreign_address(
+    xc_interface *xch, uint32_t dom,
+    int vcpu, unsigned long long virt);
 
 #ifndef __UXEN_TOOLS__
 /**

@@ -156,6 +156,15 @@ int xc_translate_foreign_address_range(
     return rc;
 }
 
+unsigned long
+xc_translate_foreign_address(xc_interface *xch, uint32_t dom,
+                             int vcpu, unsigned long long virt)
+{
+    uint64_t x;
+    xc_translate_foreign_address_range(xch, dom, vcpu, virt, 1, &x);
+    return (unsigned long)x;
+}
+
 /*
  * Local variables:
  * mode: C
