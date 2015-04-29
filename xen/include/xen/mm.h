@@ -379,9 +379,9 @@ int guest_remove_page(struct domain *d, unsigned long gmfn);
 int page_is_ram_type(unsigned long mfn, unsigned long mem_type);
 
 
-extern uint64_t host_pages_allocated;
+extern atomic_t host_pages_allocated;
 #ifdef __i386__
-extern uint64_t hidden_pages_allocated, hidden_pages_available;
+extern atomic_t hidden_pages_allocated, hidden_pages_available;
 #endif
 
 #endif /* __XEN_MM_H__ */

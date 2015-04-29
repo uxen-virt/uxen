@@ -475,7 +475,7 @@ static struct page_info *alloc_heap_pages(
     avail[node][zone] -= request;
     total_avail_pages -= request;
     ASSERT(total_avail_pages >= 0);
-    hidden_pages_allocated += request;
+    atomic_add(request, &hidden_pages_allocated);
 
 #ifndef __UXEN__
     if ( d != NULL )
@@ -595,7 +595,7 @@ static int reserve_offlined_page(struct page_info *head)
         avail[node][zone]--;
         total_avail_pages--;
         ASSERT(total_avail_pages >= 0);
-        hidden_pages_allocated++;
+        atomic_inc(&hidden_pages_allocated);
 
         page_list_add_tail(cur_head,
                            test_bit(_PGC_broken, &cur_head->count_info) ?
@@ -665,7 +665,8 @@ static void free_heap_pages(
 
     avail[node][zone] += 1 << order;
     total_avail_pages += 1 << order;
-    hidden_pages_allocated -= 1 << order;
+    atomic_sub(1 << order, &hidden_pages_allocated);
+    ASSERT(atomic_read(&hidden_pages_allocated) >= 0);
 
 #ifndef __UXEN__
     if ( opt_tmem )
@@ -981,8 +982,8 @@ static void init_heap_pages(
 {
     unsigned long i;
 
-    hidden_pages_available += nr_pages;
-    hidden_pages_allocated += nr_pages;
+    atomic_add(nr_pages, &hidden_pages_available);
+    atomic_add(nr_pages, &hidden_pages_allocated);
     for ( i = 0; i < nr_pages; i++ )
     {
         unsigned int nid = phys_to_nid(page_to_maddr(pg+i));
@@ -1144,10 +1145,10 @@ void __init scrub_heap_pages(void)
  * Host allocator
  */
 
-uint64_t host_pages_allocated = 0;
+atomic_t host_pages_allocated = ATOMIC_INIT(0);
 #ifdef __i386__
-uint64_t hidden_pages_allocated = 0;
-uint64_t hidden_pages_available = 0;
+atomic_t hidden_pages_allocated = ATOMIC_INIT(0);
+atomic_t hidden_pages_available = ATOMIC_INIT(0);
 #endif
 
 static struct page_info *
@@ -1166,7 +1167,7 @@ alloc_host_page(void)
     _uxen_info.ui_free_pages[cpu].free_list = pg->list.next;
     pg->list.next = 0;
     _uxen_info.ui_free_pages[cpu].free_count--;
-    host_pages_allocated++;
+    atomic_inc(&host_pages_allocated);
 
     BUG_ON(pg->count_info != PGC_state_host);
     pg->count_info = PGC_state_inuse;
@@ -1225,7 +1226,8 @@ free_host_page(struct page_info *pg)
     pg->list.prev = 0;
     _uxen_info.ui_free_pages[cpu].free_list = page_to_mfn(pg);
     _uxen_info.ui_free_pages[cpu].free_count++;
-    host_pages_allocated--;
+    atomic_dec(&host_pages_allocated);
+    ASSERT(atomic_read(&host_pages_allocated) >= 0);
 }
 
 void

@@ -395,12 +395,14 @@ static void dump_domains(unsigned char key)
 #ifdef __UXEN__
     {
         int cpu;
-        printk("host pages allocated: %"PRId64"\n", host_pages_allocated);
+        printk("host pages allocated: %d\n",
+               atomic_read(&host_pages_allocated));
 #ifdef __i386__
-        printk("hidden pages allocated: %"PRId64
-               " available: %"PRId64"/%"PRId64"\n",
-               hidden_pages_allocated, hidden_pages_available -
-               hidden_pages_allocated, hidden_pages_available);
+        printk("hidden pages allocated: %d available: %d/%d\n",
+               atomic_read(&hidden_pages_allocated),
+               atomic_read(&hidden_pages_available) -
+               atomic_read(&hidden_pages_allocated),
+               atomic_read(&hidden_pages_available));
 #endif
         printk("cpu pool pages:");
         for_each_present_cpu(cpu)
