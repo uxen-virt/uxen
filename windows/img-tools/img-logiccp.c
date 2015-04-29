@@ -877,18 +877,12 @@ int bfs(Variable *var, Manifest *suffixes,
     int manifested_action;
     int action;
     const size_t info_sz = 4<<20;
-    ManifestEntry *m;//, *s;
-    void *info_buf = malloc(info_sz);
-    assert(info_buf);
+    ManifestEntry *m;
+    void *info_buf;
     assert(min_shallow_size >= SECTOR_SIZE);
     int heap_switch = 0;
     int is_dir;
     Heap heaps[2];
-
-    for (i = 0; i < 2; ++i) {
-        /* Only order heaps on the 48 bits of file-id that index into MFT. */
-        heap_init(&heaps[i], 0xffffffffffffULL);
-    }
 
     m = find_by_prefix(var->man, dn);
     if (!m) {
@@ -900,7 +894,6 @@ int bfs(Variable *var, Manifest *suffixes,
 
     /* First check if this is a single file that needs to be included
      * in the output manifest by itself. */
-    //printf("Looking for entry [%S]\n", prefix(var, dn));
     if (path_exists(prefix(var, dn), &file_id, &file_size, &is_dir)) {
         if (!is_dir) {
             ManifestEntry *e = man_push(out);
@@ -927,6 +920,18 @@ int bfs(Variable *var, Manifest *suffixes,
     } else {
         /* We do not like overly broad manifests, so complain about things not found. */
         printf("warning: file not found! [%ls:%ls]\n", var->path, dn);
+    }
+
+    info_buf = malloc(info_sz);
+    if (!info_buf) {
+        printf("%s: out of memory\n", __FUNCTION__);
+        return -1;
+    }
+
+    /* Initialize heaps for use as file-id ordered priority queues. */
+    for (i = 0; i < 2; ++i) {
+        /* Only order heaps on the 48 bits of file-id that index into MFT. */
+        heap_init(&heaps[i], 0xffffffffffffULL);
     }
 
     /* Do a modified breadth-first search from the supplied directory name down.  */
