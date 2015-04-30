@@ -283,7 +283,6 @@ struct page_info *p2m_alloc_ptp(struct p2m_domain *p2m, unsigned long type)
 
 void p2m_free_ptp(struct p2m_domain *p2m, struct page_info *pg)
 {
-DEBUG();
     ASSERT(pg);
     ASSERT(p2m);
     ASSERT(p2m->domain);
