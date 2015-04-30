@@ -66,7 +66,7 @@ typedef struct
     PSHFLCLIENTDATA  pClient;
     const wchar_t    *pwszFilename;
     uint32_t         uOpenFlags;
-    uint8_t          bFileNotFound, bOpening;
+    uint8_t          bFileNotFound, bOpening, bReopening;
     struct timeout_open_ctx *to_ctx;
     filecrypt_hdr_t *crypt;
     uint8_t cryptchanged; /* do we need to re-verify crypt settings when writing */
@@ -75,6 +75,7 @@ typedef struct
 
 static SHFLINTHANDLE   *pHandles = NULL;
 static int32_t          lastHandleIndex = 0;
+static critical_section reopen_lock;
 
 extern SHFLCLIENTDATA clientData;
 
@@ -89,6 +90,7 @@ int vbsfInitHandleTable()
     /* Never return handle 0 */
     pHandles[0].uFlags = SHFL_HF_TYPE_DONTUSE;
     lastHandleIndex    = 1;
+    critical_section_init(&reopen_lock);
 
     return 0;
 }
@@ -272,32 +274,68 @@ reopen_files(LPVOID opaque)
 }
 
 int
-vbsfReopenHandleWith(PSHFLCLIENTDATA client, SHFLHANDLE h,
-                     void *opaque, int (*action)(void*))
+vbsfReopenPathHandles(PSHFLCLIENTDATA client, wchar_t *path,
+                      void *opaque, int (*action)(void*))
 {
-    SHFLFILEHANDLE *fh;
-    int rc;
+    int i, rc;
 
-    if (!pHandles[h].pwszFilename)
+    if (!path)
         return VERR_INVALID_PARAMETER;
-    fh = vbsfQueryFileHandle(client, h);
-    if (fh)
-        CloseHandle(fh->file.Handle);
-    rc = action(opaque);
-    if (rc)
-        return rc;
-    ioh_event_reset(&pHandles[h].ready_ev);
-    if (pHandles[h].pvUserData) {
-        RTMemFree((void*)pHandles[h].pvUserData);
-        pHandles[h].pvUserData = 0;
+
+    critical_section_enter(&reopen_lock);
+
+    /* close existing handles */
+    for (i = 1; i < SHFLHANDLE_MAX; ++i) {
+        pHandles[i].bReopening = 0;
+        if ((pHandles[i].uFlags & SHFL_HF_VALID) &&
+            (pHandles[i].uFlags & SHFL_HF_TYPE_FILE) &&
+             pHandles[i].pwszFilename &&
+            !wcscmp(path, pHandles[i].pwszFilename))
+        {
+            SHFLFILEHANDLE *f = vbsfQueryFileHandle(client, i);
+            if (f) {
+                ioh_event_reset(&pHandles[i].ready_ev);
+                CloseHandle(f->file.Handle);
+                pHandles[i].bReopening = 1;
+            }
+        }
     }
-    pHandles[h].bOpening = 1;
-    if (pHandles[h].crypt) {
-        fc_free_hdr(pHandles[h].crypt);
-        pHandles[h].crypt = NULL;
+    /* invoke action */
+    rc = action(opaque);
+    if (rc) {
+        /* mark as ready on error */
+        for (i = 1; i < SHFLHANDLE_MAX; ++i) {
+            if (pHandles[i].bReopening)
+                ioh_event_set(&pHandles[i].ready_ev);
+        }
+        goto out;
+    }
+    /* reopen handles */
+    for (i = 1; i < SHFLHANDLE_MAX; ++i) {
+        int reopen_rc;
+
+        if (pHandles[i].bReopening) {
+            if (pHandles[i].pvUserData) {
+                RTMemFree((void*)pHandles[i].pvUserData);
+                pHandles[i].pvUserData = 0;
+            }
+            pHandles[i].bOpening = 1;
+            if (pHandles[i].crypt) {
+                fc_free_hdr(pHandles[i].crypt);
+                pHandles[i].crypt = NULL;
+            }
+            reopen_rc = reopen_file(&pHandles[i]);
+            if (reopen_rc) {
+                LogRel(("shared folders: reopen error handle %d error %d\n", i, reopen_rc));
+                if (rc == 0)
+                    rc = reopen_rc;
+            }
+        }
     }
 
-    return reopen_file(&pHandles[h]);
+out:
+    critical_section_leave(&reopen_lock);
+    return rc;
 }
 
 /* Br: When saving a VM we save the names and open flags of

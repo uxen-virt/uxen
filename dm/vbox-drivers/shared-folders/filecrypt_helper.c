@@ -323,8 +323,8 @@ replace_action(void *opaque)
     struct replace_params *p = (struct replace_params*)opaque;
 
     if (!ReplaceFileW(p->to, p->from, NULL, 0, NULL, NULL)) {
+        warnx("replace file failure %ls->%ls err=%x\n", p->from, p->to, (int)GetLastError());
         rc = RTErrConvertFromWin32(GetLastError());
-        warnx("replace file failure %ls->%ls err=%x\n", p->from, p->to, rc);
     }
     return rc;
 }
@@ -382,7 +382,7 @@ fch_re_write_file(SHFLCLIENTDATA *client, SHFLROOT root, SHFLHANDLE src)
 
     rp.from = dstname;
     rp.to = srcname;
-    rc = vbsfReopenHandleWith(client, src, &rp, replace_action);
+    rc = vbsfReopenPathHandles(client, srcname, &rp, replace_action);
     if (rc)
         warnx("reopen handle failed %x\n", rc);
 
