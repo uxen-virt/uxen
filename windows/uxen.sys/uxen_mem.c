@@ -545,7 +545,8 @@ _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
             mm_dprintk("kernel_malloc_mfns need to alloc %d pages\n",
                        pages - uxen_info->ui_free_pages[cpu].free_count);
             delay.QuadPart = -TIME_MS(50);
-            pri = KeSetBasePriorityThread(KeGetCurrentThread(), LOW_VCPUTHREAD_PRI);
+            pri = KeSetBasePriorityThread(KeGetCurrentThread(),
+                                          LOW_VCPUTHREAD_PRI);
             status = KeDelayExecutionThread(KernelMode, FALSE, &delay);
             KeSetBasePriorityThread(KeGetCurrentThread(), pri);
             disable_preemption(i);
