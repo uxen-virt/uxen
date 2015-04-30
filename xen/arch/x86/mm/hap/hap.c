@@ -332,6 +332,7 @@ void hap_logdirty_init(struct domain *d)
                           hap_clean_dirty_bitmap);
 }
 
+#ifndef __UXEN__
 /************************************************/
 /*             HAP SUPPORT FUNCTIONS            */
 /************************************************/
@@ -504,6 +505,40 @@ hap_set_allocation(struct domain *d, unsigned int pages, int *preempted)
 
     return 0;
 }
+#else  /* __UXEN__ */
+static struct page_info *
+hap_alloc_p2m_page(struct domain *d)
+{
+    struct page_info *pg;
+    void *p;
+
+    pg = alloc_domheap_page(NULL, MEMF_host_page);
+    if (!pg)
+        return NULL;
+
+    page_set_owner(pg, d);
+    ASSERT(!(pg->count_info & PGC_count_mask));
+    pg->count_info |= 1;
+
+    p = __map_domain_page(pg);
+    ASSERT(p != NULL);
+    clear_page(p);
+    unmap_domain_page(p);
+
+    return pg;
+}
+static void
+hap_free_p2m_page(struct domain *d, struct page_info *pg)
+{
+
+    ASSERT((pg->count_info & PGC_count_mask) == 1);
+    pg->count_info &= ~PGC_count_mask;
+    /* Free should not decrement domain's total allocation, since
+     * these pages were allocated without an owner. */
+    page_set_owner(pg, NULL);
+    free_domheap_page(pg);
+}
+#endif /* __UXEN__ */
 
 #ifndef __UXEN__
 #if CONFIG_PAGING_LEVELS == 4
@@ -666,7 +701,9 @@ static void hap_destroy_monitor_table(struct vcpu* v, mfn_t mmfn)
 /************************************************/
 void hap_domain_init(struct domain *d)
 {
+#ifndef __UXEN__
     INIT_PAGE_LIST_HEAD(&d->arch.paging.hap.freelist);
+#endif  /* __UXEN__ */
 
     hap_logdirty_init(d);
 }
@@ -674,8 +711,8 @@ void hap_domain_init(struct domain *d)
 /* return 0 for success, -errno for failure */
 int hap_enable(struct domain *d, u32 mode)
 {
-    unsigned int old_pages;
 #ifndef __UXEN__
+    unsigned int old_pages;
     uint8_t i;
 #endif  /* __UXEN__ */
     int rv = 0;
@@ -689,6 +726,7 @@ int hap_enable(struct domain *d, u32 mode)
         goto out;
     }
 
+#ifndef __UXEN__
     old_pages = d->arch.paging.hap.total_pages;
     if ( old_pages == 0 )
     {
@@ -705,6 +743,7 @@ int hap_enable(struct domain *d, u32 mode)
             goto out;
         }
     }
+#endif  /* __UXEN__ */
 
     /* Allow p2m and log-dirty code to borrow our memory */
     d->arch.paging.alloc_page = hap_alloc_p2m_page;
@@ -743,17 +782,19 @@ void hap_final_teardown(struct domain *d)
     for (i = 0; i < MAX_NESTEDP2M; i++) {
         p2m_teardown(d->arch.nested_p2m[i]);
     }
-#endif  /* __UXEN__ */
 
     if ( d->arch.paging.hap.total_pages != 0 )
         hap_teardown(d);
+#endif  /* __UXEN__ */
 
     p2m_teardown(p2m_get_hostp2m(d));
+#ifndef __UXEN__
     /* Free any memory that the p2m teardown released */
     paging_lock(d);
     hap_set_allocation(d, 0, NULL);
     ASSERT(d->arch.paging.hap.p2m_pages == 0);
     paging_unlock(d);
+#endif  /* __UXEN__ */
 }
 
 void hap_teardown(struct domain *d)
@@ -784,7 +825,6 @@ void hap_teardown(struct domain *d)
             }
         }
     }
-#endif  /* __UXEN__ */
 
     if ( d->arch.paging.hap.total_pages != 0 )
     {
@@ -802,20 +842,25 @@ void hap_teardown(struct domain *d)
                       d->arch.paging.hap.p2m_pages);
         ASSERT(d->arch.paging.hap.total_pages == 0);
     }
+#endif  /* __UXEN__ */
 
     d->arch.paging.mode &= ~PG_log_dirty;
 
     paging_unlock(d);
 }
 
+#ifndef __UXEN__
 int hap_domctl(struct domain *d, xen_domctl_shadow_op_t *sc,
                XEN_GUEST_HANDLE(void) u_domctl)
 {
+#ifndef __UXEN__
     int rc, preempted = 0;
+#endif  /* __UXEN__ */
 
     switch ( sc->op )
     {
     case XEN_DOMCTL_SHADOW_OP_SET_ALLOCATION:
+#ifndef __UXEN__
         paging_lock(d);
         rc = hap_set_allocation(d, sc->mb << (20 - PAGE_SHIFT), &preempted);
         paging_unlock(d);
@@ -831,14 +876,22 @@ int hap_domctl(struct domain *d, xen_domctl_shadow_op_t *sc,
             /* Finished.  Return the new allocation */
             sc->mb = hap_get_allocation(d);
         return rc;
+#else   /* __UXEN__ */
+        return 0;
+#endif  /* __UXEN__ */
     case XEN_DOMCTL_SHADOW_OP_GET_ALLOCATION:
+#ifndef __UXEN__
         sc->mb = hap_get_allocation(d);
+#else   /* __UXEN__ */
+        sc->mb = 0;
+#endif  /* __UXEN__ */
         return 0;
     default:
         HAP_ERROR("Bad hap domctl op %u\n", sc->op);
         return -EINVAL;
     }
 }
+#endif  /* __UXEN__ */
 
 static const struct paging_mode hap_paging_real_mode;
 static const struct paging_mode hap_paging_protected_mode;

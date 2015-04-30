@@ -430,7 +430,6 @@ vm_init(const char *loadvm, int restore_mode)
 {
     uint64_t ram_size = vm_mem_mb << 20;
     uint32_t vram_size = vm_vga_mb << 20;
-    unsigned long shadow;
     struct hvm_info_table *hvm_info;
     uint8_t *hvm_info_page;
     int i;
@@ -461,11 +460,6 @@ vm_init(const char *loadvm, int restore_mode)
 
     xc_domain_set_tsc_info(xc_handle, vm_id, 2 /* info->tsc_mode */,
 			   0, 0, 0);
-
-    /* 2Mb P2M + 1Mb per vcpu + 2 pages * Mb of ram */
-    shadow = 2 + vm_vcpus + (2 * (vm_mem_mb + vm_vga_mb) + 255)  / 256;
-    xc_shadow_control(xc_handle, vm_id, XEN_DOMCTL_SHADOW_OP_SET_ALLOCATION,
-		      NULL, 0, &shadow, 0, NULL);
 
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_PAE_ENABLED, vm_pae);
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_VIRIDIAN, vm_viridian);

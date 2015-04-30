@@ -191,9 +191,9 @@ struct paging_domain {
 #ifndef __UXEN__
     /* extension for shadow paging support */
     struct shadow_domain    shadow;
-#endif
     /* extension for hardware-assited paging */
     struct hap_domain       hap;
+#endif
     /* log dirty support */
     struct log_dirty_domain log_dirty;
     /* alloc/free pages from the pool for paging-assistance structures

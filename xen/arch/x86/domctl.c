@@ -75,6 +75,7 @@ long arch_do_domctl(
     switch ( domctl->cmd )
     {
 
+#ifndef __UXEN__
     case XEN_DOMCTL_shadow_op:
     {
         struct domain *d;
@@ -91,7 +92,6 @@ long arch_do_domctl(
     }
     break;
 
-#ifndef __UXEN__
     case XEN_DOMCTL_ioport_permission:
     {
         struct domain *d;

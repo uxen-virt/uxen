@@ -937,26 +937,6 @@ _uxen_snoop_hypercall(void *udata, int mode)
         }
         }
         break;
-    case __HYPERVISOR_domctl: {
-        struct xen_domctl domctlop;
-
-        ret = copy(uhd->uhd_arg[0], &domctlop, sizeof(domctlop));
-        if (ret)
-            break;
-        if (domctlop.cmd == XEN_DOMCTL_shadow_op &&
-            domctlop.u.shadow_op.op == XEN_DOMCTL_SHADOW_OP_SET_ALLOCATION) {
-            if ((uint64_t)domctlop.u.shadow_op.mb << (20 - PAGE_SHIFT) >=
-                (1ULL << 31)) {
-                fail_msg("size assert: %"PRIx64,
-                         (uint64_t)domctlop.u.shadow_op.mb <<
-                         (20 - PAGE_SHIFT));
-                return -ENOMEM;
-            }
-            pages += domctlop.u.shadow_op.mb << (20 - PAGE_SHIFT);
-            mm_dprintk("snooped shadow_set_allocation: %d\n", pages);
-        }
-        break;
-    }
     case __HYPERVISOR_hvm_op:
         switch (uhd->uhd_arg[0]) {
         case HVMOP_set_mem_type: {

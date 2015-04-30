@@ -835,14 +835,14 @@ int paging_domctl(struct domain *d, xen_domctl_shadow_op_t *sc,
     }
 #endif  /* __UXEN__ */
 
+#ifndef __UXEN__
     /* Here, dispatch domctl to the appropriate paging code */
     if ( hap_enabled(d) )
         return hap_domctl(d, sc, u_domctl);
-#ifndef __UXEN__
     else
         return shadow_domctl(d, sc, u_domctl);
 #else   /* __UXEN__ */
-    BUG(); return 0;
+    return 0;
 #endif  /* __UXEN__ */
 }
 
