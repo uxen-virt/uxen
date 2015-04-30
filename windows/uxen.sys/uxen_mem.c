@@ -1305,20 +1305,18 @@ user_free_all_user_mappings(struct fd_assoc *fda)
     struct user_mapping *um;
     KIRQL old_irql;
 
-    dprintk("%s\n", __FUNCTION__);
     KeAcquireSpinLock(&umi->lck, &old_irql);
     while ((um = (struct user_mapping *)RB_TREE_MIN(&umi->rbtree))) {
         rb_tree_remove_node(&umi->rbtree, um);
         KeReleaseSpinLock(&umi->lck, old_irql);
-        dprintk("%s: freeing user mapping %p type %s\n", __FUNCTION__,
-                um->va.addr,
-                um->type == USER_MAPPING_MEMORY_MAP ? "mmap" :
-                um->type == USER_MAPPING_HOST_MFNS ? "host" : "malloc");
+        mm_dprintk("%s: freeing user mapping %p type %s\n", __FUNCTION__,
+                   um->va.addr,
+                   um->type == USER_MAPPING_MEMORY_MAP ? "mmap" :
+                   um->type == USER_MAPPING_HOST_MFNS ? "host" : "malloc");
         user_free_user_mapping(um);
         KeAcquireSpinLock(&umi->lck, &old_irql);
     }
     KeReleaseSpinLock(&umi->lck, old_irql);
-    dprintk("%s done\n", __FUNCTION__);
 }
 
 static void *

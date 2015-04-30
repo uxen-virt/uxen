@@ -1666,19 +1666,17 @@ user_free_all_user_mappings(struct fd_assoc *fda)
     struct user_mapping_info *umi = &fda->user_mappings;
     struct user_mapping *um;
 
-    dprintk("%s\n", __FUNCTION__);
     lck_spin_lock(umi->lck);
     while ((um = (struct user_mapping *)RB_TREE_MIN(&umi->rbtree))) {
         rb_tree_remove_node(&umi->rbtree, um);
         lck_spin_unlock(umi->lck);
-        dprintk("%s: freeing user mapping %p type %s\n", __FUNCTION__,
-                um->va.addr,
-                um->type == USER_MAPPING_MEMORY_MAP ? "mmap" : "malloc");
+        mm_dprintk("%s: freeing user mapping %p type %s\n", __FUNCTION__,
+                   um->va.addr,
+                   um->type == USER_MAPPING_MEMORY_MAP ? "mmap" : "malloc");
         user_free_user_mapping(um);
         lck_spin_lock(umi->lck);
     }
     lck_spin_unlock(umi->lck);
-    dprintk("%s done\n", __FUNCTION__);
 }
 
 int
