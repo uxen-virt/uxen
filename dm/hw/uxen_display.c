@@ -404,8 +404,12 @@ bank_reg_write(struct uxendisp_state *s, int bank_id, target_phys_addr_t addr,
 
     val = (val + (TARGET_PAGE_SIZE - 1)) &
           ~(TARGET_PAGE_SIZE - 1);
+
+    if ((bank_id == 0) && val < (vm_vga_mb_mapped << 20))
+        val = vm_vga_mb_mapped << 20;
+
     if (val > UXENDISP_BANK_SIZE)
-        return;
+        val = UXENDISP_BANK_SIZE;
 
     vram_resize(bank, val);
 }
