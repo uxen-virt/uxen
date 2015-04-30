@@ -61,11 +61,9 @@ typedef KIRQL preemption_t;
     } while (0)
 
 #define uxen_pages_increase_reserve(i, p, increase)                     \
-    _uxen_pages_increase_reserve(i, p, 0, increase, __FUNCTION__, 0)
+    _uxen_pages_increase_reserve(i, p, 0, increase, __FUNCTION__)
 #define uxen_pages_increase_reserve_extra(i, p, e, increase)            \
-    _uxen_pages_increase_reserve(i, p, e, increase, __FUNCTION__, 0)
-#define uxen_pages_increase_reserve_maybe_schedule(i, p, increase, dont_schedule) \
-    _uxen_pages_increase_reserve(i, p, 0, increase, __FUNCTION__, dont_schedule)
+    _uxen_pages_increase_reserve(i, p, e, increase, __FUNCTION__)
 
 struct host_event_channel;
 
@@ -170,10 +168,8 @@ void uxen_exec_dom0_start(void);
 void uxen_exec_dom0_end(void);
 
 /* uxen_call.c */
-intptr_t uxen_dom0_hypercall_maybe_schedule(struct vm_info_shared *, void *, uint32_t, int,  uint64_t, ...);
-
-#define uxen_dom0_hypercall(a,b,c,d,...) uxen_dom0_hypercall_maybe_schedule(a,b,c,0,d,__VA_ARGS__)
-
+intptr_t uxen_dom0_hypercall(struct vm_info_shared *, void *,
+                             uint32_t, uint64_t, ...);
 #define SNOOP_USER 0
 #define SNOOP_KERNEL 1
 int32_t _uxen_snoop_hypercall(void *udata, int mode);
@@ -187,7 +183,7 @@ int32_t _uxen_snoop_hypercall(void *udata, int mode);
             r exception_retval;                                     \
         }                                                           \
     } while (0)
-#define uxen_call_maybe_schedule(r, exception_retval, _pages, dont_schedule, fn, ...) do {            \
+#define uxen_call(r, exception_retval, _pages, fn, ...) do {            \
         LONG x;                                                         \
         preemption_t i;                                                 \
         uint32_t pages = _pages;                                        \
@@ -196,7 +192,7 @@ int32_t _uxen_snoop_hypercall(void *udata, int mode);
             r _pages;                                                   \
             break;                                                      \
         }                                                               \
-        if (uxen_pages_increase_reserve_maybe_schedule(&i, pages, &increase, dont_schedule)) {        \
+        if (uxen_pages_increase_reserve(&i, pages, &increase)) {        \
             r -ENOMEM;                                                  \
             break;                                                      \
         }                                                               \
@@ -215,8 +211,6 @@ int32_t _uxen_snoop_hypercall(void *udata, int mode);
             KeSetEvent(&uxen_devext->de_suspend_event, 0, FALSE);       \
         uxen_pages_decrease_reserve(i, increase);                       \
     } while (0)
-
-#define uxen_call(r, exception_retval, _pages, fn, ...) uxen_call_maybe_schedule(r, exception_retval, _pages, 0, fn, __VA_ARGS__ )
 
 /* uxen_cpu.c */
 #define cpu_number() KeGetCurrentProcessorNumber()
@@ -285,18 +279,18 @@ void *kernel_alloc_contiguous(uint32_t size);
 void kernel_free_contiguous(void *va, uint32_t size);
 int _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
                                  uint32_t extra_pages, uint32_t *increase,
-                                 const char *fn, int dont_schedule);
+                                 const char *fn);
 void uxen_pages_decrease_reserve(preemption_t i, uint32_t decrease);
 #define NO_RESERVE 0
-#define UXEN_SYS_V4V_MAX_RING_SIZE (2097152ULL)
-#define VCPU_V4V_MAP_PFN_RESERVE ((UXEN_SYS_V4V_MAX_RING_SIZE >> PAGE_SHIFT)+32)
 #define MIN_RESERVE 64
 #define EXTRA_RESERVE 128
 #define HYPERCALL_RESERVE 326
 #define SETUPVM_RESERVE (HYPERCALL_RESERVE + 16)
 #define STARTXEN_RESERVE 1024
-#define VCPU_RUN_RESERVE (64+VCPU_V4V_MAP_PFN_RESERVE)
 #define IDLE_RESERVE 326
+#define UXEN_SYS_V4V_MAX_RING_SIZE (2097152ULL)
+#define V4V_VCPU_RUN_RESERVE ((UXEN_SYS_V4V_MAX_RING_SIZE >> PAGE_SHIFT) + 32)
+#define VCPU_RUN_RESERVE (64 + V4V_VCPU_RUN_RESERVE)
 #define VCPU_RUN_EXTRA_RESERVE 448
 #define MAX_RESERVE (1<<18)
 #define MAX_PAGES_RESERVE_CPU (4 << 18)

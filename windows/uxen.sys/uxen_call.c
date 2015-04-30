@@ -33,11 +33,9 @@ typedef uint64_t mfn_t;
 typedef uint32_t mfn_t;
 #endif
 
-
-
 intptr_t
-uxen_dom0_hypercall_maybe_schedule(struct vm_info_shared *vmis, void *user_access_opaque,
-                    uint32_t privileged, int dont_schedule, uint64_t op,  ...)
+uxen_dom0_hypercall(struct vm_info_shared *vmis, void *user_access_opaque,
+                    uint32_t privileged, uint64_t op, ...)
 {
     struct uxen_hypercall_desc uhd;
     int idx, n_arg;
@@ -78,7 +76,7 @@ uxen_dom0_hypercall_maybe_schedule(struct vm_info_shared *vmis, void *user_acces
         memcache_ensure_space();
 
     uxen_exec_dom0_start();
-    uxen_call_maybe_schedule(ret =, -EFAULT, _uxen_snoop_hypercall(&uhd, snoop_mode), dont_schedule,
+    uxen_call(ret =, -EFAULT, _uxen_snoop_hypercall(&uhd, snoop_mode),
               uxen_do_hypercall, &uhd, vmis, user_access_opaque,
               privileged);
     ret = -ret;

@@ -481,7 +481,7 @@ kernel_free_contiguous(void *va, uint32_t size)
 int
 _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
                              uint32_t extra_pages, uint32_t *increase,
-                             const char *fn, int dont_schedule)
+                             const char *fn)
 {
     int cpu = cpu_number();
     uxen_pfn_t mfn_list[INCREASE_RESERVE_BATCH];
@@ -537,11 +537,11 @@ _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
             LARGE_INTEGER delay;
             NTSTATUS status;
             LONG pri;
-            if (dont_schedule) {
+            enable_preemption(*i);
+            if (KeGetCurrentIrql() >= DISPATCH_LEVEL) {
                 pages_reserve[cpu] -= pages;
                 return -1;
             }
-            enable_preemption(*i);
             mm_dprintk("kernel_malloc_mfns need to alloc %d pages\n",
                        pages - uxen_info->ui_free_pages[cpu].free_count);
             delay.QuadPart = -TIME_MS(50);
@@ -549,11 +549,11 @@ _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
                                           LOW_VCPUTHREAD_PRI);
             status = KeDelayExecutionThread(KernelMode, FALSE, &delay);
             KeSetBasePriorityThread(KeGetCurrentThread(), pri);
-            disable_preemption(i);
             if (status != STATUS_SUCCESS) {
                 pages_reserve[cpu] -= pages;
                 return -1;
             }
+            disable_preemption(i);
         }
     }
     *increase = pages;

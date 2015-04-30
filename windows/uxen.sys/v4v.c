@@ -32,10 +32,8 @@ static uintptr_t uxen_sys_v4v_hypercall(uintptr_t a1, uintptr_t a2, uintptr_t a3
     if (!uxen_info) return (uintptr_t) - ENOSYS;
     if (!uxen_info->ui_running) return (uintptr_t) - ENOSYS;
 
-    ret = uxen_dom0_hypercall_maybe_schedule( NULL,  NULL, UXEN_UNRESTRICTED_ACCESS_HYPERCALL, 1,
-            __HYPERVISOR_v4v_op, a1, a2, a3, a4, a5, a6);
-
-
+    ret = uxen_dom0_hypercall(NULL, NULL, UXEN_UNRESTRICTED_ACCESS_HYPERCALL,
+                              __HYPERVISOR_v4v_op, a1, a2, a3, a4, a5, a6);
     ret = -ret; //no really
 
     return (uintptr_t) ret;
