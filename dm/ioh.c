@@ -36,7 +36,7 @@ int ioh_set_read_handler2(int fd,
 
     critical_section_enter(&iohq->lock);
     TAILQ_FOREACH(ioh, &iohq->queue, queue)
-	if (ioh->fd == fd)
+	if (ioh->fd == fd && ioh->deleted == 0)
 	    break;
 
     if (!fd_read && ioh && !ioh->fd_write)
@@ -44,16 +44,16 @@ int ioh_set_read_handler2(int fd,
     else {
 	if (!ioh) {
 	    ioh = calloc(1, sizeof(IOHandlerRecord));
+            ioh->deleted = 0;
             ioh->fd = fd;
             ioh->fd_write_poll = NULL;
             ioh->fd_write = NULL;
             ioh->opaque = opaque;
             TAILQ_INSERT_HEAD(&iohq->queue, ioh, queue);
 	}
-        assert(ioh->deleted || (opaque == ioh->opaque));
+        assert(opaque == ioh->opaque);
         ioh->fd_read_poll = fd_read_poll;
         ioh->fd_read = fd_read;
-        ioh->deleted = 0;
     }
     if (iohq->wait_queue) /* asleep in another thread */
         ioh_wait_interrupt(iohq->wait_queue);
@@ -74,7 +74,7 @@ int ioh_set_write_handler2(int fd,
 
     critical_section_enter(&iohq->lock);
     TAILQ_FOREACH(ioh, &iohq->queue, queue)
-	if (ioh->fd == fd)
+	if (ioh->fd == fd && ioh->deleted == 0)
 	    break;
 
     if (!fd_write && ioh && !ioh->fd_read)
@@ -82,16 +82,16 @@ int ioh_set_write_handler2(int fd,
     else {
 	if (!ioh) {
 	    ioh = calloc(1, sizeof(IOHandlerRecord));
+            ioh->deleted = 0;
             ioh->fd = fd;
             ioh->fd_read_poll = NULL;
             ioh->fd_read = NULL;
             ioh->opaque = opaque;
             TAILQ_INSERT_HEAD(&iohq->queue, ioh, queue);
 	}
-        assert(ioh->deleted || (opaque == ioh->opaque));
+        assert(opaque == ioh->opaque);
         ioh->fd_write_poll = fd_write_poll;
         ioh->fd_write = fd_write;
-        ioh->deleted = 0;
     }
     if (iohq->wait_queue) /* asleep in another thread */
         ioh_wait_interrupt(iohq->wait_queue);
