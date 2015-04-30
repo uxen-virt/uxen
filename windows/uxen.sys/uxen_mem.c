@@ -530,8 +530,8 @@ _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
             ASSERT(!p->count_info);
 #endif
             uxen_info->ui_free_pages[cpu].free_list = mfn_list[n];
-            uxen_info->ui_free_pages[cpu].free_count++;
         }
+        uxen_info->ui_free_pages[cpu].free_count += ret;
         if (ret != needed &&
             (pages - uxen_info->ui_free_pages[cpu].free_count) > 0) {
             LARGE_INTEGER delay;
