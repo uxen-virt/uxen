@@ -1065,6 +1065,9 @@ void so_prepare(struct nickel *ni, int *timeout)
             continue;
         }
 
+        if (so->state == NSO_SS_CONNECTING)
+            update_fdevents(so, POLLIN | POLLOUT);
+
         if (so->state == NSO_SS_CONNECTED) {
             int events = 0;
 
