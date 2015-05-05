@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: ISC
  */
 
+#define _WIN32_WINNT 0x0600
 #include "filecrypt_helper.h"
 #include "mappings.h"
 
@@ -294,11 +295,33 @@ re_write_loop(wchar_t *srcname,
 }
 
 static int
-create_temp(wchar_t *name, wchar_t *tempname, int maxlen, HANDLE *temp)
+get_final_name(wchar_t *name, wchar_t *final, int nchars)
 {
-    int l = wcslen(name);
     HANDLE h;
 
+    h = CreateFileW(name, GENERIC_READ,
+                    FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL,
+                    OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) {
+        warnx("error opening file for resolving final path name %d", (int)GetLastError());
+        return RTErrConvertFromWin32(GetLastError());
+    }
+    if (!GetFinalPathNameByHandleW(h, final, nchars, FILE_NAME_NORMALIZED)) {
+        warnx("error resolving final path name %d", (int)GetLastError());
+        CloseHandle(h);
+        return RTErrConvertFromWin32(GetLastError());
+    }
+    CloseHandle(h);
+    return 0;
+}
+
+static int
+create_temp(wchar_t *name, wchar_t *tempname, int maxlen, HANDLE *temp)
+{
+    HANDLE h;
+    int l;
+
+    l = wcslen(name);
     if (l + wcslen(TEMP_SUFFIX) + 1 >= maxlen)
         return VERR_INVALID_PARAMETER;
     wcscpy(tempname, name);
@@ -333,7 +356,8 @@ int
 fch_re_write_file(SHFLCLIENTDATA *client, SHFLROOT root, SHFLHANDLE src)
 {
     filecrypt_hdr_t *dsthdr = NULL;
-    wchar_t *srcname = vbsfQueryHandlePath(client, src);
+    wchar_t *srcname_ = vbsfQueryHandlePath(client, src);
+    wchar_t  srcname[RTPATH_MAX] = { 0 };
     wchar_t  dstname[RTPATH_MAX] = { 0 };
     int cmode = 0;
     int rc;
@@ -341,6 +365,12 @@ fch_re_write_file(SHFLCLIENTDATA *client, SHFLROOT root, SHFLHANDLE src)
     HANDLE dst = INVALID_HANDLE_VALUE;
     struct replace_params rp;
 
+    /* follow symlinks */
+    if (!srcname_)
+        return VERR_INVALID_PARAMETER;
+    rc = get_final_name(srcname_, srcname, sizeof(srcname) / sizeof(wchar_t));
+    if (rc)
+        goto out;
     /* desired crypt mode of target file */
     rc = fch_query_crypt_by_handle(client, root, src, &cmode);
     if (rc)
@@ -382,7 +412,7 @@ fch_re_write_file(SHFLCLIENTDATA *client, SHFLROOT root, SHFLHANDLE src)
 
     rp.from = dstname;
     rp.to = srcname;
-    rc = vbsfReopenPathHandles(client, srcname, &rp, replace_action);
+    rc = vbsfReopenPathHandles(client, srcname_, &rp, replace_action);
     if (rc)
         warnx("reopen handle failed %x\n", rc);
 
