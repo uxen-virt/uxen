@@ -277,7 +277,7 @@ int
 vbsfReopenPathHandles(PSHFLCLIENTDATA client, wchar_t *path,
                       void *opaque, int (*action)(void*))
 {
-    int i, rc;
+    int i, rc = 0;
 
     if (!path)
         return VERR_INVALID_PARAMETER;
@@ -301,7 +301,8 @@ vbsfReopenPathHandles(PSHFLCLIENTDATA client, wchar_t *path,
         }
     }
     /* invoke action */
-    rc = action(opaque);
+    if (action)
+        rc = action(opaque);
     if (rc) {
         /* mark as ready on error */
         for (i = 1; i < SHFLHANDLE_MAX; ++i) {

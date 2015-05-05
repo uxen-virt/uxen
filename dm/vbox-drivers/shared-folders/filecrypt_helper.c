@@ -22,6 +22,7 @@
 #include <err.h>
 
 #define TEMP_SUFFIX L".uxentmp~"
+#define ATOMIC_REWRITE
 
 int
 fch_query_crypt_by_path(SHFLCLIENTDATA *client,
@@ -335,6 +336,7 @@ create_temp(wchar_t *name, wchar_t *tempname, int maxlen, HANDLE *temp)
     return 0;
 }
 
+#ifdef ATOMIC_REWRITE
 struct replace_params {
     wchar_t *from, *to;
 };
@@ -352,6 +354,75 @@ replace_action(void *opaque)
     return rc;
 }
 
+#else
+
+static int
+_write(HANDLE file, void *buf, int cnt)
+{
+    DWORD part = 0;
+    uint8_t *p = (uint8_t*)buf;
+
+    while (cnt>0) {
+        if (!WriteFile(file, p, cnt, &part, NULL))
+            return GetLastError();
+        if (part == 0)
+            return ERROR_WRITE_FAULT;
+        p += part;
+        cnt -= part;
+    }
+    return 0;
+}
+
+static int
+copy(SHFLCLIENTDATA *client, wchar_t *from, SHFLHANDLE to_shfl)
+{
+    SHFLFILEHANDLE *to_fh = vbsfQueryFileHandle(client, to_shfl);
+    HANDLE to_h, from_h;
+    DWORD n;
+    int rc = 0;
+    uint8_t buffer[32768];
+
+    if (!to_fh)
+        return VERR_INVALID_PARAMETER;
+    to_h = to_fh->file.Handle;
+    from_h = CreateFileW(from, GENERIC_READ,
+                         FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE, NULL,
+                         OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+    if (from_h == INVALID_HANDLE_VALUE) {
+        warnx("error opening file for rewrite copy %d", (int)GetLastError());
+        return RTErrConvertFromWin32(GetLastError());
+    }
+    if (SetFilePointer(to_h, 0, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER) {
+        warnx("seek error %d\n", (int)GetLastError());
+        rc = RTErrConvertFromWin32(GetLastError());
+        goto out;
+    }
+    for (;;) {
+        if (!ReadFile(from_h, buffer, sizeof(buffer), &n, NULL)) {
+            warnx("read error %d\n", (int)GetLastError());
+            rc = RTErrConvertFromWin32(GetLastError());
+            goto out;
+        }
+        if (n == 0)
+            break;
+        rc = _write(to_h, buffer, n);
+        if (rc) {
+            rc = RTErrConvertFromWin32(rc);
+            goto out;
+        }
+    }
+    if (!SetEndOfFile(to_h)) {
+        warnx("set eof error %d\n", (int)GetLastError());
+        rc = RTErrConvertFromWin32(GetLastError());
+        goto out;
+    }
+    FlushFileBuffers(to_h);
+out:
+    CloseHandle(from_h);
+    return rc;
+}
+#endif
+
 int
 fch_re_write_file(SHFLCLIENTDATA *client, SHFLROOT root, SHFLHANDLE src)
 {
@@ -363,7 +434,6 @@ fch_re_write_file(SHFLCLIENTDATA *client, SHFLROOT root, SHFLHANDLE src)
     int rc;
     int temppresent = 0;
     HANDLE dst = INVALID_HANDLE_VALUE;
-    struct replace_params rp;
 
     /* follow symlinks */
     if (!srcname_)
@@ -410,12 +480,25 @@ fch_re_write_file(SHFLCLIENTDATA *client, SHFLROOT root, SHFLHANDLE src)
     CloseHandle(dst);
     dst = INVALID_HANDLE_VALUE;
 
-    rp.from = dstname;
-    rp.to = srcname;
-    rc = vbsfReopenPathHandles(client, srcname_, &rp, replace_action);
+#ifdef ATOMIC_REWRITE
+    {
+        struct replace_params rp;
+        rp.from = dstname;
+        rp.to = srcname;
+        rc = vbsfReopenPathHandles(client, srcname, &rp, replace_action);
+        if (rc)
+            warnx("reopen handle failed %x\n", rc);
+    }
+#else
+    rc = copy(client, dstname, src);
+    if (rc) {
+        warnx("copy failed %x\n", rc);
+        goto out;
+    }
+    rc = vbsfReopenPathHandles(client, srcname, NULL, NULL);
     if (rc)
         warnx("reopen handle failed %x\n", rc);
-
+#endif
 out:
     if (dst != INVALID_HANDLE_VALUE)
         CloseHandle(dst);
