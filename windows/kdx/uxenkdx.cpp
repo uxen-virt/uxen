@@ -6,12 +6,12 @@
 
 #include "kdx.h"
 #include "kdxinfo.h"
+#include "uxen_defs.h"
 
 #include <uxen/kdxinfo.h>
 
 #define PAGE_SHIFT 12
 
-// Instantiate EngExtCpp framework's globals.
 EXT_DECLARE_GLOBALS();
 
 EXT_COMMAND(
@@ -48,29 +48,43 @@ ULONG64 get_expr(char *expr_fmt, ...)
 void
 EXT_CLASS::dump_page_info(
     ULONG64 frametable_addr,
-    ULONG64 page_info_addr)
+    ULONG64 page_info_addr,
+    bool decode_pgc)
 {
     ULONG64 idx;
+    ULONG64 count_info;
     bool invalid;
+    char pgc[128];
 
     idx = (page_info_addr - frametable_addr) / ___usym_sizeof___page_info;
     invalid = page_info_addr < frametable_addr;
 
-    Dml("%s[page_info @ 0x%p, <exec cmd=\"!db 0x%x l0x1000\">idx:0x%08x</exec>]"
-        " <exec cmd=\"!pageinfo 0x%x\">next:0x%08x</exec>"
-        ", <exec cmd=\"!pageinfo 0x%x\">prev:0x%08x</exec>"
-        ", count_info:%08x`%08x, {last}:%08x`%08x\n",
+    count_info = get_expr("poi(0x%p + 0x8)", page_info_addr);
+
+    Dml("%s[page_info:0x%p, <exec cmd=\"!pageinfo 0x%x\">idx</exec>:0x%08x]"
+        " <exec cmd=\"!pageinfo 0x%x\">prev</exec>:0x%08x"
+        ", <exec cmd=\"!pageinfo 0x%x\">next</exec>:0x%08x"
+        ", count_info:0x%08x`%08x, %s:0x%08x`%08x"
+        " <exec cmd=\"!db 0x%x l0x1000\">[raw]</exec>\n",
         invalid ? "  !!! invalid " : "  ",
         page_info_addr,
-        idx << PAGE_SHIFT, idx,
-        get_expr("poi(0x%p)", page_info_addr) & ~0UL,
-        get_expr("poi(0x%p)", page_info_addr) & ~0UL,
+        idx, idx,
         get_expr("poi(0x%p + 0x4)", page_info_addr) & ~0UL,
         get_expr("poi(0x%p + 0x4)", page_info_addr) & ~0UL,
-        get_expr("poi(0x%p + 0xc)", page_info_addr) & ~0UL,
-        get_expr("poi(0x%p + 0x8)", page_info_addr) & ~0UL,
+        get_expr("poi(0x%p)", page_info_addr) & ~0UL,
+        get_expr("poi(0x%p)", page_info_addr) & ~0UL,
+        (count_info >> 32) & ~0UL, count_info & ~0UL,
+        page_state_is(count_info, host) ? 
+            "domain" : 
+            page_state_is(count_info, free) ? "order" : "{v}",
         get_expr("poi(0x%p + 0x14)", page_info_addr) & ~0UL,
-        get_expr("poi(0x%p + 0x10)", page_info_addr) & ~0UL);
+        get_expr("poi(0x%p + 0x10)", page_info_addr) & ~0UL,
+        idx << PAGE_SHIFT);
+
+    if (decode_pgc) {
+        pgc2str(count_info, pgc, sizeof(pgc));
+        Dml("    PGC flags:%s\n", pgc);
+    }
 }
     
 void
@@ -101,7 +115,7 @@ EXT_CLASS::dump_page_list(
         if (verbose_output) {
             idx = (page_info_addr - frametable_addr) /
                 ___usym_sizeof___page_info;
-            dump_page_info(frametable_addr, page_info_addr);
+            dump_page_info(frametable_addr, page_info_addr, false);
             if (bytes_to_display > 0)
                 Execute("!db 0x%x l0x%x", idx, bytes_to_display);
         }
@@ -137,7 +151,7 @@ EXT_COMMAND(
         else
             page_info_addr = frametable_addr + ___usym_sizeof___page_info * idx;
 
-        dump_page_info(frametable_addr, page_info_addr);
+        dump_page_info(frametable_addr, page_info_addr, true);
     }
 }
 

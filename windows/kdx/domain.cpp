@@ -18,6 +18,7 @@ EXT_COMMAND(
     RequireKernelMode();
 
     ULONG64 usym_addr(domain);
+    ULONG64 phys_addr;
 
     if (HasUnnamedArg(0)) {
         /* dump specific domain details */
@@ -27,10 +28,16 @@ EXT_COMMAND(
         usym_def_addr(domain, page_list_next);
         usym_def_addr(domain, page_list_tail);
 
-        Out("[domain @ 0x%p, id:%hd]\n"
+        if (TranslateVirtualToPhysical(usym_addr(domain), &phys_addr))
+            phys_addr >>= 12;
+        else
+            phys_addr = 0;
+
+        Out("[domain %hd:0x%p(0x%08x)]\n"
             "  frametable:0x%p\n"
             "  page_list_next:0x%p, page_list_tail:0x%p\n",
-            usym_addr(domain), usym_read_u16(domain, domain_id),
+            usym_read_u16(domain, domain_id), usym_addr(domain),
+            phys_addr,
             frametable_addr,
             usym_addr(domain_page_list_next),
             usym_addr(domain_page_list_tail));
@@ -47,9 +54,16 @@ EXT_COMMAND(
             usym_def_u32(domain, max_vcpus);
             usym_def_addr(domain, vcpu);
 
-            Dml("[<exec cmd=\"!domain 0x%p\">domain @ 0x%p</exec>] domain_id:%hd, max_vcpus:%d, vcpu:0x%p\n",
-                usym_addr(domain), usym_addr(domain),
+            if (TranslateVirtualToPhysical(usym_addr(domain), &phys_addr))
+                phys_addr >>= 12;
+            else
+                phys_addr = 0;
+
+            Dml("[<exec cmd=\"!domain 0x%p\">domain %hd</exec>:0x%p(0x%08x)] max_vcpus:%d, vcpu:0x%p\n",
+                usym_addr(domain), 
                 usym_read_u16(domain, domain_id),
+                usym_addr(domain),
+                phys_addr,
                 domain_max_vcpus, usym_addr(domain_vcpu));
 
             usym_fetch_array(domain_vcpu, domain_max_vcpus * VM_PTR_SIZE,

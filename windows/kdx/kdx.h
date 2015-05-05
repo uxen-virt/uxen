@@ -36,7 +36,7 @@ public:
     EXT_COMMAND_METHOD(ugdb);
     EXT_COMMAND_METHOD(udt);
 private:
-    void dump_page_info(ULONG64, ULONG64);
+    void dump_page_info(ULONG64, ULONG64, bool);
     void dump_page_list(ULONG64, ULONG64, bool, bool, ULONG64);
     ULONG64 get_domain_by_id(uint16_t id);
     char *uxen_logging_read(struct uxen_logging_buffer *,
