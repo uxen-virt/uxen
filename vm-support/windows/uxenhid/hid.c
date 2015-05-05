@@ -89,7 +89,7 @@ hid_v4v_cb(uxen_v4v_ring_handle_t *ring, void *ctx, void *ctx2)
 
             if (devext->rpt_desc)
                 v4v_copy_out_offset(ring->ring, NULL, NULL, devext->rpt_desc,
-                                    hdr.msglen, 1, sizeof (hdr));
+                                    sizeof (hdr) + hdr.msglen, 1, sizeof (hdr));
         }
 
         if (hdr.type == UXENHID_FEATURE_REPORT &&
@@ -98,7 +98,7 @@ hid_v4v_cb(uxen_v4v_ring_handle_t *ring, void *ctx, void *ctx2)
 
             /* Read report id without consuming */
             v4v_copy_out_offset(ring->ring, NULL, NULL, &report_id,
-                                sizeof (report_id), 0, sizeof (hdr));
+                                sizeof (hdr) + sizeof (report_id), 0, sizeof (hdr));
 
 
             irp = IoCsqRemoveNextIrp(&devext->pending_feature_query_csq,
@@ -112,7 +112,7 @@ hid_v4v_cb(uxen_v4v_ring_handle_t *ring, void *ctx, void *ctx2)
                     uxen_v4v_copy_out(ring, NULL, NULL, NULL, 0, 1);
                 } else {
                     v4v_copy_out_offset(ring->ring, NULL, NULL, pkt->reportBuffer,
-                                        hdr.msglen, 1, sizeof (hdr));
+                                        sizeof (hdr) + hdr.msglen, 1, sizeof (hdr));
                     irp->IoStatus.Status = STATUS_SUCCESS;
                     irp->IoStatus.Information = hdr.msglen - sizeof (hdr);
                 }
@@ -182,7 +182,7 @@ hid_v4v_cb(uxen_v4v_ring_handle_t *ring, void *ctx, void *ctx2)
                 }
 
                 v4v_copy_out_offset(ring->ring, NULL, NULL, irp->UserBuffer,
-                                    hdr.msglen, 1, sizeof (hdr));
+                                    sizeof (hdr) + hdr.msglen, 1, sizeof (hdr));
                 irp->IoStatus.Status = STATUS_SUCCESS;
                 irp->IoStatus.Information = hdr.msglen - sizeof (hdr);
 
