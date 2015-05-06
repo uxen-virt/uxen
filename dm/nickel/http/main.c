@@ -268,6 +268,7 @@ static int64_t prx_refresh_id = 0;
 static int max_socket_per_proxy = 12;
 static char *webdav_host_dir = NULL;
 static Timer *hp_idle_timer = NULL;
+static int disable_crl_check = 0;
 
 static void hp_get(struct http_ctx *hp);
 static void hp_put(struct http_ctx *hp);
@@ -2107,9 +2108,17 @@ static int srv_read(struct http_ctx *hp)
         }
 
         if (r == TLSR_DONE_CHECK) {
-            HLOG2("TLS parsing done, checking cert chain ");
             hp->flags |= HF_TLS_CERT_DONE;
             tls_cert_send_hostsvr(hp->tls, hp->sv_name);
+
+            if (disable_crl_check) {
+                hp->flags |= HF_TLS_CERT_DONE;
+                tls_free(&hp->tls);
+
+                goto carry_on;
+            }
+
+            HLOG2("TLS parsing done, checking cert chain ");
             hp_get(hp);
             if (tls_async_cert_check(hp->tls, srv_tls_check_complete, hp) < 0) {
                 hp_put(hp);
@@ -3520,6 +3529,10 @@ static void set_settings(struct nickel *ni, yajl_val config)
             goto cleanup;
         }
     }
+
+    disable_crl_check = yajl_object_get_bool_default(config, "disable-crl-check", 0);
+    NETLOG("%s: SSL CRL check %s", __FUNCTION__, disable_crl_check ?
+           "DISABLED" : "ENABLED");
 
     custom_ntlm_creds_ = yajl_object_get_string(config, "custom-ntlm-creds");
     if (custom_ntlm_creds_) {
