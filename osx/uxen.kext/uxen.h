@@ -110,7 +110,6 @@ struct vm_vcpu_info {
     struct event_object vci_runnable;
     struct timer_call vci_timer;
     unsigned long vci_host_cpu;
-    unsigned long vci_ipi_queued;
     struct user_notification_event *vci_ioreq_wait_event;
 };
 

@@ -155,8 +155,6 @@ uxen_vcpu_ipi_cb(void *arg)
 
     if (vci->vci_shared.vci_runnable == 0)
 	return;
-
-    vci->vci_ipi_queued = 0;
 }
 
 static void __cdecl
@@ -170,8 +168,6 @@ vcpu_ipi(struct vm_vcpu_info_shared *vcis)
     if (cpu_number() == vci->vci_host_cpu)
         return;
 
-    vci->vci_ipi_queued = 1;
-
     uxen_cpu_call(vci->vci_host_cpu, uxen_vcpu_ipi_cb, vci);
 }
 
@@ -182,9 +178,6 @@ vcpu_ipi_cancel(struct vm_vcpu_info_shared *vcis)
 
     if (vci->vci_shared.vci_runnable == 0)
 	return;
-
-    /* KeRemoveQueueDpc(&vci->vci_ipi_dpc); */
-    vci->vci_ipi_queued = 0;
 }
 
 void
@@ -1057,7 +1050,6 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
     for (i = 0; i < vmi->vmi_shared.vmi_nrvcpus; i++) {
         vci = &vmi->vmi_vcpus[i];
         init_timer(&vci->vci_timer, uxen_vcpu_timer_cb, vci);
-        vci->vci_ipi_queued = 0;
 
         ret = event_init(&vci->vci_runnable, 0);
         if (ret) {
