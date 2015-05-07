@@ -80,8 +80,12 @@ typedef struct timer_call {
 typedef void *timer_call_param_t;
 typedef void (*timer_call_func_t)(timer_call_param_t param0,
                                   timer_call_param_t param1);
-#define TIMER_CALL_CRITICAL     0x01
-#define TIMER_CALL_LOCAL        0x02
+
+#define TIMER_CALL_SYS_CRITICAL  0x01
+#define TIMER_CALL_USER_CRITICAL 0x11
+#define TIMER_CALL_LOCAL         0x40
+
+#define TIMER_CALL_VCPU TIMER_CALL_LOCAL|TIMER_CALL_USER_CRITICAL
 
 /* From kern/ast.h */
 typedef uint32_t ast_t;
@@ -207,7 +211,7 @@ cpu_data_t **xnu_cpu_data_ptr(void);
 #define init_timer(timer, func, param0)         \
     xnu_timer_call_setup(timer, func, param0)
 #define set_timer(timer, expire)                \
-    xnu_timer_call_enter(timer, expire, TIMER_CALL_LOCAL|TIMER_CALL_CRITICAL)
+    xnu_timer_call_enter(timer, expire, TIMER_CALL_VCPU)
 #define cancel_timer(timer) do {                                \
         set_timer(timer, mach_absolute_time() + NSEC_PER_SEC);  \
         while (!xnu_timer_call_cancel(timer)) {                 \
