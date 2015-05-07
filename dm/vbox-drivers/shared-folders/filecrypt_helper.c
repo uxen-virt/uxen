@@ -485,7 +485,7 @@ fch_re_write_file(SHFLCLIENTDATA *client, SHFLROOT root, SHFLHANDLE src)
         struct replace_params rp;
         rp.from = dstname;
         rp.to = srcname;
-        rc = vbsfReopenPathHandles(client, srcname, &rp, replace_action);
+        rc = vbsfReopenPathHandles(client, srcname_, &rp, replace_action);
         if (rc)
             warnx("reopen handle failed %x\n", rc);
     }
@@ -495,7 +495,7 @@ fch_re_write_file(SHFLCLIENTDATA *client, SHFLROOT root, SHFLHANDLE src)
         warnx("copy failed %x\n", rc);
         goto out;
     }
-    rc = vbsfReopenPathHandles(client, srcname, NULL, NULL);
+    rc = vbsfReopenPathHandles(client, srcname_, NULL, NULL);
     if (rc)
         warnx("reopen handle failed %x\n", rc);
 #endif
