@@ -1,9 +1,10 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
 
+.globl __hypercall0
 .globl __hypercall1
 .globl __hypercall2
 .globl __hypercall3
@@ -34,17 +35,18 @@
  * touch the stack, hence we can simply jump on the hypercall table
  * and the ret instruction will just return to the calling function.
  */
-__hypercall1:
-__hypercall2:
-__hypercall3:
 __hypercall4:
 __hypercall5:
 __hypercall6:
+    movq    %r8,        %r10
+    movq    %r9,        %r8
+    movq    8(%rsp),    %r9
+__hypercall0:
+__hypercall1:
+__hypercall2:
+__hypercall3:
     movq    %rdi,       %rax
     movq    %rsi,       %rdi
     movq    %rdx,       %rsi
     movq    %rcx,       %rdx
-    movq    %r8,        %r10
-    movq    %r9,        %r8
-    movq    8(%rsp),    %r9
     jmp     *%rax

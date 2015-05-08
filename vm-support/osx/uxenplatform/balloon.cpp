@@ -1,13 +1,13 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
 
 #include "balloon.h"
-
 #include "uXenPlatform.h"
 
+#include <uxenvmlib/uxen_hypercall.h>
 #include <xen/xen.h>
 #include <xen/memory.h>
 
@@ -23,7 +23,8 @@ alloc_pages(mach_vm_size_t length)
     }
     pages->desc = IOBufferMemoryDescriptor::inTaskWithPhysicalMask(
                 kernel_task,
-                kIODirectionIn,
+                // kIOMemoryMapperNone bypasses IOMMU address translation:
+                kIODirectionIn | kIOMemoryMapperNone,
                 length,
                 0x00000FFFFFFFF000UL);
     if (!pages->desc) {
@@ -54,7 +55,7 @@ uXenBalloon::share_pages(struct balloon_pages *pages)
 
     pfn_list_desc = IOBufferMemoryDescriptor::inTaskWithPhysicalMask(
             kernel_task,
-            kIODirectionIn | kIODirectionOut,
+            kIODirectionIn | kIODirectionOut | kIOMemoryMapperNone,
             PAGE_SIZE,
             0x00000FFFFFFFF000UL);
     if (!pfn_list_desc) {
@@ -79,7 +80,7 @@ uXenBalloon::share_pages(struct balloon_pages *pages)
         pfn_list[xmszp.nr_gpfns++] = (xen_pfn_t)(addr >> PAGE_SHIFT);
         if (xmszp.nr_gpfns == (PAGE_SIZE / sizeof (xen_pfn_t))) {
             pfn_list_desc->prepare();
-            rc = platform->hypercall_memory_op(XENMEM_share_zero_pages,
+            rc = uxen_hypercall_memory_op(XENMEM_share_zero_pages,
                                                &xmszp);
             pfn_list_desc->complete();
             if (rc) {
@@ -93,7 +94,7 @@ uXenBalloon::share_pages(struct balloon_pages *pages)
 
     if (xmszp.nr_gpfns) {
         pfn_list_desc->prepare();
-        rc = platform->hypercall_memory_op(XENMEM_share_zero_pages, &xmszp);
+        rc = uxen_hypercall_memory_op(XENMEM_share_zero_pages, &xmszp);
         pfn_list_desc->complete();
         if (rc) {
             dprintk("%s: hypercall_memory_op failed rc=%d\n", __func__, rc);

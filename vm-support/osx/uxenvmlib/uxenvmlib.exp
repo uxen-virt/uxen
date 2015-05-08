@@ -1,0 +1,27 @@
+#
+# Copyright 2015-2016, Bromium, Inc.
+# Author: Phil Dennis-Jordan <phil@philjordan.eu>
+# SPDX-License-Identifier: ISC
+#
+
+# Whitelist for symbols to export. As this kext is a dependency for lots of
+# others, only export symbols that we expect those other kexts to use.
+
+# global variables
+_kmod_info
+_uxen_extraversion
+_uxen_version_major
+_uxen_version_minor
+
+
+# functions
+_uxen_hypercall_hvm_op
+_uxen_hypercall_memory_op
+_uxen_hypercall_version
+_uxen_hypercall0
+_uxen_hypercall1
+_uxen_hypercall2
+_uxen_hypercall3
+_uxen_hypercall4
+_uxen_hypercall5
+_uxen_hypercall6

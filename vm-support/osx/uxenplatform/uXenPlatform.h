@@ -23,7 +23,7 @@
 #if DEBUG
 #define dprintk(fmt, ...) IOLog("uxenplatform: " fmt, ## __VA_ARGS__)
 #else
-#define dprintk(fmt, ...) do {} while (0);
+#define dprintk(fmt, ...) do {} while (0)
 #endif
 
 class uXenPlatform : public IOService
@@ -38,11 +38,6 @@ public:
 
     virtual bool start(IOService *provider);
     virtual void stop(IOService *provider);
-
-    /* hypercall */
-    int hypercall_version(int cmd, void *arg);
-    int hypercall_memory_op(int cmd, void *arg);
-    int hypercall_hvm_op(int cmd, void *arg);
 
     /* client methods */
     IOReturn get_info(struct uXenPlatformInfo *arg);
@@ -67,17 +62,10 @@ private:
         platform->handleInterrupt(src, count);
     }
 
-    bool hypercall_init(void);
-    void hypercall_cleanup(void);
-
     IOPCIDevice *pcidev;
     IODeviceMemory *bar0;
     IODeviceMemory *bar2;
-    IOBufferMemoryDescriptor *hypercall_desc;
     IOFilterInterruptEventSource *evtsrc;
-
-    xen_extraversion_t extraversion;
-    uint16_t uxen_version_major, uxen_version_minor;
 
     uXenBalloon balloon;
     OSArray *nubs;

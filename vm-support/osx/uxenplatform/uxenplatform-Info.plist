@@ -30,10 +30,10 @@
 			<string>org.uxen.${PRODUCT_NAME:rfc1034identifier}</string>
 			<key>IOClass</key>
 			<string>uXenPlatform</string>
-                        <key>IOMatchCategory</key>
-                        <string>uXenPlatorm</string>
-                        <key>IOProbeScore</key>
-                        <integer>60000</integer>
+			<key>IOMatchCategory</key>
+			<string>uXenPlatorm</string>
+			<key>IOProbeScore</key>
+			<integer>60000</integer>
 			<key>IOPCIMatch</key>
 			<string>0x51735853</string>
 			<key>IOProviderClass</key>
@@ -56,6 +56,8 @@
 		<string>9.0</string>
 		<key>com.apple.kpi.unsupported</key>
 		<string>9.0.0</string>
+		<key>org.uxen.driver.uxenvmlib</key>
+		<string>1.0</string>
 	</dict>
 </dict>
 </plist>

@@ -10,13 +10,11 @@
 		B90DC6C81BF9F23D00C1A5B2 /* uXenPlatformDevice.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B90DC6C61BF9F23D00C1A5B2 /* uXenPlatformDevice.cpp */; };
 		B90DC6C91BF9F23D00C1A5B2 /* uXenPlatformDevice.h in Headers */ = {isa = PBXBuildFile; fileRef = B90DC6C71BF9F23D00C1A5B2 /* uXenPlatformDevice.h */; };
 		B91712A91A261E130089C954 /* uxenplatform_public.h in Headers */ = {isa = PBXBuildFile; fileRef = B91712A81A261E130089C954 /* uxenplatform_public.h */; };
-		B91712AB1A261E1B0089C954 /* hypercall.h in Headers */ = {isa = PBXBuildFile; fileRef = B91712AA1A261E1B0089C954 /* hypercall.h */; };
 		B939D9FD16E604F90017E868 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = B939D9FB16E604F90017E868 /* InfoPlist.strings */; };
 		B962869F1A26314D00FE8457 /* balloon.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B962869E1A26314D00FE8457 /* balloon.cpp */; };
 		B96286A11A26315C00FE8457 /* balloon.h in Headers */ = {isa = PBXBuildFile; fileRef = B96286A01A26315C00FE8457 /* balloon.h */; };
 		B98877461A1E626E002933FE /* uXenPlatformClient.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B98877451A1E626E002933FE /* uXenPlatformClient.cpp */; };
 		B98877481A1E6287002933FE /* uXenPlatformClient.h in Headers */ = {isa = PBXBuildFile; fileRef = B98877471A1E6287002933FE /* uXenPlatformClient.h */; };
-		B9AEDF1C1A23B95A00DF0BA8 /* hypercall.S in Sources */ = {isa = PBXBuildFile; fileRef = B9AEDF1B1A23B95A00DF0BA8 /* hypercall.S */; };
 		B9B9BEBB1A1E4B24005CF73D /* uXenPlatform.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B9B9BEBA1A1E4B24005CF73D /* uXenPlatform.cpp */; };
 		B9B9BEBD1A1E4B2E005CF73D /* uXenPlatform.h in Headers */ = {isa = PBXBuildFile; fileRef = B9B9BEBC1A1E4B2E005CF73D /* uXenPlatform.h */; };
 /* End PBXBuildFile section */
@@ -25,7 +23,6 @@
 		B90DC6C61BF9F23D00C1A5B2 /* uXenPlatformDevice.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = uXenPlatformDevice.cpp; sourceTree = "<group>"; };
 		B90DC6C71BF9F23D00C1A5B2 /* uXenPlatformDevice.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = uXenPlatformDevice.h; sourceTree = "<group>"; };
 		B91712A81A261E130089C954 /* uxenplatform_public.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = uxenplatform_public.h; sourceTree = "<group>"; };
-		B91712AA1A261E1B0089C954 /* hypercall.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hypercall.h; sourceTree = "<group>"; };
 		B939D9F316E604F90017E868 /* uxenplatform.kext */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = uxenplatform.kext; sourceTree = BUILT_PRODUCTS_DIR; };
 		B939D9F716E604F90017E868 /* Kernel.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Kernel.framework; path = System/Library/Frameworks/Kernel.framework; sourceTree = SDKROOT; };
 		B939D9FA16E604F90017E868 /* uxenplatform-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "uxenplatform-Info.plist"; sourceTree = "<group>"; };
@@ -35,7 +32,6 @@
 		B96286A01A26315C00FE8457 /* balloon.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = balloon.h; sourceTree = "<group>"; };
 		B98877451A1E626E002933FE /* uXenPlatformClient.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = uXenPlatformClient.cpp; sourceTree = "<group>"; };
 		B98877471A1E6287002933FE /* uXenPlatformClient.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = uXenPlatformClient.h; sourceTree = "<group>"; };
-		B9AEDF1B1A23B95A00DF0BA8 /* hypercall.S */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.asm; path = hypercall.S; sourceTree = "<group>"; };
 		B9B9BEBA1A1E4B24005CF73D /* uXenPlatform.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = uXenPlatform.cpp; sourceTree = "<group>"; };
 		B9B9BEBC1A1E4B2E005CF73D /* uXenPlatform.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = uXenPlatform.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -89,9 +85,7 @@
 			children = (
 				B96286A01A26315C00FE8457 /* balloon.h */,
 				B962869E1A26314D00FE8457 /* balloon.cpp */,
-				B91712AA1A261E1B0089C954 /* hypercall.h */,
 				B91712A81A261E130089C954 /* uxenplatform_public.h */,
-				B9AEDF1B1A23B95A00DF0BA8 /* hypercall.S */,
 				B98877471A1E6287002933FE /* uXenPlatformClient.h */,
 				B98877451A1E626E002933FE /* uXenPlatformClient.cpp */,
 				B9B9BEBC1A1E4B2E005CF73D /* uXenPlatform.h */,
@@ -114,7 +108,6 @@
 			files = (
 				B98877481A1E6287002933FE /* uXenPlatformClient.h in Headers */,
 				B90DC6C91BF9F23D00C1A5B2 /* uXenPlatformDevice.h in Headers */,
-				B91712AB1A261E1B0089C954 /* hypercall.h in Headers */,
 				B96286A11A26315C00FE8457 /* balloon.h in Headers */,
 				B9B9BEBD1A1E4B2E005CF73D /* uXenPlatform.h in Headers */,
 				B91712A91A261E130089C954 /* uxenplatform_public.h in Headers */,
@@ -195,7 +188,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B9AEDF1C1A23B95A00DF0BA8 /* hypercall.S in Sources */,
 				B962869F1A26314D00FE8457 /* balloon.cpp in Sources */,
 				B9B9BEBB1A1E4B24005CF73D /* uXenPlatform.cpp in Sources */,
 				B90DC6C81BF9F23D00C1A5B2 /* uXenPlatformDevice.cpp in Sources */,
@@ -241,7 +233,6 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					"../../../common/include/xen-public",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.8;
@@ -268,7 +259,6 @@
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
-					/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include,
 					"../../../common/include/xen-public",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.8;
@@ -284,6 +274,11 @@
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "uxenplatform-Prefix.pch";
 				GCC_VERSION = "";
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"../../../common/include/xen-public",
+					../,
+				);
 				INFOPLIST_FILE = "uxenplatform-Info.plist";
 				MODULE_NAME = org.uxen.uxenplatform;
 				MODULE_VERSION = 1.0.0d1;
@@ -301,6 +296,11 @@
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "uxenplatform-Prefix.pch";
 				GCC_VERSION = "";
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"../../../common/include/xen-public",
+					../,
+				);
 				INFOPLIST_FILE = "uxenplatform-Info.plist";
 				MODULE_NAME = org.uxen.uxenplatform;
 				MODULE_VERSION = 1.0.0d1;

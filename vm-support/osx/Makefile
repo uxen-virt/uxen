@@ -1,5 +1,5 @@
 #
-# Copyright 2013-2015, Bromium, Inc.
+# Copyright 2013-2016, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -10,6 +10,7 @@ SUBDIRS  =
 SUBDIRS += uxendisp
 SUBDIRS += uxenps2
 SUBDIRS += uxenplatform
+SUBDIRS += uxenvmlib
 
 TARGETS = all dist
 

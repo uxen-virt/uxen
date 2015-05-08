@@ -1,0 +1,305 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		29FB4E501B0602A500EB64FC /* hypercall.h in Headers */ = {isa = PBXBuildFile; fileRef = 29FB4E4B1B0602A500EB64FC /* hypercall.h */; };
+		29FB4E511B0602A500EB64FC /* hypercall.S in Sources */ = {isa = PBXBuildFile; fileRef = 29FB4E4C1B0602A500EB64FC /* hypercall.S */; };
+		29FB4E531B0602A500EB64FC /* uxen_hypercall.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 29FB4E4E1B0602A500EB64FC /* uxen_hypercall.cpp */; };
+		29FB4E541B0602A500EB64FC /* uxen_hypercall.h in Headers */ = {isa = PBXBuildFile; fileRef = 29FB4E4F1B0602A500EB64FC /* uxen_hypercall.h */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		29431A0B1AFCE311009107A5 /* uxenvmlib.kext */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = uxenvmlib.kext; sourceTree = BUILT_PRODUCTS_DIR; };
+		29431A0F1AFCE311009107A5 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		29431A1C1AFD16D8009107A5 /* uxenvmlib.exp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.exports; path = uxenvmlib.exp; sourceTree = "<group>"; };
+		29FB4E4B1B0602A500EB64FC /* hypercall.h */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 4; lastKnownFileType = sourcecode.c.h; path = hypercall.h; sourceTree = SOURCE_ROOT; tabWidth = 8; usesTabs = 0; };
+		29FB4E4C1B0602A500EB64FC /* hypercall.S */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.asm; path = hypercall.S; sourceTree = SOURCE_ROOT; };
+		29FB4E4D1B0602A500EB64FC /* Makefile */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.make; path = Makefile; sourceTree = SOURCE_ROOT; };
+		29FB4E4E1B0602A500EB64FC /* uxen_hypercall.cpp */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 4; lastKnownFileType = sourcecode.cpp.cpp; path = uxen_hypercall.cpp; sourceTree = SOURCE_ROOT; tabWidth = 8; usesTabs = 0; };
+		29FB4E4F1B0602A500EB64FC /* uxen_hypercall.h */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 4; lastKnownFileType = sourcecode.c.h; path = uxen_hypercall.h; sourceTree = SOURCE_ROOT; tabWidth = 8; usesTabs = 0; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		29431A071AFCE311009107A5 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		29431A011AFCE311009107A5 = {
+			isa = PBXGroup;
+			children = (
+				29431A0D1AFCE311009107A5 /* uxenvmlib */,
+				29431A0C1AFCE311009107A5 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		29431A0C1AFCE311009107A5 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				29431A0B1AFCE311009107A5 /* uxenvmlib.kext */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		29431A0D1AFCE311009107A5 /* uxenvmlib */ = {
+			isa = PBXGroup;
+			children = (
+				29FB4E4D1B0602A500EB64FC /* Makefile */,
+				29FB4E4B1B0602A500EB64FC /* hypercall.h */,
+				29FB4E4C1B0602A500EB64FC /* hypercall.S */,
+				29FB4E4E1B0602A500EB64FC /* uxen_hypercall.cpp */,
+				29FB4E4F1B0602A500EB64FC /* uxen_hypercall.h */,
+				29431A0E1AFCE311009107A5 /* Supporting Files */,
+				29431A1C1AFD16D8009107A5 /* uxenvmlib.exp */,
+			);
+			name = uxenvmlib;
+			path = UxenHypercall;
+			sourceTree = "<group>";
+		};
+		29431A0E1AFCE311009107A5 /* Supporting Files */ = {
+			isa = PBXGroup;
+			children = (
+				29431A0F1AFCE311009107A5 /* Info.plist */,
+			);
+			name = "Supporting Files";
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		29431A081AFCE311009107A5 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				29FB4E501B0602A500EB64FC /* hypercall.h in Headers */,
+				29FB4E541B0602A500EB64FC /* uxen_hypercall.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		29431A0A1AFCE311009107A5 /* uxenvmlib */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 29431A141AFCE311009107A5 /* Build configuration list for PBXNativeTarget "uxenvmlib" */;
+			buildPhases = (
+				29431A061AFCE311009107A5 /* Sources */,
+				29431A071AFCE311009107A5 /* Frameworks */,
+				29431A081AFCE311009107A5 /* Headers */,
+				29431A091AFCE311009107A5 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = uxenvmlib;
+			productName = UxenHypercall;
+			productReference = 29431A0B1AFCE311009107A5 /* uxenvmlib.kext */;
+			productType = "com.apple.product-type.kernel-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		29431A021AFCE311009107A5 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 0630;
+				ORGANIZATIONNAME = "Bromium UK Ltd.";
+				TargetAttributes = {
+					29431A0A1AFCE311009107A5 = {
+						CreatedOnToolsVersion = 6.3.1;
+					};
+				};
+			};
+			buildConfigurationList = 29431A051AFCE311009107A5 /* Build configuration list for PBXProject "uxenvmlib" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = English;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = 29431A011AFCE311009107A5;
+			productRefGroup = 29431A0C1AFCE311009107A5 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				29431A0A1AFCE311009107A5 /* uxenvmlib */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		29431A091AFCE311009107A5 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		29431A061AFCE311009107A5 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				29FB4E531B0602A500EB64FC /* uxen_hypercall.cpp in Sources */,
+				29FB4E511B0602A500EB64FC /* hypercall.S in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		29431A121AFCE311009107A5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				MACOSX_DEPLOYMENT_TARGET = 10.9;
+				MTL_ENABLE_DEBUG_INFO = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		29431A131AFCE311009107A5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				MACOSX_DEPLOYMENT_TARGET = 10.9;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		29431A151AFCE311009107A5 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				EXPORTED_SYMBOLS_FILE = uxenvmlib.exp;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../../../common/include/xen-public/",
+				);
+				INFOPLIST_FILE = Info.plist;
+				MODULE_NAME = org.uxen.driver.uxenvmlib;
+				MODULE_START = uxenvmlib_start;
+				MODULE_STOP = uxenvmlib_stop;
+				MODULE_VERSION = 1.0.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				WRAPPER_EXTENSION = kext;
+			};
+			name = Debug;
+		};
+		29431A161AFCE311009107A5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_IDENTITY = "";
+				EXPORTED_SYMBOLS_FILE = uxenvmlib.exp;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../../../common/include/xen-public/",
+				);
+				INFOPLIST_FILE = Info.plist;
+				MODULE_NAME = org.uxen.driver.uxenvmlib;
+				MODULE_START = uxenvmlib_start;
+				MODULE_STOP = uxenvmlib_stop;
+				MODULE_VERSION = 1.0.0;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				WRAPPER_EXTENSION = kext;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		29431A051AFCE311009107A5 /* Build configuration list for PBXProject "uxenvmlib" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				29431A121AFCE311009107A5 /* Debug */,
+				29431A131AFCE311009107A5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		29431A141AFCE311009107A5 /* Build configuration list for PBXNativeTarget "uxenvmlib" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				29431A151AFCE311009107A5 /* Debug */,
+				29431A161AFCE311009107A5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 29431A021AFCE311009107A5 /* Project object */;
+}
