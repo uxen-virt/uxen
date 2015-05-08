@@ -11,6 +11,7 @@
 #include <dm/console.h>
 #include <dm/vmstate.h>
 #include <dm/vram.h>
+#include <dm/edid.h>
 #include <dm/hw/vga.h>
 #include "pci.h"
 #include "pci-ram.h"
@@ -31,6 +32,7 @@
 #define UXENDISP_STRIDE_MAX 92683
 
 struct crtc_state {
+    uint32_t status;
     uint32_t offset;
 
     /* Validated */
@@ -43,6 +45,7 @@ struct crtc_state {
     volatile struct crtc_regs *regs;
     struct display_state *ds;
     int flush_pending;
+    uint8_t edid[256];
 };
 
 struct bank_state {
@@ -65,9 +68,47 @@ struct uxendisp_state {
 
     uint32_t io_index;
     uint32_t isr;
+    uint32_t interrupt_en;
     uint32_t cursor_en;
     uint32_t mode;
 };
+
+/*
+ * Interrupts
+ */
+static void
+set_interrupt(struct uxendisp_state *s, int irq)
+{
+    int m = s->interrupt_en & irq;
+
+    if (m) {
+        s->isr |= m;
+        qemu_set_irq(s->dev.irq[0], 1);
+    }
+}
+
+/*
+ * EDID
+ */
+static void
+uxendisp_set_display_identification(struct uxendisp_state *s, int crtc_id,
+                                    uint8_t *edid, size_t len)
+{
+    struct crtc_state *crtc = &s->crtcs[crtc_id];
+
+    if (len > sizeof (crtc->edid))
+        len = sizeof (crtc->edid);
+
+    if (edid) {
+        memcpy(crtc->edid, edid, len);
+        if (crtc->regs->edid)
+            memcpy((void *)crtc->regs->edid, edid, len);
+        crtc->status = 1;
+    } else
+        crtc->status = 0;
+
+    set_interrupt(s, UXDISP_INTERRUPT_HOTPLUG);
+}
 
 /*
  * Drawing and pixel conversion
@@ -222,6 +263,8 @@ static void uxendisp_update(void *opaque)
 {
     struct uxendisp_state *s = opaque;
 
+    set_interrupt(s, UXDISP_INTERRUPT_VBLANK);
+
     if (!(s->mode & UXDISP_MODE_VGA_DISABLED)) {
         vga_update_display(&s->vga);
         return;
@@ -248,6 +291,22 @@ static void uxendisp_text_update(void *opaque, console_ch_t *chardata)
         vga_update_text(&s->vga, chardata);
         return;
     }
+}
+
+void uxendisp_monitor_change(void *opaque, int w, int h)
+{
+    struct uxendisp_state *s = opaque;
+    uint8_t edid[128];
+
+    DPRINTF("%s %dx%d\n", __FUNCTION__, w, h);
+
+    if (w == 0 || h == 0) {
+        uxendisp_set_display_identification(s, 0, NULL, 0);
+        return;
+    }
+
+    edid_init_common(edid, w, h);
+    uxendisp_set_display_identification(s, 0, edid, sizeof(edid));
 }
 
 /*
@@ -415,9 +474,13 @@ crtc_read(struct uxendisp_state *s, int crtc_id, target_phys_addr_t addr)
     struct crtc_state *crtc = &s->crtcs[crtc_id];
     uint32_t ret = ~0;
 
+    if (addr >= UXDISP_REG_CRTC_EDID_DATA &&
+        addr <= (UXDISP_REG_CRTC_EDID_DATA + sizeof(crtc->regs->edid) - 4))
+        return *(uint32_t *)(crtc->regs->edid + addr - UXDISP_REG_CRTC_EDID_DATA);
+
     switch (addr) {
     case UXDISP_REG_CRTC_STATUS:
-        ret = 0; /* XXX: No monitor connected */
+        ret = crtc->status;
         break;
     case UXDISP_REG_CRTC_OFFSET:
         ret = crtc->offset;
@@ -521,6 +584,9 @@ uxendisp_mmio_write(void *opaque, target_phys_addr_t addr, uint64_t val,
         crtc_flush(s, 0);
         uxendisp_invalidate(s);
         return;
+    case UXDISP_REG_INTERRUPT_ENABLE:
+        s->interrupt_en = val;
+        return;
     default:
         break;
     }
@@ -575,6 +641,8 @@ uxendisp_mmio_read(void *opaque, target_phys_addr_t addr, unsigned size)
         return s->cursor_en;
     case UXDISP_REG_MODE:
         return s->mode;
+    case UXDISP_REG_INTERRUPT_ENABLE:
+        return s->interrupt_en;
     default:
         break;
     }
@@ -655,9 +723,13 @@ cursor_data_ptr_update(void *ptr, void *opaque)
 static void
 crtc_data_ptr_update(void *ptr, void *opaque)
 {
-    struct crtc_state *c = opaque;
+    struct crtc_state *crtc = opaque;
+    struct crtc_regs *regs = ptr;
 
-    c->regs = ptr;
+    if (regs && !crtc->regs)
+        memcpy(regs->edid, crtc->edid, sizeof(regs->edid));
+
+    crtc->regs = regs;
 }
 
 /*
@@ -735,11 +807,13 @@ uxendisp_post_save(void *opaque)
 
 static const VMStateDescription vmstate_uxendisp_crtc = {
     .name = "uxendisp-crtc",
-    .version_id = 6,
-    .minimum_version_id = 6,
-    .minimum_version_id_old = 6,
+    .version_id = 7,
+    .minimum_version_id = 7,
+    .minimum_version_id_old = 7,
     .fields = (VMStateField[]) {
         VMSTATE_UINT32(offset, struct crtc_state),
+        VMSTATE_UINT32(status, struct crtc_state),
+        VMSTATE_BUFFER(edid, struct crtc_state),
         VMSTATE_END_OF_LIST(),
     }
 };
@@ -779,6 +853,7 @@ static const VMStateDescription vmstate_uxendisp = {
                              struct crtc_state),
         VMSTATE_UINT32(io_index, struct uxendisp_state),
         VMSTATE_UINT32(isr, struct uxendisp_state),
+        VMSTATE_UINT32(interrupt_en, struct uxendisp_state),
         VMSTATE_UINT32(cursor_en, struct uxendisp_state),
         VMSTATE_UINT32(mode, struct uxendisp_state),
         VMSTATE_END_OF_LIST()
@@ -811,11 +886,12 @@ static int uxendisp_initfn(PCIDevice *dev)
                                 cursor_regs_ptr_update, s);
     memory_region_add_ram_range(&s->mmio, 0x8000, 0x8000,
                                 cursor_data_ptr_update, s);
-    for (i = 0; i < UXENDISP_NB_CRTCS; i++)
+    for (i = 0; i < UXENDISP_NB_CRTCS; i++) {
         memory_region_add_ram_range(&s->mmio,
                                     UXDISP_REG_CRTC(i) + 0x1000,
                                     0x1000,
                                     crtc_data_ptr_update, &s->crtcs[i]);
+    }
     memory_region_init(&s->vram, "uxendisp.vram", UXENDISP_VRAM_SIZE);
     s->vram.map_cb = bank_mapping_update;
     s->vram.map_opaque = s;
@@ -838,7 +914,9 @@ static int uxendisp_initfn(PCIDevice *dev)
 
     /* XXX: One per CRTC */
     s->crtcs[0].ds = display_create(&uxendisp_hw_ops, s);
+    s->crtcs[0].status = 0x1;
     s->crtcs[0].flush_pending = 0;
+    edid_init_common(s->crtcs[0].edid, 1024, 768);
 
     vga_init(v, pci_address_space(dev), pci_address_space_io(dev), s->crtcs[0].ds);
 
