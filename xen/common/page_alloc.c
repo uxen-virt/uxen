@@ -1629,7 +1629,7 @@ struct page_info *alloc_domheap_pages(
         memflags |= MEMF_host_page;
     if (!(memflags & MEMF_host_page)) {
         pg = alloc_heap_pages(0, NR_ZONES - 1, order, memflags, d);
-        if (pg)
+        if (d && pg)
             atomic_inc(&d->hidden_pages);
     }
     if (!pg)

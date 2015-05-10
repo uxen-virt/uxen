@@ -1339,7 +1339,7 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
     }
     p2m_unlock(p2m);
 
-    p = alloc_domheap_page(NULL, 0);
+    p = alloc_domheap_page(page_owner, 0);
     if (!p) {
         ret = 0;
         goto out;
@@ -1379,11 +1379,6 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
 
     uc_size = LZ4_uncompress((const char *)source, target, PAGE_SIZE);
     if (uc_size != size) {
-        ret = 0;
-        goto out;
-    }
-
-    if (assign_pages(page_owner, p, 0, 0)) {
         ret = 0;
         goto out;
     }
