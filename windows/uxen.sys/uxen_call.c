@@ -53,6 +53,9 @@ uxen_dom0_hypercall(struct vm_info_shared *vmis, void *user_access_opaque,
     case __HYPERVISOR_memory_op:
         n_arg = 2;
         break;
+    case __HYPERVISOR_sysctl:
+        n_arg = 1;
+        break;
     case __HYPERVISOR_v4v_op:
         n_arg = 6;
         break;

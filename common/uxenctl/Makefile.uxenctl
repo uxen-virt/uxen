@@ -5,6 +5,7 @@
 
 CPPFLAGS += -I$(TOPDIR)/common/include
 CPPFLAGS += -I$(TOPDIR)/common/include/xen-public
+CPPFLAGS += $(LIBXC_CPPFLAGS)
 
 CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
 
@@ -13,7 +14,9 @@ $(OSX)LDLIBS += -framework IOKit -framework CoreFoundation
 
 all: uxenctl$(EXE_SUFFIX) libuxenctl.a
 
-libuxenctl_OBJS = uxenctllib.o uxenctllib-args.o uxenctllib-$(TARGET_HOST).o
+libuxenctl_OBJS = uxenctllib.o uxenctllib-args.o uxenctllib-libxc.o
+libuxenctl_OBJS += uxenctllib-$(TARGET_HOST).o
+libuxenctl_OBJS += $(LIBXC_OBJS)
 UXENCTL_OBJS = uxenctl.o libuxenctl.a
 $(WINDOWS)UXENCTL_OBJS += uxenctl-res.o
 

@@ -370,6 +370,8 @@ static mon_cmd_t info_cmds[] = {
 #endif
     { .name = "memcache", .mhandler.info = ic_memcache,
       .help = "show memcache statistics" },
+    { .name = "physinfo", .mhandler.info = ic_physinfo,
+      .help = "show system physinfo" },
 };
 
 static int

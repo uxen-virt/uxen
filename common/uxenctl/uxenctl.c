@@ -30,6 +30,7 @@
 #include <uuid/uuid.h>
 
 #include "uxenctllib.h"
+#include "uxenctllib-libxc.h"
 
 #ifdef _WIN32
 DECLARE_PROGNAME;
@@ -125,6 +126,8 @@ main(int argc, char **argv, char **envp)
     char *logfile = NULL;
     char *path = NULL;
     struct uxen_init_desc init_args;
+    int show_physinfo = 0;
+    uxen_physinfo_t physinfo = { };
 
 #ifdef _WIN32
     setprogname(argv[0]);
@@ -150,7 +153,7 @@ main(int argc, char **argv, char **envp)
     while (1) {
         int c, index = 0;
 
-        enum { LI_LOAD, LI_UNLOAD, LI_LOGFILE, LI_LOGDAEMON };
+        enum { LI_LOAD, LI_UNLOAD, LI_LOGFILE, LI_LOGDAEMON, LI_PHYSINFO };
 
         static int long_index;
         static struct option long_options[] = {
@@ -174,6 +177,7 @@ main(int argc, char **argv, char **envp)
             {"log-daemon",    no_argument,       &long_index, LI_LOGDAEMON},
             {"log-dump",      no_argument,       NULL,       'X'},
             {"path",          required_argument, NULL,       'P'},
+            {"physinfo",      no_argument,       &long_index, LI_PHYSINFO},
             {NULL,   0,                 NULL, 0}
         };
 
@@ -197,6 +201,9 @@ main(int argc, char **argv, char **envp)
                 break;
             case LI_LOGDAEMON:
                 log_daemon = 1;
+                break;
+            case LI_PHYSINFO:
+                show_physinfo = 1;
                 break;
             }
             break;
@@ -275,7 +282,8 @@ main(int argc, char **argv, char **envp)
 
     if (init == 0 && shutdown == 0 && load == NULL && unload == 0 &&
         version == 0 && keys == NULL && destroy_vm == NULL && list_vms == 0 &&
-        log == 0 && log_dump == 0 && power == -1 && wait_vm_exit == 0) {
+        log == 0 && log_dump == 0 && show_physinfo == 0 && power == -1 &&
+        wait_vm_exit == 0) {
         if (load_driver)
             exit(0);
         if (unload_driver) {
@@ -343,6 +351,26 @@ main(int argc, char **argv, char **envp)
         ret = uxen_power(handle, power);
         if (ret)
             errx(1, "power failed");
+    }
+
+    if (show_physinfo) {
+        ret = uxen_physinfo(handle, &physinfo);
+        if (ret)
+            errx(1, "physinfo failed");
+        fprintf(stdout, "nr_cpus: %u\n", physinfo.nr_cpus);
+        fprintf(stdout, "cpu_khz: %u\n", physinfo.cpu_khz);
+        fprintf(stdout, "total_pages: %lu\n",
+                (unsigned long)physinfo.total_pages);
+        fprintf(stdout, "used_pages: %lu\n",
+                (unsigned long)physinfo.used_pages);
+        fprintf(stdout, "free_pages: %lu\n",
+                (unsigned long)physinfo.free_pages);
+        fprintf(stdout, "total_hidden_pages: %lu\n",
+                (unsigned long)physinfo.total_hidden_pages);
+        fprintf(stdout, "used_hidden_pages: %lu\n",
+                (unsigned long)physinfo.used_hidden_pages);
+        fprintf(stdout, "free_hidden_pages: %lu\n",
+                (unsigned long)physinfo.free_hidden_pages);
     }
 
     if (shutdown) {

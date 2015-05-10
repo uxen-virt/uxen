@@ -125,6 +125,7 @@ int xc_send_debug_keys(xc_interface *xch, char *keys)
 
     return ret;
 }
+#endif  /* QEMU_UXEN */
 
 int xc_physinfo(xc_interface *xch,
                 xc_physinfo_t *put_info)
@@ -144,6 +145,7 @@ int xc_physinfo(xc_interface *xch,
     return 0;
 }
 
+#if !defined(QEMU_UXEN)
 int xc_topologyinfo(xc_interface *xch,
                 xc_topologyinfo_t *put_info)
 {

@@ -24,7 +24,10 @@
 #include <xenctrl.h>
 
 #include "dm.h"
+#include "monitor.h"
 #include "uxen.h"
+
+#include <xen/sysctl.h>
 
 UXEN_HANDLE_T uxen_handle = INVALID_HANDLE_VALUE;
 
@@ -185,3 +188,33 @@ uxen_log_version(void)
                  (int)sizeof(compile_info.compile_date),
                  compile_info.compile_date);
 }
+
+#ifdef MONITOR
+void
+ic_physinfo(Monitor *mon)
+{
+    xc_physinfo_t physinfo = { };
+    int ret;
+
+    ret = xc_physinfo(xc_handle, &physinfo);
+    if (ret) {
+        warn("info physinfo failed");
+        return;
+    }
+
+    monitor_printf(mon, "physinfo nr_cpus: %u\n", physinfo.nr_cpus);
+    monitor_printf(mon, "physinfo cpu_khz: %u\n", physinfo.cpu_khz);
+    monitor_printf(mon, "physinfo total_pages: %"PRIu64"\n",
+                   physinfo.total_pages);
+    monitor_printf(mon, "physinfo used_pages: %"PRIu64"\n",
+                   physinfo.used_pages);
+    monitor_printf(mon, "physinfo free_pages: %"PRIu64"\n",
+                   physinfo.free_pages);
+    monitor_printf(mon, "physinfo total_hidden_pages: %"PRIu64"\n",
+                   physinfo.total_hidden_pages);
+    monitor_printf(mon, "physinfo used_hidden_pages: %"PRIu64"\n",
+                   physinfo.used_hidden_pages);
+    monitor_printf(mon, "physinfo free_hidden_pages: %"PRIu64"\n",
+                   physinfo.free_hidden_pages);
+}
+#endif  /* MONITOR */

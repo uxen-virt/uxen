@@ -8,6 +8,8 @@ SRCDIR ?= .
 TOPDIR = $(abspath $(SRCDIR)/../..)
 include $(TOPDIR)/Config.mk
 
+$(call include_lib,LIBXC,../libxc)
+
 ifeq (,$(MAKENOW))
 
 SRCROOT = $(abspath $(TOPDIR)/common/uxenctl)

@@ -192,6 +192,8 @@ enum xc_open_flags {
  */
 int xc_interface_close(xc_interface *xch);
 
+int xc_interface_set_handle(xc_interface *xch, uintptr_t h);
+
 uintptr_t xc_interface_handle(xc_interface *xch);
 
 #ifndef __UXEN_TOOLS__
@@ -980,8 +982,10 @@ int xc_readconsolering(xc_interface *xch,
                        int clear, int incremental, uint32_t *pindex);
 
 int xc_send_debug_keys(xc_interface *xch, char *keys);
+#endif  /* __UXEN_TOOLS__ */
 
 typedef xen_sysctl_physinfo_t xc_physinfo_t;
+#ifndef __UXEN_TOOLS__
 typedef xen_sysctl_topologyinfo_t xc_topologyinfo_t;
 typedef xen_sysctl_numainfo_t xc_numainfo_t;
 
@@ -991,8 +995,10 @@ typedef uint32_t xc_cpu_to_core_t;
 typedef uint64_t xc_node_to_memsize_t;
 typedef uint64_t xc_node_to_memfree_t;
 typedef uint32_t xc_node_to_node_dist_t;
+#endif  /* __UXEN_TOOLS__ */
 
 int xc_physinfo(xc_interface *xch, xc_physinfo_t *info);
+#ifndef __UXEN_TOOLS__
 int xc_topologyinfo(xc_interface *xch, xc_topologyinfo_t *info);
 int xc_numainfo(xc_interface *xch, xc_numainfo_t *info);
 

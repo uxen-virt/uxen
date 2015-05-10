@@ -33,5 +33,6 @@ void ic_slirp(Monitor *mon);
 void ic_ioreq(Monitor *mon);
 void ic_wo(Monitor *mon);
 void ic_memcache(Monitor *mon);
+void ic_physinfo(Monitor *mon);
 
 #endif  /* _MONITOR_CMDS_H_ */

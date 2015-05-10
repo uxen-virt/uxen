@@ -275,6 +275,21 @@ int xc_interface_close(xc_interface *xch)
     return xc_interface_close_common(xch);
 }
 
+int
+xc_interface_set_handle(xc_interface *xch, uintptr_t h)
+{
+
+    if (xc_osdep_get_info(xch, &xch->osdep) < 0)
+        return -1;
+
+    xch->ops = xch->osdep.init(xch, XC_OSDEP_PRIVCMD);
+    if (xch->ops == NULL)
+        return -1;
+
+    xch->ops_handle = h;
+    return 0;
+}
+
 uintptr_t xc_interface_handle(xc_interface *xch)
 {
     return xch->ops_handle;

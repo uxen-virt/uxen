@@ -32,9 +32,11 @@
 #endif
 
 #include "xen.h"
+#ifndef __UXEN__
 #include "domctl.h"
+#endif  /* __UXEN__ */
 
-#define XEN_SYSCTL_INTERFACE_VERSION 0x00000009
+#define XEN_SYSCTL_INTERFACE_VERSION 0x10000009
 
 /*
  * Read console content from Xen buffer ring.
@@ -100,7 +102,11 @@ struct xen_sysctl_physinfo {
     uint32_t cpu_khz;
     uint64_aligned_t total_pages;
     uint64_aligned_t free_pages;
+    uint64_aligned_t used_pages;
     uint64_aligned_t scrub_pages;
+    uint64_aligned_t total_hidden_pages;
+    uint64_aligned_t free_hidden_pages;
+    uint64_aligned_t used_hidden_pages;
     uint32_t hw_cap[8];
 
     /* XEN_SYSCTL_PHYSCAP_??? */
@@ -153,7 +159,9 @@ struct xen_sysctl_getdomaininfolist {
     /* IN variables. */
     domid_t               first_domain;
     uint32_t              max_domains;
+#ifndef __UXEN__
     XEN_GUEST_HANDLE_64(xen_domctl_getdomaininfo_t) buffer;
+#endif  /* __UXEN__ */
     /* OUT variables. */
     uint32_t              num_domains;
 };
@@ -583,9 +591,12 @@ DEFINE_XEN_GUEST_HANDLE(xen_sysctl_scheduler_op_t);
 
 struct xen_sysctl {
     uint32_t cmd;
+#ifndef __UXEN__
 #define XEN_SYSCTL_readconsole                    1
 #define XEN_SYSCTL_tbuf_op                        2
+#endif  /* __UXEN__ */
 #define XEN_SYSCTL_physinfo                       3
+#ifndef __UXEN__
 #define XEN_SYSCTL_sched_id                       4
 #define XEN_SYSCTL_perfc_op                       5
 #define XEN_SYSCTL_getdomaininfolist              6
@@ -601,11 +612,15 @@ struct xen_sysctl {
 #define XEN_SYSCTL_numainfo                      17
 #define XEN_SYSCTL_cpupool_op                    18
 #define XEN_SYSCTL_scheduler_op                  19
+#endif  /* __UXEN__ */
     uint32_t interface_version; /* XEN_SYSCTL_INTERFACE_VERSION */
     union {
+#ifndef __UXEN__
         struct xen_sysctl_readconsole       readconsole;
         struct xen_sysctl_tbuf_op           tbuf_op;
+#endif  /* __UXEN__ */
         struct xen_sysctl_physinfo          physinfo;
+#ifndef __UXEN__
         struct xen_sysctl_topologyinfo      topologyinfo;
         struct xen_sysctl_numainfo          numainfo;
         struct xen_sysctl_sched_id          sched_id;
@@ -621,6 +636,7 @@ struct xen_sysctl {
         struct xen_sysctl_lockprof_op       lockprof_op;
         struct xen_sysctl_cpupool_op        cpupool_op;
         struct xen_sysctl_scheduler_op      scheduler_op;
+#endif  /* __UXEN__ */
         uint8_t                             pad[128];
     } u;
 };

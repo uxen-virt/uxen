@@ -627,6 +627,7 @@ static uxen_hypercall_t *uxen_hypercall_table[NR_hypercalls] = {
     HYPERCALL(sched_op),
     HYPERCALL(event_channel_op),
     HYPERCALL(v4v_op),
+    HYPERCALL(sysctl),
 };
 
 intptr_t

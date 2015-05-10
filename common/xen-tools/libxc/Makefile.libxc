@@ -56,6 +56,7 @@ Makefile.lib-LIBXC:
 	@(echo "LIBXC_CPPFLAGS = -I$(SRCROOT) -I$(XENPUBLICDIR)" ;\
 	  echo "LIBXC_CPPFLAGS += $(libxc_CPPFLAGS)" ;\
 	  echo "LIBXC_LIBS = -L$(abspath .) -lxc" ;\
+	  echo "LIBXC_OBJS = $(patsubst %,$(abspath .)/%,$(libxc_OBJS))" ;\
 	  echo "LIBXC_DEPS = $(abspath .)/libxc.a" ;\
 	  echo "LIBXC_SRCDIR = $(SRCROOT)" ;\
 	  echo "$(abspath .)/libxc.a: $(patsubst %,$(SRCROOT)/%,$(libxc_SRCS))" ) >$@
