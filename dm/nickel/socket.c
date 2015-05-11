@@ -332,6 +332,12 @@ static void list_connect_free(struct socket *so)
         so_close(cso);
     }
 
+    LIST_FOREACH_SAFE(cso, &so->ni->defered_list, entry, ns_next) {
+        if (cso->parent != so && !cso->del)
+            continue;
+        so_close(cso);
+    }
+
     free(so->a_list);
     so->a_list = NULL;
     so->a_idx = 0;
