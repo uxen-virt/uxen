@@ -29,6 +29,8 @@ PERFCNT(stor_v4v_resend_resume)
 PERFCNT(zombie_requests)
 PERFCNT(recv_v4v_msgs)
 
+PERFCNT(dropped_ahci_requests)
+
 PERFCNT_ARR(in_bytes, 2)
 PERFCNT_ARR_ITEM_NAME(in_bytes, 0, "non_paging_io")
 PERFCNT_ARR_ITEM_NAME(in_bytes, 1, "paging_io")

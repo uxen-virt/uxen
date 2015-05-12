@@ -63,6 +63,7 @@ __forceinline ULONG CPUID(int id, int reg)
 #define LOG_SRB_UNHANDLED                     1
 #define LOG_IOCTL_UNHANDLED                   1
 #define LOG_HIGH_QUEUED_DELTA                 0
+#define LOG_DROPPED_AHCI_REQUESTS             1
 
 #pragma warning(disable: 4200)
 
@@ -180,6 +181,7 @@ void buffer_dump_ex(ULONG log_lvl,
 }
 
 /* readwrite.c */
+extern ULONG ahci_state;
 NTSTATUS stor_dispatch_scsi(__in PDEVICE_OBJECT dev_obj, __inout PIRP irp);
 void csq_acquire_lock(__in PIO_CSQ csq, __out __drv_out_deref(__drv_savesIRQL) PKIRQL irql);
 void csq_release_lock(__in PIO_CSQ csq, __in __drv_in(__drv_restoresIRQL) KIRQL irql);

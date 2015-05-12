@@ -13,6 +13,8 @@
 static 
 LONG_PTR req_id = 0;
 
+ULONG ahci_state = 1;
+
 static
 void stor_v4v_e_again_callback(uxen_v4v_ring_handle_t *ring, void *ctx, void *ctx2);
 
@@ -417,6 +419,11 @@ void stor_v4v_resume_callback(PKDPC dpc,
     uxen_msg("out-paging_io: %I64d; in-paging_io: %I64d", 
              perfcnt_arr_get(out_bytes, 1), perfcnt_arr_get(in_bytes, 1));
 
+    if (ahci_state) {
+        uxen_msg("disabling AHCI");
+        ahci_state = 0;
+    }
+
     req_to_be_resent = 0;
     ExAcquireSpinLockExclusiveAtDpcLevel(&dev_ext->v4v_resume_lock);
     irp = IoCsqRemoveNextIrp(&dev_ext->io_queue, NULL);
@@ -452,8 +459,7 @@ void stor_v4v_resume_callback(PKDPC dpc,
 
 #if MONITOR_SCSI_RESULTS
 static
-NTSTATUS stor_scsi_completion_routine(PDEVICE_OBJECT dev_obj, PIRP irp,
-                                      PVOID ctx)
+NTSTATUS stor_scsi_compl(PDEVICE_OBJECT dev_obj, PIRP irp, PVOID ctx)
 {
     PUXENSTOR_DEV_EXT dev_ext;
     PSCSI_REQUEST_BLOCK srb;
@@ -496,10 +502,11 @@ NTSTATUS stor_dispatch_scsi(PDEVICE_OBJECT dev_obj, PIRP irp)
         goto out_keep_rlock;
     }
 
+    srb = io_stack->Parameters.Scsi.Srb;
+
     if (!dev_ext->v4v_ring)
         goto pass_thru;
 
-    srb = io_stack->Parameters.Scsi.Srb;
     perfcnt_arr_inc(stor_dispatch_scsi, srb->Function);
 
     switch (srb->Function) {
@@ -576,16 +583,29 @@ NTSTATUS stor_dispatch_scsi(PDEVICE_OBJECT dev_obj, PIRP irp)
     }
 
   pass_thru:
+    if (ahci_state) {
 #if MONITOR_SCSI_RESULTS
-    IoCopyCurrentIrpStackLocationToNext(irp);
-    IoSetCompletionRoutine(irp, stor_scsi_completion_routine, (PVOID)srb,
-                           TRUE, TRUE, TRUE);
-    status = IoCallDriver(dev_ext->lower_dev_obj, irp);
-    goto out_keep_rlock;
+        IoCopyCurrentIrpStackLocationToNext(irp);
+        IoSetCompletionRoutine(irp, stor_scsi_compl, (PVOID)srb,
+                               TRUE, TRUE, TRUE);
+        status = IoCallDriver(dev_ext->lower_dev_obj, irp);
+        goto out_keep_rlock;
 #else /* MONITOR_SCSI_RESULTS */
-    IoSkipCurrentIrpStackLocation(irp);
-    status = IoCallDriver(dev_ext->lower_dev_obj, irp);
+        IoSkipCurrentIrpStackLocation(irp);
+        status = IoCallDriver(dev_ext->lower_dev_obj, irp);
 #endif /* MONITOR_SCSI_RESULTS */
+    } else {
+        perfcnt_inc(dropped_ahci_requests);
+#if LOG_DROPPED_AHCI_REQUESTS
+        uxen_msg("[0x%p:0x%p] dropping %sSRB_func: 0x%x (%s)",
+                 dev_obj, irp,
+                 (dev_ext->v4v_ring ? "unhandled v4v " : ""),
+                 srb->Function, srb_function_name(srb->Function));
+#endif /* LOG_DROPPED_AHCI_REQUESTS */
+        status = STATUS_UNSUCCESSFUL;
+        irp->IoStatus.Status = status;
+        IoCompleteRequest(irp, IO_NO_INCREMENT);
+    }
 
   out:
     IoReleaseRemoveLock(&dev_ext->remove_lock, irp); 

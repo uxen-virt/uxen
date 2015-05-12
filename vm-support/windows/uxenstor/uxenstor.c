@@ -423,17 +423,33 @@ NTSTATUS stor_dispatch_device_control(PDEVICE_OBJECT dev_obj,
 #endif /* LOG_IOCTL_UNHANDLED */
     }
 
+    if (ahci_state) {
 #if MONITOR_IOCTL_RESULTS
-    IoCopyCurrentIrpStackLocationToNext(irp);
-    IoSetCompletionRoutine(irp,
-                           stor_ioctl_completion_routine, NULL,
-                           TRUE, TRUE, TRUE);
-    status = IoCallDriver(dev_ext->lower_dev_obj, irp);
+        IoCopyCurrentIrpStackLocationToNext(irp);
+        IoSetCompletionRoutine(irp,
+                               stor_ioctl_completion_routine, NULL,
+                               TRUE, TRUE, TRUE);
+        status = IoCallDriver(dev_ext->lower_dev_obj, irp);
 #else /* MONITOR_IOCTL_RESULTS */
-    IoSkipCurrentIrpStackLocation(irp);
-    status = IoCallDriver(dev_ext->lower_dev_obj, irp);
-    IoReleaseRemoveLock(&dev_ext->remove_lock, irp); 
+        IoSkipCurrentIrpStackLocation(irp);
+        status = IoCallDriver(dev_ext->lower_dev_obj, irp);
+        IoReleaseRemoveLock(&dev_ext->remove_lock, irp); 
 #endif /* MONITOR_IOCTL_RESULTS */
+    } else {
+        perfcnt_inc(dropped_ahci_requests);
+#if LOG_DROPPED_AHCI_REQUESTS
+        uxen_msg("[0x%p:0x%p] dropping %s: 0x%x [%s]",
+            dev_obj, irp,
+            (IRP_MJ_DEVICE_CONTROL == io_stack->MajorFunction) ?
+            "IRP_MJ_DEVICE_CONTROL" : "IRP_MJ_SCSI",
+            io_stack->Parameters.DeviceIoControl.IoControlCode,
+            ioctl_name(io_stack->Parameters.DeviceIoControl.IoControlCode));
+#endif /* LOG_DROPPED_AHCI_REQUESTS */
+        status = STATUS_NOT_IMPLEMENTED;
+        irp->IoStatus.Status = status;
+        IoCompleteRequest(irp, IO_NO_INCREMENT);
+        IoReleaseRemoveLock(&dev_ext->remove_lock, irp);
+    }
 
   out:
     return status;
@@ -456,15 +472,28 @@ NTSTATUS stor_dispatch_pass_thru(PDEVICE_OBJECT dev_obj,
         irp->IoStatus.Status = status;
         IoCompleteRequest(irp, IO_NO_INCREMENT);
     } else {
-
         uxen_debug("[0x%p:0x%p] called: 0x%x, 0x%x",
-                   dev_obj, irp,
-                   IoGetCurrentIrpStackLocation(irp)->MajorFunction,
-                   IoGetCurrentIrpStackLocation(irp)->MinorFunction);
+            dev_obj, irp,
+            IoGetCurrentIrpStackLocation(irp)->MajorFunction,
+            IoGetCurrentIrpStackLocation(irp)->MinorFunction);
 
-        IoSkipCurrentIrpStackLocation(irp);
-        status = IoCallDriver(dev_ext->lower_dev_obj, irp);
-        IoReleaseRemoveLock(&dev_ext->remove_lock, irp); 
+        if (ahci_state) {
+            IoSkipCurrentIrpStackLocation(irp);
+            status = IoCallDriver(dev_ext->lower_dev_obj, irp);
+            IoReleaseRemoveLock(&dev_ext->remove_lock, irp); 
+        } else {
+            perfcnt_inc(dropped_ahci_requests);
+#if LOG_DROPPED_AHCI_REQUESTS
+            uxen_msg("[0x%p:0x%p] dropping: 0x%x, 0x%x",
+                dev_obj, irp,
+                IoGetCurrentIrpStackLocation(irp)->MajorFunction,
+                IoGetCurrentIrpStackLocation(irp)->MinorFunction);
+#endif /* LOG_DROPPED_AHCI_REQUESTS */
+            status = STATUS_NOT_IMPLEMENTED;
+            irp->IoStatus.Status = status;
+            IoCompleteRequest(irp, IO_NO_INCREMENT);
+            IoReleaseRemoveLock(&dev_ext->remove_lock, irp);
+        }
     }
 
     return status;
@@ -481,6 +510,16 @@ NTSTATUS stor_dispatch_pnp(PDEVICE_OBJECT dev_obj,
     ASSERT(dev_obj);
     ASSERT(irp);
 
+    io_stack = IoGetCurrentIrpStackLocation(irp);
+    if (!ahci_state) {
+        uxen_debug("[0x%p:0x%p] dropping: 0x%x",
+                   dev_obj, irp, io_stack->MinorFunction);
+        status = STATUS_UNSUCCESSFUL;
+        irp->IoStatus.Status = status;
+        IoCompleteRequest(irp, IO_NO_INCREMENT);
+        goto out;
+    }
+
     dev_ext = (PUXENSTOR_DEV_EXT)dev_obj->DeviceExtension;
     status = IoAcquireRemoveLock(&dev_ext->remove_lock, irp);
     if (!NT_SUCCESS(status)) {
@@ -491,12 +530,9 @@ NTSTATUS stor_dispatch_pnp(PDEVICE_OBJECT dev_obj,
         goto out;
     }
 
-    io_stack = IoGetCurrentIrpStackLocation(irp);
-
     uxen_debug("[0x%p:0x%p] called: 0x%x",
-               dev_obj, irp,
-               io_stack->MinorFunction);
-
+               dev_obj, irp, io_stack->MinorFunction);
+    
     switch (io_stack->MinorFunction) {
     case IRP_MN_START_DEVICE:
         KeInitializeEvent(&event, NotificationEvent, FALSE);
