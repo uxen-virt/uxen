@@ -616,6 +616,7 @@ extern bool_t machine_to_phys_mapping_valid;
 #ifdef __x86_64__
 /* 40 bits */
 #define INVALID_MFN             (0xffffffffffUL)
+#define SHARED_ZERO_MFN         (0xfffffffffeUL)
 #define P2M_MFN_MFN_BITS        28
 #define P2M_MFN_SPECIAL_BITS    4
 #define P2M_MFN_PAGE_STORE_OFFSET_BITS 8
@@ -623,6 +624,7 @@ extern bool_t machine_to_phys_mapping_valid;
 #else  /* __x86_64__ */
 /* 32 bits */
 #define INVALID_MFN             (0xffffffffUL)
+#define SHARED_ZERO_MFN         (0xfffffffeUL)
 #define P2M_MFN_MFN_BITS        22
 #define P2M_MFN_SPECIAL_BITS    4
 #define P2M_MFN_PAGE_STORE_OFFSET_BITS 6

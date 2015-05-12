@@ -261,7 +261,7 @@ typedef enum {
 
 #define p2m_update_pod_counts(d, mfn, t) do {           \
         if (p2m_is_pod((t))) {                          \
-            if ((mfn) == mfn_x(shared_zero_page))       \
+            if (mfn_zero_page(mfn))                     \
                 atomic_dec(&(d)->zero_shared_pages);    \
             else                                        \
                 atomic_dec(&(d)->tmpl_shared_pages);    \

@@ -231,7 +231,7 @@ long arch_do_domctl(
                     page = mfn_to_page(mfn);
 
                     if (p2m_is_pod(pt)) {
-                        if (mfn == mfn_x(shared_zero_page))
+                        if (mfn_zero_page(mfn))
                             type = XEN_DOMCTL_PFINFO_XALLOC;
                         else
                             type = XEN_DOMCTL_PFINFO_XPOD;

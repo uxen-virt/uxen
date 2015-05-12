@@ -268,12 +268,16 @@ void copy_page_sse2(void *, const void *);
         })
 #endif  /* __UXEN__ */
 
+#define __mfn_zero_page(mfn)                                        \
+    ((mfn) == SHARED_ZERO_MFN || (mfn) == mfn_x(shared_zero_page))
+
 /*
  * We define non-underscored wrappers for above conversion functions. These are
  * overridden in various source files while underscored versions remain intact.
  */
 #define mfn_valid(mfn)      __mfn_valid(mfn)
 #define mfn_valid_page(mfn) __mfn_valid_page(mfn)
+#define mfn_zero_page(mfn)  __mfn_zero_page(mfn)
 #define virt_to_mfn(va)     __virt_to_mfn(va)
 #define mfn_to_virt(mfn)    __mfn_to_virt(mfn)
 #define virt_to_maddr(va)   __virt_to_maddr((unsigned long)(va))

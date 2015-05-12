@@ -869,7 +869,7 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
             break;
 
         if (q == p2m_alloc_r &&
-            (d->clone_of || ept_entry->mfn == mfn_x(shared_zero_page))) {
+            (d->clone_of || mfn_zero_page(ept_entry->mfn))) {
             *t = p2m_populate_on_demand;
             goto out;
         }

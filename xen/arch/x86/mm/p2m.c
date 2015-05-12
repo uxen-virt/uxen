@@ -676,7 +676,7 @@ guest_physmap_add_entry(struct domain *d, unsigned long gfn,
             /* Count how man PoD entries we'll be replacing if successful */
             if (mfn_x(omfn) == 0)
                 pod_count++;
-            else if (mfn_x(omfn) == mfn_x(shared_zero_page))
+            else if (mfn_zero_page(mfn_x(omfn)))
                 pod_zero_count++;
             else
                 pod_tmpl_count++;
@@ -1706,7 +1706,8 @@ p2m_translate(struct domain *d, xen_pfn_t *arr, int nr, int write, int map)
             goto out;
         }
         if (unlikely(is_xen_mfn(mfn_x(mfn))) ||
-            unlikely(is_host_mfn(mfn_x(mfn))))
+            unlikely(is_host_mfn(mfn_x(mfn))) ||
+            unlikely(mfn_zero_page(mfn_x(mfn))))
             /* don't allow p2m_translate access to xen pages or host pages */
             mfn = _mfn(INVALID_MFN);
         else if (map) {
@@ -1715,15 +1716,11 @@ p2m_translate(struct domain *d, xen_pfn_t *arr, int nr, int write, int map)
                 goto out;
         } else if (mfn_valid(mfn))  {
             if (!write && p2m_is_pod(pt)) {
-                /* Populate on demand: either zero or cloned shared page. */
-                if (mfn_x(mfn) == mfn_x(shared_zero_page))
-                    mfn = _mfn(INVALID_MFN);
-                else {
-                    struct page_info *page = mfn_to_page(mfn);
-                    ASSERT(d->clone_of == page_get_owner(page));
-                    if (!get_page(page, page_get_owner(page)))
-                        DEBUG();
-                }
+                /* Populate on demand: cloned shared page. */
+                struct page_info *page = mfn_to_page(mfn);
+                ASSERT(d->clone_of == page_get_owner(page));
+                if (!get_page(page, page_get_owner(page)))
+                    DEBUG();
             } else if (!get_page(mfn_to_page(mfn), d))
                 DEBUG();
         }

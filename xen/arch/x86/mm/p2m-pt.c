@@ -1013,8 +1013,7 @@ pod_retry_l2:
             break;
 
         if (q == p2m_alloc_r &&
-            (p2m->domain->clone_of ||
-             l1e_get_pfn(*l1e) == mfn_x(shared_zero_page))) {
+            (p2m->domain->clone_of || mfn_zero_page(l1e_get_pfn(*l1e)))) {
             *t = p2m_populate_on_demand;
             goto out;
         }
