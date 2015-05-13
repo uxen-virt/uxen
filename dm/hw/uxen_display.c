@@ -880,6 +880,7 @@ static int uxendisp_initfn(PCIDevice *dev)
     VGAState *v = &s->vga;
     int i;
 
+    dev->config[PCI_INTERRUPT_PIN] = 1;
     memory_region_init_io(&s->mmio, &mmio_ops, s, "uxendisp.mmio",
                           UXENDISP_MMIO_SIZE);
     memory_region_add_ram_range(&s->mmio, 0x1000, 0x1000,
