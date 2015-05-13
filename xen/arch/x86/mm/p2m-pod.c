@@ -2455,14 +2455,27 @@ p2m_audit_pod_counts(struct domain *d)
     p2m_type_t t;
     p2m_access_t a;
     unsigned int page_order;
-    int nr_pages = 0, nr_pod = 0, nr_zero = 0, nr_tmpl = 0, nr_empty = 0;
+    int nr_pages = 0, nr_pod = 0, nr_zero = 0, nr_zero_mapped = 0,
+        nr_tmpl = 0, nr_empty = 0;
     int nr_immutable = 0;
+    void *l1table = NULL;
+    mfn_t l1mfn;
 
     p2m_lock(p2m);
     for (gpfn = 0; gpfn <= p2m->max_mapped_pfn; gpfn++) {
-        mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, &page_order);
+        if (!(gpfn & ((1UL << PAGETABLE_ORDER) - 1))) {
+            l1mfn = p2m->get_l1_table(p2m, gpfn, &page_order);
+            if (!mfn_valid_page(mfn_x(l1mfn))) {
+                gpfn |= ((1 << page_order) - 1);
+                continue;
+            }
+            if (l1table)
+                unmap_domain_page(l1table);
+            l1table = map_domain_page(mfn_x(l1mfn));
+        }
+        mfn = p2m->parse_entry(l1table, gpfn & ((1UL << PAGETABLE_ORDER) - 1),
+                               &t, &a);
         if (mfn_x(mfn) == INVALID_MFN /* !mfn_valid(mfn) */) {
-            gpfn |= ((1 << page_order) - 1);
             continue;
         }
         if (p2m_is_immutable(t))
@@ -2470,6 +2483,8 @@ p2m_audit_pod_counts(struct domain *d)
         if (p2m_is_pod(t)) {
             nr_pod++;
             if (mfn_x(mfn) == mfn_x(shared_zero_page))
+                nr_zero_mapped++;
+            else if (mfn_x(mfn) == SHARED_ZERO_MFN)
                 nr_zero++;
             else if (mfn_x(mfn))
                 nr_tmpl++;
@@ -2482,8 +2497,10 @@ p2m_audit_pod_counts(struct domain *d)
             continue;
         }
     }
-    printk("vm%d: pages %d pod %d zero %d tmpl %d empty %d\n", d->domain_id,
-           nr_pages, nr_pod, nr_zero, nr_tmpl, nr_empty);
+    if (l1table)
+        unmap_domain_page(l1table);
+    printk("vm%d: pages %d pod %d zero %d/%d tmpl %d empty %d\n", d->domain_id,
+           nr_pages, nr_pod, nr_zero, nr_zero_mapped, nr_tmpl, nr_empty);
     printk("vm%d: immutable %d\n", d->domain_id, nr_immutable);
     printk("vm%d: nr_pages=%d pod_pages=%d zero_shared=%d tmpl_shared=%d\n",
            d->domain_id, d->tot_pages, atomic_read(&d->pod_pages),
