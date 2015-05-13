@@ -22,11 +22,12 @@ CPPFLAGS += -D__XEN__ -D__UXEN__ -D__UXEN_SYS__ -DUXEN_HOST_OSX -D__SYSV_ABI__
 CPPFLAGS += -D__UXEN_EMBEDDED__
 
 CPPFLAGS += -I$(BUILDDIR_xen)/include \
+	    -I$(TOPDIR)/common/include/xen-public \
 	    -I$(TOPDIR)/xen/include \
 	    -I$(TOPDIR)/common \
 	    -I$(TOPDIR)/common/uxen.os \
 	    -I$(TOPDIR)/common/include \
-	    -I$(TOPDIR)/common/include/xen-public \
+	    -I$(TOPDIR)/common/include/xen-public/xen \
 	    -I$(SRCDIR) \
 	    -iquote $(SRCDIR)/../include \
 	    -I.
@@ -107,6 +108,7 @@ KEXT_OBJS = uxen.o \
 	    libelf-tools.o \
 	    rbtree.o \
 	    xnu_symbols.o \
+	    dom0_v4v_device.o \
 	    $(BUILDDIR_xen)/uxen.macho
 
 build_info.h:

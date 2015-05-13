@@ -905,6 +905,8 @@ uxen_op_init(struct fd_assoc *fda)
               &dom0_vmi->vmi_shared, vcis);
     ret = uxen_translate_xen_errno(ret);
     uxen_cpu_unpin();
+    
+    uxen_driver_publish_v4v_service();
 
     /* run idle thread to make it pick up the current timeout */
     signal_idle_thread(0);

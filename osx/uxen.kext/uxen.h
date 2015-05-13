@@ -469,6 +469,9 @@ enum {
 /* Force a compilation error if condition is true */
 #define BUILD_BUG_ON(condition) ((void)sizeof(struct { int:-!!(condition); }))
 
+void uxen_driver_publish_v4v_service(void);
+void uxen_driver_shutdown_v4v_service(void);
+
 #ifdef __cplusplus
 }
 

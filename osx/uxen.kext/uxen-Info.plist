@@ -50,6 +50,8 @@
 		<string>9.0.0</string>
 		<key>com.apple.kpi.unsupported</key>
 		<string>9.0.0</string>
+		<key>org.uxen.driver.uxenv4vservice</key>
+		<string>1.0</string>
 	</dict>
 </dict>
 </plist>

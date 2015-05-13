@@ -145,6 +145,7 @@ uxen_load_symbols(void)
 int
 uxen_unload(void)
 {
+    uxen_driver_shutdown_v4v_service();
 
     uxen_complete_shutdown();
 

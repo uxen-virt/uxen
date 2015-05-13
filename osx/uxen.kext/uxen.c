@@ -18,6 +18,7 @@
 #include <xen/domctl.h>
 #include <xen/hvm/hvm_op.h>
 #include <xen/xen.h>
+#include <v4v.h>
 
 #define UXEN_DEFINE_SYMBOLS_PROTO
 #include <uxen/uxen_link.h>
@@ -929,6 +930,9 @@ uxen_dom0_hypercall(struct vm_info_shared *vmis, void *user_access_opaque,
     case __HYPERVISOR_sysctl:
         n_arg = 1;
         break;
+    case __HYPERVISOR_v4v_op:
+        n_arg = 6;
+        break;
     default:
         fail_msg("unknown hypercall op: %"PRId64, op);
         return EINVAL;
@@ -950,6 +954,12 @@ uxen_dom0_hypercall(struct vm_info_shared *vmis, void *user_access_opaque,
 
     return ret;
 }
+
+#if defined(__LP64__)
+typedef uint64_t mfn_t;
+#else
+typedef uint32_t mfn_t;
+#endif
 
 int32_t
 _uxen_snoop_hypercall(void *udata, int mode)
@@ -1024,6 +1034,30 @@ _uxen_snoop_hypercall(void *udata, int mode)
         }
         }
         break;
+    case __HYPERVISOR_v4v_op: {
+        switch (uhd->uhd_arg[0]) {
+            case V4VOP_register_ring: {
+                uint64_t mem_needed;
+
+                v4v_pfn_list_t pl;
+                ret = copy(uhd->uhd_arg[2], &pl, sizeof(pl));
+                if (ret)
+                    return -ret;
+
+                mem_needed = (sizeof(mfn_t) + sizeof(uint8_t *) ) * pl.npage;
+                mem_needed += 4096; /*v4v_ring_info and other non public structures */
+
+                mem_needed +=PAGE_SIZE - 1 ;
+                pages += mem_needed >> PAGE_SHIFT;
+
+                pages *=2;
+
+                mm_dprintk("snooped %d extra pages for v4v\n",pages);
+            }
+            break;
+        }
+        break;
+    }
     default:
         break;
     }
