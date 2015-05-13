@@ -1,0 +1,20 @@
+#
+# Copyright 2015-2016, Bromium, Inc.
+# SPDX-License-Identifier: ISC
+#
+
+# Only add symbols to the public namespace which actually should be externally accessible.
+# This is a manually created list.
+
+_kmod_info
+__ZN11uxen_driver*
+__ZNK11uxen_driver*
+__ZTV11uxen_driver
+__ZTVN11uxen_driver*
+__ZN16uxen_user_client*
+__ZNK16uxen_user_client*
+__ZTV16uxen_user_client
+__ZTVN16uxen_user_client*
+
+_uxen_dom0_hypercall
+_uxen_info

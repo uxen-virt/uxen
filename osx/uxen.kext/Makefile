@@ -122,7 +122,7 @@ xen-errno.h: $(TOPDIR)/xen/include/xen/errno.h
 	@mkdir -p $(@D)
 	@sed -e '/XXX osx/ s/^\(#define.\)E/\1X_E/' <$< >$@
 
-$(KEXT_OBJS): .deps/.exists
+$(KEXT_OBJS): .deps/.exists $(SRCDIR)/uxen_driver.exports
 
 libelf-loader.o libelf-relocate.o libelf-tools.o: CPPFLAGS += -DNO_XEN_ELF_NOTE
 
@@ -130,7 +130,7 @@ $(KEXT_OBJS): build_info.h xen-errno.h
 
 $(KEXT_BIN): $(KEXT_OBJS)
 	$(_W)echo Linking - $@.kext
-	$(_V)$(LINK.o) -o $@ $^
+	$(_V)$(LINK.o) -exported_symbols_list $(SRCDIR)/uxen_driver.exports -o $@ $^
 
 $(KEXT_DSYM): $(KEXT_BIN)
 	$(_W)echo Generating - $@
