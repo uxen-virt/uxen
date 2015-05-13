@@ -51,15 +51,6 @@
     likely(__m_f_n < max_page) &&                                             \
     likely(test_bit(pfn_to_pdx(__m_f_n) / PDX_GROUP_COUNT, pdx_group_valid)); \
 })
-#else   /* __UXEN__ */
-#define __mfn_valid(mfn)        ({                                      \
-            unsigned long __m_f_n = (mfn);                              \
-            likely(__m_f_n < max_page);                                 \
-        })
-#define __mfn_valid_page(mfn)        ({                                 \
-            unsigned long __m_f_n = (mfn);                              \
-            likely(__m_f_n) && likely(__m_f_n < max_page);              \
-        })
 #endif  /* __UXEN__ */
 
 #define max_pdx                 max_page

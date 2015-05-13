@@ -65,15 +65,6 @@ extern void pfn_pdx_hole_setup(unsigned long);
 
 #ifndef __UXEN__
 extern int __mfn_valid(unsigned long mfn);
-#else   /* __UXEN__ */
-#define __mfn_valid(mfn)        ({                                      \
-            unsigned long __m_f_n = (mfn);                              \
-            likely(__m_f_n < max_page);                                 \
-        })
-#define __mfn_valid_page(mfn)        ({                                 \
-            unsigned long __m_f_n = (mfn);                              \
-            likely(__m_f_n) && likely(__m_f_n < max_page);              \
-        })
 #endif  /* __UXEN__ */
 
 #ifndef __UXEN__

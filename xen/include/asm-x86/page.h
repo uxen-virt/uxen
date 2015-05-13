@@ -257,6 +257,17 @@ void copy_page_sse2(void *, const void *);
 #define page_to_spage(page)  (spage_table+(((page)-frame_table)>>(SUPERPAGE_SHIFT-PAGE_SHIFT)))
 #define spage_to_page(spage)  (frame_table+(((spage)-spage_table)<<(SUPERPAGE_SHIFT-PAGE_SHIFT)))
 
+#ifdef __UXEN__
+#define __mfn_valid(mfn)        ({                                      \
+            unsigned long __m_f_n = (mfn);                              \
+            likely(__m_f_n < max_page);                                 \
+        })
+#define __mfn_valid_page(mfn)        ({                                 \
+            unsigned long __m_f_n = (mfn);                              \
+            likely(__m_f_n) && likely(__m_f_n < max_page);              \
+        })
+#endif  /* __UXEN__ */
+
 /*
  * We define non-underscored wrappers for above conversion functions. These are
  * overridden in various source files while underscored versions remain intact.
