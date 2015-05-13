@@ -1474,6 +1474,7 @@ int stat_files_phase(struct disk *disk, Manifest *suffixes, Manifest *man, wchar
             printf("unable to open %ls for write\n", file_id_list);
             return -1;
         }
+        setvbuf(file_id_file, NULL, _IOFBF, 1 << 20);
     }
 
     for (i = 0; i < man->n; ++i) {
