@@ -280,6 +280,7 @@ control_command_open_log(void *opaque, const char *id, const char *opt,
     int new_fd;
     FILE* new_f;
 
+    fflush(stderr);
     logfile = dict_get_string(d, "logfile");
 
     if (!strcmp(logfile, ".")) {
