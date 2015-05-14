@@ -217,11 +217,14 @@ out_pending:
 static int cx_so_try_write(struct cx_ctx *cx, const uint8_t *buf, int len_buf)
 {
     int r, written = 0;
+    bool signal_vm = false;
 
     if (cx->b_vm && cx->b_vm->len > 0) {
         r = so_write(cx->so, BUFF_TO(cx->b_vm, const uint8_t *), cx->b_vm->len);
         if (r <= 0)
             goto out;
+        if (r == cx->b_vm->len)
+            signal_vm = true;
         BUFF_CONSUME(cx->b_vm, r);
         BUFF_GC(cx->b_vm);
         if (cx->b_vm->len > 0)
@@ -234,6 +237,8 @@ static int cx_so_try_write(struct cx_ctx *cx, const uint8_t *buf, int len_buf)
     r = so_write(cx->so, buf, len_buf);
     if (r < 0)
         r = 0;
+    if (r == len_buf)
+        signal_vm = true;
     buf += r;
     len_buf -= r;
     written += r;
@@ -245,6 +250,9 @@ out:
             goto mem_error;
         written += len_buf;
     }
+
+    if (signal_vm)
+        wakeup_vm(cx);
 
     return written;
 mem_error:
