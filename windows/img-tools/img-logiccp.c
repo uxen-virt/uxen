@@ -27,6 +27,8 @@
 #include <psapi.h>
 
 
+static pNtCreateFile NtCreateFile;
+static pNtClose NtClose;
 static pNtReadFile NtReadFile;
 static pNtQuerySystemInformation NtQuerySystemInformation;
 static pNtDuplicateObject NtDuplicateObject;
@@ -757,56 +759,36 @@ out:
     return status;
 }
 
-/* Header compat. for OpenFileById */
-typedef enum _FILE_ID_TYPE {
-    FileIdType          = 0,
-    ObjectIdType        = 1,
-    ExtendedFileIdType  = 2,
-    MaximumFileIdType
-} FILE_ID_TYPE, *PFILE_ID_TYPE;
-
-typedef struct {
-    DWORD        dwSize;
-    FILE_ID_TYPE Type;
-    union {
-        LARGE_INTEGER FileId;
-        GUID          ObjectId;
-#if 0//(_WIN32_WINNT >= _WIN32_WINNT_WIN8)
-        ExtendedFileId;
-#endif
-    } DUMMYUNIONNAME;
-} FILE_ID_DESCRIPTOR;
-
-HANDLE WINAPI OpenFileById(
-    HANDLE hFile,
-    FILE_ID_DESCRIPTOR *lpFileID,
-    DWORD dwDesiredAccess,
-    DWORD dwShareMode,
-    LPSECURITY_ATTRIBUTES lpSecurityAttributes,
-    DWORD dwFlags
-    );
-
-static
-HANDLE open_file_from_id(HANDLE volume, uint64_t file_id, DWORD access)
+HANDLE open_file_from_id(HANDLE volume, uint64_t file_id, DWORD flags)
 {
     HANDLE h;
-    FILE_ID_DESCRIPTOR fid = {sizeof(fid), };
-    fid.Type = FileIdType;
-    fid.FileId.QuadPart = file_id;
+    IO_STATUS_BLOCK iosb = {{0}};
+    OBJECT_ATTRIBUTES oa = {sizeof(oa), 0};
+    UNICODE_STRING name;
+    name.Buffer = (PWSTR)&file_id;
+    name.Length = name.MaximumLength = sizeof(file_id);
+    oa.ObjectName = &name;
+    oa.RootDirectory = volume;
 
-    h = OpenFileById(volume,
-            &fid,
-            access, FILE_SHARE_READ | FILE_SHARE_WRITE,
+    NTSTATUS rc = NtCreateFile(
+            &h,
+            flags,
+            &oa,
+            &iosb,
             NULL,
             FILE_ATTRIBUTE_NORMAL
             | FILE_ATTRIBUTE_HIDDEN
             | FILE_ATTRIBUTE_SYSTEM
-            | FILE_SEQUENTIAL_ONLY
-            | FILE_FLAG_BACKUP_SEMANTICS
+            | FILE_SEQUENTIAL_ONLY,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            FILE_OPEN,
+            FILE_OPEN_BY_FILE_ID | FILE_OPEN_FOR_BACKUP_INTENT | FILE_NON_DIRECTORY_FILE,
+            NULL,
+            0
             );
-    if (h == INVALID_HANDLE_VALUE) {
-        printf("error opening file_id %"PRIx64", err=%u\n",
-                (uint64_t) file_id, (uint32_t) GetLastError());
+    if (rc) {
+        printf("rc %x for file_id %"PRIx64"\n", (uint32_t) rc, (uint64_t) file_id);
+        h = INVALID_HANDLE_VALUE;
     }
     return h;
 }
@@ -825,7 +807,7 @@ int stat_file(HANDLE volume, uint64_t file_id, uint64_t *file_size, uint64_t *of
     }
 
     if (!GetFileInformationByHandle(h, &inf)) {
-        CloseHandle(h);
+        NtClose(h);
         return -1;
     }
 
@@ -846,7 +828,7 @@ int stat_file(HANDLE volume, uint64_t file_id, uint64_t *file_size, uint64_t *of
         /* We don't care. */
     }
 
-    CloseHandle(h);
+    NtClose(h);
     return 0;
 }
 
@@ -1213,7 +1195,7 @@ void complete_io(IO* io)
     }
 
     if (io->last) {
-        CloseHandle(io->file);
+        NtClose(io->file);
         io->file = INVALID_HANDLE_VALUE;
     }
 
@@ -1354,6 +1336,12 @@ int init_logiccp(void)
 {
     NTSTATUS status = STATUS_SUCCESS;
 
+    NtCreateFile = (pNtCreateFile)GetProcAddress(
+        GetModuleHandleW(L"ntdll.dll"), "NtCreateFile");
+    assert(NtCreateFile);
+    NtClose = (pNtClose)GetProcAddress(
+        GetModuleHandleW(L"ntdll.dll"), "NtClose");
+    assert(NtClose);
     NtReadFile = (pNtReadFile)GetProcAddress(
         GetModuleHandleW(L"ntdll.dll"), "NtReadFile");
     assert(NtReadFile);
@@ -2018,7 +2006,7 @@ static DWORD WINAPI acl_files_thread(LPVOID lpParam)
             td->cache_misses ++;
         }
 
-        CloseHandle(h);
+        NtClose(h);
     }
     return 0;
 }
