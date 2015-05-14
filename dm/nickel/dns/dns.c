@@ -172,7 +172,7 @@ static void cstr2qstr(const char *cstr, char *qstr, size_t qstr_len)
 
 static void log_attack(char *qname, union dnsmsg_header *hdr)
 {
-    debug_printf("suspiciously long DNS response built for %s\n", qname);
+    NETLOG("suspiciously long DNS response built for %s", qname);
     hdr->x.qr = 1;
     hdr->x.aa = 1;
     hdr->x.rd = 1;
@@ -181,7 +181,7 @@ static void log_attack(char *qname, union dnsmsg_header *hdr)
 
 static void response_dns_nx(char *name, union dnsmsg_header *hdr)
 {
-    debug_printf("DNS request to %s failed\n", name);
+    NETLOG2("DNS request to %s failed", name);
     hdr->x.qr = 1;
     hdr->x.aa = 1;
     hdr->x.rd = 1;
@@ -190,7 +190,7 @@ static void response_dns_nx(char *name, union dnsmsg_header *hdr)
 
 static void response_dns_denied(char *name, union dnsmsg_header *hdr, const char *msg)
 {
-    debug_printf("DNS request to %s denied by containment: %s\n", name, msg);
+    NETLOG("DNS request to %s denied by containment: %s", name, msg);
     hdr->x.qr = 1;
     hdr->x.aa = 1;
     hdr->x.rd = 1;
@@ -199,7 +199,7 @@ static void response_dns_denied(char *name, union dnsmsg_header *hdr, const char
 
 static void response_dns_server_fail(char *name, union dnsmsg_header *hdr)
 {
-    debug_printf("DNS server fail response built for %s\n", name);
+    NETLOG2("DNS server fail response built for %s", name);
     hdr->x.qr = 1;
     hdr->x.aa = 1;
     hdr->x.rd = 1;
@@ -738,7 +738,7 @@ process:
         resp_len += sizeof(struct dnsmsg_answer) + len;
 
         if (i == 0)
-            NETLOG("(dns) dns-response: %s A %s", dstate->dname, inet_ntoa(dstate->response.a[i].ipv4));
+            NETLOG2("(dns) dns-response: %s A %s", dstate->dname, inet_ntoa(dstate->response.a[i].ipv4));
 
         if (debug_resolver)
             DDNS(dstate, "A %s", inet_ntoa(dstate->response.a[i].ipv4));
@@ -887,7 +887,7 @@ ndns_chr_write(CharDriverState *chr, const uint8_t *buf, int blen)
         }
     }
 
-    NETLOG("(dns) dns-lookup: %s %s qtype:%hd qclass:%hd",
+    NETLOG2("(dns) dns-lookup: %s %s qtype:%hd qclass:%hd",
         dstate->dname, suffix ? "(short name)" : "",
         ntohs(meta->type), ntohs(meta->class));
 
