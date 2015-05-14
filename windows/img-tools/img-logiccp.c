@@ -3019,12 +3019,6 @@ int main(int argc, char **argv)
         err(1, "stat_files_phase failed");
     }
 
-    /* Check ACLs of shallow files. */
-    if (acl_phase(&disk, &man_out) < 0) {
-        err(1, "acl_phase failed");
-    }
-
-
     GUID guid = {0};
     if (shallow_allowed) {
         if (arg_guid) {
@@ -3073,6 +3067,10 @@ int main(int argc, char **argv)
 
     if (shallow_allowed) {
         man_sort_by_id(&man_out);
+
+        if (acl_phase(&disk, &man_out) < 0) {
+            err(1, "acl_phase failed");
+        }
 
         if (shallow_phase(&disk, &man_out, map_idx) < 0) {
             err(1, "shallow_phase failed");
