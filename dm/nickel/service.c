@@ -415,6 +415,9 @@ int ni_proxyfwd(struct nickel *ni, const yajl_val object)
     if (prx->init)
         prx->init(ni, object);
 
+    if (!is_udp)
+        ni->tcp_service_ok = 1;
+
     return 0;
 }
 

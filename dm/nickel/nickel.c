@@ -61,10 +61,6 @@
 
 #include "proto.h"
 
-#ifdef AUTO_ADD_HTTP_PROXY_SVC
-#undef AUTO_ADD_HTTP_PROXY_SVC
-#endif
-
 int ni_log_level = 1;
 
 static heap_t ni_priv_heap;
@@ -1829,31 +1825,12 @@ int net_init_nickel(QemuOpts *opts, Monitor *mon, const char *name, VLANState *v
 
         dict_free(d);
     }
-#ifdef AUTO_ADD_HTTP_PROXY_SVC
-    if (!ni->http_proxy_svc_ok) {
-        dict d, s;
 
-        d = dict_new();
-        s = dict_new();
-        if (!d || !s)
-            goto mem_err;
-
-        dict_put_integer(d, "host_port", 8080);
-        dict_put_string(d, "proto", "tcp");
-        dict_put_string(s, "service", "http-proxy");
-        yajl_object_set(d, "host_service", s);
-        if (vmfwd(ni, d) == 0) {
-            ni->http_proxy_svc_ok = 1;
-            NETLOG("%s: adding http-proxy service", __FUNCTION__);
-        } else {
-            warnx("%s: failure adding http-proxy service", __FUNCTION__);
-        }
-
-        dict_free(d);
+    if (!ni->tcp_service_ok) {
+        ni_proxyfwd_add(ni, "tcp-service", false);
+        NETLOG("tcp service automatically enabled");
     }
-#endif
 
-    ni_proxyfwd_add(ni, "http-proxy", false);
     if (!ni->ac_enabled) {
         ni_proxyfwd_add(ni, "udp-service", true);
         NETLOG("udp service automatically enabled");

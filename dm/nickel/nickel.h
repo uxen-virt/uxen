@@ -109,6 +109,7 @@ struct nickel {
     int debug_dns_udp_icmp;
     int dns_resolver_ok;
     int http_proxy_svc_ok;
+    int tcp_service_ok;
     int webdav_svc_ok;
     int tcp_disable_window_scale;
 
