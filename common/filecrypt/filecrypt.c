@@ -114,62 +114,118 @@ fc_free_hdr(filecrypt_hdr_t *h)
     free(h);
 }
 
-int FILECRYPT_API
-fc_read_hdr(HANDLE file, int *iscrypt, filecrypt_hdr_t **_h)
+static int
+read_hdr(HANDLE file, int *iscrypt, filecrypt_hdr_t *h_in, filecrypt_hdr_t **h_out)
 {
     uint64_t magic;
     uint32_t hdrversion, hdrlen;
     filecrypt_hdr_t *h;
     int rc = 0;
+    uint8_t *ptr;
 
-    if (_h)
-        *_h = NULL;
+    if (h_out)
+        *h_out = NULL;
     *iscrypt = 0;
 
-    if (SetFilePointer(file, 0, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER)
-        return GetLastError();
     if ((rc = _read(file, &magic, 8)))
         return rc;
-    if (magic != FILECRYPT_MAGIC) {
-        SetFilePointer(file, 0, NULL, FILE_BEGIN);
+    if (h_in)
+        fc_decrypt(h_in, &magic, 0, 8);
+    if (magic != FILECRYPT_MAGIC)
         return ERROR_INVALID_DATA;
-    }
     *iscrypt = 1;
-    if ((rc = _read(file, &hdrversion, 4))) {
-        SetFilePointer(file, 0, NULL, FILE_BEGIN);
+    if ((rc = _read(file, &hdrversion, 4)))
         return rc;
-    }
-    if ((rc = _read(file, &hdrlen, 4))) {
-        SetFilePointer(file, 0, NULL, FILE_BEGIN);
+    if ((rc = _read(file, &hdrlen, 4)))
         return rc;
+    if (h_in) {
+        fc_decrypt(h_in, &hdrversion, 8, 4);
+        fc_decrypt(h_in, &hdrlen, 12, 4);
     }
-    if (hdrlen > 4096) {
-        SetFilePointer(file, 0, NULL, FILE_BEGIN);
+    if (hdrlen > 4096)
         return ERROR_BUFFER_OVERFLOW;
-    }
-    if (hdrlen < 16) {
-        SetFilePointer(file, 0, NULL, FILE_BEGIN);
+    if (hdrlen < 16)
         return ERROR_INVALID_DATA;
-    }
     h = calloc(1, hdrlen);
     if (!h)
         return ERROR_NOT_ENOUGH_MEMORY;
     h->magic = magic;
     h->hdrversion = hdrversion;
     h->hdrlen = hdrlen;
-    if ((rc = _read(file, ((uint8_t*)h) + 16, sizeof(filecrypt_hdr_t)-16))) {
-        SetFilePointer(file, 0, NULL, FILE_BEGIN);
+    ptr = ((uint8_t*)h) + 16;
+    if ((rc = _read(file, ptr, sizeof(filecrypt_hdr_t)-16)))
         return rc;
-    }
-    SetFilePointer(file, h->hdrlen, NULL, FILE_BEGIN);
+    if (h_in)
+        fc_decrypt(h_in, ptr, 16, sizeof(filecrypt_hdr_t)-16);
     if (h->keylen != FILECRYPT_KEYBYTES)
         return ERROR_INVALID_DATA;
     extend_key(h);
-    if (_h)
-        *_h = h;
+    if (h_out)
+        *h_out = h;
     else
         free(h);
 
+    return 0;
+}
+
+static void
+append_hdr(filecrypt_hdr_t *h, filecrypt_hdr_t *app)
+{
+    int i;
+    int len = h->keylen;
+
+    if (app->keylen > h->keylen)
+        len = app->keylen;
+
+    for (i = 0; i < len; ++i) {
+        uint8_t v0 = i < h->keylen ? h->key[i] : 0;
+        uint8_t v1 = i < app->keylen ? app->key[i] : 0;
+        h->key[i] = v0 ^ v1;
+    }
+    h->keylen = len;
+    h->hdrlen += app->hdrlen;
+    extend_key(h);
+}
+
+int FILECRYPT_API
+fc_read_hdr(HANDLE file, int *iscrypt, filecrypt_hdr_t **h_out)
+{
+    filecrypt_hdr_t *h;
+    int rc = 0;
+    int p;
+
+    if (h_out)
+        *h_out = NULL;
+    *iscrypt = 0;
+
+    if (SetFilePointer(file, 0, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER)
+        return GetLastError();
+    rc = read_hdr(file, iscrypt, NULL, &h);
+    if (rc) {
+        SetFilePointer(file, 0, NULL, FILE_BEGIN);
+        return rc;
+    }
+    p = h->hdrlen;
+    for (;;) {
+        int iscrypt_temp;
+        filecrypt_hdr_t *htemp = NULL;
+
+        if (SetFilePointer(file, p, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER)
+            break; /* no more crypt layers */
+        rc = read_hdr(file, &iscrypt_temp, h, &htemp);
+        if (iscrypt_temp && rc) {
+            /* read error of crypt hdr */
+            SetFilePointer(file, 0, NULL, FILE_BEGIN);
+            return rc;
+        } else if (rc)
+            break; /* no more crypt layers */
+        append_hdr(h, htemp);
+        p += htemp->hdrlen;
+        free(htemp);
+    }
+    SetFilePointer(file, h->hdrlen, NULL, FILE_BEGIN);
+    if (h_out)
+        *h_out = h;
     return 0;
 }
 
