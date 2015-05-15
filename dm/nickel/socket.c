@@ -823,6 +823,29 @@ static void so_connected(struct socket *so)
     if ((so->state > NSO_SS_CONNECTING))
         return;
 
+#ifndef _WIN32
+    {
+        int r, val;
+
+        do {
+            socklen_t valsize = sizeof(val);
+
+            errno = 0;
+            val = 0;
+            r = getsockopt(so->s, SOL_SOCKET, SO_ERROR, (void *) &val, &valsize);
+        } while (r == -1 && errno == EINTR);
+
+        if (val) {
+            NETLOG4("%s: so:%" PRIxPTR " SO_ERROR %d", __FUNCTION__, (uintptr_t) so, val);
+            so->last_err = val;
+            if (so->evt_cb)
+                so->evt_cb(so->evt_opaque, SO_EVT_CLOSING, so->last_err);
+
+            return;
+        }
+    }
+#endif
+
     so->state = NSO_SS_CONNECTED;
 
     if (so->addr.family == AF_INET)
@@ -942,11 +965,18 @@ static void events_poll(void *opaque)
 
         GET_NETWORK_EVENTS(so);
 
+        if (SO_ISSET(so, writefds) || SO_ISSET(so, connectfds)) {
+            so_connected(so);
+            so_writing(so);
+        }
+
+        if (so->del)
+            continue;
+
         if (SO_ISSET(so, readfds) || SO_ISSET(so, acceptfds)) {
             if (so->state == NSO_SS_LISTENING) {
                 so_accept(so);
             } else {
-                so_connected(so);
                 so_reading(so);
             }
         }
@@ -994,10 +1024,6 @@ static void events_poll(void *opaque)
             continue;
         }
 
-        if (SO_ISSET(so, writefds) || SO_ISSET(so, connectfds)) {
-            so_connected(so);
-            so_writing(so);
-        }
     }
 #ifndef _WIN32
     while(1 == 0);
