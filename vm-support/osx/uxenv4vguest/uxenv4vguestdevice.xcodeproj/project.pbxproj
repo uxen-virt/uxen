@@ -1,0 +1,296 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		52C7B9F21AFCDDAF005083AE /* guest_v4v_device.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 52C7B9F11AFCDDAF005083AE /* guest_v4v_device.cpp */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		29B5C06F1B062E85006C766D /* Makefile */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.make; path = Makefile; sourceTree = "<group>"; };
+		52C7B9EA1AFCDDAF005083AE /* uxenv4vguestdevice.kext */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = uxenv4vguestdevice.kext; sourceTree = BUILT_PRODUCTS_DIR; };
+		52C7B9EE1AFCDDAF005083AE /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		52C7B9F11AFCDDAF005083AE /* guest_v4v_device.cpp */ = {isa = PBXFileReference; indentWidth = 4; lastKnownFileType = sourcecode.cpp.cpp; path = guest_v4v_device.cpp; sourceTree = "<group>"; tabWidth = 8; usesTabs = 0; };
+		52C7BC5E1B021CF5000E7A91 /* guest_v4v_device.h */ = {isa = PBXFileReference; indentWidth = 4; lastKnownFileType = sourcecode.c.h; path = guest_v4v_device.h; sourceTree = "<group>"; tabWidth = 8; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		52C7B9E61AFCDDAF005083AE /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		52C7B9E01AFCDDAF005083AE = {
+			isa = PBXGroup;
+			children = (
+				52C7B9EC1AFCDDAF005083AE /* UxenV4VGuestDevice */,
+				52C7B9EB1AFCDDAF005083AE /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		52C7B9EB1AFCDDAF005083AE /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				52C7B9EA1AFCDDAF005083AE /* uxenv4vguestdevice.kext */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		52C7B9EC1AFCDDAF005083AE /* UxenV4VGuestDevice */ = {
+			isa = PBXGroup;
+			children = (
+				29B5C06F1B062E85006C766D /* Makefile */,
+				52C7BC5E1B021CF5000E7A91 /* guest_v4v_device.h */,
+				52C7B9F11AFCDDAF005083AE /* guest_v4v_device.cpp */,
+				52C7B9ED1AFCDDAF005083AE /* Supporting Files */,
+			);
+			indentWidth = 4;
+			name = UxenV4VGuestDevice;
+			sourceTree = "<group>";
+			tabWidth = 8;
+			usesTabs = 0;
+		};
+		52C7B9ED1AFCDDAF005083AE /* Supporting Files */ = {
+			isa = PBXGroup;
+			children = (
+				52C7B9EE1AFCDDAF005083AE /* Info.plist */,
+			);
+			name = "Supporting Files";
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		52C7B9E71AFCDDAF005083AE /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		52C7B9E91AFCDDAF005083AE /* uxenv4vguestdevice */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 52C7B9F51AFCDDAF005083AE /* Build configuration list for PBXNativeTarget "uxenv4vguestdevice" */;
+			buildPhases = (
+				52C7B9E51AFCDDAF005083AE /* Sources */,
+				52C7B9E61AFCDDAF005083AE /* Frameworks */,
+				52C7B9E71AFCDDAF005083AE /* Headers */,
+				52C7B9E81AFCDDAF005083AE /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = uxenv4vguestdevice;
+			productName = UxenV4VDevice;
+			productReference = 52C7B9EA1AFCDDAF005083AE /* uxenv4vguestdevice.kext */;
+			productType = "com.apple.product-type.kernel-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		52C7B9E11AFCDDAF005083AE /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 0610;
+				ORGANIZATIONNAME = "Bromium UK Ltd";
+				TargetAttributes = {
+					52C7B9E91AFCDDAF005083AE = {
+						CreatedOnToolsVersion = 6.1;
+					};
+				};
+			};
+			buildConfigurationList = 52C7B9E41AFCDDAF005083AE /* Build configuration list for PBXProject "uxenv4vguestdevice" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = English;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = 52C7B9E01AFCDDAF005083AE;
+			productRefGroup = 52C7B9EB1AFCDDAF005083AE /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				52C7B9E91AFCDDAF005083AE /* uxenv4vguestdevice */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		52C7B9E81AFCDDAF005083AE /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		52C7B9E51AFCDDAF005083AE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				52C7B9F21AFCDDAF005083AE /* guest_v4v_device.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		52C7B9F31AFCDDAF005083AE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "";
+				COPY_PHASE_STRIP = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../../../osx/uxenv4vservice/",
+					"$(SRCROOT)/../",
+					"$(SRCROOT)/../../../common/include/xen-public/",
+					"$(SRCROOT)/../../../xen/include/public/",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.9;
+				MTL_ENABLE_DEBUG_INFO = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		52C7B9F41AFCDDAF005083AE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "";
+				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../../../osx/uxenv4vservice/",
+					"$(SRCROOT)/../",
+					"$(SRCROOT)/../../../common/include/xen-public/",
+					"$(SRCROOT)/../../../xen/include/public/",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.9;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		52C7B9F61AFCDDAF005083AE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1.0.0d1;
+				INFOPLIST_FILE = Info.plist;
+				MODULE_NAME = org.uxen.driver.UxenV4VGuestDevice;
+				MODULE_VERSION = 1.0.0d1;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				WARNING_CFLAGS = "-Wno-deprecated-register";
+				WRAPPER_EXTENSION = kext;
+			};
+			name = Debug;
+		};
+		52C7B9F71AFCDDAF005083AE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1.0.0d1;
+				INFOPLIST_FILE = Info.plist;
+				MODULE_NAME = org.uxen.driver.UxenV4VGuestDevice;
+				MODULE_VERSION = 1.0.0d1;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				WARNING_CFLAGS = "-Wno-deprecated-register";
+				WRAPPER_EXTENSION = kext;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		52C7B9E41AFCDDAF005083AE /* Build configuration list for PBXProject "uxenv4vguestdevice" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				52C7B9F31AFCDDAF005083AE /* Debug */,
+				52C7B9F41AFCDDAF005083AE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		52C7B9F51AFCDDAF005083AE /* Build configuration list for PBXNativeTarget "uxenv4vguestdevice" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				52C7B9F61AFCDDAF005083AE /* Debug */,
+				52C7B9F71AFCDDAF005083AE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 52C7B9E11AFCDDAF005083AE /* Project object */;
+}
