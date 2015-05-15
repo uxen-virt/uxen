@@ -62,6 +62,9 @@
 
 #define SHFL_RT_LINK(pClient) ((pClient)->fu32Flags & SHFL_CF_SYMLINKS ? RTPATH_F_ON_LINK : RTPATH_F_FOLLOW_LINK)
 
+static int resize_file(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle,
+                       uint64_t sz);
+
 #ifdef ORIGINAL_VBOX
 /**
  * @todo find a better solution for supporting the execute bit for non-windows
@@ -679,7 +682,7 @@ static int vbsfOpenFile(SHFLCLIENTDATA *pClient, SHFLROOT root, const wchar_t *p
             /* @todo Also set the size for SHFL_CF_ACT_CREATE_IF_NEW if
                      SHFL_CF_ACT_FAIL_IF_EXISTS is set. */
             uint64_t sz = fch_host_fileoffset(pClient, root, handle, pParms->Info.cbObject);
-            RTFileSetSize(pHandle->file.Handle, sz);
+            resize_file(pClient, root, handle, sz);
             pParms->Result = SHFL_FILE_REPLACED;
         }
         if (   (   SHFL_CF_ACT_FAIL_IF_EXISTS
@@ -1285,6 +1288,8 @@ int vbsfWrite(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, uint64_
         return rc;
 
     fch_crypt(pClient, Handle, pBuffer, offset, *pcbBuffer);
+    if (*pcbBuffer >= 4)
+        Log(("RTFileWrite hostoff=%x %02x %02x %02x %02x\n", (int)hostoffset, pBuffer[0], pBuffer[1], pBuffer[2], pBuffer[3]));
     rc = RTFileWrite(pHandle->file.Handle, pBuffer, *pcbBuffer, &count);
     *pcbBuffer = (uint32_t)count;
     Log(("RTFileWrite returned 0x%x bytes written %x\n", rc, count));
@@ -1702,7 +1707,66 @@ static int vbsfSetFileInfo(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Ha
 }
 
 
-static int vbsfSetEndOfFile(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, uint32_t flags, uint32_t *pcbBuffer, uint8_t *pBuffer)
+static
+int rewrite_empty_portion(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle,
+                          uint64_t guest_off, uint64_t len)
+{
+    uint8_t zeroes[32768];
+    uint64_t p = guest_off;
+    int rc;
+
+    while (len) {
+        uint32_t n = len;
+        if (n > sizeof(zeroes))
+            n = sizeof(zeroes);
+        memset(zeroes, 0, n); // vbsfWrite can modify buffer contents
+        rc = vbsfWrite(pClient, root, handle, p, &n, zeroes);
+        if (RT_FAILURE(rc))
+            return rc;
+        len -= n;
+        p += n;
+    }
+    return VINF_SUCCESS;
+}
+
+static
+int resize_file(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle,
+                uint64_t sz)
+{
+    SHFLFILEHANDLE *pHandle = vbsfQueryFileHandle(pClient, handle);
+    RTFSOBJINFO fileinfo;
+    int crypt_mode = 0;
+    uint64_t prev_sz, prev_sz_guest;
+    int rc;
+
+    rc = fch_query_crypt_by_handle(pClient, root, handle, &crypt_mode);
+    if (RT_FAILURE(rc))
+        return rc;
+
+    rc = RTFileQueryInfo(pHandle->file.Handle, &fileinfo, RTFSOBJATTRADD_NOTHING);
+    if (RT_FAILURE(rc))
+        return rc;
+
+    prev_sz = fileinfo.cbObject;
+    fch_guest_fsinfo(pClient, root, handle, &fileinfo);
+    prev_sz_guest = fileinfo.cbObject;
+    rc = RTFileSetSize(pHandle->file.Handle, sz);
+    if (rc != VINF_SUCCESS)
+        return rc;
+    /* if encryption in use and file was extended, we need to rewrite the extended part */
+    if (crypt_mode && sz > prev_sz) {
+        rc = rewrite_empty_portion(pClient, root, handle,
+                                   prev_sz_guest,
+                                   sz - prev_sz);
+        if (RT_FAILURE(rc))
+            return rc;
+    }
+    return VINF_SUCCESS;
+}
+
+static
+int vbsfSetEndOfFile(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle,
+                     uint32_t flags, uint32_t *pcbBuffer, uint8_t *pBuffer)
 {
     SHFLFILEHANDLE *pHandle = vbsfQueryFileHandle(pClient, Handle);
     int             rc = VINF_SUCCESS;
@@ -1721,6 +1785,7 @@ static int vbsfSetEndOfFile(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE H
     {
         /* add crypt hdr if truncating to 0 len */
         int crypt_mode;
+        uint64_t sz;
 
         rc = fch_query_crypt_by_handle(pClient, root, Handle, &crypt_mode);
         if (RT_SUCCESS(rc) && crypt_mode) {
@@ -1731,10 +1796,10 @@ static int vbsfSetEndOfFile(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE H
                     return rc;
             }
         }
-        uint64_t sz = fch_host_fileoffset(pClient, root, Handle, pSFDEntry->cbObject);
-        rc = RTFileSetSize(pHandle->file.Handle, sz);
+        sz = fch_host_fileoffset(pClient, root, Handle, pSFDEntry->cbObject);
+        rc = resize_file(pClient, root, Handle, sz);
         if (rc != VINF_SUCCESS)
-            AssertFailed();
+            return rc;
     }
     else
         AssertFailed();
