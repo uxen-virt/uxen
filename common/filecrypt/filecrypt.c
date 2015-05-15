@@ -8,6 +8,8 @@
 #include <wincrypt.h>
 #include <err.h>
 
+#define MAX_LAYERS 1024
+
 static HCRYPTPROV cprov;
 
 #if __x86_64__
@@ -192,7 +194,8 @@ fc_read_hdr(HANDLE file, int *iscrypt, filecrypt_hdr_t **h_out)
 {
     filecrypt_hdr_t *h;
     int rc = 0;
-    int p;
+    uint64_t p;
+    int layer;
 
     if (h_out)
         *h_out = NULL;
@@ -206,9 +209,13 @@ fc_read_hdr(HANDLE file, int *iscrypt, filecrypt_hdr_t **h_out)
         return rc;
     }
     p = h->hdrlen;
+    layer = 0;
     for (;;) {
         int iscrypt_temp;
         filecrypt_hdr_t *htemp = NULL;
+
+        if (layer++ > MAX_LAYERS)
+            return ERROR_BUFFER_OVERFLOW;
 
         if (SetFilePointer(file, p, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER)
             break; /* no more crypt layers */
@@ -219,6 +226,8 @@ fc_read_hdr(HANDLE file, int *iscrypt, filecrypt_hdr_t **h_out)
             return rc;
         } else if (rc)
             break; /* no more crypt layers */
+        if (p + htemp->hdrlen > INT_MAX)
+            return ERROR_BUFFER_OVERFLOW;
         append_hdr(h, htemp);
         p += htemp->hdrlen;
         free(htemp);
