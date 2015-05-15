@@ -1,0 +1,572 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		29B5C08E1B133BD0006C766D /* v4v_user_ring.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 29B5C08C1B133BD0006C766D /* v4v_user_ring.cpp */; };
+		29B5C08F1B133BD0006C766D /* v4v_user_ring.h in Headers */ = {isa = PBXBuildFile; fileRef = 29B5C08D1B133BD0006C766D /* v4v_user_ring.h */; };
+		29B5C0A01B13AC31006C766D /* main.c in Sources */ = {isa = PBXBuildFile; fileRef = 29B5C09F1B13AC31006C766D /* main.c */; };
+		29B5C0A41B13AC39006C766D /* libuxenv4vlib.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 29B5C0951B13AC1B006C766D /* libuxenv4vlib.a */; };
+		29B5C0AE1B13ACC5006C766D /* uxenv4vlib.c in Sources */ = {isa = PBXBuildFile; fileRef = 29B5C0AC1B13ACC5006C766D /* uxenv4vlib.c */; };
+		29B5C0AF1B13ACC5006C766D /* uxenv4vlib.h in Headers */ = {isa = PBXBuildFile; fileRef = 29B5C0AD1B13ACC5006C766D /* uxenv4vlib.h */; };
+		4A3513F91C8F475D00604287 /* IOKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 4A3513F81C8F475D00604287 /* IOKit.framework */; };
+		52C7BC751B0221DC000E7A91 /* v4v_service.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 52C7BC5F1B021F7A000E7A91 /* v4v_service.cpp */; };
+		52C7BC761B0221E1000E7A91 /* v4v_service.h in Headers */ = {isa = PBXBuildFile; fileRef = 52C7BC601B021F7A000E7A91 /* v4v_service.h */; };
+		52C7BC771B0221E6000E7A91 /* v4v_ops.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 52DD61E81AFD2DEE00BDF9F2 /* v4v_ops.cpp */; };
+		52C7BC781B0221EB000E7A91 /* v4v_device.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 52C7BC631B022043000E7A91 /* v4v_device.cpp */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		29B5C0A71B13AC44006C766D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 52C7B9E11AFCDDAF005083AE /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 29B5C0941B13AC1B006C766D;
+			remoteInfo = uxenv4vlib;
+		};
+		29F5D2E51B40318E007A7EDB /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 52C7B9E11AFCDDAF005083AE /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 52C7BC691B0221C8000E7A91;
+			remoteInfo = uxenv4vservice;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		29B5C09B1B13AC31006C766D /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		29B5C06E1B060BBC006C766D /* uxenv4vservice.exp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.exports; path = uxenv4vservice.exp; sourceTree = "<group>"; };
+		29B5C08C1B133BD0006C766D /* v4v_user_ring.cpp */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 4; lastKnownFileType = sourcecode.cpp.cpp; path = v4v_user_ring.cpp; sourceTree = "<group>"; tabWidth = 8; usesTabs = 0; };
+		29B5C08D1B133BD0006C766D /* v4v_user_ring.h */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 4; lastKnownFileType = sourcecode.c.h; path = v4v_user_ring.h; sourceTree = "<group>"; tabWidth = 8; usesTabs = 0; };
+		29B5C0901B134780006C766D /* v4v_service_shared.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = v4v_service_shared.h; sourceTree = "<group>"; };
+		29B5C0951B13AC1B006C766D /* libuxenv4vlib.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libuxenv4vlib.a; sourceTree = BUILT_PRODUCTS_DIR; };
+		29B5C09D1B13AC31006C766D /* v4vasynctest */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = v4vasynctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		29B5C09F1B13AC31006C766D /* main.c */ = {isa = PBXFileReference; indentWidth = 4; lastKnownFileType = sourcecode.c.c; path = main.c; sourceTree = "<group>"; tabWidth = 8; usesTabs = 0; };
+		29B5C0AC1B13ACC5006C766D /* uxenv4vlib.c */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 4; lastKnownFileType = sourcecode.c.c; path = uxenv4vlib.c; sourceTree = SOURCE_ROOT; tabWidth = 4; usesTabs = 0; };
+		29B5C0AD1B13ACC5006C766D /* uxenv4vlib.h */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 4; lastKnownFileType = sourcecode.c.h; path = uxenv4vlib.h; sourceTree = SOURCE_ROOT; usesTabs = 0; };
+		4A3513F81C8F475D00604287 /* IOKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = IOKit.framework; path = System/Library/Frameworks/IOKit.framework; sourceTree = SDKROOT; };
+		52C7B9EF1AFCDDAF005083AE /* v4v_device.h */ = {isa = PBXFileReference; indentWidth = 4; lastKnownFileType = sourcecode.c.h; path = v4v_device.h; sourceTree = "<group>"; tabWidth = 8; usesTabs = 0; };
+		52C7BC5F1B021F7A000E7A91 /* v4v_service.cpp */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 4; lastKnownFileType = sourcecode.cpp.cpp; path = v4v_service.cpp; sourceTree = "<group>"; tabWidth = 8; usesTabs = 0; };
+		52C7BC601B021F7A000E7A91 /* v4v_service.h */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 4; lastKnownFileType = sourcecode.c.h; path = v4v_service.h; sourceTree = "<group>"; tabWidth = 8; usesTabs = 0; };
+		52C7BC631B022043000E7A91 /* v4v_device.cpp */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 4; lastKnownFileType = sourcecode.cpp.cpp; path = v4v_device.cpp; sourceTree = "<group>"; tabWidth = 8; usesTabs = 0; };
+		52C7BC6A1B0221C8000E7A91 /* uxenv4vservice.kext */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = uxenv4vservice.kext; sourceTree = BUILT_PRODUCTS_DIR; };
+		52C7BC6D1B0221C8000E7A91 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		52DD61E81AFD2DEE00BDF9F2 /* v4v_ops.cpp */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 4; lastKnownFileType = sourcecode.cpp.cpp; path = v4v_ops.cpp; sourceTree = "<group>"; tabWidth = 8; usesTabs = 0; };
+		52DD61E91AFD2DEE00BDF9F2 /* v4v_ops.h */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 4; lastKnownFileType = sourcecode.c.h; path = v4v_ops.h; sourceTree = "<group>"; tabWidth = 8; usesTabs = 0; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		29B5C0921B13AC1B006C766D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4A3513F91C8F475D00604287 /* IOKit.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		29B5C09A1B13AC31006C766D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				29B5C0A41B13AC39006C766D /* libuxenv4vlib.a in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		52C7BC661B0221C8000E7A91 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		29B5C09E1B13AC31006C766D /* v4vasynctest */ = {
+			isa = PBXGroup;
+			children = (
+				29B5C09F1B13AC31006C766D /* main.c */,
+			);
+			path = v4vasynctest;
+			sourceTree = "<group>";
+		};
+		29B5C0AB1B13ACA8006C766D /* uxenv4vlib */ = {
+			isa = PBXGroup;
+			children = (
+				29B5C0AC1B13ACC5006C766D /* uxenv4vlib.c */,
+				29B5C0AD1B13ACC5006C766D /* uxenv4vlib.h */,
+			);
+			name = uxenv4vlib;
+			path = v4vasynctest;
+			sourceTree = "<group>";
+		};
+		52C7B9E01AFCDDAF005083AE = {
+			isa = PBXGroup;
+			children = (
+				4A3513F81C8F475D00604287 /* IOKit.framework */,
+				52C7BC6B1B0221C8000E7A91 /* UxenV4VService */,
+				29B5C0AB1B13ACA8006C766D /* uxenv4vlib */,
+				29B5C09E1B13AC31006C766D /* v4vasynctest */,
+				52C7B9EB1AFCDDAF005083AE /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		52C7B9EB1AFCDDAF005083AE /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				52C7BC6A1B0221C8000E7A91 /* uxenv4vservice.kext */,
+				29B5C0951B13AC1B006C766D /* libuxenv4vlib.a */,
+				29B5C09D1B13AC31006C766D /* v4vasynctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		52C7BC6B1B0221C8000E7A91 /* UxenV4VService */ = {
+			isa = PBXGroup;
+			children = (
+				29B5C0901B134780006C766D /* v4v_service_shared.h */,
+				52C7B9EF1AFCDDAF005083AE /* v4v_device.h */,
+				52C7BC631B022043000E7A91 /* v4v_device.cpp */,
+				52DD61E91AFD2DEE00BDF9F2 /* v4v_ops.h */,
+				52DD61E81AFD2DEE00BDF9F2 /* v4v_ops.cpp */,
+				52C7BC601B021F7A000E7A91 /* v4v_service.h */,
+				52C7BC5F1B021F7A000E7A91 /* v4v_service.cpp */,
+				29B5C08D1B133BD0006C766D /* v4v_user_ring.h */,
+				29B5C08C1B133BD0006C766D /* v4v_user_ring.cpp */,
+				52C7BC6C1B0221C8000E7A91 /* Supporting Files */,
+				29B5C06E1B060BBC006C766D /* uxenv4vservice.exp */,
+			);
+			name = UxenV4VService;
+			sourceTree = "<group>";
+		};
+		52C7BC6C1B0221C8000E7A91 /* Supporting Files */ = {
+			isa = PBXGroup;
+			children = (
+				52C7BC6D1B0221C8000E7A91 /* Info.plist */,
+			);
+			name = "Supporting Files";
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		29B5C0931B13AC1B006C766D /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				29B5C0AF1B13ACC5006C766D /* uxenv4vlib.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		52C7BC671B0221C8000E7A91 /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				29B5C08F1B133BD0006C766D /* v4v_user_ring.h in Headers */,
+				52C7BC761B0221E1000E7A91 /* v4v_service.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		29B5C0941B13AC1B006C766D /* uxenv4vlib */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 29B5C0961B13AC1B006C766D /* Build configuration list for PBXNativeTarget "uxenv4vlib" */;
+			buildPhases = (
+				29B5C0911B13AC1B006C766D /* Sources */,
+				29B5C0921B13AC1B006C766D /* Frameworks */,
+				29B5C0931B13AC1B006C766D /* Headers */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = uxenv4vlib;
+			productName = uxenv4vlib;
+			productReference = 29B5C0951B13AC1B006C766D /* libuxenv4vlib.a */;
+			productType = "com.apple.product-type.library.static";
+		};
+		29B5C09C1B13AC31006C766D /* v4vasynctest */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 29B5C0A11B13AC31006C766D /* Build configuration list for PBXNativeTarget "v4vasynctest" */;
+			buildPhases = (
+				29B5C0991B13AC31006C766D /* Sources */,
+				29B5C09A1B13AC31006C766D /* Frameworks */,
+				29B5C09B1B13AC31006C766D /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				29F5D2E61B40318E007A7EDB /* PBXTargetDependency */,
+				29B5C0A81B13AC44006C766D /* PBXTargetDependency */,
+			);
+			name = v4vasynctest;
+			productName = v4vasynctest;
+			productReference = 29B5C09D1B13AC31006C766D /* v4vasynctest */;
+			productType = "com.apple.product-type.tool";
+		};
+		52C7BC691B0221C8000E7A91 /* uxenv4vservice */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 52C7BC721B0221C8000E7A91 /* Build configuration list for PBXNativeTarget "uxenv4vservice" */;
+			buildPhases = (
+				52C7BC651B0221C8000E7A91 /* Sources */,
+				52C7BC661B0221C8000E7A91 /* Frameworks */,
+				52C7BC671B0221C8000E7A91 /* Headers */,
+				52C7BC681B0221C8000E7A91 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = uxenv4vservice;
+			productName = UxenV4VService;
+			productReference = 52C7BC6A1B0221C8000E7A91 /* uxenv4vservice.kext */;
+			productType = "com.apple.product-type.kernel-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		52C7B9E11AFCDDAF005083AE /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 0610;
+				ORGANIZATIONNAME = "uXen Project";
+				TargetAttributes = {
+					29B5C0941B13AC1B006C766D = {
+						CreatedOnToolsVersion = 6.3.1;
+					};
+					29B5C09C1B13AC31006C766D = {
+						CreatedOnToolsVersion = 6.3.1;
+					};
+					52C7BC691B0221C8000E7A91 = {
+						CreatedOnToolsVersion = 6.1;
+					};
+				};
+			};
+			buildConfigurationList = 52C7B9E41AFCDDAF005083AE /* Build configuration list for PBXProject "uxenv4vservice" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = English;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = 52C7B9E01AFCDDAF005083AE;
+			productRefGroup = 52C7B9EB1AFCDDAF005083AE /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				52C7BC691B0221C8000E7A91 /* uxenv4vservice */,
+				29B5C0941B13AC1B006C766D /* uxenv4vlib */,
+				29B5C09C1B13AC31006C766D /* v4vasynctest */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		52C7BC681B0221C8000E7A91 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		29B5C0911B13AC1B006C766D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				29B5C0AE1B13ACC5006C766D /* uxenv4vlib.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		29B5C0991B13AC31006C766D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				29B5C0A01B13AC31006C766D /* main.c in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		52C7BC651B0221C8000E7A91 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				52C7BC751B0221DC000E7A91 /* v4v_service.cpp in Sources */,
+				52C7BC781B0221EB000E7A91 /* v4v_device.cpp in Sources */,
+				52C7BC771B0221E6000E7A91 /* v4v_ops.cpp in Sources */,
+				29B5C08E1B133BD0006C766D /* v4v_user_ring.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		29B5C0A81B13AC44006C766D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 29B5C0941B13AC1B006C766D /* uxenv4vlib */;
+			targetProxy = 29B5C0A71B13AC44006C766D /* PBXContainerItemProxy */;
+		};
+		29F5D2E61B40318E007A7EDB /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 52C7BC691B0221C8000E7A91 /* uxenv4vservice */;
+			targetProxy = 29F5D2E51B40318E007A7EDB /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		29B5C0971B13AC1B006C766D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				EXECUTABLE_PREFIX = lib;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../../xen/include/public/",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.10;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		29B5C0981B13AC1B006C766D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COPY_PHASE_STRIP = NO;
+				EXECUTABLE_PREFIX = lib;
+				GCC_NO_COMMON_BLOCKS = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../../xen/include/public/",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.10;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		29B5C0A21B13AC31006C766D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/../../xen/include/public/",
+					"$(inherited)",
+					"/Applications/Xcode-6.3.1.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.10;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		29B5C0A31B13AC31006C766D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COPY_PHASE_STRIP = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(SRCROOT)/../../xen/include/public/",
+					"$(inherited)",
+					"/Applications/Xcode-6.3.1.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.10;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		52C7B9F31AFCDDAF005083AE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "";
+				COPY_PHASE_STRIP = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+					"MACH_ASSERT=1",
+				);
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				MACOSX_DEPLOYMENT_TARGET = 10.9;
+				MTL_ENABLE_DEBUG_INFO = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				WARNING_CFLAGS = "-Wno-deprecated-register";
+			};
+			name = Debug;
+		};
+		52C7B9F41AFCDDAF005083AE /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_IDENTITY = "";
+				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = "$(inherited)";
+				MACOSX_DEPLOYMENT_TARGET = 10.9;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				WARNING_CFLAGS = "-Wno-deprecated-register";
+			};
+			name = Release;
+		};
+		52C7BC731B0221C8000E7A91 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1.0.0d1;
+				EXPORTED_SYMBOLS_FILE = UxenV4VService.exp;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../../xen/include/public/",
+					"$(SRCROOT)/../include/",
+					"$(SRCROOT)/../../common/include/xen-public/",
+				);
+				INFOPLIST_FILE = Info.plist;
+				MODULE_NAME = org.uxen.driver.UxenV4VService;
+				MODULE_VERSION = 1.0.0d1;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				WRAPPER_EXTENSION = kext;
+			};
+			name = Debug;
+		};
+		52C7BC741B0221C8000E7A91 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1.0.0d1;
+				EXPORTED_SYMBOLS_FILE = UxenV4VService.exp;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../../xen/include/public/",
+					"$(SRCROOT)/../include/",
+					"$(SRCROOT)/../../common/include/xen-public/",
+				);
+				INFOPLIST_FILE = Info.plist;
+				MODULE_NAME = org.uxen.driver.UxenV4VService;
+				MODULE_VERSION = 1.0.0d1;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				WRAPPER_EXTENSION = kext;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		29B5C0961B13AC1B006C766D /* Build configuration list for PBXNativeTarget "uxenv4vlib" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				29B5C0971B13AC1B006C766D /* Debug */,
+				29B5C0981B13AC1B006C766D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		29B5C0A11B13AC31006C766D /* Build configuration list for PBXNativeTarget "v4vasynctest" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				29B5C0A21B13AC31006C766D /* Debug */,
+				29B5C0A31B13AC31006C766D /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		52C7B9E41AFCDDAF005083AE /* Build configuration list for PBXProject "uxenv4vservice" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				52C7B9F31AFCDDAF005083AE /* Debug */,
+				52C7B9F41AFCDDAF005083AE /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		52C7BC721B0221C8000E7A91 /* Build configuration list for PBXNativeTarget "uxenv4vservice" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				52C7BC731B0221C8000E7A91 /* Debug */,
+				52C7BC741B0221C8000E7A91 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 52C7B9E11AFCDDAF005083AE /* Project object */;
+}

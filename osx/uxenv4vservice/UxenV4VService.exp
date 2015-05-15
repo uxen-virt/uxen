@@ -1,0 +1,10 @@
+# Only export symbols we expect other kexts to actually use.
+__ZN26org_uxen_driver_v4v_device*
+__ZN27org_uxen_driver_v4v_service*
+__ZNK26org_uxen_driver_v4v_device*
+__ZNK27org_uxen_driver_v4v_service*
+__ZTV26org_uxen_driver_v4v_device
+__ZTV27org_uxen_driver_v4v_service
+__ZTVN26org_uxen_driver_v4v_device9MetaClassE
+__ZTVN27org_uxen_driver_v4v_service9MetaClassE
+_kmod_info

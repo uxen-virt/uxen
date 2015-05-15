@@ -49,6 +49,7 @@ extern "C" {
 
 #include <uxen_def.h>
 #include <uxen_ioctl.h>
+#include <uxen_xnu_errno.h>
 
 #include "xen-errno.h"
 
@@ -467,18 +468,6 @@ enum {
 
 /* Force a compilation error if condition is true */
 #define BUILD_BUG_ON(condition) ((void)sizeof(struct { int:-!!(condition); }))
-
-#define uxen_translate_xen_errno(xen_e) (({             \
-                int os_e;                               \
-                switch (xen_e) {                        \
-                case -11: os_e = EAGAIN; break;         \
-                case -40: os_e = ENOSYS; break;         \
-                case -90: os_e = EMSGSIZE; break;       \
-                case -111: os_e = ECONNREFUSED; break;  \
-                default: os_e = -(xen_e); break;        \
-                }                                       \
-                os_e;                                   \
-            }))
 
 #ifdef __cplusplus
 }

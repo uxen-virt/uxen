@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2015, Bromium, Inc.
+# Copyright 2012-2016, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -16,6 +16,7 @@ SUBDIRS += img-tools
 SUBDIRS += cow-kext
 SUBDIRS += hostconfig
 SUBDIRS += uxenconsole
+SUBDIRS += uxenv4vservice
 
 TARGETS = all dist
 
