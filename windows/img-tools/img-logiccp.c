@@ -2958,12 +2958,6 @@ int main(int argc, char **argv)
         path_join(map_idx, location, L"/swapdata/map.idx");
         path_join(file_id_list, location, L"/swapdata/fileidlist.idx");
         path_join(cow_dir, location, L"/swapdata/cow");
-
-        if (!CreateDirectoryW(cow_dir, NULL)
-            && (GetLastError() != ERROR_ALREADY_EXISTS)) {
-            printf("unable to create CoW directory %ls!\n", cow_dir);
-            exit(1);
-        }
     }
 
     /* Read and parse user-supplied manifest. */
@@ -3018,6 +3012,12 @@ int main(int argc, char **argv)
         if (arg_guid) {
             if (local_uuid_parse(arg_guid, &guid) < 0) {
                 err(1, "Error in parsing guid [%s]", arg_guid);
+            }
+
+            if (!CreateDirectoryW(cow_dir, NULL)
+                && (GetLastError() != ERROR_ALREADY_EXISTS)) {
+                printf("unable to create CoW directory %ls!\n", cow_dir);
+                exit(1);
             }
 
             wchar_t cow_drvpath[MAX_PATH_LEN];
