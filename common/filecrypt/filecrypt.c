@@ -226,8 +226,10 @@ fc_read_hdr(HANDLE file, int *iscrypt, filecrypt_hdr_t **h_out)
             return rc;
         } else if (rc)
             break; /* no more crypt layers */
-        if (p + htemp->hdrlen > INT_MAX)
+        if (p + htemp->hdrlen > INT_MAX) {
+            free(htemp);
             return ERROR_BUFFER_OVERFLOW;
+        }
         append_hdr(h, htemp);
         p += htemp->hdrlen;
         free(htemp);
