@@ -19,10 +19,12 @@
 
 /* Get domid_t defined */
 #ifdef __XEN__
+#ifndef __APPLE__
 #include <xen/types.h>
+#endif
 #include <public/xen.h>
 
-#ifndef _SSIZE_T_DEFINED
+#if !defined(_SSIZE_T_DEFINED) && !defined(__APPLE__)
 #define _SSIZE_T_DEFINED
 typedef int ssize_t;            // FIXME this needs to be somewhere else
 #endif
@@ -40,7 +42,7 @@ typedef int ssize_t;            // FIXME this needs to be somewhere else
 #else
 #define V4V_VOLATILE volatile
 #include "xen.h"
-#ifndef _SSIZE_T_DEFINED
+#if !defined(_SSIZE_T_DEFINED) && !defined(__APPLE__)
 #define _SSIZE_T_DEFINED
 typedef int ssize_t;
 #endif
@@ -334,7 +336,7 @@ v4v_copy_out(struct v4v_ring *r, struct v4v_addr *from, uint32_t *protocol,
     if (btr < len)
         return -1;
 
-#if defined(__GNUC__)
+#if defined(__GNUC__) && !defined(__cplusplus)
     if (from)
         *from = mh->source;
 #else
@@ -446,7 +448,7 @@ v4v_copy_out_offset(struct v4v_ring *r, struct v4v_addr *from,
     if (btr < len)
         return -1;
 
-#if defined(__GNUC__)
+#if defined(__GNUC__) && !defined(__cplusplus)
     if (from)
         *from = mh->source;
 #else
