@@ -433,9 +433,16 @@ void man_uniq_by_name_and_action(Manifest *man)
     for (i = j = 0; i < man->n; ++i) {
 
         ManifestEntry *a = &man->entries[i];
-        if (i == 0 || wcscmp(a->name, man->entries[j - 1].name) != 0
+        const wchar_t *aname = a->rewrite ? a->rewrite : a->name;
+        if (i == 0) {
+            j++;
+        } else {
+            const wchar_t* jname = man->entries[j - 1].rewrite ?
+                man->entries[j - 1].rewrite : man->entries[j - 1].name;
+            if (wcscmp(aname, jname) != 0
                    || a->action != man->entries[j - 1].action) {
-            man->entries[j++] = *a;
+                man->entries[j++] = *a;
+            }
         }
     }
     man->n = j;
@@ -874,7 +881,7 @@ int path_exists(wchar_t *fn, uint64_t *file_id, uint64_t *file_size, int *is_dir
 
 int bfs(Variable *var, Manifest *suffixes,
         Manifest *out, struct disk *disk,
-        const wchar_t *dn)
+        ManifestEntry* toplevel_entry)
 {
     assert(disk->bootvol);
 
@@ -884,18 +891,14 @@ int bfs(Variable *var, Manifest *suffixes,
     int manifested_action;
     int action;
     const size_t info_sz = 4<<20;
-    ManifestEntry *m;
+    ManifestEntry *m = toplevel_entry;
     void *info_buf;
+    const wchar_t* dn = toplevel_entry->name;
     assert(min_shallow_size >= SECTOR_SIZE);
     int heap_switch = 0;
     int is_dir;
     Heap heaps[2];
 
-    m = find_by_prefix(var->man, dn);
-    if (!m) {
-        printf("unknown file [%ls:%ls]\n", var->path, dn);
-        exit(1);
-    }
     manifested_action = m->action;
     action = m->action;
 
@@ -1431,7 +1434,7 @@ int scanning_phase(struct disk *disk, VarList *vars,
                 case MAN_HARDLINK_SHALLOW:
                 case MAN_COPY:
                 case MAN_FORCE_COPY:
-                    r = bfs(var, suffixes, man_out, disk, m->name);
+                    r = bfs(var, suffixes, man_out, disk, m);
                     if (r < 0) {
                         printf("Failed while processing [%ls] : [%d]\n", m->name, r);
                         return r;
