@@ -409,18 +409,17 @@ void man_uniq_by_name(Manifest *man)
 {
     /* uniq'ify manifest. */
     int i, j;
-    for (i = j = 0; i < man->n; ++i) {
+    if (man->n == 0) {
+        return;
+    }
+    for (i = j = 1; i < man->n; ++i) {
 
         ManifestEntry *a = &man->entries[i];
         const wchar_t *aname = a->rewrite ? a->rewrite : a->name;
-        if (i == 0) {
-            j++;
-        } else {
-            const wchar_t* jname = man->entries[j - 1].rewrite ?
-                man->entries[j - 1].rewrite : man->entries[j - 1].name;
-            if (wcscmp(aname, jname) != 0) {
-                man->entries[j++] = *a;
-            }
+        const wchar_t* jname = man->entries[j - 1].rewrite ?
+            man->entries[j - 1].rewrite : man->entries[j - 1].name;
+        if (wcscmp(aname, jname) != 0) {
+            man->entries[j++] = *a;
         }
     }
     man->n = j;
@@ -430,19 +429,18 @@ void man_uniq_by_name_and_action(Manifest *man)
 {
     /* uniq'ify manifest. */
     int i, j;
-    for (i = j = 0; i < man->n; ++i) {
+    if (man->n == 0) {
+        return;
+    }
+    for (i = j = 1; i < man->n; ++i) {
 
         ManifestEntry *a = &man->entries[i];
         const wchar_t *aname = a->rewrite ? a->rewrite : a->name;
-        if (i == 0) {
-            j++;
-        } else {
-            const wchar_t* jname = man->entries[j - 1].rewrite ?
-                man->entries[j - 1].rewrite : man->entries[j - 1].name;
-            if (wcscmp(aname, jname) != 0
-                   || a->action != man->entries[j - 1].action) {
-                man->entries[j++] = *a;
-            }
+        const wchar_t* jname = man->entries[j - 1].rewrite ?
+            man->entries[j - 1].rewrite : man->entries[j - 1].name;
+        if (wcscmp(aname, jname) != 0
+               || a->action != man->entries[j - 1].action) {
+            man->entries[j++] = *a;
         }
     }
     man->n = j;
