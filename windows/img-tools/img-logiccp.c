@@ -412,8 +412,15 @@ void man_uniq_by_name(Manifest *man)
     for (i = j = 0; i < man->n; ++i) {
 
         ManifestEntry *a = &man->entries[i];
-        if (i == 0 || wcscmp(a->name, man->entries[j - 1].name) != 0) {
-            man->entries[j++] = *a;
+        const wchar_t *aname = a->rewrite ? a->rewrite : a->name;
+        if (i == 0) {
+            j++;
+        } else {
+            const wchar_t* jname = man->entries[j - 1].rewrite ?
+                man->entries[j - 1].rewrite : man->entries[j - 1].name;
+            if (wcscmp(aname, jname) != 0) {
+                man->entries[j++] = *a;
+            }
         }
     }
     man->n = j;
