@@ -33,6 +33,11 @@ DRIVER_DISPATCH stor_dispatch_pnp;
 static __drv_dispatchType(IRP_MJ_POWER)
 DRIVER_DISPATCH stor_dispatch_power;
 
+static 
+__drv_dispatchType(IRP_MJ_CREATE) 
+__drv_dispatchType(IRP_MJ_CLOSE)
+DRIVER_DISPATCH stor_dispatch_create_close;
+
 static DRIVER_UNLOAD stor_unload;
 
 static IO_COMPLETION_ROUTINE stor_device_usage_notification_compl;
@@ -169,6 +174,8 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT drv_obj,
     drv_obj->MajorFunction[IRP_MJ_SCSI] = stor_dispatch_scsi;
     drv_obj->MajorFunction[IRP_MJ_PNP] = stor_dispatch_pnp;
     drv_obj->MajorFunction[IRP_MJ_POWER] = stor_dispatch_power;
+    drv_obj->MajorFunction[IRP_MJ_CREATE] = stor_dispatch_create_close;
+    drv_obj->MajorFunction[IRP_MJ_CLOSE] = stor_dispatch_create_close;
 
     drv_obj->DriverExtension->AddDevice = stor_add_device;
     drv_obj->DriverUnload = stor_unload;
@@ -666,8 +673,7 @@ NTSTATUS stor_device_usage_notification_compl(PDEVICE_OBJECT dev_obj,
     return STATUS_CONTINUE_COMPLETION;
 }
 
-NTSTATUS stor_dispatch_power(PDEVICE_OBJECT dev_obj,
-                             PIRP irp)
+NTSTATUS stor_dispatch_power(PDEVICE_OBJECT dev_obj, PIRP irp)
 {
     NTSTATUS status;
     PUXENSTOR_DEV_EXT dev_ext;
@@ -695,5 +701,27 @@ NTSTATUS stor_dispatch_power(PDEVICE_OBJECT dev_obj,
     IoReleaseRemoveLock(&dev_ext->remove_lock, irp); 
 
   out:
+    return status;
+}
+
+NTSTATUS stor_dispatch_create_close(PDEVICE_OBJECT dev_obj, PIRP irp)
+{
+    PUXENSTOR_DEV_EXT dev_ext;
+    NTSTATUS status;
+
+    ASSERT(dev_obj);
+    ASSERT(irp);
+
+    dev_ext = (PUXENSTOR_DEV_EXT)dev_obj->DeviceExtension;
+    status = IoAcquireRemoveLock(&dev_ext->remove_lock, irp);
+    if (!NT_SUCCESS(status))
+        uxen_debug("[0x%p:0x%p] IoAcquireRemoveLock() failed: 0x%08x",
+                   dev_obj, irp, status);
+    else
+        status = STATUS_SUCCESS;
+
+    irp->IoStatus.Status = status;
+    IoCompleteRequest(irp, IO_NO_INCREMENT);
+
     return status;
 }
