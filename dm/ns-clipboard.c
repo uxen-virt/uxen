@@ -12,7 +12,7 @@
 #include "char.h"
 #include "ns.h"
 
-#include "net-user.h"
+#include "libnickel.h"
 #include <hgcm-limits.h>
 #include "vbox-drivers/shared-clipboard/clipboard-interface.h"
 
@@ -44,7 +44,7 @@ void ns_uclip_try_init()
 }
 
 static CharDriverState *
-ns_uclip_open(void *opaque, struct net_user *nu, CharDriverState **persist_chr,
+ns_uclip_open(void *opaque, struct nickel *ni, CharDriverState **persist_chr,
         struct sockaddr_in saddr, struct sockaddr_in daddr,
         yajl_val config)
 {
@@ -69,7 +69,7 @@ ns_uclip_open(void *opaque, struct net_user *nu, CharDriverState **persist_chr,
     d->ns_data.service_close = ns_uclip_close;
     d->ns_data.net_opaque = opaque;
 
-    ret = ns_open(&d->ns_data, nu);
+    ret = ns_open(&d->ns_data, ni);
     if (ret) {
         free(d);
 	    return NULL;

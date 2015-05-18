@@ -42,10 +42,6 @@
 #include "libnickel.h"
 #endif
 
-#if defined(CONFIG_SLIRP)
-#include <dm/slirp/libslirp.h>
-#endif
-
 #include <xenctrl.h>
 #include <uuid/uuid.h>
 
@@ -362,10 +358,6 @@ main(int argc, char **argv)
     free(vm_window_str);
     free(dom_id_str);
 
-#if defined(CONFIG_SLIRP) && defined(SLIRP_THREADED)
-    slirp_thread_start();
-#endif
-
     while (1) {
 	int timeout;
 
@@ -400,9 +392,6 @@ main(int argc, char **argv)
     ni_exit();
 #endif
     console_display_exit();
-#if defined(CONFIG_SLIRP)
-    slirp_exit();
-#endif
     net_cleanup();
 
     return 0;

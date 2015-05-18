@@ -12,7 +12,6 @@
 #ifndef LIBIMG
 #define CONFIG_NET 1
 #define CONFIG_NETEVENT 1
-#define CONFIG_SLIRP 1
 #define CONFIG_NICKEL 1
 #define HAS_AUDIO 1
 #endif

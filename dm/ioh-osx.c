@@ -21,17 +21,6 @@
 #include "timer.h"
 #include "queue.h"
 
-#if defined(CONFIG_SLIRP) && !defined(SLIRP_THREADED)
-#if defined(__APPLE__)
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#endif
-
-#include <dm/slirp/libslirp.h>
-#endif
-
 #ifndef LIBIMG
 #include "async-op.h"
 #endif
@@ -586,18 +575,10 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
 void host_main_loop_wait(int *timeout)
 {
 
-#if defined(CONFIG_SLIRP) && !defined(SLIRP_THREADED)
-    slirp_select_fill(timeout);
-#endif
-
 #ifndef LIBIMG
     ioh_wait_for_objects(&io_handlers, &wait_objects, main_active_timers, timeout, NULL);
 #else
     ioh_wait_for_objects(&io_handlers, &wait_objects, NULL, timeout, NULL);
-#endif
-
-#if defined(CONFIG_SLIRP) && !defined(SLIRP_THREADED)
-    slirp_check_timeout();
 #endif
 
 #ifndef LIBIMG

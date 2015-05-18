@@ -23,10 +23,6 @@
 #include "vbox-drivers/shared-clipboard/notify.h"
 #endif
 
-#include "slirp/libslirp.h"
-#ifdef SLIRP_DUMP_PCAP
-#include "slirp.h"
-#endif
 // #define EVENT_DEBUG 1
 
 #include "libnickel.h"

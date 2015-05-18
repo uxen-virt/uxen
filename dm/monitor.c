@@ -358,10 +358,6 @@ static mon_cmd_t info_cmds[] = {
       .help = "show block device statistics" },
     { .name = "uuid", .mhandler.info = ic_uuid,
       .help = "show the current VM UUID" },
-#if defined(CONFIG_SLIRP)
-    { .name = "slirp", .mhandler.info = ic_slirp,
-      .help = "show SLIRP statistics" },
-#endif
     { .name = "ioreq", .mhandler.info = ic_ioreq,
       .help = "show ioreq statistics" },
 #ifdef DEBUG_WAITOBJECTS

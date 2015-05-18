@@ -87,9 +87,6 @@ struct VLANState {
     QTAILQ_HEAD(, VLANClientState) clients;
     QTAILQ_ENTRY(VLANState) next;
     NetQueue *send_queue;
-#if defined(CONFIG_SLIRP) && defined(SLIRP_THREADED)
-    critical_section send_lock;
-#endif
 };
 
 VLANState *qemu_find_vlan(int id, int allocate);

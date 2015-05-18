@@ -7,7 +7,6 @@
 #ifndef _NICKEL_SERVICE_H_
 #define _NICKEL_SERVICE_H_
 
-struct net_user;
 struct socket;
 struct prx_fwd {
     int is_udp;
@@ -38,7 +37,7 @@ ni_vmfwd_add(struct nickel *ni, int is_udp, void *chr,
 void *
 ni_vmfwd_add_service(struct nickel *ni, int is_udp,
                       CharDriverState *(*service_open)(void *,
-                                                       struct net_user *,
+                                                       struct nickel *,
                                                        CharDriverState **,
                                                        struct sockaddr_in,
                                                        struct sockaddr_in,

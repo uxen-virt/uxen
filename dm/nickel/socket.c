@@ -63,10 +63,10 @@
 #define update_fdevents(so, _events) do {                       \
         if (so->events != (_events)) {                          \
             if (so->events)                                     \
-                netuser_del_wait_fd(&so->ni->nu, so->s);        \
+                ni_del_wait_fd(so->ni, so->s);                  \
             so->events = _events;                               \
             if (so->events)                                     \
-                netuser_add_wait_fd(&so->ni->nu, so->s, so->events,       \
+                ni_add_wait_fd(so->ni, so->s, so->events,       \
                                 fd_events_poll, so);            \
         }                                                       \
     } while (0)
@@ -1134,7 +1134,7 @@ int so_init(struct nickel *ni)
         warnx("%s: WSACreateEvent failed, %d", __FUNCTION__, WSAGetLastError());
         return -1;
     }
-    netuser_add_wait_object(&ni->nu, &ni->so_event, events_poll, ni);
+    ni_add_wait_object(ni, &ni->so_event, events_poll, ni);
 #endif
     return 0;
 }

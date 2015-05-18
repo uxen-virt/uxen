@@ -304,7 +304,7 @@ static void dns_lookup_sync(void *opaque);
 static int dbg_hp(int log_level, struct http_ctx *hp);
 
 static CharDriverState *
-ns_cx_open(void *opaque, struct net_user *nu, CharDriverState **persist_chr,
+ns_cx_open(void *opaque, struct nickel *ni, CharDriverState **persist_chr,
         struct sockaddr_in saddr, struct sockaddr_in daddr, yajl_val config);
 static CharDriverState *
 cx_open(void *opaque, struct nickel *ni, struct sockaddr_in saddr, struct sockaddr_in daddr);
@@ -5244,25 +5244,11 @@ cleanup:
 }
 
 static CharDriverState *
-ns_cx_open(void *opaque, struct net_user *nu, CharDriverState **persist_chr,
+ns_cx_open(void *opaque, struct nickel *ni, CharDriverState **persist_chr,
         struct sockaddr_in saddr, struct sockaddr_in daddr, yajl_val config)
 {
     CharDriverState *chr = NULL;
     struct clt_ctx *cx = NULL;
-    struct nickel *ni;
-
-    if (!nu->nickel) {
-        static bool warn_once = false;
-
-        if (!warn_once) {
-            NETLOG("%s: WARNING - guest proxy only works with Nickel", __FUNCTION__);
-            warn_once = true;
-        }
-
-        return NULL;
-    }
-
-    ni = (struct nickel *) nu->opaque;
 
     cx = cx_create(ni);
     chr = calloc(1, sizeof(*chr));

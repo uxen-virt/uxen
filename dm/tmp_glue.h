@@ -16,9 +16,6 @@
 
 extern FILE *logfile;
 
-extern int slirp_is_inited(void);
-void slirp_check_timeout(void);
-
 #include "net.h"
 
 PCIDevice *pci_nic_init_nofail(NICInfo *nd, const char *default_model,

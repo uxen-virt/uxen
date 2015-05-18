@@ -11,7 +11,7 @@
 #include "char.h"
 #include "ns.h"
 
-#include "net-user.h"
+#include "libnickel.h"
 #ifndef _WIN32
 #include <unistd.h>
 #include <fcntl.h>
@@ -20,7 +20,7 @@
 
 struct ns_fwd_data {
     CharDriverState chr; /* needs to be the first */
-    struct net_user *nu;
+    struct nickel *ni;
     void *net_opaque;
     void *opaque;
     int s;
@@ -45,7 +45,7 @@ ns_fwd_chr_can_read(void *opaque)
 {
     struct ns_fwd_data *d = opaque;
 
-    return netuser_can_recv(d->nu, d->net_opaque);
+    return ni_can_recv(d->net_opaque);
 }
 
 static void
@@ -53,7 +53,7 @@ ns_fwd_chr_read(void *opaque, const uint8_t *buf, int size)
 {
     struct ns_fwd_data *d = opaque;
 
-    netuser_recv(d->nu, d->net_opaque, buf, size);
+    ni_recv(d->net_opaque, buf, size);
 }
 
 static void
@@ -65,14 +65,14 @@ ns_fwd_chr_close(CharDriverState *chr)
         closesocket(d->s);
     d->s = -1;
     if (!d->closing) {
-        netuser_close(d->nu, d->net_opaque);
+        ni_close(d->net_opaque);
         d->net_opaque = NULL;
     }
     d->closing = 1;
 }
 
 static CharDriverState *
-ns_fwd_open(void *opaque, struct net_user *nu, CharDriverState **persist_chr,
+ns_fwd_open(void *opaque, struct nickel *ni, CharDriverState **persist_chr,
         struct sockaddr_in saddr, struct sockaddr_in daddr,
         yajl_val config)
 {
@@ -134,7 +134,7 @@ ns_fwd_open(void *opaque, struct net_user *nu, CharDriverState **persist_chr,
         goto cleanup;
     }
 
-    d->nu = nu;
+    d->ni = ni;
     d->net_opaque = opaque;
     d->chr.opaque = d;
     d->chr.refcnt = 1;

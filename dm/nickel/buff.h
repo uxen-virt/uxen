@@ -91,6 +91,7 @@ int buff_gc_consume(struct buff *b, size_t l);
 #if _WIN32
 wchar_t * buff_unicode_encode(const char *str);
 char * buff_priv_ansi_utf8_encode(const char *str);
+char * buff_ascii_encode(wchar_t *wstr);
 #endif
 
 void buff_strtolower(char *str);

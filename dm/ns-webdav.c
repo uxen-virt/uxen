@@ -19,7 +19,7 @@
 #include "timer.h"
 #include "bh.h"
 
-#include "net-user.h"
+#include "libnickel.h"
 #include "webdav.h"
 
 struct ns_webdav_data {
@@ -64,7 +64,7 @@ static void ns_webdav_do_write(void *opaque, const char *buf, size_t len)
 }
 
 static CharDriverState *
-ns_webdav_open(void *opaque, struct net_user *nu, CharDriverState **persist_chr,
+ns_webdav_open(void *opaque, struct nickel *ni, CharDriverState **persist_chr,
         struct sockaddr_in saddr, struct sockaddr_in daddr,
         yajl_val config)
 {
@@ -91,7 +91,7 @@ ns_webdav_open(void *opaque, struct net_user *nu, CharDriverState **persist_chr,
 
     d->ns_data.net_opaque = opaque;
 
-    ret = ns_open(&d->ns_data, nu);
+    ret = ns_open(&d->ns_data, ni);
     if (ret) {
         free(d);
         return NULL;

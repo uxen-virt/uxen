@@ -10,7 +10,7 @@
 #include <stdint.h>
 
 #include "char.h"
-#include "net-user.h"
+#include "libnickel.h"
 #include "ns.h"
 #include "ioh.h"
 #include "vbox-drivers/shared-clipboard/clipboard-interface.h"
@@ -130,7 +130,7 @@ ns_uclip_hostmsg_data_ready(void *opaque)
 
 bool ns_uclip_hostmsg_connection_already_opened;
 static CharDriverState *
-ns_uclip_hostmsg_open(void *opaque, struct net_user *nu, CharDriverState **persist_chr,
+ns_uclip_hostmsg_open(void *opaque, struct nickel *ni, CharDriverState **persist_chr,
         struct sockaddr_in saddr, struct sockaddr_in daddr,
         yajl_val config)
 {
@@ -148,7 +148,7 @@ ns_uclip_hostmsg_open(void *opaque, struct net_user *nu, CharDriverState **persi
 
     d->ns_data.net_opaque = opaque;
 
-    ret = ns_open(&d->ns_data, nu);
+    ret = ns_open(&d->ns_data, ni);
     if (ret) {
         free(d);
     	return NULL;
@@ -163,7 +163,7 @@ ns_uclip_hostmsg_open(void *opaque, struct net_user *nu, CharDriverState **persi
         free(d);
         return NULL;
     }
-    netuser_add_wait_object(nu, &d->data_ready_event, ns_uclip_hostmsg_data_ready, d);
+    ni_add_wait_object(ni, &d->data_ready_event, ns_uclip_hostmsg_data_ready, d);
     g_ns_uclip_hostmsg_data = d;
     ns_uclip_hostmsg_connection_already_opened = true;
     ns_uclip_try_init();
@@ -177,7 +177,7 @@ ns_uclip_hostmsg_close(CharDriverState *chr)
 
     debug_printf("%s\n", __FUNCTION__);
     g_ns_uclip_hostmsg_data = NULL;
-    netuser_del_wait_object(d->ns_data.nu, &d->data_ready_event);
+    ni_del_wait_object(d->ns_data.ni, &d->data_ready_event);
     ns_close(&d->ns_data);
 }
 

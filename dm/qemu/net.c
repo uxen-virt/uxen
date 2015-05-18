@@ -397,9 +397,6 @@ int qemu_can_send_packet(VLANClientState *sender)
         return 1;
     }
 
-#if defined(CONFIG_SLIRP) && defined(SLIRP_THREADED)
-    critical_section_enter(&vlan->send_lock);
-#endif
     QTAILQ_FOREACH(vc, &vlan->clients, next) {
         if (vc == sender) {
             continue;
@@ -407,15 +404,9 @@ int qemu_can_send_packet(VLANClientState *sender)
 
         /* no can_receive() handler, they can always receive */
         if (vc->info->can_receive && !vc->info->can_receive(vc)) {
-#if defined(CONFIG_SLIRP) && defined(SLIRP_THREADED)
-            critical_section_leave(&vlan->send_lock);
-#endif
             return 0;
         }
     }
-#if defined(CONFIG_SLIRP) && defined(SLIRP_THREADED)
-    critical_section_leave(&vlan->send_lock);
-#endif
     return 1;
 }
 
@@ -680,9 +671,6 @@ VLANState *qemu_find_vlan(int id, int allocate)
     vlan = g_malloc0(sizeof(VLANState));
     vlan->id = id;
     QTAILQ_INIT(&vlan->clients);
-#if defined(CONFIG_SLIRP) && defined(SLIRP_THREADED)
-    critical_section_init(&vlan->send_lock);
-#endif
 
     vlan->send_queue = qemu_new_net_queue(qemu_vlan_deliver_packet,
                                           qemu_vlan_deliver_packet_iov,
@@ -925,10 +913,10 @@ static const struct {
             { /* end of list */ }
         },
     },
-#ifdef CONFIG_SLIRP
+#ifdef CONFIG_NICKEL
     [NET_CLIENT_TYPE_USER] = {
         .type = "user",
-        .init = net_init_slirp,
+        .init = net_init_nickel,
         .desc = {
             NET_COMMON_PARAMS_DESC,
             {

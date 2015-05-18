@@ -6,7 +6,6 @@
 
 #include <dm/config.h>
 #include <dm/base64.h>
-#include <dm/net-user.h>
 #include <inttypes.h>
 
 #include <buff.h>

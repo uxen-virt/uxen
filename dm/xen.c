@@ -21,10 +21,6 @@
 #include "dev.h"
 #include "qemu/hw/pci.h"
 
-#if defined(CONFIG_SLIRP) && defined(SLIRP_THREADED)
-#include "slirp/libslirp.h"
-#endif
-
 int xen_pci_slot_get_pirq(PCIDevice *pci_dev, int irq_num)
 {
     return irq_num + ((pci_dev->devfn >> 3) << 2);

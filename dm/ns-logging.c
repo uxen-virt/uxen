@@ -14,7 +14,7 @@
 #include "console.h"
 #include "ns.h"
 
-#include "net-user.h"
+#include "libnickel.h"
 
 /*
  * Be careful to choose source port numbers that are outside of an ephemeral
@@ -54,7 +54,7 @@ ns_logging_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
 }
 
 static CharDriverState *
-ns_logging_open(void *opaque, struct net_user *nu, CharDriverState **persist_chr,
+ns_logging_open(void *opaque, struct nickel *ni, CharDriverState **persist_chr,
         struct sockaddr_in saddr, struct sockaddr_in daddr,
         yajl_val config)
 {
@@ -79,7 +79,7 @@ ns_logging_open(void *opaque, struct net_user *nu, CharDriverState **persist_chr
     d->ns_data.service_close = ns_logging_close;
     d->ns_data.net_opaque = opaque;
 
-    ret = ns_open(&d->ns_data, nu);
+    ret = ns_open(&d->ns_data, ni);
     if (ret) {
         free(d);
 	return NULL;

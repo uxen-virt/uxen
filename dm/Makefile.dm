@@ -20,18 +20,6 @@ $(REL_ONLY)CONFIG_MONITOR ?= no_
 
 $(OSX_CONFIG_NOT)CONFIG_VBOXDRV ?= no_
 
-#CONFIG_SLIRP ?= no_
-#CONFIG_SLIRP_DEBUG ?= no_
-CONFIG_SLIRP_TFTP_SERVER ?= no_
-#CONFIG_SLIRP_ICMP ?= no_
-CONFIG_SLIRP_IPREASS ?= no_
-CONFIG_SLIRP_TCPREASS ?= no_
-#CONFIG_SLIRP_DUMP_PCAP = no_
-CONFIG_SLIRP_INPUT_CHECKSUM = no_
-$(OSX)CONFIG_SLIRP_THREADED ?= no_
-#CONFIG_SLIRP_JUMBO_FRAMES ?= no_
-CONFIG_SLIRP_IF_OUTPUT_QUEUES ?= no_
-
 #CONFIG_NICKEL ?= no_
 #CONFIG_NICKEL_THREADED ?= no_
 
@@ -47,7 +35,6 @@ LZ4DIR = $(TOPDIR)/common/lz4
 LZ4DIR_include = $(TOPDIR)/common/lz4
 QEMUDIR = $(SRCROOT)/qemu
 VBOXDRVDIR = $(SRCROOT)/vbox-drivers
-SLIRPDIR = $(SRCROOT)/slirp
 NICKELDIR = $(SRCROOT)/nickel
 XENPUBLICDIR = $(TOPDIR)/common/include/xen-public
 XENDIR_include = $(TOPDIR)/xen/include
@@ -67,8 +54,6 @@ DM_CFLAGS += -Dmain=dm_main
 $(CONFIG_CONTROL_TEST)control.o: DM_CFLAGS += -DCONTROL_TEST=1
 $(CONFIG_MONITOR)DM_CFLAGS += -DMONITOR=1
 $(CONFIG_MONITOR)QEMU_CFLAGS += -DMONITOR=1
-$(CONFIG_MONITOR)SLIRP_CFLAGS += -DMONITOR=1
-$(CONFIG_SLIRP_THREADED)DM_CFLAGS += -DSLIRP_THREADED=1
 $(CONFIG_NICKEL_THREADED)DM_CFLAGS += -DNICKEL_THREADED=1
 $(CONFIG_VBOXDRV)DM_CFLAGS += -DCONFIG_VBOXDRV=1
 
@@ -109,7 +94,6 @@ $(WINDOWS)DM_SRCS += console-win32.c
 console-win32.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 console-win32.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
 $(CONFIG_VBOXDRV)console-win32.o: CPPFLAGS += -DNOTIFY_CLIPBOARD_SERVICE
-$(CONFIG_SLIRP_DUMP_PCAP)console-win32.o: CPPFLAGS += -DSLIRP_DUMP_PCAP=1
 $(OSX)DM_SRCS += console-osx.m
 console-osx.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 console-osx.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
@@ -123,7 +107,6 @@ console.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 console.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
 DM_SRCS += control.c
 control.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
-$(CONFIG_SLIRP_DUMP_PCAP)control.o: CPPFLAGS += -DSLIRP_DUMP_PCAP=1
 DM_SRCS += debug.c
 DM_SRCS += dev.c
 DM_SRCS += dict.c
@@ -166,7 +149,6 @@ DM_SRCS += memory-virt.c
 memory-virt.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 $(CONFIG_MONITOR)DM_SRCS += monitor.c
 DM_SRCS += mr.c
-DM_SRCS += net-user.c
 DM_SRCS += ns.c
 DM_SRCS += ns-echo.c
 $(CONFIG_WEBDAV)DM_SRCS += ns-webdav.c
@@ -192,9 +174,6 @@ $(OSX)DM_SRCS += osx-vm-view.m
 DM_SRCS += priv-heap.c
 DM_SRCS += qemu_glue.c
 DM_SRCS += rbtree.c
-$(CONFIG_SLIRP)DM_SRCS += slirp.c
-slirp.o: CPPFLAGS += -I$(SLIRPDIR)
-$(CONFIG_SLIRP_DUMP_PCAP)slirp.o: CPPFLAGS += -DSLIRP_DUMP_PCAP=1
 DM_SRCS += sysbus.c
 DM_SRCS += timer.c
 DM_SRCS += uuidgen.c
@@ -296,43 +275,6 @@ LIBELF_SRCS += libelf-tools.c
 LZ4_CPPFLAGS += -I$(LZ4DIR_include)
 LZ4_SRCS += lz4.c
 
-SLIRP_CPPFLAGS += -I$(SLIRPDIR)
-SLIRP_CPPFLAGS += -I$(TOPDIR)
-$(CONFIG_SLIRP_DEBUG)SLIRP_CPPFLAGS += -DSLIRP_DEBUG=1
-$(CONFIG_SLIRP_TFTP_SERVER)SLIRP_CPPFLAGS += -DSLIRP_PROVIDE_TFTP_SERVER
-$(CONFIG_SLIRP_ICMP)SLIRP_CPPFLAGS += -DSLIRP_SUPPORT_ICMP
-$(CONFIG_SLIRP_INPUT_CHECKSUM)SLIRP_CPPFLAGS += -DSLIRP_INPUT_CHECKSUM
-$(CONFIG_SLIRP_INPUT_CHECKSUM)QEMU_CPPFLAGS += -DSLIRP_INPUT_CHECKSUM
-$(CONFIG_SLIRP_IPREASS)SLIRP_CPPFLAGS += -DSLIRP_SUPPORT_IPREASS
-$(CONFIG_SLIRP_TCPREASS)SLIRP_CPPFLAGS += -DSLIRP_TCP_REASS=1
-$(CONFIG_SLIRP_THREADED)SLIRP_CPPFLAGS += -DSLIRP_THREADED=1
-$(CONFIG_SLIRP_THREADED)QEMU_CPPFLAGS += -DSLIRP_THREADED=1
-$(CONFIG_SLIRP_JUMBO_FRAMES)SLIRP_CFLAGS += -DSLIRP_JUMBO_FRAMES=1
-$(CONFIG_SLIRP_IF_OUTPUT_QUEUES)SLIRP_CFLAGS += -DSLIRP_IF_OUTPUT_QUEUES=1
-$(CONFIG_VBOXDRV)SLIRP_CFLAGS += -DCONFIG_VBOXDRV=1
-$(CONFIG_SLIRP_DUMP_PCAP)SLIRP_CFLAGS += -DSLIRP_DUMP_PCAP=1
-
-SLIRP_SRCS += arp_table.c
-SLIRP_SRCS += cksum.c
-SLIRP_SRCS += if.c
-SLIRP_SRCS += ip_icmp.c
-SLIRP_SRCS += ip_input.c
-SLIRP_SRCS += ip_output.c
-$(CONFIG_SLIRP_IPREASS)SLIRP_SRCS += ip_reass.c
-SLIRP_SRCS += mbuf.c
-SLIRP_SRCS += sbuf.c
-SLIRP_SRCS += slirp.c
-SLIRP_SRCS += socket.c
-SLIRP_SRCS += stats.c
-SLIRP_SRCS += tcp_input.c
-SLIRP_SRCS += tcp_output.c
-SLIRP_SRCS += tcp_subr.c
-SLIRP_SRCS += tcp_timer.c
-SLIRP_SRCS += udp.c
-SLIRP_SRCS += bootp.c
-$(CONFIG_SLIRP_TFTP_SERVER)SLIRP_SRCS += tftp.c
-SLIRP_SRCS += misc.c
-
 NICKEL_CPPFLAGS += -I$(TOPDIR) -I$(TOPDIR)/dm/nickel
 $(CONFIG_VBOXDRV)NICKEL_CPPFLAGS += -DCONFIG_VBOXDRV=1
 $(CONFIG_NICKEL_THREADED)NICKEL_CPPFLAGS += -DNICKEL_THREADED=1
@@ -399,7 +341,6 @@ LDLIBS += $(YAJL_LIBS)
 $(OSX)LDLIBS += -lm -lz
 
 $(WINDOWS)LDLIBS += -lwinmm -lws2_32 -lfltlib
-$(WINDOWS)$(SLIRP)LDLIBS += -liphlpapi
 $(WINDOWS)$(CONFIG_NICKEL)LDLIBS += -liphlpapi -ldnsapi -lcrypt32 -lwinhttp -lsecur32
 $(WINDOWS)LDLIBS += -lole32
 $(WINDOWS)LDLIBS += -ldxguid
@@ -430,10 +371,6 @@ LZ4_OBJS = $(patsubst %.m,%.o,$(patsubst %.c,%.o,$(LZ4_SRCS)))
 LZ4_OBJS := $(subst /,_,$(patsubst %,lz4/%,$(LZ4_OBJS)))
 DM_OBJS += $(LZ4_OBJS)
 lz4_lz4.o: CFLAGS_debug := $(subst -O0,-O2,$(CFLAGS_debug))
-
-SLIRP_OBJS = $(patsubst %.m,%.o,$(patsubst %.c,%.o,$(SLIRP_SRCS)))
-SLIRP_OBJS := $(subst /,_,$(patsubst %,slirp/%,$(SLIRP_OBJS)))
-$(CONFIG_SLIRP)DM_OBJS += $(SLIRP_OBJS)
 
 NICKEL_OBJS = $(patsubst %.m,%.o,$(patsubst %.c,%.o,$(NICKEL_SRCS)))
 NICKEL_OBJS := $(subst /,_,$(patsubst %,nickel/%,$(NICKEL_OBJS)))
@@ -494,12 +431,6 @@ lz4_%.o: $(LZ4DIR)/%.c
 proxy_%.o: proxy/%.c
 	$(_W)echo Compiling - $(subst proxy_,proxy/,$@)
 	$(_V)$(COMPILE.c) -I$(TOPDIR) $(EXTRA_CFLAGS) -c $< -o $@
-
-$(SLIRP_OBJS): CFLAGS += $(SLIRP_CFLAGS)
-$(SLIRP_OBJS): CPPFLAGS += $(SLIRP_CPPFLAGS)
-slirp_%.o: $(SLIRPDIR)/%.c
-	$(_W)echo Compiling - $(subst slirp_,slirp/,$@)
-	$(_V)$(COMPILE.c) $(EXTRA_CFLAGS) -c $< -o $@
 
 nickel_http-parser_%.o: $(NICKELDIR)/http-parser/%.c
 	$(_W)echo Compiling - $(subst nickel_http-parser_,nickel/http-parser/,$@)
@@ -619,6 +550,3 @@ src-files:
 
 src-files-qemu:
 	@ls $(patsubst %,$(QEMUDIR)/%,$(QEMU_SRCS))
-
-src-files-slirp:
-	@ls $(patsubst %,$(SLIRPDIR)/%,$(SLIRP_SRCS))

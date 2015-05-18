@@ -14,7 +14,7 @@
 #include "ns.h"
 #include "timer.h"
 
-#include "net-user.h"
+#include "libnickel.h"
 
 struct ns_echo_data {
     struct ns_data ns_data;
@@ -130,7 +130,7 @@ ns_echo_timer(void *opaque)
 }
 
 static CharDriverState *
-ns_echo_open(void *opaque, struct net_user *nu, CharDriverState **persist_chr,
+ns_echo_open(void *opaque, struct nickel *ni, CharDriverState **persist_chr,
         struct sockaddr_in saddr, struct sockaddr_in daddr,
         yajl_val config)
 {
@@ -147,7 +147,7 @@ ns_echo_open(void *opaque, struct net_user *nu, CharDriverState **persist_chr,
 
     d->ns_data.net_opaque = opaque;
 
-    ret = ns_open(&d->ns_data, nu);
+    ret = ns_open(&d->ns_data, ni);
     if (ret) {
         free(d);
 	return NULL;

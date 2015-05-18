@@ -20,7 +20,6 @@
 #include <unistd.h>
 #endif
 
-struct net_user;
 struct nickel;
 
 void ni_init(void);
@@ -49,6 +48,13 @@ void ni_buf_change(void *opaque);
 void ni_recv(void *opaque, const uint8_t *buf, int size);
 void ni_send(void *opaque);
 void ni_close(void *opaque);
+int ni_add_wait_object(struct nickel *ni, ioh_event *event, WaitObjectFunc *func, void *opaque);
+void ni_del_wait_object(struct nickel *ni, ioh_event *event);
+uint32_t ni_get_hostaddr(struct nickel *ni);
+#ifndef _WIN32
+int ni_add_wait_fd(struct nickel *ni, int fd, int events, WaitObjectFunc2 *func2, void *opaque);
+void ni_del_wait_fd(struct nickel *ni, int fd);
+#endif
 int ni_schedule_bh(struct nickel *ni, void (*async_cb)(void *), void (*finish_cb)(void *),
         void *opaque);
 int ni_schedule_bh_permanent(struct nickel *ni, void (*cb)(void *), void *opaque);

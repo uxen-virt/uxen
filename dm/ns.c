@@ -16,7 +16,7 @@
 
 #include <dm/file.h>
 #include <dm/async-op.h>
-#include <dm/net-user.h>
+#include <dm/libnickel.h>
 
 #define SEND_BUFFER_TRIM_THRESHHOLD 16384
 
@@ -29,7 +29,7 @@ ns_chr_can_read(void *opaque)
 {
     struct ns_data *d = opaque;
 
-    return netuser_can_recv(d->nu, d->net_opaque);
+    return ni_can_recv(d->net_opaque);
 }
 
 static void
@@ -37,7 +37,7 @@ ns_chr_read(void *opaque, const uint8_t *buf, int size)
 {
     struct ns_data *d = opaque;
 
-    netuser_recv(d->nu, d->net_opaque, buf, size);
+    ni_recv(d->net_opaque, buf, size);
 }
 
 /* This is called from tcp_input(), when ACK segment has been processed, so
@@ -155,16 +155,16 @@ ns_chr_close(CharDriverState *chr)
     struct ns_data *d = chr->opaque;
 
     debug_printf("%s: close\n", __FUNCTION__);
-    netuser_close(d->nu, d->net_opaque);
+    ni_close(d->net_opaque);
 }
 
 int
-ns_open(struct ns_data *d, struct net_user *nu)
+ns_open(struct ns_data *d, struct nickel *ni)
 {
 
     critical_section_init(&d->lock);
 
-    d->nu = nu;
+    d->ni = ni;
     d->chr = calloc(1, sizeof(CharDriverState));
 
     if (!d->chr)
@@ -206,7 +206,7 @@ ns_close(struct ns_data *d)
             d->recv_buffer = NULL;
         }
         close_thread_handle(d->server_thread);
-        netuser_del_wait_object(d->nu, &d->response_ready_event);
+        ni_del_wait_object(d->ni, &d->response_ready_event);
         ioh_event_close(&d->response_ready_event);
         ioh_event_close(&d->request_ready_event);
     }
@@ -224,10 +224,10 @@ ns_ready_write(void *opaque)
 
     assert(d->awaiting_write);
 
-    netuser_del_wait_object(d->nu, &d->write_event);
+    ni_del_wait_object(d->ni, &d->write_event);
     d->awaiting_write = 0;
 
-    netuser_send(d->nu, d->net_opaque);
+    ni_send(d->net_opaque);
 }
 
 void
@@ -237,7 +237,7 @@ ns_await_write(struct ns_data *d)
     if (d->awaiting_write)
         return;
 
-    netuser_add_wait_object(d->nu, &d->write_event, ns_ready_write, d);
+    ni_add_wait_object(d->ni, &d->write_event, ns_ready_write, d);
     d->awaiting_write = 1;
 }
 
@@ -360,7 +360,7 @@ ns_append_send_buffer(struct ns_data *d, const uint8_t *buffer, int len)
     d->send_buffer = new_buffer;
 
     qemu_chr_get(d->chr);
-    if (netuser_schedule_bh(d->nu, NULL, ns_try_send_buffer_cb, d->chr) < 0) {
+    if (ni_schedule_bh(d->ni, NULL, ns_try_send_buffer_cb, d->chr) < 0) {
         qemu_chr_put(d->chr);
         warnx("%s: error on netuser_schedule_bh !", __FUNCTION__);
     }
@@ -494,7 +494,7 @@ ns_set_threaded_mode(struct ns_data *d)
     }
     elevate_thread(&d->server_thread);
 
-    netuser_add_wait_object(d->nu, &d->response_ready_event, ns_response_ready, d);
+    ni_add_wait_object(d->ni, &d->response_ready_event, ns_response_ready, d);
     d->chr->chr_write = ns_buffered_write;
     d->chr->chr_can_write = ns_buffered_can_write;
 

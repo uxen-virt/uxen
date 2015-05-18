@@ -13,13 +13,13 @@
 #include <netinet/in.h>
 #endif
 
-struct net_user;
+struct nickel;
 struct ns_desc {
 #define NS_SERVICE_TYPE_TCP     0
 #define NS_SERVICE_TYPE_UDP     1
     int service_type;
     const char *service_name;
-    CharDriverState *(*service_open)(void *, struct net_user *, CharDriverState **,
+    CharDriverState *(*service_open)(void *, struct nickel *, CharDriverState **,
            struct sockaddr_in, struct sockaddr_in, yajl_val);
     void (*service_close)(CharDriverState *);
 
@@ -31,7 +31,7 @@ typedef int (*ns_processor_func_t)(uint8_t *req, int reqsize, uint8_t **resp,
 
 struct ns_data {
     CharDriverState *chr;
-    struct net_user *nu;
+    struct nickel *ni;
     void *net_opaque;
     void (*service_close)(CharDriverState *);
 
@@ -55,7 +55,7 @@ struct ns_data {
     int processing_request;
 };
 
-int ns_open(struct ns_data *, struct net_user *nu);
+int ns_open(struct ns_data *, struct nickel *ni);
 void ns_close(struct ns_data *);
 int ns_set_threaded_mode(struct ns_data *);
 

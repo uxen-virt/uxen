@@ -65,6 +65,7 @@ int ni_log_level = 1;
 
 static heap_t ni_priv_heap;
 static unsigned int ni_priv_heap_err;
+unsigned slirp_mru = NI_DEFAULT_MTU, slirp_mtu = NI_DEFAULT_MTU;
 
 #define MAX_ALLOC_LEN    ((size_t) (((size_t)(-1)) >> 1))
 #define FRAME_ALIGN_MASK       (4 - 1)
@@ -75,7 +76,6 @@ static unsigned int ni_priv_heap_err;
 static void queue_input(struct nickel *ni, struct buff *bf);
 #endif
 static void output(struct nickel *ni, struct buff *bf0, bool send);
-static uint32_t ni_get_hostaddr(void *nopaque);
 
 /* emulated hosts use the MAC addr 52:55:IP:IP:IP:IP */
 static const uint8_t special_ethaddr[ETH_ALEN] = {
@@ -1093,21 +1093,8 @@ int ni_schedule_bh_permanent(struct nickel *ni, void (*cb)(void *), void *opaque
     return async_op_add_bh(ni->async_op_ctx, opaque, cb);
 }
 
-static int ni_schedule_bh_permanent0(void *nopaque, void (*cb)(void *), void *opaque)
+uint32_t ni_get_hostaddr(struct nickel *ni)
 {
-    return ni_schedule_bh_permanent((struct nickel *) nopaque, cb, opaque);
-}
-
-static int ni_schedule_bh0(void *nopaque, void (*async_cb)(void *),
-        void (*finish_cb)(void *), void *opaque)
-{
-    return ni_schedule_bh((struct nickel *) nopaque, async_cb, finish_cb, opaque);
-}
-
-static uint32_t ni_get_hostaddr(void *nopaque)
-{
-    struct nickel *ni = nopaque;
-
     return ni->host_addr.s_addr;
 }
 
@@ -1423,32 +1410,24 @@ int ni_rpc_http_event(void *opaque, const char *id, const char *opt,
     return control_send_ok(opaque, opt, id, NULL);
 }
 
-static int ni_add_wait_object(void *nopaque, ioh_event *event, WaitObjectFunc *func, void *opaque)
+int ni_add_wait_object(struct nickel *ni, ioh_event *event, WaitObjectFunc *func, void *opaque)
 {
-    struct nickel *ni = nopaque;
-
     return ioh_add_wait_object(event, func, opaque, &ni->wait_objects);
 }
 
-static void ni_del_wait_object(void *nopaque, ioh_event *event)
+void ni_del_wait_object(struct nickel *ni, ioh_event *event)
 {
-    struct nickel *ni = nopaque;
-
     ioh_del_wait_object(event, &ni->wait_objects);
 }
 
 #ifndef _WIN32
-static int ni_add_wait_fd(void *nopaque, int fd, int events, WaitObjectFunc2 *func2, void *opaque)
+int ni_add_wait_fd(struct nickel *ni, int fd, int events, WaitObjectFunc2 *func2, void *opaque)
 {
-    struct nickel *ni = nopaque;
-
     return ioh_add_wait_fd(fd, events, func2, opaque, &ni->wait_objects);
 }
 
-static void ni_del_wait_fd(void *nopaque, int fd)
+void ni_del_wait_fd(struct nickel *ni, int fd)
 {
-    struct nickel *ni = nopaque;
-
     ioh_del_wait_fd(fd, &ni->wait_objects);
 }
 #endif
@@ -1776,21 +1755,6 @@ int net_init_nickel(QemuOpts *opts, Monitor *mon, const char *name, VLANState *v
     ni->dhcp_startaddr = dhcp;
     memcpy(ni->eth_nickel, special_ethaddr, sizeof(special_ethaddr));
     memcpy(ni->eth_nickel + 2, (uint8_t *) (&host.s_addr), 4);
-
-    ni->nu.opaque = ni;
-    ni->nu.nickel = 1;
-    ni->nu.can_recv = ni_can_recv;
-    ni->nu.recv = ni_recv;
-    ni->nu.close = ni_close;
-    ni->nu.add_wait_object = ni_add_wait_object;
-    ni->nu.del_wait_object = ni_del_wait_object;
-#ifndef _WIN32
-    ni->nu.add_wait_fd = ni_add_wait_fd;
-    ni->nu.del_wait_fd = ni_del_wait_fd;
-#endif
-    ni->nu.schedule_bh = ni_schedule_bh0;
-    ni->nu.schedule_bh_permanent = ni_schedule_bh_permanent0;
-    ni->nu.get_hostaddr = ni_get_hostaddr;
 
     tcpip_init(ni);
     so_init(ni);

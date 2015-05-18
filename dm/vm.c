@@ -28,10 +28,6 @@
 #include "shared-folders.h"
 #include "hw/uxen_platform.h"
 
-#if defined(CONFIG_SLIRP)
-#include <dm/slirp/libslirp.h>
-#endif
-
 #if defined(CONFIG_NICKEL)
 #include <dm/libnickel.h>
 #endif
@@ -663,9 +659,6 @@ vm_exit(void *opaque)
     sf_service_stop();
 #endif
 
-#if defined(CONFIG_SLIRP)
-    slirp_exit();
-#endif
     console_display_exit();
     control_exit();
 

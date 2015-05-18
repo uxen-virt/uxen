@@ -10,7 +10,6 @@
 #include "constants.h"
 #include <dm/yajl.h>
 #include <dm/libnickel.h>
-#include <dm/net-user.h>
 #include "proto.h"
 #include "buff.h"
 #include "tcpip.h"
@@ -164,9 +163,6 @@ struct nickel {
     struct tcp_vmfwd_list tcp_vmfwd;
     struct udp_vmfwd_list udp_vmfwd;
     struct prx_fwd_list prx_fwd;
-
-    struct net_user nu;
-
 };
 
 struct np_desc {

@@ -38,7 +38,6 @@ typedef struct QEMUFile QEMUFile;
 typedef struct RTCState RTCState;
 typedef struct SerialSetParams SerialSetParams;
 typedef struct SerialState SerialState;
-typedef struct Slirp Slirp;
 typedef struct Timer Timer;
 typedef TAILQ_HEAD( , Timer) TimerQueue;
 typedef struct VLANState VLANState;

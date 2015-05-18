@@ -297,6 +297,42 @@ err:
     goto out;
 }
 
+/* Convert a wide Unicode string to an UTF8 string */
+char * buff_ascii_encode(wchar_t *wstr)
+{
+    int cbResult = 0;
+    int iLastErr = 0;
+    char *ascii_string = NULL;
+
+    if (!wstr)
+        goto err;
+
+    cbResult = WideCharToMultiByte(CP_ACP, 0, wstr, -1, NULL, 0, NULL, NULL);
+    if (cbResult <= 0 || !IS_SANE_LENGTH(cbResult)) {
+        warnx("%s: wrong cbResult = %d", __FUNCTION__, cbResult);
+        goto err;
+    }
+    ascii_string = calloc(1, (size_t) cbResult + 1);
+    if (!ascii_string) {
+        warnx("%s: malloc", __FUNCTION__);
+        goto err;
+    }
+
+    if (WideCharToMultiByte(CP_ACP, 0, wstr, -1, ascii_string, cbResult, NULL, NULL) <= 0) {
+        iLastErr = GetLastError();
+        warnx("%s: Unicode to ACP translation failed. lasterr=%d", __FUNCTION__, iLastErr);
+        goto err;
+    }
+
+out:
+    return ascii_string;
+
+err:
+    if (ascii_string)
+        free(ascii_string);
+    ascii_string = NULL;
+    goto out;
+}
 #endif
 
 void buff_strtolower(char *str)

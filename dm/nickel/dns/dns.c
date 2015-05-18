@@ -11,6 +11,7 @@
 #include <dm/dict.h>
 #include <dm/char.h>
 #include <dm/ns.h>
+#include <dm/libnickel.h>
 #include <nickel.h>
 #include <log.h>
 #include "dns.h"
@@ -41,7 +42,7 @@ static void ndns_close(CharDriverState *chr);
 
 struct dns_chr_t {
     CharDriverState chr;
-    struct net_user *nu;
+    struct nickel *ni;
     void *net_opaque;
     int closing;
 };
@@ -80,7 +81,6 @@ struct dnsmsg_answer {
 };
 
 struct ndns_data {
-    struct net_user *nu;
     struct nickel *ni;
     char *dname;
     int denied;
@@ -535,7 +535,6 @@ struct dns_response dns_lookup_containment(struct nickel *ni, const char *name, 
 
     memset(&dstate, 0, sizeof(dstate));
     dstate.ni = ni;
-    dstate.nu = &ni->nu;
     dstate.dname = ni_priv_strdup(name);
     dstate.proxy_on = proxy_on;
     if (no_proxy_mode)
@@ -627,7 +626,7 @@ process:
         if (!dstate->response.a)
             goto out;
         dstate->response.a[0].family = AF_INET;
-        dstate->response.a[0].ipv4.s_addr = netuser_get_hostaddr(dstate->nu);
+        dstate->response.a[0].ipv4.s_addr = ni_get_hostaddr(dstate->ni);
     }
 
     if (dstate->is_fake) {
@@ -656,11 +655,10 @@ process:
                 warnx("%s: memory error", __FUNCTION__);
                 goto out;
             }
-            ndstate->nu = dstate->nu;
             ndstate->ni = dstate->ni;
             ndstate->dname = ni_priv_strdup(dstate->dname);
             ndstate->fake_ip = *faddr;
-            if (netuser_schedule_bh(ndstate->nu, dns_lookup_check, dns_lookup_check_continue,
+            if (ni_schedule_bh(ndstate->ni, dns_lookup_check, dns_lookup_check_continue,
                         ndstate)) {
 
                 warnx("%s: nickel_schedule_bh failure", __FUNCTION__);
@@ -829,9 +827,7 @@ ndns_chr_write(CharDriverState *chr, const uint8_t *buf, int blen)
     dstate = calloc(1, sizeof(struct ndns_data));
     if (!dstate)
         goto cleanup;
-    dstate->nu = dns_chr->nu;
-    if (dstate->nu->nickel)
-        dstate->ni = dstate->nu->opaque;
+    dstate->ni = dns_chr->ni;
     DDNS(dstate, "id 0x%x", DNS_GET_ID(buf));
     if (blen <= off)
         goto cleanup;
@@ -915,7 +911,7 @@ ndns_chr_write(CharDriverState *chr, const uint8_t *buf, int blen)
     }
 
     // non proxy async dns lookup
-    if (netuser_schedule_bh(dstate->nu, dns_sync_query, dns_input_continue, dstate))
+    if (ni_schedule_bh(dstate->ni, dns_sync_query, dns_input_continue, dstate))
         goto cleanup;
 
     return 0;
@@ -942,7 +938,7 @@ ndns_chr_can_read(void *opaque)
 {
     struct dns_chr_t *dns_chr = opaque;
 
-    return netuser_can_recv(dns_chr->nu, dns_chr->net_opaque);
+    return ni_can_recv(dns_chr->net_opaque);
 }
 
 static void
@@ -950,7 +946,7 @@ ndns_chr_read(void *opaque, const uint8_t *buf, int size)
 {
     struct dns_chr_t *dns_chr = opaque;
 
-    netuser_recv(dns_chr->nu, dns_chr->net_opaque, buf, size);
+    ni_recv(dns_chr->net_opaque, buf, size);
 }
 
 static void ndns_chr_event(CharDriverState *chr, int event)
@@ -965,12 +961,12 @@ ndns_chr_close(CharDriverState *chr)
     struct dns_chr_t *dns_chr = (struct dns_chr_t *)chr->opaque;
 
     if (dns_chr->net_opaque)
-        netuser_close(dns_chr->nu, dns_chr->net_opaque);
+        ni_close(dns_chr->net_opaque);
     dns_chr->net_opaque = NULL;
 }
 
 static CharDriverState *
-ndns_open(void *opaque, struct net_user *nu, CharDriverState **persist_chr,
+ndns_open(void *opaque, struct nickel *ni, CharDriverState **persist_chr,
         struct sockaddr_in saddr, struct sockaddr_in daddr,
         yajl_val config)
 {
@@ -987,7 +983,7 @@ ndns_open(void *opaque, struct net_user *nu, CharDriverState **persist_chr,
     dns_chr = calloc(1, sizeof(*dns_chr));
     if (!dns_chr)
         return NULL;
-    dns_chr->nu = nu;
+    dns_chr->ni = ni;
     dns_chr->net_opaque = opaque;
     chr = (CharDriverState *) dns_chr;
     chr->refcnt = 1;

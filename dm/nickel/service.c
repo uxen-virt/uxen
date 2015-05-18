@@ -8,7 +8,6 @@
 #include <dm/char.h>
 #include <dm/vm.h>
 #include <dm/libnickel.h>
-#include <dm/net-user.h>
 #include "nickel.h"
 #include "log.h"
 #include "socket.h"
@@ -29,7 +28,7 @@ struct tcp_vmfwd {
     yajl_val service_config;
 
     CharDriverState *chr;
-    CharDriverState *(*service_open)(void *, struct net_user *, CharDriverState **,
+    CharDriverState *(*service_open)(void *, struct nickel *, CharDriverState **,
             struct sockaddr_in, struct sockaddr_in, yajl_val);
 };
 
@@ -49,7 +48,7 @@ struct udp_vmfwd {
     void (*svc_cb) (void *);
 
     yajl_val service_config;
-    CharDriverState *(*service_open)(void *, struct net_user *, CharDriverState **,
+    CharDriverState *(*service_open)(void *, struct nickel *, CharDriverState **,
             struct sockaddr_in, struct sockaddr_in, yajl_val);
 
     uint64_t total_byte_limit;
@@ -60,7 +59,7 @@ static LIST_HEAD(, prx_fwd) ni_prx_list = LIST_HEAD_INITIALIZER(&ni_prx_list);
 void *
 ni_vmfwd_add_service(struct nickel *ni, int is_udp,
                       CharDriverState *(*service_open)(void *,
-                                                       struct net_user *,
+                                                       struct nickel *,
                                                        CharDriverState **,
                                                        struct sockaddr_in,
                                                        struct sockaddr_in,
@@ -260,7 +259,7 @@ ni_udp_vmfwd_open(struct nickel *ni, struct sockaddr_in saddr,
     if (vmfwd->chr)
         return vmfwd->chr;
 
-    chr = vmfwd->service_open(opaque, &ni->nu, &vmfwd->chr, saddr, daddr,
+    chr = vmfwd->service_open(opaque, ni, &vmfwd->chr, saddr, daddr,
             vmfwd->service_config);
     return chr;
 }
@@ -297,7 +296,7 @@ ni_tcp_vmfwd_open(struct nickel *ni, struct sockaddr_in saddr, struct sockaddr_i
     if (vmfwd->chr)
         chr = vmfwd->chr;
     else
-        chr = vmfwd->service_open(opaque, &ni->nu, &vmfwd->chr, saddr, daddr,
+        chr = vmfwd->service_open(opaque, ni, &vmfwd->chr, saddr, daddr,
                 vmfwd->service_config);
 out:
     return chr;

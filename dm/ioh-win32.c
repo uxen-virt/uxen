@@ -13,10 +13,6 @@
 #include "timer.h"
 #include "queue.h"
 
-#if defined(CONFIG_SLIRP)
-#include "slirp/libslirp.h"
-#endif
-
 #if defined(CONFIG_NICKEL)
 #include "libnickel.h"
 #endif
@@ -423,10 +419,6 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
 void host_main_loop_wait(int *timeout)
 {
 
-#if defined(CONFIG_SLIRP) && !defined(SLIRP_THREADED)
-    slirp_select_fill(timeout);
-#endif
-
 #if defined(CONFIG_NICKEL) && !defined(NICKEL_THREADED)
     ni_prepare(NULL, timeout);
 #endif
@@ -435,10 +427,6 @@ void host_main_loop_wait(int *timeout)
     ioh_wait_for_objects(&io_handlers, &wait_objects, main_active_timers, timeout, NULL);
 #else
     ioh_wait_for_objects(&io_handlers, &wait_objects, NULL, timeout, NULL);
-#endif
-
-#if defined(CONFIG_SLIRP) && !defined(SLIRP_THREADED)
-    slirp_check_timeout();
 #endif
 
 #ifndef LIBIMG
