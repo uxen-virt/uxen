@@ -310,6 +310,7 @@ edid_init_common(unsigned char *e, int hres, int vres)
                               EDID_DISPLAY_SUPPORT_DPM_SUSPEND |
                               EDID_DISPLAY_SUPPORT_SRGB_DEFAULT |
                               EDID_DISPLAY_SUPPORT_COLOR_RGB444 |
+                              EDID_DISPLAY_SUPPORT_PREFERRED_MODE |
                               EDID_DISPLAY_SUPPORT_FREQ_CONTINUOUS);
     edid_set_color_attr(e, 665, 343, 290, 620, 155, 75, 321, 337);
     edid_set_established_timings(e, EDID_EST_TIMING_640x480_75HZ |
