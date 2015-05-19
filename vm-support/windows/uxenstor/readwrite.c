@@ -393,7 +393,7 @@ void stor_v4v_e_again_callback(uxen_v4v_ring_handle_t *ring, void *ctx, void *ct
                       IoGetCurrentIrpStackLocation(irp)->Parameters.Scsi.Srb,
                       TRUE);
     } else
-       uxen_err("request :0x%p not in the queue", ctx2);
+       uxen_msg("request :0x%p not in the queue", ctx2);
 }
 
 void stor_v4v_resume_callback(PKDPC dpc,
