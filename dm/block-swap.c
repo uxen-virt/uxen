@@ -1785,30 +1785,35 @@ static void * swap_read_thread(void *_s)
 {
     BDRVSwapState *s = (BDRVSwapState*) _s;
     SwapAIOCB *acb;
-    int quit = 0;
     size_t map_size;
     uint64_t *map;
 
-    while (!quit) {
+    for (;;) {
 
-        swap_wait_read(s);
+        for (;;) {
+            int quit;
 
-        swap_lock(s);
-
-        acb = s->read_queue_head;
-        s->read_queue_head = NULL;
-
-        if (!acb)
+            swap_lock(s);
+            acb = s->read_queue_head;
             quit = s->quit;
+            s->read_queue_head = NULL;
+            swap_unlock(s);
 
-        swap_unlock(s);
+            if (acb)
+                break; /* process reads. */
+            else if (quit)
+                return 0; /* quit. */
+            else
+                swap_wait_read(s);
+        }
+
 
 #ifdef SWAP_STATS
         SwapAIOCB *a = acb;
         while (a) {
             swap_stats.pre_proc_wait += os_get_clock() - acb->t0;
             a = a->next;
-        }
+       }
 #endif
 
         while (acb) {
@@ -1852,8 +1857,7 @@ static void * swap_read_thread(void *_s)
             acb = next;
         }
     }
-
-    return 0;
+    /* Never reached. */
 }
 
 #ifndef SWAP_NO_AIO
