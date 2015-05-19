@@ -1974,6 +1974,7 @@ static void tcp_chr_reconnect(void *opaque)
     }
     if (s->fd < 0)
         return;
+    qemu_chr_event(chr, CHR_EVENT_EOF);
     ioh_set_read_handler(s->fd, chr->iohq, NULL, chr);
     closesocket(s->fd);
     s->fd = -1;
