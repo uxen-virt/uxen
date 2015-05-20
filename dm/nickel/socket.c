@@ -271,6 +271,31 @@ int so_dbg(struct buff *bf, struct socket *so)
                 so->state);
 }
 
+static int get_so_error(struct socket *so)
+{
+#ifndef _WIN32
+        int r, val = 0;
+
+        if (so->s < 0)
+            return -1;
+
+        do {
+            socklen_t valsize = sizeof(val);
+
+            errno = 0;
+            val = 0;
+            r = getsockopt(so->s, SOL_SOCKET, SO_ERROR, (void *) &val, &valsize);
+        } while (r == -1 && errno == EINTR);
+
+        if (r < 0)
+            return -1;
+
+        return val;
+#else
+        return -1;
+#endif
+}
+
 static void so_closing(struct socket *so)
 {
     bool event = true;
@@ -280,8 +305,16 @@ static void so_closing(struct socket *so)
 
     if (so->state != NSO_SS_RECONNECTING)
         so->state = NSO_SS_CLOSING;
-    if (event && so->evt_cb)
+    if (event && so->evt_cb) {
+        int err = get_so_error(so);
+
+        if (err > 0)
+            so->last_err = err;
+        else if (err == 0 && so->last_err != 0)
+            so->last_err = (- so->last_err);
+
         so->evt_cb(so->evt_opaque, SO_EVT_CLOSING, so->last_err);
+    }
 
     so->flags &= ~SF_FLUSH_CLOSE;
 
@@ -528,8 +561,8 @@ int so_listen(struct socket *so, const struct net_addr *addr, uint16_t port, so_
     }
 
     r = qemu_socket(so->addr.family, SOCK_STREAM, 0);
-    err = errno;
     if (r < 0) {
+        err = errno;
         so->state = NSO_SS_NEEDS_CLOSE;
         goto out;
     }
@@ -560,8 +593,8 @@ int so_listen(struct socket *so, const struct net_addr *addr, uint16_t port, so_
         goto out;
     }
     r = listen(so->s, 1);
-    err = errno;
     if (r < 0) {
+        err = errno;
         NETLOG("%s: listen error %d", __FUNCTION__, err);
         goto out;
     }
@@ -592,7 +625,8 @@ size_t so_read(struct socket *so, const uint8_t *buf, size_t len)
     so->flags &= ~(SF_SOCK_READ);
     ret = recv(so->s, (void *) buf, len, 0);
     NETLOG5("%s: so %lx recv %d / %d", __FUNCTION__, so, (int) ret, (int) len);
-    err = errno;
+    if (ret < 0)
+        err = errno;
     so->last_err = err;
     if (ret < 0 && (err == EINTR || err == EAGAIN || err == EWOULDBLOCK)) {
         ret = 0;
@@ -668,7 +702,8 @@ size_t so_write(struct socket *so, const uint8_t *buf, size_t len)
         goto out;
     }
     ret = send(so->s, (void *) buf, len, 0);
-    err = errno;
+    if (ret < 0)
+        err = errno;
     NETLOG5("so %lx ret %d err %d", so, (int) ret, err);
     so->last_err = err;
     if (ret < 0 && (err != EINTR && err != EAGAIN && err != EWOULDBLOCK)) {
@@ -770,12 +805,14 @@ static void _so_connect(struct socket *so)
         list_connect_connecting(so->parent);
 
     r = qemu_socket(so->addr.family, so->is_udp ? SOCK_DGRAM : SOCK_STREAM, 0);
-    err = errno;
+    if (r < 0)
+        err = errno;
     so->last_err = err;
     if (r < 0) {
         so->state = NSO_SS_NEEDS_CLOSE;
         goto out;
     }
+
     so->s = r;
     so_fd_nonblock(so->s);
     opt = 1;
@@ -785,6 +822,8 @@ static void _so_connect(struct socket *so)
         setsockopt(so->s, IPPROTO_TCP, TCP_NODELAY, (char *)&opt, sizeof(opt));
     }
 
+    r = 0;
+    err = 0;
     if (ipv4) {
         struct sockaddr_in saddr;
 
@@ -802,7 +841,8 @@ static void _so_connect(struct socket *so)
         saddr.sin6_port = so->port;
         r = connect(so->s, (const struct sockaddr *) &saddr, sizeof(saddr));
     }
-    err = errno;
+    if (r < 0)
+        err = errno;
     so->last_err = err;
     if (r < 0 && (err != EINPROGRESS) && (err != EWOULDBLOCK)) {
         so->state = NSO_SS_NEEDS_CLOSE;
@@ -817,34 +857,23 @@ out:
 
 static void so_connected(struct socket *so)
 {
+    int err;
+
     struct sockaddr_storage laddr;
     socklen_t laddrlen = sizeof(laddr);
 
     if ((so->state > NSO_SS_CONNECTING))
         return;
 
-#ifndef _WIN32
-    {
-        int r, val;
+    err = get_so_error(so);
+    if (err > 0) {
+        NETLOG4("%s: so:%" PRIxPTR " SO_ERROR %d", __FUNCTION__, (uintptr_t) so, err);
+        so->last_err = err;
+        if (so->evt_cb)
+            so->evt_cb(so->evt_opaque, SO_EVT_CLOSING, so->last_err);
 
-        do {
-            socklen_t valsize = sizeof(val);
-
-            errno = 0;
-            val = 0;
-            r = getsockopt(so->s, SOL_SOCKET, SO_ERROR, (void *) &val, &valsize);
-        } while (r == -1 && errno == EINTR);
-
-        if (val) {
-            NETLOG4("%s: so:%" PRIxPTR " SO_ERROR %d", __FUNCTION__, (uintptr_t) so, val);
-            so->last_err = val;
-            if (so->evt_cb)
-                so->evt_cb(so->evt_opaque, SO_EVT_CLOSING, so->last_err);
-
-            return;
-        }
+        return;
     }
-#endif
 
     so->state = NSO_SS_CONNECTED;
 
