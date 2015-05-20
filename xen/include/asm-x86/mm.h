@@ -613,14 +613,16 @@ extern bool_t machine_to_phys_mapping_valid;
       ? get_gpfn_from_mfn(mfn)                          \
       : (mfn) )
 
-#define INVALID_MFN             (~0UL)
-
 #ifdef __x86_64__
+/* 40 bits */
+#define INVALID_MFN             (0xffffffffffUL)
 #define P2M_MFN_MFN_BITS        28
 #define P2M_MFN_SPECIAL_BITS    4
 #define P2M_MFN_PAGE_STORE_OFFSET_BITS 8
 #define P2M_MFN_PAGE_STORE_OFFSET_INDEX 32
 #else  /* __x86_64__ */
+/* 32 bits */
+#define INVALID_MFN             (0xffffffffUL)
 #define P2M_MFN_MFN_BITS        22
 #define P2M_MFN_SPECIAL_BITS    4
 #define P2M_MFN_PAGE_STORE_OFFSET_BITS 6
