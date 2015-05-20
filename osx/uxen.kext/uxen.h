@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -275,6 +275,9 @@ struct pointer_map {
 extern const rb_tree_ops_t pointer_map_rbtree_ops;
 
 /* uxen_ops.c */
+extern uint8_t *frametable;
+extern unsigned int frametable_size;
+extern uint8_t *frametable_populated;
 extern uint32_t uxen_zero_mfn;
 void set_host_preemption(uint64_t disable);
 void __cdecl signal_idle_thread(void);
@@ -340,6 +343,8 @@ int user_munmap_pages(unsigned int num, const void *addr,
                       struct fd_assoc *fda);
 void *kernel_malloc(uint32_t size);
 void kernel_free(void *addr, uint32_t size);
+void *kernel_alloc_va(uint32_t num);
+int kernel_free_va(void *va, uint32_t num);
 int _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
                                  uint32_t extra_pages, uint32_t *increase,
                                  const char *fn);
@@ -356,6 +361,10 @@ void uxen_pages_clear(void);
 extern lck_spin_t *idle_free_lock;
 extern uint32_t idle_free_list;
 int idle_free_free_list(void);
+extern lck_spin_t *populate_frametable_lock;
+int populate_frametable(uxen_pfn_t);
+void depopulate_frametable(unsigned int);
+int kernel_alloc_mfn(uxen_pfn_t *, int zeroed);
 int kernel_malloc_mfns(uint32_t nr_pages, uint32_t *mfn_list, int zeroed);
 void kernel_free_mfn(uint32_t);
 #ifdef DEBUG

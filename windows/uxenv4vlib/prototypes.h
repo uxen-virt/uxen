@@ -111,7 +111,7 @@ V4V_DLL_EXPORT void uxen_v4vlib_set_page_notify_func(uxen_v4vlib_page_notify_fun
 V4V_DLL_EXPORT void uxen_v4vlib_deliver_signal(void);
 V4V_DLL_EXPORT void uxen_v4vlib_init_driver(PDRIVER_OBJECT pdo);
 V4V_DLL_EXPORT void uxen_v4vlib_free_driver(void);
-void v4v_call_page_notify(v4v_pfn_t *pfn, uint32_t npfn, int map);
+uintptr_t v4v_call_page_notify(v4v_pfn_t *pfn, uint32_t npfn, int map);
 
 /* notify.c */
 void uxen_v4v_notify_enqueue (uint32_t len, v4v_addr_t *dst, uxen_v4v_callback_t *callback, void *callback_data1, void *callback_data2);

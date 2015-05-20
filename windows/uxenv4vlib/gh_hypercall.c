@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -232,7 +232,10 @@ gh_v4v_register_ring(xenv4v_ring_t *robj)
 {
     int err;
 
-    v4v_call_page_notify(robj->pfn_list->pages, robj->pfn_list->npage, 1);
+    if (v4v_call_page_notify(robj->pfn_list->pages, robj->pfn_list->npage, 1)) {
+        TraceError(("register ring populate frametable failed\n"));
+        return STATUS_UNSUCCESSFUL;
+    }
 
     err = gh_v4v_hypercall(V4VOP_register_ring, robj->ring, robj->pfn_list, 0, 0, 0);
 
@@ -261,7 +264,7 @@ gh_v4v_unregister_ring(xenv4v_ring_t *robj)
         return STATUS_UNSUCCESSFUL;
     }
 
-    v4v_call_page_notify(robj->pfn_list->pages, robj->pfn_list->npage, 0);
+    (void)v4v_call_page_notify(robj->pfn_list->pages, robj->pfn_list->npage, 0);
 
     return STATUS_SUCCESS;
 }

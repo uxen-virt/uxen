@@ -2,7 +2,7 @@
  *  uxen_ops.c
  *  uxen
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -24,8 +24,9 @@
 
 static ULONG build_number = 0;
 
-static void *frametable = NULL;
-static unsigned int frametable_size;
+uint8_t *frametable = NULL;
+unsigned int frametable_size;
+uint8_t *frametable_populated = NULL;
 static void *m2p = NULL;
 static unsigned int m2p_size;
 static char *percpu_area = NULL;
@@ -711,9 +712,15 @@ uxen_op_init_free_allocs(void)
         }
     }
 
+    if (frametable_populated) {
+        dprintk("uxen mem: free frametable_populated\n");
+        depopulate_frametable(frametable_size >> PAGE_SHIFT);
+        kernel_free(frametable_populated, (frametable_size >> PAGE_SHIFT) / 8);
+        frametable_populated = NULL;
+    }
     if (frametable) {
 	dprintk("uxen mem: free frametable\n");
-	kernel_free(frametable, frametable_size);
+        kernel_free_va(frametable, frametable_size >> PAGE_SHIFT);
 	frametable = NULL;
     }
     if (m2p) {
@@ -844,7 +851,7 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
 #endif
 
 #ifdef __i386__
-    use_hidden = 1;
+    use_hidden = 0;
     if (uid.UXEN_INIT_use_hidden_mem_MASK & UXEN_INIT_use_hidden_mem)
         use_hidden = (BOOLEAN)uid.use_hidden_mem;
     printk("%susing hidden memory\n", use_hidden ? "" : "not ");
@@ -907,13 +914,30 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
     uxen_cpu_set_active_mask(&uxen_info->ui_cpu_active_mask,
 			     sizeof(uxen_info->ui_cpu_active_mask));
 
+#ifdef DEBUG_PAGE_ALLOC
+    pinfotable_size = max_pfn * sizeof(struct pinfo);
+    pinfotable_size = ((pinfotable_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1));
+    pinfotable = kernel_malloc(pinfotable_size);
+    if (pinfotable == NULL) {
+        fail_msg("kernel_malloc(pinfotable) failed");
+        ret = -ENOMEM;
+        goto out;
+    }
+#endif  /* DEBUG_PAGE_ALLOC */
+
+    ret = kernel_alloc_mfn(&uxen_zero_mfn);
+    if (ret) {
+        uxen_zero_mfn = ~0;
+        fail_msg("kernel_malloc_mfns(zero_mfn) failed");
+        ret = -ENOMEM;
+        goto out;
+    }
+    dprintk("uxen mem:   zero page %x\n", uxen_zero_mfn);
+
     m2p_size = max_pfn * sizeof(uint32_t);
     m2p_size = ((m2p_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1));
     m2p = kernel_malloc(m2p_size);
     if (m2p == NULL || ((uintptr_t)m2p & (PAGE_SIZE - 1))) {
-#ifdef DEBUG_PAGE_ALLOC
-        BUG_ON(TRUE);
-#endif /* DEBUG_PAGE_ALLOC */
         fail_msg("kernel_malloc(m2p) failed");
         ret = -ENOMEM;
 	goto out;
@@ -922,33 +946,31 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
     dprintk("uxen mem:         m2p %p - %p (0x%x/%dMB)\n", m2p,
 	    (uint8_t *)m2p + m2p_size, m2p_size, m2p_size >> 20);
 
+    dprintk("uxen mem:   page_info %x\n",
+            uxen_info->ui_sizeof_struct_page_info);
     frametable_size = max_pfn * uxen_info->ui_sizeof_struct_page_info;
     frametable_size = ((frametable_size + PAGE_SIZE-1) & ~(PAGE_SIZE-1));
-    frametable = kernel_malloc_unchecked(frametable_size);
+    frametable = kernel_alloc_va(frametable_size >> PAGE_SHIFT);
     if (frametable == NULL || ((uintptr_t)frametable & (PAGE_SIZE - 1))) {
-#ifdef DEBUG_PAGE_ALLOC
-        BUG_ON(TRUE);
-#endif /* DEBUG_PAGE_ALLOC */
-        fail_msg("kernel_malloc(frametable) failed");
+        fail_msg("kernel_malloc_va(frametable) failed");
         ret = -ENOMEM;
 	goto out;
     }
     uxen_info->ui_frametable = frametable;
     dprintk("uxen mem:  frametable %p - %p (0x%x/%dMB)\n", frametable,
-	    (uint8_t *)frametable + frametable_size, frametable_size,
+            frametable + frametable_size, frametable_size,
 	    frametable_size >> 20);
-
-#ifdef DEBUG_PAGE_ALLOC
-    pinfotable_size = max_pfn * sizeof(struct pinfo);
-    pinfotable_size = ((pinfotable_size + PAGE_SIZE-1) & ~(PAGE_SIZE-1));
-    pinfotable = kernel_malloc(pinfotable_size);
-    if (pinfotable == NULL) {
-        BUG_ON(TRUE);
-        fail_msg("kernel_malloc(pinfotable) failed");
+    frametable_populated = kernel_malloc(
+        ((frametable_size >> PAGE_SHIFT) + 7) / 8);
+    if (!frametable_populated) {
+        fail_msg("kernel_malloc(frametable_populated) failed");
         ret = -ENOMEM;
-	goto out;
+        goto out;
     }
-#endif  /* DEBUG_PAGE_ALLOC */
+    dprintk("uxen mem: f-populated %p - %p (%dKB)\n", frametable_populated,
+            frametable_populated + ((frametable_size >> PAGE_SHIFT) + 7) / 8,
+            (((frametable_size >> PAGE_SHIFT) + 7) / 8) >> 10);
+    KeInitializeSpinLock(&populate_frametable_lock);
 
     sizeof_percpu = (uxen_addr_per_cpu_data_end - uxen_addr_per_cpu_start +
                      PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
@@ -978,15 +1000,6 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
         dprintk("uxen mem: percpu_area %p - %p\n", percpu_area,
                 &percpu_area[percpu_area_size]);
     }
-
-    ret = kernel_malloc_mfns(1, &uxen_zero_mfn, 0);
-    if (ret != 1) {
-        uxen_zero_mfn = ~0;
-        fail_msg("kernel_malloc_mfns(zero_mfn) failed");
-        ret = -ENOMEM;
-        goto out;
-    }
-    dprintk("uxen mem:   zero page %x\n", uxen_zero_mfn);
 
     uxen_info->ui_hvm_io_bitmap =
         kernel_alloc_contiguous(UI_HVM_IO_BITMAP_SIZE);

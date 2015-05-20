@@ -35,6 +35,11 @@ static PMDL idle_free_mfns_mdl = NULL;
 
 static uint32_t pages_reserve[MAXIMUM_PROCESSORS];
 
+KSPIN_LOCK populate_frametable_lock;
+static PMDL frametable_page_mdl = NULL;
+#define FRAMETABLE_MFNS_BATCH 256
+static unsigned int nr_frametable_mfns = 0;
+
 #ifdef _WIN64
 #define LINEAR_PT_VA 0xfffff68000000000
 #define VA_TO_LINEAR_PTE(v)						\
@@ -315,21 +320,159 @@ struct page_list_entry {
 };
 
 int
+kernel_alloc_mfn(uxen_pfn_t *mfn)
+{
+    PHYSICAL_ADDRESS low_address;
+    PHYSICAL_ADDRESS high_address;
+    PHYSICAL_ADDRESS skip_bytes;
+    PMDL mdl = NULL;
+    KIRQL old_irql;
+    int ret = 1;
+
+    low_address.QuadPart = 0;
+    high_address.QuadPart = -1;
+    skip_bytes.QuadPart = 0;
+
+    mdl = MmAllocatePagesForMdlEx(low_address, high_address, skip_bytes,
+                                  1 << PAGE_SHIFT, MmCached,
+                                  MM_ALLOCATE_FULLY_REQUIRED);
+    if (mdl == NULL) {
+        fail_msg("MmAllocatePagesForMdlEx failed");
+        goto out;
+    }
+
+    *mfn = (uxen_pfn_t)MmGetMdlPfnArray(mdl)[0];
+    ret = 0;
+
+#ifdef DEBUG_PAGE_ALLOC
+    DASSERT(!pinfotable[*mfn].allocated);
+    pinfotable[*mfn].allocated = 1;
+#endif  /* DEBUG_PAGE_ALLOC */
+
+  out:
+    if (mdl)
+        ExFreePool(mdl);
+    return ret;
+}
+
+int
+populate_frametable(uxen_pfn_t mfn)
+{
+    unsigned int offset;
+    uintptr_t frametable_va;
+    PFN_NUMBER frametable_mfn;
+    int s = uxen_info->ui_sizeof_struct_page_info;
+    KIRQL old_irql;
+
+    offset = (s * mfn) >> PAGE_SHIFT;
+
+    KeAcquireSpinLock(&populate_frametable_lock, &old_irql);
+    while (!(frametable_populated[offset / 8] & (1 << (offset % 8)))) {
+        if (!nr_frametable_mfns) {
+            PHYSICAL_ADDRESS low_address;
+            PHYSICAL_ADDRESS high_address;
+            PHYSICAL_ADDRESS skip_bytes;
+            PMDL mdl;
+
+            KeReleaseSpinLock(&populate_frametable_lock, old_irql);
+            low_address.QuadPart = 0;
+            high_address.QuadPart = -1;
+            skip_bytes.QuadPart = 0;
+            mdl = MmAllocatePagesForMdlEx(low_address, high_address, skip_bytes,
+                                          FRAMETABLE_MFNS_BATCH << PAGE_SHIFT,
+                                          MmCached, 0);
+            KeAcquireSpinLock(&populate_frametable_lock, &old_irql);
+
+            if (!nr_frametable_mfns) {
+                /* if our allocation failed, take advantage of the
+                 * slim chance that another thread filled the mdl */
+                if (!mdl || MmGetMdlByteCount(mdl) < PAGE_SIZE) {
+                    KeReleaseSpinLock(&populate_frametable_lock, old_irql);
+                    fail_msg("MmAllocatePagesForMdlEx failed");
+                    if (mdl)
+                        ExFreePool(mdl);
+                    return 1;
+                }
+                if (frametable_page_mdl)
+                    ExFreePool(frametable_page_mdl);
+                frametable_page_mdl = mdl;
+                nr_frametable_mfns =
+                    MmGetMdlByteCount(frametable_page_mdl) >> PAGE_SHIFT;
+            } else if (mdl)
+                ExFreePool(mdl);
+            continue;
+        }
+        frametable_va = (uintptr_t)frametable + (offset << PAGE_SHIFT);
+        frametable_mfn =
+            MmGetMdlPfnArray(frametable_page_mdl)[--nr_frametable_mfns];
+#ifdef DEBUG_PAGE_ALLOC
+        DASSERT(!pinfotable[frametable_mfn].allocated);
+        pinfotable[frametable_mfn].allocated = 1;
+#endif  /* DEBUG_PAGE_ALLOC */
+        map_mfn(frametable_va, frametable_mfn);
+        memset((void *)frametable_va, 0, PAGE_SIZE);
+        frametable_populated[offset / 8] |= (1 << (offset % 8));
+        break;
+    }
+    KeReleaseSpinLock(&populate_frametable_lock, old_irql);
+
+    /* Check if last byte of mfn's page_info is in same frametable
+     * page, otherwise populate next mfn as well */
+    if (((s * (mfn + 1) - 1) >> PAGE_SHIFT) != offset)
+        return populate_frametable(mfn + 1);
+    return 0;
+}
+
+void
+depopulate_frametable(unsigned int pages)
+{
+    unsigned int offset;
+    uxen_pfn_t mfn;
+    uintptr_t frametable_va;
+    uint32_t freed_pages = 0;
+
+    for (offset = 0; offset < pages; offset++) {
+        if (!frametable_populated[offset / 8] & (1 << (offset % 8)))
+            continue;
+        if (nr_frametable_mfns == FRAMETABLE_MFNS_BATCH) {
+            frametable_page_mdl->Size = sizeof(MDL) +
+                sizeof(PFN_NUMBER) * nr_frametable_mfns;
+            MmFreePagesFromMdl(frametable_page_mdl);
+            nr_frametable_mfns = 0;
+        }
+        frametable_va = (uintptr_t)frametable + (offset << PAGE_SHIFT);
+        mfn = memcache_dm_map_mfn(frametable_va, ~0ULL) >> PAGE_SHIFT;
+        if (mfn) {
+            MmGetMdlPfnArray(frametable_page_mdl)[nr_frametable_mfns++] = mfn;
+            freed_pages++;
+        }
+    }
+
+    if (nr_frametable_mfns) {
+        frametable_page_mdl->Size = sizeof(MDL) +
+            sizeof(PFN_NUMBER) * nr_frametable_mfns;
+        MmFreePagesFromMdl(frametable_page_mdl);
+        ExFreePool(frametable_page_mdl);
+        nr_frametable_mfns = 0;
+    }
+    dprintk("%s: freed %d frametable pages\n", __FUNCTION__, freed_pages);
+}
+
+int
 kernel_malloc_mfns(uint32_t nr_pages, uxen_pfn_t *mfn_list, uint32_t max_mfn)
 {
     PHYSICAL_ADDRESS low_address;
     PHYSICAL_ADDRESS high_address;
     PHYSICAL_ADDRESS skip_bytes;
     PFN_NUMBER *mfnarray;
-    PMDL mdl = NULL, mdlx = NULL;
+    PMDL mdl = NULL;
     KIRQL old_irql;
-    uint32_t i = 0, j;
+    uint32_t i = 0, j, k;
 
     if (max_mfn == 0)
         max_mfn = uxen_info ? uxen_info->ui_max_page : -1;
 
     while (idle_free_count > 0 && i < nr_pages) {
-        uint8_t *frametable = (uint8_t *)uxen_info->ui_frametable;
         int s = uxen_info->ui_sizeof_struct_page_info;
         struct page_list_entry *p;
         uint32_t *plist;
@@ -358,53 +501,47 @@ kernel_malloc_mfns(uint32_t nr_pages, uxen_pfn_t *mfn_list, uint32_t max_mfn)
         KeReleaseSpinLock(&idle_free_lock, old_irql);
     }
 
-    if (i >= nr_pages)
-        goto out;
-
-    low_address.QuadPart = 0;
-    high_address.QuadPart = -1;
-    skip_bytes.QuadPart = 0;
-    mdl = MmAllocatePagesForMdlEx(low_address, high_address, skip_bytes,
-                                  (nr_pages - i) << PAGE_SHIFT, MmCached,
-				  MM_ALLOCATE_FULLY_REQUIRED);
-    if (mdl == NULL) {
-        fail_msg("MmAllocatePagesForMdlEx failed: %d pages", nr_pages - i);
-        goto out;
-    }
-
-    mfnarray = MmGetMdlPfnArray(mdl);
-    for (j = i; j < nr_pages; j++) {
-        mfn_list[j] = (uxen_pfn_t)mfnarray[j - i];
-        if (mfn_list[j] > max_mfn) {
-            fail_msg("invalid mfn %lx at entry %d", mfn_list[j], j - i);
-            MmFreePagesFromMdl(mdl);
+    while (i < nr_pages) {
+        low_address.QuadPart = 0;
+        high_address.QuadPart = -1;
+        skip_bytes.QuadPart = 0;
+        k = nr_pages - i;
+        if (mdl)
+            ExFreePool(mdl);
+        mdl = MmAllocatePagesForMdlEx(low_address, high_address, skip_bytes,
+                                      k << PAGE_SHIFT, MmCached,
+                                      MM_ALLOCATE_NO_WAIT);
+        if (mdl == NULL || MmGetMdlByteCount(mdl) < PAGE_SIZE) {
+            fail_msg("MmAllocatePagesForMdlEx failed: %d pages", k);
             goto out;
         }
-        if (mfn_list[j] == 0) {
-            mdlx = MmAllocatePagesForMdlEx(
-                low_address, high_address, skip_bytes,
-                1 << PAGE_SHIFT, MmCached, MM_ALLOCATE_FULLY_REQUIRED);
-            if (mdlx == NULL) {
-                fail_msg("MmAllocatePagesForMdlEx failed: 1 page");
-                MmFreePagesFromMdl(mdl);
-                goto out;
+
+        KeAcquireSpinLock(&idle_free_lock, &old_irql);
+        k = MmGetMdlByteCount(mdl) >> PAGE_SHIFT;
+        mfnarray = MmGetMdlPfnArray(mdl);
+        for (j = 0; j < k && i < nr_pages; j++) {
+            mfn_list[i] = (uxen_pfn_t)mfnarray[j];
+            if (mfn_list[i] > max_mfn || mfn_list[i] == 0) {
+                fail_msg("invalid mfn %lx at entry %d", mfn_list[i], j);
+                continue;
             }
-            /* replace page 0 and drop it */
-            dprintk("dropping page 0\n");
-            mfn_list[j] = MmGetMdlPfnArray(mdlx)[0];
-        }
+            if (populate_frametable(mfn_list[i])) {
+                fail_msg("failed to populate frametable for mfn %lx"
+                         " at entry %d", mfn_list[i], j);
+                continue;
+            }
 #ifdef DEBUG_PAGE_ALLOC
-        DASSERT(!pinfotable[mfn_list[j]].allocated);
-        pinfotable[mfn_list[j]].allocated = 1;
+            DASSERT(!pinfotable[mfn_list[i]].allocated);
+            pinfotable[mfn_list[i]].allocated = 1;
 #endif  /* DEBUG_PAGE_ALLOC */
+            i++;
+        }
+        KeReleaseSpinLock(&idle_free_lock, old_irql);
     }
-    i = nr_pages;
 
   out:
     if (mdl)
 	ExFreePool(mdl);
-    if (mdlx)
-        ExFreePool(mdlx);
     return i;
 }
 
@@ -435,10 +572,8 @@ kernel_alloc_contiguous(uint32_t size)
 {
     PHYSICAL_ADDRESS highest_contiguous;
     void *va;
-#ifdef DEBUG_PAGE_ALLOC
     uxen_pfn_t mfn;
     int i, ret;
-#endif  /* DEBUG_PAGE_ALLOC */
 
 #ifdef __x86_64__
     highest_contiguous.QuadPart =
@@ -449,17 +584,21 @@ kernel_alloc_contiguous(uint32_t size)
 
     va = MmAllocateContiguousMemory(size, highest_contiguous);
 
-#ifdef DEBUG_PAGE_ALLOC
     ret = kernel_query_mfns(va, 1, &mfn, 0);
     if (ret)
         fail_msg("kernel_query_mfns failed: %d", ret);
     else {
         for (i = 0; i < (size >> PAGE_SHIFT); i++) {
+            if (populate_frametable(mfn + i)) {
+                MmFreeContiguousMemory(va);
+                return NULL;
+            }
+#ifdef DEBUG_PAGE_ALLOC
             DASSERT(!pinfotable[mfn + i].allocated);
             pinfotable[mfn + i].allocated = 1;
+#endif  /* DEBUG_PAGE_ALLOC */
         }
     }
-#endif  /* DEBUG_PAGE_ALLOC */
 
     return va;
 }
@@ -485,6 +624,97 @@ kernel_free_contiguous(void *va, uint32_t size)
     MmFreeContiguousMemory(va);
 }
 
+void *
+kernel_alloc_va(uint32_t num)
+{
+    PMDL mdl;
+    PFN_NUMBER *pfn;
+    void *va;
+    unsigned int i;
+    int failed = 1;
+
+    va = MmAllocateMappingAddress(num << PAGE_SHIFT, UXEN_MAPPING_TAG);
+    if (va == NULL) {
+        fail_msg("MmAllocateMappingAddress failed: %d pages", num);
+        return NULL;
+    }
+
+    mdl = ExAllocatePoolWithTag(
+        NonPagedPool, sizeof(MDL) + sizeof(PFN_NUMBER) * num,
+        UXEN_POOL_TAG);
+    if (mdl == NULL) {
+        fail_msg("ExAllocatePoolWithTag failed: %d pfns", num);
+        goto out;
+    }
+    memset(mdl, 0, sizeof(*mdl));
+
+    mdl->Size = sizeof(MDL) + sizeof(PFN_NUMBER) * num;
+    mdl->ByteCount = num << PAGE_SHIFT;
+    mdl->MdlFlags = MDL_PAGES_LOCKED;
+
+    pfn = MmGetMdlPfnArray(mdl);
+    for (i = 0; i < num; i++)
+        pfn[i] = uxen_zero_mfn;
+
+    if (MmMapLockedPagesWithReservedMapping(va, UXEN_MAPPING_TAG, mdl,
+                                            MmCached))
+        failed = 0;
+    else
+        fail_msg("MmMapLockedPagesWithReservedMapping failed: "
+                 "%x pages at va %p", num, va);
+
+    /* Clear va space even in failed case, since otherwise
+     * MmFreeMappingAddress below can blue screen because the va space
+     * is "dirty"  */
+    for (i = 0; i < num; i++) {
+#ifdef __x86_64__
+        uint64_t *pteaddr = VA_TO_LINEAR_PTE((uintptr_t)va + (i << PAGE_SHIFT));
+        *pteaddr = 0;
+#else
+        volatile uint32_t *pteaddr =
+            VA_TO_LINEAR_PTE((uintptr_t)va + (i << PAGE_SHIFT));
+        pteaddr[0] = 0;
+        _WriteBarrier();
+        pteaddr[1] = 0;
+#endif
+    }
+
+    uxen_mem_tlb_flush();
+
+  out:
+    if (mdl)
+        ExFreePoolWithTag(mdl, UXEN_POOL_TAG);
+    if (failed && va) {
+        MmFreeMappingAddress(va, UXEN_MAPPING_TAG);
+        va = NULL;
+    }
+    return va;
+}
+
+int
+kernel_free_va(void *va, uint32_t num)
+{
+    uint32_t i;
+
+    /* Clear va space, since otherwise MmFreeMappingAddress below can
+     * blue screen because the va space is "dirty" */
+    for (i = 0; i < num; i++) {
+#ifdef __x86_64__
+        uint64_t *pteaddr = VA_TO_LINEAR_PTE((uintptr_t)va + (i << PAGE_SHIFT));
+        *pteaddr = 0;
+#else
+        volatile uint32_t *pteaddr =
+            VA_TO_LINEAR_PTE((uintptr_t)va + (i << PAGE_SHIFT));
+        pteaddr[0] = 0;
+        _WriteBarrier();
+        pteaddr[1] = 0;
+#endif
+    }
+
+    MmFreeMappingAddress(va, UXEN_MAPPING_TAG);
+    return 0;
+}
+
 int
 _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
                              uint32_t extra_pages, uint32_t *increase,
@@ -492,7 +722,6 @@ _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
 {
     int cpu = cpu_number();
     uxen_pfn_t mfn_list[INCREASE_RESERVE_BATCH];
-    uint8_t *frametable = (uint8_t *)uxen_info->ui_frametable;
     int s = uxen_info->ui_sizeof_struct_page_info;
     struct page_list_entry *p;
     int n, needed, ret;
@@ -570,7 +799,6 @@ _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
 static uint32_t
 uxen_pages_retire_one_cpu(int cpu, uint32_t left)
 {
-    uint8_t *frametable = (uint8_t *)uxen_info->ui_frametable;
     int s = uxen_info->ui_sizeof_struct_page_info;
     struct page_list_entry *p;
     uint32_t *plist, free_list, n;
@@ -607,7 +835,6 @@ uxen_pages_retire_one_cpu(int cpu, uint32_t left)
 static int
 uxen_pages_retire(preemption_t i, int cpu, uint32_t left)
 {
-    uint8_t *frametable = (uint8_t *)uxen_info->ui_frametable;
     int s = uxen_info->ui_sizeof_struct_page_info;
     struct page_list_entry *p;
     uint32_t free_list, n;
@@ -640,7 +867,6 @@ int
 idle_free_free_list(void)
 {
     PFN_NUMBER *pfn_list;
-    uint8_t *frametable = (uint8_t *)uxen_info->ui_frametable;
     int s = uxen_info->ui_sizeof_struct_page_info;
     struct page_list_entry *p;
     uint32_t *plist;
@@ -834,6 +1060,14 @@ map_host_pages(void *va, size_t len, uint64_t gmfn,
     for (i = 0; i < (len >> PAGE_SHIFT); i++) {
         xen_add_to_physmap_t memop_arg;
 
+        if (pfn_array[i] >= uxen_info->ui_max_page ||
+            populate_frametable(pfn_array[i])) {
+            fail_msg("invalid mfn %p or failed to populate physmap:"
+                     " gpfn=%p, domid=%d",
+                     pfn_array[i], gmfn + i, vmi->vmi_shared.vmi_domid);
+            ret = ENOMEM;
+            goto out;
+        }
         memop_arg.domid = vmi->vmi_shared.vmi_domid;
         memop_arg.size = 1;
         memop_arg.space = XENMAPSPACE_host_mfn;

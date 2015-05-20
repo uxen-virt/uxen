@@ -2,7 +2,7 @@
  *  uxen_mem.c
  *  uxen
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Gianluca Guida <glguida@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -27,6 +27,8 @@ static uint32_t idle_free_count = 0;
 #define INCREASE_RESERVE_BATCH 512
 
 static uint32_t pages_reserve[MAX_CPUS];
+
+lck_spin_t *populate_frametable_lock;
 
 #define L1_PAGETABLE_SHIFT      12
 #define L2_PAGETABLE_SHIFT      21
@@ -947,14 +949,94 @@ struct page_list_entry {
 };
 
 int
+kernel_alloc_mfn(uxen_pfn_t *mfn, int zeroed)
+{
+    vm_page_t page;
+    int ret = 1;
+
+    page = xnu_vm_page_grab();
+    if (page == NULL) {
+        fail_msg("xnu_vm_page_grab failed");
+        goto out;
+    }
+
+    *mfn = vm_page_get_phys(page);
+    if (zeroed)
+        memset(physmap_pfn_to_va(*mfn), 0, PAGE_SIZE);
+
+    ret = 0;
+  out:
+    return ret;
+}
+
+int
+populate_frametable(uxen_pfn_t mfn)
+{
+    unsigned int offset;
+    uintptr_t frametable_va;
+    uxen_pfn_t frametable_mfn;
+    int s = uxen_info->ui_sizeof_struct_page_info;
+
+    offset = (s * mfn) >> PAGE_SHIFT;
+
+    lck_spin_lock(populate_frametable_lock);
+    while (!(frametable_populated[offset / 8] & (1 << (offset % 8)))) {
+        lck_spin_unlock(populate_frametable_lock);
+        if (kernel_alloc_mfn(&frametable_mfn, 0))
+            return 1;
+        lck_spin_lock(populate_frametable_lock);
+        if (frametable_populated[offset / 8] & (1 << (offset % 8)))
+            break;
+        frametable_va = (uintptr_t)frametable + (offset << PAGE_SHIFT);
+        xnu_pmap_enter(kernel_pmap, frametable_va, frametable_mfn,
+                       VM_PROT_READ|VM_PROT_WRITE, VM_PROT_NONE,
+                       0, 1 /*wired*/);
+        memset((void *)frametable_va, 0, PAGE_SIZE);
+        frametable_populated[offset / 8] |= (1 << (offset % 8));
+        break;
+    }
+    lck_spin_unlock(populate_frametable_lock);
+
+    /* Check if last byte of mfn's page_info is in same frametable
+     * page, otherwise populate next mfn as well */
+    if (((s * (mfn + 1) - 1) >> PAGE_SHIFT) != offset)
+        return populate_frametable(mfn + 1);
+    return 0;
+}
+
+void
+depopulate_frametable(unsigned int pages)
+{
+    unsigned int offset;
+    uxen_pfn_t mfn;
+    uintptr_t frametable_va;
+    uint32_t freed_pages = 0;
+
+    for (offset = 0; offset < pages; offset++) {
+        if (!frametable_populated[offset / 8] & (1 << (offset % 8)))
+            continue;
+        frametable_va = (uintptr_t)frametable + (offset << PAGE_SHIFT);
+        mfn = pmap_find_phys(kernel_pmap, frametable_va);
+        if (mfn) {
+            xnu_pmap_remove(kernel_pmap, frametable_va,
+                            frametable_va + PAGE_SIZE);
+            release_page(mfn);
+            freed_pages++;
+        }
+    }
+
+    dprintk("%s: freed %d frametable pages\n", __FUNCTION__, freed_pages);
+}
+
+int
 kernel_malloc_mfns(uint32_t nr_pages, uint32_t *mfn_list, int zeroed)
 {
+    vm_page_t page;
     uint32_t i = 0;
 
     assert(vm_page_lck);
 
     while (idle_free_count > 0 && i < nr_pages) {
-        uint8_t *frametable = (uint8_t *)uxen_info->ui_frametable;
         int s = uxen_info->ui_sizeof_struct_page_info;
         struct page_list_entry *p;
         uint32_t *plist;
@@ -980,31 +1062,29 @@ kernel_malloc_mfns(uint32_t nr_pages, uint32_t *mfn_list, int zeroed)
         lck_spin_unlock(idle_free_lock);
     }
 
-    if (i >= nr_pages)
-        goto out;
-
-    for (; i < nr_pages; i++) {
-        vm_page_t page;
-        ppnum_t phys_page;
-
+    while (i < nr_pages) {
         page = xnu_vm_page_grab();
-        if (page == NULL)
-            break;
+        if (page == NULL) {
+            fail_msg("xnu_vm_page_grab failed");
+            goto out;
+        }
 
-        phys_page = vm_page_get_phys(page);
+        mfn_list[i] = vm_page_get_phys(page);
         if (zeroed)
-            memset(physmap_pfn_to_va(phys_page), 0, PAGE_SIZE);
-        mfn_list[i] = phys_page;
+            memset(physmap_pfn_to_va(mfn_list[i]), 0, PAGE_SIZE);
 
-        if (phys_page >= page_lookup_size) {
-            fail_msg("page lookup: pfn %x > max pfn %zx\n",
-                     phys_page, page_lookup_size);
-            xnu_vm_page_release(page);
-            break;
+        if (mfn_list[i] >= page_lookup_size || mfn_list[i] == 0) {
+            fail_msg("invalid mfn %x\n", mfn_list[i]);
+            continue;
+        }
+        if (populate_frametable(mfn_list[i])) {
+            fail_msg("failed to populate frametable for mfn %x", mfn_list[i]);
+            continue;
         }
         lck_spin_lock(vm_page_lck);
-        page_lookup[phys_page] = page;
+        page_lookup[mfn_list[i]] = page;
         lck_spin_unlock(vm_page_lck);
+        i++;
     }
 
   out:
@@ -1018,6 +1098,33 @@ kernel_free_mfn(uint32_t mfn)
     release_page(mfn);
 }
 
+void *
+kernel_alloc_va(uint32_t num)
+{
+    kern_return_t rc = 0;
+    vm_address_t addr = 0;
+
+    rc = vm_allocate(xnu_kernel_map(), &addr, num << PAGE_SHIFT,
+                     VM_FLAGS_ANYWHERE);
+    if (rc != KERN_SUCCESS) {
+        fail_msg("vm_allocate failed: %d pages", num);
+        return NULL;
+    }
+
+    return (void *)(uintptr_t)addr;
+}
+
+int
+kernel_free_va(void *va, uint32_t num)
+{
+    kern_return_t rc;
+
+    rc = vm_deallocate(xnu_kernel_map(), (vm_offset_t)va, num << PAGE_SHIFT);
+    if (rc != KERN_SUCCESS)
+        fail_msg("vm_deallocate failed");
+    return 0;
+}
+
 int
 _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
                              uint32_t extra_pages, uint32_t *increase,
@@ -1026,7 +1133,6 @@ _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
     int cpu = cpu_number();
     int needed, n;
     uxen_pfn_t mfn_list[INCREASE_RESERVE_BATCH];
-    uint8_t *frametable = (uint8_t *)uxen_info->ui_frametable;
     int s = uxen_info->ui_sizeof_struct_page_info;
     struct page_list_entry *p;
     int ret;
@@ -1078,7 +1184,6 @@ _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
 static uint32_t
 uxen_pages_retire_one_cpu(int cpu, uint32_t left)
 {
-    uint8_t *frametable = (uint8_t *)uxen_info->ui_frametable;
     int s = uxen_info->ui_sizeof_struct_page_info;
     struct page_list_entry *p;
     uint32_t *plist, free_list, n;
@@ -1110,7 +1215,6 @@ uxen_pages_retire_one_cpu(int cpu, uint32_t left)
 static int
 uxen_pages_retire(preemption_t i, int cpu, uint32_t left)
 {
-    uint8_t *frametable = (uint8_t *)uxen_info->ui_frametable;
     int s = uxen_info->ui_sizeof_struct_page_info;
     struct page_list_entry *p;
     uint32_t free_list, n;
@@ -1141,7 +1245,6 @@ uxen_pages_retire(preemption_t i, int cpu, uint32_t left)
 int
 idle_free_free_list(void)
 {
-    uint8_t *frametable = (uint8_t *)uxen_info->ui_frametable;
     int s = uxen_info->ui_sizeof_struct_page_info;
     struct page_list_entry *p;
     struct vm_page *page = NULL;
@@ -1323,6 +1426,13 @@ map_host_pages(void *va, size_t len, uint64_t gmfn,
         if (pn == 0)
             goto out;
 
+        if (pn >= uxen_info->ui_max_page || populate_frametable(pn)) {
+            fail_msg("invalid mfn %x or failed to populate physmap:"
+                     " gpfn=%"PRIx64", domid=%d",
+                     pn, gmfn + i, vmi->vmi_shared.vmi_domid);
+            ret = ENOMEM;
+            goto out;
+        }
         memop_arg.domid = vmi->vmi_shared.vmi_domid;
         memop_arg.size = 1;
         memop_arg.space = XENMAPSPACE_host_mfn;

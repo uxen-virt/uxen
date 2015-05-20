@@ -2,7 +2,7 @@
  *  uxen.h
  *  uxen
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -286,6 +286,8 @@ int kernel_query_mfns(void *va, uint32_t nr_pages,
                       uxen_pfn_t *mfn_list, uint32_t max_mfn);
 void *kernel_alloc_contiguous(uint32_t size);
 void kernel_free_contiguous(void *va, uint32_t size);
+void *kernel_alloc_va(uint32_t num);
+int kernel_free_va(void *va, uint32_t num);
 int _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
                                  uint32_t extra_pages, uint32_t *increase,
                                  const char *fn);
@@ -307,6 +309,10 @@ void uxen_pages_clear(void);
 extern KSPIN_LOCK idle_free_lock;
 extern uint32_t idle_free_list;
 int idle_free_free_list(void);
+extern KSPIN_LOCK populate_frametable_lock;
+int populate_frametable(uxen_pfn_t);
+void depopulate_frametable(unsigned int);
+int kernel_alloc_mfn(uxen_pfn_t *);
 int kernel_malloc_mfns(uint32_t, uxen_pfn_t *, uint32_t);
 void kernel_free_mfn(uxen_pfn_t);
 #define MAP_PAGE_RANGE_KERNEL_MODE 0x0
@@ -359,6 +365,9 @@ ULONG_PTR __stdcall uxen_mem_tlb_flush_fn_global(ULONG_PTR arg);
 
 /* uxen_ops.c */
 extern MDL *map_page_range_mdl;
+extern uint8_t *frametable;
+extern unsigned int frametable_size;
+extern uint8_t *frametable_populated;
 extern uxen_pfn_t uxen_zero_mfn;
 extern const rb_tree_ops_t vm_info_rbtree_ops;
 int uxen_except_handler(unsigned int, struct _EXCEPTION_POINTERS *);

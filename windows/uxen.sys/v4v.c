@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -18,7 +18,7 @@
 
 typedef uintptr_t (Uxen_v4vlib_hypercall_func)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t);
 void uxen_v4vlib_set_hypercall_func(Uxen_v4vlib_hypercall_func *);
-typedef void (Uxen_v4vlib_page_notify_func)(uint64_t *, uint32_t, int);
+typedef uintptr_t (Uxen_v4vlib_page_notify_func)(uint64_t *, uint32_t, int);
 void uxen_v4vlib_set_page_notify_func(Uxen_v4vlib_page_notify_func *);
 void uxen_v4vlib_deliver_signal (void);
 void uxen_v4vlib_we_are_dom0(void);
@@ -40,15 +40,25 @@ static uintptr_t uxen_sys_v4v_hypercall(uintptr_t a1, uintptr_t a2, uintptr_t a3
 }
 
 
-static void uxen_sys_v4v_page_notify(uint64_t *pfns, uint32_t npfn, int add)
+static uintptr_t
+uxen_sys_v4v_page_notify(uint64_t *pfns, uint32_t npfn, int add)
 {
-#ifdef DEBUG_PAGE_ALLOC
+    uint32_t mfn;
     uint32_t i;
+
     for (i = 0; i < npfn; ++i) {
-        uint64_t j = *(pfns++);
-        pinfotable[j].allocated = add;
-    }
+        mfn = (uint32_t)*(pfns++);
+        if (add && populate_frametable(mfn)) {
+            fail_msg("populate_frametable for mfn %x failed", mfn);
+            return 1;
+        }
+#ifdef DEBUG_PAGE_ALLOC
+        DASSERT(add ? !pinfotable[mfn].allocated : pinfotable[mfn].allocated);
+        pinfotable[mfn].allocated = add;
 #endif
+    }
+
+    return 0;
 }
 
 void uxen_sys_start_v4v(void)

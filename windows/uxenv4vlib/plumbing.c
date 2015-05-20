@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -59,8 +59,7 @@ V4V_DLL_EXPORT void uxen_v4vlib_init_driver(PDRIVER_OBJECT pdo)
     gh_create_device(driver_object);
 }
 
-void v4v_call_page_notify(v4v_pfn_t *pfn, uint32_t npfn, int map)
+uintptr_t v4v_call_page_notify(v4v_pfn_t *pfn, uint32_t npfn, int map)
 {
-    if (!page_notify_func) return;
-    page_notify_func(pfn, npfn, map);
+    return page_notify_func ? page_notify_func(pfn, npfn, map) : 0;
 }
