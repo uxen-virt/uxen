@@ -356,7 +356,7 @@ kernel_alloc_mfn(uxen_pfn_t *mfn)
 }
 
 int
-_populate_frametable(uxen_pfn_t mfn)
+_populate_frametable(uxen_pfn_t mfn, uxen_pfn_t pmfn)
 {
     unsigned int offset;
     uintptr_t frametable_va;
@@ -368,7 +368,7 @@ _populate_frametable(uxen_pfn_t mfn)
 
     KeAcquireSpinLock(&populate_frametable_lock, &old_irql);
     while (!(frametable_populated[offset / 8] & (1 << (offset % 8)))) {
-        if (!nr_frametable_mfns) {
+        if (!pmfn && !nr_frametable_mfns) {
             PHYSICAL_ADDRESS low_address;
             PHYSICAL_ADDRESS high_address;
             PHYSICAL_ADDRESS skip_bytes;
@@ -403,8 +403,12 @@ _populate_frametable(uxen_pfn_t mfn)
             continue;
         }
         frametable_va = (uintptr_t)frametable + (offset << PAGE_SHIFT);
-        frametable_mfn =
-            MmGetMdlPfnArray(frametable_page_mdl)[--nr_frametable_mfns];
+        if (pmfn) {
+            frametable_mfn = pmfn;
+            pmfn = 0;
+        } else
+            frametable_mfn =
+                MmGetMdlPfnArray(frametable_page_mdl)[--nr_frametable_mfns];
 #ifdef DEBUG_PAGE_ALLOC
         DASSERT(!pinfotable[frametable_mfn].allocated);
         pinfotable[frametable_mfn].allocated = 1;
@@ -419,20 +423,20 @@ _populate_frametable(uxen_pfn_t mfn)
     /* Check if last byte of mfn's page_info is in same frametable
      * page, otherwise populate next mfn as well */
     if (((s * (mfn + 1) - 1) >> PAGE_SHIFT) != offset)
-        return _populate_frametable(mfn + 1);
+        return _populate_frametable(mfn + 1, pmfn);
     return 0;
 }
 
 int frametable_check_populate = 0;
 
 static uxen_pfn_t
-populate_frametable_range(uxen_pfn_t start, uxen_pfn_t end)
+populate_frametable_range(uxen_pfn_t start, uxen_pfn_t end, int self)
 {
     int s = uxen_info->ui_sizeof_struct_page_info;
     uxen_pfn_t mfn;
 
     for (mfn = start; mfn < end;) {
-        if (_populate_frametable(mfn)) {
+        if (_populate_frametable(mfn, self ? --end : 0)) {
             fail_msg("failed to populate frametable for mfn %lx", mfn);
             return 0;
         }
@@ -461,7 +465,7 @@ populate_frametable_physical_memory(void)
         if (end > os_max_pfn)
             end = os_max_pfn;
 #endif  /* __i386__ */
-        if (!populate_frametable_range(start, end))
+        if (!populate_frametable_range(start, end, 0))
             frametable_check_populate = 1;
     }
     if (frametable_check_populate)
@@ -487,8 +491,11 @@ depopulate_frametable(unsigned int pages)
             nr_frametable_mfns = 0;
         }
         frametable_va = (uintptr_t)frametable + (offset << PAGE_SHIFT);
-        mfn = memcache_dm_map_mfn(frametable_va, ~0ULL) >> PAGE_SHIFT;
+        mfn = map_mfn(frametable_va, ~0ULL) >> PAGE_SHIFT;
         if (mfn) {
+#ifdef __i386__
+          if (mfn < os_max_pfn)
+#endif  /* __i386__ */
             MmGetMdlPfnArray(frametable_page_mdl)[nr_frametable_mfns++] = mfn;
             freed_pages++;
         }
@@ -571,7 +578,7 @@ kernel_malloc_mfns(uint32_t nr_pages, uxen_pfn_t *mfn_list, uint32_t max_mfn)
                 fail_msg("invalid mfn %lx at entry %d", mfn_list[i], j);
                 continue;
             }
-            if (populate_frametable(mfn_list[i])) {
+            if (populate_frametable(mfn_list[i], 0)) {
                 fail_msg("failed to populate frametable for mfn %lx"
                          " at entry %d", mfn_list[i], j);
                 continue;
@@ -635,7 +642,7 @@ kernel_alloc_contiguous(uint32_t size)
         fail_msg("kernel_query_mfns failed: %d", ret);
     else {
         for (i = 0; i < (size >> PAGE_SHIFT); i++) {
-            if (populate_frametable(mfn + i)) {
+            if (populate_frametable(mfn + i, 0)) {
                 MmFreeContiguousMemory(va);
                 return NULL;
             }
@@ -1110,7 +1117,7 @@ map_host_pages(void *va, size_t len, uint64_t gmfn,
          * aren't part of the memory regions returned by
          * MmGetPhysicalMemoryRanges */
         if (pfn_array[i] >= uxen_info->ui_max_page ||
-            _populate_frametable(pfn_array[i])) {
+            _populate_frametable(pfn_array[i], 0)) {
             fail_msg("invalid mfn %p or failed to populate physmap:"
                      " gpfn=%p, domid=%d",
                      pfn_array[i], gmfn + i, vmi->vmi_shared.vmi_domid);
@@ -2336,17 +2343,27 @@ get_max_pfn(int use_hidden)
 void
 add_hidden_memory(void)
 {
+    uint64_t end;
     int i;
 
     if (!hidden_memory)
         return;
 
     for (i = 0; hidden_memory[i].start; i++) {
+        /* set 3rd argument to 1 to use hidden memory pages for frametable */
+        end = populate_frametable_range(hidden_memory[i].start >> PAGE_SHIFT,
+                                        hidden_memory[i].end >> PAGE_SHIFT, 0);
+        if (!end) {
+            fail_msg("failed to populate frametable for heap memory"
+                     " %016I64x - %016I64x",
+                     hidden_memory[i].start, hidden_memory[i].end);
+            continue;
+        }
         dprintk("adding heap memory %016I64x - %016I64x\n",
-                hidden_memory[i].start, hidden_memory[i].end);
+                hidden_memory[i].start, end << PAGE_SHIFT);
         uxen_exec_dom0_start();
         uxen_call(, , NO_RESERVE, uxen_do_add_heap_memory,
-                  hidden_memory[i].start, hidden_memory[i].end);
+                  hidden_memory[i].start, end << PAGE_SHIFT);
         uxen_exec_dom0_end();
     }
 

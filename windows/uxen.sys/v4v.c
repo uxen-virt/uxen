@@ -48,7 +48,7 @@ uxen_sys_v4v_page_notify(uint64_t *pfns, uint32_t npfn, int add)
 
     for (i = 0; i < npfn; ++i) {
         mfn = (uint32_t)*(pfns++);
-        if (add && populate_frametable(mfn)) {
+        if (add && populate_frametable(mfn, 0)) {
             fail_msg("populate_frametable for mfn %x failed", mfn);
             return 1;
         }

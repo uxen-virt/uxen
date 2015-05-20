@@ -310,10 +310,10 @@ extern KSPIN_LOCK idle_free_lock;
 extern uint32_t idle_free_list;
 int idle_free_free_list(void);
 extern KSPIN_LOCK populate_frametable_lock;
-int _populate_frametable(uxen_pfn_t);
+int _populate_frametable(uxen_pfn_t, uxen_pfn_t);
 extern int frametable_check_populate;
-#define populate_frametable(mfn) (!frametable_check_populate ? 0 :      \
-                                  _populate_frametable((mfn)))
+#define populate_frametable(mfn, pmfn) (!frametable_check_populate ? 0 : \
+                                        _populate_frametable((mfn), (pmfn)))
 int populate_frametable_physical_memory(void);
 void depopulate_frametable(unsigned int);
 int kernel_alloc_mfn(uxen_pfn_t *);

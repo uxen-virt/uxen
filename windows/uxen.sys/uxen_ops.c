@@ -851,7 +851,7 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
 #endif
 
 #ifdef __i386__
-    use_hidden = 0;
+    use_hidden = 1;
     if (uid.UXEN_INIT_use_hidden_mem_MASK & UXEN_INIT_use_hidden_mem)
         use_hidden = (BOOLEAN)uid.use_hidden_mem;
     printk("%susing hidden memory\n", use_hidden ? "" : "not ");
