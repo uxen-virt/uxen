@@ -950,7 +950,7 @@ map_page_range(int n, uxen_pfn_t *mfn, int mode, struct fd_assoc *fda)
 	    goto out;
 	}
 #ifdef __i386__
-        if (pfn[i] > os_max_pfn)
+        if (pfn[i] >= os_max_pfn)
             mdl->MdlFlags |= MDL_IO_SPACE;
 #endif /* __i386__ */
     }
@@ -1357,7 +1357,7 @@ user_mmap_xen_mfns(unsigned int num, xen_pfn_t *mfns,
 	pfn[i] = (PFN_NUMBER)mfns[i];
 
 #ifdef __i386__
-        if (mfns[i] > os_max_pfn)
+        if (mfns[i] >= os_max_pfn)
             um->mdl->MdlFlags |= MDL_IO_SPACE;
 #endif /* __i386__ */
     }
