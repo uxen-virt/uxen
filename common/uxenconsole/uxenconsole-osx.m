@@ -213,10 +213,10 @@ console_resize_surface(void *priv,
 
 static void
 console_invalidate_rect(void *priv,
-                        unsigned int x,
-                        unsigned int y,
-                        unsigned int w,
-                        unsigned int h)
+                        int x,
+                        int y,
+                        int w,
+                        int h)
 {
     @autoreleasepool {
         UXENConsole *console = (__bridge UXENConsole *)priv;

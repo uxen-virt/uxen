@@ -13,6 +13,7 @@ $(call include_lib,LIBXC,../libxc)
 $(call include_lib,LIBUXENCTL,../uxenctl)
 $(call include_lib,YAJL,../yajl)
 $(call include_lib,LIBFILECRYPT,../filecrypt)
+$(call include_lib,LIBUXENCONSOLE,../uxenconsole)
 
 ifeq (,$(MAKENOW))
 

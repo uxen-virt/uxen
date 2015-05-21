@@ -7,7 +7,7 @@
 #include "driver.h"
 
 #include <uxendisp_esc.h>
-#include <uxendisp_ioctl.h>
+#include "perfcnt.h"
 
 // The driver function table with all function index/address pairs
 
@@ -24,28 +24,39 @@ static DRVFN gadrvfn[] =
     {   INDEX_DrvMovePointer,           (PFN) DrvMovePointer        },
     {   INDEX_DrvSetPointerShape,       (PFN) DrvSetPointerShape    },
     {   INDEX_DrvDitherColor,           (PFN) DrvDitherColor        },
-    {   INDEX_DrvSynchronize,           (PFN) DrvSynchronize        },
     {   INDEX_DrvGetModes,              (PFN) DrvGetModes           },
     {   INDEX_DrvDisableDriver,         (PFN) DrvDisableDriver      },
     {   INDEX_DrvEscape,                (PFN) DrvEscape             },
+    {   INDEX_DrvSynchronize,           (PFN) DrvSynchronize        },
+    {   INDEX_DrvTextOut,               (PFN) DrvTextOut            },
+    {   INDEX_DrvBitBlt,                (PFN) DrvBitBlt             },
+    {   INDEX_DrvCopyBits,              (PFN) DrvCopyBits           },
+    {   INDEX_DrvStrokePath,            (PFN) DrvStrokePath         },
+    {   INDEX_DrvLineTo,                (PFN) DrvLineTo             },
+    {   INDEX_DrvFillPath,              (PFN) DrvFillPath           },
+    {   INDEX_DrvStretchBlt,            (PFN) DrvStretchBlt         },
 };
 
 // Define the functions you want to hook for 8/16/24/32 pel formats
+#define flGlobalHooks  HOOK_BITBLT|HOOK_TEXTOUT|HOOK_COPYBITS|HOOK_STROKEPATH|HOOK_LINETO|HOOK_FILLPATH|HOOK_STRETCHBLT|HOOK_SYNCHRONIZE
 
-#define HOOKS_BMF8BPP 0
+#define HOOKS_BMF8BPP flGlobalHooks
 
-#define HOOKS_BMF16BPP 0
+#define HOOKS_BMF16BPP flGlobalHooks
 
-#define HOOKS_BMF24BPP 0
+#define HOOKS_BMF24BPP flGlobalHooks
 
-#define HOOKS_BMF32BPP 0
+#define HOOKS_BMF32BPP flGlobalHooks
 
+#define USHRT_MAX 0xffff
 
 ULONG DrvEscape(SURFOBJ *pso, ULONG iEsc, ULONG cjIn, PVOID pvIn,
                 ULONG cjOut, PVOID pvOut)
 {
     PDEV*   ppdev = (PDEV *)pso->dhpdev;
     ULONG   ret = 0;
+
+    perfcnt_inc(DrvEscape);
 
     DISPDBG((0, "%s\n", __FUNCTION__));
 
@@ -89,6 +100,8 @@ PDRVENABLEDATA pded)
 
     iEngineVersion;
 
+    perfcnt_inc(DrvEnableDriver);
+
 // Fill in as much as we can.
 
     if (cj >= sizeof(DRVENABLEDATA))
@@ -116,6 +129,8 @@ PDRVENABLEDATA pded)
 
 VOID DrvDisableDriver(VOID)
 {
+    perfcnt_inc(DrvDisableDriver);
+
     return;
 }
 
@@ -144,9 +159,12 @@ HANDLE      hDriver)        // Handle to base driver
     GDIINFO GdiInfo;
     DEVINFO DevInfo;
     PPDEV   ppdev = (PPDEV) NULL;
+    DWORD Len;
 
     UNREFERENCED_PARAMETER(pwszLogAddress);
     UNREFERENCED_PARAMETER(pwszDeviceName);
+
+    perfcnt_inc(DrvEnablePDEV);
 
     // Allocate a physical device structure.
 
@@ -197,6 +215,18 @@ HANDLE      hDriver)        // Handle to base driver
 
     memcpy(pGdiInfo, &GdiInfo, min(cjGdiInfo, sizeof(GDIINFO)));
 
+    if (EngDeviceIoControl(ppdev->hDriver,
+        IOCTL_UXENDISP_GET_UPDATE_RECT,
+        NULL,
+        0,
+        &ppdev->updateRect,
+        sizeof(ppdev->updateRect),
+        &Len))
+    {
+        DISPDBG((0, "DISP IOCTL_UXENDISP_GET_UPDATE_RECT failed IOCTL\n"));
+        goto error_free;
+    }
+
     return((DHPDEV) ppdev);
 
     // Error case for failure.
@@ -216,6 +246,8 @@ VOID DrvCompletePDEV(
 DHPDEV dhpdev,
 HDEV  hdev)
 {
+    perfcnt_inc(DrvCompletePDEV);
+
     ((PPDEV) dhpdev)->hdevEng = hdev;
 }
 
@@ -230,6 +262,8 @@ HDEV  hdev)
 VOID DrvDisablePDEV(
 DHPDEV dhpdev)
 {
+    perfcnt_inc(DrvDisablePDEV);
+
     vDisablePalette((PPDEV) dhpdev);
     EngFreeMem(dhpdev);
 }
@@ -252,6 +286,8 @@ FLONG       flReserved)
     // Add back last offset that we subtracted.  I could combine the next
     // two statements, but I thought this was more clear.  It's not
     // performance critical anyway.
+
+    perfcnt_inc(DrvOffset);
 
     ppdev->pjScreen += ((ppdev->ptlOrg.y * ppdev->lDeltaScreen) +
                         (ppdev->ptlOrg.x * ((ppdev->ulBitCount+1) >> 3)));
@@ -284,6 +320,8 @@ DHPDEV dhpdev)
     SIZEL sizl;
     ULONG ulBitmapType;
     FLONG flHooks;
+
+    perfcnt_inc(DrvEnableSurface);
 
     // Create engine bitmap around frame buffer.
 
@@ -328,6 +366,17 @@ DHPDEV dhpdev)
 
     ppdev->flHooks = flHooks;
 
+    ppdev->hBitmap = EngCreateBitmap(sizl, ppdev->lDeltaScreen, ulBitmapType,
+                                     ppdev->lDeltaScreen > 0 ? BMF_TOPDOWN : 0,
+                                     ppdev->pjScreen);
+    if (!ppdev->hBitmap)
+    {
+        DISPDBG((0, "DISP DrvEnableSurface failed EngCreateBitmap\n"));
+        return(FALSE);
+    }
+
+    ppdev->psoBitmap = EngLockSurface((HSURF)ppdev->hBitmap);
+
     hsurf = (HSURF)EngCreateDeviceSurface((DHSURF)ppdev, 
                                            sizl,
                                            ulBitmapType);
@@ -338,16 +387,10 @@ DHPDEV dhpdev)
         return(FALSE);
     }
 
-    if ( !EngModifySurface(hsurf,
-                           ppdev->hdevEng,
-                           ppdev->flHooks | HOOK_SYNCHRONIZE,
-                           MS_NOTSYSTEMMEMORY,
-                           (DHSURF)ppdev,
-                           ppdev->pjScreen,
-                           ppdev->lDeltaScreen,
-                           NULL))
+    /* Associate created surface with our device */
+    if (!EngAssociateSurface(hsurf, ppdev->hdevEng, flHooks))
     {
-        DISPDBG((0, "DISP DrvEnableSurface failed EngModifySurface\n"));
+        DISPDBG((0, "DISP DrvEnableSurface failed EngAssociateSurface\n"));
         return(FALSE);
     }
 
@@ -366,9 +409,27 @@ DHPDEV dhpdev)
 VOID DrvDisableSurface(
 DHPDEV dhpdev)
 {
-    EngDeleteSurface(((PPDEV) dhpdev)->hsurfEng);
-    vDisableSURF((PPDEV) dhpdev);
-    ((PPDEV) dhpdev)->hsurfEng = (HSURF) 0;
+    PPDEV ppdev = (PPDEV) dhpdev;
+
+    perfcnt_inc(DrvDisableSurface);
+
+    if (ppdev->hsurfEng)
+    {
+        EngDeleteSurface(ppdev->hsurfEng);
+        ppdev->hsurfEng = NULL;
+    }
+    if (ppdev->psoBitmap)
+    {
+        EngUnlockSurface(ppdev->psoBitmap);
+        ppdev->psoBitmap = NULL;
+    }
+    if (ppdev->hBitmap)
+    {
+        EngDeleteSurface((HSURF) ppdev->hBitmap);
+        ppdev->hBitmap = NULL;
+    }
+
+    vDisableSURF(ppdev);
 }
 
 /******************************Public*Routine******************************\
@@ -385,6 +446,8 @@ BOOL bEnable)
     PPDEV   ppdev = (PPDEV) dhpdev;
     ULONG   ulReturn;
     PBYTE   pjScreen;
+
+    perfcnt_inc(DrvAssertMode);
 
     if (bEnable)
     {
@@ -403,17 +466,16 @@ BOOL bEnable)
 
         if (pjScreen != ppdev->pjScreen) {
 
-            if ( !EngModifySurface(ppdev->hsurfEng,
-                                   ppdev->hdevEng,
-                                   ppdev->flHooks | HOOK_SYNCHRONIZE,
-                                   MS_NOTSYSTEMMEMORY,
-                                   (DHSURF)ppdev,
-                                   ppdev->pjScreen,
-                                   ppdev->lDeltaScreen,
-                                   NULL))
+            if (!EngAssociateSurface((HSURF)ppdev->hBitmap, ppdev->hdevEng, 0))
             {
-                DISPDBG((0, "DISP DrvAssertMode failed EngModifySurface\n"));
-                return (FALSE);
+                DISPDBG((0, "DISP DrvAssertMode failed EngAssociateSurface on bitmap\n"));
+                return FALSE;
+            }
+
+            if (!EngAssociateSurface(ppdev->hsurfEng, ppdev->hdevEng, ppdev->flHooks))
+            {
+                DISPDBG((0, "DISP DrvAssertMode failed EngAssociateSurface on surface\n"));
+                return FALSE;
             }
         }
 
@@ -465,6 +527,8 @@ DEVMODEW *pdm)
     DWORD cbModeSize;
 
     DISPDBG((3, "DrvGetModes\n"));
+
+    perfcnt_inc(DrvGetModes);
 
     cModes = getAvailableModes(hDriver,
                                (PVIDEO_MODE_INFORMATION *) &pVideoModeInformation,
@@ -555,10 +619,240 @@ DEVMODEW *pdm)
 
 }
 
-VOID DrvSynchronize(
-IN DHPDEV dhpdev,
-IN RECTL *prcl)
+VOID DrvSynchronize(DHPDEV dhpdev, RECTL *prcl)
 {
+    PDEV* ppdev = (PDEV *)dhpdev;
 
+    ppdev->updateRect.safe_to_draw(ppdev->updateRect.dev);
 }
 
+void UpdateRect(PDEV* ppdev, RECTL *rect)
+{
+    struct rect out = {0};
+
+    perfcnt_inc(UpdateRect);
+
+    if (rect) {
+        if (rect->left < rect->right) {
+            out.left = rect->left;
+            out.right = rect->right;
+        } else {
+            out.left = rect->right;
+            out.right = rect->left;
+        }
+        if (rect->top < rect->bottom) {
+            out.top = rect->top;
+            out.bottom = rect->bottom;
+        } else {
+            out.top = rect->bottom;
+            out.bottom = rect->top;
+        }
+    }
+
+    ppdev->updateRect.update(ppdev->updateRect.dev, &out);
+}
+
+__inline SURFOBJ *getSurfObj(SURFOBJ *pso)
+{
+    if (pso)
+    {
+        PPDEV ppdev = (PPDEV)pso->dhpdev;
+
+        if (ppdev)
+        {
+            if (ppdev->psoBitmap && pso->hsurf == ppdev->hsurfEng)
+            {
+                pso = ppdev->psoBitmap;
+            }
+        }
+    }
+
+    return pso;
+}
+
+BOOL DrvTextOut(
+    IN SURFOBJ *psoDst,
+    IN STROBJ *pstro,
+    IN FONTOBJ *pfo,
+    IN CLIPOBJ *pco,
+    IN RECTL *prclExtra,
+    IN RECTL *prclOpaque,
+    IN BRUSHOBJ *pboFore,
+    IN BRUSHOBJ *pboOpaque,
+    IN POINTL *pptlOrg,
+    IN MIX mix)
+{
+    BOOL Result;
+    PDEV* ppdev = (PDEV *)psoDst->dhpdev;
+
+    perfcnt_inc(DrvTextOut);
+
+    Result = EngTextOut(
+        getSurfObj(psoDst), pstro, pfo, pco, prclExtra, prclOpaque,
+        pboFore, pboOpaque, pptlOrg, mix);
+    if (Result && ppdev)
+    {
+        UpdateRect(ppdev, &pstro->rclBkGround);
+        if (prclOpaque)
+        {
+            UpdateRect(ppdev, prclOpaque);
+        }
+        if (prclExtra)
+        {
+            UpdateRect(ppdev, prclExtra);
+        }
+    }
+    
+    return Result;
+}
+
+BOOL DrvBitBlt(
+    IN SURFOBJ *psoDst,
+    IN SURFOBJ *psoSrc,
+    IN SURFOBJ *psoMask,
+    IN CLIPOBJ *pco,
+    IN XLATEOBJ *pxlo,
+    IN RECTL *prclDst,
+    IN POINTL *pptlSrc,
+    IN POINTL *pptlMask,
+    IN BRUSHOBJ *pbo,
+    IN POINTL *pptlBrush,
+    IN ROP4 rop4)
+{
+    BOOL Result;
+    PDEV* ppdev = (PDEV *)psoDst->dhpdev;
+
+    perfcnt_inc(DrvBitBlt);
+
+    Result = EngBitBlt(getSurfObj(psoDst), getSurfObj(psoSrc), psoMask, pco, pxlo, prclDst,
+        pptlSrc, pptlMask, pbo, pptlBrush, rop4);
+    if (Result && ppdev)
+    {
+        UpdateRect(ppdev, prclDst);
+    }
+    
+    return Result;
+}
+
+BOOL DrvCopyBits(
+    OUT SURFOBJ *psoDst,
+    IN SURFOBJ *psoSrc,
+    IN CLIPOBJ *pco,
+    IN XLATEOBJ *pxlo,
+    IN RECTL *prclDst,
+    IN POINTL *pptlSrc)
+{
+    BOOL Result;
+    PDEV* ppdev = (PDEV *)psoDst->dhpdev;
+
+    perfcnt_inc(DrvCopyBits);
+
+    Result = EngCopyBits(getSurfObj(psoDst), getSurfObj(psoSrc), pco, pxlo, prclDst, pptlSrc);
+    if (Result && ppdev)
+    {
+        UpdateRect(ppdev, prclDst);
+    }
+    
+    return Result;
+}
+
+BOOL DrvStrokePath(
+    SURFOBJ*   psoDst,
+    PATHOBJ*   ppo,
+    CLIPOBJ*   pco,
+    XFORMOBJ*  pxo,
+    BRUSHOBJ*  pbo,
+    POINTL*    pptlBrush,
+    LINEATTRS* pLineAttrs,
+    MIX        mix)
+{
+    BOOL Result;
+    PDEV* ppdev = (PDEV *)psoDst->dhpdev;
+
+    perfcnt_inc(DrvStrokePath);
+    
+    Result = EngStrokePath(getSurfObj(psoDst), ppo, pco, pxo, pbo,
+        pptlBrush, pLineAttrs, mix);
+    if (Result && ppdev)
+    {
+        UpdateRect(ppdev, NULL);
+    }
+    
+    return Result;
+}
+
+BOOL DrvLineTo(
+    SURFOBJ   *psoDst,
+    CLIPOBJ   *pco,
+    BRUSHOBJ  *pbo,
+    LONG       x1,
+    LONG       y1,
+    LONG       x2,
+    LONG       y2,
+    RECTL     *prclBounds,
+    MIX        mix)
+{
+    BOOL Result;
+    PDEV* ppdev = (PDEV *)psoDst->dhpdev;
+
+    perfcnt_inc(DrvLineTo);
+    
+    Result = EngLineTo(getSurfObj(psoDst), pco, pbo, x1, y1, x2, y2, prclBounds, mix);
+    if (Result && ppdev)
+    {
+        UpdateRect(ppdev, prclBounds);
+    }
+    
+    return Result;
+}
+
+BOOL DrvFillPath(
+    SURFOBJ  *psoDst,
+    PATHOBJ  *ppo,
+    CLIPOBJ  *pco,
+    BRUSHOBJ *pbo,
+    PPOINTL   pptlBrushOrg,
+    MIX       mix,
+    FLONG     flOptions)
+{
+    BOOL Result;
+    PDEV* ppdev = (PDEV *)psoDst->dhpdev;
+
+    perfcnt_inc(DrvFillPath);
+    
+    Result = EngFillPath(getSurfObj(psoDst), ppo, pco, pbo, pptlBrushOrg, mix, flOptions);
+    if (Result && ppdev)
+    {
+        UpdateRect(ppdev, NULL);
+    }
+    
+    return Result;
+}
+
+BOOL DrvStretchBlt(
+    SURFOBJ*            psoDst,
+    SURFOBJ*            psoSrc,
+    SURFOBJ*            psoMsk,
+    CLIPOBJ*            pco,
+    XLATEOBJ*           pxlo,
+    COLORADJUSTMENT*    pca,
+    POINTL*             pptlHTOrg,
+    RECTL*              prclDst,
+    RECTL*              prclSrc,
+    POINTL*             pptlMsk,
+    ULONG               iMode)
+{
+    BOOL Result;
+    PDEV* ppdev = (PDEV *)psoDst->dhpdev;
+
+    perfcnt_inc(DrvStretchBlt);
+
+    Result = EngStretchBlt(getSurfObj(psoDst), getSurfObj(psoSrc), psoMsk, pco, pxlo, pca,
+        pptlHTOrg, prclDst, prclSrc, pptlMsk, iMode);
+    if (Result && ppdev)
+    {
+        UpdateRect(ppdev, prclDst);
+    }
+    
+    return Result;
+}

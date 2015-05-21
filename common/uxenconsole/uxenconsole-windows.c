@@ -21,6 +21,7 @@ DECLARE_PROGNAME;
 struct console {
     uxenconsole_context_t ctx;
     hid_context_t hid;
+    disp_context_t disp;
     HANDLE channel_event;
     HWND window;
     HINSTANCE instance;
@@ -664,15 +665,16 @@ console_resize_surface(void *priv,
 
 static void
 console_invalidate_rect(void *priv,
-                        unsigned int x,
-                        unsigned int y,
-                        unsigned int w,
-                        unsigned int h)
+                        int x,
+                        int y,
+                        int w,
+                        int h)
 {
     struct console *cons = priv;
     RECT r = { x, y, x + w, y + h };
 
     InvalidateRect(cons->window, &r, FALSE);
+    UpdateWindow(cons->window);
 }
 
 static void
@@ -761,9 +763,10 @@ main_loop(struct console *cons)
     events[0] = cons->channel_event;
 
     while (!cons->stop) {
-        w = MsgWaitForMultipleObjects(1, events, FALSE, INFINITE,
-                                      QS_ALLINPUT);
+        w = MsgWaitForMultipleObjectsEx(1, events, INFINITE, QS_ALLINPUT, MWMO_ALERTABLE);
         switch (w) {
+        case WAIT_IO_COMPLETION:
+            break;
         case WAIT_OBJECT_0:
             {
                 uxenconsole_channel_event(cons->ctx, cons->channel_event, 0);
@@ -816,12 +819,17 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     if (!rc)
         err(1, "WideCharToMultiByte");
 
+    if (wargc < 3 || 1 != swscanf(wargv[2], L"%d", &domid))
+        domid = -1;
+
     cons.ctx = uxenconsole_init(&console_ops, &cons, pipename);
     if (!cons.ctx)
         err(1, "uxenconsole_init");
 
-    if (wargc < 3 || 1 != swscanf(wargv[2], L"%d", &domid))
-        domid = -1;
+    cons.disp = uxenconsole_disp_init(domid, &cons, console_invalidate_rect);
+    if (!cons.disp)
+        err(1, "uxenconsole_disp_init");
+
     if (domid >= 0)
         cons.hid = uxenconsole_hid_init(domid);
     else
@@ -834,6 +842,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     printf("Connected\n");
     ret = main_loop(&cons);
 
+    uxenconsole_disp_cleanup(cons.disp);
     uxenconsole_cleanup(cons.ctx);
 
     return ret;

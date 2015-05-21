@@ -13,9 +13,15 @@
 #include "ntddvdeo.h"
 #include "debug.h"
 
+#include <uxendisp_ioctl.h>
+
+#define PERFCNT_ENABLED 0
+
 typedef struct  _PDEV
 {
     HANDLE  hDriver;                    // Handle to \Device\Screen
+    HBITMAP hBitmap;
+    SURFOBJ *psoBitmap;
     HDEV    hdevEng;                    // Engine's handle to PDEV
     HSURF   hsurfEng;                   // Engine's handle to surface
     HPALETTE hpalDefault;               // Handle to the default palette for device.
@@ -44,6 +50,8 @@ typedef struct  _PDEV
     PALETTEENTRY *pPal;                 // If this is pal managed, this is the pal
     BOOL    bSupportDCI;                // Does the miniport support DCI?
     FLONG   flHooks;
+
+    GET_UPDATE_RECT_DATA updateRect;
 } PDEV, *PPDEV;
 
 DWORD getAvailableModes(HANDLE, PVIDEO_MODE_INFORMATION *, DWORD *);

@@ -24,4 +24,6 @@ BOOLEAN hw_pointer_update(PDEVICE_EXTENSION dev, ULONG width, ULONG height,
 BOOLEAN hw_pointer_setpos(PDEVICE_EXTENSION dev, SHORT x, SHORT y);
 BOOLEAN hw_pointer_enable(PDEVICE_EXTENSION dev, BOOLEAN en);
 
+void hw_disable_page_tracking(PDEVICE_EXTENSION dev);
+
 #endif /* _BOCHS_H_ */

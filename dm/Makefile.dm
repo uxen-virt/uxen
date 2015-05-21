@@ -93,6 +93,7 @@ DM_SRCS += conffile.c
 $(WINDOWS)DM_SRCS += console-win32.c
 console-win32.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 console-win32.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
+console-win32.o: CPPFLAGS += -I$(TOPDIR)/common/uxenconsole
 $(CONFIG_VBOXDRV)console-win32.o: CPPFLAGS += -DNOTIFY_CLIPBOARD_SERVICE
 $(OSX)DM_SRCS += console-osx.m
 console-osx.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
@@ -348,6 +349,7 @@ $(WINDOWS)LDLIBS += -ldxguid
 $(WINDOWS)LDLIBS += -lgdi32
 $(WINDOWS)LDLIBS += -lgdiplus
 $(WINDOWS)$(CONFIG_FILECRYPT)LDLIBS += $(LIBFILECRYPT_LIBS)
+$(WINDOWS)LDLIBS += $(LIBUXENCONSOLE_LIBS)
 
 $(OSX)LDLIBS += -framework AppKit
 $(OSX)LDLIBS += -framework Carbon
