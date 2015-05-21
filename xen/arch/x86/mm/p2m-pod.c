@@ -1954,8 +1954,10 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     if (mfn_x(put_page_parent))
         put_page(mfn_to_page(put_page_parent));
 
+#ifndef __UXEN__
     set_gpfn_from_mfn(mfn_x(mfn), gfn_aligned);
-    paging_mark_dirty(d, mfn_x(mfn));
+    paging_mark_dirty(d, gfn_aligned);
+#endif  /* __UXEN__ */
     
 #ifndef __UXEN__
     p2m->pod.entry_count -= (1 << order); /* Lock: p2m */
@@ -2418,7 +2420,9 @@ guest_physmap_mark_pod_locked(struct domain *d, unsigned long gfn,
                  * then recreating the mapping in the mapcache */
                 goto out;
 
+#ifndef __UXEN__
             set_gpfn_from_mfn(mfn_x(omfn), INVALID_M2P_ENTRY);
+#endif  /* __UXEN__ */
 
             /* set page, to be freed after updating p2m entry */
             page = mfn_to_page(omfn);
@@ -2563,8 +2567,10 @@ guest_physmap_mark_populate_on_demand_contents(
             return -1;
         }
         guest_physmap_add_page(d, gpfn, mfn_x(mfn), PAGE_ORDER_4K);
+#ifndef __UXEN__
         if (!paging_mode_translate(d))
             set_gpfn_from_mfn(mfn_x(mfn), gpfn);
+#endif  /* __UXEN__ */
         return 0;
     }
 

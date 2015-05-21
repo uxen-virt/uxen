@@ -26,7 +26,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -390,11 +390,15 @@ void p2m_free_ptp(struct p2m_domain *p2m, struct page_info *pg)
 //
 int p2m_alloc_table(struct p2m_domain *p2m)
 {
+#ifndef __UXEN__
     mfn_t mfn = _mfn(INVALID_MFN);
     struct page_info *page;
+#endif  /* __UXEN__ */
     struct page_info *p2m_top;
+#ifndef __UXEN__
     unsigned int page_count = 0;
     unsigned long gfn = -1UL;
+#endif  /* __UXEN__ */
     struct domain *d = p2m->domain;
 
     p2m_lock(p2m);
@@ -445,6 +449,7 @@ int p2m_alloc_table(struct p2m_domain *p2m)
                         p2m_invalid, p2m->default_access) )
         goto error;
 
+#ifndef __UXEN__
     if ( !p2m_is_nestedp2m(p2m) )
     {
         /* Copy all existing mappings from the page list and m2p */
@@ -468,6 +473,7 @@ int p2m_alloc_table(struct p2m_domain *p2m)
         }
         spin_unlock(&p2m->domain->page_alloc_lock);
     }
+#endif  /* __UXEN__ */
 #ifndef __UXEN__
     p2m->defer_nested_flush = 0;
 #endif  /* __UXEN__ */
@@ -476,7 +482,9 @@ int p2m_alloc_table(struct p2m_domain *p2m)
     p2m_unlock(p2m);
     return 0;
 
+#ifndef __UXEN__
 error_unlock:
+#endif  /* __UXEN__ */
     spin_unlock(&p2m->domain->page_alloc_lock);
  error:
     P2M_PRINTK("failed to initialize p2m table, gfn=%05lx, mfn=%"
@@ -650,8 +658,8 @@ p2m_remove_page(struct p2m_domain *p2m, unsigned long gfn, unsigned long mfn,
             mfn_return = p2m->get_entry(p2m, gfn + i, &t, &a, p2m_query, NULL);
 #ifndef __UXEN__
             if ( !p2m_is_grant(t) )
-#endif  /* __UXEN__ */
                 set_gpfn_from_mfn(mfn+i, INVALID_M2P_ENTRY);
+#endif  /* __UXEN__ */
             ASSERT( !p2m_is_valid(t) || mfn + i == mfn_x(mfn_return) );
             p2m_update_pod_counts(p2m->domain, mfn_x(mfn_return), t);
         }
@@ -677,7 +685,10 @@ guest_physmap_add_entry(struct domain *d, unsigned long gfn,
                         p2m_type_t t)
 {
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
-    unsigned long i, ogfn;
+    unsigned long i;
+#ifndef __UXEN__
+    unsigned long ogfn;
+#endif  /* __UXEN__ */
     p2m_type_t ot;
     p2m_access_t a;
     mfn_t omfn;
@@ -757,7 +768,9 @@ guest_physmap_add_entry(struct domain *d, unsigned long gfn,
                     return -EINVAL;
                 }
             }
+#ifndef __UXEN__
             set_gpfn_from_mfn(mfn_x(omfn), INVALID_M2P_ENTRY);
+#endif  /* __UXEN__ */
         }
         else if (p2m_is_pod(ot)) {
             /* Count how man PoD entries we'll be replacing if successful */
@@ -770,6 +783,7 @@ guest_physmap_add_entry(struct domain *d, unsigned long gfn,
         }
     }
 
+#ifndef __UXEN__
     /* Then, look for m->p mappings for this range and deal with them */
     for ( i = 0; i < (1UL << page_order); i++ )
     {
@@ -800,6 +814,7 @@ guest_physmap_add_entry(struct domain *d, unsigned long gfn,
             }
         }
     }
+#endif  /* __UXEN__ */
 
     /* Now, actually do the two-way mapping */
     if ( mfn_valid(_mfn(mfn)) ) 
@@ -811,11 +826,11 @@ guest_physmap_add_entry(struct domain *d, unsigned long gfn,
         }
 #ifndef __UXEN__
         if ( !p2m_is_grant(t) )
-#endif  /* __UXEN__ */
         {
             for ( i = 0; i < (1UL << page_order); i++ )
                 set_gpfn_from_mfn(mfn+i, gfn+i);
         }
+#endif  /* __UXEN__ */
     }
     else
     {
@@ -956,11 +971,11 @@ set_mmio_p2m_entry(struct domain *d, unsigned long gfn, mfn_t mfn)
         return 0;
     }
     else
-#endif  /* __UXEN__ */
     if (p2m_is_ram(ot)) {
         ASSERT(mfn_valid(omfn));
         set_gpfn_from_mfn(mfn_x(omfn), INVALID_M2P_ENTRY);
     }
+#endif  /* __UXEN__ */
 
     P2M_DEBUG("set mmio %lx %lx\n", gfn, mfn_x(mfn));
     rc = set_p2m_entry(p2m, gfn, mfn, PAGE_ORDER_4K, p2m_mmio_direct, p2m->default_access);

@@ -493,6 +493,7 @@ static inline void __put_gfn(struct p2m_domain *p2m, unsigned long gfn)
                                                        p2m_guest_r)
 #define get_gfn_unshare_unlocked(d, g, t) get_gfn_type((d), (g), (t), p2m_unshare)
 
+#ifndef __UXEN__
 /* General conversion function from mfn to gfn */
 static inline unsigned long mfn_to_gfn(struct domain *d, mfn_t mfn)
 {
@@ -501,6 +502,7 @@ static inline unsigned long mfn_to_gfn(struct domain *d, mfn_t mfn)
     else
         return mfn_x(mfn);
 }
+#endif  /* __UXEN__ */
 
 /* Init the datastructures for later use by the p2m code */
 int p2m_init(struct domain *d);

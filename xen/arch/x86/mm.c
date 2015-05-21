@@ -509,7 +509,9 @@ void share_xen_page_with_guest(
     if ( page_get_owner(page) == d )
         return;
 
+#ifndef __UXEN__
     set_gpfn_from_mfn(page_to_mfn(page), INVALID_M2P_ENTRY);
+#endif  /* __UXEN__ */
 
     spin_lock(&d->page_alloc_lock);
 
@@ -2446,7 +2448,7 @@ static int alloc_page_type(struct page_info *page, unsigned long type,
 
     /* A page table is dirtied when its type count becomes non-zero. */
     if ( likely(owner != NULL) )
-        paging_mark_dirty(owner, page_to_mfn(page));
+        paging_mark_dirty(owner, /* page_to_mfn(page), */ INVALID_GFN);
 
     switch ( type & PGT_type_mask )
     {
@@ -2519,7 +2521,7 @@ int free_page_type(struct page_info *page, unsigned long type,
     if ( likely(owner != NULL) && unlikely(paging_mode_enabled(owner)) )
     {
         /* A page table is dirtied when its type count becomes zero. */
-        paging_mark_dirty(owner, page_to_mfn(page));
+        paging_mark_dirty(owner, /* page_to_mfn(page), */ INVALID_GFN);
 
         if ( shadow_mode_refcounts(owner) )
             return 0;
@@ -3340,7 +3342,7 @@ int do_mmuext_op(
             }
 
             /* A page is dirtied when its pin status is set. */
-            paging_mark_dirty(pg_owner, mfn);
+            paging_mark_dirty(pg_owner, op.arg1.mfn);
            
             /* We can race domain destruction (domain_relinquish_resources). */
             if ( unlikely(pg_owner != d) )
@@ -3390,7 +3392,7 @@ int do_mmuext_op(
             put_page(page);
 
             /* A page is dirtied when its pin status is cleared. */
-            paging_mark_dirty(pg_owner, mfn);
+            paging_mark_dirty(pg_owner, op.arg1.mfn);
 
             put_gfn(pg_owner, op.arg1.mfn);
             break;
@@ -3555,7 +3557,7 @@ int do_mmuext_op(
             }
 
             /* A page is dirtied when it's being cleared. */
-            paging_mark_dirty(d, mfn);
+            paging_mark_dirty(d, op.arg1.mfn);
 
             ptr = fixmap_domain_page(mfn);
             clear_page(ptr);
@@ -3596,7 +3598,7 @@ int do_mmuext_op(
             }
 
             /* A page is dirtied when it's being copied to. */
-            paging_mark_dirty(d, mfn);
+            paging_mark_dirty(d, op.arg1.mfn);
 
             src = map_domain_page(src_mfn);
             dst = fixmap_domain_page(mfn);
@@ -4035,7 +4037,7 @@ int do_mmu_update(
 
             set_gpfn_from_mfn(mfn, gpfn);
 
-            paging_mark_dirty(pg_owner, mfn);
+            paging_mark_dirty(pg_owner, gpfn);
 
             put_page(mfn_to_page(mfn));
             break;
@@ -4909,7 +4911,7 @@ long do_update_descriptor(u64 pa, u64 desc)
         break;
     }
 
-    paging_mark_dirty(dom, mfn);
+    paging_mark_dirty(dom, gmfn);
 
     /* All is good so make the update. */
     gdt_pent = map_domain_page(mfn);
@@ -4968,7 +4970,10 @@ static int xenmem_add_to_physmap_once(
 {
     struct page_info *page, *gmfn_page = NULL;
     unsigned long gfn = 0; /* gcc ... */
-    unsigned long prev_mfn, mfn = 0, gpfn, idx;
+    unsigned long prev_mfn, mfn = 0, idx;
+#ifndef __UXEN__
+    unsigned long gpfn;
+#endif  /* __UXEN__ */
     p2m_type_t pt;
     int rc;
 
@@ -5065,9 +5070,8 @@ static int xenmem_add_to_physmap_once(
             if (!page_get_owner(__mfn_to_page(mfn)))
                 break;
             if (is_host_page(__mfn_to_page(mfn))) {
-                uint32_t gpfn = mfn_to_gmfn(d, mfn);
                 gdprintk(XENLOG_ERR, "mfn %lx for gpfn %"PRI_xen_pfn
-                         " already host page at %x\n", mfn, xatp->gpfn, gpfn);
+                         " already host page\n", mfn, xatp->gpfn);
                 rc = -EINVAL;
                 goto out;
             }
@@ -5155,20 +5159,30 @@ static int xenmem_add_to_physmap_once(
         page->count_info = PGC_host_page | 1;
         spin_unlock(&d->page_alloc_lock);
         break;
-    case XENMAPSPACE_gmfn_range:
+    case XENMAPSPACE_shared_info:
+        if (d->shared_info_gpfn != INVALID_GFN) {
+            guest_physmap_remove_page(d, d->shared_info_gpfn, mfn,
+                                      PAGE_ORDER_4K);
+            d->shared_info_gpfn = INVALID_GFN;
+        }
+        break;
     case XENMAPSPACE_gmfn:
+    case XENMAPSPACE_gmfn_range:
         if (xatp->idx == INVALID_GFN) {
             rc = 0;
             put_gfn(d, gfn);
             goto out;
         }
-        /* fallthrough */
+        guest_physmap_remove_page(d, xatp->idx, mfn, PAGE_ORDER_4K);
+        break;
     default:
+#ifndef __UXEN__
         /* Unmap from old location, if any. */
         gpfn = get_gpfn_from_mfn(mfn);
         ASSERT( gpfn != SHARED_M2P_ENTRY );
         if ( gpfn != INVALID_M2P_ENTRY )
             guest_physmap_remove_page(d, gpfn, mfn, PAGE_ORDER_4K);
+#endif  /* __UXEN__ */
         break;
     }
 
@@ -5179,6 +5193,9 @@ static int xenmem_add_to_physmap_once(
     if ( xatp->space == XENMAPSPACE_gmfn ||
          xatp->space == XENMAPSPACE_gmfn_range )
         put_gfn(d, gfn);
+    /* XENMAPSPACE_shared_info case: update shared_info_gpfn on success */
+    else if (!rc && xatp->space == XENMAPSPACE_shared_info)
+        d->shared_info_gpfn = xatp->gpfn;
   out:
     if (gmfn_page)
         put_page(gmfn_page);

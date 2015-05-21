@@ -27,8 +27,6 @@ static ULONG build_number = 0;
 uint8_t *frametable = NULL;
 unsigned int frametable_size;
 uint8_t *frametable_populated = NULL;
-static void *m2p = NULL;
-static unsigned int m2p_size;
 static char *percpu_area = NULL;
 static size_t percpu_area_size;
 static BOOLEAN ui_hvm_io_bitmap_contiguous = TRUE;
@@ -723,11 +721,6 @@ uxen_op_init_free_allocs(void)
         kernel_free_va(frametable, frametable_size >> PAGE_SHIFT);
 	frametable = NULL;
     }
-    if (m2p) {
-	dprintk("uxen mem: free m2p\n");
-	kernel_free(m2p, m2p_size);
-	m2p = NULL;
-    }
     if (percpu_area) {
 	dprintk("uxen mem: free percpu_area\n");
 	kernel_free(percpu_area, percpu_area_size);
@@ -933,18 +926,6 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
         goto out;
     }
     dprintk("uxen mem:   zero page %x\n", uxen_zero_mfn);
-
-    m2p_size = max_pfn * sizeof(uint32_t);
-    m2p_size = ((m2p_size + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1));
-    m2p = kernel_malloc(m2p_size);
-    if (m2p == NULL || ((uintptr_t)m2p & (PAGE_SIZE - 1))) {
-        fail_msg("kernel_malloc(m2p) failed");
-        ret = -ENOMEM;
-	goto out;
-    }
-    uxen_info->ui_m2p = m2p;
-    dprintk("uxen mem:         m2p %p - %p (0x%x/%dMB)\n", m2p,
-	    (uint8_t *)m2p + m2p_size, m2p_size, m2p_size >> 20);
 
     dprintk("uxen mem:   page_info %x\n",
             uxen_info->ui_sizeof_struct_page_info);

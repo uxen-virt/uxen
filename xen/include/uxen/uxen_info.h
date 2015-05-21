@@ -166,7 +166,6 @@ struct /* __WINPACKED__ */ uxen_info {
                                          const char *fmt, ...);
     uint32_t ui_sizeof_struct_page_info;
     uint32_t ui_max_page;
-    void *ui_m2p;
     void *ui_frametable;
     void (__interface_fn *ui_kick_cpu)(uint64_t, uint64_t);
     void (__interface_fn *ui_kick_vcpu)(struct vm_vcpu_info_shared *);

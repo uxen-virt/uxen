@@ -259,6 +259,7 @@ struct domain
     domid_t          domain_id;
 
     shared_info_t   *shared_info;     /* shared data area */
+    unsigned long    shared_info_gpfn;
 
     spinlock_t       domain_lock;
 

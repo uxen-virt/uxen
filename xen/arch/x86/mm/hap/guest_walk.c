@@ -97,7 +97,8 @@ unsigned long hap_p2m_ga_to_gfn(GUEST_PAGING_LEVELS)(
 #if GUEST_PAGING_LEVELS == 3
     top_map += (cr3 & ~(PAGE_MASK | 31));
 #endif
-    missing = guest_walk_tables(v, p2m, ga, &gw, pfec[0], top_mfn, top_map);
+    missing = guest_walk_tables(v, p2m, ga, &gw, pfec[0], top_mfn, top_map,
+                                top_gfn);
     unmap_domain_page(top_map);
     __put_gfn(p2m, top_gfn);
 

@@ -23,7 +23,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -613,7 +613,10 @@ static int reserve_offlined_page(struct page_info *head)
 static void free_heap_pages(
     struct page_info *pg, unsigned int order)
 {
-    unsigned long mask, mfn = page_to_mfn(pg);
+    unsigned long mask;
+#ifndef __UXEN__
+    unsigned long mfn = page_to_mfn(pg);
+#endif  /* __UXEN__ */
     unsigned int i, node = phys_to_nid(page_to_maddr(pg));
 #ifndef __UXEN__
     unsigned int tainted = 0;
@@ -633,7 +636,9 @@ static void free_heap_pages(
 
         /* This page is not a guest frame any more. */
         page_set_owner(&pg[i], NULL); /* set_gpfn_from_mfn snoops pg owner */
+#ifndef __UXEN__
         set_gpfn_from_mfn(mfn + i, INVALID_M2P_ENTRY);
+#endif  /* __UXEN__ */
 
         /*
          * Cannot assume that count_info == 0, as there are some corner cases
@@ -1185,7 +1190,9 @@ free_host_page(struct page_info *pg)
 
     /* This page is not a guest frame any more. */
     page_set_owner(pg, NULL); /* set_gpfn_from_mfn snoops pg owner */
+#ifndef __UXEN__
     set_gpfn_from_mfn(page_to_mfn(pg), INVALID_M2P_ENTRY);
+#endif  /* __UXEN__ */
 
     /*
      * Cannot assume that count_info == 0, as there are some corner cases

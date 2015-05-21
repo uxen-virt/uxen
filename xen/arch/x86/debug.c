@@ -211,7 +211,7 @@ dbg_rw_guest_mem(dbgva_t addr, dbgbyte_t *buf, int len, struct domain *dp,
         if ( toaddr )
         {
             memcpy(va, buf, pagecnt);    /* va = buf */
-            paging_mark_dirty(dp, mfn);
+            paging_mark_dirty(dp, gfn);
         }
         else
         {

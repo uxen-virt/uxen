@@ -1095,10 +1095,6 @@ intptr_t __init __interface_fn __uxen_start_xen(
     reserve_e820_ram(&boot_e820, efi_enabled ? mbi->mem_upper : __pa(&_start),
                      __pa(&_end));
 #endif
-#else   /* __UXEN__ */
-    machine_to_phys_mapping = (uint32_t *)_uxen_info.ui_m2p;
-    memset(machine_to_phys_mapping, 0x55,
-           PFN_UP(sizeof(uint32_t) * _uxen_info.ui_max_page) << PAGE_SHIFT);
 #endif  /* __UXEN__ */
 
 #ifndef __UXEN__

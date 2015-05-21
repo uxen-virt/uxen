@@ -1124,7 +1124,16 @@ static void p2m_change_type_global(struct p2m_domain *p2m,
                 if ( p2m_flags_to_type(flags) != ot )
                     continue;
                 mfn = l3e_get_pfn(l3e[i3]);
+#ifndef __UXEN__
                 gfn = get_gpfn_from_mfn(mfn);
+#else  /* __UXEN__ */
+                gfn = ((i3
+#if CONFIG_PAGING_LEVELS >= 4
+                    + (i4 * L3_PAGETABLE_ENTRIES)
+#endif
+                    )
+                    * L2_PAGETABLE_ENTRIES) * L1_PAGETABLE_ENTRIES;
+#endif  /* __UXEN__ */
                 flags = p2m_type_to_flags(nt, _mfn(mfn));
                 l1e_content = l1e_from_pfn(mfn, flags | _PAGE_PSE);
                 p2m->write_p2m_entry(p2m, gfn,

@@ -1,7 +1,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -553,26 +553,21 @@ TYPE_SAFE(unsigned long,mfn);
 #define PRI_mfn "05lx"
 
 
+#ifndef __UXEN__
 /*
  * The MPT (machine->physical mapping table) is an array of word-sized
  * values, indexed on machine frame number. It is expected that guest OSes
  * will use it to store a "physical" frame number to give the appearance of
  * contiguous (or near contiguous) physical memory.
  */
-#undef  machine_to_phys_mapping
 #ifndef __UXEN__
+#undef  machine_to_phys_mapping
 #define machine_to_phys_mapping  ((unsigned long *)RDWR_MPT_VIRT_START)
 #define INVALID_M2P_ENTRY        (~0UL)
 #define VALID_M2P(_e)            (!((_e) & (1UL<<(BITS_PER_LONG-1))))
 #define SHARED_M2P_ENTRY         (~0UL - 1UL)
-#else   /* __UXEN__ */
-extern uint32_t *_machine_to_phys_mapping;
-#define machine_to_phys_mapping  _machine_to_phys_mapping
-#define INVALID_M2P_ENTRY        ((uint32_t)(~0U))
-#define VALID_M2P(_e)            (!((_e) & (1UL<<(8*sizeof(*machine_to_phys_mapping)-1))))
-#define SHARED_M2P_ENTRY         ((uint32_t)(~0U - 1U))
-#endif  /* __UXEN__ */
 #define SHARED_M2P(_e)           ((_e) == SHARED_M2P_ENTRY)
+#endif  /* __UXEN__ */
 
 #ifdef CONFIG_COMPAT
 #define compat_machine_to_phys_mapping ((unsigned int *)RDWR_COMPAT_MPT_VIRT_START)
@@ -585,6 +580,7 @@ extern uint32_t *_machine_to_phys_mapping;
      machine_to_phys_mapping[(mfn)] = (entry));                \
     })
 #else
+#ifndef __UXEN__
 #define _set_gpfn_from_mfn(mfn, pfn) ({                        \
     struct domain *d = page_get_owner(__mfn_to_page(mfn));     \
     if(d && (d == dom_cow))                                    \
@@ -592,6 +588,7 @@ extern uint32_t *_machine_to_phys_mapping;
     else                                                       \
         machine_to_phys_mapping[(mfn)] = (pfn);                \
     })
+#endif  /* __UXEN__ */
 #endif
 
 /*
@@ -610,6 +607,7 @@ extern bool_t machine_to_phys_mapping_valid;
     ( (paging_mode_translate(_d))                       \
       ? get_gpfn_from_mfn(mfn)                          \
       : (mfn) )
+#endif  /* __UXEN__ */
 
 #ifdef __x86_64__
 /* 40 bits */

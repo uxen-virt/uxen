@@ -6,7 +6,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -661,6 +661,8 @@ int arch_domain_create(struct domain *d, unsigned int domcr_flags)
         clear_page(d->shared_info);
         share_xen_page_with_guest(
             virt_to_page(d->shared_info), d, XENSHARE_writable);
+
+        d->shared_info_gpfn = INVALID_GFN;
 
 #ifndef __UXEN__
         if ( (rc = init_domain_irq_mapping(d)) != 0 )

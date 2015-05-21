@@ -8,7 +8,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -164,13 +164,14 @@ void getdomaininfo(struct domain *d, struct xen_domctl_getdomaininfo *info)
 #ifndef __UXEN__
     info->shr_pages         = atomic_read(&d->shr_pages);
     info->paged_pages       = atomic_read(&d->paged_pages);
+    info->shared_info_frame = mfn_to_gmfn(d, __pa(d->shared_info)>>PAGE_SHIFT);
+    BUG_ON(SHARED_M2P(info->shared_info_frame));
 #else  /* __UXEN__ */
     info->pod_pages         = atomic_read(&d->pod_pages);
     info->zero_shared_pages = atomic_read(&d->zero_shared_pages);
     info->tmpl_shared_pages = atomic_read(&d->tmpl_shared_pages);
+    info->shared_info_frame = d->shared_info_gpfn;
 #endif  /* __UXEN__ */
-    info->shared_info_frame = mfn_to_gmfn(d, __pa(d->shared_info)>>PAGE_SHIFT);
-    BUG_ON(SHARED_M2P(info->shared_info_frame));
 
     info->cpupool = d->cpupool ? d->cpupool->cpupool_id : CPUPOOLID_NONE;
 

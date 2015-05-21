@@ -9,7 +9,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -118,7 +118,10 @@ static void increase_reservation(struct memop_args *a)
 static void populate_physmap(struct memop_args *a)
 {
     struct page_info *page;
-    unsigned long i, j;
+    unsigned long i;
+#ifndef __UXEN__
+    unsigned long j;
+#endif  /* __UXEN__ */
     xen_pfn_t gpfn, mfn;
     struct domain *d = a->domain;
 
@@ -181,8 +184,10 @@ static void populate_physmap(struct memop_args *a)
 
             if ( !paging_mode_translate(d) )
             {
+#ifndef __UXEN__
                 for ( j = 0; j < (1 << a->extent_order); j++ )
                     set_gpfn_from_mfn(mfn + j, gpfn + j);
+#endif  /* __UXEN__ */
 
                 /* Inform the domain of the new page's machine address. */ 
                 if ( unlikely(__copy_to_guest_offset(a->extent_list, i, &mfn, 1)) )

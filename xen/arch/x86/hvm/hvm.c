@@ -1827,7 +1827,7 @@ int hvm_hap_nested_page_fault(unsigned long gpa,
          */
         perfc_incr(page_logdirty);
         if (p2m_is_logdirty(p2mt)) {
-            paging_mark_dirty_check_vram(v, mfn_x(mfn), gfn);
+            paging_mark_dirty_check_vram(v, gfn);
             /* paging_mark_dirty_check_vram does put_gfn */
             return 1;
         }
@@ -1835,7 +1835,7 @@ int hvm_hap_nested_page_fault(unsigned long gpa,
             /* paging_mark_dirty_check_vram_l2 does put_gfn */
             return 1;
         }
-        paging_mark_dirty(v->domain, mfn_x(mfn));
+        paging_mark_dirty(v->domain, gfn);
 
         rc = 1;
         goto out_put_gfn;
@@ -2467,7 +2467,7 @@ static void *__hvm_map_guest_frame(unsigned long gfn, bool_t writable)
     ASSERT(mfn_valid(mfn));
 
     if ( writable )
-        paging_mark_dirty(d, mfn);
+        paging_mark_dirty(d, gfn);
 
     return map_domain_page(mfn);
 }
@@ -2957,7 +2957,7 @@ static enum hvm_copy_result __hvm_copy(
             else
             {
                 memcpy(p, buf, count);
-                paging_mark_dirty(curr->domain, mfn);
+                paging_mark_dirty(curr->domain, gfn);
             }
         }
         else
@@ -4730,9 +4730,7 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
                 a.value = d->arch.hvm_domain.is_s3_suspended ? 3 : 0;
                 break;
             case HVM_PARAM_SHARED_INFO_PFN:
-                a.value = get_gpfn_from_mfn(virt_to_mfn(d->shared_info));
-                if (!VALID_M2P(a.value))
-                    a.value = INVALID_M2P_ENTRY;
+                a.value = d->shared_info_gpfn;
                 break;
             default:
                 a.value = d->arch.hvm_domain.params[a.index];
@@ -4881,7 +4879,7 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
             
             if ( mfn_x(mfn) != INVALID_MFN )
             {
-                paging_mark_dirty(d, mfn_x(mfn));
+                paging_mark_dirty(d, pfn);
                 /* These are most probably not page tables any more */
                 /* don't take a long time and don't die either */
                 sh_remove_shadows(d->vcpu[0], mfn, 1, 0);

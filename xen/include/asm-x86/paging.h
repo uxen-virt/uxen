@@ -165,10 +165,9 @@ void paging_log_dirty_init(struct domain *d,
                            void (*clean_dirty_bitmap)(struct domain *d));
 
 /* mark a page as dirty */
-void paging_mark_dirty(struct domain *d, unsigned long guest_mfn);
+void paging_mark_dirty(struct domain *d, unsigned long gfn);
 
-void paging_mark_dirty_check_vram(struct vcpu *v, unsigned long guest_mfn,
-                                  unsigned long gfn);
+void paging_mark_dirty_check_vram(struct vcpu *v, unsigned long gfn);
 int paging_mark_dirty_check_vram_l2(struct vcpu *v, unsigned long gfn);
 
 /* is this guest page dirty? 

@@ -313,7 +313,8 @@ guest_walk_to_page_order(walk_t *gw)
 
 extern uint32_t 
 guest_walk_tables(struct vcpu *v, struct p2m_domain *p2m, unsigned long va,
-                  walk_t *gw, uint32_t pfec, mfn_t top_mfn, void *top_map);
+                  walk_t *gw, uint32_t pfec, mfn_t top_mfn, void *top_map,
+                  unsigned long top_gfn);
 
 /* Pretty-print the contents of a guest-walk */
 static inline void print_gw(walk_t *gw)

@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -212,33 +212,17 @@ int paging_log_dirty_disable(struct domain *d)
 }
 
 /* Mark a page as dirty */
-void paging_mark_dirty(struct domain *d, unsigned long guest_mfn)
+void paging_mark_dirty(struct domain *d, unsigned long pfn)
 {
-    unsigned long pfn;
-    mfn_t gmfn;
     int changed;
     mfn_t mfn, *l4, *l3, *l2;
     unsigned long *l1;
     int i1, i2, i3, i4;
 
-    gmfn = _mfn(guest_mfn);
-
-    if ( !paging_mode_log_dirty(d) || !mfn_valid(gmfn) ||
-         (page_get_owner(mfn_to_page(gmfn)) != d &&
-          !is_host_mfn(mfn_x(gmfn))) )
+    if ( !paging_mode_log_dirty(d) )
         return;
 
-    /* We /really/ mean PFN here, even for non-translated guests. */
-    pfn = get_gpfn_from_mfn(mfn_x(gmfn));
-    /* Shared MFNs should NEVER be marked dirty */
-    BUG_ON(SHARED_M2P(pfn));
-
-    /*
-     * Values with the MSB set denote MFNs that aren't really part of the
-     * domain's pseudo-physical memory map (e.g., the shared info frame).
-     * Nothing to do here...
-     */
-    if ( unlikely(!VALID_M2P(pfn)) )
+    if (pfn == INVALID_GFN)
         return;
 
     i1 = L1_LOGDIRTY_IDX(pfn);
@@ -291,8 +275,8 @@ void paging_mark_dirty(struct domain *d, unsigned long guest_mfn)
     if ( changed )
     {
         PAGING_DEBUG(LOGDIRTY, 
-                     "marked mfn %" PRI_mfn " (pfn=%lx), vm%u\n",
-                     mfn_x(gmfn), pfn, d->domain_id);
+                     "marked pfn=%lx, vm%u\n",
+                     pfn, d->domain_id);
         d->arch.paging.log_dirty.dirty_count++;
     }
 
@@ -302,8 +286,7 @@ out:
     return;
 }
 
-void paging_mark_dirty_check_vram(struct vcpu *v, unsigned long gmfn,
-                                  unsigned long gfn)
+void paging_mark_dirty_check_vram(struct vcpu *v, unsigned long gfn)
 {
     struct domain *d = v->domain;
     struct sh_dirty_vram *dirty_vram = d->arch.hvm_domain.dirty_vram;
@@ -315,7 +298,7 @@ void paging_mark_dirty_check_vram(struct vcpu *v, unsigned long gmfn,
 
     logdirty_lock(p2m);
 
-    paging_mark_dirty(d, gmfn);
+    paging_mark_dirty(d, gfn);
     p2m_change_type(d, gfn, p2m_ram_logdirty, p2m_ram_rw);
 
     do {
@@ -330,11 +313,10 @@ void paging_mark_dirty_check_vram(struct vcpu *v, unsigned long gmfn,
                 break;
             put_gfn(d, gfn);
             gfn++;
-            gmfn = mfn_x(get_gfn_type_access(p2m, gfn, &p2mt, &p2ma,
-                                             p2m_guest, NULL));
+            get_gfn_type_access(p2m, gfn, &p2mt, &p2ma, p2m_guest, NULL);
             if (!p2m_is_logdirty(p2mt))
                 break;
-            paging_mark_dirty(d, gmfn);
+            paging_mark_dirty(d, gfn);
             p2m_change_type(d, gfn, p2m_ram_logdirty, p2m_ram_rw);
         }
     } while(0);
@@ -359,7 +341,6 @@ paging_mark_dirty_check_vram_l2(struct vcpu *v, unsigned long gfn)
     p2m_access_t p2ma;
     struct p2m_domain *p2m;
     unsigned long gfn_l2;
-    unsigned long gmfn;
 
     if (!paging_mode_log_dirty(d) || !dirty_vram ||
         gfn < dirty_vram->begin_pfn || gfn >= dirty_vram->end_pfn)
@@ -374,9 +355,8 @@ paging_mark_dirty_check_vram_l2(struct vcpu *v, unsigned long gfn)
     gfn_l2 = gfn & ~((1ul << PAGE_ORDER_2M) - 1);
     for (gfn = gfn_l2; gfn < (gfn_l2 + (1ul << PAGE_ORDER_2M)) &&
              gfn < dirty_vram->end_pfn; gfn++) {
-        gmfn = mfn_x(get_gfn_type_access(p2m, gfn, &p2mt, &p2ma,
-                                         p2m_guest, NULL));
-        paging_mark_dirty(d, gmfn);
+        get_gfn_type_access(p2m, gfn, &p2mt, &p2ma, p2m_guest, NULL);
+        paging_mark_dirty(d, gfn);
         put_gfn(d, gfn);
     }
 
