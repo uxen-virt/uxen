@@ -356,7 +356,7 @@ kernel_alloc_mfn(uxen_pfn_t *mfn)
 }
 
 int
-populate_frametable(uxen_pfn_t mfn)
+_populate_frametable(uxen_pfn_t mfn)
 {
     unsigned int offset;
     uintptr_t frametable_va;
@@ -419,7 +419,53 @@ populate_frametable(uxen_pfn_t mfn)
     /* Check if last byte of mfn's page_info is in same frametable
      * page, otherwise populate next mfn as well */
     if (((s * (mfn + 1) - 1) >> PAGE_SHIFT) != offset)
-        return populate_frametable(mfn + 1);
+        return _populate_frametable(mfn + 1);
+    return 0;
+}
+
+int frametable_check_populate = 0;
+
+static uxen_pfn_t
+populate_frametable_range(uxen_pfn_t start, uxen_pfn_t end)
+{
+    int s = uxen_info->ui_sizeof_struct_page_info;
+    uxen_pfn_t mfn;
+
+    for (mfn = start; mfn < end;) {
+        if (_populate_frametable(mfn)) {
+            fail_msg("failed to populate frametable for mfn %lx", mfn);
+            return 0;
+        }
+        mfn = (((((s * mfn) >> PAGE_SHIFT) + 1) << PAGE_SHIFT) + s - 1) / s;
+    }
+
+    return end;
+}
+
+int
+populate_frametable_physical_memory(void)
+{
+    PPHYSICAL_MEMORY_RANGE pMemMap;
+    uxen_pfn_t start, end;
+
+    for (pMemMap = MmGetPhysicalMemoryRanges();
+         pMemMap[0].BaseAddress.QuadPart || pMemMap[0].NumberOfBytes.QuadPart;
+         pMemMap++) {
+        start = (uxen_pfn_t)(pMemMap[0].BaseAddress.QuadPart >> PAGE_SHIFT);
+        end = (uxen_pfn_t)((pMemMap[0].BaseAddress.QuadPart +
+                            pMemMap[0].NumberOfBytes.QuadPart +
+                            PAGE_SIZE - 1) >> PAGE_SHIFT);
+#ifdef __i386__
+        if (start >= os_max_pfn)
+            continue;
+        if (end > os_max_pfn)
+            end = os_max_pfn;
+#endif  /* __i386__ */
+        if (!populate_frametable_range(start, end))
+            frametable_check_populate = 1;
+    }
+    if (frametable_check_populate)
+        printk("%s: populate frametable incomplete\n", __FUNCTION__);
     return 0;
 }
 
@@ -1060,8 +1106,11 @@ map_host_pages(void *va, size_t len, uint64_t gmfn,
     for (i = 0; i < (len >> PAGE_SHIFT); i++) {
         xen_add_to_physmap_t memop_arg;
 
+        /* use _populate_frametable, in case host pages being added
+         * aren't part of the memory regions returned by
+         * MmGetPhysicalMemoryRanges */
         if (pfn_array[i] >= uxen_info->ui_max_page ||
-            populate_frametable(pfn_array[i])) {
+            _populate_frametable(pfn_array[i])) {
             fail_msg("invalid mfn %p or failed to populate physmap:"
                      " gpfn=%p, domid=%d",
                      pfn_array[i], gmfn + i, vmi->vmi_shared.vmi_domid);

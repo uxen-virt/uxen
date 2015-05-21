@@ -971,6 +971,7 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
             frametable_populated + ((frametable_size >> PAGE_SHIFT) + 7) / 8,
             (((frametable_size >> PAGE_SHIFT) + 7) / 8) >> 10);
     KeInitializeSpinLock(&populate_frametable_lock);
+    populate_frametable_physical_memory();
 
     sizeof_percpu = (uxen_addr_per_cpu_data_end - uxen_addr_per_cpu_start +
                      PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);

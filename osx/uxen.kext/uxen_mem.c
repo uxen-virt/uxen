@@ -970,7 +970,7 @@ kernel_alloc_mfn(uxen_pfn_t *mfn, int zeroed)
 }
 
 int
-populate_frametable(uxen_pfn_t mfn)
+_populate_frametable(uxen_pfn_t mfn)
 {
     unsigned int offset;
     uintptr_t frametable_va;
@@ -1000,7 +1000,52 @@ populate_frametable(uxen_pfn_t mfn)
     /* Check if last byte of mfn's page_info is in same frametable
      * page, otherwise populate next mfn as well */
     if (((s * (mfn + 1) - 1) >> PAGE_SHIFT) != offset)
-        return populate_frametable(mfn + 1);
+        return _populate_frametable(mfn + 1);
+    return 0;
+}
+
+int frametable_check_populate = 0;
+
+static uxen_pfn_t
+populate_frametable_range(uxen_pfn_t start, uxen_pfn_t end)
+{
+    int s = uxen_info->ui_sizeof_struct_page_info;
+    uxen_pfn_t mfn;
+
+    for (mfn = start; mfn < end;) {
+        if (_populate_frametable(mfn)) {
+            fail_msg("failed to populate frametable for mfn %x", mfn);
+            return 0;
+        }
+        mfn = (((((s * mfn) >> PAGE_SHIFT) + 1) << PAGE_SHIFT) + s - 1) / s;
+    }
+
+    return end;
+}
+
+int
+populate_frametable_physical_memory(void)
+{
+    unsigned int count, i;
+    uxen_pfn_t start, end;
+
+    count = xnu_pmap_memory_region_count();
+    if (!xnu_pmap_memory_regions() || !count) {
+        frametable_check_populate = 1;
+        goto out;
+    }
+
+    for (i = 0; i < count; i++) {
+        start = pmap_memory_regions_get(i, base);
+        end = pmap_memory_regions_get(i, end);
+
+        if (!populate_frametable_range(start, end))
+            frametable_check_populate = 1;
+    }
+
+  out:
+    if (frametable_check_populate)
+        printk("%s: populate frametable incomplete\n", __FUNCTION__);
     return 0;
 }
 
@@ -1426,7 +1471,9 @@ map_host_pages(void *va, size_t len, uint64_t gmfn,
         if (pn == 0)
             goto out;
 
-        if (pn >= uxen_info->ui_max_page || populate_frametable(pn)) {
+        /* use _populate_frametable, in case host pages being added
+         * aren't part of the prepopulated memory regions */
+        if (pn >= uxen_info->ui_max_page || _populate_frametable(pn)) {
             fail_msg("invalid mfn %x or failed to populate physmap:"
                      " gpfn=%"PRIx64", domid=%d",
                      pn, gmfn + i, vmi->vmi_shared.vmi_domid);

@@ -771,6 +771,7 @@ uxen_op_init(struct fd_assoc *fda)
         ret = ENOMEM;
         goto out;
     }
+    populate_frametable_physical_memory();
 
     sizeof_percpu = (uxen_addr_per_cpu_data_end - uxen_addr_per_cpu_start +
                      PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
