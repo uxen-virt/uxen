@@ -27,7 +27,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -465,7 +465,8 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
         p2m_entry = p2m_find_entry(table, &gfn_remainder, gfn,
                                    0, L1_PAGETABLE_ENTRIES);
         ASSERT(p2m_entry);
-        
+        old_mfn = l1e_get_pfn(*p2m_entry);
+
         if (mfn_valid_page(mfn_x(mfn)) ||
             p2m_is_mmio_direct(p2mt) || p2m_is_pod(p2mt))
             entry_content = l1e_from_pfn(mfn_x(mfn),
@@ -474,13 +475,18 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
             entry_content = l1e_empty();
 
         if ( entry_content.l1 != 0 )
-        {
             p2m_add_iommu_flags(&entry_content, 0, iommu_pte_flags);
-            old_mfn = l1e_get_pfn(*p2m_entry);
-        }
         /* level 1 entry */
         p2m->write_p2m_entry(p2m, gfn, p2m_entry, table_mfn, entry_content, 1);
         /* NB: paging_write_p2m_entry() handles tlb flushes properly */
+
+        if (old_mfn != mfn_x(mfn)) {
+            if (mfn_valid_page(mfn_x(mfn)) &&
+                mfn_x(mfn) != mfn_x(shared_zero_page))
+                get_page_fast(mfn_to_page(mfn), NULL);
+            if (mfn_valid_page(old_mfn) && old_mfn != mfn_x(shared_zero_page))
+                put_page(mfn_to_page(_mfn(old_mfn)));
+        }
     }
     else if ( page_order == PAGE_ORDER_2M )
     {

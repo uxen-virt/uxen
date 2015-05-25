@@ -26,7 +26,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -684,7 +684,7 @@ static inline int p2m_gfn_check_limit(
      */
     if ( !hap_enabled(d) || ((gfn + (1ul << order)) <= 0x100000UL) ||
          (boot_cpu_data.x86_vendor != X86_VENDOR_AMD) )
-        return 0;
+        return (gfn + (1ul << order) - 1) < INVALID_GFN ? 0 : -EINVAL;
 
     if ( !test_and_set_bool(d->arch.hvm_domain.svm.npt_4gb_warning) )
         dprintk(XENLOG_WARNING, "vm%u failed to populate memory beyond"
@@ -694,7 +694,8 @@ static inline int p2m_gfn_check_limit(
     return -EINVAL;
 }
 #else
-#define p2m_gfn_check_limit(d, g, o) 0
+#define p2m_gfn_check_limit(d, gfn, order) \
+    (((gfn) + (1ul << (order)) - 1) < INVALID_GFN ? 0 : -EINVAL)
 #endif
 
 /* Directly set a p2m entry: only for use by p2m code. Does not need

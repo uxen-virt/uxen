@@ -21,7 +21,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -2296,16 +2296,18 @@ struct domain *page_get_owner_and_reference(struct page_info *page)
     return page_get_owner(page);
 }
 
-/* fast get page -- use when the caller knows the page owner and is
- * already holding a reference to the page */
+/* fast get page -- used when the caller is already holding a reference
+ * to the page, and also probably knows the page owner */
 #ifndef NDEBUG
 int
 _get_page_fast(struct page_info *page, struct domain *domain)
 {
     struct domain *owner;
+    int ret;
 
-    if (!_get_page(page))
-        return 0;
+    ret = _get_page(page);
+    if (!ret || !domain)
+        return ret;
     owner = page_get_owner(page);
     if (unlikely(domain != owner)) {
         printk("%s: page %lx owner is %p/vm%d, expected %p/vm%d\n",

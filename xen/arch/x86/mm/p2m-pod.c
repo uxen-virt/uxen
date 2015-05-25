@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -2217,7 +2217,8 @@ p2m_shared_teardown(struct p2m_domain *p2m)
     p2m_access_t a;
     unsigned int page_order;
     struct page_info *page;
-    int own_count = 0, shared_count = 0;
+    int domain_count = 0, shared_count = 0, zero_count = 0, host_count = 0;
+    int p2m_count = 0;
 
     for (gpfn = 0; gpfn <= p2m->max_mapped_pfn; gpfn++) {
         if (!(gpfn & ((1UL << PAGETABLE_ORDER) - 1))) {
@@ -2234,27 +2235,34 @@ p2m_shared_teardown(struct p2m_domain *p2m)
                                &t, &a);
         if (!mfn_valid_page(mfn_x(mfn)))
             continue;
+        if (mfn_x(mfn) == mfn_x(shared_zero_page)) {
+            zero_count++;
+            continue;
+        }
         page = mfn_to_page(mfn);
+        if (test_bit(_PGC_host_page, &page->count_info)) {
+            host_count++;
+            continue;
+        }
         owner = page_get_owner(page);
         if (p2m_is_pod(t) && d->clone_of && owner == d->clone_of) {
             put_page(page);
             shared_count++;
-            continue;
-        }
-        if (test_bit(_PGC_host_page, &page->count_info))
-            continue;
-        if (p2m_is_ram(t) && owner == d) {
+        } else if (p2m_is_ram(t) && owner == d) {
             if (test_and_clear_bit(_PGC_allocated, &page->count_info))
                 put_page(page);
-            own_count++;
-            continue;
+            domain_count++;
         }
+        put_page(page);
+        p2m_count++;
     }
     if (l1table)
         unmap_domain_page(l1table);
 
-    printk("%s: vm%u dropped %d template and %d own page references\n",
-           __FUNCTION__, d->domain_id, shared_count, own_count);
+    printk("%s: vm%u cleared %d p2m entries --"
+           " domain=%d shared=%d zero=%d host=%d\n", __FUNCTION__,
+           d->domain_id, p2m_count, domain_count, shared_count, zero_count,
+           host_count);
     return 1;
 }
 

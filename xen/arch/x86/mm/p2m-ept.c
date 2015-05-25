@@ -18,7 +18,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -567,6 +567,14 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
         ept_p2m_type_to_flags(&new_entry, p2mt, p2ma);
 
         atomic_write_ept_entry(ept_entry, new_entry);
+    }
+
+    if (!target && old_entry.mfn != mfn_x(mfn)) {
+        if (mfn_valid_page(mfn_x(mfn)) && mfn_x(mfn) != mfn_x(shared_zero_page))
+            get_page_fast(mfn_to_page(mfn_x(mfn)), NULL);
+        if (mfn_valid_page(old_entry.mfn) &&
+            old_entry.mfn != mfn_x(shared_zero_page))
+            put_page(mfn_to_page(old_entry.mfn));
     }
 
     /* Track the highest gfn for which we have ever had a valid mapping */
