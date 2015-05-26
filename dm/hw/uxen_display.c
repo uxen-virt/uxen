@@ -34,6 +34,11 @@ struct crtc_state {
     int flush_pending;
 };
 
+struct bank_state {
+    struct vram_desc vram;
+    uint32_t len;
+};
+
 struct uxendisp_state {
     PCIDevice dev;
     VGAState vga;
@@ -45,7 +50,7 @@ struct uxendisp_state {
     struct cursor_regs *cursor_regs;
     uint8_t *cursor_data;
     struct crtc_state crtcs[UXENDISP_NB_CRTCS];
-    struct vram_desc banks[UXENDISP_NB_BANKS];
+    struct bank_state banks[UXENDISP_NB_BANKS];
 
     uint32_t io_index;
     uint32_t isr;
@@ -111,7 +116,7 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
 {
     struct crtc_state *crtc = &s->crtcs[crtc_id];
     int bank_id = crtc->offset >> UXENDISP_BANK_ORDER;
-    struct vram_desc *bank = &s->banks[bank_id];
+    struct bank_state *bank = &s->banks[bank_id];
     int rc;
     int npages;
     uint8_t *dirty;
@@ -135,7 +140,7 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
 
     dirty = alloca((npages + 7) / 8);
 
-    rc = xen_hvm_track_dirty_vram(bank->gfn, npages, dirty, 1);
+    rc = xen_hvm_track_dirty_vram(bank->vram.gfn, npages, dirty, 1);
     if (rc) {
         DPRINTF("xen_hvm_track_dirty_vram failed: %d\n", errno);
         return;
@@ -167,16 +172,16 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
             if (!ds_vram_surface(crtc->ds->surface)) {
                 switch (crtc->regs->p.format) {
                 case UXDISP_CRTC_FORMAT_BGRX_8888:
-                    memcpy(d, bank->view + addr1, crtc->regs->p.xres * 4);
+                    memcpy(d, bank->vram.view + addr1, crtc->regs->p.xres * 4);
                     break;
                 case UXDISP_CRTC_FORMAT_BGR_888:
-                    draw_line_24(d, bank->view + addr1, crtc->regs->p.xres);
+                    draw_line_24(d, bank->vram.view + addr1, crtc->regs->p.xres);
                     break;
                 case UXDISP_CRTC_FORMAT_BGR_565:
-                    draw_line_16(d, bank->view + addr1, crtc->regs->p.xres);
+                    draw_line_16(d, bank->vram.view + addr1, crtc->regs->p.xres);
                     break;
                 case UXDISP_CRTC_FORMAT_BGR_555:
-                    draw_line_15(d, bank->view + addr1, crtc->regs->p.xres);
+                    draw_line_15(d, bank->vram.view + addr1, crtc->regs->p.xres);
                     break;
                 }
             }
@@ -290,7 +295,7 @@ crtc_flush(struct uxendisp_state *s, int crtc_id)
 
     /* XXX crtc 0 only for now */
     if (crtc_id == 0 && (s->mode & UXDISP_MODE_VGA_DISABLED)) {
-        struct vram_desc *bank;
+        struct bank_state *bank;
         size_t sz;
 
         if (crtc->regs->p.enable) {
@@ -304,7 +309,7 @@ crtc_flush(struct uxendisp_state *s, int crtc_id)
             sz = offset + crtc->regs->p.yres * crtc->regs->p.stride;
             if (sz > UXENDISP_BANK_SIZE)
                 return;
-            if (bank->mapped_len < sz)
+            if (bank->len < sz)
                 bank_reg_write(s, bank_id, 0, sz);
 
             console_resize_from(crtc->ds,
@@ -312,7 +317,7 @@ crtc_flush(struct uxendisp_state *s, int crtc_id)
                                 crtc->regs->p.yres,
                                 uxdisp_fmt_to_bpp(crtc->regs->p.format),
                                 crtc->regs->p.stride,
-                                bank->view, offset);
+                                bank->vram.view, offset);
         } else if (crtc->ds->surface) {
             free_displaysurface(crtc->ds->surface);
             crtc->ds->surface = NULL;
@@ -397,13 +402,13 @@ static void
 bank_reg_write(struct uxendisp_state *s, int bank_id, target_phys_addr_t addr,
                uint32_t val)
 {
-    struct vram_desc *bank = &s->banks[bank_id];
+    struct bank_state *bank = &s->banks[bank_id];
 
     if (addr != 0)
         return;
 
-    val = (val + (TARGET_PAGE_SIZE - 1)) &
-          ~(TARGET_PAGE_SIZE - 1);
+    bank->len = val = (val + (TARGET_PAGE_SIZE - 1)) &
+                      ~(TARGET_PAGE_SIZE - 1);
 
     if ((bank_id == 0) && val < (vm_vga_mb_mapped << 20))
         val = vm_vga_mb_mapped << 20;
@@ -411,18 +416,18 @@ bank_reg_write(struct uxendisp_state *s, int bank_id, target_phys_addr_t addr,
     if (val > UXENDISP_BANK_SIZE)
         val = UXENDISP_BANK_SIZE;
 
-    vram_resize(bank, val);
+    vram_resize(&bank->vram, val);
 }
 
 static uint32_t
 bank_reg_read(struct uxendisp_state *s, int bank_id, target_phys_addr_t addr)
 {
-    struct vram_desc *bank = &s->banks[bank_id];
+    struct bank_state *bank = &s->banks[bank_id];
 
     if (addr != 0)
         return ~0;
 
-    return bank->mapped_len;
+    return bank->len;
 }
 
 static void
@@ -618,11 +623,11 @@ bank_mapping_update(void *opaque)
     int i;
 
     for (i = 0; i < UXENDISP_NB_BANKS; i++) {
-        struct vram_desc *bank = &s->banks[i];
+        struct bank_state *bank = &s->banks[i];
         uint32_t gfn = (memory_region_absolute_offset(&s->vram) +
                         i * UXENDISP_BANK_SIZE) >> TARGET_PAGE_BITS;
 
-        vram_map(bank, gfn);
+        vram_map(&bank->vram, gfn);
     }
 }
 
@@ -636,12 +641,12 @@ static void vram_change(struct vram_desc *v, void *opaque)
     for (crtc_id = 0; crtc_id < UXENDISP_NB_CRTCS; crtc_id++) {
         struct crtc_state *crtc = &s->crtcs[crtc_id];
         int bank_id = crtc->offset >> UXENDISP_BANK_ORDER;
-        struct vram_desc *bank = &s->banks[bank_id];
+        struct bank_state *bank = &s->banks[bank_id];
 
-        if (bank == v) {
+        if (&bank->vram == v) {
             DPRINTF("%s: bank_id=%d crtc_id=%d\n",
                     __FUNCTION__, bank_id, crtc_id);
-            dpy_vram_change(crtc->ds, bank);
+            dpy_vram_change(crtc->ds, &bank->vram);
             break;
         }
     }
@@ -684,19 +689,33 @@ static const VMStateDescription vmstate_uxendisp_crtc = {
     }
 };
 
+static const VMStateDescription vmstate_uxendisp_bank = {
+    .name = "uxendisp-bank",
+    .version_id = 7,
+    .minimum_version_id = 7,
+    .minimum_version_id_old = 7,
+    .fields = (VMStateField[]) {
+        VMSTATE_VRAM(vram, struct bank_state),
+        VMSTATE_UINT32(len, struct bank_state),
+        VMSTATE_END_OF_LIST(),
+    }
+};
+
 static const VMStateDescription vmstate_uxendisp = {
     .name = "uxendisp",
-    .version_id = 6,
-    .minimum_version_id = 6,
-    .minimum_version_id_old = 6,
+    .version_id = 7,
+    .minimum_version_id = 7,
+    .minimum_version_id_old = 7,
     .pre_save = uxendisp_pre_save,
     .post_load = uxendisp_post_load,
     .fields      = (VMStateField []) {
         VMSTATE_PCI_DEVICE(dev, struct uxendisp_state),
         VMSTATE_STRUCT(vga, struct uxendisp_state, 0,
                        vmstate_vga, VGAState),
-        VMSTATE_VRAM_ARRAY(banks, struct uxendisp_state,
-                           UXENDISP_NB_BANKS),
+        VMSTATE_STRUCT_ARRAY(banks, struct uxendisp_state,
+                             UXENDISP_NB_BANKS, 7,
+                             vmstate_uxendisp_bank,
+                             struct bank_state),
         VMSTATE_STRUCT_ARRAY(crtcs, struct uxendisp_state,
                              UXENDISP_NB_CRTCS, 6,
                              vmstate_uxendisp_crtc,
@@ -742,11 +761,12 @@ static int uxendisp_initfn(PCIDevice *dev)
     memory_region_init_io(&s->pio, &pio_ops, s, "uxendisp.pio", 0x20);
 
     for (i = 0; i < UXENDISP_NB_BANKS; i++) {
-        struct vram_desc *bank = &s->banks[i];
+        struct bank_state *bank = &s->banks[i];
 
-        vram_init(bank, UXENDISP_BANK_SIZE);
-        vram_register_change(bank, vram_change, s);
-        vram_alloc(bank, 0x1000); /* FIXME: why do we need this ? */
+        bank->len = 0x1000; /* FIXME: why do we need this ? */
+        vram_init(&bank->vram, UXENDISP_BANK_SIZE);
+        vram_register_change(&bank->vram, vram_change, s);
+        vram_alloc(&bank->vram, bank->len);
     }
 
     pci_register_bar(&s->dev, 0, PCI_BASE_ADDRESS_MEM_PREFETCH, &s->vram);
