@@ -395,6 +395,29 @@ static void dmpdev_data_write_command(void *opaque, uint32_t addr, uint32_t val)
     }
 }
 
+static void dmpdev_data_write_commandl(void *opaque, uint32_t addr, uint32_t val)
+{
+    DMPDEVState *s = opaque;
+
+    if (!s->active) return;
+
+    if (DMPDEV_CTRL_UNINTIALIZED == s->ctrl_code) {
+        /* this should not happen: unexpected data */
+        dmpdev_log("unexpected data\n");
+        return;
+    }
+
+    *((uint32_t *)&s->ctrl.raw[s->bytes_collected]) = val;
+    s->bytes_collected += sizeof(val);
+
+    if (s->bytes_collected >= s->bytes_to_collect) {
+        process_cmd(s);
+        s->ctrl_code        = DMPDEV_CTRL_UNINTIALIZED;
+        s->bytes_to_collect = 0;
+        s->bytes_collected  = 0;
+    }
+}
+
 static const MemoryRegionPortio dmpdev_cmd_portio[] = {
     {0, 1, 1, .read = NULL, .write = dmpdev_cmd_write_command},
     PORTIO_END_OF_LIST()
@@ -402,6 +425,7 @@ static const MemoryRegionPortio dmpdev_cmd_portio[] = {
 
 static const MemoryRegionPortio dmpdev_data_portio[] = {
     {0, 1, 1, .read = NULL, .write = dmpdev_data_write_command},
+    {0, 1, 4, .read = NULL, .write = dmpdev_data_write_commandl},
     PORTIO_END_OF_LIST()
 };
 

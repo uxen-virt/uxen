@@ -7,6 +7,9 @@
 #ifndef _DMPDEV_PROT_H_
 #define _DMPDEV_PROT_H_
 
+#define C_ASSERT_4B_ALIGN(s) \
+    typedef char __c_assert_4b_align[(!!(0 == (!(sizeof(s) & (~3))))) * 2 - 1]
+
 #define DMPDEV_CONTROL_PORT 0x998UL
 #define DMPDEV_DATA_PORT    0x999UL
 
@@ -28,6 +31,7 @@ typedef enum _DMPDEV_CTRL_CODE {
 typedef struct _DMPDEV_VERSION {
     uint32_t version;
 } DMPDEV_VERSION, *PDMPDEV_VERSION;
+C_ASSERT_4B_ALIGN(DMPDEV_VERSION);
 
 typedef struct _DMPDEV_CRASH_INFO {
     uint32_t code;
@@ -36,6 +40,7 @@ typedef struct _DMPDEV_CRASH_INFO {
     uint64_t param3;
     uint64_t param4;
 } DMPDEV_CRASH_INFO, *PDMPDEV_CRASH_INFO;
+C_ASSERT_4B_ALIGN(DMPDEV_CRASH_INFO);
 
 typedef enum _DMPDRV_FAILURE_TYPE {
     DMPDRV_AUXK_INIT_FAILED     = 0x01,
@@ -56,12 +61,14 @@ typedef struct _DMPDRV_FAILURE_INFO {
     uint32_t type; /* DMPDRV_FAILURE_TYPE */
     uint32_t code;
 } DMPDRV_FAILURE_INFO, *PDMPDRV_FAILURE_INFO;
+C_ASSERT_4B_ALIGN(DMPDRV_FAILURE_INFO);
 
 typedef struct _DMPDEV_DUMP_DATA {
     uint32_t flags;
     uint64_t phys_addr;
     uint32_t size;
 } DMPDEV_DUMP_DATA, *PDMPDEV_DUMP_DATA;
+C_ASSERT_4B_ALIGN(DMPDEV_DUMP_DATA);
 
 typedef enum _DMPDEV_MODULES_INFO_FLAGS {
     DMPDEV_MIF_X64          = 0x00000001,
@@ -74,11 +81,13 @@ typedef struct _DMPDEV_MODULES_INFO {
     uint32_t size;
     uint32_t entry_size;
 } DMPDEV_MODULES_INFO, *PDMPDEV_MODULES_INFO;
+C_ASSERT_4B_ALIGN(DMPDEV_MODULES_INFO);
 
 typedef struct _DMPDEV_GLOBALS_INFO {
     uint64_t PsLoadedModulesList;
     uint64_t PsActiveProcessHead;
 } DMPDEV_GLOBALS_INFO, *PDMPDEV_GLOBALS_INFO;
+C_ASSERT_4B_ALIGN(DMPDEV_GLOBALS_INFO);
 
 typedef struct _DMPDEV_MODULE_ENTRY_64 {
     uint64_t base_addr;

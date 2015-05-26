@@ -61,9 +61,17 @@ static __inline VOID SendCommand(
     __in_bcount(cbBufferSize) PVOID pBuffer,
     __in ULONG cbBufferSize)
 {
+    char *p;
+
+    ASSERT(0 == (cbBufferSize % 4));
+
     WRITE_PORT_UCHAR((PUCHAR)DMPDEV_CONTROL_PORT, (UCHAR)ctrl);
-    for (ULONG i = 0; i < cbBufferSize; i++) {
-        WRITE_PORT_UCHAR((PUCHAR)DMPDEV_DATA_PORT, ((PUCHAR)pBuffer)[i]);
+
+    p = (char *)pBuffer;
+    while (cbBufferSize > 3) {
+        WRITE_PORT_ULONG((PULONG)DMPDEV_DATA_PORT, *(PULONG)p);
+        p += 4;
+        cbBufferSize -= 4;
     }
 }
 
