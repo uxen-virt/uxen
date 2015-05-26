@@ -447,6 +447,7 @@ control_command_audio_mute(void *opaque, const char *id, const char *opt,
 }
 #endif
 
+#ifdef CONFIG_VBOXDRV
 static int
 control_command_clipboard_render(void *opaque, const char *id, const char *opt,
                         dict d, void *command_opaque)
@@ -463,6 +464,7 @@ control_command_clipboard_render(void *opaque, const char *id, const char *opt,
 #endif
     return 0;
 }
+#endif /* CONFIG_VBOXDRV */
 
 #if defined(CONFIG_VBOXDRV)
 #include <dm/shared-folders.h>
@@ -727,7 +729,9 @@ struct dict_rpc_command control_commands[] = {
             { "mute", DICT_RPC_ARG_TYPE_INTEGER, .optional = 0 },
         }},
 #endif
+#ifdef CONFIG_VBOXDRV
     { "clipboard-render", control_command_clipboard_render, },
+#endif /* CONFIG_VBOXDRV */
     { "collect-performance-data", collect_performance_data, },
     { "collect-vm-stats", collect_vm_stats,
       .args = (struct dict_rpc_arg_desc[]) {

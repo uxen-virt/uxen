@@ -246,7 +246,9 @@ main(int argc, char **argv)
     if (fc_init())
         warnx("filecrypt init FAILED");
     socket_init();
+#ifdef CONFIG_VBOXDRV
     uxenclipboard_gdi_startup_with_atexit();
+#endif /* CONFIG_VBOXDRV */
 #endif
 
 #ifdef __APPLE__
