@@ -218,7 +218,9 @@ static void process_cmd(DMPDEVState *s)
 
             if (s->ctrl.modules_info.flags & DMPDEV_MIF_X64) {
                 DMPDEV_MODULE_ENTRY_64 *entry = (DMPDEV_MODULE_ENTRY_64 *)modules;
-                if ((size_t)entry->name_offset + offsetof(DMPDEV_MODULE_ENTRY_64, full_name) >= s->ctrl.modules_info.entry_size)
+                if ((size_t)entry->name_offset + 
+                            offsetof(DMPDEV_MODULE_ENTRY_64, full_name) >= 
+                    s->ctrl.modules_info.entry_size)
                     break;
                 if (is_str_printable(entry->full_name + entry->name_offset))
                     debug_printf("dmpdev: km_mod: 0x%"PRIx64"-0x%"PRIx64" %s\n",
@@ -227,7 +229,9 @@ static void process_cmd(DMPDEVState *s)
                                  entry->full_name + entry->name_offset);
             } else {
                 DMPDEV_MODULE_ENTRY_32 *entry = (DMPDEV_MODULE_ENTRY_32 *)modules;
-                if ((size_t)entry->name_offset + offsetof(DMPDEV_MODULE_ENTRY_32, full_name) >= s->ctrl.modules_info.entry_size)
+                if ((size_t)entry->name_offset + 
+                            offsetof(DMPDEV_MODULE_ENTRY_32, full_name) >= 
+                    s->ctrl.modules_info.entry_size)
                     break;
                 if (is_str_printable(entry->full_name + entry->name_offset))
                     debug_printf("dmpdev: km_mod: 0x%"PRIx32"-0x%"PRIx32" %s\n",
@@ -392,12 +396,12 @@ static void dmpdev_data_write_command(void *opaque, uint32_t addr, uint32_t val)
 }
 
 static const MemoryRegionPortio dmpdev_cmd_portio[] = {
-    { 0, 1, 1, .read = NULL, .write = dmpdev_cmd_write_command },
+    {0, 1, 1, .read = NULL, .write = dmpdev_cmd_write_command},
     PORTIO_END_OF_LIST()
 };
 
 static const MemoryRegionPortio dmpdev_data_portio[] = {
-    { 0, 1, 1, .read = NULL, .write = dmpdev_data_write_command },
+    {0, 1, 1, .read = NULL, .write = dmpdev_data_write_command},
     PORTIO_END_OF_LIST()
 };
 

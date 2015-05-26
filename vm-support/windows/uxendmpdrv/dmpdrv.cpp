@@ -22,6 +22,39 @@ KBUGCHECK_REASON_CALLBACK_RECORD g_bugCheckReasonCbRecord;
 
 PHYSICAL_ADDRESS highestAcceptableAddress = {(ULONG)-1, -1};
 
+// KeInitializeCrashDumpHeader is documented
+// (http://msdn.microsoft.com/en-us/library/windows/hardware/ff552118(v=vs.85).aspx)
+// but not declared in WDK headers.
+const ULONG DUMP_TYPE_FULL = 1;
+
+#ifdef _M_AMD64
+extern "C" NTKERNELAPI NTSTATUS FASTCALL KeInitializeCrashDumpHeader(
+    __in ULONG DumpType,
+    __in ULONG Flags,
+    __out PVOID Buffer,
+    __in ULONG BufferSize,
+    __out_opt PULONG BufferNeeded);
+#else
+extern "C" NTKERNELAPI NTSTATUS KeInitializeCrashDumpHeader(
+    __in ULONG DumpType,
+    __in ULONG Flags,
+    __out PVOID Buffer,
+    __in ULONG BufferSize,
+    __out_opt PULONG BufferNeeded);
+#endif
+
+static PCHAR AnsiStringReverseFindChar(
+    __in PCANSI_STRING pString,
+    __in const CHAR ch)
+{
+    ASSERT(NULL != pString);
+    for (USHORT i = pString->Length - 1; i >= 0; i--) {
+        if (pString->Buffer[i] == ch) {
+            return &pString->Buffer[i];
+        }
+    }
+    return NULL;
+}
 
 static __inline VOID SendCommand(
     __in const DMPDEV_CTRL_CODE ctrl,
@@ -40,12 +73,6 @@ static __inline VOID ReportDmpDrvFailure(
 {
     DMPDRV_FAILURE_INFO info = {type, code};
     SendCommand(DMPDEV_CTRL_FAILURE, (PVOID)&info, sizeof(info));
-}
-
-static __inline VOID DmpdevHandshake()
-{
-    DMPDEV_VERSION version = {DMPDEV_PROTOCOL_VERSION};
-    SendCommand(DMPDEV_CTRL_VERSION, (PVOID)&version, sizeof(version));
 }
 
 static VOID ReportLoadedModules()
@@ -105,28 +132,6 @@ out:
     uxen_msg("end");
 }
 
-// Globals extraction from the crash header figured out by Kris.
-
-// KeInitializeCrashDumpHeader is documented
-// (http://msdn.microsoft.com/en-us/library/windows/hardware/ff552118(v=vs.85).aspx)
-// but not declared in WDK headers.
-const ULONG DUMP_TYPE_FULL = 1;
-
-#ifdef _M_AMD64
-extern "C" NTKERNELAPI NTSTATUS FASTCALL KeInitializeCrashDumpHeader(
-    __in ULONG DumpType,
-    __in ULONG Flags,
-    __out PVOID Buffer,
-    __in ULONG BufferSize,
-    __out_opt PULONG BufferNeeded);
-#else
-extern "C" NTKERNELAPI NTSTATUS KeInitializeCrashDumpHeader(
-    __in ULONG DumpType,
-    __in ULONG Flags,
-    __out PVOID Buffer,
-    __in ULONG BufferSize,
-    __out_opt PULONG BufferNeeded);
-#endif
 static VOID ReportGlobals()
 {
     DMPDEV_GLOBALS_INFO globalsInfo;
@@ -184,19 +189,6 @@ static VOID ReportGlobals()
     ExFreePoolWithTag(pDumpHeader, MEMTAG_DUMP_HEADER);
 
     uxen_msg("end");
-}
-
-static PCHAR AnsiStringReverseFindChar(
-    __in PCANSI_STRING pString,
-    __in const CHAR ch)
-{
-    ASSERT(NULL != pString);
-    for (USHORT i = pString->Length - 1; i >= 0; i--) {
-        if (pString->Buffer[i] == ch) {
-            return &pString->Buffer[i];
-        }
-    }
-    return NULL;
 }
 
 static VOID LoadImageNotifyRoutine(
@@ -344,24 +336,20 @@ static VOID BugcheckDumpIoCallback(
     }
 }
 
-#if 0
-NTSTATUS HookDbgPrint(VOID);
-NTSTATUS UnHookDbgPrint(VOID);
-#endif
-
 extern "C" NTSTATUS DriverEntry(
     __in DRIVER_OBJECT *pDriver,
     __in UNICODE_STRING *pServiceKey)
 {
     BOOLEAN fBugCheckCbRegistered = FALSE;
     NTSTATUS status = STATUS_UNSUCCESSFUL;
+    DMPDEV_VERSION version = {DMPDEV_PROTOCOL_VERSION};
 
     UNREFERENCED_PARAMETER(pDriver);
     UNREFERENCED_PARAMETER(pServiceKey);
 
     uxen_msg("begin");
 
-    DmpdevHandshake();
+    SendCommand(DMPDEV_CTRL_VERSION, (PVOID)&version, sizeof(version));
 
     KeInitializeCallbackRecord(&g_bugCheckReasonCbRecord);
     fBugCheckCbRegistered = KeRegisterBugCheckReasonCallback(
