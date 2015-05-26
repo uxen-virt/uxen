@@ -28,6 +28,8 @@ static const struct {
 
 DEFINE_PER_CPU(perfc_t[NUM_PERFCOUNTERS], perfcounters);
 
+static int show_all_cpus = 0;
+
 void perfc_printall(unsigned char key)
 {
     unsigned int i, j;
@@ -53,7 +55,7 @@ void perfc_printall(unsigned char key)
             {
                 printk("%-32s  TOTAL[%12Lu]", perfc_info[i].name, sum);
                 k = 0;
-                for_each_online_cpu ( cpu )
+                if (show_all_cpus) for_each_online_cpu ( cpu )
                 {
                     if ( k > 0 && (k % 4) == 0 )
                         printk("\n%46s", "");
@@ -92,7 +94,7 @@ void perfc_printall(unsigned char key)
                 }
 #else
                 k = 0;
-                for_each_online_cpu ( cpu )
+                if (show_all_cpus) for_each_online_cpu ( cpu )
                 {
                     perfc_t *counters = per_cpu(perfcounters, cpu) + j;
                     unsigned int n;
@@ -150,6 +152,15 @@ void perfc_reset(unsigned char key)
     }
 
     arch_perfc_reset();
+}
+
+void
+perfc_all_cpus(unsigned char key)
+{
+
+    show_all_cpus = (key == '0') ? 0 : 1;
+    printk("%s: printing %s performance counters", __FUNCTION__,
+           show_all_cpus ? "per-cpu" : "totals only");
 }
 
 #ifndef __UXEN__

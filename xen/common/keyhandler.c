@@ -528,6 +528,10 @@ static struct keyhandler perfc_reset_keyhandler = {
     .u.fn = perfc_reset,
     .desc = "reset performance counters"
 };
+static struct keyhandler perfc_all_cpus_keyhandler = {
+    .u.fn = perfc_all_cpus,
+    .desc = "print per-cpu performance counters (0=totals only, 1=all)"
+};
 #endif
 
 #ifdef LOCK_PROFILE
@@ -672,6 +676,8 @@ void __init initialize_keytable(void)
 #ifdef PERF_COUNTERS
     register_keyhandler('p', &perfc_printall_keyhandler);
     register_keyhandler('P', &perfc_reset_keyhandler);
+    register_keyhandler('0', &perfc_all_cpus_keyhandler);
+    register_keyhandler('1', &perfc_all_cpus_keyhandler);
 #endif
 
 #ifdef LOCK_PROFILE
