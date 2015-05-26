@@ -483,20 +483,6 @@ NTSTATUS
 hid_init(DEVICE_EXTENSION *devext)
 {
     NTSTATUS status;
-    UINT32 idx = 0; /* XXX */
-
-    KeInitializeSpinLock(&devext->v4v_lock);
-
-    devext->peer.port = UXENHID_V4V_PORT_BASE + idx;
-    devext->peer.domain = 0;
-    devext->ring = uxen_v4v_ring_bind(UXENHID_V4V_PORT_BASE + idx, 0,
-                                      UXENHID_V4V_RING_LEN,
-                                      hid_v4v_cb, devext, NULL);
-    if (!devext->ring)
-        return STATUS_NO_MEMORY;
-
-    KeInitializeDpc(&devext->resume_dpc, uxenhid_resume, devext);
-    uxen_v4vlib_set_resume_dpc(&devext->resume_dpc, NULL);
 
     InitializeListHead(&devext->pending_request_list);
     KeInitializeSpinLock(&devext->pending_request_lock);
@@ -509,7 +495,6 @@ hid_init(DEVICE_EXTENSION *devext)
                              pending_request_cancel);
     if (!NT_SUCCESS(status)) {
         uxen_err("IoCsqInitialize() failed: 0x%08x", status);
-        uxen_v4v_ring_free(devext->ring);
         return status;
     }
 
@@ -524,7 +509,6 @@ hid_init(DEVICE_EXTENSION *devext)
                              pending_report_cancel);
     if (!NT_SUCCESS(status)) {
         uxen_err("IoCsqInitialize() failed: 0x%08x", status);
-        uxen_v4v_ring_free(devext->ring);
         return status;
     }
 
@@ -539,12 +523,24 @@ hid_init(DEVICE_EXTENSION *devext)
                              pending_feature_query_cancel);
     if (!NT_SUCCESS(status)) {
         uxen_err("IoCsqInitialize() failed: 0x%08x", status);
-        uxen_v4v_ring_free(devext->ring);
         return status;
     }
 
     devext->rpt_desc = NULL;
     devext->rpt_desc_len = 0;
+
+    KeInitializeSpinLock(&devext->v4v_lock);
+
+    devext->peer.port = UXENHID_V4V_PORT_BASE;
+    devext->peer.domain = 0;
+    devext->ring = uxen_v4v_ring_bind(UXENHID_V4V_PORT_BASE, 0,
+                                      UXENHID_V4V_RING_LEN,
+                                      hid_v4v_cb, devext, NULL);
+    if (!devext->ring)
+        return STATUS_NO_MEMORY;
+
+    KeInitializeDpc(&devext->resume_dpc, uxenhid_resume, devext);
+    uxen_v4vlib_set_resume_dpc(&devext->resume_dpc, NULL);
 
     return STATUS_SUCCESS;
 }
