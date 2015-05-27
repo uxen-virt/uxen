@@ -10,8 +10,17 @@
 #include <dm/dmpdev.h>
 #include <dm/hw.h>
 #include <dm/firmware.h>
+
+#undef QEMU_SCSI
+
+#ifdef QEMU_SCSI
 #include <dm/qemu/hw/scsi.h>
+#else
+#include "uxen_scsi.h"
+#endif
 #include <dm/block-int.h>
+
+
 
 #ifndef SCSIOP_SYNCHRONIZE_CACHE
 #define SCSIOP_SYNCHRONIZE_CACHE 0x35
@@ -84,7 +93,16 @@ typedef struct uxen_stor_req {
 
     size_t len;
 
+#ifdef QEMU_SCSI
     SCSIRequest *req;
+    uint32_t scsi_xfer_ptr;
+    ssize_t scsi_data_len;
+#else
+    UXSCSI scsi;
+    struct uxen_stor *parent;
+    uint8_t sense_data[18];
+    size_t cdb_len;
+#endif
 
     OVERLAPPED overlapped;
 
@@ -92,8 +110,6 @@ typedef struct uxen_stor_req {
 
     uint32_t reply_size;
 
-    uint32_t scsi_xfer_ptr;
-    ssize_t scsi_data_len;
 
     int scsi_is_read;
 
@@ -124,8 +140,10 @@ typedef struct uxen_stor {
 
     BlockConf conf;
 
+#ifdef QEMU_SCSI
     SCSIBus bus;
     SCSIDevice *scsi_dev;
+#endif
 
     uxen_stor_req_list_t queue;
 
@@ -258,6 +276,36 @@ uint32_t validate_xfr(v4v_disk_transfer_t *xfr)
 }
 
 
+static uint32_t
+update_req_ptrs (uxen_stor_req_t *req)
+{
+    uint32_t size = 0,  new_size;
+
+    new_size = validate_xfr(&req->packet.xfr);
+    if ((!new_size) || (new_size > req->len)) {
+        debug_printf("%s: request seq=%"PRIx64" invalid\n", __FUNCTION__,
+                     req->packet.xfr.seq);
+	abort();
+    }
+
+    req->cdb_ptr = &req->packet.xfr.data[size];
+    size += UXEN_STOR_ROUNDUP (req->packet.xfr.cdb_size);
+
+    req->write_ptr = &req->packet.xfr.data[size];
+    size += UXEN_STOR_ROUNDUP (req->packet.xfr.write_size);
+
+    req->pagelist_ptr = &req->packet.xfr.data[size];
+    size += UXEN_STOR_ROUNDUP (req->packet.xfr.pagelist_size);
+
+    req->read_ptr = &req->packet.xfr.data[size];
+    size += UXEN_STOR_ROUNDUP (req->packet.xfr.read_size);
+
+    req->sense_ptr = &req->packet.xfr.data[size];
+
+    return size;
+}
+
+
 static void
 req_insert_tail (uxen_stor_req_list_t *list, uxen_stor_req_t *req)
 {
@@ -299,6 +347,37 @@ req_remove (uxen_stor_req_list_t *list, uxen_stor_req_t *req)
     req->next = req->prev = NULL;
 }
 
+
+static void
+uxen_stor_send_reply (uxen_stor_t *s, uxen_stor_req_t *r)
+{
+
+    r->overlapped.hEvent = s->tx_event;
+
+#if PCAP
+    uxen_stor_log_packet (s, &r->packet.xfr, r->reply_size, 1);
+#endif
+
+    /*send reply */
+    if (WriteFile
+        (s->a.v4v_handle, &r->packet,
+         r->reply_size + sizeof (v4v_datagram_t), NULL, &r->overlapped)) {
+        Wwarn("%s: fail path 1 seq=%"PRIx64, __FUNCTION__, r->packet.xfr.seq);
+        r->state = UXS_STATE_V4V_SENT;
+        return;
+    }
+
+
+    if (GetLastError () == ERROR_IO_PENDING) {
+        r->state = UXS_STATE_V4V_SENDING;
+    } else {
+        r->state = UXS_STATE_V4V_SENT;
+        Wwarn("%s: fail path 2 seq=%"PRIx64, __FUNCTION__, r->packet.xfr.seq);
+    }
+}
+
+
+#ifdef QEMU_SCSI
 static void
 uxen_stor_transfer_data (SCSIRequest *req, uint32_t len)
 {
@@ -342,66 +421,6 @@ uxen_stor_request_cancelled (SCSIRequest *req)
     scsi_req_unref (r->req);
     r->req = NULL;
 }
-
-
-static void
-uxen_stor_send_reply (uxen_stor_t *s, uxen_stor_req_t *r)
-{
-
-    r->overlapped.hEvent = s->tx_event;
-
-#if PCAP
-    uxen_stor_log_packet (s, &r->packet.xfr, r->reply_size, 1);
-#endif
-
-    /*send reply */
-    if (WriteFile
-        (s->a.v4v_handle, &r->packet,
-         r->reply_size + sizeof (v4v_datagram_t), NULL, &r->overlapped)) {
-        Wwarn("%s: fail path 1 seq=%"PRIx64, __FUNCTION__, r->packet.xfr.seq);
-        r->state = UXS_STATE_V4V_SENT;
-        return;
-    }
-
-
-    if (GetLastError () == ERROR_IO_PENDING) {
-        r->state = UXS_STATE_V4V_SENDING;
-    } else {
-        r->state = UXS_STATE_V4V_SENT;
-        Wwarn("%s: fail path 2 seq=%"PRIx64, __FUNCTION__, r->packet.xfr.seq);
-    }
-}
-
-
-static uint32_t
-update_req_ptrs (uxen_stor_req_t *req)
-{
-    uint32_t size = 0,  new_size;
-
-    new_size = validate_xfr(&req->packet.xfr);
-    if ((!new_size) || (new_size > req->len)) {
-        debug_printf("%s: request seq=%"PRIx64" invalid\n", __FUNCTION__,
-                     req->packet.xfr.seq);
-	abort();
-    }
-
-    req->cdb_ptr = &req->packet.xfr.data[size];
-    size += UXEN_STOR_ROUNDUP (req->packet.xfr.cdb_size);
-
-    req->write_ptr = &req->packet.xfr.data[size];
-    size += UXEN_STOR_ROUNDUP (req->packet.xfr.write_size);
-
-    req->pagelist_ptr = &req->packet.xfr.data[size];
-    size += UXEN_STOR_ROUNDUP (req->packet.xfr.pagelist_size);
-
-    req->read_ptr = &req->packet.xfr.data[size];
-    size += UXEN_STOR_ROUNDUP (req->packet.xfr.read_size);
-
-    req->sense_ptr = &req->packet.xfr.data[size];
-
-    return size;
-}
-
 
 
 static void
@@ -466,6 +485,76 @@ uxen_stor_command_complete (SCSIRequest *req, uint32_t status)
     uxen_stor_send_reply (s, r);
 }
 
+static const struct SCSIBusInfo uxen_stor_scsi_info = {
+    .tcq = false,
+    .max_target = 0,
+    .max_lun = 0,
+
+    .transfer_data = uxen_stor_transfer_data,
+    .complete = uxen_stor_command_complete,
+    .cancel = uxen_stor_request_cancelled
+};
+
+
+#else
+
+static void uxen_stor_uxscsi_complete(void *_r,UXSCSI *scsi)
+{
+uxen_stor_req_t *r=(uxen_stor_req_t *) _r;
+uxen_stor_t *s=r->parent;
+uint8_t status=uxscsi_status(scsi);
+size_t sense_len;
+uint32_t size=0;
+
+
+fprintf(stderr,"scsi_complete status=%d red=%d sl=%d\n",status,(int) uxscsi_red_len(scsi),(int) uxscsi_sensed_len(scsi));
+
+        r->packet.xfr.write_size = 0;
+        r->packet.xfr.pagelist_size = 0;
+        r->packet.xfr.cdb_size = 0;
+
+
+if (status!= SCSIST_GOOD) {
+	/*Fail zero everying except sense and fill that in */
+        r->packet.xfr.read_size = 0;
+        size = update_req_ptrs (r);
+
+	sense_len=uxscsi_sensed_len(scsi);
+
+	if (sense_len > r->packet.xfr.sense_size)
+		sense_len=r->packet.xfr.sense_size;
+
+        r->packet.xfr.sense_size = sense_len;
+
+        if (sense_len)
+            memcpy (r->sense_ptr, r->sense_data, sense_len);
+
+        size += r->packet.xfr.sense_size;
+} else {
+	/*Success, zero everything (except read if we're reading) */
+        r->packet.xfr.sense_size = 0;
+
+	if (r->scsi_is_read) {
+        r->packet.xfr.read_size = uxscsi_red_len(scsi);
+	} else {
+        r->packet.xfr.read_size = 0;
+	}
+
+        size = update_req_ptrs (r);
+}
+
+    r->reply_size = size + sizeof (v4v_disk_transfer_t);
+    r->packet.xfr.status = status;
+
+    r->state = UXS_STATE_SCSI_DONE;
+
+    uxen_stor_send_reply (s, r);
+}
+
+
+#endif
+
+
 static void
 uxen_stor_run_q (uxen_stor_t *s)
 {
@@ -519,6 +608,7 @@ uxen_stor_run_q (uxen_stor_t *s)
                     uxen_stor_send_reply (s, r);
 
                 } else {
+#ifdef QEMU_SCSI
                     r->req = scsi_req_new (s->scsi_dev, 0, 0, r->cdb, r);
                     r->scsi_xfer_ptr = 0;
 
@@ -530,6 +620,27 @@ uxen_stor_run_q (uxen_stor_t *s)
 
                     if (r->scsi_data_len)
                         scsi_req_continue (r->req);
+#else
+
+		/*we use the cdb and sense in r rather than the packet as we've either moved or are about to move the pointers around */
+
+                    r->scsi_is_read = !!r->packet.xfr.read_size;
+
+		    if (uxscsi_start(&r->scsi, s->conf.bs, r->cdb_len, r->cdb, r->packet.xfr.write_size,r->write_ptr,
+				 r->packet.xfr.read_size,r->read_ptr,sizeof(r->sense_data),r->sense_data,uxen_stor_uxscsi_complete,r)) {
+
+			/*A return of non-zero means the command failed immediately and that there'll be no callback */
+
+
+			//FIXME we should send an error here, but since the only cause of this is a cdb < 6 bytes
+
+                    r->state = UXS_STATE_SCSI_DONE; /*Clean up */
+
+
+		} else {
+                    r->state = UXS_STATE_SCSI_RUNNING;
+		}
+#endif
                 }
 
                 break;
@@ -658,6 +769,10 @@ uxen_stor_read_event (void *_s)
         }
         memset (req, 0, len);
 
+#ifndef QEMU_SCSI
+        req->parent = s;
+#endif
+
         req->len = len;
 
         s->mem += len;
@@ -689,6 +804,11 @@ uxen_stor_read_event (void *_s)
         //length checked above
         memset (req->cdb, 0, MAX_CDB);
         memcpy (req->cdb, req->cdb_ptr, req->packet.xfr.cdb_size);
+
+#ifndef QEMU_SCSI
+	req->cdb_len=req->packet.xfr.cdb_size;
+#endif
+
 
 
         req_insert_tail (&s->queue, req);
@@ -787,17 +907,6 @@ uxen_stor_cleanup (VLANClientState *nc)
 }
 #endif
 
-static const struct SCSIBusInfo uxen_stor_scsi_info = {
-    .tcq = false,
-    .max_target = 0,
-    .max_lun = 0,
-
-    .transfer_data = uxen_stor_transfer_data,
-    .complete = uxen_stor_command_complete,
-    .cancel = uxen_stor_request_cancelled
-};
-
-
 static int
 have_v4v (void)
 {
@@ -890,6 +999,7 @@ uxen_stor_initfn (ISADevice *dev)
             return -1;
         }
 
+#ifdef QEMU_SCSI
         /*
          * Hack alert: this pretends to be a block device, but it's really
          * a SCSI bus that can serve only a single device, which it
@@ -913,6 +1023,7 @@ uxen_stor_initfn (ISADevice *dev)
 
         if (!s->scsi_dev)
             break;
+#endif
 
 
         present_bitfield_set(unit);

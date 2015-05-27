@@ -225,6 +225,7 @@ DM_SRCS += hw/xenrtc.c
 $(OSX_NOT_YET)DM_SRCS += hw/uxen_net.c
 hw_uxen_net.o: CPPFLAGS += -I$(XENPUBLICDIR) 
 $(OSX_NOT_YET)DM_SRCS += hw/uxen_stor.c
+$(OSX_NOT_YET)DM_SRCS += hw/uxen_scsi.c
 hw_uxen_stor.o: CPPFLAGS += -I$(XENPUBLICDIR) 
 
 QEMU_CFLAGS += -I$(TOPDIR)
