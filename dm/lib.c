@@ -68,3 +68,58 @@ strip_filename(char *path) {
         *(l++) = '.';
     *l = 0;
 }
+
+
+static int xdtoa(char c)
+{
+    switch (c)
+    {
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+                return c - '0';
+        case 'a':
+        case 'b':
+        case 'c':
+        case 'd':
+        case 'e':
+        case 'f':
+                return 0xa + c - 'a';
+        case 'A':
+        case 'B':
+        case 'C':
+        case 'D':
+        case 'E':
+        case 'F':
+                return 0xA + c - 'A';
+        default:
+                return -1;
+    }
+}
+
+size_t urldecode(const char *str, char *output, size_t len)
+{
+    char *p, *end;
+
+    p = output;
+    end = p + len;
+
+    while (*str && p < end) {
+        if (str[0] == '%' && isxdigit(str[1]) && isxdigit(str[2])) {
+            str++;
+            *p = xdtoa(*str++) << 4;
+            *p |= xdtoa(*str++);
+            p++;
+        } else
+            *p++ = *str++;
+    }
+
+    return p - output;
+}

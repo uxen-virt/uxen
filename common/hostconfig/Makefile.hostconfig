@@ -11,7 +11,7 @@ $(OSX)LDLIBS += -framework IOKit -framework CoreFoundation
 
 all: hostconfig$(EXE_SUFFIX)
 
-HOSTCONFIG_OBJS = smbios.o base64.o
+HOSTCONFIG_OBJS = smbios.o base64.o urlencode.o
 $(WINDOWS)HOSTCONFIG_OBJS += win32.o hostconfig-res.o
 $(OSX)HOSTCONFIG_OBJS += smc.o osx.o
 

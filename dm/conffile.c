@@ -300,6 +300,8 @@ co_set_firmware(const char *opt, yajl_val arg, void *opaque)
         const char *oem_id;
         const char *oem_table_id;
         const char *creator_id;
+        char buf[8];
+
         yajl_val oem_revision;
         yajl_val creator_revision;
         yajl_val smbios, smbios_struct;
@@ -335,17 +337,15 @@ co_set_firmware(const char *opt, yajl_val arg, void *opaque)
         }
 
         if (oem_id) {
-            if (strlen(oem_id) > 6)
-                errx(1, "config firmware: OEM ID too long");
-
-            vm_set_oem_id(oem_id);
+            memset(buf, 0, 6);
+            urldecode(oem_id, buf, 6);
+            vm_set_oem_id(buf);
         }
 
         if (oem_table_id) {
-            if (strlen(oem_table_id) > 8)
-                errx(1, "config firmware: OEM table ID too long");
-
-            vm_set_oem_table_id(oem_table_id);
+            memset(buf, 0, 8);
+            urldecode(oem_table_id, buf, 8);
+            vm_set_oem_table_id(buf);
         }
 
         if (YAJL_IS_INTEGER(oem_revision)) {
@@ -353,10 +353,9 @@ co_set_firmware(const char *opt, yajl_val arg, void *opaque)
         }
 
         if (creator_id) {
-            if (strlen(creator_id) > 4)
-                errx(1, "config firmware: Creator ID too long");
-
-            vm_set_oem_creator_id(creator_id);
+            memset(buf, 0, 4);
+            urldecode(creator_id, buf, 4);
+            vm_set_oem_creator_id(buf);
         }
 
         if (YAJL_IS_INTEGER(creator_revision)) {

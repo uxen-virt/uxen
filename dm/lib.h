@@ -133,5 +133,6 @@ int strstart(const char *str, const char *val, const char **ptr);
 int stristart(const char *str, const char *val, const char **ptr);
 
 void strip_filename(char *path);
+size_t urldecode(const char *str, char *output, size_t len);
 
 #endif	/* _LIB_H_ */

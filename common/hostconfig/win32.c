@@ -12,6 +12,7 @@
 #include "json.h"
 #include "smbios.h"
 #include "base64.h"
+#include "urlencode.h"
 
 #define _WIN32_DCOM
 #include <windows.h>
@@ -600,10 +601,10 @@ main(int argc, char **argv)
 
     /* 2. ACPI OEM IDs */
 
-    SET_BUF("oem_id", acpi_get_oem_id(), 6);
-    SET_BUF("oem_table_id", acpi_get_oem_table_id(), 8);
+    SET_URLENC("oem_id", acpi_get_oem_id(), 6);
+    SET_URLENC("oem_table_id", acpi_get_oem_table_id(), 8);
     SET_INT("oem_revision", acpi_get_oem_revision());
-    SET_BUF("creator_id", acpi_get_creator_id(), 4);
+    SET_URLENC("creator_id", acpi_get_creator_id(), 4);
     SET_INT("creator_revision", acpi_get_creator_revision());
 
     SET_INT("smbios_version_major", smbios_get_version_major());

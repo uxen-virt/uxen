@@ -20,6 +20,16 @@ do {                                                                    \
     yajl_gen_string(g, (const unsigned char *)(buf), (len));            \
 } while (0)
 
+#define SET_URLENC(prop,buf,len)                                        \
+do {                                                                    \
+    char *str = urlencode((buf), (len));                                \
+    if (!str)                                                           \
+        break;                                                          \
+    yajl_gen_string(g, (const unsigned char *)(prop), strlen(prop));    \
+    yajl_gen_string(g, (const unsigned char *)(str), strlen(str));      \
+    free(str);                                                          \
+} while (0)
+
 #define SET_BASE64(prop,buf,len)                                        \
 do {                                                                    \
     char *str = base64_encode((buf), (len));                            \
