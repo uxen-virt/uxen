@@ -41,6 +41,7 @@ int uxen_ioctl(UXEN_HANDLE_T h, uint64_t ctl, ...);
 #ifdef _WIN32
 #include <xen/domctl.h>
 #endif
+#include <xen/sysctl.h>
 
 #ifdef _WIN32
 FILE *_uxenctllib_stderr = NULL;
@@ -664,5 +665,39 @@ uxen_unmap_host_pages(UXEN_HANDLE_T h, void *va, size_t len)
     if (ret)
         warn("ioctl(UXENUNMAPHOSTPAGES)");
 
+    return ret;
+}
+
+int
+uxen_physinfo(UXEN_HANDLE_T h, uxen_physinfo_t *up)
+{
+    int ret;
+    struct uxen_hypercall_desc uhd = { };
+    struct xen_sysctl *xs;
+    void *buf = NULL;
+
+    buf = uxen_malloc(h, 1);
+    if (!buf) {
+        warn("uxen_malloc failed");
+        ret = -1;
+        goto out;
+    }
+
+    xs = (struct xen_sysctl *)buf;
+    xs->interface_version = XEN_SYSCTL_INTERFACE_VERSION;
+    xs->cmd = XEN_SYSCTL_physinfo;
+    memcpy(&xs->u.physinfo, up, sizeof(*up));
+
+    uhd.uhd_op = __HYPERVISOR_sysctl;
+    uhd.uhd_arg[0] = (uint64_t)(uintptr_t)buf;
+    ret = uxen_hypercall(h, &uhd);
+    if (ret < 0) {
+	warn("hypercall(HYPERVISOR_sysctl,XEN_SYSCTL_physinfo)");
+	ret = -1;
+	goto out;
+    }
+    memcpy(up, &xs->u.physinfo, sizeof(*up));
+
+  out:
     return ret;
 }

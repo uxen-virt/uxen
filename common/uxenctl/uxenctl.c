@@ -30,7 +30,6 @@
 #include <uuid/uuid.h>
 
 #include "uxenctllib.h"
-#include "uxenctllib-libxc.h"
 
 #ifdef _WIN32
 DECLARE_PROGNAME;

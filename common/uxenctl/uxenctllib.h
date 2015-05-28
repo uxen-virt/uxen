@@ -37,6 +37,9 @@ typedef boolean_t BOOLEAN;
 #include <uxen/uxen_desc.h>
 #include <uxen_desc_sys.h>
 
+#include <xen/sysctl.h>
+typedef xen_sysctl_physinfo_t uxen_physinfo_t;
+
 #ifdef _WIN32
 void uxen_set_logfile(FILE *);
 #endif
@@ -90,5 +93,7 @@ int uxen_event_wait(UXEN_HANDLE_T, UXEN_EVENT_HANDLE_T, int);
 
 int uxen_map_host_pages(UXEN_HANDLE_T, void *, size_t, uint64_t);
 int uxen_unmap_host_pages(UXEN_HANDLE_T, void *, size_t);
+
+int uxen_physinfo(UXEN_HANDLE_T h, uxen_physinfo_t *up);
 
 #endif /* _UXENCTLLIB_H_ */
