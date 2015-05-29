@@ -73,20 +73,14 @@ static inline uint64_t dubtreeGetSlot(DUBTREE *t, int level)
 static inline
 int dubtreeIsMutable(DUBTREE *t)
 {
+    int r;
     char *lockfn;
-    DUBTREE_FILE_HANDLE f;
     asprintf(&lockfn, "%s/" DUBTREE_SEALED_NAME, t->fn);
     assert(lockfn);
-    printf("checking for %s\n", lockfn);
-    f = dubtreeOpenExistingFileReadOnly(lockfn);
+    r = file_exists(lockfn) ? 0 : 1;
+    printf("checking for %s, mutable = %d\n", lockfn, r);
     free(lockfn);
-
-    if (f != DUBTREE_INVALID_HANDLE) {
-        dubtreeCloseFile(f);
-        return 0;
-    } else {
-        return 1;
-    }
+    return r;
 }
 
 #ifdef _WIN32
