@@ -7,7 +7,7 @@
 #ifndef RESAMPLER_H_
 #define RESAMPLER_H_
 
-struct resampler_16_2 *resampler_16_2_init(double ratio);
+struct resampler_16_2 *resampler_16_2_init(double ratio, int dst_channels);
 void resampler_16_2_free(struct resampler_16_2 *r);
 int resampler_16_2_add_frames(struct resampler_16_2 *r, void *src, int frames);
 int resample_16_2(struct resampler_16_2 *r, void *dst, int *frames);

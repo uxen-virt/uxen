@@ -29,7 +29,7 @@ struct wasapi_voice {
     HANDLE ev;
     HANDLE task;
     HANDLE thread;
-    WAVEFORMATEX fmt;
+    WAVEFORMATEXTENSIBLE fmt;
     wasapi_data_cb_t cb;
     void *cb_opaque;
     uint64_t pos;
@@ -68,6 +68,9 @@ const IID IID_IMMNotificationClient = { 0x7991EEC9, 0x7E89, 0x4D85,
 };
 const IID IID_IUnknown = { 0x00000000, 0x0000, 0x0000,
   {0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46}
+};
+const static GUID GUID_KSDATAFORMAT_SUBTYPE_PCM = {0x00000001,0x0000,0x0010,
+  {0x80,0x00,0x00,0xaa,0x00,0x38,0x9b,0x71}
 };
 
 #define WASAPI_FAIL(hr)                                                 \
@@ -261,15 +264,32 @@ static int is_format_supported(IAudioClient* client,
     return hr == S_OK;
 }
 
-static HRESULT create_audio_client(wasapi_voice_t v,
-                                   IMMDevice *pMMDevice, WAVEFORMATEX* wv,
-                                   IAudioClient **ppClient)
+static void
+dump_format(const char *str, WAVEFORMATEX *f)
+{
+    debug_printf("%s: tag=%d channels=%d rate=%d bps=%d align=%d bits=%d size=%d",
+                 str,
+                 (int)f->wFormatTag, (int)f->nChannels, (int)f->nSamplesPerSec,
+                 (int)f->nAvgBytesPerSec,
+                 (int)f->nBlockAlign, (int)f->wBitsPerSample, (int)f->cbSize);
+    if (f->cbSize >= sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX)) {
+        WAVEFORMATEXTENSIBLE *ex = (WAVEFORMATEXTENSIBLE*)f;
+        debug_printf(" validbits=%d channelmask=%d", (int)ex->Samples.wValidBitsPerSample,
+                     (int)ex->dwChannelMask);
+    }
+    debug_printf("\n");
+}
+
+static HRESULT
+create_audio_client(wasapi_voice_t v, IMMDevice *pMMDevice,
+                    WAVEFORMATEX* datafmt, IAudioClient **ppClient)
 {
     HRESULT hr;
     IAudioClient *client = NULL;
     REFERENCE_TIME engperiod, devperiod;
     uint32_t sz = 0;
-    PWAVEFORMATEX mixfmt = NULL;
+    WAVEFORMATEX *mixfmt = NULL;
+    int channels;
     static int announce = 1;
 
     hr = pMMDevice->lpVtbl->Activate(pMMDevice,
@@ -289,34 +309,51 @@ static HRESULT create_audio_client(wasapi_voice_t v,
         return hr;
     }
 
-    /* use mixer sampler rate */
-    v->fmt = *wv;
-    v->fmt.nSamplesPerSec = mixfmt->nSamplesPerSec;
-    v->fmt.nAvgBytesPerSec = v->fmt.nSamplesPerSec * v->fmt.nBlockAlign;
+    channels = mixfmt->nChannels;
+    if (channels > 2)
+        channels = 2;
 
-    if (!is_format_supported(client, &v->fmt)) {
+    /* use mixer sampler rate and channels */
+    memset(&v->fmt, 0, sizeof(WAVEFORMATEXTENSIBLE));
+    v->fmt.Format.wFormatTag = WAVE_FORMAT_EXTENSIBLE;
+    v->fmt.Format.cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
+    v->fmt.Format.nChannels = channels;
+    v->fmt.Format.nSamplesPerSec = mixfmt->nSamplesPerSec;
+    v->fmt.Format.wBitsPerSample = datafmt->wBitsPerSample;
+    v->fmt.Format.nBlockAlign = v->fmt.Format.nChannels * v->fmt.Format.wBitsPerSample / 8;
+    v->fmt.Format.nAvgBytesPerSec = v->fmt.Format.nSamplesPerSec * v->fmt.Format.nBlockAlign;
+    v->fmt.Samples.wValidBitsPerSample = v->fmt.Format.wBitsPerSample;
+    v->fmt.SubFormat = GUID_KSDATAFORMAT_SUBTYPE_PCM;
+    if (channels == 1)
+        v->fmt.dwChannelMask = SPEAKER_FRONT_CENTER;
+    else
+        v->fmt.dwChannelMask = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
+
+    if (!is_format_supported(client, (WAVEFORMATEX*)&v->fmt)) {
         CoTaskMemFree(mixfmt);
         client->lpVtbl->Release(client);
         debug_printf("audio format not supported\n");
+        dump_format("mix format", mixfmt);
+        dump_format("playback format", (WAVEFORMATEX*)&v->fmt);
         return E_FAIL;
     }
 
-    hr = client->lpVtbl->GetDevicePeriod(client,
-             &engperiod, &devperiod);
+    hr = client->lpVtbl->GetDevicePeriod(client, &engperiod, &devperiod);
     if ( FAILED(hr) ) {
         CoTaskMemFree(mixfmt);
         client->lpVtbl->Release(client);
         WASAPI_FAIL(hr);
         return hr;
     }
-    hr = client->lpVtbl->Initialize(client,
-        AUDCLNT_SHAREMODE_SHARED,
-        AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-        WASAPI_BUF_LEN_MS * 10000, 0, &v->fmt, NULL);
+    hr = client->lpVtbl->Initialize(
+        client, AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
+        WASAPI_BUF_LEN_MS * 10000, 0, (WAVEFORMATEX*)&v->fmt, NULL);
     if ( FAILED(hr) ) {
         CoTaskMemFree(mixfmt);
         client->lpVtbl->Release(client);
         WASAPI_FAIL(hr);
+        dump_format("mix format", mixfmt);
+        dump_format("playback format", (WAVEFORMATEX*)&v->fmt);
         return hr;
     }
 
@@ -325,22 +362,11 @@ static HRESULT create_audio_client(wasapi_voice_t v,
         announce = 0;
         debug_printf("audio device period: %dus %dus\n",
                      (int)engperiod/10, (int)devperiod/10);
-        debug_printf("audio mix format: %d %d %ld %d %d %d\n",
-                     mixfmt->wFormatTag,
-                     mixfmt->nChannels,
-                     mixfmt->nSamplesPerSec,
-                     mixfmt->wBitsPerSample,
-                     mixfmt->nBlockAlign,
-                     mixfmt->cbSize);
-        debug_printf("audio play format: %d %d %ld %d %d %d\n",
-                     wv->wFormatTag,
-                     wv->nChannels,
-                     wv->nSamplesPerSec,
-                     wv->wBitsPerSample,
-                     wv->nBlockAlign,
-                     wv->cbSize);
         debug_printf("audio buffer size: %d frames = %d bytes\n",
-                     sz, sz * wv->nBlockAlign);
+                     sz, sz * datafmt->nBlockAlign);
+        dump_format("mix format", mixfmt);
+        dump_format("data format", datafmt);
+        dump_format("playback format", (WAVEFORMATEX*)&v->fmt);
     }
     CoTaskMemFree(mixfmt);
     *ppClient = client;
@@ -515,7 +541,7 @@ int wasapi_get_buffer_space(wasapi_voice_t v, int *frames)
 
 int wasapi_get_play_fmt(wasapi_voice_t v, WAVEFORMATEX **pf)
 {
-    *pf = &v->fmt;
+    *pf = (WAVEFORMATEX*)&v->fmt;
     return 0;
 }
 

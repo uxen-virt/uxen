@@ -83,6 +83,7 @@ struct channel {
 
 struct resampler_16_2 {
     struct channel l, r;
+    int dst_channels;
 };
 
 static float convolve_sse(const float* input_ptr, const float* k1,
@@ -328,14 +329,17 @@ static void channel_rewind(struct channel *ch)
     ch->src_consumed = 0;
 }
 
-struct resampler_16_2 *resampler_16_2_init(double ratio)
+struct resampler_16_2 *resampler_16_2_init(double ratio, int dst_channels)
 {
     struct resampler_16_2 *r = 0;
+
+    if (dst_channels < 1 || dst_channels > 2)
+        goto err;
 
     r = calloc(1, sizeof(struct resampler_16_2));
     if (!r)
         goto err;
-
+    r->dst_channels = dst_channels;
     if (!channel_init(&r->l, ratio))
         goto err;
 
@@ -420,10 +424,17 @@ int resample_16_2(struct resampler_16_2 *res, void *dst, int *p_dst_frames)
     resample(res->r.res, r, dst_frames, get_frames_cb, &res->r);
 
     *p_dst_frames = dst_frames;
-    while (dst_frames--) {
-        *out++ = (int16_t)((*l++) * 0x7fff);
-        *out++ = (int16_t)((*r++) * 0x7fff);
-    }
+    if (res->dst_channels == 2) {
+        while (dst_frames--) {
+            *out++ = (int16_t)((*l++) * 0x7fff);
+            *out++ = (int16_t)((*r++) * 0x7fff);
+        }
+    } else if (res->dst_channels == 1) {
+        /* STEREO -> MONO */
+        while (dst_frames--)
+            *out++ = (int16_t)(((*l++ + *r++)/2) * 0x7fff);
+    } else
+        assert(0);
 
     assert(res->l.src_consumed == res->r.src_consumed);
     consumed = res->l.src_consumed;

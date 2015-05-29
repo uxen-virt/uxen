@@ -454,7 +454,8 @@ consume_samples(uint8_t *src, int bytes, void *opaque)
     int fr_written = 0;
     int fr_read = 0;
     int src_rate = v->ww_wfx.nSamplesPerSec;
-    int dst_rate;
+    int src_channels = v->ww_wfx.nChannels;
+    int dst_rate, dst_channels;
     double dst_src_ratio, src_dst_ratio;
 
     if (!wv)
@@ -462,6 +463,7 @@ consume_samples(uint8_t *src, int bytes, void *opaque)
 
     wasapi_get_play_fmt(wv, &fmt);
     dst_rate = fmt->nSamplesPerSec;
+    dst_channels = fmt->nChannels;
     dst_src_ratio = (double)dst_rate / src_rate;
     src_dst_ratio = 1.0 / dst_src_ratio;
 
@@ -487,8 +489,8 @@ consume_samples(uint8_t *src, int bytes, void *opaque)
         fr_read = fr;
         v->dst_frames_remainder -= dst_frames;
         fr_written = dst_frames;
-    } else if (src_rate == dst_rate) {
-        /* equal rates, no resampling required */
+    } else if (src_rate == dst_rate && src_channels == dst_channels) {
+        /* equal rates and channels, no resampling required */
         int max_bytes = max_frames * v->ww_wfx.nBlockAlign;
         int b = bytes < max_bytes ? bytes : max_bytes;
         memcpy(buffer, src, b);
@@ -497,7 +499,7 @@ consume_samples(uint8_t *src, int bytes, void *opaque)
     } else {
         /* resample */
         if (!v->resampler)
-            v->resampler = resampler_16_2_init(src_dst_ratio);
+            v->resampler = resampler_16_2_init(src_dst_ratio, dst_channels);
 
         if (v->resampler) {
             fr_read = resampler_16_2_add_frames(v->resampler, src, fr);
@@ -512,7 +514,7 @@ consume_samples(uint8_t *src, int bytes, void *opaque)
     assert(fr_written <= max_frames);
 
     wasapi_unlock_buffer(wv, fr_written);
-    v->out_sent += fr_read * v->ww_wfx.nBlockAlign;
+    v->out_sent += fr_read * fmt->nBlockAlign;
 
     return fr_read * v->ww_wfx.nBlockAlign;
 }
