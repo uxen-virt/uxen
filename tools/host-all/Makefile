@@ -84,6 +84,11 @@ binutils/.libbfd-installed: $(TOOLSDIR)/bin/.exists $(INSTALL_DIR)/.exists
 binutils/.libbfd-installed: binutils/.libbfd-built
 	cd $(@D)/build-libbfd && $(BINUTILS_ENV) $(BUILD_PATH) \
 	  $(MAKE) install-libiberty install-bfd
+	@install -d $(INSTALL_DIR)/include/mach-o
+	install $(@D)/$(BINUTILS_DIR)/bfd/mach-o.h \
+	  $(INSTALL_DIR)/include/
+	install $(@D)/$(BINUTILS_DIR)/include/mach-o/loader.h \
+	  $(INSTALL_DIR)/include/mach-o/
 	@touch $@
 
 binutils/.libbfd-built: binutils/.libbfd-configured
