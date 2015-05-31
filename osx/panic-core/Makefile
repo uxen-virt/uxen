@@ -37,7 +37,7 @@ _install_banner_scripts:
 
 $(patsubst %,install_%,$(SCRIPTS)): install_%: % _install_banner_scripts
 	$(_W)echo Installing -- $(<F)
-	$(_V)$(call install_exe,$(<),$(DISTDIR))
+	$(_V)$(call install_data,$(<),$(DISTDIR))
 
 dist: $(patsubst %,install_%,$(PROGRAMS) $(SCRIPTS))
 
