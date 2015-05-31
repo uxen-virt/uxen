@@ -105,6 +105,9 @@ parse_panic(const char *file, struct x86_thread_state *regstate,
             while (fgets(line, LINE_LEN, f) != NULL) {
                 if (sscanf(line, "0x%lx : 0x%lx", &next_frame, &next_addr) != 2)
                     break;
+                if (!regstate->uts.ts64.__rip &&
+                    next_frame == regstate->uts.ts64.__rbp)
+                    regstate->uts.ts64.__rip = next_addr;
                 if (!frame) {
                     frame = next_frame;
                     addr = next_addr;
