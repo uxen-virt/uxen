@@ -10,17 +10,18 @@ set -e
 : ${UXEN_KEXT_BUNDLE_IDENT:=org.uxen.uxen}
 
 usage () {
-  echo usage: $0 [-d debug-kit-dir] [-g gdb] [-u uxen-kext-dir] [-t tools-dir] panic.text
+  echo usage: $0 [-d debug-kit-dir] [-g gdb] [-u uxen-kext-dir] [-t tools-dir] [-s system-extentions-dir] panic.text
   exit -1
 }
 
-while getopts d:g:u:t: o
+while getopts d:g:u:t:s: o
 do
   case "$o" in
   d) debug_kit_dir="$OPTARG" ;;
   g) gdb="$OPTARG" ;;
   u) uxen_kext_dir="$OPTARG" ;;
   t) tools_dir="$OPTARG" ;;
+  s) system_extensions_dir="$OPTARG" ;;
   [?]) usage;;
   esac
 done
@@ -37,6 +38,7 @@ shift $(($OPTIND - 1))
 : ${tools_dir:=$(pwd)}
 : ${panic_core:=${tools_dir}/panic-core}
 : ${macho_edit:=${tools_dir}/macho-edit}
+: ${system_extensions_dir:=/System/Library/Extensions}
 
 case "$1" in
   /*) panic_file="$1" ;;
@@ -69,6 +71,7 @@ rm -f "${UXEN_KEXT_BUNDLE_IDENT}".sym
 (cd "${workdir}" &&
     kextutil -s . -n -e -a "${UXEN_KEXT_BUNDLE_IDENT}"@"${kext_load_addr}" \
              -r "${debug_kit_dir}"/ -k "${debug_kit_dir}"/mach_kernel \
+             -d "${system_extensions_dir}/System.kext" \
              -arch x86_64 $(pwd)/uxen.kext)
 
 (cd "${workdir}" &&
