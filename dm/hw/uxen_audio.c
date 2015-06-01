@@ -90,33 +90,19 @@ out_num_running_voices(void)
 }
 
 static void
-update_process_priority(void)
+on_start_stop(void)
 {
     int playing = out_num_running_voices();
-    HANDLE process = GetCurrentProcess();
 
     if (!state)
         return;
 
-    if (!playing && state->saved_process_pri) {
-        if (!SetPriorityClass(process, state->saved_process_pri))
-            Wwarn("audio: failed to restore process priority to %x",
-                  state->saved_process_pri);
-        state->saved_process_pri = 0;
-        vm_set_vpt_coalesce(1);
-        timeEndPeriod(1);
-    }
-
-    if (playing && !state->saved_process_pri) {
-        state->saved_process_pri = GetPriorityClass(process);
-        if (!state->saved_process_pri)
-            Wwarn("audio: failed to store process priority");
-
-        if (!SetPriorityClass(process, ABOVE_NORMAL_PRIORITY_CLASS))
-            Wwarn("audio: failed to elevate process priority to %x", 
-                  ABOVE_NORMAL_PRIORITY_CLASS);
+    if (playing) {
         vm_set_vpt_coalesce(0);
         timeBeginPeriod(1);
+    } else {
+        vm_set_vpt_coalesce(1);
+        timeEndPeriod(1);
     }
 }
 
@@ -163,7 +149,7 @@ out_start(UXenAudioVoiceOut *v, uint32_t fmt)
         return -1;
     }
 
-    update_process_priority();
+    on_start_stop();
 
     wasapi_set_data_cb(v->wv, need_data_cb, v);
     transfer_out(v);
@@ -183,9 +169,9 @@ out_stop(UXenAudioVoiceOut *v, uint32_t *pos)
         v->wv = 0;
         resampler_16_2_free(v->resampler);
         v->resampler = 0;
+        on_start_stop();
     }
 
-    update_process_priority();
 }
 
 static uint32_t
