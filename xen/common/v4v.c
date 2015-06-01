@@ -181,9 +181,10 @@ v4v_signal_domain (struct domain *d)
     if (!d->v4v)  /* This can happen if the domain is being destroyed */
         return;
 
-    if (deliver_via_upcall(d))
-        uxen_info->ui_signal_v4v();
-    else {
+    if (deliver_via_upcall(d)) {
+        if (uxen_info->ui_signal_v4v)
+            uxen_info->ui_signal_v4v();
+    } else {
 #if 0
         hvm_pci_intx_assert(d, V4V_PCI_SLOT, V4V_PCI_INTX);
         hvm_pci_intx_deassert(d, V4V_PCI_SLOT, V4V_PCI_INTX);
