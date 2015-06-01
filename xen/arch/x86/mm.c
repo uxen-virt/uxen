@@ -5059,7 +5059,7 @@ static int xenmem_add_to_physmap_once(
 
     /* Remove previously mapped page if it was present. */
     prev_mfn = mfn_x(get_gfn_query(d, xatp->gpfn, &pt));
-    if ( mfn_valid(prev_mfn) )
+    if ( mfn_valid_page(prev_mfn) )
     {
         if ( is_xen_mfn(prev_mfn) )
             /* Xen heap frames are simply unhooked from this phys slot. */
