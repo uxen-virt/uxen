@@ -452,6 +452,9 @@ populate_frametable_physical_memory(void)
     PPHYSICAL_MEMORY_RANGE pMemMap;
     uxen_pfn_t start, end;
 
+    if (frametable_check_populate)
+        goto out;
+
     for (pMemMap = MmGetPhysicalMemoryRanges();
          pMemMap[0].BaseAddress.QuadPart || pMemMap[0].NumberOfBytes.QuadPart;
          pMemMap++) {
@@ -468,6 +471,7 @@ populate_frametable_physical_memory(void)
         if (!populate_frametable_range(start, end, 0))
             frametable_check_populate = 1;
     }
+  out:
     if (frametable_check_populate)
         printk("%s: populate frametable incomplete\n", __FUNCTION__);
     return 0;
@@ -2063,6 +2067,8 @@ struct hidden_mem {
 #define MAX_HIDDEN_MEM 0x200000000ULL /* 8GB */
 #define HIDDEN_MEM_STRUCT_MAX 4096
 static struct hidden_mem *hidden_memory = NULL;
+/* with >= 6GB, populate sub-4GB frametable lazily */
+// #define LAZY_FT_HIDDEN_MEM 0x180000000ULL /* 6GB */
 
 #pragma pack(push)
 #pragma pack(4)
@@ -2293,6 +2299,11 @@ get_hidden_mem(uxen_pfn_t max_pfn)
             hm[nr].start = 0;
         }
     }
+
+#ifdef LAZY_FT_HIDDEN_MEM
+    if (mem_end >= LAZY_FT_HIDDEN_MEM)
+        frametable_check_populate = 1;
+#endif  /* LAZY_FT_HIDDEN_MEM */
 
   out:
     if (hm && !hm->start) {

@@ -312,8 +312,15 @@ int idle_free_free_list(void);
 extern KSPIN_LOCK populate_frametable_lock;
 int _populate_frametable(uxen_pfn_t, uxen_pfn_t);
 extern int frametable_check_populate;
+#ifdef __i386__
+extern uxen_pfn_t os_max_pfn;
+#define populate_frametable(mfn, pmfn)                                  \
+    ((!frametable_check_populate || (mfn) >= os_max_pfn) ? 0 :          \
+     _populate_frametable((mfn), (pmfn)))
+#else  /* __i386__ */
 #define populate_frametable(mfn, pmfn) (!frametable_check_populate ? 0 : \
                                         _populate_frametable((mfn), (pmfn)))
+#endif  /* __i386__ */
 int populate_frametable_physical_memory(void);
 void depopulate_frametable(unsigned int);
 int kernel_alloc_mfn(uxen_pfn_t *);
