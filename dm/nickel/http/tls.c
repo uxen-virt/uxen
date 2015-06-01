@@ -119,9 +119,17 @@ struct cert_ctx_t {
     uint32_t response_err;
 };
 
+enum sslv2_check_t {
+    SSLv2_CK_INIT   = 0,
+    SSLv2_CK_BUFF,
+    SSLv2_CK_SSLv2,
+    SSLv2_CK_OTHER
+};
+
 struct tls_state_t {
     struct nickel *ni;
     const struct http_ctx *hp;
+    enum sslv2_check_t  sslv2;
     /* clt */
     struct tls_rec clr;
     struct tls_clt_hello clt_hello;
@@ -160,6 +168,30 @@ static size_t tls_rec_read(struct tls_state_t *tls, const uint8_t *buf, size_t l
         goto out;
 
     rec = is_client ? &tls->clr : &tls->svr;
+
+    if (is_client && (tls->sslv2 == SSLv2_CK_BUFF || tls->sslv2 == SSLv2_CK_SSLv2)) {
+        ret = len;
+        goto out;
+    }
+
+    if (is_client && tls->sslv2 == SSLv2_CK_INIT) {
+        if (len < 3) {
+            tls->sslv2 = SSLv2_CK_BUFF;
+            TLSL2("SSLv2_CK_BUFF");
+            ret = len;
+            goto out;
+        }
+
+        if (buf[0] == 0x80 && buf[2] == 0x01) {
+            tls->sslv2 = SSLv2_CK_SSLv2;
+            TLSL2("SSLv2 !");
+            ret = len;
+            goto out;
+        }
+
+        tls->sslv2 = SSLv2_CK_OTHER;
+    }
+
     /* termination */
     if (rec->hidx == sizeof(struct tls_rec_header) && rec->hlen == 0) {
         memset(&rec->header, 0, sizeof(rec->header));
@@ -597,6 +629,10 @@ bool tls_is_ssl(const uint8_t *b, size_t len)
 
     if (len < 3)
         return false;
+
+    if (b[0] == 0x80 && b[2] == 0x01) // SSLv2 Client Hello
+        return true;
+
     if (b[0] != SSL_HANDSHAKE)
         return false;
 

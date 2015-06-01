@@ -2323,7 +2323,7 @@ static int srv_write(struct http_ctx *hp, const uint8_t *b, size_t blen)
     }
     if (ret < blen)
         sched_wakeup = false;
-    if (r > 0 && TLS_HANDSHAKE_STEP(hp) && tls_read(hp->tls, b, ret, true) < 0) {
+    if (ret > 0 && TLS_HANDSHAKE_STEP(hp) && tls_read(hp->tls, b, ret, true) < 0) {
         HLOG("WARNING - TLS error(2), might not be able to check cert revocation");
     }
     if (ret < 0)
