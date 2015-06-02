@@ -407,12 +407,10 @@ pc_init_xen(void)
 
     cmos_init(hd);
 
-#ifndef __APPLE__
     {
 	extern void uxen_stor_late_register(void);
 	uxen_stor_late_register();
     }
-#endif
 
 #if !defined(QEMU_UXEN)
     if (usb_enabled)

@@ -459,3 +459,23 @@ cpu_usage(float *user, float *kernel, uint64_t *user_total_ms,
     if (kernel_total_ms)
         *kernel_total_ms = 0;
 }
+
+#ifndef LIBIMG
+/* XXX osx-v4v: implement stub handler for ioport 0x330 to disable
+ * uxen_stor driver */
+#include "ioport.h"
+
+static uint32_t
+uxen_stor_ioport_read (void *opaque, uint32_t addr)
+{
+    return 0;
+}
+
+void
+uxen_stor_late_register (void)
+{
+    debug_printf("%s: registering 0x330 for stub uxen_stor\n", __FUNCTION__);
+
+    register_ioport_read (0x330, 16, 1, uxen_stor_ioport_read, NULL);
+}
+#endif  /* LIBIMG */
