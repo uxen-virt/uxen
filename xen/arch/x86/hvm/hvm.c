@@ -431,7 +431,7 @@ hvm_destroy_ioreq_server(struct domain *d, struct hvm_ioreq_server *s)
     p = s->ioreq.va;
 
     for (i = 0; i < MAX_HVM_VCPUS; i++) {
-        if (p->vcpu_ioreq[i].vp_eport)
+        if (d->vcpu[i] && p->vcpu_ioreq[i].vp_eport)
             free_xen_event_channel(d->vcpu[i], p->vcpu_ioreq[i].vp_eport);
     }
 
@@ -3955,7 +3955,7 @@ hvmop_register_ioreq_server(struct xen_hvm_register_ioreq_server *a)
       fail_ports:
         p = s->ioreq.va;
         for (i = 0; i < MAX_HVM_VCPUS; i++) {
-            if (p->vcpu_ioreq[i].vp_eport)
+            if (d->vcpu[i] && p->vcpu_ioreq[i].vp_eport)
                 free_xen_event_channel(d->vcpu[i], p->vcpu_ioreq[i].vp_eport);
         }
 #ifndef __UXEN__
