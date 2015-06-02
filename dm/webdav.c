@@ -106,7 +106,7 @@ static void dav_header(DavClient *dc, char *fmt, ...)
 {
     char *buf, *tmp;
     va_list ap;
-    size_t len;
+    size_t len, realloc_size;
     va_start(ap, fmt);
 
     vasprintf(&buf, fmt, ap);
@@ -114,23 +114,34 @@ static void dav_header(DavClient *dc, char *fmt, ...)
 
     if (!buf) {
         debug_printf("webdav: Failed to allocate memory for header field\n");
-        return;
+        goto err;
     }
 
     len = strlen(buf);
 
-    tmp = realloc(dc->headerBuf, dc->headerSize + len + 2);
+    realloc_size = dc->headerSize + len + 2;
+    if (dc->headerSize >= realloc_size) {
+        warnx("webdav %s: alloc len overflow fail 1\n", __FUNCTION__);
+        goto err;
+    }
+    if (len >= realloc_size) {
+        warnx("webdav %s: alloc len overflow fail 2 (len=%zd)\n", __FUNCTION__, len);
+        goto err;
+    }
+
+    tmp = realloc(dc->headerBuf, realloc_size);
     if (!tmp) {
-        debug_printf("webdav: Failed to expand header buffer\n");
-        free(buf);
-        return;
+        warnx("webdav %s: failed to expand header buffer\n", __FUNCTION__);
+        goto err;
     }
     dc->headerBuf = tmp;
     memcpy(dc->headerBuf + dc->headerSize, buf, len);
     dc->headerSize += len;
     dc->headerBuf[dc->headerSize++] = '\r';
     dc->headerBuf[dc->headerSize++] = '\n';
+err:
     free(buf);
+    return;
 }
 
 static inline void dav_format_time_rfc1123(char *buffer, size_t sz, time_t t)
@@ -163,6 +174,7 @@ static char* dav_url_decode(const char *str)
 {
     char *tmp;
     char *ptr;
+    size_t len;
     
     if (str == NULL) {
         return NULL;
@@ -185,7 +197,12 @@ static char* dav_url_decode(const char *str)
     }
 
     /* the output string will either be same length or shorter */
-    tmp = (char*)malloc(strlen(str) + 1);
+    len = strlen(str);
+    if (len > len + 1) {
+        warnx("webdav %s: alloc len overflow fail\n", __FUNCTION__);
+        return NULL;
+    }
+    tmp = (char *)malloc(len + 1);
     if (tmp == NULL) {
         return NULL;
     }
@@ -217,11 +234,19 @@ static char *dav_url_encode(const char *str)
     char *buf;
     char *pbuf;
     unsigned char c;
+    size_t len, alloc_size;
 
     pstr = (char*)str;
-    buf = (char*)malloc((strlen(str) * 3) + 1);
+    len = strlen(str);
+    alloc_size = (len * 3) + 1;
+    if (len > alloc_size) {
+        warnx("webdav %s: alloc len overflow fail\n", __FUNCTION__);
+        return NULL;
+    }
+
+    buf = (char *)malloc(alloc_size);
     if (!buf) {
-        debug_printf("%s malloc fail\n", __FUNCTION__);
+        warnx("webdav %s malloc fail\n", __FUNCTION__);
         return NULL;
     }
     pbuf = buf;
@@ -345,13 +370,23 @@ static inline char *dav_memrchr(char* a, char c, size_t len)
 static char * dav_normalize_path(const char * src, size_t src_len) {
 
         char * res;
-        size_t res_len;
+        size_t res_len, alloc_size;
 
         const char * ptr = src;
         const char * end = &src[src_len];
         const char * next;
 
-        res = malloc((src_len > 0 ? src_len : 1) + 1);
+        if (src_len > 0) {
+            alloc_size = src_len + 1;
+            if (src_len > alloc_size) {
+                warnx("webdav %s: alloc len overflow fail\n", __FUNCTION__);
+                return NULL;
+            }
+        } else {
+            alloc_size = 2;
+        }
+
+        res = malloc(alloc_size);
         if (!res) {
             return NULL;
         }
@@ -727,19 +762,33 @@ const char prop_file[] =
 int dav_bprintf(char **buffer, char **end, size_t *size, const char *fmt, ...)
 {
     size_t len;
-    int ret;
+    size_t ret;
     va_list ap;
 
     len = *end - *buffer;
+    if (*size < len) {
+        warnx("webdav %s: forman len overflow fail\n", __FUNCTION__);
+        return -1;
+    }
 
     va_start(ap, fmt);
-    ret = vsnprintf(*buffer + len, *size - len, fmt, ap);
+    ret = (size_t)vsnprintf(*buffer + len, *size - len, fmt, ap);
     va_end(ap);
     if (ret >= (*size - len)) {
+
         int realloc_size = len + ret + 1;
+        if (ret >= realloc_size) {
+            warnx("webdav %s: alloc len overflow fail 1\n", __FUNCTION__);
+            return -1;
+        }
+        if (len >= realloc_size) {
+            warnx("webdav %s: alloc len overflow fail 2\n", __FUNCTION__);
+            return -1;
+        }
+
         char *bigger_buffer = realloc(*buffer, realloc_size);
         if (!bigger_buffer) {
-            Wwarn("%s realloc of size %d failed with %d", __FUNCTION__,
+            warnx("%s realloc of size %d failed with %d", __FUNCTION__,
                   realloc_size, errno);
             return -1;
         } else {
@@ -1035,6 +1084,10 @@ int dav_header_cb(http_parser* parser, const char *buf, size_t len)
 {
     DavClient *dc = parser->data;
     char *h;
+    if (len > len + sizeof(char)) {
+        warnx("webdav %s: alloc len overflow fail\n", __FUNCTION__);
+        return -1;
+    }
     h = malloc(len + sizeof(char));
     if (!h) {
         return -1;
@@ -1059,6 +1112,10 @@ int dav_value_cb(http_parser* parser, const char *buf, size_t len)
         return -1;
     }
 
+    if (len > len + sizeof(char)) {
+        warnx("webdav %s: alloc len overflow fail\n", __FUNCTION__);
+        return -1;
+    }
     v = malloc(len + sizeof(char));
     if (!v) {
         free((void*)h);
