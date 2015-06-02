@@ -475,8 +475,7 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
         free_pfns = malloc(MAX_BATCH_SIZE * sizeof(*free_pfns));
         if (free_pfns == NULL) {
             asprintf(err_msg, "free_pfns = malloc(%"PRIdSIZE") failed",
-                MAX_BATCH_SIZE * sizeof(*free_pfns));
-            free(pfn_type);
+                     MAX_BATCH_SIZE * sizeof(*free_pfns));
             ret = -ENOMEM;
             goto out;
         }
