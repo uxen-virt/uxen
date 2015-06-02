@@ -903,6 +903,41 @@ int xc_domain_populate_physmap_from_buffer(xc_interface *xch,
     return err;
 }
 
+int
+xc_domain_memory_capture(xc_interface *xch,
+                         uint32_t domid,
+                         unsigned long nr_gpfns,
+                         xen_memory_capture_gpfn_info_t *gpfn_info_list,
+                         unsigned long *nr_done,
+                         xc_hypercall_buffer_t *buffer,
+                         uint32_t buffer_size)
+{
+    int err;
+    struct xen_memory_capture xmc = {
+        .domid = domid,
+        .nr_gpfns = nr_gpfns,
+        .buffer_size = buffer_size
+    };
+    DECLARE_HYPERCALL_BOUNCE(gpfn_info_list, nr_gpfns * sizeof(*gpfn_info_list),
+                             XC_HYPERCALL_BUFFER_BOUNCE_BOTH);
+    DECLARE_HYPERCALL_BUFFER_ARGUMENT(buffer);
+
+    if (xc_hypercall_bounce_pre(xch, gpfn_info_list)) {
+        PERROR("Could not bounce gpfn_info_list for XENMEM_capture");
+        return -1;
+    }
+    set_xen_guest_handle(xmc.gpfn_info_list, gpfn_info_list);
+
+    set_xen_guest_handle(xmc.buffer, buffer);
+
+    err = do_memory_op(xch, XENMEM_capture, &xmc, sizeof(xmc));
+
+    xc_hypercall_bounce_post(xch, gpfn_info_list);
+    *nr_done = xmc.nr_done;
+
+    return err;
+}
+
 int xc_domain_clone_physmap(xc_interface *xch,
                             uint32_t domid,
                             xen_domain_handle_t parentuuid)

@@ -1134,6 +1134,15 @@ int xc_domain_populate_physmap_from_buffer(xc_interface *xch,
                                            xen_pfn_t *extent_start,
                                            xc_hypercall_buffer_t *buffer);
 
+int
+xc_domain_memory_capture(xc_interface *xch,
+                         uint32_t domid,
+                         unsigned long nr_pfns,
+                         xen_memory_capture_gpfn_info_t *pfn_list,
+                         unsigned long *nr_done,
+                         xc_hypercall_buffer_t *buffer,
+                         uint32_t buffer_size);
+
 int xc_domain_clone_physmap(xc_interface *xch,
                             uint32_t domid,
                             xen_domain_handle_t parentuuid);

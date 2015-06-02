@@ -116,6 +116,54 @@ struct xen_memory_reservation {
 typedef struct xen_memory_reservation xen_memory_reservation_t;
 DEFINE_XEN_GUEST_HANDLE(xen_memory_reservation_t);
 
+#define XENMEM_capture 47
+struct xen_memory_capture_gpfn_info {
+    union {
+        struct {                /* in */
+            uint32_t gpfn;
+            uint32_t flags;
+        };
+        struct {                /* out */
+            uint32_t type;
+            uint32_t offset;
+        };
+    };
+};
+typedef struct xen_memory_capture_gpfn_info xen_memory_capture_gpfn_info_t;
+DEFINE_XEN_GUEST_HANDLE(xen_memory_capture_gpfn_info_t);
+#define XENMEM_MCGI_FLAGS_VM         0x0000
+#define XENMEM_MCGI_FLAGS_TEMPLATE   0x0001
+
+/* page type */
+#define XENMEM_MCGI_TYPE_MASK        0x000f
+#define XENMEM_MCGI_TYPE_NOT_PRESENT 0x0000
+#define XENMEM_MCGI_TYPE_NORMAL      0x0001
+#define XENMEM_MCGI_TYPE_POD         0x0002
+#define XENMEM_MCGI_TYPE_ZERO        0x0003
+#define XENMEM_MCGI_TYPE_XEN         0x0004
+#define XENMEM_MCGI_TYPE_HOST        0x0005
+#define XENMEM_MCGI_TYPE_ERROR       0x0006
+
+/* page data type */
+#define XENMEM_MCGI_TYPE_COMPRESSED  0x0010
+
+/* errors */
+#define XENMEM_MCGI_TYPE_BUFFER_FULL 0xff01
+#define XENMEM_MCGI_TYPE_NO_TEMPLATE 0xff02
+
+struct xen_memory_capture {
+    domid_t domid;
+
+    uint32_t nr_done;
+    uint32_t nr_gpfns;
+    XEN_GUEST_HANDLE(xen_memory_capture_gpfn_info_t) gpfn_info_list;
+
+    uint32_t buffer_size;
+    XEN_GUEST_HANDLE(uint8) buffer;
+};
+typedef struct xen_memory_capture xen_memory_capture_t;
+DEFINE_XEN_GUEST_HANDLE(xen_memory_capture_t);
+
 #define XENMEM_clone_physmap        49
 struct xen_memory_clone_physmap {
     domid_t             domid;

@@ -472,6 +472,10 @@ static inline unsigned long get_gfn_untyped(struct domain *d, unsigned long gpfn
     return INVALID_MFN;
 }
 
+mfn_t
+get_gfn_contents(struct domain *d, unsigned long gpfn, p2m_type_t *t,
+                 uint8_t *buffer, uint32_t *size);
+
 /* This is a noop for now. */
 static inline void __put_gfn(struct p2m_domain *p2m, unsigned long gfn)
 {

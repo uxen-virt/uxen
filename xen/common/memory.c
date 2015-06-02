@@ -205,6 +205,110 @@ out:
     a->nr_done = i;
 }
 
+static int
+capture_memory(struct domain *d, xen_memory_capture_t *capture)
+{
+    xen_memory_capture_gpfn_info_t gi;
+    struct domain *source_d;
+    struct page_info *page;
+    uint8_t *data;
+    uint32_t size;
+    uint32_t offset = 0;
+    unsigned long mfn;
+    p2m_type_t t;
+    uint32_t gpfn, flags;
+    int ret = 0;
+
+    if (!guest_handle_subrange_okay(capture->gpfn_info_list, capture->nr_done,
+                                    capture->nr_gpfns - 1))
+        return -EFAULT;
+
+    page = alloc_domheap_page(NULL, 0);
+    if (!page)
+        return -ENOMEM;
+    data = __map_domain_page(page);
+
+    while (!ret && capture->nr_done < capture->nr_gpfns) {
+        /* XXX preempt check, ret = -EAGAIN */
+
+        if (unlikely(__copy_from_guest_offset(&gi, capture->gpfn_info_list,
+                                              capture->nr_done, 1))) {
+            ret = -EFAULT;
+            goto out;
+        }
+
+        gpfn = gi.gpfn;
+        flags = gi.flags;
+        gi.offset = -1;
+
+        if (flags & XENMEM_MCGI_FLAGS_TEMPLATE) {
+            if (!d->clone_of) {
+                gi.type = XENMEM_MCGI_TYPE_NO_TEMPLATE;
+                gi.offset = -1;
+                ret = -EEXIST;
+                goto next;
+            }
+            source_d = d->clone_of;
+        } else
+            source_d = d;
+
+        mfn = mfn_x(get_gfn_contents(source_d, gpfn, &t, data, &size));
+        if (mfn_zero_page(mfn)) {
+            gi.type = XENMEM_MCGI_TYPE_ZERO;
+            gi.offset = -1;
+        } else if (is_xen_mfn(mfn)) {
+            gi.type = XENMEM_MCGI_TYPE_XEN;
+            gi.offset = -1;
+        } else if (is_host_mfn(mfn)) {
+            gi.type = XENMEM_MCGI_TYPE_HOST;
+            gi.offset = -1;
+        } else if (mfn_valid_page(mfn) || mfn_compressed_page(mfn)) {
+            if (offset + size > capture->buffer_size) {
+                gi.type = XENMEM_MCGI_TYPE_BUFFER_FULL;
+                gi.offset = -1;
+                ret = -ENOMEM;
+                goto next;
+            }
+            if (unlikely(__copy_to_guest_offset(capture->buffer, offset,
+                                                data, size))) {
+                ret = -EFAULT;
+                goto out;
+            }
+            gi.type = XENMEM_MCGI_TYPE_NORMAL;
+            if (mfn_compressed_page(mfn))
+                gi.type |= XENMEM_MCGI_TYPE_COMPRESSED;
+            gi.offset = offset;
+            offset += size;
+        } else if (p2m_is_pod(t)) {
+            gi.type = XENMEM_MCGI_TYPE_POD;
+            gi.offset = -1;
+        } else if (mfn_error_page(mfn)) {
+            gi.type = XENMEM_MCGI_TYPE_ERROR;
+            gi.offset = -1;
+        } else {
+            gi.type = XENMEM_MCGI_TYPE_NOT_PRESENT;
+            gi.offset = -1;
+        }
+        put_gfn(source_d, gpfn);
+
+      next:
+        if (unlikely(__copy_to_guest_offset(capture->gpfn_info_list,
+                                            capture->nr_done, &gi, 1))) {
+            ret = -EFAULT;
+            goto out;
+        }
+
+        if (!ret)
+            capture->nr_done++;
+    }
+  out:
+    if (data)
+        unmap_domain_page(data);
+    if (page)
+        free_domheap_page(page);
+    return ret;
+}
+
 int guest_remove_page(struct domain *d, unsigned long gmfn)
 {
     struct page_info *page;
@@ -586,6 +690,7 @@ long do_memory_op(unsigned long cmd, XEN_GUEST_HANDLE(void) arg)
     unsigned long start_extent;
     struct xen_memory_reservation reservation;
     struct memop_args args = { };
+    struct xen_memory_capture capture;
     struct xen_memory_clone_physmap cloneinfo;
     domid_t domid;
 
@@ -695,6 +800,41 @@ long do_memory_op(unsigned long cmd, XEN_GUEST_HANDLE(void) arg)
             return hypercall_create_continuation(
                 __HYPERVISOR_memory_op, "lh",
                 op | (rc << MEMOP_EXTENT_SHIFT), arg);
+
+        break;
+
+    case XENMEM_capture:
+        if (copy_from_guest(&capture, arg, 1))
+            return -EFAULT;
+
+        if (unlikely(capture.nr_done >= capture.nr_gpfns))
+            return -EINVAL;
+
+        if (likely(capture.domid == DOMID_SELF))
+            d = rcu_lock_current_domain();
+        else {
+            d = rcu_lock_domain_by_id(capture.domid);
+            if (d == NULL)
+                return -EEXIST;
+            if (!IS_PRIV_FOR(current->domain, d)) {
+                rcu_unlock_domain(d);
+                return -EEXIST;
+            }
+        }
+
+        rc = capture_memory(d, &capture);
+
+        rcu_unlock_domain(d);
+
+        if (copy_field_to_guest(
+                XEN_GUEST_HANDLE_CAST(xen_memory_capture_t, arg),
+                &capture, nr_done))
+            return -EFAULT;
+
+        if (rc == -EAGAIN)
+            return hypercall_create_continuation(
+                __HYPERVISOR_memory_op, "lh",
+                op, arg);
 
         break;
 

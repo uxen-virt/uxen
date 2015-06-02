@@ -50,6 +50,8 @@
 #endif
 #define set_xen_guest_handle(hnd, val) set_xen_guest_handle_raw(hnd, val)
 #define XEN_GUEST_HANDLE_NULL(name)     (XEN_GUEST_HANDLE(name)){(name *)0}
+#define XEN_GUEST_HANDLE_CAST(name, hnd)        \
+    (XEN_GUEST_HANDLE(name)){(name *)(hnd).p}
 
 #if defined(__i386__)
 #include "xen-x86_32.h"

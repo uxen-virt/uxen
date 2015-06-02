@@ -231,6 +231,87 @@ mfn_t get_gfn_type_access(struct p2m_domain *p2m, unsigned long gfn,
     return mfn;
 }
 
+mfn_t
+get_gfn_contents(struct domain *d, unsigned long gpfn, p2m_type_t *t,
+                 uint8_t *buffer, uint32_t *size)
+{
+    struct p2m_domain *p2m = p2m_get_hostp2m(d);
+    p2m_access_t a;
+    unsigned int page_order;
+    mfn_t mfn;
+    struct page_info *page;
+    void *s;
+    int rc;
+
+    *size = 0;
+
+    rc = p2m_gfn_check_limit(d, gpfn, PAGE_ORDER_4K);
+    if (rc)
+        return _mfn(ERROR_MFN);
+
+    p2m_lock(p2m);
+    mfn = p2m->get_entry(p2m, gpfn, t, &a, p2m_query, &page_order);
+    if (mfn_zero_page(mfn_x(mfn)) || is_xen_mfn(mfn_x(mfn)) ||
+        is_host_mfn(mfn_x(mfn)))
+        goto out;
+    while (mfn_valid_page(mfn)) {
+        page = mfn_to_page(mfn);
+        if (unlikely(page_get_owner(mfn_to_page(mfn)) != d ||
+                     !get_page(page, d)))
+            /* if the page doesn't belong to this VM, then we don't
+             * provide the contents */
+            break;
+
+        s = map_domain_page(mfn_x(mfn));
+        memcpy(buffer, s, PAGE_SIZE);
+        unmap_domain_page(s);
+        *size = PAGE_SIZE;
+
+        put_page(page);
+        goto out;
+    }
+    while (p2m_is_pod(*t) && p2m_mfn_is_page_data(mfn_x(mfn))) {
+        uint8_t *data;
+        uint16_t offset;
+
+        if (p2m_parse_page_data(&mfn, &data, &offset)) {
+            mfn = _mfn(ERROR_MFN);
+            goto out;
+        }
+
+        page = mfn_to_page(mfn);
+        if (unlikely(page_get_owner(mfn_to_page(mfn)) != d ||
+                     !get_page(page, d)))
+            /* if the page storing the compressed data doesn't belong
+             * to this VM, then we don't provide the contents */
+            break;
+
+        *(uint16_t *)buffer = PAGE_SIZE - sizeof(uint16_t);
+        if (!p2m_get_compressed_page_data(
+                d, mfn, data, offset,
+                &buffer[sizeof(uint16_t)], (uint16_t *)buffer)) {
+            mfn = _mfn(ERROR_MFN);
+            put_page(page);
+            goto out;
+        }
+
+        *size = sizeof(uint16_t) + *(uint16_t *)buffer;
+        mfn = _mfn(COMPRESSED_MFN);
+
+        put_page(page);
+        goto out;
+    }
+    if (p2m_is_pod(*t)) {
+        mfn = _mfn(INVALID_MFN);
+        goto out;
+    }
+    mfn = _mfn(INVALID_MFN);
+
+  out:
+    p2m_unlock(p2m);
+    return mfn;
+}
+
 int set_p2m_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn, 
                   unsigned int page_order, p2m_type_t p2mt, p2m_access_t p2ma)
 {
