@@ -631,6 +631,7 @@ extern bool_t machine_to_phys_mapping_valid;
 #define PAGE_STORE_DATA_ALIGN   (PAGE_SHIFT - P2M_MFN_PAGE_STORE_OFFSET_BITS)
 
 #define P2M_MFN_MFN_MASK        ((1UL << P2M_MFN_MFN_BITS) - 1)
+#define p2m_mfn_mfn(mfn) _mfn(mfn_x((mfn)) & P2M_MFN_MFN_MASK)
 #define P2M_MFN_SPECIAL_MASK                                    \
     (((1UL << P2M_MFN_SPECIAL_BITS) - 1) << P2M_MFN_MFN_BITS)
 #define P2M_MFN_PAGE_DATA       (1UL << P2M_MFN_MFN_BITS)

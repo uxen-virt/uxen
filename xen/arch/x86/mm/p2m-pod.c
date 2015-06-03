@@ -1273,7 +1273,7 @@ p2m_pod_compress_page(struct p2m_domain *p2m, unsigned long gfn_aligned,
     /* Check page is not compressed/replaced yet */
     checkmfn = p2m->get_entry(p2m, gfn_aligned, &t, &a, p2m_query, NULL);
     if (p2m_mfn_is_mark_compress(mfn_x(checkmfn)))
-        checkmfn = _mfn(mfn_x(checkmfn) & P2M_MFN_MFN_MASK);
+        checkmfn = p2m_mfn_mfn(checkmfn);
     if (mfn_x(mfn) != mfn_x(checkmfn) || (mfn_x(checkmfn) & P2M_MFN_MFN_MASK)) {
         p2m_unlock(p2m);
         if (new_page)
@@ -1353,8 +1353,7 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
     if (offset == PAGE_SIZE) {
         perfc_incr(decompressed_pages_detached);
         spin_lock(&d->page_alloc_lock);
-        p_cont = page_list_next(__mfn_to_page(mfn_x(mfn) & P2M_MFN_MFN_MASK),
-                                &d->page_list);
+        p_cont = page_list_next(mfn_to_page(p2m_mfn_mfn(mfn)), &d->page_list);
         spin_unlock(&d->page_alloc_lock);
         ASSERT(p_cont);
         data_cont = map_domain_page_direct(__page_to_mfn(p_cont));
@@ -1367,8 +1366,7 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
         }
         memcpy(this_cpu(decompress_buffer), &data[offset], PAGE_SIZE - offset);
         spin_lock(&d->page_alloc_lock);
-        p_cont = page_list_next(__mfn_to_page(mfn_x(mfn) & P2M_MFN_MFN_MASK),
-                                &d->page_list);
+        p_cont = page_list_next(mfn_to_page(p2m_mfn_mfn(mfn)), &d->page_list);
         spin_unlock(&d->page_alloc_lock);
         ASSERT(p_cont);
         data_cont = map_domain_page_direct(__page_to_mfn(p_cont));
@@ -1580,7 +1578,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         }
         if (p2m_mfn_is_non_compressible(mfn_x(smfn)) ||
             p2m_mfn_is_mark_compress(mfn_x(smfn))) {
-            smfn = _mfn(mfn_x(smfn) & P2M_MFN_MFN_MASK);
+            smfn = p2m_mfn_mfn(smfn);
             compressible = 0;
         }
         if (mfn_valid_page(mfn_x(smfn)) &&
@@ -1655,15 +1653,19 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             goto out_fail;
         }
         check_immutable(q, d, gfn_aligned);
-    } else if (/* d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] && */
-               page_get_owner(mfn_to_page(smfn)) == d) {
+    } else if (smfn_from_clone &&
+               /* d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] && */
+               page_get_owner(mfn_to_page(p2m_mfn_mfn(smfn))) == d) {
         /* read-only mapped page already belonging to the VM - write
            access to previously decompressed page which was mapped
-           read-only */
-        mfn = smfn;
+           read-only -- remove any additional tags */
+        mfn = p2m_mfn_mfn(smfn);
     } else {
         /* check if template page is a decompressed page, only shared
          * in one clone */
+        if (p2m_mfn_is_non_compressible(mfn_x(smfn)) ||
+            p2m_mfn_is_mark_compress(mfn_x(smfn)))
+            smfn = p2m_mfn_mfn(smfn);
         while (smfn_from_clone &&
                (mfn_to_page(smfn)->count_info & PGC_count_mask) <= 2) {
             struct p2m_domain *op2m = p2m_get_hostp2m(d->clone_of);
@@ -1875,7 +1877,7 @@ clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
         if (p2m_is_pod(t)) {
             if (p2m_mfn_is_non_compressible(mfn_x(mfn)) ||
                 p2m_mfn_is_mark_compress(mfn_x(mfn)))
-                mfn = _mfn(mfn_x(mfn) & P2M_MFN_MFN_MASK);
+                mfn = p2m_mfn_mfn(mfn);
             if (mfn_valid_page(mfn_x(mfn)) &&
                 mfn_x(mfn) != mfn_x(shared_zero_page) &&
                 unlikely(!get_page_fast(mfn_to_page(mfn), od)))
@@ -2399,7 +2401,7 @@ p2m_pod_compress_template_work(void *_d)
             break;
         mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, &page_order);
         if (p2m_mfn_is_mark_compress(mfn_x(mfn))) {
-            mfn = _mfn(mfn_x(mfn) & P2M_MFN_MFN_MASK);
+            mfn = p2m_mfn_mfn(mfn);
             compress = 1;
         }
         if (!mfn_valid_page(mfn_x(mfn))) {
@@ -2427,7 +2429,7 @@ p2m_pod_compress_template_work(void *_d)
             p2m_lock(p2m);
             mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, &page_order);
             if (p2m_mfn_is_mark_compress(mfn_x(mfn)))
-                mfn = _mfn(mfn_x(mfn) & P2M_MFN_MFN_MASK);
+                mfn = p2m_mfn_mfn(mfn);
             if (mfn_valid_page(mfn_x(mfn)) &&
                 get_page(page = mfn_to_page(mfn), d)) {
                 p2m_unlock(p2m);
