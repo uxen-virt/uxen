@@ -8,7 +8,7 @@ PASS0_BINPLACE = $(NTTARGETFILE0)
 
 NTTARGETFILE2 = POST
 
-INCLUDES = ..\..\..\common\include\xen-public;..\common; $(WDK8_PATH)\inc;..\uxendisp\include
+INCLUDES = ..\..\..\common\include\xen-public;..\common; $(WDK8_PATH)\inc;..\uxendisp\include;$(UXENV4VLIB_INC);..\..\..\common\include
 
 !if $(AMD64)
 LIB_ARCH_PATH = x64
@@ -17,7 +17,9 @@ LIB_ARCH_PATH = x86
 !endif
 
 TARGETLIBS = $(DDK_LIB_PATH)\wdmsec.lib \
-             $(WDK8_PATH)\lib\$(LIB_ARCH_PATH)\displib.lib
+             $(WDK8_PATH)\lib\$(LIB_ARCH_PATH)\displib.lib \
+             $(UXENVMLIB_LIB) \
+             $(UXENV4VLIB_LIB)
 
 SOURCES = bdd.cxx \
           bdd_ddi.cxx \
@@ -27,4 +29,5 @@ SOURCES = bdd.cxx \
           blthw.cxx \
           hw.cxx \
           perfcnt.cxx \
+          dirty_rect.cxx \
           uxenkmdod.rc

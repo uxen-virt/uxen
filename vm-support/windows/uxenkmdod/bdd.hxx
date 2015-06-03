@@ -74,6 +74,7 @@ extern "C"
 #include <uxendisp_esc.h>
 #include "../common/debug.h"
 #include "perfcnt.h"
+#include "dirty_rect.h"
 
 
 #define MIN_BYTES_PER_PIXEL_REPORTED   4
@@ -229,6 +230,8 @@ private:
     DXGK_DEVICE_INFO m_DeviceInfo;
 
     UXEN_HW_RESOURCES m_HwResources;
+    
+    dr_ctx_t m_DrContext;
 
 public:
     VOID Init(_In_ DEVICE_OBJECT* pPhysicalDeviceObject);

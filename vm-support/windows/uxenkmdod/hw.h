@@ -31,4 +31,7 @@ NTSTATUS hw_pointer_update(
     _In_ PUXEN_HW_RESOURCES pHw,
     _In_ CONST DXGKARG_SETPOINTERSHAPE *pSetPointerShape);
 
+void hw_disable_page_tracking(
+    _In_ PUXEN_HW_RESOURCES pHw);
+
 #endif /* _HW_H_ */

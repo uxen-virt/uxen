@@ -18,5 +18,6 @@ SOURCES=color.c     \
         palette.c   \
         pointer.c   \
         screen.c    \
+        perfcnt.c   \
         uxendisp.rc
 

@@ -146,11 +146,21 @@ NTSTATUS BASIC_DISPLAY_DRIVER::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartIn
         return Status;
     }
 
+    m_DrContext = dr_init(&m_HwResources, (disable_tracking_ptr)hw_disable_page_tracking);
+    if (!m_DrContext)
+    {
+        uxen_err("dr_init failed. Unable to communicate with hardware.");
+        return STATUS_UNSUCCESSFUL;
+    }
+    
     return STATUS_SUCCESS;
 }
 
 NTSTATUS BASIC_DISPLAY_DRIVER::StopDevice(VOID)
 {
+    dr_deinit(m_DrContext);
+    m_DrContext = NULL;
+
     hw_cleanup(&m_HwResources);
     CleanUp();
 
@@ -373,6 +383,8 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAP
 
 NTSTATUS BASIC_DISPLAY_DRIVER::PresentDisplayOnly(_In_ CONST DXGKARG_PRESENT_DISPLAYONLY* pPresentDisplayOnly)
 {
+    NTSTATUS status;
+
     ASSERT(pPresentDisplayOnly != NULL);
     ASSERT(pPresentDisplayOnly->VidPnSourceId < MAX_VIEWS);
 
@@ -412,7 +424,7 @@ NTSTATUS BASIC_DISPLAY_DRIVER::PresentDisplayOnly(_In_ CONST DXGKARG_PRESENT_DIS
                 m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].SrcModeWidth)*DstBitPerPixel/8;
             pDst += (int)CenterShift/2;
         }
-        return m_HardwareBlt[pPresentDisplayOnly->VidPnSourceId].ExecutePresentDisplayOnly(pDst,
+        status = m_HardwareBlt[pPresentDisplayOnly->VidPnSourceId].ExecutePresentDisplayOnly(pDst,
                                                                 DstBitPerPixel,
                                                                 (BYTE*)pPresentDisplayOnly->pSource,
                                                                 pPresentDisplayOnly->BytesPerPixel,
@@ -422,6 +434,14 @@ NTSTATUS BASIC_DISPLAY_DRIVER::PresentDisplayOnly(_In_ CONST DXGKARG_PRESENT_DIS
                                                                 pPresentDisplayOnly->NumDirtyRects,
                                                                 pPresentDisplayOnly->pDirtyRect,
                                                                 RotationNeededByFb);
+
+        dr_send(m_DrContext,
+                  pPresentDisplayOnly->NumMoves,
+                  pPresentDisplayOnly->pMoves,
+                  pPresentDisplayOnly->NumDirtyRects,
+                  pPresentDisplayOnly->pDirtyRect);
+
+        return status;
     }
 
     return STATUS_SUCCESS;

@@ -7,6 +7,7 @@
 #include "uxendisp.h"
 
 #include "hw.h"
+#include "dirty_rect.h"
 
 #include <uxendisp_ioctl.h>
 #include <uxendisp_esc.h>
@@ -360,6 +361,7 @@ BOOLEAN ResetHw(PVOID dev_ext, ULONG colums, ULONG Rows)
 {
     PDEVICE_EXTENSION dev = dev_ext;
 
+    dr_deinit(dev->dr_ctx);
     hw_disable(dev);
 
     return FALSE;
@@ -381,6 +383,13 @@ BOOLEAN Initialize(PVOID dev_ext)
     dev->dma = VideoPortGetDmaAdapter(dev, &dev_desc);
 
     hw_init(dev);
+
+    dev->dr_ctx = dr_init(dev, hw_disable_page_tracking);
+    if (dev->dr_ctx == NULL)
+    {
+        DBG_ERR("Error dr_init failed.\n");
+        return FALSE;
+    }
 
     return TRUE;
 }
@@ -700,6 +709,20 @@ BOOLEAN StartIO(PVOID dev_ext, PVIDEO_REQUEST_PACKET packet)
         break;
     case IOCTL_VIDEO_ENABLE_POINTER: {
             hw_pointer_enable(dev, TRUE);
+        }
+        break;
+    case IOCTL_UXENDISP_GET_UPDATE_RECT: {
+            GET_UPDATE_RECT_DATA *updateRect = packet->OutputBuffer;
+
+            if (packet->OutputBufferLength < (packet->StatusBlock->Information =
+                                              sizeof(*updateRect))) {
+                error = ERROR_INSUFFICIENT_BUFFER;
+                goto err;
+            }
+
+            updateRect->dev = dev->dr_ctx;
+            updateRect->update = dr_update;
+            updateRect->safe_to_draw = dr_safe_to_draw;
         }
         break;
     default:

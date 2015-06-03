@@ -21,6 +21,7 @@
 #define     UXDISP_CURSOR_SHOW                      0x1
 #define UXDISP_REG_MODE                 0x00020
 #define     UXDISP_MODE_VGA_DISABLED                0x1
+#define     UXDISP_MODE_PAGE_TRACKING_DISABLED      0x2
 
 #define UXDISP_REG_BANK_LEN             0x00004
 #define UXDISP_REG_BANK(x)              (0x00100 + (x) * UXDISP_REG_BANK_LEN)

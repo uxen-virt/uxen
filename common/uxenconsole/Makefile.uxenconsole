@@ -9,6 +9,7 @@ all: uxenconsole$(EXE_SUFFIX) libuxenconsole.a
 
 libuxenconsole_OBJS = uxenconsolelib.o 
 $(WINDOWS)libuxenconsole_OBJS += hid.o
+$(WINDOWS)libuxenconsole_OBJS += disp.o
 UXENCONSOLE_OBJS = uxenconsole-$(TARGET_HOST).o libuxenconsole.a
 $(WINDOWS)UXENCONSOLE_OBJS += uxenconsole-res.o
 $(WINDOWS)LDLIBS += -lgdi32

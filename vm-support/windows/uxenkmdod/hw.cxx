@@ -52,6 +52,13 @@ NTSTATUS hw_init(_Inout_ PUXEN_HW_RESOURCES pHw)
     return STATUS_UNSUCCESSFUL;
 }
 
+void hw_disable_page_tracking(_In_ PUXEN_HW_RESOURCES pHw)
+{
+    ULONG val = uxdisp_read(pHw, UXDISP_REG_MODE);
+    val |= UXDISP_MODE_PAGE_TRACKING_DISABLED;
+    uxdisp_write(pHw, UXDISP_REG_MODE, val);
+}
+
 void hw_cleanup(_Inout_ PUXEN_HW_RESOURCES pHw)
 {
     MmUnmapIoSpace(pHw->pMmio, (SIZE_T)pHw->mmioLength);

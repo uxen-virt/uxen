@@ -35,6 +35,8 @@
 #include <uxenhid-common.h>
 #include "hw/uxen_hid.h"
 
+#include "uxenconsolelib.h"
+
 #define WM_UXEN_SETCURSOR (WM_USER + 1)
 #define WM_UXEN_EXIT (WM_USER + 2)
 
@@ -57,6 +59,7 @@ struct win32_gui_state {
     HANDLE event_loop_thread;
     HANDLE ready_event;
     HANDLE start_event;
+    HANDLE stop_event;
     HCURSOR cursor;
     int requested_w;
     int requested_h;
@@ -66,6 +69,7 @@ struct win32_gui_state {
     uint32_t vram_size;
     struct win_surface *surface;
     CRITICAL_SECTION surface_lock;
+    disp_context_t disp;
 };
 
 static int
@@ -1305,6 +1309,7 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         return 0;
 
     case WM_UXEN_EXIT:
+        SetEvent(s->stop_event);
         DestroyWindow(hwnd);
         return 0;
 
@@ -1527,19 +1532,25 @@ win_event_loop(PVOID opaque)
     debug_printf("%s: starting\n", __FUNCTION__);
     SetEvent(s->ready_event);
 
+    s->disp = uxenconsole_disp_init(vm_id, s, (invalidate_rect_t)win_update);
+    if (!s->disp)
+        errx(1, "disp_init failed");
+
     /* Runs until DestroyWindow is called. */
-    for (;;) {
-        /* According the MSDN, GetMessage() returns a BOOL
-         * that can assume the values -1, 0, and 1... */
-        int r = (int)GetMessageW(&msg, NULL, 0, 0);
-        if (r > 0) {
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        } else if (r < 0)
-            Werr(1, "GetMessage failed");
-        else
-            break;
+    while (WaitForSingleObject(s->stop_event, 0) != WAIT_OBJECT_0) {
+        ret = MsgWaitForMultipleObjectsEx(
+            1, &s->stop_event, INFINITE, QS_ALLINPUT, MWMO_ALERTABLE);
+        if (ret == WAIT_OBJECT_0 + 1) {
+            while (PeekMessageW(&msg, NULL, 0, 0, PM_REMOVE)) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
     }
+    CloseHandle(s->stop_event);
+
+    uxenconsole_disp_cleanup(s->disp);
+    s->disp = NULL;
 
     debug_printf("%s: exiting\n", __FUNCTION__);
     ExitThread(0);
@@ -1577,6 +1588,9 @@ console_init(struct gui_state *state, char *optstr)
         Werr(1, "CreateEvent failed");
     s->ready_event = CreateEvent(NULL, FALSE, FALSE, NULL);
     if (!s->ready_event)
+        Werr(1, "CreateEvent failed");
+    s->stop_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+    if (!s->stop_event)
         Werr(1, "CreateEvent failed");
 
     s->event_loop_thread = CreateThread(NULL, 0, win_event_loop, s,

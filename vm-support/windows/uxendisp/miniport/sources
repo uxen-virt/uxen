@@ -3,14 +3,11 @@ TARGETTYPE = MINIPORT
 
 !include ../../common/sources.inc
 
-TARGETLIBS=$(DDK_LIB_PATH)\videoprt.lib
-
-!if !defined(DDK_TARGET_OS) || "$(DDK_TARGET_OS)"=="Win2K"
-#
-# The driver is built in the Win2K build environment
-#
-TARGETLIBS=$(TARGETLIBS) $(DDK_LIB_PATH)\ntoskrnl.lib
-!endif
+TARGETLIBS=$(DDK_LIB_PATH)\videoprt.lib \
+           $(DDK_LIB_PATH)\ntoskrnl.lib \
+           $(DDK_LIB_PATH)\Hal.lib \
+           $(UXENVMLIB_LIB) \
+           $(UXENV4VLIB_LIB)
 
 MSC_WARNING_LEVEL = /W3 /WX
 
@@ -21,7 +18,16 @@ NTTARGETFILE1 = COPY
 
 NTTARGETFILE2 = POST
 
-SOURCES = hw.c uxendisp.c uxendisp.rc
+SOURCES = hw.c uxendisp.c dirty_rect.c uxendisp.rc
 
-INCLUDES=..\include
+INCLUDES=..\include; \
+         ..\..\common; \
+         ..\..\..\..\common\include; \
+         ..\..\..\..\common\include\xen-public; \
+         $(UXENV4VLIB_INC);
 
+UXENVMLIB_BUILD_DIR   = \
+  $(OBJECT_ROOT)\..\uxenvmlib\$(WDK_ALTERNATE_MAKEDIR)\..\..\uxenvmlib\$(O)      
+
+UXENVMLIB_LIB         = \
+  $(UXENVMLIB_BUILD_DIR)\uxenvmlib.lib

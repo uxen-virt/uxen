@@ -12,6 +12,7 @@
 #include "miniport.h"
 #include "ntddvdeo.h"
 #include "video.h"
+#include "dirty_rect.h"
 
 #ifndef _M_AMD64
 #include "ioaccess.h"
@@ -45,6 +46,7 @@ typedef struct _DEVICE_EXTENSION {
     void *hwptr_bitmap_ptr;
     PHYSICAL_ADDRESS hwptr_bitmap_addr;
 
+    dr_ctx_t dr_ctx;
 } DEVICE_EXTENSION, *PDEVICE_EXTENSION;
 
 static /* inline */ ULONG

@@ -43,10 +43,10 @@ typedef struct uxenconsole_ops {
                            unsigned int offset,
                            file_handle_t shm_handle);
     void (*invalidate_rect)(void *priv,
-                            unsigned int x,
-                            unsigned int y,
-                            unsigned int w,
-                            unsigned int z);
+                            int x,
+                            int y,
+                            int w,
+                            int h);
     void (*show_cursor)(void *priv,
                         unsigned int show);
     void (*update_cursor)(void *priv,
@@ -108,6 +108,14 @@ int                     uxenconsole_hid_touch_report(hid_context_t context,
                                                      int flags);
 
 #endif /* !QEMU_UXEN */
+
+typedef void *disp_context_t;
+typedef void (*invalidate_rect_t)(void *priv, int x, int y, int w, int h);
+
+disp_context_t          uxenconsole_disp_init(int vm_id,
+                                              void *priv,
+                                              invalidate_rect_t inv_rect);
+void                    uxenconsole_disp_cleanup(disp_context_t context);
 
 #ifdef __cplusplus
 }
