@@ -23,21 +23,21 @@
 char endianness;
 
 
-void cmd_ls(Volume* volume, int argc, const char *argv[]) {
+static void cmd_ls(Volume* volume, int argc, const char *argv[]) {
 	if(argc > 1)
 		hfs_ls(volume, argv[1]);
 	else
 		hfs_ls(volume, "/");
 }
 
-void cmd_find(Volume* volume, int argc, const char *argv[]) {
+static void cmd_find(Volume* volume, int argc, const char *argv[]) {
 	if(argc > 1)
 		hfs_find(volume, argv[1]);
 	else
 		hfs_find(volume, "/");
 }
 
-void cmd_cat(Volume* volume, int argc, const char *argv[]) {
+static void cmd_cat(Volume* volume, int argc, const char *argv[]) {
 	HFSPlusCatalogRecord* record;
 	AbstractFile* stdoutFile;
 
@@ -58,7 +58,7 @@ void cmd_cat(Volume* volume, int argc, const char *argv[]) {
 	free(stdoutFile);
 }
 
-void cmd_extract(Volume* volume, int argc, const char *argv[]) {
+static void cmd_extract(Volume* volume, int argc, const char *argv[]) {
 	HFSPlusCatalogRecord* record;
 	AbstractFile *outFile;
 	
@@ -88,7 +88,7 @@ void cmd_extract(Volume* volume, int argc, const char *argv[]) {
 	free(record);
 }
 
-void cmd_mv(Volume* volume, int argc, const char *argv[]) {
+static void cmd_mv(Volume* volume, int argc, const char *argv[]) {
 	if(argc > 2) {
 		move(argv[1], argv[2], volume);
 	} else {
@@ -96,7 +96,7 @@ void cmd_mv(Volume* volume, int argc, const char *argv[]) {
 	}
 }
 
-void cmd_symlink(Volume* volume, int argc, const char *argv[]) {
+static void cmd_symlink(Volume* volume, int argc, const char *argv[]) {
 	if(argc > 2) {
 		makeSymlink(argv[1], argv[2], volume);
 	} else {
@@ -104,7 +104,7 @@ void cmd_symlink(Volume* volume, int argc, const char *argv[]) {
 	}
 }
 
-void cmd_mkdir(Volume* volume, int argc, const char *argv[]) {
+static void cmd_mkdir(Volume* volume, int argc, const char *argv[]) {
 	if(argc > 1) {
 		newFolder(argv[1], volume, 0, 0, 0);
 	} else {
@@ -112,7 +112,7 @@ void cmd_mkdir(Volume* volume, int argc, const char *argv[]) {
 	}
 }
 
-void cmd_add(Volume* volume, int argc, const char *argv[]) {
+static void cmd_add(Volume* volume, int argc, const char *argv[]) {
 	AbstractFile *inFile;
 	
 	if(argc < 3) {
@@ -129,7 +129,7 @@ void cmd_add(Volume* volume, int argc, const char *argv[]) {
 	}
 }
 
-void cmd_rm(Volume* volume, int argc, const char *argv[]) {
+static void cmd_rm(Volume* volume, int argc, const char *argv[]) {
         int ret = 0;
         char *file = NULL;
         bool ignore_missing_files = FALSE;
@@ -158,7 +158,7 @@ void cmd_rm(Volume* volume, int argc, const char *argv[]) {
         }
 }
 
-void cmd_chmod(Volume* volume, bool recurse, int argc, const char *argv[]) {
+static void cmd_chmod(Volume* volume, bool recurse, int argc, const char *argv[]) {
 	int mode;
 	
 	if(argc > 2) {
@@ -169,7 +169,7 @@ void cmd_chmod(Volume* volume, bool recurse, int argc, const char *argv[]) {
 	}
 }
 
-void cmd_chown(Volume* volume, bool recurse, int argc, const char *argv[]) {
+static void cmd_chown(Volume* volume, bool recurse, int argc, const char *argv[]) {
 	uint32_t user_id;
 	uint32_t group_id;
 	
@@ -182,7 +182,7 @@ void cmd_chown(Volume* volume, bool recurse, int argc, const char *argv[]) {
 	}
 }
 
-void cmd_extractall(Volume* volume, int argc, const char *argv[]) {
+static void cmd_extractall(Volume* volume, int argc, const char *argv[]) {
 	HFSPlusCatalogRecord* record;
 	char cwd[1024];
 	char* name;
@@ -212,7 +212,7 @@ void cmd_extractall(Volume* volume, int argc, const char *argv[]) {
 }
 
 
-void cmd_rmall(Volume* volume, int argc, const char *argv[]) {
+static void cmd_rmall(Volume* volume, int argc, const char *argv[]) {
 	HFSPlusCatalogRecord* record;
 	char* name;
 	char initPath[1024];
@@ -244,7 +244,7 @@ void cmd_rmall(Volume* volume, int argc, const char *argv[]) {
 	free(record);
 }
 
-void cmd_addall(Volume* volume, int argc, const char *argv[]) {   
+static void cmd_addall(Volume* volume, int argc, const char *argv[]) {
 	if(argc < 2) {
 		printf("Not enough arguments");
 		return;
@@ -257,7 +257,7 @@ void cmd_addall(Volume* volume, int argc, const char *argv[]) {
 	}
 }
 
-void cmd_grow(Volume* volume, int argc, const char *argv[]) {
+static void cmd_grow(Volume* volume, int argc, const char *argv[]) {
 	uint64_t newSize;
 
 	if(argc < 2) {
@@ -273,7 +273,7 @@ void cmd_grow(Volume* volume, int argc, const char *argv[]) {
 	printf("grew volume: %" PRId64 "\n", newSize);
 }
 
-void TestByteOrder()
+static void TestByteOrder()
 {
 	short int word = 0x0001;
 	char *byte = (char *) &word;

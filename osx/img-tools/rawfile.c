@@ -298,7 +298,7 @@ static void closeRawFile(io_func* io) {
 	free(io);
 }
 
-int removeExtents(RawFile* rawFile) {
+static int removeExtents(RawFile* rawFile) {
 	uint32_t blocksLeft;
 	HFSPlusForkData* forkData;
 	uint32_t currentBlock;
@@ -412,7 +412,7 @@ int writeExtents(RawFile* rawFile) {
 	return TRUE;
 }
 
-int readExtents(RawFile* rawFile) {
+static int readExtents(RawFile* rawFile) {
 	uint32_t blocksLeft;
 	HFSPlusForkData* forkData;
 	uint32_t currentBlock;

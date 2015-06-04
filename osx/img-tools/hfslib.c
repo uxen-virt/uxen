@@ -14,6 +14,7 @@
 #include "abstractfile.h"
 #include <sys/stat.h>
 #include <inttypes.h>
+#include "hfs/hfslib.h"
 
 #define BUFSIZE 64*1024*1024
 
@@ -487,7 +488,7 @@ int copyAcrossVolumes(Volume* volume1, Volume* volume2, char* path1, char* path2
 	return ret;
 }
 
-void displayFolder(HFSCatalogNodeID folderID, Volume* volume) {
+static void displayFolder(HFSCatalogNodeID folderID, Volume* volume) {
 	CatalogRecordList* list;
 	CatalogRecordList* theList;
 	HFSPlusCatalogFolder* folder;
@@ -530,7 +531,9 @@ void displayFolder(HFSCatalogNodeID folderID, Volume* volume) {
 	releaseCatalogRecordList(theList);
 }
 
-void displayFileLSLine(HFSPlusCatalogFile* file, const char* name) {
+// alternative formatting to displayFileLSLine2
+#if 0
+static void displayFileLSLine(HFSPlusCatalogFile* file, const char* name) {
 	time_t fileTime;
 	struct tm *date;
 	
@@ -547,8 +550,9 @@ void displayFileLSLine(HFSPlusCatalogFile* file, const char* name) {
 	}
 	printf("%s\n", name);
 }
+#endif
 
-void displayFileLSLine2(HFSPlusCatalogFile* file, const char* name) {
+static void displayFileLSLine2(HFSPlusCatalogFile* file, const char* name) {
 	
 	printf("%s ", name);
 	printf("%06o ", file->permissions.fileMode);
@@ -579,7 +583,7 @@ void hfs_ls(Volume* volume, const char* path) {
 	free(record);
 }
 
-void hfs_find2(Volume* volume, const char* path, int depth) {
+static void hfs_find2(Volume* volume, const char* path, int depth) {
 
 
 	CatalogRecordList* list;

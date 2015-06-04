@@ -223,7 +223,7 @@ static void closeFlatFile(io_func* io)
     free(fd);
 }
 
-char *dir_name(const char *fn)
+static char *dir_name(const char *fn)
 {
     const char *c;
     char *ret;

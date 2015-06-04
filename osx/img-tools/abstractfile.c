@@ -65,28 +65,28 @@ static int roundup2(size_t v, size_t *r) {
     return 0;
 }
 
-size_t freadWrapper(AbstractFile* file, void* data, size_t len) {
+static size_t freadWrapper(AbstractFile* file, void* data, size_t len) {
   return fread(data, 1, len, (FILE*) (file->data));
 }
 
-size_t fwriteWrapper(AbstractFile* file, const void* data, size_t len) {
+static size_t fwriteWrapper(AbstractFile* file, const void* data, size_t len) {
   return fwrite(data, 1, len, (FILE*) (file->data));
 }
 
-int fseekWrapper(AbstractFile* file, off_t offset) {
+static int fseekWrapper(AbstractFile* file, off_t offset) {
   return fseeko((FILE*) (file->data), offset, SEEK_SET);
 }
 
-off_t ftellWrapper(AbstractFile* file) {
+static off_t ftellWrapper(AbstractFile* file) {
   return ftello((FILE*) (file->data));
 }
 
-void fcloseWrapper(AbstractFile* file) {
+static void fcloseWrapper(AbstractFile* file) {
   fclose((FILE*) (file->data));
   free(file);
 }
 
-off_t fileGetLength(AbstractFile* file) {
+static off_t fileGetLength(AbstractFile* file) {
 	off_t length;
 	off_t pos;
 
@@ -119,29 +119,29 @@ AbstractFile* createAbstractFileFromFile(FILE* file) {
 	return toReturn;
 }
 
-size_t dummyRead(AbstractFile* file, void* data, size_t len) {
+static size_t dummyRead(AbstractFile* file, void* data, size_t len) {
   return 0;
 }
 
-size_t dummyWrite(AbstractFile* file, const void* data, size_t len) {
+static size_t dummyWrite(AbstractFile* file, const void* data, size_t len) {
   *((off_t*) (file->data)) += len;
   return len;
 }
 
-int dummySeek(AbstractFile* file, off_t offset) {
+static int dummySeek(AbstractFile* file, off_t offset) {
   *((off_t*) (file->data)) = offset;
   return 0;
 }
 
-off_t dummyTell(AbstractFile* file) {
+static off_t dummyTell(AbstractFile* file) {
   return *((off_t*) (file->data));
 }
 
-void dummyClose(AbstractFile* file) {
+static void dummyClose(AbstractFile* file) {
   free(file);
 }
 
-AbstractFile* createAbstractFileFromDummy() {
+AbstractFile* createAbstractFileFromDummy(void) {
 	AbstractFile* toReturn;
 	MALLOC_CHK_ABORT(toReturn, sizeof(AbstractFile));
 	toReturn->data = NULL;
@@ -155,7 +155,7 @@ AbstractFile* createAbstractFileFromDummy() {
 	return toReturn;
 }
 
-size_t memRead(AbstractFile* file, void* data, size_t len) {
+static size_t memRead(AbstractFile* file, void* data, size_t len) {
   MemWrapperInfo* info = (MemWrapperInfo*) (file->data); 
   size_t req_buf_size = info->offset + len;
   if (req_buf_size < len) {
@@ -170,7 +170,7 @@ size_t memRead(AbstractFile* file, void* data, size_t len) {
   return len;
 }
 
-size_t memWrite(AbstractFile* file, const void* data, size_t len) {
+static size_t memWrite(AbstractFile* file, const void* data, size_t len) {
   MemWrapperInfo* info = (MemWrapperInfo*) (file->data);
   size_t req_buf_size = info->offset + len;
   if (req_buf_size < len) {
@@ -191,23 +191,23 @@ size_t memWrite(AbstractFile* file, const void* data, size_t len) {
   return len;
 }
 
-int memSeek(AbstractFile* file, off_t offset) {
+static int memSeek(AbstractFile* file, off_t offset) {
   MemWrapperInfo* info = (MemWrapperInfo*) (file->data);
   info->offset = (size_t)offset;
   return 0;
 }
 
-off_t memTell(AbstractFile* file) {
+static off_t memTell(AbstractFile* file) {
   MemWrapperInfo* info = (MemWrapperInfo*) (file->data);
   return (off_t)info->offset;
 }
 
-off_t memGetLength(AbstractFile* file) {
+static off_t memGetLength(AbstractFile* file) {
   MemWrapperInfo* info = (MemWrapperInfo*) (file->data);
   return info->bufferSize;
 }
 
-void memClose(AbstractFile* file) {
+static void memClose(AbstractFile* file) {
   free(file->data);
   free(file);
 }
@@ -254,7 +254,7 @@ void abstractFilePrint(AbstractFile* file, const char* format, ...) {
 	ASSERT(file->write(file, buffer, length) == length, "fwrite");
 }
 
-int absFileRead(io_func* io, off_t location, size_t size, void *buffer) {
+static int absFileRead(io_func* io, off_t location, size_t size, void *buffer) {
 	AbstractFile* file;
 	file = (AbstractFile*) io->data;
 	file->seek(file, location);
@@ -265,7 +265,7 @@ int absFileRead(io_func* io, off_t location, size_t size, void *buffer) {
 	}
 }
 
-int absFileWrite(io_func* io, off_t location, size_t size, void *buffer) {
+static int absFileWrite(io_func* io, off_t location, size_t size, void *buffer) {
 	AbstractFile* file;
 	file = (AbstractFile*) io->data;
 	file->seek(file, location);
@@ -276,7 +276,7 @@ int absFileWrite(io_func* io, off_t location, size_t size, void *buffer) {
 	}
 }
 
-void closeAbsFile(io_func* io) {
+static void closeAbsFile(io_func* io) {
 	AbstractFile* file;
 	file = (AbstractFile*) io->data;
 	file->close(file);
@@ -296,7 +296,7 @@ io_func* IOFuncFromAbstractFile(AbstractFile* file) {
 	return io;
 }
 
-size_t memFileRead(AbstractFile* file, void* data, size_t len) {
+static size_t memFileRead(AbstractFile* file, void* data, size_t len) {
   MemFileWrapperInfo* info = (MemFileWrapperInfo*) (file->data); 
   memcpy(data, (void*)((uint8_t*)(*(info->buffer)) + (uint32_t)info->offset), len);
   info->offset += (size_t)len;
@@ -307,7 +307,7 @@ size_t memFileRead(AbstractFile* file, void* data, size_t len) {
   return len;
 }
 
-size_t memFileWrite(AbstractFile* file, const void* data, size_t len) {
+static size_t memFileWrite(AbstractFile* file, const void* data, size_t len) {
   MemFileWrapperInfo* info = (MemFileWrapperInfo*) (file->data);
   size_t req_buf_size = info->offset + len;
   if (req_buf_size < len) {
@@ -332,23 +332,23 @@ size_t memFileWrite(AbstractFile* file, const void* data, size_t len) {
   return len;
 }
 
-int memFileSeek(AbstractFile* file, off_t offset) {
+static int memFileSeek(AbstractFile* file, off_t offset) {
   MemFileWrapperInfo* info = (MemFileWrapperInfo*) (file->data);
   info->offset = (size_t)offset;
   return 0;
 }
 
-off_t memFileTell(AbstractFile* file) {
+static off_t memFileTell(AbstractFile* file) {
   MemFileWrapperInfo* info = (MemFileWrapperInfo*) (file->data);
   return (off_t)info->offset;
 }
 
-off_t memFileGetLength(AbstractFile* file) {
+static off_t memFileGetLength(AbstractFile* file) {
   MemFileWrapperInfo* info = (MemFileWrapperInfo*) (file->data);
   return *(info->bufferSize);
 }
 
-void memFileClose(AbstractFile* file) {
+static void memFileClose(AbstractFile* file) {
   free(file->data);
   free(file);
 }

@@ -1108,7 +1108,7 @@ HFSCatalogNodeID newFile(const char* pathName, Volume* volume) {
   return newFileID;
 }
 
-int chmodFileByRecord(HFSPlusCatalogRecord* record, int mode, bool recurse, Volume* volume) {
+static int chmodFileByRecord(HFSPlusCatalogRecord* record, int mode, bool recurse, Volume* volume) {
   CatalogRecordList* list;
   CatalogRecordList* theList;
 
@@ -1151,7 +1151,7 @@ int chmodFile(const char* pathName, int mode, bool recurse, Volume* volume) {
   return rv;
 }
 
-int chownFileByRecord(HFSPlusCatalogRecord* record, uint32_t owner, uint32_t group, bool recurse, Volume* volume) {
+static int chownFileByRecord(HFSPlusCatalogRecord* record, uint32_t owner, uint32_t group, bool recurse, Volume* volume) {
   CatalogRecordList* list;
   CatalogRecordList* theList;
 
