@@ -7,11 +7,17 @@
 #ifndef _VM_SAVE_H_
 #define _VM_SAVE_H_
 
-struct control_desc;
+#ifdef _WIN32
+#define SAVE_CUCKOO_ENABLED
+#endif
 
 enum vm_save_compress_mode {
     VM_SAVE_COMPRESS_NONE = 1,
     VM_SAVE_COMPRESS_LZ4,
+#ifdef SAVE_CUCKOO_ENABLED
+    VM_SAVE_COMPRESS_CUCKOO,
+    VM_SAVE_COMPRESS_CUCKOO_SIMPLE,
+#endif
 };
 
 #define _m(v) (1 << (v))
@@ -22,6 +28,7 @@ struct vm_save_info {
     int awaiting_suspend;
     int save_requested;
     int save_abort;
+    ioh_event save_abort_event;
 
     char *filename;
     struct filebuf *f;
@@ -46,10 +53,12 @@ struct vm_save_info {
 extern struct vm_save_info vm_save_info;
 
 void vm_save(void);
+void vm_save_abort(void);
 struct xc_dominfo;
 int vm_process_suspend(struct xc_dominfo *info);
 void vm_save_execute(void);
 void vm_save_finalize(void);
+char *vm_save_file_name(const unsigned char *uuid);
 int vm_save_read_dm_offset(void *dst, off_t offset, size_t size);
 
 int vm_resume(void);

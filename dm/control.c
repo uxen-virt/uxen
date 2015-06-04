@@ -146,6 +146,7 @@ control_send_status(const char *key, const char *val, ...)
     return ret;
 }
 
+#ifdef SAVE_CUCKOO_ENABLED
 HANDLE control_dup_handle(HANDLE handle)
 {
     if (!control.chr) {
@@ -155,6 +156,7 @@ HANDLE control_dup_handle(HANDLE handle)
     }
     return qemu_chr_dup_handle(control.chr, handle);
 }
+#endif
 
 __attribute__ ((__format__ (printf, 6, 0)))
 void control_err_vprintf(const char *function, int line,
@@ -325,6 +327,12 @@ control_command_save(void *opaque, const char *id, const char *opt,
     if (c) {
         if (!strcmp(c, "lz4"))
             vm_save_info.compress_mode = VM_SAVE_COMPRESS_LZ4;
+#ifdef SAVE_CUCKOO_ENABLED
+        else if (!strcmp(c, "cuckoo"))
+          vm_save_info.compress_mode = VM_SAVE_COMPRESS_CUCKOO;
+        else if (!strcmp(c, "cuckoo-simple"))
+          vm_save_info.compress_mode = VM_SAVE_COMPRESS_CUCKOO_SIMPLE;
+#endif
     }
 
     vm_save_info.single_page = dict_get_boolean(d, "single-page");
@@ -368,7 +376,7 @@ control_command_resume(void *opaque, const char *id, const char *opt,
     vm_save_info.resume_cd = cd;
     vm_save_info.resume_id = id ? strdup(id) : NULL;
 
-    vm_save_info.save_abort = 1;
+    vm_save_abort();
 
     vm_set_run_mode(RUNNING_VM);
 

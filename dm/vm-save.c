@@ -37,6 +37,11 @@
 #include "hw/uxen_platform.h"
 #include "mapcache.h"
 
+#ifdef SAVE_CUCKOO_ENABLED
+#include "cuckoo.h"
+#include "cuckoo-uxen.h"
+#endif
+
 #include <lz4.h>
 #include <lz4hc.h>
 
@@ -99,6 +104,7 @@
 #define XC_SAVE_ID_PAGE_OFFSETS       -20
 #define XC_SAVE_ID_ZERO_BITMAP        -21
 #define XC_SAVE_ID_FINGERPRINTS       -22
+#define XC_SAVE_ID_CUCKOO_DATA        -23
 
 struct vm_save_info vm_save_info = { };
 
@@ -216,6 +222,12 @@ struct PACKED xc_save_index {
     int32_t marker;             /* marker field last such that the
                                  * regular end marker also doubles as
                                  * an index end marker */
+};
+
+struct xc_save_cuckoo_data {
+    int32_t marker;
+    int32_t simple_mode;
+    uint8_t data[];
 };
 
 #define MAX_BATCH_SIZE 1023
@@ -501,6 +513,23 @@ uxenvm_compress_lz4(const void *src, void *dst, int sz)
         LZ4_compress(src, dst, sz);
 }
 
+static inline int
+compression_is_cuckoo(void)
+{
+#ifdef SAVE_CUCKOO_ENABLED
+    return (vm_save_info.compress_mode == VM_SAVE_COMPRESS_CUCKOO ||
+            vm_save_info.compress_mode == VM_SAVE_COMPRESS_CUCKOO_SIMPLE);
+#else
+    return 0;
+#endif
+}
+
+#ifdef SAVE_CUCKOO_ENABLED
+static int
+save_cuckoo_pages(struct filebuf *f, struct page_fingerprint *hashes,
+                  int n, int simple_mode, char **err_msg);
+#endif
+
 static int
 uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
 {
@@ -527,6 +556,9 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
     int rezero_nr = 0;
     xen_pfn_t *rezero_pfns = NULL;
     struct xc_save_vm_page_offsets s_vm_page_offsets;
+#ifdef SAVE_CUCKOO_ENABLED
+    struct xc_save_cuckoo_data xc_cuckoo;
+#endif
     struct xc_save_index page_offsets_index = { 0, XC_SAVE_ID_PAGE_OFFSETS };
     struct page_fingerprint *hashes = NULL;
     int hashes_nr = 0;
@@ -535,7 +567,7 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
     int free_mem;
     int ret;
 
-    free_mem = vm_save_info.free_mem;
+    free_mem = (vm_save_info.free_mem && !compression_is_cuckoo());
 
     p2m_size = xc_domain_maximum_gpfn(xc_handle, vm_id);
     if (p2m_size < 0) {
@@ -791,7 +823,8 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
                                 *(cs16_t *)&compress_buf[compress_size] = cs1;
                                 compress_size += sizeof(cs16_t) + cs1;
                             }
-                        } else {
+                        } else if (vm_save_info.compress_mode ==
+                                   VM_SAVE_COMPRESS_LZ4) {
                             memcpy(&compress_mem[m_run << PAGE_SHIFT],
                                    &mem_buffer[gpfn_info_list[run].offset],
                                    b_run << PAGE_SHIFT);
@@ -841,6 +874,20 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
     }
 
     if (!vm_save_info.save_abort && !vm_quit_interrupt) {
+
+#ifdef SAVE_CUCKOO_ENABLED
+        if (compression_is_cuckoo()) {
+            xc_cuckoo.marker = XC_SAVE_ID_CUCKOO_DATA;
+            xc_cuckoo.simple_mode = (vm_save_info.compress_mode ==
+                                    VM_SAVE_COMPRESS_CUCKOO_SIMPLE);
+            filebuf_write(f, &xc_cuckoo, sizeof(xc_cuckoo));
+            ret = save_cuckoo_pages(f, hashes, hashes_nr,
+                                    xc_cuckoo.simple_mode, err_msg);
+            if (ret)
+                goto out;
+        }
+#endif
+
         s_zero_bitmap.marker = XC_SAVE_ID_ZERO_BITMAP;
         s_zero_bitmap.zero_bitmap_size = zero_bitmap_size;
         zero_bitmap_compressed = malloc(LZ4_compressBound((zero_bitmap_size)));
@@ -863,22 +910,26 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
         filebuf_write(f, zero_bitmap_compressed ? : zero_bitmap,
                       s_zero_bitmap.size - sizeof(s_zero_bitmap));
 
-        s_vm_page_offsets.marker = XC_SAVE_ID_PAGE_OFFSETS;
-        s_vm_page_offsets.pfn_off_nr = poi_pfn_index(&poi, poi.max_gpfn);
-        page_offsets_index.offset = filebuf_tell(f);
-        APRINTF("page offset index: pos %"PRId64" size %"PRIdSIZE" nr off %d",
-                page_offsets_index.offset, s_vm_page_offsets.pfn_off_nr *
-                sizeof(s_vm_page_offsets.pfn_off[0]),
-                s_vm_page_offsets.pfn_off_nr);
-        BUILD_BUG_ON(sizeof(poi.pfn_off[0]) !=
-                     sizeof(s_vm_page_offsets.pfn_off[0]));
-        s_vm_page_offsets.size = sizeof(s_vm_page_offsets) +
-            s_vm_page_offsets.pfn_off_nr * sizeof(s_vm_page_offsets.pfn_off[0]);
-        filebuf_write(f, &s_vm_page_offsets, sizeof(s_vm_page_offsets));
-        filebuf_write(f, poi.pfn_off, s_vm_page_offsets.pfn_off_nr *
-                      sizeof(s_vm_page_offsets.pfn_off[0]));
+        if (!compression_is_cuckoo()) {
+            s_vm_page_offsets.marker = XC_SAVE_ID_PAGE_OFFSETS;
+            s_vm_page_offsets.pfn_off_nr = poi_pfn_index(&poi, poi.max_gpfn);
+            page_offsets_index.offset = filebuf_tell(f);
+            APRINTF("page offset index: pos %"PRId64" size %"PRIdSIZE" "
+                    "nr off %d", page_offsets_index.offset,
+                    s_vm_page_offsets.pfn_off_nr *
+                    sizeof(s_vm_page_offsets.pfn_off[0]),
+                    s_vm_page_offsets.pfn_off_nr);
+            BUILD_BUG_ON(sizeof(poi.pfn_off[0]) !=
+                         sizeof(s_vm_page_offsets.pfn_off[0]));
+            s_vm_page_offsets.size = sizeof(s_vm_page_offsets) +
+                s_vm_page_offsets.pfn_off_nr *
+                sizeof(s_vm_page_offsets.pfn_off[0]);
+            filebuf_write(f, &s_vm_page_offsets, sizeof(s_vm_page_offsets));
+            filebuf_write(f, poi.pfn_off, s_vm_page_offsets.pfn_off_nr *
+                          sizeof(s_vm_page_offsets.pfn_off[0]));
+        }
 
-        if (vm_save_info.fingerprint) {
+        if (vm_save_info.fingerprint && !compression_is_cuckoo()) {
             s_vm_fingerprints.marker = XC_SAVE_ID_FINGERPRINTS;
             s_vm_fingerprints.hashes_nr = hashes_nr;
             fingerprints_index.offset = filebuf_tell(f);
@@ -1447,6 +1498,13 @@ apply_immutable_memory(struct immutable_range *r, int nranges)
     return 0;
 }
 
+void vm_save_abort(void)
+{
+    vm_save_info.save_abort = 1;
+    if (ioh_event_valid(&vm_save_info.save_abort_event))
+        ioh_event_set(&vm_save_info.save_abort_event);
+}
+
 #define uxenvm_load_read_struct(f, s, _marker, ret, err_msg, _out) do {	\
         (ret) = uxenvm_read_struct((f), &(s));                          \
         if ((ret) != uxenvm_read_struct_size(&(s))) {                   \
@@ -1455,6 +1513,136 @@ apply_immutable_memory(struct immutable_range *r, int nranges)
 	}								\
 	(s).marker = (_marker);						\
     } while(0)
+
+#ifdef SAVE_CUCKOO_ENABLED
+static int
+map_template_fingerprints(struct filebuf *t,
+                          struct page_fingerprint **tfps,
+                          int *n, char **err_msg)
+{
+    uint64_t fingerprints_pos = 0;
+    struct xc_save_vm_fingerprints s_vm_fingerprints = { };
+    int32_t marker = 0;
+    size_t sz;
+    off_t pos;
+    int ret = 0;
+
+    filebuf_seek(t, 0, FILEBUF_SEEK_END);
+    for (;;) {
+        struct xc_save_index index;
+
+        pos = filebuf_seek(t, -(off_t)sizeof(index), FILEBUF_SEEK_CUR);
+        uxenvm_load_read(t, &index, sizeof(index), ret, err_msg, out);
+        if (!index.marker) {
+            break;
+        } else if (index.marker == XC_SAVE_ID_FINGERPRINTS) {
+            fingerprints_pos = index.offset;
+            break;
+        }
+        filebuf_seek(t, pos, FILEBUF_SEEK_SET);
+    }
+
+    if (!fingerprints_pos) {
+        ret = -ENOENT;
+        goto out;
+    }
+
+    filebuf_seek(t, fingerprints_pos, FILEBUF_SEEK_SET);
+    uxenvm_load_read(t, &s_vm_fingerprints.marker,
+                     sizeof(s_vm_fingerprints.marker), ret, err_msg,
+                     out);
+    if (s_vm_fingerprints.marker != XC_SAVE_ID_FINGERPRINTS) {
+        asprintf(err_msg, "no fingerprints section at offset %"PRId64"\n",
+                 fingerprints_pos);
+        ret = -EINVAL;
+        goto out;
+    }
+    uxenvm_load_read_struct(t, s_vm_fingerprints, marker, ret,
+                            err_msg, out);
+
+    APRINTF("found %u fingerprints at offset %"PRId64,
+            s_vm_fingerprints.hashes_nr, fingerprints_pos);
+    sz = s_vm_fingerprints.hashes_nr * sizeof(struct page_fingerprint);
+    *n = s_vm_fingerprints.hashes_nr;
+    *tfps = filebuf_mmap(t, filebuf_tell(t), sz);
+    if (!*tfps) {
+        ret = -ENOMEM;
+        goto out;
+    }
+    ret = 0;
+
+out:
+    return ret;
+}
+
+static int
+save_cuckoo_pages(struct filebuf *f, struct page_fingerprint *hashes,
+                  int n, int simple_mode, char **err_msg)
+{
+    struct cuckoo_context *cuckoo_context = NULL;
+    struct cuckoo_callbacks ccb;
+    void *opaque;
+    struct page_fingerprint *tfps = NULL;
+    int tn = 0;
+    struct filebuf *t = NULL;
+    int ret;
+
+    if (vm_template_file) {
+        t = filebuf_open(vm_template_file, "rb");
+        if (!t) {
+            asprintf(err_msg, "filebuf_open(vm_template_file = %s) failed",
+                     vm_template_file);
+            ret = -errno;
+            goto out;
+        }
+
+        ret = map_template_fingerprints(t, &tfps, &tn, err_msg);
+        if (ret)
+            goto out;
+    }
+
+    ret = cuckoo_uxen_init(&cuckoo_context, &ccb, &opaque,
+                           vm_save_info.save_abort_event);
+    if (ret)
+        goto out;
+
+    if (simple_mode)
+        ret = cuckoo_compress_vm_simple(f, tn, tfps, n, hashes, &ccb, opaque);
+    else
+        ret = cuckoo_compress_vm(cuckoo_context, vm_uuid, f, tn, tfps,
+                                 n, hashes, &ccb, opaque);
+
+out:
+    if (cuckoo_context)
+        cuckoo_uxen_close(cuckoo_context, opaque);
+    if (t)
+        filebuf_close(t);
+
+    return ret < 0 ? ret : 0;
+}
+
+static int
+load_cuckoo_pages(struct filebuf *f, int reusing_vm, int simple_mode)
+{
+    struct cuckoo_context *cuckoo_context;
+    struct cuckoo_callbacks ccb;
+    void *opaque;
+    int ret;
+
+    ret = cuckoo_uxen_init(&cuckoo_context, &ccb, &opaque, NULL);
+    if (ret)
+        return ret;
+
+    if (simple_mode)
+        ret = cuckoo_reconstruct_vm_simple(f, reusing_vm, &ccb, opaque);
+    else
+        ret = cuckoo_reconstruct_vm(cuckoo_context, vm_uuid, f, reusing_vm,
+                                    &ccb, opaque);
+    cuckoo_uxen_close(cuckoo_context, opaque);
+
+    return ret < 0 ? ret : 0;
+}
+#endif /* SAVE_CUCKOO_ENABLED */
 
 static uint8_t *dm_state_load_buf = NULL;
 static int dm_state_load_size = 0;
@@ -1497,6 +1685,9 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
     struct xc_save_vm_page_offsets s_vm_page_offsets = { };
     struct xc_save_zero_bitmap s_zero_bitmap = { };
     struct xc_save_vm_fingerprints s_vm_fingerprints = { };
+#ifdef SAVE_CUCKOO_ENABLED
+    struct xc_save_cuckoo_data s_cuckoo = { };
+#endif
     struct immutable_range *immutable_ranges = NULL;
     uint8_t *hvm_buf = NULL;
     uint8_t *zero_bitmap = NULL, *zero_bitmap_compressed = NULL;
@@ -1617,6 +1808,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
 	    memcpy(vm_template_uuid, s_vm_template_uuid.uuid,
                    sizeof(vm_template_uuid));
 	    vm_has_template_uuid = 1;
+
 	    break;
         case XC_SAVE_ID_HVM_INTROSPEC:
             uxenvm_load_read_struct(f, s_hvm_introspec, marker, ret, err_msg,
@@ -1641,6 +1833,15 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
             uxenvm_load_read_struct(f, s_mapcache_params, marker, ret, err_msg,
                                     out);
             break;
+#ifdef SAVE_CUCKOO_ENABLED
+        case XC_SAVE_ID_CUCKOO_DATA:
+            uxenvm_load_read_struct(f, s_cuckoo, marker, ret, err_msg, out);
+            uxenvm_check_restore_clone(restore_mode);
+            ret = load_cuckoo_pages(f, 0, s_cuckoo.simple_mode);
+            if (ret)
+                goto out;
+            break;
+#endif
         case XC_SAVE_ID_VM_TEMPLATE_FILE:
             uxenvm_load_read_struct(f, s_vm_template_file, marker, ret,
                                     err_msg, out);
@@ -2061,7 +2262,9 @@ vm_save(void)
     /* XXX init debug option */
     if (strstr(uxen_opt_debug, ",compbatch,"))
         vm_save_info.single_page = 0;
-    vm_save_info.fingerprint = (!vm_template_file);
+    vm_save_info.fingerprint = (!vm_template_file || compression_is_cuckoo());
+
+    ioh_event_init(&vm_save_info.save_abort_event);
 
     vm_save_info.save_abort = 0;
 
@@ -2091,6 +2294,12 @@ mc_savevm(Monitor *mon, const dict args)
     if (c) {
         if (!strcmp(c, "lz4"))
             vm_save_info.compress_mode = VM_SAVE_COMPRESS_LZ4;
+#ifdef SAVE_CUCKOO_ENABLED
+        else if (!strcmp(c, "cuckoo"))
+          vm_save_info.compress_mode = VM_SAVE_COMPRESS_CUCKOO;
+        else if (!strcmp(c, "cuckoo-simple"))
+          vm_save_info.compress_mode = VM_SAVE_COMPRESS_CUCKOO_SIMPLE;
+#endif
     }
 
     vm_save_info.single_page = dict_get_boolean_default(args, "single-page", 1);
@@ -2115,7 +2324,7 @@ mc_resumevm(Monitor *mon, const dict args)
 int
 vm_process_suspend(xc_dominfo_t *info)
 {
- 
+
     if (!info->shutdown || info->shutdown_reason != SHUTDOWN_suspend)
         return 0;
 
@@ -2149,6 +2358,7 @@ vm_save_execute(void)
     char *err_msg = NULL;
     uint8_t *dm_state_buf = NULL;
     int dm_state_size;
+    struct cuckoo_page_fingerprint *hashes = NULL;
     int ret;
 
     if (!vm_save_info.filename)
@@ -2183,7 +2393,22 @@ vm_save_execute(void)
 	goto out;
     }
 
-    ret = uxenvm_savevm_write_pages(f, &err_msg);
+    while (!vm_save_info.save_abort && !vm_quit_interrupt) {
+        off_t o = filebuf_tell(f);
+        ret = uxenvm_savevm_write_pages(f, &err_msg);
+        if (ret && compression_is_cuckoo()) {
+            if (ret == -ENOSPC)
+                vm_save_info.compress_mode = VM_SAVE_COMPRESS_LZ4;
+            else if (ret == -EINTR) {
+                ret = 0;
+                break;
+            } else if (ret != -EAGAIN)
+                break;
+            filebuf_seek(f, o, FILEBUF_SEEK_SET);
+        } else
+            break;
+    }
+
     if (ret) {
         if (!err_msg)
             asprintf(&err_msg, "uxenvm_savevm_write_pages() failed");
@@ -2204,12 +2429,15 @@ vm_save_execute(void)
 
     if (vm_save_info.command_cd)
 	control_command_save_finish(ret, err_msg);
+    free(hashes);
     if (dm_state_buf)
         free(dm_state_buf);
     if (err_msg)
 	free(err_msg);
     free(vm_save_info.filename);
     vm_save_info.filename = NULL;
+    ioh_event_set(&vm_save_info.save_abort_event);
+    ioh_event_close(&vm_save_info.save_abort_event);
 }
 
 void
@@ -2235,6 +2463,9 @@ vm_restore_memory(void)
     int do_lazy_load = 0;
     int32_t marker;
     struct xc_save_generic s_generic;
+#ifdef SAVE_CUCKOO_ENABLED
+    struct xc_save_cuckoo_data s_cuckoo;
+#endif
     char *err_msg = NULL;
 #ifdef VERBOSE
     int count = 0;
@@ -2279,6 +2510,12 @@ vm_restore_memory(void)
                 goto out;
             }
             break;
+#ifdef SAVE_CUCKOO_ENABLED
+        case XC_SAVE_ID_CUCKOO_DATA:
+            uxenvm_load_read_struct(f, s_cuckoo, marker, ret, &err_msg, out);
+            ret = load_cuckoo_pages(f, 1, s_cuckoo.simple_mode);
+            goto out;
+#endif
         default:
             ret = uxenvm_load_batch(f, marker, pfn_type, pfn_err, pfn_info,
                                     &dc, do_lazy_load, populate_compressed,
