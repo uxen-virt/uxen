@@ -280,7 +280,6 @@ control_command_open_log(void *opaque, const char *id, const char *opt,
     int new_fd;
     FILE* new_f;
 
-    fflush(stderr);
     logfile = dict_get_string(d, "logfile");
 
     if (!strcmp(logfile, ".")) {
@@ -318,6 +317,7 @@ control_command_open_log(void *opaque, const char *id, const char *opt,
                      * deliberately leak its old value. */
                     intptr_t old_h = _get_osfhandle(_fileno(stderr));
                     setvbuf(new_f, NULL, _IOFBF, 0x4000);
+                    fflush(stderr);
                     *stderr = *new_f;
                     __sync_synchronize();
                     if (old_h != -1LL) {
