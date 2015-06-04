@@ -79,8 +79,13 @@ static inline void dubtreeSetFileSize(DUBTREE_FILE_HANDLE f, size_t sz)
     SetFilePointer(f, (DWORD)sz, 0, FILE_BEGIN);
     SetEndOfFile(f);
 #else
-    if (ftruncate(f, sz)) {
-        perror("truncate");
+    off_t use_sz = (off_t)sz;
+    if (sz != (size_t)use_sz) {
+        perror("dubtreeSetFileSize bad offset");
+        exit(-1);
+    }
+    if (ftruncate(f, use_sz)) {
+        perror("dubtreeSetFileSize truncate");
         exit(-1);
     }
 #endif
@@ -123,11 +128,16 @@ int dubtreeReadFileAt(DUBTREE_FILE_HANDLE f, void *buf, size_t sz,
     }
     return (int) got;
 #else
-    int r;
+    off_t use_offset = (off_t)offset;
+    if (offset != (uint64_t)use_offset) {
+        perror("dubtreeReadFileAt bad offset");
+        return -1;
+    }
+    ssize_t r;
     do {
-        r = pread(f, buf, sz, offset);
+        r = pread(f, buf, sz, use_offset);
     } while (r < 0 && errno == EINTR);
-    return r;
+    return (int)r;
 #endif
 }
 
@@ -160,11 +170,16 @@ dubtreeWriteFileAt(DUBTREE_FILE_HANDLE f, const void *buf, size_t sz,
     }
     return (int) wrote;
 #else
-    int r;
+    off_t use_offset = (off_t)offset;
+    if (offset != (uint64_t)use_offset) {
+        perror("dubtreeWriteFileAt bad offset");
+        return -1;
+    }
+    ssize_t r;
     do {
-        r = pwrite(f, buf, sz, offset);
+        r = pwrite(f, buf, sz, use_offset);
     } while (r < 0 && errno == EINTR);
-    return (r == sz) ? r : -1;
+    return (r == (ssize_t)sz) ? (int)r : -1;
 #endif
 }
 
