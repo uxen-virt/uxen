@@ -149,7 +149,7 @@ patch_sectors(BlockDriverState *bs, uint64_t lba, void *data,
     if (!buf)
         return -1;
 
-    memcpy(buf + offset, data, len);
+    memcpy((char *)buf + offset, data, len);
 
     rc = bdrv_write(bs, lba, buf, nsects);
     if (rc < 0) {
