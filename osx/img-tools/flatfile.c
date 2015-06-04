@@ -31,21 +31,11 @@ typedef struct FileData {
     ShallowMap sm;
 } FileData;
 
-#include <sys/time.h>
-static inline double rtc(void)
-{
-    struct timeval time;
-    gettimeofday(&time,0);
-    return ( (double)(time.tv_sec)+(double)(time.tv_usec)/1e6f );
-}
-double total = 0.0;
-
 static void update_cache(FileData *fd, uint64_t aligned_offset, const void *buffer, int dirty)
 {
     uint64_t old;
     void *old_sector = NULL;
     cacheStore(&fd->cache, aligned_offset / BLOCK_SIZE, buffer, dirty, &old, &old_sector);
-    double t0 = rtc();
 
     if (old_sector) {
 
@@ -56,7 +46,6 @@ static void update_cache(FileData *fd, uint64_t aligned_offset, const void *buff
         assert(r >= 0);
         free(old_sector);
     }
-    total += rtc() - t0;
 }
 
 static int hits = 0;
@@ -72,11 +61,9 @@ static inline int aligned_read(FileData *fd, off_t aligned_offset, off_t
 
         if (!cached) {
             ++misses;
-            double t0 = rtc();
             int r = bdrv_read(fd->bs, aligned_offset >> BDRV_SECTOR_BITS, buffer,
                     BLOCK_SIZE >> BDRV_SECTOR_BITS);
             assert(r>=0);
-            total += rtc() - t0;
 
             update_cache(fd, aligned_offset, buffer, 0);
 
