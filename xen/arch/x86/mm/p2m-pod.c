@@ -1575,6 +1575,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                           p2m_populate_on_demand,
                           op2m->default_access);
             atomic_inc(&d->clone_of->tmpl_shared_pages);
+            atomic_inc(&d->clone_of->pod_pages);
             p2m_pod_stat_update(d->clone_of);
         }
         if (p2m_mfn_is_non_compressible(mfn_x(smfn)) ||
@@ -1754,6 +1755,11 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                                 P2M_MFN_MARK_COMPRESS);
                     set_p2m_entry(op2m, gfn_aligned, omfn, 0,
                                   p2m_populate_on_demand, op2m->default_access);
+                    if (!p2m_is_pod(t)) {
+                        atomic_inc(&d->clone_of->tmpl_shared_pages);
+                        atomic_inc(&d->clone_of->pod_pages);
+                        p2m_pod_stat_update(d->clone_of);
+                    }
                 }
                 p2m_unlock(op2m);
             }
