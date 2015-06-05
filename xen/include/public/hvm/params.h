@@ -182,20 +182,12 @@
 /* dynamically populate l1 pages */
 #define HVM_PARAM_CLONE_L1_dynamic       0x4
 
-/* time in ns at start of a clone, during which to compress a template
- * page when the clone write accesses the page */
-#define HVM_PARAM_CLONE_PAGE_WRITE_COMPRESS_TIME 33
-
 /* control decompressed pages from read accesses */
 #define HVM_PARAM_CLONE_DECOMPRESSED 34
 /* keep pages mapped read-only */
 #define HVM_PARAM_CLONE_DECOMPRESSED_read_only 0x1
 /* share decompressed pages */
 #define HVM_PARAM_CLONE_DECOMPRESSED_shared    0x2
-
-/* time in ns at start of a clone, during which to mark a template
- * page to be compressed when the clone write accesses the page */
-#define HVM_PARAM_CLONE_PAGE_WRITE_MARK_COMPRESS_TIME 35
 
 /* only compress a page on write, if the page is not shared */
 #define HVM_PARAM_CLONE_PAGE_WRITE_COMPRESS_UNSHARED_ONLY 36

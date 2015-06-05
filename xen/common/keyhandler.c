@@ -322,11 +322,10 @@ static void dump_domains(unsigned char key)
                        atomic_read(&d->clone.l1_pod_pages));
             if (is_template_domain(d) &&
                 atomic_read(&d->template.compressed_pdata))
-                printk("    comp_pages=%d comp_pdata=%d non_comp=%d"
+                printk("    comp_pages=%d comp_pdata=%d"
                        " decomp_shared=%d decomp_perm=%d\n",
                        atomic_read(&d->template.compressed_pages),
                        atomic_read(&d->template.compressed_pdata),
-                       atomic_read(&d->template.non_compressible_pages),
                        atomic_read(&d->template.decompressed_shared),
                        atomic_read(&d->template.decompressed_permanent));
         }

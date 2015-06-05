@@ -1105,7 +1105,7 @@ p2m_pod_stat_update(struct domain *d)
             uxen_info->ui_printf(
                 NULL,
                 "p2m_pod_stat %ld %ld %d %c %"PRId64" %"PRId64
-                " %d %d %d %d %d %d\n",
+                " %d %d %d %d %d\n",
                 (u64)((d->p2m_stat_last - d->start_time) / 1000000UL),
                 (u64)(d->p2m_stat_last / 1000000UL),
                 d->domain_id, id,
@@ -1114,7 +1114,6 @@ p2m_pod_stat_update(struct domain *d)
                 atomic_read(&d->zero_shared_pages),
                 atomic_read(&d->template.compressed_pages),
                 atomic_read(&d->template.compressed_pdata),
-                atomic_read(&d->template.non_compressible_pages),
                 atomic_read(&d->template.decompressed_shared)
                 );
     }
@@ -1241,6 +1240,7 @@ p2m_pod_add_compressed_page(struct p2m_domain *p2m, unsigned long gpfn,
                      ~((1 << PAGE_STORE_DATA_ALIGN) - 1)));
 }
 
+#ifndef NDEBUG
 static int
 p2m_pod_compress_page(struct p2m_domain *p2m, unsigned long gfn_aligned,
                       mfn_t mfn, void *target)
@@ -1271,9 +1271,7 @@ p2m_pod_compress_page(struct p2m_domain *p2m, unsigned long gfn_aligned,
 
     /* Check page is not compressed/replaced yet */
     checkmfn = p2m->get_entry(p2m, gfn_aligned, &t, &a, p2m_query, NULL);
-    if (p2m_mfn_is_mark_compress(mfn_x(checkmfn)))
-        checkmfn = p2m_mfn_mfn(checkmfn);
-    if (mfn_x(mfn) != mfn_x(checkmfn) || (mfn_x(checkmfn) & P2M_MFN_MFN_MASK)) {
+    if (mfn_x(mfn) != mfn_x(checkmfn)) {
         p2m_unlock(p2m);
         if (new_page)
             free_domheap_page(new_page);
@@ -1281,10 +1279,6 @@ p2m_pod_compress_page(struct p2m_domain *p2m, unsigned long gfn_aligned,
     }
 
     if (c_size == 0) {
-        mfn = _mfn((mfn_x(mfn) & P2M_MFN_MFN_MASK) | P2M_MFN_NON_COMPRESSIBLE);
-        set_p2m_entry(p2m, gfn_aligned, mfn, 0, p2m_populate_on_demand,
-                      p2m->default_access);
-        atomic_inc(&d->template.non_compressible_pages);
         p2m_unlock(p2m);
         /* no page was allocated if c_size == 0 */
         return 1;
@@ -1307,6 +1301,7 @@ p2m_pod_compress_page(struct p2m_domain *p2m, unsigned long gfn_aligned,
     perfc_incr(compressed_pages);
     return 1;
 }
+#endif  /* NDEBUG */
 
 static int
 p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
@@ -1430,7 +1425,6 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     int smfn_from_clone = 1;
     mfn_t put_page_parent = _mfn(0);
     mfn_t put_page_clone = _mfn(0);
-    int compressible = 1;
     int ret;
 
     /* This is called from the p2m lookups, which can happen with or 
@@ -1576,11 +1570,6 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             atomic_inc(&d->clone_of->pod_pages);
             p2m_pod_stat_update(d->clone_of);
         }
-        if (p2m_mfn_is_non_compressible(mfn_x(smfn)) ||
-            p2m_mfn_is_mark_compress(mfn_x(smfn))) {
-            smfn = p2m_mfn_mfn(smfn);
-            compressible = 0;
-        }
         if (mfn_valid_page(mfn_x(smfn)) &&
             mfn_x(smfn) != mfn_x(shared_zero_page)) {
             get_page_fast(mfn_to_page(smfn), d->clone_of);
@@ -1655,17 +1644,14 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         check_immutable(q, d, gfn_aligned);
     } else if (smfn_from_clone &&
                /* d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] && */
-               page_get_owner(mfn_to_page(p2m_mfn_mfn(smfn))) == d) {
+               page_get_owner(mfn_to_page(smfn)) == d) {
         /* read-only mapped page already belonging to the VM - write
            access to previously decompressed page which was mapped
-           read-only -- remove any additional tags */
-        mfn = p2m_mfn_mfn(smfn);
+           read-only */
+        mfn = smfn;
     } else {
         /* check if template page is a decompressed page, only shared
          * in one clone */
-        if (p2m_mfn_is_non_compressible(mfn_x(smfn)) ||
-            p2m_mfn_is_mark_compress(mfn_x(smfn)))
-            smfn = p2m_mfn_mfn(smfn);
         while (smfn_from_clone &&
                (mfn_to_page(smfn)->count_info & PGC_count_mask) <= 2) {
             struct p2m_domain *op2m = p2m_get_hostp2m(d->clone_of);
@@ -1726,47 +1712,6 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
 	check_immutable(q, d, gfn_aligned);
         if (smfn_from_clone)
             put_page_clone = smfn;
-
-        if (compressible && !p2m_is_immutable(t)) {
-            struct p2m_domain *op2m = p2m_get_hostp2m(d->clone_of);
-            if (NOW() - d->start_time < d->arch.hvm_domain.params[
-                HVM_PARAM_CLONE_PAGE_WRITE_COMPRESS_TIME]) {
-                /* compress template pages, if the page is write
-                 * accessed within the time after start specified via
-                 * HVM_PARAM_CLONE_PAGE_WRITE_COMPRESS_TIME */
-                if (!p2m_pod_compress_page(op2m, gfn_aligned, smfn, target)) {
-                    domain_crash(d);
-                    goto out_fail;
-                }
-            } else if (NOW() - d->start_time < d->arch.hvm_domain.params[
-                           HVM_PARAM_CLONE_PAGE_WRITE_MARK_COMPRESS_TIME] ||
-                       !smfn_from_clone) {
-                /* mark a page for compression if the page is write
-                 * accessed early in the clone's existence, or if the
-                 * 1st access is a write: !smfn_from_clone, i.e. the
-                 * page wasn't in the clone's p2m from a read access
-                 * in this clone or any clone */
-                mfn_t omfn;
-                p2m_lock(op2m);
-                if ((!d->arch.hvm_domain.params[
-                         HVM_PARAM_CLONE_PAGE_WRITE_COMPRESS_UNSHARED_ONLY] ||
-                     (mfn_to_page(smfn)->count_info & PGC_count_mask) < 3) &&
-                    mfn_x(smfn) == mfn_x(op2m->get_entry(op2m, gfn_aligned,
-                                                         &t, &a, p2m_query,
-                                                         NULL))) {
-                    omfn = _mfn((mfn_x(smfn) & P2M_MFN_MFN_MASK) |
-                                P2M_MFN_MARK_COMPRESS);
-                    set_p2m_entry(op2m, gfn_aligned, omfn, 0,
-                                  p2m_populate_on_demand, op2m->default_access);
-                    if (!p2m_is_pod(t)) {
-                        atomic_inc(&d->clone_of->tmpl_shared_pages);
-                        atomic_inc(&d->clone_of->pod_pages);
-                        p2m_pod_stat_update(d->clone_of);
-                    }
-                }
-                p2m_unlock(op2m);
-            }
-        }
         unmap_domain_page_direct(target);
     }
 
@@ -1876,9 +1821,6 @@ clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
                 atomic_inc(&d->pod_pages);
         }
         if (p2m_is_pod(t)) {
-            if (p2m_mfn_is_non_compressible(mfn_x(mfn)) ||
-                p2m_mfn_is_mark_compress(mfn_x(mfn)))
-                mfn = p2m_mfn_mfn(mfn);
             if (mfn_valid_page(mfn_x(mfn)) &&
                 mfn_x(mfn) != mfn_x(shared_zero_page) &&
                 unlikely(!get_page_fast(mfn_to_page(mfn), od)))
@@ -2356,7 +2298,6 @@ guest_physmap_mark_populate_on_demand_contents(
         guest_physmap_add_page(d, gpfn, mfn_x(mfn), PAGE_ORDER_4K);
         if (!paging_mode_translate(d))
             set_gpfn_from_mfn(mfn_x(mfn), gpfn);
-        atomic_inc(&d->template.non_compressible_pages);
         return 0;
     }
 
@@ -2391,20 +2332,13 @@ p2m_pod_compress_template_work(void *_d)
     int nr_comp_used = 0;
     int nr_shared = 0;
     int nr_compressed = 0;
-    int nr_comp_used2 = 0;
-    int nr_shared2 = 0;
     s64 ct;
 
     ct = -NOW();
     for (gpfn = p2m->compress_gpfn; gpfn <= p2m->max_mapped_pfn; gpfn++) {
-        int compress = 0;
         if (uxen_info->ui_host_needs_preempt(NULL))
             break;
         mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, &page_order);
-        if (p2m_mfn_is_mark_compress(mfn_x(mfn))) {
-            mfn = p2m_mfn_mfn(mfn);
-            compress = 1;
-        }
         if (!mfn_valid_page(mfn_x(mfn))) {
             gpfn |= ((1 << page_order) - 1);
             continue;
@@ -2419,18 +2353,11 @@ p2m_pod_compress_template_work(void *_d)
                 nr_shared++;
             else
                 nr_comp_used++;
-            if (!compress)
-                nr_shared2++;
-            else
-                nr_comp_used2++;
         }
-        if (p2m_is_ram(t) ||
-            (compress && (!unshared_only ||
-                          (page->count_info & PGC_count_mask) < 2))) {
+        if (p2m_is_ram(t) &&
+            (!unshared_only || (page->count_info & PGC_count_mask) < 2)) {
             p2m_lock(p2m);
             mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, &page_order);
-            if (p2m_mfn_is_mark_compress(mfn_x(mfn)))
-                mfn = p2m_mfn_mfn(mfn);
             if (mfn_valid_page(mfn_x(mfn)) &&
                 get_page(page = mfn_to_page(mfn), d)) {
                 p2m_unlock(p2m);
@@ -2446,19 +2373,17 @@ p2m_pod_compress_template_work(void *_d)
     p2m->compress_gpfn = gpfn;
     ct += NOW();
     if (0)
-        printk("%s: dom %d: comp unused %d used %d/%d -- shared %d/%d"
+        printk("%s: dom %d: comp unused %d used %d -- shared %d"
                " -- compressed %d -- took %"PRIu64".%"PRIu64"ms\n",
                __FUNCTION__, d->domain_id,
-               nr_comp_unused, nr_comp_used, nr_comp_used2,
-               nr_shared, nr_shared2, nr_compressed,
+               nr_comp_unused, nr_comp_used, nr_shared, nr_compressed,
                ct / 1000000UL, ct % 1000000UL);
     if (p2m->compress_gpfn > p2m->max_mapped_pfn) {
         p2m->compress_gpfn = 0;
-        printk("%s: dom %d: comp_pages=%d comp_pdata=%d non_comp=%d\n",
+        printk("%s: dom %d: comp_pages=%d comp_pdata=%d\n",
                __FUNCTION__, d->domain_id,
                atomic_read(&d->template.compressed_pages),
-               atomic_read(&d->template.compressed_pdata),
-               atomic_read(&d->template.non_compressible_pages));
+               atomic_read(&d->template.compressed_pdata));
     } else
         set_timer(&p2m_pod_compress_template_timer, NOW() + MILLISECS(10));
 }

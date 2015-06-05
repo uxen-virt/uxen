@@ -281,7 +281,6 @@ struct domain
         struct {
             atomic_t compressed_pages; /* number of compressed pages */
             atomic_t compressed_pdata; /* number of pages w/ compressed data */
-            atomic_t non_compressible_pages; /* # of non-compressible pages */
             atomic_t decompressed_shared; /* # of decompressed pages shared */
             atomic_t decompressed_permanent; /* # of perm decompressed pages */
         } template;
