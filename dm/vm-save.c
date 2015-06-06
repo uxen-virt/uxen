@@ -719,7 +719,7 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
 
     APRINTF("memory: pages %d rezero %d clone %d", total_pages, total_rezero,
             total_clone);
-    if (compress) {
+    if (compress && total_pages) {
         int pct;
         pct = 10000 * (total_compress_save >> PAGE_SHIFT) / total_pages;
         APRINTF("        compressed %d in-vain %d -- saved %"PRIdSIZE" bytes"
