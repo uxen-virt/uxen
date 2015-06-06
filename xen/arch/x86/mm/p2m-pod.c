@@ -2227,6 +2227,15 @@ guest_physmap_mark_populate_on_demand(struct domain *d, unsigned long gfn,
 
             /* set page, to be freed after updating p2m entry */
             page = mfn_to_page(omfn);
+            if (unlikely(!get_page(page, d))) {
+                dprintk(XENLOG_WARNING, "%s: dom %d: could not get page"
+                        " gpfn=%lx mfn=%lx caf=%08lx owner=%d\n", __FUNCTION__,
+                        d->domain_id, gfn,
+                        __page_to_mfn(page), page->count_info,
+                        page_get_owner(page) ? page_get_owner(page)->domain_id :
+                        -1);
+                page = NULL;
+            }
         }
         else if (p2m_is_pod(ot)) {
             /* Count how many PoD entries we'll be replacing if successful */
@@ -2241,40 +2250,30 @@ guest_physmap_mark_populate_on_demand(struct domain *d, unsigned long gfn,
 
     /* Now, actually do the two-way mapping */
     if ( !set_p2m_entry(p2m, gfn, order ? _mfn(0) : shared_zero_page, order,
-                        p2m_populate_on_demand, p2m->default_access) )
+                        p2m_populate_on_demand, p2m->default_access) ) {
         rc = -EINVAL;
-    else
-    {
-        if (page) {
-            if (unlikely(!get_page(page, d)))
-                dprintk(XENLOG_WARNING, "%s: dom %d: could not get page"
-                        " gpfn=%lx mfn=%lx caf=%08lx owner=%d\n", __FUNCTION__,
-                        d->domain_id, gfn,
-                        __page_to_mfn(page), page->count_info,
-                        page_get_owner(page) ? page_get_owner(page)->domain_id :
-                        -1);
-            else {
-                if (test_and_clear_bit(_PGC_allocated, &page->count_info))
-                    put_page(page);
-                put_page(page);
-            }
-        }
-
-#ifndef __UXEN__
-        p2m->pod.entry_count += 1 << order; /* Lock: p2m */
-        p2m->pod.entry_count -= (pod_count + pod_zero_count + pod_tmpl_count);
-        BUG_ON(p2m->pod.entry_count < 0);
-#else  /* __UXEN__ */
-        atomic_add(1 << order, &d->pod_pages); /* Lock: p2m */
-        atomic_sub(pod_count + pod_zero_count + pod_tmpl_count, &d->pod_pages);
-        if (!order)
-            atomic_add(1 << order, &d->zero_shared_pages);
-        atomic_sub(pod_zero_count, &d->zero_shared_pages);
-        atomic_sub(pod_tmpl_count, &d->tmpl_shared_pages);
-#endif  /* __UXEN__ */
+        goto out;
     }
 
-out:
+#ifndef __UXEN__
+    p2m->pod.entry_count += 1 << order; /* Lock: p2m */
+    p2m->pod.entry_count -= (pod_count + pod_zero_count + pod_tmpl_count);
+    BUG_ON(p2m->pod.entry_count < 0);
+#else  /* __UXEN__ */
+    atomic_add(1 << order, &d->pod_pages); /* Lock: p2m */
+    atomic_sub(pod_count + pod_zero_count + pod_tmpl_count, &d->pod_pages);
+    if (!order)
+        atomic_add(1 << order, &d->zero_shared_pages);
+    atomic_sub(pod_zero_count, &d->zero_shared_pages);
+    atomic_sub(pod_tmpl_count, &d->tmpl_shared_pages);
+#endif  /* __UXEN__ */
+
+  out:
+    if (page) {
+        if (!rc && test_and_clear_bit(_PGC_allocated, &page->count_info))
+            put_page(page);
+        put_page(page);
+    }
     audit_p2m(p2m, 1);
     p2m_unlock(p2m);
 
