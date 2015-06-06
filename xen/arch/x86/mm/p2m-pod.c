@@ -2255,7 +2255,8 @@ guest_physmap_mark_populate_on_demand(struct domain *d, unsigned long gfn,
         if (page) {
             if (unlikely(!get_page(page, d)))
                 dprintk(XENLOG_WARNING, "%s: dom %d: could not get page"
-                        " mfn=%lx caf=%08lx owner=%d\n", __func__, d->domain_id,
+                        " gpfn=%lx mfn=%lx caf=%08lx owner=%d\n", __FUNCTION__,
+                        d->domain_id, gfn,
                         __page_to_mfn(page), page->count_info,
                         page_get_owner(page) ? page_get_owner(page)->domain_id :
                         -1);

@@ -2334,7 +2334,7 @@ int get_page(struct page_info *page, struct domain *domain)
 
     if ( !domain->is_dying ) {
         gdprintk(XENLOG_INFO,
-                 "Error pfn %lx: rd=%p, od=%p, caf=%08lx\n",
+                 "Error mfn %lx: rd=%p, od=%p, caf=%08lx\n",
                  page_to_mfn(page), domain, owner,
                  page->count_info);
     }
