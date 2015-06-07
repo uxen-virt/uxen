@@ -2177,8 +2177,8 @@ p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
 
 
 int
-guest_physmap_mark_populate_on_demand(struct domain *d, unsigned long gfn,
-                                      unsigned int order)
+guest_physmap_mark_pod_locked(struct domain *d, unsigned long gfn,
+                              unsigned int order)
 {
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
     unsigned long i;
@@ -2187,15 +2187,6 @@ guest_physmap_mark_populate_on_demand(struct domain *d, unsigned long gfn,
     struct page_info *page = NULL;
     int pod_count = 0, pod_zero_count = 0, pod_tmpl_count = 0;
     int rc = 0;
-
-    BUG_ON(!paging_mode_translate(d));
-
-    rc = p2m_gfn_check_limit(d, gfn, order);
-    if ( rc != 0 )
-        return rc;
-
-    p2m_lock(p2m);
-    audit_p2m(p2m, 1);
 
     // P2M_DEBUG("mark pod gfn=%#lx\n", gfn);
 
@@ -2279,6 +2270,28 @@ guest_physmap_mark_populate_on_demand(struct domain *d, unsigned long gfn,
             put_page(page);
         put_page(page);
     }
+
+    return rc;
+}
+
+int
+guest_physmap_mark_populate_on_demand(struct domain *d, unsigned long gfn,
+                                      unsigned int order)
+{
+    struct p2m_domain *p2m = p2m_get_hostp2m(d);
+    int rc = 0;
+
+    BUG_ON(!paging_mode_translate(d));
+
+    rc = p2m_gfn_check_limit(d, gfn, order);
+    if ( rc != 0 )
+        return rc;
+
+    p2m_lock(p2m);
+    audit_p2m(p2m, 1);
+
+    rc = guest_physmap_mark_pod_locked(d, gfn, order);
+
     audit_p2m(p2m, 1);
     p2m_unlock(p2m);
 

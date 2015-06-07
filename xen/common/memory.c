@@ -252,7 +252,8 @@ capture_memory(struct domain *d, xen_memory_capture_t *capture)
         } else
             source_d = d;
 
-        mfn = mfn_x(get_gfn_contents(source_d, gpfn, &t, data, &size));
+        mfn = mfn_x(get_gfn_contents(source_d, gpfn, &t, data, &size,
+                                     !!(flags & XENMEM_MCGI_FLAGS_REMOVE_PFN)));
         if (mfn_zero_page(mfn)) {
             gi.type = XENMEM_MCGI_TYPE_ZERO;
             gi.offset = -1;

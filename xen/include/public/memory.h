@@ -134,6 +134,8 @@ DEFINE_XEN_GUEST_HANDLE(xen_memory_capture_gpfn_info_t);
 #define XENMEM_MCGI_FLAGS_VM         0x0000
 #define XENMEM_MCGI_FLAGS_TEMPLATE   0x0001
 
+#define XENMEM_MCGI_FLAGS_REMOVE_PFN 0x0010
+
 /* page type */
 #define XENMEM_MCGI_TYPE_MASK        0x000f
 #define XENMEM_MCGI_TYPE_NOT_PRESENT 0x0000

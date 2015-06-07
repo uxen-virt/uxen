@@ -233,7 +233,7 @@ mfn_t get_gfn_type_access(struct p2m_domain *p2m, unsigned long gfn,
 
 mfn_t
 get_gfn_contents(struct domain *d, unsigned long gpfn, p2m_type_t *t,
-                 uint8_t *buffer, uint32_t *size)
+                 uint8_t *buffer, uint32_t *size, int remove)
 {
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
     p2m_access_t a;
@@ -261,6 +261,9 @@ get_gfn_contents(struct domain *d, unsigned long gpfn, p2m_type_t *t,
             /* if the page doesn't belong to this VM, then we don't
              * provide the contents */
             break;
+
+        if (remove)
+            guest_physmap_mark_pod_locked(d, gpfn, PAGE_ORDER_4K);
 
         s = map_domain_page(mfn_x(mfn));
         memcpy(buffer, s, PAGE_SIZE);

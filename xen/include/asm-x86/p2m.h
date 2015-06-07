@@ -474,7 +474,7 @@ static inline unsigned long get_gfn_untyped(struct domain *d, unsigned long gpfn
 
 mfn_t
 get_gfn_contents(struct domain *d, unsigned long gpfn, p2m_type_t *t,
-                 uint8_t *buffer, uint32_t *size);
+                 uint8_t *buffer, uint32_t *size, int remove);
 
 /* This is a noop for now. */
 static inline void __put_gfn(struct p2m_domain *p2m, unsigned long gfn)
@@ -534,6 +534,9 @@ void guest_physmap_remove_page(struct domain *d,
                                unsigned long mfn, unsigned int page_order);
 
 /* Set a p2m range as populate-on-demand */
+int
+guest_physmap_mark_pod_locked(struct domain *d, unsigned long gfn,
+                              unsigned int order);
 int guest_physmap_mark_populate_on_demand(struct domain *d, unsigned long gfn,
                                           unsigned int order);
 
