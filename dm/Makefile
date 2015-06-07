@@ -14,5 +14,5 @@ all:
 TAGS:
 	@($(MAKE) --no-print-directory -f Makefile.dm \
 	  SRCROOT=$(abspath $(TOPDIR)/dm) \
-	  src-files src-files-qemu src-files-slirp; \
+	  src-files src-files-qemu; \
 	  find . -name \*.h | grep -v ./qemu ) | xargs etags -
