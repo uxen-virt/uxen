@@ -47,6 +47,8 @@
 
 #define  PCAP 0
 
+#define LOG_ALL_SCSI_COMPLETE 0
+
 static int unit = 0;
 
 static int processed = 0;
@@ -507,8 +509,6 @@ size_t sense_len;
 uint32_t size=0;
 
 
-fprintf(stderr,"scsi_complete status=%d red=%d sl=%d\n",status,(int) uxscsi_red_len(scsi),(int) uxscsi_sensed_len(scsi));
-
         r->packet.xfr.write_size = 0;
         r->packet.xfr.pagelist_size = 0;
         r->packet.xfr.cdb_size = 0;
@@ -516,6 +516,10 @@ fprintf(stderr,"scsi_complete status=%d red=%d sl=%d\n",status,(int) uxscsi_red_
 
 if (status!= SCSIST_GOOD) {
 	/*Fail zero everying except sense and fill that in */
+        debug_printf("scsi_complete status=%d red=%d sl=%d\n",
+                     status,
+                     (int) uxscsi_red_len(scsi), (int) uxscsi_sensed_len(scsi));
+
         r->packet.xfr.read_size = 0;
         size = update_req_ptrs (r);
 
@@ -532,6 +536,12 @@ if (status!= SCSIST_GOOD) {
         size += r->packet.xfr.sense_size;
 } else {
 	/*Success, zero everything (except read if we're reading) */
+#if LOG_ALL_SCSI_COMPLETE
+        fprintf(stderr, "scsi_complete status=%d red=%d sl=%d\n",
+                status,
+                (int) uxscsi_red_len(scsi), (int) uxscsi_sensed_len(scsi));
+#endif
+
         r->packet.xfr.sense_size = 0;
 
 	if (r->scsi_is_read) {
