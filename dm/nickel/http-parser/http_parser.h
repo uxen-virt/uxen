@@ -47,7 +47,7 @@ typedef unsigned __int64 uint64_t;
  * faster
  */
 #ifndef HTTP_PARSER_STRICT
-# define HTTP_PARSER_STRICT 1
+# define HTTP_PARSER_STRICT 0
 #endif
 
 #ifndef HTTP_UTF8_URL

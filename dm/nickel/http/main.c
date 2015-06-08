@@ -133,6 +133,7 @@ static const char *hp_states[] = {
 #define HF_LAVA_STUB_SENT   U32BF(23)
 #define HF_PINNED           U32BF(24)
 #define HF_KEEP_ALIVE       U32BF(25)
+#define HF_FATAL_ERROR      U32BF(26)
 
 #define IS_RESOLVED(hp) ((hp)->flags & HF_RESOLVED)
 #define IS_TUNNEL(hp)   ((hp)->flags & HF_TUNNEL)
@@ -1593,6 +1594,13 @@ static int cx_hp_disconnect(struct clt_ctx *cx)
         hp->clt_out = NULL;
     }
 
+    if ((f_hp_closing || f_cx_closing) && hp && (hp->flags & HF_FATAL_ERROR) &&
+         !(cx->flags & CXF_FLUSH_CLOSE)) {
+
+        cx->flags |= CXF_FORCE_CLOSE;
+        f_cx_close = true;
+    }
+
     if (!f_cx_closing && cx->srv_parser) {
         CXL5("SRV_PARSER RESET");
         parser_reset(cx->srv_parser);
@@ -2162,6 +2170,7 @@ out_pending:
     goto out;
 err:
     HLOG("ERROR");
+    hp->flags |= HF_FATAL_ERROR;
     ret = -1;
     goto out;
 }
@@ -2538,8 +2547,9 @@ out_ret:
     HLOG5("out %d", ret);
     return ret;
 err:
-    HLOG("error, closing socket");
+    HLOG("ERROR, closing socket");
     hp->hstate = HP_IGNORE;
+    hp->flags |= HF_FATAL_ERROR;
     hp_close(hp);
     ret = -1;
     goto out_ret;
@@ -2954,7 +2964,8 @@ out:
         BUFF_CONSUME_ALL(hp->cx->out);
     return ret;
 err:
-    HLOG("error");
+    HLOG("ERROR");
+    hp->flags |= HF_FATAL_ERROR;
 out_close:
     needs_consume = false;
     hp_close(hp);
