@@ -330,11 +330,11 @@ create_audio_client(wasapi_voice_t v, IMMDevice *pMMDevice,
         v->fmt.dwChannelMask = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
 
     if (!is_format_supported(client, (WAVEFORMATEX*)&v->fmt)) {
-        CoTaskMemFree(mixfmt);
-        client->lpVtbl->Release(client);
         debug_printf("audio format not supported\n");
         dump_format("mix format", mixfmt);
         dump_format("playback format", (WAVEFORMATEX*)&v->fmt);
+        CoTaskMemFree(mixfmt);
+        client->lpVtbl->Release(client);
         return E_FAIL;
     }
 
@@ -349,11 +349,11 @@ create_audio_client(wasapi_voice_t v, IMMDevice *pMMDevice,
         client, AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
         WASAPI_BUF_LEN_MS * 10000, 0, (WAVEFORMATEX*)&v->fmt, NULL);
     if ( FAILED(hr) ) {
+        dump_format("mix format", mixfmt);
+        dump_format("playback format", (WAVEFORMATEX*)&v->fmt);
         CoTaskMemFree(mixfmt);
         client->lpVtbl->Release(client);
         WASAPI_FAIL(hr);
-        dump_format("mix format", mixfmt);
-        dump_format("playback format", (WAVEFORMATEX*)&v->fmt);
         return hr;
     }
 
