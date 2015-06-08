@@ -375,8 +375,8 @@ int resampler_16_2_add_frames(struct resampler_16_2 *res, void *src, int frames)
     int added = 0;
     while (added < frames &&
            res->l.src_avail < kStagingBufferSize) {
-        *l++ = (*p++) / 32768.0f;
-        *r++ = (*p++) / 32768.0f;
+        *l++ = (*p++) / (32768.0f*1.05f);
+        *r++ = (*p++) / (32768.0f*1.05f);
         ++added;
         ++res->l.src_avail;
     }
@@ -392,7 +392,6 @@ static int get_frames_cb(float *dst, int frames, void *opaque)
     memcpy(dst, ch->src + ch->src_consumed, frames * sizeof(float));
     ch->src_consumed += frames;
     ch->src_avail -= frames;
-
     return frames;
 }
 
@@ -403,6 +402,9 @@ int resample_16_2(struct resampler_16_2 *res, void *dst, int *p_dst_frames)
     float *r = res->r.dst;
     int consumed;
     int dst_frames = *p_dst_frames;
+
+    if (dst_frames > kStagingBufferSize)
+        dst_frames = kStagingBufferSize;
 
     /* figure out how many destination frames we can cover */
     while (dst_frames) {
