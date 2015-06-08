@@ -192,8 +192,10 @@ static void populate_physmap(struct memop_args *a)
                 va = map_domain_page(mfn);
                 if (unlikely(__copy_from_guest_offset(va, a->buffer,
                                                       i << PAGE_SHIFT,
-                                                      PAGE_SIZE)))
+                                                      PAGE_SIZE))) {
+                    unmap_domain_page(va);
                     goto out;
+                }
                 unmap_domain_page(va);
             }
         }
