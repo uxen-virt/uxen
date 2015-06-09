@@ -140,7 +140,7 @@ static void cache_init(struct nickel *ni)
         cache_timer = ni_new_vm_timer(ni, CACHE_PURGE_TIMEOUT_MS, cache_timer_cb, NULL);
 }
 
-void proxy_cache_add(struct nickel *ni, const char *domain, int port, struct proxy_t *proxy)
+void proxy_cache_add(struct nickel *ni, const char *schema, const char *domain, int port, struct proxy_t *proxy)
 {
     struct proxy_cache_t *pc = NULL;
     char *url;
@@ -151,7 +151,8 @@ void proxy_cache_add(struct nickel *ni, const char *domain, int port, struct pro
     if (!pc)
         goto mem_err;
 
-    if (asprintf(&url, "%s:%d", domain, port) < 0)
+    if (asprintf(&url, "%s%s%s:%hu", schema ? schema : "",
+                schema ? "://" : "", domain, ntohs((uint16_t) port)) < 0)
         goto mem_err;
     buff_strtolower(url);
     pc->url = url;
@@ -162,7 +163,7 @@ void proxy_cache_add(struct nickel *ni, const char *domain, int port, struct pro
 
     LIST_INSERT_HEAD(&cache_list, pc, entry);
     number_cache_entries ++;
-    PRXL4("adding %s:%hu", domain, ntohs(port));
+    PRXL4("adding %s", url);
     return;
 
 mem_err:
@@ -174,18 +175,26 @@ cleanup:
 }
 
 struct proxy_t *
-proxy_cache_find(const char *domain, int port)
+proxy_cache_find(const char *schema, const char *domain, int port)
 {
     struct proxy_cache_t *pc = NULL;
     char *url = NULL;
 
     if (!cache_timer)
         goto out;
-    if (asprintf(&url, "%s:%d", domain, port) < 0)
+    if (asprintf(&url, "%s%s%s:%hu", schema ? schema : "",
+                schema ? "://" : "", domain, ntohs((uint16_t) port)) < 0) {
+
+        warnx("%s: malloc (asprintf)", __FUNCTION__);
         goto out;
+    }
     buff_strtolower(url);
     pc = rb_tree_find_node(&cache_rbtree, url);
 out:
+    if (url) {
+        NETLOG5("%s: url %s %"PRIxPTR, __FUNCTION__, url,
+                (uintptr_t) (pc ? pc->proxy : NULL));
+    }
     free(url);
     return pc ? pc->proxy : NULL;
 }

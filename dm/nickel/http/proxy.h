@@ -36,6 +36,7 @@ struct clt_ctx {
     struct http_ctx *hp;
     void *webdav_opaque;
     char *sv_name;
+    const char *schema;
     struct sockaddr_in daddr;
     uint32_t flags;
     struct buff *in;
@@ -90,8 +91,8 @@ struct proxy_t * proxy_save(const char *name, uint16_t port, int ct, const char 
 void proxy_reset(struct proxy_t *proxy);
 struct proxy_t * proxy_save(const char *name, uint16_t port, int ct, const char *realm);
 void proxy_update(struct proxy_t *proxy, int ct, const char *realm);
-void proxy_cache_add(struct nickel *ni, const char *domain, int port, struct proxy_t *proxy);
-struct proxy_t * proxy_cache_find(const char *domain, int port);
+void proxy_cache_add(struct nickel *ni, const char *schema, const char *domain, int port, struct proxy_t *proxy);
+struct proxy_t * proxy_cache_find(const char *schema, const char *domain, int port);
 void proxy_cache_reset(void);
 int proxy_number_waiting(struct proxy_t *proxy);
 #endif

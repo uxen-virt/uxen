@@ -107,6 +107,11 @@ static const char *hp_states[] = {
 #undef XX
 };
 
+#define GET_CONST_SCHEMA(s)                       \
+    (strcasecmp("http", s) == 0  ? "http" :       \
+    (strcasecmp("https", s) == 0 ? "https" :      \
+    (strcasecmp("ftp", s) == 0   ? "ftp" : NULL)))
+
 #define HF_TUNNEL           U32BF(0)
 #define HF_TLS              U32BF(1)
 #define HF_NEEDS_RECONNECT  U32BF(2)
@@ -270,6 +275,7 @@ static int max_socket_per_proxy = 12;
 static char *webdav_host_dir = NULL;
 static Timer *hp_idle_timer = NULL;
 static int disable_crl_check = 0;
+static int no_transparent_proxy = 0;
 
 static void hp_get(struct http_ctx *hp);
 static void hp_put(struct http_ctx *hp);
@@ -3544,6 +3550,8 @@ static void set_settings(struct nickel *ni, yajl_val config)
     disable_crl_check = yajl_object_get_bool_default(config, "disable-crl-check", 0);
     NETLOG("%s: SSL CRL check %s", __FUNCTION__, disable_crl_check ?
            "DISABLED" : "ENABLED");
+    no_transparent_proxy = yajl_object_get_bool_default(config, "no-transparent-proxy-mode", 0);
+    NETLOG("%s: no-transparent-proxy-mode is %s", __FUNCTION__, no_transparent_proxy ? "ON" : "OFF");
 
     custom_ntlm_creds_ = yajl_object_get_string(config, "custom-ntlm-creds");
     if (custom_ntlm_creds_) {
@@ -3783,7 +3791,8 @@ static void rpc_connect_proxy_cb(void *opaque, dict d)
 
     if (is_direct) {
         HLOG2(" direct");
-        proxy_cache_add(hp->ni, hp->sv_name, hp->daddr.sin_port, NULL);
+        proxy_cache_add(hp->ni, hp->cx ? hp->cx->schema : NULL,
+                        hp->sv_name, hp->daddr.sin_port, NULL);
         if (hp->cx && hp->cx->proxy) {
             cx_hp_reconnect_direct(hp->cx);
             hp = NULL;
@@ -3842,7 +3851,8 @@ static void rpc_connect_proxy_cb(void *opaque, dict d)
         HLOG("srv_connect_proxy FAILURE");
         goto error;
     }
-    proxy_cache_add(hp->ni, hp->sv_name, hp->daddr.sin_port, proxy);
+    proxy_cache_add(hp->ni, hp->cx ? hp->cx->schema : NULL,
+                    hp->sv_name, hp->daddr.sin_port, proxy);
 
     if ((hp->flags & (HF_407_MESSAGE | HF_407_MESSAGE_OK)) ==
         (HF_407_MESSAGE | HF_407_MESSAGE_OK) && end_407_message(hp) < 0) {
@@ -3874,6 +3884,8 @@ rpc_connect_proxy(struct http_ctx *hp, const char *in_server, uint16_t port,
     snprintf(buf, 64, "%lu", (unsigned long) 0); // FIXME! ip address needs to be removed from the RPC call
     dict_put_string(args, "addr", buf);
     dict_put_integer(args, "port", ntohs(port));
+    if (hp->cx && hp->cx->schema)
+        dict_put_string(args, "schema", hp->cx->schema);
     if (bad_proxy) {
         char *tmp;
 
@@ -4349,6 +4361,7 @@ static void cx_reset(struct clt_ctx *cx, bool soft)
     if (!soft) {
         free(cx->sv_name);
         cx->sv_name = NULL;
+        cx->schema = NULL;
         cx->daddr.sin_addr.s_addr = 0;
         cx->daddr.sin_port = 0;
         cx->flags &= ((~CXF_HOST_RESOLVED) & (~CXF_DECIDED) & (~CXF_RPC_PROXY_URL));
@@ -4684,7 +4697,7 @@ static void cx_rpc_proxy_by_url_cb(void *opaque, dict d)
     }
 
     if (is_direct) {
-        proxy_cache_add(cx->ni, cx->sv_name, cx->daddr.sin_port, NULL);
+        proxy_cache_add(cx->ni, cx->schema, cx->sv_name, cx->daddr.sin_port, NULL);
         cx->flags |= CXF_DECIDED;
         cx->proxy = NULL;
         process = true;
@@ -4714,7 +4727,7 @@ static void cx_rpc_proxy_by_url_cb(void *opaque, dict d)
         goto out_close;
     }
 
-    proxy_cache_add(cx->ni, cx->sv_name, cx->daddr.sin_port, proxy);
+    proxy_cache_add(cx->ni, cx->schema, cx->sv_name, cx->daddr.sin_port, proxy);
     if ((tmp = dict_get_string(d, "last_refresh")))
         sscanf(tmp, "%" PRId64, &last_refresh);
 
@@ -4768,6 +4781,8 @@ static int cx_rpc_proxy_by_url(struct clt_ctx *cx, const char *sv_name, uint16_t
     snprintf(buf, 64, "%lu", (unsigned long) 0);
     dict_put_string(args, "addr", buf);
     dict_put_integer(args, "port", ntohs(port));
+    if (cx->schema)
+        dict_put_string(args, "schema", cx->schema);
 
     CXL3("nc_GetServerPort");
     cx_get(cx);
@@ -4794,7 +4809,7 @@ static int cx_decide(struct clt_ctx *cx)
     if ((cx->flags & CXF_DECIDED))
         return 0;
 
-    if (!ac_proxy_set(cx->ni)) {
+    if (!ac_proxy_set(cx->ni) || (!(cx->flags & CXF_GUEST_PROXY) && no_transparent_proxy)) {
         cx->proxy = NULL;
         cx->flags |= CXF_DECIDED;
 
@@ -4817,7 +4832,7 @@ static int cx_decide(struct clt_ctx *cx)
             goto out;
         }
     } else {
-        proxy = proxy_cache_find(cx->sv_name, cx->daddr.sin_port);
+        proxy = proxy_cache_find(cx->schema, cx->sv_name, cx->daddr.sin_port);
     }
 
     if (proxy) {
@@ -5032,6 +5047,28 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
         cx->sv_name = domain;
         domain = NULL;
         cx->daddr.sin_port = ntohs(port);
+
+        cx->schema = NULL;
+        if (ssl) {
+            cx->schema = "https";
+            CXL5("schema %s port %hu", cx->schema, (uint16_t) port);
+        } else {
+            char schema[16];
+
+            memset(schema, 0, sizeof(schema));
+            if (h_url.field_data[UF_SCHEMA].len && h_url.field_data[UF_SCHEMA].len <
+                sizeof(schema) - 1) {
+
+                assert(cx->clt_parser->h.url->len >= h_url.field_data[UF_SCHEMA].off +
+                        h_url.field_data[UF_SCHEMA].len);
+                memcpy(schema, BUFF_TO(cx->clt_parser->h.url, const char *) +
+                        h_url.field_data[UF_SCHEMA].off,
+                        h_url.field_data[UF_SCHEMA].len);
+                cx->schema = GET_CONST_SCHEMA(schema);
+                CXL5("schema %s(%s)", cx->schema ? cx->schema : "(unkn)", schema);
+            }
+        }
+
         cx->flags |= CXF_HOST_RESOLVED;
 
         CXL4("%s URL %s", cx->sv_name,
