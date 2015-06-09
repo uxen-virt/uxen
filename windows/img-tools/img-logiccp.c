@@ -1414,7 +1414,7 @@ int scanning_phase(struct disk *disk, VarList *vars,
         }
         Manifest *man = var->man;
         var->volume = CreateFileW(prefix(var, L""), GENERIC_READ,
-                FILE_SHARE_READ | FILE_SHARE_WRITE, NULL,
+                FILE_SHARE_READ, NULL,
                 OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
         if (var->volume == INVALID_HANDLE_VALUE) {
             printf("Failed while processing [%ls], err=%u\n", var->path,
