@@ -4944,7 +4944,7 @@ static int xenmem_add_to_physmap_once(
     struct domain *d,
     const struct xen_add_to_physmap *xatp)
 {
-    struct page_info *page = NULL;
+    struct page_info *page, *gmfn_page = NULL;
     unsigned long gfn = 0; /* gcc ... */
     unsigned long prev_mfn, mfn = 0, gpfn, idx;
     p2m_type_t pt;
@@ -5002,7 +5002,7 @@ static int xenmem_add_to_physmap_once(
             if ( !get_page_from_pagenr(idx, d) )
                 break;
             mfn = idx;
-            page = mfn_to_page(mfn);
+            gmfn_page = mfn_to_page(mfn);
             break;
         }
         case XENMAPSPACE_host_mfn:
@@ -5045,9 +5045,6 @@ static int xenmem_add_to_physmap_once(
             goto out;
         }
     }
-
-    if ( page )
-        put_page(page);
 
     if ( !paging_mode_translate(d) || (mfn == 0) )
     {
@@ -5133,6 +5130,8 @@ static int xenmem_add_to_physmap_once(
          xatp->space == XENMAPSPACE_gmfn_range )
         put_gfn(d, gfn);
   out:
+    if (gmfn_page)
+        put_page(gmfn_page);
     domain_unlock(d);
 
     return rc;
