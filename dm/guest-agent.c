@@ -561,9 +561,11 @@ guest_agent_cleanup(void)
     critical_section_enter(&write_list_lock);
 
     LIST_FOREACH_SAFE(wm, &write_list, node, nwm) {
-        CancelIoEx(v4v_context.v4v_handle, &wm->o);
-        LIST_REMOVE(wm, node);
-        free(wm);
+        if (CancelIoEx(v4v_context.v4v_handle, &wm->o) &&
+            GetOverlappedResult(v4v_context.v4v_handle, &wm->o, NULL, TRUE)) {
+            LIST_REMOVE(wm, node);
+            free(wm);
+        }
     }
 
     if (read_pending)

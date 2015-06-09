@@ -212,8 +212,10 @@ uxenconsole_hid_cleanup(hid_context_t context)
     b = c->txlist.first;
     while (b) {
         bn = b->next;
-        CancelIoEx(c->v4v_context.v4v_handle, &b->ovlp);
-        free_v4v_buf(b, b->len);
+        if (CancelIoEx(c->v4v_context.v4v_handle, &b->ovlp) &&
+            GetOverlappedResult(c->v4v_context.v4v_handle, &b->ovlp, NULL, TRUE)) {
+            free_v4v_buf(b, b->len);
+        }
         b = bn;
     }
     LeaveCriticalSection(&c->lock);
