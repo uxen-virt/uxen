@@ -5037,11 +5037,12 @@ static int xenmem_add_to_physmap_once(
                          ": host mfn %lx has owner %d\n",
                          xatp->gpfn, mfn,
                          page_get_owner(__mfn_to_page(mfn))->domain_id);
-                rc = -EINVAL;
-                goto out;
+            } else {
+                gdprintk(XENLOG_ERR, "attempt to map already mapped host "
+                         "mfn %lx at gpfn %"PRI_xen_pfn"\n", mfn, xatp->gpfn);
             }
-            page = mfn_to_page(mfn);
-            break;
+            rc = -EINVAL;
+            goto out;
         }
     }
 
@@ -5107,20 +5108,13 @@ static int xenmem_add_to_physmap_once(
             goto out;
         }
         page = __mfn_to_page(mfn);
-        if (!page_get_owner(page)) {
-            spin_lock(&d->page_alloc_lock);
-            page_set_owner(page, d);
-            wmb(); /* install valid domain ptr before updating refcnt. */
-            d->tot_pages++;
-            page_list_add_tail(page, &d->page_list);
-            page->count_info = PGC_host_page | 1;
-            spin_unlock(&d->page_alloc_lock);
-        } else {
-            gdprintk(XENLOG_ERR, "attempt to map already mapped "
-                     "host mfn %lx at gpfn %"PRI_xen_pfn"\n", mfn, xatp->gpfn);
-            rc = -EINVAL;
-            goto out;
-        }
+        spin_lock(&d->page_alloc_lock);
+        page_set_owner(page, d);
+        wmb(); /* install valid domain ptr before updating refcnt. */
+        d->tot_pages++;
+        page_list_add_tail(page, &d->page_list);
+        page->count_info = PGC_host_page | 1;
+        spin_unlock(&d->page_alloc_lock);
         break;
     default:
         /* Unmap from old location, if any. */
