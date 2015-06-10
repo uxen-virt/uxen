@@ -1195,11 +1195,15 @@ static void win_chr_pipe_read(void *opaque);
 static void win_chr_close(CharDriverState *chr)
 {
     WinCharState *s = chr->opaque;
+    DWORD size;
 
     if (s->fpipe) {
 	NPDEBUG();
-	if (s->hrecv) {
-	    CancelIo(s->hrecv);
+	if (s->hrecv && s->hcom) {
+        if (CancelIo(s->hcom) || (GetLastError() != ERROR_NOT_FOUND)) {
+            GetOverlappedResult(s->hcom, &s->osend, &size, TRUE);
+            GetOverlappedResult(s->hcom, &s->orecv, &size, TRUE);
+        }
 	    ioh_set_np_handler2(s->hrecv, NULL, NULL, NULL, NULL, chr->iohq);
 	}
     }
@@ -1253,9 +1257,13 @@ win_chr_pipe_reopen(void *opaque)
 {
     CharDriverState *chr = opaque;
     WinCharState *s = chr->opaque;
+    DWORD size;
     int ret;
 
-    CancelIo(s->hcom);
+    if (CancelIo(s->hcom) || (GetLastError() != ERROR_NOT_FOUND)) {
+        GetOverlappedResult(s->hcom, &s->osend, &size, TRUE);
+        GetOverlappedResult(s->hcom, &s->orecv, &size, TRUE);
+    }
     CloseHandle(s->hcom);
     s->hcom = NULL;
     if (s->server_mode) {
@@ -1275,12 +1283,16 @@ static void win_chr_pipe_reconnect(void *opaque)
 {
     CharDriverState *chr = opaque;
     WinCharState *s = chr->opaque;
+    DWORD size;
     int ret;
 
     if (!s->server_mode)
         return; /* XXX not yet */
 
-    CancelIo(s->hcom);
+    if (CancelIo(s->hcom) || (GetLastError() != ERROR_NOT_FOUND)) {
+        GetOverlappedResult(s->hcom, &s->osend, &size, TRUE);
+        GetOverlappedResult(s->hcom, &s->orecv, &size, TRUE);
+    }
     CloseHandle(s->hcom);
     s->hcom = NULL;
     ret = win_chr_pipe_create(s);
@@ -1294,8 +1306,12 @@ win_chr_pipe_disconnect(void *opaque)
 {
     CharDriverState *chr = opaque;
     WinCharState *s = chr->opaque;
+    DWORD size;
 
-    CancelIo(s->hcom);
+    if (CancelIo(s->hcom) || (GetLastError() != ERROR_NOT_FOUND)) {
+        GetOverlappedResult(s->hcom, &s->osend, &size, TRUE);
+        GetOverlappedResult(s->hcom, &s->orecv, &size, TRUE);
+    }
 }
 
 static int
