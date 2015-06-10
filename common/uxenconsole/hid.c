@@ -211,11 +211,13 @@ uxenconsole_hid_cleanup(hid_context_t context)
     EnterCriticalSection(&c->lock);
     b = c->txlist.first;
     while (b) {
+        DWORD bytes;
+
         bn = b->next;
-        if (CancelIoEx(c->v4v_context.v4v_handle, &b->ovlp) &&
-            GetOverlappedResult(c->v4v_context.v4v_handle, &b->ovlp, NULL, TRUE)) {
-            free_v4v_buf(b, b->len);
-        }
+        if (CancelIoEx(c->v4v_context.v4v_handle, &b->ovlp) ||
+            GetLastError() != ERROR_NOT_FOUND)
+            GetOverlappedResult(c->v4v_context.v4v_handle, &b->ovlp, &bytes, TRUE);
+        free_v4v_buf(b, b->len);
         b = bn;
     }
     LeaveCriticalSection(&c->lock);

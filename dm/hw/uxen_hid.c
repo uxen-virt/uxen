@@ -563,11 +563,14 @@ uxenhid_cleanup(void)
 
     critical_section_enter(&async_write_lock);
     TAILQ_FOREACH_SAFE(b, &async_write_list, link, bn) {
-        if (CancelIoEx(v4v_context.v4v_handle, &b->ovlp) &&
-            GetOverlappedResult(v4v_context.v4v_handle, &b->ovlp, NULL, TRUE)) {
-            TAILQ_REMOVE(&async_write_list, b, link);
-            free_async_buf(b, b->len);
-        }
+        DWORD bytes;
+
+        if (CancelIoEx(v4v_context.v4v_handle, &b->ovlp) ||
+            GetLastError() != ERROR_NOT_FOUND)
+            GetOverlappedResult(v4v_context.v4v_handle, &b->ovlp, &bytes, TRUE);
+
+        TAILQ_REMOVE(&async_write_list, b, link);
+        free_async_buf(b, b->len);
     }
     critical_section_leave(&async_write_lock);
     CancelIoEx(v4v_context.v4v_handle, &async_read.ovlp);
