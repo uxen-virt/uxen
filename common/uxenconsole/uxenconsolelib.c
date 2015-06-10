@@ -37,8 +37,14 @@ struct ctx {
 #if defined(_WIN32)
     HANDLE pipe;
     OVERLAPPED oread;
-    OVERLAPPED owrite;
     char read_buf[BUF_SZ];
+    struct sndbuf {
+        struct sndbuf *next;
+        struct sndbuf **pprev;
+        OVERLAPPED ovlp;
+        size_t len;
+    } *sndlist_first, **sndlist_last;
+    CRITICAL_SECTION sndlock;
 #elif defined(__APPLE__)
     int socket;
     int recvd_fd;
@@ -57,7 +63,11 @@ uxenconsole_init(ConsoleOps *console_ops, void *console_priv, char *filename)
     c->ops = console_ops;
     c->priv = console_priv;
     c->filename = filename;
-#if defined(__APPLE__)
+#if defined(_WIN32)
+    c->sndlist_first = NULL;
+    c->sndlist_last = &c->sndlist_first;
+    InitializeCriticalSection(&c->sndlock);
+#elif defined(__APPLE__)
     c->socket = -1;
     c->recvd_fd = -1;
 #endif
@@ -192,24 +202,37 @@ channel_write(struct ctx *c, void *data, unsigned int len)
 {
 #if defined(_WIN32)
     BOOL rc;
-    DWORD count;
-    DWORD l = 0;
+    DWORD bytes;
+    struct sndbuf *b;
 
-    while (l < len) {
-        rc = WriteFile(c->pipe, data + l, len - l, NULL, &c->owrite);
-        if (rc)
-            return len; /* Completed immediately ?? */
-        if ((GetLastError() != ERROR_IO_PENDING) ||
-            (!GetOverlappedResult(c->pipe, &c->owrite, &count, TRUE))) {
-            if (c->ops->disconnected)
-                c->ops->disconnected(c->priv);
-            uxenconsole_disconnect(c);
-            return 0;
+    b = malloc(sizeof(*b) + len);
+    if (!b)
+        return -1;
+    RtlZeroMemory(&b->ovlp, sizeof(OVERLAPPED));
+    RtlCopyMemory(b + 1, data, len);
+    b->len = len;
+
+    rc = WriteFile(c->pipe, b + 1, b->len, &bytes, &b->ovlp);
+    if (!rc) {
+        if (GetLastError() == ERROR_IO_PENDING) {
+            EnterCriticalSection(&c->sndlock);
+            b->next = NULL;
+            b->pprev = c->sndlist_last;
+            *c->sndlist_last = b;
+            c->sndlist_last = &b->next;
+            LeaveCriticalSection(&c->sndlock);
+            return b->len;
         }
-        l += count;
+        free(b);
+        return -1;
+    } else if (bytes != b->len) {
+        free(b);
+        return -1;
     }
 
-    return l;
+    free(b);
+
+    return (int)bytes;
 #elif defined(__APPLE__)
     unsigned int l = 0;
     int rc;
@@ -233,6 +256,43 @@ channel_write(struct ctx *c, void *data, unsigned int len)
 #endif
 }
 
+static void
+snd_complete(struct ctx *c)
+{
+    struct sndbuf *b, *bn;
+    DWORD bytes;
+    BOOL rc;
+
+    EnterCriticalSection(&c->sndlock);
+    b = c->sndlist_first;
+    while (b) {
+        bn = b->next;
+        rc = GetOverlappedResult(c->pipe, &b->ovlp, &bytes, FALSE);
+
+        if (!rc && GetLastError() == ERROR_IO_INCOMPLETE) {
+            b = bn;
+            continue;
+        }
+
+        if (!rc || bytes != b->len) {
+            LeaveCriticalSection(&c->sndlock);
+            if (c->ops->disconnected)
+                c->ops->disconnected(c->priv);
+            uxenconsole_disconnect(c);
+            return;
+        }
+
+        if (bn)
+            bn->pprev = b->pprev;
+        else
+            c->sndlist_last = b->pprev;
+        *b->pprev = bn;
+        free(b);
+        b = bn;
+    }
+    LeaveCriticalSection(&c->sndlock);
+}
+
 file_handle_t
 uxenconsole_connect(uxenconsole_context_t ctx)
 {
@@ -243,7 +303,6 @@ uxenconsole_connect(uxenconsole_context_t ctx)
     DWORD err;
 
     c->oread.hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
-    c->owrite.hEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 
     while (1) {
         c->pipe = CreateFile(c->filename,
@@ -257,7 +316,6 @@ uxenconsole_connect(uxenconsole_context_t ctx)
             WaitNamedPipe(c->filename, 1000);
         else {
             CloseHandle(c->oread.hEvent);
-            CloseHandle(c->owrite.hEvent);
             SetLastError(err);
             return NULL;
         }
@@ -272,7 +330,6 @@ uxenconsole_connect(uxenconsole_context_t ctx)
     if (err != ERROR_IO_PENDING) {
         CloseHandle(c->pipe);
         CloseHandle(c->oread.hEvent);
-        CloseHandle(c->owrite.hEvent);
         SetLastError(err);
         return NULL;
     }
@@ -367,6 +424,8 @@ uxenconsole_channel_event(uxenconsole_context_t ctx, file_handle_t event,
 #endif
 }
 
+BOOL WINAPI CancelIoEx(HANDLE hFile, LPOVERLAPPED lpOverlapped);
+
 void
 uxenconsole_disconnect(uxenconsole_context_t ctx)
 {
@@ -374,12 +433,26 @@ uxenconsole_disconnect(uxenconsole_context_t ctx)
 
 #if defined(_WIN32)
     if (c->pipe) {
+        struct sndbuf *b, *bn;
+
+        EnterCriticalSection(&c->sndlock);
+        b = c->sndlist_first;
+        while (b) {
+            DWORD bytes;
+
+            bn = b->next;
+            if (CancelIoEx(c->pipe, &b->ovlp) ||
+                GetLastError() != ERROR_NOT_FOUND)
+                GetOverlappedResult(c->pipe, &b->ovlp, &bytes, TRUE);
+
+            free(b);
+            b = bn;
+        }
+        LeaveCriticalSection(&c->sndlock);
         CancelIo(c->pipe);
         CloseHandle(c->pipe);
         CloseHandle(c->oread.hEvent);
-        CloseHandle(c->owrite.hEvent);
         c->oread.hEvent = NULL;
-        c->owrite.hEvent = NULL;
         c->pipe = NULL;
     }
 #elif defined(__APPLE__)
@@ -397,10 +470,12 @@ uxenconsole_cleanup(uxenconsole_context_t ctx)
 
 #if defined(_WIN32)
     if (c->pipe)
+        uxenconsole_disconnect(ctx);
+    DeleteCriticalSection(&c->sndlock);
 #elif defined(__APPLE__)
     if (c->socket >= 0)
-#endif
         uxenconsole_disconnect(ctx);
+#endif
 
     free(c);
 }
@@ -416,6 +491,8 @@ uxenconsole_mouse_event(uxenconsole_context_t ctx,
     struct ctx *c = ctx;
     struct uxenconsole_msg_mouse_event msg;
     int rc;
+
+    snd_complete(c);
 
     msg.header.type = UXENCONSOLE_MSG_TYPE_MOUSE_EVENT;
     msg.header.len = sizeof (msg);
@@ -446,6 +523,8 @@ uxenconsole_keyboard_event(uxenconsole_context_t ctx,
     int rc;
     size_t len;
     size_t charlen;
+
+    snd_complete(c);
 
     if (nchars > 256)
         return -1;
@@ -480,6 +559,8 @@ uxenconsole_request_resize(uxenconsole_context_t ctx,
     struct ctx *c = ctx;
     struct uxenconsole_msg_request_resize msg;
     int rc;
+
+    snd_complete(c);
 
     msg.header.type = UXENCONSOLE_MSG_TYPE_REQUEST_RESIZE;
     msg.header.len = sizeof (msg);
