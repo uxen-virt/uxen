@@ -45,6 +45,7 @@ struct console {
     HCURSOR cursor;
     int requested_width;
     int requested_height;
+    int resize_pending;
     int stop;
 };
 
@@ -211,6 +212,30 @@ reset_mouse_tracking(HWND hwnd)
     mousetrack.dwHoverTime = 0;
 
     TrackMouseEvent(&mousetrack);
+}
+
+static int
+resize_window(struct console *cons, int w, int h)
+{
+    RECT inner, outer;
+
+    GetClientRect(cons->window, &inner);
+    GetWindowRect(cons->window, &outer);
+
+    /*
+     * Window has no current size, probably because it is hidden,
+     * do not force size.
+     */
+    if (!inner.right && !inner.left && !inner.bottom && !inner.top)
+        return 0;
+
+    w += (inner.right - inner.left) - (outer.right - outer.left);
+    h += (inner.bottom - inner.top) - (outer.bottom - outer.top);
+
+    cons->requested_width = w;
+    cons->requested_height = h;
+
+    return 0;
 }
 
 #ifndef WM_MOUSEHWHEEL
@@ -423,37 +448,6 @@ sendkey:
             return 0;
         }
         break;
-    case WM_SIZING:
-        {
-            RECT *dst = (void *)lParam;
-            RECT inner, outer;
-            int w, h;
-
-            GetClientRect(cons->window, &inner);
-            GetWindowRect(cons->window, &outer);
-
-            w = (inner.right - inner.left) -
-                (outer.right - outer.left) +
-                (dst->right - dst->left);
-
-            h = (inner.bottom - inner.top) -
-                (outer.bottom - outer.top) +
-                (dst->bottom - dst->top);
-
-            cons->requested_width = w;
-            cons->requested_height = h;
-        }
-        return TRUE;
-    case WM_EXITSIZEMOVE:
-        {
-            if (cons->requested_width && cons->requested_height)
-                uxenconsole_request_resize(cons->ctx,
-                                           cons->requested_width,
-                                           cons->requested_height);
-            cons->requested_width = 0;
-            cons->requested_height = 0;
-        }
-        return 0;
     case WM_MOVING:
         {
             RECT src;
@@ -490,6 +484,23 @@ sendkey:
             }
         }
         break;
+    case WM_WINDOWPOSCHANGING:
+        {
+            WINDOWPOS *p = (WINDOWPOS *)lParam;
+            if (p->flags & (SWP_NOSIZE | SWP_DRAWFRAME))
+                break;
+            if (resize_window(cons, p->cx, p->cy)) {
+                RECT r;
+                GetWindowRect(hwnd, &r);
+                p->cx = r.right - r.left;
+                p->cy = r.bottom - r.top;
+                return 0;
+            }
+        }
+        break;
+    case WM_CLOSE:
+        cons->stop = 1;
+        return 0;
     default:
         break;
     }
@@ -498,7 +509,7 @@ sendkey:
 }
 
 static int
-create_window(struct console *cons, int width, int height)
+create_window(struct console *cons)
 {
     WNDCLASSEXW wndclass;
 
@@ -523,8 +534,8 @@ create_window(struct console *cons, int width, int height)
                                    (WS_OVERLAPPEDWINDOW & ~(WS_MAXIMIZEBOX)),
                                    CW_USEDEFAULT,
                                    CW_USEDEFAULT,
-                                   width,
-                                   height,
+                                   CW_USEDEFAULT,
+                                   CW_USEDEFAULT,
                                    NULL,
                                    NULL,
                                    NULL,
@@ -539,8 +550,6 @@ create_window(struct console *cons, int width, int height)
 
     SetWindowLongPtr(cons->window, GWLP_USERDATA, (LONG_PTR)cons);
 
-    ShowWindow(cons->window, cons->show);
-    UpdateWindow(cons->window);
     reset_mouse_tracking(cons->window);
 
     return 0;
@@ -631,36 +640,36 @@ console_resize_surface(void *priv,
 {
     struct console *cons = priv;
     int ret;
-
-    printf("resize surface: "
-           "width=%d height=%d linesize=%d length=%d bpp=%d offset=%d shm=%p\n",
-           width, height, linesize, length, bpp, offset, shm_handle);
+    RECT inner, outer;
+    int borderX, borderY;
 
     release_surface(cons);
 
-    if (!cons->window) {
-        create_window(cons, width, height);
-    } else {
-        RECT inner, outer;
-        int borderX, borderY;
+    if (!cons->window)
+        create_window(cons);
 
-        GetClientRect(cons->window, &inner);
-        GetWindowRect(cons->window, &outer);
+    GetClientRect(cons->window, &inner);
+    GetWindowRect(cons->window, &outer);
 
-        borderX = (outer.right - outer.left) - (inner.right - inner.left);
-        borderY = (outer.bottom - outer.top) - (inner.bottom - inner.top);
+    borderX = (outer.right - outer.left) - (inner.right - inner.left);
+    borderY = (outer.bottom - outer.top) - (inner.bottom - inner.top);
 
-        SetWindowPos(cons->window, HWND_NOTOPMOST,
-                     CW_USEDEFAULT, CW_USEDEFAULT,
-                     width + borderX, height + borderY,
-                     SWP_NOMOVE);
-    }
+    SetWindowPos(cons->window, HWND_NOTOPMOST,
+                 CW_USEDEFAULT, CW_USEDEFAULT,
+                 width + borderX, height + borderY,
+                 SWP_NOMOVE);
+
     cons->width = width;
     cons->height = height;
 
     ret = alloc_surface(cons, width, height, linesize, length, bpp, offset, shm_handle);
     if (ret)
         errx(1, "alloc_surface failed");
+
+    ShowWindow(cons->window, cons->show);
+    UpdateWindow(cons->window);
+
+    cons->resize_pending = 0;
 }
 
 static void
@@ -780,6 +789,17 @@ main_loop(struct console *cons)
                     TranslateMessage(&msg);
                     DispatchMessageW(&msg);
                 }
+
+                if (!cons->resize_pending &&
+                    (cons->width != cons->requested_width ||
+                     cons->height != cons->requested_height)) {
+                    cons->resize_pending = 1;
+                    uxenconsole_request_resize(cons->ctx,
+                                               cons->requested_width,
+                                               cons->requested_height);
+                    cons->requested_width = 0;
+                    cons->requested_height = 0;
+                }
             }
             break;
         default:
@@ -790,7 +810,10 @@ main_loop(struct console *cons)
 
     }
 out:
-
+    if (cons->window) {
+        DestroyWindow(cons->window);
+        cons->window = NULL;
+    }
     return ret;
 }
 
