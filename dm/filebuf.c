@@ -13,7 +13,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-const size_t buffer_max = 1 << 20;
+static const size_t default_buffer_max = 1 << 20;
 
 struct filebuf *
 filebuf_open(const char *fn, const char *mode)
@@ -29,7 +29,8 @@ filebuf_open(const char *fn, const char *mode)
     if (!fb)
         return NULL;
 
-    fb->buffer = page_align_alloc(buffer_max);
+    fb->buffer_max = default_buffer_max;
+    fb->buffer = page_align_alloc(fb->buffer_max);
     if (!fb->buffer) {
         free(fb);
         return NULL;
@@ -37,9 +38,11 @@ filebuf_open(const char *fn, const char *mode)
 
     while (*mode) {
         switch (*mode) {
+#ifdef __APPLE__
             case 'n':
                 no_buffering = 1;
                 break;
+#endif  /* __APPLE__ */
 #ifdef _WIN32
             case 's':
                 sequential = 1;
@@ -57,6 +60,8 @@ filebuf_open(const char *fn, const char *mode)
         mode++;
     }
 
+    fb->users = 1;
+
 #ifdef _WIN32
     fb->file = CreateFile(fn,
           (fb->writable ? GENERIC_WRITE : 0) | GENERIC_READ,
@@ -64,7 +69,7 @@ filebuf_open(const char *fn, const char *mode)
             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
           NULL,
           fb->writable ? CREATE_ALWAYS : OPEN_EXISTING,
-          FILE_ATTRIBUTE_NORMAL |
+          FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED |
           (sequential ? FILE_FLAG_SEQUENTIAL_SCAN : 0) |
           (write_through ? FILE_FLAG_WRITE_THROUGH : 0) |
           (no_buffering ? FILE_FLAG_NO_BUFFERING : 0),
@@ -91,26 +96,65 @@ filebuf_open(const char *fn, const char *mode)
 }
 
 int
+filebuf_set_readable(struct filebuf *fb)
+{
+
+    if (!fb->writable)
+        return -1;
+
+    filebuf_flush(fb);
+
+    fb->offset = 0;
+    fb->writable = 0;
+
+    return 0;
+}
+
+int
 filebuf_flush(struct filebuf *fb)
 {
 #ifdef _WIN32
-    DWORD wrote;
+    DWORD ret;
+    OVERLAPPED o = { };
+#else  /* _WIN32 */
+    ssize_t ret, o;
+#endif  /* _WIN32 */
 
-    if (!WriteFile(fb->file, fb->buffer, fb->buffered, &wrote, NULL)) {
+    if (!fb->writable) {
+        /* flush buffered data for read files */
+        fb->offset = filebuf_tell(fb);
+        fb->buffered = fb->consumed = 0;
+        return 0;
+    }
+
+#ifdef _WIN32
+    o.Offset = fb->offset;
+    o.OffsetHigh = fb->offset >> 32ULL;
+
+    if (!WriteFile(fb->file, fb->buffer, fb->buffered, &ret, &o) &&
+        GetLastError() != ERROR_IO_PENDING) {
         Wwarn("%s: WriteFile failed", __FUNCTION__);
         return -1;
     }
-#else  /* _WIN32 */
-    ssize_t ret;
-
-    do {
-        ret = write(fb->file, fb->buffer, fb->buffered);
-    } while (ret < 0 && errno == EINTR);
-    if (ret < 0) {
-        warn("%s: write failed", __FUNCTION__);
+    if (!GetOverlappedResult(fb->file, &o, &ret, TRUE) ||
+        ret != fb->buffered) {
+        Wwarn("%s: GetOverlappedResult failed", __FUNCTION__);
         return -1;
     }
+#else  /* _WIN32 */
+    do {
+        ret = pwrite(fb->file, fb->buffer + o, fb->buffered - o,
+                     fb->offset + o);
+        if (ret > 0)
+            o += ret;
+    } while (ret < 0 && errno == EINTR);
+    if (ret < 0) {
+        warn("%s: pwrite failed", __FUNCTION__);
+        return -1;
+    }
+    ret = o;
 #endif  /* _WIN32 */
+    fb->offset += ret;
     fb->buffered = 0;
     return 0;
 }
@@ -118,6 +162,10 @@ filebuf_flush(struct filebuf *fb)
 void
 filebuf_close(struct filebuf *fb)
 {
+
+    --fb->users;
+    if (fb->users)
+        return;
 
     if (fb->writable)
         filebuf_flush(fb);
@@ -130,6 +178,13 @@ filebuf_close(struct filebuf *fb)
     free(fb);
 }
 
+void
+filebuf_openref(struct filebuf *fb)
+{
+
+    ++fb->users;
+}
+
 int
 filebuf_write(struct filebuf *fb, void *buf, size_t size)
 {
@@ -138,14 +193,14 @@ filebuf_write(struct filebuf *fb, void *buf, size_t size)
     while (size) {
         size_t n = size;
 
-        if (n > buffer_max - fb->buffered)
-            n = buffer_max - fb->buffered;
+        if (n > fb->buffer_max - fb->buffered)
+            n = fb->buffer_max - fb->buffered;
         memcpy(fb->buffer + fb->buffered, b, n);
         fb->buffered += n;
         b += n;
         size -= n;
 
-        if (fb->buffered == buffer_max) {
+        if (fb->buffered == fb->buffer_max) {
             if (filebuf_flush(fb) < 0)
                 return -1;
         }
@@ -153,13 +208,65 @@ filebuf_write(struct filebuf *fb, void *buf, size_t size)
     return b - (uint8_t *) buf;
 }
 
+static int
+filebuf_fill(struct filebuf *fb)
+{
+    if (fb->consumed == fb->buffered) {
+#ifdef _WIN32
+        DWORD ret;
+        OVERLAPPED o = { };
+
+        o.Offset = fb->offset;
+        o.OffsetHigh = fb->offset >> 32ULL;
+
+        if (!ReadFile(fb->file, fb->buffer, (DWORD)fb->buffer_max, &ret, &o) &&
+            GetLastError() != ERROR_IO_PENDING) {
+            Wwarn("%s: ReadFile failed", __FUNCTION__);
+            return -1;
+        }
+        if (!GetOverlappedResult(fb->file, &o, &ret, TRUE) &&
+            GetLastError() != ERROR_HANDLE_EOF) {
+            Wwarn("%s: GetOverlappedResult failed", __FUNCTION__);
+            return -1;
+        }
+#else  /* _WIN32 */
+        ssize_t ret, o = 0;
+
+        do {
+            ret = pread(fb->file, fb->buffer + o, fb->buffer_max - o,
+                        fb->offset + o);
+            if (ret > 0)
+                o += ret;
+        } while (ret < 0 && errno == EINTR);
+        if (ret < 0) {
+            warn("%s: pread failed", __FUNCTION__);
+            return -1;
+        }
+        ret = o;
+#endif  /* _WIN32 */
+        fb->offset += ret;
+        fb->buffered = ret;
+        fb->eof = (fb->buffered < fb->buffer_max);
+        fb->consumed = 0;
+    }
+    return 0;
+}
+
 int
 filebuf_read(struct filebuf *fb, void *buf, size_t size)
 {
     uint8_t *b = buf;
+    int ret;
 
     while (size) {
         size_t n = size;
+
+        ret = filebuf_fill(fb);
+        if (ret < 0)
+            return ret;
+
+        if (fb->consumed == fb->buffered && fb->eof)
+            break;
 
         if (n > fb->buffered - fb->consumed)
             n = fb->buffered - fb->consumed;
@@ -167,36 +274,82 @@ filebuf_read(struct filebuf *fb, void *buf, size_t size)
         fb->consumed += n;
         b += n;
         size -= n;
-
-        if (fb->consumed == fb->buffered && fb->eof)
-            return b - (uint8_t *)buf;
-
-        if (fb->consumed == fb->buffered) {
-#ifdef _WIN32
-            DWORD ret;
-
-            if (!ReadFile(fb->file, fb->buffer, (DWORD)buffer_max, &ret,
-                          NULL)) {
-                Wwarn("%s: ReadFile failed", __FUNCTION__);
-                return -1;
-            }
-#else
-            ssize_t ret;
-
-            do {
-                ret = read(fb->file, fb->buffer, buffer_max);
-            } while (ret < 0 && errno == EINTR);
-            if (ret < 0) {
-                warn("%s: read failed", __FUNCTION__);
-                return -1;
-            }
-#endif
-            fb->buffered = ret;
-            fb->eof = (fb->buffered < buffer_max);
-            fb->consumed = 0;
-        }
     }
 
     return b - (uint8_t *)buf;
 }
 
+int
+filebuf_skip(struct filebuf *fb, size_t size)
+{
+    void *buf = NULL;
+    uint8_t *b = buf;
+    int ret;
+
+    while (size) {
+        size_t n = size;
+
+        ret = filebuf_fill(fb);
+        if (ret < 0)
+            return ret;
+
+        if (fb->consumed == fb->buffered && fb->eof)
+            break;
+
+        if (n > fb->buffered - fb->consumed)
+            n = fb->buffered - fb->consumed;
+        fb->consumed += n;
+        b += n;
+        size -= n;
+    }
+
+    return b - (uint8_t *)buf;
+}
+
+off_t
+filebuf_tell(struct filebuf *fb)
+{
+
+    if (fb->writable)
+        return fb->offset + fb->buffered;
+    else
+        return fb->offset - fb->buffered + fb->consumed;
+}
+
+off_t
+filebuf_seek(struct filebuf *fb, off_t offset, int whence)
+{
+
+    filebuf_flush(fb);
+    switch (whence) {
+    case FILEBUF_SEEK_SET:
+        fb->offset = offset;
+        break;
+    case FILEBUF_SEEK_CUR:
+        fb->offset += offset;
+        break;
+    case FILEBUF_SEEK_END:
+        errx(1, "%s: FILEBUF_SEEK_END not supported", __FUNCTION__);
+        /* fb->offset = fb->end - offset; */
+        break;
+    }
+    return fb->offset;
+}
+
+void
+filebuf_buffer_max(struct filebuf *fb, size_t new_buffer_max)
+{
+
+    filebuf_flush(fb);
+
+    fb->buffer_max = new_buffer_max;
+    do {
+        align_free(fb->buffer);
+        fb->buffer = page_align_alloc(fb->buffer_max);
+        if (!fb->buffer) {
+            fb->buffer_max /= 2; /* try half sized buffer */
+            if (fb->buffer_max < ALIGN_PAGE_ALIGN)
+                errx(1, "%s: out of memory", __FUNCTION__);
+        }
+    } while (!fb->buffer);
+}
