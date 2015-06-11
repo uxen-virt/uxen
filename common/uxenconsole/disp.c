@@ -6,13 +6,13 @@
 
 #include <windows.h>
 #include <stdint.h>
+#include <assert.h>
 #define V4V_USE_INLINE_API
 #include <windows/uxenv4vlib/gh_v4vapi.h>
 
 #include "uxenconsolelib.h"
 #include "uxendisp-common.h"
 
-#define EXIT_RET_COUNT 5
 #define ONE_MS_IN_HNS 10000
 #define DUE_TIME_MS 100
 
@@ -29,7 +29,7 @@ struct disp_context {
     } conn_msg;
     HANDLE timer;
     LARGE_INTEGER due_time;
-    int exit_cnt;
+    DWORD thread_id;
     BOOL exit;
 };
 
@@ -126,6 +126,8 @@ uxenconsole_disp_init(int vm_id, void *priv, invalidate_rect_t inv_rect)
     if (!c)
         return NULL;
 
+    c->thread_id = GetCurrentThreadId();
+
     memset(&o, 0, sizeof(o));
     if (!v4v_open(&c->v4v_context, UXENDISP_RING_SIZE, &o) ||
         !GetOverlappedResult(c->v4v_context.v4v_handle, &o, &t, TRUE)) {
@@ -164,7 +166,6 @@ uxenconsole_disp_init(int vm_id, void *priv, invalidate_rect_t inv_rect)
 
     c->priv = priv;
     c->inv_rect = inv_rect;
-    c->exit_cnt = EXIT_RET_COUNT;
 
     return c;
 
@@ -178,14 +179,27 @@ void
 uxenconsole_disp_cleanup(disp_context_t ctx)
 {
     struct disp_context *c = ctx;
+    DWORD bytes;
 
     if (c) {
+        // Cleanup must be called on the same thread as init was.
+        assert(c->thread_id == GetCurrentThreadId());
+
         c->exit = TRUE;
-        do {
-            CancelIo(c->v4v_context.v4v_handle);
-            SleepEx(DUE_TIME_MS, TRUE);
-            c->exit_cnt--;
-        } while (c->exit && (c->exit_cnt > 0));
+        if (CancelIo(c->v4v_context.v4v_handle) ||
+            (GetLastError() != ERROR_NOT_FOUND)) {
+            GetOverlappedResult(c->v4v_context.v4v_handle,
+                                &c->owrite,
+                                &bytes,
+                                TRUE);
+            GetOverlappedResult(c->v4v_context.v4v_handle,
+                                &c->oread,
+                                &bytes,
+                                TRUE);
+        }
+        // We need to put thread in alertable state to allow completion
+        // routine to run.
+        SleepEx(DUE_TIME_MS, TRUE);
         CloseHandle(c->timer);
         v4v_close(&c->v4v_context);
         free(c);

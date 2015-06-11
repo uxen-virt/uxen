@@ -26,7 +26,7 @@ install_libuxenconsole.a: libuxenconsole.a $(SDKDIR_lib)/.exists
 	$(_W)echo Installing -- $(<F)
 	$(_V)$(call install_lib,$<,$(SDKDIR_lib))
 
-all: uxenconsole$(EXE_SUFFIX) install_uxenconsolelib.h install_libuxenconsole.a
+dist: uxenconsole$(EXE_SUFFIX) install_uxenconsolelib.h install_libuxenconsole.a
 	$(_W)echo Installing from $(abspath $(<D)) to $(DISTDIR)
 	$(_W)echo Installing -- $(<F)
 	$(_V)$(call install_exe,$<,$(DISTDIR))
