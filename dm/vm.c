@@ -641,7 +641,7 @@ vm_exit(void *opaque)
 #endif
 
     /* call control_command_exit as early as possible
-     * to avoid deadlock on rcp sync commands */
+     * to avoid deadlock on rpc sync commands */
     control_command_exit();
 
     /* Since we are going to exit here, make sure everything is flushed. */
