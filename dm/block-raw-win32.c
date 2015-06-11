@@ -380,13 +380,10 @@ static void raw_aio_cancel(BlockDriverAIOCB *blockacb)
     RawAIOCB *acb = (RawAIOCB *)blockacb;
     BlockDriverState *bs = acb->common.bs;
     BDRVRawState *s = bs->opaque;
-    DWORD bytes;
-
-    /* XXX: if more than one async I/O it is not correct */
-    if (CancelIo(s->hfile) || (GetLastError() != ERROR_NOT_FOUND))
-        GetOverlappedResult(s->hfile, &acb->ov, &bytes, TRUE);
 
     aio_del_wait_object(&acb->ov.hEvent);
+    /* XXX: if more than one async I/O it is not correct */
+    CancelIo(s->hfile);
     aio_release(acb);
 }
 #endif /* #if WIN32_AIO */
