@@ -440,7 +440,7 @@ vm_init(const char *loadvm, int restore_mode)
     ret = uxen_logging(uxen_handle, vm_logging_buffer_size, vm_logging_event,
                        &vm_logging_buffer);
     if (ret)
-        errx(1, "vm logging setup failed");
+        err(1, "vm logging setup failed");
 
     uxen_notification_add_wait_object(&vm_logging_event, handle_logging_event,
                                       NULL);
