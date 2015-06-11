@@ -43,6 +43,8 @@ FILECRYPT_INCLUDES = $(TOPDIR)/common/filecrypt
 
 CFLAGS += -D__UXEN_TOOLS__ -DQEMU_UXEN
 $(OSX)CFLAGS += -Wno-deprecated-declarations
+CFLAGS += -fms-extensions
+$(OSX)CFLAGS += -Wno-microsoft
 
 $(DEBUG_ONLY)CFLAGS += -DDEBUG=1
 

@@ -41,7 +41,9 @@
 #include <xenctrl.h>
 #include <xc_private.h>
 
-#define SAVE_FORMAT_VERSION 3
+#include <xen/hvm/e820.h>
+
+#define SAVE_FORMAT_VERSION 4
 
 #define DECOMPRESS_THREADED
 #define DECOMPRESS_THREADS 2
@@ -90,6 +92,7 @@
 #define XC_SAVE_ID_HVM_INTROSPEC      -17
 #define XC_SAVE_ID_MAPCACHE_PARAMS    -18
 #define XC_SAVE_ID_VM_TEMPLATE_FILE   -19
+#define XC_SAVE_ID_PAGE_OFFSETS       -20
 
 struct vm_save_info vm_save_info = { };
 
@@ -106,13 +109,18 @@ uxenvm_savevm_initiate(char **err_msg)
     return ret;
 }
 
+struct xc_save_generic {
+    int32_t marker;
+    uint32_t size;
+};
+
 struct xc_save_version_info {
-    int marker;
+    int32_t marker;
     uint32_t version;
 };
 
 struct xc_save_tsc_info {
-    int marker;
+    int32_t marker;
     uint32_t tsc_mode;
     uint64_t nsec;
     uint32_t khz;
@@ -120,60 +128,74 @@ struct xc_save_tsc_info {
 };
 
 struct xc_save_vcpu_info {
-    int marker;
+    int32_t marker;
     int max_vcpu_id;
     uint64_t vcpumap;
 };
 
 struct xc_save_hvm_generic_chunk {
-    int marker;
+    int32_t marker;
     uint32_t pad;
     uint64_t data;
 };
 
 struct xc_save_hvm_magic_pfns {
-    int marker;
+    int32_t marker;
     uint64_t magic_pfns[3];
 };
 
 struct xc_save_hvm_context {
-    int marker;
+    int32_t marker;
     uint32_t size;
     uint8_t context[];
 };
 
 struct xc_save_hvm_dm {
-    int marker;
+    int32_t marker;
     uint32_t size;
     uint8_t state[];
 };
 
 struct xc_save_vm_uuid {
-    int marker;
+    int32_t marker;
     uint8_t uuid[16];
 };
 
 struct xc_save_vm_template_uuid {
-    int marker;
+    int32_t marker;
     uint8_t uuid[16];
 };
 
 struct xc_save_hvm_introspec {
-    int marker;
+    int32_t marker;
     struct guest_introspect_info_header info;
 };
 
 struct xc_save_mapcache_params {
-    int marker;
+    int32_t marker;
     uint32_t end_low_pfn;
     uint32_t start_high_pfn;
     uint32_t end_high_pfn;
 };
 
 struct xc_save_vm_template_file {
-    int marker;
+    int32_t marker;
     uint16_t size;
     char file[];
+};
+
+struct xc_save_vm_page_offsets {
+    struct xc_save_generic;
+
+    uint32_t pfn_off_nr;
+    uint64_t pfn_off[];
+};
+
+struct PACKED xc_save_index {
+    uint64_t offset;
+    int32_t marker;             /* marker field last such that the
+                                 * regular end marker also doubles as
+                                 * an index end marker */
 };
 
 #define MAX_BATCH_SIZE 1023
@@ -183,6 +205,24 @@ typedef uint16_t cs16_t;
 #define PP_BUFFER_PAGES                                                 \
     (int)((MAX_BATCH_SIZE * (sizeof(cs16_t) + PAGE_SIZE) + PAGE_SIZE - 1) \
           >> PAGE_SHIFT)
+
+#define PCI_HOLE_START_PFN (PCI_HOLE_START >> UXEN_PAGE_SHIFT)
+#define PCI_HOLE_END_PFN (PCI_HOLE_END >> UXEN_PAGE_SHIFT)
+#define skip_pci_hole(pfn) ((pfn) < PCI_HOLE_END_PFN ?                  \
+                            (pfn) :                                     \
+                            (pfn) - (PCI_HOLE_END_PFN - PCI_HOLE_START_PFN))
+#define poi_valid_pfn(poi, pfn) ((pfn) < (poi)->max_gpfn &&      \
+                                 ((pfn) < PCI_HOLE_START_PFN ||  \
+                                  (pfn) >= PCI_HOLE_END_PFN))
+#define poi_pfn_index(poi, pfn) skip_pci_hole(pfn)
+
+struct page_offset_info {
+    uint32_t max_gpfn;
+    uint64_t *pfn_off;
+    struct filebuf *fb;
+};
+#define PAGE_OFFSET_INDEX_PFN_OFF_COMPRESSED (1ULL << 63)
+#define PAGE_OFFSET_INDEX_PFN_OFF_MASK (~(PAGE_OFFSET_INDEX_PFN_OFF_COMPRESSED))
 
 #define uxenvm_read_struct_size(s) (sizeof(*(s)) - sizeof(marker))
 #define uxenvm_read_struct(f, s)                                        \
@@ -439,6 +479,10 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
     DECLARE_HYPERCALL_BUFFER(uint8_t, mem_buffer);
 #define MEM_BUFFER_SIZE (MAX_BATCH_SIZE * PAGE_SIZE)
     xen_memory_capture_gpfn_info_t *gpfn_info_list = NULL;
+    uint64_t mem_pos = 0, pos;
+    struct page_offset_info poi;
+    struct xc_save_vm_page_offsets s_vm_page_offsets;
+    struct xc_save_index page_offsets_index = { 0, XC_SAVE_ID_PAGE_OFFSETS };
     int ret;
 
     p2m_size = xc_domain_maximum_gpfn(xc_handle, vm_id);
@@ -510,6 +554,12 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
         }
     }
 
+    poi.max_gpfn = vm_mem_mb << (20 - UXEN_PAGE_SHIFT);
+    poi.pfn_off = calloc(1, poi.max_gpfn * sizeof(poi.pfn_off[0]));
+    /* adjust max_gpfn to account for pci hole after allocating pfn_off */
+    if (poi.max_gpfn > PCI_HOLE_START_PFN)
+        poi.max_gpfn += PCI_HOLE_END_PFN - PCI_HOLE_START_PFN;
+
     /* store start of batch file offset, to allow restoring page data
      * without parsing the entire save file */
     vm_save_info.page_batch_offset = filebuf_tell(f);
@@ -579,8 +629,10 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
             if (compress)
                 _batch -= single_page ? 2 * MAX_BATCH_SIZE : MAX_BATCH_SIZE;
             filebuf_write(f, pfn_batch, _batch * sizeof(pfn_batch[0]));
-            if (compress && single_page)
+            if (compress && single_page) {
                 compress_size = 0;
+                mem_pos = filebuf_tell(f) + sizeof(compress_size);
+            }
             j = 0;
             m_run = 0;
             v_run = 0;
@@ -597,11 +649,19 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
                     SAVE_DPRINTF(
                         "     write %08x:%08x = %03x pages",
                         pfn + run, pfn + j, b_run);
-                    if (!compress)
+                    if (!compress) {
+                        int i;
+                        pos = filebuf_tell(f);
+                        for (i = 0; i < b_run; i++) {
+                            if (!poi_valid_pfn(&poi, pfn + run + i))
+                                continue;
+                            poi.pfn_off[poi_pfn_index(&poi, pfn + run + i)] =
+                                pos + (i << PAGE_SHIFT);
+                        }
                         filebuf_write(
                             f, &mem_buffer[gpfn_info_list[run].offset],
                             b_run << PAGE_SHIFT);
-                    else {
+                    } else {
                         if (single_page) {
                             int i, cs1;
                             for (i = 0; i < b_run; i++) {
@@ -621,6 +681,19 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
                                     v_run++;
                                 } else
                                     m_run++;
+                                /* if the page is not compressed, then
+                                 * record the offset of the page data,
+                                 * otherwise record the offset of the
+                                 * size field and set the
+                                 * PAGE_OFFSET_INDEX_PFN_OFF_COMPRESSED
+                                 * indicator */
+                                if (poi_valid_pfn(&poi, pfn + run + i))
+                                    poi.pfn_off[
+                                        poi_pfn_index(&poi,
+                                                      pfn + run + i)] =
+                                        (mem_pos + compress_size) +
+                                        (cs1 == PAGE_SIZE ? sizeof(cs16_t) :
+                                         PAGE_OFFSET_INDEX_PFN_OFF_COMPRESSED);
                                 *(cs16_t *)&compress_buf[compress_size] = cs1;
                                 compress_size += sizeof(cs16_t) + cs1;
                             }
@@ -683,9 +756,29 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
     }
 
     if (!vm_save_info.save_abort && !vm_quit_interrupt) {
+        s_vm_page_offsets.marker = XC_SAVE_ID_PAGE_OFFSETS;
+        s_vm_page_offsets.pfn_off_nr = poi_pfn_index(&poi, poi.max_gpfn);
+        page_offsets_index.offset = filebuf_tell(f);
+        APRINTF("page offset index: pos %"PRId64" size %"PRIdSIZE" nr off %d",
+                page_offsets_index.offset, s_vm_page_offsets.pfn_off_nr *
+                sizeof(s_vm_page_offsets.pfn_off[0]),
+                s_vm_page_offsets.pfn_off_nr);
+        BUILD_BUG_ON(sizeof(poi.pfn_off[0]) !=
+                     sizeof(s_vm_page_offsets.pfn_off[0]));
+        s_vm_page_offsets.size = sizeof(s_vm_page_offsets) +
+            s_vm_page_offsets.pfn_off_nr * sizeof(s_vm_page_offsets.pfn_off[0]);
+        filebuf_write(f, &s_vm_page_offsets, sizeof(s_vm_page_offsets));
+        filebuf_write(f, poi.pfn_off, s_vm_page_offsets.pfn_off_nr *
+                      sizeof(s_vm_page_offsets.pfn_off[0]));
+    }
+
+    if (!vm_save_info.save_abort && !vm_quit_interrupt) {
         /* 0: end marker */
         batch = 0;
         filebuf_write(f, &batch, sizeof(batch));
+
+        /* indexes */
+        filebuf_write(f, &page_offsets_index, sizeof(page_offsets_index));
 
         APRINTF("memory: pages %d zero %d rezero %d clone %d", total_pages,
                 total_zero - total_rezero, total_rezero, total_clone);
@@ -1100,7 +1193,7 @@ uxenvm_load_alloc(xen_pfn_t **pfn_type, int **pfn_err, int **pfn_info,
 }
 
 static int
-uxenvm_load_batch(struct filebuf *f, int marker, xen_pfn_t *pfn_type,
+uxenvm_load_batch(struct filebuf *f, int32_t marker, xen_pfn_t *pfn_type,
                   int *pfn_err, int *pfn_info, struct decompress_ctx *dc,
                   int populate_compressed, char **err_msg)
 {
@@ -1217,13 +1310,13 @@ apply_immutable_memory(struct immutable_range *r, int nranges)
     return 0;
 }
 
-#define uxenvm_load_read_struct(f, s, marker, ret, err_msg, _out) do {	\
+#define uxenvm_load_read_struct(f, s, _marker, ret, err_msg, _out) do {	\
         (ret) = uxenvm_read_struct((f), &(s));                          \
         if ((ret) != uxenvm_read_struct_size(&(s))) {                   \
             asprintf((err_msg), "uxenvm_read_struct(%s) failed", #s);   \
 	    goto _out;							\
 	}								\
-	(s).marker = marker;						\
+	(s).marker = (_marker);						\
     } while(0)
 
 static uint8_t *dm_state_load_buf = NULL;
@@ -1247,13 +1340,14 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
     struct xc_save_hvm_introspec s_hvm_introspec = { };
     struct xc_save_mapcache_params s_mapcache_params = { };
     struct xc_save_vm_template_file s_vm_template_file = { };
+    struct xc_save_vm_page_offsets s_vm_page_offsets = { };
     struct immutable_range *immutable_ranges = NULL;
     uint8_t *hvm_buf = NULL;
     xen_pfn_t *pfn_type = NULL;
     int *pfn_err = NULL, *pfn_info = NULL;
     struct decompress_ctx dc = { 0 };
     int populate_compressed = (restore_mode == VM_RESTORE_TEMPLATE);
-    int marker;
+    int32_t marker;
     int ret;
     int size;
 
@@ -1398,6 +1492,23 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
                              ret, err_msg, out);
             vm_template_file[s_vm_template_file.size] = 0;
             APRINTF("vm template file: %s", vm_template_file);
+            break;
+        case XC_SAVE_ID_PAGE_OFFSETS:
+            uxenvm_load_read_struct(f, s_vm_page_offsets, marker, ret,
+                                    err_msg, out);
+            ret = filebuf_seek(f, s_vm_page_offsets.pfn_off_nr *
+                               sizeof(s_vm_page_offsets.pfn_off[0]),
+                               FILEBUF_SEEK_CUR) != -1 ? 0 : -EIO;
+            if (ret < 0) {
+                asprintf(err_msg, "filebuf_seek(vm_page_offsets) failed");
+                goto out;
+            }
+            APRINTF("page offset index: %d pages, skipped %"PRIdSIZE
+                    " bytes at %"PRId64,
+                    s_vm_page_offsets.pfn_off_nr,
+                    s_vm_page_offsets.pfn_off_nr *
+                    sizeof(s_vm_page_offsets.pfn_off[0]),
+                    filebuf_tell(f) - s_vm_page_offsets.size);
             break;
 	default:
 	    if (restore_mode == VM_RESTORE_CLONE) {
@@ -1725,7 +1836,8 @@ vm_restore_memory(void)
     int *pfn_err = NULL, *pfn_info = NULL;
     struct decompress_ctx dc = { };
     int populate_compressed = 0;
-    int marker;
+    int32_t marker;
+    struct xc_save_generic s_generic;
     char *err_msg = NULL;
 #ifdef VERBOSE
     int count = 0;
@@ -1757,15 +1869,30 @@ vm_restore_memory(void)
         uxenvm_load_read(f, &marker, sizeof(marker), ret, &err_msg, out);
 	if (marker == 0)	/* end marker */
 	    break;
-        ret = uxenvm_load_batch(f, marker, pfn_type, pfn_err, pfn_info,
-                                &dc, populate_compressed, &err_msg);
-        if (ret)
-            goto out;
+        switch (marker) {
+        case XC_SAVE_ID_PAGE_OFFSETS:
+            uxenvm_load_read_struct(f, s_generic, marker, ret, &err_msg,
+                                    out);
+            ret = filebuf_seek(f, s_generic.size - sizeof(s_generic),
+                               FILEBUF_SEEK_CUR) != -1 ? 0 : -EIO;
+            if (ret < 0) {
+                asprintf(&err_msg, "filebuf_seek(%d, SEEK_CUR) failed",
+                         s_generic.size);
+                goto out;
+            }
+            break;
+        default:
+            ret = uxenvm_load_batch(f, marker, pfn_type, pfn_err, pfn_info,
+                                    &dc, populate_compressed, &err_msg);
+            if (ret)
+                goto out;
 #ifdef VERBOSE
-        while (marker > MAX_BATCH_SIZE)
-            marker -= MAX_BATCH_SIZE;
-        count += marker;
+            while (marker > MAX_BATCH_SIZE)
+                marker -= MAX_BATCH_SIZE;
+            count += marker;
 #endif  /* VERBOSE */
+            break;
+        }
     }
 #ifdef VERBOSE
     DPRINTF("%s: %d pages", __FUNCTION__, count);
