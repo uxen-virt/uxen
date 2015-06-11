@@ -13,6 +13,10 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#ifdef __APPLE__
+#include <sys/mman.h>
+#endif  /* __APPLE__ */
+
 static const size_t default_buffer_max = 1 << 20;
 
 struct filebuf *
@@ -181,8 +185,12 @@ filebuf_close(struct filebuf *fb)
         filebuf_flush(fb);
 #ifdef _WIN32
     CloseHandle(fb->file);
+    if (fb->mapping)
+        UnmapViewOfFile(fb->mapping);
 #else  /* _WIN32 */
     close(fb->file);
+    if (fb->mapping)
+        munmap(fb->mapping, fb->mapping_len);
     free(fb->filename);
 #endif  /* _WIN32 */
     align_free(fb->buffer);
@@ -382,4 +390,50 @@ filebuf_delete_on_close(struct filebuf *fb, int delete)
     fb->delete_on_close = delete;
     return 0;
 #endif  /* _WIN32 */
+}
+
+uint8_t *
+filebuf_mmap(struct filebuf *fb, off_t offset, size_t len)
+{
+#ifdef _WIN32
+    HANDLE h = INVALID_HANDLE_VALUE;
+    SYSTEM_INFO si;
+    static uint64_t align_mask = 0;
+    uint64_t aligned_offset;
+
+    if (!align_mask) {
+        GetSystemInfo(&si);
+        align_mask = ~(si.dwAllocationGranularity - 1);
+    }
+    aligned_offset = offset & align_mask;
+
+    h = CreateFileMapping(fb->file, NULL, PAGE_READONLY, 0, 0, NULL);
+    if (!h)
+        Werr(1, "%s: CreateFileMapping failed", __FUNCTION__);
+
+    fb->mapping = MapViewOfFile(h, FILE_MAP_READ,
+                                (uint32_t)(aligned_offset >> 32),
+                                (uint32_t)aligned_offset,
+                                len + offset - aligned_offset);
+    if (!fb->mapping)
+        Werr(1, "%s: MapViewOfFile failed", __FUNCTION__);
+
+    if (h)
+        CloseHandle(h);
+
+    return fb->mapping + offset - aligned_offset;
+#else  /* _WIN32 */
+    const uint64_t align_mask = UXEN_PAGE_MASK;
+    uint64_t aligned_offset;
+
+    aligned_offset = offset & align_mask;
+
+    fb->mapping_len = len + offset - aligned_offset;
+    fb->mapping = mmap(NULL, fb->mapping_len, PROT_READ,
+                       MAP_FILE, fb->file, aligned_offset);
+    if (!fb->mapping)
+        err(1, "%s: mmap failed", __FUNCTION__);
+
+    return fb->mapping + offset - aligned_offset;
+#endif /* _WIN32 */
 }
