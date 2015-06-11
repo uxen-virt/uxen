@@ -355,7 +355,6 @@ main(int argc, char **argv)
     if (ret <= 0)
         err(1, "asprintf dom_id_str failed");
 
-    control_ready = 1;
     control_send_status("vm-runstate", "running", "hwnd", vm_window_str, "dom-id", dom_id_str, NULL);
     free(vm_window_str);
     free(dom_id_str);

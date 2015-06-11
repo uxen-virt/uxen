@@ -41,8 +41,6 @@
 #define CONTROL_INPUT_REALLOC_SIZE 512
 #define DEFAULT_TIMEOUT_MS 100000
 
-int control_ready = 0;
-
 static struct io_handler_queue control_io_handlers;
 static WaitObjects control_wait_objects;
 static ioh_event control_ev;
@@ -137,11 +135,6 @@ control_send_status(const char *key, const char *val, ...)
     if (!control.chr) {
         warnx("%s: control chr unavailable", __FUNCTION__);
         errno = EINVAL;
-        return -1;
-    }
-
-    if (!control_ready) {
-        errno = EBUSY;
         return -1;
     }
 

@@ -9,8 +9,6 @@
 
 #include "dict.h"
 
-extern int control_ready;
-
 void control_open(char *path);
 void control_command_exit(void);
 void control_exit(void);

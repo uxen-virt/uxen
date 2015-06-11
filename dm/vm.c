@@ -536,7 +536,6 @@ vm_init(const char *loadvm, int restore_mode)
 		(restore_mode == VM_RESTORE_CLONE ? "clone" : "load"));
         if (restore_mode == VM_RESTORE_TEMPLATE) {
             template_load_failed = false;
-            control_ready = 1;
             control_send_status("template", "loaded", NULL);
 #ifdef CONFIG_DUMP_MEMORY_STAT
             dump_stats();
