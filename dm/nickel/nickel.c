@@ -484,6 +484,9 @@ void vbsfSaveHandleTable(QEMUFile *f);
 int vbsfLoadHandleTable(QEMUFile *f);
 #endif
 
+static void suspend_flush(struct nickel *ni);
+static void resume(struct nickel *ni);
+
 static void
 state_save(QEMUFile *f, void *opaque)
 {
@@ -492,6 +495,7 @@ state_save(QEMUFile *f, void *opaque)
     struct buff *bf, *bf_n;
 
     NETLOG("%s: saving nickel state", __FUNCTION__);
+    suspend_flush(ni);
     qemu_put_byte(f, ni->eth_vm_resolved ? 1 : 0);
     if (ni->eth_vm_resolved)
         qemu_put_buffer(f, ni->eth_vm, ETH_ALEN);
@@ -518,6 +522,7 @@ state_save(QEMUFile *f, void *opaque)
 #if defined(CONFIG_VBOXDRV)
     vbsfSaveHandleTable(f);
 #endif
+    resume(ni);
 }
 
 static int
@@ -1539,6 +1544,25 @@ void ni_exit(void)
     fflush(stderr);
 }
 
+static void suspend_flush(struct nickel *ni)
+{
+
+#if defined(NICKEL_THREADED)
+    ioh_event_reset(&ni->suspend_ok_ev);
+    ioh_event_reset(&ni->suspend_ev);
+    if (cmpxchg(&ni->suspend_request, 0, 1) == 0) {
+        NETLOG("%s: nickel thread suspend request", __FUNCTION__);
+        ioh_event_set(&ni->event);
+        ioh_event_wait(&ni->suspend_ok_ev);
+    }
+#endif
+    tcpip_flush(ni);
+    output(ni, NULL, true);
+    lava_flush(ni);
+    if (ni->pcapf)
+        fflush(ni->pcapf);
+}
+
 void ni_suspend_flush(void)
 {
     struct nc_nickel_s *nc;
@@ -1548,22 +1572,18 @@ void ni_suspend_flush(void)
         struct nickel *ni = nc->ni;
 
         assert(ni);
-#if defined(NICKEL_THREADED)
-        ioh_event_reset(&ni->suspend_ok_ev);
-        ioh_event_reset(&ni->suspend_ev);
-        if (cmpxchg(&ni->suspend_request, 0, 1) == 0) {
-            NETLOG("%s: nickel thread suspend request", __FUNCTION__);
-            ioh_event_set(&ni->event);
-            ioh_event_wait(&ni->suspend_ok_ev);
-        }
-#endif
-        tcpip_flush(ni);
-        output(ni, NULL, true);
-        lava_flush(ni);
-        if (ni->pcapf)
-            fflush(ni->pcapf);
+        suspend_flush(ni);
     }
     NETLOG("%s: flushed", __FUNCTION__);
+}
+
+static void resume(struct nickel *ni)
+{
+
+#if defined(NICKEL_THREADED)
+    ioh_event_set(&ni->suspend_ev);
+    ioh_event_set(&ni->deqin_ev);
+#endif
 }
 
 void ni_wakeup_loop(struct nickel *ni)

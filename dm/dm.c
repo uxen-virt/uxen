@@ -376,10 +376,6 @@ main(int argc, char **argv)
 	timeout = 1;
         host_main_loop_wait(&timeout); /* For the select() on events */
 
-#if defined(CONFIG_NICKEL)
-        ni_suspend_flush();
-#endif
-
         control_command_exit();
 
         /* complete any in-flight disk ops */
