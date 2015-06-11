@@ -68,6 +68,7 @@ long vm_time_offset = 0;
 xen_domain_handle_t vm_uuid;
 xen_domain_handle_t vm_template_uuid;
 int vm_has_template_uuid = 0;
+char *vm_template_file = NULL;
 int vm_restore_mode = VM_RESTORE_NONE;
 window_handle vm_window = NULL;
 window_handle vm_window_parent = NULL;

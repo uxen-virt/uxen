@@ -29,6 +29,7 @@ extern long vm_time_offset;
 extern uint8_t vm_uuid[16];
 extern uint8_t vm_template_uuid[16];
 extern int vm_has_template_uuid;
+extern char *vm_template_file;
 extern int vm_restore_mode;
 extern int vm_status_sent;
 extern window_handle vm_window;

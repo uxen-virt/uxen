@@ -86,6 +86,7 @@
 #define XC_SAVE_ID_VERSION            -16
 #define XC_SAVE_ID_HVM_INTROSPEC      -17
 #define XC_SAVE_ID_MAPCACHE_PARAMS    -18
+#define XC_SAVE_ID_VM_TEMPLATE_FILE   -19
 
 /* 
  * the script:
@@ -205,6 +206,12 @@ struct xc_save_mapcache_params {
     uint32_t end_high_pfn;
 };
 
+struct xc_save_vm_template_file {
+    int marker;
+    uint16_t size;
+    char file[];
+};
+
 #define MAX_BATCH_SIZE 1023
 
 typedef uint16_t cs16_t;
@@ -271,6 +278,7 @@ uxenvm_savevm_write_info(struct filebuf *f, uint8_t *dm_state_buf,
     struct xc_save_vm_uuid s_vm_uuid;
     struct xc_save_vm_template_uuid s_vm_template_uuid;
     struct xc_save_mapcache_params s_mapcache_params;
+    struct xc_save_vm_template_file s_vm_template_file;
     int j;
     int ret;
 
@@ -425,6 +433,13 @@ uxenvm_savevm_write_info(struct filebuf *f, uint8_t *dm_state_buf,
                         &s_mapcache_params.start_high_pfn,
                         &s_mapcache_params.end_high_pfn);
     filebuf_write(f, &s_mapcache_params, sizeof(s_mapcache_params));
+
+    if (vm_template_file) {
+        s_vm_template_file.marker = XC_SAVE_ID_VM_TEMPLATE_FILE;
+        s_vm_template_file.size = strlen(vm_template_file);
+        filebuf_write(f, &s_vm_template_file, sizeof(s_vm_template_file));
+        filebuf_write(f, vm_template_file, s_vm_template_file.size);
+    }
 
   out:
     return ret;
@@ -1136,6 +1151,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
     struct xc_save_vm_template_uuid s_vm_template_uuid = { 0, };
     struct xc_save_hvm_introspec s_hvm_introspec = { 0, };
     struct xc_save_mapcache_params s_mapcache_params = { 0, };
+    struct xc_save_vm_template_file s_vm_template_file = { 0, };
     struct immutable_range *immutable_ranges = NULL;
     uint8_t *hvm_buf = NULL;
     xen_pfn_t *pfn_type = NULL;
@@ -1315,6 +1331,23 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
         case XC_SAVE_ID_MAPCACHE_PARAMS:
             uxenvm_load_read_struct(f, s_mapcache_params, marker, ret, err_msg,
                                     out);
+            break;
+        case XC_SAVE_ID_VM_TEMPLATE_FILE:
+            uxenvm_load_read_struct(f, s_vm_template_file, marker, ret,
+                                    err_msg, out);
+            vm_template_file = calloc(1, s_vm_template_file.size);
+            if (vm_template_file == NULL) {
+                asprintf(err_msg, "vm_template_file = calloc(%d) failed",
+                         s_vm_template_file.size);
+                ret = -ENOMEM;
+                goto out;
+            }
+            ret = filebuf_read(f, vm_template_file, s_vm_template_file.size);
+            if (ret < 0) {
+                asprintf(err_msg, "uxenvm_read(vm_template_file) failed");
+                goto out;
+            }
+            APRINTF("vm template file: %s", vm_template_file);
             break;
 	default:
             decompress = 0;
@@ -1709,6 +1742,10 @@ vm_load(const char *name, int restore_mode)
 	    EPRINTF("%s", err_msg);
 	goto out;
     }
+
+    /* 1st generation clone, record name as template filename */
+    if (restore_mode == VM_RESTORE_CLONE && !vm_template_file)
+        vm_template_file = strdup(name);
 
   out:
     if (f)
