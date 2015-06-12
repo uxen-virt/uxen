@@ -256,6 +256,9 @@ channel_write(struct ctx *c, void *data, unsigned int len)
 #endif
 }
 
+#if defined(_WIN32)
+BOOL WINAPI CancelIoEx(HANDLE hFile, LPOVERLAPPED lpOverlapped);
+
 static void
 snd_complete(struct ctx *c)
 {
@@ -292,6 +295,9 @@ snd_complete(struct ctx *c)
     }
     LeaveCriticalSection(&c->sndlock);
 }
+#else
+#define snd_complete(c)
+#endif
 
 file_handle_t
 uxenconsole_connect(uxenconsole_context_t ctx)
@@ -423,8 +429,6 @@ uxenconsole_channel_event(uxenconsole_context_t ctx, file_handle_t event,
     }
 #endif
 }
-
-BOOL WINAPI CancelIoEx(HANDLE hFile, LPOVERLAPPED lpOverlapped);
 
 void
 uxenconsole_disconnect(uxenconsole_context_t ctx)
