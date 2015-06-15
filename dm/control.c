@@ -780,7 +780,7 @@ struct dict_rpc_command control_commands[] = {
             { "filename", DICT_RPC_ARG_TYPE_STRING, .optional = 1 },
             { "compress", DICT_RPC_ARG_TYPE_STRING, .optional = 1 },
             { "single-page", DICT_RPC_ARG_TYPE_BOOLEAN, .optional = 1,
-              .defval = DICT_RPC_ARG_DEFVAL_BOOLEAN("false") },
+              .defval = DICT_RPC_ARG_DEFVAL_BOOLEAN("true") },
             { NULL, },
         }, },
     { "set-balloon-size", control_command_set_balloon_size,

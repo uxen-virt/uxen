@@ -1604,8 +1604,8 @@ vm_save(void)
     int ret;
 
     /* XXX init debug option */
-    if (!strstr(uxen_opt_debug, ",compbatch,"))
-        vm_save_info.single_page = 1;
+    if (strstr(uxen_opt_debug, ",compbatch,"))
+        vm_save_info.single_page = 0;
 
     vm_save_info.awaiting_suspend = 1;
     vm_set_run_mode(SUSPEND_VM);
@@ -1628,7 +1628,7 @@ mc_savevm(Monitor *mon, const dict args)
     vm_save_info.filename = filename ? strdup(filename) : NULL;
 
     vm_save_info.compress = dict_get_string(args, "compress") ? 1 : 0;
-    vm_save_info.single_page = dict_get_boolean_default(args, "single-page", 0);
+    vm_save_info.single_page = dict_get_boolean_default(args, "single-page", 1);
 
     vm_save();
 }
