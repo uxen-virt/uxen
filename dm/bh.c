@@ -54,7 +54,9 @@ bh_new(BHFunc *cb, void *opaque)
     bh = calloc(1, sizeof(BH));
     bh->cb = cb;
     bh->opaque = opaque;
+    critical_section_enter(&bh_lock);
     TAILQ_INSERT_TAIL(&bhs, bh, queue);
+    critical_section_leave(&bh_lock);
 
     return bh;
 }
