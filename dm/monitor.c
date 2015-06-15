@@ -300,7 +300,7 @@ static mon_cmd_t mon_cmds[] = {
     { .name = "quit|q", .mhandler.cmd = mc_quit,
       .args_type = "?s:force", .help = "terminate the vm" },
     { .name = "savevm", .mhandler.cmd = mc_savevm,
-      .args_type = "?s:filename,?s:compress,?b:single-page",
+      .args_type = "?s:filename,?s:compress,?b:single-page,?b:free-mem",
       .help = "save the vm" },
     { .name = "debug-break|xdbg", .mhandler.cmd = mc_debug_break,
       .help = "execute breakpoint instruction" },

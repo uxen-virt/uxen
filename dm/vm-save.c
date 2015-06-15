@@ -127,6 +127,7 @@ struct vm_save_info vm_save_info = {
     .command_id = NULL,
     .compress = 0,
     .single_page = 0,
+    .free_mem = 1,
 };
 
 static int
@@ -1629,6 +1630,7 @@ mc_savevm(Monitor *mon, const dict args)
 
     vm_save_info.compress = dict_get_string(args, "compress") ? 1 : 0;
     vm_save_info.single_page = dict_get_boolean_default(args, "single-page", 1);
+    vm_save_info.free_mem = dict_get_boolean_default(args, "free-mem", 1);
 
     vm_save();
 }
@@ -1697,7 +1699,8 @@ vm_save_execute(void)
 	goto out;
     }
 
-    ret = uxenvm_savevm_write_pages(f, vm_save_info.compress, 1,
+    ret = uxenvm_savevm_write_pages(f, vm_save_info.compress,
+                                    vm_save_info.free_mem,
                                     vm_save_info.single_page, &err_msg);
     if (ret) {
         if (!err_msg)

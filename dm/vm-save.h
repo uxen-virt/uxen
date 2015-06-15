@@ -20,6 +20,7 @@ struct vm_save_info {
 
     int compress;
     int single_page;
+    int free_mem;
 };
 
 extern struct vm_save_info vm_save_info;
