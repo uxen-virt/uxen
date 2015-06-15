@@ -759,6 +759,8 @@ collect_vm_stats(void *opaque, const char *id, const char *opt,
     return 0;
 }
 
+#define CONTROL_SUSPEND_OK 0x0001
+
 /* must be strcmp sorted */
 struct dict_rpc_command control_commands[] = {
 #ifdef HAS_AUDIO
@@ -816,7 +818,7 @@ struct dict_rpc_command control_commands[] = {
             { "set", DICT_RPC_ARG_TYPE_ARRAY, .optional = 0 },
       }, },
     { "pause", control_command_pause, },
-    { "quit", control_command_quit, },
+    { "quit", control_command_quit, .flags = CONTROL_SUSPEND_OK },
     { "remote-execute", remote_execute,
       .args = (struct dict_rpc_arg_desc[]) {
             { "command-line", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },
@@ -874,6 +876,29 @@ struct dict_rpc_command control_commands[] = {
     { "unpause", control_command_unpause, },
 };
 
+static int
+control_execute(dict_rpc_send_fn send_fn, void *send_opaque,
+                struct dict_rpc_command *c, const char *id,
+                dict d, void *fn_opaque)
+{
+
+    switch (vm_get_run_mode()) {
+    case SUSPEND_VM:
+        if (!(c->flags & CONTROL_SUSPEND_OK)) {
+            dict_rpc_error(send_fn, send_opaque, c->command, id, EAGAIN,
+                           "invalid state: command \"%s\" "
+                           "not allowed while VM suspended",
+                           c->command);
+            return EAGAIN | DICT_EXECUTE_ERROR_SUPPRESS;
+        }
+        break;
+    default:
+        break;
+    }
+
+    return c->fn(fn_opaque, id, c->command, d, c->opaque);
+}
+
 static void
 control_process_input(struct control_desc *cd)
 {
@@ -885,7 +910,7 @@ control_process_input(struct control_desc *cd)
     debug_printf("control: %s\n", cd->input);
 
     /* ret = */ dict_rpc_process_input_buffer(
-        control_send, cd, cd->input,
+        control_execute, control_send, cd, cd->input,
         control_commands, ARRAY_SIZE(control_commands), cd);
 }
 

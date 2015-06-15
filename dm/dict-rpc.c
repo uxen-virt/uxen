@@ -533,7 +533,8 @@ validate_arguments(struct dict_rpc_command *c, dict obj,
 }
 
 int
-dict_rpc_process_input(dict_rpc_send_fn send_fn, void *send_opaque, dict d,
+dict_rpc_process_input(dict_rpc_execute_fn execute_fn,
+                       dict_rpc_send_fn send_fn, void *send_opaque, dict d,
                        struct dict_rpc_command *commands, size_t n_commands,
                        void *fn_opaque)
 {
@@ -601,11 +602,14 @@ dict_rpc_process_input(dict_rpc_send_fn send_fn, void *send_opaque, dict d,
         goto out;
     }
 
-    ret = c->fn(fn_opaque, id, c->command, d, c->opaque);
+    ret = execute_fn(send_fn, send_opaque, c, id, d, fn_opaque);
     if (ret) {
-        dict_rpc_error(send_fn, send_opaque, command, id, ret,
-                       "processing error: command \"%s\" failed",
-                       command);
+        if (ret & DICT_EXECUTE_ERROR_SUPPRESS)
+            ret &= ~DICT_EXECUTE_ERROR_SUPPRESS;
+        else
+            dict_rpc_error(send_fn, send_opaque, command, id, ret,
+                           "processing error: command \"%s\" failed",
+                           command);
         goto out;
     }
 
@@ -615,7 +619,8 @@ dict_rpc_process_input(dict_rpc_send_fn send_fn, void *send_opaque, dict d,
 }
 
 int
-dict_rpc_process_input_buffer(dict_rpc_send_fn send_fn, void *send_opaque,
+dict_rpc_process_input_buffer(dict_rpc_execute_fn execute_fn,
+                              dict_rpc_send_fn send_fn, void *send_opaque,
                               const char *input,
                               struct dict_rpc_command *commands,
                               size_t n_commands, void *fn_opaque)
@@ -629,7 +634,7 @@ dict_rpc_process_input_buffer(dict_rpc_send_fn send_fn, void *send_opaque,
         return -1;
     }
 
-    return dict_rpc_process_input(send_fn, send_opaque, d,
+    return dict_rpc_process_input(execute_fn, send_fn, send_opaque, d,
                                   commands, n_commands, fn_opaque);
 }
 

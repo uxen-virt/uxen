@@ -62,13 +62,20 @@ struct dict_rpc_command {
     dict_rpc_command_fn fn;
     void *opaque;
     struct dict_rpc_arg_desc *args;
+    unsigned long long int flags;
 };
+
+typedef int (*dict_rpc_execute_fn)(dict_rpc_send_fn, void *,
+                                   struct dict_rpc_command *, const char *,
+                                   dict, void *);
 
 void dict_rpc_init(void);
 void dict_rpc_cb_exit(void);
-int dict_rpc_process_input(dict_rpc_send_fn, void *, dict,
+int dict_rpc_process_input(dict_rpc_execute_fn, dict_rpc_send_fn, void *, dict,
                            struct dict_rpc_command *, size_t, void *);
-int dict_rpc_process_input_buffer(dict_rpc_send_fn, void *, const char *,
+int dict_rpc_process_input_buffer(dict_rpc_execute_fn, dict_rpc_send_fn,
+                                  void *, const char *,
                                   struct dict_rpc_command *, size_t, void *);
+#define DICT_EXECUTE_ERROR_SUPPRESS 0x80000000
 
 #endif  /* _DICT_RPC_ */

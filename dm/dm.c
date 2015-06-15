@@ -376,8 +376,6 @@ main(int argc, char **argv)
 	timeout = 1;
         host_main_loop_wait(&timeout); /* For the select() on events */
 
-        control_command_exit();
-
         /* complete any in-flight disk ops */
         bdrv_flush_all(0);
         aio_flush();

@@ -801,6 +801,12 @@ vm_set_run_mode(enum vm_run_mode r)
     ioh_event_set(&vm_run_mode_change);
 }
 
+enum vm_run_mode
+vm_get_run_mode(void)
+{
+    return run_mode;
+}
+
 void
 vm_poweroff(void)
 {
