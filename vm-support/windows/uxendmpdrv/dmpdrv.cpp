@@ -63,7 +63,7 @@ static __inline VOID SendCommand(
 {
     char *p;
 
-    ASSERT(0 == (cbBufferSize % 4));
+    ASSERT(!(cbBufferSize & 3));
 
     WRITE_PORT_UCHAR((PUCHAR)DMPDEV_CONTROL_PORT, (UCHAR)ctrl);
 

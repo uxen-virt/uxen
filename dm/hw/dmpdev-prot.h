@@ -8,7 +8,7 @@
 #define _DMPDEV_PROT_H_
 
 #define C_ASSERT_4B_ALIGN(s) \
-    typedef char __c_assert_4b_align[(!!(0 == (!(sizeof(s) & (~3))))) * 2 - 1]
+    typedef char __c_assert_4b_align[(!(sizeof(s) & 3)) * 2 - 1]
 
 #define DMPDEV_CONTROL_PORT 0x998UL
 #define DMPDEV_DATA_PORT    0x999UL
