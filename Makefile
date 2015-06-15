@@ -10,6 +10,7 @@ include $(TOPDIR)/Config.mk
 SUBDIRS  =
 SUBDIRS += xen
 SUBDIRS += common/xen-tools/firmware
+SUBDIRS += common/include
 SUBDIRS += $(TARGET_HOST)
 
 TARGETS = all dist clean

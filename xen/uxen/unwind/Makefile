@@ -17,7 +17,7 @@ VPATH = $(SRCROOT)
 
 $(HOST_WINDOWS)CC := $(TOOLSDIR)/bin/x86_64-w64-mingw32-gcc
 
-$(HOST_WINDOWS)CPPFLAGS += -I$(TOPDIR)/windows/include
+$(HOST_WINDOWS)CPPFLAGS += -I$(TOPDIR)/windows/include -I$(TOPDIR)/common/include
 
 all dist: xpdata-extract$(HOST_EXE_SUFFIX)
 	@ :

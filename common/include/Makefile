@@ -1,5 +1,5 @@
 #
-# Copyright 2013-2015, Bromium, Inc.
+# Copyright 2015, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -15,7 +15,7 @@ VPATH = $(SRCDIR)
 all:
 	@ :
 
-SDK_include_files =
+SDK_include_files = $(SDKDIR_include)/err.h
 
 dist: $(SDK_include_files)
 

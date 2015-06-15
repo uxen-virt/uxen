@@ -71,6 +71,7 @@ link = $(LINK.o) -o $1 $2
 endif
 
 CPPFLAGS += -I$(abspath $(TOPDIR)/windows/include)
+CPPFLAGS += -I$(abspath $(TOPDIR)/common/include)
 CPPFLAGS += -I$(abspath $(TOOLSDIR)/cross-mingw/include)
 
 $(REL_ONLY)LDFLAGS += -Wl,--dynamicbase -Wl,--nxcompat -pie 

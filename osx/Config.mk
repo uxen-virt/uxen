@@ -17,6 +17,7 @@ RANLIB := $(if $(subst ranlib,,$(RANLIB)),$(RANLIB),ranlib)
 STRIP := $(if $(subst strip,,$(STRIP)),$(STRIP),strip)
 
 CPPFLAGS += -I$(abspath $(TOPDIR)/osx/include)
+CPPFLAGS += -I$(abspath $(TOPDIR)/common/include)
 #CPPFLAGS += -I$(abspath $(TOOLSDIR)/cross-xxx/include)
 
 #LDFLAGS += 
