@@ -7,7 +7,8 @@
 #include <ntddk.h>
 #include <Aux_klib.h>
 
-#include "uxenvmlib.h"
+#include <uxenvmlib.h>
+#include <compiler.h>
 
 #include <dm/hw/dmpdev-prot.h>
 
