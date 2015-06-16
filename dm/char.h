@@ -15,6 +15,7 @@
 struct CharDriverState {
     void (*init)(struct CharDriverState *s);
     int (*chr_write)(struct CharDriverState *s, const uint8_t *buf, int len);
+    int (*chr_write_flush)(struct CharDriverState *s);
     void (*chr_update_read_handler)(struct CharDriverState *s);
     int (*chr_ioctl)(struct CharDriverState *s, int cmd, void *arg);
     void (*chr_restore)(struct CharDriverState *s, QEMUFile *f);
@@ -56,6 +57,7 @@ int qemu_chr_can_read(CharDriverState *s);
 int qemu_chr_can_write(CharDriverState *s);
 void qemu_chr_read(CharDriverState *s, uint8_t *buf, int len);
 int qemu_chr_write(CharDriverState *s, const uint8_t *buf, int len);
+int qemu_chr_write_flush(CharDriverState *s);
 void qemu_chr_send_event(CharDriverState *s, int event);
 void qemu_chr_send_event_async(CharDriverState *s, int event);
 void qemu_chr_disconnect(CharDriverState *s);
