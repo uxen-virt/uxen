@@ -672,10 +672,11 @@ vm_run_mode_change_cb(void *opaque)
 #ifdef CONFIG_DUMP_MEMORY_STAT
       dump_periodic_stats_reset();
 #endif  /* CONFIG_DUMP_MEMORY_STAT */
+        vm_clock_unpause();
+        break;
     case SUSPEND_VM:
     case POWEROFF_VM:
     case DESTROY_VM:
-        vm_clock_unpause();
         break;
     case PAUSE_VM:
         vm_clock_pause();

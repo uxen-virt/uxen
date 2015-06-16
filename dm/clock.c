@@ -17,7 +17,7 @@
 #ifdef RELATIVE_CLOCK
 static int64_t start_time;
 int64_t time_pause_adjust = 0;
-static uint32_t clock_paused = 0;
+static int64_t clock_paused_time = 0;
 static critical_section clock_lck;
 #else
 #define start_time 0
@@ -58,12 +58,16 @@ int64_t _os_get_clock(int type)
 
     if (type == CLOCK_VIRTUAL)
         vm_clock_lock();
-    QueryPerformanceCounter(&ti);
-    ret = muldiv64(ti.QuadPart - start_time, CLOCK_BASE, clock_freq);
-    if (type == CLOCK_VIRTUAL) {
-        ret -= time_pause_adjust;
-        vm_clock_unlock();
+    if (type == CLOCK_VIRTUAL && clock_paused_time)
+        ret = clock_paused_time;
+    else {
+        QueryPerformanceCounter(&ti);
+        ret = muldiv64(ti.QuadPart - start_time, CLOCK_BASE, clock_freq);
+        if (type == CLOCK_VIRTUAL)
+            ret -= time_pause_adjust;
     }
+    if (type == CLOCK_VIRTUAL)
+        vm_clock_unlock();
 
     return ret;
 }
@@ -75,10 +79,14 @@ int64_t _os_get_clock_ms(int type)
 
     if (type == CLOCK_VIRTUAL)
         vm_clock_lock();
-    QueryPerformanceCounter(&ti);
-    ret = muldiv64(ti.QuadPart - start_time, CLOCK_BASE, clock_freq);
-    if (type == CLOCK_VIRTUAL)
-        ret -= time_pause_adjust;
+    if (type == CLOCK_VIRTUAL && clock_paused_time)
+        ret = clock_paused_time;
+    else {
+        QueryPerformanceCounter(&ti);
+        ret = muldiv64(ti.QuadPart - start_time, CLOCK_BASE, clock_freq);
+        if (type == CLOCK_VIRTUAL)
+            ret -= time_pause_adjust;
+    }
     ret /= SCALE_MS;
     if (type == CLOCK_VIRTUAL)
         vm_clock_unlock();
@@ -137,23 +145,27 @@ static void vm_clock_unlock(void)
 void
 vm_clock_pause(void)
 {
-    if (cmpxchg(&clock_paused, 0, 1) != 0)
-	return;
 
     vm_clock_lock();
 
-    debug_printf("vm clock pause\n");
+    if (!clock_paused_time) {
+        clock_paused_time = _os_get_clock(CLOCK_REALTIME) - time_pause_adjust;
+        debug_printf("%s\n", __FUNCTION__);
+    }
+
+    vm_clock_unlock();
 }
 
 void vm_clock_unpause(void)
 {
 
-    if (cmpxchg(&clock_paused, 1, 2) != 1)
-	return;
+    vm_clock_lock();
 
-    debug_printf("vm clock unpause\n");
+    if (clock_paused_time) {
+        debug_printf("%s\n", __FUNCTION__);
+        clock_paused_time = 0;
+    }
 
-    clock_paused = 0;
     vm_clock_unlock();
 }
 #else
@@ -214,7 +226,7 @@ clock_is_paused(Clock *clock)
     case CLOCK_REALTIME:
         return 0;
     case CLOCK_VIRTUAL:
-        return clock_paused;
+        return !!clock_paused_time;
     default:
         err(1, "%s: invalid type %d", __FUNCTION__, clock->type);
     }
