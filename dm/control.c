@@ -54,7 +54,6 @@ static struct control_desc {
     int input_len;
     int input_size;
     int discard;
-    critical_section send_lock;
 } control = { NULL, };
 
 static int
@@ -72,11 +71,7 @@ control_send(void *send_opaque, char *buf, size_t len)
 
     tmp[len] = '\n';
 
-    critical_section_enter(&cd->send_lock);
-
     qemu_chr_write(cd->chr, (const uint8_t *)buf, len + 1);
-
-    critical_section_leave(&cd->send_lock);
 
     free(buf);
 
@@ -951,8 +946,6 @@ control_open(char *path)
     control.input_len = 0;
     control.input_size = 0;
     control.discard = 0;
-
-    critical_section_init(&control.send_lock);
 
     qemu_chr_add_handlers(control.chr, control_can_receive,
 			  control_receive, NULL, &control);
