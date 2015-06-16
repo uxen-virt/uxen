@@ -146,6 +146,48 @@ control_send_status(const char *key, const char *val, ...)
     return ret;
 }
 
+__attribute__ ((__format__ (printf, 6, 0)))
+void control_err_vprintf(const char *function, int line,
+                         const char *type,
+                         int errval, const char *errdesc,
+                         const char *fmt, va_list ap)
+{
+    char *msg;
+
+    vasprintf(&msg, fmt, ap);
+    debug_printf("%s", msg);
+    debug_printf("\n");
+
+    if (control.chr) {
+        if (errval || errdesc)
+            dict_rpc_status(control_send, &control,
+                            "ssisis",
+                            "uxendm", type,
+                            "function", function,
+                            "line", (uint64_t)line,
+                            "message", msg,
+                            "value", (uint64_t)errval,
+                            "description", errdesc,
+                            NULL);
+        else
+            dict_rpc_status(control_send, &control,
+                            "ssis",
+                            "uxendm", type,
+                            "function", function,
+                            "line", (uint64_t)line,
+                            "message", msg,
+                            NULL);
+    }
+    free(msg);
+}
+
+void control_err_flush(void)
+{
+    if (control.chr)
+        qemu_chr_write_flush(control.chr);
+    fflush(stderr);
+}
+
 int
 control_send_command(const char *command, const dict args,
                      void (*callback)(void *, dict), void *callback_opaque)

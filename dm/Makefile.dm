@@ -47,6 +47,7 @@ $(OSX)CFLAGS += -Wno-deprecated-declarations
 $(DEBUG_ONLY)CFLAGS += -DDEBUG=1
 
 CFLAGS += $(YAJL_CPPFLAGS)
+CFLAGS += -D_err_vprintf=control_err_vprintf -D_err_flush=control_err_flush
 
 DM_CFLAGS = -I$(TOPDIR)
 DM_CFLAGS += -Dmain=dm_main
