@@ -965,6 +965,9 @@ uxenvm_load_readbatch(struct filebuf *f, int batch, xen_pfn_t *pfn_type,
 
     LOAD_DPRINTF("page batch %03x pages", batch);
 
+    if (!single_page)
+        populate_compressed = 0;
+
     ret = filebuf_read(f, &pfn_info[0], batch * sizeof(pfn_info[0]));
     if (ret < 0) {
         asprintf(err_msg, "pfn_type read %d failed", batch);
