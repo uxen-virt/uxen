@@ -88,6 +88,7 @@ struct VMStateDescription {
     int (*pre_load)(void *opaque);
     int (*post_load)(void *opaque, int version_id);
     void (*pre_save)(void *opaque);
+    void (*post_save)(void *opaque);
     VMStateField *fields;
     const VMStateSubsection *subsections;
 };

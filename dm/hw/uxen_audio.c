@@ -640,6 +640,14 @@ uxenaudio_pre_save(void *opaque)
     pci_ram_pre_save(&s->dev);
 }
 
+static void
+uxenaudio_post_save(void *opaque)
+{
+    UXenAudioState *s = opaque;
+
+    pci_ram_post_save(&s->dev);
+}
+
 static const VMStateDescription vmstate_uxenaudiovoiceout = {
     .name = "uxenaudiovoiceout",
     .version_id = 2,
@@ -665,6 +673,7 @@ static const VMStateDescription vmstate_uxenaudio = {
     .minimum_version_id_old = 2,
     .pre_save = uxenaudio_pre_save,
     .post_load = uxenaudio_post_load,
+    .post_save = uxenaudio_post_save,
     .fields = (VMStateField[]) {
         VMSTATE_PCI_DEVICE (dev, UXenAudioState),
         VMSTATE_UINT32(unused1, UXenAudioState),

@@ -218,6 +218,13 @@ static void uxen_platform_pre_save(void *opaque)
     pci_ram_pre_save(&s->dev);
 }
 
+static void
+uxen_platform_post_save(void *opaque)
+{
+    PCI_uxen_platform_state *s = opaque;
+
+    pci_ram_post_save(&s->dev);
+}
 
 static const VMStateDescription vmstate_uxen_platform_ctl_mmio = {
     .name = "uxen-platform-ctl-mmio",
@@ -241,6 +248,7 @@ static const VMStateDescription vmstate_uxen_platform = {
     .minimum_version_id_old = 1,
     .pre_save = uxen_platform_pre_save,
     .post_load = uxen_platform_post_load,
+    .post_save = uxen_platform_post_save,
     .fields = (VMStateField []) {
         VMSTATE_PCI_DEVICE(dev, PCI_uxen_platform_state),
         VMSTATE_STRUCT(ctl_mmio, PCI_uxen_platform_state, 0,

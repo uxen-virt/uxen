@@ -137,6 +137,28 @@ pci_ram_pre_save(PCIDevice *d)
 }
 
 void
+pci_ram_post_save(PCIDevice *d)
+{
+    PCIIORegion *r;
+    int i;
+    pcibus_t addr;
+    struct ram_range *range;
+
+    for (i = 0; i < PCI_NUM_REGIONS; i++) {
+        r = &d->io_regions[i];
+        if (!r->size)
+            continue;
+        addr = pci_bar_address(d, i, r->type, r->size);
+        if (addr != PCI_BAR_UNMAPPED) {
+            TAILQ_FOREACH(range, &r->memory->ram_map, link) {
+                unmap_ram(range->ram_ptr, range->length);
+                range->ram_ptr = NULL;
+            }
+        }
+    }
+}
+
+void
 pci_ram_post_load(PCIDevice *d, int version_id)
 {
     PCIIORegion *r;

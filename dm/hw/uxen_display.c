@@ -682,6 +682,14 @@ uxendisp_post_load(void *opaque, int version_id)
     return 0;
 }
 
+static void
+uxendisp_post_save(void *opaque)
+{
+    struct uxendisp_state *s = opaque;
+
+    pci_ram_post_save(&s->dev);
+}
+
 static const VMStateDescription vmstate_uxendisp_crtc = {
     .name = "uxendisp-crtc",
     .version_id = 6,
@@ -712,6 +720,7 @@ static const VMStateDescription vmstate_uxendisp = {
     .minimum_version_id_old = 7,
     .pre_save = uxendisp_pre_save,
     .post_load = uxendisp_post_load,
+    .post_save = uxendisp_post_save,
     .fields      = (VMStateField []) {
         VMSTATE_PCI_DEVICE(dev, struct uxendisp_state),
         VMSTATE_STRUCT(vga, struct uxendisp_state, 0,

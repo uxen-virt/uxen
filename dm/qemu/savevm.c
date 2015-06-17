@@ -1627,6 +1627,10 @@ void vmstate_save_state(QEMUFile *f, const VMStateDescription *vmsd,
     vmstate_subsection_save(f, vmsd, opaque);
     VMSTATE_DPRINTF("%s/%"PRIx64": %s save done\n", __FUNCTION__, qemu_ftell(f),
 		    vmsd->name);
+    if (vmsd->post_save) {
+        VMSTATE_DPRINTF("%s: save %s post\n", __FUNCTION__, vmsd->name);
+        vmsd->post_save(opaque);
+    }
 }
 
 static int vmstate_load(QEMUFile *f, SaveStateEntry *se, int version_id)
