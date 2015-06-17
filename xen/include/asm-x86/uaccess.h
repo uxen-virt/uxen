@@ -21,7 +21,6 @@ unsigned long copy_from_user(void *to, const void *from, unsigned len);
 unsigned long __copy_to_user_ll(void *to, const void *from, unsigned n);
 unsigned long __copy_from_user_ll(void *to, const void *from, unsigned n);
 
-#ifndef __UXEN_MACOS__
 extern long __get_user_bad(void);
 extern void __put_user_bad(void);
 
@@ -277,22 +276,5 @@ extern struct exception_table_entry __stop___pre_ex_table[];
 
 extern unsigned long search_exception_table(unsigned long);
 extern void sort_exception_tables(void);
-#else   /* __UXEN_MACOS__ */
-static always_inline unsigned long
-__copy_to_user(void __user *to, const void *from, unsigned long n)
-{
-	return memcpy(to, from, n) != to ? n : 0;
-}
-static always_inline unsigned long
-__copy_from_user(void *to, const void __user *from, unsigned long n)
-{
-	return memcpy(to, from, n) != to ? n : 0;
-}
-#define get_user(x,ptr) ({						\
-			unsigned long n =				\
-				__copy_from_user(&(x), (ptr), sizeof(*(ptr))); \
-			n ? -EFAULT : 0;				\
-		})
-#endif  /* __UXEN_MACOS__ */
 
 #endif /* __X86_UACCESS_H__ */
