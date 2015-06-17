@@ -489,11 +489,11 @@ validate_arguments(struct dict_rpc_command *c, dict obj,
                 break;
             }
             v = dict_get(obj, ad->name);
-            if (v || ad->optional)
-                continue;
-            snprintf(errbuf, errbuf_size, "argument \"%s\" is required",
-                     ad->name);
-            return EINVAL;
+            if (!v && ad->optional) {
+                snprintf(errbuf, errbuf_size, "argument \"%s\" is required",
+                         ad->name);
+                return EINVAL;
+            }
         }
         switch (ad->type) {
         case DICT_RPC_ARG_TYPE_STRING:
