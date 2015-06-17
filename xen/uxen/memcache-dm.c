@@ -169,10 +169,12 @@ mdm_enter(struct domain *d, xen_pfn_t pfn, xen_pfn_t mfn)
     mdm_mfn_entry_t *entry;
     uint32_t offset;
     mdm_mfn_t opfn = MDM_MFN_NONE;
+    __smap_state(aflags);
 
     if (!vmis->vmi_mapcache_active)
         return MDM_MFN_NONE;
 
+    __smap_disable(&aflags);
   again:
     if (pfn < d->mdm_end_low_gpfn)
         entry = &d->mdm_mfn_to_entry[pfn];
@@ -182,7 +184,9 @@ mdm_enter(struct domain *d, xen_pfn_t pfn, xen_pfn_t mfn)
     else {
         if (!d->mdm_end_low_gpfn && !mdm_init_vm(d))
             goto again;
-        return MDM_MFN_NONE;
+
+        opfn = MDM_MFN_NONE;
+        goto out;
     }
 
     if (mdm_entry_get(d, pfn)) {
@@ -190,7 +194,9 @@ mdm_enter(struct domain *d, xen_pfn_t pfn, xen_pfn_t mfn)
             mdm->mdm_takeref--;
         else
             mdm_entry_put(d, pfn);
-        return MDM_MFN_EXISTING;
+
+        opfn = MDM_MFN_EXISTING;
+        goto out;
     }
 
     offset = d->mdm_next_offset;
@@ -221,6 +227,8 @@ mdm_enter(struct domain *d, xen_pfn_t pfn, xen_pfn_t mfn)
     if (opfn == d->mdm_undefined_mfn)
         opfn = MDM_MFN_NONE;
 
+out:
+    __smap_restore(aflags);
     return opfn;
 }
 
@@ -231,10 +239,13 @@ mdm_clear(struct domain *d, xen_pfn_t pfn, int force)
     struct mdm_info *mdm = &vmis->vmi_mdm;
     mdm_mfn_entry_t *entry;
     uint32_t offset;
+    __smap_state(aflags);
+    int ret;
 
     if (!vmis->vmi_mapcache_active)
         return -1;
 
+    __smap_disable(&aflags);
   again:
     if (pfn < d->mdm_end_low_gpfn)
         entry = &d->mdm_mfn_to_entry[pfn];
@@ -244,14 +255,20 @@ mdm_clear(struct domain *d, xen_pfn_t pfn, int force)
     else {
         if (!d->mdm_end_low_gpfn && !mdm_init_vm(d))
             goto again;
-        return MDM_MFN_NONE;
+
+        ret = MDM_MFN_NONE;
+        goto out;
     }
 
     offset = *entry;
-    if (offset == ~0U)
-	return 0;
-    if (mdm_entry_clear(d, pfn) && !force)
-	return 1;
+    if (offset == ~0U) {
+       ret = 0;
+       goto out;
+    }
+    if (mdm_entry_clear(d, pfn) && !force) {
+       ret = 1;
+       goto out;
+    }
 
     offset &= MEMCACHE_ENTRY_OFFSET_MASK;
     // offset <<= (PAGE_SHIFT - MEMCACHE_ENTRY_OFFSET_SHIFT);
@@ -260,8 +277,11 @@ mdm_clear(struct domain *d, xen_pfn_t pfn, int force)
     mdm_unmap_mfn(mdm->mdm_va, offset, d->mdm_undefined_mfn);
     offset >>= PAGE_SHIFT;
     d->mdm_mapped_pfn[offset] = ~0U;
+    ret = -1;
 
-    return -1;
+out:
+    __smap_restore(aflags);
+    return ret;
 }
 
 static int

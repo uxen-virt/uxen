@@ -690,6 +690,7 @@ uxen_op_init(struct fd_assoc *fda)
     uxen_info->ui_memcache_dm_map_mfn = memcache_dm_map_mfn;
 
     uxen_info->ui_user_access_ok = uxen_mem_user_access_ok;
+    uxen_info->ui_smap_enabled = xnu_pmap_smap_enabled() ? 1 : 0;
 
     printk("uxen mem:     maxpage %x\n", uxen_info->ui_max_page);
 

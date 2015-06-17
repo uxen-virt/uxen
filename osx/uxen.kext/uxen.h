@@ -65,6 +65,35 @@ extern "C" {
 #define UXEN_MAP_PAGE_RANGE_MAX 16
 
 typedef uint32_t preemption_t;
+void disable_preemption(preemption_t *i);
+void enable_preemption(preemption_t i);
+struct smap_state {
+    uint64_t flags;
+    preemption_t i;
+};
+#define uxen_smap_state(smap) struct smap_state smap
+
+static inline void uxen_smap_preempt_disable(struct smap_state *s)
+{
+    if (!xnu_pmap_smap_enabled())
+        return;
+
+    disable_preemption(&s->i);
+    asm ("pushfq; popq %0\n\t" : "=r"(s->flags));
+    if (!(s->flags & EFL_AC))
+        asm volatile("stac\n\t");
+}
+
+static inline void uxen_smap_preempt_restore(struct smap_state *s)
+{
+    if (!xnu_pmap_smap_enabled())
+        return;
+
+    if (!(s->flags & EFL_AC))
+        asm volatile("clac\n\t");
+    enable_preemption(s->i);
+}
+
 #define spinlock_acquire(lock, p) (({ (void)(p); lck_spin_lock(lock); }))
 #define spinlock_release(lock, p) (({ (void)(p); lck_spin_unlock(lock); }))
 #define spinlock_initialize(lock) (({                                   \
@@ -192,33 +221,8 @@ intptr_t uxen_dom0_hypercall(struct vm_info_shared *, void *,
 int32_t _uxen_snoop_hypercall(void *udata, int mode);
 #define uxen_snoop_hypercall(udata) _uxen_snoop_hypercall(udata, SNOOP_USER)
 
-static inline void uxen_smap_disable(uint64_t *flags)
-{
-
-    if (!xnu_pmap_smap_enabled())
-        return;
-
-    asm ("pushfq; popq %0\n\t" : "=r"(*flags));
-    if (!(*flags & EFL_AC))
-        asm volatile("stac\n\t");
-}
-
-static inline void uxen_smap_restore(uint64_t flags)
-{
-
-    if (!xnu_pmap_smap_enabled())
-        return;
-
-    if (!(flags & EFL_AC))
-        asm volatile("clac\n\t");
-
-}
-
 #define try_call(r, exception_retval, fn, ...) do {                 \
-        uint64_t flags;                                             \
-        uxen_smap_disable(&flags);                                  \
         r fn(__VA_ARGS__);                                          \
-        uxen_smap_restore(flags);                                   \
     } while (0)
 
 #define uxen_call(r, exception_retval, _pages, fn, ...) do {            \
@@ -264,8 +268,6 @@ extern const rb_tree_ops_t pointer_map_rbtree_ops;
 
 /* uxen_ops.c */
 extern uint32_t uxen_zero_mfn;
-void disable_preemption(preemption_t *i);
-void enable_preemption(preemption_t i);
 void set_host_preemption(uint64_t disable);
 void __cdecl signal_idle_thread(void);
 int suspend_block(preemption_t i, uint32_t pages, uint32_t *reserve_increase);

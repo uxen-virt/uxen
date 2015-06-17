@@ -24,6 +24,30 @@ unsigned long __copy_from_user_ll(void *to, const void *from, unsigned n);
 extern long __get_user_bad(void);
 extern void __put_user_bad(void);
 
+#if defined(UXEN_HOST_OSX)
+#define __smap_state(flags) unsigned long flags
+static void always_inline
+__smap_disable(unsigned long *flags)
+{
+    if (uxen_info->ui_smap_enabled) {
+        asm volatile ( "pushf" __OS " ; pop" __OS " %0" : "=m" (*flags));
+        if (!(*flags & X86_EFLAGS_AC))
+            asm volatile(_ASM_STAC ::: "cc","memory");
+    }
+}
+
+static void always_inline
+__smap_restore(unsigned long flags)
+{
+    if (uxen_info->ui_smap_enabled && !(flags & X86_EFLAGS_AC))
+        asm volatile(_ASM_CLAC ::: "cc","memory");
+}
+#else
+#define __smap_state(flags) struct flags
+#define __smap_disable(flags) do { } while(0)
+#define __smap_restore(flags) do { } while(0)
+#endif
+
 /**
  * get_user: - Get a simple variable from user space.
  * @x:   Variable to store result.
@@ -148,7 +172,7 @@ struct __large_struct { unsigned long buf[100]; };
  * we do not write to any memory gcc knows about, so there are no
  * aliasing issues.
  */
-#define __put_user_asm(x, addr, err, itype, rtype, ltype, errret)	\
+#define ___put_user_asm(x, addr, err, itype, rtype, ltype, errret)      \
 	__asm__ __volatile__(						\
 		"1:	mov"itype" %"rtype"1,%2\n"			\
 		"2:\n"							\
@@ -160,7 +184,7 @@ struct __large_struct { unsigned long buf[100]; };
 		: "=r"(err)						\
 		: ltype (x), "m"(__m(addr)), "i"(errret), "0"(err))
 
-#define __get_user_asm(x, addr, err, itype, rtype, ltype, errret)	\
+#define ___get_user_asm(x, addr, err, itype, rtype, ltype, errret)	\
 	__asm__ __volatile__(						\
 		"1:	mov"itype" %2,%"rtype"1\n"			\
 		"2:\n"							\
@@ -173,6 +197,21 @@ struct __large_struct { unsigned long buf[100]; };
 		: "=r"(err), ltype (x)					\
 		: "m"(__m(addr)), "i"(errret), "0"(err))
 
+#define __put_user_asm(x, addr, err, itype, rtype, ltype, errret)	\
+        do {                                                            \
+            __smap_state(aflags);                                       \
+            __smap_disable(&aflags);                                    \
+            ___put_user_asm(x, addr, err, itype, rtype, ltype, errret); \
+            __smap_restore(aflags);                                     \
+        } while(0)
+
+#define __get_user_asm(x, addr, err, itype, rtype, ltype, errret)	\
+        do {                                                            \
+            __smap_state(aflags);                                       \
+            __smap_disable(&aflags);                                    \
+            ___get_user_asm(x, addr, err, itype, rtype, ltype, errret); \
+            __smap_restore(aflags);                                     \
+        } while(0)
 /**
  * __copy_to_user: - Copy a block of data into user space, with less checking
  * @to:   Destination address, in user space.

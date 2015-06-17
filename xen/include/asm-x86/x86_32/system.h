@@ -57,6 +57,8 @@ static always_inline unsigned long long __cmpxchg8b(
 #define cmpxchg_user(_p,_o,_n)                                          \
 ({                                                                      \
     int _rc;                                                            \
+    __smap_state(aflags);                                               \
+    __smap_disable(&aflags);                                            \
     switch ( sizeof(*(_p)) ) {                                          \
     case 1:                                                             \
         __cmpxchg_user(_p,_o,_n,"b","b","q");                           \
@@ -82,6 +84,7 @@ static always_inline unsigned long long __cmpxchg8b(
             : "memory");                                                \
         break;                                                          \
     }                                                                   \
+    __smap_restore(aflags);                                             \
     _rc;                                                                \
 })
 

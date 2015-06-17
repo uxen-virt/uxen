@@ -14,7 +14,9 @@
 unsigned long __copy_to_user_ll(void __user *to, const void *from, unsigned n)
 {
     unsigned long __d0, __d1, __d2, __n = n;
+    __smap_state(aflags);
 
+    __smap_disable(&aflags);
     asm volatile (
         "    cmp  $"STR(2*BYTES_PER_LONG-1)",%0\n"
         "    jbe  1f\n"
@@ -43,6 +45,7 @@ unsigned long __copy_to_user_ll(void __user *to, const void *from, unsigned n)
         : "=&c" (__n), "=&D" (__d0), "=&S" (__d1), "=&r" (__d2)
         : "0" (__n), "1" (to), "2" (from), "3" (__n)
         : "memory" );
+    __smap_restore(aflags);
 
     return __n;
 }
@@ -51,7 +54,9 @@ unsigned long
 __copy_from_user_ll(void *to, const void __user *from, unsigned n)
 {
     unsigned long __d0, __d1, __d2, __n = n;
+    __smap_state(aflags);
 
+    __smap_disable(&aflags);
     asm volatile (
         "    cmp  $"STR(2*BYTES_PER_LONG-1)",%0\n"
         "    jbe  1f\n"
@@ -86,6 +91,7 @@ __copy_from_user_ll(void *to, const void __user *from, unsigned n)
         : "=&c" (__n), "=&D" (__d0), "=&S" (__d1), "=&r" (__d2)
         : "0" (__n), "1" (to), "2" (from), "3" (__n)
         : "memory" );
+    __smap_restore(aflags);
 
     return __n;
 }

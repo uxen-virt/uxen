@@ -128,6 +128,10 @@ struct /* __WINPACKED__ */ uxen_info {
     uint8_t *ui_pdata_end;
 #endif
 
+#if defined(UXEN_HOST_OSX) || defined(__APPLE__)
+    uint32_t ui_smap_enabled;
+#endif
+
     /* internal */
     void (*ui_cli)(void);
     void (*ui_sti)(void);

@@ -50,21 +50,24 @@ mdm_entry_get(struct mdm_info *mdm, mdm_mfn_t pfn)
     mdm_mfn_entry_t *entry;
     uint32_t y, x, nx;
     int count;
+    int ret = 0;
+    uxen_smap_state(smap);
 
+    uxen_smap_preempt_disable(&smap);
     if (pfn < mdm->mdm_end_low_gpfn)
         entry = &mdm->mdm_mfn_to_entry[pfn];
     else if (pfn >= mdm->mdm_start_high_gpfn && pfn < mdm->mdm_end_high_gpfn)
         entry = &mdm->mdm_mfn_to_entry[pfn - (mdm->mdm_start_high_gpfn -
                                               mdm->mdm_end_low_gpfn)];
     else
-        return 0;
+        goto out;
 
     y = *entry;
 
     do {
 	x = y;
         if (x == ~0U)
-            return 0;
+            goto out;
 	nx = (x & ~MEMCACHE_ENTRY_COUNT_MASK);
 	count = (x & MEMCACHE_ENTRY_COUNT_MASK) >> MEMCACHE_ENTRY_COUNT_SHIFT;
         /* remove lock-bit */
@@ -77,7 +80,10 @@ mdm_entry_get(struct mdm_info *mdm, mdm_mfn_t pfn)
 	    break;
     } while ((y = cmpxchg(entry, x, nx)) != x);
 
-    return 1;
+    ret = 1;
+out:
+    uxen_smap_preempt_restore(&smap);
+    return ret;
 }
 
 #define MDM_PAGE_PRESENT 0x1U
@@ -224,6 +230,7 @@ mdm_init(struct uxen_memcacheinit_desc *umd, struct fd_assoc *fda)
     uint64_t nr_gpfn;
     size_t s;
     int ret = ENOENT;
+    uxen_smap_state(smap);
 
     start_execution(vmi);
     if (vmi->vmi_shared.vmi_runnable == 0)
@@ -254,7 +261,10 @@ mdm_init(struct uxen_memcacheinit_desc *umd, struct fd_assoc *fda)
 	ret = ENOMEM;
 	goto out;
     }
+
+    uxen_smap_preempt_disable(&smap);
     memset((uint8_t *)mdm->mdm_mfn_to_entry, 0xff, s);
+    uxen_smap_preempt_restore(&smap);
 
     mdm->mdm_map_pfns = (1ULL << (32 - MEMCACHE_ENTRY_OFFSET_SHIFT)) - 1;
     dprintk("mdm: cache size %x\n", mdm->mdm_map_pfns << PAGE_SHIFT);

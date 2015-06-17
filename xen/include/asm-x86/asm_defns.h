@@ -47,4 +47,7 @@
 
 #endif
 
+#define _ASM_CLAC      ".byte 0x0f,0x01,0xca"
+#define _ASM_STAC      ".byte 0x0f,0x01,0xcb"
+
 #endif /* __X86_ASM_DEFNS_H__ */

@@ -363,6 +363,9 @@ int hostdrv_except_handler(char *, ...);
 #define disable_preemption(pi) KeRaiseIrql(DISPATCH_LEVEL, pi)
 #define enable_preemption(i) KeLowerIrql(i)
 #define preemption_enabled() (KeGetCurrentIrql() < DISPATCH_LEVEL)
+#define uxen_smap_state(smap) struct smap
+#define uxen_smap_preempt_disable(smap) do { } while(0, 0)
+#define uxen_smap_preempt_restore(smap) do { } while(0, 0)
 void set_host_preemption(uint64_t disable);
 void uxen_update_unixtime_generation(void);
 extern KEVENT uxen_idle_thread_event;
