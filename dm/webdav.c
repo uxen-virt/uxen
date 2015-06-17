@@ -125,7 +125,7 @@ static void dav_header(DavClient *dc, char *fmt, ...)
         goto err;
     }
     if (len >= realloc_size) {
-        warnx("webdav %s: alloc len overflow fail 2 (len=%zd)\n", __FUNCTION__, len);
+        warnx("webdav %s: alloc len overflow fail 2 (len=%"PRIuSIZE")\n", __FUNCTION__, len);
         goto err;
     }
 
