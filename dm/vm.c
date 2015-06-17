@@ -669,6 +669,7 @@ vm_run_mode_change_cb(void *opaque)
 {
     switch (run_mode) {
     case RUNNING_VM:
+        vm_time_update();
 #ifdef CONFIG_DUMP_MEMORY_STAT
       dump_periodic_stats_reset();
 #endif  /* CONFIG_DUMP_MEMORY_STAT */
@@ -786,7 +787,6 @@ vm_set_run_mode(enum vm_run_mode r)
 
     switch (r) {
     case RUNNING_VM:
-        vm_time_update();
         break;
     case PAUSE_VM:
         break;
