@@ -227,53 +227,113 @@ drive_query_storage_property(HANDLE drive, size_t *prop_len)
     return (unsigned char *)data;
 }
 
-void
-drive_enumerate(int (*callback)(int, unsigned char *, unsigned char *,
-                                unsigned char *, unsigned char *,
-                                size_t, void *),
-                void *priv)
+static int
+set_drive_info(int id, unsigned char *model, unsigned char *serial,
+               unsigned char *version, unsigned char *prop,
+               size_t prop_len, void *priv)
 {
-    int i = 0;
+    yajl_gen g = (yajl_gen)priv;
+    size_t sz;
+    char drive_id[16];
+
+    sz = snprintf(drive_id, 16, "ich%d", id);
+
+    yajl_gen_map_open(g);
+    SET_BUF("id", drive_id, sz);
+    if (model)
+        SET_BASE64("model", model, 40);
+    if (serial)
+        SET_BASE64("serial", serial, 20);
+    if (version)
+        SET_BASE64("version", version, 8);
+    if (prop)
+        SET_BASE64("properties", prop, prop_len);
+    yajl_gen_map_close(g);
+
+    return 0;
+}
+
+DWORD
+get_system_drive_index(void)
+{
     HANDLE drive;
-    char name[32];
+    char windows_directory_path[MAX_PATH + 1] = { 0 };
+    char windows_drive_path[MAX_PATH + 1] = { 0 };
+    VOLUME_DISK_EXTENTS disk_extents;
+    DWORD system_drive_index = 0;
+    DWORD bytes_returned_count = 0;
+    if (!GetSystemWindowsDirectoryA(windows_directory_path, MAX_PATH + 1)) {
+        fprintf(stderr,
+            "GetSystemWindowsDirectory failed, (%ld), defaulting to C drive\n",
+            GetLastError());
+        windows_directory_path[0] = 'C';
+    }
+
+    snprintf(windows_drive_path, sizeof(windows_drive_path), "\\\\.\\%c:",
+        windows_directory_path[0]);
+    drive = CreateFile(windows_drive_path, GENERIC_READ | GENERIC_WRITE,
+        FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+        NULL, OPEN_EXISTING, 0, NULL);
+    if (drive == INVALID_HANDLE_VALUE) {
+        fprintf(stderr,
+            "Unable to open windows system volume handle (%ld), "
+            "defaulting to disk 0\n",
+            GetLastError());
+    } else {
+        if (!DeviceIoControl(drive,
+            IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS,
+            NULL,
+            0,
+            &disk_extents,
+            sizeof(disk_extents),
+            &bytes_returned_count,
+            NULL)) {
+                fprintf(stderr, "IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS query failed (%ld), "
+                    "using default system root drive\n", GetLastError());
+        } else {
+            system_drive_index = disk_extents.Extents->DiskNumber;
+        }
+        CloseHandle(drive);
+    }
+    return system_drive_index;
+}
+
+void
+set_system_drive_config(void *priv)
+{
+    HANDLE drive;
     int rc;
     unsigned char model[40];
     unsigned char serial[20];
     unsigned char version[8];
+    char name[32] = { 0 };
+    DWORD system_root_drive_index = get_system_drive_index();
+    snprintf(name, sizeof (name), "\\\\.\\PhysicalDrive%d", (unsigned int)system_root_drive_index);
+    drive = CreateFile(name, GENERIC_READ | GENERIC_WRITE,
+                       FILE_SHARE_DELETE| FILE_SHARE_READ | FILE_SHARE_WRITE,
+                       NULL, OPEN_EXISTING, 0, NULL);
 
-    do {
-        snprintf(name, sizeof (name), "\\\\.\\PhysicalDrive%d", i);
+    if (drive != INVALID_HANDLE_VALUE) {
+        unsigned char *prop;
+        size_t prop_len;
 
-        drive = CreateFile(name, GENERIC_READ | GENERIC_WRITE,
-                           FILE_SHARE_DELETE| FILE_SHARE_READ | FILE_SHARE_WRITE,
-                           NULL, OPEN_EXISTING, 0, NULL);
+        rc = drive_identify(drive, model, serial, version);
+        prop = drive_query_storage_property(drive, &prop_len);
 
-        if (drive != INVALID_HANDLE_VALUE) {
-            unsigned char *prop;
-            size_t prop_len;
+        set_drive_info(0,
+                       rc ? NULL : model,
+                       rc ? NULL : serial,
+                       rc ? NULL : version,
+                       prop,
+                       prop ? prop_len : 0,
+                       priv);
 
-            rc = drive_identify(drive, model, serial, version);
-            prop = drive_query_storage_property(drive, &prop_len);
-
-            callback(i,
-                     rc ? NULL : model,
-                     rc ? NULL : serial,
-                     rc ? NULL : version,
-                     prop,
-                     prop ? prop_len : 0,
-                     priv);
-
-            if (prop)
-                free(prop);
-            CloseHandle(drive);
-        }
-
-#ifdef IDENTIFY_ALL_DRIVES
-        i++;
-#else
-        break;
-#endif
-    } while (drive != INVALID_HANDLE_VALUE);
+        if (prop)
+            free(prop);
+        CloseHandle(drive);
+    } else {
+        fprintf(stderr, "Failed to open %s, (%ld)\n", name, GetLastError());
+    }
 }
 
 struct macaddr
@@ -502,32 +562,6 @@ smbios_oem_struct_iterate(int (*callback)(char *, size_t, void *),
 }
 
 static int
-drive_callback(int id, unsigned char *model, unsigned char *serial,
-               unsigned char *version, unsigned char *prop,
-               size_t prop_len, void *priv)
-{
-    yajl_gen g = (yajl_gen)priv;
-    size_t sz;
-    char drive_id[16];
-
-    sz = snprintf(drive_id, 16, "ich%d", id);
-
-    yajl_gen_map_open(g);
-    SET_BUF("id", drive_id, sz);
-    if (model)
-        SET_BASE64("model", model, 40);
-    if (serial)
-        SET_BASE64("serial", serial, 20);
-    if (version)
-        SET_BASE64("version", version, 8);
-    if (prop)
-        SET_BASE64("properties", prop, prop_len);
-    yajl_gen_map_close(g);
-
-    return 0;
-}
-
-static int
 nic_callback(int id, unsigned char *addr, size_t addr_len, void *priv)
 {
     yajl_gen g = (yajl_gen)priv;
@@ -626,7 +660,7 @@ main(int argc, char **argv)
     yajl_gen_string(g, (const unsigned char *)"block", 5);
 
     yajl_gen_array_open(g);
-    drive_enumerate(drive_callback, (void *)g);
+    set_system_drive_config((void *)g);
     yajl_gen_array_close(g);
 
     /* 5. Network interfaces */
