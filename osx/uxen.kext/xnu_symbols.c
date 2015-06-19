@@ -158,6 +158,13 @@ static uint64_t *physmap_base;
 static uint64_t *physmap_max;
 static cpu_data_t **cpu_data_ptr;
 
+static pmap_t
+xnu_get_map_pmap_10_11(vm_map_t map)
+{
+    uintptr_t map_ptr = (uintptr_t)map;
+    return *(pmap_t *)(map_ptr + 0x50);
+}
+
 int
 init_xnu_symbols(void)
 {
@@ -210,6 +217,10 @@ init_xnu_symbols(void)
     xnu_vm_page_locks = find_xnu_symbol("_vm_page_locks");
     xnu_vm_page_wire_count = find_xnu_symbol("_vm_page_wire_count");
 #endif
+
+    if (!xnu_get_map_pmap) {
+        xnu_get_map_pmap = xnu_get_map_pmap_10_11;
+    }
 
     xnu_symbols_present = 1;
 
