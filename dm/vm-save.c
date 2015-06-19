@@ -69,7 +69,8 @@
 #undef APRINTF
 #define APRINTF(fmt, ...) debug_printf(fmt "\n", ## __VA_ARGS__)
 #undef EPRINTF
-#define EPRINTF(fmt, ...) error_printf(fmt "\n", ## __VA_ARGS__)
+#define EPRINTF(fmt, ...) error_printf("%s: " fmt "\n", __FUNCTION__, \
+                                       ## __VA_ARGS__)
 
 // #include <xg_save_restore.h>
 #define XC_SAVE_ID_VCPU_INFO          -2 /* Additional VCPU info */
@@ -1584,7 +1585,7 @@ vm_save(void)
     ret = uxenvm_savevm_initiate(&err_msg);
     if (ret) {
 	if (err_msg)
-	    EPRINTF("%s", err_msg);
+            EPRINTF("%s: ret %d", err_msg, ret);
 	return;
     }
 }
@@ -1655,7 +1656,7 @@ vm_save_execute(void)
     if (ret) {
 	if (!err_msg)
 	    asprintf(&err_msg, "uxenvm_savevm_get_dm_state() failed");
-	EPRINTF("%s", err_msg);
+        EPRINTF("%s: ret %d", err_msg, ret);
 	ret = -ret;
 	goto out;
     }
@@ -1664,7 +1665,7 @@ vm_save_execute(void)
     if (ret) {
 	if (!err_msg)
 	    asprintf(&err_msg, "uxenvm_savevm_write_info() failed");
-	EPRINTF("%s", err_msg);
+        EPRINTF("%s: ret %d", err_msg, ret);
 	ret = -ret;
 	goto out;
     }
@@ -1675,7 +1676,7 @@ vm_save_execute(void)
     if (ret) {
         if (!err_msg)
             asprintf(&err_msg, "uxenvm_savevm_write_pages() failed");
-        EPRINTF("%s", err_msg);
+        EPRINTF("%s: ret %d", err_msg, ret);
         ret = -ret;
         goto out;
     }
@@ -1704,15 +1705,16 @@ vm_load(const char *name, int restore_mode)
 
     f = filebuf_open(name, restore_mode == VM_RESTORE_TEMPLATE ? "rbn" : "rb");
     if (f == NULL) {
+        asprintf(&err_msg, "filebuf_open(%s) failed", name);
 	ret = -errno;
-	EPRINTF("filebuf_open(%s) failed", name);
+        EPRINTF("%s: ret %d", err_msg, ret);
 	goto out;
     }
 
     ret = uxenvm_loadvm_execute(f, restore_mode, &err_msg);
     if (ret) {
 	if (err_msg)
-	    EPRINTF("%s", err_msg);
+            EPRINTF("%s: ret %d", err_msg, ret);
 	goto out;
     }
 
@@ -1740,7 +1742,7 @@ vm_load_finish(void)
     ret = uxenvm_loadvm_execute_finish(&err_msg);
     if (ret) {
 	if (err_msg)
-	    EPRINTF("%s", err_msg);
+            EPRINTF("%s: ret %d", err_msg, ret);
     }
 
     return ret;
