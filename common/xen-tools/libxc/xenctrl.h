@@ -510,6 +510,7 @@ int xc_domain_destroy(xc_interface *xch,
                       uint32_t domid);
 
 
+#ifndef __UXEN_TOOLS__
 /**
  * This function resumes a suspended domain. The domain should have
  * been previously suspended.
@@ -522,6 +523,9 @@ int xc_domain_destroy(xc_interface *xch,
 int xc_domain_resume(xc_interface *xch,
 		     uint32_t domid,
 		     int fast);
+#else  /* __UXEN_TOOLS__ */
+int xc_domain_resume(xc_interface *xch, uint32_t domid);
+#endif  /* __UXEN_TOOLS__ */
 
 /**
  * This function will shutdown a domain. This is intended for use in

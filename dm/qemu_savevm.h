@@ -18,4 +18,6 @@ int64_t qemu_fseek(QEMUFile *f, int64_t pos, int whence);
 QEMUFile *qemu_memopen(uint8_t *buffer, int bufsize, const char *mode);
 uint8_t *qemu_meminfo(QEMUFile *f, int *used);
 
+void qemu_savevm_resume(void);
+
 #endif  /* _QEMU_SAVEVM_H_ */

@@ -257,6 +257,44 @@ control_command_save_finish(int ret, char *err_msg)
 }
 
 static int
+control_command_resume(void *opaque, const char *id, const char *opt,
+                       dict d, void *command_opaque)
+{
+    struct control_desc *cd = (struct control_desc *)opaque;
+
+    if (vm_save_info.free_mem) {
+        control_send_error(cd, "resume", id, EINVAL,
+                           "can't resume after freeing memory");
+        return 0;
+    }
+
+    vm_save_info.resume_cd = cd;
+    vm_save_info.resume_id = id ? strdup(id) : NULL;
+
+    vm_set_run_mode(RUNNING_VM);
+
+    return 0;
+}
+
+void
+control_command_resume_finish(int ret, char *err_msg)
+{
+
+    if (ret)
+        control_send_error(vm_save_info.resume_cd, "resume",
+                           vm_save_info.resume_id, ret,
+                           err_msg);
+    else
+        control_send_ok(vm_save_info.resume_cd, "resume",
+                        vm_save_info.resume_id, NULL);
+    vm_save_info.resume_cd = NULL;
+    if (vm_save_info.resume_id) {
+        free(vm_save_info.resume_id);
+        vm_save_info.resume_id = NULL;
+    }
+}
+
+static int
 control_command_quit(void *opaque, const char *id, const char *opt,
                      dict d, void *command_opaque)
 {
@@ -826,6 +864,7 @@ struct dict_rpc_command control_commands[] = {
 #ifdef _WIN32
     { "reopen-char-files", control_command_reopen_char_files, },
 #endif
+    { "resume", control_command_resume, .flags = CONTROL_SUSPEND_OK },
     { "save", control_command_save,
       .args = (struct dict_rpc_arg_desc[]) {
             { "filename", DICT_RPC_ARG_TYPE_STRING, .optional = 1 },

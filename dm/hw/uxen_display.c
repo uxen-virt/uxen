@@ -721,6 +721,7 @@ static const VMStateDescription vmstate_uxendisp = {
     .pre_save = uxendisp_pre_save,
     .post_load = uxendisp_post_load,
     .post_save = uxendisp_post_save,
+    .resume = uxendisp_post_load,
     .fields      = (VMStateField []) {
         VMSTATE_PCI_DEVICE(dev, struct uxendisp_state),
         VMSTATE_STRUCT(vga, struct uxendisp_state, 0,

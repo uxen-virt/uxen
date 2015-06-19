@@ -25,7 +25,8 @@ enum vm_run_mode {
     PAUSE_VM,
     SUSPEND_VM,
     POWEROFF_VM,
-    DESTROY_VM
+    DESTROY_VM,
+    SETUP_VM
 };
 void vm_set_run_mode(enum vm_run_mode r);
 enum vm_run_mode vm_get_run_mode(void);

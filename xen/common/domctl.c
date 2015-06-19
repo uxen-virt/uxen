@@ -442,7 +442,6 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
     }
     break;
 
-#ifndef __UXEN__
     case XEN_DOMCTL_resumedomain:
     {
         struct domain *d = rcu_lock_domain_by_id(op->domain);
@@ -463,7 +462,6 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
         ret = 0;
     }
     break;
-#endif  /* __UXEN__ */
 
     case XEN_DOMCTL_createdomain:
     {

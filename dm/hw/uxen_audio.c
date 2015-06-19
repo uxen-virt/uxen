@@ -674,6 +674,7 @@ static const VMStateDescription vmstate_uxenaudio = {
     .pre_save = uxenaudio_pre_save,
     .post_load = uxenaudio_post_load,
     .post_save = uxenaudio_post_save,
+    .resume = uxenaudio_post_load,
     .fields = (VMStateField[]) {
         VMSTATE_PCI_DEVICE (dev, UXenAudioState),
         VMSTATE_UINT32(unused1, UXenAudioState),

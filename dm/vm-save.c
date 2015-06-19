@@ -27,6 +27,7 @@
 #include "dmpdev.h"
 #include "filebuf.h"
 #include "introspection_info.h"
+#include "monitor.h"
 #include "qemu_savevm.h"
 #include "vm.h"
 #include "vm-save.h"
@@ -120,16 +121,7 @@
  * - write xc_domain_hvm_getcontext
  */
 
-struct vm_save_info vm_save_info = {
-    .awaiting_suspend = 0,
-    .save_requested = 0,
-    .filename = NULL,
-    .command_cd = NULL,
-    .command_id = NULL,
-    .compress = 0,
-    .single_page = 0,
-    .free_mem = 1,
-};
+struct vm_save_info vm_save_info = { };
 
 static int
 uxenvm_savevm_initiate(char **err_msg)
@@ -1637,6 +1629,17 @@ mc_savevm(Monitor *mon, const dict args)
 
     vm_save();
 }
+
+void
+mc_resumevm(Monitor *mon, const dict args)
+{
+
+    if (vm_save_info.free_mem)
+        monitor_printf(mon, "%s: can't resume after freeing memory\n",
+                       __FUNCTION__);
+    else
+        vm_set_run_mode(RUNNING_VM);
+}
 #endif  /* MONITOR */
 
 int
@@ -1777,5 +1780,28 @@ vm_load_finish(void)
             EPRINTF("%s: ret %d", err_msg, ret);
     }
 
+    return ret;
+}
+
+int
+vm_resume(void)
+{
+    int ret;
+    char *err_msg = NULL;
+
+    qemu_savevm_resume();
+
+    ret = xc_domain_resume(xc_handle, vm_id);
+    if (ret) {
+        if (!err_msg)
+            asprintf(&err_msg, "xc_domain_resume failed");
+        EPRINTF("%s: ret %d", err_msg, -ret);
+        ret = -ret;
+        goto out;
+    }
+
+  out:
+    if (vm_save_info.resume_cd)
+        control_command_resume_finish(ret, err_msg);
     return ret;
 }

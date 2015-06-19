@@ -249,6 +249,7 @@ static const VMStateDescription vmstate_uxen_platform = {
     .pre_save = uxen_platform_pre_save,
     .post_load = uxen_platform_post_load,
     .post_save = uxen_platform_post_save,
+    .resume = uxen_platform_post_load,
     .fields = (VMStateField []) {
         VMSTATE_PCI_DEVICE(dev, PCI_uxen_platform_state),
         VMSTATE_STRUCT(ctl_mmio, PCI_uxen_platform_state, 0,

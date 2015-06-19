@@ -130,6 +130,17 @@ int xc_domain_shutdown(xc_interface *xch,
     return ret;
 }
 
+int
+xc_domain_resume(xc_interface *xch, uint32_t domid)
+{
+    DECLARE_DOMCTL;
+
+    domctl.cmd = XEN_DOMCTL_resumedomain;
+    domctl.domain = domid;
+
+    return do_domctl(xch, &domctl);
+}
+
 
 #ifndef __UXEN_TOOLS__
 int xc_vcpu_setaffinity(xc_interface *xch,

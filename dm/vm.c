@@ -589,6 +589,7 @@ static uxen_notification_event exceptionEvent;
 
 static uint32_t running_vcpus = 0;
 static enum vm_run_mode run_mode = RUNNING_VM;
+static enum vm_run_mode old_run_mode = SETUP_VM;
 
 #if defined(_WIN32)
 static DWORD WINAPI
@@ -669,6 +670,8 @@ vm_run_mode_change_cb(void *opaque)
 {
     switch (run_mode) {
     case RUNNING_VM:
+        if (old_run_mode == SUSPEND_VM)
+            vm_resume();
         vm_time_update();
 #ifdef CONFIG_DUMP_MEMORY_STAT
       dump_periodic_stats_reset();
@@ -682,10 +685,13 @@ vm_run_mode_change_cb(void *opaque)
     case PAUSE_VM:
         vm_clock_pause();
         break;
+    case SETUP_VM:
+        break;
     }
 
     if (run_mode == DESTROY_VM)
         vm_exit(opaque);
+    old_run_mode = run_mode;
 }
 
 static void
@@ -769,9 +775,10 @@ vm_set_run_mode(enum vm_run_mode r)
     critical_section_enter(&vm_run_mode_lock);
     switch (run_mode) {
     case PAUSE_VM:
+    case SETUP_VM:
+    case SUSPEND_VM:
         if (r == RUNNING_VM)
             break;
-    case SUSPEND_VM:
     case POWEROFF_VM:
     case DESTROY_VM:
         if (r == DESTROY_VM)
@@ -796,6 +803,8 @@ vm_set_run_mode(enum vm_run_mode r)
         vm_poweroff();
         break;
     case DESTROY_VM:
+        break;
+    case SETUP_VM:
         break;
     }
 

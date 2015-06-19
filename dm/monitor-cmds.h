@@ -11,6 +11,7 @@
 
 void mc_quit(Monitor *mon, const dict args);
 void mc_savevm(Monitor *mon, const dict args);
+void mc_resumevm(Monitor *mon, const dict args);
 void mc_xen_key(Monitor *mon, const dict args);
 void mc_toggle_ioreq(Monitor *mon, const dict args);
 void mc_toggle_hvm_tracking(Monitor *mon, const dict args);

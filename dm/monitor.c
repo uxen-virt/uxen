@@ -302,6 +302,8 @@ static mon_cmd_t mon_cmds[] = {
     { .name = "savevm", .mhandler.cmd = mc_savevm,
       .args_type = "?s:filename,?s:compress,?b:single-page,?b:free-mem",
       .help = "save the vm" },
+    { .name = "resume", .mhandler.cmd = mc_resumevm,
+      .help = "resume the vm" },
     { .name = "debug-break|xdbg", .mhandler.cmd = mc_debug_break,
       .help = "execute breakpoint instruction" },
     { .name = "xen-key|xk", .mhandler.cmd = mc_xen_key,

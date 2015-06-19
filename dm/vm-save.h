@@ -17,6 +17,8 @@ struct vm_save_info {
 
     struct control_desc *command_cd;
     char *command_id;
+    struct control_desc *resume_cd;
+    char *resume_id;
 
     int compress;
     int single_page;
@@ -29,6 +31,9 @@ void vm_save(void);
 struct xc_dominfo;
 int vm_process_suspend(struct xc_dominfo *info);
 void vm_save_execute(void);
+
+int vm_resume(void);
+
 int vm_load(const char *, int);
 int vm_load_finish(void);
 

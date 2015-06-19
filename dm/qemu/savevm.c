@@ -1820,6 +1820,105 @@ void qemu_savevm_state_cancel(Monitor *mon, QEMUFile *f)
     }
 }
 
+static void vmstate_subsection_resume(const VMStateDescription *vmsd,
+                                      void *opaque);
+
+static void vmstate_resume(const VMStateDescription *vmsd, void *opaque)
+{
+    VMStateField *field = vmsd->fields;
+
+    VMSTATE_DPRINTF("%s: resume %s\n", __FUNCTION__, vmsd->name);
+    if (vmsd->resume) {
+        VMSTATE_DPRINTF("%s: resume %s resume\n", __FUNCTION__, vmsd->name);
+        vmsd->resume(opaque, vmsd->version_id);
+#if 0
+    } else if (vmsd->post_load) {
+        /* debug_printf */
+        VMSTATE_DPRINTF("%s: resume %s post load\n", __FUNCTION__, vmsd->name);
+        // vmsd->post_load(opaque, vmsd->version_id);
+#endif
+    }
+    while (field->name) {
+        VMSTATE_DPRINTF("%s: %s resume field %s v %p/%d\n", __FUNCTION__,
+                        vmsd->name, field->name, field->field_exists,
+                        vmsd->version_id);
+        if (!field->field_exists ||
+            field->field_exists(opaque, vmsd->version_id)) {
+            void *base_addr = opaque + field->offset;
+            int i, n_elems = 1;
+            int size = field->size;
+
+            if (field->flags & VMS_VBUFFER) {
+                size = *(int32_t *)(opaque+field->size_offset);
+                if (field->flags & VMS_MULTIPLY) {
+                    size *= field->size;
+                }
+            }
+            if (field->flags & VMS_ARRAY) {
+                n_elems = field->num;
+            } else if (field->flags & VMS_VARRAY_INT32) {
+                n_elems = *(int32_t *)(opaque+field->num_offset);
+            } else if (field->flags & VMS_VARRAY_UINT32) {
+                n_elems = *(uint32_t *)(opaque+field->num_offset);
+            } else if (field->flags & VMS_VARRAY_UINT16) {
+                n_elems = *(uint16_t *)(opaque+field->num_offset);
+            } else if (field->flags & VMS_VARRAY_UINT8) {
+                n_elems = *(uint8_t *)(opaque+field->num_offset);
+            }
+            if (field->flags & VMS_POINTER) {
+                base_addr = *(void **)base_addr + field->start;
+            }
+            VMSTATE_DPRINTF("%s: %s resume field %s n %d type %s\n",
+                            __FUNCTION__, vmsd->name, field->name, n_elems,
+                            (field->flags & VMS_STRUCT) ? "struct" : "put");
+            for (i = 0; i < n_elems; i++) {
+                void *addr = base_addr + size * i;
+
+                if (field->flags & VMS_ARRAY_OF_POINTER) {
+                    addr = *(void **)addr;
+                }
+                if (field->flags & VMS_STRUCT) {
+                    vmstate_resume(field->vmsd, addr);
+                }
+            }
+        }
+        VMSTATE_DPRINTF("%s: %s resume field %s done\n", __FUNCTION__,
+                        vmsd->name, field->name);
+        field++;
+    }
+    if (vmsd->subsections)
+        VMSTATE_DPRINTF("%s: %s resume subsection\n", __FUNCTION__, vmsd->name);
+    vmstate_subsection_resume(vmsd, opaque);
+    VMSTATE_DPRINTF("%s: %s resume done\n", __FUNCTION__, vmsd->name);
+}
+
+static void vmstate_subsection_resume(const VMStateDescription *vmsd,
+                                      void *opaque)
+{
+    const VMStateSubsection *sub = vmsd->subsections;
+
+    while (sub && sub->needed) {
+        if (sub->needed(opaque)) {
+            const VMStateDescription *vmsd = sub->vmsd;
+
+            vmstate_resume(vmsd, opaque);
+        }
+        sub++;
+    }
+}
+
+void qemu_savevm_resume(void)
+{
+    SaveStateEntry *se;
+
+    QTAILQ_FOREACH(se, &savevm_handlers, entry) {
+        const VMStateDescription *vmsd = se->vmsd;
+        if (vmsd) {
+            vmstate_resume(vmsd, se->opaque);
+        }
+    }
+}
+
 /* static */ int qemu_savevm_state(Monitor *mon, QEMUFile *f)
 {
     int ret;
