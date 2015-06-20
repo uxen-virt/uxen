@@ -534,6 +534,10 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
         }
     }
 
+    /* store start of batch file offset, to allow restoring page data
+     * without parsing the entire save file */
+    vm_save_info.page_batch_offset = filebuf_tell(f);
+
     pfn = 0;
     while (pfn < p2m_size) {
 	batch = 0;
@@ -1634,11 +1638,7 @@ void
 mc_resumevm(Monitor *mon, const dict args)
 {
 
-    if (vm_save_info.free_mem)
-        monitor_printf(mon, "%s: can't resume after freeing memory\n",
-                       __FUNCTION__);
-    else
-        vm_set_run_mode(RUNNING_VM);
+    vm_set_run_mode(RUNNING_VM);
 }
 #endif  /* MONITOR */
 
@@ -1686,6 +1686,7 @@ vm_save_execute(void)
 	ret = errno;
 	goto out;
     }
+    vm_save_info.f = f;
 
     ret = uxenvm_savevm_get_dm_state(&dm_state_buf, &dm_state_size, &err_msg);
     if (ret) {
@@ -1722,11 +1723,95 @@ vm_save_execute(void)
     if (dm_state_buf)
         free(dm_state_buf);
     if (f)
-	filebuf_close(f);
+        filebuf_flush(f);
     if (err_msg)
 	free(err_msg);
     free(vm_save_info.filename);
     vm_save_info.filename = NULL;
+}
+
+void
+vm_save_finalize(void)
+{
+
+    if (vm_save_info.f) {
+        filebuf_close(vm_save_info.f);
+        vm_save_info.f = NULL;
+    }
+}
+
+static int
+vm_restore_memory(void)
+{
+    struct filebuf *f;
+    xen_pfn_t *pfn_type = NULL;
+    int *pfn_err = NULL, *pfn_info = NULL;
+    struct decompress_ctx dc = { };
+    int populate_compressed = 0;
+    int marker;
+    char *err_msg = NULL;
+#ifdef VERBOSE
+    int count = 0;
+#endif  /* VERBOSE */
+    int ret = 0;
+
+    if (!vm_save_info.f)
+        errx(1, "%s: no file", __FUNCTION__);
+    f = vm_save_info.f;
+    vm_save_info.f = NULL;
+
+    if (!vm_save_info.page_batch_offset)
+        errx(1, "%s: no page batch offset", __FUNCTION__);
+
+    filebuf_set_readable(f);
+
+    ret = filebuf_seek(f, vm_save_info.page_batch_offset,
+                       FILEBUF_SEEK_SET) != -1 ? 0 : -1;
+    if (ret < 0) {
+        asprintf(&err_msg, "filebuf_seek(vm_page_offsets) failed");
+        goto out;
+    }
+
+    ret = uxenvm_load_alloc(&pfn_type, &pfn_err, &pfn_info, &err_msg);
+    if (ret < 0)
+        goto out;
+
+    while (1) {
+        uxenvm_load_read(f, &marker, sizeof(marker), ret, &err_msg, out);
+	if (marker == 0)	/* end marker */
+	    break;
+        ret = uxenvm_load_batch(f, marker, pfn_type, pfn_err, pfn_info,
+                                &dc, populate_compressed, &err_msg);
+        if (ret)
+            goto out;
+#ifdef VERBOSE
+        while (marker > MAX_BATCH_SIZE)
+            marker -= MAX_BATCH_SIZE;
+        count += marker;
+#endif  /* VERBOSE */
+    }
+#ifdef VERBOSE
+    DPRINTF("%s: %d pages", __FUNCTION__, count);
+#endif  /* VERBOSE */
+
+  out:
+#ifndef DECOMPRESS_THREADED
+    if (HYPERCALL_BUFFER_ARGUMENT_BUFFER(dc.pp_buffer))
+        xc__hypercall_buffer_free_pages(xc_handle, dc.pp_buffer,
+                                        PP_BUFFER_PAGES);
+#else  /* DECOMPRESS_THREADED */
+    if (dc.async_op_ctx)
+        (void)decompress_wait_all(&dc, NULL);
+#endif  /* DECOMPRESS_THREADED */
+    free(pfn_err);
+    free(pfn_info);
+    free(pfn_type);
+    if (f)
+	filebuf_close(f);
+    if (ret < 0 && err_msg)
+        EPRINTF("%s: ret %d", err_msg, ret);
+    free(err_msg);
+    return ret;
 }
 
 int
@@ -1788,6 +1873,9 @@ vm_resume(void)
 {
     int ret;
     char *err_msg = NULL;
+
+    if (vm_save_info.free_mem)
+        vm_restore_memory();
 
     qemu_savevm_resume();
 

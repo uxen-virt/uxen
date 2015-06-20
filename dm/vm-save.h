@@ -14,6 +14,7 @@ struct vm_save_info {
     int save_requested;
 
     char *filename;
+    struct filebuf *f;
 
     struct control_desc *command_cd;
     char *command_id;
@@ -23,6 +24,8 @@ struct vm_save_info {
     int compress;
     int single_page;
     int free_mem;
+
+    off_t page_batch_offset;
 };
 
 extern struct vm_save_info vm_save_info;
@@ -31,6 +34,7 @@ void vm_save(void);
 struct xc_dominfo;
 int vm_process_suspend(struct xc_dominfo *info);
 void vm_save_execute(void);
+void vm_save_finalize(void);
 
 int vm_resume(void);
 

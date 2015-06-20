@@ -262,12 +262,6 @@ control_command_resume(void *opaque, const char *id, const char *opt,
 {
     struct control_desc *cd = (struct control_desc *)opaque;
 
-    if (vm_save_info.free_mem) {
-        control_send_error(cd, "resume", id, EINVAL,
-                           "can't resume after freeing memory");
-        return 0;
-    }
-
     vm_save_info.resume_cd = cd;
     vm_save_info.resume_id = id ? strdup(id) : NULL;
 
