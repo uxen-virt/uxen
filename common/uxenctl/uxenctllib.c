@@ -699,5 +699,7 @@ uxen_physinfo(UXEN_HANDLE_T h, uxen_physinfo_t *up)
     memcpy(up, &xs->u.physinfo, sizeof(*up));
 
   out:
+    if (buf)
+        uxen_free(h, buf, 1);
     return ret;
 }
