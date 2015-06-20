@@ -124,7 +124,9 @@ _err_vprintf(const char *function, int line,
     if (fmt) {
         vfprintf(ERR_STDERR, fmt, ap);
         if (errdesc)
-            fprintf(ERR_STDERR, ": %s", errdesc);
+            fprintf(ERR_STDERR, ": %s (%08X)", errdesc, errval);
+        else if (errval)
+            fprintf(ERR_STDERR, ": (%08X)", errval);
     }
     fprintf(ERR_STDERR, "\n");
 }
@@ -284,6 +286,13 @@ _errx(const char *function, int line, int eval, const char *fmt, ...)
 #define errx(eval, fmt, ...) _errx(__FUNCTION__, __LINE__, eval, fmt, ##__VA_ARGS__)
 
 #ifdef _ERR_WINDOWS
+#define _err_trim_format_message(buf) if ((buf)) {           \
+        if ((buf)[strlen((buf)) - 1] == '\n')           \
+            (buf)[strlen((buf)) - 1] = 0;               \
+        if ((buf)[strlen((buf)) - 1] == '\r')           \
+            (buf)[strlen((buf)) - 1] = 0;               \
+    }
+
 static inline void
 _Wwarnv(const char *function, int line, const char *fmt, va_list ap)
 {
@@ -300,6 +309,7 @@ _Wwarnv(const char *function, int line, const char *fmt, va_list ap)
 		  FORMAT_MESSAGE_IGNORE_INSERTS, NULL, last_error,
 		  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)&lpMsgBuf,
 		  0, NULL);
+    _err_trim_format_message(lpMsgBuf);
 
     _err_vprintf(function, line, "warn", last_error, lpMsgBuf, fmt, ap);
 
@@ -332,6 +342,7 @@ _Werrv(const char *function, int line, int eval, const char *fmt, va_list ap)
 		  FORMAT_MESSAGE_IGNORE_INSERTS, NULL, last_error,
 		  MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPTSTR)&lpMsgBuf,
 		  0, NULL);
+    _err_trim_format_message(lpMsgBuf);
 
     _err_vprintf(function, line, "err", last_error, lpMsgBuf, fmt, ap);
 
