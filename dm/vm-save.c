@@ -854,7 +854,7 @@ decompress_batch(int batch, xen_pfn_t *pfn_type, uint8_t *mem,
 
 #ifndef DECOMPRESS_THREADED
 struct decompress_ctx {
-    xc_hypercall_buffer_t *pp_buffer;
+    xc_hypercall_buffer_t pp_buffer;
 };
 #else  /* DECOMPRESS_THREADED */
 struct decompress_ctx;
@@ -1070,12 +1070,12 @@ uxenvm_load_readbatch(struct filebuf *f, int batch, xen_pfn_t *pfn_type,
         if (!populate_compressed) {
             ret = decompress_batch(
                 batch, pfn_type,
-                HYPERCALL_BUFFER_ARGUMENT_BUFFER(dc->pp_buffer),
+                HYPERCALL_BUFFER_ARGUMENT_BUFFER(&dc->pp_buffer),
                 compress_buf, compress_size, single_page, err_msg);
             if (ret)
                 goto out;
         } else
-            memcpy(HYPERCALL_BUFFER_ARGUMENT_BUFFER(dc->pp_buffer),
+            memcpy(HYPERCALL_BUFFER_ARGUMENT_BUFFER(&dc->pp_buffer),
                    compress_buf, compress_size);
 
         LOAD_DPRINTF("  populate %08"PRIx64":%08"PRIx64" = %03x pages",
@@ -1083,7 +1083,7 @@ uxenvm_load_readbatch(struct filebuf *f, int batch, xen_pfn_t *pfn_type,
         ret = xc_domain_populate_physmap_from_buffer(
             xc_handle, domid, batch, 0, populate_compressed ?
             XENMEMF_populate_from_buffer_compressed :
-            XENMEMF_populate_from_buffer, &pfn_type[0], dc->pp_buffer);
+            XENMEMF_populate_from_buffer, &pfn_type[0], &dc->pp_buffer);
         if (ret) {
             asprintf(err_msg, "xc_domain_populate_physmap_from_buffer "
                      "compressed failed");
@@ -1097,6 +1097,147 @@ uxenvm_load_readbatch(struct filebuf *f, int batch, xen_pfn_t *pfn_type,
     if (mem)
         xc_munmap(xc_handle, vm_id, mem, batch * PAGE_SIZE);
     free(compress_buf);
+    return ret;
+}
+
+static uint32_t uxenvm_load_progress = 0;
+
+static int
+uxenvm_load_alloc(xen_pfn_t **pfn_type, int **pfn_err, int **pfn_info,
+                  char **err_msg)
+{
+    int ret = 0;
+
+    *pfn_type = malloc(MAX_BATCH_SIZE * sizeof(**pfn_type));
+    if (*pfn_type == NULL) {
+	asprintf(err_msg, "pfn_type = malloc(%"PRIdSIZE") failed",
+		 MAX_BATCH_SIZE * sizeof(**pfn_type));
+	ret = -ENOMEM;
+	goto out;
+    }
+
+    *pfn_info = malloc(MAX_BATCH_SIZE * sizeof(**pfn_info));
+    if (*pfn_info == NULL) {
+	asprintf(err_msg, "pfn_info = malloc(%"PRIdSIZE") failed",
+		 MAX_BATCH_SIZE * sizeof(**pfn_info));
+	ret = -ENOMEM;
+	goto out;
+    }
+
+    *pfn_err = malloc(MAX_BATCH_SIZE * sizeof(**pfn_err));
+    if (*pfn_err == NULL) {
+	asprintf(err_msg, "pfn_err = malloc(%"PRIdSIZE") failed",
+		 MAX_BATCH_SIZE * sizeof(**pfn_err));
+	ret = -ENOMEM;
+	goto out;
+    }
+
+    uxenvm_load_progress = 0;
+
+  out:
+    return ret;
+}
+
+static int
+uxenvm_load_batch(struct filebuf *f, int marker, xen_pfn_t *pfn_type,
+                  int *pfn_err, int *pfn_info, struct decompress_ctx *dc,
+                  int populate_compressed, char **err_msg)
+{
+    DECLARE_HYPERCALL_BUFFER(uint8_t, pp_buffer);
+    int decompress;
+    int single_page;
+    int zero_batch;
+    int ret;
+
+    decompress = 0;
+    single_page = 0;
+    zero_batch = 0;
+    if ((unsigned int)marker > 4 * MAX_BATCH_SIZE) {
+        asprintf(err_msg, "invalid batch size: %x",
+                 (unsigned int)marker);
+        ret = -EINVAL;
+        goto out;
+    } else if (marker > 3 * MAX_BATCH_SIZE) {
+        marker -= 3 * MAX_BATCH_SIZE;
+        zero_batch = 1;
+    } else if (marker > 2 * MAX_BATCH_SIZE) {
+        marker -= 2 * MAX_BATCH_SIZE;
+        decompress = 1;
+        single_page = 1;
+    } else if (marker > MAX_BATCH_SIZE) {
+        marker -= MAX_BATCH_SIZE;
+        decompress = 1;
+    }
+    if (decompress) {
+#ifdef DECOMPRESS_THREADED
+        if (!dc->async_op_ctx) {
+            struct decompress_buf_ctx *dbc;
+            int i;
+            dc->ret = 0;
+            dc->async_op_ctx = async_op_init();
+            LIST_INIT(&dc->list);
+            for (i = 0; i < DECOMPRESS_THREADS; i++) {
+                dbc = calloc(1, sizeof(struct decompress_buf_ctx));
+                if (!dbc) {
+                    asprintf(err_msg, "calloc dbc failed");
+                    ret = -ENOMEM;
+                    goto out;
+                }
+                pp_buffer = xc_hypercall_buffer_alloc_pages(
+                    xc_handle, pp_buffer, PP_BUFFER_PAGES);
+                if (!pp_buffer) {
+                    asprintf(err_msg, "xc_hypercall_buffer_alloc_pages"
+                             "(%d pages) failed", PP_BUFFER_PAGES);
+                    ret = -ENOMEM;
+                    goto out;
+                }
+                dbc->pp_buffer = *HYPERCALL_BUFFER(pp_buffer);
+                dbc->pfn_type = malloc(
+                    MAX_BATCH_SIZE * sizeof(*pfn_type));
+                if (dbc->pfn_type == NULL) {
+                    asprintf(err_msg, "dbc->pfn_type = malloc(%"
+                             PRIdSIZE") failed",
+                             MAX_BATCH_SIZE * sizeof(*pfn_type));
+                    ret = -ENOMEM;
+                    goto out;
+                }
+                dbc->dc = dc;
+                LIST_INSERT_HEAD(&dc->list, dbc, elem);
+            }
+            ioh_event_init(&dc->process_event);
+            dc->xc_handle = xc_handle;
+            dc->vm_id = vm_id;
+            dc->err_msg = err_msg;
+            pp_buffer = NULL;
+        }
+#else
+        if (!dc->pp_buffer) {
+            pp_buffer = xc_hypercall_buffer_alloc_pages(
+                xc_handle, pp_buffer, PP_BUFFER_PAGES);
+            if (!pp_buffer) {
+                asprintf(err_msg, "xc_hypercall_buffer_alloc_pages"
+                         "(%d pages) failed", PP_BUFFER_PAGES);
+                ret = -ENOMEM;
+                goto out;
+            }
+            dc->pp_buffer = *HYPERCALL_BUFFER(pp_buffer);
+        }
+#endif  /* DECOMPRESS_THREADED */
+    }
+    uxenvm_load_progress += marker;
+    /* output progress load message every ~10% */
+    if ((uxenvm_load_progress * 10 / (vm_mem_mb << 8UL)) !=
+        ((uxenvm_load_progress - marker) * 10 / (vm_mem_mb << 8UL)))
+        APRINTF("memory load %d pages", uxenvm_load_progress);
+    if (zero_batch)
+        ret = uxenvm_load_zerobatch(f, marker, pfn_type, pfn_info,
+                                    err_msg);
+    else
+        ret = uxenvm_load_readbatch(f, marker, pfn_type, pfn_info,
+                                    pfn_err, decompress, dc,
+                                    single_page, populate_compressed,
+                                    err_msg);
+  out:
     return ret;
 }
 
@@ -1126,7 +1267,6 @@ apply_immutable_memory(struct immutable_range *r, int nranges)
 
 static uint8_t *dm_state_load_buf = NULL;
 static int dm_state_load_size = 0;
-static uint32_t dm_load_progress = 0;
 
 static int
 uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
@@ -1150,12 +1290,8 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
     uint8_t *hvm_buf = NULL;
     xen_pfn_t *pfn_type = NULL;
     int *pfn_err = NULL, *pfn_info = NULL;
-    DECLARE_HYPERCALL_BUFFER(uint8_t, pp_buffer);
-    int decompress;
-    struct decompress_ctx dc = { NULL, };
-    int single_page;
+    struct decompress_ctx dc = { };
     int populate_compressed = (restore_mode == VM_RESTORE_TEMPLATE);
-    int zero_batch;
     int marker;
     int ret;
     int size;
@@ -1164,29 +1300,9 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
     if (strstr(uxen_opt_debug, ",uncomptmpl,"))
         populate_compressed = 0;
 
-    pfn_type = malloc(MAX_BATCH_SIZE * sizeof(*pfn_type));
-    if (pfn_type == NULL) {
-	asprintf(err_msg, "pfn_type = malloc(%"PRIdSIZE") failed",
-		 MAX_BATCH_SIZE * sizeof(*pfn_type));
-	ret = -ENOMEM;
-	goto out;
-    }
-
-    pfn_info = malloc(MAX_BATCH_SIZE * sizeof(*pfn_info));
-    if (pfn_info == NULL) {
-	asprintf(err_msg, "pfn_info = malloc(%"PRIdSIZE") failed",
-		 MAX_BATCH_SIZE * sizeof(*pfn_info));
-	ret = -ENOMEM;
-	goto out;
-    }
-
-    pfn_err = malloc(MAX_BATCH_SIZE * sizeof(*pfn_err));
-    if (pfn_err == NULL) {
-	asprintf(err_msg, "pfn_err = malloc(%"PRIdSIZE") failed",
-		 MAX_BATCH_SIZE * sizeof(*pfn_err));
-	ret = -ENOMEM;
-	goto out;
-    }
+    ret = uxenvm_load_alloc(&pfn_type, &pfn_err, &pfn_info, err_msg);
+    if (ret < 0)
+        goto out;
 
     uxenvm_load_read(f, &marker, sizeof(marker), ret, err_msg, out);
     if (marker == XC_SAVE_ID_VERSION)
@@ -1322,81 +1438,6 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
             APRINTF("vm template file: %s", vm_template_file);
             break;
 	default:
-            decompress = 0;
-            single_page = 0;
-            zero_batch = 0;
-            if ((unsigned int)marker > 4 * MAX_BATCH_SIZE) {
-                asprintf(err_msg, "invalid batch size: %x",
-                         (unsigned int)marker);
-                ret = -EINVAL;
-                goto out;
-            } else if (marker > 3 * MAX_BATCH_SIZE) {
-                marker -= 3 * MAX_BATCH_SIZE;
-                zero_batch = 1;
-            } else if (marker > 2 * MAX_BATCH_SIZE) {
-                marker -= 2 * MAX_BATCH_SIZE;
-                decompress = 1;
-                single_page = 1;
-            } else if (marker > MAX_BATCH_SIZE) {
-                marker -= MAX_BATCH_SIZE;
-                decompress = 1;
-            }
-            if (decompress) {
-#ifdef DECOMPRESS_THREADED
-                if (!dc.async_op_ctx) {
-                    struct decompress_buf_ctx *dbc;
-                    int i;
-                    dc.ret = 0;
-                    dc.async_op_ctx = async_op_init();
-                    LIST_INIT(&dc.list);
-                    for (i = 0; i < DECOMPRESS_THREADS; i++) {
-                        dbc = calloc(1, sizeof(struct decompress_buf_ctx));
-                        if (!dbc) {
-                            asprintf(err_msg, "calloc dbc failed");
-                            ret = -ENOMEM;
-                            goto out;
-                        }
-                        pp_buffer = xc_hypercall_buffer_alloc_pages(
-                            xc_handle, pp_buffer, PP_BUFFER_PAGES);
-                        if (!pp_buffer) {
-                            asprintf(err_msg, "xc_hypercall_buffer_alloc_pages"
-                                     "(%d pages) failed", PP_BUFFER_PAGES);
-                            ret = -ENOMEM;
-                            goto out;
-                        }
-                        dbc->pp_buffer = *HYPERCALL_BUFFER(pp_buffer);
-                        dbc->pfn_type = malloc(
-                            MAX_BATCH_SIZE * sizeof(*pfn_type));
-                        if (dbc->pfn_type == NULL) {
-                            asprintf(err_msg, "dbc->pfn_type = malloc(%"
-                                     PRIdSIZE") failed",
-                                     MAX_BATCH_SIZE * sizeof(*pfn_type));
-                            ret = -ENOMEM;
-                            goto out;
-                        }
-                        dbc->dc = &dc;
-                        LIST_INSERT_HEAD(&dc.list, dbc, elem);
-                    }
-                    ioh_event_init(&dc.process_event);
-                    dc.xc_handle = xc_handle;
-                    dc.vm_id = vm_id;
-                    dc.err_msg = err_msg;
-                    pp_buffer = NULL;
-                }
-#else
-                if (!dc.pp_buffer) {
-                    pp_buffer = xc_hypercall_buffer_alloc_pages(
-                        xc_handle, pp_buffer, PP_BUFFER_PAGES);
-                    if (!pp_buffer) {
-                        asprintf(err_msg, "xc_hypercall_buffer_alloc_pages"
-                                 "(%d pages) failed", PP_BUFFER_PAGES);
-                        ret = -ENOMEM;
-                        goto out;
-                    }
-                    dc.pp_buffer = HYPERCALL_BUFFER(pp_buffer);
-                }
-#endif  /* DECOMPRESS_THREADED */
-            }
 	    if (restore_mode == VM_RESTORE_CLONE) {
                 ret = xc_domain_clone_physmap(xc_handle, vm_id,
                                               vm_template_uuid);
@@ -1411,19 +1452,8 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
 		}
 		restore_mode = VM_RESTORE_NORMAL;
 	    }
-            dm_load_progress += marker;
-            /* output progress load message every ~10% */
-            if ((dm_load_progress * 10 / (vm_mem_mb << 8UL)) !=
-                ((dm_load_progress - marker) * 10 / (vm_mem_mb << 8UL)))
-                APRINTF("memory load %d pages", dm_load_progress);
-            if (zero_batch)
-                ret = uxenvm_load_zerobatch(f, marker, pfn_type, pfn_info,
-                                            err_msg);
-            else
-                ret = uxenvm_load_readbatch(f, marker, pfn_type, pfn_info,
-                                            pfn_err, decompress, &dc,
-                                            single_page, populate_compressed,
-                                            err_msg);
+            ret = uxenvm_load_batch(f, marker, pfn_type, pfn_err, pfn_info,
+                                    &dc, populate_compressed, err_msg);
 	    if (ret)
 		goto out;
 	    break;
@@ -1513,9 +1543,11 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
 
     ret = 0;
   out:
-    if (pp_buffer)
-        xc_hypercall_buffer_free_pages(xc_handle, pp_buffer, PP_BUFFER_PAGES);
-#ifdef DECOMPRESS_THREADED
+#ifndef DECOMPRESS_THREADED
+    if (HYPERCALL_BUFFER_ARGUMENT_BUFFER(dc.pp_buffer))
+        xc__hypercall_buffer_free_pages(xc_handle, dc.pp_buffer,
+                                        PP_BUFFER_PAGES);
+#else  /* DECOMPRESS_THREADED */
     if (dc.async_op_ctx)
         (void)decompress_wait_all(&dc, NULL);
 #endif  /* DECOMPRESS_THREADED */
