@@ -221,9 +221,10 @@ typedef uint16_t cs16_t;
     (int)((MAX_BATCH_SIZE * (sizeof(cs16_t) + PAGE_SIZE) + PAGE_SIZE - 1) \
           >> PAGE_SHIFT)
 
+#define uxenvm_read_struct_size(s) (sizeof(*(s)) - sizeof(marker))
 #define uxenvm_read_struct(f, s)                                        \
     filebuf_read(f, (uint8_t *)(s) + sizeof(marker),                    \
-                 sizeof(*(s)) - sizeof(marker))
+                 uxenvm_read_struct_size(s))
 
 static int
 uxenvm_savevm_get_dm_state(uint8_t **dm_state_buf, int *dm_state_size,
@@ -758,6 +759,16 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
     return ret;
 }
 
+#define uxenvm_load_read(f, buf, size, ret, err_msg, _out) do {         \
+        (ret) = filebuf_read((f), (buf), (size));                       \
+        if ((ret) != (size)) {                                          \
+            asprintf((err_msg), "uxenvm_load_read(%s) failed", #buf);   \
+            if ((ret) >= 0)                                             \
+                (ret) = -EIO;                                           \
+            goto _out;                                                  \
+        }                                                               \
+    } while(0)
+
 static int
 uxenvm_load_zerobatch(struct filebuf *f, int batch, xen_pfn_t *pfn_type,
                       int *pfn_zero, char **err_msg)
@@ -767,11 +778,8 @@ uxenvm_load_zerobatch(struct filebuf *f, int batch, xen_pfn_t *pfn_type,
 
     LOAD_DPRINTF("zero batch %03x pages", batch);
 
-    ret = filebuf_read(f, &pfn_zero[0], batch * sizeof(pfn_zero[0]));
-    if (ret < 0) {
-        asprintf(err_msg, "pfn_type read %d failed", batch);
-        goto out;
-    }
+    uxenvm_load_read(f, &pfn_zero[0], batch * sizeof(pfn_zero[0]),
+                     ret, err_msg, out);
 
     for (j = 0; j < batch; j++)
         pfn_type[j] = pfn_zero[j] & ~XEN_DOMCTL_PFINFO_LTAB_MASK;
@@ -968,23 +976,15 @@ uxenvm_load_readbatch(struct filebuf *f, int batch, xen_pfn_t *pfn_type,
     if (!single_page)
         populate_compressed = 0;
 
-    ret = filebuf_read(f, &pfn_info[0], batch * sizeof(pfn_info[0]));
-    if (ret < 0) {
-        asprintf(err_msg, "pfn_type read %d failed", batch);
-        goto out;
-    }
+    uxenvm_load_read(f, &pfn_info[0], batch * sizeof(pfn_info[0]),
+                     ret, err_msg, out);
 
     for (j = 0; j < batch; j++)
 	pfn_type[j] = pfn_info[j] & ~XEN_DOMCTL_PFINFO_LTAB_MASK;
 
     if (decompress) {
-        ret = filebuf_read(f, &compress_size, sizeof(compress_size));
-        if (ret < 0) {
-            asprintf(err_msg, "size of compressed page %"PRIx64
-                     ":%"PRIx64" read failed",
-                     pfn_type[0], pfn_type[batch - 1] + 1);
-            goto out;
-        }
+        uxenvm_load_read(f, &compress_size, sizeof(compress_size),
+                         ret, err_msg, out);
         if (compress_size == -1)
             decompress = 0;
     }
@@ -1018,12 +1018,7 @@ uxenvm_load_readbatch(struct filebuf *f, int batch, xen_pfn_t *pfn_type,
 
         LOAD_DPRINTF("      read %08"PRIx64":%08"PRIx64" = %03x pages",
                      pfn_type[0], pfn_type[batch - 1] + 1, batch);
-        ret = filebuf_read(f, mem, batch << PAGE_SHIFT);
-        if (ret < 0) {
-            asprintf(err_msg, "page %"PRIx64":%"PRIx64" read failed",
-                     pfn_type[0], pfn_type[batch - 1] + 1);
-            goto out;
-        }
+        uxenvm_load_read(f, mem, batch << PAGE_SHIFT, ret, err_msg, out);
     } else {
 #ifdef DECOMPRESS_THREADED
         struct decompress_buf_ctx *dbc;
@@ -1037,13 +1032,7 @@ uxenvm_load_readbatch(struct filebuf *f, int batch, xen_pfn_t *pfn_type,
 
         LOAD_DPRINTF("      read %08"PRIx64":%08"PRIx64" = %03x pages",
                      pfn_type[0], pfn_type[batch - 1] + 1, batch);
-        ret = filebuf_read(f, compress_buf, compress_size);
-        if (ret < 0) {
-            asprintf(err_msg, "compressed page %"PRIx64
-                     ":%"PRIx64" read failed",
-                     pfn_type[0], pfn_type[batch - 1] + 1);
-            goto out;
-        }
+        uxenvm_load_read(f, compress_buf, compress_size, ret, err_msg, out);
 #ifdef DECOMPRESS_THREADED
         ioh_event_reset(&dc->process_event);
         async_op_process(dc->async_op_ctx);
@@ -1126,9 +1115,9 @@ apply_immutable_memory(struct immutable_range *r, int nranges)
 }
 
 #define uxenvm_load_read_struct(f, s, marker, ret, err_msg, _out) do {	\
-	(ret) = uxenvm_read_struct(f, &(s));				\
-	if ((ret) < 0) {						\
-	    asprintf((err_msg), "filebuf_read(%s) failed", #s);		\
+        (ret) = uxenvm_read_struct((f), &(s));                          \
+        if ((ret) != uxenvm_read_struct_size(&(s))) {                   \
+            asprintf((err_msg), "uxenvm_read_struct(%s) failed", #s);   \
 	    goto _out;							\
 	}								\
 	(s).marker = marker;						\
@@ -1198,25 +1187,17 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
 	goto out;
     }
 
-    ret = filebuf_read(f, &marker, sizeof(marker));
-    if (ret < 0) {
-        asprintf(err_msg, "filebuf_read(first marker) failed");
-        goto out;
-    }
+    uxenvm_load_read(f, &marker, sizeof(marker), ret, err_msg, out);
     if (marker == XC_SAVE_ID_VERSION)
         uxenvm_load_read_struct(f, s_version_info, marker, ret, err_msg, out);
     if (s_version_info.version != SAVE_FORMAT_VERSION) {
         asprintf(err_msg, "version info mismatch: %d != %d",
                  s_version_info.version, SAVE_FORMAT_VERSION);
-        ret = -1;
+        ret = -EINVAL;
         goto out;
     }
     while (1) {
-	ret = filebuf_read(f, &marker, sizeof(marker));
-	if (ret < 0) {
-	    asprintf(err_msg, "filebuf_read(marker) failed");
-	    goto out;
-	}
+        uxenvm_load_read(f, &marker, sizeof(marker), ret, err_msg, out);
 	if (marker == 0)	/* end marker */
 	    break;
 	switch (marker) {
@@ -1271,11 +1252,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
 		ret = -ENOMEM;
 		goto out;
 	    }
-	    ret = filebuf_read(f, hvm_buf, s_hvm_context.size);
-	    if (ret < 0) {
-		asprintf(err_msg, "filebuf_read(hvm_buf) failed");
-		goto out;
-	    }
+            uxenvm_load_read(f, hvm_buf, s_hvm_context.size, ret, err_msg, out);
 	    break;
 	case XC_SAVE_ID_HVM_DM:
 	    uxenvm_load_read_struct(f, s_hvm_dm, marker, ret, err_msg, out);
@@ -1287,11 +1264,8 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
 		ret = -ENOMEM;
 		goto out;
 	    }
-	    ret = filebuf_read(f, dm_state_load_buf, s_hvm_dm.size);
-	    if (ret < 0) {
-		asprintf(err_msg, "filebuf_read(dm_state_load_buf) failed");
-		goto out;
-	    }
+            uxenvm_load_read(f, dm_state_load_buf, s_hvm_dm.size,
+                             ret, err_msg, out);
 	    dm_state_load_size = s_hvm_dm.size;
 	    break;
 	case XC_SAVE_ID_VM_UUID:
@@ -1325,11 +1299,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
                 ret = -ENOMEM;
                 goto out;
             }
-            ret = filebuf_read(f, immutable_ranges, size);
-            if (ret < 0) {
-                asprintf(err_msg, "filebuf_read(immutable ranges) failed");
-                goto out;
-            }
+            uxenvm_load_read(f, immutable_ranges, size, ret, err_msg, out);
             APRINTF("immutable_ranges size 0x%x", size);
             break;
         case XC_SAVE_ID_MAPCACHE_PARAMS:
@@ -1346,11 +1316,8 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
                 ret = -ENOMEM;
                 goto out;
             }
-            ret = filebuf_read(f, vm_template_file, s_vm_template_file.size);
-            if (ret < 0) {
-                asprintf(err_msg, "uxenvm_read(vm_template_file) failed");
-                goto out;
-            }
+            uxenvm_load_read(f, vm_template_file, s_vm_template_file.size,
+                             ret, err_msg, out);
             APRINTF("vm template file: %s", vm_template_file);
             break;
 	default:
@@ -1360,7 +1327,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
             if ((unsigned int)marker > 4 * MAX_BATCH_SIZE) {
                 asprintf(err_msg, "invalid batch size: %x",
                          (unsigned int)marker);
-                ret = EINVAL;
+                ret = -EINVAL;
                 goto out;
             } else if (marker > 3 * MAX_BATCH_SIZE) {
                 marker -= 3 * MAX_BATCH_SIZE;
@@ -1385,7 +1352,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
                         dbc = calloc(1, sizeof(struct decompress_buf_ctx));
                         if (!dbc) {
                             asprintf(err_msg, "calloc dbc failed");
-                            ret = ENOMEM;
+                            ret = -ENOMEM;
                             goto out;
                         }
                         pp_buffer = xc_hypercall_buffer_alloc_pages(
@@ -1532,8 +1499,8 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
             ret = xc_domain_add_to_physmap(xc_handle, vm_id,
                                            XENMAPSPACE_shared_info, 0,
                                            s_hvm_magic_pfns.magic_pfns[2]);
-            if (ret) {
-                asprintf(err_msg, "filebuf_read(map shared_info) failed");
+            if (ret < 0) {
+                asprintf(err_msg, "add_to_physmap(shared_info) failed");
                 goto out;
             }
         }
@@ -1757,7 +1724,11 @@ vm_load(const char *name, int restore_mode)
     if (f)
 	filebuf_close(f);
 
-    return ret;
+    if (ret) {
+        _set_errno(-ret);
+        return -1;
+    }
+    return 0;
 }
 
 int
