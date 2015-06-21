@@ -180,6 +180,16 @@ static void ahci_trigger_irq(AHCIState *s, AHCIDevice *d,
     ahci_check_irq(s);
 }
 
+static void unmap_page(uint8_t **ptr, uint64_t old_addr, uint32_t wanted)
+{
+    target_phys_addr_t len = wanted;
+
+    if (*ptr) {
+        vm_memory_unmap(old_addr, len, 1, 0, *ptr, len);
+        *ptr = NULL;
+    }
+}
+
 static void map_page(uint8_t **ptr, uint64_t addr, uint64_t old_addr,
 		     uint32_t wanted)
 {
@@ -1345,12 +1355,25 @@ static int ahci_device_post_load(void *opaque, int version_id)
     return 0;
 }
 
+static void ahci_device_post_save(void *opaque)
+{
+    AHCIDevice *ad = opaque;
+    AHCIPortRegs *pr = &ad->port_regs;
+
+    unmap_page(&ad->lst, ((uint64_t)pr->lst_addr_hi << 32) | pr->lst_addr,
+               1024);
+    unmap_page(&ad->res_fis, ((uint64_t)pr->fis_addr_hi << 32) | pr->fis_addr,
+               256);
+}
+
 const VMStateDescription vmstate_ahci_device = {
     .name = "ahci-device",
     .version_id = 3,
     .minimum_version_id = 0,
     .minimum_version_id_old = 0,
     .post_load = ahci_device_post_load,
+    .post_save = ahci_device_post_save,
+    .resume = ahci_device_post_load,
     .fields = (VMStateField []) {
 	VMSTATE_IDE_BUS(port, AHCIDevice),
 	VMSTATE_IDE_DRIVES(port.ifs, AHCIDevice),
