@@ -152,17 +152,16 @@ void control_err_vprintf(const char *function, int line,
                          int errval, const char *errdesc,
                          const char *fmt, va_list ap)
 {
-    char *msg, *debug_msg;
+    char *msg;
 
     vasprintf(&msg, fmt, ap);
 
     if (errdesc)
-        asprintf(&debug_msg, "%s: %s (%08X)", msg, errdesc, errval);
+        debug_printf("%s: %s (%08X)\n", msg, errdesc, errval);
     else if (errval)
-        asprintf(&debug_msg, "%s: (%08X)", msg, errval);
+        debug_printf("%s: (%08X)\n", msg, errval);
     else
-        debug_msg = msg;
-    debug_printf("%s\n", debug_msg);
+        debug_printf("%s\n", msg);
 
     if (control.chr) {
         if (errval || errdesc)
@@ -185,8 +184,6 @@ void control_err_vprintf(const char *function, int line,
                             NULL);
     }
 
-    if (debug_msg != msg)
-        free(debug_msg);
     free(msg);
 }
 
