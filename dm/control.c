@@ -157,12 +157,12 @@ void control_err_vprintf(const char *function, int line,
     vasprintf(&msg, fmt, ap);
 
     if (errdesc)
-        asprintf(&debug_msg, "%s: %s (%08X)\n", msg, errdesc, errval);
+        asprintf(&debug_msg, "%s: %s (%08X)", msg, errdesc, errval);
     else if (errval)
-        asprintf(&debug_msg, "%s: (%08X)\n", msg, errval);
+        asprintf(&debug_msg, "%s: (%08X)", msg, errval);
     else
         debug_msg = msg;
-    debug_printf("%s", debug_msg);
+    debug_printf("%s\n", debug_msg);
 
     if (control.chr) {
         if (errval || errdesc)
