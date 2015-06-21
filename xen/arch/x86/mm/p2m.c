@@ -487,6 +487,53 @@ void p2m_final_teardown(struct domain *d)
 }
 
 
+static int
+p2m_mapcache_map(struct domain *d, xen_pfn_t gpfn, mfn_t mfn)
+{
+    struct page_info *page;
+    xen_pfn_t omfn;
+
+    page = mfn_to_page(mfn);
+    if (unlikely(!get_page(page, d))) {
+        if (!d->is_dying)
+            gdprintk(XENLOG_INFO,
+                     "%s: mfn %lx for vm %u gpfn %"PRI_xen_pfn" vanished\n",
+                     __FUNCTION__, mfn_x(mfn), d->domain_id, gpfn);
+        return -EINVAL;
+    }
+    spin_lock(&d->page_alloc_lock);
+    if (!test_and_set_bit(_PGC_mapcache, &page->count_info)) {
+        page_list_del2(page, &d->page_list, &d->xenpage_list);
+        page_list_add_tail(page, &d->mapcache_page_list);
+    } else {
+        /* This shouldn't really happen -- we're doing a map
+         * operation, but the page is already marked as mapped
+         * in the mapcache. */
+        /* gdprintk(XENLOG_INFO, */
+        /*          "%s: mfn %lx already mapcache mapped " */
+        /*          "in vm %u, duplicating at gpfn %"PRI_xen_pfn"\n", */
+        /*          __FUNCTION__, mfn_x(mfn), d->domain_id, gpfn); */
+        put_page(page);
+    }
+    omfn = mdm_enter(d, gpfn, mfn_x(mfn));
+    if (__mfn_valid(omfn)) {
+        page = __mfn_to_page(omfn);
+        if (!test_and_clear_bit(_PGC_mapcache, &page->count_info))
+            gdprintk(XENLOG_WARNING,
+                     "%s: mfn %"PRI_xen_pfn" in mapcache for vm %u gpfn"
+                     " %"PRI_xen_pfn" without _PGC_mapcache\n", __FUNCTION__,
+                     omfn, d->domain_id, gpfn);
+        else {
+            page_list_del(page, &d->mapcache_page_list);
+            page_list_add_tail(page, is_xen_page(page) ?
+                               &d->xenpage_list : &d->page_list);
+            put_page(page);
+        }
+    }
+    spin_unlock(&d->page_alloc_lock);
+    return 0;
+}
+
 static void
 p2m_remove_page(struct p2m_domain *p2m, unsigned long gfn, unsigned long mfn,
                 unsigned int page_order)
@@ -599,13 +646,29 @@ guest_physmap_add_entry(struct domain *d, unsigned long gfn,
             ASSERT(mfn_valid(omfn));
             if (test_bit(_PGC_mapcache, &mfn_to_page(omfn)->count_info) &&
                 p2m_clear_gpfn_from_mapcache(p2m, gfn + i, omfn)) {
-                gdprintk(XENLOG_WARNING,
-                         "Old guest page %lx mapcache mapped mfn %lx\n",
-                         gfn + i, mfn_x(omfn));
-                domain_crash(d);
-                p2m_unlock(p2m);
-
-                return -EINVAL;
+                int ret;
+                /* caller beware that briefly the page seen through
+                 * the userspace mapping is the new mapping while the
+                 * old mapping is still present in the p2m -- ok since
+                 * this operation is only supported while the VM is
+                 * suspended */
+                if (!d->is_shutting_down || !mfn_valid(_mfn(mfn))) {
+                    if (mfn_valid(_mfn(mfn)))
+                        gdprintk(XENLOG_WARNING,
+                                 "%s: can't clear mapcache mapped mfn %lx"
+                                 " for vm %u gpfn %lx new mfn %lx\n",
+                                 __FUNCTION__, mfn_x(omfn), d->domain_id,
+                                 gfn + i, mfn);
+                    domain_crash(d);
+                    p2m_unlock(p2m);
+                    return -EINVAL;
+                }
+                ret = p2m_mapcache_map(d, gfn + i, _mfn(mfn));
+                if (ret) {
+                    domain_crash(d);
+                    p2m_unlock(p2m);
+                    return -EINVAL;
+                }
             }
             set_gpfn_from_mfn(mfn_x(omfn), INVALID_M2P_ENTRY);
         }
@@ -1647,46 +1710,9 @@ p2m_translate(struct domain *d, xen_pfn_t *arr, int nr, int write, int map)
             /* don't allow p2m_translate access to xen pages or host pages */
             mfn = _mfn(INVALID_MFN);
         else if (map) {
-            struct page_info *page;
-            xen_pfn_t omfn;
-            page = mfn_to_page(mfn);
-            if (unlikely(!get_page(page, d))) {
-                if (!d->is_dying)
-                    gdprintk(XENLOG_INFO,
-                             "Translated domain page %"PRI_xen_pfn
-                             " in domain %u has disappeared\n",
-                             arr[j], d->domain_id);
-                rc = -EINVAL;
+            rc = p2m_mapcache_map(d, arr[j], mfn);
+            if (rc)
                 goto out;
-            }
-            spin_lock(&d->page_alloc_lock);
-            if (!test_and_set_bit(_PGC_mapcache, &page->count_info)) {
-                page_list_del2(page, &d->page_list, &d->xenpage_list);
-                page_list_add_tail(page, &d->mapcache_page_list);
-            } else {
-                /* This shouldn't really happen -- we're doing a map
-                 * operation, but the page is already marked as mapped
-                 * in the mapcache. */
-                /* gdprintk(XENLOG_INFO, */
-                /*          "Bad mapcache map for page %lx " */
-                /*          "in domain %u\n", arr[j], d->domain_id); */
-                put_page(page);
-            }
-            omfn = mdm_enter(d, arr[j], mfn_x(mfn));
-            if (__mfn_valid(omfn)) {
-                page = __mfn_to_page(omfn);
-                if (!test_and_clear_bit(_PGC_mapcache, &page->count_info))
-                    gdprintk(XENLOG_WARNING,
-                             "Bad mapcache clear for page %"PRI_xen_pfn
-                             " in domain %u\n", omfn, d->domain_id);
-                else {
-                    page_list_del(page, &d->mapcache_page_list);
-                    page_list_add_tail(page, is_xen_page(page) ?
-                                       &d->xenpage_list : &d->page_list);
-                    put_page(page);
-                }
-            }
-            spin_unlock(&d->page_alloc_lock);
         } else if (mfn_valid(mfn))  {
             if (!write && p2m_is_pod(pt)) {
                 /* Populate on demand: either zero or cloned shared page. */
