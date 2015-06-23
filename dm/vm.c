@@ -546,6 +546,9 @@ vm_init(const char *loadvm, int restore_mode)
         }
     }
 
+    if (vm_quit_interrupt)
+        errx(0, "%s quit interrupt", __FUNCTION__);
+
     ioreq_init();
 
     pc_init_xen();

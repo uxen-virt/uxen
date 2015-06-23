@@ -1310,7 +1310,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
         ret = -EINVAL;
         goto out;
     }
-    while (1) {
+    while (!vm_quit_interrupt) {
         uxenvm_load_read(f, &marker, sizeof(marker), ret, err_msg, out);
 	if (marker == 0)	/* end marker */
 	    break;
@@ -1465,6 +1465,8 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
 #endif  /* DECOMPRESS_THREADED */
 
   skip_mem:
+    if (vm_quit_interrupt)
+        goto out;
     if (restore_mode == VM_RESTORE_TEMPLATE) {		/* template load */
         ret = xc_domain_sethandle(xc_handle, vm_id, vm_uuid);
         if (ret < 0) {
