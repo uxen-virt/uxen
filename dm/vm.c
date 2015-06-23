@@ -57,6 +57,8 @@ uint64_t vm_restricted_x86_emul = 0;
 uint64_t vm_vpt_align = 0;
 uint64_t vm_vpt_coalesce_period = 0;
 
+bool vm_quit_interrupt = false;
+
 static void vm_run_mode_change_cb(void *opaque);
 
 #ifdef CONFIG_DUMP_PERIODIC_STATS

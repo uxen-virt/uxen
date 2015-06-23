@@ -539,7 +539,7 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
     vm_save_info.page_batch_offset = filebuf_tell(f);
 
     pfn = 0;
-    while (pfn < p2m_size) {
+    while (pfn < p2m_size && !vm_save_info.save_abort && !vm_quit_interrupt) {
 	batch = 0;
 	while ((pfn + batch) < p2m_size && batch < MAX_BATCH_SIZE) {
 	    pfn_type[batch] = pfn + batch;
@@ -1607,6 +1607,8 @@ vm_save(void)
     /* XXX init debug option */
     if (strstr(uxen_opt_debug, ",compbatch,"))
         vm_save_info.single_page = 0;
+
+    vm_save_info.save_abort = 0;
 
     vm_save_info.awaiting_suspend = 1;
     vm_set_run_mode(SUSPEND_VM);

@@ -17,6 +17,8 @@ extern uint64_t vm_vpt_align;
 extern uint64_t vm_vpt_coalesce_period;
 extern critical_section vm_pause_lock;
 
+extern bool vm_quit_interrupt;
+
 void vm_create(int restore_mode);
 void vm_init(const char *loadvm, int restore_mode);
 void vm_start_run(void);

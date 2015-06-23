@@ -265,6 +265,8 @@ control_command_resume(void *opaque, const char *id, const char *opt,
     vm_save_info.resume_cd = cd;
     vm_save_info.resume_id = id ? strdup(id) : NULL;
 
+    vm_save_info.save_abort = 1;
+
     vm_set_run_mode(RUNNING_VM);
 
     return 0;
@@ -294,9 +296,10 @@ control_command_quit(void *opaque, const char *id, const char *opt,
 {
     struct control_desc *cd = (struct control_desc *)opaque;
 
-    control_send_ok(cd, opt, id, NULL);
-
+    vm_quit_interrupt = dict_get_boolean(d, "interrupt");
     vm_set_run_mode(DESTROY_VM);
+
+    control_send_ok(cd, opt, id, NULL);
 
     return 0;
 }
@@ -850,7 +853,12 @@ struct dict_rpc_command control_commands[] = {
             { "set", DICT_RPC_ARG_TYPE_ARRAY, .optional = 0 },
       }, },
     { "pause", control_command_pause, },
-    { "quit", control_command_quit, .flags = CONTROL_SUSPEND_OK },
+    { "quit", control_command_quit, .flags = CONTROL_SUSPEND_OK,
+      .args = (struct dict_rpc_arg_desc[]) {
+            { "interrupt", DICT_RPC_ARG_TYPE_BOOLEAN,
+              .defval = DICT_RPC_ARG_DEFVAL_BOOLEAN(false) },
+            { NULL, },
+        }, },
     { "remote-execute", remote_execute,
       .args = (struct dict_rpc_arg_desc[]) {
             { "command-line", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },

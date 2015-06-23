@@ -12,6 +12,7 @@ struct control_desc;
 struct vm_save_info {
     int awaiting_suspend;
     int save_requested;
+    int save_abort;
 
     char *filename;
     struct filebuf *f;
