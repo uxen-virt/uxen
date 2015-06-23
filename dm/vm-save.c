@@ -446,7 +446,7 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
 {
     uint8_t *hvm_buf = NULL;
     int p2m_size, pfn, batch, _batch, run, b_run, m_run, v_run, rezero, clone;
-    int total_pages = 0, total_rezero = 0, total_clone = 0;
+    int total_pages = 0, total_zero = 0, total_rezero = 0, total_clone = 0;
     int total_compressed_pages = 0, total_compress_in_vain = 0;
     size_t total_compress_save = 0;
     int j;
@@ -596,6 +596,7 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
                                   zero_batch * sizeof(pfn_zero[0]));
                     zero_batch = 0;
                 }
+                total_zero++;
             } else if (pfn_type[j] == XEN_DOMCTL_PFINFO_XPOD) {
                 /* ignore map errors -- PROT_READ mapped pod pages are
                  * only mapped if they are not cow */
@@ -731,8 +732,8 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
     batch = 0;
     filebuf_write(f, &batch, sizeof(batch));
 
-    APRINTF("memory: pages %d rezero %d clone %d", total_pages, total_rezero,
-            total_clone);
+    APRINTF("memory: pages %d zero %d rezero %d clone %d", total_pages,
+            total_zero - total_rezero, total_rezero, total_clone);
     if (compress && total_pages) {
         int pct;
         pct = 10000 * (total_compress_save >> PAGE_SHIFT) / total_pages;
