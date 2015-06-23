@@ -1317,7 +1317,8 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
     struct page_info *p = NULL, *p_cont;
     uint8_t *data, *data_cont = NULL;
     struct page_data_info *pdi;
-    uint16_t offset, size, uc_size;
+    uint16_t offset, size;
+    int uc_size;
     void *source;
     void *target = NULL;
     int ret = 1;
@@ -1377,8 +1378,9 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
     } else
         source = pdi->data;
 
-    uc_size = LZ4_uncompress((const char *)source, target, PAGE_SIZE);
-    if (uc_size != size) {
+    uc_size = LZ4_decompress_safe((const char *)source, target,
+                                  size, PAGE_SIZE);
+    if (uc_size != PAGE_SIZE) {
         ret = 0;
         goto out;
     }
@@ -2296,7 +2298,8 @@ guest_physmap_mark_populate_on_demand_contents(
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
     struct page_info *new_page;
     void *va;
-    uint16_t c_size, uc_size;
+    uint16_t c_size;
+    int uc_size;
     mfn_t mfn;
 
     if (unlikely(!check_decompress_buffer()))
@@ -2328,14 +2331,14 @@ guest_physmap_mark_populate_on_demand_contents(
         mfn = page_to_mfn(new_page);
         va = map_domain_page(mfn_x(mfn));
         if (c_size < PAGE_SIZE)
-            uc_size = LZ4_uncompress((const char *)this_cpu(decompress_buffer),
-                                     va, PAGE_SIZE);
+            uc_size = LZ4_decompress_safe((const char *)this_cpu(decompress_buffer),
+                                     va, c_size, PAGE_SIZE);
         else {
             memcpy(va, this_cpu(decompress_buffer), PAGE_SIZE);
-            uc_size = c_size;
+            uc_size = PAGE_SIZE;
         }
         unmap_domain_page(va);
-        if (uc_size != c_size) {
+        if (uc_size != PAGE_SIZE) {
             printk("%s: gpfn %lx invalid compressed data\n", __FUNCTION__,
                    gpfn);
             free_domheap_page(new_page);
