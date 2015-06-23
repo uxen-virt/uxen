@@ -219,7 +219,15 @@ init_xnu_symbols(void)
 #endif
 
     if (!xnu_get_map_pmap) {
-        xnu_get_map_pmap = xnu_get_map_pmap_10_11;
+        switch (version_major) {
+            default:
+                fail_msg("unexpector version_major %d for get_map_pmap",
+                         version_major);
+                /* fall through */
+            case 15: /* OS X 10.11 */
+                xnu_get_map_pmap = xnu_get_map_pmap_10_11;
+                break;
+        }
     }
 
     xnu_symbols_present = 1;
