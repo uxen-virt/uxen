@@ -91,7 +91,7 @@ void cmp(uint64_t sector, uint8_t *buf, uint8_t *buf2)
     }
 }
 
-#define MAX_SECTORS (1ULL << (20ULL-9ULL))
+#define MAX_SECTORS (16ULL << (30ULL-9ULL))
 uint8_t sector_map[MAX_SECTORS + 1024*1024];
 
 /* Generate random <offset, len> pair. */
