@@ -129,7 +129,7 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
 
     if (crtc->flush_pending)
         crtc_flush(s, crtc_id);
-    if (!crtc->ds)
+    if (!crtc->ds || !crtc->regs)
         return;
 
     npages = (crtc->offset + crtc->regs->p.stride * crtc->regs->p.yres +
@@ -251,10 +251,10 @@ cursor_flush(struct uxendisp_state *s)
     struct DisplayState *ds;
 
     /* XXX crtc 0 only for now */
-    if (s->cursor_regs->crtc_idx == 0)
-        ds = s->crtcs[0].ds;
-    else
+    if (!s->cursor_regs || s->cursor_regs->crtc_idx != 0)
         return;
+
+    ds = s->crtcs[0].ds;
 
     if (!(s->cursor_en & UXDISP_CURSOR_SHOW)) {
         dpy_cursor_shape(ds, 0, 0, 0, 0, NULL, NULL);
@@ -296,6 +296,9 @@ static void
 crtc_flush(struct uxendisp_state *s, int crtc_id)
 {
     struct crtc_state *crtc = &s->crtcs[crtc_id];
+
+    if (!crtc->regs)
+        return;
 
     /* XXX crtc 0 only for now */
     if (crtc_id == 0 && (s->mode & UXDISP_MODE_VGA_DISABLED)) {
