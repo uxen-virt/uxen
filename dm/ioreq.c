@@ -390,7 +390,7 @@ static void __handle_ioreq(ioreq_t *req)
 static uint64_t
 unbiased_time_ms(void)
 {
-#ifdef _WIN32
+#if 0
     extern WINAPI BOOL QueryUnbiasedInterruptTime(PULONGLONG);
     ULONGLONG t = 0;
     QueryUnbiasedInterruptTime(&t);
