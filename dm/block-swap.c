@@ -169,7 +169,7 @@ typedef struct BDRVSwapState {
     DUBTREE t;
     DUBTREECONTEXT *find_context;
 
-    int reads_outstanding;
+    int ios_outstanding;
     struct SwapAIOCB *read_queue_head;
     struct SwapAIOCB *read_queue_tail;
 
@@ -1762,13 +1762,22 @@ out:
 
 
 #ifndef SWAP_NO_AIO
-static void bdrv_swap_aio_cancel(BlockDriverAIOCB *_acb)
+static inline void swap_common_cb(SwapAIOCB *acb)
 {
-    SwapAIOCB *acb = (SwapAIOCB *)_acb;
+    BDRVSwapState *s = (BDRVSwapState*) acb->bs->opaque;
+#ifdef SWAP_STATS
+    swap_stats.blocked_time += os_get_clock() - acb->t0;
+#endif
+    --(s->ios_outstanding);
     aio_del_wait_object(&acb->event);
     aio_release(acb);
 }
 
+static void bdrv_swap_aio_cancel(BlockDriverAIOCB *_acb)
+{
+    SwapAIOCB *acb = (SwapAIOCB *)_acb;
+    swap_common_cb(acb);
+}
 
 static AIOPool swap_aio_pool = {
     .aiocb_size = sizeof(SwapAIOCB),
@@ -1865,6 +1874,7 @@ static void * swap_read_thread(void *_s)
 static SwapAIOCB *swap_aio_get(BlockDriverState *bs,
         BlockDriverCompletionFunc *cb, void *opaque)
 {
+    BDRVSwapState *s = (BDRVSwapState*) bs->opaque;
     SwapAIOCB *acb;
     acb = aio_get(&swap_aio_pool, bs, cb, opaque);
     assert(acb);
@@ -1875,25 +1885,16 @@ static SwapAIOCB *swap_aio_get(BlockDriverState *bs,
     }
     acb->bs = bs;
     acb->result = -1;
+    ++(s->ios_outstanding);
 #ifdef SWAP_STATS
     acb->t0 = os_get_clock();
 #endif
     return acb;
 }
 
-static inline void swap_common_cb(SwapAIOCB *acb)
-{
-#ifdef SWAP_STATS
-    swap_stats.blocked_time += os_get_clock() - acb->t0;
-#endif
-    aio_del_wait_object(&acb->event);
-    aio_release(acb);
-}
-
 static void swap_read_cb(void *opaque)
 {
     SwapAIOCB *acb = opaque;
-    BDRVSwapState *s = (BDRVSwapState*) acb->bs->opaque;
 
 #ifdef SWAP_STATS
     swap_stats.post_proc_wait += os_get_clock() - acb->t1;
@@ -1903,7 +1904,6 @@ static void swap_read_cb(void *opaque)
         memcpy(acb->buffer, acb->tmp + acb->modulo, acb->size - acb->modulo);
         free(acb->tmp);
     }
-    --(s->reads_outstanding);
     acb->common.cb(acb->common.opaque, 0);
     swap_common_cb(acb);
 }
@@ -1911,14 +1911,12 @@ static void swap_read_cb(void *opaque)
 static void swap_rmw_cb(void *opaque)
 {
     SwapAIOCB *acb = opaque;
-    BDRVSwapState *s = (BDRVSwapState*) acb->bs->opaque;
 
     memcpy(acb->tmp + acb->modulo, acb->buffer, acb->orig_size);
     acb->result = swap_write(acb->bs, 8 * acb->block, acb->tmp,
                    acb->size >> BDRV_SECTOR_BITS);
     free(acb->tmp);
 
-    --(s->reads_outstanding);
     acb->common.cb(acb->common.opaque, 0);
     swap_common_cb(acb);
 }
@@ -1943,7 +1941,6 @@ static inline void swap_queue_read_acb(BlockDriverState *bs, SwapAIOCB *acb)
         s->read_queue_tail = acb;
     }
     swap_unlock(s);
-    ++(s->reads_outstanding);
     swap_signal_read(s);
 }
 
@@ -2198,7 +2195,7 @@ static int swap_flush(BlockDriverState *bs)
     /* Wait for all outstanding reads completing. */
     aio_wait_start();
     aio_poll();
-    while (s->reads_outstanding) {
+    while (s->ios_outstanding) {
         aio_wait();
     }
     aio_wait_end();
