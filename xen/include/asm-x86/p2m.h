@@ -720,6 +720,12 @@ extern void audit_p2m(struct p2m_domain *p2m, int strict_m2p);
 #define P2M_DEBUG(_f, _a...) do { (void)(_f); } while(0)
 #endif
 
+int
+p2m_get_compressed_page_data(struct domain *d, mfn_t mfn, uint8_t *data,
+                             uint16_t offset, void *target, uint16_t *c_size);
+int
+p2m_parse_page_data(mfn_t *mfn, uint8_t **data, uint16_t *offset);
+
 /* Called by p2m code when demand-populating a PoD page */
 int
 p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,

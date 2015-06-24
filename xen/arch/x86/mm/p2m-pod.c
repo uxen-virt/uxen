@@ -1303,46 +1303,19 @@ p2m_pod_compress_page(struct p2m_domain *p2m, unsigned long gfn_aligned,
 }
 #endif  /* NDEBUG */
 
-static int
-p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
-                        struct domain *page_owner, int share)
+int
+p2m_get_compressed_page_data(struct domain *d, mfn_t mfn, uint8_t *data,
+                             uint16_t offset, void *target, uint16_t *c_size)
 {
-    struct domain *d = p2m->domain;
-    struct page_info *p = NULL, *p_cont;
-    uint8_t *data, *data_cont = NULL;
-    struct page_data_info *pdi;
-    uint16_t offset, size;
+    struct page_info *p_cont;
+    uint8_t *data_cont = NULL;
+    uint16_t size;
     int uc_size;
+    struct page_data_info *pdi;
     void *source;
-    void *target = NULL;
     int ret = 1;
 
-    offset = (mfn_x(mfn) >>
-              (P2M_MFN_PAGE_STORE_OFFSET_INDEX - PAGE_STORE_DATA_ALIGN)) &
-        ~((1 << PAGE_STORE_DATA_ALIGN) - 1);
-    mfn = p2m_mfn_mfn(mfn);
-    data = map_domain_page_direct(mfn_x(mfn));
     pdi = (struct page_data_info *)&data[offset];
-
-    /* check if decompressed page exists */
-    p2m_lock_recursive(p2m);
-    if (share && page_owner == d && mfn_x(pdi->mfn)) {
-        *tmfn = pdi->mfn;
-        get_page_fast(mfn_to_page(*tmfn), page_owner);
-        p2m_unlock(p2m);
-        perfc_incr(decompressed_shared);
-        goto out;
-    }
-    p2m_unlock(p2m);
-
-    p = alloc_domheap_page(page_owner, 0);
-    if (!p) {
-        ret = 0;
-        goto out;
-    }
-    *tmfn = page_to_mfn(p);
-    target = map_domain_page_direct(mfn_x(*tmfn));
-
     size = pdi->size;
     offset += sizeof(struct page_data_info);
     if (offset == PAGE_SIZE) {
@@ -1371,12 +1344,82 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
     } else
         source = pdi->data;
 
-    uc_size = LZ4_decompress_safe((const char *)source, target,
-                                  size, PAGE_SIZE);
-    if (uc_size != PAGE_SIZE) {
+    if (!c_size) {
+        uc_size = LZ4_decompress_safe((const char *)source, target, size,
+                                      PAGE_SIZE);
+        if (uc_size != PAGE_SIZE) {
+            ret = 0;
+            goto out;
+        }
+    } else {
+        if (size > *c_size) {
+            ret = 0;
+            goto out;
+        }
+        memcpy(target, source, size);
+        *c_size = size;
+    }
+
+  out:
+    if (data_cont)
+        unmap_domain_page(data_cont);
+    return ret;
+}
+
+int
+p2m_parse_page_data(mfn_t *mfn, uint8_t **data, uint16_t *offset)
+{
+
+    *offset = (mfn_x(*mfn) >>
+               (P2M_MFN_PAGE_STORE_OFFSET_INDEX - PAGE_STORE_DATA_ALIGN)) &
+        ~((1 << PAGE_STORE_DATA_ALIGN) - 1);
+    *mfn = p2m_mfn_mfn(*mfn);
+    *data = map_domain_page_direct(mfn_x(*mfn));
+
+    return 0;
+}
+
+static int
+p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
+                        struct domain *page_owner, int share)
+{
+    struct domain *d = p2m->domain;
+    struct page_info *p = NULL;
+    uint8_t *data;
+    struct page_data_info *pdi;
+    uint16_t offset;
+    void *target = NULL;
+    int ret = 1;
+
+    if (p2m_parse_page_data(&mfn, &data, &offset)) {
         ret = 0;
         goto out;
     }
+
+    pdi = (struct page_data_info *)&data[offset];
+
+    /* check if decompressed page exists */
+    p2m_lock_recursive(p2m);
+    if (share && page_owner == d && mfn_x(pdi->mfn)) {
+        *tmfn = pdi->mfn;
+        get_page_fast(mfn_to_page(*tmfn), page_owner);
+        p2m_unlock(p2m);
+        perfc_incr(decompressed_shared);
+        goto out;
+    }
+    p2m_unlock(p2m);
+
+    p = alloc_domheap_page(page_owner, 0);
+    if (!p) {
+        ret = 0;
+        goto out;
+    }
+    *tmfn = page_to_mfn(p);
+
+    target = map_domain_page_direct(mfn_x(*tmfn));
+    ret = p2m_get_compressed_page_data(d, mfn, data, offset, target, NULL);
+    if (!ret)
+        goto out;
 
     if (share && page_owner == d) {
         p2m_lock_recursive(p2m);
@@ -1403,8 +1446,6 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
   out:
     if (target)
         unmap_domain_page_direct(target);
-    if (data_cont)
-        unmap_domain_page(data_cont);
     unmap_domain_page(data);
     if (p)
         free_domheap_page(p);
@@ -1666,11 +1707,10 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                 p2m_unlock(op2m);
                 break;
             }
-            offset = (mfn_x(omfn) >> (P2M_MFN_PAGE_STORE_OFFSET_INDEX -
-                                      PAGE_STORE_DATA_ALIGN)) &
-                ~((1 << PAGE_STORE_DATA_ALIGN) - 1);
-            omfn = p2m_mfn_mfn(omfn);
-            data = map_domain_page_direct(mfn_x(omfn));
+            if (p2m_parse_page_data(&omfn, &data, &offset)) {
+                p2m_unlock(op2m);
+                break;
+            }
             pdi = (struct page_data_info *)&data[offset];
             if (mfn_x(pdi->mfn) == mfn_x(smfn)) {
                 ret = change_page_owner(mfn_to_page(pdi->mfn), d,
@@ -2282,8 +2322,8 @@ guest_physmap_mark_populate_on_demand_contents(
         mfn = page_to_mfn(new_page);
         va = map_domain_page(mfn_x(mfn));
         if (c_size < PAGE_SIZE)
-            uc_size = LZ4_decompress_safe((const char *)this_cpu(decompress_buffer),
-                                     va, c_size, PAGE_SIZE);
+            uc_size = LZ4_decompress_safe(
+                (const char *)this_cpu(decompress_buffer), va, PAGE_SIZE);
         else {
             memcpy(va, this_cpu(decompress_buffer), PAGE_SIZE);
             uc_size = PAGE_SIZE;
