@@ -2327,7 +2327,8 @@ guest_physmap_mark_populate_on_demand_contents(
         va = map_domain_page(mfn_x(mfn));
         if (c_size < PAGE_SIZE)
             uc_size = LZ4_decompress_safe(
-                (const char *)this_cpu(decompress_buffer), va, PAGE_SIZE);
+                (const char *)this_cpu(decompress_buffer), va, c_size,
+                PAGE_SIZE);
         else {
             memcpy(va, this_cpu(decompress_buffer), PAGE_SIZE);
             uc_size = PAGE_SIZE;
