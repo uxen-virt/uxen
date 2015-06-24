@@ -27,6 +27,8 @@
 #undef _IOREQ_H_
 #include <xen/hvm/ioreq.h>
 
+#define LONG_IOREQ_MS 100
+
 struct ioreq_state *default_ioreq_state = NULL;
 
 int ioreq_dump = 0;
@@ -384,6 +386,20 @@ static void __handle_ioreq(ioreq_t *req)
     }
 }
 
+/* running time without periods spent in sleep state */
+static uint64_t
+unbiased_time_ms(void)
+{
+#ifdef _WIN32
+    extern WINAPI BOOL QueryUnbiasedInterruptTime(PULONGLONG);
+    ULONGLONG t = 0;
+    QueryUnbiasedInterruptTime(&t);
+    return t / 10000;
+#else
+    return os_get_clock() / SCALE_MS;
+#endif
+}
+
 static void
 handle_ioreq(void *opaque)
 {
@@ -391,8 +407,11 @@ handle_ioreq(void *opaque)
     struct ioreq_state *is = ev->state;
     unsigned int vcpu = ev - &is->events[0];
     ioreq_t *req = get_ioreq(is, vcpu);
+    uint64_t t0, t1;
 
     if (req) {
+        t0 = unbiased_time_ms();
+
         __handle_ioreq(req);
 
         if (req->state != STATE_IOREQ_INPROCESS) {
@@ -410,6 +429,15 @@ handle_ioreq(void *opaque)
         req->state = STATE_IORESP_READY;
         uxen_user_notification_event_set(&ev->completed);
 	ioreq_count++;
+
+        t1 = unbiased_time_ms();
+        if (t1 - t0 >= LONG_IOREQ_MS)
+            debug_printf("long I/O request: %dms, dir=%d, "
+                         "ptr: %x, port: %"PRIx64", "
+                         "data: %"PRIx64", count: %u, size: %u\n",
+                         (int)(t1-t0),
+                         req->dir, req->data_is_ptr, req->addr,
+                         req->data, req->count, req->size);
     }
 }
 
