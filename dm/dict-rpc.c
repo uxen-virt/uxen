@@ -489,7 +489,9 @@ validate_arguments(struct dict_rpc_command *c, dict obj,
                 break;
             }
             v = dict_get(obj, ad->name);
-            if (!v && ad->optional) {
+            if (!v) {
+                if (ad->optional)
+                    continue;
                 snprintf(errbuf, errbuf_size, "argument \"%s\" is required",
                          ad->name);
                 return EINVAL;
