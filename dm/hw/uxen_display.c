@@ -685,6 +685,7 @@ uxendisp_post_load(void *opaque, int version_id)
     return 0;
 }
 
+#ifdef UNMAP_ON_SAVE
 static void
 uxendisp_post_save(void *opaque)
 {
@@ -692,6 +693,7 @@ uxendisp_post_save(void *opaque)
 
     pci_ram_post_save(&s->dev);
 }
+#endif
 
 static const VMStateDescription vmstate_uxendisp_crtc = {
     .name = "uxendisp-crtc",
@@ -723,7 +725,9 @@ static const VMStateDescription vmstate_uxendisp = {
     .minimum_version_id_old = 7,
     .pre_save = uxendisp_pre_save,
     .post_load = uxendisp_post_load,
+#ifdef UNMAP_ON_SAVE
     .post_save = uxendisp_post_save,
+#endif
     .resume = uxendisp_post_load,
     .fields      = (VMStateField []) {
         VMSTATE_PCI_DEVICE(dev, struct uxendisp_state),
