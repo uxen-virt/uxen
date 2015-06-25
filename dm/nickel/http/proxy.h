@@ -24,26 +24,32 @@ struct nickel;
 struct clt_ctx;
 struct parser_ctx;
 struct proxy_t;
+struct hpd_t;
 struct buff;
+struct http_server {
+    char *sv_name;
+    struct sockaddr_in daddr;
+};
 RLIST_HEAD(clt_ctx_list, clt_ctx);
 struct clt_ctx {
     struct CharDriverState *chr;
 
     LIST_ENTRY(clt_ctx) entry;
     RLIST_ENTRY(clt_ctx_list) w_list;
+    RLIST_ENTRY(clt_ctx_list) direct_cx_list;
     struct nickel *ni;
     void *ni_opaque;
     struct http_ctx *hp;
     void *webdav_opaque;
-    char *sv_name;
+    struct http_server h;
     const char *schema;
-    struct sockaddr_in daddr;
     uint32_t flags;
     struct buff *in;
     struct buff *out;
     uint8_t bf_tls_ck[QUICK_HTTP_PARSE_LEN + 1];
     int bf_tls_ck_len;
     struct proxy_t *proxy;
+    struct hpd_t *hpd;
     struct parser_ctx *clt_parser;
     struct parser_ctx *srv_parser;
     char *alternative_proxies;

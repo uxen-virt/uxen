@@ -22,6 +22,7 @@
 #include <dm/dict-rpc.h>
 #include <dm/qemu_glue.h>
 #include <dm/ns.h>
+#include <dm/rbtree.h>
 #include <dm/webdav.h>
 
 #include <socket.h>
@@ -42,8 +43,8 @@
 #include "lava.h"
 
 #define NTLM_MAKE_USERNAME_UPPERCASE
-#define MAX_N_SOCK_REUSED_PER_HOST  12
 #define HP_IDLE_MAX_TIMEOUT         (60 * 1000) /* 60 secs */
+#define HPD_DEBUG_CHECK_MS          (4 * 1000) /* 4 secs */
 
 #define U32BF(a)            (((uint32_t) 1) << (a))
 
@@ -229,13 +230,16 @@ static const char *hp_states[] = {
 #define CXF_LOCAL_WEBDAV        U32BF(30)
 #define CXF_LOCAL_WEBDAV_COMPLETE   U32BF(31)
 
+struct hpd_t;
+RLIST_HEAD(http_ctx_list, http_ctx);
 struct http_ctx {
     LIST_ENTRY(http_ctx) entry;
+    RLIST_ENTRY(http_ctx_list) direct_hp_list;
+    struct hpd_t *hpd;
     struct nickel *ni;
     struct clt_ctx *cx;
     struct socket *so;
-    char *sv_name;
-    struct sockaddr_in daddr;
+    struct http_server h;
     struct net_addr *a;
     enum so_state_t cstate;
     enum hp_state_t hstate;
@@ -270,12 +274,24 @@ struct dns_connect_ctx {
     struct dns_response response;
 };
 
+struct hpd_t {
+    struct http_ctx direct_hp_list;
+    struct clt_ctx direct_cx_list;
+    struct http_ctx *hp;
+    int nr_hp;
+    int nr_cx;
+    struct rb_node hpd_rbnode;
+};
+
 static int64_t prx_refresh_id = 0;
 static int max_socket_per_proxy = 12;
 static char *webdav_host_dir = NULL;
 static Timer *hp_idle_timer = NULL;
 static int disable_crl_check = 0;
 static int no_transparent_proxy = 0;
+static rb_tree_t hpd_rbtree;
+static int hpd_rbtree_init = 0;
+static Timer *hpd_debug_timer = NULL;
 
 static void hp_get(struct http_ctx *hp);
 static void hp_put(struct http_ctx *hp);
@@ -347,6 +363,16 @@ static void hp_event(void *opaque, uint32_t evt, int err);
 static int hp_srv_process(struct http_ctx *hp);
 static void proxy_connect_cx_next(struct proxy_t *proxy);
 
+static void cx_remove_hpd(struct clt_ctx *cx);
+static struct hpd_t * hp_create_hpd(struct http_ctx *hp);
+static void hp_remove_hpd(struct http_ctx *hp);
+static void hpd_add_cx(struct hpd_t *hpd, struct clt_ctx *cx);
+static void hpd_add_hp(struct hpd_t *hpd, struct http_ctx *hp);
+static void hpd_cleanup(struct hpd_t *hpd);
+static void hpd_cx_continue(struct hpd_t *hpd);
+static int hpd_compare_key(void *ctx, const void *b, const void *key);
+static int hpd_compare_nodes(void *ctx, const void *parent, const void *node);
+
 static LIST_HEAD(, http_ctx) http_list = LIST_HEAD_INITIALIZER(&http_list);
 static LIST_HEAD(, clt_ctx) cx_list = LIST_HEAD_INITIALIZER(&cx_list);
 static LIST_HEAD(, http_ctx) http_gc_list = LIST_HEAD_INITIALIZER(&http_gc_list);
@@ -357,6 +383,12 @@ static const char *hc_prx_srv = NULL;
 static uint32_t hc_prx_addr = 0;
 static uint16_t hc_prx_port = 0;
 struct ntlm_ctx *custom_ntlm = NULL;
+static const rb_tree_ops_t hpd_rbtree_ops = {
+    .rbto_compare_nodes = hpd_compare_nodes,
+    .rbto_compare_key = hpd_compare_key,
+    .rbto_node_offset = offsetof(struct hpd_t, hpd_rbnode),
+    .rbto_context = NULL
+};
 
 #if defined(_WIN32)
 #define _POSIX
@@ -389,11 +421,11 @@ static int dbg_hp(int log_level, struct http_ctx *hp)
     if (hp->so && so_dbg(hp->ni->bf_dbg, hp->so) < 0)
         goto out;
     ret = buff_appendf(hp->ni->bf_dbg, " hp:%" PRIxPTR " cx:%" PRIxPTR " so:%"
-            PRIxPTR " f:%x %s %s %s p:%hu %s",
-            (uintptr_t) hp, (uintptr_t) hp->cx, (uintptr_t) hp->so, hp->flags,
+            PRIxPTR " hpd:%"PRIxPTR " f:%x %s %s %s p:%hu %s",
+            (uintptr_t) hp, (uintptr_t) hp->cx, (uintptr_t) hp->so, (uintptr_t) hp->hpd, hp->flags,
             so_states[hp->cstate],
             hp_states[hp->hstate], hp->hstate == HP_WAIT ? hp_states[hp->hwait_state] : "",
-            ntohs(hp->daddr.sin_port), log_level > 4 && hp->sv_name ? hp->sv_name : "");
+            ntohs(hp->h.daddr.sin_port), log_level > 4 && hp->h.sv_name ? hp->h.sv_name : "");
 out:
     return ret;
 }
@@ -422,17 +454,197 @@ static int cx_dbg(int log_level, struct clt_ctx *cx)
     netlog_prefix(log_level, cx->ni->bf_dbg);
     BUFF_APPENDSTR(cx->ni->bf_dbg, "(clt)");
     ret = buff_appendf(cx->ni->bf_dbg, " cx:%"PRIxPTR" hp:%"PRIxPTR" tcp:%"PRIxPTR
-            " c:%"PRIxPTR" f:%x p:%hu %s",
+            " c:%"PRIxPTR" hpd:%"PRIxPTR" f:%x p:%hu %s",
             (uintptr_t) cx, (uintptr_t) cx->hp, (uintptr_t) cx->ni_opaque,
-            (uintptr_t) cx->chr, cx->flags, ntohs(cx->daddr.sin_port),
-            log_level > 4 && cx->sv_name ? cx->sv_name : "");
+            (uintptr_t) cx->chr, (uintptr_t) cx->hpd, cx->flags, ntohs(cx->h.daddr.sin_port),
+            log_level > 4 && cx->h.sv_name ? cx->h.sv_name : "");
 
 out:
     return ret;
 }
 
-static int prepare_clt_auth(struct http_ctx *hp)
+static void hpd_debug_timer_cb(void *unused)
 {
+    int64_t now = get_clock_ms(vm_clock);
+    struct http_ctx *hp;
+    bool print_once = false;
+
+    LIST_FOREACH(hp, &http_list, entry) {
+        if (hp->hpd && hp->hpd->hp == hp) {
+            struct hpd_t *hpd = hp->hpd;
+
+
+            if (!print_once) {
+                NETLOG("--- HPD stats ---");
+                print_once = true;
+            }
+
+            NETLOG("%s%s:%hu #hp %d #cx %d", hpd->nr_cx > 0 ? " -> " : "",
+                    hp->h.sv_name ? hp->h.sv_name : "-",
+                    ntohs(hp->h.daddr.sin_port), (int) hpd->nr_hp, (int) hpd->nr_cx);
+        }
+    }
+
+    if (print_once)
+        NETLOG("--- HPD END ---");
+
+    if (hpd_debug_timer)
+        mod_timer(hpd_debug_timer, now + HPD_DEBUG_CHECK_MS);
+}
+
+static int hpd_compare_key(void *ctx, const void *b, const void *key)
+{
+    const struct hpd_t *hpd = b;
+    const struct http_server *hk = key;
+    const struct http_server *hn;
+
+    assert(hpd->hp);
+    hn = &(hpd->hp->h);
+
+    if (hk->daddr.sin_port > hn->daddr.sin_port)
+        return 1;
+    else if (hk->daddr.sin_port < hn->daddr.sin_port)
+        return -1;
+    if (!hk->sv_name && !hn->sv_name)
+        return 0;
+    if (!hk->sv_name)
+        return -1;
+    if (!hn->sv_name)
+        return 1;
+    return strcasecmp(hk->sv_name, hn->sv_name);
+}
+
+static int hpd_compare_nodes(void *ctx, const void *parent, const void *node)
+{
+    const struct hpd_t * const hpd = node;
+
+    assert(hpd->hp);
+    return hpd_compare_key(ctx, parent, &(hpd->hp->h));
+}
+
+static void hpd_cleanup(struct hpd_t *hpd)
+{
+    if (!hpd->hp) {
+        if (RLIST_EMPTY(&hpd->direct_hp_list, direct_hp_list)) {
+            struct clt_ctx *cx, *_cx;
+
+            RLIST_FOREACH_SAFE(cx, &hpd->direct_cx_list, direct_cx_list, _cx) {
+                RLIST_REMOVE(cx, direct_cx_list);
+                hpd->nr_cx--;
+                cx->hpd = NULL;
+                cx_process(cx, NULL, 0);
+            }
+
+            rb_tree_remove_node(&hpd_rbtree, hpd);
+            NETLOG5("HPD %"PRIxPTR " FREED", (uintptr_t) hpd);
+            free(hpd);
+            return;
+        }
+
+        hpd->hp = RLIST_FIRST(&hpd->direct_hp_list, direct_hp_list);
+    }
+
+    hpd_cx_continue(hpd);
+}
+
+static void hpd_add_cx(struct hpd_t *hpd, struct clt_ctx *cx)
+{
+    if (!RLIST_EMPTY(cx, direct_cx_list))
+        return;
+    assert(!cx->hpd);
+    CXL5("WLIST ADD N %d HPD %"PRIxPTR, hpd->nr_cx, (uintptr_t) hpd);
+    RLIST_INSERT_TAIL(&hpd->direct_cx_list, cx, direct_cx_list);
+    cx->hpd = hpd;
+    hpd->nr_cx++;
+}
+
+static void cx_remove_hpd(struct clt_ctx *cx)
+{
+    if (RLIST_EMPTY(cx, direct_cx_list))
+        return;
+    assert(cx->hpd);
+    RLIST_REMOVE(cx, direct_cx_list);
+    cx->hpd->nr_cx--;
+    CXL5("HPD %"PRIxPTR " WLIST REMOVE N %d", (uintptr_t) cx->hpd, cx->hpd->nr_cx);
+    hpd_cleanup(cx->hpd);
+    cx->hpd = NULL;
+}
+
+static void hpd_add_hp(struct hpd_t *hpd, struct http_ctx *hp)
+{
+    if (hp->hpd == hpd || !RLIST_EMPTY(hp, direct_hp_list))
+        return;
+    assert(!hp->hpd);
+    HLOG5("WLIST ADD N %d HPD %"PRIxPTR, hpd->nr_hp, (uintptr_t) hpd);
+    RLIST_INSERT_TAIL(&hpd->direct_hp_list, hp, direct_hp_list);
+    hp->hpd = hpd;
+    hpd->nr_hp++;
+    if (!hpd->hp)
+        hpd->hp = hp;
+}
+
+static void hp_remove_hpd(struct http_ctx *hp)
+{
+    if (RLIST_EMPTY(hp, direct_hp_list))
+        return;
+
+    assert(hp->hpd);
+    RLIST_REMOVE(hp, direct_hp_list);
+    hp->hpd->nr_hp--;
+    HLOG5("HPD %"PRIxPTR " WLIST REMOVE N %d", (uintptr_t) hp->hpd, hp->hpd->nr_hp);
+    if (hp->hpd->hp == hp)
+        hp->hpd->hp = NULL;
+    hpd_cleanup(hp->hpd);
+    hp->hpd = NULL;
+}
+
+static struct hpd_t *
+hp_create_hpd(struct http_ctx *hp)
+{
+    struct hpd_t *hpd;
+
+    hpd = calloc(1, sizeof(*hpd));
+    if (!hpd) {
+        warnx("%s: malloc", __FUNCTION__);
+        goto cleanup;
+    }
+    RLIST_INIT(&hpd->direct_cx_list, direct_cx_list);
+    RLIST_INIT(&hpd->direct_hp_list, direct_hp_list);
+
+    assert(RLIST_EMPTY(hp, direct_hp_list));
+    assert(!hp->hpd);
+    hpd_add_hp(hpd, hp);
+    if (rb_tree_insert_node(&hpd_rbtree, hpd) != hpd)
+        goto cleanup;
+
+    HLOG5("HPD %"PRIxPTR " CREATE", (uintptr_t) hpd);
+    return hpd;
+cleanup:
+    if (hpd) {
+        if (!RLIST_EMPTY(hp, direct_hp_list))
+            RLIST_REMOVE(hp, direct_hp_list);
+        hp->hpd = NULL;
+        free(hpd);
+    }
+    return NULL;
+}
+
+static void hpd_cx_continue(struct hpd_t *hpd)
+{
+    struct clt_ctx *cx;
+
+    if (RLIST_EMPTY(&hpd->direct_cx_list, direct_cx_list))
+        return;
+    cx = RLIST_FIRST(&hpd->direct_cx_list, direct_cx_list);
+    RLIST_REMOVE(cx, direct_cx_list);
+    hpd->nr_cx--;
+    cx->hpd = NULL;
+    CXL5("HPD %"PRIxPTR " CONTINUE", (uintptr_t) hpd);
+    cx_process(cx, NULL, 0);
+}
+
+static int prepare_clt_auth(struct http_ctx *hp)
+    {
     int ret = -1;
 
     assert(hp->proxy);
@@ -481,11 +693,11 @@ static int prepare_clt_out(struct http_ctx *hp, bool prx_auth)
     assert(hp->clt_out != hp->cx->in);
     BUFF_RESET(hp->clt_out);
     if (IS_TUNNEL(hp)) {
-        if (create_connect_header(hp->sv_name, hp->daddr.sin_port, auth_header, &hp->clt_out))
+        if (create_connect_header(hp->h.sv_name, hp->h.daddr.sin_port, auth_header, &hp->clt_out))
             goto out;
     } else {
-        if (create_http_header(prx_auth, hp->sv_name, use_head,
-                     hp->daddr.sin_port, &hp->cx->clt_parser->h, auth_header, &hp->clt_out))
+        if (create_http_header(prx_auth, hp->h.sv_name, use_head,
+                     hp->h.daddr.sin_port, &hp->cx->clt_parser->h, auth_header, &hp->clt_out))
             goto out;
         if (use_head) {
             hp->cx->flags |= CXF_HEAD_REQUEST;
@@ -932,6 +1144,7 @@ static struct http_ctx * hp_create(struct nickel *ni)
     hp_get(hp);
     hp->cstate = S_INIT;
     LIST_INSERT_HEAD(&http_list, hp, entry);
+    RLIST_INIT(hp, direct_hp_list);
 out:
     return hp;
 mem_err:
@@ -1006,6 +1219,9 @@ static void hp_close(struct http_ctx *hp)
     }
 
     hp->flags |= HF_CLOSED;
+
+    hp_remove_hpd(hp);
+
     hp_put(hp);
     LIST_INSERT_HEAD(&http_gc_list, hp, entry);
     hp->flags &= ~HF_CLOSING;
@@ -1023,11 +1239,11 @@ static void hp_free(struct http_ctx *hp)
         hp->so = NULL;
     }
 
-    free(hp->sv_name);
-    hp->sv_name = NULL;
-    hp->daddr.sin_port = 0;
-    hp->daddr.sin_addr.s_addr = 0;
-    hp->daddr.sin_family = AF_INET;
+    free(hp->h.sv_name);
+    hp->h.sv_name = NULL;
+    hp->h.daddr.sin_port = 0;
+    hp->h.daddr.sin_addr.s_addr = 0;
+    hp->h.daddr.sin_family = AF_INET;
     free(hp->a);
     hp->a = NULL;
     hp->cstate = S_INIT;
@@ -1103,10 +1319,10 @@ static int hp_cx_connect_next(struct http_ctx *hp, struct proxy_t *proxy)
             if (on_cx_hp_connect(cx) < 0)
                 return -1;
         }
-        free(hp->sv_name);
-        if (cx->sv_name)
-            hp->sv_name = strdup(cx->sv_name);
-        hp->daddr.sin_port = cx->daddr.sin_port;
+        free(hp->h.sv_name);
+        if (cx->h.sv_name)
+            hp->h.sv_name = strdup(cx->h.sv_name);
+        hp->h.daddr.sin_port = cx->h.daddr.sin_port;
         if (hp_reset(hp) < 0)
             return -1;
     } else {
@@ -1183,20 +1399,20 @@ static int hp_dns_proxy_check_domain(struct http_ctx *hp)
 
     assert(hp->proxy);
 
-    if (!hp->ni->ac_enabled || !hp->sv_name)
+    if (!hp->ni->ac_enabled || !hp->h.sv_name)
         goto out_allow;
 
-    if (inet_aton(hp->sv_name, &addr) != 0) {
+    if (inet_aton(hp->h.sv_name, &addr) != 0) {
         if (!ac_is_ip_allowed(hp->ni, &addr)) {
-            HLOG("IP %s DENIED by containment", hp->sv_name);
+            HLOG("IP %s DENIED by containment", hp->h.sv_name);
             goto out;
         }
 
         goto out_allow;
     }
 
-    if (!ac_is_dnsname_allowed(hp->ni, hp->sv_name)) {
-        HLOG("%s DENIED by containment", hp->sv_name);
+    if (!ac_is_dnsname_allowed(hp->ni, hp->h.sv_name)) {
+        HLOG("%s DENIED by containment", hp->h.sv_name);
         goto out;
     }
 
@@ -1205,7 +1421,7 @@ static int hp_dns_proxy_check_domain(struct http_ctx *hp)
         goto mem_err;
 
     dns->hp = hp;
-    dns->domain = strdup(hp->sv_name);
+    dns->domain = strdup(hp->h.sv_name);
     dns->containment_check = 1;
     dns->proxy_on = 1;
     if (!dns->domain)
@@ -1311,14 +1527,14 @@ cx_hp_connect_proxy(struct clt_ctx *cx)
             goto close_hp;
     }
 
-    if (cx->sv_name)
-        hp->sv_name = strdup(cx->sv_name);
-    hp->daddr.sin_port = cx->daddr.sin_port;
+    if (cx->h.sv_name)
+        hp->h.sv_name = strdup(cx->h.sv_name);
+    hp->h.daddr.sin_port = cx->h.daddr.sin_port;
 
     hp->proxy = cx->proxy;
     if (!(cx->flags & CXF_GUEST_PROXY)) {
-        hp->daddr.sin_family = AF_INET;
-        hp->daddr.sin_addr = cx->daddr.sin_addr;
+        hp->h.daddr.sin_family = AF_INET;
+        hp->h.daddr.sin_addr = cx->h.daddr.sin_addr;
         hp->flags |= HF_RESOLVED;
     } else {
         // GPROXY to HPROXY
@@ -1388,19 +1604,23 @@ static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now)
 
     if (!RLIST_EMPTY(cx, w_list))
         goto out;
+    if (!RLIST_EMPTY(cx, direct_cx_list))
+        goto out;
 
     if (!cx->proxy) {
+        struct hpd_t *hpd = NULL;
         bool split_buffs = false;
+        int not_binary = !(cx->flags & (CXF_TUNNEL_GUEST | CXF_TLS | CXF_BINARY));
 
         hp = NULL;
-        if ((cx->flags & CXF_GUEST_PROXY)) {
+        if ((cx->flags & CXF_GUEST_PROXY) && not_binary && hpd_rbtree_init &&
+            (hpd = rb_tree_find_node(&hpd_rbtree, &cx->h))) {
+
             struct http_ctx *lhp;
 
-            LIST_FOREACH(lhp, &http_list, entry) {
-                if (!lhp->cx && !lhp->proxy && (lhp->flags & HF_REUSABLE) &&
-                    (lhp->flags & HF_REUSE_READY) && lhp->sv_name && lhp->daddr.sin_port &&
-                    strcasecmp(lhp->sv_name, cx->sv_name) == 0 && lhp->daddr.sin_port ==
-                    cx->daddr.sin_port) {
+            RLIST_FOREACH(lhp, &hpd->direct_hp_list, direct_hp_list) {
+                if (!lhp->cx && (lhp->flags & HF_REUSABLE) && (lhp->flags & HF_REUSE_READY) &&
+                    !(lhp->flags & (HF_CLOSING|HF_CLOSED))) {
 
                     hp = lhp;
                     CXL5("DIRECT REUSED HP %"PRIxPTR, hp);
@@ -1409,11 +1629,17 @@ static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now)
             }
         }
 
-        if (!hp)
-            hp = hp_create(cx->ni);
         if (!hp) {
-            warnx("%s: cx %"PRIxPTR" malloc", __FUNCTION__, (uintptr_t) cx);
-            goto err;
+            if (hpd && hpd->nr_hp >= max_socket_per_proxy) {
+                hpd_add_cx(hpd, cx);
+                *connect_now = true;
+                goto out;
+            }
+            hp = hp_create(cx->ni);
+            if (!hp) {
+                warnx("%s: malloc", __FUNCTION__);
+                goto err;
+            }
         }
 
         if (!hp->cx) {
@@ -1427,13 +1653,21 @@ static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now)
                 goto err;
         }
 
-        if (cx->sv_name && !hp->sv_name)
-            hp->sv_name = strdup(cx->sv_name);
-        hp->daddr.sin_port = cx->daddr.sin_port;
+        if (cx->h.sv_name && !hp->h.sv_name)
+            hp->h.sv_name = strdup(cx->h.sv_name);
+        hp->h.daddr.sin_port = cx->h.daddr.sin_port;
+
+        if (!hpd && (cx->flags & CXF_GUEST_PROXY) && not_binary &&
+            hpd_rbtree_init && !(hpd = hp_create_hpd(hp))) {
+
+            goto err;
+        }
+        if (hpd)
+            hpd_add_hp(hpd, hp);
 
         if (!(cx->flags & CXF_GUEST_PROXY)) {
-            hp->daddr.sin_family = AF_INET;
-            hp->daddr.sin_addr = cx->daddr.sin_addr;
+            hp->h.daddr.sin_family = AF_INET;
+            hp->h.daddr.sin_addr = cx->h.daddr.sin_addr;
             hp->flags |= HF_RESOLVED;
         }
 
@@ -1498,10 +1732,10 @@ static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now)
                 goto err;
         }
 
-        free(hp->sv_name);
-        if (cx->sv_name)
-            hp->sv_name = strdup(cx->sv_name);
-        hp->daddr.sin_port = cx->daddr.sin_port;
+        free(hp->h.sv_name);
+        if (cx->h.sv_name)
+            hp->h.sv_name = strdup(cx->h.sv_name);
+        hp->h.daddr.sin_port = cx->h.daddr.sin_port;
 
         if (hp_reset(hp) < 0)
             goto out;
@@ -1639,26 +1873,7 @@ static int cx_hp_disconnect(struct clt_ctx *cx)
 
     if (!hp->proxy && !f_hp_closing && (hp->flags & HF_REUSABLE) &&
         (hp->flags & HF_REUSE_READY) && (hp->flags & HF_KEEP_ALIVE) &&
-        hp->sv_name && hp->daddr.sin_port) {
-
-        struct http_ctx *lhp, *chp;
-        int number = 0;
-
-        LIST_FOREACH(lhp, &http_list, entry) {
-            if (lhp != hp && !lhp->cx && !lhp->proxy && (lhp->flags & HF_REUSABLE) &&
-                (lhp->flags & HF_REUSE_READY) && lhp->sv_name && lhp->daddr.sin_port &&
-                strcasecmp(lhp->sv_name, hp->sv_name) == 0 && lhp->daddr.sin_port ==
-                hp->daddr.sin_port) {
-
-                chp = lhp;
-                number++;
-            }
-        }
-
-        if (number >= MAX_N_SOCK_REUSED_PER_HOST) {
-            HLOG5("number %d >= MAX_N_SOCK_REUSED_PER_HOST", number);
-            hp_close(chp);
-        }
+        hp->h.sv_name && hp->h.daddr.sin_port) {
 
         hp_reset(hp);
         if (hp_set_idle_timer(hp) < 0) {
@@ -1701,6 +1916,8 @@ out:
     else if (cx && f_cx_guest_write && cx_guest_write(cx) < 0)
         cx_close(cx);
 
+    if (hp && hp->hpd)
+        hpd_cx_continue(hp->hpd);
     return ret;
 }
 
@@ -1858,7 +2075,7 @@ static int srv_reconnect_bad_proxy(struct http_ctx *hp)
 
     hp->cstate = S_RESOLVED;
     HLOG4("rpc_connect_proxy");
-    ret = rpc_connect_proxy(hp, hp->sv_name, hp->daddr.sin_port, hp->proxy, alternative_proxies);
+    ret = rpc_connect_proxy(hp, hp->h.sv_name, hp->h.daddr.sin_port, hp->proxy, alternative_proxies);
     /* if no alternative, we just tell hostsvr about last bad proxy and give up */
     if (!alternative_proxies)
         ret = -1;
@@ -1897,7 +2114,7 @@ static int srv_connected(struct http_ctx *hp)
     a = so_get_remote_addr(hp->so);
     port = so_get_remote_port(hp->so);
     lava_event_remote_established(lv, &a, port);
-    if (hp_connecting_containment(hp, &a, hp->daddr.sin_port) < 0) {
+    if (hp_connecting_containment(hp, &a, hp->h.daddr.sin_port) < 0) {
         HLOG("DENIED by containment");
         if (hp->cx) {
             lava_event_set_denied(lv);
@@ -1924,7 +2141,7 @@ static int srv_connected(struct http_ctx *hp)
     }
 #if VERBSTATS
     HLOG3("CONNECTED to %s(%s):%hu in %lums / %lums",
-            hp->proxy ? hp->proxy->name : (hp->sv_name ? hp->sv_name : "?"),
+            hp->proxy ? hp->proxy->name : (hp->h.sv_name ? hp->h.sv_name : "?"),
             a.family == AF_INET ? inet_ntoa(a.ipv4) : (a.family == AF_INET6 ? "ipv6" : "?"),
             ntohs(port), (unsigned long) (get_clock_ms(rt_clock) - hp->srv_ts),
             hp->cx ? (unsigned long) (get_clock_ms(rt_clock) - hp->cx->created_ts) : 0);
@@ -1946,10 +2163,10 @@ static int srv_connected(struct http_ctx *hp)
         c_addr = so_get_remote_addr(hp->so);
         dns_hyb_update(hp->a, c_addr);
     }
-    if (!hp->proxy && fakedns_is_fake(&hp->daddr.sin_addr)) {
+    if (!hp->proxy && fakedns_is_fake(&hp->h.daddr.sin_addr)) {
         struct net_addr *a;
 
-        a = fakedns_get_ips(hp->daddr.sin_addr);
+        a = fakedns_get_ips(hp->h.daddr.sin_addr);
         if (a) {
             struct net_addr c_addr;
 
@@ -1986,7 +2203,7 @@ static void srv_tls_check_complete(void *opaque, int revoked, uint32_t err_code)
         HLOG3("sending RPC to hostsvr and closing TLS socket");
         d = dict_new();
         if (d) {
-            dict_put_string(d, "endpoint", hp->sv_name);
+            dict_put_string(d, "endpoint", hp->h.sv_name);
             dict_put_integer(d, "cert_status", kCertificateStatusRevoked);
             ni_rpc_send(hp->ni, "nc_AdviseSecureConnectionCertificateStatus", d, NULL, NULL);
             dict_free(d);
@@ -2123,7 +2340,7 @@ static int srv_read(struct http_ctx *hp)
 
         if (r == TLSR_DONE_CHECK) {
             hp->flags |= HF_TLS_CERT_DONE;
-            tls_cert_send_hostsvr(hp->tls, hp->sv_name);
+            tls_cert_send_hostsvr(hp->tls, hp->h.sv_name);
 
             if (disable_crl_check) {
                 hp->flags |= HF_TLS_CERT_DONE;
@@ -2968,6 +3185,8 @@ write_guest:
 out:
     if (needs_consume && hp->cx && hp->cx->out)
         BUFF_CONSUME_ALL(hp->cx->out);
+    if ((hp->flags & HF_PINNED) && hp->hpd)
+        hp_remove_hpd(hp);
     return ret;
 err:
     HLOG("ERROR");
@@ -3070,8 +3289,8 @@ static int srv_connect_direct(struct http_ctx *hp)
 {
     int ret = 0;
 
-    assert(hp->sv_name && hp->daddr.sin_port);
-    if (!hp->sv_name) {
+    assert(hp->h.sv_name && hp->h.daddr.sin_port);
+    if (!hp->h.sv_name) {
         HLOG("ERROR - bug!, sv_name NULL");
         ret = -1;
         goto out;
@@ -3088,10 +3307,10 @@ static int srv_connect_direct(struct http_ctx *hp)
 
         a = &_a[0];
         memset(&_a[0], 0, sizeof(_a));
-        if (inet_aton(hp->sv_name, &a->ipv4) != 0) {
-            hp->daddr.sin_addr = a->ipv4;
+        if (inet_aton(hp->h.sv_name, &a->ipv4) != 0) {
+            hp->h.daddr.sin_addr = a->ipv4;
             hp->flags |= HF_RESOLVED;
-        } else if (inet_pton(AF_INET6, hp->sv_name, (void *) &a->ipv6) == 1) {
+        } else if (inet_pton(AF_INET6, hp->h.sv_name, (void *) &a->ipv6) == 1) {
             a->family = AF_INET6;
             hp->flags |= HF_RESOLVED;
             hp->cstate = S_RESOLVED;
@@ -3110,14 +3329,14 @@ static int srv_connect_direct(struct http_ctx *hp)
         goto out;
     }
 
-    if (!fakedns_is_fake(&hp->daddr.sin_addr)) {
+    if (!fakedns_is_fake(&hp->h.daddr.sin_addr)) {
         hp->cstate = S_RESOLVED;
-        if ((ret = srv_connect_ipv4(hp, hp->daddr.sin_addr.s_addr, hp->daddr.sin_port)))
+        if ((ret = srv_connect_ipv4(hp, hp->h.daddr.sin_addr.s_addr, hp->h.daddr.sin_port)))
             goto out;
     } else {
         struct net_addr *a;
 
-        a = fakedns_get_ips(hp->daddr.sin_addr);
+        a = fakedns_get_ips(hp->h.daddr.sin_addr);
         if (a && a[0].family) {
             hp->cstate = S_RESOLVED;
             ret = srv_connect_dns_resolved(hp, a);
@@ -3235,7 +3454,7 @@ static void dns_direct_connect_cb(void *opaque)
         goto out;
     }
     hp->cstate = S_RESOLVED;
-    if (srv_connect_list(hp, hp->a, hp->daddr.sin_port) < 0) {
+    if (srv_connect_list(hp, hp->a, hp->h.daddr.sin_port) < 0) {
         HLOG("ERROR - srv_connect_list fail");
         if ((hp->cx && !(hp->cx->flags & CXF_GUEST_PROXY)) ||
              (hp->cx && cx_proxy_response(hp->cx, HMSG_CONNECT_FAILED, true) < 0)) {
@@ -3294,14 +3513,14 @@ static int srv_connect_dns_direct(struct http_ctx *hp)
     int ret = -1;
     struct dns_connect_ctx *dns = NULL;
 
-    assert(!hp->proxy && hp->daddr.sin_port);
+    assert(!hp->proxy && hp->h.daddr.sin_port);
     dns = calloc(1, sizeof(*dns));
     if (!dns)
         goto mem_err;
 
     dns->hp = hp;
-    dns->port = hp->daddr.sin_port;
-    dns->domain = strdup(hp->sv_name);
+    dns->port = hp->h.daddr.sin_port;
+    dns->domain = strdup(hp->h.sv_name);
     dns->containment_check = 1;
     if (!dns->domain)
         goto mem_err;
@@ -3332,9 +3551,9 @@ static void on_fakeip_blocked(struct in_addr addr)
     struct http_ctx *hp, *hp_next;
 
     LIST_FOREACH_SAFE(hp, &http_list, entry, hp_next) {
-        if (hp->daddr.sin_addr.s_addr == addr.s_addr) {
+        if (hp->h.daddr.sin_addr.s_addr == addr.s_addr) {
             HLOG("connection G -> %s:%hu denied. closing connection",
-                    hp->sv_name ? hp->sv_name : "(NULL)", ntohs(hp->daddr.sin_port));
+                    hp->h.sv_name ? hp->h.sv_name : "(NULL)", ntohs(hp->h.daddr.sin_port));
             hp_close(hp);
         }
     }
@@ -3345,7 +3564,7 @@ static void on_fakeip_update(struct in_addr fkaddr, struct net_addr *a)
     struct http_ctx *hp, *hp_next;
 
     LIST_FOREACH_SAFE(hp, &http_list, entry, hp_next) {
-        if (hp->daddr.sin_addr.s_addr != fkaddr.s_addr)
+        if (hp->h.daddr.sin_addr.s_addr != fkaddr.s_addr)
             continue;
 
         HLOG3("");
@@ -3468,11 +3687,11 @@ static int srv_connect_dns_resolved(struct http_ctx *hp, struct net_addr *a)
     }
 
     if (!a || !a[0].family) {
-        HLOG2("dns lookup fail for %s", hp->sv_name ? hp->sv_name : "(null)");
+        HLOG2("dns lookup fail for %s", hp->h.sv_name ? hp->h.sv_name : "(null)");
         goto out;
     }
 
-    if (srv_connect_list(hp, a, hp->daddr.sin_port)) {
+    if (srv_connect_list(hp, a, hp->h.daddr.sin_port)) {
         HLOG("srv_connect_list FAILURE");
         goto out;
     }
@@ -3702,7 +3921,7 @@ static void set_settings(struct nickel *ni, yajl_val config)
         s_max_n_socks = true;
     }
 
-    NETLOG("%s: max-conn-per-proxy set to %d %s", __FUNCTION__, max_socket_per_proxy,
+    NETLOG("%s: max-conn-per-proxy (or host) set to %d %s", __FUNCTION__, max_socket_per_proxy,
             s_max_n_socks ? "(config set)" : "(default)");
 
     ni->http_evt_cb = rpc_on_event;
@@ -3792,7 +4011,7 @@ static void rpc_connect_proxy_cb(void *opaque, dict d)
     if (is_direct) {
         HLOG2(" direct");
         proxy_cache_add(hp->ni, hp->cx ? hp->cx->schema : NULL,
-                        hp->sv_name, hp->daddr.sin_port, NULL);
+                        hp->h.sv_name, hp->h.daddr.sin_port, NULL);
         if (hp->cx && hp->cx->proxy) {
             cx_hp_reconnect_direct(hp->cx);
             hp = NULL;
@@ -3852,7 +4071,7 @@ static void rpc_connect_proxy_cb(void *opaque, dict d)
         goto error;
     }
     proxy_cache_add(hp->ni, hp->cx ? hp->cx->schema : NULL,
-                    hp->sv_name, hp->daddr.sin_port, proxy);
+                    hp->h.sv_name, hp->h.daddr.sin_port, proxy);
 
     if ((hp->flags & (HF_407_MESSAGE | HF_407_MESSAGE_OK)) ==
         (HF_407_MESSAGE | HF_407_MESSAGE_OK) && end_407_message(hp) < 0) {
@@ -4018,6 +4237,13 @@ static void hp_init(struct nickel *ni, yajl_val config)
     set_settings(ni, config);
     http_auth_init();
     fakedns_register_callbacks(on_fakeip_update, on_fakeip_blocked);
+    rb_tree_init(&hpd_rbtree, &hpd_rbtree_ops);
+    if (NLOG_LEVEL > 4) {
+        hpd_debug_timer = ni_new_vm_timer(ni, HPD_DEBUG_CHECK_MS, hpd_debug_timer_cb, NULL);
+        if (hpd_debug_timer)
+            NETLOG4("hpd stats enabled");
+    }
+    hpd_rbtree_init = 1;
 }
 
 static void cx_webdav_ready(struct clt_ctx *cx)
@@ -4221,6 +4447,7 @@ cx_create(struct nickel *ni)
     cx->ni = ni;
     cx->in = bf;
     RLIST_INIT(cx, w_list);
+    RLIST_INIT(cx, direct_cx_list);
 
     LIST_INSERT_HEAD(&cx_list, cx, entry);
 
@@ -4327,6 +4554,8 @@ static void cx_close(struct clt_ctx *cx)
         parser_free(&cx->srv_parser);
     cx->flags |= (CXF_CLOSED | CXF_IGNORE);
 
+    cx_remove_hpd(cx);
+
     cx_put(cx);
     LIST_INSERT_HEAD(&cx_gc_list, cx, entry);
 out:
@@ -4336,8 +4565,8 @@ out:
 static void cx_free(struct clt_ctx *cx)
 {
     assert((cx->flags & CXF_CLOSED));
-    free(cx->sv_name);
-    cx->sv_name = NULL;
+    free(cx->h.sv_name);
+    cx->h.sv_name = NULL;
     assert(cx->hp == NULL);
     if (cx->in)
         buff_put(cx->in);
@@ -4359,11 +4588,11 @@ static void cx_reset(struct clt_ctx *cx, bool soft)
     if (cx->out)
         BUFF_RESET(cx->out);
     if (!soft) {
-        free(cx->sv_name);
-        cx->sv_name = NULL;
+        free(cx->h.sv_name);
+        cx->h.sv_name = NULL;
         cx->schema = NULL;
-        cx->daddr.sin_addr.s_addr = 0;
-        cx->daddr.sin_port = 0;
+        cx->h.daddr.sin_addr.s_addr = 0;
+        cx->h.daddr.sin_port = 0;
         cx->flags &= ((~CXF_HOST_RESOLVED) & (~CXF_DECIDED) & (~CXF_RPC_PROXY_URL));
         cx->flags &= ~CXF_IP_CHECKED;
         cx->flags &= ((~CXF_LOCAL_WEBDAV) & (~CXF_LOCAL_WEBDAV_COMPLETE));
@@ -4607,6 +4836,8 @@ static int cx_guest_write(struct clt_ctx *cx)
 
                      if (cx->proxy && !(cx->hp->flags & HF_PINNED))
                          cx_hp_disconnect(cx);
+                     if (!cx->proxy && cx->hp && cx->hp->hpd)
+                         cx_hp_disconnect(cx);
                      cx_reset(cx, false);
                 } else if (!(cx->flags & (CXF_GUEST_PROXY | CXF_TUNNEL_GUEST | CXF_TLS |
                              CXF_BINARY)) && cx->proxy) {
@@ -4697,7 +4928,7 @@ static void cx_rpc_proxy_by_url_cb(void *opaque, dict d)
     }
 
     if (is_direct) {
-        proxy_cache_add(cx->ni, cx->schema, cx->sv_name, cx->daddr.sin_port, NULL);
+        proxy_cache_add(cx->ni, cx->schema, cx->h.sv_name, cx->h.daddr.sin_port, NULL);
         cx->flags |= CXF_DECIDED;
         cx->proxy = NULL;
         process = true;
@@ -4727,7 +4958,7 @@ static void cx_rpc_proxy_by_url_cb(void *opaque, dict d)
         goto out_close;
     }
 
-    proxy_cache_add(cx->ni, cx->schema, cx->sv_name, cx->daddr.sin_port, proxy);
+    proxy_cache_add(cx->ni, cx->schema, cx->h.sv_name, cx->h.daddr.sin_port, proxy);
     if ((tmp = dict_get_string(d, "last_refresh")))
         sscanf(tmp, "%" PRId64, &last_refresh);
 
@@ -4817,8 +5048,8 @@ static int cx_decide(struct clt_ctx *cx)
         goto out;
     }
 
-    assert(cx->sv_name && cx->daddr.sin_port);
-    if (!cx->sv_name) {
+    assert(cx->h.sv_name && cx->h.daddr.sin_port);
+    if (!cx->h.sv_name) {
         CXL("ERROR - bug!, sv_name NULL");
         goto out;
     }
@@ -4832,11 +5063,11 @@ static int cx_decide(struct clt_ctx *cx)
             goto out;
         }
     } else {
-        proxy = proxy_cache_find(cx->schema, cx->sv_name, cx->daddr.sin_port);
+        proxy = proxy_cache_find(cx->schema, cx->h.sv_name, cx->h.daddr.sin_port);
     }
 
     if (proxy) {
-        CXL4("proxy cache hit for %s:%hu", cx->sv_name, ntohs(cx->daddr.sin_port));
+        CXL4("proxy cache hit for %s:%hu", cx->h.sv_name, ntohs(cx->h.daddr.sin_port));
         cx->proxy = NULL;
         if (!PROXY_IS_DIRECT(proxy))
             cx->proxy = proxy;
@@ -4847,7 +5078,7 @@ static int cx_decide(struct clt_ctx *cx)
     }
 
     // slowpath
-    ret = cx_rpc_proxy_by_url(cx, cx->sv_name, cx->daddr.sin_port);
+    ret = cx_rpc_proxy_by_url(cx, cx->h.sv_name, cx->h.daddr.sin_port);
 out:
     return ret;
 }
@@ -4860,7 +5091,7 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
     bool maybe_binary = false;
 
     CXL5("len_buf %d", len_buf);
-    if ((cx->flags & (CXF_CLOSED | CXF_IGNORE)))
+    if ((cx->flags & (CXF_CLOSED | CXF_CLOSING | CXF_IGNORE)))
         goto out;
 
     if ((cx->flags & CXF_TUNNEL_RESPONSE))
@@ -5043,10 +5274,10 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
                  h_url.field_data[UF_HOST].off,
                  h_url.field_data[UF_HOST].len);
 
-        free(cx->sv_name);
-        cx->sv_name = domain;
+        free(cx->h.sv_name);
+        cx->h.sv_name = domain;
         domain = NULL;
-        cx->daddr.sin_port = ntohs(port);
+        cx->h.daddr.sin_port = ntohs(port);
 
         cx->schema = NULL;
         if (ssl) {
@@ -5071,16 +5302,16 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
 
         cx->flags |= CXF_HOST_RESOLVED;
 
-        CXL4("%s URL %s", cx->sv_name,
+        CXL4("%s URL %s", cx->h.sv_name,
            hide_log_sensitive_data ? "..." : BUFF_TO(cx->clt_parser->h.url, const char *));
 
         if (!ssl && port == 80 && cx->ni->webdav_svc_ok) {
             struct in_addr daddr = {.s_addr = 0};
 
-            if (inet_aton(cx->sv_name, &daddr) != 0) {
+            if (inet_aton(cx->h.sv_name, &daddr) != 0) {
                 if (daddr.s_addr == cx->ni->host_addr.s_addr)
                     cx->flags |= (CXF_LOCAL_WEBDAV | CXF_DECIDED);
-            } else if (dns_is_nickel_domain_name(cx->sv_name))
+            } else if (dns_is_nickel_domain_name(cx->h.sv_name))
                 cx->flags |= (CXF_LOCAL_WEBDAV | CXF_DECIDED);
         }
 
@@ -5091,7 +5322,7 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
             if (lv) {
                 lava_event_remote_disconnect(lv);
                 lava_event_set_http(lv, cx->clt_parser->h.method,
-                            cx->sv_name, BUFF_TO(cx->clt_parser->h.url, const char *), port);
+                            cx->h.sv_name, BUFF_TO(cx->clt_parser->h.url, const char *), port);
                 if ((cx->flags & CXF_LOCAL_WEBDAV))
                     lava_event_set_local(lv);
             }
@@ -5109,14 +5340,14 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
             cx->flags |= CXF_HTTP;
         }
 
-        if (cx->hp && (cx->hp->daddr.sin_port != cx->daddr.sin_port ||
-                      (strcasecmp(cx->hp->sv_name, cx->sv_name) != 0) ||
+        if (cx->hp && (cx->hp->h.daddr.sin_port != cx->h.daddr.sin_port ||
+                      (strcasecmp(cx->hp->h.sv_name, cx->h.sv_name) != 0) ||
                       (cx->proxy && !(cx->hp->flags & HF_PINNED)))) {
 
             if (!cx->proxy) {
                 CXL5("cx changed from %s:%hu -> %s:%hu, DISCONNECT",
-                        cx->hp->sv_name, ntohs(cx->hp->daddr.sin_port),
-                        cx->sv_name, ntohs(cx->daddr.sin_port));
+                        cx->hp->h.sv_name, ntohs(cx->hp->h.daddr.sin_port),
+                        cx->h.sv_name, ntohs(cx->h.daddr.sin_port));
             }
             cx_hp_disconnect(cx);
         } else if (cx->hp) {
@@ -5248,8 +5479,8 @@ cx_open(void *opaque, struct nickel *ni, struct sockaddr_in saddr, struct sockad
     cx->chr->refcnt = 1;
 
     cx->ni_opaque = opaque;
-    cx->daddr = daddr;
-    cx->daddr.sin_family = AF_INET; /* ipv4 only (in the guest) */
+    cx->h.daddr = daddr;
+    cx->h.daddr.sin_family = AF_INET; /* ipv4 only (in the guest) */
     cx->flags |= CXF_HOST_RESOLVED;
 
     if (fakedns_is_fake(&daddr.sin_addr)) {
@@ -5266,8 +5497,8 @@ cx_open(void *opaque, struct nickel *ni, struct sockaddr_in saddr, struct sockad
         if (!sv_name)
             goto cleanup;
     }
-    cx->sv_name = strdup(sv_name);
-    if (!cx->sv_name)
+    cx->h.sv_name = strdup(sv_name);
+    if (!cx->h.sv_name)
         goto cleanup;
 
     qemu_chr_add_handlers(chr, cx_chr_can_read, cx_chr_read, NULL, cx);
