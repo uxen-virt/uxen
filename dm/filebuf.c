@@ -117,7 +117,7 @@ filebuf_flush(struct filebuf *fb)
     DWORD ret;
     OVERLAPPED o = { };
 #else  /* _WIN32 */
-    ssize_t ret, o;
+    ssize_t ret, o = 0;
 #endif  /* _WIN32 */
 
     if (!fb->writable) {
