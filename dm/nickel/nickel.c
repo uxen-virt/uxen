@@ -1087,6 +1087,23 @@ ni_new_vm_timer(struct nickel *ni, int64_t delay_ms, void (*cb)(void *opaque), v
     return t;
 }
 
+Timer *
+ni_new_rt_timer(struct nickel *ni, int64_t delay_ms, void (*cb)(void *opaque), void *opaque)
+{
+    Timer *t;
+
+#if defined(NICKEL_THREADED)
+    t = new_timer_ms_ex(ni->active_timers, rt_clock, cb, opaque);
+#else
+    t = new_timer_ms(rt_clock, cb, opaque);
+#endif
+
+    if (!t)
+        return NULL;
+    mod_timer(t, get_clock_ms(rt_clock) + delay_ms);
+    return t;
+}
+
 int ni_schedule_bh(struct nickel *ni, void (*async_cb)(void *), void (*finish_cb)(void *),
         void *opaque)
 {
@@ -1368,14 +1385,14 @@ static void * ni_thread_run(void *opaque)
         ni_prepare(ni, &timeout);
 
         if (delay_ms) {
-            delay_ms = get_clock_ms(vm_clock) - delay_ms;
+            delay_ms = get_clock_ms(rt_clock) - delay_ms;
             delay_ms -= wait_time;
 
             if (delay_ms > LOOP_DELAY_WARN)
                 NETLOG("%s: warning! blocking networking thread? latency %lu ms",
                         __FUNCTION__, (unsigned long) delay_ms);
         }
-        delay_ms = get_clock_ms(vm_clock);
+        delay_ms = get_clock_ms(rt_clock);
         ioh_wait_for_objects(&ni->io_handlers, &ni->wait_objects, ni->active_timers,
                 &timeout, &wait_time);
     }
@@ -1589,6 +1606,35 @@ static void resume(struct nickel *ni)
 void ni_wakeup_loop(struct nickel *ni)
 {
     ioh_event_set(&ni->event);
+}
+
+void ni_vm_pause(void)
+{
+    struct nc_nickel_s *nc;
+
+    NETLOG4("%s: vm pause", __FUNCTION__);
+    QTAILQ_FOREACH(nc, &nc_list, entry) {
+        struct nickel *ni;
+
+        ni = nc->ni;
+        assert(ni);
+        ni->vm_paused = 1;
+    }
+}
+
+void ni_vm_unpause(void)
+{
+    struct nc_nickel_s *nc;
+
+    NETLOG4("%s: vm unpause", __FUNCTION__);
+    QTAILQ_FOREACH(nc, &nc_list, entry) {
+        struct nickel *ni;
+
+        ni = nc->ni;
+        assert(ni);
+        ni->vm_paused = 0;
+        ioh_event_set(&ni->deqin_ev);
+    }
 }
 
 

@@ -465,7 +465,7 @@ out:
 
 static void hpd_debug_timer_cb(void *unused)
 {
-    int64_t now = get_clock_ms(vm_clock);
+    int64_t now = get_clock_ms(rt_clock);
     struct http_ctx *hp;
     bool print_once = false;
 
@@ -1486,16 +1486,16 @@ static void hp_gc_idle_sockets(int64_t now, bool close)
 
 static void hp_idle_timer_cb(void *unused)
 {
-    hp_gc_idle_sockets(get_clock_ms(vm_clock), true);
+    hp_gc_idle_sockets(get_clock_ms(rt_clock), true);
 }
 
 static int hp_set_idle_timer(struct http_ctx *hp)
 {
-    int now = get_clock_ms(vm_clock);
+    int now = get_clock_ms(rt_clock);
 
     hp->idle_ts = now;
     if (!hp_idle_timer) {
-        hp_idle_timer = ni_new_vm_timer(hp->ni, HP_IDLE_MAX_TIMEOUT, hp_idle_timer_cb, NULL);
+        hp_idle_timer = ni_new_rt_timer(hp->ni, HP_IDLE_MAX_TIMEOUT, hp_idle_timer_cb, NULL);
         return hp_idle_timer ? 0 : -1;
     }
 
@@ -4239,7 +4239,7 @@ static void hp_init(struct nickel *ni, yajl_val config)
     fakedns_register_callbacks(on_fakeip_update, on_fakeip_blocked);
     rb_tree_init(&hpd_rbtree, &hpd_rbtree_ops);
     if (NLOG_LEVEL > 4) {
-        hpd_debug_timer = ni_new_vm_timer(ni, HPD_DEBUG_CHECK_MS, hpd_debug_timer_cb, NULL);
+        hpd_debug_timer = ni_new_rt_timer(ni, HPD_DEBUG_CHECK_MS, hpd_debug_timer_cb, NULL);
         if (hpd_debug_timer)
             NETLOG4("hpd stats enabled");
     }

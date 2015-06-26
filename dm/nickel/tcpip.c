@@ -1185,7 +1185,7 @@ static void tcpip_timer(struct nickel *ni, int64_t now, int *timeout)
             continue;
         }
         diff = so->ts_created + UDP_SOCK_EXPIRE - now;
-        if (diff < 0)
+        if (diff <= 0)
             send_close(so, false);
         else if ((int64_t) (*timeout) > diff)
             *timeout = (int) diff;
@@ -1201,7 +1201,7 @@ static void tcpip_timer(struct nickel *ni, int64_t now, int *timeout)
         /* delayed ACK */
         if (so->state == TS_ESTABLISHED && (so->flags & TF_DELAYED_ACK)) {
             diff = so->delay_ac_ts - now;
-            if (now > so->delay_ac_ts || diff <= DELAY_ACK_MIN_MS)
+            if (diff <= DELAY_ACK_MIN_MS)
                 tcp_send(so, TH_ACK, NULL, 0);
             else if ((int64_t) (*timeout) > diff)
                 *timeout = diff;
@@ -1236,14 +1236,15 @@ static void tcpip_timer(struct nickel *ni, int64_t now, int *timeout)
                     tcp_send(so, TH_ACK, NULL, 0);
                     break;
                 }
-                if ((!bf->retransmit && (so->flags & TF_RETRANSMISSION)) || diff > tmo) {
+                if ((!bf->retransmit && (so->flags & TF_RETRANSMISSION)) || diff >= tmo) {
 
                     if (bf->state == BFS_SENT)
                         retransmit_packet(so, bf);
                     break;
                 }
 
-                if ((int64_t) (*timeout) > diff)
+                diff = tmo - diff;
+                if (diff > 0 && (int64_t) (*timeout) > diff)
                    *timeout = (int) diff;
 
                 break;
@@ -1272,7 +1273,7 @@ static void tcpip_timer(struct nickel *ni, int64_t now, int *timeout)
                 continue;
             }
             diff = so->ts_closed + TCP_FIN_WAIT - now;
-            if (diff < 0) {
+            if (diff <= 0) {
                 so->n_fin_retransmit++;
                 if (!(so->flags & TF_FIN_ACKED)) {
                     NETLOG2("%s: s:%lx c:%lx (G:%hu -> %s:%hu) -- FIN sent %s",
@@ -2795,10 +2796,9 @@ int tcpip_load(QEMUFile *f, struct nickel *ni, int version_id)
 
 void tcpip_prepare(struct nickel *ni, int *timeout)
 {
-    int64_t now = get_clock_ms(vm_clock);
-
-    tcpip_timer(ni, now, timeout);
-    lava_timer(ni, now, timeout);
+    if (!ni->vm_paused)
+        tcpip_timer(ni, get_clock_ms(vm_clock), timeout);
+    lava_timer(ni, get_clock_ms(rt_clock));
 }
 
 void tcpip_init(struct nickel *ni)

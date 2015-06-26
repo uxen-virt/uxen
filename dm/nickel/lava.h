@@ -14,7 +14,7 @@ struct net_addr;
 int lava_init(struct nickel *ni);
 void lava_exit(struct nickel *ni);
 void lava_flush(struct nickel *ni);
-void lava_timer(struct nickel *ni, int64_t now, int *timeout);
+void lava_timer(struct nickel *ni, int64_t now);
 struct lava_event *
 lava_event_create(struct nickel *ni, struct sockaddr_in sa, struct sockaddr_in da, bool tcp);
 void lava_event_set_denied(struct lava_event *lv);

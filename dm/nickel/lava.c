@@ -203,7 +203,7 @@ out:
     return resp;
 }
 
-void lava_timer(struct nickel *ni, int64_t now, int *timeout)
+void lava_timer(struct nickel *ni, int64_t now)
 {
     static int64_t ts_last_flush = 0;
     int64_t diff;

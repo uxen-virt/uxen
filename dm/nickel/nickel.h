@@ -52,6 +52,7 @@ struct nickel {
     uint32_t number_lava_events;
 
     void *nc_opaque;
+    int vm_paused;
     struct in_addr network_addr;
     struct in_addr network_mask;
     struct in_addr host_addr;
@@ -204,6 +205,8 @@ ni_udp_open(struct nickel *ni, struct sockaddr_in gaddr,
 
 Timer *
 ni_new_vm_timer(struct nickel *ni, int64_t delay_ms, void (*cb)(void *opaque), void *opaque);
+Timer *
+ni_new_rt_timer(struct nickel *ni, int64_t delay_ms, void (*cb)(void *opaque), void *opaque);
 
 void ni_wakeup_loop(struct nickel *ni);
 void _np_add_service(struct np_desc *);

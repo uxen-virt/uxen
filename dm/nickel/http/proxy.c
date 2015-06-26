@@ -137,7 +137,7 @@ static void cache_init(struct nickel *ni)
 {
     proxy_cache_reset();
     if (!cache_timer)
-        cache_timer = ni_new_vm_timer(ni, CACHE_PURGE_TIMEOUT_MS, cache_timer_cb, NULL);
+        cache_timer = ni_new_rt_timer(ni, CACHE_PURGE_TIMEOUT_MS, cache_timer_cb, NULL);
 }
 
 void proxy_cache_add(struct nickel *ni, const char *schema, const char *domain, int port, struct proxy_t *proxy)

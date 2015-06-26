@@ -444,7 +444,7 @@ static int list_connect_next(struct socket *so)
         goto cleanup;
     if (!so->a_timer) {
         so_get(so);
-        so->a_timer = ni_new_vm_timer(so->ni, HYB_NEXT_CONNECT_MS,
+        so->a_timer = ni_new_rt_timer(so->ni, HYB_NEXT_CONNECT_MS,
                 list_connect_timeout_cb, so);
         if (!so->a_timer) {
             so_put(so);

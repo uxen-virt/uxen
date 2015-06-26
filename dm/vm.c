@@ -685,6 +685,9 @@ vm_run_mode_change_cb(void *opaque)
       dump_periodic_stats_reset();
 #endif  /* CONFIG_DUMP_MEMORY_STAT */
         vm_clock_unpause();
+#if defined(CONFIG_NICKEL)
+        ni_vm_unpause();
+#endif
         break;
     case SUSPEND_VM:
     case POWEROFF_VM:
@@ -692,6 +695,9 @@ vm_run_mode_change_cb(void *opaque)
         break;
     case PAUSE_VM:
         vm_clock_pause();
+#if defined(CONFIG_NICKEL)
+        ni_vm_pause();
+#endif
         break;
     case SETUP_VM:
         break;

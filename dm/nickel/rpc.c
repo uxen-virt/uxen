@@ -100,7 +100,7 @@ int ni_rpc_send_sync(struct nickel *ni, const char *command, const dict args, di
 
     ret = -1;
 
-    rpc_ts = get_clock_ms(vm_clock);
+    rpc_ts = get_clock_ms(rt_clock);
     ctx = calloc(1, sizeof(*ctx));
     if (!ctx) {
         warnx("%s: memory error", __FUNCTION__);
@@ -126,7 +126,7 @@ int ni_rpc_send_sync(struct nickel *ni, const char *command, const dict args, di
     ioh_event_close(&ctx->event);
     free(ctx);
 
-    rpc_ts = get_clock_ms(vm_clock) - rpc_ts;
+    rpc_ts = get_clock_ms(rt_clock) - rpc_ts;
     NETLOG3("debug: rpc command %s, response in %" PRIu64 " ms", command, rpc_ts);
     if (rpc_ts > RPC_DELAY_WARN)
         NETLOG("%s: warning! blocking rpc command %s took %lu ms to execute", __FUNCTION__,

@@ -51,6 +51,8 @@ void ni_close(void *opaque);
 int ni_add_wait_object(struct nickel *ni, ioh_event *event, WaitObjectFunc *func, void *opaque);
 void ni_del_wait_object(struct nickel *ni, ioh_event *event);
 uint32_t ni_get_hostaddr(struct nickel *ni);
+void ni_vm_pause(void);
+void ni_vm_unpause(void);
 #ifndef _WIN32
 int ni_add_wait_fd(struct nickel *ni, int fd, int events, WaitObjectFunc2 *func2, void *opaque);
 void ni_del_wait_fd(struct nickel *ni, int fd);
