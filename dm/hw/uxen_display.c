@@ -27,9 +27,13 @@
 #define DPRINTF(fmt, ...) do {} while (0)
 #endif
 
+#define UXENDISP_XRES_MAX 23170
+#define UXENDISP_YRES_MAX 23170
+#define UXENDISP_STRIDE_MAX 92683
+
 struct crtc_state {
     uint32_t offset;
-    struct crtc_regs *regs;
+    volatile struct crtc_regs *regs;
     DisplayState *ds;
     int flush_pending;
 };
@@ -47,8 +51,8 @@ struct uxendisp_state {
     MemoryRegion mmio; /* BAR 1 */
     MemoryRegion pio; /* BAR 2 */
 
-    struct cursor_regs *cursor_regs;
-    uint8_t *cursor_data;
+    volatile struct cursor_regs *cursor_regs;
+    volatile uint8_t *cursor_data;
     struct crtc_state crtcs[UXENDISP_NB_CRTCS];
     struct bank_state banks[UXENDISP_NB_BANKS];
 
@@ -246,9 +250,10 @@ static void uxendisp_text_update(void *opaque, console_ch_t *chardata)
 static void
 cursor_flush(struct uxendisp_state *s)
 {
-    uint8_t *mask;
-    uint8_t *color;
+    volatile uint8_t *mask;
+    volatile uint8_t *color;
     struct DisplayState *ds;
+    unsigned int w, h;
 
     /* XXX crtc 0 only for now */
     if (!s->cursor_regs || s->cursor_regs->crtc_idx != 0)
@@ -261,8 +266,10 @@ cursor_flush(struct uxendisp_state *s)
         return;
     }
 
-    if ((s->cursor_regs->width > UXENDISP_CURSOR_MAX_WIDTH) ||
-        (s->cursor_regs->height > UXENDISP_CURSOR_MAX_HEIGHT))
+    w = s->cursor_regs->width;
+    h = s->cursor_regs->height;
+
+    if ((w > UXENDISP_CURSOR_MAX_WIDTH) || (h > UXENDISP_CURSOR_MAX_HEIGHT))
         return;
 
     if (s->cursor_regs->flags & UXDISP_CURSOR_FLAG_1BPP) {
@@ -275,16 +282,15 @@ cursor_flush(struct uxendisp_state *s)
         mask = NULL;
         if (s->cursor_regs->flags & UXDISP_CURSOR_FLAG_MASK_PRESENT) {
             mask = color;
-            color += ((s->cursor_regs->width + 7) / 8) *
-                     s->cursor_regs->height;
+            color += ((w + 7) / 8) * h;
         }
     }
 
-    dpy_cursor_shape(ds, s->cursor_regs->width,
-                     s->cursor_regs->height,
+    dpy_cursor_shape(ds, w, h,
                      s->cursor_regs->hot_x,
                      s->cursor_regs->hot_y,
-                     mask, color);
+                     (uint8_t *)mask,
+                     (uint8_t *)color);
 }
 
 static void bank_reg_write(struct uxendisp_state *s,
@@ -308,22 +314,29 @@ crtc_flush(struct uxendisp_state *s, int crtc_id)
         if (crtc->regs->p.enable) {
             uint32_t offset = crtc->offset & (UXENDISP_BANK_SIZE - 1);
             int bank_id = crtc->offset >> UXENDISP_BANK_ORDER;
+            unsigned int w, h, stride;
+
+            w = crtc->regs->p.xres;
+            h = crtc->regs->p.yres;
+            stride = crtc->regs->p.stride;
+
+            if (w > UXENDISP_XRES_MAX || h > UXENDISP_YRES_MAX ||
+                stride > UXENDISP_STRIDE_MAX)
+                return;
 
             if (bank_id >= UXENDISP_NB_BANKS)
                 return;
 
             bank = &s->banks[bank_id];
-            sz = offset + crtc->regs->p.yres * crtc->regs->p.stride;
+            sz = offset + h * stride;
             if (sz > UXENDISP_BANK_SIZE)
                 return;
             if (bank->len < sz)
                 bank_reg_write(s, bank_id, 0, sz);
 
-            console_resize_from(crtc->ds,
-                                crtc->regs->p.xres,
-                                crtc->regs->p.yres,
+            console_resize_from(crtc->ds, w, h,
                                 uxdisp_fmt_to_bpp(crtc->regs->p.format),
-                                crtc->regs->p.stride,
+                                stride,
                                 bank->vram.view, offset);
         } else if (crtc->ds->surface) {
             free_displaysurface(crtc->ds->surface);
