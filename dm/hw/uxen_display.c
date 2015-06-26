@@ -33,6 +33,14 @@
 
 struct crtc_state {
     uint32_t offset;
+
+    /* Validated */
+    uint32_t enable;
+    uint32_t xres;
+    uint32_t yres;
+    uint32_t stride;
+    uint32_t format;
+
     volatile struct crtc_regs *regs;
     DisplayState *ds;
     int flush_pending;
@@ -133,10 +141,10 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
 
     if (crtc->flush_pending)
         crtc_flush(s, crtc_id);
-    if (!crtc->ds || !crtc->regs)
+    if (!crtc->ds)
         return;
 
-    npages = (crtc->offset + crtc->regs->p.stride * crtc->regs->p.yres +
+    npages = (crtc->offset + crtc->stride * crtc->yres +
               TARGET_PAGE_SIZE - 1) >> TARGET_PAGE_BITS;
 
     if (npages > (UXENDISP_BANK_SIZE >> TARGET_PAGE_BITS))
@@ -160,12 +168,12 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
     y_start = -1;
     page_min = (uint32_t)-1;
     page_max = 0;
-    for (y = 0; y < crtc->regs->p.yres; y++) {
+    for (y = 0; y < crtc->yres; y++) {
         int update = 0;
 
         addr = addr1;
         page0 = addr >> TARGET_PAGE_BITS;
-        page1 = (addr + crtc->regs->p.stride - 1) >> TARGET_PAGE_BITS;
+        page1 = (addr + crtc->stride - 1) >> TARGET_PAGE_BITS;
 
         for (pagei = page0; pagei <= page1; pagei++)
             update |= dirty[pagei / 8] & (1 << (pagei % 8));
@@ -178,33 +186,33 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
             if (page1 > page_max)
                 page_max = page1;
             if (!ds_vram_surface(crtc->ds->surface)) {
-                switch (crtc->regs->p.format) {
+                if ((addr1 + crtc->xres * 4) > bank->vram.mapped_len)
+                    break;
+                switch (crtc->format) {
                 case UXDISP_CRTC_FORMAT_BGRX_8888:
-                    memcpy(d, bank->vram.view + addr1, crtc->regs->p.xres * 4);
+                    memcpy(d, bank->vram.view + addr1, crtc->xres * 4);
                     break;
                 case UXDISP_CRTC_FORMAT_BGR_888:
-                    draw_line_24(d, bank->vram.view + addr1, crtc->regs->p.xres);
+                    draw_line_24(d, bank->vram.view + addr1, crtc->xres);
                     break;
                 case UXDISP_CRTC_FORMAT_BGR_565:
-                    draw_line_16(d, bank->vram.view + addr1, crtc->regs->p.xres);
+                    draw_line_16(d, bank->vram.view + addr1, crtc->xres);
                     break;
                 case UXDISP_CRTC_FORMAT_BGR_555:
-                    draw_line_15(d, bank->vram.view + addr1, crtc->regs->p.xres);
+                    draw_line_15(d, bank->vram.view + addr1, crtc->xres);
                     break;
                 }
             }
         } else if (y_start >= 0) {
-            dpy_update(crtc->ds, 0, y_start, crtc->regs->p.xres,
-                       y - y_start);
+            dpy_update(crtc->ds, 0, y_start, crtc->xres, y - y_start);
             y_start = -1;
         }
-        addr1 += crtc->regs->p.stride;
+        addr1 += crtc->stride;
         d += linesize;
     }
     ds_surface_unlock(crtc->ds);
     if (y_start >= 0) {
-        dpy_update(crtc->ds, 0, y_start, crtc->regs->p.xres,
-                   y - y_start);
+        dpy_update(crtc->ds, 0, y_start, crtc->xres, y - y_start);
     }
 }
 
@@ -298,6 +306,19 @@ static void bank_reg_write(struct uxendisp_state *s,
                            target_phys_addr_t addr,
                            uint32_t val);
 
+static int fmt_valid(int fmt)
+{
+    switch (fmt) {
+    case UXDISP_CRTC_FORMAT_BGRX_8888:
+    case UXDISP_CRTC_FORMAT_BGR_888:
+    case UXDISP_CRTC_FORMAT_BGR_565:
+    case UXDISP_CRTC_FORMAT_BGR_555:
+        return 1;
+    }
+
+    return 0;
+}
+
 static void
 crtc_flush(struct uxendisp_state *s, int crtc_id)
 {
@@ -314,14 +335,18 @@ crtc_flush(struct uxendisp_state *s, int crtc_id)
         if (crtc->regs->p.enable) {
             uint32_t offset = crtc->offset & (UXENDISP_BANK_SIZE - 1);
             int bank_id = crtc->offset >> UXENDISP_BANK_ORDER;
-            unsigned int w, h, stride;
+            unsigned int w, h, stride, fmt;
 
             w = crtc->regs->p.xres;
             h = crtc->regs->p.yres;
             stride = crtc->regs->p.stride;
+            fmt = crtc->regs->p.format;
 
             if (w > UXENDISP_XRES_MAX || h > UXENDISP_YRES_MAX ||
                 stride > UXENDISP_STRIDE_MAX)
+                return;
+
+            if (!fmt_valid(fmt))
                 return;
 
             if (bank_id >= UXENDISP_NB_BANKS)
@@ -335,14 +360,20 @@ crtc_flush(struct uxendisp_state *s, int crtc_id)
                 bank_reg_write(s, bank_id, 0, sz);
 
             console_resize_from(crtc->ds, w, h,
-                                uxdisp_fmt_to_bpp(crtc->regs->p.format),
+                                uxdisp_fmt_to_bpp(fmt),
                                 stride,
                                 bank->vram.view, offset);
+
+            crtc->xres = w;
+            crtc->yres = h;
+            crtc->stride = stride;
+            crtc->format = fmt;
         } else if (crtc->ds->surface) {
             free_displaysurface(crtc->ds->surface);
             crtc->ds->surface = NULL;
         }
 
+        crtc->enable = crtc->regs->p.enable;
         do_dpy_trigger_refresh(crtc->ds);
     }
 
