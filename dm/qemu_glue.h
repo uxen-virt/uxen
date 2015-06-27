@@ -13,6 +13,28 @@
 #include <stdint.h>
 #include "tmp_glue.h"
 
+#include "bitops.h"
+#undef test_bit
+#define test_bit qemu_test_bit
+static inline int test_bit(uint8_t *map, int bit)
+{
+    return ( map[bit / 8] & (1 << (bit % 8)) );
+}
+
+#undef set_bit
+#define set_bit qemu_set_bit
+static inline void set_bit(uint8_t *map, int bit)
+{
+    map[bit / 8] |= (1 << (bit % 8));
+}
+
+#undef clear_bit
+#define clear_bit qemu_clear_bit
+static inline void clear_bit(uint8_t *map, int bit)
+{
+    map[bit / 8] &= ~(1 << (bit % 8));
+}
+
 #include "xen.h"
 #define xen_enabled() 1
 

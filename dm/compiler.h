@@ -147,19 +147,4 @@
 #define BUILD_ASSERT_SIZEOF(s, v)   BUILD_ASSERT(sizeof(s) == (v))
 #define BUILD_ASSERT_SIZEOF_X(s, v) BUILD_ASSERT((sizeof(s) % (v)) == 0)
 
-static inline int test_bit(uint8_t *map, int bit)
-{
-    return ( map[bit / 8] & (1 << (bit % 8)) );
-}
-
-static inline void set_bit(uint8_t *map, int bit)
-{
-    map[bit / 8] |= (1 << (bit % 8));
-}
-
-static inline void clear_bit(uint8_t *map, int bit)
-{
-    map[bit / 8] &= ~(1 << (bit % 8));
-}
-
 #endif	/* _COMPILER_H_ */
