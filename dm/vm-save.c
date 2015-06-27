@@ -1268,21 +1268,21 @@ static int dm_state_load_size = 0;
 static int
 uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
 {
-    struct xc_save_version_info s_version_info = { 0, };
-    struct xc_save_tsc_info s_tsc_info = { 0, };
-    struct xc_save_vcpu_info s_vcpu_info = { 0, };
-    struct xc_save_hvm_generic_chunk s_hvm_ident_pt = { 0, };
-    struct xc_save_hvm_generic_chunk s_hvm_vm86_tss = { 0, };
-    struct xc_save_hvm_generic_chunk s_hvm_console_pfn = { 0, };
-    struct xc_save_hvm_generic_chunk s_hvm_acpi_ioports_location = { 0, };
-    struct xc_save_hvm_magic_pfns s_hvm_magic_pfns = { 0, };
-    struct xc_save_hvm_context s_hvm_context = { 0, };
-    struct xc_save_hvm_dm s_hvm_dm = { 0, };
-    struct xc_save_vm_uuid s_vm_uuid = { 0, };
-    struct xc_save_vm_template_uuid s_vm_template_uuid = { 0, };
-    struct xc_save_hvm_introspec s_hvm_introspec = { 0, };
-    struct xc_save_mapcache_params s_mapcache_params = { 0, };
-    struct xc_save_vm_template_file s_vm_template_file = { 0, };
+    struct xc_save_version_info s_version_info = { };
+    struct xc_save_tsc_info s_tsc_info = { };
+    struct xc_save_vcpu_info s_vcpu_info = { };
+    struct xc_save_hvm_generic_chunk s_hvm_ident_pt = { };
+    struct xc_save_hvm_generic_chunk s_hvm_vm86_tss = { };
+    struct xc_save_hvm_generic_chunk s_hvm_console_pfn = { };
+    struct xc_save_hvm_generic_chunk s_hvm_acpi_ioports_location = { };
+    struct xc_save_hvm_magic_pfns s_hvm_magic_pfns = { };
+    struct xc_save_hvm_context s_hvm_context = { };
+    struct xc_save_hvm_dm s_hvm_dm = { };
+    struct xc_save_vm_uuid s_vm_uuid = { };
+    struct xc_save_vm_template_uuid s_vm_template_uuid = { };
+    struct xc_save_hvm_introspec s_hvm_introspec = { };
+    struct xc_save_mapcache_params s_mapcache_params = { };
+    struct xc_save_vm_template_file s_vm_template_file = { };
     struct immutable_range *immutable_ranges = NULL;
     uint8_t *hvm_buf = NULL;
     xen_pfn_t *pfn_type = NULL;
