@@ -90,37 +90,6 @@
 #define XC_SAVE_ID_MAPCACHE_PARAMS    -18
 #define XC_SAVE_ID_VM_TEMPLATE_FILE   -19
 
-/* 
- * the script:
- * - (pv driver) query HVM_PARAM_CALLBACK_IRQ
- * - (pv driver) query HVM_PARAM_ACPI_S_STATE
- * - xc_domain_shutdown(SHUTDOWN_suspend) if (!pv-driver || non-0 acpi state)
- * - wait for 60s, querying xc_domain_getinfolist for:
- *   + info.flags & XEN_DOMINF_shutdown
- *   + shutdown_reason == SHUTDOWN_suspend
- * - hvm_buf_size = xc_domain_hvm_getcontext(xch, dom, 0, 0);
- * - hvm_buf = malloc(hvm_buf_size);
- * - xc_domain_get_tsc_info and save
- * - p2m_size = xc_domain_maximum_gpfn(xch, dom) + 1;
- * - iterate through all guest pfn's based on p2m_size
- *   + map batch of pages using xc_map_foreign_bulk
- *   + query page types using xc_get_pfn_type_batch
- *   + if page map fail and page type is XEN_DOMCTL_PFINFO_XTAB: skip
- *   + add pfn to pfn_type
- *   + write batch size
- *   + write pfn_type array
- *   + write pages that are present
- *   + unmap pages
- * - write XC_SAVE_ID_VCPU_INFO chunk
- * - write XC_SAVE_ID_HVM_IDENT_PT chunk
- * - write XC_SAVE_ID_HVM_VM86_TSS chunk
- * - write XC_SAVE_ID_HVM_CONSOLE_PFN chunk
- * - write XC_SAVE_ID_HVM_ACPI_IOPORTS_LOCATION chunk
- * - write 0
- * - write magic pfns
- * - write xc_domain_hvm_getcontext
- */
-
 struct vm_save_info vm_save_info = { };
 
 static int
