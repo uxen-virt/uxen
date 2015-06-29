@@ -22,6 +22,7 @@
 #include <uuid/uuid.h>
 
 #include "async-op.h"
+#include "bitops.h"
 #include "control.h"
 #include "dm.h"
 #include "dmpdev.h"
@@ -93,6 +94,7 @@
 #define XC_SAVE_ID_MAPCACHE_PARAMS    -18
 #define XC_SAVE_ID_VM_TEMPLATE_FILE   -19
 #define XC_SAVE_ID_PAGE_OFFSETS       -20
+#define XC_SAVE_ID_ZERO_BITMAP        -21
 
 struct vm_save_info vm_save_info = { };
 
@@ -189,6 +191,13 @@ struct xc_save_vm_page_offsets {
 
     uint32_t pfn_off_nr;
     uint64_t pfn_off[];
+};
+
+struct xc_save_zero_bitmap {
+    struct xc_save_generic;
+
+    uint32_t zero_bitmap_size;
+    uint8_t data[];
 };
 
 struct PACKED xc_save_index {
@@ -471,8 +480,9 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
     size_t total_compress_save = 0;
     int j;
     int *pfn_batch = NULL;
-    int *pfn_zero = NULL;
-    int zero_batch = 0;
+    uint8_t *zero_bitmap = NULL, *zero_bitmap_compressed = NULL;
+    uint32_t zero_bitmap_size;
+    struct xc_save_zero_bitmap s_zero_bitmap;
     char *compress_mem = NULL;
     char *compress_buf = NULL;
     uint32_t compress_size = 0;
@@ -493,6 +503,14 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
     }
     p2m_size++;
     APRINTF("p2m_size: 0x%x", p2m_size);
+
+    zero_bitmap_size = (p2m_size + 7) / 8;
+    zero_bitmap = calloc(zero_bitmap_size, 1);
+    if (zero_bitmap == NULL) {
+        asprintf(err_msg, "zero_bitmap = calloc(%d) failed", zero_bitmap_size);
+        ret = -ENOMEM;
+        goto out;
+    }
 
     gpfn_info_list = malloc(MAX_BATCH_SIZE * sizeof(*gpfn_info_list));
     if (gpfn_info_list == NULL) {
@@ -517,14 +535,6 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
                  MAX_BATCH_SIZE * sizeof(*pfn_batch));
 	ret = -ENOMEM;
 	goto out;
-    }
-
-    pfn_zero = malloc(MAX_BATCH_SIZE * sizeof(*pfn_zero));
-    if (pfn_zero == NULL) {
-        asprintf(err_msg, "pfn_zero = malloc(%"PRIdSIZE") failed",
-                 MAX_BATCH_SIZE * sizeof(*pfn_zero));
-        ret = -ENOMEM;
-        goto out;
     }
 
     if (compress && !single_page) {
@@ -602,15 +612,7 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
                 _batch++;
             }
             if (gpfn_info_list[j].type == XENMEM_MCGI_TYPE_ZERO) {
-                pfn_zero[zero_batch] = pfn + j;
-                zero_batch++;
-                if (zero_batch == MAX_BATCH_SIZE) {
-                    int _zero_batch = zero_batch + 3 * MAX_BATCH_SIZE;
-                    filebuf_write(f, &_zero_batch, sizeof(zero_batch));
-                    filebuf_write(f, &pfn_zero[0],
-                                  zero_batch * sizeof(pfn_zero[0]));
-                    zero_batch = 0;
-                }
+                __set_bit(pfn + j, zero_bitmap);
                 _zero++;
                 total_zero++;
             }
@@ -747,15 +749,28 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
     }
 
     if (!vm_save_info.save_abort && !vm_quit_interrupt) {
-        if (zero_batch) {
-            int _zero_batch = zero_batch + 3 * MAX_BATCH_SIZE;
-            filebuf_write(f, &_zero_batch, sizeof(zero_batch));
-            filebuf_write(f, &pfn_zero[0],
-                          zero_batch * sizeof(pfn_zero[0]));
+        s_zero_bitmap.marker = XC_SAVE_ID_ZERO_BITMAP;
+        s_zero_bitmap.zero_bitmap_size = zero_bitmap_size;
+        zero_bitmap_compressed = malloc(LZ4_compressBound((zero_bitmap_size)));
+        if (!zero_bitmap_compressed)
+            s_zero_bitmap.size = zero_bitmap_size;
+        else {
+            s_zero_bitmap.size = uxenvm_compress_lz4(
+                (const char *)zero_bitmap, (char *)zero_bitmap_compressed,
+                zero_bitmap_size);
+            if (s_zero_bitmap.size >= zero_bitmap_size) {
+                free(zero_bitmap_compressed);
+                zero_bitmap_compressed = NULL;
+                s_zero_bitmap.size = zero_bitmap_size;
+            }
         }
-    }
+        s_zero_bitmap.size += sizeof(s_zero_bitmap);
+        APRINTF("zero bitmap: size %d bitmap_size %d",
+                s_zero_bitmap.size, s_zero_bitmap.zero_bitmap_size);
+        filebuf_write(f, &s_zero_bitmap, sizeof(s_zero_bitmap));
+        filebuf_write(f, zero_bitmap_compressed ? : zero_bitmap,
+                      s_zero_bitmap.size - sizeof(s_zero_bitmap));
 
-    if (!vm_save_info.save_abort && !vm_quit_interrupt) {
         s_vm_page_offsets.marker = XC_SAVE_ID_PAGE_OFFSETS;
         s_vm_page_offsets.pfn_off_nr = poi_pfn_index(&poi, poi.max_gpfn);
         page_offsets_index.offset = filebuf_tell(f);
@@ -799,7 +814,8 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
     if (mem_buffer)
         xc_hypercall_buffer_free_pages(xc_handle, mem_buffer,
                                        MEM_BUFFER_SIZE >> PAGE_SHIFT);
-    free(pfn_zero);
+    free(zero_bitmap);
+    free(zero_bitmap_compressed);
     free(pfn_batch);
     free(gpfn_info_list);
     free(compress_mem);
@@ -819,6 +835,32 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
             goto _out;                                                  \
         }                                                               \
     } while(0)
+
+static int
+uxenvm_load_zero_bitmap(uint8_t *zero_bitmap, uint32_t zero_bitmap_size,
+                        xen_pfn_t *pfn_type, char **err_msg)
+{
+    int i, j;
+    int ret = 0;
+
+    for (i = j = 0; i < 8 * zero_bitmap_size; ++i) {
+        if (test_bit(i, zero_bitmap))
+            pfn_type[j++] = i;
+        if (j == MAX_BATCH_SIZE || i == 8 * zero_bitmap_size - 1) {
+            ret = xc_domain_populate_physmap_exact(
+                xc_handle, vm_id, j, 0, XENMEMF_populate_on_demand,
+                pfn_type);
+            if (ret) {
+                asprintf(err_msg,
+                         "xc_domain_populate_physmap_exact failed");
+                goto out;
+            }
+            j = 0;
+        }
+    }
+  out:
+    return ret;
+}
 
 static int
 uxenvm_load_zerobatch(struct filebuf *f, int batch, xen_pfn_t *pfn_type,
@@ -1322,6 +1364,23 @@ apply_immutable_memory(struct immutable_range *r, int nranges)
 static uint8_t *dm_state_load_buf = NULL;
 static int dm_state_load_size = 0;
 
+#define uxenvm_check_restore_clone(mode) do {                           \
+        if ((mode) == VM_RESTORE_CLONE) {                               \
+            ret = xc_domain_clone_physmap(xc_handle, vm_id,             \
+                                          vm_template_uuid);            \
+            if (ret < 0) {                                              \
+                asprintf(err_msg, "xc_domain_clone_physmap failed");    \
+                goto out;                                               \
+            }                                                           \
+            if (!vm_has_template_uuid) {                                \
+                vm_has_template_uuid = 1;                               \
+                ret = 0;                                                \
+                goto skip_mem;                                          \
+            }                                                           \
+            (mode) = VM_RESTORE_NORMAL;                                 \
+        }                                                               \
+    } while (0)
+
 static int
 uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
 {
@@ -1341,8 +1400,10 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
     struct xc_save_mapcache_params s_mapcache_params = { };
     struct xc_save_vm_template_file s_vm_template_file = { };
     struct xc_save_vm_page_offsets s_vm_page_offsets = { };
+    struct xc_save_zero_bitmap s_zero_bitmap = { };
     struct immutable_range *immutable_ranges = NULL;
     uint8_t *hvm_buf = NULL;
+    uint8_t *zero_bitmap = NULL, *zero_bitmap_compressed = NULL;
     xen_pfn_t *pfn_type = NULL;
     int *pfn_err = NULL, *pfn_info = NULL;
     struct decompress_ctx dc = { 0 };
@@ -1510,21 +1571,45 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
                     sizeof(s_vm_page_offsets.pfn_off[0]),
                     filebuf_tell(f) - s_vm_page_offsets.size);
             break;
+        case XC_SAVE_ID_ZERO_BITMAP:
+            uxenvm_load_read_struct(f, s_zero_bitmap, marker, ret, err_msg,
+                                    out);
+            zero_bitmap_compressed =
+                malloc(s_zero_bitmap.size - sizeof(s_zero_bitmap));
+            if (zero_bitmap_compressed == NULL) {
+                asprintf(err_msg, "zero_bitmap_compressed = "
+                         "malloc(%"PRIdSIZE") failed",
+                         s_zero_bitmap.size - sizeof(s_zero_bitmap));
+                ret = -ENOMEM;
+                goto out;
+            }
+            zero_bitmap = malloc(s_zero_bitmap.zero_bitmap_size);
+            if (zero_bitmap == NULL) {
+                asprintf(err_msg, "zero_bitmap = malloc(%d) failed",
+                         s_zero_bitmap.zero_bitmap_size);
+                ret = -ENOMEM;
+                goto out;
+            }
+            uxenvm_load_read(f, zero_bitmap_compressed, s_zero_bitmap.size -
+                             sizeof(s_zero_bitmap), ret, err_msg, out);
+            ret = LZ4_decompress_fast((const char *)zero_bitmap_compressed,
+                                      (char *)zero_bitmap,
+                                      s_zero_bitmap.zero_bitmap_size);
+            if (ret != s_zero_bitmap.size - sizeof(s_zero_bitmap)) {
+                asprintf(err_msg, "LZ4_decompress_fast(zero_bitmap) failed:"
+                         " %d != %"PRIdSIZE, ret,
+                         s_zero_bitmap.size - sizeof(s_zero_bitmap));
+                ret = -EINVAL;
+                goto out;
+            }
+            uxenvm_check_restore_clone(restore_mode);
+            ret = uxenvm_load_zero_bitmap(
+                zero_bitmap, s_zero_bitmap.zero_bitmap_size, pfn_type, err_msg);
+            if (ret)
+                goto out;
+            break;
 	default:
-	    if (restore_mode == VM_RESTORE_CLONE) {
-                ret = xc_domain_clone_physmap(xc_handle, vm_id,
-                                              vm_template_uuid);
-                if (ret < 0) {
-                    asprintf(err_msg, "xc_domain_clone_physmap failed");
-                    goto out;
-                }
-		if (!vm_has_template_uuid) {
-		    vm_has_template_uuid = 1;
-		    ret = 0;
-		    goto skip_mem;
-		}
-		restore_mode = VM_RESTORE_NORMAL;
-	    }
+            uxenvm_check_restore_clone(restore_mode);
             ret = uxenvm_load_batch(f, marker, pfn_type, pfn_err, pfn_info,
                                     &dc, populate_compressed, err_msg);
 	    if (ret)
@@ -1630,6 +1715,8 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
     free(pfn_info);
     free(pfn_type);
     free(hvm_buf);
+    free(zero_bitmap);
+    free(zero_bitmap_compressed);
     return ret;
 }
 
@@ -1871,6 +1958,7 @@ vm_restore_memory(void)
 	    break;
         switch (marker) {
         case XC_SAVE_ID_PAGE_OFFSETS:
+        case XC_SAVE_ID_ZERO_BITMAP:
             uxenvm_load_read_struct(f, s_generic, marker, ret, &err_msg,
                                     out);
             ret = filebuf_seek(f, s_generic.size - sizeof(s_generic),
