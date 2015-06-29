@@ -863,33 +863,6 @@ uxenvm_load_zero_bitmap(uint8_t *zero_bitmap, uint32_t zero_bitmap_size,
 }
 
 static int
-uxenvm_load_zerobatch(struct filebuf *f, int batch, xen_pfn_t *pfn_type,
-                      int *pfn_zero, char **err_msg)
-{
-    int j;
-    int ret;
-
-    LOAD_DPRINTF("zero batch %03x pages", batch);
-
-    uxenvm_load_read(f, &pfn_zero[0], batch * sizeof(pfn_zero[0]),
-                     ret, err_msg, out);
-
-    /* XXX legacy -- new save files have a clean pfn_zero array */
-    for (j = 0; j < batch; j++)
-        pfn_type[j] = pfn_zero[j] & ~XEN_DOMCTL_PFINFO_LTAB_MASK;
-
-    ret = xc_domain_populate_physmap_exact(
-        xc_handle, vm_id, batch, 0, XENMEMF_populate_on_demand, &pfn_type[0]);
-    if (ret) {
-        asprintf(err_msg, "xc_domain_populate_physmap_exact failed");
-        goto out;
-    }
-
-  out:
-    return ret;
-}
-
-static int
 decompress_batch(int batch, xen_pfn_t *pfn_type, uint8_t *mem,
                  char *compress_buf, uint32_t compress_size,
                  int single_page, char **err_msg)
@@ -1242,20 +1215,15 @@ uxenvm_load_batch(struct filebuf *f, int32_t marker, xen_pfn_t *pfn_type,
     DECLARE_HYPERCALL_BUFFER(uint8_t, pp_buffer);
     int decompress;
     int single_page;
-    int zero_batch;
     int ret;
 
     decompress = 0;
     single_page = 0;
-    zero_batch = 0;
-    if ((unsigned int)marker > 4 * MAX_BATCH_SIZE) {
+    if ((unsigned int)marker > 3 * MAX_BATCH_SIZE) {
         asprintf(err_msg, "invalid batch size: %x",
                  (unsigned int)marker);
         ret = -EINVAL;
         goto out;
-    } else if (marker > 3 * MAX_BATCH_SIZE) {
-        marker -= 3 * MAX_BATCH_SIZE;
-        zero_batch = 1;
     } else if (marker > 2 * MAX_BATCH_SIZE) {
         marker -= 2 * MAX_BATCH_SIZE;
         decompress = 1;
@@ -1325,14 +1293,9 @@ uxenvm_load_batch(struct filebuf *f, int32_t marker, xen_pfn_t *pfn_type,
     if ((uxenvm_load_progress * 10 / (vm_mem_mb << 8UL)) !=
         ((uxenvm_load_progress - marker) * 10 / (vm_mem_mb << 8UL)))
         APRINTF("memory load %d pages", uxenvm_load_progress);
-    if (zero_batch)
-        ret = uxenvm_load_zerobatch(f, marker, pfn_type, pfn_info,
-                                    err_msg);
-    else
-        ret = uxenvm_load_readbatch(f, marker, pfn_type, pfn_info,
-                                    pfn_err, decompress, dc,
-                                    single_page, populate_compressed,
-                                    err_msg);
+    ret = uxenvm_load_readbatch(f, marker, pfn_type, pfn_info, pfn_err,
+                                decompress, dc, single_page,
+                                populate_compressed, err_msg);
   out:
     return ret;
 }
