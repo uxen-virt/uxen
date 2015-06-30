@@ -628,6 +628,7 @@ uxenaudio_pre_save(void *opaque)
     UXenAudioState *s = opaque;
     int i;
 
+    del_timer(s->control_notify_timer);
     if (s->ram_ptr) {
         for (i = 0; i < NVOICEOUT; ++i) {
             UXenAudioVoiceOut *v = &s->voiceout[i];
