@@ -89,6 +89,10 @@ extern HRESULT WINAPI FilterConnectCommunicationPort(
 
 #endif
 
+#define WRITE_RATELIMIT_THR_BYTES (32 << 20)
+#define WRITE_BLOCK_THR_BYTES (WRITE_RATELIMIT_THR_BYTES * 2)
+#define WRITE_RATELIMIT_GAP_MS 10
+
 uint64_t log_swap_fills = 0;
 
 // #define SWAP_NO_AIO 1
@@ -117,9 +121,6 @@ typedef struct SwapRadix {
     void *children[1 << SWAP_RADIX_BITS];
 } SwapRadix;
 
-
-static int swap_write(BlockDriverState *bs, int64_t sector_num,
-                      const uint8_t *buf, int nb_sectors);
 
 static int swap_backend_active = 0;
 
@@ -172,6 +173,7 @@ typedef struct BDRVSwapState {
     int ios_outstanding;
     struct SwapAIOCB *read_queue_head;
     struct SwapAIOCB *read_queue_tail;
+    TAILQ_HEAD(, SwapAIOCB) rlimit_write_queue;
 
     int log_swap_fills;
 
@@ -195,6 +197,7 @@ struct {
 typedef struct SwapAIOCB {
     BlockDriverAIOCB common; /* must go first. */
     struct SwapAIOCB *next;
+    TAILQ_ENTRY(SwapAIOCB) rlimit_write_entry;
     BlockDriverState *bs;
     uint64_t block;
     uint32_t size;
@@ -204,6 +207,8 @@ typedef struct SwapAIOCB {
     size_t orig_size;
     ioh_event event;
     int result;
+    int rmw_write_issued;
+    Timer *ratelimit_complete_timer;
 #ifdef _WIN32
     OVERLAPPED ovl;
 #endif
@@ -220,6 +225,11 @@ static DWORD WINAPI swap_read_thread(void *_s);
 static void *swap_read_thread(void *_s);
 #endif
 static void swap_free_block(BDRVSwapState *s, void *b);
+
+static int swap_write(BlockDriverState *bs, int64_t sector_num,
+                      const uint8_t *buf, int nb_sectors,
+                      SwapAIOCB *acb);
+
 
 /* Wrappers for compress and expand functions. */
 
@@ -533,7 +543,7 @@ static void *swap_write_thread(void *_s)
     }
     free(wb);
 
-    debug_printf("swap: write thread exited cleanly\n");
+    debug_printf("%s exiting cleanly\n", __FUNCTION__);
 
     return 0;
 }
@@ -935,6 +945,7 @@ static int swap_open(BlockDriverState *bs, const char *filename, int flags)
     int i;
     /* Start out with well-defined state. */
     memset(s, 0, sizeof(*s));
+    TAILQ_INIT(&s->rlimit_write_queue);
 
     s->log_swap_fills = log_swap_fills;
 
@@ -1769,6 +1780,9 @@ static inline void swap_common_cb(SwapAIOCB *acb)
     swap_stats.blocked_time += os_get_clock() - acb->t0;
 #endif
     --(s->ios_outstanding);
+    if (TAILQ_ACTIVE(acb, rlimit_write_entry))
+	TAILQ_REMOVE(&s->rlimit_write_queue, acb,
+                     rlimit_write_entry);
     aio_del_wait_object(&acb->event);
     aio_release(acb);
 }
@@ -1810,9 +1824,10 @@ static void * swap_read_thread(void *_s)
 
             if (acb)
                 break; /* process reads. */
-            else if (quit)
+            else if (quit) {
+                debug_printf("%s exiting cleanly\n", __FUNCTION__);
                 return 0; /* quit. */
-            else
+            } else
                 swap_wait_read(s);
         }
 
@@ -1883,8 +1898,11 @@ static SwapAIOCB *swap_aio_get(BlockDriverState *bs,
     } else {
         ioh_event_reset(&acb->event);
     }
+    acb->rmw_write_issued = 0;
     acb->bs = bs;
     acb->result = -1;
+    memset(&acb->rlimit_write_entry, 0, sizeof(acb->rlimit_write_entry));
+
     ++(s->ios_outstanding);
 #ifdef SWAP_STATS
     acb->t0 = os_get_clock();
@@ -1912,13 +1930,16 @@ static void swap_rmw_cb(void *opaque)
 {
     SwapAIOCB *acb = opaque;
 
-    memcpy(acb->tmp + acb->modulo, acb->buffer, acb->orig_size);
-    acb->result = swap_write(acb->bs, 8 * acb->block, acb->tmp,
-                   acb->size >> BDRV_SECTOR_BITS);
-    free(acb->tmp);
-
-    acb->common.cb(acb->common.opaque, 0);
-    swap_common_cb(acb);
+    if (!acb->rmw_write_issued) {
+        acb->rmw_write_issued = 1;
+        memcpy(acb->tmp + acb->modulo, acb->buffer, acb->orig_size);
+        acb->result = swap_write(acb->bs, 8 * acb->block, acb->tmp,
+                                 acb->size >> BDRV_SECTOR_BITS, acb);
+        free(acb->tmp);
+    } else {
+        acb->common.cb(acb->common.opaque, 0);
+        swap_common_cb(acb);
+    }
 }
 
 static void swap_write_cb(void *opaque)
@@ -1985,8 +2006,38 @@ out:
 }
 #endif  /* SWAP_NO_AIO */
 
+static void
+swap_complete_write_acb(SwapAIOCB *acb)
+{
+#ifndef LIBIMG
+    if (acb->ratelimit_complete_timer) {
+        free_timer(acb->ratelimit_complete_timer);
+        acb->ratelimit_complete_timer = NULL;
+    }
+#endif
+    ioh_event_set(&acb->event);
+}
+
+#ifndef LIBIMG
+static void
+swap_ratelimit_complete_timer_notify(void *opaque)
+{
+    SwapAIOCB *acb = (SwapAIOCB*)opaque;
+    BDRVSwapState *s = (BDRVSwapState*) acb->bs->opaque;
+
+    swap_signal_write(s);
+    if (__sync_add_and_fetch(&s->buffered, 0) > WRITE_BLOCK_THR_BYTES) {
+        /* we're over block threshold of buffered data, hold writes off */
+        mod_timer(acb->ratelimit_complete_timer,
+                  get_clock_ms(rt_clock) + WRITE_RATELIMIT_GAP_MS);
+    } else {
+        swap_complete_write_acb(acb);
+    }
+}
+#endif
+
 static int swap_write_unaligned(BlockDriverState *bs, uint64_t offset, const void *buf,
-                    uint64_t count)
+                                uint64_t count, SwapAIOCB *acb)
 {
     ssize_t r;
     const uint64_t mask = SWAP_SECTOR_SIZE - 1;
@@ -2013,7 +2064,7 @@ static int swap_write_unaligned(BlockDriverState *bs, uint64_t offset, const voi
     memcpy(aligned_buf + (offset & mask), buf, count);
     /* Write. */
     r = swap_write(bs, aligned_offset >> BDRV_SECTOR_BITS, aligned_buf,
-                   aligned_count >> BDRV_SECTOR_BITS);
+                   aligned_count >> BDRV_SECTOR_BITS, acb);
 
   out:
     free(aligned_buf);
@@ -2021,7 +2072,8 @@ static int swap_write_unaligned(BlockDriverState *bs, uint64_t offset, const voi
 }
 
 static int swap_write(BlockDriverState *bs, int64_t sector_num,
-                      const uint8_t *buf, int nb_sectors)
+                      const uint8_t *buf, int nb_sectors,
+                      SwapAIOCB *acb)
 {
     BDRVSwapState *s = (BDRVSwapState*) bs->opaque;
     uint64_t start;
@@ -2031,10 +2083,10 @@ static int swap_write(BlockDriverState *bs, int64_t sector_num,
     int count = nb_sectors << BDRV_SECTOR_BITS;
     const uint64_t mask = SWAP_SECTOR_SIZE - 1;
     LruCache *bc = &s->bc;
-    
+
     if ((offset & mask) || (count & mask)) {
 
-        int r = swap_write_unaligned(bs, offset, buf, count);
+        int r = swap_write_unaligned(bs, offset, buf, count, acb);
         if (r < 0) {
             warn("swap: unaligned emulation write error %d", r);
         }
@@ -2091,14 +2143,30 @@ static int swap_write(BlockDriverState *bs, int64_t sector_num,
      * thread. We check after having updated s->buffered above, to make sure
      * the write thread cannot shut down while we stil have work for it. */
 
+#ifndef LIBIMG
+    swap_signal_write(s);
+    if (__sync_add_and_fetch(&s->buffered, 0) > WRITE_RATELIMIT_THR_BYTES) {
+        /* late completion in order to rate limit writes */
+        acb->ratelimit_complete_timer = new_timer_ms(
+            rt_clock, swap_ratelimit_complete_timer_notify, acb);
+        mod_timer(acb->ratelimit_complete_timer,
+                  get_clock_ms(rt_clock) + WRITE_RATELIMIT_GAP_MS);
+        TAILQ_INSERT_TAIL(&s->rlimit_write_queue, acb, rlimit_write_entry);
+    } else {
+        /* immediate completion */
+        swap_complete_write_acb(acb);
+    }
+#else
     for (;;) {
         swap_signal_write(s);
-        if (__sync_add_and_fetch(&s->buffered, 0) > (32<<20)) {
+        if (__sync_add_and_fetch(&s->buffered, 0) > WRITE_RATELIMIT_THR_BYTES) {
             swap_wait_can_write(s);
         } else {
+            swap_complete_write_acb(acb);
             break;
         }
     }
+#endif
 
     return 0;
 }
@@ -2142,8 +2210,7 @@ static BlockDriverAIOCB *swap_aio_write(BlockDriverState *bs,
     } else {
         /* Already done. */
         aio_add_wait_object(&acb->event, swap_write_cb, acb);
-        acb->result = swap_write(bs, sector_num, buf, nb_sectors);
-        ioh_event_set(&acb->event);
+        acb->result = swap_write(bs, sector_num, buf, nb_sectors, acb);
 #ifdef SWAP_STATS
         acb->t1 = os_get_clock();
 #endif
@@ -2158,10 +2225,26 @@ static int swap_flush(BlockDriverState *bs)
     BDRVSwapState *s = (BDRVSwapState*) bs->opaque;
     LruCache *bc = &s->bc;
     SwapRadix *rx;
+    SwapAIOCB *acb, *next;
     int i;
+
+    /* Complete ratelimited writes */
+    debug_printf("swap: completing ratelimited writes\n");
+    TAILQ_FOREACH_SAFE(acb, &s->rlimit_write_queue, rlimit_write_entry, next)
+        swap_complete_write_acb(acb);
+
+    /* Wait for all outstanding ios completing. */
+    aio_wait_start();
+    aio_poll();
+    while (s->ios_outstanding) {
+        aio_wait();
+    }
+    aio_wait_end();
+    debug_printf("swap: finished outstanding ios\n");
 
     /* Move all cache lines to radix tree. */
     swap_lock(s);
+    debug_printf("swap: emptying cache lines\n");
     rx = s->radix[s->active_radix];
     for (i = 0; i < (1 << bc->log_lines); ++i) {
         LruCacheLine *cl = &bc->lines[i];
@@ -2181,7 +2264,7 @@ static int swap_flush(BlockDriverState *bs)
         swap_signal_write(s);
         swap_wait_can_write(s);
     }
-
+    debug_printf("swap: finished waiting for write thread\n");
 #ifdef _WIN32
     /* Release the heap used for buffers back to OS. */
     swap_lock(s);
@@ -2191,14 +2274,6 @@ static int swap_flush(BlockDriverState *bs)
     }
     swap_unlock(s);
 #endif
-
-    /* Wait for all outstanding reads completing. */
-    aio_wait_start();
-    aio_poll();
-    while (s->ios_outstanding) {
-        aio_wait();
-    }
-    aio_wait_end();
 
     return 0;
 }
