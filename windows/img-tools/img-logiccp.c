@@ -3067,6 +3067,13 @@ int main(int argc, char **argv)
     /* Copy/shallow phase. */
     printf("copy + shallow %d files\n", man_out.n);
 
+    if (shallow_allowed) {
+        man_sort_by_id(&man_out);
+        if (acl_phase(&disk, &man_out) < 0) {
+            err(1, "acl_phase failed");
+        }
+    }
+
     man_sort_by_offset(&man_out);
 
     if (vm_links_phase_1(&disk, &man_out) < 0) {
@@ -3075,10 +3082,6 @@ int main(int argc, char **argv)
 
     if (shallow_allowed) {
         man_sort_by_id(&man_out);
-
-        if (acl_phase(&disk, &man_out) < 0) {
-            err(1, "acl_phase failed");
-        }
 
         if (shallow_phase(&disk, &man_out, map_idx) < 0) {
             err(1, "shallow_phase failed");
