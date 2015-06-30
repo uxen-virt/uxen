@@ -1069,6 +1069,7 @@ int bfs(Variable *var, Manifest *suffixes,
                     } else {
                         /* Check if we should exclude the file based on extension and size. */
                         ManifestEntry *s = find_by_suffix(suffixes, fn);
+                        ++files;
                         if (s && file_size >= s->file_size) {
                             printf("info: excluding file by suffix and size: %ls (%"PRIu64" bytes)\n",
                                     full_name, file_size);
