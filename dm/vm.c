@@ -689,11 +689,11 @@ vm_run_mode_change_cb(void *opaque)
         ni_vm_unpause();
 #endif
         break;
-    case SUSPEND_VM:
     case POWEROFF_VM:
     case DESTROY_VM:
         break;
     case PAUSE_VM:
+    case SUSPEND_VM:
         vm_clock_pause();
 #if defined(CONFIG_NICKEL)
         ni_vm_pause();
