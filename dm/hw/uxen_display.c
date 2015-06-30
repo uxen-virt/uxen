@@ -264,10 +264,10 @@ cursor_flush(struct uxendisp_state *s)
     unsigned int w, h;
 
     /* XXX crtc 0 only for now */
-    if (!s->cursor_regs || s->cursor_regs->crtc_idx != 0)
+    if (s->cursor_regs->crtc_idx == 0)
+        ds = s->crtcs[0].ds;
+    else
         return;
-
-    ds = s->crtcs[0].ds;
 
     if (!(s->cursor_en & UXDISP_CURSOR_SHOW)) {
         dpy_cursor_shape(ds, 0, 0, 0, 0, NULL, NULL);
@@ -323,9 +323,6 @@ static void
 crtc_flush(struct uxendisp_state *s, int crtc_id)
 {
     struct crtc_state *crtc = &s->crtcs[crtc_id];
-
-    if (!crtc->regs)
-        return;
 
     /* XXX crtc 0 only for now */
     if (crtc_id == 0 && (s->mode & UXDISP_MODE_VGA_DISABLED)) {
@@ -729,7 +726,6 @@ uxendisp_post_load(void *opaque, int version_id)
     return 0;
 }
 
-#ifdef UNMAP_ON_SAVE
 static void
 uxendisp_post_save(void *opaque)
 {
@@ -737,7 +733,6 @@ uxendisp_post_save(void *opaque)
 
     pci_ram_post_save(&s->dev);
 }
-#endif
 
 static const VMStateDescription vmstate_uxendisp_crtc = {
     .name = "uxendisp-crtc",
@@ -769,9 +764,7 @@ static const VMStateDescription vmstate_uxendisp = {
     .minimum_version_id_old = 7,
     .pre_save = uxendisp_pre_save,
     .post_load = uxendisp_post_load,
-#ifdef UNMAP_ON_SAVE
     .post_save = uxendisp_post_save,
-#endif
     .resume = uxendisp_post_load,
     .fields      = (VMStateField []) {
         VMSTATE_PCI_DEVICE(dev, struct uxendisp_state),
