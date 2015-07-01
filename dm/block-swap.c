@@ -1029,7 +1029,7 @@ static int swap_open(BlockDriverState *bs, const char *filename, int flags)
      * of s->version is not in the tree. */
     s->find_context = dubtreePrepareFind(&s->t, s->version);
     if (!s->find_context) {
-        warn("swap: failed to create find context");
+        warnx("swap: failed to create find context");
         r = -1;
         goto out;
     }
@@ -1106,7 +1106,7 @@ static int swap_open(BlockDriverState *bs, const char *filename, int flags)
 
 out:
     if (r < 0) {
-        warn("swap: failed to open %s", filename);
+        warnx("swap: failed to open %s", filename);
     }
 
     free(fallback);
