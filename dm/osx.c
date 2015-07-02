@@ -171,6 +171,30 @@ ioh_event_init(ioh_event *ev)
     critical_section_init(&ev->lock);
 }
 
+void ioh_event_init_with_mach_port(ioh_event *ev, mach_port_t port)
+{
+    kern_return_t kr;
+    mach_port_t pset;
+    
+    ioh_event_init(ev);
+    
+    kr = mach_port_allocate(
+        mach_task_self(),
+        MACH_PORT_RIGHT_PORT_SET,
+        &pset);
+    if (kr != KERN_SUCCESS)
+        errx(1, "%s: mach_port_allocate failed (%x)", __FUNCTION__, kr);
+
+    kr = mach_port_insert_member(mach_task_self(),
+                                 port, pset);
+    if (kr != KERN_SUCCESS)
+        errx(1, "%s: mach_port_insert_member failed (%x)", __FUNCTION__, kr);
+
+    
+    ev->filter = EVFILT_MACHPORT;
+    ev->ident = pset;
+}
+
 void
 ioh_event_set(ioh_event *ev)
 {
@@ -266,6 +290,12 @@ ioh_event_close(ioh_event *ev)
 
     ev->valid = 0;
 
+    if (ev->filter == EVFILT_MACHPORT)
+    {
+        // on mach port based event setup, we created a port set, which we need to get rid of
+        mach_port_destroy(mach_task_self(), ev->ident);
+    }
+    
     critical_section_free(&ev->lock);
 }
 

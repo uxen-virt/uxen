@@ -115,6 +115,7 @@ static inline void ioh_event_queue_del(ioh_event *ev, int queue)
 }
 
 void ioh_event_init(ioh_event *ev);
+void ioh_event_init_with_mach_port(ioh_event *ev, mach_port_t port);
 void ioh_event_set(ioh_event *ev);
 void ioh_event_reset(ioh_event *ev);
 void ioh_event_wait(ioh_event *ev);

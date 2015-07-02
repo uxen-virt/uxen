@@ -242,13 +242,18 @@ hw_vga.o: CPPFLAGS += $(LZ4_CPPFLAGS)
 DM_SRCS += hw/xenpc.c
 hw_xenpc.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 DM_SRCS += hw/xenrtc.c
-$(OSX_NOT_YET)DM_SRCS += hw/uxen_net.c
+DM_SRCS += hw/uxen_net.c
 hw_uxen_net.o: CPPFLAGS += -I$(XENPUBLICDIR)
 DM_SRCS += hw/uxen_null.c
 hw_uxen_null.o: CPPFLAGS += -I$(XENPUBLICDIR)
 $(OSX_NOT_YET)DM_SRCS += hw/uxen_stor.c
 $(OSX_NOT_YET)DM_SRCS += hw/uxen_scsi.c
 hw_uxen_stor.o: CPPFLAGS += -I$(XENPUBLICDIR)
+
+$(WINDOWS)DM_SRCS += hw/uxen_v4v_win32.c
+hw_uxen_v4v_win32.o: CPPFLAGS += -I$(XENPUBLICDIR)
+$(OSX)DM_SRCS += hw/uxen_v4v_osx.c
+hw_uxen_v4v_osx.o: CPPFLAGS += -I$(XENPUBLICDIR)
 
 QEMU_CFLAGS += -I$(TOPDIR)
 
@@ -381,6 +386,7 @@ $(WINDOWS)LDLIBS += $(LIBUXENCONSOLE_LIBS)
 $(OSX)LDLIBS += -framework AppKit
 $(OSX)LDLIBS += -framework Carbon
 $(OSX)LDLIBS += -framework Security
+$(OSX)LDLIBS += -framework IOKit
 
 $(WINDOWS)LDFLAGS += -mwindows
 $(WINDOWS)LDFLAGS += -Wl,--wrap,malloc,--wrap,realloc,--wrap,calloc,--wrap,free

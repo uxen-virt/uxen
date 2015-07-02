@@ -12,16 +12,11 @@
 #include <dm/hw.h>
 #include <dm/firmware.h>
 
-#include <winioctl.h>
-#define V4V_USE_INLINE_API
-#include <windows/uxenv4vlib/gh_v4vapi.h>
+#include "uxen_v4v.h"
 
 #include "uxen_platform.h"
 #include <uxen/platform_interface.h>
 
-#if defined(_WIN32)
-#define _POSIX
-#endif
 #include <time.h>
 #include <sys/time.h>
 
@@ -56,7 +51,9 @@ typedef struct uxen_net_packet {
     uxen_net_packet_api_t *packet;
     uint32_t len;
     uint32_t buf_size;
+#if defined(_WIN32)
     OVERLAPPED overlapped;
+#endif
     int state;
 } uxen_net_packet_t;
 
@@ -72,13 +69,10 @@ typedef struct uxen_net {
     UXenPlatformDevice dev;
     NICState *nic;
     NICConf conf;
-    v4v_context_t a;
+    _v4v_context_t a;
     v4v_addr_t dest;
 
-    OVERLAPPED notify_overlapped;
-    BOOLEAN notify_pending;
-
-    HANDLE tx_event;
+    ioh_event tx_event;
 
     uint8_t *rx_buf;
 
@@ -795,7 +789,34 @@ wrap_uxen_net_receive (VLANClientState *nc, const uint8_t *buf, size_t size)
 #endif
 #endif
 
-static void uxen_net_run_tx_q(uxen_net_t *s)
+/* OSX: keep sending messages in the queue to v4v guest port until destination
+ *      ring is full or queue is empty. Unsent packets will be retried later.
+ * Windows: If the current packet has been submitted, remove it from the queue
+ *          if it's been sent, then send the next packet but leave it on the
+ *          queue until we get its completion.
+ */
+
+#if !defined(_WIN32)
+static void
+uxen_net_run_tx_q(uxen_net_t *s)
+{
+    ssize_t sent;
+    uxen_net_packet_t *p;
+    
+    while ((p = queue.head))  {
+        s->dest.domain = vm_id;
+        sent = v4v_sendto(
+            s->a.v4v_handle, s->dest, p->packet->data, p->len, 0 /*flags*/);
+        if (sent <= 0)
+            break;
+        packet_remove(&queue, p);
+        packet_done(p);
+        queue_len--;
+    }
+}
+#else
+static void
+uxen_net_run_tx_q(uxen_net_t *s)
 {
     uxen_net_packet_t *p;
     unsigned len;
@@ -818,7 +839,7 @@ static void uxen_net_run_tx_q(uxen_net_t *s)
                 memset (&p->overlapped, 0, sizeof (OVERLAPPED));
                 p->overlapped.hEvent = s->tx_event;
 
-                if (WriteFile (s->a.v4v_handle, p->packet, len, NULL, &p->overlapped)) {
+                if (WriteFile (s->a.c.v4v_handle, p->packet, len, NULL, &p->overlapped)) {
                     /* as we're asynchronous, this should never succeed */
                     warnx("uxn: fail path 1");
                     packet_remove(&queue, p);
@@ -858,7 +879,7 @@ static void uxen_net_run_tx_q(uxen_net_t *s)
 
 
 
-                if (!GetOverlappedResult (s->a.v4v_handle, &p->overlapped, &writ, FALSE)) {
+                if (!GetOverlappedResult (s->a.c.v4v_handle, &p->overlapped, &writ, FALSE)) {
 
                     err = GetLastError ();
                     if (err == ERROR_IO_INCOMPLETE) {
@@ -902,7 +923,7 @@ static void uxen_net_run_tx_q(uxen_net_t *s)
         }
     }
 }
-
+#endif /* _WIN32 */
 
 static void
 uxen_net_write_event (void *_s)
@@ -913,7 +934,7 @@ uxen_net_write_event (void *_s)
     debug_printf("uxn: write_event\n");
 #endif
 
-    ResetEvent(s->tx_event);
+    ioh_event_reset(&s->tx_event);
 
     uxen_net_run_tx_q(s);
     if (queue_len < MAX_QD_PACKETS)
@@ -978,31 +999,6 @@ uxen_net_receive (VLANClientState *nc, const uint8_t *buf, size_t size)
 /*********************** RX path ***************************/
 
 
-static int
-uxen_net_notify_complete (uxen_net_t *s, BOOLEAN wait)
-{
-    DWORD writ;
-
-    if (!s->notify_pending)
-        return 1;
-
-    if (GetOverlappedResult
-        (s->a.v4v_handle, &s->notify_overlapped, &writ, wait)) {
-        s->notify_pending = FALSE;
-        return 1;
-    }
-
-    if (GetLastError () == ERROR_IO_INCOMPLETE)
-        return 0;
-
-    /* XXX: does false mean complete? in this case */
-    s->notify_pending = FALSE;
-
-    return 1;
-}
-
-
-
 static void
 uxen_net_read_event (void *_s)
 {
@@ -1015,7 +1011,6 @@ uxen_net_read_event (void *_s)
         len = v4v_copy_out (s->ring, &from, &protocol, s->rx_buf, ETH_MTU, 1);
         if (len < 0)
             break;
-
         if (len > ETH_MTU)
             len = ETH_MTU;
 
@@ -1037,16 +1032,12 @@ uxen_net_read_event (void *_s)
         qemu_send_packet (&s->nic->nc, s->rx_buf, len);
     } while (1);
 
-
-    if ((s->notify_pending) && (!uxen_net_notify_complete (s, FALSE))) {
+    if (!_v4v_notify(&s->a))
         return;
-    }
-    memset (&s->notify_overlapped, 0, sizeof (OVERLAPPED));
-
-    gh_v4v_notify(&s->a, &s->notify_overlapped);
-
-    s->notify_pending = TRUE;
-
+    /* XXX: do we really want to run the tx queue here? If it's safe to send
+     * some more, surely our tx event would have fired? If we really do want to
+     * run the tx queue, why only if we managed to notify that we're ready to
+     * receive more? */
     uxen_net_run_tx_q(s);
     if (queue_len < MAX_QD_PACKETS)
         qemu_flush_queued_packets(&s->nic->nc);
@@ -1101,7 +1092,7 @@ uxen_net_cleanup (VLANClientState *nc)
     packet_free_list(&queue);
     packet_free_list(&free_list);
 
-    CloseHandle(&s->tx_event);
+    ioh_event_close(&s->tx_event);
 
     v4v_close (&s->a);
     free (s->rx_buf);
@@ -1119,26 +1110,11 @@ static NetClientInfo uxen_net_net_info = {
 
 
 static int
-have_v4v (void)
-{
-    v4v_context_t c = { 0 };
-
-    if (v4v_open (&c, 4096, NULL)) {
-        v4v_close (&c);
-        return 1;
-    }
-
-    return 0;
-}
-
-static int
 uxen_net_initfn (UXenPlatformDevice *dev)
 {
-    DWORD t;
     v4v_ring_id_t r;
-    v4v_mapring_values_t mr;
-    OVERLAPPED o = { 0 };
     int v4v_opened = 0;
+    int error;
     extern unsigned slirp_mru;
     uxen_net_t *s = DO_UPCAST (uxen_net_t, dev, dev);
     uint16_t mru;
@@ -1152,7 +1128,7 @@ uxen_net_initfn (UXenPlatformDevice *dev)
             break;
 #endif
 
-        if (!have_v4v ()) {
+        if (!v4v_have_v4v ()) {
             debug_printf("uxen_net_isa_initfn - no v4v detected on the host\n");
             break;
         }
@@ -1161,14 +1137,11 @@ uxen_net_initfn (UXenPlatformDevice *dev)
         if (!s->rx_buf)
             break;
 
-        s->a.flags = V4V_FLAG_OVERLAPPED;
-        memset (&o, 0, sizeof (o));
-
-        if (!v4v_open (&s->a, RING_SIZE, &o))
+        if (!v4v_open_sync(&s->a, RING_SIZE, &error)) {
+            debug_printf("%s: v4v_open failed (%x)\n",
+                         __FUNCTION__, error);
             break;
-
-        if (!GetOverlappedResult (s->a.v4v_handle, &o, &t, TRUE))
-            break;
+        }
 
         v4v_opened++;
 
@@ -1177,32 +1150,25 @@ uxen_net_initfn (UXenPlatformDevice *dev)
         r.addr.domain = V4V_DOMID_ANY;
         r.partner = vm_id;
 
-        memset (&o, 0, sizeof (o));
-
-        if (!v4v_bind (&s->a, &r, &o))
+        if (!v4v_bind_sync(&s->a, &r, &error))
+        {
+            debug_printf("%s: v4v_bind failed (%x)\n",
+                         __FUNCTION__, error);
             break;
+        }
 
-        if (!GetOverlappedResult (s->a.v4v_handle, &o, &t, TRUE))
+        s->ring = v4v_ring_map_sync(&s->a, &error);
+        if (!s->ring) {
+            debug_printf("%s: failed to map v4v ring (%x)\n",
+                         __FUNCTION__, error);
             break;
+        }
 
-        memset (&o, 0, sizeof (o));
-
-        mr.ring = NULL;
-        if (!v4v_map (&s->a, &mr, &o))
+        if (!v4v_init_tx_event(&s->a, &s->tx_event, &error)) {
+            debug_printf("%s: failed to create transmit event (%x)\n",
+                         __FUNCTION__, error);
             break;
-
-        if (!GetOverlappedResult (s->a.v4v_handle, &o, &t, TRUE))
-            break;
-
-        s->ring = mr.ring;
-        if (!s->ring)
-            break;
-
-        s->tx_event = CreateEvent(NULL, FALSE, FALSE, NULL);
-
-        if (!s->tx_event)
-            break;
-
+        }
 
         ioh_add_wait_object (&s->a.recv_event, uxen_net_read_event, s, NULL);
         ioh_add_wait_object (&s->tx_event, uxen_net_write_event, s, NULL);
