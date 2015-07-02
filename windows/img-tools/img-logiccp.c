@@ -254,8 +254,8 @@ typedef enum { /* actions are ordered from most to least desirable. */
 typedef struct ManifestEntry {
     ntfs_fs_t vol;
     Variable *var;
-    wchar_t *name;
-    wchar_t *host_name; /* set if different from guest name. */
+    wchar_t *name; /* guest name */
+    wchar_t *host_name; /* Always set post-rewire_phase. Used differently for hardlinks. */
     wchar_t *rewrite;
     size_t name_len;
     uint64_t offset;
@@ -799,7 +799,7 @@ HANDLE WINAPI OpenFileById(
     );
 
 static
-HANDLE open_file_from_id(HANDLE volume, uint64_t file_id, DWORD access)
+HANDLE open_file_by_id(HANDLE volume, uint64_t file_id, DWORD access)
 {
     HANDLE h;
     FILE_ID_DESCRIPTOR fid = {sizeof(fid), };
@@ -823,6 +823,28 @@ HANDLE open_file_from_id(HANDLE volume, uint64_t file_id, DWORD access)
     return h;
 }
 
+HANDLE open_file_by_name(const wchar_t* file_name)
+{
+    HANDLE h = CreateFileW(
+        file_name,
+        GENERIC_READ,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        NULL,
+        OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_BACKUP_SEMANTICS,
+        NULL);
+    if (h == INVALID_HANDLE_VALUE) {
+        DWORD win32_err = GetLastError();
+        if (win32_err == ERROR_FILE_NOT_FOUND || win32_err == ERROR_PATH_NOT_FOUND) {
+            // Not considered fatal
+            printf("failed to open %ls for copying, err=%d\n", file_name, (int)win32_err);
+        } else {
+            err(1, "failed to open %ls for copying, err=%d\n", file_name, (int)win32_err);
+        }
+    }
+    return h;
+}
+
 int stat_file(HANDLE volume, uint64_t file_id, uint64_t *file_size, uint64_t *offset,
         Action *action)
 {
@@ -831,7 +853,7 @@ int stat_file(HANDLE volume, uint64_t file_id, uint64_t *file_size, uint64_t *of
     RETRIEVAL_POINTERS_BUFFER retr;
     DWORD bytes;
 
-    HANDLE h = open_file_from_id(volume, file_id, FILE_READ_ATTRIBUTES);
+    HANDLE h = open_file_by_id(volume, file_id, FILE_READ_ATTRIBUTES);
     if (h == INVALID_HANDLE_VALUE || h == 0) {
         return -1;
     }
@@ -1606,6 +1628,7 @@ int hardlinks_phase(struct disk *disk, Manifest *man, wchar_t *hardlinks)
 
             if (CreateHardLinkW(bromiumlink, source, NULL)
                     || GetLastError() == ERROR_ALREADY_EXISTS) {
+                free(m->host_name); // Might have been set in rewire_phase
                 m->host_name = wcsdup(bromiumlink + 2); // will add rootdrive later
                 assert(m->host_name);
 
@@ -1667,6 +1690,8 @@ int rewire_phase(struct disk *disk, Manifest *man)
             path_join(fn, m->rewrite, L"");
             m->name = wcsdup(fn);
             printf("mapping [%S] =[%d]=>[%S]\n", m->host_name, m->action, m->name);
+        } else if (!m->host_name) {
+            m->host_name = wcsdup(m->name);
         }
     }
     LEAVE_PHASE();
@@ -1686,6 +1711,7 @@ int vm_links_phase_1(struct disk *disk, Manifest *man)
         if (last && m->link_id && is_same_file(m, last)) {
             /* We cannot link files that we moved to /boot on sysvol. */
             if (last->action != MAN_BOOT) {
+                free(m->host_name); // Might have been set in rewire_phase
                 m->host_name = last->name;
                 m->action = MAN_LINK;
                 ++q;
@@ -2003,7 +2029,7 @@ static DWORD WINAPI acl_files_thread(LPVOID lpParam)
 
         assert(m->file_id != 0);
 
-        h = open_file_from_id(m->var->volume, m->file_id, READ_CONTROL);
+        h = open_file_by_id(m->var->volume, m->file_id, READ_CONTROL);
         if (h == INVALID_HANDLE_VALUE || h == 0) {
             printf("Unable to open file %ls (err=%u)\n", m->name,
                     (int)GetLastError());
@@ -2224,10 +2250,13 @@ int copy_phase(struct disk *disk, Manifest *man)
             ManifestEntry *m = &man->entries[i];
             if (m->action == MAN_COPY || m->action == MAN_FORCE_COPY) {
                 assert(m->file_id);
-                h = open_file_from_id(m->var->volume, m->file_id, GENERIC_READ);
+                h = open_file_by_id(m->var->volume, m->file_id, GENERIC_READ);
                 if (h == INVALID_HANDLE_VALUE) {
-                    printf("failed to open %ls for copying!\n", m->name);
+                    printf("failed to open %ls by id for copying, retrying by name\n", m->name);
+                    wchar_t* filename = prefix(m->var, m->host_name);
+                    h = open_file_by_name(filename);
                 }
+
                 handles[j++] = h;
             }
         }
@@ -2241,8 +2270,7 @@ int copy_phase(struct disk *disk, Manifest *man)
                        that behavior changes, remove the log statement.
                     */
                     printf("Force-copying [%ls] of size [%"PRIu64"]\n",
-                        man->entries[i].host_name ?
-                            man->entries[i].host_name : man->entries[i].name,
+                        man->entries[i].host_name,
                         man->entries[i].file_size);
                 }
                 HANDLE h = handles[j++];
@@ -2253,8 +2281,6 @@ int copy_phase(struct disk *disk, Manifest *man)
                         total_size_force_copied += m->file_size;
                     }
                     ++q;
-                } else {
-                    err(1, "could not open %ls\n", m->name);
                 }
             }
         }
@@ -2342,6 +2368,14 @@ int register_with_cow(
     }
 
     printf("Successfully sent start message to CoW filter");
+
+    // Also register to be allowed to read exclusively-opened files
+    HANDLE cow_port;
+    hr = FilterConnectCommunicationPort(L"\\CoWAllowReadPort", 0, NULL, 0,
+        NULL, &cow_port);
+    if (FAILED(hr)) {
+        printf("Unable to connect to CoWAllowReadPort : [%d]\n", (int)hr);
+    }
 
 cleanup:
 
@@ -2450,8 +2484,7 @@ int usn_phase(
         } else if (man->entries[i].file_id < he->file_id) {
             ++i;
         } else {
-            wchar_t *filename = man->entries[i].host_name ?
-                man->entries[i].host_name : man->entries[i].name;
+            wchar_t *filename = man->entries[i].host_name;
             printf("File [%ls] is changed! Will examine it.\n",
                 filename);
 
@@ -2762,8 +2795,7 @@ next:
         } else if (man->entries[i].file_id < he->file_id) {
             ++i;
         } else {
-            wchar_t *filename = man->entries[i].host_name ?
-                man->entries[i].host_name : man->entries[i].name;
+            wchar_t *filename = man->entries[i].host_name;
             printf("File [%ls] is open! Will examine it.\n",
                 filename);
 
