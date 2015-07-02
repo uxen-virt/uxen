@@ -61,7 +61,12 @@ static inline int valid_name(const char *fn)
 
 static inline int list_file(const Options *opt, const char *fn, struct stat *st)
 {
-    assert(valid_name(fn));
+    if (!valid_name(fn)) {
+        fprintf(stderr,
+                "warning: ignoring file '%s' because its name isn't valid.\n",
+                fn);
+        return 1;
+    }
 
     int type = st->st_mode & 0770000;
     if (type == S_IFCHR || type == S_IFBLK) {
@@ -90,7 +95,13 @@ static inline int list_file(const Options *opt, const char *fn, struct stat *st)
         if ((len = readlink(fn, ln, sizeof(ln))) >= 0) {
             ln[len] = '\0';
 
-            assert(valid_name(ln));
+            if (!valid_name(ln)) {
+                fprintf(stderr,
+                        "warning: ignoring linked file '%s' (by '%s')"
+                        " because its name isn't valid.\n",
+                        ln, fn);
+                return 1;
+            }
 
             if (ln[0] == '/') {
                 strcpy(link, ln);
