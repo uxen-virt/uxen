@@ -4999,6 +4999,10 @@ static int xenmem_add_to_physmap_once(
                 return -ENOMEM;
             }
 #endif  /* __UXEN__ */
+            if (idx == INVALID_MFN) {
+                put_gfn(d, gfn);
+                return -EINVAL;
+            }
             if ( !get_page_from_pagenr(idx, d) )
                 break;
             mfn = idx;
