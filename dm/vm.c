@@ -613,7 +613,8 @@ vmrun_thread(void *dummy)
     do {
         ret = uxen_run(vcpu);
     } while (ret < 0 && (errno == EAGAIN || errno == EINTR) &&
-             (run_mode == RUNNING_VM || run_mode == PAUSE_VM));
+             (run_mode == RUNNING_VM || run_mode == PAUSE_VM ||
+              run_mode == SUSPEND_VM));
 
     r = running_vcpus;
     do {
