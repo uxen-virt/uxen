@@ -345,7 +345,8 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
             ret = 0;
             goto out_reset_current;
         }
-        if (v->paused_for_shutdown && d->shutdown_code != SHUTDOWN_suspend) {
+        if (v->paused_for_shutdown && d->shutdown_code != SHUTDOWN_suspend &&
+            d->shutdown_code != -1) {
             vci->vci_run_mode = VCI_RUN_MODE_SHUTDOWN;
             ret = 0;
             goto out_reset_current;
