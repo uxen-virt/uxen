@@ -846,6 +846,9 @@ void __domain_crash(struct domain *d)
         printk("Domain %d (vcpu#%d) crashed on cpu#%d:\n",
                d->domain_id, current->vcpu_id, smp_processor_id());
         show_execution_state(guest_cpu_user_regs());
+#ifdef run_in_exception_handler
+        run_in_exception_handler(show_stack);
+#endif
     }
     else
     {
