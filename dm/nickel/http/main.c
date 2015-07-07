@@ -919,7 +919,8 @@ static int start_407_message(struct http_ctx *hp)
 {
     int ret = 0;
 
-    assert(hp->cx);
+    if (!hp->cx)
+        goto out_close;
     hp->flags |= HF_407_MESSAGE;
     if (!hp->cx->in || IS_TUNNEL(hp) || (hp->flags & HF_TLS))
         goto out_close;
