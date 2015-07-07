@@ -168,6 +168,8 @@ void uxen_exec_dom0_start(void);
 void uxen_exec_dom0_end(void);
 
 /* uxen_call.c */
+intptr_t uxen_hypercall(struct uxen_hypercall_desc *, int,
+                        struct vm_info_shared *, void *, uint32_t);
 intptr_t uxen_dom0_hypercall(struct vm_info_shared *, void *,
                              uint32_t, uint64_t, ...);
 #define SNOOP_USER 0

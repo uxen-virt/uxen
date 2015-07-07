@@ -34,6 +34,7 @@
 int uxen_verbose = 0;
 
 DEFINE_PER_CPU(uintptr_t, stack_top);
+DEFINE_PER_CPU(struct uxen_hypercall_desc *, hypercall_args);
 
 static void _cpu_irq_disable(void);
 static void _cpu_irq_enable(void);
@@ -638,6 +639,8 @@ do_hypercall(struct uxen_hypercall_desc *uhd)
     if (uhd->uhd_op >= NR_hypercalls ||
 	uxen_hypercall_table[uhd->uhd_op] == NULL)
 	return -ENOSYS;
+
+    this_cpu(hypercall_args) = uhd;
 
     return uxen_hypercall_table[uhd->uhd_op](uhd->uhd_arg[0], uhd->uhd_arg[1],
                                              uhd->uhd_arg[2], uhd->uhd_arg[3],

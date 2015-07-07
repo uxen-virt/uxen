@@ -322,21 +322,6 @@ init_fd_assoc_user_mappings(const char *ident, struct fd_assoc *fda)
         };                                                      \
     } while (0)
 
-#define UXEN_DOM0_VM_CALL(name, fn, arg_type, ...) do {                 \
-        CHECK_MODE(MODE_INITIALIZED, name);                             \
-        CHECK_INPUT_BUFFER(name, arg_type);                             \
-        map_pfn_array_pool_fill();                                      \
-        uxen_exec_dom0_start();                                         \
-        uxen_call(ret =, -EINVAL, uxen_snoop_hypercall(in_buf),         \
-                  fn, (arg_type *)in_buf, ##__VA_ARGS__);               \
-        uxen_exec_dom0_end();                                           \
-        if (ret < 0) {                                                  \
-            ret = uxen_translate_xen_errno(ret);                        \
-            fail_msg("%s: %s failed: %d", name, #fn, ret);              \
-            goto out;                                                   \
-        }                                                               \
-    } while (0)
-
 
 int
 uxen_ioctl(u_long cmd, struct fd_assoc *fda, struct vm_info *vmi,
@@ -409,18 +394,23 @@ uxen_ioctl(u_long cmd, struct fd_assoc *fda, struct vm_info *vmi,
         OP_CALL("UXENKEYHANDLER", uxen_op_keyhandler, char,
                 UXEN_MAX_KEYHANDLER_KEYS);
         break;
-    case UXENHYPERCALL:
-        UXEN_DOM0_VM_CALL("UXENHYPERCALL", uxen_do_hypercall,
-                          struct uxen_hypercall_desc,
-                          fda->vmi_owner ? &vmi->vmi_shared : NULL,
-                          &fda->user_mappings,
-                          fda->admin_access ? UXEN_ADMIN_HYPERCALL : 0);
-        {
-            struct uxen_hypercall_desc *uhd =
-                (struct uxen_hypercall_desc *)in_buf;
-            uhd->uhd_op = ret;
-            ret = 0;
+    case UXENHYPERCALL: {
+        struct uxen_hypercall_desc *uhd =
+            (struct uxen_hypercall_desc *)in_buf;
+        CHECK_MODE(MODE_INITIALIZED, "UXENHYPERCALL");
+        CHECK_INPUT_BUFFER("UXENHYPERCALL", struct uxen_hypercall_desc);
+        ret = uxen_hypercall(uhd, SNOOP_USER,
+                             fda->vmi_owner ? &vmi->vmi_shared : NULL,
+                             &fda->user_mappings,
+                             fda->admin_access ? UXEN_ADMIN_HYPERCALL : 0);
+        if (ret < 0) {
+            ret = uxen_translate_xen_errno(ret);
+            fail_msg("UXENHYPERCALL: uxen_do_hypercall failed: %d", ret);
+            goto out;
         }
+        uhd->uhd_op = ret;
+        ret = 0;
+    }
         break;
     case UXENMALLOC:
         ret = init_fd_assoc_user_mappings("UXENMALLOC", fda);
@@ -829,6 +819,31 @@ uxen_exec_dom0_end(void)
 }
 
 intptr_t
+uxen_hypercall(struct uxen_hypercall_desc *uhd, int snoop_mode,
+               struct vm_info_shared *vmis, void *user_access_opaque,
+               uint32_t privileged)
+{
+    intptr_t ret = 0;
+
+    while (/* CONSTCOND */ 1) {
+        map_pfn_array_pool_fill();
+
+        uxen_exec_dom0_start();
+        uxen_call(ret =, -EINVAL, _uxen_snoop_hypercall(uhd, snoop_mode),
+                  uxen_do_hypercall, uhd, vmis, user_access_opaque,
+                  privileged);
+        uxen_exec_dom0_end();
+
+        if (ret == -ECONTINUATION)
+            continue;
+
+        break;
+    }
+
+    return ret;
+}
+
+intptr_t
 uxen_dom0_hypercall(struct vm_info_shared *vmis, void *user_access_opaque,
                     uint32_t privileged, uint64_t op, ...)
 {
@@ -867,12 +882,8 @@ uxen_dom0_hypercall(struct vm_info_shared *vmis, void *user_access_opaque,
         uhd.uhd_arg[idx] = va_arg(ap, uintptr_t);
     va_end(ap);
 
-    uxen_exec_dom0_start();
-    uxen_call(ret =, -EFAULT, _uxen_snoop_hypercall(&uhd, snoop_mode),
-              uxen_do_hypercall, &uhd, vmis, user_access_opaque,
-              privileged);
-    ret = uxen_translate_xen_errno(ret);
-    uxen_exec_dom0_end();
+    ret = uxen_hypercall(&uhd, snoop_mode, vmis, user_access_opaque,
+                         privileged);
 
     return ret;
 }

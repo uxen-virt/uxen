@@ -22,4 +22,7 @@
 #define EMSGSIZE        90      /* Message too long */ /* XXX osx 40 */
 #define ECONNREFUSED    111     /* Connection refused */ /* XXX osx 61 */
 
+#define ECONTINUATION   129     /* pseudo error code: retry after
+                                 * scheduling */
+
 #endif

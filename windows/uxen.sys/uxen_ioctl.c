@@ -387,19 +387,15 @@ uxen_ioctl(__inout DEVICE_OBJECT *DeviceObject, __inout IRP *pIRP)
         UXEN_CHECK_MODE(UXEN_MODE_INITIALIZED, "UXENHYPERCALL");
         UXEN_CHECK_INPUT_BUFFER("UXENHYPERCALL", struct uxen_hypercall_desc);
         UXEN_CHECK_OUTPUT_BUFFER("UXENHYPERCALL", struct uxen_hypercall_desc);
-        memcache_ensure_space();
         KeAcquireGuardedMutex(&fda->user_malloc_mutex);
-        uxen_exec_dom0_start();
-        uxen_call(ret =, -EINVAL, uxen_snoop_hypercall(InputBuffer),
-                  uxen_do_hypercall, uhd,
-                  fda->vmi_owner ? &vmi->vmi_shared : NULL,
-                  &fda->user_mappings,
-                  fda->admin_access ? UXEN_ADMIN_HYPERCALL : 0);
+        ret = uxen_hypercall(uhd, SNOOP_USER,
+                             fda->vmi_owner ? &vmi->vmi_shared : NULL,
+                             &fda->user_mappings,
+                             fda->admin_access ? UXEN_ADMIN_HYPERCALL : 0);
         if (ret < 0)
             IOCTL_FAILURE(UXEN_NTSTATUS_FROM_ERRNO(-ret),
                           "uxen_ioctl(UXENHYPERCALL %d) fail: %d",
                           uhd->uhd_op, -ret);
-        uxen_exec_dom0_end();
         KeReleaseGuardedMutex(&fda->user_malloc_mutex);
         uhd->uhd_op = ret;
     }

@@ -49,6 +49,12 @@ extern "C" {
 #include <uxen_def.h>
 #include <uxen_ioctl.h>
 
+#undef EAGAIN
+#undef ENOSYS
+#undef EMSGSIZE
+#undef ECONNREFUSED
+#include <xen/errno.h>
+
 #include "events.h"
 #include "uxen_debug.h"
 #include "xnu_symbols.h"
@@ -214,6 +220,8 @@ void uxen_lock(void);
 void uxen_unlock(void);
 void uxen_exec_dom0_start(void);
 void uxen_exec_dom0_end(void);
+intptr_t uxen_hypercall(struct uxen_hypercall_desc *, int,
+                        struct vm_info_shared *, void *, uint32_t);
 intptr_t uxen_dom0_hypercall(struct vm_info_shared *, void *,
                              uint32_t, uint64_t, ...);
 #define SNOOP_USER 0

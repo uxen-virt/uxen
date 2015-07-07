@@ -34,6 +34,32 @@ typedef uint32_t mfn_t;
 #endif
 
 intptr_t
+uxen_hypercall(struct uxen_hypercall_desc *uhd, int snoop_mode,
+               struct vm_info_shared *vmis, void *user_access_opaque,
+               uint32_t privileged)
+{
+    intptr_t ret = 0;
+
+    while (/* CONSTCOND */ 1) {
+        if (KeGetCurrentIrql() < DISPATCH_LEVEL) 
+            memcache_ensure_space();
+
+        uxen_exec_dom0_start();
+        uxen_call(ret =, -EINVAL, _uxen_snoop_hypercall(uhd, snoop_mode),
+                  uxen_do_hypercall, uhd, vmis, user_access_opaque,
+                  privileged);
+        uxen_exec_dom0_end();
+
+        if (ret == -ECONTINUATION)
+            continue;
+
+        break;
+    }
+
+    return ret;
+}
+
+intptr_t
 uxen_dom0_hypercall(struct vm_info_shared *vmis, void *user_access_opaque,
                     uint32_t privileged, uint64_t op, ...)
 {
@@ -75,15 +101,9 @@ uxen_dom0_hypercall(struct vm_info_shared *vmis, void *user_access_opaque,
         uhd.uhd_arg[idx] = va_arg(ap, uintptr_t);
     va_end(ap);
 
-    if (KeGetCurrentIrql() < DISPATCH_LEVEL) 
-        memcache_ensure_space();
-
-    uxen_exec_dom0_start();
-    uxen_call(ret =, -EFAULT, _uxen_snoop_hypercall(&uhd, snoop_mode),
-              uxen_do_hypercall, &uhd, vmis, user_access_opaque,
-              privileged);
+    ret = uxen_hypercall(&uhd, snoop_mode, vmis, user_access_opaque,
+                         privileged);
     ret = -ret;
-    uxen_exec_dom0_end();
 
     return ret;
 }

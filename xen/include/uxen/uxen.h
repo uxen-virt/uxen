@@ -76,4 +76,6 @@ DECLARE_PER_CPU(uintptr_t, stack_top);
     } while (0)
 #define restore_stack_top(x) this_cpu(stack_top) = (x)
 
+DECLARE_PER_CPU(struct uxen_hypercall_desc *, hypercall_args);
+
 #endif

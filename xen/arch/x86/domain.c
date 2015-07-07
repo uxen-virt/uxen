@@ -1854,7 +1854,6 @@ void sync_vcpu_execstate(struct vcpu *v)
     flush_tlb_mask(v->vcpu_dirty_cpumask);
 }
 
-#ifndef __UXEN__
 #define next_arg(fmt, args) ({                                              \
     unsigned long __arg;                                                    \
     switch ( *(fmt)++ )                                                     \
@@ -1866,7 +1865,6 @@ void sync_vcpu_execstate(struct vcpu *v)
     }                                                                       \
     __arg;                                                                  \
 })
-#endif  /* __UXEN__ */
 
 void hypercall_cancel_continuation(void)
 {
@@ -1890,11 +1888,28 @@ void hypercall_cancel_continuation(void)
 #endif  /* __UXEN__ */
 }
 
+static void
+_hypercall_continuation(unsigned int op, const char *format, va_list args)
+{
+    struct uxen_hypercall_desc *uhd = this_cpu(hypercall_args);
+    const char *p = format;
+    unsigned long arg;
+    unsigned int i;
+
+    uhd->uhd_op = op;
+
+    for (i = 0; *p != '\0'; i++) {
+        arg = next_arg(p, args);
+        uhd->uhd_arg[i] = arg;
+    }
+}
+
 unsigned long hypercall_create_continuation(
     unsigned int op, const char *format, ...)
 {
 #ifndef __UXEN__
     struct mc_state *mcs = &current->mc_state;
+#endif  /* __UXEN__ */
     struct cpu_user_regs *regs;
     const char *p = format;
     unsigned long arg;
@@ -1903,6 +1918,17 @@ unsigned long hypercall_create_continuation(
 
     va_start(args, format);
 
+#ifdef __UXEN__
+    if (IS_HOST(current->domain)) {
+        _hypercall_continuation(op, format, args);
+
+        va_end(args);
+
+        return -ECONTINUATION;
+    }
+#endif  /* __UXEN__ */
+
+#ifndef __UXEN__
     if ( test_bit(_MCSF_in_multicall, &mcs->flags) )
     {
         __set_bit(_MCSF_call_preempted, &mcs->flags);
@@ -1916,19 +1942,26 @@ unsigned long hypercall_create_continuation(
         }
     }
     else
+#endif  /* __UXEN__ */
     {
         regs       = guest_cpu_user_regs();
         regs->eax  = op;
 
+#ifndef __UXEN__
         /* Ensure the hypercall trap instruction is re-executed. */
         if ( !is_hvm_vcpu(current) )
             regs->eip -= 2;  /* re-execute 'syscall' / 'int $xx' */
         else
+#endif  /* __UXEN__ */
             current->arch.hvm_vcpu.hcall_preempted = 1;
 
 #ifdef __x86_64__
+#ifndef __UXEN__
         if ( !is_hvm_vcpu(current) ?
              !is_pv_32on64_vcpu(current) :
+#else  /* __UXEN__ */
+        if (
+#endif  /* __UXEN__ */
              (hvm_guest_x86_mode(current) == 8) )
         {
             for ( i = 0; *p != '\0'; i++ )
@@ -1970,9 +2003,6 @@ unsigned long hypercall_create_continuation(
     va_end(args);
 
     return op;
-#else   /* __UXEN__ */
-    BUG(); return 0;
-#endif  /* __UXEN__ */
 }
 
 #ifndef __UXEN__
