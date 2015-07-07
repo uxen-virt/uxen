@@ -19,7 +19,7 @@
 #define	ENOSPC		28	/* No space left on device */
 #define	ERANGE		34	/* Math result not representable */
 #define	ENOSYS		40	/* Function not implemented */ /* XXX osx 78 */
-#define EMSGSIZE        90      /* Message too long */
-#define ECONNREFUSED    111     /* Connection refused */  
+#define EMSGSIZE        90      /* Message too long */ /* XXX osx 40 */
+#define ECONNREFUSED    111     /* Connection refused */ /* XXX osx 61 */
 
 #endif
