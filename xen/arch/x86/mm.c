@@ -4990,6 +4990,10 @@ static int xenmem_add_to_physmap_once(
             p2m_type_t p2mt;
             gfn = xatp->idx;
 
+            if (hypercall_needs_checks()) {
+                put_gfn(d, gfn);
+                return -EAGAIN;
+            }
             idx = mfn_x(get_gfn_unshare(d, xatp->idx, &p2mt));
 #ifndef __UXEN__
             /* If the page is still shared, exit early */

@@ -730,6 +730,13 @@ void hypercall_cancel_continuation(void);
 #define hypercall_preempt_check() 0
 #endif  /* __UXEN__ */
 
+#define check_free_pages_needed()                                   \
+    (_uxen_info.ui_free_pages[smp_processor_id()].free_count < 20)
+#define check_memcache_needed()                 \
+    (_uxen_info.ui_memcache_needs_check)
+#define hypercall_needs_checks()                    \
+    (check_free_pages_needed() || check_memcache_needed())
+
 extern struct domain *domain_list;
 
 /* Caller must hold the domlist_read_lock or domlist_update_lock. */

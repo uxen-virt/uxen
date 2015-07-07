@@ -352,12 +352,12 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
             ret = 0;
             goto out_reset_current;
         }
-        if (_uxen_info.ui_free_pages[smp_processor_id()].free_count < 20) {
+        if (check_free_pages_needed()) {
             vci->vci_run_mode = VCI_RUN_MODE_FREEPAGE_CHECK;
             ret = 0;
             goto out_reset_current;
         }
-        if (_uxen_info.ui_memcache_needs_check &&
+        if (check_memcache_needed() &&
             uxen_info->ui_memcache_check &&
             uxen_info->ui_memcache_check()) {
             vci->vci_run_mode = VCI_RUN_MODE_MEMCACHE_CHECK;
