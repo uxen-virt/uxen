@@ -7,11 +7,16 @@
 #ifndef _OSX_H_
 #define _OSX_H_
 
-#include <err.h>
 #include <inttypes.h>
 #include <stdlib.h>
 #include <stddef.h>
+
+#define ffs strffs
+#define fls strfls
 #include <string.h>
+#undef ffs
+#undef fls
+#include <err.h>
 
 #include "queue.h"
 #include "typedef.h"

@@ -4,7 +4,6 @@
 
 #include "config.h"
 #include "opts.h"
-#include "os.h"
 
 #define QEMU_VERSION "uXen"
 

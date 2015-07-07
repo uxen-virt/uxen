@@ -4,10 +4,8 @@
  * SPDX-License-Identifier: ISC
  */
 
-#import <AppKit/AppKit.h>
-
-// import this so we can use the same debug_printf as the rest of the code
 #include "config.h"
+#import <AppKit/AppKit.h>
 
 #include "qemu_glue.h"
 #include "timer.h"

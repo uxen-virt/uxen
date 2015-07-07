@@ -4,12 +4,11 @@
  * SPDX-License-Identifier: ISC
  */
 
+#include "config.h"
 #import <AppKit/AppKit.h>
 
 #include <sys/time.h>
 #include <sys/posix_shm.h>
-
-#include "config.h"
 
 #include "console.h"
 #include "dm.h"

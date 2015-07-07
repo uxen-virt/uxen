@@ -4,15 +4,15 @@
  * SPDX-License-Identifier: ISC
  */
 
+#include "config.h"
+
 #import <Carbon/Carbon.h>
-#import <AppKit/AppKit.h>
 #include <pthread.h>
 #include <libgen.h>
 #include <libproc.h>
 
 #import "osx-app-delegate.h"
 
-#include "config.h"
 #include "dm.h"
 #include "vm.h"
 

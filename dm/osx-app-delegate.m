@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: ISC
  */
 
+#include "config.h"
+
 #import "osx-app-delegate.h"
 #import "osx-vm-view.h"
 
-// import this so we can use the same debug_printf as the rest of the code
-#include "config.h"
 #include "vm.h"
 
 @implementation UXENAppDelegate

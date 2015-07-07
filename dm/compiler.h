@@ -130,7 +130,7 @@
 #endif
 
 #define inline        __inline__
-#define noinline      __attribute__((noinline))
+#define __noinline__  __attribute__((noinline))
 
 #define BUILD_BUG_ON(condition) ((void)sizeof(struct { int:-!!(condition); }))
 
