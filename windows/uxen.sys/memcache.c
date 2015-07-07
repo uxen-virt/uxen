@@ -314,7 +314,6 @@ memcache_enter(mc_mfn_t mfn)
     }
 
 #ifdef MEMCACHE_MAP_FULL
-    uxen_info->ui_memcache_needs_check++;
     while (memcache_next_idx != MEMCACHE_MAX_IDX) {
 	idx = memcache_next_idx;
 	mc = memcaches[idx];
@@ -330,6 +329,8 @@ memcache_enter(mc_mfn_t mfn)
 		~(1ULL << offset);
 	    offset += mc->md_first_free_offset << MEMCACHE_MD_FREE_SHIFT;
 	    memcache_space--;
+            if (memcache_space < 2048)
+                uxen_info->ui_memcache_needs_check++;
 	    if (memcache_map_mfn(mc->md_va, offset << PAGE_SHIFT, mfn))
 		goto out;
 	    MemoryBarrier();
