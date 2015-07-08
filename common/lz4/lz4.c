@@ -79,7 +79,14 @@
 #else
 #  if defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)   /* C99 */
 #    if defined(__GNUC__) || defined(__clang__)
-#      define FORCE_INLINE static inline __attribute__((always_inline))
+
+#      ifdef __UXEN__
+#        define FORCE_INLINE static always_inline
+#      else
+#        define FORCE_INLINE static inline __attribute__((always_inline))
+#      endif
+
+
 #    else
 #      define FORCE_INLINE static inline
 #    endif
@@ -95,25 +102,38 @@
 #  define expect(expr,value)    (expr)
 #endif
 
-#define likely(expr)     expect((expr) != 0, 1)
-#define unlikely(expr)   expect((expr) != 0, 0)
-
 
 /**************************************
 *  Memory routines
 **************************************/
+#ifndef __UXEN__
 #include <stdlib.h>   /* malloc, calloc, free */
 #define ALLOCATOR(n,s) calloc(n,s)
 #define FREEMEM        free
 #include <string.h>   /* memset, memcpy */
+#else   /* __UXEN__ */
+#include <asm/byteorder.h>
+#include <asm/string.h>
+#endif  /* __UXEN__ */
 #define MEM_INIT       memset
+
+#ifndef likely
+#define likely(expr)     expect((expr) != 0, 1)
+#endif
+#ifndef unlikely
+#define unlikely(expr)   expect((expr) != 0, 0)
+#endif
 
 
 /**************************************
 *  Basic Types
 **************************************/
 #if defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)   /* C99 */
+#ifndef __UXEN__
 # include <stdint.h>
+#else   /* __UXEN__ */
+# include <xen/types.h>
+#endif  /* __UXEN__ */
   typedef  uint8_t BYTE;
   typedef uint16_t U16;
   typedef uint32_t U32;
@@ -223,6 +243,9 @@ static void LZ4_wildCopy(void* dstPtr, const void* srcPtr, void* dstEnd)
 #define MFLIMIT (COPYLENGTH+MINMATCH)
 static const int LZ4_minLength = (MFLIMIT+1);
 
+#undef KB
+#undef MB
+#undef GB
 #define KB *(1 <<10)
 #define MB *(1 <<20)
 #define GB *(1U<<30)
@@ -700,6 +723,7 @@ int LZ4_compress_default(const char* source, char* dest, int inputSize, int maxO
 }
 
 
+#ifndef __UXEN__
 /* hidden debug function */
 /* strangely enough, gcc generates faster code when this function is uncommented, even if unused */
 int LZ4_compress_fast_force(const char* source, char* dest, int inputSize, int maxOutputSize, int acceleration)
@@ -713,12 +737,14 @@ int LZ4_compress_fast_force(const char* source, char* dest, int inputSize, int m
     else
         return LZ4_compress_generic(&ctx, source, dest, inputSize, maxOutputSize, limitedOutput, LZ4_64bits() ? byU32 : byPtr, noDict, noDictIssue, acceleration);
 }
+#endif /* __UXEN__ */
 
 
 /********************************
 *  destSize variant
 ********************************/
 
+#ifndef __UXEN__
 static int LZ4_compress_destSize_generic(
                        void* const ctx,
                  const char* const src,
@@ -925,13 +951,14 @@ int LZ4_compress_destSize(const char* src, char* dst, int* srcSizePtr, int targe
 #endif
     return result;
 }
-
+#endif /* __UXEN__ */
 
 
 /********************************
 *  Streaming functions
 ********************************/
 
+#ifndef __UXEN__
 LZ4_stream_t* LZ4_createStream(void)
 {
     LZ4_stream_t* lz4s = (LZ4_stream_t*)ALLOCATOR(8, LZ4_STREAMSIZE_U64);
@@ -939,12 +966,14 @@ LZ4_stream_t* LZ4_createStream(void)
     LZ4_resetStream(lz4s);
     return lz4s;
 }
+#endif /* __UXEN__ */
 
 void LZ4_resetStream (LZ4_stream_t* LZ4_stream)
 {
     MEM_INIT(LZ4_stream, 0, sizeof(LZ4_stream_t));
 }
 
+#ifndef __UXEN__
 int LZ4_freeStream (LZ4_stream_t* LZ4_stream)
 {
     FREEMEM(LZ4_stream);
@@ -1095,6 +1124,7 @@ int LZ4_saveDict (LZ4_stream_t* LZ4_dict, char* safeBuffer, int dictSize)
 
     return dictSize;
 }
+#endif  /* __UXEN__ */
 
 
 
@@ -1301,6 +1331,7 @@ int LZ4_decompress_fast(const char* source, char* dest, int originalSize)
 }
 
 
+#ifndef __UXEN__
 /* streaming decompression functions */
 
 typedef struct
@@ -1409,6 +1440,7 @@ int LZ4_decompress_fast_continue (LZ4_streamDecode_t* LZ4_streamDecode, const ch
 
     return result;
 }
+#endif  /* __UXEN__ */
 
 
 /*
@@ -1453,11 +1485,13 @@ int LZ4_decompress_safe_forceExtDict(const char* source, char* dest, int compres
 ***************************************************/
 /* obsolete compression functions */
 int LZ4_compress_limitedOutput(const char* source, char* dest, int inputSize, int maxOutputSize) { return LZ4_compress_default(source, dest, inputSize, maxOutputSize); }
+#ifndef __UXEN__
 int LZ4_compress(const char* source, char* dest, int inputSize) { return LZ4_compress_default(source, dest, inputSize, LZ4_compressBound(inputSize)); }
 int LZ4_compress_limitedOutput_withState (void* state, const char* src, char* dst, int srcSize, int dstSize) { return LZ4_compress_fast_extState(state, src, dst, srcSize, dstSize, 1); }
 int LZ4_compress_withState (void* state, const char* src, char* dst, int srcSize) { return LZ4_compress_fast_extState(state, src, dst, srcSize, LZ4_compressBound(srcSize), 1); }
 int LZ4_compress_limitedOutput_continue (LZ4_stream_t* LZ4_stream, const char* src, char* dst, int srcSize, int maxDstSize) { return LZ4_compress_fast_continue(LZ4_stream, src, dst, srcSize, maxDstSize, 1); }
 int LZ4_compress_continue (LZ4_stream_t* LZ4_stream, const char* source, char* dest, int inputSize) { return LZ4_compress_fast_continue(LZ4_stream, source, dest, inputSize, LZ4_compressBound(inputSize), 1); }
+#endif /* __UXEN__ */
 
 /*
 These function names are deprecated and should no longer be used.
@@ -1469,6 +1503,7 @@ int LZ4_uncompress (const char* source, char* dest, int outputSize) { return LZ4
 int LZ4_uncompress_unknownOutputSize (const char* source, char* dest, int isize, int maxOutputSize) { return LZ4_decompress_safe(source, dest, isize, maxOutputSize); }
 
 
+#ifndef __UXEN__
 /* Obsolete Streaming functions */
 
 int LZ4_sizeofStreamState() { return LZ4_STREAMSIZE; }
@@ -1511,6 +1546,7 @@ int LZ4_decompress_fast_withPrefix64k(const char* source, char* dest, int origin
 {
     return LZ4_decompress_generic(source, dest, 0, originalSize, endOnOutputSize, full, 0, withPrefix64k, (BYTE*)dest - 64 KB, NULL, 64 KB);
 }
+#endif /* __UXEN__ */
 
 #endif   /* LZ4_COMMONDEFS_ONLY */
 
