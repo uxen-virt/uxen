@@ -101,10 +101,8 @@ ps2_mouse_event(int x, int y, int dz, int flags)
 
     input_event->type = MOUSE_INPUT_EVENT;
     if (input_mouse_is_absolute()) {
-        input_event->x = x * 0x7fff /
-                         (ds_get_width(display_state) - 1);
-        input_event->y = y * 0x7fff /
-                         (ds_get_height(display_state) - 1);
+        assert(0);
+        input_event->x = input_event->y = 0;
     } else {
         input_event->x = x - mouse_x;
         input_event->y = y - mouse_y;

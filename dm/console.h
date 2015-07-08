@@ -9,9 +9,6 @@
 
 #include <stdint.h>
 
-#define DISPLAY_REFRESH_FPS_DEFAULT 31
-extern int display_refresh_period;
-
 #define MOUSE_EVENT_LBUTTON 0x01
 #define MOUSE_EVENT_RBUTTON 0x02
 #define MOUSE_EVENT_MBUTTON 0x04
@@ -27,6 +24,8 @@ struct PixelFormat {
 };
 typedef struct PixelFormat PixelFormat;
 
+typedef unsigned long console_ch_t;
+
 #define DISPLAYSURFACE_VRAM 0x1
 
 struct display_surface {
@@ -38,20 +37,29 @@ struct display_surface {
     void (*unlock)(struct display_surface *);
 };
 
-struct display_surface *create_displaysurface(int width, int height);
-struct display_surface *resize_displaysurface(struct display_surface *surface,
+struct display_state {
+    struct display_surface *surface;
+    critical_section resize_lock;
+    TAILQ_ENTRY(display_state) link;
+    struct gui_state *gui;
+    void (*hw_update)(void *);
+    void (*hw_invalidate)(void *);
+    void (*hw_text_update)(void *, console_ch_t *);
+    void *hw;
+};
+TAILQ_HEAD(display_list, display_state);
+
+struct display_surface *create_displaysurface(struct display_state *ds,
                                               int width, int height);
-void free_displaysurface(struct display_surface *surface);
-struct display_surface *create_vram_displaysurface(int width, int height,
+struct display_surface *resize_displaysurface(struct display_state *ds,
+                                              struct display_surface *surface,
+                                              int width, int height);
+void free_displaysurface(struct display_state *ds, struct display_surface *surface);
+struct display_surface *create_vram_displaysurface(struct display_state *ds,
+                                                   int width, int height,
                                                    int depth, int linesize,
                                                    void *vram_ptr,
                                                    unsigned int vram_offset);
-
-struct display_state {
-    struct display_surface *surface;
-    struct Timer *gui_timer;
-    critical_section resize_lock;
-};
 
 struct vram_desc;
 
@@ -135,7 +143,6 @@ static inline int ds_get_bits_per_pixel(struct display_state *ds)
     return bpp;
 }
 
-typedef unsigned long console_ch_t;
 static inline void console_write_ch(console_ch_t *dest, uint32_t ch)
 {
     if (!(ch & 0xff))
@@ -148,7 +155,8 @@ struct display_state *graphic_console_init(void (*update)(void *),
                                            void (*text_update)(void *, console_ch_t *),
                                            void *opaque);
 
-void vga_hw_update(void);
+void vga_hw_update(struct display_state *ds);
+void vga_hw_invalidate(struct display_state *ds);
 
 void console_resize(struct display_state *ds, int width, int height);
 void console_resize_from(struct display_state *ds, int width, int height,
@@ -161,7 +169,7 @@ void console_display_start(void);
 void console_display_exit(void);
 
 void do_dpy_trigger_refresh(void *opaque);
-void do_dpy_setup_refresh(struct display_state *ds);
+void do_dpy_setup_refresh(void);
 
 enum { FORWARD_CONTROL_KEYS = 1, };
 extern uint32_t forwarded_keys;
@@ -177,16 +185,18 @@ struct gui_info {
     const char *name;
     size_t size;
 
-    int (*init)(struct gui_state *s, char *optstr);
-    void (*exit)(struct gui_state *s);
+    int (*init)(char *optstr);
+    void (*exit)(void);
+    int (*create)(struct gui_state *s, struct display_state *ds);
+    void (*destroy)(struct gui_state *s);
     void (*start)(struct gui_state *s);
     struct display_surface *(*create_surface)(struct gui_state *s,
-                                      int width, int height);
+                                              int width, int height);
     struct display_surface *(*create_vram_surface)(struct gui_state *s,
-                                           int width, int height,
-                                           int depth, int linesize,
-                                           void *vram_ptr,
-                                           unsigned int vram_offset);
+                                                   int width, int height,
+                                                   int depth, int linesize,
+                                                   void *vram_ptr,
+                                                   unsigned int vram_offset);
     void (*free_surface)(struct gui_state *s,
                          struct display_surface *surface);
     void (*vram_change)(struct gui_state *s, struct vram_desc *v);

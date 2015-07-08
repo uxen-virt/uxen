@@ -56,6 +56,8 @@ struct console_client
     size_t msg_len;
 };
 
+static struct ipc_service console_svc;
+
 struct remote_surface
 {
     struct display_surface s;
@@ -75,6 +77,7 @@ enum {
 
 struct remote_gui_state {
     struct gui_state state;
+    struct display_state *ds;
     struct remote_surface *surface;
     file_handle_t vram_handle;
     void *vram_view;
@@ -93,7 +96,6 @@ struct remote_gui_state {
     size_t msgbuf_len;
     size_t msg_len;
     int mouse_x, mouse_y;
-    struct ipc_service svc;
 };
 
 static void display_resize(struct gui_state *state, int w, int h);
@@ -478,7 +480,6 @@ free_surface(struct gui_state *state, struct display_surface *surface)
 static void
 display_update(struct gui_state *state, int x, int y, int w, int h)
 {
-    struct remote_gui_state *s = (void *)state;
     struct uxenconsole_msg_invalidate_rect m;
     struct ipc_client *c;
 
@@ -489,7 +490,7 @@ display_update(struct gui_state *state, int x, int y, int w, int h)
     m.w = w;
     m.h = h;
 
-    TAILQ_FOREACH(c, &s->svc.clients, link)
+    TAILQ_FOREACH(c, &console_svc.clients, link)
         ipc_client_send(c, &m, sizeof(m));
 }
 
@@ -509,7 +510,7 @@ display_resize(struct gui_state *state, int w, int h)
     m.bpp = 32;
     m.offset = s->surface->data - s->surface->segment_view;
 
-    TAILQ_FOREACH(c, &s->svc.clients, link) {
+    TAILQ_FOREACH(c, &console_svc.clients, link) {
         m.shm_handle = ipc_client_share(c, (uintptr_t)s->surface->segment_handle);
         ipc_client_send(c, &m, sizeof(m));
     }
@@ -521,7 +522,9 @@ display_resize(struct gui_state *state, int w, int h)
 static void
 display_refresh(struct gui_state *state)
 {
-    vga_hw_update();
+    struct remote_gui_state *s = (void *)state;
+
+    vga_hw_update(s->ds);
 }
 
 static void
@@ -579,7 +582,7 @@ display_cursor_shape(struct gui_state *state,
 
     if (s->cursor_width == 0 || s->cursor_height == 0) {
         m.flags = CURSOR_UPDATE_FLAG_HIDE;
-        TAILQ_FOREACH(c, &s->svc.clients, link)
+        TAILQ_FOREACH(c, &console_svc.clients, link)
             ipc_client_send(c, &m, sizeof(m));
     } else {
         m.w = s->cursor_width;
@@ -590,7 +593,7 @@ display_cursor_shape(struct gui_state *state,
             m.mask_offset = s->cursor_mask_offset;
         if (s->cursor_type == CURSOR_TYPE_MONOCHROME)
             m.flags = CURSOR_UPDATE_FLAG_MONOCHROME;
-        TAILQ_FOREACH(c, &s->svc.clients, link) {
+        TAILQ_FOREACH(c, &console_svc.clients, link) {
             m.shm_handle = ipc_client_share(c, (uintptr_t)s->cursor_handle);
             ipc_client_send(c, &m, sizeof(m));
         }
@@ -598,14 +601,12 @@ display_cursor_shape(struct gui_state *state,
 }
 
 static int
-console_init(struct gui_state *state, char *optstr)
+console_init(char *optstr)
 {
-    struct remote_gui_state *s = (void *)state;
-
     if (optstr) {
         int rc;
 
-        rc = ipc_service_init(&s->svc, optstr, &svc_ops, sizeof(struct console_client), s);
+        rc = ipc_service_init(&console_svc, optstr, &svc_ops, sizeof(struct console_client), NULL);
 
         if (rc) {
             debug_printf("ipc_service_init failed: \"%s\"\n", optstr);
@@ -617,14 +618,22 @@ console_init(struct gui_state *state, char *optstr)
     guest_agent_init();
 #endif
 
+    return 0;
+}
+
+static int
+console_create(struct gui_state *state, struct display_state *ds)
+{
+    struct remote_gui_state *s = (void *)state;
+
     s->state.width = 640;
     s->state.height = 480;
 
+    s->ds = ds;
     s->cursor_mask_offset = 128 * 128 * 4;
     s->cursor_len = s->cursor_mask_offset + 128 * 128 * 2 / 8;
     s->cursor_view = create_shm_segment(s->cursor_len, &s->cursor_handle);
     if (!s->cursor_view) {
-        ipc_service_cleanup(&s->svc);
         return -1;
     }
 
@@ -638,11 +647,16 @@ console_start(struct gui_state *state)
 }
 
 static void
-console_exit(struct gui_state *state)
+console_exit(void)
+{
+    ipc_service_cleanup(&console_svc);
+}
+
+static void
+console_destroy(struct gui_state *state)
 {
     struct remote_gui_state *s = (void *)state;
 
-    ipc_service_cleanup(&s->svc);
     destroy_shm_segment(s->cursor_handle, s->cursor_view,
                         s->cursor_len);
 }
@@ -658,8 +672,7 @@ vram_changed(struct gui_state *state, struct vram_desc *v)
     s->vram_handle = (file_handle_t)v->hdl;
     s->vram_len = v->mapped_len;
 
-    if (display_state && display_state->gui_timer)
-        do_dpy_trigger_refresh(display_state);
+    do_dpy_trigger_refresh(NULL);
 }
 
 static struct gui_info remote_gui_info = {
@@ -668,6 +681,8 @@ static struct gui_info remote_gui_info = {
     .init = console_init,
     .start = console_start,
     .exit = console_exit,
+    .create = console_create,
+    .destroy = console_destroy,
     .create_surface = create_surface,
     .create_vram_surface = create_vram_surface,
     .free_surface = free_surface,

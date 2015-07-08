@@ -365,7 +365,7 @@ crtc_flush(struct uxendisp_state *s, int crtc_id)
             crtc->stride = stride;
             crtc->format = fmt;
         } else if (crtc->ds->surface) {
-            free_displaysurface(crtc->ds->surface);
+            free_displaysurface(crtc->ds, crtc->ds->surface);
             crtc->ds->surface = NULL;
         }
 

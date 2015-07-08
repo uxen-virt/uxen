@@ -70,6 +70,7 @@ struct win32_gui_state {
     uint32_t vram_size;
     struct win_surface *surface;
     CRITICAL_SECTION surface_lock;
+    struct display_state *ds;
 };
 
 static int
@@ -223,7 +224,7 @@ win_resize(struct gui_state *state, int w, int h)
         s->requested_h = 0;
 
     if (s->surface == NULL)
-        create_displaysurface(width, height);
+        create_displaysurface(s->ds, width, height);
 
     /* If we have a border around the window, we need to take its dimensions
      * into account before asking for a Window resize. */
@@ -242,7 +243,9 @@ win_resize(struct gui_state *state, int w, int h)
 static void
 win_refresh(struct gui_state *state)
 {
-    vga_hw_update();
+    struct win32_gui_state *s = (void *)state;
+
+    vga_hw_update(s->ds);
 }
 
 static void
@@ -363,8 +366,8 @@ handle_resizing(struct win32_gui_state *s, int w, int h)
     if (w == s->requested_w && h == s->requested_h)
         return 0;
 
-    if (w == ds_get_width(display_state) &&
-        h == ds_get_height(display_state))
+    if (w == ds_get_width(s->ds) &&
+        h == ds_get_height(s->ds))
         return 0;
 
     if (w <= 0 || h <= 0) {
@@ -389,7 +392,7 @@ static int last_mouse_x = 0;
 static int last_mouse_y = 0;
 
 static void
-handle_mouse_event(int x, int y, int dz, int wParam)
+handle_mouse_event(struct win32_gui_state *s, int x, int y, int dz, int wParam)
 {
     struct input_event *input_event;
     BH *bh;
@@ -398,8 +401,8 @@ handle_mouse_event(int x, int y, int dz, int wParam)
     if (input_mouse_is_absolute()) {
         last_mouse_x = x;
         last_mouse_y = y;
-        x = x * 0x7fff / (ds_get_width(display_state) - 1);
-        y = y * 0x7fff / (ds_get_height(display_state) - 1);
+        x = x * 0x7fff / (ds_get_width(s->ds) - 1);
+        y = y * 0x7fff / (ds_get_height(s->ds) - 1);
     } else {
         int dx, dy;
         dx = x - last_mouse_x;
@@ -674,7 +677,8 @@ is_numpad_key(int keycode)
 }
 
 static int
-hid_mouse_event(HWND hwnd, int x, int y, int wheel, int hwheel, int wParam)
+hid_mouse_event(struct win32_gui_state *s,
+                int x, int y, int wheel, int hwheel, int wParam)
 {
     uint8_t buttons = 0;
     int ret;
@@ -691,8 +695,8 @@ hid_mouse_event(HWND hwnd, int x, int y, int wheel, int hwheel, int wParam)
     if (wParam & MK_XBUTTON2)
         buttons |= UXENHID_MOUSE_BUTTON_5;
 
-    scaled_x = (x * UXENHID_XY_MAX) / (ds_get_width(display_state) - 1);
-    scaled_y = (y * UXENHID_XY_MAX) / (ds_get_height(display_state) - 1);
+    scaled_x = (x * UXENHID_XY_MAX) / (ds_get_width(s->ds) - 1);
+    scaled_y = (y * UXENHID_XY_MAX) / (ds_get_height(s->ds) - 1);
 
     ret = uxenhid_send_mouse_report(buttons, scaled_x, scaled_y,
                                     wheel / 30, hwheel / 30);
@@ -705,14 +709,15 @@ hid_mouse_event(HWND hwnd, int x, int y, int wheel, int hwheel, int wParam)
 }
 
 static int
-hid_touch_event(HWND hwnd, POINTER_TOUCH_INFO *info, UINT32 count)
+hid_touch_event(struct win32_gui_state *s,
+                POINTER_TOUCH_INFO *info, UINT32 count)
 {
     UINT32 i;
     POINT pos = {0, 0};
     RECT client;
 
-    ClientToScreen(hwnd, &pos);
-    GetClientRect(hwnd, &client);
+    ClientToScreen(s->window, &pos);
+    GetClientRect(s->window, &client);
 
 
     for (i = 0; i < count; i++) {
@@ -735,9 +740,9 @@ hid_touch_event(HWND hwnd, POINTER_TOUCH_INFO *info, UINT32 count)
         pointer_id ^= info[i].pointerInfo.pointerId >> 16;
 
 #define SCALE_X(v) \
-        (((v) * UXENHID_XY_MAX) / (ds_get_width(display_state) - 1))
+        (((v) * UXENHID_XY_MAX) / (ds_get_width(s->ds) - 1))
 #define SCALE_Y(v) \
-        (((v) * UXENHID_XY_MAX) / (ds_get_height(display_state) - 1))
+        (((v) * UXENHID_XY_MAX) / (ds_get_height(s->ds) - 1))
 
         x = SCALE_X(info[i].pointerInfo.ptPixelLocation.x - pos.x);
         y = SCALE_Y(info[i].pointerInfo.ptPixelLocation.y - pos.y);
@@ -768,12 +773,12 @@ hid_touch_event(HWND hwnd, POINTER_TOUCH_INFO *info, UINT32 count)
 }
 
 static int
-hid_pen_event(HWND hwnd, POINTER_PEN_INFO *info, UINT32 count)
+hid_pen_event(struct win32_gui_state *s, POINTER_PEN_INFO *info, UINT32 count)
 {
     UINT32 i;
     POINT pos = {0, 0};
 
-    ClientToScreen(hwnd, &pos);
+    ClientToScreen(s->window, &pos);
 
     for (i = 0; i < count; i++) {
         int rc;
@@ -1256,15 +1261,15 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
          * Since we use SetCapture, we need to make sure we're not trying to
          * transmit negative or coordinates larger than the desktop size.
          */
-        if ((x < 0) || (x >= ds_get_width(display_state)) ||
-            (y < 0) || (y >= ds_get_height(display_state))) {
+        if ((x < 0) || (x >= ds_get_width(s->ds)) ||
+            (y < 0) || (y >= ds_get_height(s->ds))) {
             x = last_mouse_x;
             y = last_mouse_y;
         }
-        if (hid_mouse_event(hwnd, x, y, 0, 0, wParam) &&
+        if (hid_mouse_event(s, x, y, 0, 0, wParam) &&
             (!event_service_mouse_moves ||
              guest_agent_window_event(0, message, wParam, lParam)))
-            handle_mouse_event(x, y, 0, wParam);
+            handle_mouse_event(s, x, y, 0, wParam);
         return 0;
 
     case WM_XBUTTONDOWN:
@@ -1272,7 +1277,7 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         /* Special non-PS2 buttons */
         x = GET_X_LPARAM(lParam);
         y = GET_Y_LPARAM(lParam);
-        if (!hid_mouse_event(hwnd, x, y, 0, 0, wParam) ||
+        if (!hid_mouse_event(s, x, y, 0, 0, wParam) ||
             !guest_agent_window_event(0, message, wParam, lParam))
             return TRUE;
         break;
@@ -1280,10 +1285,10 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         ClientToScreen(hwnd, &pos);
         x = GET_X_LPARAM(lParam) - pos.x;
         y = GET_Y_LPARAM(lParam) - pos.y;
-        if (hid_mouse_event(hwnd, x, y, GET_WHEEL_DELTA_WPARAM(wParam), 0,
+        if (hid_mouse_event(s, x, y, GET_WHEEL_DELTA_WPARAM(wParam), 0,
                             wParam) &&
             guest_agent_window_event(0, message, wParam, lParam)) {
-            handle_mouse_event(x, y,
+            handle_mouse_event(s, x, y,
                                GET_WHEEL_DELTA_WPARAM(wParam) < 0 ? 1 : -1,
                                GET_KEYSTATE_WPARAM(wParam));
         }
@@ -1292,7 +1297,7 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         ClientToScreen(hwnd, &pos);
         x = GET_X_LPARAM(lParam) - pos.x;
         y = GET_Y_LPARAM(lParam) - pos.y;
-        if (hid_mouse_event(hwnd, x, y, 0, GET_WHEEL_DELTA_WPARAM(wParam),
+        if (hid_mouse_event(s, x, y, 0, GET_WHEEL_DELTA_WPARAM(wParam),
                             wParam))
             guest_agent_window_event(0, message, wParam, lParam);
         break;
@@ -1395,7 +1400,7 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_ACTIVATE:
         if (wParam == WA_INACTIVE) {
             /* release mouse buttons with previous coordinates */
-            handle_mouse_event(last_mouse_x, last_mouse_y, 0, 0);
+            handle_mouse_event(s, last_mouse_x, last_mouse_y, 0, 0);
         }
 
         break;
@@ -1424,14 +1429,14 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 
             count = 32;
             if (GetPointerFrameTouchInfo(id, &count, touch_info) &&
-                !hid_touch_event(hwnd, touch_info, count)) {
+                !hid_touch_event(s, touch_info, count)) {
                 SkipPointerFrameMessages(id);
                 return 0;
             }
 
             count = 32;
             if (GetPointerFramePenInfo(id, &count, pen_info) &&
-                !hid_pen_event(hwnd, pen_info, count)) {
+                !hid_pen_event(s, pen_info, count)) {
                 SkipPointerFrameMessages(id);
                 return 0;
             }
@@ -1454,8 +1459,7 @@ vram_changed(struct gui_state *state, struct vram_desc *v)
     s->vram_handle = (HANDLE)v->hdl;
     s->vram_size = v->mapped_len;
 
-    if (display_state && display_state->gui_timer)
-        do_dpy_trigger_refresh(display_state);
+    do_dpy_trigger_refresh(NULL);
 }
 
 static wchar_t window_class_name[] = L"uXenWindow";
@@ -1567,17 +1571,34 @@ mon_resize_screen(struct gui_state *s, Monitor *mon, const dict args)
 
 static void disp_inv_rect(void *priv, int x, int y, int w, int h)
 {
+#if 0
     if (display_state)
         dpy_update(display_state, x, y, w, h);
+#endif
 }
 
 static int
-console_init(struct gui_state *state, char *optstr)
+console_init(char *optstr)
+{
+    guest_agent_init();
+    disp = uxenconsole_disp_init(vm_id, NULL, disp_inv_rect);
+    return 0;
+}
+
+static void
+console_exit(void)
+{
+    uxenconsole_disp_cleanup(disp);
+    disp = NULL;
+    guest_agent_cleanup();
+}
+
+static int
+console_create(struct gui_state *state, struct display_state *ds)
 {
     struct win32_gui_state *s = (void *)state;
 
-    guest_agent_init();
-    disp = uxenconsole_disp_init(vm_id, NULL, disp_inv_rect);
+    s->ds = ds;
     InitializeCriticalSection(&s->surface_lock);
     EnterCriticalSection(&s->surface_lock);
     s->state.width = 640;
@@ -1617,7 +1638,7 @@ console_start(struct gui_state *state)
 }
 
 static void
-console_exit(struct gui_state *state)
+console_destroy(struct gui_state *state)
 {
     struct win32_gui_state *s = (void *)state;
     DWORD ret;
@@ -1635,10 +1656,6 @@ console_exit(struct gui_state *state)
 
         DeleteCriticalSection(&s->surface_lock);
     }
-
-    uxenconsole_disp_cleanup(disp);
-    disp = NULL;
-    guest_agent_cleanup();
 }
 
 static struct gui_info win_gui_info = {
@@ -1647,6 +1664,8 @@ static struct gui_info win_gui_info = {
     .init = console_init,
     .start = console_start,
     .exit = console_exit,
+    .create = console_create,
+    .destroy = console_destroy,
     .create_surface = create_surface,
     .create_vram_surface = create_vram_surface,
     .free_surface = free_surface,
