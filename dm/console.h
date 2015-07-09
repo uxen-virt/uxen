@@ -143,11 +143,9 @@ static inline void console_write_ch(console_ch_t *dest, uint32_t ch)
     *dest = ch;
 }
 
-#include "vga.h"
-
-struct display_state *graphic_console_init(vga_hw_update_ptr update,
-                                           vga_hw_invalidate_ptr invalidate,
-                                           vga_hw_text_update_ptr text_update,
+struct display_state *graphic_console_init(void (*update)(void *),
+                                           void (*invalidate)(void *),
+                                           void (*text_update)(void *, console_ch_t *),
                                            void *opaque);
 
 void vga_hw_update(void);

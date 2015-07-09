@@ -23,9 +23,9 @@ uint32_t forwarded_keys = 0;
 struct Console {
     struct display_state *ds;
     /* Graphic console state.  */
-    vga_hw_update_ptr hw_update;
-    vga_hw_invalidate_ptr hw_invalidate;
-    vga_hw_text_update_ptr hw_text_update;
+    void (*hw_update)(void *);
+    void (*hw_invalidate)(void *);
+    void (*hw_text_update)(void *, console_ch_t *);
     void *hw;
 
     int g_width, g_height;
@@ -46,9 +46,9 @@ void vga_hw_invalidate(void)
 }
 
 
-struct display_state *graphic_console_init(vga_hw_update_ptr update,
-                                           vga_hw_invalidate_ptr invalidate,
-                                           vga_hw_text_update_ptr text_update,
+struct display_state *graphic_console_init(void (*update)(void *),
+                                           void (*invalidate)(void *),
+                                           void (*text_update)(void *, console_ch_t *),
                                            void *opaque)
 {
     struct Console *s;

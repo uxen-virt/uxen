@@ -47,7 +47,6 @@
 #include <dm/dma.h>
 #include <dm/console.h>
 #include <dm/qemu/hw/pci.h>
-#include <dm/vga.h>
 #include <dm/vmstate.h>
 #include <lz4.h>
 

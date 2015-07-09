@@ -9,7 +9,6 @@
 #include <dm/dev.h>
 #include <dm/dma.h>
 #include <dm/console.h>
-#include <dm/vga.h>
 #include <dm/vmstate.h>
 #include <dm/vram.h>
 #include <dm/hw/vga.h>
