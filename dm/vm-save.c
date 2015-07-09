@@ -40,6 +40,8 @@
 #include <lz4.h>
 #include <lz4hc.h>
 
+#include <fingerprint.h>
+
 #include <xenctrl.h>
 #include <xc_private.h>
 
@@ -96,6 +98,7 @@
 #define XC_SAVE_ID_VM_TEMPLATE_FILE   -19
 #define XC_SAVE_ID_PAGE_OFFSETS       -20
 #define XC_SAVE_ID_ZERO_BITMAP        -21
+#define XC_SAVE_ID_FINGERPRINTS       -22
 
 struct vm_save_info vm_save_info = { };
 
@@ -199,6 +202,13 @@ struct xc_save_zero_bitmap {
 
     uint32_t zero_bitmap_size;
     uint8_t data[];
+};
+
+struct xc_save_vm_fingerprints {
+    struct xc_save_generic;
+
+    uint32_t hashes_nr;
+    struct page_fingerprint hashes[];
 };
 
 struct PACKED xc_save_index {
@@ -518,6 +528,10 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
     xen_pfn_t *rezero_pfns = NULL;
     struct xc_save_vm_page_offsets s_vm_page_offsets;
     struct xc_save_index page_offsets_index = { 0, XC_SAVE_ID_PAGE_OFFSETS };
+    struct page_fingerprint *hashes = NULL;
+    int hashes_nr = 0;
+    struct xc_save_vm_fingerprints s_vm_fingerprints;
+    struct xc_save_index fingerprints_index = { 0, XC_SAVE_ID_FINGERPRINTS };
     int free_mem;
     int ret;
 
@@ -705,6 +719,29 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
                     SAVE_DPRINTF(
                         "     write %08x:%08x = %03x pages",
                         pfn + run, pfn + j, b_run);
+                    if (vm_save_info.fingerprint) {
+                        int i;
+                        for (i = 0; i < b_run; i++) {
+                            if (!((hashes_nr - 1) & hashes_nr)) {
+                                hashes = realloc(
+                                    hashes, sizeof(hashes[0]) *
+                                    (hashes_nr ? 2 * hashes_nr : 1));
+                                if (!hashes) {
+                                    EPRINTF("%s: hashes realloc failed, "
+                                            "disabling fingerprinting",
+                                            __FUNCTION__);
+                                    vm_save_info.fingerprint = 0;
+                                    break;
+                                }
+                            }
+                            hashes[hashes_nr].pfn = pfn + run + i;
+                            hashes[hashes_nr].hash =
+                                page_fingerprint(
+                                    &mem_buffer[gpfn_info_list[run + i].offset],
+                                    &hashes[hashes_nr].rotate);
+                            hashes_nr++;
+                        }
+                    }
                     if (vm_save_info.compress_mode == VM_SAVE_COMPRESS_NONE) {
                         int i;
                         pos = filebuf_tell(f);
@@ -840,6 +877,23 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
         filebuf_write(f, &s_vm_page_offsets, sizeof(s_vm_page_offsets));
         filebuf_write(f, poi.pfn_off, s_vm_page_offsets.pfn_off_nr *
                       sizeof(s_vm_page_offsets.pfn_off[0]));
+
+        if (vm_save_info.fingerprint) {
+            s_vm_fingerprints.marker = XC_SAVE_ID_FINGERPRINTS;
+            s_vm_fingerprints.hashes_nr = hashes_nr;
+            fingerprints_index.offset = filebuf_tell(f);
+            BUILD_BUG_ON(sizeof(hashes[0]) !=
+                         sizeof(s_vm_fingerprints.hashes[0]));
+            s_vm_fingerprints.size = s_vm_fingerprints.hashes_nr *
+                sizeof(s_vm_fingerprints.hashes[0]);
+            s_vm_fingerprints.size += sizeof(s_vm_fingerprints);
+            APRINTF("fingerprints: pos %"PRId64" size %d nr hashes %d",
+                    fingerprints_index.offset, s_vm_fingerprints.size,
+                    s_vm_fingerprints.hashes_nr);
+            filebuf_write(f, &s_vm_fingerprints, sizeof(s_vm_fingerprints));
+            filebuf_write(f, hashes,
+                          s_vm_fingerprints.size - sizeof(s_vm_fingerprints));
+        }
     }
 
     if (!vm_save_info.save_abort && !vm_quit_interrupt) {
@@ -849,6 +903,8 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
 
         /* indexes */
         filebuf_write(f, &page_offsets_index, sizeof(page_offsets_index));
+        if (vm_save_info.fingerprint)
+            filebuf_write(f, &fingerprints_index, sizeof(fingerprints_index));
 
         APRINTF("memory: pages %d zero %d rezero %d clone %d", total_pages,
                 total_zero - total_rezero, total_rezero, total_clone);
@@ -872,6 +928,7 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
     free(zero_bitmap);
     free(zero_bitmap_compressed);
     free(rezero_pfns);
+    free(hashes);
     free(pfn_batch);
     free(gpfn_info_list);
     free(compress_mem);
@@ -1439,6 +1496,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
     struct xc_save_vm_template_file s_vm_template_file = { };
     struct xc_save_vm_page_offsets s_vm_page_offsets = { };
     struct xc_save_zero_bitmap s_zero_bitmap = { };
+    struct xc_save_vm_fingerprints s_vm_fingerprints = { };
     struct immutable_range *immutable_ranges = NULL;
     uint8_t *hvm_buf = NULL;
     uint8_t *zero_bitmap = NULL, *zero_bitmap_compressed = NULL;
@@ -1652,6 +1710,20 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
                 zero_bitmap, s_zero_bitmap.zero_bitmap_size, pfn_type, err_msg);
             if (ret)
                 goto out;
+            break;
+        case XC_SAVE_ID_FINGERPRINTS:
+            uxenvm_load_read_struct(f, s_vm_fingerprints, marker, ret,
+                                    err_msg, out);
+            ret = filebuf_seek(
+                f, s_vm_fingerprints.size - sizeof(s_vm_fingerprints),
+                FILEBUF_SEEK_CUR) != -1 ? 0 : -EIO;
+            if (ret < 0) {
+                asprintf(err_msg, "filebuf_seek(vm_fingerprints) failed");
+                goto out;
+            }
+            APRINTF("fingerprints: %d hashes, skipped %"PRIdSIZE" bytes",
+                    s_vm_fingerprints.hashes_nr,
+                    s_vm_fingerprints.size - sizeof(s_vm_fingerprints));
             break;
 	default:
             uxenvm_check_restore_clone(restore_mode);
@@ -1989,6 +2061,7 @@ vm_save(void)
     /* XXX init debug option */
     if (strstr(uxen_opt_debug, ",compbatch,"))
         vm_save_info.single_page = 0;
+    vm_save_info.fingerprint = (!vm_template_file);
 
     vm_save_info.save_abort = 0;
 
@@ -2195,6 +2268,7 @@ vm_restore_memory(void)
         switch (marker) {
         case XC_SAVE_ID_PAGE_OFFSETS:
         case XC_SAVE_ID_ZERO_BITMAP:
+        case XC_SAVE_ID_FINGERPRINTS:
             uxenvm_load_read_struct(f, s_generic, marker, ret, &err_msg,
                                     out);
             ret = filebuf_seek(f, s_generic.size - sizeof(s_generic),

@@ -33,6 +33,8 @@ LIBELFDIR = $(TOPDIR)/xen/common/libelf
 LIBELFDIR_include = $(TOPDIR)/common/include/xen-public
 LZ4DIR = $(TOPDIR)/common/lz4
 LZ4DIR_include = $(TOPDIR)/common/lz4
+CUCKOODIR = $(TOPDIR)/common/cuckoo
+CUCKOODIR_include = $(TOPDIR)/common/cuckoo
 QEMUDIR = $(SRCROOT)/qemu
 VBOXDRVDIR = $(SRCROOT)/vbox-drivers
 NICKELDIR = $(SRCROOT)/nickel
@@ -196,6 +198,7 @@ DM_SRCS += vm-save.c
 vm-save.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 vm-save.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
 vm-save.o: CPPFLAGS += $(LZ4_CPPFLAGS)
+vm-save.o: CPPFLAGS += $(CUCKOO_CPPFLAGS)
 $(WINDOWS)DM_SRCS += win32.c
 DM_SRCS += xen.c
 xen.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
@@ -287,6 +290,9 @@ LIBELF_SRCS += libelf-tools.c
 LZ4_CPPFLAGS += -I$(LZ4DIR_include)
 LZ4_SRCS += lz4.c
 LZ4_SRCS += lz4hc.c
+
+CUCKOO_CPPFLAGS += -I$(CUCKOODIR_include)
+CUCKOO_SRCS += fingerprint.c
 
 NICKEL_CPPFLAGS += -I$(TOPDIR) -I$(TOPDIR)/dm/nickel
 $(CONFIG_VBOXDRV)NICKEL_CPPFLAGS += -DCONFIG_VBOXDRV=1
@@ -387,6 +393,11 @@ LZ4_OBJS := $(subst /,_,$(patsubst %,lz4/%,$(LZ4_OBJS)))
 DM_OBJS += $(LZ4_OBJS)
 lz4_lz4.o: CFLAGS_debug := $(subst -O0,-O2,$(CFLAGS_debug))
 
+CUCKOO_OBJS = $(patsubst %.m,%.o,$(patsubst %.c,%.o,$(CUCKOO_SRCS)))
+CUCKOO_OBJS := $(subst /,_,$(patsubst %,cuckoo/%,$(CUCKOO_OBJS)))
+DM_OBJS += $(CUCKOO_OBJS)
+cuckoo_fingerprint.o: CFLAGS_debug := $(subst -O0,-O2,$(CFLAGS_debug))
+
 NICKEL_OBJS = $(patsubst %.m,%.o,$(patsubst %.c,%.o,$(NICKEL_SRCS)))
 NICKEL_OBJS := $(subst /,_,$(patsubst %,nickel/%,$(NICKEL_OBJS)))
 $(CONFIG_NICKEL)DM_OBJS += $(NICKEL_OBJS)
@@ -441,6 +452,12 @@ $(LZ4_OBJS): CFLAGS += $(LZ4_CFLAGS)
 $(LZ4_OBJS): CPPFLAGS += $(LZ4_CPPFLAGS)
 lz4_%.o: $(LZ4DIR)/%.c
 	$(_W)echo Compiling - $(subst lz4_,lz4/,$@)
+	$(_V)$(COMPILE.c) $(EXTRA_CFLAGS) -c $< -o $@
+
+$(CUCKOO_OBJS): CFLAGS += $(CUCKOO_CFLAGS)
+$(CUCKOO_OBJS): CPPFLAGS += $(CUCKOO_CPPFLAGS)
+cuckoo_%.o: $(CUCKOODIR)/%.c
+	$(_W)echo Compiling - $(subst cuckoo_,cuckoo/,$@)
 	$(_V)$(COMPILE.c) $(EXTRA_CFLAGS) -c $< -o $@
 
 proxy_%.o: proxy/%.c
