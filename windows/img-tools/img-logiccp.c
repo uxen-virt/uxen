@@ -1710,7 +1710,7 @@ int vm_links_phase_1(struct disk *disk, Manifest *man)
 
         if (last && m->link_id && is_same_file(m, last)) {
             /* We cannot link files that we moved to /boot on sysvol. */
-            if (last->action != MAN_BOOT) {
+            if (last->action != MAN_BOOT && last->action != MAN_EXCLUDE) {
                 free(m->host_name); // Might have been set in rewire_phase
                 m->host_name = last->name;
                 m->action = MAN_LINK;
