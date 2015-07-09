@@ -61,6 +61,7 @@
 #include "../internal/dir.h"
 
 #define SHFL_RT_LINK(pClient) ((pClient)->fu32Flags & SHFL_CF_SYMLINKS ? RTPATH_F_ON_LINK : RTPATH_F_FOLLOW_LINK)
+#define CRYPT_HDR_FIXED_SIZE 4096
 
 static int resize_file(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle,
                        uint64_t sz);
@@ -1349,6 +1350,7 @@ int vbsfDirList(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, SHFLS
     PSHFLDIRINFO   pSFDEntry;
     PRTUTF16       pwszString;
     PRTDIR         DirHandle;
+    int            crypt_mode;
 
     if (pHandle == 0 || pcbBuffer == 0 || pBuffer == 0)
     {
@@ -1402,6 +1404,9 @@ int vbsfDirList(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, SHFLS
         Assert(pHandle->dir.SearchHandle);
         DirHandle = pHandle->dir.SearchHandle;
     }
+
+    crypt_mode = 0;
+    fch_query_crypt_by_path(pClient, root, DirHandle->pwszPath, &crypt_mode);
 
     while (cbBufferOrg)
     {
@@ -1459,34 +1464,25 @@ int vbsfDirList(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, SHFLS
         pSFDEntry->cucShortName = 0;
 
         
-        {
-            filecrypt_hdr_t *hdr = NULL;
-            int cr_rc;
+        pSFDEntry->name.String.ucs2[0] = 0;
+        pwszString = pSFDEntry->name.String.ucs2;
+        wcscpy(pwszString, (wchar_t*)pDirEntry->szName);
 
-            pSFDEntry->name.String.ucs2[0] = 0;
-            pwszString = pSFDEntry->name.String.ucs2;
-            wcscpy(pwszString, (wchar_t*)pDirEntry->szName);
+        pSFDEntry->name.u16Length = (uint32_t)wcslen(pSFDEntry->name.String.ucs2) * 2;
+        pSFDEntry->name.u16Size = pSFDEntry->name.u16Length + 2;
 
-            pSFDEntry->name.u16Length = (uint32_t)wcslen(pSFDEntry->name.String.ucs2) * 2;
-            pSFDEntry->name.u16Size = pSFDEntry->name.u16Length + 2;
+        Log(("SHFL: File name size %d\n", pSFDEntry->name.u16Size));
+        Log(("SHFL: File name %ls\n", &pSFDEntry->name.String.ucs2));
 
-            Log(("SHFL: File name size %d\n", pSFDEntry->name.u16Size));
-            Log(("SHFL: File name %ls\n", &pSFDEntry->name.String.ucs2));
+        // adjust cbNeeded (it was overestimated before)
+        cbNeeded = RT_OFFSETOF(SHFLDIRINFO, name.String) + pSFDEntry->name.u16Size;
 
-            // adjust cbNeeded (it was overestimated before)
-            cbNeeded = RT_OFFSETOF(SHFLDIRINFO, name.String) + pSFDEntry->name.u16Size;
-
-            /* adjust reported file length for crypted files */
-            cr_rc = fch_read_dir_entry_crypthdr(
-                pClient, root, DirHandle->pwszPath,
-                (wchar_t*)pDirEntry->szName, &hdr);
-            if (RT_FAILURE(cr_rc))
-                return cr_rc;
-            if (hdr) {
-                pSFDEntry->Info.cbObject -= hdr->hdrlen;
-                free(hdr);
-            }
-        }
+        /* adjust reported file length for crypted files.
+         * HACK warning: to be fully correct it would need to inspect the file to see if it's
+         * actually scrambled or not. That's very slow for large directories, so we rely on current
+         * crypt settings for that folder instead */
+        if (crypt_mode && pSFDEntry->Info.cbObject >= CRYPT_HDR_FIXED_SIZE)
+            pSFDEntry->Info.cbObject -= CRYPT_HDR_FIXED_SIZE;
 
         pSFDEntry   = (PSHFLDIRINFO)((uintptr_t)pSFDEntry + cbNeeded);
         *pcbBuffer += cbNeeded;
