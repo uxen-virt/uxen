@@ -267,6 +267,8 @@ control_command_resume(void *opaque, const char *id, const char *opt,
 {
     struct control_desc *cd = (struct control_desc *)opaque;
 
+    vm_save_info.resume_delete = dict_get_boolean(d, "delete-savefile");
+
     vm_save_info.resume_cd = cd;
     vm_save_info.resume_id = id ? strdup(id) : NULL;
 
@@ -871,7 +873,11 @@ struct dict_rpc_command control_commands[] = {
 #ifdef _WIN32
     { "reopen-char-files", control_command_reopen_char_files, },
 #endif
-    { "resume", control_command_resume, .flags = CONTROL_SUSPEND_OK },
+    { "resume", control_command_resume, .flags = CONTROL_SUSPEND_OK,
+      .args = (struct dict_rpc_arg_desc[]) {
+            { "delete-savefile", DICT_RPC_ARG_TYPE_BOOLEAN, .optional = 1,
+              .defval = DICT_RPC_ARG_DEFVAL_BOOLEAN(true) },
+        }, },
     { "save", control_command_save,
       .args = (struct dict_rpc_arg_desc[]) {
             { "filename", DICT_RPC_ARG_TYPE_STRING, .optional = 1 },

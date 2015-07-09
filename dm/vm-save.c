@@ -1619,6 +1619,9 @@ void
 mc_resumevm(Monitor *mon, const dict args)
 {
 
+    vm_save_info.resume_delete =
+        dict_get_boolean_default(args, "delete-savefile", 1);
+
     vm_set_run_mode(RUNNING_VM);
 }
 #endif  /* MONITOR */
@@ -1787,8 +1790,11 @@ vm_restore_memory(void)
     free(pfn_err);
     free(pfn_info);
     free(pfn_type);
-    if (f)
+    if (f) {
+        if (vm_save_info.resume_delete)
+            filebuf_delete_on_close(f, 1);
 	filebuf_close(f);
+    }
     if (ret < 0 && err_msg)
         EPRINTF("%s: ret %d", err_msg, ret);
     free(err_msg);

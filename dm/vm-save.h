@@ -26,6 +26,8 @@ struct vm_save_info {
     int single_page;
     int free_mem;
 
+    int resume_delete;
+
     off_t page_batch_offset;
 };
 

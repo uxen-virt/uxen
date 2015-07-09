@@ -12,6 +12,8 @@ struct filebuf {
     HANDLE file;
 #else
     int file;
+    char *filename;
+    int delete_on_close;
 #endif
     int users;
     uint8_t *buffer;
@@ -37,5 +39,6 @@ off_t filebuf_seek(struct filebuf *fb, off_t offset, int whence);
 #define FILEBUF_SEEK_CUR 1
 #define FILEBUF_SEEK_END 2
 void filebuf_buffer_max(struct filebuf *fb, size_t new_buffer_max);
+int filebuf_delete_on_close(struct filebuf *fb, int delete);
 
 #endif  /* __FILEBUF_H_ */

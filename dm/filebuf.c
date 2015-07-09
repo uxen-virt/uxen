@@ -63,17 +63,17 @@ filebuf_open(const char *fn, const char *mode)
     fb->users = 1;
 
 #ifdef _WIN32
-    fb->file = CreateFile(fn,
-          (fb->writable ? GENERIC_WRITE : 0) | GENERIC_READ,
-          fb->writable ? 0 :
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
-          NULL,
-          fb->writable ? CREATE_ALWAYS : OPEN_EXISTING,
-          FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED |
-          (sequential ? FILE_FLAG_SEQUENTIAL_SCAN : 0) |
-          (write_through ? FILE_FLAG_WRITE_THROUGH : 0) |
-          (no_buffering ? FILE_FLAG_NO_BUFFERING : 0),
-          NULL);
+    fb->file = CreateFile(
+        fn, GENERIC_READ | (fb->writable ? GENERIC_WRITE | DELETE : 0),
+        fb->writable ? 0 :
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        NULL,
+        fb->writable ? CREATE_ALWAYS : OPEN_EXISTING,
+        FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OVERLAPPED |
+        (sequential ? FILE_FLAG_SEQUENTIAL_SCAN : 0) |
+        (write_through ? FILE_FLAG_WRITE_THROUGH : 0) |
+        (no_buffering ? FILE_FLAG_NO_BUFFERING : 0),
+        NULL);
 #else  /* _WIN32 */
     fb->file = open(fn, fb->writable ? O_RDWR | O_CREAT : O_RDONLY, 0644);
 #endif  /* _WIN32 */
@@ -84,6 +84,7 @@ filebuf_open(const char *fn, const char *mode)
     if (fb->file < 0)
 #endif  /* _WIN32 */
     {
+        Wwarn("%s: open %s failed", __FUNCTION__, fn);
         align_free(fb->buffer);
         free(fb);
         fb = NULL;
@@ -92,6 +93,8 @@ filebuf_open(const char *fn, const char *mode)
     else {
         if (no_buffering)
             fcntl(fb->file, F_NOCACHE, 1);
+        if (fb->file >= 0)
+            fb->filename = strdup(fn);
     }
 #endif  /* __APPLE__ */
     return fb;
@@ -169,12 +172,18 @@ filebuf_close(struct filebuf *fb)
     if (fb->users)
         return;
 
+#ifdef __APPLE__
+    if (fb->delete_on_close)
+        unlink(fb->filename);
+    else                        /* only flush if the file isn't deleted */
+#endif  /* __APPLE__ */
     if (fb->writable)
         filebuf_flush(fb);
 #ifdef _WIN32
     CloseHandle(fb->file);
 #else  /* _WIN32 */
     close(fb->file);
+    free(fb->filename);
 #endif  /* _WIN32 */
     align_free(fb->buffer);
     free(fb);
@@ -355,4 +364,22 @@ filebuf_buffer_max(struct filebuf *fb, size_t new_buffer_max)
                 errx(1, "%s: out of memory", __FUNCTION__);
         }
     } while (!fb->buffer);
+}
+
+int
+filebuf_delete_on_close(struct filebuf *fb, int delete)
+{
+#ifdef _WIN32
+    FILE_DISPOSITION_INFO fdi = { delete };
+    int ret;
+
+    ret = SetFileInformationByHandle(fb->file, FileDispositionInfo, &fdi,
+                                     sizeof(fdi));
+    if (!ret)
+        Wwarn("%s", __FUNCTION__);
+    return ret ? 0 : -1;
+#else  /* _WIN32 */
+    fb->delete_on_close = delete;
+    return 0;
+#endif  /* _WIN32 */
 }

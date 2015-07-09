@@ -303,6 +303,7 @@ static mon_cmd_t mon_cmds[] = {
       .args_type = "?s:filename,?s:compress,?b:single-page,?b:free-mem",
       .help = "save the vm" },
     { .name = "resume", .mhandler.cmd = mc_resumevm,
+      .args_type = "?b:delete-savefile",
       .help = "resume the vm" },
     { .name = "debug-break|xdbg", .mhandler.cmd = mc_debug_break,
       .help = "execute breakpoint instruction" },
