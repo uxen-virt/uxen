@@ -96,6 +96,7 @@ static int req_on_headers_complete(struct http_parser *parser)
 
     h->http_major = parser->http_major;
     h->http_minor = parser->http_minor;
+    h->header_length = parser->nread;
     if (parser->content_length != ULLONG_MAX)
         h->content_length = parser->content_length;
     if (h->crt_header >= NUM_HEADERS - 1)
@@ -140,6 +141,7 @@ static int resp_on_headers_complete(struct http_parser *parser)
     p->h.status_code = p->parser.status_code;
     p->h.http_major = parser->http_major;
     p->h.http_minor = parser->http_minor;
+    p->h.header_length = parser->nread;
     if (parser->content_length != ULLONG_MAX)
         p->h.content_length = parser->content_length;
     p->parse_state = PS_HCOMPLETE;
@@ -303,7 +305,7 @@ size_t parser_execute(struct parser_ctx *p, const char *b, size_t l)
     ret = http_parser_execute(&p->parser, &p->settings, b, l);
     p->parsed_len += ret;
     if (!p->h.header_length) {
-        if (p->h.content_length > 0 && p->body_at) {
+        if (p->body_at) {
             assert(p->body_at - b > 0 && p->body_at - b <= l);
             p->h.header_length = p->parsed_len - ret + (p->body_at - b);
         } else if (p->parse_state == PS_HCOMPLETE || p->parse_state == PS_MCOMPLETE) {
