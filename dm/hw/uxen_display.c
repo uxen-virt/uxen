@@ -42,7 +42,7 @@ struct crtc_state {
     uint32_t format;
 
     volatile struct crtc_regs *regs;
-    DisplayState *ds;
+    struct display_state *ds;
     int flush_pending;
 };
 
@@ -260,7 +260,7 @@ cursor_flush(struct uxendisp_state *s)
 {
     volatile uint8_t *mask;
     volatile uint8_t *color;
-    struct DisplayState *ds;
+    struct display_state *ds;
     unsigned int w, h;
 
     /* XXX crtc 0 only for now */

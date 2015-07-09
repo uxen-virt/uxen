@@ -907,7 +907,7 @@ static int update_basic_params(VGAState *s)
 
 #define NB_DEPTHS 7
 
-static inline int get_depth_index(DisplayState *s)
+static inline int get_depth_index(struct display_state *s)
 {
     switch(ds_get_bits_per_pixel(s)) {
     default:
@@ -1903,7 +1903,7 @@ static const struct ioport_region vga_portio_list[] = {
 };
 
 void vga_init(VGAState *s, MemoryRegion *address_space,
-              MemoryRegion *address_space_io, DisplayState *ds)
+              MemoryRegion *address_space_io, struct display_state *ds)
 {
     int i, j, v, b;
 

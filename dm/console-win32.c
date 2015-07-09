@@ -45,7 +45,7 @@ static disp_context_t disp;
 
 struct win_surface
 {
-    DisplaySurface s; /* Must be first */
+    struct display_surface s; /* Must be first */
 
     HDC dc;
     HBITMAP bitmap;
@@ -73,7 +73,7 @@ struct win32_gui_state {
 };
 
 static int
-win_surface_lock(DisplaySurface *s, uint8_t **data, int *linesize)
+win_surface_lock(struct display_surface *s, uint8_t **data, int *linesize)
 {
     struct win_surface *surface = (void *)s;
 
@@ -84,7 +84,7 @@ win_surface_lock(DisplaySurface *s, uint8_t **data, int *linesize)
 }
 
 static void
-win_surface_unlock(DisplaySurface *s)
+win_surface_unlock(struct display_surface *s)
 {
 
 }
@@ -148,7 +148,7 @@ win_create_surface(struct win32_gui_state *s,
     return surface;
 }
 
-static DisplaySurface *
+static struct display_surface *
 create_surface(struct gui_state *state, int width, int height)
 {
     struct win32_gui_state *s = (void *)state;
@@ -161,7 +161,7 @@ create_surface(struct gui_state *state, int width, int height)
     return &surface->s;
 }
 
-static DisplaySurface *
+static struct display_surface *
 create_vram_surface(struct gui_state *state,
                     int width, int height,
                     int depth, int linesize,
@@ -184,7 +184,7 @@ create_vram_surface(struct gui_state *state,
 }
 
 static void
-free_surface(struct gui_state *state, DisplaySurface *surface)
+free_surface(struct gui_state *state, struct display_surface *surface)
 {
     struct win32_gui_state *s = (void *)state;
     struct win_surface *surf = (struct win_surface *)surface;

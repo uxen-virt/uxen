@@ -16,7 +16,6 @@ typedef struct DeviceInfo DeviceInfo;
 typedef struct DeviceState DeviceState;
 typedef struct DisplayAllocator DisplayAllocator;
 typedef struct DisplayChangeListener DisplayChangeListener;
-typedef struct DisplayState DisplayState;
 typedef struct DriveInfo DriveInfo;
 typedef struct ISABus ISABus;
 typedef struct ISADevice ISADevice;

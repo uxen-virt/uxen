@@ -22,7 +22,7 @@
 
 struct osx_surface
 {
-    DisplaySurface s; /* Must be first */
+    struct display_surface s; /* Must be first */
     uint8_t *data;
     int linesize;
 };
@@ -36,7 +36,7 @@ struct osx_gui_state {
 };
 
 static int
-osx_surface_lock(DisplaySurface *s, uint8_t **data, int *linesize)
+osx_surface_lock(struct display_surface *s, uint8_t **data, int *linesize)
 {
     struct osx_surface *surface = (void *)s;
 
@@ -47,7 +47,7 @@ osx_surface_lock(DisplaySurface *s, uint8_t **data, int *linesize)
 }
 
 static void
-osx_surface_unlock(DisplaySurface *s)
+osx_surface_unlock(struct display_surface *s)
 {
 
 }
@@ -89,7 +89,7 @@ osx_create_surface(struct osx_gui_state *s,
     return surface;
 }
 
-static DisplaySurface *
+static struct display_surface *
 create_surface(struct gui_state *state, int width, int height)
 {
     struct osx_gui_state *s = (void *)state;
@@ -105,7 +105,7 @@ create_surface(struct gui_state *state, int width, int height)
     return &surface->s;
 }
 
-static DisplaySurface *
+static struct display_surface *
 create_vram_surface(struct gui_state *state,
                     int width, int height,
                     int depth, int linesize,
@@ -128,7 +128,7 @@ create_vram_surface(struct gui_state *state,
 }
 
 void
-free_surface(struct gui_state *state, DisplaySurface *surface)
+free_surface(struct gui_state *state, struct display_surface *surface)
 {
     struct osx_gui_state *s = (void *)state;
     struct osx_surface *surf = (void *)surface;

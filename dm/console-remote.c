@@ -58,7 +58,7 @@ struct console_client
 
 struct remote_surface
 {
-    DisplaySurface s;
+    struct display_surface s;
     uint8_t *data;
     int linesize;
     file_handle_t segment_handle;
@@ -274,7 +274,8 @@ console_data_pending(struct ipc_client *c, void *opaque)
     int rc;
 
     if (client->msg_len < hdrlen) {
-        rc = ipc_client_recv(c, client->buf + client->msg_len, hdrlen - client->msg_len);
+        rc = ipc_client_recv(c, client->buf + client->msg_len,
+                             hdrlen - client->msg_len);
         if (rc > 0)
             client->msg_len += rc;
     } else {
@@ -368,7 +369,7 @@ destroy_shm_segment(file_handle_t hdl, void *view, size_t len)
 }
 
 static int
-surface_lock(DisplaySurface *surface, uint8_t **data, int *linesize)
+surface_lock(struct display_surface *surface, uint8_t **data, int *linesize)
 {
     struct remote_surface *s = (void *)surface;
 
@@ -379,7 +380,7 @@ surface_lock(DisplaySurface *surface, uint8_t **data, int *linesize)
 }
 
 static void
-surface_unlock(DisplaySurface *surface)
+surface_unlock(struct display_surface *surface)
 {
 
 }
@@ -405,7 +406,7 @@ alloc_surface(struct remote_gui_state *s, int width, int height)
     return surface;
 }
 
-static DisplaySurface *
+static struct display_surface *
 create_surface(struct gui_state *state, int width, int height)
 {
     struct remote_gui_state *s = (void *)state;
@@ -426,7 +427,7 @@ create_surface(struct gui_state *state, int width, int height)
     return &surf->s;
 }
 
-static DisplaySurface *
+static struct display_surface *
 create_vram_surface(struct gui_state *state,
                     int width, int height,
                     int depth, int linesize,
@@ -456,7 +457,7 @@ create_vram_surface(struct gui_state *state,
 }
 
 static void
-free_surface(struct gui_state *state, DisplaySurface *surface)
+free_surface(struct gui_state *state, struct display_surface *surface)
 {
     struct remote_gui_state *s = (void *)state;
     struct remote_surface *surf = (void *)surface;

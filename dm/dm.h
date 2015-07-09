@@ -68,7 +68,7 @@ struct xc_interface_core;
 extern struct xc_interface_core *xc_handle;
 extern int xen_logdirty_enabled;
 
-extern DisplayState *display_state;
+extern struct display_state *display_state;
 extern uint64_t display_refresh_periodic;
 extern int display_refresh_event_mode;
 

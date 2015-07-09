@@ -80,7 +80,7 @@ typedef struct VGAState {
     uint8_t palette[768];
     int32_t bank_offset;
     /* display refresh support */
-    DisplayState *ds;
+    struct display_state *ds;
     uint32_t font_offsets[2];
     int graphic_mode;
     uint8_t shift_control;
@@ -138,7 +138,7 @@ extern const uint8_t gr_mask[16];
 const VMStateDescription vmstate_vga;
 void vga_init(VGAState *s, MemoryRegion *address_space,
               MemoryRegion *address_space_io,
-              DisplayState *ds);
+              struct display_state *ds);
 void vga_exit(VGAState *s);
 void vga_update_display(VGAState *s);
 void vga_invalidate_display(VGAState *s);
