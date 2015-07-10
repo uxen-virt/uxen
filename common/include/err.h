@@ -314,6 +314,7 @@ _Wwarnv(const char *function, int line, const char *fmt, va_list ap)
     _err_vprintf(function, line, "warn", last_error, lpMsgBuf, fmt, ap);
 
     LocalFree(lpMsgBuf);
+    _err_flush();
     _set_errno(saved_errno);
 }
 
