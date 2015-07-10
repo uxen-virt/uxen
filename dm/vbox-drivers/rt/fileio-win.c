@@ -265,12 +265,11 @@ RTR3DECL(int) RTFileOpenUcs(PRTFILE pFile, const wchar_t *pwszFilename, uint64_t
             }
     }
 
-    /* we always share read access, necessary for crypt code */
     DWORD dwShareMode;
     switch (fOpen & RTFILE_O_DENY_MASK)
     {
         case RTFILE_O_DENY_NONE:                                dwShareMode = FILE_SHARE_READ | FILE_SHARE_WRITE; break;
-        case RTFILE_O_DENY_READ:                                dwShareMode = FILE_SHARE_READ | FILE_SHARE_WRITE; break;
+        case RTFILE_O_DENY_READ:                                dwShareMode = FILE_SHARE_WRITE; break;
         case RTFILE_O_DENY_WRITE:                               dwShareMode = FILE_SHARE_READ; break;
         case RTFILE_O_DENY_READWRITE:                           dwShareMode = 0; break;
 
@@ -282,6 +281,9 @@ RTR3DECL(int) RTFileOpenUcs(PRTFILE pFile, const wchar_t *pwszFilename, uint64_t
             AssertMsgFailed(("Impossible fOpen=%#llx\n", fOpen));
             return VERR_INVALID_PARAMETER;
     }
+
+    /* we always share read access, necessary for crypt code */
+    dwShareMode |= FILE_SHARE_READ;
 
     SECURITY_ATTRIBUTES  SecurityAttributes;
     PSECURITY_ATTRIBUTES pSecurityAttributes = NULL;
