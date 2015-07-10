@@ -468,8 +468,7 @@ uxenvm_compress_lz4(const void *src, void *dst, int sz)
 }
 
 static int
-uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
-                          int single_page, char **err_msg)
+uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
 {
     uint8_t *hvm_buf = NULL;
     int p2m_size, pfn, batch, _batch, run, b_run, m_run, v_run, rezero, clone;
@@ -537,30 +536,33 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
 	goto out;
     }
 
-    if (compress && !single_page) {
-        /* The LZ4_compressBound macro is unsafe, so we have to wrap the
-         * argument. */
-        compress_buf =
-            (char *)malloc(LZ4_compressBound((MAX_BATCH_SIZE << PAGE_SHIFT)));
-        if (!compress_buf) {
-            asprintf(err_msg, "malloc(compress_buf) failed");
-            ret = -ENOMEM;
-            goto out;
-        }
-        compress_mem = (char *)malloc(MAX_BATCH_SIZE << PAGE_SHIFT);
-        if (!compress_mem) {
-            asprintf(err_msg, "malloc(compress_mem) failed");
-            ret = -ENOMEM;
-            goto out;
-        }
-    } else if (compress && single_page) {
-        compress_buf = (char *)malloc(
-            sizeof(compress_size) +
-            MAX_BATCH_SIZE * (sizeof(cs16_t) + PAGE_SIZE));
-        if (!compress_buf) {
-            asprintf(err_msg, "malloc(compress_buf) failed");
-            ret = -ENOMEM;
-            goto out;
+    if (vm_save_info.compress_mode == VM_SAVE_COMPRESS_LZ4) {
+        if (!vm_save_info.single_page) {
+            /* The LZ4_compressBound macro is unsafe, so we have to wrap the
+             * argument. */
+            compress_buf =
+                (char *)malloc(LZ4_compressBound(
+                                   (MAX_BATCH_SIZE << PAGE_SHIFT)));
+            if (!compress_buf) {
+                asprintf(err_msg, "malloc(compress_buf) failed");
+                ret = -ENOMEM;
+                goto out;
+            }
+            compress_mem = (char *)malloc(MAX_BATCH_SIZE << PAGE_SHIFT);
+            if (!compress_mem) {
+                asprintf(err_msg, "malloc(compress_mem) failed");
+                ret = -ENOMEM;
+                goto out;
+            }
+        } else {
+            compress_buf = (char *)malloc(
+                sizeof(compress_size) +
+                MAX_BATCH_SIZE * (sizeof(cs16_t) + PAGE_SIZE));
+            if (!compress_buf) {
+                asprintf(err_msg, "malloc(compress_buf) failed");
+                ret = -ENOMEM;
+                goto out;
+            }
         }
     }
 
@@ -580,7 +582,7 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
         while ((pfn + batch) < p2m_size && batch < MAX_BATCH_SIZE) {
             gpfn_info_list[batch].gpfn = pfn + batch;
             gpfn_info_list[batch].flags = XENMEM_MCGI_FLAGS_VM |
-                (free_after_save ? XENMEM_MCGI_FLAGS_REMOVE_PFN : 0);
+                (vm_save_info.free_mem ? XENMEM_MCGI_FLAGS_REMOVE_PFN : 0);
             batch++;
         }
         ret = xc_domain_memory_capture(
@@ -622,18 +624,23 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
             }
         }
         if (_batch) {
-            SAVE_DPRINTF("page batch %08x:%08x = %03x pages,"
-                         " rezero %03x, clone %03x, zero %03x",
-                         pfn, pfn + batch, _batch, rezero, clone, _zero);
-            if (compress)
-                _batch += single_page ? 2 * MAX_BATCH_SIZE : MAX_BATCH_SIZE;
-            filebuf_write(f, &_batch, sizeof(_batch));
-            if (compress)
-                _batch -= single_page ? 2 * MAX_BATCH_SIZE : MAX_BATCH_SIZE;
-            filebuf_write(f, pfn_batch, _batch * sizeof(pfn_batch[0]));
-            if (compress && single_page) {
-                compress_size = 0;
-                mem_pos = filebuf_tell(f) + sizeof(compress_size);
+            if (vm_save_compress_mode_batched(vm_save_info.compress_mode)) {
+                SAVE_DPRINTF("page batch %08x:%08x = %03x pages,"
+                             " rezero %03x, clone %03x, zero %03x",
+                             pfn, pfn + batch, _batch, rezero, clone, _zero);
+                if (vm_save_info.compress_mode == VM_SAVE_COMPRESS_LZ4)
+                    _batch += vm_save_info.single_page ?
+                        2 * MAX_BATCH_SIZE : MAX_BATCH_SIZE;
+                filebuf_write(f, &_batch, sizeof(_batch));
+                if (vm_save_info.compress_mode == VM_SAVE_COMPRESS_LZ4)
+                    _batch -= vm_save_info.single_page ?
+                        2 * MAX_BATCH_SIZE : MAX_BATCH_SIZE;
+                filebuf_write(f, pfn_batch, _batch * sizeof(pfn_batch[0]));
+                if (vm_save_info.compress_mode == VM_SAVE_COMPRESS_LZ4 &&
+                    vm_save_info.single_page) {
+                    compress_size = 0;
+                    mem_pos = filebuf_tell(f) + sizeof(compress_size);
+                }
             }
             j = 0;
             m_run = 0;
@@ -651,7 +658,7 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
                     SAVE_DPRINTF(
                         "     write %08x:%08x = %03x pages",
                         pfn + run, pfn + j, b_run);
-                    if (!compress) {
+                    if (vm_save_info.compress_mode == VM_SAVE_COMPRESS_NONE) {
                         int i;
                         pos = filebuf_tell(f);
                         for (i = 0; i < b_run; i++) {
@@ -663,8 +670,9 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
                         filebuf_write(
                             f, &mem_buffer[gpfn_info_list[run].offset],
                             b_run << PAGE_SHIFT);
-                    } else {
-                        if (single_page) {
+                    } else if (vm_save_info.compress_mode ==
+                               VM_SAVE_COMPRESS_LZ4) {
+                        if (vm_save_info.single_page) {
                             int i, cs1;
                             for (i = 0; i < b_run; i++) {
                                 cs1 = uxenvm_compress_lz4(
@@ -714,8 +722,8 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
 
             if (_batch)
                 debug_printf("%d stray pages\n", _batch);
-            if (compress) {
-                if (!single_page) {
+            if (vm_save_info.compress_mode == VM_SAVE_COMPRESS_LZ4) {
+                if (!vm_save_info.single_page) {
                     compress_size = uxenvm_compress_lz4(
                         compress_mem, compress_buf, m_run << PAGE_SHIFT);
                     if (compress_size >= m_run << PAGE_SHIFT) {
@@ -797,7 +805,7 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
 
         APRINTF("memory: pages %d zero %d rezero %d clone %d", total_pages,
                 total_zero - total_rezero, total_rezero, total_clone);
-        if (compress && total_pages) {
+        if (vm_save_info.compress_mode == VM_SAVE_COMPRESS_LZ4 && total_pages) {
             int pct;
             pct = 10000 * (total_compress_save >> PAGE_SHIFT) / total_pages;
             APRINTF("        compressed %d in-vain %d -- saved %"PRIdSIZE
@@ -1754,11 +1762,18 @@ void
 mc_savevm(Monitor *mon, const dict args)
 {
     const char *filename;
+    const char *c;
 
     filename = dict_get_string(args, "filename");
     vm_save_info.filename = filename ? strdup(filename) : NULL;
 
-    vm_save_info.compress = dict_get_string(args, "compress") ? 1 : 0;
+    vm_save_info.compress_mode = VM_SAVE_COMPRESS_NONE;
+    c = dict_get_string(args, "compress");
+    if (c) {
+        if (!strcmp(c, "lz4"))
+            vm_save_info.compress_mode = VM_SAVE_COMPRESS_LZ4;
+    }
+
     vm_save_info.single_page = dict_get_boolean_default(args, "single-page", 1);
     vm_save_info.free_mem = dict_get_boolean_default(args, "free-mem", 1);
     vm_save_info.high_compress = dict_get_boolean_default(args,
@@ -1842,9 +1857,7 @@ vm_save_execute(void)
 	goto out;
     }
 
-    ret = uxenvm_savevm_write_pages(f, vm_save_info.compress,
-                                    vm_save_info.free_mem,
-                                    vm_save_info.single_page, &err_msg);
+    ret = uxenvm_savevm_write_pages(f, &err_msg);
     if (ret) {
         if (!err_msg)
             asprintf(&err_msg, "uxenvm_savevm_write_pages() failed");

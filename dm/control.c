@@ -304,11 +304,19 @@ control_command_save(void *opaque, const char *id, const char *opt,
 {
     struct control_desc *cd = (struct control_desc *)opaque;
     const char *filename;
+    const char *c;
 
     filename = dict_get_string(d, "filename");
 
     vm_save_info.filename = filename ? strdup(filename) : NULL;
-    vm_save_info.compress = dict_get_string(d, "compress") ? 1 : 0;
+
+    vm_save_info.compress_mode = VM_SAVE_COMPRESS_NONE;
+    c = dict_get_string(d, "compress");
+    if (c) {
+        if (!strcmp(c, "lz4"))
+            vm_save_info.compress_mode = VM_SAVE_COMPRESS_LZ4;
+    }
+
     vm_save_info.single_page = dict_get_boolean(d, "single-page");
     vm_save_info.free_mem = dict_get_boolean(d, "free-mem");
     vm_save_info.high_compress = dict_get_boolean(d, "high-compress");

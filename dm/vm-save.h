@@ -9,6 +9,15 @@
 
 struct control_desc;
 
+enum vm_save_compress_mode {
+    VM_SAVE_COMPRESS_NONE = 1,
+    VM_SAVE_COMPRESS_LZ4,
+};
+
+#define _m(v) (1 << (v))
+#define vm_save_compress_mode_batched(m)                                \
+    (!!(_m(m) & (_m(VM_SAVE_COMPRESS_NONE) | _m(VM_SAVE_COMPRESS_LZ4))))
+
 struct vm_save_info {
     int awaiting_suspend;
     int save_requested;
@@ -22,7 +31,7 @@ struct vm_save_info {
     struct control_desc *resume_cd;
     char *resume_id;
 
-    int compress;
+    enum vm_save_compress_mode compress_mode;
     int single_page;
     int free_mem;
     int high_compress;
