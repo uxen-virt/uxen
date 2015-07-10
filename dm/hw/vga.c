@@ -1069,7 +1069,7 @@ static void vga_draw_text(VGAState *s, int full_update)
         cw != s->last_cw || cheight != s->last_ch || s->last_depth) {
         s->last_scr_width = width * cw;
         s->last_scr_height = height * cheight;
-        console_resize(s->ds, s->last_scr_width, s->last_scr_height);
+        display_resize(s->ds, s->last_scr_width, s->last_scr_height);
         s->last_depth = 0;
         s->last_width = width;
         s->last_height = height;
@@ -1351,7 +1351,7 @@ static void vga_draw_graphic(VGAState *s, int full_update)
         height != s->last_height ||
         s->last_depth != depth) {
 
-        console_resize_from(s->ds, disp_width, height, depth, s->line_offset,
+        display_resize_from(s->ds, disp_width, height, depth, s->line_offset,
                             s->vmem_ptr, s->start_addr * 4);
         s->last_scr_width = disp_width;
         s->last_scr_height = height;

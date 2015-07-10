@@ -199,7 +199,7 @@ free_surface(struct gui_state *state, struct display_surface *surface)
 
 /* Update a region of the screen. */
 static void
-win_update(struct gui_state *state, int x, int y, int w, int h)
+gui_update(struct gui_state *state, int x, int y, int w, int h)
 {
     struct win32_gui_state *s = (void *)state;
     RECT r = { x, y, x + w, y + h };
@@ -210,7 +210,7 @@ win_update(struct gui_state *state, int x, int y, int w, int h)
 
 /* Resize the screen. */
 static void
-win_resize(struct gui_state *state, int w, int h)
+gui_resize(struct gui_state *state, int w, int h)
 {
     struct win32_gui_state *s = (void *)state;
     int width = s->requested_w ? : w;
@@ -241,7 +241,7 @@ win_resize(struct gui_state *state, int w, int h)
 
 /* Request to refresh the screen. */
 static void
-win_refresh(struct gui_state *state)
+gui_refresh(struct gui_state *state)
 {
     struct win32_gui_state *s = (void *)state;
 
@@ -249,7 +249,7 @@ win_refresh(struct gui_state *state)
 }
 
 static void
-win_cursor_shape(struct gui_state *state,
+gui_cursor_shape(struct gui_state *state,
                  int w, int h,
                  int hot_x, int hot_y,
                  uint8_t *mask, uint8_t *color)
@@ -1578,7 +1578,7 @@ static void disp_inv_rect(void *priv, int x, int y, int w, int h)
 }
 
 static int
-console_init(char *optstr)
+gui_init(char *optstr)
 {
     guest_agent_init();
     disp = uxenconsole_disp_init(vm_id, NULL, disp_inv_rect);
@@ -1586,7 +1586,7 @@ console_init(char *optstr)
 }
 
 static void
-console_exit(void)
+gui_exit(void)
 {
     uxenconsole_disp_cleanup(disp);
     disp = NULL;
@@ -1594,7 +1594,7 @@ console_exit(void)
 }
 
 static int
-console_create(struct gui_state *state, struct display_state *ds)
+gui_create(struct gui_state *state, struct display_state *ds)
 {
     struct win32_gui_state *s = (void *)state;
 
@@ -1623,7 +1623,7 @@ console_create(struct gui_state *state, struct display_state *ds)
 }
 
 static void
-console_start(struct gui_state *state)
+gui_start(struct gui_state *state)
 {
     struct win32_gui_state *s = (void *)state;
     DWORD ret;
@@ -1638,7 +1638,7 @@ console_start(struct gui_state *state)
 }
 
 static void
-console_destroy(struct gui_state *state)
+gui_destroy(struct gui_state *state)
 {
     struct win32_gui_state *s = (void *)state;
     DWORD ret;
@@ -1661,19 +1661,19 @@ console_destroy(struct gui_state *state)
 static struct gui_info win_gui_info = {
     .name = "win32",
     .size = sizeof(struct win32_gui_state),
-    .init = console_init,
-    .start = console_start,
-    .exit = console_exit,
-    .create = console_create,
-    .destroy = console_destroy,
+    .init = gui_init,
+    .start = gui_start,
+    .exit = gui_exit,
+    .create = gui_create,
+    .destroy = gui_destroy,
     .create_surface = create_surface,
     .create_vram_surface = create_vram_surface,
     .free_surface = free_surface,
     .vram_change = vram_changed,
-    .display_update = win_update,
-    .display_resize = win_resize,
-    .display_refresh = win_refresh,
-    .display_cursor_shape = win_cursor_shape,
+    .update = gui_update,
+    .resize = gui_resize,
+    .refresh = gui_refresh,
+    .cursor_shape = gui_cursor_shape,
 #if MONITOR
     .mon_resize_screen = mon_resize_screen,
 #endif

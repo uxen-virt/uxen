@@ -98,7 +98,7 @@ struct remote_gui_state {
     int mouse_x, mouse_y;
 };
 
-static void display_resize(struct gui_state *state, int w, int h);
+static void gui_resize(struct gui_state *state, int w, int h);
 
 static void
 handle_message(struct remote_gui_state *s, struct uxenconsole_msg_header *hdr)
@@ -197,7 +197,7 @@ handle_message(struct remote_gui_state *s, struct uxenconsole_msg_header *hdr)
 #endif /* !__APPLE */
             {
                 /* Cancel request by sending a resize message immediately */
-                display_resize(&s->state, s->state.width, s->state.height);
+                gui_resize(&s->state, s->state.width, s->state.height);
             }
         }
         break;
@@ -478,7 +478,7 @@ free_surface(struct gui_state *state, struct display_surface *surface)
 }
 
 static void
-display_update(struct gui_state *state, int x, int y, int w, int h)
+gui_update(struct gui_state *state, int x, int y, int w, int h)
 {
     struct uxenconsole_msg_invalidate_rect m;
     struct ipc_client *c;
@@ -495,7 +495,7 @@ display_update(struct gui_state *state, int x, int y, int w, int h)
 }
 
 static void
-display_resize(struct gui_state *state, int w, int h)
+gui_resize(struct gui_state *state, int w, int h)
 {
     struct remote_gui_state *s = (void *)state;
     struct uxenconsole_msg_resize_surface m;
@@ -520,7 +520,7 @@ display_resize(struct gui_state *state, int w, int h)
 }
 
 static void
-display_refresh(struct gui_state *state)
+gui_refresh(struct gui_state *state)
 {
     struct remote_gui_state *s = (void *)state;
 
@@ -528,10 +528,10 @@ display_refresh(struct gui_state *state)
 }
 
 static void
-display_cursor_shape(struct gui_state *state,
-                     int w, int h,
-                     int hot_x, int hot_y,
-                     uint8_t *mask, uint8_t *color)
+gui_cursor_shape(struct gui_state *state,
+                 int w, int h,
+                 int hot_x, int hot_y,
+                 uint8_t *mask, uint8_t *color)
 {
     struct remote_gui_state *s = (void *)state;
     struct uxenconsole_msg_update_cursor m;
@@ -601,7 +601,7 @@ display_cursor_shape(struct gui_state *state,
 }
 
 static int
-console_init(char *optstr)
+gui_init(char *optstr)
 {
     if (optstr) {
         int rc;
@@ -622,7 +622,7 @@ console_init(char *optstr)
 }
 
 static int
-console_create(struct gui_state *state, struct display_state *ds)
+gui_create(struct gui_state *state, struct display_state *ds)
 {
     struct remote_gui_state *s = (void *)state;
 
@@ -641,19 +641,19 @@ console_create(struct gui_state *state, struct display_state *ds)
 }
 
 static void
-console_start(struct gui_state *state)
+gui_start(struct gui_state *state)
 {
     DPRINTF("%s\n", __FUNCTION__);
 }
 
 static void
-console_exit(void)
+gui_exit(void)
 {
     ipc_service_cleanup(&console_svc);
 }
 
 static void
-console_destroy(struct gui_state *state)
+gui_destroy(struct gui_state *state)
 {
     struct remote_gui_state *s = (void *)state;
 
@@ -678,19 +678,19 @@ vram_changed(struct gui_state *state, struct vram_desc *v)
 static struct gui_info remote_gui_info = {
     .name = "remote",
     .size = sizeof(struct remote_gui_state),
-    .init = console_init,
-    .start = console_start,
-    .exit = console_exit,
-    .create = console_create,
-    .destroy = console_destroy,
+    .init = gui_init,
+    .start = gui_start,
+    .exit = gui_exit,
+    .create = gui_create,
+    .destroy = gui_destroy,
     .create_surface = create_surface,
     .create_vram_surface = create_vram_surface,
     .free_surface = free_surface,
     .vram_change = vram_changed,
-    .display_update = display_update,
-    .display_resize = display_resize,
-    .display_refresh = display_refresh,
-    .display_cursor_shape = display_cursor_shape,
+    .update = gui_update,
+    .resize = gui_resize,
+    .refresh = gui_refresh,
+    .cursor_shape = gui_cursor_shape,
 };
 
 console_gui_register(remote_gui_info)

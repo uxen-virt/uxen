@@ -676,7 +676,7 @@ vm_exit(void *opaque)
     clip_service_stop();
 #endif
 
-    console_display_exit();
+    console_exit();
     control_exit();
 
     exit(0);

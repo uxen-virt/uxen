@@ -37,14 +37,18 @@ struct display_surface {
     void (*unlock)(struct display_surface *);
 };
 
+struct console_hw_ops {
+    void (*update)(void *);
+    void (*invalidate)(void *);
+    void (*text_update)(void *, console_ch_t *);
+};
+
 struct display_state {
     struct display_surface *surface;
     critical_section resize_lock;
     TAILQ_ENTRY(display_state) link;
     struct gui_state *gui;
-    void (*hw_update)(void *);
-    void (*hw_invalidate)(void *);
-    void (*hw_text_update)(void *, console_ch_t *);
+    struct console_hw_ops *hw_ops;
     void *hw;
 };
 TAILQ_HEAD(display_list, display_state);
@@ -150,23 +154,21 @@ static inline void console_write_ch(console_ch_t *dest, uint32_t ch)
     *dest = ch;
 }
 
-struct display_state *graphic_console_init(void (*update)(void *),
-                                           void (*invalidate)(void *),
-                                           void (*text_update)(void *, console_ch_t *),
-                                           void *opaque);
-
-void vga_hw_update(struct display_state *ds);
-void vga_hw_invalidate(struct display_state *ds);
-
-void console_resize(struct display_state *ds, int width, int height);
-void console_resize_from(struct display_state *ds, int width, int height,
+struct display_state *display_create(struct console_hw_ops *ops,
+                                     void *opaque);
+void display_resize(struct display_state *ds, int width, int height);
+void display_resize_from(struct display_state *ds, int width, int height,
                          int depth, int linesize,
                          void *vram_ptr,
                          unsigned int vram_offset);
 
-int console_display_init(const char *name);
-void console_display_start(void);
-void console_display_exit(void);
+void vga_hw_update(struct display_state *ds);
+void vga_hw_invalidate(struct display_state *ds);
+
+
+int console_init(const char *name);
+void console_start(void);
+void console_exit(void);
 
 void do_dpy_trigger_refresh(void *opaque);
 void do_dpy_setup_refresh(void);
@@ -204,13 +206,13 @@ struct gui_info {
     void (*mon_resize_screen)(struct gui_state *s,
                               Monitor *mon, const dict args);
 #endif
-    void (*display_update)(struct gui_state *s, int x, int y, int w, int h);
-    void (*display_resize)(struct gui_state *s, int w, int h);
-    void (*display_refresh)(struct gui_state *s);
-    void (*display_cursor)(struct gui_state *s, int x, int y);
-    void (*display_cursor_shape)(struct gui_state *s,
-                                 int w, int h, int hot_x, int hot_y,
-                                 uint8_t *mask, uint8_t *color);
+    void (*update)(struct gui_state *s, int x, int y, int w, int h);
+    void (*resize)(struct gui_state *s, int w, int h);
+    void (*refresh)(struct gui_state *s);
+    void (*cursor)(struct gui_state *s, int x, int y);
+    void (*cursor_shape)(struct gui_state *s,
+                         int w, int h, int hot_x, int hot_y,
+                         uint8_t *mask, uint8_t *color);
     struct gui_info *next;
 };
 

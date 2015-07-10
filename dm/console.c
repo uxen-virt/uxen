@@ -22,32 +22,28 @@ uint32_t forwarded_keys = 0;
 
 void vga_hw_update(struct display_state *ds)
 {
-    if (ds->hw_update)
-        ds->hw_update(ds->hw);
+    if (ds->hw_ops->update)
+        ds->hw_ops->update(ds->hw);
 }
 
 void vga_hw_invalidate(struct display_state *ds)
 {
-    if (ds->hw_invalidate)
-        ds->hw_invalidate(ds->hw);
+    if (ds->hw_ops->invalidate)
+        ds->hw_ops->invalidate(ds->hw);
 }
 
 
-struct display_state *graphic_console_init(void (*update)(void *),
-                                           void (*invalidate)(void *),
-                                           void (*text_update)(void *, console_ch_t *),
-                                           void *opaque)
+struct display_state *display_create(struct console_hw_ops *ops,
+                                     void *opaque)
 {
     struct display_state *ds;
 
     ds = (struct display_state *)calloc(1, sizeof(struct display_state));
     if (!ds)
         errx(1, "%s: alloc struct display_state failed", __FUNCTION__);
-    critical_section_init(&ds->resize_lock);
 
-    ds->hw_update = update;
-    ds->hw_invalidate = invalidate;
-    ds->hw_text_update = text_update;
+    critical_section_init(&ds->resize_lock);
+    ds->hw_ops = ops;
     ds->hw = opaque;
 
     TAILQ_INSERT_TAIL(&displays, ds, link);
@@ -76,7 +72,7 @@ int console_set_forwarded_keys(yajl_val arg)
     return 0;
 }
 
-void console_resize(struct display_state *ds, int width, int height)
+void display_resize(struct display_state *ds, int width, int height)
 {
     critical_section_enter(&ds->resize_lock);
     ds->surface = resize_displaysurface(ds, ds->surface, width, height);
@@ -84,7 +80,7 @@ void console_resize(struct display_state *ds, int width, int height)
     dpy_resize(ds);
 }
 
-void console_resize_from(struct display_state *ds, int width, int height,
+void display_resize_from(struct display_state *ds, int width, int height,
                          int depth, int linesize,
                          void *vram_ptr,
                          unsigned int vram_offset)
@@ -247,7 +243,7 @@ console_state_load(QEMUFile *f, void *opaque, int version_id)
 }
 
 int
-console_display_init(const char *name)
+console_init(const char *name)
 {
     int ret = 0;
     char *type;
@@ -301,7 +297,7 @@ console_display_init(const char *name)
 }
 
 void
-console_display_exit(void)
+console_exit(void)
 {
     struct display_state *ds;
 
@@ -317,7 +313,7 @@ console_display_exit(void)
 }
 
 void
-console_display_start(void)
+console_start(void)
 {
     if (gui_info && gui_info->start) {
         struct display_state *ds;
@@ -389,8 +385,8 @@ dpy_vram_change(struct display_state *ds, struct vram_desc *v)
 void
 dpy_update(struct display_state *ds, int x, int y, int w, int h)
 {
-    if (gui_info && gui_info->display_update)
-        gui_info->display_update(ds->gui, x, y, w, h);
+    if (gui_info && gui_info->update)
+        gui_info->update(ds->gui, x, y, w, h);
 }
 
 void
@@ -399,22 +395,22 @@ dpy_resize(struct display_state *ds)
     int w = ds_get_width(ds);
     int h = ds_get_height(ds);
 
-    if (gui_info && gui_info->display_resize)
-        gui_info->display_resize(ds->gui, w, h);
+    if (gui_info && gui_info->resize)
+        gui_info->resize(ds->gui, w, h);
 }
 
 void
 dpy_refresh(struct display_state *ds)
 {
-    if (gui_info && gui_info->display_refresh)
-        gui_info->display_refresh(ds->gui);
+    if (gui_info && gui_info->refresh)
+        gui_info->refresh(ds->gui);
 }
 
 void
 dpy_cursor(struct display_state *ds, int x, int y)
 {
-    if (gui_info && gui_info->display_cursor)
-        gui_info->display_cursor(ds->gui, x, y);
+    if (gui_info && gui_info->cursor)
+        gui_info->cursor(ds->gui, x, y);
 }
 
 void
@@ -422,8 +418,8 @@ dpy_cursor_shape(struct display_state *ds,
                  int w, int h, int hot_x, int hot_y,
                  uint8_t *mask, uint8_t *color)
 {
-    if (gui_info && gui_info->display_cursor_shape)
-        gui_info->display_cursor_shape(ds->gui,
-                                       w, h, hot_x, hot_y, mask, color);
+    if (gui_info && gui_info->cursor_shape)
+        gui_info->cursor_shape(ds->gui,
+                               w, h, hot_x, hot_y, mask, color);
 }
 

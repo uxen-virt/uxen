@@ -328,7 +328,7 @@ main(int argc, char **argv)
 
     vm_init(vm_loadfile, vm_restore_mode);
 
-    if (console_display_init(console_type))
+    if (console_init(console_type))
         errx(1, "Failed to initialize GUI '%s'", console_type);
 
 #ifdef CONFIG_NET
@@ -343,7 +343,7 @@ main(int argc, char **argv)
         debug_printf("vm uuid:         %s\n", uuid);
     }
 
-    console_display_start();
+    console_start();
 
     qemu_chr_initial_reset();
 
@@ -397,7 +397,7 @@ main(int argc, char **argv)
 #if defined(CONFIG_NICKEL)
     ni_exit();
 #endif
-    console_display_exit();
+    console_exit();
     net_cleanup();
 
     return 0;

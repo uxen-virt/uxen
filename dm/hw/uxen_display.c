@@ -355,7 +355,7 @@ crtc_flush(struct uxendisp_state *s, int crtc_id)
             if (bank->len < sz)
                 bank_reg_write(s, bank_id, 0, sz);
 
-            console_resize_from(crtc->ds, w, h,
+            display_resize_from(crtc->ds, w, h,
                                 uxdisp_fmt_to_bpp(fmt),
                                 stride,
                                 bank->vram.view, offset);
@@ -793,6 +793,12 @@ uxendisp_reset(void *opaque)
     (void)s;
 }
 
+static struct console_hw_ops uxendisp_hw_ops = {
+    .update = uxendisp_update,
+    .invalidate = uxendisp_invalidate,
+    .text_update = uxendisp_text_update,
+};
+
 static int uxendisp_initfn(PCIDevice *dev)
 {
     struct uxendisp_state *s = DO_UPCAST(struct uxendisp_state, dev, dev);
@@ -831,9 +837,7 @@ static int uxendisp_initfn(PCIDevice *dev)
     pci_register_bar(&s->dev, 2, PCI_BASE_ADDRESS_SPACE_IO, &s->pio);
 
     /* XXX: One per CRTC */
-    s->crtcs[0].ds = graphic_console_init(uxendisp_update,
-                                          uxendisp_invalidate,
-                                          uxendisp_text_update, s);
+    s->crtcs[0].ds = display_create(&uxendisp_hw_ops, s);
     s->crtcs[0].flush_pending = 0;
 
     vga_init(v, pci_address_space(dev), pci_address_space_io(dev), s->crtcs[0].ds);
