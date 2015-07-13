@@ -22,14 +22,27 @@
 	<string>1</string>
 	<key>IOKitPersonalities</key>
 	<dict>
-		<key>V4VDevice</key>
+		<key>AHCIBlocker</key>
 		<dict>
 			<key>CFBundleIdentifier</key>
 			<string>org.uxen.driver.$(PRODUCT_NAME:rfc1034identifier)</string>
 			<key>IOClass</key>
-			<string>org_uxen_driver_guest_v4v_device</string>
+			<string>org_uxen_driver_AHCIBlocker</string>
+			<key>IOProviderClass</key>
+			<string>IOPCIDevice</string>
+			<key>IOProbeScore</key>
+			<integer>60000</integer>
+			<key>IOPCIClassMatch</key>
+			<string>0x01060100&amp;0xffffff00</string>
+		</dict>
+		<key>V4VStorageDevice</key>
+		<dict>
+			<key>CFBundleIdentifier</key>
+			<string>org.uxen.driver.$(PRODUCT_NAME:rfc1034identifier)</string>
+			<key>IOClass</key>
+			<string>org_uxen_driver_V4VStorageController</string>
 			<key>IONameMatch</key>
-			<string>UXV0100</string>
+			<string>UXS0FFF</string>
 			<key>IOProviderClass</key>
 			<string>IOACPIPlatformDevice</string>
 		</dict>
@@ -44,9 +57,11 @@
 		<string>10.0</string>
 		<key>com.apple.kpi.mach</key>
 		<string>10.0</string>
+		<key>com.apple.iokit.IOACPIFamily</key>
+		<string>1.4</string>
+		<key>com.apple.iokit.IOSCSIArchitectureModelFamily</key>
+		<string>3.6</string>
 		<key>org.uxen.driver.uxenv4vservice</key>
-		<string>1.0</string>
-		<key>org.uxen.driver.uxenvmlib</key>
 		<string>1.0</string>
 	</dict>
 	<key>OSBundleRequired</key>

@@ -1,0 +1,296 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		294663361B8337C900294284 /* uxennet.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 294663351B8337C900294284 /* uxennet.cpp */; };
+		29E732EE1B71248F004BDE4C /* uxennet.h in Headers */ = {isa = PBXBuildFile; fileRef = 29E732ED1B71248F004BDE4C /* uxennet.h */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		294663351B8337C900294284 /* uxennet.cpp */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 4; lastKnownFileType = sourcecode.cpp.cpp; path = uxennet.cpp; sourceTree = SOURCE_ROOT; tabWidth = 4; usesTabs = 0; };
+		29E732ED1B71248F004BDE4C /* uxennet.h */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 4; lastKnownFileType = sourcecode.c.h; path = uxennet.h; sourceTree = SOURCE_ROOT; tabWidth = 4; usesTabs = 0; };
+		D3342FD01B133A8F00A21C6F /* uxennet.kext */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = uxennet.kext; sourceTree = BUILT_PRODUCTS_DIR; };
+		D3342FD41B133A8F00A21C6F /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		D3342FCC1B133A8F00A21C6F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		D3342FC61B133A8F00A21C6F = {
+			isa = PBXGroup;
+			children = (
+				D3342FD21B133A8F00A21C6F /* uxennet */,
+				D3342FD11B133A8F00A21C6F /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		D3342FD11B133A8F00A21C6F /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				D3342FD01B133A8F00A21C6F /* uxennet.kext */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		D3342FD21B133A8F00A21C6F /* uxennet */ = {
+			isa = PBXGroup;
+			children = (
+				29E732ED1B71248F004BDE4C /* uxennet.h */,
+				294663351B8337C900294284 /* uxennet.cpp */,
+				D3342FD31B133A8F00A21C6F /* Supporting Files */,
+			);
+			name = uxennet;
+			path = uxenv4vnet;
+			sourceTree = "<group>";
+		};
+		D3342FD31B133A8F00A21C6F /* Supporting Files */ = {
+			isa = PBXGroup;
+			children = (
+				D3342FD41B133A8F00A21C6F /* Info.plist */,
+			);
+			name = "Supporting Files";
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXHeadersBuildPhase section */
+		D3342FCD1B133A8F00A21C6F /* Headers */ = {
+			isa = PBXHeadersBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				29E732EE1B71248F004BDE4C /* uxennet.h in Headers */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXHeadersBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		D3342FCF1B133A8F00A21C6F /* uxennet */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D3342FDB1B133A8F00A21C6F /* Build configuration list for PBXNativeTarget "uxennet" */;
+			buildPhases = (
+				D3342FCB1B133A8F00A21C6F /* Sources */,
+				D3342FCC1B133A8F00A21C6F /* Frameworks */,
+				D3342FCD1B133A8F00A21C6F /* Headers */,
+				D3342FCE1B133A8F00A21C6F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = uxennet;
+			productName = uxenv4vnet;
+			productReference = D3342FD01B133A8F00A21C6F /* uxennet.kext */;
+			productType = "com.apple.product-type.kernel-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		D3342FC71B133A8F00A21C6F /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 0620;
+				ORGANIZATIONNAME = "uXen Project";
+				TargetAttributes = {
+					D3342FCF1B133A8F00A21C6F = {
+						CreatedOnToolsVersion = 6.2;
+					};
+				};
+			};
+			buildConfigurationList = D3342FCA1B133A8F00A21C6F /* Build configuration list for PBXProject "uxennet" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = English;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = D3342FC61B133A8F00A21C6F;
+			productRefGroup = D3342FD11B133A8F00A21C6F /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				D3342FCF1B133A8F00A21C6F /* uxennet */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		D3342FCE1B133A8F00A21C6F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		D3342FCB1B133A8F00A21C6F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				294663361B8337C900294284 /* uxennet.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		D3342FD91B133A8F00A21C6F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../../../xen/include/public/",
+					"$(SRCROOT)/../../../osx/uxenv4vservice/",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.9;
+				MTL_ENABLE_DEBUG_INFO = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		D3342FDA1B133A8F00A21C6F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../../../xen/include/public/",
+					"$(SRCROOT)/../../../osx/uxenv4vservice/",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 10.9;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		D3342FDC1B133A8F00A21C6F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1.0.0d1;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../../../common/include/xen-public/",
+					"$(SRCROOT)/../../../osx/uxenv4vservice/",
+				);
+				INFOPLIST_FILE = Info.plist;
+				MODULE_NAME = org.uxen.driver.uxenv4vnet;
+				MODULE_VERSION = 1.0.0d1;
+				PRODUCT_NAME = uxennet;
+				WRAPPER_EXTENSION = kext;
+			};
+			name = Debug;
+		};
+		D3342FDD1B133A8F00A21C6F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1.0.0d1;
+				HEADER_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(SRCROOT)/../../../common/include/xen-public/",
+					"$(SRCROOT)/../../../osx/uxenv4vservice/",
+				);
+				INFOPLIST_FILE = Info.plist;
+				MODULE_NAME = org.uxen.driver.uxenv4vnet;
+				MODULE_VERSION = 1.0.0d1;
+				PRODUCT_NAME = uxennet;
+				WRAPPER_EXTENSION = kext;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		D3342FCA1B133A8F00A21C6F /* Build configuration list for PBXProject "uxennet" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D3342FD91B133A8F00A21C6F /* Debug */,
+				D3342FDA1B133A8F00A21C6F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		D3342FDB1B133A8F00A21C6F /* Build configuration list for PBXNativeTarget "uxennet" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D3342FDC1B133A8F00A21C6F /* Debug */,
+				D3342FDD1B133A8F00A21C6F /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = D3342FC71B133A8F00A21C6F /* Project object */;
+}

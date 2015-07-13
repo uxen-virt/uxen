@@ -12,6 +12,7 @@ SUBDIRS += uxenps2
 SUBDIRS += uxenplatform
 SUBDIRS += uxenvmlib
 SUBDIRS += uxenv4vguest
+SUBDIRS += uxennet
 
 TARGETS = all dist
 

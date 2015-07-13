@@ -22,16 +22,18 @@
 	<string>1</string>
 	<key>IOKitPersonalities</key>
 	<dict>
-		<key>V4VDevice</key>
+		<key>V4VNetworkDevice</key>
 		<dict>
 			<key>CFBundleIdentifier</key>
 			<string>org.uxen.driver.$(PRODUCT_NAME:rfc1034identifier)</string>
 			<key>IOClass</key>
-			<string>org_uxen_driver_guest_v4v_device</string>
+			<string>org_uxen_driver_uxen_net</string>
 			<key>IONameMatch</key>
-			<string>UXV0100</string>
+			<string>UXN0100</string>
 			<key>IOProviderClass</key>
 			<string>IOACPIPlatformDevice</string>
+			<key>Product Name</key>
+			<string>V4V uxennet</string>
 		</dict>
 	</dict>
 	<key>NSHumanReadableCopyright</key>
@@ -46,10 +48,12 @@
 		<string>10.0</string>
 		<key>org.uxen.driver.uxenv4vservice</key>
 		<string>1.0</string>
-		<key>org.uxen.driver.uxenvmlib</key>
-		<string>1.0</string>
+		<key>com.apple.iokit.IOACPIFamily</key>
+		<string>1.4</string>
+		<key>com.apple.kpi.bsd</key>
+		<string>13.0</string>
+		<key>com.apple.iokit.IONetworkingFamily</key>
+		<string>3.2</string>
 	</dict>
-	<key>OSBundleRequired</key>
-	<string>Local-Root</string>
 </dict>
 </plist>
