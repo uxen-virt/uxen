@@ -13,6 +13,7 @@ SUBDIRS += uxenplatform
 SUBDIRS += uxenvmlib
 SUBDIRS += uxenv4vguest
 SUBDIRS += uxennet
+SUBDIRS += uxenstor
 
 TARGETS = all dist
 

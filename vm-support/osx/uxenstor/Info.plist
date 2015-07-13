@@ -27,7 +27,7 @@
 			<key>CFBundleIdentifier</key>
 			<string>org.uxen.driver.$(PRODUCT_NAME:rfc1034identifier)</string>
 			<key>IOClass</key>
-			<string>org_uxen_driver_AHCIBlocker</string>
+			<string>org_uxen_driver_ahci_blocker</string>
 			<key>IOProviderClass</key>
 			<string>IOPCIDevice</string>
 			<key>IOProbeScore</key>
@@ -40,7 +40,7 @@
 			<key>CFBundleIdentifier</key>
 			<string>org.uxen.driver.$(PRODUCT_NAME:rfc1034identifier)</string>
 			<key>IOClass</key>
-			<string>org_uxen_driver_V4VStorageController</string>
+			<string>org_uxen_driver_v4v_storage_controller</string>
 			<key>IONameMatch</key>
 			<string>UXS0FFF</string>
 			<key>IOProviderClass</key>
