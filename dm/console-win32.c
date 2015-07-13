@@ -401,8 +401,8 @@ handle_mouse_event(struct win32_gui_state *s, int x, int y, int dz, int wParam)
     if (input_mouse_is_absolute()) {
         last_mouse_x = x;
         last_mouse_y = y;
-        x = x * 0x7fff / (ds_get_width(s->ds) - 1);
-        y = y * 0x7fff / (ds_get_height(s->ds) - 1);
+        x = x * 0x7fff / (desktop_width - 1);
+        y = y * 0x7fff / (desktop_height - 1);
     } else {
         int dx, dy;
         dx = x - last_mouse_x;
@@ -695,8 +695,8 @@ hid_mouse_event(struct win32_gui_state *s,
     if (wParam & MK_XBUTTON2)
         buttons |= UXENHID_MOUSE_BUTTON_5;
 
-    scaled_x = (x * UXENHID_XY_MAX) / (ds_get_width(s->ds) - 1);
-    scaled_y = (y * UXENHID_XY_MAX) / (ds_get_height(s->ds) - 1);
+    scaled_x = (x * UXENHID_XY_MAX) / (desktop_width - 1);
+    scaled_y = (y * UXENHID_XY_MAX) / (desktop_height - 1);
 
     ret = uxenhid_send_mouse_report(buttons, scaled_x, scaled_y,
                                     wheel / 30, hwheel / 30);
@@ -740,9 +740,9 @@ hid_touch_event(struct win32_gui_state *s,
         pointer_id ^= info[i].pointerInfo.pointerId >> 16;
 
 #define SCALE_X(v) \
-        (((v) * UXENHID_XY_MAX) / (ds_get_width(s->ds) - 1))
+        (((v) * UXENHID_XY_MAX) / (desktop_width - 1))
 #define SCALE_Y(v) \
-        (((v) * UXENHID_XY_MAX) / (ds_get_height(s->ds) - 1))
+        (((v) * UXENHID_XY_MAX) / (desktop_height - 1))
 
         x = SCALE_X(info[i].pointerInfo.ptPixelLocation.x - pos.x);
         y = SCALE_Y(info[i].pointerInfo.ptPixelLocation.y - pos.y);
@@ -1261,8 +1261,8 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
          * Since we use SetCapture, we need to make sure we're not trying to
          * transmit negative or coordinates larger than the desktop size.
          */
-        if ((x < 0) || (x >= ds_get_width(s->ds)) ||
-            (y < 0) || (y >= ds_get_height(s->ds))) {
+        if ((x < 0) || (x >= desktop_width) ||
+            (y < 0) || (y >= desktop_height)) {
             x = last_mouse_x;
             y = last_mouse_y;
         }

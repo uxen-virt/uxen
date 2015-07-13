@@ -50,6 +50,8 @@ struct display_state {
     struct gui_state *gui;
     struct console_hw_ops *hw_ops;
     void *hw;
+    int desktop_x;
+    int desktop_y;
 };
 TAILQ_HEAD(display_list, display_state);
 
@@ -156,11 +158,15 @@ static inline void console_write_ch(console_ch_t *dest, uint32_t ch)
 
 struct display_state *display_create(struct console_hw_ops *ops,
                                      void *opaque);
+void display_destroy(struct display_state *ds);
 void display_resize(struct display_state *ds, int width, int height);
 void display_resize_from(struct display_state *ds, int width, int height,
                          int depth, int linesize,
                          void *vram_ptr,
                          unsigned int vram_offset);
+void display_move(struct display_state *ds, int desktop_x, int desktop_y);
+extern int desktop_width;
+extern int desktop_height;
 
 void vga_hw_update(struct display_state *ds);
 void vga_hw_invalidate(struct display_state *ds);

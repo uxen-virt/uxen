@@ -16,7 +16,13 @@
 #include "qemu_glue.h"
 #include "uxen.h"
 
-static struct display_list displays = TAILQ_HEAD_INITIALIZER(displays);
+int desktop_width, desktop_height;
+
+static struct display_list desktop;
+static critical_section desktop_lock;
+static struct gui_info *gui_info_list = NULL;
+static struct gui_info *gui_info = NULL;
+
 
 uint32_t forwarded_keys = 0;
 
@@ -32,6 +38,24 @@ void vga_hw_invalidate(struct display_state *ds)
         ds->hw_ops->invalidate(ds->hw);
 }
 
+static void desktop_refresh(void)
+{
+    struct display_state *ds;
+    int max_x = 0;
+    int max_y = 0;
+
+    /* desktop_lock is taken */
+    TAILQ_FOREACH(ds, &desktop, link) {
+        if (!ds->surface)
+            continue;
+        if (ds->desktop_x + ds->surface->width > max_x)
+            max_x = ds->desktop_x + ds->surface->width;
+        if (ds->desktop_y + ds->surface->height > max_y)
+            max_y = ds->desktop_y + ds->surface->height;
+    }
+    desktop_width = max_x;
+    desktop_height = max_y;
+}
 
 struct display_state *display_create(struct console_hw_ops *ops,
                                      void *opaque)
@@ -42,13 +66,42 @@ struct display_state *display_create(struct console_hw_ops *ops,
     if (!ds)
         errx(1, "%s: alloc struct display_state failed", __FUNCTION__);
 
+
     critical_section_init(&ds->resize_lock);
     ds->hw_ops = ops;
     ds->hw = opaque;
 
-    TAILQ_INSERT_TAIL(&displays, ds, link);
+    critical_section_enter(&desktop_lock);
+    desktop_refresh();
+    ds->desktop_x = desktop_width;
+    ds->desktop_y = 0;
+
+    if (gui_info && gui_info->create && !ds->gui) {
+        ds->gui = calloc(1, gui_info->size);
+        if (ds->gui)
+            gui_info->create(ds->gui, ds);
+    }
+
+    TAILQ_INSERT_TAIL(&desktop, ds, link);
+    critical_section_leave(&desktop_lock);
 
     return ds;
+}
+
+void display_destroy(struct display_state *ds)
+{
+    critical_section_enter(&desktop_lock);
+    if (ds->gui && gui_info && gui_info->destroy)
+        gui_info->destroy(ds->gui);
+    TAILQ_REMOVE(&desktop, ds, link);
+    if (ds->surface) {
+        free_displaysurface(ds, ds->surface);
+        ds->surface = NULL;
+    }
+    desktop_refresh();
+    critical_section_leave(&desktop_lock);
+
+    free(ds);
 }
 
 int console_set_forwarded_keys(yajl_val arg)
@@ -72,11 +125,24 @@ int console_set_forwarded_keys(yajl_val arg)
     return 0;
 }
 
+void display_move(struct display_state *ds, int desktop_x, int desktop_y)
+{
+    critical_section_enter(&desktop_lock);
+    ds->desktop_x = desktop_x;
+    ds->desktop_y = desktop_y;
+    desktop_refresh();
+    critical_section_leave(&desktop_lock);
+
+}
+
 void display_resize(struct display_state *ds, int width, int height)
 {
+    critical_section_enter(&desktop_lock);
     critical_section_enter(&ds->resize_lock);
     ds->surface = resize_displaysurface(ds, ds->surface, width, height);
     critical_section_leave(&ds->resize_lock);
+    desktop_refresh();
+    critical_section_leave(&desktop_lock);
     dpy_resize(ds);
 }
 
@@ -85,6 +151,7 @@ void display_resize_from(struct display_state *ds, int width, int height,
                          void *vram_ptr,
                          unsigned int vram_offset)
 {
+    critical_section_enter(&desktop_lock);
     critical_section_enter(&ds->resize_lock);
     if (ds->surface)
         free_displaysurface(ds, ds->surface);
@@ -98,6 +165,8 @@ void display_resize_from(struct display_state *ds, int width, int height,
         ds->surface = create_displaysurface(ds, width, height);
     critical_section_leave(&ds->resize_lock);
 
+    desktop_refresh();
+    critical_section_leave(&desktop_lock);
     dpy_resize(ds);
 }
 
@@ -189,8 +258,10 @@ static void refresh(void *opaque)
 {
     struct display_state *ds;
 
-    TAILQ_FOREACH(ds, &displays, link)
+    critical_section_enter(&desktop_lock);
+    TAILQ_FOREACH(ds, &desktop, link)
         dpy_refresh(ds);
+    critical_section_leave(&desktop_lock);
 }
 
 void do_dpy_trigger_refresh(void *opaque)
@@ -210,9 +281,6 @@ void do_dpy_setup_refresh(void)
     uxen_notification_add_wait_object(&vram_event, do_dpy_trigger_refresh, NULL);
     uxen_ioemu_event(UXEN_IOEMU_EVENT_VRAM, &vram_event);
 }
-
-static struct gui_info *gui_info_list = NULL;
-static struct gui_info *gui_info = NULL;
 
 void
 gui_register_info(struct gui_info *info)
@@ -281,8 +349,11 @@ console_init(const char *name)
             return ret;
     }
 
-    assert(!TAILQ_EMPTY(&displays));
-    TAILQ_FOREACH(ds, &displays, link) {
+    critical_section_enter(&desktop_lock);
+    assert(!TAILQ_EMPTY(&desktop));
+    TAILQ_FOREACH(ds, &desktop, link) {
+        if (ds->gui)
+            continue;
         ds->gui = calloc(1, gui_info->size);
         if (!ds->gui)
             continue;
@@ -290,6 +361,7 @@ console_init(const char *name)
         if (gui_info->create)
             gui_info->create(ds->gui, ds);
     }
+    critical_section_leave(&desktop_lock);
 
     free(type);
 
@@ -301,12 +373,14 @@ console_exit(void)
 {
     struct display_state *ds;
 
-    TAILQ_FOREACH(ds, &displays, link) {
+    critical_section_enter(&desktop_lock);
+    TAILQ_FOREACH(ds, &desktop, link) {
         if (gui_info->destroy)
             gui_info->destroy(ds->gui);
         free(ds->gui);
         ds->gui = NULL;
     }
+    critical_section_leave(&desktop_lock);
 
     if (gui_info && gui_info->exit)
         gui_info->exit();
@@ -318,8 +392,10 @@ console_start(void)
     if (gui_info && gui_info->start) {
         struct display_state *ds;
 
-        TAILQ_FOREACH(ds, &displays, link)
+        critical_section_enter(&desktop_lock);
+        TAILQ_FOREACH(ds, &desktop, link)
             gui_info->start(ds->gui);
+        critical_section_leave(&desktop_lock);
     }
 
     do_dpy_setup_refresh();
@@ -421,5 +497,13 @@ dpy_cursor_shape(struct display_state *ds,
     if (gui_info && gui_info->cursor_shape)
         gui_info->cursor_shape(ds->gui,
                                w, h, hot_x, hot_y, mask, color);
+}
+
+static void __attribute__((constructor))
+desktop_init(void)
+{
+    TAILQ_INIT(&desktop);
+    desktop_width = desktop_height = 0;
+    critical_section_init(&desktop_lock);
 }
 
