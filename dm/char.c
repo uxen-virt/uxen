@@ -1218,8 +1218,9 @@ static CharDriverState *qemu_chr_open_pty(void)
 
 typedef struct WinCharState {
     int max_size;
-    HANDLE hcom, hrecv, hsend;
-    OVERLAPPED orecv, osend;
+    int is_overlapped;
+    HANDLE hcom, hrecv;
+    OVERLAPPED orecv;
     BOOL fpipe;
     DWORD len;
     uint8_t pipebuf[1];
@@ -1248,9 +1249,6 @@ static void win_chr_close(CharDriverState *chr)
     if (s->fpipe) {
         NPDEBUG();
         if (s->hcom) {
-            if (CancelIoEx(s->hcom, &s->osend) ||
-                (GetLastError() != ERROR_NOT_FOUND))
-                    GetOverlappedResult(s->hcom, &s->osend, &size, TRUE);
             if (CancelIoEx(s->hcom, &s->orecv) ||
                 (GetLastError() != ERROR_NOT_FOUND))
                     GetOverlappedResult(s->hcom, &s->orecv, &size, TRUE);
@@ -1259,10 +1257,8 @@ static void win_chr_close(CharDriverState *chr)
             ioh_set_np_handler2(s->hrecv, NULL, NULL, NULL, NULL, chr->iohq);
     }
 
-    if (s->hsend) {
-        CloseHandle(s->hsend);
-        s->hsend = NULL;
-    }
+    s->is_overlapped = 0;
+
     if (s->hrecv) {
         CloseHandle(s->hrecv);
         s->hrecv = NULL;
@@ -1277,21 +1273,39 @@ static int win_chr_write(CharDriverState *chr, const uint8_t *buf, int len1)
 {
     WinCharState *s = chr->opaque;
     DWORD len, ret, size;
+    OVERLAPPED o;
+    HANDLE e = NULL;
 
     len = len1;
-    ZeroMemory(&s->osend, sizeof(s->osend));
-    s->osend.hEvent = s->hsend;
+
+    if (s->is_overlapped) {
+        e = CreateEvent(NULL, TRUE, FALSE, NULL);
+        if (!e)
+	    return 0;
+    }
+
+
     while (len > 0) {
-	ret = WriteFile(s->hcom, buf, len, &size, s->hsend ? &s->osend : NULL);
+	
+	if (e) {
+           ZeroMemory(&o, sizeof(o));
+           o.hEvent = e;
+        }
+
+	ret = WriteFile(s->hcom, buf, len, &size, e ? &o : NULL);
         if (!ret) {
-            if (GetLastError() == ERROR_IO_PENDING)
-                ret = GetOverlappedResult(s->hcom, &s->osend, &size, TRUE);
+            if (e && (GetLastError() == ERROR_IO_PENDING))
+                ret = GetOverlappedResult(s->hcom, &o, &size, TRUE);
 	    if (!ret)
                 break;
         }
 	buf += size;
 	len -= size;
     }
+
+    if (e)
+	CloseHandle(e);
+
     return len1 - len;
 }
 
@@ -1311,9 +1325,6 @@ win_chr_pipe_reopen(void *opaque)
     DWORD size;
     int ret;
 
-    if (CancelIoEx(s->hcom, &s->osend) ||
-        (GetLastError() != ERROR_NOT_FOUND))
-            GetOverlappedResult(s->hcom, &s->osend, &size, TRUE);
     if (CancelIoEx(s->hcom, &s->orecv) ||
         (GetLastError() != ERROR_NOT_FOUND))
             GetOverlappedResult(s->hcom, &s->orecv, &size, TRUE);
@@ -1342,9 +1353,6 @@ static void win_chr_pipe_reconnect(void *opaque)
     if (!s->server_mode)
         return; /* XXX not yet */
 
-    if (CancelIoEx(s->hcom, &s->osend) ||
-        (GetLastError() != ERROR_NOT_FOUND))
-            GetOverlappedResult(s->hcom, &s->osend, &size, TRUE);
     if (CancelIoEx(s->hcom, &s->orecv) ||
         (GetLastError() != ERROR_NOT_FOUND))
             GetOverlappedResult(s->hcom, &s->orecv, &size, TRUE);
@@ -1363,9 +1371,6 @@ win_chr_pipe_disconnect(void *opaque)
     WinCharState *s = chr->opaque;
     DWORD size;
 
-    if (CancelIoEx(s->hcom, &s->osend) ||
-        (GetLastError() != ERROR_NOT_FOUND))
-            GetOverlappedResult(s->hcom, &s->osend, &size, TRUE);
     if (CancelIoEx(s->hcom, &s->orecv) ||
         (GetLastError() != ERROR_NOT_FOUND))
             GetOverlappedResult(s->hcom, &s->orecv, &size, TRUE);
@@ -1572,11 +1577,8 @@ static int win_chr_pipe_init(CharDriverState *chr, const char *filename,
 
     ret = -1;
 
-    s->hsend = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (!s->hsend) {
-        Wwarn("CreateEvent failed");
-        goto fail;
-    }
+    s->is_overlapped = 1;
+
     s->hrecv = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (!s->hrecv) {
         Wwarn("CreateEvent failed");
