@@ -74,10 +74,18 @@ static inline void fpu_xrstor(struct vcpu *v, uint64_t mask)
     set_xcr0(xcr0_host);
 }
 
+DEFINE_PER_CPU(bool_t, ffxse_efer);
+
 /* Restor x87 FPU, MMX, SSE and SSE2 state */
 static inline void fpu_fxrstor(struct vcpu *v)
 {
     const char *fpu_ctxt = v->arch.fpu_ctxt;
+
+    if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD) {
+        this_cpu(ffxse_efer) = !!(read_efer() & EFER_FFXSE);
+        if (this_cpu(ffxse_efer))
+            write_efer(read_efer() & ~((u64)EFER_FFXSE));
+    }
 
     /*
      * FXRSTOR can fault if passed a corrupted data block. We handle this
@@ -181,6 +189,9 @@ static inline void fpu_fxsave(struct vcpu *v)
             : : "m" (*fpu_ctxt) );
     }
 #endif  /* __UXEN__ */
+
+    if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD && this_cpu(ffxse_efer))
+        write_efer(read_efer() | (u64)EFER_FFXSE);
 }
 
 #ifndef __UXEN__
