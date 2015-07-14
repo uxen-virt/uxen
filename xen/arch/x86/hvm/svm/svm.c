@@ -1346,10 +1346,13 @@ static void svm_fpu_dirty_intercept(void)
 {
     struct vcpu *v = current;
     struct vmcb_struct *vmcb = v->arch.hvm_svm.vmcb;
+#ifndef __UXEN_NOT_YET__
     struct vmcb_struct *n1vmcb = vcpu_nestedhvm(v).nv_n1vmcx;
+#endif  /* __UXEN_NOT_YET__ */
 
     svm_fpu_enter(v);
 
+#ifndef __UXEN_NOT_YET__
     if ( vmcb != n1vmcb )
     {
        /* Check if l1 guest must make FPU ready for the l2 guest */
@@ -1359,6 +1362,7 @@ static void svm_fpu_dirty_intercept(void)
            vmcb_set_cr0(n1vmcb, vmcb_get_cr0(n1vmcb) & ~X86_CR0_TS);
        return;
     }
+#endif  /* __UXEN_NOT_YET__ */
 
     if ( !(v->arch.hvm_vcpu.guest_cr[0] & X86_CR0_TS) )
         vmcb_set_cr0(vmcb, vmcb_get_cr0(vmcb) & ~X86_CR0_TS);
