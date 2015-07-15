@@ -419,7 +419,8 @@ v4v_memcpy_skip(void *_dst, const void *_src, size_t len, size_t *skip)
 /* Copy at most t bytes of the next message in the ring, into the buffer
  * at _buf, skipping skip bytes, setting from and protocol if they are not
  * NULL, returns the actual length of the message, or -1 if there is
- * nothing to read */
+ * nothing to read.
+ * Note: t must include skip, i.e. t is the end of the message subrange to read. */
 
 static V4V_INLINE ssize_t
 v4v_copy_out_offset(struct v4v_ring *r, struct v4v_addr *from,
