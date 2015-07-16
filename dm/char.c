@@ -1850,6 +1850,19 @@ typedef struct {
 
 static void tcp_chr_accept(void *opaque);
 
+static int tcp_chr_eof(CharDriverState *chr)
+{
+    TCPCharDriver *s = chr->opaque;
+    struct pollfd pfd = { 0 };
+
+    if (s->fd < 0)
+        return 0;
+
+    pfd.events |= POLLIN;
+    pfd.fd = s->fd;
+    return (1 == poll(&pfd, 1, 0)) && (pfd.revents & POLLHUP);
+}
+
 static int tcp_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
 {
     TCPCharDriver *s = chr->opaque;
@@ -2139,6 +2152,7 @@ static CharDriverState *qemu_chr_open_tcp(const char *host_str,
     chr->chr_write = tcp_chr_write;
     chr->chr_close = tcp_chr_close;
     chr->chr_reconnect = tcp_chr_reconnect;
+    chr->chr_eof = tcp_chr_eof;
 
     if (is_listen) {
         s->listen_fd = fd;
@@ -2271,6 +2285,14 @@ void qemu_chr_disconnect(CharDriverState *chr)
 {
     if (chr->chr_disconnect)
 	chr->chr_disconnect(chr);
+}
+
+int qemu_chr_eof(CharDriverState *chr)
+{
+    if (chr->chr_eof)
+        return chr->chr_eof(chr);
+
+    return 0;
 }
 
 int qemu_chr_reopen_all(void)

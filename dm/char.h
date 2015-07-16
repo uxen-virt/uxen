@@ -32,6 +32,7 @@ struct CharDriverState {
     void (*chr_reconnect)(void *);
     void (*chr_accept_input)(struct CharDriverState *chr);
     int (*chr_getname)(struct CharDriverState *s, char *buf, size_t buflen);
+    int  (*chr_eof)(struct CharDriverState *s);
     void *opaque;
     uint32_t events;
     int focus;
@@ -68,6 +69,7 @@ void qemu_chr_add_handlers(CharDriverState *s,
                            void *opaque);
 void qemu_chr_accept_input(CharDriverState *s);
 int qemu_chr_reopen_all(void);
+int qemu_chr_eof(CharDriverState *chr);
 
 #define qemu_chr_fe_ioctl(s, c, a) qemu_chr_ioctl(s, c, a)
 int qemu_chr_ioctl(CharDriverState *s, int cmd, void *arg);

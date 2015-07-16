@@ -1134,6 +1134,11 @@ static void fwd_connect_cb(void *opaque)
     if (so->state == TS_CLOSED) {
         uint16_t port;
 
+        /* check for chr betrayal */
+        if (so->chr && qemu_chr_eof(so->chr)) {
+            qemu_chr_send_event(so->chr, CHR_EVENT_NI_REFUSED);
+            goto free_timer;
+        }
         socket_reset(so);
         so->snd_iss = get_iss();
         port = tcp_get_free_port(so->ni);
