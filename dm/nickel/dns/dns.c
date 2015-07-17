@@ -240,7 +240,7 @@ struct dns_response dns_lookup(const char *cname)
     memset(&hints, 0, sizeof(hints));
 
     hints.ai_family = AF_UNSPEC;
-    hints.ai_flags = AI_CANONNAME;
+    hints.ai_flags = AI_CANONNAME | AI_ADDRCONFIG;
 
     ret.cname = cname;
 
