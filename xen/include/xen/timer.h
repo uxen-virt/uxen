@@ -53,6 +53,7 @@ struct timer {
 #define TIMER_TYPE_cpu        1 /* cpu timer. */
 #define TIMER_TYPE_vcpu       2 /* vcpu timer. */
     uint8_t type;
+    uint8_t suspended;
 };
 
 struct timers {
@@ -61,6 +62,7 @@ struct timers {
     struct timer  *list;
     struct timer  *running;
     struct list_head inactive;
+    s_time_t suspend_time;
 } __cacheline_aligned;
 
 /*
@@ -123,6 +125,12 @@ s_time_t align_timer(s_time_t firsttick, uint64_t period);
 
 /* Initialise lock and heap in struct timers. */
 void init_timers(struct timers *ts);
+
+/* suspend for sleep */
+void suspend_timers(void);
+
+/* resume after sleep */
+void resume_timers(void);
 
 #endif /* _TIMER_H_ */
 

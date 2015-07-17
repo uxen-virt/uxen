@@ -544,8 +544,12 @@ static void re_calibrate_tsc(int init)
     last_host_counter_tsc = _uxen_info.ui_host_counter_tsc;
 }
 
+void suspend_platform_time(void)
+{
+    suspend_timers();
+}
 
-void reinit_platform_time(void)
+void resume_platform_time(void)
 {
     struct cpu_time nt;
 
@@ -566,6 +570,8 @@ void reinit_platform_time(void)
 
     set_time_scale(&plt_scale, _uxen_info.ui_host_counter_frequency,
                    MILLISECS(1000));
+
+    resume_timers();
 
     calibration_epoch = MILLISECS(1000);
     set_timer(&calibration_timer, NOW() + calibration_epoch);

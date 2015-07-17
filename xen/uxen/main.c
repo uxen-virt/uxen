@@ -561,6 +561,7 @@ __uxen_suspend_xen(void)
     current->is_privileged = 1;
 
     on_selected_cpus(&cpu_online_map, do_hvm_cpu_down, NULL, 1);
+    suspend_platform_time();
 
     current->is_privileged = 0;
     uxen_set_current(NULL); /* not end_execution, do not process rcu */
@@ -589,7 +590,7 @@ __uxen_resume_xen(void)
     uxen_set_current(dom0->vcpu[smp_processor_id()]);
     current->is_privileged = 1;
 
-    reinit_platform_time();
+    resume_platform_time();
 
     cpumask_copy(&hvm_cpu_up_mask, &cpu_online_map);
 

@@ -44,7 +44,8 @@ int time_resume(void);
 void platform_time_calibration(void);
 void platform_time_sync(void);
 
-void reinit_platform_time(void);
+void suspend_platform_time(void);
+void resume_platform_time(void);
 
 struct ioreq;
 int dom0_pit_access(struct ioreq *ioreq);

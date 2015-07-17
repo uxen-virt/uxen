@@ -59,6 +59,11 @@ DEFINE_PER_CPU(s_time_t, timer_deadline);
 
 DEFINE_PER_CPU(uint8_t, timer_had_timeout);
 
+struct susp_iter {
+    s_time_t now;
+    int n;
+};
+
 /****************************************************************************
  * HEAP OPERATIONS.
  */
@@ -700,8 +705,27 @@ s_time_t align_timer(s_time_t firsttick, uint64_t period)
     return firsttick + (period - 1) - ((firsttick - 1) % period);
 }
 
-static void dump_timer(struct timer *t, s_time_t now)
+static void
+iterate_timers(struct timers *ts,
+               void (*fn)(struct timers *,
+                          struct timer *,
+                          void *),
+               void *opaque)
 {
+    struct timer *t;
+    int j;
+
+    for (j = 1; j <= GET_HEAP_SIZE(ts->heap); j++)
+        fn(ts, ts->heap[j], opaque);
+    for (t = ts->list, j = 0; t != NULL; t = t->list_next, j++)
+        fn(ts, t, opaque);
+}
+
+static void
+dump_timer(struct timers *ts, struct timer *t, void *opaque)
+{
+    s_time_t now = *((s_time_t*)opaque);
+
     printk("  ex=%8"PRId64"us timer=%p cb=%p(%p)",
            (t->expires - now) / 1000, t, t->function, t->data);
     print_symbol(" %s\n", (unsigned long)t->function);
@@ -709,13 +733,12 @@ static void dump_timer(struct timer *t, s_time_t now)
 
 /* static */ void dump_timerq(unsigned char key)
 {
-    struct timer  *t;
     struct timers *ts;
     unsigned long  flags;
     s_time_t       now = NOW();
     struct domain *d;
     struct vcpu   *v;
-    int            i, j;
+    int            i;
 
     printk("Dumping timer queues: NOW %"PRId64"\n", now);
 
@@ -725,10 +748,7 @@ static void dump_timer(struct timer *t, s_time_t now)
 
         printk("CPU%02d:\n", i);
         spin_lock_irqsave(&ts->lock, flags);
-        for ( j = 1; j <= GET_HEAP_SIZE(ts->heap); j++ )
-            dump_timer(ts->heap[j], now);
-        for ( t = ts->list, j = 0; t != NULL; t = t->list_next, j++ )
-            dump_timer(t, now);
+        iterate_timers(ts, dump_timer, &now);
         spin_unlock_irqrestore(&ts->lock, flags);
     }
 
@@ -737,13 +757,136 @@ static void dump_timer(struct timer *t, s_time_t now)
             printk("VCPU[%d.%d]:\n", d->domain_id, v->vcpu_id);
             ts = &v->timers;
             spin_lock_irqsave(&ts->lock, flags);
-            for ( j = 1; j <= GET_HEAP_SIZE(ts->heap); j++ )
-                dump_timer(ts->heap[j], now);
-            for ( t = ts->list, j = 0; t != NULL; t = t->list_next, j++ )
-                dump_timer(t, now);
+            iterate_timers(ts, dump_timer, &now);
             spin_unlock_irqrestore(&ts->lock, flags);
         }
     }
+}
+
+static void
+suspend_one_timer(struct timers *ts, struct timer *timer, void *opaque)
+{
+    struct susp_iter *it = (struct susp_iter*)opaque;
+
+    timer->suspended = 0;
+    if (active_timer(timer)) {
+        timer->suspended = 1;
+
+        /* save expiration delta WRT now now */
+        timer->expires -= it->now;
+    }
+    it->n += timer->suspended;
+}
+
+static void
+resume_one_timer(struct timers *ts, struct timer *timer, void *opaque)
+{
+    struct susp_iter *it = (struct susp_iter*)opaque;
+    int s = timer->suspended;
+
+    /* restore expiration time using saved delta (held in timer->expires) */
+    if (s) {
+        timer->suspended = 0;
+        timer->expires += it->now;
+        if (timer->type == TIMER_TYPE_cpu)
+            cpu_raise_softirq(timer->cpu, TIMER_SOFTIRQ);
+        else if (timer->type == TIMER_TYPE_vcpu)
+            vcpu_raise_softirq(timer->vcpu, TIMER_SOFTIRQ);
+    }
+    it->n += s;
+}
+
+static int
+__suspend_timers(struct timers *ts, s_time_t now)
+{
+    struct susp_iter it;
+
+    it.now = now;
+    it.n = 0;
+    iterate_timers(ts, suspend_one_timer, &it);
+    return it.n;
+}
+
+static int
+__resume_timers(struct timers *ts, s_time_t now)
+{
+    struct susp_iter it;
+
+    it.now = now;
+    it.n = 0;
+    iterate_timers(ts, resume_one_timer, &it);
+    return it.n;
+}
+
+static void
+suspend_resume_timers(int suspend)
+{
+    struct timers *ts;
+    struct domain *d;
+    struct vcpu *v;
+    unsigned long flags;
+    int i, n;
+    s_time_t now;
+
+    rcu_read_lock(&timer_cpu_read_lock);
+    for_each_online_cpu(i) {
+        ts = &per_cpu(timers, i);
+        spin_lock_irqsave(&ts->lock, flags);
+        now = NOW();
+        if (suspend) {
+            ts->suspend_time = now;
+            n = __suspend_timers(ts, now);
+            if (n)
+                printk("suspended pcpu%d timers; count=%d\n",
+                       i, n);
+        } else {
+            n = __resume_timers(ts, now);
+            if (n)
+                printk("resumed pcpu%d timers; count=%d; delta=%"PRId64"ms\n",
+                       i, n, (now - ts->suspend_time) / MILLISECS(1));
+        }
+        spin_unlock_irqrestore(&ts->lock, flags);
+    }
+    rcu_read_unlock(&timer_cpu_read_lock);
+
+    rcu_read_lock(&domlist_read_lock);
+    for_each_domain(d) {
+        domain_lock(d);
+        for_each_vcpu(d, v) {
+            ts = &v->timers;
+            spin_lock_irqsave(&ts->lock, flags);
+            now = NOW();
+            if (suspend) {
+                ts->suspend_time = now;
+                n = __suspend_timers(ts, now);
+                if (n)
+                    printk("suspended vcpu(%d:%d) timers; count=%d\n",
+                           d->domain_id, v->vcpu_id, n);
+            } else {
+                n = __resume_timers(ts, now);
+                if (n)
+                    printk("resumed vcpu(%d:%d) timers; count=%d; "
+                           "delta=%"PRId64"ms\n",
+                           d->domain_id, v->vcpu_id, n,
+                           (now - ts->suspend_time) / MILLISECS(1));
+            }
+            spin_unlock_irqrestore(&ts->lock, flags);
+        }
+        domain_unlock(d);
+    }
+    rcu_read_unlock(&domlist_read_lock);
+}
+
+void
+suspend_timers(void)
+{
+    suspend_resume_timers(1);
+}
+
+void
+resume_timers(void)
+{
+    suspend_resume_timers(0);
 }
 
 static struct keyhandler dump_timerq_keyhandler = {
