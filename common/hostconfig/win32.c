@@ -357,9 +357,9 @@ get_wga_macs(size_t *len)
     struct macaddr *macs = NULL;
 
     rc = RegGetValueA(HKEY_LOCAL_MACHINE,
-                      "SOFTWARE\\Wow6432Node\\Microsoft\\Windows Genuine Advantage",
+                      "SOFTWARE\\Microsoft\\Windows Genuine Advantage",
                       "MAC",
-                      RRF_RT_REG_SZ, NULL,
+                      RRF_RT_REG_SZ | RRF_SUBKEY_WOW6432KEY, NULL,
                       str, &sz);
     if (rc != ERROR_SUCCESS)
         return NULL;
@@ -369,9 +369,9 @@ get_wga_macs(size_t *len)
         return NULL;
 
     rc = RegGetValueA(HKEY_LOCAL_MACHINE,
-                      "SOFTWARE\\Wow6432Node\\Microsoft\\Windows Genuine Advantage",
+                      "SOFTWARE\\Microsoft\\Windows Genuine Advantage",
                       "MAC",
-                      RRF_RT_REG_SZ, NULL,
+                      RRF_RT_REG_SZ | RRF_SUBKEY_WOW6432KEY, NULL,
                       str, &sz);
     if (rc != ERROR_SUCCESS) {
         free(str);
