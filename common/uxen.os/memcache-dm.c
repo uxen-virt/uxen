@@ -164,6 +164,7 @@ mdm_map(struct uxen_memcachemap_desc *umd, struct fd_assoc *fda)
 
     pfns = kernel_malloc(umd->nr_pfn * sizeof(xen_pfn_t) * 2);
     if (pfns == NULL) {
+        fail_msg("kernel_malloc(%d)", umd->nr_pfn * sizeof(xen_pfn_t) * 2);
 	ret = ENOMEM;
 	goto out;
     }
