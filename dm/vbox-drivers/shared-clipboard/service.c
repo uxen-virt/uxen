@@ -795,8 +795,11 @@ static DECLCALLBACK(void) svcCall (void *unused,
                 int i = 0;
                 unsigned int local, remote;
                 while (!uxenclipboard_get_announced_format(i, &local, &remote)) {
-                    LogRel(("got local fmt 0x%x remote 0x%x\n",
-                        local, remote));
+                    char name[256] = { 0 };
+
+                    uxenclipboard_get_format_name(local, name, sizeof(name));
+                    LogRel(("got local fmt 0x%x remote 0x%x: %s\n",
+                            local, remote, name));
                     uxenclipboard_mark_format_written(remote, 0);
                     i++;
                 }

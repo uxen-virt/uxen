@@ -201,6 +201,7 @@ static void render_format_(UINT format, int *status_ptr)
     /* Insert the requested clipboard format data into the clipboard. */
     VBOXCLIPBOARDCONTEXT *pCtx = &g_ctx;
     int is_warning_request = (status_ptr && *status_ptr == MAGIC_LPARAM_UNSUPPORTED_FORMAT);
+    char name[256] = { 0 };
 
     uint32_t u32Format;
     if (is_warning_request)
@@ -212,7 +213,8 @@ static void render_format_(UINT format, int *status_ptr)
         return;
     }
 
-    LogRel(("render clipboard format 0x%x (remote 0x%x)\n", format, u32Format));
+    uxenclipboard_get_format_name(format, name, sizeof(name));
+    LogRel(("render clipboard format 0x%x (remote 0x%x): %s\n", format, u32Format, name));
 
     if (u32Format == 0 || pCtx->pClient == NULL)
     {
@@ -456,7 +458,11 @@ static LRESULT CALLBACK vboxClipboardWndProc(HWND hwnd, UINT msg, WPARAM wParam,
                 Log(("WM_USER emptied clipboard\n"));
 
                 while (!uxenclipboard_get_announced_format(i, &local, &remote)) {
-                    LogRel(("process announced format local %x remote %x\n"));
+                    char name[256] = { 0 };
+
+                    uxenclipboard_get_format_name(local, name, sizeof(name));
+                    LogRel(("process announced format local 0x%x remote 0x%x: %s\n",
+                            local, remote, name));
                     if (deferred_clipboard) {
                         status = 1;
                         SetClipboardData(local, NULL);

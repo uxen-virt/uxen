@@ -10,6 +10,8 @@
 #include <clipboardformats.h>
 #include <dm/vbox-drivers/heap.h>
 
+#define FIRST_DYNAMIC_FORMAT 0xc000
+
 #define _CF(x) {x, #x}
 static struct {
     unsigned int fmt;
@@ -141,4 +143,18 @@ int uxenclipboard_is_allowed_format(int direction, unsigned int fmt,
     return ret;
 }
 
+int uxenclipboard_get_format_name(unsigned int fmt, char *name, int sz)
+{
+    int rv;
+
+    if (fmt < FIRST_DYNAMIC_FORMAT) {
+        char *ascii = get_predefined_format_name(fmt);
+        if (!ascii)
+            return -1;
+        strncpy(name, ascii, sz);
+        return 0;
+    }
+    rv = GetClipboardFormatNameA(fmt, name, sz);
+    return rv ? 0 : -1;
+}
 
