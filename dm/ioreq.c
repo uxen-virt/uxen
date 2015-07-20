@@ -201,6 +201,8 @@ ioreq_new_server(void)
         uxen_notification_event_init(&state->events[i].signal);
         uxen_user_notification_event_init(&state->events[i].completed);
 
+        dprintf("vcpu%d ioreq eport %d\n", i,
+                state->io_page->vcpu_ioreq[i].vp_eport);
         ret = uxen_setup_event_channel(
             i, state->io_page->vcpu_ioreq[i].vp_eport,
             &state->events[i].signal, &state->events[i].completed);
