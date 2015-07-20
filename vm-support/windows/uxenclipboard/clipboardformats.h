@@ -17,6 +17,7 @@ int uxenclipboard_is_allowed_format(int direction, unsigned int fmt,
 int uxenclipboard_init_formats_critical_section();
 int uxenclipboard_test_format_written(unsigned int remotefmt, int *written);
 int uxenclipboard_mark_format_written(unsigned int remotefmt, int written);
+int uxenclipboard_get_format_name(unsigned int fmt, char *name, int sz);
 
 BOOL WINAPI mingw_AddClipboardFormatListener(HWND hwnd);
 #endif
