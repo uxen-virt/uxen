@@ -23,6 +23,7 @@
 #define ACPI 0x41435049
 #define SLIC 0x43494C53
 #define FADT 0x50434146
+#define MSDM 0x4D44534D
 
 #define RSMB 0x52534D42
 
@@ -85,6 +86,12 @@ void *
 acpi_get_slic(size_t *len)
 {
     return get_table(ACPI, SLIC, len);
+}
+
+void *
+acpi_get_msdm(size_t *len)
+{
+    return get_table(ACPI, MSDM, len);
 }
 
 unsigned char *
@@ -630,6 +637,11 @@ main(int argc, char **argv)
     data = acpi_get_slic(&data_len);
     if (data) {
         SET_BASE64("slic", data, data_len);
+        free(data);
+    }
+    data = acpi_get_msdm(&data_len);
+    if (data) {
+        SET_BASE64("msdm", data, data_len);
         free(data);
     }
 
