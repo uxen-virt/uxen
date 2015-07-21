@@ -64,16 +64,27 @@
 #define SUPERPAGE_1GB_SHIFT   18
 #define SUPERPAGE_1GB_NR_PFNS (1UL << SUPERPAGE_1GB_SHIFT)
 
-#define SPECIALPAGE_BUFIOREQ 0
-#define SPECIALPAGE_XENSTORE 1
-#define SPECIALPAGE_IOREQ    2
-#define SPECIALPAGE_IDENT_PT 3
-#define SPECIALPAGE_CONSOLE  4
-#define NR_SPECIAL_PAGES     5
-#define special_pfn(x, add) (0xff000u - (NR_SPECIAL_PAGES + (add)) + (x))
+#define SPECIALPAGE_IDENT_PT 0
+
+#if !defined(QEMU_UXEN)
+#define SPECIALPAGE_IOREQ    X
+#define SPECIALPAGE_BUFIOREQ X
+#define SPECIALPAGE_XENSTORE X
+#define SPECIALPAGE_CONSOLE  X
+#endif  /* QEMU_UXEN */
+
+/* reverse first/last since special_pfn's indexes allocate in reverse order */
+#define SPECIALPAGE_IOREQ_LAST 1
+#define SPECIALPAGE_IOREQ_FIRST                                         \
+    (SPECIALPAGE_IOREQ_LAST + (nr_ioreq_servers * NR_IO_PAGES_PER_SERVER) + 1)
+
+#define NR_SPECIAL_PAGES     SPECIALPAGE_IOREQ_FIRST
+
+/* special_pfn indexes start at 0, index 0 == 0xfefff */
+#define special_pfn(x) (0xff000u - 1 - (x))
 
 static void build_hvm_info(void *hvm_info_page, uint64_t mem_size,
-                           uint32_t nr_special_pages, uint32_t modules_base,
+                           uint32_t nr_ioreq_servers, uint32_t modules_base,
                            struct xc_hvm_oem_info *oem_info)
 {
     struct hvm_info_table *hvm_info = (struct hvm_info_table *)
@@ -102,7 +113,7 @@ static void build_hvm_info(void *hvm_info_page, uint64_t mem_size,
     /* Memory parameters. */
     hvm_info->low_mem_pgend = lowmem_end >> PAGE_SHIFT;
     hvm_info->high_mem_pgend = highmem_end >> PAGE_SHIFT;
-    hvm_info->reserved_mem_pgstart = special_pfn(0, nr_special_pages);
+    hvm_info->reserved_mem_pgstart = special_pfn(NR_SPECIAL_PAGES);
 
     /* Modules */
     hvm_info->mod_base = modules_base;
@@ -363,7 +374,7 @@ static int check_page_works(void *p)
 
 static int setup_guest(xc_interface *xch,
                        uint32_t dom, int memsize, int target,
-                       uint32_t nr_special_pages,
+                       uint32_t nr_ioreq_servers,
                        char *image, unsigned long image_size,
                        struct xc_hvm_module *modules,
                        size_t mod_count,
@@ -582,37 +593,36 @@ static int setup_guest(xc_interface *xch,
     if ( (rc = check_page_works(hvm_info_page)) )
         goto error_out;
 
-    build_hvm_info(hvm_info_page, v_end, nr_special_pages, modules_base,
+    build_hvm_info(hvm_info_page, v_end, nr_ioreq_servers, modules_base,
                    oem_info);
     xc_munmap(xch, dom, hvm_info_page, PAGE_SIZE);
 
     /* Allocate and clear special pages. */
-    for ( i = 0; i < NR_SPECIAL_PAGES + nr_special_pages; i++ )
+    for ( i = 0; i <= NR_SPECIAL_PAGES; i++ )
     {
-        xen_pfn_t pfn = special_pfn(i, nr_special_pages);
+        xen_pfn_t pfn = special_pfn(i);
         rc = xc_domain_populate_physmap_exact(xch, dom, 1, 0, 0, &pfn);
         if ( rc != 0 )
         {
             PERROR("Could not allocate %d'th special page.", i);
             goto error_out;
         }
-        if ( xc_clear_domain_page(xch, dom, special_pfn(i, nr_special_pages)) )
+        if ( xc_clear_domain_page(xch, dom, special_pfn(i)) )
             goto error_out;
     }
 
 #if !defined(QEMU_UXEN)
     xc_set_hvm_param(xch, dom, HVM_PARAM_STORE_PFN,
-                     special_pfn(SPECIALPAGE_XENSTORE, nr_special_pages);
+                     special_pfn(SPECIALPAGE_XENSTORE));
 #endif  /* QEMU_UXEN */
 #if !defined(QEMU_UXEN)
     xc_set_hvm_param(xch, dom, HVM_PARAM_CONSOLE_PFN,
-                     special_pfn(SPECIALPAGE_CONSOLE, nr_special_pages));
+                     special_pfn(SPECIALPAGE_CONSOLE));
 #endif  /* QEMU_UXEN */
     xc_set_hvm_param(xch, dom, HVM_PARAM_IO_PFN_FIRST,
-                     special_pfn(NR_SPECIAL_PAGES, nr_special_pages));
+                     special_pfn(SPECIALPAGE_IOREQ_FIRST));
     xc_set_hvm_param(xch, dom, HVM_PARAM_IO_PFN_LAST,
-                     special_pfn(NR_SPECIAL_PAGES + nr_special_pages - 1,
-                                 nr_special_pages));
+                     special_pfn(SPECIALPAGE_IOREQ_LAST));
 
     /*
      * Identity-map page table is required for running with CR0.PG=0 when
@@ -620,15 +630,14 @@ static int setup_guest(xc_interface *xch,
      */
     if ( (ident_pt = xc_map_foreign_range(
               xch, dom, PAGE_SIZE, PROT_READ | PROT_WRITE,
-              special_pfn(SPECIALPAGE_IDENT_PT, nr_special_pages))) == NULL )
+              special_pfn(SPECIALPAGE_IDENT_PT))) == NULL )
         goto error_out;
     for ( i = 0; i < PAGE_SIZE / sizeof(*ident_pt); i++ )
         ident_pt[i] = ((i << 22) | _PAGE_PRESENT | _PAGE_RW | _PAGE_USER |
                        _PAGE_ACCESSED | _PAGE_DIRTY | _PAGE_PSE);
     xc_munmap(xch, dom, ident_pt, PAGE_SIZE);
     xc_set_hvm_param(xch, dom, HVM_PARAM_IDENT_PT,
-                     special_pfn(SPECIALPAGE_IDENT_PT, nr_special_pages) <<
-                     PAGE_SHIFT);
+                     special_pfn(SPECIALPAGE_IDENT_PT) << PAGE_SHIFT);
 
     /* Insert JMP <rel32> instruction at address 0x0 to reach entry point. */
     entry_eip = elf_uval(&elf, elf.ehdr, e_entry);
@@ -659,7 +668,7 @@ static int xc_hvm_build_internal(xc_interface *xch,
                                  uint32_t domid,
                                  int memsize,
                                  int target,
-                                 uint32_t nr_special_pages,
+                                 uint32_t nr_ioreq_servers,
                                  char *image,
                                  unsigned long image_size,
                                  struct xc_hvm_module *modules,
@@ -673,7 +682,7 @@ static int xc_hvm_build_internal(xc_interface *xch,
     }
 
     target = 8;
-    return setup_guest(xch, domid, memsize, target, nr_special_pages,
+    return setup_guest(xch, domid, memsize, target, nr_ioreq_servers,
                        image, image_size, modules, mod_count, oem_info);
 }
 
@@ -683,7 +692,7 @@ static int xc_hvm_build_internal(xc_interface *xch,
 int xc_hvm_build(xc_interface *xch,
                  uint32_t domid,
                  int memsize,
-                 uint32_t nr_special_pages,
+                 uint32_t nr_ioreq_servers,
                  const char *image_name,
                  struct xc_hvm_module *modules,
                  size_t mod_count,
@@ -699,7 +708,7 @@ int xc_hvm_build(xc_interface *xch,
         return -1;
     }
 
-    sts = xc_hvm_build_internal(xch, domid, memsize, memsize, nr_special_pages,
+    sts = xc_hvm_build_internal(xch, domid, memsize, memsize, nr_ioreq_servers,
                                 image, image_size, modules, mod_count,
                                 oem_info);
 
@@ -720,7 +729,7 @@ int xc_hvm_build_target_mem(xc_interface *xch,
                            uint32_t domid,
                            int memsize,
                            int target,
-                           uint32_t nr_special_pages,
+                           uint32_t nr_ioreq_servers,
                            const char *image_name)
 {
     char *image;
@@ -731,7 +740,7 @@ int xc_hvm_build_target_mem(xc_interface *xch,
          ((image = xc_read_image(xch, image_name, &image_size)) == NULL) )
         return -1;
 
-    sts = xc_hvm_build_internal(xch, domid, memsize, target, nr_special_pages,
+    sts = xc_hvm_build_internal(xch, domid, memsize, target, nr_ioreq_servers,
                                 image, image_size);
 
     free(image);
@@ -745,7 +754,7 @@ int xc_hvm_build_target_mem(xc_interface *xch,
 int xc_hvm_build_mem(xc_interface *xch,
                      uint32_t domid,
                      int memsize,
-                     uint32_t nr_special_pages,
+                     uint32_t nr_ioreq_servers,
                      const char *image_buffer,
                      unsigned long image_size)
 {
@@ -768,7 +777,7 @@ int xc_hvm_build_mem(xc_interface *xch,
         return -1;
     }
 
-    sts = xc_hvm_build_internal(xch, domid, memsize, memsize, nr_special_pages,
+    sts = xc_hvm_build_internal(xch, domid, memsize, memsize, nr_ioreq_servers,
                                 img, img_len);
 
     /* xc_inflate_buffer may return the original buffer pointer (for
