@@ -224,8 +224,8 @@ struct xc_hvm_oem_info {
 int xc_hvm_build(xc_interface *xch,
                  uint32_t domid,
                  int memsize,
-                 const char *image_name,
                  uint32_t nr_special_pages,
+                 const char *image_name,
                  struct xc_hvm_module *modules,
                  size_t mod_count,
                  struct xc_hvm_oem_info *oem_info);
@@ -235,15 +235,15 @@ int xc_hvm_build_target_mem(xc_interface *xch,
                             uint32_t domid,
                             int memsize,
                             int target,
-                            const char *image_name,
-                            uint32_t nr_special_pages);
+                            uint32_t nr_special_pages,
+                            const char *image_name);
 
 int xc_hvm_build_mem(xc_interface *xch,
                      uint32_t domid,
                      int memsize,
+                     uint32_t nr_special_pages,
                      const char *image_buffer,
-                     unsigned long image_size,
-                     uint32_t nr_special_pages);
+                     unsigned long image_size);
 
 int xc_suspend_evtchn_release(xc_interface *xch, xc_evtchn *xce, int domid, int suspend_evtchn);
 

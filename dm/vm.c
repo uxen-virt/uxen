@@ -503,9 +503,9 @@ vm_init(const char *loadvm, int restore_mode)
 
         modules = vm_get_modules(&mod_count);
 
-        if (xc_hvm_build(xc_handle, vm_id, ram_size >> 20, hvmloader_path,
+        if (xc_hvm_build(xc_handle, vm_id, ram_size >> 20,
                          NR_IO_PAGES_PER_SERVER * NR_IOREQ_SERVERS + 1,
-                         modules, mod_count, &oem_info))
+                         hvmloader_path, modules, mod_count, &oem_info))
             errx(1, "xc_hvm_build failed");
 
         if (modules)
