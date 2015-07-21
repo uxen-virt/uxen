@@ -1319,8 +1319,8 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
 	case XC_SAVE_ID_HVM_MAGIC_PFNS:
 	    uxenvm_load_read_struct(f, s_hvm_magic_pfns, marker, ret, err_msg,
 				    out);
-	    APRINTF("ioreq pfn %"PRIx64" bufioreq pfn %"PRIx64
-		    " shared info pfn %"PRIx64, s_hvm_magic_pfns.magic_pfns[0],
+	    APRINTF("ioreq pfn %"PRIx64"-%"PRIx64" shared info pfn %"PRIx64,
+                    s_hvm_magic_pfns.magic_pfns[0],
 		    s_hvm_magic_pfns.magic_pfns[1],
 		    s_hvm_magic_pfns.magic_pfns[2]);
 	    break;
