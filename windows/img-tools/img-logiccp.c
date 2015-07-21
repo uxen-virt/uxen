@@ -136,6 +136,7 @@ struct disk {
 };
 
 static wchar_t rootdrive = L'c';
+static Variable *bootvol_var = NULL;
 
 /* Heap used as priority queue for BFS scan. */
 typedef struct HeapElem {
@@ -263,6 +264,7 @@ typedef struct ManifestEntry {
     uint64_t link_id;
     uint64_t file_id;
     Action action;
+    uint8_t sha[SHA1_DIGEST_SIZE]; /* only used/populated for file copies */
 } ManifestEntry;
 
 typedef struct Manifest {
@@ -526,6 +528,13 @@ static inline void strip_filename(wchar_t *path)
     }
     if (last) {
         *last = '\0';
+    }
+}
+
+static inline void strip_trailing_slash(wchar_t *path) {
+    int len = wcslen(path);
+    if (len > 1 && path[len-1] == L'/') {
+        path[len-1] = 0;
     }
 }
 
@@ -985,6 +994,26 @@ int bfs(Variable *var, Manifest *suffixes,
     /* Do a modified breadth-first search from the supplied directory name down.  */
     HeapElem he = {wcsdup(dn), 0, m->rewrite};
     //printf("1.pushing [%S], [%S]\n", he.name, (he.rerooted_name ? he.rerooted_name : L"NULL"));
+    directories++;
+
+    /* Add a MAN_MKDIR for the top-level dir manifest entry in case there are files/hardlinks
+     * included at the top level, at which point a dir otherwise won't exist yet.
+     */
+    ManifestEntry *e = man_push(out);
+    e->vol = disk->bootvol;
+    e->action = MAN_MKDIR;
+    e->var = var;
+    e->rewrite = wcsdup(m->rewrite);
+    e->name = wcsdup(dn);
+    /* These came from user input so require a little more cleaning up.
+     * disklib_mkdir_simple gets upset if you don't strip trailing slashes */
+    if (e->rewrite) {
+        normalize_string(e->rewrite);
+        strip_trailing_slash(e->rewrite);
+    }
+    normalize_string(e->name);
+    strip_trailing_slash(e->name);
+    e->name_len = wcslen(e->name);
 
     heap_push(&heaps[heap_switch], he);
     for (;;) {
@@ -1225,6 +1254,8 @@ typedef struct IO {
     HANDLE event;
     IO_STATUS_BLOCK iosb;
     int last;
+    SHA1_CTX *sha_ctx; // non-NULL if we should calculate the SHA
+    uint8_t *sha;
 } IO;
 
 IO ios[MAX_IOS];
@@ -1248,6 +1279,15 @@ void complete_io(IO* io)
         io->file = INVALID_HANDLE_VALUE;
     }
 
+    if (io->sha_ctx) {
+        SHA1_Update(io->sha_ctx, io->buffer, io->size);
+        if (io->last) {
+            SHA1_Final(io->sha_ctx, io->sha);
+            free(io->sha_ctx);
+            io->sha_ctx = NULL;
+        }
+    }
+
     free(io->buffer);
     io->buffer = NULL;
     ResetEvent(io->event);
@@ -1265,14 +1305,23 @@ void complete_all_ios(void)
     }
 }
 
-static int copy_file(ntfs_fs_t vol, const wchar_t *path, HANDLE input, uint64_t size)
+static int copy_file(ntfs_fs_t vol, const wchar_t *path, HANDLE input, uint64_t size, uint8_t *out_sha)
 {
     size_t buf_size = (low_priority ? 1 : 4) << 20;
     uint64_t offset;
     uint64_t take;
+    SHA1_CTX *sha_ctx = NULL;
+    if (out_sha) {
+        sha_ctx = (SHA1_CTX*)malloc(sizeof(SHA1_CTX));
+        SHA1_Init(sha_ctx);
+    }
 
     if (size == 0) {
         /* Special-case empty files. */
+        if (out_sha) {
+            SHA1_Final(sha_ctx, out_sha);
+            free(sha_ctx);
+        }
         return disklib_write_simple(vol, path, NULL, 0, 0, 0);
     }
 
@@ -1291,6 +1340,8 @@ static int copy_file(ntfs_fs_t vol, const wchar_t *path, HANDLE input, uint64_t 
         io->name = path;
         io->size = take;
         io->offset = offset;
+        io->sha_ctx = sha_ctx;
+        io->sha = out_sha;
 
         assert(!io->buffer);
         io->buffer = malloc(take);
@@ -1578,6 +1629,11 @@ int mkdir_phase(struct disk *disk, Manifest *man)
 
         if (m->action == MAN_MKDIR) {
             //printf("mkdir [%ls]\n", m->name);
+            if (wcsncmp(m->name, L"/", MAX_PATH_LEN) == 0) {
+                // Root is not a dir so need to skip this in case a top-level
+                // manifest entry maps a dir in to the root
+                continue;
+            }
             if (disklib_mkdir_simple(m->vol, m->name) < 0) {
                 printf("unable to mkdir %ls : %s\n", m->name,
                         strerror(ntfs_get_errno()));
@@ -2178,6 +2234,27 @@ cleanup:
     return ret;
 }
 
+static void make_unshadowed_host_path(wchar_t* out, ManifestEntry *m)
+{
+    // First get full hostname including path components from the prefix (if any)
+    wchar_t* filename = prefix(m->var, m->host_name);
+    wchar_t* path;
+    if (bootvol_var && !wcsnicmp(filename, bootvol_var->path, wcslen(bootvol_var->path))) {
+        // Now replace the volume prefix with the rootdrive
+        path = filename + wcslen(bootvol_var->path);
+    } else {
+        // if there's no BOOTVOL then all bets are off as to how we reconstruct
+        // the host path from a non-volume prefix, so assume the prefix is not
+        // important. Note this does mean we don't support shallowing from any
+        // volume other than BOOTVOL - this has always been the case but maybe
+        // isn't stated explicitly.
+        path = m->host_name;
+    }
+    swprintf(out, L"%lc:%ls", rootdrive, path);
+    // finally, convert back to backslashes
+    normalize_string2(out);
+}
+
 int shallow_phase(struct disk *disk, Manifest *man, wchar_t *map_idx)
 {
     assert(shallow_allowed);
@@ -2193,8 +2270,7 @@ int shallow_phase(struct disk *disk, Manifest *man, wchar_t *map_idx)
         if (m->action == MAN_SHALLOW || m->action == MAN_HARDLINK_SHALLOW || m->action == MAN_BOOT) {
             //printf("%d,%d shallow %ls @ %"PRIx64"\n", i, man->n, m->name, m->offset);
             wchar_t host_name[MAX_PATH_LEN];
-            swprintf(host_name, L"%lc:%ls", rootdrive,
-                    m->host_name ? m->host_name : m->name);
+            make_unshadowed_host_path(host_name, m);
             shallow_file(m->vol, m->name, host_name, m->file_size, m->file_id);
             total_size_shallowed += m->file_size;
             ++j;
@@ -2223,7 +2299,7 @@ int shallow_phase(struct disk *disk, Manifest *man, wchar_t *map_idx)
     return 0;
 }
 
-int copy_phase(struct disk *disk, Manifest *man)
+int copy_phase(struct disk *disk, Manifest *man, int calculate_shas)
 {
     ENTER_PHASE();
 
@@ -2275,7 +2351,8 @@ int copy_phase(struct disk *disk, Manifest *man)
                 }
                 HANDLE h = handles[j++];
                 if (h != INVALID_HANDLE_VALUE) {
-                    copy_file(m->vol, m->name, h, m->file_size);
+                    uint8_t *out_sha = (calculate_shas ? m->sha : NULL);
+                    copy_file(m->vol, m->name, h, m->file_size, out_sha);
                     total_size_copied += m->file_size;
                     if (m->action == MAN_FORCE_COPY) {
                         total_size_force_copied += m->file_size;
@@ -2853,9 +2930,132 @@ int local_uuid_parse(const char *str, GUID *guid)
     return 0;
 }
 
+void json_escape_string(const wchar_t* wide_source, char* dest)
+{
+    char* src_buf = utf8(wide_source);
+    char* src = src_buf;
+    int ch;
+    do {
+        ch = *src++;
+        switch(ch) {
+        case '"': /* Drop thru */
+        case '\\':
+            *dest++ = '\\';
+            *dest++ = ch;
+            break;
+        case '\r':
+            *dest++ = '\\';
+            *dest++ = 'r';
+            break;
+        case '\n':
+            *dest++ = '\\';
+            *dest++ = 'n';
+            break;
+        default:
+            *dest++ = ch;
+            break;
+        }
+    } while (ch != 0);
+    *dest = 0; // Make sure to zero-terminate
+    free(src_buf);
+}
+
+/* If requested to by a -m option on the command line, this outputs a JSON
+ * formatted file containing information about all the files added to the image.
+ * Note this is not a list of all the files on disk, only the ones added by this
+ * logiccp invocation. The format of the output is derived from that used by
+ * tinydisk. The only major differences being: it doesn't list all files (as
+ * already mentioned); it is not pretty-printed; entries are not sorted by path;
+ * the output is UTF-8 rather than ASCII with JSON \u escapes; SHA-1 hashes are
+ * only calculated and output for files which are copied, rather than for all
+ * files.
+*/
+int output_manifest_phase(
+    Manifest *man, struct disk* disk, int sysvol, int bootvol, const char* out_path)
+{
+    ENTER_PHASE();
+    FILE* f;
+    int i;
+    static char temp_buf[(MAX_PATH_LEN + 1) * 2]; /* Max length of a MAX_PATH_LEN string after JSON escaping */
+    static wchar_t wide_buf[MAX_PATH_LEN];
+
+    f = fopen(out_path, "wt");
+    if (!f) {
+        printf("unable to create output manifest: %s errno=%d\n", out_path, errno);
+        return 1;
+    }
+
+    fputs("[", f);
+    for (i = 0; i < man->n; i++) {
+        ManifestEntry* entry = &man->entries[i];
+        if (entry->action == MAN_EXCLUDE) {
+            continue;
+        }
+
+        fprintf(f, "\n{\"partition\": %d",
+            entry->vol == disk->sysvol ? sysvol : bootvol);
+
+        json_escape_string(entry->name, temp_buf);
+        fprintf(f, ", \"path\": \"%s\"", temp_buf);
+
+        switch (entry->action) {
+        case MAN_CHANGE:
+            /* Doesn't occur in an output manifest */
+            break;
+
+        case MAN_EXCLUDE:
+            break;
+
+        /* These all call shallow_file() */
+        case MAN_BOOT:
+        case MAN_SHALLOW:
+        case MAN_HARDLINK_SHALLOW:
+            fprintf(f, ", \"size\": %"PRIu64", \"shallow_id\": \"%016"PRIx64"\"",
+                entry->file_size, entry->file_id);
+            make_unshadowed_host_path(wide_buf, entry);
+            json_escape_string(wide_buf, temp_buf);
+            fprintf(f, ", \"source\": \"host\", \"source_path\": \"%s\"", temp_buf);
+            break;
+
+        case MAN_FORCE_COPY: /* Drop thru */
+        case MAN_COPY:
+            fprintf(f, ", \"size\": %"PRIu64"",
+                entry->file_size);
+            make_unshadowed_host_path(wide_buf, entry);
+            json_escape_string(wide_buf, temp_buf);
+            fprintf(f, ", \"source\": \"host\", \"source_path\": \"%s\"", temp_buf);
+            fprintf(f, ", \"sha1\": \"" SHA1FMT "\"",
+                entry->sha[0], entry->sha[1], entry->sha[2], entry->sha[3],
+                entry->sha[4], entry->sha[5], entry->sha[6], entry->sha[7],
+                entry->sha[8], entry->sha[9], entry->sha[10], entry->sha[11],
+                entry->sha[12], entry->sha[13], entry->sha[14], entry->sha[15],
+                entry->sha[16], entry->sha[17], entry->sha[18], entry->sha[19]);
+            break;
+
+        case MAN_MKDIR:
+            fprintf(f, ", \"type\": \"dir\"");
+            break;
+
+        case MAN_LINK:
+            json_escape_string(entry->host_name, temp_buf);
+            fprintf(f, ", \"type\": \"hardlink\", \"target\": \"%s\"", temp_buf);
+            break;
+        }
+        if (i+1 == man->n) {
+            fputs("}", f);
+        } else {
+            fputs("},", f);
+        }
+    }
+    fputs("\n]", f);
+    fclose(f);
+    LEAVE_PHASE();
+    return 0;
+}
+
 void print_usage(void)
 {
-    printf("usage: %s [-sbootvol=shadow-path] manifest image.swap " \
+    printf("usage: %s [-sBOOTVOL=<path>] [-m<outmanifest>] manifest image.swap " \
         "[USN=<USN record-id in hex>] [GUID=<CoW driver GUID>] " \
         "[PARTITION=<partition number in decimal>] " \
         "[MINSHALLOW=<minimum shallowing size in decimal bytes>]\n",
@@ -2921,6 +3121,14 @@ int main(int argc, char **argv)
         /* path can be NULL, which means skip manifest lines under this var. */
         e->path = *c ? wide(c) : NULL;
 
+        ++argv;
+        --argc;
+    }
+    bootvol_var = varlist_find(&vars, L"BOOTVOL");
+
+    char *arg_out_manifest = NULL;
+    if (strncmp(argv[1], "-m", 2) == 0) {
+        arg_out_manifest = argv[1] + 2;
         ++argv;
         --argc;
     }
@@ -3154,12 +3362,20 @@ int main(int argc, char **argv)
     }
 
     man_sort_by_offset(&man_out);
-    if (copy_phase(&disk, &man_out) < 0) {
+    if (copy_phase(&disk, &man_out, arg_out_manifest != NULL) < 0) {
         err(1, "copy_phase failed");
     }
 
     if (vm_links_phase_2(&disk, &man_out) < 0) {
         err(1, "vm_links_phase_2 failed");
+    }
+
+    if (arg_out_manifest != NULL) {
+        if (output_manifest_phase(&man_out, &disk, 0, partition, arg_out_manifest) < 0) {
+            err(1, "output_manifest_phase failed");
+        }
+    } else {
+        printf("Skipping output_manifest_phase.\n");
     }
 
     if (flush_phase(&disk) < 0) {
