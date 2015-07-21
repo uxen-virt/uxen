@@ -29,7 +29,7 @@ int filebuf_flush(struct filebuf *fb);
 int filebuf_read(struct filebuf *fb, void *buf, size_t size);
 int filebuf_write(struct filebuf *fb, void *buf, size_t size);
 void filebuf_close(struct filebuf *fb);
-void filebuf_openref(struct filebuf *fb);
+struct filebuf *filebuf_openref(struct filebuf *fb);
 int filebuf_skip(struct filebuf *fb, size_t size);
 off_t filebuf_tell(struct filebuf *fb);
 off_t filebuf_seek(struct filebuf *fb, off_t offset, int whence);

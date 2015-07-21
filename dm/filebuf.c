@@ -178,11 +178,12 @@ filebuf_close(struct filebuf *fb)
     free(fb);
 }
 
-void
+struct filebuf *
 filebuf_openref(struct filebuf *fb)
 {
 
     ++fb->users;
+    return fb;
 }
 
 int
