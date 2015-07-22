@@ -280,7 +280,7 @@ static int construct_passthrough_tables(unsigned long *table_ptrs,
          */
         if (header->signature == ASCII32('S', 'L', 'I', 'C'))
             slic_header = header;
-        else
+        else if (header->signature != ASCII32('M', 'S', 'D', 'M'))
             set_oem(header);
 
         set_checksum(buffer, offsetof(struct acpi_header, checksum), length);

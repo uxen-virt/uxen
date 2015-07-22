@@ -297,6 +297,7 @@ co_set_firmware(const char *opt, yajl_val arg, void *opaque)
 
     YAJL_FOREACH_ARRAY_OR_OBJECT(v, arg, i) {
         const char *slic;
+        const char *msdm;
         const char *oem_id;
         const char *oem_table_id;
         const char *creator_id;
@@ -312,6 +313,7 @@ co_set_firmware(const char *opt, yajl_val arg, void *opaque)
 	    errx(1, "config option %s: wrong type: map expected", opt);
 
 	slic = yajl_object_get_string(v, "slic");
+	msdm = yajl_object_get_string(v, "msdm");
         oem_id = yajl_object_get_string(v, "oem_id");
         oem_table_id = yajl_object_get_string(v, "oem_table_id");
         oem_revision = yajl_object_get(v, "oem_revision");
@@ -328,6 +330,18 @@ co_set_firmware(const char *opt, yajl_val arg, void *opaque)
             size_t len;
 
             data = base64_decode(slic, &len);
+            if (!data)
+                errx(1, "config firmware: failed to base64 decode data");
+
+            ret = acpi_module_add(data, len);
+            if (ret)
+                break;
+        }
+        if (msdm) {
+            unsigned char *data;
+            size_t len;
+
+            data = base64_decode(msdm, &len);
             if (!data)
                 errx(1, "config firmware: failed to base64 decode data");
 
