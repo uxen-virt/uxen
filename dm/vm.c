@@ -659,12 +659,12 @@ vm_exit(void *opaque)
         ni_suspend_flush();
 #endif
 
+    /* close vm save file if open */
+    vm_save_finalize();
+
     /* call control_command_exit as early as possible
      * to avoid deadlock on rpc sync commands */
     control_command_exit();
-
-    /* close vm save file if open */
-    vm_save_finalize();
 
     /* Since we are going to exit here, make sure everything is flushed. */
     aio_flush();

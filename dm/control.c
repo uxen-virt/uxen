@@ -221,6 +221,83 @@ control_send_command(const char *command, const dict args,
     return ret;
 }
 
+struct control_queue_entry {
+    STAILQ_ENTRY(control_queue_entry) next;
+    CharDriverState *chr;
+    char *buf;
+    size_t len;
+};
+STAILQ_HEAD(, control_queue_entry) control_queue_entries =
+    STAILQ_HEAD_INITIALIZER(control_queue_entries);
+
+static int
+control_queue(void *send_opaque, char *buf, size_t len)
+{
+    struct control_desc *cd = (struct control_desc *)send_opaque;
+    char *tmp;
+    struct control_queue_entry *cqe;
+
+    tmp = realloc(buf, len + 1);
+    if (!tmp) {
+        free(buf);
+        return -1;
+    }
+    buf = tmp;
+
+    buf[len] = '\n';
+
+    cqe = malloc(sizeof(struct control_queue_entry));
+    if (!cqe) {
+        free(buf);
+        return -1;
+    }
+    cqe->chr = cd->chr;
+    cqe->buf = buf;
+    cqe->len = len + 1;
+    STAILQ_INSERT_TAIL(&control_queue_entries, cqe, next);
+
+    return 0;
+}
+
+static void
+control_send_queued(void)
+{
+    struct control_queue_entry *cqe;
+
+    while ((cqe = STAILQ_FIRST(&control_queue_entries))) {
+        STAILQ_REMOVE_HEAD(&control_queue_entries, next);
+
+        qemu_chr_write(cqe->chr, (const uint8_t *)cqe->buf, cqe->len);
+
+        free(cqe->buf);
+    }
+}
+
+int
+control_queue_ok(void *send_opaque, const char *command, const char *id,
+                 const char *fmt, ...)
+{
+    va_list ap;
+    int ret;
+
+    if (fmt)
+        va_start(ap, fmt);
+
+    ret = dict_rpc_ok(control_queue, send_opaque, command, id, fmt,
+                      fmt ? ap : NULL);
+
+    if (fmt)
+        va_end(ap);
+
+    if (ret) {
+        warnx("%s: dict_rpc_ok", __FUNCTION__);
+        goto out;
+    }
+
+  out:
+    return ret;
+}
+
 static int
 control_command_save(void *opaque, const char *id, const char *opt,
                      dict d, void *command_opaque)
@@ -306,7 +383,7 @@ control_command_quit(void *opaque, const char *id, const char *opt,
     vm_quit_interrupt = dict_get_boolean(d, "interrupt");
     vm_set_run_mode(DESTROY_VM);
 
-    control_send_ok(cd, opt, id, NULL);
+    control_queue_ok(cd, opt, id, NULL);
 
     return 0;
 }
@@ -1085,6 +1162,9 @@ control_open(char *path)
 void
 control_command_exit(void)
 {
+
+    control_send_queued();
+
     dict_rpc_cb_exit();
 }
 

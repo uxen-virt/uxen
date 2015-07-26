@@ -21,6 +21,9 @@ int control_send_command(const char *command, const dict args,
 int
 control_send_ok(void *send_opaque, const char *command, const char *id,
 		const char *fmt, ...);
+int
+control_queue_ok(void *send_opaque, const char *command, const char *id,
+                 const char *fmt, ...);
 void control_command_save_finish(int ret, char *err_msg);
 void control_command_resume_finish(int ret, char *err_msg);
 
