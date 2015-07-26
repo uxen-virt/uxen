@@ -1398,15 +1398,16 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
         case XC_SAVE_ID_VM_TEMPLATE_FILE:
             uxenvm_load_read_struct(f, s_vm_template_file, marker, ret,
                                     err_msg, out);
-            vm_template_file = calloc(1, s_vm_template_file.size);
+            vm_template_file = calloc(1, s_vm_template_file.size + 1);
             if (vm_template_file == NULL) {
                 asprintf(err_msg, "vm_template_file = calloc(%d) failed",
-                         s_vm_template_file.size);
+                         s_vm_template_file.size + 1);
                 ret = -ENOMEM;
                 goto out;
             }
             uxenvm_load_read(f, vm_template_file, s_vm_template_file.size,
                              ret, err_msg, out);
+            vm_template_file[s_vm_template_file.size] = 0;
             APRINTF("vm template file: %s", vm_template_file);
             break;
 	default:
