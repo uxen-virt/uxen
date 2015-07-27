@@ -1858,8 +1858,9 @@ static int tcp_chr_eof(CharDriverState *chr)
     if (s->fd < 0)
         return 0;
 
-    pfd.events |= POLLIN;
+    pfd.events |= POLLRDNORM | POLLRDBAND;
     pfd.fd = s->fd;
+
     return (1 == poll(&pfd, 1, 0)) && (pfd.revents & POLLHUP);
 }
 

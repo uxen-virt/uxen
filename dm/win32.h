@@ -18,6 +18,7 @@
 #undef POLLIN
 #undef POLLOUT
 #undef POLLERR
+#define poll WSAPoll
 
 #define ERR_WINDOWS
 #include <err.h>
