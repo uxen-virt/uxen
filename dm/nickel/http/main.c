@@ -47,6 +47,7 @@
 #define HPD_DEBUG_CHECK_MS          (4 * 1000) /* 4 secs */
 
 #define U32BF(a)            (((uint32_t) 1) << (a))
+#define U64BF(a)            (((uint64_t) 1) << (a))
 
 #define SO_READBUFLEN   (16 * 1024)
 #define MAX_SRV_BUFLEN  (128 * 1024)
@@ -140,6 +141,7 @@ static const char *hp_states[] = {
 #define HF_PINNED           U32BF(24)
 #define HF_KEEP_ALIVE       U32BF(25)
 #define HF_FATAL_ERROR      U32BF(26)
+#define HF_PARSE_ERROR      U32BF(27)
 
 #define IS_RESOLVED(hp) ((hp)->flags & HF_RESOLVED)
 #define IS_TUNNEL(hp)   ((hp)->flags & HF_TUNNEL)
@@ -197,38 +199,39 @@ static const char *hp_states[] = {
             netlog_print_esc(NULL, bbf, bbl);                   \
     } while (1 == 0)
 
-#define CXF_HOST_RESOLVED       U32BF(0)
-#define CXF_NI_ESTABLISHED      U32BF(1)
-#define CXF_NI_FIN              U32BF(2)
-#define CXF_FLUSH_CLOSE         U32BF(3)
-#define CXF_DECIDED             U32BF(4)
-#define CXF_GUEST_PROXY         U32BF(5)
-#define CXF_SUSPENDED           U32BF(6)
-#define CXF_TUNNEL_GUEST        U32BF(7)
-#define CXF_IGNORE              U32BF(8)
-#define CXF_407_MESSAGE         U32BF(9)
-#define CXF_RPC_PROXY_URL       U32BF(10)
-#define CXF_TUNNEL_DETECTED     U32BF(11)
-#define CXF_TUNNEL_RESPONSE     U32BF(12)
-#define CXF_TUNNEL_RESPONSE_OK  U32BF(13)
-#define CXF_CLOSED              U32BF(14)
-#define CXF_TLS                 U32BF(15)
-#define CXF_HTTP                U32BF(16)
-#define CXF_BINARY              U32BF(17)
-#define CXF_TLS_DETECT_OK       U32BF(18)
-#define CXF_HEADERS_OK          U32BF(19)
-#define CXF_LONG_REQ            U32BF(20)
-#define CXF_PROXY_SUSPEND       U32BF(21)
-#define CXF_CLOSING             U32BF(22)
-#define CXF_ACCEPTED            U32BF(23)
-#define CXF_IP_CHECKED          U32BF(24)
-#define CXF_GPROXY_REQUEST      U32BF(25)
-#define CXF_FORCE_CLOSE         U32BF(26)
-#define CXF_HEAD_REQUEST        U32BF(27)
-#define CXF_HEAD_REQUEST_SENT   U32BF(28)
-#define CXF_TUNNEL_GUEST_SENT   U32BF(29)
-#define CXF_LOCAL_WEBDAV        U32BF(30)
-#define CXF_LOCAL_WEBDAV_COMPLETE   U32BF(31)
+#define CXF_HOST_RESOLVED       U64BF(0)
+#define CXF_NI_ESTABLISHED      U64BF(1)
+#define CXF_NI_FIN              U64BF(2)
+#define CXF_FLUSH_CLOSE         U64BF(3)
+#define CXF_DECIDED             U64BF(4)
+#define CXF_GUEST_PROXY         U64BF(5)
+#define CXF_SUSPENDED           U64BF(6)
+#define CXF_TUNNEL_GUEST        U64BF(7)
+#define CXF_IGNORE              U64BF(8)
+#define CXF_407_MESSAGE         U64BF(9)
+#define CXF_RPC_PROXY_URL       U64BF(10)
+#define CXF_TUNNEL_DETECTED     U64BF(11)
+#define CXF_TUNNEL_RESPONSE     U64BF(12)
+#define CXF_TUNNEL_RESPONSE_OK  U64BF(13)
+#define CXF_CLOSED              U64BF(14)
+#define CXF_TLS                 U64BF(15)
+#define CXF_HTTP                U64BF(16)
+#define CXF_BINARY              U64BF(17)
+#define CXF_TLS_DETECT_OK       U64BF(18)
+#define CXF_HEADERS_OK          U64BF(19)
+#define CXF_LONG_REQ            U64BF(20)
+#define CXF_PROXY_SUSPEND       U64BF(21)
+#define CXF_CLOSING             U64BF(22)
+#define CXF_ACCEPTED            U64BF(23)
+#define CXF_IP_CHECKED          U64BF(24)
+#define CXF_GPROXY_REQUEST      U64BF(25)
+#define CXF_FORCE_CLOSE         U64BF(26)
+#define CXF_HEAD_REQUEST        U64BF(27)
+#define CXF_HEAD_REQUEST_SENT   U64BF(28)
+#define CXF_TUNNEL_GUEST_SENT   U64BF(29)
+#define CXF_LOCAL_WEBDAV        U64BF(30)
+#define CXF_LOCAL_WEBDAV_COMPLETE   U64BF(31)
+#define CXF_RESET_STATE             U64BF(32)
 
 struct hpd_t;
 RLIST_HEAD(http_ctx_list, http_ctx);
@@ -454,7 +457,7 @@ static int cx_dbg(int log_level, struct clt_ctx *cx)
     netlog_prefix(log_level, cx->ni->bf_dbg);
     BUFF_APPENDSTR(cx->ni->bf_dbg, "(clt)");
     ret = buff_appendf(cx->ni->bf_dbg, " cx:%"PRIxPTR" hp:%"PRIxPTR" tcp:%"PRIxPTR
-            " c:%"PRIxPTR" hpd:%"PRIxPTR" f:%x p:%hu %s",
+            " c:%"PRIxPTR" hpd:%"PRIxPTR" f:%"PRIx64" p:%hu %s",
             (uintptr_t) cx, (uintptr_t) cx->hp, (uintptr_t) cx->ni_opaque,
             (uintptr_t) cx->chr, (uintptr_t) cx->hpd, cx->flags, ntohs(cx->h.daddr.sin_port),
             log_level > 4 && cx->h.sv_name ? cx->h.sv_name : "");
@@ -980,6 +983,10 @@ static int create_http_header(bool prx_auth, const char *sv_name, int use_head, 
     const char *method = NULL;
     const char *s_url = NULL;
 
+    NETLOG5("create_http_header: sv_name %s, horig->method %s, horig->url %s",
+            sv_name ? sv_name : "(null)",
+            horig && horig->method ? horig->method : "(null)",
+            horig && horig->url ? BUFF_CSTR(horig->url) : "(null)");
     if (!horig) {
         NETLOG("%s: ERROR - bug, no horig", __FUNCTION__);
         goto out;
@@ -1596,7 +1603,10 @@ static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now)
     struct http_ctx *hp = NULL;
     int n_all = 0, n_http = 0, n_alone = 0;
 
-    CXL5("start, CXF_DECIDED is %d", !!((cx->flags & CXF_DECIDED)));
+    if ((cx->flags & CXF_CLOSED))
+        goto out;
+
+    CXL5("start, CXF_DECIDED is %d", (int) !!((cx->flags & CXF_DECIDED)));
     assert(!cx->hp);
     if ((cx->flags & CXF_LOCAL_WEBDAV))
         goto out;
@@ -1809,7 +1819,6 @@ static int cx_hp_disconnect(struct clt_ctx *cx)
     bool f_cx_close = false;
     bool f_cx_closing = false;
     bool f_hp_closing = false;
-    bool f_cx_process = false;
     bool f_cx_guest_write = false;
 
     if (!cx->hp)
@@ -1849,11 +1858,13 @@ static int cx_hp_disconnect(struct clt_ctx *cx)
 
     if ((hp->flags & HF_HTTP_CLOSE)) {
 
-        if (!cx->out || BUFF_BUFFERED(cx->out) == 0) {
-            cx_close(cx);
-        } else {
-            cx->flags |= CXF_FLUSH_CLOSE;
-            f_cx_guest_write = true;
+        if (!(cx->flags & CXF_GPROXY_REQUEST)) {
+            if (!cx->out || BUFF_BUFFERED(cx->out) == 0) {
+                cx_close(cx);
+            } else {
+                cx->flags |= CXF_FLUSH_CLOSE;
+                f_cx_guest_write = true;
+            }
         }
         hp_close(hp);
         hp = NULL;
@@ -1868,6 +1879,13 @@ static int cx_hp_disconnect(struct clt_ctx *cx)
 
     if ((hp->flags & HF_CLOSED)) {
         f_cx_close = true;
+        hp = NULL;
+        goto out;
+    }
+
+    if ((hp->flags & HF_PARSE_ERROR)) {
+        HLOG5("HF_PARSE_ERROR closing");
+        hp_close(hp);
         hp = NULL;
         goto out;
     }
@@ -1910,8 +1928,6 @@ out:
             proxy_connect_cx_next(proxy);
     }
 
-    if (f_cx_process)
-        cx_process(cx, NULL, 0);
     if (f_cx_close)
         cx_close(cx);
     else if (cx && f_cx_guest_write && cx_guest_write(cx) < 0)
@@ -1919,6 +1935,12 @@ out:
 
     if (hp && hp->hpd)
         hpd_cx_continue(hp->hpd);
+
+    if ((cx->flags & CXF_CLOSED)) {
+        CXL5("CXF_CLOSED already");
+        ret = -1;
+    }
+
     return ret;
 }
 
@@ -2826,6 +2848,7 @@ static int hp_srv_process(struct http_ctx *hp)
     int auth_state;
     size_t lparsed = 0;
     bool needs_consume = false;
+    bool remove_hpd = false;
 
     if (!hp->cx)
         goto out;
@@ -2837,13 +2860,16 @@ static int hp_srv_process(struct http_ctx *hp)
         goto out;
 
     /* do we need to parse here ? */
-    if (((hp->flags & HF_RESTARTABLE) || hp->proxy) && hp->cx->out->len &&
-            (hp->hstate != HP_TUNNEL)) {
+    if ((!(hp->flags & HF_PARSE_ERROR) && ((hp->flags & HF_RESTARTABLE) || hp->proxy)) &&
+       hp->cx->out->len && (hp->hstate != HP_TUNNEL)) {
 
         bool headers_just_received = false;
+        bool parse_error = false;
 
         lparsed = HTTP_PARSE_BUFF(hp->cx->srv_parser, hp->cx->out);
         needs_consume = true;
+        if (lparsed != hp->cx->out->len)
+            parse_error = true;
 
         if (!(hp->flags & HF_RESP_RECEIVED) && hp->cx->srv_parser->h.status_code &&
                         hp->cx->srv_parser->h.status_code != HTTP_STATUS_PROXY_AUTH)
@@ -2914,45 +2940,43 @@ static int hp_srv_process(struct http_ctx *hp)
             hp->flags |= HF_HTTP_CLOSE;
         }
 
-        if (!(hp->flags & HF_HTTP_CLOSE) && lparsed != hp->cx->out->len &&
-              (hp->cx->srv_parser->parse_state == PS_HCOMPLETE ||
-              hp->cx->srv_parser->parse_state == PS_MCOMPLETE) &&
-              hp->cx->srv_parser->h.status_code != 407) {
-
-            HLOG2("HTTP parse error lparsed %u for %u, errno %d pl %d ml %d cl %lu"
-                    " - workaround - mark it as HF_HTTP_CLOSE",
+        if (parse_error) {
+            hp->cx->srv_parser->parse_error = 1;
+            HLOG2("HTTP parse error. lparsed %u for %u, errno %d pl %d ml "
+                    "%d cl %ld",
                     (unsigned int) lparsed, (unsigned int) hp->cx->out->len,
                     (int) hp->cx->srv_parser->parser.http_errno,
                     (int) hp->cx->srv_parser->parsed_len,
                     (int) hp->cx->srv_parser->message_len,
-                    (unsigned long) hp->cx->srv_parser->parser.content_length);
+                    (long) hp->cx->srv_parser->parser.content_length);
 
-            hp->cx->srv_parser->http_close = 1;
-            hp->flags |= HF_HTTP_CLOSE;
-        }
+            hp->flags &= (~HF_RESTARTABLE & ~HF_RESTART_OK & ~HF_REUSABLE & ~HF_REUSE_READY);
+            hp->flags |= HF_PARSE_ERROR;
+            hp->cx->flags |= CXF_RESET_STATE;
+            if (hp->hpd)
+                remove_hpd = true;
+            HLOG5("HF_PARSE_ERROR, CXF_RESET_STATE");
+            if (!hp->cx->srv_parser->h.status_code || hp->cx->srv_parser->h.status_code == 407) {
+                HLOG("ERROR - HTTP parse error. cannot obtain HTTP response code or got 407 code %d",
+                     (int) hp->cx->srv_parser->h.status_code);
+                if (!hide_log_sensitive_data) {
+                    BUFF_UNCONSUME(hp->cx->out);
+                    HLOG_DMP(BUFF_CSTR(hp->cx->out), hp->cx->out->len);
+                }
+                goto err;
+            }
 
-        if (!(hp->flags & HF_HTTP_CLOSE) && lparsed != hp->cx->out->len) {
-            hp->cx->srv_parser->parse_error = 1;
+            if ((hp->cx->srv_parser->parse_state == PS_HCOMPLETE ||
+               hp->cx->srv_parser->parse_state == PS_MCOMPLETE)) {
 
-            if (hp->proxy && hp->hstate == HP_RESPONSE &&
-                    hp->cx->srv_parser->h.status_code != 0 &&
-                    hp->cx->srv_parser->h.status_code != HTTP_STATUS_PROXY_AUTH) {
+                hp->cx->srv_parser->http_close = 1;
+                hp->flags |= HF_HTTP_CLOSE;
+            }
 
+            if (hp->proxy && hp->hstate == HP_RESPONSE) {
                 HLOG2("http parse error, ignoring as authorized anyway ...");
                 goto authorize;
             }
-
-            HLOG("HTTP parse error lparsed %u for %u, errno %d pl %d ml %d cl %lu",
-                    (unsigned int) lparsed, (unsigned int) hp->cx->out->len,
-                    (int) hp->cx->srv_parser->parser.http_errno,
-                    (int) hp->cx->srv_parser->parsed_len,
-                    (int) hp->cx->srv_parser->message_len,
-                    (unsigned long) hp->cx->srv_parser->parser.content_length);
-            BUFF_UNCONSUME(hp->cx->out);
-            if (NLOG_LEVEL > 3 && !hide_log_sensitive_data)
-                HLOG_DMP(BUFF_CSTR(hp->cx->out), hp->cx->out->len);
-
-            goto err;
         }
 
         if ((hp->cx->flags & CXF_GUEST_PROXY) && headers_just_received &&
@@ -3198,7 +3222,7 @@ write_guest:
 out:
     if (needs_consume && hp->cx && hp->cx->out)
         BUFF_CONSUME_ALL(hp->cx->out);
-    if ((hp->flags & HF_PINNED) && hp->hpd)
+    if ((remove_hpd || (hp->flags & HF_PINNED)) && hp->hpd)
         hp_remove_hpd(hp);
     return ret;
 err:
@@ -4594,12 +4618,8 @@ static void cx_free(struct clt_ctx *cx)
     free(cx);
 }
 
-static void cx_reset(struct clt_ctx *cx, bool soft)
+static void cx_reset_state(struct clt_ctx *cx, bool soft)
 {
-    if (cx->in)
-        BUFF_RESET(cx->in);
-    if (cx->out)
-        BUFF_RESET(cx->out);
     if (!soft) {
         free(cx->h.sv_name);
         cx->h.sv_name = NULL;
@@ -4618,6 +4638,15 @@ static void cx_reset(struct clt_ctx *cx, bool soft)
         CXL5("SRV_PARSER RESET");
         parser_reset(cx->srv_parser);
     }
+}
+
+static void cx_reset(struct clt_ctx *cx, bool soft)
+{
+    if (cx->in)
+        BUFF_RESET(cx->in);
+    if (cx->out)
+        BUFF_RESET(cx->out);
+    cx_reset_state(cx, soft);
 }
 
 static int cx_srv_fin(struct clt_ctx *cx)
@@ -4782,6 +4811,8 @@ static int cx_guest_write(struct clt_ctx *cx)
     size_t l;
     bool buf_ready = false;
 
+    if ((cx->flags & CXF_CLOSED))
+        goto out;
     if ((cx->flags & CXF_FORCE_CLOSE))
         goto out_close;
     if (!(cx->flags & CXF_NI_ESTABLISHED) || !cx->out)
@@ -4847,15 +4878,16 @@ static int cx_guest_write(struct clt_ctx *cx)
 
                 if ((cx->flags & CXF_GUEST_PROXY) && !(cx->flags & CXF_TUNNEL_GUEST)) {
 
-                     if (cx->proxy && !(cx->hp->flags & HF_PINNED))
-                         cx_hp_disconnect(cx);
-                     if (!cx->proxy && cx->hp && cx->hp->hpd)
-                         cx_hp_disconnect(cx);
+                     if (cx->proxy && !(cx->hp->flags & HF_PINNED) && cx_hp_disconnect(cx) < 0)
+                        goto out_close;
+                     if (!cx->proxy && cx->hp && cx->hp->hpd && cx_hp_disconnect(cx) < 0)
+                        goto out_close;
                      cx_reset(cx, false);
                 } else if (!(cx->flags & (CXF_GUEST_PROXY | CXF_TUNNEL_GUEST | CXF_TLS |
                              CXF_BINARY)) && cx->proxy) {
 
-                    cx_hp_disconnect(cx);
+                    if (cx_hp_disconnect(cx) < 0)
+                        goto out_close;
                     cx_reset(cx, true);
                 }
                 parser_reset(cx->srv_parser);
@@ -5116,6 +5148,12 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
         cx->flags &= ~CXF_LOCAL_WEBDAV_COMPLETE;
     }
 
+    if (buf && (cx->flags & CXF_RESET_STATE)) {
+        CXL5("CXF_RESET_STATE found");
+        cx->flags &= ~CXF_RESET_STATE;
+        cx_reset_state(cx, false);
+    }
+
     assert(cx->in);
 
     if (buf && !(cx->flags & CXF_GUEST_PROXY) && !(cx->flags & CXF_TLS_DETECT_OK)) {
@@ -5353,6 +5391,12 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
             cx->flags |= CXF_HTTP;
         }
 
+        if (cx->hp && (cx->hp->flags & HF_PARSE_ERROR)) {
+            CXL5("HF_PARSE_ERROR disconnect");
+            if (cx_hp_disconnect(cx) < 0)
+                goto out;
+        }
+
         if (cx->hp && (cx->hp->h.daddr.sin_port != cx->h.daddr.sin_port ||
                       (strcasecmp(cx->hp->h.sv_name, cx->h.sv_name) != 0) ||
                       (cx->proxy && !(cx->hp->flags & HF_PINNED)))) {
@@ -5362,7 +5406,8 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
                         cx->hp->h.sv_name, ntohs(cx->hp->h.daddr.sin_port),
                         cx->h.sv_name, ntohs(cx->h.daddr.sin_port));
             }
-            cx_hp_disconnect(cx);
+            if (cx_hp_disconnect(cx) < 0)
+                goto out;
         } else if (cx->hp) {
             cx->flags |= CXF_DECIDED;
             if (hp_reset(cx->hp) < 0)
@@ -5382,7 +5427,8 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
             goto err;
 
         if (cx->hp && cx->proxy)
-            cx_hp_disconnect(cx);
+            if (cx_hp_disconnect(cx) < 0)
+                goto out;
     }
 
     assert((cx->flags & CXF_DECIDED));

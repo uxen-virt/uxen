@@ -43,7 +43,7 @@ struct clt_ctx {
     void *webdav_opaque;
     struct http_server h;
     const char *schema;
-    uint32_t flags;
+    uint64_t flags;
     struct buff *in;
     struct buff *out;
     uint8_t bf_tls_ck[QUICK_HTTP_PARSE_LEN + 1];

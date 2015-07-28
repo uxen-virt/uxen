@@ -134,11 +134,20 @@ static int resp_on_message_begin(struct http_parser *parser)
     return 0;
 }
 
-static int resp_on_headers_complete(struct http_parser *parser)
+static int resp_on_status_complete(struct http_parser *parser)
 {
     struct parser_ctx *p = (struct parser_ctx *) parser->data;
 
     p->h.status_code = p->parser.status_code;
+    return 0;
+}
+
+static int resp_on_headers_complete(struct http_parser *parser)
+{
+    struct parser_ctx *p = (struct parser_ctx *) parser->data;
+
+    if (!p->h.status_code)
+        p->h.status_code = p->parser.status_code;
     p->h.http_major = parser->http_major;
     p->h.http_minor = parser->http_minor;
     p->h.header_length = parser->nread;
@@ -279,6 +288,7 @@ int parser_create_response(struct parser_ctx **pp, void *hx)
     if (!parser)
         goto out;
     parser->settings.on_message_begin = resp_on_message_begin;
+    parser->settings.on_status_complete = resp_on_status_complete;
     parser->settings.on_headers_complete = resp_on_headers_complete;
     parser->settings.on_header_field = resp_on_header_field;
     parser->settings.on_header_value = resp_on_header_value;
