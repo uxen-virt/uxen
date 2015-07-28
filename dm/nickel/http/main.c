@@ -1548,7 +1548,7 @@ cx_hp_connect_proxy(struct clt_ctx *cx)
     hp->cstate = S_INIT;
     if (hp_cx_connect_buffs(hp, true) < 0)
         goto close_hp;
-    if (hp->proxy && !(cx->flags & (CXF_TUNNEL_GUEST | CXF_TLS | CXF_BINARY)))
+    if (hp->proxy && (cx->flags & CXF_GUEST_PROXY) && !(cx->flags & (CXF_TUNNEL_GUEST | CXF_TLS | CXF_BINARY)))
         hp->flags |= HF_REUSABLE;
     if ((hp->proxy || (cx->flags & CXF_GUEST_PROXY)) &&
          !(cx->flags & (CXF_TUNNEL_GUEST | CXF_TLS | CXF_BINARY))) {
