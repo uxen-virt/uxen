@@ -41,6 +41,7 @@
 #define WM_UXEN_EXIT (WM_USER + 2)
 
 static UINT wm_print_surface = 0;
+static disp_context_t disp;
 
 struct win_surface
 {
@@ -69,7 +70,6 @@ struct win32_gui_state {
     uint32_t vram_size;
     struct win_surface *surface;
     CRITICAL_SECTION surface_lock;
-    disp_context_t disp;
 };
 
 static int
@@ -1532,10 +1532,6 @@ win_event_loop(PVOID opaque)
     debug_printf("%s: starting\n", __FUNCTION__);
     SetEvent(s->ready_event);
 
-    s->disp = uxenconsole_disp_init(vm_id, s, (invalidate_rect_t)win_update);
-    if (!s->disp)
-        errx(1, "disp_init failed");
-
     /* Runs until DestroyWindow is called. */
     while (WaitForSingleObject(s->stop_event, 0) != WAIT_OBJECT_0) {
         ret = MsgWaitForMultipleObjectsEx(
@@ -1548,9 +1544,6 @@ win_event_loop(PVOID opaque)
         }
     }
     CloseHandle(s->stop_event);
-
-    uxenconsole_disp_cleanup(s->disp);
-    s->disp = NULL;
 
     debug_printf("%s: exiting\n", __FUNCTION__);
     ExitThread(0);
@@ -1572,12 +1565,19 @@ mon_resize_screen(struct gui_state *s, Monitor *mon, const dict args)
 }
 #endif  /* MONITOR */
 
+static void disp_inv_rect(void *priv, int x, int y, int w, int h)
+{
+    if (display_state)
+        dpy_update(display_state, x, y, w, h);
+}
+
 static int
 console_init(struct gui_state *state, char *optstr)
 {
     struct win32_gui_state *s = (void *)state;
 
     guest_agent_init();
+    disp = uxenconsole_disp_init(vm_id, NULL, disp_inv_rect);
     InitializeCriticalSection(&s->surface_lock);
     EnterCriticalSection(&s->surface_lock);
     s->state.width = 640;
@@ -1636,6 +1636,8 @@ console_exit(struct gui_state *state)
         DeleteCriticalSection(&s->surface_lock);
     }
 
+    uxenconsole_disp_cleanup(disp);
+    disp = NULL;
     guest_agent_cleanup();
 }
 
