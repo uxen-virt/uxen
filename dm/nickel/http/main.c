@@ -2245,8 +2245,20 @@ static int srv_read(struct http_ctx *hp)
     hp->flags &= ~HF_RESTART_OK;
 
     assert(hp->so);
-    if (!hp->cx)
+    if (!hp->cx) {
+        if ((hp->flags & HF_REUSABLE)) {
+            uint8_t tmp_buf[2];
+
+            len = so_read(hp->so, tmp_buf, 1);
+            if (len > 0) {
+                HLOG("ERROR - received data on an idle reusable socket! closing connection.");
+                hp_close(hp);
+            }
+        }
+
         goto out;
+    }
+
     if ((hp->flags & HF_SRV_SUSPENDED))
         goto out_pending;
 
