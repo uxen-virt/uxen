@@ -7,6 +7,7 @@
 #include <malloc.h>
 #include <stdio.h>
 #include <windows.h>
+
 void RTLogLoggerEx(PRTLOGGER pLogger, unsigned fFlags, unsigned iGroup,
     const char *pszFormat, ...)
 {

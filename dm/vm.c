@@ -26,6 +26,7 @@
 #include "vm.h"
 #include "vm-save.h"
 #include "shared-folders.h"
+#include "clipboard.h"
 #include "hw/uxen_platform.h"
 
 #if defined(CONFIG_NICKEL)
@@ -561,6 +562,12 @@ vm_init(const char *loadvm, int restore_mode)
 
     xc_cpuid_apply_policy(xc_handle, vm_id);
 
+#if defined(CONFIG_VBOXDRV)
+    ret = clip_service_start();
+    if (ret)
+        err(1, "clip_service_start");
+#endif
+
 #ifdef CONFIG_DUMP_PERIODIC_STATS
     dump_periodic_stats_init();
 #endif  /* CONFIG_DUMP_PERIODIC_STAT */
@@ -666,6 +673,7 @@ vm_exit(void *opaque)
 
 #if defined(CONFIG_VBOXDRV)
     sf_service_stop();
+    clip_service_stop();
 #endif
 
     console_display_exit();

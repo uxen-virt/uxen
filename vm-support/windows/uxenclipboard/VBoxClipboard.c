@@ -40,6 +40,7 @@
 #include "channel.h"
 #include "clipboardformats.h"
 #include "uxen_bmp_convert.h"
+#include <dm/clipboard-protocol.h>
 
 typedef struct _VBOXCLIPBOARDCONTEXT
 {
@@ -695,72 +696,59 @@ out:
     return ret;
 }
 
-static DWORD WINAPI VBoxClipboardThread(void *pInstance)
+static DWORD WINAPI
+VBoxClipboardThread(void *pInstance)
 {
-    char msg[16384];
-    unsigned int * msgint = (unsigned int*)msg;
     Log(("BrHVTray: BrHVClipboardThread\n"));
     int ret;
 
     VBOXCLIPBOARDCONTEXT *pCtx = (VBOXCLIPBOARDCONTEXT *)pInstance;
     AssertPtr(pCtx);
     LogFlow(("VBoxClipboardThread, pCtx=%p, hwnd=%p\n", pCtx, pCtx->hwnd));
+    // notify guest connected
+    ChannelSendNotify("X", 1);
     /* The thread waits for incoming messages from the host. */
-    for (;;)
-    {
-        int rc = ChannelRecvHostMsg(msg, sizeof(msg));
-        if (RT_FAILURE(rc))
-        {
-            Log(("BrHVTray: BrHVClipboardThread: Failed to call the driver for host message! rc = %d\n", rc));
-            if (rc == VERR_INTERRUPTED)
-            {
-                /* Wait for termination event. */
-                WaitForSingleObject(pCtx->pEnv->hStopEvent, INFINITE);
+    for (;;) {
+        struct clip_notify_data *ndata;
+        void *msg = NULL;
+        int msglen;
+        int rc = ChannelRecvNotify(&msg, &msglen);
+
+        if (rc) {
+            Log(("BrHVTray: notification receive error %d\n", rc));
+       } else {
+            ndata = (struct clip_notify_data*) msg;
+            Log(("BrHVTray: BrHVClipboardThread: VbglR3ClipboardGetHostMsg type %d len %d\n",
+                 ndata->type, ndata->len));
+            switch (ndata->type) {
+            case VBOX_SHARED_CLIPBOARD_HOST_MSG_FORMATS:
+                /* The host has announced available clipboard formats.
+                 * Forward the information to the window, so it can later
+                 * respond to WM_RENDERFORMAT message. */
+                ret = uxenclipboard_parse_remote_format_announce(
+                    (char*)ndata->data, ndata->len);
+                if (ret) {
+                    Log(("BrHVTray: uxenclipboard_parse_remote_format_announce error %d", ret));
+                } else
+                    PostMessage (pCtx->hwnd, WM_USER, 0, 0);
+                break;
+                
+            case VBOX_SHARED_CLIPBOARD_HOST_MSG_READ_DATA: {
+                uint32_t *p = (uint32_t*)ndata->data;
+                /* The host needs data in the specified format. */
+                PostMessage (pCtx->hwnd, WM_USER + 1, 0, *p);
                 break;
             }
-            /* Wait a bit before retrying. */
-            AssertPtr(pCtx->pEnv);
-            if (WaitForSingleObject(pCtx->pEnv->hStopEvent, 1000) == WAIT_OBJECT_0)
-            {
+            case VBOX_SHARED_CLIPBOARD_HOST_MSG_QUIT:
+                /* The host is terminating. */
+                rc = VERR_INTERRUPTED;
+                break;
+
+            default:
+                Log(("BrHVTray: BrHVClipboardThread: Unsupported message from host!\n"));
                 break;
             }
-            continue;
-       }
-        else
-        {
-            Log(("BrHVTray: BrHVClipboardThread: VbglR3ClipboardGetHostMsg 0x%x 0x%x 0x%x\n", msgint[0], msgint[1], msgint[2]));
-            switch (msgint[1])
-            {
-                case VBOX_SHARED_CLIPBOARD_HOST_MSG_FORMATS:
-                {
-                    /* The host has announced available clipboard formats.
-                     * Forward the information to the window, so it can later
-                     * respond to WM_RENDERFORMAT message. */
-                    ret = uxenclipboard_parse_remote_format_announce(
-                        (char*)(msgint + 2), msgint[0]);
-                    if (ret) {
-                        Log(("BrHVTray: uxenclipboard_parse_remote_format_announce error %d", ret));
-                    } else
-                        PostMessage (pCtx->hwnd, WM_USER, 0, 0);
-                } break;
-
-                case VBOX_SHARED_CLIPBOARD_HOST_MSG_READ_DATA:
-                {
-                    /* The host needs data in the specified format. */
-                    PostMessage (pCtx->hwnd, WM_USER + 1, 0, msgint[2]);
-                } break;
-
-                case VBOX_SHARED_CLIPBOARD_HOST_MSG_QUIT:
-                {
-                    /* The host is terminating. */
-                    rc = VERR_INTERRUPTED;
-                } break;
-
-                default:
-                {
-                    Log(("BrHVTray: BrHVClipboardThread: Unsupported message from host!\n"));
-                }
-            }
+            free(msg);
         }
     }
     return 0;

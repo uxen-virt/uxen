@@ -14,12 +14,15 @@ VPATH = $(SRCDIR)
 
 CPPFLAGS += -I$(SRCDIR) -I$(TOPDIR)/vm-support/windows/uxensf/driver \
 	-I$(TOPDIR)/dm/vbox-includes/include \
+	$(LIBXC_CPPFLAGS) $(LIBUXENCTL_CPPFLAGS) \
+	-I$(TOPDIR)/common/include -I$(TOPDIR) -I$(TOPDIR)/common/include/xen-public \
 	-DVBOX -DIN_RING3 -DVBOX_WITH_HGCM -DVBOX_WITH_64_BITS_GUESTS \
 	-DARCH_BITS=64 -DRT_OS_WINDOWS -DLOG_ENABLED -DLOG_USE_C99 \
-	-DGC_ARCH_BITS=64
+	-DGC_ARCH_BITS=64 $(LIBXC_CPPFLAGS) $(LIBUXENCTL_CPPFLAGS)
 
 UXENCLIPBOARD_OBJS=VBoxClipboard.o VBoxGuestR3LibClipboard.o hgcmcall.o \
-    hgcm-simple.o rt.o RTErrConvertFromWin32.o channel.o defroute.o clipboardformats.o uxen_bmp_convert.o
+    hgcm-simple.o rt.o RTErrConvertFromWin32.o channel.o defroute.o clipboardformats.o uxen_bmp_convert.o \
+    clipboard-protocol.o
 
 $(UXENCLIPBOARD_OBJS): .deps/.exists
 

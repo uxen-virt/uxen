@@ -898,6 +898,13 @@ vmfwd(struct nickel *ni, const yajl_val object)
 #endif
                 return 0;
             }
+            if (serv && !strcmp(serv, "shared-clipboard")) {
+#if defined(CONFIG_VBOXDRV)
+                extern int clip_parse_config(yajl_val config);
+                clip_parse_config(host_service);
+#endif
+                return 0;
+            }
         }
 
         nsd = ns_find_service(yajl_object_get_string(host_service, "service"),

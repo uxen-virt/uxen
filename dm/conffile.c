@@ -34,6 +34,7 @@
 
 #include "yajl.h"
 #include "shared-folders.h"
+#include "clipboard.h"
 
 struct conffile {
     yajl_val parser_obj;
@@ -623,6 +624,16 @@ co_set_shared_folders(const char *opt, yajl_val arg, void *opaque)
 }
 
 static int
+co_set_clipboard(const char *opt, yajl_val arg, void *opaque)
+{
+#if defined(CONFIG_VBOXDRV)
+    return clip_parse_config(arg);
+#else
+    return 0;
+#endif
+}
+
+static int
 co_set_uuid(const char *opt, yajl_val arg, void *opaque)
 {
     int ret;
@@ -656,6 +667,7 @@ struct config_option config_options[] = {
     { "balloon-min-size", co_set_integer_opt, &balloon_min_mb },
     { "block", co_set_block, NULL },
     { "boot-order", co_set_string_opt, &boot_order },
+    { "clipboard", co_set_clipboard, NULL },
     { "clipboard-formats-blacklist-host2vm", co_set_string_opt,
         &clipboard_formats_blacklist_host2vm },
     { "clipboard-formats-blacklist-vm2host", co_set_string_opt,

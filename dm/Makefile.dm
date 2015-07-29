@@ -157,10 +157,6 @@ DM_SRCS += ns.c
 DM_SRCS += ns-echo.c
 $(CONFIG_WEBDAV)DM_SRCS += ns-webdav.c
 $(CONFIG_WEBDAV)DM_SRCS += webdav.c
-$(CONFIG_VBOXDRV)DM_SRCS += ns-clipboard.c
-ns-clipboard.o: CFLAGS += \
-      -I$(TOPDIR)/vm-support/windows/uxensf/driver
-$(CONFIG_VBOXDRV)DM_SRCS += ns-clipboard-hostmsg.c
 DM_SRCS += ns-forward.c
 DM_SRCS += ns-logging.c
 $(CONFIG_VBOXDRV)DM_SRCS += shared-folders.c
@@ -168,6 +164,10 @@ $(CONFIG_VBOXDRV)shared-folders.o: CFLAGS += \
       -I$(TOPDIR)/vm-support/windows/uxensf/driver
 $(CONFIG_VBOXDRV)shared-folders.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 $(CONFIG_VBOXDRV)shared-folders.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
+$(CONFIG_VBOXDRV)DM_SRCS += clipboard.c
+$(CONFIG_VBOXDRV)DM_SRCS += clipboard-protocol.c
+$(CONFIG_VBOXDRV)clipboard-protocol.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
+$(CONFIG_VBOXDRV)clipboard-protocol.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
 
 $(OSX)DM_SRCS += osx.c
 osx.o: CPPFLAGS += $(LIBXC_CPPFLAGS)

@@ -42,6 +42,7 @@
 #include <windows.h>
 #include <hgcm-limits.h>
 #include <hgcm-simple.h>
+#include "heap.h"
 #include "generic-server.h"
 
 /* This is effectively unused - we assume a single client.
@@ -166,7 +167,7 @@ int generic_server_process_request(char *req, int reqsize, char** respbuf,
         tmpbuf = *respbuf;
     } else {
         /* TODO: get rid of this allocation (used in clipboard only?) */
-        tmpbuf = malloc(marshall_size + sizeof(*respheader));
+        tmpbuf = hgcm_malloc(marshall_size + sizeof(*respheader));
         if (!tmpbuf) {
             LogRel(("generic_server: malloc for 0x%x failed\n", marshall_size + sizeof(*respheader)));
             return VERR_NO_MEMORY;

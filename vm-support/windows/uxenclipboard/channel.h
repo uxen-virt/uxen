@@ -3,8 +3,13 @@
  * SPDX-License-Identifier: ISC
  */
 
+#ifndef _CHANNEL_H_
+#define _CHANNEL_H_
+
 int ChannelSend(char* buffer, int count);
-int ChannelRecv(char* buffer, int count);
-int ChannelRecvHostMsg(char* msg, unsigned int maxlen);
+int ChannelRecv(void **buffer, int *count);
+int ChannelSendNotify(char *buffer, int count);
+int ChannelRecvNotify(void **msg, int *len);
 int ChannelConnect(void);
 
+#endif
