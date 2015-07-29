@@ -702,6 +702,7 @@ struct config_option config_options[] = {
     { "serial", co_set_serial, NULL },
     { "shared-folders", co_set_shared_folders, NULL },
     { "timer-mode", co_set_integer_opt, &vm_timer_mode },
+    { "tsc-mode", co_set_integer_opt, &vm_tsc_mode },
     { "use-v4v-disk", co_set_integer_opt, &vm_use_v4v_disk },
     { "use-v4v-net", co_set_integer_opt, &vm_use_v4v_net },
     { "uuid", co_set_uuid, NULL },

@@ -456,7 +456,7 @@ vm_init(const char *loadvm, int restore_mode)
     xc_domain_set_introspection_features(xc_handle, vm_id,
                                          compute_introspection_features());
 
-    xc_domain_set_tsc_info(xc_handle, vm_id, 2 /* info->tsc_mode */,
+    xc_domain_set_tsc_info(xc_handle, vm_id, vm_tsc_mode /* info->tsc_mode */,
 			   0, 0, 0);
 
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_PAE_ENABLED, vm_pae);

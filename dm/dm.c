@@ -75,6 +75,7 @@ window_handle vm_window_parent = NULL;
 uint64_t vm_vcpus = 1;
 uint8_t vm_vcpu_avail[(HVM_MAX_VCPUS + 7) / 8] = {1, 0};
 uint64_t vm_timer_mode = 0;
+uint64_t vm_tsc_mode = 2;
 uint64_t vm_vga_mb = 0;
 uint64_t vm_vga_mb_mapped = 0;
 char *vm_vga_shm_name = NULL;
