@@ -133,7 +133,7 @@ Return Value:
     UNICODE_STRING      DeviceLinkUnicodeString;
     PDRIVER_DISPATCH    DispatchTable[IRP_MJ_MAXIMUM_FUNCTION + 1];
 
-    DEBUGP(MP_TRACE, ("==>NICRegisterDevice\n"));
+    uxen_msg("==>NICRegisterDevice");
 
     PAGED_CODE();
 
@@ -168,7 +168,7 @@ Return Value:
 
     NIC_RELEASE_MUTEX(&ControlDeviceMutex);
 
-    DEBUGP(MP_TRACE, ("<==NICRegisterDevice: %x\n", Status));
+    uxen_msg("<==NICRegisterDevice: %x", Status);
 
     return (Status);
 }
@@ -206,7 +206,7 @@ Return Value:
     PAGED_CODE();
 
     irpStack = IoGetCurrentIrpStackLocation(Irp);
-    DEBUGP(MP_TRACE, ("==>NICDispatch %d\n", irpStack->MajorFunction));
+    uxen_msg("==>NICDispatch %d", irpStack->MajorFunction);
 
     switch (irpStack->MajorFunction) {
         case IRP_MJ_CREATE:
@@ -230,10 +230,10 @@ Return Value:
                     // Add code here to handle ioctl commands.
                     //
                     case IOCTL_NETVMINI_READ_DATA:
-                        DEBUGP(MP_TRACE, ("Received Read IOCTL\n"));
+                        uxen_msg("Received Read IOCTL");
                         break;
                     case IOCTL_NETVMINI_WRITE_DATA:
-                        DEBUGP(MP_TRACE, ("Received Write IOCTL\n"));
+                        uxen_msg("Received Write IOCTL");
                         break;
                     default:
                         status = STATUS_UNSUCCESSFUL;
@@ -248,7 +248,7 @@ Return Value:
     Irp->IoStatus.Status = status;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
-    DEBUGP(MP_TRACE, ("<== NIC Dispatch\n"));
+    uxen_msg("<== NIC Dispatch");
 
     return status;
 
@@ -279,7 +279,7 @@ Return Value:
 {
     NDIS_STATUS Status = NDIS_STATUS_SUCCESS;
 
-    DEBUGP(MP_TRACE, ("==>NICDeregisterDevice\n"));
+    uxen_msg("==>NICDeregisterDevice");
 
     PAGED_CODE();
 
@@ -303,7 +303,7 @@ Return Value:
 
     NIC_RELEASE_MUTEX(&ControlDeviceMutex);
 
-    DEBUGP(MP_TRACE, ("<== NICDeregisterDevice: %x\n", Status));
+    uxen_msg("<== NICDeregisterDevice: %x", Status);
     return Status;
 
 }

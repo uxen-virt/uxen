@@ -52,11 +52,6 @@ Notes:
 
 #include "uxennet_private.h"
 
-#undef FISH
-#define FISH do { DEBUGP(MP_TRACE, ("%s:%s:%d\n",__FILE__,__FUNCTION__,__LINE__)); } while (0)
-
-
-
 NDIS_STATUS
 NICSendPacket(
     PMP_ADAPTER Adapter,
@@ -65,7 +60,7 @@ NICSendPacket(
     NDIS_STATUS       Status = NDIS_STATUS_SUCCESS;
     ULONG  nbs;
 
-    DEBUGP(MP_TRACE, ("--> NICSendPacket, Packet= %p\n", Packet));
+    uxen_msg("--> NICSendPacket, Packet= %p", Packet);
 
 
 //    uxen_net_soh(&Adapter->uxen_net,Adapter);
@@ -101,7 +96,7 @@ NICSendPacket(
             NdisInterlockedDecrement(&Adapter->nBusySend);
     }
 
-    DEBUGP(MP_TRACE, ("<-- NICSendPacket Status = 0x%08x\n", Status));
+    uxen_msg("<-- NICSendPacket Status = 0x%08x", Status);
 
     return (Status);
 }
@@ -176,7 +171,7 @@ Return Value:
     NDIS_STATUS       Status;
     UINT              PacketCount;
 
-    DEBUGP(MP_TRACE, ("---> MPSendPackets\n"));
+    uxen_msg("---> MPSendPackets");
 
     Adapter = (PMP_ADAPTER)MiniportAdapterContext;
 
@@ -195,7 +190,7 @@ Return Value:
 
     }
 
-    DEBUGP(MP_TRACE, ("<--- MPSendPackets\n"));
+    uxen_msg("<--- MPSendPackets");
 
     return;
 }

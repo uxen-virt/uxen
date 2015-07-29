@@ -140,9 +140,9 @@ Notes: Read "Minimizing Miniport Driver Initialization Time" in the DDK
     ULONG64                 ulInfo64;
     PVOID                   pInfo = &ulInfo;
     ULONG                   ulInfoLen = sizeof(ulInfo);
-    static unsigned char buf[256]
+    static unsigned char buf[256];
 
-    DEBUGP(MP_LOUD, ("---> MPQueryInformation %s\n", DbgGetOidName(Oid)));
+    uxen_msg("---> MPQueryInformation %s", DbgGetOidName(Oid));
 
     Adapter = (PMP_ADAPTER) MiniportAdapterContext;
 
@@ -646,7 +646,7 @@ Notes: Read "Minimizing Miniport Driver Initialization Time" in the DDK
                 pInfo = (PVOID) buf;
                 ulInfoLen = sizeof(*h) + FIELD_OFFSET(NDIS_TASK_OFFLOAD, TaskBuffer) + sizeof(*checksum_buffer);
 
-                DbgPrint("uxennet - lied through our teeth about checksums!\n");
+                uxen_msg("uxennet - lied through our teeth about checksums!");
 
                 break;
             }
@@ -670,7 +670,7 @@ Notes: Read "Minimizing Miniport Driver Initialization Time" in the DDK
         }
     }
 
-    DEBUGP(MP_LOUD, ("<--- MPQueryInformation Status = 0x%08x\n", Status));
+    uxen_msg("<--- MPQueryInformation Status = 0x%08x", Status);
 
     return (Status);
 }
@@ -707,7 +707,7 @@ Return Value:
     NDIS_STATUS             Status = NDIS_STATUS_SUCCESS;
     PMP_ADAPTER           Adapter = (PMP_ADAPTER) MiniportAdapterContext;
 
-    DEBUGP(MP_LOUD, ("---> MPSetInformation %s\n", DbgGetOidName(Oid)));
+    uxen_msg("---> MPSetInformation %s", DbgGetOidName(Oid));
 
     *BytesRead = 0;
     *BytesNeeded = 0;
@@ -778,7 +778,7 @@ Return Value:
         *BytesRead = InformationBufferLength;
     }
 
-    DEBUGP(MP_LOUD, ("<-- MPSetInformation Status = 0x%08x\n", Status));
+    uxen_msg("<-- MPSetInformation Status = 0x%08x", Status);
 
     return (Status);
 }
@@ -829,7 +829,7 @@ Return Value:
 {
     NDIS_STATUS      Status = NDIS_STATUS_SUCCESS;
 
-    DEBUGP(MP_TRACE, ("--> NICSetPacketFilter\n"));
+    uxen_msg("--> NICSetPacketFilter");
 
     // any bits not supported?
     if (PacketFilter & ~NIC_SUPPORTED_FILTERS) {
@@ -847,7 +847,7 @@ Return Value:
         Adapter->PacketFilter = PacketFilter;
     }
 
-    DEBUGP(MP_TRACE, ("<-- NICSetPacketFilter\n"));
+    uxen_msg("<-- NICSetPacketFilter");
 
     return (Status);
 }
@@ -886,7 +886,7 @@ Return Value:
     ULONG                  index;
 #endif
 
-    DEBUGP(MP_TRACE, ("--> NICSetMulticastList\n"));
+    uxen_msg("--> NICSetMulticastList");
 
     //
     // Initialize.
@@ -923,14 +923,14 @@ Return Value:
 #if DBG
         // display the multicast list
         for (index = 0; index < Adapter->ulMCListSize; index++) {
-            DEBUGP(MP_LOUD, ("MC(%d) = %02x-%02x-%02x-%02x-%02x-%02x\n",
+            uxen_msg("MC(%d) = %02x-%02x-%02x-%02x-%02x-%02x",
                              index,
                              Adapter->MCList[index][0],
                              Adapter->MCList[index][1],
                              Adapter->MCList[index][2],
                              Adapter->MCList[index][3],
                              Adapter->MCList[index][4],
-                             Adapter->MCList[index][5]));
+                             Adapter->MCList[index][5]);
         }
 #endif
     } while (bFalse);
@@ -939,7 +939,7 @@ Return Value:
     // Program the hardware to add suport for these muticast addresses
     //
 
-    DEBUGP(MP_TRACE, ("<-- NICSetMulticastList\n"));
+    uxen_msg("<-- NICSetMulticastList");
 
     return (Status);
 

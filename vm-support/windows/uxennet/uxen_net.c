@@ -55,8 +55,6 @@ uxen_net_send_packet (Uxennet *n, PNDIS_PACKET p)
 
     ret = uxen_v4v_sendv_from_ring(n->recv_ring, &n->dest_addr, iov, niov, V4V_PROTO_DGRAM);
 
-//  DbgPrint ("uxen_send_packet: Total bytes %d expected %d sendv returns %d\n", pktlen, len,ret);
-
     if (ret != len)
         return NDIS_STATUS_FAILURE;
 
@@ -158,14 +156,14 @@ uxen_net_init_adapter (Uxennet *n)
     InsertTailList (&globals.adapter_list, &n->list);
     NdisReleaseSpinLock (&globals.lock);
 
-    DbgPrint("Adapter num %d\n", n->anum);
+    uxen_msg("Adapter num %d", n->anum);
 
     n->recv_ring = uxen_v4v_ring_bind(0xc0000 + n->anum, 0, V4V_RING_LEN, uxen_net_callback, n->parent, NULL);
 
     n->dest_addr.port = 0xc0000 + n->anum;
     n->dest_addr.domain = 0;
 
-    DbgPrint("recv_ring %p\n", n->recv_ring);
+    uxen_msg("recv_ring %p", n->recv_ring);
 
     if (!n->recv_ring)
         return STATUS_NO_MEMORY;
@@ -216,7 +214,7 @@ void uxen_net_soh(Uxennet *n, PMP_ADAPTER adapter)
 
     if (q < 100) return;
     q = 0;
-    DbgPrint("un: rx_ptr=%u tx_ptr=%u free rcbs? %s\n",
+    uxen_msg("un: rx_ptr=%u tx_ptr=%u free rcbs? %s",
              (unsigned) n->recv_ring->ring->rx_ptr,
              (unsigned) n->recv_ring->ring->tx_ptr,
              IsListEmpty(&adapter->RecvFreeList) ? "No" : "Yes");
