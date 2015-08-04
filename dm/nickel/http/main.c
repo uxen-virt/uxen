@@ -2534,6 +2534,9 @@ static int srv_write(struct http_ctx *hp, const uint8_t *b, size_t blen)
     if ((hp->flags & HF_CLT_FIN_OK))
         goto out;
 
+    if (hp->cstate != S_CONNECTED)
+        goto out;
+
     HLOG5("blen %lu", blen);
     if (hp->clt_out) {
         BUFF_CONSUME_ALL(hp->clt_out);
