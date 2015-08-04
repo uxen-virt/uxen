@@ -976,7 +976,8 @@ int bfs(Variable *var, Manifest *suffixes,
         }
     } else {
         /* We do not like overly broad manifests, so complain about things not found. */
-        printf("warning: file not found! [%ls:%ls]\n", var->path, dn);
+        uint32_t err = (uint32_t)GetLastError();
+        printf("warning: file not found! [%ls:%ls] err=%u\n", var->path, dn, err);
     }
 
     info_buf = malloc(info_sz);
@@ -2446,14 +2447,6 @@ int register_with_cow(
 
     printf("Successfully sent start message to CoW filter");
 
-    // Also register to be allowed to read exclusively-opened files
-    HANDLE cow_port;
-    hr = FilterConnectCommunicationPort(L"\\CoWAllowReadPort", 0, NULL, 0,
-        NULL, &cow_port);
-    if (FAILED(hr)) {
-        printf("Unable to connect to CoWAllowReadPort : [%d]\n", (int)hr);
-    }
-
 cleanup:
 
     if (hPort != INVALID_HANDLE_VALUE) {
@@ -2471,6 +2464,17 @@ cleanup:
     }
 
     return 0;
+}
+
+void cow_allow_file_access()
+{
+    // register to be allowed to read exclusively-opened files
+    HANDLE cow_port;
+    HRESULT hr = FilterConnectCommunicationPort(L"\\CoWAllowReadPort", 0, NULL, 0,
+        NULL, &cow_port);
+    if (FAILED(hr)) {
+        printf("Unable to connect to CoWAllowReadPort : [%d]\n", (int)hr);
+    }
 }
 
 int get_next_usn(HANDLE drive, USN *usn, uint64_t *journal)
@@ -3262,6 +3266,11 @@ int main(int argc, char **argv)
             }
         }
     }
+
+    /* Needed to scan exclusively-opened files when not using VSS, because of
+     * how path_exists() is implemented.
+     */
+    cow_allow_file_access();
 
     /* Scan directories on host. */
     if (scanning_phase(&disk, &vars, &suffixes, &man_out) < 0) {
