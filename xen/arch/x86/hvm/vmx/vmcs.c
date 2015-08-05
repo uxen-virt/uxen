@@ -73,6 +73,7 @@ boolean_param("unrestricted_guest", opt_unrestricted_guest_enabled);
 #endif  /* __UXEN__ */
 
 #define VMCS_ITERATE_NO_XEN_MAPPINGS 1
+#define VMCS_FIRST_FIELD_OFFSET 8
 
 /*
  * These two parameters are used to config the controls for Pause-Loop Exiting:
@@ -2046,61 +2047,87 @@ static const enum vmcs_field all_vmcs_fields[] = {
     /* NVMX_LAUNCH_STATE */
 };
 
+/* find offset of a given vmcs field */
+static uint64_t
+vmcs_scan_for_field(void *vmcs, uint64_t vmcs_ma, enum vmcs_field f,
+                    uint16_t shoot_v, uint32_t flags, uint32_t *begin)
+{
+    int i;
+    uint64_t off = 0;
 
-static void _pv_vmcs_write_xen(unsigned long vmcs_encoding, unsigned long val, u64 *content);
+#define NEXT_OFF(x) (x+2 < PAGE_SIZE ? x+2 : VMCS_FIRST_FIELD_OFFSET)
+
+    /* Xen throws an exception on vmptrld if it can't map the various bitmaps */
+    if (flags & VMCS_ITERATE_NO_XEN_MAPPINGS) {
+        if (f == IO_BITMAP_A || f == IO_BITMAP_A_HIGH ||
+            f == IO_BITMAP_B || f == IO_BITMAP_B_HIGH ||
+            f == MSR_BITMAP  || f == MSR_BITMAP_HIGH)
+            /* can't find its offset */
+            return 0;
+    }
+
+    __vmpclear(vmcs_ma);
+    /* zero whole vmcs minus hdr bits */
+    memset(vmcs+VMCS_FIRST_FIELD_OFFSET, 0, PAGE_SIZE-VMCS_FIRST_FIELD_OFFSET);
+    i = *begin;
+    do {
+        /* shoot safe value & reload vmcs, assumes little endian */
+        __vmpclear(vmcs_ma);
+        *((uint16_t*)(vmcs+i)) = shoot_v;
+        __vmptrld(vmcs_ma);
+        /* did we hit bullseye? */
+        if (__vmread_direct(f) == shoot_v) {
+            off = i;
+            break;
+        }
+        /* restore 0 */
+        *((uint16_t*)(vmcs+i)) = 0;
+
+        i = NEXT_OFF(i);
+    } while (i != *begin);
+
+    __vmpclear(vmcs_ma);
+
+    /* next time don't start from beginning */
+    *begin = off ? NEXT_OFF(off) : VMCS_FIRST_FIELD_OFFSET;
+    return off;
+}
 
 static int
 vmcs_fields_iterate(int (*fn)(uint64_t, union vmcs_encoding, int), uint32_t flags)
 {
-    struct vmcs_struct *v1;
-    uint16_t *v1_mem16;
-    uint64_t v1_ma;
-    uint64_t v;
+    struct vmcs_struct *vmcs;
+    uint64_t vmcs_ma;
     int i;
     int ret = 0;
-    union vmcs_encoding enc;
-    int index;
+    uint32_t offset_iter;
 
-    v1 = vmx_alloc_vmcs();
-    if (!v1) {
+    vmcs = vmx_alloc_vmcs();
+    if (!vmcs) {
         dprintk(XENLOG_ERR, "out of memory\n");
         ret = -ENOMEM;
         goto out;
     }
+    vmcs_ma = virt_to_maddr(vmcs);
 
-    v1_mem16 = (uint16_t *)v1;
-    v1_ma = virt_to_maddr(v1);
-
-    __vmpclear(v1_ma);
-
-    /* skip vmcs revision id (uint32_t) and vmx abort indicator (uint32_t) */
-    for (i = 4; i < PAGE_SIZE / 2; i++)
-        v1_mem16[i] = i * 2;
-
-    /* Xen throws an exception on vmptrld if it can't map the various bitmaps */
-    if (flags & VMCS_ITERATE_NO_XEN_MAPPINGS) {
-	_pv_vmcs_write_xen(IO_BITMAP_A, 0, (u64 *) v1);
-	_pv_vmcs_write_xen(IO_BITMAP_A_HIGH, 0, (u64 *) v1);
-	_pv_vmcs_write_xen(IO_BITMAP_B, 0, (u64 *) v1);
-	_pv_vmcs_write_xen(IO_BITMAP_B_HIGH, 0, (u64 *) v1);
-	_pv_vmcs_write_xen(MSR_BITMAP, 0, (u64 *) v1);
-	_pv_vmcs_write_xen(MSR_BITMAP_HIGH, 0, (u64 *) v1);
-    }
-    __vmptrld(v1_ma);
-
+    /* start scanning vmcs at byte 8 to skip revision id (uint32_t) and
+     * vmx abort indicator (uint32_t) */
+    offset_iter = VMCS_FIRST_FIELD_OFFSET;
     for (i = 0; i < ARRAY_SIZE(all_vmcs_fields); i++) {
-        v = __vmread_direct(all_vmcs_fields[i]);
+        union vmcs_encoding enc;
+        int index;
+        uint64_t offset;
+
+        offset = vmcs_scan_for_field(vmcs, vmcs_ma, all_vmcs_fields[i], 1, flags, &offset_iter);
         enc.word = all_vmcs_fields[i];
         index = _pv_vmcs_get_offset_xen(enc.width, enc.type, enc.index);
-        ret = fn(v, enc, index);
+        ret = fn(offset, enc, index);
         if (ret)
             break;
     }
-    __vmpclear(v1_ma);
-
   out:
-    if (v1)
-        vmx_free_vmcs(v1);
+    if (vmcs)
+        vmx_free_vmcs(vmcs);
     return ret;
 }
 
@@ -2654,11 +2681,16 @@ pv_vmcs_flush_dirty(struct arch_vmx_struct *vmcs_vmx, int unload)
 static int
 fill_vmcs_offsets_table_fn(uint64_t v, union vmcs_encoding enc, int index)
 {
-
-    _pv_vmcs_offset_table[index] = v & 0xffff;
-    dprintk(XENLOG_DEBUG, "%04x:%03x w:%x at:%x offset:%"PRIx64"\n",
-            enc.word, index, enc.width, enc.access_type, v & 0xffff);
-    return 0;
+    if (v) {
+        _pv_vmcs_offset_table[index] = v & 0xffff;
+        dprintk(XENLOG_DEBUG, "%04x:%03x w:%x at:%x offset:%"PRIx64"\n",
+                enc.word, index, enc.width, enc.access_type, v & 0xffff);
+        return 0;
+    } else {
+        printk("failed to find offset of vmcs field %04x:%03x w:%x at:%x\n",
+               enc.word, index, enc.width, enc.access_type);
+        return -1;
+    }
 }
 
 static int
@@ -2709,8 +2741,11 @@ setup_pv_vmcs_access_vmware(void)
     if (strcmp(signature, "VMwareVMware"))
         return -1;
 
-    if (fill_vmcs_offsets_table())
+    if (fill_vmcs_offsets_table()) {
+        printk("HVM/VMX: Found VMware, but failed scan for vmcs offsets - "
+               "not enabling pv nested optimizations\n");
         return -1;
+    }
 
     printk("HVM/VMX: Found VMware, enabling pv nested optimisations\n");
 
