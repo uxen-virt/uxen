@@ -969,6 +969,9 @@ v4v_fill_ring_data(struct domain *src_d,
     ret = copy_field_to_guest_errno(data_ent_hnd, &ent, flags);
     if (ret)
         return ret;
+    ret = copy_field_to_guest_errno(data_ent_hnd, &ent, max_message_size);
+    if (ret)
+        return ret;
 #if 0                           //FIXME sa
     ret = copy_field_to_guest_errno(data_ent_hnd, &ent, space_avail);
     if (ret) {
