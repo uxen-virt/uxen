@@ -205,6 +205,37 @@ struct QEMUFile {
     int last_error;
 };
 
+static void hexdump(const char *prefix, void *buf,
+                    int start, int stop, int ascii)
+{
+    char c;
+    int diff,i;
+    char *hbuf = buf;
+
+    while (start < stop) {
+        diff = stop - start;
+        if (diff > 16) diff = 16;
+        debug_printf("%s: %05X  ", prefix, start);
+        for (i = 0; i < diff; i++)
+            debug_printf("%02X ", (unsigned char)*(hbuf + start + i));
+        if (ascii) {
+            for (i = diff; i < 16; i++) debug_printf("   ");
+            for (i = 0; i < diff; i++) {
+                c = *(hbuf + start + i);
+                debug_printf("%c", isprint(c) ? c : '.');
+            }
+        }
+        debug_printf("\n");
+        start += 16;
+    }
+}
+
+void qemu_file_error(QEMUFile *f)
+{
+    debug_printf("buf_index=%d buf_size=%d\n", f->buf_index, f->buf_size);
+    hexdump("buf", f->buf, 0, IO_BUF_SIZE, 1);
+}
+
 typedef struct QEMUFileMemory
 {
     uint8_t *buffer;

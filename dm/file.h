@@ -51,5 +51,6 @@ int qemu_get_buffer(QEMUFile *f, uint8_t *buf, int size);
 void qemu_put_buffer(QEMUFile *f, const uint8_t *buf, int size);
 
 void qemu_file_skip(QEMUFile *f, int size);
+void qemu_file_error(QEMUFile *f);
 
 #endif	/* _FILE_H_ */
