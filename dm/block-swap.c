@@ -2273,6 +2273,7 @@ static int swap_flush(BlockDriverState *bs)
     swap_unlock(s);
 #endif
 
+    debug_printf("%s done\n", __FUNCTION__);
     return 0;
 }
 
