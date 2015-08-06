@@ -70,6 +70,7 @@ xen_domain_handle_t vm_template_uuid;
 int vm_has_template_uuid = 0;
 char *vm_template_file = NULL;
 int vm_restore_mode = VM_RESTORE_NONE;
+static int vm_start_paused = 0;
 window_handle vm_window = NULL;
 window_handle vm_window_parent = NULL;
 uint64_t vm_vcpus = 1;
@@ -150,6 +151,7 @@ parse_options(int argc, char **argv)
           {"help",         no_argument,       NULL,       'h'},
           {"load",         required_argument, NULL,       'l'},
           {"name",         required_argument, NULL,       'n'},
+          {"paused",       no_argument,       NULL,       'p'},
           {"template",     no_argument,       NULL,       't'},
           {"uuid",         required_argument, NULL,       'u'},
           {"window-parent", required_argument, &long_index,
@@ -209,6 +211,9 @@ parse_options(int argc, char **argv)
 	  break;
       case 'n':
 	  vm_name = optarg;
+	  break;
+      case 'p':
+	  vm_start_paused = 1;
 	  break;
       case 't':
 	  vm_restore_mode = VM_RESTORE_TEMPLATE;
@@ -346,6 +351,10 @@ main(int argc, char **argv)
     ni_start();
 #endif
 
+    if (vm_start_paused) {
+        vm_set_run_mode(PAUSE_VM);
+        vm_pause();
+    }
     vm_start_run();
 
     plog("ready");
