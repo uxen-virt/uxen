@@ -14,7 +14,7 @@ VPATH = $(SRCDIR)
 
 CPPFLAGS += -I$(TOPDIR)/windows/include
 
-CPPFLAGS += -I$(TOPDIR)/vm-support/windows/uxendisp/include
+CPPFLAGS += -I$(TOPDIR)/vm-support/windows/uxendisp/xddm/include
 
 CPPFLAGS += -I$(TOPDIR)/dm
 

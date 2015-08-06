@@ -6,7 +6,7 @@
 
 #include "uxendisp.h"
 
-#include "../../../../dm/hw/uxdisp_hw.h" /* XXX */
+#include "../../../../../dm/hw/uxdisp_hw.h" /* XXX */
 
 /* A structure describing mode information. Note: The mode numbers
  * usually match VBE, but this should not be relied upon.

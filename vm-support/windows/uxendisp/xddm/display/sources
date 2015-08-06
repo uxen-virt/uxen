@@ -2,7 +2,7 @@ TARGETNAME=uxendispdd
 TARGETPATH=obj
 TARGETTYPE=GDI_DRIVER
 
-!include ../../common/sources.inc
+!include ../../../common/sources.inc
 
 MSC_WARNING_LEVEL=/W3
 

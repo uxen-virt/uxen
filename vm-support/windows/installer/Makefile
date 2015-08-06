@@ -13,7 +13,7 @@ VPATH = $(SRCDIR)
 
 ELEVATE_DIR = $(DISTDIR_VM_SUPPORT)/elevate
 UXENCLIPBOARD_DIR = $(DISTDIR_VM_SUPPORT)/uxenclipboard
-UXENDISP_DIR = $(DISTDIR_VM_SUPPORT)/uxendisp
+UXENDISP_DIR = $(DISTDIR_VM_SUPPORT)/uxendisp/xddm
 UXENAUDIO_DIR = $(DISTDIR_VM_SUPPORT)/uxenaudio
 UXENDMPDRV_DIR = $(DISTDIR_VM_SUPPORT)/uxendmpdrv
 UXENEVENT_DIR = $(DISTDIR_VM_SUPPORT)/uxenevent
@@ -112,7 +112,7 @@ dist: $(INSTALLER)
 $(UXENAUDIO_DIR)/uxenaudio.sys:
 	$(MAKE) -C $(SRCDIR)/../uxenaudio dist
 $(UXENDISP_DIR)/uxendisp.sys:
-	$(MAKE) -C $(SRCDIR)/../uxendisp dist
+	$(MAKE) -C $(SRCDIR)/../uxendisp/xddm dist
 $(UXENMOUSE_DIR)/uxenmouse.sys:
 	$(MAKE) -C $(SRCDIR)/../uxenmouse dist
 $(UXENSF_DIR)/uxensf.sys:

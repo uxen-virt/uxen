@@ -8,7 +8,7 @@ PASS0_BINPLACE = $(NTTARGETFILE0)
 
 NTTARGETFILE2 = POST
 
-INCLUDES = ..\..\..\common\include\xen-public;..\common; $(WDK8_PATH)\inc;..\uxendisp\include;$(UXENV4VLIB_INC);..\..\..\common\include
+INCLUDES = ..\..\..\common\include\xen-public;..\common; $(WDK8_PATH)\inc;..\uxendisp\xddm\include;$(UXENV4VLIB_INC);..\..\..\common\include
 
 !if $(AMD64)
 LIB_ARCH_PATH = x64

@@ -9,7 +9,7 @@ include $(TOPDIR)/Config.mk
 SUBDIRS  =
 SUBDIRS += uxenvmlib
 SUBDIRS += uxenv4vlib
-SUBDIRS += uxendisp
+SUBDIRS += uxendisp/xddm
 SUBDIRS += uxenmouse
 SUBDIRS += uxenaudio
 SUBDIRS += uxenclipboard

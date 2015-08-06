@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: ISC
 #
 
-TOPDIR = ../../..
+TOPDIR = ../../../..
 include $(TOPDIR)/Config.mk
 
 ifneq (,$(BUILDDIR))
@@ -42,7 +42,7 @@ INSTALL_FILES += uxendispdd.pdb
 INSTALL_FILES += devcon.exe
 INSTALL_FILES += install.bat
 
-INSTALL_DIR = $(DISTDIR_VM_SUPPORT)/uxendisp
+INSTALL_DIR = $(DISTDIR_VM_SUPPORT)/uxendisp/xddm
 
 _install_banner: $(INSTALL_DIR)/.exists
 	$(_W)echo Installing from $(abspath $(OUTDIR_uxendisp)) to $(INSTALL_DIR)
