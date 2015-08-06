@@ -1337,9 +1337,8 @@ win_chr_pipe_reopen(void *opaque)
 			     ret ? NULL : win_chr_pipe_connect,
 			     NULL, chr, chr->iohq);
     } else {
-        Wwarn("pipe error, shutting down VM");
-        vm_set_run_mode(DESTROY_VM);
-        ioh_set_np_handler2(s->hrecv, NULL, NULL, NULL, chr, chr->iohq);
+        Wwarn("pipe error, hard-exiting VM");
+        hard_exit(1);
     }
 }
 
@@ -1428,11 +1427,6 @@ win_chr_pipe_read(void *opaque)
 
     ret = GetOverlappedResult(s->hcom, &s->orecv, &size, TRUE);
     if (!ret) {
-	if (GetLastError() != ERROR_BROKEN_PIPE) {
-	    debug_printf("%s:%d: GetOverlappedResult failed err %ld\n",
-                         __FUNCTION__, __LINE__, GetLastError());
-	    NPDEBUG();
-	}
 	win_chr_pipe_reopen(opaque);
 	return;
     }

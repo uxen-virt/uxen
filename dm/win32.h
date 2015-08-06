@@ -61,6 +61,8 @@ int vasprintf(char **strp, const char *fmt, va_list ap)
 int asprintf(char **strp, const char *fmt, ...)
     __attribute__ ((__format__ (printf, 2, 3)));
 
+void hard_exit(int);
+
 extern HINSTANCE g_instance;
 extern int g_showwindow;
 
