@@ -511,6 +511,15 @@ uxen_op_host_needs_preempt(struct vm_vcpu_info_shared *vcis)
         if (*(uint32_t volatile *)(kprcb + 0x2d80 + 0x018))
             return 1;
         break;
+    case 10240:
+        /* Windows10.10240 */
+        // +0x2de9 QuantumEnd       : UChar
+        // +0x2d80 DpcData          : [2] _KDPC_DATA
+        //        +0x018 DpcQueueDepth    : Int4B
+        if (*(kprcb + 0x2de9))
+            return 1;
+        if (*(uint32_t volatile *)(kprcb + 0x2d80 + 0x018))
+            return 1;
     }
 
     return 0;
