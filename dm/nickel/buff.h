@@ -42,7 +42,8 @@ void buff_get(struct buff *buf);
 void buff_put(struct buff *buf);
 int buff_adj(struct buff *buf, size_t newlen);
 int buff_append(struct buff *buf, const char *c, size_t len);
-int buff_appendf(struct buff *bf, const char *fmt, ...);
+int __attribute__ ((__format__ (printf, 2, 3)))
+buff_appendf(struct buff *bf, const char *fmt, ...);
 int buff_gc_consume(struct buff *b, size_t l);
 
 #define BUFF_NEW(buf, pbuf, l) ((buf) = buff_new(pbuf, l))

@@ -88,7 +88,7 @@ int hcert_add_cert(struct hcert_ctx *hcx, uint8_t *cert, size_t len)
     if (ecert)
         hcx->ecert = ecert;
 
-    NETLOG5("%s: adding cert of len %lu", __FUNCTION__, len);
+    NETLOG5("%s: adding cert of len %lu", __FUNCTION__, (unsigned long) len);
     hcx->certs[hcx->ic++] = pcert_ctx;
     ret = 0;
 out:
@@ -141,7 +141,7 @@ int hcert_get_chain(struct hcert_ctx *hcx, const char *hostname, uint32_t *err_c
          goto out;
     }
 
-    NETLOG5("%s: for %lu certs", __FUNCTION__, hcx->ic);
+    NETLOG5("%s: for %lu certs", __FUNCTION__, (unsigned long) hcx->ic);
     memset(&chain_para, 0, sizeof(chain_para));
     chain_para.cbSize = sizeof(chain_para);
     chain_para.RequestedUsage.dwType = USAGE_MATCH_TYPE_OR;

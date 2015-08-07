@@ -405,7 +405,7 @@ bool parser_is_http_req(struct buff *b)
     l = http_parser_execute(&parser, &settings, (char*)b->m, b->len);
     if (l == b->len)
         return true;
-    NETLOG4("%s: parsed %lu out of %lu", __FUNCTION__, l, b->len);
+    NETLOG4("%s: parsed %u out of %u", __FUNCTION__, (unsigned)l, (unsigned)b->len);
     NETLOG4("%s: http parser: %s %s", __FUNCTION__, http_errno_name(HTTP_PARSER_ERRNO(&parser)),
             http_errno_description(HTTP_PARSER_ERRNO(&parser)));
     return false;

@@ -232,7 +232,7 @@ static bool seems_ntlm_token(struct http_auth *auth, const char *token, size_t l
     }
 
     if (NLOG_LEVEL > 3) {
-        AUXL("len %lu, MIN_KERB_TOKEN_LEN %d, token:", len, (int) MIN_KERB_TOKEN_LEN);
+        AUXL("len %lu, MIN_KERB_TOKEN_LEN %d, token:", (unsigned long) len, (int) MIN_KERB_TOKEN_LEN);
         netlog_print_esc("TOKEN", token, len);
     }
 
@@ -637,7 +637,8 @@ int sspi_clt(struct http_auth *auth)
             NETLOG("%s: base64_decode failed for buf_in_data", __FUNCTION__);
             goto out;
         }
-        AUXL4("buf_in_data decoded from %lu to %lu", strlen(auth->prx_auth), buf_in_data_len);
+        AUXL4("buf_in_data decoded from %u to %u", (unsigned) strlen(auth->prx_auth),
+               (unsigned) buf_in_data_len);
     }
 
     auth->logon_required = 0;

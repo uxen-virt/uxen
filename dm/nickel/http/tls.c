@@ -420,7 +420,7 @@ static int cert_parse(struct cert_ctx_t *cert_ctx, const uint8_t *buf, size_t le
             if ((cert->len & 0xFF000000)) {
                 cert_ctx->state = CST_CCERT;
                 cert->len &= (~0xFF000000);
-                TLSL5("cert CERT len %lu", cert->len);
+                TLSL5("cert CERT len %lu", (unsigned long) cert->len);
             }
             ADV_BUF(1);
             cert_ctx->len -= 1;
@@ -605,7 +605,8 @@ int tls_cert_send_hostsvr(struct tls_state_t *tls, const char *hostname)
     }
 
     dict_put_string(d, "certs", BUFF_TO(bf, const char *));
-    NETLOG4("h:%lx sending nc_TLSCertificates blen %lu", tls->hp, (unsigned long) bf->len);
+    NETLOG4("h:%"PRIxPTR" sending nc_TLSCertificates blen %lu",
+            (uintptr_t) tls->hp, (unsigned long) bf->len);
     if (control_send_command("nc_TLSCertificates", d, NULL, NULL))
         goto out;
 

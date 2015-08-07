@@ -50,7 +50,8 @@ static void ring_write(const char *buf, size_t len)
     ring_buf[(ring_idx + 1) % LOG_RING_SIZE] = 0;
 }
 
-static void ring_vprintf(const char *fmt, va_list ap)
+static void __attribute__ ((__format__ (printf, 1, 0)))
+ring_vprintf(const char *fmt, va_list ap)
 {
     struct tm _tm, *tm;
     time_t ltime;
@@ -88,7 +89,7 @@ out:
         free(buf);
 }
 
-static void
+static void __attribute__ ((__format__ (printf, 1, 2)))
 ring_printf(const char *fmt, ...)
 {
     va_list ap;

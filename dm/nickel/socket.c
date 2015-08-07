@@ -624,7 +624,7 @@ size_t so_read(struct socket *so, const uint8_t *buf, size_t len)
         wakeup = true;
     so->flags &= ~(SF_SOCK_READ);
     ret = recv(so->s, (void *) buf, len, 0);
-    NETLOG5("%s: so %lx recv %d / %d", __FUNCTION__, so, (int) ret, (int) len);
+    NETLOG5("%s: so %"PRIxPTR" recv %d / %d", __FUNCTION__, (uintptr_t) so, (int) ret, (int) len);
     if (ret < 0)
         err = errno;
     so->last_err = err;
@@ -704,7 +704,7 @@ size_t so_write(struct socket *so, const uint8_t *buf, size_t len)
     ret = send(so->s, (void *) buf, len, 0);
     if (ret < 0)
         err = errno;
-    NETLOG5("so %lx ret %d err %d", so, (int) ret, err);
+    NETLOG5("so %"PRIxPTR" ret %d err %d", (uintptr_t) so, (int) ret, err);
     so->last_err = err;
     if (ret < 0 && (err != EINTR && err != EAGAIN && err != EWOULDBLOCK)) {
         ret = 0;
@@ -746,7 +746,7 @@ void so_buf_ready(struct socket *so)
     }
 #endif
 
-    NETLOG5("SO %lx so_buf_ready", so);
+    NETLOG5("SO %"PRIxPTR" so_buf_ready", (uintptr_t) so);
     ni_wakeup_loop(so->ni);
 }
 
@@ -930,7 +930,7 @@ static int so_accept(struct socket *so)
         aso->addr.ipv6 = ((struct sockaddr_in6 *) (&addr))->sin6_addr;
         aso->port = ((struct sockaddr_in6 *) (&addr))->sin6_port;
     } else {
-        NETLOG("%s: invalid inet family %hu", __FUNCTION__, addr.ss_family);
+        NETLOG("%s: invalid inet family %u", __FUNCTION__, (unsigned) addr.ss_family);
         goto err;
     }
 

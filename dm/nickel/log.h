@@ -25,7 +25,8 @@ extern int ni_log_level;
         netlog_buf(buf, len);                            \
     } while(0)
 
-void netlog(const char *fmt, ...);
+void __attribute__ ((__format__ (printf, 1, 2)))
+netlog(const char *fmt, ...);
 void netlog_prefix(int log_level, struct buff *bf);
 void netlog_buf(const char *msg, const char *buf, size_t len);
 void netlog_flush(void);

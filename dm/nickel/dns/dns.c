@@ -27,8 +27,8 @@
 
 #define GUEST_DNS_SUFFIX ".internal-domain.local"
 
-#define DDNS(d, fmt, ...) do { if (debug_resolver) NETLOG("(dns-debug) [%s] d:%lx " fmt, \
-                             __FUNCTION__, d, ## __VA_ARGS__); } while(1 == 0)
+#define DDNS(d, fmt, ...) do { if (debug_resolver) NETLOG("(dns-debug) [%s] d:%"PRIxPTR" " fmt, \
+                             __FUNCTION__, (uintptr_t)d, ## __VA_ARGS__); } while(1 == 0)
 #define DNS_GET_ID(pkt) (unsigned int) (pkt ? (((union dnsmsg_header *)(pkt))->x.id) : -1)
 
 static bool http_proxy_enabled = false;

@@ -538,9 +538,9 @@ state_load(QEMUFile *f, void *opaque, int version_id)
     if (qemu_get_byte(f)) {
         ni->eth_vm_resolved = 1;
         qemu_get_buffer(f, (unsigned char *) ni->eth_vm, ETH_ALEN);
-        NETLOG("%s: vm mac addr %02hhx:%02hhx:%02hhx:%02hhx:%02hhx:%02hhx", __FUNCTION__,
-                ni->eth_vm[0], ni->eth_vm[1], ni->eth_vm[2],
-                ni->eth_vm[3], ni->eth_vm[4], ni->eth_vm[5]);
+        NETLOG("%s: vm mac addr %02x:%02x:%02x:%02x:%02x:%02x", __FUNCTION__,
+                (unsigned)ni->eth_vm[0], (unsigned)ni->eth_vm[1], (unsigned)ni->eth_vm[2],
+                (unsigned)ni->eth_vm[3], (unsigned)ni->eth_vm[4], (unsigned)ni->eth_vm[5]);
     }
 
     while (qemu_get_byte(f)) {
@@ -1368,12 +1368,12 @@ static void * ni_thread_run(void *opaque)
     int64_t delay_ms = 0;
 
 #if defined(_WIN32)
-    NETLOG("%s: ni %lx pid %lu thid %lu a %lx %lx", __FUNCTION__, ni,
+    NETLOG("%s: ni %"PRIxPTR" pid %lu thid %lu a %"PRIxPTR" %"PRIxPTR, __FUNCTION__, (uintptr_t) ni,
             (unsigned long) GetProcessIdOfThread(ni->threadh),
-            (unsigned long) GetCurrentThreadId(), ni_thread_run, &opaque);
+            (unsigned long) GetCurrentThreadId(), (uintptr_t) ni_thread_run, (uintptr_t) &opaque);
 #elif defined(__APPLE__)
-    NETLOG("%s: ni %lx pid %lu a %lx %lx", __FUNCTION__, ni,
-            (unsigned long) getpid(), ni_thread_run, &opaque);
+    NETLOG("%s: ni %"PRIxPTR" pid %lu a %"PRIxPTR" %"PRIxPTR, __FUNCTION__, (uintptr_t) ni,
+            (unsigned long) getpid(), (uintptr_t) ni_thread_run, (uintptr_t) &opaque);
 #endif
 
     while (!ni->exit_request) {

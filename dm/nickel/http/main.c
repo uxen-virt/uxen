@@ -1635,7 +1635,7 @@ static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now)
                     !(lhp->flags & (HF_CLOSING|HF_CLOSED))) {
 
                     hp = lhp;
-                    CXL5("DIRECT REUSED HP %"PRIxPTR, hp);
+                    CXL5("DIRECT REUSED HP %"PRIxPTR, (uintptr_t) hp);
                     break;
                 }
             }
@@ -1774,7 +1774,7 @@ static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now)
         hp = cx_hp_connect_proxy(cx);
 
 out:
-    CXL5("HP_CONNECTED hp %"PRIxPTR, hp);
+    CXL5("HP_CONNECTED hp %"PRIxPTR, (uintptr_t) hp);
     return ret;
 err:
     if (hp)
@@ -2553,7 +2553,7 @@ static int srv_write(struct http_ctx *hp, const uint8_t *b, size_t blen)
     if ((hp->flags & HF_CLT_FIN_OK))
         goto out;
 
-    HLOG5("blen %lu", blen);
+    HLOG5("blen %lu", (unsigned long) blen);
     if (hp->clt_out) {
         BUFF_CONSUME_ALL(hp->clt_out);
         if (!(hp->flags & HF_SRV_NO_RETRY) && ((ssize_t) BUFF_BUFFERED(hp->clt_out)) >
@@ -2639,7 +2639,7 @@ out:
             blen = spc;
         buff_append(hp->clt_out, (const char*) b + ret, blen);
         ret += blen;
-        HLOG5("BUFFERED %lu ", blen);
+        HLOG5("BUFFERED %lu ", (unsigned long) blen);
     }
     if (sched_wakeup)
         wakeup_client(hp);

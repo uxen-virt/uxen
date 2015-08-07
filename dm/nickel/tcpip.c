@@ -175,8 +175,8 @@ static void socket_reset(struct ni_socket *so)
             uint32_t seq = 0, len = 0;
 
             get_bf_seq_len(so, bf, &seq, &len);
-            NETLOG4("%s: so %lx removed buff with seq %u len %u", __FUNCTION__,
-                    so, seq, len);
+            NETLOG4("%s: so %"PRIxPTR" removed buff with seq %u len %u", __FUNCTION__,
+                   (uintptr_t) so, seq, len);
         }
         remove_buff(so, bf);
     }
@@ -253,9 +253,9 @@ socket_free(struct ni_socket *so)
     so->fwd_timer = NULL;
 
     if (so->type == IPPROTO_TCP) {
-        NETLOG4("%s: s:%lx c:%lx (G:%hu -> %s:%hu) -- TCP last rcv_win %u snd_off_nxt %u snd_off_ack %u",
+        NETLOG4("%s: s:%"PRIxPTR" c:%"PRIxPTR" (G:%hu -> %s:%hu) -- TCP last rcv_win %u snd_off_nxt %u snd_off_ack %u",
                 __FUNCTION__,
-                so, so->chr, NI_NTOHS(so->gaddr.sin_port),
+                (uintptr_t) so, (uintptr_t) so->chr, NI_NTOHS(so->gaddr.sin_port),
                 inet_ntoa(so->faddr.sin_addr),
                 NI_NTOHS(so->faddr.sin_port),
                 (unsigned int) so->rcv_win,
@@ -815,9 +815,9 @@ static int tcp_rst(struct ni_socket *so)
     so->state = TS_CONN_RST;
     ret = tcp_send(so, TH_ACK|TH_RST, NULL, 0);
 
-    NETLOG4("%s: s:%lx c:%lx (G:%hu -> %s:%hu) -- RST sent",
+    NETLOG4("%s: s:%"PRIxPTR" c:%"PRIxPTR" (G:%hu -> %s:%hu) -- RST sent",
             __FUNCTION__,
-            so, so->chr, NI_NTOHS(so->gaddr.sin_port),
+            (uintptr_t) so, (uintptr_t) so->chr, NI_NTOHS(so->gaddr.sin_port),
             inet_ntoa(so->faddr.sin_addr),
             NI_NTOHS(so->faddr.sin_port));
 
@@ -981,8 +981,8 @@ static void retransmit_packet(struct ni_socket *so, struct buff *bf)
     ip_checksum(ip, bf->len - ETH_HLEN);
 
 #if DEBUG_RETRANSMIT
-    NETLOG4("%s: so %lx seq %u len %u", __FUNCTION__,
-            so, NI_NTOHL(tcp->th_seq) - so->snd_iss,
+    NETLOG4("%s: so %"PRIxPTR" seq %u len %u", __FUNCTION__,
+            (uintptr_t) so, NI_NTOHL(tcp->th_seq) - so->snd_iss,
             (unsigned int) (bf->len - ETH_HLEN - sizeof(struct ip) - sizeof(struct tcp)));
 #endif
 
@@ -1015,7 +1015,7 @@ static void packets_acked_range(struct ni_socket *so, uint32_t left, uint32_t ri
     struct buff *bf, *bf_n;
 
 #if DEBUG_RETRANSMIT
-    NETLOG4("%s: so %lx win %u left %u right %u", __FUNCTION__, so,
+    NETLOG4("%s: so %" "win %u left %u right %u", __FUNCTION__, (uintptr_t) so,
             (unsigned int) so->rcv_win,
             (unsigned int) left,
             (unsigned int) right);
@@ -1086,7 +1086,8 @@ static void retransmit_queue(struct ni_socket *so, bool sack, uint32_t sack_to)
 
         if (!bf->retransmit || now - bf->ts > RETRANSMIT_REPEAT) {
 #if DEBUG_RETRANSMIT
-            NETLOG4("%s: so %lx retransmission pkt len %lu", __FUNCTION__, so, bf->len);
+            NETLOG4("%s: so %"PRIxPTR" retransmission pkt len %lu", __FUNCTION__, 
+                    (uintptr_t) so, bf->len);
 #endif
             retransmit_packet(so, bf);
             if (!sack)
@@ -1100,9 +1101,10 @@ static void tcp_send_fin(struct ni_socket *so, CharDriverState *chr_saved)
     if (!RLIST_EMPTY(&so->sent_q, so_entry)) {
         so->ts_closed = get_clock_ms(vm_clock);
         so->flags |= (TF_RETRANSMISSION | TF_RETRANSMISSION_FIN);
-        NETLOG4("%s: s:%lx c:%lx/%lx (G:%hu -> %s:%hu) -- retransmission FIN",
+        NETLOG4("%s: s:%"PRIxPTR" c:%"PRIxPTR"/%"PRIxPTR" (G:%hu -> %s:%hu) -- retransmission FIN",
                 __FUNCTION__,
-                so, so->chr, chr_saved, NI_NTOHS(so->gaddr.sin_port),
+                (uintptr_t) so, (uintptr_t) so->chr, (uintptr_t) chr_saved,
+                NI_NTOHS(so->gaddr.sin_port),
                 inet_ntoa(so->faddr.sin_addr),
                 NI_NTOHS(so->faddr.sin_port));
     } else if (!(so->flags & TF_FIN_SENT)) {
@@ -1111,9 +1113,10 @@ static void tcp_send_fin(struct ni_socket *so, CharDriverState *chr_saved)
         so->snd_off_nxt += 1;
         so->flags |= TF_FIN_SENT;
 
-        NETLOG4("%s: s:%lx c:%lx/%lx (G:%hu -> %s:%hu) -- FIN sent",
+        NETLOG4("%s: s:%"PRIxPTR" c:%"PRIxPTR"/%"PRIxPTR" (G:%hu -> %s:%hu) -- FIN sent",
                 __FUNCTION__,
-                so, so->chr, chr_saved, NI_NTOHS(so->gaddr.sin_port),
+                (uintptr_t) so, (uintptr_t) so->chr, (uintptr_t) chr_saved,
+                NI_NTOHS(so->gaddr.sin_port),
                 inet_ntoa(so->faddr.sin_addr),
                 NI_NTOHS(so->faddr.sin_port));
     }
@@ -1224,10 +1227,11 @@ static void tcpip_timer(struct nickel *ni, int64_t now, int *timeout)
                     uint32_t seq = 0, len = 0;
 
                     get_bf_seq_len(so, bf, &seq, &len);
-                    NETLOG2("%s: s:%lx c:%lx (G:%hu -> %s:%hu) -- MAX_RETRANSMIT_PER_PACKET bf seq %u "
+                    NETLOG2("%s: s:%"PRIxPTR" c:%"PRIxPTR" (G:%hu -> %s:%hu) "
+                            "-- MAX_RETRANSMIT_PER_PACKET bf seq %u "
                             "len %u rcv_win %u/%d snd_off_nxt %u snd_off_ack %u",
                             __FUNCTION__,
-                            so, so->chr, NI_NTOHS(so->gaddr.sin_port),
+                            (uintptr_t)so, (uintptr_t)so->chr, NI_NTOHS(so->gaddr.sin_port),
                             inet_ntoa(so->faddr.sin_addr),
                             NI_NTOHS(so->faddr.sin_port),
                             (unsigned int) seq, (unsigned int) len,
@@ -1268,9 +1272,9 @@ static void tcpip_timer(struct nickel *ni, int64_t now, int *timeout)
 
             if (so->n_fin_retransmit > MAX_COUNT_FIN_WAIT) {
                 tcp_send(so, TH_RST, NULL, 0);
-                NETLOG4("%s: s:%lx c:%lx (G:%hu -> %s:%hu) -- RST sent FINACKED=%d",
+                NETLOG4("%s: s:%"PRIxPTR" c:%"PRIxPTR" (G:%hu -> %s:%hu) -- RST sent FINACKED=%d",
                         __FUNCTION__,
-                        so, so->chr, NI_NTOHS(so->gaddr.sin_port),
+                        (uintptr_t) so, (uintptr_t) so->chr, NI_NTOHS(so->gaddr.sin_port),
                         inet_ntoa(so->faddr.sin_addr),
                         NI_NTOHS(so->faddr.sin_port), (int) !!(so->flags & TF_FIN_ACKED));
 
@@ -1281,9 +1285,9 @@ static void tcpip_timer(struct nickel *ni, int64_t now, int *timeout)
             if (diff <= 0) {
                 so->n_fin_retransmit++;
                 if (!(so->flags & TF_FIN_ACKED)) {
-                    NETLOG2("%s: s:%lx c:%lx (G:%hu -> %s:%hu) -- FIN sent %s",
+                    NETLOG2("%s: s:%"PRIxPTR" c:%"PRIxPTR" (G:%hu -> %s:%hu) -- FIN sent %s",
                             __FUNCTION__,
-                            so, so->chr, NI_NTOHS(so->gaddr.sin_port),
+                            (uintptr_t) so, (uintptr_t) so->chr, NI_NTOHS(so->gaddr.sin_port),
                             inet_ntoa(so->faddr.sin_addr),
                             NI_NTOHS(so->faddr.sin_port),
                             (so->flags & TF_FIN_SENT) ? "retransmission" : "");
@@ -1580,8 +1584,8 @@ static void tcp_send_bufd_data(struct ni_socket *so)
 
     if (so->bufd_len) {
 #if DEBUG_RETRANSMIT
-        NETLOG4("%s: so %lx seq %u -- retransmit, sending buffered %u bytes",
-                __FUNCTION__, so,
+        NETLOG4("%s: so %"PRIxPTR" seq %u -- retransmit, sending buffered %u bytes",
+                __FUNCTION__, (uintptr_t) so,
                 (unsigned int) so->snd_off_nxt,
                 (unsigned int) so->bufd_len);
 #endif
@@ -1601,8 +1605,9 @@ void tcpip_output(struct ni_socket *so, const uint8_t *data, int size)
     if (so->type == IPPROTO_TCP) {
 
         if (so->state != TS_ESTABLISHED) {
-            NETLOG("%s: so %lx chr %lx -- bug! trying to send %d bytes while not TS_ESTABLISHED ",
-                    " -- data will be lost", __FUNCTION__, so, so->chr, size);
+            NETLOG("%s: so %"PRIxPTR" chr %"PRIxPTR
+                    " -- bug! trying to send %d bytes while not TS_ESTABLISHED "
+                    " -- data will be lost", __FUNCTION__, (uintptr_t)so, (uintptr_t)so->chr, size);
             goto out;
         }
 
@@ -1624,7 +1629,8 @@ void tcpip_output(struct ni_socket *so, const uint8_t *data, int size)
             so->bufd_len += size;
 
 #if DEBUG_RETRANSMIT
-            NETLOG4("%s: so %lx -- retransmit, buffered %d data", __FUNCTION__, so, size);
+            NETLOG4("%s: so %"PRIxPTR" -- retransmit, buffered %d data", __FUNCTION__,
+                    (uintptr_t) so, size);
 #endif
         }
 
@@ -1785,16 +1791,16 @@ static int tcp_input(struct nickel *ni, struct ip *ip, const uint8_t *pkt, size_
         if ((tcp->th_flags & TH_RST) && (tcp->th_flags & TH_ACK)) {
 
             if (((uint32_t) NI_NTOHL(tcp->th_ack)) != so->snd_iss + 1) {
-                NETLOG2("%s: s:%lx c:%lx (G:%hu -> %s:%hu) ip_id %hu/%hu -- strange, "
-                        "received RST but wrong ack %u %u, TCP flags %hhx. accept it though.",
+                NETLOG2("%s: s:%"PRIxPTR" c:%"PRIxPTR" (G:%hu -> %s:%hu) ip_id %hu/%hu -- strange, "
+                        "received RST but wrong ack %u %u, TCP flags %x. accept it though.",
                         __FUNCTION__,
-                        so, so->chr, NI_NTOHS(so->gaddr.sin_port),
+                        (uintptr_t)so, (uintptr_t)so->chr, NI_NTOHS(so->gaddr.sin_port),
                         inet_ntoa(so->faddr.sin_addr),
                         NI_NTOHS(so->faddr.sin_port),
                         NI_NTOHS(ip->ip_id),
                         ni->g_last_ip,
                         (unsigned int) NI_NTOHL(tcp->th_ack),
-                        (unsigned int) so->snd_iss + 1, (unsigned char) tcp->th_flags);
+                        (unsigned int) so->snd_iss + 1, (unsigned) tcp->th_flags);
             }
 
             so->state = TS_CLOSED;
@@ -1845,11 +1851,12 @@ static int tcp_input(struct nickel *ni, struct ip *ip, const uint8_t *pkt, size_
         so->rcv_off_ack = 1;
         tcp_send(so, TH_ACK, NULL, 0);
         so->state = TS_ESTABLISHED;
-        NETLOG4("%s: s:%lx c:%lx (G:%hu -> %s:%hu) ip_id %hu/%hu rwin %u rwshift %d mss %u "
+        NETLOG4("%s: s:%"PRIxPTR" c:%"PRIxPTR
+                " (G:%hu -> %s:%hu) ip_id %hu/%hu rwin %u rwshift %d mss %u "
                 "swin %u swshift %d mss %u "
                 "-- connection established",
                 __FUNCTION__,
-                so, so->chr, NI_NTOHS(so->gaddr.sin_port),
+                (uintptr_t)so, (uintptr_t)so->chr, NI_NTOHS(so->gaddr.sin_port),
                 inet_ntoa(so->faddr.sin_addr),
                 NI_NTOHS(so->faddr.sin_port),
                 NI_NTOHS(ip->ip_id),
@@ -1877,29 +1884,29 @@ static int tcp_input(struct nickel *ni, struct ip *ip, const uint8_t *pkt, size_
     /* XXX check seq_no here ! */
     if ((tcp->th_flags & TH_RST) || so->state == TS_CONN_RST) {
         if (so->state == TS_ESTABLISHED)
-            NETLOG2("%s: s:%lx c:%lx (G:%hu -> %s:%hu) ip_id %hu/%hu -- RST received, "
-                    "TCP flags %hhx",
+            NETLOG2("%s: s:%"PRIxPTR" c:%"PRIxPTR" (G:%hu -> %s:%hu) ip_id %hu/%hu -- RST received, "
+                    "TCP flags %x",
                     __FUNCTION__,
-                    so, so->chr, NI_NTOHS(so->gaddr.sin_port),
+                    (uintptr_t)so, (uintptr_t)so->chr, NI_NTOHS(so->gaddr.sin_port),
                     inet_ntoa(so->faddr.sin_addr),
                     NI_NTOHS(so->faddr.sin_port),
                     NI_NTOHS(ip->ip_id),
-                    ni->g_last_ip, (unsigned char) tcp->th_flags);
+                    ni->g_last_ip, (unsigned) tcp->th_flags);
 
         goto close_rst;
     }
 
     if (so->state == TS_SYN_RECVD) {
         if (doff != len) /* data in SYN packet not allowed !*/ {
-            NETLOG("%s: s:%lx c:%lx (G:%hu -> %s:%hu) ip_id %hu/%hu -- strange, "
-                    "data in SYN packet ? len %u TCP flags %hhx. RST connection.",
+            NETLOG("%s: s:%"PRIxPTR" c:%"PRIxPTR" (G:%hu -> %s:%hu) ip_id %hu/%hu -- strange, "
+                    "data in SYN packet ? len %u TCP flags %x. RST connection.",
                     __FUNCTION__,
-                    so, so->chr, NI_NTOHS(so->gaddr.sin_port),
+                    (uintptr_t)so, (uintptr_t)so->chr, NI_NTOHS(so->gaddr.sin_port),
                     inet_ntoa(so->faddr.sin_addr),
                     NI_NTOHS(ip->ip_id),
                     ni->g_last_ip,
                     NI_NTOHS(so->faddr.sin_port),
-                    (unsigned int) (len - doff), (unsigned char) tcp->th_flags);
+                    (unsigned int) (len - doff), (unsigned) tcp->th_flags);
             goto close_rst;
         }
         tcp_send(so, TH_SYN|TH_ACK, NULL, 0);
@@ -1915,10 +1922,11 @@ static int tcp_input(struct nickel *ni, struct ip *ip, const uint8_t *pkt, size_
             goto out;
         so->rcv_win = get_rcv_win(so, tcp);
         so->state = TS_ESTABLISHED;
-        NETLOG4("%s: s:%lx c:%lx (G:%hu -> %s:%hu) ip_id %hu/%hu win %u wshift %d mss %u -- "
+        NETLOG4("%s: s:%"PRIxPTR" c:%"PRIxPTR
+                " (G:%hu -> %s:%hu) ip_id %hu/%hu win %u wshift %d mss %u -- "
                 "connection established %lu ms",
                 __FUNCTION__,
-                so, so->chr, NI_NTOHS(so->gaddr.sin_port),
+                (uintptr_t) so, (uintptr_t) so->chr, NI_NTOHS(so->gaddr.sin_port),
                 inet_ntoa(so->faddr.sin_addr),
                 NI_NTOHS(so->faddr.sin_port),
                 NI_NTOHS(ip->ip_id),
@@ -1946,10 +1954,10 @@ static int tcp_input(struct nickel *ni, struct ip *ip, const uint8_t *pkt, size_
         uint32_t win = 0;
 
         if (off_ack - so->snd_off_ack > so->snd_off_nxt - so->snd_off_ack) {
-            NETLOG2("%s: s:%lx c:%lx (G:%hu -> %s:%hu) ip_id %hu/%hu -- strange, "
+            NETLOG2("%s: s:%"PRIxPTR" c:%"PRIxPTR" (G:%hu -> %s:%hu) ip_id %hu/%hu -- strange, "
                     "out of order ACK? %u %u %u",
                     __FUNCTION__,
-                    so, so->chr, NI_NTOHS(so->gaddr.sin_port),
+                    (uintptr_t) so, (uintptr_t) so->chr, NI_NTOHS(so->gaddr.sin_port),
                     inet_ntoa(so->faddr.sin_addr),
                     NI_NTOHS(so->faddr.sin_port),
                     NI_NTOHS(ip->ip_id),
@@ -1991,7 +1999,8 @@ static int tcp_input(struct nickel *ni, struct ip *ip, const uint8_t *pkt, size_
 
                 ol = c;
                 if (ol < 2) {
-                    NETLOG("%s: so %lx error on parsing TCP options", __FUNCTION__, so);
+                    NETLOG("%s: so %"PRIxPTR" error on parsing TCP options", __FUNCTION__,
+                           (uintptr_t) so);
                     break;
                 }
                 ol -= 2;
@@ -2000,7 +2009,8 @@ static int tcp_input(struct nickel *ni, struct ip *ip, const uint8_t *pkt, size_
 
                 if (ot == 0x05) { // SAck
                     if ((size_t) ol > s) {
-                        NETLOG("%s: so %lx error on parsing SAck option", __FUNCTION__, so);
+                        NETLOG("%s: so %"PRIxPTR" error on parsing SAck option", __FUNCTION__,
+                               (uintptr_t) so);
                         break;
                     }
                     if (ol >= 4 + 4) {
@@ -2026,7 +2036,7 @@ static int tcp_input(struct nickel *ni, struct ip *ip, const uint8_t *pkt, size_
                 q_buff_change = true;
 
 #if DEBUG_RETRANSMIT
-                NETLOG4("%s: so %lx retransmission off %s", __FUNCTION__, so,
+                NETLOG4("%s: so %"" retransmission off %s", __FUNCTION__, (uintptr_t) so,
                         (so->flags & TF_RETRANSMISSION_RST) ? "RST" :
                         ((so->flags & TF_RETRANSMISSION_FIN) ? "FIN" :
                         "-"));
@@ -2035,8 +2045,8 @@ static int tcp_input(struct nickel *ni, struct ip *ip, const uint8_t *pkt, size_
                 if ((so->flags & TF_RETRANSMISSION_FIN)) {
                     so->flags &= ~TF_RETRANSMISSION_FIN;
 
-                    NETLOG4("%s: so %lx retransmission off FIN %s", __FUNCTION__, so,
-                            (so->flags & TF_RETRANSMISSION_RST) ? "(RST)" : "");
+                    NETLOG4("%s: so %"PRIxPTR" retransmission off FIN %s", __FUNCTION__,
+                            (uintptr_t) so, (so->flags & TF_RETRANSMISSION_RST) ? "(RST)" : "");
 
                     if (!(so->flags & TF_FIN_SENT)) {
                         tcp_send(so, TH_FIN|TH_ACK, NULL, 0);
@@ -2055,14 +2065,14 @@ static int tcp_input(struct nickel *ni, struct ip *ip, const uint8_t *pkt, size_
         /* hmm, we do not believe they would shrink the window without
          * us having sent some more data ;-) */
         if (off_ack == so->snd_off_ack && win < so->rcv_win) {
-            NETLOG2("%s: s:%lx c:%lx (G:%hu -> %s:%hu) ip_id %hu/%hu -- strange, "
+            NETLOG2("%s: s:%"PRIxPTR" c:%"PRIxPTR" (G:%hu -> %s:%hu) ip_id %hu/%hu -- strange, "
                     "shrinking window from %u to %u, we don't believe that",
                     __FUNCTION__,
-                    so, so->chr, NI_NTOHS(so->gaddr.sin_port),
+                    (uintptr_t)so, (uintptr_t)so->chr, NI_NTOHS(so->gaddr.sin_port),
                     inet_ntoa(so->faddr.sin_addr),
                     NI_NTOHS(so->faddr.sin_port),
                     NI_NTOHS(ip->ip_id),
-                    (unsigned int) ni->g_last_ip,
+                    (unsigned short) ni->g_last_ip,
                     (unsigned int) so->rcv_win, (unsigned int) win);
             break;
         }
@@ -2085,10 +2095,11 @@ static int tcp_input(struct nickel *ni, struct ip *ip, const uint8_t *pkt, size_
         if (SEQ_CMP(seq_off, so->rcv_off_ack) < 0) {
             q_send_ack = true;
             if (seq_off == so->rcv_off_ack - 1) {
-                NETLOG4("%s: s:%lx c:%lx (G:%hu -> %s:%hu) ip_id %hu/%hu -- Keep-Alive packet? "
+                NETLOG4("%s: s:%"PRIxPTR" c:%"PRIxPTR
+                        " (G:%hu -> %s:%hu) ip_id %hu/%hu -- Keep-Alive packet? "
                         "seq_off %u rcv_off_ack %u win %u len %u",
                         __FUNCTION__,
-                        so, so->chr, NI_NTOHS(so->gaddr.sin_port),
+                        (uintptr_t)so, (uintptr_t)so->chr, NI_NTOHS(so->gaddr.sin_port),
                         inet_ntoa(so->faddr.sin_addr),
                         NI_NTOHS(so->faddr.sin_port),
                         NI_NTOHS(ip->ip_id),
@@ -2101,10 +2112,10 @@ static int tcp_input(struct nickel *ni, struct ip *ip, const uint8_t *pkt, size_
                 break;
             }
 
-            NETLOG2("%s: s:%lx c:%lx (G:%hu -> %s:%hu) ip_id %hu/%hu -- strange, "
+            NETLOG2("%s: s:%"PRIxPTR" c:%"PRIxPTR" (G:%hu -> %s:%hu) ip_id %hu/%hu -- strange, "
                     "seq_no out of window seq_off %u rcv_off_ack %u win %u",
                     __FUNCTION__,
-                    so, so->chr, NI_NTOHS(so->gaddr.sin_port),
+                    (uintptr_t)so, (uintptr_t)so->chr, NI_NTOHS(so->gaddr.sin_port),
                     inet_ntoa(so->faddr.sin_addr),
                     NI_NTOHS(so->faddr.sin_port),
                     NI_NTOHS(ip->ip_id),
@@ -2120,11 +2131,11 @@ static int tcp_input(struct nickel *ni, struct ip *ip, const uint8_t *pkt, size_
 
             q_send_ack = true;
             if (seq_off + (len - doff) - so->rcv_off_ack > so->snd_win) {
-                NETLOG2("%s: s:%lx c:%lx (G:%hu -> %s:%hu) ip_id %hu/%hu -- strange, "
+                NETLOG2("%s: s:%"PRIxPTR" c:%"PRIxPTR" (G:%hu -> %s:%hu) ip_id %hu/%hu -- strange, "
                         "seq_no out of window, seq_off %u rcv_off_ack %u "
                         "len %u win %u",
                         __FUNCTION__,
-                        so, so->chr, NI_NTOHS(so->gaddr.sin_port),
+                        (uintptr_t)so, (uintptr_t)so->chr, NI_NTOHS(so->gaddr.sin_port),
                         inet_ntoa(so->faddr.sin_addr),
                         NI_NTOHS(so->faddr.sin_port),
                         NI_NTOHS(ip->ip_id),
@@ -2136,11 +2147,11 @@ static int tcp_input(struct nickel *ni, struct ip *ip, const uint8_t *pkt, size_
                 break;
             }
             if (seq_off != so->rcv_off_ack) {
-                NETLOG2("%s: s:%lx c:%lx (G:%hu -> %s:%hu) ip_id %hu/%hu -- strange, "
+                NETLOG2("%s: s:%"PRIxPTR" c:%"PRIxPTR" (G:%hu -> %s:%hu) ip_id %hu/%hu -- strange, "
                         "seq_no out of order?, seq_off %u rcv_off_ack %u "
                         "len %u win %u",
                         __FUNCTION__,
-                        so, so->chr, NI_NTOHS(so->gaddr.sin_port),
+                        (uintptr_t)so, (uintptr_t)so->chr, NI_NTOHS(so->gaddr.sin_port),
                         inet_ntoa(so->faddr.sin_addr),
                         NI_NTOHS(so->faddr.sin_port),
                         NI_NTOHS(ip->ip_id),
@@ -2159,11 +2170,12 @@ static int tcp_input(struct nickel *ni, struct ip *ip, const uint8_t *pkt, size_
             if (so->chr)
                 sent = qemu_chr_write(so->chr, pkt + doff, len - doff);
             if (sent != len - doff) {
-                NETLOG2("%s: s:%lx c:%lx (G:%hu -> %s:%hu) ip_id %hu/%hu -- consumed less, "
+                NETLOG2("%s: s:%"PRIxPTR" c:%"PRIxPTR
+                        " (G:%hu -> %s:%hu) ip_id %hu/%hu -- consumed less, "
                         "G would need to re-transmit ! "
                         " len %u consumed %u snd_win %u/%u/%u",
                         __FUNCTION__,
-                        so, so->chr, NI_NTOHS(so->gaddr.sin_port),
+                        (uintptr_t)so, (uintptr_t) so->chr, NI_NTOHS(so->gaddr.sin_port),
                         inet_ntoa(so->faddr.sin_addr),
                         NI_NTOHS(so->faddr.sin_port),
                         NI_NTOHS(ip->ip_id),
@@ -2198,14 +2210,14 @@ static int tcp_input(struct nickel *ni, struct ip *ip, const uint8_t *pkt, size_
     } while (1 == 0);
 
     if ((tcp->th_flags & TH_FIN)) {
-        NETLOG4("%s: s:%lx c:%lx (G:%hu -> %s:%hu) ip_id %hu/%hu -- FIN received, "
-                "TCP flags %hhx",
+        NETLOG4("%s: s:%"PRIxPTR" c:%"PRIxPTR" (G:%hu -> %s:%hu) ip_id %hu/%hu -- FIN received, "
+                "TCP flags %x",
                 __FUNCTION__,
-                so, so->chr, NI_NTOHS(so->gaddr.sin_port),
+                (uintptr_t)so, (uintptr_t)so->chr, NI_NTOHS(so->gaddr.sin_port),
                 inet_ntoa(so->faddr.sin_addr),
                 NI_NTOHS(so->faddr.sin_port),
                 NI_NTOHS(ip->ip_id),
-                ni->g_last_ip, (unsigned char) tcp->th_flags);
+                ni->g_last_ip, (unsigned) tcp->th_flags);
         q_send_ack = true;
         if ((so->flags & TF_FIN_RECV))
             goto out;
@@ -2700,11 +2712,11 @@ static int tcp_socket_load(QEMUFile *f, struct nickel *ni, int version_id, uint3
     }
 
     if (!err && !skip_so) {
-        NETLOG4("%s: s:%lx c:%lx (G:%hu -> %s:%hu) f:%d/%x rwin %u rwshift %d mss %u "
+        NETLOG4("%s: s:%"PRIxPTR" c:%"PRIxPTR" (G:%hu -> %s:%hu) f:%d/%x rwin %u rwshift %d mss %u "
                 "swin %u swshift %d mss %u snd_off_nxt %u snd_off_ack %u rcv_off_ack %u "
                 "-- connection %s",
                 __FUNCTION__,
-                so, so->chr, NI_NTOHS(so->gaddr.sin_port),
+                (uintptr_t)so, (uintptr_t)so->chr, NI_NTOHS(so->gaddr.sin_port),
                 inet_ntoa(so->faddr.sin_addr),
                 NI_NTOHS(so->faddr.sin_port),
                 (int) so->state, (unsigned int) so->flags,
@@ -2858,10 +2870,10 @@ void tcpip_exit(struct nickel *ni)
         if (so->snd_off_nxt != so->snd_off_ack &&
            (so->state == TS_ESTABLISHED || so->state == TS_CONN_RST)) {
 
-            NETLOG4("%s: s:%lx c:%lx (G:%hu -> %s:%hu) -- snd ack mismatch! "
+            NETLOG4("%s: s:%"PRIxPTR" c:%"PRIxPTR" (G:%hu -> %s:%hu) -- snd ack mismatch! "
                     "iss %u rcv_win %u/%d snd_off_nxt %u snd_off_ack %u",
                     __FUNCTION__,
-                    so, so->chr, NI_NTOHS(so->gaddr.sin_port),
+                    (uintptr_t)so, (uintptr_t)so->chr, NI_NTOHS(so->gaddr.sin_port),
                     inet_ntoa(so->faddr.sin_addr),
                     NI_NTOHS(so->faddr.sin_port),
                     (unsigned int) so->snd_iss,
