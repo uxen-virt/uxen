@@ -1,0 +1,31 @@
+TARGETNAME = uxendisp
+TARGETTYPE = MINIPORT
+
+!include ../../../common/sources.inc
+
+TARGETLIBS=$(DDK_LIB_PATH)\displib.lib \
+           $(DDK_LIB_PATH)\ntoskrnl.lib \
+           $(DDK_LIB_PATH)\Hal.lib \
+           $(UXENVMLIB_LIB) \
+           $(UXENV4VLIB_LIB)
+
+MSC_WARNING_LEVEL = /W3 /WX
+
+NTTARGETFILE0 = $(OBJ_PATH)\$(O)\$(INF_NAME).inf
+PASS0_BINPLACE = $(NTTARGETFILE0)
+
+NTTARGETFILE2 = COPY POST
+
+SOURCES = uxendisp.c ddi.c vidpn.c crtc.c edid.c uxendisp.rc
+
+INCLUDES=..\inc; \
+         ..\..\..\common; \
+         ..\..\..\..\..\common\include; \
+         ..\..\..\..\..\common\include\xen-public; \
+         $(UXENV4VLIB_INC);
+
+UXENVMLIB_BUILD_DIR   = \
+  $(OBJECT_ROOT)\..\..\uxenvmlib\$(WDK_ALTERNATE_MAKEDIR)\..\..\..\uxenvmlib\$(O)      
+
+UXENVMLIB_LIB         = \
+  $(UXENVMLIB_BUILD_DIR)\uxenvmlib.lib

@@ -1,0 +1,52 @@
+/*
+ * Copyright 2015, Bromium, Inc.
+ * Author: Julian Pidancet <julian@pidancet.net>
+ * SPDX-License-Identifier: ISC
+ */
+
+#ifndef D3D_H
+#define D3D_H
+
+#define UXENDISP_D3D_MAGIC        'uD3D'
+#define UXENDISP_D3D_VERSION      0x1
+#define UXENDISP_D3D_FORMAT_COUNT 7
+
+// Zero is unused by D3DKMDT_STANDARDALLOCATION_TYPE
+typedef enum _UXENDISP_STANDARDALLOCATION_TYPE {
+    UXENDISP_USERALLOCATION_TYPE       = 0,
+    UXENDISP_SHAREDPRIMARYSURFACE_TYPE = 1,
+    UXENDISP_SHADOWSURFACE_TYPE        = 2,
+    UXENDISP_STAGINGSURFACE_TYPE       = 3
+} UXENDISP_STANDARDALLOCATION_TYPE;
+
+#define UXENDISP_ALLOCATION_STATE_NONE         0x00000000
+#define UXENDISP_ALLOCATION_STATE_ASSIGNED     0x00000001
+#define UXENDISP_ALLOCATION_STATE_VISIBLE      0x00000002
+
+typedef struct _UXENDISP_UMDRIVERPRIVATE {
+    ULONG Magic;
+    ULONG Version;
+    USHORT VendorId;
+    USHORT DeviceId;
+    ULONG ApertureSize;
+    GUID AdapterGuid;
+} UXENDISP_UMDRIVERPRIVATE, *PUXENDISP_UMDRIVERPRIVATE;
+
+typedef struct _UXENDISP_SURFACE_DESC {
+    ULONG XResolution;
+    ULONG YResolution;
+    ULONG BytesPerPixel;
+    ULONG Stride;
+    D3DDDIFORMAT Format;
+    D3DDDI_RATIONAL RefreshRate;
+} UXENDISP_SURFACE_DESC, *PUXENDISP_SURFACE_DESC;
+
+typedef struct _UXENDISP_D3D_ALLOCATION {
+    UXENDISP_STANDARDALLOCATION_TYPE Type;
+    BOOLEAN Primary;
+    D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId;
+    UXENDISP_SURFACE_DESC SurfaceDesc;
+    ULONG ByteAlignment; // StrideAlignment + 1 for alignment bytes
+} UXENDISP_D3D_ALLOCATION, *PUXENDISP_D3D_ALLOCATION;
+
+#endif //D3D_H
