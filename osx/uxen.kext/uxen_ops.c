@@ -1254,6 +1254,7 @@ uxen_vmi_stop_running(struct vm_info *vmi)
 
     /* KeFlushQueuedDpcs(); */
 
+    fast_event_clear(&vmi->vmi_notexecuting);
     if (vmi->vmi_running_vcpus)
         fast_event_wait(&vmi->vmi_notexecuting,
                         EVENT_UNINTERRUPTIBLE, EVENT_NO_TIMEOUT);
