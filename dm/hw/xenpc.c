@@ -16,6 +16,8 @@
 #include "xenpc.h"
 #include "xenrtc.h"
 
+#include <xen/hvm/e820.h>
+
 const char *serial_devices[MAX_SERIAL_PORTS] = { NULL, };
 CharDriverState *serial_hds[MAX_SERIAL_PORTS];
 

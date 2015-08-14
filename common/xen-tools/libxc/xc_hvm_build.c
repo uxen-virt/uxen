@@ -95,7 +95,7 @@ static void build_hvm_info(void *hvm_info_page, uint64_t mem_size,
 
     if ( lowmem_end > HVM_BELOW_4G_RAM_END )
     {
-        highmem_end = lowmem_end + (1ull<<32) - HVM_BELOW_4G_RAM_END;
+        highmem_end = lowmem_end + HVM_BELOW_4G_MMIO_LENGTH;
         lowmem_end = HVM_BELOW_4G_RAM_END;
     }
 

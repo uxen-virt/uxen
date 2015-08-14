@@ -10,7 +10,9 @@
 #define MAX_SERIAL_PORTS 4
 extern struct CharDriverState *serial_hds[MAX_SERIAL_PORTS];
 
-#define PCI_HOLE_START 0xe0000000
+/* #include <xen/hvm/e820.h> */
+#define PCI_HOLE_START HVM_BELOW_4G_MMIO_START
+#define PCI_HOLE_END HVM_BELOW_4G_MMIO_END
 
 #define MAX_IDE_BUS 2
 #define MAX_IDE_DEVS 2

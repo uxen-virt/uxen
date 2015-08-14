@@ -225,6 +225,7 @@ hw_uxen_platform.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 DM_SRCS += hw/vga.c
 hw_vga.o: CPPFLAGS += $(LZ4_CPPFLAGS)
 DM_SRCS += hw/xenpc.c
+hw_xenpc.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 DM_SRCS += hw/xenrtc.c
 $(OSX_NOT_YET)DM_SRCS += hw/uxen_net.c
 hw_uxen_net.o: CPPFLAGS += -I$(XENPUBLICDIR) 

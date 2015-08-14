@@ -23,6 +23,7 @@
 #include <xenctrl.h>
 
 #include <uxen/uxen_memcache_dm.h>
+#include <xen/hvm/e820.h>
 
 static uint32_t mapcache_end_low_pfn, mapcache_end_high_pfn;
 static uint32_t mapcache_start_high_pfn =

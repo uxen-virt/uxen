@@ -4990,6 +4990,11 @@ static int xenmem_add_to_physmap_once(
             p2m_type_t p2mt;
             gfn = xatp->idx;
 
+            if (xatp->idx == INVALID_GFN) {
+                mfn = INVALID_MFN;
+                break;
+            }
+
             if (hypercall_needs_checks()) {
                 put_gfn(d, gfn);
                 return -EAGAIN;
@@ -5102,6 +5107,9 @@ static int xenmem_add_to_physmap_once(
     if (d->is_dying) {
         /* silently don't add page to p2m when domain is exiting */
         rc = 0;
+        if ( xatp->space == XENMAPSPACE_gmfn ||
+             xatp->space == XENMAPSPACE_gmfn_range )
+            put_gfn(d, gfn);
         goto out;
     }
 
@@ -5121,6 +5129,14 @@ static int xenmem_add_to_physmap_once(
         page->count_info = PGC_host_page | 1;
         spin_unlock(&d->page_alloc_lock);
         break;
+    case XENMAPSPACE_gmfn_range:
+    case XENMAPSPACE_gmfn:
+        if (xatp->idx == INVALID_GFN) {
+            rc = 0;
+            put_gfn(d, gfn);
+            goto out;
+        }
+        /* fallthrough */
     default:
         /* Unmap from old location, if any. */
         gpfn = get_gpfn_from_mfn(mfn);
@@ -5167,7 +5183,8 @@ static int xenmem_add_to_physmap(struct domain *d,
             if ( rc < 0 )
                 return rc;
 
-            xatp->idx++;
+            if (xatp->idx != INVALID_GFN)
+                xatp->idx++;
             xatp->gpfn++;
             xatp->size--;
 
