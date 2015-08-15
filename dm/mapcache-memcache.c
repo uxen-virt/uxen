@@ -25,9 +25,9 @@
 #include <uxen/uxen_memcache_dm.h>
 #include <xen/hvm/e820.h>
 
-static uint32_t mapcache_end_low_pfn, mapcache_end_high_pfn;
-static uint32_t mapcache_start_high_pfn =
-    (PCI_HOLE_START >> UXEN_PAGE_SHIFT);
+static uint32_t mapcache_end_low_pfn = 0;
+static uint32_t mapcache_start_high_pfn = 0;
+static uint32_t mapcache_end_high_pfn = 0;
 static uint8_t *memcache_va;
 static mdm_mfn_entry_t *memcache_mfn_to_entry;
 
@@ -40,11 +40,14 @@ mapcache_init(uint64_t mem_mb)
     critical_section_init(&cs);
 
     mapcache_end_low_pfn = mem_mb << (20 - UXEN_PAGE_SHIFT);
-    mapcache_end_high_pfn = 0x100000;
-    if (mapcache_end_low_pfn > mapcache_start_high_pfn) {
-        mapcache_end_high_pfn +=
-            mapcache_end_low_pfn - mapcache_start_high_pfn;
-        mapcache_end_low_pfn = mapcache_start_high_pfn;
+    if (mapcache_end_low_pfn <= PCI_HOLE_START >> UXEN_PAGE_SHIFT) {
+        mapcache_start_high_pfn = mapcache_end_low_pfn;
+        mapcache_end_high_pfn = mapcache_start_high_pfn;
+    } else {
+        mapcache_start_high_pfn = PCI_HOLE_END >> UXEN_PAGE_SHIFT;
+        mapcache_end_high_pfn = mapcache_start_high_pfn +
+            mapcache_end_low_pfn - (PCI_HOLE_START >> UXEN_PAGE_SHIFT);
+        mapcache_end_low_pfn = PCI_HOLE_START >> UXEN_PAGE_SHIFT;
     }
 
     return uxen_memcacheinit(uxen_handle, mapcache_end_low_pfn,
