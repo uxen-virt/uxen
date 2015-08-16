@@ -299,6 +299,9 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
 
         v->context_loaded = 0;
 
+        if (d->shutdown_code != -1)
+            goto out;
+
         uxen_set_current(v);
         if (!v->vcpu_id)
             domain_unpause_by_systemcontroller(v->domain);
