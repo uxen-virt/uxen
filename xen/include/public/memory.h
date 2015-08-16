@@ -326,7 +326,8 @@ DEFINE_XEN_GUEST_HANDLE(xen_add_to_physmap_t);
 struct xen_translate_gpfn_list_for_map {
     domid_t domid;
     uint16_t prot;
-    uint32_t nr_gpfns;
+    uint32_t gpfns_start;
+    uint32_t gpfns_end;
     uint32_t map_mode;
     XEN_GUEST_HANDLE(xen_pfn_t) gpfn_list;
     XEN_GUEST_HANDLE(xen_pfn_t) mfn_list;

@@ -936,9 +936,9 @@ _uxen_snoop_hypercall(void *udata, int mode)
             ret = copy(uhd->uhd_arg[1], &list, sizeof(list));
             if (ret)
                 return -ret;
-            if (list.nr_gpfns > 1024)
+            if (list.gpfns_end - list.gpfns_start > 1024)
                 return -EINVAL;
-            pages += list.nr_gpfns;
+            pages += list.gpfns_end - list.gpfns_start;
             if (pages > 1)
                 mm_dprintk("snooped translate gpfn list for map: %d\n", pages);
             break;

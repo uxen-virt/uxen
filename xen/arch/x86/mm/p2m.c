@@ -1811,7 +1811,7 @@ p2m_translate(struct domain *d, xen_pfn_t *arr, int nr, int write, int map)
         put_gfn(d, arr[j]);
         arr[j] = mfn_x(mfn);
     }
-    rc = 0;
+    rc = j;
  out:
     p2m_unlock(p2m);
     return rc;

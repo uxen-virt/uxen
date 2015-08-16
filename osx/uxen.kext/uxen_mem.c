@@ -669,7 +669,8 @@ release_user_mapping_range(xen_pfn_t *mfns, uint32_t num, struct fd_assoc *fda)
 
         umemopa.translate_gpfn_list_for_map.domid = vmi->vmi_shared.vmi_domid;
         umemopa.translate_gpfn_list_for_map.prot = 0;
-        umemopa.translate_gpfn_list_for_map.nr_gpfns = n;
+        umemopa.translate_gpfn_list_for_map.gpfns_start = 0;
+        umemopa.translate_gpfn_list_for_map.gpfns_end = n;
         umemopa.translate_gpfn_list_for_map.map_mode =
             XENMEM_TRANSLATE_MAP_RELEASE;
         set_xen_guest_handle(umemopa.translate_gpfn_list_for_map.mfn_list,
@@ -1809,7 +1810,8 @@ uxen_mem_mmapbatch(struct uxen_mmapbatch_desc *ummapbd, struct fd_assoc *fda)
                 XENMEM_TRANSLATE_PROT_WRITE;
             break;
         }
-        umemopa.translate_gpfn_list_for_map.nr_gpfns = n;
+        umemopa.translate_gpfn_list_for_map.gpfns_start = 0;
+        umemopa.translate_gpfn_list_for_map.gpfns_end = n;
         umemopa.translate_gpfn_list_for_map.map_mode =
             XENMEM_TRANSLATE_MAP_NOT;
         ret = copyin((const user_addr_t)&ummapbd->umd_arr[done], gpfns,

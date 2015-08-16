@@ -5496,7 +5496,7 @@ long arch_memory_op(int op, XEN_GUEST_HANDLE(void) arg)
         if ( rc != 0 )
             return rc;
         
-        if (list.nr_gpfns > 1024) {
+        if (list.gpfns_end > 1024) {
             rc = -E2BIG;
             goto translate_gpfn_list_for_map_out;
         }
@@ -5509,8 +5509,8 @@ long arch_memory_op(int op, XEN_GUEST_HANDLE(void) arg)
 
         arr = __map_domain_page(page);
 
-        for (n = rc = 0; n < list.nr_gpfns; ) {
-            k = min_t(unsigned int, list.nr_gpfns - n,
+        for (n = list.gpfns_start; n < list.gpfns_end; ) {
+            k = min_t(unsigned int, list.gpfns_end - n,
                       PAGE_SIZE / sizeof(*arr));
             switch (list.map_mode) {
             case XENMEM_TRANSLATE_MAP_RELEASE:
@@ -5521,7 +5521,6 @@ long arch_memory_op(int op, XEN_GUEST_HANDLE(void) arg)
                 for (i = 0; i < k; i++)
                     if (__mfn_valid(arr[i]))
                         put_page(__mfn_to_page(arr[i]));
-                rc = 0;
                 break;
             default:
                 if ( copy_from_guest_offset(arr, list.gpfn_list, n, k) ) {
@@ -5531,16 +5530,28 @@ long arch_memory_op(int op, XEN_GUEST_HANDLE(void) arg)
                 rc = p2m_translate(d, arr, k,
                                    list.prot == XENMEM_TRANSLATE_PROT_WRITE,
                                    list.map_mode == XENMEM_TRANSLATE_MAP_DM);
-                if (rc)
+                if (rc < 0)
                     goto translate_gpfn_list_for_map_out;
-                if ( copy_to_guest_offset(list.mfn_list, n, arr, k) ) {
+                if (copy_to_guest_offset(list.mfn_list, n, arr, rc)) {
                     rc = -EFAULT;
+                    goto translate_gpfn_list_for_map_out;
+                }
+                if (rc != k) {
+                    list.gpfns_start = n + rc;
+                    if (copy_to_guest(arg, &list, 1)) {
+                        rc = -EFAULT;
+                        goto translate_gpfn_list_for_map_out;
+                    }
+                    rc = hypercall_create_continuation(
+                        __HYPERVISOR_memory_op, "ih",
+                        XENMEM_translate_gpfn_list_for_map, arg);
                     goto translate_gpfn_list_for_map_out;
                 }
                 break;
             }
             n += k;
         }
+        rc = 0;
 
     translate_gpfn_list_for_map_out:
         if (arr)

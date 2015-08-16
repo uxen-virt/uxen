@@ -179,7 +179,8 @@ mdm_map(struct uxen_memcachemap_desc *umd, struct fd_assoc *fda)
     mdm->mdm_takeref = 1;
     umemopa.translate_gpfn_list_for_map.domid = fda->vmi->vmi_shared.vmi_domid;
     umemopa.translate_gpfn_list_for_map.prot = XENMEM_TRANSLATE_PROT_WRITE;
-    umemopa.translate_gpfn_list_for_map.nr_gpfns = umd->nr_pfn;
+    umemopa.translate_gpfn_list_for_map.gpfns_start = 0;
+    umemopa.translate_gpfn_list_for_map.gpfns_end = umd->nr_pfn;
     umemopa.translate_gpfn_list_for_map.map_mode = XENMEM_TRANSLATE_MAP_DM;
     set_xen_guest_handle(umemopa.translate_gpfn_list_for_map.gpfn_list, pfns);
     set_xen_guest_handle(umemopa.translate_gpfn_list_for_map.mfn_list, mfns);
