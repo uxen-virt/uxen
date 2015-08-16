@@ -33,6 +33,8 @@
 /* Is the guest handle a NULL reference? */
 #define guest_handle_is_null(hnd)        ((hnd).p == NULL)
 
+#define guest_handle_is_aligned(hnd, mask) (!((uintptr_t)(hnd).p & (mask)))
+
 /* Offset the given guest handle into the array it refers to. */
 #define guest_handle_add_offset(hnd, nr) ((hnd).p += (nr))
 #define guest_handle_subtract_offset(hnd, nr) ((hnd).p -= (nr))
