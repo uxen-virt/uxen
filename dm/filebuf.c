@@ -350,9 +350,19 @@ filebuf_seek(struct filebuf *fb, off_t offset, int whence)
     case FILEBUF_SEEK_CUR:
         fb->offset += offset;
         break;
-    case FILEBUF_SEEK_END:
-        errx(1, "%s: FILEBUF_SEEK_END not supported", __FUNCTION__);
-        /* fb->offset = fb->end - offset; */
+    case FILEBUF_SEEK_END: {
+#ifdef _WIN32
+        LARGE_INTEGER size;
+        if (!GetFileSizeEx(fb->file, &size))
+            Werr(1, "%s: GetFileSizeEx failed", __FUNCTION__);
+        fb->end = size.QuadPart;
+#else  /* _WIN32 */
+        fb->end = lseek(fb->file, 0, SEEK_END);
+        if (fb->end == -1)
+            err(1, "%s: lseek(SEEK_END) failed", __FUNCTION__);
+#endif /* _WIN32 */
+        fb->offset = fb->end + offset;
+    }
         break;
     }
     return fb->offset;

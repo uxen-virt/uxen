@@ -18,6 +18,7 @@ struct filebuf {
     int users;
     uint8_t *buffer;
     off_t offset;
+    off_t end;
     size_t buffered;
     size_t consumed;
     int writable;
