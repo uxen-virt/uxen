@@ -105,8 +105,8 @@ typedef HANDLE uxen_user_notification_event;
 #define uxen_notification_event_init(ev) ioh_event_init(ev)
 #define uxen_user_notification_event_init(ev) ioh_event_init(ev)
 #define uxen_user_notification_event_set(ev) ioh_event_set(ev)
-#define uxen_notification_add_wait_object(ev, fn, arg) \
-    ioh_add_wait_object(ev, fn, arg, NULL)
+#define uxen_notification_add_wait_object(ev, fn, arg, wo) \
+    ioh_add_wait_object(ev, fn, arg, wo)
 
 typedef HWND window_handle;
 

@@ -340,7 +340,8 @@ static void uxen_notification_wait_func(void *opaque)
 
 int
 uxen_notification_add_wait_object(uxen_notification_event *event,
-                                  WaitObjectFunc *func, void *opaque)
+                                  WaitObjectFunc *func, void *opaque,
+                                  WaitObjects *wo)
 {
     static int once = 0;
 
@@ -366,8 +367,8 @@ uxen_notification_add_wait_object(uxen_notification_event *event,
         ioh_notification_event.filter = EVFILT_MACHPORT;
         ioh_notification_event.ident = pset;
 
-        ioh_add_wait_object(&ioh_notification_event, uxen_notification_wait_func,
-                            NULL, NULL);
+        ioh_add_wait_object(&ioh_notification_event,
+                            uxen_notification_wait_func, NULL, wo);
         once++;
     }
 

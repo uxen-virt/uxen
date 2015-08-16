@@ -220,7 +220,7 @@ ioreq_wait_server_events(struct ioreq_state *is)
 
     for (i = 0; i < vm_vcpus; i++)
         uxen_notification_add_wait_object(&is->events[i].signal, handle_ioreq,
-                                          &is->events[i]);
+                                          &is->events[i], NULL);
 }
 
 static ioreq_t *

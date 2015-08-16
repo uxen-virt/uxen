@@ -283,7 +283,8 @@ void do_dpy_setup_refresh(void)
     mod_timer(vram_timer, get_clock_ms(vm_clock) + REFRESH_TIMEOUT_MS);
 
     uxen_notification_event_init(&vram_event);
-    uxen_notification_add_wait_object(&vram_event, do_dpy_trigger_refresh, NULL);
+    uxen_notification_add_wait_object(&vram_event, do_dpy_trigger_refresh, NULL,
+                                      NULL);
     uxen_ioemu_event(UXEN_IOEMU_EVENT_VRAM, &vram_event);
 }
 

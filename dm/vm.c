@@ -446,7 +446,7 @@ vm_init(const char *loadvm, int restore_mode)
         err(1, "vm logging setup failed");
 
     uxen_notification_add_wait_object(&vm_logging_event, handle_logging_event,
-                                      NULL);
+                                      NULL, NULL);
 
     ret = xc_domain_setmaxmem(xc_handle, vm_id,
 			      ((ram_size + vram_size) >> 10) + 1024);
@@ -776,7 +776,7 @@ vm_start_run(void)
 
     uxen_notification_event_init(&exceptionEvent);
     uxen_notification_add_wait_object(&exceptionEvent, handle_exception_event,
-                                      NULL);
+                                      NULL, NULL);
 
     ret = uxen_ioemu_event(UXEN_IOEMU_EVENT_EXCEPTION, &exceptionEvent);
     if (ret)

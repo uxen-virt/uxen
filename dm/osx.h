@@ -137,7 +137,8 @@ void uxen_notification_event_init(uxen_notification_event *ev);
 void uxen_user_notification_event_init(uxen_user_notification_event *ev);
 void uxen_user_notification_event_set(uxen_user_notification_event *ev);
 int uxen_notification_add_wait_object(uxen_notification_event *event,
-                                      WaitObjectFunc *func, void *opaque);
+                                      WaitObjectFunc *func, void *opaque,
+                                      WaitObjects *wo);
 int file_exists(const char *path);
 
 /* XXX NSWindow? */
