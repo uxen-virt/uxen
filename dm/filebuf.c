@@ -233,21 +233,22 @@ filebuf_fill(struct filebuf *fb)
 {
     if (fb->consumed == fb->buffered) {
 #ifdef _WIN32
-        DWORD ret;
+        DWORD ret = 0;
         OVERLAPPED o = { };
 
         o.Offset = fb->offset;
         o.OffsetHigh = fb->offset >> 32ULL;
 
-        if (!ReadFile(fb->file, fb->buffer, (DWORD)fb->buffer_max, &ret, &o) &&
-            GetLastError() != ERROR_IO_PENDING) {
-            Wwarn("%s: ReadFile failed", __FUNCTION__);
-            return -1;
-        }
-        if (!GetOverlappedResult(fb->file, &o, &ret, TRUE) &&
-            GetLastError() != ERROR_HANDLE_EOF) {
-            Wwarn("%s: GetOverlappedResult failed", __FUNCTION__);
-            return -1;
+        if (!ReadFile(fb->file, fb->buffer, (DWORD)fb->buffer_max, &ret, &o)) {
+            if (GetLastError() != ERROR_IO_PENDING) {
+                Wwarn("%s: ReadFile failed", __FUNCTION__);
+                return -1;
+            }
+            if (!GetOverlappedResult(fb->file, &o, &ret, TRUE) &&
+                GetLastError() != ERROR_HANDLE_EOF) {
+                Wwarn("%s: GetOverlappedResult failed", __FUNCTION__);
+                return -1;
+            }
         }
 #else  /* _WIN32 */
         ssize_t ret, o = 0;
