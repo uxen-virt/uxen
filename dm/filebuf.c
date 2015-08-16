@@ -342,6 +342,7 @@ filebuf_seek(struct filebuf *fb, off_t offset, int whence)
 {
 
     filebuf_flush(fb);
+    fb->eof = 0;
     switch (whence) {
     case FILEBUF_SEEK_SET:
         fb->offset = offset;
