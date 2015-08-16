@@ -224,6 +224,7 @@ struct xc_hvm_oem_info {
 int xc_hvm_build(xc_interface *xch,
                  uint32_t domid,
                  int memsize,
+                 uint32_t nr_vcpus,
                  uint32_t nr_ioreq_servers,
                  const char *image_name,
                  struct xc_hvm_module *modules,
@@ -235,12 +236,14 @@ int xc_hvm_build_target_mem(xc_interface *xch,
                             uint32_t domid,
                             int memsize,
                             int target,
+                            uint32_t nr_vcpus,
                             uint32_t nr_ioreq_servers,
                             const char *image_name);
 
 int xc_hvm_build_mem(xc_interface *xch,
                      uint32_t domid,
                      int memsize,
+                     uint32_t nr_vcpus,
                      uint32_t nr_ioreq_servers,
                      const char *image_buffer,
                      unsigned long image_size);

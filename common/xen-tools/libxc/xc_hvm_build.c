@@ -84,7 +84,8 @@
 #define special_pfn(x) (0xff000u - 1 - (x))
 
 static void build_hvm_info(void *hvm_info_page, uint64_t mem_size,
-                           uint32_t nr_ioreq_servers, uint32_t modules_base,
+                           uint32_t nr_vcpus, uint32_t nr_ioreq_servers,
+                           uint32_t modules_base,
                            struct xc_hvm_oem_info *oem_info)
 {
     struct hvm_info_table *hvm_info = (struct hvm_info_table *)
@@ -374,7 +375,7 @@ static int check_page_works(void *p)
 
 static int setup_guest(xc_interface *xch,
                        uint32_t dom, int memsize, int target,
-                       uint32_t nr_ioreq_servers,
+                       uint32_t nr_vcpus, uint32_t nr_ioreq_servers,
                        char *image, unsigned long image_size,
                        struct xc_hvm_module *modules,
                        size_t mod_count,
@@ -593,8 +594,8 @@ static int setup_guest(xc_interface *xch,
     if ( (rc = check_page_works(hvm_info_page)) )
         goto error_out;
 
-    build_hvm_info(hvm_info_page, v_end, nr_ioreq_servers, modules_base,
-                   oem_info);
+    build_hvm_info(hvm_info_page, v_end, nr_vcpus, nr_ioreq_servers,
+                   modules_base, oem_info);
     xc_munmap(xch, dom, hvm_info_page, PAGE_SIZE);
 
     /* Allocate and clear special pages. */
@@ -668,6 +669,7 @@ static int xc_hvm_build_internal(xc_interface *xch,
                                  uint32_t domid,
                                  int memsize,
                                  int target,
+                                 uint32_t nr_vcpus,
                                  uint32_t nr_ioreq_servers,
                                  char *image,
                                  unsigned long image_size,
@@ -682,7 +684,7 @@ static int xc_hvm_build_internal(xc_interface *xch,
     }
 
     target = 8;
-    return setup_guest(xch, domid, memsize, target, nr_ioreq_servers,
+    return setup_guest(xch, domid, memsize, target, nr_vcpus, nr_ioreq_servers,
                        image, image_size, modules, mod_count, oem_info);
 }
 
@@ -692,6 +694,7 @@ static int xc_hvm_build_internal(xc_interface *xch,
 int xc_hvm_build(xc_interface *xch,
                  uint32_t domid,
                  int memsize,
+                 uint32_t nr_vcpus,
                  uint32_t nr_ioreq_servers,
                  const char *image_name,
                  struct xc_hvm_module *modules,
@@ -708,9 +711,9 @@ int xc_hvm_build(xc_interface *xch,
         return -1;
     }
 
-    sts = xc_hvm_build_internal(xch, domid, memsize, memsize, nr_ioreq_servers,
-                                image, image_size, modules, mod_count,
-                                oem_info);
+    sts = xc_hvm_build_internal(xch, domid, memsize, memsize, nr_vcpus,
+                                nr_ioreq_servers, image, image_size,
+                                modules, mod_count, oem_info);
 
     free(image);
 
@@ -729,6 +732,7 @@ int xc_hvm_build_target_mem(xc_interface *xch,
                            uint32_t domid,
                            int memsize,
                            int target,
+                           uint32_t nr_vcpus,
                            uint32_t nr_ioreq_servers,
                            const char *image_name)
 {
@@ -740,8 +744,8 @@ int xc_hvm_build_target_mem(xc_interface *xch,
          ((image = xc_read_image(xch, image_name, &image_size)) == NULL) )
         return -1;
 
-    sts = xc_hvm_build_internal(xch, domid, memsize, target, nr_ioreq_servers,
-                                image, image_size);
+    sts = xc_hvm_build_internal(xch, domid, memsize, target, nr_vcpus,
+                                nr_ioreq_servers, image, image_size);
 
     free(image);
 
@@ -754,6 +758,7 @@ int xc_hvm_build_target_mem(xc_interface *xch,
 int xc_hvm_build_mem(xc_interface *xch,
                      uint32_t domid,
                      int memsize,
+                     uint32_t nr_vcpus,
                      uint32_t nr_ioreq_servers,
                      const char *image_buffer,
                      unsigned long image_size)
@@ -777,8 +782,8 @@ int xc_hvm_build_mem(xc_interface *xch,
         return -1;
     }
 
-    sts = xc_hvm_build_internal(xch, domid, memsize, memsize, nr_ioreq_servers,
-                                img, img_len);
+    sts = xc_hvm_build_internal(xch, domid, memsize, memsize, nr_vcpus,
+                                nr_ioreq_servers, img, img_len);
 
     /* xc_inflate_buffer may return the original buffer pointer (for
        for already inflated buffers), so exercise some care in freeing */
