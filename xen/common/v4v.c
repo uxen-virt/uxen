@@ -60,6 +60,8 @@ static struct v4v_ring_info *v4v_ring_find_info_by_addr(struct domain *d,
                                                         struct v4v_addr *a,
                                                         domid_t p);
 
+static void v4v_ring_remove_mfns(struct v4v_ring_info *ring_info,
+                                 int put_pages);
 static void v4v_notify_check_pending(struct domain *d);
 static void dump_rings(unsigned char key);
 
@@ -230,33 +232,40 @@ v4v_ring_unmap(struct v4v_ring_info *ring_info)
 }
 
 /*caller must have L3*/
-static uint8_t *
-v4v_ring_map_page(struct v4v_ring_info *ring_info, int i)
+static int
+v4v_ring_map_page(struct v4v_ring_info *ring_info, int i, uint8_t **page)
 {
-    if (i >= ring_info->npage)
-        return NULL;
-    if (!ring_info->mfn_mapping)
-        return NULL;
-    if (ring_info->mfn_mapping[i])
-        return ring_info->mfn_mapping[i];
 
-    if (!ring_info->mfns || !ring_info->mfn_mapping) {
-        printk(XENLOG_ERR "%s: no mfns/mfn_mapping for ring_info at %p,"
-               " id: vm%u for vm%d p:%x len:%d mfns:%p[%d]\n", __FUNCTION__,
-               ring_info, ring_info->id.addr.domain, ring_info->id.partner,
-               ring_info->id.addr.port, ring_info->len, ring_info->mfns,
-               ring_info->npage);
-        return NULL;
+    if (i >= ring_info->npage) {
+        printk(XENLOG_ERR "%s: ring (vm%u:%x vm%d) %p attempted to map page"
+               " %d of %d\n", __FUNCTION__, ring_info->id.addr.domain,
+               ring_info->id.addr.port, ring_info->id.partner, ring_info,
+               i, ring_info->npage);
+        return -EFAULT;
+    }
+    ASSERT(ring_info->mfns);
+    ASSERT(ring_info->mfn_mapping);
+
+    if (!ring_info->mfn_mapping[i]) {
+        ring_info->mfn_mapping[i] =
+            map_domain_page_global(mfn_x(ring_info->mfns[i]));
+        if (!ring_info->mfn_mapping[i]) {
+            printk(XENLOG_ERR "%s: ring (vm%u:%x vm%d) %p attempted to map page"
+                   " %d of %d\n", __FUNCTION__, ring_info->id.addr.domain,
+                   ring_info->id.addr.port, ring_info->id.partner, ring_info,
+                   i, ring_info->npage);
+            return -EFAULT;
+        }
+
+#ifdef V4V_DEBUG
+        printk(XENLOG_ERR "%s:%d mapping page %"PRI_mfn" to %p\n",
+               __FUNCTION__, __LINE__, mfn_x(ring_info->mfns[i]),
+               ring_info->mfn_mapping[i]);
+#endif
     }
 
-    ring_info->mfn_mapping[i] =
-        map_domain_page_global(mfn_x(ring_info->mfns[i]));
-#ifdef V4V_DEBUG
-    printk(XENLOG_ERR "%s:%d mapping page %"PRI_mfn" to %p\n",
-           __FUNCTION__, __LINE__, mfn_x(ring_info->mfns[i]),
-           ring_info->mfn_mapping[i]);
-#endif
-    return ring_info->mfn_mapping[i];
+    *page = ring_info->mfn_mapping[i];
+    return 0;
 }
 
 /*caller must have L3*/
@@ -267,13 +276,14 @@ v4v_memcpy_from_guest_ring(void *_dst, struct v4v_ring_info *ring_info,
     int page = offset >> PAGE_SHIFT;
     uint8_t *src;
     uint8_t *dst = _dst;
+    int ret;
 
     offset &= ~PAGE_MASK;
 
     while ((offset + len) > PAGE_SIZE) {
-        src = v4v_ring_map_page(ring_info, page);
-        if (!src)
-            return -EFAULT;
+        ret = v4v_ring_map_page(ring_info, page, &src);
+        if (ret)
+            return ret;
 
 #ifdef V4V_DEBUG
         printk(XENLOG_ERR "%s:%d memcpy(%p,%p+%d,%ld)\n",
@@ -287,9 +297,9 @@ v4v_memcpy_from_guest_ring(void *_dst, struct v4v_ring_info *ring_info,
         offset = 0;
     }
 
-    src = v4v_ring_map_page(ring_info, page);
-    if (!src)
-        return -EFAULT;
+    ret = v4v_ring_map_page(ring_info, page, &src);
+    if (ret)
+        return ret;
 
 #ifdef V4V_DEBUG
     printk(XENLOG_ERR "%s:%d memcpy(%p,%p+%d,%d)\n",
@@ -307,10 +317,11 @@ v4v_update_tx_ptr(struct v4v_ring_info *ring_info, uint32_t tx_ptr)
 {
     uint8_t *dst;
     volatile uint32_t *p;
+    int ret;
 
-    dst = v4v_ring_map_page(ring_info, 0);
-    if (!dst)
-        return -EFAULT;
+    ret = v4v_ring_map_page(ring_info, 0, &dst);
+    if (ret)
+        return ret;
 
     p = (uint32_t *)(dst + offsetof(v4v_ring_t, tx_ptr));
     *p = tx_ptr;
@@ -326,13 +337,21 @@ v4v_memcpy_to_guest_ring(struct v4v_ring_info *ring_info, uint32_t offset,
     int page = offset >> PAGE_SHIFT;
     uint8_t *dst;
     uint8_t *src = _src;
+    int ret;
 
     offset &= ~PAGE_MASK;
 
     while ((offset + len) > PAGE_SIZE) {
-        dst = v4v_ring_map_page(ring_info, page);
-        if (!dst)
-            return -EFAULT;
+        ret = v4v_ring_map_page(ring_info, page, &dst);
+        if (ret) {
+            if (ret != -ECONTINUATION)
+                printk(XENLOG_ERR "%s: ring (vm%u:%x vm%d) %p attempted to map"
+                       " page %d of %d\n", __FUNCTION__,
+                       ring_info->id.addr.domain, ring_info->id.addr.port,
+                       ring_info->id.partner, ring_info, page,
+                       ring_info->npage);
+            return ret;
+        }
 
 #ifdef V4V_DEBUG
         printk(XENLOG_ERR "%s:%d memcpy(%p+%d,%p,%ld)\n",
@@ -348,13 +367,14 @@ v4v_memcpy_to_guest_ring(struct v4v_ring_info *ring_info, uint32_t offset,
         offset = 0;
     }
 
-    dst = v4v_ring_map_page(ring_info, page);
-    if (!dst) {
-        printk(XENLOG_ERR "%s: ring (vm%u:%x vm%d) %p attempted to map page"
-               " %d of %d\n", __FUNCTION__, ring_info->id.addr.domain,
-               ring_info->id.addr.port, ring_info->id.partner, ring_info,
-               page, ring_info->npage);
-        return -EFAULT;
+    ret = v4v_ring_map_page(ring_info, page, &dst);
+    if (ret) {
+        if (ret != -ECONTINUATION)
+            printk(XENLOG_ERR "%s: ring (vm%u:%x vm%d) %p attempted to map page"
+                   " %d of %d\n", __FUNCTION__, ring_info->id.addr.domain,
+                   ring_info->id.addr.port, ring_info->id.partner, ring_info,
+                   page, ring_info->npage);
+        return ret;
     }
 
 #ifdef V4V_DEBUG
@@ -387,9 +407,9 @@ v4v_memcpy_to_guest_ring_from_guest(struct v4v_ring_info *ring_info,
         return -EFAULT;
 
     while ((offset + len) > PAGE_SIZE) {
-        dst = v4v_ring_map_page(ring_info, page);
-        if (!dst)
-            return -EFAULT;
+        ret = v4v_ring_map_page(ring_info, page, &dst);
+        if (ret)
+            return ret;
 
 #ifdef V4V_DEBUG
         printk(XENLOG_ERR "%s:%d copy_from_guest(%p+%d,%p,%ld)\n",
@@ -406,9 +426,9 @@ v4v_memcpy_to_guest_ring_from_guest(struct v4v_ring_info *ring_info,
         offset = 0;
     }
 
-    dst = v4v_ring_map_page(ring_info, page);
-    if (!dst)
-        return -EFAULT;
+    ret = v4v_ring_map_page(ring_info, page, &dst);
+    if (ret)
+        return ret;
 
 #ifdef V4V_DEBUG
     printk(XENLOG_ERR "%s:%d copy_from_guest(%p+%d,%p,%d)\n",
@@ -423,23 +443,20 @@ v4v_ringbuf_get_rx_ptr(struct domain *d, struct v4v_ring_info *ring_info,
                        uint32_t *rx_ptr)
 {
     v4v_ring_t *ringp;
+    int ret;
 
-    if (ring_info->npage == 0)
-        return -1;
+    if (!ring_info->npage || ring_info->npage < ring_info->nmfns)
+        return -EINVAL;
 
-    ringp = (v4v_ring_t *)v4v_ring_map_page(ring_info, 0);
-    //ringp = map_domain_page(mfn_x(ring_info->mfns[0]));
+    ret = v4v_ring_map_page(ring_info, 0, (uint8_t **)&ringp);
 #ifdef V4V_DEBUG
     printk(XENLOG_ERR "%s: mapped %"PRI_mfn" to %p\n", __FUNCTION__,
            mfn_x(ring_info->mfns[0]), ringp);
 #endif
-    if (!ringp)
-        return -1;
+    if (ret)
+        return ret;
 
     *rx_ptr = *(volatile uint32_t *)&ringp->rx_ptr;
-
-    //unmap_domain_page((void*)ringp);
-    //v4v_ring_unmap(ring_info);
 
     return 0;
 }
@@ -988,15 +1005,11 @@ v4v_find_ring_mfns(struct domain *d, struct v4v_ring_info *ring_info,
                    XEN_GUEST_HANDLE(v4v_pfn_list_t) pfn_list_hnd)
 {
     XEN_GUEST_HANDLE(v4v_pfn_t) pfn_hnd;
+    XEN_GUEST_HANDLE(uint8_t) slop_hnd;
     v4v_pfn_list_t pfn_list;
-    int i, j;
-    mfn_t *mfns;
-    uint8_t **mfn_mapping;
-    unsigned long mfn;
-    int ret;
-#if 0
-    struct page_info *page;
-#endif
+    int i;
+    mfn_t mfn;
+    int ret = 0;
 
     ret = copy_from_guest_errno(&pfn_list, pfn_list_hnd, 1);
     if (ret)
@@ -1008,108 +1021,93 @@ v4v_find_ring_mfns(struct domain *d, struct v4v_ring_info *ring_info,
     if ((pfn_list.npage << PAGE_SHIFT) < ring_info->len)
         return -EINVAL;
 
-    {
-        XEN_GUEST_HANDLE(uint8_t) slop_hnd =
-            guest_handle_cast(pfn_list_hnd, uint8_t);
-        guest_handle_add_offset(slop_hnd, sizeof(v4v_pfn_list_t));
-        pfn_hnd = guest_handle_cast(slop_hnd, v4v_pfn_t);
-    }
+    slop_hnd = guest_handle_cast(pfn_list_hnd, uint8_t);
+    guest_handle_add_offset(slop_hnd, sizeof(v4v_pfn_list_t));
+    pfn_hnd = guest_handle_cast(slop_hnd, v4v_pfn_t);
 
     if (pfn_list.npage > (V4V_MAX_RING_SIZE >> PAGE_SHIFT))
         return -EINVAL;
 
-    mfns = v4v_xmalloc_array(mfn_t, pfn_list.npage);
-    if (!mfns)
-        return -ENOMEM;
-
-    mfn_mapping = v4v_xmalloc_array(uint8_t *, pfn_list.npage);
-    if (!mfn_mapping) {
-        v4v_xfree(mfns);
-        return -ENOMEM;
+    if (ring_info->mfns && (ring_info->nmfns != pfn_list.npage ||
+                            ring_info->nmfns == ring_info->npage)) {
+        /* Ring already existed. Unless the ring was partially
+         * populated (nmfns != npage because this call failed), remove
+         * the MFN's from list and then add the new list. */
+        printk(XENLOG_INFO "%s: vm%u re-registering existing v4v ring"
+               " (vm%u:%x vm%d), clearing MFN list\n", __FUNCTION__,
+               current->domain->domain_id, ring_info->id.addr.domain,
+               ring_info->id.addr.port, ring_info->id.partner);
+        v4v_ring_remove_mfns(ring_info, !mfns_dont_belong_xen(current->domain));
+        ASSERT(!ring_info->mfns);
     }
 
-    for (i = 0; i < pfn_list.npage; i++) {
+    if (!ring_info->mfns) {
+        mfn_t *mfns;
+        uint8_t **mfn_mapping;
+
+        mfns = v4v_xmalloc_array(mfn_t, pfn_list.npage);
+        if (!mfns)
+            return -ENOMEM;
+
+        mfn_mapping = v4v_xmalloc_array(uint8_t *, pfn_list.npage);
+        if (!mfn_mapping) {
+            v4v_xfree (mfns);
+            return -ENOMEM;
+        }
+
+        ring_info->nmfns = pfn_list.npage;
+        ring_info->mfns = mfns;
+        ring_info->mfn_mapping = mfn_mapping;
+    }
+    ASSERT(ring_info->nmfns == pfn_list.npage);
+
+    for (i = ring_info->npage; i < ring_info->nmfns; i++) {
         v4v_pfn_t pfn;
 
         ret = copy_from_guest_offset_errno(&pfn, pfn_hnd, i, 1);
         if (ret)
             break;
 
-#if 0
-        page = get_page_from_gfn(d, pfn, NULL, P2M_ALLOC);
-        if (unlikely(!page)) {
-            printk(XENLOG_ERR "%s: vm%d passed invalid gmfn %"PRI_mfn
-                   " ring %p seq %d\n", __FUNCTION__, d->domain_id,
-                   pfn, ring_info, i);
-            ret = -EINVAL;
-            break;
-        }
-        mfn = page_to_mfn(page);
-        if (!mfn_valid(mfn)) {
-            printk(XENLOG_ERR "%s: vm%d passed invalid mfn %"PRI_mfn
-                   " ring %p seq %d\n", __FUNCTION__, d->domain_id,
-                   mfn, ring_info, i);
-            ret = -EINVAL;
-            put_page(page);
-            break;
-        }
-        if (!get_page_type(page, PGT_writable_page)) {
-            printk(XENLOG_ERR "%s: vm%d passed wrong type mfn %"PRI_mfn
-                   " ring %p seq %d\n", __FUNCTION__, d->domain_id,
-                   mfn, ring_info, i);
-            ret = -EINVAL;
-            break;
-        }
-#else
-
         if (mfns_dont_belong_xen(d))
-            mfn = pfn;
+            mfn = _mfn(pfn);    /* XXX access check / valid check ? */
         else {
-            mfn = get_gfn_untyped(d, pfn);
+            p2m_type_t t;
 
-            if (!mfn_valid(mfn) ||
-                !get_page_and_type(mfn_to_page(mfn), d, PGT_writable_page)) {
-                put_gfn(d, pfn); //XXX: JMM check surely don't put if mfn is invalid
-
-                printk(XENLOG_ERR "%s: vm%u passed invalid mfn %"PRI_mfn
+            mfn = get_gfn_unshare(d, pfn, &t);
+            if (!mfn_valid_page(mfn_x(mfn)) ||
+                !get_page(mfn_to_page(mfn_x(mfn)), d)) {
+                put_gfn(d, pfn);
+                printk(XENLOG_ERR "%s: vm%u passed invalid gpfn %"PRI_xen_pfn
                        " ring %p seq %d\n", __FUNCTION__, d->domain_id,
-                       mfn, ring_info, i);
+                       pfn, ring_info, i);
                 ret = -EINVAL;
                 break;
             }
         }
-#endif
 
-        mfns[i] = _mfn(mfn);
+        ring_info->mfns[i] = mfn;
+        ring_info->npage = i + 1;
 
 #ifdef V4V_DEBUG
-        printk(XENLOG_ERR "%s: %d: %"PRIx64" -> %"PRI_mfn"\n", __FUNCTION__,
-               i, pfn, mfn_x(mfns[i]));
+        printk(XENLOG_ERR "%s: %d: %"PRI_xen_pfn" -> %"PRI_mfn"\n",
+               __FUNCTION__, i, pfn, mfn_x(ring_info->mfns[i]));
 #endif
-        if (mfn_x(mfns[i]) == INVALID_MFN) {
-            v4v_xfree(mfn_mapping);
-            v4v_xfree(mfns);
-            return -EINVAL;
-        }
-        mfn_mapping[i] = NULL;
+
+        ring_info->mfn_mapping[i] = NULL;
     }
 
-    if (!ret) {
-        ring_info->npage = pfn_list.npage;
-        ring_info->mfns = mfns;
-        printk(XENLOG_ERR "%s: vm%u ring (vm%u:%x vm%d) %p mfn_mapping %p\n",
-               __FUNCTION__, current->domain->domain_id,
-               ring_info->id.addr.domain, ring_info->id.addr.port,
-               ring_info->id.partner, ring_info, mfn_mapping);
-        ring_info->mfn_mapping = mfn_mapping;
-    } else {
-        j = i;
-        for (i = 0; i < j; i++)
-            if (mfn_x(mfns[i]) != 0)
-                put_page_and_type(mfn_to_page(mfn_x(mfns[i])));
-        v4v_xfree(mfn_mapping);
-        v4v_xfree(mfns);
+    if (ret && ret != -ECONTINUATION) {
+        v4v_ring_remove_mfns(ring_info, !mfns_dont_belong_xen(current->domain));
+        return ret;
     }
+
+    ASSERT(ret || ring_info->npage == ring_info->nmfns);
+    if (!ret)
+        printk(XENLOG_ERR "%s: vm%u ring (vm%u:%x vm%d) %p mfn_mapping %p"
+               " npage %d nmfns %d\n", __FUNCTION__, current->domain->domain_id,
+               ring_info->id.addr.domain, ring_info->id.addr.port,
+               ring_info->id.partner, ring_info, ring_info->mfn_mapping,
+               ring_info->npage, ring_info->nmfns);
     return ret;
 }
 
@@ -1174,18 +1172,25 @@ static void
 v4v_ring_remove_mfns(struct v4v_ring_info *ring_info, int put_pages)
 {
     int i;
-    if (ring_info->mfns) {
-        if (put_pages)
-            for (i = 0; i < ring_info->npage; i++)
-                if (mfn_x(ring_info->mfns[i]) != 0)
-                    put_page_and_type(mfn_to_page(mfn_x(ring_info->mfns[i])));
-        v4v_xfree(ring_info->mfns);
+
+    if (!ring_info->mfns)
+        return;
+    ASSERT(ring_info->mfn_mapping);
+
+    v4v_ring_unmap(ring_info);
+
+    if (put_pages) {
+        for (i = 0; i < ring_info->npage; i++)
+            if (mfn_x(ring_info->mfns[i]))
+                put_page(mfn_to_page(mfn_x(ring_info->mfns[i])));
     }
+
+    v4v_xfree(ring_info->mfns);
     ring_info->mfns = NULL;
-    if (ring_info->mfn_mapping) {
-        v4v_xfree(ring_info->mfn_mapping);
-        ring_info->mfn_mapping = NULL;
-    }
+    ring_info->nmfns = 0;
+    v4v_xfree(ring_info->mfn_mapping);
+    ring_info->mfn_mapping = NULL;
+    ring_info->npage = 0;
 }
 
 /*caller must hold W(L2) */
@@ -1193,7 +1198,6 @@ static void
 v4v_ring_reset(struct v4v_ring_info *ring_info, int put_pages)
 {
 
-    v4v_ring_unmap(ring_info);
     v4v_ring_remove_mfns(ring_info, put_pages);
 
     ring_info->len = 0;
@@ -1207,7 +1211,6 @@ static void
 v4v_ring_remove_info(struct v4v_ring_info *ring_info, int put_pages)
 {
     v4v_pending_remove_all(ring_info);
-    v4v_ring_unmap(ring_info);
     hlist_del(&ring_info->node);
     v4v_ring_remove_mfns(ring_info, put_pages);
     v4v_xfree(ring_info);
@@ -1311,26 +1314,29 @@ v4v_ring_create(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_id_t) ring_id_hnd)
         }
 
         spin_lock_init(&ring_info->lock);
-        INIT_HLIST_HEAD(&ring_info->pending);
+        spin_lock(&ring_info->lock);
 
         ring_info->mfns = NULL;
+        ring_info->nmfns = 0;
         ring_info->mfn_mapping = NULL;
         ring_info->len = 0;
+        ring_info->npage = 0;
 
         ring_info->tx_ptr = 0;
         ring_info->ring = XEN_GUEST_HANDLE_NULL(v4v_ring_t);
-        ring_info->npage = 0;
 
-        spin_lock(&ring_info->lock);
         ring_info->id = ring_id;
+        INIT_HLIST_HEAD(&ring_info->pending);
 
-        hash = v4v_hash_fn(&ring_id);
+        hash = v4v_hash_fn(&ring_info->id);
         hlist_add_head(&ring_info->node, &dst_d->v4v->ring_hash[hash]);
+
         write_unlock(&dst_d->v4v->lock);
 
         printk(XENLOG_INFO "%s: vm%u creating placeholder ring (vm%u:%x vm%d)"
-               "\n", __FUNCTION__, current->domain->domain_id,
-               ring_id.addr.domain, ring_id.addr.port, ring_id.partner);
+               " %p npage %d\n", __FUNCTION__, current->domain->domain_id,
+               ring_id.addr.domain, ring_id.addr.port, ring_id.partner,
+               ring_info, ring_info->npage);
 
         //We now require the caller retries the send
         //v4v_pending_queue(ring_info, d->domain_id, 1);
@@ -1426,12 +1432,18 @@ v4v_ring_add(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd,
             spin_lock(&ring_info->lock);
 
             ring_info->mfns = NULL;
+            ring_info->nmfns = 0;
             ring_info->mfn_mapping = NULL;
+            ring_info->len = 0;
+            ring_info->npage = 0;
+
+            ring_info->tx_ptr = 0;
+            ring_info->ring = XEN_GUEST_HANDLE_NULL(v4v_ring_t);
 
             ring_info->id = ring.id;
             INIT_HLIST_HEAD(&ring_info->pending);
 
-            hash = v4v_hash_fn(&ring.id);
+            hash = v4v_hash_fn(&ring_info->id);
             hlist_add_head(&ring_info->node, &d->v4v->ring_hash[hash]);
 
             write_unlock(&d->v4v->lock);
@@ -1443,21 +1455,6 @@ v4v_ring_add(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd,
             write_unlock(&d->v4v->lock);
 
             spin_lock(&ring_info->lock);
-            /* Ring info already existed. If mfn list was already
-             * populated remove the MFN's from list and then add the
-             * new list.
-             */
-            printk(XENLOG_INFO "%s: vm%d re-registering existing v4v ring"
-                   " (%d:%x %d), clearing MFN list\n", __FUNCTION__,
-                   current->domain->domain_id, ring.id.addr.domain,
-                   ring.id.addr.port, ring.id.partner);
-            v4v_ring_unmap(ring_info);
-            v4v_ring_remove_mfns(ring_info,
-                                 !mfns_dont_belong_xen(current->domain));
-
-            if (ring_info->mfns)
-                xfree(ring_info->mfns);
-            ring_info->mfns = NULL;
         }
 
         ring_info->len = ring.len;

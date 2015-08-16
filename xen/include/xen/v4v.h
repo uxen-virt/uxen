@@ -54,6 +54,7 @@ struct v4v_ring_info
 
     uint8_t **mfn_mapping;      /* mapped ring pages protected by L3*/
 
+    uint32_t nmfns;
     mfn_t *mfns;                /* list of mfns of guest ring */
     struct hlist_head pending;  /* list of struct v4v_pending_ent for
                                  * this ring, L3 */
