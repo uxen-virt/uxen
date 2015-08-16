@@ -379,6 +379,7 @@ v4v_memcpy_to_guest_ring_from_guest(struct v4v_ring_info *ring_info,
 {
     int page = offset >> PAGE_SHIFT;
     uint8_t *dst;
+    int ret;
 
     offset &= ~PAGE_MASK;
 
@@ -395,8 +396,9 @@ v4v_memcpy_to_guest_ring_from_guest(struct v4v_ring_info *ring_info,
                __FUNCTION__, __LINE__, dst, offset, (void *)src_hnd.p,
                PAGE_SIZE - offset);
 #endif
-        if (copy_from_guest((dst + offset), src_hnd, PAGE_SIZE - offset))
-            return -EFAULT;
+        ret = copy_from_guest_errno(dst + offset, src_hnd, PAGE_SIZE - offset);
+        if (ret)
+            return ret;
 
         page++;
         len -= PAGE_SIZE - offset;
@@ -412,10 +414,7 @@ v4v_memcpy_to_guest_ring_from_guest(struct v4v_ring_info *ring_info,
     printk(XENLOG_ERR "%s:%d copy_from_guest(%p+%d,%p,%d)\n",
            __FUNCTION__, __LINE__, dst, offset, (void *)src_hnd.p, len);
 #endif
-    if (copy_from_guest((dst + offset), src_hnd, len))
-        return -EFAULT;
-
-    return 0;
+    return copy_from_guest_errno((dst + offset), src_hnd, len);
 }
 
 /*caller must have L3*/
@@ -596,24 +595,26 @@ static ssize_t
 v4v_iov_count(XEN_GUEST_HANDLE(v4v_iov_t) iovs, int niov)
 {
     v4v_iov_t iov;
-    size_t ret = 0;
+    size_t done = 0;
+    int ret;
 
     while (niov--) {
-        if (copy_from_guest(&iov, iovs, 1))
-            return -EFAULT;
+        ret = copy_from_guest_errno(&iov, iovs, 1);
+        if (ret)
+            return ret;
 
         if (iov.iov_len > V4V_RING_MAX_SIZE)
             return -EINVAL;
 
-        ret += iov.iov_len;
+        done += iov.iov_len;
 
-        if (ret > V4V_RING_MAX_SIZE)
+        if (done > V4V_RING_MAX_SIZE)
             return -EINVAL;
 
         guest_handle_add_offset(iovs, 1);
     }
 
-    return ret;
+    return done;
 }
 
 /*caller must have L3*/
@@ -685,10 +686,9 @@ v4v_ringbuf_insertv(struct domain *d,
             XEN_GUEST_HANDLE(uint8_t) buf_hnd;
             v4v_iov_t iov;
 
-            if (copy_from_guest(&iov, iovs, 1)) {
-                ret = -EFAULT;
+            ret = copy_from_guest_errno(&iov, iovs, 1);
+            if (ret)
                 break;
-            }
 
             buf_hnd.p = (uint8_t *)(unsigned long)iov.iov_base; //FIXME
             iov_len = iov.iov_len;
@@ -889,9 +889,11 @@ v4v_fill_ring_data(struct domain *src_d,
     v4v_ring_data_ent_t ent;
     struct domain *dst_d;
     struct v4v_ring_info *ring_info;
+    int ret;
 
-    if (copy_from_guest(&ent, data_ent_hnd, 1))
-        return -EFAULT;
+    ret = copy_from_guest_errno(&ent, data_ent_hnd, 1);
+    if (ret)
+        return ret;
 
 #ifdef V4V_DEBUG
     printk(XENLOG_ERR "%s: ent.ring.domain=vm%u, ent.ring.port=%d\n",
@@ -945,12 +947,14 @@ v4v_fill_ring_data(struct domain *src_d,
     if (dst_d)
         put_domain(dst_d);
 
-    if (copy_field_to_guest(data_ent_hnd, &ent, flags))
-        return -EFAULT;
+    ret = copy_field_to_guest_errno(data_ent_hnd, &ent, flags);
+    if (ret)
+        return ret;
 #if 0                           //FIXME sa
-    if (copy_field_to_guest(data_ent_hnd, &ent, space_avail)) {
+    ret = copy_field_to_guest_errno(data_ent_hnd, &ent, space_avail);
+    if (ret) {
         DEBUG_BANANA;
-        return -EFAULT;
+        return ret;
     }
 
 #ifdef V4V_DEBUG
@@ -985,16 +989,18 @@ v4v_find_ring_mfns(struct domain *d, struct v4v_ring_info *ring_info,
 {
     XEN_GUEST_HANDLE(v4v_pfn_t) pfn_hnd;
     v4v_pfn_list_t pfn_list;
-    int i, j, ret = 0;
+    int i, j;
     mfn_t *mfns;
     uint8_t **mfn_mapping;
     unsigned long mfn;
+    int ret;
 #if 0
     struct page_info *page;
 #endif
 
-    if (copy_from_guest(&pfn_list, pfn_list_hnd, 1))
-        return -EFAULT;
+    ret = copy_from_guest_errno(&pfn_list, pfn_list_hnd, 1);
+    if (ret)
+        return ret;
 
     if (pfn_list.magic != V4V_PFN_LIST_MAGIC)
         return -EINVAL;
@@ -1024,10 +1030,10 @@ v4v_find_ring_mfns(struct domain *d, struct v4v_ring_info *ring_info,
 
     for (i = 0; i < pfn_list.npage; i++) {
         v4v_pfn_t pfn;
-        if (copy_from_guest_offset(&pfn, pfn_hnd, i, 1)) {
-            ret = -EFAULT;
+
+        ret = copy_from_guest_offset_errno(&pfn, pfn_hnd, i, 1);
+        if (ret)
             break;
-        }
 
 #if 0
         page = get_page_from_gfn(d, pfn, NULL, P2M_ALLOC);
@@ -1224,10 +1230,9 @@ v4v_ring_remove(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd)
             break;
         }
 
-        if (copy_from_guest(&ring, ring_hnd, 1)) {
-            ret = -EFAULT;
+        ret = copy_from_guest_errno(&ring, ring_hnd, 1);
+        if (ret)
             break;
-        }
 
         if (ring.magic != V4V_RING_MAGIC) {
             ret = -EINVAL;
@@ -1272,11 +1277,9 @@ v4v_ring_create(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_id_t) ring_id_hnd)
     read_lock(&v4v_lock);
 
     do {
-
-        if (copy_from_guest(&ring_id, ring_id_hnd, 1)) {
-            ret = -EFAULT;
+        ret = copy_from_guest_errno(&ring_id, ring_id_hnd, 1);
+        if (ret)
             break;
-        }
 
         if (ring_id.partner != V4V_DOMID_ANY)
             ring_id.partner = current->domain->domain_id;
@@ -1366,10 +1369,9 @@ v4v_ring_add(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd,
             break;
         }
 
-        if (copy_from_guest(&ring, ring_hnd, 1)) {
-            ret = -EFAULT;
+        ret = copy_from_guest_errno(&ring, ring_hnd, 1);
+        if (ret)
             break;
-        }
 
         if (ring.magic != V4V_RING_MAGIC) {
             ret = -EINVAL;
@@ -1389,10 +1391,9 @@ v4v_ring_add(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd,
         }
 
         ring.id.addr.domain = d->domain_id;
-        if (copy_field_to_guest(ring_hnd, &ring, id)) {
-            ret = -EFAULT;
+        ret = copy_field_to_guest_errno(ring_hnd, &ring, id);
+        if (ret)
             break;
-        }
 
         /* no need for a lock yet, because only we know about this */
         /* set the tx pointer if it looks bogus (we don't reset it
@@ -1404,7 +1405,10 @@ v4v_ring_add(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd,
             if (ring.tx_ptr >= ring.len)
                 ring.tx_ptr = 0;
 
-            copy_field_to_guest(ring_hnd, &ring, tx_ptr); ///XXX: not atomic
+            ///XXX: not atomic
+            ret = copy_field_to_guest_errno(ring_hnd, &ring, tx_ptr);
+            if (ret)
+                break;
         }
 
         write_lock(&d->v4v->lock);
@@ -1536,20 +1540,18 @@ v4v_notify(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_data_t) ring_data_hnd)
     do {
         if (!guest_handle_is_null(ring_data_hnd)) {
             /* Quick sanity check on ring_data_hnd */
-            if (copy_field_from_guest(&ring_data, ring_data_hnd, magic)) {
-                ret = -EFAULT;
+            ret = copy_field_from_guest_errno(&ring_data, ring_data_hnd, magic);
+            if (ret)
                 break;
-            }
 
             if (ring_data.magic != V4V_RING_DATA_MAGIC) {
                 ret = -EINVAL;
                 break;
             }
 
-            if (copy_from_guest(&ring_data, ring_data_hnd, 1)) {
-                ret = -EFAULT;
+            ret = copy_from_guest_errno(&ring_data, ring_data_hnd, 1);
+            if (ret)
                 break;
-            }
 
             {
                 XEN_GUEST_HANDLE(v4v_ring_data_ent_t) ring_data_ent_hnd;
@@ -1835,12 +1837,14 @@ do_v4v_op(int cmd, XEN_GUEST_HANDLE(void) arg1,
 
         if (unlikely(!guest_handle_okay(src_hnd, 1)))
             goto out;
-        if (copy_from_guest(&src, src_hnd, 1))
+        rc = copy_from_guest_errno(&src, src_hnd, 1);
+        if (rc)
             goto out;
 
         if (unlikely(!guest_handle_okay(dst_hnd, 1)))
             goto out;
-        if (copy_from_guest(&dst, dst_hnd, 1))
+        rc = copy_from_guest_errno(&dst, dst_hnd, 1);
+        if (rc)
             goto out;
 
         src.domain = current->domain->domain_id;
@@ -1861,12 +1865,14 @@ do_v4v_op(int cmd, XEN_GUEST_HANDLE(void) arg1,
 
         if (unlikely(!guest_handle_okay(src_hnd, 1)))
             goto out;
-        if (copy_from_guest(&src, src_hnd, 1))
+        rc = copy_from_guest_errno(&src, src_hnd, 1);
+        if (rc)
             goto out;
 
         if (unlikely(!guest_handle_okay(dst_hnd, 1)))
             goto out;
-        if (copy_from_guest(&dst, dst_hnd, 1))
+        rc = copy_from_guest_errno(&dst, dst_hnd, 1);
+        if (rc)
             goto out;
 
         if (unlikely(!guest_handle_okay(iovs, niov)))
@@ -1903,7 +1909,8 @@ do_v4v_op(int cmd, XEN_GUEST_HANDLE(void) arg1,
         v4v_addr_t dst;
         XEN_GUEST_HANDLE(v4v_addr_t) dst_hnd =
             guest_handle_cast(arg1, v4v_addr_t);
-        if (copy_from_guest(&dst, dst_hnd, 1))
+        rc = copy_from_guest_errno(&dst, dst_hnd, 1);
+        if (rc)
             goto out;
 
         printk(XENLOG_ERR "%s: poking vm%u\n", __FUNCTION__, dst.domain);

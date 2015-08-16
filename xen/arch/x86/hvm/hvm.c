@@ -2791,6 +2791,41 @@ unsigned long copy_from_user_hvm(void *to, const void *from, unsigned len)
     return rc ? len : 0; /* fake a copy_from_user() return code */
 }
 
+int
+copy_to_hvm_errno(void *to, const void *from, unsigned len)
+{
+    int rc;
+
+    rc = hvm_copy_to_guest_virt_nofault(
+        (unsigned long)to, (void *)from, len, 0);
+    switch (rc) {
+    case HVMCOPY_okay:
+        rc = 0;
+        break;
+    default:
+        rc = -EFAULT;
+        break;
+    }
+    return rc;
+}
+
+int
+copy_from_hvm_errno(void *to, const void *from, unsigned len)
+{
+    int rc;
+
+    rc = hvm_copy_from_guest_virt_nofault(to, (unsigned long)from, len, 0);
+    switch (rc) {
+    case HVMCOPY_okay:
+        rc = 0;
+        break;
+    default:
+        rc = -EFAULT;
+        break;
+    }
+    return rc;
+}
+
 void hvm_cpuid(unsigned int input, unsigned int *eax, unsigned int *ebx,
                                    unsigned int *ecx, unsigned int *edx)
 {
