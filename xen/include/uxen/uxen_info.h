@@ -205,7 +205,7 @@ struct /* __WINPACKED__ */ uxen_info {
     void (__interface_fn *ui_notify_exception)(struct vm_info_shared *);
     void (__interface_fn *ui_notify_vram)(struct vm_info_shared *);
     uint64_t (__interface_fn *ui_signal_event)(struct vm_vcpu_info_shared *,
-                                               void *);
+                                               void *, void **);
     uint64_t (__interface_fn *ui_check_ioreq)(struct vm_vcpu_info_shared *);
     uint32_t ui_memcache_needs_check;
     uint64_t (__interface_fn *ui_memcache_check)(void);
@@ -256,6 +256,7 @@ struct vm_vcpu_info_shared {
     uint32_t vci_run_mode;
     uint32_t vci_host_halted;
     uint32_t vci_has_timer_interrupt;
+    void *vci_wait_event;
 };
 
 enum {
@@ -282,6 +283,11 @@ struct vm_info_shared {
     uint64_t vmi_xsave;
     uint32_t vmi_xsave_size;
     struct mdm_info vmi_mdm;
+    void *vmi_domain;
+    void *vmi_dmreq;
+    void *vmi_dmreq_vcpu_page_va;
+    void *vmi_dmreq_hec;
+    void *vmi_wait_event;
 };
 
 #define UXEN_PAGE_SHIFT 12

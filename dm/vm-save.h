@@ -56,4 +56,6 @@ int vm_resume(void);
 int vm_load(const char *, int);
 int vm_load_finish(void);
 
+int vm_lazy_load_page(uint32_t gpfn, uint8_t *va, int compressed);
+
 #endif	/* _VM_SAVE_H_ */

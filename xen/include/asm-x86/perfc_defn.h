@@ -208,6 +208,10 @@ PERFCOUNTER(decompressed_unshared, "decompressed pages unshared")
 PERFCOUNTER(decompressed_in_vain, "pages decompressed in vain")
 PERFCOUNTER(populated_zero_pages, "populated zero pages")
 PERFCOUNTER(populated_clone_pages, "populated clone pages")
+PERFCOUNTER(dmreq_populated, "dmreq populated pages")
+PERFCOUNTER(dmreq_populated_template, "dmreq populated template pages")
+PERFCOUNTER(dmreq_populated_template_shared,
+            "dmreq populated shared template pages")
 
 PERFCOUNTER(pc0,                        "pc0")
 PERFCOUNTER(pc1,                        "pc1")

@@ -88,7 +88,6 @@ struct vm_vcpu_info {
     unsigned long vci_ipi_cpu;
     unsigned long vci_ipi_queued;
     KSPIN_LOCK vci_ipi_lck;
-    KEVENT *vci_ioreq_wait_event;
     volatile uint8_t vci_executing;
 };
 
@@ -146,6 +145,12 @@ struct device_extension {
     LONG volatile de_executing;
     KEVENT de_resume_event;
     KEVENT de_suspend_event;
+};
+
+struct host_event_channel {
+    KEVENT *request;
+    KEVENT *completed;
+    struct host_event_channel *next;
 };
 
 #ifdef DEBUG_PAGE_ALLOC

@@ -147,8 +147,10 @@ static void populate_physmap(struct memop_args *a)
 
         if ( a->memflags & MEMF_populate_on_demand )
         {
-            if (guest_physmap_mark_populate_on_demand(
-                    d, gpfn, a->extent_order, _mfn(SHARED_ZERO_MFN)) < 0)
+            if (guest_physmap_mark_populate_on_demand
+                (d, gpfn, a->extent_order,
+                 (a->memflags & MEMF_populate_on_demand_dmreq ?
+                  _mfn(DMREQ_MFN) : _mfn(SHARED_ZERO_MFN))) < 0)
                 goto out;
         }
         else if (a->memflags & MEMF_populate_from_buffer_compressed)
@@ -752,6 +754,9 @@ long do_memory_op(unsigned long cmd, XEN_GUEST_HANDLE(void) arg)
         if ( op == XENMEM_populate_physmap
              && (reservation.mem_flags & XENMEMF_populate_on_demand) )
             args.memflags |= MEMF_populate_on_demand;
+        if (op == XENMEM_populate_physmap
+            && (reservation.mem_flags & XENMEMF_populate_on_demand_dmreq))
+            args.memflags |= MEMF_populate_on_demand_dmreq;
 
         if (op == XENMEM_populate_physmap &&
             (reservation.mem_flags & XENMEMF_populate_from_buffer)) {

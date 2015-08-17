@@ -50,12 +50,6 @@ static uint32_t idle_thread_suspended = 0;
 static LARGE_INTEGER uxen_start_time;
 static LARGE_INTEGER uxen_host_counter_start, uxen_host_counter_freq;
 
-struct host_event_channel {
-    KEVENT *request;
-    KEVENT *completed;
-    struct host_event_channel *next;
-};
-
 extern BOOLEAN *KdDebuggerEnabled;
 
 static void __cdecl uxen_op_wake_vm(struct vm_vcpu_info_shared *vcis);
@@ -664,13 +658,21 @@ uxen_op_notify_vram(struct vm_info_shared *vmis)
 
 static uint64_t __cdecl
 uxen_op_signal_event(struct vm_vcpu_info_shared *vcis,
-                     struct host_event_channel *hec)
+                     struct host_event_channel *hec, void **_wait_event)
 {
     struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
+    KEVENT **wait_event = (KEVENT **)_wait_event;
 
     if (!hec || !hec->request || !is_vci_runnable(vci))
 	return 1;
 
+    if (hec->completed && *wait_event != hec->completed) {
+        if (*wait_event) {
+            fail_msg("%s: nested waiting signal event", __FUNCTION__);
+            return 1;
+        }
+        *wait_event = hec->completed;
+    }
     KeSetEvent(hec->request, 0, FALSE);
     return 0;
 }
@@ -681,11 +683,13 @@ uxen_op_check_ioreq(struct vm_vcpu_info_shared *vcis)
     struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
     int ret;
 
-    if ((vci->vci_ioreq_wait_event == NULL) || !is_vci_runnable(vci))
+    if ((vcis->vci_wait_event == NULL) || !is_vci_runnable(vci))
 	return 1;
-    ret = KeReadStateEvent(vci->vci_ioreq_wait_event);
-    if (ret)
-        KeClearEvent(vci->vci_ioreq_wait_event);
+    ret = KeReadStateEvent(vcis->vci_wait_event);
+    if (ret) {
+        KeClearEvent(vcis->vci_wait_event);
+        vcis->vci_wait_event = NULL;
+    }
     return ret;
 }
 
@@ -1565,8 +1569,8 @@ uxen_vmi_stop_running(struct vm_info *vmi)
                                        0, 1) == 0)
             continue;
 
-	if (vci->vci_ioreq_wait_event)
-	    KeSetEvent(vci->vci_ioreq_wait_event, 0, FALSE);
+	if (vci->vci_shared.vci_wait_event)
+	    KeSetEvent(vci->vci_shared.vci_wait_event, 0, FALSE);
 
 	KeSetEvent(&vci->vci_runnable, 0, FALSE);
 
@@ -1757,9 +1761,10 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
 	    break;
         switch (vci->vci_shared.vci_run_mode) {
         case VCI_RUN_MODE_PROCESS_IOREQ:
-            EVENT_WAIT(vci->vci_ioreq_wait_event, 1, 0);
+            EVENT_WAIT(vci->vci_shared.vci_wait_event, 1, 0);
             /* since timeout == 0, EVENT_WAIT only continues here on SUCCESS */
-            KeClearEvent(vci->vci_ioreq_wait_event);
+            KeClearEvent(vci->vci_shared.vci_wait_event);
+            vci->vci_shared.vci_wait_event = NULL;
             break;
         case VCI_RUN_MODE_PREEMPT:
             /* nothing */
@@ -1896,7 +1901,6 @@ uxen_op_set_event_channel(struct uxen_event_channel_desc *uecd,
     NTSTATUS status;
     struct host_event_channel *hec = NULL;
     struct evtchn_bind_host bind;
-    struct vm_vcpu_info *vci;
     int ev;
     int ret = ENOENT;
 
@@ -1955,10 +1959,8 @@ uxen_op_set_event_channel(struct uxen_event_channel_desc *uecd,
 	goto out;
     }
 
-    vci = &vmi->vmi_vcpus[uecd->uecd_vcpu];
-    if (hec->completed && !vci->vci_ioreq_wait_event)
-        /* 1st event is default */
-        vci->vci_ioreq_wait_event = hec->completed;
+    if (hec->completed)
+        KeClearEvent(hec->completed);
 
     hec->next = vmi->vmi_host_event_channels;
     vmi->vmi_host_event_channels = hec;

@@ -834,6 +834,25 @@ uxen_hypercall(struct uxen_hypercall_desc *uhd, int snoop_mode,
                   privileged);
         uxen_exec_dom0_end();
 
+        if (ret == -ECONTINUATION && vmis && vmis->vmi_wait_event) {
+            struct user_notification_event *completed =
+                (struct user_notification_event *)vmis->vmi_wait_event;
+
+            /* dprintk("%s: continuation\n", __FUNCTION__); */
+            ret = fast_event_wait(&completed->fast_ev,
+                                  EVENT_INTERRUPTIBLE, EVENT_NO_TIMEOUT);
+            if (ret) {
+                fail_msg("%s: %d: wait interrupted", __FUNCTION__,
+                         vmis->vmi_domid);
+                ret = -EINTR;
+                break;
+            }
+            fast_event_clear(&completed->fast_ev);
+            vmis->vmi_wait_event = NULL;
+            /* dprintk("%s: continuation signaled\n", __FUNCTION__); */
+            continue;
+        }
+
         if (ret == -ECONTINUATION)
             continue;
 

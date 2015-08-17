@@ -50,6 +50,25 @@ uxen_hypercall(struct uxen_hypercall_desc *uhd, int snoop_mode,
                   privileged);
         uxen_exec_dom0_end();
 
+        if (ret == -ECONTINUATION && vmis && vmis->vmi_wait_event) {
+            KEVENT *completed = (KEVENT *)vmis->vmi_wait_event;
+            NTSTATUS status;
+
+            /* dprintk("%s: continuation\n", __FUNCTION__); */
+            status = KeWaitForSingleObject(completed, Executive, UserMode,
+                                           FALSE, NULL);
+            if (status != STATUS_SUCCESS) {
+                fail_msg("%s: %d: wait interrupted: 0x%08X", __FUNCTION__,
+                         vmis->vmi_domid, status);
+                ret = -EINTR;
+                break;
+            }
+            KeClearEvent(completed);
+            vmis->vmi_wait_event = NULL;
+            /* dprintk("%s: continuation signaled\n", __FUNCTION__); */
+            continue;
+        }
+
         if (ret == -ECONTINUATION)
             continue;
 

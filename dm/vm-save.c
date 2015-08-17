@@ -26,6 +26,7 @@
 #include "control.h"
 #include "dm.h"
 #include "dmpdev.h"
+#include "dmreq.h"
 #include "filebuf.h"
 #include "introspection_info.h"
 #include "monitor.h"
@@ -143,7 +144,7 @@ struct xc_save_hvm_generic_chunk {
 
 struct xc_save_hvm_magic_pfns {
     int32_t marker;
-    uint64_t magic_pfns[3];
+    uint64_t magic_pfns[5];
 };
 
 struct xc_save_hvm_context {
@@ -232,6 +233,8 @@ struct page_offset_info {
 };
 #define PAGE_OFFSET_INDEX_PFN_OFF_COMPRESSED (1ULL << 63)
 #define PAGE_OFFSET_INDEX_PFN_OFF_MASK (~(PAGE_OFFSET_INDEX_PFN_OFF_COMPRESSED))
+
+static struct page_offset_info dm_lazy_load_info = { };
 
 #define uxenvm_read_struct_size(s) (sizeof(*(s)) - sizeof(marker))
 #define uxenvm_read_struct(f, s)                                        \
@@ -373,9 +376,15 @@ uxenvm_savevm_write_info(struct filebuf *f, uint8_t *dm_state_buf,
 		     &s_hvm_magic_pfns.magic_pfns[1]);
     xc_get_hvm_param(xc_handle, vm_id, HVM_PARAM_SHARED_INFO_PFN,
 		     &s_hvm_magic_pfns.magic_pfns[2]);
+    xc_get_hvm_param(xc_handle, vm_id, HVM_PARAM_DMREQ_PFN,
+                     &s_hvm_magic_pfns.magic_pfns[3]);
+    xc_get_hvm_param(xc_handle, vm_id, HVM_PARAM_DMREQ_VCPU_PFN,
+                     &s_hvm_magic_pfns.magic_pfns[4]);
     APRINTF("ioreq pfn %"PRIx64"-%"PRIx64
-            " shared info pfn %"PRIx64, s_hvm_magic_pfns.magic_pfns[0],
-            s_hvm_magic_pfns.magic_pfns[1], s_hvm_magic_pfns.magic_pfns[2]);
+            " shared info pfn %"PRIx64" dmreq pfn %"PRIx64"/%"PRIx64,
+            s_hvm_magic_pfns.magic_pfns[0], s_hvm_magic_pfns.magic_pfns[1],
+            s_hvm_magic_pfns.magic_pfns[2], s_hvm_magic_pfns.magic_pfns[3],
+            s_hvm_magic_pfns.magic_pfns[4]);
     filebuf_write(f, &s_hvm_magic_pfns, sizeof(s_hvm_magic_pfns));
 
     hvm_buf_size = xc_domain_hvm_getcontext(xc_handle, vm_id, 0, 0);
@@ -1058,7 +1067,7 @@ static int
 uxenvm_load_readbatch(struct filebuf *f, int batch, xen_pfn_t *pfn_type,
                       int *pfn_info, int *pfn_err, int decompress,
                       struct decompress_ctx *dc, int single_page,
-                      int populate_compressed, char **err_msg)
+                      int do_lazy_load, int populate_compressed, char **err_msg)
 {
     uint8_t *mem = NULL;
     int j;
@@ -1075,8 +1084,13 @@ uxenvm_load_readbatch(struct filebuf *f, int batch, xen_pfn_t *pfn_type,
                      ret, err_msg, out);
 
     /* XXX legacy -- new save files have a clean pfn_info array */
-    for (j = 0; j < batch; j++)
+    for (j = 0; j < batch; j++) {
 	pfn_type[j] = pfn_info[j] & ~XEN_DOMCTL_PFINFO_LTAB_MASK;
+        if (!do_lazy_load)
+            continue;
+        if (pfn_type[j] >= PCI_HOLE_START_PFN && pfn_type[j] < PCI_HOLE_END_PFN)
+            do_lazy_load = 0;
+    }
 
     if (decompress) {
         uxenvm_load_read(f, &compress_size, sizeof(compress_size),
@@ -1085,14 +1099,28 @@ uxenvm_load_readbatch(struct filebuf *f, int batch, xen_pfn_t *pfn_type,
             decompress = 0;
     }
 
-    if (!decompress) {
+    if (!decompress || do_lazy_load) {
         LOAD_DPRINTF("  populate %08"PRIx64":%08"PRIx64" = %03x pages",
                      pfn_type[0], pfn_type[batch - 1] + 1, batch);
         ret = xc_domain_populate_physmap_exact(
-            xc_handle, vm_id, batch, 0, XENMEMF_populate_on_demand,
+            xc_handle, vm_id, batch, 0, XENMEMF_populate_on_demand |
+            (do_lazy_load ? XENMEMF_populate_on_demand_dmreq : 0),
             &pfn_type[0]);
         if (ret) {
             asprintf(err_msg, "xc_domain_populate_physmap_exact failed");
+            goto out;
+        }
+
+        if (do_lazy_load) {
+            uint32_t skip;
+            if (decompress)
+                skip = compress_size;
+            else
+                skip = batch << PAGE_SHIFT;
+            ret = filebuf_seek(f, skip, FILEBUF_SEEK_CUR) != -1 ? 0 : -EIO;
+            if (ret < 0)
+                asprintf(err_msg, "page %"PRIx64":%"PRIx64" skip failed",
+                         pfn_type[0], pfn_type[batch - 1] + 1);
             goto out;
         }
 
@@ -1236,7 +1264,7 @@ uxenvm_load_alloc(xen_pfn_t **pfn_type, int **pfn_err, int **pfn_info,
 static int
 uxenvm_load_batch(struct filebuf *f, int32_t marker, xen_pfn_t *pfn_type,
                   int *pfn_err, int *pfn_info, struct decompress_ctx *dc,
-                  int populate_compressed, char **err_msg)
+                  int do_lazy_load, int populate_compressed, char **err_msg)
 {
     DECLARE_HYPERCALL_BUFFER(uint8_t, pp_buffer);
     int decompress;
@@ -1320,7 +1348,7 @@ uxenvm_load_batch(struct filebuf *f, int32_t marker, xen_pfn_t *pfn_type,
         ((uxenvm_load_progress - marker) * 10 / (vm_mem_mb << 8UL)))
         APRINTF("memory load %d pages", uxenvm_load_progress);
     ret = uxenvm_load_readbatch(f, marker, pfn_type, pfn_info, pfn_err,
-                                decompress, dc, single_page,
+                                decompress, dc, single_page, do_lazy_load,
                                 populate_compressed, err_msg);
   out:
     return ret;
@@ -1397,6 +1425,9 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
     int *pfn_err = NULL, *pfn_info = NULL;
     struct decompress_ctx dc = { 0 };
     int populate_compressed = (restore_mode == VM_RESTORE_TEMPLATE);
+    int do_lazy_load = 0;
+    int load_lazy_load_info = do_lazy_load;
+    struct page_offset_info *lli = &dm_lazy_load_info;
     int32_t marker;
     int ret;
     int size;
@@ -1458,10 +1489,13 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
 	case XC_SAVE_ID_HVM_MAGIC_PFNS:
 	    uxenvm_load_read_struct(f, s_hvm_magic_pfns, marker, ret, err_msg,
 				    out);
-	    APRINTF("ioreq pfn %"PRIx64"-%"PRIx64" shared info pfn %"PRIx64,
+            APRINTF("ioreq pfn %"PRIx64"-%"PRIx64" shared info pfn %"PRIx64
+                    " dmreq pfn %"PRIx64"/%"PRIx64,
                     s_hvm_magic_pfns.magic_pfns[0],
-		    s_hvm_magic_pfns.magic_pfns[1],
-		    s_hvm_magic_pfns.magic_pfns[2]);
+                    s_hvm_magic_pfns.magic_pfns[1],
+                    s_hvm_magic_pfns.magic_pfns[2],
+                    s_hvm_magic_pfns.magic_pfns[3],
+                    s_hvm_magic_pfns.magic_pfns[4]);
 	    break;
 	case XC_SAVE_ID_HVM_CONTEXT:
 	    uxenvm_load_read_struct(f, s_hvm_context, marker, ret, err_msg,
@@ -1542,6 +1576,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
                              ret, err_msg, out);
             vm_template_file[s_vm_template_file.size] = 0;
             APRINTF("vm template file: %s", vm_template_file);
+            do_lazy_load = 0;
             break;
         case XC_SAVE_ID_PAGE_OFFSETS:
             uxenvm_load_read_struct(f, s_vm_page_offsets, marker, ret,
@@ -1600,7 +1635,8 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
 	default:
             uxenvm_check_restore_clone(restore_mode);
             ret = uxenvm_load_batch(f, marker, pfn_type, pfn_err, pfn_info,
-                                    &dc, populate_compressed, err_msg);
+                                    &dc, do_lazy_load, populate_compressed,
+                                    err_msg);
 	    if (ret)
 		goto out;
 	    break;
@@ -1643,6 +1679,66 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
                               s_mapcache_params.end_high_pfn);
     else
         mapcache_init(vm_mem_mb);
+
+    if (load_lazy_load_info) {
+        uint64_t page_offsets_pos = 0;
+
+        if (vm_template_file) {
+            lli->fb = filebuf_open(vm_template_file, "rb");
+            if (!lli->fb) {
+                ret = -errno;
+                asprintf(err_msg,
+                         "uxenvm_open(vm_template_file = %s) failed",
+                         vm_template_file);
+                goto out;
+            }
+        } else
+            lli->fb = filebuf_openref(f);
+
+        filebuf_buffer_max(lli->fb, PAGE_SIZE);
+        filebuf_seek(lli->fb, 0, FILEBUF_SEEK_END);
+        while (1) {
+            struct xc_save_index index;
+
+            filebuf_seek(lli->fb, -(off_t)sizeof(index), FILEBUF_SEEK_CUR);
+            uxenvm_load_read(lli->fb, &index, sizeof(index), ret, err_msg, out);
+            if (!index.marker)
+                break;
+            switch (index.marker) {
+            case XC_SAVE_ID_PAGE_OFFSETS:
+                page_offsets_pos = index.offset;
+                break;
+            }
+            filebuf_seek(lli->fb, -(off_t)sizeof(index), FILEBUF_SEEK_CUR);
+        }
+
+        if (page_offsets_pos) {
+            filebuf_seek(lli->fb, page_offsets_pos, FILEBUF_SEEK_SET);
+            uxenvm_load_read(lli->fb, &s_vm_page_offsets.marker,
+                             sizeof(s_vm_page_offsets.marker), ret, err_msg,
+                             out);
+            if (s_vm_page_offsets.marker != XC_SAVE_ID_PAGE_OFFSETS) {
+                asprintf(err_msg, "page_offsets index corrupt, no page offsets "
+                         "index at offset %"PRId64, page_offsets_pos);
+                ret = -EINVAL;
+                goto out;
+            }
+            uxenvm_load_read_struct(lli->fb, s_vm_page_offsets,
+                                    XC_SAVE_ID_PAGE_OFFSETS, ret, err_msg, out);
+            lli->max_gpfn = s_vm_page_offsets.pfn_off_nr;
+            if (lli->max_gpfn > PCI_HOLE_START_PFN)
+                lli->max_gpfn += PCI_HOLE_END_PFN - PCI_HOLE_START_PFN;
+            page_offsets_pos += sizeof(s_vm_page_offsets);
+            APRINTF("lazy load index: pos %"PRId64" size %"PRIdSIZE
+                    " nr off %d", page_offsets_pos,
+                    s_vm_page_offsets.pfn_off_nr * sizeof(lli->pfn_off[0]),
+                    s_vm_page_offsets.pfn_off_nr);
+            lli->pfn_off = (uint64_t *)filebuf_mmap(
+                lli->fb, page_offsets_pos,
+                s_vm_page_offsets.pfn_off_nr * sizeof(lli->pfn_off[0]));
+        }
+    }
+
     if (s_tsc_info.marker == XC_SAVE_ID_TSC_INFO)
 	xc_domain_set_tsc_info(xc_handle, vm_id, s_tsc_info.tsc_mode,
 			       s_tsc_info.nsec, s_tsc_info.khz,
@@ -1684,6 +1780,22 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
                 goto out;
             }
         }
+        xc_clear_domain_page(xc_handle, vm_id, s_hvm_magic_pfns.magic_pfns[3]);
+        ret = xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_DMREQ_VCPU_PFN,
+                               s_hvm_magic_pfns.magic_pfns[4]);
+        if (ret < 0) {
+            asprintf(err_msg, "set_hvm_param(HVM_PARAM_DMREQ_VCPU_PFN) = %"
+                     PRIx64" failed", s_hvm_magic_pfns.magic_pfns[4]);
+            goto out;
+        }
+        ret = xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_DMREQ_PFN,
+                               s_hvm_magic_pfns.magic_pfns[3]);
+        if (ret < 0) {
+            asprintf(err_msg, "set_hvm_param(HVM_PARAM_DMREQ_PFN) = %"PRIx64
+                     " failed", s_hvm_magic_pfns.magic_pfns[3]);
+            goto out;
+        }
+        dmreq_init();
     }
     if (s_hvm_context.marker == XC_SAVE_ID_HVM_CONTEXT)
 	xc_domain_hvm_setcontext(xc_handle, vm_id, hvm_buf, s_hvm_context.size);
@@ -1742,6 +1854,101 @@ uxenvm_loadvm_execute_finish(char **err_msg)
 	dm_state_load_buf = NULL;
 	dm_state_load_size = 0;
     }
+    return ret;
+}
+
+int
+vm_lazy_load_page(uint32_t gpfn, uint8_t *va, int compressed)
+{
+    int ret;
+    uint64_t offset;
+    static int lazy_compressed = 0;
+
+    if (gpfn >= PCI_HOLE_START_PFN && gpfn < PCI_HOLE_END_PFN)
+        errx(1, "%s: gpfn %x in pci hole", __FUNCTION__, gpfn);
+    if (gpfn >= dm_lazy_load_info.max_gpfn)
+        errx(1, "%s: gpfn %x too large, max_gpfn %x", __FUNCTION__,
+             gpfn, dm_lazy_load_info.max_gpfn);
+
+    offset = dm_lazy_load_info.pfn_off[skip_pci_hole(gpfn)];
+
+    /* dprintf("%s: gpfn %x at file offset %"PRIu64" to %p\n", __FUNCTION__, */
+    /*         gpfn, offset & PAGE_OFFSET_INDEX_PFN_OFF_MASK, va); */
+
+    filebuf_seek(dm_lazy_load_info.fb, offset & PAGE_OFFSET_INDEX_PFN_OFF_MASK,
+                 FILEBUF_SEEK_SET);
+
+    if (offset & PAGE_OFFSET_INDEX_PFN_OFF_COMPRESSED) {
+        cs16_t cs1;
+        ret = filebuf_read(dm_lazy_load_info.fb, &cs1, sizeof(cs1));
+        if (ret != sizeof(cs1)) {
+            ret = -errno;
+            warn("%s: filebuf_read(lazy load page) gpfn %x offset %"PRIu64
+                 " read page size failed", __FUNCTION__, gpfn,
+                 offset & PAGE_OFFSET_INDEX_PFN_OFF_MASK);
+            goto out;
+        }
+        if (cs1 > PAGE_SIZE) {
+            warnx("%s: filebuf_read(lazy load page) gpfn %x offset %"PRIu64
+                  " invalid size: %d", __FUNCTION__, gpfn,
+                  offset & PAGE_OFFSET_INDEX_PFN_OFF_MASK, cs1);
+            ret = -EINVAL;
+            goto out;
+        }
+        if (cs1 == PAGE_SIZE) {
+            /* this codepath should not be taken, unless the save file
+             * doesn't have the optimisation to not set
+             * LAZY_LOAD_PFN_OFF_COMPRESSED for compressed in vain pages */
+            ret = filebuf_read(dm_lazy_load_info.fb, va, PAGE_SIZE);
+            if (ret != PAGE_SIZE) {
+                ret = -errno;
+                warn("%s: filebuf_read(lazy load page) gpfn %x offset %"PRIu64
+                     " read %ld failed", __FUNCTION__, gpfn,
+                     offset & PAGE_OFFSET_INDEX_PFN_OFF_MASK, PAGE_SIZE);
+            }
+            goto out;
+        }
+        if (lazy_compressed && compressed && cs1 <= (PAGE_SIZE - 256)) {
+            /* load compressed data, decompress in uxen */
+            ret = filebuf_read(dm_lazy_load_info.fb, va, cs1);
+            if (ret != cs1) {
+                ret = -errno;
+                warn("%s: filebuf_read(lazy load page) gpfn %x offset %"PRIu64
+                     " read %d failed", __FUNCTION__, gpfn,
+                     offset & PAGE_OFFSET_INDEX_PFN_OFF_MASK, cs1);
+                goto out;
+            }
+        } else {
+            char page[PAGE_SIZE];
+            ret = filebuf_read(dm_lazy_load_info.fb, &page[0], cs1);
+            if (ret != cs1) {
+                ret = -errno;
+                warn("%s: filebuf_read(lazy load page) gpfn %x offset %"PRIu64
+                     " read %d failed", __FUNCTION__, gpfn,
+                     offset & PAGE_OFFSET_INDEX_PFN_OFF_MASK, cs1);
+                goto out;
+            }
+            ret = LZ4_decompress_fast(&page[0], (char *)va, PAGE_SIZE);
+            if (ret != cs1) {
+                ret = -EINVAL;
+                warnx("%s: decompress gpfn %x offset %"PRIu64" failed",
+                      __FUNCTION__, gpfn,
+                      offset & PAGE_OFFSET_INDEX_PFN_OFF_MASK);
+                goto out;
+            }
+            ret = PAGE_SIZE;
+        }
+    } else {
+        ret = filebuf_read(dm_lazy_load_info.fb, va, PAGE_SIZE);
+        if (ret != PAGE_SIZE) {
+            ret = -errno;
+            warn("%s: filebuf_read(lazy load page) gpfn %x offset %"PRIu64
+                 " failed", __FUNCTION__, gpfn,
+                 offset & PAGE_OFFSET_INDEX_PFN_OFF_MASK);
+        }
+    }
+
+  out:
     return ret;
 }
 
@@ -1916,6 +2123,7 @@ vm_restore_memory(void)
     int *pfn_err = NULL, *pfn_info = NULL;
     struct decompress_ctx dc = { };
     int populate_compressed = 0;
+    int do_lazy_load = 0;
     int32_t marker;
     struct xc_save_generic s_generic;
     char *err_msg = NULL;
@@ -1963,7 +2171,8 @@ vm_restore_memory(void)
             break;
         default:
             ret = uxenvm_load_batch(f, marker, pfn_type, pfn_err, pfn_info,
-                                    &dc, populate_compressed, &err_msg);
+                                    &dc, do_lazy_load, populate_compressed,
+                                    &err_msg);
             if (ret)
                 goto out;
 #ifdef VERBOSE

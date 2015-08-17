@@ -22,10 +22,22 @@
 #define __ASM_X86_HVM_SUPPORT_H__
 
 #include <xen/types.h>
+#include <public/hvm/dmreq.h>
 #include <public/hvm/ioreq.h>
 #include <xen/sched.h>
 #include <xen/hvm/save.h>
 #include <asm/processor.h>
+
+static inline struct dmreq *
+get_dmreq(struct vcpu *v)
+{
+    struct domain *d = v->domain;
+
+    ASSERT((v == current) || spin_is_locked(&d->arch.hvm_domain.dmreq.lock));
+    ASSERT(d->arch.hvm_domain.dmreq.va != NULL);
+
+    return &d->arch.hvm_domain.dmreq.va->dmreq_vcpu[v->vcpu_id];
+}
 
 static inline ioreq_t *get_ioreq(struct vcpu *v)
 {

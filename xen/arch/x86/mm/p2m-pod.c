@@ -1144,7 +1144,7 @@ check_decompress_buffer(void)
     return 1;
 }
 
-static void
+static mfn_t
 p2m_pod_add_compressed_page(struct p2m_domain *p2m, unsigned long gpfn,
                             uint8_t *c_data, uint16_t c_size,
                             struct page_info *new_page)
@@ -1238,6 +1238,8 @@ p2m_pod_add_compressed_page(struct p2m_domain *p2m, unsigned long gpfn,
         PAGE_SIZE - ((sizeof(struct page_data_info) + c_size +
                       ((1 << PAGE_STORE_DATA_ALIGN) - 1)) &
                      ~((1 << PAGE_STORE_DATA_ALIGN) - 1)));
+
+    return mfn;
 }
 
 #ifndef NDEBUG
@@ -1453,6 +1455,8 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
     return ret;
 }
 
+int dmreq_lazy_template = 0;
+
 mfn_t
 p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                         unsigned int order, p2m_query_t q, void *entry)
@@ -1638,6 +1642,187 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             goto out;
         }
         smfn_from_clone = 0;
+    }
+
+    if (mfn_retry(smfn)) {
+        struct dmreq *dmreq;
+        void *dmreq_vcpu_page = NULL;
+
+        if (current->target_vmis)
+            dmreq = current->target_vmis->vmi_dmreq;
+        else
+            dmreq = get_dmreq(current);
+        if (!dmreq || dmreq_gpfn_error(dmreq->dmreq_gpfn_loaded)) {
+            domain_crash(d);
+            goto out_fail;
+        }
+
+        if (gfn_aligned != dmreq->dmreq_gpfn ||
+            !dmreq_gpfn_set(dmreq->dmreq_gpfn_loaded) ||
+            dmreq->dmreq_gpfn != dmreq->dmreq_gpfn_loaded) {
+            if (gfn_aligned == dmreq->dmreq_gpfn) {
+                gdprintk(
+                    XENLOG_DEBUG, "%s: vm%u.%s%u dmreq gpfn %lx %s "
+                    "(dmreq_gpfn %x dmreq_gpfn_loaded %x)\n",
+                    __FUNCTION__,
+                    current->target_vmis ? current->target_vmis->vmi_domid :
+                    current->domain->domain_id,
+                    current->target_vmis ? "dom" : "",
+                    current->target_vmis ? 0 : current->vcpu_id, gfn_aligned,
+                    !dmreq_gpfn_set(dmreq->dmreq_gpfn_loaded) ? "spurious" :
+                    "mismatch", dmreq->dmreq_gpfn, dmreq->dmreq_gpfn_loaded);
+                /* DEBUG(); */
+            }
+
+            dmreq->dmreq_gpfn_loaded = DMREQ_GPFN_UNUSED;
+            dmreq->dmreq_gpfn = gfn_aligned;
+            dmreq->dmreq_gpfn_access =
+                (q != p2m_guest_r && q != p2m_alloc_r) ?
+                DMREQ_GPFN_ACCESS_WRITE : DMREQ_GPFN_ACCESS_READ;
+
+            if (current->target_vmis) {
+                ((struct domain *)current->target_vmis->vmi_domain)
+                    ->arch.hvm_domain.dmreq_query = q;
+                hvm_send_dom0_dmreq(current->target_vmis->vmi_domain);
+            } else {
+                current->arch.hvm_vcpu.dmreq_gpfn = gfn_aligned;
+                current->arch.hvm_vcpu.dmreq_query = q;
+                hvm_send_dmreq(current);
+            }
+            p2m_unlock(p2m);
+            return _mfn(DMREQ_MFN);
+        }
+
+        ASSERT(dmreq->dmreq_gpfn == dmreq->dmreq_gpfn_loaded);
+        dmreq->dmreq_gpfn = dmreq->dmreq_gpfn_loaded = DMREQ_GPFN_UNUSED;
+        if (current->target_vmis)
+            dmreq_vcpu_page = current->target_vmis->vmi_dmreq_vcpu_page_va;
+        else
+            dmreq_vcpu_page = current->arch.hvm_vcpu.dmreq_vcpu_page_va;
+
+        if (!dmreq_lazy_template || !d->clone_of) {
+            p = alloc_domheap_page(d, PAGE_ORDER_4K);
+            if (!p)
+                goto out_of_memory;
+            mfn = page_to_mfn(p);
+
+            target = map_domain_page_direct(mfn_x(mfn));
+            if (dmreq->dmreq_gpfn_size > PAGE_SIZE) {
+                domain_crash(d);
+                goto out_fail;
+            }
+            if (dmreq->dmreq_gpfn_size != PAGE_SIZE) {
+                int uc_size;
+                uc_size = LZ4_decompress_safe(dmreq_vcpu_page, target,
+                                              dmreq->dmreq_gpfn_size,
+                                              PAGE_SIZE);
+                if (uc_size != PAGE_SIZE) {
+                    unmap_domain_page_direct(target);
+                    domain_crash(d);
+                    goto out_fail;
+                }
+                perfc_incr(pc18);
+            } else
+                memcpy(target, dmreq_vcpu_page, PAGE_SIZE);
+            perfc_incr(pc16);
+            check_immutable(q, d, gfn_aligned);
+            unmap_domain_page_direct(target);
+            perfc_incr(dmreq_populated);
+
+            goto out_reassigned;
+        } else {
+            struct domain *tmpl = d->clone_of;
+            struct p2m_domain *pp2m = p2m_get_hostp2m(tmpl);
+            p2m_query_t orig_q;
+
+            if (current->target_vmis)
+                orig_q = ((struct domain *)current->target_vmis->vmi_domain)
+                    ->arch.hvm_domain.dmreq_query;
+            else
+                orig_q = current->arch.hvm_vcpu.dmreq_query;
+
+            p = alloc_domheap_page(tmpl, PAGE_ORDER_4K);
+            if (!p)
+                goto out_of_memory;
+            mfn = page_to_mfn(p);
+
+            p2m_lock(pp2m);
+            smfn = pp2m->get_entry(pp2m, gfn_aligned, &t, &a, p2m_query, NULL);
+            if (mfn_retry(smfn)) {
+                if (dmreq->dmreq_gpfn_size > PAGE_SIZE) {
+                    p2m_unlock(pp2m);
+                    free_domheap_page(p);
+                    domain_crash(d);
+                    goto out_fail;
+                }
+
+                /* compressed + write -> add compressed to template,
+                   then decompress into VM via cow below */
+                if (dmreq->dmreq_gpfn_size != PAGE_SIZE &&
+                    (orig_q != p2m_guest_r && orig_q != p2m_alloc_r)) {
+                    /* pp2m unlocked on return */
+                    smfn = p2m_pod_add_compressed_page(
+                        pp2m, gfn_aligned, dmreq_vcpu_page,
+                        dmreq->dmreq_gpfn_size, p);
+
+                    update_host_memory_saved(-PAGE_SIZE);
+                } else {
+                    /* compressed + read -> decompress */
+                    if (dmreq->dmreq_gpfn_size != PAGE_SIZE) {
+                        int uc_size;
+
+                        ASSERT(orig_q == p2m_guest_r || orig_q == p2m_alloc_r);
+                        target = map_domain_page_direct(mfn_x(mfn));
+                        uc_size = LZ4_decompress_safe(dmreq_vcpu_page, target,
+                                                      dmreq->dmreq_gpfn_size,
+                                                      PAGE_SIZE);
+                        if (uc_size != PAGE_SIZE) {
+                            unmap_domain_page_direct(target);
+                            p2m_unlock(pp2m);
+                            domain_crash(d);
+                            goto out_fail;
+                        }
+                    } else {
+                        /* uncompressed */
+                        target = map_domain_page_direct(mfn_x(mfn));
+                        memcpy(target, dmreq_vcpu_page, PAGE_SIZE);
+                    }
+
+                    /* add uncompressed or decompressed to template */
+                    set_p2m_entry(pp2m, gfn_aligned, mfn, 0,
+                                  p2m_populate_on_demand,
+                                  pp2m->default_access);
+                    atomic_dec(&tmpl->retry_pages);
+                    atomic_inc(&tmpl->tmpl_shared_pages);
+
+                    unmap_domain_page_direct(target);
+                    update_host_memory_saved(-PAGE_SIZE);
+
+                    p2m_pod_stat_update(tmpl);
+                    p2m_unlock(pp2m);
+
+                    /* read -> share template with VM */
+                    if (orig_q == p2m_guest_r || orig_q == p2m_alloc_r) {
+                        get_page_fast(p, tmpl);
+                        set_p2m_entry(p2m, gfn_aligned, mfn, 0,
+                                      p2m_populate_on_demand,
+                                      p2m->default_access);
+                        if (smfn_from_clone)
+                            atomic_dec(&d->retry_pages);
+                        atomic_inc(&d->tmpl_shared_pages);
+                        perfc_incr(dmreq_populated_template_shared);
+                        goto out;
+                    }
+
+                    /* write -> cow into VM */
+                    smfn = mfn;
+                }
+
+                perfc_incr(dmreq_populated_template);
+            } else
+                p2m_unlock(pp2m);
+            smfn_from_clone = 0;
+        }
     }
 
     if (mfn_zero_page(mfn_x(smfn))) {
@@ -2245,9 +2430,10 @@ guest_physmap_mark_pod_locked(struct domain *d, unsigned long gfn,
                 pod_count++;
             else if (mfn_zero_page(mfn_x(omfn)))
                 pod_zero_count++;
-            else if (mfn_retry(omfn))
+            else if (mfn_retry(omfn)) {
                 pod_retry_count++;
-            else
+                update_host_memory_saved(-PAGE_SHIFT);
+            } else
                 pod_tmpl_count++;
         }
     }
@@ -2268,9 +2454,10 @@ guest_physmap_mark_pod_locked(struct domain *d, unsigned long gfn,
     atomic_sub(pod_count + pod_zero_count + pod_tmpl_count + pod_retry_count,
                &d->pod_pages);
     if (!order) {
-        if (mfn_retry(mfn))
+        if (mfn_retry(mfn)) {
             atomic_add(1 << order, &d->retry_pages);
-        else
+            update_host_memory_saved((1 << order) << PAGE_SHIFT);
+        } else
             atomic_add(1 << order, &d->zero_shared_pages);
     }
     atomic_sub(pod_zero_count, &d->zero_shared_pages);

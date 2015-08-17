@@ -196,6 +196,9 @@
 
 #define HVM_PARAM_LOG_RATELIMIT_GUEST_MS 38
 
-#define HVM_NR_PARAMS          39
+#define HVM_PARAM_DMREQ_PFN    39
+#define HVM_PARAM_DMREQ_VCPU_PFN 40
+
+#define HVM_NR_PARAMS          41
 
 #endif /* __XEN_PUBLIC_HVM_PARAMS_H__ */

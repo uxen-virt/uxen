@@ -73,8 +73,11 @@
 #define SPECIALPAGE_CONSOLE  X
 #endif  /* QEMU_UXEN */
 
+#define SPECIALPAGE_DMREQ      (SPECIALPAGE_IDENT_PT + 1)
+#define SPECIALPAGE_DMREQ_VCPU (SPECIALPAGE_DMREQ + 1 + nr_vcpus + 1)
+
 /* reverse first/last since special_pfn's indexes allocate in reverse order */
-#define SPECIALPAGE_IOREQ_LAST 1
+#define SPECIALPAGE_IOREQ_LAST (SPECIALPAGE_DMREQ_VCPU + 1)
 #define SPECIALPAGE_IOREQ_FIRST                                         \
     (SPECIALPAGE_IOREQ_LAST + (nr_ioreq_servers * NR_IO_PAGES_PER_SERVER) + 1)
 
@@ -652,6 +655,11 @@ static int setup_guest(xc_interface *xch,
         *(uint32_t *)&page0[1] = entry_eip - 5;
         xc_munmap(xch, dom, page0, PAGE_SIZE);
     }
+
+    xc_set_hvm_param(xch, dom, HVM_PARAM_DMREQ_PFN,
+                     special_pfn(SPECIALPAGE_DMREQ));
+    xc_set_hvm_param(xch, dom, HVM_PARAM_DMREQ_VCPU_PFN,
+                     special_pfn(SPECIALPAGE_DMREQ_VCPU));
 
     if (hmi)
         free(hmi);

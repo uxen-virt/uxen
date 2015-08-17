@@ -58,6 +58,7 @@ hostsched_setup_vm(struct domain *d, struct vm_info_shared *vmi)
         return -EBUSY;
 
     d->vm_info_shared = vmi;
+    vmi->vmi_domain = d;
     return 0;
 }
 
@@ -143,12 +144,18 @@ void
 hostsched_signal_event(struct vcpu *v, void *opaque)
 {
     struct vm_vcpu_info_shared *vci = v->vm_vcpu_info_shared;
+    int on_vcpu_thread =
+        (current->domain->domain_id == v->domain->domain_id);
 
-    if (vci)
-        UI_HOST_CALL(ui_signal_event, vci, opaque);
-    else
+    if (unlikely(!vci)) {
         printk("hostsched_signal_event vm%u.%u no vm_info\n",
                v->domain->domain_id, v->vcpu_id);
+        return;
+    }
+
+    UI_HOST_CALL(ui_signal_event, vci, opaque,
+                 on_vcpu_thread ? &vci->vci_wait_event :
+                 &v->domain->vm_info_shared->vmi_wait_event);
 }
 
 void

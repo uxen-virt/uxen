@@ -96,6 +96,8 @@ int assign_pages(
 #define  MEMF_no_refcount (1U<<_MEMF_no_refcount)
 #define _MEMF_populate_on_demand 1
 #define  MEMF_populate_on_demand (1U<<_MEMF_populate_on_demand)
+#define _MEMF_populate_on_demand_dmreq 2
+#define  MEMF_populate_on_demand_dmreq (1U<<_MEMF_populate_on_demand_dmreq)
 #ifndef __UXEN__
 #define _MEMF_tmem        2
 #define  MEMF_tmem        (1U<<_MEMF_tmem)

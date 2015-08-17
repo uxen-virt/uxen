@@ -84,4 +84,6 @@ void notify_via_xen_event_channel(struct domain *ld, int lport);
         mb(); /* set blocked status /then/ caller does his work */      \
     } while ( 0 )
 
+void *xen_event_channel_host_opaque(struct domain *ld, int lport);
+
 #endif /* __XEN_EVENT_H__ */

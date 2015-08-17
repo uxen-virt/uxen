@@ -36,6 +36,13 @@
 #include <public/hvm/params.h>
 #include <public/hvm/save.h>
 
+struct dmreq_page;
+struct hvm_dmreq_page {
+    spinlock_t lock;
+    struct page_info *page;
+    struct dmreq_page *va;
+};
+
 struct hvm_ioreq_page {
     spinlock_t lock;
     struct page_info *page;
@@ -65,6 +72,13 @@ struct hvm_domain {
     uint32_t               nr_ioreq_server;
     spinlock_t             ioreq_server_lock;
 
+    struct hvm_dmreq_page  dmreq;
+    int                    dmreq_port;
+    struct page_info      *dmreq_vcpu_page;
+    void                  *dmreq_vcpu_page_va;
+    spinlock_t             dmreq_vcpu_page_lock;
+    uint32_t               dmreq_query;
+
     struct pl_time         pl_time;
 
     struct hvm_io_handler *io_handler;
@@ -82,8 +96,10 @@ struct hvm_domain {
     /* VCPU which is current target for 8259 interrupts. */
     struct vcpu           *i8259_target;
 
+#ifndef __UXEN__
     /* emulated irq to pirq */
     struct radix_tree_root emuirq_pirq;
+#endif  /* __UXEN__ */
 
     /* hvm_print_line() logging. */
 #define HVM_PBUF_SIZE 80

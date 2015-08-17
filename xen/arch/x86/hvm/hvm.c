@@ -82,6 +82,7 @@
 #include <asm/mtrr.h>
 #include <asm/apic.h>
 #include <public/sched.h>
+#include <public/hvm/dmreq.h>
 #include <public/hvm/ioreq.h>
 #include <public/version.h>
 #include <public/memory.h>
@@ -363,6 +364,14 @@ void hvm_do_resume(struct vcpu *v)
     check_wakeup_from_wait();
 #endif  /* __UXEN__ */
 
+    if (dmreq_gpfn_set(v->arch.hvm_vcpu.dmreq_gpfn)) {
+        p2m_type_t pt;
+        get_gfn_unshare(v->domain, v->arch.hvm_vcpu.dmreq_gpfn, &pt);
+        put_gfn(v->domain, v->arch.hvm_vcpu.dmreq_gpfn);
+        v->arch.hvm_vcpu.dmreq_gpfn = DMREQ_GPFN_UNUSED;
+        vcpu_end_shutdown_deferral(v);
+    }
+
     p = get_ioreq(v);
 
     /* NB. Optimised for common case (p->state == STATE_IOREQ_NONE). */
@@ -401,6 +410,192 @@ void hvm_do_resume_trap(struct vcpu *v)
                              v->arch.hvm_vcpu.inject_cr2);
         v->arch.hvm_vcpu.inject_trap = -1;
     }
+}
+
+static void
+hvm_init_dmreq_page(struct domain *d)
+{
+    struct hvm_dmreq_page *dmrp = &d->arch.hvm_domain.dmreq;
+
+    memset(dmrp, 0, sizeof(*dmrp));
+    spin_lock_init(&dmrp->lock);
+    domain_pause(d);
+}
+
+static void
+hvm_destroy_dmreq_page(struct domain *d)
+{
+    struct hvm_dmreq_page *dmrp = &d->arch.hvm_domain.dmreq;
+
+    spin_lock(&dmrp->lock);
+
+    ASSERT(d->is_dying);
+
+    if (dmrp->va) {
+        unmap_domain_page_global(dmrp->va);
+        put_page(dmrp->page);
+        dmrp->va = NULL;
+    }
+
+    spin_unlock(&dmrp->lock);
+}
+
+static int
+hvm_set_dmreq_page(struct domain *d, unsigned long gmfn)
+{
+    struct hvm_dmreq_page *dmrp = &d->arch.hvm_domain.dmreq;
+    struct page_info *page;
+    p2m_type_t p2mt;
+    unsigned long mfn;
+    void *va;
+    int i;
+
+    mfn = mfn_x(get_gfn_unshare(d, gmfn, &p2mt));
+    if (p2mt != p2m_ram_rw) {
+        put_gfn(d, gmfn);
+        return -EINVAL;
+    }
+    ASSERT(mfn_valid(mfn));
+
+    page = mfn_to_page(mfn);
+    if (!get_page(page, d)) {
+        put_gfn(d, gmfn);
+        return -EINVAL;
+    }
+
+    va = map_domain_page_global(mfn);
+    if (!va) {
+        put_page(page);
+        put_gfn(d, gmfn);
+        return -ENOMEM;
+    }
+
+    spin_lock(&dmrp->lock);
+
+    if (dmrp->va || d->is_dying) {
+        spin_unlock(&dmrp->lock);
+        unmap_domain_page_global(va);
+        put_page(mfn_to_page(mfn));
+        put_gfn(d, gmfn);
+        return -EINVAL;
+    }
+
+    dmrp->va = va;
+    dmrp->page = page;
+
+    for (i = 0; i < d->max_vcpus; i++) {
+        dmrp->va->dmreq_vcpu[i].dmreq_gpfn = DMREQ_GPFN_UNUSED;
+        dmrp->va->dmreq_vcpu[i].dmreq_gpfn_loaded = DMREQ_GPFN_UNUSED;
+        d->vcpu[i]->arch.hvm_vcpu.dmreq_gpfn = DMREQ_GPFN_UNUSED;
+    }
+    dmrp->va->dmreq_dom0.dmreq_gpfn = DMREQ_GPFN_UNUSED;
+    dmrp->va->dmreq_dom0.dmreq_gpfn_loaded = DMREQ_GPFN_UNUSED;
+
+    spin_unlock(&dmrp->lock);
+    put_gfn(d, gmfn);
+
+    domain_unpause(d);
+
+    return 0;
+}
+
+static void
+hvm_init_dmreq_vcpu_pages(struct domain *d)
+{
+
+    spin_lock_init(&d->arch.hvm_domain.dmreq_vcpu_page_lock);
+    domain_pause(d);
+}
+
+static void
+hvm_destroy_dmreq_vcpu_pages(struct domain *d)
+{
+    int i;
+
+    spin_lock(&d->arch.hvm_domain.dmreq_vcpu_page_lock);
+
+    ASSERT(d->is_dying);
+
+    if (d->arch.hvm_domain.dmreq_vcpu_page_va) {
+        unmap_domain_page_global(d->arch.hvm_domain.dmreq_vcpu_page_va);
+        put_page(d->arch.hvm_domain.dmreq_vcpu_page);
+        d->arch.hvm_domain.dmreq_vcpu_page_va = NULL;
+        if (d->vm_info_shared)
+            d->vm_info_shared->vmi_dmreq_vcpu_page_va = NULL;
+    }
+
+    for (i = 0; i < d->max_vcpus; i++) {
+        if (!d->vcpu[i]->arch.hvm_vcpu.dmreq_vcpu_page_va)
+            continue;
+        unmap_domain_page_global(d->vcpu[i]->arch.hvm_vcpu.dmreq_vcpu_page_va);
+        put_page(d->vcpu[i]->arch.hvm_vcpu.dmreq_vcpu_page);
+        d->vcpu[i]->arch.hvm_vcpu.dmreq_vcpu_page_va = NULL;
+    }
+
+    spin_unlock(&d->arch.hvm_domain.dmreq_vcpu_page_lock);
+}
+
+static int
+hvm_set_dmreq_vcpu_pages(struct domain *d, unsigned long gmfn)
+{
+    struct page_info *page;
+    p2m_type_t p2mt;
+    unsigned long mfn;
+    void *va;
+    int i;
+
+    for (i = 0; i < d->max_vcpus + 1; i++) {
+        mfn = mfn_x(get_gfn_unshare(d, gmfn + i, &p2mt));
+        if (p2mt != p2m_ram_rw) {
+            put_gfn(d, gmfn);
+            return -EINVAL;
+        }
+        ASSERT(mfn_valid(mfn));
+
+        page = mfn_to_page(mfn);
+        if (!get_page(page, d)) {
+            put_gfn(d, gmfn);
+            return -EINVAL;
+        }
+
+        va = map_domain_page_global(mfn);
+        if (!va) {
+            put_page(page);
+            put_gfn(d, gmfn);
+            return -ENOMEM;
+        }
+
+        spin_lock(&d->arch.hvm_domain.dmreq_vcpu_page_lock);
+
+        if (i == d->max_vcpus) {
+            if (d->arch.hvm_domain.dmreq_vcpu_page_va || d->is_dying) {
+                spin_unlock(&d->arch.hvm_domain.dmreq_vcpu_page_lock);
+                unmap_domain_page_global(va);
+                put_page(mfn_to_page(mfn));
+                put_gfn(d, gmfn);
+                return -EINVAL;
+            }
+            d->arch.hvm_domain.dmreq_vcpu_page_va = va;
+            d->arch.hvm_domain.dmreq_vcpu_page = page;
+            d->vm_info_shared->vmi_dmreq_vcpu_page_va = va;
+        } else {
+            if (d->vcpu[i]->arch.hvm_vcpu.dmreq_vcpu_page_va || d->is_dying) {
+                spin_unlock(&d->arch.hvm_domain.dmreq_vcpu_page_lock);
+                unmap_domain_page_global(va);
+                put_page(mfn_to_page(mfn));
+                put_gfn(d, gmfn);
+                return -EINVAL;
+            }
+            d->vcpu[i]->arch.hvm_vcpu.dmreq_vcpu_page_va = va;
+            d->vcpu[i]->arch.hvm_vcpu.dmreq_vcpu_page = page;
+        }
+
+        spin_unlock(&d->arch.hvm_domain.dmreq_vcpu_page_lock);
+        put_gfn(d, gmfn);
+    }
+
+    domain_unpause(d);
+    return 0;
 }
 
 static void
@@ -697,6 +892,8 @@ int hvm_domain_initialise(struct domain *d)
 
     hvm_init_ioreq_page(d, &d->arch.hvm_domain.ioreq);
     hvm_init_ioreq_servers(d);
+    hvm_init_dmreq_page(d);
+    hvm_init_dmreq_vcpu_pages(d);
 
     register_portio_handler(d, 0xe9, 1, hvm_print_line);
 
@@ -728,6 +925,8 @@ void hvm_domain_relinquish_resources(struct domain *d)
 {
     hvm_destroy_ioreq_servers(d);
     hvm_destroy_ioreq_page(d, &d->arch.hvm_domain.ioreq);
+    hvm_destroy_dmreq_page(d);
+    hvm_destroy_dmreq_vcpu_pages(d);
     hvm_destroy_pci_emul(d);
 
 #ifndef __UXEN__
@@ -1217,6 +1416,30 @@ int hvm_vcpu_initialise(struct vcpu *v)
 
     v->arch.hvm_vcpu.ioreq = &v->domain->arch.hvm_domain.ioreq;
 
+    /* Create dmreq event channel. */
+    rc = alloc_unbound_xen_event_channel(v, 0);
+    if (rc < 0)
+        goto fail4;
+    /* Register dmreq event channel. */
+    v->arch.hvm_vcpu.dmreq_port = rc;
+
+    /* Create dmreq event for dom0 requests */
+    if (!v->vcpu_id) {
+        rc = alloc_unbound_xen_event_channel(v, 0);
+        if (rc < 0)
+            goto fail4;
+        v->domain->arch.hvm_domain.dmreq_port = rc;
+    }
+
+    spin_lock(&v->domain->arch.hvm_domain.dmreq.lock);
+    if (v->domain->arch.hvm_domain.dmreq.va) {
+        get_dmreq(v)->vp_eport = v->arch.hvm_vcpu.dmreq_port;
+        if (!v->vcpu_id)
+            v->domain->arch.hvm_domain.dmreq.va->dmreq_dom0.vp_eport =
+                v->domain->arch.hvm_domain.dmreq_port;
+    }
+    spin_unlock(&v->domain->arch.hvm_domain.dmreq.lock);
+
     spin_lock_init(&v->arch.hvm_vcpu.tm_lock);
     INIT_LIST_HEAD(&v->arch.hvm_vcpu.tm_list);
 
@@ -1341,6 +1564,40 @@ bool_t hvm_send_assist_req(struct vcpu *v)
      */
     p->state = STATE_IOREQ_READY;
     notify_via_xen_event_channel(v->domain, p->vp_eport);
+
+    return 1;
+}
+
+bool_t
+hvm_send_dmreq(struct vcpu *v)
+{
+
+    if (unlikely(!vcpu_start_shutdown_deferral(v)))
+        return 0; /* implicitly bins the i/o operation */
+
+    prepare_wait_on_xen_event_channel(v->arch.hvm_vcpu.dmreq_port);
+
+    notify_via_xen_event_channel(v->domain, v->arch.hvm_vcpu.dmreq_port);
+
+    return 1;
+}
+
+bool_t
+hvm_send_dom0_dmreq(struct domain *d)
+{
+    struct dmreq *dmreq;
+
+    if (unlikely(!d || !d->vm_info_shared))
+        return 0; /* implicitly bins the i/o operation */
+
+    dmreq = d->vm_info_shared->vmi_dmreq;
+    if (!d->vm_info_shared->vmi_dmreq_hec)
+        d->vm_info_shared->vmi_dmreq_hec =
+            xen_event_channel_host_opaque(d, dmreq->vp_eport);
+
+    prepare_wait_on_xen_event_channel(dmreq->vp_eport);
+
+    notify_via_xen_event_channel(d, dmreq->vp_eport);
 
     return 1;
 }
@@ -2822,8 +3079,8 @@ copy_to_hvm_errno(void *to, const void *from, unsigned len)
 {
     int rc;
 
-    rc = hvm_copy_to_guest_virt_nofault(
-        (unsigned long)to, (void *)from, len, 0);
+    rc = hvm_copy_to_guest_virt_nofault((unsigned long)to, (void *)from,
+                                        len, 0);
     switch (rc) {
     case HVMCOPY_okay:
         rc = 0;
@@ -4200,6 +4457,7 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
     case HVMOP_get_param:
     {
         struct xen_hvm_param a;
+        struct hvm_dmreq_page *dmrp;
         struct domain *d;
         struct vcpu *v;
 
@@ -4238,6 +4496,27 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
                        a.domid, a.value);
                 if ((d->arch.hvm_domain.params[HVM_PARAM_IO_PFN_LAST]))
                     rc = -EINVAL;
+                break;
+            case HVM_PARAM_DMREQ_PFN:
+                dmrp = &d->arch.hvm_domain.dmreq;
+                rc = hvm_set_dmreq_page(d, a.value);
+                if (rc)
+                    break;
+                spin_lock(&dmrp->lock);
+                if (dmrp->va) {
+                    /* Initialise evtchn port info if VCPUs already created. */
+                    for_each_vcpu (d, v)
+                        get_dmreq(v)->vp_eport = v->arch.hvm_vcpu.dmreq_port;
+                    d->vm_info_shared->vmi_dmreq = &dmrp->va->dmreq_dom0;
+                    dmrp->va->dmreq_dom0.vp_eport =
+                        d->arch.hvm_domain.dmreq_port;
+                }
+                spin_unlock(&dmrp->lock);
+                break;
+            case HVM_PARAM_DMREQ_VCPU_PFN:
+                rc = hvm_set_dmreq_vcpu_pages(d, a.value);
+                if (rc)
+                    break;
                 break;
             case HVM_PARAM_CALLBACK_IRQ:
                 hvm_set_callback_via(d, a.value);
@@ -4303,6 +4582,7 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
                 rc = 0;
                 domain_pause(d); /* safe to change per-vcpu xen_port */
                 iorp = &d->arch.hvm_domain.ioreq;
+                dmrp = &d->arch.hvm_domain.dmreq;
                 for_each_vcpu ( d, v )
                 {
                     int old_port, new_port;
@@ -4319,6 +4599,10 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
                     if ( iorp->va != NULL )
                         get_ioreq(v)->vp_eport = v->arch.hvm_vcpu.xen_port;
                     spin_unlock(&iorp->lock);
+                    spin_lock(&dmrp->lock);
+                    if (dmrp->va)
+                        get_dmreq(v)->vp_eport = v->arch.hvm_vcpu.dmreq_port;
+                    spin_unlock(&dmrp->lock);
                 }
                 domain_unpause(d);
                 break;
@@ -4659,6 +4943,9 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
         if ( a.hvmmem_type >= ARRAY_SIZE(memtype) )
             goto param_fail4;
 
+        /* XXX disable immutable memory */
+        goto out_ok;
+
         /* We need HVMMEM_ram_immutable only for now. */
         if (a.hvmmem_type != HVMMEM_ram_immutable)
             goto param_fail4;
@@ -4713,6 +5000,7 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
             put_gfn(d, pfn);
         }
 
+      out_ok: /* XXX disable immutable memory */
         rc = 0;
 
     param_fail4:

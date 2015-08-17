@@ -1193,6 +1193,30 @@ void notify_via_xen_event_channel(struct domain *ld, int lport)
     spin_unlock(&ld->event_lock);
 }
 
+void *
+xen_event_channel_host_opaque(struct domain *ld, int lport)
+{
+    struct evtchn *lchn;
+    void *opaque = NULL;
+
+    spin_lock(&ld->event_lock);
+
+    if (unlikely(ld->is_dying)) {
+        spin_unlock(&ld->event_lock);
+        return NULL;
+    }
+
+    ASSERT(port_is_valid(ld, lport));
+    lchn = evtchn_from_port(ld, lport);
+    ASSERT(lchn->consumer_is_xen);
+
+    if (likely(lchn->state == ECS_HOST))
+        opaque = lchn->u.host.host_opaque;
+
+    spin_unlock(&ld->event_lock);
+    return opaque;
+}
+
 
 int evtchn_init(struct domain *d)
 {

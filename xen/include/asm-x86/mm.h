@@ -617,6 +617,7 @@ extern bool_t machine_to_phys_mapping_valid;
 #define SHARED_ZERO_MFN         (0xfffffffffeUL)
 #define COMPRESSED_MFN          (0xfffffffffdUL)
 #define ERROR_MFN               (0xfffffffffcUL)
+#define DMREQ_MFN               (0xfffffffffbUL)
 #define P2M_MFN_MFN_BITS        28
 #define P2M_MFN_SPECIAL_BITS    4
 #define P2M_MFN_PAGE_STORE_OFFSET_BITS 8
@@ -627,6 +628,7 @@ extern bool_t machine_to_phys_mapping_valid;
 #define SHARED_ZERO_MFN         (0xfffffffeUL)
 #define COMPRESSED_MFN          (0xfffffffdUL)
 #define ERROR_MFN               (0xfffffffcUL)
+#define DMREQ_MFN               (0xfffffffbUL)
 #define P2M_MFN_MFN_BITS        22
 #define P2M_MFN_SPECIAL_BITS    4
 #define P2M_MFN_PAGE_STORE_OFFSET_BITS 6
@@ -634,7 +636,7 @@ extern bool_t machine_to_phys_mapping_valid;
 #endif /* __x86_64__ */
 #define PAGE_STORE_DATA_ALIGN   (PAGE_SHIFT - P2M_MFN_PAGE_STORE_OFFSET_BITS)
 
-#define __mfn_retry(mfn) ({ (void)(mfn); 0; })
+#define __mfn_retry(mfn) ((mfn) == DMREQ_MFN)
 #define mfn_retry(mfn) (__mfn_retry(mfn_x((mfn))))
 
 #define P2M_MFN_MFN_MASK        ((1UL << P2M_MFN_MFN_BITS) - 1)

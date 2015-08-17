@@ -16,6 +16,7 @@
 #include "console.h"
 #include "control.h"
 #include "dm.h"
+#include "dmreq.h"
 #include "firmware.h"
 #include "ioh.h"
 #include "ioreq.h"
@@ -518,6 +519,8 @@ vm_init(const char *loadvm, int restore_mode)
 
         free(hvmloader_path);
 
+        dmreq_init();
+
         hvm_info_page = xc_map_foreign_range(xc_handle, vm_id, XC_PAGE_SIZE,
                                              PROT_READ | PROT_WRITE,
                                              HVM_INFO_PFN);
@@ -695,6 +698,7 @@ vm_exit(void *opaque)
 
     console_exit();
     control_exit();
+    dmreq_exit();
 
     exit(0);
 }

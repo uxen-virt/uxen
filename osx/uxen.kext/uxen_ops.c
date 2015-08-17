@@ -447,14 +447,23 @@ notify_vram(struct vm_info_shared *vmis)
 }
 
 static uint64_t __cdecl
-signal_event(struct vm_vcpu_info_shared *vcis, void *_hec)
+signal_event(struct vm_vcpu_info_shared *vcis, void *_hec, void **_wait_event)
 {
     struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
     struct host_event_channel *hec = (struct host_event_channel *)_hec;
+    struct user_notification_event **wait_event =
+        (struct user_notification_event **)_wait_event;
 
     if (!hec || hec->request.id == -1 || !vci->vci_shared.vci_runnable)
         return 1;
 
+    if (hec->completed.notify_address && *wait_event != &hec->completed) {
+        if (*wait_event) {
+            fail_msg("%s: nested waiting signal event", __FUNCTION__);
+            return 1;
+        }
+        *wait_event = &hec->completed;
+    }
     signal_notification_event(&hec->request);
     return 0;
 }
@@ -465,12 +474,16 @@ check_ioreq(struct vm_vcpu_info_shared *vcis)
     struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
     int ret;
 
-    if ((vci->vci_ioreq_wait_event == NULL) ||
+    if ((vcis->vci_wait_event == NULL) ||
 	(vci->vci_shared.vci_runnable == 0))
 	return 1;
-    ret = fast_event_state(&vci->vci_ioreq_wait_event->fast_ev);
-    if (ret)
-        fast_event_clear(&vci->vci_ioreq_wait_event->fast_ev);
+    ret = fast_event_state(&((struct user_notification_event *)
+                             vcis->vci_wait_event)->fast_ev);
+    if (ret) {
+        fast_event_clear(&((struct user_notification_event *)
+                           vcis->vci_wait_event)->fast_ev);
+        vcis->vci_wait_event = NULL;
+    }
     return ret;
 }
 
@@ -1242,8 +1255,9 @@ uxen_vmi_stop_running(struct vm_info *vmi)
         if (!OSCompareAndSwap(1, 0, &vci->vci_shared.vci_runnable))
             continue;
 
-        if (vci->vci_ioreq_wait_event)
-            fast_event_signal(&vci->vci_ioreq_wait_event->fast_ev);
+        if (vci->vci_shared.vci_wait_event)
+            fast_event_signal(&((struct user_notification_event *)
+                                vci->vci_shared.vci_wait_event)->fast_ev);
 
         event_signal(&vci->vci_runnable);
 
@@ -1427,12 +1441,15 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
 	    break;
         switch (vci->vci_shared.vci_run_mode) {
         case VCI_RUN_MODE_PROCESS_IOREQ:
-            assert(vci->vci_ioreq_wait_event);
-            ret = fast_event_wait(&vci->vci_ioreq_wait_event->fast_ev,
+            assert(vci->vci_shared.vci_wait_event);
+            ret = fast_event_wait(&((struct user_notification_event *)
+                                    vci->vci_shared.vci_wait_event)->fast_ev,
                                   EVENT_INTERRUPTIBLE, EVENT_NO_TIMEOUT);
             if (ret)
                 goto out;
-            fast_event_clear(&vci->vci_ioreq_wait_event->fast_ev);
+            fast_event_clear(&((struct user_notification_event *)
+                               vci->vci_shared.vci_wait_event)->fast_ev);
+            vci->vci_shared.vci_wait_event = NULL;
             break;
         case VCI_RUN_MODE_PREEMPT:
             if (thread_status_suspended(self)) {
@@ -1546,7 +1563,6 @@ uxen_op_set_event_channel(
 {
     struct host_event_channel *hec = NULL;
     struct evtchn_bind_host bind;
-    struct vm_vcpu_info *vci;
     int ret = ENOENT;
 
     OSIncrementAtomic(&vmi->vmi_running_vcpus);
@@ -1596,10 +1612,8 @@ uxen_op_set_event_channel(
         goto out;
     }
 
-    vci = &vmi->vmi_vcpus[uecd->uecd_vcpu];
-    if (hec->completed.notify_address && !vci->vci_ioreq_wait_event)
-        /* 1st event is default */
-        vci->vci_ioreq_wait_event = &hec->completed;
+    if (hec->completed.notify_address)
+        fast_event_clear(&hec->completed.fast_ev);
 
     hec->next = vmi->vmi_host_event_channels;
     vmi->vmi_host_event_channels = hec;
