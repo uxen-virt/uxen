@@ -117,8 +117,8 @@ struct paging_mode {
                                             unsigned long cr3,
                                             paddr_t ga, uint32_t *pfec,
                                             unsigned int *page_order);
-    void          (*update_cr3            )(struct vcpu *v, int do_locking);
-    void          (*update_paging_modes   )(struct vcpu *v);
+    int           (*update_cr3            )(struct vcpu *v, int do_locking);
+    int           (*update_paging_modes   )(struct vcpu *v);
     void          (*write_p2m_entry       )(struct vcpu *v, unsigned long gfn,
                                             l1_pgentry_t *p, mfn_t table_mfn, 
                                             l1_pgentry_t new, 
@@ -303,9 +303,9 @@ static inline void paging_update_cr3(struct vcpu *v)
 /* Update all the things that are derived from the guest's CR0/CR3/CR4.
  * Called to initialize paging structures if the paging mode
  * has changed, and when bringing up a VCPU for the first time. */
-static inline void paging_update_paging_modes(struct vcpu *v)
+static inline int paging_update_paging_modes(struct vcpu *v)
 {
-    paging_get_hostmode(v)->update_paging_modes(v);
+    return paging_get_hostmode(v)->update_paging_modes(v);
 }
 
 

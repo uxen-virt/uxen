@@ -237,6 +237,7 @@ static void mem_sharing_audit(void)
                     continue;
                 }
                 mfn = get_gfn_unlocked(d, g->gfn, &t); 
+#error handle get_gfn retry here
                 if(mfn_x(mfn) != mfn_x(e->mfn))
                     MEM_SHARING_DEBUG("Incorrect P2M for vm%u, PFN=%lx."
                                       "Expecting MFN=%ld, got %ld\n",
@@ -345,6 +346,7 @@ int mem_sharing_debug_gfn(struct domain *d, unsigned long gfn)
     mfn_t mfn;
 
     mfn = get_gfn_unlocked(d, gfn, &p2mt);
+#error handle get_gfn retry here
 
     printk("Debug for vm%u, gfn=%lx, ", d->domain_id, gfn);
     return mem_sharing_debug_mfn(mfn_x(mfn));
@@ -467,6 +469,7 @@ int mem_sharing_nominate_page(struct domain *d,
 
     shr_lock(); 
     mfn = get_gfn(d, gfn, &p2mt);
+#error handle get_gfn retry here
 
     /* Check if mfn is valid */
     ret = -EINVAL;
@@ -610,6 +613,7 @@ int mem_sharing_unshare_page(struct domain *d,
     shr_lock();
     mem_sharing_audit();
     mfn = get_gfn(d, gfn, &p2mt);
+#error handle get_gfn retry here
     
     /* Has someone already unshared it? */
     if (!p2m_is_shared(p2mt)) {

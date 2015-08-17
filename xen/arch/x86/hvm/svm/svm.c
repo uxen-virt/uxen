@@ -276,6 +276,10 @@ static int svm_vmcb_restore(struct vcpu *v, struct hvm_hw_cpu *c)
         if ( c->cr0 & X86_CR0_PG )
         {
             mfn = mfn_x(get_gfn(v->domain, c->cr3 >> PAGE_SHIFT, &p2mt));
+            if (__mfn_retry(mfn)) {
+                put_gfn(v->domain, c->cr3 >> PAGE_SHIFT);
+                return -ECONTINUATION;
+            }
             if ( !p2m_is_ram(p2mt) || !get_page(mfn_to_page(mfn), v->domain) )
             {
                 put_gfn(v->domain, c->cr3 >> PAGE_SHIFT);
@@ -375,11 +379,16 @@ static void svm_save_vmcb_ctxt(struct vcpu *v, struct hvm_hw_cpu *ctxt)
 
 static int svm_load_vmcb_ctxt(struct vcpu *v, struct hvm_hw_cpu *ctxt)
 {
+    int ret;
+
     svm_load_cpu_state(v, ctxt);
-    if (svm_vmcb_restore(v, ctxt)) {
-        gdprintk(XENLOG_ERR, "svm_vmcb restore failed!\n");
-        domain_crash(v->domain);
-        return -EINVAL;
+    ret = svm_vmcb_restore(v, ctxt);
+    if (ret) {
+        if (ret != -ECONTINUATION) {
+            gdprintk(XENLOG_ERR, "svm_vmcb restore failed!\n");
+            domain_crash(v->domain);
+        }
+        return ret;
     }
 
     return 0;
@@ -465,10 +474,11 @@ static void svm_update_host_cr3(struct vcpu *v)
     /* SVM doesn't have a HOST_CR3 equivalent to update. */
 }
 
-static void svm_update_guest_cr(struct vcpu *v, unsigned int cr)
+static int svm_update_guest_cr(struct vcpu *v, unsigned int cr)
 {
     struct vmcb_struct *vmcb = v->arch.hvm_svm.vmcb;
     uint64_t value;
+    int ret = 0;
 
     switch ( cr )
     {
@@ -513,6 +523,8 @@ static void svm_update_guest_cr(struct vcpu *v, unsigned int cr)
     default:
         BUG();
     }
+
+    return ret;
 }
 
 static void svm_update_guest_efer(struct vcpu *v)
@@ -1575,6 +1587,8 @@ static int svm_msr_write_intercept(unsigned int msr, uint64_t msr_content)
 #ifndef __UXEN__
     int sync = 0;
 #endif  /* __UXEN__ */
+    int ret = X86EMUL_OKAY;
+    int r;
 
     switch ( msr )
     {
@@ -1680,10 +1694,11 @@ static int svm_msr_write_intercept(unsigned int msr, uint64_t msr_content)
             break;
 #endif  /* __UXEN_NOT_YET__ */
 
-        if ( wrmsr_viridian_regs(msr, msr_content) )
-            break;
-
-        wrmsr_hypervisor_regs(msr, msr_content);
+        r = wrmsr_viridian_regs(msr, msr_content);
+        if (!r)
+            r = wrmsr_hypervisor_regs(msr, msr_content);
+        if (r == -1)
+            ret = X86EMUL_RETRY;
         break;
     }
 
@@ -1692,7 +1707,7 @@ static int svm_msr_write_intercept(unsigned int msr, uint64_t msr_content)
         svm_vmload(vmcb);
 #endif  /* __UXEN__ */
 
-    return X86EMUL_OKAY;
+    return ret;
 
  gpf:
     hvm_inject_exception(TRAP_gp_fault, 0, 0);

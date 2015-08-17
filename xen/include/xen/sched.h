@@ -273,9 +273,10 @@ struct domain
     atomic_t         shr_pages;       /* number of shared pages             */
     atomic_t         paged_pages;     /* number of paged-out pages          */
 #else  /* __UXEN__ */
-    atomic_t         pod_pages;       /* number of pages populated on demand */
-    atomic_t         zero_shared_pages; /* number of pages zero shared      */
-    atomic_t         tmpl_shared_pages; /* number of pages template shared  */
+    atomic_t         pod_pages;       /* # pages populated on demand */
+    atomic_t         zero_shared_pages; /* # pages zero shared      */
+    atomic_t         retry_pages;       /* # pages retry pod        */
+    atomic_t         tmpl_shared_pages; /* # pages template shared  */
 #endif  /* __UXEN__ */
     unsigned int     xenheap_pages;   /* # pages allocated from Xen heap    */
 

@@ -568,7 +568,7 @@ static mfn_t p2m_gfn_to_mfn_current(struct p2m_domain *p2m,
                                     p2m_access_t *a, p2m_query_t q,
                                     unsigned int *page_order)
 {
-    mfn_t mfn = _mfn(INVALID_MFN);
+    mfn_t mfn = _mfn(0);
     p2m_type_t p2mt = p2m_mmio_dm;
     paddr_t addr = ((paddr_t)gfn) << PAGE_SHIFT;
     /* XXX This is for compatibility with the old model, where anything not 
@@ -603,8 +603,9 @@ pod_retry_l3:
             /* The read has succeeded, so we know that mapping exists */
             if ( q != p2m_query )
             {
-                if ( !p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_1G, q,
-                                              p2m_entry) )
+                mfn = p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_1G, q,
+                                              p2m_entry);
+                if (!mfn_x(mfn))
                     goto pod_retry_l3;
                 p2mt = p2m_invalid;
                 printk("%s: Allocate 1GB failed!\n", __func__);
@@ -654,8 +655,9 @@ pod_retry_l2:
              * exits at this point.  */
             if ( q != p2m_query )
             {
-                if (!p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_2M, q,
-                                             p2m_entry))
+                mfn = p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_2M, q,
+                                              p2m_entry);
+                if (!mfn_x(mfn))
                     goto pod_retry_l2;
 
                 /* Allocate failed. */
@@ -710,8 +712,9 @@ pod_retry_l1:
              * exits at this point.  */
             if ( q != p2m_query )
             {
-                if (!p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_4K, q,
-                                             p2m_entry))
+                mfn = p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_4K, q,
+                                              p2m_entry);
+                if (!mfn_x(mfn))
                     goto pod_retry_l1;
 
                 /* Allocate failed. */
@@ -740,7 +743,7 @@ pod_retry_l1:
         *page_order = PAGE_ORDER_4K;
 out:
     *t = p2mt;
-    return mfn;
+    return mfn_x(mfn) ? mfn : _mfn(INVALID_MFN);
 }
 #endif  /* __UXEN__ */
 
@@ -859,7 +862,7 @@ p2m_gfn_to_mfn(struct p2m_domain *p2m, unsigned long gfn,
                p2m_type_t *t, p2m_access_t *a, p2m_query_t q,
                unsigned int *page_order)
 {
-    mfn_t mfn;
+    mfn_t mfn = _mfn(0);
     paddr_t addr = ((paddr_t)gfn) << PAGE_SHIFT;
     l2_pgentry_t *l2e;
     l1_pgentry_t *l1e;
@@ -924,8 +927,9 @@ pod_retry_l3:
             if (p2m_is_pod(p2m_flags_to_type(l3e_get_flags(*l3e)))) {
                 if ( q != p2m_query )
                 {
-                    if (!p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_1G, q,
-                                                 l3e))
+                    mfn = p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_1G, q,
+                                                  l3e);
+                    if (mfn_x(mfn))
                         goto pod_retry_l3;
                 }
                 else
@@ -974,9 +978,10 @@ pod_retry_l2:
                 goto out_l2;
             }
 
-            if (!p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_2M, q, l2e))
-                goto pod_retry_l2;
-            goto out_l2;
+            mfn = p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_2M, q, l2e);
+            if (mfn_x(mfn))
+                goto out_l2;
+            goto pod_retry_l2;
         }
 
       out_l2:
@@ -1018,7 +1023,8 @@ pod_retry_l2:
             goto out;
         }
 
-        if (p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_4K, q, l1e))
+        mfn = p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_4K, q, l1e);
+        if (mfn_x(mfn))
             goto out;
 
         if (is_p2m_zeroshare_any(q)) {
@@ -1047,7 +1053,7 @@ pod_retry_l2:
     unmap_domain_page(l1e);
     if (page_order)
         *page_order = PAGE_ORDER_4K;
-    return mfn;
+    return mfn_x(mfn) ? mfn : _mfn(INVALID_MFN);
 }
 
 /* Walk the whole p2m table, changing any entries of the old type

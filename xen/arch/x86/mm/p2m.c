@@ -264,7 +264,8 @@ get_gfn_contents(struct domain *d, unsigned long gpfn, p2m_type_t *t,
             break;
 
         if (remove)
-            guest_physmap_mark_pod_locked(d, gpfn, PAGE_ORDER_4K);
+            guest_physmap_mark_pod_locked(d, gpfn, PAGE_ORDER_4K,
+                                          _mfn(SHARED_ZERO_MFN));
 
         s = map_domain_page(mfn_x(mfn));
         memcpy(buffer, s, PAGE_SIZE);
@@ -1782,6 +1783,10 @@ p2m_translate(struct domain *d, xen_pfn_t *arr, int nr, int write, int map)
             break;
         default:
             rc = -EINVAL;
+            goto out;
+        }
+        if (mfn_retry(mfn)) {
+            rc = j;
             goto out;
         }
         if (map && !mfn_valid(mfn)) {

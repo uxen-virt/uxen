@@ -92,6 +92,7 @@ enum hvm_copy_result {
     HVMCOPY_unhandleable,
     HVMCOPY_gfn_paged_out,
     HVMCOPY_gfn_shared,
+    HVMCOPY_gfn_populate = HVMCOPY_gfn_paged_out,
 };
 
 /*

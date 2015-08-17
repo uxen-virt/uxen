@@ -80,7 +80,7 @@ struct reference_tsc_page {
     int64_t  tsc_offset;
 };
 
-static void enable_reference_tsc_page(struct vcpu *v, uint64_t gmfn);
+static int enable_reference_tsc_page(struct vcpu *v, uint64_t gmfn);
 
 int cpuid_viridian_leaves(unsigned int leaf, unsigned int *eax,
                           unsigned int *ebx, unsigned int *ecx,
@@ -180,18 +180,23 @@ void dump_apic_assist(struct vcpu *v)
             (unsigned long)v->arch.hvm_vcpu.viridian.apic_assist.fields.pfn);
 }
 
-static void enable_reference_tsc_page(struct vcpu *v, uint64_t gmfn)
+static int
+enable_reference_tsc_page(struct vcpu *v, uint64_t gmfn)
 {
     struct domain *d = v->domain;
     unsigned long mfn;
     struct reference_tsc_page *tsc_ref;
 
     mfn = get_gfn_untyped(d, gmfn);
+    if (__mfn_retry(mfn)) {
+        put_gfn(d, gmfn);
+        return 1;
+    }
     if (!mfn_valid(mfn) ||
         !get_page_and_type(mfn_to_page(mfn), d, PGT_writable_page)) {
         put_gfn(d, gmfn);
         gdprintk(XENLOG_WARNING, "Bad GMFN %"PRIx64" (MFN %lx)\n", gmfn, mfn);
-        return;
+        return 0;
     }
 
     tsc_ref = map_domain_page(mfn);
@@ -204,20 +209,28 @@ static void enable_reference_tsc_page(struct vcpu *v, uint64_t gmfn)
 
     put_page_and_type(mfn_to_page(mfn));
     put_gfn(d, gmfn);
+
+    return 0;
 }
 
-static void enable_hypercall_page(struct domain *d)
+static int
+enable_hypercall_page(struct domain *d)
 {
     unsigned long gmfn = d->arch.hvm_domain.viridian.hypercall_gpa.fields.pfn;
     unsigned long mfn = get_gfn_untyped(d, gmfn);
     uint8_t *p;
+
+    if (__mfn_retry(mfn)) {
+        put_gfn(d, gmfn);
+        return 1;
+    }
 
     if ( !mfn_valid(mfn) ||
          !get_page_and_type(mfn_to_page(mfn), d, PGT_writable_page) )
     {
         put_gfn(d, gmfn); 
         gdprintk(XENLOG_WARNING, "Bad GMFN %lx (MFN %lx)\n", gmfn, mfn);
-        return;
+        return 0;
     }
 
     p = map_domain_page(mfn);
@@ -239,14 +252,22 @@ static void enable_hypercall_page(struct domain *d)
 
     put_page_and_type(mfn_to_page(mfn));
     put_gfn(d, gmfn); 
+
+    return 0;
 }
 
-void initialize_apic_assist(struct vcpu *v)
+static int
+initialize_apic_assist(struct vcpu *v)
 {
     struct domain *d = v->domain;
     unsigned long gmfn = v->arch.hvm_vcpu.viridian.apic_assist.fields.pfn;
     unsigned long mfn = get_gfn_untyped(d, gmfn);
     uint8_t *p;
+
+    if (__mfn_retry(mfn)) {
+        put_gfn(d, gmfn);
+        return 1;
+    }
 
     /*
      * We don't yet make use of the APIC assist page but by setting
@@ -263,7 +284,7 @@ void initialize_apic_assist(struct vcpu *v)
     {
         put_gfn(d, gmfn); 
         gdprintk(XENLOG_WARNING, "Bad GMFN %lx (MFN %lx)\n", gmfn, mfn);
-        return;
+        return 0;
     }
 
     p = map_domain_page(mfn);
@@ -274,6 +295,8 @@ void initialize_apic_assist(struct vcpu *v)
 
     put_page_and_type(mfn_to_page(mfn));
     put_gfn(d, gmfn); 
+
+    return 0;
 }
 
 int wrmsr_viridian_regs(uint32_t idx, uint64_t val)
@@ -297,7 +320,8 @@ int wrmsr_viridian_regs(uint32_t idx, uint64_t val)
         d->arch.hvm_domain.viridian.hypercall_gpa.raw = val;
         dump_hypercall(d);
         if ( d->arch.hvm_domain.viridian.hypercall_gpa.fields.enabled )
-            enable_hypercall_page(d);
+            if (enable_hypercall_page(d))
+                return -1;
         break;
 
     case VIRIDIAN_MSR_VP_INDEX:
@@ -332,7 +356,8 @@ int wrmsr_viridian_regs(uint32_t idx, uint64_t val)
         if (!(val & HV_X64_MSR_TSC_REFERENCE_ENABLE))
             break;
         gpa = val >> HV_X64_MSR_TSC_REFERENCE_ADDRESS_SHIFT;
-        enable_reference_tsc_page(v, gpa);
+        if (enable_reference_tsc_page(v, gpa))
+            return -1;
         d->arch.hvm_domain.viridian.ref_tsc_page_msr = val;
         break;
     }
@@ -344,7 +369,8 @@ int wrmsr_viridian_regs(uint32_t idx, uint64_t val)
         v->arch.hvm_vcpu.viridian.apic_assist.raw = val;
         dump_apic_assist(v);
         if (v->arch.hvm_vcpu.viridian.apic_assist.fields.enabled)
-            initialize_apic_assist(v);
+            if (initialize_apic_assist(v))
+                return -1;
         break;
 
     case VIRIDIAN_MSR_CRASH_P0 ... VIRIDIAN_MSR_CRASH_P4:

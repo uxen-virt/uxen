@@ -77,6 +77,12 @@ unsigned long hap_p2m_ga_to_gfn(GUEST_PAGING_LEVELS)(
         __put_gfn(p2m, top_gfn);
         return INVALID_GFN;
     }
+#else  /* __UXEN__ */
+    if (mfn_retry(top_mfn)) {
+        pfec[0] = PFEC_page_populate;
+        __put_gfn(p2m, top_gfn);
+        return INVALID_GFN;
+    }
 #endif  /* __UXEN__ */
     if ( !p2m_is_ram(p2mt) )
     {
@@ -99,7 +105,8 @@ unsigned long hap_p2m_ga_to_gfn(GUEST_PAGING_LEVELS)(
     if ( missing == 0 )
     {
         gfn_t gfn = guest_l1e_get_gfn(gw.l1e);
-        (void)get_gfn_type_access(p2m, gfn_x(gfn), &p2mt, &p2ma, p2m_unshare, NULL); 
+        mfn_t mfn = get_gfn_type_access(p2m, gfn_x(gfn), &p2mt, &p2ma,
+                                        p2m_unshare, NULL);
 #ifndef __UXEN__
         if ( p2m_is_paging(p2mt) )
         {
@@ -113,6 +120,12 @@ unsigned long hap_p2m_ga_to_gfn(GUEST_PAGING_LEVELS)(
         if ( p2m_is_shared(p2mt) )
         {
             pfec[0] = PFEC_page_shared;
+            __put_gfn(p2m, gfn_x(gfn));
+            return INVALID_GFN;
+        }
+#else  /* __UXEN__ */
+        if (mfn_retry(mfn)) {
+            pfec[0] = PFEC_page_populate;
             __put_gfn(p2m, gfn_x(gfn));
             return INVALID_GFN;
         }
@@ -131,6 +144,9 @@ unsigned long hap_p2m_ga_to_gfn(GUEST_PAGING_LEVELS)(
 
     if ( missing & _PAGE_INVALID_BITS ) 
         pfec[0] |= PFEC_reserved_bit;
+
+    if (missing & _PAGE_POPULATE)
+        pfec[0] = PFEC_page_populate;
 
     if ( missing & _PAGE_PAGED )
         pfec[0] = PFEC_page_paged;

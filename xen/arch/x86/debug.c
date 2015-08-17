@@ -60,6 +60,7 @@ dbg_hvm_va2mfn(dbgva_t vaddr, struct domain *dp, int toaddr,
     }
 
     mfn = mfn_x(get_gfn(dp, *gfn, &gfntype)); 
+#error handle get_gfn retry here
     if ( p2m_is_readonly(gfntype) && toaddr )
     {
         DBGP2("kdb:p2m_is_readonly: gfntype:%x\n", gfntype);

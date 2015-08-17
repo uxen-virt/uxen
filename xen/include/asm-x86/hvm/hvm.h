@@ -134,7 +134,7 @@ struct hvm_function_table {
     /*
      * Called to inform HVM layer that a guest CRn or EFER has changed.
      */
-    void (*update_guest_cr)(struct vcpu *v, unsigned int cr);
+    int  (*update_guest_cr)(struct vcpu *v, unsigned int cr);
     void (*update_guest_efer)(struct vcpu *v);
 
     void (*set_tsc_offset)(struct vcpu *v, u64 offset);
@@ -281,9 +281,9 @@ hvm_update_host_cr3(struct vcpu *v)
     hvm_funcs.update_host_cr3(v);
 }
 
-static inline void hvm_update_guest_cr(struct vcpu *v, unsigned int cr)
+static inline int hvm_update_guest_cr(struct vcpu *v, unsigned int cr)
 {
-    hvm_funcs.update_guest_cr(v, cr);
+    return hvm_funcs.update_guest_cr(v, cr);
 }
 
 static inline void hvm_update_guest_efer(struct vcpu *v)

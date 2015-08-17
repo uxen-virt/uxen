@@ -536,9 +536,9 @@ void guest_physmap_remove_page(struct domain *d,
 /* Set a p2m range as populate-on-demand */
 int
 guest_physmap_mark_pod_locked(struct domain *d, unsigned long gfn,
-                              unsigned int order);
+                              unsigned int order, mfn_t mfn);
 int guest_physmap_mark_populate_on_demand(struct domain *d, unsigned long gfn,
-                                          unsigned int order);
+                                          unsigned int order, mfn_t mfn);
 
 /* Set a p2m range as populate-on-demand with contents */
 int guest_physmap_mark_populate_on_demand_contents(
@@ -734,7 +734,7 @@ int
 p2m_parse_page_data(mfn_t *mfn, uint8_t **data, uint16_t *offset);
 
 /* Called by p2m code when demand-populating a PoD page */
-int
+mfn_t
 p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                         unsigned int order, p2m_query_t q, void *entry);
 /* Called by p2m code when re-sharing a zero page */

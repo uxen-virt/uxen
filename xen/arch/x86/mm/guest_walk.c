@@ -113,6 +113,12 @@ static inline void *map_domain_gfn(struct p2m_domain *p2m,
         *rc = _PAGE_SHARED;
         return NULL;
     }
+#else  /* __UXEN__ */
+    if (mfn_retry(*mfn)) {
+        __put_gfn(p2m, gfn_x(gfn));
+        *rc = _PAGE_POPULATE;
+        return NULL;
+    }
 #endif  /* __UXEN__ */
     if ( !p2m_is_ram(*p2mt) ) 
     {

@@ -1453,7 +1453,7 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
     return ret;
 }
 
-int
+mfn_t
 p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                         unsigned int order, p2m_query_t q, void *entry)
 {
@@ -1489,7 +1489,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     if (!p2m_is_pod(t) || ((q == p2m_guest_r || q == p2m_alloc_r) &&
                            mfn_valid_page(mfn_x(smfn)))) {
         p2m_unlock(p2m);
-        return 0;
+        return _mfn(0);
     }
 
     switch (order) {
@@ -1505,7 +1505,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                       p2m_populate_on_demand, p2m->default_access);
         audit_p2m(p2m, 1);
         p2m_unlock(p2m);
-        return 0;
+        return _mfn(0);
     case PAGE_ORDER_2M:
         if (!d->clone_of) {
             gdprintk(XENLOG_ERR, "PAGE_ORDER_2M pod in non-clone VM\n");
@@ -1516,7 +1516,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         ret = p2m_clone_l1(p2m_get_hostp2m(d->clone_of), p2m, gfn_aligned,
                            entry);
         p2m_unlock(p2m);
-        return ret;
+        return ret ? _mfn(INVALID_MFN) : _mfn(0);
     }
 
 #ifndef __UXEN__
@@ -1577,6 +1577,8 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             /* replacing a template shared page? */
             else if (mfn_valid_page(mfn_x(smfn)))
                 atomic_dec(&d->tmpl_shared_pages);
+            else if (mfn_retry(smfn))
+                atomic_dec(&d->retry_pages);
         }
         audit_p2m(p2m, 1);
         goto out;
@@ -1793,7 +1795,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
   out:
     p2m_pod_stat_update(d);
     p2m_unlock(p2m);
-    return 0;
+    return _mfn(0);
 out_of_memory:
 #ifndef __UXEN__
     unlock_page_alloc(p2m);
@@ -1804,7 +1806,7 @@ out_of_memory:
     domain_crash(d);
 out_fail:
     p2m_unlock(p2m);
-    return -1;
+    return _mfn(INVALID_MFN);
 #ifndef __UXEN__
 remap_and_retry:
     DEBUG();
@@ -1830,7 +1832,7 @@ remap_and_retry:
     }
 
     p2m_unlock(p2m);
-    return 0;
+    return _mfn(0);
 #endif  /* __UXEN__ */
 }
 
@@ -1877,6 +1879,8 @@ clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
                 atomic_inc(&d->pod_pages);
             if (mfn_x(mfn) == SHARED_ZERO_MFN)
                 atomic_inc(&d->zero_shared_pages);
+            else if (mfn_retry(mfn))
+                atomic_inc(&d->retry_pages);
             else
                 atomic_inc(&d->tmpl_shared_pages);
         } else if (p2m_is_ram(t)) {
@@ -1926,7 +1930,7 @@ p2m_clone_l1(struct p2m_domain *op2m, struct p2m_domain *p2m,
 
     mfn = op2m->get_l1_table(op2m, gpfn, NULL);
     if (!mfn_valid_page(mfn_x(mfn)))
-        return ret;
+        return 0;
     otable = map_domain_page(mfn_x(mfn));
 
     mfn = p2m->parse_entry(entry, 0, &t, &a);
@@ -2179,14 +2183,15 @@ p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
 
 int
 guest_physmap_mark_pod_locked(struct domain *d, unsigned long gfn,
-                              unsigned int order)
+                              unsigned int order, mfn_t mfn)
 {
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
     unsigned long i;
     p2m_type_t ot;
     mfn_t omfn;
     struct page_info *page = NULL;
-    int pod_count = 0, pod_zero_count = 0, pod_tmpl_count = 0;
+    int pod_count = 0, pod_zero_count = 0, pod_tmpl_count = 0,
+        pod_retry_count = 0;
     int rc = 0;
 
     // P2M_DEBUG("mark pod gfn=%#lx\n", gfn);
@@ -2240,13 +2245,15 @@ guest_physmap_mark_pod_locked(struct domain *d, unsigned long gfn,
                 pod_count++;
             else if (mfn_zero_page(mfn_x(omfn)))
                 pod_zero_count++;
+            else if (mfn_retry(omfn))
+                pod_retry_count++;
             else
                 pod_tmpl_count++;
         }
     }
 
     /* Now, actually do the two-way mapping */
-    if ( !set_p2m_entry(p2m, gfn, order ? _mfn(0) : _mfn(SHARED_ZERO_MFN),
+    if ( !set_p2m_entry(p2m, gfn, order ? _mfn(0) : mfn,
                         order, p2m_populate_on_demand, p2m->default_access) ) {
         rc = -EINVAL;
         goto out;
@@ -2258,10 +2265,16 @@ guest_physmap_mark_pod_locked(struct domain *d, unsigned long gfn,
     BUG_ON(p2m->pod.entry_count < 0);
 #else  /* __UXEN__ */
     atomic_add(1 << order, &d->pod_pages); /* Lock: p2m */
-    atomic_sub(pod_count + pod_zero_count + pod_tmpl_count, &d->pod_pages);
-    if (!order)
-        atomic_add(1 << order, &d->zero_shared_pages);
+    atomic_sub(pod_count + pod_zero_count + pod_tmpl_count + pod_retry_count,
+               &d->pod_pages);
+    if (!order) {
+        if (mfn_retry(mfn))
+            atomic_add(1 << order, &d->retry_pages);
+        else
+            atomic_add(1 << order, &d->zero_shared_pages);
+    }
     atomic_sub(pod_zero_count, &d->zero_shared_pages);
+    atomic_sub(pod_retry_count, &d->retry_pages);
     atomic_sub(pod_tmpl_count, &d->tmpl_shared_pages);
 #endif  /* __UXEN__ */
 
@@ -2277,7 +2290,7 @@ guest_physmap_mark_pod_locked(struct domain *d, unsigned long gfn,
 
 int
 guest_physmap_mark_populate_on_demand(struct domain *d, unsigned long gfn,
-                                      unsigned int order)
+                                      unsigned int order, mfn_t mfn)
 {
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
     int rc = 0;
@@ -2291,7 +2304,7 @@ guest_physmap_mark_populate_on_demand(struct domain *d, unsigned long gfn,
     p2m_lock(p2m);
     audit_p2m(p2m, 1);
 
-    rc = guest_physmap_mark_pod_locked(d, gfn, order);
+    rc = guest_physmap_mark_pod_locked(d, gfn, order, mfn);
 
     audit_p2m(p2m, 1);
     p2m_unlock(p2m);

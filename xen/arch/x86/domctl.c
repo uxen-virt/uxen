@@ -228,6 +228,11 @@ long arch_do_domctl(
                     p2m_type_t pt;
                     unsigned long type = 0, mfn = mfn_x(get_gfn_query(d, arr[j], &pt));
 
+                    if (__mfn_retry(mfn)) {
+                        ret = -ECONTINUATION;
+                        break;
+                    }
+
                     page = mfn_to_page(mfn);
 
                     if (p2m_is_pod(pt)) {
@@ -274,13 +279,16 @@ long arch_do_domctl(
                 }
 
                 if ( copy_to_guest_offset(domctl->u.getpageframeinfo3.array,
-                                          n, arr, k) )
+                                          n, arr, j) )
                 {
                     ret = -EFAULT;
                     break;
                 }
 
-                n += k;
+                n += j;
+
+                if (j != k)
+                    break;
             }
 
             unmap_domain_page(arr);
@@ -339,6 +347,11 @@ long arch_do_domctl(
                 unsigned long gfn = arr32[j];
                 unsigned long mfn = get_gfn_untyped(d, gfn);
 
+                if (__mfn_retry(mfn)) {
+                    ret = -ECONTINUATION;
+                    break;
+                }
+
                 page = mfn_to_page(mfn);
 
                 if ( domctl->cmd == XEN_DOMCTL_getpageframeinfo3)
@@ -385,13 +398,16 @@ long arch_do_domctl(
             }
 
             if ( copy_to_guest_offset(domctl->u.getpageframeinfo2.array,
-                                      n, arr32, k) )
+                                      n, arr32, j) )
             {
                 ret = -EFAULT;
                 break;
             }
 
-            n += k;
+            n += j;
+
+            if (j != k)
+                break;
         }
 
         free_xenheap_page(arr32);
@@ -470,6 +486,7 @@ long arch_do_domctl(
         }
 
         mfn = get_gfn_untyped(d, gmfn);
+#error handle get_gfn retry here
 
         ret = -EACCES;
         if ( !mfn_valid(mfn) ||

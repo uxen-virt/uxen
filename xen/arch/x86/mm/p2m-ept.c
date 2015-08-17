@@ -786,7 +786,7 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
     u32 index;
     int i;
     int ret = 0;
-    mfn_t mfn = _mfn(INVALID_MFN);
+    mfn_t mfn = _mfn(0);
 
     perfc_incr(pc11);
 
@@ -797,7 +797,7 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
 
     /* This pfn is higher than the highest the p2m map currently holds */
     if ( gfn > p2m->max_mapped_pfn )
-        return mfn;
+        return _mfn(INVALID_MFN);
 
     /* Should check if gfn obeys GAW here. */
 
@@ -833,10 +833,11 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
                 /* Populate this superpage */
                 ASSERT(i == 1);
 
-                if (!p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_2M, q,
-                                             ept_entry))
-                    goto retry;
-                goto out;
+                mfn = p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_2M, q,
+                                              ept_entry);
+                if (mfn_x(mfn))
+                    goto out;
+                goto retry;
             } else if (ret == GUEST_TABLE_SUPER_PAGE)
                 break;
         }
@@ -876,7 +877,8 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
 
         ASSERT(i == 0);
         
-        if (p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_4K, q, ept_entry))
+        mfn = p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_4K, q, ept_entry);
+        if (mfn_x(mfn))
             goto out;
 
         if (is_p2m_zeroshare_any(q)) {
@@ -922,7 +924,7 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
 
 out:
     unmap_domain_page_global(table);
-    return mfn;
+    return mfn_x(mfn) ? mfn : _mfn(INVALID_MFN);
 }
 
 /* WARNING: Only caller doesn't care about PoD pages.  So this function will

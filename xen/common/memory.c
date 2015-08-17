@@ -147,8 +147,8 @@ static void populate_physmap(struct memop_args *a)
 
         if ( a->memflags & MEMF_populate_on_demand )
         {
-            if ( guest_physmap_mark_populate_on_demand(d, gpfn,
-                                                       a->extent_order) < 0 )
+            if (guest_physmap_mark_populate_on_demand(
+                    d, gpfn, a->extent_order, _mfn(SHARED_ZERO_MFN)) < 0)
                 goto out;
         }
         else if (a->memflags & MEMF_populate_from_buffer_compressed)
@@ -254,6 +254,10 @@ capture_memory(struct domain *d, xen_memory_capture_t *capture)
 
         mfn = mfn_x(get_gfn_contents(source_d, gpfn, &t, data, &size,
                                      !!(flags & XENMEM_MCGI_FLAGS_REMOVE_PFN)));
+        if (__mfn_retry(mfn)) {
+            ret = -ECONTINUATION;
+            goto next;
+        }
         if (mfn_zero_page(mfn)) {
             gi.type = XENMEM_MCGI_TYPE_ZERO;
             gi.offset = -1;
@@ -325,6 +329,12 @@ int guest_remove_page(struct domain *d, unsigned long gmfn)
     {
         guest_physmap_remove_page(d, gmfn, mfn, PAGE_ORDER_4K);
         p2m_mem_paging_drop_page(d, gmfn);
+        put_gfn(d, gmfn);
+        return 1;
+    }
+#else  /* __UXEN__ */
+    if (__mfn_retry(mfn)) {
+        guest_physmap_remove_page(d, gmfn, mfn, PAGE_ORDER_4K);
         put_gfn(d, gmfn);
         return 1;
     }
@@ -535,6 +545,7 @@ static long memory_exchange(XEN_GUEST_HANDLE(xen_memory_exchange_t) arg)
 
                 /* Shared pages cannot be exchanged */
                 mfn = mfn_x(get_gfn_unshare(d, gmfn + k, &p2mt));
+#error handle get_gfn retry here
                 if ( p2m_is_shared(p2mt) )
                 {
                     put_gfn(d, gmfn + k);

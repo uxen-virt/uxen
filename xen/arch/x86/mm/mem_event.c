@@ -67,6 +67,7 @@ static int mem_event_enable(struct domain *d,
      * enables 3. the two gfn's in each enable criss-crossed
      * 2MB regions. Duly noted.... */
     ring_mfn = get_gfn(dom_mem_event, ring_gfn, &p2mt);
+#error handle get_gfn retry here
 
     if ( unlikely(!mfn_valid(mfn_x(ring_mfn))) )
     {
@@ -78,6 +79,7 @@ static int mem_event_enable(struct domain *d,
     guest_get_eff_l1e(v, shared_addr, &l1e);
     shared_gfn = l1e_get_pfn(l1e);
     shared_mfn = get_gfn(dom_mem_event, shared_gfn, &p2mt);
+#error handle get_gfn retry here
 
     if ( unlikely(!mfn_valid(mfn_x(shared_mfn))) )
     {

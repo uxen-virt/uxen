@@ -546,6 +546,11 @@ static int hvm_set_ioreq_page(
         put_gfn(d, gmfn);
         return -ENOENT;
     }
+#else  /* __UXEN__ */
+    if (__mfn_retry(mfn)) {
+        put_gfn(d, gmfn);
+        return -ENOENT;
+    }
 #endif  /* __UXEN__ */
     ASSERT(mfn_valid(mfn));
 
@@ -894,6 +899,7 @@ static int hvm_load_cpu_ctxt(struct domain *d, hvm_domain_context_t *h)
     struct hvm_hw_cpu ctxt;
     struct segment_register seg;
     uint64_t efer_validbits;
+    int ret;
 
     /* Which vcpu is this? */
     vcpuid = hvm_load_instance(h);
@@ -959,8 +965,9 @@ static int hvm_load_cpu_ctxt(struct domain *d, hvm_domain_context_t *h)
 #undef UNFOLD_ARBYTES
 
     /* Architecture-specific vmcs/vmcb bits */
-    if ( hvm_funcs.load_cpu_ctxt(v, &ctxt) < 0 )
-        return -EINVAL;
+    ret = hvm_funcs.load_cpu_ctxt(v, &ctxt);
+    if (ret < 0)
+        return ret;
 
     v->arch.hvm_vcpu.msr_tsc_aux = ctxt.msr_tsc_aux;
 
@@ -1464,6 +1471,11 @@ int hvm_hap_nested_page_fault(unsigned long gpa,
     mfn = get_gfn_type_access(p2m, gfn, &p2mt, &p2ma,
                               access_w ? p2m_guest : p2m_guest_r, NULL);
 
+    if (mfn_retry(mfn)) {
+        rc = 1;
+        goto out_put_gfn;
+    }
+
     /* Check access permissions first, then handle faults */
     if (mfn_valid_page(mfn_x(mfn))) {
         int violation = 0;
@@ -1898,6 +1910,7 @@ int hvm_set_cr0(unsigned long value)
             /* The guest CR3 must be pointing to the guest physical. */
             gfn = v->arch.hvm_vcpu.guest_cr[3]>>PAGE_SHIFT;
             mfn = mfn_x(get_gfn(v->domain, gfn, &p2mt));
+#error handle get_gfn retry here
             if ( !p2m_is_ram(p2mt) || !mfn_valid(mfn) ||
                  !get_page(mfn_to_page(mfn), v->domain))
             {
@@ -2001,6 +2014,7 @@ int hvm_set_cr3(unsigned long value)
         /* Shadow-mode CR3 change. Check PDBR and update refcounts. */
         HVM_DBG_LOG(DBG_LEVEL_VMMU, "CR3 value = %lx", value);
         mfn = mfn_x(get_gfn(v->domain, value >> PAGE_SHIFT, &p2mt));
+#error handle get_gfn retry here
         if ( !p2m_is_ram(p2mt) || !mfn_valid(mfn) ||
              !get_page(mfn_to_page(mfn), v->domain) )
         {
@@ -2174,6 +2188,11 @@ static void *__hvm_map_guest_frame(unsigned long gfn, bool_t writable)
     if ( p2m_is_paging(p2mt) )
     {
         p2m_mem_paging_populate(d, gfn);
+        put_gfn(d, gfn);
+        return NULL;
+    }
+#else  /* __UXEN__ */
+    if (__mfn_retry(mfn)) {
         put_gfn(d, gfn);
         return NULL;
     }
@@ -2610,6 +2629,8 @@ static enum hvm_copy_result __hvm_copy(
             gfn = paging_gva_to_gfn(curr, addr, &pfec);
             if ( gfn == INVALID_GFN )
             {
+                if (pfec == PFEC_page_populate)
+                    return HVMCOPY_gfn_populate;
                 if ( pfec == PFEC_page_paged )
                     return HVMCOPY_gfn_paged_out;
                 if ( pfec == PFEC_page_shared )
@@ -2642,6 +2663,11 @@ static enum hvm_copy_result __hvm_copy(
         {
             put_gfn(curr->domain, gfn);
             return HVMCOPY_unhandleable;
+        }
+#else  /* __UXEN__ */
+        if (__mfn_retry(mfn)) {
+            put_gfn(curr->domain, gfn);
+            return HVMCOPY_gfn_populate;
         }
 #endif  /* __UXEN__ */
         if ( !p2m_is_ram(p2mt) )
@@ -2802,6 +2828,9 @@ copy_to_hvm_errno(void *to, const void *from, unsigned len)
     case HVMCOPY_okay:
         rc = 0;
         break;
+    case HVMCOPY_gfn_populate:
+        rc = -ECONTINUATION;
+        break;
     default:
         rc = -EFAULT;
         break;
@@ -2818,6 +2847,9 @@ copy_from_hvm_errno(void *to, const void *from, unsigned len)
     switch (rc) {
     case HVMCOPY_okay:
         rc = 0;
+        break;
+    case HVMCOPY_gfn_populate:
+        rc = -ECONTINUATION;
         break;
     default:
         rc = -EFAULT;
@@ -3506,6 +3538,11 @@ int hvm_do_hypercall(struct cpu_user_regs *regs)
 
     HVM_DBG_LOG(DBG_LEVEL_HCALL, "hcall%u -> %lx",
                 eax, (unsigned long)regs->eax);
+
+    if (regs->eax == -ECONTINUATION) {
+        regs->eax = eax;
+        return HVM_HCALL_preempted;
+    }
 
     if ( curr->arch.hvm_vcpu.hcall_preempted )
         return HVM_HCALL_preempted;
@@ -4531,6 +4568,12 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
             if( p2m_is_shared(t) )
                 gdprintk(XENLOG_WARNING,
                          "shared pfn 0x%lx modified?\n", pfn);
+#else  /* __UXEN__ */
+            if (mfn_retry(mfn)) {
+                put_gfn(d, pfn);
+                rc = -EINVAL;
+                goto param_fail3;
+            }
 #endif  /* __UXEN__ */
             
             if ( mfn_x(mfn) != INVALID_MFN )
@@ -4566,6 +4609,7 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
         if ( is_hvm_domain(d) )
         {
             get_gfn_unshare_unlocked(d, a.pfn, &t);
+#error handle get_gfn retry here
             if ( p2m_is_mmio(t) )
                 a.mem_type =  HVMMEM_mmio_dm;
             else if ( p2m_is_readonly(t) )
@@ -4623,7 +4667,7 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
         {
             p2m_type_t t;
             p2m_type_t nt;
-            get_gfn_unshare(d, pfn, &t);
+            mfn_t mfn = get_gfn_unshare(d, pfn, &t);
 #ifndef __UXEN__
             if ( p2m_is_paging(t) )
             {
@@ -4647,6 +4691,12 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
                 goto param_fail4;
             }
             else
+#else  /* __UXEN__ */
+            if (mfn_retry(mfn)) {
+                put_gfn(d, pfn);
+                rc = -EINVAL;
+                goto param_fail4;
+            }
 #endif  /* __UXEN__ */
             {
                 nt = p2m_change_type(d, pfn, t, memtype[a.hvmmem_type]);

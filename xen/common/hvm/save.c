@@ -192,6 +192,7 @@ int hvm_load(struct domain *d, hvm_domain_context_t *h)
     struct hvm_save_descriptor *desc;
     hvm_load_handler handler;
     struct vcpu *v;
+    int ret;
     
     gdprintk(XENLOG_INFO, "HVM restore: vm%u%s\n", d->domain_id,
              d->is_dying ? " (dying)" : "");
@@ -201,10 +202,10 @@ int hvm_load(struct domain *d, hvm_domain_context_t *h)
 
     /* Read the save header, which must be first */
     if ( hvm_load_entry(HEADER, h, &hdr) != 0 ) 
-        return -1;
+        return -EINVAL;
 
     if ( arch_hvm_load(d, &hdr) )
-        return -1;
+        return -EINVAL;
 
     /* Down all the vcpus: we only re-enable the ones that had state saved. */
     for_each_vcpu(d, v) 
@@ -218,7 +219,7 @@ int hvm_load(struct domain *d, hvm_domain_context_t *h)
             /* Run out of data */
             gdprintk(XENLOG_ERR, 
                      "HVM restore: save did not end with a null entry\n");
-            return -1;
+            return -EINVAL;
         }
         
         /* Read the typecode of the next entry  and check for the end-marker */
@@ -235,18 +236,19 @@ int hvm_load(struct domain *d, hvm_domain_context_t *h)
             gdprintk(XENLOG_ERR, 
                      "HVM restore: unknown entry typecode %u\n", 
                      desc->typecode);
-            return -1;
+            return -EINVAL;
         }
 
         /* Load the entry */
         gdprintk(XENLOG_DEBUG, "HVM restore: %s %"PRIu16"\n",  
                  hvm_sr_handlers[desc->typecode].name, desc->instance);
-        if ( handler(d, h) != 0 ) 
-        {
-            gdprintk(XENLOG_ERR, 
-                     "HVM restore: failed to load entry %u/%u\n", 
-                     desc->typecode, desc->instance);
-            return -1;
+        ret = handler(d, h);
+        if (ret) {
+            if (ret != -ECONTINUATION)
+                gdprintk(XENLOG_ERR,
+                         "HVM restore: failed to load entry %u/%u\n",
+                         desc->typecode, desc->instance);
+            return ret;
         }
     }
 

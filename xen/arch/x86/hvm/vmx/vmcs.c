@@ -1479,7 +1479,7 @@ void vmcs_mini_dump_vcpu(struct vcpu *v, unsigned int exit_reason)
         pfn = paging_gva_to_gfn(current, 0x20c53, &pfec);
         if (pfn != INVALID_GFN) {
             printk("rip gfn %lx\n", pfn);
-            mfn = mfn_x(get_gfn_unshare(current->domain, pfn, &p2mt));
+            mfn = mfn_x(get_gfn_query(current->domain, pfn, &p2mt));
             if (mfn_valid(mfn)) {
                 char *p = (char *)map_domain_page(mfn);
                 printk("mfn %lx at %p\n", mfn, p);

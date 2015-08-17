@@ -952,10 +952,10 @@ DEBUG();
     return 0;
 }
 
-static void hap_update_cr3(struct vcpu *v, int do_locking)
+static int hap_update_cr3(struct vcpu *v, int do_locking)
 {
     v->arch.hvm_vcpu.hw_cr[3] = v->arch.hvm_vcpu.guest_cr[3];
-    hvm_update_guest_cr(v, 3);
+    return hvm_update_guest_cr(v, 3);
 }
 
 const struct paging_mode *
@@ -969,7 +969,7 @@ hap_paging_get_mode(struct vcpu *v)
                                    &hap_paging_protected_mode;
 }
 
-static void hap_update_paging_modes(struct vcpu *v)
+static int hap_update_paging_modes(struct vcpu *v)
 {
     struct domain *d = v->domain;
     uint64_t cr3;
@@ -997,7 +997,7 @@ static void hap_update_paging_modes(struct vcpu *v)
     paging_unlock(d);
 
     /* CR3 is effectively updated by a mode change. Flush ASIDs, etc. */
-    hap_update_cr3(v, 0);
+    return hap_update_cr3(v, 0);
 }
 
 #ifndef __UXEN__

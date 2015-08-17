@@ -742,6 +742,11 @@ int wrmsr_hypervisor_regs(uint32_t idx, uint64_t val)
 
         mfn = get_gfn_untyped(d, gmfn);
 
+        if (__mfn_retry(mfn)) {
+            put_gfn(d, gmfn);
+            return -1;
+        }
+
         if ( !mfn_valid(mfn) ||
              !get_page_and_type(mfn_to_page(mfn), d, PGT_writable_page) )
         {
@@ -2452,6 +2457,7 @@ static int emulate_privileged_op(struct cpu_user_regs *regs)
 #endif
             }
             mfn = get_gfn_untyped(v->domain, gfn);
+#error handle get_gfn retry here
             rc = new_guest_cr3(mfn);
             put_gfn(v->domain, gfn);
             domain_unlock(v->domain);
@@ -2612,7 +2618,10 @@ static int emulate_privileged_op(struct cpu_user_regs *regs)
                 goto fail;
             break;
         default:
-            if ( wrmsr_hypervisor_regs(regs->ecx, msr_content) )
+            rc = wrmsr_hypervisor_regs(regs->ecx, msr_content);
+            if (rc == -1)
+                goto fail;
+            if (rc)
                 break;
 
             rc = vmce_wrmsr(regs->ecx, msr_content);

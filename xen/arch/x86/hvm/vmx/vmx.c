@@ -87,7 +87,7 @@ static void vmx_ctxt_switch_to(struct vcpu *v);
 static int  vmx_alloc_vlapic_mapping(struct domain *d);
 static void vmx_free_vlapic_mapping(struct domain *d);
 static void vmx_install_vlapic_mapping(struct vcpu *v);
-static void vmx_update_guest_cr(struct vcpu *v, unsigned int cr);
+static int vmx_update_guest_cr(struct vcpu *v, unsigned int cr);
 static void vmx_update_guest_efer(struct vcpu *v);
 static void vmx_cpuid_intercept(
     unsigned int *eax, unsigned int *ebx,
@@ -571,6 +571,7 @@ static int vmx_restore_cr0_cr3(
         if ( cr0 & X86_CR0_PG )
         {
             mfn = mfn_x(get_gfn(v->domain, cr3 >> PAGE_SHIFT, &p2mt));
+#error handle get_gfn retry here
             if ( !p2m_is_ram(p2mt) || !get_page(mfn_to_page(mfn), v->domain) )
             {
                 put_gfn(v->domain, cr3 >> PAGE_SHIFT);
@@ -630,7 +631,9 @@ static int vmx_vmcs_restore(struct vcpu *v, struct hvm_hw_cpu *c)
 
     vmx_vmcs_exit(v);
 
-    paging_update_paging_modes(v);
+    rc = paging_update_paging_modes(v);
+    if (rc)
+        return rc;
 
     if ( c->pending_valid )
     {
@@ -701,16 +704,17 @@ static void vmx_save_vmcs_ctxt(struct vcpu *v, struct hvm_hw_cpu *ctxt)
 
 static int vmx_load_vmcs_ctxt(struct vcpu *v, struct hvm_hw_cpu *ctxt)
 {
+    int ret;
+
     vmx_load_cpu_state(v, ctxt);
 
-    if ( vmx_vmcs_restore(v, ctxt) )
-    {
+    ret = vmx_vmcs_restore(v, ctxt);
+    if (ret && ret != -ECONTINUATION) {
         gdprintk(XENLOG_ERR, "vmx_vmcs restore failed!\n");
         domain_crash(v->domain);
-        return -EINVAL;
     }
 
-    return 0;
+    return ret;
 }
 
 static void vmx_fpu_enter(struct vcpu *v)
@@ -1348,21 +1352,26 @@ static void vmx_set_interrupt_shadow(struct vcpu *v, unsigned int intr_shadow)
     __vmwrite(GUEST_INTERRUPTIBILITY_INFO, intr_shadow);
 }
 
-static void vmx_load_pdptrs(struct vcpu *v)
+static int vmx_load_pdptrs(struct vcpu *v)
 {
     unsigned long cr3 = v->arch.hvm_vcpu.guest_cr[3], mfn;
     uint64_t *guest_pdptrs;
     p2m_type_t p2mt;
     char *p;
+    int ret = 0;
 
     /* EPT needs to load PDPTRS into VMCS for PAE. */
     if ( !hvm_pae_enabled(v) || (v->arch.hvm_vcpu.guest_efer & EFER_LMA) )
-        return;
+        return 0;
 
     if ( cr3 & 0x1fUL )
         goto crash;
 
     mfn = mfn_x(get_gfn(v->domain, cr3 >> PAGE_SHIFT, &p2mt));
+    if (__mfn_retry(mfn)) {
+        ret = -ECONTINUATION;
+        goto out;
+    }
     if ( !p2m_is_ram(p2mt) )
     {
         put_gfn(v->domain, cr3 >> PAGE_SHIFT);
@@ -1395,11 +1404,13 @@ static void vmx_load_pdptrs(struct vcpu *v)
     vmx_vmcs_exit(v);
 
     unmap_domain_page(p);
+  out:
     put_gfn(v->domain, cr3 >> PAGE_SHIFT);
-    return;
+    return ret;
 
  crash:
     domain_crash(v->domain);
+    return -EINVAL;
 }
 
 static void vmx_update_host_cr3(struct vcpu *v)
@@ -1429,8 +1440,10 @@ void vmx_update_debug_state(struct vcpu *v)
     vmx_update_exception_bitmap(v);
 }
 
-static void vmx_update_guest_cr(struct vcpu *v, unsigned int cr)
+static int vmx_update_guest_cr(struct vcpu *v, unsigned int cr)
 {
+    int ret = 0;
+
     vmx_vmcs_enter(v);
 
     switch ( cr )
@@ -1533,7 +1546,7 @@ static void vmx_update_guest_cr(struct vcpu *v, unsigned int cr)
             if ( !hvm_paging_enabled(v) )
                 v->arch.hvm_vcpu.hw_cr[3] =
                     v->domain->arch.hvm_domain.params[HVM_PARAM_IDENT_PT];
-            vmx_load_pdptrs(v);
+            ret = vmx_load_pdptrs(v);
         }
  
         __vmwrite(GUEST_CR3, v->arch.hvm_vcpu.hw_cr[3]);
@@ -1573,6 +1586,8 @@ static void vmx_update_guest_cr(struct vcpu *v, unsigned int cr)
     }
 
     vmx_vmcs_exit(v);
+
+    return ret;
 }
 
 static void vmx_update_guest_efer(struct vcpu *v)
@@ -2443,6 +2458,7 @@ void vmx_vlapic_msr_changed(struct vcpu *v)
 static int vmx_msr_write_intercept(unsigned int msr, uint64_t msr_content)
 {
     struct vcpu *v = current;
+    int r;
 
     HVM_DBG_LOG(DBG_LEVEL_1, "ecx=%x, msr_value=0x%"PRIx64,
                 msr, msr_content);
@@ -2504,15 +2520,20 @@ static int vmx_msr_write_intercept(unsigned int msr, uint64_t msr_content)
             return X86EMUL_OKAY;
 #endif  /* __UXEN__ */
 
-        if ( wrmsr_viridian_regs(msr, msr_content) ) 
+        r = wrmsr_viridian_regs(msr, msr_content);
+        if (r == -1)
+            return X86EMUL_RETRY;
+        if (r)
             break;
 
         switch ( long_mode_do_msr_write(msr, msr_content) )
         {
             case HNDL_unhandled:
                 if ( (vmx_write_guest_msr(msr, msr_content) != 0) &&
-                     !is_last_branch_msr(msr) )
-                    wrmsr_hypervisor_regs(msr, msr_content);
+                     !is_last_branch_msr(msr) ) {
+                    if (wrmsr_hypervisor_regs(msr, msr_content) == -1)
+                        return X86EMUL_RETRY;
+                }
                 break;
             case HNDL_exception_raised:
                 return X86EMUL_EXCEPTION;

@@ -298,6 +298,7 @@ ret_t do_physdev_op(int cmd, XEN_GUEST_HANDLE(void) arg)
 
         ret = -EINVAL;
         mfn = get_gfn_untyped(current->domain, info.gmfn);
+#error handle get_gfn retry here
         if ( !mfn_valid(mfn) ||
              !get_page_and_type(mfn_to_page(mfn), v->domain,
                                 PGT_writable_page) )
