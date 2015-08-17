@@ -280,7 +280,6 @@ typedef struct Manifest {
 } Manifest;
 
 ManifestEntry *find_by_prefix(Manifest *man, const wchar_t *fn);
-ManifestEntry *find_by_name(Manifest *man, const wchar_t *fn);
 
 void man_init(Manifest *man)
 {
@@ -323,11 +322,15 @@ ManifestEntry* man_push_file(Manifest *out, ntfs_fs_t vol, Variable *var, const 
     return e;
 }
 
+/* Sorts by name (insensitively), then by action, then finally by case-sensitive
+ * name, as a tie-break to impose a consistent ordering on entries that differ
+ * only by case.
+ */
 int cmp(const void *a, const void *b)
 {
     const ManifestEntry *ea = (const ManifestEntry *) a;
     const ManifestEntry *eb = (const ManifestEntry *) b;
-    int r = wcscmp(ea->name, eb->name);
+    int r = wcsicmp(ea->name, eb->name);
     if (r != 0) {
         return r;
     } else {
@@ -336,7 +339,7 @@ int cmp(const void *a, const void *b)
         } else if (eb->action < ea->action) {
             return 1;
         } else {
-            return 0;
+            return wcscmp(ea->name, eb->name);
         }
     }
 }
@@ -448,7 +451,7 @@ void man_uniq_by_name(Manifest *man)
         const wchar_t *aname = a->rewrite ? a->rewrite : a->name;
         const wchar_t* jname = man->entries[j - 1].rewrite ?
             man->entries[j - 1].rewrite : man->entries[j - 1].name;
-        if (wcscmp(aname, jname) != 0) {
+        if (wcsicmp(aname, jname) != 0) {
             man->entries[j++] = *a;
         }
     }
@@ -468,7 +471,7 @@ void man_uniq_by_name_and_action(Manifest *man)
         const wchar_t *aname = a->rewrite ? a->rewrite : a->name;
         const wchar_t* jname = man->entries[j - 1].rewrite ?
             man->entries[j - 1].rewrite : man->entries[j - 1].name;
-        if (wcscmp(aname, jname) != 0
+        if (wcsicmp(aname, jname) != 0
                || a->action != man->entries[j - 1].action) {
             man->entries[j++] = *a;
         }
@@ -501,6 +504,8 @@ void man_filter_excludables(Manifest *man)
     }
 }
 
+/* Replaces backslashes with forward slashes and eliminates duplicate slashes.
+ * Note this does not alter the case of s */
 static inline void normalize_string(wchar_t *s)
 {
     int last = 0;
@@ -514,7 +519,7 @@ static inline void normalize_string(wchar_t *s)
             continue;
         }
         last = c;
-        *d++ = towlower(c);
+        *d++ = c;
     }
     *d = L'\0';
 }
@@ -750,28 +755,6 @@ int read_manifest(FILE *f, VarList *vars, Manifest *suffix)
     return 0;
 }
 
-ManifestEntry *find_by_name(Manifest *man, const wchar_t *fn)
-{
-    int half;
-    ManifestEntry *middle;
-    ManifestEntry *first = man->entries;
-    int len = man->n;
-    while (len > 0) {
-        half = len >> 1;
-        middle = first + half;
-        if (wcscmp(middle->name, fn) < 0) {
-            first = middle + 1;
-            len = len - half - 1;
-        } else
-            len = half;
-    }
-    if (first == &man->entries[man->n] || wcscmp(first->name, fn)) {
-        return NULL;
-    } else {
-        return first;
-    }
-}
-
 ManifestEntry *find_by_prefix(Manifest *man, const wchar_t *fn)
 {
     int i;
@@ -781,7 +764,7 @@ ManifestEntry *find_by_prefix(Manifest *man, const wchar_t *fn)
 
         ManifestEntry *e = man->entries_ex[i];
 
-        if (!wcsncmp(fn, e->name, e->name_len) &&
+        if (!wcsnicmp(fn, e->name, e->name_len) &&
                 (!match || e->name_len > match->name_len)) {
             match = e;
         }
@@ -801,7 +784,7 @@ ManifestEntry *find_by_suffix(Manifest *man, const wchar_t *fn)
 
         if (fn_len >= e->name_len &&
                 (!e->name_len || fn[fn_len - (1 + e->name_len)] == L'.') &&
-                !wcsncmp(fn + fn_len - e->name_len, e->name, e->name_len) &&
+                !wcsnicmp(fn + fn_len - e->name_len, e->name, e->name_len) &&
                 (!match || e->name_len > match->name_len)) {
             match = e;
         }

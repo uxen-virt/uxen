@@ -930,11 +930,14 @@ static int ntfs_filldir(ntfs_inode *dir_ni, s64 *pos, u8 ivcn_bits,
 				|| !(fn->file_attributes & FILE_ATTR_HIDDEN)))
             || (NVolShowSysFiles(dir_ni->vol) && (NVolShowHidFiles(dir_ni->vol)
 				|| metadata))) {
+#if 0 // Uxen change: never mangle case
 		if (NVolCaseSensitive(dir_ni->vol)) {
+#endif
 			res = filldir(dirent, fn->file_name,
 					fn->file_name_length,
 					fn->file_name_type, *pos,
 					mref, dt_type);
+#if 0 // Uxen change: never mangle case
 		} else {
 			loname = (ntfschar*)ntfs_malloc(2*fn->file_name_length);
 			if (loname) {
@@ -951,6 +954,7 @@ static int ntfs_filldir(ntfs_inode *dir_ni, s64 *pos, u8 ivcn_bits,
 			} else
 				res = -1;
 		}
+#endif
 	} else
 		res = 0;
 	return (res);
