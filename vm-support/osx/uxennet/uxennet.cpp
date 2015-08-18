@@ -69,27 +69,35 @@ bool uxen_net::start(IOService *provider)
     if (!this->queryDeviceProperties(acpi_device))
         return false;
 
+    this->send_workloop = IOWorkLoop::workLoop();
+    
     /* this calls getHardwareAddress()/getMaxPacketSize(), so we can't call it
      * any earlier */
-    if (!this->super::start(provider))
+    if (!this->super::start(provider)) {
+        OSSafeReleaseNULL(this->send_workloop);
         return false;
+    }
 
     IOOutputQueue* queue = this->getOutputQueue();
     if (queue == nullptr) {
         IOLog("uxen_net::start - aborting, failed to get output queue.\n");
         this->super::stop(provider);
+        OSSafeReleaseNULL(this->send_workloop);
         return false;
     }
-
+    
     // Establish the V4V communication channel
-    // TODO: is the 10 second timeout the way to go? Should we register for async matching instead?
     matching_dict = this->serviceMatching(kUxenV4VServiceClassName);
+    /* This waits synchronously for up to 10 seconds. Installing an async
+     * notification may be cleaner but this seems to work fine and uses less
+     * code. */
     matching_service =
         this->waitForMatchingService(matching_dict, NSEC_PER_SEC * 10);
     service = OSDynamicCast(uxen_v4v_service, matching_service);
     if (service == nullptr) {
         OSSafeRelease(matching_service); // balances waitForMatchingService()
         this->super::stop(provider);
+        OSSafeReleaseNULL(this->send_workloop);
         return false;
     }
     this->attach(service);
@@ -103,16 +111,17 @@ bool uxen_net::start(IOService *provider)
         kprintf("uxen_net::start Failed to create v4v ring, error %d\n", err);
         this->detach(service);
         this->super::stop(provider);
+        OSSafeReleaseNULL(this->send_workloop);
         return false;
     }
     this->v4v_ring = new_ring;
 
     // Bring up the network interface startup
-    if(!this->attachInterface(&this->interface, true /*register with IOKit*/))
-    {
+    if(!this->attachInterface(&this->interface, true /*register with IOKit*/)) {
         this->detach(service);
         kprintf("uxen_net::start Could not attach interface \n");
         this->super::stop(provider);
+        OSSafeReleaseNULL(this->send_workloop);
         return false;
     }
     
@@ -123,13 +132,23 @@ bool uxen_net::start(IOService *provider)
 
 void
 uxen_net::stop(IOService *provider) {
-
     if (this->v4v_ring != nullptr) {
         this->v4v_service->destroyRing(this->v4v_ring);
         this->v4v_ring = nullptr;
     }
     this->super::stop(provider);
 }
+
+void
+uxen_net::free() {
+
+    OSSafeReleaseNULL(this->interface);
+    this->super::free();
+    /* The output queue uses the send workloop until it's destroyed
+     * in IONetworkController::free, so delete it last */
+    OSSafeReleaseNULL(this->send_workloop);
+}
+
 
 static OSData*
 acpi_get_data_property(IOACPIPlatformDevice* acpi_device, const char* property_name)
@@ -186,13 +205,13 @@ uxen_net::createOutputQueue()
     IOGatedOutputQueue* queue;
     
     capacity = UXENNET_RING_SIZE / min(this->mtu, kIOEthernetMaxPacketSize);
-    queue = IOGatedOutputQueue::withTarget(this, this->getWorkLoop(), capacity);
+    queue = IOGatedOutputQueue::withTarget(this, this->send_workloop, capacity);
     if (queue == nullptr) {
         IOLog(
             "uxen_net::createOutputQueue: failed to create output queue "
             "with capacity %u (MTU %u, ring size %u) on workloop %p.\n",
             capacity, this->mtu, UXENNET_RING_SIZE,
-            static_cast<void*>(this->getWorkLoop()));
+            static_cast<void*>(this->send_workloop));
     }
     return queue;
 }

@@ -25,6 +25,9 @@ protected:
     IONetworkInterface* interface;
     uxen_v4v_ring* v4v_ring;
     IOKernelDebugger* debugger;
+	
+	// Workloop (thread) used for sending. The inherited V4V workloop is used for receiving.
+    IOWorkLoop* send_workloop;
     
     bool queryDeviceProperties(IOACPIPlatformDevice *acpi_device);
     void processReceivedPackets();
@@ -32,6 +35,7 @@ protected:
 public:
     virtual bool start(IOService *provider) override;
     virtual void stop(IOService *provider) override;
+    virtual void free() override;
     virtual IOReturn getHardwareAddress(IOEthernetAddress *addrP) override;
     virtual IOOutputQueue *createOutputQueue() override;
     virtual UInt32 outputPacket(mbuf_t, void *param) override;
