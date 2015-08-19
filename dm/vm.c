@@ -744,7 +744,8 @@ handle_exception_event(void *opaque)
         if (vm_save_info.awaiting_suspend && vm_process_suspend(&info))
             return;
 
-        if (info.shutdown || info.crashed) {
+        if ((info.shutdown && info.shutdown_reason != SHUTDOWN_suspend) ||
+            info.crashed) {
             vm_set_run_mode(DESTROY_VM);
             return;
         }
@@ -754,7 +755,8 @@ handle_exception_event(void *opaque)
             return;
         }
 
-        vm_set_run_mode(RUNNING_VM);
+        if (!info.shutdown && !info.shutting_down)
+            vm_set_run_mode(RUNNING_VM);
     }
 }
 

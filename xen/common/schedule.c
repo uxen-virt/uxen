@@ -998,7 +998,8 @@ ret_t do_sched_op(int cmd, XEN_GUEST_HANDLE(void) arg)
         }
 #endif  /* __UXEN__ */
 
-        printk("SCHEDOP_remote_shutdown reason %d\n", (u8)sched_remote_shutdown.reason);
+        printk("vm%d SCHEDOP_remote_shutdown reason %d\n",
+               d->domain_id, (u8)sched_remote_shutdown.reason);
         domain_shutdown(d, (u8)sched_remote_shutdown.reason);
 
         rcu_unlock_domain(d);

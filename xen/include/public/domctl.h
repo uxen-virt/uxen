@@ -94,6 +94,9 @@ struct xen_domctl_getdomaininfo {
  /* Being debugged.  */
 #define _XEN_DOMINF_debugged  6
 #define XEN_DOMINF_debugged   (1U<<_XEN_DOMINF_debugged)
+ /* Shutting down.  */
+#define _XEN_DOMINF_shutting_down 7
+#define XEN_DOMINF_shutting_down (1U<<_XEN_DOMINF_shutting_down)
  /* XEN_DOMINF_shutdown guest-supplied code.  */
 #define XEN_DOMINF_shutdownmask 255
 #define XEN_DOMINF_shutdownshift 16
