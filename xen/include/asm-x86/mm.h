@@ -302,7 +302,7 @@ struct spage_info
 #else
 #define is_xen_heap_page(page) ((page)->count_info & PGC_xen_heap)
 #define is_xen_heap_mfn(mfn) \
-    (__mfn_valid(mfn) && is_xen_heap_page(__mfn_to_page(mfn)))
+    (__mfn_valid_page(mfn) && is_xen_heap_page(__mfn_to_page(mfn)))
 #define is_xen_fixed_mfn(mfn)                     \
     ((((mfn) << PAGE_SHIFT) >= __pa(&_start)) &&  \
      (((mfn) << PAGE_SHIFT) <= __pa(&_end)))
@@ -310,10 +310,10 @@ struct spage_info
 #else  /* __UXEN__ */
 #define is_xen_page(page) ((page)->count_info & PGC_xen_page)
 #define is_xen_mfn(mfn) \
-    (__mfn_valid(mfn) && is_xen_page(__mfn_to_page(mfn)))
+    (__mfn_valid_page(mfn) && is_xen_page(__mfn_to_page(mfn)))
 #define is_host_page(page) ((page)->count_info & PGC_host_page)
 #define is_host_mfn(mfn) \
-    (__mfn_valid(mfn) && is_host_page(__mfn_to_page(mfn)))
+    (__mfn_valid_page(mfn) && is_host_page(__mfn_to_page(mfn)))
 #endif  /* __UXEN__ */
 
 #if defined(__i386__)

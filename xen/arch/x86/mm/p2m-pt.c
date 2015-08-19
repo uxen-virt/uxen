@@ -983,7 +983,7 @@ pod_retry_l2:
         unmap_domain_page(l2e);
         if (page_order)
             *page_order = PAGE_ORDER_2M;
-        return mfn;
+        return mfn_x(mfn) ? mfn : _mfn(INVALID_MFN);
     }
 #ifndef __UXEN__
     else if ( (l2e_get_flags(*l2e) & _PAGE_PSE) )
