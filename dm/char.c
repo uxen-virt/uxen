@@ -490,9 +490,9 @@ static int fd_chr_write_flush(CharDriverState *chr)
             s->eof = 1;
             goto release;
         case -1:
+            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
+                break;
             s->err = errno;
-            TAILQ_REMOVE(&s->send_queue, b, link);
-            free(b);
             goto release;
         default:
             b->len -= rc;
