@@ -93,7 +93,7 @@ mdm_unmap_mfn(void *va, uint32_t offset, mdm_mfn_t mfn)
 {
     uint64_t pte;
 
-    pte = memcache_dm_map_mfn((uintptr_t)va + offset, mfn);
+    pte = map_mfn((uintptr_t)va + offset, mfn);
     ASSERT(pte);
 
     return (pte & MDM_PAGE_PRESENT) ?

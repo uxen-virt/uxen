@@ -318,8 +318,8 @@ int uxen_load_symbols(void);
 int uxen_unload(void);
 
 /* uxen_mem.c */
-#define set_mdm_map_pte_flags() do { } while (0)
-uint64_t __cdecl memcache_dm_map_mfn(uintptr_t va, xen_pfn_t mfn);
+#define set_map_mfn_pte_flags() do { } while (0)
+uint64_t __cdecl map_mfn(uintptr_t va, xen_pfn_t mfn);
 int map_pfn_array_pool_fill(void);
 void map_pfn_array_pool_clear(void);
 void *map_pfn_array_from_pool(uint32_t *pfn_array, uint32_t num_pages);

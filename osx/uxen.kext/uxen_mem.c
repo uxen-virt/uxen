@@ -77,14 +77,14 @@ set_pte(uintptr_t va, uint64_t _new)
 }
 
 /* NX AVAIL0 ACCESSED USER RW PRESENT */
-#define mdm_map_pte_flags 0x8000000000000227
+#define map_mfn_pte_flags 0x8000000000000227
 
 uint64_t __cdecl
-memcache_dm_map_mfn(uintptr_t va, xen_pfn_t mfn)
+map_mfn(uintptr_t va, xen_pfn_t mfn)
 {
 
     return set_pte(va, mfn == ~0ULL ? mfn :
-                   (((uint64_t)mfn << PAGE_SHIFT) | mdm_map_pte_flags));
+                   (((uint64_t)mfn << PAGE_SHIFT) | map_mfn_pte_flags));
 }
 
 #ifdef DEBUG

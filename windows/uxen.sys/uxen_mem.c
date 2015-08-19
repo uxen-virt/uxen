@@ -97,29 +97,29 @@ set_pte(uintptr_t va, uint64_t new)
     return old;
 }
 
-static uint64_t mdm_map_pte_flags = 0;
+static uint64_t map_mfn_pte_flags = 0;
 
 uint64_t __cdecl
-memcache_dm_map_mfn(uintptr_t va, xen_pfn_t mfn)
+map_mfn(uintptr_t va, xen_pfn_t mfn)
 {
 
     return set_pte(va, mfn == ~0ULL ? mfn :
-                   (((uint64_t)mfn << PAGE_SHIFT) | mdm_map_pte_flags));
+                   (((uint64_t)mfn << PAGE_SHIFT) | map_mfn_pte_flags));
 }
 
 void
-set_mdm_map_pte_flags(void)
+set_map_mfn_pte_flags(void)
 {
     uint64_t dummy = 0;
 
     /* ---DA--UW-V and avail2 */
-    mdm_map_pte_flags = 0x0000000000000867;
+    map_mfn_pte_flags = 0x0000000000000867;
     
     /* set NX bit if it's used for stack PTE */
-    mdm_map_pte_flags |= (*((uint64_t *)VA_TO_LINEAR_PTE((size_t)&dummy)) &
+    map_mfn_pte_flags |= (*((uint64_t *)VA_TO_LINEAR_PTE((size_t)&dummy)) &
                           0x8000000000000000);
 
-    if (!(mdm_map_pte_flags & 0x8000000000000000))
+    if (!(map_mfn_pte_flags & 0x8000000000000000))
         printk("NX is disabled\n");
 }
 

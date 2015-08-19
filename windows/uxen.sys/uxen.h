@@ -268,8 +268,8 @@ int uxen_unload(void);
 
 /* uxen_mem.c */
 extern int map_page_range_max_nr;
-void set_mdm_map_pte_flags(void);
-uint64_t __cdecl memcache_dm_map_mfn(uintptr_t va, xen_pfn_t mfn);
+void set_map_mfn_pte_flags(void);
+uint64_t __cdecl map_mfn(uintptr_t va, xen_pfn_t mfn);
 int mem_init(void);
 void mem_exit(void);
 void *_kernel_malloc(size_t, int);
