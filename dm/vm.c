@@ -539,6 +539,7 @@ vm_init(const char *loadvm, int restore_mode)
         if (restore_mode == VM_RESTORE_TEMPLATE) {
             template_load_failed = false;
             control_send_status("template", "loaded", NULL);
+            control_flush();
 #ifdef CONFIG_DUMP_MEMORY_STAT
             dump_stats();
 #endif  /* CONFIG_DUMP_MEMORY_STAT */

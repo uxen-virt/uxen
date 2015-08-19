@@ -12,6 +12,7 @@
 void control_open(char *path);
 void control_command_exit(void);
 void control_exit(void);
+void control_flush(void);
 
 int control_send_status(const char *key, const char *val, ...);
 

@@ -187,10 +187,15 @@ void control_err_vprintf(const char *function, int line,
     free(msg);
 }
 
-void control_err_flush(void)
+void control_flush(void)
 {
     if (control.chr)
         qemu_chr_write_flush(control.chr);
+}
+
+void control_err_flush(void)
+{
+    control_flush();
     fflush(stderr);
 }
 
@@ -1084,6 +1089,7 @@ control_exit(void)
         return;
 
     control_command_exit();
+    control_flush();
     control_thread_exit = 1;
     ioh_event_set(&control_ev);
 
