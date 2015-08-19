@@ -124,9 +124,9 @@ release_fd_assoc(struct fd_assoc *fda)
         fda->logging_mapping.user_mapping = NULL;
     }
 
-    uxen_lock();
     vmi = fda->vmi;
     if (vmi) {
+        uxen_lock();
         if (vmi->vmi_mdm_fda == fda)
             mdm_clear_all(vmi);
         prepare_release_fd_assoc(fda);
@@ -134,9 +134,8 @@ release_fd_assoc(struct fd_assoc *fda)
             vmi->vmi_marked_for_destroy = 1;
         OSDecrementAtomic(&vmi->vmi_active_references);
         uxen_vmi_cleanup_vm(vmi);
-        fda->vmi = NULL;
+        uxen_unlock();
     }
-    uxen_unlock();
 }
 
 typedef void *user_notification_event_key;
