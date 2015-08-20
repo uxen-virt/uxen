@@ -1576,9 +1576,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                 atomic_dec(&d->tmpl_shared_pages);
         }
         audit_p2m(p2m, 1);
-        p2m_pod_stat_update(d);
-        p2m_unlock(p2m);
-        return 0;
+        goto out;
     }
 
     if (mfn_x(smfn) == 0) {
@@ -1596,9 +1594,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
              * (HVM_PARAM_CLONE_L1_lazy_populate) */
             set_p2m_entry(p2m, gfn_aligned, _mfn(0), 0, 0, 0);
             atomic_dec(&d->pod_pages);
-            p2m_pod_stat_update(d);
-            p2m_unlock(p2m);
-            return 1;
+            goto out;
         }
         if ((d->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] &
              HVM_PARAM_CLONE_L1_dynamic) && p2m_is_ram_rw(t)) {
@@ -1631,9 +1627,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                 atomic_inc(&d->zero_shared_pages);
             else
                 atomic_inc(&d->tmpl_shared_pages);
-            p2m_pod_stat_update(d);
-            p2m_unlock(p2m);
-            return 0;
+            goto out;
         }
         smfn_from_clone = 0;
     }
@@ -1790,6 +1784,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         __trace_var(TRC_MEM_POD_POPULATE, 0, sizeof(t), &t);
     }
 
+  out:
     p2m_pod_stat_update(d);
     p2m_unlock(p2m);
     return 0;
