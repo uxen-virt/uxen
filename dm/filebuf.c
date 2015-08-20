@@ -89,8 +89,10 @@ filebuf_open(const char *fn, const char *mode)
         fb = NULL;
     }
 #ifdef __APPLE__
-    if (no_buffering)
-        fcntl(fb->file, F_NOCACHE, 1);
+    else {
+        if (no_buffering)
+            fcntl(fb->file, F_NOCACHE, 1);
+    }
 #endif  /* __APPLE__ */
     return fb;
 }
