@@ -45,6 +45,7 @@
 #define NTLM_MAKE_USERNAME_UPPERCASE
 #define HP_IDLE_MAX_TIMEOUT         (60 * 1000) /* 60 secs */
 #define HPD_DEBUG_CHECK_MS          (4 * 1000) /* 4 secs */
+#define MAX_RETRY_HTTP_REQ          3
 
 #define U32BF(a)            (((uint32_t) 1) << (a))
 #define U64BF(a)            (((uint64_t) 1) << (a))
@@ -142,6 +143,7 @@ static const char *hp_states[] = {
 #define HF_KEEP_ALIVE       U32BF(25)
 #define HF_FATAL_ERROR      U32BF(26)
 #define HF_PARSE_ERROR      U32BF(27)
+#define HF_SRV_NO_RETRY     U32BF(28)
 
 #define IS_RESOLVED(hp) ((hp)->flags & HF_RESOLVED)
 #define IS_TUNNEL(hp)   ((hp)->flags & HF_TUNNEL)
@@ -248,7 +250,7 @@ struct http_ctx {
     enum hp_state_t hstate;
     enum hp_state_t hwait_state;
     uint32_t flags;
-    int reconn_retry;
+    int restart_count;
     struct buff *clt_out;
     struct buff *c407_buff;
 
@@ -1256,7 +1258,6 @@ static void hp_free(struct http_ctx *hp)
     hp->a = NULL;
     hp->cstate = S_INIT;
     hp->hwait_state = 0;
-    hp->reconn_retry = 0;
 
     http_auth_free(&hp->auth);
     hp->proxy = NULL;
@@ -1547,7 +1548,7 @@ cx_hp_connect_proxy(struct clt_ctx *cx)
     } else {
         // GPROXY to HPROXY
         if (hp_dns_proxy_check_domain(hp) < 0) {
-            cx_proxy_response(cx, HMSG_CONNECT_FAILED, true);
+            cx_proxy_response(cx, HMSG_CONNECT_DENIED, true);
             goto out;
         }
     }
@@ -1668,6 +1669,8 @@ static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now)
             hp->h.sv_name = strdup(cx->h.sv_name);
         hp->h.daddr.sin_port = cx->h.daddr.sin_port;
 
+        hp->flags &= ~HF_SRV_NO_RETRY;
+        hp->restart_count = 0;
         if (!hpd && (cx->flags & CXF_GUEST_PROXY) && not_binary &&
             hpd_rbtree_init && !(hpd = hp_create_hpd(hp))) {
 
@@ -2317,6 +2320,7 @@ static int srv_read(struct http_ctx *hp)
     if (len == 0)
         goto out;
 
+    hp->flags |= HF_SRV_NO_RETRY;
 #ifdef VERBSTATS
     if (hp->srv_lat_idx < LAT_STAT_NUMBER * 2) {
         int64_t now = get_clock_ms(rt_clock);
@@ -2474,6 +2478,21 @@ static int srv_closing(struct http_ctx *hp, int err)
         goto out;
     }
 
+    if (hp->cx && !hp->proxy && (hp->cx->flags & CXF_GUEST_PROXY) && (hp->flags & HF_RESTARTABLE) &&
+        (hp->flags & HF_RESTART_OK) && !(hp->flags & HF_SRV_NO_RETRY) && hp->clt_out &&
+        BUFF_BUFFERED(hp->clt_out)) {
+
+            if (hp->restart_count >= MAX_RETRY_HTTP_REQ) {
+                HLOG3("MAX_RETRY_HTTP_REQ %d reached, closing socket", (int) MAX_RETRY_HTTP_REQ);
+                goto close;
+            }
+            hp->restart_count++;
+            HLOG3("needs_reconnect, restart_count %d", (int) hp->restart_count);
+            BUFF_WR_UNCONSUME(hp->clt_out);
+            if (srv_reconnect(hp) == 0)
+                goto out;
+    }
+
     if (!hp->proxy || hp->hstate == HP_TUNNEL || hp->hstate == HP_PASS ||
             hp->hstate == HP_GPDIRECT || hp->hstate == HP_AUTHENTICATED) {
 
@@ -2537,12 +2556,19 @@ static int srv_write(struct http_ctx *hp, const uint8_t *b, size_t blen)
     HLOG5("blen %lu", blen);
     if (hp->clt_out) {
         BUFF_CONSUME_ALL(hp->clt_out);
-        len = BUFF_CONSUMED(hp->clt_out);
+        if (!(hp->flags & HF_SRV_NO_RETRY) && ((ssize_t) BUFF_BUFFERED(hp->clt_out)) >
+            (((ssize_t) MAX_GUEST_BUF) - BUF_CHUNK * 2)) {
+
+            hp->flags |= HF_SRV_NO_RETRY;
+            BUFF_WR_GC(hp->clt_out);
+        }
+        assert(hp->clt_out->wr_len <= hp->clt_out->size);
+        len = BUFF_WR_CLEN(hp->clt_out);
     }
     if (hp->clt_out && len) {
         r = 0;
         if (hp->so)
-            r = so_write(hp->so, (uint8_t *) BUFF_BEGINNING(hp->clt_out), len);
+            r = so_write(hp->so, BUFF_WR_BEGINNING(hp->clt_out), len);
         if (r > 0) {
             written = true;
             if (NLOG_LEVEL > 5 && !hide_log_sensitive_data)
@@ -2554,7 +2580,12 @@ static int srv_write(struct http_ctx *hp, const uint8_t *b, size_t blen)
                         r, true) < 0) {
                 HLOG("WARNING - TLS error(1), might not be able to check cert revocation");
             }
-            buff_gc_consume(hp->clt_out, r);
+            BUFF_WR_ADVANCE(hp->clt_out, r);
+            if (!hp->cx || !(hp->cx->flags & CXF_GUEST_PROXY) || (hp->flags & HF_SRV_NO_RETRY) ||
+                hp->proxy || !(hp->flags & HF_RESTARTABLE)) {
+
+                BUFF_WR_GC(hp->clt_out);
+            }
             HLOG5("sent buff %d of %u bytes", r, (unsigned int) len);
         }
         if (r < len) {
@@ -2586,6 +2617,7 @@ static int srv_write(struct http_ctx *hp, const uint8_t *b, size_t blen)
         hp->clt_bytes += ret;
         if ((hp->flags & HF_REUSABLE))
             hp->flags &= ~HF_REUSE_READY;
+        hp->flags |= HF_SRV_NO_RETRY;
         HLOG5("sent %d of %d bytes", ret, (int) blen);
     }
     if (ret < blen)
@@ -5419,7 +5451,10 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
 
     assert((cx->flags & CXF_HOST_RESOLVED));
     if (!(cx->flags & CXF_DECIDED)) {
-        cx_decide(cx);
+        if (cx_decide(cx) < 0) {
+            CXL("cx_decide ERROR");
+            goto err;
+        }
         if (!(cx->flags & CXF_DECIDED))
             goto out_buffer;
 
@@ -5511,7 +5546,7 @@ out:
 mem_err:
     warnx("%s: cx %"PRIxPTR" malloc", __FUNCTION__, (uintptr_t) cx);
 err:
-    CXL("error");
+    CXL("ERROR");
     cx_close(cx);
     ret = -1;
     goto out;

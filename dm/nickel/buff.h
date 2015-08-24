@@ -29,6 +29,7 @@ struct buff {
     size_t mx_size;
     size_t len;
     size_t prev_len;
+    size_t wr_len;
     uint32_t refcnt;
 
     int priv_heap;
@@ -78,6 +79,11 @@ int buff_gc_consume(struct buff *b, size_t l);
 #define BUFF_GC(b) do { if ((b)->m == (b)->data) break; if ((b)->len) \
                     memmove((b)->data, (b)->m, (b)->len); \
                     (b)->m = (b)->data; (b)->m[(b)->len] = 0; } while(0)
+#define BUFF_WR_UNCONSUME(b) do { (b)->wr_len = 0; } while(0)
+#define BUFF_WR_CLEN(b) (BUFF_BUFFERED(b) - (b)->wr_len)
+#define BUFF_WR_BEGINNING(b) (((uint8_t *)BUFF_BEGINNING(b)) + (b)->wr_len)
+#define BUFF_WR_ADVANCE(b, l) do { (b)->wr_len += l; } while(0)
+#define BUFF_WR_GC(b) do { buff_gc_consume(b, (b)->wr_len); (b)->wr_len = 0; } while(0)
 #define BUFF_OFF(b) ((b)->m - (b)->data)
 #define BUFF_RESET(b) do { if (!(b)) break; (b)->m = (b)->data; (b)->len = 0;                   \
                             (b)->prev_len = 0; *((b)->data) = 0; } while(0)
