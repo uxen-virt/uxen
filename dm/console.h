@@ -70,6 +70,7 @@ struct display_surface *create_vram_displaysurface(struct display_state *ds,
 struct vram_desc;
 
 void dpy_update(struct display_state *s, int x, int y, int w, int h);
+void dpy_desktop_update(int x, int y, int w, int h);
 void dpy_resize(struct display_state *s);
 void dpy_refresh(struct display_state *s);
 void dpy_cursor_shape(struct display_state *s,

@@ -32,6 +32,8 @@
 #define UXENDISP_STRIDE_MAX 92683
 
 struct crtc_state {
+    int id;
+
     uint32_t status;
     uint32_t offset;
 
@@ -72,6 +74,8 @@ struct uxendisp_state {
     uint32_t cursor_en;
     uint32_t mode;
 };
+
+#define crtc_to_state(c) (container_of((c), struct uxendisp_state, crtcs[(c)->id]))
 
 /*
  * Interrupts
@@ -261,23 +265,25 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
  */
 static void uxendisp_update(void *opaque)
 {
-    struct uxendisp_state *s = opaque;
+    struct crtc_state *crtc = opaque;
+    struct uxendisp_state *s = crtc_to_state(crtc);
 
     set_interrupt(s, UXDISP_INTERRUPT_VBLANK);
 
-    if (!(s->mode & UXDISP_MODE_VGA_DISABLED)) {
+    if (crtc->id == 0 && !(s->mode & UXDISP_MODE_VGA_DISABLED)) {
         vga_update_display(&s->vga);
         return;
     }
 
-    crtc_draw(s, 0);
+    crtc_draw(s, crtc->id);
 }
 
 static void uxendisp_invalidate(void *opaque)
 {
-    struct uxendisp_state *s = opaque;
+    struct crtc_state *crtc = opaque;
+    struct uxendisp_state *s = crtc_to_state(crtc);
 
-    if (!(s->mode & UXDISP_MODE_VGA_DISABLED)) {
+    if (crtc->id == 0 && !(s->mode & UXDISP_MODE_VGA_DISABLED)) {
         vga_invalidate_display(&s->vga);
         return;
     }
@@ -285,29 +291,34 @@ static void uxendisp_invalidate(void *opaque)
 
 static void uxendisp_text_update(void *opaque, console_ch_t *chardata)
 {
-    struct uxendisp_state *s = opaque;
+    struct crtc_state *crtc = opaque;
+    struct uxendisp_state *s = crtc_to_state(crtc);
 
-    if (!(s->mode & UXDISP_MODE_VGA_DISABLED)) {
+    if (crtc->id == 0 && !(s->mode & UXDISP_MODE_VGA_DISABLED)) {
         vga_update_text(&s->vga, chardata);
         return;
     }
 }
 
-void uxendisp_monitor_change(void *opaque, int w, int h)
+void uxendisp_monitor_change(void *opaque, int crtc_id, int w, int h)
 {
     struct uxendisp_state *s = opaque;
     uint8_t edid[128];
 
-    DPRINTF("%s %dx%d\n", __FUNCTION__, w, h);
-
     if (w == 0 || h == 0) {
-        uxendisp_set_display_identification(s, 0, NULL, 0);
+        uxendisp_set_display_identification(s, crtc_id, NULL, 0);
         return;
     }
 
     edid_init_common(edid, w, h);
-    uxendisp_set_display_identification(s, 0, edid, sizeof(edid));
+    uxendisp_set_display_identification(s, crtc_id, edid, sizeof(edid));
 }
+
+static struct console_hw_ops uxendisp_hw_ops = {
+    .update = uxendisp_update,
+    .invalidate = uxendisp_invalidate,
+    .text_update = uxendisp_text_update,
+};
 
 /*
 * IO handling
@@ -381,58 +392,66 @@ static void
 crtc_flush(struct uxendisp_state *s, int crtc_id)
 {
     struct crtc_state *crtc = &s->crtcs[crtc_id];
-
-    /* XXX crtc 0 only for now */
-    if (crtc_id == 0 && (s->mode & UXDISP_MODE_VGA_DISABLED)) {
-        struct bank_state *bank;
-        size_t sz;
-
-        if (crtc->regs->p.enable) {
-            uint32_t offset = crtc->offset & (UXENDISP_BANK_SIZE - 1);
-            int bank_id = crtc->offset >> UXENDISP_BANK_ORDER;
-            unsigned int w, h, stride, fmt;
-
-            w = crtc->regs->p.xres;
-            h = crtc->regs->p.yres;
-            stride = crtc->regs->p.stride;
-            fmt = crtc->regs->p.format;
-
-            if (w > UXENDISP_XRES_MAX || h > UXENDISP_YRES_MAX ||
-                stride > UXENDISP_STRIDE_MAX)
-                return;
-
-            if (!fmt_valid(fmt))
-                return;
-
-            if (bank_id >= UXENDISP_NB_BANKS)
-                return;
-
-            bank = &s->banks[bank_id];
-            sz = offset + h * stride;
-            if (sz > UXENDISP_BANK_SIZE)
-                return;
-            if (bank->len < sz)
-                bank_reg_write(s, bank_id, 0, sz);
-
-            display_resize_from(crtc->ds, w, h,
-                                uxdisp_fmt_to_bpp(fmt),
-                                stride,
-                                bank->vram.view, offset);
-
-            crtc->xres = w;
-            crtc->yres = h;
-            crtc->stride = stride;
-            crtc->format = fmt;
-        } else if (crtc->ds->surface) {
-            free_displaysurface(crtc->ds, crtc->ds->surface);
-            crtc->ds->surface = NULL;
-        }
-
-        crtc->enable = crtc->regs->p.enable;
-        do_dpy_trigger_refresh(crtc->ds);
-    }
+    struct bank_state *bank;
+    size_t sz;
 
     crtc->flush_pending = 0;
+
+    if (crtc_id == 0 && !(s->mode & UXDISP_MODE_VGA_DISABLED))
+        return;
+
+    if (crtc->regs->p.enable) {
+        uint32_t offset = crtc->offset & (UXENDISP_BANK_SIZE - 1);
+        int bank_id = crtc->offset >> UXENDISP_BANK_ORDER;
+        unsigned int w, h, stride, fmt;
+
+        if (!crtc->ds)
+            crtc->ds = display_create(&uxendisp_hw_ops, crtc);
+
+        w = crtc->regs->p.xres;
+        h = crtc->regs->p.yres;
+        stride = crtc->regs->p.stride;
+        fmt = crtc->regs->p.format;
+
+        if (w > UXENDISP_XRES_MAX || h > UXENDISP_YRES_MAX ||
+            stride > UXENDISP_STRIDE_MAX)
+            return;
+
+        if (!fmt_valid(fmt))
+            return;
+
+        if (bank_id >= UXENDISP_NB_BANKS)
+            return;
+
+        bank = &s->banks[bank_id];
+        sz = offset + h * stride;
+        if (sz > UXENDISP_BANK_SIZE)
+            return;
+        if (bank->len < sz)
+            bank_reg_write(s, bank_id, 0, sz);
+
+        display_resize_from(crtc->ds, w, h,
+                            uxdisp_fmt_to_bpp(fmt),
+                            stride,
+                            bank->vram.view, offset);
+
+        crtc->xres = w;
+        crtc->yres = h;
+        crtc->stride = stride;
+        crtc->format = fmt;
+    } else {
+        if (crtc->ds) {
+            if (crtc->ds->surface) {
+                free_displaysurface(crtc->ds, crtc->ds->surface);
+                crtc->ds->surface = NULL;
+            }
+            display_destroy(crtc->ds);
+            crtc->ds = NULL;
+        }
+    }
+
+    crtc->enable = crtc->regs->p.enable;
+    do_dpy_trigger_refresh(crtc->ds);
 }
 
 static void
@@ -755,8 +774,6 @@ static void vram_change(struct vram_desc *v, void *opaque)
     struct uxendisp_state *s = opaque;
     int crtc_id;
 
-    DPRINTF("%s\n", __FUNCTION__);
-
     for (crtc_id = 0; crtc_id < UXENDISP_NB_CRTCS; crtc_id++) {
         struct crtc_state *crtc = &s->crtcs[crtc_id];
         int bank_id = crtc->offset >> UXENDISP_BANK_ORDER;
@@ -868,12 +885,6 @@ uxendisp_reset(void *opaque)
     (void)s;
 }
 
-static struct console_hw_ops uxendisp_hw_ops = {
-    .update = uxendisp_update,
-    .invalidate = uxendisp_invalidate,
-    .text_update = uxendisp_text_update,
-};
-
 static int uxendisp_initfn(PCIDevice *dev)
 {
     struct uxendisp_state *s = DO_UPCAST(struct uxendisp_state, dev, dev);
@@ -913,8 +924,9 @@ static int uxendisp_initfn(PCIDevice *dev)
     pci_register_bar(&s->dev, 1, PCI_BASE_ADDRESS_SPACE_MEMORY, &s->mmio);
     pci_register_bar(&s->dev, 2, PCI_BASE_ADDRESS_SPACE_IO, &s->pio);
 
-    /* XXX: One per CRTC */
-    s->crtcs[0].ds = display_create(&uxendisp_hw_ops, s);
+    for (i = 0; i < UXENDISP_NB_CRTCS; i++)
+        s->crtcs[i].id = i;
+    s->crtcs[0].ds = display_create(&uxendisp_hw_ops, &s->crtcs[0]);
     s->crtcs[0].status = 0x1;
     s->crtcs[0].flush_pending = 0;
     edid_init_common(s->crtcs[0].edid, 1024, 768);
@@ -939,6 +951,7 @@ static int uxendisp_exitfn(PCIDevice *dev)
 
 int uxendisp_init(PCIBus *bus)
 {
+
     pci_create_simple(bus, -1, "uxendisp");
     return 0;
 }

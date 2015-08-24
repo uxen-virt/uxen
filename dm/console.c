@@ -55,6 +55,8 @@ static void desktop_refresh(void)
     }
     desktop_width = max_x;
     desktop_height = max_y;
+
+    debug_printf("desktop resize %dx%d\n", max_x, max_y);
 }
 
 struct display_state *display_create(struct console_hw_ops *ops,
@@ -78,8 +80,10 @@ struct display_state *display_create(struct console_hw_ops *ops,
 
     if (gui_info && gui_info->create && !ds->gui) {
         ds->gui = calloc(1, gui_info->size);
-        if (ds->gui)
+        if (ds->gui) {
             gui_info->create(ds->gui, ds);
+            gui_info->start(ds->gui);
+        }
     }
 
     TAILQ_INSERT_TAIL(&desktop, ds, link);
@@ -91,13 +95,16 @@ struct display_state *display_create(struct console_hw_ops *ops,
 void display_destroy(struct display_state *ds)
 {
     critical_section_enter(&desktop_lock);
-    if (ds->gui && gui_info && gui_info->destroy)
-        gui_info->destroy(ds->gui);
-    TAILQ_REMOVE(&desktop, ds, link);
     if (ds->surface) {
         free_displaysurface(ds, ds->surface);
         ds->surface = NULL;
     }
+    if (ds->gui && gui_info && gui_info->destroy) {
+        gui_info->destroy(ds->gui);
+        free(ds->gui);
+        ds->gui = NULL;
+    }
+    TAILQ_REMOVE(&desktop, ds, link);
     desktop_refresh();
     critical_section_leave(&desktop_lock);
 
@@ -371,15 +378,22 @@ console_init(const char *name)
 void
 console_exit(void)
 {
-    struct display_state *ds;
+    struct display_state *ds, *ds_next;
 
     critical_section_enter(&desktop_lock);
-    TAILQ_FOREACH(ds, &desktop, link) {
-        if (gui_info->destroy)
+    TAILQ_FOREACH_SAFE(ds, &desktop, link, ds_next) {
+        if (ds->surface) {
+            free_displaysurface(ds, ds->surface);
+            ds->surface = NULL;
+        }
+        if (ds->gui && gui_info && gui_info->destroy) {
             gui_info->destroy(ds->gui);
-        free(ds->gui);
-        ds->gui = NULL;
+            free(ds->gui);
+            ds->gui = NULL;
+        }
+        TAILQ_REMOVE(&desktop, ds, link);
     }
+    desktop_refresh();
     critical_section_leave(&desktop_lock);
 
     if (gui_info && gui_info->exit)
@@ -444,10 +458,6 @@ resize_displaysurface(struct display_state *ds, struct display_surface *surface,
 void
 mc_resize_screen(Monitor *mon, const dict args)
 {
-#if 0
-    if (gui_info && gui_info->mon_resize_screen)
-        gui_info->mon_resize_screen(gui_state, mon, args);
-#endif
 }
 #endif
 
@@ -463,6 +473,40 @@ dpy_update(struct display_state *ds, int x, int y, int w, int h)
 {
     if (gui_info && gui_info->update)
         gui_info->update(ds->gui, x, y, w, h);
+}
+
+void
+dpy_desktop_update(int x, int y, int w, int h)
+{
+    struct display_state *ds;
+
+    critical_section_enter(&desktop_lock);
+    TAILQ_FOREACH(ds, &desktop, link) {
+        int x1 = x - ds->desktop_x;
+        int y1 = y - ds->desktop_y;
+        int x2 = (x + w) - ds->desktop_x;
+        int y2 = (y + h) - ds->desktop_y;
+
+        /* Overlap check */
+        if (x1 > ds->surface->width ||
+            x2 <= 0 ||
+            y1 > ds->surface->height ||
+            y2 <= 0)
+            continue;
+
+        /* trim to current display size */
+        if (x1 < 0)
+            x1 = 0;
+        if (x2 > ds->surface->width)
+            x2 = ds->surface->width;
+        if (y1 < 0)
+            y1 = 0;
+        if (y2 > ds->surface->height)
+            y2 = ds->surface->height;
+
+        dpy_update(ds, x1, y1, x2 - x1, y2 - y1);
+    }
+    critical_section_leave(&desktop_lock);
 }
 
 void

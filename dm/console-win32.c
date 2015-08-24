@@ -695,8 +695,8 @@ hid_mouse_event(struct win32_gui_state *s,
     if (wParam & MK_XBUTTON2)
         buttons |= UXENHID_MOUSE_BUTTON_5;
 
-    scaled_x = (x * UXENHID_XY_MAX) / (desktop_width - 1);
-    scaled_y = (y * UXENHID_XY_MAX) / (desktop_height - 1);
+    scaled_x = ((x + s->ds->desktop_x) * UXENHID_XY_MAX) / (desktop_width - 1);
+    scaled_y = ((y + s->ds->desktop_y) * UXENHID_XY_MAX) / (desktop_height - 1);
 
     ret = uxenhid_send_mouse_report(buttons, scaled_x, scaled_y,
                                     wheel / 30, hwheel / 30);
@@ -740,9 +740,9 @@ hid_touch_event(struct win32_gui_state *s,
         pointer_id ^= info[i].pointerInfo.pointerId >> 16;
 
 #define SCALE_X(v) \
-        (((v) * UXENHID_XY_MAX) / (desktop_width - 1))
+        ((((v) + s->ds->desktop_x) * UXENHID_XY_MAX) / (desktop_width - 1))
 #define SCALE_Y(v) \
-        (((v) * UXENHID_XY_MAX) / (desktop_height - 1))
+        ((((v) + s->ds->desktop_y) * UXENHID_XY_MAX) / (desktop_height - 1))
 
         x = SCALE_X(info[i].pointerInfo.ptPixelLocation.x - pos.x);
         y = SCALE_Y(info[i].pointerInfo.ptPixelLocation.y - pos.y);
@@ -1465,13 +1465,10 @@ vram_changed(struct gui_state *state, struct vram_desc *v)
 static wchar_t window_class_name[] = L"uXenWindow";
 static wchar_t window_caption[] = L"uXen VM";
 
-static DWORD WINAPI
-win_event_loop(PVOID opaque)
+static int
+win_register_class(void)
 {
-    struct win32_gui_state *s = opaque;
     WNDCLASSEXW wndclass;
-    MSG msg;
-    DWORD ret;
 
     /* Register a Window class. */
     wndclass.cbSize         = sizeof(wndclass);
@@ -1486,8 +1483,20 @@ win_event_loop(PVOID opaque)
     wndclass.hbrBackground  = (HBRUSH)GetStockObject(WHITE_BRUSH);
     wndclass.lpszClassName  = window_class_name;
     wndclass.lpszMenuName   = NULL;
-    if (!RegisterClassExW(&wndclass))
+    if (!RegisterClassExW(&wndclass)) {
         Werr(1, "RegisterClassEx failed");
+        return -1;
+    }
+
+    return 0;
+}
+
+static DWORD WINAPI
+win_event_loop(PVOID opaque)
+{
+    struct win32_gui_state *s = opaque;
+    MSG msg;
+    DWORD ret;
 
     ret = WaitForSingleObject(s->start_event, INFINITE);
     if (ret == WAIT_FAILED)
@@ -1571,15 +1580,13 @@ mon_resize_screen(struct gui_state *s, Monitor *mon, const dict args)
 
 static void disp_inv_rect(void *priv, int x, int y, int w, int h)
 {
-#if 0
-    if (display_state)
-        dpy_update(display_state, x, y, w, h);
-#endif
+    dpy_desktop_update(x, y, w, h);
 }
 
 static int
 gui_init(char *optstr)
 {
+    win_register_class();
     guest_agent_init();
     disp = uxenconsole_disp_init(vm_id, NULL, disp_inv_rect);
     return 0;
