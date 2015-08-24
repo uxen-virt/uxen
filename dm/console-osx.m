@@ -33,6 +33,7 @@ struct osx_gui_state {
     void *vram_view;
     size_t vram_len;
     struct osx_surface *surface;
+    struct display_state *ds;
 };
 
 static int
@@ -155,7 +156,8 @@ free_surface(struct gui_state *state, struct display_surface *surface)
 static void
 osx_update(struct gui_state *state, int x, int y, int w, int h)
 {
-    NSRect rect = NSMakeRect(x, ds_get_height(display_state) - y - h, w, h);
+    struct osx_gui_state *s = (void *)state;
+    NSRect rect = NSMakeRect(x, ds_get_height(s->ds) - y - h, w, h);
 
     dispatch_async(dispatch_get_main_queue(), ^{
             UXENAppDelegate *delegate = (UXENAppDelegate*)[NSApp delegate];
@@ -179,7 +181,9 @@ osx_resize(struct gui_state *state, int w, int h)
 static void
 osx_refresh(struct gui_state *state)
 {
-    vga_hw_update();
+    struct osx_gui_state *s = (void *)state;
+
+    vga_hw_update(s->ds);
 }
 
 static NSCursor *
@@ -265,11 +269,23 @@ osx_cursor_shape(struct gui_state *state,
     }
 }
 
-int
-console_init(struct gui_state *state, char *optstr)
+static int
+gui_init(char *optstr)
+{
+    return 0;
+}
+
+static void
+gui_exit(void)
+{
+}
+
+static int
+gui_create(struct gui_state *state, struct display_state *ds)
 {
     struct osx_gui_state *s = (void *)state;
 
+    s->ds = ds;
     s->vram_handle = -1;
     s->vram_view = NULL;
     s->vram_len = 0;
@@ -280,7 +296,7 @@ console_init(struct gui_state *state, char *optstr)
 }
 
 void
-console_exit(struct gui_state *state)
+gui_destroy(struct gui_state *state)
 {
     struct osx_gui_state *s = (void *)state;
 
@@ -298,7 +314,7 @@ console_exit(struct gui_state *state)
 }
 
 void
-console_start(struct gui_state *state)
+gui_start(struct gui_state *state)
 {
     struct osx_gui_state *s = (void *)state;
 
@@ -328,24 +344,25 @@ vram_changed(struct gui_state *state, struct vram_desc *v)
     s->vram_handle = (int)v->hdl;
     s->vram_len = v->mapped_len;
 
-    if (display_state && display_state->gui_timer)
-        do_dpy_trigger_refresh(display_state);
+    do_dpy_trigger_refresh(NULL);
 }
 
 static struct gui_info osx_gui_info = {
     .name = "osx",
     .size = sizeof(struct osx_gui_state),
-    .init = console_init,
-    .start = console_start,
-    .exit = console_exit,
+    .init = gui_init,
+    .start = gui_start,
+    .exit = gui_exit,
+    .create = gui_create,
+    .destroy = gui_destroy,
     .create_surface = create_surface,
     .create_vram_surface = create_vram_surface,
     .free_surface = free_surface,
     .vram_change = vram_changed,
-    .display_update = osx_update,
-    .display_resize = osx_resize,
-    .display_refresh = osx_refresh,
-    .display_cursor_shape = osx_cursor_shape,
+    .update = osx_update,
+    .resize = osx_resize,
+    .refresh = osx_refresh,
+    .cursor_shape = osx_cursor_shape,
 };
 
 console_gui_register(osx_gui_info)
