@@ -33,6 +33,8 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include "config.h"
+
 #include <string.h>
 #include <stdlib.h>
 
@@ -293,13 +295,31 @@ edid_finalize(unsigned char *e, int block_count)
     return e;
 }
 
+static uint32_t hash_update(uint32_t h, void *data, size_t len)
+{
+    uint8_t *p = data;
+    size_t i;
+
+    for (i = 0; i < len; i++)
+        h ^= (h << 5) + p[i] + (h >> 2);
+
+    return h;
+}
+
+static uint32_t hash(void *data, size_t len)
+{
+    return hash_update(0x4e67c6a7, data, len);
+}
+
 unsigned char *
 edid_init_common(unsigned char *e, int hres, int vres)
 {
+    int serial;
     int pixclock;
+    char serial_string[14];
 
+    memset(e, 0, 128);
     edid_set_header(e);
-    edid_set_vendor(e, "UXE", 0xF00D, 0x00000000, 39, 2014);
     edid_set_version(e, 1, 4);
     edid_set_display_features(e, EDID_VIDEO_INPUT_SIGNAL_DIGITAL |
                               EDID_VIDEO_INPUT_COLOR_DEPTH_8BITS |
@@ -313,6 +333,7 @@ edid_init_common(unsigned char *e, int hres, int vres)
                               EDID_DISPLAY_SUPPORT_PREFERRED_MODE |
                               EDID_DISPLAY_SUPPORT_FREQ_CONTINUOUS);
     edid_set_color_attr(e, 665, 343, 290, 620, 155, 75, 321, 337);
+
     edid_set_established_timings(e, EDID_EST_TIMING_640x480_75HZ |
                                  EDID_EST_TIMING_720x400_88HZ |
                                  EDID_EST_TIMING_800x600_75HZ |
@@ -354,12 +375,19 @@ edid_init_common(unsigned char *e, int hres, int vres)
                              VSYNC_WIDTH_COMMON,
                              HSIZE_COMMON, VSIZE_COMMON, 0, 0,
                              EDID_DET_TIMING_SIGNAL_DIGITAL);
+
     edid_set_display_descriptor(e, 1, EDID_DISPLAY_DESCR_TAG_DUMMY,
                                 NULL, 0);
-    edid_set_display_descriptor(e, 2, EDID_DISPLAY_DESCR_TAG_SERIAL,
-                                "A000000001\n  ", 13);
     edid_set_display_descriptor(e, 3, EDID_DISPLAY_DESCR_TAG_NAME,
                                 "uXen display\n", 13);
+
+    serial = hash(e, 128);
+    snprintf(serial_string, sizeof(serial_string), "A%010d\n ", serial);
+
+    edid_set_vendor(e, "UXE", 0xF00D, serial, 39, 2014);
+    edid_set_display_descriptor(e, 2, EDID_DISPLAY_DESCR_TAG_SERIAL,
+                                serial_string, 13);
+
 
     return edid_finalize(e, 0);
 }
