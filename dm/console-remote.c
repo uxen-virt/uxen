@@ -76,6 +76,7 @@ enum {
 };
 
 struct remote_gui_state {
+    TAILQ_ENTRY(remote_gui_state) link;
     struct gui_state state;
     struct display_state *ds;
     struct remote_surface *surface;
@@ -97,12 +98,14 @@ struct remote_gui_state {
     size_t msg_len;
     int mouse_x, mouse_y;
 };
+static TAILQ_HEAD(, remote_gui_state) heads;
 
 static void gui_resize(struct gui_state *state, int w, int h);
 
 static void
-handle_message(struct remote_gui_state *s, struct uxenconsole_msg_header *hdr)
+handle_message(struct uxenconsole_msg_header *hdr)
 {
+    struct remote_gui_state *s = TAILQ_FIRST(&heads); /* XXX */
 
     switch (hdr->type) {
     case UXENCONSOLE_MSG_TYPE_MOUSE_EVENT:
@@ -209,51 +212,53 @@ handle_message(struct remote_gui_state *s, struct uxenconsole_msg_header *hdr)
 static int
 console_connect(struct ipc_client *c, void *opaque)
 {
-    struct remote_gui_state *s = opaque;
+    struct remote_gui_state *s;
     struct console_client *client = (void *)c;
 
     DPRINTF("%s connection detected\n", __FUNCTION__);
 
     client->msg_len = 0;
 
-    if (s->surface) {
-        struct uxenconsole_msg_resize_surface m;
+    TAILQ_FOREACH(s, &heads, link) {
+        if (s->surface) {
+            struct uxenconsole_msg_resize_surface m;
 
-        m.header.type = UXENCONSOLE_MSG_TYPE_RESIZE_SURFACE;
-        m.header.len = sizeof(m);
-        m.width = s->state.width;
-        m.height = s->state.height;
-        m.linesize = s->surface->linesize;
-        m.length = s->surface->len;
-        m.bpp = 32;
-        m.offset = s->surface->data - s->surface->segment_view;
-        m.shm_handle = ipc_client_share(c, (uintptr_t)s->surface->segment_handle);
+            m.header.type = UXENCONSOLE_MSG_TYPE_RESIZE_SURFACE;
+            m.header.len = sizeof(m);
+            m.width = s->state.width;
+            m.height = s->state.height;
+            m.linesize = s->surface->linesize;
+            m.length = s->surface->len;
+            m.bpp = 32;
+            m.offset = s->surface->data - s->surface->segment_view;
+            m.shm_handle = ipc_client_share(c, (uintptr_t)s->surface->segment_handle);
 
-        ipc_client_send(c, &m, sizeof(m));
-    }
-
-    if (s->cursor_type) {
-        struct uxenconsole_msg_update_cursor m;
-
-        memset(&m, 0, sizeof(m));
-
-        m.header.type = UXENCONSOLE_MSG_TYPE_UPDATE_CURSOR;
-        m.header.len = sizeof(m);
-
-        if (s->cursor_width == 0 || s->cursor_height == 0) {
-            m.flags = CURSOR_UPDATE_FLAG_HIDE;
             ipc_client_send(c, &m, sizeof(m));
-        } else {
-            m.w = s->cursor_width;
-            m.h = s->cursor_height;
-            m.hot_x = s->cursor_hot_x;
-            m.hot_y = s->cursor_hot_y;
-            if (s->cursor_type != CURSOR_TYPE_RGB_ALPHA)
-                m.mask_offset = s->cursor_mask_offset;
-            if (s->cursor_type == CURSOR_TYPE_MONOCHROME)
-                m.flags = CURSOR_UPDATE_FLAG_MONOCHROME;
-            m.shm_handle = ipc_client_share(c, (uintptr_t)s->cursor_handle);
-            ipc_client_send(c, &m, sizeof(m));
+        }
+
+        if (s->cursor_type) {
+            struct uxenconsole_msg_update_cursor m;
+
+            memset(&m, 0, sizeof(m));
+
+            m.header.type = UXENCONSOLE_MSG_TYPE_UPDATE_CURSOR;
+            m.header.len = sizeof(m);
+
+            if (s->cursor_width == 0 || s->cursor_height == 0) {
+                m.flags = CURSOR_UPDATE_FLAG_HIDE;
+                ipc_client_send(c, &m, sizeof(m));
+            } else {
+                m.w = s->cursor_width;
+                m.h = s->cursor_height;
+                m.hot_x = s->cursor_hot_x;
+                m.hot_y = s->cursor_hot_y;
+                if (s->cursor_type != CURSOR_TYPE_RGB_ALPHA)
+                    m.mask_offset = s->cursor_mask_offset;
+                if (s->cursor_type == CURSOR_TYPE_MONOCHROME)
+                    m.flags = CURSOR_UPDATE_FLAG_MONOCHROME;
+                m.shm_handle = ipc_client_share(c, (uintptr_t)s->cursor_handle);
+                ipc_client_send(c, &m, sizeof(m));
+            }
         }
     }
 
@@ -270,7 +275,6 @@ static void
 console_data_pending(struct ipc_client *c, void *opaque)
 {
     struct console_client *client = (void *)c;
-    struct remote_gui_state *s = opaque;
     struct uxenconsole_msg_header *hdr = (void *)client->buf;
     const size_t hdrlen = sizeof(*hdr);
     int rc;
@@ -290,7 +294,7 @@ console_data_pending(struct ipc_client *c, void *opaque)
             client->msg_len += rc;
 
         if (client->msg_len >= hdrlen && client->msg_len == hdr->len) {
-            handle_message(s, hdr);
+            handle_message(hdr);
             client->msg_len = 0;
         }
     }
@@ -603,6 +607,8 @@ gui_cursor_shape(struct gui_state *state,
 static int
 gui_init(char *optstr)
 {
+    TAILQ_INIT(&heads);
+
     if (optstr) {
         int rc;
 
@@ -636,6 +642,7 @@ gui_create(struct gui_state *state, struct display_state *ds)
     if (!s->cursor_view) {
         return -1;
     }
+    TAILQ_INSERT_TAIL(&heads, s, link);
 
     return 0;
 }
@@ -657,6 +664,7 @@ gui_destroy(struct gui_state *state)
 {
     struct remote_gui_state *s = (void *)state;
 
+    TAILQ_REMOVE(&heads, s, link);
     destroy_shm_segment(s->cursor_handle, s->cursor_view,
                         s->cursor_len);
 }
