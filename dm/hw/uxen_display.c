@@ -911,15 +911,6 @@ static int uxendisp_initfn(PCIDevice *dev)
     /* Note: 0x20 appears to be the minumum size of an IO BAR */
     memory_region_init_io(&s->pio, &pio_ops, s, "uxendisp.pio", 0x20);
 
-    for (i = 0; i < UXENDISP_NB_BANKS; i++) {
-        struct bank_state *bank = &s->banks[i];
-
-        bank->len = 0x1000; /* FIXME: why do we need this ? */
-        vram_init(&bank->vram, UXENDISP_BANK_SIZE);
-        vram_register_change(&bank->vram, vram_change, s);
-        vram_alloc(&bank->vram, bank->len);
-    }
-
     pci_register_bar(&s->dev, 0, PCI_BASE_ADDRESS_MEM_PREFETCH, &s->vram);
     pci_register_bar(&s->dev, 1, PCI_BASE_ADDRESS_SPACE_MEMORY, &s->mmio);
     pci_register_bar(&s->dev, 2, PCI_BASE_ADDRESS_SPACE_IO, &s->pio);
@@ -930,6 +921,15 @@ static int uxendisp_initfn(PCIDevice *dev)
     s->crtcs[0].status = 0x1;
     s->crtcs[0].flush_pending = 0;
     edid_init_common(s->crtcs[0].edid, 1024, 768);
+
+    for (i = 0; i < UXENDISP_NB_BANKS; i++) {
+        struct bank_state *bank = &s->banks[i];
+
+        bank->len = 0x1000; /* FIXME: why do we need this ? */
+        vram_init(&bank->vram, UXENDISP_BANK_SIZE);
+        vram_register_change(&bank->vram, vram_change, s);
+        vram_alloc(&bank->vram, bank->len);
+    }
 
     vga_init(v, pci_address_space(dev), pci_address_space_io(dev), s->crtcs[0].ds);
 

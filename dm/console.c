@@ -80,10 +80,8 @@ struct display_state *display_create(struct console_hw_ops *ops,
 
     if (gui_info && gui_info->create && !ds->gui) {
         ds->gui = calloc(1, gui_info->size);
-        if (ds->gui) {
+        if (ds->gui)
             gui_info->create(ds->gui, ds);
-            gui_info->start(ds->gui);
-        }
     }
 
     TAILQ_INSERT_TAIL(&desktop, ds, link);
@@ -323,7 +321,6 @@ console_init(const char *name)
     int ret = 0;
     char *type;
     char *optstr;
-    struct display_state *ds;
 
     type = strdup(name);
     optstr = strchr(type, ',');
@@ -355,20 +352,6 @@ console_init(const char *name)
         if (ret)
             return ret;
     }
-
-    critical_section_enter(&desktop_lock);
-    assert(!TAILQ_EMPTY(&desktop));
-    TAILQ_FOREACH(ds, &desktop, link) {
-        if (ds->gui)
-            continue;
-        ds->gui = calloc(1, gui_info->size);
-        if (!ds->gui)
-            continue;
-
-        if (gui_info->create)
-            gui_info->create(ds->gui, ds);
-    }
-    critical_section_leave(&desktop_lock);
 
     free(type);
 
@@ -403,14 +386,17 @@ console_exit(void)
 void
 console_start(void)
 {
-    if (gui_info && gui_info->start) {
-        struct display_state *ds;
+    struct display_state *ds;
 
-        critical_section_enter(&desktop_lock);
-        TAILQ_FOREACH(ds, &desktop, link)
+    critical_section_enter(&desktop_lock);
+    assert(!TAILQ_EMPTY(&desktop));
+    TAILQ_FOREACH(ds, &desktop, link) {
+        if (!ds->gui)
+            continue;
+        if (gui_info->start)
             gui_info->start(ds->gui);
-        critical_section_leave(&desktop_lock);
     }
+    critical_section_leave(&desktop_lock);
 
     do_dpy_setup_refresh();
 }

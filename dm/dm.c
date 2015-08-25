@@ -326,10 +326,10 @@ main(int argc, char **argv)
 		 serial_devices[i]);
     }
 
-    vm_init(vm_loadfile, vm_restore_mode);
-
     if (console_init(console_type))
         errx(1, "Failed to initialize GUI '%s'", console_type);
+
+    vm_init(vm_loadfile, vm_restore_mode);
 
 #ifdef CONFIG_NET
     net_check_clients();
