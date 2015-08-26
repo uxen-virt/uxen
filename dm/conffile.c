@@ -701,6 +701,8 @@ struct config_option config_options[] = {
     { "netlumps", co_set_net_lumps,NULL },
     { "pae", co_set_integer_opt, &vm_pae },
     { "parent-window-key-forward", co_set_forwarded_keys, NULL },
+    { "log-ratelimit-guest-burst", co_set_integer_opt, &log_ratelimit_guest_burst },
+    { "log-ratelimit-guest-ms", co_set_integer_opt, &log_ratelimit_guest_ms },
 #ifdef _WIN32
     { "process-shutdown-priority", co_set_integer_opt,
       &process_shutdown_priority },

@@ -68,7 +68,10 @@ long arch_do_sysctl(
 
     switch ( sysctl->cmd )
     {
-
+    case XEN_SYSCTL_log_ratelimit:
+        change_log_limits(sysctl->u.log_ratelimit.ms,
+                          sysctl->u.log_ratelimit.burst);
+        break;
     case XEN_SYSCTL_physinfo:
     {
         xen_sysctl_physinfo_t *pi = &sysctl->u.physinfo;

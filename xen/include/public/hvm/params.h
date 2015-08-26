@@ -192,6 +192,10 @@
 /* only compress a page on write, if the page is not shared */
 #define HVM_PARAM_CLONE_PAGE_WRITE_COMPRESS_UNSHARED_ONLY 36
 
-#define HVM_NR_PARAMS          37
+#define HVM_PARAM_LOG_RATELIMIT_GUEST_BURST 37
+
+#define HVM_PARAM_LOG_RATELIMIT_GUEST_MS 38
+
+#define HVM_NR_PARAMS          39
 
 #endif /* __XEN_PUBLIC_HVM_PARAMS_H__ */

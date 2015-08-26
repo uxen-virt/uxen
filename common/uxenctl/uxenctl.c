@@ -23,6 +23,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <limits.h>
+#include <inttypes.h>
 #ifdef __APPLE__
 #include <libgen.h>
 #endif
@@ -56,6 +57,8 @@ usage(const char *progname)
     fprintf(stderr, "       %s [-P path]\n", progname);
     fprintf(stderr, "       %s [-x] [-X] [--logfile file]\n", progname);
     fprintf(stderr, "       %s [--log-daemon]\n", progname);
+    fprintf(stderr, "       %s [--log-ratelimit-ms arg]\n", progname);
+    fprintf(stderr, "       %s [--log-ratelimit-burst arg]\n", progname);
     exit(1);
 }
 
@@ -127,6 +130,8 @@ main(int argc, char **argv, char **envp)
     struct uxen_init_desc init_args;
     int show_physinfo = 0;
     uxen_physinfo_t physinfo = { };
+    uint64_t log_ratelimit_ms = 0;
+    uint64_t log_ratelimit_burst = 0;
 
 #ifdef _WIN32
     setprogname(argv[0]);
@@ -152,7 +157,8 @@ main(int argc, char **argv, char **envp)
     while (1) {
         int c, index = 0;
 
-        enum { LI_LOAD, LI_UNLOAD, LI_LOGFILE, LI_LOGDAEMON, LI_PHYSINFO };
+        enum { LI_LOAD, LI_UNLOAD, LI_LOGFILE, LI_LOGDAEMON, LI_PHYSINFO,
+               LI_LRMS, LI_LRBURST };
 
         static int long_index;
         static struct option long_options[] = {
@@ -177,6 +183,8 @@ main(int argc, char **argv, char **envp)
             {"log-dump",      no_argument,       NULL,       'X'},
             {"path",          required_argument, NULL,       'P'},
             {"physinfo",      no_argument,       &long_index, LI_PHYSINFO},
+            {"log-ratelimit-ms", required_argument, &long_index, LI_LRMS},
+            {"log-ratelimit-burst", required_argument, &long_index, LI_LRBURST},
             {NULL,   0,                 NULL, 0}
         };
 
@@ -203,6 +211,12 @@ main(int argc, char **argv, char **envp)
                 break;
             case LI_PHYSINFO:
                 show_physinfo = 1;
+                break;
+            case LI_LRMS:
+                sscanf(optarg, "%" SCNu64, &log_ratelimit_ms);
+                break;
+            case LI_LRBURST:
+                sscanf(optarg, "%" SCNu64, &log_ratelimit_burst);
                 break;
             }
             break;
@@ -282,7 +296,8 @@ main(int argc, char **argv, char **envp)
     if (init == 0 && shutdown == 0 && load == NULL && unload == 0 &&
         version == 0 && keys == NULL && destroy_vm == NULL && list_vms == 0 &&
         log == 0 && log_dump == 0 && show_physinfo == 0 && power == -1 &&
-        wait_vm_exit == 0) {
+        wait_vm_exit == 0 && log_ratelimit_ms == 0 &&
+        log_ratelimit_burst == 0) {
         if (load_driver)
             exit(0);
         if (unload_driver) {
@@ -350,6 +365,13 @@ main(int argc, char **argv, char **envp)
         ret = uxen_power(handle, power);
         if (ret)
             errx(1, "power failed");
+    }
+
+    if (log_ratelimit_ms || log_ratelimit_burst) {
+        ret = uxen_log_ratelimit(handle, log_ratelimit_ms,
+                                 log_ratelimit_burst);
+        if (ret)
+            errx(1, "log_ratelimit failed");
     }
 
     if (show_physinfo) {

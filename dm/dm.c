@@ -119,6 +119,9 @@ FILE *logfile;
 int loglevel = 0;
 uint64_t hide_log_sensitive_data = 0;
 
+uint64_t log_ratelimit_guest_burst = 0;
+uint64_t log_ratelimit_guest_ms = 0;
+
 static void
 usage(const char *progname)
 {

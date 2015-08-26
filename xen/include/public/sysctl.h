@@ -589,6 +589,14 @@ struct xen_sysctl_scheduler_op {
 typedef struct xen_sysctl_scheduler_op xen_sysctl_scheduler_op_t;
 DEFINE_XEN_GUEST_HANDLE(xen_sysctl_scheduler_op_t);
 
+/* XEN_SYSCTL_log_ratelimit */
+struct xen_sysctl_log_ratelimit {
+    uint64_t ms;
+    uint64_t burst;
+};
+typedef struct xen_sysctl_log_ratelimit xen_sysctl_log_ratelimit_t;
+DEFINE_XEN_GUEST_HANDLE(xen_sysctl_log_ratelimit_t);
+
 struct xen_sysctl {
     uint32_t cmd;
 #ifndef __UXEN__
@@ -608,11 +616,12 @@ struct xen_sysctl {
 #define XEN_SYSCTL_pm_op                         12
 #define XEN_SYSCTL_page_offline_op               14
 #define XEN_SYSCTL_lockprof_op                   15
-#define XEN_SYSCTL_topologyinfo                  16 
+#define XEN_SYSCTL_topologyinfo                  16
 #define XEN_SYSCTL_numainfo                      17
 #define XEN_SYSCTL_cpupool_op                    18
 #define XEN_SYSCTL_scheduler_op                  19
 #endif  /* __UXEN__ */
+#define XEN_SYSCTL_log_ratelimit                 20
     uint32_t interface_version; /* XEN_SYSCTL_INTERFACE_VERSION */
     union {
 #ifndef __UXEN__
@@ -637,6 +646,7 @@ struct xen_sysctl {
         struct xen_sysctl_cpupool_op        cpupool_op;
         struct xen_sysctl_scheduler_op      scheduler_op;
 #endif  /* __UXEN__ */
+        struct xen_sysctl_log_ratelimit     log_ratelimit;
         uint8_t                             pad[128];
     } u;
 };

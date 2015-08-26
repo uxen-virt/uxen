@@ -871,25 +871,39 @@ static int __printk_ratelimit(int ratelimit_ms, int ratelimit_burst,
 }
 
 /* minimum time in ms between messages */
-static int __read_mostly printk_ratelimit_ms = 5 * 1000;
+static int __read_mostly printk_ratelimit_ms = 1000;
 
 /* number of messages we send before ratelimiting */
-static int __read_mostly printk_ratelimit_burst = 10;
+static int __read_mostly printk_ratelimit_burst = 100;
 
-/* minimum time in ms between messages */
-static int __read_mostly guest_printk_ratelimit_ms = 5 * 1000;
-
-/* number of messages we send before ratelimiting */
-static int __read_mostly guest_printk_ratelimit_burst = 100;
+void change_log_limits(uint64_t ratelimit_ms, uint64_t ratelimit_burst)
+{
+    if (ratelimit_ms)
+        printk_ratelimit_ms = (int)ratelimit_ms;
+    if (ratelimit_burst)
+        printk_ratelimit_burst = (int)ratelimit_burst;
+}
 
 static int printk_ratelimit(int per_guest)
 {
     static long toks = 0;
     static unsigned long last_msg = 0;
     static int missed = 0;
+    uint64_t *params = NULL;
+    int guest_printk_ratelimit_ms = 1000;
+    int guest_printk_ratelimit_burst = 1000;
 
-    if (!current || !current->domain)
+    if (!current || !current->domain) {
         per_guest = 0;
+    } else if (is_hvm_domain(current->domain)) {
+        params = current->domain->arch.hvm_domain.params;
+        if (params[HVM_PARAM_LOG_RATELIMIT_GUEST_MS])
+            guest_printk_ratelimit_ms =
+                (int)params[HVM_PARAM_LOG_RATELIMIT_GUEST_MS];
+        if (params[HVM_PARAM_LOG_RATELIMIT_GUEST_BURST])
+            guest_printk_ratelimit_burst =
+                (int)params[HVM_PARAM_LOG_RATELIMIT_GUEST_BURST];
+    }
 
     if (per_guest)
         return  __printk_ratelimit(

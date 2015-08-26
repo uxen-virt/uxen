@@ -703,3 +703,39 @@ uxen_physinfo(UXEN_HANDLE_T h, uxen_physinfo_t *up)
         uxen_free(h, buf, 1);
     return ret;
 }
+
+int
+uxen_log_ratelimit(UXEN_HANDLE_T h, uint64_t ms, uint64_t burst)
+{
+    int ret;
+    struct uxen_hypercall_desc uhd = { };
+    struct xen_sysctl *xs;
+    void *buf = NULL;
+
+    buf = uxen_malloc(h, 1);
+    if (!buf) {
+        warn("uxen_malloc failed");
+        ret = -1;
+        goto out;
+    }
+
+    xs = (struct xen_sysctl *)buf;
+    xs->interface_version = XEN_SYSCTL_INTERFACE_VERSION;
+    xs->cmd = XEN_SYSCTL_log_ratelimit;
+    xs->u.log_ratelimit.ms = ms;
+    xs->u.log_ratelimit.burst = burst;
+
+    uhd.uhd_op = __HYPERVISOR_sysctl;
+    uhd.uhd_arg[0] = (uint64_t)(uintptr_t)buf;
+    ret = uxen_hypercall(h, &uhd);
+    if (ret < 0) {
+        warn("hypercall(HYPERVISOR_sysctl,XEN_SYSCTL_log_ratelimit)");
+        ret = -1;
+        goto out;
+    }
+
+  out:
+    if (buf)
+        uxen_free(h, buf, 1);
+    return ret;
+}

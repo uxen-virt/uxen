@@ -73,6 +73,9 @@ extern int loglevel;
 extern uint64_t hide_log_sensitive_data;
 extern uint64_t log_swap_fills;
 
+extern uint64_t log_ratelimit_guest_burst;
+extern uint64_t log_ratelimit_guest_ms;
+
 extern const char *serial_devices[MAX_SERIAL_PORTS];
 
 #endif	/* _DM_H_ */

@@ -479,6 +479,11 @@ vm_init(const char *loadvm, int restore_mode)
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_RAND_SEED_HI,
                      rand_seed[1]);
 
+    xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_LOG_RATELIMIT_GUEST_BURST,
+                     log_ratelimit_guest_burst);
+    xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_LOG_RATELIMIT_GUEST_MS,
+                     log_ratelimit_guest_ms);
+
     vm_time_offset = get_timeoffset();
     xc_domain_set_time_offset(xc_handle, vm_id, vm_time_offset);
 

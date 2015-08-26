@@ -40,4 +40,6 @@ void console_giveback(int id);
 int console_suspend(void);
 int console_resume(void);
 
+void change_log_limits(uint64_t ratelimit_ms, uint64_t ratelimit_burst);
+
 #endif /* __CONSOLE_H__ */
