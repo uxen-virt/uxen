@@ -59,9 +59,6 @@ HKR, NetworkProvider, Name, 0x00000000, "uXen Hypervisor Shared Folders"
 HKR, NetworkProvider, ProviderPath, 0x00000000, %11%\VBoxMRXNP.dll
 HKLM, System\CurrentControlSet\Control\NetworkProvider\Order, ProviderOrder, 0x00000000, "uxensf,RDPNP,LanmanWorkstation,webclient"
 
-[VBoxMRXNP_Add_Reg]
-HKLM, SOFTWARE\Microsoft\Windows\CurrentVersion\Run, VBoxMRXNP, 0x00000000, %11%\VBoxMRXNP.exe
-
 [Strings]
 uXenMfg = "uXen Project"
 uxensf.DeviceDesc = "uXen Shared Folder"
