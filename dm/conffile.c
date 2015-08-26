@@ -693,6 +693,9 @@ struct config_option config_options[] = {
     { "hide-log-sensitive-data", co_set_boolean_opt, &hide_log_sensitive_data },
     { "hpet", co_set_integer_opt, &vm_hpet },
     { "lava", co_set_string_opt, &lava_options },
+    { "log-ratelimit-guest-burst", co_set_integer_opt,
+      &log_ratelimit_guest_burst },
+    { "log-ratelimit-guest-ms", co_set_integer_opt, &log_ratelimit_guest_ms },
     { "malloc-limit", co_set_integer_opt, &malloc_limit_bytes},
     { "memory", co_set_integer_opt, &vm_mem_mb },
     { "monitor", co_set_monitor, NULL },
@@ -701,8 +704,6 @@ struct config_option config_options[] = {
     { "netlumps", co_set_net_lumps,NULL },
     { "pae", co_set_integer_opt, &vm_pae },
     { "parent-window-key-forward", co_set_forwarded_keys, NULL },
-    { "log-ratelimit-guest-burst", co_set_integer_opt, &log_ratelimit_guest_burst },
-    { "log-ratelimit-guest-ms", co_set_integer_opt, &log_ratelimit_guest_ms },
 #ifdef _WIN32
     { "process-shutdown-priority", co_set_integer_opt,
       &process_shutdown_priority },
