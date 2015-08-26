@@ -426,7 +426,7 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
     int zero_batch = 0;
     int map_err;
     uint8_t *mem = NULL;
-    int mem_nr;
+    int mem_nr = 0;
     int free_nr = 0;
     char *compress_mem = NULL;
     char *compress_buf = NULL;
