@@ -182,10 +182,10 @@ mdm_map(struct uxen_memcachemap_desc *umd, struct fd_assoc *fda)
     set_xen_guest_handle(umemopa.translate_gpfn_list_for_map.gpfn_list, pfns);
     set_xen_guest_handle(umemopa.translate_gpfn_list_for_map.mfn_list, mfns);
     ret = (int)uxen_dom0_hypercall(
-        fda->vmi_owner ? &vmi->vmi_shared : NULL, &fda->user_mappings,
+        &vmi->vmi_shared, &fda->user_mappings,
         UXEN_UNRESTRICTED_ACCESS_HYPERCALL |
-        (fda->admin_access ? UXEN_ADMIN_HYPERCALL : 0),
-        __HYPERVISOR_memory_op,
+        (fda->admin_access ? UXEN_ADMIN_HYPERCALL : 0) |
+        (fda->vmi_owner ? UXEN_VMI_OWNER : 0), __HYPERVISOR_memory_op,
         (uintptr_t)XENMEM_translate_gpfn_list_for_map, (uintptr_t)&umemopa);
     uxen_mem_tlb_flush();       /* deferred from mdm_enter */
     if (ret) {

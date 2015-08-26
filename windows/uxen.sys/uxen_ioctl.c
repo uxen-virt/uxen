@@ -389,9 +389,9 @@ uxen_ioctl(__inout DEVICE_OBJECT *DeviceObject, __inout IRP *pIRP)
         UXEN_CHECK_OUTPUT_BUFFER("UXENHYPERCALL", struct uxen_hypercall_desc);
         KeAcquireGuardedMutex(&fda->user_malloc_mutex);
         ret = uxen_hypercall(uhd, SNOOP_USER,
-                             fda->vmi_owner ? &vmi->vmi_shared : NULL,
-                             &fda->user_mappings,
-                             fda->admin_access ? UXEN_ADMIN_HYPERCALL : 0);
+                             &vmi->vmi_shared, &fda->user_mappings,
+                             (fda->admin_access ? UXEN_ADMIN_HYPERCALL : 0) |
+                             (fda->vmi_owner ? UXEN_VMI_OWNER : 0));
         if (ret < 0)
             IOCTL_FAILURE(UXEN_NTSTATUS_FROM_ERRNO(-ret),
                           "uxen_ioctl(UXENHYPERCALL %d) fail: %d",

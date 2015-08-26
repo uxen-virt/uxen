@@ -168,6 +168,8 @@ struct vcpu
     /* Is this guest fully privileged (aka dom0)? */
     bool_t           is_privileged;
 
+    bool_t           target_vmis_owner;
+
     uint8_t          has_preemption_masked;
 
     uint8_t          cr3_load_count;
@@ -873,7 +875,7 @@ void watchdog_domain_destroy(struct domain *d);
                 (IS_HOST(_d) ?                                          \
                  (current->is_privileged ||                             \
                   (current->domain == (_d) &&                           \
-                   (current->target_vmis &&                             \
+                   (current->target_vmis_owner && current->target_vmis && \
                     current->target_vmis->vmi_domid == (_t)->domain_id))) : \
                  (current->domain == (_d) &&                            \
                   (_d)->domain_id == (_t)->domain_id));                 \

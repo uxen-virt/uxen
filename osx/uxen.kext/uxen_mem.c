@@ -1233,8 +1233,8 @@ remove_host_mfns_mapping(uint64_t gmfn, size_t len, struct fd_assoc *fda)
 
         uxen_dom0_hypercall(&vmi->vmi_shared, &fda->user_mappings,
                             UXEN_UNRESTRICTED_ACCESS_HYPERCALL |
-                            (fda->admin_access ? UXEN_ADMIN_HYPERCALL : 0),
-                            __HYPERVISOR_memory_op,
+                            (fda->admin_access ? UXEN_ADMIN_HYPERCALL : 0) |
+                            UXEN_VMI_OWNER, __HYPERVISOR_memory_op,
                             XENMEM_add_to_physmap, &memop_arg);
     }
 }
@@ -1331,8 +1331,8 @@ map_host_pages(void *va, size_t len, uint64_t gmfn,
         ret = (int)uxen_dom0_hypercall(&vmi->vmi_shared, &fda->user_mappings,
                                        UXEN_UNRESTRICTED_ACCESS_HYPERCALL |
                                        (fda->admin_access ?
-                                        UXEN_ADMIN_HYPERCALL : 0),
-                                       __HYPERVISOR_memory_op,
+                                        UXEN_ADMIN_HYPERCALL : 0) |
+                                       UXEN_VMI_OWNER, __HYPERVISOR_memory_op,
                                        XENMEM_add_to_physmap, &memop_arg);
         if (ret)
             goto out;
@@ -1823,10 +1823,10 @@ uxen_mem_mmapbatch(struct uxen_mmapbatch_desc *ummapbd, struct fd_assoc *fda)
         set_xen_guest_handle(umemopa.translate_gpfn_list_for_map.mfn_list,
                              &mfns[done]);
         ret = (int)uxen_dom0_hypercall(
-            fda->vmi_owner ? &vmi->vmi_shared : NULL, &fda->user_mappings,
+            &vmi->vmi_shared, &fda->user_mappings,
             UXEN_UNRESTRICTED_ACCESS_HYPERCALL |
-            (fda->admin_access ? UXEN_ADMIN_HYPERCALL : 0),
-            __HYPERVISOR_memory_op,
+            (fda->admin_access ? UXEN_ADMIN_HYPERCALL : 0) |
+            (fda->vmi_owner ? UXEN_VMI_OWNER : 0), __HYPERVISOR_memory_op,
             (uintptr_t)XENMEM_translate_gpfn_list_for_map, (uintptr_t)&umemopa);
         if (ret) {
             fail_msg("XENMEM_translate_gpfn_list failed at %d/%d/%d: %d",

@@ -400,9 +400,9 @@ uxen_ioctl(u_long cmd, struct fd_assoc *fda, struct vm_info *vmi,
         CHECK_MODE(MODE_INITIALIZED, "UXENHYPERCALL");
         CHECK_INPUT_BUFFER("UXENHYPERCALL", struct uxen_hypercall_desc);
         ret = uxen_hypercall(uhd, SNOOP_USER,
-                             fda->vmi_owner ? &vmi->vmi_shared : NULL,
-                             &fda->user_mappings,
-                             fda->admin_access ? UXEN_ADMIN_HYPERCALL : 0);
+                             &vmi->vmi_shared, &fda->user_mappings,
+                             (fda->admin_access ? UXEN_ADMIN_HYPERCALL : 0) |
+                             (fda->vmi_owner ? UXEN_VMI_OWNER : 0));
         if (ret < 0) {
             ret = uxen_translate_xen_errno(ret);
             fail_msg("UXENHYPERCALL: uxen_do_hypercall failed: %d", ret);

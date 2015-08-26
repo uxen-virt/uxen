@@ -1941,10 +1941,10 @@ uxen_op_set_event_channel(struct uxen_event_channel_desc *uecd,
     bind.remote_port = uecd->uecd_port;
     bind.host_opaque = hec;
     ret = (int)uxen_dom0_hypercall(
-        fda->vmi_owner ? &vmi->vmi_shared : NULL, &fda->user_mappings,
+        &vmi->vmi_shared, &fda->user_mappings,
         UXEN_UNRESTRICTED_ACCESS_HYPERCALL |
-        (fda->admin_access ? UXEN_ADMIN_HYPERCALL : 0),
-        __HYPERVISOR_event_channel_op,
+        (fda->admin_access ? UXEN_ADMIN_HYPERCALL : 0) |
+        (fda->vmi_owner ? UXEN_VMI_OWNER : 0), __HYPERVISOR_event_channel_op,
         (uintptr_t)EVTCHNOP_bind_host, (uintptr_t)&bind);
     if (ret) {
         fail_msg("event_channel_op(bind_host) failed: %d", ret);
