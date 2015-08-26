@@ -690,27 +690,33 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
 	pfn += batch;
     }
 
-    if (zero_batch) {
-        int _zero_batch = zero_batch + 3 * MAX_BATCH_SIZE;
-        filebuf_write(f, &_zero_batch, sizeof(zero_batch));
-        filebuf_write(f, &pfn_zero[0],
-                      zero_batch * sizeof(pfn_zero[0]));
+    if (!vm_save_info.save_abort && !vm_quit_interrupt) {
+        if (zero_batch) {
+            int _zero_batch = zero_batch + 3 * MAX_BATCH_SIZE;
+            filebuf_write(f, &_zero_batch, sizeof(zero_batch));
+            filebuf_write(f, &pfn_zero[0],
+                          zero_batch * sizeof(pfn_zero[0]));
+        }
     }
 
-    /* 0: end marker */
-    batch = 0;
-    filebuf_write(f, &batch, sizeof(batch));
+    if (!vm_save_info.save_abort && !vm_quit_interrupt) {
+        /* 0: end marker */
+        batch = 0;
+        filebuf_write(f, &batch, sizeof(batch));
 
-    APRINTF("memory: pages %d zero %d rezero %d clone %d", total_pages,
-            total_zero - total_rezero, total_rezero, total_clone);
-    if (compress && total_pages) {
-        int pct;
-        pct = 10000 * (total_compress_save >> PAGE_SHIFT) / total_pages;
-        APRINTF("        compressed %d in-vain %d -- saved %"PRIdSIZE" bytes"
-                " (%d.%02d%%)",
-                total_compressed_pages, total_compress_in_vain,
-                total_compress_save, pct / 100, pct % 100);
-    }
+        APRINTF("memory: pages %d zero %d rezero %d clone %d", total_pages,
+                total_zero - total_rezero, total_rezero, total_clone);
+        if (compress && total_pages) {
+            int pct;
+            pct = 10000 * (total_compress_save >> PAGE_SHIFT) / total_pages;
+            APRINTF("        compressed %d in-vain %d -- saved %"PRIdSIZE
+                    " bytes (%d.%02d%%)",
+                    total_compressed_pages, total_compress_in_vain,
+                    total_compress_save, pct / 100, pct % 100);
+        }
+    } else
+        APRINTF("%s: save aborted%s", __FUNCTION__,
+                vm_quit_interrupt ? " (quit interrupt)" : "");
 
     ret = 0;
   out:
