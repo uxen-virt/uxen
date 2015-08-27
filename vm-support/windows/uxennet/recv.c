@@ -76,8 +76,6 @@ Return Value:
     PMP_ADAPTER Adapter = pRCB->Adapter;
     BOOLEAN schedule;
 
-    uxen_msg("--> NICFreeRCB %p", pRCB);
-
     ASSERT(!pRCB->Buffer->Next); // should be NULL
     ASSERT(!pRCB->Ref); // should be 0
     ASSERT(pRCB->Adapter); // shouldn't be NULL
@@ -95,8 +93,6 @@ Return Value:
 
     if (schedule)
         KeInsertQueueDpc(&Adapter->RecvDpc, NULL, NULL);
-
-    uxen_msg("<-- NICFreeRCB");
 }
 
 
@@ -131,8 +127,6 @@ Return Value:
 
     UNREFERENCED_PARAMETER(MiniportAdapterContext);
 
-    uxen_msg("---> MPReturnPacket");
-
     pRCB = *(PRCB *)Packet->MiniportReserved;
 
     Adapter = pRCB->Adapter;
@@ -152,8 +146,6 @@ Return Value:
         KeBugCheckEx(0xdead, 0xbeef, 0xfee1, 0xbad, 0xdead);
     }
     NICFreeRCB(pRCB);
-
-    uxen_msg("<--- MPReturnPacket");
 }
 
 

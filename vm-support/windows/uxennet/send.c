@@ -60,11 +60,6 @@ NICSendPacket(
     NDIS_STATUS       Status = NDIS_STATUS_SUCCESS;
     ULONG  nbs;
 
-    uxen_msg("--> NICSendPacket, Packet= %p", Packet);
-
-
-//    uxen_net_soh(&Adapter->uxen_net,Adapter);
-
     if (!MP_IS_READY(Adapter))
         return NDIS_STATUS_FAILURE;
 
@@ -95,8 +90,6 @@ NICSendPacket(
             );
             NdisInterlockedDecrement(&Adapter->nBusySend);
     }
-
-    uxen_msg("<-- NICSendPacket Status = 0x%08x", Status);
 
     return (Status);
 }
@@ -171,8 +164,6 @@ Return Value:
     NDIS_STATUS       Status;
     UINT              PacketCount;
 
-    uxen_msg("---> MPSendPackets");
-
     Adapter = (PMP_ADAPTER)MiniportAdapterContext;
 
     NICSendQueuedPackets( Adapter);
@@ -189,8 +180,6 @@ Return Value:
         }
 
     }
-
-    uxen_msg("<--- MPSendPackets");
 
     return;
 }
