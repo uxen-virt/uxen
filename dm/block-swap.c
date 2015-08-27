@@ -255,7 +255,7 @@ static inline int swap_get_key(void *out, const void *in, size_t sz)
     if (sz == DUBTREE_BLOCK_SIZE) {
         memcpy(out, in, sz);
     } else {
-        int unsz = LZ4_uncompress((const char*)in, (char*)out, DUBTREE_BLOCK_SIZE);
+        int unsz = LZ4_decompress_fast((const char*)in, (char*)out, DUBTREE_BLOCK_SIZE);
         if (unsz!=sz) {
 #ifndef __APPLE__
             /* On OSX we don't like unclean exists, but on Windows our guest

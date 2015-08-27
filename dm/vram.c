@@ -288,7 +288,7 @@ get_vram(QEMUFile *f, void *pv, size_t size)
 
         qemu_get_buffer(f, p, lz4_len);
         vram_resize(v, len);
-        LZ4_uncompress(p, (void *)v->view, len);
+        LZ4_decompress_fast(p, (void *)v->view, len);
         free(p);
     }
 

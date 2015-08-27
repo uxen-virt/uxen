@@ -1821,7 +1821,7 @@ get_vga_ram(QEMUFile *f, void *pv, size_t size)
     len = qemu_get_be32(f);
     tmp = malloc(len);
     qemu_get_buffer(f, tmp, len);
-    LZ4_uncompress(tmp, (void *)vmem_ptr, VGA_RAM_SIZE);
+    LZ4_decompress_fast(tmp, (void *)vmem_ptr, VGA_RAM_SIZE);
     free(tmp);
 
     return 0;

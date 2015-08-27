@@ -110,7 +110,7 @@ int main(int argc, char **argv)
             }
                 
             if (sizes[0] < 4096) {
-                unsz = LZ4_uncompress((const char*)out, page, DUBTREE_BLOCK_SIZE);
+                unsz = LZ4_decompress_fast((const char*)out, page, DUBTREE_BLOCK_SIZE);
 
             } else {
                 unsz = 4096;

@@ -789,7 +789,7 @@ decompress_batch(int batch, xen_pfn_t *pfn_type, uint8_t *mem,
             }
             decompress_pos += sizeof(cs16_t);
             if (cs1 < PAGE_SIZE) {
-                ret = LZ4_uncompress(&compress_buf[decompress_pos],
+                ret = LZ4_decompress_fast(&compress_buf[decompress_pos],
                                      (char *)&mem[i << PAGE_SHIFT],
                                      PAGE_SIZE);
                 if (ret != cs1) {
@@ -806,7 +806,7 @@ decompress_batch(int batch, xen_pfn_t *pfn_type, uint8_t *mem,
             decompress_pos += cs1;
         }
     } else {
-        ret = LZ4_uncompress(compress_buf, (char *)mem,
+        ret = LZ4_decompress_fast(compress_buf, (char *)mem,
                              batch << PAGE_SHIFT);
         if (ret != compress_size) {
             asprintf(err_msg, "decompression of page %"PRIx64
