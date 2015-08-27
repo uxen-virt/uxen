@@ -738,6 +738,8 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
             asprintf((err_msg), "uxenvm_load_read(%s) failed", #buf);   \
             if ((ret) >= 0)                                             \
                 (ret) = -EIO;                                           \
+            else                                                        \
+                (ret) = -errno;                                         \
             goto _out;                                                  \
         }                                                               \
     } while(0)
@@ -1666,8 +1668,8 @@ vm_save_execute(void)
 
     f = filebuf_open(vm_save_info.filename, "wb");
     if (f == NULL) {
-	ERRMSG("filebuf_open(%s) failed", vm_save_info.filename);
 	ret = errno;
+	ERRMSG("filebuf_open(%s) failed", vm_save_info.filename);
 	goto out;
     }
     vm_save_info.f = f;
@@ -1812,8 +1814,8 @@ vm_load(const char *name, int restore_mode)
 
     f = filebuf_open(name, restore_mode == VM_RESTORE_TEMPLATE ? "rbn" : "rb");
     if (f == NULL) {
-        asprintf(&err_msg, "filebuf_open(%s) failed", name);
 	ret = -errno;
+        asprintf(&err_msg, "filebuf_open(%s) failed", name);
         EPRINTF("%s: ret %d", err_msg, ret);
 	goto out;
     }

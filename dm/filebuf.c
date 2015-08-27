@@ -88,6 +88,7 @@ filebuf_open(const char *fn, const char *mode)
     if (fb->file < 0)
 #endif  /* _WIN32 */
     {
+        _set_errno(GetLastError());
         Wwarn("%s: open %s failed", __FUNCTION__, fn);
         align_free(fb->buffer);
         free(fb);
@@ -241,11 +242,13 @@ filebuf_fill(struct filebuf *fb)
 
         if (!ReadFile(fb->file, fb->buffer, (DWORD)fb->buffer_max, &ret, &o)) {
             if (GetLastError() != ERROR_IO_PENDING) {
+                _set_errno(GetLastError());
                 Wwarn("%s: ReadFile failed", __FUNCTION__);
                 return -1;
             }
             if (!GetOverlappedResult(fb->file, &o, &ret, TRUE) &&
                 GetLastError() != ERROR_HANDLE_EOF) {
+                _set_errno(GetLastError());
                 Wwarn("%s: GetOverlappedResult failed", __FUNCTION__);
                 return -1;
             }
