@@ -601,7 +601,7 @@ uxendisp_mmio_write(void *opaque, target_phys_addr_t addr, uint64_t val,
     case UXDISP_REG_MODE:
         s->mode = val;
         crtc_flush(s, 0);
-        uxendisp_invalidate(s);
+        uxendisp_invalidate(&s->crtcs[0]);
         return;
     case UXDISP_REG_INTERRUPT_ENABLE:
         s->interrupt_en = val;
@@ -899,6 +899,7 @@ static int uxendisp_initfn(PCIDevice *dev)
     memory_region_add_ram_range(&s->mmio, 0x8000, 0x8000,
                                 cursor_data_ptr_update, s);
     for (i = 0; i < UXENDISP_NB_CRTCS; i++) {
+        s->crtcs[i].id = i;
         memory_region_add_ram_range(&s->mmio,
                                     UXDISP_REG_CRTC(i) + 0x1000,
                                     0x1000,
@@ -915,8 +916,6 @@ static int uxendisp_initfn(PCIDevice *dev)
     pci_register_bar(&s->dev, 1, PCI_BASE_ADDRESS_SPACE_MEMORY, &s->mmio);
     pci_register_bar(&s->dev, 2, PCI_BASE_ADDRESS_SPACE_IO, &s->pio);
 
-    for (i = 0; i < UXENDISP_NB_CRTCS; i++)
-        s->crtcs[i].id = i;
     s->crtcs[0].ds = display_create(&uxendisp_hw_ops, &s->crtcs[0]);
     s->crtcs[0].status = 0x1;
     s->crtcs[0].flush_pending = 0;
