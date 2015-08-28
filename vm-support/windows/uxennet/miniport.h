@@ -41,7 +41,6 @@ Notes:
 #ifndef _MINIPORT_H
 #define _MINIPORT_H
 
-#include "../common/debug.h"
 
 #if defined(NDIS50_MINIPORT)
 #define MP_NDIS_MAJOR_VERSION       5
@@ -126,6 +125,31 @@ Notes:
 //
 #define NIC_RESOURCE_BUF_SIZE           (sizeof(NDIS_RESOURCE_LIST) + \
                                         (10*sizeof(CM_PARTIAL_RESOURCE_DESCRIPTOR)))
+
+//
+// Message verbosity: lower values indicate higher urgency
+//
+#define MP_LOUD    4
+#define MP_INFO    3
+#define MP_TRACE   2
+#define MP_WARNING 1
+#define MP_ERROR   0
+
+extern INT MPDebugLevel;
+
+#if DBG
+#define DEBUGP(Level, Fmt) \
+{ \
+    if (Level <= MPDebugLevel) \
+    { \
+        DbgPrint("NetVMini.SYS:"); \
+        DbgPrint Fmt; \
+    } \
+}
+#else
+#define DEBUGP(Level, Fmt)
+#endif
+
 
 #ifndef min
 #define    min(_a, _b)      (((_a) < (_b)) ? (_a) : (_b))
@@ -532,6 +556,12 @@ VOID
 NICFreeQueuedRecvPackets(
     PMP_ADAPTER Adapter
 );
+
+PCHAR
+DbgGetOidName
+(ULONG oid
+);
+
 
 #if defined(IOCTL_INTERFACE)
 NDIS_STATUS

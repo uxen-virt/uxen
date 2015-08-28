@@ -63,6 +63,7 @@ Notes:
 #endif
 
 MP_GLOBAL_DATA  GlobalData;
+INT             MPDebugLevel = MP_INFO;
 NDIS_HANDLE     NdisWrapperHandle;
 
 NDIS_STATUS
@@ -91,7 +92,9 @@ Arguments:
     NDIS_STATUS                   Status;
     NDIS_MINIPORT_CHARACTERISTICS MPChar;
 
-    uxen_msg("---> DriverEntry built on "__DATE__" at "__TIME__);
+    DbgPrint("Fish FISH FISH FISH FISH FISH FISH\n");
+
+    DEBUGP(MP_TRACE, ("---> DriverEntry built on "__DATE__" at "__TIME__ "\n"));
 
     //
     // Associate the miniport driver with NDIS by calling the
@@ -111,7 +114,7 @@ Arguments:
         NULL
     );
     if (!NdisWrapperHandle) {
-        uxen_err("NdisMInitializeWrapper failed");
+        DEBUGP(MP_ERROR, ("NdisMInitializeWrapper failed\n"));
         return NDIS_STATUS_FAILURE;
     }
 
@@ -159,7 +162,7 @@ Arguments:
 #endif
 
 
-    uxen_msg("Calling NdisMRegisterMiniport...");
+    DEBUGP(MP_LOUD, ("Calling NdisMRegisterMiniport...\n"));
 
     //
     // Registers miniport's entry points with the NDIS library as the first
@@ -173,7 +176,7 @@ Arguments:
                  sizeof(NDIS_MINIPORT_CHARACTERISTICS));
     if (Status != NDIS_STATUS_SUCCESS) {
 
-        uxen_err("NdisMRegisterMiniport failed with status = 0x%08x", Status);
+        DEBUGP(MP_ERROR, ("Status = 0x%08x\n", Status));
         NdisTerminateWrapper(NdisWrapperHandle, NULL);
 
     } else {
@@ -197,7 +200,7 @@ Arguments:
     }
 
 
-    uxen_msg("<--- DriverEntry");
+    DEBUGP(MP_TRACE, ("<--- DriverEntry\n"));
     return Status;
 
 }
@@ -235,7 +238,7 @@ Arguments:
 
     UNREFERENCED_PARAMETER(OpenErrorStatus);
 
-    uxen_msg("---> MPInitialize");
+    DEBUGP(MP_TRACE, ("---> MPInitialize\n"));
 
     PAGED_CODE();
 
@@ -251,7 +254,7 @@ Arguments:
         }
 
         if (index == MediumArraySize) {
-            uxen_err("Expected media is not in MediumArray.");
+            DEBUGP(MP_ERROR, ("Expected media is not in MediumArray.\n"));
             Status = NDIS_STATUS_UNSUPPORTED_MEDIA;
             break;
         }
@@ -267,7 +270,6 @@ Arguments:
         //
         Status = NICAllocAdapter(&Adapter);
         if (Status != NDIS_STATUS_SUCCESS) {
-            uxen_err("NICAllocAdapter failed with status = 0x%08x", Status);
             break;
         }
 
@@ -300,7 +302,6 @@ Arguments:
         Status = NICReadRegParameters(Adapter, WrapperConfigurationContext);
 
         if (Status != NDIS_STATUS_SUCCESS) {
-            uxen_err("NICReadRegParameters failed with status = 0x%08x", Status);
             break;
         }
 
@@ -332,7 +333,6 @@ Arguments:
 
         Status = NICInitializeAdapter(Adapter, WrapperConfigurationContext);
         if (Status != NDIS_STATUS_SUCCESS) {
-            uxen_err("NICInitializeAdapter failed with status = 0x%08x", Status);
             Status = NDIS_STATUS_FAILURE;
             break;
         }
@@ -344,6 +344,14 @@ Arguments:
             &Adapter->ResetTimer,
             (PNDIS_TIMER_FUNCTION) NICResetCompleteTimerDpc,
             (PVOID) Adapter);
+
+
+        {
+            LONG death = 0;
+
+            if  (NdisInterlockedIncrement(&death) != 1)
+                KeBugCheckEx(0x4567, 0x1, 0x2, 0x3, 0x4);
+        }
 
         KeInitializeDpc(&Adapter->RecvDpc, RecvDpcFunc, (PVOID) Adapter);
         KeInitializeDpc(&Adapter->NotifyDpc, NotifyDpcFunc, (PVOID) Adapter);
@@ -369,7 +377,7 @@ Arguments:
         }
     }
 
-    uxen_msg("<--- MPInitialize Status = 0x%08x", Status);
+    DEBUGP(MP_TRACE, ("<--- MPInitialize Status = 0x%08x%\n", Status));
 
     return Status;
 
@@ -422,7 +430,7 @@ Return Value:
 
     MP_SET_FLAG(Adapter, fMP_ADAPTER_HALT_IN_PROGRESS);
 
-    uxen_msg("---> MPHalt");
+    DEBUGP(MP_TRACE, ("---> MPHalt\n"));
 
     //
     // Call Shutdown handler to disable interrupt and turn the hardware off
@@ -452,7 +460,6 @@ Return Value:
     //
     NdisCancelTimer(&Adapter->ResetTimer, &bCancelled);
     if ( ! bCancelled ) {
-        uxen_err("NdisCancelTimer failed");
         // you may do something
     }
 
@@ -468,7 +475,7 @@ Return Value:
     // 2) Receive Indication DPC is still running.
     //
 
-    uxen_msg("RefCount=%d --- waiting!", MP_GET_REF(Adapter));
+    DEBUGP(MP_INFO, ("RefCount=%d --- waiting!\n", MP_GET_REF(Adapter)));
 
     NdisWaitEvent(&Adapter->RemoveEvent, 0);
 
@@ -479,7 +486,7 @@ Return Value:
         // Are all the packets indicated up returned?
         //
         if (Adapter->nBusyRecv) {
-            uxen_debug("nBusyRecv = %d", Adapter->nBusyRecv);
+            DEBUGP(MP_INFO, ("nBusyRecv = %d\n", Adapter->nBusyRecv));
             bDone = FALSE;
         }
 
@@ -487,7 +494,7 @@ Return Value:
         // Are there any outstanding send packets?
         //
         if (Adapter->nBusySend) {
-            uxen_debug("nBusySend = %d", Adapter->nBusySend);
+            DEBUGP(MP_INFO, ("nBusySend = %d\n", Adapter->nBusySend));
             bDone = FALSE;
         }
 
@@ -496,11 +503,12 @@ Return Value:
         }
 
         if (++nHaltCount % 100) {
-            uxen_err("Halt timed out!!!");
+            DEBUGP(MP_ERROR, ("Halt timed out!!!\n"));
+            DEBUGP(MP_ERROR, ("RecvWaitList = %p\n", &Adapter->RecvWaitList));
             ASSERT(FALSE);
         }
 
-        uxen_debug("MPHalt - waiting ...");
+        DEBUGP(MP_INFO, ("MPHalt - waiting ...\n"));
         NdisMSleep(1000);
     }
 
@@ -522,7 +530,7 @@ Return Value:
 
     NICFreeAdapter(Adapter);
 
-    uxen_msg("<--- MPHalt");
+    DEBUGP(MP_TRACE, ("<--- MPHalt\n"));
 }
 
 NDIS_STATUS
@@ -578,7 +586,7 @@ Return Value:
     BOOLEAN           bDone = TRUE;
     BOOLEAN         bFalse = FALSE;
 
-    uxen_msg("---> MPReset");
+    DEBUGP(MP_TRACE, ("---> MPReset\n"));
 
     do {
         ASSERT(!MP_TEST_FLAG(Adapter, fMP_ADAPTER_HALT_IN_PROGRESS));
@@ -599,7 +607,7 @@ Return Value:
         // Check to see if all the packets indicated up are returned.
         //
         if (Adapter->nBusyRecv) {
-            uxen_debug("nBusyRecv = %d", Adapter->nBusyRecv);
+            DEBUGP(MP_INFO, ("nBusyRecv = %d\n", Adapter->nBusyRecv));
             bDone = FALSE;
         }
 
@@ -608,7 +616,7 @@ Return Value:
         // transmitted?
         //
         if (Adapter->nBusySend) {
-            uxen_debug("nBusySend = %d", Adapter->nBusySend);
+            DEBUGP(MP_INFO, ("nBusySend = %d\n", Adapter->nBusySend));
             bDone = FALSE;
         }
 
@@ -635,7 +643,7 @@ Return Value:
 
     } while (bFalse);
 
-    uxen_msg("<--- MPReset Status = 0x%08x", Status);
+    DEBUGP(MP_TRACE, ("<--- MPReset Status = 0x%08x\n", Status));
 
     return (Status);
 }
@@ -672,7 +680,7 @@ Return Value:
     UNREFERENCED_PARAMETER(SystemSpecific3);
 
 
-    uxen_debug("--> NICResetCompleteTimerDpc");
+    DEBUGP(MP_TRACE, ("--> NICResetCompleteTimerDpc\n"));
 
     //
     // Increment the ref count on the adapter to prevent the driver from
@@ -685,7 +693,7 @@ Return Value:
     // Check to see if all the packets indicated up are returned.
     //
     if (Adapter->nBusyRecv) {
-        uxen_debug("nBusyRecv = %d\n", Adapter->nBusyRecv);
+        DEBUGP(MP_INFO, ("nBusyRecv = %d\n", Adapter->nBusyRecv));
         bDone = FALSE;
     }
 
@@ -694,7 +702,7 @@ Return Value:
     // transmitted?
     //
     if (Adapter->nBusySend) {
-        uxen_debug("nBusySend = %d\n", Adapter->nBusySend);
+        DEBUGP(MP_INFO, ("nBusySend = %d\n", Adapter->nBusySend));
         bDone = FALSE;
     }
 
@@ -710,16 +718,17 @@ Return Value:
             // We have tried enough. Something is wrong. Let us
             // just complete the reset request with failure.
             //
-            uxen_err("Reset timed out!!!");
-            uxen_err("nBusySend = %d", Adapter->nBusySend);
-            uxen_err("nBusyRecv = %d", Adapter->nBusyRecv);
+            DEBUGP(MP_ERROR, ("Reset timed out!!!\n"));
+            DEBUGP(MP_ERROR, ("nBusySend = %d\n", Adapter->nBusySend));
+            DEBUGP(MP_ERROR, ("RecvWaitList = %p\n", &Adapter->RecvWaitList));
+            DEBUGP(MP_ERROR, ("nBusyRecv = %d\n", Adapter->nBusyRecv));
 
             ASSERT(FALSE);
 
             Status = NDIS_STATUS_FAILURE;
         }
 
-        uxen_debug("Done - NdisMResetComplete");
+        DEBUGP(MP_INFO, ("Done - NdisMResetComplete\n"));
 
         MP_CLEAR_FLAG(Adapter, fMP_RESET_IN_PROGRESS);
         NdisMResetComplete(
@@ -731,7 +740,7 @@ Return Value:
 
     MP_DEC_REF(Adapter);
 
-    uxen_debug("<-- NICResetCompleteTimerDpc Status = 0x%08x", Status);
+    DEBUGP(MP_TRACE, ("<-- NICResetCompleteTimerDpc Status = 0x%08x\n", Status));
 }
 
 
@@ -765,7 +774,7 @@ Return Value:
 {
     UNREFERENCED_PARAMETER(DriverObject);
 
-    uxen_msg("--> MPUnload");
+    DEBUGP(MP_TRACE, ("--> MPUnload\n"));
 
     PAGED_CODE();
 
@@ -774,7 +783,7 @@ Return Value:
     NdisFreeSpinLock(&GlobalData.Lock);
 
 
-    uxen_msg("<--- MPUnload");
+    DEBUGP(MP_TRACE, ("<--- MPUnload\n"));
 }
 
 VOID
@@ -810,11 +819,11 @@ Return Value:
 --*/
 {
     PMP_ADAPTER     Adapter = (PMP_ADAPTER)MiniportAdapterContext;
-    uxen_msg("---> MPShutdown");
+    DEBUGP(MP_TRACE, ("---> MPShutdown\n"));
 
     uxen_net_stop_adapter(Adapter);
 
-    uxen_msg("<--- MPShutdown");
+    DEBUGP(MP_TRACE, ("<--- MPShutdown\n"));
 }
 
 BOOLEAN
@@ -854,8 +863,8 @@ Note:
 {
     UNREFERENCED_PARAMETER(MiniportAdapterContext);
 
-    uxen_debug("---> MPCheckForHang");
-    uxen_debug("<--- MPCheckForHang");
+    DEBUGP(MP_LOUD, ("---> MPCheckForHang\n"));
+    DEBUGP(MP_LOUD, ("<--- MPCheckForHang\n"));
     return (FALSE);
 }
 
@@ -901,8 +910,8 @@ Return Value:
 {
     UNREFERENCED_PARAMETER(MiniportAdapterContext);
 
-    uxen_debug("---> MPHandleInterrupt");
-    uxen_debug("<--- MPHandleInterrupt");
+    DEBUGP(MP_TRACE, ("---> MPHandleInterrupt\n"));
+    DEBUGP(MP_TRACE, ("<--- MPHandleInterrupt\n"));
 }
 
 VOID
@@ -953,8 +962,8 @@ Return Value:
     UNREFERENCED_PARAMETER(QueueMiniportHandleInterrupt);
     UNREFERENCED_PARAMETER(MiniportAdapterContext);
 
-    uxen_debug("---> MPIsr");
-    uxen_debug("<--- MPIsr");
+    DEBUGP(MP_TRACE, ("---> MPIsr\n"));
+    DEBUGP(MP_TRACE, ("<--- MPIsr\n"));
 }
 
 VOID
@@ -985,8 +994,8 @@ Return Value:
 --*/
 {
     UNREFERENCED_PARAMETER(MiniportAdapterContext);
-    uxen_debug("---> MPDisableInterrupt");
-    uxen_debug("<--- MPDisableInterrupt");
+    DEBUGP(MP_TRACE, ("---> MPDisableInterrupt\n"));
+    DEBUGP(MP_TRACE, ("<--- MPDisableInterrupt\n"));
 
 }
 
@@ -1017,8 +1026,8 @@ Return Value:
 --*/
 {
     UNREFERENCED_PARAMETER(MiniportAdapterContext);
-    uxen_debug("---> MPEnableInterrupt");
-    uxen_debug("<--- MPEnableInterrupt");
+    DEBUGP(MP_TRACE, ("---> MPEnableInterrupt\n"));
+    DEBUGP(MP_TRACE, ("<--- MPEnableInterrupt\n"));
 
 }
 
@@ -1063,8 +1072,7 @@ Return Value:
     UNREFERENCED_PARAMETER(Length);
     UNREFERENCED_PARAMETER(Context);
 
-    uxen_debug("---> MPAllocateComplete");
-    uxen_debug("<--- MPAllocateComplete");
+    DEBUGP(MP_TRACE, ("---> MPAllocateComplete\n"));
 }
 
 #ifdef NDIS51_MINIPORT
@@ -1110,7 +1118,7 @@ Return Value:
 
 #define MP_GET_PACKET_MR(_p)    (PSINGLE_LIST_ENTRY)(&(_p)->MiniportReserved[0])
 
-    uxen_debug("---> MPCancelSendPackets");
+    DEBUGP(MP_TRACE, ("---> MPCancelSendPackets\n"));
 
     SendCancelList.Next = NULL;
 
@@ -1158,7 +1166,7 @@ Return Value:
         entry = PopEntryList(&SendCancelList);
     }
 
-    uxen_debug("<--- MPCancelSendPackets");
+    DEBUGP(MP_TRACE, ("<--- MPCancelSendPackets\n"));
 
 }
 
@@ -1202,7 +1210,7 @@ Return Value:
     //
     UNREFERENCED_PARAMETER(Adapter);
 
-    uxen_debug("---> MPPnPEventNotify");
+    DEBUGP(MP_TRACE, ("---> MPPnPEventNotify\n"));
 
     PAGED_CODE();
 
@@ -1211,7 +1219,7 @@ Return Value:
             //
             // Called when NDIS receives IRP_MN_QUERY_REMOVE_DEVICE.
             //
-            uxen_debug("MPPnPEventNotify: NdisDevicePnPEventQueryRemoved");
+            DEBUGP(MP_INFO, ("MPPnPEventNotify: NdisDevicePnPEventQueryRemoved\n"));
             break;
 
         case NdisDevicePnPEventRemoved:
@@ -1219,7 +1227,7 @@ Return Value:
             // Called when NDIS receives IRP_MN_REMOVE_DEVICE.
             // NDIS calls MiniportHalt function after this call returns.
             //
-            uxen_debug("MPPnPEventNotify: NdisDevicePnPEventRemoved");
+            DEBUGP(MP_INFO, ("MPPnPEventNotify: NdisDevicePnPEventRemoved\n"));
             break;
 
         case NdisDevicePnPEventSurpriseRemoved:
@@ -1228,14 +1236,14 @@ Return Value:
             // NDIS calls MiniportHalt function after this call returns.
             //
             MP_SET_FLAG(Adapter, fMP_ADAPTER_SURPRISE_REMOVED);
-            uxen_debug("MPPnPEventNotify: NdisDevicePnPEventSurpriseRemoved");
+            DEBUGP(MP_INFO, ("MPPnPEventNotify: NdisDevicePnPEventSurpriseRemoved\n"));
             break;
 
         case NdisDevicePnPEventQueryStopped:
             //
             // Called when NDIS receives IRP_MN_QUERY_STOP_DEVICE. ??
             //
-            uxen_debug("MPPnPEventNotify: NdisDevicePnPEventQueryStopped");
+            DEBUGP(MP_INFO, ("MPPnPEventNotify: NdisDevicePnPEventQueryStopped\n"));
             break;
 
         case NdisDevicePnPEventStopped:
@@ -1244,7 +1252,7 @@ Return Value:
             // NDIS calls MiniportHalt function after this call returns.
             //
             //
-            uxen_debug("MPPnPEventNotify: NdisDevicePnPEventStopped");
+            DEBUGP(MP_INFO, ("MPPnPEventNotify: NdisDevicePnPEventStopped\n"));
             break;
 
         case NdisDevicePnPEventPowerProfileChanged:
@@ -1255,25 +1263,27 @@ Return Value:
             // NDIS calls the miniport's MiniportPnPEventNotify function with
             // PnPEvent set to NdisDevicePnPEventPowerProfileChanged.
             //
-            uxen_debug("MPPnPEventNotify: NdisDevicePnPEventPowerProfileChanged");
+            DEBUGP(MP_INFO, ("MPPnPEventNotify: NdisDevicePnPEventPowerProfileChanged\n"));
 
             if (InformationBufferLength == sizeof(NDIS_POWER_PROFILE)) {
                 NdisPowerProfile = (PNDIS_POWER_PROFILE)InformationBuffer;
                 if (*NdisPowerProfile == NdisPowerProfileBattery) {
-                    uxen_debug("The host system is running on battery power");
+                    DEBUGP(MP_INFO,
+                           ("The host system is running on battery power\n"));
                 }
                 if (*NdisPowerProfile == NdisPowerProfileAcOnLine) {
-                    uxen_debug("The host system is running on AC power");
+                    DEBUGP(MP_INFO,
+                           ("The host system is running on AC power\n"));
                 }
             }
             break;
 
         default:
-            uxen_err("MPPnPEventNotify: unknown PnP event %x", PnPEvent);
+            DEBUGP(MP_ERROR, ("MPPnPEventNotify: unknown PnP event %x \n", PnPEvent));
             break;
     }
 
-    uxen_debug("<--- MPPnPEventNotify");
+    DEBUGP(MP_TRACE, ("<--- MPPnPEventNotify\n"));
 
 }
 
