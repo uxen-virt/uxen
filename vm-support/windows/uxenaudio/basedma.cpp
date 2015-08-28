@@ -74,7 +74,8 @@ Return Value:
 
     PAGED_CODE();
 
-    DPF_ENTER(("[CMiniportWaveCyclicStreamUXenAudio::AllocateBuffer]"));
+    DPF_ENTER;
+
     ULONG RingBufferSize;
 
 
@@ -127,7 +128,7 @@ Return Value:
 
 --*/
 {
-    DPF_ENTER(("[CMiniportWaveCyclicStreamUXenAudio::AllocatedBufferSize]"));
+    DPF_ENTER;
 
     return m_ulDmaBufferSize;
 } // AllocatedBufferSize
@@ -189,9 +190,18 @@ Return Value:
 
 --*/
 {
-    UNREFERENCED_PARAMETER(Destination);
-    UNREFERENCED_PARAMETER(Source);
-    UNREFERENCED_PARAMETER(ByteCount);
+    ULONG offset = (ULONG) ((PUCHAR) Source - (PUCHAR) m_pvDmaBuffer);
+
+    if (offset >= m_ulDmaBufferSize) {
+        DWARN("read attempt past buffer %d %d", offset, m_ulDmaBufferSize);
+        return;
+    }
+    if (offset+ByteCount > m_ulDmaBufferSize) {
+        DWARN("read attempt past buffer %d %d", offset + ByteCount, m_ulDmaBufferSize);
+        return;
+    }
+
+    m_pMiniport->m_AdapterCommon->VoiceCopyFrom(m_nVoiceNumber,offset,(PUCHAR) Destination,ByteCount);
 } // CopyFrom
 
 //=============================================================================
@@ -223,17 +233,18 @@ Return Value:
 --*/
 )
 {
-    //static unsigned char fish[262144];
-    //UNREFERENCED_PARAMETER(Source);
     ULONG offset = (ULONG) ((PUCHAR) Destination - (PUCHAR) m_pvDmaBuffer);
 
-    if (offset>= m_ulDmaBufferSize) return;
-    if ((offset+ByteCount)> m_ulDmaBufferSize) return;
+    if (offset >= m_ulDmaBufferSize) {
+        DWARN("write attempt past buffer %d %d", offset, m_ulDmaBufferSize);
+        return;
+    }
+    if (offset+ByteCount > m_ulDmaBufferSize) {
+        DWARN("write attempt past buffer %d %d", offset + ByteCount, m_ulDmaBufferSize);
+        return;
+    }
 
     m_pMiniport->m_AdapterCommon->VoiceCopyTo(m_nVoiceNumber,offset,(PUCHAR) Source,ByteCount);
-    //m_pMiniport->m_AdapterCommon->VoiceCopyTo(m_nVoiceNumber,offset,(PUCHAR) fish,ByteCount);
-
-    //m_SaveData.WriteData((PBYTE) Source, ByteCount);
 } // CopyTo
 
 //=============================================================================
@@ -262,7 +273,7 @@ Return Value:
 {
     PAGED_CODE();
 
-    DPF_ENTER(("[CMiniportWaveCyclicStreamUXenAudio::FreeBuffer]"));
+    DPF_ENTER;
 
     if ( m_pvDmaBuffer )
     {
@@ -293,7 +304,7 @@ Return Value:
 
 --*/
 {
-    DPF_ENTER(("[CMiniportWaveCyclicStreamUXenAudio::GetAdapterObject]"));
+    DPF_ENTER;
 
     // UXenAudio does not have need a physical DMA channel. Therefore it
     // does not have physical DMA structure.
@@ -319,7 +330,7 @@ Return Value:
 
 --*/
 {
-    DPF_ENTER(("[CMiniportWaveCyclicStreamUXenAudio::MaximumBufferSize]"));
+    DPF_ENTER;
 
     return m_pMiniport->m_MaxDmaBufferSize;
 } // MaximumBufferSize
@@ -347,7 +358,7 @@ Return Value:
 
 --*/
 {
-    DPF_ENTER(("[CMiniportWaveCyclicStreamUXenAudio::PhysicalAddress]"));
+    DPF_ENTER;
 
     PHYSICAL_ADDRESS            pAddress;
 
@@ -382,7 +393,7 @@ Return Value:
 
 --*/
 {
-    DPF_ENTER(("[CMiniportWaveCyclicStreamUXenAudio::SetBufferSize]"));
+    DPF_ENTER;
 
     if ( BufferSize <= m_ulDmaBufferSize )
     {
@@ -390,7 +401,7 @@ Return Value:
     }
     else
     {
-        DPF(D_ERROR, ("Tried to enlarge dma buffer size"));
+        DERR("Tried to enlarge dma buffer size");
     }
 } // SetBufferSize
 
@@ -442,7 +453,7 @@ Return Value:
 
 --*/
 {
-    DPF_ENTER(("[CMiniportWaveCyclicStreamUXenAudio::TransferCount]"));
+    DPF_ENTER;
 
     return m_ulDmaBufferSize;
 }

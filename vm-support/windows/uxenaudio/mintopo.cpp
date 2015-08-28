@@ -124,7 +124,7 @@ Return Value:
 {
     PAGED_CODE();
 
-    DPF_ENTER(("[CMiniportTopology::~CMiniportTopology]"));
+    DPF_ENTER;
 } // ~CMiniportTopology
 
 //=============================================================================
@@ -255,7 +255,7 @@ Return Value:
     ASSERT(UnknownAdapter);
     ASSERT(Port_);
 
-    DPF_ENTER(("[CMiniportTopology::Init]"));
+    DPF_ENTER;
 
     NTSTATUS                    ntStatus;
 
@@ -357,7 +357,7 @@ Return Value:
 
     ASSERT(PropertyRequest);
 
-    DPF_ENTER(("[PropertyHandlerJackDescription]"));
+    DPF_ENTER;
 
     NTSTATUS ntStatus = STATUS_INVALID_DEVICE_REQUEST;
     ULONG    nPinId = (ULONG)-1;
@@ -438,7 +438,7 @@ Return Value:
 
     ASSERT(PropertyRequest);
 
-    DPF_ENTER(("[PropertyHandler_TopoFilter]"));
+    DPF_ENTER;
 
     // PropertryRequest structure is filled by portcls. 
     // MajorTarget is a pointer to miniport object for miniports.
@@ -485,7 +485,7 @@ Return Value:
 
     ASSERT(PropertyRequest);
 
-    DPF_ENTER(("[PropertyHandler_Topology]"));
+    DPF_ENTER;
 
     // PropertryRequest structure is filled by portcls. 
     // MajorTarget is a pointer to miniport object for miniports.

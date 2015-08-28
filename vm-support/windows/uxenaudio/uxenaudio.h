@@ -59,17 +59,7 @@ DEFINE_GUIDSTRUCT("5B722BF8-F0AB-47ee-B9C8-8D61D31375A1", PID_UXENAUDIO);
 // Pool tag used for UXENAUDIO allocations
 #define UXENAUDIO_POOLTAG               'UXAU'  
 
-// Debug module name
-#define STR_MODULENAME              "UXENAUDIO: "
-
-// Debug utility macros
-#define D_FUNC                      4
-#define D_BLAB                      DEBUGLVL_BLAB
-#define D_VERBOSE                   DEBUGLVL_VERBOSE        
-#define D_TERSE                     DEBUGLVL_TERSE          
-#define D_ERROR                     DEBUGLVL_ERROR          
-#define DPF                         _DbgPrintF
-#define DPF_ENTER(x)                DPF(D_FUNC, x)
+#define DPF_ENTER DOUT(DBG_PRINT, "===> enter")
 
 // Channel orientation
 #define CHAN_LEFT                   0

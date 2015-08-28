@@ -103,7 +103,7 @@ Return Value:
 {
     PAGED_CODE();
 
-    DPF_ENTER(("[CMiniportWaveCyclic::~CMiniportWaveCyclic]"));
+    DPF_ENTER;
 } // ~CMiniportWaveCyclic
 
 
@@ -241,7 +241,7 @@ Return Value:
 
     NTSTATUS                    ntStatus;
 
-    DPF_ENTER(("[CMiniportWaveCyclic::Init]"));
+    DPF_ENTER;
 
     m_MaxOutputStreams      = MAX_OUTPUT_STREAMS;
     m_MaxInputStreams       = MAX_INPUT_STREAMS;
@@ -329,7 +329,7 @@ Return Value:
     ASSERT(OutDmaChannel);
     ASSERT(OutServiceGroup);
 
-    DPF_ENTER(("[CMiniportWaveCyclic::NewStream]"));
+    DPF_ENTER;
 
     NTSTATUS                    ntStatus = STATUS_SUCCESS;
     PCMiniportWaveCyclicStream  stream = NULL;
@@ -339,7 +339,7 @@ Return Value:
     {
         if (m_fCaptureAllocated)
         {
-            DPF(D_TERSE, ("[Only one capture stream supported]"));
+            DWARN("[Only one capture stream supported]");
             ntStatus = STATUS_INSUFFICIENT_RESOURCES;
         }
     }
@@ -347,7 +347,7 @@ Return Value:
     {
         if (m_fRenderAllocated)
         {
-            DPF(D_TERSE, ("[Only one render stream supported]"));
+            DWARN("[Only one render stream supported]");
             ntStatus = STATUS_INSUFFICIENT_RESOURCES;
         }
     }
@@ -503,7 +503,7 @@ Return Value:
 {
     PAGED_CODE();
 
-    DPF_ENTER(("[PropertyHandlerComponentId]"));
+    DPF_ENTER;
 
     NTSTATUS ntStatus = STATUS_INVALID_DEVICE_REQUEST;
 
@@ -546,7 +546,7 @@ Return Value:
         }
         else
         {
-            DPF(D_TERSE, ("[PropertyHandlerComponentId - Invalid parameter]"));
+            DWARN("[PropertyHandlerComponentId - Invalid parameter]");
             ntStatus = STATUS_INVALID_PARAMETER;
         }
     }
@@ -580,7 +580,7 @@ Return Value:
 {
     PAGED_CODE();
 
-    DPF_ENTER(("[PropertyHandlerProposedFormat]"));
+    DPF_ENTER;
 
     NTSTATUS ntStatus = STATUS_INVALID_DEVICE_REQUEST;
 
@@ -706,7 +706,7 @@ Return Value:
             break;
         
         default:
-            DPF(D_TERSE, ("[PropertyHandler_WaveFilter: Invalid Device Request]"));
+            DWARN("[PropertyHandler_WaveFilter: Invalid Device Request]");
     }
 
     return ntStatus;
@@ -737,7 +737,7 @@ Return Value:
 {
     PAGED_CODE();
 
-    DPF_ENTER(("[CMiniportWaveCyclicStream::~CMiniportWaveCyclicStream]"));
+    DPF_ENTER;
 
     if (NULL != m_pMiniportLocal)
     {

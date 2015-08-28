@@ -393,22 +393,22 @@ ValidateResources
     ULONG countDMA = ResourceList->NumberOfDmas ();
     ULONG countMMIO = ResourceList->NumberOfMemories ();
 
-        DOUT (DBG_ERROR, ("resources found configuration:\n"
-                          "   IO   count: %d\n"
-                          "   MMIO count: %d\n"
-                          "   IRQ  count: %d\n"
-                          "   DMA  count: %d",
-                          countIO, countMMIO, countIRQ, countDMA));
+    DOUT (DBG_SYSINFO, "resources found configuration: "
+          "   IO   count: %d"
+          "   MMIO count: %d"
+          "   IRQ  count: %d"
+          "   DMA  count: %d",
+          countIO, countMMIO, countIRQ, countDMA);
 
     // validate resources
     if ((countMMIO != 2) || (countIO != 0) || (countIRQ != 1) || (countDMA != 0))
     {
-        DOUT (DBG_ERROR, ("Unknown configuration:\n"
-                          "   IO   count: %d\n"
-                          "   MMIO count: %d\n"
-                          "   IRQ  count: %d\n"
-                          "   DMA  count: %d",
-                          countIO, countMMIO, countIRQ, countDMA));
+        DOUT (DBG_ERROR, "Unknown configuration:"
+              "   IO   count: %d"
+              "   MMIO count: %d"
+              "   IRQ  count: %d"
+              "   DMA  count: %d",
+              countIO, countMMIO, countIRQ, countDMA);
         return STATUS_DEVICE_CONFIGURATION_ERROR;
     }
 

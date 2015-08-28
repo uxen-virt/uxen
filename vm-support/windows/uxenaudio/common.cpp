@@ -191,7 +191,8 @@ class CAdapterCommon :
     
         STDMETHODIMP_(NTSTATUS)     VoiceStart
         ( 
-    		IN UINT		Voice
+            IN UINT Voice,
+            IN BOOL capture
         );
     
         STDMETHODIMP_(NTSTATUS)     VoiceStop
@@ -200,6 +201,14 @@ class CAdapterCommon :
         );
     
         STDMETHODIMP_(NTSTATUS)     VoiceCopyTo
+        ( 
+    		IN UINT		Voice,
+		IN ULONG	Offset,
+    		IN PUCHAR	Data,
+    		IN UINT		Len
+        );
+
+        STDMETHODIMP_(NTSTATUS)     VoiceCopyFrom
         ( 
     		IN UINT		Voice,
 		IN ULONG	Offset,
@@ -306,7 +315,7 @@ Return Value:
     UINT i;
     PAGED_CODE();
 
-    DPF_ENTER(("[CAdapterCommon::~CAdapterCommon]"));
+    DPF_ENTER;
 
     if (m_pHW)
     {
@@ -366,7 +375,7 @@ ULONG CAdapterCommon::ReadMMIO32
 
 	ulValue = READ_REGISTER_ULONG((PULONG) (m_pMMIOBase + ulOffset));
 
-  	//DOUT (DBG_REGS, ("ReadMMIO32(0x%p)=0x%8x", ulOffset,ulValue));
+  	DOUT (DBG_REGS, "ReadMMIO32(0x%p)=0x%8x", ulOffset,ulValue);
 
 	return ulValue;
 }
@@ -377,10 +386,9 @@ void CAdapterCommon::WriteMMIO32
 	IN ULONG ulValue
 )
 {
-
 	WRITE_REGISTER_ULONG((PULONG) (m_pMMIOBase + ulOffset), ulValue);
 
-        //DOUT (DBG_REGS, ("WriteMMIO32(0x%p,0x%8x)", ulOffset,ulValue));
+        DOUT (DBG_REGS, "WriteMMIO32(0x%p,0x%8x)", ulOffset,ulValue);
 
 }
 
@@ -393,7 +401,7 @@ ULONG CAdapterCommon::ReadRAM32
 
 	ulValue = READ_REGISTER_ULONG((PULONG) (m_pRAMBase + ulOffset));
 
-  	//DOUT (DBG_REGS, ("ReadRAM32(0x%p)=0x%8x", ulOffset,ulValue));
+  	DOUT (DBG_REGS, "ReadRAM32(0x%p)=0x%8x", ulOffset,ulValue);
 
 	return ulValue;
 }
@@ -407,7 +415,7 @@ void CAdapterCommon::WriteRAM32
 
 	WRITE_REGISTER_ULONG((PULONG) (m_pRAMBase + ulOffset), ulValue);
 
-        //DOUT (DBG_REGS, ("WriteRAM32(0x%p,0x%8x)", ulOffset,ulValue));
+        DOUT (DBG_REGS, "WriteRAM32(0x%p,0x%8x)", ulOffset,ulValue);
 }
 
 NTSTATUS
@@ -433,7 +441,7 @@ CAdapterCommon::Probe
 	NTSTATUS ntStatus;
 	UINT i;
 
-	DOUT(DBG_PRINT,("[CAdapterCommon::Probe]"));
+	DOUT(DBG_PRINT, "[CAdapterCommon::Probe]");
 
 	ntStatus = CheckSig();
 
@@ -449,7 +457,7 @@ CAdapterCommon::Probe
 
 	for (i=0;i<m_nVoice;++i) 
 	{
-    		m_pVoices[i] = new (NonPagedPool, UXENAUDIO_POOLTAG)  CVoice;
+                m_pVoices[i] = new (NonPagedPool, UXENAUDIO_POOLTAG)  CVoice(i);
 		ntStatus=m_pVoices[i]->Probe(m_pMMIOBase+UXAU_V_BASE(i),m_pRAMBase);
 		if (!NT_SUCCESS(ntStatus)) return ntStatus;
 	}
@@ -487,7 +495,7 @@ Return Value:
 
     NTSTATUS                    ntStatus = STATUS_SUCCESS;
 
-    DPF_ENTER(("[CAdapterCommon::Init]"));
+    DPF_ENTER;
 
     m_pDeviceObject = DeviceObject;
     m_PowerState    = PowerDeviceD0;
@@ -509,27 +517,27 @@ Return Value:
 
 #endif
     
-    DOUT (DBG_SYSINFO, ("Configuration:\n"
-                        "   MMIOBase   = 0x%p+0x%x -> 0x%p\n"
-                        "   RAMBase    = 0x%p+0x%x -> 0x%p\n",
-			(PVOID) m_MMIOBase_phys.QuadPart, m_MMIOBase_len, m_pMMIOBase,
-			(PVOID) m_RAMBase_phys.QuadPart, m_RAMBase_len, m_pRAMBase));
+    DOUT (DBG_SYSINFO, "Configuration:"
+          "   MMIOBase   = 0x%p+0x%x -> 0x%p"
+          "   RAMBase    = 0x%p+0x%x -> 0x%p",
+          (PVOID) m_MMIOBase_phys.QuadPart, m_MMIOBase_len, m_pMMIOBase,
+          (PVOID) m_RAMBase_phys.QuadPart, m_RAMBase_len, m_pRAMBase);
 
-    DOUT (DBG_SYSINFO, ("Configuration:\n"
-                        "   RAMBase[0]= 0x%lx\n"
-                        "   RAMBase[1]= 0x%lx\n"
-                        "   RAMBase[0x100]= 0x%lx\n"
-                        "   RAMBase[0x1000]= 0x%lx\n",
-			(ULONG) ReadRAM32(0),
-			(ULONG) ReadRAM32(1),
-			(ULONG) ReadRAM32(0x100),
-			(ULONG) ReadRAM32(0x1000)));
+    DOUT (DBG_SYSINFO, "Configuration:"
+          "   RAMBase[0]= 0x%lx"
+          "   RAMBase[1]= 0x%lx"
+          "   RAMBase[0x100]= 0x%lx"
+          "   RAMBase[0x1000]= 0x%lx",
+          (ULONG) ReadRAM32(0),
+          (ULONG) ReadRAM32(1),
+          (ULONG) ReadRAM32(0x100),
+          (ULONG) ReadRAM32(0x1000));
 
 
     ntStatus = Probe ();
 
     if (!NT_SUCCESS(ntStatus)) {
-	DOUT(DBG_ERROR,("Probe failed!"));
+	DOUT(DBG_ERROR, "Probe failed!");
         return ntStatus;
     }
 
@@ -539,7 +547,7 @@ Return Value:
     m_pHW = new (NonPagedPool, UXENAUDIO_POOLTAG)  CUXENAUDIOHW;
     if (!m_pHW)
     {
-        DPF(D_TERSE, ("Insufficient memory for UXenAudio HW"));
+        DWARN("Insufficient memory for UXenAudio HW");
         ntStatus = STATUS_INSUFFICIENT_RESOURCES;
     }
     else
@@ -656,7 +664,7 @@ Return Value:
 {
     PAGED_CODE();
     
-    DPF_ENTER(("[CAdapterCommon::SetWaveServiceGroup]"));
+    DPF_ENTER;
     
     if (m_pServiceGroupWave)
     {
@@ -1068,10 +1076,11 @@ STDMETHODIMP_(NTSTATUS)     CAdapterCommon::VoiceNotify
     
 STDMETHODIMP_(NTSTATUS)     CAdapterCommon::VoiceStart
 ( 
-	IN UINT		Voice
+    IN UINT Voice,
+    IN BOOL capture
 )
 {
-	return m_pVoices[Voice]->Start();
+    return m_pVoices[Voice]->Start(capture);
 }
     
 STDMETHODIMP_(NTSTATUS)     CAdapterCommon::VoiceStop
@@ -1092,7 +1101,18 @@ STDMETHODIMP_(NTSTATUS)     CAdapterCommon::VoiceCopyTo
 {
 	return m_pVoices[Voice]->CopyTo(Offset,Data,Len);
 }
- 
+
+STDMETHODIMP_(NTSTATUS)     CAdapterCommon::VoiceCopyFrom
+( 
+	IN UINT		Voice,
+	IN ULONG 	Offset,
+    	IN PUCHAR	Data,
+    	IN UINT		Len
+)
+{
+	return m_pVoices[Voice]->CopyFrom(Offset,Data,Len);
+}
+
 STDMETHODIMP_(NTSTATUS)     CAdapterCommon::VoiceReadOffset
 ( 
 	IN UINT		Voice,
@@ -1134,7 +1154,7 @@ Return Value:
 
 --*/
 {
-    DPF_ENTER(("[CAdapterCommon::PowerChangeState]"));
+    DPF_ENTER;
 
     // is this actually a state change??
     //
@@ -1150,17 +1170,12 @@ Return Value:
             case PowerDeviceD3:
                 m_PowerState = NewState.DeviceState;
 
-                DPF
-                ( 
-                    D_VERBOSE, 
-                    ("Entering D%d", ULONG(m_PowerState) - ULONG(PowerDeviceD0)) 
-                );
+                DOUT(DBG_POWER, "Entering D%d", ULONG(m_PowerState) - ULONG(PowerDeviceD0));
 
                 break;
     
             default:
-            
-                DPF(D_VERBOSE, ("Unknown Device Power State"));
+                DWARN("Unknown Device Power State");
                 break;
         }
     }
@@ -1192,7 +1207,7 @@ Return Value:
 {
     UNREFERENCED_PARAMETER(PowerDeviceCaps);
 
-    DPF_ENTER(("[CAdapterCommon::QueryDeviceCapabilities]"));
+    DPF_ENTER;
 
     return (STATUS_SUCCESS);
 } // QueryDeviceCapabilities
@@ -1221,7 +1236,7 @@ Return Value:
 {
     UNREFERENCED_PARAMETER(NewStateQuery);
 
-    DPF_ENTER(("[CAdapterCommon::QueryPowerChangeState]"));
+    DPF_ENTER;
 
     return STATUS_SUCCESS;
 } // QueryPowerChangeState

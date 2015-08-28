@@ -59,7 +59,7 @@ Return Value:
 {
     PAGED_CODE();
 
-    DPF_ENTER(("[%s]",__FUNCTION__));
+    DPF_ENTER;
 
     m_AdapterCommon = NULL;
     m_FilterDescriptor = NULL;
@@ -85,7 +85,7 @@ Return Value:
 {
     PAGED_CODE();
 
-    DPF_ENTER(("[%s]",__FUNCTION__));
+    DPF_ENTER;
 
     if (m_AdapterCommon)
     {
@@ -146,7 +146,7 @@ Return Value:
 
     PAGED_CODE();
 
-    DPF_ENTER(("[%s]",__FUNCTION__));
+    DPF_ENTER;
 
     return (STATUS_NOT_IMPLEMENTED);
 } // DataRangeIntersection
@@ -180,7 +180,7 @@ Return Value:
 
     ASSERT(OutFilterDescriptor);
 
-    DPF_ENTER(("[%s]",__FUNCTION__));
+    DPF_ENTER;
 
     *OutFilterDescriptor = m_FilterDescriptor;
 
@@ -219,7 +219,7 @@ Return Value:
     ASSERT(UnknownAdapter_);
     ASSERT(Port_);
 
-    DPF_ENTER(("[CMiniportTopologyUXenAudio::Init]"));
+    DPF_ENTER;
 
     NTSTATUS                    ntStatus;
 
@@ -360,7 +360,7 @@ Return Value:
 {
     PAGED_CODE();
 
-    DPF_ENTER(("[%s]",__FUNCTION__));
+    DPF_ENTER;
 
     NTSTATUS ntStatus = STATUS_INVALID_DEVICE_REQUEST;
 
@@ -436,7 +436,7 @@ Return Value:
             break;
 
         default:
-            DPF(D_TERSE, ("[PropertyHandlerGeneric: Invalid Device Request]"));
+            DWARN("PropertyHandlerGeneric: Invalid Device Request");
     }
 
     return ntStatus;
@@ -466,7 +466,7 @@ Return Value:
 {
     PAGED_CODE();
 
-    DPF_ENTER(("[%s]",__FUNCTION__));
+    DPF_ENTER;
 
     NTSTATUS                    ntStatus;
     LONG                        lChannel;
@@ -516,7 +516,7 @@ Return Value:
         }
         else
         {
-            DPF(D_TERSE, ("[%s - ntStatus=0x%08x]",__FUNCTION__,ntStatus));
+            DWARN("ntStatus=0x%08x", ntStatus);
         }
     }
 
@@ -547,7 +547,7 @@ Return Value:
 {
     PAGED_CODE();
 
-    DPF_ENTER(("[%s]",__FUNCTION__));
+    DPF_ENTER;
 
     NTSTATUS                    ntStatus = STATUS_INVALID_DEVICE_REQUEST;
 
@@ -585,7 +585,7 @@ Return Value:
         }
         else
         {
-            DPF(D_TERSE, ("[PropertyHandlerMuxSource - Invalid parameter]"));
+            DWARN("[PropertyHandlerMuxSource - Invalid parameter]");
             ntStatus = STATUS_INVALID_PARAMETER;
         }
     }
@@ -617,7 +617,7 @@ Return Value:
 {
     PAGED_CODE();
 
-    DPF_ENTER(("[%s]",__FUNCTION__));
+    DPF_ENTER;
 
     NTSTATUS ntStatus = STATUS_INVALID_DEVICE_REQUEST;
     LONG     lChannel;
@@ -663,7 +663,7 @@ Return Value:
         }
         else
         {
-            DPF(D_TERSE, ("[%s - ntStatus=0x%08x]",__FUNCTION__,ntStatus));
+            DWARN("[ntStatus=0x%08x]",ntStatus);
         }
     }
 
@@ -695,7 +695,7 @@ Return Value:
 {
     PAGED_CODE();
 
-    DPF_ENTER(("[%s]",__FUNCTION__));
+    DPF_ENTER;
 
     NTSTATUS ntStatus=STATUS_SUCCESS;
 
@@ -889,7 +889,7 @@ Return Value:
 
         if( !NT_SUCCESS(ntStatus))
         {
-            DPF(D_TERSE, ("[%s - ntStatus=0x%08x]",__FUNCTION__,ntStatus));
+            DWARN("[ntStatus=0x%08x]",ntStatus);
         }
     }
 

@@ -60,7 +60,7 @@ Return Value:
 {
     PAGED_CODE();
 
-    DPF_ENTER(("[CMiniportWaveCyclicUXenAudio::CMiniportWaveCyclicUXenAudio]"));
+    DPF_ENTER;
 
     // Initialize members.
     //
@@ -106,7 +106,7 @@ Return Value:
 {
     PAGED_CODE();
 
-    DPF_ENTER(("[CMiniportWaveCyclicUXenAudio::~CMiniportWaveCyclicUXenAudio]"));
+    DPF_ENTER;
 
     if (m_Port)
     {
@@ -151,7 +151,7 @@ Return Value:
 
     ASSERT(OutFilterDescriptor);
 
-    DPF_ENTER(("[CMiniportWaveCyclicUXenAudio::GetDescription]"));
+    DPF_ENTER;
 
     *OutFilterDescriptor = m_FilterDescriptor;
 
@@ -191,7 +191,7 @@ Return Value:
     ASSERT(UnknownAdapter_);
     ASSERT(Port_);
 
-    DPF_ENTER(("[CMiniportWaveCyclicUXenAudio::Init]"));
+    DPF_ENTER;
 
     // AddRef() is required because we are keeping this pointer.
     //
@@ -274,7 +274,7 @@ Return Value:
 
     ASSERT(PropertyRequest);
 
-    DPF_ENTER(("[CMiniportWaveCyclicUXenAudio::PropertyHandlerCpuResources]"));
+    DPF_ENTER;
 
     NTSTATUS                    ntStatus = STATUS_INVALID_DEVICE_REQUEST;
 
@@ -338,7 +338,7 @@ Return Value:
             break;
 
         default:
-            DPF(D_TERSE, ("[PropertyHandlerGeneric: Invalid Device Request]"));
+            DWARN("[PropertyHandlerGeneric: Invalid Device Request]");
             ntStatus = STATUS_INVALID_DEVICE_REQUEST;
     }
 
@@ -372,7 +372,7 @@ Return Value:
 
     ASSERT(pDataFormat);
 
-    DPF_ENTER(("[CMiniportWaveCyclicUXenAudio::ValidateFormat]"));
+    DPF_ENTER;
 
     NTSTATUS                    ntStatus = STATUS_INVALID_PARAMETER;
     PWAVEFORMATEX               pwfx;
@@ -400,13 +400,13 @@ Return Value:
                 }
 
                 default:
-                    DPF(D_TERSE, ("Invalid format EXTRACT_WAVEFORMATEX_ID!"));
+                    DWARN("Invalid format EXTRACT_WAVEFORMATEX_ID!");
                     break;
             }
         }
         else
         {
-            DPF(D_TERSE, ("Invalid pDataFormat->SubFormat!") );
+            DWARN("Invalid pDataFormat->SubFormat!");
         }
     }
 
@@ -438,7 +438,7 @@ Return Value:
 {
     PAGED_CODE();
 
-    DPF_ENTER(("CMiniportWaveCyclicUXenAudio::ValidatePcm"));
+    DPF_ENTER;
 
     if
     (
@@ -455,7 +455,7 @@ Return Value:
         return STATUS_SUCCESS;
     }
 
-    DPF(D_TERSE, ("Invalid PCM format"));
+    DWARN("Invalid PCM format");
 
     return STATUS_INVALID_PARAMETER;
 } // ValidatePcm
@@ -490,7 +490,7 @@ CMiniportWaveCyclicStreamUXenAudio::CMiniportWaveCyclicStreamUXenAudio
     m_ulDmaMovementRate = 0;
     m_ullDmaTimeStamp = 0;
 
-    m_nVoiceNumber = 0; //JMM only support one voice for now
+    m_nVoiceNumber = 0;
 }
 
 //=============================================================================
@@ -514,7 +514,7 @@ Return Value:
 {
     PAGED_CODE();
 
-    DPF_ENTER(("[CMiniportWaveCyclicStreamMS::~CMiniportWaveCyclicStreamMS]"));
+    DPF_ENTER;
 
     if (m_pTimer)
     {
@@ -565,7 +565,7 @@ Return Value:
 {
     PAGED_CODE();
 
-    DPF_ENTER(("[CMiniportWaveCyclicStreamUXenAudio::Init]"));
+    DPF_ENTER;
 
     ASSERT(Miniport_);
     ASSERT(DataFormat_);
@@ -573,10 +573,13 @@ Return Value:
     NTSTATUS                    ntStatus = STATUS_SUCCESS;
     PWAVEFORMATEX               pWfx;
 
+    /* hardcode voice 0 for playback, voice 1 for capture */
+    m_nVoiceNumber = Capture_ ? 1 : 0;
+
     pWfx = GetWaveFormatEx(DataFormat_);
     if (!pWfx)
     {
-        DPF(D_TERSE, ("Invalid DataFormat param in NewStream"));
+        DWARN("Invalid DataFormat param in NewStream");
         ntStatus = STATUS_INVALID_PARAMETER;
     }
 
@@ -602,7 +605,7 @@ Return Value:
         if (!m_fCapture)
         {
 #if 0 
-            DPF(D_TERSE, ("SaveData %p", &m_SaveData));
+            DWARN("SaveData %p", &m_SaveData);
 	    //FIXME: XXX - JMM 
             ntStatus = m_SaveData.SetDataFormat(DataFormat_);
             if (NT_SUCCESS(ntStatus))
@@ -645,7 +648,7 @@ Return Value:
         }
         else
         {
-            DPF(D_TERSE, ("[SamplingFrequency Sync failed: %08X]", ntStatus));
+            DWARN("[SamplingFrequency Sync failed: %08X]", ntStatus);
         }
     }
 
@@ -665,7 +668,7 @@ Return Value:
             );
         if (!m_pDpc)
         {
-            DPF(D_TERSE, ("[Could not allocate memory for DPC]"));
+            DWARN("[Could not allocate memory for DPC]");
             ntStatus = STATUS_INSUFFICIENT_RESOURCES;
         }
     }
@@ -681,7 +684,7 @@ Return Value:
             );
         if (!m_pTimer)
         {
-            DPF(D_TERSE, ("[Could not allocate memory for Timer]"));
+            DWARN("[Could not allocate memory for Timer]");
             ntStatus = STATUS_INSUFFICIENT_RESOURCES;
         }
     }
@@ -741,6 +744,8 @@ Return Value:
 
     *Position = ret;
 
+    DOUT(DBG_POSITION, "voice%d: position %10d status %x", m_nVoiceNumber,
+         *Position, ntStatus);
     return ntStatus;
 
 #if 0
@@ -863,7 +868,7 @@ Return Value:
 
     ASSERT(Format);
 
-    DPF_ENTER(("[CMiniportWaveCyclicStreamUXenAudio::SetFormat]"));
+    DPF_ENTER;
 
     NTSTATUS                    ntStatus = STATUS_INVALID_DEVICE_REQUEST;
     PWAVEFORMATEX               pWfx;
@@ -899,7 +904,7 @@ Return Value:
                     pWfx->nSamplesPerSec;
                 m_ulDmaMovementRate = pWfx->nAvgBytesPerSec;
 
-                DPF(D_TERSE, ("New Format: %d", pWfx->nSamplesPerSec));
+                DOUT(DBG_PRINT, "New Format: %d", pWfx->nSamplesPerSec);
             }
 
             KeReleaseMutex(&m_pMiniport->m_SampleRateSync, FALSE);
@@ -942,7 +947,7 @@ Return Value:
 
     ASSERT(FramingSize);
 
-    DPF_ENTER(("[CMiniportWaveCyclicStreamUXenAudio::SetNotificationFreq]"));
+    DPF_ENTER;
 
     m_pMiniport->m_NotificationInterval = Interval;
 
@@ -979,7 +984,7 @@ Return Value:
 {
     PAGED_CODE();
 
-    DPF_ENTER(("[CMiniportWaveCyclicStreamUXenAudio::SetState]"));
+    DPF_ENTER;
 
     NTSTATUS                    ntStatus = STATUS_SUCCESS;
 
@@ -997,9 +1002,9 @@ Return Value:
         {
             case KSSTATE_PAUSE:
             {
-                DPF(D_TERSE, ("KSSTATE_PAUSE"));
-            if (!m_fCapture)
-		ntStatus=m_pMiniport->m_AdapterCommon->VoiceStop(m_nVoiceNumber);
+                DOUT(DBG_PRINT, "KSSTATE_PAUSE");
+                if (!m_fCapture)
+                    ntStatus=m_pMiniport->m_AdapterCommon->VoiceStop(m_nVoiceNumber);
 
                 m_fDmaActive = FALSE;
             }
@@ -1007,9 +1012,9 @@ Return Value:
 
             case KSSTATE_RUN:
             {
-                DPF(D_TERSE, ("KSSTATE_RUN"));
+                DOUT(DBG_PRINT, "KSSTATE_RUN");
 
-                 LARGE_INTEGER   delay;
+                LARGE_INTEGER   delay;
 
                 // Set the timer for DPC.
                 //
@@ -1027,13 +1032,13 @@ Return Value:
                     m_pDpc
                 );
 
-		ntStatus=m_pMiniport->m_AdapterCommon->VoiceStart(m_nVoiceNumber);
+		ntStatus=m_pMiniport->m_AdapterCommon->VoiceStart(m_nVoiceNumber, m_fCapture);
             }
             break;
 
         case KSSTATE_STOP:
 
-            DPF(D_TERSE, ("KSSTATE_STOP"));
+            DOUT(DBG_PRINT, "KSSTATE_STOP");
 
             m_fDmaActive                      = FALSE;
             m_ulDmaPosition                   = 0;
@@ -1042,13 +1047,7 @@ Return Value:
 
             KeCancelTimer( m_pTimer );
 
-            // Wait until all work items are completed.
-            //
-            if (!m_fCapture)
-            {
-                DPF(D_TERSE, ("KSSTATE_PAUSE"));
-		ntStatus=m_pMiniport->m_AdapterCommon->VoiceStop(m_nVoiceNumber);
-            }
+            ntStatus=m_pMiniport->m_AdapterCommon->VoiceStop(m_nVoiceNumber);
 
             break;
         }

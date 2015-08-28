@@ -162,8 +162,9 @@ DECLARE_INTERFACE_(IAdapterCommon, IUnknown)
 
     STDMETHOD_(NTSTATUS,     VoiceStart)
     ( 
-		THIS_
-		IN UINT		Voice
+        THIS_
+        IN UINT	Voice,
+        IN BOOL capture
     ) PURE;
 
     STDMETHOD_(NTSTATUS,     VoiceStop)
@@ -181,6 +182,15 @@ DECLARE_INTERFACE_(IAdapterCommon, IUnknown)
 		IN UINT		Len
     ) PURE;
 
+    STDMETHOD_(NTSTATUS,     VoiceCopyFrom)
+    ( 
+		THIS_
+		IN UINT		Voice,
+		IN ULONG 	Offset,
+		IN PUCHAR	Data,
+		IN UINT		Len
+    ) PURE;
+    
     STDMETHOD_(NTSTATUS,     VoiceReadOffset)
     ( 
 		THIS_

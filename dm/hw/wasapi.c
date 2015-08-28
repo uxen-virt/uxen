@@ -18,13 +18,17 @@
 
 #include "wasapi.h"
 
-#define WASAPI_BUF_LEN_MS 60
+#define WASAPI_BUF_LEN_PLAYBACK_MS 60
+#define WASAPI_BUF_LEN_CAPTURE_MS 300
+
 #define MAX_VOICES 4
 
 struct wasapi_voice {
     int index;
+    int capture;
     IAudioClient *client;
-    IAudioRenderClient *render;
+    IAudioRenderClient *render_client;
+    IAudioCaptureClient *capture_client;
     IAudioClock *clock;
     HANDLE ev;
     HANDLE task;
@@ -122,7 +126,7 @@ static WINAPI HRESULT NC_OnDefaultDeviceChanged(
     EDataFlow flow, ERole role,
     LPCWSTR pwstrDeviceId)
 {
-    if (flow == eRender && role == eMultimedia)
+    if ((flow == eRender || flow == eCapture) && role == eMultimedia)
         SetEvent(devchange_ev);
     return S_OK;
 }
@@ -198,7 +202,7 @@ static void notification_free(IMMNotificationClient *c)
     }
 }
 
-static HRESULT get_mm_device(IMMDevice **ppMMDevice)
+static HRESULT get_mm_device(int capture, IMMDevice **ppMMDevice)
 {
     HRESULT hr = S_OK;
 
@@ -236,7 +240,7 @@ static HRESULT get_mm_device(IMMDevice **ppMMDevice)
 
     // get the default render endpoint
     hr = enumerator->lpVtbl->GetDefaultAudioEndpoint(enumerator,
-           eRender, eMultimedia, ppMMDevice);
+           capture ? eCapture : eRender, eMultimedia, ppMMDevice);
 
     if ( FAILED(hr) ) {
         WASAPI_FAIL(hr);
@@ -347,7 +351,8 @@ create_audio_client(wasapi_voice_t v, IMMDevice *pMMDevice,
     }
     hr = client->lpVtbl->Initialize(
         client, AUDCLNT_SHAREMODE_SHARED, AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
-        WASAPI_BUF_LEN_MS * 10000, 0, (WAVEFORMATEX*)&v->fmt, NULL);
+        (v->capture ? WASAPI_BUF_LEN_CAPTURE_MS : WASAPI_BUF_LEN_PLAYBACK_MS) * 10000,
+        0, (WAVEFORMATEX*)&v->fmt, NULL);
     if ( FAILED(hr) ) {
         dump_format("mix format", mixfmt);
         dump_format("playback format", (WAVEFORMATEX*)&v->fmt);
@@ -455,7 +460,7 @@ void wasapi_mute_voice(wasapi_voice_t v, int silence)
     }
 }
 
-int wasapi_play(wasapi_voice_t v)
+int wasapi_start(wasapi_voice_t v)
 {
     if (v->thread) {
         debug_printf("wasapi_play: already playing\n");
@@ -467,7 +472,7 @@ int wasapi_play(wasapi_voice_t v)
     atomic_inc(&num_voices);
     atomic_inc(&num_nonsilent_voices);
     SetEvent(mm_prioritize_ev);
-    debug_printf("audio: started playback\n");
+    debug_printf("audio: started %s\n", v->capture ? "capture" : "playback");
     return 0;
 }
 
@@ -491,7 +496,7 @@ int wasapi_stop(wasapi_voice_t v)
     atomic_dec(&num_voices);
     atomic_dec(&num_nonsilent_voices);
     SetEvent(mm_prioritize_ev);
-    debug_printf("audio: stopped playback\n");
+    debug_printf("audio: stopped %s\n", v->capture ? "capture" : "playback");
     return 0;
 }
 
@@ -545,7 +550,7 @@ int wasapi_get_play_fmt(wasapi_voice_t v, WAVEFORMATEX **pf)
     return 0;
 }
 
-int wasapi_lock_buffer(wasapi_voice_t v, int *frames, void **buffer)
+int wasapi_pb_lock_buffer(wasapi_voice_t v, int *frames, void **buffer)
 {
     HRESULT hr;
 
@@ -553,7 +558,7 @@ int wasapi_lock_buffer(wasapi_voice_t v, int *frames, void **buffer)
     if (wasapi_get_buffer_space(v, frames))
         return -1;
 
-    hr = v->render->lpVtbl->GetBuffer(v->render, *frames, (BYTE**)buffer);
+    hr = v->render_client->lpVtbl->GetBuffer(v->render_client, *frames, (BYTE**)buffer);
     if ( FAILED(hr) ) {
         WASAPI_FAIL(hr);
         return -1;
@@ -562,17 +567,68 @@ int wasapi_lock_buffer(wasapi_voice_t v, int *frames, void **buffer)
     return 0;
 }
 
-int wasapi_unlock_buffer(wasapi_voice_t v, int frames)
+int wasapi_pb_unlock_buffer(wasapi_voice_t v, int frames)
 {
     HRESULT hr;
 
-    hr = v->render->lpVtbl->ReleaseBuffer(v->render, frames, 0);
+    hr = v->render_client->lpVtbl->ReleaseBuffer(v->render_client, frames, 0);
     if ( FAILED(hr) ) {
         WASAPI_FAIL(hr);
         return -1;
     }
     v->frames += frames;
 
+    return 0;
+}
+
+int
+wasapi_cap_next_packet_size(wasapi_voice_t v, int *frames)
+{
+    HRESULT hr;
+    uint32_t sz = 0;
+
+    hr = v->capture_client->lpVtbl->GetNextPacketSize(v->capture_client, &sz);
+    *frames = sz;
+    if ( FAILED(hr) ) {
+        WASAPI_FAIL(hr);
+        return -1;
+    }
+
+    return 0;
+}
+
+int
+wasapi_cap_lock_buffer(wasapi_voice_t v, int *frames, int *silent, void **buffer)
+{
+    HRESULT hr;
+    DWORD flags;
+    uint32_t _frames;
+
+    *buffer = 0;
+    *frames = 0;
+    *silent = 0;
+
+    hr = v->capture_client->lpVtbl->GetBuffer(v->capture_client, (BYTE**)buffer,
+                                       &_frames, &flags, NULL, NULL);
+    if ( FAILED(hr) ) {
+        WASAPI_FAIL(hr);
+        return -1;
+    }
+    *frames = _frames;
+    *silent = (flags & AUDCLNT_BUFFERFLAGS_SILENT) ? 1:0;
+    return 0;
+}
+
+int
+wasapi_cap_unlock_buffer(wasapi_voice_t v, int frames)
+{
+    HRESULT hr;
+
+    hr = v->capture_client->lpVtbl->ReleaseBuffer(v->capture_client, frames);
+    if ( FAILED(hr) ) {
+        WASAPI_FAIL(hr);
+        return -1;
+    }
     return 0;
 }
 
@@ -613,7 +669,8 @@ static void voice_unregister(wasapi_voice_t v)
     critical_section_leave(&lock);
 }
 
-static int voice_init_internal(wasapi_voice_t v, WAVEFORMATEX *fmt)
+static int
+voice_init_internal(wasapi_voice_t v, int capture, WAVEFORMATEX *fmt)
 {
     IMMDevice *dev = NULL;
     HRESULT hr;
@@ -621,10 +678,11 @@ static int voice_init_internal(wasapi_voice_t v, WAVEFORMATEX *fmt)
 
     debug_printf("initialising audio voice\n");
     memset(v, 0, sizeof(*v));
+    v->capture = capture;
     v->ev = CreateEvent(NULL, FALSE, FALSE, NULL);
     if (!v->ev)
         goto err;
-    get_mm_device(&dev);
+    get_mm_device(v->capture, &dev);
     if (!dev) {
         debug_printf("no audio device\n");
         goto err;
@@ -636,11 +694,20 @@ static int voice_init_internal(wasapi_voice_t v, WAVEFORMATEX *fmt)
         WASAPI_FAIL(hr);
         goto err;
     }
-    hr = v->client->lpVtbl->GetService(v->client, &IID_IAudioRenderClient, (void**)&v->render);
-    if ( FAILED(hr) ) {
-        WASAPI_FAIL(hr);
-        goto err;
+    if (!capture) {
+        hr = v->client->lpVtbl->GetService(v->client, &IID_IAudioRenderClient, (void**)&v->render_client);
+        if ( FAILED(hr) ) {
+            WASAPI_FAIL(hr);
+            goto err;
+        }
+    } else {
+        hr = v->client->lpVtbl->GetService(v->client, &IID_IAudioCaptureClient, (void**)&v->capture_client);
+        if ( FAILED(hr) ) {
+            WASAPI_FAIL(hr);
+            goto err;
+        }
     }
+
     hr = v->client->lpVtbl->GetService(v->client, &IID_IAudioClock, (void**)&v->clock);
     if ( FAILED(hr) ) {
         WASAPI_FAIL(hr);
@@ -658,6 +725,8 @@ err:
     debug_printf("voice_init_internal failed\n");
     if (v->ev) CloseHandle(v->ev);
 out:
+    if (dev) dev->lpVtbl->Release(dev);
+
     return rv;
 }
 
@@ -666,7 +735,10 @@ static void voice_release_internal(wasapi_voice_t v)
     if (v) {
         wasapi_stop(v);
         v->clock->lpVtbl->Release(v->clock);
-        v->render->lpVtbl->Release(v->render);
+        if (v->render_client)
+            v->render_client->lpVtbl->Release(v->render_client);
+        if (v->capture_client)
+            v->capture_client->lpVtbl->Release(v->capture_client);
         v->client->lpVtbl->Release(v->client);
         CloseHandle(v->ev);
         voice_unregister(v);
@@ -674,7 +746,7 @@ static void voice_release_internal(wasapi_voice_t v)
     }
 }
 
-int wasapi_init_voice(wasapi_voice_t* out_v, WAVEFORMATEX *fmt)
+int wasapi_init_voice(wasapi_voice_t* out_v, int capture, WAVEFORMATEX *fmt)
 {
     wasapi_voice_t v;
     int rv;
@@ -683,7 +755,7 @@ int wasapi_init_voice(wasapi_voice_t* out_v, WAVEFORMATEX *fmt)
     v = calloc(1, sizeof(struct wasapi_voice));
     if (!v)
         return -1;
-    rv = voice_init_internal(v, fmt);
+    rv = voice_init_internal(v, capture, fmt);
     if (rv) {
         free(v);
         return rv;

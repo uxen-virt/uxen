@@ -8,7 +8,6 @@
 #include "voice.h"
 #include "uxaud_hw.h"
 
-
 ULONG CVoice::ReadMMIO32
 (
 	IN ULONG ulOffset
@@ -18,9 +17,7 @@ ULONG CVoice::ReadMMIO32
 
 	ulValue = READ_REGISTER_ULONG((PULONG) (m_pMMIOBase + ulOffset));
 
-#if 0
-        DOUT (DBG_REGS, ("VReadMMIO32(0x%p)=0x%8x", ulOffset,ulValue));
-#endif
+        DOUT (DBG_REGS, "voice%d: VReadMMIO32(0x%p)=0x%8x", m_nIndex, ulOffset,ulValue);
 
 	return ulValue;
 }
@@ -34,9 +31,7 @@ VOID CVoice::WriteMMIO32
 
 	WRITE_REGISTER_ULONG((PULONG) (m_pMMIOBase + ulOffset), ulValue);
 
-#if 0
-        DOUT (DBG_REGS, ("VWriteMMIO32(0x%p,0x%8x)", ulOffset,ulValue));
-#endif
+        DOUT (DBG_REGS, "voice%d: VWriteMMIO32(0x%p,0x%8x)", m_nIndex, ulOffset,ulValue);
 }
 
 ULONG CVoice::ReadRMMIO32
@@ -48,9 +43,9 @@ ULONG CVoice::ReadRMMIO32
 
 	ulValue = READ_REGISTER_ULONG((PULONG) (m_pRMMIOBase + ulOffset));
 
-#if 0
-        DOUT (DBG_REGS, ("VReadRMMIO32(0x%p)=0x%8x (bar offset=%lx, absolute=%p)", ulOffset,ulValue,(unsigned long) (m_pRMMIOBase-m_pRamBase),m_pRMMIOBase + ulOffset ));
-#endif
+        DOUT (DBG_REGS, "voice%d: VReadRMMIO32(0x%p)=0x%8x (bar offset=%lx, absolute=%p)",
+              m_nIndex, ulOffset,ulValue,(unsigned long) (m_pRMMIOBase-m_pRamBase),
+              m_pRMMIOBase + ulOffset);
 
 	return ulValue;
 }
@@ -61,12 +56,9 @@ VOID CVoice::WriteRMMIO32
 	IN ULONG ulValue
 )
 {
-
 	WRITE_REGISTER_ULONG((PULONG) (m_pRMMIOBase + ulOffset), ulValue);
 
-#if 0
-        DOUT (DBG_REGS, ("VWriteRMMIO32(0x%p,0x%8x)", ulOffset,ulValue));
-#endif
+        DOUT (DBG_REGS, "voice%d: VWriteRMMIO32(0x%p,0x%8x)", m_nIndex, ulOffset,ulValue);
 }
 
 VOID CVoice::CopyToBuffer(IN PUCHAR Data,OUT PUCHAR Dest,UINT Len)
@@ -127,7 +119,7 @@ NTSTATUS CVoice::Probe(IN PUCHAR MMIOBase, IN PUCHAR RAMBase)
 {
 	NTSTATUS ntStatus;
 
-//        DOUT (DBG_REGS, ("CVoice::Probe(%p,%p)",MMIOBase,RAMBase));
+        DOUT (DBG_REGS, "voice%d: CVoice::Probe(%p,%p)",m_nIndex,MMIOBase,RAMBase);
 
 	m_pMMIOBase=MMIOBase;
 	m_pRamBase=RAMBase;
@@ -154,8 +146,8 @@ NTSTATUS CVoice::Probe(IN PUCHAR MMIOBase, IN PUCHAR RAMBase)
 	//XXX: for the moment we'll just stick with one fixed format
 		
 	if (!(ReadMMIO32(UXAU_V_AVFMT) & UXAU_V_AVFMT_44100_16_2)) {
-		DOUT(DBG_PRINT,("44.1k 16bits 2 channels not supported"));
-		return STATUS_INVALID_PARAMETER;
+            DOUT(DBG_PRINT, "44.1k 16bits 2 channels not supported");
+            return STATUS_INVALID_PARAMETER;
 	}
 
 	WriteMMIO32(UXAU_V_FMT,UXAU_V_AVFMT_44100_16_2);
@@ -169,89 +161,94 @@ NTSTATUS CVoice::Probe(IN PUCHAR MMIOBase, IN PUCHAR RAMBase)
 	return STATUS_SUCCESS;
 }
 
-NTSTATUS CVoice::Start(VOID)
+NTSTATUS CVoice::Start(BOOL capture)
 {
-	WriteMMIO32(UXAU_V_CTL,0);
-	m_bHWRunning=FALSE;
+    DWORD cmd = UXAU_V_CTL_RUN_NSTOP;
 
-//        DOUT (DBG_REGS, ("CVoice::Start"));
+    if (capture)
+        cmd |= UXAU_V_CTL_RUN_CAPTURE;
 
-	WriteMMIO32(UXAU_V_CTL,UXAU_V_CTL_RUN_NSTOP);
-	m_bHWRunning=TRUE;
-	m_bRunning=TRUE;
+    WriteMMIO32(UXAU_V_CTL,0);
+    m_bHWRunning=FALSE;
+    m_bCapture = capture;
 
-	m_nTicks=0;
-        m_nSilence=0;
+    DOUT (DBG_REGS, "voice%d: CVoice::Start capture=%d", m_nIndex, capture);
 
-	return STATUS_SUCCESS;
+    WriteMMIO32(UXAU_V_CTL, cmd);
+    m_bHWRunning=TRUE;
+    m_bRunning=TRUE;
+    m_nTicks=0;
+    m_nSilence=0;
+
+    return STATUS_SUCCESS;
 }
 
 NTSTATUS CVoice::Stop(VOID)
 {
-//        DOUT (DBG_REGS, ("CVoice::Stop"));
+    DOUT (DBG_REGS, "voice%d: CVoice::Stop", m_nIndex);
 
-	WriteMMIO32(UXAU_V_CTL,0);
+    WriteMMIO32(UXAU_V_CTL,0);
 
-	m_nWPTR=ReadRMMIO32(UXAU_VM_RPTR);
-	WriteRMMIO32(UXAU_VM_WPTR,m_nWPTR);
+    m_nWPTR=ReadRMMIO32(UXAU_VM_RPTR);
+    WriteRMMIO32(UXAU_VM_WPTR,m_nWPTR);
 
-	m_nBytesWritten=0;
+    m_nBytesWritten=0;
 
-	m_bRunning=FALSE;
-	m_bHWRunning=FALSE;
+    m_bRunning=FALSE;
+    m_bHWRunning=FALSE;
 
-
-	return STATUS_SUCCESS;
+    return STATUS_SUCCESS;
 }
 
 
 ULONG CVoice::Stats(IN ULONG playback_ptr, IN INT)
 {
-	ULONG lag;
-	ULONG reported_lag;
-	ULONG read_position;
+    ULONG lag;
+    ULONG reported_lag;
+    ULONG read_position;
 
-	// n contains the number of bytes that the host
-	// audio driver has consumed thus far (allegedly accurate to
-	// the dac but not)
-	
-	if (playback_ptr>m_nBytesWritten) {
-		lag=0;
-	} else {
-		lag=m_nBytesWritten-playback_ptr;
-	}
+    if (m_bCapture)
+        return playback_ptr % m_nBufLen;
 
-	// This is the number of bytes in the host qemu's buffers
-	// we aim to keep that at about 176400 (1 second)
+    // n contains the number of bytes that the host
+    // audio driver has consumed thus far (allegedly accurate to
+    // the dac but not)
 
+    if (playback_ptr>m_nBytesWritten)
+        lag=0;
+    else
+        lag=m_nBytesWritten-playback_ptr;
 
-	if (lag>m_nTargetLag) {
-		reported_lag=lag-m_nTargetLag;
-	} else {
-		reported_lag=0;
-	}
+    // This is the number of bytes in the host qemu's buffers
+    // we aim to keep that at about 176400 (1 second)
 
 
-	if (reported_lag<=m_nBufLen) {
-		read_position=m_nWPTR + m_nBufLen - reported_lag;
-		read_position %= m_nBufLen;
-	} else {
-		read_position=m_nWPTR+4;
-		read_position %= m_nBufLen;
-	}
+    if (lag>m_nTargetLag)
+        reported_lag=lag-m_nTargetLag;
+    else
+        reported_lag=0;
 
-        /* rounding to winwave buffer length avoids playback startup glitches */
-        if (m_nPositionStep) {
-            read_position /= m_nPositionStep;
-            read_position *= m_nPositionStep;
-        }
+    if (reported_lag<=m_nBufLen) {
+        read_position=m_nWPTR + m_nBufLen - reported_lag;
+        read_position %= m_nBufLen;
+    } else {
+        read_position=m_nWPTR+4;
+        read_position %= m_nBufLen;
+    }
 
-//	if (Print || !reported_lag) {
-//		DOUT(DBG_PRINT,("[CVoice::ReadOffset] playpack_ptr=%d m_nBytesWritten=%d lag=%d reported_lag=%d m_nWPTR=%d read_position=%d\n",
-//			(int) playback_ptr,(int) m_nBytesWritten,(int) lag,(int) reported_lag,(int) m_nWPTR,(int) read_position));
-//	}
+    /* rounding to winwave buffer length avoids playback startup glitches */
+    if (m_nPositionStep) {
+        read_position /= m_nPositionStep;
+        read_position *= m_nPositionStep;
+    }
 
-	return read_position;
+#if 0
+    if (Print || !reported_lag) {
+        DOUT(DBG_REGS,"[CVoice::ReadOffset] playback_ptr=%d m_nBytesWritten=%d lag=%d reported_lag=%d m_nWPTR=%d read_position=%d\n",
+             (int) playback_ptr,(int) m_nBytesWritten,(int) lag,(int) reported_lag,(int) m_nWPTR,(int) read_position);
+    }
+#endif
+    return read_position;
 }
 
 
@@ -285,6 +282,18 @@ NTSTATUS CVoice::RingSize(OUT PULONG  RingSize)
 	return STATUS_SUCCESS;
 }
 
+NTSTATUS CVoice::CopyFrom(ULONG offset, IN PUCHAR data, IN UINT len)
+{
+    if (offset >= m_nBufLen)
+        return STATUS_INVALID_PARAMETER;
+    if (offset+len > m_nBufLen)
+        return STATUS_INVALID_PARAMETER;
+    RtlCopyMemory(data, m_pBufStart + offset, len);
+    m_nRPTR = offset + len;
+    m_nRPTR %= m_nBufLen;
+    WriteRMMIO32(UXAU_VM_RPTR,m_nRPTR);
+    return STATUS_SUCCESS;
+}
 
 NTSTATUS CVoice::CopyTo(ULONG Offset,IN PUCHAR Data,IN UINT Len)
 {
@@ -306,7 +315,7 @@ NTSTATUS CVoice::CopyTo(ULONG Offset,IN PUCHAR Data,IN UINT Len)
 	m_nBytesWritten+=Len;
 
 #if 0
-       	DOUT(DBG_PRINT,("[CVoice::CopyTo] Wrote [%d-%d] m_nWPTR=%d\n",(int) Offset, (int) (Offset+Len-1),(int) m_nWPTR));
+       	DOUT(DBG_PRINT,"[CVoice::CopyTo] Wrote [%d-%d] m_nWPTR=%d",(int) Offset, (int) (Offset+Len-1),(int) m_nWPTR);
 
 	{
 		PSHORT sd=(PSHORT) Data;
@@ -321,7 +330,7 @@ NTSTATUS CVoice::CopyTo(ULONG Offset,IN PUCHAR Data,IN UINT Len)
 		sd=(PSHORT) Data;
 
 
-        	DOUT(DBG_PRINT,("xenaudio: transfer in: Offet=%d Len=%d rptr=%d, wptr=%d, %d in [0x%04x 0x%04x ...] [%d,%d]\n",(int) Offset,(int) Len, (int)rptr,(int)m_nWPTR, (int)Len,(unsigned int)sd[0],(unsigned int) sd[1],min,max));
+        	DOUT(DBG_PRINT,"xenaudio: transfer in: Offet=%d Len=%d rptr=%d, wptr=%d, %d in [0x%04x 0x%04x ...] [%d,%d]",(int) Offset,(int) Len, (int)rptr,(int)m_nWPTR, (int)Len,(unsigned int)sd[0],(unsigned int) sd[1],min,max);
 
 	}
 #endif
@@ -333,7 +342,8 @@ NTSTATUS CVoice::CopyTo(ULONG Offset,IN PUCHAR Data,IN UINT Len)
 	return STATUS_SUCCESS;
 }
 
-CVoice::CVoice(VOID)
+CVoice::CVoice(int index)
+    : m_nIndex(index)
 {
 }
 

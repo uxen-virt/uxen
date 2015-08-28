@@ -31,50 +31,39 @@
 //
 // Modified version of ksdebug.h to support runtime debug level changes.
 //
-const int DBG_NONE     = 0x00000000;
-const int DBG_PRINT    = 0x00000001; // Blabla. Function entries for example
-const int DBG_WARNING  = 0x00000002; // warning level
-const int DBG_ERROR    = 0x00000004; // this doesn't generate a breakpoint
+const unsigned int DBG_NONE     = 0x00000000;
+const unsigned int DBG_PRINT    = 0x00000001; // Blabla. Function entries for example
+const unsigned int DBG_WARNING  = 0x00000002; // warning level
+const unsigned int DBG_ERROR    = 0x00000004; // this doesn't generate a breakpoint
 
 // specific debug output; you don't have to enable DBG_PRINT for this.
-const int DBG_STREAM   = 0x00000010; // Enables stream output.
-const int DBG_POWER    = 0x00000020; // Enables power management output.
-const int DBG_DMA      = 0x00000040; // Enables DMA engine output.
-const int DBG_REGS     = 0x00000080; // Enables register outout.
-const int DBG_PROBE    = 0x00000100; // Enables hardware probing output.
-const int DBG_SYSINFO  = 0x00000200; // Enables system info output.
-const int DBG_VSR      = 0x00000400; // Enables variable sample rate output.
-const int DBG_PROPERTY = 0x00000800; // Enables property handler output
-const int DBG_POSITION = 0x00001000; // Enables printing of position on GetPosition
-const int DBG_PINS     = 0x10000000; // Enables dump of created pins in topology
-const int DBG_NODES    = 0x20000000; // Enables dump of created nodes in topology
-const int DBG_CONNS    = 0x40000000; // Enables dump of the connections in topology
+const unsigned int DBG_STREAM   = 0x00000010; // Enables stream output.
+const unsigned int DBG_POWER    = 0x00000020; // Enables power management output.
+const unsigned int DBG_DMA      = 0x00000040; // Enables DMA engine output.
+const unsigned int DBG_REGS     = 0x00000080; // Enables register outout.
+const unsigned int DBG_PROBE    = 0x00000100; // Enables hardware probing output.
+const unsigned int DBG_SYSINFO  = 0x00000200; // Enables system info output.
+const unsigned int DBG_VSR      = 0x00000400; // Enables variable sample rate output.
+const unsigned int DBG_PROPERTY = 0x00000800; // Enables property handler output
+const unsigned int DBG_POSITION = 0x00001000; // Enables printing of position on GetPosition
+const unsigned int DBG_PINS     = 0x10000000; // Enables dump of created pins in topology
+const unsigned int DBG_NODES    = 0x20000000; // Enables dump of created nodes in topology
+const unsigned int DBG_CONNS    = 0x40000000; // Enables dump of the connections in topology
                                     
-const int DBG_ALL      = 0xFFFFFFFF;
+const unsigned int DBG_ALL      = 0xFFFFFFFF;
 
-//
-// The default statements that will print are warnings (DBG_WARNING) and
-// errors (DBG_ERROR).
-//
-#if 0
-const int DBG_DEFAULT = 0x00000004;  // Errors only.
-#else
-const int DBG_DEFAULT = 0x7fffffff;  // Errors only.
-#endif
+/* default log level */
+const unsigned int DBG_DEFAULT = DBG_ERROR | DBG_WARNING;
+//const unsigned int DBG_DEFAULT = DBG_ALL; // & ~DBG_REGS;
 
-    
 //
 // Define global debug variable.
 //
 #ifdef DEFINE_DEBUG_VARS
-#if (DBG)
-unsigned long ulDebugOut = DBG_DEFAULT;
-#endif
+unsigned int ulDebugOut = DBG_DEFAULT;
 
 #else // !DEFINED_DEBUG_VARS
-#if (DBG)
-extern unsigned long ulDebugOut;
-#endif
+extern unsigned int ulDebugOut;
 #endif
 
 
@@ -88,29 +77,20 @@ extern "C" {
 //
 // DBG is 1 in checked builds
 //
-#if (DBG)
-#define DOUT(lvl, strings)          \
-    if ((lvl) & ulDebugOut)         \
-    {                               \
-        DbgPrint(STR_MODULENAME);   \
-        DbgPrint##strings;          \
-        DbgPrint("\n");             \
-    }
+#define DOUT(lvl, fmt, ...) {                      \
+    unsigned int _lvl = lvl;                       \
+    if (_lvl & ulDebugOut) {                       \
+        if (_lvl & DBG_ERROR)                      \
+            uxen_err(fmt, ##__VA_ARGS__);          \
+        else                                       \
+            uxen_msg(fmt, ##__VA_ARGS__);          \
+    } }
 
 #define BREAK()                     \
     DbgBreakPoint()
 
-#else // if (!DBG)
-#define DOUT(lvl, strings)
-#define BREAK()
-#endif // !DBG    
-
-#if 0
-#define FISH 0
-#else
-#pragma warning( disable : 4127 )
-#define FISH do { DbgPrint("%s:%s:%d\n",__FILE__,__FUNCTION__,__LINE__); } while (0)
-#endif
+#define DERR(fmt, ...) DOUT(DBG_ERROR, fmt, ##__VA_ARGS__)
+#define DWARN(fmt, ...) DOUT(DBG_WARNING, fmt, ##__VA_ARGS__)
 
 #if defined(__cplusplus)
 }

@@ -1207,6 +1207,7 @@ static HANDLE audioRunEvent;
 static int audio_exit = 0;
 #endif	/* AUDIO_MT */
 
+#if 0
 static
 void control_audio_notify(void *opaque)
 {
@@ -1233,6 +1234,7 @@ void control_audio_notify(void *opaque)
     } else
         del_timer(s->control_notify_timer);
 }
+#endif
 
 static void audio_reset_timer (AudioState *s)
 {
@@ -1400,7 +1402,9 @@ void AUD_set_active_out (SWVoiceOut *sw, int on)
         }
         sw->active = on;
     }
+#if 0
     control_audio_notify(&glob_audio_state);
+#endif
 }
 
 void AUD_set_active_in (SWVoiceIn *sw, int on)
@@ -2046,7 +2050,9 @@ static void audio_init (void)
 
     InitializeCriticalSection(&audio_cs);
 
+#if 0
     s->control_notify_timer = new_timer_ms(vm_clock, control_audio_notify, s);
+#endif
 
 #ifndef AUDIO_MT
     s->ts = qemu_new_timer_ns (vm_clock, audio_timer, s);
@@ -2161,7 +2167,9 @@ static void audio_init (void)
 	    hwi->pcm_ops->ctl_in (hwi, op, conf.try_poll_in);
 	}
 	audio_reset_timer (s);
+#if 0
         control_audio_notify(s);
+#endif
     }
 #endif
 

@@ -27,6 +27,7 @@
 #define UXAU_V_AVFMT_48000_16_2		(1UL << 1)
 #define UXAU_V_CTL	0x20
 #define UXAU_V_CTL_RUN_NSTOP		(1UL << 0)
+#define UXAU_V_CTL_RUN_CAPTURE          (1UL << 1)
 #define UXAU_V_FMT	0x28
 #define UXAU_V_POSITION	0x40
 #define UXAU_V_POSITION_STEP 0x44
@@ -34,7 +35,6 @@
 #define UXAU_V_LWM	0x4c
 #define UXAU_V_GAIN0	0x100
 #define UXAU_V_GAIN1	0x104
-
 
 #define UXAU_VM_SIGNATURE	0x0
 #define UXAU_VM_SIGNATURE_VALUE	0x37a3932f

@@ -4,8 +4,11 @@
  */
 
 #define NVOICEOUT			1
-#define DEFAULT_BUFLEN			32768
-#define TARGET_LAG (1764*8)
+#define NVOICEIN                        1
+#define NVOICE                          (NVOICEOUT+NVOICEIN)
+#define AUDIO_QUANTUM_BYTES             1764
+#define DEFAULT_BUFLEN                  (AUDIO_QUANTUM_BYTES*30)
+#define TARGET_LAG                      (AUDIO_QUANTUM_BYTES*8)
 #undef DEBUG_UXENAUDIO
 
 #undef USE_QEMUS_BROKEN_AUDIO
@@ -43,7 +46,7 @@ struct PACKED UXenAudioBuf
     uint8_t buf[0];
 };
 
-struct UXenAudioVoiceOutRegs_struct
+struct UXenAudioVoiceRegs_struct
 {
     uint32_t gain0;
     uint32_t gain1;
@@ -51,22 +54,21 @@ struct UXenAudioVoiceOutRegs_struct
     uint32_t check_start;
 };
 
-struct UXenAudioVoiceOut_struct
+struct UXenAudioVoice_struct
 {
     struct UXenAudioState_struct *s;
     uint32_t index;
+    int capture;
     int running;
     uint32_t buf_len;
     uint32_t mmio_offset;
     uint32_t rptr;
     uint32_t wptr;
+    uint32_t frames_written;
     uint32_t position_offset;
-    uint32_t out_sent;
-    struct UXenAudioVoiceOutRegs_struct regs;
+    struct UXenAudioVoiceRegs_struct regs;
     volatile struct UXenAudioBuf *buf;
-    uint32_t qemu_free;
     uxenaudio_out_mode_t omode;
-    int silence_mute;
     uint32_t last_realpos;
     uint64_t virt_pos_t0;
     struct resampler_16_2 *resampler;
@@ -75,17 +77,17 @@ struct UXenAudioVoiceOut_struct
     SWVoiceOut *voice;
 #else
     wasapi_voice_t wv;
-    WAVEFORMATEX ww_wfx;
+    WAVEFORMATEX guest_fmt;
 #endif
 
 };
-typedef struct UXenAudioVoiceOut_struct UXenAudioVoiceOut;
+typedef struct UXenAudioVoice_struct UXenAudioVoice;
 
 typedef struct UXenAudioState_struct
 {
     PCIDevice dev;
     QEMUSoundCard card;
-    UXenAudioVoiceOut voiceout[NVOICEOUT];
+    UXenAudioVoice voices[NVOICE];
     MemoryRegion io;
     MemoryRegion buffer;
 
@@ -95,6 +97,9 @@ typedef struct UXenAudioState_struct
     void *ram_ptr;
 
     int dev_mute;
+    int capture_enabled;
+    int last_out_used;
+    int last_inp_used;
 #ifndef USE_QEMUS_BROKEN_AUDIO
     Timer *control_notify_timer;
 #endif

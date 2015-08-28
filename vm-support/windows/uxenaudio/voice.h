@@ -6,12 +6,13 @@
 #ifndef _UXENAUDIO_VOICE_H_
 #define _UXENAUDIO_VOICE_H_
 
-#define HW_MAX_VOICE 1
+#define HW_MAX_VOICE 2
 #define HW_MIN_VOICE 1
 
 class CVoice 
 {
     private:
+        int                     m_nIndex;
 	PUCHAR			m_pRamBase; // Of adapter
 
 	PUCHAR			m_pMMIOBase; // Of Voice
@@ -23,9 +24,11 @@ class CVoice
 	ULONG			m_nBytesBeforeStart;
 	
 	ULONG			m_nWPTR;
+        ULONG                   m_nRPTR;
 
 	BOOL			m_bRunning;
 	BOOL			m_bHWRunning;
+        BOOL                    m_bCapture;
 	ULONG			m_nBytesWritten;
 
 	ULONG			m_nTicks;
@@ -75,7 +78,7 @@ class CVoice
 	);
 
     public:
-	CVoice();
+	CVoice(int index);
 	~CVoice();
 
         STDMETHODIMP_(NTSTATUS)     Probe
@@ -87,7 +90,7 @@ class CVoice
 
         STDMETHODIMP_(NTSTATUS)     Start
         ( 
-		VOID
+		IN BOOL capture
 	);
 
 
@@ -103,6 +106,13 @@ class CVoice
 
         STDMETHODIMP_(NTSTATUS)     CopyTo
         ( 
+		IN ULONG	Offset,
+		IN PUCHAR	Data,
+		IN UINT		Len
+	);
+
+        STDMETHODIMP_(NTSTATUS)     CopyFrom
+        (
 		IN ULONG	Offset,
 		IN PUCHAR	Data,
 		IN UINT		Len
