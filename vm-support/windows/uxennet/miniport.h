@@ -533,12 +533,6 @@ NICFreeQueuedRecvPackets(
     PMP_ADAPTER Adapter
 );
 
-PCHAR
-DbgGetOidName
-(ULONG oid
-);
-
-
 #if defined(IOCTL_INTERFACE)
 NDIS_STATUS
 NICRegisterDevice(
