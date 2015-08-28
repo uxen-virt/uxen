@@ -206,7 +206,7 @@ Return Value:
     PAGED_CODE();
 
     irpStack = IoGetCurrentIrpStackLocation(Irp);
-    uxen_msg("==>NICDispatch %d", irpStack->MajorFunction);
+    uxen_debug("==>NICDispatch %d", irpStack->MajorFunction);
 
     switch (irpStack->MajorFunction) {
         case IRP_MJ_CREATE:
@@ -230,10 +230,10 @@ Return Value:
                     // Add code here to handle ioctl commands.
                     //
                     case IOCTL_NETVMINI_READ_DATA:
-                        uxen_msg("Received Read IOCTL");
+                        uxen_debug("Received Read IOCTL");
                         break;
                     case IOCTL_NETVMINI_WRITE_DATA:
-                        uxen_msg("Received Write IOCTL");
+                        uxen_debug("Received Write IOCTL");
                         break;
                     default:
                         status = STATUS_UNSUCCESSFUL;
@@ -248,7 +248,7 @@ Return Value:
     Irp->IoStatus.Status = status;
     IoCompleteRequest(Irp, IO_NO_INCREMENT);
 
-    uxen_msg("<== NIC Dispatch");
+    uxen_debug("<== NIC Dispatch");
 
     return status;
 

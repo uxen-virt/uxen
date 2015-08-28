@@ -82,7 +82,7 @@ Return Value:
     NDIS_STATUS Status;
     BOOLEAN         bFalse = FALSE;
 
-    uxen_msg("--> NICAllocRecvResources");
+    uxen_debug("--> NICAllocRecvResources");
 
     do {
 
@@ -204,7 +204,7 @@ Return Value:
         }
     } while (bFalse);
 
-    uxen_msg("<-- NICAllocRecvResources %x", Status);
+    uxen_debug("<-- NICAllocRecvResources %x", Status);
 
     return Status;
 
@@ -232,7 +232,7 @@ Return Value:
 {
     PRCB           pRCB;
 
-    uxen_msg("--> NICFreeRecvResources");
+    uxen_debug("--> NICFreeRecvResources");
 
     PAGED_CODE();
 
@@ -281,7 +281,7 @@ Return Value:
 
     MP_CLEAR_FLAG(Adapter, fMP_RECV_SIDE_RESOURCE_ALLOCATED);
 
-    uxen_msg("<-- NICFreeRecvResources");
+    uxen_debug("<-- NICFreeRecvResources");
 
     return;
 }
@@ -315,7 +315,7 @@ Return Value:
 #endif
     BOOLEAN     bFalse = FALSE;
 
-    uxen_msg("--> NICAllocSendResources");
+    uxen_debug("--> NICAllocSendResources");
 
     do {
         //
@@ -349,7 +349,7 @@ Return Value:
                      NIC_TAG);
 
         if (Status != NDIS_STATUS_SUCCESS) {
-            uxen_err ("Failed to allocate memory for TCB's\n"));
+            uxen_err("Failed to allocate memory for TCB's\n"));
             break;
         }
         NdisZeroMemory(pTCBMem, sizeof(TCB) * NIC_MAX_BUSY_SENDS);
@@ -364,7 +364,7 @@ Return Value:
             &Adapter->SendBufferPoolHandle,
             NIC_MAX_BUSY_SENDS);
         if (Status != NDIS_STATUS_SUCCESS) {
-            uxen_err ("NdisAllocateBufferPool for send buffer failed\n"));
+            uxen_err("NdisAllocateBufferPool for send buffer failed\n"));
             break;
         }
 
@@ -388,7 +388,7 @@ Return Value:
                 (PVOID)&pTCB->Data[0],
                 NIC_BUFFER_SIZE);
             if (Status != NDIS_STATUS_SUCCESS) {
-                uxen_err ("NdisAllocateBuffer failed\n"));
+                uxen_err("NdisAllocateBuffer failed\n"));
                 break;
             }
 
@@ -413,7 +413,7 @@ Return Value:
 #endif
     } while (bFalse);
 
-    uxen_msg("<-- NICAllocSendResources %x", Status);
+    uxen_debug("<-- NICAllocSendResources %x", Status);
 
     return Status;
 }
@@ -440,7 +440,7 @@ Return Value:
     PTCB           pTCB;
 #endif
 
-    uxen_msg("--> NICFreeSendResources");
+    uxen_debug("--> NICFreeSendResources");
 
     PAGED_CODE();
 
@@ -487,7 +487,7 @@ Return Value:
 
     MP_CLEAR_FLAG(Adapter, fMP_SEND_SIDE_RESOURCE_ALLOCATED);
 
-    uxen_msg("<-- NICFreeSendResources");
+    uxen_debug("<-- NICFreeSendResources");
 }
 
 #pragma NDIS_PAGEABLE_FUNCTION(NICAllocAdapter)

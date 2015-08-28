@@ -672,7 +672,7 @@ Return Value:
     UNREFERENCED_PARAMETER(SystemSpecific3);
 
 
-    uxen_msg("--> NICResetCompleteTimerDpc");
+    uxen_debug("--> NICResetCompleteTimerDpc");
 
     //
     // Increment the ref count on the adapter to prevent the driver from
@@ -731,7 +731,7 @@ Return Value:
 
     MP_DEC_REF(Adapter);
 
-    uxen_msg("<-- NICResetCompleteTimerDpc Status = 0x%08x", Status);
+    uxen_debug("<-- NICResetCompleteTimerDpc Status = 0x%08x", Status);
 }
 
 
@@ -854,8 +854,8 @@ Note:
 {
     UNREFERENCED_PARAMETER(MiniportAdapterContext);
 
-    uxen_msg("---> MPCheckForHang");
-    uxen_msg("<--- MPCheckForHang");
+    uxen_debug("---> MPCheckForHang");
+    uxen_debug("<--- MPCheckForHang");
     return (FALSE);
 }
 
@@ -901,8 +901,8 @@ Return Value:
 {
     UNREFERENCED_PARAMETER(MiniportAdapterContext);
 
-    uxen_msg("---> MPHandleInterrupt");
-    uxen_msg("<--- MPHandleInterrupt");
+    uxen_debug("---> MPHandleInterrupt");
+    uxen_debug("<--- MPHandleInterrupt");
 }
 
 VOID
@@ -953,8 +953,8 @@ Return Value:
     UNREFERENCED_PARAMETER(QueueMiniportHandleInterrupt);
     UNREFERENCED_PARAMETER(MiniportAdapterContext);
 
-    uxen_msg("---> MPIsr");
-    uxen_msg("<--- MPIsr");
+    uxen_debug("---> MPIsr");
+    uxen_debug("<--- MPIsr");
 }
 
 VOID
@@ -985,8 +985,8 @@ Return Value:
 --*/
 {
     UNREFERENCED_PARAMETER(MiniportAdapterContext);
-    uxen_msg("---> MPDisableInterrupt");
-    uxen_msg("<--- MPDisableInterrupt");
+    uxen_debug("---> MPDisableInterrupt");
+    uxen_debug("<--- MPDisableInterrupt");
 
 }
 
@@ -1017,8 +1017,8 @@ Return Value:
 --*/
 {
     UNREFERENCED_PARAMETER(MiniportAdapterContext);
-    uxen_msg("---> MPEnableInterrupt");
-    uxen_msg("<--- MPEnableInterrupt");
+    uxen_debug("---> MPEnableInterrupt");
+    uxen_debug("<--- MPEnableInterrupt");
 
 }
 
@@ -1063,8 +1063,8 @@ Return Value:
     UNREFERENCED_PARAMETER(Length);
     UNREFERENCED_PARAMETER(Context);
 
-    uxen_msg("---> MPAllocateComplete");
-    uxen_msg("<--- MPAllocateComplete");
+    uxen_debug("---> MPAllocateComplete");
+    uxen_debug("<--- MPAllocateComplete");
 }
 
 #ifdef NDIS51_MINIPORT
@@ -1110,7 +1110,7 @@ Return Value:
 
 #define MP_GET_PACKET_MR(_p)    (PSINGLE_LIST_ENTRY)(&(_p)->MiniportReserved[0])
 
-    uxen_msg("---> MPCancelSendPackets");
+    uxen_debug("---> MPCancelSendPackets");
 
     SendCancelList.Next = NULL;
 
@@ -1158,7 +1158,7 @@ Return Value:
         entry = PopEntryList(&SendCancelList);
     }
 
-    uxen_msg("<--- MPCancelSendPackets");
+    uxen_debug("<--- MPCancelSendPackets");
 
 }
 
@@ -1202,7 +1202,7 @@ Return Value:
     //
     UNREFERENCED_PARAMETER(Adapter);
 
-    uxen_msg("---> MPPnPEventNotify");
+    uxen_debug("---> MPPnPEventNotify");
 
     PAGED_CODE();
 
@@ -1273,7 +1273,7 @@ Return Value:
             break;
     }
 
-    uxen_msg("<--- MPPnPEventNotify");
+    uxen_debug("<--- MPPnPEventNotify");
 
 }
 
