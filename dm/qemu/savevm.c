@@ -698,9 +698,18 @@ void qemu_put_byte(QEMUFile *f, int v)
 
 void qemu_file_skip(QEMUFile *f, int size)
 {
-    if (f->buf_index + size <= f->buf_size) {
-        f->buf_index += size;
+    while (f->buf_index + size > f->buf_size) {
+        size -= f->buf_size - f->buf_index; /* consume pending */
+        f->buf_index = f->buf_size;
+        qemu_fill_buffer(f);
+        if (f->last_error) {
+            warnx("%s: failed with %d left and %d pending before pos %"PRId64,
+                  __FUNCTION__, size, f->buf_size - f->buf_index,
+                  f->buf_offset);
+            return;
+        }
     }
+    f->buf_index += size;
 }
 
 static int qemu_peek_buffer(QEMUFile *f, uint8_t *buf, int size, size_t offset)
