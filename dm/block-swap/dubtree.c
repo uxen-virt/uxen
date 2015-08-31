@@ -498,7 +498,8 @@ static int dubtreeLoad(DUBTREE *t, int force_fallback)
                 goto out;
             offset += sz;
 
-            if (LZ4_decompress_fast((char*)buffer, (char*)page, simpletreeNodeSize())
+            if (LZ4_decompress_fast((char*)buffer, (char*)page,
+                                    simpletreeNodeSize())
                     != compressed_size) {
                 errx(1, "failed to uncompress B-tree page!");
             }

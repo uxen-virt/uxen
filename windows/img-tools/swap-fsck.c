@@ -97,9 +97,11 @@ int main(int argc, char **argv)
         }
 
         /* Print progress. */
-        if (!(start % 1000000)) printf("%u found=%d...\n", (uint32_t)start, found);
+        if (!(start % 1000000))
+            printf("%u found=%d...\n", (uint32_t)start, found);
 
-        /* If we found the block, check that it decompresses to the right size. */
+        /* If we found the block, check that it decompresses to the
+         * right size. */
         if (map[0]) {
             char page[4096];
             int unsz;
@@ -110,13 +112,14 @@ int main(int argc, char **argv)
             }
                 
             if (sizes[0] < 4096) {
-                unsz = LZ4_decompress_fast((const char*)out, page, DUBTREE_BLOCK_SIZE);
-
+                unsz = LZ4_decompress_fast((const char*)out, page,
+                                           DUBTREE_BLOCK_SIZE);
             } else {
                 unsz = 4096;
             }
             if (unsz != sizes[0]) {
-                printf("%"PRIx64" is %d should be %u\n", start, unsz, (uint32_t)sizes[0]);
+                printf("%"PRIx64" is %d should be %u\n", start, unsz,
+                       (uint32_t)sizes[0]);
                 exit(1);
             }
         }

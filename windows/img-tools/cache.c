@@ -56,7 +56,8 @@ static size_t compress(void *out, const void *in)
 
 static void expand(void *out, const void *in)
 {
-    int rc = LZ4_decompress_fast((const char *)in, (char *)out, CACHE_SECTORSIZE);
+    int rc = LZ4_decompress_fast((const char *)in, (char *)out,
+                                 CACHE_SECTORSIZE);
     assert(rc >= 0);
 }
 
