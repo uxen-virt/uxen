@@ -455,8 +455,6 @@ signal_event(struct vm_vcpu_info_shared *vcis, void *_hec)
     if (!hec || hec->request.id == -1 || !vci->vci_shared.vci_runnable)
         return 1;
 
-    if (hec->completed.notify_address)
-        fast_event_clear(&hec->completed.fast_ev);
     signal_notification_event(&hec->request);
     return 0;
 }
@@ -465,11 +463,15 @@ static uint64_t __cdecl
 check_ioreq(struct vm_vcpu_info_shared *vcis)
 {
     struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
+    int ret;
 
     if ((vci->vci_ioreq_wait_event == NULL) ||
 	(vci->vci_shared.vci_runnable == 0))
 	return 1;
-    return fast_event_state(&vci->vci_ioreq_wait_event->fast_ev);
+    ret = fast_event_state(&vci->vci_ioreq_wait_event->fast_ev);
+    if (ret)
+        fast_event_clear(&vci->vci_ioreq_wait_event->fast_ev);
+    return ret;
 }
 
 static int

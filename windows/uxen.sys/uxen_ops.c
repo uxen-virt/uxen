@@ -671,8 +671,6 @@ uxen_op_signal_event(struct vm_vcpu_info_shared *vcis,
     if (!hec || !hec->request || !is_vci_runnable(vci))
 	return 1;
 
-    if (hec->completed)
-        KeClearEvent(hec->completed);
     KeSetEvent(hec->request, 0, FALSE);
     return 0;
 }
@@ -681,10 +679,14 @@ static uint64_t __cdecl
 uxen_op_check_ioreq(struct vm_vcpu_info_shared *vcis)
 {
     struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
+    int ret;
 
     if ((vci->vci_ioreq_wait_event == NULL) || !is_vci_runnable(vci))
 	return 1;
-    return KeReadStateEvent(vci->vci_ioreq_wait_event);
+    ret = KeReadStateEvent(vci->vci_ioreq_wait_event);
+    if (ret)
+        KeClearEvent(vci->vci_ioreq_wait_event);
+    return ret;
 }
 
 void
@@ -1756,6 +1758,8 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
         switch (vci->vci_shared.vci_run_mode) {
         case VCI_RUN_MODE_PROCESS_IOREQ:
             EVENT_WAIT(vci->vci_ioreq_wait_event, 1, 0);
+            /* since timeout == 0, EVENT_WAIT only continues here on SUCCESS */
+            KeClearEvent(vci->vci_ioreq_wait_event);
             break;
         case VCI_RUN_MODE_PREEMPT:
             /* nothing */
