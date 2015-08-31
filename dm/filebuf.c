@@ -83,13 +83,13 @@ filebuf_open(const char *fn, const char *mode)
 #endif  /* _WIN32 */
 
 #ifdef _WIN32
-    if (fb->file == INVALID_HANDLE_VALUE)
-#else  /* _WIN32 */
-    if (fb->file < 0)
-#endif  /* _WIN32 */
-    {
+    if (fb->file == INVALID_HANDLE_VALUE) {
         _set_errno(GetLastError());
         Wwarn("%s: open %s failed", __FUNCTION__, fn);
+#else  /* _WIN32 */
+    if (fb->file < 0) {
+        warn("%s: open %s failed", __FUNCTION__, fn);
+#endif  /* _WIN32 */
         align_free(fb->buffer);
         free(fb);
         fb = NULL;
