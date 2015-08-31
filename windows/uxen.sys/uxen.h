@@ -371,7 +371,7 @@ int hostdrv_except_handler(char *, ...);
 void set_host_preemption(uint64_t disable);
 void uxen_update_unixtime_generation(void);
 extern KEVENT uxen_idle_thread_event;
-#define uxen_signal_idle_thread() KeSetEvent(&uxen_idle_thread_event, 0, FALSE);
+#define uxen_signal_idle_thread() KeSetEvent(&uxen_idle_thread_event, 0, FALSE)
 int suspend_block(preemption_t i, uint32_t pages, uint32_t *reserve_increase);
 void uxen_op_init_free_allocs(void);
 int uxen_op_init(struct fd_assoc *, struct uxen_init_desc *, uint32_t,

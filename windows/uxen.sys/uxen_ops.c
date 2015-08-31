@@ -599,7 +599,8 @@ uxen_update_unixtime_generation(void)
 
     if (uxen_info) {
         uxen_info->ui_unixtime_generation++;
-        uxen_signal_idle_thread();
+        if (uxen_idle_thread)
+            uxen_signal_idle_thread();
     }
 }
 
