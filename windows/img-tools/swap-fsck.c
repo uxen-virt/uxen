@@ -110,7 +110,7 @@ int main(int argc, char **argv)
                 printf("found wrong version %"PRIx64"\n", map[0]);
                 exit(1);
             }
-                
+
             if (sizes[0] < 4096) {
                 unsz = LZ4_decompress_fast((const char*)out, page,
                                            DUBTREE_BLOCK_SIZE);
