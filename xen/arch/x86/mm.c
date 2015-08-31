@@ -967,7 +967,7 @@ get_page_from_l1e(
         {
             if ( mfn != (PADDR_MASK >> PAGE_SHIFT) ) /* INVALID_MFN? */
             {
-                MEM_LOG("Non-privileged (%u) attempt to map I/O space %08lx", 
+                MEM_LOG("Non-privileged (vm%u) attempt to map I/O space %08lx",
                         pg_owner->domain_id, mfn);
                 return -EPERM;
             }
@@ -978,7 +978,7 @@ get_page_from_l1e(
              !rangeset_contains_singleton(mmio_ro_ranges, mfn) )
             return 0;
         dprintk(XENLOG_G_WARNING,
-                "d%d: Forcing read-only access to MFN %lx\n",
+                "vm%u: Forcing read-only access to MFN %lx\n",
                 l1e_owner->domain_id, mfn);
         return 1;
     }
@@ -1041,7 +1041,7 @@ get_page_from_l1e(
             put_page(page);
 
             MEM_LOG("Error updating mappings for mfn %lx (pfn %lx,"
-                    " from L1 entry %" PRIpte ") for %d",
+                    " from L1 entry %" PRIpte ") for vm%u",
                     mfn, get_gpfn_from_mfn(mfn),
                     l1e_get_intpte(l1e), l1e_owner->domain_id);
             return err;
@@ -1052,7 +1052,7 @@ get_page_from_l1e(
 
  could_not_pin:
     MEM_LOG("Error getting mfn %lx (pfn %lx) from L1 entry %" PRIpte
-            " for l1e_owner=%d, pg_owner=%d",
+            " for l1e_owner=vm%u, pg_owner=vm%u",
             mfn, get_gpfn_from_mfn(mfn),
             l1e_get_intpte(l1e), l1e_owner->domain_id, pg_owner->domain_id);
     if ( real_pg_owner != NULL )
@@ -2306,8 +2306,9 @@ _get_page_fast(struct page_info *page, struct domain *domain)
         return 0;
     owner = page_get_owner(page);
     if (unlikely(domain != owner)) {
-        printk("%s: page %lx owner is %p/%d, expected %p/%d\n", __FUNCTION__,
-               page_to_mfn(page), owner, owner ? owner->domain_id : -1,
+        printk("%s: page %lx owner is %p/vm%d, expected %p/vm%d\n",
+               __FUNCTION__, page_to_mfn(page),
+               owner, owner ? owner->domain_id : -1,
                domain, domain ? domain->domain_id : -1);
         DEBUG();
     }
@@ -3137,7 +3138,7 @@ static struct domain *get_pg_owner(domid_t domid)
     default:
         if ( (pg_owner = rcu_lock_domain_by_id(domid)) == NULL )
         {
-            MEM_LOG("Unknown domain '%u'", domid);
+            MEM_LOG("Unknown vm%u", domid);
             break;
         }
         if ( !IS_PRIV_FOR(curr, pg_owner) )
@@ -4503,7 +4504,7 @@ int donate_page(
 
  fail:
     spin_unlock(&d->page_alloc_lock);
-    MEM_LOG("Bad donate %p: ed=%p(%u), sd=%p, caf=%08lx, taf=%" PRtype_info,
+    MEM_LOG("Bad donate %p: ed=%p(vm%u), sd=%p, caf=%08lx, taf=%" PRtype_info,
             (void *)page_to_mfn(page), d, d->domain_id,
             page_get_owner(page), page->count_info, page->u.inuse.type_info);
     return -1;
@@ -4552,7 +4553,7 @@ int steal_page(
 
  fail:
     spin_unlock(&d->page_alloc_lock);
-    MEM_LOG("Bad page %p: ed=%p(%u), sd=%p, caf=%08lx, taf=%" PRtype_info,
+    MEM_LOG("Bad page %p: ed=%p(vm%u), sd=%p, caf=%08lx, taf=%" PRtype_info,
             (void *)page_to_mfn(page), d, d->domain_id,
             page_get_owner(page), page->count_info, page->u.inuse.type_info);
     return -1;
@@ -5047,7 +5048,7 @@ static int xenmem_add_to_physmap_once(
             }
             if (!get_page_from_pagenr(mfn, d)) {
                 gdprintk(XENLOG_ERR, "unexpected owner for gpfn %"PRI_xen_pfn
-                         ": host mfn %lx has owner %d\n",
+                         ": host mfn %lx has owner vm%u\n",
                          xatp->gpfn, mfn,
                          page_get_owner(__mfn_to_page(mfn))->domain_id);
             } else {
@@ -5082,7 +5083,7 @@ static int xenmem_add_to_physmap_once(
             page = __mfn_to_page(prev_mfn);
             if (!get_page(page, d)) {
                 gdprintk(XENLOG_ERR, "unexpected owner for gpfn %"PRI_xen_pfn
-                         " unhook: host mfn %lx owner %d\n",
+                         " unhook: host mfn %lx owner vm%d\n",
                          xatp->gpfn, prev_mfn,
                          !page_get_owner(page) ? -1 :
                          page_get_owner(page)->domain_id);

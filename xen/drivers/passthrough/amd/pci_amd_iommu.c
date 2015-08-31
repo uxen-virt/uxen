@@ -344,7 +344,7 @@ static int reassign_device( struct domain *source, struct domain *target,
     if ( !iommu )
     {
         AMD_IOMMU_DEBUG("Fail to find iommu."
-                        " %04x:%02x:%x02.%x cannot be assigned to dom%d\n",
+                        " %04x:%02x:%x02.%x cannot be assigned to vm%u\n",
                         seg, bus, PCI_SLOT(devfn), PCI_FUNC(devfn),
                         target->domain_id);
         return -ENODEV;
@@ -361,7 +361,7 @@ static int reassign_device( struct domain *source, struct domain *target,
         allocate_domain_resources(t);
 
     amd_iommu_setup_domain_device(target, iommu, bdf);
-    AMD_IOMMU_DEBUG("Re-assign %04x:%02x:%02x.%u from dom%d to dom%d\n",
+    AMD_IOMMU_DEBUG("Re-assign %04x:%02x:%02x.%u from vm%u to vm%u\n",
                     seg, bus, PCI_SLOT(devfn), PCI_FUNC(devfn),
                     source->domain_id, target->domain_id);
 
@@ -466,7 +466,7 @@ static int amd_iommu_add_device(struct pci_dev *pdev)
     if ( !iommu )
     {
         AMD_IOMMU_DEBUG("Fail to find iommu."
-                        " %04x:%02x:%02x.%u cannot be assigned to dom%d\n",
+                        " %04x:%02x:%02x.%u cannot be assigned to vm%u\n",
                         pdev->seg, pdev->bus, PCI_SLOT(pdev->devfn),
                         PCI_FUNC(pdev->devfn), pdev->domain->domain_id);
         return -ENODEV;
@@ -488,7 +488,7 @@ static int amd_iommu_remove_device(struct pci_dev *pdev)
     if ( !iommu )
     {
         AMD_IOMMU_DEBUG("Fail to find iommu."
-                        " %04x:%02x:%02x.%u cannot be removed from dom%d\n",
+                        " %04x:%02x:%02x.%u cannot be removed from vm%u\n",
                         pdev->seg, pdev->bus, PCI_SLOT(pdev->devfn),
                         PCI_FUNC(pdev->devfn), pdev->domain->domain_id);
         return -ENODEV;

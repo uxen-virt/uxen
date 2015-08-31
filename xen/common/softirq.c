@@ -71,6 +71,8 @@ static void __do_softirq(unsigned long ignore_mask)
         if ((cpu || !is_idle_vcpu(current)) && i != RCU_SOFTIRQ)
             WARN_ONCE();
         switch (i) {
+        case SCHEDULE_SOFTIRQ:
+            break;
         case RCU_SOFTIRQ:
             break;
         case TIMER_SOFTIRQ:
@@ -80,8 +82,9 @@ static void __do_softirq(unsigned long ignore_mask)
             perfc_incr(do_TIME_CALIBRATE_SOFTIRQ);
             break;
         default:
-            printk("softirq %d on cpu %d => %p\n", i, cpu,
-                   softirq_handlers[i]);
+            printk("vm%u.%u softirq %d on cpu %d => %S\n",
+                   current->domain->domain_id, current->vcpu_id, i, cpu,
+                   (printk_symbol)softirq_handlers[i]);
         }
         ASSERT(softirq_handlers[i]);
 #endif  /* __UXEN__ */

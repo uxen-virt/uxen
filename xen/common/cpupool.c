@@ -379,7 +379,7 @@ int cpupool_add_domain(struct domain *d, int poolid)
         rc = 0;
     }
     spin_unlock(&cpupool_lock);
-    cpupool_dprintk("cpupool_add_domain(dom=%d,pool=%d) n_dom %d rc %d\n",
+    cpupool_dprintk("cpupool_add_domain(vm%u,pool=%d) n_dom %d rc %d\n",
                     d->domain_id, poolid, n_dom, rc);
     return rc;
 #else   /* __UXEN__ */
@@ -406,7 +406,7 @@ void cpupool_rm_domain(struct domain *d)
     n_dom = d->cpupool->n_dom;
     d->cpupool = NULL;
     spin_unlock(&cpupool_lock);
-    cpupool_dprintk("cpupool_rm_domain(dom=%d,pool=%d) n_dom %d\n",
+    cpupool_dprintk("cpupool_rm_domain(vm%u,pool=%d) n_dom %d\n",
                     d->domain_id, cpupool_id, n_dom);
     return;
 #else   /* __UXEN__ */
@@ -565,7 +565,7 @@ int cpupool_do_sysctl(struct xen_sysctl_cpupool_op *op)
             rcu_unlock_domain(d);
             break;
         }
-        cpupool_dprintk("cpupool move_domain(dom=%d)->pool=%d\n",
+        cpupool_dprintk("cpupool move_domain(vm%u)->pool=%d\n",
                         d->domain_id, op->cpupool_id);
         ret = -ENOENT;
         spin_lock(&cpupool_lock);
@@ -580,7 +580,7 @@ int cpupool_do_sysctl(struct xen_sysctl_cpupool_op *op)
                 c->n_dom++;
         }
         spin_unlock(&cpupool_lock);
-        cpupool_dprintk("cpupool move_domain(dom=%d)->pool=%d ret %d\n",
+        cpupool_dprintk("cpupool move_domain(vm%u)->pool=%d ret %d\n",
                         d->domain_id, op->cpupool_id, ret);
         rcu_unlock_domain(d);
     }

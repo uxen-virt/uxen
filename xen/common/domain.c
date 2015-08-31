@@ -477,7 +477,7 @@ domain_create(domid_t dom, unsigned int flags, uint32_t ssidref,
 
     if ((dom > 0) && (dom < DOMID_FIRST_RESERVED)) {
         if ( !is_free_domid(dom) ) {
-            printk("domain %d: %" PRIuuid " id already in use\n",
+            printk("vm%u: %" PRIuuid " id already in use\n",
                    dom, PRIuuid_arg(uuid));
             return -EINVAL;
         }
@@ -504,7 +504,7 @@ domain_create(domid_t dom, unsigned int flags, uint32_t ssidref,
     /* check if requested handle is already used */
     d_uuid = rcu_lock_domain_by_uuid(uuid);
     if (d_uuid) {
-        printk("domain %d: %" PRIuuid " handle already in use\n",
+        printk("vm%u: %" PRIuuid " handle already in use\n",
                dom, PRIuuid_arg(uuid));
         spin_unlock(&domlist_update_lock);
         rcu_unlock_domain(d_uuid);
@@ -843,7 +843,7 @@ void __domain_crash(struct domain *d)
     }
     else if ( d == current->domain )
     {
-        printk("Domain %d (vcpu#%d) crashed on cpu#%d:\n",
+        printk("vm%u.%u crashed on cpu#%d:\n",
                d->domain_id, current->vcpu_id, smp_processor_id());
         show_execution_state(guest_cpu_user_regs());
 #ifdef run_in_exception_handler
@@ -852,7 +852,7 @@ void __domain_crash(struct domain *d)
     }
     else
     {
-        printk("Domain %d reported crashed by domain %d on cpu#%d:\n",
+        printk("vm%u reported crashed by vm%u on cpu#%d:\n",
                d->domain_id, current->domain->domain_id, smp_processor_id());
     }
 

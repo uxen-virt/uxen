@@ -2056,7 +2056,7 @@ static void dump_softtsc(unsigned char key)
     {
         if ( d->domain_id == 0 && d->arch.tsc_mode == TSC_MODE_DEFAULT )
             continue;
-        printk("dom%u%s: mode=%d",d->domain_id,
+        printk("vm%u%s: mode=%d",d->domain_id,
                 is_hvm_domain(d) ? "(hvm)" : "", d->arch.tsc_mode);
         if ( d->arch.vtsc_offset )
             printk(",ofs=0x%"PRIx64"",d->arch.vtsc_offset);

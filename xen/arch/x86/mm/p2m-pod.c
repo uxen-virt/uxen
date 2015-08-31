@@ -124,9 +124,9 @@ p2m_pod_cache_add(struct p2m_domain *p2m,
         od = page_get_owner(p);
         if(od != d)
         {
-            printk("%s: mfn %lx expected owner d%d, got owner d%d!\n",
+            printk("%s: mfn %lx expected owner vm%u, got owner vm%d!\n",
                    __func__, mfn_x(mfn), d->domain_id,
-                   od?od->domain_id:-1);
+                   od ? od->domain_id : -1);
             return -1;
         }
     }
@@ -333,7 +333,7 @@ p2m_pod_set_cache_target(struct p2m_domain *p2m, unsigned long pod_target, int p
             /* Copied from common/memory.c:guest_remove_page() */
             if ( unlikely(!get_page(page+i, d)) )
             {
-                gdprintk(XENLOG_INFO, "Bad page free for domain %u\n", d->domain_id);
+                gdprintk(XENLOG_INFO, "Bad page free for vm%u\n", d->domain_id);
                 ret = -EINVAL;
                 goto out;
             }
@@ -2001,14 +2001,14 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
     ct += NOW();
     p2m_unlock(np2m);
 
-    printk("%s: domain %d took %"PRIu64".%06"PRIu64"ms\n",
+    printk("%s: vm%u took %"PRIu64".%06"PRIu64"ms\n",
            __FUNCTION__, nd->domain_id, ct / 1000000UL, ct % 1000000UL);
-    printk("domain %d: pod_pages=%d zero_shared=%d tmpl_shared=%d\n",
+    printk("vm%u: pod_pages=%d zero_shared=%d tmpl_shared=%d\n",
            nd->domain_id, atomic_read(&nd->pod_pages),
            atomic_read(&nd->zero_shared_pages),
            atomic_read(&nd->tmpl_shared_pages));
     if (atomic_read(&nd->clone.l1_pod_pages))
-        printk("domain %d: l1_pod_pages=%d\n",
+        printk("vm%u: l1_pod_pages=%d\n",
                nd->domain_id, atomic_read(&nd->clone.l1_pod_pages));
     return ret;
 }
@@ -2060,7 +2060,7 @@ p2m_shared_teardown(struct p2m_domain *p2m)
     if (l1table)
         unmap_domain_page(l1table);
 
-    printk("%s: domain %d dropped %d template and %d own page references\n",
+    printk("%s: vm%u dropped %d template and %d own page references\n",
            __FUNCTION__, d->domain_id, shared_count, own_count);
     return 1;
 }
@@ -2083,7 +2083,7 @@ p2m_clear_gpfn_from_mapcache(struct p2m_domain *p2m, unsigned long gfn,
     case -1:
         if (!test_and_clear_bit(_PGC_mapcache, &page->count_info)) {
             gdprintk(XENLOG_INFO,
-                     "Bad mapcache clear for page %lx in domain %u\n",
+                     "Bad mapcache clear for page %lx in vm%u\n",
                      gfn, d->domain_id);
             break;
         }
@@ -2208,7 +2208,7 @@ guest_physmap_mark_populate_on_demand(struct domain *d, unsigned long gfn,
             ASSERT(mfn_valid(omfn));
 
             if (order) {
-                dprintk(XENLOG_WARNING, "%s: dom %d: unsupported order != 0\n",
+                dprintk(XENLOG_WARNING, "%s: vm%u: unsupported order != 0\n",
                     __func__, d->domain_id);
                 rc = -EINVAL;
                 goto out;
@@ -2228,9 +2228,9 @@ guest_physmap_mark_populate_on_demand(struct domain *d, unsigned long gfn,
             /* set page, to be freed after updating p2m entry */
             page = mfn_to_page(omfn);
             if (unlikely(!get_page(page, d))) {
-                dprintk(XENLOG_WARNING, "%s: dom %d: could not get page"
-                        " gpfn=%lx mfn=%lx caf=%08lx owner=%d\n", __FUNCTION__,
-                        d->domain_id, gfn,
+                dprintk(XENLOG_WARNING, "%s: vm%u: could not get page"
+                        " gpfn=%lx mfn=%lx caf=%08lx owner=vm%d\n",
+                        __FUNCTION__, d->domain_id, gfn,
                         __page_to_mfn(page), page->count_info,
                         page_get_owner(page) ? page_get_owner(page)->domain_id :
                         -1);
@@ -2413,14 +2413,14 @@ p2m_pod_compress_template_work(void *_d)
     p2m->compress_gpfn = gpfn;
     ct += NOW();
     if (0)
-        printk("%s: dom %d: comp unused %d used %d -- shared %d"
+        printk("%s: vm%u: comp unused %d used %d -- shared %d"
                " -- compressed %d -- took %"PRIu64".%"PRIu64"ms\n",
                __FUNCTION__, d->domain_id,
                nr_comp_unused, nr_comp_used, nr_shared, nr_compressed,
                ct / 1000000UL, ct % 1000000UL);
     if (p2m->compress_gpfn > p2m->max_mapped_pfn) {
         p2m->compress_gpfn = 0;
-        printk("%s: dom %d: comp_pages=%d comp_pdata=%d\n",
+        printk("%s: vm%u: comp_pages=%d comp_pdata=%d\n",
                __FUNCTION__, d->domain_id,
                atomic_read(&d->template.compressed_pages),
                atomic_read(&d->template.compressed_pdata));

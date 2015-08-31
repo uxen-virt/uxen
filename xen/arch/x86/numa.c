@@ -399,7 +399,7 @@ static void dump_numa(unsigned char key)
 	printk("Memory location of each domain:\n");
 	for_each_domain(d)
 	{
-		printk("Domain %u (total: %u):\n", d->domain_id, d->tot_pages);
+		printk("vm%u (total: %u):\n", d->domain_id, d->tot_pages);
 
 		for_each_online_node(i)
 			page_num_node[i] = 0;

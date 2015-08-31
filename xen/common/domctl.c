@@ -316,7 +316,7 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
             return -EPERM;
         if (!IS_PRIV_FOR(current->domain, d)) {
             rcu_unlock_domain(d);
-            gdprintk(XENLOG_ERR, "%s: domctl %d on dom %d: access denied\n",
+            gdprintk(XENLOG_ERR, "%s: domctl %d on vm%u: access denied\n",
                      __FUNCTION__, op->cmd, op->domain);
             return -EPERM;
         }

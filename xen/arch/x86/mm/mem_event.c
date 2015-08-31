@@ -258,7 +258,7 @@ int mem_event_domctl(struct domain *d, xen_domctl_mem_event_op_t *mec,
 
     if ( unlikely(d->is_dying) )
     {
-        gdprintk(XENLOG_INFO, "Ignoring memory paging op on dying domain %u\n",
+        gdprintk(XENLOG_INFO, "Ignoring memory paging op on dying vm%u\n",
                  d->domain_id);
         return 0;
     }
@@ -266,7 +266,7 @@ int mem_event_domctl(struct domain *d, xen_domctl_mem_event_op_t *mec,
     if ( unlikely(d->vcpu == NULL) || unlikely(d->vcpu[0] == NULL) )
     {
         gdprintk(XENLOG_INFO,
-                 "Memory paging op on a domain (%u) with no vcpus\n",
+                 "Memory paging op on a vm%u with no vcpus\n",
                  d->domain_id);
         return -EINVAL;
     }

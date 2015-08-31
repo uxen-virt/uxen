@@ -172,7 +172,8 @@ void dump_hypercall(struct domain *d)
 
 void dump_apic_assist(struct vcpu *v)
 {
-    gdprintk(XENLOG_INFO, "APIC_ASSIST[%d]:\n", v->vcpu_id);
+    gdprintk(XENLOG_INFO, "APIC_ASSIST[vm%u.%u]:\n", v->domain->domain_id,
+             v->vcpu_id);
     gdprintk(XENLOG_INFO, "\tenabled: %x\n",
             v->arch.hvm_vcpu.viridian.apic_assist.fields.enabled);
     gdprintk(XENLOG_INFO, "\tpfn: %lx\n",
@@ -348,8 +349,9 @@ int wrmsr_viridian_regs(uint32_t idx, uint64_t val)
 
     case VIRIDIAN_MSR_CRASH_P0 ... VIRIDIAN_MSR_CRASH_P4:
         perfc_incr(mshv_wrmsr_crash_regs);
-        printk(XENLOG_G_INFO "HVM%d: viridian-crash-notification: p%d = %"PRIx64"\n",
-               current_domain_id(), (idx - VIRIDIAN_MSR_CRASH_P0), val);
+        printk(XENLOG_G_INFO "vm%u: viridian-crash-notification: p%d = %"
+               PRIx64"\n", current_domain_id(),
+               (idx - VIRIDIAN_MSR_CRASH_P0), val);
         break;
 
     default:
@@ -567,7 +569,8 @@ static int viridian_load_vcpu_ctxt(struct domain *d, hvm_domain_context_t *h)
     vcpuid = hvm_load_instance(h);
     if ( vcpuid >= d->max_vcpus || (v = d->vcpu[vcpuid]) == NULL )
     {
-        gdprintk(XENLOG_ERR, "HVM restore: domain has no vcpu %u\n", vcpuid);
+        gdprintk(XENLOG_ERR, "HVM restore: no vcpu vm%u.%u\n", d->domain_id,
+                 vcpuid);
         return -EINVAL;
     }
 

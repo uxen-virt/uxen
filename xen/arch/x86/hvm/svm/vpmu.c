@@ -327,8 +327,8 @@ static void amd_vpmu_initialise(struct vcpu *v)
     if ( !ctxt )
     {
         gdprintk(XENLOG_WARNING, "Insufficient memory for PMU, "
-            " PMU feature is unavailable on domain %d vcpu %d.\n",
-            v->vcpu_id, v->domain->domain_id);
+            " PMU feature is unavailable on vm%u.%u.\n",
+            v->domain->domain_id, v->vcpu_id);
         return;
     }
 

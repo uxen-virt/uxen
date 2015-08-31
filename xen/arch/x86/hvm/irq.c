@@ -293,7 +293,7 @@ void hvm_set_pci_link_route(struct domain *d, u8 link, u8 isa_irq)
  out:
     spin_unlock(&d->arch.hvm_domain.irq_lock);
 
-    dprintk(XENLOG_G_INFO, "Dom%u PCI link %u changed %u -> %u\n",
+    dprintk(XENLOG_G_INFO, "vm%u PCI link %u changed %u -> %u\n",
             d->domain_id, link, old_isa_irq, isa_irq);
 }
 
@@ -376,7 +376,7 @@ void hvm_set_callback_via(struct domain *d, uint64_t via)
 
     spin_unlock(&d->arch.hvm_domain.irq_lock);
 
-    dprintk(XENLOG_G_INFO, "Dom%u callback via changed to ", d->domain_id);
+    dprintk(XENLOG_G_INFO, "vm%u callback via changed to ", d->domain_id);
     switch ( via_type )
     {
     case HVMIRQ_callback_gsi:

@@ -344,7 +344,7 @@ int deassign_device(struct domain *d, u16 seg, u8 bus, u8 devfn)
     if ( pdev->domain != d )
     {
         dprintk(XENLOG_ERR VTDPREFIX,
-                "d%d: deassign a device not owned\n", d->domain_id);
+                "vm%u: deassign a device not owned\n", d->domain_id);
         return -EINVAL;
     }
 
@@ -352,7 +352,7 @@ int deassign_device(struct domain *d, u16 seg, u8 bus, u8 devfn)
     if ( ret )
     {
         dprintk(XENLOG_ERR VTDPREFIX,
-                "d%d: Deassign device (%04x:%02x:%02x.%u) failed!\n",
+                "vm%u: Deassign device (%04x:%02x:%02x.%u) failed!\n",
                 d->domain_id, seg, bus, PCI_SLOT(devfn), PCI_FUNC(devfn));
         return ret;
     }

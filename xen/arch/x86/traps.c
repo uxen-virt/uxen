@@ -410,7 +410,7 @@ void show_execution_state(struct cpu_user_regs *regs)
 
 void vcpu_show_execution_state(struct vcpu *v)
 {
-    printk("*** Dumping Dom%d vcpu#%d state: ***\n",
+    printk("*** Dumping vm%u.%u state: ***\n",
            v->domain->domain_id, v->vcpu_id);
 
     if ( v == current )
@@ -540,8 +540,8 @@ static void do_guest_trap(
 
     if ( unlikely(null_trap_bounce(v, tb)) )
         gdprintk(XENLOG_WARNING, "Unhandled %s fault/trap [#%d] "
-                 "on VCPU %d [ec=%04x]\n",
-                 trapstr(trapnr), trapnr, v->vcpu_id, regs->error_code);
+                 "on VCPU vm%u.%u [ec=%04x]\n", trapstr(trapnr), trapnr,
+                 v->domain->domain_id, v->vcpu_id, regs->error_code);
 #else  /* __UXEN__ */
     debugger_trap_fatal(trapnr, (struct cpu_user_regs *)regs);
     WARN_ONCE();
@@ -1176,7 +1176,7 @@ asmlinkage_sysv void do_machine_check(struct cpu_user_regs *regs)
 static void reserved_bit_page_fault(
     unsigned long addr, struct cpu_user_regs *regs)
 {
-    printk("d%d:v%d: reserved bit in page table (ec=%04X)\n",
+    printk("vm%u.%u: reserved bit in page table (ec=%04X)\n",
            current->domain->domain_id, current->vcpu_id, regs->error_code);
     show_page_walk(addr);
     show_execution_state(regs);
@@ -1207,7 +1207,7 @@ void propagate_page_fault(unsigned long addr, u16 error_code)
         tb->flags |= TBF_INTERRUPT;
     if ( unlikely(null_trap_bounce(v, tb)) )
     {
-        printk("d%d:v%d: unhandled page fault (ec=%04X)\n",
+        printk("vm%u.%u: unhandled page fault (ec=%04X)\n",
                v->domain->domain_id, v->vcpu_id, error_code);
         show_page_walk(addr);
     }

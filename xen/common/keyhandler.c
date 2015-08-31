@@ -124,7 +124,7 @@ void dump_execstate(struct cpu_user_regs *regs)
 
     if ( !is_idle_vcpu(current) )
     {
-        printk("*** Dumping CPU%u guest state (d%d:v%d): ***\n",
+        printk("*** Dumping CPU%u guest state (vm%u.%u): ***\n",
                smp_processor_id(), current->domain->domain_id,
                current->vcpu_id);
         show_execution_state(guest_cpu_user_regs());
@@ -299,7 +299,7 @@ static void dump_domains(unsigned char key)
 
         atomic_read_domain_handle(&d->handle_atomic, (uint128_t *)handle);
 
-        printk("General information for domain %u:\n", d->domain_id);
+        printk("General information for vm%u:\n", d->domain_id);
         cpuset_print(tmpstr, sizeof(tmpstr), d->domain_dirty_cpumask);
         printk("    refcnt=%d dying=%d dirty_cpus=%s\n",
                atomic_read(&d->refcnt), d->is_dying, tmpstr);
@@ -344,13 +344,13 @@ static void dump_domains(unsigned char key)
 
         dump_pageframe_info(d);
                
-        printk("VCPU information and callbacks for domain %u:\n",
+        printk("VCPU information and callbacks for vm%u:\n",
                d->domain_id);
         for_each_vcpu ( d, v )
         {
-            printk("    VCPU%d: CPU%d [has=%c] flags=%lx poll=%d "
+            printk("    VCPU:vm%u.%u: CPU%d [has=%c] flags=%lx poll=%d "
                    "upcall_pend = %02x, upcall_mask = %02x ",
-                   v->vcpu_id, v->processor,
+                   d->domain_id, v->vcpu_id, v->processor,
                    v->is_running ? 'T':'F',
                    v->pause_flags, v->poll_evtchn,
                    vcpu_info(v, evtchn_upcall_pending),
@@ -376,7 +376,7 @@ static void dump_domains(unsigned char key)
     {
         for_each_vcpu ( d, v )
         {
-            printk("Notifying guest %d:%d (virq %d, port %d, stat %d/%d/%d)\n",
+            printk("Notifying vm%u.%u (virq %d, port %d, stat %d/%d/%d)\n",
                    d->domain_id, v->vcpu_id,
                    VIRQ_DEBUG, v->virq_to_evtchn[VIRQ_DEBUG],
                    test_bit(v->virq_to_evtchn[VIRQ_DEBUG], 

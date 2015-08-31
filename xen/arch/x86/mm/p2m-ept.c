@@ -975,8 +975,8 @@ void ept_walk_table(struct domain *d, unsigned long gfn)
 
     perfc_incr(pc11);
 
-    gdprintk(XENLOG_ERR, "Walking EPT tables for domain %d gfn %lx\n",
-           d->domain_id, gfn);
+    gdprintk(XENLOG_ERR, "Walking EPT tables for vm%u gfn %lx\n",
+             d->domain_id, gfn);
 
     /* This pfn is higher than the highest the p2m map currently holds */
     if ( gfn > p2m->max_mapped_pfn )
@@ -1178,7 +1178,7 @@ static void ept_dump_p2m_table(unsigned char key)
             continue;
 
         p2m = p2m_get_hostp2m(d);
-        printk("\ndomain%d EPT p2m table: \n", d->domain_id);
+        printk("\nvm%u EPT p2m table: \n", d->domain_id);
 
         for ( gfn = 0; gfn <= p2m->max_mapped_pfn; gfn += (1 << order) )
         {

@@ -197,7 +197,7 @@ static void pt_process_missed_ticks(struct periodic_time *pt)
     if ( pending*pt->period >
          MAX_MISSED_TICKS_PERIOD_MS*1000000ULL ) {
         /* missed too much, give up and set exception in the guest */
-        printk("vpt: (%d,%d): dropping %"PRIu64" pending ticks\n",
+        printk("vpt: (vm%u.%u): dropping %"PRIu64" pending ticks\n",
                v->domain->domain_id, v->vcpu_id, pending);
 
         pt->pending_intr_nr++;
@@ -220,7 +220,8 @@ static void pt_process_missed_ticks(struct periodic_time *pt)
 
 #ifdef DEBUG_VPT
     if (pending >= 10)
-        printk("vpt: (%d,%d): pending %ld (%ldms) total time done %ldms total ticks done %ld pending intrs %d\n",
+        printk("vpt: (vm%u.%u): pending %ld (%ldms) total time done %ldms "
+               "total ticks done %ld pending intrs %d\n",
                v->domain->domain_id, v->vcpu_id,
                pending, pending*pt->period/1000000, pt->time_done/1000000,
                pt->time_done / pt->period, pt->pending_intr_nr);
@@ -435,7 +436,8 @@ void pt_intr_post(struct vcpu *v, struct hvm_intack intack)
     {
 #ifdef DEBUG_VPT
         if (pt->collapse_ticks)
-            printk("vpt: (%d,%d): collapsing ticks\n", v->domain->domain_id, v->vcpu_id);
+            printk("vpt: (vm%u.%u): collapsing ticks\n", v->domain->domain_id,
+                   v->vcpu_id);
 #endif
         pt->last_plt_gtime = hvm_get_guest_time(v);
         pt_process_missed_ticks(pt);
@@ -542,7 +544,7 @@ void update_periodic_time(struct periodic_time *pt, int irq, uint64_t period,
 
 #ifdef DEBUG_VPT
     if (pt->period)
-        printk("vpt: (%d,%d): update periodic time: period %"PRIu64"us"
+        printk("vpt: (vm%u.%u): update periodic time: period %"PRIu64"us"
                " schedule period %"PRIu64"us\n",
                v->domain->domain_id, v->vcpu_id,
                pt->period / 1000, pt->schedule_period / 1000);
@@ -603,7 +605,7 @@ void create_periodic_time(
 
 #ifdef DEBUG_VPT
     if (pt->period)
-        printk("vpt: (%d,%d): create periodic time: period %"PRIu64"us"
+        printk("vpt: (vm%u.%u): create periodic time: period %"PRIu64"us"
                " schedule period %"PRIu64"us delta %"PRIu64"us\n",
                v->domain->domain_id, v->vcpu_id,
                pt->period / 1000, pt->schedule_period / 1000,

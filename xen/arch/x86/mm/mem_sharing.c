@@ -214,7 +214,7 @@ static void mem_sharing_audit(void)
                 MEM_SHARING_DEBUG("mfn %lx not shared, but in the hash!\n",
                                    mfn_x(e->mfn));
             if(page_get_owner(pg) != dom_cow)
-                MEM_SHARING_DEBUG("mfn %lx shared, but wrong owner (%d)!\n",
+                MEM_SHARING_DEBUG("mfn %lx shared, but wrong owner (vm%u)!\n",
                                    mfn_x(e->mfn), 
                                    page_get_owner(pg)->domain_id);
             if(e->handle != pg->shr_handle)
@@ -232,18 +232,18 @@ static void mem_sharing_audit(void)
                 d = get_domain_by_id(g->domain);
                 if(d == NULL)
                 {
-                    MEM_SHARING_DEBUG("Unknow dom: %d, for PFN=%lx, MFN=%lx\n",
+                    MEM_SHARING_DEBUG("Unknow vm%u, for PFN=%lx, MFN=%lx\n",
                             g->domain, g->gfn, mfn_x(e->mfn));
                     continue;
                 }
                 mfn = get_gfn_unlocked(d, g->gfn, &t); 
                 if(mfn_x(mfn) != mfn_x(e->mfn))
-                    MEM_SHARING_DEBUG("Incorrect P2M for d=%d, PFN=%lx."
+                    MEM_SHARING_DEBUG("Incorrect P2M for vm%u, PFN=%lx."
                                       "Expecting MFN=%ld, got %ld\n",
                                       g->domain, g->gfn, mfn_x(e->mfn),
                                       mfn_x(mfn));
                 if(t != p2m_ram_shared)
-                    MEM_SHARING_DEBUG("Incorrect P2M type for d=%d, PFN=%lx."
+                    MEM_SHARING_DEBUG("Incorrect P2M type for vm%u, PFN=%lx."
                                       "Expecting t=%d, got %d\n",
                                       g->domain, g->gfn, mfn_x(e->mfn),
                                       p2m_ram_shared, t);
@@ -282,7 +282,7 @@ static struct page_info* mem_sharing_alloc_page(struct domain *d,
          * XXX old code that BUG()ed here; the callers now BUG()
          * XXX elewhere. */
         gdprintk(XENLOG_ERR, 
-                 "Failed alloc on unshare path for foreign (%d) lookup\n",
+                 "Failed alloc on unshare path for foreign (vm%u) lookup\n",
                  d->domain_id);
         return page;
     }
@@ -330,7 +330,7 @@ int mem_sharing_debug_mfn(unsigned long mfn)
     }
     page = mfn_to_page(_mfn(mfn));
 
-    printk("Debug page: MFN=%lx is ci=%lx, ti=%lx, owner_id=%d\n",
+    printk("Debug page: MFN=%lx is ci=%lx, ti=%lx, owner_id=vm%u\n",
             mfn_x(page_to_mfn(page)), 
             page->count_info, 
             page->u.inuse.type_info,
@@ -346,9 +346,7 @@ int mem_sharing_debug_gfn(struct domain *d, unsigned long gfn)
 
     mfn = get_gfn_unlocked(d, gfn, &p2mt);
 
-    printk("Debug for domain=%d, gfn=%lx, ", 
-            d->domain_id, 
-            gfn);
+    printk("Debug for vm%u, gfn=%lx, ", d->domain_id, gfn);
     return mem_sharing_debug_mfn(mfn_x(mfn));
 }
 
@@ -436,7 +434,7 @@ int mem_sharing_debug_gref(struct domain *d, grant_ref_t ref)
 
     if(d->grant_table->gt_version < 1)
     {
-        printk("Asked to debug [dom=%d,gref=%d], but not yet inited.\n",
+        printk("Asked to debug [vm%u,gref=%d], but not yet inited.\n",
                 d->domain_id, ref);
         return -1;
     }
@@ -447,8 +445,7 @@ int mem_sharing_debug_gref(struct domain *d, grant_ref_t ref)
     else 
         status = status_entry(d->grant_table, ref);
     
-    printk("==> Grant [dom=%d,ref=%d], status=%x. ", 
-            d->domain_id, ref, status);
+    printk("==> Grant [vm%u,ref=%d], status=%x. ", d->domain_id, ref, status);
 
     return mem_sharing_debug_gfn(d, gfn); 
 }

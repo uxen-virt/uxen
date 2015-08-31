@@ -611,7 +611,7 @@ int cpu_disable_scheduler(unsigned int cpu)
             if ( cpumask_empty(&online_affinity) &&
                  cpumask_test_cpu(cpu, v->cpu_affinity) )
             {
-                printk("Breaking vcpu affinity for domain %d vcpu %d\n",
+                printk("Breaking vcpu affinity for vm%u.%u\n",
                         v->domain->domain_id, v->vcpu_id);
                 cpumask_setall(v->cpu_affinity);
                 affinity_broken = 1;
@@ -795,7 +795,7 @@ static void domain_watchdog_timeout(void *data)
     if ( d->is_shutting_down || d->is_dying )
         return;
 
-    printk("Watchdog timer fired for domain %u\n", d->domain_id);
+    printk("Watchdog timer fired for vm%u\n", d->domain_id);
     domain_shutdown(d, SHUTDOWN_watchdog);
 }
 
@@ -998,7 +998,7 @@ ret_t do_sched_op(int cmd, XEN_GUEST_HANDLE(void) arg)
         }
 #endif  /* __UXEN__ */
 
-        printk("vm%d SCHEDOP_remote_shutdown reason %d\n",
+        printk("vm%u SCHEDOP_remote_shutdown reason %d\n",
                d->domain_id, (u8)sched_remote_shutdown.reason);
         domain_shutdown(d, (u8)sched_remote_shutdown.reason);
 
@@ -1058,8 +1058,8 @@ long do_set_timer_op(s_time_t timeout)
          * reasonable middleground of triggering a timer event in 100ms.
          */
         gdprintk(XENLOG_INFO,
-                 "Warning: huge timeout set by vcpu %d: %"PRIx64"\n",
-                 v->vcpu_id, (uint64_t)timeout);
+                 "Warning: huge timeout set by vm%u.%u: %"PRIx64"\n",
+                 v->domain->domain_id, v->vcpu_id, (uint64_t)timeout);
         set_timer(&v->singleshot_timer, NOW() + MILLISECS(100));
     }
     else

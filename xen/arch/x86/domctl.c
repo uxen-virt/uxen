@@ -1304,7 +1304,8 @@ long arch_do_domctl(
             break;
         }
         if ( !atomic_read(&v->pause_count) )
-            printk("WARN: Unpausing vcpu:%d which is not paused\n", v->vcpu_id);
+            printk("WARN: Unpausing vcpu:vm%u.%u which is not paused\n",
+                   d->domain_id, v->vcpu_id);
         vcpu_unpause(v);
         ret = 0;
         rcu_unlock_domain(d);
@@ -1529,7 +1530,7 @@ long arch_do_domctl(
 #ifndef __UXEN__
         ret = iommu_do_domctl(domctl, u_domctl);
 #else   /* __UXEN__ */
-        gdprintk(XENLOG_ERR, "unknown domctl %d on domain %d\n", domctl->cmd,
+        gdprintk(XENLOG_ERR, "unknown domctl %d on vm%u\n", domctl->cmd,
                  domctl->domain);
         DEBUG();
         ret = -ENOSYS;

@@ -244,7 +244,7 @@ v4v_ring_map_page (struct v4v_ring_info *ring_info, int i)
 
     if (!ring_info->mfns || !ring_info->mfn_mapping) {
         printk(XENLOG_ERR "%s: no mfns/mfn_mapping for ring_info at %p,"
-               " id: d:%d for %d p:%x len:%d mfns:%p[%d]\n", __FUNCTION__,
+               " id: vm%u for vm%d p:%x len:%d mfns:%p[%d]\n", __FUNCTION__,
                ring_info, ring_info->id.addr.domain, ring_info->id.partner,
                ring_info->id.addr.port, ring_info->len, ring_info->mfns,
                ring_info->npage);
@@ -351,7 +351,7 @@ v4v_memcpy_to_guest_ring (struct v4v_ring_info *ring_info, uint32_t offset,
     dst = v4v_ring_map_page (ring_info, page);
 
     if (!dst) {
-        printk(XENLOG_ERR "%s: ring (%d:%x %d) %p attempted to map page"
+        printk(XENLOG_ERR "%s: ring (vm%u:%x vm%d) %p attempted to map page"
                " %d of %d\n", __FUNCTION__, ring_info->id.addr.domain,
                ring_info->id.addr.port, ring_info->id.partner, ring_info,
                page, ring_info->npage);
@@ -716,7 +716,7 @@ v4v_ringbuf_insertv (struct domain *d,
             if (!iov_len)  {
                 printk(XENLOG_ERR "%s: iov.iov_len=0, iov.iov_base=%"PRIx64"\n",
                        __FUNCTION__, iov.iov_base);
-                printk(XENLOG_ERR "%s: ring_info->id = { %d -> %d:%x }\n",
+                printk(XENLOG_ERR "%s: ring_info->id = { vm%d -> vm%u:%x }\n",
                        __FUNCTION__, ring_info->id.partner,
                        ring_info->id.addr.domain, ring_info->id.addr.port);
                 guest_handle_add_offset (iovs, 1);
@@ -917,7 +917,7 @@ v4v_fill_ring_data (struct domain *src_d,
         return -EFAULT;
 
 #ifdef V4V_DEBUG
-    printk(XENLOG_ERR "%s: ent.ring.domain=%d, ent.ring.port=%d\n",
+    printk(XENLOG_ERR "%s: ent.ring.domain=vm%u, ent.ring.port=%d\n",
            __FUNCTION__, ent.ring.domain, ent.ring.port);
 #endif
 
@@ -1095,7 +1095,7 @@ v4v_find_ring_mfns (struct domain *d, struct v4v_ring_info *ring_info,
                  !get_page_and_type(mfn_to_page(mfn), d, PGT_writable_page) ) {
                 put_gfn(d, pfn); //XXX: JMM check surely don't put if mfn is invalid
 
-                printk(XENLOG_ERR "%s: vm%d passed invalid mfn %"PRI_mfn
+                printk(XENLOG_ERR "%s: vm%u passed invalid mfn %"PRI_mfn
                        " ring %p seq %d\n", __FUNCTION__, d->domain_id,
                        mfn, ring_info, i);
                 ret = -EINVAL;
@@ -1121,7 +1121,7 @@ v4v_find_ring_mfns (struct domain *d, struct v4v_ring_info *ring_info,
     if (!ret) {
         ring_info->npage = pfn_list.npage;
         ring_info->mfns = mfns;
-        printk(XENLOG_ERR "%s: vm%d ring (%d:%x %d) %p mfn_mapping %p\n",
+        printk(XENLOG_ERR "%s: vm%u ring (vm%u:%x vm%d) %p mfn_mapping %p\n",
                __FUNCTION__, current->domain->domain_id,
                ring_info->id.addr.domain, ring_info->id.addr.port,
                ring_info->id.partner, ring_info, mfn_mapping);
@@ -1151,8 +1151,8 @@ v4v_ring_find_info (struct domain *d, struct v4v_ring_id *id)
 #ifdef V4V_DEBUG
     printk(XENLOG_ERR "%s: d->v4v=%p, d->v4v->ring_hash[%d]=%p id=%p\n",
            __FUNCTION__, d->v4v, hash, d->v4v->ring_hash[hash].first, id);
-    printk(XENLOG_ERR "%s: id.addr.port=%d id.addr.domain=%d"
-           " id.addr.partner=%d\n", __FUNCTION__,
+    printk(XENLOG_ERR "%s: id.addr.port=%d id.addr.domain=vm%u"
+           " id.addr.partner=vm%d\n", __FUNCTION__,
            id->addr.port, id->addr.domain, id->partner);
 #endif
 
@@ -1340,9 +1340,9 @@ v4v_ring_create (struct domain *d, XEN_GUEST_HANDLE (v4v_ring_id_t) ring_id_hnd)
         hlist_add_head (&ring_info->node, &dst_d->v4v->ring_hash[hash]);
         write_unlock (&dst_d->v4v->lock);
 
-        printk(XENLOG_INFO "%s: vm%d creating placeholder ring (%d:%x %d)\n",
-               __FUNCTION__, current->domain->domain_id, ring_id.addr.domain,
-               ring_id.addr.port, ring_id.partner);
+        printk(XENLOG_INFO "%s: vm%u creating placeholder ring (vm%u:%x vm%d)"
+               "\n", __FUNCTION__, current->domain->domain_id,
+               ring_id.addr.domain, ring_id.addr.port, ring_id.partner);
 
         //We now require the caller retries the send
         //v4v_pending_queue (ring_info, d->domain_id, 1);
@@ -1448,7 +1448,7 @@ v4v_ring_add (struct domain *d, XEN_GUEST_HANDLE (v4v_ring_t) ring_hnd,
 
             write_unlock (&d->v4v->lock);
 
-            printk(XENLOG_INFO "%s: vm%d registering ring (%d:%x %d)\n",
+            printk(XENLOG_INFO "%s: vm%u registering ring (vm%u:%x vm%d)\n",
                    __FUNCTION__, current->domain->domain_id,
                    ring.id.addr.domain, ring.id.addr.port, ring.id.partner);
         } else {
@@ -1935,7 +1935,7 @@ do_v4v_op (int cmd, XEN_GUEST_HANDLE (void) arg1,
                 if (copy_from_guest (&dst, dst_hnd, 1))
                     goto out;
 
-                printk(XENLOG_ERR "%s: poking domain %d\n", __FUNCTION__,
+                printk(XENLOG_ERR "%s: poking vm%u\n", __FUNCTION__,
                        dst.domain);
 
                 rc = v4v_poke(&dst);
@@ -2056,7 +2056,7 @@ dump_domain_ring (struct domain *d, struct v4v_ring_info *ring_info)
     uint32_t rx_ptr;
 
 
-    printk(XENLOG_ERR "  ring: domid=%d port=0x%08x partner=%d npage=%d\n",
+    printk(XENLOG_ERR "  ring: domid=vm%u port=0x%08x partner=vm%d npage=%d\n",
            d->domain_id, ring_info->id.addr.port,
            ring_info->id.partner, ring_info->npage);
 
@@ -2077,7 +2077,7 @@ dump_domain_rings (struct domain *d)
 {
     int i;
 
-    printk(XENLOG_ERR " domain %d:\n", d->domain_id);
+    printk(XENLOG_ERR " vm%u:\n", d->domain_id);
 
     if (!d->v4v) return;
 

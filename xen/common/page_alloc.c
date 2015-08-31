@@ -1546,7 +1546,7 @@ int assign_pages(
 
     if ( unlikely(d->is_dying) )
     {
-        gdprintk(XENLOG_INFO, "Cannot assign page to domain%d -- dying.\n",
+        gdprintk(XENLOG_INFO, "Cannot assign page to vm%u -- dying.\n",
                 d->domain_id);
         goto fail;
     }
@@ -1558,7 +1558,7 @@ int assign_pages(
 #ifndef __UXEN__
             if ( !opt_tmem || order != 0 || d->tot_pages != d->max_pages )
 #endif  /* __UXEN__ */
-                gdprintk(XENLOG_INFO, "Over-allocation for domain %u: "
+                gdprintk(XENLOG_INFO, "Over-allocation for vm%u: "
                          "%u > %u\n", d->domain_id,
                          d->tot_pages + (1 << order), d->max_pages);
             goto fail;

@@ -676,13 +676,13 @@ static void intel_memerr_dhandler(
 
                 if ( !is_vmce_ready(bank, d) )
                 {
-                    printk("DOM%d not ready for vMCE\n", d->domain_id);
+                    printk("vm%u not ready for vMCE\n", d->domain_id);
                     goto vmce_failed;
                 }
 
                 if ( unmmap_broken_page(d, _mfn(mfn), gfn) )
                 {
-                    printk("Unmap broken memory %lx for DOM%d failed\n",
+                    printk("Unmap broken memory %lx for vm%u failed\n",
                             mfn, d->domain_id);
                     goto vmce_failed;
                 }
@@ -692,7 +692,7 @@ static void intel_memerr_dhandler(
                 if ( fill_vmsr_data(bank, d,
                       global->mc_gstatus) == -1 )
                 {
-                    mce_printk(MCE_QUIET, "Fill vMCE# data for DOM%d "
+                    mce_printk(MCE_QUIET, "Fill vMCE# data for vm%u "
                       "failed\n", bank->mc_domid);
                     goto vmce_failed;
                 }
@@ -700,7 +700,7 @@ static void intel_memerr_dhandler(
                 /* We will inject vMCE to DOMU*/
                 if ( inject_vmce(d) < 0 )
                 {
-                    mce_printk(MCE_QUIET, "inject vMCE to DOM%d"
+                    mce_printk(MCE_QUIET, "inject vMCE to vm%u"
                       " failed\n", d->domain_id);
                     goto vmce_failed;
                 }

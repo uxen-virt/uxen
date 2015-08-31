@@ -345,8 +345,7 @@ static int core2_vpmu_alloc_resource(struct vcpu *v)
     xfree(pmu_enable);
  out1:
     gdprintk(XENLOG_WARNING, "Insufficient memory for PMU, PMU feature is "
-             "unavailable on domain %d vcpu %d.\n",
-             v->vcpu_id, v->domain->domain_id);
+             "unavailable on vm%u.%u.\n", v->domain->domain_id, v->vcpu_id);
     return 0;
 }
 

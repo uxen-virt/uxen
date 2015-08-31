@@ -674,14 +674,14 @@ int do_xenoprof_op(int op, XEN_GUEST_HANDLE(void) arg)
     
     if ( (op < 0) || (op > XENOPROF_last_op) )
     {
-        printk("xenoprof: invalid operation %d for domain %d\n",
+        printk("xenoprof: invalid operation %d for vm%u\n",
                op, current->domain->domain_id);
         return -EINVAL;
     }
 
     if ( !NONPRIV_OP(op) && (current->domain != xenoprof_primary_profiler) )
     {
-        printk("xenoprof: dom %d denied privileged operation %d\n",
+        printk("xenoprof: vm%u denied privileged operation %d\n",
                current->domain->domain_id, op);
         return -EPERM;
     }
@@ -905,7 +905,7 @@ int do_xenoprof_op(int op, XEN_GUEST_HANDLE(void) arg)
     spin_unlock(&xenoprof_lock);
 
     if ( ret < 0 )
-        printk("xenoprof: operation %d failed for dom %d (status : %d)\n",
+        printk("xenoprof: operation %d failed for vm%u (status : %d)\n",
                op, current->domain->domain_id, ret);
 
     return ret;

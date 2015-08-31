@@ -323,13 +323,13 @@ int inject_vmce(struct domain *d)
     {
         if ( d->is_hvm )
         {
-            mce_printk(MCE_VERBOSE, "MCE: inject vMCE to HVM DOM %d\n",
+            mce_printk(MCE_VERBOSE, "MCE: inject vMCE to HVM vm%u\n",
                        d->domain_id);
             vcpu_kick(d->vcpu[0]);
         }
         else
         {
-            mce_printk(MCE_VERBOSE, "MCE: inject vMCE to PV DOM%d\n",
+            mce_printk(MCE_VERBOSE, "MCE: inject vMCE to PV vm%u\n",
                        d->domain_id);
             if ( guest_has_trap_callback(d, 0, TRAP_machine_check) )
             {
@@ -355,7 +355,7 @@ int inject_vmce(struct domain *d)
          * the mce node's consistency].
          */
         mce_printk(MCE_QUIET, "There's a pending vMCE waiting to be injected "
-                   " to this DOM%d!\n", d->domain_id);
+                   " to this vm%u!\n", d->domain_id);
         return -1;
     }
     return 0;
@@ -426,7 +426,7 @@ int fill_vmsr_data(struct mcinfo_bank *mc_bank, struct domain *d,
         spin_unlock(&dom_vmce(d)->lock);
 
         mce_printk(MCE_VERBOSE,"MCE: Found error @[BANK%d "
-                   "status %"PRIx64" addr %"PRIx64" domid %d]\n ",
+                   "status %"PRIx64" addr %"PRIx64" vm%u]\n ",
                    mc_bank->mc_bank, mc_bank->mc_status, mc_bank->mc_addr,
                    mc_bank->mc_domid);
     }

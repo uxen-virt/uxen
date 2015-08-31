@@ -754,7 +754,7 @@ dump_timer(struct timers *ts, struct timer *t, void *opaque)
 
     for_each_domain(d) {
         for_each_vcpu(d, v) {
-            printk("VCPU[%d.%d]:\n", d->domain_id, v->vcpu_id);
+            printk("VCPU[vm%u.%u]:\n", d->domain_id, v->vcpu_id);
             ts = &v->timers;
             spin_lock_irqsave(&ts->lock, flags);
             iterate_timers(ts, dump_timer, &now);
@@ -860,12 +860,12 @@ suspend_resume_timers(int suspend)
                 ts->suspend_time = now;
                 n = __suspend_timers(ts, now);
                 if (n)
-                    printk("suspended vcpu(%d:%d) timers; count=%d\n",
+                    printk("suspended vcpu(vm%u.%u) timers; count=%d\n",
                            d->domain_id, v->vcpu_id, n);
             } else {
                 n = __resume_timers(ts, now);
                 if (n)
-                    printk("resumed vcpu(%d:%d) timers; count=%d; "
+                    printk("resumed vcpu(vm%u.%u) timers; count=%d; "
                            "delta=%"PRId64"ms\n",
                            d->domain_id, v->vcpu_id, n,
                            (now - ts->suspend_time) / MILLISECS(1));

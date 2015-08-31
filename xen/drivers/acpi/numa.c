@@ -59,7 +59,7 @@ void __init acpi_table_print_srat_entry(struct acpi_subtable_header * header)
 				proximity_domain |= p->proximity_domain_hi[2] << 24;
 			}
 			ACPI_DEBUG_PRINT((ACPI_DB_INFO,
-					  "SRAT Processor (id[0x%02x] eid[0x%02x]) in proximity domain %d %s\n",
+					  "SRAT Processor (id[0x%02x] eid[0x%02x]) in proximity vm%u %s\n",
 					  p->apic_id, p->local_sapic_eid,
 					  proximity_domain,
 					  p->flags & ACPI_SRAT_CPU_ENABLED
@@ -78,7 +78,7 @@ void __init acpi_table_print_srat_entry(struct acpi_subtable_header * header)
 			if (srat_rev < 2)
 				proximity_domain &= 0xff;
 			ACPI_DEBUG_PRINT((ACPI_DB_INFO,
-					  "SRAT Memory (0x%016"PRIx64" length 0x%016"PRIx64" type 0x%x) in proximity domain %d %s%s\n",
+					  "SRAT Memory (0x%016"PRIx64" length 0x%016"PRIx64" type 0x%x) in proximity vm%u %s%s\n",
 					  p->base_address, p->length,
 					  p->memory_type, proximity_domain,
 					  p->flags & ACPI_SRAT_MEM_ENABLED
@@ -96,7 +96,7 @@ void __init acpi_table_print_srat_entry(struct acpi_subtable_header * header)
 			    (struct acpi_srat_x2apic_cpu_affinity *)header;
 			ACPI_DEBUG_PRINT((ACPI_DB_INFO,
 					  "SRAT Processor (x2apicid[0x%08x]) in"
-					  " proximity domain %d %s\n",
+					  " proximity vm%u %s\n",
 					  p->apic_id,
 					  p->proximity_domain,
 					  (p->flags & ACPI_SRAT_CPU_ENABLED) ?

@@ -220,8 +220,8 @@ static int vlapic_match_logical_addr(struct vlapic *vlapic, uint8_t mda)
             result = 1;
         break;
     default:
-        gdprintk(XENLOG_WARNING, "Bad DFR value for lapic of vcpu %d: %08x\n",
-                 vlapic_vcpu(vlapic)->vcpu_id,
+        gdprintk(XENLOG_WARNING, "Bad DFR value for lapic of vm%u.%u: %08x\n",
+                 vlapic_domain(vlapic)->domain_id, vlapic_vcpu(vlapic)->vcpu_id,
                  vlapic_get_reg(vlapic, APIC_DFR));
         break;
     }
@@ -1147,7 +1147,8 @@ static int lapic_load_hidden(struct domain *d, hvm_domain_context_t *h)
     vcpuid = hvm_load_instance(h); 
     if ( vcpuid >= d->max_vcpus || (v = d->vcpu[vcpuid]) == NULL )
     {
-        gdprintk(XENLOG_ERR, "HVM restore: domain has no vlapic %u\n", vcpuid);
+        gdprintk(XENLOG_ERR, "HVM restore: no vcpu vm%u.%u\n", d->domain_id,
+                 vcpuid);
         return -EINVAL;
     }
     s = vcpu_vlapic(v);
@@ -1170,7 +1171,8 @@ static int lapic_load_regs(struct domain *d, hvm_domain_context_t *h)
     vcpuid = hvm_load_instance(h); 
     if ( vcpuid >= d->max_vcpus || (v = d->vcpu[vcpuid]) == NULL )
     {
-        gdprintk(XENLOG_ERR, "HVM restore: domain has no vlapic %u\n", vcpuid);
+        gdprintk(XENLOG_ERR, "HVM restore: no vcpu vm%u.%u\n", d->domain_id,
+                 vcpuid);
         return -EINVAL;
     }
     s = vcpu_vlapic(v);
@@ -1193,7 +1195,7 @@ int vlapic_init(struct vcpu *v)
     struct vlapic *vlapic = vcpu_vlapic(v);
     unsigned int memflags = MEMF_node(vcpu_to_node(v));
 
-    HVM_DBG_LOG(DBG_LEVEL_VLAPIC, "%d", v->vcpu_id);
+    HVM_DBG_LOG(DBG_LEVEL_VLAPIC, "vm%u.%u", v->domain->domain_id, v->vcpu_id);
 
     vlapic->pt.source = PTSRC_lapic;
 
@@ -1207,7 +1209,7 @@ int vlapic_init(struct vcpu *v)
         vlapic->regs_page = alloc_domheap_page(NULL, memflags);
         if ( vlapic->regs_page == NULL )
         {
-            dprintk(XENLOG_ERR, "alloc vlapic regs error: %d/%d\n",
+            dprintk(XENLOG_ERR, "alloc vlapic regs error: vm%u.%u\n",
                     v->domain->domain_id, v->vcpu_id);
             return -ENOMEM;
         }
@@ -1217,7 +1219,7 @@ int vlapic_init(struct vcpu *v)
         vlapic->regs = __map_domain_page_global(vlapic->regs_page);
         if ( vlapic->regs == NULL )
         {
-            dprintk(XENLOG_ERR, "map vlapic regs error: %d/%d\n",
+            dprintk(XENLOG_ERR, "map vlapic regs error: vm%u.%u\n",
                     v->domain->domain_id, v->vcpu_id);
             return -ENOMEM;
         }

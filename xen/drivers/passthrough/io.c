@@ -279,7 +279,7 @@ int pt_irq_create_bind_vtd(
 
         if ( iommu_verbose )
             dprintk(VTDPREFIX,
-                    "d%d: bind: m_gsi=%u g_gsi=%u device=%u intx=%u\n",
+                    "vm%u: bind: m_gsi=%u g_gsi=%u device=%u intx=%u\n",
                     d->domain_id, pirq, guest_gsi, device, intx);
     }
     return 0;
@@ -304,7 +304,7 @@ int pt_irq_destroy_bind_vtd(
 
     if ( iommu_verbose )
         dprintk(VTDPREFIX,
-                "d%d: unbind: m_gsi=%u g_gsi=%u device=%u intx=%u\n",
+                "vm%u: unbind: m_gsi=%u g_gsi=%u device=%u intx=%u\n",
                 d->domain_id, machine_gsi, guest_gsi, device, intx);
 
     spin_lock(&d->event_lock);
@@ -362,7 +362,7 @@ int pt_irq_destroy_bind_vtd(
 
     if ( iommu_verbose )
         dprintk(VTDPREFIX,
-                "d%d unmap: m_irq=%u device=%u intx=%u\n",
+                "vm%u unmap: m_irq=%u device=%u intx=%u\n",
                 d->domain_id, machine_gsi, device, intx);
 
     return 0;

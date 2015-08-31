@@ -840,7 +840,7 @@ map_host_pages(void *va, size_t len, uint64_t gmfn,
                                        UXEN_VMI_OWNER, __HYPERVISOR_memory_op,
                                        XENMEM_add_to_physmap, &memop_arg);
         if (ret) {
-            fail_msg("failed to add mapping: mfn=%p, gpfn=%p, domid=%d",
+            fail_msg("failed to add mapping: mfn=%p, gpfn=%p, domid=vm%u",
                      pfn_array[i], gmfn + i, vmi->vmi_shared.vmi_domid);
             goto out;
         }

@@ -298,12 +298,12 @@ mdm_init_vm(struct domain *d)
         return -1;
 
     d->mdm_map_pfns = mdm->mdm_map_pfns;
-    printk(XENLOG_INFO "%s:vm%d cache size %x\n", __FUNCTION__, d->domain_id,
+    printk(XENLOG_INFO "%s:vm%u cache size %x\n", __FUNCTION__, d->domain_id,
            d->mdm_map_pfns << PAGE_SHIFT);
     s = ALIGN_PAGE_UP(sizeof(uint32_t) * d->mdm_map_pfns);
     d->mdm_mapped_pfn = alloc_host_pages(s >> PAGE_SHIFT, MEMF_multiok);
     if (!d->mdm_mapped_pfn) {
-        printk(XENLOG_ERR "%s:vm%d failed to allocate mapped_pfn array\n",
+        printk(XENLOG_ERR "%s:vm%u failed to allocate mapped_pfn array\n",
                __FUNCTION__, d->domain_id);
         return -1;
     }
@@ -314,7 +314,7 @@ mdm_init_vm(struct domain *d)
     d->mdm_start_high_gpfn = mdm->mdm_start_high_gpfn;
     d->mdm_end_high_gpfn = mdm->mdm_end_high_gpfn;
     d->mdm_undefined_mfn = mdm->mdm_undefined_mfn;
-    printk(XENLOG_INFO "%s:vm%d mdm_mapped_pfn %p "
+    printk(XENLOG_INFO "%s:vm%u mdm_mapped_pfn %p "
            "mdm_mfn_to_entry %p mdm_*_gpfn %x/%x/%x\n",
            __FUNCTION__, d->domain_id, d->mdm_mapped_pfn, d->mdm_mfn_to_entry,
            d->mdm_end_low_gpfn, d->mdm_start_high_gpfn, d->mdm_end_high_gpfn);

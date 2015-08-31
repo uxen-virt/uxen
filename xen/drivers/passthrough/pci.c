@@ -508,7 +508,7 @@ void pci_release_devices(struct domain *d)
         bus = pdev->bus;
         devfn = pdev->devfn;
         if ( deassign_device(d, pdev->seg, bus, devfn) )
-            printk("domain %d: deassign device (%04x:%02x:%02x.%u) failed!\n",
+            printk("vm%u: deassign device (%04x:%02x:%02x.%u) failed!\n",
                    d->domain_id, pdev->seg, bus,
                    PCI_SLOT(devfn), PCI_FUNC(devfn));
     }
@@ -696,7 +696,7 @@ static int _dump_pci_devices(struct pci_seg *pseg, void *arg)
 
     list_for_each_entry ( pdev, &pseg->alldevs_list, alldevs_list )
     {
-        printk("%04x:%02x:%02x.%u - dom %-3d - MSIs < ",
+        printk("%04x:%02x:%02x.%u - vm%d - MSIs < ",
                pseg->nr, pdev->bus,
                PCI_SLOT(pdev->devfn), PCI_FUNC(pdev->devfn),
                pdev->domain ? pdev->domain->domain_id : -1);

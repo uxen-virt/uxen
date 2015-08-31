@@ -116,7 +116,7 @@ static void p2m_initialise(struct domain *d, struct p2m_domain *p2m)
     p2m->cr3 = CR3_EADDR;
 #endif  /* __UXEN__ */
 
-    printk("dom %d: hap %sabled boot_cpu_data.x86_vendor %s\n",
+    printk("vm%u: hap %sabled boot_cpu_data.x86_vendor %s\n",
            d->domain_id, hap_enabled(d) ? "en" : "dis",
            (boot_cpu_data.x86_vendor ==  X86_VENDOR_INTEL) ? "intel" :
            ((boot_cpu_data.x86_vendor ==  X86_VENDOR_AMD) ? "amd" :
@@ -497,7 +497,7 @@ p2m_mapcache_map(struct domain *d, xen_pfn_t gpfn, mfn_t mfn)
     if (unlikely(!get_page(page, d))) {
         if (!d->is_dying)
             gdprintk(XENLOG_INFO,
-                     "%s: mfn %lx for vm %u gpfn %"PRI_xen_pfn" vanished\n",
+                     "%s: mfn %lx for vm%u gpfn %"PRI_xen_pfn" vanished\n",
                      __FUNCTION__, mfn_x(mfn), d->domain_id, gpfn);
         return -EINVAL;
     }
@@ -511,7 +511,7 @@ p2m_mapcache_map(struct domain *d, xen_pfn_t gpfn, mfn_t mfn)
          * in the mapcache. */
         /* gdprintk(XENLOG_INFO, */
         /*          "%s: mfn %lx already mapcache mapped " */
-        /*          "in vm %u, duplicating at gpfn %"PRI_xen_pfn"\n", */
+        /*          "in vm%u, duplicating at gpfn %"PRI_xen_pfn"\n", */
         /*          __FUNCTION__, mfn_x(mfn), d->domain_id, gpfn); */
         put_page(page);
     }
@@ -520,7 +520,7 @@ p2m_mapcache_map(struct domain *d, xen_pfn_t gpfn, mfn_t mfn)
         page = __mfn_to_page(omfn);
         if (!test_and_clear_bit(_PGC_mapcache, &page->count_info))
             gdprintk(XENLOG_WARNING,
-                     "%s: mfn %"PRI_xen_pfn" in mapcache for vm %u gpfn"
+                     "%s: mfn %"PRI_xen_pfn" in mapcache for vm%u gpfn"
                      " %"PRI_xen_pfn" without _PGC_mapcache\n", __FUNCTION__,
                      omfn, d->domain_id, gpfn);
         else {
@@ -656,7 +656,7 @@ guest_physmap_add_entry(struct domain *d, unsigned long gfn,
                     if (mfn_valid(_mfn(mfn)))
                         gdprintk(XENLOG_WARNING,
                                  "%s: can't clear mapcache mapped mfn %lx"
-                                 " for vm %u gpfn %lx new mfn %lx\n",
+                                 " for vm%u gpfn %lx new mfn %lx\n",
                                  __FUNCTION__, mfn_x(omfn), d->domain_id,
                                  gfn + i, mfn);
                     domain_crash(d);
@@ -1344,8 +1344,8 @@ DEBUG();
         if ( p2m->access_required ) 
         {
             printk(XENLOG_INFO 
-                   "Memory access permissions failure, no mem_event listener: pausing VCPU %d, dom %d\n",
-                   v->vcpu_id, d->domain_id);
+                   "Memory access permissions failure, no mem_event listener: "
+                   "pausing vm%u.%u\n", d->domain_id, v->vcpu_id);
 
             mem_event_mark_and_pause(v);
         }
@@ -1700,8 +1700,8 @@ p2m_translate(struct domain *d, xen_pfn_t *arr, int nr, int write, int map)
         }
         if (map && !mfn_valid(mfn)) {
             gdprintk(XENLOG_INFO,
-                     "Translate failed for domain page %"PRI_xen_pfn
-                     " in domain %u\n", arr[j], d->domain_id);
+                     "Translate failed for vm%u page %"PRI_xen_pfn"\n",
+                     d->domain_id, arr[j]);
             rc = -EINVAL;
             goto out;
         }
@@ -1755,7 +1755,7 @@ p2m_mapcache_mappings_teardown(struct domain *d)
         mfn = mfn_x(page_to_mfn(page));
         if (!test_and_clear_bit(_PGC_mapcache, &page->count_info) && bad < 5) {
             gdprintk(XENLOG_WARNING,
-                     "Bad mapcache clear for page %lx in domain %u\n",
+                     "Bad mapcache clear for page %lx in vm%u\n",
                      mfn, d->domain_id);
             bad++;
         }
@@ -1766,7 +1766,7 @@ p2m_mapcache_mappings_teardown(struct domain *d)
         put_page(page);
     }
 
-    gdprintk(XENLOG_INFO, "%s: total %d in domain %u, %d bad\n",
+    gdprintk(XENLOG_INFO, "%s: total %d in vm%u, %d bad\n",
              __FUNCTION__, total, d->domain_id, bad);
     spin_unlock_recursive(&d->page_alloc_lock);
 

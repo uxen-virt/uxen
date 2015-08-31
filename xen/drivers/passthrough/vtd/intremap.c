@@ -490,7 +490,7 @@ static void set_msi_source_id(struct pci_dev *pdev, struct iremap_entry *ire)
 
     default:
         dprintk(XENLOG_WARNING VTDPREFIX,
-                "d%d: unknown(%u): %04x:%02x:%02x.%u\n",
+                "vm%u: unknown(%u): %04x:%02x:%02x.%u\n",
                 pdev->domain->domain_id, type,
                 seg, bus, PCI_SLOT(devfn), PCI_FUNC(devfn));
         break;

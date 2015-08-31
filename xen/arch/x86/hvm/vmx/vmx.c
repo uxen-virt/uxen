@@ -154,8 +154,8 @@ static int vmx_vcpu_initialise(struct vcpu *v)
     if ( (rc = vmx_create_vmcs(v)) != 0 )
     {
         dprintk(XENLOG_WARNING,
-                "Failed to create VMCS for vcpu %d: err=%d.\n",
-                v->vcpu_id, rc);
+                "Failed to create VMCS for vcpu vm%u.%u: err=%d.\n",
+                v->domain->domain_id, v->vcpu_id, rc);
         return rc;
     }
 
@@ -2902,7 +2902,7 @@ vmx_execute(struct vcpu *v)
     if (exit_reason < ARRAY_SIZE(v->vmexit_reason_count)) {
         v->vmexit_reason_count[(uint16_t)exit_reason]++;
         if ((v->vmexit_reason_count[(uint16_t)exit_reason] % 500000) == 0)
-            printk("vm%d.%d: 500k reason %d\n", v->domain->domain_id,
+            printk("vm%u.%u: 500k reason %d\n", v->domain->domain_id,
                    v->vcpu_id, (uint16_t)exit_reason);
     }
 
@@ -3332,7 +3332,7 @@ vmx_execute(struct vcpu *v)
 
         if ((EXIT_REASON_EPT_VIOLATION < ARRAY_SIZE(v->vmexit_reason_count)) &&
             ((v->vmexit_reason_count[EXIT_REASON_EPT_VIOLATION] % 500000) == 0))
-            printk("vm%d.%d: 500k EPT violation: gpa %#"PRIpaddr
+            printk("vm%u.%u: 500k EPT violation: gpa %#"PRIpaddr
                    ", RIP: %08lx, exit qualification: %lx\n",
                    v->domain->domain_id, v->vcpu_id,
                    gpa, (unsigned long)regs->eip, exit_qualification);

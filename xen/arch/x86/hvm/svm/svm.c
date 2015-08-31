@@ -1042,8 +1042,8 @@ static int svm_vcpu_initialise(struct vcpu *v)
     if ( (rc = svm_create_vmcb(v)) != 0 )
     {
         dprintk(XENLOG_WARNING,
-                "Failed to create VMCB for vcpu %d: err=%d.\n",
-                v->vcpu_id, rc);
+                "Failed to create VMCB for vcpu vm%u.%u: err=%d.\n",
+                v->domain->domain_id, v->vcpu_id, rc);
         return rc;
     }
 
@@ -2175,7 +2175,7 @@ svm_execute(struct vcpu *v)
     if (exit_reason < ARRAY_SIZE(v->vmexit_reason_count)) {
         v->vmexit_reason_count[(uint16_t)exit_reason]++;
         if ((v->vmexit_reason_count[(uint16_t)exit_reason] % 500000) == 0)
-            printk("vm%d.%d: 500k reason %d\n", v->domain->domain_id,
+            printk("vm%u.%u: 500k reason %d\n", v->domain->domain_id,
                    v->vcpu_id, (uint16_t)exit_reason);
     }
 

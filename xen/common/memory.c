@@ -95,7 +95,7 @@ static void increase_reservation(struct memop_args *a)
         if ( unlikely(page == NULL) ) 
         {
             gdprintk(XENLOG_INFO, "Could not allocate order=%d extent: "
-                    "id=%d memflags=%x (%ld of %d)\n",
+                    "id=vm%u memflags=%x (%ld of %d)\n",
                      a->extent_order, d->domain_id, a->memflags,
                      i, a->nr_extents);
             goto out;
@@ -168,7 +168,7 @@ static void populate_physmap(struct memop_args *a)
                 if ( !opt_tmem || (a->extent_order != 0) )
 #endif  /* __UXEN__ */
                     gdprintk(XENLOG_INFO, "Could not allocate order=%d extent:"
-                             " id=%d memflags=%x (%ld of %d)\n",
+                             " id=vm%u memflags=%x (%ld of %d)\n",
                              a->extent_order, d->domain_id, a->memflags,
                              i, a->nr_extents);
                 goto out;
@@ -230,8 +230,8 @@ int guest_remove_page(struct domain *d, unsigned long gmfn)
     if ( unlikely(!mfn_valid(mfn)) )
     {
         put_gfn(d, gmfn);
-        gdprintk(XENLOG_INFO, "Domain %u page number %lx invalid\n",
-                d->domain_id, gmfn);
+        gdprintk(XENLOG_INFO, "vm%u page number %lx invalid\n",
+                 d->domain_id, gmfn);
         return 0;
     }
             
@@ -253,7 +253,7 @@ int guest_remove_page(struct domain *d, unsigned long gmfn)
     if ( unlikely(!get_page(page, d)) )
     {
         put_gfn(d, gmfn);
-        gdprintk(XENLOG_INFO, "Bad page free for domain %u\n", d->domain_id);
+        gdprintk(XENLOG_INFO, "Bad page free for vm%u\n", d->domain_id);
         return 0;
     }
 

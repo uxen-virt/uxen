@@ -71,8 +71,8 @@
 #define ERROR_EXIT_DOM(_errno, _dom)                                \
     do {                                                            \
         gdprintk(XENLOG_WARNING,                                    \
-                "EVTCHNOP failure: domain %d, error %d\n",          \
-                (_dom)->domain_id, (_errno));                       \
+                 "EVTCHNOP failure: vm%u, error %d\n",              \
+                 (_dom)->domain_id, (_errno));                      \
         rc = (_errno);                                              \
         goto out;                                                   \
     } while ( 0 )
@@ -758,7 +758,7 @@ void send_guest_global_virq(struct domain *d, int virq)
     spin_unlock_irqrestore(&v->virq_lock, flags);
 #else   /* __UXEN__ */
     if (d != NULL)
-        printk("send_guest_global_virq dom %d virq %d\n", d->domain_id, virq);
+        printk("send_guest_global_virq vm%u virq %d\n", d->domain_id, virq);
 #endif  /* __UXEN__ */
 }
 
@@ -1275,7 +1275,7 @@ static void domain_dump_evtchn_info(struct domain *d)
 
     bitmap_scnlistprintf(keyhandler_scratch, sizeof(keyhandler_scratch),
                          d->poll_mask, d->max_vcpus);
-    printk("Event channel information for domain %d:\n"
+    printk("Event channel information for vm%u:\n"
            "Polling vCPUs: {%s}\n"
            "    port [p/m]\n", d->domain_id, keyhandler_scratch);
 
@@ -1291,18 +1291,18 @@ static void domain_dump_evtchn_info(struct domain *d)
         if ( chn->state == ECS_FREE )
             continue;
 
-        printk("    %4u [%d/%d]: s=%d n=%d",
+        printk("    %4u [%d/%d]: s=%d n=vm%u.%u",
                port,
                !!test_bit(port, &shared_info(d, evtchn_pending)),
                !!test_bit(port, &shared_info(d, evtchn_mask)),
-               chn->state, chn->notify_vcpu_id);
+               chn->state, d->domain_id, chn->notify_vcpu_id);
         switch ( chn->state )
         {
         case ECS_UNBOUND:
-            printk(" d=%d", chn->u.unbound.remote_domid);
+            printk(" d=vm%u", chn->u.unbound.remote_domid);
             break;
         case ECS_INTERDOMAIN:
-            printk(" d=%d p=%d",
+            printk(" d=vm%u p=%d",
                    chn->u.interdomain.remote_dom->domain_id,
                    chn->u.interdomain.remote_port);
             break;

@@ -192,10 +192,10 @@ do_setup_vm(struct uxen_createvm_desc *ucd, struct vm_info_shared *vmi,
     vmi->vmi_domid = d->domain_id;
     atomic_read_domain_handle(&d->handle_atomic, (uint128_t *)vmi->vmi_uuid);
 
-    printk("%s: domain %d: %" PRIuuid "\n", 
+    printk("%s: vm%u: uuid %" PRIuuid "\n",
            __FUNCTION__, vmi->vmi_domid, PRIuuid_arg(vmi->vmi_uuid));
 
-    printk("domain %d: %p/%p\n", d->domain_id, d, vmi);
+    printk("vm%u: %p/%p\n", d->domain_id, d, vmi);
     ret = hostsched_setup_vm(d, vmi);
     if (ret)
         goto out;
@@ -219,7 +219,7 @@ do_setup_vm(struct uxen_createvm_desc *ucd, struct vm_info_shared *vmi,
 
     for_each_vcpu(d, v) {
         struct vm_vcpu_info_shared *vci = vcis[v->vcpu_id];
-        printk("domain %d vcpu %d: %p/%p on cpu %d\n", d->domain_id,
+        printk("vm%u.%u: %p/%p on cpu %d\n", d->domain_id,
                v->vcpu_id, v, vci, v->processor);
         vci->vci_vcpuid = v->vcpu_id;
 
@@ -292,7 +292,7 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
     case VCI_RUN_MODE_IDLE:
         BUG();
     case VCI_RUN_MODE_SETUP:
-        printk("vcpu %d.%d pause flags %lx count %x domain count %x\n",
+        printk("vm%u.%u pause flags %lx count %x domain count %x\n",
                v->domain->domain_id, v->vcpu_id,
                v->pause_flags, atomic_read(&v->pause_count),
                atomic_read(&v->domain->pause_count));

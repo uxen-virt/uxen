@@ -132,7 +132,7 @@ int hvm_save(struct domain *d, hvm_domain_context_t *h)
     hvm_save_handler handler;
     uint16_t i;
 
-    gdprintk(XENLOG_INFO, "HVM save: vm%d%s\n", d->domain_id,
+    gdprintk(XENLOG_INFO, "HVM save: vm%u%s\n", d->domain_id,
              d->is_dying ? " (dying)" : "");
 
     if ( d->is_dying )
@@ -182,7 +182,7 @@ int hvm_save(struct domain *d, hvm_domain_context_t *h)
 
     /* Save macros should not have let us overrun */
     ASSERT(h->cur <= h->size);
-    gdprintk(XENLOG_INFO, "HVM save: vm%d done\n", d->domain_id);
+    gdprintk(XENLOG_INFO, "HVM save: vm%u done\n", d->domain_id);
     return 0;
 }
 
@@ -193,7 +193,7 @@ int hvm_load(struct domain *d, hvm_domain_context_t *h)
     hvm_load_handler handler;
     struct vcpu *v;
     
-    gdprintk(XENLOG_INFO, "HVM restore: vm%d%s\n", d->domain_id,
+    gdprintk(XENLOG_INFO, "HVM restore: vm%u%s\n", d->domain_id,
              d->is_dying ? " (dying)" : "");
 
     if ( d->is_dying )
@@ -224,7 +224,7 @@ int hvm_load(struct domain *d, hvm_domain_context_t *h)
         /* Read the typecode of the next entry  and check for the end-marker */
         desc = (struct hvm_save_descriptor *)(&h->data[h->cur]);
         if ( desc->typecode == 0 ) {
-            gdprintk(XENLOG_INFO, "HVM restore: vm%d done\n", d->domain_id);
+            gdprintk(XENLOG_INFO, "HVM restore: vm%u done\n", d->domain_id);
             return 0; 
         }
         

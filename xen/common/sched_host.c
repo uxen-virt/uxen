@@ -112,7 +112,7 @@ hostsched_set_timer_vcpu(struct vcpu *v, uint64_t expire)
     if (vci)
         uxen_info->ui_set_timer_vcpu(vci, expire);
     else
-        printk("hostsched_set_timer_vcpu %d.%d no vm_info\n",
+        printk("hostsched_set_timer_vcpu vm%u.%u no vm_info\n",
                v->domain->domain_id, v->vcpu_id);
 }
 
@@ -124,7 +124,7 @@ hostsched_kick_vcpu(struct vcpu *v)
     if (vci)
         uxen_info->ui_kick_vcpu(vci);
     else
-        printk("hostsched_kick_vcpu %d.%d no vm_info\n",
+        printk("hostsched_kick_vcpu vm%u.%u no vm_info\n",
                v->domain->domain_id, v->vcpu_id);
 }
 
@@ -147,7 +147,7 @@ hostsched_signal_event(struct vcpu *v, void *opaque)
     if (vci)
         uxen_info->ui_signal_event(vci, opaque);
     else
-        printk("hostsched_signal_event %d.%d no vm_info\n",
+        printk("hostsched_signal_event vm%u.%u no vm_info\n",
                v->domain->domain_id, v->vcpu_id);
 }
 
@@ -170,10 +170,10 @@ hostsched_dump_vcpu(struct vcpu *v, int wake)
     if (vci == NULL)
         return;
 
-    printk("    vcpu %d (halted %x, runstate %x, runmode %x, "
+    printk("    vm%u.%u (halted %x, runstate %x, runmode %x, "
            "pause counts %x/%x\n"
            "             softirq %lx, timer int %s, timeout %"PRId64"ms)\n",
-           v->vcpu_id, vci->vci_host_halted,
+           v->domain->domain_id, v->vcpu_id, vci->vci_host_halted,
            v->runstate.state, vci->vci_run_mode,
 		   atomic_read(&v->pause_count), atomic_read(&v->domain->pause_count),
            v->softirq_pending, vci->vci_has_timer_interrupt ? "yes" : "no",

@@ -828,15 +828,16 @@ void hap_teardown(struct domain *d)
 
     if ( d->arch.paging.hap.total_pages != 0 )
     {
-        HAP_PRINTK("teardown of domain %u starts."
+        HAP_PRINTK("teardown of vm%u starts."
                       "  pages total = %u, free = %u, p2m=%u\n",
                       d->domain_id,
                       d->arch.paging.hap.total_pages,
                       d->arch.paging.hap.free_pages,
                       d->arch.paging.hap.p2m_pages);
         hap_set_allocation(d, 0, NULL);
-        HAP_PRINTK("teardown done."
+        HAP_PRINTK("teardown of vm%u done."
                       "  pages total = %u, free = %u, p2m=%u\n",
+                      d->domain_id,
                       d->arch.paging.hap.total_pages,
                       d->arch.paging.hap.free_pages,
                       d->arch.paging.hap.p2m_pages);
@@ -921,7 +922,7 @@ static int hap_page_fault(struct vcpu *v, unsigned long va,
     struct domain *d = v->domain;
 
 DEBUG();
-    HAP_ERROR("Intercepted a guest #PF (%u:%u) with HAP enabled.\n",
+    HAP_ERROR("Intercepted a guest #PF (vm%u.%u) with HAP enabled.\n",
               d->domain_id, v->vcpu_id);
     domain_crash(d);
     return 0;
@@ -945,7 +946,7 @@ DEBUG();
     }
 #endif  /* __UXEN__ */
 
-    HAP_ERROR("Intercepted a guest INVLPG (%u:%u) with HAP enabled.\n",
+    HAP_ERROR("Intercepted a guest INVLPG (vm%u.%u) with HAP enabled.\n",
               v->domain->domain_id, v->vcpu_id);
     domain_crash(v->domain);
     return 0;

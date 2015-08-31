@@ -121,7 +121,9 @@ mdm_allocate(struct vm_info *vmi)
     mdm->mdm_va = mdm_allocate_va(vmi, mdm->mdm_map_pfns);
     if (!mdm->mdm_va)
         return ENOMEM;
-    dprintk("mdm: allocated at %p\n", mdm->mdm_va);
+    dprintk("%s: vm%u allocated at %p/%x\n", __FUNCTION__,
+            vmi->vmi_shared.vmi_domid, mdm->mdm_va,
+            mdm->mdm_map_pfns << PAGE_SHIFT);
 
     return 0;
 }
@@ -268,7 +270,6 @@ mdm_init(struct uxen_memcacheinit_desc *umd, struct fd_assoc *fda)
     uxen_smap_preempt_restore(&smap);
 
     mdm->mdm_map_pfns = (1ULL << (32 - MEMCACHE_ENTRY_OFFSET_SHIFT)) - 1;
-    dprintk("mdm: cache size %x\n", mdm->mdm_map_pfns << PAGE_SHIFT);
     ret = mdm_allocate(vmi);
     if (ret)
         goto out;
@@ -312,7 +313,8 @@ mdm_clear_all(struct vm_info *vmi)
     cleared = mdm_clear_cache(mdm);
     uxen_mem_tlb_flush();
     if (cleared)
-        dprintk("mdm_clear_all: cleared %d entries\n", cleared);
+        dprintk("%s: vm%u cleared %d entries\n", __FUNCTION__,
+                vmi->vmi_shared.vmi_domid, cleared);
 
     vmi->vmi_shared.vmi_mapcache_active = 0;
     mdm_free_all(vmi);

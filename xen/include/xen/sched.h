@@ -862,7 +862,8 @@ void watchdog_domain_destroy(struct domain *d);
                     gdprintk(XENLOG_ERR, "%s: IS_PRIV not with current\n", \
                              __FUNCTION__);                             \
                 if (!current->is_privileged)                            \
-                    gdprintk(XENLOG_ERR, "%s: IS_PRIV %d target_vmis %d\n", \
+                    gdprintk(XENLOG_ERR,                                \
+                             "%s: IS_PRIV vm%u target_vmis vm%d\n",     \
                              __FUNCTION__, (_d)->domain_id,             \
                              current->target_vmis ?                     \
                              current->target_vmis->vmi_domid : -1);     \

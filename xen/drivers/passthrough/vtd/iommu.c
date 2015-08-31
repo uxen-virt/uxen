@@ -72,7 +72,7 @@ static int domain_iommu_domid(struct domain *d,
     }
 
     dprintk(XENLOG_ERR VTDPREFIX,
-            "Cannot get valid iommu domid: domid=%d iommu->index=%d\n",
+            "Cannot get valid iommu domid: domid=vm%u iommu->index=%d\n",
             d->domain_id, iommu->index);
     return -1;
 }
@@ -1309,7 +1309,7 @@ int domain_context_mapping_one(
         {
             if ( pdev->domain != domain )
             {
-                dprintk(XENLOG_INFO VTDPREFIX, "d%d: bdf = %x:%x.%x owned by d%d!",
+                dprintk(XENLOG_INFO VTDPREFIX, "vm%u: bdf = %x:%x.%x owned by vm%d!",
                         domain->domain_id, 
                         bus, PCI_SLOT(devfn), PCI_FUNC(devfn),
                         (pdev->domain)
@@ -1324,14 +1324,14 @@ int domain_context_mapping_one(
             
             if ( cdomain < 0 )
             {
-                dprintk(VTDPREFIX, "d%d: bdf = %x:%x.%x mapped, but can't find owner!\n",
+                dprintk(VTDPREFIX, "vm%u: bdf = %x:%x.%x mapped, but can't find owner!\n",
                         domain->domain_id, 
                         bus, PCI_SLOT(devfn), PCI_FUNC(devfn));
                 res = -EINVAL;
             }
             else if ( cdomain != domain->domain_id )
             {
-                dprintk(XENLOG_INFO VTDPREFIX, "d%d: bdf = %x:%x.%x already mapped to d%d!",
+                dprintk(XENLOG_INFO VTDPREFIX, "vm%u: bdf = %x:%x.%x already mapped to vm%u!",
                         domain->domain_id, 
                         bus, PCI_SLOT(devfn), PCI_FUNC(devfn),
                         cdomain);
@@ -1447,7 +1447,7 @@ static int domain_context_mapping(
 
     case DEV_TYPE_PCIe_ENDPOINT:
         if ( iommu_verbose )
-            dprintk(VTDPREFIX, "d%d:PCIe: map %04x:%02x:%02x.%u\n",
+            dprintk(VTDPREFIX, "vm%u:PCIe: map %04x:%02x:%02x.%u\n",
                     domain->domain_id, seg, bus,
                     PCI_SLOT(devfn), PCI_FUNC(devfn));
         ret = domain_context_mapping_one(domain, drhd->iommu, bus, devfn);
@@ -1458,7 +1458,7 @@ static int domain_context_mapping(
 
     case DEV_TYPE_PCI:
         if ( iommu_verbose )
-            dprintk(VTDPREFIX, "d%d:PCI: map %04x:%02x:%02x.%u\n",
+            dprintk(VTDPREFIX, "vm%u:PCI: map %04x:%02x:%02x.%u\n",
                     domain->domain_id, seg, bus,
                     PCI_SLOT(devfn), PCI_FUNC(devfn));
 
@@ -1483,7 +1483,7 @@ static int domain_context_mapping(
         break;
 
     default:
-        dprintk(XENLOG_ERR VTDPREFIX, "d%d:unknown(%u): %04x:%02x:%02x.%u\n",
+        dprintk(XENLOG_ERR VTDPREFIX, "vm%u:unknown(%u): %04x:%02x:%02x.%u\n",
                 domain->domain_id, type,
                 seg, bus, PCI_SLOT(devfn), PCI_FUNC(devfn));
         ret = -EINVAL;
@@ -1578,7 +1578,7 @@ static int domain_context_unmap(
 
     case DEV_TYPE_PCIe_ENDPOINT:
         if ( iommu_verbose )
-            dprintk(VTDPREFIX, "d%d:PCIe: unmap %04x:%02x:%02x.%u\n",
+            dprintk(VTDPREFIX, "vm%u:PCIe: unmap %04x:%02x:%02x.%u\n",
                     domain->domain_id, seg, bus,
                     PCI_SLOT(devfn), PCI_FUNC(devfn));
         ret = domain_context_unmap_one(domain, iommu, bus, devfn);
@@ -1589,7 +1589,7 @@ static int domain_context_unmap(
 
     case DEV_TYPE_PCI:
         if ( iommu_verbose )
-            dprintk(VTDPREFIX, "d%d:PCI: unmap %04x:%02x:%02x.%u\n",
+            dprintk(VTDPREFIX, "vm%u:PCI: unmap %04x:%02x:%02x.%u\n",
                     domain->domain_id, seg, bus, PCI_SLOT(devfn), PCI_FUNC(devfn));
         ret = domain_context_unmap_one(domain, iommu, bus, devfn);
         if ( ret )
@@ -1615,7 +1615,7 @@ static int domain_context_unmap(
         break;
 
     default:
-        dprintk(XENLOG_ERR VTDPREFIX, "d%d:unknown(%u): %04x:%02x:%02x.%u\n",
+        dprintk(XENLOG_ERR VTDPREFIX, "vm%u:unknown(%u): %04x:%02x:%02x.%u\n",
                 domain->domain_id, type,
                 seg, bus, PCI_SLOT(devfn), PCI_FUNC(devfn));
         ret = -EINVAL;
@@ -1904,7 +1904,7 @@ static int intel_iommu_add_device(struct pci_dev *pdev)
                                  pdev->devfn);
     if ( ret )
     {
-        dprintk(XENLOG_ERR VTDPREFIX, "d%d: context mapping failed\n",
+        dprintk(XENLOG_ERR VTDPREFIX, "vm%u: context mapping failed\n",
                 pdev->domain->domain_id);
         return ret;
     }
@@ -1917,7 +1917,7 @@ static int intel_iommu_add_device(struct pci_dev *pdev)
         {
             ret = rmrr_identity_mapping(pdev->domain, rmrr);
             if ( ret )
-                dprintk(XENLOG_ERR VTDPREFIX, "d%d: RMRR mapping failed\n",
+                dprintk(XENLOG_ERR VTDPREFIX, "vm%u: RMRR mapping failed\n",
                         pdev->domain->domain_id);
         }
     }

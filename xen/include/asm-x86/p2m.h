@@ -680,7 +680,7 @@ static inline int p2m_gfn_check_limit(
         return 0;
 
     if ( !test_and_set_bool(d->arch.hvm_domain.svm.npt_4gb_warning) )
-        dprintk(XENLOG_WARNING, "Dom%d failed to populate memory beyond"
+        dprintk(XENLOG_WARNING, "vm%u failed to populate memory beyond"
                 " 4GB: specify 'hap=0' domain config option.\n",
                 d->domain_id);
 

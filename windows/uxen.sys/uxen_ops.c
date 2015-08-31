@@ -1119,14 +1119,14 @@ uxen_op_shutdown(void)
 
     uxen_lock();
     RB_TREE_FOREACH_SAFE(vmi, &uxen_devext->de_vm_info_rbtree, tvmi) {
-        dprintk("uxen shutdown: destroy %d\n", vmi->vmi_shared.vmi_domid);
+        dprintk("uxen shutdown: destroy vm%u\n", vmi->vmi_shared.vmi_domid);
         uxen_vmi_destroy_vm(vmi);
     }
 
     /* cleanup any templates which weren't freed before all clones
      * were destroyed */
     RB_TREE_FOREACH_SAFE(vmi, &uxen_devext->de_vm_info_rbtree, tvmi) {
-        dprintk("uxen shutdown: cleanup %d\n", vmi->vmi_shared.vmi_domid);
+        dprintk("uxen shutdown: cleanup vm%u\n", vmi->vmi_shared.vmi_domid);
         uxen_vmi_cleanup_vm(vmi);
     }
 
@@ -1514,7 +1514,7 @@ uxen_vmi_free(struct vm_info *vmi)
 
     logging_free(&vmi->vmi_logging_desc);
 
-    dprintk("%s: vm %d vmi freed\n", __FUNCTION__, vmi->vmi_shared.vmi_domid);
+    dprintk("%s: vm%u vmi freed\n", __FUNCTION__, vmi->vmi_shared.vmi_domid);
     kernel_free(vmi, (size_t)ALIGN_PAGE_UP(sizeof(struct vm_info)));
 
     KeSetEvent(&uxen_devext->de_vm_cleanup_event, 0, FALSE);
@@ -1526,18 +1526,18 @@ uxen_vmi_cleanup_vm(struct vm_info *vmi)
     int domid = vmi->vmi_shared.vmi_domid;
     unsigned int i;
 
-    dprintk("%s: vm %d refs %d, running %d vcpus\n", __FUNCTION__, domid,
+    dprintk("%s: vm%u refs %d, running %d vcpus\n", __FUNCTION__, domid,
             vmi->vmi_active_references, vmi->vmi_running_vcpus);
     for (i = 0; i < vmi->vmi_shared.vmi_nrvcpus; i++)
-        dprintk("  vcpu %d.%d running %s\n", domid, i,
+        dprintk("  vcpu vm%u.%u running %s\n", domid, i,
                 vmi->vmi_vcpus[i].vci_shared.vci_runnable ? "yes" : "no");
 
     if (vmi->vmi_marked_for_destroy && uxen_vmi_destroy_vm(vmi)) {
-        printk("%s: vm %d deferred by destroy\n", __FUNCTION__, domid);
+        printk("%s: vm%u deferred by destroy\n", __FUNCTION__, domid);
         return;
     }
 
-    printk("%s: vm %d cleanup complete\n", __FUNCTION__, domid);
+    printk("%s: vm%u cleanup complete\n", __FUNCTION__, domid);
 }
 
 static void
@@ -1546,7 +1546,7 @@ uxen_vmi_stop_running(struct vm_info *vmi)
     unsigned int i;
     int interrupt_cpus = 0;
 
-    dprintk("%s: vm %d has %d of %d vcpus running\n", __FUNCTION__,
+    dprintk("%s: vm%u has %d of %d vcpus running\n", __FUNCTION__,
             vmi->vmi_shared.vmi_domid, vmi->vmi_running_vcpus,
             vmi->vmi_shared.vmi_nrvcpus);
 
@@ -1555,7 +1555,7 @@ uxen_vmi_stop_running(struct vm_info *vmi)
     for (i = 0; i < vmi->vmi_shared.vmi_nrvcpus; i++) {
         struct vm_vcpu_info *vci = &vmi->vmi_vcpus[i];
 
-        dprintk("  vcpu %d runnable %s\n", i,
+        dprintk("  vcpu vm%u.%u runnable %s\n", vmi->vmi_shared.vmi_domid, i,
                 vci->vci_shared.vci_runnable ? "yes" : "no");
 
         if (InterlockedCompareExchange(&vci->vci_shared.vci_runnable,
@@ -1582,7 +1582,7 @@ uxen_vmi_stop_running(struct vm_info *vmi)
         KeWaitForSingleObject(&vmi->vmi_notexecuting, Executive, KernelMode,
                               FALSE, NULL);
 
-    printk("%s: vm %d all %d vcpus stopped (%d running)\n", __FUNCTION__,
+    printk("%s: vm%u all %d vcpus stopped (%d running)\n", __FUNCTION__,
            vmi->vmi_shared.vmi_domid, vmi->vmi_shared.vmi_nrvcpus,
            vmi->vmi_running_vcpus);
 }
@@ -1593,7 +1593,7 @@ uxen_vmi_destroy_vm(struct vm_info *vmi)
     unsigned int i;
     int ret;
 
-    dprintk("%s: vm %d alive %s, refs %d, running %d vcpus\n", __FUNCTION__,
+    dprintk("%s: vm%u alive %s, refs %d, running %d vcpus\n", __FUNCTION__,
             vmi->vmi_shared.vmi_domid, vmi->vmi_alive ? "yes" : "no",
             vmi->vmi_active_references, vmi->vmi_running_vcpus);
 
@@ -1611,13 +1611,13 @@ uxen_vmi_destroy_vm(struct vm_info *vmi)
     if (ret == -ENOENT)
         ret = 0;
     if (ret) {
-        printk("%s: vm %d not destroyed: %d\n", __FUNCTION__,
+        printk("%s: vm%u not destroyed: %d\n", __FUNCTION__,
                vmi->vmi_shared.vmi_domid, ret);
         InterlockedIncrement(&vmi->vmi_alive);
         goto out;
     }
 
-    printk("%s: vm %d destroyed\n", __FUNCTION__, vmi->vmi_shared.vmi_domid);
+    printk("%s: vm%u destroyed\n", __FUNCTION__, vmi->vmi_shared.vmi_domid);
     vmi->vmi_marked_for_destroy = 0;
 
     uxen_vmi_free(vmi);
@@ -1697,7 +1697,7 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
             object, Executive, interruptible ? UserMode : KernelMode,   \
             FALSE, timeout ? &t : NULL);                                \
         if (status != STATUS_SUCCESS && status != STATUS_TIMEOUT) {     \
-            fail_msg("%d: %d.%d: wait interrupted: 0x%08X", __LINE__,   \
+            fail_msg("%d: vm%u.%u: wait interrupted: 0x%08X", __LINE__, \
                      vmi->vmi_shared.vmi_domid, vci->vci_shared.vci_vcpuid, \
                      status);                                           \
             ret = -EINTR;                                               \
@@ -1738,7 +1738,7 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
         vci->vci_executing = 0;
 
         if (ret)
-            fail_msg("uxen_do_run_vcpu: %d.%d: ret %d",
+            fail_msg("uxen_do_run_vcpu: vm%u.%u: ret %d",
                      vmi->vmi_shared.vmi_domid, vci->vci_shared.vci_vcpuid,
                      ret);
 
@@ -1813,8 +1813,7 @@ uxen_op_execute(struct uxen_execute_desc *ued, struct vm_info *vmi)
     int ret = ENOENT;
 
     if (ued->ued_vcpu >= vmi->vmi_shared.vmi_nrvcpus) {
-        fail_msg("invalid vcpu %d.%d", vmi->vmi_shared.vmi_domid,
-                 ued->ued_vcpu);
+        fail_msg("invalid vm%u.%u", vmi->vmi_shared.vmi_domid, ued->ued_vcpu);
         return EINVAL;
     }
 
@@ -1829,8 +1828,8 @@ uxen_op_execute(struct uxen_execute_desc *ued, struct vm_info *vmi)
     ret = -ret;
 
   out:
-    printk("%s: exiting %d.%d (%d)\n", __FUNCTION__, vmi->vmi_shared.vmi_domid,
-           ued->ued_vcpu, ret);
+    printk("%s: exiting vm%u.%u (%d)\n", __FUNCTION__,
+           vmi->vmi_shared.vmi_domid, ued->ued_vcpu, ret);
 
     if (InterlockedDecrement(&vmi->vmi_running_vcpus) == 0)
         KeSetEvent(&vmi->vmi_notexecuting, 0, FALSE);

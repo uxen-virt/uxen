@@ -1244,7 +1244,7 @@ void audit_p2m(struct p2m_domain *p2m, int strict_m2p)
 
         if ( od != d )
         {
-            P2M_PRINTK("wrong owner %#lx -> %p(%u) != %p(%u)\n",
+            P2M_PRINTK("wrong owner %#lx -> %p(vm%d) != %p(vm%u)\n",
                        mfn, od, (od?od->domain_id:-1), d, d->domain_id);
             continue;
         }

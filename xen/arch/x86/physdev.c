@@ -109,7 +109,7 @@ int physdev_map_pirq(domid_t domid, int type, int *index, int *pirq_p,
     case MAP_PIRQ_TYPE_GSI:
         if ( *index < 0 || *index >= nr_irqs_gsi )
         {
-            dprintk(XENLOG_G_ERR, "dom%d: map invalid irq %d\n",
+            dprintk(XENLOG_G_ERR, "vm%u: map invalid irq %d\n",
                     d->domain_id, *index);
             ret = -EINVAL;
             goto free_domain;
@@ -121,7 +121,7 @@ int physdev_map_pirq(domid_t domid, int type, int *index, int *pirq_p,
             if ( IS_PRIV(current->domain) )
                 irq = *index;
             else {
-                dprintk(XENLOG_G_ERR, "dom%d: map pirq with incorrect irq!\n",
+                dprintk(XENLOG_G_ERR, "vm%u: map pirq with incorrect irq!\n",
                         d->domain_id);
                 ret = -EINVAL;
                 goto free_domain;
@@ -136,7 +136,7 @@ int physdev_map_pirq(domid_t domid, int type, int *index, int *pirq_p,
 
         if ( irq < 0 || irq >= nr_irqs )
         {
-            dprintk(XENLOG_G_ERR, "dom%d: can't create irq for msi!\n",
+            dprintk(XENLOG_G_ERR, "vm%u: can't create irq for msi!\n",
                     d->domain_id);
             ret = -EINVAL;
             goto free_domain;
@@ -147,7 +147,7 @@ int physdev_map_pirq(domid_t domid, int type, int *index, int *pirq_p,
         break;
 
     default:
-        dprintk(XENLOG_G_ERR, "dom%d: wrong map_pirq type %x\n",
+        dprintk(XENLOG_G_ERR, "vm%u: wrong map_pirq type %x\n",
                 d->domain_id, type);
         ret = -EINVAL;
         goto free_domain;
@@ -161,7 +161,7 @@ int physdev_map_pirq(domid_t domid, int type, int *index, int *pirq_p,
     {
         if ( pirq )
         {
-            dprintk(XENLOG_G_ERR, "dom%d: %d:%d already mapped to %d\n",
+            dprintk(XENLOG_G_ERR, "vm%u: %d:%d already mapped to %d\n",
                     d->domain_id, *index, *pirq_p, pirq);
             if ( pirq < 0 )
             {
@@ -174,7 +174,7 @@ int physdev_map_pirq(domid_t domid, int type, int *index, int *pirq_p,
             pirq = get_free_pirq(d, type, *index);
             if ( pirq < 0 )
             {
-                dprintk(XENLOG_G_ERR, "dom%d: no free pirq\n", d->domain_id);
+                dprintk(XENLOG_G_ERR, "vm%u: no free pirq\n", d->domain_id);
                 ret = pirq;
                 goto done;
             }
@@ -184,7 +184,7 @@ int physdev_map_pirq(domid_t domid, int type, int *index, int *pirq_p,
     {
         if ( pirq && pirq != *pirq_p )
         {
-            dprintk(XENLOG_G_ERR, "dom%d: pirq %d conflicts with irq %d\n",
+            dprintk(XENLOG_G_ERR, "vm%u: pirq %d conflicts with irq %d\n",
                     d->domain_id, *index, *pirq_p);
             ret = -EEXIST;
             goto done;

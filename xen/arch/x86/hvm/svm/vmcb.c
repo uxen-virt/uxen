@@ -285,10 +285,10 @@ static void vmcb_dump(unsigned char ch)
     {
         if ( !is_hvm_domain(d) )
             continue;
-        printk("\n>>> Domain %d <<<\n", d->domain_id);
+        printk("\n>>> vm%u <<<\n", d->domain_id);
         for_each_vcpu ( d, v )
         {
-            printk("\tVCPU %d\n", v->vcpu_id);
+            printk("\tvm%u.%u\n", d->domain_id, v->vcpu_id);
             svm_vmcb_dump("key_handler", v->arch.hvm_svm.vmcb);
         }
     }

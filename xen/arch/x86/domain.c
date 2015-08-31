@@ -166,7 +166,7 @@ void dump_pageframe_info(struct domain *d)
     struct page_info *page;
     int n = 0;
 
-    printk("Memory pages belonging to domain %u:\n", d->domain_id);
+    printk("Memory pages belonging to vm%u:\n", d->domain_id);
 
     if ( d->tot_pages >= 10 && !d->is_dying )
     {

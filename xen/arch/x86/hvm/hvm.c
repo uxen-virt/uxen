@@ -605,7 +605,7 @@ static int hvm_print_line(
         if ( c != '\n' )
             hd->pbuf[hd->pbuf_idx++] = '\n';
         hd->pbuf[hd->pbuf_idx] = '\0';
-        printk(XENLOG_G_INFO "HVM%u: %s", curr->domain->domain_id, hd->pbuf);
+        printk(XENLOG_G_INFO "vm%u: %s", curr->domain->domain_id, hd->pbuf);
         hd->pbuf_idx = 0;
     }
     spin_unlock(&hd->pbuf_lock);
@@ -898,7 +898,8 @@ static int hvm_load_cpu_ctxt(struct domain *d, hvm_domain_context_t *h)
     vcpuid = hvm_load_instance(h);
     if ( vcpuid >= d->max_vcpus || (v = d->vcpu[vcpuid]) == NULL )
     {
-        gdprintk(XENLOG_ERR, "HVM restore: domain has no vcpu %u\n", vcpuid);
+        gdprintk(XENLOG_ERR, "HVM restore: no vcpu vm%u.%u\n", d->domain_id,
+                 vcpuid);
         return -EINVAL;
     }
 
@@ -1118,7 +1119,8 @@ static int hvm_load_cpu_xsave_states(struct domain *d, hvm_domain_context_t *h)
     vcpuid = hvm_load_instance(h);
     if ( vcpuid >= d->max_vcpus || (v = d->vcpu[vcpuid]) == NULL )
     {
-        gdprintk(XENLOG_ERR, "HVM restore: domain has no vcpu %u\n", vcpuid);
+        gdprintk(XENLOG_ERR, "HVM restore: no vcpu vm%u.%u\n", d->domain_id,
+                 vcpuid);
         return -EINVAL;
     }
 
@@ -1358,8 +1360,8 @@ void hvm_hlt(unsigned long rflags)
 void hvm_triple_fault(void)
 {
     struct vcpu *v = current;
-    gdprintk(XENLOG_INFO, "Triple fault on VCPU%d - "
-             "invoking HVM system reset.\n", v->vcpu_id);
+    gdprintk(XENLOG_INFO, "Triple fault on VCPU:vm%u.%u - "
+             "invoking HVM system reset.\n", v->domain->domain_id, v->vcpu_id);
     domain_shutdown(v->domain, SHUTDOWN_reboot);
 }
 
@@ -4870,7 +4872,7 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
         }
         xl.msg[xl.len] = 0;
 
-        printk(XENLOG_G_INFO "HVM%u: %s\n", current->domain->domain_id,
+        printk(XENLOG_G_INFO "vm%u: %s\n", current->domain->domain_id,
                xl.msg);
         break;
     }

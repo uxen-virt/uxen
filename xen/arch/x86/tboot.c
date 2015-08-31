@@ -214,7 +214,7 @@ static void tboot_gen_domain_integrity(const uint8_t key[TB_KEY_SIZE],
     {
         if ( !d->arch.s3_integrity )
             continue;
-        printk("MACing Domain %u\n", d->domain_id);
+        printk("MACing vm%u\n", d->domain_id);
 
         spin_lock(&d->page_alloc_lock);
         page_list_for_each(page, &d->page_list)

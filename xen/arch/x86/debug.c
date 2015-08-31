@@ -50,7 +50,7 @@ dbg_hvm_va2mfn(dbgva_t vaddr, struct domain *dp, int toaddr,
     uint32_t pfec = PFEC_page_present;
     p2m_type_t gfntype;
 
-    DBGP2("vaddr:%lx domid:%d\n", vaddr, dp->domain_id);
+    DBGP2("vaddr:%lx vm%u\n", vaddr, dp->domain_id);
 
     *gfn = paging_gva_to_gfn(dp->vcpu[0], vaddr, &pfec);
     if ( *gfn == INVALID_GFN )
@@ -66,7 +66,7 @@ dbg_hvm_va2mfn(dbgva_t vaddr, struct domain *dp, int toaddr,
         return INVALID_MFN;
     }
 
-    DBGP2("X: vaddr:%lx domid:%d mfn:%lx\n", vaddr, dp->domain_id, mfn);
+    DBGP2("X: vaddr:%lx vm%u mfn:%lx\n", vaddr, dp->domain_id, mfn);
     return mfn;
 }
 
@@ -95,7 +95,7 @@ dbg_pv_va2mfn(dbgva_t vaddr, struct domain *dp, uint64_t pgd3val)
     unsigned long cr3 = (pgd3val ? pgd3val : dp->vcpu[0]->arch.cr3);
     unsigned long mfn = cr3 >> PAGE_SHIFT;
 
-    DBGP2("vaddr:%lx domid:%d cr3:%lx pgd3:%lx\n", vaddr, dp->domain_id, 
+    DBGP2("vaddr:%lx vm%u cr3:%lx pgd3:%lx\n", vaddr, dp->domain_id,
           cr3, pgd3val);
 
     if ( pgd3val == 0 )
@@ -155,7 +155,7 @@ dbg_pv_va2mfn(dbgva_t vaddr, struct domain *dp, uint64_t pgd3val)
     unsigned long cr3 = (pgd3val ? pgd3val : dp->vcpu[0]->arch.cr3);
     unsigned long mfn = cr3 >> PAGE_SHIFT;
 
-    DBGP2("vaddr:%lx domid:%d cr3:%lx pgd3:%lx\n", vaddr, dp->domain_id, 
+    DBGP2("vaddr:%lx vm%u cr3:%lx pgd3:%lx\n", vaddr, dp->domain_id,
           cr3, pgd3val);
 
     if ( pgd3val == 0 )
@@ -243,7 +243,7 @@ dbg_rw_mem(dbgva_t addr, dbgbyte_t *buf, int len, domid_t domid, int toaddr,
     struct domain *dp = get_domain_by_id(domid);
     int hyp = (domid == DOMID_IDLE);
 
-    DBGP2("gmem:addr:%lx buf:%p len:$%d domid:%x toaddr:%x dp:%p\n", 
+    DBGP2("gmem:addr:%lx buf:%p len:$%d vm%u toaddr:%x dp:%p\n",
           addr, buf, len, domid, toaddr, dp);
     if ( hyp )
     {

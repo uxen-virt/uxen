@@ -291,7 +291,7 @@ void paging_mark_dirty(struct domain *d, unsigned long guest_mfn)
     if ( changed )
     {
         PAGING_DEBUG(LOGDIRTY, 
-                     "marked mfn %" PRI_mfn " (pfn=%lx), dom %d\n",
+                     "marked mfn %" PRI_mfn " (pfn=%lx), vm%u\n",
                      mfn_x(gmfn), pfn, d->domain_id);
         d->arch.paging.log_dirty.dirty_count++;
     }
@@ -458,7 +458,7 @@ DEBUG();
 
     clean = (sc->op == XEN_DOMCTL_SHADOW_OP_CLEAN);
 
-    PAGING_DEBUG(LOGDIRTY, "log-dirty %s: dom %u faults=%u dirty=%u\n",
+    PAGING_DEBUG(LOGDIRTY, "log-dirty %s: vm%u faults=%u dirty=%u\n",
                  (clean) ? "clean" : "peek",
                  d->domain_id,
                  d->arch.paging.log_dirty.fault_count,
@@ -573,7 +573,7 @@ int paging_log_dirty_range(struct domain *d,
         d->arch.paging.log_dirty.clean_dirty_bitmap(d);
     paging_lock(d);
 
-    PAGING_DEBUG(LOGDIRTY, "log-dirty-range: dom %u faults=%u dirty=%u\n",
+    PAGING_DEBUG(LOGDIRTY, "log-dirty-range: vm%u faults=%u dirty=%u\n",
                  d->domain_id,
                  d->arch.paging.log_dirty.fault_count,
                  d->arch.paging.log_dirty.dirty_count);
@@ -785,14 +785,14 @@ int paging_domctl(struct domain *d, xen_domctl_shadow_op_t *sc,
 
     if ( unlikely(d->is_dying) )
     {
-        gdprintk(XENLOG_INFO, "Ignoring paging op on dying domain %u\n",
+        gdprintk(XENLOG_INFO, "Ignoring paging op on dying vm%u\n",
                  d->domain_id);
         return 0;
     }
 
     if ( unlikely(d->vcpu == NULL) || unlikely(d->vcpu[0] == NULL) )
     {
-        gdprintk(XENLOG_DEBUG, "Paging op on a domain (%u) with no vcpus\n",
+        gdprintk(XENLOG_DEBUG, "Paging op on a vm%u with no vcpus\n",
                  d->domain_id);
         return -EINVAL;
     }
