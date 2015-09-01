@@ -519,6 +519,14 @@ validate_arguments(struct dict_rpc_command *c, dict obj,
                 dict_put_boolean(obj, ad->name, b);
                 v = dict_get(obj, ad->name);
             }
+            if (dict_typeof(v) == DICT_TYPE_NUMBER) {
+                int b;
+                b = dict_integer_as_bool(YAJL_GET_INTEGER(v), -1);
+                if (b == -1)
+                    goto mismatch;
+                dict_put_boolean(obj, ad->name, b);
+                v = dict_get(obj, ad->name);
+            }
             if (dict_typeof(v) != DICT_TYPE_TRUE &&
                 dict_typeof(v) != DICT_TYPE_FALSE)
                 goto mismatch;

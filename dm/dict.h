@@ -106,6 +106,17 @@ dict_get_integer_default(dict d, const char *key, int64_t defval)
 }
 
 static inline int
+dict_integer_as_bool(int64_t i, int defval)
+{
+
+    if (i == 1)
+        return 1;
+    if (i == 0)
+        return 0;
+    return defval;
+}
+
+static inline int
 dict_get_boolean(dict d, const char *key)
 {
 
