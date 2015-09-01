@@ -365,26 +365,28 @@ void hvm_do_resume(struct vcpu *v)
 
     p = get_ioreq(v);
 
-   /* NB. Optimised for common case (p->state == STATE_IOREQ_NONE). */
+    /* NB. Optimised for common case (p->state == STATE_IOREQ_NONE). */
     while (p->state != STATE_IOREQ_NONE) {
         switch (p->state) {
         case STATE_IORESP_READY: /* IORESP_READY -> NONE */
             hvm_io_assist();
+            /* hvm_io_assist usually resets the state to NONE, but in some
+             * cases another ioreq is immediately issued and needs to be
+             * waited upon below */
             break;
         case STATE_IOREQ_READY:  /* IOREQ_{READY,INPROCESS} -> IORESP_READY */
         case STATE_IOREQ_INPROCESS:
             wait_on_xen_event_channel(p->vp_eport,
                                       (p->state != STATE_IOREQ_READY) &&
                                       (p->state != STATE_IOREQ_INPROCESS));
-            if (!test_bit(_VPF_blocked_in_xen, &v->pause_flags)) {
-                hvm_io_assist();
-                break;
-            }
+            if (test_bit(_VPF_blocked_in_xen, &v->pause_flags))
+                return;
+            /* not waiting, state already changed to IORESP_READY? */
             break;
         default:
             gdprintk(XENLOG_ERR, "Weird HVM iorequest state %d.\n", p->state);
             domain_crash(v->domain);
-            break; /* bail */
+            return;
         }
     }
 }
