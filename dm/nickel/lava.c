@@ -486,9 +486,9 @@ lava_event_restore(struct nickel *ni, QEMUFile *f)
         goto out;
     if (len != sizeof(lvs)) {
         warnx("%s: expected len %u got %u", __FUNCTION__,
-              (unsigned) sizeof(lvs), len);
-        qemu_file_error(f);
-        return NULL;
+                (unsigned) sizeof(lvs), len);
+        qemu_file_skip(f, len);
+        goto consume;
     }
 
     qemu_get_buffer(f, (uint8_t *) &lvs, sizeof(lvs));
