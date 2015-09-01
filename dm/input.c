@@ -18,6 +18,8 @@ static input_mouse_fn *mouse_handler = NULL;
 static void *mouse_opaque = NULL;
 static int mouse_absolute = 0;
 static int kbd_ledstate = 0;
+static void (*kbd_ledstate_notify_fn)(int ledstate, void *opaque) = NULL;
+static void *kbd_ledstate_notify_opaque = NULL;
 
 void
 input_set_kbd_handler(input_kbd_fn *fn, void *opaque)
@@ -34,10 +36,19 @@ input_kbd_event(int keycode)
 	kbd_handler(kbd_opaque, keycode);
 }
 
+void input_kbd_ledstate_register(void (*fn)(int ledstate, void *opaque),
+                                 void *opaque)
+{
+    kbd_ledstate_notify_fn = fn;
+    kbd_ledstate_notify_opaque = opaque;
+}
+
 void
 input_kbd_ledstate(int ledstate)
 {
     kbd_ledstate = ledstate;
+    if (kbd_ledstate_notify_fn)
+        kbd_ledstate_notify_fn(ledstate, kbd_ledstate_notify_opaque);
 }
 
 int

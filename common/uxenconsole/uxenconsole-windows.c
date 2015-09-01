@@ -47,6 +47,7 @@ struct console {
     int requested_height;
     int resize_pending;
     int stop;
+    int kbd_ledstate;
 };
 
 enum {
@@ -746,6 +747,15 @@ console_update_cursor(void *priv,
 }
 
 static void
+console_keyboard_ledstate(void *priv, int state)
+{
+    struct console *cons = priv;
+
+    printf("Keyboard LED=%x\n", state);
+    cons->kbd_ledstate = state;
+}
+
+static void
 console_disconnected(void *priv)
 {
     struct console *cons = priv;
@@ -758,6 +768,7 @@ static ConsoleOps console_ops = {
     .resize_surface = console_resize_surface,
     .invalidate_rect = console_invalidate_rect,
     .update_cursor = console_update_cursor,
+    .keyboard_ledstate = console_keyboard_ledstate,
 
     .disconnected = console_disconnected,
 };

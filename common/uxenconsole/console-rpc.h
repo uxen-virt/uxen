@@ -17,12 +17,13 @@ struct uxenconsole_msg_header
 
 enum uxenconsole_msg_type
 {
-    UXENCONSOLE_MSG_TYPE_RESIZE_SURFACE  = 0,
-    UXENCONSOLE_MSG_TYPE_INVALIDATE_RECT = 1,
-    UXENCONSOLE_MSG_TYPE_MOUSE_EVENT     = 2,
-    UXENCONSOLE_MSG_TYPE_KEYBOARD_EVENT  = 3,
-    UXENCONSOLE_MSG_TYPE_UPDATE_CURSOR   = 4,
-    UXENCONSOLE_MSG_TYPE_REQUEST_RESIZE  = 5,
+    UXENCONSOLE_MSG_TYPE_RESIZE_SURFACE     = 0,
+    UXENCONSOLE_MSG_TYPE_INVALIDATE_RECT    = 1,
+    UXENCONSOLE_MSG_TYPE_MOUSE_EVENT        = 2,
+    UXENCONSOLE_MSG_TYPE_KEYBOARD_EVENT     = 3,
+    UXENCONSOLE_MSG_TYPE_UPDATE_CURSOR      = 4,
+    UXENCONSOLE_MSG_TYPE_REQUEST_RESIZE     = 5,
+    UXENCONSOLE_MSG_TYPE_KEYBOARD_LEDSTATE  = 6,
 };
 
 struct uxenconsole_msg_resize_surface {
@@ -77,6 +78,11 @@ struct uxenconsole_msg_request_resize {
     struct uxenconsole_msg_header header;
     uint32_t width;
     uint32_t height;
+};
+
+struct uxenconsole_msg_keyboard_ledstate {
+    struct uxenconsole_msg_header header;
+    uint32_t state;
 };
 
 #endif /* _CONSOLE_RPC_H_ */

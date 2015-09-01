@@ -139,6 +139,14 @@ handle_message(struct ctx *c, struct uxenconsole_msg_header *hdr)
 #endif
         }
         break;
+    case UXENCONSOLE_MSG_TYPE_KEYBOARD_LEDSTATE:
+        {
+            struct uxenconsole_msg_keyboard_ledstate *msg = (void *)hdr;
+
+            if (c->ops->keyboard_ledstate)
+                c->ops->keyboard_ledstate(c->priv, msg->state);
+        }
+        break;
     default:
         break;
     }

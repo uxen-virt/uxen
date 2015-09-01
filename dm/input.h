@@ -15,6 +15,8 @@ void input_kbd_event(int keycode);
 void input_kbd_ledstate(int ledstate);
 
 int input_get_kbd_ledstate(void);
+void input_kbd_ledstate_register(void (*fn)(int ledstate, void *opaque),
+                                 void *opaque);
 
 typedef void input_mouse_fn(void *opaque, int dx, int dy, int dz,
 			    int button_state);

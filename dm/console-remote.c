@@ -209,6 +209,18 @@ handle_message(struct uxenconsole_msg_header *hdr)
     }
 }
 
+static void
+ledstate_update(struct ipc_client *c, int state)
+{
+    struct uxenconsole_msg_keyboard_ledstate m;
+
+    m.header.type = UXENCONSOLE_MSG_TYPE_KEYBOARD_LEDSTATE;
+    m.header.len = sizeof(m);
+    m.state = state;
+
+    ipc_client_send(c, &m, sizeof(m));
+}
+
 static int
 console_connect(struct ipc_client *c, void *opaque)
 {
@@ -261,6 +273,8 @@ console_connect(struct ipc_client *c, void *opaque)
             }
         }
     }
+
+    ledstate_update(c, input_get_kbd_ledstate());
 
     return 0;
 }
@@ -604,6 +618,15 @@ gui_cursor_shape(struct gui_state *state,
     }
 }
 
+static void
+console_ledstate_notify(int state, void *opaque)
+{
+    struct ipc_client *c;
+
+    TAILQ_FOREACH(c, &console_svc.clients, link)
+        ledstate_update(c, state);
+}
+
 static int
 gui_init(char *optstr)
 {
@@ -623,6 +646,8 @@ gui_init(char *optstr)
 #if !defined(__APPLE__)
     guest_agent_init();
 #endif
+
+    input_kbd_ledstate_register(console_ledstate_notify, NULL);
 
     return 0;
 }

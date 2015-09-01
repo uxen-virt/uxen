@@ -57,6 +57,8 @@ typedef struct uxenconsole_ops {
                           unsigned int mask_offset,
                           unsigned int flags,
                           file_handle_t shm_handle);
+    void (*keyboard_ledstate)(void *priv,
+                              int state);
 
     void (*enable_write_event)(void *priv, file_handle_t handle, int enable);
     void (*disconnected)(void *priv);
