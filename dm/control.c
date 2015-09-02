@@ -381,7 +381,10 @@ control_command_quit(void *opaque, const char *id, const char *opt,
     struct control_desc *cd = (struct control_desc *)opaque;
 
     vm_quit_interrupt = dict_get_boolean(d, "interrupt");
-    vm_set_run_mode(DESTROY_VM);
+    if (vm_get_run_mode() != RUNNING_VM || dict_get_boolean(d, "force"))
+        vm_set_run_mode(DESTROY_VM);
+    else
+        vm_set_run_mode(POWEROFF_VM);
 
     control_queue_ok(cd, opt, id, NULL);
 
@@ -939,6 +942,8 @@ struct dict_rpc_command control_commands[] = {
     { "pause", control_command_pause, },
     { "quit", control_command_quit, .flags = CONTROL_SUSPEND_OK,
       .args = (struct dict_rpc_arg_desc[]) {
+            { "force", DICT_RPC_ARG_TYPE_BOOLEAN,
+              .defval = DICT_RPC_ARG_DEFVAL_BOOLEAN(true) },
             { "interrupt", DICT_RPC_ARG_TYPE_BOOLEAN,
               .defval = DICT_RPC_ARG_DEFVAL_BOOLEAN(false) },
             { NULL, },

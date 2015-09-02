@@ -904,7 +904,8 @@ void
 mc_quit(Monitor *mon, const dict args)
 {
 
-    if (run_mode != RUNNING_VM || dict_get_string(args, "force"))
+    vm_quit_interrupt = dict_get_boolean_default(args, "interrupt", 0);
+    if (run_mode != RUNNING_VM || dict_get_boolean_default(args, "force", 1))
         vm_set_run_mode(DESTROY_VM);
     else
         vm_set_run_mode(POWEROFF_VM);
