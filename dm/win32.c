@@ -376,13 +376,4 @@ cpu_usage(float *user, float *kernel, uint64_t *user_total_ms,
     last_time = current_time;
 }
 
-/* Version of exit() that does not wait for threads to complete, and does
- * not call atexit() handlers. Only flushing done is stderr, to make sure
- * we get all logs out. */
-void hard_exit(int rc)
-{
-    fflush(stderr);
-    TerminateProcess(GetCurrentProcess(), rc);
-}
-
 #endif  /* LIBIMG */
