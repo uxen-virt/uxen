@@ -248,6 +248,8 @@ _backtrace(struct output_buffer *ob, struct bfd_set *set, int depth , LPCONTEXT 
 	char symbol_buffer[sizeof(IMAGEHLP_SYMBOL) + 255];
 	char module_name_raw[MAX_PATH];
 
+        output_print(ob, "Backtrace:\n");
+
 	while(StackWalk(
 #if defined(_WIN64)
 		IMAGE_FILE_MACHINE_AMD64,
@@ -297,13 +299,13 @@ _backtrace(struct output_buffer *ob, struct bfd_set *set, int depth , LPCONTEXT 
 			}
 		}
 		if (func == NULL) {
-			output_print(ob,"0x%x: %s@0x%x: %s\n",
+			output_print(ob,"    0x%x: %s@0x%x: %s\n",
                                      frame.AddrPC.Offset,
                                      module_name, module_base,
                                      file);
 		}
 		else {
-			output_print(ob,"0x%x: %s@0x%x: %s:%d: %s\n",
+			output_print(ob,"    0x%x: %s@0x%x: %s:%d: %s\n",
                                      frame.AddrPC.Offset,
                                      module_name, module_base,
                                      file,
@@ -322,12 +324,59 @@ static HANDLE except_monitor_mutex;
 static HANDLE except_notify_event;
 static HANDLE except_cont_event;
 
+static void
+dump_exception_info(struct output_buffer *ob, PEXCEPTION_RECORD record)
+{
+    DWORD i;
+
+    output_print(ob, "Exception caught !\n");
+    output_print(ob, "    Code=%08x, Flags=%08x, Address=%p, Parameters(%d): ",
+                 record->ExceptionCode, record->ExceptionFlags,
+                 record->ExceptionAddress, record->NumberParameters);
+    for (i = 0; i < (record->NumberParameters - 1); i++)
+        output_print(ob, "%p, ", record->ExceptionInformation[i]);
+    if (record->NumberParameters)
+        output_print(ob, "%p\n", record->ExceptionInformation[i]);
+}
+
+static void
+dump_regs(struct output_buffer *ob, LPCONTEXT context)
+{
+    output_print(ob, "Register dump:\n");
+
+#if defined(_WIN64)
+    output_print(ob, "    RIP=0x%016x\n", context->Rip);
+    output_print(ob, "    RAX=0x%016x, RCX=0x%016x, RDX=0x%016x, RBX=0x%016x\n",
+                 context->Rax, context->Rcx, context->Rdx, context->Rbx);
+    output_print(ob, "    RSP=0x%016x, RBP=0x%016x, RSI=0x%016x, RDI=0x%016x\n",
+                 context->Rsp, context->Rbp, context->Rsi, context->Rdi);
+    output_print(ob, "    R8 =0x%016x, R9 =0x%016x, R10=0x%016x, R11=0x%016x\n",
+                 context->R8, context->R9, context->R10, context->R11);
+    output_print(ob, "    R12=0x%016x, R13=0x%016x, R14=0x%016x, R15=0x%016x\n",
+                 context->Rsp, context->Rbp, context->Rsi, context->Rdi);
+#else
+    output_print(ob, "    EIP=0x%08x\n", context->Eip);
+    output_print(ob, "    EAX=0x%08x, ECX=0x%08x, EDX=0x%08x, EBX=0x%08x\n",
+                 context->Eax, context->Ecx, context->Edx, context->Ebx);
+    output_print(ob, "    ESP=0x%08x, EBP=0x%08x, ESI=0x%08x, EDI=0x%08x\n",
+                 context->Esp, context->Ebp, context->Esi, context->Edi);
+#endif
+    output_print(ob, "    EFLAGS=0x%08x\n", context->EFlags);
+    output_print(ob, "    CS=0x%08x DS=0x%08x ES=0x%08x\n",
+                 context->SegCs, context->SegDs, context->SegEs);
+    output_print(ob, "    FS=0x%08x GS=0x%08x SS=0x%08x\n",
+                 context->SegFs, context->SegGs, context->SegSs);
+}
+
 static LONG WINAPI
 exception_filter(LPEXCEPTION_POINTERS info)
 {
 	struct output_buffer ob;
 	output_init(&ob, g_output, BUFFER_MAX);
         DWORD rc;
+
+        dump_exception_info(&ob, info->ExceptionRecord);
+        dump_regs(&ob, info->ContextRecord);
 
 	if (!SymInitialize(GetCurrentProcess(), 0, TRUE)) {
 		output_print(&ob,"Failed to init symbol context\n");
