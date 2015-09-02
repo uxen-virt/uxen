@@ -23,6 +23,9 @@ extern "C" {
 #define KEYBOARD_EVENT_FLAG_EXTENDED    0x1
 #define KEYBOARD_EVENT_FLAG_UCS2        0x10000
 
+#define CLIPBOARD_PERMIT_COPY           0x1
+#define CLIPBOARD_PERMIT_PASTE          0x2
+
 #ifndef QEMU_UXEN
 typedef void *uxenconsole_context_t;
 typedef void *hid_context_t;
@@ -93,6 +96,7 @@ int                     uxenconsole_request_resize(uxenconsole_context_t ctx,
                                                    unsigned int width,
                                                    unsigned int height);
 
+int                     uxenconsole_clipboard_permit(int permit_type);
 
 hid_context_t           uxenconsole_hid_init(int vm_id);
 void                    uxenconsole_hid_cleanup(hid_context_t context);
@@ -108,7 +112,6 @@ int                     uxenconsole_hid_touch_report(hid_context_t context,
                                                      int x, int y,
                                                      int width, int height,
                                                      int flags);
-
 #endif /* !QEMU_UXEN */
 
 typedef void *disp_context_t;

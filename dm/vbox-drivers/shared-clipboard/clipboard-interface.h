@@ -14,6 +14,7 @@ void uxen_clipboard_set_policy(const char *policy);
 
 /* lift access restrictions (temporarily) */
 void uxen_clipboard_allow_copy_access();
+void uxen_clipboard_allow_paste_access();
 
 /* block clipboard rendering from remote end / test for blocked render */
 void uxen_clipboard_block_remote_render(int);

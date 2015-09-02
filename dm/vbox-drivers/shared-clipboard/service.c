@@ -268,6 +268,11 @@ void uxen_clipboard_allow_copy_access()
     copy_allowed_timestamp = RTTimeSystemMilliTS();
 }
 
+void uxen_clipboard_allow_paste_access()
+{
+    paste_allowed_timestamp = RTTimeSystemMilliTS();
+}
+
 int uxen_clipboard_remote_render_blocked(void)
 {
     return remote_render_blocked;
@@ -284,6 +289,7 @@ enum {
     LEFT_BUTTON_PRESSED,
     RIGHT_BUTTON_PRESSED
 };
+
 static void InputNotify(int inputtype)
 {
 #ifdef EXTRA_LOGGING
@@ -291,10 +297,10 @@ static void InputNotify(int inputtype)
 #endif
     switch (inputtype) {
         case COPY_KEY_PRESSED:
-            copy_allowed_timestamp = RTTimeSystemMilliTS();
+            uxen_clipboard_allow_copy_access();
             break;
         case PASTE_KEY_PRESSED:
-            paste_allowed_timestamp = RTTimeSystemMilliTS();
+            uxen_clipboard_allow_paste_access();
             break;
         case LEFT_BUTTON_PRESSED:
             click_seen = true;

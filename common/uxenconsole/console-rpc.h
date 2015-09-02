@@ -24,6 +24,7 @@ enum uxenconsole_msg_type
     UXENCONSOLE_MSG_TYPE_UPDATE_CURSOR      = 4,
     UXENCONSOLE_MSG_TYPE_REQUEST_RESIZE     = 5,
     UXENCONSOLE_MSG_TYPE_KEYBOARD_LEDSTATE  = 6,
+    UXENCONSOLE_MSG_TYPE_CLIPBOARD_PERMIT   = 7,
 };
 
 struct uxenconsole_msg_resize_surface {
@@ -83,6 +84,11 @@ struct uxenconsole_msg_request_resize {
 struct uxenconsole_msg_keyboard_ledstate {
     struct uxenconsole_msg_header header;
     uint32_t state;
+};
+
+struct uxenconsole_msg_clipboard_permit {
+    struct uxenconsole_msg_header header;
+    uint32_t permit_type;
 };
 
 #endif /* _CONSOLE_RPC_H_ */

@@ -586,4 +586,25 @@ uxenconsole_request_resize(uxenconsole_context_t ctx,
     return 0;
 }
 
+int
+uxenconsole_clipboard_permit(uxenconsole_context_t ctx,
+                             int permit_type)
+{
+    struct ctx *c = ctx;
+    struct uxenconsole_msg_clipboard_permit msg;
+    int rc;
+
+    snd_complete(c);
+
+    msg.header.type = UXENCONSOLE_MSG_TYPE_CLIPBOARD_PERMIT;
+    msg.header.len = sizeof (msg);
+    msg.permit_type = permit_type;
+
+    rc = channel_write(c, &msg, sizeof (msg));
+    if (rc != sizeof (msg))
+        return -1;
+
+    return 0;
+}
+
 

@@ -17,6 +17,7 @@
 
 #ifdef NOTIFY_CLIPBOARD_SERVICE
 #include "vbox-drivers/shared-clipboard/notify.h"
+#include "vbox-drivers/shared-clipboard/clipboard-interface.h"
 #endif
 
 #include <xenctrl.h>
@@ -202,6 +203,18 @@ handle_message(struct uxenconsole_msg_header *hdr)
                 /* Cancel request by sending a resize message immediately */
                 gui_resize(&s->state, s->state.width, s->state.height);
             }
+        }
+        break;
+    case UXENCONSOLE_MSG_TYPE_CLIPBOARD_PERMIT:
+        {
+#ifdef NOTIFY_CLIPBOARD_SERVICE
+            struct uxenconsole_msg_clipboard_permit *msg = (void *)hdr;
+
+            if (msg->permit_type & CLIPBOARD_PERMIT_COPY)
+                uxen_clipboard_allow_copy_access();
+            if (msg->permit_type & CLIPBOARD_PERMIT_PASTE)
+                uxen_clipboard_allow_paste_access();
+#endif
         }
         break;
     default:
