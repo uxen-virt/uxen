@@ -36,6 +36,7 @@ uint64_t ioreq_count = 0;
 
 static void handle_ioreq(void *opaque);
 
+#ifdef MONITOR
 struct ioreqstat_key {
     unsigned int isk_addr;
     unsigned int isk_size;
@@ -126,7 +127,6 @@ ioreqstat_update(ioreq_t *req)
     }
 }
 
-#ifdef MONITOR
 void
 ic_ioreq(Monitor *mon)
 {
@@ -155,16 +155,16 @@ ic_ioreq(Monitor *mon)
 }
 #endif  /* MONITOR */
 
-
 void
 ioreq_init(void)
 {
-
     default_ioreq_state = ioreq_new_server();
     if (default_ioreq_state == NULL)
         errx(1, "ioreq_new_server failed");
 
+#ifdef MONITOR
     rb_tree_init(&ioreqstat_rbtree, &ioreqstat_rbtree_ops);
+#endif
 }
 
 struct ioreq_state *
@@ -358,7 +358,9 @@ static void __handle_ioreq(ioreq_t *req)
         (req->size < sizeof(uint64_t)))
         req->data &= (1ULL << (8 * req->size)) - 1;
 
+#ifdef MONITOR
     ioreqstat_update(req);
+#endif
 
     switch (req->type) {
     case IOREQ_TYPE_PIO:
