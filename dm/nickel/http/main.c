@@ -4904,6 +4904,7 @@ static int cx_guest_write(struct clt_ctx *cx)
                 if (cx->hp->flags & HF_REUSABLE)
                     cx->hp->flags |= HF_REUSE_READY;
                 CXL5("PS_MCOMPLETE");
+                cx->flags &= ~CXF_RESET_STATE;
 
                 if ((cx->hp->flags & HF_HTTP_CLOSE))
                     cx->hp->flags &= ~HF_HTTP_CLOSE;
@@ -4923,6 +4924,8 @@ static int cx_guest_write(struct clt_ctx *cx)
                     cx_reset(cx, true);
                 }
                 parser_reset(cx->srv_parser);
+            } else if (cx->proxy || (cx->flags & CXF_GUEST_PROXY)) {
+                cx->flags |= CXF_RESET_STATE;
             }
         }
 
@@ -5181,9 +5184,14 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
     }
 
     if (buf && (cx->flags & CXF_RESET_STATE)) {
-        CXL5("CXF_RESET_STATE found");
+        CXL4("CXF_RESET_STATE");
         cx->flags &= ~CXF_RESET_STATE;
         cx_reset_state(cx, false);
+        if (cx->hp) {
+            cx->hp->flags &= (~HF_REUSABLE & ~HF_HTTP_CLOSE);
+            if (cx_hp_disconnect(cx) < 0)
+                goto out;
+        }
     }
 
     assert(cx->in);
