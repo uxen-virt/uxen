@@ -19,7 +19,7 @@ typedef uint32_t word_t;
 #endif
 
 static int
-_read(HANDLE file, void *buf, int cnt)
+_fc_read(HANDLE file, void *buf, int cnt)
 {
     DWORD part = 0;
     uint8_t *p = (uint8_t*)buf;
@@ -36,7 +36,7 @@ _read(HANDLE file, void *buf, int cnt)
 }
 
 static int
-_write(HANDLE file, void *buf, int cnt)
+_fc_write(HANDLE file, void *buf, int cnt)
 {
     DWORD part = 0;
     uint8_t *p = (uint8_t*)buf;
@@ -53,7 +53,7 @@ _write(HANDLE file, void *buf, int cnt)
 }
 
 static int
-_pad(HANDLE file, int sz)
+_fc_pad(HANDLE file, int sz)
 {
     uint8_t *buf;
     int ret;
@@ -63,7 +63,7 @@ _pad(HANDLE file, int sz)
     buf = calloc(1, sz);
     if (!buf)
         return ERROR_NOT_ENOUGH_MEMORY;
-    ret = _write(file, buf, sz);
+    ret = _fc_write(file, buf, sz);
     free(buf);
     return ret;
 }
@@ -129,16 +129,16 @@ read_hdr(HANDLE file, int *iscrypt, filecrypt_hdr_t *h_in, filecrypt_hdr_t **h_o
         *h_out = NULL;
     *iscrypt = 0;
 
-    if ((rc = _read(file, &magic, 8)))
+    if ((rc = _fc_read(file, &magic, 8)))
         return rc;
     if (h_in)
         fc_decrypt(h_in, &magic, 0, 8);
     if (magic != FILECRYPT_MAGIC)
         return ERROR_INVALID_DATA;
     *iscrypt = 1;
-    if ((rc = _read(file, &hdrversion, 4)))
+    if ((rc = _fc_read(file, &hdrversion, 4)))
         return rc;
-    if ((rc = _read(file, &hdrlen, 4)))
+    if ((rc = _fc_read(file, &hdrlen, 4)))
         return rc;
     if (h_in) {
         fc_decrypt(h_in, &hdrversion, 8, 4);
@@ -155,7 +155,7 @@ read_hdr(HANDLE file, int *iscrypt, filecrypt_hdr_t *h_in, filecrypt_hdr_t **h_o
     h->hdrversion = hdrversion;
     h->hdrlen = hdrlen;
     ptr = ((uint8_t*)h) + 16;
-    if ((rc = _read(file, ptr, sizeof(filecrypt_hdr_t)-16)))
+    if ((rc = _fc_read(file, ptr, sizeof(filecrypt_hdr_t)-16)))
         return rc;
     if (h_in)
         fc_decrypt(h_in, ptr, 16, sizeof(filecrypt_hdr_t)-16);
@@ -269,9 +269,9 @@ fc_write_hdr(HANDLE file, filecrypt_hdr_t *h)
         return ERROR_WRITE_FAULT;
     if (h->hdrlen > 4096)
         return ERROR_BUFFER_OVERFLOW;
-    if ((rc = _write(file, h, sizeof(*h))))
+    if ((rc = _fc_write(file, h, sizeof(*h))))
         return rc;
-    if ((rc = _pad(file, FILECRYPT_HDR_PAD - sizeof(*h))))
+    if ((rc = _fc_pad(file, FILECRYPT_HDR_PAD - sizeof(*h))))
         return rc;
     return 0;
 }

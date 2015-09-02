@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #if defined(ERR_WINDOWS) && defined(_WIN32)
 #define _ERR_WINDOWS
@@ -232,7 +233,9 @@ _verr(const char *function, int line, int eval, const char *fmt, va_list ap)
                  fmt, ap);
 
     _err_flush();
-    exit(eval);
+    if (eval)
+        _exit(eval);
+    exit(0);
     /* NOTREACHED */
 }
 
@@ -250,7 +253,9 @@ _verrx(const char *function, int line, int eval, const char *fmt, va_list ap)
                  fmt, ap);
 
     _err_flush();
-    exit(eval);
+    if (eval)
+        _exit(eval);
+    exit(0);
     /* NOTREACHED */
 }
 
@@ -348,7 +353,9 @@ _Werrv(const char *function, int line, int eval, const char *fmt, va_list ap)
     _err_vprintf(function, line, "err", last_error, lpMsgBuf, fmt, ap);
 
     _err_flush();
-    exit(eval);
+    if (eval)
+        _exit(eval);
+    exit(0);
     /* NOTREACHED */
 }
 
