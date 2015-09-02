@@ -1721,6 +1721,8 @@ vm_save_finalize(void)
 {
 
     if (vm_save_info.f) {
+        if (vm_quit_interrupt)
+            filebuf_delete_on_close(vm_save_info.f, 1);
         filebuf_close(vm_save_info.f);
         vm_save_info.f = NULL;
     }

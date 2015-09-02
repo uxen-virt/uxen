@@ -663,9 +663,18 @@ vm_exit(void *opaque)
     /* close vm save file if open */
     vm_save_finalize();
 
+    /* flush logs before sending quit command acknowledgment */
+    fflush(stderr);
+
     /* call control_command_exit as early as possible
      * to avoid deadlock on rpc sync commands */
     control_command_exit();
+
+    /* interrupting quit, exit instantly */
+    if (vm_quit_interrupt) {
+        fflush(stderr);
+        _exit(0);
+    }
 
     /* Since we are going to exit here, make sure everything is flushed. */
     aio_flush();
