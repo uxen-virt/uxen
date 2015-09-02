@@ -371,9 +371,8 @@ void hvm_do_resume(struct vcpu *v)
         case STATE_IORESP_READY: /* IORESP_READY -> NONE */
             hvm_io_assist();
             /* hvm_io_assist usually resets the state to NONE, but in some
-             * cases another ioreq is immediately issued and needs to be
-             * waited upon below */
-            break;
+             * cases another ioreq is immediately issued */
+            return;
         case STATE_IOREQ_READY:  /* IOREQ_{READY,INPROCESS} -> IORESP_READY */
         case STATE_IOREQ_INPROCESS:
             wait_on_xen_event_channel(p->vp_eport,
