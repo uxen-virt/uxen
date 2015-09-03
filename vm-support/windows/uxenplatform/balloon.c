@@ -651,7 +651,7 @@ share_pages(__in const MDL * const mdl)
     static xen_pfn_t                * gpfn_list      = NULL;
     static xen_pfn_t                  gpfn_list_gpfn = 0;
     static const ULONG                batch_size     = 
-        PAGE_SIZE / sizeof(PFN_NUMBER);
+        XENMEM_SHARE_ZERO_PAGES_MAX_BATCH;
     unsigned int                      gpfn;
     const PFN_NUMBER                * gpfns;
     //ULONG                             i;
@@ -663,8 +663,6 @@ share_pages(__in const MDL * const mdl)
     UXENPLATFORM_BALLOON_ENTER();
     UXENPLATFORM_BALLOON_ASSERT((mdl));
     UXENPLATFORM_BALLOON_INITIALIZATION_CHECK(1);
-    UXENPLATFORM_BALLOON_ASSERT((
-        batch_size == XENMEM_SHARE_ZERO_PAGES_MAX_BATCH));
 
     gpfns           = MmGetMdlPfnArray(mdl);
     UXENPLATFORM_BALLOON_ASSERT((gpfns));

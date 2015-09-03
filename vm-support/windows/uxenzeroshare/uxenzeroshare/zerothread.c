@@ -113,7 +113,7 @@ zt_create_zeroing_thread(
     Context->ZeroingBatch = (PFN_NUMBER *)
         ExAllocatePoolWithTag(
             NonPagedPool,
-            sizeof(PFN_NUMBER) * XENMEM_SHARE_ZERO_PAGES_MAX_BATCH,
+            sizeof(xen_pfn_t) * XENMEM_SHARE_ZERO_PAGES_MAX_BATCH,
             UXENZEROSHARE_POOL_TAG
             );
 
