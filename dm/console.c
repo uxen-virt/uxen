@@ -491,7 +491,8 @@ dpy_desktop_update(int x, int y, int w, int h)
         if (y2 > ds->surface->height)
             y2 = ds->surface->height;
 
-        dpy_update(ds, x1, y1, x2 - x1, y2 - y1);
+        if (x2 > x1 && y2 > y1)
+            dpy_update(ds, x1, y1, x2 - x1, y2 - y1);
     }
     critical_section_leave(&desktop_lock);
 }
