@@ -96,7 +96,8 @@ int                     uxenconsole_request_resize(uxenconsole_context_t ctx,
                                                    unsigned int width,
                                                    unsigned int height);
 
-int                     uxenconsole_clipboard_permit(int permit_type);
+int                     uxenconsole_clipboard_permit(uxenconsole_context_t ctx,
+                                                     int permit_type);
 
 hid_context_t           uxenconsole_hid_init(int vm_id);
 void                    uxenconsole_hid_cleanup(hid_context_t context);
