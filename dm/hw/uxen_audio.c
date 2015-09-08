@@ -180,7 +180,6 @@ voice_stop(UXenAudioVoice *v)
 
     v->running = 0;
     v->rptr = 0;
-    v->buf->rptr = v->rptr;
 }
 
 static void
