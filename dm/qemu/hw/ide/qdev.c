@@ -24,6 +24,7 @@
 // #include "sysemu.h"
 
 #include <dm/qemu_glue.h>
+#include <dm/hw/xenpc.h>
 #include "internal.h"
 
 /* --------------------------------- */
@@ -160,14 +161,9 @@ static int ide_dev_initfn(IDEDevice *dev, IDEDriveKind kind)
     if (ide_init_drive(s, dev->conf.bs, kind, dev->version, serial,
                        dev->model) < 0) {
         return -1;
-   }
+    }
 
-#ifndef __APPLE__
-   {
-	extern DeviceState *uxen_stor_add_parasite(BlockDriverState *bs);
-	uxen_stor_add_parasite(dev->conf.bs);
-   } 
-#endif
+    uxen_stor_add_parasite(dev->conf.bs);
  
     if (!dev->version) {
         dev->version = g_strdup(s->version_buf);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -11,11 +11,16 @@
 #include <dm/hw.h>
 #include <dm/firmware.h>
 
+#ifdef __APPLE__
+#define QEMU_SCSI
+#else
 #undef QEMU_SCSI
+#endif
 
 #ifdef QEMU_SCSI
 #include <dm/qemu/hw/scsi.h>
 #else
+#include <dm/hw/xenpc.h>
 #include "uxen_scsi.h"
 #endif
 #include <dm/block-int.h>
@@ -26,14 +31,8 @@
 #define SCSIOP_SYNCHRONIZE_CACHE 0x35
 #endif
 
+#include "uxen_v4v.h"
 
-#include <winioctl.h>
-#define V4V_USE_INLINE_API
-#include <windows/uxenv4vlib/gh_v4vapi.h>
-
-#if defined(_WIN32)
-#define _POSIX
-#endif
 #include <time.h>
 #include <sys/time.h>
 
@@ -106,7 +105,9 @@ typedef struct uxen_stor_req {
     size_t cdb_len;
 #endif
 
+#ifdef _WIN32
     OVERLAPPED overlapped;
+#endif
 
     uint8_t cdb[MAX_CDB];
 
@@ -130,13 +131,13 @@ typedef struct uxen_stor_req {
 typedef struct uxen_stor {
     ISADevice dev;
     //DeviceState dev;
-    v4v_context_t a;
+    _v4v_context_t a;
     v4v_addr_t dest;
 
-    OVERLAPPED notify_overlapped;
-    BOOLEAN notify_pending;
-
-    HANDLE tx_event;
+    ioh_event tx_event;
+#ifndef _WIN32
+    ioh_event run_queue_event;
+#endif
 
     v4v_ring_t *ring;
 
@@ -350,6 +351,10 @@ req_remove (uxen_stor_req_list_t *list, uxen_stor_req_t *req)
 }
 
 
+/* Windows: send message, check for completion whenever TX event fires.
+ * OSX: send message, if it fails, retry on TX event. */
+#ifdef _WIN32
+
 static void
 uxen_stor_send_reply (uxen_stor_t *s, uxen_stor_req_t *r)
 {
@@ -362,7 +367,7 @@ uxen_stor_send_reply (uxen_stor_t *s, uxen_stor_req_t *r)
 
     /*send reply */
     if (WriteFile
-        (s->a.v4v_handle, &r->packet,
+        (s->a.c.v4v_handle, &r->packet,
          r->reply_size + sizeof (v4v_datagram_t), NULL, &r->overlapped)) {
         Wwarn("%s: fail path 1 seq=%"PRIx64, __FUNCTION__, r->packet.xfr.seq);
         r->state = UXS_STATE_V4V_SENT;
@@ -377,6 +382,37 @@ uxen_stor_send_reply (uxen_stor_t *s, uxen_stor_req_t *r)
         Wwarn("%s: fail path 2 seq=%"PRIx64, __FUNCTION__, r->packet.xfr.seq);
     }
 }
+
+#else
+
+static void
+uxen_stor_send_reply (uxen_stor_t *s, uxen_stor_req_t *r)
+{
+    ssize_t sent_bytes = v4v_sendto(
+        s->a.v4v_handle, s->dest,
+        &r->packet.xfr, r->reply_size, r->packet.dg.flags);
+    if (sent_bytes == -EAGAIN)
+    {
+        r->state = UXS_STATE_V4V_SENDING;
+    }
+    else if (sent_bytes == r->reply_size)
+    {
+        r->state = UXS_STATE_V4V_SENT;
+    }
+    else if (sent_bytes < 0)
+    {
+        debug_printf("uxen_stor_send_reply: error sending %u byte reply: %ld\n",
+            r->reply_size, sent_bytes);
+    }
+    else
+    {
+        debug_printf(
+            "uxen_stor_send_reply: warning: sent only %ld of %u byte reply\n",
+            sent_bytes, r->reply_size);
+    }
+}
+
+#endif
 
 
 #ifdef QEMU_SCSI
@@ -424,6 +460,9 @@ uxen_stor_request_cancelled (SCSIRequest *req)
     r->req = NULL;
 }
 
+
+static void
+uxen_stor_run_q (uxen_stor_t *s);
 
 static void
 uxen_stor_command_complete (SCSIRequest *req, uint32_t status)
@@ -485,6 +524,13 @@ uxen_stor_command_complete (SCSIRequest *req, uint32_t status)
     r->req = NULL;
 
     uxen_stor_send_reply (s, r);
+    
+#ifndef _WIN32
+    /* Run queue so that the request gets cleaned up and other pending replies
+     * are retried */
+    if (r->state == UXS_STATE_V4V_SENT)
+        ioh_event_set(&s->run_queue_event);
+#endif
 }
 
 static const struct SCSIBusInfo uxen_stor_scsi_info = {
@@ -571,6 +617,10 @@ uxen_stor_run_q (uxen_stor_t *s)
     uxen_stor_req_t *r, *next_r;
     int short_circuit;
 
+#ifndef _WIN32
+    uxen_stor_req_t *still_pending = NULL;
+    int last_sent_successfully = 0;
+#endif
     for (r = s->queue.head; r;) {
 
 
@@ -615,6 +665,9 @@ uxen_stor_run_q (uxen_stor_t *s)
                     r->packet.xfr.status = 0;
 
                     r->state = UXS_STATE_SCSI_DONE;
+#ifndef _WIN32
+                    last_sent_successfully = 0;
+#endif
                     uxen_stor_send_reply (s, r);
 
                 } else {
@@ -660,8 +713,13 @@ uxen_stor_run_q (uxen_stor_t *s)
                 break;
 
             case UXS_STATE_V4V_SENDING:
+#ifdef _WIN32
                 if (HasOverlappedIoCompleted (&r->overlapped))
                     r->state = UXS_STATE_V4V_SENT;
+#else
+                last_sent_successfully = 0;
+                uxen_stor_send_reply (s, r);
+#endif
 
                 break;
             case UXS_STATE_V4V_SENT: /*compiler, grr */
@@ -678,9 +736,24 @@ uxen_stor_run_q (uxen_stor_t *s)
             req_remove (&s->queue, r);
             s->mem -= r->len;
             free (r);
+#ifndef _WIN32
+            last_sent_successfully = 1;
+        }
+        else if (r->state == UXS_STATE_V4V_SENDING)
+        {
+            still_pending = r;
+#endif
         }
         r = next_r;
     }
+#ifndef _WIN32
+    /* if the last reply sent successfully but there are others that didn't, we
+     * won't get a tx event for the failed ones. Insert a fake event to re-run
+     * the queue on the next cycle so we always end on a failed send (or no
+     * pending sends) */
+    if (still_pending && last_sent_successfully)
+        ioh_event_set(&s->run_queue_event);
+#endif
 }
 
 
@@ -693,7 +766,10 @@ uxen_stor_write_event (void *_s)
     debug_printf("%s: write_event\n", __FUNCTION__);
 #endif
 
-    ResetEvent (s->tx_event);
+    ioh_event_reset(&s->tx_event);
+#ifndef _WIN32
+    ioh_event_reset(&s->run_queue_event);
+#endif
 
     uxen_stor_run_q (s);
 
@@ -702,31 +778,6 @@ uxen_stor_write_event (void *_s)
 
 /*********************** RX path ***************************/
 
-
-static int
-uxen_stor_notify_complete (uxen_stor_t *s, BOOLEAN wait)
-{
-    DWORD writ;
-
-    if (!s->notify_pending)
-        return 1;
-
-    if (GetOverlappedResult
-        (s->a.v4v_handle, &s->notify_overlapped, &writ, wait)) {
-        s->notify_pending = FALSE;
-        return 1;
-    }
-
-    if (GetLastError () == ERROR_IO_INCOMPLETE)
-        return 0;
-
-    /* XXX: does false mean complete? in this case */
-    s->notify_pending = FALSE;
-
-    return 1;
-}
-
-
 static void
 uxen_stor_read_event (void *_s)
 {
@@ -734,7 +785,7 @@ uxen_stor_read_event (void *_s)
     ssize_t len;
     uint32_t protocol;
     v4v_disk_transfer_t xfr;
-    uxen_stor_req_t *req;
+    uxen_stor_req_t *req = NULL;
 
     uint32_t size;
 #if PCAP
@@ -821,12 +872,7 @@ uxen_stor_read_event (void *_s)
         req_insert_tail (&s->queue, req);
     } while (1);
 
-    if (!((s->notify_pending) && (!uxen_stor_notify_complete (s, FALSE)))) {
-        memset (&s->notify_overlapped, 0, sizeof (OVERLAPPED));
-        gh_v4v_notify (&s->a, &s->notify_overlapped);
-
-        s->notify_pending = TRUE;
-    }
+    _v4v_notify(&s->a);
 
     uxen_stor_run_q (s);
 }
@@ -915,29 +961,13 @@ uxen_stor_cleanup (VLANClientState *nc)
 #endif
 
 static int
-have_v4v (void)
-{
-    v4v_context_t c = { 0 };
-
-    if (v4v_open (&c, 4096, NULL)) {
-        v4v_close (&c);
-        return 1;
-    }
-
-    return 0;
-}
-
-static int
 uxen_stor_initfn (ISADevice *dev)
 {
-    DWORD t;
     v4v_ring_id_t r;
-    v4v_mapring_values_t mr;
-    OVERLAPPED o = { 0 };
+    int error;
 
     uxen_stor_t *s = DO_UPCAST (uxen_stor_t, dev, dev);
     BlockDriverState *bs = s->conf.bs;
-
 
     s->queue.head = s->queue.tail = NULL;
     s->unit = unit;
@@ -954,81 +984,50 @@ uxen_stor_initfn (ISADevice *dev)
     }
 #endif
 
-    if (!have_v4v()) {
+    if (!v4v_have_v4v ()) {
         debug_printf("%s: no v4v detected on the host\n", __FUNCTION__);
         return -1;
     }
 
-    s->a.flags = V4V_FLAG_OVERLAPPED;
-    memset (&o, 0, sizeof (o));
-
-    if (!v4v_open(&s->a, RING_SIZE, &o)) {
+    if (!v4v_open_sync(&s->a, RING_SIZE, &error)) {
         debug_printf("%s: v4v_open failed (%x)\n",
-                     __FUNCTION__, (int)GetLastError());
+                     __FUNCTION__, error);
         return -1;
     }
 
-    if (!GetOverlappedResult(s->a.v4v_handle, &o, &t, TRUE)) {
-        debug_printf("%s: GetOverlappedResult (v4v_open) failed (%x)\n",
-                     __FUNCTION__, (int)GetLastError());
-        return -1;
-    }
 
     r.addr.port = 0xd0000 + unit;
     r.addr.domain = V4V_DOMID_ANY;
     r.partner = vm_id;
 
-    memset(&o, 0, sizeof (o));
-
-    if (!v4v_bind(&s->a, &r, &o)) {
+    if (!v4v_bind_sync(&s->a, &r, &error)) {
         debug_printf("%s: v4v_bind failed (%x)\n",
-                     __FUNCTION__, (int)GetLastError());
+                     __FUNCTION__, error);
         v4v_close(&s->a);
         return -1;
     }
 
-    if (!GetOverlappedResult(s->a.v4v_handle, &o, &t, TRUE)) {
-        debug_printf("%s: GetOverlappedResult (v4v_bind) failed (%x)\n",
-                     __FUNCTION__, (int)GetLastError());
-        v4v_close(&s->a);
-        return -1;
-    }
-
-    memset(&o, 0, sizeof (o));
-
-    mr.ring = NULL;
-    if (!v4v_map(&s->a, &mr, &o)) {
-        debug_printf("%s: failed to map ring (%x)\n",
-                     __FUNCTION__, (int)GetLastError());
-        v4v_close(&s->a);
-        return -1;
-    }
-
-    if (!GetOverlappedResult(s->a.v4v_handle, &o, &t, TRUE)) {
-        debug_printf("%s: GetOverlappedResult (v4v_map) failed (%x)\n",
-                     __FUNCTION__, (int)GetLastError());
-        v4v_close(&s->a);
-        return -1;
-    }
-
-    s->ring = mr.ring;
+    s->ring = v4v_ring_map_sync(&s->a, &error);
     if (!s->ring) {
-        debug_printf("%s: ring == NULL\n", __FUNCTION__);
+        debug_printf("%s: failed to map ring (%x)\n",
+                     __FUNCTION__, error);
         v4v_close(&s->a);
         return -1;
     }
-
-    s->tx_event = CreateEvent(NULL, FALSE, FALSE, NULL);
-    if (!s->tx_event) {
+    if (!v4v_init_tx_event(&s->a, &s->tx_event, &error)) {
         debug_printf("%s: failed to create event (%x)\n",
-                     __FUNCTION__, (int)GetLastError());
+                     __FUNCTION__, error);
         v4v_close(&s->a);
         return -1;
     }
+        
+#ifndef _WIN32
+    ioh_event_init(&s->run_queue_event);
+#endif
 
     if (!bs) {
         error_report("uxen-stor: drive property not set");
-        CloseHandle(s->tx_event);
+        ioh_event_close(&s->tx_event);
         v4v_close(&s->a);
         return -1;
     }
@@ -1057,7 +1056,7 @@ uxen_stor_initfn (ISADevice *dev)
 
     if (!s->scsi_dev) {
         debug_printf("%s: scsi_bus_legacy_add_drive failed\n", __FUNCTION__);
-        CloseHandle(s->tx_event);
+        ioh_event_close(&s->tx_event);
         v4v_close(&s->a);
         return -1;
     }
@@ -1067,6 +1066,9 @@ uxen_stor_initfn (ISADevice *dev)
 
     ioh_add_wait_object (&s->a.recv_event, uxen_stor_read_event, s, NULL);
     ioh_add_wait_object (&s->tx_event, uxen_stor_write_event, s, NULL);
+#ifndef _WIN32
+    ioh_add_wait_object (&s->run_queue_event, uxen_stor_write_event, s, NULL);
+#endif
 
     s->dest.domain = vm_id;
     s->dest.port = 0xd0000 + unit;

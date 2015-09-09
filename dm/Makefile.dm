@@ -246,7 +246,7 @@ DM_SRCS += hw/uxen_net.c
 hw_uxen_net.o: CPPFLAGS += -I$(XENPUBLICDIR)
 DM_SRCS += hw/uxen_null.c
 hw_uxen_null.o: CPPFLAGS += -I$(XENPUBLICDIR)
-$(OSX_NOT_YET)DM_SRCS += hw/uxen_stor.c
+DM_SRCS += hw/uxen_stor.c
 $(OSX_NOT_YET)DM_SRCS += hw/uxen_scsi.c
 hw_uxen_stor.o: CPPFLAGS += -I$(XENPUBLICDIR)
 

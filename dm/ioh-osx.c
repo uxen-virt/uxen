@@ -192,7 +192,7 @@ int _ioh_add_wait_object(ioh_event *event, WaitObjectFunc *func, void *opaque,
 
     critical_section_enter(&event->lock);
 
-    EV_SET(&kev, event->ident, event->filter, EV_ADD | EV_CLEAR, 0, 0, event);
+    EV_SET(&kev, event->ident, event->filter, EV_ADD | EV_CLEAR, event->fflags, 0, event);
     rc = kevent(w->queue_fd, &kev, 1, NULL, 0, NULL);
     if (rc == -1)
         err(1, "%s: kevent failed - ident %lu, filter %d", __FUNCTION__, event->ident, event->filter);

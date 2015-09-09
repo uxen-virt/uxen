@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -31,5 +31,7 @@ SerialState *serial_init(int base, qemu_irq irq, int baudbase,
                          CharDriverState *chr);
 
 void cmos_set_s3_resume(void);
+
+ISADevice *uxen_stor_add_parasite(BlockDriverState *bs);
 
 #endif  /* _XENPC_H_ */

@@ -73,6 +73,7 @@ struct ioh_event_queue;
 typedef struct ioh_event {
     uintptr_t ident;
     int16_t filter;
+    unsigned fflags;
     WaitObjectFunc *func;
     void *opaque;
 #define IOH_MAX_QUEUES 8
