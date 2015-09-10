@@ -13,6 +13,8 @@
 #define UXENDISP_PCI_VEN    0x5853
 #define UXENDISP_PCI_DEV    0x5102
 
+#define UXENDISP_REFRESH_RATE 85
+
 struct _UXENDISP_DRIVER_ALLOCATION;
 
 typedef struct _UXENDISP_SOURCE{
@@ -176,7 +178,7 @@ uxendisp_to_ddi_fmt(ULONG fmt)
 {
     switch (fmt) {
     case UXDISP_CRTC_FORMAT_BGRX_8888:
-        return D3DDDIFMT_X8R8G8B8;
+        return D3DDDIFMT_A8R8G8B8;
     case UXDISP_CRTC_FORMAT_BGR_888:
         return D3DDDIFMT_R8G8B8;
     case UXDISP_CRTC_FORMAT_BGR_565:

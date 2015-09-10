@@ -1196,22 +1196,7 @@ uXenD3DCloseAdapter(HANDLE hAdapter)
 HRESULT APIENTRY
 OpenAdapter(D3DDDIARG_OPENADAPTER *pOpenData)
 {
-    HRESULT hr;
     UXEN_D3D_ADAPTER *puXenD3DAdapter;
-    D3DDDICB_QUERYADAPTERINFO QueryAdapterInfo;
-    UXENDISP_UMDRIVERPRIVATE UMDriverPrivate;
-
-    /* Handshake with our driver */
-    QueryAdapterInfo.pPrivateDriverData = &UMDriverPrivate;
-    QueryAdapterInfo.PrivateDriverDataSize = sizeof(UXENDISP_UMDRIVERPRIVATE);
-    hr = pOpenData->pAdapterCallbacks->pfnQueryAdapterInfoCb(pOpenData->hAdapter, &QueryAdapterInfo);
-    if (FAILED(hr)) {
-        return hr;
-    }
-
-    if ((UMDriverPrivate.Magic != UXENDISP_D3D_MAGIC)||(UMDriverPrivate.Version != UXENDISP_D3D_MAGIC)) {
-        return E_FAIL;
-    }
 
     /* Create an adapter object */
     puXenD3DAdapter = (UXEN_D3D_ADAPTER*)malloc(sizeof(UXEN_D3D_ADAPTER));
@@ -1224,7 +1209,6 @@ OpenAdapter(D3DDDIARG_OPENADAPTER *pOpenData)
     puXenD3DAdapter->Interface = pOpenData->Interface;
     puXenD3DAdapter->Version = pOpenData->Version;
     puXenD3DAdapter->AdapterCallbacks = *pOpenData->pAdapterCallbacks;
-    puXenD3DAdapter->UMDriverPrivate = UMDriverPrivate;
 
     pOpenData->hAdapter = puXenD3DAdapter;
     pOpenData->pAdapterFuncs->pfnGetCaps = uXenD3DGetCaps;

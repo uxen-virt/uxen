@@ -85,24 +85,6 @@ edid_mode_add_all(ULONG width, ULONG height, ULONG flags,
     if (index > max)
         max = index;
 
-    index = edid_mode_add(width, height, 3 * width,
-                          UXDISP_CRTC_FORMAT_BGR_888, flags,
-                          modes, max_modes);
-    if (index > max)
-        max = index;
-
-    index = edid_mode_add(width, height, 2 * width,
-                          UXDISP_CRTC_FORMAT_BGR_565, flags,
-                          modes, max_modes);
-    if (index > max)
-        max = index;
-
-    index = edid_mode_add(width, height, 2 * width,
-                          UXDISP_CRTC_FORMAT_BGR_555, flags,
-                          modes, max_modes);
-    if (index > max)
-        max = index;
-
     return max;
 }
 

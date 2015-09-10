@@ -276,6 +276,7 @@ uXenDispQueryAdapterInfo(CONST HANDLE hAdapter,
         break;
     case DXGKQAITYPE_DRIVERCAPS:
         pDriverCaps = (DXGK_DRIVERCAPS *) pQueryAdapterInfo->pOutputData;
+        RtlZeroMemory(pDriverCaps, sizeof *pDriverCaps);
 
         /* TODO some of these fields need more investigation */
         pDriverCaps->HighestAcceptableAddress.QuadPart = (ULONG64) - 1;
@@ -301,13 +302,11 @@ uXenDispQueryAdapterInfo(CONST HANDLE hAdapter,
         pDriverCaps->MemoryManagementCaps.Value = 0;
         pDriverCaps->MemoryManagementCaps.PagingNode = 0;
         pDriverCaps->GpuEngineTopology.NbAsymetricProcessingNodes = 2;
+        pDriverCaps->WDDMVersion = DXGKDDI_WDDMv1;
 
         break;
     case DXGKQAITYPE_QUERYSEGMENT:
         {
-            ULONG vram_size = uxdisp_read(dev, UXDISP_REG_VRAM_SIZE);
-            ULONG bank_order = uxdisp_read(dev, UXDISP_REG_BANK_ORDER);
-            ULONG i, nbbanks = vram_size / (1 << bank_order);
             PHYSICAL_ADDRESS baseaddr = { 0 };
 
             pQuerySegmentOut = (DXGK_QUERYSEGMENTOUT *)pQueryAdapterInfo->pOutputData;
@@ -318,24 +317,20 @@ uXenDispQueryAdapterInfo(CONST HANDLE hAdapter,
                 break;
             }
 
+            RtlZeroMemory(pQuerySegmentOut->pSegmentDescriptor,
+                          pQuerySegmentOut->NbSegment * sizeof(DXGK_SEGMENTDESCRIPTOR));
+
             /* Setup one linear aperture-space segment */
             pQuerySegmentOut->pSegmentDescriptor[0].BaseAddress = baseaddr;
             pQuerySegmentOut->pSegmentDescriptor[0].CpuTranslatedAddress = dev->vram_phys;
-            pQuerySegmentOut->pSegmentDescriptor[0].Size = vram_size;
-            pQuerySegmentOut->pSegmentDescriptor[0].NbOfBanks = nbbanks;
+            pQuerySegmentOut->pSegmentDescriptor[0].Size = dev->vram_len;
+            pQuerySegmentOut->pSegmentDescriptor[0].CommitLimit = dev->vram_len;
             pQuerySegmentOut->pSegmentDescriptor[0].Flags.Value = 0;
             pQuerySegmentOut->pSegmentDescriptor[0].Flags.CpuVisible = 1;
-            pQuerySegmentOut->pSegmentDescriptor[0].Flags.UseBanking = 1;
-            pQuerySegmentOut->pSegmentDescriptor[0].CommitLimit = vram_size;
+            //pQuerySegmentOut->pSegmentDescriptor[0].Flags.Aperture = 1;
             pQuerySegmentOut->PagingBufferSegmentId = 0;
             pQuerySegmentOut->PagingBufferSize = 64 * 1024; /* TODO  */
             pQuerySegmentOut->PagingBufferPrivateDataSize = 0;
-
-            if (pQuerySegmentOut->pSegmentDescriptor[0].pBankRangeTable) {
-                for (i = 0; i < nbbanks - 1; i++)
-                    pQuerySegmentOut->pSegmentDescriptor[0].pBankRangeTable[i] =
-                        (i + 1) * (1 << bank_order);
-            }
 
             break;
         }
@@ -838,7 +833,7 @@ xfer(DEVICE_EXTENSION *dev,
         dst += mdloffset * PAGE_SIZE;
     } else {
         addr = dev->vram_phys;
-        addr.QuadPart += dstaddr.QuadPart + xferoffset;
+        addr.QuadPart += /*dstaddr.QuadPart +*/ xferoffset;
         dst = MmMapIoSpace(addr, size, MmNonCached);
         if (!dst) {
             status = STATUS_NO_MEMORY;
@@ -933,8 +928,8 @@ uXenDispBuildPagingBuffer(CONST HANDLE hAdapter,
         ASSERT(NT_SUCCESS(status));
         break;
     case DXGK_OPERATION_FILL:
-        ASSERT(pBuildPagingBuffer->Operation != DXGK_OPERATION_FILL);
-        uxen_err("Illegal DXGK_OPERATION_FILL operation.");
+        //ASSERT(pBuildPagingBuffer->Operation != DXGK_OPERATION_FILL);
+        uxen_msg("Illegal DXGK_OPERATION_FILL operation.");
         break;
     case DXGK_OPERATION_DISCARD_CONTENT:
         /* Not needed */
@@ -1451,7 +1446,7 @@ uXenDispCreateContext(CONST HANDLE hDevice,
     pCreateContext->ContextInfo.DmaBufferSize = 64 * 1024;
 
     /* Allocates the DMA buffer in the gart. */
-    pCreateContext->ContextInfo.DmaBufferSegmentSet = 1;
+    pCreateContext->ContextInfo.DmaBufferSegmentSet = 0;
     pCreateContext->ContextInfo.AllocationListSize = 3 * 1024;
     pCreateContext->ContextInfo.PatchLocationListSize = 3 * 1024;
     pCreateContext->ContextInfo.DmaBufferPrivateDataSize = 128;

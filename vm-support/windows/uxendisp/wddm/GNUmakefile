@@ -22,16 +22,22 @@ SET_STAMPINF_DATE := set STAMPINF_DATE=$(shell TZ=GMT date +%m/%d/%Y)&
 SET_UXENDIRS := set UXEN_DISTDIR_VM_SUPPORT=$(call dospath,$(DISTDIR_VM_SUPPORT))& set UXEN_SDKDIR_INCLUDE=$(call dospath,$(SDKDIR_include))& set UXEN_SDKDIR_LIB=$(call dospath,$(SDKDIR_lib))&
 
 OUTDIR_uxendisp := $(OBJDIR_uxendisp)/miniport/$(OBJDIR_ddk)
+OUTDIR_uxendisp32 := $(OBJDIR_uxendisp)/display/$(OBJDIR_ddk_32)
 
 .PHONY: all
-all: $(OUTDIR_uxendisp)/uxendisp.sys
+all: $(OUTDIR_uxendisp32)/uxend3d.dll $(OUTDIR_uxendisp)/uxendisp.sys
 
 # NOTE: no space after set foo=xxx since cmd otherwise includes the space in foo
-.PHONY: $(OUTDIR_uxendisp)/uxendisp.sys
+.PHONY: $(OUTDIR_uxendisp)/uxendisp.sys $(OUTDIR_uxendisp32)/uxend3d.dll
 $(OUTDIR_uxendisp)/uxendisp.sys:
 	@mkdir -p $(@D)
 	$(_W)echo WinDDK build $@
 	$(_V)cmd /c "set MAKEFLAGS=& $(SET_STAMPINF_DATE) $(SET_SIGN) $(SET_UXENDIRS) $(WINDDK_DIR)\bin\setenv.bat $(WINDDK_DIR)\ $(DDKENV) $(UXEN_TARGET_VM_SUPPORT_ARCH_NAME) $(UXEN_TARGET_VM_SUPPORT_OS) no_oacr & cd /D $$(pwd -W) & $(SET_OBJECT_ROOT) $(WINDDK_BUILD) -cZ -jpath $(call dospath,$(OBJDIR_uxendisp))"
+
+$(OUTDIR_uxendisp32)/uxend3d.dll:
+	@mkdir -p $(@D)
+	$(_W)echo WinDDK i386 build $@
+	$(_V)cmd /c "set MAKEFLAGS=& $(SET_STAMPINF_DATE) $(SET_SIGN) $(SET_UXENDIRS) $(WINDDK_DIR)\bin\setenv.bat $(WINDDK_DIR)\ $(DDKENV) $(UXEN_TARGET_VM_SUPPORT_ARCH_NAME_32_BIT) $(UXEN_TARGET_VM_SUPPORT_OS) no_oacr & cd /D $$(pwd -W)/display & $(SET_OBJECT_ROOT) $(WINDDK_BUILD) -cZ -jpath $(call dospath,$(OBJDIR_uxendisp)/display)"
 
 INSTALL_FILES = uxendisp.sys
 INSTALL_FILES += uxendisp.cat
@@ -53,10 +59,16 @@ $(patsubst %,install_%,$(INSTALL_FILES)): install_%: $(OUTDIR_uxendisp)/%
 	$(_W)echo Installing -- $(<F)
 	$(_V)$(call install_data,$(<),$(INSTALL_DIR))
 
-dist: $(patsubst %,install_%,$(INSTALL_FILES))
+install_uxend3d32.dll: $(OUTDIR_uxendisp32)/uxend3d.dll
+	$(_W)echo Installing -- uxend3d32.dll
+	$(_V)$(call install_data,$(<),$(INSTALL_DIR)/uxend3d32.dll)
+
+dist: $(patsubst %,install_%,$(INSTALL_FILES)) install_uxend3d32.dll
 
 clean::
 	@$(if $(BUILDDIR),rm -rf $(BUILDDIR),:)
 $(BUILDDIR:%=x)clean::
 	@rm -rf obj{chk,fre}_$(UXEN_TARGET_VM_SUPPORT_OS)_$(UXEN_TARGET_VM_SUPPORT_ARCH)
 	@rm -f build{chk,fre}_$(UXEN_TARGET_VM_SUPPORT_OS)_$(UXEN_TARGET_VM_SUPPORT_ARCH).{log,err,wrn}
+	@rm -rf obj{chk,fre}_$(UXEN_TARGET_VM_SUPPORT_OS)_$(UXEN_TARGET_VM_SUPPORT_ARCH_32_BIT)
+	@rm -f build{chk,fre}_$(UXEN_TARGET_VM_SUPPORT_OS)_$(UXEN_TARGET_VM_SUPPORT_ARCH_32_BIT).{log,err,wrn}

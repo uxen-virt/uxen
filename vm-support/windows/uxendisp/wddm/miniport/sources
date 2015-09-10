@@ -25,7 +25,7 @@ INCLUDES=..\inc; \
          $(UXENV4VLIB_INC);
 
 UXENVMLIB_BUILD_DIR   = \
-  $(OBJECT_ROOT)\..\..\uxenvmlib\$(WDK_ALTERNATE_MAKEDIR)\..\..\..\uxenvmlib\$(O)      
+  $(OBJECT_ROOT)\..\..\uxenvmlib\$(WDK_ALTERNATE_MAKEDIR)\..\..\..\uxenvmlib\$(O)
 
 UXENVMLIB_LIB         = \
   $(UXENVMLIB_BUILD_DIR)\uxenvmlib.lib

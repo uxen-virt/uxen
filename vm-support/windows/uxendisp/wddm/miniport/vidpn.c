@@ -153,7 +153,7 @@ is_supported_target_mode(UXENDISP_CRTC *crtc,
     if ((signal_info->VideoStandard != D3DKMDT_VSS_OTHER)||
         (signal_info->TotalSize.cx != D3DKMDT_DIMENSION_NOTSPECIFIED)||
         (signal_info->TotalSize.cy != D3DKMDT_DIMENSION_NOTSPECIFIED)||
-        (signal_info->VSyncFreq.Numerator != 60 * 1000)||
+        (signal_info->VSyncFreq.Numerator != UXENDISP_REFRESH_RATE * 1000)||
         (signal_info->VSyncFreq.Denominator != 1000)||
         (signal_info->HSyncFreq.Denominator != 1000)||
         (signal_info->ScanLineOrdering != D3DDDI_VSSLO_PROGRESSIVE)) {
@@ -590,11 +590,11 @@ add_target_mode(D3DKMDT_HVIDPNTARGETMODESET tgt_mode_set_hdl,
     signal_info->TotalSize.cy = D3DKMDT_DIMENSION_NOTSPECIFIED;
     signal_info->ActiveSize.cx = mode->xres;
     signal_info->ActiveSize.cy = mode->yres;
-    signal_info->VSyncFreq.Numerator = 60 * 1000;
+    signal_info->VSyncFreq.Numerator = UXENDISP_REFRESH_RATE * 1000;
     signal_info->VSyncFreq.Denominator = 1000;
-    signal_info->HSyncFreq.Numerator = 60 * mode->yres * 1000 * (105 / 100);
+    signal_info->HSyncFreq.Numerator = UXENDISP_REFRESH_RATE * mode->yres * 1000 * (105 / 100);
     signal_info->HSyncFreq.Denominator = 1000;
-    signal_info->PixelRate = mode->xres * mode->yres * 60;
+    signal_info->PixelRate = mode->xres * mode->yres * UXENDISP_REFRESH_RATE;
     signal_info->ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
 
     /* Add it*/
@@ -1575,11 +1575,11 @@ init_monitor_source_mode(D3DKMDT_MONITOR_SOURCE_MODE *pVidPnMonitorSourceModeInf
     signal_info->TotalSize.cy = D3DKMDT_DIMENSION_NOTSPECIFIED;
     signal_info->ActiveSize.cx = mode->xres;
     signal_info->ActiveSize.cy = mode->yres;
-    signal_info->VSyncFreq.Numerator = 60 * 1000;
+    signal_info->VSyncFreq.Numerator = UXENDISP_REFRESH_RATE * 1000;
     signal_info->VSyncFreq.Denominator = 1000;
-    signal_info->HSyncFreq.Numerator = 60 * mode->yres * 1000 * (105 / 100);
+    signal_info->HSyncFreq.Numerator = UXENDISP_REFRESH_RATE * mode->yres * 1000 * (105 / 100);
     signal_info->HSyncFreq.Denominator = 1000;
-    signal_info->PixelRate = mode->xres * mode->yres * 60;
+    signal_info->PixelRate = mode->xres * mode->yres * UXENDISP_REFRESH_RATE;
     signal_info->ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
 }
 
