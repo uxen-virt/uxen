@@ -36,6 +36,7 @@
 #include "mapcache.h"
 
 #include <lz4.h>
+#include <lz4hc.h>
 
 #include <xenctrl.h>
 #include <xc_private.h>
@@ -409,6 +410,14 @@ uxenvm_savevm_write_info(struct filebuf *f, uint8_t *dm_state_buf,
     return ret;
 }
 
+static inline int
+uxenvm_compress_lz4(const void *src, void *dst, int sz)
+{
+    return vm_save_info.high_compress ?
+        LZ4_compressHC(src, dst, sz) :
+        LZ4_compress(src, dst, sz);
+}
+
 static int
 uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
                           int single_page, char **err_msg)
@@ -619,8 +628,8 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
                         if (single_page) {
                             int i, cs1;
                             for (i = 0; i < b_run; i++) {
-                                cs1 = LZ4_compress(
-                                    (const char *)&mem[(run + i) << PAGE_SHIFT],
+                                cs1 = uxenvm_compress_lz4(
+                                    &mem[(run + i) << PAGE_SHIFT],
                                     &compress_buf[compress_size +
                                                   sizeof(cs16_t)],
                                     PAGE_SIZE);
@@ -653,7 +662,7 @@ uxenvm_savevm_write_pages(struct filebuf *f, int compress, int free_after_save,
                 debug_printf("%d stray pages\n", _batch);
             if (compress) {
                 if (!single_page) {
-                    compress_size = LZ4_compress(
+                    compress_size = uxenvm_compress_lz4(
                         compress_mem, compress_buf, m_run << PAGE_SHIFT);
                     if (compress_size >= m_run << PAGE_SHIFT) {
                         SAVE_DPRINTF("compressed size larger for pages "
@@ -1613,6 +1622,8 @@ mc_savevm(Monitor *mon, const dict args)
     vm_save_info.compress = dict_get_string(args, "compress") ? 1 : 0;
     vm_save_info.single_page = dict_get_boolean_default(args, "single-page", 1);
     vm_save_info.free_mem = dict_get_boolean_default(args, "free-mem", 1);
+    vm_save_info.high_compress = dict_get_boolean_default(args,
+                                                          "high-compress", 0);
 
     vm_save();
 }

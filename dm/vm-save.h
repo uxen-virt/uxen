@@ -25,6 +25,7 @@ struct vm_save_info {
     int compress;
     int single_page;
     int free_mem;
+    int high_compress;
 
     int resume_delete;
 

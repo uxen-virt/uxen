@@ -311,6 +311,7 @@ control_command_save(void *opaque, const char *id, const char *opt,
     vm_save_info.compress = dict_get_string(d, "compress") ? 1 : 0;
     vm_save_info.single_page = dict_get_boolean(d, "single-page");
     vm_save_info.free_mem = dict_get_boolean(d, "free-mem");
+    vm_save_info.high_compress = dict_get_boolean(d, "high-compress");
 
     vm_save_info.command_cd = cd;
     vm_save_info.command_id = id ? strdup(id) : NULL;
@@ -964,6 +965,8 @@ struct dict_rpc_command control_commands[] = {
       .args = (struct dict_rpc_arg_desc[]) {
             { "filename", DICT_RPC_ARG_TYPE_STRING, .optional = 1 },
             { "compress", DICT_RPC_ARG_TYPE_STRING, .optional = 1 },
+            { "high-compress", DICT_RPC_ARG_TYPE_BOOLEAN, .optional = 1,
+              .defval = DICT_RPC_ARG_DEFVAL_BOOLEAN(false) },
             { "single-page", DICT_RPC_ARG_TYPE_BOOLEAN, .optional = 1,
               .defval = DICT_RPC_ARG_DEFVAL_BOOLEAN(true) },
             { "free-mem", DICT_RPC_ARG_TYPE_BOOLEAN, .optional = 1,

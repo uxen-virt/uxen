@@ -300,7 +300,8 @@ static mon_cmd_t mon_cmds[] = {
     { .name = "quit|q", .mhandler.cmd = mc_quit,
       .args_type = "?b:interrupt,?b:force", .help = "terminate the vm" },
     { .name = "savevm", .mhandler.cmd = mc_savevm,
-      .args_type = "?s:filename,?s:compress,?b:single-page,?b:free-mem",
+      .args_type = "?s:filename,?s:compress,?b:high-compress,"
+                   "?b:single-page,?b:free-mem",
       .help = "save the vm" },
     { .name = "resume", .mhandler.cmd = mc_resumevm,
       .args_type = "?b:delete-savefile",
