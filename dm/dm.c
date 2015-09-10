@@ -240,6 +240,7 @@ main(int argc, char **argv)
 
     logfile = stderr; /* initial value */
 
+    debug_printf("dm pid: %ld\n", GetCurrentProcessId());
     log_version();
 
     chardev_init();
