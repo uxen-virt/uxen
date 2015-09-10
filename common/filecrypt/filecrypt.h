@@ -28,6 +28,10 @@ typedef struct filecrypt_hdr {
     uint8_t key[FILECRYPT_KEYBYTES*2];
 } filecrypt_hdr_t;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 int FILECRYPT_API fc_init(void);
 /* allocate header */
 filecrypt_hdr_t* FILECRYPT_API fc_init_hdr(void);
@@ -46,5 +50,9 @@ void FILECRYPT_API fc_decrypt(filecrypt_hdr_t *h, void *buf, uint64_t off, uint3
 /* read/write and decrypt/crypt bytes from file */
 BOOL FILECRYPT_API fc_read(filecrypt_hdr_t *h, HANDLE f, void *buffer, DWORD sz, DWORD *num_read);
 BOOL FILECRYPT_API fc_write(filecrypt_hdr_t *h, HANDLE f, void *buffer, DWORD sz, DWORD *num_written);
+
+#ifdef __cplusplus
+} // extern "C"
+#endif
 
 #endif
