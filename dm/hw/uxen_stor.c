@@ -635,6 +635,7 @@ uxen_stor_run_q (uxen_stor_t *s)
 		/*we use the cdb and sense in r rather than the packet as we've either moved or are about to move the pointers around */
 
                     r->scsi_is_read = !!r->packet.xfr.read_size;
+                    r->state = UXS_STATE_SCSI_RUNNING;
 
 		    if (uxscsi_start(&r->scsi, s->conf.bs, r->cdb_len, r->cdb, r->packet.xfr.write_size,r->write_ptr,
 				 r->packet.xfr.read_size,r->read_ptr,sizeof(r->sense_data),r->sense_data,uxen_stor_uxscsi_complete,r)) {
@@ -645,10 +646,6 @@ uxen_stor_run_q (uxen_stor_t *s)
 			//FIXME we should send an error here, but since the only cause of this is a cdb < 6 bytes
 
                     r->state = UXS_STATE_SCSI_DONE; /*Clean up */
-
-
-		} else {
-                    r->state = UXS_STATE_SCSI_RUNNING;
 		}
 #endif
                 }
