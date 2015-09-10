@@ -5,6 +5,7 @@
  */
 
 #include "config.h"
+#include "dm.h"
 
 /* Set to default if NULL and set to NULL if "-", to select console */
 static void
@@ -59,6 +60,12 @@ redir_stderr(wchar_t *name, wchar_t *defname, int append)
             }
         }
     }
+}
+
+static void __attribute__((constructor))
+logstyle_early_init(void)
+{
+    logstyle_set(getenv("UXENDM_LOGSTYLE"));
 }
 
 static void __attribute__((constructor))

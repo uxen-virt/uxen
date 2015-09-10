@@ -18,10 +18,88 @@
 #include <time.h>
 #include <sys/time.h>
 
+static void (*log_prefix_fn)(char *target,
+                             size_t len,
+                             struct tm *tm,
+                             struct timeval *tv) = NULL;
+
 int
 verbose_logging(void)
 {
     return 1;
+}
+
+static void
+log_prefix_default(char *target, size_t len, struct tm *tm, struct timeval *tv)
+{
+    snprintf(target, len, "%03d-%02d:%02d:%02d.%03d ",
+             tm->tm_yday, tm->tm_hour, tm->tm_min, tm->tm_sec,
+             (int)(tv->tv_usec / 1000));
+}
+
+static void
+log_prefix_iso_8601(char *target, size_t len, struct tm *tm, struct timeval *tv)
+{
+    unsigned long tz_abs_hour_off;
+    unsigned long tz_abs_minute_off;
+    char tz_sign;
+
+#ifdef _WIN32
+    LONG log_timezone_bias = 0;
+    int is_behind_utc;
+    int abs_bias;
+
+    TIME_ZONE_INFORMATION timezone_info;
+    switch (GetTimeZoneInformation(&timezone_info)) {
+        case TIME_ZONE_ID_UNKNOWN:
+            log_timezone_bias = timezone_info.Bias;
+            break;
+        case TIME_ZONE_ID_STANDARD:
+            log_timezone_bias = timezone_info.Bias + timezone_info.StandardBias;
+            break;
+        case TIME_ZONE_ID_DAYLIGHT:
+            log_timezone_bias = timezone_info.Bias + timezone_info.DaylightBias;
+            break;
+        default:
+            log_timezone_bias = 0;
+            break;
+    }
+    is_behind_utc = log_timezone_bias > 0;
+    abs_bias = log_timezone_bias < 0 ? -log_timezone_bias : log_timezone_bias;
+
+    tz_abs_hour_off = abs_bias / 60;
+    tz_abs_minute_off = abs_bias % 60;
+    tz_sign = is_behind_utc ? '-' : '+';
+#else
+    tz_abs_hour_off = labs(tm->tm_gmtoff) / 3600L;
+    tz_abs_minute_off = (labs(tm->tm_gmtoff) % 3600L) / 60L;
+    tz_sign = tm->tm_gmtoff >= 0L ? '+' : '-';
+#endif
+
+    snprintf(target, len,
+             "%04d-%02d-%02d %02d:%02d:%02d.%03d%c%02lu%02lu ",
+             tm->tm_year+1900, tm->tm_mon+1, tm->tm_mday, tm->tm_hour,
+             tm->tm_min, tm->tm_sec, (int)(tv->tv_usec / 1000),
+             tz_sign,
+             tz_abs_hour_off,
+             tz_abs_minute_off);
+}
+
+void
+logstyle_set(const char *log_timestamp_style)
+{
+    if (!log_timestamp_style || !strcmp(log_timestamp_style, "default")) {
+
+        log_prefix_fn = log_prefix_default;
+    } else if (!strcmp(log_timestamp_style, "iso-8601")) {
+
+        log_prefix_fn = log_prefix_iso_8601;
+    } else {
+
+        fprintf(stderr, "log timestamp style '%s' unknown, "
+                "falling back to default\n", log_timestamp_style);
+        log_prefix_fn = log_prefix_default;
+    }
 }
 
 void
@@ -30,7 +108,7 @@ debug_vprintf(const char *fmt, va_list ap)
     struct tm _tm, *tm;
     time_t ltime;
     struct timeval tv;
-    char prefix[3 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 3 + 1 + 1];
+    char prefix[32];
     char *buf;
     static int had_newline = 1;
     static int last_sec = -1;
@@ -52,9 +130,7 @@ debug_vprintf(const char *fmt, va_list ap)
         flush = (last_sec != (int)tv.tv_sec);
         last_sec = (int)tv.tv_sec;
 	if (tm) {
-            snprintf(prefix, sizeof(prefix), "%03d-%02d:%02d:%02d.%03d ",
-                     tm->tm_yday, tm->tm_hour, tm->tm_min, tm->tm_sec,
-                     (int)(tv.tv_usec / 1000));
+	    log_prefix_fn(prefix, sizeof(prefix), tm, &tv);
 	    fputs(prefix, stderr);
 	}
 	had_newline = 0;

@@ -32,4 +32,6 @@ error_printf(const char *fmt, ...);
 #define error_printf(...) fprintf(stderr, __VA_ARGS__)
 #endif
 
+void logstyle_set(const char *logstyle);
+
 #endif	/* _DEBUG_H_ */

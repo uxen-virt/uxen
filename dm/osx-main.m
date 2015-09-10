@@ -104,6 +104,7 @@ main(int argc, char **argv)
         SetFrontProcess(&thePSN);
     }
 
+    logstyle_set(getenv("UXENDM_LOGSTYLE"));
     redir_stderr(getenv("UXENDM_LOGFILE"), "uxendm.log",
                  getenv("UXENDM_LOGFILE_APPEND") != NULL);
 
