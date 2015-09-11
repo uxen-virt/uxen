@@ -240,7 +240,12 @@ main(int argc, char **argv)
 
     logfile = stderr; /* initial value */
 
+#ifdef _WIN32
     debug_printf("dm pid: %ld\n", GetCurrentProcessId());
+#elif __APPLE__
+    debug_printf("dm pid: %d\n", getpid());
+#endif
+
     log_version();
 
     chardev_init();
