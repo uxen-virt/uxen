@@ -934,7 +934,6 @@ uxen_stor_initfn (ISADevice *dev)
     v4v_ring_id_t r;
     v4v_mapring_values_t mr;
     OVERLAPPED o = { 0 };
-    int v4v_opened = 0;
 
     uxen_stor_t *s = DO_UPCAST (uxen_stor_t, dev, dev);
     BlockDriverState *bs = s->conf.bs;
@@ -948,110 +947,135 @@ uxen_stor_initfn (ISADevice *dev)
     debug_printf("%s: unit %d parasite is %d\n", __FUNCTION__,
                  unit, s->parasite);
 
-    do {
 #if PCAP
-        if (uxen_stor_log_init (s, unit))
-            break;
+    if (uxen_stor_log_init(s, unit)) {
+        debug_printf("%s: uxen_stor_log_init failed\n", __FUNCTION__);
+        return -1;
+    }
 #endif
 
-        if (!have_v4v ()) {
-            debug_printf("%s: no v4v detected on the host\n", __FUNCTION__);
-            break;
-        }
+    if (!have_v4v()) {
+        debug_printf("%s: no v4v detected on the host\n", __FUNCTION__);
+        return -1;
+    }
 
-        s->a.flags = V4V_FLAG_OVERLAPPED;
-        memset (&o, 0, sizeof (o));
+    s->a.flags = V4V_FLAG_OVERLAPPED;
+    memset (&o, 0, sizeof (o));
 
-        if (!v4v_open (&s->a, RING_SIZE, &o))
-            break;
+    if (!v4v_open(&s->a, RING_SIZE, &o)) {
+        debug_printf("%s: v4v_open failed (%x)\n",
+                     __FUNCTION__, (int)GetLastError());
+        return -1;
+    }
 
-        if (!GetOverlappedResult (s->a.v4v_handle, &o, &t, TRUE))
-            break;
+    if (!GetOverlappedResult(s->a.v4v_handle, &o, &t, TRUE)) {
+        debug_printf("%s: GetOverlappedResult (v4v_open) failed (%x)\n",
+                     __FUNCTION__, (int)GetLastError());
+        return -1;
+    }
 
-        v4v_opened++;
+    r.addr.port = 0xd0000 + unit;
+    r.addr.domain = V4V_DOMID_ANY;
+    r.partner = vm_id;
 
+    memset(&o, 0, sizeof (o));
 
-        r.addr.port = 0xd0000 + unit;
-        r.addr.domain = V4V_DOMID_ANY;
-        r.partner = vm_id;
+    if (!v4v_bind(&s->a, &r, &o)) {
+        debug_printf("%s: v4v_bind failed (%x)\n",
+                     __FUNCTION__, (int)GetLastError());
+        v4v_close(&s->a);
+        return -1;
+    }
 
-        memset (&o, 0, sizeof (o));
+    if (!GetOverlappedResult(s->a.v4v_handle, &o, &t, TRUE)) {
+        debug_printf("%s: GetOverlappedResult (v4v_bind) failed (%x)\n",
+                     __FUNCTION__, (int)GetLastError());
+        v4v_close(&s->a);
+        return -1;
+    }
 
-        if (!v4v_bind (&s->a, &r, &o))
-            break;
+    memset(&o, 0, sizeof (o));
 
-        if (!GetOverlappedResult (s->a.v4v_handle, &o, &t, TRUE))
-            break;
+    mr.ring = NULL;
+    if (!v4v_map(&s->a, &mr, &o)) {
+        debug_printf("%s: failed to map ring (%x)\n",
+                     __FUNCTION__, (int)GetLastError());
+        v4v_close(&s->a);
+        return -1;
+    }
 
-        memset (&o, 0, sizeof (o));
+    if (!GetOverlappedResult(s->a.v4v_handle, &o, &t, TRUE)) {
+        debug_printf("%s: GetOverlappedResult (v4v_map) failed (%x)\n",
+                     __FUNCTION__, (int)GetLastError());
+        v4v_close(&s->a);
+        return -1;
+    }
 
-        mr.ring = NULL;
-        if (!v4v_map (&s->a, &mr, &o))
-            break;
+    s->ring = mr.ring;
+    if (!s->ring) {
+        debug_printf("%s: ring == NULL\n", __FUNCTION__);
+        v4v_close(&s->a);
+        return -1;
+    }
 
-        if (!GetOverlappedResult (s->a.v4v_handle, &o, &t, TRUE))
-            break;
+    s->tx_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+    if (!s->tx_event) {
+        debug_printf("%s: failed to create event (%x)\n",
+                     __FUNCTION__, (int)GetLastError());
+        v4v_close(&s->a);
+        return -1;
+    }
 
-        s->ring = mr.ring;
-        if (!s->ring)
-            break;
-
-        s->tx_event = CreateEvent (NULL, FALSE, FALSE, NULL);
-
-        if (!s->tx_event)
-            break;
-
-        if (!bs) {
-            error_report ("uxen-stor: drive property not set");
-            return -1;
-        }
+    if (!bs) {
+        error_report("uxen-stor: drive property not set");
+        CloseHandle(s->tx_event);
+        v4v_close(&s->a);
+        return -1;
+    }
 
 #ifdef QEMU_SCSI
-        /*
-         * Hack alert: this pretends to be a block device, but it's really
-         * a SCSI bus that can serve only a single device, which it
-         * creates automatically.  But first it needs to detach from its
-         * blockdev, or else scsi_bus_legacy_add_drive() dies when it
-         * attaches again.
-         *
-         * The hack is probably a bad idea.
-         */
+    /*
+     * Hack alert: this pretends to be a block device, but it's really
+     * a SCSI bus that can serve only a single device, which it
+     * creates automatically.  But first it needs to detach from its
+     * blockdev, or else scsi_bus_legacy_add_drive() dies when it
+     * attaches again.
+     *
+     * The hack is probably a bad idea.
+     */
 
 
-        if (!s->parasite)
-            bdrv_detach_dev (bs, &s->dev);
+    if (!s->parasite)
+        bdrv_detach_dev(bs, &s->dev);
 
-        s->conf.bs = NULL;
+    s->conf.bs = NULL;
 
-        scsi_bus_new (&s->bus, &s->dev.qdev, &uxen_stor_scsi_info);
-        s->scsi_dev =
-            scsi_bus_legacy_add_drive (&s->bus, bs, 0, ! !s->removable,
-                                       s->conf.bootindex);
+    scsi_bus_new(&s->bus, &s->dev.qdev, &uxen_stor_scsi_info);
+    s->scsi_dev =
+        scsi_bus_legacy_add_drive(&s->bus, bs, 0, ! !s->removable,
+                                  s->conf.bootindex);
 
-        if (!s->scsi_dev)
-            break;
+    if (!s->scsi_dev) {
+        debug_printf("%s: scsi_bus_legacy_add_drive failed\n", __FUNCTION__);
+        CloseHandle(s->tx_event);
+        v4v_close(&s->a);
+        return -1;
+    }
 #endif
 
+    present_bitfield_set(unit);
 
-        present_bitfield_set(unit);
+    ioh_add_wait_object (&s->a.recv_event, uxen_stor_read_event, s, NULL);
+    ioh_add_wait_object (&s->tx_event, uxen_stor_write_event, s, NULL);
 
-        ioh_add_wait_object (&s->a.recv_event, uxen_stor_read_event, s, NULL);
-        ioh_add_wait_object (&s->tx_event, uxen_stor_write_event, s, NULL);
+    s->dest.domain = vm_id;
+    s->dest.port = 0xd0000 + unit;
 
-        s->dest.domain = vm_id;
-        s->dest.port = 0xd0000 + unit;
+    uxen_stor_read_event(s);
 
-        uxen_stor_read_event (s);
+    unit++;
 
-        unit++;
-
-        return 0;
-    } while (1);
-
-    if (v4v_opened)
-        v4v_close (&s->a);
-
-    return -1;
+    return 0;
 }
 
 ISADevice *
