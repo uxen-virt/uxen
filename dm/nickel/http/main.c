@@ -225,7 +225,6 @@ static const char *hp_states[] = {
 #define CXF_PROXY_SUSPEND       U64BF(21)
 #define CXF_CLOSING             U64BF(22)
 #define CXF_ACCEPTED            U64BF(23)
-#define CXF_IP_CHECKED          U64BF(24)
 #define CXF_GPROXY_REQUEST      U64BF(25)
 #define CXF_FORCE_CLOSE         U64BF(26)
 #define CXF_HEAD_REQUEST        U64BF(27)
@@ -3651,7 +3650,7 @@ static int hp_connecting_containment(struct http_ctx *hp, const struct net_addr 
     if (hp->proxy || (hp->flags & HF_IP_CHECKED))
         return 0;
 
-    if (!hp->cx || (hp->cx->flags & CXF_IP_CHECKED))
+    if (!hp->cx)
         return 0;
 
     if (!a || a->family != AF_INET)
@@ -4659,7 +4658,6 @@ static void cx_reset_state(struct clt_ctx *cx, bool soft)
         cx->h.daddr.sin_addr.s_addr = 0;
         cx->h.daddr.sin_port = 0;
         cx->flags &= ((~CXF_HOST_RESOLVED) & (~CXF_DECIDED) & (~CXF_RPC_PROXY_URL));
-        cx->flags &= ~CXF_IP_CHECKED;
         cx->flags &= ((~CXF_LOCAL_WEBDAV) & (~CXF_LOCAL_WEBDAV_COMPLETE));
     }
     cx->flags &= ((~CXF_HEADERS_OK) & (~CXF_LONG_REQ) & (~CXF_HEAD_REQUEST) &
@@ -5641,7 +5639,6 @@ ns_cx_open(void *opaque, struct nickel *ni, CharDriverState **persist_chr,
 
     cx->ni_opaque = opaque;
     cx->flags |= (CXF_GUEST_PROXY | CXF_HTTP);
-    cx->flags |= CXF_IP_CHECKED;
     if (parser_create_request(&cx->clt_parser, cx) < 0)
         goto mem_err;
 
