@@ -2117,9 +2117,22 @@ vmcs_fields_iterate(int (*fn)(uint64_t, union vmcs_encoding, int), uint32_t flag
         union vmcs_encoding enc;
         int index;
         uint64_t offset;
+        enum vmcs_field f = all_vmcs_fields[i];
 
-        offset = vmcs_scan_for_field(vmcs, vmcs_ma, all_vmcs_fields[i], 1, flags, &offset_iter);
-        enc.word = all_vmcs_fields[i];
+        /* vmware 12+ throws exception if accessing PLE. Skip if no PLE support */
+        if (!cpu_has_vmx_ple && (f == PLE_GAP || f == PLE_WINDOW))
+            continue;
+        /* vmware 12+ throws exception if accessing PAT fields. Skip if no PAT
+           support */
+        if (!cpu_has_vmx_pat && (f == GUEST_PAT || f == GUEST_PAT_HIGH ||
+                                 f == HOST_PAT  || f == HOST_PAT_HIGH))
+            continue;
+        /* vmware 12+ throws exception if accessing APIC ADDR */
+        if (f == APIC_ACCESS_ADDR || f == APIC_ACCESS_ADDR_HIGH)
+            continue;
+
+        offset = vmcs_scan_for_field(vmcs, vmcs_ma, f, 1, flags, &offset_iter);
+        enc.word = f;
         index = _pv_vmcs_get_offset_xen(enc.width, enc.type, enc.index);
         ret = fn(offset, enc, index);
         if (ret)
@@ -2330,8 +2343,6 @@ pv_vmcs_write_table(unsigned long vmcs_encoding, unsigned long val)
     /* case TSC_OFFSET_HIGH: */
     /* case VIRTUAL_APIC_PAGE_ADDR: */
     /* case VIRTUAL_APIC_PAGE_ADDR_HIGH: */
-    case APIC_ACCESS_ADDR:
-    case APIC_ACCESS_ADDR_HIGH:
     /* case EPT_POINTER: */
     /* case EPT_POINTER_HIGH: */
     case GUEST_PHYSICAL_ADDRESS:
@@ -2449,6 +2460,19 @@ pv_vmcs_write_table(unsigned long vmcs_encoding, unsigned long val)
         _pv_vmcs_write_xen(vmcs_encoding, val, vmcs_shadow);
         perfc_incr(pv_vmcs_idem_write_miss);
         break;
+    /* direct access */
+    case APIC_ACCESS_ADDR:
+    case APIC_ACCESS_ADDR_HIGH: {
+        unsigned long flags;
+        cpu_irq_save(flags);
+        __vmptrld(vmcs_vmx->vmcs_ma);
+        vmcs_vmx->loaded = 1;
+        __vmwrite_direct(vmcs_encoding, val);
+        __vmpclear(vmcs_vmx->vmcs_ma);
+        vmcs_vmx->loaded = 0;
+        cpu_irq_restore(flags);
+        return;
+    }
 #define W(f) case f: 
         W(IO_BITMAP_A);
         W(IO_BITMAP_A_HIGH);
