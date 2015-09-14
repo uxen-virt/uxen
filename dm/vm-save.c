@@ -913,6 +913,8 @@ decompress_wait_all(struct decompress_ctx *dc, char **err_msg)
     int ret = 0;
 
     APRINTF("waiting for decompress threads");
+    assert(dc->async_op_ctx);
+    assert(dc->xc_handle);
     for (i = 0; i < DECOMPRESS_THREADS; i++) {
         ioh_event_reset(&dc->process_event);
         async_op_process(dc->async_op_ctx);
@@ -1273,7 +1275,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
     uint8_t *hvm_buf = NULL;
     xen_pfn_t *pfn_type = NULL;
     int *pfn_err = NULL, *pfn_info = NULL;
-    struct decompress_ctx dc = { };
+    struct decompress_ctx dc = { 0 };
     int populate_compressed = (restore_mode == VM_RESTORE_TEMPLATE);
     int marker;
     int ret;
