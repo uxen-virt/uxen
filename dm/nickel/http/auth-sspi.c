@@ -24,7 +24,7 @@
 #include <ntsecapi.h>
 #include <wincrypt.h>
 
-#define MAX_SSPI_STEPS 3
+#define MAX_SSPI_STEPS 6
 
 #define MAX_TIMEOUT_PRX_MS  (4 * 1000) /* ms */
 #define CRED_TMP_PREFIX "tmp_"
@@ -222,23 +222,21 @@ out:
     return ret;
 }
 
-static bool seems_ntlm_token(struct http_auth *auth, const char *token, size_t len)
+static bool is_ntlm_token(struct http_auth *auth, const char *token, size_t len)
 {
-    bool ret = true;
+    bool ret = false;
 
     if (len >= sizeof(NTLM_TOKEN_SIGNATURE) &&
         strncmp(NTLM_TOKEN_SIGNATURE, token, sizeof(NTLM_TOKEN_SIGNATURE) - 1) == 0) {
+        ret = true;
         goto out;
     }
 
-    if (NLOG_LEVEL > 3) {
-        AUXL("len %lu, MIN_KERB_TOKEN_LEN %d, token:", (unsigned long) len, (int) MIN_KERB_TOKEN_LEN);
+    if (NLOG_LEVEL > 3)
         netlog_print_esc("TOKEN", token, len);
-    }
 
-    ret = (len < MIN_KERB_TOKEN_LEN);
 out:
-    AUXL4(" %s", ret ? "NTLM" : "Kerberos");
+    AUXL4(" %s", ret ? "NTLM" : "Unknown (Negotiate)");
     return ret;
 }
 
@@ -314,10 +312,12 @@ int sspi_init_auth(struct http_auth *auth)
     sspi = calloc(1, sizeof(*sspi));
     if (!sspi)
         goto out;
-    if (auth->type == AUTH_TYPE_KERBEROS || auth->type == AUTH_TYPE_NEGOTIATE)
+    if (auth->type == AUTH_TYPE_KERBEROS)
         sspi->nr_steps = 1;
+    else if (auth->type == AUTH_TYPE_NTLM)
+        sspi->nr_steps = 2;
     else
-        sspi->nr_steps = 2; /* NTLM */
+        sspi->nr_steps = MAX_SSPI_STEPS; // Negotiate
     auth->auth_opaque = sspi;
     ret = 0;
 out:
@@ -679,16 +679,11 @@ int sspi_clt(struct http_auth *auth)
     }
 
     /* we need to find out the number of auth steps if Negotiate */
-    if (!custom_ntlm && auth->type == AUTH_TYPE_NEGOTIATE && sspi->step == 1) {
-        bool ntlm = seems_ntlm_token(auth, (const char *) buf_out_data, buf_out_data_len);
+    if (!custom_ntlm && auth->type == AUTH_TYPE_NEGOTIATE && sspi->step == 1 &&
+        is_ntlm_token(auth, (const char *) buf_out_data, buf_out_data_len)) {
 
-        if (ntlm) {
-            sspi->nr_steps = 2; /* NTLM */
-            auth->last_step = 0;
-        } else {
-            sspi->nr_steps = 1;
-            auth->last_step = 1;
-        }
+        sspi->nr_steps = 2; /* NTLM */
+        auth->last_step = 0;
     }
 
     buf_encoded = base64_encode(buf_out_data, buf_out_data_len);

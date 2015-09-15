@@ -53,7 +53,7 @@
 #define SO_READBUFLEN   (16 * 1024)
 #define MAX_SRV_BUFLEN  (128 * 1024)
 #define MIN_GUEST_BUF   (64 * 1024)
-#define MAX_GUEST_BUF   (4 * 1024 * 1024)
+#define MAX_GUEST_BUF   (16 * 1024 * 1024)
 #define BUF_CHUNK   (2 * 1024)
 
 #define SO_STATE_MAP(XX)                \
@@ -5273,7 +5273,7 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
             if (cx->clt_parser->h.header_length + cx->clt_parser->h.content_length >=
                 MAX_GUEST_BUF) {
 
-                CXL5("CXF_LONG_REQ");
+                CXL4("long HTTP request (>= %u bytes)", (unsigned) MAX_GUEST_BUF);
                 cx->flags |= CXF_LONG_REQ;
             }
         } else if (!(cx->flags & (CXF_HTTP | CXF_TLS | CXF_BINARY | CXF_GUEST_PROXY)) &&
