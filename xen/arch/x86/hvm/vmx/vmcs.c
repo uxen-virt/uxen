@@ -2053,6 +2053,7 @@ vmcs_scan_for_field(void *vmcs, uint64_t vmcs_ma, enum vmcs_field f,
                     uint16_t shoot_v, uint32_t flags, uint32_t *begin)
 {
     int i;
+    int error = 0;
     uint64_t off = 0;
 
 #define NEXT_OFF(x) (x+2 < PAGE_SIZE ? x+2 : VMCS_FIRST_FIELD_OFFSET)
@@ -2071,13 +2072,20 @@ vmcs_scan_for_field(void *vmcs, uint64_t vmcs_ma, enum vmcs_field f,
     memset(vmcs+VMCS_FIRST_FIELD_OFFSET, 0, PAGE_SIZE-VMCS_FIRST_FIELD_OFFSET);
     i = *begin;
     do {
+        unsigned long v;
+
         /* shoot safe value & reload vmcs, assumes little endian */
         __vmpclear(vmcs_ma);
         *((uint16_t*)(vmcs+i)) = shoot_v;
         __vmptrld(vmcs_ma);
         /* did we hit bullseye? */
-        if (__vmread_direct(f) == shoot_v) {
+        v = __vmread_safe_direct(f, &error);
+        if (!error && v == shoot_v) {
             off = i;
+            break;
+        } else if (error) {
+            printk("HVM/VMX: vmread of vmcs field %x failed!\n", f);
+            off = 0;
             break;
         }
         /* restore 0 */
@@ -2087,10 +2095,37 @@ vmcs_scan_for_field(void *vmcs, uint64_t vmcs_ma, enum vmcs_field f,
     } while (i != *begin);
 
     __vmpclear(vmcs_ma);
+    /* clear vmcs */
+    memset(vmcs+VMCS_FIRST_FIELD_OFFSET, 0, PAGE_SIZE-VMCS_FIRST_FIELD_OFFSET);
+    __vmptrld(vmcs_ma);
+    __vmpclear(vmcs_ma);
 
     /* next time don't start from beginning */
     *begin = off ? NEXT_OFF(off) : VMCS_FIRST_FIELD_OFFSET;
     return off;
+}
+
+static int
+vmcs_field_accessible(enum vmcs_field f)
+{
+    if (!cpu_has_vmx_ple &&
+        (f == PLE_GAP || f == PLE_WINDOW))
+        return 0;
+
+    if (!cpu_has_vmx_pat &&
+        (f == GUEST_PAT || f == GUEST_PAT_HIGH ||
+         f == HOST_PAT  || f == HOST_PAT_HIGH))
+        return 0;
+
+    if (!cpu_has_vmx_virtualize_apic_accesses &&
+        (f == APIC_ACCESS_ADDR || f == APIC_ACCESS_ADDR_HIGH))
+        return 0;
+
+    if (!cpu_has_vmx_tpr_shadow &&
+        (f == TPR_THRESHOLD))
+        return 0;
+
+    return 1;
 }
 
 static int
@@ -2119,18 +2154,8 @@ vmcs_fields_iterate(int (*fn)(uint64_t, union vmcs_encoding, int), uint32_t flag
         uint64_t offset;
         enum vmcs_field f = all_vmcs_fields[i];
 
-        /* vmware 12+ throws exception if accessing PLE. Skip if no PLE support */
-        if (!cpu_has_vmx_ple && (f == PLE_GAP || f == PLE_WINDOW))
+        if (!vmcs_field_accessible(f))
             continue;
-        /* vmware 12+ throws exception if accessing PAT fields. Skip if no PAT
-           support */
-        if (!cpu_has_vmx_pat && (f == GUEST_PAT || f == GUEST_PAT_HIGH ||
-                                 f == HOST_PAT  || f == HOST_PAT_HIGH))
-            continue;
-        /* vmware 12+ throws exception if accessing APIC ADDR */
-        if (f == APIC_ACCESS_ADDR || f == APIC_ACCESS_ADDR_HIGH)
-            continue;
-
         offset = vmcs_scan_for_field(vmcs, vmcs_ma, f, 1, flags, &offset_iter);
         enc.word = f;
         index = _pv_vmcs_get_offset_xen(enc.width, enc.type, enc.index);
@@ -2343,6 +2368,8 @@ pv_vmcs_write_table(unsigned long vmcs_encoding, unsigned long val)
     /* case TSC_OFFSET_HIGH: */
     /* case VIRTUAL_APIC_PAGE_ADDR: */
     /* case VIRTUAL_APIC_PAGE_ADDR_HIGH: */
+    case APIC_ACCESS_ADDR:
+    case APIC_ACCESS_ADDR_HIGH:
     /* case EPT_POINTER: */
     /* case EPT_POINTER_HIGH: */
     case GUEST_PHYSICAL_ADDRESS:
@@ -2460,19 +2487,6 @@ pv_vmcs_write_table(unsigned long vmcs_encoding, unsigned long val)
         _pv_vmcs_write_xen(vmcs_encoding, val, vmcs_shadow);
         perfc_incr(pv_vmcs_idem_write_miss);
         break;
-    /* direct access */
-    case APIC_ACCESS_ADDR:
-    case APIC_ACCESS_ADDR_HIGH: {
-        unsigned long flags;
-        cpu_irq_save(flags);
-        __vmptrld(vmcs_vmx->vmcs_ma);
-        vmcs_vmx->loaded = 1;
-        __vmwrite_direct(vmcs_encoding, val);
-        __vmpclear(vmcs_vmx->vmcs_ma);
-        vmcs_vmx->loaded = 0;
-        cpu_irq_restore(flags);
-        return;
-    }
 #define W(f) case f: 
         W(IO_BITMAP_A);
         W(IO_BITMAP_A_HIGH);
@@ -2702,6 +2716,8 @@ pv_vmcs_flush_dirty(struct arch_vmx_struct *vmcs_vmx, int unload)
     }
 }
 
+static int num_failed_offsets;
+
 static int
 fill_vmcs_offsets_table_fn(uint64_t v, union vmcs_encoding enc, int index)
 {
@@ -2713,7 +2729,8 @@ fill_vmcs_offsets_table_fn(uint64_t v, union vmcs_encoding enc, int index)
     } else {
         printk("failed to find offset of vmcs field %04x:%03x w:%x at:%x\n",
                enc.word, index, enc.width, enc.access_type);
-        return -1;
+        ++num_failed_offsets;
+        return 0;
     }
 }
 
@@ -2789,12 +2806,16 @@ setup_pv_vmcs_access(void)
     if (!boot_cpu_has(X86_FEATURE_HYPERVISOR))
         return;
 
+    num_failed_offsets = 0;
     ret = setup_pv_vmcs_access_xen();
     if (ret)
         ret = setup_pv_vmcs_access_vmware();
-    (void)ret;
-
-    return;
+    if (num_failed_offsets) {
+        printk("HVM/VMX: failed to find %d vmcs offsets "
+               "(secondary exec ctrl=%08x)\n",
+               num_failed_offsets, vmx_secondary_exec_control);
+        BUG_ON(1);
+    }
 }
 
 
