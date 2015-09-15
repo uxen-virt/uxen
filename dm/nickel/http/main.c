@@ -5184,7 +5184,7 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
     if (buf && (cx->flags & CXF_RESET_STATE)) {
         CXL4("CXF_RESET_STATE");
         cx->flags &= ~CXF_RESET_STATE;
-        cx_reset_state(cx, false);
+        cx_reset(cx, false);
         if (cx->hp) {
             cx->hp->flags &= (~HF_REUSABLE & ~HF_HTTP_CLOSE);
             if (cx_hp_disconnect(cx) < 0)
