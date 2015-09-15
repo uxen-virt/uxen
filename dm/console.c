@@ -80,8 +80,11 @@ struct display_state *display_create(struct console_hw_ops *ops,
 
     if (gui_info && gui_info->create && !ds->gui) {
         ds->gui = calloc(1, gui_info->size);
-        if (ds->gui)
+        if (ds->gui) {
             gui_info->create(ds->gui, ds);
+            if (gui_info->start)
+                gui_info->start(ds->gui);
+        }
     }
 
     TAILQ_INSERT_TAIL(&desktop, ds, link);
