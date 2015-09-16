@@ -2716,7 +2716,7 @@ pv_vmcs_flush_dirty(struct arch_vmx_struct *vmcs_vmx, int unload)
     }
 }
 
-static int num_failed_offsets;
+static int num_failed_offsets = 0;
 
 static int
 fill_vmcs_offsets_table_fn(uint64_t v, union vmcs_encoding enc, int index)
@@ -2729,7 +2729,7 @@ fill_vmcs_offsets_table_fn(uint64_t v, union vmcs_encoding enc, int index)
     } else {
         printk("failed to find offset of vmcs field %04x:%03x w:%x at:%x\n",
                enc.word, index, enc.width, enc.access_type);
-        ++num_failed_offsets;
+        num_failed_offsets++;
         return 0;
     }
 }
