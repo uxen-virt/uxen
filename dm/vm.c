@@ -677,8 +677,10 @@ vm_exit(void *opaque)
     }
 
     /* Since we are going to exit here, make sure everything is flushed. */
-    aio_flush();
     bdrv_flush_all(1);
+    /* Call aio_flush() after flushing the backends, to not hang if backends
+     * use never-to-be-serviced timers for IO rate limiting. */
+    aio_flush();
 #if defined(HAS_AUDIO)
     uxenaudio_exit();
 #endif
