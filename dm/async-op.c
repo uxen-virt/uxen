@@ -190,28 +190,31 @@ async_op_add(struct async_op_ctx *ctx, void *opaque, ioh_event *event,
     op->handle = handle;
     op->process = process;
 
+    if (!handle) {
+        int ret;
+
+        list_lock(ctx);
+        LIST_INSERT_HEAD(&ctx->list, op, entry);
+        ret = sched_bh(op);
+        list_unlock(ctx);
+
+        return ret;
+    }
+
     list_lock(ctx);
     LIST_INSERT_HEAD(&ctx->list, op, entry);
-    if (!handle && sched_bh(op)) {
-        list_unlock(ctx);
-        return -1;
-    }
-    list_unlock(ctx);
-
-    if (!handle)
-        return 0;
-
-    list_lock(ctx);
     ctx->threads++;
-    list_unlock(ctx);
-
     if (create_thread(&thread_h, async_op_run, ctx) < 0) {
-        list_lock(ctx);
+        Wwarn("%s: create_thread failed", __FUNCTION__);
+        LIST_REMOVE(op, entry);
+        free(op);
         ctx->threads--;
         ioh_event_set(&ctx->thread_exit_ev);
         list_unlock(ctx);
         return -1;
     }
+    list_unlock(ctx);
+
     elevate_thread(thread_h);
     close_thread_handle(thread_h);
 
