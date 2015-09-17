@@ -1733,6 +1733,18 @@ static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now)
 
     if (hp) {
         assert(!hp->cx);
+
+        free(hp->h.sv_name);
+        if (cx->h.sv_name)
+            hp->h.sv_name = strdup(cx->h.sv_name);
+        hp->h.daddr.sin_port = cx->h.daddr.sin_port;
+        if (hp_dns_proxy_check_domain(hp) < 0) {
+            CXL4("ac DENIED while reusing the proxy socket");
+            cx_proxy_response(cx, HMSG_CONNECT_DENIED, true);
+            hp = NULL;
+            goto out;
+        }
+
         if (!hp->cx) {
             cx_get(cx);
             hp->cx = cx;
@@ -1744,11 +1756,6 @@ static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now)
             if (on_cx_hp_connect(cx) < 0)
                 goto err;
         }
-
-        free(hp->h.sv_name);
-        if (cx->h.sv_name)
-            hp->h.sv_name = strdup(cx->h.sv_name);
-        hp->h.daddr.sin_port = cx->h.daddr.sin_port;
 
         if (hp_reset(hp) < 0)
             goto out;
