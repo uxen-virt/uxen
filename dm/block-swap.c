@@ -2228,14 +2228,16 @@ static int swap_flush(BlockDriverState *bs)
     int i;
 
     /* Complete ratelimited writes */
-    debug_printf("swap: completing ratelimited writes\n");
-    TAILQ_FOREACH_SAFE(acb, &s->rlimit_write_queue, rlimit_write_entry, next)
-        swap_complete_write_acb(acb);
 
     /* Wait for all outstanding ios completing. */
     aio_wait_start();
     aio_poll();
     while (s->ios_outstanding) {
+        debug_printf("swap: finishing %d outstanding IOs\n",
+                     s->ios_outstanding);
+        TAILQ_FOREACH_SAFE(acb, &s->rlimit_write_queue, rlimit_write_entry,
+                           next)
+            swap_complete_write_acb(acb);
         aio_wait();
     }
     aio_wait_end();
