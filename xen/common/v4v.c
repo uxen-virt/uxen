@@ -1210,6 +1210,20 @@ static void v4v_ring_remove_mfns (struct v4v_ring_info *ring_info, int put_pages
 
 /*caller must hold W(L2) */
 static void
+v4v_ring_reset(struct v4v_ring_info *ring_info, int put_pages)
+{
+
+    v4v_ring_unmap(ring_info);
+    v4v_ring_remove_mfns(ring_info, put_pages);
+
+    ring_info->len = 0;
+    ring_info->tx_ptr = 0;
+    ring_info->ring = XEN_GUEST_HANDLE_NULL(v4v_ring_t);
+    ring_info->npage = 0;
+}
+
+/*caller must hold W(L2) */
+static void
 v4v_ring_remove_info (struct v4v_ring_info *ring_info, int put_pages)
 {
     v4v_pending_remove_all (ring_info);
@@ -1603,7 +1617,6 @@ v4v_poke (v4v_addr_t *dst_addr)
     return 0;
 }
 #endif
-
 
 
 /*Hypercall to do the send*/
@@ -2045,6 +2058,46 @@ v4v_init (struct domain *d)
     }
 
     return 0;
+}
+
+void
+v4v_shutdown(struct domain *d)
+{
+    int i;
+
+    if (!d)
+        return;
+
+    write_lock(&v4v_lock);
+
+    if (get_domain(d)) {
+          if (d && d->v4v) {
+              for (i = 0; i < V4V_HTABLE_SIZE; i++) {
+                  struct hlist_node *node, *next;
+                  struct v4v_ring_info *ring_info;
+                  hlist_for_each_entry_safe(ring_info, node,
+                                            next, &d->v4v->ring_hash[i], node)
+                      v4v_ring_reset(ring_info, !mfns_dont_belong_xen(d));
+              }
+          }
+          put_domain(d);
+    }
+
+    write_unlock(&v4v_lock);
+}
+
+void
+v4v_resume(struct domain *d)
+{
+
+    if (!d)
+        return;
+
+    if (!get_domain(d))
+        return;
+
+    v4v_signal_domain(d);
+    put_domain(d);
 }
 
 

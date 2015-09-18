@@ -66,6 +66,8 @@ struct v4v_domain
 
 void v4v_destroy(struct domain *d);
 int v4v_init(struct domain *d);
+void v4v_shutdown(struct domain *d);
+void v4v_resume(struct domain *d);
 long do_v4v_op (int cmd, XEN_GUEST_HANDLE (void) arg1, XEN_GUEST_HANDLE (void) arg2, XEN_GUEST_HANDLE (void) arg3, uint32_t arg4, uint32_t arg5);
 
 #endif /* __V4V_PRIVATE_H__ */

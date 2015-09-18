@@ -140,6 +140,8 @@ static void __domain_finalise_shutdown(struct domain *d)
 
     domain_pause_time(d);
 
+    v4v_shutdown(d);
+
     d->is_shut_down = 1;
 #ifndef __UXEN__
     if ( (d->shutdown_code == SHUTDOWN_suspend) && d->suspend_evtchn )
@@ -945,6 +947,8 @@ void domain_resume(struct domain *d)
     spin_unlock(&d->shutdown_lock);
 
     domain_unpause(d);
+
+    v4v_resume(d);
 }
 
 int vcpu_start_shutdown_deferral(struct vcpu *v)
