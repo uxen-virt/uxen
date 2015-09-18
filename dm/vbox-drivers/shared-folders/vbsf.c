@@ -41,6 +41,7 @@
 #include "vbsf.h"
 #include "shflhandle.h"
 #include "filecrypt_helper.h"
+#include "quota.h"
 
 #include <iprt/alloc.h>
 #include <iprt/assert.h>
@@ -599,6 +600,11 @@ static int vbsfOpenFile(SHFLCLIENTDATA *pClient, SHFLROOT root, const wchar_t *p
             if (pHandle)
             {
                 int already_exists = 0, created = 0, truncated = 0;
+                struct quota_op qop;
+
+                quota_start_op(&qop, pClient, root, SHFL_HANDLE_NIL, pszPath);
+                quota_set_delta(&qop, -quota_get_filesize(&qop));
+
                 rc = RTFileOpenUcs(&pHandle->file.Handle, pszPath, fOpen, &already_exists, &created,
                     &truncated);
                 if ((RT_SUCCESS(rc)
@@ -608,6 +614,8 @@ static int vbsfOpenFile(SHFLCLIENTDATA *pClient, SHFLROOT root, const wchar_t *p
                     fAlreadyExists = true;
                 }
                 if (RT_SUCCESS(rc)) {
+                    if (truncated)
+                        quota_complete_op(&qop);
                     if (created || truncated)
                         rc = fch_create_crypt_hdr(pClient, root, handle);
                     else
@@ -1265,7 +1273,9 @@ int vbsfWrite(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, uint64_
     SHFLFILEHANDLE *pHandle = vbsfQueryFileHandle(pClient, Handle);
     size_t count = 0;
     uint64_t hostoffset;
+    int64_t delta;
     int rc;
+    struct quota_op qop;
 
     if (pHandle == 0 || pcbBuffer == 0 || pBuffer == 0)
     {
@@ -1292,6 +1302,16 @@ int vbsfWrite(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, uint64_
     /* need to requery handle, might've changed on rewrite */
     pHandle = vbsfQueryFileHandle(pClient, Handle);
     hostoffset = fch_host_fileoffset(pClient, root, Handle, offset);
+    quota_start_op(&qop, pClient, root, Handle, NULL);
+    delta = hostoffset + *pcbBuffer - quota_get_filesize(&qop);
+    if (delta > 0) {
+        if (RT_FAILURE(quota_set_delta(&qop, delta))) {
+            LogRel(("Error: quota exceeded for write h=0x%llx off=%lld len=%d\n",
+                    Handle, offset, *pcbBuffer));
+            return VERR_DISK_FULL;
+        }
+    }
+
     rc = RTFileSeek(pHandle->file.Handle,
                     hostoffset,
                     RTFILE_SEEK_BEGIN, NULL);
@@ -1303,6 +1323,8 @@ int vbsfWrite(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, uint64_
         Log(("RTFileWrite hostoff=%x %02x %02x %02x %02x\n", (int)hostoffset, pBuffer[0], pBuffer[1], pBuffer[2], pBuffer[3]));
     rc = RTFileWrite(pHandle->file.Handle, pBuffer, *pcbBuffer, &count);
     *pcbBuffer = (uint32_t)count;
+    if (RT_SUCCESS(rc))
+        quota_complete_op(&qop);
     Log(("RTFileWrite returned 0x%x bytes written %x\n", rc, count));
     return rc;
 }
@@ -1744,6 +1766,7 @@ int resize_file(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle,
     int crypt_mode = 0;
     uint64_t prev_sz, prev_sz_guest;
     int rc;
+    struct quota_op qop;
 
     rc = fch_query_crypt_by_handle(pClient, root, handle, &crypt_mode);
     if (RT_FAILURE(rc))
@@ -1756,9 +1779,13 @@ int resize_file(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle,
     prev_sz = fileinfo.cbObject;
     fch_guest_fsinfo(pClient, root, handle, &fileinfo);
     prev_sz_guest = fileinfo.cbObject;
+    quota_start_op(&qop, pClient, root, handle, NULL);
+    if (RT_FAILURE(quota_set_delta(&qop, sz - prev_sz)))
+        return VERR_DISK_FULL;
     rc = RTFileSetSize(pHandle->file.Handle, sz);
     if (rc != VINF_SUCCESS)
         return rc;
+    quota_complete_op(&qop);
     /* if encryption in use and file was extended, we need to rewrite the extended part */
     if (crypt_mode && sz > prev_sz) {
         rc = rewrite_empty_portion(pClient, root, handle,
@@ -2090,9 +2117,15 @@ int vbsfRemove(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLSTRING *pPath, uint32
         {
             if (flags & SHFL_REMOVE_SYMLINK)
                 rc = VERR_NOT_IMPLEMENTED;
-            else if (flags & SHFL_REMOVE_FILE)
+            else if (flags & SHFL_REMOVE_FILE) {
+                struct quota_op qop;
+
+                quota_start_op(&qop, pClient, root, SHFL_HANDLE_NIL, pszFullPath);
+                quota_set_delta(&qop, -quota_get_filesize(&qop));
                 rc = RTFileDeleteUcs(pszFullPath);
-            else
+                if (RT_SUCCESS(rc))
+                    quota_complete_op(&qop);
+            } else
                 rc = RTDirRemoveUcs(pszFullPath);
         }
 

@@ -323,6 +323,7 @@ VBOXDRV_SRCS += shared-folders/mappings.c
 VBOXDRV_SRCS += shared-folders/mappings-crypt.c
 VBOXDRV_SRCS += shared-folders/sf-service.c
 VBOXDRV_SRCS += shared-folders/shflhandle.c
+VBOXDRV_SRCS += shared-folders/quota.c
 VBOXDRV_SRCS += shared-folders/vbsf.c
 VBOXDRV_SRCS += shared-clipboard/VBoxClipboard-win.c
 VBOXDRV_SRCS += shared-clipboard/service.c

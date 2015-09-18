@@ -41,8 +41,10 @@
 #include <windows.h>
 #include "shfl.h"
 #include "vbsf.h"
+#include "mappings.h"
 #include <generic-server.h>
 #include <dm/vbox-drivers/heap.h>
+#include <inttypes.h>
 
 SHFLCLIENTDATA clientData;
 
@@ -92,38 +94,6 @@ static void *makeSHFLStringUTF8(char *str)
     return ret;
 }
 
-static int addMappingInternal(VBOXHGCMSVCFNTABLE *svcTable, char *folder, 
-                              char *name, int writable, int crypt)
-{
-    VBOXHGCMSVCPARM addMappingParams[SHFL_CPARMS_ADD_MAPPING];
-    void * shflString;
-    int rc;
-
-    addMappingParams[0].type = VBOX_HGCM_SVC_PARM_PTR;
-    shflString = makeSHFLStringUTF8(folder);
-    if (!shflString)
-        return VERR_NO_MEMORY;
-    addMappingParams[0].u.pointer.addr = shflString;
-    addMappingParams[0].u.pointer.size = ShflStringSizeOfBuffer(shflString);
-
-    addMappingParams[1].type = VBOX_HGCM_SVC_PARM_PTR;
-    shflString = makeSHFLStringUTF8(name);
-    if (!shflString)
-        return VERR_NO_MEMORY;
-    addMappingParams[1].u.pointer.addr = shflString;
-    addMappingParams[1].u.pointer.size = ShflStringSizeOfBuffer(shflString);
-    addMappingParams[2].type = VBOX_HGCM_SVC_PARM_32BIT;
-
-    addMappingParams[2].u.uint32 = writable | (crypt << 3);
-
-    rc = svcTable->pfnHostCall(NULL, SHFL_FN_ADD_MAPPING, SHFL_CPARMS_ADD_MAPPING, addMappingParams);
-
-    hgcm_free(addMappingParams[0].u.pointer.addr);
-    hgcm_free(addMappingParams[1].u.pointer.addr);
-
-    return rc;
-}
-
 int sf_VBoxHGCMSvcLoad (VBOXHGCMSVCFNTABLE *ptable);
 int sf_init()
 {
@@ -141,8 +111,35 @@ int sf_init()
     return rc;
 }
 
-int sf_add_mapping(char *folder, char *name, int writable, int crypt)
+int
+sf_add_mapping(char *folder, char *name, int writable, int crypt,
+               uint64_t quota)
 {
-    return addMappingInternal(&svcTable, folder, name, writable, crypt);
+    SHFLSTRING *folder_sstr, *name_sstr;
+    int rc;
+
+    folder_sstr = makeSHFLStringUTF8(folder);
+    if (!folder_sstr)
+        return VERR_NO_MEMORY;
+
+    name_sstr = makeSHFLStringUTF8(name);
+    if (!name_sstr)
+        return VERR_NO_MEMORY;
+
+    LogRel(("shared-folders: Host path '%ls', map name '%ls', %s, crypt=%s, quota=%" PRId64 "\n",
+            folder_sstr->String.ucs2,
+            name_sstr->String.ucs2,
+            writable ? "writable" : "read-only",
+            crypt ? "true" : "false",
+            quota));
+
+    /* Execute the function. */
+    rc = vbsfMappingsAdd(folder_sstr, name_sstr,
+                         writable, 0, 0, crypt, quota);
+
+    hgcm_free(folder_sstr);
+    hgcm_free(name_sstr);
+
+    return rc;
 }
 

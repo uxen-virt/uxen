@@ -116,14 +116,20 @@ is_sep(wchar_t c)
     return (c == PATH_SEP || c == PATH_SEP_ALT);
 }
 
-static int
+int
 is_path_prefixof(wchar_t *prefix, wchar_t *path)
 {
+    if (!wcsncmp(L"\\\\?\\", prefix, 4))
+        prefix += 4;
+    if (!wcsncmp(L"\\\\?\\", path, 4))
+        path += 4;
     while (is_sep(*prefix)) ++prefix;
     while (is_sep(*path)) ++path;
 
     while (*path && *prefix) {
-        if (*path != *prefix)
+        wchar_t a = towlower(*path);
+        wchar_t b = towlower(*prefix);
+        if (a != b)
             return 0;
         ++path;
         ++prefix;

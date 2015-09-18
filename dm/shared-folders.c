@@ -110,6 +110,7 @@ int sf_parse_config(yajl_val config)
     const char *name, *folder;
     const char* folders_path[] = {"folders", NULL};
     int writable, crypt_mode;
+    uint64_t quota;
 
     __init();
 
@@ -132,7 +133,8 @@ int sf_parse_config(yajl_val config)
             }
             writable = yajl_object_get_integer_default(v, "writable", 0);
             crypt_mode = yajl_object_get_integer_default(v, "scramble", 0);
-            rc = sf_add_mapping(folder, name, writable, crypt_mode);
+            quota = yajl_object_get_integer_default(v, "quota", 0);
+            rc = sf_add_mapping(folder, name, writable, crypt_mode, quota);
             if (rc) {
                 warnx("sf_add_mapping folder=%s name=%s error %d", 
                     folder, name, rc);

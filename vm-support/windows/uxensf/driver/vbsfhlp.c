@@ -255,6 +255,10 @@ NTSTATUS VBoxErrorToNTStatus (int vboxRC)
         Status = STATUS_NETWORK_NAME_DELETED;
         break;
 
+    case VERR_DISK_FULL:
+        Status = STATUS_DISK_FULL;
+        break;
+
     default:
         /* @todo error handling */
         Status = STATUS_INVALID_PARAMETER;

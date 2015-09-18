@@ -71,6 +71,7 @@ typedef struct
     filecrypt_hdr_t *crypt;
     uint8_t cryptchanged; /* do we need to re-verify crypt settings when writing */
     ioh_event ready_ev;
+    struct shfl_handle_data data;
 } SHFLINTHANDLE, *PSHFLINTHANDLE;
 
 static SHFLINTHANDLE   *pHandles = NULL;
@@ -433,6 +434,10 @@ int vbsfLoadHandleTable(QEMUFile *f)
         pHandles[idx].bOpening = 1;
         pHandles[idx].cryptchanged = 0; /* will get handled in reopen */
         pHandles[idx].crypt = NULL;
+        pHandles[idx].data.fsize = 0;
+        pHandles[idx].data.link = 0;
+        pHandles[idx].data.quota_cachedattrs =0;
+
         ioh_event_init(&pHandles[idx].ready_ev);
     }
 
@@ -495,6 +500,9 @@ SHFLHANDLE  vbsfAllocHandle(PSHFLCLIENTDATA pClient, uint32_t uType,
     pHandles[handle].bOpening = 0;
     pHandles[handle].cryptchanged = 1; /* mark so that it's tested on 1st write */
     pHandles[handle].crypt = NULL;
+    pHandles[handle].data.fsize = 0;
+    pHandles[handle].data.link = 0;
+    pHandles[handle].data.quota_cachedattrs =0;
     ioh_event_init(&pHandles[handle].ready_ev);
 
     lastHandleIndex++;
@@ -702,6 +710,19 @@ int vbsfQueryHandleFileExistence(SHFLHANDLE handle)
     wait_handle_ready(handle);
 
     return handle < SHFLHANDLE_MAX && !pHandles[handle].bFileNotFound;
+}
+
+struct shfl_handle_data *
+vbsfQueryHandleData(PSHFLCLIENTDATA pClient, SHFLHANDLE handle)
+{
+    wait_handle_ready(handle);
+
+    if (   handle < SHFLHANDLE_MAX
+        && (pHandles[handle].uFlags & SHFL_HF_VALID)
+        && pHandles[handle].pClient == pClient)
+        return &pHandles[handle].data;
+    else
+        return NULL;
 }
 
 SHFLHANDLE vbsfAllocDirHandle(PSHFLCLIENTDATA pClient)

@@ -215,7 +215,7 @@ wchar_t* RTwcsdup(wchar_t*);
  */
 int vbsfMappingsAdd(PSHFLSTRING pFolderName, PSHFLSTRING pMapName,
                     bool fWritable, bool fAutoMount, bool fSymlinksCreate,
-                    bool fCrypt)
+                    bool fCrypt, uint64_t quota)
 {
     unsigned i;
 
@@ -263,6 +263,8 @@ int vbsfMappingsAdd(PSHFLSTRING pFolderName, PSHFLSTRING pMapName,
             FolderMapping[i].fSymlinksCreate = fSymlinksCreate;
             FolderMapping[i].fCrypt          = fCrypt;
             FolderMapping[i].fHostCaseSensitive = false;
+            FolderMapping[i].quota_max = quota;
+            FolderMapping[i].quota_cur = QUOTA_INVALID;
             vbsfRootHandleAdd(i);
             break;
         }
@@ -616,5 +618,33 @@ vbsfMappingsQueryCrypt(PSHFLCLIENTDATA pClient, SHFLROOT root, wchar_t *path, in
                                rootpath, path, crypt_mode);
     }
 
+    return VINF_SUCCESS;
+}
+
+int
+vbsfMappingsQueryQuota(PSHFLCLIENTDATA pClient, SHFLROOT root,
+                       uint64_t *quota_max, uint64_t *quota_cur)
+{
+    MAPPING *pFolderMapping = vbsfMappingGetByRoot(root);
+
+    *quota_max = *quota_cur = 0;
+    AssertReturn(pFolderMapping, VERR_INVALID_PARAMETER);
+    if (!pFolderMapping->fValid)
+        return VERR_FILE_NOT_FOUND;
+    *quota_max = pFolderMapping->quota_max;
+    *quota_cur = pFolderMapping->quota_cur;
+    return VINF_SUCCESS;
+}
+
+int
+vbsfMappingsUpdateQuota(PSHFLCLIENTDATA pClient, SHFLROOT root,
+                        uint64_t quota_cur)
+{
+    MAPPING *pFolderMapping = vbsfMappingGetByRoot(root);
+
+    AssertReturn(pFolderMapping, VERR_INVALID_PARAMETER);
+    if (!pFolderMapping->fValid)
+        return VERR_FILE_NOT_FOUND;
+    pFolderMapping->quota_cur = quota_cur;
     return VINF_SUCCESS;
 }

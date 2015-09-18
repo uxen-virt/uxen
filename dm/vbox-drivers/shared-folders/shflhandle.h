@@ -79,6 +79,12 @@ typedef struct _SHFLFILEHANDLE
     };
 } SHFLFILEHANDLE;
 
+struct shfl_handle_data {
+    int64_t fsize;
+    int link;
+    int quota_cachedattrs;
+};
+
 SHFLHANDLE      vbsfAllocDirHandle(PSHFLCLIENTDATA pClient);
 SHFLHANDLE      vbsfAllocFileHandle(PSHFLCLIENTDATA pClient, const wchar_t *pwsFileName, uint32_t uOpenFlags);
 void            vbsfFreeFileHandle (PSHFLCLIENTDATA pClient, SHFLHANDLE hHandle);
@@ -108,6 +114,7 @@ void vbsfSetHandleCrypt(PSHFLCLIENTDATA pClient, SHFLHANDLE handle, filecrypt_hd
 int vbsfQueryHandleCryptChanged(PSHFLCLIENTDATA client, SHFLHANDLE handle);
 void vbsfResetHandleCryptChanged(PSHFLCLIENTDATA client, SHFLHANDLE handle);
 void vbsfNotifyCryptChanged(void);
+struct shfl_handle_data *vbsfQueryHandleData(PSHFLCLIENTDATA client, SHFLHANDLE handle);
 
 /* reopen handles to given path with action performed between close of existing one and reopen */
 int vbsfReopenPathHandles(PSHFLCLIENTDATA client, wchar_t *path,

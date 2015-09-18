@@ -1125,6 +1125,9 @@ static DECLCALLBACK(int) svcHostCall (void *unused, uint32_t u32Function, uint32
     {
     case SHFL_FN_ADD_MAPPING:
     {
+        rc = VERR_INVALID_PARAMETER;
+        break;
+#if 0
         Log(("SharedFolders host service: svcCall: SHFL_FN_ADD_MAPPING\n"));
         LogRel(("SharedFolders host service: adding host mapping\n"));
         /* Verify parameter count and types. */
@@ -1180,10 +1183,14 @@ static DECLCALLBACK(int) svcHostCall (void *unused, uint32_t u32Function, uint32
         if (RT_FAILURE(rc))
             LogRel(("SharedFolders host service: adding host mapping failed with rc=0x%x\n", rc));
         break;
+#endif
     }
 
     case SHFL_FN_REMOVE_MAPPING:
     {
+        rc = VERR_INVALID_PARAMETER;
+        break;
+#if 0
         Log(("SharedFolders host service: svcCall: SHFL_FN_REMOVE_MAPPING\n"));
         LogRel(("SharedFolders host service: removing host mapping '%ls'\n",
                 ((SHFLSTRING *)paParms[0].u.pointer.addr)->String.ucs2));
@@ -1223,6 +1230,7 @@ static DECLCALLBACK(int) svcHostCall (void *unused, uint32_t u32Function, uint32
         if (RT_FAILURE(rc))
             LogRel(("SharedFolders host service: removing host mapping failed with rc=0x%x\n", rc));
         break;
+#endif
     }
 
     case SHFL_FN_SET_STATUS_LED:

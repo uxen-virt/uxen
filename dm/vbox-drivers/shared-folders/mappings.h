@@ -38,6 +38,8 @@
 #include "shfl.h"
 #include <VBox/shflsvc.h>
 
+#define QUOTA_INVALID 0xFFFFFFFFFFFFFFFF
+
 typedef struct
 {
     wchar_t        *pszFolderName;       /**< directory at the host to share with the guest */
@@ -50,6 +52,7 @@ typedef struct
     bool        fAutoMount;           /**< folder will be auto-mounted by the guest */
     bool        fSymlinksCreate;      /**< guest is able to create symlinks */
     bool        fCrypt;               /**< scramble/crypt file contents */
+    uint64_t    quota_max, quota_cur; /**< folder quota in bytes */
 } MAPPING;
 /** Pointer to a MAPPING structure. */
 typedef MAPPING *PMAPPING;
@@ -59,7 +62,8 @@ void vbsfMappingInit(void);
 bool vbsfMappingQuery(uint32_t iMapping, PMAPPING *pMapping);
 
 int vbsfMappingsAdd(PSHFLSTRING pFolderName, PSHFLSTRING pMapName,
-                    bool fWritable, bool fAutoMount, bool fCreateSymlinks, bool fCrypt);
+                    bool fWritable, bool fAutoMount, bool fCreateSymlinks, bool fCrypt,
+                    uint64_t quota);
 int vbsfMappingsRemove(PSHFLSTRING pMapName);
 
 int vbsfMappingsQuery(PSHFLCLIENTDATA pClient, PSHFLMAPPING pMappings, uint32_t *pcMappings);
@@ -68,7 +72,9 @@ int vbsfMappingsQueryWritable(PSHFLCLIENTDATA pClient, SHFLROOT root, bool *fWri
 int vbsfMappingsQueryAutoMount(PSHFLCLIENTDATA pClient, SHFLROOT root, bool *fAutoMount);
 int vbsfMappingsQuerySymlinksCreate(PSHFLCLIENTDATA pClient, SHFLROOT root, bool *fSymlinksCreate);
 int vbsfMappingsQueryCrypt(PSHFLCLIENTDATA pClient, SHFLROOT root, wchar_t *path, int *crypt_mode);
-
+int vbsfMappingsQueryQuota(PSHFLCLIENTDATA pClient, SHFLROOT root,
+                           uint64_t *quota_max, uint64_t *quota_cur);
+int vbsfMappingsUpdateQuota(PSHFLCLIENTDATA pClient, SHFLROOT root, uint64_t quota_cur);
 int vbsfMapFolder(PSHFLCLIENTDATA pClient, PSHFLSTRING pszMapName, RTUTF16 delimiter,
                   bool fCaseSensitive, SHFLROOT *pRoot);
 int vbsfUnmapFolder(PSHFLCLIENTDATA pClient, SHFLROOT root);
