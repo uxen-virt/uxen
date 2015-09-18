@@ -17,15 +17,17 @@ NTTARGETFILE1 = COPY
 
 NTTARGETFILE2 = POST
 
-INCLUDES=..\..\..\common\include\xen-public;..\common
+INCLUDES = ..\..\..\common\include\xen-public;..\common
 
 LINKER_FLAGS = $(LINKER_FLAGS) /LTCG:NOSTATUS /SECTION:.rsrc,!d
 
-TARGETLIBS=$(UXENVMLIB_LIB)
+TARGETLIBS = $(UXENVMLIB_LIB) \
+             $(DDK_LIB_PATH)\aux_klib.lib
 
 SOURCES = balloon.c \
 	  platform.c \
           bus.c \
+          zp.c \
 	  uxenplatform.rc
 
 AMD64_SOURCES = bus_config.asm

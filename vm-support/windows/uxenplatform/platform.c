@@ -17,6 +17,7 @@
 #include "balloon.h"
 #include "bus.h"
 #include "version.h"
+#include "zp.h"
 
 NTSTATUS
 DriverEntry(IN PDRIVER_OBJECT driver_object, IN PUNICODE_STRING registry_path)
@@ -389,6 +390,8 @@ uxp_ev_device_prepare_hardware(WDFDEVICE device, WDFCMRESLIST resources,
     status = bus_enumerate(device);
     if (!NT_SUCCESS(status))
         return status;
+
+    zp_init();
 
     return STATUS_SUCCESS;
 }

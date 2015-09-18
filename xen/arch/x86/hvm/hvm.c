@@ -1634,6 +1634,38 @@ hvm_send_dom0_dmreq(struct domain *d)
     return 1;
 }
 
+static int
+hvm_save_zp(struct domain *d, hvm_domain_context_t *h)
+{
+    uint32_t nr;
+    int ret = 0;
+
+    for (nr = 0; !ret && nr < XEN_MEMORY_SET_ZERO_PAGE_DESC_MAX; nr++)
+        ret = hvm_save_entry(ZP, nr, h, &d->zp_ctxt[nr]);
+
+    return ret;
+}
+
+static int
+hvm_load_zp(struct domain *d, hvm_domain_context_t *h)
+{
+    struct hvm_zp_context dummy = { }, *ctxt = &d->zp_ctxt[d->zp_nr];
+
+    if (d->zp_nr >= XEN_MEMORY_SET_ZERO_PAGE_DESC_MAX)
+        ctxt = &dummy;
+
+    if (hvm_load_entry(ZP, h, ctxt) != 0)
+        return -EINVAL;
+
+    if (ctxt != &dummy && d->zp_ctxt[d->zp_nr].entry)
+        d->zp_nr++;
+
+    return 0;
+}
+
+HVM_REGISTER_SAVE_RESTORE(ZP, hvm_save_zp, hvm_load_zp,
+                          XEN_MEMORY_SET_ZERO_PAGE_DESC_MAX, HVMSR_PER_DOM);
+
 void hvm_hlt(unsigned long rflags)
 {
     struct vcpu *curr = current;
@@ -3554,6 +3586,7 @@ static long hvm_memory_op(int cmd, XEN_GUEST_HANDLE(void) arg)
 #else  /* __UXEN__ */
     case XENMEM_add_to_physmap:
     case XENMEM_share_zero_pages:
+    case XENMEM_set_zero_page_ctxt:
         break;
     default:
         gdprintk(XENLOG_WARNING, "hvm_memory_op cmd %d\n", cmd);

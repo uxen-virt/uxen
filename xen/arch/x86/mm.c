@@ -5642,6 +5642,63 @@ long arch_memory_op(int op, XEN_GUEST_HANDLE(void) arg)
         return rc;
     }
 
+    case XENMEM_set_zero_page_ctxt:
+    {
+        struct domain *d;
+        xen_memory_set_zero_page_ctxt_t zp_arg;
+        uint32_t nr;
+
+        d = rcu_lock_current_domain();
+
+        if (copy_from_guest(&zp_arg, arg, 1))
+            return -EFAULT;
+
+        if (d->zp_nr) {
+            MEM_LOG("zp: vm zero page ctxt already set");
+            goto set_zero_page_ctxt_out;
+        }
+
+        for (nr = 0; nr < zp_arg.nr_desc; nr++) {
+            if (nr > XEN_MEMORY_SET_ZERO_PAGE_DESC_MAX)
+                break;
+            if (!zp_arg.zp[nr].entry)
+                continue;
+            d->zp_ctxt[d->zp_nr].entry = zp_arg.zp[nr].entry;
+            d->zp_ctxt[d->zp_nr].ret = zp_arg.zp[nr].ret;
+            d->zp_ctxt[d->zp_nr].nr_gpfns_mode = zp_arg.zp[nr].nr_gpfns_mode;
+            d->zp_ctxt[d->zp_nr].gva_mode = zp_arg.zp[nr].gva_mode;
+            d->zp_ctxt[d->zp_nr].prologue_mode = zp_arg.zp[nr].prologue_mode;
+            d->zp_ctxt[d->zp_nr].zero_thread_mode =
+                zp_arg.zp[nr].zero_thread_mode;
+            switch (d->zp_ctxt[d->zp_nr].zero_thread_mode) {
+            case XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_gs_pcr_188:
+            case XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_fs_pcr_124:
+                d->zp_ctxt[d->zp_nr].zero_thread_addr =
+                    zp_arg.zp[nr].zero_thread_addr;
+                break;
+            case XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_cr3:
+                d->zp_ctxt[d->zp_nr].zero_thread_cr3 =
+                    zp_arg.zp[nr].zero_thread_cr3;
+                break;
+            }
+            MEM_LOG("zp: vm zero page fn @ %"PRIxPTR" - %"PRIxPTR
+                    " nr_gpfns %d gva %d prologue %d"
+                    " -- zero thread addr/cr3 %"PRIxPTR" mode %d",
+                    d->zp_ctxt[d->zp_nr].entry, d->zp_ctxt[d->zp_nr].ret,
+                    d->zp_ctxt[d->zp_nr].nr_gpfns_mode,
+                    d->zp_ctxt[d->zp_nr].gva_mode,
+                    d->zp_ctxt[d->zp_nr].prologue_mode,
+                    d->zp_ctxt[d->zp_nr].zero_thread_addr,
+                    d->zp_ctxt[d->zp_nr].zero_thread_mode);
+            d->zp_nr++;
+        }
+
+      set_zero_page_ctxt_out:
+        rcu_unlock_domain(d);
+
+        return 0;
+    }
+
 #ifndef __UXEN__
     default:
         return subarch_memory_op(op, arg);

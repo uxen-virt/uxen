@@ -26,7 +26,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -410,6 +410,40 @@ typedef struct xen_memory_share_zero_pages xen_memory_share_zero_pages_t;
 DEFINE_XEN_GUEST_HANDLE(xen_memory_share_zero_pages_t);
 
 #define XENMEM_SHARE_ZERO_PAGES_MAX_BATCH (PAGE_SIZE / sizeof(xen_pfn_t))
+
+#define XENMEM_set_zero_page_ctxt         51
+struct xen_memory_set_zero_page_desc {
+    uint64_t entry;
+    uint64_t ret;
+    union {
+        uint64_t zero_thread_addr;
+        uint64_t zero_thread_cr3;
+    };
+    uint8_t nr_gpfns_mode;
+    uint8_t gva_mode;
+    uint8_t prologue_mode;
+    uint8_t zero_thread_mode;
+};
+#define XEN_MEMORY_SET_ZERO_PAGE_DESC_MAX 2
+struct xen_memory_set_zero_page_ctxt {
+    uint32_t nr_desc;
+    struct xen_memory_set_zero_page_desc zp[XEN_MEMORY_SET_ZERO_PAGE_DESC_MAX];
+};
+typedef struct xen_memory_set_zero_page_ctxt xen_memory_set_zero_page_ctxt_t;
+
+#define XEN_MEMORY_SET_ZERO_PAGE_NR_GPFN_MODE_single 0
+#define XEN_MEMORY_SET_ZERO_PAGE_NR_GPFN_MODE_edx_shift_5 1
+#define XEN_MEMORY_SET_ZERO_PAGE_NR_GPFN_MODE_edx_shift_6 2
+#define XEN_MEMORY_SET_ZERO_PAGE_NR_GPFN_MODE_ecx_shift_10 3
+#define XEN_MEMORY_SET_ZERO_PAGE_GVA_MODE_single 0
+#define XEN_MEMORY_SET_ZERO_PAGE_GVA_MODE_ecx 1
+#define XEN_MEMORY_SET_ZERO_PAGE_GVA_MODE_edi 2
+#define XEN_MEMORY_SET_ZERO_PAGE_PROLOGUE_none 0
+#define XEN_MEMORY_SET_ZERO_PAGE_PROLOGUE_clear_edx 1
+#define XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_none 0
+#define XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_gs_pcr_188 1
+#define XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_fs_pcr_124 2
+#define XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_cr3 3
 
 #endif /* __XEN_PUBLIC_MEMORY_H__ */
 

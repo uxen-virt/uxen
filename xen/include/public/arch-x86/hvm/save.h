@@ -586,9 +586,28 @@ struct hvm_viridian_vcpu_context {
 
 DECLARE_HVM_SAVE_TYPE(VIRIDIAN_VCPU, 17, struct hvm_viridian_vcpu_context);
 
+/*
+ * Zero pages reshare context.
+ */
+
+struct hvm_zp_context {
+    uintptr_t entry;
+    uintptr_t ret;
+    union {
+        uintptr_t zero_thread_addr;
+        uintptr_t zero_thread_cr3;
+    };
+    uint8_t nr_gpfns_mode;
+    uint8_t gva_mode;
+    uint8_t prologue_mode;
+    uint8_t zero_thread_mode;
+};
+
+DECLARE_HVM_SAVE_TYPE(ZP, 18, struct hvm_zp_context);
+
 /* 
  * Largest type-code in use
  */
-#define HVM_SAVE_CODE_MAX 17
+#define HVM_SAVE_CODE_MAX 18
 
 #endif /* __XEN_PUBLIC_HVM_SAVE_X86_H__ */

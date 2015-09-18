@@ -278,6 +278,13 @@ struct domain_extra_1
     hvm_domain_dirty_vram[SH_DIRTY_VRAM_SIZE]; /* ...hvm_domain.dirty_vram */
 
     struct debug_port_state debug_port;
+
+    struct {
+        struct hvm_zp_context zp_ctxt[XEN_MEMORY_SET_ZERO_PAGE_DESC_MAX];
+        uint32_t zp_nr;
+    };
+#define zp_ctxt extra_1->zp_ctxt
+#define zp_nr extra_1->zp_nr
 };
 
 struct arch_domain
