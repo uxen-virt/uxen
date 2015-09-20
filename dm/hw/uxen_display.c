@@ -73,6 +73,7 @@ struct uxendisp_state {
     uint32_t interrupt_en;
     uint32_t cursor_en;
     uint32_t mode;
+    int resumed;
 };
 
 #define crtc_to_state(c) (container_of((c), struct uxendisp_state, crtcs[(c)->id]))
@@ -420,7 +421,7 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
             crtc->yres == h &&
             crtc->stride == stride &&
             crtc->format == fmt &&
-            crtc->offset == offset)
+            crtc->offset == offset && !s->resumed)
             return;
 
         if (w > UXENDISP_XRES_MAX || h > UXENDISP_YRES_MAX ||
@@ -451,6 +452,8 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
         crtc->stride = stride;
         crtc->format = fmt;
         crtc->offset = offset;
+        s->resumed = 0;
+
     } else {
         if (crtc->ds) {
             if (crtc->ds->surface) {
@@ -825,11 +828,37 @@ uxendisp_post_load(void *opaque, int version_id)
     return 0;
 }
 
+static int
+uxendisp_resume(void *opaque, int version_id)
+{
+    struct uxendisp_state *s = opaque;
+    int i;
+    int ret;
+
+    ret = uxendisp_post_load(opaque, version_id);
+    if (ret)
+        return ret;
+
+    for (i = 0; i < UXENDISP_NB_BANKS; i++) {
+        struct bank_state *bank = &s->banks[i];
+        ret = vram_resume(&bank->vram);
+        if (ret)
+            return ret;
+    }
+    s->resumed = 1;
+    return 0;
+}
+
 static void
 uxendisp_post_save(void *opaque)
 {
     struct uxendisp_state *s = opaque;
+    int i;
 
+    for (i = 0; i < UXENDISP_NB_BANKS; i++) {
+        struct bank_state *bank = &s->banks[i];
+        vram_suspend(&bank->vram);
+    }
     pci_ram_post_save(&s->dev);
 }
 
@@ -866,7 +895,7 @@ static const VMStateDescription vmstate_uxendisp = {
     .pre_save = uxendisp_pre_save,
     .post_load = uxendisp_post_load,
     .post_save = uxendisp_post_save,
-    .resume = uxendisp_post_load,
+    .resume = uxendisp_resume,
     .fields      = (VMStateField []) {
         VMSTATE_PCI_DEVICE(dev, struct uxendisp_state),
         VMSTATE_STRUCT(vga, struct uxendisp_state, 0,

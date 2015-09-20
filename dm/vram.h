@@ -15,6 +15,9 @@ struct vram_desc {
     size_t len;
     size_t mapped_len;
     uint32_t gfn;
+    uint32_t last_gfn;
+    size_t lz4_len;
+    int64_t file_offset;
 
     void (*notify)(struct vram_desc *, void *);
     void *priv;
@@ -23,6 +26,8 @@ struct vram_desc {
 int vram_init(struct vram_desc *v, size_t len);
 int vram_alloc(struct vram_desc *v, size_t mapped_len);
 int vram_release(struct vram_desc *v);
+int vram_suspend(struct vram_desc *v);
+int vram_resume(struct vram_desc *v);
 int vram_unmap(struct vram_desc *v);
 int vram_map(struct vram_desc *v, uint32_t gfn);
 int vram_resize(struct vram_desc *v, uint32_t new_mapped_len);

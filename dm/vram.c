@@ -11,6 +11,7 @@
 #include "vm.h"
 
 #include "qemu_glue.h"
+#include "qemu_savevm.h"
 
 #include <lz4.h>
 
@@ -118,12 +119,65 @@ shm_free(uintptr_t handle, void *view, size_t len)
     DPRINTF("shm_free handle=%08"PRIxPTR"\n", handle);
 
 #if defined(_WIN32)
-    UnmapViewOfFile(view);
+    if (!UnmapViewOfFile(view))
+        Wwarn("vram UnmapViewOfFile failed");
     CloseHandle((HANDLE)handle);
 #elif defined (__APPLE__)
     munmap(view, len);
     close((int)handle);
 #endif
+}
+
+int
+vram_suspend(struct vram_desc *v)
+{
+    if (v->mapped_len) {
+        v->last_gfn = v->gfn;
+        if (vram_unmap(v))
+            err(1, "vram_unmap failed!\n");
+        shm_free(v->hdl, v->view, v->mapped_len);
+        v->hdl = NULL_HANDLE;
+        v->view = NULL;
+        if (v->notify)
+            v->notify(v, v->priv);
+    }
+    return 0;
+}
+
+int
+vram_resume(struct vram_desc *v)
+{
+    int ret = 0;
+    void *buf;
+
+    if (v->mapped_len) {
+        v->view = shm_malloc(v->mapped_len, &v->hdl);
+        if (!v->view)
+            return -1;
+
+        ret = vram_map(v, v->last_gfn);
+        if (ret) {
+            shm_free(v->hdl, v->view, v->mapped_len);
+            return ret;
+        }
+        v->last_gfn = 0;
+
+        buf = malloc(v->lz4_len);
+        if (buf) {
+            if (vm_save_read_dm_offset(buf, v->file_offset, v->lz4_len) ==
+                    v->lz4_len) {
+                ret = LZ4_decompress_safe(buf, (void *)v->view, v->lz4_len,
+                                          v->mapped_len);
+
+                ret = ret == v->mapped_len ? 0 : -1;
+            }
+            free(buf);
+        }
+
+        if (v->notify)
+            v->notify(v, v->priv);
+    }
+    return ret;
 }
 
 int
@@ -308,6 +362,8 @@ put_vram(QEMUFile *f, void *pv, size_t size)
         lz4_len = LZ4_compress((void *)v->view, p, v->mapped_len);
 
         qemu_put_be32(f, lz4_len);
+        v->lz4_len = lz4_len;
+        v->file_offset = qemu_ftell(f);
         qemu_put_buffer(f, p, lz4_len);
         free(p);
     }

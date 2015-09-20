@@ -429,6 +429,7 @@ uxenvm_savevm_write_info(struct filebuf *f, uint8_t *dm_state_buf,
     s_hvm_dm.size = dm_state_size;
     APRINTF("dm rec size %d", s_hvm_dm.size);
     filebuf_write(f, &s_hvm_dm, sizeof(s_hvm_dm));
+    vm_save_info.dm_offset = filebuf_tell(f);
     filebuf_write(f, dm_state_buf, s_hvm_dm.size);
 
     s_vm_uuid.marker = XC_SAVE_ID_VM_UUID;
@@ -456,6 +457,20 @@ uxenvm_savevm_write_info(struct filebuf *f, uint8_t *dm_state_buf,
     }
 
   out:
+    return ret;
+}
+
+int
+vm_save_read_dm_offset(void *dst, off_t offset, size_t size)
+{
+    int ret;
+    off_t o;
+
+    o = filebuf_tell(vm_save_info.f);
+    offset += vm_save_info.dm_offset;
+    filebuf_seek(vm_save_info.f, offset, FILEBUF_SEEK_SET);
+    ret = filebuf_read(vm_save_info.f, dst, size);
+    filebuf_seek(vm_save_info.f, o, FILEBUF_SEEK_SET);
     return ret;
 }
 
@@ -1913,7 +1928,6 @@ vm_restore_memory(void)
     if (!vm_save_info.f)
         errx(1, "%s: no file", __FUNCTION__);
     f = vm_save_info.f;
-    vm_save_info.f = NULL;
 
     if (!vm_save_info.page_batch_offset)
         errx(1, "%s: no page batch offset", __FUNCTION__);
@@ -1977,11 +1991,6 @@ vm_restore_memory(void)
     free(pfn_err);
     free(pfn_info);
     free(pfn_type);
-    if (f) {
-        if (vm_save_info.resume_delete)
-            filebuf_delete_on_close(f, 1);
-	filebuf_close(f);
-    }
     if (ret < 0 && err_msg)
         EPRINTF("%s: ret %d", err_msg, ret);
     free(err_msg);
@@ -2052,6 +2061,11 @@ vm_resume(void)
         vm_restore_memory();
 
     qemu_savevm_resume();
+
+    if (vm_save_info.resume_delete)
+        filebuf_delete_on_close(vm_save_info.f, 1);
+    filebuf_close(vm_save_info.f);
+    vm_save_info.f = NULL;
 
     ret = xc_domain_resume(xc_handle, vm_id);
     if (ret) {

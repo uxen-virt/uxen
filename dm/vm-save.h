@@ -25,6 +25,7 @@ struct vm_save_info {
 
     char *filename;
     struct filebuf *f;
+    off_t dm_offset;
 
     struct control_desc *command_cd;
     char *command_id;
@@ -48,6 +49,7 @@ struct xc_dominfo;
 int vm_process_suspend(struct xc_dominfo *info);
 void vm_save_execute(void);
 void vm_save_finalize(void);
+int vm_save_read_dm_offset(void *dst, off_t offset, size_t size);
 
 int vm_resume(void);
 
