@@ -97,7 +97,7 @@ uint64_t log_swap_fills = 0;
 
 // #define SWAP_NO_AIO 1
 
-#if !defined(LIBIMG)
+#if !defined(LIBIMG) && defined(CONFIG_DUMP_SWAP_STAT)
   #define SWAP_STATS
 #endif
 
@@ -1105,6 +1105,7 @@ static int swap_open(BlockDriverState *bs, const char *filename, int flags)
 
     bs->total_sectors = s->size >> BDRV_SECTOR_BITS;
 
+    debug_printf("%s: done\n", __FUNCTION__);
 out:
     if (r < 0) {
         warnx("swap: failed to open %s", filename);
@@ -1470,7 +1471,7 @@ static int swap_fill_read_holes(BDRVSwapState *s, uint64_t offset, uint64_t coun
                            use the copy from the cow directory. Since CoWed files are expected to
                            be much lesser in number than original files this approach is better. */
 
-#if !defined(LIBIMG)
+#if !defined(LIBIMG) && defined(SWAP_STATS)
                         debug_printf("swap: open %s\n", filename);
 #endif
 
@@ -1480,10 +1481,12 @@ static int swap_fill_read_holes(BDRVSwapState *s, uint64_t offset, uint64_t coun
                         file_id.LowPart = tuple->file_id_lowpart;
 
                         handle = swap_open_file_by_id(s->volume, file_id.QuadPart);
+#ifdef SWAP_STATS
                         if (handle != DUBTREE_INVALID_HANDLE) {
                             debug_printf("Opened file [%s] by file-id [0x%"PRIx64"]\n",
                                             filename, file_id.QuadPart);
                         }
+#endif
 
                         if (handle != DUBTREE_INVALID_HANDLE) {
                             /* Check that the file was modified before the template was created. */

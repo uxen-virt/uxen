@@ -225,7 +225,9 @@ void dubtreeClose(DUBTREE *t)
         free(*fb++);
     }
     if (t->is_mutable) {
+        printf("swap: flush in-memory state to disk...\n");
         FlushViewOfFile(t->mem, 0);
+        printf("swap: flush done.\n");
     }
     UnmapViewOfFile(t->mem);
     CloseHandle(t->map);
