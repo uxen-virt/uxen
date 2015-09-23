@@ -97,7 +97,7 @@ gh_v4v_ctrl_bind(xenv4v_extension_t *pde, xenv4v_context_t *ctx, v4v_bind_values
     NTSTATUS            status = STATUS_SUCCESS;
     LONG                val;
     KLOCK_QUEUE_HANDLE  lqh;
-    xenv4v_ring_t        *robj;
+    xenv4v_ring_t        *robj = NULL;
     uint32_t            port;
 
     // Use a simple guard variable to enforce the state transition order
@@ -163,9 +163,8 @@ gh_v4v_ctrl_bind(xenv4v_extension_t *pde, xenv4v_context_t *ctx, v4v_bind_values
 
     if (!NT_SUCCESS(status)) {
         // If it failed, undo everything - this will remove it from the list
-        if (ctx->ring_object != NULL) {
-            gh_v4v_release_ring(pde, ctx->ring_object);
-        }
+        if (robj)
+            gh_v4v_release_ring(pde, robj);
     }
 
     return status;
