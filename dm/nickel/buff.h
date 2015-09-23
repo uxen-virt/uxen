@@ -87,7 +87,7 @@ int buff_gc_consume(struct buff *b, size_t l);
 #define BUFF_WR_GC(b) do { buff_gc_consume(b, (b)->wr_len); (b)->wr_len = 0; } while(0)
 #define BUFF_OFF(b) ((b)->m - (b)->data)
 #define BUFF_RESET(b) do { if (!(b)) break; (b)->m = (b)->data; (b)->len = 0;                   \
-                            (b)->prev_len = 0; *((b)->data) = 0; } while(0)
+                            (b)->prev_len = 0; *((b)->data) = 0; (b)->wr_len = 0; } while(0)
 #define BUFF_APPENDSTR(buf, str) buff_append(buf, str, strlen(str))
 #define BUFF_APPENDB(buf, b) buff_append(buf, BUFF_CSTR(b), (b)->len)
 #define BUFF_APPENDFROM(out, in, from) buff_append(out, (const char *) (((in)->data) + from),   \

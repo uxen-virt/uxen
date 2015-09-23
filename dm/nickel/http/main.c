@@ -54,6 +54,7 @@
 #define MAX_SRV_BUFLEN  (128 * 1024)
 #define MIN_GUEST_BUF   (64 * 1024)
 #define MAX_GUEST_BUF   (16 * 1024 * 1024)
+#define MAX_SAVE_REQ_PRX (512 * 1024)
 #define BUF_CHUNK   (2 * 1024)
 
 #define SO_STATE_MAP(XX)                \
@@ -143,7 +144,9 @@ static const char *hp_states[] = {
 #define HF_KEEP_ALIVE       U32BF(25)
 #define HF_FATAL_ERROR      U32BF(26)
 #define HF_PARSE_ERROR      U32BF(27)
-#define HF_SRV_NO_RETRY     U32BF(28)
+#define HF_SAVE_REQ_RTRY    U32BF(28)
+#define HF_SAVE_REQ_PRX     U32BF(29)
+#define HF_MONITOR_407      U32BF(30)
 
 #define IS_RESOLVED(hp) ((hp)->flags & HF_RESOLVED)
 #define IS_TUNNEL(hp)   ((hp)->flags & HF_TUNNEL)
@@ -249,7 +252,7 @@ struct http_ctx {
     enum hp_state_t hstate;
     enum hp_state_t hwait_state;
     uint32_t flags;
-    int restart_count;
+    int http_req_rtry_cnt;
     struct buff *clt_out;
     struct buff *c407_buff;
 
@@ -808,8 +811,13 @@ static int start_authenticate(struct http_ctx *hp)
 {
     http_auth_reset(hp->auth);
 
-    if (hp->cx)
+    if (hp->cx) {
         hp->cx->flags &= ~CXF_PROXY_SUSPEND;
+
+        /* in case of an unexpected 407 */
+        if (hp->proxy && (hp->cx->flags & CXF_GUEST_PROXY))
+            hp->flags |= (HF_MONITOR_407 | HF_SAVE_REQ_PRX);
+    }
     return hp_cx_connect_buffs(hp, false);
 }
 
@@ -1286,15 +1294,29 @@ static void hp_free(struct http_ctx *hp)
     free(hp);
 }
 
-static int hp_reset(struct http_ctx *hp)
+static int hp_connect_reinit(struct http_ctx *hp)
 {
     hp->hstate = HP_NEW;
     hp->flags &= ~HF_KEEP_ALIVE;
 
-    if (hp_cx_connect_buffs(hp, true) < 0)
-        return -1;
-    if (hp->cx && hp->cx->srv_parser)
-        parser_reset(hp->cx->srv_parser);
+    if (hp->cx) {
+        bool split_buffs = true;
+
+        if (hp->cx->proxy && (hp->flags & HF_MONITOR_407))
+            hp->flags |= HF_SAVE_REQ_PRX;
+        if (!hp->cx->proxy && (hp->cx->flags & CXF_GUEST_PROXY)) {
+            hp->flags |= HF_SAVE_REQ_RTRY;
+            hp->http_req_rtry_cnt = 0;
+        }
+
+        if (!hp->cx->proxy && !(hp->cx->flags & CXF_GUEST_PROXY))
+            split_buffs = false;
+        if (hp_cx_connect_buffs(hp, split_buffs) < 0)
+            return -1;
+
+        if (hp->cx->srv_parser)
+            parser_reset(hp->cx->srv_parser);
+    }
 
     return 0;
 }
@@ -1347,7 +1369,7 @@ static int hp_cx_connect_next(struct http_ctx *hp, struct proxy_t *proxy)
         if (cx->h.sv_name)
             hp->h.sv_name = strdup(cx->h.sv_name);
         hp->h.daddr.sin_port = cx->h.daddr.sin_port;
-        if (hp_reset(hp) < 0)
+        if (hp_connect_reinit(hp) < 0)
             return -1;
     } else {
         hp = cx_hp_connect_proxy(cx);
@@ -1371,8 +1393,8 @@ static int hp_cx_connect_buffs(struct http_ctx *hp, bool sep_out)
         }
         if (hp->clt_out != NULL)
             BUFF_RESET(hp->clt_out);
-        if (hp->clt_out == NULL && !BUFF_NEW_MX_PRIV(&hp->clt_out, hp->cx->in ? hp->cx->in->size :
-                    SO_READBUFLEN, MAX_GUEST_BUF)) {
+        if (hp->clt_out == NULL && !BUFF_NEW_MX_PRIV(&hp->clt_out,
+            hp->cx->in ? hp->cx->in->size : SO_READBUFLEN, MAX_GUEST_BUF)) {
 
             goto mem_err;
         }
@@ -1569,10 +1591,13 @@ cx_hp_connect_proxy(struct clt_ctx *cx)
     }
 
     hp->cstate = S_INIT;
-    if (hp_cx_connect_buffs(hp, true) < 0)
+    if (hp_connect_reinit(hp) < 0)
         goto close_hp;
-    if (hp->proxy && (cx->flags & CXF_GUEST_PROXY) && !(cx->flags & (CXF_TUNNEL_GUEST | CXF_TLS | CXF_BINARY)))
+    if (hp->proxy && (cx->flags & CXF_GUEST_PROXY) &&
+        !(cx->flags & (CXF_TUNNEL_GUEST | CXF_TLS | CXF_BINARY))) {
+
         hp->flags |= HF_REUSABLE;
+    }
     if ((hp->proxy || (cx->flags & CXF_GUEST_PROXY)) &&
          !(cx->flags & (CXF_TUNNEL_GUEST | CXF_TLS | CXF_BINARY))) {
 
@@ -1636,7 +1661,6 @@ static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now)
 
     if (!cx->proxy) {
         struct hpd_t *hpd = NULL;
-        bool split_buffs = false;
         int not_binary = !(cx->flags & (CXF_TUNNEL_GUEST | CXF_TLS | CXF_BINARY));
 
         hp = NULL;
@@ -1684,8 +1708,6 @@ static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now)
             hp->h.sv_name = strdup(cx->h.sv_name);
         hp->h.daddr.sin_port = cx->h.daddr.sin_port;
 
-        hp->flags &= ~HF_SRV_NO_RETRY;
-        hp->restart_count = 0;
         if (!hpd && (cx->flags & CXF_GUEST_PROXY) && not_binary &&
             hpd_rbtree_init && !(hpd = hp_create_hpd(hp))) {
 
@@ -1700,9 +1722,7 @@ static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now)
             hp->flags |= HF_RESOLVED;
         }
 
-        if ((cx->flags & CXF_GUEST_PROXY))
-            split_buffs = true;
-        if (hp_cx_connect_buffs(hp, split_buffs) < 0)
+        if (hp_connect_reinit(hp) < 0)
             goto err;
 
         if ((cx->flags & CXF_GUEST_PROXY) &&
@@ -1773,7 +1793,7 @@ static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now)
                 goto err;
         }
 
-        if (hp_reset(hp) < 0)
+        if (hp_connect_reinit(hp) < 0)
             goto out;
         *connect_now = true;
 
@@ -1869,6 +1889,8 @@ static int cx_hp_disconnect_ex(struct clt_ctx *cx, bool no_cx_close)
         hp->clt_out = NULL;
     }
 
+    hp->flags &= (~HF_SAVE_REQ_PRX & ~HF_SAVE_REQ_RTRY);
+
     if ((f_hp_closing || f_cx_closing) && hp && (hp->flags & HF_FATAL_ERROR) &&
          !(cx->flags & CXF_FLUSH_CLOSE)) {
 
@@ -1919,7 +1941,7 @@ static int cx_hp_disconnect_ex(struct clt_ctx *cx, bool no_cx_close)
         (hp->flags & HF_REUSE_READY) && (hp->flags & HF_KEEP_ALIVE) &&
         hp->h.sv_name && hp->h.daddr.sin_port) {
 
-        hp_reset(hp);
+        hp_connect_reinit(hp);
         if (hp_set_idle_timer(hp) < 0) {
             HLOG("hp_set_idle_timer FAILED!");
             hp_close(hp);
@@ -2086,6 +2108,7 @@ static int srv_reconnect(struct http_ctx *hp)
     if (hp->cx && hp->cx->srv_parser)
         parser_reset(hp->cx->srv_parser);
     http_auth_reset(hp->auth);
+    hp->auth->was_authorized = 0;
     if (hp->clt_out)
         BUFF_UNCONSUME(hp->clt_out);
 
@@ -2346,7 +2369,7 @@ static int srv_read(struct http_ctx *hp)
     if (len == 0)
         goto out;
 
-    hp->flags |= HF_SRV_NO_RETRY;
+    hp->flags &= ~HF_SAVE_REQ_RTRY;
 #ifdef VERBSTATS
     if (hp->srv_lat_idx < LAT_STAT_NUMBER * 2) {
         int64_t now = get_clock_ms(rt_clock);
@@ -2505,15 +2528,15 @@ static int srv_closing(struct http_ctx *hp, int err)
     }
 
     if (hp->cx && !hp->proxy && (hp->cx->flags & CXF_GUEST_PROXY) && (hp->flags & HF_RESTARTABLE) &&
-        (hp->flags & HF_RESTART_OK) && !(hp->flags & HF_SRV_NO_RETRY) && hp->clt_out &&
+        (hp->flags & HF_RESTART_OK) && (hp->flags & HF_SAVE_REQ_RTRY) && hp->clt_out &&
         BUFF_BUFFERED(hp->clt_out)) {
 
-            if (hp->restart_count >= MAX_RETRY_HTTP_REQ) {
+            if (hp->http_req_rtry_cnt >= MAX_RETRY_HTTP_REQ) {
                 HLOG3("MAX_RETRY_HTTP_REQ %d reached, closing socket", (int) MAX_RETRY_HTTP_REQ);
                 goto close;
             }
-            hp->restart_count++;
-            HLOG3("needs_reconnect, restart_count %d", (int) hp->restart_count);
+            hp->http_req_rtry_cnt++;
+            HLOG3("needs_reconnect, http_req_rtry_cnt %d", (int) hp->http_req_rtry_cnt);
             BUFF_WR_UNCONSUME(hp->clt_out);
             if (srv_reconnect(hp) == 0)
                 goto out;
@@ -2582,12 +2605,20 @@ static int srv_write(struct http_ctx *hp, const uint8_t *b, size_t blen)
     HLOG5("blen %lu", (unsigned long) blen);
     if (hp->clt_out) {
         BUFF_CONSUME_ALL(hp->clt_out);
-        if (!(hp->flags & HF_SRV_NO_RETRY) && ((ssize_t) BUFF_BUFFERED(hp->clt_out)) >
-            (((ssize_t) MAX_GUEST_BUF) - BUF_CHUNK * 2)) {
 
-            hp->flags |= HF_SRV_NO_RETRY;
-            BUFF_WR_GC(hp->clt_out);
+        if ((hp->flags & (HF_SAVE_REQ_PRX | HF_SAVE_REQ_RTRY)) &&
+            ((ssize_t) BUFF_BUFFERED(hp->clt_out)) > (((ssize_t) MAX_GUEST_BUF) - BUF_CHUNK * 2)) {
+
+            HLOG3("WARN buffered too much, cannot save any more req data");
+            hp->flags &= (~HF_SAVE_REQ_PRX & ~HF_SAVE_REQ_RTRY);
+        } else if ((hp->flags & HF_SAVE_REQ_PRX) && BUFF_BUFFERED(hp->clt_out) > MAX_SAVE_REQ_PRX) {
+            HLOG4("WARN buffered too much, clearing save-req flag");
+            hp->flags &= ~HF_SAVE_REQ_PRX;
         }
+
+        if (!(hp->flags & (HF_SAVE_REQ_PRX | HF_SAVE_REQ_RTRY)))
+            BUFF_WR_GC(hp->clt_out);
+
         assert(hp->clt_out->wr_len <= hp->clt_out->size);
         len = BUFF_WR_CLEN(hp->clt_out);
     }
@@ -2607,9 +2638,11 @@ static int srv_write(struct http_ctx *hp, const uint8_t *b, size_t blen)
                 HLOG("WARNING - TLS error(1), might not be able to check cert revocation");
             }
             BUFF_WR_ADVANCE(hp->clt_out, r);
-            if (!hp->cx || !(hp->cx->flags & CXF_GUEST_PROXY) || (hp->flags & HF_SRV_NO_RETRY) ||
-                hp->proxy || !(hp->flags & HF_RESTARTABLE)) {
+            if (!hp->cx || !(hp->cx->flags & CXF_GUEST_PROXY) ||
+                !(hp->flags & (HF_SAVE_REQ_PRX | HF_SAVE_REQ_RTRY)) ||
+                !(hp->flags & HF_RESTARTABLE)) {
 
+                hp->flags &= (~HF_SAVE_REQ_PRX & ~HF_SAVE_REQ_RTRY);
                 BUFF_WR_GC(hp->clt_out);
             }
             HLOG5("sent buff %d of %u bytes", r, (unsigned int) len);
@@ -2643,7 +2676,7 @@ static int srv_write(struct http_ctx *hp, const uint8_t *b, size_t blen)
         hp->clt_bytes += ret;
         if ((hp->flags & HF_REUSABLE))
             hp->flags &= ~HF_REUSE_READY;
-        hp->flags |= HF_SRV_NO_RETRY;
+        hp->flags &= (~HF_SAVE_REQ_RTRY & ~HF_SAVE_REQ_PRX);
         HLOG5("sent %d of %d bytes", ret, (int) blen);
     }
     if (ret < blen)
@@ -2930,8 +2963,10 @@ static int hp_srv_process(struct http_ctx *hp)
             parse_error = true;
 
         if (!(hp->flags & HF_RESP_RECEIVED) && hp->cx->srv_parser->h.status_code &&
-                        hp->cx->srv_parser->h.status_code != HTTP_STATUS_PROXY_AUTH)
+            hp->cx->srv_parser->h.status_code != 407) {
+
             srv_response_received(hp);
+        }
 
         conn_close = hp->cx->srv_parser->conn_close != 0;
         resp_complete = hp->cx->srv_parser->parse_state == PS_MCOMPLETE;
@@ -2949,17 +2984,13 @@ static int hp_srv_process(struct http_ctx *hp)
                 HLOG5("NOT KEEP_ALIVE");
             }
 
-            if (hp->cx->srv_parser->h.status_code != HTTP_STATUS_PROXY_AUTH &&
-                hp->c407_buff) {
-
+            if (hp->cx->srv_parser->h.status_code != 407 && hp->c407_buff) {
                 hp->flags &= ~HF_407_MESSAGE_OK;
                 buff_free(&hp->c407_buff);
             }
         }
 
-        if (hp->cx->srv_parser->headers_parsed && hp->cx->srv_parser->h.status_code ==
-            HTTP_STATUS_PROXY_AUTH) {
-
+        if (hp->cx->srv_parser->headers_parsed && hp->cx->srv_parser->h.status_code == 407) {
             if (!hp->c407_buff && !buff_new_priv(&hp->c407_buff, SO_READBUFLEN))
                 goto mem_err;
 
@@ -3153,8 +3184,16 @@ static int hp_srv_process(struct http_ctx *hp)
     }
 
     HLOG3("received HTTP %d", hp->cx->srv_parser->h.status_code);
+
+    if (hp->proxy && (hp->cx->flags & CXF_GUEST_PROXY) &&
+        hp->cx->srv_parser->h.status_code != 407) {
+
+        hp->flags |= HF_MONITOR_407;
+        hp->flags &= ~HF_SAVE_REQ_PRX;
+    }
+
     if (hp->hstate == HP_AUTH_TRY) {
-        if (hp->cx->srv_parser->h.status_code == HTTP_STATUS_PROXY_AUTH) {
+        if (hp->cx->srv_parser->h.status_code == 407) {
             HLOG("ERROR - oops long_req but still not authorized. pity ...");
             BUFF_UNCONSUME(hp->cx->out);
             if (!hide_log_sensitive_data)
@@ -3177,6 +3216,32 @@ static int hp_srv_process(struct http_ctx *hp)
             HLOG_DMP(BUFF_CSTR(hp->cx->out), hp->cx->out->len);
 
         goto err;
+    }
+
+    if (auth_state == AUTH_RESTART) {
+        struct clt_ctx *cx;
+
+        cx = hp->cx;
+        HLOG3("prompted for auth, need to retry the request");
+        if (!(hp->flags & HF_SAVE_REQ_PRX)) {
+            HLOG("ERROR - cannot retry the request as HF_SAVE_REQ_PRX is not set!");
+            goto err;
+        }
+        if ((hp->flags & HF_PINNED)) {
+            HLOG("ERROR - cannot retry the request as HF_PINNED is set!");
+            goto err;
+        }
+        hp->flags &= (~HF_HTTP_CLOSE & ~HF_FATAL_ERROR & ~HF_REUSABLE);
+        if (cx->out)
+            BUFF_RESET(cx->out);
+        if (cx->srv_parser)
+            parser_reset(cx->srv_parser);
+        if (cx_hp_disconnect(cx) < 0)
+            goto err;
+        if (cx_process(cx, NULL, 0) < 0)
+            goto err;
+
+        goto out;
     }
 
     if (auth_state == AUTH_PROGRESS) {
@@ -5488,7 +5553,7 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
                 goto out;
         } else if (cx->hp) {
             cx->flags |= CXF_PRX_DECIDED;
-            if (hp_reset(cx->hp) < 0)
+            if (hp_connect_reinit(cx->hp) < 0)
                 goto err;
             cx_lava_connect(cx);
             CXL5("SAME HP REUSED");

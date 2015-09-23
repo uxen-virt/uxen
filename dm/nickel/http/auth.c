@@ -280,7 +280,7 @@ int http_auth_srv(struct http_auth *auth, struct http_header *h)
         auth->prx_auth = NULL;
     }
 
-    auth->authorized = h->status_code == HTTP_STATUS_PROXY_AUTH ? 0 : 1;
+    auth->authorized = (h->status_code == 407 ? 0 : 1);
 
 #if defined(_WIN32)
     if (IS_SSPI_AUTH(auth->type)) {
@@ -293,10 +293,21 @@ int http_auth_srv(struct http_auth *auth, struct http_header *h)
             AUXL("basicauth_srv ERROR");
             goto out;
         }
+    } else if (!auth->authorized && auth->was_authorized) {
+        AUXL("unexpected HTTP 407 received, trying to restart the request.");
+        auth->needs_restart = 1;
     }
 #endif
 
+    if (auth->needs_restart) {
+        auth->needs_restart = 0;
+        auth->was_authorized = 0;
+        ret = AUTH_RESTART;
+        goto out;
+    }
+
     if (auth->authorized) {
+        auth->was_authorized = 1;
         ret = AUTH_PASS;
         goto out;
     }

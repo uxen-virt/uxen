@@ -36,5 +36,4 @@
 #define S_PS_SESSION_BASED_AUTH "Session-Based-Authentication"
 #define S_HDR_PS_SESSION_BASED_AUTH "Proxy-support: Session-Based-Authentication\r\n"
 
-#define HTTP_STATUS_PROXY_AUTH  407
 #endif

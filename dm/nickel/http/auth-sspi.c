@@ -738,6 +738,12 @@ int sspi_srv(struct http_auth *auth, int authorized)
     if (auth->last_step) {
         bool prompt_u = sspi && !custom_ntlm;
 
+        if (prompt_u && auth->was_authorized) {
+            AUXL2("last sspi step but was once authorized, retry the request.");
+            auth->needs_restart = 1;
+            goto out;
+        }
+
         AUXL2("last sspi step but not authorized. %s",
             prompt_u ?  "Prompt for username/pass" : "CUSTOM CREDENTIALS USED. Giving Up.");
         if (prompt_u)

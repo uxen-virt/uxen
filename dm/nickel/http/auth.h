@@ -36,11 +36,13 @@ struct http_auth {
     enum auth_enum type;
     char *prx_auth;
     int authorized;
+    int was_authorized;
     int sessions;
     int last_step;
     int cred_tried;
     int logon_required;
     int needs_reconnect;
+    int needs_restart;
     void *auth_opaque;
     struct proxy_t *proxy;
     struct http_ctx *hp;
@@ -50,6 +52,7 @@ struct http_auth {
 #define AUTH_PASS           0
 #define AUTH_PROGRESS       1
 #define AUTH_ERR            2
+#define AUTH_RESTART        3
 
 
 #define AUXL0(ll, fmt, ...) NETLOG_LEVEL(ll, "(auth) a:%"PRIxPTR" hp:%"PRIxPTR" [%s] " fmt, \
