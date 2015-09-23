@@ -1212,6 +1212,12 @@ void domain_unpause_by_systemcontroller(struct domain *d)
     hostsched_notify_exception(d);
 }
 
+void domain_initial_unpause(struct domain *d)
+{
+    domain_unpause_by_systemcontroller(d);
+    v4v_resume(d);
+}
+
 void
 domain_pause_for_suspend(struct domain *d)
 {

@@ -303,11 +303,8 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
             goto out;
 
         uxen_set_current(v);
-        if (!v->vcpu_id) {
-            domain_unpause_by_systemcontroller(v->domain);
-            v4v_resume(v->domain);
-        }
-
+        if (!v->vcpu_id)
+            domain_initial_unpause(v->domain);
         break;
 
     case VCI_RUN_MODE_PROCESS_IOREQ:
