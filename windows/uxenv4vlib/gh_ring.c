@@ -53,8 +53,6 @@
 // (12 + (16 * 2) + (2 * 1) + 2 + (16 * 1) + (2 * 1) + 1) = 67 --> 128
 #define XENV4V_DUMP_SIZE 127
 
-LONG uxen_v4vlib_ring_refs = 0;
-
 static VOID
 gh_v4v_hexdump_ring(void *_b, int len)
 {
@@ -237,8 +235,6 @@ gh_v4v_allocate_ring(uint32_t ring_length)
         return NULL;
     }
 
-    InterlockedIncrement(&uxen_v4vlib_ring_refs);
-
     return robj;
 }
 
@@ -250,7 +246,6 @@ gh_v4v_add_ref_ring(xenv4v_extension_t *pde, xenv4v_ring_t *robj)
 
     KeAcquireInStackQueuedSpinLock(&pde->ring_lock, &lqh);
     count = ++robj->refc;
-    InterlockedIncrement(&uxen_v4vlib_ring_refs);
     KeReleaseInStackQueuedSpinLock(&lqh);
 
     return count;
@@ -265,12 +260,10 @@ gh_v4v_release_ring(xenv4v_extension_t *pde, xenv4v_ring_t *robj)
     KeAcquireInStackQueuedSpinLock(&pde->ring_lock, &lqh);
     ASSERT(robj->refc != 1); // SNO, really bad
     count = --robj->refc;
-    InterlockedDecrement(&uxen_v4vlib_ring_refs);
     if (count == 1) {
         // Nobody but the list is holding us so remove ourself
         RemoveEntryList(&robj->le);
         count = 0;
-        InterlockedDecrement(&uxen_v4vlib_ring_refs);
     }
     KeReleaseInStackQueuedSpinLock(&lqh);
 
@@ -378,7 +371,6 @@ gh_v4v_link_to_ring_list(xenv4v_extension_t *pde, xenv4v_ring_t *robj)
 {
     // Add a reference for the list - mainly for consistency
     robj->refc++;
-    InterlockedIncrement(&uxen_v4vlib_ring_refs);
 
     // Link this context into the adapter list
     InsertHeadList(&pde->ring_list, &(robj->le));

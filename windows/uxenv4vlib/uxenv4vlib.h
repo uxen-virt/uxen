@@ -37,8 +37,6 @@ typedef void (uxen_v4v_callback_t)(uxen_v4v_ring_handle_t *, void *private_data1
 
 struct uxp_state_bar;
 
-DECLSPEC_IMPORT LONG uxen_v4vlib_ring_refs;
-
 /* Calls from upper drivers */
 DECLSPEC_IMPORT void uxen_v4vlib_set_hypercall_func(uxen_v4vlib_hypercall_func_t *);
 DECLSPEC_IMPORT void uxen_v4vlib_set_page_notify_func(uxen_v4vlib_page_notify_func_t *func);

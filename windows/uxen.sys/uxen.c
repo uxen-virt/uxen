@@ -26,7 +26,7 @@ DRIVER_DISPATCH uxen_cleanup;
 
 DECLSPEC_IMPORT void uxen_v4vlib_init_driver_hook(PDRIVER_OBJECT pdo);
 DECLSPEC_IMPORT void uxen_v4vlib_free_driver_unhook(void );
-DECLSPEC_IMPORT ULONG uxen_v4vlib_ring_refs;
+
 
 struct device_extension *uxen_devext = NULL;
 DRIVER_OBJECT *uxen_drvobj = NULL;
@@ -289,8 +289,6 @@ uxen_driver_unload(__in PDRIVER_OBJECT DriverObject)
     (void)RtlInitUnicodeString(&devicename_dos, UXEN_DEVICE_PATH_DOS_U);
     IoDeleteSymbolicLink(&devicename_dos);
     IoDeleteDevice(devobj);
-
-    BUG_ON(uxen_v4vlib_ring_refs != 0);
 
     dprintk("uxen_driver_unload done\n");
 
