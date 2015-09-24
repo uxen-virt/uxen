@@ -105,7 +105,7 @@ uxendisp_set_display_identification(struct uxendisp_state *s, int crtc_id,
 
     if (edid) {
         memcpy(crtc->edid, edid, len);
-        if (crtc->regs->edid)
+        if (crtc->regs)
             memcpy((void *)crtc->regs->edid, edid, len);
         crtc->status = 1;
     } else
