@@ -238,7 +238,7 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.8;
 				ONLY_ACTIVE_ARCH = YES;
-				SDKROOT = macosx10.9;
+				SDKROOT = macosx;
 			};
 			name = Debug;
 		};
@@ -264,7 +264,7 @@
 					"../../../common/include/xen-public",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.8;
-				SDKROOT = macosx10.9;
+				SDKROOT = macosx;
 			};
 			name = Release;
 		};

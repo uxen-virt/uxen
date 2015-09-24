@@ -256,7 +256,7 @@
 				MODULE_NAME = org.uxen.uxendisp;
 				MODULE_VERSION = 1.0.0d1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = macosx10.9;
+				SDKROOT = macosx;
 				WRAPPER_EXTENSION = kext;
 			};
 			name = Debug;
@@ -273,7 +273,7 @@
 				MODULE_NAME = org.uxen.uxendisp;
 				MODULE_VERSION = 1.0.0d1;
 				PRODUCT_NAME = "$(TARGET_NAME)";
-				SDKROOT = macosx10.9;
+				SDKROOT = macosx;
 				WRAPPER_EXTENSION = kext;
 			};
 			name = Release;
