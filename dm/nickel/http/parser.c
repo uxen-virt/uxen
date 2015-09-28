@@ -130,6 +130,10 @@ static int resp_on_message_begin(struct http_parser *parser)
 {
     struct parser_ctx *p = (struct parser_ctx *) parser->data;
 
+    if (p->parse_state != PS_INIT) {
+        NETLOG4("%s: 2nd message not supported! hx %"PRIxPTR, __FUNCTION__, (uintptr_t) p->hx);
+        return -1;
+    }
     p->parse_state = PS_HEADER;
     return 0;
 }
