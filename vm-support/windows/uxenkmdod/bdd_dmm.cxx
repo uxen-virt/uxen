@@ -715,15 +715,8 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_M
 {
     CURRENT_BDD_MODE* pCurrentBddMode = &m_CurrentModes[pPath->VidPnSourceId];
     VIDEO_MODE_INFORMATION mode;
+
     NTSTATUS Status = STATUS_SUCCESS;
-
-    if ((pCurrentBddMode->SrcModeWidth == pSourceMode->Format.Graphics.PrimSurfSize.cx) &&
-        (pCurrentBddMode->SrcModeHeight == pSourceMode->Format.Graphics.PrimSurfSize.cy))
-    {
-        uxen_debug("Ignoring mode change request. Current and requested modes are equal.");
-        return Status;
-    }
-
     pCurrentBddMode->Scaling = pPath->ContentTransformation.Scaling;
     pCurrentBddMode->SrcModeWidth = pSourceMode->Format.Graphics.PrimSurfSize.cx;
     pCurrentBddMode->SrcModeHeight = pSourceMode->Format.Graphics.PrimSurfSize.cy;
@@ -843,10 +836,10 @@ NTSTATUS BASIC_DISPLAY_DRIVER::IsVidPnSourceModeFieldsValid(CONST D3DKMDT_VIDPN_
     }
 }
 #endif  /* VERIFY_VIDPN */
-
+    
 NTSTATUS BASIC_DISPLAY_DRIVER::SetNextMode(UXENDISPCustomMode *pNewMode)
 {
-    NTSTATUS status = STATUS_SUCCESS;
+    NTSTATUS status;
     DXGK_CHILD_STATUS childStatus;
 
     perfcnt_inc(SetNextMode);
@@ -856,12 +849,6 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetNextMode(UXENDISPCustomMode *pNewMode)
     if (perfcnt_get(SetNextMode) < 64)
         uxen_msg("called: %dx%d", pNewMode->width, pNewMode->height);
 #endif  /* DBG */
-
-    if ((m_NextMode.width == pNewMode->width) && (m_NextMode.height == pNewMode->height))
-    {
-        uxen_debug("Ignore SetNextMode call. New and current mode are the same.");
-        goto out;
-    }
 
     m_NextMode = *pNewMode;
 
