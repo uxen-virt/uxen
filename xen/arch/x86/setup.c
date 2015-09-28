@@ -117,6 +117,9 @@ boolean_param("cpuidle", xen_cpuidle);
 char opt_debug[XEN_OPT_DEBUG_LEN] = "";
 string_param("debug", opt_debug);
 
+/* verbose information (regs,trace) about bulk vmexits */
+bool_t verbose_exit_reason = 0;
+
 bool_t __read_mostly early_boot = 1;
 
 cpumask_t __read_mostly cpu_present_map;
@@ -858,8 +861,11 @@ intptr_t __init __interface_fn __uxen_start_xen(
     }
 #endif  /* __UXEN__ */
 
-    if (opt_debug[0])
+    if (opt_debug[0]) {
         printk("opt debug: %s\n", opt_debug);
+        if (strstr(opt_debug, ",verbexitreason,"))
+            verbose_exit_reason = 1;
+    }
 
 #ifndef __UXEN__
     /* Sanitise the raw E820 map to produce a final clean version. */

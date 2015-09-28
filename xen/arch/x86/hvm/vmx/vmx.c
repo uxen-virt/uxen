@@ -2901,9 +2901,14 @@ vmx_execute(struct vcpu *v)
 
     if (exit_reason < ARRAY_SIZE(v->vmexit_reason_count)) {
         v->vmexit_reason_count[(uint16_t)exit_reason]++;
-        if ((v->vmexit_reason_count[(uint16_t)exit_reason] % 500000) == 0)
+        if ((v->vmexit_reason_count[(uint16_t)exit_reason] % 500000) == 0) {
+            extern bool_t verbose_exit_reason;
+
             printk("vm%u.%u: 500k reason %d\n", v->domain->domain_id,
                    v->vcpu_id, (uint16_t)exit_reason);
+            if (verbose_exit_reason)
+                show_execution_state(regs);
+        }
     }
 
 #if defined(__UXEN__)

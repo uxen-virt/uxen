@@ -148,9 +148,7 @@ static void show_guest_stack(struct vcpu *v, struct cpu_user_regs *regs)
     int i;
     unsigned long *stack, addr;
     unsigned long mask = STACK_SIZE;
-
-    if ( is_hvm_vcpu(v) )
-        return;
+    int hvm = is_hvm_vcpu(v);
 
     if ( is_pv_32on64_vcpu(v) )
     {
@@ -203,9 +201,13 @@ static void show_guest_stack(struct vcpu *v, struct cpu_user_regs *regs)
 
     for ( i = 0; i < (debug_stack_lines*stack_words_per_line); i++ )
     {
+        int err;
+
         if ( (((long)stack - 1) ^ ((long)(stack + 1) - 1)) & mask )
             break;
-        if ( __get_user(addr, stack) )
+        err = hvm ? copy_from_user_hvm(&addr, stack, sizeof(addr))
+                  : __get_user(addr, stack);
+        if ( err )
         {
             if ( i != 0 )
                 printk("\n    ");
