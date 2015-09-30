@@ -95,7 +95,9 @@ typedef HANDLE ioh_wait_event;
 #define ioh_event_set(ev) SetEvent(*(ev))
 #define ioh_event_reset(ev) ResetEvent(*(ev))
 #define ioh_event_wait(ev) WaitForSingleObject(*(ev), INFINITE)
-#define ioh_event_close(ev) CloseHandle(*(ev))
+#define ioh_event_close(ev) do {                                    \
+        CloseHandle(*(ev)); *(ev) = NULL;                           \
+    } while(0)
 #define ioh_event_valid(ev) (*(ev) != NULL)
 
 typedef HANDLE uxen_notification_event;
