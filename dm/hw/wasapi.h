@@ -11,10 +11,12 @@ struct wasapi_voice;
 
 typedef struct wasapi_voice* wasapi_voice_t;
 typedef void (*wasapi_data_cb_t)(wasapi_voice_t, void *opaque);
+typedef void (*wasapi_init_cb_t)(wasapi_voice_t, void *opaque, int err);
 
 void wasapi_init(void);
 void wasapi_exit(void);
-int wasapi_init_voice(wasapi_voice_t*, int capture, WAVEFORMATEX *wf);
+int wasapi_init_voice(wasapi_voice_t*, int capture, WAVEFORMATEX *wf,
+                      wasapi_init_cb_t init_cb, void *init_opaque);
 void wasapi_set_data_cb(wasapi_voice_t, wasapi_data_cb_t cb, void *opaque);
 int wasapi_start(wasapi_voice_t);
 int wasapi_stop(wasapi_voice_t);

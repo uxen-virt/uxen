@@ -23,17 +23,28 @@
 
 #define MAX_VOICES 4
 
+enum voice_state {
+    VSTATE_CREATING,
+    VSTATE_IDLE,
+    VSTATE_RUNNING,
+    VSTATE_FINISHING,
+    VSTATE_FINISHED
+};
+
 struct wasapi_voice {
     int index;
     int capture;
+    enum voice_state state;
     IAudioClient *client;
     IAudioRenderClient *render_client;
     IAudioCaptureClient *capture_client;
     IAudioClock *clock;
-    HANDLE ev;
+    HANDLE ev, state_ev;
     HANDLE task;
     HANDLE thread;
-    WAVEFORMATEXTENSIBLE fmt;
+    WAVEFORMATEXTENSIBLE fmt, guestfmt;
+    wasapi_init_cb_t init_cb;
+    void *init_cb_opaque;
     wasapi_data_cb_t cb;
     void *cb_opaque;
     uint64_t pos;
@@ -95,6 +106,9 @@ static critical_section lock;
 static wasapi_voice_t voices[MAX_VOICES];
 
 static void prioritize_cb(void*);
+static int voice_setupapi(wasapi_voice_t v);
+static void voice_releaseapi(wasapi_voice_t v);
+static int voice_update_position(wasapi_voice_t v);
 
 /* Notification client implementation */
 
@@ -202,7 +216,8 @@ static void notification_free(IMMNotificationClient *c)
     }
 }
 
-static HRESULT get_mm_device(int capture, IMMDevice **ppMMDevice)
+static HRESULT
+get_mm_device(int capture, IMMDevice **ppMMDevice)
 {
     HRESULT hr = S_OK;
 
@@ -235,6 +250,7 @@ static HRESULT get_mm_device(int capture, IMMDevice **ppMMDevice)
             return hr;
         }
         enumerator = pMMDeviceEnumerator;
+        enumerator->lpVtbl->AddRef(enumerator);
     }
     critical_section_leave(&lock);
 
@@ -286,7 +302,7 @@ dump_format(const char *str, WAVEFORMATEX *f)
 
 static HRESULT
 create_audio_client(wasapi_voice_t v, IMMDevice *pMMDevice,
-                    WAVEFORMATEX* datafmt, IAudioClient **ppClient)
+                    WAVEFORMATEX* guestfmt, IAudioClient **ppClient)
 {
     HRESULT hr;
     IAudioClient *client = NULL;
@@ -323,7 +339,7 @@ create_audio_client(wasapi_voice_t v, IMMDevice *pMMDevice,
     v->fmt.Format.cbSize = sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX);
     v->fmt.Format.nChannels = channels;
     v->fmt.Format.nSamplesPerSec = mixfmt->nSamplesPerSec;
-    v->fmt.Format.wBitsPerSample = datafmt->wBitsPerSample;
+    v->fmt.Format.wBitsPerSample = guestfmt->wBitsPerSample;
     v->fmt.Format.nBlockAlign = v->fmt.Format.nChannels * v->fmt.Format.wBitsPerSample / 8;
     v->fmt.Format.nAvgBytesPerSec = v->fmt.Format.nSamplesPerSec * v->fmt.Format.nBlockAlign;
     v->fmt.Samples.wValidBitsPerSample = v->fmt.Format.wBitsPerSample;
@@ -368,9 +384,9 @@ create_audio_client(wasapi_voice_t v, IMMDevice *pMMDevice,
         debug_printf("audio device period: %dus %dus\n",
                      (int)engperiod/10, (int)devperiod/10);
         debug_printf("audio buffer size: %d frames = %d bytes\n",
-                     sz, sz * datafmt->nBlockAlign);
+                     sz, sz * guestfmt->nBlockAlign);
         dump_format("mix format", mixfmt);
-        dump_format("data format", datafmt);
+        dump_format("data format", guestfmt);
         dump_format("playback format", (WAVEFORMATEX*)&v->fmt);
     }
     CoTaskMemFree(mixfmt);
@@ -413,28 +429,60 @@ static void prioritize_cb(void *opaque)
     __mm_prioritize(&mm_task, num_nonsilent_voices > 0);
 }
 
-static DWORD WINAPI voice_thread_run(void *opaque)
+static void
+voice_wait_state(wasapi_voice_t v, enum voice_state s)
+{
+    while (v->state < s)
+        WaitForSingleObject(v->state_ev, INFINITE);
+}
+
+static void
+voice_change_state(wasapi_voice_t v, enum voice_state s)
+{
+    if (s > v->state) {
+        v->state = s;
+        SetEvent(v->state_ev);
+    }
+}
+
+static DWORD WINAPI
+voice_thread_run(void *opaque)
 {
     wasapi_voice_t v = (wasapi_voice_t)opaque;
-    int silence = 0;
+    int silence = 0, rv;
     HRESULT hr;
+
+    CoInitializeEx(NULL, COINIT_MULTITHREADED);
+
+    if ((rv = voice_setupapi(v))) {
+        if (v->init_cb)
+            v->init_cb(v, v->init_cb_opaque, rv);
+        goto finish;
+    }
+    if (v->init_cb)
+        v->init_cb(v, v->init_cb_opaque, 0);
+
+    voice_wait_state(v, VSTATE_RUNNING);
     prioritize(v, 1);
 
     if (!v->quit_thread) {
+        /* initial playback buffer populate */
+        if (!v->capture && v->cb)
+            v->cb(v, v->cb_opaque);
         hr = v->client->lpVtbl->Start(v->client);
-        if ( FAILED(hr) ) {
-            WASAPI_FAIL(hr);
-            return 0;
-        }
+        if ( FAILED(hr) )
+            goto finish;
     }
 
     while (!v->quit_thread) {
+        voice_update_position(v);
         WaitForSingleObject(v->ev, INFINITE);
         if (v->quit_thread)
             break;
-        if (v->cb) {
+        voice_update_position(v);
+        if (v->cb)
             v->cb(v, v->cb_opaque);
-        }
+
         if (v->silence != silence) {
             silence = v->silence;
             if (silence)
@@ -445,10 +493,22 @@ static DWORD WINAPI voice_thread_run(void *opaque)
             SetEvent(mm_prioritize_ev);
         }
     }
+
+    hr = v->client->lpVtbl->Stop(v->client);
+    if ( FAILED(hr) )
+        WASAPI_FAIL(hr);
+
+    voice_update_position(v);
+finish:
+    voice_change_state(v, VSTATE_FINISHING);
     if (silence)
         atomic_inc(&num_nonsilent_voices);
-
     prioritize(v, 0);
+    voice_releaseapi(v);
+    voice_change_state(v, VSTATE_FINISHED);
+
+    CoUninitialize();
+
     return 0;
 }
 
@@ -462,32 +522,19 @@ void wasapi_mute_voice(wasapi_voice_t v, int silence)
 
 int wasapi_start(wasapi_voice_t v)
 {
-    if (v->thread) {
-        debug_printf("wasapi_play: already playing\n");
-        return -1;
-    }
-    v->quit_thread = 0;
     v->pos = 0;
-    create_thread(&v->thread, voice_thread_run, v);
     atomic_inc(&num_voices);
     atomic_inc(&num_nonsilent_voices);
     SetEvent(mm_prioritize_ev);
+    voice_change_state(v, VSTATE_RUNNING);
     debug_printf("audio: started %s\n", v->capture ? "capture" : "playback");
     return 0;
 }
 
 int wasapi_stop(wasapi_voice_t v)
 {
-    HRESULT hr;
-
-    if (!v->thread) {
+    if (!v->thread)
         return -1;
-    }
-    hr = v->client->lpVtbl->Stop(v->client);
-    if ( FAILED(hr) ) {
-        WASAPI_FAIL(hr);
-        return -1;
-    }
     v->quit_thread = 1;
     SetEvent(v->ev);
     wait_thread(v->thread);
@@ -500,26 +547,31 @@ int wasapi_stop(wasapi_voice_t v)
     return 0;
 }
 
-int wasapi_get_position(wasapi_voice_t v, uint64_t *p)
+static int
+voice_update_position(wasapi_voice_t v)
 {
-    uint64_t freq;
+    uint64_t freq = 0, p = 0;
     HRESULT hr;
 
     hr = v->clock->lpVtbl->GetFrequency(v->clock, &freq);
     if ( FAILED(hr) ) {
         WASAPI_FAIL(hr);
-        *p = v->pos; /* last valid pos */
         return -1;
     }
 
-    hr = v->clock->lpVtbl->GetPosition(v->clock, p, NULL);
+    hr = v->clock->lpVtbl->GetPosition(v->clock, &p, NULL);
     if ( FAILED(hr) ) {
         WASAPI_FAIL(hr);
-        *p = v->pos; /* last valid pos */
         return -1;
     }
-    *p = *p * 1000000000 / freq;
-    v->pos = *p;
+    p = p * 1000000000 / freq;
+    v->pos = p;
+    return 0;
+}
+
+int wasapi_get_position(wasapi_voice_t v, uint64_t *p)
+{
+    *p = v->pos;
     return 0;
 }
 
@@ -670,31 +722,25 @@ static void voice_unregister(wasapi_voice_t v)
 }
 
 static int
-voice_init_internal(wasapi_voice_t v, int capture, WAVEFORMATEX *fmt)
+voice_setupapi(wasapi_voice_t v)
 {
     IMMDevice *dev = NULL;
     HRESULT hr;
-    int rv;
+    int rv = -1;
 
-    debug_printf("initialising audio voice\n");
-    memset(v, 0, sizeof(*v));
-    v->capture = capture;
-    v->ev = CreateEvent(NULL, FALSE, FALSE, NULL);
-    if (!v->ev)
-        goto err;
     get_mm_device(v->capture, &dev);
     if (!dev) {
         debug_printf("no audio device\n");
         goto err;
     }
-    if ( FAILED(create_audio_client(v, dev, fmt, &v->client)) )
+    if ( FAILED(create_audio_client(v, dev, (WAVEFORMATEX*)&v->guestfmt, &v->client)) )
         goto err;
     hr = v->client->lpVtbl->SetEventHandle(v->client, v->ev);
     if ( FAILED(hr) ) {
         WASAPI_FAIL(hr);
         goto err;
     }
-    if (!capture) {
+    if (!v->capture) {
         hr = v->client->lpVtbl->GetService(v->client, &IID_IAudioRenderClient, (void**)&v->render_client);
         if ( FAILED(hr) ) {
             WASAPI_FAIL(hr);
@@ -713,8 +759,56 @@ voice_init_internal(wasapi_voice_t v, int capture, WAVEFORMATEX *fmt)
         WASAPI_FAIL(hr);
         goto err;
     }
+
+    rv = 0;
+    goto out;
+err:
+    rv = -1;
+out:
+    if (dev)
+        dev->lpVtbl->Release(dev);
+    return rv;
+}
+
+static void
+voice_releaseapi(wasapi_voice_t v)
+{
+    if (v->client) {
+        if (v->clock)
+            v->clock->lpVtbl->Release(v->clock);
+        if (v->render_client)
+            v->render_client->lpVtbl->Release(v->render_client);
+        if (v->capture_client)
+            v->capture_client->lpVtbl->Release(v->capture_client);
+        v->client->lpVtbl->Release(v->client);
+        v->clock = NULL;
+        v->render_client = NULL;
+        v->capture_client = NULL;
+        v->client = NULL;
+    }
+}
+
+static int
+voice_init_internal(wasapi_voice_t v, int capture, WAVEFORMATEX *guestfmt)
+{
+    int rv;
+
+    debug_printf("initialising audio voice\n");
+    memcpy(&v->guestfmt, guestfmt, sizeof(WAVEFORMATEX));
+    v->state = VSTATE_CREATING;
+    v->capture = capture;
+    v->ev = CreateEvent(NULL, FALSE, FALSE, NULL);
+    if (!v->ev)
+        goto err;
+    v->state_ev = CreateEvent(NULL, FALSE, FALSE, NULL);
+    if (!v->state_ev)
+        goto err;
     if (voice_register(v) < 0) {
         debug_printf("not enough free voices\n");
+        goto err;
+    }
+    if ((rv = create_thread(&v->thread, voice_thread_run, v))) {
+        debug_printf("failed to create voice thread %d\n", rv);
         goto err;
     }
     rv = 0;
@@ -723,9 +817,12 @@ voice_init_internal(wasapi_voice_t v, int capture, WAVEFORMATEX *fmt)
 err:
     rv = -1;
     debug_printf("voice_init_internal failed\n");
-    if (v->ev) CloseHandle(v->ev);
+    if (v->ev)
+        CloseHandle(v->ev);
+    if (v->state_ev)
+        CloseHandle(v->state_ev);
+    voice_unregister(v);
 out:
-    if (dev) dev->lpVtbl->Release(dev);
 
     return rv;
 }
@@ -734,19 +831,16 @@ static void voice_release_internal(wasapi_voice_t v)
 {
     if (v) {
         wasapi_stop(v);
-        v->clock->lpVtbl->Release(v->clock);
-        if (v->render_client)
-            v->render_client->lpVtbl->Release(v->render_client);
-        if (v->capture_client)
-            v->capture_client->lpVtbl->Release(v->capture_client);
-        v->client->lpVtbl->Release(v->client);
         CloseHandle(v->ev);
+        CloseHandle(v->state_ev);
         voice_unregister(v);
         memset(v, 0, sizeof(*v));
     }
 }
 
-int wasapi_init_voice(wasapi_voice_t* out_v, int capture, WAVEFORMATEX *fmt)
+int
+wasapi_init_voice(wasapi_voice_t* out_v, int capture, WAVEFORMATEX *fmt,
+                  wasapi_init_cb_t init_cb, void *init_opaque)
 {
     wasapi_voice_t v;
     int rv;
@@ -755,6 +849,8 @@ int wasapi_init_voice(wasapi_voice_t* out_v, int capture, WAVEFORMATEX *fmt)
     v = calloc(1, sizeof(struct wasapi_voice));
     if (!v)
         return -1;
+    v->init_cb = init_cb;
+    v->init_cb_opaque = init_opaque;
     rv = voice_init_internal(v, capture, fmt);
     if (rv) {
         free(v);
@@ -835,7 +931,7 @@ void wasapi_exit(void)
 
 static void __attribute__((constructor)) wasapi_construct(void)
 {
-    CoInitialize(NULL);
+    CoInitializeEx(NULL, COINIT_MULTITHREADED);
     critical_section_init(&lock);
     load_avrt();
 }

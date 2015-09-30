@@ -64,6 +64,7 @@ static void set_out_mode(UXenAudioVoice *v, uxenaudio_out_mode_t new);
 static uint32_t stream_pos(UXenAudioVoice *v);
 static uint32_t out_where(UXenAudioVoice *v);
 static uint32_t inp_where(UXenAudioVoice *v);
+static void control_audio_notify(void *opaque);
 
 /* Audio Interfaces */
 
@@ -128,6 +129,15 @@ voice_init(UXenAudioVoice *v)
     v->guest_fmt.wBitsPerSample = 16;
 }
 
+static void
+voice_init_cb(wasapi_voice_t wv, void *opaque, int err)
+{
+    UXenAudioVoice *v = (UXenAudioVoice*)opaque;
+
+    if (err)
+        v->omode = UXENAUDIO_OUT_NULL;
+}
+
 static int
 voice_start_internal(UXenAudioVoice *v, uint32_t fmt)
 {
@@ -137,17 +147,12 @@ voice_start_internal(UXenAudioVoice *v, uint32_t fmt)
     v->resampler = 0;
     v->dst_frames_remainder = 0;
 
-    wasapi_init_voice(&v->wv, v->capture, &v->guest_fmt);
-    if (!v->wv) {
-        set_out_mode(v, UXENAUDIO_OUT_NULL);
-        return -1;
-    }
+    wasapi_init_voice(&v->wv, v->capture, &v->guest_fmt,
+                      voice_init_cb, v);
 
     on_start_stop();
 
     wasapi_set_data_cb(v->wv, need_data_cb, v);
-    if (!v->capture)
-        transfer(v);
     wasapi_start(v->wv);
 
     return 0;
@@ -199,8 +204,11 @@ bytes_since(UXenAudioVoice *v, uint64_t t0)
 static uint32_t
 stream_virt_pos(UXenAudioVoice *v)
 {
-    return bytes_since(v, v->virt_pos_t0) &
+    uint32_t p = bytes_since(v, v->virt_pos_t0) &
         ~((uint32_t)v->guest_fmt.nBlockAlign-1);
+    p /= AUDIO_QUANTUM_BYTES;
+    p *= AUDIO_QUANTUM_BYTES;
+    return p;
 }
 
 static uint32_t
@@ -244,6 +252,7 @@ set_out_mode(UXenAudioVoice *v, uxenaudio_out_mode_t new)
         warnx("unexpected audio mode transition: %d -> %d", old, new);
         v->omode = old;
     }
+    control_audio_notify(v->s);
 }
 
 static uint32_t
@@ -266,13 +275,14 @@ out_where(UXenAudioVoice *v)
             /* real stream started producing positions (!= 0),
              * switch to regular host playback mode */
             ret = spos;
-            v->position_offset -= spos;
             set_out_mode(v, UXENAUDIO_OUT_HOST);
         } else
             ret = stream_virt_pos(v);
         break;
     }
 
+    ret /= AUDIO_QUANTUM_BYTES;
+    ret *= AUDIO_QUANTUM_BYTES;
     return v->position_offset + ret;
 }
 
@@ -299,7 +309,7 @@ control_audio_notify(void *opaque)
     for (i = 0; i < NVOICE; ++i) {
         UXenAudioVoice *v = &s->voices[i];
 
-        if (v->running && (v->capture || v->omode != UXENAUDIO_OUT_NULL)) {
+        if (v->running && (v->capture || v->omode == UXENAUDIO_OUT_HOST)) {
             running++;
             if (v->capture)
                 inp_used++;
@@ -607,8 +617,8 @@ voice_re_start(UXenAudioVoice *v)
     v->buf->rptr = v->rptr;
     v->buf->sts = 0;
 
-    voice_start_internal(v, v->regs.fmt);
     v->running = true;
+    voice_start_internal(v, v->regs.fmt);
     control_audio_notify(v->s);
 }
 
