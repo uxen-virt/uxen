@@ -105,8 +105,10 @@ SOURCES$(UXEN_ELF_ONLY)=$(SOURCES) \
 
 AMD64_SOURCES=$(AMD64_SOURCES) \
   uxen_sys.asm \
-  uxen_debug_sup.asm
+  uxen_debug_sup.asm \
+  uxen_ops_wrappers.asm
 
 I386_SOURCES=$(I386_SOURCES) \
   uxen_hiber.c \
-  uxen_sys.asm
+  uxen_sys.asm \
+  uxen_ops_wrappers.asm

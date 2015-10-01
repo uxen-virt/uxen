@@ -18,6 +18,8 @@
 #undef uxen_info
 extern struct _uxen_info _uxen_info;
 
+extern void ui_printf(struct vm_info_shared *vmi, const char *fmt, ...);
+
 #if defined(UXEN_HOST_WINDOWS)
 #ifdef __x86_64__
 #define UXEN_GS_CPU_OFFSET 0x184

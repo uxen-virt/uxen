@@ -1086,7 +1086,7 @@ p2m_pod_stat_update(struct domain *d)
         d->p2m_stat_last = NOW();
         d->p2m_stat_ops = 0;
         if (!is_template_domain(d))
-            uxen_info->ui_printf(
+            ui_printf(
                 NULL,
                 "p2m_pod_stat %ld %ld %d %c %"PRId64" %"PRId64
                 " %d %d %d %d %d %d\n",
@@ -1102,7 +1102,7 @@ p2m_pod_stat_update(struct domain *d)
                 /* atomic_read(&d->lazy_load_pages) */ 0
                 );
         else
-            uxen_info->ui_printf(
+            ui_printf(
                 NULL,
                 "p2m_pod_stat %ld %ld %d %c %"PRId64" %"PRId64
                 " %d %d %d %d %d\n",
