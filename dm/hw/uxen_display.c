@@ -165,7 +165,7 @@ draw_line_15(uint8_t *d, uint8_t *s, size_t width)
     }
 }
 
-static void crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset);
+static void crtc_flush(struct uxendisp_state *s, int crtc_id);
 
 static void
 crtc_draw(struct uxendisp_state *s, int crtc_id)
@@ -184,7 +184,7 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
     uint32_t page0, page1, pagei, page_min, page_max;
 
     if (crtc->flush_pending)
-        crtc_flush(s, crtc_id, crtc->offset);
+        crtc_flush(s, crtc_id);
     if (!crtc->ds)
         return;
 
@@ -389,7 +389,7 @@ static int fmt_valid(int fmt)
 }
 
 static void
-crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset)
+crtc_flush(struct uxendisp_state *s, int crtc_id)
 {
     struct crtc_state *crtc = &s->crtcs[crtc_id];
     struct bank_state *bank;
@@ -401,8 +401,8 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset)
         return;
 
     if (crtc->regs->p.enable) {
-        uint32_t bank_offset = offset & (UXENDISP_BANK_SIZE - 1);
-        int bank_id = offset >> UXENDISP_BANK_ORDER;
+        uint32_t offset = crtc->offset & (UXENDISP_BANK_SIZE - 1);
+        int bank_id = crtc->offset >> UXENDISP_BANK_ORDER;
         unsigned int w, h, stride, fmt;
 
         if (!crtc->ds)
@@ -412,14 +412,6 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset)
         h = crtc->regs->p.yres;
         stride = crtc->regs->p.stride;
         fmt = crtc->regs->p.format;
-
-        /* Filter out spurious mode changes */
-        if (crtc->xres == w &&
-            crtc->yres == h &&
-            crtc->stride == stride &&
-            crtc->format == fmt &&
-            crtc->offset == offset)
-            return;
 
         if (w > UXENDISP_XRES_MAX || h > UXENDISP_YRES_MAX ||
             stride > UXENDISP_STRIDE_MAX)
@@ -432,7 +424,7 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset)
             return;
 
         bank = &s->banks[bank_id];
-        sz = bank_offset + h * stride;
+        sz = offset + h * stride;
         if (sz > UXENDISP_BANK_SIZE)
             return;
         if (bank->len < sz)
@@ -441,14 +433,12 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset)
         display_resize_from(crtc->ds, w, h,
                             uxdisp_fmt_to_bpp(fmt),
                             stride,
-                            bank->vram.view,
-                            bank_offset);
+                            bank->vram.view, offset);
 
         crtc->xres = w;
         crtc->yres = h;
         crtc->stride = stride;
         crtc->format = fmt;
-        crtc->offset = offset;
     } else {
         if (crtc->ds) {
             if (crtc->ds->surface) {
@@ -472,7 +462,8 @@ crtc_write(struct uxendisp_state *s, int crtc_id, target_phys_addr_t addr,
 
     switch (addr) {
     case UXDISP_REG_CRTC_OFFSET:
-        crtc_flush(s, crtc_id, val);
+        crtc->offset = val;
+        crtc_flush(s, crtc_id);
         break;
     case UXDISP_REG_CRTC_ENABLE:
         crtc->regs->p.enable = val;
@@ -609,7 +600,7 @@ uxendisp_mmio_write(void *opaque, target_phys_addr_t addr, uint64_t val,
         return;
     case UXDISP_REG_MODE:
         s->mode = val;
-        crtc_flush(s, 0, 0);
+        crtc_flush(s, 0);
         uxendisp_invalidate(&s->crtcs[0]);
         return;
     case UXDISP_REG_INTERRUPT_ENABLE:
