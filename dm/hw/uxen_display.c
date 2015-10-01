@@ -172,6 +172,7 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
 {
     struct crtc_state *crtc = &s->crtcs[crtc_id];
     int bank_id = crtc->offset >> UXENDISP_BANK_ORDER;
+    uint32_t bank_offset = crtc->offset & (UXENDISP_BANK_SIZE - 1);
     struct bank_state *bank = &s->banks[bank_id];
     int rc;
     int npages;
@@ -188,7 +189,7 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
     if (!crtc->ds)
         return;
 
-    npages = (crtc->offset + crtc->stride * crtc->yres +
+    npages = (bank_offset + crtc->stride * crtc->yres +
               TARGET_PAGE_SIZE - 1) >> TARGET_PAGE_BITS;
 
     if (npages > (UXENDISP_BANK_SIZE >> TARGET_PAGE_BITS))
@@ -208,7 +209,7 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
 
     if (ds_surface_lock(crtc->ds, &d, &linesize))
         return;
-    addr1 = crtc->offset;
+    addr1 = bank_offset;
     y_start = -1;
     page_min = (uint32_t)-1;
     page_max = 0;
