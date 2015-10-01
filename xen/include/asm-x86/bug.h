@@ -35,7 +35,7 @@ struct bug_frame {
             "i" (__FILE__) )
 #else
 #define WARN()                                     \
-    ui_printf(NULL, "Xen WARN at %.50s:%d\n", __FILE__, __LINE__);
+    uxen_info->ui_printf(NULL, "Xen WARN at %.50s:%d\n", __FILE__, __LINE__);
 #endif
 
 #define WARN_ONCE() do {                        \

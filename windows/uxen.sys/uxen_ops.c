@@ -22,22 +22,6 @@
 
 #include "memcache.h"
 
-#define UXEN_WRAPPER_NAME(fn) fn ## _wrapper
-#define UXEN_WRAPPER(fn) ((void *) &(UXEN_WRAPPER_NAME(fn)))
-#define UXEN_WRAPPER_DECLARE(fn) extern void * UXEN_WRAPPER_NAME(fn)
-
-/* If you get an error in this macro it's because the type of fn doesn't match
- * fp. You need to check your function matches the definition given in struct
- * uxen_info. */
-
-static int uxen_use_wrappers = 1;
-
-#define UXENINFO_SET_HOSTFUNC(fp, fn) do { \
-            UXEN_WRAPPER_DECLARE(fn); \
-            fp = fn; \
-            if (uxen_use_wrappers) fp = UXEN_WRAPPER(fn); \
-        } while (0)
-
 static ULONG build_number = 0;
 
 static void *frametable = NULL;
@@ -74,7 +58,7 @@ struct host_event_channel {
 
 extern BOOLEAN *KdDebuggerEnabled;
 
-void __cdecl uxen_op_wake_vm(struct vm_vcpu_info_shared *vcis);
+static void __cdecl uxen_op_wake_vm(struct vm_vcpu_info_shared *vcis);
 static int uxen_vmi_destroy_vm(struct vm_info *vmi);
 static void quiesce_execution(void);
 static void resume_execution(void);
@@ -274,10 +258,7 @@ uxen_cpu_ipi_cb(IN PKDPC Dpc, IN PVOID DeferredContext,
     }
 }
 
-
-extern void __cdecl uxen_op_cpu_ipi_helper(uint64_t host_cpu, uint64_t vector);
-
-void __cdecl
+static void __cdecl
 uxen_op_cpu_ipi(uint64_t host_cpu, uint64_t vector)
 {
     PKDPC dpc;
@@ -319,7 +300,7 @@ uxen_vcpu_ipi_cb(IN PKDPC Dpc, IN PVOID DeferredContext,
     spinlock_release(vci->vci_ipi_lck, pre);
 }
 
-void __cdecl
+static void __cdecl
 uxen_op_vcpu_ipi(struct vm_vcpu_info_shared *vcis)
 {
     struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
@@ -352,7 +333,7 @@ uxen_op_vcpu_ipi(struct vm_vcpu_info_shared *vcis)
     spinlock_release(vci->vci_ipi_lck, pre);
 }
 
-void __cdecl
+static void __cdecl
 uxen_op_vcpu_ipi_cancel(struct vm_vcpu_info_shared *vcis)
 {
     struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
@@ -468,7 +449,7 @@ uxen_idle_thread_fn(void *context)
     dprintk("idle thread exiting\n");
 }
 
-void __cdecl
+static void __cdecl
 uxen_op_signal_idle_thread(void)
 {
 
@@ -580,7 +561,7 @@ uxen_vcpu_timer_cb(IN PKDPC Dpc, IN PVOID DeferredContext,
         uxen_op_vcpu_ipi(&vci->vci_shared);
 }
 
-void __cdecl
+static void __cdecl
 uxen_op_set_vcpu_timer(struct vm_vcpu_info_shared *vcis, uint64_t expire)
 {
     LARGE_INTEGER timeDue;
@@ -602,7 +583,7 @@ uxen_op_set_vcpu_timer(struct vm_vcpu_info_shared *vcis, uint64_t expire)
 	KeCancelTimer(&vci->vci_timer);
 }
 
-uint64_t __cdecl
+static uint64_t __cdecl
 uxen_op_get_host_counter(void)
 {
     LARGE_INTEGER time;
@@ -623,7 +604,7 @@ uxen_update_unixtime_generation(void)
     }
 }
 
-uint64_t __cdecl
+static uint64_t __cdecl
 uxen_op_get_unixtime(void)
 {
     LARGE_INTEGER system_time;
@@ -634,7 +615,7 @@ uxen_op_get_unixtime(void)
     return (system_time.QuadPart - 116444736000000000LL) * 100;
 }
 
-void __cdecl
+static void __cdecl
 uxen_op_wake_vm(struct vm_vcpu_info_shared *vcis)
 {
     struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
@@ -663,7 +644,7 @@ suspend_block(preemption_t i, uint32_t pages, uint32_t *reserve_increase)
     return ret;
 }
 
-void __cdecl
+static void __cdecl
 uxen_op_notify_exception(struct vm_info_shared *vmis)
 {
     struct vm_info *vmi = (struct vm_info *)vmis;
@@ -672,7 +653,7 @@ uxen_op_notify_exception(struct vm_info_shared *vmis)
 	KeSetEvent(vmi->vmi_ioemu_exception_event, 0, FALSE);
 }
 
-void __cdecl
+static void __cdecl
 uxen_op_notify_vram(struct vm_info_shared *vmis)
 {
     struct vm_info *vmi = (struct vm_info *)vmis;
@@ -681,7 +662,7 @@ uxen_op_notify_vram(struct vm_info_shared *vmis)
 	KeSetEvent(vmi->vmi_ioemu_vram_event, 0, FALSE);
 }
 
-uint64_t __cdecl
+static uint64_t __cdecl
 uxen_op_signal_event(struct vm_vcpu_info_shared *vcis,
                      struct host_event_channel *hec)
 {
@@ -694,7 +675,7 @@ uxen_op_signal_event(struct vm_vcpu_info_shared *vcis,
     return 0;
 }
 
-uint64_t __cdecl
+static uint64_t __cdecl
 uxen_op_check_ioreq(struct vm_vcpu_info_shared *vcis)
 {
     struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
@@ -877,43 +858,43 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
 
     max_pfn = get_max_pfn(use_hidden);
 
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_printf, uxen_printk);
+    uxen_info->ui_printf = uxen_printk;
 
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_map_page, uxen_mem_map_page);
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_unmap_page_va, uxen_mem_unmap_page_va);
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_access_page_va, uxen_mem_access_page_va);
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_map_page_range, uxen_mem_map_page_range);
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_unmap_page_range, uxen_mem_unmap_page_range);
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_mapped_va_pfn, uxen_mem_mapped_va_pfn);
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_mapped_pfn_va, uxen_mem_mapped_pfn_va);
+    uxen_info->ui_map_page = uxen_mem_map_page;
+    uxen_info->ui_unmap_page_va = uxen_mem_unmap_page_va;
+    uxen_info->ui_access_page_va = uxen_mem_access_page_va;
+    uxen_info->ui_map_page_range = uxen_mem_map_page_range;
+    uxen_info->ui_unmap_page_range = uxen_mem_unmap_page_range;
+    uxen_info->ui_mapped_va_pfn = uxen_mem_mapped_va_pfn;
+    uxen_info->ui_mapped_pfn_va = uxen_mem_mapped_pfn_va;
 
     uxen_info->ui_max_page = max_pfn;
 
     uxen_info->ui_host_needs_preempt = uxen_op_host_needs_preempt;
 
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_on_selected_cpus, uxen_cpu_on_selected);
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_kick_cpu, uxen_op_cpu_ipi);
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_kick_vcpu, uxen_op_vcpu_ipi);
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_kick_vcpu_cancel, uxen_op_vcpu_ipi_cancel);
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_wake_vm, uxen_op_wake_vm);
+    uxen_info->ui_on_selected_cpus = uxen_cpu_on_selected;
+    uxen_info->ui_kick_cpu = uxen_op_cpu_ipi;
+    uxen_info->ui_kick_vcpu = uxen_op_vcpu_ipi;
+    uxen_info->ui_kick_vcpu_cancel = uxen_op_vcpu_ipi_cancel;
+    uxen_info->ui_wake_vm = uxen_op_wake_vm;
 
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_signal_idle_thread, uxen_op_signal_idle_thread);
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_set_timer_vcpu, uxen_op_set_vcpu_timer);
+    uxen_info->ui_signal_idle_thread = uxen_op_signal_idle_thread;
+    uxen_info->ui_set_timer_vcpu = uxen_op_set_vcpu_timer;
 
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_notify_exception, uxen_op_notify_exception);
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_notify_vram, uxen_op_notify_vram);
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_signal_event, uxen_op_signal_event);
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_check_ioreq, uxen_op_check_ioreq);
+    uxen_info->ui_notify_exception = uxen_op_notify_exception;
+    uxen_info->ui_notify_vram = uxen_op_notify_vram;
+    uxen_info->ui_signal_event = uxen_op_signal_event;
+    uxen_info->ui_check_ioreq = uxen_op_check_ioreq;
 
     uxen_info->ui_memcache_needs_check = 0;
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_memcache_check, uxen_memcache_check);
+    uxen_info->ui_memcache_check = uxen_memcache_check;
 
     set_map_mfn_pte_flags();
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_memcache_dm_map_mfn, map_mfn);
+    uxen_info->ui_memcache_dm_map_mfn = map_mfn;
 
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_user_access_ok, uxen_mem_user_access_ok);
+    uxen_info->ui_user_access_ok = uxen_mem_user_access_ok;
 
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_signal_v4v, uxen_sys_signal_v4v);
+    uxen_info->ui_signal_v4v = uxen_sys_signal_v4v;
 
     printk("uxen mem:     maxpage %x\n", uxen_info->ui_max_page);
 
@@ -1040,8 +1021,8 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
     update_ui_host_counter();
     uxen_info->ui_host_counter_frequency =
         (uint32_t)uxen_host_counter_freq.QuadPart;
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_get_unixtime, uxen_op_get_unixtime);
-    UXENINFO_SET_HOSTFUNC(uxen_info->ui_get_host_counter, uxen_op_get_host_counter);
+    uxen_info->ui_get_unixtime = uxen_op_get_unixtime;
+    uxen_info->ui_get_host_counter = uxen_op_get_host_counter;
     uxen_info->ui_host_timer_frequency = UXEN_HOST_TIMER_FREQUENCY;
 
     KeResetEvent(&uxen_devext->de_shutdown_done);

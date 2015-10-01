@@ -66,20 +66,6 @@ struct vm_vcpu_info_shared *hostsched_setup_vcpu(struct vcpu *,
                                                  struct vm_vcpu_info_shared *);
 extern void fpu_init(void);
 
-void ui_printf(struct vm_info_shared *vmi, const char *fmt, ...)
-{
-    static char   buf[1024];
-    va_list args;
-
-    va_start(args, fmt);
-    vsnprintf(buf, sizeof(buf), fmt, args);
-    va_end(args);
-
-    buf[sizeof(buf) - 1] = 0;
-
-    uxen_info->ui_printf(vmi, "%s", dmsgbuf);
-}
-
 static void
 _cpu_irq_disable(void)
 {
@@ -923,7 +909,7 @@ __uxen_process_ud2(struct cpu_user_regs *regs)
     if ( id == BUGFRAME_warn )
     {
         show_execution_state(regs);
-        ui_printf(NULL, "Xen WARN at %.50s:%d\n", filename, lineno);
+        uxen_info->ui_printf(NULL, "Xen WARN at %.50s:%d\n", filename, lineno);
         regs->eip = (unsigned long)eip;
         return 0;
     }
@@ -931,7 +917,7 @@ __uxen_process_ud2(struct cpu_user_regs *regs)
     if ( id == BUGFRAME_bug )
     {
         show_execution_state(regs);
-        ui_printf(NULL, "Xen BUG at %.50s:%d\n", filename, lineno);
+        uxen_info->ui_printf(NULL, "Xen BUG at %.50s:%d\n", filename, lineno);
         return 1;
     }
 
@@ -939,7 +925,7 @@ __uxen_process_ud2(struct cpu_user_regs *regs)
     {
 #ifndef NDEBUG
         show_stack(regs);
-        ui_printf(NULL, "Xen ABORT at %.50s:%d\n", filename, lineno);
+        uxen_info->ui_printf(NULL, "Xen ABORT at %.50s:%d\n", filename, lineno);
 #endif
         return 2;
     }
@@ -953,7 +939,7 @@ __uxen_process_ud2(struct cpu_user_regs *regs)
     eip += sizeof(*bug_str);
 
     show_execution_state(regs);
-    ui_printf(NULL, "Assertion '%s' failed at %.50s:%d\n",
+    uxen_info->ui_printf(NULL, "Assertion '%s' failed at %.50s:%d\n",
                          predicate, filename, lineno);
     return 1;
 
@@ -964,7 +950,7 @@ __uxen_process_ud2(struct cpu_user_regs *regs)
         return 0;
     }
     show_execution_state(regs);
-    ui_printf(NULL, "FATAL TRAP: vector = %d (invalid opcode)\n",
+    uxen_info->ui_printf(NULL, "FATAL TRAP: vector = %d (invalid opcode)\n",
                          TRAP_invalid_op);
     return 1;
 }
