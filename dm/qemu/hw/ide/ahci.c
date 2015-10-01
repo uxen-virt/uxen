@@ -58,6 +58,32 @@ static void ahci_reset_port(AHCIState *s, int port);
 static void ahci_write_fis_d2h(AHCIDevice *ad, uint8_t *cmd_fis);
 static void ahci_init_d2h(AHCIDevice *ad);
 
+static uint32_t  ahci_restricted_port_read(AHCIRestrict *n, int port,
+                                           int offset)
+{
+    uint32_t val;
+    AHCIRestrictedPort *np;
+
+    if ((port < 0) || (port >= AHCI_MAX_PORTS))
+        return 0;
+
+    np = &n->ports[port];
+
+    switch (offset) {
+    case PORT_SIG:
+        val = np->sig;
+        break;
+    case PORT_SCR_STAT:
+        val = np->scr_stat;
+        break;
+    default:
+        val = 0;
+    }
+    DPRINTF(port, "offset: 0x%x val: 0x%x\n", offset, val);
+
+    return val;
+}
+
 static uint32_t  ahci_port_read(AHCIState *s, int port, int offset)
 {
     uint32_t val;
@@ -311,11 +337,50 @@ static void  ahci_port_write(AHCIState *s, int port, int offset, uint32_t val)
     }
 }
 
+static uint64_t ahci_restricted_mem_read(AHCIRestrict *n,
+                                         target_phys_addr_t addr,
+                                         unsigned size)
+{
+    uint32_t val = 0;
+
+    if (addr < AHCI_GENERIC_HOST_CONTROL_REGS_MAX_ADDR) {
+        switch (addr) {
+        case HOST_CAP:
+            val = n->control_regs.cap;
+            break;
+        case HOST_CTL:
+            val = n->control_regs.ghc;
+            break;
+        case HOST_IRQ_STAT:
+            val = n->control_regs.irqstatus;
+            break;
+        case HOST_PORTS_IMPL:
+            val = n->control_regs.impl;
+            break;
+        case HOST_VERSION:
+            val = n->control_regs.version;
+            break;
+        }
+
+        DPRINTF(-1, "(addr 0x%08X), val 0x%08X\n", (unsigned) addr, val);
+    } else if ((addr >= AHCI_PORT_REGS_START_ADDR) &&
+               (addr < (AHCI_PORT_REGS_START_ADDR +
+                (n->num_ports * AHCI_PORT_ADDR_OFFSET_LEN)))) {
+        val = ahci_restricted_port_read(n, (addr - AHCI_PORT_REGS_START_ADDR) >> 7,
+                             addr & AHCI_PORT_ADDR_OFFSET_MASK);
+    }
+
+    return val;
+}
+
 static uint64_t ahci_mem_read(void *opaque, target_phys_addr_t addr,
                               unsigned size)
 {
     AHCIState *s = opaque;
     uint32_t val = 0;
+
+    if (s->restrict.state) 
+        return ahci_restricted_mem_read(&s->restrict, addr, size);
 
     if (addr < AHCI_GENERIC_HOST_CONTROL_REGS_MAX_ADDR) {
         switch (addr) {
@@ -360,6 +425,9 @@ static void ahci_mem_write(void *opaque, target_phys_addr_t addr,
                      addr);
         return;
     }
+
+    if (s->restrict.state)
+        return;
 
     if (addr < AHCI_GENERIC_HOST_CONTROL_REGS_MAX_ADDR) {
         DPRINTF(-1, "(addr 0x%08X), val 0x%08"PRIx64"\n", (unsigned) addr, val);
@@ -410,6 +478,9 @@ static uint64_t ahci_idp_read(void *opaque, target_phys_addr_t addr,
 {
     AHCIState *s = opaque;
 
+    if (s->restrict.state) 
+        return 0;
+
     if (addr == s->idp_offset) {
         /* index register */
         return s->idp_index;
@@ -425,6 +496,9 @@ static void ahci_idp_write(void *opaque, target_phys_addr_t addr,
                            uint64_t val, unsigned size)
 {
     AHCIState *s = opaque;
+
+    if (s->restrict.state) 
+        return;
 
     if (addr == s->idp_offset) {
         /* index register - mask off reserved bits */
@@ -1338,6 +1412,32 @@ const VMStateDescription vmstate_ahci_port_regs = {
     }
 };
 
+static void ahci_restrict(AHCIState *s)
+{
+    unsigned i;
+    AHCIRestrict *n = &s->restrict;
+    AHCIRestrictedPort *np;
+
+    error_printf("%s: called\n", __FUNCTION__);
+
+    n->control_regs.cap = ahci_mem_read(s, HOST_CAP, 4);
+    n->control_regs.ghc = ahci_mem_read(s, HOST_CTL, 4);
+    n->control_regs.irqstatus = ahci_mem_read(s, HOST_IRQ_STAT, 4);
+    n->control_regs.impl = ahci_mem_read(s, HOST_PORTS_IMPL, 4);
+    n->control_regs.version = ahci_mem_read(s, HOST_VERSION, 4);
+
+    n->num_ports = s->ports;
+
+    for (i = 0; i < s->ports; ++i) {
+        np = &n->ports[i];
+        np->sig = ahci_port_read(s, i, PORT_SIG);
+        np->scr_stat = ahci_port_read(s, i, PORT_SCR_STAT);
+    }
+
+    n->state = 1;
+}
+
+
 static int ahci_device_post_load(void *opaque, int version_id)
 {
     AHCIDevice *ad = opaque;
@@ -1364,6 +1464,19 @@ static void ahci_device_post_save(void *opaque)
                1024);
     unmap_page(&ad->res_fis, ((uint64_t)pr->fis_addr_hi << 32) | pr->fis_addr,
                256);
+}
+
+static int ahci_post_load(void *opaque, int version_id)
+{
+    extern uint64_t vm_use_v4v_disk;
+    AHCIState *s = opaque;
+
+    if (vm_use_v4v_disk) {
+        ahci_restrict(s);
+        return 0;
+    }
+
+    return 0;
 }
 
 const VMStateDescription vmstate_ahci_device = {
@@ -1408,7 +1521,7 @@ const VMStateDescription vmstate_ahci = {
     .version_id = 3,
     .minimum_version_id = 0,
     .minimum_version_id_old = 0,
-    // .post_load = ahci_post_load,
+    .post_load = ahci_post_load,
     .fields = (VMStateField []) {
 	VMSTATE_STRUCT_VARRAY_POINTER_INT32(dev, AHCIState, ports,
 					    vmstate_ahci_device, AHCIDevice),
