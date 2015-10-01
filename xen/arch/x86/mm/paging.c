@@ -341,7 +341,7 @@ void paging_mark_dirty_check_vram(struct vcpu *v, unsigned long gmfn,
 
     if (dirty_vram && dirty_vram->want_events) {
         dirty_vram->want_events = 0;
-        uxen_info->ui_notify_vram(d->vm_info_shared);
+        UI_HOST_CALL(ui_notify_vram, d->vm_info_shared);
     }
 
     logdirty_unlock(p2m);
@@ -385,7 +385,7 @@ paging_mark_dirty_check_vram_l2(struct vcpu *v, unsigned long gfn)
 
     if (dirty_vram->want_events) {
         dirty_vram->want_events = 0;
-        uxen_info->ui_notify_vram(d->vm_info_shared);
+        UI_HOST_CALL(ui_notify_vram, d->vm_info_shared);
     }
 
     logdirty_unlock(p2m);

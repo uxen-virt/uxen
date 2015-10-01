@@ -314,7 +314,7 @@ uxen_puts(const char *s)
         used += copy;
         dmsgbuf[used] = 0;
         if (dmsgbuf[used - 1] == '\n' || used == UXEN_DMSG_MAXLINE) {
-            uxen_info->ui_printf(vmi, "%s", dmsgbuf);
+            UI_HOST_CALL(ui_printf, vmi, "%s", dmsgbuf);
             used = 0;
             dmsgbuf[used] = 0;
         }

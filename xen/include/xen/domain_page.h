@@ -31,6 +31,7 @@
 #include <xen/config.h>
 #include <xen/mm.h>
 #include <xen/perfc.h>
+#include <xen/sched.h>
 
 #ifdef CONFIG_DOMAIN_PAGE
 
@@ -144,7 +145,7 @@ uxen_map_page(unsigned long mfn)
 {
     void *_v;
 
-    _v = uxen_info->ui_map_page(mfn);
+    _v = UI_HOST_CALL(ui_map_page, mfn);
 #ifdef DEBUG_MAPCACHE
     if (_v) {
         struct page_info *_pg;
@@ -164,11 +165,11 @@ uxen_unmap_page(const void *va)
 #ifdef DEBUG_MAPCACHE
     unsigned long _mfn;
 
-    _mfn = uxen_info->ui_unmap_page_va(va);
+    _mfn = UI_HOST_CALL(ui_unmap_page_va, va);
     ASSERT(_mfn != INVALID_MFN);
     atomic_dec(&mfn_to_page(_mfn)->mapped);
 #else  /* DEBUG_MAPCACHE */
-    uxen_info->ui_unmap_page_va(va);
+    UI_HOST_CALL(ui_unmap_page_va, va);
 #endif  /* DEBUG_MAPCACHE */
 #endif
 }
@@ -180,12 +181,12 @@ uxen_access_domain_page(const void *va)
 #ifdef DEBUG_MAPCACHE
     unsigned long _mfn;
 
-    _mfn = uxen_info->ui_access_page_va(va);
+    _mfn = UI_HOST_CALL(ui_access_page_va, va);
     ASSERT(_mfn != INVALID_MFN);
     ASSERT(atomic_read(&mfn_to_page(_mfn)->mapped));
     atomic_inc(&mfn_to_page(_mfn)->mapped);
 #else  /* DEBUG_MAPCACHE */
-    uxen_info->ui_access_page_va(va);
+    UI_HOST_CALL(ui_access_page_va, va);
 #endif  /* DEBUG_MAPCACHE */
 #endif
 }

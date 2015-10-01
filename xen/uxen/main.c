@@ -334,10 +334,10 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
 
       again:
         if (atomic_read(&v->event_check)) {
-            uxen_info->ui_kick_vcpu_cancel(vci);
+            UI_HOST_CALL(ui_kick_vcpu_cancel, vci);
             atomic_set(&v->event_check, 0);
         }
-        if (v->force_preempt || uxen_info->ui_host_needs_preempt(vci)) {
+        if (v->force_preempt || UI_HOST_CALL(ui_host_needs_preempt, vci)) {
             v->force_preempt = 0;
             vci->vci_run_mode = VCI_RUN_MODE_PREEMPT;
             ret = 0;
@@ -361,14 +361,14 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
         }
         if (check_memcache_needed() &&
             uxen_info->ui_memcache_check &&
-            uxen_info->ui_memcache_check()) {
+            UI_HOST_CALL(ui_memcache_check)) {
             vci->vci_run_mode = VCI_RUN_MODE_MEMCACHE_CHECK;
             ret = 0;
             goto out_reset_current;
         }
 
         if (test_bit(_VPF_blocked_in_xen, &v->pause_flags)) {
-            if (uxen_info->ui_check_ioreq(vci)) {
+            if (UI_HOST_CALL(ui_check_ioreq, vci)) {
                 clear_bit(_VPF_blocked_in_xen, &v->pause_flags);
                 vcpu_wake(v);
                 v->need_hvm_resume = 1;
@@ -426,6 +426,9 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
 
         if (!vci->vci_runnable)
             goto out_reset_current;
+
+        if (!uxen_info->host_os_is_xmm_clean && !v->arch.xmm_belong_guest)
+            xmm_restore(v);
 
         hvm_execute(v);
     }
@@ -909,7 +912,7 @@ __uxen_process_ud2(struct cpu_user_regs *regs)
     if ( id == BUGFRAME_warn )
     {
         show_execution_state(regs);
-        uxen_info->ui_printf(NULL, "Xen WARN at %.50s:%d\n", filename, lineno);
+        UI_HOST_CALL(ui_printf, NULL, "Xen WARN at %.50s:%d\n", filename, lineno);
         regs->eip = (unsigned long)eip;
         return 0;
     }
@@ -917,7 +920,7 @@ __uxen_process_ud2(struct cpu_user_regs *regs)
     if ( id == BUGFRAME_bug )
     {
         show_execution_state(regs);
-        uxen_info->ui_printf(NULL, "Xen BUG at %.50s:%d\n", filename, lineno);
+        UI_HOST_CALL(ui_printf, NULL, "Xen BUG at %.50s:%d\n", filename, lineno);
         return 1;
     }
 
@@ -925,7 +928,7 @@ __uxen_process_ud2(struct cpu_user_regs *regs)
     {
 #ifndef NDEBUG
         show_stack(regs);
-        uxen_info->ui_printf(NULL, "Xen ABORT at %.50s:%d\n", filename, lineno);
+        UI_HOST_CALL(ui_printf, NULL, "Xen ABORT at %.50s:%d\n", filename, lineno);
 #endif
         return 2;
     }
@@ -939,7 +942,7 @@ __uxen_process_ud2(struct cpu_user_regs *regs)
     eip += sizeof(*bug_str);
 
     show_execution_state(regs);
-    uxen_info->ui_printf(NULL, "Assertion '%s' failed at %.50s:%d\n",
+    UI_HOST_CALL(ui_printf, NULL, "Assertion '%s' failed at %.50s:%d\n",
                          predicate, filename, lineno);
     return 1;
 
@@ -950,7 +953,7 @@ __uxen_process_ud2(struct cpu_user_regs *regs)
         return 0;
     }
     show_execution_state(regs);
-    uxen_info->ui_printf(NULL, "FATAL TRAP: vector = %d (invalid opcode)\n",
+    UI_HOST_CALL(ui_printf, NULL, "FATAL TRAP: vector = %d (invalid opcode)\n",
                          TRAP_invalid_op);
     return 1;
 }

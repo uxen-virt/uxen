@@ -552,6 +552,9 @@ struct arch_vcpu
     void *compat_arg_xlat;
 #endif
 
+    bool_t xmm_belong_guest;
+    uint64_t xmm[6][2];
+
 } __cacheline_aligned;
 
 /* Shorthands to improve code legibility. */

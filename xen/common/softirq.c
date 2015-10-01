@@ -183,7 +183,7 @@ check_work_vcpu(struct vcpu *v)
         return 1;
     }
 
-    if (uxen_info->ui_host_needs_preempt(v->vm_vcpu_info_shared)) {
+    if (UI_HOST_CALL(ui_host_needs_preempt, v->vm_vcpu_info_shared)) {
         cpu_irq_enable();
         return 1;
     }
@@ -256,7 +256,7 @@ void raise_softirq(unsigned int nr)
         break;
     default:
         set_bit(nr, &softirq_pending(0 /* smp_processor_id() */));
-        uxen_info->ui_signal_idle_thread();
+        UI_HOST_CALL(ui_signal_idle_thread);
     }
 }
 

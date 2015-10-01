@@ -288,8 +288,8 @@ static u64 init_host_counter_and_calibrate_tsc(uint64_t *period)
     ticks = scale_delta(*period, &scale_r);
 
     rdtscll(start);
-    tzero = uxen_info->ui_get_host_counter();
-    while (((tlast = uxen_info->ui_get_host_counter()) - tzero) < ticks)
+    tzero = UI_HOST_CALL(ui_get_host_counter);
+    while (((tlast = UI_HOST_CALL(ui_get_host_counter)) - tzero) < ticks)
         continue;
     rdtscll(end);
 
@@ -332,7 +332,7 @@ int reprogram_timer(s_time_t timeout, struct vcpu *v)
 
         _uxen_info.ui_host_idle_timeout = ticks;
         if (!is_idle_vcpu(current))
-            uxen_info->ui_signal_idle_thread();
+            UI_HOST_CALL(ui_signal_idle_thread);
     } else {
         extern void hostsched_set_timer_vcpu(struct vcpu *, uint64_t);
         hostsched_set_timer_vcpu(v, ticks);
@@ -672,7 +672,7 @@ update_xen_time(void)
 
     unixtime_generation = _uxen_info.ui_unixtime_generation;
 
-    unixtime = uxen_info->ui_get_unixtime();
+    unixtime = UI_HOST_CALL(ui_get_unixtime);
     do_settime(unixtime / 1000000000, unixtime % 1000000000, NOW());
 
     update_domain_rtc();

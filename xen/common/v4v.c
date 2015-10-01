@@ -183,7 +183,7 @@ v4v_signal_domain (struct domain *d)
 
     if (deliver_via_upcall(d)) {
         if (uxen_info->ui_signal_v4v)
-            uxen_info->ui_signal_v4v();
+            UI_HOST_CALL(ui_signal_v4v);
     } else {
 #if 0
         hvm_pci_intx_assert(d, V4V_PCI_SLOT, V4V_PCI_INTX);

@@ -20,6 +20,7 @@
 #include <asm/processor.h>
 #include <asm/msr-index.h>
 #include <asm/hvm/svm/svmdebug.h>
+#include <xen/sched.h>
 
 static void svm_dump_sel(const char *name, svm_segment_register_t *s)
 {

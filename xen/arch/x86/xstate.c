@@ -111,11 +111,43 @@ inline uint64_t get_xcr0(void)
 }
 #endif  /* __UXEN__ */
 
+void xmm_save_if_needed(struct vcpu *v)
+{
+    if (v->arch.xmm_belong_guest) return;
+
+    __asm__( "movdqu %%xmm0,(%0)"  : : "r" (v->arch.xmm[0]) :);
+    __asm__( "movdqu %%xmm1,(%0)"  : : "r" (v->arch.xmm[1]) :);
+    __asm__( "movdqu %%xmm2,(%0)"  : : "r" (v->arch.xmm[2]) :);
+    __asm__( "movdqu %%xmm3,(%0)"  : : "r" (v->arch.xmm[3]) :);
+    __asm__( "movdqu %%xmm4,(%0)"  : : "r" (v->arch.xmm[4]) :);
+    __asm__( "movdqu %%xmm5,(%0)"  : : "r" (v->arch.xmm[5]) :"memory");
+
+    v->arch.xmm_belong_guest = 0;
+}
+
+
+void xmm_restore(struct vcpu *v)
+{
+    BUG_ON(v->arch.xmm_belong_guest);
+
+    __asm__( "movdqu (%0),%%xmm0"  : : "r" (v->arch.xmm[0]) :);
+    __asm__( "movdqu (%0),%%xmm1"  : : "r" (v->arch.xmm[1]) :);
+    __asm__( "movdqu (%0),%%xmm2"  : : "r" (v->arch.xmm[2]) :);
+    __asm__( "movdqu (%0),%%xmm3"  : : "r" (v->arch.xmm[3]) :);
+    __asm__( "movdqu (%0),%%xmm4"  : : "r" (v->arch.xmm[4]) :);
+    __asm__( "movdqu (%0),%%xmm5"  : : "r" (v->arch.xmm[5]) :"memory");
+
+    v->arch.xmm_belong_guest = 1;
+}
+
 void xsave(struct vcpu *v, uint64_t mask)
 {
     struct xsave_struct *ptr = v->arch.xsave_area;
     uint32_t hmask = mask >> 32;
     uint32_t lmask = mask;
+
+    if (!uxen_info->host_os_is_xmm_clean && !v->arch.xmm_belong_guest)
+        xmm_restore(v);
 
     if ( cpu_has_xsaveopt )
         asm volatile (
@@ -129,6 +161,9 @@ void xsave(struct vcpu *v, uint64_t mask)
             :
             : "a" (lmask), "d" (hmask), "D"(ptr)
             : "memory" );
+
+
+    /* FIXME: performance improvement from calling vzero here, but need to test cpu feature*/
 }
 
 void xrstor(struct vcpu *v, uint64_t mask)
@@ -146,6 +181,9 @@ void xrstor(struct vcpu *v, uint64_t mask)
         ".byte " REX_PREFIX "0x0f,0xae,0x2f"
         :
         : "m" (*ptr), "a" (lmask), "d" (hmask), "D"(ptr) );
+
+    if (mask & XSTATE_SSE) 
+        v->arch.xmm_belong_guest = 1;
 }
 
 bool_t xsave_enabled(const struct vcpu *v)

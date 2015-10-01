@@ -123,11 +123,11 @@ static inline void *__maddr_to_virt(unsigned long ma)
                 _pg = __mfn_to_page(mfn);                       \
                 if (!(_pg->count_info & PGC_xen_page)) DEBUG(); \
                 perfc_incr(map_xen_page_count);                 \
-                uxen_info->ui_map_page(mfn);                    \
+                UI_HOST_CALL(ui_map_page, mfn);                 \
             }))
 #define unmap_xen_page(va) (({                              \
                 unsigned long _mfn;                         \
-                _mfn = uxen_info->ui_unmap_page_va(va);     \
+                _mfn = UI_HOST_CALL(ui_unmap_page_va, va);  \
                 perfc_incr(unmap_xen_page_count);           \
                 _mfn;                                       \
             }))
@@ -136,10 +136,10 @@ static inline void *__maddr_to_virt(unsigned long ma)
                 _pg = __mfn_to_page(mfn);                       \
                 if (!(_pg->count_info & PGC_xen_page)) DEBUG(); \
                 perfc_incr(mapped_xen_page_count);              \
-                uxen_info->ui_mapped_pfn_va(mfn);               \
+                UI_HOST_CALL(ui_mapped_pfn_va, mfn);            \
             }))
 #define __virt_to_maddr(va)                                             \
-    (((paddr_t)uxen_info->ui_mapped_va_pfn((void *)(va)) << PAGE_SHIFT) + \
+    (((paddr_t)UI_HOST_CALL(ui_mapped_va_pfn, (void *)(va)) << PAGE_SHIFT) + \
      ((va) & (PAGE_SIZE - 1)))
 #define __maddr_to_virt(ma)                     \
     (mapped_xen_page((ma) >> PAGE_SHIFT) +      \
