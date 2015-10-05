@@ -318,8 +318,8 @@ static int rpc_connect_proxy(struct http_ctx *hp, const char *in_server, uint16_
 static void rpc_on_event(void *opaque);
 static int create_http_header(bool prx_auth, const char *sv_name, int use_head, uint16_t sv_port,
         struct http_header *horig, struct http_header *hadd, struct buff **pbuf);
-static int create_connect_header(const char *sv_name, uint16_t sv_port, struct http_header *hadd,
-        struct buff **pbuf);
+static int create_connect_header(char *prev_connect_headers, const char *sv_name,
+                                 uint16_t sv_port, struct http_header *hadd, struct buff **pbuf);
 static void on_fakeip_blocked(struct in_addr addr);
 static void on_fakeip_update(struct in_addr fkaddr, struct net_addr *a);
 static int prompt_credentials(struct http_ctx *hp);
@@ -699,7 +699,7 @@ static int prepare_clt_out(struct http_ctx *hp, bool prx_auth)
     assert(hp->clt_out != hp->cx->in);
     BUFF_RESET(hp->clt_out);
     if (IS_TUNNEL(hp)) {
-        if (create_connect_header(hp->h.sv_name, hp->h.daddr.sin_port, auth_header, &hp->clt_out))
+        if (create_connect_header(hp->cx->connect_header_lines, hp->h.sv_name, hp->h.daddr.sin_port, auth_header, &hp->clt_out))
             goto out;
     } else {
         if (create_http_header(prx_auth, hp->h.sv_name, use_head,
@@ -861,6 +861,8 @@ static int start_tunnel(struct http_ctx *hp)
         parser_free(&hp->cx->srv_parser);
     if (hp->auth)
         http_auth_free(&hp->auth);
+    free(hp->cx->connect_header_lines);
+    hp->cx->connect_header_lines = NULL;
     ret = 0;
 out:
     return ret;
@@ -1078,8 +1080,9 @@ mem_err:
     goto out;
 }
 
-static int create_connect_header(const char *sv_name, uint16_t sv_port, struct http_header *hadd,
-        struct buff **pbuf)
+static int create_connect_header(char *prev_connect_headers, const char *sv_name,
+                                       uint16_t sv_port, struct http_header *hadd,
+                                       struct buff **pbuf)
 {
     int ret = -1;
     char tmpb[64];
@@ -1090,45 +1093,56 @@ static int create_connect_header(const char *sv_name, uint16_t sv_port, struct h
     if (!buf && !BUFF_NEW_PRIV(buf, pbuf, 256))
         goto out;
 
-    if (buff_append(buf, S_CONNECT S_SPACE, STRLEN(S_CONNECT S_SPACE)) < 0)
-        goto out;
-    if (BUFF_APPENDSTR(buf, sv_name) < 0)
-        goto out;
-
-    tmpb[63] = 0;
-    snprintf(tmpb, 63, S_COLON "%hu" S_SPACE S_HTTP11 S_END, ntohs(sv_port));
-    if (BUFF_APPENDSTR(buf, tmpb) < 0)
-        goto out;
-
-    /* "Host: domain-name:port" field */
-    if (buff_append(buf, S_HOST S_COLON S_SPACE, STRLEN(S_HOST S_COLON S_SPACE)) < 0)
-        goto out;
-    if (BUFF_APPENDSTR(buf, sv_name) < 0)
-        goto out;
-    if (ntohs(sv_port) != 443) {
-        tmpb[63] = 0;
-        if (snprintf(tmpb, 63, S_COLON "%hu",  ntohs(sv_port)) < 0)
+    if (!prev_connect_headers) {
+        if (buff_append(buf, S_CONNECT S_SPACE, STRLEN(S_CONNECT S_SPACE)) < 0)
             goto out;
+        if (BUFF_APPENDSTR(buf, sv_name) < 0)
+            goto out;
+
+        tmpb[63] = 0;
+        snprintf(tmpb, 63, S_COLON "%hu" S_SPACE S_HTTP11 S_END, ntohs(sv_port));
         if (BUFF_APPENDSTR(buf, tmpb) < 0)
             goto out;
-    }
-    if (buff_append(buf, S_END, STRLEN(S_END)) < 0)
-        goto out;
 
-    if (user_agent) {
-        if (buff_append(buf, S_USER_AGENT S_COLON S_SPACE, STRLEN(S_USER_AGENT S_COLON S_SPACE)) < 0)
+        /* "Host: domain-name:port" field */
+        if (buff_append(buf, S_HOST S_COLON S_SPACE, STRLEN(S_HOST S_COLON S_SPACE)) < 0)
             goto out;
-        if (BUFF_APPENDSTR(buf, user_agent) < 0)
+        if (BUFF_APPENDSTR(buf, sv_name) < 0)
             goto out;
+        if (ntohs(sv_port) != 443) {
+            tmpb[63] = 0;
+            if (snprintf(tmpb, 63, S_COLON "%hu",  ntohs(sv_port)) < 0)
+                goto out;
+            if (BUFF_APPENDSTR(buf, tmpb) < 0)
+                goto out;
+        }
         if (buff_append(buf, S_END, STRLEN(S_END)) < 0)
             goto out;
-    } else {
-        NETLOG("%s: WARNING - no user-agent specified", __FUNCTION__);
-    }
 
-    if (buff_append(buf, S_CONNECTION S_COLON S_SPACE S_KEEPALIVE S_END,
-                STRLEN(S_CONNECTION S_COLON S_SPACE S_KEEPALIVE S_END)) < 0)
-        goto out;
+        if (user_agent) {
+            if (buff_append(buf, S_USER_AGENT S_COLON S_SPACE,
+                STRLEN(S_USER_AGENT S_COLON S_SPACE)) < 0) {
+
+                goto out;
+            }
+            if (BUFF_APPENDSTR(buf, user_agent) < 0)
+                goto out;
+            if (buff_append(buf, S_END, STRLEN(S_END)) < 0)
+                goto out;
+        } else {
+            NETLOG("%s: WARNING - no user-agent specified", __FUNCTION__);
+        }
+
+        if (buff_append(buf, S_CONNECTION S_COLON S_SPACE S_KEEPALIVE S_END,
+                    STRLEN(S_CONNECTION S_COLON S_SPACE S_KEEPALIVE S_END)) < 0) {
+
+            goto out;
+        }
+    } else {
+        BUFF_RESET(buf);
+        if (buff_append(buf, prev_connect_headers, strlen(prev_connect_headers)) < 0)
+            goto out;
+    }
 
     /* additional headers */
     if (hadd && add_headers(buf, hadd, false, false) < 0)
@@ -4633,6 +4647,8 @@ static void cx_close(struct clt_ctx *cx)
         parser_free(&cx->clt_parser);
     if (cx->srv_parser)
         parser_free(&cx->srv_parser);
+    free(cx->connect_header_lines);
+    cx->connect_header_lines = NULL;
     cx->flags |= (CXF_CLOSED | CXF_IGNORE);
 
     cx_remove_hpd(cx);
@@ -5476,6 +5492,21 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
                 goto err;
             cx_lava_connect(cx);
             CXL5("SAME HP REUSED");
+        }
+
+        if (ssl && BUFF_BUFFERED(cx->in) > STRLEN("\r\n\r\n")) {
+            char *hend;
+            size_t hlen;
+
+            hlen = BUFF_BUFFERED(cx->in) - STRLEN("\r\n\r\n");
+            hend = ((char *) BUFF_BEGINNING(cx->in)) + hlen;
+
+            hlen += 2; /* just before the last \r\n */
+            if (strcmp(hend, "\r\n\r\n") == 0 &&
+                (cx->connect_header_lines = calloc(1, hlen + 1))) {
+
+                memcpy(cx->connect_header_lines, BUFF_BEGINNING(cx->in), hlen);
+            }
         }
     }
 

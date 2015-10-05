@@ -46,6 +46,7 @@ struct clt_ctx {
     uint64_t flags;
     struct buff *in;
     struct buff *out;
+    char *connect_header_lines;
     uint8_t bf_tls_ck[QUICK_HTTP_PARSE_LEN + 1];
     int bf_tls_ck_len;
     struct proxy_t *proxy;
