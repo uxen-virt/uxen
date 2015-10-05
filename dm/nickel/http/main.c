@@ -205,7 +205,7 @@ static const char *hp_states[] = {
 #define CXF_NI_ESTABLISHED      U64BF(1)
 #define CXF_NI_FIN              U64BF(2)
 #define CXF_FLUSH_CLOSE         U64BF(3)
-#define CXF_DECIDED             U64BF(4)
+#define CXF_PRX_DECIDED         U64BF(4)
 #define CXF_GUEST_PROXY         U64BF(5)
 #define CXF_SUSPENDED           U64BF(6)
 #define CXF_TUNNEL_GUEST        U64BF(7)
@@ -339,6 +339,8 @@ static void cx_close(struct clt_ctx *cx);
 static void cx_free(struct clt_ctx *cx);
 static void cx_get(struct clt_ctx *cx);
 static void cx_put(struct clt_ctx *cx);
+static int cx_proxy_decide(struct clt_ctx *cx);
+static void cx_proxy_set(struct clt_ctx *cx, struct proxy_t *proxy);
 static int cx_chr_can_read(void *opaque);
 static int cx_chr_can_write(void *opaque);
 static ssize_t cx_write(struct clt_ctx *cx, uint8_t *p, size_t l);
@@ -1606,11 +1608,11 @@ static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now)
     if ((cx->flags & CXF_CLOSED))
         goto out;
 
-    CXL5("start, CXF_DECIDED is %d", (int) !!((cx->flags & CXF_DECIDED)));
+    CXL5("start, CXF_PRX_DECIDED is %d", (int) !!((cx->flags & CXF_PRX_DECIDED)));
     assert(!cx->hp);
     if ((cx->flags & CXF_LOCAL_WEBDAV))
         goto out;
-    if (!(cx->flags & CXF_DECIDED))
+    if (!(cx->flags & CXF_PRX_DECIDED))
         goto out;
 
     if (!RLIST_EMPTY(cx, w_list))
@@ -1820,7 +1822,7 @@ static void proxy_connect_cx_next(struct proxy_t *proxy)
     hp_cx_connect_next(hp, proxy);
 }
 
-static int cx_hp_disconnect(struct clt_ctx *cx)
+static int cx_hp_disconnect_ex(struct clt_ctx *cx, bool no_cx_close)
 {
     int ret = 0;
     struct http_ctx *hp = NULL;
@@ -1937,9 +1939,9 @@ out:
             proxy_connect_cx_next(proxy);
     }
 
-    if (f_cx_close)
+    if (f_cx_close && !no_cx_close)
         cx_close(cx);
-    else if (cx && f_cx_guest_write && cx_guest_write(cx) < 0)
+    else if (cx && f_cx_guest_write && cx_guest_write(cx) < 0 && !no_cx_close)
         cx_close(cx);
 
     if (hp && hp->hpd)
@@ -1951,6 +1953,11 @@ out:
     }
 
     return ret;
+}
+
+static int cx_hp_disconnect(struct clt_ctx *cx)
+{
+    return cx_hp_disconnect_ex(cx, false);
 }
 
 static int cx_hp_reconnect_direct(struct clt_ctx *cx)
@@ -1969,8 +1976,7 @@ static int cx_hp_reconnect_direct(struct clt_ctx *cx)
         cx->hp = NULL;
         lava_event_remote_disconnect(tcpip_lava_get(cx->ni_opaque));
     }
-    cx->proxy = NULL;
-    cx->flags |= CXF_DECIDED;
+    cx_proxy_set(cx, NULL);
     return cx_process(cx, NULL, 0);
 }
 
@@ -4466,7 +4472,7 @@ cx_accept(void *opaque, struct nickel *ni, struct socket *so)
     cx->chr->refcnt = 1;
     cx->flags |= CXF_NI_ESTABLISHED;
     cx->flags |= (CXF_HOST_RESOLVED | CXF_BINARY | CXF_ACCEPTED | CXF_TLS_DETECT_OK);
-    cx->flags |= CXF_DECIDED;
+    cx->flags |= CXF_PRX_DECIDED;
     cx->ni_opaque = opaque;
 
     hp = hp_create(ni);
@@ -4664,7 +4670,7 @@ static void cx_reset_state(struct clt_ctx *cx, bool soft)
         cx->schema = NULL;
         cx->h.daddr.sin_addr.s_addr = 0;
         cx->h.daddr.sin_port = 0;
-        cx->flags &= ((~CXF_HOST_RESOLVED) & (~CXF_DECIDED) & (~CXF_RPC_PROXY_URL));
+        cx->flags &= ((~CXF_HOST_RESOLVED) & (~CXF_PRX_DECIDED) & (~CXF_RPC_PROXY_URL));
         cx->flags &= ((~CXF_LOCAL_WEBDAV) & (~CXF_LOCAL_WEBDAV_COMPLETE));
     }
     cx->flags &= ((~CXF_HEADERS_OK) & (~CXF_LONG_REQ) & (~CXF_HEAD_REQUEST) &
@@ -5014,8 +5020,7 @@ static void cx_rpc_proxy_by_url_cb(void *opaque, dict d)
 
     if (is_direct) {
         proxy_cache_add(cx->ni, cx->schema, cx->h.sv_name, cx->h.daddr.sin_port, NULL);
-        cx->flags |= CXF_DECIDED;
-        cx->proxy = NULL;
+        cx_proxy_set(cx, NULL);
         process = true;
         goto out;
     }
@@ -5063,8 +5068,7 @@ static void cx_rpc_proxy_by_url_cb(void *opaque, dict d)
     if (alternative_proxies && *alternative_proxies)
         cx->alternative_proxies = strdup(alternative_proxies);
 
-    cx->flags |= CXF_DECIDED;
-    cx->proxy = proxy;
+    cx_proxy_set(cx, proxy);
     process = true;
 
 out:
@@ -5085,7 +5089,7 @@ static int cx_rpc_proxy_by_url(struct clt_ctx *cx, const char *sv_name, uint16_t
     dict args = NULL;
     char buf[64];
 
-    if ((cx->flags & (CXF_DECIDED | CXF_RPC_PROXY_URL)))
+    if ((cx->flags & (CXF_PRX_DECIDED | CXF_RPC_PROXY_URL)))
         goto out_ok;
 
     args = dict_new();
@@ -5117,17 +5121,16 @@ out:
     return ret;
 }
 
-static int cx_decide(struct clt_ctx *cx)
+static int cx_proxy_decide(struct clt_ctx *cx)
 {
     int ret = -1;
     struct proxy_t *proxy = NULL;
 
-    if ((cx->flags & CXF_DECIDED))
+    if ((cx->flags & CXF_PRX_DECIDED))
         return 0;
 
     if (!ac_proxy_set(cx->ni) || (!(cx->flags & CXF_GUEST_PROXY) && no_transparent_proxy)) {
-        cx->proxy = NULL;
-        cx->flags |= CXF_DECIDED;
+        cx_proxy_set(cx, NULL);
 
         ret = 0;
         goto out;
@@ -5153,10 +5156,7 @@ static int cx_decide(struct clt_ctx *cx)
 
     if (proxy) {
         CXL4("proxy cache hit for %s:%hu", cx->h.sv_name, ntohs(cx->h.daddr.sin_port));
-        cx->proxy = NULL;
-        if (!PROXY_IS_DIRECT(proxy))
-            cx->proxy = proxy;
-        cx->flags |= CXF_DECIDED;
+        cx_proxy_set(cx, PROXY_IS_DIRECT(proxy) ? NULL : proxy);
 
         ret = 0;
         goto out;
@@ -5166,6 +5166,23 @@ static int cx_decide(struct clt_ctx *cx)
     ret = cx_rpc_proxy_by_url(cx, cx->h.sv_name, cx->h.daddr.sin_port);
 out:
     return ret;
+}
+
+static void cx_proxy_set(struct clt_ctx *cx, struct proxy_t *proxy)
+{
+    cx->flags |= CXF_PRX_DECIDED;
+    cx->proxy = proxy;
+
+    /* if the website is to be proxied through itself, do not use the
+     * proxy and rather go direct, that is what IE does */
+    if (cx->proxy && cx->proxy->name && cx->h.sv_name &&
+        cx->proxy->port == cx->h.daddr.sin_port &&
+        strcasecmp(cx->proxy->name, cx->h.sv_name) == 0) {
+
+        if (cx->hp)
+            cx_hp_disconnect_ex(cx, true);
+        cx->proxy = NULL;
+    }
 }
 
 static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
@@ -5220,7 +5237,7 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
 
     while (need_parse) {
 
-        if (!(cx->flags & CXF_GUEST_PROXY) && (cx->flags & CXF_DECIDED) && !cx->proxy) {
+        if (!(cx->flags & CXF_GUEST_PROXY) && (cx->flags & CXF_PRX_DECIDED) && !cx->proxy) {
             need_parse = false;
             break;
         }
@@ -5406,9 +5423,9 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
 
             if (inet_aton(cx->h.sv_name, &daddr) != 0) {
                 if (daddr.s_addr == cx->ni->host_addr.s_addr)
-                    cx->flags |= (CXF_LOCAL_WEBDAV | CXF_DECIDED);
+                    cx->flags |= (CXF_LOCAL_WEBDAV | CXF_PRX_DECIDED);
             } else if (dns_is_nickel_domain_name(cx->h.sv_name))
-                cx->flags |= (CXF_LOCAL_WEBDAV | CXF_DECIDED);
+                cx->flags |= (CXF_LOCAL_WEBDAV | CXF_PRX_DECIDED);
         }
 
         {
@@ -5454,7 +5471,7 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
             if (cx_hp_disconnect(cx) < 0)
                 goto out;
         } else if (cx->hp) {
-            cx->flags |= CXF_DECIDED;
+            cx->flags |= CXF_PRX_DECIDED;
             if (hp_reset(cx->hp) < 0)
                 goto err;
             cx_lava_connect(cx);
@@ -5463,12 +5480,12 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
     }
 
     assert((cx->flags & CXF_HOST_RESOLVED));
-    if (!(cx->flags & CXF_DECIDED)) {
-        if (cx_decide(cx) < 0) {
+    if (!(cx->flags & CXF_PRX_DECIDED)) {
+        if (cx_proxy_decide(cx) < 0) {
             CXL("cx_decide ERROR");
             goto err;
         }
-        if (!(cx->flags & CXF_DECIDED))
+        if (!(cx->flags & CXF_PRX_DECIDED))
             goto out_buffer;
 
         if (cx->proxy && !cx->srv_parser && parser_create_response(&cx->srv_parser, cx) < 0)
@@ -5479,7 +5496,7 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
                 goto out;
     }
 
-    assert((cx->flags & CXF_DECIDED));
+    assert((cx->flags & CXF_PRX_DECIDED));
     if (!(cx->flags & CXF_NI_ESTABLISHED) && cx->proxy) {
         cx->flags |= CXF_NI_ESTABLISHED;
         if (cx->ni_opaque)
