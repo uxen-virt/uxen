@@ -80,6 +80,7 @@ uXenDispAddDevice(CONST PDEVICE_OBJECT pPhysicalDeviceObject,
     DEVICE_EXTENSION *dev;
 
     PAGED_CODE();
+    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(pPhysicalDeviceObject) ||
         !ARGUMENT_PRESENT(ppMiniportDeviceContext))
@@ -95,6 +96,7 @@ uXenDispAddDevice(CONST PDEVICE_OBJECT pPhysicalDeviceObject,
 
     *ppMiniportDeviceContext = dev;
 
+    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -102,6 +104,7 @@ static void
 uXenDispFreeResources(DEVICE_EXTENSION *dev)
 {
     ULONG i;
+    uxen_msg("Enter");
 
     for (i = 0; i < dev->crtc_count; i++) {
         UXENDISP_CRTC *crtc = &dev->crtcs[i];
@@ -116,6 +119,7 @@ uXenDispFreeResources(DEVICE_EXTENSION *dev)
         MmUnmapIoSpace(dev->mmio, dev->mmio_len);
     dev->pdo = NULL;
     dev->dxgkhdl = NULL;
+    uxen_msg("Leave");
 }
 
 static void
@@ -125,12 +129,14 @@ ChildStatusChangeDpc(KDPC *dpc,
                      VOID *system_argument2)
 {
     DEVICE_EXTENSION *dev = deferred_context;;
+    uxen_msg("Enter");
 
     UNREFERENCED_PARAMETER(dpc);
     UNREFERENCED_PARAMETER(system_argument1);
     UNREFERENCED_PARAMETER(system_argument2);
 
     uXenDispDetectChildStatusChanges(dev);
+    uxen_msg("Leave");
 }
 
 NTSTATUS APIENTRY
@@ -147,6 +153,7 @@ uXenDispStartDevice(CONST PVOID pMiniportDeviceContext,
     ULONG c, i, Magic, Rev;
     ULONG memres_index = 0;
     PAGED_CODE();
+    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(pMiniportDeviceContext) ||
         !ARGUMENT_PRESENT(pDxgkStartInfo) ||
@@ -281,6 +288,7 @@ uXenDispStartDevice(CONST PVOID pMiniportDeviceContext,
 
     /* Configure all the child devices once up front. */
     uXenDispDetectChildStatusChanges(dev);
+    uxen_msg("Leave");
 
     return STATUS_SUCCESS;
 }
@@ -291,6 +299,7 @@ uXenDispStopDevice(CONST PVOID pMiniportDeviceContext)
     DEVICE_EXTENSION *dev = pMiniportDeviceContext;
 
     PAGED_CODE();
+    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(pMiniportDeviceContext))
         return STATUS_INVALID_PARAMETER;
@@ -307,6 +316,7 @@ uXenDispStopDevice(CONST PVOID pMiniportDeviceContext)
     /* Clear any remaining state */
     RtlZeroMemory(dev, sizeof(DEVICE_EXTENSION));
 
+    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -314,12 +324,14 @@ NTSTATUS APIENTRY
 uXenDispRemoveDevice(CONST PVOID pMiniportDeviceContext)
 {
     PAGED_CODE();
+    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(pMiniportDeviceContext))
         return STATUS_INVALID_PARAMETER;
 
     ExFreePoolWithTag(pMiniportDeviceContext, UXENDISP_TAG);
 
+    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -329,6 +341,7 @@ uXenDispDispatchIoRequest(CONST PVOID pMiniportDeviceContext,
                           PVIDEO_REQUEST_PACKET pVideoRequestPacket)
 {
     PAGED_CODE();
+    uxen_msg("Leave");
 
     if (!ARGUMENT_PRESENT(pMiniportDeviceContext) ||
         !ARGUMENT_PRESENT(pVideoRequestPacket)||
@@ -341,6 +354,7 @@ uXenDispDispatchIoRequest(CONST PVOID pMiniportDeviceContext,
     /* Only IOCTL_VIDEO_QUERY_COLOR_CAPABILITIES and IOCTL_VIDEO_HANDLE_VIDEOPARAMETERS  */
     /* are used - no support for either. */
 
+    uxen_msg("Leave");
     return STATUS_UNSUCCESSFUL;
 }
 
@@ -353,6 +367,7 @@ uXenDispInterruptRoutine(CONST PVOID pMiniportDeviceContext,
     BOOLEAN handled = FALSE;
 
     UNREFERENCED_PARAMETER(MessageNumber); /* line-based IRQ */
+    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(pMiniportDeviceContext))
         return FALSE;
@@ -382,6 +397,7 @@ uXenDispInterruptRoutine(CONST PVOID pMiniportDeviceContext,
 #endif
         handled = TRUE;
     }
+    uxen_msg("Leave");
 
     return handled;
 }
@@ -390,9 +406,12 @@ VOID APIENTRY
 uXenDispDpcRoutine(CONST PVOID pMiniportDeviceContext)
 {
     DEVICE_EXTENSION *dev = pMiniportDeviceContext;
+    uxen_msg("Enter");
 
     /* The DDI DPC is used to ACK DMA and V-Sync interrupts are fully serviced. */
     dev->dxgkif.DxgkCbNotifyDpc(dev->dxgkhdl);
+
+    uxen_msg("Leave");
 }
 
 NTSTATUS APIENTRY
@@ -404,6 +423,7 @@ uXenDispQueryChildRelations(CONST PVOID pMiniportDeviceContext,
     ULONG i;
 
     PAGED_CODE();
+    uxen_msg("Enter");
 
     if (ChildRelationsSize <= (dev->crtc_count * sizeof(PDXGK_CHILD_DESCRIPTOR)))
         return STATUS_BUFFER_TOO_SMALL;
@@ -426,6 +446,7 @@ uXenDispQueryChildRelations(CONST PVOID pMiniportDeviceContext,
         pChildRelations[i].ChildCapabilities.Type.VideoOutput.SupportsSdtvModes = FALSE;
     }
 
+    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -438,6 +459,7 @@ uXenDispQueryChildStatus(CONST PVOID pMiniportDeviceContext,
     UXENDISP_CRTC *crtc;
 
     PAGED_CODE();
+    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(pMiniportDeviceContext) ||
         !ARGUMENT_PRESENT(pChildStatus))
@@ -463,6 +485,7 @@ uXenDispQueryChildStatus(CONST PVOID pMiniportDeviceContext,
         break;
     };
 
+    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -475,6 +498,7 @@ uXenDispGetChildDescriptor(PDEVICE_EXTENSION dev,
     NTSTATUS    status;
     ULONG       to_copy;
 
+    uxen_msg("Enter");
     KeAcquireSpinLock(&dev->crtc_lock, &irql);
 
     do {
@@ -499,6 +523,7 @@ uXenDispGetChildDescriptor(PDEVICE_EXTENSION dev,
     } while (FALSE);
 
     KeReleaseSpinLock(&dev->crtc_lock, irql);
+    uxen_msg("Leave");
 
     return status;
 }
@@ -513,6 +538,7 @@ uXenDispQueryDeviceDescriptor(CONST PVOID pMiniportDeviceContext,
     NTSTATUS status;
 
     PAGED_CODE();
+    uxen_msg("Enter");
 
     /* These failures should not occur */
     if (!ARGUMENT_PRESENT(pMiniportDeviceContext) ||
@@ -526,6 +552,7 @@ uXenDispQueryDeviceDescriptor(CONST PVOID pMiniportDeviceContext,
 
     crtc = &dev->crtcs[ChildUid];
     status = uXenDispGetChildDescriptor(dev, crtc, pDeviceDescriptor);
+    uxen_msg("Leave");
 
     return status;
 }
@@ -539,10 +566,12 @@ uXenDispSetPowerState(CONST PVOID pMiniportDeviceContext,
     UNREFERENCED_PARAMETER(pMiniportDeviceContext);
 
     PAGED_CODE();
+    uxen_msg("Enter");
 
     uxen_debug("HW UID: %d DEVICE_POWER_STATE: %d POWER_ACTION: %d",
                HardwareUid, DevicePowerState, ActionType);
 
+    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -551,15 +580,19 @@ uXenDispResetDevice(CONST PVOID pMiniportDeviceContext)
 {
     DEVICE_EXTENSION *dev = pMiniportDeviceContext;
 
+    uxen_msg("Enter");
     /* Disable the interrupt and switch back to VGA mode */
     uxdisp_write(dev, UXDISP_REG_MODE, 0);
+    uxen_msg("Leave");
 }
 
 VOID APIENTRY
 uXenDispUnload(VOID)
 {
     PAGED_CODE();
+    uxen_msg("Enter");
 
+    uxen_msg("Leave");
     /* Nothing to do */
 }
 
@@ -571,6 +604,8 @@ uXenDispQueryInterface(CONST PVOID pMiniportDeviceContext,
     UNREFERENCED_PARAMETER(pQueryInterface);
     PAGED_CODE();
 
+    uxen_msg("Enter");
+    uxen_msg("Leave");
     return STATUS_NOT_SUPPORTED;
 }
 
@@ -578,6 +613,7 @@ NTSTATUS
 DriverEntry(PDRIVER_OBJECT pDriverObject, PUNICODE_STRING pRegistryPath)
 {
     DRIVER_INITIALIZATION_DATA DriverInitializationData = {0};
+    uxen_msg("Enter");
 
     DriverInitializationData.Version                                = DXGKDDI_INTERFACE_VERSION;
 
@@ -647,5 +683,6 @@ DriverEntry(PDRIVER_OBJECT pDriverObject, PUNICODE_STRING pRegistryPath)
     DriverInitializationData.DxgkDdiLinkDevice                      = NULL; /* not supported */
     DriverInitializationData.DxgkDdiSetDisplayPrivateDriverFormat   = NULL; /* not supported */
 
+    uxen_msg("Leave");
     return DxgkInitialize(pDriverObject, pRegistryPath, &DriverInitializationData);
 }
