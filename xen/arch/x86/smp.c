@@ -396,7 +396,7 @@ void on_selected_cpus(
     if (wait == 1) {
 	if (cpumask_equal(&call_data.selected, cpumask_of(smp_processor_id())))
 	    goto this_cpu;
-	uxen_info->ui_on_selected_cpus(&call_data.selected,
+	UI_HOST_CALL(ui_on_selected_cpus, &call_data.selected,
                                        __uxen_smp_call_function_interrupt);
 	goto wait;
     }
@@ -583,7 +583,7 @@ DEBUG();
 void
 uxen_ipi(unsigned int cpu, int vector)
 {
-    uxen_info->ui_kick_cpu(cpu, vector);
+    UI_HOST_CALL(ui_kick_cpu, cpu, vector);
 }
 
 void
@@ -595,7 +595,7 @@ uxen_ipi_mask(const cpumask_t *cpumask, int vector)
     switch (vector) {
     case INVALIDATE_TLB_VECTOR:
         spin_lock(&call_lock);
-	uxen_info->ui_on_selected_cpus(cpumask,
+	UI_HOST_CALL(ui_on_selected_cpus, cpumask,
                                        __uxen_smp_invalidate_interrupt);
         spin_unlock(&call_lock);
 	break;

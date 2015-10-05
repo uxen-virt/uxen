@@ -21,29 +21,132 @@
 #include "uxen_types.h"
 #include "uxen_memcache_dm.h"
 
+
 /* based on sizeof(ui_cpu_active_mask) */
 #define UXEN_MAXIMUM_PROCESSORS (sizeof(uint64_t) * 8)
 
 #define UXEN_MAX_VCPUS 8
 
+#if defined(__UXEN__) && defined(__GNUC__)
+
+/* Minor quantites of magic here */
+
+/* First we mark all the function pointers for the host calls to be deprecated
+ * so they generate an error. In UI_HOST_CALL we use magic gcc pragmas to
+ * ignore that error */
+
+/* UI_HOST_CALL(a, ...)  calls UI_HOST_CALL_a and then uxen_info->a(...) the
+ * complexity in the macro below is to handle the case where the function takes
+ * no argument */
+
+/* The various UI_HOST_CALL_a can be defined to UI_HOST_CALL_SAVE_.... as 
+ * required */
+
+#include <asm/xstate.h>
+
+#define __host_call __attribute__ (( deprecated("don't call host functions from uxen_info directly, use the UI_HOST_CALL macro") ))
+
+#define UI_HOST_CALL_SAVE_XMM \
+    ({ \
+        struct vcpu *v = current; \
+        if ((!uxen_info->host_os_is_xmm_clean) && v &&  v->arch.xmm_belong_guest) \
+        xmm_save_if_needed(v); \
+    }),
+
+#define UI_HOST_CALL_SAVE_NOTHING 0,
+
+#define UI_HOST_CALL_ui_printf              UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_kick_cpu            UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_kick_vcpu           UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_kick_vcpu_cancel    UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_signal_idle_thread  UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_set_timer_vcpu      UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_get_unixtime        UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_get_host_counter    UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_wake_vm             UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_on_selected_cpus    UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_map_page            UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_unmap_page_va       UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_access_page_va      UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_map_page_range      UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_unmap_page_range    UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_mapped_va_pfn       UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_mapped_pfn_va       UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_host_needs_preempt  UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_notify_exception    UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_notify_vram         UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_signal_event        UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_check_ioreq         UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_memcache_check      UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_memcache_dm_enter   UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_memcache_dm_clear   UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_memcache_dm_map_mfn UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_user_access_ok      UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_signal_v4v          UI_HOST_CALL_SAVE_XMM
+
+
+#define UI_HOST_CALL(...) \
+    UI_HOST_CALL_SELECT_WRAP(__VA_ARGS__, UI_HOST_CALLS(__VA_ARGS__)) 
+
+#define UI_HOST_CALL_SELECT_WRAP(...) \
+    UI_HOST_CALL_SELECT(__VA_ARGS__) 
+
+#define UI_HOST_CALL_SELECT(B1,B2,B3,B4,B5,B6,B7,B8,B9,B10,B11,B12,B13,B14,B15,N,...) N
+
+#define UI_HOST_CALLS(...) \
+    UI_HOST_CALL_N(__VA_ARGS__), \
+    UI_HOST_CALL_N(__VA_ARGS__), \
+    UI_HOST_CALL_N(__VA_ARGS__), \
+    UI_HOST_CALL_N(__VA_ARGS__), \
+    UI_HOST_CALL_N(__VA_ARGS__), \
+    UI_HOST_CALL_N(__VA_ARGS__), \
+    UI_HOST_CALL_N(__VA_ARGS__), \
+    UI_HOST_CALL_N(__VA_ARGS__), \
+    UI_HOST_CALL_N(__VA_ARGS__), \
+    UI_HOST_CALL_N(__VA_ARGS__), \
+    UI_HOST_CALL_N(__VA_ARGS__), \
+    UI_HOST_CALL_N(__VA_ARGS__), \
+    UI_HOST_CALL_N(__VA_ARGS__), \
+    UI_HOST_CALL_N(__VA_ARGS__), \
+    UI_HOST_CALL_N(__VA_ARGS__), \
+    UI_HOST_CALL_0(__VA_ARGS__,0) 
+
+#pragma GCC diagnostic error "-Wdeprecated"
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated"
+
+#define UI_HOST_CALL_0(a,b...) \
+	( UI_HOST_CALL_ ## a \
+	(uxen_info->a)()) 
+
+#define UI_HOST_CALL_N(a,b...) \
+	( UI_HOST_CALL_ ## a \
+	(uxen_info->a)(b)) 
+
+#else
+#define __host_call
+#endif
+
+#pragma GCC diagnostic pop
+
 #if defined(_MSC_VER)
-#define __interface_fn __cdecl
+#define __interface_fn __cdecl __host_call
 #if defined(__x86_64__)
-#define __interface_fn_fn
+#define __interface_fn_fn 
 #else
 #define __interface_fn_fn /* __stdcall */
 #endif
 #else /* _MSC_VER */
 #if defined(__MS_ABI__)
 #if defined(__x86_64__)
-#define __interface_fn __attribute__ ((__ms_abi__))
-#define __interface_fn_fn __interface_fn
+#define __interface_fn __attribute__ ((__ms_abi__)) __host_call
+#define __interface_fn_fn __attribute__ ((__ms_abi__))
 #else
-#define __interface_fn __cdecl
+#define __interface_fn __cdecl __host_call
 #define __interface_fn_fn __stdcall
 #endif
 #else /* __MS_ABI__ */
-#define __interface_fn
+#define __interface_fn __host_call
 #define __interface_fn_fn
 #endif /* __MS_ABI__ */
 #endif /* _MSC_VER */
@@ -55,6 +158,7 @@ struct ui_free_pages {
     uint32_t free_list;
     uint32_t free_count;
 };
+
 
 struct /* __WINPACKED__ */ uxen_info {
     uint32_t ui_running;
@@ -131,6 +235,8 @@ struct /* __WINPACKED__ */ uxen_info {
 #if defined(UXEN_HOST_OSX) || defined(__APPLE__)
     uint32_t ui_smap_enabled;
 #endif
+
+    uint32_t host_os_is_xmm_clean;
 
     /* internal */
     void (*ui_cli)(void);

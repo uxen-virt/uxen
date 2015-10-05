@@ -1086,7 +1086,7 @@ p2m_pod_stat_update(struct domain *d)
         d->p2m_stat_last = NOW();
         d->p2m_stat_ops = 0;
         if (!is_template_domain(d))
-            uxen_info->ui_printf(
+            UI_HOST_CALL(ui_printf,
                 NULL,
                 "p2m_pod_stat %ld %ld %d %c %"PRId64" %"PRId64
                 " %d %d %d %d %d %d\n",
@@ -1102,7 +1102,7 @@ p2m_pod_stat_update(struct domain *d)
                 /* atomic_read(&d->lazy_load_pages) */ 0
                 );
         else
-            uxen_info->ui_printf(
+            UI_HOST_CALL(ui_printf,
                 NULL,
                 "p2m_pod_stat %ld %ld %d %c %"PRId64" %"PRId64
                 " %d %d %d %d %d\n",
@@ -2394,7 +2394,7 @@ p2m_pod_compress_template_work(void *_d)
 
     ct = -NOW();
     for (gpfn = p2m->compress_gpfn; gpfn <= p2m->max_mapped_pfn; gpfn++) {
-        if (uxen_info->ui_host_needs_preempt(NULL))
+        if (UI_HOST_CALL(ui_host_needs_preempt, NULL))
             break;
         mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, &page_order);
         if (!mfn_valid_page(mfn_x(mfn))) {

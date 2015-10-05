@@ -858,6 +858,8 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
 
     max_pfn = get_max_pfn(use_hidden);
 
+    uxen_info->host_os_is_xmm_clean = 0;
+
     uxen_info->ui_printf = uxen_printk;
 
     uxen_info->ui_map_page = uxen_mem_map_page;

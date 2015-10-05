@@ -21,7 +21,7 @@
 
 #define access_ok(addr, size)                                   \
     (current->always_access_ok ||                               \
-     uxen_info->ui_user_access_ok(current->user_access_opaque,  \
+     UI_HOST_CALL(ui_user_access_ok, current->user_access_opaque,  \
                                   (void *)(uintptr_t)(addr), size))
 
 #define array_access_ok(addr,count,size) \

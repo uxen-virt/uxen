@@ -44,7 +44,7 @@ extern void *xlat_malloc(unsigned long *xlat_page_current, size_t size);
 
 #define access_ok(addr, size)                                   \
     (current->always_access_ok ||                               \
-     uxen_info->ui_user_access_ok(current->user_access_opaque,  \
+     UI_HOST_CALL(ui_user_access_ok, current->user_access_opaque,  \
                                   (void *)(addr), size))
 
 #define array_access_ok(addr, count, size) \

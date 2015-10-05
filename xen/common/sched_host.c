@@ -34,7 +34,7 @@ hostsched_vcpu_wake(const struct scheduler *ops, struct vcpu *v)
 
     if (vci->vci_host_halted) {
         perfc_incr(hostsched_wake_vm);
-        uxen_info->ui_wake_vm(vci);
+        UI_HOST_CALL(ui_wake_vm, vci);
     }
 }
 
@@ -110,7 +110,7 @@ hostsched_set_timer_vcpu(struct vcpu *v, uint64_t expire)
 
     ASSERT(v == current);
     if (vci)
-        uxen_info->ui_set_timer_vcpu(vci, expire);
+        UI_HOST_CALL(ui_set_timer_vcpu, vci, expire);
     else
         printk("hostsched_set_timer_vcpu vm%u.%u no vm_info\n",
                v->domain->domain_id, v->vcpu_id);
@@ -122,7 +122,7 @@ hostsched_kick_vcpu(struct vcpu *v)
     struct vm_vcpu_info_shared *vci = v->vm_vcpu_info_shared;
 
     if (vci)
-        uxen_info->ui_kick_vcpu(vci);
+        UI_HOST_CALL(ui_kick_vcpu, vci);
     else
         printk("hostsched_kick_vcpu vm%u.%u no vm_info\n",
                v->domain->domain_id, v->vcpu_id);
@@ -136,7 +136,7 @@ hostsched_notify_exception(struct domain *d)
     if (!vmis || is_template_domain(d))
         return;
 
-    uxen_info->ui_notify_exception(vmis);
+    UI_HOST_CALL(ui_notify_exception, vmis);
 }
 
 void
@@ -145,7 +145,7 @@ hostsched_signal_event(struct vcpu *v, void *opaque)
     struct vm_vcpu_info_shared *vci = v->vm_vcpu_info_shared;
 
     if (vci)
-        uxen_info->ui_signal_event(vci, opaque);
+        UI_HOST_CALL(ui_signal_event, vci, opaque);
     else
         printk("hostsched_signal_event vm%u.%u no vm_info\n",
                v->domain->domain_id, v->vcpu_id);
@@ -179,7 +179,7 @@ hostsched_dump_vcpu(struct vcpu *v, int wake)
            v->softirq_pending, vci->vci_has_timer_interrupt ? "yes" : "no",
            (v->timer_deadline - NOW()) / 1000000);
     if (wake)
-        uxen_info->ui_wake_vm(vci);
+        UI_HOST_CALL(ui_wake_vm, vci);
 }
 
 const struct scheduler sched_host_def = {
