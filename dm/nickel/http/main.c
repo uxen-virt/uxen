@@ -4940,7 +4940,7 @@ static int cx_guest_write(struct clt_ctx *cx)
 
                      if (cx->proxy && !(cx->hp->flags & HF_PINNED) && cx_hp_disconnect(cx) < 0)
                         goto out_close;
-                     if (!cx->proxy && cx->hp && cx->hp->hpd && cx_hp_disconnect(cx) < 0)
+                     if (!cx->proxy && cx->hp && !(cx->hp->flags & HF_PINNED) && cx->hp->hpd && cx_hp_disconnect(cx) < 0)
                         goto out_close;
                      cx_reset(cx, false);
                 } else if (!(cx->flags & (CXF_GUEST_PROXY | CXF_TUNNEL_GUEST | CXF_TLS |
@@ -5195,7 +5195,7 @@ static void cx_proxy_set(struct clt_ctx *cx, struct proxy_t *proxy)
         cx->proxy->port == cx->h.daddr.sin_port &&
         strcasecmp(cx->proxy->name, cx->h.sv_name) == 0) {
 
-        if (cx->hp)
+        if (cx->hp && !(cx->hp->flags & HF_PINNED))
             cx_hp_disconnect_ex(cx, true);
         cx->proxy = NULL;
     }
@@ -5227,7 +5227,7 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
         cx_reset(cx, false);
         if (cx->hp) {
             cx->hp->flags &= (~HF_REUSABLE & ~HF_HTTP_CLOSE);
-            if (cx_hp_disconnect(cx) < 0)
+            if (!(cx->hp->flags & HF_PINNED) && cx_hp_disconnect(cx) < 0)
                 goto out;
         }
     }
@@ -5470,8 +5470,8 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
         }
 
         if (cx->hp && (cx->hp->flags & HF_PARSE_ERROR)) {
-            CXL5("HF_PARSE_ERROR disconnect");
-            if (cx_hp_disconnect(cx) < 0)
+            CXL5("HF_PARSE_ERROR disconnect if not pinned.");
+            if (!(cx->hp->flags & HF_PINNED) && cx_hp_disconnect(cx) < 0)
                 goto out;
         }
 
@@ -5523,7 +5523,7 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
             goto err;
 
         if (cx->hp && cx->proxy)
-            if (cx_hp_disconnect(cx) < 0)
+            if (!(cx->hp->flags & HF_PINNED) && cx_hp_disconnect(cx) < 0)
                 goto out;
     }
 
