@@ -123,11 +123,11 @@
 	( UI_HOST_CALL_ ## a \
 	(uxen_info->a)(b)) 
 
+#pragma GCC diagnostic pop
+
 #else
 #define __host_call
 #endif
-
-#pragma GCC diagnostic pop
 
 #if defined(_MSC_VER)
 #define __interface_fn __cdecl __host_call
