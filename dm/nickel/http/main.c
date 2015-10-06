@@ -282,11 +282,14 @@ struct dns_connect_ctx {
 };
 
 struct hpd_t {
+    LIST_ENTRY(hpd_t) entry;
+    struct nickel *ni;
     struct http_ctx direct_hp_list;
     struct clt_ctx direct_cx_list;
     struct http_ctx *hp;
     int nr_hp;
     int nr_cx;
+    int needs_continue;
     struct rb_node hpd_rbnode;
 };
 
@@ -298,6 +301,7 @@ static int disable_crl_check = 0;
 static int no_transparent_proxy = 0;
 static rb_tree_t hpd_rbtree;
 static int hpd_rbtree_init = 0;
+static int hpd_needs_continue = 0;
 static Timer *hpd_debug_timer = NULL;
 
 static void hp_get(struct http_ctx *hp);
@@ -371,6 +375,7 @@ static int hp_clt_process(struct http_ctx *hp, const uint8_t *buf, int len_buf);
 static void hp_event(void *opaque, uint32_t evt, int err);
 static int hp_srv_process(struct http_ctx *hp);
 static void proxy_connect_cx_next(struct proxy_t *proxy);
+static void proxy_wakeup_list(struct proxy_t *proxy);
 
 static void cx_remove_hpd(struct clt_ctx *cx);
 static struct hpd_t * hp_create_hpd(struct http_ctx *hp);
@@ -386,6 +391,7 @@ static LIST_HEAD(, http_ctx) http_list = LIST_HEAD_INITIALIZER(&http_list);
 static LIST_HEAD(, clt_ctx) cx_list = LIST_HEAD_INITIALIZER(&cx_list);
 static LIST_HEAD(, http_ctx) http_gc_list = LIST_HEAD_INITIALIZER(&http_gc_list);
 static LIST_HEAD(, clt_ctx) cx_gc_list = LIST_HEAD_INITIALIZER(&cx_gc_list);
+static LIST_HEAD(, hpd_t) hpd_list = LIST_HEAD_INITIALIZER(&hpd_list);
 
 static char *user_agent = NULL;
 static const char *hc_prx_srv = NULL;
@@ -545,6 +551,7 @@ static void hpd_cleanup(struct hpd_t *hpd)
             }
 
             rb_tree_remove_node(&hpd_rbtree, hpd);
+            LIST_REMOVE(hpd, entry);
             NETLOG5("HPD %"PRIxPTR " FREED", (uintptr_t) hpd);
             free(hpd);
             return;
@@ -553,7 +560,9 @@ static void hpd_cleanup(struct hpd_t *hpd)
         hpd->hp = RLIST_FIRST(&hpd->direct_hp_list, direct_hp_list);
     }
 
-    hpd_cx_continue(hpd);
+    hpd_needs_continue = 1;
+    hpd->needs_continue = 1;
+    ni_wakeup_loop(hpd->ni);
 }
 
 static void hpd_add_cx(struct hpd_t *hpd, struct clt_ctx *cx)
@@ -617,6 +626,8 @@ hp_create_hpd(struct http_ctx *hp)
         warnx("%s: malloc", __FUNCTION__);
         goto cleanup;
     }
+    hpd->ni = hp->ni;
+    LIST_INSERT_HEAD(&hpd_list, hpd, entry);
     RLIST_INIT(&hpd->direct_cx_list, direct_cx_list);
     RLIST_INIT(&hpd->direct_hp_list, direct_hp_list);
 
@@ -633,6 +644,7 @@ cleanup:
         if (!RLIST_EMPTY(hp, direct_hp_list))
             RLIST_REMOVE(hp, direct_hp_list);
         hp->hpd = NULL;
+        LIST_REMOVE(hpd, entry);
         free(hpd);
     }
     return NULL;
@@ -1259,8 +1271,10 @@ static void hp_close(struct http_ctx *hp)
     LIST_INSERT_HEAD(&http_gc_list, hp, entry);
     hp->flags &= ~HF_CLOSING;
 
-    if (proxy)
-        proxy_connect_cx_next(proxy);
+    if (proxy) {
+        proxy->wakeup_list = 1;
+        ni_wakeup_loop(hp->ni);
+    }
 }
 
 static void hp_free(struct http_ctx *hp)
@@ -1856,6 +1870,15 @@ static void proxy_connect_cx_next(struct proxy_t *proxy)
     hp_cx_connect_next(hp, proxy);
 }
 
+void proxy_wakeup_list(struct proxy_t *proxy)
+{
+    if (proxy->wakeup_list) {
+        proxy->wakeup_list = 0;
+        if (!PROXY_IS_DIRECT(proxy))
+            proxy_connect_cx_next(proxy);
+    }
+}
+
 static int cx_hp_disconnect_ex(struct clt_ctx *cx, bool no_cx_close)
 {
     int ret = 0;
@@ -1865,7 +1888,9 @@ static int cx_hp_disconnect_ex(struct clt_ctx *cx, bool no_cx_close)
     bool f_cx_closing = false;
     bool f_hp_closing = false;
     bool f_cx_guest_write = false;
+    struct nickel *ni;
 
+    ni = cx->ni;
     if (!cx->hp)
         goto out;
 
@@ -1971,8 +1996,10 @@ out:
 
     if (hp && (hp->flags & HF_REUSABLE)) {
         hp->flags |= HF_REUSE_READY;
-        if (proxy)
-            proxy_connect_cx_next(proxy);
+        if (proxy) {
+            proxy->wakeup_list = 1;
+            ni_wakeup_loop(ni);
+        }
     }
 
     if (f_cx_close && !no_cx_close)
@@ -1980,8 +2007,11 @@ out:
     else if (cx && f_cx_guest_write && cx_guest_write(cx) < 0 && !no_cx_close)
         cx_close(cx);
 
-    if (hp && hp->hpd)
-        hpd_cx_continue(hp->hpd);
+    if (hp && hp->hpd) {
+        hpd_needs_continue = 1;
+        hp->hpd->needs_continue = 1;
+        ni_wakeup_loop(ni);
+    }
 
     if ((cx->flags & CXF_CLOSED)) {
         CXL5("CXF_CLOSED already");
@@ -4388,6 +4418,20 @@ static void hp_bh(void *unused)
         LIST_REMOVE(cx, entry);
         cx_free(cx);
     }
+
+    proxy_foreach(proxy_wakeup_list);
+
+    if (hpd_needs_continue) {
+        struct hpd_t *hpd, *hpd_next;
+        hpd_needs_continue = 0;
+        LIST_FOREACH_SAFE(hpd, &hpd_list, entry, hpd_next) {
+            if (hpd->needs_continue) {
+                hpd->needs_continue = 0;
+                hpd_cx_continue(hpd);
+            }
+        }
+    }
+
 }
 
 static void hp_init(struct nickel *ni, yajl_val config)

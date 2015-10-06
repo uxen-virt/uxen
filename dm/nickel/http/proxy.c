@@ -14,6 +14,17 @@
 
 static LIST_HEAD(, proxy_t) proxy_list = LIST_HEAD_INITIALIZER(&proxy_list);
 
+void proxy_foreach(void (*cb)(struct proxy_t * proxy))
+{
+    struct proxy_t *px;
+
+    if (!cb)
+        return;
+
+    LIST_FOREACH (px, &proxy_list, entry)
+        cb(px);
+}
+
 struct proxy_t * proxy_find(const char *name, uint16_t port)
 {
     struct proxy_t *proxy = NULL;

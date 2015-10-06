@@ -78,6 +78,7 @@ struct proxy_t {
     int port;
     int resolved;
     int ct;
+    int wakeup_list;
     char *realm;
 };
 extern struct proxy_t proxy_direct;
@@ -94,6 +95,7 @@ extern struct proxy_t proxy_direct;
 #define PRXL5(fmt, ...) PRXL0(5, fmt, ## __VA_ARGS__)
 #define PRXL6(fmt, ...) PRXL0(6, fmt, ## __VA_ARGS__)
 struct proxy_t * proxy_find(const char *name, uint16_t port);
+void proxy_foreach(void (*cb)(struct proxy_t * proxy));
 struct proxy_t * proxy_save(const char *name, uint16_t port, int ct, const char *realm);
 void proxy_reset(struct proxy_t *proxy);
 struct proxy_t * proxy_save(const char *name, uint16_t port, int ct, const char *realm);
