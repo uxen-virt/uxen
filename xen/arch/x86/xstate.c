@@ -113,14 +113,15 @@ inline uint64_t get_xcr0(void)
 
 void xmm_save_if_needed(struct vcpu *v)
 {
-    if (v->arch.xmm_belong_guest) return;
+    if (v->arch.xmm_belong_guest)
+        return;
 
-    __asm__( "movdqu %%xmm0,(%0)"  : : "r" (v->arch.xmm[0]) :);
-    __asm__( "movdqu %%xmm1,(%0)"  : : "r" (v->arch.xmm[1]) :);
-    __asm__( "movdqu %%xmm2,(%0)"  : : "r" (v->arch.xmm[2]) :);
-    __asm__( "movdqu %%xmm3,(%0)"  : : "r" (v->arch.xmm[3]) :);
-    __asm__( "movdqu %%xmm4,(%0)"  : : "r" (v->arch.xmm[4]) :);
-    __asm__( "movdqu %%xmm5,(%0)"  : : "r" (v->arch.xmm[5]) :"memory");
+    __asm__("movdqu %%xmm0,(%0)" : : "r" (v->arch.xmm[0]) : );
+    __asm__("movdqu %%xmm1,(%0)" : : "r" (v->arch.xmm[1]) : );
+    __asm__("movdqu %%xmm2,(%0)" : : "r" (v->arch.xmm[2]) : );
+    __asm__("movdqu %%xmm3,(%0)" : : "r" (v->arch.xmm[3]) : );
+    __asm__("movdqu %%xmm4,(%0)" : : "r" (v->arch.xmm[4]) : );
+    __asm__("movdqu %%xmm5,(%0)" : : "r" (v->arch.xmm[5]) : "memory");
 
     v->arch.xmm_belong_guest = 0;
 }
@@ -130,12 +131,12 @@ void xmm_restore(struct vcpu *v)
 {
     BUG_ON(v->arch.xmm_belong_guest);
 
-    __asm__( "movdqu (%0),%%xmm0"  : : "r" (v->arch.xmm[0]) :);
-    __asm__( "movdqu (%0),%%xmm1"  : : "r" (v->arch.xmm[1]) :);
-    __asm__( "movdqu (%0),%%xmm2"  : : "r" (v->arch.xmm[2]) :);
-    __asm__( "movdqu (%0),%%xmm3"  : : "r" (v->arch.xmm[3]) :);
-    __asm__( "movdqu (%0),%%xmm4"  : : "r" (v->arch.xmm[4]) :);
-    __asm__( "movdqu (%0),%%xmm5"  : : "r" (v->arch.xmm[5]) :"memory");
+    __asm__("movdqu (%0),%%xmm0" : : "r" (v->arch.xmm[0]) : );
+    __asm__("movdqu (%0),%%xmm1" : : "r" (v->arch.xmm[1]) : );
+    __asm__("movdqu (%0),%%xmm2" : : "r" (v->arch.xmm[2]) : );
+    __asm__("movdqu (%0),%%xmm3" : : "r" (v->arch.xmm[3]) : );
+    __asm__("movdqu (%0),%%xmm4" : : "r" (v->arch.xmm[4]) : );
+    __asm__("movdqu (%0),%%xmm5" : : "r" (v->arch.xmm[5]) : "memory");
 
     v->arch.xmm_belong_guest = 1;
 }
@@ -162,8 +163,8 @@ void xsave(struct vcpu *v, uint64_t mask)
             : "a" (lmask), "d" (hmask), "D"(ptr)
             : "memory" );
 
-
-    /* FIXME: performance improvement from calling vzero here, but need to test cpu feature*/
+    /* FIXME: performance improvement from calling vzero here, but
+     * need to test cpu feature*/
 }
 
 void xrstor(struct vcpu *v, uint64_t mask)

@@ -21,7 +21,6 @@
 #include "uxen_types.h"
 #include "uxen_memcache_dm.h"
 
-
 /* based on sizeof(ui_cpu_active_mask) */
 #define UXEN_MAXIMUM_PROCESSORS (sizeof(uint64_t) * 8)
 
@@ -44,13 +43,16 @@
 
 #include <asm/xstate.h>
 
-#define __host_call __attribute__ (( deprecated("don't call host functions from uxen_info directly, use the UI_HOST_CALL macro") ))
+#define __host_call __attribute__                                       \
+    (( deprecated("don't call host functions from uxen_info directly, " \
+                  "use the UI_HOST_CALL macro") ))
 
-#define UI_HOST_CALL_SAVE_XMM \
-    ({ \
-        struct vcpu *v = current; \
-        if ((!uxen_info->host_os_is_xmm_clean) && v &&  v->arch.xmm_belong_guest) \
-        xmm_save_if_needed(v); \
+#define UI_HOST_CALL_SAVE_XMM                     \
+    ({                                            \
+        struct vcpu *v = current;                 \
+        if ((!uxen_info->host_os_is_xmm_clean) && \
+            v && v->arch.xmm_belong_guest)        \
+            xmm_save_if_needed(v);                \
     }),
 
 #define UI_HOST_CALL_SAVE_NOTHING 0,
@@ -93,35 +95,35 @@
 
 #define UI_HOST_CALL_SELECT(B1,B2,B3,B4,B5,B6,B7,B8,B9,B10,B11,B12,B13,B14,B15,N,...) N
 
-#define UI_HOST_CALLS(...) \
-    UI_HOST_CALL_N(__VA_ARGS__), \
-    UI_HOST_CALL_N(__VA_ARGS__), \
-    UI_HOST_CALL_N(__VA_ARGS__), \
-    UI_HOST_CALL_N(__VA_ARGS__), \
-    UI_HOST_CALL_N(__VA_ARGS__), \
-    UI_HOST_CALL_N(__VA_ARGS__), \
-    UI_HOST_CALL_N(__VA_ARGS__), \
-    UI_HOST_CALL_N(__VA_ARGS__), \
-    UI_HOST_CALL_N(__VA_ARGS__), \
-    UI_HOST_CALL_N(__VA_ARGS__), \
-    UI_HOST_CALL_N(__VA_ARGS__), \
-    UI_HOST_CALL_N(__VA_ARGS__), \
-    UI_HOST_CALL_N(__VA_ARGS__), \
-    UI_HOST_CALL_N(__VA_ARGS__), \
-    UI_HOST_CALL_N(__VA_ARGS__), \
-    UI_HOST_CALL_0(__VA_ARGS__,0) 
+#define UI_HOST_CALLS(...)                      \
+    UI_HOST_CALL_N(__VA_ARGS__),                \
+        UI_HOST_CALL_N(__VA_ARGS__),            \
+        UI_HOST_CALL_N(__VA_ARGS__),            \
+        UI_HOST_CALL_N(__VA_ARGS__),            \
+        UI_HOST_CALL_N(__VA_ARGS__),            \
+        UI_HOST_CALL_N(__VA_ARGS__),            \
+        UI_HOST_CALL_N(__VA_ARGS__),            \
+        UI_HOST_CALL_N(__VA_ARGS__),            \
+        UI_HOST_CALL_N(__VA_ARGS__),            \
+        UI_HOST_CALL_N(__VA_ARGS__),            \
+        UI_HOST_CALL_N(__VA_ARGS__),            \
+        UI_HOST_CALL_N(__VA_ARGS__),            \
+        UI_HOST_CALL_N(__VA_ARGS__),            \
+        UI_HOST_CALL_N(__VA_ARGS__),            \
+        UI_HOST_CALL_N(__VA_ARGS__),            \
+        UI_HOST_CALL_0(__VA_ARGS__, 0)
 
 #pragma GCC diagnostic error "-Wdeprecated"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated"
 
 #define UI_HOST_CALL_0(a,b...) \
-	( UI_HOST_CALL_ ## a \
-	(uxen_info->a)()) 
+    (UI_HOST_CALL_ ## a        \
+     (uxen_info->a)())
 
 #define UI_HOST_CALL_N(a,b...) \
-	( UI_HOST_CALL_ ## a \
-	(uxen_info->a)(b)) 
+    (UI_HOST_CALL_ ## a        \
+     (uxen_info->a)(b))
 
 #pragma GCC diagnostic pop
 
@@ -158,7 +160,6 @@ struct ui_free_pages {
     uint32_t free_list;
     uint32_t free_count;
 };
-
 
 struct /* __WINPACKED__ */ uxen_info {
     uint32_t ui_running;

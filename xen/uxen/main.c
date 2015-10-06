@@ -912,7 +912,8 @@ __uxen_process_ud2(struct cpu_user_regs *regs)
     if ( id == BUGFRAME_warn )
     {
         show_execution_state(regs);
-        UI_HOST_CALL(ui_printf, NULL, "Xen WARN at %.50s:%d\n", filename, lineno);
+        UI_HOST_CALL(ui_printf, NULL, "Xen WARN at %.50s:%d\n", filename,
+                     lineno);
         regs->eip = (unsigned long)eip;
         return 0;
     }
@@ -920,7 +921,8 @@ __uxen_process_ud2(struct cpu_user_regs *regs)
     if ( id == BUGFRAME_bug )
     {
         show_execution_state(regs);
-        UI_HOST_CALL(ui_printf, NULL, "Xen BUG at %.50s:%d\n", filename, lineno);
+        UI_HOST_CALL(ui_printf, NULL, "Xen BUG at %.50s:%d\n", filename,
+                     lineno);
         return 1;
     }
 
@@ -928,7 +930,8 @@ __uxen_process_ud2(struct cpu_user_regs *regs)
     {
 #ifndef NDEBUG
         show_stack(regs);
-        UI_HOST_CALL(ui_printf, NULL, "Xen ABORT at %.50s:%d\n", filename, lineno);
+        UI_HOST_CALL(ui_printf, NULL, "Xen ABORT at %.50s:%d\n", filename,
+                     lineno);
 #endif
         return 2;
     }
@@ -943,7 +946,7 @@ __uxen_process_ud2(struct cpu_user_regs *regs)
 
     show_execution_state(regs);
     UI_HOST_CALL(ui_printf, NULL, "Assertion '%s' failed at %.50s:%d\n",
-                         predicate, filename, lineno);
+                 predicate, filename, lineno);
     return 1;
 
  die:
@@ -954,7 +957,7 @@ __uxen_process_ud2(struct cpu_user_regs *regs)
     }
     show_execution_state(regs);
     UI_HOST_CALL(ui_printf, NULL, "FATAL TRAP: vector = %d (invalid opcode)\n",
-                         TRAP_invalid_op);
+                 TRAP_invalid_op);
     return 1;
 }
 

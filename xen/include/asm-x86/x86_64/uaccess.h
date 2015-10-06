@@ -42,10 +42,10 @@ extern void *xlat_malloc(unsigned long *xlat_page_current, size_t size);
     (__addr_ok(addr) || is_compat_arg_xlat_range(addr, size))
 #endif  /* __UXEN__ */
 
-#define access_ok(addr, size)                                   \
-    (current->always_access_ok ||                               \
+#define access_ok(addr, size)                                      \
+    (current->always_access_ok ||                                  \
      UI_HOST_CALL(ui_user_access_ok, current->user_access_opaque,  \
-                                  (void *)(addr), size))
+                  (void *)(addr), size))
 
 #define array_access_ok(addr, count, size) \
     (access_ok(addr, (count)*(size)))

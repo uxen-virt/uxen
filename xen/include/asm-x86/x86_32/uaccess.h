@@ -19,10 +19,10 @@
 #define access_ok(addr,size) (likely(__range_not_ok(addr,size) == 0))
 #endif  /* __UXEN__ */
 
-#define access_ok(addr, size)                                   \
-    (current->always_access_ok ||                               \
-     UI_HOST_CALL(ui_user_access_ok, current->user_access_opaque,  \
-                                  (void *)(uintptr_t)(addr), size))
+#define access_ok(addr, size)                                           \
+    (current->always_access_ok ||                                       \
+     UI_HOST_CALL(ui_user_access_ok, current->user_access_opaque,       \
+                  (void *)(uintptr_t)(addr), size))
 
 #define array_access_ok(addr,count,size) \
     (likely(count < (~0UL/size)) && access_ok(addr,count*size))
