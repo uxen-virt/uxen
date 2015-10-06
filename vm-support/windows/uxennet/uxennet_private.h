@@ -42,9 +42,3 @@ typedef struct uxen_net_globals {
 
 #include "prototypes.h"
 
-
-#ifdef DBG
-#define FISH do { DbgPrint("%s:%s:%d\n",__FILE__,__FUNCTION__,__LINE__); } while(0)
-#else
-#define FISH 0
-#endif

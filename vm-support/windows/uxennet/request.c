@@ -140,9 +140,7 @@ Notes: Read "Minimizing Miniport Driver Initialization Time" in the DDK
     ULONG64                 ulInfo64;
     PVOID                   pInfo = &ulInfo;
     ULONG                   ulInfoLen = sizeof(ulInfo);
-    static unsigned char buf[256]
-
-    DEBUGP(MP_LOUD, ("---> MPQueryInformation %s\n", DbgGetOidName(Oid)));
+    static unsigned char buf[256];
 
     Adapter = (PMP_ADAPTER) MiniportAdapterContext;
 
@@ -646,7 +644,7 @@ Notes: Read "Minimizing Miniport Driver Initialization Time" in the DDK
                 pInfo = (PVOID) buf;
                 ulInfoLen = sizeof(*h) + FIELD_OFFSET(NDIS_TASK_OFFLOAD, TaskBuffer) + sizeof(*checksum_buffer);
 
-                DbgPrint("uxennet - lied through our teeth about checksums!\n");
+                uxen_msg("uxennet - lied through our teeth about checksums!");
 
                 break;
             }
@@ -669,8 +667,6 @@ Notes: Read "Minimizing Miniport Driver Initialization Time" in the DDK
             Status = NDIS_STATUS_BUFFER_TOO_SHORT;
         }
     }
-
-    DEBUGP(MP_LOUD, ("<--- MPQueryInformation Status = 0x%08x\n", Status));
 
     return (Status);
 }
@@ -706,8 +702,6 @@ Return Value:
 {
     NDIS_STATUS             Status = NDIS_STATUS_SUCCESS;
     PMP_ADAPTER           Adapter = (PMP_ADAPTER) MiniportAdapterContext;
-
-    DEBUGP(MP_LOUD, ("---> MPSetInformation %s\n", DbgGetOidName(Oid)));
 
     *BytesRead = 0;
     *BytesNeeded = 0;
@@ -778,8 +772,6 @@ Return Value:
         *BytesRead = InformationBufferLength;
     }
 
-    DEBUGP(MP_LOUD, ("<-- MPSetInformation Status = 0x%08x\n", Status));
-
     return (Status);
 }
 
@@ -829,8 +821,6 @@ Return Value:
 {
     NDIS_STATUS      Status = NDIS_STATUS_SUCCESS;
 
-    DEBUGP(MP_TRACE, ("--> NICSetPacketFilter\n"));
-
     // any bits not supported?
     if (PacketFilter & ~NIC_SUPPORTED_FILTERS) {
         return (NDIS_STATUS_NOT_SUPPORTED);
@@ -846,8 +836,6 @@ Return Value:
         // Save the new packet filter value
         Adapter->PacketFilter = PacketFilter;
     }
-
-    DEBUGP(MP_TRACE, ("<-- NICSetPacketFilter\n"));
 
     return (Status);
 }
@@ -886,8 +874,6 @@ Return Value:
     ULONG                  index;
 #endif
 
-    DEBUGP(MP_TRACE, ("--> NICSetMulticastList\n"));
-
     //
     // Initialize.
     //
@@ -923,14 +909,14 @@ Return Value:
 #if DBG
         // display the multicast list
         for (index = 0; index < Adapter->ulMCListSize; index++) {
-            DEBUGP(MP_LOUD, ("MC(%d) = %02x-%02x-%02x-%02x-%02x-%02x\n",
+            uxen_msg("MC(%d) = %02x-%02x-%02x-%02x-%02x-%02x",
                              index,
                              Adapter->MCList[index][0],
                              Adapter->MCList[index][1],
                              Adapter->MCList[index][2],
                              Adapter->MCList[index][3],
                              Adapter->MCList[index][4],
-                             Adapter->MCList[index][5]));
+                             Adapter->MCList[index][5]);
         }
 #endif
     } while (bFalse);
@@ -939,103 +925,7 @@ Return Value:
     // Program the hardware to add suport for these muticast addresses
     //
 
-    DEBUGP(MP_TRACE, ("<-- NICSetMulticastList\n"));
-
     return (Status);
 
 }
-
-PCHAR DbgGetOidName(ULONG oid)
-{
-    PCHAR oidName;
-
-    switch (oid) {
-
-#undef MAKECASE
-#define MAKECASE(oidx) case oidx: oidName = #oidx; break;
-
-            MAKECASE(OID_GEN_SUPPORTED_LIST)
-            MAKECASE(OID_GEN_HARDWARE_STATUS)
-            MAKECASE(OID_GEN_MEDIA_SUPPORTED)
-            MAKECASE(OID_GEN_MEDIA_IN_USE)
-            MAKECASE(OID_GEN_MAXIMUM_LOOKAHEAD)
-            MAKECASE(OID_GEN_MAXIMUM_FRAME_SIZE)
-            MAKECASE(OID_GEN_LINK_SPEED)
-            MAKECASE(OID_GEN_TRANSMIT_BUFFER_SPACE)
-            MAKECASE(OID_GEN_RECEIVE_BUFFER_SPACE)
-            MAKECASE(OID_GEN_TRANSMIT_BLOCK_SIZE)
-            MAKECASE(OID_GEN_RECEIVE_BLOCK_SIZE)
-            MAKECASE(OID_GEN_VENDOR_ID)
-            MAKECASE(OID_GEN_VENDOR_DESCRIPTION)
-            MAKECASE(OID_GEN_CURRENT_PACKET_FILTER)
-            MAKECASE(OID_GEN_CURRENT_LOOKAHEAD)
-            MAKECASE(OID_GEN_DRIVER_VERSION)
-            MAKECASE(OID_GEN_MAXIMUM_TOTAL_SIZE)
-            MAKECASE(OID_GEN_PROTOCOL_OPTIONS)
-            MAKECASE(OID_GEN_MAC_OPTIONS)
-            MAKECASE(OID_GEN_MEDIA_CONNECT_STATUS)
-            MAKECASE(OID_GEN_MAXIMUM_SEND_PACKETS)
-            MAKECASE(OID_GEN_VENDOR_DRIVER_VERSION)
-            MAKECASE(OID_GEN_SUPPORTED_GUIDS)
-            MAKECASE(OID_GEN_NETWORK_LAYER_ADDRESSES)
-            MAKECASE(OID_GEN_TRANSPORT_HEADER_OFFSET)
-            MAKECASE(OID_GEN_MEDIA_CAPABILITIES)
-            MAKECASE(OID_GEN_PHYSICAL_MEDIUM)
-            MAKECASE(OID_GEN_XMIT_OK)
-            MAKECASE(OID_GEN_RCV_OK)
-            MAKECASE(OID_GEN_XMIT_ERROR)
-            MAKECASE(OID_GEN_RCV_ERROR)
-            MAKECASE(OID_GEN_RCV_NO_BUFFER)
-            MAKECASE(OID_GEN_DIRECTED_BYTES_XMIT)
-            MAKECASE(OID_GEN_DIRECTED_FRAMES_XMIT)
-            MAKECASE(OID_GEN_MULTICAST_BYTES_XMIT)
-            MAKECASE(OID_GEN_MULTICAST_FRAMES_XMIT)
-            MAKECASE(OID_GEN_BROADCAST_BYTES_XMIT)
-            MAKECASE(OID_GEN_BROADCAST_FRAMES_XMIT)
-            MAKECASE(OID_GEN_DIRECTED_BYTES_RCV)
-            MAKECASE(OID_GEN_DIRECTED_FRAMES_RCV)
-            MAKECASE(OID_GEN_MULTICAST_BYTES_RCV)
-            MAKECASE(OID_GEN_MULTICAST_FRAMES_RCV)
-            MAKECASE(OID_GEN_BROADCAST_BYTES_RCV)
-            MAKECASE(OID_GEN_BROADCAST_FRAMES_RCV)
-            MAKECASE(OID_GEN_RCV_CRC_ERROR)
-            MAKECASE(OID_GEN_TRANSMIT_QUEUE_LENGTH)
-            MAKECASE(OID_GEN_GET_TIME_CAPS)
-            MAKECASE(OID_GEN_GET_NETCARD_TIME)
-            MAKECASE(OID_GEN_NETCARD_LOAD)
-            MAKECASE(OID_GEN_DEVICE_PROFILE)
-            MAKECASE(OID_GEN_INIT_TIME_MS)
-            MAKECASE(OID_GEN_RESET_COUNTS)
-            MAKECASE(OID_GEN_MEDIA_SENSE_COUNTS)
-            MAKECASE(OID_PNP_CAPABILITIES)
-            MAKECASE(OID_PNP_SET_POWER)
-            MAKECASE(OID_PNP_QUERY_POWER)
-            MAKECASE(OID_PNP_ADD_WAKE_UP_PATTERN)
-            MAKECASE(OID_PNP_REMOVE_WAKE_UP_PATTERN)
-            MAKECASE(OID_PNP_ENABLE_WAKE_UP)
-            MAKECASE(OID_802_3_PERMANENT_ADDRESS)
-            MAKECASE(OID_802_3_CURRENT_ADDRESS)
-            MAKECASE(OID_802_3_MULTICAST_LIST)
-            MAKECASE(OID_802_3_MAXIMUM_LIST_SIZE)
-            MAKECASE(OID_802_3_MAC_OPTIONS)
-            MAKECASE(OID_802_3_RCV_ERROR_ALIGNMENT)
-            MAKECASE(OID_802_3_XMIT_ONE_COLLISION)
-            MAKECASE(OID_802_3_XMIT_MORE_COLLISIONS)
-            MAKECASE(OID_802_3_XMIT_DEFERRED)
-            MAKECASE(OID_802_3_XMIT_MAX_COLLISIONS)
-            MAKECASE(OID_802_3_RCV_OVERRUN)
-            MAKECASE(OID_802_3_XMIT_UNDERRUN)
-            MAKECASE(OID_802_3_XMIT_HEARTBEAT_FAILURE)
-            MAKECASE(OID_802_3_XMIT_TIMES_CRS_LOST)
-            MAKECASE(OID_802_3_XMIT_LATE_COLLISIONS)
-
-        default:
-            oidName = "<** UNKNOWN OID **>";
-            break;
-    }
-
-    return oidName;
-}
-
-
 

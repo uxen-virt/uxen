@@ -52,10 +52,6 @@ Notes:
 
 #include "uxennet_private.h"
 
-#undef FISH
-#define FISH do { DEBUGP(MP_TRACE, ("%s:%s:%d\n",__FILE__,__FUNCTION__,__LINE__)); } while (0)
-
-
 VOID
 NICFreeRCB(
     IN PRCB pRCB)
@@ -80,15 +76,11 @@ Return Value:
     PMP_ADAPTER Adapter = pRCB->Adapter;
     BOOLEAN schedule;
 
-    DEBUGP(MP_TRACE, ("--> NICFreeRCB %p\n", pRCB));
-
     ASSERT(!pRCB->Buffer->Next); // should be NULL
     ASSERT(!pRCB->Ref); // should be 0
     ASSERT(pRCB->Adapter); // shouldn't be NULL
 
     NdisAdjustBufferLength(pRCB->Buffer, NIC_BUFFER_SIZE);
-
-    //DbgPrint("NICFreeRCB, returning packet to list\n");
 
     NdisAcquireSpinLock(&Adapter->RecvLock);
     schedule = IsListEmpty(&Adapter->RecvFreeList);
@@ -135,12 +127,7 @@ Return Value:
 
     UNREFERENCED_PARAMETER(MiniportAdapterContext);
 
-    DEBUGP(MP_TRACE, ("---> MPReturnPacket\n"));
-
     pRCB = *(PRCB *)Packet->MiniportReserved;
-
-    // DbgPrint("MPReturnPacket, rcb->ref is %d\n",pRCB->Ref);
-
 
     Adapter = pRCB->Adapter;
 
@@ -155,13 +142,10 @@ Return Value:
 
 
     if (NdisInterlockedDecrement(&pRCB->Ref) != 0) {
-        DbgPrint("R1! %p\n", pRCB);
+        uxen_msg("R1! %p", pRCB);
         KeBugCheckEx(0xdead, 0xbeef, 0xfee1, 0xbad, 0xdead);
     }
-//    DbgPrint("R- %p (%d)\n",pRCB,l);
     NICFreeRCB(pRCB);
-
-    DEBUGP(MP_TRACE, ("<--- MPReturnPacket\n"));
 }
 
 
@@ -217,14 +201,9 @@ Return value:
     ASSERT(CurrentBuffer == pRCB->Buffer);
 
     NdisInterlockedIncrement(&pRCB->Ref);
-//    DbgPrint("R+ %p\n",pRCB);
-
 
     NDIS_SET_PACKET_STATUS(pRCB->Packet, NDIS_STATUS_SUCCESS);
-    //Adapter->nPacketsIndicated++;
 
-
-    //DbgPrint("Received packet of %d bytes\n",(int) BytesToIndicate);
     NdisMIndicateReceivePacket(Adapter->AdapterHandle, &pRCB->Packet, 1);
 }
 
@@ -242,8 +221,6 @@ int RecvPackets(MP_ADAPTER *adapter)
     do {
         len = uxen_v4v_copy_out(rh, NULL, NULL, NULL, 0, 0);
 
-//    DbgPrint("Packet of size %d on ring\n",len);
-
         if (len < 0) //Finished return
             return notify;
 
@@ -251,7 +228,7 @@ int RecvPackets(MP_ADAPTER *adapter)
 
         if (IsListEmpty(&adapter->RecvFreeList)) {
             NdisReleaseSpinLock(&adapter->RecvLock);
-            DbgPrint("No RCBs - leaving on ring\n", len);
+            uxen_msg("No RCBs - leaving on ring", len);
             return notify;
         }
 
@@ -261,7 +238,7 @@ int RecvPackets(MP_ADAPTER *adapter)
 
         ASSERT(pRCB);
         if (pRCB->Ref) {
-            DbgPrint("R2! %p (%d)\n", pRCB, pRCB->Ref);
+            uxen_msg("R2! %p (%d)", pRCB, pRCB->Ref);
             KeBugCheckEx(0xdead, 0xbeef, 0xfee1, 0xbad, 0xdead);
         }
         NdisInterlockedIncrement(&adapter->nBusyRecv);
@@ -301,26 +278,13 @@ VOID RecvDpcFunc(
     IN    PVOID                    SystemSpecific3)
 {
     PMP_ADAPTER Adapter = (PMP_ADAPTER)FunctionContext;
-    static LONG fish;
 
     SystemSpecific1;
     SystemSpecific2;
     SystemSpecific3;
 
-#if 0
-    if (NdisInterlockedIncrement(&fish) == 1) {
-//        DbgPrint("C\n");
-
-#endif
-        if (RecvPackets(Adapter))
-            KeInsertQueueDpc(&Adapter->NotifyDpc, NULL, NULL);
-        NdisInterlockedDecrement(&fish);
-#if 0
-    } else {
-        DbgPrint("N\n");
-        NdisInterlockedDecrement(&fish);
-    }
-#endif
+    if (RecvPackets(Adapter))
+        KeInsertQueueDpc(&Adapter->NotifyDpc, NULL, NULL);
 
     NICSendQueuedPackets( Adapter);
 
@@ -343,11 +307,4 @@ VOID NotifyDpcFunc(
     uxen_v4v_notify();
 
 }
-
-
-
-
-
-
-
 

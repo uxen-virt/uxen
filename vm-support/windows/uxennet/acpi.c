@@ -121,8 +121,8 @@ uxen_net_get_mac_address( IN PDEVICE_OBJECT   pdo, uint8_t *mac_address)
                  sizeof(output_buffer_buf)
              );
 
-    DbgPrint("uxn: apci: SendDownStreamIrp returns %x\n", status);
     if (!NT_SUCCESS(status)) {
+        uxen_err("uxn: apci: SendDownStreamIrp returns %x", status);
         return status;
     }
 
@@ -134,21 +134,22 @@ uxen_net_get_mac_address( IN PDEVICE_OBJECT   pdo, uint8_t *mac_address)
     }
     //}
 
-    DbgPrint("uxn: acpi output_buffer->Count=%d\n", output_buffer->Count);
-
-    if (output_buffer->Count != 1)
+    if (output_buffer->Count != 1) {
+        uxen_err("uxn: acpi output_buffer->Count=%d", output_buffer->Count);
         return STATUS_ACPI_INVALID_DATA;
+    }
 
     // Retrieve the output argument
     argument = output_buffer->Argument;
 
-    DbgPrint("uxn: acpi argument->Type=0x%x\n", (unsigned) argument->Type);
-    DbgPrint("uxn: acpi argument->DataLength=%u\n", (unsigned) argument->DataLength);
-
-    if (argument->Type != ACPI_METHOD_ARGUMENT_BUFFER)
+    if (argument->Type != ACPI_METHOD_ARGUMENT_BUFFER) {
+        uxen_err("uxn: acpi argument->Type=0x%x", (unsigned) argument->Type);
         return STATUS_ACPI_INVALID_DATA;
-    if (argument->DataLength != MAC_LENGTH)
+    }
+    if (argument->DataLength != MAC_LENGTH) {
+        uxen_err("uxn: acpi argument->DataLength=%u", (unsigned) argument->DataLength);
         return STATUS_ACPI_INVALID_DATA;
+    }
 
     memcpy(mac_address, argument->Data, MAC_LENGTH);
 
@@ -181,8 +182,8 @@ uxen_net_get_mtu( IN PDEVICE_OBJECT   pdo, ULONG *mtu)
                  sizeof(output_buffer_buf)
              );
 
-    DbgPrint("uxn: apci: SendDownStreamIrp returns %x\n", status);
     if (!NT_SUCCESS(status)) {
+        uxen_err("uxn: apci: SendDownStreamIrp returns %x", status);
         return status;
     }
 
@@ -194,19 +195,19 @@ uxen_net_get_mtu( IN PDEVICE_OBJECT   pdo, ULONG *mtu)
     }
     //}
 
-    DbgPrint("uxn: acpi output_buffer->Count=%d\n", output_buffer->Count);
-
-    if (output_buffer->Count != 1)
+    if (output_buffer->Count != 1) {
+        uxen_err("uxn: acpi output_buffer->Count=%d", output_buffer->Count);
         return STATUS_ACPI_INVALID_DATA;
+    }
 
     // Retrieve the output argument
     argument = output_buffer->Argument;
 
-    DbgPrint("uxn: acpi argument->Type=0x%x\n", (unsigned) argument->Type);
-    DbgPrint("uxn: acpi argument->DataLength=%u\n", (unsigned) argument->DataLength);
-
-    if (argument->Type != ACPI_METHOD_ARGUMENT_INTEGER)
+    if (argument->Type != ACPI_METHOD_ARGUMENT_INTEGER) {
+        uxen_err("uxn: acpi argument->Type=0x%x", (unsigned) argument->Type);
+        uxen_err("uxn: acpi argument->DataLength=%u", (unsigned) argument->DataLength);
         return STATUS_ACPI_INVALID_DATA;
+    }
 
     *mtu = argument->Argument;
 
