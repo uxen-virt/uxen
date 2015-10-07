@@ -2138,7 +2138,8 @@ static int srv_reconnect(struct http_ctx *hp)
     if (hp->cx && hp->cx->srv_parser)
         parser_reset(hp->cx->srv_parser);
     http_auth_reset(hp->auth);
-    hp->auth->was_authorized = 0;
+    if (hp->auth)
+        hp->auth->was_authorized = 0;
     if (hp->clt_out)
         BUFF_UNCONSUME(hp->clt_out);
 
