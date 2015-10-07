@@ -1145,12 +1145,22 @@ int vbsfClose(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle)
     {
         case SHFL_HF_TYPE_DIR:
         {
-            rc = vbsfCloseDir(vbsfQueryDirHandle(pClient, Handle));
+            SHFLFILEHANDLE *pHandle = vbsfQueryDirHandle(pClient, Handle);
+
+            if (pHandle)
+                rc = vbsfCloseDir(pHandle);
+            else
+                return VERR_INVALID_PARAMETER;
             break;
         }
         case SHFL_HF_TYPE_FILE:
         {
-            rc = vbsfCloseFile(vbsfQueryFileHandle(pClient, Handle));
+            SHFLFILEHANDLE *pHandle = vbsfQueryFileHandle(pClient, Handle);
+
+            if (pHandle)
+                rc = vbsfCloseFile(vbsfQueryFileHandle(pClient, Handle));
+            else
+                return VERR_INVALID_PARAMETER;
             break;
         }
         default:
