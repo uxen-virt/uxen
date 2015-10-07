@@ -729,7 +729,8 @@ vm_run_mode_change_cb(void *opaque)
         break;
     }
 
-    if (run_mode == DESTROY_VM)
+    if (run_mode == DESTROY_VM &&
+        !vm_save_info.awaiting_suspend && !vm_save_info.save_requested)
         vm_exit(opaque);
     old_run_mode = run_mode;
 }

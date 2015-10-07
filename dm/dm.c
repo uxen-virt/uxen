@@ -401,6 +401,10 @@ main(int argc, char **argv)
         vm_save_execute();
 
 	vm_save_info.save_requested = 0;
+
+        /* reset run mode to trigger mode changes suppressed during
+         * save */
+        vm_set_run_mode(vm_get_run_mode());
     }
 
 #if defined(CONFIG_NICKEL)

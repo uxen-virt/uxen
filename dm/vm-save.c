@@ -1818,11 +1818,10 @@ vm_process_suspend(xc_dominfo_t *info)
     if (!info->shutdown || info->shutdown_reason != SHUTDOWN_suspend)
         return 0;
 
-    vm_save_info.awaiting_suspend = 0;
-
     APRINTF("vm is suspended");
 
     vm_save_info.save_requested = 1;
+    vm_save_info.awaiting_suspend = 0;
 
     return 1;
 }
