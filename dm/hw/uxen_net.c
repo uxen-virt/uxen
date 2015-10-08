@@ -83,6 +83,7 @@ typedef struct uxen_net {
 
     int32_t fish;
 
+    uint8_t sta;
 #if PCAP
     FILE *pcap;
     int pcap_last_tx_nr;
@@ -1090,6 +1091,21 @@ static const VMStateDescription vmstate_uxen_net = {
 
 /******************ACPI interface******************************/
 
+static void
+uxen_net_ioport_write (void *opaque, uint32_t addr, uint32_t val)
+{
+    uxen_net_t *s = (uxen_net_t *) opaque;
+
+    addr &= 15;
+
+    if (!addr) {
+        s->sta &= ~1;
+        s->sta |= val & 1;
+    }
+
+    debug_printf("uxn: ioport write 0x%x => 0x%x\n", addr, val);
+}
+
 static uint32_t
 uxen_net_ioport_read (void *opaque, uint32_t addr)
 {
@@ -1101,7 +1117,7 @@ uxen_net_ioport_read (void *opaque, uint32_t addr)
     addr &= 15;
 
     if (!addr) {
-        ret = 0x5a;
+        ret = s->sta | 0x80;
     } else if ((addr > 0) && (addr <= ETHER_ADDR_LEN)) {
         ret = s->conf.macaddr.a[addr - 1];
     } else if (addr == 8) {
@@ -1239,7 +1255,10 @@ uxen_net_isa_initfn (ISADevice *dev)
         s->dest.domain = vm_id;
         s->dest.port = 0xc0000;
 
+        s->sta = 0;
+
         register_ioport_read (0x320, 16, 1, uxen_net_ioport_read, s);
+        register_ioport_write (0x320, 16, 1, uxen_net_ioport_write, s);
 
         s->nic = qemu_new_nic (&uxen_net_net_info, &s->conf,
                                dev->qdev.info->name, dev->qdev.id, s);

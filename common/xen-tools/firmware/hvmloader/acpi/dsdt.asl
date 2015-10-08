@@ -320,11 +320,21 @@ DefinitionBlock ("DSDT.aml", "DSDT", 2, "Xen", "HVM", 0)
 
 		/* Status method bits 0 - present, 1 - enabled and decoding, 2 - show in device manager, 3 - passed self test */
                 Method (_STA, 0, NotSerialized) {
-                    If(LEqual(UXNS, 0x5a)) {
+                    If(LEqual(UXNS, 0x81)) {
                         return(0x0F)
                     } Else {
-                        Return(0x00)
+                        return(0x0D)
                     }
+                }
+
+                Method (_DIS, 0, NotSerialized) {
+                    Store(UXNS, Local0)
+                    And(Local0, 0xFE, UXNS)
+                }
+
+                Method (_SRS, 1, NotSerialized) {
+                    Store(UXNS, Local0)
+                    Or(Local0, 0x01, UXNS)
                 }
 
                 Name(_CRS, ResourceTemplate() {

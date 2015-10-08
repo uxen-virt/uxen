@@ -44,6 +44,9 @@ uxenv4vlib.sys = 222,,
 
 [UXENNET]
 Characteristics = 0x1 ; NCF_VIRTUAL
+*IfType            = 0x6 ; IF_TYPE_ETHERNET_CSMACD
+*MediaType         = 0x0 ; NdisMedium802_3
+*PhysicalMediaType = 14  ; NdisPhysicalMedium802_3
 AddReg          = UXENNET.AddReg
 CopyFiles       = UXENNET.CopyList
 

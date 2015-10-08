@@ -837,8 +837,10 @@ Return Value:
             }
         }
 
-        Status = NDIS_STATUS_SUCCESS;
 
+        NdisMIndicateStatus(Adapter->AdapterHandle, NDIS_STATUS_MEDIA_CONNECT, NULL, 0);
+
+        Status = NDIS_STATUS_SUCCESS;
         //
         // Map bus-relative IO range to system IO space using
         // NdisMRegisterIoPortRange
