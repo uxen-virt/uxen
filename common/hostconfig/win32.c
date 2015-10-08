@@ -20,6 +20,10 @@
 #include <iphlpapi.h>
 #include <assert.h>
 
+#ifndef RRF_SUBKEY_WOW6432KEY
+#define RRF_SUBKEY_WOW6432KEY 0x00020000
+#endif
+
 #define ACPI 0x41435049
 #define SLIC 0x43494C53
 #define FADT 0x50434146
