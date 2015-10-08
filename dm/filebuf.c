@@ -407,7 +407,7 @@ filebuf_delete_on_close(struct filebuf *fb, int delete)
 #endif  /* _WIN32 */
 }
 
-uint8_t *
+void *
 filebuf_mmap(struct filebuf *fb, off_t offset, size_t len)
 {
 #ifdef _WIN32

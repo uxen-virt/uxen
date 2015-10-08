@@ -45,6 +45,6 @@ off_t filebuf_seek(struct filebuf *fb, off_t offset, int whence);
 #define FILEBUF_SEEK_END 2
 void filebuf_buffer_max(struct filebuf *fb, size_t new_buffer_max);
 int filebuf_delete_on_close(struct filebuf *fb, int delete);
-uint8_t *filebuf_mmap(struct filebuf *fb, off_t offset, size_t len);
+void *filebuf_mmap(struct filebuf *fb, off_t offset, size_t len);
 
 #endif  /* __FILEBUF_H_ */
