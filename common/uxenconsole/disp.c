@@ -141,11 +141,17 @@ uxenconsole_disp_init(int vm_id, void *priv, invalidate_rect_t inv_rect)
 
     if (!v4v_bind(&c->v4v_context, &id, &o) ||
         !GetOverlappedResult(c->v4v_context.v4v_handle, &o, &t, TRUE)) {
-        err = GetLastError();
-        goto error;
+
+        // Allow one additional console to be connected.
+        id.addr.port = UXENDISP_ALT_PORT;
+        if (!v4v_bind(&c->v4v_context, &id, &o) ||
+            !GetOverlappedResult(c->v4v_context.v4v_handle, &o, &t, TRUE)) {
+            err = GetLastError();
+            goto error;
+        }
     }
 
-    c->conn_msg.dgram.addr.port = UXENDISP_PORT;
+    c->conn_msg.dgram.addr.port = id.addr.port;
     c->conn_msg.dgram.addr.domain = vm_id;
     rc = WriteFileEx(c->v4v_context.v4v_handle,
                      (void *)&c->conn_msg,

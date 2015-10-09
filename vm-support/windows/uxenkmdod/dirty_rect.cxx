@@ -22,9 +22,12 @@ struct dr_context
     void *dev;
     disable_tracking_ptr disable_tracking;
     v4v_addr_t peer;
+    v4v_addr_t alt_peer;
     uxen_v4v_ring_handle_t *ring;
+    uxen_v4v_ring_handle_t *alt_ring;
     KEVENT safe_to_draw;
     BOOLEAN enabled;
+    BOOLEAN alt_ring_active;
 };
 
 static void dr_v4v_dpc(uxen_v4v_ring_handle_t *ring, void *ctx1, void *ctx2)
@@ -38,13 +41,17 @@ static void dr_v4v_dpc(uxen_v4v_ring_handle_t *ring, void *ctx1, void *ctx2)
 
     len = uxen_v4v_copy_out(ring, NULL, NULL, &dummy, sizeof(dummy), 0);
     if (len > 0) {
+        uxen_v4v_copy_out(ring, NULL, NULL, NULL, 0, 1);
         if (ctx->disable_tracking)
         {
             ctx->disable_tracking(ctx->dev);
             ctx->disable_tracking = NULL;
             ctx->enabled = TRUE;
         }
-        uxen_v4v_copy_out(ring, NULL, NULL, NULL, 0, 1);
+        if ((ctx->alt_ring_active == FALSE) && (ctx->alt_ring == ring))
+        {
+            ctx->alt_ring_active = TRUE;
+        }
         KeSetEvent(&ctx->safe_to_draw, 0, FALSE);
     }
 
@@ -77,6 +84,18 @@ dr_ctx_t dr_init(void *dev, disable_tracking_ptr fn)
                                    dr_v4v_dpc, ctx, NULL);
     if (!ctx->ring)
     {
+        ExFreePoolWithTag(ctx, DR_CTX_TAG);
+        return NULL;
+    }
+
+    ctx->alt_peer.port = UXENDISP_ALT_PORT;
+    ctx->alt_peer.domain = 0;
+    ctx->alt_ring = uxen_v4v_ring_bind(UXENDISP_ALT_PORT, 0,
+                                       UXENDISP_RING_SIZE,
+                                       dr_v4v_dpc, ctx, NULL);
+    if (!ctx->alt_ring)
+    {
+        uxen_v4v_ring_free(ctx->ring);
         ExFreePoolWithTag(ctx, DR_CTX_TAG);
         return NULL;
     }
@@ -119,9 +138,14 @@ void dr_send(dr_ctx_t context, ULONG m_num, D3DKMT_MOVE_RECT *move_rect,
         rect.bottom = max(rect.bottom, dirty_rect[idx].bottom);
     }
 
-    if ((rect.right > 0) && (rect.bottom > 0))
+    if ((rect.right > 0) && (rect.bottom > 0)) {
         uxen_v4v_send_from_ring(ctx->ring, &ctx->peer, &rect, sizeof(rect),
                                 V4V_PROTO_DGRAM);
+        if (ctx->alt_ring_active == TRUE) {
+           uxen_v4v_send_from_ring(ctx->alt_ring, &ctx->alt_peer, &rect,
+                                   sizeof(rect), V4V_PROTO_DGRAM);
+        }
+    }
 }
 
 void dr_deinit(dr_ctx_t context)
@@ -130,6 +154,7 @@ void dr_deinit(dr_ctx_t context)
 
     if (ctx)
     {
+        uxen_v4v_ring_free(ctx->alt_ring);
         uxen_v4v_ring_free(ctx->ring);
         ExFreePoolWithTag(ctx, DR_CTX_TAG);
     }

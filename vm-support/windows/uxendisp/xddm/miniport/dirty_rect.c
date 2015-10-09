@@ -24,7 +24,9 @@ struct dr_context
     void *dev;
     disable_tracking_ptr disable_tracking;
     v4v_addr_t peer;
+    v4v_addr_t alt_peer;
     uxen_v4v_ring_handle_t *ring;
+    uxen_v4v_ring_handle_t *alt_ring;
     KTIMER timer;
     KDPC dpc;
     LARGE_INTEGER due_time;
@@ -32,6 +34,7 @@ struct dr_context
     KEVENT safe_to_send;
     struct rect dirty;
     BOOLEAN force_update;
+    BOOLEAN alt_ring_active;
     KSPIN_LOCK lock;
 };
 
@@ -60,6 +63,11 @@ static void dr_timer_dpc(
 
         uxen_v4v_send_from_ring(ctx->ring, &ctx->peer, &ctx->dirty,
                                 sizeof(ctx->dirty), V4V_PROTO_DGRAM);
+        if (ctx->alt_ring_active)
+        {
+            uxen_v4v_send_from_ring(ctx->alt_ring, &ctx->alt_peer, &ctx->dirty,
+                                    sizeof(ctx->dirty), V4V_PROTO_DGRAM);
+        }
 
         ctx->dirty.left = DR_USHRT_MAX;
         ctx->dirty.top = DR_USHRT_MAX;
@@ -91,6 +99,10 @@ static void dr_v4v_dpc(uxen_v4v_ring_handle_t *ring, void *ctx1, void *ctx2)
             ctx->disable_tracking(ctx->dev);
             ctx->disable_tracking = NULL;
             KeSetTimerEx(&ctx->timer, ctx->due_time, DR_PERIOD_MS, &ctx->dpc);
+        }
+        if ((ctx->alt_ring_active == FALSE) && (ctx->alt_ring == ring))
+        {
+            ctx->alt_ring_active = TRUE;
         }
         KeSetEvent(&ctx->safe_to_draw, 0, FALSE);
     }
@@ -131,6 +143,18 @@ dr_ctx_t dr_init(void *dev, disable_tracking_ptr fn)
                                    dr_v4v_dpc, ctx, NULL);
     if (!ctx->ring)
     {
+        ExFreePoolWithTag(ctx, DR_CTX_TAG);
+        return NULL;
+    }
+
+    ctx->alt_peer.port = UXENDISP_ALT_PORT;
+    ctx->alt_peer.domain = 0;
+    ctx->alt_ring = uxen_v4v_ring_bind(UXENDISP_ALT_PORT, 0,
+                                       UXENDISP_RING_SIZE,
+                                       dr_v4v_dpc, ctx, NULL);
+    if (!ctx->alt_ring)
+    {
+        uxen_v4v_ring_free(ctx->ring);
         ExFreePoolWithTag(ctx, DR_CTX_TAG);
         return NULL;
     }
@@ -182,6 +206,7 @@ void dr_deinit(dr_ctx_t context)
     if (ctx)
     {
         KeCancelTimer(&ctx->timer);
+        uxen_v4v_ring_free(ctx->alt_ring);
         uxen_v4v_ring_free(ctx->ring);
         ExFreePoolWithTag(ctx, DR_CTX_TAG);
     }
