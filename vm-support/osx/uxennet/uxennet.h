@@ -45,7 +45,10 @@ public:
     virtual IOReturn enable(IOKernelDebugger * debugger) override;
     virtual void receivePacket(void * pkt, UInt32 * pktSize, UInt32 timeout) override;
     virtual void sendPacket(void * pkt, UInt32 pktSize) override;
-
+    
+    virtual IONetworkInterface *createInterface() override;
+    virtual IOReturn setMaxPacketSize(UInt32 maxSize) override;
+    virtual bool configureInterface(IONetworkInterface *interface) override;
 };
 
 #endif

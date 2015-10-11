@@ -11,6 +11,8 @@
 #include <v4v_service_shared.h>
 #include <v4v_ops.h>
 #include <sys/errno.h>
+#include <IOKit/network/IOEthernetInterface.h>
+#include <net/ethernet.h>
 
 OSDefineMetaClassAndStructors(uxen_net, IOEthernetController);
 
@@ -24,9 +26,67 @@ static unsigned acpi_get_number_property(
 static OSData* acpi_get_data_property(
     IOACPIPlatformDevice* acpi_device, const char* property_name);
 
-bool uxen_net::queryDeviceProperties(IOACPIPlatformDevice *acpi_device)
+#define uxen_net_interface org_uxen_driver_uxen_net_interface
+
+class uxen_net_interface : public IOEthernetInterface
 {
-    this->mtu = acpi_get_number_property(acpi_device, "VMTU", 1500);
+    OSDeclareDefaultStructors(uxen_net_interface);
+    friend class uxen_net; // grant access to setMaxTransferUnit
+/*
+protected:
+    virtual SInt32 performCommand(IONetworkController * controller,
+                                  unsigned long         cmd,
+                                  void *                arg0,
+                                  void *                arg1) override;
+*/
+};
+OSDefineMetaClassAndStructors(uxen_net_interface, IOEthernetInterface);
+
+/*
+SInt32 uxen_net_interface::performCommand(IONetworkController * controller,
+                                  unsigned long         cmd,
+ void *                arg0,
+ void *                arg1)
+{
+    SInt32 result = IOEthernetInterface::performCommand(controller, cmd, arg0, arg1);
+    if (result != 0)
+        IOLog("uxen_net_interface::performCommand result = %d\n controller = %p\n cmd = %lx\n arg0 = %p\n arg1 = %p\n\n", result, &controller, cmd, &arg0, &arg1);
+    return result;
+}
+*/
+
+IONetworkInterface *
+uxen_net::createInterface()
+{
+    uxen_net_interface* netif;
+    
+    netif = new uxen_net_interface();
+    if (netif != nullptr && !netif->init(this)) {
+        netif->release();
+        netif = nullptr;
+    }
+    return netif;
+}
+
+bool
+uxen_net::configureInterface(IONetworkInterface *interface)
+{
+    bool ok;
+    
+    ok = this->super::configureInterface(interface);
+    if (ok && OSDynamicCast(uxen_net_interface, interface)) {
+        // default to the MTU reported by the uxennet node (minus overhead)
+        static_cast<uxen_net_interface*>(interface)->setMaxTransferUnit(
+            this->mtu - kIOEthernetCRCSize - sizeof(struct ether_header));
+    }
+    return ok;
+}
+
+bool
+uxen_net::queryDeviceProperties(IOACPIPlatformDevice *acpi_device)
+{
+    this->mtu = acpi_get_number_property(
+        acpi_device, "VMTU", kIOEthernetMaxPacketSize);
 	
     OSData* mac_address_data = acpi_get_data_property(acpi_device, "VMAC");
     if (mac_address_data == nullptr) {
@@ -53,6 +113,9 @@ bool uxen_net::queryDeviceProperties(IOACPIPlatformDevice *acpi_device)
 
 bool uxen_net::start(IOService *provider)
 {
+    OSDictionary *medium_dict;
+    IONetworkMedium *medium;
+    IOOutputQueue *queue;
     OSDictionary *matching_dict;
     IOService *matching_service;
     uxen_v4v_ring *new_ring;
@@ -68,6 +131,15 @@ bool uxen_net::start(IOService *provider)
     // Determine device parameters (MTU & MAC)
     if (!this->queryDeviceProperties(acpi_device))
         return false;
+    
+    medium_dict = OSDictionary::withCapacity(1);
+    if (medium_dict == nullptr)
+        return false;
+    medium =
+        IONetworkMedium::medium(
+            kIOMediumEthernetAuto, UINT64_C(10000000000) /* 10gbit */);
+    IONetworkMedium::addMedium(medium_dict, medium);
+    OSSafeRelease(medium);
 
     this->send_workloop = IOWorkLoop::workLoop();
     
@@ -78,7 +150,12 @@ bool uxen_net::start(IOService *provider)
         return false;
     }
 
-    IOOutputQueue* queue = this->getOutputQueue();
+    if (!this->publishMediumDictionary(medium_dict)) {
+        IOLog("uxen_net::start: note - failed to publish medium dictionary\n");
+    }
+    medium_dict->release();
+
+    queue = this->getOutputQueue();
     if (queue == nullptr) {
         IOLog("uxen_net::start - aborting, failed to get output queue.\n");
         this->super::stop(provider);
@@ -344,6 +421,17 @@ uxen_net::getMaxPacketSize(UInt32 *maxSize) const
     *maxSize = this->mtu;
     return kIOReturnSuccess;
 }
+
+IOReturn
+uxen_net::setMaxPacketSize(UInt32 maxSize)
+{
+
+    if (maxSize <= this->mtu)
+        return kIOReturnSuccess;
+    else
+        return kIOReturnBadArgument;
+}
+
 
 
 IOReturn
