@@ -150,7 +150,7 @@ static int raw_open(BlockDriverState *bs, const char *filename, int flags)
     else
 #endif
         create_flags = OPEN_EXISTING;
-    overlapped = FILE_ATTRIBUTE_NORMAL | FILE_FLAG_RANDOM_ACCESS;
+    overlapped = FILE_ATTRIBUTE_NORMAL;
     overlapped |= FILE_FLAG_OVERLAPPED;
     if ((flags & BDRV_O_NOCACHE))
         overlapped |= FILE_FLAG_NO_BUFFERING | FILE_FLAG_WRITE_THROUGH;
