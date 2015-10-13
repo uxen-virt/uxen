@@ -79,7 +79,8 @@ filebuf_open(const char *fn, const char *mode)
         (no_buffering ? FILE_FLAG_NO_BUFFERING : 0),
         NULL);
 #else  /* _WIN32 */
-    fb->file = open(fn, fb->writable ? O_RDWR | O_CREAT : O_RDONLY, 0644);
+    fb->file = open(fn, fb->writable ? O_RDWR | O_CREAT | O_TRUNC : O_RDONLY,
+                    0644);
 #endif  /* _WIN32 */
 
 #ifdef _WIN32
