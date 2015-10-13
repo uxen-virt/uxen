@@ -6,6 +6,7 @@
 
 #include "uxenmouse.h"
 #include "uxenvmlib.h"
+#include "version.h"
 
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text (INIT, DriverEntry)
@@ -174,7 +175,7 @@ DriverEntry(IN PDRIVER_OBJECT driver_object, IN PUNICODE_STRING registry_path)
     WDF_DRIVER_CONFIG config;
     NTSTATUS status;
 
-    uxen_msg("begin");
+    uxen_msg("begin version: %s", UXEN_DRIVER_VERSION_CHANGESET);
 
     WDF_DRIVER_CONFIG_INIT(&config, uxenmouse_add);
 

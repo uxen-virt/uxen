@@ -10,6 +10,10 @@ ARCH_C_FLAGS=/D__i386__
 C_DEFINES=$(C_DEFINES) /D__i386__
 !endif
 
+!if defined(UXEN_BUILD_INFO)
+RCOPTIONS=$(RCOPTIONS) /DBUILD_INFO=$(UXEN_BUILD_INFO)
+USER_C_FLAGS=$(USER_C_FLAGS) /DBUILD_INFO=$(UXEN_BUILD_INFO)
+!endif
 
 #USER_C_FLAGS=$(USER_C_FLAGS) /D__MS_ABI__ /D__UXEN_SYS__
 USER_C_FLAGS=$(USER_C_FLAGS) /D__MS_ABI__ /D__UXEN_TOOLS__
@@ -20,12 +24,12 @@ DLLDEF             = uxenv4vlib.def
 
 NTTARGETFILE2 = POST
 
-INCLUDES= ..\..\common; ..\..\common\include; ..\..\common\include\xen-public; ..\..\uxen\common
+INCLUDES= ..\..\common; ..\..\common\include; ..\..\common\include\xen-public; ..\..\uxen\common; $(OBJECT_ROOT)
 
 TARGETLIBS = \
     $(TARGETLIBS) \
     $(DDK_LIB_PATH)\csq.lib \
-    $(DDK_LIB_PATH)\wdmsec.lib 
+    $(DDK_LIB_PATH)\wdmsec.lib
 
 LINKER_FLAGS=$(LINKER_FLAGS) /SECTION:.shared,RWS
 

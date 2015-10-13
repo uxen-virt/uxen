@@ -3,6 +3,10 @@ TARGETTYPE = DRIVER
 
 !include ../common/sources.inc
 
+!if defined(UXEN_BUILD_INFO)
+RCOPTIONS=$(RCOPTIONS) /DBUILD_INFO=$(UXEN_BUILD_INFO)
+USER_C_FLAGS=$(USER_C_FLAGS) /DBUILD_INFO=$(UXEN_BUILD_INFO)
+!endif
 
 KMDF_VERSION_MAJOR = 1
 
@@ -23,8 +27,6 @@ SOURCES = uxenv4vguest.c \
 	  hardware.c \
 	  plumbing.c \
 	  uxenv4vguest.rc
-	
-		
 
 TARGET_DESTINATION = wdf
 

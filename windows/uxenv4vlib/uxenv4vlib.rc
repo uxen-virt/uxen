@@ -3,21 +3,13 @@
  * SPDX-License-Identifier: ISC
  */
 
-#include <windows.h>
+#include "../../vm-support/windows/common/uxencommon.rc"
 
-#include <ntverp.h>
+#define VER_FILETYPE                VFT_DRV
+#define VER_FILESUBTYPE             VFT2_DRV_SYSTEM
+#define VER_FILEDESCRIPTION_STR     "uXen V4V Shared Guest/Host Driver"
+#define VER_INTERNALNAME_STR        "uxenv4vlib.sys"
+#define VER_ORIGINALFILENAME_STR    VER_INTERNALNAME_STR
+#define VER_PRODUCTNAME_STR         "uXen V4V Shared Guest/Host"
 
-#define	VER_FILETYPE	VFT_DRV
-#define	VER_FILESUBTYPE	VFT2_DRV_SYSTEM
-#define VER_FILEDESCRIPTION_STR    "uXen v4v shared guest/host components"
-#define VER_INTERNALNAME_STR       "uxenv4vlib.dll"
-#undef VER_PRODUCTNAME_STR
-#define VER_PRODUCTNAME_STR		"uXen"
-#undef VER_COMPANYNAME_STR
-#define VER_COMPANYNAME_STR		"uXen Project"
-#define VER_LEGALCOPYRIGHT_STR		"Copyright © uXen Project. All rights reserved."
-#define VER_LEGALCOPYRIGHT_STR_WITH_YEARS "Copyright © 2014 uXen Project. All rights reserved."
-
-#define VER_LANGNEUTRAL
 #include "common.ver"
-

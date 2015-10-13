@@ -8,6 +8,7 @@
 #include <ntddk.h>
 
 #include "../common/debug.h"
+#include "../common/version.h"
 
 /*
     DllInitialize()
@@ -24,7 +25,8 @@ DllInitialize(PUNICODE_STRING  RegistryPath)
     
     RegistryPath;
 
-    uxen_msg("uxenvmlib!DllInitialize() called %u time(s)", calls);
+    uxen_msg("uxenvmlib!DllInitialize() called %u time(s) version: %s", calls,
+            UXEN_DRIVER_VERSION_CHANGESET);
     calls++;
 
     return STATUS_SUCCESS;

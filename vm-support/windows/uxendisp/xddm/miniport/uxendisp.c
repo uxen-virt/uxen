@@ -11,6 +11,7 @@
 
 #include <uxendisp_ioctl.h>
 #include <uxendisp_esc.h>
+#include "version.h"
 
 VP_STATUS FindAdapter(PVOID dev_extension,
                       PVOID reserved,
@@ -64,7 +65,7 @@ ULONG DriverEntry(PVOID context1, PVOID context2)
 
     PAGED_CODE();
 
-    DBG_INFO("");
+    DBG_INFO("Enter version: %s", UXEN_DRIVER_VERSION_CHANGESET);
 
     VideoPortZeroMemory(&init_data, sizeof(VIDEO_HW_INITIALIZATION_DATA));
     init_data.HwInitDataSize = sizeof(VIDEO_HW_INITIALIZATION_DATA);
@@ -87,6 +88,8 @@ ULONG DriverEntry(PVOID context1, PVOID context2)
         init_data.HwInitDataSize = SIZE_OF_W2K_VIDEO_HW_INITIALIZATION_DATA;
         ret = VideoPortInitialize(context1, context2, &init_data, NULL);
     }
+
+    DBG_INFO("Leave");
     return ret;
 }
 

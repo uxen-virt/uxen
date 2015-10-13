@@ -11,6 +11,7 @@
 #include <compiler.h>
 
 #include <dm/hw/dmpdev-prot.h>
+#include "version.h"
 
 extern "C" DRIVER_INITIALIZE DriverEntry;
 static KBUGCHECK_REASON_CALLBACK_ROUTINE BugcheckDumpIoCallback;
@@ -356,7 +357,7 @@ extern "C" NTSTATUS DriverEntry(
     UNREFERENCED_PARAMETER(pDriver);
     UNREFERENCED_PARAMETER(pServiceKey);
 
-    uxen_msg("begin");
+    uxen_msg("begin version: %s", UXEN_DRIVER_VERSION_CHANGESET);
 
     SendCommand(DMPDEV_CTRL_VERSION, (PVOID)&version, sizeof(version));
 

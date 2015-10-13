@@ -6,6 +6,7 @@
 
 #include "storflt.h"
 #include "smbios.h"
+#include "version.h"
 
 
 extern PULONG InitSafeBootMode;
@@ -174,7 +175,7 @@ NTSTATUS DriverEntry(
 
     UNREFERENCED_PARAMETER(pRegistryPath);
 
-    uxen_msg("begin");
+    uxen_msg("begin version: %s", UXEN_DRIVER_VERSION_CHANGESET);
 
     for (i = 0; i <= IRP_MJ_MAXIMUM_FUNCTION; i++) {
         pDrvObj->MajorFunction[i] = StroportDispatchPassThru;

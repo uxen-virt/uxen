@@ -15,6 +15,7 @@
 #include <uxen/platform_interface.h>
 
 #include "balloon.h"
+#include "version.h"
 
 NTSTATUS
 DriverEntry(IN PDRIVER_OBJECT driver_object, IN PUNICODE_STRING registry_path)
@@ -24,7 +25,7 @@ DriverEntry(IN PDRIVER_OBJECT driver_object, IN PUNICODE_STRING registry_path)
     WDF_OBJECT_ATTRIBUTES attrib;
     WDFDRIVER driver;
 
-    uxen_msg("begin");
+    uxen_msg("begin version: %s", UXEN_DRIVER_VERSION_CHANGESET);
 
     WDF_OBJECT_ATTRIBUTES_INIT_CONTEXT_TYPE(&attrib, DRIVER_CONTEXT);
 

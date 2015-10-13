@@ -52,6 +52,7 @@ Notes:
  */
 
 #include "uxennet_private.h"
+#include "version.h"
 
 #pragma NDIS_INIT_FUNCTION(DriverEntry)
 #pragma NDIS_PAGEABLE_FUNCTION(MPInitialize)
@@ -91,7 +92,8 @@ Arguments:
     NDIS_STATUS                   Status;
     NDIS_MINIPORT_CHARACTERISTICS MPChar;
 
-    uxen_msg("---> DriverEntry built on "__DATE__" at "__TIME__);
+    uxen_msg("---> DriverEntry built on "__DATE__" at "__TIME__" version %s",
+             UXEN_DRIVER_VERSION_CHANGESET);
 
     //
     // Associate the miniport driver with NDIS by calling the

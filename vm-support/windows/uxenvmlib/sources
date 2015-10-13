@@ -3,6 +3,11 @@ TARGETTYPE         = EXPORT_DRIVER
 
 !include ../common/sources.inc
 
+!if defined(UXEN_BUILD_INFO)
+RCOPTIONS=$(RCOPTIONS) /DBUILD_INFO=$(UXEN_BUILD_INFO)
+USER_C_FLAGS=$(USER_C_FLAGS) /DBUILD_INFO=$(UXEN_BUILD_INFO)
+!endif
+
 TARGET_DESTINATION = uxenvmlib
 DLLDEF             = uxenvmlib.def
 
@@ -30,8 +35,4 @@ AMD64_SOURCES = \
 
 I386_SOURCES = \
  	        uxen_hypercall_sup.asm
-
-		
-
-
 

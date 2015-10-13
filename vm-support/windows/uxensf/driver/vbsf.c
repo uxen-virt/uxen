@@ -36,6 +36,7 @@
  */
 
 #include "vbsf.h"
+#include "version.h"
 
 /*
  * The current state of the driver.
@@ -442,7 +443,8 @@ NTSTATUS DriverEntry(IN PDRIVER_OBJECT  DriverObject,
     int vboxRC;
     VBSFCLIENT hgcmClient;
 
-    Log(("VBOXSF: DriverEntry: Driver object %p\n", DriverObject));
+    Log(("VBOXSF: DriverEntry: Driver object %p; version: %s\n", DriverObject,
+                UXEN_DRIVER_VERSION_CHANGESET));
 
     if (DriverObject == NULL)
     {

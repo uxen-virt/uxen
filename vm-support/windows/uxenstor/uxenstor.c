@@ -5,6 +5,7 @@
 
 #include "uxenstor.h"
 #include "smbios.h"
+#include "version.h"
 
 extern PULONG InitSafeBootMode;
 
@@ -165,7 +166,7 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT drv_obj,
 
     UNREFERENCED_PARAMETER(svc_reg_path);
 
-    uxen_msg("begin");
+    uxen_msg("begin version: %s", UXEN_DRIVER_VERSION_CHANGESET);
 
     for (i = 0; i <= IRP_MJ_MAXIMUM_FUNCTION; i++)
         drv_obj->MajorFunction[i] = stor_dispatch_pass_thru;

@@ -4,6 +4,7 @@
  */
 
 #include "uxenv4vguest_private.h"
+#include "version.h"
 
 
 
@@ -197,7 +198,7 @@ Return Value:
     WDF_DRIVER_CONFIG   config;
     WDF_OBJECT_ATTRIBUTES attributes;
 
-    uxen_msg("> driver entry");
+    uxen_msg("> driver entry version: %s", UXEN_DRIVER_VERSION_CHANGESET);
 
     WDF_DRIVER_CONFIG_INIT( &config, UxvgEvtDeviceAdd );
 

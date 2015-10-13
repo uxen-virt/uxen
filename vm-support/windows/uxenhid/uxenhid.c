@@ -7,6 +7,7 @@
 #include <hidport.h>
 
 #include "uxenhid.h"
+#include "version.h"
 
 NTSTATUS DriverEntry(PDRIVER_OBJECT drvobj, PUNICODE_STRING regpath);
 NTSTATUS uxenhid_create_close(PDEVICE_OBJECT devobj, PIRP irp);
@@ -27,7 +28,7 @@ DriverEntry(PDRIVER_OBJECT drvobj, PUNICODE_STRING regpath)
     HID_MINIDRIVER_REGISTRATION registration;
     NTSTATUS status;
 
-    uxen_msg("drvobj=0x%08x", drvobj);
+    uxen_msg("drvobj=0x%08x version: %s", drvobj, UXEN_DRIVER_VERSION_CHANGESET);
 
     drvobj->MajorFunction[IRP_MJ_CREATE] = uxenhid_create_close;
     drvobj->MajorFunction[IRP_MJ_CLOSE] = uxenhid_create_close;

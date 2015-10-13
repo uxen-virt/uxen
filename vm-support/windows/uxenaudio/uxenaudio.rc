@@ -3,20 +3,13 @@
  * SPDX-License-Identifier: ISC
  */
 
-#include <windows.h>
-
-#include <ntverp.h>
+#include "../common/uxencommon.rc"
 
 #define VER_FILETYPE                VFT_DRV
 #define VER_FILESUBTYPE             VFT2_DRV_SOUND
-#define VER_FILEDESCRIPTION_STR     "uXen PV audio driver"
+#define VER_FILEDESCRIPTION_STR     "uXen Audio Driver"
 #define VER_INTERNALNAME_STR        "uxenaudio.sys"
-#define VER_ORIGINALFILENAME_STR    "uxenaudio.sys"
-
-#define VER_LEGALCOPYRIGHT_STR	    "Copyright © uXen Project. All rights reserved."
-#define VER_LEGALCOPYRIGHT_STR_WITH_YEARS "Copyright © 2013 uXen Project. All rights reserved."
+#define VER_ORIGINALFILENAME_STR    VER_INTERNALNAME_STR
+#define VER_PRODUCTNAME_STR         "uXen Audio"
 
 #include "common.ver"
-
-
-

@@ -1,18 +1,10 @@
-#include <windows.h>
+#include "../common/uxencommon.rc"
 
-#include <ntverp.h>
+#define VER_FILETYPE                VFT_DRV
+#define VER_FILESUBTYPE             VFT2_DRV_SYSTEM
+#define VER_FILEDESCRIPTION_STR     "uXen Shared Folders Driver"
+#define VER_INTERNALNAME_STR        "uxensf.sys"
+#define VER_ORIGINALFILENAME_STR    VER_INTERNALNAME_STR
+#define VER_PRODUCTNAME_STR        "uXen Shared Folders"
 
-#define	VER_FILETYPE	VFT_DRV
-#define	VER_FILESUBTYPE	VFT2_DRV_SYSTEM
-#define VER_FILEDESCRIPTION_STR    "uXen Shared Folders Network Redirector"
-#define VER_INTERNALNAME_STR       "uxensf.sys"
-#define VER_ORIGINALFILENAME_STR   "uxensf.sys"
-#undef VER_PRODUCTNAME_STR
-#define VER_PRODUCTNAME_STR		"uXen Shared Folders"
-#undef VER_COMPANYNAME_STR
-#define VER_COMPANYNAME_STR		"uXen Project"
-#define VER_LEGALCOPYRIGHT_STR		"Copyright © uXen Project. All rights reserved."
-#define VER_LEGALCOPYRIGHT_STR_WITH_YEARS "Copyright © 2013 uXen Project. All rights reserved."
-
-#define VER_LANGNEUTRAL
 #include "common.ver"

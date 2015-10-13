@@ -40,6 +40,7 @@ Abstract:
 #define DEFINE_DEBUG_VARS
 #include <uxenaudio.h>
 #include "common.h"
+#include "version.h"
 
 //-----------------------------------------------------------------------------
 // Defines                                                                    
@@ -123,7 +124,7 @@ Return Value:
     NTSTATUS                    ntStatus;
 
 
-    uxen_msg("begin");
+    uxen_msg("begin version: %s", UXEN_DRIVER_VERSION_CHANGESET);
 
     // Tell the class driver to initialize the driver.
     //

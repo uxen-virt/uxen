@@ -3,21 +3,13 @@
  * SPDX-License-Identifier: ISC
  */
 
-#include <windows.h>
+#include "../common/uxencommon.rc"
 
-#include <ntverp.h>
+#define VER_FILETYPE                VFT_DRV
+#define VER_FILESUBTYPE             VFT2_DRV_SYSTEM
+#define VER_FILEDESCRIPTION_STR     "uXen Mouse Driver"
+#define VER_INTERNALNAME_STR        "uxenmouse.sys"
+#define VER_ORIGINALFILENAME_STR    VER_INTERNALNAME_STR
+#define VER_PRODUCTNAME_STR         "uXen Mouse"
 
-#define	VER_FILETYPE	VFT_DRV
-#define	VER_FILESUBTYPE	VFT2_DRV_SYSTEM
-#define VER_FILEDESCRIPTION_STR    "uXen absolute coordinate PS/2 mouse filter"
-#define VER_INTERNALNAME_STR       "uxenmouse.sys"
-#define VER_ORIGINALFILENAME_STR   "uxenmouse.sys"
-#undef VER_PRODUCTNAME_STR
-#define VER_PRODUCTNAME_STR		"uXen Mouse"
-#undef VER_COMPANYNAME_STR
-#define VER_COMPANYNAME_STR		"uXen Project"
-#define VER_LEGALCOPYRIGHT_STR		"Copyright © uXen Project. All rights reserved."
-#define VER_LEGALCOPYRIGHT_STR_WITH_YEARS "Copyright © 2013 uXen Project. All rights reserved."
-
-#define VER_LANGNEUTRAL
 #include "common.ver"

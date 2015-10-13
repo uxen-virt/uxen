@@ -3,6 +3,11 @@ TARGETTYPE = DRIVER
 
 !include ../common/sources.inc
 
+!if defined(UXEN_BUILD_INFO)
+RCOPTIONS=$(RCOPTIONS) /DBUILD_INFO=$(UXEN_BUILD_INFO)
+USER_C_FLAGS=$(USER_C_FLAGS) /DBUILD_INFO=$(UXEN_BUILD_INFO)
+!endif
+
 KMDF_VERSION_MAJOR = 1
 
 NTTARGETFILE0 = $(OBJ_PATH)\$(O)\$(INF_NAME).inf
@@ -17,7 +22,7 @@ INCLUDES = ..\common
 TARGETLIBS = $(UXENVMLIB_LIB)
 SOURCES = uxenmouse.c  \
 	  uxenmouse.rc
-   	  
+
 
 TARGET_DESTINATION = wdf
 

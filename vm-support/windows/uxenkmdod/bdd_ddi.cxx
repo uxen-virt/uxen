@@ -27,6 +27,7 @@
  */
 
 #include "BDD.hxx"
+#include "version.h"
 
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text(INIT, DriverEntry)
@@ -39,7 +40,7 @@ DriverEntry(
 {
     KMDDOD_INITIALIZATION_DATA InitialData = {0};
 
-    uxen_msg("begin");
+    uxen_msg("begin version: %s", UXEN_DRIVER_VERSION_CHANGESET);
 
     InitialData.Version = DXGKDDI_INTERFACE_VERSION_WIN8;
     InitialData.DxgkDdiAddDevice                    = BddDdiAddDevice;
