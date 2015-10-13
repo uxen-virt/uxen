@@ -1,0 +1,19 @@
+#
+# Copyright 2015-2016, Bromium, Inc.
+# Author: Julian Pidancet <julian@pidancet.net>
+# SPDX-License-Identifier: ISC
+#
+
+# Only export symbols we expect other kexts to actually use.
+
+_kmod_info
+__ZN18uXenPlatformClient*
+__ZN12uXenPlatform*
+__ZTV12uXenPlatform
+__ZTV18uXenPlatformClient
+__ZTVN12uXenPlatform9MetaClassE
+__ZTVN18uXenPlatformClient9MetaClassE
+
+__ZN18uXenPlatformDevice*
+__ZTV18uXenPlatformDevice
+__ZTVN18uXenPlatformDevice9MetaClassE

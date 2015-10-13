@@ -6,6 +6,8 @@
 
 #include <IOKit/IOLib.h>
 #include <IOKit/pci/IOPCIDevice.h>
+#include <IOKit/IOFilterInterruptEventSource.h>
+#include <IOKit/IOBufferMemoryDescriptor.h>
 
 #include "uXenPlatform.h"
 #include "uXenPlatformDevice.h"
@@ -169,6 +171,11 @@ uXenPlatform::start(IOService *provider)
     if (!nubs)
         return false;
 
+    bar1 = pcidev->getDeviceMemoryWithRegister(kIOPCIConfigBaseAddress1);
+    if(!bar1)
+        return false;
+
+    
     evtsrc = IOFilterInterruptEventSource::filterInterruptEventSource(
             this,
             uXenPlatform::handle_interrupt,

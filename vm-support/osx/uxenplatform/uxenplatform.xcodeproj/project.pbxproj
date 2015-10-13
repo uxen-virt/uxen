@@ -22,6 +22,7 @@
 /* Begin PBXFileReference section */
 		B90DC6C61BF9F23D00C1A5B2 /* uXenPlatformDevice.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = uXenPlatformDevice.cpp; sourceTree = "<group>"; };
 		B90DC6C71BF9F23D00C1A5B2 /* uXenPlatformDevice.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = uXenPlatformDevice.h; sourceTree = "<group>"; };
+		52B2536A1BCD795800E9681F /* uxenplatform.exp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.exports; path = uxenplatform.exp; sourceTree = "<group>"; };
 		B91712A81A261E130089C954 /* uxenplatform_public.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = uxenplatform_public.h; sourceTree = "<group>"; };
 		B939D9F316E604F90017E868 /* uxenplatform.kext */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = uxenplatform.kext; sourceTree = BUILT_PRODUCTS_DIR; };
 		B939D9F716E604F90017E868 /* Kernel.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Kernel.framework; path = System/Library/Frameworks/Kernel.framework; sourceTree = SDKROOT; };
@@ -95,6 +96,7 @@
 				B939DA0116E604F90017E868 /* uxenplatform-Prefix.pch */,
 				B90DC6C61BF9F23D00C1A5B2 /* uXenPlatformDevice.cpp */,
 				B90DC6C71BF9F23D00C1A5B2 /* uXenPlatformDevice.h */,
+				52B2536A1BCD795800E9681F /* uxenplatform.exp */,
 			);
 			name = "Supporting Files";
 			sourceTree = "<group>";
@@ -270,7 +272,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1.0.0d1;
+				CURRENT_PROJECT_VERSION = 1.1.0;
+				EXPORTED_SYMBOLS_FILE = uxenplatform.exp;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "uxenplatform-Prefix.pch";
 				GCC_VERSION = "";
@@ -281,7 +284,7 @@
 				);
 				INFOPLIST_FILE = "uxenplatform-Info.plist";
 				MODULE_NAME = org.uxen.uxenplatform;
-				MODULE_VERSION = 1.0.0d1;
+				MODULE_VERSION = 1.1.0;
 				PRODUCT_NAME = uxenplatform;
 				SDKROOT = macosx;
 				WRAPPER_EXTENSION = kext;
@@ -292,7 +295,8 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1.0.0d1;
+				CURRENT_PROJECT_VERSION = 1.1.0;
+				EXPORTED_SYMBOLS_FILE = uxenplatform.exp;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "uxenplatform-Prefix.pch";
 				GCC_VERSION = "";
@@ -303,7 +307,7 @@
 				);
 				INFOPLIST_FILE = "uxenplatform-Info.plist";
 				MODULE_NAME = org.uxen.uxenplatform;
-				MODULE_VERSION = 1.0.0d1;
+				MODULE_VERSION = 1.1.0;
 				PRODUCT_NAME = uxenplatform;
 				SDKROOT = macosx;
 				WRAPPER_EXTENSION = kext;

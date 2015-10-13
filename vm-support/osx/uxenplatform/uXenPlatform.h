@@ -8,12 +8,6 @@
 #define _UXENPLATFORM_H_
 
 #include <IOKit/IOService.h>
-#include <IOKit/IOFilterInterruptEventSource.h>
-#include <IOKit/IOBufferMemoryDescriptor.h>
-#include <IOKit/pci/IOPCIDevice.h>
-
-#include <xen/version.h>
-#include <xen/xen.h>
 
 #include <uxen/platform_interface.h>
 
@@ -25,6 +19,11 @@
 #else
 #define dprintk(fmt, ...) do {} while (0)
 #endif
+
+#define kUxenPlatformClassName "uXenPlatform"
+class IOPCIDevice;
+class IOFilterInterruptEventSource;
+class IOInterruptEventSource;
 
 class uXenPlatform : public IOService
 {
@@ -43,7 +42,7 @@ public:
     IOReturn get_info(struct uXenPlatformInfo *arg);
     IOReturn get_balloon_stats(struct uXenPlatformBalloonStats *arg);
     IOReturn set_balloon_target(struct uXenPlatformBalloonTarget *arg);
-
+    IODeviceMemory* getPlatformStateBAR(){return bar1;}
 private:
     bool filterInterrupt(IOFilterInterruptEventSource *src);
     void handleInterrupt(IOInterruptEventSource *src, int count);
@@ -64,7 +63,9 @@ private:
 
     IOPCIDevice *pcidev;
     IODeviceMemory *bar0;
+    IODeviceMemory *bar1;
     IODeviceMemory *bar2;
+
     IOFilterInterruptEventSource *evtsrc;
 
     uXenBalloon balloon;

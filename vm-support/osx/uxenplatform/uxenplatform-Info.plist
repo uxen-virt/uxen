@@ -17,11 +17,11 @@
 	<key>CFBundlePackageType</key>
 	<string>KEXT</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>1.2</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>1.2</string>
 	<key>IOKitPersonalities</key>
 	<dict>
 		<key>uXenPlatform</key>
@@ -41,7 +41,7 @@
 		</dict>
 	</dict>
 	<key>NSHumanReadableCopyright</key>
-	<string>Copyright © 2013 uXen Project. All rights reserved.</string>
+	<string>Copyright © 2013, 2015-2016 uXen Project. All rights reserved.</string>
 	<key>OSBundleLibraries</key>
 	<dict>
 		<key>com.apple.iokit.IOPCIFamily</key>
@@ -59,5 +59,9 @@
 		<key>org.uxen.driver.uxenvmlib</key>
 		<string>1.0</string>
 	</dict>
+	<key>OSBundleRequired</key>
+	<string>Local-Root</string>
+	<key>OSBundleCompatibleVersion</key>
+	<string>1.1</string>
 </dict>
 </plist>
