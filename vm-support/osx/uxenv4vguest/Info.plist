@@ -48,6 +48,8 @@
 		<string>1.0</string>
 		<key>org.uxen.driver.uxenvmlib</key>
 		<string>1.0</string>
+		<key>org.uxen.uxenplatform</key>
+		<string>1.1</string>
 	</dict>
 	<key>OSBundleRequired</key>
 	<string>Local-Root</string>

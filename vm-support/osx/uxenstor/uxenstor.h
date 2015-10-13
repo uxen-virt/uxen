@@ -118,7 +118,7 @@ public:
         OSDictionary *propTable = 0);
     virtual IOReturn message(
         UInt32 type, IOService *provider, void *argument = 0) override;
-    void processCompletedRequests();
+    void processCompletedRequests(bool resetRing);
     static IOReturn gatedProcessCompletedRequests(
         OSObject *owner, void *arg0, void *arg1, void *arg2, void *arg3);
     virtual void free(void) override;

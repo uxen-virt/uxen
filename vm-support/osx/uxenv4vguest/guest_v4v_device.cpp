@@ -7,6 +7,8 @@
 #include "guest_v4v_device.h"
 #include <v4v_service.h>
 #include <uxenvmlib/uxen_hypercall.h>
+#include <uxenplatform/uXenPlatform.h>
+#include <uxen/platform_interface.h>
 #include <IOKit/IOLib.h>
 #include <IOKit/IOBufferMemoryDescriptor.h>
 
@@ -16,9 +18,50 @@ OSDefineMetaClassAndStructors(uxen_guest_v4v_device, uxen_v4v_device);
 bool
 uxen_guest_v4v_device::start(IOService *provider)
 {
+    OSDictionary *matching_dict;
+    IOService *matching_service;
+    uXenPlatform *platform;
+    IODeviceMemory *bar;
+    
     if (!this->IOService::start(provider))
         return false;
-    this->intr_event_source = IOInterruptEventSource::interruptEventSource(this, &interruptAction, provider, 0);
+    matching_dict = this->serviceMatching(kUxenPlatformClassName);
+    matching_service =
+        this->waitForMatchingService(matching_dict, NSEC_PER_SEC * 10);
+    platform = OSDynamicCast(uXenPlatform, matching_service);
+    if(platform == nullptr) {
+        OSSafeReleaseNULL(matching_service);
+        kprintf(
+            "UxenGuestV4VDevice::start: failed to match the platform device\n");
+        return false;
+    }
+    
+    this->platform_device = platform;
+    bar = platform->getPlatformStateBAR();
+    if(bar == nullptr) {
+        OSSafeReleaseNULL(this->platform_device);
+        return false;
+    }
+    this->platform_state_bar_map = bar->createMappingInTask(
+        kernel_task, 0, kIOMapAnywhere);
+    if(this->platform_state_bar_map == NULL) {
+        OSSafeReleaseNULL(this->platform_device);
+        return false;
+    }
+    this->platform_state =
+        reinterpret_cast<uxp_state_bar*>(
+            this->platform_state_bar_map->getAddress());
+    if(this->platform_state->magic != UXEN_STATE_BAR_MAGIC) {
+        kprintf(
+            "State bar magic does not equal UXEN_STATE_BAR_MAGIC: %08x\n",
+            this->platform_state->magic);
+        OSSafeReleaseNULL(this->platform_state_bar_map);
+        OSSafeReleaseNULL(this->platform_device);
+        return false;
+    }
+
+    this->intr_event_source = IOInterruptEventSource::interruptEventSource(
+        this, &interruptAction, provider, 0);
     if(this->intr_event_source == nullptr) {
         kprintf(
             "UxenGuestV4VDevice::start: "
@@ -27,12 +70,16 @@ uxen_guest_v4v_device::start(IOService *provider)
     }
 
     this->work_loop = getWorkLoop();
-    if (!work_loop)
+    if (!this->work_loop) {
+        OSSafeReleaseNULL(this->platform_device);
         return false;
-    
-    if (kIOReturnSuccess != this->work_loop->addEventSource(intr_event_source)) {
-        IOLog("UxenGuestV4VDevice::start Error! Adding interrupt event source to work loop failed.\n");
+    }
+    if (kIOReturnSuccess != this->work_loop->addEventSource(intr_event_source)){
+        kprintf(
+            "UxenGuestV4VDevice::start "
+            "Error! Adding interrupt event source to work loop failed.\n");
         OSSafeReleaseNULL(intr_event_source);
+        OSSafeReleaseNULL(this->platform_device);
         return false;
     }
     
@@ -57,8 +104,10 @@ uxen_guest_v4v_device::closeV4VDevice()
 void
 uxen_guest_v4v_device::stop(IOService *provider)
 {
-    closeV4VDevice();
-    
+
+    this->closeV4VDevice();
+    OSSafeReleaseNULL(this->platform_device);
+    OSSafeReleaseNULL(this->platform_state_bar_map);
     IOService::stop(provider);
 }
 
@@ -84,6 +133,10 @@ uxen_guest_v4v_device::interruptAction(
     
     v4v_service = OSDynamicCast(uxen_v4v_service, this->getClient());
     if (v4v_service != nullptr) {
+        while(this->platform_state->v4v_running == 0) {
+            this->platform_state->v4v_running++;
+            v4v_service->notifyV4VRingResetEvent();
+        }
         v4v_service->notifyV4VEvent();
     }
 }

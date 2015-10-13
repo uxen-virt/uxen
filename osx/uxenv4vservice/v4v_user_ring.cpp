@@ -392,8 +392,14 @@ IOReturn
 uxen_v4v_user_ring::message(
     UInt32 type, IOService *provider, void *argument)
 {
-    if (type == kUxenV4VServiceRingNotification)
-    {
+    if (type == kUxenV4VServiceRingResetNotification) {
+        IORWLockWrite(this->lock);
+        if (this->ring != nullptr)
+            this->v4v_service->reregisterRing(this->ring);
+        IORWLockUnlock(this->lock);
+    }
+    if (type == kUxenV4VServiceRingNotification
+        || type == kUxenV4VServiceRingResetNotification) {
         IORWLockRead(this->lock);
         // V4V service received an interrupt/upcall, ring may need servicing
         if (this->ring != nullptr

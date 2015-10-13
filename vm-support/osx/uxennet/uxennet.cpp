@@ -118,6 +118,7 @@ bool uxen_net::start(IOService *provider)
     IOOutputQueue *queue;
     OSDictionary *matching_dict;
     IOService *matching_service;
+    IOWorkLoop *wl;
     uxen_v4v_ring *new_ring;
     errno_t err;
     uxen_v4v_service *service;
@@ -172,9 +173,12 @@ bool uxen_net::start(IOService *provider)
         this->waitForMatchingService(matching_dict, NSEC_PER_SEC * 10);
     service = OSDynamicCast(uxen_v4v_service, matching_service);
     if (service == nullptr) {
+        kprintf("uxenv4vnet::start - v4v service not found\n");
         OSSafeRelease(matching_service); // balances waitForMatchingService()
         this->super::stop(provider);
-        OSSafeReleaseNULL(this->send_workloop);
+        wl = this->send_workloop;
+        this->send_workloop = nullptr;
+        OSSafeReleaseNULL(wl);
         return false;
     }
     this->attach(service);
@@ -339,8 +343,15 @@ uxen_net::outputPacket(mbuf_t packet, void *param)
 IOReturn
 uxen_net::message(UInt32 type, IOService *provider, void *argument )
 {
-    if (type == kUxenV4VServiceRingNotification && provider == this->v4v_service)
-    {
+    if ((type == kUxenV4VServiceRingNotification
+         || type == kUxenV4VServiceRingResetNotification)
+        && provider == this->v4v_service) {
+        if (type == kUxenV4VServiceRingResetNotification) {
+            kprintf(
+                "uxen_net::message: "
+                "reregistering ring due to reset notification\n");
+            this->v4v_service->reregisterRing(this->v4v_ring);
+        }
         this->getOutputQueue()->service();
         this->processReceivedPackets();
         return kIOReturnSuccess;

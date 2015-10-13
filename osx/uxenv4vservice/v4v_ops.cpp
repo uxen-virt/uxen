@@ -190,6 +190,8 @@ uxen_v4v_bind_ring_with_buffer(
     uxen_ring->source_address.domain = ring->id.addr.domain;
     uxen_ring->source_address.port = ring->id.addr.port;
     uxen_ring->protocol_number = V4V_PROTO_DGRAM;
+    uxen_ring->local_port = local_port;
+    uxen_ring->partner_domain = partner_domain;
     
     *created_ring = uxen_ring;
     
@@ -216,6 +218,21 @@ uxen_v4v_destroy_ring(uxen_v4v_device *device, uxen_v4v_ring *created_ring)
     IOFreeAligned(created_ring->pfn_list, pfn_list_size);
     
     IOFreeAligned(created_ring, sizeof(uxen_v4v_ring));
+}
+
+errno_t
+uxen_v4v_reregister_ring(uxen_v4v_device *device, uxen_v4v_ring *ring)
+{
+
+    v4v_unregister_ring(device, ring->ring);
+    
+    ring->ring->id.addr.domain = V4V_DOMID_ANY;
+    ring->ring->id.addr.port = ring->local_port;
+    ring->ring->id.partner = ring->partner_domain;
+    ring->ring->magic = V4V_RING_MAGIC;
+    ring->ring->len = static_cast<uint32_t>(ring->length);
+    
+    return v4v_register_ring(device, ring->ring, ring->pfn_list);
 }
 
 intptr_t

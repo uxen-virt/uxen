@@ -805,9 +805,16 @@ IOReturn
 uxen_v4v_storage_device::message(
     UInt32 type, IOService *provider, void *argument)
 {
+    bool resetRing;
+    
     if (type == kUxenV4VServiceRingNotification && provider == this->v4v_service) {
-        
-        this->command_gate->runAction(&gatedProcessCompletedRequests);
+        resetRing = false;
+        this->command_gate->runAction(&gatedProcessCompletedRequests, &resetRing);
+        return kIOReturnSuccess;
+    } else if(type == kUxenV4VServiceRingResetNotification && provider ==
+        this->v4v_service) {
+        resetRing = true;
+        this->command_gate->runAction(&gatedProcessCompletedRequests, &resetRing);
         return kIOReturnSuccess;
     } else {
         return this->IOSCSIProtocolServices::message(type, provider, argument);
@@ -818,7 +825,11 @@ IOReturn
 uxen_v4v_storage_device::gatedProcessCompletedRequests(
     OSObject *owner, void *arg0, void *arg1, void *arg2, void *arg3)
 {
-    static_cast<uxen_v4v_storage_device*>(owner)->processCompletedRequests();
+    bool resetRing;
+    
+    resetRing = *static_cast<const bool*>(arg0);
+    static_cast<uxen_v4v_storage_device*>(owner)->processCompletedRequests(
+        resetRing);
     
     return kIOReturnSuccess;
 }
@@ -840,7 +851,7 @@ find_and_remove_task(IOSimpleLock *lock, SCSITaskIdentifier_rb_head* task_tree,
 }
 
 void
-uxen_v4v_storage_device::processCompletedRequests()
+uxen_v4v_storage_device::processCompletedRequests(bool resetRing)
 {
     bool a_message_received;
     v4v_disk_transfer_t header;
@@ -858,6 +869,8 @@ uxen_v4v_storage_device::processCompletedRequests()
 
     if (this->v4v_ring == nullptr)
         return;
+    if(resetRing)
+        this->v4v_service->reregisterRing(this->v4v_ring);
     a_message_received = false;
     while (true) {
         header = {};

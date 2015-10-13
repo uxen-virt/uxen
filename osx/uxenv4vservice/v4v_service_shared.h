@@ -29,6 +29,8 @@ enum uxen_v4v_user_notification_port_type
 
 static const uint32_t kUxenV4VServiceRingNotification =
     iokit_vendor_specific_msg(0);
+static const uint32_t kUxenV4VServiceRingResetNotification =
+    iokit_vendor_specific_msg(1);
 
 #define kUxenV4VServiceClassName "org_uxen_driver_v4v_service"
 

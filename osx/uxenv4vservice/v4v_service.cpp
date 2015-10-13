@@ -20,6 +20,13 @@ uxen_v4v_service::notifyV4VEvent()
     this->messageClients(kUxenV4VServiceRingNotification);
 }
 
+void
+uxen_v4v_service::notifyV4VRingResetEvent()
+{
+
+    this->messageClients(kUxenV4VServiceRingResetNotification);
+}
+
 bool
 uxen_v4v_service::start(IOService *provider)
 {
@@ -97,6 +104,14 @@ uxen_v4v_service::allocAndBindRing(
         this->v4v_device, length, partner_domain, source_port, out_new_ring);
 }
 
+errno_t
+uxen_v4v_service::reregisterRing(uxen_v4v_ring *ring)
+{
+
+    return uxen_v4v_reregister_ring(this->v4v_device, ring);
+}
+
+    
 void
 uxen_v4v_service::destroyRing(uxen_v4v_ring *ring)
 {

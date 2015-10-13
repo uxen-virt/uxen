@@ -34,6 +34,7 @@ public:
         IOUserClient ** handler ) override;
 
     void notifyV4VEvent();
+    void notifyV4VRingResetEvent();
     
     errno_t allocAndBindSharedRing(
         unsigned length, uint16_t partner_domain,
@@ -43,7 +44,7 @@ public:
     errno_t allocAndBindRing(
         unsigned length, uint16_t partner_domain, uint32_t local_port,
         uxen_v4v_ring **out_new_ring);
-    
+    errno_t reregisterRing(uxen_v4v_ring *ring);
     void destroyRing(uxen_v4v_ring *ring);
     
     ssize_t sendOnRing(

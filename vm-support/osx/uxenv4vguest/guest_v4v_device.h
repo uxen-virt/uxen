@@ -10,7 +10,7 @@
 #include <v4v_device.h>
 
 #define uxen_guest_v4v_device org_uxen_driver_guest_v4v_device
-
+class uXenPlatform;
 /** Uxen v4v mechanism provider for guest domains, based on dedicated interrupt
  * and uxen hypercalls. Interrupts are discovered via the corresponding ACPI
  * entry; provider for this service is the IOACPIPlatformDevice.
@@ -22,7 +22,9 @@ class uxen_guest_v4v_device : public uxen_v4v_device
 protected:
     IOInterruptEventSource *intr_event_source;
     IOWorkLoop *work_loop;
-    
+    uXenPlatform* platform_device;
+    IOMemoryMap* platform_state_bar_map;
+    struct uxp_state_bar* platform_state;
 public:
     virtual bool start(IOService *provider) override;
     static void interruptAction(
