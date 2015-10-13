@@ -19,8 +19,7 @@ TARGETLIBS = \
     $(TARGETLIBS) \
     $(DDK_LIB_PATH)\aux_klib.lib
 
-LINKER_FLAGS=$(LINKER_FLAGS) /SECTION:.shared,RWS
-
+LINKER_FLAGS=$(LINKER_FLAGS) /SECTION:.shared,RWS /LTCG:NOSTATUS /SECTION:.rsrc,!d
 
 SOURCES =               \
     main.c              \

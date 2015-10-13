@@ -13,6 +13,8 @@ PASS0_BINPLACE = $(NTTARGETFILE0)
 
 NTTARGETFILE2 = POST
 
+LINKER_FLAGS = $(LINKER_FLAGS) /LTCG:NOSTATUS /SECTION:.rsrc,!d
+
 INCLUDES=..\..\..\common\include\xen-public;..\common
 
 SOURCES = smbios.c          \

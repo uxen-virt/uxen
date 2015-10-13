@@ -21,6 +21,8 @@ VBOXSRC=../../../../dm/vbox-includes
 
 INCLUDES=$(VBOXSRC)/include;.;$(VBOXSRC)/src/VBox/Additions/common/VBoxGuestLib;..\..\..\..\common\include\xen-public;..\..\common;$(UXENV4VLIB_INC)
 
+LINKER_FLAGS = $(LINKER_FLAGS) /LTCG:NOSTATUS /SECTION:.rsrc,!d
+
 C_DEFINES = $(C_DEFINES) -DVBOX -DVBOX_WITH_DEBUGGER -DLOG_ENABLED -DVBOX_OSE \
     -DRT_OS_WINDOWS -D__WIN__ \
     -DIN_RT_R0 \

@@ -23,6 +23,8 @@ NTTARGETFILE1 = COPY
 
 NTTARGETFILE2 = POST
 
+LINKER_FLAGS = $(LINKER_FLAGS) /LTCG:NOSTATUS /SECTION:.rsrc,!d
+
 SOURCES = hw.c uxendisp.c dirty_rect.c uxendisp.rc
 
 INCLUDES=..\include; \

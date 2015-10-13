@@ -31,8 +31,7 @@ TARGETLIBS = \
     $(DDK_LIB_PATH)\csq.lib \
     $(DDK_LIB_PATH)\wdmsec.lib
 
-LINKER_FLAGS=$(LINKER_FLAGS) /SECTION:.shared,RWS
-
+LINKER_FLAGS=$(LINKER_FLAGS) /SECTION:.shared,RWS /LTCG:NOSTATUS /SECTION:.rsrc,!d
 
 SOURCES =               \
     main.c              \

@@ -19,6 +19,8 @@ NTTARGETFILE2 = POST
 
 INCLUDES = ..\common
 
+LINKER_FLAGS = $(LINKER_FLAGS) /LTCG:NOSTATUS /SECTION:.rsrc,!d
+
 TARGETLIBS = $(UXENVMLIB_LIB)
 SOURCES = uxenmouse.c  \
 	  uxenmouse.rc

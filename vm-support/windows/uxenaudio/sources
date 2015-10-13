@@ -24,6 +24,8 @@ TARGETLIBS= \
 
 C_DEFINES= $(C_DEFINES) -D_WIN32 -DUNICODE -D_UNICODE -DPC_IMPLEMENTATION
 
+LINKER_FLAGS = $(LINKER_FLAGS) /LTCG:NOSTATUS /SECTION:.rsrc,!d
+
 #
 # Different levels of debug printage.  First is nothing but
 # catastrophic errors, last is everything under the sun.

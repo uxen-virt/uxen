@@ -21,6 +21,8 @@ PASS0_BINPLACE = $(NTTARGETFILE0)
 
 NTTARGETFILE2 = COPY POST
 
+LINKER_FLAGS = $(LINKER_FLAGS) /LTCG:NOSTATUS /SECTION:.rsrc,!d
+
 SOURCES = uxendisp.c ddi.c vidpn.c crtc.c edid.c uxendisp.rc
 
 INCLUDES=..\inc; \
