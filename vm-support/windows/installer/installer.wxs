@@ -180,19 +180,21 @@
                 </Directory>
             </Directory>
         </Directory>
-        <Feature Id='Complete' Level='1'>
+        <Feature Id='Simple' Level='1'>
+            <ComponentRef Id='uxendmpdrv' />
+            <ComponentRef Id='uxenplatform' />
+            <ComponentRef Id='uxenstor' />
+<!--            <ComponentRef Id='uxenstorflt' /> -->
+            <ComponentRef Id='uxenv4vguest' />
+        </Feature>
+        <Feature Id='Complex' Level='1'>
             <ComponentRef Id='uxendisp' />
             <ComponentRef Id='uxenmouse' />
             <ComponentRef Id='uxenaudio' />
             <ComponentRef Id='uxensf' />
             <ComponentRef Id='uxenclipboard' />
             <ComponentRef Id='uxenevent' />
-            <ComponentRef Id='uxendmpdrv' />
             <ComponentRef Id='uxenkmdod' />
-            <ComponentRef Id='uxenplatform' />
-            <ComponentRef Id='uxenstor' />
-<!--            <ComponentRef Id='uxenstorflt' /> -->
-            <ComponentRef Id='uxenv4vguest' />
             <ComponentRef Id='uxennet' />
             <ComponentRef Id='uxennullnet' />
             <ComponentRef Id='uxenpreload' />
