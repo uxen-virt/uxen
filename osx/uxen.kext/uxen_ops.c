@@ -1050,31 +1050,33 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
 	goto out;
     }
 
-    for (i = 0; i < vmi->vmi_shared.vmi_nrvcpus; i++) {
-        vci = &vmi->vmi_vcpus[i];
-        init_timer(&vci->vci_timer, uxen_vcpu_timer_cb, vci);
-
-        ret = event_init(&vci->vci_runnable, 0);
-        if (ret) {
-            fail_msg("event_init vci_runnable failed: %d", ret);
-            goto out;
-        }
-    }
-
     ret = fast_event_init(&vmi->vmi_notexecuting, 0);
     if (ret) {
         fail_msg("event_init vmi_notexecuting failed: %d", ret);
         goto out;
     }
 
-    uxen_lock();
-    rb_tree_insert_node(&uxen_devext->de_vm_info_rbtree, vmi);
-    uxen_unlock();
-
     OSIncrementAtomic(&vmi->vmi_alive);
 
     /* This reference will be dropped on vm destroy */
     OSIncrementAtomic(&vmi->vmi_active_references);
+
+    for (i = 0; i < vmi->vmi_shared.vmi_nrvcpus; i++) {
+        vci = &vmi->vmi_vcpus[i];
+
+        ret = event_init(&vci->vci_runnable, 0);
+        if (ret) {
+            fail_msg("event_init vci_runnable failed: %d", ret);
+            goto out;
+        }
+
+        init_timer(&vci->vci_timer, uxen_vcpu_timer_cb, vci);
+        vci->vci_shared.vci_runnable = 1;
+    }
+
+    uxen_lock();
+    rb_tree_insert_node(&uxen_devext->de_vm_info_rbtree, vmi);
+    uxen_unlock();
 
     ret = kernel_malloc_mfns(1, &vmi->vmi_undefined_mfn, 1);
     if (ret != 1) {
@@ -1084,8 +1086,6 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
         goto out;
     }
 
-    for (i = 0; i < vmi->vmi_shared.vmi_nrvcpus; i++)
-        vmi->vmi_vcpus[i].vci_shared.vci_runnable = 1;
     vmi->vmi_shared.vmi_runnable = 1;
 
     fda->vmi_owner = true;

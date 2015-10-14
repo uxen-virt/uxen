@@ -1351,6 +1351,11 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
 	goto out;
     }
 
+    InterlockedIncrement(&vmi->vmi_alive);
+
+    /* This reference will be dropped on vm destroy */
+    InterlockedIncrement(&vmi->vmi_active_references);
+
     for (i = 0; i < vmi->vmi_shared.vmi_nrvcpus; i++) {
         vci = &vmi->vmi_vcpus[i];
         KeInitializeTimer(&vci->vci_timer);
@@ -1366,6 +1371,7 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
         spinlock_initialize(vci->vci_ipi_lck);
 
         KeInitializeEvent(&vci->vci_runnable, NotificationEvent, FALSE);
+        vci->vci_shared.vci_runnable = 1;
     }
 
     KeInitializeEvent(&vmi->vmi_notexecuting, NotificationEvent, FALSE);
@@ -1375,11 +1381,6 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
     rb_tree_insert_node(&uxen_devext->de_vm_info_rbtree, vmi);
     uxen_unlock();
 
-    InterlockedIncrement(&vmi->vmi_alive);
-
-    /* This reference will be dropped on vm destroy */
-    InterlockedIncrement(&vmi->vmi_active_references);
-
     ret = kernel_malloc_mfns(1, &vmi->vmi_undefined_mfn, 0);
     if (ret != 1) {
         fail_msg("kernel_malloc_mfns(vmi_undefined page) failed: %d", ret);
@@ -1387,9 +1388,6 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
         ret = -ENOMEM;
         goto out;
     }
-
-    for (i = 0; i < vmi->vmi_shared.vmi_nrvcpus; i++)
-        vmi->vmi_vcpus[i].vci_shared.vci_runnable = 1;
 
     vmi->vmi_shared.vmi_runnable = 1;
 
