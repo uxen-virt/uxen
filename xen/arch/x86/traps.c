@@ -168,7 +168,7 @@ static void show_guest_stack(struct vcpu *v, struct cpu_user_regs *regs)
         printk("Guest stack trace from "__OP"sp=%p:\n  ", stack);
     }
 
-    if ( !access_ok(stack, sizeof(*stack)) )
+    if ( !hvm && !access_ok(stack, sizeof(*stack)) )
     {
         printk("Guest-inaccessible memory.\n");
         return;
