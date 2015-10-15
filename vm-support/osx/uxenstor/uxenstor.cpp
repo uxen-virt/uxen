@@ -14,6 +14,7 @@
 #include <sys/errno.h>
 #include <IOKit/IOCommandGate.h>
 #include <IOKit/IOKitKeys.h>
+#include <IOKit/scsi/SCSICommandOperationCodes.h>
 #include "../../../osx/uxenv4vservice/v4v_service_shared.h"
 #include "../../../osx/uxenv4vservice/v4v_ops.h"
 
@@ -40,10 +41,15 @@ static const uint64_t UXENSTOR_MAX_READ_IO_SIZE =
     - sizeof(struct v4v_ring_message_header) // V4V message overhead
     - V4V_ROUNDUP(1); // ring can't be completely full
 
-static int SCSITaskIdentifier_rb_entry_compare(struct SCSITaskIdentifier_rb_entry* a, struct SCSITaskIdentifier_rb_entry* b)
+static int
+SCSITaskIdentifier_rb_entry_compare(struct SCSITaskIdentifier_rb_entry* a,
+    struct SCSITaskIdentifier_rb_entry* b)
 {
-	uintptr_t val_a = reinterpret_cast<uintptr_t>(static_cast<void*>(a->task));
-	uintptr_t val_b = reinterpret_cast<uintptr_t>(static_cast<void*>(b->task));
+    uintptr_t val_a;
+    uintptr_t val_b;
+    
+	val_a = reinterpret_cast<uintptr_t>(static_cast<void*>(a->task));
+	val_b = reinterpret_cast<uintptr_t>(static_cast<void*>(b->task));
     if (val_a == val_b)
         return 0;
     else if (val_a < val_b)
@@ -52,8 +58,10 @@ static int SCSITaskIdentifier_rb_entry_compare(struct SCSITaskIdentifier_rb_entr
         return -1;
 }
 
-RB_PROTOTYPE_SC(static, SCSITaskIdentifier_rb_head, SCSITaskIdentifier_rb_entry, entry, SCSITaskIdentifier_rb_entry_compare);
-RB_GENERATE(SCSITaskIdentifier_rb_head, SCSITaskIdentifier_rb_entry, entry, SCSITaskIdentifier_rb_entry_compare)
+RB_PROTOTYPE_SC(static, SCSITaskIdentifier_rb_head, SCSITaskIdentifier_rb_entry,
+    entry, SCSITaskIdentifier_rb_entry_compare);
+RB_GENERATE(SCSITaskIdentifier_rb_head, SCSITaskIdentifier_rb_entry, entry,
+    SCSITaskIdentifier_rb_entry_compare)
 
 
 #pragma mark V4V Storage Controller
@@ -64,6 +72,7 @@ uxen_v4v_storage_controller::start(IOService *provider)
     OSDictionary *blocker_matching_dict;
     OSDictionary *v4v_matching_dict;
     IONotifier *n;
+    bool ok;
     
     this->acpi_device = OSDynamicCast(IOACPIPlatformDevice, provider);
     if (this->acpi_device == nullptr) {
@@ -83,7 +92,7 @@ uxen_v4v_storage_controller::start(IOService *provider)
     
     this->setName("uxen_v4v_storage_controller");
 
-    bool ok = this->super::start(provider);
+    ok = this->super::start(provider);
     if (!ok)
         return false;
     
@@ -116,7 +125,6 @@ uxen_v4v_storage_controller::start(IOService *provider)
             this);
         OSSafeRelease(v4v_matching_dict);
     }
-    
     return n != nullptr;
 }
 
@@ -127,14 +135,12 @@ uxen_v4v_storage_controller::stop(IOService *provider)
     if (this->dependency_lock != nullptr) {
         IOLockLock(this->dependency_lock);
         
-        if (this->ahci_blocker_notifier != nullptr)
-        {
+        if (this->ahci_blocker_notifier != nullptr) {
             this->ahci_blocker_notifier->remove();
             this->ahci_blocker_notifier = nullptr;
         }
         
-        if (this->v4v_service_notifier != nullptr)
-        {
+        if (this->v4v_service_notifier != nullptr) {
             this->v4v_service_notifier->remove();
             this->v4v_service_notifier = nullptr;
         }
@@ -144,8 +150,6 @@ uxen_v4v_storage_controller::stop(IOService *provider)
         
         IOLockUnlock(this->dependency_lock);
     }
-    
-    
     this->super::stop(provider);
 }
 
@@ -213,7 +217,7 @@ uxen_v4v_storage_controller::v4vServiceMatchingNotificationHandler(
 bool
 uxen_v4v_storage_controller::startStorageController()
 {
-    IOMemoryMap* mem_map;
+    IOMemoryMap *mem_map;
     IOByteCount length;
     unsigned offset;
     uint8_t stor_dev_set;
@@ -265,14 +269,18 @@ uxen_v4v_storage_controller::startStorageController()
 IOService *
 uxen_ahci_blocker::probe(IOService *provider, SInt32 *score)
 {
+    OSDictionary *matching_dict;
+    OSString *uxenstor_acpi_name;
+    IOService *service;
+
     /* Check if uxenstor is active. If it is, capture the AHCI device otherwise,
      * allow the stock AHCI driver to load. */
-    OSDictionary* matching_dict = this->serviceMatching("IOACPIPlatformDevice");
-    OSString* uxenstor_acpi_name = OSString::withCString("UXS0FFF");
+    matching_dict = this->serviceMatching("IOACPIPlatformDevice");
+    uxenstor_acpi_name = OSString::withCString("UXS0FFF");
     matching_dict->setObject("IONameMatch", uxenstor_acpi_name);
     uxenstor_acpi_name->release();
     //OSIterator* uxenstor_acpi_services = this->getMatchingServices(matching_dict);
-    IOService* service = this->waitForMatchingService(matching_dict, 10 * NSEC_PER_SEC);
+    service = this->waitForMatchingService(matching_dict, 10 * NSEC_PER_SEC);
     OSSafeRelease(matching_dict);
     
     if (service != nullptr) {
@@ -302,11 +310,15 @@ uxen_ahci_blocker::start(IOService *provider)
 
 #pragma mark V4V Storage Device
 
-static uint32_t max_write_payload_size_for_device(uxen_v4v_service *v4v_service, uint32_t device_index)
+static uint32_t
+max_write_payload_size_for_device(uxen_v4v_service *v4v_service,
+    uint32_t device_index)
 {
     errno_t err;
     uint32_t max_write_size = 0;
-    // find out the maximum message size and from it, deduce the maximum write size
+    
+    /* find out the maximum message size and from it, deduce the maximum write
+     * size */
     union {
         v4v_ring_data_t data;
         char bytes[sizeof(v4v_ring_data_t) + sizeof(v4v_ring_data_ent_t)];
@@ -316,11 +328,15 @@ static uint32_t max_write_payload_size_for_device(uxen_v4v_service *v4v_service,
             .nent = 1,
         },
     };
-    notify.data.data[0] = (v4v_ring_data_ent_t){ { .domain = UXENSTOR_DEST_DOMAIN, .port = UXENSTOR_DEST_PORT + device_index }, 0, 0, 0 };
+    notify.data.data[0] = (v4v_ring_data_ent_t){
+        { .domain = UXENSTOR_DEST_DOMAIN, .port = UXENSTOR_DEST_PORT + device_index },
+        0, 0, 0 };
     err = v4v_service->notify(&notify.data);
     if (err == 0 && 0 != (notify.data.data[0].flags & V4V_RING_DATA_F_EXISTS)) {
-        if (notify.data.data[0].max_message_size > sizeof(v4v_disk_transfer_t) + 16) {
-            max_write_size = notify.data.data[0].max_message_size - sizeof(v4v_disk_transfer_t) - 16 /*CDB+padding*/;
+        if (notify.data.data[0].max_message_size > sizeof(v4v_disk_transfer_t)
+            + 16) {
+            max_write_size = notify.data.data[0].max_message_size -
+                sizeof(v4v_disk_transfer_t) - 16 /*CDB+padding*/;
         } else if (notify.data.data[0].max_message_size == 0) {
             printf(
                 "uxenstor Warning: Max message size for uxenstor disk %u reported as 0."
@@ -348,10 +364,18 @@ static uint32_t max_write_payload_size_for_device(uxen_v4v_service *v4v_service,
 bool
 uxen_v4v_storage_device::start(IOService *provider)
 {
+    uxen_v4v_ring *new_ring;
+    OSDictionary *device_characteristics;
+    OSNumber *max_read_size_num;
+    OSNumber *max_write_size_num;
+    OSDictionary *proto_characteristics;
+    OSString *v4v;
+    OSString *internal;
+    
     this->attach(this->v4v_service);
     
     //create the ring
-    uxen_v4v_ring *new_ring = nullptr;
+    new_ring = nullptr;
     int err = this->v4v_service->allocAndBindRing(
         UXENSTOR_RING_SIZE, UXENSTOR_DEST_DOMAIN,
         UXENSTOR_DEST_PORT + this->deviceIndex, &new_ring);
@@ -383,23 +407,23 @@ uxen_v4v_storage_device::start(IOService *provider)
     snprintf(dev_index_str, sizeof(dev_index_str), "%u", this->deviceIndex);
     this->setLocation(dev_index_str);
 
-
-    OSDictionary* device_characteristics = OSDictionary::withCapacity(2);
-    OSNumber* max_read_size_num = OSNumber::withNumber(UXENSTOR_MAX_READ_IO_SIZE, 64);
+    device_characteristics = OSDictionary::withCapacity(2);
+    max_read_size_num = OSNumber::withNumber(UXENSTOR_MAX_READ_IO_SIZE, 64);
     device_characteristics->setObject(kIOMaximumByteCountReadKey, max_read_size_num);
     OSSafeReleaseNULL(max_read_size_num);
-    OSNumber* max_write_size_num = OSNumber::withNumber(this->max_write_size, 32);
+    max_write_size_num = OSNumber::withNumber(this->max_write_size, 32);
     device_characteristics->setObject(kIOMaximumByteCountWriteKey, max_write_size_num);
     OSSafeReleaseNULL(max_write_size_num);
     this->setProperty(kIOPropertySCSIDeviceCharacteristicsKey, device_characteristics);
     OSSafeReleaseNULL(device_characteristics);
     
-    OSDictionary *proto_characteristics = OSDictionary::withCapacity(2);
-    OSString *v4v = OSString::withCStringNoCopy("V4V");
+    proto_characteristics = OSDictionary::withCapacity(2);
+    v4v = OSString::withCStringNoCopy("V4V");
     proto_characteristics->setObject(kIOPropertyPhysicalInterconnectTypeKey, v4v);
     OSSafeReleaseNULL(v4v);
-    OSString *internal = OSString::withCStringNoCopy(kIOPropertyInternalKey);
-    proto_characteristics->setObject(kIOPropertyPhysicalInterconnectLocationKey, internal);
+    internal = OSString::withCStringNoCopy(kIOPropertyInternalKey);
+    proto_characteristics->setObject(kIOPropertyPhysicalInterconnectLocationKey,
+        internal);
     OSSafeReleaseNULL(internal);
     this->setProperty(kIOPropertyProtocolCharacteristicsKey, proto_characteristics);
     OSSafeReleaseNULL(proto_characteristics);
@@ -409,14 +433,14 @@ uxen_v4v_storage_device::start(IOService *provider)
         return false;
     
     this->registerService();
-    
-    
+
     return true;
 }
 
 void
 uxen_v4v_storage_device::stop(IOService *provider)
 {
+
     if (this->v4v_ring != nullptr) {
         this->v4v_service->destroyRing(this->v4v_ring);
         this->v4v_ring = nullptr;
@@ -425,9 +449,6 @@ uxen_v4v_storage_device::stop(IOService *provider)
         this->detach(this->v4v_service);
         this->v4v_service = nullptr;
     }
-    
-    
-    
     if (this->bounce_buffer != nullptr) {
         IOFree(this->bounce_buffer, UXENSTOR_RING_SIZE);
         this->bounce_buffer = nullptr;
@@ -436,9 +457,7 @@ uxen_v4v_storage_device::stop(IOService *provider)
         IOLockFree(this->bounce_buffer_lock);
         this->bounce_buffer_lock = nullptr;
     }
-    
-    if (this->live_tasks_lock != nullptr)
-    {
+    if (this->live_tasks_lock != nullptr) {
         IOSimpleLockFree(this->live_tasks_lock);
         this->live_tasks_lock = nullptr;
     }
@@ -446,9 +465,11 @@ uxen_v4v_storage_device::stop(IOService *provider)
     this->super::stop(provider);
 }
 
-
-static bool uxen4v4storage_can_send_message_with_size(unsigned device_index, uxen_v4v_service* v4v_service, uint32_t msg_size)
+static bool
+uxen4v4storage_can_send_message_with_size(unsigned device_index,
+    uxen_v4v_service *v4v_service, uint32_t msg_size)
 {
+
     union {
         v4v_ring_data_t data;
         char bytes[sizeof(v4v_ring_data_t) + sizeof(v4v_ring_data_ent_t)];
@@ -460,7 +481,8 @@ static bool uxen4v4storage_can_send_message_with_size(unsigned device_index, uxe
     };
     notify.data.data[0] = (v4v_ring_data_ent_t)
         {
-            { .domain = UXENSTOR_DEST_DOMAIN, .port = UXENSTOR_DEST_PORT + device_index },
+            { .domain = UXENSTOR_DEST_DOMAIN,
+                .port = UXENSTOR_DEST_PORT + device_index },
             .space_required = msg_size
         };
     errno_t err = v4v_service->notify(&notify.data);
@@ -469,12 +491,17 @@ static bool uxen4v4storage_can_send_message_with_size(unsigned device_index, uxe
 
 static SCSITaskIdentifier_rb_entry *task_rb_entry_alloc()
 {
-    SCSITaskIdentifier_rb_entry *e = static_cast<SCSITaskIdentifier_rb_entry*>(
+    SCSITaskIdentifier_rb_entry *e;
+
+    e = static_cast<SCSITaskIdentifier_rb_entry*>(
         IOMalloc(sizeof(*e)));
     return e;
 }
-static void task_rb_entry_free(SCSITaskIdentifier_rb_entry *e)
+
+static void
+task_rb_entry_free(SCSITaskIdentifier_rb_entry *e)
 {
+
     IOFree(e, sizeof(*e));
 }
 
@@ -483,67 +510,94 @@ uxen_v4v_storage_device::SendSCSICommand(
     SCSITaskIdentifier request,
     SCSIServiceResponse *serviceResponse, SCSITaskStatus *taskStatus)
 {
+    SCSITaskIdentifier_rb_entry *tree_entry;
+    uint8_t dataDir;
+    bool writeData;
+    uint32_t remainder;
+    uint32_t paddingSize;
+    unsigned int num_bufs;
+    IOMemoryMap *mmap;
+    IOMemoryDescriptor *dataBuffer;
+    void* copy;
+    UInt64 dataLength;
     UInt64 dataOffset;
+    ssize_t bytes_sent;
+    bool already_responded;
+    
     struct
     {
         v4v_disk_transfer_t header;
-        SCSICommandDescriptorBlock cdbData;
+        SCSICommandDescriptorBlock cdb_data;
     } msg __attribute__((aligned(16))) = {};
     _Static_assert(sizeof(msg) % 16 == 0,"message is padded to 16 byte boundary");
+    if (!GetCommandDescriptorBlock(request, &msg.cdb_data)) {
+        kprintf("UxenV4VStorageDevice::SendSCSICommand GetCommandDescriptorBlock"
+            " failed\n");
+        return false;
+    }
+    uint32_t cdb_size = GetCommandDescriptorBlockSize(request);
+    if (msg.cdb_data[0] == kSCSICmd_INQUIRY) {
+        // INQUIRY commands aren't handled by uxen SCSI stack, so short-circuit them
+        bool short_circuit = this->shortCircuitRequestResponse(&msg.cdb_data, cdb_size, request);
+        if (short_circuit) {
+            *serviceResponse = kSCSIServiceResponse_Request_In_Process;
+            *taskStatus = kSCSITaskStatus_GOOD;
+            return true;
+        }
+    }
+
     
-    SCSITaskIdentifier_rb_entry* tree_entry = task_rb_entry_alloc();
+    tree_entry = task_rb_entry_alloc();
     if (tree_entry == nullptr)
         return false;
     tree_entry->submitted = false;
     tree_entry->received_response = false;
     
     msg.header.seq = reinterpret_cast<uintptr_t>(request);
-    uint32_t cdbSize = GetCommandDescriptorBlockSize(request);
-    msg.header.cdb_size = cdbSize;
-    uint8_t dataDir = GetDataTransferDirection(request);
-    bool writeData = false;
+    msg.header.cdb_size = cdb_size;
+    dataDir = GetDataTransferDirection(request);
+    writeData = false;
     if( dataDir == kSCSIDataTransfer_FromInitiatorToTarget) {
         writeData = true;
     }
     
     if (writeData) {
-        msg.header.write_size = static_cast<uint32_t>(GetRequestedDataTransferCount(request));
+        msg.header.write_size = static_cast<uint32_t>
+            (GetRequestedDataTransferCount(request));
         msg.header.read_size = 0;
     } else {
-        msg.header.read_size = static_cast<uint32_t>(GetRequestedDataTransferCount(request));
+        msg.header.read_size = static_cast<uint32_t>
+            (GetRequestedDataTransferCount(request));
         msg.header.write_size = 0;
     }
     
     msg.header.pagelist_size = 0;
-    msg.header.sense_size = static_cast<uint32_t>(GetAutosenseRequestedDataTransferCount(request));
+    msg.header.sense_size = static_cast<uint32_t>
+        (GetAutosenseRequestedDataTransferCount(request));
     msg.header.status = 0;
     
-    
-    if (!GetCommandDescriptorBlock(request, &msg.cdbData)) {
-        kprintf("UxenV4VStorageDevice::SendSCSICommand getCDB did not work\n");
-        return false;
-    }
-    uint32_t remainder = (sizeof(v4v_disk_transfer_t) + cdbSize) % 16;
-    uint32_t paddingSize = 0;
+    remainder = (sizeof(v4v_disk_transfer_t) + cdb_size) % 16;
+    paddingSize = 0;
     if(remainder != 0) {
         paddingSize = 16 - remainder;
     }
     
-    unsigned int num_bufs = 1;
+    num_bufs = 1;
     if(writeData)
         num_bufs += 1;
     v4v_iov_t buffer [num_bufs];
 
     buffer[0].iov_base = reinterpret_cast<uintptr_t>(&msg);
-    buffer[0].iov_len = sizeof(v4v_disk_transfer_t) + cdbSize + paddingSize;
+    buffer[0].iov_len = sizeof(v4v_disk_transfer_t) + cdb_size + paddingSize;
     
-    IOMemoryMap* mmap = nullptr;
-    IOMemoryDescriptor* dataBuffer = nullptr;
-    void* copy = nullptr;
-    UInt64 dataLength = 0;
+    mmap = nullptr;
+    dataBuffer = nullptr;
+    copy = nullptr;
+    dataLength = 0;
     
     if (writeData) {
-        // before we do any expensive copying or mapping, check if we can even send this much data
+        /* before we do any expensive copying or mapping, check if we can even
+         * send this much data */
         dataLength = GetRequestedDataTransferCount(request);
         if (!uxen4v4storage_can_send_message_with_size(
                 this->deviceIndex, this->v4v_service,
@@ -557,7 +611,8 @@ uxen_v4v_storage_device::SendSCSICommand(
         if (mmap != nullptr && mmap->getLength() >= dataLength) {
             buffer[1].iov_base = mmap->getAddress();
         } else {
-            // mapping failed or ended up too short - can happen e.g. if it's an IOMultiMemoryDescriptor
+            /* mapping failed or ended up too short - can happen e.g. if it's
+             * an IOMultiMemoryDescriptor */
             OSSafeReleaseNULL(mmap);
             IOLockLock(this->bounce_buffer_lock);
             copy = this->bounce_buffer;
@@ -567,9 +622,7 @@ uxen_v4v_storage_device::SendSCSICommand(
             buffer[1].iov_base = reinterpret_cast<uint64_t>(copy);
         }
         buffer[1].iov_len = dataLength;
-    }
-    else
-    {
+    } else {
         /* No operations need to be performed on the request once it's been
          * passed to the device if no payload data is being written. */
         tree_entry->submitted = true;
@@ -580,13 +633,15 @@ uxen_v4v_storage_device::SendSCSICommand(
     RB_INSERT(SCSITaskIdentifier_rb_head, &this->live_tasks, tree_entry);
     IOSimpleLockUnlock(this->live_tasks_lock);
     
-    ssize_t bytes_sent = this->v4v_service->sendvOnRing(
+    bytes_sent = this->v4v_service->sendvOnRing(
         this->v4v_ring,
-        v4v_addr_t({ .domain = UXENSTOR_DEST_DOMAIN, .port = UXENSTOR_DEST_PORT + this->deviceIndex }),
+        v4v_addr_t({ .domain = UXENSTOR_DEST_DOMAIN,
+            .port = UXENSTOR_DEST_PORT + this->deviceIndex }),
         buffer,
         num_bufs);
     if (bytes_sent == -EFAULT && copy == nullptr) {
-        // Hypercall did not like pointer we gave it. Try again with a copy of the data.
+        /* Hypercall did not like pointer we gave it. Try again with a copy 
+         * of the data. */
         assert(UXENSTOR_RING_SIZE >= dataLength);
         IOLockLock(this->bounce_buffer_lock);
         copy = this->bounce_buffer;
@@ -596,7 +651,8 @@ uxen_v4v_storage_device::SendSCSICommand(
 
         bytes_sent = this->v4v_service->sendvOnRing(
             this->v4v_ring,
-            v4v_addr_t({ .domain = UXENSTOR_DEST_DOMAIN, .port = UXENSTOR_DEST_PORT + this->deviceIndex }),
+            v4v_addr_t({ .domain = UXENSTOR_DEST_DOMAIN,
+                .port = UXENSTOR_DEST_PORT + this->deviceIndex }),
             buffer,
             num_bufs);
     }
@@ -613,20 +669,21 @@ uxen_v4v_storage_device::SendSCSICommand(
         *taskStatus = kSCSITaskStatus_GOOD;
         if (writeData) {
             if (bytes_sent > buffer[0].iov_len)
-                this->SetRealizedDataTransferCount(request, bytes_sent - buffer[0].iov_len);
+                this->SetRealizedDataTransferCount(request,
+                    bytes_sent - buffer[0].iov_len);
             
             IOSimpleLockLock(this->live_tasks_lock);
             tree_entry->submitted = true;
-            bool already_responded = tree_entry->received_response;
+            already_responded = tree_entry->received_response;
             IOSimpleLockUnlock(this->live_tasks_lock);
             
             if (already_responded) {
                 // Another thread has already received the response.
-                CommandCompleted(request, kSCSIServiceResponse_TASK_COMPLETE, tree_entry->response_status);
+                CommandCompleted(request, kSCSIServiceResponse_TASK_COMPLETE,
+                    tree_entry->response_status);
                 task_rb_entry_free(tree_entry);
             }
         }
-        
         return true;
     } else {
         IOSimpleLockLock(this->live_tasks_lock);
@@ -641,7 +698,7 @@ uxen_v4v_storage_device::SendSCSICommand(
                 "sending %llu + %llu byte request\n",
                 bytes_sent, buffer[0].iov_len, writeData ? buffer[1].iov_len : 0);
             IOLog("uxen_v4v_storage_device::SendSCSICommand: error %ld while sending"
-                "%llu + %llu byte request\n",
+                " %llu + %llu byte request\n",
                 bytes_sent, buffer[0].iov_len, writeData ? buffer[1].iov_len : 0);
             *serviceResponse = kSCSIServiceResponse_SERVICE_DELIVERY_OR_TARGET_FAILURE;
             *taskStatus = kSCSITaskStatus_DeliveryFailure;
@@ -650,9 +707,55 @@ uxen_v4v_storage_device::SendSCSICommand(
     }
 }
 
+bool uxen_v4v_storage_device::shortCircuitRequestResponse(const SCSICommandDescriptorBlock* cdb_data, uint32_t cdb_size, SCSITaskIdentifier request)
+{
+    const uint8_t standard_inquiry_cdb[6] =
+        { kSCSICmd_INQUIRY, 0x00, 0x00, 0x00, 0x24, 0x00 };
+    const uint8_t evpd_supported_inquiry_cdb[6] =
+        { kSCSICmd_INQUIRY, 0x01, 0x00, 0x00, 0x40, 0x00 };
+
+    if (cdb_size != 6) { // INQUIRY should be 6 bytes
+        return false;
+    } else if (0 == memcmp(*cdb_data, evpd_supported_inquiry_cdb, 4)
+		           && (*cdb_data)[5] == evpd_supported_inquiry_cdb[5]) {
+        // Don't support any EVPD, empty response
+        SetRealizedDataTransferCount(request, 0);
+        CommandCompleted(request, kSCSIServiceResponse_TASK_COMPLETE, kSCSITaskStatus_GOOD);
+        return true;
+    } else if(0 == memcmp(*cdb_data, standard_inquiry_cdb, cdb_size)) {
+        // normal inquiry message, respond with same disk data as QEMU SCSI stack
+        IOMemoryDescriptor* dataBuffer = GetDataBuffer(request);
+        UInt64 dataOffset = GetDataBufferOffset(request);
+        UInt64 dataLength = GetRequestedDataTransferCount(request);
+        const uint8_t inquiry_response[] = {
+            0x00, 0x00, 0x05, 0x02,  0x1F, 0x00, 0x00, 0x10,
+            0x51, 0x45, 0x4D, 0x55,  0x20, 0x20, 0x20, 0x20,
+            0x51, 0x45, 0x4D, 0x55,  0x20, 0x48, 0x41, 0x52,
+            0x44, 0x44, 0x49, 0x53,  0x4B, 0x20, 0x20, 0x20,
+            0x75, 0x58, 0x65, 0x6E };
+        _Static_assert(sizeof(inquiry_response) == 36, "inquiry response should be 36 bytes long");
+        dataBuffer->prepare(kIODirectionIn);
+        dataBuffer->writeBytes(dataOffset, inquiry_response, min(36, dataLength));
+        dataBuffer->complete(kIODirectionIn);
+        SetRealizedDataTransferCount(request, min(36, dataLength));
+        CommandCompleted(request, kSCSIServiceResponse_TASK_COMPLETE, kSCSITaskStatus_GOOD);
+        return true;
+    } else {
+        kprintf("Unexpected SCSI INQUIRY command, can't short-circuit:\n");
+        for(int i = 0; i < cdb_size; i++) {
+            kprintf("%02x ", (*cdb_data)[i]);
+        }
+        kprintf("\n");
+        return false;
+    }
+}
+
+
+
 SCSIServiceResponse
 uxen_v4v_storage_device::AbortSCSICommand (SCSITaskIdentifier request)
 {
+
     return kSCSIServiceResponse_SERVICE_DELIVERY_OR_TARGET_FAILURE;
 }
 
@@ -660,12 +763,15 @@ bool
 uxen_v4v_storage_device::IsProtocolServiceSupported(
     SCSIProtocolFeature feature, void *serviceValue)
 {
+    uint64_t *maxReadBytes;
+    uint64_t *maxWriteBytes;
+    
     if(feature == kSCSIProtocolFeature_MaximumReadTransferByteCount) {
-        uint64_t* maxReadBytes = static_cast<uint64_t*>(serviceValue);
+        maxReadBytes = static_cast<uint64_t*>(serviceValue);
         *maxReadBytes = UXENSTOR_MAX_READ_IO_SIZE;
         return true;
     } else if (feature == kSCSIProtocolFeature_MaximumWriteTransferByteCount) {
-        uint64_t* maxWriteBytes = static_cast<uint64_t*>(serviceValue);
+        maxWriteBytes = static_cast<uint64_t*>(serviceValue);
         *maxWriteBytes = this->max_write_size;
         return true;
     }
@@ -675,6 +781,7 @@ bool
 uxen_v4v_storage_device::HandleProtocolServiceFeature(
     SCSIProtocolFeature feature, void *serviceValue)
 {
+
     return false;
 }
 
@@ -682,15 +789,14 @@ bool
 uxen_v4v_storage_device::initWithDeviceIndex(
     unsigned device_idx, uxen_v4v_service *service, OSDictionary *propTable)
 {
+
     if (!this->IOSCSIProtocolServices::init(propTable))
         return false;
     this->v4v_service = service;
     IOWorkLoop* work_loop = this->v4v_service->getWorkLoop();
     this->command_gate = IOCommandGate::commandGate(this);
     this->command_gate->setWorkLoop(work_loop);
-    
     this->deviceIndex = device_idx;
-
     return true;
 }
 
@@ -717,11 +823,16 @@ uxen_v4v_storage_device::gatedProcessCompletedRequests(
     return kIOReturnSuccess;
 }
 
-static SCSITaskIdentifier_rb_entry* find_and_remove_task(IOSimpleLock *lock, SCSITaskIdentifier_rb_head* task_tree, uintptr_t seq)
+static SCSITaskIdentifier_rb_entry*
+find_and_remove_task(IOSimpleLock *lock, SCSITaskIdentifier_rb_head* task_tree,
+    uintptr_t seq)
 {
-    SCSITaskIdentifier_rb_entry find = {{}, static_cast<SCSITaskIdentifier>(reinterpret_cast<void*>(seq)) };
+    SCSITaskIdentifier_rb_entry *found;
+    SCSITaskIdentifier_rb_entry find;
+
+    find = {{}, static_cast<SCSITaskIdentifier>(reinterpret_cast<void*>(seq)) };
     IOSimpleLockLock(lock);
-    SCSITaskIdentifier_rb_entry* found = RB_FIND(SCSITaskIdentifier_rb_head, task_tree, &find);
+    found = RB_FIND(SCSITaskIdentifier_rb_head, task_tree, &find);
     if (found != nullptr)
         RB_REMOVE(SCSITaskIdentifier_rb_head, task_tree, found);
     IOSimpleLockUnlock(lock);
@@ -731,12 +842,27 @@ static SCSITaskIdentifier_rb_entry* find_and_remove_task(IOSimpleLock *lock, SCS
 void
 uxen_v4v_storage_device::processCompletedRequests()
 {
+    bool a_message_received;
+    v4v_disk_transfer_t header;
+    ssize_t messageSize;
+    SCSITaskIdentifier_rb_entry *task_entry;
+    SCSITaskIdentifier request;
+    IOMemoryMap *mmap;
+    IOMemoryDescriptor *dataBuffer;
+    UInt64 dataOffset;
+    UInt64 dataLength;
+    size_t actual_payload_size;
+    SCSI_Sense_Data senseData;
+    size_t actual_sense_size;
+    bool complete;
+
     if (this->v4v_ring == nullptr)
         return;
-    bool a_message_received = false;
+    a_message_received = false;
     while (true) {
-        v4v_disk_transfer_t header = {};
-        ssize_t messageSize = this->v4v_service->receiveFromRing(this->v4v_ring, &header, sizeof(header), false);
+        header = {};
+        messageSize = this->v4v_service->receiveFromRing(this->v4v_ring, &header,
+            sizeof(header), false);
         if (messageSize < 0)
             break;
         if (messageSize < sizeof(header)) {
@@ -749,7 +875,7 @@ uxen_v4v_storage_device::processCompletedRequests()
         }
         
 
-        SCSITaskIdentifier_rb_entry* task_entry = find_and_remove_task(
+        task_entry = find_and_remove_task(
             this->live_tasks_lock, &this->live_tasks, header.seq);
         if (task_entry == nullptr) {
             kprintf("uxen_v4v_storage_device::processRequestCompleted(): task"
@@ -758,28 +884,34 @@ uxen_v4v_storage_device::processCompletedRequests()
             this->v4v_service->receiveFromRing(this->v4v_ring, nullptr, 0, true);
             continue;
         }
-        SCSITaskIdentifier request = task_entry->task;
+        request = task_entry->task;
+        
+
         
         if(header.read_size > 0) {
-            IOMemoryMap* mmap = nullptr;
+            mmap = nullptr;
             //data to be read
-            IOMemoryDescriptor* dataBuffer = GetDataBuffer(request);
-            UInt64 dataOffset = GetDataBufferOffset(request);
-            UInt64 dataLength = GetRequestedDataTransferCount(request);
+            dataBuffer = GetDataBuffer(request);
+            dataOffset = GetDataBufferOffset(request);
+            dataLength = GetRequestedDataTransferCount(request);
             dataBuffer->prepare(kIODirectionIn);
-            mmap = dataBuffer->createMappingInTask(kernel_task, 0, kIOMapAnywhere, dataOffset, dataLength);
-            size_t actual_payload_size = min(min(header.read_size, dataLength), messageSize - sizeof(header));
+            mmap = dataBuffer->createMappingInTask(kernel_task, 0, kIOMapAnywhere,
+                dataOffset, dataLength);
+            actual_payload_size = min(min(header.read_size, dataLength),
+                messageSize - sizeof(header));
             if (mmap != nullptr) {
                 void* dataAddress = reinterpret_cast<void*>(mmap->getAddress());
                 v4v_copy_out_offset(
                     this->v4v_ring->ring,
                     nullptr, nullptr,
                     dataAddress,
-                    sizeof(header) + actual_payload_size, // NOT no of bytes to copy, but end of submessage
+                    sizeof(header) + actual_payload_size, // NOT no of bytes to
+                    //copy, but end of submessage
                     false,
                     sizeof(header)); // offset
             } else {
-                // failed to map memory descriptor - might be a multimemorydescriptor etc.
+                // failed to map memory descriptor - might be a
+                // multimemorydescriptor etc.
                 // use bounce buffer instead
                 assert(actual_payload_size <= UXENSTOR_RING_SIZE);
                 IOLockLock(this->bounce_buffer_lock);
@@ -787,28 +919,30 @@ uxen_v4v_storage_device::processCompletedRequests()
                     this->v4v_ring->ring,
                     nullptr, nullptr,
                     this->bounce_buffer,
-                    sizeof(header) + actual_payload_size, // NOT no of bytes to copy, but end of submessage
+                    sizeof(header) + actual_payload_size, // NOT no of bytes to
+                    //copy, but end of submessage
                     false,
                     sizeof(header)); // offset
-                dataBuffer->writeBytes(dataOffset, this->bounce_buffer, actual_payload_size);
+                dataBuffer->writeBytes(dataOffset, this->bounce_buffer,
+                    actual_payload_size);
                 IOLockUnlock(this->bounce_buffer_lock);
             }
             dataBuffer->complete(kIODirectionIn);
             
             SetRealizedDataTransferCount(request, actual_payload_size);
             OSSafeRelease(mmap);
-        }
-        
-        else if(header.sense_size > 0) {
+        } else if(header.sense_size > 0) {
             //sense data to be read
-            SCSI_Sense_Data senseData = {};
+            senseData = {};
             v4v_copy_out_offset(
                 this->v4v_ring->ring,
                 nullptr, nullptr,
                 &senseData,
-                sizeof(header) + sizeof(senseData), // NOT no of bytes to copy, but end of submessage
+                sizeof(header) + sizeof(senseData), // NOT no of bytes to copy,
+                //but end of submessage
                 false, sizeof(header));
-            size_t actual_sense_size = min(min(header.sense_size, sizeof(senseData)), messageSize - sizeof(header));
+            actual_sense_size = min(min(header.sense_size, sizeof(senseData)),
+                messageSize - sizeof(header));
             SetAutoSenseData(request, &senseData, actual_sense_size);
         }
         
@@ -816,29 +950,31 @@ uxen_v4v_storage_device::processCompletedRequests()
         a_message_received = true;
 
         IOSimpleLockLock(this->live_tasks_lock);
-        bool complete = task_entry->submitted; // only finish up if the submission is already done.
+        complete = task_entry->submitted; // only finish up if the submission is
+        //already done.
         task_entry->response_status = static_cast<SCSITaskStatus>(header.status);
         task_entry->received_response = true;
         IOSimpleLockUnlock(this->live_tasks_lock);
         if (complete) {
-            CommandCompleted(request, kSCSIServiceResponse_TASK_COMPLETE, static_cast<SCSITaskStatus>(header.status));
+            CommandCompleted(request, kSCSIServiceResponse_TASK_COMPLETE,
+                static_cast<SCSITaskStatus>(header.status));
             task_rb_entry_free(task_entry);
         } /* else {
             kprintf("uxen_v4v_storage_device::processCompletedRequests: "
-            "Requesting thread not finished yet.\n");
+                "Requesting thread not finished yet.\n");
         } */
     }
     if (a_message_received) {
         this->v4v_service->notify();
     }
-        
 }
+
 
 IOWorkLoop *
 uxen_v4v_storage_device::getWorkLoop() const
 {
-    if(this->v4v_service == nullptr)
-    {
+
+    if(this->v4v_service == nullptr) {
         return nullptr;
     }
     return this->v4v_service->getWorkLoop();
@@ -848,6 +984,7 @@ uxen_v4v_storage_device::getWorkLoop() const
 void
 uxen_v4v_storage_device::free(void)
 {
+
     OSSafeReleaseNULL(this->command_gate);
     this->super::free();
 }

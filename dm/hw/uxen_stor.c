@@ -11,11 +11,7 @@
 #include <dm/hw.h>
 #include <dm/firmware.h>
 
-#ifdef __APPLE__
-#define QEMU_SCSI
-#else
 #undef QEMU_SCSI
-#endif
 
 #ifdef QEMU_SCSI
 #include <dm/qemu/hw/scsi.h>

@@ -54,7 +54,7 @@ class uxen_ahci_blocker : public IOService
     OSDeclareDefaultStructors(uxen_ahci_blocker);
 protected:
 public:
-    virtual IOService * probe(IOService *provider, SInt32 *score) override;
+    virtual IOService *probe(IOService *provider, SInt32 *score) override;
     virtual bool start(IOService *provider) override;    
 };
 
@@ -83,18 +83,22 @@ protected:
     typedef IOSCSIProtocolServices super;
     using IOSCSIProtocolServices::init;
     unsigned deviceIndex;
-    uxen_v4v_service* v4v_service;
-    uxen_v4v_ring* v4v_ring;
-    IOCommandGate* command_gate;
+    uxen_v4v_service *v4v_service;
+    uxen_v4v_ring *v4v_ring;
+    IOCommandGate *command_gate;
     
     void* bounce_buffer;
     IOLock* bounce_buffer_lock;
     
-    /// Maximum number of payload bytes in a write. Depends on the destination V4V ring size.
+    /* Maximum number of payload bytes in a write. Depends on the destination
+     * V4V ring size. */
     uint32_t max_write_size;
     
-    IOSimpleLock* live_tasks_lock;
+    IOSimpleLock *live_tasks_lock;
     SCSITaskIdentifier_rb_head live_tasks;
+    
+    bool shortCircuitRequestResponse(
+        const SCSICommandDescriptorBlock* cdbData, uint32_t cdb_size, SCSITaskIdentifier request);
     
 public:
     virtual bool start(IOService *provider) override;
@@ -109,12 +113,16 @@ public:
         SCSIProtocolFeature feature, void *serviceValue) override;
     virtual bool HandleProtocolServiceFeature(
         SCSIProtocolFeature feature, void *serviceValue) override;
-    virtual bool initWithDeviceIndex(unsigned device_idx, uxen_v4v_service* service, OSDictionary *propTable = 0);
-    virtual IOReturn message(UInt32 type, IOService *provider, void *argument = 0) override;
+    virtual bool initWithDeviceIndex(
+        unsigned device_idx, uxen_v4v_service *service,
+        OSDictionary *propTable = 0);
+    virtual IOReturn message(
+        UInt32 type, IOService *provider, void *argument = 0) override;
     void processCompletedRequests();
-    static IOReturn gatedProcessCompletedRequests(OSObject *owner, void *arg0, void *arg1, void *arg2, void *arg3);
+    static IOReturn gatedProcessCompletedRequests(
+        OSObject *owner, void *arg0, void *arg1, void *arg2, void *arg3);
     virtual void free(void) override;
-    virtual IOWorkLoop* getWorkLoop() const override;
+    virtual IOWorkLoop *getWorkLoop() const override;
 };
 
 #endif
