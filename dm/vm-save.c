@@ -802,7 +802,10 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
 
         /* indexes */
         filebuf_write(f, &page_offsets_index, sizeof(page_offsets_index));
+        filebuf_flush(f);
 
+        APRINTF("total file size: %"PRIu64" bytes\n",
+                (uint64_t) filebuf_tell(f));
         APRINTF("memory: pages %d zero %d rezero %d clone %d", total_pages,
                 total_zero - total_rezero, total_rezero, total_clone);
         if (vm_save_info.compress_mode == VM_SAVE_COMPRESS_LZ4 && total_pages) {
