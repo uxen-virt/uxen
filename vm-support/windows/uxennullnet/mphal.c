@@ -60,6 +60,36 @@ HWCopyBytesFromNetBuffer(
 #pragma NDIS_PAGEABLE_FUNCTION(HWInitialize)
 #pragma NDIS_PAGEABLE_FUNCTION(HWReadPermanentMacAddress)
 
+static NDIS_STATUS
+IndicateLinkState(PMP_ADAPTER Adapter)
+{
+    NDIS_STATUS_INDICATION Status;
+    NDIS_LINK_STATE LinkState;
+
+    NdisZeroMemory(&Status, sizeof(Status));
+    NdisZeroMemory(&LinkState, sizeof(LinkState));
+
+    Status.Header.Type = NDIS_OBJECT_TYPE_STATUS_INDICATION;
+    Status.Header.Revision = NDIS_STATUS_INDICATION_REVISION_1;
+    Status.Header.Size = NDIS_SIZEOF_STATUS_INDICATION_REVISION_1;
+    Status.SourceHandle = Adapter->AdapterHandle;
+    Status.StatusCode = NDIS_STATUS_LINK_STATE;
+    Status.StatusBuffer = (PVOID)&LinkState;
+    Status.StatusBufferSize = sizeof(LinkState);
+    LinkState.Header.Type = NDIS_OBJECT_TYPE_DEFAULT;
+    LinkState.Header.Revision = NDIS_LINK_STATE_REVISION_1;
+    LinkState.Header.Size = NDIS_SIZEOF_LINK_STATE_REVISION_1;
+    LinkState.MediaDuplexState = MediaDuplexStateFull;
+    LinkState.XmitLinkSpeed = Adapter->ulLinkSendSpeed;
+    LinkState.RcvLinkSpeed = Adapter->ulLinkRecvSpeed;
+    LinkState.PauseFunctions = NdisPauseFunctionsUnsupported;
+    LinkState.AutoNegotiationFlags = NDIS_LINK_STATE_DUPLEX_AUTO_NEGOTIATED;
+    LinkState.MediaConnectState = HWGetMediaConnectStatus(Adapter);
+
+    NdisMIndicateStatusEx(Adapter->AdapterHandle, &Status);
+
+    return NDIS_STATUS_SUCCESS;
+}
 
 
 
@@ -125,6 +155,13 @@ Return Value:
                 }
             }
         }
+
+        /*
+         * XXX: uXen
+         *
+         * link state
+         */
+        IndicateLinkState(Adapter);
 
         Status = NDIS_STATUS_SUCCESS;
 
