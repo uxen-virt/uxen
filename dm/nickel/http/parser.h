@@ -34,6 +34,10 @@ struct http_header {
     uint64_t content_length;
     size_t header_length;
     const char *method;
+    char *method_str;
+    char method_buf[32];
+    size_t method_buf_len;
+    int method_saved;
     int status_code;
     struct buff *url;
     struct header_field headers[NUM_HEADERS];
@@ -57,12 +61,13 @@ struct parser_ctx {
     int parse_error;
     struct http_header h;
     int headers_parsed;
+    int any_http_verb;
     void *hx;
 };
 
 size_t parser_execute(struct parser_ctx *p, const char *buf, size_t len);
 bool parser_is_http_req(struct buff *b);
-int parser_create_request(struct parser_ctx **p, void *hx);
+int parser_create_request(struct parser_ctx **p, void *hx, int any_http_verb);
 int parser_create_response(struct parser_ctx **p, void *hx);
 void parser_free(struct parser_ctx **pp);
 void parser_reset(struct parser_ctx *p);

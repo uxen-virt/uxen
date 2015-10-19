@@ -346,6 +346,7 @@ static void cx_close(struct clt_ctx *cx);
 static void cx_free(struct clt_ctx *cx);
 static void cx_get(struct clt_ctx *cx);
 static void cx_put(struct clt_ctx *cx);
+static int cx_parser_create_request(struct clt_ctx *cx);
 static int cx_proxy_decide(struct clt_ctx *cx);
 static void cx_proxy_set(struct clt_ctx *cx, struct proxy_t *proxy);
 static int cx_chr_can_read(void *opaque);
@@ -807,7 +808,7 @@ static int start_gproxy_direct(struct http_ctx *hp)
     if (hp_cx_connect_buffs(hp, true) < 0)
         goto out;
 
-    if (!hp->cx->clt_parser && parser_create_request(&hp->cx->clt_parser, hp->cx))
+    if (cx_parser_create_request(hp->cx))
         goto out;
     if (hp->cx->srv_parser)
         parser_reset(hp->cx->srv_parser);
@@ -3061,7 +3062,6 @@ static int hp_srv_process(struct http_ctx *hp)
         }
 
         if (parse_error) {
-            hp->cx->srv_parser->parse_error = 1;
             HLOG2("HTTP parse error. lparsed %u for %u, errno %d pl %d ml "
                     "%d cl %ld",
                     (unsigned int) lparsed, (unsigned int) hp->cx->out->len,
@@ -4788,6 +4788,14 @@ static void cx_free(struct clt_ctx *cx)
     free(cx);
 }
 
+static int cx_parser_create_request(struct clt_ctx *cx)
+{
+    if (cx->clt_parser)
+        return 0;
+
+    return parser_create_request(&cx->clt_parser, cx, !!(cx->flags & CXF_GUEST_PROXY));
+}
+
 static void cx_reset_state(struct clt_ctx *cx, bool soft)
 {
     if (!soft) {
@@ -5398,7 +5406,7 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
             netlog_print_esc("cx->in", BUFF_CSTR(cx->in), cx->in->len);
         }
         ret = len_buf;
-        if (!cx->clt_parser && parser_create_request(&cx->clt_parser, cx) < 0)
+        if (cx_parser_create_request(cx) < 0)
             goto err;
         lparsed = HTTP_PARSE_BUFF(cx->clt_parser, cx->in);
         if (lparsed != cx->in->len && maybe_binary) {
@@ -5804,7 +5812,7 @@ ns_cx_open(void *opaque, struct nickel *ni, CharDriverState **persist_chr,
 
     cx->ni_opaque = opaque;
     cx->flags |= (CXF_GUEST_PROXY | CXF_HTTP);
-    if (parser_create_request(&cx->clt_parser, cx) < 0)
+    if (cx_parser_create_request(cx) < 0)
         goto mem_err;
 
     qemu_chr_add_handlers(chr, cx_chr_can_read, cx_chr_read, NULL, cx);

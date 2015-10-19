@@ -907,8 +907,11 @@ size_t http_parser_execute (http_parser *parser,
           case 'T': parser->method = HTTP_TRACE; break;
           case 'U': parser->method = HTTP_UNLOCK; /* or UNSUBSCRIBE */ break;
           default:
-            SET_ERRNO(HPE_INVALID_METHOD);
-            goto error;
+            if (!parser->any_http_verb) {
+                SET_ERRNO(HPE_INVALID_METHOD);
+                goto error;
+            }
+            parser->method = HTTP_METHOD_UNKNOWN;
         }
         parser->state = s_req_method;
 
@@ -926,9 +929,9 @@ size_t http_parser_execute (http_parser *parser,
         }
 
         matcher = method_strings[parser->method];
-        if (ch == ' ' && matcher[parser->index] == '\0') {
+        if (ch == ' ' && (parser->method == HTTP_METHOD_UNKNOWN || matcher[parser->index] == '\0')) {
           parser->state = s_req_spaces_before_url;
-        } else if (ch == matcher[parser->index]) {
+        } else if (parser->method == HTTP_METHOD_UNKNOWN || ch == matcher[parser->index]) {
           ; /* nada */
         } else if (parser->method == HTTP_CONNECT) {
           if (parser->index == 1 && ch == 'H') {
@@ -936,7 +939,9 @@ size_t http_parser_execute (http_parser *parser,
           } else if (parser->index == 2  && ch == 'P') {
             parser->method = HTTP_COPY;
           } else {
-            goto error;
+            if (!parser->any_http_verb)
+                goto error;
+            parser->method = HTTP_METHOD_UNKNOWN;
           }
         } else if (parser->method == HTTP_MKCOL) {
           if (parser->index == 1 && ch == 'O') {
@@ -948,13 +953,17 @@ size_t http_parser_execute (http_parser *parser,
           } else if (parser->index == 2 && ch == 'A') {
             parser->method = HTTP_MKACTIVITY;
           } else {
-            goto error;
+            if (!parser->any_http_verb)
+                goto error;
+            parser->method = HTTP_METHOD_UNKNOWN;
           }
         } else if (parser->method == HTTP_SUBSCRIBE) {
           if (parser->index == 1 && ch == 'E') {
             parser->method = HTTP_SEARCH;
           } else {
-            goto error;
+            if (!parser->any_http_verb)
+                goto error;
+            parser->method = HTTP_METHOD_UNKNOWN;
           }
         } else if (parser->index == 1 && parser->method == HTTP_POST) {
           if (ch == 'R') {
@@ -964,7 +973,9 @@ size_t http_parser_execute (http_parser *parser,
           } else if (ch == 'A') {
             parser->method = HTTP_PATCH;
           } else {
-            goto error;
+            if (!parser->any_http_verb)
+                goto error;
+            parser->method = HTTP_METHOD_UNKNOWN;
           }
         } else if (parser->index == 2) {
           if (parser->method == HTTP_PUT) {
@@ -975,8 +986,11 @@ size_t http_parser_execute (http_parser *parser,
         } else if (parser->index == 4 && parser->method == HTTP_PROPFIND && ch == 'P') {
           parser->method = HTTP_PROPPATCH;
         } else {
-          SET_ERRNO(HPE_INVALID_METHOD);
-          goto error;
+          if (!parser->any_http_verb) {
+              SET_ERRNO(HPE_INVALID_METHOD);
+              goto error;
+          }
+          parser->method = HTTP_METHOD_UNKNOWN;
         }
 
         ++parser->index;

@@ -112,6 +112,7 @@ typedef int (*http_cb) (http_parser*);
   /* RFC-5789 */                    \
   XX(24, PATCH,       PATCH)        \
   XX(25, PURGE,       PURGE)        \
+  XX(255, METHOD_UNKNOWN, METHOD_UNKNOWN) \
 
 enum http_method
   {
@@ -217,6 +218,9 @@ struct http_parser {
    * error checking.
    */
   unsigned char upgrade : 1;
+
+  /** FLAGS **/
+  unsigned char any_http_verb : 1;
 
   /** PUBLIC **/
   void *data; /* A pointer to get hook to the "connection" or "socket" object */

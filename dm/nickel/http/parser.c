@@ -12,11 +12,14 @@
 #include <inttypes.h>
 #include "strings.h"
 #include "parser.h"
+#include <nickel.h>
 #include <log.h>
 
 #ifndef ULLONG_MAX
 # define ULLONG_MAX ((uint64_t) -1) /* 2^64-1 */
 #endif
+
+#define MAX_UNKNOWN_METHOD_LEN  1024
 
 /* req */
 static int req_on_message_begin(struct http_parser *parser)
@@ -33,8 +36,12 @@ static int req_on_url(struct http_parser *parser, const char *at, size_t length)
     struct parser_ctx *p = (struct parser_ctx *) parser->data;
     struct http_header *h = &p->h;
 
-    if (!h->method)
-        h->method = http_method_str(parser->method);
+    if (!h->method) {
+        if (parser->method != HTTP_METHOD_UNKNOWN)
+            h->method = http_method_str(parser->method);
+        else if (h->method_saved)
+            h->method = h->method_str;
+    }
 
     if (!h->url && !buff_new_priv(&h->url, 256))
         goto out;
@@ -257,7 +264,7 @@ out:
     return ret;
 }
 
-int parser_create_request(struct parser_ctx **pp, void *hx)
+int parser_create_request(struct parser_ctx **pp, void *hx, int any_http_verb)
 {
     int ret = -1;
     struct parser_ctx *parser;
@@ -275,6 +282,8 @@ int parser_create_request(struct parser_ctx **pp, void *hx)
     parser->parser.data = parser;
     parser->hx = hx;
     parser->req_type = 1;
+    if (any_http_verb)
+        parser->any_http_verb = 1;
     parser_reset(parser);
 
     *pp = parser;
@@ -315,9 +324,73 @@ size_t parser_execute(struct parser_ctx *p, const char *b, size_t l)
     if (l == 0)
         goto out;
 
+    if (p->any_http_verb && !p->h.method_saved && !p->parse_error) {
+        const char *sc;
+
+        sc = memchr(b, ' ', l);
+        if (sc)
+            p->h.method_saved = 1;
+        else
+            sc = b + l;
+
+        if (!p->h.method_str || p->h.method_str == p->h.method_buf) {
+            if (p->h.method_buf_len + (sc - b) < sizeof(p->h.method_buf)) {
+                memcpy(p->h.method_buf + p->h.method_buf_len, b, (sc - b));
+                p->h.method_buf_len += (sc - b);
+                p->h.method_buf[p->h.method_buf_len] = 0;
+                p->h.method_str = p->h.method_buf;
+            } else {
+                p->h.method_str = NULL;
+            }
+        }
+
+        /* slowpath */
+        if (p->h.method_str != p->h.method_buf) {
+            char *tmp_p;
+            size_t plen = 0;
+
+            if (p->h.method_str)
+                plen = strlen(p->h.method_str);
+
+            if (plen >= MAX_UNKNOWN_METHOD_LEN) {
+                NETLOG("%s: hx %"PRIxPTR " strangely long unknown HTTP method. parse ERROR.",
+                        __FUNCTION__, (uintptr_t) p->hx);
+                p->parse_error = 1;
+                p->h.method_saved = 0;
+                ret = 0;
+                goto out;
+            }
+
+            tmp_p = ni_priv_realloc(p->h.method_str, p->h.method_buf_len + plen +
+                    (sc - b) + 1);
+            if (!tmp_p) {
+                warnx("%s: malloc", __FUNCTION__);
+                p->parse_error = 1;
+                p->h.method_saved = 0;
+                ret = 0;
+                goto out;
+            }
+            p->h.method_str = tmp_p;
+
+            if (p->h.method_buf_len > 0) {
+                memcpy(p->h.method_str + plen, p->h.method_buf, p->h.method_buf_len);
+                plen += p->h.method_buf_len;
+                p->h.method_buf_len = 0;
+                p->h.method_buf[0] = 0;
+            }
+            memcpy(p->h.method_str + plen, b, (sc - b));
+            plen += (sc - b);
+            p->h.method_str[plen] = 0;
+        }
+    }
+
     p->body_at = NULL;
     ret = http_parser_execute(&p->parser, &p->settings, b, l);
     p->parsed_len += ret;
+
+    if (ret != l)
+        p->parse_error = 1;
+
     if (!p->h.header_length) {
         if (p->body_at) {
             assert(p->body_at - b > 0 && p->body_at - b <= l);
@@ -344,9 +417,18 @@ void parser_reset(struct parser_ctx *p)
     //http_parser_init(&p->parser, p->req_type ? HTTP_REQUEST : HTTP_RESPONSE);
     http_parser_init(&p->parser, HTTP_BOTH);
 
+    if (p->any_http_verb)
+        p->parser.any_http_verb = 1;
+
     p->h.crt_header = 0;
     p->h.hint_size = 0;
     p->h.method = NULL;
+    p->h.method_buf_len = 0;
+    p->h.method_buf[0] = 0;
+    if (p->h.method_str != p->h.method_buf)
+        ni_priv_free(p->h.method_str);
+    p->h.method_str = NULL;
+    p->h.method_saved = 0;
     p->h.status_code = 0;
     p->h.http_major = p->h.http_minor = 0;
     p->h.content_length = 0;
