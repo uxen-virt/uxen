@@ -383,11 +383,15 @@ DefinitionBlock ("DSDT.aml", "DSDT", 2, "Xen", "HVM", 0)
                 Name(_CID, "uxennul")
                 Method(_STA, 0, NotSerialized) {
                     Store(0x00,UXBN)
-                    If(LEqual(UXBE, 0)) {
-                        return(0x0F)
-                    } Else {
-                        return(0x00)
-                    }
+                    return(UXBE)
+                }
+                Method (_DIS, 0, NotSerialized) {
+                    Store(0x00,UXBN)
+                    Store(0x01,UXBE)
+                }
+                Method (_SRS, 1, NotSerialized) {
+                    Store(0x00,UXBN)
+                    Store(0x00,UXBE)
                 }
                 Method(VMAC,0) {
                     Name(NBUF,Buffer() { 0x00,0x00,0x00,0x00,0x00,0x00 })
@@ -413,11 +417,15 @@ DefinitionBlock ("DSDT.aml", "DSDT", 2, "Xen", "HVM", 0)
                 Name(_CID, "uxennul")
                 Method(_STA, 0, NotSerialized) {
                     Store(0x01,UXBN)
-                    If(LEqual(UXBE, 0)) {
-                        return(0x0F)
-                    } Else {
-                        return(0x00)
-                    }
+                    return(UXBE)
+                }
+                Method (_DIS, 0, NotSerialized) {
+                    Store(0x01,UXBN)
+                    Store(0x01,UXBE)
+                }
+                Method (_SRS, 1, NotSerialized) {
+                    Store(0x01,UXBN)
+                    Store(0x00,UXBE)
                 }
                 Method(VMAC,0) {
                     Name(NBUF,Buffer() { 0x00,0x00,0x00,0x00,0x00,0x00 })
@@ -443,11 +451,15 @@ DefinitionBlock ("DSDT.aml", "DSDT", 2, "Xen", "HVM", 0)
                 Name(_CID, "uxennul")
                 Method(_STA, 0, NotSerialized) {
                     Store(0x02,UXBN)
-                    If(LEqual(UXBE, 0)) {
-                        return(0x0F)
-                    } Else {
-                        return(0x00)
-                    }
+                    return(UXBE)
+                }
+                Method (_DIS, 0, NotSerialized) {
+                    Store(0x02,UXBN)
+                    Store(0x01,UXBE)
+                }
+                Method (_SRS, 1, NotSerialized) {
+                    Store(0x02,UXBN)
+                    Store(0x00,UXBE)
                 }
                 Method(VMAC,0) {
                     Name(NBUF,Buffer() { 0x00,0x00,0x00,0x00,0x00,0x00 })
@@ -473,11 +485,15 @@ DefinitionBlock ("DSDT.aml", "DSDT", 2, "Xen", "HVM", 0)
                 Name(_CID, "uxennul")
                 Method(_STA, 0, NotSerialized) {
                     Store(0x03,UXBN)
-                    If(LEqual(UXBE, 0)) {
-                        return(0x0F)
-                    } Else {
-                        return(0x00)
-                    }
+                    return(UXBE)
+                }
+                Method (_DIS, 0, NotSerialized) {
+                    Store(0x03,UXBN)
+                    Store(0x01,UXBE)
+                }
+                Method (_SRS, 1, NotSerialized) {
+                    Store(0x03,UXBN)
+                    Store(0x00,UXBE)
                 }
                 Method(VMAC,0) {
                     Name(NBUF,Buffer() { 0x00,0x00,0x00,0x00,0x00,0x00 })
@@ -503,11 +519,15 @@ DefinitionBlock ("DSDT.aml", "DSDT", 2, "Xen", "HVM", 0)
                 Name(_CID, "uxennul")
                 Method(_STA, 0, NotSerialized) {
                     Store(0x04,UXBN)
-                    If(LEqual(UXBE, 0)) {
-                        return(0x0F)
-                    } Else {
-                        return(0x00)
-                    }
+                    return(UXBE)
+                }
+                Method (_DIS, 0, NotSerialized) {
+                    Store(0x04,UXBN)
+                    Store(0x01,UXBE)
+                }
+                Method (_SRS, 1, NotSerialized) {
+                    Store(0x04,UXBN)
+                    Store(0x00,UXBE)
                 }
                 Method(VMAC,0) {
                     Name(NBUF,Buffer() { 0x00,0x00,0x00,0x00,0x00,0x00 })
@@ -533,11 +553,15 @@ DefinitionBlock ("DSDT.aml", "DSDT", 2, "Xen", "HVM", 0)
                 Name(_CID, "uxennul")
                 Method(_STA, 0, NotSerialized) {
                     Store(0x05,UXBN)
-                    If(LEqual(UXBE, 0)) {
-                        return(0x0F)
-                    } Else {
-                        return(0x00)
-                    }
+                    return(UXBE)
+                }
+                Method (_DIS, 0, NotSerialized) {
+                    Store(0x05,UXBN)
+                    Store(0x01,UXBE)
+                }
+                Method (_SRS, 1, NotSerialized) {
+                    Store(0x05,UXBN)
+                    Store(0x00,UXBE)
                 }
                 Method(VMAC,0) {
                     Name(NBUF,Buffer() { 0x00,0x00,0x00,0x00,0x00,0x00 })

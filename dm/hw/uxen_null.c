@@ -19,6 +19,7 @@ struct null_net_state {
     ISADevice dev;
     NICState *nic;
     NICConf conf;
+    uint8_t disabled;
 };
 
 struct null_enum_state {
@@ -76,6 +77,7 @@ static const VMStateDescription vmstate_null_net = {
     .minimum_version_id_old = 1,
     .fields = (VMStateField[]) {
         VMSTATE_MACADDR(conf.macaddr, struct null_net_state),
+        VMSTATE_UINT8(disabled, struct null_net_state),
         VMSTATE_END_OF_LIST ()
     },
 };
@@ -97,15 +99,25 @@ static void
 null_enum_ioport_write(void *opaque, uint32_t addr, uint32_t val)
 {
     struct null_enum_state *s = opaque;
+    struct null_net_state *n;
 
     addr &= 0xF;
 
     debug_printf("%s: addr=%x val=%x\n", __FUNCTION__, addr, val);
 
-    if (addr)
-        return;
-
-    s->index = val & 0xff;
+    switch (addr) {
+    case 0:
+        s->index = val & 0xff;
+        break;
+    case 1:
+        n = s->nics[s->index];
+        if (!n)
+            break;
+        n->disabled = val;
+        break;
+    default:
+        break;
+    }
 }
 
 static uint32_t
@@ -126,7 +138,9 @@ null_enum_ioport_read(void *opaque, uint32_t addr)
         ret = s->index;
         break;
     case 1:
-        ret = n ? 0x0 : 0xff;
+        ret = 0;
+        if (n)
+            ret = n->disabled ? 0x0D : 0x0F;
         break;
     case 2:
     case 3:
