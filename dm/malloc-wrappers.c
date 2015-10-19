@@ -159,7 +159,7 @@ void * __wrap_VirtualAlloc(void *addr, size_t size, DWORD type, DWORD protect)
 {
     void *r;
     r = VirtualAlloc(addr, size, type, protect);
-    assert_always(r);
+    assert_always(type == MEM_RESET || r);
     return r;
 }
 
