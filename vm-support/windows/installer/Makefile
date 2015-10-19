@@ -28,6 +28,7 @@ UXENVMLIB_DIR = $(DISTDIR_VM_SUPPORT)/uxenvmlib
 UXENV4VLIB_DIR = $(DISTDIR_VM_SUPPORT)/uxenv4vlib
 UXENV4VGUEST_DIR = $(DISTDIR_VM_SUPPORT)/uxenv4vguest
 UXENNET_DIR = $(DISTDIR_VM_SUPPORT)/uxennet
+UXENNULLNET_DIR = $(DISTDIR_VM_SUPPORT)/uxennullnet
 UXENPRELOAD_DIR = $(DISTDIR_VM_SUPPORT)/uxenpreload
 #UXENZEROSHARE_DIR = $(DISTDIR_VM_SUPPORT)/uxenzeroshare
 UXENHID_DIR = $(DISTDIR_VM_SUPPORT)/uxenhid
@@ -67,6 +68,7 @@ WIX_INCLUDES = -delevatedir=$(ELEVATE_DIR) \
 	       -duxenstordir=$(UXENSTOR_DIR) \
 	       -duxenv4vguestdir=$(UXENV4VGUEST_DIR) \
 	       -duxennetdir=$(UXENNET_DIR) \
+	       -duxennullnetdir=$(UXENNULLNET_DIR) \
 	       -duxensvcdir=$(UXENSVC_DIR) \
 	       -duxenpreloaddir=$(UXENPRELOAD_DIR) \
 	       -dWin64=$(WIN64) \
@@ -85,6 +87,7 @@ WIX_DEPS = $(ELEVATE_DIR)/elevate.exe \
 	   $(UXENPLATFORM_DIR)/uxenplatform.sys \
 	   $(UXENV4VGUEST_DIR)/uxenv4vguest.sys \
 	   $(UXENNET_DIR)/uxennet.sys \
+	   $(UXENNULLNET_DIR)/uxennullnet.sys \
 	   $(UXENSF_DIR)/uxensf.sys \
 	   $(UXENSTOR_DIR)/uxenstor.sys \
 	   $(UXENSVC_DIR)/uxensvc.exe \
@@ -135,6 +138,8 @@ $(UXENV4VGUEST_DIR)/uxenv4vguest.sys:
 	$(MAKE) -C $(SRCDIR)/../uxenv4vguest dist
 $(UXENNET_DIR)/uxennet.sys:
 	$(MAKE) -C $(SRCDIR)/../uxennet dist
+$(UXENNULLNET_DIR)/uxennullnet.sys:
+	$(MAKE) -C $(SRCDIR)/../uxennullnet dist
 $(UXENVMLIB_DIR)/uxenvmlib.sys:
 	$(MAKE) -C $(SRCDIR)/../uxenvmlib dist
 $(UXENV4VLIB_DIR)/uxenv4vlib.sys:

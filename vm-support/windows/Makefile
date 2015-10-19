@@ -25,6 +25,7 @@ SUBDIRS += uxenpreload
 SUBDIRS += uxenv4vguest
 SUBDIRS += uxenstor
 SUBDIRS += uxennet
+SUBDIRS += uxennullnet
 SUBDIRS += uxensf
 SUBDIRS += uxenhid
 SUBDIRS += installer

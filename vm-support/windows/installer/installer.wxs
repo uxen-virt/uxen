@@ -147,6 +147,14 @@
                             <difx:Driver Legacy="yes" ForceInstall="yes" Sequence='6' />
                         </Component>
                     </Directory>
+                    <Directory Id='uxennullnet' Name='uxennullnet'>
+                        <Component Id="uxennullnet" Guid="fe5bbc43-1394-4546-a195-5484b10e1de2">
+                            <File Id="uxennullnet.sys" Name="uxennullnet.sys" DiskId="1" Source="$(var.uxennullnetdir)/uxennullnet.sys" />
+                            <File Id="uxennullnet.cat" Name="uxennullnet.cat" DiskId="1" Source="$(var.uxennullnetdir)/uxennullnet.cat" />
+                            <File Id="uxennullnet.inf" Name="uxennullnet.inf" DiskId="1" Source="$(var.uxennullnetdir)/uxennullnet.inf" />
+                            <difx:Driver Legacy="yes" ForceInstall="yes" Sequence='6' />
+                        </Component>
+                    </Directory>
                     <Directory Id='uxenhid' Name='uxenhid'>
                         <Component Id="uxenhid" Guid="888021b0-dbda-476e-9847-e5954cecc772" Win64="$(var.Win64)">
                             <File Id="uxenhid.sys" Name="uxenhid.sys" DiskId="1" Source="$(var.uxenhiddir)/uxenhid.sys" />
@@ -186,6 +194,7 @@
 <!--            <ComponentRef Id='uxenstorflt' /> -->
             <ComponentRef Id='uxenv4vguest' />
             <ComponentRef Id='uxennet' />
+            <ComponentRef Id='uxennullnet' />
             <ComponentRef Id='uxenpreload' />
             <ComponentRef Id='uxenhid' />
 <!--            <ComponentRef Id='uxenzeroshare' /> -->
