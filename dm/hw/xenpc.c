@@ -336,14 +336,28 @@ pc_init_xen(void)
             }
         }
     } else {
+        ISADevice *dev;
+        ISADevice *enumerator = isa_create_simple("null_enum");
+
+        int null_enum_add_child(ISADevice *dev, unsigned int index, ISADevice *child);
+
         for (i = 0; !i; ++i) {
-            ISADevice *dev;
             if (nd_table[i].used) {
                 if (!nd_table[i].netdev && !nd_table[i].vlan)
                     nd_table[i].vlan = qemu_find_vlan(0, 1);
                 dev=isa_create("uxen_net");
                 qdev_set_nic_properties(&dev->qdev, &nd_table[i]);
                 qdev_init(&dev->qdev);
+            }
+        }
+        for (; i < MAX_NICS; i++) {
+            if (nd_table[i].used) {
+                if (!nd_table[i].netdev && !nd_table[i].vlan)
+                    nd_table[i].vlan = qemu_find_vlan(0, 1);
+                dev = isa_create_simple("null_net");
+                qdev_set_nic_properties(&dev->qdev, &nd_table[i]);
+                qdev_init(&dev->qdev);
+                null_enum_add_child(enumerator, i - 1, dev);
             }
         }
     }

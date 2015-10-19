@@ -1,0 +1,36 @@
+TARGETNAME = uxennullnet
+TARGETTYPE = DRIVER
+
+!include ../common/sources.inc
+
+!if defined(UXEN_BUILD_INFO)
+RCOPTIONS=$(RCOPTIONS) /DBUILD_INFO=$(UXEN_BUILD_INFO)
+USER_C_FLAGS=$(USER_C_FLAGS) /DBUILD_INFO=$(UXEN_BUILD_INFO)
+!endif
+
+INF_NAME = uxennullnet
+
+NTTARGETFILE0 = $(OBJ_PATH)\$(O)\$(INF_NAME).inf
+PASS0_BINPLACE = $(NTTARGETFILE0)
+
+NTTARGETFILE1 = COPY
+NTTARGETFILE2 = POST
+
+INCLUDES=..\..\..\common\include\xen-public;..\common
+
+TARGETLIBS=$(DDK_LIB_PATH)\ndis.lib
+
+LINKER_FLAGS = $(LINKER_FLAGS) /LTCG:NOSTATUS /SECTION:.rsrc,!d
+
+C_DEFINES=$(C_DEFINES) -DNDIS_MINIPORT_DRIVER=1
+C_DEFINES=$(C_DEFINES) -DNDIS60_MINIPORT=1
+
+SOURCES = adapter.c \
+          ctrlpath.c \
+          datapath.c \
+          miniport.c \
+          mphal.c \
+          qos1.c \
+          tcbrcb.c \
+          vmq.c \
+          acpi.c

@@ -366,6 +366,198 @@ DefinitionBlock ("DSDT.aml", "DSDT", 2, "Xen", "HVM", 0)
 		}
 	    }
 
+            OperationRegion(UXBO, SystemIO, 0x820, 0x10)
+            Field(UXBO,ByteAcc,NoLock,Preserve) {
+                  UXBN,8,
+                  UXBE,8,
+                  UBM0,8,
+                  UBM1,8,
+                  UBM2,8,
+                  UBM3,8,
+                  UBM4,8,
+                  UBM5,8
+            }
+
+            Device (UXB0) {
+                Name(_HID, EISAID("UXB0100"))
+                Name(_CID, "uxennul")
+                Method(_STA, 0, NotSerialized) {
+                    Store(0x00,UXBN)
+                    If(LEqual(UXBE, 0)) {
+                        return(0x0F)
+                    } Else {
+                        return(0x00)
+                    }
+                }
+                Method(VMAC,0) {
+                    Name(NBUF,Buffer() { 0x00,0x00,0x00,0x00,0x00,0x00 })
+                    Store(0x00,UXBN)
+                    CreateByteField(NBUF,0x00,NB0)
+                    CreateByteField(NBUF,0x01,NB1)
+                    CreateByteField(NBUF,0x02,NB2)
+                    CreateByteField(NBUF,0x03,NB3)
+                    CreateByteField(NBUF,0x04,NB4)
+                    CreateByteField(NBUF,0x05,NB5)
+                    Store(UBM0,NB0)
+                    Store(UBM1,NB1)
+                    Store(UBM2,NB2)
+                    Store(UBM3,NB3)
+                    Store(UBM4,NB4)
+                    Store(UBM5,NB5)
+                    Return(NBUF)
+                }
+            }
+
+            Device (UXB1) {
+                Name(_HID, EISAID("UXB0101"))
+                Name(_CID, "uxennul")
+                Method(_STA, 0, NotSerialized) {
+                    Store(0x01,UXBN)
+                    If(LEqual(UXBE, 0)) {
+                        return(0x0F)
+                    } Else {
+                        return(0x00)
+                    }
+                }
+                Method(VMAC,0) {
+                    Name(NBUF,Buffer() { 0x00,0x00,0x00,0x00,0x00,0x00 })
+                    Store(0x01,UXBN)
+                    CreateByteField(NBUF,0x00,NB0)
+                    CreateByteField(NBUF,0x01,NB1)
+                    CreateByteField(NBUF,0x02,NB2)
+                    CreateByteField(NBUF,0x03,NB3)
+                    CreateByteField(NBUF,0x04,NB4)
+                    CreateByteField(NBUF,0x05,NB5)
+                    Store(UBM0,NB0)
+                    Store(UBM1,NB1)
+                    Store(UBM2,NB2)
+                    Store(UBM3,NB3)
+                    Store(UBM4,NB4)
+                    Store(UBM5,NB5)
+                    Return(NBUF)
+                }
+            }
+
+            Device (UXB2) {
+                Name(_HID, EISAID("UXB0102"))
+                Name(_CID, "uxennul")
+                Method(_STA, 0, NotSerialized) {
+                    Store(0x02,UXBN)
+                    If(LEqual(UXBE, 0)) {
+                        return(0x0F)
+                    } Else {
+                        return(0x00)
+                    }
+                }
+                Method(VMAC,0) {
+                    Name(NBUF,Buffer() { 0x00,0x00,0x00,0x00,0x00,0x00 })
+                    Store(0x02,UXBN)
+                    CreateByteField(NBUF,0x00,NB0)
+                    CreateByteField(NBUF,0x01,NB1)
+                    CreateByteField(NBUF,0x02,NB2)
+                    CreateByteField(NBUF,0x03,NB3)
+                    CreateByteField(NBUF,0x04,NB4)
+                    CreateByteField(NBUF,0x05,NB5)
+                    Store(UBM0,NB0)
+                    Store(UBM1,NB1)
+                    Store(UBM2,NB2)
+                    Store(UBM3,NB3)
+                    Store(UBM4,NB4)
+                    Store(UBM5,NB5)
+                    Return(NBUF)
+                }
+            }
+
+            Device (UXB3) {
+                Name(_HID, EISAID("UXB0103"))
+                Name(_CID, "uxennul")
+                Method(_STA, 0, NotSerialized) {
+                    Store(0x03,UXBN)
+                    If(LEqual(UXBE, 0)) {
+                        return(0x0F)
+                    } Else {
+                        return(0x00)
+                    }
+                }
+                Method(VMAC,0) {
+                    Name(NBUF,Buffer() { 0x00,0x00,0x00,0x00,0x00,0x00 })
+                    Store(0x03,UXBN)
+                    CreateByteField(NBUF,0x00,NB0)
+                    CreateByteField(NBUF,0x01,NB1)
+                    CreateByteField(NBUF,0x02,NB2)
+                    CreateByteField(NBUF,0x03,NB3)
+                    CreateByteField(NBUF,0x04,NB4)
+                    CreateByteField(NBUF,0x05,NB5)
+                    Store(UBM0,NB0)
+                    Store(UBM1,NB1)
+                    Store(UBM2,NB2)
+                    Store(UBM3,NB3)
+                    Store(UBM4,NB4)
+                    Store(UBM5,NB5)
+                    Return(NBUF)
+                }
+            }
+
+            Device (UXB4) {
+                Name(_HID, EISAID("UXB0104"))
+                Name(_CID, "uxennul")
+                Method(_STA, 0, NotSerialized) {
+                    Store(0x04,UXBN)
+                    If(LEqual(UXBE, 0)) {
+                        return(0x0F)
+                    } Else {
+                        return(0x00)
+                    }
+                }
+                Method(VMAC,0) {
+                    Name(NBUF,Buffer() { 0x00,0x00,0x00,0x00,0x00,0x00 })
+                    Store(0x04,UXBN)
+                    CreateByteField(NBUF,0x00,NB0)
+                    CreateByteField(NBUF,0x01,NB1)
+                    CreateByteField(NBUF,0x02,NB2)
+                    CreateByteField(NBUF,0x03,NB3)
+                    CreateByteField(NBUF,0x04,NB4)
+                    CreateByteField(NBUF,0x05,NB5)
+                    Store(UBM0,NB0)
+                    Store(UBM1,NB1)
+                    Store(UBM2,NB2)
+                    Store(UBM3,NB3)
+                    Store(UBM4,NB4)
+                    Store(UBM5,NB5)
+                    Return(NBUF)
+                }
+            }
+
+            Device (UXB5) {
+                Name(_HID, EISAID("UXB0105"))
+                Name(_CID, "uxennul")
+                Method(_STA, 0, NotSerialized) {
+                    Store(0x05,UXBN)
+                    If(LEqual(UXBE, 0)) {
+                        return(0x0F)
+                    } Else {
+                        return(0x00)
+                    }
+                }
+                Method(VMAC,0) {
+                    Name(NBUF,Buffer() { 0x00,0x00,0x00,0x00,0x00,0x00 })
+                    Store(0x05,UXBN)
+                    CreateByteField(NBUF,0x00,NB0)
+                    CreateByteField(NBUF,0x01,NB1)
+                    CreateByteField(NBUF,0x02,NB2)
+                    CreateByteField(NBUF,0x03,NB3)
+                    CreateByteField(NBUF,0x04,NB4)
+                    CreateByteField(NBUF,0x05,NB5)
+                    Store(UBM0,NB0)
+                    Store(UBM1,NB1)
+                    Store(UBM2,NB2)
+                    Store(UBM3,NB3)
+                    Store(UBM4,NB4)
+                    Store(UBM5,NB5)
+                    Return(NBUF)
+                }
+            }
+
             Device(UXH) {
                 Name(_HID, EISAID("UXH0000"))
                 Name(_CID, "uxenhid")
