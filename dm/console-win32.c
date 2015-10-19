@@ -1500,7 +1500,7 @@ win_event_loop(PVOID opaque)
 
     ret = WaitForSingleObject(s->start_event, INFINITE);
     if (ret == WAIT_FAILED)
-        Wwarn("WaitForSingleObject failed");
+        Wwarn("%s: WaitForSingleObject failed", __FUNCTION__);
     CloseHandle(s->start_event);
     s->start_event = NULL;
 
@@ -1639,7 +1639,7 @@ gui_start(struct gui_state *state)
 
     ret = WaitForSingleObject(s->ready_event, INFINITE);
     if (ret == WAIT_FAILED)
-        Wwarn("WaitForSingleObject failed");
+        Wwarn("%s: WaitForSingleObject failed", __FUNCTION__);
     CloseHandle(s->ready_event);
     s->ready_event = NULL;
 }
@@ -1657,7 +1657,7 @@ gui_destroy(struct gui_state *state)
         /* Wait for window thread finishing. */
         ret = WaitForSingleObject(s->event_loop_thread, INFINITE);
         if (ret == WAIT_FAILED)
-            Wwarn("WaitForSingleObject failed");
+            Wwarn("%s: WaitForSingleObject failed", __FUNCTION__);
         CloseHandle(s->event_loop_thread);
         s->event_loop_thread = NULL;
 
