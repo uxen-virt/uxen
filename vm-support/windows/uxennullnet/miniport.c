@@ -439,7 +439,7 @@ DbgPrintOidName(
 
 VOID
 DbgPrintAddress(
-    _In_reads_bytes_(NIC_MACADDR_SIZE) PUCHAR Address)
+    PUCHAR Address)
 {
     UNREFERENCED_PARAMETER(Address);
 }
