@@ -1206,6 +1206,10 @@ static void v4v_ring_remove_mfns (struct v4v_ring_info *ring_info, int put_pages
         v4v_xfree (ring_info->mfns);
     }
     ring_info->mfns = NULL;
+    if (ring_info->mfn_mapping) {
+        v4v_xfree(ring_info->mfn_mapping);
+        ring_info->mfn_mapping = NULL;
+    }
 }
 
 /*caller must hold W(L2) */
