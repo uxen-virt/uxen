@@ -121,6 +121,7 @@ typedef struct _MRX_VBOX_FOBX_
     BOOLEAN fKeepLastWriteTime;
     BOOLEAN fKeepChangeTime;
     BYTE SetFileInfoOnCloseFlags;
+    BYTE no_flush;
 } MRX_VBOX_FOBX, *PMRX_VBOX_FOBX;
 
 #define VBoxMRxGetDeviceExtension(RxContext) \

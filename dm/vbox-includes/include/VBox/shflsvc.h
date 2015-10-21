@@ -560,6 +560,9 @@ typedef enum _SHFLCREATERESULT
 /* warning, 0x00080000 used above as SHFL_CF_ACCESS_DENYDELETE */
 /** @} */
 
+/** File flush operations are disabled */
+#define SHFL_CF_NO_FLUSH                (0x00100000)
+
 #pragma pack(1)
 typedef struct _SHFLCREATEPARMS
 {

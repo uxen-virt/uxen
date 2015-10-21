@@ -365,6 +365,7 @@ void vbsfSaveHandleTable(QEMUFile *f)
                 qemu_put_be32(f, len);
                 qemu_put_buffer(f, (uint8_t*)pwszFilename, len);
                 qemu_put_be32(f, pHandles[i].uOpenFlags);
+                qemu_put_be64(f, pHandles[i].data.folder_opts);
             }
         }
     }
@@ -430,13 +431,14 @@ int vbsfLoadHandleTable(QEMUFile *f)
 
         pHandles[idx].pwszFilename = pwszFilename;
         pHandles[idx].uOpenFlags = qemu_get_be32(f);
+        pHandles[idx].data.folder_opts = qemu_get_be64(f);
         pHandles[idx].bFileNotFound = 0;
         pHandles[idx].bOpening = 1;
         pHandles[idx].cryptchanged = 0; /* will get handled in reopen */
         pHandles[idx].crypt = NULL;
         pHandles[idx].data.fsize = 0;
         pHandles[idx].data.link = 0;
-        pHandles[idx].data.quota_cachedattrs =0;
+        pHandles[idx].data.quota_cachedattrs = 0;
 
         ioh_event_init(&pHandles[idx].ready_ev);
     }
@@ -502,7 +504,8 @@ SHFLHANDLE  vbsfAllocHandle(PSHFLCLIENTDATA pClient, uint32_t uType,
     pHandles[handle].crypt = NULL;
     pHandles[handle].data.fsize = 0;
     pHandles[handle].data.link = 0;
-    pHandles[handle].data.quota_cachedattrs =0;
+    pHandles[handle].data.quota_cachedattrs = 0;
+    pHandles[handle].data.folder_opts = 0;
     ioh_event_init(&pHandles[handle].ready_ev);
 
     lastHandleIndex++;

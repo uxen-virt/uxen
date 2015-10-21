@@ -51,7 +51,7 @@ typedef struct
     bool        fWritable;            /**< folder is writable for the guest */
     bool        fAutoMount;           /**< folder will be auto-mounted by the guest */
     bool        fSymlinksCreate;      /**< guest is able to create symlinks */
-    bool        fCrypt;               /**< scramble/crypt file contents */
+    uint64_t    opts;                 /**< other opt flags */
     uint64_t    quota_max, quota_cur; /**< folder quota in bytes */
 } MAPPING;
 /** Pointer to a MAPPING structure. */
@@ -62,8 +62,8 @@ void vbsfMappingInit(void);
 bool vbsfMappingQuery(uint32_t iMapping, PMAPPING *pMapping);
 
 int vbsfMappingsAdd(PSHFLSTRING pFolderName, PSHFLSTRING pMapName,
-                    bool fWritable, bool fAutoMount, bool fCreateSymlinks, bool fCrypt,
-                    uint64_t quota);
+                    bool fWritable, bool fAutoMount, bool fCreateSymlinks,
+                    uint64_t opts, uint64_t quota);
 int vbsfMappingsRemove(PSHFLSTRING pMapName);
 
 int vbsfMappingsQuery(PSHFLCLIENTDATA pClient, PSHFLMAPPING pMappings, uint32_t *pcMappings);

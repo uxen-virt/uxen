@@ -80,6 +80,7 @@ typedef struct _SHFLFILEHANDLE
 } SHFLFILEHANDLE;
 
 struct shfl_handle_data {
+    uint64_t folder_opts;
     int64_t fsize;
     int link;
     int quota_cachedattrs;

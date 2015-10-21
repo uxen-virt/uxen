@@ -637,6 +637,7 @@ control_command_clipboard_render(void *opaque, const char *id, const char *opt,
 
 #if defined(CONFIG_VBOXDRV)
 #include <dm/shared-folders.h>
+
 static int
 control_command_sf_set_subfolder_scramble_mode(
     void *opaque,
@@ -648,16 +649,76 @@ control_command_sf_set_subfolder_scramble_mode(
     struct control_desc *cd = (struct control_desc *)opaque;
     const char *name = dict_get_string(d, "name");
     const char *subfolder = dict_get_string(d, "subfolder");
+    wchar_t *name_w = _utf8_to_wide(name);
+    wchar_t *subfolder_w = _utf8_to_wide(subfolder);
+
     int mode = dict_get_integer(d, "mode");
     int rc;
 
     rc =  mode < 0
-        ? sf_del_subfolder_crypt((char*)name, (char*)subfolder)
-        : sf_add_subfolder_crypt((char*)name, (char*)subfolder, mode);
+        ? sf_restore_opt(name_w, subfolder_w, SF_OPT_SCRAMBLE)
+        : sf_mod_opt(name_w, subfolder_w, SF_OPT_SCRAMBLE, mode ? 1:0);
     if (rc)
         control_send_error(cd, opt, id, rc, NULL);
     else
         control_send_ok(cd, opt, id, NULL);
+    free(name_w);
+    free(subfolder_w);
+    return 0;
+}
+
+static int
+control_command_sf_add_subfolder_opt(
+    void *opaque,
+    const char *id,
+    const char *opt,
+    dict d,
+    void *command_opaque)
+{
+    struct control_desc *cd = (struct control_desc *)opaque;
+    const char *name = dict_get_string(d, "name");
+    const char *subfolder = dict_get_string(d, "subfolder");
+    wchar_t *name_w = _utf8_to_wide(name);
+    wchar_t *subfolder_w = _utf8_to_wide(subfolder);
+
+    uint64_t vopt = dict_get_integer(d, "opt");
+    uint64_t v = dict_get_integer(d, "value");
+    int rc;
+
+    rc = sf_mod_opt(name_w, subfolder_w, vopt, v ? 1 : 0);
+    if (rc)
+        control_send_error(cd, opt, id, rc, NULL);
+    else
+        control_send_ok(cd, opt, id, NULL);
+    free(name_w);
+    free(subfolder_w);
+    return 0;
+}
+
+static int
+control_command_sf_del_subfolder_opt(
+    void *opaque,
+    const char *id,
+    const char *opt,
+    dict d,
+    void *command_opaque)
+{
+    struct control_desc *cd = (struct control_desc *)opaque;
+    const char *name = dict_get_string(d, "name");
+    const char *subfolder = dict_get_string(d, "subfolder");
+    wchar_t *name_w = _utf8_to_wide(name);
+    wchar_t *subfolder_w = _utf8_to_wide(subfolder);
+
+    uint64_t vopt = dict_get_integer(d, "opt");
+    int rc;
+
+    rc = sf_restore_opt(name_w, subfolder_w, vopt);
+    if (rc)
+        control_send_error(cd, opt, id, rc, NULL);
+    else
+        control_send_ok(cd, opt, id, NULL);
+    free(name_w);
+    free(subfolder_w);
     return 0;
 }
 #endif
@@ -988,6 +1049,23 @@ struct dict_rpc_command control_commands[] = {
             { NULL, },
       }, },
 #if defined(CONFIG_VBOXDRV)
+    { "sf-add-subfolder-opt", control_command_sf_add_subfolder_opt,
+      .args = (struct dict_rpc_arg_desc[]) {
+            { "name", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },
+            { "subfolder", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },
+            { "opt", DICT_RPC_ARG_TYPE_INTEGER, .optional = 0 },
+            { "value", DICT_RPC_ARG_TYPE_INTEGER, .optional = 0 },
+            { NULL, },
+        }
+    },
+    { "sf-del-subfolder-opt", control_command_sf_del_subfolder_opt,
+      .args = (struct dict_rpc_arg_desc[]) {
+            { "name", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },
+            { "subfolder", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },
+            { "opt", DICT_RPC_ARG_TYPE_INTEGER, .optional = 0 },
+            { NULL, },
+        }
+    },
     { "sf-set-subfolder-scramble-mode", control_command_sf_set_subfolder_scramble_mode,
       .args = (struct dict_rpc_arg_desc[]) {
             { "name", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },

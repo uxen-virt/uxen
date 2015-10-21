@@ -68,7 +68,8 @@ void sf_quit(void)
     vbsfDisconnect(&clientData);
 }
 
-static void *makeSHFLString(wchar_t *str)
+void *
+makeSHFLString(wchar_t *str)
 {
     int len = 2*wcslen(str) + 2;
     PSHFLSTRING shfl = (PSHFLSTRING)hgcm_malloc(sizeof(SHFLSTRING) + len);
@@ -78,7 +79,8 @@ static void *makeSHFLString(wchar_t *str)
     return shfl;
 }
 
-static void *makeSHFLStringUTF8(char *str)
+void *
+makeSHFLStringUTF8(char *str)
 {
     void *ret;
     wchar_t *buf;
@@ -112,8 +114,8 @@ int sf_init()
 }
 
 int
-sf_add_mapping(char *folder, char *name, int writable, int crypt,
-               uint64_t quota)
+sf_add_mapping(char *folder, char *name, int writable,
+               uint64_t opts, uint64_t quota)
 {
     SHFLSTRING *folder_sstr, *name_sstr;
     int rc;
@@ -126,16 +128,17 @@ sf_add_mapping(char *folder, char *name, int writable, int crypt,
     if (!name_sstr)
         return VERR_NO_MEMORY;
 
-    LogRel(("shared-folders: Host path '%ls', map name '%ls', %s, crypt=%s, quota=%" PRId64 "\n",
+    LogRel(("shared-folders: Host path '%ls', map name '%ls', %s, opts=0x%" PRIx64
+            ", quota=%" PRId64 "\n",
             folder_sstr->String.ucs2,
             name_sstr->String.ucs2,
             writable ? "writable" : "read-only",
-            crypt ? "true" : "false",
+            opts,
             quota));
 
     /* Execute the function. */
     rc = vbsfMappingsAdd(folder_sstr, name_sstr,
-                         writable, 0, 0, crypt, quota);
+                         writable, 0, 0, opts, quota);
 
     hgcm_free(folder_sstr);
     hgcm_free(name_sstr);

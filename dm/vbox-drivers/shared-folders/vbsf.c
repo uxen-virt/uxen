@@ -38,6 +38,7 @@
 #endif
 
 #include "mappings.h"
+#include "mappings-opts.h"
 #include "vbsf.h"
 #include "shflhandle.h"
 #include "filecrypt_helper.h"
@@ -60,6 +61,8 @@
 
 #include "rt/rt.h"
 #include "../internal/dir.h"
+#include <dm/shared-folders.h>
+#include <inttypes.h>
 
 #define SHFL_RT_LINK(pClient) ((pClient)->fu32Flags & SHFL_CF_SYMLINKS ? RTPATH_F_ON_LINK : RTPATH_F_FOLLOW_LINK)
 #define CRYPT_HDR_FIXED_SIZE 4096
@@ -759,7 +762,17 @@ static int vbsfOpenFile(SHFLCLIENTDATA *pClient, SHFLROOT root, const wchar_t *p
     /* Report the driver that all is okay, we're done here */
     if (fNoError)
         rc = VINF_SUCCESS;
+    if (RT_SUCCESS(rc) && handle != SHFL_HANDLE_NIL) {
+        struct shfl_handle_data *d;
 
+        d = vbsfQueryHandleData(pClient, handle);
+        if (d) {
+            d->folder_opts = _sf_get_opt(root, (wchar_t*)pszPath);
+            if (d->folder_opts & SF_OPT_NO_FLUSH)
+                pParms->CreateFlags |= SHFL_CF_NO_FLUSH;
+            LogFlow(("vbsfOpenFile: opts=0x%" PRIx64 "\n", d->folder_opts));
+        }
+    }
     LogFlow(("vbsfOpenFile: rc = 0x%x\n", rc));
     return rc;
 }
@@ -1345,6 +1358,7 @@ void testFlush(RTTEST hTest)
 int vbsfFlush(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle)
 {
     SHFLFILEHANDLE *pHandle = vbsfQueryFileHandle(pClient, Handle);
+    struct shfl_handle_data *data;
     int rc = VINF_SUCCESS;
 
     if (pHandle == 0)
@@ -1353,6 +1367,9 @@ int vbsfFlush(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle)
         return VERR_INVALID_HANDLE;
     }
 
+    data = vbsfQueryHandleData(pClient, Handle);
+    if (data->folder_opts & SF_OPT_NO_FLUSH)
+        return VINF_SUCCESS;
     Log(("vbsfFlush 0x%llx\n", Handle));
     rc = RTFileFlush(pHandle->file.Handle);
     AssertRC(rc);
@@ -1371,6 +1388,23 @@ void testDirList(RTTEST hTest)
     /* Add tests as required... */
 }
 #endif
+
+static int
+hidden(SHFLROOT root, wchar_t *dir, wchar_t *entry)
+{
+    wchar_t name[512] = { 0 };
+    int len = wcslen(dir);
+    int i;
+
+    if (len + wcslen(entry) + 2 >= 512)
+        return 0;
+    wcscat(name, dir);
+    i = len-1;
+    while (i > 0 && name[i] != '\\')
+        name[i--] = 0;
+    wcscat(name, entry);
+    return _sf_has_opt(root, name, SF_OPT_HIDE);
+}
 
 int vbsfDirList(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, SHFLSTRING *pPath, uint32_t flags,
                 uint32_t *pcbBuffer, uint8_t *pBuffer, uint32_t *pIndex, uint32_t *pcFiles)
@@ -1472,9 +1506,12 @@ int vbsfDirList(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, SHFLS
             }
         }
 
+        if (hidden(root, DirHandle->pwszPath, (wchar_t*)pDirEntry->szName))
+            continue;
+
         cbNeeded = RT_OFFSETOF(SHFLDIRINFO, name.String);
-            /* Overestimating, but that's ok */
-            cbNeeded += pDirEntry->cbName + 2;
+        /* Overestimating, but that's ok */
+        cbNeeded += pDirEntry->cbName + 2;
 
         if (cbBufferOrg < cbNeeded)
         {

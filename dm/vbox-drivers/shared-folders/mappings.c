@@ -37,7 +37,7 @@
 #endif
 
 #include "mappings.h"
-#include "mappings-crypt.h"
+#include "mappings-opts.h"
 #include <iprt/alloc.h>
 #include <iprt/assert.h>
 #include <iprt/string.h>
@@ -46,12 +46,16 @@
 # include "teststubs.h"
 #endif
 
+#include <dm/shared-folders.h>
+#include <windows.h>
+
 /* Shared folders order in the saved state and in the FolderMapping can differ.
  * So a translation array of root handle is needed.
  */
 
 static MAPPING FolderMapping[SHFL_MAX_MAPPINGS];
 static SHFLROOT aIndexFromRoot[SHFL_MAX_MAPPINGS];
+
 
 void vbsfMappingInit(void)
 {
@@ -61,7 +65,7 @@ void vbsfMappingInit(void)
         aIndexFromRoot[root] = SHFL_ROOT_NIL;
     }
 
-    sf_crypt_mapping_init();
+    sf_opts_init();
 }
 
 int vbsfMappingLoaded(const PMAPPING pLoadedMapping, SHFLROOT root)
@@ -163,6 +167,14 @@ static MAPPING *vbsfMappingGetByName (PRTUTF16 pwszName, SHFLROOT *pRoot)
     return NULL;
 }
 
+static SHFLROOT
+root_by_name(wchar_t *name)
+{
+    SHFLROOT root = SHFL_ROOT_NIL;
+    vbsfMappingGetByName(name, &root);
+    return root;
+}
+
 static void vbsfRootHandleAdd(SHFLROOT iMapping)
 {
     unsigned root;
@@ -215,7 +227,7 @@ wchar_t* RTwcsdup(wchar_t*);
  */
 int vbsfMappingsAdd(PSHFLSTRING pFolderName, PSHFLSTRING pMapName,
                     bool fWritable, bool fAutoMount, bool fSymlinksCreate,
-                    bool fCrypt, uint64_t quota)
+                    uint64_t opts, uint64_t quota)
 {
     unsigned i;
 
@@ -261,10 +273,10 @@ int vbsfMappingsAdd(PSHFLSTRING pFolderName, PSHFLSTRING pMapName,
             FolderMapping[i].fWritable       = fWritable;
             FolderMapping[i].fAutoMount      = fAutoMount;
             FolderMapping[i].fSymlinksCreate = fSymlinksCreate;
-            FolderMapping[i].fCrypt          = fCrypt;
             FolderMapping[i].fHostCaseSensitive = false;
             FolderMapping[i].quota_max = quota;
             FolderMapping[i].quota_cur = QUOTA_INVALID;
+            FolderMapping[i].opts = opts;
             vbsfRootHandleAdd(i);
             break;
         }
@@ -604,20 +616,11 @@ int
 vbsfMappingsQueryCrypt(PSHFLCLIENTDATA pClient, SHFLROOT root, wchar_t *path, int *crypt_mode)
 {
     MAPPING *pFolderMapping = vbsfMappingGetByRoot(root);
-    wchar_t *rootpath;
 
     AssertReturn(pFolderMapping, VERR_INVALID_PARAMETER);
-
     if (!pFolderMapping->fValid)
         return VERR_FILE_NOT_FOUND;
-
-    *crypt_mode = pFolderMapping->fCrypt;
-    rootpath = (wchar_t*)vbsfMappingsQueryHostRoot(root);
-    if (path && rootpath && pFolderMapping->pMapName) {
-        sf_override_crypt_mode(pFolderMapping->pMapName->String.ucs2,
-                               rootpath, path, crypt_mode);
-    }
-
+    *crypt_mode = _sf_has_opt(root, path, SF_OPT_SCRAMBLE);
     return VINF_SUCCESS;
 }
 
@@ -646,5 +649,38 @@ vbsfMappingsUpdateQuota(PSHFLCLIENTDATA pClient, SHFLROOT root,
     if (!pFolderMapping->fValid)
         return VERR_FILE_NOT_FOUND;
     pFolderMapping->quota_cur = quota_cur;
+    return VINF_SUCCESS;
+}
+
+int
+sf_set_opt(wchar_t *name, wchar_t *subfolder, uint64_t opt)
+{
+    SHFLROOT r = root_by_name(name);
+
+    if (r == SHFL_ROOT_NIL)
+        return VERR_FILE_NOT_FOUND;
+    _sf_set_opt(r, subfolder, opt);
+    return VINF_SUCCESS;
+}
+
+int
+sf_mod_opt(wchar_t *name, wchar_t *subfolder, uint64_t opt, int add)
+{
+    SHFLROOT r = root_by_name(name);
+
+    if (r == SHFL_ROOT_NIL)
+        return VERR_FILE_NOT_FOUND;
+    _sf_mod_opt(r, subfolder, opt, add);
+    return VINF_SUCCESS;
+}
+
+int
+sf_restore_opt(wchar_t *name, wchar_t *subfolder, uint64_t opt)
+{
+    SHFLROOT r = root_by_name(name);
+
+    if (r == SHFL_ROOT_NIL)
+        return VERR_FILE_NOT_FOUND;
+    _sf_restore_opt(r, subfolder, opt);
     return VINF_SUCCESS;
 }

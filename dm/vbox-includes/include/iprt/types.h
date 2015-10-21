@@ -220,7 +220,6 @@ typedef unsigned char bool;
 #  define false (0)
 # endif
 #endif
-
 /**
  * 128-bit unsigned integer.
  */

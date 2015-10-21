@@ -68,12 +68,33 @@ static int __init(void)
     return 0;
 }
 
+static uint64_t
+parse_folder_opts(yajl_val v)
+{
+    uint64_t opts = 0;
+
+    if ((opts = yajl_object_get_integer_default(v, "opts", 0)))
+        return opts;
+
+    if (yajl_object_get_integer_default(v, "scramble", 0))
+        opts |= SF_OPT_SCRAMBLE;
+    if (yajl_object_get_integer_default(v, "hide", 0))
+        opts |= SF_OPT_HIDE;
+    if (yajl_object_get_integer_default(v, "no-flush", 0))
+        opts |= SF_OPT_NO_FLUSH;
+    if (yajl_object_get_integer_default(v, "no-quota", 0))
+        opts |= SF_OPT_NO_QUOTA;
+    return opts;
+}
+
 static int
-sf_parse_subfolder_config(const char *folder_name, yajl_val folder)
+sf_parse_subfolder_config(const char *folder_name, yajl_val folder,
+                          uint64_t parent_opts)
 {
     const char* subfolders_path[] = {"subfolders", NULL};
     yajl_val subfolders, v;
     int i;
+    uint64_t opts;
 
     subfolders = yajl_tree_get(folder, subfolders_path, yajl_t_array);
     if (!subfolders)
@@ -85,7 +106,6 @@ sf_parse_subfolder_config(const char *folder_name, yajl_val folder)
     }
     YAJL_FOREACH_ARRAY_OR_OBJECT(v, subfolders, i) {
         const char *path;
-        int crypt;
 
         if (!YAJL_IS_OBJECT(v))
             continue;
@@ -95,8 +115,15 @@ sf_parse_subfolder_config(const char *folder_name, yajl_val folder)
             return -1;
         }
 
-        crypt = yajl_object_get_integer_default(v, "scramble", 0);
-        sf_add_subfolder_crypt((char*)folder_name, (char*)path, crypt);
+        opts = parse_folder_opts(v);
+        if (opts != parent_opts) {
+            wchar_t *folder_name_w = _utf8_to_wide(folder_name);
+            wchar_t *path_w = _utf8_to_wide(path);
+
+            sf_set_opt(folder_name_w, path_w, opts);
+            free(folder_name_w);
+            free(path_w);
+        }
     }
 
     return 0;
@@ -109,8 +136,9 @@ int sf_parse_config(yajl_val config)
     int rc;
     const char *name, *folder;
     const char* folders_path[] = {"folders", NULL};
-    int writable, crypt_mode;
+    int writable;
     uint64_t quota;
+    uint64_t opts = 0;
 
     __init();
 
@@ -132,15 +160,15 @@ int sf_parse_config(yajl_val config)
                 return -1;
             }
             writable = yajl_object_get_integer_default(v, "writable", 0);
-            crypt_mode = yajl_object_get_integer_default(v, "scramble", 0);
+            opts = parse_folder_opts(v);
             quota = yajl_object_get_integer_default(v, "quota", 0);
-            rc = sf_add_mapping(folder, name, writable, crypt_mode, quota);
+            rc = sf_add_mapping(folder, name, writable, opts, quota);
             if (rc) {
                 warnx("sf_add_mapping folder=%s name=%s error %d", 
                     folder, name, rc);
                 return -1;
             }
-            rc = sf_parse_subfolder_config(name, v);
+            rc = sf_parse_subfolder_config(name, v, opts);
             if (rc)
                 return -1;
         }

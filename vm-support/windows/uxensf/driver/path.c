@@ -46,6 +46,7 @@ static NTSTATUS vbsfProcessCreate(PRX_CONTEXT RxContext,
                                   PVOID EaBuffer,
                                   ULONG EaLength,
                                   ULONG *pulCreateAction,
+                                  BYTE *pNoFlush,
                                   SHFLHANDLE *pHandle)
 {
     NTSTATUS Status = STATUS_SUCCESS;
@@ -302,6 +303,9 @@ static NTSTATUS vbsfProcessCreate(PRX_CONTEXT RxContext,
     Log(("VBOXSF: vbsfProcessCreate: vboxCallCreate returns vboxRC = %Rrc, Result = 0x%x\n",
          vboxRC, pCreateParms->Result));
 
+    if (pNoFlush)
+        *pNoFlush = (pCreateParms->CreateFlags & SHFL_CF_NO_FLUSH) != 0;
+
     if (RT_FAILURE(vboxRC))
     {
         /* Map some VBoxRC to STATUS codes expected by the system. */
@@ -499,6 +503,7 @@ failure:
 NTSTATUS VBoxMRxCreate(IN OUT PRX_CONTEXT RxContext)
 {
     NTSTATUS Status = STATUS_SUCCESS;
+    BYTE no_flush = 0;
 
     RxCaptureFcb;
     RxCaptureFobx;
@@ -558,6 +563,7 @@ NTSTATUS VBoxMRxCreate(IN OUT PRX_CONTEXT RxContext)
                                RxContext->Create.EaBuffer,
                                RxContext->Create.EaLength,
                                &CreateAction,
+                               &no_flush,
                                &Handle);
 
     if (Status != STATUS_SUCCESS)
@@ -638,7 +644,7 @@ NTSTATUS VBoxMRxCreate(IN OUT PRX_CONTEXT RxContext)
     pVBoxFobx->fKeepLastWriteTime = FALSE;
     pVBoxFobx->fKeepChangeTime = FALSE;
     pVBoxFobx->SetFileInfoOnCloseFlags = 0;
-
+    pVBoxFobx->no_flush = no_flush;
     if (!RxIsFcbAcquiredExclusive(capFcb))
     {
         RxAcquireExclusiveFcbResourceInMRx(capFcb);

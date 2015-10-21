@@ -617,6 +617,7 @@ static int
 co_set_shared_folders(const char *opt, yajl_val arg, void *opaque)
 {
 #if defined(CONFIG_VBOXDRV)
+    extern int sf_parse_config(yajl_val config);
     return sf_parse_config(arg);
 #else
     return 0;

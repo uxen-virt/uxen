@@ -6,6 +6,7 @@
 
 #define _WIN32_WINNT 0x0600
 #include "mappings.h"
+#include "mappings-opts.h"
 #include "vbsf.h"
 #include "shflhandle.h"
 #include "quota.h"
@@ -20,6 +21,7 @@
 #include "rt/rt.h"
 
 #include <dm/debug.h>
+#include <dm/shared-folders.h>
 
 //#define SCAN_DIR_SIZE
 
@@ -120,6 +122,7 @@ resolve_path(struct quota_op *op, const wchar_t *name, HANDLE h)
         }
     }
     fileattrs(h, &op->filesize, &attrs, &nlinks);
+#if 0
     if (!GetFinalPathNameByHandleW(h, op->path,
                                    sizeof(op->path) / sizeof(wchar_t),
                                    FILE_NAME_NORMALIZED)) {
@@ -128,6 +131,7 @@ resolve_path(struct quota_op *op, const wchar_t *name, HANDLE h)
             CloseHandle(h);
         return RTErrConvertFromWin32(GetLastError());
     }
+#endif
     if (name)
         CloseHandle(h);
     /*
@@ -143,6 +147,21 @@ resolve_path(struct quota_op *op, const wchar_t *name, HANDLE h)
         data->link = op->islink;
         data->quota_cachedattrs = 1;
     }
+    return 0;
+}
+
+static int
+quota_disabled(SHFLCLIENTDATA *client, SHFLROOT root,
+               SHFLHANDLE handle, const wchar_t *path)
+{
+    if (handle != SHFL_HANDLE_NIL) {
+        struct shfl_handle_data *d;
+
+        d = vbsfQueryHandleData(client, handle);
+        return d->folder_opts & SF_OPT_NO_QUOTA;
+    }
+    if (path)
+        return _sf_has_opt(root, (wchar_t*)path, SF_OPT_NO_QUOTA);
     return 0;
 }
 
@@ -162,6 +181,8 @@ quota_start_op(struct quota_op *op,
     memset(op, 0, sizeof(*op));
     vbsfMappingsQueryQuota(client, root, &qmax, &qcur);
     if (!qmax)
+        return VINF_SUCCESS;
+    if (quota_disabled(client, root, shflhandle, path))
         return VINF_SUCCESS;
     if (qcur == QUOTA_INVALID) {
 #ifdef SCAN_DIR_SIZE

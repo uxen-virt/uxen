@@ -356,6 +356,9 @@ NTSTATUS VBoxMRxFlush (IN PRX_CONTEXT RxContext)
 
     int vboxRC;
 
+    if (pVBoxFobx->no_flush)
+        return STATUS_SUCCESS;
+
     Log(("VBOXSF: MRxFlush\n"));
 
     /* Do the actual flushing of file buffers */
