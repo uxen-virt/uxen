@@ -95,7 +95,7 @@ fileattrs(HANDLE h, uint64_t *size, uint32_t *attrs, uint32_t *nlinks)
 static int
 resolve_path(struct quota_op *op, const wchar_t *name, HANDLE h)
 {
-    const wchar_t *root = vbsfMappingsQueryHostRoot(op->root);
+//    const wchar_t *root = vbsfMappingsQueryHostRoot(op->root);
     uint32_t attrs = 0, nlinks = 0;
     struct shfl_handle_data *data = NULL;
 
@@ -135,7 +135,7 @@ resolve_path(struct quota_op *op, const wchar_t *name, HANDLE h)
         (attrs & FILE_ATTRIBUTE_REPARSE_POINT))
         op->islink = 1;
     */
-    QDBG("prefix test root=%ls path=%ls nlinks=%d islink=%d\n", root, op->path,
+    QDBG("prefix test path=%ls nlinks=%d islink=%d\n", op->path,
          nlinks, op->islink);
 
     if (data) {
