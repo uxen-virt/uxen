@@ -1661,7 +1661,7 @@ int stat_files_phase(struct disk *disk, Manifest *suffixes, Manifest *man, wchar
         ManifestEntry *m = &man->entries[i];
         Action action = m->action;
 
-        if (action == MAN_COPY || action == MAN_SHALLOW) {
+        if (action == MAN_COPY || action == MAN_SHALLOW || action == MAN_FORCE_COPY) {
 
             ++files;
 
@@ -2507,7 +2507,8 @@ int copy_phase(struct disk *disk, Manifest *man, int calculate_shas)
         double t1 = rtc();
         for (i = base, j = 0; i < man->n && j < max_opens; ++i) {
             ManifestEntry *m = &man->entries[i];
-            if (m->action == MAN_COPY || m->action == MAN_FORCE_COPY) {
+            if ((m->action == MAN_COPY || m->action == MAN_FORCE_COPY) ||
+                (!shallow_allowed && m->action == MAN_BOOT)) {
                 assert(m->file_id);
                 h = open_file_by_id(m->var->volume, m->file_id, GENERIC_READ);
                 if (h == INVALID_HANDLE_VALUE) {
@@ -2523,7 +2524,8 @@ int copy_phase(struct disk *disk, Manifest *man, int calculate_shas)
 
         for (i = base, j = 0; i < man->n && j < max_opens; ++i) {
             ManifestEntry *m = &man->entries[i];
-            if (m->action == MAN_COPY || m->action == MAN_FORCE_COPY) {
+            if ((m->action == MAN_COPY || m->action == MAN_FORCE_COPY) ||
+                (!shallow_allowed && m->action == MAN_BOOT)) {
                 if (m->action == MAN_FORCE_COPY) {
                     /* Currently only some files are changed to a MAN_FORCE_COPY. If
                        that behavior changes, remove the log statement.
@@ -3250,19 +3252,35 @@ void print_usage(void)
     printf("usage: %s [-sBOOTVOL=<path>] [-m<outmanifest>] manifest image.swap " \
         "[USN=<USN record-id in hex>] [GUID=<CoW driver GUID>] " \
         "[PARTITION=<partition number in decimal>] " \
-        "[MINSHALLOW=<minimum shallowing size in decimal bytes>]\n",
+        "[MINSHALLOW=<minimum shallowing size in decimal bytes>]" \
+        "[SKIP_USN_PHASE] [SKIP_ACL_PHASE] [SKIP_OPEN_HANDLES_PHASE]" \
+        "[SKIP_COW_REGISTRATION] [NOSHALLOW]\n",
             getprogname());
 }
 
-#define NUMBER_OF(x)        (sizeof((x))/sizeof((x)[0]) - 1)
-#define ARG_USN             "USN="
-#define ARG_GUID            "GUID="
-#define ARG_PARTITION       "PARTITION="
-#define ARG_MINSHALLOW      "MINSHALLOW="
-#define ARG_USN_SIZE        NUMBER_OF(ARG_USN)
-#define ARG_GUID_SIZE       NUMBER_OF(ARG_GUID)
-#define ARG_PARTITION_SIZE  NUMBER_OF(ARG_PARTITION)
-#define ARG_MINSHALLOW_SIZE NUMBER_OF(ARG_MINSHALLOW)
+#define NUMBER_OF(x)                     (sizeof((x))/sizeof((x)[0]) - 1)
+#define ARG_SUBSTITUTION                 "-s"
+#define ARG_OUT_MANIFEST                 "-m"
+#define ARG_USN                          "USN="
+#define ARG_GUID                         "GUID="
+#define ARG_PARTITION                    "PARTITION="
+#define ARG_MINSHALLOW                   "MINSHALLOW="
+#define ARG_SKIP_USN_PHASE               "SKIP_USN_PHASE"
+#define ARG_SKIP_ACL_PHASE               "SKIP_ACL_PHASE"
+#define ARG_SKIP_OPEN_HANDLES_PHASE      "SKIP_OPEN_HANDLES_PHASE"
+#define ARG_SKIP_COW_REGISTRATION        "SKIP_COW_REGISTRATION"
+#define ARG_NOSHALLOW                    "NOSHALLOW"
+#define ARG_SUBSTITUTION_SIZE            NUMBER_OF(ARG_SUBSTITUTION)
+#define ARG_OUT_MANIFEST_SIZE            NUMBER_OF(ARG_OUT_MANIFEST)
+#define ARG_USN_SIZE                     NUMBER_OF(ARG_USN)
+#define ARG_GUID_SIZE                    NUMBER_OF(ARG_GUID)
+#define ARG_PARTITION_SIZE               NUMBER_OF(ARG_PARTITION)
+#define ARG_MINSHALLOW_SIZE              NUMBER_OF(ARG_MINSHALLOW)
+#define ARG_SKIP_USN_PHASE_SIZE          NUMBER_OF(ARG_SKIP_USN_PHASE)
+#define ARG_SKIP_ACL_PHASE_SIZE          NUMBER_OF(ARG_SKIP_ACL_PHASE)
+#define ARG_SKIP_OPEN_HANDLES_PHASE_SIZE NUMBER_OF(ARG_SKIP_OPEN_HANDLES_PHASE)
+#define ARG_SKIP_COW_REGISTRATION_SIZE   NUMBER_OF(ARG_SKIP_COW_REGISTRATION)
+#define ARG_NOSHALLOW_SIZE               NUMBER_OF(ARG_NOSHALLOW)
 
 int main(int argc, char **argv)
 {
@@ -3290,32 +3308,84 @@ int main(int argc, char **argv)
     man_init(&man_out);
     man_init(&suffixes);
 
-    /* Handle -s switches for setting for defining variables. */
-    while (strncmp(argv[1], "-s", 2) == 0) {
-        char *v = argv[1] + 2;
-        char *c = v;
-        size_t l;
-        while (*c != '=' && *c) {
-            ++c;
-        }
-        /* Krypton may have quoted the actual path, so clean that up. */
-        *c++ = '\0';
-        l = strlen(c);
-        if (*c == '"' && c[l - 1] == '"') {
-            c[l - 1] = '\0';
-            ++c;
-        }
+    char *arg_out_manifest = NULL;
+    char *arg_manifest_file = NULL;
+    char *arg_swap_file = NULL;
+    char *arg_usn = NULL;
+    char *arg_guid = NULL;
+    char *arg_partition = NULL;
+    char *arg_minshallow = NULL;
 
-        Variable *e = varlist_push(&vars);
-        e->man = (Manifest*) malloc(sizeof(Manifest));
-        man_init(e->man);
-        e->name = wide(v);
-        /* path can be NULL, which means skip manifest lines under this var. */
-        e->path = *c ? wide(c) : NULL;
+    int skip_acl_phase = 0;
+    int skip_open_handles_phase = 0;
+    int skip_cow_registration = 0;
+    int skip_usn_phase = 0;
 
+    while (argc >= 2) {
+        if (strncmp(argv[1], ARG_SUBSTITUTION, ARG_SUBSTITUTION_SIZE) == 0) {
+            /* Handle -s switches for setting for defining variables. */
+            char *v = argv[1] + ARG_SUBSTITUTION_SIZE;
+            char *c = v;
+            size_t l;
+            while (*c != '=' && *c) {
+                ++c;
+            }
+            /* Krypton may have quoted the actual path, so clean that up. */
+            *c++ = '\0';
+            l = strlen(c);
+            if (*c == '"' && c[l - 1] == '"') {
+                c[l - 1] = '\0';
+                ++c;
+            }
+
+            Variable *e = varlist_push(&vars);
+            e->man = (Manifest*) malloc(sizeof(Manifest));
+            man_init(e->man);
+            e->name = wide(v);
+            /* path can be NULL, which means skip manifest lines under this var. */
+            e->path = *c ? wide(c) : NULL;
+        } else if (strncmp(argv[1], ARG_OUT_MANIFEST, ARG_OUT_MANIFEST_SIZE) == 0) {
+            arg_out_manifest = argv[1];
+            arg_out_manifest += ARG_OUT_MANIFEST_SIZE;
+        } else if (strncmp(argv[1], ARG_USN, ARG_USN_SIZE) == 0) {
+            arg_usn = argv[1];
+            arg_usn += ARG_USN_SIZE;
+        } else if (strncmp(argv[1], ARG_GUID, ARG_GUID_SIZE) == 0) {
+            arg_guid = argv[1];
+            arg_guid += ARG_GUID_SIZE;
+        } else if (strncmp(argv[1], ARG_PARTITION, ARG_PARTITION_SIZE) == 0) {
+            arg_partition = argv[1];
+            arg_partition += ARG_PARTITION_SIZE;
+        } else if (strncmp(argv[1], ARG_MINSHALLOW, ARG_MINSHALLOW_SIZE) == 0) {
+            arg_minshallow = argv[1];
+            arg_minshallow += ARG_MINSHALLOW_SIZE;
+        } else if (strncmp(argv[1], ARG_SKIP_USN_PHASE, ARG_SKIP_USN_PHASE_SIZE) == 0) {
+            skip_usn_phase = 1;
+            printf("Will skip USN phase\n");
+        } else if (strncmp(argv[1], ARG_SKIP_OPEN_HANDLES_PHASE, ARG_SKIP_OPEN_HANDLES_PHASE_SIZE) == 0) {
+            skip_open_handles_phase = 1;
+            printf("Will skip open handles phase\n");
+        } else if (strncmp(argv[1], ARG_SKIP_ACL_PHASE, ARG_SKIP_ACL_PHASE_SIZE) == 0) {
+            skip_acl_phase = 1;
+            printf("Will skip ACL phase\n");
+        } else if (strncmp(argv[1], ARG_SKIP_COW_REGISTRATION, ARG_SKIP_COW_REGISTRATION_SIZE) == 0) {
+            skip_cow_registration = 1;
+            printf("Will skip COW registration\n");
+        } else if (strncmp(argv[1], ARG_NOSHALLOW, ARG_NOSHALLOW_SIZE) == 0) {
+            shallow_allowed = 0;
+            printf("Not allowing shallowing\n");
+        } else if (arg_manifest_file == NULL) {
+            arg_manifest_file = argv[1];
+        } else if (arg_swap_file == NULL) {
+            arg_swap_file = argv[1];
+        } else {
+            print_usage();
+            exit(1);
+        }
         ++argv;
         --argc;
     }
+
     // And a dummy to hold things from the manifest not associated with a
     // particular var (like mkdirs)
     Variable *dummy_var = varlist_push(&vars);
@@ -3325,43 +3395,6 @@ int main(int argc, char **argv)
     dummy_var->path = wide("");
 
     bootvol_var = varlist_find(&vars, L"BOOTVOL");
-
-    char *arg_out_manifest = NULL;
-    if (strncmp(argv[1], "-m", 2) == 0) {
-        arg_out_manifest = argv[1] + 2;
-        ++argv;
-        --argc;
-    }
-
-    char *arg_manifest_file = argv[1];
-    char *arg_swap_file = argv[2];
-
-    char *arg_usn = NULL;
-    char *arg_guid = NULL;
-    char *arg_partition = NULL;
-    char *arg_minshallow = NULL;
-
-    while (argc >= 4) {
-        if (strncmp(argv[3], ARG_USN, ARG_USN_SIZE) == 0) {
-            arg_usn = argv[3];
-            arg_usn += ARG_USN_SIZE;
-        } else if (strncmp(argv[3], ARG_GUID, ARG_GUID_SIZE) == 0) {
-            arg_guid = argv[3];
-            arg_guid += ARG_GUID_SIZE;
-        } else if (strncmp(argv[3], ARG_PARTITION, ARG_PARTITION_SIZE) == 0) {
-            arg_partition = argv[3];
-            arg_partition += ARG_PARTITION_SIZE;
-        } else if (strncmp(argv[3], ARG_MINSHALLOW, ARG_MINSHALLOW_SIZE) == 0) {
-            arg_minshallow = argv[3];
-            arg_minshallow += ARG_MINSHALLOW_SIZE;
-        } else {
-            print_usage();
-            exit(1);
-        }
-        ++argv;
-        --argc;
-    }
-
     manifest_file = fopen(arg_manifest_file, "r");
     if (!manifest_file) {
         err(1, "unable to open manifest: %s", arg_manifest_file);
@@ -3435,7 +3468,7 @@ int main(int argc, char **argv)
     man_uniq_by_name_and_action(&suffixes);
 
     HANDLE drive = INVALID_HANDLE_VALUE;
-    if (shallow_allowed) {
+    if (shallow_allowed && !skip_usn_phase) {
         wchar_t unc_systemroot[MAX_PATH_LEN];
         path_join(unc_systemroot, L"\\\\?\\", systemroot);
         drive = CreateFileW(
@@ -3483,7 +3516,7 @@ int main(int argc, char **argv)
 
     GUID guid = {0};
     if (shallow_allowed) {
-        if (arg_guid) {
+        if (arg_guid && !skip_cow_registration) {
             if (local_uuid_parse(arg_guid, &guid) < 0) {
                 err(1, "Error in parsing guid [%s]", arg_guid);
             }
@@ -3525,8 +3558,10 @@ int main(int argc, char **argv)
 
     if (shallow_allowed) {
         man_sort_by_id(&man_out);
-        if (acl_phase(&disk, &man_out) < 0) {
-            err(1, "acl_phase failed");
+        if (!skip_acl_phase) {
+            if (acl_phase(&disk, &man_out) < 0) {
+                err(1, "acl_phase failed");
+            }
         }
     }
 
@@ -3543,15 +3578,17 @@ int main(int argc, char **argv)
             err(1, "shallow_phase failed");
         }
 
-        /* Read the USN journal again and consume the set. */
-        USN end_usn;
-        uint64_t journal;
-        if (get_next_usn(drive, &end_usn, &journal) < 0) {
-            err(1, "Unable to record ending USN entry\n");
-        }
+        if (!skip_usn_phase) {
+            /* Read the USN journal again and consume the set. */
+            USN end_usn;
+            uint64_t journal;
+            if (get_next_usn(drive, &end_usn, &journal) < 0) {
+                err(1, "Unable to record ending USN entry\n");
+            }
 
-        if (usn_phase(drive, start_usn, end_usn, journal, &man_out) < 0) {
-            err(1, "usn_phase failed\n");
+            if (usn_phase(drive, start_usn, end_usn, journal, &man_out) < 0) {
+                err(1, "usn_phase failed\n");
+            }
         }
 
         if (drive != INVALID_HANDLE_VALUE) {
@@ -3559,8 +3596,10 @@ int main(int argc, char **argv)
             drive = INVALID_HANDLE_VALUE;
         }
 
-        if (open_handles_phase(&man_out) < 0) {
-            err(1, "open_handles_phase failed\n");
+        if (!skip_open_handles_phase) {
+            if (open_handles_phase(&man_out) < 0) {
+                err(1, "open_handles_phase failed\n");
+            }
         }
     }
 
