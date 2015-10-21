@@ -482,6 +482,8 @@ uXenDispFB::setCursorImage(void *image)
     uxdisp_write(UXDISP_REG_CURSOR_CRTC, 0);
     uxdisp_write(UXDISP_REG_CURSOR_FLAGS, 0);
 
+    flushCursor();
+
     return kIOReturnSuccess;
 }
 
