@@ -13,6 +13,11 @@
 #define MOUSE_EVENT_RBUTTON 0x02
 #define MOUSE_EVENT_MBUTTON 0x04
 
+enum DisplayCreateFlags {
+    DCF_NONE      = 0x0,
+    DCF_START_GUI = 0x1,
+};
+
 struct PixelFormat {
     uint8_t bits_per_pixel;
     uint8_t bytes_per_pixel;
@@ -157,8 +162,8 @@ static inline void console_write_ch(console_ch_t *dest, uint32_t ch)
     *dest = ch;
 }
 
-struct display_state *display_create(struct console_hw_ops *ops,
-                                     void *opaque);
+struct display_state *display_create(struct console_hw_ops *ops, void *opaque,
+                                     enum DisplayCreateFlags flags);
 void display_destroy(struct display_state *ds);
 void display_resize(struct display_state *ds, int width, int height);
 void display_resize_from(struct display_state *ds, int width, int height,

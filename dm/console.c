@@ -59,8 +59,8 @@ static void desktop_refresh(void)
     debug_printf("desktop resize %dx%d\n", max_x, max_y);
 }
 
-struct display_state *display_create(struct console_hw_ops *ops,
-                                     void *opaque)
+struct display_state *display_create(struct console_hw_ops *ops, void *opaque,
+                                     enum DisplayCreateFlags flags)
 {
     struct display_state *ds;
 
@@ -82,7 +82,7 @@ struct display_state *display_create(struct console_hw_ops *ops,
         ds->gui = calloc(1, gui_info->size);
         if (ds->gui) {
             gui_info->create(ds->gui, ds);
-            if (gui_info->start)
+            if (gui_info->start && (flags & DCF_START_GUI))
                 gui_info->start(ds->gui);
         }
     }

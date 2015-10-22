@@ -407,7 +407,7 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
         unsigned int w, h, stride, fmt;
 
         if (!crtc->ds)
-            crtc->ds = display_create(&uxendisp_hw_ops, crtc);
+            crtc->ds = display_create(&uxendisp_hw_ops, crtc, DCF_START_GUI);
 
         w = crtc->regs->p.xres;
         h = crtc->regs->p.yres;
@@ -927,7 +927,7 @@ static int uxendisp_initfn(PCIDevice *dev)
     pci_register_bar(&s->dev, 1, PCI_BASE_ADDRESS_SPACE_MEMORY, &s->mmio);
     pci_register_bar(&s->dev, 2, PCI_BASE_ADDRESS_SPACE_IO, &s->pio);
 
-    s->crtcs[0].ds = display_create(&uxendisp_hw_ops, &s->crtcs[0]);
+    s->crtcs[0].ds = display_create(&uxendisp_hw_ops, &s->crtcs[0], DCF_NONE);
     s->crtcs[0].status = 0x1;
     s->crtcs[0].flush_pending = 0;
     edid_init_common(s->crtcs[0].edid, 1024, 768);
