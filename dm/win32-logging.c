@@ -56,7 +56,7 @@ redir_stderr(wchar_t *name, wchar_t *defname, int append)
                 /* flush old stderr */
                 fflush(stderr);
                 *stderr = *f;
-                setvbuf(stderr, NULL, _IOFBF, 0x4000);
+                setvbuf(stderr, NULL, _IONBF, 0);
             }
         }
     }

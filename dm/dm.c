@@ -383,6 +383,7 @@ main(int argc, char **argv)
     while (1) {
 	int timeout;
 
+        setvbuf(stderr, NULL, _IOFBF, 0x4000);
 	while (!vm_save_info.save_requested) {
 	    timeout = 10000; /* 10s */
 
@@ -392,6 +393,7 @@ main(int argc, char **argv)
 
 	    bh_poll();
 	}
+        setvbuf(stderr, NULL, _IONBF, 0);
 
 	timeout = 1;
         host_main_loop_wait(&timeout); /* For the select() on events */
