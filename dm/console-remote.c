@@ -77,8 +77,8 @@ enum {
 };
 
 struct remote_gui_state {
+    struct gui_state state; /* Must be first */
     TAILQ_ENTRY(remote_gui_state) link;
-    struct gui_state state;
     struct display_state *ds;
     struct remote_surface *surface;
     file_handle_t vram_handle;
