@@ -33,8 +33,12 @@ struct memcache_desc {
 typedef volatile uint32_t memcache_mfn_entry_t;
 #define cmpxchg_entry cmpxchg
 #else
+/*
 typedef volatile uint16_t memcache_mfn_entry_t;
 #define cmpxchg_entry cmpxchg16b
+*/
+typedef volatile uint32_t memcache_mfn_entry_t;
+#define cmpxchg_entry cmpxchg
 #endif
 static memcache_mfn_entry_t *memcache_mfn_to_entry = NULL;
 #define MEMCACHE_MFN_ENTRY_EMPTY (memcache_mfn_entry_t)~0U
@@ -44,8 +48,12 @@ static memcache_mfn_entry_t *memcache_mfn_to_entry = NULL;
 #define MEMCACHE_OFFSET_BITS (32 - MEMCACHE_OFFSET_SHIFT)
 #else
 #define MEMCACHE_INDEX_MASK 0x0U
+/*
 #define MEMCACHE_OFFSET_SHIFT 3
 #define MEMCACHE_OFFSET_BITS (16 - MEMCACHE_OFFSET_SHIFT)
+*/
+#define MEMCACHE_OFFSET_SHIFT 18
+#define MEMCACHE_OFFSET_BITS (32 - MEMCACHE_OFFSET_SHIFT)
 #endif
 #define MEMCACHE_OFFSET_MASK                                            \
     ((memcache_mfn_entry_t)~((1U << MEMCACHE_OFFSET_SHIFT) - 1))
