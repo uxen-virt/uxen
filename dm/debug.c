@@ -77,7 +77,7 @@ log_prefix_iso_8601(char *target, size_t len, struct tm *tm, struct timeval *tv)
 #endif
 
     snprintf(target, len,
-             "%04d-%02d-%02d %02d:%02d:%02d.%03d%c%02lu%02lu ",
+             "%04d-%02d-%02d %02d:%02d:%02d.%03d%c%02lu:%02lu ",
              tm->tm_year+1900, tm->tm_mon+1, tm->tm_mday, tm->tm_hour,
              tm->tm_min, tm->tm_sec, (int)(tv->tv_usec / 1000),
              tz_sign,
