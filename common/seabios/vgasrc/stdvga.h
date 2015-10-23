@@ -108,5 +108,7 @@ int stdvga_save_state(u16 seg, void *data, int states);
 int stdvga_restore_state(u16 seg, void *data, int states);
 void stdvga_enable_video_addressing(u8 disable);
 int stdvga_init(void);
+int stdvga_get_ddc_capabilities(u16 unit);
+int stdvga_read_edid(u16 unit, u16 block, u16 seg, void *data);
 
 #endif // stdvga.h

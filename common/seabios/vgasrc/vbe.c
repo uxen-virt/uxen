@@ -384,6 +384,39 @@ vbe_104f10(struct bregs *regs)
 }
 
 static void
+vbe_104f15(struct bregs *regs)
+{
+    int ret;
+    u16 seg = regs->es;
+    void *data = (void *)(regs->di+0);
+    u16 unit = regs->cx;
+    u16 block = regs->dx;
+
+    switch (regs->bl) {
+    case 0x00: /* Report VBE/DDC Capabilities */
+        ret = vgahw_get_ddc_capabilities(unit);
+        if (ret < 0)
+            goto fail;
+        regs->bh = ret >> 8; /* Approx. time in seconds, rounded up, to transfer
+                                one EDID block (128 bytes) */
+        regs->bl = ret & 0xff; /* DDC level supported */
+        break;
+    case 0x01: /* Read EDID */
+        ret = vgahw_read_edid(unit, block, seg, data);
+        if (ret < 0)
+            goto fail;
+        break;
+    default:
+        goto fail;
+    }
+    regs->ax = 0x004f;
+    return;
+
+fail:
+    regs->ax = 0x014f;
+}
+
+static void
 vbe_104fXX(struct bregs *regs)
 {
     debug_stub(regs);
@@ -410,6 +443,7 @@ handle_104f(struct bregs *regs)
     case 0x08: vbe_104f08(regs); break;
     case 0x0a: vbe_104f0a(regs); break;
     case 0x10: vbe_104f10(regs); break;
+    case 0x15: vbe_104f15(regs); break;
     default:   vbe_104fXX(regs); break;
     }
 }

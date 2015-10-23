@@ -499,3 +499,14 @@ stdvga_init(void)
 
     return 0;
 }
+
+int stdvga_get_ddc_capabilities(u16 unit)
+{
+    return -1;
+}
+
+int stdvga_read_edid(u16 unit, u16 block, u16 seg, void *data)
+{
+    return -1;
+}
+

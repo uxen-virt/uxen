@@ -154,4 +154,9 @@ struct vbe_crtc_info {
 #define VBE_DIRECTCOLOR_COLOR_RAMP_PROGRAMMABLE          0x01
 #define VBE_DIRECTCOLOR_RESERVED_BITS_AVAILABLE          0x02
 
+/* Display Data Channel (DDC) */
+#define VBE_DDC1_PROTOCOL_SUPPORTED                      0x01
+#define VBE_DDC2_PROTOCOL_SUPPORTED                      0x02
+#define VBE_DDC_BLANK_DURING_TRANSFER                    0x04
+
 #endif

@@ -348,6 +348,42 @@ uxenvga_set_mode(struct vgamode_s *vmode_g, int flags)
     return 0;
 }
 
+int uxenvga_get_ddc_capabilities(u16 unit)
+{
+    u16 iobase = GET_GLOBAL(uxenvga_iobase);
+    u32 status;
+
+    status = uxenvga_crtc_read(iobase, unit, UXDISP_REG_CRTC_STATUS);
+    if (!status)
+        return 0;
+
+    return (1 << 8) | VBE_DDC1_PROTOCOL_SUPPORTED | VBE_DDC2_PROTOCOL_SUPPORTED;
+}
+
+int uxenvga_read_edid(u16 unit, u16 block, u16 seg, void *data)
+{
+    u16 iobase = GET_GLOBAL(uxenvga_iobase);
+    u32 status;
+    u16 addr;
+    u32 v;
+    u32 *dest;
+    u16 i;
+
+    status = uxenvga_crtc_read(iobase, unit, UXDISP_REG_CRTC_STATUS);
+    if (!status)
+        return -1;
+
+    dest = data;
+    addr = UXDISP_REG_CRTC_EDID_DATA + (block * 128);
+    for (i = 0; i < (128 / sizeof (v)); i++) {
+        v = uxenvga_crtc_read(iobase, unit, addr);
+        SET_FARVAR(seg, *dest, v);
+        dest++;
+        addr += sizeof (v);
+    }
+
+    return 0;
+}
 
 /****************************************************************
  * Init
@@ -416,3 +452,4 @@ uxenvga_init(void)
 
     return 0;
 }
+

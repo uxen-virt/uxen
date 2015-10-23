@@ -26,6 +26,8 @@ int uxenvga_size_state(int states);
 int uxenvga_save_state(u16 seg, void *data, int states);
 int uxenvga_restore_state(u16 seg, void *data, int states);
 int uxenvga_set_mode(struct vgamode_s *vmode_g, int flags);
+int uxenvga_get_ddc_capabilities(u16 unit);
+int uxenvga_read_edid(u16 unit, u16 block, u16 seg, void *data);
 int uxenvga_init(void);
 
 static inline u32 uxenvga_read(u16 iobase, u32 addr)

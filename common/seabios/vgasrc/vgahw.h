@@ -160,4 +160,16 @@ static inline int vgahw_restore_state(u16 seg, void *data, int states) {
     return stdvga_restore_state(seg, data, states);
 }
 
+static inline int vgahw_get_ddc_capabilities(u16 unit) {
+    if (CONFIG_VGA_UXEN)
+        return uxenvga_get_ddc_capabilities(unit);
+    return stdvga_get_ddc_capabilities(unit);
+}
+
+static inline int vgahw_read_edid(u16 unit, u16 block, u16 seg, void *data) {
+    if (CONFIG_VGA_UXEN)
+        return uxenvga_read_edid(unit, block, seg, data);
+    return stdvga_read_edid(unit, block, seg, data);
+}
+
 #endif // vgahw.h
