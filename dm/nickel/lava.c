@@ -35,6 +35,7 @@ PCSTR WSAAPI inet_ntop (INT Family, PVOID pAddr, PSTR pStringBuf, size_t StringB
 #define LVF_DENIED              U32BF(4)
 #define LVF_GPROXY              U32BF(5)
 #define LVF_REMOTE_ESTABLISHED  U32BF(6)
+#define LVF_ICMP                U32BF(7)
 
 struct lava_event_sv {
     uint32_t internal;
@@ -255,6 +256,63 @@ static void lv_free(struct lava_event *lv)
     ni_priv_free(lv->http_domain);
     ni_priv_free(lv->http_url);
     free(lv);
+}
+
+int lava_send_icmp(struct nickel *ni, uint32_t daddr, uint8_t type, bool denied)
+{
+    int ret = -1;
+    struct buff *bf = NULL;
+    uint32_t flags = 0;
+    struct in_addr _daddr;
+    const char *str_daddr = NULL;
+
+    if (!lava_initialized || !ni->ac_event_log_enabled)
+        goto out;
+
+    if (buff_new_priv(&bf, DEFAULT_RPC_EVENT_LEN) == NULL)
+        goto mem_err;
+    RLIST_INIT(bf, entry);
+
+    flags |= LVF_ICMP;
+    if (denied)
+        flags |= LVF_DENIED;
+    if ((flags >> 8) != 0) {
+        static bool first_warn = true;
+
+        if (first_warn) {
+            NETLOG("%s: WARNING ! upper part of flags is set", __FUNCTION__);
+            first_warn = false;
+        }
+    }
+    flags |= (((uint32_t) type) << 8);
+
+    _daddr.s_addr = daddr;
+    str_daddr = inet_ntoa(_daddr);
+    if (!str_daddr)
+        str_daddr = "";
+
+    if (buff_appendf(bf, "\"%u\",\"%u\",\"%hu\",\"%s\",\"%s\",\"%s\",\"%hu\",\"%s\",\"%hu\"",
+            (unsigned) flags, (unsigned) 0, (uint16_t) 0, "", "", "", (uint16_t) 0, str_daddr,
+            (uint16_t) 0) < 0) {
+
+        goto mem_err;
+    }
+
+    critical_section_enter(&lava_list_lock);
+    RLIST_INSERT_TAIL(&lava_rpc_list, bf, entry);
+    lava_rpc_count++;
+    critical_section_leave(&lava_list_lock);
+
+    if (lava_rpc_count > NUMBER_EVENTS_TRIGGER)
+        ioh_event_set(&lava_event);
+
+    ret = 0;
+out:
+    return ret;
+mem_err:
+    warnx("%s: malloc error", __FUNCTION__);
+    buff_free(&bf);
+    goto out;
 }
 
 static void lv_submit_and_reset(struct lava_event *lv)

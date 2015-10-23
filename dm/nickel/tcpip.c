@@ -2275,6 +2275,12 @@ static int icmp_input(struct nickel *ni, const uint8_t *i_pkt, size_t i_len,
     if (i_len < sizeof(*icmp))
         return -1;
 
+    if (daddr != ni->host_addr.s_addr || (icmp->type != ICMP_ECHO &&
+        icmp->type != ICMP_ECHOREPLY)) {
+
+        lava_send_icmp(ni, daddr, icmp->type, true); /* always set denied = true for now */
+    }
+
     if (!ni->eth_vm_resolved)
         return 0;
 
