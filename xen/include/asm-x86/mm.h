@@ -392,8 +392,6 @@ static inline void *__page_to_virt(const struct page_info *pg)
                     (sizeof(*pg) / (sizeof(*pg) & -sizeof(*pg))) *
                     (PAGE_SIZE / (sizeof(*pg) & -sizeof(*pg))));
 }
-#else   /* __UXEN__ */
-#define __page_to_virt(pg) map_domain_page(page_to_mfn(pg))
 #endif  /* __UXEN__ */
 
 int free_page_type(struct page_info *page, unsigned long type,

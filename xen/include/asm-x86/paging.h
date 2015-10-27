@@ -128,10 +128,12 @@ struct paging_mode {
     int           (*cmpxchg_guest_entry   )(struct vcpu *v, intpte_t *p,
                                             intpte_t *old, intpte_t new,
                                             mfn_t gmfn);
+#ifndef __UXEN__
     void *        (*guest_map_l1e         )(struct vcpu *v, unsigned long va,
                                             unsigned long *gl1mfn);
     void          (*guest_get_eff_l1e     )(struct vcpu *v, unsigned long va,
                                             void *eff_l1e);
+#endif  /* __UXEN__ */
     unsigned int guest_levels;
 
     /* paging support extension */
@@ -377,11 +379,11 @@ void paging_dump_vcpu_info(struct vcpu *v);
 /*****************************************************************************
  * Access to the guest pagetables */
 
+#ifndef __UXEN__
 /* Get a mapping of a PV guest's l1e for this virtual address. */
 static inline l1_pgentry_t *
 guest_map_l1e(struct vcpu *v, unsigned long addr, unsigned long *gl1mfn)
 {
-#ifndef __UXEN__
     l2_pgentry_t l2e;
 
     if ( unlikely(paging_mode_translate(v->domain)) )
@@ -398,9 +400,6 @@ guest_map_l1e(struct vcpu *v, unsigned long addr, unsigned long *gl1mfn)
         return NULL;
     *gl1mfn = l2e_get_pfn(l2e);
     return (l1_pgentry_t *)map_domain_page(*gl1mfn) + l1_table_offset(addr);
-#else   /* __UXEN__ */
-    BUG(); return NULL;
-#endif  /* __UXEN__ */
 }
 
 /* Pull down the mapping we got from guest_map_l1e() */
@@ -414,7 +413,6 @@ guest_unmap_l1e(struct vcpu *v, void *p)
 static inline void
 guest_get_eff_l1e(struct vcpu *v, unsigned long addr, void *eff_l1e)
 {
-#ifndef __UXEN__
     if ( likely(!paging_mode_translate(v->domain)) )
     {
         ASSERT(!paging_mode_external(v->domain));
@@ -426,9 +424,6 @@ guest_get_eff_l1e(struct vcpu *v, unsigned long addr, void *eff_l1e)
     }
         
     paging_get_hostmode(v)->guest_get_eff_l1e(v, addr, eff_l1e);
-#else   /* __UXEN__ */
-    BUG();
-#endif  /* __UXEN__ */
 }
 
 /* Read the guest's l1e that maps this address, from the kernel-mode
@@ -447,6 +442,7 @@ guest_get_eff_kern_l1e(struct vcpu *v, unsigned long addr, void *eff_l1e)
     guest_get_eff_l1e(v, addr, eff_l1e);
     TOGGLE_MODE();
 }
+#endif  /* __UXEN__ */
 
 
 
