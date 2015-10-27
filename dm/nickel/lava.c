@@ -162,24 +162,54 @@ static void * lava_thread_run(void *opaque)
     return 0;
 }
 
+#define MLEN_FIELD 256
+
 static char *
-sanitize_256_to_utf8(const char *str, size_t max_len)
+lv_encode_string(const char *str, size_t max_len)
 {
     char *resp = NULL;
-    char buf[256 + 1], *p;
-    size_t len;
+    char buf[MLEN_FIELD + 1], *p;
+    const char *q;
+    size_t i;
+    bool exit_loop;
 
     if (!str)
         goto out;
 
-    memset(buf, 0, 256 + 1);
-    if (max_len > 256)
-        max_len = 256;
+    memset(buf, 0, MLEN_FIELD + 1);
+    if (max_len > MLEN_FIELD)
+        max_len = MLEN_FIELD;
 
-    len = strlen(str);
-    if (len > max_len)
-        len = max_len;
-    memcpy(buf, str, len);
+    q = str;
+    i = 0;
+    exit_loop = false;
+    while (!exit_loop && *q && i <= max_len) {
+        switch (*q) {
+        case ' ':
+            if (i + 2 > max_len) {
+                exit_loop = true;
+                break;
+            }
+            buf[i++] = '%';
+            buf[i++] = '2';
+            buf[i++] = '0';
+            break;
+        case '"':
+            if (i + 2 > max_len) {
+                exit_loop = true;
+                break;
+            }
+            buf[i++] = '%';
+            buf[i++] = '2';
+            buf[i++] = '2';
+            break;
+        default:
+            buf[i++] = *q;
+            break;
+        }
+
+        q++;
+    }
 
 #if defined(_WIN32)
     resp = buff_priv_ansi_utf8_encode(buf);
@@ -188,9 +218,10 @@ sanitize_256_to_utf8(const char *str, size_t max_len)
 
     NETLOG("%s: enconding to UTF8 failed, forcing ASCII", __FUNCTION__);
     p = buf;
-    while (*p++) {
+    while (*p) {
         if ((*p & 0x80))
             *p = '.';
+        p++;
     }
 #else
     (void) p;
@@ -455,13 +486,13 @@ void lava_event_set_http(struct lava_event *lv, const char *method,
     lv->flags |= LVF_GPROXY;
     if (lv->http_method)
         ni_priv_free(lv->http_method);
-    lv->http_method = sanitize_256_to_utf8(method, 128);
+    lv->http_method = lv_encode_string(method, 128);
     if (lv->http_domain)
         ni_priv_free(lv->http_domain);
-    lv->http_domain = sanitize_256_to_utf8(domain, 256);
+    lv->http_domain = lv_encode_string(domain, 256);
     if (lv->http_url)
         ni_priv_free(lv->http_url);
-    lv->http_url = sanitize_256_to_utf8(url, 256);
+    lv->http_url = lv_encode_string(url, 256);
     lv->http_port = port;
 }
 
