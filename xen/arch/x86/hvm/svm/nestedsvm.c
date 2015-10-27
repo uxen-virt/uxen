@@ -72,13 +72,13 @@ int nestedsvm_vmcb_map(struct vcpu *v, uint64_t vmcbaddr)
     if (nv->nv_vvmcx != NULL && nv->nv_vvmcxaddr != vmcbaddr) {
         ASSERT(nv->nv_vvmcx != NULL);
         ASSERT(nv->nv_vvmcxaddr != VMCX_EADDR);
-        hvm_unmap_guest_frame(nv->nv_vvmcx);
+        hvm_unmap_guest_frame_global(nv->nv_vvmcx);
         nv->nv_vvmcx = NULL;
         nv->nv_vvmcxaddr = VMCX_EADDR;
     }
 
     if (nv->nv_vvmcx == NULL) {
-        nv->nv_vvmcx = hvm_map_guest_frame_rw(vmcbaddr >> PAGE_SHIFT);
+        nv->nv_vvmcx = hvm_map_guest_frame_rw_global(vmcbaddr >> PAGE_SHIFT);
         if (nv->nv_vvmcx == NULL)
             return 0;
         nv->nv_vvmcxaddr = vmcbaddr;

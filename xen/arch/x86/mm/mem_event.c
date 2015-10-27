@@ -87,8 +87,8 @@ static int mem_event_enable(struct domain *d,
     }
 
     /* Map ring and shared pages */
-    med->ring_page = map_domain_page(mfn_x(ring_mfn));
-    med->shared_page = map_domain_page(mfn_x(shared_mfn));
+    med->ring_page = map_domain_page_global(mfn_x(ring_mfn));
+    med->shared_page = map_domain_page_global(mfn_x(shared_mfn));
     put_gfn(dom_mem_event, ring_gfn);
     put_gfn(dom_mem_event, shared_gfn); 
 
@@ -114,10 +114,10 @@ static int mem_event_enable(struct domain *d,
     return 0;
 
  err:
-    unmap_domain_page(med->shared_page);
+    unmap_domain_page_global(med->shared_page);
     med->shared_page = NULL;
 
-    unmap_domain_page(med->ring_page);
+    unmap_domain_page_global(med->ring_page);
     med->ring_page = NULL;
 
     return rc;
@@ -125,10 +125,10 @@ static int mem_event_enable(struct domain *d,
 
 static int mem_event_disable(struct mem_event_domain *med)
 {
-    unmap_domain_page(med->ring_page);
+    unmap_domain_page_global(med->ring_page);
     med->ring_page = NULL;
 
-    unmap_domain_page(med->shared_page);
+    unmap_domain_page_global(med->shared_page);
     med->shared_page = NULL;
 
     return 0;

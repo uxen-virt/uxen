@@ -225,7 +225,7 @@ v4v_ring_unmap (struct v4v_ring_info *ring_info)
                    __FUNCTION__, __LINE__, mfn_x(ring_info->mfns[i]),
                    ring_info->mfn_mapping[i]);
 #endif
-        unmap_domain_page (ring_info->mfn_mapping[i]);
+        unmap_domain_page_global(ring_info->mfn_mapping[i]);
         ring_info->mfn_mapping[i] = NULL;
     }
 }
@@ -251,7 +251,8 @@ v4v_ring_map_page (struct v4v_ring_info *ring_info, int i)
         return NULL;
     }
 
-    ring_info->mfn_mapping[i] = map_domain_page (mfn_x (ring_info->mfns[i]));
+    ring_info->mfn_mapping[i] =
+        map_domain_page_global(mfn_x(ring_info->mfns[i]));
 #ifdef V4V_DEBUG
     printk(XENLOG_ERR "%s:%d mapping page %"PRI_mfn" to %p\n",
            __FUNCTION__, __LINE__, mfn_x(ring_info->mfns[i]),

@@ -87,11 +87,11 @@ map_domain_page_with_cache(unsigned long mfn, struct domain_mmap_cache *cache)
         cache->flags |= DMCACHE_ENTRY_HELD;
         if ( likely(mfn == cache->mfn) )
             goto done;
-        unmap_domain_page(cache->va);
+        unmap_domain_page_global(cache->va);
     }
 
     cache->mfn   = mfn;
-    cache->va    = map_domain_page(mfn);
+    cache->va    = map_domain_page_global(mfn);
     cache->flags = DMCACHE_ENTRY_HELD | DMCACHE_ENTRY_VALID;
 
  done:
@@ -113,7 +113,7 @@ domain_mmap_cache_destroy(struct domain_mmap_cache *cache)
 
     if ( likely(cache->flags & DMCACHE_ENTRY_VALID) )
     {
-        unmap_domain_page(cache->va);
+        unmap_domain_page_global(cache->va);
         cache->flags = 0;
     }
 }
