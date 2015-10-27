@@ -352,7 +352,7 @@ static struct page_info *hap_alloc(struct domain *d)
     p = __map_domain_page(pg);
     ASSERT(p != NULL);
     clear_page(p);
-    hap_unmap_domain_page(p);
+    unmap_domain_page(p);
 
     return pg;
 }
@@ -391,7 +391,7 @@ static struct page_info *hap_alloc_p2m_page(struct domain *d)
         {
             void *p = __map_domain_page(pg);
             clear_page(p);
-            hap_unmap_domain_page(p);
+            unmap_domain_page(p);
         }
     }
 #endif
