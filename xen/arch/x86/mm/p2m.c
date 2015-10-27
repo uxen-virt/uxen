@@ -241,6 +241,7 @@ get_gfn_contents(struct domain *d, unsigned long gpfn, p2m_type_t *t,
     mfn_t mfn;
     struct page_info *page;
     void *s;
+    uint8_t *data = NULL;
     int rc;
 
     *size = 0;
@@ -274,7 +275,6 @@ get_gfn_contents(struct domain *d, unsigned long gpfn, p2m_type_t *t,
         goto out;
     }
     while (p2m_is_pod(*t) && p2m_mfn_is_page_data(mfn_x(mfn))) {
-        uint8_t *data;
         uint16_t offset;
 
         if (p2m_parse_page_data(&mfn, &data, &offset)) {
@@ -311,6 +311,8 @@ get_gfn_contents(struct domain *d, unsigned long gpfn, p2m_type_t *t,
     mfn = _mfn(INVALID_MFN);
 
   out:
+    if (data)
+        unmap_domain_page_direct(data);
     p2m_unlock(p2m);
     return mfn;
 }

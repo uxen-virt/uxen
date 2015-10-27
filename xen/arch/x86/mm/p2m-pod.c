@@ -1362,7 +1362,7 @@ p2m_get_compressed_page_data(struct domain *d, mfn_t mfn, uint8_t *data,
 
   out:
     if (data_cont)
-        unmap_domain_page(data_cont);
+        unmap_domain_page_direct(data_cont);
     return ret;
 }
 
@@ -1385,7 +1385,7 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
 {
     struct domain *d = p2m->domain;
     struct page_info *p = NULL;
-    uint8_t *data;
+    uint8_t *data = NULL;
     struct page_data_info *pdi;
     uint16_t offset;
     void *target = NULL;
@@ -1446,7 +1446,8 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
   out:
     if (target)
         unmap_domain_page_direct(target);
-    unmap_domain_page(data);
+    if (data)
+        unmap_domain_page_direct(data);
     if (p)
         free_domheap_page(p);
     return ret;

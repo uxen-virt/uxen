@@ -560,11 +560,12 @@ int paging_log_dirty_range(struct domain *d,
 {
     int rv = 0;
     unsigned long pages = 0;
-    mfn_t *l4, *l3, *l2;
-    unsigned long *l1;
+    mfn_t *l4 = NULL, *l3 = NULL, *l2 = NULL;
     int b1, b2, b3, b4;
     int i2, i3, i4;
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
+    static unsigned long zeroes[PAGE_SIZE/BYTES_PER_LONG];
+    unsigned long *l1 = zeroes;
 
     p2m = p2m_get_hostp2m(d);
     logdirty_lock(p2m);
@@ -625,7 +626,6 @@ int paging_log_dirty_range(struct domain *d,
                   (pages < nr) && (i2 < LOGDIRTY_NODE_ENTRIES);
                   i2++ )
             {
-                static unsigned long zeroes[PAGE_SIZE/BYTES_PER_LONG];
                 unsigned int bytes = PAGE_SIZE;
                 uint8_t *s;
                 l1 = ((l2 && mfn_valid(l2[i2])) ?
@@ -686,22 +686,34 @@ int paging_log_dirty_range(struct domain *d,
                 if ( l1 != zeroes )
                     clear_page(l1);
                 pages += bytes << 3;
-                if ( l1 != zeroes )
+                if ( l1 != zeroes ) {
                     unmap_domain_page(l1);
+                    l1 = zeroes;
+                }
                 b1 = b1 & 0x7;
             }
             b2 = 0;
-            if ( l2 )
+            if ( l2 ) {
                 unmap_domain_page(l2);
+                l2 = NULL;
+            }
         }
         b3 = 0;
-        if ( l3 )
+        if ( l3 ) {
             unmap_domain_page(l3);
+            l3 = NULL;
+        }
     }
-    if ( l4 )
-        unmap_domain_page(l4);
 
  out:
+    if ( l1 != zeroes )
+        unmap_domain_page(l1);
+    if ( l2 )
+        unmap_domain_page(l2);
+    if ( l3 )
+        unmap_domain_page(l3);
+    if ( l4 )
+        unmap_domain_page(l4);
     paging_unlock(d);
     logdirty_unlock(p2m);
     return rv;
