@@ -25,6 +25,7 @@ TARGETLIBS=$(UXENVMLIB_LIB)
 
 SOURCES = balloon.c \
 	  platform.c \
+          bus.c \
 	  uxenplatform.rc
 
 TARGET_DESTINATION = wdf

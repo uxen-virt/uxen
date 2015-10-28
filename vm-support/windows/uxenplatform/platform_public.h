@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -87,5 +87,15 @@ struct uxen_platform_balloon_statistics {
 
 #define IOCTL_UXEN_PLATFORM_GET_FTIME \
     UXEN_IOR(4, uint64_t)
+
+
+/* Child PDOs IOCTLs */
+#define UXENPLATFORM_BUS_IO(nr)                     \
+    CTL_CODE(FILE_DEVICE_UNKNOWN,                   \
+             (nr) | 0x8000,                         \
+             METHOD_BUFFERED,                       \
+             FILE_READ_ACCESS | FILE_WRITE_ACCESS)
+
+#define IOCTL_UXEN_PLATFORM_BUS_GET_DEVICE_PROPERTY  UXENPLATFORM_BUS_IO(0)
 
 #endif  /* _PLATFORM_PUBLIC_H_ */

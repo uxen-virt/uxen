@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -42,6 +42,9 @@ typedef struct _FDO_DATA
 
     struct shared_info *shared_info;
     unsigned int shared_info_gpfn;
+
+    PHYSICAL_ADDRESS bus_conf_phys;
+    uint8_t *bus_conf;
 } FDO_DATA, *PFDO_DATA;
 
 WDF_DECLARE_CONTEXT_TYPE_WITH_NAME(FDO_DATA, get_fdo_data)

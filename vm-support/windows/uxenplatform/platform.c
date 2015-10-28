@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -15,6 +15,7 @@
 #include <uxen/platform_interface.h>
 
 #include "balloon.h"
+#include "bus.h"
 #include "version.h"
 
 NTSTATUS
@@ -65,7 +66,8 @@ interrupt_enable(IN WDFINTERRUPT interrupt, IN WDFDEVICE associated_device)
 
     fdo_data = get_fdo_data(associated_device);
     WRITE_REGISTER_ULONG((PULONG)&fdo_data->ctl_mmio->cm_events_enabled,
-            CTL_MMIO_EVENT_SYNC_TIME | CTL_MMIO_EVENT_SET_BALLOON);
+            CTL_MMIO_EVENT_SYNC_TIME | CTL_MMIO_EVENT_SET_BALLOON |
+            CTL_MMIO_EVENT_HOTPLUG);
 
     return STATUS_SUCCESS;
 }
@@ -148,6 +150,12 @@ interrupt_dpc(IN WDFINTERRUPT interrupt, IN WDFOBJECT device)
         fdo_data->processing_events &= ~CTL_MMIO_EVENT_SET_BALLOON;
     }
 
+    if (fdo_data->processing_events & CTL_MMIO_EVENT_HOTPLUG) {
+        uxen_debug("hotplug event");
+        bus_enumerate(fdo_data->wdf_device);
+        fdo_data->processing_events &= ~CTL_MMIO_EVENT_HOTPLUG;
+    }
+
     if (fdo_data->processing_events) {
         uxen_err("unknown events 0x%x", fdo_data->processing_events);
         fdo_data->processing_events = 0;
@@ -220,6 +228,12 @@ uxp_ev_driver_device_add(IN WDFDRIVER driver, IN PWDFDEVICE_INIT device_init)
 
     fdo_attributes.EvtCleanupCallback = uxp_ev_device_context_cleanup;
 
+    status = bus_init(device_init);
+    if (!NT_SUCCESS(status)) {
+        uxen_err("bus_init failed: 0x%08X", status);
+        return status;
+    }
+
     status = WdfDeviceCreate(&device_init, &fdo_attributes, &device);
     if (!NT_SUCCESS(status)) {
         uxen_err("WdfDeviceCreate failed: 0x%08X", status);
@@ -277,6 +291,12 @@ uxp_ev_driver_device_add(IN WDFDRIVER driver, IN PWDFDEVICE_INIT device_init)
         return status;
     }
 
+    status = bus_set_info(device);
+    if (!NT_SUCCESS(status)) {
+        uxen_err("bus_set_info failed: 0x%08X", status);
+        return status;
+    }
+
     uxen_msg("end");
     return status;
 }
@@ -301,6 +321,7 @@ uxp_ev_device_prepare_hardware(WDFDEVICE device, WDFCMRESLIST resources,
     PCM_PARTIAL_RESOURCE_DESCRIPTOR descriptor;
     ULONG i;
     ULONG mem_bar_no = 0;
+    NTSTATUS status;
 
     UNREFERENCED_PARAMETER(resources);
     PAGED_CODE();
@@ -342,6 +363,12 @@ uxp_ev_device_prepare_hardware(WDFDEVICE device, WDFCMRESLIST resources,
                                               MmCached);
                     uxen_debug("state_bar=%p", fdo_data->state_bar);
                     break;
+                case 2:
+                    fdo_data->bus_conf_phys = descriptor->u.Memory.Start;
+                    fdo_data->bus_conf = MmMapIoSpace(descriptor->u.Memory.Start,
+                                                      descriptor->u.Memory.Length,
+                                                      MmCached);
+                    break;
 	    }
 	    mem_bar_no++;
             break;
@@ -358,6 +385,10 @@ uxp_ev_device_prepare_hardware(WDFDEVICE device, WDFCMRESLIST resources,
 
     uxen_hypercall_init();
     uxen_set_state_bar(fdo_data->state_bar);
+
+    status = bus_enumerate(device);
+    if (!NT_SUCCESS(status))
+        return status;
 
     return STATUS_SUCCESS;
 }
