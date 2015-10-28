@@ -1,11 +1,12 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
 
 #include <dm/qemu_glue.h>
 #include <dm/qemu/hw/irq.h>
+#include <dm/qemu/net.h>
 #include <dm/dm.h>
 #include "pci.h"
 #include "pci-ram.h"
@@ -29,6 +30,11 @@
 
 #define RAM_BAR_SIZE TARGET_PAGE_SIZE
 
+struct platform_bus {
+    BusState qbus;
+    MemoryRegion io;
+};
+
 typedef struct PCI_uxen_platform_state {
     PCIDevice dev;
     MemoryRegion ctl_mmio_bar;
@@ -39,6 +45,8 @@ typedef struct PCI_uxen_platform_state {
     MemoryRegion state_bar;
 
     void *state_ptr;
+
+    struct platform_bus *bus;
 } PCI_uxen_platform_state;
 
 static struct PCI_uxen_platform_state *uxp_dev = NULL;
@@ -182,6 +190,18 @@ uxen_platform_set_balloon_size(int min_mb, int max_mb)
     if (uxp_dev->ctl_mmio.cm_events & uxp_dev->ctl_mmio.cm_events_enabled)
         qemu_set_irq(uxp_dev->dev.irq[0], 1);
     return 0;
+}
+
+static void
+uxen_platform_hotplug(void)
+{
+
+    if (!uxp_dev)
+        return;
+
+    uxp_dev->ctl_mmio.cm_events |= CTL_MMIO_EVENT_HOTPLUG;
+    if (uxp_dev->ctl_mmio.cm_events & uxp_dev->ctl_mmio.cm_events_enabled)
+        qemu_set_irq(uxp_dev->dev.irq[0], 1);
 }
 
 int uxen_platform_get_balloon_size(int *current, int *min, int *max)
@@ -329,6 +349,226 @@ static const MemoryRegionOps uxen_platform_ram_ops = {
     .write = ram_write
 };
 
+/* uXen platform Bus */
+
+static void
+bus_io_write(void *opaque, target_phys_addr_t addr, uint64_t val,
+             unsigned size)
+{
+
+}
+
+static uint64_t
+bus_io_read(void *opaque, target_phys_addr_t addr, unsigned size)
+{
+    struct platform_bus *b = opaque;
+    uint64_t val = ~0;
+    UXenPlatformDevice *d;
+    DeviceState *dev;
+    int devid, i = 0;
+
+    addr &= (UXENBUS_DEVICE_CONFIG_LENGTH * UXENBUS_DEVICE_COUNT) - 1;
+    devid = addr / UXENBUS_DEVICE_CONFIG_LENGTH;
+    addr &= UXENBUS_DEVICE_CONFIG_LENGTH - 1;
+
+    dev = TAILQ_FIRST(&b->qbus.children);
+    while (dev && i++ < devid)
+        dev = TAILQ_NEXT(dev, sibling);
+    if (!dev)
+        goto out;
+    d = DO_UPCAST(UXenPlatformDevice, qdev, dev);
+    if (addr + size > UXENBUS_DEVICE_CONFIG_LENGTH)
+        goto out;
+    if (d->config)
+        memcpy(&val, d->config + addr, size);
+
+out:
+    return val;
+}
+
+static const MemoryRegionOps bus_io_ops = {
+    .read = bus_io_read,
+    .write = bus_io_write,
+    .endianness = DEVICE_LITTLE_ENDIAN,
+};
+
+static struct BusInfo platform_bus_info = {
+    .name = "uxenplatform",
+    .size = sizeof(struct platform_bus),
+};
+
+static int platform_qdev_init(DeviceState *qdev, DeviceInfo *base)
+{
+    UXenPlatformDevice *d = DO_UPCAST(UXenPlatformDevice, qdev, qdev);
+    UXenPlatformDeviceInfo *info = DO_UPCAST(UXenPlatformDeviceInfo, qdev, base);
+    DeviceState *dev;
+    struct uxp_bus_device *cfg;
+    uint8_t instance_id = 0;
+    int ret;
+
+    d->config = malloc(UXENBUS_DEVICE_CONFIG_LENGTH);
+    if (!d->config)
+        return -1;
+
+    TAILQ_FOREACH(dev, &qdev->parent_bus->children, sibling) {
+        UXenPlatformDevice *sibling = DO_UPCAST(UXenPlatformDevice, qdev, dev);
+        struct uxp_bus_device *cfg2 = (void *)sibling->config;
+
+        if (cfg2 && sibling != d &&
+            cfg2->device_type == info->devtype &&
+            cfg2->instance_id >= instance_id)
+            instance_id = cfg2->instance_id + 1;
+    }
+
+    cfg = (void *)d->config;
+    cfg->device_type = info->devtype;
+    cfg->instance_id = instance_id;
+    cfg->prop_list.property_type = UXENBUS_PROPERTY_TYPE_LIST_END;
+    cfg->prop_list.length = 0;
+
+    ret = info->init(d);
+    if (ret) {
+        free(d->config);
+        d->config = NULL;
+        return ret;
+    }
+
+    if (qdev->hotplugged)
+        uxen_platform_hotplug();
+
+    return 0;
+}
+
+static int platform_qdev_exit(DeviceState *qdev)
+{
+    UXenPlatformDevice *d = DO_UPCAST(UXenPlatformDevice, qdev, qdev);
+    UXenPlatformDeviceInfo *info = DO_UPCAST(UXenPlatformDeviceInfo, qdev,
+                                             qdev->info);
+    int ret = 0;
+
+    if (d->config) {
+        free(d->config);
+        d->config = NULL;
+    }
+
+    if (info->exit)
+        ret = info->exit(d);
+
+    return ret;
+}
+
+static int platform_qdev_unplug(DeviceState *qdev)
+{
+    UXenPlatformDevice *d = DO_UPCAST(UXenPlatformDevice, qdev, qdev);
+    UXenPlatformDeviceInfo *info = DO_UPCAST(UXenPlatformDeviceInfo, qdev,
+                                             qdev->info);
+    int ret = 0;
+
+    if (d->config) {
+        free(d->config);
+        d->config = NULL;
+    }
+
+    if (info->unplug)
+        ret = info->unplug(d);
+
+    uxen_platform_hotplug();
+
+    return ret;
+}
+
+void uxenplatform_qdev_register(UXenPlatformDeviceInfo *info)
+{
+    info->qdev.init = platform_qdev_init;
+    info->qdev.exit = platform_qdev_exit;
+    info->qdev.unplug = platform_qdev_unplug;
+    info->qdev.bus_info = &platform_bus_info;
+    qdev_register(&info->qdev);
+}
+
+int
+uxenplatform_device_add_property(UXenPlatformDevice *dev, uint8_t property_type,
+                                 void *property, size_t property_len)
+{
+    struct uxp_bus_device *cfg = (void *)dev->config;
+    struct uxp_bus_device_property *prop = &cfg->prop_list;
+    struct uxp_bus_device_property *end = (void *)(dev->config +
+                                                   UXENBUS_DEVICE_CONFIG_LENGTH -
+                                                   sizeof(*prop));
+
+    while (prop <= end && prop->property_type != UXENBUS_PROPERTY_TYPE_LIST_END)
+        prop = UXENBUS_PROP_NEXT(prop);
+
+    if (prop->property_type != UXENBUS_PROPERTY_TYPE_LIST_END ||
+        UXENBUS_PROP_NEXT_L(prop, property_len) > end)
+        return -1; /* Not enough space */
+
+    prop->property_type = property_type;
+    prop->length = property_len;
+    memcpy(prop + 1, property, property_len);
+    prop = UXENBUS_PROP_NEXT(prop);
+
+    prop->property_type = UXENBUS_PROPERTY_TYPE_LIST_END;
+    prop->length = 0;
+
+    return 0;
+}
+
+int
+uxenplatform_device_get_instance_id(UXenPlatformDevice *dev)
+{
+    struct uxp_bus_device *cfg = (void *)dev->config;
+
+    return cfg->instance_id;
+}
+
+UXenPlatformDevice *uxenplatform_device_create(const char *name)
+{
+    DeviceState *dev;
+
+    if (!uxp_dev || !uxp_dev->bus)
+        return NULL;
+
+    dev = qdev_create(&uxp_dev->bus->qbus, name);
+
+    return DO_UPCAST(UXenPlatformDevice, qdev, dev);
+}
+
+UXenPlatformDevice *uxenplatform_create_simple(const char *model)
+{
+    UXenPlatformDevice *dev;
+
+    dev = uxenplatform_device_create(model);
+    if (!dev)
+        return NULL;
+
+    if (qdev_init(&dev->qdev) < 0) {
+        qdev_free(&dev->qdev);
+        return NULL;
+    }
+
+    return dev;
+}
+
+UXenPlatformDevice *uxenplatform_nic_init(NICInfo *nd, const char *model)
+{
+    UXenPlatformDevice *dev;
+
+    dev = uxenplatform_device_create(model);
+    if (!dev)
+        return NULL;
+
+    qdev_set_nic_properties(&dev->qdev, nd);
+    if (qdev_init(&dev->qdev) < 0) {
+        qdev_free(&dev->qdev);
+        return NULL;
+    }
+
+    return dev;
+}
+
+/* init */
+
 static int
 uxen_platform_initfn(PCIDevice *dev)
 {
@@ -355,18 +595,20 @@ uxen_platform_initfn(PCIDevice *dev)
 
     d->balloon_status_bh = bh_new(uxen_platform_balloon_notify, d);
 
-#if 0
-    platform_ioport_bar_setup(d);
-    pci_register_bar(&d->dev, 0, PCI_BASE_ADDRESS_SPACE_IO, &d->io_bar);
-#endif
-
-    
     memory_region_init_io (&d->state_bar, &uxen_platform_ram_ops, d,
                            "uxen_platform ram", RAM_BAR_SIZE);
     memory_region_add_ram_range(&d->state_bar, 0, RAM_BAR_SIZE,
                                 update_state_pointer, d);
 
-    pci_register_bar (&d->dev, 1, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->state_bar);
+    pci_register_bar(&d->dev, 1, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->state_bar);
+
+    d->bus = FROM_QBUS(struct platform_bus,
+                       qbus_create(&platform_bus_info, &dev->qdev, NULL));
+    d->bus->qbus.allow_hotplug = 1;
+
+    memory_region_init_io(&d->bus->io, &bus_io_ops, d->bus, "platform.bus_io",
+                          UXENBUS_DEVICE_CONFIG_LENGTH * UXENBUS_DEVICE_COUNT);
+    pci_register_bar(&d->dev, 2, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->bus->io);
 
     return 0;
 }
@@ -376,6 +618,9 @@ uxen_platform_exitfn (PCIDevice * dev)
 {
     PCI_uxen_platform_state *s = DO_UPCAST(PCI_uxen_platform_state, dev, dev);
 
+    memory_region_destroy(&s->bus->io);
+    qbus_free(&s->bus->qbus);
+    s->bus = NULL;
     memory_region_del_ram_range(&s->state_bar, 0);
     memory_region_destroy (&s->state_bar);
     memory_region_destroy(&s->ctl_mmio_bar);

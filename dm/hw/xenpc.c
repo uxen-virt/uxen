@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -17,6 +17,8 @@
 #include "xenrtc.h"
 
 #include <xen/hvm/e820.h>
+
+#include "uxen_platform.h"
 
 const char *serial_devices[MAX_SERIAL_PORTS] = { NULL, };
 CharDriverState *serial_hds[MAX_SERIAL_PORTS];
@@ -315,6 +317,8 @@ pc_init_xen(void)
     platform_fixed_ioport_init();
 #endif
 
+    pci_create_simple(pci_bus, -1, "uxen-platform");
+
     for (i = 0; i < MAX_SERIAL_PORTS; i++)
         if (serial_hds[i]) {
             ISADevice *dev = isa_try_create("isa-serial");
@@ -457,6 +461,4 @@ pc_init_xen(void)
     if (i440fx_state)
         i440fx_init_memory_mappings(i440fx_state);
 #endif
-
-    pci_create_simple(pci_bus, -1, "uxen-platform");
 }
