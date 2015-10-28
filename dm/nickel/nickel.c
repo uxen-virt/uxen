@@ -687,9 +687,8 @@ static void ni_input_buff(struct nickel *ni, struct buff *bf)
     buff_free(&bf);
 }
 
-static void dequeue_input(void *opaque)
+static void _dequeue_input(struct nickel *ni)
 {
-    struct nickel *ni = opaque;
     struct buff *bf;
 
     for (;;) {
@@ -705,6 +704,13 @@ static void dequeue_input(void *opaque)
 
        ni_input_buff(ni, bf);
     }
+}
+
+static void dequeue_input(void *opaque)
+{
+    struct nickel *ni = opaque;
+
+    _dequeue_input(ni);
 }
 #endif
 
@@ -1379,10 +1385,12 @@ static void * ni_thread_run(void *opaque)
     while (!ni->exit_request) {
 
         if (cmpxchg(&ni->suspend_request, 1, 2) == 1) {
+            _dequeue_input(ni);
             ioh_event_set(&ni->suspend_ok_ev);
             NETLOG("%s: nickel thread suspended", __FUNCTION__);
             ioh_event_wait(&ni->suspend_ev);
             ni->suspend_request = 0;
+            NETLOG("%s: nickel thread resumed", __FUNCTION__);
         }
 
         if (ni->exit_request)

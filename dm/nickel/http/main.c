@@ -99,8 +99,9 @@ enum hp_state_t {
 
 enum cx_save_state {
     CXSV_CONTINUE = 0, /* needs to be 0 */
-    CXSV_RESET,
+    CXSV_CLOSE,
     CXSV_CONNFAILED,
+    CXSV_SSL_ABORT,
 
     CXSV_LAST_STATE
 };
@@ -236,6 +237,8 @@ static const char *hp_states[] = {
 #define CXF_LOCAL_WEBDAV        U64BF(30)
 #define CXF_LOCAL_WEBDAV_COMPLETE   U64BF(31)
 #define CXF_RESET_STATE             U64BF(32)
+#define CXF_GPROXY_RECEIVED     U64BF(33)
+#define CXF_HTTP_COMPLETE       U64BF(34)
 
 struct hpd_t;
 RLIST_HEAD(http_ctx_list, http_ctx);
@@ -343,6 +346,7 @@ ns_cx_open(void *opaque, struct nickel *ni, CharDriverState **persist_chr,
 static CharDriverState *
 cx_open(void *opaque, struct nickel *ni, struct sockaddr_in saddr, struct sockaddr_in daddr);
 static void cx_close(struct clt_ctx *cx);
+static int cx_closing_response(struct clt_ctx *cx);
 static void cx_free(struct clt_ctx *cx);
 static void cx_get(struct clt_ctx *cx);
 static void cx_put(struct clt_ctx *cx);
@@ -1219,8 +1223,12 @@ static void hp_put(struct http_ctx *hp)
 
 static void hp_close(struct http_ctx *hp)
 {
-    struct proxy_t *proxy = hp->proxy;
+    struct proxy_t *proxy;
 
+    if (!hp)
+        return;
+
+    proxy = hp->proxy;
     if ((hp->flags & (HF_CLOSING | HF_CLOSED)))
         return;
 
@@ -2113,6 +2121,7 @@ static int cx_proxy_response(struct clt_ctx *cx, int msg, bool close)
     if (close)
         cx->flags |= (CXF_FLUSH_CLOSE | CXF_IGNORE);
 
+    cx->flags &= ((~CXF_SUSPENDED) & (~CXF_PROXY_SUSPEND));
     BUFF_CONSUME_ALL(cx->out);
     if (cx_guest_write(cx) < 0)
         goto out;
@@ -2284,8 +2293,11 @@ static int srv_connected(struct http_ctx *hp)
 
     if (hp->cx && (hp->cx->flags & CXF_TUNNEL_DETECTED)) {
         hp->cx->flags |= CXF_TUNNEL_RESPONSE;
-        if (cx_proxy_response(hp->cx, HMSG_CONNECT_OK, false) < 0)
+        if (cx_proxy_response(hp->cx, HMSG_CONNECT_OK, false) < 0) {
             cx_close(hp->cx);
+            ret = -1;
+            goto out;
+        }
     }
 
     hp->cstate = S_CONNECTED;
@@ -4401,12 +4413,20 @@ static void hp_bh(void *unused)
         run_once = 1;
 
         LIST_FOREACH_SAFE(cx, &cx_list, entry, cx_next) {
-            if (!cx->restart_state)
+            unsigned int state;
+
+            state = cx->restart_state;
+            if (!state)
                 continue;
-            if (cx->restart_state == CXSV_RESET)
+            cx->restart_state = 0;
+            if (state == CXSV_CLOSE) {
+                cx->flags |= CXF_FORCE_CLOSE;
                 cx_close(cx);
-            else if (cx->restart_state == CXSV_CONNFAILED)
+            } else if (state == CXSV_CONNFAILED) {
                 cx_proxy_response(cx, HMSG_CONNECT_FAILED, true);
+            } else if (state == CXSV_SSL_ABORT) {
+                cx_proxy_response(cx, HMSG_CONNECT_ABORTED_SSL, true);
+            }
         }
     }
 
@@ -4428,6 +4448,7 @@ static void hp_bh(void *unused)
 
     if (hpd_needs_continue) {
         struct hpd_t *hpd, *hpd_next;
+
         hpd_needs_continue = 0;
         LIST_FOREACH_SAFE(hpd, &hpd_list, entry, hpd_next) {
             if (hpd->needs_continue) {
@@ -4494,7 +4515,7 @@ static void cx_webdav_do_write(void *opaque, const char *buf, size_t len)
     BUFF_CONSUME_ALL(cx->out);
     cx_guest_write(cx);
     if (lparsed != len || cx->srv_parser->parse_state == PS_MCOMPLETE)
-        cx->flags |= CXF_LOCAL_WEBDAV_COMPLETE;
+        cx->flags |= (CXF_LOCAL_WEBDAV_COMPLETE | CXF_HTTP_COMPLETE);
 }
 
 static int cx_webdav_process(struct clt_ctx *cx, const uint8_t *buf, int len)
@@ -4686,6 +4707,9 @@ static void cx_put(struct clt_ctx *cx)
 
 static void cx_close(struct clt_ctx *cx)
 {
+    if (!cx)
+        return;
+
     if ((cx->flags & (CXF_CLOSING | CXF_CLOSED)))
         return;
 
@@ -4695,17 +4719,9 @@ static void cx_close(struct clt_ctx *cx)
     if (cx->hp)
         cx_hp_disconnect(cx);
 
-    if (!(cx->flags & CXF_FORCE_CLOSE)) {
-        cx->flags &= ~CXF_GPROXY_REQUEST;
-        if ((cx->flags & CXF_TUNNEL_RESPONSE_OK) && !(cx->flags & CXF_TUNNEL_GUEST_SENT)) {
-            cx_proxy_response(cx, HMSG_CONNECT_ABORTED_SSL, true);
-            cx->flags |= CXF_TUNNEL_GUEST_SENT;
-        }
-        if (cx->out && BUFF_BUFFERED(cx->out)) {
-            cx->flags |= CXF_FLUSH_CLOSE;
-            if (cx_guest_write(cx) == 0)
-                goto out;
-        }
+    if (cx_closing_response(cx) == 0) {
+        CXL4("cx_closing_response");
+        goto out;
     }
 
 #if VERBSTATS
@@ -4790,6 +4806,44 @@ static void cx_free(struct clt_ctx *cx)
     cx->alternative_proxies = NULL;
 
     free(cx);
+}
+
+static int cx_closing_response(struct clt_ctx *cx)
+{
+    int ret = -1;
+
+    if ((cx->flags & (CXF_CLOSED | CXF_FORCE_CLOSE)))
+        goto out;
+
+    if (cx->hp)
+        cx->hp->flags |= HF_SRV_SUSPENDED;
+
+    if ((cx->flags & CXF_FLUSH_CLOSE)) {
+        ret = cx_guest_write(cx);
+        goto out;
+    }
+
+    if ((cx->flags & CXF_TUNNEL_RESPONSE_OK) && !(cx->flags & CXF_TUNNEL_GUEST_SENT)) {
+        ret = cx_proxy_response(cx, HMSG_CONNECT_ABORTED_SSL, true);
+        if (ret == 0)
+            cx->flags |= CXF_TUNNEL_GUEST_SENT;
+        goto out;
+    }
+
+    if (cx->out && BUFF_BUFFERED(cx->out) && !(cx->flags & (CXF_SUSPENDED | CXF_PROXY_SUSPEND))) {
+        cx->flags |= CXF_FLUSH_CLOSE;
+        ret = cx_guest_write(cx);
+        goto out;
+    }
+
+    if ((cx->flags & CXF_GPROXY_REQUEST)) {
+        ret = cx_proxy_response(cx, HMSG_CONNECT_FAILED, true);
+        goto out;
+    }
+
+out:
+    cx->flags &= ~CXF_GPROXY_REQUEST;
+    return ret;
 }
 
 static int cx_parser_create_request(struct clt_ctx *cx)
@@ -4899,21 +4953,34 @@ out_close:
 static void cx_chr_save(struct CharDriverState *chr,  QEMUFile *f)
 {
     struct clt_ctx *cx = (struct clt_ctx *) chr->handler_opaque;
-    unsigned int save_state = CXSV_RESET;
+    unsigned int save_state = CXSV_CLOSE;
 
-    if (!(cx->flags & CXF_CLOSED) && (cx->flags & CXF_GUEST_PROXY) && !cx->hp &&
-            (cx->flags & CXF_HTTP)) {
-
-        if ((cx->flags & CXF_GPROXY_REQUEST) && cx->clt_parser &&
-             cx->clt_parser->parse_state == PS_MCOMPLETE) {
-
-            save_state = CXSV_CONNFAILED;
-        } else if (!(cx->flags & CXF_GPROXY_REQUEST) && (!cx->in || !BUFF_BUFFERED(cx->in))) {
-
-            save_state = CXSV_CONTINUE;
-        }
+    if (!(cx->flags & CXF_GUEST_PROXY) || (cx->flags & CXF_CLOSED)) {
+        save_state = CXSV_CLOSE;
+        goto out;
     }
 
+    if ((cx->flags & CXF_TUNNEL_RESPONSE_OK) && !(cx->flags & CXF_TUNNEL_GUEST_SENT)) {
+        save_state = CXSV_SSL_ABORT;
+        goto out;
+    }
+
+    if ((cx->flags & CXF_GPROXY_REQUEST)) {
+        save_state = CXSV_CONNFAILED;
+        goto out;
+    }
+
+    if (!(cx->flags & CXF_GPROXY_RECEIVED)) {
+        save_state = CXSV_CONTINUE;
+        goto out;
+    }
+
+    if ((!cx->in || !BUFF_BUFFERED(cx->in)) && (cx->flags & CXF_HTTP_COMPLETE)) {
+        save_state = CXSV_CONTINUE;
+        goto out;
+    }
+
+out:
     qemu_put_be32(f, 4); // 4 bytes
     qemu_put_be32(f, (uint32_t) save_state);
 }
@@ -4922,7 +4989,7 @@ static void cx_chr_restore(struct CharDriverState *chr,  QEMUFile *f)
 {
     struct clt_ctx *cx = (struct clt_ctx *) chr->handler_opaque;
     unsigned int len;
-    unsigned int save_state = CXSV_RESET;
+    unsigned int save_state = CXSV_CLOSE;
 
     len = qemu_get_be32(f);
 
@@ -4938,7 +5005,7 @@ static void cx_chr_restore(struct CharDriverState *chr,  QEMUFile *f)
     save_state = qemu_get_be32(f);
     if (save_state >= CXSV_LAST_STATE) {
         CXL("ERROR - received invalid save-state %u", save_state);
-        save_state = CXSV_RESET;
+        save_state = CXSV_CLOSE;
     }
 
 consume:
@@ -4996,16 +5063,21 @@ static int cx_guest_write(struct clt_ctx *cx)
         goto out;
     if ((cx->flags & CXF_FORCE_CLOSE))
         goto out_close;
-    if (!(cx->flags & CXF_NI_ESTABLISHED) || !cx->out)
+    if (!(cx->flags & CXF_NI_ESTABLISHED))
         goto out;
 
-    l = BUFF_CONSUMED(cx->out);
+    l = 0;
+    if (cx->out)
+        l = BUFF_CONSUMED(cx->out);
     CXL5("available buf len %d", (int) l);
-    if (l == 0)
-        goto out;
+    if (l == 0) {
+        if ((cx->flags & CXF_FLUSH_CLOSE))
+            goto flush_close_end;
 
-    cx->flags &= ~CXF_GPROXY_REQUEST;
-    if ((cx->flags & (CXF_SUSPENDED | CXF_PROXY_SUSPEND)))
+        goto out;
+    }
+
+    if (!(cx->flags & CXF_FLUSH_CLOSE) && (cx->flags & (CXF_SUSPENDED | CXF_PROXY_SUSPEND)))
         goto out;
 
     r = cx_write(cx, (uint8_t *) (BUFF_BEGINNING(cx->out)), l);
@@ -5016,16 +5088,17 @@ static int cx_guest_write(struct clt_ctx *cx)
     CXL5("wrote %d bytes to G", (int) r);
 
     if (r > 0) {
+        cx->flags &= ~CXF_GPROXY_REQUEST;
 #if VERBSTATS
-    if (cx->clt_lat_idx < LAT_STAT_NUMBER * 2) {
-        int64_t now = get_clock_ms(rt_clock);
+        if (cx->clt_lat_idx < LAT_STAT_NUMBER * 2) {
+            int64_t now = get_clock_ms(rt_clock);
 
-        cx->clt_lat[cx->clt_lat_idx] = (uint32_t) (now - cx->created_ts);
-        cx->clt_lat[cx->clt_lat_idx + 1] = (uint32_t) r;
-        cx->clt_lat_idx += 2;
+            cx->clt_lat[cx->clt_lat_idx] = (uint32_t) (now - cx->created_ts);
+            cx->clt_lat[cx->clt_lat_idx + 1] = (uint32_t) r;
+            cx->clt_lat_idx += 2;
 
-        cx->created_ts = now;
-    }
+            cx->created_ts = now;
+        }
 #endif
         buff_gc_consume(cx->out, r);
         if (cx->hp)
@@ -5036,19 +5109,17 @@ static int cx_guest_write(struct clt_ctx *cx)
     }
 
     CXL5("BUFF_BUFFERED(cx->out) %d", (int) BUFF_BUFFERED(cx->out));
-    if (BUFF_BUFFERED(cx->out) == 0) {
-        if ((cx->flags & CXF_FLUSH_CLOSE)) {
-            CXL5("CXF_FLUSH_CLOSE END");
-            if (!(cx->flags & CXF_GUEST_PROXY) && cx_srv_fin(cx) == 0)
-                goto out;
 
-            goto out_close;
-        }
+    /* whole buffer written to the guest */
+    if (BUFF_BUFFERED(cx->out) == 0) {
+        if ((cx->flags & CXF_FLUSH_CLOSE))
+            goto flush_close_end;
 
         if (cx->hp && (cx->hp->flags & HF_RESTARTABLE)) {
             assert(cx->srv_parser);
             CXL5("parse_state %d", (int) cx->srv_parser->parse_state);
             if (cx->srv_parser->parse_state == PS_MCOMPLETE) {
+                cx->flags |= CXF_HTTP_COMPLETE;
                 cx->hp->flags |= HF_RESTART_OK;
                 if (cx->hp->flags & HF_REUSABLE)
                     cx->hp->flags |= HF_REUSE_READY;
@@ -5060,7 +5131,7 @@ static int cx_guest_write(struct clt_ctx *cx)
 
                 if ((cx->flags & CXF_GUEST_PROXY) && !(cx->flags & CXF_TUNNEL_GUEST)) {
 
-                     if (cx->proxy && !(cx->hp->flags & HF_PINNED) && cx_hp_disconnect(cx) < 0)
+                     if (cx->proxy && cx->hp && !(cx->hp->flags & HF_PINNED) && cx_hp_disconnect(cx) < 0)
                         goto out_close;
                      if (!cx->proxy && cx->hp && !(cx->hp->flags & HF_PINNED) && cx->hp->hpd && cx_hp_disconnect(cx) < 0)
                         goto out_close;
@@ -5094,12 +5165,21 @@ static int cx_guest_write(struct clt_ctx *cx)
 out:
     if (buf_ready && cx->hp)
         hp_cx_buf_ready(cx->hp);
-
     return ret;
+
 out_close:
     cx_close(cx);
     ret = -1;
     goto out;
+
+flush_close_end:
+    CXL5("CXF_FLUSH_CLOSE END");
+    if (!(cx->flags & CXF_GUEST_PROXY) && cx_srv_fin(cx) == 0)
+        goto out;
+
+    cx->flags &= ~CXF_FLUSH_CLOSE;
+    cx->flags |= CXF_FORCE_CLOSE;
+    goto out_close;
 }
 
 static int cx_chr_write(CharDriverState *chr, const uint8_t *buf, int len_buf)
@@ -5337,6 +5417,9 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
     if ((cx->flags & CXF_TUNNEL_RESPONSE))
         goto out;
 
+    if (len_buf && (cx->flags & CXF_HTTP_COMPLETE))
+        cx->flags &= ~CXF_HTTP_COMPLETE;
+
     if ((cx->flags & CXF_LOCAL_WEBDAV_COMPLETE)) {
         cx_webdav_close(cx);
         cx_reset(cx, false);
@@ -5454,6 +5537,8 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
         assert((cx->flags & CXF_GUEST_PROXY));
         if (!buf || !len_buf)
             goto out;
+
+        cx->flags |= CXF_GPROXY_RECEIVED;
 
         if (!(cx->flags & CXF_HEADERS_OK))
             goto out;
