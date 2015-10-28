@@ -1071,6 +1071,7 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
         }
 
         init_timer(&vci->vci_timer, uxen_vcpu_timer_cb, vci);
+        vci->vci_timer_created = 1;
         vci->vci_shared.vci_runnable = 1;
     }
 
@@ -1246,8 +1247,6 @@ uxen_vmi_stop_running(struct vm_info *vmi)
 
         event_signal(&vci->vci_runnable);
 
-        cancel_timer(&vci->vci_timer);
-
         interrupt_cpus = 1;
     }
 
@@ -1264,6 +1263,14 @@ uxen_vmi_stop_running(struct vm_info *vmi)
     printk("%s: vm%u all %d vcpus stopped (%d running)\n", __FUNCTION__,
            vmi->vmi_shared.vmi_domid, vmi->vmi_shared.vmi_nrvcpus,
            vmi->vmi_running_vcpus);
+
+    /* cancel timers only after all vcpus stopped */
+    for (i = 0; i < vmi->vmi_shared.vmi_nrvcpus; i++) {
+        struct vm_vcpu_info *vci = &vmi->vmi_vcpus[i];
+
+        if (OSCompareAndSwap(1, 0, &vci->vci_timer_created))
+            cancel_timer(&vci->vci_timer);
+    }
 }
 
 static int

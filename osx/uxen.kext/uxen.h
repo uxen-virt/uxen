@@ -144,6 +144,7 @@ struct vm_vcpu_info {
     struct vm_vcpu_info_shared vci_shared;
     struct event_object vci_runnable;
     struct timer_call vci_timer;
+    uint32_t vci_timer_created;
     unsigned long vci_host_cpu;
     struct user_notification_event *vci_ioreq_wait_event;
 };
