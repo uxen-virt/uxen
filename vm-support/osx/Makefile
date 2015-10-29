@@ -9,6 +9,7 @@ include $(TOPDIR)/Config.mk
 SUBDIRS  =
 SUBDIRS += uxendisp
 SUBDIRS += uxenps2
+SUBDIRS += uxenplatform
 
 TARGETS = all dist
 
