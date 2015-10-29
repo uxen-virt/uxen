@@ -39,7 +39,7 @@
 
 #define CONTROL_MAX_LINE_LEN 4096
 #define CONTROL_INPUT_REALLOC_SIZE 512
-#define DEFAULT_TIMEOUT_MS 100000
+#define DEFAULT_TIMEOUT_MS 0x7fffffff // ideally would be INFINITE
 
 static struct io_handler_queue control_io_handlers;
 static WaitObjects control_wait_objects;
