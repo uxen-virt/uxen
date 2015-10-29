@@ -2069,6 +2069,7 @@ vm_save_execute(void)
 	ERRMSG("filebuf_open(%s) failed", vm_save_info.filename);
 	goto out;
     }
+    filebuf_delete_on_close(f, 1);
     vm_save_info.f = f;
 
     ret = uxenvm_savevm_get_dm_state(&dm_state_buf, &dm_state_size, &err_msg);
@@ -2099,12 +2100,21 @@ vm_save_execute(void)
     }
 
   out:
+
+    if (ret == 0) {
+        APRINTF("total file size: %"PRIu64" bytes\n",
+                (uint64_t) filebuf_tell(f));
+        filebuf_flush(f);
+        filebuf_delete_on_close(f, 0);
+    } else {
+        filebuf_close(f);
+        f = vm_save_info.f = NULL;
+    }
+
     if (vm_save_info.command_cd)
 	control_command_save_finish(ret, err_msg);
     if (dm_state_buf)
         free(dm_state_buf);
-    if (f)
-        filebuf_flush(f);
     if (err_msg)
 	free(err_msg);
     free(vm_save_info.filename);
