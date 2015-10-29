@@ -33,6 +33,9 @@ struct CharDriverState {
     void (*chr_accept_input)(struct CharDriverState *chr);
     int (*chr_getname)(struct CharDriverState *s, char *buf, size_t buflen);
     int  (*chr_eof)(struct CharDriverState *s);
+#ifdef _WIN32
+    int (*chr_dup_handle)(struct CharDriverState *s, HANDLE in, HANDLE *out);
+#endif
     void *opaque;
     uint32_t events;
     int focus;
@@ -70,6 +73,9 @@ void qemu_chr_add_handlers(CharDriverState *s,
 void qemu_chr_accept_input(CharDriverState *s);
 int qemu_chr_reopen_all(void);
 int qemu_chr_eof(CharDriverState *chr);
+#ifdef _WIN32
+HANDLE qemu_chr_dup_handle(CharDriverState *s, HANDLE handle);
+#endif
 
 #define qemu_chr_fe_ioctl(s, c, a) qemu_chr_ioctl(s, c, a)
 int qemu_chr_ioctl(CharDriverState *s, int cmd, void *arg);

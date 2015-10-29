@@ -146,6 +146,16 @@ control_send_status(const char *key, const char *val, ...)
     return ret;
 }
 
+HANDLE control_dup_handle(HANDLE handle)
+{
+    if (!control.chr) {
+        warnx("%s: control chr unavailable", __FUNCTION__);
+        errno = EINVAL;
+        return NULL;
+    }
+    return qemu_chr_dup_handle(control.chr, handle);
+}
+
 __attribute__ ((__format__ (printf, 6, 0)))
 void control_err_vprintf(const char *function, int line,
                          const char *type,

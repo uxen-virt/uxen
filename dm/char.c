@@ -1705,6 +1705,29 @@ qemu_chr_reopen_win_file(WinCharState *s, const char *filename)
     return 0;
 }
 
+HANDLE qemu_chr_dup_win_handle(WinCharState *s, HANDLE handle)
+{
+    ULONG pid;
+    HANDLE proc;
+    HANDLE dup;
+    if (!GetNamedPipeServerProcessId(s->hcom, &pid)) {
+        Wwarn("GetNamedPipeClientProcessId fails");
+        return NULL;
+    }
+    proc = OpenProcess(PROCESS_DUP_HANDLE, FALSE, pid);
+    if (!proc) {
+        Wwarn("OpenProcess fails");
+        return NULL;
+    }
+    if (!DuplicateHandle(GetCurrentProcess(), handle, proc,
+                         &dup, 0, FALSE, DUPLICATE_SAME_ACCESS)) {
+        Wwarn("DuplicateHandle fails");
+        dup = NULL;
+    }
+    CloseHandle(proc);
+    return dup;
+}
+
 #endif /* !_WIN32 */
 
 #if 0
@@ -2317,6 +2340,13 @@ int qemu_chr_reopen_all(void)
     critical_section_leave(&chardevs_lock);
     return r;
 }
+
+#ifdef _WIN32
+HANDLE qemu_chr_dup_handle(CharDriverState *s, HANDLE handle)
+{
+    return qemu_chr_dup_win_handle(s->opaque, handle);
+}
+#endif
 
 #ifdef MONITOR
 void

@@ -27,4 +27,8 @@ control_queue_ok(void *send_opaque, const char *command, const char *id,
 void control_command_save_finish(int ret, char *err_msg);
 void control_command_resume_finish(int ret, char *err_msg);
 
+#ifdef _WIN32
+HANDLE control_dup_handle(HANDLE handle);
+#endif
+
 #endif	/* _CONTROL_H_ */
