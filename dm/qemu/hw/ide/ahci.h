@@ -270,17 +270,17 @@ typedef struct NCQTransferState {
     int used;
 } NCQTransferState;
 
-typedef struct AHCIRestrictedPort_struct {
+typedef struct AHCIShadowPort_struct {
     uint32_t sig;
     uint32_t scr_stat;
-} AHCIRestrictedPort;
+} AHCIShadowPort;
 
-typedef struct AHCIRestrict_struct {
+typedef struct AHCIShadow_struct {
     uint32_t state;
     AHCIControlRegs control_regs;
     uint32_t num_ports;
-    AHCIRestrictedPort ports[];
-} AHCIRestrict;
+    AHCIShadowPort ports[];
+} AHCIShadow;
 
 struct AHCIDevice {
     IDEDMA dma;
@@ -305,7 +305,7 @@ struct AHCIDevice {
 
 typedef struct AHCIState {
     AHCIDevice *dev;
-    AHCIRestrict restrict;
+    AHCIShadow shadow;
     AHCIControlRegs control_regs;
     MemoryRegion mem;
     MemoryRegion idp;       /* Index-Data Pair I/O port space */

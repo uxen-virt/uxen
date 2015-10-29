@@ -58,11 +58,10 @@ static void ahci_reset_port(AHCIState *s, int port);
 static void ahci_write_fis_d2h(AHCIDevice *ad, uint8_t *cmd_fis);
 static void ahci_init_d2h(AHCIDevice *ad);
 
-static uint32_t  ahci_restricted_port_read(AHCIRestrict *n, int port,
-                                           int offset)
+static uint32_t  ahci_shadow_port_read(AHCIShadow *n, int port, int offset)
 {
     uint32_t val;
-    AHCIRestrictedPort *np;
+    AHCIShadowPort *np;
 
     if ((port < 0) || (port >= AHCI_MAX_PORTS))
         return 0;
@@ -337,9 +336,8 @@ static void  ahci_port_write(AHCIState *s, int port, int offset, uint32_t val)
     }
 }
 
-static uint64_t ahci_restricted_mem_read(AHCIRestrict *n,
-                                         target_phys_addr_t addr,
-                                         unsigned size)
+static uint64_t ahci_shadow_mem_read(AHCIShadow *n, target_phys_addr_t addr,
+                                     unsigned size)
 {
     uint32_t val = 0;
 
@@ -366,7 +364,7 @@ static uint64_t ahci_restricted_mem_read(AHCIRestrict *n,
     } else if ((addr >= AHCI_PORT_REGS_START_ADDR) &&
                (addr < (AHCI_PORT_REGS_START_ADDR +
                 (n->num_ports * AHCI_PORT_ADDR_OFFSET_LEN)))) {
-        val = ahci_restricted_port_read(n, (addr - AHCI_PORT_REGS_START_ADDR) >> 7,
+        val = ahci_shadow_port_read(n, (addr - AHCI_PORT_REGS_START_ADDR) >> 7,
                              addr & AHCI_PORT_ADDR_OFFSET_MASK);
     }
 
@@ -379,8 +377,8 @@ static uint64_t ahci_mem_read(void *opaque, target_phys_addr_t addr,
     AHCIState *s = opaque;
     uint32_t val = 0;
 
-    if (s->restrict.state) 
-        return ahci_restricted_mem_read(&s->restrict, addr, size);
+    if (s->shadow.state) 
+        return ahci_shadow_mem_read(&s->shadow, addr, size);
 
     if (addr < AHCI_GENERIC_HOST_CONTROL_REGS_MAX_ADDR) {
         switch (addr) {
@@ -426,7 +424,7 @@ static void ahci_mem_write(void *opaque, target_phys_addr_t addr,
         return;
     }
 
-    if (s->restrict.state)
+    if (s->shadow.state)
         return;
 
     if (addr < AHCI_GENERIC_HOST_CONTROL_REGS_MAX_ADDR) {
@@ -478,7 +476,7 @@ static uint64_t ahci_idp_read(void *opaque, target_phys_addr_t addr,
 {
     AHCIState *s = opaque;
 
-    if (s->restrict.state) 
+    if (s->shadow.state) 
         return 0;
 
     if (addr == s->idp_offset) {
@@ -497,7 +495,7 @@ static void ahci_idp_write(void *opaque, target_phys_addr_t addr,
 {
     AHCIState *s = opaque;
 
-    if (s->restrict.state) 
+    if (s->shadow.state) 
         return;
 
     if (addr == s->idp_offset) {
@@ -1412,11 +1410,11 @@ const VMStateDescription vmstate_ahci_port_regs = {
     }
 };
 
-static void ahci_restrict(AHCIState *s)
+static void ahci_shadow(AHCIState *s)
 {
     unsigned i;
-    AHCIRestrict *n = &s->restrict;
-    AHCIRestrictedPort *np;
+    AHCIShadow *n = &s->shadow;
+    AHCIShadowPort *np;
 
     error_printf("%s: called\n", __FUNCTION__);
 
@@ -1472,7 +1470,7 @@ static int ahci_post_load(void *opaque, int version_id)
     AHCIState *s = opaque;
 
     if (vm_use_v4v_disk) {
-        ahci_restrict(s);
+        ahci_shadow(s);
         return 0;
     }
 
