@@ -2029,6 +2029,7 @@ vm_process_suspend(xc_dominfo_t *info)
 
     vm_save_info.save_requested = 1;
     vm_save_info.awaiting_suspend = 0;
+    control_send_status("vm-runstate", "suspended", NULL);
 
     return 1;
 }
