@@ -365,10 +365,10 @@ update_voice_pointers(void *ram_ptr, void *opaque)
 
             v->buf = (struct UXenAudioBuf *)(ram_ptr + v->mmio_offset);
         }
+        if (!s->ram_ptr)
+            initialize_voice_pointers(s);
     }
 
-    if (!s->ram_ptr)
-        initialize_voice_pointers(s);
 
     s->ram_ptr = ram_ptr;
 }
