@@ -514,9 +514,14 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
     xen_memory_capture_gpfn_info_t *gpfn_info_list = NULL;
     uint64_t mem_pos = 0, pos;
     struct page_offset_info poi;
+    int rezero_nr = 0;
+    xen_pfn_t *rezero_pfns = NULL;
     struct xc_save_vm_page_offsets s_vm_page_offsets;
     struct xc_save_index page_offsets_index = { 0, XC_SAVE_ID_PAGE_OFFSETS };
+    int free_mem;
     int ret;
+
+    free_mem = vm_save_info.free_mem;
 
     p2m_size = xc_domain_maximum_gpfn(xc_handle, vm_id);
     if (p2m_size < 0) {
@@ -558,6 +563,16 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
                  MAX_BATCH_SIZE * sizeof(*pfn_batch));
 	ret = -ENOMEM;
 	goto out;
+    }
+
+    if (!free_mem) {
+        rezero_pfns = malloc(MAX_BATCH_SIZE * sizeof(*rezero_pfns));
+        if (rezero_pfns == NULL) {
+            asprintf(err_msg, "rezero_pfns = malloc(%"PRIdSIZE") failed",
+                     MAX_BATCH_SIZE * sizeof(*rezero_pfns));
+            ret = -ENOMEM;
+            goto out;
+        }
     }
 
     if (vm_save_info.compress_mode == VM_SAVE_COMPRESS_LZ4) {
@@ -606,7 +621,7 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
         while ((pfn + batch) < p2m_size && batch < MAX_BATCH_SIZE) {
             gpfn_info_list[batch].gpfn = pfn + batch;
             gpfn_info_list[batch].flags = XENMEM_MCGI_FLAGS_VM |
-                (vm_save_info.free_mem ? XENMEM_MCGI_FLAGS_REMOVE_PFN : 0);
+                (free_mem ? XENMEM_MCGI_FLAGS_REMOVE_PFN : 0);
             batch++;
         }
         ret = xc_domain_memory_capture(
@@ -631,6 +646,9 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
                     gpfn_info_list[j].type = XENMEM_MCGI_TYPE_ZERO;
                     rezero++;
                     total_rezero++;
+                    /* Always re-share zero pages. */
+                    if (!free_mem)
+                        rezero_pfns[rezero_nr++] = pfn + j;
                 }
             }
             if (gpfn_info_list[j].type == XENMEM_MCGI_TYPE_NORMAL) {
@@ -646,6 +664,11 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
                 clone++;
                 total_clone++;
             }
+        }
+        if (rezero_nr) {
+            xc_domain_populate_physmap(xc_handle, vm_id, rezero_nr, 0,
+                                       XENMEMF_populate_on_demand, rezero_pfns);
+            rezero_nr = 0;
         }
         if (_batch) {
             if (vm_save_compress_mode_batched(vm_save_info.compress_mode)) {
@@ -851,6 +874,7 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
                                        MEM_BUFFER_SIZE >> PAGE_SHIFT);
     free(zero_bitmap);
     free(zero_bitmap_compressed);
+    free(rezero_pfns);
     free(pfn_batch);
     free(gpfn_info_list);
     free(compress_mem);
