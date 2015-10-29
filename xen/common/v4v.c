@@ -1474,6 +1474,9 @@ v4v_ring_add (struct domain *d, XEN_GUEST_HANDLE (v4v_ring_t) ring_hnd,
             write_unlock (&d->v4v->lock);
 
             spin_lock (&ring_info->lock);
+
+            v4v_ring_unmap (ring_info);
+
             /* Ring info already existed. If mfn list was already
              * populated remove the MFN's from list and then add the
              * new list.
