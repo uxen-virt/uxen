@@ -2033,6 +2033,15 @@ vm_process_suspend(xc_dominfo_t *info)
     return 1;
 }
 
+char *vm_save_file_name(const uuid_t uuid)
+{
+    char *fn;
+    char uuid_str[37];
+    uuid_unparse_lower(uuid, uuid_str);
+    asprintf(&fn, "%s%s.save", save_file_prefix, uuid_str);
+    return fn;
+}
+
 #define ERRMSG(fmt, ...) do {			 \
 	EPRINTF(fmt, ## __VA_ARGS__);		 \
 	asprintf(&err_msg, fmt, ## __VA_ARGS__); \
@@ -2043,14 +2052,12 @@ vm_save_execute(void)
 {
     struct filebuf *f = NULL;
     char *err_msg = NULL;
-    char uuid[37];
     uint8_t *dm_state_buf = NULL;
     int dm_state_size;
     int ret;
 
     if (!vm_save_info.filename) {
-        uuid_unparse_lower(vm_uuid, uuid);
-        asprintf(&vm_save_info.filename, "uxenvm-%s.save", uuid);
+        vm_save_info.filename = vm_save_file_name(vm_uuid);
     }
 
     APRINTF("device model saving state: %s", vm_save_info.filename);

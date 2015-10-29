@@ -63,6 +63,7 @@ extern const char *clipboard_formats_whitelist_vm2host;
 extern uint64_t deferred_clipboard;
 extern uint64_t event_service_mouse_moves;
 extern uint64_t hid_touch_enabled;
+extern char *save_file_prefix;
 
 struct xc_interface_core;
 extern struct xc_interface_core *xc_handle;
