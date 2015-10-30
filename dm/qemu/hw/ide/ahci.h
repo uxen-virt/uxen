@@ -279,7 +279,7 @@ typedef struct AHCIShadow_struct {
     uint32_t state;
     AHCIControlRegs control_regs;
     uint32_t num_ports;
-    AHCIShadowPort ports[];
+    AHCIShadowPort ports[AHCI_MAX_PORTS];
 } AHCIShadow;
 
 struct AHCIDevice {
