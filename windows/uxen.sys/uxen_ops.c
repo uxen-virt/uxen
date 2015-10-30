@@ -924,7 +924,7 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
 
     frametable_size = max_pfn * uxen_info->ui_sizeof_struct_page_info;
     frametable_size = ((frametable_size + PAGE_SIZE-1) & ~(PAGE_SIZE-1));
-    frametable = kernel_malloc(frametable_size);
+    frametable = kernel_malloc_unchecked(frametable_size);
     if (frametable == NULL || ((uintptr_t)frametable & (PAGE_SIZE - 1))) {
 #ifdef DEBUG_PAGE_ALLOC
         BUG_ON(TRUE);

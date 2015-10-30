@@ -232,16 +232,11 @@ mem_exit(void)
 }
 
 void *
-_kernel_malloc(size_t size, int line)
+_kernel_malloc_unchecked(size_t size, int line)
 {
     void *p;
     ULONG tag;
     char hex[] = "0123456789abcdef";
-
-    if (size > (1 << 30)) {
-        fail_msg("size assert: %Ix", size);
-        return NULL;
-    }
 
     tag = hex[(line >> 0) & 0xf] << 24 |
           hex[(line >> 4) & 0xf] << 16 |
@@ -251,7 +246,19 @@ _kernel_malloc(size_t size, int line)
     p = ExAllocatePoolWithTag(NonPagedPool, size, tag);
     if (p)
         memset(p, 0, size);
+
     return p;
+}
+
+void *
+_kernel_malloc(size_t size, int line)
+{
+    if (size > (1 << 30)) {
+        fail_msg("size assert: %Ix", size);
+        return NULL;
+    }
+
+    return _kernel_malloc_unchecked(size, line);
 }
 
 void

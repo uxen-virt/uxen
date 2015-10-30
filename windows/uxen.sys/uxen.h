@@ -279,6 +279,8 @@ int mem_init(void);
 void mem_exit(void);
 void *_kernel_malloc(size_t, int);
 #define kernel_malloc(size) _kernel_malloc(size, __LINE__)
+void *_kernel_malloc_unchecked(size_t, int);
+#define kernel_malloc_unchecked(size) _kernel_malloc_unchecked(size, __LINE__)
 void kernel_free(void *, size_t);
 int kernel_query_mfns(void *va, uint32_t nr_pages,
                       uxen_pfn_t *mfn_list, uint32_t max_mfn);
