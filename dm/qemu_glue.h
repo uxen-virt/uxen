@@ -187,6 +187,7 @@ void QEMU_NORETURN hw_error(const char *fmt, ...)
 #define qbus_create_inplace bus_create_inplace
 #define qbus_create bus_create
 #define qdev_reset_all dev_reset_all
+#define qbus_free bus_free
 
 #define FROM_QBUS(type, dev) DO_UPCAST(type, qbus, dev)
 

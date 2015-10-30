@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -172,6 +172,24 @@ bus_create_inplace(BusState *bus, BusInfo *info,
 	LIST_INSERT_HEAD(&parent->child_bus, bus, sibling);
 	parent->num_child_bus++;
     }
+}
+
+void
+bus_free(BusState *bus)
+{
+    DeviceState *dev;
+
+    while ((dev = TAILQ_FIRST(&bus->children)) != NULL) {
+        dev_free(dev);
+    }
+    if (bus->parent) {
+        LIST_REMOVE(bus, sibling);
+        bus->parent->num_child_bus--;
+    }
+    if (bus->name)
+        free((char *)bus->name);
+
+    free(bus);
 }
 
 BusState *

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -122,6 +122,7 @@ void bus_create_inplace(BusState *bus, BusInfo *info,
 			DeviceState *parent, const char *name);
 BusState *bus_create(BusInfo *info, DeviceState *parent, const char *name);
 void dev_reset_all(DeviceState *dev);
+void bus_free(BusState *bus);
 
 void process_config_devices(void);
 
