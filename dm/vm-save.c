@@ -2076,9 +2076,8 @@ vm_save_execute(void)
     int dm_state_size;
     int ret;
 
-    if (!vm_save_info.filename) {
+    if (!vm_save_info.filename)
         vm_save_info.filename = vm_save_file_name(vm_uuid);
-    }
 
     APRINTF("device model saving state: %s", vm_save_info.filename);
 
