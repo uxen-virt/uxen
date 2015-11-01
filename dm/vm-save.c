@@ -1990,10 +1990,7 @@ vm_save(void)
     if (strstr(uxen_opt_debug, ",compbatch,"))
         vm_save_info.single_page = 0;
 
-    vm_save_info.save_abort = 0;
-
     vm_save_info.awaiting_suspend = 1;
-    vm_set_run_mode(SUSPEND_VM);
 
     ret = uxenvm_savevm_initiate(&err_msg);
     if (ret) {
@@ -2025,7 +2022,8 @@ mc_savevm(Monitor *mon, const dict args)
     vm_save_info.high_compress = dict_get_boolean_default(args,
                                                           "high-compress", 0);
 
-    vm_save();
+    vm_save_info.save_abort = 0;
+    vm_set_run_mode(SUSPEND_VM);
 }
 
 void

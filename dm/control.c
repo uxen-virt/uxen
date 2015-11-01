@@ -324,7 +324,8 @@ control_command_save(void *opaque, const char *id, const char *opt,
     vm_save_info.command_cd = cd;
     vm_save_info.command_id = id ? strdup(id) : NULL;
 
-    vm_save();
+    vm_save_info.save_abort = 0;
+    vm_set_run_mode(SUSPEND_VM);
 
     return 0;
 }
