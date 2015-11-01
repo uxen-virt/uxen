@@ -2299,15 +2299,17 @@ vm_resume(void)
     int ret;
     char *err_msg = NULL;
 
-    if (vm_save_info.free_mem)
-        vm_restore_memory();
+    if (vm_save_info.f) {
+        if (vm_save_info.free_mem)
+            vm_restore_memory();
 
-    qemu_savevm_resume();
+        qemu_savevm_resume();
 
-    if (!vm_save_info.resume_delete)
-        filebuf_delete_on_close(vm_save_info.f, 0);
-    filebuf_close(vm_save_info.f);
-    vm_save_info.f = NULL;
+        if (!vm_save_info.resume_delete)
+            filebuf_delete_on_close(vm_save_info.f, 0);
+        filebuf_close(vm_save_info.f);
+        vm_save_info.f = NULL;
+    }
 
     ret = xc_domain_resume(xc_handle, vm_id);
     if (ret) {
