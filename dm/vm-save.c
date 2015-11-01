@@ -2122,7 +2122,6 @@ vm_save_execute(void)
     if (ret == 0) {
         APRINTF("total file size: %"PRIu64" bytes", (uint64_t)filebuf_tell(f));
         filebuf_flush(f);
-        filebuf_delete_on_close(f, 0);
     } else {
         filebuf_close(f);
         f = vm_save_info.f = NULL;
@@ -2143,8 +2142,8 @@ vm_save_finalize(void)
 {
 
     if (vm_save_info.f) {
-        if (vm_quit_interrupt)
-            filebuf_delete_on_close(vm_save_info.f, 1);
+        if (!vm_quit_interrupt)
+            filebuf_delete_on_close(vm_save_info.f, 0);
         filebuf_close(vm_save_info.f);
         vm_save_info.f = NULL;
     }
@@ -2305,8 +2304,8 @@ vm_resume(void)
 
     qemu_savevm_resume();
 
-    if (vm_save_info.resume_delete)
-        filebuf_delete_on_close(vm_save_info.f, 1);
+    if (!vm_save_info.resume_delete)
+        filebuf_delete_on_close(vm_save_info.f, 0);
     filebuf_close(vm_save_info.f);
     vm_save_info.f = NULL;
 
