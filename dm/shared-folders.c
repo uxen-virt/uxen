@@ -162,7 +162,7 @@ int sf_parse_config(yajl_val config)
             writable = yajl_object_get_integer_default(v, "writable", 0);
             opts = parse_folder_opts(v);
             quota = yajl_object_get_integer_default(v, "quota", 0);
-            rc = sf_add_mapping(folder, name, writable, opts, quota);
+            rc = sf_add_mapping(folder, name, writable, opts, quota * 1024 * 1024);
             if (rc) {
                 warnx("sf_add_mapping folder=%s name=%s error %d", 
                     folder, name, rc);
