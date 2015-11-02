@@ -35,6 +35,7 @@ static pFilterConnectCommunicationPort FilterConnectCommunicationPort;
 static pFilterSendMessage FilterSendMessage;
 static int shallow_allowed = 1;
 static int min_shallow_size = SECTOR_SIZE;
+static int absent_files_fatal = 0;
 
 extern int ntfs_get_errno(void);
 
@@ -924,7 +925,8 @@ HANDLE open_file_by_name(const wchar_t* file_name)
         NULL);
     if (h == INVALID_HANDLE_VALUE) {
         DWORD win32_err = GetLastError();
-        if (win32_err == ERROR_FILE_NOT_FOUND || win32_err == ERROR_PATH_NOT_FOUND) {
+        if (!absent_files_fatal &&
+            (win32_err == ERROR_FILE_NOT_FOUND || win32_err == ERROR_PATH_NOT_FOUND)) {
             // Not considered fatal
             printf("failed to open %ls for copying, err=%d\n", file_name, (int)win32_err);
         } else {
@@ -3503,7 +3505,8 @@ void print_usage(void)
         "[PARTITION=<partition number in decimal>] " \
         "[MINSHALLOW=<minimum shallowing size in decimal bytes>]" \
         "[SKIP_USN_PHASE] [SKIP_ACL_PHASE] [SKIP_OPEN_HANDLES_PHASE]" \
-        "[SKIP_COW_REGISTRATION] [NOSHALLOW] [ALL_HASHES] [FILE_METADATA]\n",
+        "[SKIP_COW_REGISTRATION] [NOSHALLOW] [ALL_HASHES] [FILE_METADATA]" \
+        "[ABSENT_FILES_FATAL]\n",
             getprogname());
 }
 
@@ -3523,6 +3526,7 @@ void print_usage(void)
 #define ARG_FILE_METADATA                "FILE_METADATA"
 #define ARG_RETRY_DELAY                  "RETRY_DELAY="
 #define ARG_NUM_RETRIES                  "NUM_RETRIES="
+#define ARG_ABSENT_FILES_FATAL           "ABSENT_FILES_FATAL"
 #define ARG_SUBSTITUTION_SIZE            NUMBER_OF(ARG_SUBSTITUTION)
 #define ARG_OUT_MANIFEST_SIZE            NUMBER_OF(ARG_OUT_MANIFEST)
 #define ARG_USN_SIZE                     NUMBER_OF(ARG_USN)
@@ -3538,6 +3542,7 @@ void print_usage(void)
 #define ARG_FILE_METADATA_SIZE           NUMBER_OF(ARG_FILE_METADATA)
 #define ARG_RETRY_DELAY_SIZE             NUMBER_OF(ARG_RETRY_DELAY)
 #define ARG_NUM_RETRIES_SIZE             NUMBER_OF(ARG_NUM_RETRIES)
+#define ARG_ABSENT_FILES_FATAL_SIZE      NUMBER_OF(ARG_ABSENT_FILES_FATAL)
 
 int main(int argc, char **argv)
 {
@@ -3647,6 +3652,9 @@ int main(int argc, char **argv)
         } else if (strncmp(argv[1], ARG_NUM_RETRIES, ARG_NUM_RETRIES_SIZE) == 0) {
             num_retries = atoi(argv[1] + ARG_RETRY_DELAY_SIZE);
             printf("Using %d retries\n", num_retries);
+        } else if (strncmp(argv[1], ARG_ABSENT_FILES_FATAL, ARG_ABSENT_FILES_FATAL_SIZE) == 0) {
+            absent_files_fatal = 1;
+            printf("Absent files are fatal\n");
         } else if (arg_manifest_file == NULL) {
             arg_manifest_file = argv[1];
         } else if (arg_swap_file == NULL) {
