@@ -472,7 +472,7 @@ nic_enumerate(int (*callback)(int, unsigned char *, size_t, void *),
 
             callback(i++, adapter->Address, adapter->AddressLength, priv);
 
-//#define IDENTIFY_ALL_NICS
+#define IDENTIFY_ALL_NICS
 #ifndef IDENTIFY_ALL_NICS
             break;
 #endif
