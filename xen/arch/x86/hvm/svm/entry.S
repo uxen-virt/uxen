@@ -171,6 +171,8 @@ UNLIKELY_END(svm_trace)
         mov  r(ax),%cr8
 #endif
 
+        call_with_abi(svm_restore_regs)
+
         get_user_regs(r(bx), r(di))
         mov  VCPU_svm_vmcb(r(bx)),r(cx)
         mov  UREGS_r(ax)(r(di)),r(ax)

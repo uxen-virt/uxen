@@ -719,7 +719,6 @@ static int vmx_load_vmcs_ctxt(struct vcpu *v, struct hvm_hw_cpu *ctxt)
 
 static void vmx_fpu_enter(struct vcpu *v)
 {
-    vcpu_restore_fpu_lazy(v);
     v->arch.hvm_vmx.exception_bitmap &= ~(1u << TRAP_no_device);
     vmx_update_exception_bitmap(v);
     v->arch.hvm_vmx.host_cr0 &= ~X86_CR0_TS;
@@ -1018,7 +1017,6 @@ static void vmx_ctxt_switch_to(struct vcpu *v)
     }
 
     vmx_restore_guest_msrs(v);
-    vcpu_restore_fpu_lazy(v);
 #ifndef __UXEN_NOT_YET__
     vmx_restore_dr(v);
     vpmu_load(v);
@@ -3459,6 +3457,8 @@ asmlinkage_abi void vmx_restore_regs(uintptr_t host_rsp)
     __vmwrite(GUEST_RIP, regs->eip);
     __vmwrite(GUEST_RSP, regs->esp);
     __vmwrite(GUEST_RFLAGS, regs->eflags);
+
+    vcpu_restore_fpu_lazy(current);
 
     if (vmx_vmcs_late_load)
         pv_vmcs_flush_dirty(this_cpu(current_vmcs_vmx), 0);

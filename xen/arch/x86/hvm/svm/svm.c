@@ -398,7 +398,6 @@ static void svm_fpu_enter(struct vcpu *v)
 {
     struct vmcb_struct *n1vmcb = vcpu_nestedhvm(v).nv_n1vmcx;
 
-    vcpu_restore_fpu_lazy(v);
     vmcb_set_exception_intercepts(
         n1vmcb,
         vmcb_get_exception_intercepts(n1vmcb) & ~(1U << TRAP_no_device));
@@ -956,7 +955,6 @@ static void svm_ctxt_switch_to(struct vcpu *v)
     cpumask_set_cpu(cpu, v->domain->domain_dirty_cpumask);
     cpumask_set_cpu(cpu, v->vcpu_dirty_cpumask);
 
-    vcpu_restore_fpu_lazy(v);
 #ifndef __UXEN_NOT_YET__
     svm_restore_dr(v);
 #endif  /* __UXEN_NOT_YET__ */
@@ -2511,6 +2509,12 @@ asmlinkage_abi void svm_trace_vmentry(void)
                 1/*cycles*/, 0, 0, 0, 0, 0, 0, 0);
 }
   
+asmlinkage_abi void svm_restore_regs(void)
+{
+
+    vcpu_restore_fpu_lazy(current);
+}
+
 /*
  * Local variables:
  * mode: C

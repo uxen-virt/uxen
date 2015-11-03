@@ -87,8 +87,6 @@ u64 xgetbv(uint32_t index);
 void sync_xcr0(void);
 void set_xcr0(u64 xfeatures);
 uint64_t get_xcr0(void);
-void xmm_save_if_needed(struct vcpu *v);
-void xmm_restore(struct vcpu *v);
 void xsave(struct vcpu *v, uint64_t mask);
 void xrstor(struct vcpu *v, uint64_t mask);
 bool_t xsave_enabled(const struct vcpu *v);

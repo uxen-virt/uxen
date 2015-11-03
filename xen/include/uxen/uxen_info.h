@@ -41,15 +41,17 @@
 /* The various UI_HOST_CALL_a can be defined to UI_HOST_CALL_SAVE_.... as 
  * required */
 
-#include <asm/xstate.h>
+#include <asm/i387.h>
 
 #define __host_call __attribute__                                       \
     (( deprecated("don't call host functions from uxen_info directly, " \
                   "use the UI_HOST_CALL macro") ))
 
-#define UI_HOST_CALL_SAVE_XMM                     \
-    ({                                            \
-        struct vcpu *v = current;                 \
+#define UI_HOST_CALL_SAVE_XMM                           \
+    ({                                                  \
+        struct vcpu *v = current;                       \
+        if (!uxen_info->host_os_is_xmm_clean && v)      \
+            vcpu_save_fpu(v);                           \
     }),
 
 #define UI_HOST_CALL_SAVE_NOTHING 0,
