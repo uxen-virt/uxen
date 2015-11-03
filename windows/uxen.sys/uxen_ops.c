@@ -30,6 +30,11 @@ uint8_t *frametable_populated = NULL;
 static char *percpu_area = NULL;
 static size_t percpu_area_size;
 static BOOLEAN ui_hvm_io_bitmap_contiguous = TRUE;
+#ifdef __i386__
+static uint32_t mapcache_size = 0;
+static uint32_t mapcache_cpus = 0;
+static uintptr_t *mapcache_va = 0;
+#endif  /* __i386__ */
 
 #ifdef DEBUG_PAGE_ALLOC
 struct pinfo *pinfotable = NULL;
@@ -731,6 +736,17 @@ uxen_op_init_free_allocs(void)
 	kernel_free_mfn(uxen_zero_mfn);
 	uxen_zero_mfn = ~0;
     }
+#ifdef __i386__
+    if (mapcache_va) {
+        int i;
+        for (i = 0; i < mapcache_cpus; i++) {
+            if (mapcache_va[i])
+                kernel_free_va((void *)mapcache_va[i], mapcache_size);
+        }
+        kernel_free(mapcache_va, mapcache_cpus * sizeof(void *));
+        mapcache_va = 0;
+    }
+#endif  /* __i386__ */
 #ifdef DEBUG_PAGE_ALLOC
     if (pinfotable) {
         kernel_free(pinfotable, pinfotable_size);
@@ -758,6 +774,9 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
     uint32_t max_pfn;
     KAFFINITY affinity;
     unsigned int host_cpu;
+#ifdef __i386__
+    unsigned int cpu;
+#endif  /* __i386__ */
     HANDLE handle;
     LARGE_INTEGER system_time, pc_now, pc_freq, tsc_now;
     KIRQL irql;
@@ -866,8 +885,11 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
 
     uxen_info->ui_printf = uxen_printk;
 
+#ifndef __i386__
     uxen_info->ui_map_page = uxen_mem_map_page;
-    uxen_info->ui_unmap_page_va = uxen_mem_unmap_page_va;
+    /* not called through to host */
+    /* uxen_info->ui_unmap_page_va = uxen_mem_unmap_page_va; */
+#endif /* __i386__ */
     uxen_info->ui_map_page_global = uxen_mem_map_page;
     uxen_info->ui_unmap_page_global_va = uxen_mem_unmap_page_va;
     uxen_info->ui_map_page_range = uxen_mem_map_page_range;
@@ -1008,6 +1030,34 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
 
     uxen_info->ui_map_page_range_offset = 0;
     uxen_info->ui_map_page_range_max_nr = map_page_range_max_nr;
+
+#ifdef __i386__
+    mapcache_size = uxen_info->ui_mapcache_size;
+    for (host_cpu = 0; host_cpu < MAXIMUM_PROCESSORS; host_cpu++) {
+        if ((affinity & affinity_mask(host_cpu)) == 0)
+            continue;
+        mapcache_cpus++;
+    }
+    mapcache_va = kernel_malloc(mapcache_cpus * sizeof(void *));
+    if (!mapcache_va) {
+        fail_msg("kernel_malloc(mapcache_va) failed");
+        ret = -ENOMEM;
+        goto out;
+    }
+    cpu = 0;
+    for (host_cpu = 0; host_cpu < MAXIMUM_PROCESSORS; host_cpu++) {
+        if ((affinity & affinity_mask(host_cpu)) == 0)
+            continue;
+        mapcache_va[cpu] = (uintptr_t)kernel_alloc_va(mapcache_size);
+        if (!mapcache_va[cpu] || (mapcache_va[cpu] & (PAGE_SIZE - 1))) {
+            fail_msg("kernel_alloc_va(mapcache_va) failed");
+            ret = -ENOMEM;
+            goto out;
+        }
+        uxen_info->ui_mapcache_va[host_cpu] = mapcache_va[cpu];
+        cpu++;
+    }
+#endif  /* __i386__ */
 
     KeInitializeSpinLock(&idle_free_lock);
 

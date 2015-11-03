@@ -32,6 +32,7 @@
 #include <xen/mm.h>
 #include <xen/perfc.h>
 #include <xen/sched.h>
+#include <uxen/mapcache.h>
 
 #ifdef CONFIG_DOMAIN_PAGE
 
@@ -143,35 +144,17 @@ struct domain_mmap_cache {
 static inline void *
 uxen_map_page(unsigned long mfn)
 {
-    void *_v;
 
-    _v = UI_HOST_CALL(ui_map_page, mfn);
-#ifdef DEBUG_MAPCACHE
-    if (_v) {
-        struct page_info *_pg;
-        _pg = __mfn_to_page(mfn);
-        atomic_inc(&_pg->mapped);
-        _pg->lastmap = __builtin_return_address(0);
-        _pg->lastmap0 = __builtin_return_address(1);
-    }
-#endif  /* DEBUG_MAPCACHE */
-    return _v;
+    return UI_HOST_CALL(ui_map_page, mfn);
 }
 
 static inline void
 uxen_unmap_page(const void *va)
 {
-#ifdef __i386__
-#ifdef DEBUG_MAPCACHE
-    unsigned long _mfn;
 
-    _mfn = UI_HOST_CALL(ui_unmap_page_va, va);
-    ASSERT(_mfn != INVALID_MFN);
-    atomic_dec(&mfn_to_page(_mfn)->mapped);
-#else  /* DEBUG_MAPCACHE */
+#ifdef __i386__
     UI_HOST_CALL(ui_unmap_page_va, va);
-#endif  /* DEBUG_MAPCACHE */
-#endif
+#endif  /* __i386__ */
 }
 
 static inline void *
@@ -259,7 +242,11 @@ uxen_unmap_domain_page_direct(const void *va)
 #define map_domain_page(mfn)                uxen_map_domain_page(mfn)
 #define __map_domain_page(pg)               uxen_map_domain_page(__page_to_mfn(pg))
 #define unmap_domain_page(va)               uxen_unmap_domain_page(va)
+#ifndef UXEN_HOST_WINDOWS
 #define mapped_domain_page_va_pfn(va)       virt_to_mfn(va)
+#else  /* UXEN_HOST_WINDOWS */
+#define mapped_domain_page_va_pfn(va)       mapcache_mapped_va_mfn(va)
+#endif  /* UXEN_HOST_WINDOWS */
 
 #define map_domain_page_direct(mfn)         uxen_map_domain_page_direct(mfn)
 #define unmap_domain_page_direct(va)        uxen_unmap_domain_page_direct(va)

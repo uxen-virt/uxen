@@ -218,6 +218,10 @@ struct /* __WINPACKED__ */ uxen_info {
     uint64_t (__interface_fn *ui_user_access_ok)(void *, void *, uint64_t);
     void (__interface_fn *ui_signal_v4v)(void);
     struct ui_free_pages ui_free_pages[UXEN_MAXIMUM_PROCESSORS];
+#ifdef __i386__
+    uintptr_t ui_mapcache_va[UXEN_MAXIMUM_PROCESSORS];
+    uint32_t ui_mapcache_size;
+#endif  /* __i386__ */
     uint16_t ui_host_gsoff_cpu;
     uint16_t ui_host_gsoff_current;
     uintptr_t *ui_hvm_io_bitmap;

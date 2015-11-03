@@ -30,6 +30,7 @@
 
 #include <uxen/uxen.h>
 #include <uxen/uxen_desc.h>
+#include <uxen/mapcache.h>
 #include <uxen/memcache-dm.h>
 
 int uxen_verbose = 0;
@@ -45,6 +46,12 @@ static void _cpu_irq_restore(unsigned long x);
 
 struct _uxen_info _uxen_info = {
         .ui_sizeof_struct_page_info = sizeof(struct page_info),
+
+#ifdef __i386__
+        .ui_map_page = mapcache_map_page,
+        .ui_unmap_page_va = mapcache_unmap_page_va,
+        .ui_mapcache_size = MAPCACHE_SIZE,
+#endif  /* __i386__ */
 
         .ui_cli = _cpu_irq_disable,
         .ui_sti = _cpu_irq_enable,

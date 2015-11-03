@@ -68,6 +68,7 @@
 
 #include <uxen/uxen.h>
 #include <uxen/uxen_desc.h>
+#include <uxen/mapcache.h>
 
 #ifndef __UXEN__
 /* opt_nosmp: If true, secondary processors are ignored. */
@@ -1496,6 +1497,10 @@ intptr_t __init __interface_fn __uxen_start_xen(
 #ifndef __UXEN__
     smp_cpus_done();
 #endif  /* __UXEN__ */
+
+#if defined(__UXEN__) && defined(__i386__)
+    mapcache_init();
+#endif  /* __UXEN__ && __i386__ */
 
     do_initcalls();
 
