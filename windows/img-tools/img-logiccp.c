@@ -3131,6 +3131,132 @@ void json_escape_string(const wchar_t* wide_source, char* dest)
     free(src_buf);
 }
 
+// returns zero on success
+int calculate_sha1_for_file(const wchar_t *filename, uint8_t *out_sha)
+{
+    int err = 0;
+    const size_t buf_size = 1 << 20;
+    char *buf = NULL;
+    HANDLE h = INVALID_HANDLE_VALUE;
+    SHA1_CTX sha_ctx;
+    SHA1_Init(&sha_ctx);
+    buf = malloc(buf_size);
+    if (!buf) {
+        err = 1;
+        goto out;
+    }
+    h = open_file_by_name(filename);
+    if (h == INVALID_HANDLE_VALUE) {
+        err = 1;
+        goto out;
+    }
+
+    for(;;) {
+        DWORD bytes_read;
+        BOOL ok;
+        ok = ReadFile(h, buf, buf_size, &bytes_read, NULL);
+        if (!ok) {
+            err = 1; /* assume some error */
+        }
+        if (!ok || bytes_read == 0) {
+            break;
+        }
+        SHA1_Update(&sha_ctx, (uint8_t *)buf, bytes_read);
+    }
+    SHA1_Final(&sha_ctx, out_sha);
+out:
+    free(buf);
+    if (h != INVALID_HANDLE_VALUE) {
+        CloseHandle(h);
+    }
+    return err;
+}
+
+int hash_shallowed_files_phase(struct disk *disk, Manifest *man)
+{
+    ENTER_PHASE();
+    /* Deep-copied files will have their SHA1s calculated in
+     * copy_file. Here we will calculate the SHA1s for those we're shallowing.
+     * This will only be done when a certain config option is enabled so this is
+     * not performance-critical, hence why it is a simple loop rather than using
+     * parallel IOs */
+    int i;
+    for (i = 0; i < man->n; i++) {
+        ManifestEntry* entry = &man->entries[i];
+        if (entry->action == MAN_SHALLOW || entry->action == MAN_BOOT) {
+            wchar_t *host_name = prefix(entry->var, entry->host_name);
+            int err = calculate_sha1_for_file(host_name, entry->sha);
+            if (err) {
+                printf("Failed to get SHA1 for %ls\n", host_name);
+            }
+        }
+    }
+
+    LEAVE_PHASE();
+    return 0;
+}
+
+void append_ver_string(wchar_t **output, WORD *lang, void *buf,
+                       const wchar_t *variable)
+{
+    wchar_t *value;
+    UINT len;
+    BOOL ok;
+    wchar_t subblock[64];
+    snwprintf(subblock, 64, L"\\StringFileInfo\\%04x%04x\\%ls",
+              lang[0], lang[1], variable);
+    ok = VerQueryValueW(buf, subblock, (void **)&value, &len);
+    if (ok) {
+        size_t oldlen = *output ? wcslen(*output) : 0;
+        /* +1 for \n, +2 for ": ", +1 for zero term */
+        size_t newlen = oldlen + 1 + wcslen(variable) + 2 + len + 1;
+        wchar_t *newstr = realloc(*output, newlen * sizeof(wchar_t));
+        if (newstr) {
+            *output = newstr;
+            snwprintf(*output + oldlen, newlen - oldlen, L"%ls: %ls\n",
+                      variable, value);
+        }
+    }
+}
+
+/* Returns a string containing various pieces of useful metadata as returned by
+ * the Windows GetFileVersionInfoSize() API, or NULL if the file doesn't have
+ * any version information.
+ */
+wchar_t* get_file_metadata(const wchar_t *filename)
+{
+    void *infobuf = NULL;
+    BOOL ok;
+    UINT len;
+    WORD *langptr;
+    wchar_t *result = NULL;
+    DWORD bufsize = GetFileVersionInfoSizeW(filename, NULL);
+    if (bufsize == 0) {
+        /* Probably means no version info - not an error */
+        goto out;
+    }
+    infobuf = malloc(bufsize);
+    ok = GetFileVersionInfoW(filename, 0, bufsize, infobuf);
+    if (ok) {
+        ok = VerQueryValueW(infobuf, L"\\VarFileInfo\\Translation",
+                            (void **)&langptr, &len);
+    }
+    if (!ok) {
+        /* Shouldn't happen unless the file has version info but no strings */
+        printf("Failed to GetFileVersionInfo for %ls\n", filename);
+        goto out;
+    }
+    append_ver_string(&result, langptr, infobuf, L"CompanyName");
+    append_ver_string(&result, langptr, infobuf, L"FileDescription");
+    append_ver_string(&result, langptr, infobuf, L"FileVersion");
+    append_ver_string(&result, langptr, infobuf, L"ProductName");
+    append_ver_string(&result, langptr, infobuf, L"ProductVersion");
+
+out:
+    free(infobuf);
+    return result;
+}
+
 /* If requested to by a -m option on the command line, this outputs a JSON
  * formatted file containing information about all the files added to the image.
  * Note this is not a list of all the files on disk, only the ones added by this
@@ -3139,15 +3265,28 @@ void json_escape_string(const wchar_t* wide_source, char* dest)
  * already mentioned); it is not pretty-printed; entries are not sorted by path;
  * the output is UTF-8 rather than ASCII with JSON \u escapes; SHA-1 hashes are
  * only calculated and output for files which are copied, rather than for all
- * files.
+ * files (unless calculate_all_hashes is true).
+ *
+ * If collect_file_metadata is true, then also add a "description" attribute to
+ * any file which has Windows versioning information embedded (which broadly
+ * means DLLs and EXEs) containing Company, Product and Version information.
+ * This is to aid diagnosing when binaries of unknown provenence end up in the
+ * guest.
+ *
+ * calculate_all_hashes and collect_file_metadata (command line options
+ * ALL_HASHES and FILE_METADATA) are off by default thus no effort has been made
+ * to performance optimise them. They are only intended to be used when
+ * debugging.
 */
-int output_manifest_phase(
-    Manifest *man, struct disk* disk, int sysvol, int bootvol, const char* out_path)
+int output_manifest_phase(Manifest *man, struct disk* disk,
+                          int sysvol, int bootvol, const char* out_path,
+                          int calculate_all_hashes, int collect_file_metadata)
 {
     ENTER_PHASE();
     FILE* f;
     int i;
-    static char temp_buf[(MAX_PATH_LEN + 1) * 2]; /* Max length of a MAX_PATH_LEN string after JSON escaping */
+    /* Max length of a MAX_PATH_LEN string after JSON escaping */
+    static char temp_buf[(MAX_PATH_LEN + 1) * 4];
     static wchar_t wide_buf[MAX_PATH_LEN];
 
     f = fopen(out_path, "wt");
@@ -3159,6 +3298,7 @@ int output_manifest_phase(
     fputs("[", f);
     for (i = 0; i < man->n; i++) {
         ManifestEntry* entry = &man->entries[i];
+        int has_sha = 0;
         if (entry->action == MAN_EXCLUDE) {
             continue;
         }
@@ -3181,32 +3321,43 @@ int output_manifest_phase(
             break;
 
         case MAN_EXCLUDE:
-            // Already handled
+            /* Already handled */
             break;
 
-        /* These all call shallow_file() */
+        /* These both call shallow_file() */
         case MAN_BOOT:
         case MAN_SHALLOW:
-            fprintf(f, ", \"size\": %"PRIu64", \"shallow_id\": \"%016"PRIx64"\"",
-                entry->file_size, entry->file_id);
-            make_unshadowed_host_path(wide_buf, entry);
-            json_escape_string(wide_buf, temp_buf);
-            fprintf(f, ", \"source\": \"host\", \"source_path\": \"%s\"", temp_buf);
-            break;
-
+            fprintf(f, ", \"shallow_id\": \"%016"PRIx64"\"", entry->file_id);
+            /* Drop thru */
         case MAN_FORCE_COPY: /* Drop thru */
         case MAN_COPY:
-            fprintf(f, ", \"size\": %"PRIu64"",
-                entry->file_size);
+            fprintf(f, ", \"size\": %"PRIu64"", entry->file_size);
             make_unshadowed_host_path(wide_buf, entry);
             json_escape_string(wide_buf, temp_buf);
             fprintf(f, ", \"source\": \"host\", \"source_path\": \"%s\"", temp_buf);
-            fprintf(f, ", \"sha1\": \"" SHA1FMT "\"",
-                entry->sha[0], entry->sha[1], entry->sha[2], entry->sha[3],
-                entry->sha[4], entry->sha[5], entry->sha[6], entry->sha[7],
-                entry->sha[8], entry->sha[9], entry->sha[10], entry->sha[11],
-                entry->sha[12], entry->sha[13], entry->sha[14], entry->sha[15],
-                entry->sha[16], entry->sha[17], entry->sha[18], entry->sha[19]);
+            has_sha = calculate_all_hashes
+                        || (entry->action == MAN_COPY)
+                        || (entry->action == MAN_FORCE_COPY);
+            if (has_sha) {
+                fprintf(f, ", \"sha1\": \"" SHA1FMT "\"",
+                    entry->sha[0], entry->sha[1], entry->sha[2], entry->sha[3],
+                    entry->sha[4], entry->sha[5], entry->sha[6], entry->sha[7],
+                    entry->sha[8], entry->sha[9], entry->sha[10], entry->sha[11],
+                    entry->sha[12], entry->sha[13], entry->sha[14], entry->sha[15],
+                    entry->sha[16], entry->sha[17], entry->sha[18], entry->sha[19]);
+            }
+            if (collect_file_metadata) {
+                wchar_t* md = get_file_metadata(wide_buf);
+                /* md could be arbitrarily big so do a quick length check
+                 * before using temp_buf. Don't expect this to ever happen so
+                 * haven't bothered making it truncate, or use a variable sized
+                 * buffer etc, but if it does we should definitely not crash. */
+                if (md && wcslen(md) < MAX_PATH_LEN) {
+                    json_escape_string(md, temp_buf);
+                    fprintf(f, ", \"description\": \"%s\"", temp_buf);
+                }
+                free(md);
+            }
             break;
 
         case MAN_MKDIR:
@@ -3237,7 +3388,7 @@ void print_usage(void)
         "[PARTITION=<partition number in decimal>] " \
         "[MINSHALLOW=<minimum shallowing size in decimal bytes>]" \
         "[SKIP_USN_PHASE] [SKIP_ACL_PHASE] [SKIP_OPEN_HANDLES_PHASE]" \
-        "[SKIP_COW_REGISTRATION] [NOSHALLOW]\n",
+        "[SKIP_COW_REGISTRATION] [NOSHALLOW] [ALL_HASHES] [FILE_METADATA]\n",
             getprogname());
 }
 
@@ -3253,6 +3404,8 @@ void print_usage(void)
 #define ARG_SKIP_OPEN_HANDLES_PHASE      "SKIP_OPEN_HANDLES_PHASE"
 #define ARG_SKIP_COW_REGISTRATION        "SKIP_COW_REGISTRATION"
 #define ARG_NOSHALLOW                    "NOSHALLOW"
+#define ARG_ALL_HASHES                   "ALL_HASHES"
+#define ARG_FILE_METADATA                "FILE_METADATA"
 #define ARG_SUBSTITUTION_SIZE            NUMBER_OF(ARG_SUBSTITUTION)
 #define ARG_OUT_MANIFEST_SIZE            NUMBER_OF(ARG_OUT_MANIFEST)
 #define ARG_USN_SIZE                     NUMBER_OF(ARG_USN)
@@ -3264,6 +3417,8 @@ void print_usage(void)
 #define ARG_SKIP_OPEN_HANDLES_PHASE_SIZE NUMBER_OF(ARG_SKIP_OPEN_HANDLES_PHASE)
 #define ARG_SKIP_COW_REGISTRATION_SIZE   NUMBER_OF(ARG_SKIP_COW_REGISTRATION)
 #define ARG_NOSHALLOW_SIZE               NUMBER_OF(ARG_NOSHALLOW)
+#define ARG_ALL_HASHES_SIZE              NUMBER_OF(ARG_ALL_HASHES)
+#define ARG_FILE_METADATA_SIZE           NUMBER_OF(ARG_FILE_METADATA)
 
 int main(int argc, char **argv)
 {
@@ -3303,6 +3458,8 @@ int main(int argc, char **argv)
     int skip_open_handles_phase = 0;
     int skip_cow_registration = 0;
     int skip_usn_phase = 0;
+    int calculate_all_hashes = 0;
+    int collect_file_metadata = 0;
 
     while (argc >= 2) {
         if (strncmp(argv[1], ARG_SUBSTITUTION, ARG_SUBSTITUTION_SIZE) == 0) {
@@ -3357,6 +3514,12 @@ int main(int argc, char **argv)
         } else if (strncmp(argv[1], ARG_NOSHALLOW, ARG_NOSHALLOW_SIZE) == 0) {
             shallow_allowed = 0;
             printf("Not allowing shallowing\n");
+        } else if (strncmp(argv[1], ARG_ALL_HASHES, ARG_ALL_HASHES_SIZE) == 0) {
+            printf("Will collect hashes for all files\n");
+            calculate_all_hashes = 1;
+        } else if (strncmp(argv[1], ARG_FILE_METADATA, ARG_FILE_METADATA_SIZE) == 0) {
+            printf("Will collect metadata for all files\n");
+            collect_file_metadata = 1;
         } else if (arg_manifest_file == NULL) {
             arg_manifest_file = argv[1];
         } else if (arg_swap_file == NULL) {
@@ -3561,6 +3724,12 @@ int main(int argc, char **argv)
             err(1, "shallow_phase failed");
         }
 
+        if (calculate_all_hashes) {
+            if (hash_shallowed_files_phase(&disk, &man_out) < 0) {
+                err(1, "hash_shallowed_files_phase failed");
+            }
+        }
+
         if (!skip_usn_phase) {
             /* Read the USN journal again and consume the set. */
             USN end_usn;
@@ -3596,7 +3765,10 @@ int main(int argc, char **argv)
     }
 
     if (arg_out_manifest != NULL) {
-        if (output_manifest_phase(&man_out, &disk, 0, partition, arg_out_manifest) < 0) {
+        r = output_manifest_phase(&man_out, &disk, 0, partition,
+                                  arg_out_manifest, calculate_all_hashes,
+                                  collect_file_metadata);
+        if (r < 0) {
             err(1, "output_manifest_phase failed");
         }
     } else {
