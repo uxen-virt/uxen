@@ -427,9 +427,6 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
         if (!vci->vci_runnable)
             goto out_reset_current;
 
-        if (!uxen_info->host_os_is_xmm_clean && !v->arch.xmm_belong_guest)
-            xmm_restore(v);
-
         hvm_execute(v);
     }
 

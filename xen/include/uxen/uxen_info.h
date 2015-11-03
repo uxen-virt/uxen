@@ -50,9 +50,6 @@
 #define UI_HOST_CALL_SAVE_XMM                     \
     ({                                            \
         struct vcpu *v = current;                 \
-        if ((!uxen_info->host_os_is_xmm_clean) && \
-            v && v->arch.xmm_belong_guest)        \
-            xmm_save_if_needed(v);                \
     }),
 
 #define UI_HOST_CALL_SAVE_NOTHING 0,
