@@ -108,6 +108,11 @@ handle_message(struct uxenconsole_msg_header *hdr)
 {
     struct remote_gui_state *s = TAILQ_FIRST(&heads); /* XXX */
 
+    if (!s) {
+        warn("%s: State is NULL. Someone is sending us messages before console start.", __FUNCTION__);
+        return;
+    }
+
     switch (hdr->type) {
     case UXENCONSOLE_MSG_TYPE_MOUSE_EVENT:
         {
@@ -531,6 +536,11 @@ gui_resize(struct gui_state *state, int w, int h)
     struct remote_gui_state *s = (void *)state;
     struct uxenconsole_msg_resize_surface m;
     struct ipc_client *c;
+
+    if (!s || !s->surface) {
+        warn("%s: state(0x%p) or state->surface is NULL.", __FUNCTION__, s);
+        return;
+    }
 
     m.header.type = UXENCONSOLE_MSG_TYPE_RESIZE_SURFACE;
     m.header.len = sizeof(m);
