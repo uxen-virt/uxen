@@ -266,6 +266,9 @@ void vcpu_restore_fpu_lazy(struct vcpu *v)
         v->fpu_initialised = 1;
     }
 
+    if ( xsave_enabled(v) ) 
+        set_xcr0(v->arch.xcr0);
+
     v->fpu_dirtied = 1;
 }
 
