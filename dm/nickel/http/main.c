@@ -3374,6 +3374,8 @@ write_guest:
     wakeup_client(hp);
     /* through */
 out:
+    if (hp->proxy && conn_close && !done_reconnect)
+        hp->flags |= HF_HTTP_CLOSE;
     if (needs_consume && hp->cx && hp->cx->out)
         BUFF_CONSUME_ALL(hp->cx->out);
     if ((remove_hpd || (hp->flags & HF_PINNED)) && hp->hpd)
