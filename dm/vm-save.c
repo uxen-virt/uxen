@@ -2399,10 +2399,7 @@ vm_save_execute(void)
         if (ret && compression_is_cuckoo()) {
             if (ret == -ENOSPC)
                 vm_save_info.compress_mode = VM_SAVE_COMPRESS_LZ4;
-            else if (ret == -EINTR) {
-                ret = 0;
-                break;
-            } else if (ret != -EAGAIN)
+            else if (ret != -EAGAIN)
                 break;
             filebuf_seek(f, o, FILEBUF_SEEK_SET);
         } else
