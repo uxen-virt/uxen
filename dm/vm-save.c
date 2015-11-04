@@ -2399,6 +2399,7 @@ vm_save_execute(void)
             if (ret == -ENOSPC)
                 vm_save_info.compress_mode = VM_SAVE_COMPRESS_LZ4;
             else if (ret == -EINTR) {
+                vm_save_info.free_mem = 0;
                 ret = 0;
                 break;
             } else if (ret != -EAGAIN)
