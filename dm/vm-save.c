@@ -1695,8 +1695,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
     int *pfn_err = NULL, *pfn_info = NULL;
     struct decompress_ctx dc = { 0 };
     int populate_compressed = (restore_mode == VM_RESTORE_TEMPLATE);
-    int do_lazy_load = 0;
-    int load_lazy_load_info = do_lazy_load;
+    int load_lazy_load_info = vm_lazy_load;
     struct page_offset_info *lli = &dm_lazy_load_info;
     int32_t marker;
     int ret;
@@ -1856,7 +1855,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
                              ret, err_msg, out);
             vm_template_file[s_vm_template_file.size] = 0;
             APRINTF("vm template file: %s", vm_template_file);
-            do_lazy_load = 0;
+            vm_lazy_load = 0;
             break;
         case XC_SAVE_ID_PAGE_OFFSETS:
             uxenvm_load_read_struct(f, s_vm_page_offsets, marker, ret,
@@ -1929,7 +1928,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
 	default:
             uxenvm_check_restore_clone(restore_mode);
             ret = uxenvm_load_batch(f, marker, pfn_type, pfn_err, pfn_info,
-                                    &dc, do_lazy_load, populate_compressed,
+                                    &dc, vm_lazy_load, populate_compressed,
                                     err_msg);
 	    if (ret)
 		goto out;
@@ -2457,7 +2456,6 @@ vm_restore_memory(void)
     int *pfn_err = NULL, *pfn_info = NULL;
     struct decompress_ctx dc = { };
     int populate_compressed = 0;
-    int do_lazy_load = 0;
     int32_t marker;
     struct xc_save_generic s_generic;
 #ifdef SAVE_CUCKOO_ENABLED
@@ -2515,7 +2513,7 @@ vm_restore_memory(void)
 #endif
         default:
             ret = uxenvm_load_batch(f, marker, pfn_type, pfn_err, pfn_info,
-                                    &dc, do_lazy_load, populate_compressed,
+                                    &dc, 0 /* lazy_load */, populate_compressed,
                                     &err_msg);
             if (ret)
                 goto out;

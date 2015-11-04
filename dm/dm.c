@@ -70,6 +70,7 @@ xen_domain_handle_t vm_template_uuid;
 int vm_has_template_uuid = 0;
 char *vm_template_file = NULL;
 int vm_restore_mode = VM_RESTORE_NONE;
+uint64_t vm_lazy_load = 0;
 static int vm_start_paused = 0;
 window_handle vm_window = NULL;
 window_handle vm_window_parent = NULL;

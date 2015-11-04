@@ -1455,7 +1455,7 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
     return ret;
 }
 
-int dmreq_lazy_template = 0;
+int dmreq_lazy_template = 1;
 
 mfn_t
 p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
