@@ -285,14 +285,14 @@ static int is_alive(void *opaque, const uuid_t uuid)
     char *fn = vm_save_file_name(uuid);
     int r;
 
-    HANDLE f = CreateFile(fn, GENERIC_READ | GENERIC_WRITE,
+    HANDLE f = CreateFile(fn, GENERIC_READ,
             FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
-            OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
+            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
 
-    if (f != INVALID_HANDLE_VALUE || GetLastError() == ERROR_ACCESS_DENIED) {
-        r = 1;
-    } else {
+    if (f == INVALID_HANDLE_VALUE && GetLastError() == ERROR_FILE_NOT_FOUND) {
         r = 0;
+    } else {
+        r = 1;
     }
     if (f != INVALID_HANDLE_VALUE) {
         CloseHandle(f);
