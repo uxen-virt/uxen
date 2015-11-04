@@ -340,13 +340,10 @@ pc_init_xen(void)
             }
         }
     } else {
-        ISADevice *dev;
-        ISADevice *enumerator = isa_create_simple("null_enum");
-
-        int null_enum_add_child(ISADevice *dev, unsigned int index, ISADevice *child);
-
         for (i = 0; !i; ++i) {
             if (nd_table[i].used) {
+                ISADevice *dev;
+
                 if (!nd_table[i].netdev && !nd_table[i].vlan)
                     nd_table[i].vlan = qemu_find_vlan(0, 1);
                 dev=isa_create("uxen_net");
@@ -358,10 +355,7 @@ pc_init_xen(void)
             if (nd_table[i].used) {
                 if (!nd_table[i].netdev && !nd_table[i].vlan)
                     nd_table[i].vlan = qemu_find_vlan(0, 1);
-                dev = isa_create_simple("null_net");
-                qdev_set_nic_properties(&dev->qdev, &nd_table[i]);
-                qdev_init(&dev->qdev);
-                null_enum_add_child(enumerator, i - 1, dev);
+                uxenplatform_nic_init(&nd_table[i], "null_net");
             }
         }
     }
