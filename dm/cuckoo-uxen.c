@@ -210,7 +210,8 @@ static int capture_pfns(void *opaque, int tid, int n, void *out, uint64_t *pfns)
                 }
             } else {
                 /* This shouldn't happen. */
-                debug_printf("j=%d type=%d pfn=%"PRIx64"\n", j, type, pfns[j]);
+                debug_printf("j=%d type=%d pfn=%"PRIx64"\n", j, type,
+                             pfns[i + j]);
                 assert(0);
                 memset(p, 0, PAGE_SIZE);
             }
