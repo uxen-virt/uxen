@@ -169,7 +169,9 @@ vram_resume(struct vram_desc *v)
                 ret = LZ4_decompress_safe(buf, (void *)v->view, v->lz4_len,
                                           v->mapped_len);
 
-                ret = ret == v->mapped_len ? 0 : -1;
+                if (ret < 0)
+                    debug_printf("failed to decompress vram data, r=%d\n", ret);
+                ret = 0;
             }
             free(buf);
         }
