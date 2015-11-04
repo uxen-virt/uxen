@@ -2478,8 +2478,6 @@ vm_restore_memory(void)
     if (!vm_save_info.page_batch_offset)
         errx(1, "%s: no page batch offset", __FUNCTION__);
 
-    filebuf_set_readable(f);
-
     ret = filebuf_seek(f, vm_save_info.page_batch_offset,
                        FILEBUF_SEEK_SET) != -1 ? 0 : -1;
     if (ret < 0) {
@@ -2612,6 +2610,9 @@ vm_resume(void)
     char *err_msg = NULL;
 
     if (vm_save_info.f) {
+
+        filebuf_set_readable(vm_save_info.f);
+
         if (vm_save_info.free_mem)
             vm_restore_memory();
 
