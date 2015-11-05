@@ -30,13 +30,10 @@ uxennullnet.sys  = 222,,
 %MfgName% = uXen,NTAMD64
 
 [uXen.NTx86]
-%UXENNULLNET.DeviceDesc%    = UXENNULLNET, uxennul ; ACPI compatible device name
-;%UXENNULLNET.DeviceDesc%    = UXENNULLNET, root\UXENNULLNET ; Root enumerated 
+%UXENNULLNET.DeviceDesc%    = UXENNULLNET, uxenplatform\uxennullnet
 
 [uXen.NTAMD64]
-%UXENNULLNET.DeviceDesc%    = UXENNULLNET, uxennul ; ACPI compatible device name
-;%UXENNULLNET.DeviceDesc%    = UXENNULLNET, root\UXENNULLNET ; Root enumerated 
-;%UXENNULLNET.DeviceDesc%    = UXENNULLNET, {b85b7c50-6a01-11d2-b841-00c04fad5171}\UXENNULLNET 
+%UXENNULLNET.DeviceDesc%    = UXENNULLNET, uxenplatform\uxennullnet
 
 [UXENNULLNET]
 Characteristics = 0x1 ; NCF_VIRTUAL

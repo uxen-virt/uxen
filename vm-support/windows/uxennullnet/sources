@@ -16,7 +16,7 @@ PASS0_BINPLACE = $(NTTARGETFILE0)
 NTTARGETFILE1 = COPY
 NTTARGETFILE2 = POST
 
-INCLUDES=..\..\..\common\include\xen-public;..\common
+INCLUDES=..\..\..\common\include\xen-public;..\common;..\uxenplatform
 
 TARGETLIBS=$(DDK_LIB_PATH)\ndis.lib
 
@@ -33,5 +33,5 @@ SOURCES = adapter.c \
           qos1.c \
           tcbrcb.c \
           vmq.c \
-          acpi.c \
+          platform.c \
           uxennullnet.rc

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -29,7 +29,7 @@
 #pragma warning(disable:4100)
 
 NTSTATUS
-acpi_get_mac_address(IN PDEVICE_OBJECT pdo, UCHAR *mac_address);
+platform_get_mac_address(IN PDEVICE_OBJECT pdo, UCHAR *mac_address);
 
 #endif // _UXENNULLNET_H
 

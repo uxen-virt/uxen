@@ -19,7 +19,7 @@ Abstract:
 /*
  * uXen changes:
  *
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -230,6 +230,7 @@ Return Value:
 
     PAGED_CODE();
 
+#if 0
     //
     // We want to figure out what the NIC's physical address is.
     // If we had a hardware NIC, we would query the physical address from it.
@@ -259,6 +260,7 @@ Return Value:
         NIC_COPY_ADDRESS(PermanentMacAddress, Parameter->ParameterData.BinaryData.Buffer);
     }
     else
+#endif
     {
         NDIS_CONFIGURATION_PARAMETER NewPhysicalAddress;
         NTSTATUS s;
@@ -269,7 +271,7 @@ Return Value:
         //
         NdisZeroMemory(PermanentMacAddress, NIC_MACADDR_SIZE);
 
-        s = acpi_get_mac_address(Adapter->Pdo, PermanentMacAddress);
+        s = platform_get_mac_address(Adapter->Pdo, PermanentMacAddress);
         if (!NT_SUCCESS(s))
             return;
 
