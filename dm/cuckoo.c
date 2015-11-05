@@ -931,8 +931,8 @@ execute_plan(struct cuckoo_context *cc,
     struct work_unit *u;
     struct work_unit *first;
 
-    const int max_template_pfns = 2048;
-    const int max_pfns = 2048;
+    const int max_template_pfns = 128;
+    const int max_pfns = 128;
 
     uxen_thread tids[CUCKOO_NUM_THREADS];
     struct thread_context cs[CUCKOO_NUM_THREADS];
