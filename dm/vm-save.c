@@ -531,6 +531,36 @@ save_cuckoo_pages(struct filebuf *f, struct page_fingerprint *hashes,
 #endif
 
 static int
+check_aborted(void)
+{
+    if (vm_save_info.safe_to_abort) {
+        if (vm_quit_interrupt)
+            return 1;
+        if (vm_save_info.save_abort) {
+            vm_set_run_mode(RUNNING_VM);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void
+set_abortable(void)
+{
+    if (cmpxchg(&vm_save_info.safe_to_abort, 0, 1) == 0)
+        check_aborted();
+}
+
+void
+vm_save_abort(void)
+{
+    vm_save_info.save_abort = 1;
+    if (ioh_event_valid(&vm_save_info.save_abort_event))
+        ioh_event_set(&vm_save_info.save_abort_event);
+    check_aborted();
+}
+
+static int
 uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
 {
     uint8_t *hvm_buf = NULL;
@@ -660,9 +690,10 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
     /* store start of batch file offset, to allow restoring page data
      * without parsing the entire save file */
     vm_save_info.page_batch_offset = filebuf_tell(f);
+    set_abortable();
 
     pfn = 0;
-    while (pfn < p2m_size && !vm_save_info.save_abort && !vm_quit_interrupt) {
+    while (pfn < p2m_size && !check_aborted()) {
         batch = 0;
         while ((pfn + batch) < p2m_size && batch < MAX_BATCH_SIZE) {
             gpfn_info_list[batch].gpfn = pfn + batch;
@@ -873,7 +904,7 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
 	pfn += batch;
     }
 
-    if (!vm_save_info.save_abort && !vm_quit_interrupt) {
+    if (!check_aborted()) {
 
 #ifdef SAVE_CUCKOO_ENABLED
         if (compression_is_cuckoo()) {
@@ -947,7 +978,7 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
         }
     }
 
-    if (!vm_save_info.save_abort && !vm_quit_interrupt) {
+    if (!check_aborted()) {
         /* 0: end marker */
         batch = 0;
         filebuf_write(f, &batch, sizeof(batch));
@@ -1496,13 +1527,6 @@ apply_immutable_memory(struct immutable_range *r, int nranges)
     APRINTF("%s: done", __FUNCTION__);
 
     return 0;
-}
-
-void vm_save_abort(void)
-{
-    vm_save_info.save_abort = 1;
-    if (ioh_event_valid(&vm_save_info.save_abort_event))
-        ioh_event_set(&vm_save_info.save_abort_event);
 }
 
 #define uxenvm_load_read_struct(f, s, _marker, ret, err_msg, _out) do {	\
@@ -2266,6 +2290,7 @@ vm_save(void)
     ioh_event_init(&vm_save_info.save_abort_event);
 
     vm_save_info.save_abort = 0;
+    vm_save_info.safe_to_abort = 0;
 
     vm_save_info.awaiting_suspend = 1;
     vm_set_run_mode(SUSPEND_VM);
@@ -2316,7 +2341,7 @@ mc_resumevm(Monitor *mon, const dict args)
     vm_save_info.resume_delete =
         dict_get_boolean_default(args, "delete-savefile", 1);
 
-    vm_set_run_mode(RUNNING_VM);
+    vm_save_abort();
 }
 #endif  /* MONITOR */
 
@@ -2392,7 +2417,7 @@ vm_save_execute(void)
 	goto out;
     }
 
-    while (!vm_save_info.save_abort && !vm_quit_interrupt) {
+    while (!check_aborted()) {
         off_t o = filebuf_tell(f);
         ret = uxenvm_savevm_write_pages(f, &err_msg);
         if (ret && compression_is_cuckoo()) {

@@ -378,8 +378,6 @@ control_command_resume(void *opaque, const char *id, const char *opt,
 
     vm_save_abort();
 
-    vm_set_run_mode(RUNNING_VM);
-
     return 0;
 }
 

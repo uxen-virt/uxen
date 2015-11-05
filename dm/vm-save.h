@@ -28,6 +28,7 @@ struct vm_save_info {
     int awaiting_suspend;
     int save_requested;
     int save_abort;
+    int safe_to_abort;
     ioh_event save_abort_event;
 
     char *filename;
