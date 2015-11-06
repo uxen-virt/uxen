@@ -388,7 +388,9 @@ static inline void pt_sync_domain(struct domain *d)
         (xsave_enabled(_v) ? X86_CR4_OSXSAVE : 0))))
 
 /* These exceptions must always be intercepted. */
-#define HVM_TRAP_MASK ((1U << TRAP_machine_check))
+#define HVM_TRAP_MASK ((1U << TRAP_debug)           | \
+                       (1U << TRAP_alignment_check) | \
+                       (1U << TRAP_machine_check))
 
 /*
  * x86 event types. This enumeration is valid for:
