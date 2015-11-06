@@ -2448,7 +2448,8 @@ vm_save_execute(void)
         APRINTF("total file size: %"PRIu64" bytes", (uint64_t)filebuf_tell(f));
         filebuf_flush(f);
     } else {
-        filebuf_close(f);
+        if (f)
+            filebuf_close(f);
         f = vm_save_info.f = NULL;
     }
 
