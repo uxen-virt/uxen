@@ -1425,18 +1425,12 @@ static void vmx_update_host_cr3(struct vcpu *v)
 
 void vmx_update_debug_state(struct vcpu *v)
 {
-    unsigned long mask;
-
     ASSERT(v == current);
 
-    mask = 1u << TRAP_int3;
-    if ( !cpu_has_monitor_trap_flag )
-        mask |= 1u << TRAP_debug;
-
     if ( v->arch.hvm_vcpu.debug_state_latch )
-        v->arch.hvm_vmx.exception_bitmap |= mask;
+        v->arch.hvm_vmx.exception_bitmap |= 1U << TRAP_int3;
     else
-        v->arch.hvm_vmx.exception_bitmap &= ~mask;
+        v->arch.hvm_vmx.exception_bitmap &= ~(1U << TRAP_int3);
     vmx_update_exception_bitmap(v);
 }
 
@@ -1714,13 +1708,12 @@ void vmx_inject_hw_exception(int trap, int error_code)
     switch ( trap )
     {
     case TRAP_debug:
-        type = X86_EVENTTYPE_SW_EXCEPTION;
         if ( guest_cpu_user_regs()->eflags & X86_EFLAGS_TF )
         {
             __restore_debug_registers(curr);
             write_debugreg(6, read_debugreg(6) | 0x4000);
         }
-        if ( cpu_has_monitor_trap_flag )
+        if ( cpu_has_monitor_trap_flag || !curr->domain->debugger_attached )
             break;
     case TRAP_int3:
         if ( curr->domain->debugger_attached )
@@ -3041,9 +3034,10 @@ vmx_execute(struct vcpu *v)
              */
             exit_qualification = __vmread(EXIT_QUALIFICATION);
             write_debugreg(6, exit_qualification | 0xffff0ff0);
-            if ( !v->domain->debugger_attached || cpu_has_monitor_trap_flag )
-                goto exit_and_crash;
-            domain_pause_for_debugger();
+            if ( !v->domain->debugger_attached )
+                hvm_inject_exception(vector, HVM_DELIVER_NO_ERROR_CODE, 0);
+            else
+                domain_pause_for_debugger();
             break;
         case TRAP_int3: 
         {
@@ -3103,6 +3097,9 @@ vmx_execute(struct vcpu *v)
 
             v->arch.hvm_vcpu.guest_cr[2] = exit_qualification;
             vmx_inject_hw_exception(TRAP_page_fault, regs->error_code);
+            break;
+        case TRAP_alignment_check:
+            hvm_inject_exception(vector, __vmread(VM_EXIT_INTR_ERROR_CODE), 0);
             break;
         case TRAP_nmi:
             if ( (intr_info & INTR_INFO_INTR_TYPE_MASK) !=
