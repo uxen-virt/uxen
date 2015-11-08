@@ -430,7 +430,7 @@ static struct work_unit *create_plan(
             }
         }
     }
-    us = grow_us(us, i + 1, ccb, opaque);
+    us = grow_us(us, i, ccb, opaque);
     if (us) {
         us[i].ref = NULL;
     }
