@@ -1314,6 +1314,8 @@ int vbsfWrite(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, uint64_
         return rc;
     /* need to requery handle, might've changed on rewrite */
     pHandle = vbsfQueryFileHandle(pClient, Handle);
+    if (!pHandle)
+        return VERR_INVALID_HANDLE;
     hostoffset = fch_host_fileoffset(pClient, root, Handle, offset);
     quota_start_op(&qop, pClient, root, Handle, NULL);
     delta = hostoffset + *pcbBuffer - quota_get_filesize(&qop);
@@ -1646,11 +1648,15 @@ int vbsfQueryFileInfo(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle,
     if (type == SHFL_HF_TYPE_DIR)
     {
         SHFLFILEHANDLE *pHandle = vbsfQueryDirHandle(pClient, Handle);
+        if (!pHandle)
+            return VERR_INVALID_HANDLE;
         rc = RTDirQueryInfo(pHandle->dir.Handle, &fileinfo, RTFSOBJATTRADD_NOTHING);
     }
     else
     {
         SHFLFILEHANDLE *pHandle = vbsfQueryFileHandle(pClient, Handle);
+        if (!pHandle)
+            return VERR_INVALID_HANDLE;
         rc = RTFileQueryInfo(pHandle->file.Handle, &fileinfo, RTFSOBJATTRADD_NOTHING);
         if (RT_SUCCESS(rc))
             fch_guest_fsinfo(pClient, root, Handle, &fileinfo);
@@ -1701,6 +1707,8 @@ static int vbsfSetFileInfo(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Ha
     if (type == SHFL_HF_TYPE_DIR)
     {
         SHFLFILEHANDLE *pHandle = vbsfQueryDirHandle(pClient, Handle);
+        if (!pHandle)
+            return VERR_INVALID_HANDLE;
         rc = RTDirSetTimes(pHandle->dir.Handle,
                             (RTTimeSpecGetNano(&pSFDEntry->AccessTime)) ?       &pSFDEntry->AccessTime : NULL,
                             (RTTimeSpecGetNano(&pSFDEntry->ModificationTime)) ? &pSFDEntry->ModificationTime: NULL,
@@ -1711,6 +1719,8 @@ static int vbsfSetFileInfo(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Ha
     else
     {
         SHFLFILEHANDLE *pHandle = vbsfQueryFileHandle(pClient, Handle);
+        if (!pHandle)
+            return VERR_INVALID_HANDLE;
         rc = RTFileSetTimes(pHandle->file.Handle,
                             (RTTimeSpecGetNano(&pSFDEntry->AccessTime)) ?       &pSFDEntry->AccessTime : NULL,
                             (RTTimeSpecGetNano(&pSFDEntry->ModificationTime)) ? &pSFDEntry->ModificationTime: NULL,
@@ -1732,6 +1742,8 @@ static int vbsfSetFileInfo(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Ha
     if (type == SHFL_HF_TYPE_FILE)
     {
         SHFLFILEHANDLE *pHandle = vbsfQueryFileHandle(pClient, Handle);
+        if (!pHandle)
+            return VERR_INVALID_HANDLE;
         /* Change file attributes if necessary */
         if (pSFDEntry->Attr.fMode)
         {
@@ -1804,6 +1816,9 @@ int resize_file(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle,
     uint64_t prev_sz, prev_sz_guest;
     int rc;
     struct quota_op qop;
+
+    if (!pHandle)
+        return VERR_INVALID_HANDLE;
 
     rc = fch_query_crypt_by_handle(pClient, root, handle, &crypt_mode);
     if (RT_FAILURE(rc))
