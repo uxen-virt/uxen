@@ -21,6 +21,7 @@ int sf_quit();
 
 int sf_set_opt(wchar_t *name, wchar_t *subfolder, uint64_t opt);
 int sf_mod_opt(wchar_t *name, wchar_t *subfolder, uint64_t opt, int add);
+int sf_mod_opt_dynamic(wchar_t *name, wchar_t *subfolder, uint64_t opt, int add);
 int sf_restore_opt(wchar_t *name, wchar_t *subfolder, uint64_t opt);
 
 void *makeSHFLString(wchar_t *str);

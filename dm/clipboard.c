@@ -73,7 +73,6 @@ clip_load(QEMUFile *f, void *opaque, int version)
     struct clip_state *s = (struct clip_state*)opaque;
 
     s->guest_connected = qemu_get_be32(f);
-    debug_printf("ZONK loaded guest conected %d\n", s->guest_connected);
     return 0;
 }
 

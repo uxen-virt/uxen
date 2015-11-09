@@ -659,7 +659,7 @@ sf_set_opt(wchar_t *name, wchar_t *subfolder, uint64_t opt)
 
     if (r == SHFL_ROOT_NIL)
         return VERR_FILE_NOT_FOUND;
-    _sf_set_opt(r, subfolder, opt);
+    _sf_set_opt(r, subfolder, opt, 0);
     return VINF_SUCCESS;
 }
 
@@ -670,7 +670,18 @@ sf_mod_opt(wchar_t *name, wchar_t *subfolder, uint64_t opt, int add)
 
     if (r == SHFL_ROOT_NIL)
         return VERR_FILE_NOT_FOUND;
-    _sf_mod_opt(r, subfolder, opt, add);
+    _sf_mod_opt(r, subfolder, opt, add, 0);
+    return VINF_SUCCESS;
+}
+
+int
+sf_mod_opt_dynamic(wchar_t *name, wchar_t *subfolder, uint64_t opt, int add)
+{
+    SHFLROOT r = root_by_name(name);
+
+    if (r == SHFL_ROOT_NIL)
+        return VERR_FILE_NOT_FOUND;
+    _sf_mod_opt(r, subfolder, opt, add, 1);
     return VINF_SUCCESS;
 }
 

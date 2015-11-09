@@ -23,6 +23,7 @@ typedef struct folder_opt_entry {
 
     wchar_t  mapname[SUBFOLDER_PATHMAX];
     wchar_t  subfolder[SUBFOLDER_PATHMAX];
+    int      dynamic;
     uint64_t opts;
 } folder_opt_entry_t;
 
@@ -30,13 +31,15 @@ static critical_section folder_opt_lock;
 static TAILQ_HEAD(, folder_opt_entry) folder_opt_entries;
 
 static void
-clear_opt_entries(void)
+clear_dyn_entries(void)
 {
     folder_opt_entry_t *e, *next;
 
     TAILQ_FOREACH_SAFE(e, &folder_opt_entries, entry, next) {
-        TAILQ_REMOVE(&folder_opt_entries, e, entry);
-        free(e);
+        if (e->dynamic) {
+            TAILQ_REMOVE(&folder_opt_entries, e, entry);
+            free(e);
+        }
     }
 }
 
@@ -66,16 +69,34 @@ state_save(QEMUFile *f, void *opaque)
     folder_opt_entry_t *e;
     uint32_t count = 0;
 
+    /* only store dynamicaly added options in the savefile */
     critical_section_enter(&folder_opt_lock);
     TAILQ_FOREACH(e, &folder_opt_entries, entry)
-        ++count;
+        if (e->dynamic)
+            ++count;
     qemu_put_be32(f, count);
     TAILQ_FOREACH(e, &folder_opt_entries, entry) {
-        put_wstr(f, e->mapname);
-        put_wstr(f, e->subfolder);
-        qemu_put_be64(f, e->opts);
+        if (e->dynamic) {
+            put_wstr(f, e->mapname);
+            put_wstr(f, e->subfolder);
+            qemu_put_be64(f, e->opts);
+            qemu_put_byte(f, e->dynamic);
+        }
     }
     critical_section_leave(&folder_opt_lock);
+}
+
+static void
+dump_opt_table(void)
+{
+    folder_opt_entry_t *e;
+    int i = 0;
+
+    TAILQ_FOREACH(e, &folder_opt_entries, entry) {
+        debug_printf("shared-folders: option entry %d (%ls, %ls, %"PRIx64", dyn=%d)\n",
+                     i, e->mapname, e->subfolder, e->opts, e->dynamic);
+        ++i;
+    }
 }
 
 static int
@@ -84,20 +105,22 @@ state_load(QEMUFile *f, void *opaque, int version_id)
     uint32_t count;
 
     critical_section_enter(&folder_opt_lock);
+    clear_dyn_entries();
     count = qemu_get_be32(f);
-    if (count)
-        clear_opt_entries();
     while (count--) {
         folder_opt_entry_t *e = calloc(1, sizeof(*e));
 
         get_wstr(f, e->mapname);
         get_wstr(f, e->subfolder);
         e->opts = qemu_get_be64(f);
+        e->dynamic = qemu_get_byte(f);
+
         TAILQ_INSERT_TAIL(&folder_opt_entries, e, entry);
 
-        debug_printf("shared-folders: loaded folder option entry (%ls, %ls, %"PRIx64")\n",
-                     e->mapname, e->subfolder, e->opts);
+        debug_printf("shared-folders: loaded folder option entry (%ls, %ls, %"PRIx64", dyn=%d)\n",
+                     e->mapname, e->subfolder, e->opts, e->dynamic);
     }
+    dump_opt_table();
     critical_section_leave(&folder_opt_lock);
     return 0;
 }
@@ -155,19 +178,20 @@ get_mapname(SHFLROOT root)
 }
 
 static folder_opt_entry_t *
-find_exact_entry(wchar_t *mapname, wchar_t *subfolder)
+find_exact_entry(wchar_t *mapname, wchar_t *subfolder, int dyn)
 {
     folder_opt_entry_t *e;
 
     TAILQ_FOREACH(e, &folder_opt_entries, entry) {
-        if (!wcsncmp(mapname, e->mapname, SUBFOLDER_PATHMAX) &&
+        if (e->dynamic == dyn &&
+            !wcsncmp(mapname, e->mapname, SUBFOLDER_PATHMAX) &&
             !wcsncmp(subfolder, e->subfolder, SUBFOLDER_PATHMAX))
             return e;
     }
     return NULL;
 }
 
-/* longest path match */
+/* longest path match, dynamic opts first */
 static folder_opt_entry_t *
 find_entry_for_path(SHFLROOT root, wchar_t *path)
 {
@@ -175,37 +199,44 @@ find_entry_for_path(SHFLROOT root, wchar_t *path)
     wchar_t *mapname = get_mapname(root);
     folder_opt_entry_t *e, *found = NULL;
     int maxlen = 0, len;
+    int dyn;
 
     if (!rootpath || !mapname)
         return NULL;
 
-    TAILQ_FOREACH(e, &folder_opt_entries, entry) {
-        wchar_t subfolder_fullpath[SUBFOLDER_PATHMAX] = { 0 };
+    for (dyn = 1; dyn >= 0; dyn--) {
+        TAILQ_FOREACH(e, &folder_opt_entries, entry) {
+            wchar_t subfolder_fullpath[SUBFOLDER_PATHMAX] = { 0 };
 
-        if (wcslen(rootpath) + wcslen(e->subfolder) >= SUBFOLDER_PATHMAX) {
-            warnx("shared-folders: path too long");
-            continue;
-        }
+            if (e->dynamic != dyn)
+                continue;
+            if (wcslen(rootpath) + wcslen(e->subfolder) >= SUBFOLDER_PATHMAX) {
+                warnx("shared-folders: path too long");
+                continue;
+            }
 
-        wcsncpy(subfolder_fullpath, rootpath, SUBFOLDER_PATHMAX);
-        catpath(subfolder_fullpath, e->subfolder);
+            wcsncpy(subfolder_fullpath, rootpath, SUBFOLDER_PATHMAX);
+            catpath(subfolder_fullpath, e->subfolder);
 
-        if (!wcsncmp(mapname, e->mapname, SUBFOLDER_PATHMAX) &&
-            is_path_prefixof(subfolder_fullpath, path))
-        {
-            len = wcslen(e->subfolder);
-            if (len >= maxlen) {
-                len = maxlen;
-                found = e;
+            if (!wcsncmp(mapname, e->mapname, SUBFOLDER_PATHMAX) &&
+                is_path_prefixof(subfolder_fullpath, path))
+            {
+                len = wcslen(e->subfolder);
+                if (len >= maxlen) {
+                    len = maxlen;
+                    found = e;
+                }
             }
         }
+        if (found)
+            break;
     }
 
     return found;
 }
 
 static void
-del_opt(SHFLROOT root, wchar_t *subfolder)
+del_opt(SHFLROOT root, wchar_t *subfolder, int dyn_only)
 {
     folder_opt_entry_t *e, *next;
     wchar_t *mapname = get_mapname(root);
@@ -217,8 +248,13 @@ del_opt(SHFLROOT root, wchar_t *subfolder)
         if (!wcsncmp(mapname, e->mapname, SUBFOLDER_PATHMAX) &&
             !wcsncmp(subfolder, e->subfolder, SUBFOLDER_PATHMAX))
         {
-            TAILQ_REMOVE(&folder_opt_entries, e, entry);
-            free(e);
+            if (!dyn_only || e->dynamic) {
+                debug_printf("shared-folders: delete option entry "
+                             "(%ls, %ls, %"PRIx64", dyn=%d)\n",
+                             e->mapname, e->subfolder, e->opts, e->dynamic);
+                TAILQ_REMOVE(&folder_opt_entries, e, entry);
+                free(e);
+            }
         }
     }
 }
@@ -248,7 +284,7 @@ _sf_has_opt(SHFLROOT root, wchar_t *path, uint64_t opt)
 }
 
 void
-_sf_set_opt(SHFLROOT root, wchar_t *subfolder, uint64_t opt)
+_sf_set_opt(SHFLROOT root, wchar_t *subfolder, uint64_t opt, int dyn)
 {
     folder_opt_entry_t *e;
     MAPPING *mapping = vbsfMappingGetByRoot(root);
@@ -261,44 +297,38 @@ _sf_set_opt(SHFLROOT root, wchar_t *subfolder, uint64_t opt)
     prev = _sf_get_opt(root, subfolder);
 
     critical_section_enter(&folder_opt_lock);
-    if (opt == mapping->opts)
-        del_opt(root, subfolder);
-    else {
-        e = find_exact_entry(mapname, subfolder);
-        if (!e) {
-            e = calloc(1, sizeof(*e));
-            if (!e)
-                errx(1, "out of memory");
-            wcsncpy(e->mapname, mapname, SUBFOLDER_PATHMAX);
-            wcsncpy(e->subfolder, subfolder, SUBFOLDER_PATHMAX);
-            TAILQ_INSERT_TAIL(&folder_opt_entries, e, entry);
-        }
-        e->opts = opt;
+    e = find_exact_entry(mapname, subfolder, dyn);
+    if (!e) {
+        e = calloc(1, sizeof(*e));
+        if (!e)
+            errx(1, "out of memory");
+        wcsncpy(e->mapname, mapname, SUBFOLDER_PATHMAX);
+        wcsncpy(e->subfolder, subfolder, SUBFOLDER_PATHMAX);
+        TAILQ_INSERT_TAIL(&folder_opt_entries, e, entry);
     }
+    e->dynamic = dyn;
+    e->opts = opt;
     critical_section_leave(&folder_opt_lock);
 
     if ((prev & SF_OPT_SCRAMBLE) != (opt & SF_OPT_SCRAMBLE))
         vbsfNotifyCryptChanged();
     debug_printf(
-        "shared-folders: set subfolder option (folder %ls subfolder %ls opt 0x%08"PRIx64")\n",
-        mapname, subfolder, opt);
+        "shared-folders: set subfolder option (folder %ls subfolder %ls opt 0x%08"PRIx64" dyn %d)\n",
+        mapname, subfolder, opt, dyn);
 }
 
 void
-_sf_mod_opt(SHFLROOT root, wchar_t *subfolder, uint64_t opt, int add)
+_sf_mod_opt(SHFLROOT root, wchar_t *subfolder, uint64_t opt, int add, int dyn)
 {
     uint64_t o = _sf_get_opt(root, subfolder);
 
-    _sf_set_opt(root, subfolder, add ? (o | opt) : (o & ~opt));
+    _sf_set_opt(root, subfolder, add ? (o | opt) : (o & ~opt), dyn);
 }
 
 void
 _sf_restore_opt(SHFLROOT root, wchar_t *subfolder, uint64_t opt)
 {
-    MAPPING *mapping = vbsfMappingGetByRoot(root);
-
-    if (mapping)
-        _sf_set_opt(root, subfolder, mapping->opts);
+    del_opt(root, subfolder, 1);
 }
 
 void

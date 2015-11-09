@@ -673,7 +673,7 @@ control_command_sf_set_subfolder_scramble_mode(
 
     rc =  mode < 0
         ? sf_restore_opt(name_w, subfolder_w, SF_OPT_SCRAMBLE)
-        : sf_mod_opt(name_w, subfolder_w, SF_OPT_SCRAMBLE, mode ? 1:0);
+        : sf_mod_opt_dynamic(name_w, subfolder_w, SF_OPT_SCRAMBLE, mode ? 1:0);
     if (rc)
         control_send_error(cd, opt, id, rc, NULL);
     else
@@ -701,7 +701,7 @@ control_command_sf_add_subfolder_opt(
     uint64_t v = dict_get_integer(d, "value");
     int rc;
 
-    rc = sf_mod_opt(name_w, subfolder_w, vopt, v ? 1 : 0);
+    rc = sf_mod_opt_dynamic(name_w, subfolder_w, vopt, v ? 1 : 0);
     if (rc)
         control_send_error(cd, opt, id, rc, NULL);
     else
