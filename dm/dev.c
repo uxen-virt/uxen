@@ -18,6 +18,7 @@
 #include "qemu_qdev-prop.h"
 
 dict config_devices = NULL;
+static int dev_hotplug = 0;
 
 static BusState _main_system_bus = {
     .info = &system_bus_info,
@@ -29,6 +30,11 @@ static BusState *main_system_bus = &_main_system_bus;
 
 SLIST_HEAD(, DeviceInfo) device_info_list =
     SLIST_HEAD_INITIALIZER(&device_info_list);
+
+void dev_machine_creation_done(void)
+{
+    dev_hotplug = 1;
+}
 
 static DeviceInfo *
 dev_find_info(BusInfo *bus_info, const char *name)
@@ -56,6 +62,8 @@ dev_create_from_info(BusState *bus, DeviceInfo *info)
     qdev_prop_set_defaults(dev, dev->info->props);
     qdev_prop_set_defaults(dev, dev->parent_bus->info->props);
     TAILQ_INSERT_HEAD(&bus->children, dev, sibling);
+    if (dev_hotplug)
+        dev->hotplugged = 1;
     dev->instance_id_alias = -1;
 
     return dev;
@@ -287,4 +295,14 @@ process_config_devices(void)
             errx(1, "%s: failed to init device with driver '%s'",
                  __FUNCTION__, driver);
     }
+}
+
+int dev_unplug(DeviceState *dev)
+{
+    if (!dev->parent_bus->allow_hotplug)
+        return -1;
+
+    assert(dev->info->unplug != NULL);
+
+    return dev->info->unplug(dev);
 }

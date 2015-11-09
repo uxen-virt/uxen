@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -580,6 +580,8 @@ vm_init(const char *loadvm, int restore_mode)
 #ifdef CONFIG_DUMP_PERIODIC_STATS
     dump_periodic_stats_init();
 #endif  /* CONFIG_DUMP_PERIODIC_STAT */
+
+    dev_machine_creation_done();
 }
 
 int vm_is_paused(void)

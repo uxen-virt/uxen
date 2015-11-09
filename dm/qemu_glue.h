@@ -184,6 +184,7 @@ void QEMU_NORETURN hw_error(const char *fmt, ...)
 #define qdev_init_nofail dev_init_nofail
 #define qdev_register dev_register
 #define qdev_get_parent_bus dev_get_parent_bus
+#define qdev_unplug dev_unplug
 #define qbus_create_inplace bus_create_inplace
 #define qbus_create bus_create
 #define qdev_reset_all dev_reset_all

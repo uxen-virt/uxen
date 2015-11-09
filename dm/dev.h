@@ -110,6 +110,7 @@ struct DeviceInfo {
     SLIST_ENTRY(DeviceInfo) next;
 };
 
+void dev_machine_creation_done(void);
 DeviceState *dev_create(BusState *bus, const char *name);
 DeviceState *dev_try_create(BusState *bus, const char *name);
 int dev_init(DeviceState *dev);
@@ -122,6 +123,7 @@ void bus_create_inplace(BusState *bus, BusInfo *info,
 			DeviceState *parent, const char *name);
 BusState *bus_create(BusInfo *info, DeviceState *parent, const char *name);
 void dev_reset_all(DeviceState *dev);
+int dev_unplug(DeviceState *dev);
 void bus_free(BusState *bus);
 
 void process_config_devices(void);
