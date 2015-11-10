@@ -24,7 +24,7 @@
 #define CLIP_MSG_ACK 1
 #define CLIP_MSG_NACK 2
 
-#define CLIP_TIMEOUT 15000
+#define CLIP_TIMEOUT INFINITE
 
 #ifndef CLIPLOG
  #include <dm/debug.h>
@@ -34,6 +34,7 @@
 struct clip_ctx {
     v4v_context_t v4v;
     HANDLE ev;
+    OVERLAPPED ov;
     int domain;
     int port;
     void* (*alloc)(size_t);
@@ -51,23 +52,60 @@ struct __attribute__((packed)) clip_msg {
 };
 
 static int
-connect_v4v(v4v_context_t *ctx, int domain, int port)
+wait_ov(struct clip_ctx *ctx, char *op, DWORD *bytes)
+{
+    int ret;
+
+    ret = WaitForSingleObject(ctx->ev, CLIP_TIMEOUT);
+    switch (ret) {
+    case WAIT_TIMEOUT:
+        CLIPLOG("clipboard: %s timeout\n", op);
+        break;
+    case WAIT_OBJECT_0:
+        ret = 0;
+        if (!GetOverlappedResult(ctx->v4v.v4v_handle, &ctx->ov, bytes, FALSE))
+            ret = (int)GetLastError();
+        break;
+    default:
+        CLIPLOG("clipboard: %s wait error %d\n", op, ret);
+        break;
+    }
+    if (ret) {
+        CLIPLOG("clipboard: %s wait_ov operation error %d\n", op, ret);
+        CancelIoEx(ctx->v4v.v4v_handle, &ctx->ov);
+    }
+    return ret;
+}
+
+static int
+connect_v4v(struct clip_ctx *ctx, int domain, int port)
 {
     v4v_ring_id_t id;
     int ret;
+    DWORD bytes;
 
-    ret = v4v_open(ctx, CLIP_RING_SIZE, NULL);
-    if (!ret) {
-        CLIPLOG("%s: v4v_open error %d", __FUNCTION__, ret);
+    ResetEvent(ctx->ev);
+    ret = v4v_open(&ctx->v4v, CLIP_RING_SIZE, &ctx->ov);
+    if (!ret && GetLastError() == ERROR_IO_PENDING)
+        ret = wait_ov(ctx, "open", &bytes);
+    else
+        ret = GetLastError();
+    if (ret) {
+        CLIPLOG("%s: v4v_open error %d\n", __FUNCTION__, ret);
         return -1;
     }
     id.addr.port = port;
     id.addr.domain = V4V_DOMID_ANY;
     id.partner = domain;
-    ret = v4v_bind(ctx, &id, NULL);
-    if (!ret) {
-        CLIPLOG("%s: v4v_bind error %d", __FUNCTION__, ret);
-        v4v_close(ctx);
+    ResetEvent(ctx->ev);
+    ret = v4v_bind(&ctx->v4v, &id, &ctx->ov);
+    if (!ret && GetLastError() == ERROR_IO_PENDING)
+        ret = wait_ov(ctx, "bind", &bytes);
+    else
+        ret = GetLastError();
+    if (ret) {
+        CLIPLOG("%s: v4v_bind error %d\n", __FUNCTION__, ret);
+        v4v_close(&ctx->v4v);
         return -1;
     }
     return 0;
@@ -86,7 +124,9 @@ clip_open(int domain, int port, void* (*mem_alloc)(size_t),
     ctx->alloc = mem_alloc;
     ctx->free = mem_free;
     ctx->ev = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (connect_v4v(&ctx->v4v, domain, port)) {
+    memset(&ctx->ov, 0, sizeof(ctx->ov));
+    ctx->ov.hEvent = ctx->ev;
+    if (connect_v4v(ctx, domain, port)) {
         free(ctx);
         return NULL;
     }
@@ -113,40 +153,35 @@ void
 clip_cancel_io(struct clip_ctx* ctx)
 {
     SetEvent(ctx->v4v.recv_event);
+    SetEvent(ctx->ev);
 }
 
 static int
 read_file_timeout(struct clip_ctx *ctx, LPVOID buf, DWORD len, DWORD *nout)
 {
-    OVERLAPPED ov;
     HANDLE h = ctx->v4v.v4v_handle;
-    int ret;
 
     *nout = 0;
-    memset(&ov, 0, sizeof(ov));
-    ov.hEvent = ctx->ev;
-    ResetEvent(ov.hEvent);
-    if (!ReadFile(h, buf, len, NULL, &ov)) {
+    ResetEvent(ctx->ev);
+    if (!ReadFile(h, buf, len, NULL, &ctx->ov)) {
         if (GetLastError() != ERROR_IO_PENDING)
             return (int)GetLastError();
     }
-    ret = WaitForSingleObject(ctx->ev, CLIP_TIMEOUT);
-    switch (ret) {
-    case WAIT_TIMEOUT:
-        CLIPLOG("clipboard: read timeout");
-        break;
-    case WAIT_OBJECT_0:
-        ret = 0;
-        if (!GetOverlappedResult(h, &ov, nout, FALSE))
-            ret = (int)GetLastError();
-        break;
-    default:
-        CLIPLOG("clipboard: wait error %d\n", ret);
-        break;
+    return wait_ov(ctx, "read", nout);
+}
+
+static int
+write_file_timeout(struct clip_ctx *ctx, LPVOID buf, DWORD len, DWORD *nout)
+{
+    HANDLE h = ctx->v4v.v4v_handle;
+
+    *nout = 0;
+    ResetEvent(ctx->ev);
+    if (!WriteFile(h, buf, len, NULL, &ctx->ov)) {
+        if (GetLastError() != ERROR_IO_PENDING)
+            return (int)GetLastError();
     }
-    if (ret)
-        CancelIoEx(h, &ov);
-    return ret;
+    return wait_ov(ctx, "write", nout);
 }
 
 static int
@@ -180,6 +215,7 @@ _send_ack(struct clip_ctx *ctx, int isnack)
 {
     struct clip_msg msg;
     DWORD written;
+    int ret;
 
     memset(&msg, 0, sizeof(msg));
     msg.dgram.addr.port = ctx->port;
@@ -188,8 +224,9 @@ _send_ack(struct clip_ctx *ctx, int isnack)
     msg.magic = CLIP_MAGIC;
     msg.type = isnack ? CLIP_MSG_NACK : CLIP_MSG_ACK;
 
-    if (!WriteFile(ctx->v4v.v4v_handle, &msg, sizeof(msg), &written, NULL))
-        return (int)GetLastError();
+    ret = write_file_timeout(ctx, &msg, sizeof(msg), &written);
+    if (ret)
+        return ret;
     if (written != sizeof(msg)) {
         CLIPLOG("short write, have %d expected %d\n", (int)written, (int)sizeof(msg));
         return -1;
@@ -233,8 +270,9 @@ clip_send_bytes(struct clip_ctx *ctx, void *data, int len)
     msg->seqid = seqid++;
     msg->data_totallen = len;
 
-    if (!WriteFile(ctx->v4v.v4v_handle, msg, sizeof(*msg), &written, NULL))
-        return (int)GetLastError();
+    ret = write_file_timeout(ctx, msg, sizeof(*msg), &written);
+    if (ret)
+        return ret;
     if (written != sizeof(*msg)) {
         CLIPLOG("short write, have %d expected %d\n", (int)written, (int)sizeof(*msg));
         return -1;
@@ -260,9 +298,10 @@ clip_send_bytes(struct clip_ctx *ctx, void *data, int len)
         msg->data_offset = offset;
         msg->data_totallen = len;
         memcpy(msg->data, p, chunk);
-        if (!WriteFile(ctx->v4v.v4v_handle, msg, sizeof(*msg) + chunk, &written, NULL)) {
-            CLIPLOG("write error %d\n", (int)GetLastError());
-            return (int)GetLastError();
+        ret = write_file_timeout(ctx, msg, sizeof(*msg) + chunk, &written);
+        if (ret) {
+            CLIPLOG("write error %d\n", ret);
+            return ret;
         }
         if (written != sizeof(*msg) + chunk) {
             CLIPLOG("short write, have %d expected %d\n", (int)written, (int)sizeof(*msg) + chunk);
