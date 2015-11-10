@@ -8,7 +8,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -175,7 +175,7 @@ uxen_unmap_page(const void *va)
 }
 
 static inline void
-uxen_access_domain_page(const void *va)
+uxen_access_page(const void *va)
 {
 #ifdef __i386__
 #ifdef DEBUG_MAPCACHE
@@ -205,6 +205,14 @@ uxen_unmap_domain_page(const void *va)
 
     perfc_incr(unmap_domain_page_count);
     uxen_unmap_page(va);
+}
+
+static inline void
+uxen_access_domain_page(const void *va)
+{
+
+    perfc_incr(access_domain_page_count);
+    uxen_access_page(va);
 }
 
 static inline void *

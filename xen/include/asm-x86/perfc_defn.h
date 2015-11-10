@@ -44,6 +44,7 @@ PERFCOUNTER(copy_user_faults,       "copy_user faults")
 
 PERFCOUNTER(map_domain_page_count,  "map_domain_page count")
 PERFCOUNTER(unmap_domain_page_count,  "unmap_domain_page count")
+PERFCOUNTER(access_domain_page_count,  "access_domain_page count")
 PERFCOUNTER(map_domain_page_global_count,  "map_domain_page_global count")
 PERFCOUNTER(unmap_domain_page_global_count,  "unmap_domain_page_global count")
 PERFCOUNTER(map_domain_page_direct_count,  "map_domain_page_direct count")

@@ -530,13 +530,13 @@ void p2m_teardown(struct p2m_domain *p2m)
 #endif  /* __UXEN__ */
 
     if (p2m->ept.se_l1_table) {
-        unmap_domain_page_global(p2m->ept.se_l1_table);
+        unmap_domain_page(p2m->ept.se_l1_table);
         p2m->ept.se_l1_table = NULL;
     }
 
     for (i = 0; i < NR_GE_L1_CACHE; i++) {
         if (p2m->ept.ge_l1_table[i]) {
-            unmap_domain_page_global(p2m->ept.ge_l1_table[i]);
+            unmap_domain_page(p2m->ept.ge_l1_table[i]);
             p2m->ept.ge_l1_table[i] = NULL;
         }
     }
