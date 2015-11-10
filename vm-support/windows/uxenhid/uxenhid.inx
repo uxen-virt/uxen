@@ -24,10 +24,10 @@ uxenhid.sys=1
 1=%DISK_NAME%,
 
 [uXenMfg.NT$ARCH$]
-%uXenHID.DEVDESC%=uXenHIDInst,uxenhid; ACPI Compatible name
+%uXenHID.DEVDESC%=uXenHIDInst, uxenplatform\uxenhid
 
 [uXenMfg.NT$ARCH$.6.1]
-%uXenHID.DEVDESC%=uXenHIDInst.Win7,uxenhid; ACPI Compatible name
+%uXenHID.DEVDESC%=uXenHIDInst.Win7, uxenplatform\uxenhid
 
 [uXenHIDInst.NT]
 CopyFiles=uXenHIDInst.NT.Copy

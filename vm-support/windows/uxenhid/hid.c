@@ -9,6 +9,8 @@
 
 #include "uxenhid.h"
 
+#include "platform_public.h"
+
 static const wchar_t manufacturer_str[] = L"uXen";
 static const wchar_t product_str[] = L"v4v HID device";
 static const wchar_t serial_number[] = L"0.001";
@@ -483,6 +485,7 @@ NTSTATUS
 hid_init(DEVICE_EXTENSION *devext)
 {
     NTSTATUS status;
+    ULONG addr; ULONG addr_len;
 
     InitializeListHead(&devext->pending_request_list);
     KeInitializeSpinLock(&devext->pending_request_lock);
@@ -531,9 +534,18 @@ hid_init(DEVICE_EXTENSION *devext)
 
     KeInitializeSpinLock(&devext->v4v_lock);
 
-    devext->peer.port = UXENHID_V4V_PORT_BASE;
+    status = IoGetDeviceProperty(devext->pdo,
+                                 DevicePropertyAddress,
+                                 sizeof(addr),
+                                 &addr, &addr_len);
+    if (!NT_SUCCESS(status)) {
+        uxen_err("IoGetDeviceProperty() failed: 0x%08x", status);
+        return status;
+    }
+
+    devext->peer.port = UXENHID_V4V_PORT_BASE + addr;
     devext->peer.domain = 0;
-    devext->ring = uxen_v4v_ring_bind(UXENHID_V4V_PORT_BASE, 0,
+    devext->ring = uxen_v4v_ring_bind(UXENHID_V4V_PORT_BASE + addr, 0,
                                       UXENHID_V4V_RING_LEN,
                                       hid_v4v_cb, devext, NULL);
     if (!devext->ring)
