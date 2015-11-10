@@ -366,16 +366,6 @@ DefinitionBlock ("DSDT.aml", "DSDT", 2, "Xen", "HVM", 0)
 		}
 	    }
 
-            Device(UXH) {
-                Name(_HID, EISAID("UXH0000"))
-                Name(_CID, "uxenhid")
-
-                /* Status method bits 0 - present, 1 - enabled and decoding, 2 - show in device manager, 3 - passed self test */
-                Method (_STA, 0, NotSerialized) {
-                    return(0x0F)
-                }
-            }
-
             Device(SMC) {
                 Name(_HID, EISAID("APP0001"))
                 Name(_CID, "smc-napa")

@@ -1,12 +1,11 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
 
 #include <dm/qemu_glue.h>
 #include <dm/dev.h>
-#include <dm/qemu/hw/isa.h>
 
 #include "../config.h"
 
@@ -20,6 +19,8 @@
 #define V4V_USE_INLINE_API
 #include <windows/uxenv4vlib/gh_v4vapi.h>
 
+#include "uxen_platform.h"
+#include <uxen/platform_interface.h>
 #include "uxen_hid.h"
 #include "uxenhid-common.h"
 
@@ -29,9 +30,13 @@ uint64_t hid_touch_enabled = 0;
 #define _ENC16(v) _ENC8(v), _ENC8((v) >> 8)
 #define _ENC32(v) _ENC16(v), _ENC16((v) >> 16)
 
-static struct uxenhid_state {
-    ISADevice dev;
+struct uxenhid_state {
+    UXenPlatformDevice dev;
 
+    const char *report_descriptor;
+    size_t report_descriptor_len;
+
+    uint32_t v4v_port;
     v4v_context_t v4v_context;
     HANDLE rx_event;
     HANDLE tx_event;
@@ -48,7 +53,7 @@ static struct uxenhid_state {
             uint8_t data[UXENHID_MAX_MSG_LEN];
         } buf;
     } async_read;
-} *hid_state = NULL;
+};
 
 struct async_buf {
     TAILQ_ENTRY(async_buf) link;
@@ -219,6 +224,10 @@ static const char report_descriptor_touch[] = {
     0xc0                               /* END_COLLECTION */
 };
 
+static struct uxenhid_state *mouse_state = NULL;
+static struct uxenhid_state *pen_state = NULL;
+static struct uxenhid_state *touch_state = NULL;
+
 static struct async_buf *
 alloc_async_buf(DWORD len, void **data, v4v_addr_t addr)
 {
@@ -285,10 +294,13 @@ int uxenhid_send_mouse_report(uint8_t buttons, uint16_t x, uint16_t y,
         struct mouse_report report;
     } __attribute__ ((packed)) *buf;
     DWORD msglen = sizeof (*buf);
-    v4v_addr_t addr = { .port = UXENHID_PORT, .domain = vm_id };
+    v4v_addr_t addr;
 
-    if (!hid_state || !hid_state->ready)
+    if (!mouse_state || !mouse_state->ready)
         return -1;
+
+    addr.port = mouse_state->v4v_port;
+    addr.domain = vm_id;
 
     b = alloc_async_buf(msglen, (void **)&buf, addr);
     if (!b)
@@ -304,7 +316,7 @@ int uxenhid_send_mouse_report(uint8_t buttons, uint16_t x, uint16_t y,
     buf->report.wheel = wheel;
     buf->report.hwheel = hwheel;
 
-    return send_async(hid_state, b, msglen);
+    return send_async(mouse_state, b, msglen);
 }
 
 int uxenhid_send_pen_report(uint16_t x, uint16_t y, uint8_t flags,
@@ -316,10 +328,13 @@ int uxenhid_send_pen_report(uint16_t x, uint16_t y, uint8_t flags,
         struct pen_report report;
     } __attribute__ ((packed)) *buf;
     DWORD msglen = sizeof (*buf);
-    v4v_addr_t addr = { .port = UXENHID_PORT, .domain = vm_id };
+    v4v_addr_t addr;
 
-    if (!hid_touch_enabled || !hid_state || !hid_state->ready)
+    if (!pen_state || !pen_state->ready)
         return -1;
+
+    addr.port = pen_state->v4v_port;
+    addr.domain = vm_id;
 
     b = alloc_async_buf(msglen, (void **)&buf, addr);
     if (!b)
@@ -334,7 +349,7 @@ int uxenhid_send_pen_report(uint16_t x, uint16_t y, uint8_t flags,
     buf->report.flags = flags;
     buf->report.pressure = pressure;
 
-    return send_async(hid_state, b, msglen);
+    return send_async(pen_state, b, msglen);
 }
 
 int uxenhid_send_touch_report(uint8_t contact_count, uint16_t contact_id,
@@ -348,10 +363,13 @@ int uxenhid_send_touch_report(uint8_t contact_count, uint16_t contact_id,
         struct touch_report report;
     }  __attribute__ ((packed)) *buf;
     DWORD msglen = sizeof (*buf);
-    v4v_addr_t addr = { .port = UXENHID_PORT, .domain = vm_id };
+    v4v_addr_t addr;
 
-    if (!hid_touch_enabled || !hid_state || !hid_state->ready)
+    if (!touch_state || !touch_state->ready)
         return -1;
+
+    addr.port = touch_state->v4v_port;
+    addr.domain = vm_id;
 
     b = alloc_async_buf(msglen, (void **)&buf, addr);
     if (!b)
@@ -369,7 +387,7 @@ int uxenhid_send_touch_report(uint8_t contact_count, uint16_t contact_id,
     buf->report.flags = flags | 0x4;
     buf->report.contact_count = contact_count;
 
-    return send_async(hid_state, b, msglen);
+    return send_async(touch_state, b, msglen);
 }
 
 static int
@@ -381,10 +399,13 @@ uxenhid_send_max_contact_count_report(void)
         struct max_contact_count_report report;
     } __attribute__ ((packed)) *buf;
     DWORD msglen = sizeof (*buf);
-    v4v_addr_t addr = { .port = UXENHID_PORT, .domain = vm_id };
+    v4v_addr_t addr;
 
-    if (!hid_touch_enabled || !hid_state || !hid_state->ready)
+    if (!touch_state || !touch_state->ready)
         return -1;
+
+    addr.port = touch_state->v4v_port;
+    addr.domain = vm_id;
 
     b = alloc_async_buf(msglen, (void **)&buf, addr);
     if (!b)
@@ -396,7 +417,7 @@ uxenhid_send_max_contact_count_report(void)
     buf->report.report_id = UXENHID_REPORT_ID_MAX_CONTACT_COUNT;
     buf->report.max_contact_count = 11;
 
-    return send_async(hid_state, b, msglen);
+    return send_async(touch_state, b, msglen);
 }
 
 static void
@@ -427,26 +448,13 @@ uxenhid_recv(struct uxenhid_state *s, v4v_datagram_t *dgram,
         {
             uint8_t *p;
 
-            reply_len = sizeof(*reply) + sizeof(report_descriptor_mouse);
-            if (hid_touch_enabled) {
-                reply_len += sizeof(report_descriptor_pen) +
-                             sizeof(report_descriptor_touch);
-            }
+            reply_len = sizeof(*reply) + s->report_descriptor_len;
             b = alloc_async_buf(reply_len, (void **)&reply, dgram->addr);
             if (!b)
                 return;
 
             p = (uint8_t *)(reply + 1);
-            memcpy(p, report_descriptor_mouse,
-                   sizeof(report_descriptor_mouse));
-            if (hid_touch_enabled) {
-                p += sizeof (report_descriptor_mouse);
-                memcpy(p, report_descriptor_pen,
-                       sizeof(report_descriptor_pen));
-                p += sizeof (report_descriptor_pen);
-                memcpy(p, report_descriptor_touch,
-                       sizeof(report_descriptor_touch));
-            }
+            memcpy(p, s->report_descriptor, s->report_descriptor_len);
 
             reply->type = UXENHID_REQUEST_REPORT_DESCRIPTOR;
             reply->msglen = reply_len;
@@ -555,54 +563,46 @@ tx_complete(void *opaque)
     critical_section_leave(&s->async_write_lock);
 }
 
-#if 0
-void
-uxenhid_cleanup(void)
+static int
+uxenhid_exit(UXenPlatformDevice *dev)
 {
+    struct uxenhid_state *s = DO_UPCAST(struct uxenhid_state, dev, dev);
     struct async_buf *b, *bn;
 
-    critical_section_enter(&async_write_lock);
-    TAILQ_FOREACH_SAFE(b, &async_write_list, link, bn) {
+    critical_section_enter(&s->async_write_lock);
+    TAILQ_FOREACH_SAFE(b, &s->async_write_list, link, bn) {
         DWORD bytes;
 
-        if (CancelIoEx(v4v_context.v4v_handle, &b->ovlp) ||
+        if (CancelIoEx(s->v4v_context.v4v_handle, &b->ovlp) ||
             GetLastError() != ERROR_NOT_FOUND)
-            GetOverlappedResult(v4v_context.v4v_handle, &b->ovlp, &bytes, TRUE);
+            GetOverlappedResult(s->v4v_context.v4v_handle, &b->ovlp, &bytes, TRUE);
 
-        TAILQ_REMOVE(&async_write_list, b, link);
+        TAILQ_REMOVE(&s->async_write_list, b, link);
         free_async_buf(b, b->len);
     }
-    critical_section_leave(&async_write_lock);
-    CancelIoEx(v4v_context.v4v_handle, &async_read.ovlp);
+    critical_section_leave(&s->async_write_lock);
+    CancelIoEx(s->v4v_context.v4v_handle, &s->async_read.ovlp);
 
-    ioh_del_wait_object(&rx_event, NULL);
-    ioh_del_wait_object(&tx_event, NULL);
+    ioh_del_wait_object(&s->rx_event, NULL);
+    ioh_del_wait_object(&s->tx_event, NULL);
 
-    v4v_close(&v4v_context);
+    v4v_close(&s->v4v_context);
 
-    CloseHandle(tx_event);
-    CloseHandle(rx_event);
+    CloseHandle(s->tx_event);
+    CloseHandle(s->rx_event);
 
-    critical_section_free(&async_write_lock);
-}
-#endif
+    critical_section_free(&s->async_write_lock);
 
-static void
-uxenhid_isa_reset(DeviceState *dev)
-{
-
+    return 0;
 }
 
 static int
-uxenhid_isa_init(ISADevice *dev)
+uxenhid_init(UXenPlatformDevice *dev)
 {
     struct uxenhid_state *s = DO_UPCAST(struct uxenhid_state, dev, dev);
     v4v_ring_id_t id;
     OVERLAPPED o;
     DWORD t;
-
-    if (hid_state)
-        return -1;
 
     s->ready = 0;
 
@@ -613,13 +613,16 @@ uxenhid_isa_init(ISADevice *dev)
         return -1;
     }
 
-    id.addr.port = UXENHID_PORT;
+    s->v4v_port = UXENHID_PORT + uxenplatform_device_get_instance_id(dev);
+
+    id.addr.port = s->v4v_port;
     id.addr.domain = V4V_DOMID_ANY;
     id.partner = vm_id;
 
+    memset(&o, 0, sizeof(o));
     if (!v4v_bind(&s->v4v_context, &id, &o) ||
         !GetOverlappedResult(s->v4v_context.v4v_handle, &o, &t, TRUE)) {
-        Wwarn("%s: v4v_bind", __FUNCTION__);
+        Wwarn("%s: v4v_bind", __FUNCTION__, id.addr.port);
         v4v_close(&s->v4v_context);
         return -1;
     }
@@ -647,18 +650,74 @@ uxenhid_isa_init(ISADevice *dev)
 
     rx_start(s);
 
-    uxenhid_isa_reset(&dev->qdev);
-
-    hid_state = s;
-
     return 0;
 }
 
-static ISADeviceInfo uxenhid_isa_info = {
+int
+uxenhid_create_devices(void)
+{
+    UXenPlatformDevice *dev;
+    int ret = -1;
+
+    dev = uxenplatform_device_create("uxen_hid");
+    if (!dev)
+        goto err;
+    mouse_state = DO_UPCAST(struct uxenhid_state, dev, dev);
+    mouse_state->report_descriptor = report_descriptor_mouse;
+    mouse_state->report_descriptor_len = sizeof(report_descriptor_mouse);
+    ret = qdev_init(&dev->qdev);
+    if (ret < 0)
+        goto err;
+
+    if (hid_touch_enabled) {
+        dev = uxenplatform_device_create("uxen_hid");
+        if (!dev)
+            goto err;
+        pen_state = DO_UPCAST(struct uxenhid_state, dev, dev);
+        pen_state->report_descriptor = report_descriptor_pen;
+        pen_state->report_descriptor_len = sizeof(report_descriptor_pen);
+        ret = qdev_init(&dev->qdev);
+        if (ret < 0)
+            goto err;
+    }
+
+    if (hid_touch_enabled) {
+        dev = uxenplatform_device_create("uxen_hid");
+        if (!dev)
+            goto err;
+        touch_state = DO_UPCAST(struct uxenhid_state, dev, dev);
+        touch_state->report_descriptor = report_descriptor_touch;
+        touch_state->report_descriptor_len = sizeof(report_descriptor_touch);
+        ret = qdev_init(&dev->qdev);
+        if (ret < 0)
+            goto err;
+    }
+
+    return 0;
+err:
+    if (touch_state) {
+        qdev_free(&touch_state->dev.qdev);
+        touch_state = NULL;
+    }
+    if (pen_state) {
+        qdev_free(&pen_state->dev.qdev);
+        pen_state = NULL;
+    }
+    if (mouse_state) {
+        qdev_free(&mouse_state->dev.qdev);
+        mouse_state = NULL;
+    }
+
+    return ret;
+}
+
+static UXenPlatformDeviceInfo uxenhid_info = {
     .qdev.name = "uxen_hid",
     .qdev.size = sizeof(struct uxenhid_state),
-    .qdev.reset = uxenhid_isa_reset,
-    .init = uxenhid_isa_init,
+    .init = uxenhid_init,
+    .exit = uxenhid_exit,
+    .unplug = NULL,
+    .devtype = UXENBUS_DEVICE_TYPE_HID,
     .qdev.props = (Property[]) {
         DEFINE_PROP_END_OF_LIST(),
     },
@@ -667,7 +726,7 @@ static ISADeviceInfo uxenhid_isa_info = {
 static void
 uxenhid_register_devices(void)
 {
-    isa_qdev_register(&uxenhid_isa_info);
+    uxenplatform_qdev_register(&uxenhid_info);
 }
 
 device_init(uxenhid_register_devices);

@@ -394,7 +394,8 @@ pc_init_xen(void)
 #endif
 
 #ifndef __APPLE__
-    isa_create_simple("uxen_hid");
+    int uxenhid_create_devices(void);
+    uxenhid_create_devices();
 #endif
 
     isa_create_simple("uxen_debug");
