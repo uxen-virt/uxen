@@ -869,10 +869,12 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
     uxen_info->ui_map_page = uxen_mem_map_page;
     uxen_info->ui_unmap_page_va = uxen_mem_unmap_page_va;
     uxen_info->ui_access_page_va = uxen_mem_access_page_va;
+    uxen_info->ui_map_page_global = uxen_mem_map_page;
+    uxen_info->ui_unmap_page_global_va = uxen_mem_unmap_page_va;
     uxen_info->ui_map_page_range = uxen_mem_map_page_range;
     uxen_info->ui_unmap_page_range = uxen_mem_unmap_page_range;
-    uxen_info->ui_mapped_va_pfn = uxen_mem_mapped_va_pfn;
-    uxen_info->ui_mapped_pfn_va = uxen_mem_mapped_pfn_va;
+    uxen_info->ui_mapped_global_va_pfn = uxen_mem_mapped_va_pfn;
+    uxen_info->ui_mapped_global_pfn_va = uxen_mem_mapped_pfn_va;
 
     uxen_info->ui_max_page = max_pfn;
 

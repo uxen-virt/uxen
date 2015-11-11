@@ -174,6 +174,40 @@ uxen_unmap_page(const void *va)
 #endif
 }
 
+static inline void *
+uxen_map_page_global(unsigned long mfn)
+{
+    void *_v;
+
+    _v = UI_HOST_CALL(ui_map_page_global, mfn);
+#ifdef DEBUG_MAPCACHE
+    if (_v) {
+        struct page_info *_pg;
+        _pg = __mfn_to_page(mfn);
+        atomic_inc(&_pg->mapped);
+        _pg->lastmap = current_text_addr();
+        _pg->lastmap0 = __builtin_return_address(0);
+    }
+#endif  /* DEBUG_MAPCACHE */
+    return _v;
+}
+
+static inline void
+uxen_unmap_page_global(const void *va)
+{
+#ifdef __i386__
+#ifdef DEBUG_MAPCACHE
+    unsigned long _mfn;
+
+    _mfn = UI_HOST_CALL(ui_unmap_page_global_va, va);
+    ASSERT(_mfn != INVALID_MFN);
+    atomic_dec(&mfn_to_page(_mfn)->mapped);
+#else  /* DEBUG_MAPCACHE */
+    UI_HOST_CALL(ui_unmap_page_global_va, va);
+#endif  /* DEBUG_MAPCACHE */
+#endif
+}
+
 static inline void
 uxen_access_page(const void *va)
 {
@@ -220,7 +254,7 @@ uxen_map_domain_page_global(unsigned long mfn)
 {
 
     perfc_incr(map_domain_page_global_count);
-    return uxen_map_page(mfn);
+    return uxen_map_page_global(mfn);
 }
 
 static inline void
@@ -228,7 +262,7 @@ uxen_unmap_domain_page_global(const void *va)
 {
 
     perfc_incr(unmap_domain_page_global_count);
-    uxen_unmap_page(va);
+    uxen_unmap_page_global(va);
 }
 
 static inline void *

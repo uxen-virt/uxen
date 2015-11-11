@@ -679,10 +679,12 @@ uxen_op_init(struct fd_assoc *fda)
     uxen_info->ui_map_page = map_page;
     uxen_info->ui_unmap_page_va = unmap_page_va;
     uxen_info->ui_access_page_va = access_page_va;
+    uxen_info->ui_map_page_global = map_page;
+    uxen_info->ui_unmap_page_global_va = unmap_page_va;
     uxen_info->ui_map_page_range = map_page_range;
     uxen_info->ui_unmap_page_range = unmap_page_range;
-    uxen_info->ui_mapped_va_pfn = physmap_va_to_pfn;
-    uxen_info->ui_mapped_pfn_va = map_page;
+    uxen_info->ui_mapped_global_va_pfn = physmap_va_to_pfn;
+    uxen_info->ui_mapped_global_pfn_va = map_page;
 
     uxen_info->ui_max_page = max_pfn;
 

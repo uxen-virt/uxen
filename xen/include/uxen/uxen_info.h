@@ -56,34 +56,36 @@
 
 #define UI_HOST_CALL_SAVE_NOTHING 0,
 
-#define UI_HOST_CALL_ui_printf              UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_kick_cpu            UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_kick_vcpu           UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_kick_vcpu_cancel    UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_signal_idle_thread  UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_set_timer_vcpu      UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_get_unixtime        UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_get_host_counter    UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_wake_vm             UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_on_selected_cpus    UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_map_page            UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_unmap_page_va       UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_access_page_va      UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_map_page_range      UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_unmap_page_range    UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_mapped_va_pfn       UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_mapped_pfn_va       UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_host_needs_preempt  UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_notify_exception    UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_notify_vram         UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_signal_event        UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_check_ioreq         UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_memcache_check      UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_memcache_dm_enter   UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_memcache_dm_clear   UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_memcache_dm_map_mfn UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_user_access_ok      UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_signal_v4v          UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_printf                      UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_kick_cpu                    UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_kick_vcpu                   UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_kick_vcpu_cancel            UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_signal_idle_thread          UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_set_timer_vcpu              UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_get_unixtime                UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_get_host_counter            UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_wake_vm                     UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_on_selected_cpus            UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_map_page_global             UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_unmap_page_global_va        UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_map_page                    UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_unmap_page_va               UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_access_page_va              UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_map_page_range              UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_unmap_page_range            UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_mapped_global_va_pfn        UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_mapped_global_pfn_va        UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_host_needs_preempt          UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_notify_exception            UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_notify_vram                 UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_signal_event                UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_check_ioreq                 UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_memcache_check              UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_memcache_dm_enter           UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_memcache_dm_clear           UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_memcache_dm_map_mfn         UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_user_access_ok              UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_signal_v4v                  UI_HOST_CALL_SAVE_XMM
 
 
 #define UI_HOST_CALL(...) \
@@ -187,6 +189,8 @@ struct /* __WINPACKED__ */ uxen_info {
     void (__interface_fn *ui_on_selected_cpus)(const void *,
 					       __interface_fn_fn
                                                uintptr_t (*)(uintptr_t));
+    void *(__interface_fn *ui_map_page_global)(xen_pfn_t);
+    uint64_t (__interface_fn *ui_unmap_page_global_va)(const void *);
     void *(__interface_fn *ui_map_page)(xen_pfn_t);
     uint64_t (__interface_fn *ui_unmap_page_va)(const void *);
     uint64_t (__interface_fn *ui_access_page_va)(const void *);
@@ -195,8 +199,8 @@ struct /* __WINPACKED__ */ uxen_info {
                                                    uxen_pfn_t *);
     uint32_t ui_map_page_range_offset;
     uint32_t ui_map_page_range_max_nr;
-    uxen_pfn_t (__interface_fn *ui_mapped_va_pfn)(const void *);
-    void *(__interface_fn *ui_mapped_pfn_va)(xen_pfn_t);
+    uxen_pfn_t (__interface_fn *ui_mapped_global_va_pfn)(const void *);
+    void *(__interface_fn *ui_mapped_global_pfn_va)(xen_pfn_t);
     void **ui_dom0_current;
     uint64_t (__interface_fn *ui_host_needs_preempt)(
         struct vm_vcpu_info_shared *);
