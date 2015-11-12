@@ -22,6 +22,7 @@ typedef struct _FILE_ID_BOTH_DIR_INFO {
     LARGE_INTEGER    FileId;
     WCHAR    FileName[1];
 } FILE_ID_BOTH_DIR_INFO,*PFILE_ID_BOTH_DIR_INFO,*LPFILE_ID_BOTH_DIR_INFO;
+
 typedef enum _FILE_INFO_BY_HANDLE_CLASS {
     FileBasicInfo,
     FileStandardInfo,
@@ -39,6 +40,16 @@ typedef enum _FILE_INFO_BY_HANDLE_CLASS {
     FileRemoteProtocolInfo,
     MaximumFileInfoByHandlesClass
 } FILE_INFO_BY_HANDLE_CLASS,*PFILE_INFO_BY_HANDLE_CLASS;
+
+/* https://msdn.microsoft.com/en-us/library/windows/desktop/aa364401(v=vs.85).aspx */
+typedef struct _FILE_STANDARD_INFO {
+    LARGE_INTEGER AllocationSize;
+    LARGE_INTEGER EndOfFile;
+    DWORD         NumberOfLinks;
+    BOOLEAN       DeletePending;
+    BOOLEAN       Directory;
+} FILE_STANDARD_INFO, *PFILE_STANDARD_INFO;
+
 #define CreateSymbolicLink __AW(CreateSymbolicLink)
 WINBASEAPI BOOL WINAPI CreateSymbolicLinkA(LPCSTR,LPCSTR,DWORD);
 WINBASEAPI BOOL WINAPI CreateSymbolicLinkW(LPCWSTR,LPCWSTR,DWORD);
