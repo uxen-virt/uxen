@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -1045,7 +1045,8 @@ uxenhid_send_start_stop(DEVICE_EXTENSION *devext, UXENHID_MSG_TYPE type)
                 status = ctx.status;
 
             return status;
-        }
+        } else if (ret == -ECONNREFUSED)
+            return STATUS_VIRTUAL_CIRCUIT_CLOSED;
 
         uxen_err("uxen_v4v_send_from_ring_async() failed: %d", ret);
 
@@ -1064,5 +1065,11 @@ hid_start(DEVICE_EXTENSION *devext)
 NTSTATUS
 hid_stop(DEVICE_EXTENSION *devext)
 {
-    return uxenhid_send_start_stop(devext, UXENHID_DEVICE_STOP);
+    NTSTATUS status;
+
+    status = uxenhid_send_start_stop(devext, UXENHID_DEVICE_STOP);
+    if (status == STATUS_VIRTUAL_CIRCUIT_CLOSED)
+        status = STATUS_SUCCESS;
+
+    return status;
 }

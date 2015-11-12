@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -356,12 +356,6 @@ uxenhid_pnp(PDEVICE_OBJECT devobj, PIRP irp)
         break;
     case IRP_MN_REMOVE_DEVICE:
         uxen_msg("REMOVE_DEVICE");
-        status = remove_device(devext, irp);
-        if (NT_SUCCESS(status))
-            return status;
-        break;
-    case IRP_MN_SURPRISE_REMOVAL:
-        uxen_msg("SURPRISE_REMOVAL");
         status = remove_device(devext, irp);
         if (NT_SUCCESS(status))
             return status;
