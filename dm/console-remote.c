@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -220,6 +220,14 @@ handle_message(struct uxenconsole_msg_header *hdr)
             if (msg->permit_type & CLIPBOARD_PERMIT_PASTE)
                 uxen_clipboard_allow_paste_access();
 #endif
+        }
+        break;
+    case UXENCONSOLE_MSG_TYPE_TOUCH_DEVICE_HOTPLUG:
+        {
+            struct uxenconsole_msg_touch_device_hotplug *msg = (void *)hdr;
+            void hotplug_touch_devices(int plug);
+
+            hotplug_touch_devices(msg->plug);
         }
         break;
     default:

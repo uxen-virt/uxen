@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -342,7 +342,12 @@ static mon_cmd_t mon_cmds[] = {
     { .name ="audio-mute", .mhandler.cmd = mc_vm_audio_mute,
       .args_type = "n:mute", .help = "mute/unmute guest audio" },
 #endif
-
+#ifndef OSX_NOT_YET
+    { .name = "touch-plug", .mhandler.cmd = mc_touch_plug,
+      .help = "Plug touch devices" },
+    { .name = "touch-unplug", .mhandler.cmd = mc_touch_unplug,
+      .help = "Unplug touch devices" },
+#endif
 };
 
 static void ic_version(Monitor *mon);

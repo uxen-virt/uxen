@@ -711,6 +711,55 @@ err:
     return ret;
 }
 
+void hotplug_touch_devices(int plug)
+{
+    if (!plug) {
+        if (pen_state) {
+            qdev_unplug(&pen_state->dev.qdev);
+            qdev_free(&pen_state->dev.qdev);
+            pen_state = NULL;
+        }
+
+        if (touch_state) {
+            qdev_unplug(&touch_state->dev.qdev);
+            qdev_free(&touch_state->dev.qdev);
+            touch_state = NULL;
+        }
+    } else {
+        UXenPlatformDevice *dev;
+
+        if (!pen_state) {
+            dev = uxenplatform_device_create("uxen_hid");
+            pen_state = DO_UPCAST(struct uxenhid_state, dev, dev);
+            pen_state->report_descriptor = report_descriptor_pen;
+            pen_state->report_descriptor_len = sizeof(report_descriptor_pen);
+            qdev_init(&dev->qdev);
+        }
+
+        if (!touch_state) {
+            dev = uxenplatform_device_create("uxen_hid");
+            touch_state = DO_UPCAST(struct uxenhid_state, dev, dev);
+            touch_state->report_descriptor = report_descriptor_touch;
+            touch_state->report_descriptor_len = sizeof(report_descriptor_touch);
+            qdev_init(&dev->qdev);
+        }
+    }
+}
+
+#ifdef MONITOR
+void
+mc_touch_unplug(Monitor *mon, const dict args)
+{
+    hotplug_touch_devices(0);
+}
+
+void
+mc_touch_plug(Monitor *mon, const dict args)
+{
+    hotplug_touch_devices(1);
+}
+#endif
+
 static UXenPlatformDeviceInfo uxenhid_info = {
     .qdev.name = "uxen_hid",
     .qdev.size = sizeof(struct uxenhid_state),
