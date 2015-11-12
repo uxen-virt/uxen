@@ -411,14 +411,13 @@ static struct work_unit *create_plan(
                 if (!us) {
                     return NULL;
                 }
-                u = &us[i];
+                u = &us[i++];
                 u->ref = ref;
                 u->n = 0;
                 u->start = -1;
                 u->size = 0;
                 u->p = p;
                 ref = NULL;
-                ++i;
             }
             u->n++;
 
@@ -636,13 +635,15 @@ decompression_thread(void *_c)
     struct thread_context *c = _c;
     struct cuckoo_callbacks *ccb = c->ccb;
     void *opaque = c->opaque;
-    uint64_t *template_pfns;
     uint64_t *pfns;
-    uint8_t *template_pages, *t;
+    uint64_t *template_pfns = NULL;
+    uint8_t *template_pages = NULL;
+    const uint8_t *t;
     uint8_t *pages;
     struct work_unit *u;
     int max;
     int i, j;
+    int last_tpfs = 0;
 
     pages = ccb->get_buffer(opaque, c->tid, &max);
     pfns = ccb->malloc(opaque, sizeof(pfns[0]) * max);
@@ -665,9 +666,13 @@ decompression_thread(void *_c)
             }
         }
 
-        template_pfns = ccb->malloc(opaque, sizeof(template_pfns[0]) *
-                                    num_tpfns);
-        template_pages = ccb->malloc(opaque, PAGE_SIZE * num_tpfns);
+        if (num_tpfns > last_tpfs) {
+            ccb->free(opaque, template_pfns);
+            ccb->free(opaque, template_pages);
+            template_pfns = ccb->malloc(opaque, sizeof(template_pfns[0]) *
+                                        num_tpfns);
+            template_pages = ccb->malloc(opaque, PAGE_SIZE * num_tpfns);
+        }
 
         for (u = s->first, num_tpfns = 0; u != s->last; ++u) {
             if (is_template(u->ref)) {
@@ -693,7 +698,7 @@ decompression_thread(void *_c)
 
             const struct cuckoo_page *ref = u->ref;
             uint8_t b[PAGE_SIZE];
-            uint8_t *base;
+            const uint8_t *base;
 
             if (is_template(ref)) {
                 base = t;
@@ -761,9 +766,6 @@ skip_template_ident:
             }
         }
 
-        ccb->free(opaque, template_pfns);
-        ccb->free(opaque, template_pages);
-
         if (s->buffer) {
             ccb->free(opaque, s->buffer);
             s->buffer = NULL;
@@ -772,6 +774,8 @@ skip_template_ident:
         thread_event_set(&s->processed);
     }
 
+    ccb->free(opaque, template_pfns);
+    ccb->free(opaque, template_pages);
     ccb->free(opaque, pfns);
     __sync_synchronize();
     return 0;
