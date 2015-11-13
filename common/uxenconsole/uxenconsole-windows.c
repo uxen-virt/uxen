@@ -860,14 +860,15 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     if (!cons.ctx)
         err(1, "uxenconsole_init");
 
-    cons.disp = uxenconsole_disp_init(domid, &cons, console_invalidate_rect);
-    if (!cons.disp)
-        err(1, "uxenconsole_disp_init");
-
-    if (domid >= 0)
+    if (domid >= 0) {
+        cons.disp = uxenconsole_disp_init(domid, &cons, console_invalidate_rect);
+        if (!cons.disp)
+            err(1, "uxenconsole_disp_init");
         cons.hid = uxenconsole_hid_init(domid);
-    else
+    } else {
+        cons.disp = NULL;
         cons.hid = NULL;
+    }
 
     printf("Connecting to %s\n", pipename);
     cons.channel_event = uxenconsole_connect(cons.ctx);
@@ -876,7 +877,8 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     printf("Connected\n");
     ret = main_loop(&cons);
 
-    uxenconsole_disp_cleanup(cons.disp);
+    if (cons.disp)
+        uxenconsole_disp_cleanup(cons.disp);
     uxenconsole_cleanup(cons.ctx);
 
     return ret;
