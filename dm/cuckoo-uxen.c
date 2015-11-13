@@ -283,23 +283,7 @@ static void unlock(void *opaque, enum cuckoo_mutex_type id)
 
 static int is_alive(void *opaque, const uuid_t uuid)
 {
-    char *fn = vm_save_file_name(uuid);
-    int r;
-
-    HANDLE f = CreateFile(fn, GENERIC_READ,
-            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, NULL,
-            OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
-
-    if (f == INVALID_HANDLE_VALUE && GetLastError() == ERROR_FILE_NOT_FOUND) {
-        r = 0;
-    } else {
-        r = 1;
-    }
-    if (f != INVALID_HANDLE_VALUE) {
-        CloseHandle(f);
-    }
-    free(fn);
-    return r;
+    return file_exists(vm_save_file_name(uuid));
 }
 
 int cuckoo_uxen_init(struct cuckoo_context **ret_context,
