@@ -149,7 +149,7 @@ swap-fsck$(EXE_SUFFIX): $(SWAP_FSCK_OBJS)
 
 img-logiccp$(EXE_SUFFIX): $(IMG_LOGICCP_OBJS) $(IMG_LIBS);
 	$(_W)echo Linking - $@
-	$(_V)$(call link,$@,$^ $(PROGRAMS_LDLIBS) $(LDLIBS) -lVersion)
+	$(_V)$(call link,$@,$^ $(PROGRAMS_LDLIBS) $(LDLIBS) -lversion)
 
 
 disklib.a: $(DISKLIB_OBJS)
