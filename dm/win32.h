@@ -253,15 +253,24 @@ static inline int file_exists(const char *path)
 {
     wchar_t *path_w = _utf8_to_wide(path);
     DWORD attr;
+    int ret;
+
     if (!path_w) {
         /* For sake of convenience we treat OOM here as 'no such file'. */
         return 0;
     }
 
     attr = GetFileAttributesW(path_w);
+    if (attr == INVALID_FILE_ATTRIBUTES &&
+            (GetLastError() == ERROR_FILE_NOT_FOUND ||
+            GetLastError() == ERROR_PATH_NOT_FOUND)) {
+        ret = 0;
+    } else {
+        ret = 1;
+    }
     free(path_w);
 
-    return (attr != INVALID_FILE_ATTRIBUTES);
+    return ret;
 }
 
 /* UTF-8 compatible wrapper for CreateFile(). */
