@@ -11,6 +11,7 @@
 #include "cuckoo-uxen.h"
 #include "dm.h"
 #include "filebuf.h"
+#include "priv-heap.h"
 #include "qemu_savevm.h"
 #include "vm.h"
 #include "vm-save.h"
@@ -26,7 +27,7 @@ struct thread_ctx {
 };
 
 struct ctx {
-    HANDLE heap;
+    heap_t heap;
     HANDLE cancel_event;
     struct thread_ctx tcs[CUCKOO_NUM_THREADS];
     HANDLE mutexes[cuckoo_num_mutexes];
@@ -38,15 +39,13 @@ struct ctx {
 static void *alloc_mem(void *opaque, size_t sz)
 {
     struct ctx *ctx = (struct ctx *) opaque;
-    return sz ? HeapAlloc(ctx->heap, 0, sz) : NULL;
+    return sz ? priv_malloc(ctx->heap, sz) : NULL;
 }
 
 static void free_mem(void *opaque, void *ptr)
 {
     struct ctx *ctx = (struct ctx *) opaque;
-    if (ptr) {
-        HeapFree(ctx->heap, 0, ptr);
-    }
+    priv_free(ctx->heap, ptr);
 }
 
 static int cancelled(void *opaque)
@@ -313,8 +312,7 @@ int cuckoo_uxen_init(struct cuckoo_context **ret_context,
     if (!ctx) {
         return -1;
     }
-    ctx->heap = HeapCreate(0, 0, 0);
-    if (!ctx->heap) {
+    if (priv_heap_create(&ctx->heap) != 0) {
         free(ctx);
         return -1;
     }
@@ -375,6 +373,6 @@ void cuckoo_uxen_close(struct cuckoo_context *cuckoo_context, void *opaque)
         CloseHandle(ctx->mutexes[i]);
         ctx->mutexes[i] = NULL;
     }
-    HeapDestroy(ctx->heap);
+    priv_heap_destroy(ctx->heap);
     free(ctx);
 }
