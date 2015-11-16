@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -8,6 +8,7 @@
 #include <IOKit/pci/IOPCIDevice.h>
 
 #include "uXenPlatform.h"
+#include "uXenPlatformDevice.h"
 
 #include "hypercall.h"
 
@@ -181,6 +182,76 @@ uXenPlatform::probe(IOService *provider, SInt32 *score)
     return ret;
 }
 
+void
+uXenPlatform::stop_devices(void)
+{
+    int i;
+
+    for (i = 0; i < UXENBUS_DEVICE_COUNT; i++) {
+        uXenPlatformDevice *nub = (uXenPlatformDevice *)nubs->getObject(i);
+        if (nub) {
+            nub->terminate();
+            nub->release();
+            nubs->removeObject(i);
+        }
+    }
+}
+
+void
+uXenPlatform::enumerate_devices(void)
+{
+    int i;
+
+    for (i = 0; i < UXENBUS_DEVICE_COUNT; i++) {
+        IODeviceMemory *config;
+        uXenPlatformDevice *nub;
+        struct uxp_bus_device desc;
+
+        config = IODeviceMemory::withSubRange(bar2, i * UXENBUS_DEVICE_CONFIG_LENGTH,
+                                              UXENBUS_DEVICE_CONFIG_LENGTH);
+        if (!config)
+            continue;
+
+        if (config->readBytes(0, &desc, sizeof(desc)) != sizeof(desc))
+            goto next;
+
+        nub = (uXenPlatformDevice *)nubs->getObject(i);
+
+        if (nub && (nub->getDeviceType() != desc.device_type ||
+                    nub->getInstanceId() != desc.instance_id)) {
+            nub->terminate();
+            nub->release();
+            nubs->removeObject(i);
+        }
+
+        if (desc.device_type != UXENBUS_DEVICE_NOT_PRESENT) {
+
+            nub = uXenPlatformDevice::withConfig(config);
+            if (!nub)
+                goto next;
+
+            nub->attach(this);
+            nub->registerService();
+            nubs->setObject(i, nub);
+        }
+
+next:
+        config->release();
+    }
+}
+
+#ifndef offsetof
+#define offsetof(st, m) ((IOByteCount)(&((st *)0)->m))
+#endif
+
+void
+uXenPlatform::enable_interrupt(int events)
+{
+    uint32_t ev = events;
+
+    bar0->writeBytes(offsetof(struct ctl_mmio, cm_events_enabled), &ev, sizeof(ev));
+}
+
 bool
 uXenPlatform::start(IOService *provider)
 {
@@ -198,6 +269,12 @@ uXenPlatform::start(IOService *provider)
     bar0 = pcidev->getDeviceMemoryWithRegister(kIOPCIConfigBaseAddress0);
     if (!bar0)
         return false;
+    bar2 = pcidev->getDeviceMemoryWithRegister(kIOPCIConfigBaseAddress2);
+    if (!bar2)
+        return false;
+    nubs = OSArray::withCapacity(UXENBUS_DEVICE_COUNT);
+    if (!nubs)
+        return false;
 
     evtsrc = IOFilterInterruptEventSource::filterInterruptEventSource(
             this,
@@ -209,6 +286,7 @@ uXenPlatform::start(IOService *provider)
         return false;
     if (getWorkLoop()->addEventSource(evtsrc) != kIOReturnSuccess)
         return false;
+    enable_interrupt(CTL_MMIO_EVENT_HOTPLUG);
 
     if (!hypercall_init()) {
         getWorkLoop()->removeEventSource(evtsrc);
@@ -221,6 +299,8 @@ uXenPlatform::start(IOService *provider)
         return false;
     }
 
+    enumerate_devices();
+
     setProperty("IOUserClientClass", "uXenPlatformClient");
     registerService();
 
@@ -230,6 +310,9 @@ uXenPlatform::start(IOService *provider)
 void
 uXenPlatform::stop(IOService *provider)
 {
+    stop_devices();
+    nubs->release();
+    nubs = NULL;
     balloon.free();
     hypercall_cleanup();
     getWorkLoop()->removeEventSource(evtsrc);
@@ -245,7 +328,12 @@ uXenPlatform::filterInterrupt(IOFilterInterruptEventSource *src)
      * Read interrupt register and return true to schedule secondary
      * interrupt.
      */
-    return false;
+    uint32_t ev = 0;
+
+    bar0->readBytes(offsetof(struct ctl_mmio, cm_events), &ev, sizeof(ev));
+    pending_events |= ev;
+
+    return true;
 }
 
 void
@@ -254,5 +342,10 @@ uXenPlatform::handleInterrupt(IOInterruptEventSource *src, int count)
     /*
      * Secondary Interrupt handler, called in workloop context.
      */
+    if (pending_events & CTL_MMIO_EVENT_HOTPLUG) {
+        pending_events &= ~CTL_MMIO_EVENT_HOTPLUG;
+
+        enumerate_devices();
+    }
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -14,6 +14,8 @@
 
 #include <xen/version.h>
 #include <xen/xen.h>
+
+#include <uxen/platform_interface.h>
 
 #include "uxenplatform_public.h"
 #include "balloon.h"
@@ -70,6 +72,7 @@ private:
 
     IOPCIDevice *pcidev;
     IODeviceMemory *bar0;
+    IODeviceMemory *bar2;
     IOBufferMemoryDescriptor *hypercall_desc;
     IOFilterInterruptEventSource *evtsrc;
 
@@ -77,6 +80,13 @@ private:
     uint16_t uxen_version_major, uxen_version_minor;
 
     uXenBalloon balloon;
+    OSArray *nubs;
+
+    void enable_interrupt(int events);
+    uint32_t pending_events;
+
+    void enumerate_devices(void);
+    void stop_devices(void);
 };
 
 #endif /* _UXENPLATFORM_H_ */

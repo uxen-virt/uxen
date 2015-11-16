@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		B90DC6C81BF9F23D00C1A5B2 /* uXenPlatformDevice.cpp in Sources */ = {isa = PBXBuildFile; fileRef = B90DC6C61BF9F23D00C1A5B2 /* uXenPlatformDevice.cpp */; };
+		B90DC6C91BF9F23D00C1A5B2 /* uXenPlatformDevice.h in Headers */ = {isa = PBXBuildFile; fileRef = B90DC6C71BF9F23D00C1A5B2 /* uXenPlatformDevice.h */; };
 		B91712A91A261E130089C954 /* uxenplatform_public.h in Headers */ = {isa = PBXBuildFile; fileRef = B91712A81A261E130089C954 /* uxenplatform_public.h */; };
 		B91712AB1A261E1B0089C954 /* hypercall.h in Headers */ = {isa = PBXBuildFile; fileRef = B91712AA1A261E1B0089C954 /* hypercall.h */; };
 		B939D9FD16E604F90017E868 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = B939D9FB16E604F90017E868 /* InfoPlist.strings */; };
@@ -20,6 +22,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		B90DC6C61BF9F23D00C1A5B2 /* uXenPlatformDevice.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = uXenPlatformDevice.cpp; sourceTree = "<group>"; };
+		B90DC6C71BF9F23D00C1A5B2 /* uXenPlatformDevice.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = uXenPlatformDevice.h; sourceTree = "<group>"; };
 		B91712A81A261E130089C954 /* uxenplatform_public.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = uxenplatform_public.h; sourceTree = "<group>"; };
 		B91712AA1A261E1B0089C954 /* hypercall.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = hypercall.h; sourceTree = "<group>"; };
 		B939D9F316E604F90017E868 /* uxenplatform.kext */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = uxenplatform.kext; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -95,6 +99,8 @@
 				B939D9FA16E604F90017E868 /* uxenplatform-Info.plist */,
 				B939D9FB16E604F90017E868 /* InfoPlist.strings */,
 				B939DA0116E604F90017E868 /* uxenplatform-Prefix.pch */,
+				B90DC6C61BF9F23D00C1A5B2 /* uXenPlatformDevice.cpp */,
+				B90DC6C71BF9F23D00C1A5B2 /* uXenPlatformDevice.h */,
 			);
 			name = "Supporting Files";
 			sourceTree = "<group>";
@@ -107,6 +113,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				B98877481A1E6287002933FE /* uXenPlatformClient.h in Headers */,
+				B90DC6C91BF9F23D00C1A5B2 /* uXenPlatformDevice.h in Headers */,
 				B91712AB1A261E1B0089C954 /* hypercall.h in Headers */,
 				B96286A11A26315C00FE8457 /* balloon.h in Headers */,
 				B9B9BEBD1A1E4B2E005CF73D /* uXenPlatform.h in Headers */,
@@ -191,6 +198,7 @@
 				B9AEDF1C1A23B95A00DF0BA8 /* hypercall.S in Sources */,
 				B962869F1A26314D00FE8457 /* balloon.cpp in Sources */,
 				B9B9BEBB1A1E4B24005CF73D /* uXenPlatform.cpp in Sources */,
+				B90DC6C81BF9F23D00C1A5B2 /* uXenPlatformDevice.cpp in Sources */,
 				B98877461A1E626E002933FE /* uXenPlatformClient.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
