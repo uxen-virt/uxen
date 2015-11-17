@@ -389,6 +389,7 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     int needs_sync = 1;
     struct domain *d = p2m->domain;
     ept_entry_t old_entry = { .epte = 0 };
+    union p2m_l1_cache *l1c = &p2m->p2m_l1_cache;
 
     /*
      * the caller must make sure:
@@ -406,13 +407,14 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
            (target == 1 && hvm_hap_has_2mb(d)) ||
            (target == 0));
 
-    if (target || !p2m->ept.se_l1_table ||
-        (gfn & ~((1UL << EPT_TABLE_ORDER) - 1)) != p2m->ept.se_l1_prefix) {
-        if (p2m->ept.se_l1_table) {
-            unmap_domain_page(p2m->ept.se_l1_table);
-            p2m->ept.se_l1_table = NULL;
+    if (target || !l1c->se_l1_table ||
+        p2m_l1_prefix(gfn) != l1c->se_l1_prefix) {
+        if (l1c->se_l1_table) {
+            unmap_domain_page(l1c->se_l1_table);
+            l1c->se_l1_table = NULL;
         }
 
+        perfc_incr(p2m_set_entry_walk);
         table = map_domain_page(ept_get_asr(d));
         for ( i = ept_get_wl(d); i > target; i-- )
         {
@@ -423,11 +425,12 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
                 break;
         }
         if (!target && !i && ret == GUEST_TABLE_NORMAL_PAGE) {
-            p2m->ept.se_l1_prefix = gfn & ~((1UL << EPT_TABLE_ORDER) - 1);
-            p2m->ept.se_l1_table = table;
+            l1c->se_l1_prefix = p2m_l1_prefix(gfn);
+            l1c->se_l1_table = table;
         }
     } else {
-        table = (ept_entry_t *)p2m->ept.se_l1_table;
+        perfc_incr(p2m_set_entry_cached);
+        table = (ept_entry_t *)l1c->se_l1_table;
         gfn_remainder = gfn & ((1UL << EPT_TABLE_ORDER) - 1);
         i = 0;
         ret = GUEST_TABLE_NORMAL_PAGE;
@@ -435,30 +438,16 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
 
     ASSERT(ret != GUEST_TABLE_POD_PAGE || i != target);
 
-    /* Non-l1 update -- invalidate the get_entry cache */
-    if (target) {
-        int j;
-        p2m_ge_l1_cache_lock(p2m);
-        perfc_incr(ept_get_entry_p2m_invalidate);
-        for (j = 0; j < NR_GE_L1_CACHE; j++) {
-            if (p2m->ept.ge_l1_table[j] &&
-                /* prefix of cached l1 matches non-l1 update prefix? */
-                ((gfn & ((1UL << ((target + 1) * EPT_TABLE_ORDER)) - 1)) ==
-                 (p2m->ept.ge_l1_prefix[j] &
-                  ((1UL << ((target + 1) * EPT_TABLE_ORDER)) - 1)))) {
-                unmap_domain_page(p2m->ept.ge_l1_table[j]);
-                p2m->ept.ge_l1_table[j] = NULL;
-            }
-        }
-        p2m_ge_l1_cache_unlock(p2m);
-    }
-
     index = gfn_remainder >> (i * EPT_TABLE_ORDER);
 #ifndef __UXEN__
     offset = gfn_remainder & ((1UL << (i * EPT_TABLE_ORDER)) - 1);
 #endif  /* __UXEN__ */
 
     ept_entry = table + index;
+
+    /* Non-l1 update -- invalidate the get_entry cache */
+    if (target && is_epte_present(ept_entry))
+        p2m_ge_l1_cache_invalidate(p2m, gfn, order);
 
 #ifndef __UXEN__
     /* In case VT-d uses same page table, this flag is needed by VT-d */ 
@@ -586,7 +575,7 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     rv = 1;
 
 out:
-    if (p2m->ept.se_l1_table != table)
+    if (l1c->se_l1_table != table)
         unmap_domain_page(table);
 
     if ( needs_sync )
@@ -795,6 +784,7 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
     int i;
     int ret = 0;
     mfn_t mfn = _mfn(0);
+    union p2m_l1_cache *l1c = &p2m->p2m_l1_cache;
 
     perfc_incr(pc11);
 
@@ -810,16 +800,15 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
     /* Should check if gfn obeys GAW here. */
 
     p2m_ge_l1_cache_lock(p2m);
-    if (!p2m->ept.ge_l1_table[ge_l1_cache_slot] ||
-        (gfn & ~((1UL << EPT_TABLE_ORDER) - 1)) !=
-        p2m->ept.ge_l1_prefix[ge_l1_cache_slot]) {
-        if (p2m->ept.ge_l1_table[ge_l1_cache_slot]) {
-            unmap_domain_page(p2m->ept.ge_l1_table[ge_l1_cache_slot]);
-            p2m->ept.ge_l1_table[ge_l1_cache_slot] = NULL;
+    if (!l1c->ge_l1_table[ge_l1_cache_slot] ||
+        p2m_l1_prefix(gfn) != l1c->ge_l1_prefix[ge_l1_cache_slot]) {
+        if (l1c->ge_l1_table[ge_l1_cache_slot]) {
+            unmap_domain_page(l1c->ge_l1_table[ge_l1_cache_slot]);
+            l1c->ge_l1_table[ge_l1_cache_slot] = NULL;
         }
         p2m_ge_l1_cache_unlock(p2m);
 
-        perfc_incr(ept_get_entry_p2m_walk);
+        perfc_incr(p2m_get_entry_walk);
         table = map_domain_page(ept_get_asr(d));
         for (i = ept_get_wl(d); i > 0; i--) {
           retry:
@@ -852,17 +841,16 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
 
         if (!i && ret == GUEST_TABLE_NORMAL_PAGE) {
             p2m_ge_l1_cache_lock(p2m);
-            if (!p2m->ept.ge_l1_table[ge_l1_cache_slot]) {
-                p2m->ept.ge_l1_prefix[ge_l1_cache_slot] =
-                    gfn & ~((1UL << EPT_TABLE_ORDER) - 1);
-                p2m->ept.ge_l1_table[ge_l1_cache_slot] = table;
+            if (!l1c->ge_l1_table[ge_l1_cache_slot]) {
+                l1c->ge_l1_prefix[ge_l1_cache_slot] = p2m_l1_prefix(gfn);
+                l1c->ge_l1_table[ge_l1_cache_slot] = table;
                 access_domain_page(table);
             }
             p2m_ge_l1_cache_unlock(p2m);
         }
     } else {
-        perfc_incr(ept_get_entry_p2m_cached);
-        table = (ept_entry_t *)p2m->ept.ge_l1_table[ge_l1_cache_slot];
+        perfc_incr(p2m_get_entry_cached);
+        table = (ept_entry_t *)l1c->ge_l1_table[ge_l1_cache_slot];
         access_domain_page(table);
         p2m_ge_l1_cache_unlock(p2m);
         gfn_remainder = gfn & ((1UL << EPT_TABLE_ORDER) - 1);
@@ -1166,6 +1154,9 @@ void ept_p2m_init(struct p2m_domain *p2m)
     p2m->split_super_page_one = ept_split_super_page_one;
     p2m->change_entry_type_global = ept_change_entry_type_global;
     p2m->ro_update_l2_entry = ept_ro_update_l2_entry;
+
+    p2m->p2m_l1_cache_flush = p2m_l1_cache_flush;
+    mm_lock_init(&p2m->p2m_l1_cache.ge_l1_lock);
 }
 
 static void ept_dump_p2m_table(unsigned char key)

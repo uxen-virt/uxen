@@ -101,7 +101,6 @@ static void p2m_initialise(struct domain *d, struct p2m_domain *p2m)
 {
     mm_lock_init(&p2m->lock);
     mm_lock_init(&p2m->logdirty_lock);
-    mm_lock_init(&p2m->ept.ge_l1_lock);
 #ifndef __UXEN__
     INIT_LIST_HEAD(&p2m->np2m_list);
 #endif  /* __UXEN__ */
@@ -506,7 +505,6 @@ void p2m_teardown(struct p2m_domain *p2m)
     mfn_t mfn;
 #endif
 #endif  /* __UXEN__ */
-    int i;
 
     if (p2m == NULL)
         return;
@@ -529,17 +527,8 @@ void p2m_teardown(struct p2m_domain *p2m)
 #endif
 #endif  /* __UXEN__ */
 
-    if (p2m->ept.se_l1_table) {
-        unmap_domain_page(p2m->ept.se_l1_table);
-        p2m->ept.se_l1_table = NULL;
-    }
-
-    for (i = 0; i < NR_GE_L1_CACHE; i++) {
-        if (p2m->ept.ge_l1_table[i]) {
-            unmap_domain_page(p2m->ept.ge_l1_table[i]);
-            p2m->ept.ge_l1_table[i] = NULL;
-        }
-    }
+    if (p2m->p2m_l1_cache_flush)
+        p2m->p2m_l1_cache_flush(p2m);
 
     p2m->phys_table = pagetable_null();
 
@@ -1874,6 +1863,53 @@ p2m_mapcache_mappings_teardown(struct domain *d)
     spin_unlock_recursive(&d->page_alloc_lock);
 
     return 0;
+}
+
+static void
+_p2m_l1_cache_flush(union p2m_l1_cache *l1c)
+{
+    int j;
+
+    if (l1c->se_l1_table) {
+        unmap_domain_page(l1c->se_l1_table);
+        l1c->se_l1_table = NULL;
+    }
+    for (j = 0; j < NR_GE_L1_CACHE; j++) {
+        if (l1c->ge_l1_table[j]) {
+            unmap_domain_page(l1c->ge_l1_table[j]);
+            l1c->ge_l1_table[j] = NULL;
+        }
+    }
+}
+
+void
+p2m_l1_cache_flush(struct p2m_domain *p2m)
+{
+
+    _p2m_l1_cache_flush(&p2m->p2m_l1_cache);
+}
+
+/* Non-l1 update -- invalidate the get_entry cache */
+void
+p2m_ge_l1_cache_invalidate(struct p2m_domain *p2m, unsigned long gfn,
+                           unsigned int page_order)
+{
+    union p2m_l1_cache *l1c = &p2m->p2m_l1_cache;
+    int j;
+
+    p2m_ge_l1_cache_lock(p2m);
+    for (j = 0; j < NR_GE_L1_CACHE; j++) {
+        if (l1c->ge_l1_table[j] &&
+            /* prefix of cached l1 matches non-l1 update prefix? */
+            ((gfn & ~((1UL << page_order) - 1)) ==
+             (l1c->ge_l1_prefix[j] & ~((1UL << page_order) - 1)))) {
+            unmap_domain_page(l1c->ge_l1_table[j]);
+            l1c->ge_l1_table[j] = NULL;
+        }
+    }
+    p2m_ge_l1_cache_unlock(p2m);
+
+    perfc_incr(p2m_get_entry_invalidate);
 }
 
 /*

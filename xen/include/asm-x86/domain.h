@@ -245,12 +245,13 @@ struct pv_domain
     unsigned int nr_e820;
 };
 
-#define P2M_DOMAIN_SIZE                                                 \
-    (208 + 3 * sizeof(void *) +                                         \
-     sizeof(unsigned long) + sizeof(void *) +                           \
-     NR_GE_L1_CACHE * (sizeof(unsigned long) + sizeof(void *)) +        \
-     sizeof(mm_lock_t) + sizeof(mfn_t) + sizeof(uint16_t) +             \
-     /* align */ 3 * sizeof(uint16_t))
+#define P2M_DOMAIN_SIZE                                     \
+    (208 + 4 * sizeof(void *) + sizeof(mfn_t) +             \
+     sizeof(uint16_t) + /* align */ 3 * sizeof(uint16_t))
+#define P2M_DOMAIN_SIZE_P2M_L1_CACHE                        \
+    (sizeof(uint64_t) + sizeof(void *) +                    \
+     NR_GE_L1_CACHE * (sizeof(uint64_t) + sizeof(void *)) + \
+     sizeof(mm_lock_t))
 #ifndef NDEBUG
 #define P2M_DOMAIN_SIZE_DEBUG_EXTRA (sizeof(unsigned long))
 #else
@@ -260,7 +261,8 @@ struct pv_domain
 struct domain_extra_1
 {
     /* struct p2m_domain */ uint8_t
-    p2m[P2M_DOMAIN_SIZE + P2M_DOMAIN_SIZE_DEBUG_EXTRA]; /* d->arch.p2m */
+    p2m[P2M_DOMAIN_SIZE + P2M_DOMAIN_SIZE_P2M_L1_CACHE +   \
+        P2M_DOMAIN_SIZE_DEBUG_EXTRA]; /* d->arch.p2m */
     cpuid_input_t cpuids[MAX_CPUID_INPUT]; /* d->arch.cpuids */
 
     /* XXX UXEN_MAX_VCPUS is sufficient */

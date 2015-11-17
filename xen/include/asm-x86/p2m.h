@@ -269,6 +269,25 @@ typedef enum {
         }                                               \
     } while (0)
 
+union p2m_l1_cache {
+    struct {
+        /* prefix/table for set_entry l1 p2m table page cache */
+        uint64_t se_l1_prefix;
+        void *se_l1_table;
+        /* prefix/table/lock for get_entry l1 p2m table page cache */
+        uint64_t ge_l1_prefix[NR_GE_L1_CACHE];
+        void *ge_l1_table[NR_GE_L1_CACHE];
+#define ge_l1_cache_hash(gfn) ((gfn >> PAGETABLE_ORDER) & (NR_GE_L1_CACHE - 1))
+        mm_lock_t ge_l1_lock;
+    };
+};
+
+#define p2m_l1_prefix(gfn) ((gfn) & ~((1UL << PAGETABLE_ORDER) - 1))
+
+void p2m_l1_cache_flush(struct p2m_domain *p2m);
+void p2m_ge_l1_cache_invalidate(struct p2m_domain *p2m, unsigned long gfn,
+                                unsigned int page_order);
+
 /* Per-p2m-table state */
 struct p2m_domain {
     /* Lock that protects updates to the p2m */
@@ -343,6 +362,8 @@ struct p2m_domain {
                                              unsigned long gfn, int read_only,
                                              int *need_sync);
 
+    void               (*p2m_l1_cache_flush)(struct p2m_domain *p2m);
+
     /* Default P2M access type for each page in the the domain: new pages,
      * swapped in pages, cleared pages, and pages that are ambiquously
      * retyped get this access type.  See definition of p2m_access_t. */
@@ -387,18 +408,7 @@ struct p2m_domain {
         unsigned         max_guest;    /* gpfn of max guest demand-populate */
     } pod;
 
-    union {
-        struct {
-            /* prefix/table for ept_set_entry l1 ept table page cache */
-            unsigned long se_l1_prefix;
-            void *se_l1_table;
-            /* prefix/table/lock for ept_get_entry l1 ept table page cache */
-            unsigned long ge_l1_prefix[NR_GE_L1_CACHE];
-            void *ge_l1_table[NR_GE_L1_CACHE];
-#define ge_l1_cache_hash(gfn) ((gfn >> EPT_TABLE_ORDER) & (NR_GE_L1_CACHE - 1))
-            mm_lock_t ge_l1_lock;
-        } ept;
-    };
+    union p2m_l1_cache p2m_l1_cache;
 
     struct {
         mfn_t data_mfn;

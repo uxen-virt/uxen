@@ -201,8 +201,10 @@ declare_mm_order_constraint(page_alloc)
  */
 
 declare_mm_lock(ge_l1_cache)
-#define p2m_ge_l1_cache_lock(p)   mm_lock(ge_l1_cache, &(p)->ept.ge_l1_lock)
-#define p2m_ge_l1_cache_unlock(p) mm_unlock(&(p)->ept.ge_l1_lock)
+#define p2m_ge_l1_cache_lock(p)                         \
+    mm_lock(ge_l1_cache, &(p)->p2m_l1_cache.ge_l1_lock)
+#define p2m_ge_l1_cache_unlock(p)               \
+    mm_unlock(&(p)->p2m_l1_cache.ge_l1_lock)
 
 /* Paging lock (per-domain)
  *

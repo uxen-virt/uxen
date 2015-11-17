@@ -54,9 +54,11 @@ PERFCOUNTER(mapped_xen_page_count,  "mapped_xen_page count")
 PERFCOUNTER(unmap_xen_page_count,   "unmap_xen_page count")
 PERFCOUNTER(ptwr_emulations,        "writable pt emulations")
 
-PERFCOUNTER(ept_get_entry_p2m_walk, "ept_get_entry p2m walk count")
-PERFCOUNTER(ept_get_entry_p2m_cached, "ept_get_entry p2m walk cached")
-PERFCOUNTER(ept_get_entry_p2m_invalidate, "ept_get_entry p2m walk invalidate")
+PERFCOUNTER(p2m_get_entry_walk,       "p2m get entry walk")
+PERFCOUNTER(p2m_get_entry_cached,     "p2m get entry walk cached")
+PERFCOUNTER(p2m_get_entry_invalidate, "p2m get entry walk invalidate")
+PERFCOUNTER(p2m_set_entry_walk,       "p2m set entry walk")
+PERFCOUNTER(p2m_set_entry_cached,     "p2m set entry walk cached")
 
 PERFCOUNTER(exception_fixed,        "pre-exception fixed")
 
