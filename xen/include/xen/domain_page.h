@@ -151,8 +151,8 @@ uxen_map_page(unsigned long mfn)
         struct page_info *_pg;
         _pg = __mfn_to_page(mfn);
         atomic_inc(&_pg->mapped);
-        _pg->lastmap = current_text_addr();
-        _pg->lastmap0 = __builtin_return_address(0);
+        _pg->lastmap = __builtin_return_address(0);
+        _pg->lastmap0 = __builtin_return_address(1);
     }
 #endif  /* DEBUG_MAPCACHE */
     return _v;
@@ -185,8 +185,8 @@ uxen_map_page_global(unsigned long mfn)
         struct page_info *_pg;
         _pg = __mfn_to_page(mfn);
         atomic_inc(&_pg->mapped);
-        _pg->lastmap = current_text_addr();
-        _pg->lastmap0 = __builtin_return_address(0);
+        _pg->lastmap = __builtin_return_address(0);
+        _pg->lastmap0 = __builtin_return_address(1);
     }
 #endif  /* DEBUG_MAPCACHE */
     return _v;
