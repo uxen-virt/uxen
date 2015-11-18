@@ -19,13 +19,7 @@
 
 #define SF_PORT 44444
 #define RING_SIZE 262144
-
-typedef enum {
-    SF_WAIT,
-    SF_RECEIVE,
-    SF_HANDLE,
-    SF_RESPOND
-} sf_req_state;
+#define SF_TIMEOUT 10000
 
 struct sf_msg {
     v4v_datagram_t dgram;
@@ -35,12 +29,16 @@ struct sf_msg {
 struct sf_state {
     v4v_context_t v4v;
     critical_section lock;
+    struct io_handler_queue ioh_queue;
+    WaitObjects wait_objects;
+    ioh_event io_ev, pause_ev;
+    int paused;
+    OVERLAPPED ov;
+
     uxen_thread thread;
     bool quit_thread;
     bool init_done;
     bool running;
-
-    sf_req_state req_state;
 
     struct sf_msg *request, *response;
     int request_bytes, response_bytes;
@@ -53,7 +51,8 @@ static void sf_service_stop_processing(void);
 static void sf_service_free(void);
 void sf_service_stop(void);
 
-static int __init(void)
+static int
+__init(void)
 {
     struct sf_state *s = &_state;
     if (!s->init_done) {
@@ -62,6 +61,7 @@ static int __init(void)
             return -1;
         }
         critical_section_init(&s->lock);
+
         register_savevm(NULL, "shared-folders", 0, 1, sf_save, sf_load, s);
         s->init_done = 1;
     }
@@ -129,7 +129,8 @@ sf_parse_subfolder_config(const char *folder_name, yajl_val folder,
     return 0;
 }
 
-int sf_parse_config(yajl_val config)
+int
+sf_parse_config(yajl_val config)
 {
     yajl_val folders, v;
     int i;
@@ -176,28 +177,117 @@ int sf_parse_config(yajl_val config)
     return 0;
 }
 
-static int __send_bytes(struct sf_state *state, struct sf_msg *msg, int len)
+void
+sf_vm_pause(void)
+{
+    struct sf_state *s = &_state;
+
+    s->paused = 1;
+    ioh_event_set(&s->pause_ev);
+    debug_printf("sf: paused\n");
+}
+
+void
+sf_vm_unpause(void)
+{
+    struct sf_state *s = &_state;
+
+    s->paused = 0;
+    ioh_event_set(&s->pause_ev);
+    debug_printf("sf: unpaused\n");
+}
+
+static int
+wait_ov(struct sf_state *s, char *op, DWORD *bytes)
+{
+    int ret;
+
+    ret = WaitForSingleObject(s->io_ev, SF_TIMEOUT);
+    switch (ret) {
+    case WAIT_TIMEOUT:
+        debug_printf("sf: %s timeout\n", op);
+        break;
+    case WAIT_OBJECT_0:
+        ret = 0;
+        if (!GetOverlappedResult(s->v4v.v4v_handle, &s->ov, bytes, FALSE))
+            ret = (int)GetLastError();
+        break;
+    default:
+        debug_printf("sf: %s wait error %d\n", op, ret);
+        break;
+    }
+    if (ret) {
+        debug_printf("sf: %s operation error %d\n", op, ret);
+        CancelIoEx(s->v4v.v4v_handle, &s->ov);
+    }
+    return ret;
+}
+
+static int
+read_file_timeout(struct sf_state *s, LPVOID buf, DWORD len, DWORD *nout)
+{
+    *nout = 0;
+    ioh_event_reset(&s->io_ev);
+    if (!ReadFile(s->v4v.v4v_handle, buf, len, NULL, &s->ov)) {
+        if (GetLastError() != ERROR_IO_PENDING) {
+            Wwarn("%s: ReadFile error %d", __FUNCTION__, GetLastError());
+            return (int)GetLastError();
+        }
+    }
+    return wait_ov(s, "read", nout);
+}
+
+static int
+write_file_timeout(struct sf_state *s, LPVOID buf, DWORD len, DWORD *nout)
+{
+    *nout = 0;
+    ioh_event_reset(&s->io_ev);
+    if (!WriteFile(s->v4v.v4v_handle, buf, len, NULL, &s->ov)) {
+        if (GetLastError() != ERROR_IO_PENDING) {
+            Wwarn("%s: WriteFile error %d", __FUNCTION__, GetLastError());
+            return (int)GetLastError();
+        }
+    }
+    return wait_ov(s, "write", nout);
+}
+
+static int
+send_bytes(struct sf_state *state, struct sf_msg *msg, int len)
 {
     DWORD bytes = 0;
+    int ret;
 
-    if (!WriteFile(state->v4v.v4v_handle, (void *)msg, len, &bytes, NULL)) {
-        Wwarn("%s: WriteFile", __FUNCTION__);
-        return -1;
-    }
+    memset(&msg->dgram, 0, sizeof(msg->dgram));
+    msg->dgram.addr.port = SF_PORT;
+    msg->dgram.addr.domain = vm_id;
+    //msg->dgram.flags = V4V_DATAGRAM_FLAG_IGNORE_DLO;
+    if ((ret = write_file_timeout(state, (void *)msg, len, &bytes)))
+        return ret;
 
     assert(bytes == len);
 
     return 0;
 }
 
-static void __respond(struct sf_state *state)
+static int
+respond(struct sf_state *state)
 {
-    __send_bytes(state,
-                 state->response,
-                 sizeof(v4v_datagram_t) + state->response_bytes);
+    int ret;
+
+    if (!state->response_bytes)
+        return 0;
+
+    ret = send_bytes(
+        state,
+        state->response,
+        sizeof(v4v_datagram_t) + state->response_bytes);
+    if (!ret)
+        state->response_bytes = 0;
+    return ret;
 }
 
-static void __handle_req(struct sf_state *state, char *data, int len)
+static void
+handle_req(struct sf_state *state, char *data, int len)
 {
     struct sf_msg *msg = state->response;
     int resp_size = RING_SIZE;
@@ -206,27 +296,33 @@ static void __handle_req(struct sf_state *state, char *data, int len)
 
     assert(resp_size < RING_SIZE - 4096);
 
-    msg->dgram.addr.port = SF_PORT;
-    msg->dgram.addr.domain = vm_id;
-    msg->dgram.flags = V4V_DATAGRAM_FLAG_IGNORE_DLO;
     state->response_bytes = resp_size;
 }
 
-static int __receive_req(struct sf_state *state)
+static int
+receive_req(struct sf_state *state)
 {
     DWORD bytes = 0;
-    if (!ReadFile(state->v4v.v4v_handle,
-                  state->request,
-                  sizeof(struct sf_msg),
-                  &bytes, NULL)) {
-        Wwarn("%s: ReadFile", __FUNCTION__);
+
+    if (read_file_timeout(state,
+                          state->request,
+                          sizeof(struct sf_msg),
+                          &bytes))
         return -1;
-    }
     assert(bytes < RING_SIZE - 4096);
     state->request_bytes = bytes - sizeof(v4v_datagram_t);
     return 0;
-
 }
+
+static void
+do_recv_ev(void *opaque)
+{
+    struct sf_state *s = (struct sf_state*) opaque;
+
+    s->request_bytes = 0;
+    receive_req(s);
+}
+
 
 #ifdef _WIN32
 static DWORD WINAPI __run_thread(void *_s)
@@ -235,47 +331,48 @@ static void *__run_thread(void *_s)
 #endif
 {
     struct sf_state *s = (struct sf_state*)_s;
+    int ret;
+    int timeout = SF_TIMEOUT;
 
-    while ( !s->quit_thread ) {
-
-        critical_section_enter(&s->lock);
-        switch (s->req_state) {
-        case SF_WAIT:
+    critical_section_enter(&s->lock);
+    for (;;) {
+        if (s->quit_thread) {
             critical_section_leave(&s->lock);
-            ioh_event_wait( &s->v4v.recv_event );
-            critical_section_enter(&s->lock);
-            if ( !s->quit_thread )
-                s->req_state = SF_RECEIVE;
-            break;
-        case SF_RECEIVE:
-            if (__receive_req(s) == 0)
-                s->req_state = SF_HANDLE;
-            else
-                s->req_state = SF_WAIT;
-            break;
-        case SF_HANDLE:
-            __handle_req(s, s->request->data, s->request_bytes);
-            s->req_state = SF_RESPOND;
-            break;
-        case SF_RESPOND:
-            __respond(s);
-            s->req_state = SF_WAIT;
+            debug_printf("sf: quitting processing thread\n");
             break;
         }
+        if (s->paused) {
+            critical_section_leave(&s->lock);
+            ioh_event_wait(&s->pause_ev);
+            ioh_event_reset(&s->pause_ev);
+            critical_section_enter(&s->lock);
+            continue;
+        }
+        ret = respond(s);
+        if (ret == ERROR_VC_DISCONNECTED) {
+            debug_printf("sf: remote end disconnected, quitting thread\n");
+            s->quit_thread = 1;
+        } else if (ret)
+            debug_printf("sf: failed to send response, error %d\n", ret);
         critical_section_leave(&s->lock);
+        ioh_wait_for_objects(&s->ioh_queue, &s->wait_objects, NULL, &timeout, NULL);
+        critical_section_enter(&s->lock);
+        if (s->request_bytes) {
+            handle_req(s, s->request->data, s->request_bytes);
+            s->request_bytes = 0;
+        }
     }
-
     s->quit_thread = 0;
     return 0;
 }
 
-static void sf_save(QEMUFile *f, void *opaque)
+static void
+sf_save(QEMUFile *f, void *opaque)
 {
     struct sf_state *s = (struct sf_state*)opaque;
 
     critical_section_enter(&s->lock);
-    debug_printf("sf save, request state %d\n", s->req_state);
-    qemu_put_be32(f, s->req_state);
+    debug_printf("sf save, resp=%d req=%d\n", s->response_bytes, s->request_bytes);
     qemu_put_be32(f, s->request_bytes);
     qemu_put_buffer(f, (uint8_t*)s->request, sizeof(struct sf_msg));
     qemu_put_be32(f, s->response_bytes);
@@ -283,49 +380,86 @@ static void sf_save(QEMUFile *f, void *opaque)
     critical_section_leave(&s->lock);
 }
 
-static int sf_load(QEMUFile *f, void *opaque, int version)
+static int
+sf_load(QEMUFile *f, void *opaque, int version)
 {
     struct sf_state *s = (struct sf_state*)opaque;
 
     critical_section_enter(&s->lock);
-    s->req_state = qemu_get_be32(f);
-    debug_printf("sf load, request state %d\n", s->req_state);
     s->request_bytes = qemu_get_be32(f);
     qemu_get_buffer(f, (uint8_t*)s->request, sizeof(struct sf_msg));
     s->response_bytes = qemu_get_be32(f);
     qemu_get_buffer(f, (uint8_t*)s->response, sizeof(struct sf_msg));
+    debug_printf("sf load, resp=%d req=%d\n", s->response_bytes, s->request_bytes);
     critical_section_leave(&s->lock);
-
     return 0;
 }
 
-int sf_service_start(void)
+static int
+connect_v4v(struct sf_state *s, int domain, int port)
 {
-    struct sf_state *s = &_state;
-    int ret;
     v4v_ring_id_t id;
+    DWORD bytes;
 
-    if (!s->init_done)
-        return 0;
-
-    ret = v4v_open(&s->v4v, RING_SIZE, NULL);
-    if (!ret) {
-        warnx("%s: v4v_open", __FUNCTION__);
+    ioh_event_reset(&s->io_ev);
+    if (!v4v_open(&s->v4v, RING_SIZE, &s->ov)) {
+        debug_printf("%s: v4v_open failed (%d)\n",
+                     __FUNCTION__, (int)GetLastError());
         return -1;
     }
-
-    id.addr.port = SF_PORT;
-    id.addr.domain = V4V_DOMID_ANY;
-    id.partner = vm_id;
-
-    ret = v4v_bind(&s->v4v, &id, NULL);
-    if (!ret) {
-        warnx("%s: v4v_bind", __FUNCTION__);
+    if (!GetOverlappedResult(s->v4v.v4v_handle, &s->ov, &bytes, TRUE)) {
+        debug_printf("%s: GetOverlappedResult (v4v_open) failed (%d)\n",
+                     __FUNCTION__, (int)GetLastError());
         v4v_close(&s->v4v);
         return -1;
     }
 
-    s->req_state = SF_WAIT;
+    id.addr.port = port;
+    id.addr.domain = V4V_DOMID_ANY;
+    id.partner = domain;
+
+    ioh_event_reset(&s->io_ev);
+    if (!v4v_bind(&s->v4v, &id, &s->ov)) {
+        debug_printf("%s: v4v_bind failed (%d)\n",
+                     __FUNCTION__, (int)GetLastError());
+        v4v_close(&s->v4v);
+        return -1;
+    }
+
+    if (!GetOverlappedResult(s->v4v.v4v_handle, &s->ov, &bytes, TRUE)) {
+        debug_printf("%s: GetOverlappedResult (v4v_bind) failed (%x)\n",
+                     __FUNCTION__, (int)GetLastError());
+        v4v_close(&s->v4v);
+        return -1;
+    }
+
+    return 0;
+}
+
+int
+sf_service_start(void)
+{
+    struct sf_state *s = &_state;
+
+    if (!s->init_done)
+        return 0;
+
+    if (connect_v4v(s, vm_id, SF_PORT)) {
+        warnx("%s: connect_v4v failed", __FUNCTION__);
+        return -1;
+    }
+
+    ioh_queue_init(&s->ioh_queue);
+    ioh_init_wait_objects(&s->wait_objects);
+    ioh_event_init(&s->io_ev);
+    ioh_event_init(&s->pause_ev);
+    memset(&s->ov, 0, sizeof(s->ov));
+    s->ov.hEvent = s->io_ev;
+
+    ioh_add_wait_object(&s->io_ev, NULL, s, &s->wait_objects);
+    ioh_add_wait_object(&s->pause_ev, NULL, s, &s->wait_objects);
+    ioh_add_wait_object(&s->v4v.recv_event, do_recv_ev, s, &s->wait_objects);
+
     s->quit_thread = 0;
 
     s->request = hgcm_calloc(1, sizeof(struct sf_msg));
@@ -348,7 +482,8 @@ int sf_service_start(void)
     return 0;
 }
 
-static void sf_service_stop_processing(void)
+static void
+sf_service_stop_processing(void)
 {
     struct sf_state *s = &_state;
 
@@ -356,11 +491,14 @@ static void sf_service_stop_processing(void)
         debug_printf("sf v4v service stopping\n");
 
         s->quit_thread = 1;
-        ioh_event_set(&s->v4v.recv_event);
+        ioh_event_set(&s->io_ev);
+        ioh_event_set(&s->pause_ev);
         wait_thread(s->thread);
 
         v4v_close(&s->v4v);
-
+        ioh_cleanup_wait_objects(&s->wait_objects);
+        ioh_event_close(&s->io_ev);
+        ioh_event_close(&s->pause_ev);
         sf_quit();
 
         debug_printf("sf v4v service stopped\n");
@@ -368,7 +506,8 @@ static void sf_service_stop_processing(void)
     }
 }
 
-static void sf_service_free(void)
+static void
+sf_service_free(void)
 {
     struct sf_state *s = &_state;
 
@@ -382,7 +521,8 @@ static void sf_service_free(void)
     }
 }
 
-void sf_service_stop(void)
+void
+sf_service_stop(void)
 {
     sf_service_stop_processing();
     sf_service_free();

@@ -18,6 +18,8 @@ int sf_add_mapping(const char * path, const char *name, int writable,
                    uint64_t opts, uint64_t quota);
 int sf_init();
 int sf_quit();
+void sf_vm_pause(void);
+void sf_vm_unpause(void);
 
 int sf_set_opt(wchar_t *name, wchar_t *subfolder, uint64_t opt);
 int sf_mod_opt(wchar_t *name, wchar_t *subfolder, uint64_t opt, int add);

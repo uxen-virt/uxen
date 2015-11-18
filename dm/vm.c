@@ -718,6 +718,9 @@ vm_run_mode_change_cb(void *opaque)
 #if defined(CONFIG_NICKEL)
         ni_vm_unpause();
 #endif
+#if defined(CONFIG_VBOXDRV)
+        sf_vm_unpause();
+#endif
         break;
     case POWEROFF_VM:
     case DESTROY_VM:
@@ -727,6 +730,9 @@ vm_run_mode_change_cb(void *opaque)
         vm_clock_pause();
 #if defined(CONFIG_NICKEL)
         ni_vm_pause();
+#endif
+#if defined(CONFIG_VBOXDRV)
+        sf_vm_pause();
 #endif
         break;
     case SETUP_VM:
