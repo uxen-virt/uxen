@@ -34,42 +34,65 @@ enum cuckoo_page_type {
     cuckoo_page_ref_local,
 };
 
-struct cuckoo_page {
-    uint64_t hash; // 64-bit page hash to reduce risk of collisions
-    uint32_t offset : 31; // byte offset into pin or file
-    uint16_t vm : CUCKOO_LOG_MAX_VMS;
-    uint32_t pfn : 22; // up to 2*22 pages (16GiB) per VM
-    uint16_t size : 13; // up to and including 4kiB per page
-    uint16_t rotate : 10; // 1024 ways to rotate with 32-bit alignment
-    enum cuckoo_page_type type : 2;
-    uint16_t is_stable : 1; // has been processed and written out
-#ifdef CUCKOO_VERIFY
-    uint64_t strong_hash;
-#endif
+struct cuckoo_page_common {
+    uint16_t vm : CUCKOO_LOG_MAX_VMS; \
+    uint32_t pfn : 21;                \
+    uint16_t size : 13;               \
+    uint16_t rotate : 10;             \
+    enum cuckoo_page_type type : 2;   \
+    uint16_t is_stable : 1;
 } __attribute__((__packed__));
+
+struct cuckoo_page_ext {
+    uint64_t hash;
+    uint32_t offset;
+} __attribute__((__packed__));
+
+struct cuckoo_page {
+    struct cuckoo_page_common c;
+    struct cuckoo_page_ext x;
+} __attribute__((__packed__));
+
+struct cuckoo_page_delta {
+    struct cuckoo_page_common c;
+} __attribute__((__packed__));
+
+static inline const struct cuckoo_page *
+nextc(const struct cuckoo_page *p)
+{
+    size_t sz = p->c.type ? sizeof(struct cuckoo_page) :
+                            sizeof(struct cuckoo_page_delta);
+    return (const struct cuckoo_page *) (((const uint8_t *) p) + sz);
+}
+
+static inline struct cuckoo_page *
+next(struct cuckoo_page *p)
+{
+    return (struct cuckoo_page *) nextc(p);
+}
 
 static inline int
 is_delta(const struct cuckoo_page *p)
 {
-    return p->type == cuckoo_page_delta;
+    return p->c.type == cuckoo_page_delta;
 }
 
 static inline int
 is_shared(const struct cuckoo_page *p)
 {
-    return p->type == cuckoo_page_ref_shared;
+    return p->c.type == cuckoo_page_ref_shared;
 }
 
 static inline int
 is_local(const struct cuckoo_page *p)
 {
-    return p->type == cuckoo_page_ref_local;
+    return p->c.type == cuckoo_page_ref_local;
 }
 
 static inline int
 is_template(const struct cuckoo_page *p)
 {
-    return p->type == cuckoo_page_ref_template;
+    return p->c.type == cuckoo_page_ref_template;
 }
 
 struct cuckoo_vm {
@@ -79,6 +102,7 @@ struct cuckoo_vm {
 
 struct cuckoo_shared {
     int num_pages;
+    uint32_t space_used;
     uint32_t pin_brk;
     struct cuckoo_vm vms[CUCKOO_MAX_VMS];
     int needs_gc;

@@ -347,7 +347,6 @@ static void vm_presence_map(struct cuckoo_shared *s, uuid_t exclude,
 
 struct work_unit { /* A unit of work. */
     int n;
-    int start;
     int size;
     struct cuckoo_page *ref;
     struct cuckoo_page *p;
@@ -385,7 +384,7 @@ static struct work_unit *create_plan(
         int include_unstable,
         struct cuckoo_callbacks *ccb, void *opaque)
 {
-    int i;
+    int i, j;
     struct cuckoo_page *ref = NULL;
     struct cuckoo_page *p;
     struct work_unit *us = NULL;
@@ -398,77 +397,78 @@ static struct work_unit *create_plan(
      * live in the pin.  Therefore, a simple hash-has-changed check is not
      * sufficient to track the location of the most recent ref. */
 
-    for (i = 0, p = pages; p != pages + num_pages; ++p) {
-        if (!p->is_stable && !include_unstable) {
+    for (i = j = 0, p = pages; i < num_pages; ++i, p = next(p)) {
+        if (!p->c.is_stable && !include_unstable) {
             continue;
         }
-        if (is_shared(p) || is_template(p) || (is_local(p) && p->vm ==vm)) {
+        if (is_shared(p) || is_template(p) || (is_local(p) && p->c.vm ==vm)) {
             ref = p;
         }
-        if (p->vm == vm) {
+        if (p->c.vm == vm) {
             if (ref) {
-                us = grow_us(us, i, ccb, opaque);
+                us = grow_us(us, j, ccb, opaque);
                 if (!us) {
                     return NULL;
                 }
-                u = &us[i++];
+                u = &us[j];
                 u->ref = ref;
                 u->n = 0;
-                u->start = -1;
                 u->size = 0;
                 u->p = p;
                 ref = NULL;
+                ++j;
             }
             u->n++;
 
-            if (!is_shared(p) && !is_template(p) && p->size) {
-                if (u->start == -1) {
-                    u->start = p->offset;
-                }
-                u->size += p->size;
+            if (!is_shared(p) && !is_template(p) && p->c.size) {
+                u->size += p->c.size;
             }
         }
     }
-    us = grow_us(us, i, ccb, opaque);
+    us = grow_us(us, j, ccb, opaque);
     if (us) {
-        us[i].ref = NULL;
+        us[j].ref = NULL;
     }
     return us;
 }
 
 /* Merge a hash-sorted array of new pages into the array of existing ones. */
 int merge(struct cuckoo_page *out,
+          uint32_t *space_used,
           const struct cuckoo_page *a, int na,
           const struct cuckoo_page *b, int nb,
           const uint8_t *present,
           struct cuckoo_callbacks *ccb, void *opaque)
 {
     struct cuckoo_page *r = out;
-    const struct cuckoo_page *end_a = a + na;
-    int i;
+    int i, j, k;
     struct cuckoo_page *ref = NULL;
+    uint64_t last_a = 0;
+    uint64_t last_b = 0;
     const struct cuckoo_page *rescue = NULL;
 
-    for (i = 0; a != end_a || i < nb; ) {
+    for (i = j = k = 0; i < na || j < nb; ) {
         /* Merge a before b if a <= b. */
-        if (a != end_a && (i == nb || a->hash <= b[i].hash)) {
+        uint64_t ha = i < na ? (a->c.type ? a->x.hash : last_a) : ~0ULL;
+        uint64_t hb = j < nb ? (b->c.type ? b->x.hash : last_b) : ~0ULL;
+        if (ha <= hb) {
             /* Elide pages belonging to dead VMs, but keep a door open should
              * they get referenced later. */
-            if  (!a->is_stable) {
-                ++a;
-                continue;
+            last_a = ha;
+            if  (!a->c.is_stable) {
+                goto next_a;
             } else if (!is_template(a)) {
-                if (!present[a->vm]) {
+                if (!present[a->c.vm]) {
                     if (is_shared(a)) {
                         rescue = a;
                     }
-                    ++a;
-                    continue;
+                    goto next_a;
                 } else {
-                    if (rescue && rescue->hash == a->hash) {
-                        ref = r++;
-                        *ref = *rescue;
-                        ref->vm = 0;
+                    if (rescue && rescue->x.hash == ha) {
+                        ref = r;
+                        *r++ = *rescue;
+                        ++k;
+                        ref->c.vm = 0;
                         rescue = NULL;
                     }
                 }
@@ -477,30 +477,48 @@ int merge(struct cuckoo_page *out,
             if (!is_delta(a)) {
                 ref = r;
             }
-            *r = *a++;
+
+            r->c = a->c;
+            if (a->c.type) {
+                r->x = a->x;
+            }
+            ++k;
+            r = next(r);
+next_a:
+            a = nextc(a); ++i;
         } else {
             /* Consume min from b. */
-            *r = b[i];
+            r->c = b->c;
 
-            if (ref && ref->hash == r->hash) {
-                if (ref->type == cuckoo_page_ref_local) {
+            if (ref && ref->x.hash == hb) {
+                if (ref->c.type == cuckoo_page_ref_local) {
                     /* r will be the new ref, but the existing one will still
                      * be kept around, because it refers to pages on disk that
                      * we cannot get to and re-encode. */
-                    r->type = cuckoo_page_ref_shared;
+                    r->c.type = cuckoo_page_ref_shared;
+                    r->x = b->x;
+
+                } else {
+                    r->c.type = cuckoo_page_delta;
                 }
             } else {
-                if (i == 0 || b[i - 1].hash != b[i].hash) {
-                    r->type = cuckoo_page_ref_local;
+                if (j == 0 || last_b != hb) {
+                    r->c.type = cuckoo_page_ref_local;
+                    r->x = b->x;
+                } else {
+                    r->c.type = cuckoo_page_delta;
                 }
             }
             ref = NULL;
-            ++i;
-        }
-        ++r;
-    }
+            last_b = hb;
 
-    return r - out;
+            r = next(r); ++k;
+            b = nextc(b); ++j;
+        }
+    }
+    *space_used = ((uint8_t *) r) - ((uint8_t *) out);
+
+    return k;
 }
 
 const int num_slots = 32;
@@ -508,8 +526,7 @@ struct io_slot {
     thread_event metadata_ready, data_ready, processed;
     uint8_t *buffer;
     struct work_unit *first, *last;
-    int start;
-    int end;
+    int size;
     int done;
 #ifdef _WIN32
     OVERLAPPED o;
@@ -549,15 +566,17 @@ compress_range(struct thread_context *c, struct work_unit *u, uint8_t **src,
     uint8_t b[PAGE_SIZE];
     uint8_t *base;
     uint8_t tmp[2* PAGE_SIZE];
+    struct cuckoo_page *p;
+    int k;
     int skip = 0;
 
     if (is_template(ref)) {
         base = *src;
         *src += PAGE_SIZE;
     } else if (is_shared(ref)) {
-        if (ref->is_stable) {
-            if (ref->size) {
-                if (expand(b, cc->pin + ref->offset, ref->size) < 0) {
+        if (ref->c.is_stable) {
+            if (ref->c.size) {
+                if (expand(b, cc->pin + ref->x.offset, ref->c.size) < 0) {
                     debug_printf("expand failed line=%d\n", __LINE__);
                     assert(0);
                 }
@@ -566,22 +585,22 @@ compress_range(struct thread_context *c, struct work_unit *u, uint8_t **src,
                 base = NULL;
             }
         } else {
-            ref->size = compress(tmp, *src, PAGE_SIZE, 1);
-            ref->offset = __sync_fetch_and_add(&cc->active->pin_brk,
-                                               ref->size);
-            if (ref->offset + ref->size < pin_size) {
-                memcpy(cc->pin + ref->offset, tmp, ref->size);
+            ref->c.size = compress(tmp, *src, PAGE_SIZE, 1);
+            ref->x.offset = __sync_fetch_and_add(&cc->active->pin_brk,
+                                               ref->c.size);
+            if (ref->x.offset + ref->c.size < pin_size) {
+                memcpy(cc->pin + ref->x.offset, tmp, ref->c.size);
             } else {
-                memcpy(buffer + *buffer_offset, tmp, ref->size);
-                ref->offset = *buffer_offset;
-                *buffer_offset += ref->size;
-                ref->type = cuckoo_page_ref_local;
+                memcpy(buffer + *buffer_offset, tmp, ref->c.size);
+                ref->x.offset = *buffer_offset;
+                *buffer_offset += ref->c.size;
+                ref->c.type = cuckoo_page_ref_local;
             }
 
 #ifdef CUCKOO_VERIFY
             ref->strong_hash = strong_hash(*src);
 #endif
-            ref->is_stable = 1;
+            ref->c.is_stable = 1;
             base = *src;
             *src += PAGE_SIZE;
             skip = 1;
@@ -590,34 +609,28 @@ compress_range(struct thread_context *c, struct work_unit *u, uint8_t **src,
         base = NULL;
     }
 
-    int k;
-    for (k = skip; k < u->n; ++k, *src += PAGE_SIZE) {
-        struct cuckoo_page *p = u->p + k;
+    p = skip ? next(u->p) : u->p;
+    for (k = skip; k < u->n; ++k, *src += PAGE_SIZE, p = next(p)) {
 #ifdef CUCKOO_VERIFY
         p->strong_hash = strong_hash(*src);
 #endif
         size_t sz0;
         uint8_t *t;
         if (base != NULL) {
-            sz0 = diff(tmp, base, *src, p->rotate - ref->rotate);
+            sz0 = diff(tmp, base, *src, p->c.rotate - ref->c.rotate);
             t = tmp;
         } else {
             /* No point actually XORing with zero page. */
-            assert(ref->rotate == p->rotate);
             sz0 = PAGE_SIZE;
             t = *src;
         }
         if (sz0) {
-            p->size = compress(buffer + *buffer_offset, t, sz0, 0);
-            p->offset = *buffer_offset;
-            *buffer_offset += p->size;
+            p->c.size = compress(buffer + *buffer_offset, t, sz0, 0);
+            *buffer_offset += p->c.size;
         } else {
-            p->size = 0;
-            assert(p->type == cuckoo_page_delta);
-            p->type = cuckoo_page_delta;
-            p->offset = 0;
+            p->c.size = 0;
         }
-        p->is_stable = 1;
+        p->c.is_stable = 1;
 
         if (p == ref) {
             base = *src;
@@ -635,10 +648,9 @@ decompression_thread(void *_c)
     struct thread_context *c = _c;
     struct cuckoo_callbacks *ccb = c->ccb;
     void *opaque = c->opaque;
-    uint64_t *pfns;
     uint64_t *template_pfns = NULL;
-    uint8_t *template_pages = NULL;
-    const uint8_t *t;
+    uint8_t *template_pages = NULL, *t;
+    uint64_t *pfns;
     uint8_t *pages;
     struct work_unit *u;
     int max;
@@ -653,6 +665,7 @@ decompression_thread(void *_c)
         int num_tpfns = 0;
         idx %= num_slots;
         struct io_slot *s = &c->slots[idx];
+        int start = 0;
 
         thread_event_wait(&s->metadata_ready);
         if (s->done) {
@@ -676,14 +689,15 @@ decompression_thread(void *_c)
 
         for (u = s->first, num_tpfns = 0; u != s->last; ++u) {
             if (is_template(u->ref)) {
-                template_pfns[num_tpfns++] = u->ref->pfn | CUCKOO_TEMPLATE_PFN;
+                template_pfns[num_tpfns++] =
+                    u->ref->c.pfn | CUCKOO_TEMPLATE_PFN;
             }
         }
 
         ccb->capture_pfns(opaque, c->tid, num_tpfns, template_pages,
                           template_pfns);
 
-        if (s->start != s->end) {
+        if (s->size) {
             thread_event_wait(&s->data_ready);
 #ifdef _WIN32
             DWORD got;
@@ -698,20 +712,23 @@ decompression_thread(void *_c)
 
             const struct cuckoo_page *ref = u->ref;
             uint8_t b[PAGE_SIZE];
-            const uint8_t *base;
+            uint8_t *base;
+            const struct cuckoo_page *p;
+            int k;
 
             if (is_template(ref)) {
                 base = t;
                 t += PAGE_SIZE;
-            } else if (ref->size) {
+            } else if (ref->c.size) {
                 void *src;
                 if(is_shared(ref)) {
-                    src = c->cc->pin + ref->offset;
+                    src = c->cc->pin + ref->x.offset;
                 } else {
-                    src = s->buffer + ref->offset - s->start;
+                    src = s->buffer + start;
+                    start += ref->c.size;
                 }
 
-                if (expand(b, src, ref->size) < 0) {
+                if (expand(b, src, ref->c.size) < 0) {
                     debug_printf("failed to expand from %s!\n",
                                  is_shared(ref) ? "pin" : "file");
                     assert(0);
@@ -721,29 +738,28 @@ decompression_thread(void *_c)
                 base = NULL;
             }
 
-            int k;
-            for (k = 0; k < u->n; ++k) {
-                const struct cuckoo_page *p = u->p + k;
+            for (k = 0, p = u->p; k < u->n; ++k, p = nextc(p)) {
                 uint8_t *dst = pages + PAGE_SIZE * i;
 
                 if (p != ref) {
-                    if (p->size) {
-                        if (expand(dst, s->buffer + p->offset - s->start,
-                                   p->size) < 0) {
+                    uint16_t size = p->c.size;
+                    if (size) {
+                        if (expand(dst, s->buffer + start, size) < 0) {
                             debug_printf("expand failed line=%d\n", __LINE__);
                             assert(0);
                         }
                         if (base != NULL) {
                             undiff(dst, base);
                         }
+                        start += size;
                     } else {
-                        if (!c->reusing_vm && is_template(ref) && ref->pfn ==
-                                p->pfn && ref->rotate == p->rotate) {
+                        if (!c->reusing_vm && is_template(ref) && ref->c.pfn ==
+                                p->c.pfn && ref->c.rotate == p->c.rotate) {
                             goto skip_template_ident;
                         }
                         memcpy(dst, base, PAGE_SIZE);
                     }
-                    int rotate = - (p->rotate - ref->rotate);
+                    int rotate = - (p->c.rotate - ref->c.rotate);
                     if (rotate) {
                         uint8_t tmp[PAGE_SIZE];
                         memcpy(tmp, dst, PAGE_SIZE);
@@ -756,7 +772,7 @@ decompression_thread(void *_c)
                 assert(p->strong_hash == strong_hash(dst));
 #endif
 
-                pfns[i++] = p->pfn;
+                pfns[i++] = p->c.pfn;
 skip_template_ident:
                 if (i == max || u + 1 == s->last) {
                     ccb->populate_pfns(opaque, c->tid, i, pfns);
@@ -776,6 +792,7 @@ skip_template_ident:
 
     ccb->free(opaque, template_pfns);
     ccb->free(opaque, template_pages);
+
     ccb->free(opaque, pfns);
     __sync_synchronize();
     return 0;
@@ -822,11 +839,12 @@ compression_thread(void *_c)
 
         for (u = s->first, num_pfns = 0; u != s->last; ++u) {
             if (is_template(u->ref)) {
-                pfns[num_pfns++] = u->ref->pfn | CUCKOO_TEMPLATE_PFN;
+                pfns[num_pfns++] = u->ref->c.pfn | CUCKOO_TEMPLATE_PFN;
             }
             int j;
-            for (j = 0; j < u->n; ++j) {
-                pfns[num_pfns++] = u->p[j].pfn;
+            const struct cuckoo_page *p;
+            for (j = 0, p = u->p; j < u->n; ++j, p = nextc(p)) {
+                pfns[num_pfns++] = p->c.pfn;
             }
         }
 
@@ -836,12 +854,10 @@ compression_thread(void *_c)
                 u != s->last; ++u) {
             compress_range(c, u, &src, s->buffer, &buffer_offset);
         }
-        assert(buffer_offset <= PAGE_SIZE * (1 + num_pfns));
         ccb->free(opaque, pfns);
         ccb->free(opaque, pages);
 
-        s->start = 0;
-        s->end = buffer_offset;
+        s->size = buffer_offset;
         thread_event_set(&s->processed);
     }
 
@@ -850,15 +866,15 @@ compression_thread(void *_c)
 }
 
 static int
-read_slot(struct filebuf *fb, struct io_slot *s)
+read_slot(struct filebuf *fb, struct io_slot *s, uint32_t start)
 {
     int r = 0;
 
 #ifdef _WIN32
     memset(&s->o, 0, sizeof(OVERLAPPED));
-    s->o.Offset = s->start;
+    s->o.Offset = start;
     s->o.hEvent = s->data_ready;
-    if (!ReadFile(fb->file, s->buffer, s->end - s->start, NULL, &s->o)) {
+    if (!ReadFile(fb->file, s->buffer, s->size, NULL, &s->o)) {
         if (GetLastError() != ERROR_IO_PENDING) {
             Werr(1, "%s:%d ReadFile fails", __FUNCTION__, __LINE__);
             r = -1;
@@ -866,9 +882,9 @@ read_slot(struct filebuf *fb, struct io_slot *s)
     }
 #else
     do {
-        r = pread(fb->file, s->buffer, s->end - s->start, s->start);
+        r = pread(fb->file, s->buffer, s->size, start);
     } while (r < 0 && errno == EINTR);
-    if (r != s->end - s->start) {
+    if (r != s->size) {
         r = -1;
     }
     thread_event_set(&s->data_ready);
@@ -877,47 +893,37 @@ read_slot(struct filebuf *fb, struct io_slot *s)
 }
 
 static int
-write_slot(struct filebuf *fb, struct io_slot *s)
+write_slot(struct filebuf *fb, struct io_slot *s, uint32_t start)
 {
     int r = 0;
-    struct work_unit *u;
 
 #ifdef _WIN32
     DWORD got;
     memset(&s->o, 0, sizeof(s->o));
-    s->o.Offset = s->start;
+    s->o.Offset = start;
     s->o.hEvent = s->data_ready;
-    if (!WriteFile(fb->file, s->buffer, s->end - s->start, NULL, &s->o)) {
+    if (!WriteFile(fb->file, s->buffer, s->size, NULL, &s->o)) {
         if (GetLastError() != ERROR_IO_PENDING) {
             Wwarn("WriteFilefails");
             r = -1;
         }
     }
     if (!GetOverlappedResult(fb->file, &s->o, &got, TRUE) ||
-            got != s->end - s->start) {
-        debug_printf("only wrote %u instead of %d\n",
-                (uint32_t) got, s->end - s->start);
+            got != s->size) {
+        debug_printf("only wrote %u instead of %u\n",
+                (uint32_t) got, s->size);
         Wwarn("GetOverlappedResult fails");
         r = -1;
     }
 #else
     do {
-        r = pwrite(fb->file, s->buffer, s->end - s->start, s->start);
+        r = pwrite(fb->file, s->buffer, s->size, start);
     } while (r < 0 && errno == EINTR);
-    if (r != s->end - s->start) {
+    if (r != s->size) {
         r = -1;
     }
 #endif
 
-    for (u = s->first; u != s->last; u++) {
-        int j;
-        for (j = 0; j < u->n; ++j) {
-            struct cuckoo_page *p = u->p + j;
-            if (!is_template(p) && !is_shared(p) && p->size) {
-                p->offset += s->start;
-            }
-        }
-    }
     return r;
 }
 
@@ -979,8 +985,6 @@ execute_plan(struct cuckoo_context *cc,
             first = u, slot = (slot + 1) % num_slots) {
 
         struct io_slot *s = &slots[slot];
-        int start = -1;
-        int end = -1;
         int num_tpfns;
         int num_pfns;
 
@@ -988,12 +992,10 @@ execute_plan(struct cuckoo_context *cc,
         --outstanding;
 
         if (compressing && s->buffer) {
-            s->start = file_offset;
-            s->end += file_offset;
-            if (write_slot(fb, s) < 0) {
+            if (write_slot(fb, s, file_offset) < 0) {
                 cancelled = 1;
             }
-            file_offset = s->end;
+            file_offset += s->size;
             ccb->free(opaque, s->buffer);
             s->buffer = NULL;
         }
@@ -1011,42 +1013,33 @@ execute_plan(struct cuckoo_context *cc,
             }
         }
 
+        s->size = 0;
         for (u = first, num_pfns = num_tpfns = 0; valid_u(u);) {
             num_pfns += u->n;
             num_tpfns += is_template(u->ref) ? 1 : 0;
-            if (start == -1) {
-                start = u->start;
-            }
-            if (u->start != -1) {
-                if (u->start < end) {
-                    break;
-                }
-                end = u->start + u->size;
-            }
+            s->size += u->size;
 
             ++u;
             /* Check after increasing u, to ensure progress. */
             if (num_pfns >= max_pfns ||
                     num_tpfns >= max_template_pfns ||
-                    (end - start) >= (1<<19)) {
+                    s->size > (1<<19)) {
                 break;
             }
         }
 
         s->first = first;
         s->last = u;
-        s->start = start;
-        s->end = end;
         s->buffer = NULL;
         __sync_synchronize();
 
         if (!compressing) {
-            if (start != end) {
-                s->buffer = ccb->malloc(opaque, end - start);
+            if (s->size) {
+                s->buffer = ccb->malloc(opaque, s->size);
                 assert(s->buffer);
                 __sync_synchronize();
-                read_slot(fb, s);
-                file_offset = end;
+                read_slot(fb, s, file_offset);
+                file_offset += s->size;
             }
         }
         thread_event_set(&s->metadata_ready);
@@ -1119,9 +1112,9 @@ static int page_cmp_offset(const void *_a, const void *_b)
     struct cuckoo_page *a = *(struct cuckoo_page **) _a;
     struct cuckoo_page *b = *(struct cuckoo_page **) _b;
 
-    if (a->offset < b->offset) {
+    if (a->x.offset < b->x.offset) {
         return -1;
-    } else if (b->offset < a->offset) {
+    } else if (b->x.offset < a->x.offset) {
         return 1;
     } else {
         return 0;
@@ -1139,37 +1132,36 @@ static void gc_pin(struct cuckoo_context *cc,
     uint32_t dst;
     struct cuckoo_page **pages;
 
-    for (i = num_shared = 0; i < cc->passive->num_pages; ++i) {
-        struct cuckoo_page *p = (struct cuckoo_page *) &cc->passive->pages[i];
-        if (p->is_stable && is_shared(p)) {
+    struct cuckoo_page *p = (struct cuckoo_page *) cc->passive->pages;
+    for (i = num_shared = 0; i < cc->passive->num_pages; ++i, p = next(p)) {
+        if (p->c.is_stable && is_shared(p)) {
             ++num_shared;
         }
     }
 
     pages = ccb->malloc(opaque, sizeof(pages[0]) * num_shared);
-    for (i = j = 0; i < cc->passive->num_pages; ++i) {
-        struct cuckoo_page *p = (struct cuckoo_page *) &cc->passive->pages[i];
-        if (p->is_stable && is_shared(p)) {
+    p = (struct cuckoo_page *) cc->passive->pages;
+    for (i = j = 0; i < cc->passive->num_pages; ++i, p = next(p)) {
+        if (p->c.is_stable && is_shared(p)) {
             pages[j++] = p;
-            assert(p->size);
+            assert(p->c.size);
         }
     }
     qsort(pages, num_shared, sizeof(pages[0]), page_cmp_offset);
 
     for (i = dst = 0; i < num_shared; ++i) {
-        struct cuckoo_page *p = pages[i];
-        assert(is_shared(p));
-        assert(i == 0 || pages[i-1]->offset < p->offset);
-        assert(dst <= p->offset);
-        if (p->offset - dst >= p->size) {
+        struct cuckoo_page *p = pages[i]; // XXX shadows
+        uint16_t size = p->c.size;
+        uint32_t offset = p->x.offset;
+        if (offset - dst >= size) {
             /* We can move atomically with no overlap. */
-            memcpy(cc->pin + dst, cc->pin + p->offset, p->size);
+            memcpy(cc->pin + dst, cc->pin + offset, size);
             __sync_synchronize();
-            p->offset = dst;
-            dst += p->size;
+            p->x.offset = dst;
+            dst += size;
         } else {
             /* Cannot move without violating crash-consistency. */
-            dst = p->offset + p->size;
+            dst = offset + size;
         }
     }
     ((struct cuckoo_shared *)cc->passive)->pin_brk = dst;
@@ -1181,7 +1173,8 @@ static void gc_pin(struct cuckoo_context *cc,
 
 static void print_stats(struct cuckoo_shared *s)
 {
-    const struct cuckoo_page *p, *ref, *begin, *end;
+#if 0
+    const struct cuckoo_page *p, *ref, *begin;
     int64_t size_pin = 0, size_unique = 0;
     int64_t saved_template = 0, saved_pin = 0, saved_local = 0;
     int num_shared = 0;
@@ -1189,17 +1182,17 @@ static void print_stats(struct cuckoo_shared *s)
     int num_pin = 0;
     int num_local = 0;
     int num_template_ident = 0;
+    int i;
 
     begin = s->pages;
-    end = s->pages + s->num_pages;
-    for (p = begin, ref = NULL; p != end; ++p) {
+    for (i = 0, p = begin, ref = NULL; i < s->num_pages; ++i, p = nextc(p)) {
         if (is_template(p)) {
             ref = p;
         } else if (is_shared(p)) {
             ref = p;
             size_pin += p->size;
             ++num_shared;
-        } else if (p == begin || p[-1].hash != p->hash) {
+        } else if (p == begin || get_hash(&p[-1]) != get_hash(p)) {
             ref = p;
             size_unique += p->size;
         } else {
@@ -1239,6 +1232,7 @@ static void print_stats(struct cuckoo_shared *s)
             saved_pin >> 20,
             saved_local >> 20);
 
+#endif
 }
 
 int cuckoo_reconstruct_vm(struct cuckoo_context *cc, uuid_t uuid,
@@ -1288,16 +1282,18 @@ cmp_page_hash(const void *a, const void *b)
 {
     const struct cuckoo_page *pa = a;
     const struct cuckoo_page *pb = b;
+    uint64_t ha = pa->x.hash;
+    uint64_t hb = pb->x.hash;
 
-    if (pa->hash < pb->hash) {
+    if (ha < hb) {
         return -1;
-    } else if (pb->hash < pa->hash) {
+    } else if (hb < ha) {
         return 1;
     } else {
 
-        if (pa->pfn < pb->pfn) {
+        if (pa->c.pfn < pb->c.pfn) {
             return -1;
-        } else if (pb->pfn < pa->pfn) {
+        } else if (pb->c.pfn < pa->c.pfn) {
             return 1;
         } else {
             return 0;
@@ -1315,9 +1311,10 @@ prepare_pages(int num_pages,
 {
     struct cuckoo_page *p;
     struct cuckoo_page a = proto;
-    int i;
+    int i, j;
+    assert(proto.c.type);
 
-    for (i = 0, p = pages; i < num_pages; ++i) {
+    for (i = j = 0, p = pages; i < num_pages; ++i) {
         struct page_fingerprint *s = &fps[i];
         uint64_t hash = s->hash;
         uint64_t pfn = s->pfn;
@@ -1325,40 +1322,45 @@ prepare_pages(int num_pages,
         /* ~0ULL means no meaningful hash value. Use a unique id instead,
          * or skip entirely if priming template. */
         if (hash == ~0ULL) {
-            if (a.vm == 0) {
+            if (a.c.vm == 0) {
                 continue;
             } else {
-                hash = (((uint64_t) a.vm << 48ULL) | pfn);
+                hash = (((uint64_t) a.c.vm << 48ULL) | pfn);
             }
         }
 
-        a.hash = hash;
-        a.pfn = pfn;
-        a.rotate = s->rotate;
-        *p++ = a;
+        a.c.pfn = pfn;
+        a.c.rotate = s->rotate;
+        *p = a;
+        p->x.hash = hash;
+        p = next(p);
+        ++j;
     }
-    qsort(pages, p - pages, sizeof(pages[0]), cmp_page_hash);
-    return p - pages;
+    qsort(pages, j, sizeof(pages[0]), cmp_page_hash);
+    return j;
 }
 
 static int
 uniq_pages(int num_pages, struct cuckoo_page *pages)
 {
-    int i;
+    int i, j;
     struct cuckoo_page *p, *q;
-    for (i = 0, p = q = pages; i < num_pages; ++i, ++p) {
-        if (i == 0 || p[-1].hash != p->hash) {
-            *q++ = pages[i];
+    uint64_t last_h = 0;
+    for (i = j = 0, p = q = pages; i < num_pages; ++i, ++p) {
+        assert(p->c.type);
+        if (i == 0 || last_h != p->x.hash) {
+            *q++ = *p;
+            last_h = p->x.hash;
+            ++j;
         }
     }
-    return q - pages;
+    return j;
 }
 
 static inline int space_left(const struct cuckoo_shared *s)
 {
-    int total_space = ((idx_size - sizeof(struct cuckoo_shared)) /
+    return ((idx_size - ((sizeof(struct cuckoo_shared) + s->space_used))) /
             sizeof(struct cuckoo_page));
-    return total_space - s->num_pages;
 }
 
 int cuckoo_compress_vm(struct cuckoo_context *cc, uuid_t uuid,
@@ -1411,8 +1413,9 @@ int cuckoo_compress_vm(struct cuckoo_context *cc, uuid_t uuid,
         debug_printf("priming template\n");
         int na;
         struct cuckoo_page tmpl_proto = {};
-        tmpl_proto.type = cuckoo_page_ref_template;
-        tmpl_proto.is_stable = 1;
+        tmpl_proto.c.type = cuckoo_page_ref_template;
+        tmpl_proto.c.is_stable = 1;
+        tmpl_proto.c.type = cuckoo_page_ref_template;
 
         prepare(cc);
         na = prepare_pages(num_template, cc->active->pages,
@@ -1439,8 +1442,9 @@ int cuckoo_compress_vm(struct cuckoo_context *cc, uuid_t uuid,
         ret = -ENOSPC;
         if (needs_gc) {
             forget_vm(active, vm);
-            active->num_pages = merge(active->pages, passive->pages,
-                                      passive->num_pages, NULL, 0, present,
+            active->num_pages = merge(active->pages, &active->space_used,
+                                      passive->pages, passive->num_pages,
+                                      NULL, 0, present,
                                       ccb, opaque);
             if (space_left(active) >= num_pages) {
                 debug_printf("cuckoo caller should retry\n");
@@ -1452,8 +1456,8 @@ int cuckoo_compress_vm(struct cuckoo_context *cc, uuid_t uuid,
         }
     }
 
-    proto.vm = vm;
-    proto.type = cuckoo_page_delta;
+    proto.c.vm = vm;
+    proto.c.type = cuckoo_page_ref_local;
     int n = prepare_pages(num_pages, pages, fps, proto, ccb, opaque);
     assert(n == num_pages);
 
@@ -1462,7 +1466,8 @@ int cuckoo_compress_vm(struct cuckoo_context *cc, uuid_t uuid,
     assert(space_left(passive) >= num_pages);
 
     /* Merge with existing set of hashes. */
-    active->num_pages = merge(active->pages, passive->pages, passive->num_pages,
+    active->num_pages = merge(active->pages, &active->space_used,
+                              passive->pages, passive->num_pages,
                               pages, num_pages, present, ccb, opaque);
 
     us = create_plan(vm, active->pages, active->num_pages, 1, ccb, opaque);
@@ -1511,14 +1516,21 @@ out_force_commit:
 static int
 strip_unused_template(int num_pages, struct cuckoo_page *pages)
 {
-    int i;
+    int i, j;
     struct cuckoo_page *p, *q;
-    for (i = 0, p = q = pages; i <num_pages; ++i, ++p) {
-        if (!is_template(p) || (i < num_pages - 1 && p[1].hash == p->hash)) {
-            *q++ = *p;
+    for (i = j = 0, p = q = pages; i <num_pages; ++i, p = next(p)) {
+        if (!is_template(p) || (i < num_pages - 1 &&
+                    next(p)->x.hash == p->x.hash)) {
+            q->c = p->c;
+            if (p->c.type) {
+                q->x = p->x;
+
+            }
+            q = next(q);
+            ++j;
         }
     }
-    return q - pages;
+    return j;
 }
 
 int cuckoo_compress_vm_simple(struct filebuf *fb,
@@ -1537,10 +1549,11 @@ int cuckoo_compress_vm_simple(struct filebuf *fb,
     struct cuckoo_page vm_proto = {};
     struct work_unit *us;
     int num_pages;
+    uint32_t used;
 
     /* sort | uniq of template (vm=0) pages. */
-    tmpl_proto.type = cuckoo_page_ref_template;
-    tmpl_proto.is_stable = 1;
+    tmpl_proto.c.type = cuckoo_page_ref_template;
+    tmpl_proto.c.is_stable = 1;
     pa = ccb->malloc(opaque, sizeof(pa[0]) * na);
     if (!pa) {
         goto out;
@@ -1553,7 +1566,7 @@ int cuckoo_compress_vm_simple(struct filebuf *fb,
     na = uniq_pages(na, pa);
 
     /* sort of vm=1 pages. */
-    vm_proto.vm = 1;
+    vm_proto.c.vm = 1;
     nb = prepare_pages(nb, pb, b, vm_proto, ccb, opaque);
 
     /* merge sorted arrays. */
@@ -1561,7 +1574,7 @@ int cuckoo_compress_vm_simple(struct filebuf *fb,
     if (!pages) {
         goto out;
     }
-    num_pages = merge(pages, pa, na, pb, nb, present, ccb, opaque);
+    num_pages = merge(pages, &used, pa, na, pb, nb, present, ccb, opaque);
 
     /* remove unreferenced template pages from array to save file space. */
     num_pages = strip_unused_template(num_pages, pages);
