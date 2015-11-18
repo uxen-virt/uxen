@@ -411,11 +411,11 @@ filebuf_delete_on_close(struct filebuf *fb, int delete)
 void *
 filebuf_mmap(struct filebuf *fb, off_t offset, size_t len)
 {
+    static uint64_t align_mask = 0;
+    uint64_t aligned_offset;
 #ifdef _WIN32
     HANDLE h = INVALID_HANDLE_VALUE;
     SYSTEM_INFO si;
-    static uint64_t align_mask = 0;
-    uint64_t aligned_offset;
 
     if (!align_mask) {
         GetSystemInfo(&si);
@@ -437,19 +437,19 @@ filebuf_mmap(struct filebuf *fb, off_t offset, size_t len)
     if (h)
         CloseHandle(h);
 
-    return fb->mapping + offset - aligned_offset;
 #else  /* _WIN32 */
-    const uint64_t align_mask = UXEN_PAGE_MASK;
-    uint64_t aligned_offset;
 
+    if (!align_mask)
+        align_mask = ~((uint64_t) sysconf(_SC_PAGESIZE) - 1);
     aligned_offset = offset & align_mask;
 
     fb->mapping_len = len + offset - aligned_offset;
     fb->mapping = mmap(NULL, fb->mapping_len, PROT_READ,
-                       MAP_FILE, fb->file, aligned_offset);
-    if (!fb->mapping)
+                       MAP_SHARED, fb->file, aligned_offset);
+    if (fb->mapping == MAP_FAILED)
         err(1, "%s: mmap failed", __FUNCTION__);
 
-    return fb->mapping + offset - aligned_offset;
 #endif /* _WIN32 */
+
+    return fb->mapping + offset - aligned_offset;
 }
