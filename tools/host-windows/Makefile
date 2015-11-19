@@ -24,7 +24,10 @@ REGEX_DIR = mingw-libgnurx-2.5.1
 WIX_DISTFILES = wix37-binaries.tar.bz2
 
 CV2PDB_DISTFILES = cv2pdb-0.31.tar.gz
-CV2PDB_PATCHES = cv2pdb-mingw.patch cv2pdb-nocxxstring.patch cv2pdb-timestamps.patch
+CV2PDB_PATCHES = cv2pdb-mingw.patch \
+		 cv2pdb-nocxxstring.patch \
+		 cv2pdb-timestamps.patch \
+		 cv2pdb-windows-path-separator.patch
 CV2PDB_DIR = cv2pdb-0.31
 
 VPATH = $(SRCDIR)/patches:$(XEN_DISTFILES)
