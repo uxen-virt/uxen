@@ -126,6 +126,14 @@ uXenDispDetectChildStatusChanges(DEVICE_EXTENSION *dev)
     KeReleaseSpinLock(&dev->crtc_lock, irql);
 }
 
+VOID
+uXenDispCrtcDisablePageTracking(DEVICE_EXTENSION *dev)
+{
+    ULONG val = uxdisp_read(dev, UXDISP_REG_MODE);
+    val |= UXDISP_MODE_PAGE_TRACKING_DISABLED;
+    uxdisp_write(dev, UXDISP_REG_MODE, val);
+}
+
 NTSTATUS
 uXenDispCrtcEnable(DEVICE_EXTENSION *dev, UXENDISP_CRTC *crtc)
 {
@@ -146,7 +154,9 @@ uXenDispCrtcEnable(DEVICE_EXTENSION *dev, UXENDISP_CRTC *crtc)
 
     /* Flush */
     uxdisp_crtc_write(dev, crtc->crtcid, UXDISP_REG_CRTC_OFFSET,
-                      crtc->primary_address.LowPart);
+                      dev->sources[crtc->crtcid].shadow_allocation->addr.LowPart);
+
+    uxdisp_write(dev, UXDISP_REG_BANK(0) + UXDISP_REG_BANK_POPULATE, 32 * 1024 *1024);
 
     return STATUS_SUCCESS;
 }
@@ -154,9 +164,9 @@ uXenDispCrtcEnable(DEVICE_EXTENSION *dev, UXENDISP_CRTC *crtc)
 NTSTATUS
 uXenDispCrtcDisable(DEVICE_EXTENSION *dev, UXENDISP_CRTC *crtc)
 {
-    uxdisp_crtc_write(dev, crtc->crtcid, UXDISP_REG_CRTC_ENABLE, 0);
+    //uxdisp_crtc_write(dev, crtc->crtcid, UXDISP_REG_CRTC_ENABLE, 0);
     /* Flush */
-    uxdisp_crtc_write(dev, crtc->crtcid, UXDISP_REG_CRTC_OFFSET, 0);
+    //uxdisp_crtc_write(dev, crtc->crtcid, UXDISP_REG_CRTC_OFFSET, 0);
 
     return STATUS_SUCCESS;
 }

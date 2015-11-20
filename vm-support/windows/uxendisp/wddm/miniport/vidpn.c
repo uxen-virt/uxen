@@ -337,37 +337,6 @@ is_supported_source_mode_set(UXENDISP_CRTC *crtc,
     return FALSE;
 }
 
-static UXENDISP_MODE_SET *
-get_mode_set(DEVICE_EXTENSION *dev, ULONG child_uid)
-{
-    KIRQL irql;
-    UXENDISP_CRTC *crtc = &dev->crtcs[child_uid];
-    UXENDISP_MODE_SET *mode_set;
-
-    if (child_uid >= dev->crtc_count)
-        return NULL;
-
-    KeAcquireSpinLock(&dev->crtc_lock, &irql);
-    mode_set = crtc->mode_set;
-    mode_set->refcount++;
-    KeReleaseSpinLock(&dev->crtc_lock, irql);
-
-    return mode_set;
-}
-
-static VOID
-put_mode_set(DEVICE_EXTENSION *dev, UXENDISP_MODE_SET *mode_set)
-{
-    KIRQL irql;
-
-    KeAcquireSpinLock(&dev->crtc_lock, &irql);
-    if (--mode_set->refcount == 0) {
-        ExFreePoolWithTag(mode_set->modes, UXENDISP_TAG);
-        ExFreePoolWithTag(mode_set, UXENDISP_TAG);
-    }
-    KeReleaseSpinLock(&dev->crtc_lock, irql);
-}
-
 NTSTATUS APIENTRY
 uXenDispIsSupportedVidPn(CONST HANDLE  hAdapter,
                          DXGKARG_ISSUPPORTEDVIDPN *pIsSupportedVidPn)
@@ -446,6 +415,7 @@ uXenDispIsSupportedVidPn(CONST HANDLE  hAdapter,
 
         if (!is_supported_path(curr_path_info)) {
             topology_if->pfnReleasePathInfo(topology_hdl, curr_path_info);
+            curr_path_info = NULL;
             status = STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
             break;
         }
@@ -532,9 +502,11 @@ uXenDispIsSupportedVidPn(CONST HANDLE  hAdapter,
         status = topology_if->pfnAcquireNextPathInfo(topology_hdl, curr_path_info, &next_path_info);
         /* Done with the last path.*/
         topology_if->pfnReleasePathInfo(topology_hdl, curr_path_info);
+        curr_path_info = NULL;
 
         if (status == STATUS_GRAPHICS_NO_MORE_ELEMENTS_IN_DATASET) {
             End = TRUE;
+            status = STATUS_SUCCESS;
             break;
         }
         else if (!NT_SUCCESS(status)) {
@@ -545,7 +517,7 @@ uXenDispIsSupportedVidPn(CONST HANDLE  hAdapter,
         i++;
     }
 
-    if (!End) /* broke out early, cleanup current path*/
+    if (!End && curr_path_info) /* broke out early, cleanup current path*/
         topology_if->pfnReleasePathInfo(topology_hdl, curr_path_info);
 
     if (!NT_SUCCESS(status))
@@ -575,10 +547,7 @@ add_target_mode(D3DKMDT_HVIDPNTARGETMODESET tgt_mode_set_hdl,
     }
 
     /* Let OS assign the ID, set the preferred mode field.*/
-    if (mode->flags & UXENDISP_MODE_FLAG_PREFERRED)
-        target_mode->Preference = D3DKMDT_MP_PREFERRED;
-    else
-        target_mode->Preference = D3DKMDT_MP_NOTPREFERRED;
+    target_mode->Preference = D3DKMDT_MP_PREFERRED;
 
     /*
      * Init signal information (much like what is done for setting
@@ -630,7 +599,6 @@ uXenDispRecommendFunctionalVidPn(CONST HANDLE hAdapter,
 
 static NTSTATUS
 update_target_mode_set(UXENDISP_CRTC *crtc,
-                       UXENDISP_MODE_SET *mode_set,
                        CONST D3DKMDT_HVIDPN vidpn_hdl,
                        DXGK_VIDPN_INTERFACE *vidpn_if,
                        D3DKMDT_VIDPN_PRESENT_PATH *curr_path_info)
@@ -643,7 +611,6 @@ update_target_mode_set(UXENDISP_CRTC *crtc,
     D3DKMDT_VIDPN_SOURCE_MODE *src_mode_info = NULL;
     UXENDISP_PINNED_STATE pinned_state;
     UXENDISP_MODE *mode;
-    ULONG count = 0, i;
     NTSTATUS status = STATUS_SUCCESS;
     PAGED_CODE();
 
@@ -719,40 +686,18 @@ update_target_mode_set(UXENDISP_CRTC *crtc,
          * options would be to leave it as is or add a default mode set.
          * It seems the sample would effectively do what is done here.
          */
-        if (mode_set != NULL)
-            count = mode_set->mode_count;
 
-        for (i = 0; i < count; i++) {
-            mode = &mode_set->modes[i];
-
-            /* Only target modes that match a pinned source mode*/
-            if (src_mode_info != NULL) {
-                if ((src_mode_info->Format.Graphics.PrimSurfSize.cx == mode->xres)&&
-                    (src_mode_info->Format.Graphics.PrimSurfSize.cy == mode->yres)) {
-                    if (ddi_to_uxendisp_fmt(src_mode_info->Format.Graphics.PixelFormat) == -1)
-                        continue;
-                }
-                else {
-                    continue;
-                }
-            }
-
-            /* Add the next mode to the set.*/
-            status = add_target_mode(tgt_mode_set_hdl,
-                                     target_mode_set_if,
-                                     mode);
-            if (!NT_SUCCESS(status)) {
-                uxen_err("uXenDispAddTargetMode failed: 0x%x", status);
-                break;
-            }
+        status = add_target_mode(tgt_mode_set_hdl,
+                                 target_mode_set_if,
+                                 &crtc->next_mode);
+        if (!NT_SUCCESS(status)) {
+            uxen_err("uXenDispAddTargetMode failed: 0x%x", status);
+            break;
         }
 
-        if (!NT_SUCCESS(status))
-            break;
-
         status = vidpn_if->pfnAssignTargetModeSet(vidpn_hdl,
-                                                         curr_path_info->VidPnTargetId,
-                                                         tgt_mode_set_hdl);
+                                                  curr_path_info->VidPnTargetId,
+                                                  tgt_mode_set_hdl);
         if (NT_SUCCESS(status))
             tgt_mode_set_hdl = NULL;
         else
@@ -820,7 +765,6 @@ add_source_mode(D3DKMDT_HVIDPNSOURCEMODESET source_mode_set_hdl,
 
 static NTSTATUS
 update_source_mode_set(UXENDISP_CRTC *crtc,
-                       UXENDISP_MODE_SET *mode_set,
                        CONST D3DKMDT_HVIDPN vidpn_hdl,
                        DXGK_VIDPN_INTERFACE *vidpn_if,
                        D3DKMDT_VIDPN_PRESENT_PATH *curr_path_info)
@@ -833,7 +777,6 @@ update_source_mode_set(UXENDISP_CRTC *crtc,
     D3DKMDT_VIDPN_TARGET_MODE *tgt_mode_info = NULL;
     UXENDISP_PINNED_STATE pinned_state;
     UXENDISP_MODE *mode;
-    ULONG count = 0, i;
     NTSTATUS status = STATUS_SUCCESS;
     PAGED_CODE();
 
@@ -921,32 +864,14 @@ update_source_mode_set(UXENDISP_CRTC *crtc,
          * options would be to leave it as is or add a default mode set.
          * It seems the sample would effectively do what is done here.
          */
-        if (mode_set != NULL)
-            count = mode_set->mode_count;
 
-        for (i = 0; i < count; i++) {
-            mode = &mode_set->modes[i];
-
-            /* Only target modes that match a pinned source mode*/
-            if (tgt_mode_info != NULL) {
-                if ((tgt_mode_info->VideoSignalInfo.ActiveSize.cx != mode->xres) ||
-                    (tgt_mode_info->VideoSignalInfo.ActiveSize.cy != mode->yres)) {
-                    continue;
-                }
-            }
-
-            /* Add the next mode to the set.*/
-            status = add_source_mode(source_mode_set_hdl,
-                                     source_mode_set_if,
-                                     mode);
-            if (!NT_SUCCESS(status)) {
-                uxen_err("add_source_mode failed: 0x%x", status);
-                break;
-            }
-        }
-
-        if (!NT_SUCCESS(status))
+        status = add_source_mode(source_mode_set_hdl,
+                                 source_mode_set_if,
+                                 &crtc->next_mode);
+        if (!NT_SUCCESS(status)) {
+            uxen_err("add_source_mode failed: 0x%x", status);
             break;
+        }
 
         status = vidpn_if->pfnAssignSourceModeSet(vidpn_hdl,
                                                   curr_path_info->VidPnSourceId,
@@ -986,7 +911,6 @@ uXenDispEnumVidPnCofuncModality(CONST HANDLE hAdapter,
     D3DKMDT_VIDPN_PRESENT_PATH *next_path_info;
     D3DKMDT_VIDPN_PRESENT_PATH CurrPathInfo;
     BOOLEAN UpdatePath;
-    UXENDISP_MODE_SET *mode_set = NULL;
     NTSTATUS status;
     BOOLEAN End = FALSE;
     ULONG i;
@@ -1068,12 +992,10 @@ uXenDispEnumVidPnCofuncModality(CONST HANDLE hAdapter,
         }
 
         /* -- Target & Source --*/
-        mode_set = get_mode_set(dev, curr_path_info->VidPnTargetId);
 
         if ((pEnumCofuncModality->EnumPivotType != D3DKMDT_EPT_VIDPNTARGET)||
             (pEnumCofuncModality->EnumPivot.VidPnTargetId != curr_path_info->VidPnTargetId)) {
             status = update_target_mode_set(&dev->crtcs[curr_path_info->VidPnTargetId],
-                                            mode_set,
                                             pEnumCofuncModality->hConstrainingVidPn,
                                             vidpn_if,
                                             curr_path_info);
@@ -1086,7 +1008,6 @@ uXenDispEnumVidPnCofuncModality(CONST HANDLE hAdapter,
         if ((pEnumCofuncModality->EnumPivotType != D3DKMDT_EPT_VIDPNSOURCE)||
             (pEnumCofuncModality->EnumPivot.VidPnSourceId != curr_path_info->VidPnSourceId)) {
             status = update_source_mode_set(&dev->crtcs[curr_path_info->VidPnTargetId],
-                                            mode_set,
                                             pEnumCofuncModality->hConstrainingVidPn,
                                             vidpn_if,
                                             curr_path_info);
@@ -1095,11 +1016,6 @@ uXenDispEnumVidPnCofuncModality(CONST HANDLE hAdapter,
                 break;
             }
         }
-
-        if (mode_set != NULL)
-            put_mode_set(dev, mode_set);
-
-        mode_set = NULL;
 
         /* -- Next --*/
         status = topology_if->pfnAcquireNextPathInfo(topology_hdl, curr_path_info, &next_path_info);
@@ -1120,8 +1036,6 @@ uXenDispEnumVidPnCofuncModality(CONST HANDLE hAdapter,
     if (!End) {
         /* Broke out early, cleanup current path and release any mode set*/
         topology_if->pfnReleasePathInfo(topology_hdl, curr_path_info);
-        if (mode_set != NULL)
-            put_mode_set(dev, mode_set);
     }
 
     return STATUS_SUCCESS;
@@ -1185,39 +1099,7 @@ uXenDispSetVidPnSourceVisibility(CONST HANDLE hAdapter,
         }
     }
 
-
-
     return STATUS_SUCCESS;
-}
-
-static LONG
-validate_new_mode(UXENDISP_CRTC *crtc, UXENDISP_SOURCE_MAP_ENTRY *entry)
-{
-    ULONG i;
-    UXENDISP_MODE *mode;
-
-    /* already checked there is a monitor connected*/
-    ASSERT(crtc->mode_set != NULL);
-    /* already checked there is a monitor connected*/
-    ASSERT(crtc->mode_set->modes != NULL);
-    /* already checked there is a new mode set*/
-    ASSERT(entry->fmt_set);
-
-    if (crtc->mode_set->mode_count < 1) {
-        uxen_err("monitor connected but no modes for CRTC %p", crtc);
-        return -1;
-    }
-
-    for (i = 0; i < crtc->mode_set->mode_count; i++) {
-        mode = &crtc->mode_set->modes[i];
-        if (mode->xres == entry->fmt.VisibleRegionSize.cx &&
-            mode->yres == entry->fmt.VisibleRegionSize.cy &&
-            ddi_to_uxendisp_fmt(entry->fmt.PixelFormat) != -1 &&
-            mode->stride == entry->fmt.Stride)
-            return i;
-    }
-
-    return -1;
 }
 
 NTSTATUS APIENTRY
@@ -1239,6 +1121,8 @@ uXenDispCommitVidPn(CONST HANDLE hAdapter,
     NTSTATUS status;
     KIRQL irql;
     ULONG i;
+
+    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pCommitVidPn))
@@ -1410,22 +1294,6 @@ uXenDispCommitVidPn(CONST HANDLE hAdapter,
             continue;
         }
 
-        /*
-         * All other cases:
-         *      |T|       ... |T|<-|S|     new path and source
-         *      |T|<-|S1| ... |T|<-|S2|    new source
-         *      |T|<-|S1| ... |T|<-|S1|    same source
-         *      |T|<-|S1| ... |T|<-|S1'|   same source, new mode
-         * Check for monitor, validate mode, stage values
-         */
-        if (crtc->connected) {
-            crtc->staged_modeidx = validate_new_mode(crtc, &source_map[i]);
-            if (crtc->staged_modeidx == -1) {
-                status = STATUS_GRAPHICS_VIDPN_MODALITY_NOT_SUPPORTED;
-                break;
-            }
-        }
-
         crtc->staged_sourceid = source_map[i].sourceid;
         crtc->staged_fmt = ddi_to_uxendisp_fmt(source_map[i].fmt.PixelFormat);
         /*
@@ -1450,18 +1318,13 @@ uXenDispCommitVidPn(CONST HANDLE hAdapter,
          */
         if (NT_SUCCESS(status)) {
             if (!(crtc->staged_flags & UXENDISP_CRTC_STAGED_FLAG_SKIP)) {
-                crtc->modeidx = crtc->staged_modeidx;
                 crtc->sourceid = crtc->staged_sourceid;
-
-                /* Set the new mode format*/
-                if (crtc->staged_fmt != -1)
-                    crtc->mode_set->modes[crtc->modeidx].fmt = crtc->staged_fmt;
 
                 /*
                  * Make a copy of the current mode that can be accessed
                  * outside of the lock.
                  */
-                RtlMoveMemory(&crtc->curr_mode, &crtc->mode_set->modes[crtc->modeidx],
+                RtlMoveMemory(&crtc->curr_mode, &crtc->next_mode,
                               sizeof(UXENDISP_MODE));
 
                 if (crtc->staged_flags & UXENDISP_CRTC_STAGED_FLAG_DISABLE)
@@ -1478,6 +1341,8 @@ uXenDispCommitVidPn(CONST HANDLE hAdapter,
     KeReleaseSpinLock(&dev->crtc_lock, irql);
 
     ExFreePoolWithTag(source_map, UXENDISP_TAG);
+
+    uxen_msg("Exit %x", status);
 
     return status;
 }
@@ -1496,60 +1361,6 @@ uXenDispUpdateActiveVidPnPresentPath(CONST HANDLE hAdapter,
     return STATUS_SUCCESS;
 }
 
-static BOOLEAN
-compare_monitor_modes(UXENDISP_MODE *mode,
-                      D3DKMDT_HMONITORSOURCEMODESET mon_src_mode_set_hdl,
-                      CONST DXGK_MONITORSOURCEMODESET_INTERFACE *mon_src_mode_set_if)
-{
-    D3DKMDT_MONITOR_SOURCE_MODE *curr_info;
-    D3DKMDT_MONITOR_SOURCE_MODE *next_info;
-    D3DKMDT_2DREGION active_size;
-    NTSTATUS status;
-    BOOLEAN r = TRUE;
-
-    PAGED_CODE();
-
-    /*
-     * Enumerate monitor modes and determine if the mode already exists.
-     */
-    status = mon_src_mode_set_if->pfnAcquireFirstModeInfo(mon_src_mode_set_hdl,
-                                                          &curr_info);
-    if (status == STATUS_GRAPHICS_DATASET_IS_EMPTY) {
-        /* Empty set, that is OK */
-        return FALSE;
-    }
-    if (!NT_SUCCESS(status)) {
-        uxen_err("pfnAcquireFirstModeInfo failed: 0x%x", status);
-        return TRUE; /* bad mode set? - more likely low memory - probably can't add to it*/
-    }
-
-    while (TRUE) {
-        active_size = curr_info->VideoSignalInfo.ActiveSize;
-
-        /* Match, then it is already there.*/
-        if ((active_size.cx == mode->xres) &&
-            (active_size.cy == mode->yres)) {
-            mon_src_mode_set_if->pfnReleaseModeInfo(mon_src_mode_set_hdl, curr_info);
-            break;
-        }
-
-        status = mon_src_mode_set_if->pfnAcquireNextModeInfo(mon_src_mode_set_hdl, curr_info, &next_info);
-        mon_src_mode_set_if->pfnReleaseModeInfo(mon_src_mode_set_hdl, curr_info);
-
-        if (status == STATUS_GRAPHICS_NO_MORE_ELEMENTS_IN_DATASET) {
-            r = FALSE;
-            break;
-        }
-        else if (!NT_SUCCESS(status)) {
-            uxen_err("pfnAcquireNextPathInfo failed: 0x%x", status);
-            break; /* bad mode set? - more likely low memory - probably can't add to it*/
-        }
-        curr_info = next_info;
-    }
-
-    return r;
-}
-
 static VOID
 init_monitor_source_mode(D3DKMDT_MONITOR_SOURCE_MODE *pVidPnMonitorSourceModeInfo,
                          UXENDISP_MODE *mode)
@@ -1558,17 +1369,17 @@ init_monitor_source_mode(D3DKMDT_MONITOR_SOURCE_MODE *pVidPnMonitorSourceModeInf
 
     PAGED_CODE();
 
-    pVidPnMonitorSourceModeInfo->ColorBasis = D3DKMDT_CB_SRGB;
+    pVidPnMonitorSourceModeInfo->ColorBasis = D3DKMDT_CB_SCRGB;
     pVidPnMonitorSourceModeInfo->ColorCoeffDynamicRanges.FirstChannel = 8;
     pVidPnMonitorSourceModeInfo->ColorCoeffDynamicRanges.SecondChannel = 8;
     pVidPnMonitorSourceModeInfo->ColorCoeffDynamicRanges.ThirdChannel = 8;
     pVidPnMonitorSourceModeInfo->ColorCoeffDynamicRanges.FourthChannel = 0;
     pVidPnMonitorSourceModeInfo->Origin = D3DKMDT_MCO_DRIVER;
 
-    if (mode->flags & UXENDISP_MODE_FLAG_PREFERRED)
+    //if (mode->flags & UXENDISP_MODE_FLAG_PREFERRED)
         pVidPnMonitorSourceModeInfo->Preference = D3DKMDT_MP_PREFERRED;
-    else
-        pVidPnMonitorSourceModeInfo->Preference = D3DKMDT_MP_NOTPREFERRED;
+    //else
+        //pVidPnMonitorSourceModeInfo->Preference = D3DKMDT_MP_NOTPREFERRED;
 
     signal_info->VideoStandard = D3DKMDT_VSS_OTHER;
     signal_info->TotalSize.cx = D3DKMDT_DIMENSION_NOTSPECIFIED;
@@ -1588,80 +1399,31 @@ uXenDispRecommendMonitorModes(CONST HANDLE hAdapter,
                               CONST DXGKARG_RECOMMENDMONITORMODES *CONST pRecommendMonitorModes)
 {
     DEVICE_EXTENSION *dev = (DEVICE_EXTENSION*)hAdapter;
-    D3DKMDT_HMONITORSOURCEMODESET mon_src_mode_set_hdl;
-    CONST DXGK_MONITORSOURCEMODESET_INTERFACE *mon_src_mode_set_if;
     D3DKMDT_MONITOR_SOURCE_MODE *mon_src_mode_info;
-    UXENDISP_MODE_SET *mode_set;
-    UXENDISP_MODE *mode;
-    UXENDISP_MODE **mode_list;
     NTSTATUS status = STATUS_SUCCESS;
-    ULONG i;
     PAGED_CODE();
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pRecommendMonitorModes))
         return STATUS_INVALID_PARAMETER;
 
-    ASSERT(pRecommendMonitorModes->VideoPresentTargetId < dev->crtc_count);
-    mon_src_mode_set_hdl = pRecommendMonitorModes->hMonitorSourceModeSet;
-    mon_src_mode_set_if = pRecommendMonitorModes->pMonitorSourceModeSetInterface;
-
-    /*
-     * It seems reasonable to assume this is called when a monitor is
-     * hotplugged to allow modes to be added the the monitor source mode set.
-     */
-    /*
-     * N.B. The working assumption here is that the monitor modes are gotten
-     * from the EDID query on the child device. This set should include 3
-     * standard timings and the detailed timing for the preferred mode. This
-     * corresponds to the modes with either UXENDISP_MODE_FLAG_BASE_SET
-     * or UXENDISP_MODE_FLAG_EDID_MODE flags set. It remains to be seen how
-     * the directx kernel handles this.
-     */
-    mode_set = get_mode_set(dev, pRecommendMonitorModes->VideoPresentTargetId);
-    if (!mode_set)
-        return STATUS_SUCCESS; /* no monitor at this point*/
-
-    /* Temp queue to hold modes to recommend.*/
-    mode_list = ExAllocatePoolWithTag(NonPagedPool,
-                                      mode_set->mode_count * sizeof(UXENDISP_MODE),
-                                      UXENDISP_TAG);
-    if (!mode_list) {
-        put_mode_set(dev, mode_set);
-        return STATUS_NO_MEMORY;
-    }
-    RtlZeroMemory(mode_list, mode_set->mode_count * sizeof(UXENDISP_MODE));
-
-    for (i = 0; i < mode_set->mode_count; i++) {
-        if (!compare_monitor_modes(&mode_set->modes[i],
-                                   mon_src_mode_set_hdl,
-                                   mon_src_mode_set_if)) {
-            mode_list[i] = &mode_set->modes[i];
-        }
+    status = pRecommendMonitorModes->pMonitorSourceModeSetInterface->pfnCreateNewModeInfo(
+            pRecommendMonitorModes->hMonitorSourceModeSet, &mon_src_mode_info);
+    if (!NT_SUCCESS(status)) {
+        uxen_err("pfnCreateNewModeInfo failed: 0x%x", status);
     }
 
-    /* Add any missing modes*/
-    for (i = 0; i < mode_set->mode_count; i++) {
-        if (mode_list[i] == NULL)
-            continue;
+    if (NT_SUCCESS(status)) {
+        init_monitor_source_mode(mon_src_mode_info, &dev->crtcs[0].next_mode);
 
-        status = mon_src_mode_set_if->pfnCreateNewModeInfo(mon_src_mode_set_hdl, &mon_src_mode_info);
-        if (!NT_SUCCESS(status)) {
-            uxen_err("pfnCreateNewModeInfo failed: 0x%x", status);
-            break; /* bad mode set? - probably low memory       */
-        }
-
-        init_monitor_source_mode(mon_src_mode_info, mode_list[i]);
-
-        status = mon_src_mode_set_if->pfnAddMode(mon_src_mode_set_hdl, mon_src_mode_info);
+        status = pRecommendMonitorModes->pMonitorSourceModeSetInterface->pfnAddMode(
+                pRecommendMonitorModes->hMonitorSourceModeSet, mon_src_mode_info);
         if (!NT_SUCCESS(status)) {
             uxen_err("pfnCreateNewModeInfo pfnAddMode: 0x%x", status);
-            mon_src_mode_set_if->pfnReleaseModeInfo(mon_src_mode_set_hdl, mon_src_mode_info);
+            pRecommendMonitorModes->pMonitorSourceModeSetInterface->pfnReleaseModeInfo(
+                    pRecommendMonitorModes->hMonitorSourceModeSet, mon_src_mode_info);
         }
     }
-
-    ExFreePoolWithTag(mode_list, UXENDISP_TAG);
-    put_mode_set(dev, mode_set);
 
     return status;
 }

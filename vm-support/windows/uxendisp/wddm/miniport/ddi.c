@@ -11,7 +11,9 @@
 #include <devioctl.h>
 
 #include <debug.h>
+#include <uxendisp_esc.h>
 #include "uxendisp.h"
+#include "dirty_rect.h"
 
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text(PAGE,uXenDispControlEtwLogging)
@@ -49,8 +51,6 @@ map_fb(DEVICE_EXTENSION * dev, UXENDISP_DRIVER_ALLOCATION *drvalloc,
     PHYSICAL_ADDRESS addr;
     SIZE_T l;
 
-    uxen_msg("Enter");
-
     addr = dev->vram_phys;
     addr.QuadPart += drvalloc->addr.QuadPart;
 
@@ -65,7 +65,6 @@ map_fb(DEVICE_EXTENSION * dev, UXENDISP_DRIVER_ALLOCATION *drvalloc,
     if (len)
         *len = l;
 
-    uxen_msg("Leave");
     return fb;
 }
 
@@ -90,8 +89,6 @@ subrect_blit(UXENDISP_DMA_PRESENT *dma_present,
     ULONG i;
     LONG delta_x, overlap;
 
-    uxen_msg("Enter");
-
     width = subrect->width * srcalloc->surface_desc.BytesPerPixel;
 
     if (v_overlap) {
@@ -101,7 +98,7 @@ subrect_blit(UXENDISP_DMA_PRESENT *dma_present,
                (subrect->left * srcalloc->surface_desc.BytesPerPixel);
         dst += ((subrect->top + subrect->height - 1) *
                 dstalloc->surface_desc.Stride) +
-               (subrect->left * srcalloc->surface_desc.BytesPerPixel);
+               (subrect->left * dstalloc->surface_desc.BytesPerPixel);
     } else {
         /* Copy top to bottom */
         src += (subrect->top * srcalloc->surface_desc.Stride) +
@@ -135,10 +132,14 @@ subrect_blit(UXENDISP_DMA_PRESENT *dma_present,
             RtlCopyMemory(to, from, delta_x);
         }
 
-        dst += dstalloc->surface_desc.Stride * (v_overlap ? -1 : 1);
-        src += srcalloc->surface_desc.Stride * (v_overlap ? -1 : 1);
+        if (v_overlap) {
+            dst -= dstalloc->surface_desc.Stride;
+            src -= srcalloc->surface_desc.Stride;
+        } else {
+            dst += dstalloc->surface_desc.Stride;
+            src += srcalloc->surface_desc.Stride;
+        }
     }
-    uxen_msg("Leave");
 }
 
 static NTSTATUS
@@ -151,8 +152,6 @@ do_blit(DEVICE_EXTENSION *dev, UXENDISP_DMA_PRESENT *dma_present)
     BOOLEAN h_overlap, v_overlap;
     SUBRECT *subrects;
     ULONG i;
-
-    uxen_msg("Enter");
 
     srcalloc = dma_present->srcalloc;
     dstalloc = dma_present->dstalloc;
@@ -192,8 +191,6 @@ do_blit(DEVICE_EXTENSION *dev, UXENDISP_DMA_PRESENT *dma_present)
     MmUnmapIoSpace(dst_fb, dst_len);
     MmUnmapIoSpace(src_fb, src_len);
 
-    uxen_msg("Leave");
-
     return STATUS_SUCCESS;
 }
 
@@ -202,8 +199,6 @@ do_command(DEVICE_EXTENSION *dev, PHYSICAL_ADDRESS dma_addr, SIZE_T length)
 {
     UINT i;
     UXENDISP_DMA_PRESENT *dma_present;
-
-    uxen_msg("Enter");
 
     /* Map the DMA buffer */
     dma_present = MmMapIoSpace(dma_addr, length, MmNonCached);
@@ -225,7 +220,6 @@ do_command(DEVICE_EXTENSION *dev, PHYSICAL_ADDRESS dma_addr, SIZE_T length)
 
     MmUnmapIoSpace(dma_present, length);
 
-    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -365,7 +359,6 @@ uXenDispCreateDevice(CONST HANDLE hAdapter,
     UXENDISP_D3D_DEVICE *d3ddev;
 
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pCreateDevice))
@@ -384,7 +377,6 @@ uXenDispCreateDevice(CONST HANDLE hAdapter,
 
     pCreateDevice->hDevice = d3ddev;
 
-    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -396,7 +388,6 @@ uXenDispSetDriverAllocation(DEVICE_EXTENSION * dev,
 {
     KIRQL irql;
 
-    uxen_msg("Enter");
     KeAcquireSpinLock(&dev->sources_lock, &irql);
     if (flag && dev->sources[sourceID].in_use) {
         uxen_err("Failed to associate primary allocation with a VidPN source",
@@ -408,7 +399,6 @@ uXenDispSetDriverAllocation(DEVICE_EXTENSION * dev,
             pDrvAllocation->state |= UXENDISP_ALLOCATION_STATE_ASSIGNED;
     }
     KeReleaseSpinLock(&dev->sources_lock, irql);
-    uxen_msg("Leave");
 }
 
 NTSTATUS APIENTRY
@@ -424,7 +414,6 @@ uXenDispCreateAllocation(CONST HANDLE hAdapter,
 
     PAGED_CODE();
 
-    uxen_msg("Enter");
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pCreateAllocation))
         return STATUS_INVALID_PARAMETER;
@@ -492,6 +481,8 @@ uXenDispCreateAllocation(CONST HANDLE hAdapter,
             ASSERT(d3dalloc->VidPnSourceId < dev->crtc_count);
             uXenDispSetDriverAllocation(dev, d3dalloc->VidPnSourceId,
                                         drvalloc, TRUE);
+        } else if (d3dalloc->Type == UXENDISP_SHADOWSURFACE_TYPE) {
+            dev->sources[0].shadow_allocation = drvalloc;
         }
 
         /* Fill in allocation information */
@@ -523,7 +514,6 @@ uXenDispCreateAllocation(CONST HANDLE hAdapter,
         }
     }
 
-    uxen_msg("Leave");
     return status;
 }
 
@@ -536,7 +526,6 @@ uXenDispDestroyAllocation(CONST HANDLE hAdapter,
     ULONG i;
 
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pDestroyAllocation))
@@ -560,7 +549,6 @@ uXenDispDestroyAllocation(CONST HANDLE hAdapter,
         pDestroyAllocation->hResource)
         ExFreePoolWithTag(pDestroyAllocation->hResource, UXENDISP_TAG);
 
-    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -571,7 +559,6 @@ uXenDispDescribeAllocation(CONST HANDLE hAdapter,
     UXENDISP_DRIVER_ALLOCATION *drvalloc;
 
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pDescribeAlloc))
@@ -586,7 +573,6 @@ uXenDispDescribeAllocation(CONST HANDLE hAdapter,
     pDescribeAlloc->Format = drvalloc->surface_desc.Format;
     pDescribeAlloc->RefreshRate = drvalloc->surface_desc.RefreshRate;
 
-    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -598,7 +584,6 @@ uXenDispGetStandardAllocationDriverData(CONST HANDLE hAdapter,
     UXENDISP_D3D_ALLOCATION *d3dalloc;
 
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pStandardAllocationDriverData))
@@ -694,7 +679,6 @@ uXenDispGetStandardAllocationDriverData(CONST HANDLE hAdapter,
         return STATUS_INVALID_PARAMETER;
     }
 
-    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -784,7 +768,6 @@ uXenDispSubmitCommand(CONST HANDLE hAdapter,
     DXGKARGCB_NOTIFY_INTERRUPT_DATA notify = { 0 };
     PHYSICAL_ADDRESS addr;
     SIZE_T length;
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pSubmitCommand))
@@ -805,7 +788,6 @@ uXenDispSubmitCommand(CONST HANDLE hAdapter,
     dev->dxgkif.DxgkCbNotifyInterrupt(dev->dxgkhdl, &notify);
     dev->dxgkif.DxgkCbQueueDpc(dev->dxgkhdl);
 
-    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -903,7 +885,6 @@ uXenDispBuildPagingBuffer(CONST HANDLE hAdapter,
     LARGE_INTEGER srcaddr = { 0 } , dstaddr = { 0 };
 
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pBuildPagingBuffer))
@@ -955,6 +936,7 @@ uXenDispBuildPagingBuffer(CONST HANDLE hAdapter,
         else
             dstaddr = pBuildPagingBuffer->Transfer.Destination.SegmentAddress;
 
+        status = STATUS_SUCCESS;
         status = xfer(dev,
                       srcmdl,
                       srcaddr,
@@ -994,7 +976,6 @@ uXenDispBuildPagingBuffer(CONST HANDLE hAdapter,
     default:
         break;
     };
-    uxen_msg("Leave");
 
     /* Always return success - any failures (which should not occur) will be traced. */
     return STATUS_SUCCESS;
@@ -1024,7 +1005,6 @@ uXenDispSetPointerPosition(CONST HANDLE hAdapter,
     DEVICE_EXTENSION *dev = (DEVICE_EXTENSION *)hAdapter;
 
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pSetPointerPosition))
@@ -1045,7 +1025,6 @@ uXenDispSetPointerPosition(CONST HANDLE hAdapter,
         dev->cursor_visible = FALSE;
     }
 
-    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -1061,7 +1040,6 @@ uXenDispSetPointerShape(CONST HANDLE hAdapter,
     ULONG flags = 0;
 
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pSetPointerShape))
@@ -1119,7 +1097,6 @@ uXenDispSetPointerShape(CONST HANDLE hAdapter,
     uxdisp_write(dev, UXDISP_REG_CURSOR_ENABLE, UXDISP_CURSOR_SHOW);
 
     dev->cursor_visible = TRUE;
-    uxen_msg("Leave");
 
     return STATUS_SUCCESS;
 }
@@ -1156,17 +1133,47 @@ uXenDispRestartFromTimeout(CONST HANDLE hAdapter)
 NTSTATUS APIENTRY
 uXenDispEscape(CONST HANDLE hAdapter, CONST DXGKARG_ESCAPE *pEscape)
 {
+    NTSTATUS status;
+    UXENDISPCustomMode mode;
+    DEVICE_EXTENSION *dev = (DEVICE_EXTENSION *)hAdapter;
+    DXGK_CHILD_STATUS child_status;
+
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter) || !ARGUMENT_PRESENT(pEscape))
         return STATUS_INVALID_PARAMETER;
 
-    /* TODO this may be useful later to send stuffs between the mp and user land */
-    /* display driver. */
-    uxen_msg("Leave");
+    /* for now we can just assume that there is only one kind of escape calls */
+    if (pEscape->PrivateDriverDataSize == sizeof(mode)) {
+        mode = *((UXENDISPCustomMode*)pEscape->pPrivateDriverData);
+        dev->crtcs[0].next_mode.xres = mode.width;
+        dev->crtcs[0].next_mode.yres = mode.height;
+        dev->crtcs[0].next_mode.stride = mode.width * 4;
+        dev->crtcs[0].next_mode.fmt = 0;
+        dev->crtcs[0].next_mode.flags = UXENDISP_MODE_FLAG_PREFERRED;
 
-    return STATUS_SUCCESS;
+        /* disconnect monitor... */
+        child_status.Type = StatusConnection;
+        child_status.ChildUid = 0;
+        child_status.HotPlug.Connected = FALSE;
+        status = dev->dxgkif.DxgkCbIndicateChildStatus(dev->dxgkhdl, &child_status);
+        if (!NT_SUCCESS(status)) {
+            ASSERT_FAIL("DxgkCbIndicateChildStatus(off) failed: %d\n", status);
+        }
+
+        /* ...and connect it again */
+        child_status.Type = StatusConnection;
+        child_status.ChildUid = 0;
+        child_status.HotPlug.Connected = TRUE;
+        status = dev->dxgkif.DxgkCbIndicateChildStatus(dev->dxgkhdl, &child_status);
+        if (!NT_SUCCESS(status)) {
+            ASSERT_FAIL("DxgkCbIndicateChildStatus(on) failed: %d\n", status);
+        }
+    } else {
+        status = STATUS_INVALID_PARAMETER;
+    }
+
+    return status;
 }
 
 NTSTATUS APIENTRY
@@ -1299,9 +1306,7 @@ NTSTATUS APIENTRY uXenDispDestroyDevice(CONST HANDLE hDevice)
     if (!ARGUMENT_PRESENT(hDevice))
         return STATUS_INVALID_PARAMETER;
 
-    uxen_msg("Enter");
     ExFreePoolWithTag(hDevice, UXENDISP_TAG);
-    uxen_msg("Leave");
 
     return STATUS_SUCCESS;
 }
@@ -1319,7 +1324,6 @@ uXenDispOpenAllocation(CONST HANDLE hDevice,
     NTSTATUS status = STATUS_SUCCESS;
 
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hDevice) ||
         !ARGUMENT_PRESENT(pOpenAllocation))
@@ -1356,7 +1360,6 @@ uXenDispOpenAllocation(CONST HANDLE hDevice,
             drvalloc->allochdl = 0;
         }
     }
-    uxen_msg("Leave");
 
     return status;
 }
@@ -1366,7 +1369,6 @@ uXenDispCloseAllocation(CONST HANDLE hDevice,
                         CONST DXGKARG_CLOSEALLOCATION *pCloseAllocation)
 {
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hDevice) ||
         !ARGUMENT_PRESENT(pCloseAllocation))
@@ -1377,7 +1379,6 @@ uXenDispCloseAllocation(CONST HANDLE hDevice,
      * mapping done above will just go away.
      */
 
-    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -1413,7 +1414,6 @@ uXenDispPresent(CONST HANDLE hContext, DXGKARG_PRESENT *pPresent)
     ULONG srcwidth, srcheight;
 
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hContext) ||
         !ARGUMENT_PRESENT(pPresent))
@@ -1472,7 +1472,7 @@ uXenDispPresent(CONST HANDLE hContext, DXGKARG_PRESENT *pPresent)
         subrects[i].width = min((ULONG)pPresent->pDstSubRects[i].right -
                                 pPresent->pDstSubRects[i].left, srcwidth);
         subrects[i].height = min((ULONG)pPresent->pDstSubRects[i].bottom -
-                                 pPresent->pDstSubRects[i].top, srcheight);;
+                                 pPresent->pDstSubRects[i].top, srcheight);
     }
 
     /* Set the patch locations and advance the location counter */
@@ -1481,7 +1481,8 @@ uXenDispPresent(CONST HANDLE hContext, DXGKARG_PRESENT *pPresent)
     pPresent->pPatchLocationListOut[1].AllocationIndex = DXGK_PRESENT_DESTINATION_INDEX;
     pPresent->pPatchLocationListOut += 2;
 
-    uxen_msg("Leave");
+    dr_send(dev->dr_ctx, 1, &pPresent->DstRect);
+
     return STATUS_SUCCESS;
 }
 

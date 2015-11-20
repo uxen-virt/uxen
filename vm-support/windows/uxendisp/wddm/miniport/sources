@@ -23,12 +23,13 @@ NTTARGETFILE2 = COPY POST
 
 LINKER_FLAGS = $(LINKER_FLAGS) /LTCG:NOSTATUS /SECTION:.rsrc,!d
 
-SOURCES = uxendisp.c ddi.c vidpn.c crtc.c edid.c uxendisp.rc
+SOURCES = uxendisp.c ddi.c vidpn.c crtc.c edid.c dirty_rect.c uxendisp.rc
 
 INCLUDES=..\inc; \
          ..\..\..\common; \
          ..\..\..\..\..\common\include; \
          ..\..\..\..\..\common\include\xen-public; \
+         ..\..\xddm\include; \
          $(UXENV4VLIB_INC);
 
 UXENVMLIB_BUILD_DIR   = \

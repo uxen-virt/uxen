@@ -13,13 +13,14 @@
 #define UXENDISP_PCI_VEN    0x5853
 #define UXENDISP_PCI_DEV    0x5102
 
-#define UXENDISP_REFRESH_RATE 85
+#define UXENDISP_REFRESH_RATE 60
 
 struct _UXENDISP_DRIVER_ALLOCATION;
 
 typedef struct _UXENDISP_SOURCE{
     BOOLEAN in_use;
     struct _UXENDISP_DRIVER_ALLOCATION *primary_allocation;
+    struct _UXENDISP_DRIVER_ALLOCATION *shadow_allocation;
 } UXENDISP_SOURCE, *PUXENDISP_SOURCE;
 
 typedef struct _UXENDISP_MODE {
@@ -49,6 +50,7 @@ typedef struct _UXENDISP_CRTC {
     UCHAR *edid;
     UXENDISP_MODE_SET *mode_set;
     UXENDISP_MODE curr_mode;
+    UXENDISP_MODE next_mode;
     D3DDDI_VIDEO_PRESENT_SOURCE_ID sourceid;
     PHYSICAL_ADDRESS primary_address;
     LONG modeidx;
@@ -80,6 +82,7 @@ typedef struct _DEVICE_EXTENSION {
     UXENDISP_UMDRIVERPRIVATE private_data;
     BOOLEAN cursor_visible;
     UINT current_fence;
+    void *dr_ctx;
 } DEVICE_EXTENSION, *PDEVICE_EXTENSION;
 
 typedef struct _UXENDISP_D3D_DEVICE {
@@ -271,6 +274,7 @@ NTSTATUS APIENTRY uXenDispRecommendVidPnTopology(CONST HANDLE hAdapter,
 
 /* Crtc */
 VOID uXenDispDetectChildStatusChanges(DEVICE_EXTENSION *dev);
+VOID uXenDispCrtcDisablePageTracking(DEVICE_EXTENSION *dev);
 NTSTATUS uXenDispCrtcDisable(DEVICE_EXTENSION *dev, UXENDISP_CRTC *crtc);
 NTSTATUS uXenDispCrtcEnable(DEVICE_EXTENSION *dev, UXENDISP_CRTC *crtc);
 

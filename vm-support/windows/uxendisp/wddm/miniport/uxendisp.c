@@ -13,6 +13,7 @@
 #include <debug.h>
 
 #include "uxendisp.h"
+#include "dirty_rect.h"
 #include "version.h"
 
 NTSTATUS APIENTRY
@@ -258,6 +259,12 @@ uXenDispStartDevice(CONST PVOID pMiniportDeviceContext,
         crtc->staged_sourceid = D3DDDI_ID_UNINITIALIZED;
         crtc->staged_fmt = -1;
         crtc->staged_flags = 0;
+
+        crtc->next_mode.xres = 1024;
+        crtc->next_mode.yres = 768;
+        crtc->next_mode.stride = 1024 * 4;
+        crtc->next_mode.fmt = 0;
+        crtc->next_mode.flags = UXENDISP_MODE_FLAG_PREFERRED;
     }
 
     /*
@@ -289,6 +296,14 @@ uXenDispStartDevice(CONST PVOID pMiniportDeviceContext,
 
     /* Configure all the child devices once up front. */
     uXenDispDetectChildStatusChanges(dev);
+
+    dev->dr_ctx = dr_init(dev, uXenDispCrtcDisablePageTracking);
+    if (!dev->dr_ctx) {
+        uxen_err("%s Failed to init dirty rect tracking!");
+        uXenDispFreeResources(dev);
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+
     uxen_msg("Leave");
 
     return STATUS_SUCCESS;
@@ -304,6 +319,8 @@ uXenDispStopDevice(CONST PVOID pMiniportDeviceContext)
 
     if (!ARGUMENT_PRESENT(pMiniportDeviceContext))
         return STATUS_INVALID_PARAMETER;
+
+    dr_deinit(dev->dr_ctx);
 
     /* Device stopped, switch to uninitialized */
     InterlockedExchange(&dev->initialized, 0);
@@ -407,12 +424,9 @@ VOID APIENTRY
 uXenDispDpcRoutine(CONST PVOID pMiniportDeviceContext)
 {
     DEVICE_EXTENSION *dev = pMiniportDeviceContext;
-    uxen_msg("Enter");
 
     /* The DDI DPC is used to ACK DMA and V-Sync interrupts are fully serviced. */
     dev->dxgkif.DxgkCbNotifyDpc(dev->dxgkhdl);
-
-    uxen_msg("Leave");
 }
 
 NTSTATUS APIENTRY
@@ -490,72 +504,13 @@ uXenDispQueryChildStatus(CONST PVOID pMiniportDeviceContext,
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS
-uXenDispGetChildDescriptor(PDEVICE_EXTENSION dev,
-                           PUXENDISP_CRTC crtc,
-                           PDXGK_DEVICE_DESCRIPTOR pDeviceDescriptor)
-{
-    KIRQL       irql;
-    NTSTATUS    status;
-    ULONG       to_copy;
-
-    uxen_msg("Enter");
-    KeAcquireSpinLock(&dev->crtc_lock, &irql);
-
-    do {
-        status = STATUS_MONITOR_NO_MORE_DESCRIPTOR_DATA;
-
-        if (pDeviceDescriptor->DescriptorOffset >= crtc->edid_len)
-            break;
-
-        if (!pDeviceDescriptor->DescriptorLength)
-            break;
-
-        to_copy = crtc->edid_len - pDeviceDescriptor->DescriptorOffset;
-        if (to_copy > pDeviceDescriptor->DescriptorLength)
-            to_copy = pDeviceDescriptor->DescriptorLength;
-
-        /* Valid hunk of descriptor requested */
-        RtlMoveMemory(pDeviceDescriptor->DescriptorBuffer,
-                      ((UCHAR *)crtc->edid) + pDeviceDescriptor->DescriptorOffset,
-                      to_copy);
-
-        status = STATUS_SUCCESS;
-    } while (FALSE);
-
-    KeReleaseSpinLock(&dev->crtc_lock, irql);
-    uxen_msg("Leave");
-
-    return status;
-}
-
 NTSTATUS APIENTRY
 uXenDispQueryDeviceDescriptor(CONST PVOID pMiniportDeviceContext,
                               ULONG ChildUid,
                               PDXGK_DEVICE_DESCRIPTOR pDeviceDescriptor)
 {
-    DEVICE_EXTENSION *dev = pMiniportDeviceContext;
-    UXENDISP_CRTC *crtc;
-    NTSTATUS status;
-
     PAGED_CODE();
-    uxen_msg("Enter");
-
-    /* These failures should not occur */
-    if (!ARGUMENT_PRESENT(pMiniportDeviceContext) ||
-        !ARGUMENT_PRESENT(pDeviceDescriptor))
-        return STATUS_INVALID_PARAMETER;
-
-    if (ChildUid >= dev->crtc_count) {
-        uxen_err("Invalid ChildUid specified: %d", ChildUid);
-        return STATUS_INVALID_PARAMETER;
-    }
-
-    crtc = &dev->crtcs[ChildUid];
-    status = uXenDispGetChildDescriptor(dev, crtc, pDeviceDescriptor);
-    uxen_msg("Leave");
-
-    return status;
+    return STATUS_MONITOR_NO_DESCRIPTOR;
 }
 
 NTSTATUS APIENTRY
