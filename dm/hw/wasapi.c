@@ -330,8 +330,6 @@ create_audio_client(wasapi_voice_t v, IMMDevice *pMMDevice,
     }
 
     channels = mixfmt->nChannels;
-    if (channels > 2)
-        channels = 2;
 
     /* use mixer sampler rate and channels */
     memset(&v->fmt, 0, sizeof(WAVEFORMATEXTENSIBLE));
@@ -346,8 +344,17 @@ create_audio_client(wasapi_voice_t v, IMMDevice *pMMDevice,
     v->fmt.SubFormat = GUID_KSDATAFORMAT_SUBTYPE_PCM;
     if (channels == 1)
         v->fmt.dwChannelMask = SPEAKER_FRONT_CENTER;
-    else
+    else if (channels == 2)
         v->fmt.dwChannelMask = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
+    else {
+        if (mixfmt->cbSize >= sizeof(WAVEFORMATEXTENSIBLE) - sizeof(WAVEFORMATEX))
+            v->fmt.dwChannelMask = ((WAVEFORMATEXTENSIBLE*)mixfmt)->dwChannelMask;
+        else {
+            /* fallback */
+            debug_printf("audio: fallback to stereo channel mask\n");
+            v->fmt.dwChannelMask = SPEAKER_FRONT_LEFT | SPEAKER_FRONT_RIGHT;
+        }
+    }
 
     if (!is_format_supported(client, (WAVEFORMATEX*)&v->fmt)) {
         debug_printf("audio format not supported\n");

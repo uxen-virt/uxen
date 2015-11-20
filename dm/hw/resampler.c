@@ -333,7 +333,7 @@ struct resampler_16_2 *resampler_16_2_init(double ratio, int dst_channels)
 {
     struct resampler_16_2 *r = 0;
 
-    if (dst_channels < 1 || dst_channels > 2)
+    if (dst_channels < 1)
         goto err;
 
     r = calloc(1, sizeof(struct resampler_16_2));
@@ -426,17 +426,37 @@ int resample_16_2(struct resampler_16_2 *res, void *dst, int *p_dst_frames)
     resample(res->r.res, r, dst_frames, get_frames_cb, &res->r);
 
     *p_dst_frames = dst_frames;
-    if (res->dst_channels == 2) {
+    switch (res->dst_channels) {
+    case 1:
+        /* STEREO -> MONO */
+        while (dst_frames--)
+            *out++ = (int16_t)(((*l++ + *r++)/2) * 0x7fff);
+        break;
+    case 2:
         while (dst_frames--) {
             *out++ = (int16_t)((*l++) * 0x7fff);
             *out++ = (int16_t)((*r++) * 0x7fff);
         }
-    } else if (res->dst_channels == 1) {
-        /* STEREO -> MONO */
-        while (dst_frames--)
-            *out++ = (int16_t)(((*l++ + *r++)/2) * 0x7fff);
-    } else
-        assert(0);
+        break;
+    case 4:
+        while (dst_frames--) {
+            *out++ = (int16_t)((*l) * 0x7fff);
+            *out++ = (int16_t)((*r) * 0x7fff);
+            *out++ = (int16_t)((*l++) * 0x7fff);
+            *out++ = (int16_t)((*r++) * 0x7fff);
+        }
+        break;
+    default:
+        while (dst_frames--) {
+            int pad;
+
+            *out++ = (int16_t)((*l++) * 0x7fff);
+            *out++ = (int16_t)((*r++) * 0x7fff);
+            for (pad = 2; pad < res->dst_channels; ++pad)
+                *out++ = 0;
+        }
+        break;
+    }
 
     assert(res->l.src_consumed == res->r.src_consumed);
     consumed = res->l.src_consumed;
