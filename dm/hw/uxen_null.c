@@ -110,6 +110,8 @@ null_enum_ioport_write(void *opaque, uint32_t addr, uint32_t val)
         s->index = val & 0xff;
         break;
     case 1:
+        if (s->index >= NULL_NET_MAX)
+            break;
         n = s->nics[s->index];
         if (!n)
             break;
