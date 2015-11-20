@@ -477,6 +477,9 @@ dpy_desktop_update(int x, int y, int w, int h)
         int x2 = (x + w) - ds->desktop_x;
         int y2 = (y + h) - ds->desktop_y;
 
+        if (!ds->surface)
+            continue;
+
         /* Overlap check */
         if (x1 > ds->surface->width ||
             x2 <= 0 ||

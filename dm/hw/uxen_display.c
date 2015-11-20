@@ -456,10 +456,6 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
 
     } else {
         if (crtc->ds) {
-            if (crtc->ds->surface) {
-                free_displaysurface(crtc->ds, crtc->ds->surface);
-                crtc->ds->surface = NULL;
-            }
             display_destroy(crtc->ds);
             crtc->ds = NULL;
         }
