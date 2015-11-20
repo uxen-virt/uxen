@@ -77,6 +77,7 @@ struct proxy_t {
     struct net_addr *a;
     int port;
     int resolved;
+    int connection_ok;
     int ct;
     int wakeup_list;
     char *realm;

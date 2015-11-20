@@ -2179,6 +2179,8 @@ static int srv_reconnect_bad_proxy(struct http_ctx *hp)
     if (!hp->cx || !hp->proxy || hp->cstate == S_CONNECTED)
         goto out;
 
+    hp->proxy->connection_ok = 0;
+
     /* too late */
     if ((hp->flags & HF_RESP_RECEIVED))
         goto out;
@@ -2301,6 +2303,13 @@ static int srv_connected(struct http_ctx *hp)
     }
 
     hp->cstate = S_CONNECTED;
+
+    if (hp->proxy && !hp->proxy->connection_ok) {
+        hp->proxy->connection_ok = 1;
+        proxy_cache_add(hp->ni, hp->cx ? hp->cx->schema : NULL,
+                        hp->h.sv_name, hp->h.daddr.sin_port, hp->proxy);
+    }
+
     ret = hp_srv_ready(hp);
 out:
     return ret;
@@ -4277,8 +4286,10 @@ static void rpc_connect_proxy_cb(void *opaque, dict d)
         HLOG("srv_connect_proxy FAILURE");
         goto error;
     }
-    proxy_cache_add(hp->ni, hp->cx ? hp->cx->schema : NULL,
-                    hp->h.sv_name, hp->h.daddr.sin_port, proxy);
+    if (proxy && proxy->connection_ok) {
+        proxy_cache_add(hp->ni, hp->cx ? hp->cx->schema : NULL,
+                        hp->h.sv_name, hp->h.daddr.sin_port, proxy);
+    }
 
     if ((hp->flags & (HF_407_MESSAGE | HF_407_MESSAGE_OK)) ==
         (HF_407_MESSAGE | HF_407_MESSAGE_OK) && end_407_message(hp) < 0) {
@@ -5266,7 +5277,8 @@ static void cx_rpc_proxy_by_url_cb(void *opaque, dict d)
         goto out_close;
     }
 
-    proxy_cache_add(cx->ni, cx->schema, cx->h.sv_name, cx->h.daddr.sin_port, proxy);
+    if (proxy->connection_ok)
+        proxy_cache_add(cx->ni, cx->schema, cx->h.sv_name, cx->h.daddr.sin_port, proxy);
     if ((tmp = dict_get_string(d, "last_refresh")))
         sscanf(tmp, "%" PRId64, &last_refresh);
 
