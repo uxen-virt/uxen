@@ -10,6 +10,7 @@ SUBDIRS  =
 SUBDIRS += uxenvmlib
 SUBDIRS += uxenv4vlib
 SUBDIRS += uxendisp/xddm
+SUBDIRS += uxendisp/wddm
 SUBDIRS += uxenmouse
 SUBDIRS += uxenaudio
 SUBDIRS += uxenclipboard
