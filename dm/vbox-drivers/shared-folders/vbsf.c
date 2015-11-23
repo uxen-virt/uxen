@@ -1405,7 +1405,7 @@ hidden(SHFLROOT root, wchar_t *dir, wchar_t *entry)
     while (i > 0 && name[i] != '\\')
         name[i--] = 0;
     wcscat(name, entry);
-    return _sf_has_opt(root, name, SF_OPT_HIDE);
+    return _sf_hidden_path(root, name);
 }
 
 int vbsfDirList(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, SHFLSTRING *pPath, uint32_t flags,

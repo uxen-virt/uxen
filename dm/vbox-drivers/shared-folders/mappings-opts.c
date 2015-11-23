@@ -131,8 +131,8 @@ is_sep(wchar_t c)
     return (c == PATH_SEP || c == PATH_SEP_ALT);
 }
 
-int
-is_path_prefixof(wchar_t *prefix, wchar_t *path)
+static wchar_t *
+get_path_suffix(wchar_t *prefix, wchar_t *path)
 {
     if (!wcsncmp(L"\\\\?\\", prefix, 4))
         prefix += 4;
@@ -145,12 +145,22 @@ is_path_prefixof(wchar_t *prefix, wchar_t *path)
         wchar_t a = towlower(*path);
         wchar_t b = towlower(*prefix);
         if (a != b)
-            return 0;
+            return NULL;
         ++path;
         ++prefix;
     }
 
-    return ((is_sep(*path) || *path == 0) && *prefix == 0);
+    if (*prefix)
+        return NULL;
+    while (is_sep(*path))
+        ++path;
+    return path;
+}
+
+int
+is_path_prefixof(wchar_t *prefix, wchar_t *path)
+{
+    return get_path_suffix(prefix, path) ? 1 : 0;
 }
 
 static void
@@ -183,9 +193,9 @@ find_exact_entry(wchar_t *mapname, wchar_t *subfolder, int dyn)
     folder_opt_entry_t *e;
 
     TAILQ_FOREACH(e, &folder_opt_entries, entry) {
-        if (e->dynamic == dyn &&
-            !wcsncmp(mapname, e->mapname, SUBFOLDER_PATHMAX) &&
-            !wcsncmp(subfolder, e->subfolder, SUBFOLDER_PATHMAX))
+        if ((dyn < 0 || e->dynamic == dyn) &&
+            !wcsnicmp(mapname, e->mapname, SUBFOLDER_PATHMAX) &&
+            !wcsnicmp(subfolder, e->subfolder, SUBFOLDER_PATHMAX))
             return e;
     }
     return NULL;
@@ -281,6 +291,26 @@ _sf_has_opt(SHFLROOT root, wchar_t *path, uint64_t opt)
     uint64_t cur_opt = _sf_get_opt(root, path);
 
     return (cur_opt & opt) == opt;
+}
+
+int
+_sf_hidden_path(SHFLROOT root, wchar_t *path)
+{
+    folder_opt_entry_t *e;
+    MAPPING *mapping = vbsfMappingGetByRoot(root);
+    wchar_t *mapname = get_mapname(root);
+    wchar_t *rootpath = (wchar_t*)vbsfMappingsQueryHostRoot(root);
+
+    if (!mapping || !mapname || !rootpath)
+        return 0;
+    path = get_path_suffix(rootpath, path);
+    if (!path)
+        return 0;
+    critical_section_enter(&folder_opt_lock);
+    e = find_exact_entry(mapname, path, -1);
+    critical_section_leave(&folder_opt_lock);
+
+    return e ? (e->opts & SF_OPT_HIDE) : 0;
 }
 
 void
