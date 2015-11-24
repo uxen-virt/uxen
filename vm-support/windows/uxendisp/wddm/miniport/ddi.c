@@ -125,7 +125,7 @@ subrect_blit(UXENDISP_DMA_PRESENT *dma_present,
 
             from = dst;
             to = dst + delta_x;
-            RtlCopyMemory(to, from, overlap);
+            RtlMoveMemory(to, from, overlap);
 
             to = dst;
             from = src;
@@ -156,10 +156,14 @@ do_blit(DEVICE_EXTENSION *dev, UXENDISP_DMA_PRESENT *dma_present)
     srcalloc = dma_present->srcalloc;
     dstalloc = dma_present->dstalloc;
 
-    src_fb = map_fb(dev, srcalloc, &src_len);
-    if (!src_fb) {
-        uxen_err("failed to map source framebuffer");
-        return STATUS_NO_MEMORY;
+    if (srcalloc->type == UXENDISP_SHADOWSURFACE_TYPE) {
+        src_fb = dev->crtcs[0].shadow_surface;
+    } else {
+        src_fb = map_fb(dev, srcalloc, &src_len);
+        if (!src_fb) {
+            uxen_err("failed to map source framebuffer");
+            return STATUS_NO_MEMORY;
+        }
     }
     dst_fb = map_fb(dev, dstalloc, &dst_len);
     if (!dst_fb) {
@@ -188,8 +192,12 @@ do_blit(DEVICE_EXTENSION *dev, UXENDISP_DMA_PRESENT *dma_present)
     for (i = 0; i < dma_present->subrect_count; i++)
         subrect_blit(dma_present, dst, src, &subrects[i], v_overlap, h_overlap);
 
+    dr_send(dev->dr_ctx, 1, &dma_present->dstrect);
+
     MmUnmapIoSpace(dst_fb, dst_len);
-    MmUnmapIoSpace(src_fb, src_len);
+    if (srcalloc->type != UXENDISP_SHADOWSURFACE_TYPE) {
+        MmUnmapIoSpace(src_fb, src_len);
+    }
 
     return STATUS_SUCCESS;
 }
@@ -262,7 +270,6 @@ uXenDispQueryAdapterInfo(CONST HANDLE hAdapter,
     DXGK_DRIVERCAPS *pDriverCaps;
     DXGK_QUERYSEGMENTOUT *pQuerySegmentOut;
 
-    uxen_msg("Enter");
     PAGED_CODE();
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
@@ -321,7 +328,7 @@ uXenDispQueryAdapterInfo(CONST HANDLE hAdapter,
 
             /* First call */
             if (!pQuerySegmentOut->pSegmentDescriptor) {
-                pQuerySegmentOut->NbSegment = 1;
+                pQuerySegmentOut->NbSegment = 2;
                 break;
             }
 
@@ -331,11 +338,19 @@ uXenDispQueryAdapterInfo(CONST HANDLE hAdapter,
             /* Setup one linear aperture-space segment */
             pQuerySegmentOut->pSegmentDescriptor[0].BaseAddress = baseaddr;
             pQuerySegmentOut->pSegmentDescriptor[0].CpuTranslatedAddress = dev->vram_phys;
-            pQuerySegmentOut->pSegmentDescriptor[0].Size = dev->vram_len;
-            pQuerySegmentOut->pSegmentDescriptor[0].CommitLimit = dev->vram_len;
+            pQuerySegmentOut->pSegmentDescriptor[0].Size = dev->vram_len / 4;
+            pQuerySegmentOut->pSegmentDescriptor[0].CommitLimit = dev->vram_len / 4;
             pQuerySegmentOut->pSegmentDescriptor[0].Flags.Value = 0;
             pQuerySegmentOut->pSegmentDescriptor[0].Flags.CpuVisible = 1;
-            //pQuerySegmentOut->pSegmentDescriptor[0].Flags.Aperture = 1;
+
+            pQuerySegmentOut->pSegmentDescriptor[1].BaseAddress = baseaddr;
+            pQuerySegmentOut->pSegmentDescriptor[1].CpuTranslatedAddress = dev->vram_phys;
+            pQuerySegmentOut->pSegmentDescriptor[1].Size = dev->vram_len / 4;
+            pQuerySegmentOut->pSegmentDescriptor[1].CommitLimit = dev->vram_len / 4;
+            pQuerySegmentOut->pSegmentDescriptor[1].Flags.Value = 0;
+            pQuerySegmentOut->pSegmentDescriptor[1].Flags.CpuVisible = 1;
+            pQuerySegmentOut->pSegmentDescriptor[1].Flags.Aperture = 1;
+
             pQuerySegmentOut->PagingBufferSegmentId = 0;
             pQuerySegmentOut->PagingBufferSize = 64 * 1024; /* TODO  */
             pQuerySegmentOut->PagingBufferPrivateDataSize = 0;
@@ -348,7 +363,6 @@ uXenDispQueryAdapterInfo(CONST HANDLE hAdapter,
         status = STATUS_NOT_SUPPORTED;
     };
 
-    uxen_msg("Leave");
     return status;
 }
 
@@ -491,9 +505,15 @@ uXenDispCreateAllocation(CONST HANDLE hAdapter,
                            d3dalloc->SurfaceDesc.YResolution;
         alloc_info->PitchAlignedSize = 0;
         alloc_info->HintedBank.Value = 0;
-        alloc_info->PreferredSegment.Value = 0;
-        alloc_info->SupportedReadSegmentSet = 1;
-        alloc_info->SupportedWriteSegmentSet = 1;
+        if (d3dalloc->Type == UXENDISP_SHADOWSURFACE_TYPE) {
+            alloc_info->PreferredSegment.Value = 2;
+            alloc_info->SupportedReadSegmentSet = 2;
+            alloc_info->SupportedWriteSegmentSet = 2;
+        } else {
+            alloc_info->PreferredSegment.Value = 1;
+            alloc_info->SupportedReadSegmentSet = 1;
+            alloc_info->SupportedWriteSegmentSet = 1;
+        }
         alloc_info->EvictionSegmentSet = 0;
         alloc_info->MaximumRenamingListLength = 0;
         alloc_info->pAllocationUsageHint = NULL;
@@ -723,7 +743,6 @@ uXenDispPatch(CONST HANDLE hAdapter, CONST DXGKARG_PATCH * pPatch)
 {
     UXENDISP_DMA_PRESENT *dma_present;
     ULONG size;
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pPatch))
@@ -739,7 +758,7 @@ uXenDispPatch(CONST HANDLE hAdapter, CONST DXGKARG_PATCH * pPatch)
      * call being made.
      */
     ASSERT(pPatch->AllocationListSize == 3);
-    ASSERT(pPatch->pAllocationList[DXGK_PRESENT_SOURCE_INDEX].SegmentId == 1);
+    ASSERT(pPatch->pAllocationList[DXGK_PRESENT_SOURCE_INDEX].SegmentId <= 2);
     ASSERT(pPatch->pAllocationList[DXGK_PRESENT_DESTINATION_INDEX].SegmentId == 1);
 
     size = pPatch->DmaBufferSubmissionEndOffset - pPatch->DmaBufferSubmissionStartOffset;
@@ -755,7 +774,6 @@ uXenDispPatch(CONST HANDLE hAdapter, CONST DXGKARG_PATCH * pPatch)
         pPatch->pAllocationList[DXGK_PRESENT_SOURCE_INDEX].PhysicalAddress;
     dma_present->dstalloc->addr =
         pPatch->pAllocationList[DXGK_PRESENT_DESTINATION_INDEX].PhysicalAddress;
-    uxen_msg("Leave");
 
     return STATUS_SUCCESS;
 }
@@ -815,74 +833,11 @@ uXenDispPreemptCommand(CONST HANDLE hAdapter,
     return STATUS_SUCCESS;
 }
 
-static NTSTATUS
-xfer(DEVICE_EXTENSION *dev,
-     MDL *srcmdl, LARGE_INTEGER srcaddr,
-     MDL *dstmdl, LARGE_INTEGER dstaddr,
-     UINT xferoffset, UINT mdloffset,
-     SIZE_T size)
-{
-    UCHAR *src = NULL, *dst = NULL;
-    PHYSICAL_ADDRESS addr;
-    NTSTATUS status;
-    uxen_msg("Enter");
-
-    if (srcmdl) {
-        src = MmGetSystemAddressForMdlSafe(srcmdl, HighPagePriority);
-        if (!src) {
-            status = STATUS_NO_MEMORY;
-            goto err;
-        }
-        src += mdloffset * PAGE_SIZE;
-    } else {
-        addr = dev->vram_phys;
-        addr.QuadPart += srcaddr.QuadPart + xferoffset;
-        src = MmMapIoSpace(addr, size, MmNonCached);
-        if (!src) {
-            status = STATUS_NO_MEMORY;
-            goto err;
-        }
-    }
-
-    if (dstmdl) {
-        dst = MmGetSystemAddressForMdlSafe(dstmdl, HighPagePriority);
-        if (!dst) {
-            status = STATUS_NO_MEMORY;
-            goto err;
-        }
-        dst += mdloffset * PAGE_SIZE;
-    } else {
-        addr = dev->vram_phys;
-        addr.QuadPart += /*dstaddr.QuadPart +*/ xferoffset;
-        dst = MmMapIoSpace(addr, size, MmNonCached);
-        if (!dst) {
-            status = STATUS_NO_MEMORY;
-            goto err;
-        }
-    }
-
-    RtlMoveMemory(dst, src, size);
-    status = STATUS_SUCCESS;
-
-err:
-    if (src && !srcmdl)
-        MmUnmapIoSpace(src, size);
-
-    if (dst && !dstmdl)
-        MmUnmapIoSpace(dst, size);
-
-    uxen_msg("Leave");
-    return status;
-}
-
 NTSTATUS APIENTRY
 uXenDispBuildPagingBuffer(CONST HANDLE hAdapter,
                           DXGKARG_BUILDPAGINGBUFFER *pBuildPagingBuffer)
 {
     DEVICE_EXTENSION *dev = (DEVICE_EXTENSION *) hAdapter;
-    NTSTATUS status = STATUS_SUCCESS;
-    MDL *srcmdl = NULL, *dstmdl = NULL;
-    LARGE_INTEGER srcaddr = { 0 } , dstaddr = { 0 };
 
     PAGED_CODE();
 
@@ -892,66 +847,8 @@ uXenDispBuildPagingBuffer(CONST HANDLE hAdapter,
 
     switch (pBuildPagingBuffer->Operation) {
     case DXGK_OPERATION_TRANSFER:
-        if (!pBuildPagingBuffer->Transfer.TransferSize)
-            break;              /* nothing to do */
-
-        if ((pBuildPagingBuffer->Transfer.Source.SegmentId != 0) &&
-            (pBuildPagingBuffer->Transfer.Source.SegmentId != 1)) {
-            /* This is bad, SNO */
-            ASSERT(((pBuildPagingBuffer->Transfer.Source.SegmentId == 0) ||
-                    (pBuildPagingBuffer->Transfer.Source.SegmentId == 1)));
-            uxen_err("DXGK_OPERATION_TRANSFER invalid source segment %d.",
-                     pBuildPagingBuffer->Transfer.Source.SegmentId);
-            break;
-        }
-
-        if ((pBuildPagingBuffer->Transfer.Destination.SegmentId != 0) &&
-            (pBuildPagingBuffer->Transfer.Destination.SegmentId != 1)) {
-            /* This is bad, SNO */
-            ASSERT(((pBuildPagingBuffer->Transfer.Destination.SegmentId == 0) ||
-                   (pBuildPagingBuffer->Transfer.Destination.SegmentId == 1)));
-            uxen_err("DXGK_OPERATION_TRANSFER invalid destination segment %d.",
-                     pBuildPagingBuffer->Transfer.Destination.SegmentId);
-            break;
-        }
-
-        /* Not expecting any swizzle flags set */
-        if ((pBuildPagingBuffer->Transfer.Flags.Swizzle == 1) ||
-            (pBuildPagingBuffer->Transfer.Flags.Unswizzle == 1)) {
-            ASSERT(((pBuildPagingBuffer->Transfer.Flags.Swizzle == 0) &&
-                    (pBuildPagingBuffer->Transfer.Flags.Unswizzle == 0)));
-            uxen_err("DXGK_OPERATION_TRANSFER unexpected flags set: 0x%x.",
-                     pBuildPagingBuffer->Transfer.Flags);
-            break;
-        }
-
-        /* Call routine to do the transfer */
-        if (!pBuildPagingBuffer->Transfer.Source.SegmentId)
-            srcmdl = pBuildPagingBuffer->Transfer.Source.pMdl;
-        else
-            srcaddr = pBuildPagingBuffer->Transfer.Source.SegmentAddress;
-
-        if (!pBuildPagingBuffer->Transfer.Destination.SegmentId)
-            dstmdl = pBuildPagingBuffer->Transfer.Destination.pMdl;
-        else
-            dstaddr = pBuildPagingBuffer->Transfer.Destination.SegmentAddress;
-
-        status = STATUS_SUCCESS;
-        status = xfer(dev,
-                      srcmdl,
-                      srcaddr,
-                      dstmdl,
-                      dstaddr,
-                      pBuildPagingBuffer->Transfer.TransferOffset,
-                      pBuildPagingBuffer->Transfer.MdlOffset,
-                      pBuildPagingBuffer->Transfer.TransferSize);
-
-        /* This should not fail unless something is seriously wrong. */
-        ASSERT(NT_SUCCESS(status));
         break;
     case DXGK_OPERATION_FILL:
-        //ASSERT(pBuildPagingBuffer->Operation != DXGK_OPERATION_FILL);
-        uxen_msg("Illegal DXGK_OPERATION_FILL operation.");
         break;
     case DXGK_OPERATION_DISCARD_CONTENT:
         /* Not needed */
@@ -965,10 +862,11 @@ uXenDispBuildPagingBuffer(CONST HANDLE hAdapter,
          */
         break;
     case DXGK_OPERATION_MAP_APERTURE_SEGMENT:
-        ASSERT(0);
+        dev->crtcs[0].shadow_surface = MmGetSystemAddressForMdlSafe(
+            pBuildPagingBuffer->MapApertureSegment.pMdl, NormalPagePriority);
         break;
     case DXGK_OPERATION_UNMAP_APERTURE_SEGMENT:
-        ASSERT(0);
+        dev->crtcs[0].shadow_surface = NULL;
         break;
     case DXGK_OPERATION_SPECIAL_LOCK_TRANSFER:
         /* Not using UseAlternateVA */
@@ -1480,8 +1378,6 @@ uXenDispPresent(CONST HANDLE hContext, DXGKARG_PRESENT *pPresent)
     pPresent->pPatchLocationListOut[0].AllocationIndex = DXGK_PRESENT_SOURCE_INDEX;
     pPresent->pPatchLocationListOut[1].AllocationIndex = DXGK_PRESENT_DESTINATION_INDEX;
     pPresent->pPatchLocationListOut += 2;
-
-    dr_send(dev->dr_ctx, 1, &pPresent->DstRect);
 
     return STATUS_SUCCESS;
 }

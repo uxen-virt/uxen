@@ -154,9 +154,7 @@ uXenDispCrtcEnable(DEVICE_EXTENSION *dev, UXENDISP_CRTC *crtc)
 
     /* Flush */
     uxdisp_crtc_write(dev, crtc->crtcid, UXDISP_REG_CRTC_OFFSET,
-                      dev->sources[crtc->crtcid].shadow_allocation->addr.LowPart);
-
-    uxdisp_write(dev, UXDISP_REG_BANK(0) + UXDISP_REG_BANK_POPULATE, 32 * 1024 *1024);
+                      crtc->primary_address.LowPart);
 
     return STATUS_SUCCESS;
 }

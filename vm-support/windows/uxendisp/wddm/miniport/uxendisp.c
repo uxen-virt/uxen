@@ -438,7 +438,6 @@ uXenDispQueryChildRelations(CONST PVOID pMiniportDeviceContext,
     ULONG i;
 
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (ChildRelationsSize <= (dev->crtc_count * sizeof(PDXGK_CHILD_DESCRIPTOR)))
         return STATUS_BUFFER_TOO_SMALL;
@@ -461,7 +460,6 @@ uXenDispQueryChildRelations(CONST PVOID pMiniportDeviceContext,
         pChildRelations[i].ChildCapabilities.Type.VideoOutput.SupportsSdtvModes = FALSE;
     }
 
-    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -474,7 +472,6 @@ uXenDispQueryChildStatus(CONST PVOID pMiniportDeviceContext,
     UXENDISP_CRTC *crtc;
 
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(pMiniportDeviceContext) ||
         !ARGUMENT_PRESENT(pChildStatus))
@@ -500,7 +497,6 @@ uXenDispQueryChildStatus(CONST PVOID pMiniportDeviceContext,
         break;
     };
 
-    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -559,9 +555,6 @@ uXenDispQueryInterface(CONST PVOID pMiniportDeviceContext,
     UNREFERENCED_PARAMETER(pMiniportDeviceContext);
     UNREFERENCED_PARAMETER(pQueryInterface);
     PAGED_CODE();
-
-    uxen_msg("Enter");
-    uxen_msg("Leave");
     return STATUS_NOT_SUPPORTED;
 }
 
