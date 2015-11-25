@@ -240,6 +240,12 @@ static const char *hp_states[] = {
 #define CXF_GPROXY_RECEIVED     U64BF(33)
 #define CXF_HTTP_COMPLETE       U64BF(34)
 
+#define LIST_REMOVE_NULL(elm, field) do {   \
+            LIST_REMOVE(elm, field);        \
+            (elm)->field.le_prev = NULL;    \
+        } while (1 == 0)
+#define LIST_IN_LIST(elm, field) ((elm)->field.le_prev != NULL)
+
 struct hpd_t;
 RLIST_HEAD(http_ctx_list, http_ctx);
 struct http_ctx {
@@ -396,6 +402,7 @@ static LIST_HEAD(, http_ctx) http_list = LIST_HEAD_INITIALIZER(&http_list);
 static LIST_HEAD(, clt_ctx) cx_list = LIST_HEAD_INITIALIZER(&cx_list);
 static LIST_HEAD(, http_ctx) http_gc_list = LIST_HEAD_INITIALIZER(&http_gc_list);
 static LIST_HEAD(, clt_ctx) cx_gc_list = LIST_HEAD_INITIALIZER(&cx_gc_list);
+static LIST_HEAD(, clt_ctx) cx_proc_list = LIST_HEAD_INITIALIZER(&cx_proc_list);
 static LIST_HEAD(, hpd_t) hpd_list = LIST_HEAD_INITIALIZER(&hpd_list);
 
 static char *user_agent = NULL;
@@ -544,6 +551,9 @@ static int hpd_compare_nodes(void *ctx, const void *parent, const void *node)
 
 static void hpd_cleanup(struct hpd_t *hpd)
 {
+    bool ni_wakeup = false;
+    struct nickel *ni = hpd->ni;
+
     if (!hpd->hp) {
         if (RLIST_EMPTY(&hpd->direct_hp_list, direct_hp_list)) {
             struct clt_ctx *cx, *_cx;
@@ -552,14 +562,19 @@ static void hpd_cleanup(struct hpd_t *hpd)
                 RLIST_REMOVE(cx, direct_cx_list);
                 hpd->nr_cx--;
                 cx->hpd = NULL;
-                cx_process(cx, NULL, 0);
+                if (!(cx->flags & (CXF_CLOSING | CXF_CLOSED)) && !LIST_IN_LIST(cx, proc_entry)) {
+                    LIST_INSERT_HEAD(&cx_proc_list, cx, proc_entry);
+                    ni_wakeup = true;
+                }
             }
 
             rb_tree_remove_node(&hpd_rbtree, hpd);
-            LIST_REMOVE(hpd, entry);
+            LIST_REMOVE_NULL(hpd, entry);
             NETLOG5("HPD %"PRIxPTR " FREED", (uintptr_t) hpd);
             free(hpd);
-            return;
+            hpd = NULL;
+
+            goto out;
         }
 
         hpd->hp = RLIST_FIRST(&hpd->direct_hp_list, direct_hp_list);
@@ -567,7 +582,11 @@ static void hpd_cleanup(struct hpd_t *hpd)
 
     hpd_needs_continue = 1;
     hpd->needs_continue = 1;
-    ni_wakeup_loop(hpd->ni);
+    ni_wakeup = true;
+
+out:
+    if (ni_wakeup)
+        ni_wakeup_loop(ni);
 }
 
 static void hpd_add_cx(struct hpd_t *hpd, struct clt_ctx *cx)
@@ -649,7 +668,7 @@ cleanup:
         if (!RLIST_EMPTY(hp, direct_hp_list))
             RLIST_REMOVE(hp, direct_hp_list);
         hp->hpd = NULL;
-        LIST_REMOVE(hpd, entry);
+        LIST_REMOVE_NULL(hpd, entry);
         free(hpd);
     }
     return NULL;
@@ -1200,7 +1219,7 @@ out:
 mem_err:
     warnx("%s: malloc", __FUNCTION__);
     if (hp) {
-        LIST_REMOVE(hp, entry);
+        LIST_REMOVE_NULL(hp, entry);
         free(hp);
         hp = NULL;
     }
@@ -1234,9 +1253,8 @@ static void hp_close(struct http_ctx *hp)
 
     hp->flags |= HF_CLOSING;
     hp->flags &= (~HF_RESTARTABLE & ~HF_REUSABLE);
-    if (hp->entry.le_prev)
-        LIST_REMOVE(hp, entry);
-    hp->entry.le_prev = NULL;
+    if (LIST_IN_LIST(hp, entry))
+        LIST_REMOVE_NULL(hp, entry);
 #if VERBSTATS
     if (hp->srv_lat_idx) {
         char tmp_buf[(12 + 1) * 2 * LAT_STAT_NUMBER + 1];
@@ -4444,15 +4462,30 @@ static void hp_bh(void *unused)
     LIST_FOREACH_SAFE(hp, &http_gc_list, entry, hp_next) {
         if (hp->refcnt)
             continue;
-        LIST_REMOVE(hp, entry);
+        LIST_REMOVE_NULL(hp, entry);
         hp_free(hp);
     }
 
     LIST_FOREACH_SAFE(cx, &cx_gc_list, entry, cx_next) {
         if (cx->refcnt)
             continue;
-        LIST_REMOVE(cx, entry);
+        LIST_REMOVE_NULL(cx, entry);
         cx_free(cx);
+    }
+
+    if (!LIST_EMPTY(&cx_proc_list)) {
+        LIST_HEAD(, clt_ctx) proc_list = LIST_HEAD_INITIALIZER(&proc_list);
+
+        LIST_FOREACH_SAFE(cx, &cx_proc_list, proc_entry, cx_next) {
+            LIST_REMOVE_NULL(cx, proc_entry);
+            if (!(cx->flags & CXF_CLOSED))
+                LIST_INSERT_HEAD(&proc_list, cx, proc_entry);
+        }
+
+        LIST_FOREACH_SAFE(cx, &proc_list, proc_entry, cx_next) {
+            LIST_REMOVE_NULL(cx, proc_entry);
+            cx_process(cx, NULL, 0);
+        }
     }
 
     proxy_foreach(proxy_wakeup_list);
@@ -4768,8 +4801,10 @@ static void cx_close(struct clt_ctx *cx)
     if (cx->chr)
         qemu_chr_close(cx->chr);
     cx->chr = NULL;
-    if (cx->entry.le_prev)
-        LIST_REMOVE(cx, entry);
+    if (LIST_IN_LIST(cx, entry))
+        LIST_REMOVE_NULL(cx, entry);
+    if (LIST_IN_LIST(cx, proc_entry))
+        LIST_REMOVE_NULL(cx, proc_entry);
     if (!RLIST_EMPTY(cx, w_list)) {
         RLIST_REMOVE(cx, w_list);
         cx_put(cx);

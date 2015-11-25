@@ -35,6 +35,7 @@ struct clt_ctx {
     struct CharDriverState *chr;
 
     LIST_ENTRY(clt_ctx) entry;
+    LIST_ENTRY(clt_ctx) proc_entry;
     RLIST_ENTRY(clt_ctx_list) w_list;
     RLIST_ENTRY(clt_ctx_list) direct_cx_list;
     struct nickel *ni;
