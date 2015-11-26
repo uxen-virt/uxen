@@ -201,22 +201,29 @@ static void _netlog_print_esc(bool bin_always, const char *msg, const char *str,
     bool binary = false, b_bsg = msg != NULL;
     size_t i = 0, olen = len;
     unsigned char c;
+    struct buff *bf = NULL;
 
     if (bin_always)
         binary = true;
 
-    fprintf(stderr, " --- DMP %s%s%s --- \n", b_bsg ? "[" : "",
+    if (!buff_new_priv(&bf, 256))
+        goto mem_err;
+
+    debug_printf(" --- DMP %s%s%s --- \n", b_bsg ? "[" : "",
             b_bsg ? msg : "", b_bsg ? "]" : "");
     while (i < len) {
         if (!bin_always && (*(str + i) == '\\' || *(str + i) == '~')) {
             if (i > 0) {
-                fwrite(str, i, 1, stderr);
+                BUFF_RESET(bf);
+                if (buff_append(bf, str, i) < 0)
+                    goto mem_err;
+                debug_printf("%s", BUFF_CSTR(bf));
                 str += i;
                 len -= i;
                 i = 0;
             }
-            fputc('\\', stderr);
-            fputc(*str, stderr);
+            debug_printf("%c", '\\');
+            debug_printf("%c", *str);
             str += 1;
             len -= 1;
             continue;
@@ -227,17 +234,20 @@ static void _netlog_print_esc(bool bin_always, const char *msg, const char *str,
             (binary || (c != '\n' && c != '\r' && c != 0x09)))) {
 
             if (i > 0) {
-                fwrite(str, i, 1, stderr);
+                BUFF_RESET(bf);
+                if (buff_append(bf, str, i) < 0)
+                    goto mem_err;
+                debug_printf("%s", BUFF_CSTR(bf));
                 str += i;
                 len -= i;
                 i = 0;
             }
             binary = true;
-            fputc('~', stderr);
+            debug_printf("%c", '~');
             c = ((unsigned char)*str) >> 4;
-            fputc(HB_TO_ASCII(c), stderr);
+            debug_printf("%c", HB_TO_ASCII(c));
             c = ((unsigned char)*str) & 0x0f;
-            fputc(HB_TO_ASCII(c), stderr);
+            debug_printf("%c", HB_TO_ASCII(c));
             str += 1;
             len -= 1;
             continue;
@@ -246,10 +256,23 @@ static void _netlog_print_esc(bool bin_always, const char *msg, const char *str,
         i++;
     }
 
-    if (i > 0)
-        fwrite(str, i, 1, stderr);
+    if (i > 0) {
+        BUFF_RESET(bf);
+        if (buff_append(bf, str, i) < 0)
+            goto mem_err;
+        debug_printf("%s", BUFF_CSTR(bf));
+    }
 
-    fprintf(stderr, "\n --- END %lu bytes --- \n", (unsigned long) olen);
+    debug_printf("\n");
+    debug_printf(" --- END %lu bytes --- \n", (unsigned long) olen);
+
+out:
+    buff_free(&bf);
+    return;
+
+mem_err:
+    warnx("%s: malloc", __FUNCTION__);
+    goto out;
 }
 
 void netlog_print_esc(const char *msg, const char *str, size_t len)

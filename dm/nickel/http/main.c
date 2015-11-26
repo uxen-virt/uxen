@@ -10,11 +10,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <inttypes.h>
-#if defined(_WIN32)
-#define _POSIX
-#endif
-#include <time.h>
-#include <sys/time.h>
 
 #include <dm/queue2.h>
 #include <dm/base64.h>
@@ -169,10 +164,10 @@ static const char *hp_states[] = {
 /* DEBUG */
 #define HLOG0(ll, fmt, ...) do {                                               \
             if (NLOG_LEVEL < ll) break;                                        \
+            BUFF_RESET(hp->ni->bf_dbg);                                        \
             dbg_hp(ll, hp);                                                    \
-            buff_appendf(hp->ni->bf_dbg, " [%s] " fmt "\n",  __FUNCTION__,     \
-                    ## __VA_ARGS__);                                           \
-            fwrite(BUFF_CSTR(hp->ni->bf_dbg), hp->ni->bf_dbg->len, 1, stderr); \
+            debug_printf("%s [%s] " fmt "\n", BUFF_CSTR(hp->ni->bf_dbg),       \
+                    __FUNCTION__,  ## __VA_ARGS__);                            \
         } while (1 == 0)
 
 #define HLOG(fmt, ...) HLOG0(1, fmt, ## __VA_ARGS__)
@@ -184,10 +179,10 @@ static const char *hp_states[] = {
 
 #define CXL0(ll, fmt, ...) do {                                                \
             if (NLOG_LEVEL < ll) break;                                        \
+            BUFF_RESET(cx->ni->bf_dbg);                                        \
             cx_dbg(ll, cx);                                                    \
-            buff_appendf(cx->ni->bf_dbg, " [%s] - " fmt "\n",  __FUNCTION__,     \
-                    ## __VA_ARGS__);                                           \
-            fwrite(BUFF_CSTR(cx->ni->bf_dbg), cx->ni->bf_dbg->len, 1, stderr); \
+            debug_printf("%s [%s] - " fmt "\n", BUFF_CSTR(cx->ni->bf_dbg),     \
+                    __FUNCTION__, ## __VA_ARGS__);                             \
         } while (1 == 0)
 
 #define CXL(fmt, ...)  CXL0(1, fmt, ## __VA_ARGS__)
@@ -425,24 +420,11 @@ static const rb_tree_ops_t hpd_rbtree_ops = {
 static int dbg_hp(int log_level, struct http_ctx *hp)
 {
     int ret = -1;
-    struct tm _tm, *tm;
-    time_t ltime;
-    struct timeval tv;
-    char prefix[3 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 3 + 1 + 1];
 
     if (!hp)
         goto out;
 
     BUFF_RESET(hp->ni->bf_dbg);
-    gettimeofday(&tv, NULL);
-    ltime = (time_t)tv.tv_sec;
-    tm = localtime_r(&ltime, &_tm);
-    if (tm) {
-        snprintf(prefix, sizeof(prefix), "%03d-%02d:%02d:%02d.%03d ",
-                 tm->tm_yday, tm->tm_hour, tm->tm_min, tm->tm_sec,
-                 (int)(tv.tv_usec / 1000));
-        BUFF_APPENDSTR(hp->ni->bf_dbg, prefix);
-    }
     netlog_prefix(log_level, hp->ni->bf_dbg);
     BUFF_APPENDSTR(hp->ni->bf_dbg, "(svr)");
     if (hp->so && so_dbg(hp->ni->bf_dbg, hp->so) < 0)
@@ -460,24 +442,10 @@ out:
 static int cx_dbg(int log_level, struct clt_ctx *cx)
 {
     int ret = -1;
-    struct tm _tm, *tm;
-    time_t ltime;
-    struct timeval tv;
-    char prefix[3 + 1 + 2 + 1 + 2 + 1 + 2 + 1 + 3 + 1 + 1];
-
     if (!cx)
         goto out;
 
     BUFF_RESET(cx->ni->bf_dbg);
-    gettimeofday(&tv, NULL);
-    ltime = (time_t)tv.tv_sec;
-    tm = localtime_r(&ltime, &_tm);
-    if (tm) {
-        snprintf(prefix, sizeof(prefix), "%03d-%02d:%02d:%02d.%03d ",
-                 tm->tm_yday, tm->tm_hour, tm->tm_min, tm->tm_sec,
-                 (int)(tv.tv_usec / 1000));
-        BUFF_APPENDSTR(cx->ni->bf_dbg, prefix);
-    }
     netlog_prefix(log_level, cx->ni->bf_dbg);
     BUFF_APPENDSTR(cx->ni->bf_dbg, "(clt)");
     ret = buff_appendf(cx->ni->bf_dbg, " cx:%"PRIxPTR" hp:%"PRIxPTR" tcp:%"PRIxPTR
