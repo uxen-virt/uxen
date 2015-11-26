@@ -2570,14 +2570,13 @@ int copy_phase(struct disk *disk, Manifest *man, int calculate_shas, int retry)
                     printf("Force-copying [%ls] of size [%"PRIu64"]\n",
                         man->entries[i].host_name,
                         man->entries[i].file_size);
-                } else if (m->action == MAN_CHANGE) {
-                    ++nchanged;
                 }
                 HANDLE h = handles[j++];
                 if (h != INVALID_HANDLE_VALUE) {
                     int err;
                     uint8_t *out_sha = (calculate_shas ? m->sha : NULL);
                     if (m->action == MAN_CHANGE) {
+                        ++nchanged;
                         /* file size may have changed since we first looked it
                          * up in stat_files_phase, need to recalculate. If it
                          * changes again after this point, the usn_phase
@@ -2863,9 +2862,13 @@ int usn_phase(
 
                 printf("Deleting [%ls] from target\n", filename);
                 if (disklib_ntfs_unlink(m->vol, cfilename) < 0) {
-                    printf("Unable to unlink [%s]\n", cfilename);
-                    free(cfilename);
-                    return -1;
+                    if (disklib_errno() != DISKLIB_ERR_NOENT) {
+                        /* Not an error for the file to not even have made it
+                         * into the image */
+                        printf("Unable to unlink [%s] err=%d\n", cfilename, disklib_errno());
+                        free(cfilename);
+                        return -1;
+                    }
                 }
                 free(cfilename);
 
