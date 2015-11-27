@@ -28,5 +28,8 @@ SOURCES = balloon.c \
           bus.c \
 	  uxenplatform.rc
 
+AMD64_SOURCES = bus_config.asm
+I386_SOURCES = bus_config.asm
+
 TARGET_DESTINATION = wdf
 

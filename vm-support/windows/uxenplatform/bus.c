@@ -87,23 +87,23 @@ bus_get_device_property(WDFDEVICE device, UCHAR property_id,
                  UXENBUS_DEVICE_CONFIG_LENGTH);
     p = &d->prop_list;
 
-    prop_type = READ_REGISTER_UCHAR((void *)&p->property_type);
+    prop_type = bus_config_read8((void *)&p->property_type);
     while (prop_type != UXENBUS_PROPERTY_TYPE_LIST_END) {
         if ( prop_type == property_id)
             break;
 
-        p = UXENBUS_PROP_NEXT_L(p, READ_REGISTER_UCHAR((void *)&p->length));
-        prop_type = READ_REGISTER_UCHAR((void *)&p->property_type);
+        p = UXENBUS_PROP_NEXT_L(p, bus_config_read8((void *)&p->length));
+        prop_type = bus_config_read8((void *)&p->property_type);
     }
 
     if (prop_type != property_id)
         return STATUS_NOT_FOUND;
 
-    len = READ_REGISTER_UCHAR((void *)&p->length);
+    len = bus_config_read8((void *)&p->length);
     if (*property_len < len)
         return STATUS_BUFFER_TOO_SMALL;
 
-    READ_REGISTER_BUFFER_UCHAR((void *)(p + 1), property, len);
+    bus_config_read_buffer((void *)(p + 1), property, len);
 
     *property_len = len;
 
@@ -355,7 +355,7 @@ bus_enumerate(WDFDEVICE device)
         struct uxp_bus_device *d = (void *)(fdo_data->bus_conf +
                                             i * UXENBUS_DEVICE_CONFIG_LENGTH);
 
-        device_type = READ_REGISTER_UCHAR((void *)&d->device_type);
+        device_type = bus_config_read8((void *)&d->device_type);
         if (device_type == UXENBUS_DEVICE_NOT_PRESENT)
             continue;
 
@@ -363,7 +363,7 @@ bus_enumerate(WDFDEVICE device)
 
         desc.slot = i;
         desc.deviceType = device_type;
-        desc.deviceId = READ_REGISTER_UCHAR((void *)&d->instance_id);
+        desc.deviceId = bus_config_read8((void *)&d->instance_id);
 
         uxen_msg("found device type=%02x id=%02x on slot %d", device_type, desc.deviceId, i);
         status = WdfChildListAddOrUpdateChildDescriptionAsPresent(

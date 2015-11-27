@@ -48,4 +48,7 @@ NTSTATUS create_pdo(WDFCHILDLIST device_list,
                     PWDFDEVICE_INIT child_init);
 NTSTATUS bus_enumerate(WDFDEVICE device);
 
+UCHAR bus_config_read8(UCHAR *addr);
+size_t bus_config_read_buffer(UCHAR *src, void *dst, size_t len);
+
 #endif /* __BUS_H */
