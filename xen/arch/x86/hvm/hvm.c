@@ -4479,6 +4479,12 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
         if ( rc )
             goto param_fail;
 
+        if (curr_d->clone_of) {
+            gdprintk(XENLOG_WARNING, "HVMOP_%set_param %"PRIx32" denied\n",
+                (op == HVMOP_set_param) ? "s":"g", a.index);
+            goto param_fail;
+        }
+
         if ( op == HVMOP_set_param )
         {
             rc = 0;
