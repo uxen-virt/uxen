@@ -12,7 +12,7 @@ CatalogFile = uxendisp.cat
 DefaultDestDir    = 11    ; system32
 uxendisp.Miniport = 12    ; drivers
 uxendisp.Display  = 11    ; system32
-uxendisp.DispWow  = 10
+uxendisp.DispWow  = 10, SysWow64
 
 [SourceDisksNames]
 1 = %DiskId%
@@ -34,7 +34,7 @@ uxend3d32.dll = 1
 %uxendisp.DeviceDesc% = uxendisp, PCI\VEN_5853&DEV_5102
 
 [uxendisp]
-FeatureScore = F8
+FeatureScore = F9
 CopyFiles    = uxendisp.Miniport, uxendisp.Display, uxendisp.DispWow
 AddReg       = uxendisp_SoftwareDeviceSettings
 
@@ -44,7 +44,7 @@ uxendisp.sys
 [uxendisp.Display]
 uxend3d.dll,,,%COPYFLG_IN_USE_TRY_RENAME% | %DELFLG_IN_USE%
 
-[Xengfx.DispWow]
+[uxendisp.DispWow]
 uxend3d32.dll,,,%COPYFLG_IN_USE_TRY_RENAME% | %DELFLG_IN_USE%
 
 [uxendisp.Services]

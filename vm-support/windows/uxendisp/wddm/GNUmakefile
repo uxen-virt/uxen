@@ -28,11 +28,13 @@ OUTDIR_uxendisp32 := $(OBJDIR_uxendisp)/display/$(OBJDIR_ddk_32)
 all: $(OUTDIR_uxendisp32)/uxend3d.dll $(OUTDIR_uxendisp)/uxendisp.sys
 
 # NOTE: no space after set foo=xxx since cmd otherwise includes the space in foo
-.PHONY: $(OUTDIR_uxendisp)/uxendisp.sys $(OUTDIR_uxendisp32)/uxend3d.dll
+.PHONY: $(OUTDIR_uxendisp32)/uxend3d.dll $(OUTDIR_uxendisp)/uxendisp.sys
 $(OUTDIR_uxendisp)/uxendisp.sys: $(OBJDIR_uxendisp)/build_info.h
 	@mkdir -p $(@D)
 	$(_W)echo WinDDK build $@
-	$(_V)cmd /c "set UXEN_BUILD_INFO=\"\"\"../../../build_info.h\"\"\"& set MAKEFLAGS=& $(SET_STAMPINF_DATE) $(SET_SIGN) $(SET_UXENDIRS) $(WINDDK_DIR)\bin\setenv.bat $(WINDDK_DIR)\ $(DDKENV) $(UXEN_TARGET_VM_SUPPORT_ARCH_NAME) $(UXEN_TARGET_VM_SUPPORT_OS) no_oacr & cd /D $$(pwd -W) & $(SET_OBJECT_ROOT) $(WINDDK_BUILD) -cZ -jpath $(call dospath,$(OBJDIR_uxendisp))"
+	$(_V)cmd /c "del /F /Q /S $(call dospath,$(OUTDIR_uxendisp)/) >nul 2>&1"
+	$(_V)cmd /c "xcopy /Y $(call dospath,$(OUTDIR_uxendisp32)/uxend3d.dll) $(call dospath,$(OUTDIR_uxendisp)/uxend3d32.dll)*"
+	$(_V)cmd /c "set UXEN_BUILD_INFO=\"\"\"../../../build_info.h\"\"\"& set MAKEFLAGS=& $(SET_STAMPINF_DATE) $(SET_SIGN) $(SET_UXENDIRS) $(WINDDK_DIR)\bin\setenv.bat $(WINDDK_DIR)\ $(DDKENV) $(UXEN_TARGET_VM_SUPPORT_ARCH_NAME) $(UXEN_TARGET_VM_SUPPORT_OS) no_oacr & cd /D $$(pwd -W) & $(SET_OBJECT_ROOT) $(WINDDK_BUILD) -Z -jpath $(call dospath,$(OBJDIR_uxendisp))"
 
 $(OUTDIR_uxendisp32)/uxend3d.dll:
 	@mkdir -p $(@D)
@@ -70,11 +72,12 @@ $(patsubst %,install_%,$(INSTALL_FILES)): install_%: $(OUTDIR_uxendisp)/%
 	$(_W)echo Installing -- $(<F)
 	$(_V)$(call install_data,$(<),$(INSTALL_DIR))
 
+install_uxend3d32.dll: _install_banner
 install_uxend3d32.dll: $(OUTDIR_uxendisp32)/uxend3d.dll
 	$(_W)echo Installing -- uxend3d32.dll
 	$(_V)$(call install_data,$(<),$(INSTALL_DIR)/uxend3d32.dll)
 
-dist: $(patsubst %,install_%,$(INSTALL_FILES)) install_uxend3d32.dll
+dist: install_uxend3d32.dll $(patsubst %,install_%,$(INSTALL_FILES))
 
 clean::
 	@$(if $(BUILDDIR),rm -rf $(BUILDDIR),:)
