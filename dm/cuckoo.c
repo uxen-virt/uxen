@@ -20,7 +20,6 @@
 #include <uuid/uuid.h>
 #include <fingerprint.h>
 #include <lz4.h>
-#include <lz4hc.h>
 
 #include "cuckoo.h"
 #include "filebuf.h"
@@ -230,9 +229,7 @@ size_t compress(void *out, const void *in, size_t in_sz, int high)
      * pages as special, and use memcpy() there as well. */
 
     uint8_t tmp[2 * PAGE_SIZE];
-    size_t sz = high ?
-        LZ4_compressHC((const char *)in, (char *) tmp, in_sz) :
-        LZ4_compress((const char *)in, (char *) tmp, in_sz);
+    size_t sz = LZ4_compress((const char *)in, (char *) tmp, in_sz);
 
     if (sz + 2 >= PAGE_SIZE) {
         memcpy(out, in, PAGE_SIZE);

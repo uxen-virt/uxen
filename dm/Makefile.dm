@@ -296,7 +296,6 @@ LIBELF_SRCS += libelf-tools.c
 
 LZ4_CPPFLAGS += -I$(LZ4DIR_include)
 LZ4_SRCS += lz4.c
-LZ4_SRCS += lz4hc.c
 
 CUCKOO_CPPFLAGS += -I$(CUCKOODIR_include)
 CUCKOO_SRCS += fingerprint.c
