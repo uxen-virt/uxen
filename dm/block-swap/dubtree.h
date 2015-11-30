@@ -67,6 +67,7 @@ typedef struct DUBTREE {
     int lockfile;
     char *mapping_name;
 #endif
+    uint64_t t0;
 } DUBTREE;
 
 typedef struct DUBTREECONTEXT {

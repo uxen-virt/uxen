@@ -37,22 +37,36 @@
 
 static inline void dubtreeLockForWrite(DUBTREE *t)
 {
+    uint64_t t0, t1, dt;
+    t0 = os_get_clock();
 #ifdef _WIN32
     WaitForSingleObject(t->mutex, INFINITE);
 #else
     int r = flock(t->lockfile, LOCK_EX);
     assert(r == 0);
 #endif
+    t1 = os_get_clock();
+    dt = t1 - t0;
+    if (dt / SCALE_MS > 10000) {
+        printf("swap: waited %"PRId64"ms for mutex\n", dt / SCALE_MS);
+    }
+    t->t0 = t1;
 }
 
 static inline void dubtreeUnlockForWrite(DUBTREE *t)
 {
+    uint64_t t1, dt;
 #ifdef _WIN32
     ReleaseMutex(t->mutex);
 #else
     int r = flock(t->lockfile, LOCK_UN);
     assert(r == 0);
 #endif
+    t1 = os_get_clock();
+    dt = t1 - t->t0;
+    if (dt / SCALE_MS > 10000) {
+        printf("swap: insert took %"PRId64"ms\n", dt / SCALE_MS);
+    }
 }
 
 
