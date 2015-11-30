@@ -278,15 +278,17 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
 
     d = get_domain_by_id(domid);
     if (d == NULL)
-        goto out;
+        goto out_nohostfpu;
 
     v = d->vcpu[vcpuid];
     if (v == NULL)
-        goto out;
+        goto out_nohostfpu;
 
     vci = v->vm_vcpu_info_shared;
     if (vci == NULL)
-        goto out;
+        goto out_nohostfpu;
+
+    vcpu_save_fpu_host(v);
 
     switch (vci->vci_run_mode) {
     case VCI_RUN_MODE_IDLE:
@@ -437,6 +439,9 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
     _end_execution(NULL);
 
   out:
+    vcpu_restore_fpu_host(v);
+
+  out_nohostfpu:
     if (d)
         put_domain(d);
     return ret;
