@@ -4,6 +4,8 @@
 
 PERFCOUNTER_ARRAY(exceptions,           "exceptions", 32)
 
+PERFCOUNTER(hvm_cpu_on,                 "hvm cpu on")
+
 #define VMX_PERF_EXIT_REASON_SIZE 56
 #define VMX_PERF_VECTOR_SIZE 0x20
 PERFCOUNTER_ARRAY(vmexits,              "vmexits", VMX_PERF_EXIT_REASON_SIZE)

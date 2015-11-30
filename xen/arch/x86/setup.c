@@ -1584,6 +1584,8 @@ intptr_t __init __interface_fn __uxen_start_xen(
     reset_stack_and_jump(init_done);
 #endif  /* __UXEN__ */
 
+    hvm_cpu_off();
+
     uxen_set_current(NULL);
 
     return 0;

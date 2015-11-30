@@ -2,7 +2,7 @@
  *  uxenctllib-args.c
  *  uxen
  *
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -93,6 +93,7 @@ static struct uxen_param params[] = {
     UINT_OPTION("xfeatures", opt_xfeatures),
     BOOLEAN_OPTION("xsave", use_xsave),
     STRING_OPTION("debug", opt_debug),
+    BOOLEAN_OPTION("hvmonoff", opt_hvmonoff),
     LAST_OPTION
 };
 

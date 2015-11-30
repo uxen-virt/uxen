@@ -2,7 +2,7 @@
  *  uxen_desc.h
  *  uxen
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -215,6 +215,9 @@ struct uxen_init_desc {
     char opt_debug[XEN_OPT_DEBUG_LEN];
 #     define UXEN_INIT_opt_debug			(1ULL << 24)
 #     define UXEN_INIT_opt_debug_MASK			mask0
+    uint64_t opt_hvmonoff;
+#     define UXEN_INIT_opt_hvmonoff       		(1ULL << 25)
+#     define UXEN_INIT_opt_hvmonoff_MASK                mask0
 };
 
 #endif

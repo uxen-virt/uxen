@@ -1612,7 +1612,9 @@ static void vmx_update_guest_efer(struct vcpu *v)
 static void __ept_sync_domain(void *info)
 {
     struct domain *d = info;
-    __invept(INVEPT_SINGLE_CONTEXT, ept_get_eptp(d), 0);
+
+    if (this_cpu(hvmon))
+        __invept(INVEPT_SINGLE_CONTEXT, ept_get_eptp(d), 0);
 }
 
 static void ept_sync_domain(struct domain *d)
@@ -1885,6 +1887,8 @@ static struct hvm_function_table __read_mostly vmx_function_table = {
     .do_pmu_interrupt     = vmx_do_pmu_interrupt,
     .do_execute           = vmx_execute,
     .pt_sync_domain       = ept_sync_domain,
+    .cpu_on               = vmx_cpu_on,
+    .cpu_off              = vmx_cpu_off,
     .cpu_up               = vmx_cpu_up,
     .cpu_down             = vmx_cpu_down,
     .cpuid_intercept      = vmx_cpuid_intercept,
@@ -1915,7 +1919,7 @@ struct hvm_function_table * __init start_vmx(void)
     if ( !test_bit(X86_FEATURE_VMXE, &boot_cpu_data.x86_capability) )
         return NULL;
 
-    if ( vmx_cpu_up() )
+    if ( vmx_cpu_up(hvmon_default) )
     {
         printk("VMX: failed to initialise.\n");
         return NULL;

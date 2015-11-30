@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -237,7 +237,7 @@ void smp_callin(void)
     /* Save our processor parameters. */
     smp_store_cpu_info(cpu);
 
-    if ( (rc = hvm_cpu_up()) != 0 )
+    if ( (rc = hvm_cpu_up(hvmon_default)) != 0 )
     {
         printk("CPU%d: Failed to initialise HVM. Not coming online.\n", cpu);
         cpu_error = rc;
@@ -451,6 +451,8 @@ void start_secondary(void *unused)
 #ifndef __UXEN__
     startup_cpu_idle_loop();
 #endif  /* __UXEN__ */
+
+    hvm_cpu_off();
 }
 
 #ifndef __UXEN__

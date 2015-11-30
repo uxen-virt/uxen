@@ -123,6 +123,7 @@ _end_execution(struct vcpu *vcpu)
         rcu_check_callbacks(cpu);
     process_pending_rcu_softirq();
 
+    hvm_cpu_off();
     uxen_set_current(vcpu);
 }
 #define end_execution() _end_execution(NULL)
@@ -152,6 +153,7 @@ __uxen_lookup_vm(xen_domain_handle_t vm_uuid)
 
     set_stack_top();
     uxen_set_current(dom0->vcpu[smp_processor_id()]);
+    hvm_cpu_on();
 
     ret = do_lookup_vm(vm_uuid);
 
@@ -254,6 +256,7 @@ __uxen_setup_vm(struct uxen_createvm_desc *ucd, struct vm_info_shared *vmi,
 
     set_stack_top();
     uxen_set_current(dom0->vcpu[smp_processor_id()]);
+    hvm_cpu_on();
     current->always_access_ok = 1;
     current->is_privileged = 1;
 
@@ -301,18 +304,21 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
             goto out;
 
         uxen_set_current(v);
+        hvm_cpu_on();
         if (!v->vcpu_id)
             v4v_resume(d);
         break;
 
     case VCI_RUN_MODE_PROCESS_IOREQ:
         uxen_set_current(v);
+        hvm_cpu_on();
         if (test_and_clear_bit(_VPF_blocked_in_xen, &v->pause_flags))
             vcpu_wake(v);
         break;
 
     case VCI_RUN_MODE_HALT:
         uxen_set_current(v);
+        hvm_cpu_on();
         break;
 
     case VCI_RUN_MODE_YIELD:
@@ -322,6 +328,7 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
     case VCI_RUN_MODE_MEMCACHE_CHECK:
     case VCI_RUN_MODE_FREEPAGE_CHECK:
         uxen_set_current(v);
+        hvm_cpu_on();
         break;
     }
 
@@ -491,6 +498,7 @@ __uxen_destroy_vm(xen_domain_handle_t vm_uuid)
 
     set_stack_top();
     uxen_set_current(dom0->vcpu[smp_processor_id()]);
+    hvm_cpu_on();
 
     ret = do_destroy_vm(vm_uuid);
 
@@ -508,6 +516,7 @@ __uxen_shutdown_xen(void)
 
     set_stack_top();
     uxen_set_current(dom0->vcpu[smp_processor_id()]);
+    hvm_cpu_on();
 
     console_start_sync();
 
@@ -539,6 +548,7 @@ __uxen_suspend_xen_prepare(void)
 
     set_stack_top();
     uxen_set_current(dom0->vcpu[smp_processor_id()]);
+    hvm_cpu_on();
     current->is_privileged = 1;
 
     rcu_read_lock(&domlist_read_lock);
@@ -574,7 +584,7 @@ void
 do_hvm_cpu_up(void *arg)
 {
 
-    hvm_cpu_up();
+    hvm_cpu_up(hvmon_default);
     mb();
     cpumask_clear_cpu(smp_processor_id(), &hvm_cpu_up_mask);
 }
@@ -613,6 +623,7 @@ __uxen_resume_xen(void)
     rcu_read_unlock(&domlist_read_lock);
 
     current->is_privileged = 0;
+    hvm_cpu_off();
     uxen_set_current(NULL); /* not end_execution, do not process rcu */
 }
 
@@ -662,6 +673,7 @@ __uxen_hypercall(struct uxen_hypercall_desc *uhd,
 
     set_stack_top();
     uxen_set_current(dom0->vcpu[smp_processor_id()]);
+    hvm_cpu_on();
     if (privileged & UXEN_UNRESTRICTED_ACCESS_HYPERCALL)
         current->always_access_ok = 1;
     if (privileged & UXEN_ADMIN_HYPERCALL)
@@ -713,6 +725,7 @@ __uxen_add_heap_memory(uint64_t start, uint64_t end)
 
     set_stack_top();
     uxen_set_current(idle_vcpu[smp_processor_id()]);
+    hvm_cpu_on();
 
     init_domheap_pages(start, end);
 
@@ -729,6 +742,7 @@ __uxen_handle_keypress(unsigned char key)
 
     set_stack_top();
     uxen_set_current(idle_vcpu[smp_processor_id()]);
+    hvm_cpu_on();
 
     handle_keypress(key, NULL);
 
@@ -746,6 +760,7 @@ __uxen_run_idle_thread(uint32_t had_timeout)
 
     set_stack_top();
     uxen_set_current(idle_vcpu[smp_processor_id()]);
+    hvm_cpu_on();
 
     if (_uxen_info.ui_unixtime_generation != unixtime_generation)
         update_xen_time();
@@ -778,6 +793,7 @@ __uxen_flush_rcu(uint32_t complete)
 
     set_stack_top();
     uxen_set_current(idle_vcpu[smp_processor_id()]);
+    hvm_cpu_on();
 
     if (!complete) {
         if (!cpu)
@@ -792,6 +808,7 @@ __uxen_flush_rcu(uint32_t complete)
         process_pending_rcu_softirq();
     }
 
+    hvm_cpu_down();
     uxen_set_current(NULL);
     return !!atomic_read(this_cpu(flush_rcu_data).cpu_count);
 }

@@ -102,7 +102,6 @@ static DEFINE_PER_CPU_READ_MOSTLY(struct vmcs_struct *, vmxon_region);
 DEFINE_PER_CPU(struct arch_vmx_struct *, current_vmcs_vmx);
 static DEFINE_PER_CPU(struct vmcs_struct *, active_vmcs);
 static DEFINE_PER_CPU(struct list_head, active_vmcs_list);
-static DEFINE_PER_CPU(bool_t, vmxon);
 static DEFINE_PER_CPU(unsigned char [10], gdt_save);
 static DEFINE_PER_CPU(unsigned char [10], idt_save);
 
@@ -524,13 +523,85 @@ DEBUG();
     per_cpu(vmxon_region, cpu) = NULL;
 }
 
-int vmx_cpu_up(void)
+int vmx_cpu_on(void)
+{
+    int cpu = smp_processor_id();
+    unsigned long flags;
+    u32 vmx_basic_msr_low, vmx_basic_msr_high;
+
+    cpu_irq_save(flags);
+
+    if (this_cpu(hvmon)) {
+        cpu_irq_restore(flags);
+        return 0;
+    }
+
+    perfc_incr(hvm_cpu_on);
+
+    if (!(read_cr4() & X86_CR4_VMXE))
+        set_in_cr4_cpu(X86_CR4_VMXE);
+
+    switch ( __vmxon(virt_to_maddr(this_cpu(vmxon_region))) )
+    {
+    case -2: /* #UD or #GP */
+        cpu_irq_restore(flags);
+        printk("CPU%d: unexpected VMXON failure\n", cpu);
+        return -EINVAL;
+    case -1: /* CF==1 or ZF==1 */
+    case 0: /* success */
+        this_cpu(hvmon) = hvmon_on;
+        break;
+    default:
+        BUG();
+    }
+    cpu_irq_restore(flags);
+
+    hvm_asid_init(cpu_has_vmx_vpid ? (1u << VMCS_VPID_WIDTH) : 0);
+
+    if ( cpu_has_vmx_ept )
+        ept_sync_all();
+
+    if ( cpu_has_vmx_vpid )
+        vpid_sync_all();
+
+    rdmsr(MSR_IA32_VMX_BASIC, vmx_basic_msr_low, vmx_basic_msr_high);
+
+    return 0;
+}
+
+void vmx_cpu_off(void)
+{
+    struct list_head *active_vmcs_list = &this_cpu(active_vmcs_list);
+    unsigned long flags;
+
+    cpu_irq_save(flags);
+
+    /* only turn off if turned on via vmx_cpu_on */
+    if ( this_cpu(hvmon) != hvmon_on ) {
+        cpu_irq_restore(flags);
+        return;
+    }
+
+    while ( !list_empty(active_vmcs_list) )
+        __vmx_clear_vmcs(list_entry(active_vmcs_list->next,
+                                    struct vcpu, arch.hvm_vmx.active_list));
+
+    BUG_ON(!(read_cr4() & X86_CR4_VMXE));
+    this_cpu(hvmon) = hvmon_off;
+    __vmxoff();
+
+    clear_in_cr4_cpu(X86_CR4_VMXE);
+
+    cpu_irq_restore(flags);
+}
+
+int vmx_cpu_up(enum hvmon hvmon_mode)
 {
     u32 eax, edx;
     int rc, bios_locked, cpu = smp_processor_id();
     u64 cr0, vmx_cr0_fixed0, vmx_cr0_fixed1;
 
-    if (this_cpu(vmxon))
+    if (this_cpu(hvmon))
         return 0;
 
     if (!(read_cr4() & X86_CR4_VMXE))
@@ -607,7 +678,7 @@ int vmx_cpu_up(void)
 #endif  /* __UXEN__ */
     case 0: /* success */
         printk("CPU%d: vmxon success\n", cpu);
-        this_cpu(vmxon) = 1;
+        this_cpu(hvmon) = hvmon_mode;
         break;
     default:
         BUG();
@@ -629,7 +700,7 @@ void vmx_cpu_down(void)
     struct list_head *active_vmcs_list = &this_cpu(active_vmcs_list);
     unsigned long flags;
 
-    if ( !this_cpu(vmxon) )
+    if ( !this_cpu(hvmon) )
         return;
 
     cpu_irq_save(flags);
@@ -639,7 +710,7 @@ void vmx_cpu_down(void)
                                     struct vcpu, arch.hvm_vmx.active_list));
 
     BUG_ON(!(read_cr4() & X86_CR4_VMXE));
-    this_cpu(vmxon) = 0;
+    this_cpu(hvmon) = hvmon_off;
     __vmxoff();
 
     clear_in_cr4(X86_CR4_VMXE);

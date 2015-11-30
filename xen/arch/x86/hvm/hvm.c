@@ -99,6 +99,11 @@ integer_param("hvm_debug", opt_hvm_debug_level);
 
 struct hvm_function_table hvm_funcs __read_mostly;
 
+static bool_t __initdata opt_hvmonoff = 0;
+boolean_param("hvmonoff", opt_hvmonoff);
+enum hvmon hvmon_default __read_mostly = hvmon_always;
+DEFINE_PER_CPU(enum hvmon, hvmon);
+
 static long do_hvm_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg);
 static long do_hvm_sched_op(unsigned long op, XEN_GUEST_HANDLE(void) arg);
 
@@ -136,6 +141,9 @@ static int __init hvm_enable(void)
     struct hvm_function_table *fns = NULL;
 
     BUILD_BUG_ON(UI_HVM_IO_BITMAP_SIZE != IOPM_SIZE);
+
+    if (opt_hvmonoff)
+        hvmon_default = hvmon_on;
 
     switch ( boot_cpu_data.x86_vendor )
     {

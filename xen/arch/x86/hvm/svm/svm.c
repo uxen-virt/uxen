@@ -1184,7 +1184,7 @@ static void svm_init_erratum_383(struct cpuinfo_x86 *c)
     }
 }
 
-static int svm_cpu_up(void)
+static int svm_cpu_up(enum hvmon hvmon_mode)
 {
     uint64_t msr_content;
     int rc, cpu = smp_processor_id();
@@ -1258,7 +1258,7 @@ struct hvm_function_table * __init start_svm(void)
         return NULL;
     }
 
-    if ( svm_cpu_up() )
+    if ( svm_cpu_up(hvmon_default) )
     {
         printk("SVM: failed to initialise.\n");
         return NULL;

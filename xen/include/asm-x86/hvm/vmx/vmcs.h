@@ -29,7 +29,9 @@ extern void vmx_unload_vmcs(struct vcpu *);
 /* extern void vmx_load_vmcs(struct vcpu *); */
 extern int  vmx_cpu_up_prepare(unsigned int cpu);
 extern void vmx_cpu_dead(unsigned int cpu);
-extern int  vmx_cpu_up(void);
+extern int  vmx_cpu_on(void);
+extern void vmx_cpu_off(void);
+extern int  vmx_cpu_up(enum hvmon);
 extern void vmx_cpu_down(void);
 extern void vmx_save_host_msrs(void);
 void vmx_restore_host_env(void);

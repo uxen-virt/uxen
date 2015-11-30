@@ -20,7 +20,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -91,6 +91,15 @@ enum hvm_intblk {
 #define HVM_HAP_SUPERPAGE_2MB   0x00000001
 #define HVM_HAP_SUPERPAGE_1GB   0x00000002
 
+enum hvmon {
+    hvmon_off = 0,
+    hvmon_on = 1,
+    hvmon_always = 2,           /* leave hvmon across schedule */
+};
+
+DECLARE_PER_CPU(enum hvmon, hvmon);
+extern enum hvmon hvmon_default;
+
 /*
  * The hardware virtual machine (HVM) interface abstracts away from the
  * x86/x86_64 CPU virtualization assist specifics. Currently this interface
@@ -154,7 +163,9 @@ struct hvm_function_table {
     int  (*cpu_up_prepare)(unsigned int cpu);
     void (*cpu_dead)(unsigned int cpu);
 
-    int  (*cpu_up)(void);
+    int  (*cpu_on)(void);
+    void (*cpu_off)(void);
+    int  (*cpu_up)(enum hvmon);
     void (*cpu_down)(void);
 
     /* Copy up to 15 bytes from cached instruction bytes at current rIP. */
@@ -411,9 +422,20 @@ void hvm_set_rdtsc_exiting(struct domain *d, bool_t enable);
 
 bool_t hvm_ple_enabled(struct vcpu *v);
 
-static inline int hvm_cpu_up(void)
+static inline int hvm_cpu_on(void)
 {
-    return (hvm_funcs.cpu_up ? hvm_funcs.cpu_up() : 0);
+    return (hvm_funcs.cpu_on ? hvm_funcs.cpu_on() : 0);
+}
+
+static inline void hvm_cpu_off(void)
+{
+    if ( hvm_funcs.cpu_off )
+        hvm_funcs.cpu_off();
+}
+
+static inline int hvm_cpu_up(enum hvmon hvmon_mode)
+{
+    return (hvm_funcs.cpu_up ? hvm_funcs.cpu_up(hvmon_mode) : 0);
 }
 
 static inline void hvm_cpu_down(void)
