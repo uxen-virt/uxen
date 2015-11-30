@@ -152,12 +152,12 @@ handle_message(struct ctx *c, struct uxenconsole_msg_header *hdr)
     }
 }
 
-static int
-channel_read(struct ctx *c, void *data, unsigned int len)
+static size_t
+channel_read(struct ctx *c, void *data, size_t len)
 {
     struct uxenconsole_msg_header *hdr;
     size_t hdrlen = sizeof (*hdr);
-    int r = 0;
+    size_t r = 0;
 
     if (c->buf_len < hdrlen) {
         c->buf = realloc(c->buf, hdrlen);
@@ -243,7 +243,7 @@ channel_write(struct ctx *c, void *data, unsigned int len)
     return (int)bytes;
 #elif defined(__APPLE__)
     unsigned int l = 0;
-    int rc;
+    ssize_t rc;
 
     while (l < len) {
         rc = send(c->socket, data + l, len - l, 0);
@@ -401,7 +401,7 @@ uxenconsole_channel_event(uxenconsole_context_t ctx, file_handle_t event,
     }
 #elif defined(__APPLE__)
     char buf[BUF_SZ];
-    int rc;
+    ssize_t rc;
     struct msghdr msg;
     struct iovec iov;
     struct {
@@ -433,7 +433,7 @@ uxenconsole_channel_event(uxenconsole_context_t ctx, file_handle_t event,
             cmsgbuf.hdr.cmsg_level == SOL_SOCKET &&
             cmsgbuf.hdr.cmsg_type == SCM_RIGHTS)
             c->recvd_fd = cmsgbuf.fd;
-        channel_read(c, buf, rc);
+        channel_read(c, buf, (size_t)rc);
     }
 #endif
 }
@@ -533,8 +533,8 @@ uxenconsole_keyboard_event(uxenconsole_context_t ctx,
     struct ctx *c = ctx;
     struct uxenconsole_msg_keyboard_event *msg;
     int rc;
-    size_t len;
-    size_t charlen;
+    unsigned int len;
+    unsigned int charlen;
 
     snd_complete(c);
 
