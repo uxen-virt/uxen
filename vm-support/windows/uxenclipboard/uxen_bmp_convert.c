@@ -129,17 +129,25 @@ out_release_none:
     return hr;
 }
 
+static GdiplusStartupOutput gdiplusStartupOutput;
+static ULONG_PTR gdiplusNotificationToken;
 static ULONG_PTR gdiplusToken;
+
 int 
 uxenclipboard_gdi_startup()
 {
-    GdiplusStartupInput gdiplusStartupInput = {1, NULL, FALSE, FALSE};
-    GdiplusStartup(&gdiplusToken, &gdiplusStartupInput, NULL);
+    GdiplusStartupInput inp = {1, NULL, TRUE, FALSE};
+
+    GdiplusStartup(&gdiplusToken, &inp, &gdiplusStartupOutput);
+    if (gdiplusStartupOutput.NotificationHook)
+        gdiplusStartupOutput.NotificationHook(&gdiplusNotificationToken);
     return 0;
 }
 
 void uxenclipboard_gdi_shutdown()
 {
+    if (gdiplusStartupOutput.NotificationUnhook)
+        gdiplusStartupOutput.NotificationUnhook(gdiplusNotificationToken);
    GdiplusShutdown(gdiplusToken);
 }
 
