@@ -4,13 +4,6 @@
  * SPDX-License-Identifier: ISC
  */
 
-#include <ntddk.h>
-#include <ntstrsafe.h>
-#include <dispmprt.h>
-#include <dderror.h>
-#include <devioctl.h>
-
-#include <debug.h>
 #include "uxendisp.h"
 
 typedef struct _UXENDISP_SOURCE_MAP_ENTRY {
@@ -89,7 +82,7 @@ is_supported_path(D3DKMDT_VIDPN_PRESENT_PATH *path_info)
         return FALSE;
     }
 
-    if ((path_info->VidPnTargetColorBasis != D3DKMDT_CB_SRGB)&&
+    if ((path_info->VidPnTargetColorBasis != D3DKMDT_CB_SCRGB)&&
         (path_info->VidPnTargetColorBasis != D3DKMDT_CB_UNINITIALIZED)) {
         uxen_debug("unsupported ColorBasis: %d.", path_info->VidPnTargetColorBasis);
         return FALSE;
@@ -256,7 +249,7 @@ is_supported_source_mode(UXENDISP_CRTC *crtc, D3DKMDT_VIDPN_SOURCE_MODE *source_
         return FALSE;
     }
 
-    if ((source_mode_info->Format.Graphics.ColorBasis != D3DKMDT_CB_SRGB)&&
+    if ((source_mode_info->Format.Graphics.ColorBasis != D3DKMDT_CB_SCRGB)&&
         (source_mode_info->Format.Graphics.ColorBasis != D3DKMDT_CB_UNINITIALIZED)) {
         uxen_debug("unsupported color basis: %d.", source_mode_info->Format.Graphics.ColorBasis);
         return FALSE;
@@ -749,7 +742,7 @@ add_source_mode(D3DKMDT_HVIDPNSOURCEMODESET source_mode_set_hdl,
     fmt->VisibleRegionSize.cy = mode->yres;
     fmt->Stride = mode->stride;
     fmt->PixelFormat = uxendisp_to_ddi_fmt(mode->fmt);
-    fmt->ColorBasis = D3DKMDT_CB_SRGB;
+    fmt->ColorBasis = D3DKMDT_CB_SCRGB;
     fmt->PixelValueAccessMode = D3DKMDT_PVAM_DIRECT;
 
     /* Add it */

@@ -4,17 +4,7 @@
  * SPDX-License-Identifier: ISC
  */
 
-#include <ntddk.h>
-#include <ntstrsafe.h>
-#include <dispmprt.h>
-#include <dderror.h>
-#include <devioctl.h>
-
-#include <debug.h>
-
 #include "uxendisp.h"
-#include "dirty_rect.h"
-#include "version.h"
 
 NTSTATUS APIENTRY
 uXenDispAddDevice(CONST PDEVICE_OBJECT pPhysicalDeviceObject,
@@ -564,7 +554,7 @@ DriverEntry(PDRIVER_OBJECT pDriverObject, PUNICODE_STRING pRegistryPath)
     DRIVER_INITIALIZATION_DATA DriverInitializationData = {0};
     uxen_msg("Enter version: %s", UXEN_DRIVER_VERSION_CHANGESET);
 
-    DriverInitializationData.Version                                = DXGKDDI_INTERFACE_VERSION;
+    DriverInitializationData.Version                                = DXGKDDI_INTERFACE_VERSION_VISTA;
 
     /* Miniport */
     DriverInitializationData.DxgkDdiAddDevice                       = uXenDispAddDevice;

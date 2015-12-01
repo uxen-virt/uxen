@@ -4,16 +4,7 @@
  * SPDX-License-Identifier: ISC
  */
 
-#include <ntddk.h>
-#include <ntstrsafe.h>
-#include <dispmprt.h>
-#include <dderror.h>
-#include <devioctl.h>
-
-#include <debug.h>
-#include <uxendisp_esc.h>
 #include "uxendisp.h"
-#include "dirty_rect.h"
 
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text(PAGE,uXenDispControlEtwLogging)
@@ -115,7 +106,7 @@ uXenDispQueryAdapterInfo(CONST HANDLE hAdapter,
         pDriverCaps->PointerCaps.Color = 1;
         pDriverCaps->PointerCaps.MaskedColor = 1;
         pDriverCaps->InterruptMessageNumber = 0;
-        pDriverCaps->NumberOfSwizzlingRanges = 0;       /* none for now */
+        pDriverCaps->NumberOfSwizzlingRanges = 0;
         pDriverCaps->MaxOverlays = 0;
         pDriverCaps->GammaRampCaps.Value = 0;
         pDriverCaps->GammaRampCaps.Gamma_Rgb256x3x16 = 1;
@@ -130,7 +121,7 @@ uXenDispQueryAdapterInfo(CONST HANDLE hAdapter,
         pDriverCaps->MemoryManagementCaps.Value = 0;
         pDriverCaps->MemoryManagementCaps.PagingNode = 0;
         pDriverCaps->GpuEngineTopology.NbAsymetricProcessingNodes = 2;
-        pDriverCaps->WDDMVersion = DXGKDDI_WDDMv1;
+        pDriverCaps->WDDMVersion = DXGKDDI_WDDMv1_2;
 
         break;
     case DXGKQAITYPE_QUERYSEGMENT:
@@ -475,7 +466,7 @@ uXenDispGetStandardAllocationDriverData(CONST HANDLE hAdapter,
             d3dalloc->SurfaceDesc.BytesPerPixel = (bpp + 7) / 8;
             d3dalloc->SurfaceDesc.Stride = ((bpp + 7) / 8) * pSSD->Width;
             d3dalloc->SurfaceDesc.Format = pSSD->Format;
-            d3dalloc->SurfaceDesc.RefreshRate.Numerator = 60000;
+            d3dalloc->SurfaceDesc.RefreshRate.Numerator = UXENDISP_REFRESH_RATE * 1000;
             d3dalloc->SurfaceDesc.RefreshRate.Denominator = 1000;
             d3dalloc->ByteAlignment = 1;
 
@@ -498,7 +489,7 @@ uXenDispGetStandardAllocationDriverData(CONST HANDLE hAdapter,
             d3dalloc->SurfaceDesc.BytesPerPixel = 4;
             d3dalloc->SurfaceDesc.Stride = 4 * pSSD->Width;
             d3dalloc->SurfaceDesc.Format = D3DDDIFMT_X8B8G8R8;
-            d3dalloc->SurfaceDesc.RefreshRate.Numerator = 60000;
+            d3dalloc->SurfaceDesc.RefreshRate.Numerator = UXENDISP_REFRESH_RATE * 1000;
             d3dalloc->SurfaceDesc.RefreshRate.Denominator = 1000;
             d3dalloc->ByteAlignment = 1;
 
@@ -565,20 +556,10 @@ uXenDispSubmitCommand(CONST HANDLE hAdapter,
 {
     DEVICE_EXTENSION *dev = (DEVICE_EXTENSION *)hAdapter;
     DXGKARGCB_NOTIFY_INTERRUPT_DATA notify = { 0 };
-    PHYSICAL_ADDRESS addr;
-    SIZE_T length;
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pSubmitCommand))
         return STATUS_INVALID_PARAMETER;
-
-    /* Get DMA Address and length */
-    addr = pSubmitCommand->DmaBufferPhysicalAddress;
-    addr.QuadPart += pSubmitCommand->DmaBufferSubmissionStartOffset;
-    length = pSubmitCommand->DmaBufferSubmissionEndOffset -
-             pSubmitCommand->DmaBufferSubmissionStartOffset;
-
-    //do_command(dev, addr, length);
 
     dev->current_fence = pSubmitCommand->SubmissionFenceId;
 
@@ -648,6 +629,7 @@ uXenDispBuildPagingBuffer(CONST HANDLE hAdapter,
         /* Not using UseAlternateVA */
         break;
     default:
+        uxen_msg("%d", pBuildPagingBuffer->Operation);
         break;
     };
 
@@ -1106,6 +1088,8 @@ uXenDispPresent(CONST HANDLE hContext, DXGKARG_PRESENT *pPresent)
         return STATUS_ILLEGAL_INSTRUCTION;
     }
 
+    /* Allocate DMA chunk and advance the buffer */
+    pPresent->pDmaBuffer = (UCHAR *)pPresent->pDmaBuffer + 1;
     /* Set the patch locations and advance the location counter */
     RtlZeroMemory(pPresent->pPatchLocationListOut, 2 * sizeof(D3DDDI_PATCHLOCATIONLIST));
     pPresent->pPatchLocationListOut[0].AllocationIndex = DXGK_PRESENT_SOURCE_INDEX;
