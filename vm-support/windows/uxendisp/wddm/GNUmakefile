@@ -25,11 +25,11 @@ OUTDIR_uxendisp := $(OBJDIR_uxendisp)/miniport/$(OBJDIR_ddk)
 OUTDIR_uxendisp32 := $(OBJDIR_uxendisp)/display/$(OBJDIR_ddk_32)
 
 .PHONY: all
-all: $(OUTDIR_uxendisp32)/uxend3d.dll $(OUTDIR_uxendisp)/uxendisp.sys
+all: $(OUTDIR_uxendisp)/uxendisp.sys
 
 # NOTE: no space after set foo=xxx since cmd otherwise includes the space in foo
-.PHONY: $(OUTDIR_uxendisp32)/uxend3d.dll $(OUTDIR_uxendisp)/uxendisp.sys
-$(OUTDIR_uxendisp)/uxendisp.sys: $(OBJDIR_uxendisp)/build_info.h
+.PHONY: $(OUTDIR_uxendisp)/uxendisp.sys
+$(OUTDIR_uxendisp)/uxendisp.sys: $(OBJDIR_uxendisp)/build_info.h $(OUTDIR_uxendisp32)/uxend3d.dll
 	@mkdir -p $(@D)
 	$(_W)echo WinDDK build $@
 	$(_V)cmd /c "del /F /Q /S $(call dospath,$(OUTDIR_uxendisp)/) >nul 2>&1"
