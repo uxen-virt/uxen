@@ -43,194 +43,6 @@
 #pragma alloc_text(PAGE,uXenDispDestroyContext)
 #endif
 
-static PVOID
-map_fb(DEVICE_EXTENSION * dev, UXENDISP_DRIVER_ALLOCATION *drvalloc,
-       SIZE_T *len)
-{
-    PVOID fb;
-    PHYSICAL_ADDRESS addr;
-    SIZE_T l;
-
-    addr = dev->vram_phys;
-    addr.QuadPart += drvalloc->addr.QuadPart;
-
-    l = drvalloc->surface_desc.YResolution * drvalloc->surface_desc.Stride;
-    fb = MmMapIoSpace(addr, l, MmNonCached);
-
-    if (!fb) {
-        uxen_err("failed to map rectangle from framebuffer");
-        return NULL;
-    }
-
-    if (len)
-        *len = l;
-
-    return fb;
-}
-
-static __inline PUCHAR
-rect_address(PUCHAR fb, UXENDISP_DRIVER_ALLOCATION *drvalloc,
-             RECT *rect)
-{
-    return fb +
-           (rect->top * drvalloc->surface_desc.Stride) +
-           (rect->left * drvalloc->surface_desc.BytesPerPixel);
-}
-
-static void
-subrect_blit(UXENDISP_DMA_PRESENT *dma_present,
-             PUCHAR dst, PUCHAR src,
-             SUBRECT *subrect,
-             BOOLEAN v_overlap, BOOLEAN h_overlap)
-{
-    UXENDISP_DRIVER_ALLOCATION *srcalloc = dma_present->srcalloc;
-    UXENDISP_DRIVER_ALLOCATION *dstalloc = dma_present->dstalloc;
-    ULONG width;
-    ULONG i;
-    LONG delta_x, overlap;
-
-    width = subrect->width * srcalloc->surface_desc.BytesPerPixel;
-
-    if (v_overlap) {
-        /* Copy bottom up */
-        src += ((subrect->top + subrect->height - 1) *
-                srcalloc->surface_desc.Stride) +
-               (subrect->left * srcalloc->surface_desc.BytesPerPixel);
-        dst += ((subrect->top + subrect->height - 1) *
-                dstalloc->surface_desc.Stride) +
-               (subrect->left * dstalloc->surface_desc.BytesPerPixel);
-    } else {
-        /* Copy top to bottom */
-        src += (subrect->top * srcalloc->surface_desc.Stride) +
-               (subrect->left * srcalloc->surface_desc.BytesPerPixel);
-        dst += (subrect->top * dstalloc->surface_desc.Stride) +
-               (subrect->left * dstalloc->surface_desc.BytesPerPixel);
-    }
-
-    if (h_overlap) {
-        delta_x = (dma_present->dstrect.left - dma_present->srcrect.left) *
-                  dstalloc->surface_desc.BytesPerPixel;
-        overlap = width - delta_x;
-        if (overlap < 0)
-            h_overlap = FALSE;
-    }
-
-    for (i = 0; i < subrect->height; i++) {
-        if (!h_overlap)
-            /* Copy left to right */
-            RtlCopyMemory(dst, src, width);
-        else {
-            /* Copy in to non-overlapping right to left segments */
-            UCHAR *from, *to;
-
-            from = dst;
-            to = dst + delta_x;
-            RtlMoveMemory(to, from, overlap);
-
-            to = dst;
-            from = src;
-            RtlCopyMemory(to, from, delta_x);
-        }
-
-        if (v_overlap) {
-            dst -= dstalloc->surface_desc.Stride;
-            src -= srcalloc->surface_desc.Stride;
-        } else {
-            dst += dstalloc->surface_desc.Stride;
-            src += srcalloc->surface_desc.Stride;
-        }
-    }
-}
-
-static NTSTATUS
-do_blit(DEVICE_EXTENSION *dev, UXENDISP_DMA_PRESENT *dma_present)
-{
-    UXENDISP_DRIVER_ALLOCATION *srcalloc, *dstalloc;
-    PVOID src_fb, dst_fb;
-    SIZE_T src_len, dst_len;
-    PUCHAR src, dst;
-    BOOLEAN h_overlap, v_overlap;
-    SUBRECT *subrects;
-    ULONG i;
-
-    srcalloc = dma_present->srcalloc;
-    dstalloc = dma_present->dstalloc;
-
-    if (srcalloc->type == UXENDISP_SHADOWSURFACE_TYPE) {
-        src_fb = dev->crtcs[0].shadow_surface;
-    } else {
-        src_fb = map_fb(dev, srcalloc, &src_len);
-        if (!src_fb) {
-            uxen_err("failed to map source framebuffer");
-            return STATUS_NO_MEMORY;
-        }
-    }
-    dst_fb = map_fb(dev, dstalloc, &dst_len);
-    if (!dst_fb) {
-        uxen_err("failed to map destination framebuffer");
-        MmUnmapIoSpace(src_fb, src_len);
-        return STATUS_NO_MEMORY;
-    }
-
-    src = rect_address(src_fb, srcalloc, &dma_present->srcrect);
-    dst = rect_address(dst_fb, dstalloc, &dma_present->dstrect);
-
-    /* Determine direction of bitblt */
-    v_overlap = FALSE;
-    h_overlap = FALSE;
-    if (dstalloc == srcalloc) {
-        if (dma_present->srcrect.top < dma_present->dstrect.top)
-            v_overlap = TRUE;
-        else if (dma_present->srcrect.top == dma_present->dstrect.top &&
-                 dma_present->srcrect.left < dma_present->dstrect.left &&
-                 (dma_present->srcrect.left + dma_present->srcrect.right) >
-                  dma_present->dstrect.left)
-            h_overlap = TRUE;
-    }
-
-    subrects = (SUBRECT *)(dma_present + 1);
-    for (i = 0; i < dma_present->subrect_count; i++)
-        subrect_blit(dma_present, dst, src, &subrects[i], v_overlap, h_overlap);
-
-    dr_send(dev->dr_ctx, 1, &dma_present->dstrect);
-
-    MmUnmapIoSpace(dst_fb, dst_len);
-    if (srcalloc->type != UXENDISP_SHADOWSURFACE_TYPE) {
-        MmUnmapIoSpace(src_fb, src_len);
-    }
-
-    return STATUS_SUCCESS;
-}
-
-static NTSTATUS
-do_command(DEVICE_EXTENSION *dev, PHYSICAL_ADDRESS dma_addr, SIZE_T length)
-{
-    UINT i;
-    UXENDISP_DMA_PRESENT *dma_present;
-
-    /* Map the DMA buffer */
-    dma_present = MmMapIoSpace(dma_addr, length, MmNonCached);
-    if (!dma_present) {
-        uxen_err("Out of Memory");
-        return STATUS_INSUFFICIENT_RESOURCES;
-    }
-
-    if (dma_present->flags.Flip) {
-        for (i = 0; i < dev->crtc_count; i++) {
-            if (dev->crtcs[i].sourceid != dma_present->srcalloc->sourceid)
-                continue;
-            uXenDispCrtcEnable(dev, &dev->crtcs[i]);
-        }
-    } else if (dma_present->flags.Blt) {
-        /* Do the blit  */
-        do_blit(dev, dma_present);
-    }
-
-    MmUnmapIoSpace(dma_present, length);
-
-    return STATUS_SUCCESS;
-}
-
 static int
 uXenDispBppFromDdiFormat(D3DDDIFORMAT format)
 {
@@ -308,6 +120,7 @@ uXenDispQueryAdapterInfo(CONST HANDLE hAdapter,
         pDriverCaps->GammaRampCaps.Value = 0;
         pDriverCaps->GammaRampCaps.Gamma_Rgb256x3x16 = 1;
         pDriverCaps->PresentationCaps.Value = 0;
+        pDriverCaps->PresentationCaps.NoScreenToScreenBlt = 1;
         pDriverCaps->MaxQueuedFlipOnVSync = 1;
         pDriverCaps->FlipCaps.Value = 0;
         pDriverCaps->FlipCaps.FlipOnVSyncWithNoWait = 1;
@@ -495,8 +308,6 @@ uXenDispCreateAllocation(CONST HANDLE hAdapter,
             ASSERT(d3dalloc->VidPnSourceId < dev->crtc_count);
             uXenDispSetDriverAllocation(dev, d3dalloc->VidPnSourceId,
                                         drvalloc, TRUE);
-        } else if (d3dalloc->Type == UXENDISP_SHADOWSURFACE_TYPE) {
-            dev->sources[0].shadow_allocation = drvalloc;
         }
 
         /* Fill in allocation information */
@@ -506,13 +317,13 @@ uXenDispCreateAllocation(CONST HANDLE hAdapter,
         alloc_info->PitchAlignedSize = 0;
         alloc_info->HintedBank.Value = 0;
         if (d3dalloc->Type == UXENDISP_SHADOWSURFACE_TYPE) {
-            alloc_info->PreferredSegment.Value = 2;
-            alloc_info->SupportedReadSegmentSet = 2;
-            alloc_info->SupportedWriteSegmentSet = 2;
-        } else {
             alloc_info->PreferredSegment.Value = 1;
             alloc_info->SupportedReadSegmentSet = 1;
             alloc_info->SupportedWriteSegmentSet = 1;
+        } else {
+            alloc_info->PreferredSegment.Value = 2;
+            alloc_info->SupportedReadSegmentSet = 2;
+            alloc_info->SupportedWriteSegmentSet = 2;
         }
         alloc_info->EvictionSegmentSet = 0;
         alloc_info->MaximumRenamingListLength = 0;
@@ -741,39 +552,9 @@ uXenDispReleaseSwizzlingRange(CONST HANDLE hAdapter,
 NTSTATUS APIENTRY
 uXenDispPatch(CONST HANDLE hAdapter, CONST DXGKARG_PATCH * pPatch)
 {
-    UXENDISP_DMA_PRESENT *dma_present;
-    ULONG size;
-
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pPatch))
         return STATUS_INVALID_PARAMETER;
-
-    /* No patching locations or allocation list for paging operations. */
-    if (pPatch->Flags.Paging == 1)
-        return STATUS_SUCCESS;
-
-    /*
-     * Patching addresses for source and destination that were potentially
-     * mapped in in a call to uXenDispBuildPagingBuffer() prior to this
-     * call being made.
-     */
-    ASSERT(pPatch->AllocationListSize == 3);
-    ASSERT(pPatch->pAllocationList[DXGK_PRESENT_SOURCE_INDEX].SegmentId <= 2);
-    ASSERT(pPatch->pAllocationList[DXGK_PRESENT_DESTINATION_INDEX].SegmentId == 1);
-
-    size = pPatch->DmaBufferSubmissionEndOffset - pPatch->DmaBufferSubmissionStartOffset;
-    dma_present = (UXENDISP_DMA_PRESENT *)pPatch->pDmaBuffer;
-    if (dma_present->size != size) {
-        uxen_debug("Invalid DMA buffer size: 0x%x expecting: 0x%x",
-                   size, dma_present->size);
-        return STATUS_UNSUCCESSFUL;
-    }
-
-    /* N.B. store the physical address of the allocation. Not currently used. */
-    dma_present->srcalloc->addr =
-        pPatch->pAllocationList[DXGK_PRESENT_SOURCE_INDEX].PhysicalAddress;
-    dma_present->dstalloc->addr =
-        pPatch->pAllocationList[DXGK_PRESENT_DESTINATION_INDEX].PhysicalAddress;
 
     return STATUS_SUCCESS;
 }
@@ -797,7 +578,7 @@ uXenDispSubmitCommand(CONST HANDLE hAdapter,
     length = pSubmitCommand->DmaBufferSubmissionEndOffset -
              pSubmitCommand->DmaBufferSubmissionStartOffset;
 
-    do_command(dev, addr, length);
+    //do_command(dev, addr, length);
 
     dev->current_fence = pSubmitCommand->SubmissionFenceId;
 
@@ -837,8 +618,6 @@ NTSTATUS APIENTRY
 uXenDispBuildPagingBuffer(CONST HANDLE hAdapter,
                           DXGKARG_BUILDPAGINGBUFFER *pBuildPagingBuffer)
 {
-    DEVICE_EXTENSION *dev = (DEVICE_EXTENSION *) hAdapter;
-
     PAGED_CODE();
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
@@ -862,11 +641,8 @@ uXenDispBuildPagingBuffer(CONST HANDLE hAdapter,
          */
         break;
     case DXGK_OPERATION_MAP_APERTURE_SEGMENT:
-        dev->crtcs[0].shadow_surface = MmGetSystemAddressForMdlSafe(
-            pBuildPagingBuffer->MapApertureSegment.pMdl, NormalPagePriority);
         break;
     case DXGK_OPERATION_UNMAP_APERTURE_SEGMENT:
-        dev->crtcs[0].shadow_surface = NULL;
         break;
     case DXGK_OPERATION_SPECIAL_LOCK_TRANSFER:
         /* Not using UseAlternateVA */
@@ -1305,11 +1081,6 @@ uXenDispPresent(CONST HANDLE hContext, DXGKARG_PRESENT *pPresent)
 {
     UXENDISP_D3D_CONTEXT *d3dctx = (UXENDISP_D3D_CONTEXT *)hContext;
     DEVICE_EXTENSION *dev = d3dctx->d3ddev->dev;
-    UXENDISP_DMA_PRESENT *dma_present;
-    UINT size, subrects_size;
-    ULONG i;
-    SUBRECT *subrects;
-    ULONG srcwidth, srcheight;
 
     PAGED_CODE();
 
@@ -1335,49 +1106,13 @@ uXenDispPresent(CONST HANDLE hContext, DXGKARG_PRESENT *pPresent)
         return STATUS_ILLEGAL_INSTRUCTION;
     }
 
-    /* TODO check allocation types (shared primary only)? */
-
-    /* Allocate a DMA buffer to hold all the values for this present operation. */
-    subrects_size = pPresent->SubRectCnt * sizeof(RECT);
-    size = sizeof(UXENDISP_DMA_PRESENT) + subrects_size;
-    if (pPresent->DmaSize < size) {
-        uxen_debug("pDmaBuffer too small, size=0x%x", pPresent->DmaSize);
-        return STATUS_GRAPHICS_INSUFFICIENT_DMA_BUFFER;
-    }
-
-    /* Allocate DMA chunk and advance the buffer */
-    dma_present = (UXENDISP_DMA_PRESENT *)pPresent->pDmaBuffer;
-    pPresent->pDmaBuffer = (UCHAR *)pPresent->pDmaBuffer + size;
-
-    /* Copy the present values into the DMA buffer */
-    dma_present->size = size;
-    dma_present->srcalloc = pPresent->pAllocationList[DXGK_PRESENT_SOURCE_INDEX].hDeviceSpecificAllocation;
-    dma_present->dstalloc = pPresent->pAllocationList[DXGK_PRESENT_DESTINATION_INDEX].hDeviceSpecificAllocation;
-    dma_present->srcrect = pPresent->SrcRect;
-    dma_present->dstrect = pPresent->DstRect;
-    dma_present->subrect_count = pPresent->SubRectCnt;
-    dma_present->flags = pPresent->Flags;
-
-    subrects = (SUBRECT *)((UCHAR *)dma_present + sizeof(UXENDISP_DMA_PRESENT));
-
-    srcwidth = pPresent->SrcRect.right - pPresent->SrcRect.left;
-    srcheight = pPresent->SrcRect.bottom - pPresent->SrcRect.top;
-    for (i = 0; i < pPresent->SubRectCnt; i++) {
-        subrects[i].left = min((ULONG)pPresent->pDstSubRects[i].left -
-                               pPresent->DstRect.left, srcwidth);
-        subrects[i].top =  min((ULONG)pPresent->pDstSubRects[i].top -
-                               pPresent->DstRect.top, srcheight);
-        subrects[i].width = min((ULONG)pPresent->pDstSubRects[i].right -
-                                pPresent->pDstSubRects[i].left, srcwidth);
-        subrects[i].height = min((ULONG)pPresent->pDstSubRects[i].bottom -
-                                 pPresent->pDstSubRects[i].top, srcheight);
-    }
-
     /* Set the patch locations and advance the location counter */
     RtlZeroMemory(pPresent->pPatchLocationListOut, 2 * sizeof(D3DDDI_PATCHLOCATIONLIST));
     pPresent->pPatchLocationListOut[0].AllocationIndex = DXGK_PRESENT_SOURCE_INDEX;
     pPresent->pPatchLocationListOut[1].AllocationIndex = DXGK_PRESENT_DESTINATION_INDEX;
     pPresent->pPatchLocationListOut += 2;
+
+    dr_send(dev->dr_ctx, 1, &pPresent->DstRect);
 
     return STATUS_SUCCESS;
 }

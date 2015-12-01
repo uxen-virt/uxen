@@ -20,7 +20,6 @@ struct _UXENDISP_DRIVER_ALLOCATION;
 typedef struct _UXENDISP_SOURCE{
     BOOLEAN in_use;
     struct _UXENDISP_DRIVER_ALLOCATION *primary_allocation;
-    struct _UXENDISP_DRIVER_ALLOCATION *shadow_allocation;
 } UXENDISP_SOURCE, *PUXENDISP_SOURCE;
 
 typedef struct _UXENDISP_MODE {
@@ -60,7 +59,6 @@ typedef struct _UXENDISP_CRTC {
 #define UXENDISP_CRTC_STAGED_FLAG_DISABLE 0x1
 #define UXENDISP_CRTC_STAGED_FLAG_SKIP 0x2
     ULONG staged_flags;
-    PVOID shadow_surface;
 } UXENDISP_CRTC, *PUXENDISP_CRTC;
 
 typedef struct _DEVICE_EXTENSION {
