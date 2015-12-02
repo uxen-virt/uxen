@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -15,6 +15,9 @@
 #include <winioctl.h>
 #define V4V_USE_INLINE_API
 #include <windows/uxenv4vlib/gh_v4vapi.h>
+
+#include "uxen_platform.h"
+#include <uxen/platform_interface.h>
 
 #if defined(_WIN32)
 #define _POSIX
@@ -66,7 +69,7 @@ static uxen_net_packet_list_t queue, free_list;
 static unsigned int queue_len;
 
 typedef struct uxen_net {
-    ISADevice dev;
+    UXenPlatformDevice dev;
     NICState *nic;
     NICConf conf;
     v4v_context_t a;
@@ -83,7 +86,6 @@ typedef struct uxen_net {
 
     int32_t fish;
 
-    uint8_t sta;
 #if PCAP
     FILE *pcap;
     int pcap_last_tx_nr;
@@ -1089,54 +1091,6 @@ static const VMStateDescription vmstate_uxen_net = {
     },
 };
 
-/******************ACPI interface******************************/
-
-static void
-uxen_net_ioport_write (void *opaque, uint32_t addr, uint32_t val)
-{
-    uxen_net_t *s = (uxen_net_t *) opaque;
-
-    addr &= 15;
-
-    if (!addr) {
-        s->sta &= ~1;
-        s->sta |= val & 1;
-    }
-
-    debug_printf("uxn: ioport write 0x%x => 0x%x\n", addr, val);
-}
-
-static uint32_t
-uxen_net_ioport_read (void *opaque, uint32_t addr)
-{
-    extern unsigned slirp_mru;
-// extern unsigned slirp_mtu;
-    uxen_net_t *s = (uxen_net_t *) opaque;
-    uint8_t ret;
-
-    addr &= 15;
-
-    if (!addr) {
-        ret = s->sta | 0x80;
-    } else if ((addr > 0) && (addr <= ETHER_ADDR_LEN)) {
-        ret = s->conf.macaddr.a[addr - 1];
-    } else if (addr == 8) {
-        ret = slirp_mru & 0xff;
-    } else if (addr == 9) {
-        ret = slirp_mru >> 8;
-    } else {
-        ret = 0xff;
-    }
-
-    if (addr)
-        debug_printf("uxn: ioport read 0x%x => 0x%x\n", addr, ret);
-
-    return ret;
-}
-
-/*******************************************************/
-
-
 static void
 uxen_net_cleanup (VLANClientState *nc)
 {
@@ -1178,7 +1132,7 @@ have_v4v (void)
 }
 
 static int
-uxen_net_isa_initfn (ISADevice *dev)
+uxen_net_initfn (UXenPlatformDevice *dev)
 {
     DWORD t;
     v4v_ring_id_t r;
@@ -1187,6 +1141,7 @@ uxen_net_isa_initfn (ISADevice *dev)
     int v4v_opened = 0;
     extern unsigned slirp_mru;
     uxen_net_t *s = DO_UPCAST (uxen_net_t, dev, dev);
+    uint16_t mru;
 
     qemu_macaddr_default_if_unset (&s->conf.macaddr);
 
@@ -1255,15 +1210,16 @@ uxen_net_isa_initfn (ISADevice *dev)
         s->dest.domain = vm_id;
         s->dest.port = 0xc0000;
 
-        s->sta = 0;
-
-        register_ioport_read (0x320, 16, 1, uxen_net_ioport_read, s);
-        register_ioport_write (0x320, 16, 1, uxen_net_ioport_write, s);
-
         s->nic = qemu_new_nic (&uxen_net_net_info, &s->conf,
                                dev->qdev.info->name, dev->qdev.id, s);
 
         qemu_format_nic_info_str (&s->nic->nc, s->conf.macaddr.a);
+
+        uxenplatform_device_add_property(dev, UXENBUS_PROPERTY_TYPE_MACADDR,
+                                         s->conf.macaddr.a, 6);
+        mru = htons(slirp_mru);
+        uxenplatform_device_add_property(dev, UXENBUS_PROPERTY_TYPE_MTU,
+                                         &mru, 2);
 
         debug_printf("%s: mac is %02x:%02x:%02x:%02x:%02x:%02x\n"
                      " slirp_mru(guest mtu) is %d\n", __FUNCTION__,
@@ -1283,11 +1239,12 @@ uxen_net_isa_initfn (ISADevice *dev)
     return -1;
 }
 
-static ISADeviceInfo uxen_net_isa_info = {
+static UXenPlatformDeviceInfo uxen_net_info = {
     .qdev.name = "uxen_net",
     .qdev.size = sizeof (uxen_net_t),
     .qdev.vmsd = &vmstate_uxen_net,
-    .init = uxen_net_isa_initfn,
+    .init = uxen_net_initfn,
+    .devtype = UXENBUS_DEVICE_TYPE_NET,
     .qdev.props = (Property[])
     {
         DEFINE_NIC_PROPERTIES (uxen_net_t, conf),
@@ -1296,12 +1253,10 @@ static ISADeviceInfo uxen_net_isa_info = {
     ,
 };
 
-
-
 static void
-uxen_net_isa_register_devices (void)
+uxen_net_register_devices (void)
 {
-    isa_qdev_register (&uxen_net_isa_info);
+    uxenplatform_qdev_register(&uxen_net_info);
 }
 
-device_init (uxen_net_isa_register_devices);
+device_init (uxen_net_register_devices);

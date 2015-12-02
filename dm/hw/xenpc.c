@@ -342,13 +342,9 @@ pc_init_xen(void)
     } else {
         for (i = 0; !i; ++i) {
             if (nd_table[i].used) {
-                ISADevice *dev;
-
                 if (!nd_table[i].netdev && !nd_table[i].vlan)
                     nd_table[i].vlan = qemu_find_vlan(0, 1);
-                dev=isa_create("uxen_net");
-                qdev_set_nic_properties(&dev->qdev, &nd_table[i]);
-                qdev_init(&dev->qdev);
+                uxenplatform_nic_init(&nd_table[i], "uxen_net");
             }
         }
         for (; i < MAX_NICS; i++) {
