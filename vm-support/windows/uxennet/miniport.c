@@ -35,7 +35,7 @@ Notes:
 /*
  * uXen changes:
  *
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -188,7 +188,6 @@ Arguments:
         NdisAllocateSpinLock(&GlobalData.Lock);
         NdisInitializeListHead(&GlobalData.AdapterList);
 
-        (void) uxen_net_init();
         //
         // Register an Unload handler for global data cleanup. The unload handler
         // has a more global scope, whereas the scope of the MiniportHalt function
@@ -294,6 +293,14 @@ Arguments:
                                NULL);
 
         Adapter->AdapterHandle = MiniportAdapterHandle;
+
+        Adapter->uxen_net.parent = Adapter;
+
+        Status = uxen_net_init_adapter(&Adapter->uxen_net);
+        if (Status != NDIS_STATUS_SUCCESS) {
+            uxen_err("uxen_net_setup failed");
+            break;
+        }
 
         //
         // Read Advanced configuration information from the registry
@@ -767,7 +774,6 @@ Return Value:
 
     PAGED_CODE();
 
-    uxen_net_free();
     ASSERT(IsListEmpty(&GlobalData.AdapterList));
     NdisFreeSpinLock(&GlobalData.Lock);
 

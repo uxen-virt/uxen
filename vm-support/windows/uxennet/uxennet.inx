@@ -34,13 +34,10 @@ uxenv4vlib.sys = 222,,
 
 
 [uXen.NTx86]
-%UXENNET.DeviceDesc%    = UXENNET, uxennet ; ACPI compatible device name
-;%UXENNET.DeviceDesc%    = UXENNET, root\UXENNET ; Root enumerated 
+%UXENNET.DeviceDesc%    = UXENNET, uxenplatform\uxennet
 
 [uXen.NTAMD64]
-%UXENNET.DeviceDesc%    = UXENNET, uxennet ; ACPI compatible device name
-;%UXENNET.DeviceDesc%    = UXENNET, root\UXENNET ; Root enumerated 
-;%UXENNET.DeviceDesc%    = UXENNET, {b85b7c50-6a01-11d2-b841-00c04fad5171}\UXENNET 
+%UXENNET.DeviceDesc%    = UXENNET, uxenplatform\uxennet
 
 [UXENNET]
 Characteristics = 0x1 ; NCF_VIRTUAL

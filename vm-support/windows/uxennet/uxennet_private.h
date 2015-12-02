@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -30,12 +30,6 @@ typedef struct uxen_net {
     KDPC    resume_dpc;
     int ready;
 } Uxennet;
-
-typedef struct uxen_net_globals {
-    LIST_ENTRY      adapter_list;
-    NDIS_SPIN_LOCK  lock;
-} Uxennet_globals;
-
 
 #include "miniport.h"
 #include "public.h"

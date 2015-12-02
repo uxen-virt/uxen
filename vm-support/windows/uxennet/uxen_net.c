@@ -1,11 +1,9 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
 #include "uxennet_private.h"
-
-Uxennet_globals globals;
 
 #define MAX_IOV 16
 
@@ -80,10 +78,6 @@ void uxen_net_resume_dpc(void *SystemSpecific1, void *FunctionContext, void *Sys
 void
 uxen_net_free_adapter (Uxennet *n)
 {
-    NdisAcquireSpinLock (&globals.lock);
-    RemoveEntryList (&n->list);
-    NdisReleaseSpinLock (&globals.lock);
-
 #if 0
     uxen_v4vlib_unset_resume_dpc(&n->resume_dpc, n);
 #endif
@@ -95,38 +89,6 @@ uxen_net_free_adapter (Uxennet *n)
     }
 
 }
-
-
-static
-is_adapternum_free (int anum)
-{
-    Uxennet *n;
-
-
-    n = (Uxennet *) globals.adapter_list.Flink;
-
-    while ((PLIST_ENTRY) n != &globals.adapter_list) {
-        if (n->anum == anum)
-            return 0;
-        n = (Uxennet *) n->list.Flink;
-    }
-
-    return 1;
-}
-
-
-static int
-get_free_adapternum (void)
-{
-    int anum = 0;
-
-    while (!is_adapternum_free (anum))
-        anum++;
-
-    return anum;
-}
-
-
 
 void uxen_net_callback(uxen_v4v_ring_handle_t *r, void *_a, void *_b)
 {
@@ -143,18 +105,27 @@ void uxen_net_callback(uxen_v4v_ring_handle_t *r, void *_a, void *_b)
     RecvDpcFunc(NULL, adapter, NULL, NULL);
 }
 
+static int get_adapternum(Uxennet *n)
+{
+    NTSTATUS status;
+    ULONG addr, addr_len;
 
+    status = IoGetDeviceProperty(n->parent->Pdo,
+                                 DevicePropertyAddress,
+                                 sizeof(addr),
+                                 &addr, &addr_len);
+    if (!NT_SUCCESS(status)) {
+        uxen_err("IoGetDeviceProperty failed - 0x%.08X", status);
+        return -1;
+    }
+
+    return (int)addr;
+}
 
 NTSTATUS
 uxen_net_init_adapter (Uxennet *n)
 {
-
-    n->anum = -1;
-
-    NdisAcquireSpinLock (&globals.lock);
-    n->anum = get_free_adapternum ();
-    InsertTailList (&globals.adapter_list, &n->list);
-    NdisReleaseSpinLock (&globals.lock);
+    n->anum = get_adapternum(n);
 
     uxen_msg("Adapter num %d", n->anum);
 
@@ -190,20 +161,6 @@ uxen_net_stop_adapter(MP_ADAPTER *a)
     a->uxen_net.ready = 0;
     uxen_net_callback(NULL, a, NULL);
     return STATUS_SUCCESS;
-}
-
-void
-uxen_net_free (void)
-{
-    ASSERT (IsListEmpty (&globals.adapter_list));
-    NdisFreeSpinLock (&globals.lock);
-}
-
-void
-uxen_net_init (void)
-{
-    NdisAllocateSpinLock (&globals.lock);
-    NdisInitializeListHead (&globals.adapter_list);
 }
 
 void uxen_net_soh(Uxennet *n, PMP_ADAPTER adapter)

@@ -24,7 +24,7 @@ Notes:
 /*
  * uXen changes:
  *
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -525,14 +525,6 @@ NDIS_STATUS NICAllocAdapter(
             break;
         }
 
-        Adapter->uxen_net.parent = Adapter;
-
-        Status = uxen_net_init_adapter(&Adapter->uxen_net);
-        if (Status != NDIS_STATUS_SUCCESS) {
-            uxen_err("uxen_net_setup failed");
-            break;
-        }
-
 
     } while (bFalse);
 
@@ -669,7 +661,7 @@ Return Value:
     {
         ULONG qemu_mtu = 0;
 
-        uxen_net_get_mtu(Adapter->Pdo, &qemu_mtu);
+        platform_get_mtu(Adapter->Pdo, &qemu_mtu);
         uxen_msg("ReportedMTU from qemu is %d", (int) qemu_mtu);
 
         if (qemu_mtu && (qemu_mtu != 1500))
@@ -731,8 +723,8 @@ Return Value:
 
 
     uxen_msg("Getting acpi address");
-    uxen_net_get_mac_address(Adapter->Pdo, Adapter->PermanentAddress);
-    uxen_net_get_mac_address(Adapter->Pdo, Adapter->CurrentAddress);
+    platform_get_mac_address(Adapter->Pdo, Adapter->PermanentAddress);
+    platform_get_mac_address(Adapter->Pdo, Adapter->CurrentAddress);
 
     uxen_msg("Permanent Address = %02x-%02x-%02x-%02x-%02x-%02x",
                      Adapter->PermanentAddress[0],
