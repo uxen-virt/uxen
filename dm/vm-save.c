@@ -1564,6 +1564,7 @@ map_template_fingerprints(struct filebuf *t,
     }
 
     if (!fingerprints_pos) {
+        asprintf(err_msg, "no fingerprints section found in template file");
         ret = -ENOENT;
         goto out;
     }
@@ -1573,7 +1574,7 @@ map_template_fingerprints(struct filebuf *t,
                      sizeof(s_vm_fingerprints.marker), ret, err_msg,
                      out);
     if (s_vm_fingerprints.marker != XC_SAVE_ID_FINGERPRINTS) {
-        asprintf(err_msg, "no fingerprints section at offset %"PRId64"\n",
+        asprintf(err_msg, "no fingerprints section at offset %"PRId64,
                  fingerprints_pos);
         ret = -EINVAL;
         goto out;
@@ -1587,6 +1588,7 @@ map_template_fingerprints(struct filebuf *t,
     *n = s_vm_fingerprints.hashes_nr;
     *tfps = filebuf_mmap(t, filebuf_tell(t), sz);
     if (!*tfps) {
+        asprintf(err_msg, "failed mapping fingerprints");
         ret = -ENOMEM;
         goto out;
     }
