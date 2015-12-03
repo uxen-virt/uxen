@@ -285,12 +285,11 @@ static int is_alive(void *opaque, const uuid_t uuid)
     return file_exists(vm_save_file_name(uuid));
 }
 
-int cuckoo_uxen_init(struct cuckoo_context **ret_context,
+int cuckoo_uxen_init(struct cuckoo_context *cuckoo_context,
                      struct cuckoo_callbacks *ret_ccb, void **ret_opaque,
                      HANDLE cancel_event)
 {
     int i;
-    struct cuckoo_context *cuckoo_context;
     struct ctx *ctx;
     struct cuckoo_callbacks ccb = {
         cancelled,
@@ -308,22 +307,16 @@ int cuckoo_uxen_init(struct cuckoo_context **ret_context,
         is_alive,
     };
 
+    cuckoo_init(cuckoo_context);
+
     ctx = calloc(1, sizeof(*ctx));
     if (!ctx) {
-        return -1;
+        goto err;
     }
     if (priv_heap_create(&ctx->heap) != 0) {
-        free(ctx);
-        return -1;
+        goto err;
     }
     ctx->cancel_event = cancel_event;
-
-    cuckoo_context = malloc(sizeof(*cuckoo_context));
-    if (!cuckoo_context) {
-        free(ctx);
-        return -1;
-    }
-    cuckoo_init(cuckoo_context);
 
     for (i = 0; i < CUCKOO_NUM_THREADS; ++i) {
         struct thread_ctx *tc = &ctx->tcs[i];
@@ -331,7 +324,7 @@ int cuckoo_uxen_init(struct cuckoo_context **ret_context,
         pp_buffer = xc_hypercall_buffer_alloc_pages(
             xc_handle, pp_buffer, MAX_BATCH_SIZE);
         if (!pp_buffer) {
-            assert(0);
+            goto err;
         }
         tc->buffer = *HYPERCALL_BUFFER(pp_buffer);
         tc->gpfn_info_list = alloc_mem(ctx, MAX_BATCH_SIZE *
@@ -342,20 +335,25 @@ int cuckoo_uxen_init(struct cuckoo_context **ret_context,
         char *mn;
         asprintf(&mn, "uxen-cuckoo-mutex-%d", i);
         if (!mn) {
-            return -1;
+            goto err;
         }
         ctx->mutexes[i] = CreateMutexA(NULL, FALSE, mn);
         free(mn);
         if (!ctx->mutexes[i]) {
             Wwarn("CreateMutexA failed");
-            return -1;
+            goto err;
         }
     }
 
-    *ret_context = cuckoo_context;
     *ret_ccb = ccb;
     *ret_opaque = ctx;
     return 0;
+
+err:
+    if (ctx) {
+        cuckoo_uxen_close(cuckoo_context, ctx);
+    }
+    return -ENOMEM;
 }
 
 void cuckoo_uxen_close(struct cuckoo_context *cuckoo_context, void *opaque)
@@ -365,14 +363,20 @@ void cuckoo_uxen_close(struct cuckoo_context *cuckoo_context, void *opaque)
 
     for (i = 0; i < CUCKOO_NUM_THREADS; ++i) {
         struct thread_ctx *tc = &ctx->tcs[i];
-        xc__hypercall_buffer_free_pages(xc_handle, &tc->buffer,
-                                        MAX_BATCH_SIZE);
+        if (HYPERCALL_BUFFER_ARGUMENT_BUFFER(&tc->buffer)) {
+            xc__hypercall_buffer_free_pages(xc_handle, &tc->buffer,
+                                            MAX_BATCH_SIZE);
+        }
         free_mem(ctx, tc->gpfn_info_list);
     }
     for (i = 0; i < cuckoo_num_mutexes; ++i) {
-        CloseHandle(ctx->mutexes[i]);
+        if (ctx->mutexes[i]) {
+            CloseHandle(ctx->mutexes[i]);
+        }
         ctx->mutexes[i] = NULL;
     }
-    priv_heap_destroy(ctx->heap);
+    if (ctx->heap) {
+        priv_heap_destroy(ctx->heap);
+    }
     free(ctx);
 }

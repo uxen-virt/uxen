@@ -904,6 +904,11 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
     if (!check_aborted()) {
 
 #ifdef SAVE_CUCKOO_ENABLED
+        if (mem_buffer) {
+            xc_hypercall_buffer_free_pages(xc_handle, mem_buffer,
+                                           MEM_BUFFER_SIZE >> PAGE_SHIFT);
+            mem_buffer = NULL;
+        }
         if (compression_is_cuckoo()) {
             xc_cuckoo.marker = XC_SAVE_ID_CUCKOO_DATA;
             xc_cuckoo.simple_mode = (vm_save_info.compress_mode ==
@@ -1602,7 +1607,7 @@ static int
 save_cuckoo_pages(struct filebuf *f, struct page_fingerprint *hashes,
                   int n, int simple_mode, char **err_msg)
 {
-    struct cuckoo_context *cuckoo_context = NULL;
+    struct cuckoo_context cuckoo_context;
     struct cuckoo_callbacks ccb;
     void *opaque;
     struct page_fingerprint *tfps = NULL;
@@ -1632,12 +1637,11 @@ save_cuckoo_pages(struct filebuf *f, struct page_fingerprint *hashes,
     if (simple_mode)
         ret = cuckoo_compress_vm_simple(f, tn, tfps, n, hashes, &ccb, opaque);
     else
-        ret = cuckoo_compress_vm(cuckoo_context, vm_uuid, f, tn, tfps,
+        ret = cuckoo_compress_vm(&cuckoo_context, vm_uuid, f, tn, tfps,
                                  n, hashes, &ccb, opaque);
 
+    cuckoo_uxen_close(&cuckoo_context, opaque);
 out:
-    if (cuckoo_context)
-        cuckoo_uxen_close(cuckoo_context, opaque);
     if (t)
         filebuf_close(t);
 
@@ -1647,7 +1651,7 @@ out:
 static int
 load_cuckoo_pages(struct filebuf *f, int reusing_vm, int simple_mode)
 {
-    struct cuckoo_context *cuckoo_context;
+    struct cuckoo_context cuckoo_context;
     struct cuckoo_callbacks ccb;
     void *opaque;
     int ret;
@@ -1659,9 +1663,9 @@ load_cuckoo_pages(struct filebuf *f, int reusing_vm, int simple_mode)
     if (simple_mode)
         ret = cuckoo_reconstruct_vm_simple(f, reusing_vm, &ccb, opaque);
     else
-        ret = cuckoo_reconstruct_vm(cuckoo_context, vm_uuid, f, reusing_vm,
+        ret = cuckoo_reconstruct_vm(&cuckoo_context, vm_uuid, f, reusing_vm,
                                     &ccb, opaque);
-    cuckoo_uxen_close(cuckoo_context, opaque);
+    cuckoo_uxen_close(&cuckoo_context, opaque);
 
     return ret < 0 ? ret : 0;
 }

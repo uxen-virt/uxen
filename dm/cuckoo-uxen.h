@@ -10,7 +10,7 @@
 struct cuckoo_context;
 struct cuckoo_callbacks;
 
-int cuckoo_uxen_init(struct cuckoo_context **ret_context,
+int cuckoo_uxen_init(struct cuckoo_context *cuckoo_context,
                      struct cuckoo_callbacks *ret_ccb, void **ret_opaque,
                      HANDLE cancel_event);
 void cuckoo_uxen_close(struct cuckoo_context *cuckoo_context, void *opaque);
