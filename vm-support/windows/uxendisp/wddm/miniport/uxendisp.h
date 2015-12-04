@@ -41,8 +41,6 @@
 #include "dirty_rect.h"
 #include "version.h"
 
-#include "d3d.h"
-
 /* PCI vendor and device IDs. */
 #define UXENDISP_PCI_VEN    0x5853
 #define UXENDISP_PCI_DEV    0x5102
@@ -50,6 +48,35 @@
 #define UXENDISP_REFRESH_RATE 60
 
 struct _UXENDISP_DRIVER_ALLOCATION;
+
+// Zero is unused by D3DKMDT_STANDARDALLOCATION_TYPE
+typedef enum _UXENDISP_STANDARDALLOCATION_TYPE {
+    UXENDISP_USERALLOCATION_TYPE       = 0,
+    UXENDISP_SHAREDPRIMARYSURFACE_TYPE = 1,
+    UXENDISP_SHADOWSURFACE_TYPE        = 2,
+    UXENDISP_STAGINGSURFACE_TYPE       = 3
+} UXENDISP_STANDARDALLOCATION_TYPE;
+
+#define UXENDISP_ALLOCATION_STATE_NONE         0x00000000
+#define UXENDISP_ALLOCATION_STATE_ASSIGNED     0x00000001
+#define UXENDISP_ALLOCATION_STATE_VISIBLE      0x00000002
+
+typedef struct _UXENDISP_SURFACE_DESC {
+    ULONG XResolution;
+    ULONG YResolution;
+    ULONG BytesPerPixel;
+    ULONG Stride;
+    D3DDDIFORMAT Format;
+    D3DDDI_RATIONAL RefreshRate;
+} UXENDISP_SURFACE_DESC, *PUXENDISP_SURFACE_DESC;
+
+typedef struct _UXENDISP_D3D_ALLOCATION {
+    UXENDISP_STANDARDALLOCATION_TYPE Type;
+    BOOLEAN Primary;
+    D3DDDI_VIDEO_PRESENT_SOURCE_ID VidPnSourceId;
+    UXENDISP_SURFACE_DESC SurfaceDesc;
+    ULONG ByteAlignment; // StrideAlignment + 1 for alignment bytes
+} UXENDISP_D3D_ALLOCATION, *PUXENDISP_D3D_ALLOCATION;
 
 typedef struct _UXENDISP_SOURCE{
     BOOLEAN in_use;
@@ -59,37 +86,21 @@ typedef struct _UXENDISP_SOURCE{
 typedef struct _UXENDISP_MODE {
     ULONG xres;
     ULONG yres;
-    ULONG stride;
+    LONG stride;
     ULONG fmt;
 #define UXENDISP_MODE_FLAG_PREFERRED 0x1
     ULONG flags;
 } UXENDISP_MODE, *PUXENDISP_MODE;
 
-typedef struct _UXENDISP_MODE_SET {
-    ULONG child_uid;
-    ULONG refcount;
-#define UXENDISP_MAX_MODE_COUNT 64
-    ULONG mode_count;
-    UXENDISP_MODE *modes;
-} UXENDISP_MODE_SET, *PUXENDISP_MODE_SET;
-
-#define UXENDISP_CRTC_MAX_XRES 65535
-#define UXENDISP_CRTC_MAX_YRES 65535
-
 typedef struct _UXENDISP_CRTC {
     ULONG crtcid;
     BOOLEAN connected;
-    ULONG edid_len;
-    UCHAR *edid;
-    UXENDISP_MODE_SET *mode_set;
     UXENDISP_MODE curr_mode;
     UXENDISP_MODE next_mode;
     D3DDDI_VIDEO_PRESENT_SOURCE_ID sourceid;
     PHYSICAL_ADDRESS primary_address;
-    LONG modeidx;
-    LONG staged_modeidx;
+    PVOID fb;
     D3DDDI_VIDEO_PRESENT_SOURCE_ID staged_sourceid;
-    LONG staged_fmt;
 #define UXENDISP_CRTC_STAGED_FLAG_DISABLE 0x1
 #define UXENDISP_CRTC_STAGED_FLAG_SKIP 0x2
     ULONG staged_flags;
@@ -111,11 +122,11 @@ typedef struct _DEVICE_EXTENSION {
     UXENDISP_CRTC *crtcs;
     UXENDISP_SOURCE *sources;
     KSPIN_LOCK sources_lock;
-    KDPC child_status_dpc;
-    UXENDISP_UMDRIVERPRIVATE private_data;
     BOOLEAN cursor_visible;
     UINT current_fence;
     void *dr_ctx;
+    KDPC vsync_dpc;
+    KTIMER vsync_timer;
 } DEVICE_EXTENSION, *PDEVICE_EXTENSION;
 
 typedef struct _UXENDISP_D3D_DEVICE {
@@ -132,23 +143,6 @@ typedef struct _UXENDISP_DRIVER_ALLOCATION {
     D3DKMT_HANDLE allochdl;
     PHYSICAL_ADDRESS addr;
 } UXENDISP_DRIVER_ALLOCATION, *PUXENDISP_DRIVER_ALLOCATION;
-
-typedef struct _SUBRECT {
-    ULONG left;
-    ULONG top;
-    ULONG width;
-    ULONG height;
-} SUBRECT, PSUBRECT;
-
-typedef struct _UXENDISP_DMA_PRESENT {
-    ULONG size;
-    UXENDISP_DRIVER_ALLOCATION *srcalloc;
-    UXENDISP_DRIVER_ALLOCATION *dstalloc;
-    RECT srcrect;
-    RECT dstrect;
-    UINT subrect_count;
-    DXGK_PRESENTFLAGS flags;
-} UXENDISP_DMA_PRESENT, *PUXENDISP_DMA_PRESENT;
 
 typedef enum _UXENDISP_CONTEXT_TYPE {
     UXENDISP_CONTEXT_TYPE_NONE      = 0,
@@ -194,36 +188,15 @@ uxdisp_crtc_write(PDEVICE_EXTENSION dev, ULONG crtc, ULONG reg, ULONG val)
 static INLINE LONG
 ddi_to_uxendisp_fmt(D3DDDIFORMAT ddi_fmt)
 {
-    switch (ddi_fmt) {
-    case D3DDDIFMT_A8R8G8B8:
-    case D3DDDIFMT_X8R8G8B8:
-        return UXDISP_CRTC_FORMAT_BGRX_8888;
-    case D3DDDIFMT_R8G8B8:
-        return UXDISP_CRTC_FORMAT_BGR_888;
-    case D3DDDIFMT_R5G6B5:
-        return UXDISP_CRTC_FORMAT_BGR_565;
-    case D3DDDIFMT_X1R5G5B5:
-        return UXDISP_CRTC_FORMAT_BGR_555;
-    }
-
-    return -1;
+    ASSERT(ddi_fmt == D3DDDIFMT_A8R8G8B8 || ddi_fmt == D3DDDIFMT_X8R8G8B8);
+    return UXDISP_CRTC_FORMAT_BGRX_8888;
 }
 
 static INLINE D3DDDIFORMAT
 uxendisp_to_ddi_fmt(ULONG fmt)
 {
-    switch (fmt) {
-    case UXDISP_CRTC_FORMAT_BGRX_8888:
-        return D3DDDIFMT_A8R8G8B8;
-    case UXDISP_CRTC_FORMAT_BGR_888:
-        return D3DDDIFMT_R8G8B8;
-    case UXDISP_CRTC_FORMAT_BGR_565:
-        return D3DDDIFMT_R5G6B5;
-    case UXDISP_CRTC_FORMAT_BGR_555:
-        return D3DDDIFMT_X1R5G5B5;
-    }
-
-    return D3DDDIFMT_UNKNOWN;
+    ASSERT(fmt == UXDISP_CRTC_FORMAT_BGRX_8888);
+    return D3DDDIFMT_A8R8G8B8;
 }
 
 /* DDI */
@@ -281,6 +254,8 @@ NTSTATUS APIENTRY uXenDispRender(CONST HANDLE hContext,
                                  DXGKARG_RENDER *pRender);
 NTSTATUS APIENTRY uXenDispPresent(CONST HANDLE hContext,
                                   DXGKARG_PRESENT *pPresent);
+NTSTATUS APIENTRY uXenDispPresentDisplayOnly(HANDLE hDevice,
+                                  CONST DXGKARG_PRESENT_DISPLAYONLY* pPresentDisplayOnly);
 NTSTATUS APIENTRY uXenDispCreateContext(CONST HANDLE hDevice,
                                         DXGKARG_CREATECONTEXT *pCreateContext);
 NTSTATUS APIENTRY uXenDispDestroyContext(CONST HANDLE hContext);
@@ -304,7 +279,8 @@ NTSTATUS APIENTRY uXenDispRecommendMonitorModes(CONST HANDLE hAdapter,
                                                 CONST DXGKARG_RECOMMENDMONITORMODES *CONST pRecommendMonitorModes);
 NTSTATUS APIENTRY uXenDispRecommendVidPnTopology(CONST HANDLE hAdapter,
                                                  CONST DXGKARG_RECOMMENDVIDPNTOPOLOGY *CONST pRecommendVidPnTopology);
-
+NTSTATUS APIENTRY uXenDispQueryVidPnHWCapability(CONST HANDLE hAdapter,
+                                                 DXGKARG_QUERYVIDPNHWCAPABILITY* pVidPnHWCaps);
 /* Crtc */
 VOID uXenDispDetectChildStatusChanges(DEVICE_EXTENSION *dev);
 VOID uXenDispCrtcDisablePageTracking(DEVICE_EXTENSION *dev);

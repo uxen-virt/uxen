@@ -65,6 +65,8 @@ DriverEntry(PDRIVER_OBJECT pDriverObject,
 #pragma alloc_text(INIT,DriverEntry)
 #endif
 
+static BOOLEAN g_dod = FALSE;
+
 NTSTATUS APIENTRY
 uXenDispAddDevice(CONST PDEVICE_OBJECT pPhysicalDeviceObject,
                   PVOID *ppMiniportDeviceContext)
@@ -72,7 +74,6 @@ uXenDispAddDevice(CONST PDEVICE_OBJECT pPhysicalDeviceObject,
     DEVICE_EXTENSION *dev;
 
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(pPhysicalDeviceObject) ||
         !ARGUMENT_PRESENT(ppMiniportDeviceContext))
@@ -88,47 +89,85 @@ uXenDispAddDevice(CONST PDEVICE_OBJECT pPhysicalDeviceObject,
 
     *ppMiniportDeviceContext = dev;
 
-    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
 static void
 uXenDispFreeResources(DEVICE_EXTENSION *dev)
 {
-    ULONG i;
-    uxen_msg("Enter");
-
-    for (i = 0; i < dev->crtc_count; i++) {
-        UXENDISP_CRTC *crtc = &dev->crtcs[i];
-
-        if (crtc->edid)
-            ExFreePoolWithTag(crtc->edid, UXENDISP_TAG);
-    }
-    if (i)
+    if (dev->crtc_count)
         ExFreePoolWithTag(dev->crtcs, UXENDISP_TAG);
     ExFreePoolWithTag(dev->sources, UXENDISP_TAG);
     if (dev->mmio)
         MmUnmapIoSpace(dev->mmio, dev->mmio_len);
     dev->pdo = NULL;
     dev->dxgkhdl = NULL;
-    uxen_msg("Leave");
 }
 
-static void
-ChildStatusChangeDpc(KDPC *dpc,
-                     VOID *deferred_context,
-                     VOID *system_argument1,
-                     VOID *system_argument2)
+static VOID
+uXenDispCrtcDisablePageTracking(DEVICE_EXTENSION *dev)
 {
-    DEVICE_EXTENSION *dev = deferred_context;;
-    uxen_msg("Enter");
+    ULONG val = uxdisp_read(dev, UXDISP_REG_MODE);
+    val |= UXDISP_MODE_PAGE_TRACKING_DISABLED;
+    uxdisp_write(dev, UXDISP_REG_MODE, val);
+}
 
-    UNREFERENCED_PARAMETER(dpc);
-    UNREFERENCED_PARAMETER(system_argument1);
-    UNREFERENCED_PARAMETER(system_argument2);
+static VOID
+uXenDispDetectChildStatusChanges(DEVICE_EXTENSION *dev)
+{
+    KIRQL irql;
+    ULONG i;
+    DXGK_CHILD_STATUS child_status;
 
-    uXenDispDetectChildStatusChanges(dev);
-    uxen_msg("Leave");
+    if (!InterlockedExchangeAdd(&dev->initialized, 0))
+        return;
+
+    KeAcquireSpinLock(&dev->crtc_lock, &irql);
+    for (i = 0; i < dev->crtc_count; i++) {
+        UXENDISP_CRTC *crtc = &dev->crtcs[i];
+        ULONG status;
+
+        status = uxdisp_crtc_read(dev, crtc->crtcid, UXDISP_REG_CRTC_STATUS);
+        if (status) {
+            if (!crtc->connected) {
+                child_status.ChildUid = crtc->crtcid;
+                child_status.Type = StatusConnection;
+                child_status.HotPlug.Connected = TRUE;
+                crtc->connected = TRUE;
+                dev->dxgkif.DxgkCbIndicateChildStatus(dev->dxgkhdl, &child_status);
+            }
+        } else {
+            if (crtc->connected) {
+                child_status.ChildUid = crtc->crtcid;
+                child_status.Type = StatusConnection;
+                child_status.HotPlug.Connected = FALSE;
+                crtc->connected = FALSE;
+                dev->dxgkif.DxgkCbIndicateChildStatus(dev->dxgkhdl, &child_status);
+            }
+        }
+    }
+    KeReleaseSpinLock(&dev->crtc_lock, irql);
+}
+
+static VOID
+vsync_routine(KDPC *dpc, PVOID ctx, PVOID unused1, PVOID unused2)
+{
+    DEVICE_EXTENSION *dev = ctx;
+    DXGKARGCB_NOTIFY_INTERRUPT_DATA NotifyInt = {0};
+    KIRQL irql;
+
+    if (g_dod) {
+        NotifyInt.InterruptType = DXGK_INTERRUPT_DISPLAYONLY_VSYNC;
+    } else {
+        NotifyInt.InterruptType = DXGK_INTERRUPT_CRTC_VSYNC;
+        NotifyInt.CrtcVsync.VidPnTargetId = 0;
+        NotifyInt.CrtcVsync.PhysicalAddress = dev->vram_phys;
+    }
+
+    KeRaiseIrql(DISPATCH_LEVEL + 1, &irql);
+    dev->dxgkif.DxgkCbNotifyInterrupt(dev->dxgkhdl, &NotifyInt);
+    dev->dxgkif.DxgkCbQueueDpc(dev->dxgkhdl);
+    KeLowerIrql(irql);
 }
 
 NTSTATUS APIENTRY
@@ -144,6 +183,7 @@ uXenDispStartDevice(CONST PVOID pMiniportDeviceContext,
     PCM_PARTIAL_RESOURCE_DESCRIPTOR pPRList;
     ULONG c, i, Magic, Rev;
     ULONG memres_index = 0;
+    LARGE_INTEGER DueTime = { 0 };
     PAGED_CODE();
     uxen_msg("Enter");
 
@@ -238,16 +278,12 @@ uXenDispStartDevice(CONST PVOID pMiniportDeviceContext,
     }
     for (i = 0; i < dev->crtc_count; i++) {
         UXENDISP_CRTC *crtc = &dev->crtcs[i];
+        RtlZeroMemory(crtc, sizeof *crtc);
 
         crtc->crtcid = i;
         crtc->connected = FALSE;
-        crtc->edid_len = 0;
-        crtc->edid = NULL;
-        crtc->mode_set = NULL;
         crtc->sourceid = D3DDDI_ID_UNINITIALIZED;
-        crtc->staged_modeidx = -1;
         crtc->staged_sourceid = D3DDDI_ID_UNINITIALIZED;
-        crtc->staged_fmt = -1;
         crtc->staged_flags = 0;
 
         crtc->next_mode.xres = 1024;
@@ -274,10 +310,6 @@ uXenDispStartDevice(CONST PVOID pMiniportDeviceContext,
     RtlZeroMemory(dev->sources, dev->crtc_count * sizeof(UXENDISP_SOURCE));
     KeInitializeSpinLock(&dev->sources_lock);
 
-    KeInitializeDpc(&dev->child_status_dpc,
-                    ChildStatusChangeDpc,
-                    dev);
-
     /* Device is up, switch to initialized */
     InterlockedExchange(&dev->initialized, 1);
 
@@ -294,6 +326,10 @@ uXenDispStartDevice(CONST PVOID pMiniportDeviceContext,
         return STATUS_INSUFFICIENT_RESOURCES;
     }
 
+    KeInitializeDpc(&dev->vsync_dpc, vsync_routine, dev);
+    KeInitializeTimerEx(&dev->vsync_timer, SynchronizationTimer);
+    KeSetTimerEx(&dev->vsync_timer, DueTime, 16, &dev->vsync_dpc);
+
     uxen_msg("Leave");
 
     return STATUS_SUCCESS;
@@ -309,6 +345,8 @@ uXenDispStopDevice(CONST PVOID pMiniportDeviceContext)
 
     if (!ARGUMENT_PRESENT(pMiniportDeviceContext))
         return STATUS_INVALID_PARAMETER;
+
+    KeCancelTimer(&dev->vsync_timer);
 
     dr_deinit(dev->dr_ctx);
 
@@ -332,14 +370,12 @@ NTSTATUS APIENTRY
 uXenDispRemoveDevice(CONST PVOID pMiniportDeviceContext)
 {
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(pMiniportDeviceContext))
         return STATUS_INVALID_PARAMETER;
 
     ExFreePoolWithTag(pMiniportDeviceContext, UXENDISP_TAG);
 
-    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -349,7 +385,6 @@ uXenDispDispatchIoRequest(CONST PVOID pMiniportDeviceContext,
                           PVIDEO_REQUEST_PACKET pVideoRequestPacket)
 {
     PAGED_CODE();
-    uxen_msg("Leave");
 
     if (!ARGUMENT_PRESENT(pMiniportDeviceContext) ||
         !ARGUMENT_PRESENT(pVideoRequestPacket)||
@@ -362,7 +397,6 @@ uXenDispDispatchIoRequest(CONST PVOID pMiniportDeviceContext,
     /* Only IOCTL_VIDEO_QUERY_COLOR_CAPABILITIES and IOCTL_VIDEO_HANDLE_VIDEOPARAMETERS  */
     /* are used - no support for either. */
 
-    uxen_msg("Leave");
     return STATUS_UNSUCCESSFUL;
 }
 
@@ -370,44 +404,7 @@ BOOLEAN APIENTRY
 uXenDispInterruptRoutine(CONST PVOID pMiniportDeviceContext,
                          ULONG MessageNumber)
 {
-    DEVICE_EXTENSION *dev = pMiniportDeviceContext;
-    ULONG isr;
-    BOOLEAN handled = FALSE;
-
-    UNREFERENCED_PARAMETER(MessageNumber); /* line-based IRQ */
-    uxen_msg("Enter");
-
-    if (!ARGUMENT_PRESENT(pMiniportDeviceContext))
-        return FALSE;
-
-    if (!InterlockedExchangeAdd(&dev->initialized, 0))
-        return FALSE;
-
-    isr = uxdisp_read(dev, UXDISP_REG_INTERRUPT);
-    if (isr & UXDISP_INTERRUPT_HOTPLUG) {
-        uxdisp_write(dev, UXDISP_REG_INTERRUPT, UXDISP_INTERRUPT_HOTPLUG);
-        KeInsertQueueDpc(&dev->child_status_dpc, NULL, NULL);
-        handled = TRUE;
-    }
-    if (isr & UXDISP_INTERRUPT_VBLANK) {
-        uxdisp_write(dev, UXDISP_REG_INTERRUPT, UXDISP_INTERRUPT_VBLANK);
-#if 0
-        ULONG i;
-        DXGKARGCB_NOTIFY_INTERRUPT_DATA NotifyInt = {0};
-
-        NotifyInt.InterruptType = DXGK_INTERRUPT_CRTC_VSYNC;
-        NotifyInt.CrtcVsync.VidPnTargetId = pCrtc->VidPnTargetId;
-        NotifyInt.CrtcVsync.PhysicalAddress = dev->GraphicsApertureDescriptor.u.Memory.Start;
-        NotifyInt.CrtcVsync.PhysicalAddress.QuadPart += pCrtc->PrimaryAddress.QuadPart;
-        NotifyInt.CrtcVsync.PhysicalAdapterMask = 0;
-        dev->dxgkif.DxgkCbNotifyInterrupt(dev->dxgkhdl, &NotifyInt);
-        dev->dxgkif.DxgkCbQueueDpc(dev->dxgkhdl);
-#endif
-        handled = TRUE;
-    }
-    uxen_msg("Leave");
-
-    return handled;
+    return FALSE;
 }
 
 VOID APIENTRY
@@ -445,7 +442,7 @@ uXenDispQueryChildRelations(CONST PVOID pMiniportDeviceContext,
         pChildRelations[i].ChildUid = i;
         pChildRelations[i].ChildDeviceType = TypeVideoOutput;
         pChildRelations[i].ChildCapabilities.HpdAwareness = HpdAwarenessInterruptible;
-        pChildRelations[i].ChildCapabilities.Type.VideoOutput.InterfaceTechnology = D3DKMDT_VOT_HD15;
+        pChildRelations[i].ChildCapabilities.Type.VideoOutput.InterfaceTechnology = D3DKMDT_VOT_OTHER;
         pChildRelations[i].ChildCapabilities.Type.VideoOutput.MonitorOrientationAwareness = D3DKMDT_MOA_NONE;
         pChildRelations[i].ChildCapabilities.Type.VideoOutput.SupportsSdtvModes = FALSE;
     }
@@ -508,12 +505,10 @@ uXenDispSetPowerState(CONST PVOID pMiniportDeviceContext,
     UNREFERENCED_PARAMETER(pMiniportDeviceContext);
 
     PAGED_CODE();
-    uxen_msg("Enter");
 
     uxen_debug("HW UID: %d DEVICE_POWER_STATE: %d POWER_ACTION: %d",
                HardwareUid, DevicePowerState, ActionType);
 
-    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -521,11 +516,8 @@ VOID APIENTRY
 uXenDispResetDevice(CONST PVOID pMiniportDeviceContext)
 {
     DEVICE_EXTENSION *dev = pMiniportDeviceContext;
-
-    uxen_msg("Enter");
     /* Disable the interrupt and switch back to VGA mode */
     uxdisp_write(dev, UXDISP_REG_MODE, 0);
-    uxen_msg("Leave");
 }
 
 VOID APIENTRY
@@ -551,77 +543,134 @@ uXenDispQueryInterface(CONST PVOID pMiniportDeviceContext,
 NTSTATUS
 DriverEntry(PDRIVER_OBJECT pDriverObject, PUNICODE_STRING pRegistryPath)
 {
-    DRIVER_INITIALIZATION_DATA DriverInitializationData = {0};
+    NTSTATUS Status;
+    RTL_OSVERSIONINFOW VersionInformation = { sizeof VersionInformation };
     uxen_msg("Enter version: %s", UXEN_DRIVER_VERSION_CHANGESET);
 
-    DriverInitializationData.Version                                = DXGKDDI_INTERFACE_VERSION_VISTA;
+    Status = RtlGetVersion(&VersionInformation);
+    if (!NT_SUCCESS(Status)) {
+        uxen_err("RtlGetVersion failed 0x%x", Status);
+    }
 
-    /* Miniport */
-    DriverInitializationData.DxgkDdiAddDevice                       = uXenDispAddDevice;
-    DriverInitializationData.DxgkDdiStartDevice                     = uXenDispStartDevice;
-    DriverInitializationData.DxgkDdiStopDevice                      = uXenDispStopDevice;
-    DriverInitializationData.DxgkDdiRemoveDevice                    = uXenDispRemoveDevice;
-    DriverInitializationData.DxgkDdiDispatchIoRequest               = uXenDispDispatchIoRequest;
-    DriverInitializationData.DxgkDdiInterruptRoutine                = uXenDispInterruptRoutine;
-    DriverInitializationData.DxgkDdiDpcRoutine                      = uXenDispDpcRoutine;
-    DriverInitializationData.DxgkDdiQueryChildRelations             = uXenDispQueryChildRelations;
-    DriverInitializationData.DxgkDdiQueryChildStatus                = uXenDispQueryChildStatus;
-    DriverInitializationData.DxgkDdiQueryDeviceDescriptor           = uXenDispQueryDeviceDescriptor;
-    DriverInitializationData.DxgkDdiSetPowerState                   = uXenDispSetPowerState;
-    DriverInitializationData.DxgkDdiNotifyAcpiEvent                 = NULL; /* optional, not currently used */
-    DriverInitializationData.DxgkDdiResetDevice                     = uXenDispResetDevice;
-    DriverInitializationData.DxgkDdiUnload                          = uXenDispUnload;
-    DriverInitializationData.DxgkDdiQueryInterface                  = uXenDispQueryInterface;
-    /* DDI */
-    DriverInitializationData.DxgkDdiControlEtwLogging               = uXenDispControlEtwLogging;
-    DriverInitializationData.DxgkDdiQueryAdapterInfo                = uXenDispQueryAdapterInfo;
-    DriverInitializationData.DxgkDdiCreateDevice                    = uXenDispCreateDevice;
-    DriverInitializationData.DxgkDdiCreateAllocation                = uXenDispCreateAllocation;
-    DriverInitializationData.DxgkDdiDestroyAllocation               = uXenDispDestroyAllocation;
-    DriverInitializationData.DxgkDdiDescribeAllocation              = uXenDispDescribeAllocation;
-    DriverInitializationData.DxgkDdiGetStandardAllocationDriverData = uXenDispGetStandardAllocationDriverData;
-    DriverInitializationData.DxgkDdiAcquireSwizzlingRange           = uXenDispAcquireSwizzlingRange;
-    DriverInitializationData.DxgkDdiReleaseSwizzlingRange           = uXenDispReleaseSwizzlingRange;
-    DriverInitializationData.DxgkDdiPatch                           = uXenDispPatch;
-    DriverInitializationData.DxgkDdiSubmitCommand                   = uXenDispSubmitCommand;
-    DriverInitializationData.DxgkDdiPreemptCommand                  = uXenDispPreemptCommand;
-    DriverInitializationData.DxgkDdiBuildPagingBuffer               = uXenDispBuildPagingBuffer;
-    DriverInitializationData.DxgkDdiSetPalette                      = uXenDispSetPalette;
-    DriverInitializationData.DxgkDdiSetPointerPosition              = uXenDispSetPointerPosition;
-    DriverInitializationData.DxgkDdiSetPointerShape                 = uXenDispSetPointerShape;
-    DriverInitializationData.DxgkDdiResetFromTimeout                = uXenDispResetFromTimeout;
-    DriverInitializationData.DxgkDdiRestartFromTimeout              = uXenDispRestartFromTimeout;
-    DriverInitializationData.DxgkDdiEscape                          = uXenDispEscape;
-    DriverInitializationData.DxgkDdiCollectDbgInfo                  = uXenDispCollectDbgInfo;
-    DriverInitializationData.DxgkDdiQueryCurrentFence               = uXenDispQueryCurrentFence;
-    /* VidPn */
-    DriverInitializationData.DxgkDdiIsSupportedVidPn                = uXenDispIsSupportedVidPn;
-    DriverInitializationData.DxgkDdiRecommendFunctionalVidPn        = uXenDispRecommendFunctionalVidPn;
-    DriverInitializationData.DxgkDdiEnumVidPnCofuncModality         = uXenDispEnumVidPnCofuncModality;
-    DriverInitializationData.DxgkDdiSetVidPnSourceAddress           = uXenDispSetVidPnSourceAddress;
-    DriverInitializationData.DxgkDdiSetVidPnSourceVisibility        = uXenDispSetVidPnSourceVisibility;
-    DriverInitializationData.DxgkDdiCommitVidPn                     = uXenDispCommitVidPn;
-    DriverInitializationData.DxgkDdiUpdateActiveVidPnPresentPath    = uXenDispUpdateActiveVidPnPresentPath;
-    DriverInitializationData.DxgkDdiRecommendMonitorModes           = uXenDispRecommendMonitorModes;
-    DriverInitializationData.DxgkDdiRecommendVidPnTopology          = uXenDispRecommendVidPnTopology;
-    DriverInitializationData.DxgkDdiGetScanLine                     = uXenDispGetScanLine;
-    /* DDI */
-    DriverInitializationData.DxgkDdiStopCapture                     = uXenDispStopCapture;
-    DriverInitializationData.DxgkDdiControlInterrupt                = uXenDispControlInterrupt;
-    DriverInitializationData.DxgkDdiCreateOverlay                   = NULL; /* not supported */
-    DriverInitializationData.DxgkDdiDestroyDevice                   = uXenDispDestroyDevice;
-    DriverInitializationData.DxgkDdiOpenAllocation                  = uXenDispOpenAllocation;
-    DriverInitializationData.DxgkDdiCloseAllocation                 = uXenDispCloseAllocation;
-    DriverInitializationData.DxgkDdiRender                          = uXenDispRender;
-    DriverInitializationData.DxgkDdiPresent                         = uXenDispPresent;
-    DriverInitializationData.DxgkDdiUpdateOverlay                   = NULL; /* not supported */
-    DriverInitializationData.DxgkDdiFlipOverlay                     = NULL; /* not supported */
-    DriverInitializationData.DxgkDdiDestroyOverlay                  = NULL; /* not supported */
-    DriverInitializationData.DxgkDdiCreateContext                   = uXenDispCreateContext;
-    DriverInitializationData.DxgkDdiDestroyContext                  = uXenDispDestroyContext;
-    DriverInitializationData.DxgkDdiLinkDevice                      = NULL; /* not supported */
-    DriverInitializationData.DxgkDdiSetDisplayPrivateDriverFormat   = NULL; /* not supported */
+    if (NT_SUCCESS(Status)) {
+        if ((VersionInformation.dwMajorVersion == 6) &&
+            (VersionInformation.dwMinorVersion == 1)) {
+            DRIVER_INITIALIZATION_DATA InitialData = {0};
+
+            InitialData.Version                                = DXGKDDI_INTERFACE_VERSION_VISTA;
+
+            /* Miniport */
+            InitialData.DxgkDdiAddDevice                       = uXenDispAddDevice;
+            InitialData.DxgkDdiStartDevice                     = uXenDispStartDevice;
+            InitialData.DxgkDdiStopDevice                      = uXenDispStopDevice;
+            InitialData.DxgkDdiRemoveDevice                    = uXenDispRemoveDevice;
+            InitialData.DxgkDdiDispatchIoRequest               = uXenDispDispatchIoRequest;
+            InitialData.DxgkDdiInterruptRoutine                = uXenDispInterruptRoutine;
+            InitialData.DxgkDdiDpcRoutine                      = uXenDispDpcRoutine;
+            InitialData.DxgkDdiQueryChildRelations             = uXenDispQueryChildRelations;
+            InitialData.DxgkDdiQueryChildStatus                = uXenDispQueryChildStatus;
+            InitialData.DxgkDdiQueryDeviceDescriptor           = uXenDispQueryDeviceDescriptor;
+            InitialData.DxgkDdiSetPowerState                   = uXenDispSetPowerState;
+            InitialData.DxgkDdiNotifyAcpiEvent                 = NULL; /* optional, not currently used */
+            InitialData.DxgkDdiResetDevice                     = uXenDispResetDevice;
+            InitialData.DxgkDdiUnload                          = uXenDispUnload;
+            InitialData.DxgkDdiQueryInterface                  = uXenDispQueryInterface;
+            /* DDI */
+            InitialData.DxgkDdiControlEtwLogging               = uXenDispControlEtwLogging;
+            InitialData.DxgkDdiQueryAdapterInfo                = uXenDispQueryAdapterInfo;
+            InitialData.DxgkDdiCreateDevice                    = uXenDispCreateDevice;
+            InitialData.DxgkDdiCreateAllocation                = uXenDispCreateAllocation;
+            InitialData.DxgkDdiDestroyAllocation               = uXenDispDestroyAllocation;
+            InitialData.DxgkDdiDescribeAllocation              = uXenDispDescribeAllocation;
+            InitialData.DxgkDdiGetStandardAllocationDriverData = uXenDispGetStandardAllocationDriverData;
+            InitialData.DxgkDdiAcquireSwizzlingRange           = uXenDispAcquireSwizzlingRange;
+            InitialData.DxgkDdiReleaseSwizzlingRange           = uXenDispReleaseSwizzlingRange;
+            InitialData.DxgkDdiPatch                           = uXenDispPatch;
+            InitialData.DxgkDdiSubmitCommand                   = uXenDispSubmitCommand;
+            InitialData.DxgkDdiPreemptCommand                  = uXenDispPreemptCommand;
+            InitialData.DxgkDdiBuildPagingBuffer               = uXenDispBuildPagingBuffer;
+            InitialData.DxgkDdiSetPalette                      = uXenDispSetPalette;
+            InitialData.DxgkDdiSetPointerPosition              = uXenDispSetPointerPosition;
+            InitialData.DxgkDdiSetPointerShape                 = uXenDispSetPointerShape;
+            InitialData.DxgkDdiResetFromTimeout                = uXenDispResetFromTimeout;
+            InitialData.DxgkDdiRestartFromTimeout              = uXenDispRestartFromTimeout;
+            InitialData.DxgkDdiEscape                          = uXenDispEscape;
+            InitialData.DxgkDdiCollectDbgInfo                  = uXenDispCollectDbgInfo;
+            InitialData.DxgkDdiQueryCurrentFence               = uXenDispQueryCurrentFence;
+            /* VidPn */
+            InitialData.DxgkDdiIsSupportedVidPn                = uXenDispIsSupportedVidPn;
+            InitialData.DxgkDdiRecommendFunctionalVidPn        = uXenDispRecommendFunctionalVidPn;
+            InitialData.DxgkDdiEnumVidPnCofuncModality         = uXenDispEnumVidPnCofuncModality;
+            InitialData.DxgkDdiSetVidPnSourceAddress           = uXenDispSetVidPnSourceAddress;
+            InitialData.DxgkDdiSetVidPnSourceVisibility        = uXenDispSetVidPnSourceVisibility;
+            InitialData.DxgkDdiCommitVidPn                     = uXenDispCommitVidPn;
+            InitialData.DxgkDdiUpdateActiveVidPnPresentPath    = uXenDispUpdateActiveVidPnPresentPath;
+            InitialData.DxgkDdiRecommendMonitorModes           = uXenDispRecommendMonitorModes;
+            InitialData.DxgkDdiRecommendVidPnTopology          = uXenDispRecommendVidPnTopology;
+            InitialData.DxgkDdiGetScanLine                     = uXenDispGetScanLine;
+            /* DDI */
+            InitialData.DxgkDdiStopCapture                     = uXenDispStopCapture;
+            InitialData.DxgkDdiControlInterrupt                = uXenDispControlInterrupt;
+            InitialData.DxgkDdiCreateOverlay                   = NULL; /* not supported */
+            InitialData.DxgkDdiDestroyDevice                   = uXenDispDestroyDevice;
+            InitialData.DxgkDdiOpenAllocation                  = uXenDispOpenAllocation;
+            InitialData.DxgkDdiCloseAllocation                 = uXenDispCloseAllocation;
+            InitialData.DxgkDdiRender                          = uXenDispRender;
+            InitialData.DxgkDdiPresent                         = uXenDispPresent;
+            InitialData.DxgkDdiUpdateOverlay                   = NULL; /* not supported */
+            InitialData.DxgkDdiFlipOverlay                     = NULL; /* not supported */
+            InitialData.DxgkDdiDestroyOverlay                  = NULL; /* not supported */
+            InitialData.DxgkDdiCreateContext                   = uXenDispCreateContext;
+            InitialData.DxgkDdiDestroyContext                  = uXenDispDestroyContext;
+            InitialData.DxgkDdiLinkDevice                      = NULL; /* not supported */
+            InitialData.DxgkDdiSetDisplayPrivateDriverFormat   = NULL; /* not supported */
+
+            Status = DxgkInitialize(pDriverObject, pRegistryPath, &InitialData);
+        } else {
+            KMDDOD_INITIALIZATION_DATA InitialData = {0};
+
+            InitialData.Version                             = DXGKDDI_INTERFACE_VERSION_WIN8;
+            InitialData.DxgkDdiAddDevice                    = uXenDispAddDevice;
+            InitialData.DxgkDdiStartDevice                  = uXenDispStartDevice;
+            InitialData.DxgkDdiStopDevice                   = uXenDispStopDevice;
+            InitialData.DxgkDdiResetDevice                  = uXenDispResetDevice;
+            InitialData.DxgkDdiRemoveDevice                 = uXenDispRemoveDevice;
+            InitialData.DxgkDdiDispatchIoRequest            = uXenDispDispatchIoRequest;
+            InitialData.DxgkDdiInterruptRoutine             = uXenDispInterruptRoutine;
+            InitialData.DxgkDdiControlInterrupt             = uXenDispControlInterrupt;
+            InitialData.DxgkDdiDpcRoutine                   = uXenDispDpcRoutine;
+            InitialData.DxgkDdiQueryChildRelations          = uXenDispQueryChildRelations;
+            InitialData.DxgkDdiQueryChildStatus             = uXenDispQueryChildStatus;
+            InitialData.DxgkDdiQueryDeviceDescriptor        = uXenDispQueryDeviceDescriptor;
+            InitialData.DxgkDdiSetPowerState                = uXenDispSetPowerState;
+            InitialData.DxgkDdiUnload                       = uXenDispUnload;
+            InitialData.DxgkDdiQueryAdapterInfo             = uXenDispQueryAdapterInfo;
+            InitialData.DxgkDdiSetPointerPosition           = uXenDispSetPointerPosition;
+            InitialData.DxgkDdiSetPointerShape              = uXenDispSetPointerShape;
+            InitialData.DxgkDdiEscape                       = uXenDispEscape;
+            InitialData.DxgkDdiIsSupportedVidPn             = uXenDispIsSupportedVidPn;
+            InitialData.DxgkDdiRecommendFunctionalVidPn     = uXenDispRecommendFunctionalVidPn;
+            InitialData.DxgkDdiEnumVidPnCofuncModality      = uXenDispEnumVidPnCofuncModality;
+            InitialData.DxgkDdiSetVidPnSourceVisibility     = uXenDispSetVidPnSourceVisibility;
+            InitialData.DxgkDdiCommitVidPn                  = uXenDispCommitVidPn;
+            InitialData.DxgkDdiUpdateActiveVidPnPresentPath = uXenDispUpdateActiveVidPnPresentPath;
+            InitialData.DxgkDdiRecommendMonitorModes        = uXenDispRecommendMonitorModes;
+            InitialData.DxgkDdiQueryVidPnHWCapability       = uXenDispQueryVidPnHWCapability;
+            InitialData.DxgkDdiGetScanLine                  = uXenDispGetScanLine;
+            InitialData.DxgkDdiPresentDisplayOnly           = uXenDispPresentDisplayOnly;
+
+            Status = DxgkInitializeDisplayOnlyDriver(pDriverObject, pRegistryPath, &InitialData);
+
+            g_dod = TRUE;
+        }
+        if (!NT_SUCCESS(Status)) {
+            uxen_err("Initialisation(%d, %d) failed 0x%x",
+                     VersionInformation.dwMajorVersion,
+                     VersionInformation.dwMinorVersion,
+                     Status);
+        }
+    }
 
     uxen_msg("Leave");
-    return DxgkInitialize(pDriverObject, pRegistryPath, &DriverInitializationData);
+    return Status;
 }

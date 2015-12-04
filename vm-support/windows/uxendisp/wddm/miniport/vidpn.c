@@ -36,80 +36,6 @@ typedef enum _UXENDISP_PINNED_STATE {
 #pragma alloc_text(PAGE,uXenDispRecommendVidPnTopology)
 #endif
 
-static BOOLEAN
-is_supported_path(D3DKMDT_VIDPN_PRESENT_PATH *path_info)
-{
-    /*
-     * Bare minimum support to start with. OK with any of the uncommited
-     * states for transformations.
-     */
-    if ((path_info->ContentTransformation.Scaling != D3DKMDT_VPPS_UNINITIALIZED)&&
-        (path_info->ContentTransformation.Scaling != D3DKMDT_VPPS_IDENTITY)&&
-        (path_info->ContentTransformation.Scaling != D3DKMDT_VPPS_UNPINNED)&&
-        (path_info->ContentTransformation.Scaling != D3DKMDT_VPPS_NOTSPECIFIED)) {
-        uxen_debug("unsupported Scaling value: %d", path_info->ContentTransformation.Scaling);
-        return FALSE;
-    }
-
-    if ((path_info->ContentTransformation.ScalingSupport.Centered != 0)||
-        (path_info->ContentTransformation.ScalingSupport.Stretched != 0)) {
-        /*(path_info->ContentTransformation.ScalingSupport.AspectRatioCenteredMax != 0)*/
-        /*(path_info->ContentTransformation.ScalingSupport.Custom != 0)*/
-        uxen_debug("unsupported ScalingSupport value: %d", path_info->ContentTransformation.ScalingSupport);
-        return FALSE;
-    }
-
-    if ((path_info->ContentTransformation.Rotation != D3DKMDT_VPPR_UNINITIALIZED)&&
-        (path_info->ContentTransformation.Rotation != D3DKMDT_VPPR_IDENTITY)&&
-        (path_info->ContentTransformation.Rotation != D3DKMDT_VPPR_UNPINNED)&&
-        (path_info->ContentTransformation.Rotation != D3DKMDT_VPPR_NOTSPECIFIED)) {
-        uxen_debug("unsupported Rotation value: %d", path_info->ContentTransformation.Rotation);
-        return FALSE;
-    }
-
-    if ((path_info->ContentTransformation.RotationSupport.Rotate90 != 0)||
-        (path_info->ContentTransformation.RotationSupport.Rotate180 != 0)||
-        (path_info->ContentTransformation.RotationSupport.Rotate270 != 0)) {
-        uxen_debug("unsupported RotationSupport value: %d", path_info->ContentTransformation.RotationSupport);
-        return FALSE;
-    }
-
-    if ((path_info->VisibleFromActiveTLOffset.cx != 0)||
-        (path_info->VisibleFromActiveTLOffset.cy != 0)||
-        (path_info->VisibleFromActiveBROffset.cx != 0)||
-        (path_info->VisibleFromActiveBROffset.cy != 0)) {
-        uxen_debug("TL/BR offsets not supported.");
-        return FALSE;
-    }
-
-    if ((path_info->VidPnTargetColorBasis != D3DKMDT_CB_SCRGB)&&
-        (path_info->VidPnTargetColorBasis != D3DKMDT_CB_UNINITIALIZED)) {
-        uxen_debug("unsupported ColorBasis: %d.", path_info->VidPnTargetColorBasis);
-        return FALSE;
-    }
-
-    if ((path_info->Content != D3DKMDT_VPPC_UNINITIALIZED)&&
-        (path_info->Content != D3DKMDT_VPPC_GRAPHICS)&&
-        (path_info->Content != D3DKMDT_VPPC_NOTSPECIFIED)) {
-        uxen_debug("unsupported Content: %d.");
-        return FALSE;
-    }
-
-    if ((path_info->CopyProtection.CopyProtectionType != D3DKMDT_VPPMT_NOPROTECTION)&&
-        (path_info->CopyProtection.CopyProtectionType != D3DKMDT_VPPMT_UNINITIALIZED)) {
-        uxen_debug("CopyProtection not supported.");
-        return FALSE;
-    }
-
-    if ((path_info->GammaRamp.Type != D3DDDI_GAMMARAMP_DEFAULT)&&
-        (path_info->GammaRamp.Type != D3DDDI_GAMMARAMP_UNINITIALIZED)) {
-        uxen_debug("non-default gamma ramp not supported.");
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
 static __inline UXENDISP_PINNED_STATE
 pinned_mode_state(NTSTATUS status, VOID *mode)
 {
@@ -121,400 +47,15 @@ pinned_mode_state(NTSTATUS status, VOID *mode)
         return UXENDISP_PS_UNPINNED;
 }
 
-static __inline BOOLEAN
-region_compare(D3DKMDT_2DREGION *r1, D3DKMDT_2DREGION *r2)
-{
-    return (r1->cx == r2->cx) && (r1->cy == r2->cy);
-}
-
-static BOOLEAN
-is_supported_target_mode(UXENDISP_CRTC *crtc,
-                         D3DKMDT_VIDPN_TARGET_MODE *target_mode)
-{
-    D3DKMDT_VIDEO_SIGNAL_INFO *signal_info;
-    PAGED_CODE();
-
-    signal_info = &target_mode->VideoSignalInfo;
-
-    if ((signal_info->ActiveSize.cx > UXENDISP_CRTC_MAX_XRES) ||
-        (signal_info->ActiveSize.cy > UXENDISP_CRTC_MAX_YRES)) {
-        uxen_debug("target mode resolution to large for CRTC.");
-        return FALSE;
-    }
-
-    /* Expected values without resolution values being present.*/
-    if ((signal_info->VideoStandard != D3DKMDT_VSS_OTHER)||
-        (signal_info->TotalSize.cx != D3DKMDT_DIMENSION_NOTSPECIFIED)||
-        (signal_info->TotalSize.cy != D3DKMDT_DIMENSION_NOTSPECIFIED)||
-        (signal_info->VSyncFreq.Numerator != UXENDISP_REFRESH_RATE * 1000)||
-        (signal_info->VSyncFreq.Denominator != 1000)||
-        (signal_info->HSyncFreq.Denominator != 1000)||
-        (signal_info->ScanLineOrdering != D3DDDI_VSSLO_PROGRESSIVE)) {
-        uxen_debug("unsupported target mode value(s).");
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
-
-static BOOLEAN
-is_supported_target_mode_set(UXENDISP_CRTC *crtc,
-                             D3DKMDT_HVIDPNTARGETMODESET tgt_mode_set_hdl,
-                             CONST DXGK_VIDPNTARGETMODESET_INTERFACE *target_mode_set_if,
-                             UXENDISP_PINNED_MODES *pinned_modes)
-{
-    D3DKMDT_VIDPN_TARGET_MODE *curr_mode_info;
-    D3DKMDT_VIDPN_TARGET_MODE *next_mode_info;
-    UXENDISP_PINNED_STATE pinned_state;
-    NTSTATUS status;
-    BOOLEAN r;
-
-    PAGED_CODE();
-
-    /* If there is a pinned, mode validate only this mode.*/
-    status = target_mode_set_if->pfnAcquirePinnedModeInfo(tgt_mode_set_hdl, &curr_mode_info);
-    pinned_state = pinned_mode_state(status, curr_mode_info);
-    if (pinned_state == UXENDISP_PS_PINNED) {
-        r = is_supported_target_mode(crtc, curr_mode_info);
-        if (r) {
-            pinned_modes->tgt_pinned = TRUE;
-            pinned_modes->tgt_active_size = curr_mode_info->VideoSignalInfo.ActiveSize;
-        }
-        target_mode_set_if->pfnReleaseModeInfo(tgt_mode_set_hdl, curr_mode_info);
-        return r;
-    }
-    else if (pinned_state == UXENDISP_PS_ERROR) {
-        uxen_err("pfnAcquirePinnedModeInfo failed: 0x%x", status);
-        return FALSE; /* bad handles - probably low memory*/
-    }
-
-    status = target_mode_set_if->pfnAcquireFirstModeInfo(tgt_mode_set_hdl, &curr_mode_info);
-    if (status == STATUS_GRAPHICS_DATASET_IS_EMPTY) {
-        /* Empty set, that is OK*/
-        return TRUE;
-    }
-    else if (!NT_SUCCESS(status)) {
-        uxen_err("pfnAcquireFirstModeInfo failed: 0x%x", status);
-        return FALSE; /* bad handles - probably low memory       */
-    }
-
-    while (TRUE) {
-        /* Test the unpinned modes, only need to find one that will potentially work to*/
-        /* report this is supported.*/
-        if (is_supported_target_mode(crtc, curr_mode_info)) {
-            target_mode_set_if->pfnReleaseModeInfo(tgt_mode_set_hdl, curr_mode_info);
-            return TRUE;
-        }
-
-        status = target_mode_set_if->pfnAcquireNextModeInfo(tgt_mode_set_hdl, curr_mode_info, &next_mode_info);
-        /* Done with the last path.*/
-        target_mode_set_if->pfnReleaseModeInfo(tgt_mode_set_hdl, curr_mode_info);
-
-        if (status == STATUS_GRAPHICS_NO_MORE_ELEMENTS_IN_DATASET) {
-            return FALSE; /* done enumerating, did not find any that can be implemented.*/
-        }
-        else if (!NT_SUCCESS(status)) {
-            uxen_err("pfnAcquireNextModeInfo failed: 0x%x", status);
-            return FALSE;
-        }
-        curr_mode_info = next_mode_info;
-    }
-
-    /* Nothing supported found.*/
-    return FALSE;
-}
-
-static BOOLEAN
-is_supported_source_mode(UXENDISP_CRTC *crtc, D3DKMDT_VIDPN_SOURCE_MODE *source_mode_info)
-{
-    PAGED_CODE();
-
-    /* Only supporting graphics type for now.*/
-    if (source_mode_info->Type != D3DKMDT_RMT_GRAPHICS) {
-        uxen_debug("unsupported mode type: %d", source_mode_info->Type);
-        return FALSE;
-    }
-
-    /* Check the visible and primary surfaces match*/
-    if (!region_compare(&source_mode_info->Format.Graphics.VisibleRegionSize,
-                        &source_mode_info->Format.Graphics.PrimSurfSize)) {
-        uxen_debug("visible and primary surface size mismatch.");
-        return FALSE;
-    }
-
-    if ((source_mode_info->Format.Graphics.PrimSurfSize.cx > UXENDISP_CRTC_MAX_XRES) ||
-        (source_mode_info->Format.Graphics.PrimSurfSize.cy > UXENDISP_CRTC_MAX_YRES)) {
-        uxen_debug("source mode resolution too large for CRTC.");
-        return FALSE;
-    }
-
-    if ((source_mode_info->Format.Graphics.ColorBasis != D3DKMDT_CB_SCRGB)&&
-        (source_mode_info->Format.Graphics.ColorBasis != D3DKMDT_CB_UNINITIALIZED)) {
-        uxen_debug("unsupported color basis: %d.", source_mode_info->Format.Graphics.ColorBasis);
-        return FALSE;
-    }
-
-    if (ddi_to_uxendisp_fmt(source_mode_info->Format.Graphics.PixelFormat) == -1) {
-        uxen_debug("unsupported pixel format: %d.", source_mode_info->Format.Graphics.PixelFormat);
-        return FALSE;
-    }
-
-    return TRUE;
-}
-
-static BOOLEAN
-is_supported_source_mode_set(UXENDISP_CRTC *crtc,
-                            D3DKMDT_HVIDPNSOURCEMODESET source_mode_set_hdl,
-                            CONST DXGK_VIDPNSOURCEMODESET_INTERFACE *source_mode_set_if,
-                            UXENDISP_PINNED_MODES *pinned_modes)
-{
-    D3DKMDT_VIDPN_SOURCE_MODE *curr_source_mode_info = NULL;
-    D3DKMDT_VIDPN_SOURCE_MODE *next_source_mode_info;
-    UXENDISP_PINNED_STATE pinned_state;
-    NTSTATUS status;
-    BOOLEAN r;
-
-    PAGED_CODE();
-
-    /* If there is a pinned, mode validate only this mode.*/
-    status = source_mode_set_if->pfnAcquirePinnedModeInfo(source_mode_set_hdl, &curr_source_mode_info);
-    pinned_state = pinned_mode_state(status, curr_source_mode_info);
-    if (pinned_state == UXENDISP_PS_PINNED) {
-        r = is_supported_source_mode(crtc, curr_source_mode_info);
-        if (r) {
-            pinned_modes->src_pinned = TRUE;
-            pinned_modes->src_primary_surf_size = curr_source_mode_info->Format.Graphics.PrimSurfSize;
-        }
-        source_mode_set_if->pfnReleaseModeInfo(source_mode_set_hdl, curr_source_mode_info);
-        return r;
-    }
-    else if (pinned_state == UXENDISP_PS_ERROR) {
-        uxen_err("pfnAcquirePinnedModeInfo failed: 0x%x", status);
-        return FALSE; /* bad handles - probably low memory*/
-    }
-
-    status = source_mode_set_if->pfnAcquireFirstModeInfo(source_mode_set_hdl, &curr_source_mode_info);
-    if (status == STATUS_GRAPHICS_DATASET_IS_EMPTY) {
-        /* Empty set, that is OK*/
-        return TRUE;
-    }
-    else if (!NT_SUCCESS(status)) {
-        uxen_err("pfnAcquireFirstModeInfo failed: 0x%x", status);
-        return FALSE; /* bad handles - probably low memory       */
-    }
-
-    while (TRUE) {
-        /* Test the unpinned modes, only need to find one that will potentially work to*/
-        /* report this is supported.*/
-        if (is_supported_source_mode(crtc, curr_source_mode_info)) {
-            source_mode_set_if->pfnReleaseModeInfo(source_mode_set_hdl, curr_source_mode_info);
-            return TRUE;
-        }
-
-        status = source_mode_set_if->pfnAcquireNextModeInfo(source_mode_set_hdl, curr_source_mode_info, &next_source_mode_info);
-        /* Done with the last path.*/
-        source_mode_set_if->pfnReleaseModeInfo(source_mode_set_hdl, curr_source_mode_info);
-
-        if (status == STATUS_GRAPHICS_NO_MORE_ELEMENTS_IN_DATASET) {
-            return FALSE; /* done enumerating, did not find any that can be implemented.*/
-        }
-        else if (!NT_SUCCESS(status)) {
-            uxen_err("pfnAcquireNextModeInfo failed: 0x%x", status);
-            return FALSE;
-        }
-        curr_source_mode_info = next_source_mode_info;
-    }
-
-    /* Nothing supported found.*/
-    return FALSE;
-}
-
 NTSTATUS APIENTRY
 uXenDispIsSupportedVidPn(CONST HANDLE  hAdapter,
                          DXGKARG_ISSUPPORTEDVIDPN *pIsSupportedVidPn)
 {
-    DEVICE_EXTENSION *dev = (DEVICE_EXTENSION*)hAdapter;
-    DXGK_VIDPN_INTERFACE *vidpn_if = NULL;
-    D3DKMDT_HVIDPNTOPOLOGY topology_hdl;
-    DXGK_VIDPNTOPOLOGY_INTERFACE *topology_if;
-    D3DKMDT_VIDPN_PRESENT_PATH *curr_path_info;
-    D3DKMDT_VIDPN_PRESENT_PATH *next_path_info;
-    D3DKMDT_HVIDPNSOURCEMODESET source_mode_set_hdl;
-    CONST DXGK_VIDPNSOURCEMODESET_INTERFACE *source_mode_set_if;
-    D3DKMDT_HVIDPNTARGETMODESET tgt_mode_set_hdl;
-    CONST DXGK_VIDPNTARGETMODESET_INTERFACE *target_mode_set_if;
-    UXENDISP_PINNED_MODES pinned_modes;
-    NTSTATUS status;
-    BOOLEAN End = FALSE;
-
-    ULONG i = 0;
     PAGED_CODE();
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pIsSupportedVidPn))
         return STATUS_INVALID_PARAMETER;
-
-    pIsSupportedVidPn->IsVidPnSupported = FALSE;
-
-    status = dev->dxgkif.DxgkCbQueryVidPnInterface(pIsSupportedVidPn->hDesiredVidPn, DXGK_VIDPN_INTERFACE_VERSION_V1, &vidpn_if);
-    if (!NT_SUCCESS(status)) {
-        uxen_err("DxgkCbQueryVidPnInterface failed: 0x%x", status);
-        return STATUS_NO_MEMORY; /* SNO*/
-    }
-
-    status = vidpn_if->pfnGetTopology(pIsSupportedVidPn->hDesiredVidPn, &topology_hdl, &topology_if);
-    if (!NT_SUCCESS(status)) {
-        uxen_err("pfnGetTopology failed: 0x%x", status);
-        return STATUS_NO_MEMORY; /* SNO*/
-    }
-
-    status = topology_if->pfnAcquireFirstPathInfo(topology_hdl, &curr_path_info);
-    if (status == STATUS_GRAPHICS_DATASET_IS_EMPTY) {
-        /* Empty topology, that is OK (case 3 in the docs)*/
-        pIsSupportedVidPn->IsVidPnSupported = TRUE;
-        return STATUS_SUCCESS;
-    }
-    else if (!NT_SUCCESS(status)) {
-        uxen_err("pfnAcquireFirstPathInfo failed: 0x%x", status);
-        return STATUS_NO_MEMORY; /* bad topology? - probably low memory       */
-    }
-
-    /*
-     * TODO for now actual monitor modes are not being used to validate
-     * the proposed topology. If this is needed, the block below would
-     * need to be locked.
-     */
-
-    /*
-     * The topology is the set of all paths and the sources/targets they
-     * connect to. A path brings those objects and their mode sets/modes
-     * into the topology by being connected to them. Other sources/targets
-     * may exist outside the topology. We do not care about those. The loop
-     * below will handle cases 1 and 2 in the docs. Don't need to lock for
-     * CRTC access right now - only reading read-only values to check CRTC
-     * codec capabilities for the topology.
-     */
-    while (TRUE) {
-        pinned_modes.src_pinned = pinned_modes.tgt_pinned = FALSE;
-
-        /* -- Path --*/
-        if (i == dev->crtc_count) {
-            /* Can't be more paths than sources/targets?*/
-            uxen_err("more paths in topology than there are targets/sources??");
-            status = STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
-            break;
-        }
-
-        if (!is_supported_path(curr_path_info)) {
-            topology_if->pfnReleasePathInfo(topology_hdl, curr_path_info);
-            curr_path_info = NULL;
-            status = STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
-            break;
-        }
-
-        /* -- Target --*/
-        if (curr_path_info->VidPnTargetId >= dev->crtc_count) {
-            /* Invalid VidPnTargetId*/
-            uxen_err("invalid VidPnTargetId %d for path at %d??",
-                     curr_path_info->VidPnTargetId, i);
-            status = STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
-            break;
-        }
-
-        /* Check the target mode set for the VidPnTargetId of this path. Note there is*/
-        /* a 1 to 1 mapping from targets to paths.*/
-        status = vidpn_if->pfnAcquireTargetModeSet(pIsSupportedVidPn->hDesiredVidPn,
-                                                          curr_path_info->VidPnTargetId,
-                                                          &tgt_mode_set_hdl,
-                                                          &target_mode_set_if);
-        if (!NT_SUCCESS(status)) {
-            uxen_err("pfnAcquireTargetModeSet failed: 0x%x", status);
-            break;
-        }
-
-        if (!is_supported_target_mode_set(&dev->crtcs[curr_path_info->VidPnTargetId],
-                                          tgt_mode_set_hdl,
-                                          target_mode_set_if,
-                                          &pinned_modes)) {
-            vidpn_if->pfnReleaseTargetModeSet(pIsSupportedVidPn->hDesiredVidPn, tgt_mode_set_hdl);
-            status = STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
-            break;
-        }
-
-        vidpn_if->pfnReleaseTargetModeSet(pIsSupportedVidPn->hDesiredVidPn, tgt_mode_set_hdl);
-
-        /* -- Source --*/
-        if (curr_path_info->VidPnSourceId >= dev->crtc_count) {
-            /* Invalid VidPnTargetId*/
-            uxen_err("invalid VidPnSourceId %d for path at %d??",
-                     curr_path_info->VidPnSourceId, i);
-            status = STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
-            break;
-        }
-
-        /* Check the source mode set for the VidPnSourceId of this path. Note we could scan*/
-        /* the sets more than once if a source is on multiple paths - this is OK.*/
-        status = vidpn_if->pfnAcquireSourceModeSet(pIsSupportedVidPn->hDesiredVidPn,
-                                                          curr_path_info->VidPnSourceId,
-                                                          &source_mode_set_hdl,
-                                                          &source_mode_set_if);
-        if (!NT_SUCCESS(status)) {
-            uxen_err("pfnAcquireSourceModeSet failed: 0x%x", status);
-            break;
-        }
-
-        if (!is_supported_source_mode_set(&dev->crtcs[curr_path_info->VidPnTargetId],
-                                         source_mode_set_hdl,
-                                         source_mode_set_if,
-                                         &pinned_modes)) {
-            vidpn_if->pfnReleaseSourceModeSet(pIsSupportedVidPn->hDesiredVidPn, source_mode_set_hdl);
-            status = STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
-            break;
-        }
-
-        vidpn_if->pfnReleaseSourceModeSet(pIsSupportedVidPn->hDesiredVidPn, source_mode_set_hdl);
-
-        /* -- Pinned -- */
-        /*
-         * Since transformation, rotation, etc is not supported right now,
-         * the pinned target and source must match eachothers
-         * to support this pinning. The check handles clone mode also in
-         * that it tests each source against its target.
-         */
-        if (pinned_modes.src_pinned && pinned_modes.tgt_pinned) {
-            if (!region_compare(&pinned_modes.src_primary_surf_size,
-                                &pinned_modes.tgt_active_size)) {
-                uxen_debug("pinned source and target modes don't match.", status);
-                status = STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
-                break;
-            }
-        }
-
-        /* -- Next -- */
-        status = topology_if->pfnAcquireNextPathInfo(topology_hdl, curr_path_info, &next_path_info);
-        /* Done with the last path.*/
-        topology_if->pfnReleasePathInfo(topology_hdl, curr_path_info);
-        curr_path_info = NULL;
-
-        if (status == STATUS_GRAPHICS_NO_MORE_ELEMENTS_IN_DATASET) {
-            End = TRUE;
-            status = STATUS_SUCCESS;
-            break;
-        }
-        else if (!NT_SUCCESS(status)) {
-            uxen_err("pfnAcquireNextPathInfo failed: 0x%x", status);
-            break;
-        }
-        curr_path_info = next_path_info;
-        i++;
-    }
-
-    if (!End && curr_path_info) /* broke out early, cleanup current path*/
-        topology_if->pfnReleasePathInfo(topology_hdl, curr_path_info);
-
-    if (!NT_SUCCESS(status))
-        return status;
 
     pIsSupportedVidPn->IsVidPnSupported = TRUE;
 
@@ -548,15 +89,15 @@ add_target_mode(D3DKMDT_HVIDPNTARGETMODESET tgt_mode_set_hdl,
      */
     signal_info = &target_mode->VideoSignalInfo;
     signal_info->VideoStandard = D3DKMDT_VSS_OTHER;
-    signal_info->TotalSize.cx = D3DKMDT_DIMENSION_NOTSPECIFIED;
-    signal_info->TotalSize.cy = D3DKMDT_DIMENSION_NOTSPECIFIED;
+    signal_info->TotalSize.cx = mode->xres;
+    signal_info->TotalSize.cy = mode->yres;
     signal_info->ActiveSize.cx = mode->xres;
     signal_info->ActiveSize.cy = mode->yres;
+    signal_info->PixelRate = mode->xres * mode->yres * UXENDISP_REFRESH_RATE;
     signal_info->VSyncFreq.Numerator = UXENDISP_REFRESH_RATE * 1000;
     signal_info->VSyncFreq.Denominator = 1000;
-    signal_info->HSyncFreq.Numerator = UXENDISP_REFRESH_RATE * mode->yres * 1000 * (105 / 100);
+    signal_info->HSyncFreq.Numerator = (UINT)((signal_info->PixelRate / signal_info->TotalSize.cy) * 1000);
     signal_info->HSyncFreq.Denominator = 1000;
-    signal_info->PixelRate = mode->xres * mode->yres * UXENDISP_REFRESH_RATE;
     signal_info->ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
 
     /* Add it*/
@@ -599,9 +140,6 @@ update_target_mode_set(UXENDISP_CRTC *crtc,
     D3DKMDT_HVIDPNTARGETMODESET tgt_mode_set_hdl = NULL;
     CONST DXGK_VIDPNTARGETMODESET_INTERFACE *target_mode_set_if;
     D3DKMDT_VIDPN_TARGET_MODE *tgt_mode_info = NULL;
-    D3DKMDT_HVIDPNSOURCEMODESET source_mode_set_hdl = NULL;
-    CONST DXGK_VIDPNSOURCEMODESET_INTERFACE *source_mode_set_if;
-    D3DKMDT_VIDPN_SOURCE_MODE *src_mode_info = NULL;
     UXENDISP_PINNED_STATE pinned_state;
     UXENDISP_MODE *mode;
     NTSTATUS status = STATUS_SUCCESS;
@@ -613,16 +151,6 @@ update_target_mode_set(UXENDISP_CRTC *crtc,
                                                       &target_mode_set_if);
     if (!NT_SUCCESS(status)) {
         uxen_err("pfnAcquireTargetModeSet failed: 0x%x", status);
-        return status; /* low memory - bail out on operation.*/
-    }
-
-    status = vidpn_if->pfnAcquireSourceModeSet(vidpn_hdl,
-                                                      curr_path_info->VidPnSourceId,
-                                                      &source_mode_set_hdl,
-                                                      &source_mode_set_if);
-    if (!NT_SUCCESS(status)) {
-        vidpn_if->pfnReleaseTargetModeSet(vidpn_hdl, tgt_mode_set_hdl);
-        uxen_err("pfnAcquireSourceModeSet failed: 0x%x", status);
         return status; /* low memory - bail out on operation.*/
     }
 
@@ -645,17 +173,6 @@ update_target_mode_set(UXENDISP_CRTC *crtc,
         vidpn_if->pfnReleaseTargetModeSet(vidpn_hdl, tgt_mode_set_hdl);
         tgt_mode_set_hdl = NULL;
 
-        /* Acquire any pinned source mode since this will constrain the target modes that are added.*/
-        status = source_mode_set_if->pfnAcquirePinnedModeInfo(source_mode_set_hdl, &src_mode_info);
-        pinned_state = pinned_mode_state(status, src_mode_info);
-        if (pinned_state == UXENDISP_PS_ERROR) {
-            uxen_err("pfnAcquirePinnedModeInfo(source) failed: 0x%x", status);
-            src_mode_info = NULL;
-            break; /* unknown nasty failure*/
-        }
-        if (pinned_state == UXENDISP_PS_UNPINNED)
-            src_mode_info = NULL;
-
         /* Make a new target mode set*/
         status = vidpn_if->pfnCreateNewTargetModeSet(vidpn_hdl,
                                                             curr_path_info->VidPnTargetId,
@@ -666,19 +183,6 @@ update_target_mode_set(UXENDISP_CRTC *crtc,
             tgt_mode_set_hdl = NULL;
             break; /* no memory*/
         }
-
-        /*
-         * Enumerate over the modes for the CRTC adding them. This is more
-         * or less what the sample does. This could be done using the monitor
-         * modes set but it is not clear whether that would contain all
-         * the modes needed.
-         */
-        /*
-         * N.B. If there is no mode set, commit an empty set to this path
-         * since there is nothing to initialize it with. Other possible
-         * options would be to leave it as is or add a default mode set.
-         * It seems the sample would effectively do what is done here.
-         */
 
         status = add_target_mode(tgt_mode_set_hdl,
                                  target_mode_set_if,
@@ -698,14 +202,8 @@ update_target_mode_set(UXENDISP_CRTC *crtc,
 
     } while (FALSE);
 
-    if (src_mode_info != NULL)
-        source_mode_set_if->pfnReleaseModeInfo(source_mode_set_hdl, src_mode_info);
-
     if (tgt_mode_info != NULL)
         target_mode_set_if->pfnReleaseModeInfo(tgt_mode_set_hdl, tgt_mode_info);
-
-    if (source_mode_set_hdl != NULL)
-        vidpn_if->pfnReleaseSourceModeSet(vidpn_hdl, source_mode_set_hdl);
 
     if (tgt_mode_set_hdl != NULL)
         vidpn_if->pfnReleaseTargetModeSet(vidpn_hdl, tgt_mode_set_hdl);
@@ -742,7 +240,7 @@ add_source_mode(D3DKMDT_HVIDPNSOURCEMODESET source_mode_set_hdl,
     fmt->VisibleRegionSize.cy = mode->yres;
     fmt->Stride = mode->stride;
     fmt->PixelFormat = uxendisp_to_ddi_fmt(mode->fmt);
-    fmt->ColorBasis = D3DKMDT_CB_SCRGB;
+    fmt->ColorBasis = D3DKMDT_CB_SRGB;
     fmt->PixelValueAccessMode = D3DKMDT_PVAM_DIRECT;
 
     /* Add it */
@@ -765,9 +263,6 @@ update_source_mode_set(UXENDISP_CRTC *crtc,
     D3DKMDT_HVIDPNSOURCEMODESET source_mode_set_hdl = NULL;
     CONST DXGK_VIDPNSOURCEMODESET_INTERFACE *source_mode_set_if;
     D3DKMDT_VIDPN_SOURCE_MODE *src_mode_info = NULL;
-    D3DKMDT_HVIDPNTARGETMODESET tgt_mode_set_hdl = NULL;
-    CONST DXGK_VIDPNTARGETMODESET_INTERFACE *target_mode_set_if;
-    D3DKMDT_VIDPN_TARGET_MODE *tgt_mode_info = NULL;
     UXENDISP_PINNED_STATE pinned_state;
     UXENDISP_MODE *mode;
     NTSTATUS status = STATUS_SUCCESS;
@@ -782,31 +277,14 @@ update_source_mode_set(UXENDISP_CRTC *crtc,
         return status; /* low memory - bail out on operation.*/
     }
 
-    status = vidpn_if->pfnAcquireTargetModeSet(vidpn_hdl,
-                                               curr_path_info->VidPnTargetId,
-                                               &tgt_mode_set_hdl,
-                                               &target_mode_set_if);
-    if (!NT_SUCCESS(status)) {
-        vidpn_if->pfnReleaseSourceModeSet(vidpn_hdl, source_mode_set_hdl);
-        uxen_err("pfnAcquireTargetModeSet failed: 0x%x", status);
-        return status; /* low memory - bail out on operation.*/
-    }
-
     do {
         /* If the source mode set already has a pinned mode, don't do any updates.*/
         status = source_mode_set_if->pfnAcquirePinnedModeInfo(source_mode_set_hdl,
                                                               &src_mode_info);
         pinned_state = pinned_mode_state(status, src_mode_info);
         if (pinned_state == UXENDISP_PS_PINNED) {
-            /*
-             * Sanity check to make sure this pinned source mode specifies
-             * a pixel format that this CRTC can handle.
-             */
-            if (ddi_to_uxendisp_fmt(src_mode_info->Format.Graphics.PixelFormat) != -1)
-                status = STATUS_SUCCESS;
-            else
-                status = STATUS_GRAPHICS_INVALID_VIDPN_TOPOLOGY;
             /* Drop out */
+            status = STATUS_SUCCESS;
             break;
         }
         if (pinned_state == UXENDISP_PS_ERROR) {
@@ -818,21 +296,6 @@ update_source_mode_set(UXENDISP_CRTC *crtc,
         vidpn_if->pfnReleaseSourceModeSet(vidpn_hdl, source_mode_set_hdl);
         source_mode_set_hdl = NULL;
 
-        /*
-         * Acquire any pinned target mode since this will constrain the
-         * source modes that are added.
-         */
-        status = target_mode_set_if->pfnAcquirePinnedModeInfo(tgt_mode_set_hdl,
-                                                              &tgt_mode_info);
-        pinned_state = pinned_mode_state(status, tgt_mode_info);
-        if (pinned_state == UXENDISP_PS_ERROR) {
-            uxen_err("pfnAcquirePinnedModeInfo(target) failed: 0x%x", status);
-            tgt_mode_info = NULL;
-            break; /* unknown nasty failure*/
-        }
-        if (pinned_state == UXENDISP_PS_UNPINNED)
-            tgt_mode_info = NULL;
-
         /* Make a new source mode set*/
         status = vidpn_if->pfnCreateNewSourceModeSet(vidpn_hdl,
                                                      curr_path_info->VidPnSourceId,
@@ -840,23 +303,8 @@ update_source_mode_set(UXENDISP_CRTC *crtc,
                                                      &source_mode_set_if);
         if (!NT_SUCCESS(status)) {
             uxen_err("pfnCreateNewSourceModeSet failed: 0x%x", status);
-            tgt_mode_set_hdl = NULL;
             break; /* no memory*/
         }
-
-        /*
-         * Enumerate over the modes for the CRTC adding them. This is more
-         * or less what the sample does. This could be done using the
-         * monitor modes set but it is not clear whether that would contain
-         * all the modes needed.
-         */
-
-        /*
-         * N.B. If there is no mode set, commit an empty set to this path
-         * since there is nothing to initialize it with. Other possible
-         * options would be to leave it as is or add a default mode set.
-         * It seems the sample would effectively do what is done here.
-         */
 
         status = add_source_mode(source_mode_set_hdl,
                                  source_mode_set_if,
@@ -876,14 +324,8 @@ update_source_mode_set(UXENDISP_CRTC *crtc,
 
     } while (FALSE);
 
-    if (tgt_mode_info != NULL)
-        target_mode_set_if->pfnReleaseModeInfo(tgt_mode_set_hdl, tgt_mode_info);
-
     if (src_mode_info != NULL)
         source_mode_set_if->pfnReleaseModeInfo(source_mode_set_hdl, src_mode_info);
-
-    if (tgt_mode_set_hdl != NULL)
-        vidpn_if->pfnReleaseTargetModeSet(vidpn_hdl, tgt_mode_set_hdl);
 
     if (source_mode_set_hdl != NULL)
         vidpn_if->pfnReleaseSourceModeSet(vidpn_hdl, source_mode_set_hdl);
@@ -897,13 +339,10 @@ uXenDispEnumVidPnCofuncModality(CONST HANDLE hAdapter,
 {
     DEVICE_EXTENSION *dev = (DEVICE_EXTENSION*)hAdapter;
     DXGK_VIDPN_INTERFACE *vidpn_if = NULL;
-    DXGK_MONITOR_INTERFACE *monitor_interface;
     D3DKMDT_HVIDPNTOPOLOGY topology_hdl;
     DXGK_VIDPNTOPOLOGY_INTERFACE *topology_if;
     D3DKMDT_VIDPN_PRESENT_PATH *curr_path_info;
     D3DKMDT_VIDPN_PRESENT_PATH *next_path_info;
-    D3DKMDT_VIDPN_PRESENT_PATH CurrPathInfo;
-    BOOLEAN UpdatePath;
     NTSTATUS status;
     BOOLEAN End = FALSE;
     ULONG i;
@@ -918,12 +357,6 @@ uXenDispEnumVidPnCofuncModality(CONST HANDLE hAdapter,
                                                    &vidpn_if);
     if (!NT_SUCCESS(status)) {
         uxen_err("DxgkCbQueryVidPnInterface failed: 0x%x", status);
-        return STATUS_NO_MEMORY; /* SNO */
-    }
-
-    status = dev->dxgkif.DxgkCbQueryMonitorInterface(dev->dxgkhdl, DXGK_MONITOR_INTERFACE_VERSION_V1, &monitor_interface);
-    if (!NT_SUCCESS(status)) {
-        uxen_err("DxgkCbQueryMonitorInterface failed: 0x%x", status);
         return STATUS_NO_MEMORY; /* SNO */
     }
 
@@ -945,47 +378,6 @@ uXenDispEnumVidPnCofuncModality(CONST HANDLE hAdapter,
 
     /* can't be more paths than sources/targets*/
     for (i = 0; i < dev->crtc_count; i++) {
-        /* -- Path --*/
-        UpdatePath = FALSE;
-        RtlMoveMemory(&CurrPathInfo, curr_path_info, sizeof(D3DKMDT_VIDPN_PRESENT_PATH));
-
-        if ((pEnumCofuncModality->EnumPivotType != D3DKMDT_EPT_SCALING)&&
-            (curr_path_info->ContentTransformation.Scaling == D3DKMDT_VPPS_UNPINNED)) {
-            RtlZeroMemory(&CurrPathInfo.ContentTransformation.ScalingSupport, sizeof(D3DKMDT_VIDPN_PRESENT_PATH_SCALING_SUPPORT));
-            CurrPathInfo.ContentTransformation.ScalingSupport.Identity = TRUE;
-            UpdatePath = TRUE;
-        }
-
-        if ((pEnumCofuncModality->EnumPivotType != D3DKMDT_EPT_ROTATION)&&
-            (curr_path_info->ContentTransformation.Rotation == D3DKMDT_VPPS_UNPINNED)) {
-            RtlZeroMemory(&CurrPathInfo.ContentTransformation.RotationSupport, sizeof(D3DKMDT_VIDPN_PRESENT_PATH_ROTATION_SUPPORT));
-            CurrPathInfo.ContentTransformation.RotationSupport.Identity = TRUE;
-            UpdatePath = TRUE;
-        }
-
-        if (CurrPathInfo.CopyProtection.CopyProtectionType != D3DKMDT_VPPMT_NOPROTECTION) {
-            RtlZeroMemory(&CurrPathInfo.CopyProtection, sizeof(D3DKMDT_VIDPN_PRESENT_PATH_COPYPROTECTION));
-            CurrPathInfo.CopyProtection.CopyProtectionType = D3DKMDT_VPPMT_NOPROTECTION;
-            UpdatePath = TRUE;
-        }
-
-        /*
-         * TODO how exactly do you specify the other path values? Like:
-         * VisibleFromActive*, ColorBasis values, Content, Gamma etc.
-         * According to the docs, pfnUpdatePathSupportInfo only updates
-         * transforms and content protection!
-         */
-
-        if (UpdatePath) {
-            status = topology_if->pfnUpdatePathSupportInfo(topology_hdl, &CurrPathInfo);
-            if (!NT_SUCCESS(status)) {
-                uxen_err("pfnUpdatePathSupportInfo failed: 0x%x", status);
-                break;
-            }
-        }
-
-        /* -- Target & Source --*/
-
         if ((pEnumCofuncModality->EnumPivotType != D3DKMDT_EPT_VIDPNTARGET)||
             (pEnumCofuncModality->EnumPivot.VidPnTargetId != curr_path_info->VidPnTargetId)) {
             status = update_target_mode_set(&dev->crtcs[curr_path_info->VidPnTargetId],
@@ -1083,12 +475,24 @@ uXenDispSetVidPnSourceVisibility(CONST HANDLE hAdapter,
     for (i = 0; i < dev->crtc_count; i++) {
         crtc = &dev->crtcs[i];
         if (crtc->sourceid == pSetVidPnSourceVisibility->VidPnSourceId) {
-            if (pSetVidPnSourceVisibility->Visible)
+            if (pSetVidPnSourceVisibility->Visible) {
                 /* start scanning source */
-                uXenDispCrtcEnable(dev, crtc);
-            else
+                uxdisp_crtc_write(dev, crtc->crtcid, UXDISP_REG_CRTC_ENABLE, 1);
+                uxdisp_crtc_write(dev, crtc->crtcid, UXDISP_REG_CRTC_XRES,
+                                  crtc->curr_mode.xres);
+                uxdisp_crtc_write(dev, crtc->crtcid, UXDISP_REG_CRTC_YRES,
+                                  crtc->curr_mode.yres);
+                uxdisp_crtc_write(dev, crtc->crtcid, UXDISP_REG_CRTC_STRIDE,
+                                  crtc->curr_mode.stride);
+                uxdisp_crtc_write(dev, crtc->crtcid, UXDISP_REG_CRTC_FORMAT,
+                                  crtc->curr_mode.fmt);
+                /* Flush */
+                uxdisp_crtc_write(dev, crtc->crtcid, UXDISP_REG_CRTC_OFFSET,
+                                  crtc->primary_address.LowPart);
+            } else {
                 /* stop scanning source */
-                uXenDispCrtcDisable(dev, crtc);
+                // uXenDispCrtcDisable(dev, crtc);
+            }
         }
     }
 
@@ -1114,8 +518,6 @@ uXenDispCommitVidPn(CONST HANDLE hAdapter,
     NTSTATUS status;
     KIRQL irql;
     ULONG i;
-
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pCommitVidPn))
@@ -1258,9 +660,7 @@ uXenDispCommitVidPn(CONST HANDLE hAdapter,
         crtc = &dev->crtcs[i];
 
         /* Reset all staging values to defaults.*/
-        crtc->staged_modeidx = -1;
         crtc->staged_sourceid = D3DDDI_ID_UNINITIALIZED;
-        crtc->staged_fmt = -1;
         crtc->staged_flags = 0;
 
         /* Test if new mode information could be obtained above.*/
@@ -1288,7 +688,6 @@ uXenDispCommitVidPn(CONST HANDLE hAdapter,
         }
 
         crtc->staged_sourceid = source_map[i].sourceid;
-        crtc->staged_fmt = ddi_to_uxendisp_fmt(source_map[i].fmt.PixelFormat);
         /*
          * Want to do a reset to stop scanning to any primary surface
          * that is currently programmed for the CRTC.
@@ -1312,21 +711,23 @@ uXenDispCommitVidPn(CONST HANDLE hAdapter,
         if (NT_SUCCESS(status)) {
             if (!(crtc->staged_flags & UXENDISP_CRTC_STAGED_FLAG_SKIP)) {
                 crtc->sourceid = crtc->staged_sourceid;
-
+                if (crtc->fb)
+                    MmUnmapIoSpace(crtc->fb, crtc->curr_mode.stride * crtc->curr_mode.yres);
                 /*
                  * Make a copy of the current mode that can be accessed
                  * outside of the lock.
                  */
                 RtlMoveMemory(&crtc->curr_mode, &crtc->next_mode,
                               sizeof(UXENDISP_MODE));
-
-                if (crtc->staged_flags & UXENDISP_CRTC_STAGED_FLAG_DISABLE)
-                    uXenDispCrtcDisable(dev, crtc);
+                if (crtc->staged_flags & UXENDISP_CRTC_STAGED_FLAG_DISABLE) {
+                    //uXenDispCrtcDisable(dev, crtc);
+                }
+                crtc->fb = MmMapIoSpace(dev->vram_phys, crtc->curr_mode.stride * crtc->curr_mode.yres, MmNonCached);
+                ASSERT(crtc->fb);
             }
         }
 
         /* Clear all staging values*/
-        crtc->staged_modeidx = -1;
         crtc->staged_sourceid = D3DDDI_ID_UNINITIALIZED;
         crtc->staged_flags = 0;
     }
@@ -1334,8 +735,6 @@ uXenDispCommitVidPn(CONST HANDLE hAdapter,
     KeReleaseSpinLock(&dev->crtc_lock, irql);
 
     ExFreePoolWithTag(source_map, UXENDISP_TAG);
-
-    uxen_msg("Exit %x", status);
 
     return status;
 }
@@ -1362,28 +761,24 @@ init_monitor_source_mode(D3DKMDT_MONITOR_SOURCE_MODE *pVidPnMonitorSourceModeInf
 
     PAGED_CODE();
 
-    pVidPnMonitorSourceModeInfo->ColorBasis = D3DKMDT_CB_SCRGB;
+    pVidPnMonitorSourceModeInfo->ColorBasis = D3DKMDT_CB_SRGB;
     pVidPnMonitorSourceModeInfo->ColorCoeffDynamicRanges.FirstChannel = 8;
     pVidPnMonitorSourceModeInfo->ColorCoeffDynamicRanges.SecondChannel = 8;
     pVidPnMonitorSourceModeInfo->ColorCoeffDynamicRanges.ThirdChannel = 8;
     pVidPnMonitorSourceModeInfo->ColorCoeffDynamicRanges.FourthChannel = 0;
     pVidPnMonitorSourceModeInfo->Origin = D3DKMDT_MCO_DRIVER;
-
-    //if (mode->flags & UXENDISP_MODE_FLAG_PREFERRED)
-        pVidPnMonitorSourceModeInfo->Preference = D3DKMDT_MP_PREFERRED;
-    //else
-        //pVidPnMonitorSourceModeInfo->Preference = D3DKMDT_MP_NOTPREFERRED;
+    pVidPnMonitorSourceModeInfo->Preference = D3DKMDT_MP_PREFERRED;
 
     signal_info->VideoStandard = D3DKMDT_VSS_OTHER;
-    signal_info->TotalSize.cx = D3DKMDT_DIMENSION_NOTSPECIFIED;
-    signal_info->TotalSize.cy = D3DKMDT_DIMENSION_NOTSPECIFIED;
+    signal_info->TotalSize.cx = mode->xres;
+    signal_info->TotalSize.cy = mode->yres;
     signal_info->ActiveSize.cx = mode->xres;
     signal_info->ActiveSize.cy = mode->yres;
+    signal_info->PixelRate = mode->xres * mode->yres * UXENDISP_REFRESH_RATE;
     signal_info->VSyncFreq.Numerator = UXENDISP_REFRESH_RATE * 1000;
     signal_info->VSyncFreq.Denominator = 1000;
-    signal_info->HSyncFreq.Numerator = UXENDISP_REFRESH_RATE * mode->yres * 1000 * (105 / 100);
+    signal_info->HSyncFreq.Numerator = (UINT)((signal_info->PixelRate / signal_info->TotalSize.cy) * 1000);
     signal_info->HSyncFreq.Denominator = 1000;
-    signal_info->PixelRate = mode->xres * mode->yres * UXENDISP_REFRESH_RATE;
     signal_info->ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
 }
 
@@ -1434,3 +829,18 @@ uXenDispRecommendVidPnTopology(CONST HANDLE hAdapter,
     return STATUS_GRAPHICS_NO_RECOMMENDED_VIDPN_TOPOLOGY;
 }
 
+NTSTATUS APIENTRY
+uXenDispQueryVidPnHWCapability(CONST HANDLE hAdapter,
+                               DXGKARG_QUERYVIDPNHWCAPABILITY* pVidPnHWCaps)
+{
+    ASSERT(pVidPnHWCaps != NULL);
+
+    pVidPnHWCaps->VidPnHWCaps.DriverRotation             = 0;
+    pVidPnHWCaps->VidPnHWCaps.DriverScaling              = 0;
+    pVidPnHWCaps->VidPnHWCaps.DriverCloning              = 0;
+    pVidPnHWCaps->VidPnHWCaps.DriverColorConvert         = 0;
+    pVidPnHWCaps->VidPnHWCaps.DriverLinkedAdapaterOutput = 0;
+    pVidPnHWCaps->VidPnHWCaps.DriverRemoteDisplay        = 0;
+
+    return STATUS_SUCCESS;
+}

@@ -30,6 +30,7 @@
 #pragma alloc_text(PAGE,uXenDispCloseAllocation)
 #pragma alloc_text(PAGE,uXenDispRender)
 #pragma alloc_text(PAGE,uXenDispPresent)
+#pragma alloc_text(PAGE,uXenDispPresentDisplayOnly)
 #pragma alloc_text(PAGE,uXenDispCreateContext)
 #pragma alloc_text(PAGE,uXenDispDestroyContext)
 #endif
@@ -59,7 +60,6 @@ uXenDispControlEtwLogging(BOOLEAN Enable, ULONG Flags, UCHAR Level)
     UNREFERENCED_PARAMETER(Level);
 
     PAGED_CODE();
-
     /* Not using ETW logging at this point. */
 }
 
@@ -80,46 +80,18 @@ uXenDispQueryAdapterInfo(CONST HANDLE hAdapter,
         return STATUS_INVALID_PARAMETER;
 
     switch (pQueryAdapterInfo->Type) {
-    case DXGKQAITYPE_UMDRIVERPRIVATE:
-        if (pQueryAdapterInfo->OutputDataSize <
-            sizeof(UXENDISP_UMDRIVERPRIVATE)) {
-            status = STATUS_INVALID_PARAMETER;
-            break;
-        }
-
-        /* Copy over the private data for our display driver */
-        RtlMoveMemory(pQueryAdapterInfo->pOutputData,
-                      &dev->private_data,
-                      sizeof(UXENDISP_UMDRIVERPRIVATE));
-        break;
     case DXGKQAITYPE_DRIVERCAPS:
         pDriverCaps = (DXGK_DRIVERCAPS *) pQueryAdapterInfo->pOutputData;
         RtlZeroMemory(pDriverCaps, sizeof *pDriverCaps);
 
-        /* TODO some of these fields need more investigation */
         pDriverCaps->HighestAcceptableAddress.QuadPart = (ULONG64) - 1;
-        pDriverCaps->MaxAllocationListSlotId = 74;
-        pDriverCaps->ApertureSegmentCommitLimit = 0;
         pDriverCaps->MaxPointerWidth = 64;
         pDriverCaps->MaxPointerHeight = 64;
-        pDriverCaps->PointerCaps.Value = 0;
         pDriverCaps->PointerCaps.Color = 1;
         pDriverCaps->PointerCaps.MaskedColor = 1;
-        pDriverCaps->InterruptMessageNumber = 0;
-        pDriverCaps->NumberOfSwizzlingRanges = 0;
-        pDriverCaps->MaxOverlays = 0;
-        pDriverCaps->GammaRampCaps.Value = 0;
-        pDriverCaps->GammaRampCaps.Gamma_Rgb256x3x16 = 1;
-        pDriverCaps->PresentationCaps.Value = 0;
+        pDriverCaps->MaxAllocationListSlotId = 16;
         pDriverCaps->PresentationCaps.NoScreenToScreenBlt = 1;
-        pDriverCaps->MaxQueuedFlipOnVSync = 1;
-        pDriverCaps->FlipCaps.Value = 0;
-        pDriverCaps->FlipCaps.FlipOnVSyncWithNoWait = 1;
-        pDriverCaps->FlipCaps.FlipOnVSyncMmIo = 1;
-        pDriverCaps->SchedulingCaps.Value = 0;
         pDriverCaps->SchedulingCaps.MultiEngineAware = 1;
-        pDriverCaps->MemoryManagementCaps.Value = 0;
-        pDriverCaps->MemoryManagementCaps.PagingNode = 0;
         pDriverCaps->GpuEngineTopology.NbAsymetricProcessingNodes = 2;
         pDriverCaps->WDDMVersion = DXGKDDI_WDDMv1_2;
 
@@ -155,7 +127,7 @@ uXenDispQueryAdapterInfo(CONST HANDLE hAdapter,
             pQuerySegmentOut->pSegmentDescriptor[1].Flags.CpuVisible = 1;
             pQuerySegmentOut->pSegmentDescriptor[1].Flags.Aperture = 1;
 
-            pQuerySegmentOut->PagingBufferSegmentId = 0;
+            pQuerySegmentOut->PagingBufferSegmentId = 1;
             pQuerySegmentOut->PagingBufferSize = 64 * 1024; /* TODO  */
             pQuerySegmentOut->PagingBufferPrivateDataSize = 0;
 
@@ -510,15 +482,11 @@ uXenDispAcquireSwizzlingRange(CONST HANDLE hAdapter,
                               pAcquireSwizzlingRange)
 {
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pAcquireSwizzlingRange))
         return STATUS_INVALID_PARAMETER;
 
-    /* TODO implement later. */
-
-    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -529,14 +497,10 @@ uXenDispReleaseSwizzlingRange(CONST HANDLE hAdapter,
 {
     PAGED_CODE();
 
-    uxen_msg("Enter");
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pReleaseSwizzlingRange))
         return STATUS_INVALID_PARAMETER;
 
-    /* TODO implement later. */
-
-    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -546,7 +510,6 @@ uXenDispPatch(CONST HANDLE hAdapter, CONST DXGKARG_PATCH * pPatch)
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pPatch))
         return STATUS_INVALID_PARAMETER;
-
     return STATUS_SUCCESS;
 }
 
@@ -577,7 +540,6 @@ uXenDispPreemptCommand(CONST HANDLE hAdapter,
 {
     DEVICE_EXTENSION *dev = (DEVICE_EXTENSION *)hAdapter;
     DXGKARGCB_NOTIFY_INTERRUPT_DATA notify = { 0 };
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pPreemptCommand))
@@ -591,7 +553,6 @@ uXenDispPreemptCommand(CONST HANDLE hAdapter,
     dev->dxgkif.DxgkCbNotifyInterrupt(dev->dxgkhdl, &notify);
     dev->dxgkif.DxgkCbQueueDpc(dev->dxgkhdl);
 
-    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -642,14 +603,10 @@ uXenDispSetPalette(CONST HANDLE hAdapter,
                    CONST DXGKARG_SETPALETTE *pSetPalette)
 {
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pSetPalette))
         return STATUS_INVALID_PARAMETER;
-
-    /* TODO may not have to deal with this */
-    uxen_msg("Leave");
 
     return STATUS_SUCCESS;
 }
@@ -761,14 +718,12 @@ NTSTATUS APIENTRY CALLBACK uXenDispResetFromTimeout(CONST HANDLE hAdapter)
 {
     DEVICE_EXTENSION *dev = (DEVICE_EXTENSION *)hAdapter;
     ULONG ControlReg;
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter))
         return STATUS_INVALID_PARAMETER;
 
     /* Disable interrupts */
     uxdisp_write(dev, UXDISP_REG_INTERRUPT_ENABLE, 0);
-    uxen_msg("Leave");
 
     return STATUS_SUCCESS;
 }
@@ -777,11 +732,9 @@ NTSTATUS APIENTRY CALLBACK
 uXenDispRestartFromTimeout(CONST HANDLE hAdapter)
 {
     DEVICE_EXTENSION *dev = (DEVICE_EXTENSION *)hAdapter;
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter))
         return STATUS_INVALID_PARAMETER;
-    uxen_msg("Leave");
 
     return STATUS_SUCCESS;
 }
@@ -837,7 +790,6 @@ uXenDispCollectDbgInfo(HANDLE hAdapter,
                        CONST DXGKARG_COLLECTDBGINFO *pCollectDbgInfo)
 {
 #define DBG_INFO_UNKNOWN "************: uXenDisp - Unknown reason."
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pCollectDbgInfo))
@@ -853,11 +805,9 @@ uXenDispCollectDbgInfo(HANDLE hAdapter,
         buf[0] = DXGK_SECONDARY_BUCKETING_TAG;
         buf[1] = 0xBADC0DE;
         buf[2] = pCollectDbgInfo->Reason;
-    uxen_msg("Leave");
 
         return STATUS_SUCCESS;
     }
-    uxen_msg("Leave");
 
     return STATUS_UNSUCCESSFUL;
 }
@@ -869,14 +819,12 @@ uXenDispQueryCurrentFence(CONST HANDLE hAdapter,
     DEVICE_EXTENSION *dev = (DEVICE_EXTENSION *)hAdapter;
 
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pCurrentFence))
         return STATUS_INVALID_PARAMETER;
 
     pCurrentFence->CurrentFence = dev->current_fence;
-    uxen_msg("Leave");
 
     return STATUS_SUCCESS;
 }
@@ -888,7 +836,6 @@ uXenDispGetScanLine(CONST HANDLE hAdapter,
     DEVICE_EXTENSION *dev = (DEVICE_EXTENSION *)hAdapter;
 
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pGetScanLine))
@@ -898,7 +845,6 @@ uXenDispGetScanLine(CONST HANDLE hAdapter,
 
     pGetScanLine->InVerticalBlank = TRUE;
     pGetScanLine->ScanLine = (UINT)-1;
-    uxen_msg("Leave");
 
     return STATUS_SUCCESS;
 }
@@ -908,15 +854,11 @@ uXenDispStopCapture(CONST HANDLE hAdapter,
                     CONST DXGKARG_STOPCAPTURE *pStopCapture)
 {
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter) ||
         !ARGUMENT_PRESENT(pStopCapture))
         return STATUS_INVALID_PARAMETER;
 
-    /* Probably don't care about this one. */
-
-    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -926,33 +868,23 @@ uXenDispControlInterrupt(CONST HANDLE hAdapter,
                          BOOLEAN Enable)
 {
     DEVICE_EXTENSION *dev = (DEVICE_EXTENSION *)hAdapter;
-    UXENDISP_CRTC *crtc;
-    ULONG interrupt;
-    ULONG ien;
+    LARGE_INTEGER DueTime = { 0 };
 
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hAdapter))
         return STATUS_INVALID_PARAMETER;
 
-    switch (InterruptType) {
-    case DXGK_INTERRUPT_CRTC_VSYNC:
-        interrupt = UXDISP_INTERRUPT_VBLANK;
-        break;
-    default:
+    if (InterruptType == UXDISP_INTERRUPT_VBLANK) {
+        if (Enable) {
+            KeSetTimerEx(&dev->vsync_timer, DueTime, 16, &dev->vsync_dpc);
+        } else {
+            KeCancelTimer(&dev->vsync_timer);
+        }
+        return STATUS_SUCCESS;
+    } else {
         return STATUS_NOT_IMPLEMENTED;
     }
-
-    ien = uxdisp_read(dev, UXDISP_REG_INTERRUPT_ENABLE);
-    if (Enable)
-        ien |= interrupt;
-    else
-        ien &= ~interrupt;
-    uxdisp_write(dev, UXDISP_REG_INTERRUPT_ENABLE, ien);
-
-    uxen_msg("Leave");
-    return STATUS_SUCCESS;
 }
 
 NTSTATUS APIENTRY uXenDispDestroyDevice(CONST HANDLE hDevice)
@@ -1030,11 +962,6 @@ uXenDispCloseAllocation(CONST HANDLE hDevice,
         !ARGUMENT_PRESENT(pCloseAllocation))
         return STATUS_INVALID_PARAMETER;
 
-    /*
-     * Nothing to do. The allocation is going to be destroyed so the open
-     * mapping done above will just go away.
-     */
-
     return STATUS_SUCCESS;
 }
 
@@ -1042,19 +969,11 @@ NTSTATUS APIENTRY
 uXenDispRender(CONST HANDLE hContext, DXGKARG_RENDER *pRender)
 {
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hContext) ||
         !ARGUMENT_PRESENT(pRender))
         return STATUS_INVALID_PARAMETER;
 
-    /*
-     * N.B. This routine can be skipped for now since this will never be called
-     * by GDI (only uXenDispPresent is used). For a full 3D implementation,
-     * this will need to be implemented.
-     */
-
-    uxen_msg("Leave");
     return STATUS_NOT_IMPLEMENTED;
 }
 
@@ -1070,24 +989,6 @@ uXenDispPresent(CONST HANDLE hContext, DXGKARG_PRESENT *pPresent)
         !ARGUMENT_PRESENT(pPresent))
         return STATUS_INVALID_PARAMETER;
 
-    /* TODO support these later? */
-    if (!pPresent->pAllocationList[DXGK_PRESENT_SOURCE_INDEX].hDeviceSpecificAllocation) {
-        uxen_debug("ColorFill operation not supported, Flags=0x%x",
-                   pPresent->Flags);
-        return STATUS_ILLEGAL_INSTRUCTION;
-    } else if (!pPresent->pAllocationList[DXGK_PRESENT_DESTINATION_INDEX].hDeviceSpecificAllocation) {
-        uxen_debug("Flip operation not supported, Flags=0x%x",
-                   pPresent->Flags);
-        return STATUS_ILLEGAL_INSTRUCTION;
-    }
-
-    if (!pPresent->pDmaBuffer) {
-        /* This SNO since FLIPCAPS specify no HW flip support right now. */
-        uxen_msg("HW MMIO Flip operation not supported, Flags=0x%x",
-                 pPresent->Flags);
-        return STATUS_ILLEGAL_INSTRUCTION;
-    }
-
     /* Allocate DMA chunk and advance the buffer */
     pPresent->pDmaBuffer = (UCHAR *)pPresent->pDmaBuffer + 1;
     /* Set the patch locations and advance the location counter */
@@ -1102,6 +1003,85 @@ uXenDispPresent(CONST HANDLE hContext, DXGKARG_PRESENT *pPresent)
 }
 
 NTSTATUS APIENTRY
+uXenDispPresentDisplayOnly(CONST HANDLE hAdapter,
+                           CONST DXGKARG_PRESENT_DISPLAYONLY* pPresentDisplayOnly)
+{
+    DEVICE_EXTENSION *dev = (DEVICE_EXTENSION *)hAdapter;
+    ULONG iRect;
+    UXENDISP_CRTC *crtc;
+    KIRQL irql;
+
+    PAGED_CODE();
+
+    if (!ARGUMENT_PRESENT(hAdapter) ||
+        !ARGUMENT_PRESENT(pPresentDisplayOnly))
+        return STATUS_INVALID_PARAMETER;
+
+    crtc = dev->crtcs;
+    for (iRect = 0; iRect < pPresentDisplayOnly->NumMoves; iRect++)
+    {
+        RECT* pRect = &pPresentDisplayOnly->pMoves[iRect].DestRect;
+        CONST POINT* pPoint = &pPresentDisplayOnly->pMoves[iRect].SourcePoint;
+        UINT NumPixels = pRect->right - pRect->left;
+        UINT NumRows = pRect->bottom - pRect->top;
+        UINT BytesToCopy = NumPixels * 4;
+        LONG SrcPitch;
+        LONG DstPitch;
+        BYTE* pStartDst;
+        BYTE* pStartSrc;
+        UINT i;
+        if (pPoint->y > pRect->top) {
+            SrcPitch = -pPresentDisplayOnly->Pitch;
+            DstPitch = -crtc->curr_mode.stride;
+            pStartDst = (PBYTE)dev->crtcs[0].fb +
+                        (pRect->top * -DstPitch) + pRect->left * 4;
+            pStartSrc = (PBYTE)dev->crtcs[0].fb +
+                        (pPoint->y * -SrcPitch) + pPoint->x * 4;
+        } else {
+            SrcPitch = pPresentDisplayOnly->Pitch;
+            DstPitch = crtc->curr_mode.stride;
+            pStartDst = (PBYTE)dev->crtcs[0].fb +
+                        (pRect->top + NumRows - 1) * DstPitch + pRect->left * 4;
+            pStartSrc = (PBYTE)dev->crtcs[0].fb +
+                        (pPoint->y + NumRows - 1) * SrcPitch + pPoint->x * 4;
+        }
+        for (i = 0; i < NumRows; ++i)
+        {
+            RtlMoveMemory(pStartDst, pStartSrc, BytesToCopy);
+            pStartDst -= DstPitch;
+            pStartSrc -= SrcPitch;
+        }
+
+        dr_send(dev->dr_ctx, 1, pRect);
+    }
+
+    for (iRect = 0; iRect < pPresentDisplayOnly->NumDirtyRects; iRect++)
+    {
+        CONST RECT* pRect = &pPresentDisplayOnly->pDirtyRect[iRect];
+        UINT NumPixels = pRect->right - pRect->left;
+        UINT NumRows = pRect->bottom - pRect->top;
+        UINT BytesToCopy = NumPixels * 4;
+        LONG SrcPitch = pPresentDisplayOnly->Pitch;
+        LONG DstPitch = crtc->curr_mode.stride;
+        BYTE* pStartDst = (PBYTE)dev->crtcs[0].fb +
+                          pRect->top * DstPitch + pRect->left * 4;
+        CONST BYTE* pStartSrc = (PBYTE)pPresentDisplayOnly->pSource +
+                                pRect->top * SrcPitch + pRect->left * 4;
+        UINT i;
+        for (i = 0; i < NumRows; ++i)
+        {
+            RtlCopyMemory(pStartDst, pStartSrc, BytesToCopy);
+            pStartDst += DstPitch;
+            pStartSrc += SrcPitch;
+        }
+    }
+
+    dr_send(dev->dr_ctx, pPresentDisplayOnly->NumDirtyRects, pPresentDisplayOnly->pDirtyRect);
+
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS APIENTRY
 uXenDispCreateContext(CONST HANDLE hDevice,
                       DXGKARG_CREATECONTEXT *pCreateContext)
 {
@@ -1109,7 +1089,6 @@ uXenDispCreateContext(CONST HANDLE hDevice,
     UXENDISP_D3D_CONTEXT *d3dctx;
 
     PAGED_CODE();
-    uxen_msg("Enter");
 
     if (!ARGUMENT_PRESENT(hDevice) ||
         !ARGUMENT_PRESENT(pCreateContext))
@@ -1142,7 +1121,6 @@ uXenDispCreateContext(CONST HANDLE hDevice,
     pCreateContext->ContextInfo.PatchLocationListSize = 3 * 1024;
     pCreateContext->ContextInfo.DmaBufferPrivateDataSize = 128;
 
-    uxen_msg("Leave");
     return STATUS_SUCCESS;
 }
 
@@ -1150,12 +1128,10 @@ NTSTATUS APIENTRY uXenDispDestroyContext(CONST HANDLE hContext)
 {
     PAGED_CODE();
 
-    uxen_msg("Enter");
     if (!ARGUMENT_PRESENT(hContext))
         return STATUS_INVALID_PARAMETER;
 
     ExFreePoolWithTag(hContext, UXENDISP_TAG);
-    uxen_msg("Leave");
 
     return STATUS_SUCCESS;
 }

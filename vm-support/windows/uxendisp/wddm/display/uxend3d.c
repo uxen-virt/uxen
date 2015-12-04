@@ -48,76 +48,6 @@
 #include <d3d9types.h>
 #include <d3dumddi.h>
 #include <d3dhal.h>
-#include <assert.h>
-
-#include "uxend3d.h"
-
-static BOOL g_uXenDisp2D = TRUE;
-
-#if 0
-
-/* TODO need to revisit and posible change FORMAT OPS for each. */
-
-/* GetCaps D3DDDICAPS_GETFORMATDATA will report all possible formats and each */
-/* VidPN will indicate what source modes can be set. */
-static FORMATOP g_XenGfxD3dFormats[UXENDISP_D3D_FORMAT_COUNT] = {
-    {D3DDDIFMT_X1R5G5B5, /* XGFX_FORMAT_RGB555 16 BPP */
-     (FORMATOP_TEXTURE|FORMATOP_VOLUMETEXTURE|FORMATOP_CUBETEXTURE|
-      FORMATOP_OFFSCREEN_RENDERTARGET|FORMATOP_SAME_FORMAT_RENDERTARGET|
-      FORMATOP_CONVERT_TO_ARGB|FORMATOP_OFFSCREENPLAIN|
-      FORMATOP_MEMBEROFGROUP_ARGB|FORMATOP_VERTEXTEXTURE),
-     0, 0, 0},
-
-    {D3DDDIFMT_R5G6B5, /* XGFX_FORMAT_RGB565 16 BP */
-     (FORMATOP_TEXTURE|FORMATOP_VOLUMETEXTURE|FORMATOP_CUBETEXTURE|
-      FORMATOP_OFFSCREEN_RENDERTARGET|FORMATOP_SAME_FORMAT_RENDERTARGET|
-      FORMATOP_DISPLAYMODE|FORMATOP_3DACCELERATION|
-      FORMATOP_CONVERT_TO_ARGB|FORMATOP_OFFSCREENPLAIN|
-      FORMATOP_MEMBEROFGROUP_ARGB|FORMATOP_VERTEXTEXTURE),
-     0, 0, 0},
-
-    {D3DDDIFMT_R8G8B8, /* XGFX_FORMAT_RGB888 24 BPP */
-     (FORMATOP_TEXTURE|FORMATOP_VOLUMETEXTURE|FORMATOP_CUBETEXTURE|
-      FORMATOP_OFFSCREEN_RENDERTARGET|FORMATOP_SAME_FORMAT_RENDERTARGET|
-      FORMATOP_DISPLAYMODE|FORMATOP_3DACCELERATION|FORMATOP_CONVERT_TO_ARGB|
-      FORMATOP_OFFSCREENPLAIN|FORMATOP_SRGBREAD|FORMATOP_MEMBEROFGROUP_ARGB|
-      FORMATOP_SRGBWRITE|FORMATOP_VERTEXTEXTURE),
-     0, 0, 0},
-
-    {D3DDDIFMT_X8R8G8B8, /* XGFX_FORMAT_RGBX8888 32 BPP */
-     (FORMATOP_TEXTURE|FORMATOP_VOLUMETEXTURE|FORMATOP_CUBETEXTURE|
-      FORMATOP_OFFSCREEN_RENDERTARGET|FORMATOP_SAME_FORMAT_RENDERTARGET|
-      FORMATOP_DISPLAYMODE|FORMATOP_3DACCELERATION|FORMATOP_CONVERT_TO_ARGB|
-      FORMATOP_OFFSCREENPLAIN|FORMATOP_SRGBREAD|FORMATOP_MEMBEROFGROUP_ARGB|
-      FORMATOP_SRGBWRITE|FORMATOP_VERTEXTEXTURE),
-     0, 0, 0},
-
-    {D3DDDIFMT_X8B8G8R8, /* XGFX_FORMAT_BGRX8888 32 BPP */
-     (FORMATOP_TEXTURE|FORMATOP_VOLUMETEXTURE|FORMATOP_CUBETEXTURE|
-      FORMATOP_OFFSCREEN_RENDERTARGET|FORMATOP_SAME_FORMAT_RENDERTARGET|
-      FORMATOP_DISPLAYMODE|FORMATOP_3DACCELERATION|FORMATOP_CONVERT_TO_ARGB|
-      FORMATOP_OFFSCREENPLAIN|FORMATOP_SRGBREAD|FORMATOP_MEMBEROFGROUP_ARGB|
-      FORMATOP_SRGBWRITE|FORMATOP_VERTEXTEXTURE),
-     0, 0, 0},
-
-    {D3DDDIFMT_A8R8G8B8, /* XGFX_FORMAT_BGRX8888 32 BPP (preserve Alpha) */
-     (FORMATOP_TEXTURE|FORMATOP_VOLUMETEXTURE|FORMATOP_CUBETEXTURE|
-      FORMATOP_OFFSCREEN_RENDERTARGET|FORMATOP_SAME_FORMAT_RENDERTARGET|
-      FORMATOP_DISPLAYMODE|FORMATOP_3DACCELERATION|FORMATOP_CONVERT_TO_ARGB|
-      FORMATOP_OFFSCREENPLAIN|FORMATOP_SRGBREAD|FORMATOP_MEMBEROFGROUP_ARGB|
-      FORMATOP_SRGBWRITE|FORMATOP_VERTEXTEXTURE),
-     0, 0, 0},
-
-    {D3DDDIFMT_A8B8G8R8, /* XGFX_FORMAT_BGRX8888 32 BPP (preserve Alpha) */
-     (FORMATOP_TEXTURE|FORMATOP_VOLUMETEXTURE|FORMATOP_CUBETEXTURE|
-      FORMATOP_OFFSCREEN_RENDERTARGET|FORMATOP_SAME_FORMAT_RENDERTARGET|
-      FORMATOP_DISPLAYMODE|FORMATOP_3DACCELERATION|FORMATOP_CONVERT_TO_ARGB|
-      FORMATOP_OFFSCREENPLAIN|FORMATOP_SRGBREAD|FORMATOP_MEMBEROFGROUP_ARGB|
-      FORMATOP_SRGBWRITE|FORMATOP_VERTEXTEXTURE),
-     0, 0, 0}
-
-};
-#endif
 
 static HRESULT APIENTRY
 uXenD3DSetRenderState(HANDLE hDevice, CONST D3DDDIARG_RENDERSTATE *pSetRenderState)
@@ -912,10 +842,7 @@ uXenD3DExtensionExecute(HANDLE hDevice, CONST D3DDDIARG_EXTENSIONEXECUTE *pExten
 static HRESULT APIENTRY
 uXenD3DDestroyDevice(HANDLE hDevice)
 {
-    assert(hDevice != NULL);
-
-    free(hDevice);
-
+    UNREFERENCED_PARAMETER(hDevice);
     return S_OK;
 }
 
@@ -1039,16 +966,8 @@ uXenD3DRename(HANDLE hDevice, CONST D3DDDIARG_RENAME *pRename)
 static HRESULT APIENTRY
 uXenD3DGetCaps(HANDLE hAdapter, CONST D3DDDIARG_GETCAPS *pGetCaps)
 {
-
-    if ((hAdapter == NULL)||(pGetCaps == NULL))
-        return E_INVALIDARG;
-
-    if (g_uXenDisp2D) {
-        /* Flags set, just fail to fall back to 2D and GDI */
-        return E_FAIL;
-    }
-
-    /* TODO 3D driver reports capabilities here */
+    UNREFERENCED_PARAMETER(hAdapter);
+    UNREFERENCED_PARAMETER(pGetCaps);
 
     return S_OK;
 }
@@ -1056,30 +975,7 @@ uXenD3DGetCaps(HANDLE hAdapter, CONST D3DDDIARG_GETCAPS *pGetCaps)
 static HRESULT APIENTRY
 uXenD3DCreateDevice(HANDLE hAdapter, D3DDDIARG_CREATEDEVICE *pCreateData)
 {
-    UXEN_D3D_ADAPTER *puXenD3DAdapter = (UXEN_D3D_ADAPTER*)hAdapter;
-    UXEN_D3D_DEVICE *puXenD3DDevice;
-
-    if ((hAdapter == NULL)||(pCreateData == NULL))
-        return E_INVALIDARG;
-
-    /* Create a device object */
-    puXenD3DDevice = (UXEN_D3D_DEVICE*)malloc(sizeof(UXEN_D3D_DEVICE));
-    if (puXenD3DDevice == NULL) {
-        return E_OUTOFMEMORY;
-    }
-    ZeroMemory(puXenD3DDevice, sizeof(UXEN_D3D_DEVICE));
-    puXenD3DDevice->puXenD3DAdapter = puXenD3DAdapter;
-
-    /* Copy the input values */
-    puXenD3DDevice->hDevice = pCreateData->hDevice;
-    puXenD3DDevice->Interface = pCreateData->Interface;
-    puXenD3DDevice->Version = pCreateData->Version;
-    puXenD3DDevice->DeviceCallbacks = *pCreateData->pCallbacks;
-    puXenD3DDevice->Flags = pCreateData->Flags;
-
-    /* Set the output values */
-    pCreateData->hDevice = puXenD3DDevice;
-
+    pCreateData->hDevice = hAdapter;
     pCreateData->pDeviceFuncs->pfnSetRenderState                = uXenD3DSetRenderState;
     pCreateData->pDeviceFuncs->pfnUpdateWInfo                   = uXenD3DUpdateWInfo;
     pCreateData->pDeviceFuncs->pfnValidateDevice                = uXenD3DValidateDevice;
@@ -1186,9 +1082,7 @@ uXenD3DCreateDevice(HANDLE hAdapter, D3DDDIARG_CREATEDEVICE *pCreateData)
 static HRESULT APIENTRY
 uXenD3DCloseAdapter(HANDLE hAdapter)
 {
-    assert(hAdapter != NULL);
-
-    free(hAdapter);
+    UNREFERENCED_PARAMETER(hAdapter);
 
     return S_OK;
 }
@@ -1196,25 +1090,30 @@ uXenD3DCloseAdapter(HANDLE hAdapter)
 HRESULT APIENTRY
 OpenAdapter(D3DDDIARG_OPENADAPTER *pOpenData)
 {
-    UXEN_D3D_ADAPTER *puXenD3DAdapter;
-
-    /* Create an adapter object */
-    puXenD3DAdapter = (UXEN_D3D_ADAPTER*)malloc(sizeof(UXEN_D3D_ADAPTER));
-    if (puXenD3DAdapter == NULL) {
-        return E_OUTOFMEMORY;
-    }
-    ZeroMemory(puXenD3DAdapter, sizeof(UXEN_D3D_ADAPTER));
-
-    puXenD3DAdapter->hAdapter = pOpenData->hAdapter;
-    puXenD3DAdapter->Interface = pOpenData->Interface;
-    puXenD3DAdapter->Version = pOpenData->Version;
-    puXenD3DAdapter->AdapterCallbacks = *pOpenData->pAdapterCallbacks;
-
-    pOpenData->hAdapter = puXenD3DAdapter;
+    pOpenData->hAdapter = (HANDLE)1;
     pOpenData->pAdapterFuncs->pfnGetCaps = uXenD3DGetCaps;
     pOpenData->pAdapterFuncs->pfnCreateDevice = uXenD3DCreateDevice;
     pOpenData->pAdapterFuncs->pfnCloseAdapter = uXenD3DCloseAdapter;
     pOpenData->DriverVersion = D3D_UMD_INTERFACE_VERSION;
 
     return S_OK;
+}
+
+BOOL WINAPI
+DllMain(HINSTANCE hModule, DWORD Reason, LPVOID pReserved)
+{
+    UNREFERENCED_PARAMETER(pReserved);
+
+    switch (Reason)
+    {
+    case DLL_PROCESS_ATTACH:
+        DisableThreadLibraryCalls(hModule);
+        break;
+    case DLL_PROCESS_DETACH:
+        break;
+    default:
+        break;
+    }
+
+    return TRUE;
 }
