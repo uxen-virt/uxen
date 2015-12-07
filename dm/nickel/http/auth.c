@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -16,8 +16,8 @@
 #include "auth.h"
 #include <inttypes.h>
 
-#if defined(_WIN32)
 #include "auth-basic.h"
+#if defined(_WIN32)
 #include "auth-sspi.h"
 #endif
 
@@ -161,6 +161,10 @@ static int auth_init(struct http_auth *auth)
     } else if (auth->type == AUTH_TYPE_BASIC) {
         ret = basicauth_init_auth(auth);
     }
+#elif defined(__APPLE__)
+    if (auth->type == AUTH_TYPE_BASIC) {
+        ret = basicauth_init_auth(auth);
+    }
 #endif
 
 out:
@@ -173,6 +177,10 @@ static int change_auth(struct http_auth *auth, enum auth_enum new_type)
     if (IS_SSPI_AUTH(auth->type)) {
         sspi_free_auth(auth);
     } else if (auth->type == AUTH_TYPE_BASIC) {
+        basicauth_free_auth(auth);
+    }
+#elif defined(__APPLE__)
+    if (auth->type == AUTH_TYPE_BASIC) {
         basicauth_free_auth(auth);
     }
 #endif
@@ -260,6 +268,13 @@ int http_auth_clt(struct http_auth *auth)
             goto out;
         }
     }
+#elif defined(__APPLE__)
+    if (auth->type == AUTH_TYPE_BASIC) {
+        if (basicauth_clt(auth)) {
+            AUXL("basicauth_step ERROR");
+            goto out;
+        }
+    }
 #endif
 
     ret = 0;
@@ -289,6 +304,16 @@ int http_auth_srv(struct http_auth *auth, struct http_header *h)
             goto out;
         }
     } else if (auth->type == AUTH_TYPE_BASIC) {
+        if (basicauth_srv(auth, auth->authorized)) {
+            AUXL("basicauth_srv ERROR");
+            goto out;
+        }
+    } else if (!auth->authorized && auth->was_authorized) {
+        AUXL("unexpected HTTP 407 received, trying to restart the request.");
+        auth->needs_restart = 1;
+    }
+#elif defined(__APPLE__)
+    if (auth->type == AUTH_TYPE_BASIC) {
         if (basicauth_srv(auth, auth->authorized)) {
             AUXL("basicauth_srv ERROR");
             goto out;
@@ -346,6 +371,9 @@ int http_auth_srv_closing(struct http_auth *auth)
     if (IS_SSPI_AUTH(auth->type))
         ret = sspi_srv_closing(auth);
     else if (auth->type == AUTH_TYPE_BASIC)
+        ret = basicauth_srv_closing(auth);
+#elif defined(__APPLE__)
+    if (auth->type == AUTH_TYPE_BASIC)
         ret = basicauth_srv_closing(auth);
 #endif
 

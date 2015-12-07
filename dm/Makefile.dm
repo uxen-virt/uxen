@@ -236,19 +236,19 @@ hw_uxen_hid.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 hw_uxen_hid.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
 DM_SRCS += hw/uxen_platform.c
 hw_uxen_platform.o: CPPFLAGS += -I$(XENPUBLICDIR)
-hw_uxen_platform.o: CPPFLAGS += $(LIBXC_CPPFLAGS) 
+hw_uxen_platform.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 DM_SRCS += hw/vga.c
 hw_vga.o: CPPFLAGS += $(LZ4_CPPFLAGS)
 DM_SRCS += hw/xenpc.c
 hw_xenpc.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 DM_SRCS += hw/xenrtc.c
 $(OSX_NOT_YET)DM_SRCS += hw/uxen_net.c
-hw_uxen_net.o: CPPFLAGS += -I$(XENPUBLICDIR) 
+hw_uxen_net.o: CPPFLAGS += -I$(XENPUBLICDIR)
 DM_SRCS += hw/uxen_null.c
 hw_uxen_null.o: CPPFLAGS += -I$(XENPUBLICDIR)
 $(OSX_NOT_YET)DM_SRCS += hw/uxen_stor.c
 $(OSX_NOT_YET)DM_SRCS += hw/uxen_scsi.c
-hw_uxen_stor.o: CPPFLAGS += -I$(XENPUBLICDIR) 
+hw_uxen_stor.o: CPPFLAGS += -I$(XENPUBLICDIR)
 
 QEMU_CFLAGS += -I$(TOPDIR)
 
@@ -316,7 +316,7 @@ NICKEL_SRCS += socket.c
 NICKEL_SRCS += tcpip.c
 NICKEL_SRCS += dns/dns.c
 NICKEL_SRCS += dns/dns-fake.c
-$(WINDOWS)NICKEL_SRCS += http/auth-basic.c
+NICKEL_SRCS += http/auth-basic.c
 $(WINDOWS)NICKEL_SRCS += http/auth-sspi.c
 $(OSX)NICKEL_SRCS += http/cert-osx.c
 $(WINDOWS)NICKEL_SRCS += http/cert-win32.c
@@ -378,6 +378,7 @@ $(WINDOWS)LDLIBS += $(LIBUXENCONSOLE_LIBS)
 
 $(OSX)LDLIBS += -framework AppKit
 $(OSX)LDLIBS += -framework Carbon
+$(OSX)LDLIBS += -framework Security
 
 $(WINDOWS)LDFLAGS += -mwindows
 $(WINDOWS)LDFLAGS += -Wl,--wrap,malloc,--wrap,realloc,--wrap,calloc,--wrap,free
