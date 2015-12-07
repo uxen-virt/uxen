@@ -80,9 +80,11 @@
                             <Condition>
                               <![CDATA[Installed OR (VersionNT >= 602)]]>
                             </Condition>
-                            <File Id="uxenkmdod.inf" Name="uxenkmdod.inf" DiskId="1" Source="$(var.uxenkmdoddir)/uxenkmdod.inf" />
-                            <File Id="uxenkmdod.sys" Name="uxenkmdod.sys" DiskId="1" Source="$(var.uxenkmdoddir)/uxenkmdod.sys" />
-                            <File Id="uxenkmdod.cat" Name="uxenkmdod.cat" DiskId="1" Source="$(var.uxenkmdoddir)/uxenkmdod.cat" />
+                            <File Id="wddm_uxendisp.inf" Name="uxendisp.inf" DiskId="1" Source="$(var.uxenkmdoddir)/uxendisp.inf" />
+                            <File Id="wddm_uxendisp.sys" Name="uxendisp.sys" DiskId="1" Source="$(var.uxenkmdoddir)/uxendisp.sys" />
+                            <File Id="wddm_uxendisp.cat" Name="uxendisp.cat" DiskId="1" Source="$(var.uxenkmdoddir)/uxendisp.cat" />
+                            <File Id="wddm_uxend3d.dll" Name="uxend3d.dll" DiskId="1" Source="$(var.uxenkmdoddir)/uxend3d.dll" />
+                            <File Id="wddm_uxend3d32.dll" Name="uxend3d32.dll" DiskId="1" Source="$(var.uxenkmdoddir)/uxend3d32.dll" />
                             <difx:Driver Legacy='yes' ForceInstall='yes' />
                         </Component>
                     </Directory>
