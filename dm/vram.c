@@ -344,7 +344,9 @@ get_vram(QEMUFile *f, void *pv, size_t size)
 
         qemu_get_buffer(f, p, lz4_len);
         vram_resize(v, len);
-        LZ4_decompress_fast(p, (void *)v->view, len);
+        if (!p || LZ4_decompress_safe(p, (void *)v->view, lz4_len, len) < 0)
+            warnx("%s: failed to decompress vram, p=%p lz4_len=%"PRIdSIZE,
+                  __FUNCTION__, p, lz4_len);
         free(p);
     }
 
