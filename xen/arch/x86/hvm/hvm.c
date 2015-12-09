@@ -3149,8 +3149,12 @@ void hvm_cpuid(unsigned int input, unsigned int *eax, unsigned int *ebx,
             *edx &= ~cpufeat_mask(X86_FEATURE_PSE36);
         break;
     case 0x7:
-        if ( (count == 0) && !cpu_has_smep )
-            *ebx &= ~cpufeat_mask(X86_FEATURE_SMEP);
+        if (count == 0) {
+            if (!cpu_has_smep )
+              *ebx &= ~cpufeat_mask(X86_FEATURE_SMEP);
+
+            *ebx &= ~cpufeat_mask(X86_FEATURE_MPX);
+        }
         break;
     case 0xb:
         /* Fix the x2APIC identifier. */

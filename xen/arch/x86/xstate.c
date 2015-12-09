@@ -298,9 +298,10 @@ void xstate_init(void)
          * We know FP/SSE and YMM about eax, and nothing about edx at present.
          */
         xsave_cntxt_size = ebx;
-        xfeature_mask = xcr0;
-        printk("%s: using cntxt_size: 0x%x and states: 0x%"PRIx64"\n",
-            __func__, xsave_cntxt_size, xfeature_mask);
+        xfeature_mask = xcr0 & XCNTXT_MASK;
+        printk("%s: using cntxt_size: 0x%x and states: 0x%"PRIx64
+            " (host states 0x"PRIx64"\n", __func__, xsave_cntxt_size,
+            xfeature_mask, xcr0);
 
         /* Check XSAVEOPT feature. */
         cpuid_count(XSTATE_CPUID, 1, &eax, &ebx, &ecx, &edx);
