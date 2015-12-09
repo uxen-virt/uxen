@@ -2,7 +2,7 @@
  *  uxenctllib-osx.c
  *  uxen
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  *
@@ -116,13 +116,15 @@ uxen_ioctl(UXEN_HANDLE_T h, uint64_t ctl, ...)
 }
 
 static int
-load_kext(const char *path)
+load_kext(const char *path, const char *dependency_dir_path)
 {
     struct stat st;
     int ret;
     int rc;
     CFStringRef cfpath;
     CFURLRef url;
+    CFURLRef dependency_dir_url;
+    CFArrayRef dependency_dir_url_list = NULL;
 
     /* Check dir and perms because OSX won't give us useful errors */
     ret = stat(path, &st);
@@ -138,12 +140,30 @@ load_kext(const char *path)
         return -1;
     }
 
+    if (dependency_dir_path) {
+        cfpath = CFStringCreateWithCString(NULL,
+                                           dependency_dir_path,
+                                           kCFStringEncodingUTF8);
+        dependency_dir_url = CFURLCreateWithFileSystemPath(kCFAllocatorDefault,
+                                                           cfpath,
+                                                           kCFURLPOSIXPathStyle,
+                                                           true);
+        dependency_dir_url_list = CFArrayCreate(NULL,
+                                            (const void**)&dependency_dir_url,
+                                            1,
+                                            &kCFTypeArrayCallBacks);
+        CFRelease(cfpath);
+        CFRelease(dependency_dir_url);
+    }
     cfpath = CFStringCreateWithCString(NULL, path, kCFStringEncodingUTF8);
     url = CFURLCreateWithFileSystemPath(kCFAllocatorDefault, cfpath,
                                         kCFURLPOSIXPathStyle, true);
-    rc = KextManagerLoadKextWithURL(url, NULL);
+    rc = KextManagerLoadKextWithURL(url, dependency_dir_url_list);
     CFRelease(url);
     CFRelease(cfpath);
+    if (dependency_dir_url_list) {
+        CFRelease(dependency_dir_url_list);
+    }
 
     if (rc != kOSReturnSuccess) {
         fprintf(stderr, "KextManagerLoadKextWithURL %s: rc=%x\n", path, rc);
@@ -274,11 +294,11 @@ uxen_manage_driver(BOOLEAN install, BOOLEAN fail_ok, const char *path)
         if (cwd)
             free(cwd);
 
-        ret = load_kext(buf);
+        ret = load_kext(buf, path);
         /* fallback trying to load the kext from default location */
         if (ret && errno == ENOENT)
-            ret = load_kext("/System/Library/Extensions/uxen.kext");
-
+            ret = load_kext("/Library/Extensions/uxen.kext",
+                            "/Library/Extensions");
         if (!ret) {
             h = calloc(1, sizeof(*h));
             if (!h)
