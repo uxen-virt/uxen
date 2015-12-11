@@ -17,7 +17,7 @@ UXENDISP_DIR = $(DISTDIR_VM_SUPPORT)/uxendisp/xddm
 UXENAUDIO_DIR = $(DISTDIR_VM_SUPPORT)/uxenaudio
 UXENDMPDRV_DIR = $(DISTDIR_VM_SUPPORT)/uxendmpdrv
 UXENEVENT_DIR = $(DISTDIR_VM_SUPPORT)/uxenevent
-UXENKMDOD_DIR = $(DISTDIR_VM_SUPPORT)/uxendisp/wddm
+UXENKMDOD_DIR = $(DISTDIR_VM_SUPPORT)/uxenkmdod
 UXENMOUSE_DIR = $(DISTDIR_VM_SUPPORT)/uxenmouse
 UXENPLATFORM_DIR = $(DISTDIR_VM_SUPPORT)/uxenplatform
 UXENSF_DIR = $(DISTDIR_VM_SUPPORT)/uxensf
@@ -82,7 +82,7 @@ WIX_DEPS = $(ELEVATE_DIR)/elevate.exe \
 	   $(UXENAUDIO_DIR)/uxenaudio.sys \
 	   $(UXENDMPDRV_DIR)/uxendmpdrv.sys \
 	   $(UXENEVENT_DIR)/uxenevent.exe \
-	   $(UXENKMDOD_DIR)/uxendisp.sys \
+	   $(UXENKMDOD_DIR)/uxenkmdod.sys \
 	   $(UXENMOUSE_DIR)/uxenmouse.sys \
 	   $(UXENPLATFORM_DIR)/uxenplatform.sys \
 	   $(UXENV4VGUEST_DIR)/uxenv4vguest.sys \
@@ -126,8 +126,8 @@ $(UXENEVENT_DIR)/uxenevent.exe:
 	$(MAKE) -C $(SRCDIR)/../uxenevent dist
 $(UXENDMPDRV_DIR)/uxendmpdrv.sys:
 	$(MAKE) -C $(SRCDIR)/../uxendmpdrv dist
-$(UXENKMDOD_DIR)/uxendisp.sys:
-	$(MAKE) -C $(SRCDIR)/../uxendisp/wddm dist
+$(UXENKMDOD_DIR)/uxenkmdod.sys:
+	$(MAKE) -C $(SRCDIR)/../uxenkmdod dist
 $(UXENPLATFORM_DIR)/uxenplatform.sys:
 	$(MAKE) -C $(SRCDIR)/../uxenplatform dist
 $(UXENSTOR_DIR)/uxenstor.sys:
