@@ -93,11 +93,19 @@ add_target_mode(D3DKMDT_HVIDPNTARGETMODESET tgt_mode_set_hdl,
     signal_info->TotalSize.cy = mode->yres;
     signal_info->ActiveSize.cx = mode->xres;
     signal_info->ActiveSize.cy = mode->yres;
-    signal_info->PixelRate = mode->xres * mode->yres * UXENDISP_REFRESH_RATE;
-    signal_info->VSyncFreq.Numerator = UXENDISP_REFRESH_RATE * 1000;
-    signal_info->VSyncFreq.Denominator = 1000;
-    signal_info->HSyncFreq.Numerator = (UINT)((signal_info->PixelRate / signal_info->TotalSize.cy) * 1000);
-    signal_info->HSyncFreq.Denominator = 1000;
+    if (!g_dod) {
+        signal_info->PixelRate = mode->xres * mode->yres * UXENDISP_REFRESH_RATE;
+        signal_info->VSyncFreq.Numerator = UXENDISP_REFRESH_RATE * 1000;
+        signal_info->VSyncFreq.Denominator = 1000;
+        signal_info->HSyncFreq.Numerator = (UINT)((signal_info->PixelRate / signal_info->TotalSize.cy) * 1000);
+        signal_info->HSyncFreq.Denominator = 1000;
+    } else {
+        signal_info->PixelRate = D3DKMDT_FREQUENCY_NOTSPECIFIED;
+        signal_info->VSyncFreq.Numerator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
+        signal_info->VSyncFreq.Denominator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
+        signal_info->HSyncFreq.Numerator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
+        signal_info->HSyncFreq.Denominator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
+    }
     signal_info->ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
 
     /* Add it*/
@@ -239,7 +247,7 @@ add_source_mode(D3DKMDT_HVIDPNSOURCEMODESET source_mode_set_hdl,
     fmt->VisibleRegionSize.cx = mode->xres;
     fmt->VisibleRegionSize.cy = mode->yres;
     fmt->Stride = mode->stride;
-    fmt->PixelFormat = uxendisp_to_ddi_fmt(mode->fmt);
+    fmt->PixelFormat = D3DDDIFMT_A8R8G8B8;
     fmt->ColorBasis = D3DKMDT_CB_SRGB;
     fmt->PixelValueAccessMode = D3DKMDT_PVAM_DIRECT;
 
@@ -774,11 +782,19 @@ init_monitor_source_mode(D3DKMDT_MONITOR_SOURCE_MODE *pVidPnMonitorSourceModeInf
     signal_info->TotalSize.cy = mode->yres;
     signal_info->ActiveSize.cx = mode->xres;
     signal_info->ActiveSize.cy = mode->yres;
-    signal_info->PixelRate = mode->xres * mode->yres * UXENDISP_REFRESH_RATE;
-    signal_info->VSyncFreq.Numerator = UXENDISP_REFRESH_RATE * 1000;
-    signal_info->VSyncFreq.Denominator = 1000;
-    signal_info->HSyncFreq.Numerator = (UINT)((signal_info->PixelRate / signal_info->TotalSize.cy) * 1000);
-    signal_info->HSyncFreq.Denominator = 1000;
+    if (!g_dod) {
+        signal_info->PixelRate = mode->xres * mode->yres * UXENDISP_REFRESH_RATE;
+        signal_info->VSyncFreq.Numerator = UXENDISP_REFRESH_RATE * 1000;
+        signal_info->VSyncFreq.Denominator = 1000;
+        signal_info->HSyncFreq.Numerator = (UINT)((signal_info->PixelRate / signal_info->TotalSize.cy) * 1000);
+        signal_info->HSyncFreq.Denominator = 1000;
+    } else {
+        signal_info->PixelRate = D3DKMDT_FREQUENCY_NOTSPECIFIED;
+        signal_info->VSyncFreq.Numerator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
+        signal_info->VSyncFreq.Denominator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
+        signal_info->HSyncFreq.Numerator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
+        signal_info->HSyncFreq.Denominator = D3DKMDT_FREQUENCY_NOTSPECIFIED;
+    }
     signal_info->ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;
 }
 

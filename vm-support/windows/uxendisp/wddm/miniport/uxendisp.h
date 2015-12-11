@@ -47,6 +47,8 @@
 
 #define UXENDISP_REFRESH_RATE 60
 
+extern BOOLEAN g_dod;
+
 struct _UXENDISP_DRIVER_ALLOCATION;
 
 // Zero is unused by D3DKMDT_STANDARDALLOCATION_TYPE
@@ -183,20 +185,6 @@ static INLINE void
 uxdisp_crtc_write(PDEVICE_EXTENSION dev, ULONG crtc, ULONG reg, ULONG val)
 {
     uxdisp_write(dev, UXDISP_REG_CRTC(crtc) + reg, val);
-}
-
-static INLINE LONG
-ddi_to_uxendisp_fmt(D3DDDIFORMAT ddi_fmt)
-{
-    ASSERT(ddi_fmt == D3DDDIFMT_A8R8G8B8 || ddi_fmt == D3DDDIFMT_X8R8G8B8);
-    return UXDISP_CRTC_FORMAT_BGRX_8888;
-}
-
-static INLINE D3DDDIFORMAT
-uxendisp_to_ddi_fmt(ULONG fmt)
-{
-    ASSERT(fmt == UXDISP_CRTC_FORMAT_BGRX_8888);
-    return D3DDDIFMT_A8R8G8B8;
 }
 
 /* DDI */

@@ -65,7 +65,7 @@ DriverEntry(PDRIVER_OBJECT pDriverObject,
 #pragma alloc_text(INIT,DriverEntry)
 #endif
 
-static BOOLEAN g_dod = FALSE;
+BOOLEAN g_dod = FALSE;
 
 NTSTATUS APIENTRY
 uXenDispAddDevice(CONST PDEVICE_OBJECT pPhysicalDeviceObject,
@@ -156,13 +156,9 @@ vsync_routine(KDPC *dpc, PVOID ctx, PVOID unused1, PVOID unused2)
     DXGKARGCB_NOTIFY_INTERRUPT_DATA NotifyInt = {0};
     KIRQL irql;
 
-    if (g_dod) {
-        NotifyInt.InterruptType = DXGK_INTERRUPT_DISPLAYONLY_VSYNC;
-    } else {
-        NotifyInt.InterruptType = DXGK_INTERRUPT_CRTC_VSYNC;
-        NotifyInt.CrtcVsync.VidPnTargetId = 0;
-        NotifyInt.CrtcVsync.PhysicalAddress = dev->vram_phys;
-    }
+    NotifyInt.InterruptType = DXGK_INTERRUPT_CRTC_VSYNC;
+    NotifyInt.CrtcVsync.VidPnTargetId = 0;
+    NotifyInt.CrtcVsync.PhysicalAddress = dev->vram_phys;
 
     KeRaiseIrql(DISPATCH_LEVEL + 1, &irql);
     dev->dxgkif.DxgkCbNotifyInterrupt(dev->dxgkhdl, &NotifyInt);
@@ -328,7 +324,6 @@ uXenDispStartDevice(CONST PVOID pMiniportDeviceContext,
 
     KeInitializeDpc(&dev->vsync_dpc, vsync_routine, dev);
     KeInitializeTimerEx(&dev->vsync_timer, SynchronizationTimer);
-    KeSetTimerEx(&dev->vsync_timer, DueTime, 16, &dev->vsync_dpc);
 
     uxen_msg("Leave");
 
@@ -540,6 +535,46 @@ uXenDispQueryInterface(CONST PVOID pMiniportDeviceContext,
     return STATUS_NOT_SUPPORTED;
 }
 
+NTSTATUS APIENTRY
+uXenDispSystemDisplayEnable(
+    VOID* pDeviceContext,
+    D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,
+    PDXGKARG_SYSTEM_DISPLAY_ENABLE_FLAGS Flags,
+    UINT* Width,
+    UINT* Height,
+    D3DDDIFORMAT* ColorFormat)
+{
+    DEVICE_EXTENSION *dev = pDeviceContext;
+    UNREFERENCED_PARAMETER(Flags);
+
+    *Width = dev->crtcs[TargetId].curr_mode.xres;
+    *Height = dev->crtcs[TargetId].curr_mode.yres;
+    *ColorFormat = D3DDDIFMT_A8R8G8B8;
+
+    return STATUS_SUCCESS;
+}
+
+VOID APIENTRY
+uXenDispSystemDisplayWrite(
+    VOID* pDeviceContext,
+    VOID* Source,
+    UINT SourceWidth,
+    UINT SourceHeight,
+    UINT SourceStride,
+    UINT PositionX,
+    UINT PositionY)
+{
+}
+
+NTSTATUS APIENTRY
+uXenDispStopDeviceAndReleasePostDisplayOwnership(
+    VOID* pDeviceContext,
+    D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,
+    DXGK_DISPLAY_INFORMATION* DisplayInfo)
+{
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS
 DriverEntry(PDRIVER_OBJECT pDriverObject, PUNICODE_STRING pRegistryPath)
 {
@@ -637,7 +672,6 @@ DriverEntry(PDRIVER_OBJECT pDriverObject, PUNICODE_STRING pRegistryPath)
             InitialData.DxgkDdiRemoveDevice                 = uXenDispRemoveDevice;
             InitialData.DxgkDdiDispatchIoRequest            = uXenDispDispatchIoRequest;
             InitialData.DxgkDdiInterruptRoutine             = uXenDispInterruptRoutine;
-            InitialData.DxgkDdiControlInterrupt             = uXenDispControlInterrupt;
             InitialData.DxgkDdiDpcRoutine                   = uXenDispDpcRoutine;
             InitialData.DxgkDdiQueryChildRelations          = uXenDispQueryChildRelations;
             InitialData.DxgkDdiQueryChildStatus             = uXenDispQueryChildStatus;
@@ -656,8 +690,10 @@ DriverEntry(PDRIVER_OBJECT pDriverObject, PUNICODE_STRING pRegistryPath)
             InitialData.DxgkDdiUpdateActiveVidPnPresentPath = uXenDispUpdateActiveVidPnPresentPath;
             InitialData.DxgkDdiRecommendMonitorModes        = uXenDispRecommendMonitorModes;
             InitialData.DxgkDdiQueryVidPnHWCapability       = uXenDispQueryVidPnHWCapability;
-            InitialData.DxgkDdiGetScanLine                  = uXenDispGetScanLine;
             InitialData.DxgkDdiPresentDisplayOnly           = uXenDispPresentDisplayOnly;
+            InitialData.DxgkDdiStopDeviceAndReleasePostDisplayOwnership = uXenDispStopDeviceAndReleasePostDisplayOwnership;
+            InitialData.DxgkDdiSystemDisplayEnable          = uXenDispSystemDisplayEnable;
+            InitialData.DxgkDdiSystemDisplayWrite           = uXenDispSystemDisplayWrite;
 
             Status = DxgkInitializeDisplayOnlyDriver(pDriverObject, pRegistryPath, &InitialData);
 
