@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -21,7 +21,7 @@
 
 #define IS_SSPI_AUTH(a) ((a) == AUTH_TYPE_NTLM || (a) == AUTH_TYPE_NEGOTIATE || \
         (a) == AUTH_TYPE_KERBEROS)
-
+#define IS_NTLM_AUTH(a) ((a) == AUTH_TYPE_NTLM || (a) == AUTH_TYPE_NEGOTIATE)
 enum auth_enum {
 #define XX(num, name, string) AUTH_TYPE_##name = num,
   HTTP_AUTH_MAP(XX)

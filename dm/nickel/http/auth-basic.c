@@ -220,8 +220,6 @@ mem_err:
         goto mem_err;
     }
 
-    NETLOG3("Got credentials: %s", credentials);
-
     encoded_credentials = base64_encode((const unsigned char *)credentials, strlen(credentials));
     if (!encoded_credentials)
         goto mem_err;

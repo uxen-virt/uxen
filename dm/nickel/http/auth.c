@@ -19,6 +19,8 @@
 #include "auth-basic.h"
 #if defined(_WIN32)
 #include "auth-sspi.h"
+#elif defined(__APPLE__)
+#include "auth-ntlm.h"
 #endif
 
 #define MAX_AUTH_SESSIONS   3
@@ -158,14 +160,13 @@ static int auth_init(struct http_auth *auth)
 #if defined(_WIN32)
     if (IS_SSPI_AUTH(auth->type)) {
         ret = sspi_init_auth(auth);
+#elif defined(__APPLE__)
+    if (IS_NTLM_AUTH(auth->type)) {
+        ret = ntlm_init_auth(auth);
+#endif
     } else if (auth->type == AUTH_TYPE_BASIC) {
         ret = basicauth_init_auth(auth);
     }
-#elif defined(__APPLE__)
-    if (auth->type == AUTH_TYPE_BASIC) {
-        ret = basicauth_init_auth(auth);
-    }
-#endif
 
 out:
     return ret;
@@ -176,14 +177,13 @@ static int change_auth(struct http_auth *auth, enum auth_enum new_type)
 #if defined(_WIN32)
     if (IS_SSPI_AUTH(auth->type)) {
         sspi_free_auth(auth);
+#elif defined(__APPLE__)
+    if (IS_NTLM_AUTH(auth->type)) {
+        ntlm_free_auth(auth);
+#endif
     } else if (auth->type == AUTH_TYPE_BASIC) {
         basicauth_free_auth(auth);
     }
-#elif defined(__APPLE__)
-    if (auth->type == AUTH_TYPE_BASIC) {
-        basicauth_free_auth(auth);
-    }
-#endif
 
     auth->type = new_type;
     return auth_init(auth);
@@ -241,6 +241,9 @@ int http_auth_reset(struct http_auth *auth)
 #if defined(_WIN32)
     if (IS_SSPI_AUTH(auth->type))
         sspi_reset_auth(auth);
+#elif defined(__APPLE__)
+    if (IS_NTLM_AUTH(auth->type))
+        ntlm_reset_auth(auth);
 #endif
 
 out:
@@ -262,20 +265,19 @@ int http_auth_clt(struct http_auth *auth)
             AUXL("sspi_step ERROR");
             goto out;
         }
+#elif defined(__APPLE__)
+    if (IS_NTLM_AUTH(auth->type)) {
+        if (ntlm_clt(auth)) {
+            AUXL("ntlm_step ERROR");
+            goto out;
+        }
+#endif
     } else if (auth->type == AUTH_TYPE_BASIC) {
         if (basicauth_clt(auth)) {
             AUXL("basicauth_step ERROR");
             goto out;
         }
     }
-#elif defined(__APPLE__)
-    if (auth->type == AUTH_TYPE_BASIC) {
-        if (basicauth_clt(auth)) {
-            AUXL("basicauth_step ERROR");
-            goto out;
-        }
-    }
-#endif
 
     ret = 0;
 out:
@@ -303,6 +305,13 @@ int http_auth_srv(struct http_auth *auth, struct http_header *h)
             AUXL("sspi_srv ERROR");
             goto out;
         }
+#elif defined(__APPLE__)
+    if (IS_NTLM_AUTH(auth->type)) {
+        if (ntlm_srv(auth, auth->authorized)) {
+            AUXL("ntlm_srv ERROR");
+            goto out;
+        }
+#endif
     } else if (auth->type == AUTH_TYPE_BASIC) {
         if (basicauth_srv(auth, auth->authorized)) {
             AUXL("basicauth_srv ERROR");
@@ -312,17 +321,7 @@ int http_auth_srv(struct http_auth *auth, struct http_header *h)
         AUXL("unexpected HTTP 407 received, trying to restart the request.");
         auth->needs_restart = 1;
     }
-#elif defined(__APPLE__)
-    if (auth->type == AUTH_TYPE_BASIC) {
-        if (basicauth_srv(auth, auth->authorized)) {
-            AUXL("basicauth_srv ERROR");
-            goto out;
-        }
-    } else if (!auth->authorized && auth->was_authorized) {
-        AUXL("unexpected HTTP 407 received, trying to restart the request.");
-        auth->needs_restart = 1;
-    }
-#endif
+
 
     if (auth->needs_restart) {
         auth->needs_restart = 0;
@@ -370,12 +369,12 @@ int http_auth_srv_closing(struct http_auth *auth)
 #if defined(_WIN32)
     if (IS_SSPI_AUTH(auth->type))
         ret = sspi_srv_closing(auth);
+#elif defined(__APPLE__)
+    if (IS_NTLM_AUTH(auth->type))
+        ret = ntlm_srv_closing(auth);
+#endif
     else if (auth->type == AUTH_TYPE_BASIC)
         ret = basicauth_srv_closing(auth);
-#elif defined(__APPLE__)
-    if (auth->type == AUTH_TYPE_BASIC)
-        ret = basicauth_srv_closing(auth);
-#endif
 
 out:
     return ret;
