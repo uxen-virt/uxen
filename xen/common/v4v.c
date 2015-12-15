@@ -1320,6 +1320,7 @@ v4v_ring_create(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_id_t) ring_id_hnd)
 
         ring_info = v4v_xmalloc(struct v4v_ring_info);
         if (!ring_info) {
+            write_unlock(&dst_d->v4v->lock);
             ret = -ENOMEM;
             break;
         }
