@@ -9,7 +9,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -333,7 +333,7 @@ NTSTATUS BddDdiEscape(
     IN_CONST_HANDLE hAdapter,
     IN_CONST_PDXGKARG_ESCAPE pEscape)
 {
-    NTSTATUS status;
+    NTSTATUS status = STATUS_SUCCESS;
     UXENDISPCustomMode mode;
 
     ASSERT(hAdapter != NULL);
@@ -350,7 +350,17 @@ NTSTATUS BddDdiEscape(
     /* for now we can just assume that there is only one kind of escape calls */
     if (pEscape->PrivateDriverDataSize == sizeof(mode)) {
         mode = *((UXENDISPCustomMode*)pEscape->pPrivateDriverData);
-        status = pBDD->SetNextMode(&mode);
+        switch (mode.esc_code) {
+        case UXENDISP_ESCAPE_SET_CUSTOM_MODE:
+            status = pBDD->SetNextMode(&mode);
+            break;
+        case UXENDISP_ESCAPE_SET_VIRTUAL_MODE:
+            status = pBDD->SetVirtMode(&mode);
+            break;
+        case UXENDISP_ESCAPE_IS_VIRT_MODE_ENABLED:
+            status = pBDD->IsVirtModeEnabled();
+            break;
+        };
     } else
         status = STATUS_INVALID_PARAMETER;
 

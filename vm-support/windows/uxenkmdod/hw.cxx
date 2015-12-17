@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -29,6 +29,13 @@ static
 void uxdisp_crtc_write(_In_ PUXEN_HW_RESOURCES pHw, ULONG crtc, ULONG reg, ULONG val)
 {
     uxdisp_write(pHw, UXDISP_REG_CRTC(crtc) + reg, val);
+}
+
+NTSTATUS hw_is_virt_mode_enabled(_In_ PUXEN_HW_RESOURCES pHw)
+{
+    if (uxdisp_read(pHw, UXDISP_REG_VIRTMODE_ENABLED))
+        return STATUS_SUCCESS;
+    return STATUS_UNSUCCESSFUL;
 }
 
 NTSTATUS hw_init(_Inout_ PUXEN_HW_RESOURCES pHw)

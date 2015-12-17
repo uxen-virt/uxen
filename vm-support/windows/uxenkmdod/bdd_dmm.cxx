@@ -9,7 +9,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -727,6 +727,9 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_M
     pCurrentBddMode->DispInfo.Height = pSourceMode->Format.Graphics.PrimSurfSize.cy;
     pCurrentBddMode->DispInfo.ColorFormat = D3DDDIFMT_A8R8G8B8;
 
+    m_VirtMode.width = pSourceMode->Format.Graphics.PrimSurfSize.cx;
+    m_VirtMode.height = pSourceMode->Format.Graphics.PrimSurfSize.cy;
+
     mode.VisScreenWidth = pSourceMode->Format.Graphics.PrimSurfSize.cx;
     mode.VisScreenHeight = pSourceMode->Format.Graphics.PrimSurfSize.cy;
     mode.ScreenStride = pSourceMode->Format.Graphics.Stride;
@@ -878,6 +881,50 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetNextMode(UXENDISPCustomMode *pNewMode)
 
 out:
     return status;
+}
+
+NTSTATUS BASIC_DISPLAY_DRIVER::SetVirtMode(UXENDISPCustomMode *pNewMode)
+{
+    VIDEO_MODE_INFORMATION mode;
+
+    KeWaitForSingleObject(&m_PresentLock, Executive, KernelMode, FALSE, NULL);
+
+    mode.VisScreenWidth = pNewMode->width;
+    mode.VisScreenHeight = pNewMode->height;
+    mode.ScreenStride = pNewMode->width * 4;
+    mode.BitsPerPlane = 32;
+
+    if (pNewMode->width < m_VirtMode.width) {
+        UINT i;
+        PBYTE src = (PBYTE)m_CurrentModes[0].FrameBuffer.Ptr + (m_VirtMode.width << 2);
+        PBYTE dst = (PBYTE)m_CurrentModes[0].FrameBuffer.Ptr + (pNewMode->width << 2);
+        for (i = 1; i < min(pNewMode->height, m_VirtMode.height); ++i) {
+            RtlMoveMemory(dst, src, pNewMode->width << 2);
+            src += m_VirtMode.width << 2;
+            dst += pNewMode->width << 2;
+        }
+    }
+
+    hw_set_mode(&m_HwResources, &mode);
+
+    if (pNewMode->width > m_VirtMode.width) {
+        INT i;
+        INT height = min(pNewMode->height, m_VirtMode.height);
+        PBYTE src = (PBYTE)m_CurrentModes[0].FrameBuffer.Ptr + ((height - 1) * (m_VirtMode.width << 2));
+        PBYTE dst = (PBYTE)m_CurrentModes[0].FrameBuffer.Ptr + ((height - 1) * (pNewMode->width << 2));
+        for (i = 1; i < height; ++i) {
+            RtlMoveMemory(dst, src, m_VirtMode.width << 2);
+            RtlFillMemory(dst + (m_VirtMode.width << 2), (m_VirtMode.width - m_VirtMode.width) << 2, 0xFF);
+            src -= m_VirtMode.width << 2;
+            dst -= pNewMode->width << 2;
+        }
+    }
+
+    m_VirtMode = *pNewMode;
+
+    KeReleaseSemaphore(&m_PresentLock, 0, 1, FALSE);
+
+    return STATUS_SUCCESS;
 }
 
 NTSTATUS BASIC_DISPLAY_DRIVER::AddSingleSourceMode(_In_ CONST DXGK_VIDPNSOURCEMODESET_INTERFACE* pVidPnSourceModeSetInterface,

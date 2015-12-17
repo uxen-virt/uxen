@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -44,6 +44,7 @@ extern uint64_t vm_vga_mb_mapped;
 extern char *vm_vga_shm_name;
 extern uint64_t vm_pae;
 extern uint64_t vm_viridian;
+extern uint64_t vm_virt_mode_change;
 extern uint64_t vm_hpet;
 extern uint64_t vm_apic;
 extern uint64_t vm_hidden_mem;

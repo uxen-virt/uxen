@@ -9,7 +9,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -52,6 +52,8 @@ VOID BASIC_DISPLAY_DRIVER::Init(_In_ DEVICE_OBJECT* pPhysicalDeviceObject)
 
     m_NextMode.width = 1024;
     m_NextMode.height = 768;
+    m_VirtMode = m_NextMode;
+    KeInitializeSemaphore(&m_PresentLock, 1, 1);
 }
 
 NTSTATUS BASIC_DISPLAY_DRIVER::GetResources(_In_ PCM_RESOURCE_LIST pResList)
@@ -384,6 +386,7 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAP
 NTSTATUS BASIC_DISPLAY_DRIVER::PresentDisplayOnly(_In_ CONST DXGKARG_PRESENT_DISPLAYONLY* pPresentDisplayOnly)
 {
     NTSTATUS status;
+    LARGE_INTEGER timeout = {0};
 
     ASSERT(pPresentDisplayOnly != NULL);
     ASSERT(pPresentDisplayOnly->VidPnSourceId < MAX_VIEWS);
@@ -424,8 +427,43 @@ NTSTATUS BASIC_DISPLAY_DRIVER::PresentDisplayOnly(_In_ CONST DXGKARG_PRESENT_DIS
                 m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].SrcModeWidth)*DstBitPerPixel/8;
             pDst += (int)CenterShift/2;
         }
+
+        status = KeWaitForSingleObject(&m_PresentLock, Executive, KernelMode, FALSE, &timeout);
+        if (status != STATUS_SUCCESS)
+            return STATUS_SUCCESS;
+
+        for (unsigned int i = 0; i < pPresentDisplayOnly->NumMoves; ++i) {
+            POINT *pt = &pPresentDisplayOnly->pMoves[i].SourcePoint;
+            RECT *rct = &pPresentDisplayOnly->pMoves[i].DestRect;
+            int diff;
+
+            if ((pt->x > (int)m_VirtMode.width) || (pt->y > (int)m_VirtMode.height) ||
+                (rct->left > (int)m_VirtMode.width) || (rct->top > (int)m_VirtMode.height)) {
+                RtlZeroMemory(&pPresentDisplayOnly->pMoves[i], sizeof pPresentDisplayOnly->pMoves[i]);
+                continue;
+            }
+
+            rct->right = min(rct->right, (int)m_VirtMode.width);
+            rct->bottom = min(rct->bottom, (int)m_VirtMode.height);
+
+            diff = pt->x + rct->right - rct->left - m_VirtMode.width;
+            if (diff > 0)
+                rct->right -= diff;
+            diff = pt->y + rct->bottom - rct->top - m_VirtMode.height;
+            if (diff > 0)
+                rct->bottom -= diff;
+        }
+
+        for (unsigned int i = 0; i < pPresentDisplayOnly->NumDirtyRects; ++i) {
+            pPresentDisplayOnly->pDirtyRect[i].left = min(pPresentDisplayOnly->pDirtyRect[i].left, (int)m_VirtMode.width);
+            pPresentDisplayOnly->pDirtyRect[i].top = min(pPresentDisplayOnly->pDirtyRect[i].top, (int)m_VirtMode.height);
+            pPresentDisplayOnly->pDirtyRect[i].right = min(pPresentDisplayOnly->pDirtyRect[i].right, (int)m_VirtMode.width);
+            pPresentDisplayOnly->pDirtyRect[i].bottom = min(pPresentDisplayOnly->pDirtyRect[i].bottom, (int)m_VirtMode.height);
+        }
+
         status = m_HardwareBlt[pPresentDisplayOnly->VidPnSourceId].ExecutePresentDisplayOnly(pDst,
                                                                 DstBitPerPixel,
+                                                                m_VirtMode.width * 4,
                                                                 (BYTE*)pPresentDisplayOnly->pSource,
                                                                 pPresentDisplayOnly->BytesPerPixel,
                                                                 pPresentDisplayOnly->Pitch,
@@ -440,6 +478,8 @@ NTSTATUS BASIC_DISPLAY_DRIVER::PresentDisplayOnly(_In_ CONST DXGKARG_PRESENT_DIS
                   pPresentDisplayOnly->pMoves,
                   pPresentDisplayOnly->NumDirtyRects,
                   pPresentDisplayOnly->pDirtyRect);
+
+        KeReleaseSemaphore(&m_PresentLock, 0, 1, FALSE);
 
         return status;
     }
@@ -620,6 +660,11 @@ BOOLEAN BASIC_DISPLAY_DRIVER::InterruptRoutine(_In_  ULONG MessageNumber)
 
 VOID BASIC_DISPLAY_DRIVER::ResetDevice(VOID)
 {
+}
+
+NTSTATUS BASIC_DISPLAY_DRIVER::IsVirtModeEnabled()
+{
+    return hw_is_virt_mode_enabled(&m_HwResources);
 }
 
 // Must be Non-Paged, as it sets up the display for a bugcheck

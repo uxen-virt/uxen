@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -730,6 +730,7 @@ struct config_option config_options[] = {
     { "vga-memory-mapped", co_set_integer_opt, &vm_vga_mb_mapped },
     { "vga-shm-name", co_set_string_opt, &vm_vga_shm_name },
     { "viridian", co_set_integer_opt, &vm_viridian },
+    { "virt-mode-change", co_set_integer_opt, &vm_virt_mode_change },
     { "vpt-align", co_set_boolean_opt, &vm_vpt_align },
     { "vpt-coalesce-period", co_set_integer_opt, &vm_vpt_coalesce_period },
 };

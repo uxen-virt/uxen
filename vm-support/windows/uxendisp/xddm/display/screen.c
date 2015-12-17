@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -291,6 +291,8 @@ DEVINFO *pDevInfo)
     ppdev->ulMode = pVideoModeSelected->ModeIndex;
     ppdev->cxScreen = pVideoModeSelected->VisScreenWidth;
     ppdev->cyScreen = pVideoModeSelected->VisScreenHeight;
+    ppdev->virt_w = pVideoModeSelected->VisScreenWidth;
+    ppdev->virt_h = pVideoModeSelected->VisScreenHeight;
     ppdev->ulBitCount = pVideoModeSelected->BitsPerPlane *
                         pVideoModeSelected->NumberOfPlanes;
     ppdev->lDeltaScreen = pVideoModeSelected->ScreenStride;

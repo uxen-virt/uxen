@@ -10,7 +10,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -73,6 +73,7 @@ NTSTATUS
 BDD_HWBLT::ExecutePresentDisplayOnly(
     _In_ BYTE*             DstAddr,
     _In_ UINT              DstBitPerPixel,
+    _In_ LONG              DstPitch,
     _In_ BYTE*             SrcAddr,
     _In_ UINT              SrcBytesPerPixel,
     _In_ LONG              SrcPitch,
@@ -130,7 +131,7 @@ BDD_HWBLT::ExecutePresentDisplayOnly(
 
     ctx->DstAddr          = DstAddr;
     ctx->DstBitPerPixel   = DstBitPerPixel;
-    ctx->DstStride        = pModeCur->DispInfo.Pitch;
+    ctx->DstStride        = DstPitch;
     ctx->SrcWidth         = pModeCur->SrcModeWidth;
     ctx->SrcHeight        = pModeCur->SrcModeHeight;
     ctx->SrcAddr          = NULL;

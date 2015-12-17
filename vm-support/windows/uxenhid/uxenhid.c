@@ -13,6 +13,7 @@ NTSTATUS DriverEntry(PDRIVER_OBJECT drvobj, PUNICODE_STRING regpath);
 NTSTATUS uxenhid_create_close(PDEVICE_OBJECT devobj, PIRP irp);
 NTSTATUS uxenhid_add_device(PDRIVER_OBJECT drvobj, PDEVICE_OBJECT devobj);
 NTSTATUS uxenhid_system_control(PDEVICE_OBJECT devobj, PIRP irp);
+NTSTATUS uxenhid_device_ioctl(PDEVICE_OBJECT devobj, PIRP irp);
 NTSTATUS uxenhid_internal_ioctl(PDEVICE_OBJECT devobj, PIRP irp);
 NTSTATUS uxenhid_pnp(PDEVICE_OBJECT devobj, PIRP irp);
 NTSTATUS uxenhid_power(PDEVICE_OBJECT devobj, PIRP irp);
@@ -22,6 +23,11 @@ void uxenhid_unload(PDRIVER_OBJECT drvobj);
 #pragma alloc_text(INIT, DriverEntry)
 #endif
 
+static LONG CreateCnt;
+static DRIVER_DISPATCH *ClassCreate;
+static DRIVER_DISPATCH *ClassClose;
+static DRIVER_DISPATCH *ClassDeviceControl;
+
 NTSTATUS
 DriverEntry(PDRIVER_OBJECT drvobj, PUNICODE_STRING regpath)
 {
@@ -30,8 +36,6 @@ DriverEntry(PDRIVER_OBJECT drvobj, PUNICODE_STRING regpath)
 
     uxen_msg("drvobj=0x%08x version: %s", drvobj, UXEN_DRIVER_VERSION_CHANGESET);
 
-    drvobj->MajorFunction[IRP_MJ_CREATE] = uxenhid_create_close;
-    drvobj->MajorFunction[IRP_MJ_CLOSE] = uxenhid_create_close;
     drvobj->MajorFunction[IRP_MJ_SYSTEM_CONTROL] = uxenhid_system_control;
     drvobj->MajorFunction[IRP_MJ_INTERNAL_DEVICE_CONTROL] = uxenhid_internal_ioctl;
     drvobj->MajorFunction[IRP_MJ_PNP] = uxenhid_pnp;
@@ -51,6 +55,13 @@ DriverEntry(PDRIVER_OBJECT drvobj, PUNICODE_STRING regpath)
         uxen_err("HidRegisterMinidriver() failed: 0x%08x", status);
         return status;
     }
+
+    ClassCreate = drvobj->MajorFunction[IRP_MJ_CREATE];
+    ClassClose = drvobj->MajorFunction[IRP_MJ_CLOSE];
+    ClassDeviceControl = drvobj->MajorFunction[IRP_MJ_DEVICE_CONTROL];
+    drvobj->MajorFunction[IRP_MJ_CREATE] = uxenhid_create_close;
+    drvobj->MajorFunction[IRP_MJ_CLOSE] = uxenhid_create_close;
+    drvobj->MajorFunction[IRP_MJ_DEVICE_CONTROL] = uxenhid_device_ioctl;
 
     return STATUS_SUCCESS;
 }
@@ -79,13 +90,24 @@ uxenhid_add_device(PDRIVER_OBJECT drvobj, PDEVICE_OBJECT devobj)
     devobj->Flags &= ~DO_DEVICE_INITIALIZING;
     devobj->Flags |= DO_POWER_PAGABLE;
 
+    status = IoRegisterDeviceInterface(devext->pdo, &UXENHID_IFACE_GUID, NULL, &devext->symlink_name);
+    if (!NT_SUCCESS(status)) {
+        uxen_err("IoRegisterDeviceInterface: 0x%08X\n", status);
+    }
+
     return status;
 }
 
 NTSTATUS
 uxenhid_create_close(PDEVICE_OBJECT devobj, PIRP irp)
 {
-    UNREFERENCED_PARAMETER(devobj);
+    if (irp->Flags & IRP_CREATE_OPERATION) {
+        if (InterlockedIncrement(&CreateCnt) == 1)
+            return ClassCreate(devobj, irp);
+    } else {
+        if (InterlockedDecrement(&CreateCnt) == 0)
+            return ClassClose(devobj, irp);
+    }
 
     irp->IoStatus.Information = 0;
     irp->IoStatus.Status = STATUS_SUCCESS;
@@ -114,6 +136,33 @@ uxenhid_system_control(PDEVICE_OBJECT devobj, PIRP irp)
     IoSkipCurrentIrpStackLocation(irp);
     status = IoCallDriver(devext->nextdevobj, irp);
     IoReleaseRemoveLock(&devext->remove_lock, irp);
+
+    return status;
+}
+
+NTSTATUS
+uxenhid_device_ioctl(PDEVICE_OBJECT devobj, PIRP irp)
+{
+    NTSTATUS status = STATUS_SUCCESS;
+    DEVICE_EXTENSION *devext = DEVEXT(devobj);
+    PIO_STACK_LOCATION loc = IoGetCurrentIrpStackLocation(irp);
+    struct virt_mode* mode = irp->AssociatedIrp.SystemBuffer;
+
+    switch (loc->Parameters.DeviceIoControl.IoControlCode) {
+    case IOCTL_UXENHID_SET_VIRTUAL_MODE:
+        if (mode && (loc->Parameters.DeviceIoControl.InputBufferLength >= sizeof *mode)) {
+            devext->virt_w = (uint16_t)mode->virt_w;
+            devext->virt_h = (uint16_t)mode->virt_h;
+            devext->curr_w = (uint16_t)mode->curr_w;
+            devext->curr_h = (uint16_t)mode->curr_h;
+        }
+        irp->IoStatus.Information = 0;
+        irp->IoStatus.Status = status;
+        IoCompleteRequest(irp, IO_NO_INCREMENT);
+        break;
+    default:
+        status = ClassDeviceControl(devobj, irp);
+    }
 
     return status;
 }
@@ -232,6 +281,15 @@ start_device(DEVICE_EXTENSION *devext, IRP *irp)
     irp->IoStatus.Status = status;
     IoCompleteRequest(irp, IO_NO_INCREMENT);
 
+    if (NT_SUCCESS(status)) {
+        status = IoSetDeviceInterfaceState(&devext->symlink_name, TRUE);
+        if (!NT_SUCCESS(status)) {
+            uxen_err("IoSetDeviceInterfaceState: 0x%08X\n", status);
+        } else {
+            devext->flags |= UXENHID_INTERFACE_ENABLED;
+        }
+    }
+
     return status;
 }
 
@@ -239,6 +297,10 @@ static NTSTATUS
 remove_device(DEVICE_EXTENSION *devext, IRP *irp)
 {
     NTSTATUS status;
+
+    if (devext->symlink_name.Length > 0) {
+        RtlFreeUnicodeString(&devext->symlink_name);
+    }
 
     if (devext->flags & UXENHID_DEVICE_STARTED) {
         status = hid_stop(devext);
@@ -266,6 +328,10 @@ static NTSTATUS
 stop_device(DEVICE_EXTENSION *devext, IRP *irp)
 {
     NTSTATUS status;
+
+    if (devext->flags & UXENHID_INTERFACE_ENABLED) {
+        IoSetDeviceInterfaceState(&devext->symlink_name, FALSE);
+    }
 
     if (devext->flags & UXENHID_DEVICE_STARTED) {
         status = hid_stop(devext);

@@ -8,6 +8,7 @@
 #include <hidport.h>
 
 #include "uxenhid.h"
+#include "uxenhid-common.h"
 
 #include "platform_public.h"
 
@@ -185,6 +186,42 @@ hid_v4v_cb(uxen_v4v_ring_handle_t *ring, void *ctx, void *ctx2)
 
                 v4v_copy_out_offset(ring->ring, NULL, NULL, irp->UserBuffer,
                                     sizeof (hdr) + hdr.msglen, 1, sizeof (hdr));
+                switch (*(uint8_t*)irp->UserBuffer) {
+                case UXENHID_REPORT_ID_MOUSE: {
+                        struct mouse_report* msg = (struct mouse_report*)irp->UserBuffer;
+                        if (!devext->virt_w || !devext->virt_h)
+                            break;
+                        if (msg->x)
+                            msg->x = (msg->x * (devext->virt_w - 1)) / (devext->curr_w - 1);
+                        if (msg->y)
+                            msg->y = (msg->y * (devext->virt_h - 1)) / (devext->curr_h - 1);
+                    }
+                    break;
+                case UXENHID_REPORT_ID_PEN: {
+                        struct pen_report* msg = (struct pen_report*)irp->UserBuffer;
+                        if (!devext->virt_w || !devext->virt_h)
+                            break;
+                        if (msg->x)
+                            msg->x = (msg->x * (devext->virt_w - 1)) / (devext->curr_w - 1);
+                        if (msg->y)
+                            msg->y = (msg->y * (devext->virt_h - 1)) / (devext->curr_h - 1);
+                    }
+                    break;
+                case UXENHID_REPORT_ID_TOUCH: {
+                        struct touch_report* msg = (struct touch_report*)irp->UserBuffer;
+                        if (!devext->virt_w || !devext->virt_h)
+                            break;
+                        if (msg->x)
+                            msg->x = (msg->x * (devext->virt_w - 1)) / (devext->curr_w - 1);
+                        if (msg->y)
+                            msg->y = (msg->y * (devext->virt_h - 1)) / (devext->curr_h - 1);
+                        if (msg->width)
+                            msg->width = (msg->width * (devext->virt_w - 1)) / (devext->curr_w - 1);
+                        if (msg->height)
+                            msg->height = (msg->height * (devext->virt_h - 1)) / (devext->curr_h - 1);
+                    }
+                    break;
+                }
                 irp->IoStatus.Status = STATUS_SUCCESS;
                 irp->IoStatus.Information = hdr.msglen - sizeof (hdr);
 

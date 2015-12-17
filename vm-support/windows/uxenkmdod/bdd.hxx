@@ -9,7 +9,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -177,6 +177,7 @@ public:
     void SetPresentWorkerThreadInfo(HANDLE hWorkerThread);
     NTSTATUS ExecutePresentDisplayOnly(_In_ BYTE*             DstAddr,
                                        _In_ UINT              DstBitPerPixel,
+                                       _In_ LONG              DstPitch,
                                        _In_ BYTE*             SrcAddr,
                                        _In_ UINT              SrcBytesPerPixel,
                                        _In_ LONG              SrcPitch,
@@ -211,6 +212,9 @@ private:
     CURRENT_BDD_MODE m_CurrentModes[MAX_VIEWS];
 
     UXENDISPCustomMode m_NextMode;
+
+    UXENDISPCustomMode m_VirtMode;
+    KSEMAPHORE         m_PresentLock;
 
     BDD_HWBLT        m_HardwareBlt[MAX_VIEWS];
 
@@ -333,6 +337,10 @@ public:
 
     // Inject new mode and trigger mode change
     NTSTATUS SetNextMode(UXENDISPCustomMode* pNewMode);
+
+    NTSTATUS SetVirtMode(UXENDISPCustomMode* pNewMode);
+
+    NTSTATUS IsVirtModeEnabled();
 
 private:
 

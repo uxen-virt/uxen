@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -54,25 +54,86 @@ ULONG DrvEscape(SURFOBJ *pso, ULONG iEsc, ULONG cjIn, PVOID pvIn,
                 ULONG cjOut, PVOID pvOut)
 {
     PDEV*   ppdev = (PDEV *)pso->dhpdev;
+    UXENDISPCustomMode *mode = (UXENDISPCustomMode *)pvIn;
     ULONG   ret = 0;
+    ULONG   len;
 
     perfcnt_inc(DrvEscape);
 
-    DISPDBG((0, "%s\n", __FUNCTION__));
-
     switch (iEsc) {
     case UXENDISP_ESCAPE_SET_CUSTOM_MODE: {
-            ULONG len;
+            if ((cjIn < sizeof *mode) || !pvIn) {
+                DISPDBG((0, "%s: ioctl failed wrong input size\n", __FUNCTION__));
+                break;
+            }
 
             DISPDBG((0, "%s: SET_CUSTOM_MODE\n", __FUNCTION__));
+            EngWaitForSingleObject(ppdev->virt_lock, NULL);
 
             if (EngDeviceIoControl(ppdev->hDriver, IOCTL_UXENDISP_SET_CUSTOM_MODE,
                                    pvIn, cjIn, NULL, 0, &len)) {
-                DISPDBG((0, "%s: ioctl failed\n", __FUNCTION__));
+                DISPDBG((0, "%s: ioctl IOCTL_UXENDISP_SET_CUSTOM_MODE failed\n", __FUNCTION__));
+                EngSetEvent(ppdev->virt_lock);
                 break;
             }
+
+            ppdev->virt_w = mode->width;
+            ppdev->virt_h = mode->height;
+
+            EngSetEvent(ppdev->virt_lock);
             ret = 1;
         }
+        break;
+    case UXENDISP_ESCAPE_SET_VIRTUAL_MODE: {
+            if ((cjIn < sizeof *mode) || !pvIn) {
+                DISPDBG((0, "%s: ioctl failed wrong input size\n", __FUNCTION__));
+                break;
+            }
+
+            EngWaitForSingleObject(ppdev->virt_lock, NULL);
+
+            if (mode->width < (UINT)ppdev->virt_w) {
+                UINT i;
+                PBYTE src = (PBYTE)ppdev->psoBitmap->pvBits + (ppdev->virt_w << 2);
+                PBYTE dst = (PBYTE)ppdev->psoBitmap->pvBits + (mode->width << 2);
+                for (i = 1; i < min(mode->height, (UINT)ppdev->virt_h); ++i) {
+                    RtlMoveMemory(dst, src, mode->width << 2);
+                    src += ppdev->virt_w << 2;
+                    dst += mode->width << 2;
+                }
+            }
+
+            if (EngDeviceIoControl(ppdev->hDriver, IOCTL_UXENDISP_SET_VIRTUAL_MODE,
+                                   pvIn, cjIn, NULL, 0, &len)) {
+                DISPDBG((0, "%s: ioctl IOCTL_UXENDISP_SET_VIRTUAL_MODE failed\n", __FUNCTION__));
+                EngSetEvent(ppdev->virt_lock);
+                break;
+            }
+
+            if (mode->width > (UINT)ppdev->virt_w) {
+                INT i;
+                INT height = min(mode->height, (UINT)ppdev->virt_h);
+                PBYTE src = (PBYTE)ppdev->psoBitmap->pvBits + ((height - 1) * (ppdev->virt_w << 2));
+                PBYTE dst = (PBYTE)ppdev->psoBitmap->pvBits + ((height - 1) * (mode->width << 2));
+                for (i = 1; i < height; ++i) {
+                    RtlMoveMemory(dst, src, ppdev->virt_w << 2);
+                    RtlFillMemory(dst + (ppdev->virt_w << 2), (mode->width - ppdev->virt_w) << 2, 0xFF);
+                    src -= ppdev->virt_w << 2;
+                    dst -= mode->width << 2;
+                }
+            }
+
+            ppdev->virt_w = mode->width;
+            ppdev->virt_h = mode->height;
+            ppdev->psoBitmap->lDelta = mode->width * 4;
+
+            EngSetEvent(ppdev->virt_lock);
+            ret = 1;
+        }
+        break;
+    case UXENDISP_ESCAPE_IS_VIRT_MODE_ENABLED:
+        if (!EngDeviceIoControl(ppdev->hDriver, IOCTL_UXENDISP_IS_VIRT_MODE_ENABLED, NULL, 0, NULL, 0, &len))
+            ret = 1;
         break;
     default:
         DISPDBG((0, "Unhandled escape code %x\n", iEsc));
@@ -227,6 +288,8 @@ HANDLE      hDriver)        // Handle to base driver
         goto error_free;
     }
 
+    EngCreateEvent(&ppdev->virt_lock);
+
     return((DHPDEV) ppdev);
 
     // Error case for failure.
@@ -263,7 +326,7 @@ VOID DrvDisablePDEV(
 DHPDEV dhpdev)
 {
     perfcnt_inc(DrvDisablePDEV);
-
+    EngDeleteEvent(((PPDEV)dhpdev)->virt_lock);
     vDisablePalette((PPDEV) dhpdev);
     EngFreeMem(dhpdev);
 }
@@ -377,7 +440,7 @@ DHPDEV dhpdev)
 
     ppdev->psoBitmap = EngLockSurface((HSURF)ppdev->hBitmap);
 
-    hsurf = (HSURF)EngCreateDeviceSurface((DHSURF)ppdev, 
+    hsurf = (HSURF)EngCreateDeviceSurface((DHSURF)ppdev,
                                            sizl,
                                            ulBitmapType);
 
@@ -647,6 +710,16 @@ void UpdateRect(PDEV* ppdev, RECTL *rect)
             out.top = rect->bottom;
             out.bottom = rect->top;
         }
+    } else if (ppdev) {
+        out.right = ppdev->virt_w;
+        out.bottom = ppdev->virt_h;
+    }
+
+    if (ppdev) {
+        out.left = min(out.left, (ULONG)ppdev->virt_w);
+        out.top = min(out.top, (ULONG)ppdev->virt_h);
+        out.right = min(out.right, (ULONG)ppdev->virt_w);
+        out.bottom = min(out.bottom, (ULONG)ppdev->virt_h);
     }
 
     ppdev->updateRect.update(ppdev->updateRect.dev, &out);
@@ -670,6 +743,28 @@ __inline SURFOBJ *getSurfObj(SURFOBJ *pso)
     return pso;
 }
 
+static CLIPOBJ clip = {0, {0, 0, 1024, 768}, DC_RECT, FC_RECT, TC_RECTANGLES, 0};
+
+__inline VOID clipToVirtRes(PDEV* ppdev, CLIPOBJ **ppco)
+{
+    CLIPOBJ *pco;
+
+    if (!*ppco)
+        *ppco = &clip;
+    pco = *ppco;
+
+    if (ppdev) {
+        clip.rclBounds.right = ppdev->virt_w;
+        clip.rclBounds.bottom = ppdev->virt_h;
+        if (pco->iDComplexity == DC_TRIVIAL)
+            pco->iDComplexity = DC_RECT;
+        pco->rclBounds.left = min(pco->rclBounds.left, ppdev->virt_w);
+        pco->rclBounds.top = min(pco->rclBounds.top, ppdev->virt_h);
+        pco->rclBounds.right = min(pco->rclBounds.right, ppdev->virt_w);
+        pco->rclBounds.bottom = min(pco->rclBounds.bottom, ppdev->virt_h);
+    }
+}
+
 BOOL DrvTextOut(
     IN SURFOBJ *psoDst,
     IN STROBJ *pstro,
@@ -684,6 +779,14 @@ BOOL DrvTextOut(
 {
     BOOL Result;
     PDEV* ppdev = (PDEV *)psoDst->dhpdev;
+
+    if (ppdev) {
+        LARGE_INTEGER timeout = {0};
+        if (!EngWaitForSingleObject(ppdev->virt_lock, &timeout))
+            return TRUE;
+    }
+
+    clipToVirtRes(ppdev, &pco);
 
     perfcnt_inc(DrvTextOut);
 
@@ -702,7 +805,10 @@ BOOL DrvTextOut(
             UpdateRect(ppdev, prclExtra);
         }
     }
-    
+
+    if (ppdev)
+        EngSetEvent(ppdev->virt_lock);
+
     return Result;
 }
 
@@ -722,6 +828,14 @@ BOOL DrvBitBlt(
     BOOL Result;
     PDEV* ppdev = (PDEV *)psoDst->dhpdev;
 
+    if (ppdev) {
+        LARGE_INTEGER timeout = {0};
+        if (!EngWaitForSingleObject(ppdev->virt_lock, &timeout))
+            return TRUE;
+    }
+
+    clipToVirtRes(ppdev, &pco);
+
     perfcnt_inc(DrvBitBlt);
 
     Result = EngBitBlt(getSurfObj(psoDst), getSurfObj(psoSrc), psoMask, pco, pxlo, prclDst,
@@ -730,7 +844,10 @@ BOOL DrvBitBlt(
     {
         UpdateRect(ppdev, prclDst);
     }
-    
+
+    if (ppdev)
+        EngSetEvent(ppdev->virt_lock);
+
     return Result;
 }
 
@@ -745,6 +862,14 @@ BOOL DrvCopyBits(
     BOOL Result;
     PDEV* ppdev = (PDEV *)psoDst->dhpdev;
 
+    if (ppdev) {
+        LARGE_INTEGER timeout = {0};
+        if (!EngWaitForSingleObject(ppdev->virt_lock, &timeout))
+            return TRUE;
+    }
+
+    clipToVirtRes(ppdev, &pco);
+
     perfcnt_inc(DrvCopyBits);
 
     Result = EngCopyBits(getSurfObj(psoDst), getSurfObj(psoSrc), pco, pxlo, prclDst, pptlSrc);
@@ -752,7 +877,10 @@ BOOL DrvCopyBits(
     {
         UpdateRect(ppdev, prclDst);
     }
-    
+
+    if (ppdev)
+        EngSetEvent(ppdev->virt_lock);
+
     return Result;
 }
 
@@ -769,15 +897,26 @@ BOOL DrvStrokePath(
     BOOL Result;
     PDEV* ppdev = (PDEV *)psoDst->dhpdev;
 
+    if (ppdev) {
+        LARGE_INTEGER timeout = {0};
+        if (!EngWaitForSingleObject(ppdev->virt_lock, &timeout))
+            return TRUE;
+    }
+
+    clipToVirtRes(ppdev, &pco);
+
     perfcnt_inc(DrvStrokePath);
-    
+
     Result = EngStrokePath(getSurfObj(psoDst), ppo, pco, pxo, pbo,
         pptlBrush, pLineAttrs, mix);
     if (Result && ppdev)
     {
         UpdateRect(ppdev, NULL);
     }
-    
+
+    if (ppdev)
+        EngSetEvent(ppdev->virt_lock);
+
     return Result;
 }
 
@@ -795,14 +934,25 @@ BOOL DrvLineTo(
     BOOL Result;
     PDEV* ppdev = (PDEV *)psoDst->dhpdev;
 
+    if (ppdev) {
+        LARGE_INTEGER timeout = {0};
+        if (!EngWaitForSingleObject(ppdev->virt_lock, &timeout))
+            return TRUE;
+    }
+
+    clipToVirtRes(ppdev, &pco);
+
     perfcnt_inc(DrvLineTo);
-    
+
     Result = EngLineTo(getSurfObj(psoDst), pco, pbo, x1, y1, x2, y2, prclBounds, mix);
     if (Result && ppdev)
     {
         UpdateRect(ppdev, prclBounds);
     }
-    
+
+    if (ppdev)
+        EngSetEvent(ppdev->virt_lock);
+
     return Result;
 }
 
@@ -818,14 +968,25 @@ BOOL DrvFillPath(
     BOOL Result;
     PDEV* ppdev = (PDEV *)psoDst->dhpdev;
 
+    if (ppdev) {
+        LARGE_INTEGER timeout = {0};
+        if (!EngWaitForSingleObject(ppdev->virt_lock, &timeout))
+            return TRUE;
+    }
+
+    clipToVirtRes(ppdev, &pco);
+
     perfcnt_inc(DrvFillPath);
-    
+
     Result = EngFillPath(getSurfObj(psoDst), ppo, pco, pbo, pptlBrushOrg, mix, flOptions);
     if (Result && ppdev)
     {
         UpdateRect(ppdev, NULL);
     }
-    
+
+    if (ppdev)
+        EngSetEvent(ppdev->virt_lock);
+
     return Result;
 }
 
@@ -845,6 +1006,14 @@ BOOL DrvStretchBlt(
     BOOL Result;
     PDEV* ppdev = (PDEV *)psoDst->dhpdev;
 
+    if (ppdev) {
+        LARGE_INTEGER timeout = {0};
+        if (!EngWaitForSingleObject(ppdev->virt_lock, &timeout))
+            return TRUE;
+    }
+
+    clipToVirtRes(ppdev, &pco);
+
     perfcnt_inc(DrvStretchBlt);
 
     Result = EngStretchBlt(getSurfObj(psoDst), getSurfObj(psoSrc), psoMsk, pco, pxlo, pca,
@@ -853,6 +1022,9 @@ BOOL DrvStretchBlt(
     {
         UpdateRect(ppdev, prclDst);
     }
-    
+
+    if (ppdev)
+        EngSetEvent(ppdev->virt_lock);
+
     return Result;
 }

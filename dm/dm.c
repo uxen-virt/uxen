@@ -83,6 +83,7 @@ uint64_t vm_vga_mb_mapped = 0;
 char *vm_vga_shm_name = NULL;
 uint64_t vm_pae = 1;
 uint64_t vm_viridian = 1;
+uint64_t vm_virt_mode_change = 0;
 uint64_t vm_hpet = 1;
 uint64_t vm_apic = 1;
 uint64_t vm_hidden_mem = 1;

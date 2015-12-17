@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -91,6 +91,13 @@ static VP_STATUS mode_info_bpp(ULONG bpp, VIDEO_MODE_INFORMATION *info)
     }
 
     return NO_ERROR;
+}
+
+VP_STATUS hw_is_virt_mode_enabled(PDEVICE_EXTENSION dev)
+{
+    if (uxdisp_read(dev, UXDISP_REG_VIRTMODE_ENABLED))
+        return NO_ERROR;
+    return ERROR_DEV_NOT_EXIST;
 }
 
 VP_STATUS hw_get_mode_info(PDEVICE_EXTENSION dev, ULONG i,

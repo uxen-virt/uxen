@@ -20,6 +20,8 @@ CPPFLAGS += -I$(TOPDIR)/dm
 
 CPPFLAGS += -I$(TOPDIR) -I$(TOPDIR)/common/include/xen-public
 
+CPPFLAGS += -I$(TOPDIR) -I$(TOPDIR)/vm-support/windows/common
+
 LDFLAGS += -mwindows
 LDLIBS += -lws2_32 -luser32 -lgdi32 -liphlpapi -lsetupapi -lwtsapi32 -luserenv -lpdh
 

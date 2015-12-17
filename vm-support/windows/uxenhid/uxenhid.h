@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -10,8 +10,10 @@
 #include <uxenvmlib.h>
 #include <uxenv4vlib.h>
 #include "../common/debug.h"
+#include "hid_interface.h"
 
-#define UXENHID_DEVICE_STARTED 0x00000001
+#define UXENHID_DEVICE_STARTED    0x00000001
+#define UXENHID_INTERFACE_ENABLED 0x00000002
 
 #define UXENHID_POOL_TAG 'dihu'
 
@@ -44,6 +46,12 @@ typedef struct _DEVICE_EXTENSION
     USHORT rpt_desc_len;
 
     KDPC resume_dpc;
+
+    UNICODE_STRING symlink_name;
+    uint16_t virt_w;
+    uint16_t virt_h;
+    uint16_t curr_w;
+    uint16_t curr_h;
 } DEVICE_EXTENSION, *PDEVICE_EXTENSION;
 
 #define DEVEXT(DO) \

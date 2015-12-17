@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -651,6 +651,30 @@ BOOLEAN StartIO(PVOID dev_ext, PVIDEO_REQUEST_PACKET packet)
             info->VideoMemoryBitmapWidth = mode->width;
             info->VideoMemoryBitmapHeight = mode->height;
         }
+        break;
+    case IOCTL_UXENDISP_SET_VIRTUAL_MODE: {
+            UXENDISPCustomMode *mode = (UXENDISPCustomMode *)packet->InputBuffer;
+            VIDEO_MODE_INFORMATION info;
+
+            if (packet->InputBufferLength < sizeof *mode) {
+                error = ERROR_INSUFFICIENT_BUFFER;
+                goto err;
+            }
+
+            info.VisScreenWidth = mode->width;
+            info.VisScreenHeight = mode->height;
+            info.ScreenStride = mode->width * 4;
+            info.BitsPerPlane = 32;
+
+            error = hw_set_mode(dev, &info);
+            if (error != NO_ERROR)
+                goto err;
+        }
+        break;
+    case IOCTL_UXENDISP_IS_VIRT_MODE_ENABLED:
+        error = hw_is_virt_mode_enabled(dev);
+        if (error != NO_ERROR)
+            goto err;
         break;
     case IOCTL_VIDEO_QUERY_POINTER_CAPABILITIES: {
             PVIDEO_POINTER_CAPABILITIES ptr_cap = packet->OutputBuffer;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -23,6 +23,7 @@
 #define     UXDISP_MODE_VGA_DISABLED                0x1
 #define     UXDISP_MODE_PAGE_TRACKING_DISABLED      0x2
 #define UXDISP_REG_INTERRUPT_ENABLE     0x00024
+#define UXDISP_REG_VIRTMODE_ENABLED     0x00028
 
 #define UXDISP_REG_BANK_LEN             0x00004
 #define UXDISP_REG_BANK(x)              (0x00100 + (x) * UXDISP_REG_BANK_LEN)

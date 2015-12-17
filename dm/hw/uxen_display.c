@@ -672,6 +672,8 @@ uxendisp_mmio_read(void *opaque, target_phys_addr_t addr, unsigned size)
         return s->mode;
     case UXDISP_REG_INTERRUPT_ENABLE:
         return s->interrupt_en;
+    case UXDISP_REG_VIRTMODE_ENABLED:
+        return vm_virt_mode_change;
     default:
         break;
     }

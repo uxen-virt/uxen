@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -25,5 +25,7 @@ BOOLEAN hw_pointer_setpos(PDEVICE_EXTENSION dev, SHORT x, SHORT y);
 BOOLEAN hw_pointer_enable(PDEVICE_EXTENSION dev, BOOLEAN en);
 
 void hw_disable_page_tracking(PDEVICE_EXTENSION dev);
+
+VP_STATUS hw_is_virt_mode_enabled(PDEVICE_EXTENSION dev);
 
 #endif /* _BOCHS_H_ */

@@ -1,35 +1,44 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
 
 #include <windows.h>
+#include <Windowsx.h>
+#include <Sddl.h>
 #include <tchar.h>
-
+#define __CRT_STRSAFE_IMPL
+#include <Strsafe.h>
 #include <err.h>
-#include <stdio.h>
-#include <stdlib.h>
+#include <Setupapi.h>
 
 #include <uxendisp_esc.h>
 
 #include "uxenevent.h"
 #include "d3dkmthk_x.h"
+#include "hid_interface.h"
 
 static HDC hdc;
 static D3DKMT_HANDLE disp_adapter = 0;
 static DISPLAY_DEVICE dispDevice;
 static HWND blank_window;
+static HWND right_window;
+static HWND bottom_window;
 static HANDLE blank_thread;
 static int blanking = 0;
+static int virtual_w = 0;
+static int virtual_h = 0;
 static int current_w = 0;
 static int current_h = 0;
+static DWORD maximize_message = 0;
+static int virtual_mode_change = 0;
 
 int
 display_get_size(int *w, int *h)
 {
-    if (w) *w = current_w;
-    if (h) *h = current_h;
+    if (w) *w = virtual_w;
+    if (h) *h = virtual_h;
     return 0;
 }
 
@@ -63,57 +72,149 @@ display_escape(int escape_code, void *in_buf, int in_buf_size)
     return ret;
 }
 
+static VOID
+SendResolutionToHidDriver()
+{
+    SP_DEVICE_INTERFACE_DATA did = {sizeof did};
+    HDEVINFO hdev;
+    BOOL res;
+    BYTE buffer[1024];
+    DWORD size = sizeof buffer;
+    PSP_DEVICE_INTERFACE_DETAIL_DATA pdidd = (PSP_DEVICE_INTERFACE_DETAIL_DATA)buffer;
+    HANDLE devhdl = INVALID_HANDLE_VALUE;
+    struct virt_mode mode = {virtual_w, virtual_h, current_w, current_h};
+
+    hdev = SetupDiGetClassDevs(&UXENHID_IFACE_GUID, 0, 0, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
+    if (INVALID_HANDLE_VALUE == hdev) {
+        warnx("SetupDiGetClassDevs failed");
+        goto exit;
+    }
+
+    res = SetupDiEnumDeviceInterfaces(hdev, 0, &UXENHID_IFACE_GUID, 0, &did);
+    if (!res) {
+        warnx("SetupDiEnumDeviceInterfaces failed");
+        goto exit;
+    }
+
+    pdidd->cbSize = sizeof *pdidd;
+    res = SetupDiGetDeviceInterfaceDetail(hdev, &did, pdidd, size, &size, 0);
+    if (!res) {
+        warnx("SetupDiGetDeviceInterfaceDetail failed");
+        goto exit;
+    }
+
+    devhdl = CreateFile(pdidd->DevicePath, GENERIC_READ | GENERIC_WRITE,
+                        FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
+                        FILE_ATTRIBUTE_NORMAL, NULL);
+    if (INVALID_HANDLE_VALUE == devhdl) {
+        warnx("CreateFile failed");
+        goto exit;
+    }
+
+    res = DeviceIoControl(devhdl, IOCTL_UXENHID_SET_VIRTUAL_MODE,
+                          &mode, sizeof mode, NULL, 0, &size, NULL);
+    if (!res) {
+        warnx("DeviceIoControl failed");
+        goto exit;
+    }
+
+exit:
+    if (devhdl != INVALID_HANDLE_VALUE)
+        CloseHandle(devhdl);
+
+    if (hdev != INVALID_HANDLE_VALUE)
+        SetupDiDestroyDeviceInfoList(hdev);
+}
+
 int
 display_resize(int w, int h)
 {
+    RECT work_area = {0};
     UXENDISPCustomMode cm;
-    DWORD mode = 0;
-    DEVMODE devMode;
-    LONG status;
-    BOOL rc;
+    BOOL set_mode = (current_w < w) || (current_h < h);
 
-    cm.width = w;
-    cm.height = h;
-    if (display_escape(UXENDISP_ESCAPE_SET_CUSTOM_MODE, &cm, sizeof(cm))) {
-        warnx("failed to inject custom mode [%dx%d]", w, h);
-        return -1;
+    if (set_mode || !virtual_mode_change) {
+        DWORD mode = 0;
+        DEVMODE devMode;
+        LONG status;
+        BOOL rc;
+
+        if (virtual_mode_change) {
+            w = max(w, current_w);
+            h = max(h, current_h);
+        }
+
+        cm.esc_code = UXENDISP_ESCAPE_SET_CUSTOM_MODE;
+        cm.width = w;
+        cm.height = h;
+        if (display_escape(UXENDISP_ESCAPE_SET_CUSTOM_MODE, &cm, sizeof(cm))) {
+            warnx("failed to inject custom mode [%dx%d]", w, h);
+            return -1;
+        }
+
+        FillMemory(&devMode, sizeof(DEVMODE), 0);
+        devMode.dmSize = sizeof(DEVMODE);
+        while ((rc = EnumDisplaySettings(dispDevice.DeviceName, mode, &devMode))) {
+            if (devMode.dmPelsWidth == w && devMode.dmPelsHeight == h)
+                break;
+            mode++;
+        }
+
+        if (!disp_adapter && !rc) {
+            warnx("couldn't find desired mode %dx%d", w, h);
+            return -1;
+        }
+
+        devMode.dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT;
+
+        status = ChangeDisplaySettingsEx(dispDevice.DeviceName,
+                                         &devMode,
+                                         NULL,
+                                         0,
+                                         NULL);
+        if (status != DISP_CHANGE_SUCCESSFUL) {
+            warnx("couldn't change display settings");
+            return -1;
+        }
+
+        current_w = w;
+        current_h = h;
     }
 
-    FillMemory(&devMode, sizeof(DEVMODE), 0);
-    devMode.dmSize = sizeof(DEVMODE);
-    while ((rc = EnumDisplaySettings(dispDevice.DeviceName, mode, &devMode))) {
-
-        if (devMode.dmPelsWidth == w && devMode.dmPelsHeight == h)
-            break;
-
-        mode++;
-    }
-
-    if (!disp_adapter && !rc) {
-        warnx("couldn't find desired mode %dx%d", w, h);
-        return -1;
-    }
-
-    devMode.dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT;
-
-    status = ChangeDisplaySettingsEx(dispDevice.DeviceName,
-                                     &devMode,
-                                     NULL,
-                                     0,
-                                     NULL);
-    if (status != DISP_CHANGE_SUCCESSFUL) {
-        warnx("couldn't change display settings");
-        return -1;
-    }
-
-    current_w = w;
-    current_h = h;
+    virtual_w = w;
+    virtual_h = h;
+    work_area.right = w;
+    work_area.bottom = h;
 
     if (blanking)
-        SetWindowPos(blank_window, HWND_TOPMOST,
-                     0, 0,
-                     current_w, current_h,
-                     SWP_SHOWWINDOW);
+        SetWindowPos(blank_window, HWND_TOPMOST, 0, 0, w, h, SWP_SHOWWINDOW);
+
+    if (!virtual_mode_change)
+        return 0;
+
+    if (!set_mode) {
+        cm.esc_code = UXENDISP_ESCAPE_SET_VIRTUAL_MODE;
+        cm.width = w;
+        cm.height = h;
+        if (display_escape(UXENDISP_ESCAPE_SET_VIRTUAL_MODE, &cm, sizeof(cm))) {
+            warnx("failed to inject virtual mode [%dx%d]", w, h);
+            return -1;
+        }
+    }
+
+    SendResolutionToHidDriver();
+    SystemParametersInfo(SPI_SETWORKAREA, 0, &work_area, SPIF_UPDATEINIFILE);
+    BroadcastSystemMessage(BSF_FORCEIFHUNG, BSM_ALLCOMPONENTS, maximize_message, 0, 0);
+
+    if (virtual_w != current_w)
+        SetWindowPos(right_window, HWND_TOPMOST, virtual_w, 0, current_w, current_h, SWP_SHOWWINDOW);
+    else
+        ShowWindow(right_window, SW_HIDE);
+
+    if (virtual_h != current_h)
+        SetWindowPos(bottom_window, HWND_TOPMOST, 0, virtual_h, current_w, current_h, SWP_SHOWWINDOW);
+    else
+        ShowWindow(bottom_window, SW_HIDE);
 
     return 0;
 }
@@ -140,6 +241,7 @@ blank_loop(void *opaque)
     WNDCLASSEX wndclass;
     MSG msg;
     BOOL rc;
+    DWORD ret = 0;
 
     wndclass.cbSize         = sizeof(wndclass);
     wndclass.style          = 0;
@@ -155,21 +257,35 @@ blank_loop(void *opaque)
     wndclass.lpszMenuName   = NULL;
     RegisterClassEx(&wndclass);
 
-    blank_window = CreateWindowEx(0,
-                                  "BlankWindow",
-                                  "Blank Window",
-                                  WS_POPUP,
-                                  0, 0,
-                                  current_w, current_h,
-                                  NULL, NULL,
-                                  (HINSTANCE)GetModuleHandle(NULL),
-                                  NULL);
+    blank_window = CreateWindowEx(0, "BlankWindow", "Blank Window", WS_POPUP,
+                                  0, 0, current_w, current_h,
+                                  NULL, NULL, NULL, NULL);
     if (!blank_window) {
         warnx("failed to create blank window");
-        return -1;
+        ret = -1;
+        goto exit;
     }
-
     ShowWindow(blank_window, SW_HIDE);
+
+    right_window = CreateWindowEx(WS_EX_TOPMOST, "BlankWindow", "Right Window",
+                                  WS_POPUP, virtual_w, 0, virtual_w + 1, virtual_h,
+                                  NULL, NULL, NULL, NULL);
+    if (!right_window) {
+        warnx("failed to create right window");
+        ret = -1;
+        goto exit;
+    }
+    ShowWindow(right_window, SW_HIDE);
+
+    bottom_window = CreateWindowEx(WS_EX_TOPMOST, "BlankWindow", "Bottom Window",
+                                   WS_POPUP, 0, virtual_h, virtual_w, virtual_h + 1,
+                                   NULL, NULL, NULL, NULL);
+    if (!bottom_window) {
+        warnx("failed to create bottom window");
+        ret = -1;
+        goto exit;
+    }
+    ShowWindow(bottom_window, SW_HIDE);
 
     rc = GetMessage(&msg, NULL, 0, 0);
     while (rc > 0) {
@@ -177,7 +293,14 @@ blank_loop(void *opaque)
         rc = GetMessage(&msg, NULL, 0, 0);
     }
 
-    return 0;
+exit:
+    if (bottom_window)
+        DestroyWindow(bottom_window);
+    if (right_window)
+        DestroyWindow(right_window);
+    if (blank_window)
+        DestroyWindow(blank_window);
+    return ret;
 }
 
 int
@@ -188,6 +311,8 @@ display_init(void)
     DEVMODE devMode;
     NTSTATUS status;
     D3DKMT_OPENADAPTERFROMHDC open_adapter_info;
+    UXENDISPCustomMode cm;
+    RECT work_area = {0};
 
     /* Sanity check here */
     FillMemory(&dispDevice, sizeof(DISPLAY_DEVICE), 0);
@@ -216,6 +341,8 @@ display_init(void)
 
     current_w = devMode.dmPelsWidth;
     current_h = devMode.dmPelsHeight;
+    virtual_w = current_w;
+    virtual_h = current_h;
 
     hdc = CreateDC(dispDevice.DeviceName, dispDevice.DeviceName, NULL, NULL);
     if (!hdc) {
@@ -229,6 +356,20 @@ display_init(void)
     status = D3DKMTOpenAdapterFromHdc(&open_adapter_info);
     if (NT_SUCCESS(status))
         disp_adapter = open_adapter_info.hAdapter;
+
+    maximize_message = RegisterWindowMessageW(L"Bromium.Maximize");
+
+    cm.esc_code = UXENDISP_ESCAPE_IS_VIRT_MODE_ENABLED;
+    if (display_escape(UXENDISP_ESCAPE_IS_VIRT_MODE_ENABLED, &cm, sizeof(cm))) {
+        warnx("Virtual Mode Change is DISABLED.");
+    } else {
+        virtual_mode_change = 1;
+        work_area.bottom = virtual_h;
+        work_area.right = virtual_w;
+        SystemParametersInfo(SPI_SETWORKAREA, 0, &work_area, SPIF_UPDATEINIFILE);
+        BroadcastSystemMessage(BSF_FORCEIFHUNG, BSM_ALLCOMPONENTS, maximize_message, 0, 0);
+    }
+
 
     blank_thread = CreateThread(NULL, 0, blank_loop, NULL, 0, NULL);
     if (!blank_thread) {

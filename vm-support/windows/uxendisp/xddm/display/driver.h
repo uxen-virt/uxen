@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -50,6 +50,10 @@ typedef struct  _PDEV
     PALETTEENTRY *pPal;                 // If this is pal managed, this is the pal
     BOOL    bSupportDCI;                // Does the miniport support DCI?
     FLONG   flHooks;
+
+    LONG virt_w;
+    LONG virt_h;
+    PEVENT virt_lock;
 
     GET_UPDATE_RECT_DATA updateRect;
 } PDEV, *PPDEV;

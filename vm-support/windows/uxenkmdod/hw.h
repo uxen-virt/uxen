@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -32,6 +32,9 @@ NTSTATUS hw_pointer_update(
     _In_ CONST DXGKARG_SETPOINTERSHAPE *pSetPointerShape);
 
 void hw_disable_page_tracking(
+    _In_ PUXEN_HW_RESOURCES pHw);
+
+NTSTATUS hw_is_virt_mode_enabled(
     _In_ PUXEN_HW_RESOURCES pHw);
 
 #endif /* _HW_H_ */

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -13,6 +13,12 @@
 
 #define IOCTL_UXENDISP_GET_UPDATE_RECT \
     CTL_CODE(FILE_DEVICE_VIDEO, 0x801, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+#define IOCTL_UXENDISP_SET_VIRTUAL_MODE \
+    CTL_CODE(FILE_DEVICE_VIDEO, 0x802, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
+#define IOCTL_UXENDISP_IS_VIRT_MODE_ENABLED \
+    CTL_CODE(FILE_DEVICE_VIDEO, 0x803, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
 struct rect {
     ULONG left;
