@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -986,7 +986,7 @@ struct dict_rpc_command control_commands[] = {
             { "start", DICT_RPC_ARG_TYPE_INTEGER, .optional = 0 },
             { NULL, },
         }, },
-    { "collect-vm-stats-once", collect_vm_stats_once, },
+    { "collect-vm-stats-once", collect_vm_stats_once, .flags = CONTROL_SUSPEND_OK, },
     { "inject-ctrl-alt-delete", inject_ctrl_alt_delete, },
     { "inject-trap", control_command_inject_trap,
       .args = (struct dict_rpc_arg_desc[]) {
