@@ -33,4 +33,5 @@ SOURCES = adapter.c \
           qos1.c \
           tcbrcb.c \
           vmq.c \
-          acpi.c
+          acpi.c \
+          uxennullnet.rc
