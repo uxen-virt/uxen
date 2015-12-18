@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -95,13 +95,16 @@ extern HRESULT WINAPI FilterConnectCommunicationPort(
 
 uint64_t log_swap_fills = 0;
 
-// #define SWAP_NO_AIO 1
-
 #if !defined(LIBIMG) && defined(CONFIG_DUMP_SWAP_STAT)
   #define SWAP_STATS
 #endif
 
 #define SWAP_SECTOR_SIZE DUBTREE_BLOCK_SIZE
+#ifdef LIBIMG
+  #define SWAP_LOG_BLOCK_CACHE_LINES 16
+#else
+  #define SWAP_LOG_BLOCK_CACHE_LINES 8
+#endif
 
 typedef struct SwapMapTuple {
     uint32_t end;
@@ -205,10 +208,10 @@ typedef struct SwapAIOCB {
     uint8_t *buffer;
     uint8_t *tmp;
     uint32_t modulo;
+    uint64_t *map;
     size_t orig_size;
     ioh_event event;
     int result;
-    int rmw_write_issued;
     Timer *ratelimit_complete_timer;
 #ifdef _WIN32
     OVERLAPPED ovl;
@@ -226,11 +229,6 @@ static DWORD WINAPI swap_read_thread(void *_s);
 static void *swap_read_thread(void *_s);
 #endif
 static void swap_free_block(BDRVSwapState *s, void *b);
-
-static int swap_write(BlockDriverState *bs, int64_t sector_num,
-                      const uint8_t *buf, int nb_sectors,
-                      SwapAIOCB *acb);
-
 
 /* Wrappers for compress and expand functions. */
 
@@ -1064,7 +1062,7 @@ static int swap_open(BlockDriverState *bs, const char *filename, int flags)
         warn("swap: unable to create hashtable for block cache");
         return -1;
     }
-    if (lruCacheInit(&s->bc, 8) < 0) {
+    if (lruCacheInit(&s->bc, SWAP_LOG_BLOCK_CACHE_LINES) < 0) {
         warn("swap: unable to create lrucache for blocks");
         return -1;
     }
@@ -1168,50 +1166,10 @@ swap_do_read(BDRVSwapState *s, uint64_t offset, uint64_t count,
 {
     int i;
     int r = 0;
-    const uint64_t mask = SWAP_SECTOR_SIZE - 1;
     uint64_t start = offset / SWAP_SECTOR_SIZE;
     uint64_t end = (offset + count + SWAP_SECTOR_SIZE - 1) / SWAP_SECTOR_SIZE;
-    uint64_t left = count;
-    uint64_t found = 0;
     size_t *sizes = NULL;
     void *tmp = NULL;
-
-    /* Check in buffered writes radix tree first. */
-
-    swap_lock(s);
-
-    for (i = 0; i < (count + mask) / SWAP_SECTOR_SIZE; ++i) {
-        int j;
-        int a = s->active_radix;
-        uint64_t take = left < SWAP_SECTOR_SIZE ? left : SWAP_SECTOR_SIZE;
-        const uint8_t *b;
-        uint64_t line;
-
-        if (hashtableFind(&s->cached_blocks, start + i, &line)) {
-            b = (void*) lruCacheTouchLine(&s->bc, line)->value;
-            memcpy(buf + SWAP_SECTOR_SIZE * i, b, take);
-            map[i] = s->version;
-            found += take;
-        } else {
-            for (j = 0; j < 2; ++j, a ^= 1) {
-                const uint8_t *b = swap_radix_find(s->radix[a], 0, start + i);
-                if (b) {
-                    memcpy(buf + SWAP_SECTOR_SIZE * i, b, take);
-                    map[i] = s->version;
-                    found += take;
-                    break; /* Don't look in other radix, we found it already. */
-                }
-            }
-        }
-
-        left -= take;
-    }
-
-    swap_unlock(s);
-
-    /* Note that left == 0 does not imply found == count. */
-    if (found == count)
-        return count;
 
     /* Returns number of unresolved blocks, or negative on
      * error. */
@@ -1720,65 +1678,6 @@ next:
     return 0;
 }
 
-static int swap_read(BlockDriverState *bs, int64_t sector_num,
-                     uint8_t *buf, int nb_sectors)
-{
-    BDRVSwapState *s = (BDRVSwapState*) bs->opaque;
-    int64_t offset = sector_num << BDRV_SECTOR_BITS;
-    int count = nb_sectors << BDRV_SECTOR_BITS;
-    const uint64_t mask = SWAP_SECTOR_SIZE - 1;
-    int r;
-    size_t map_size;
-    uint64_t *map;
-
-    /* Deal with non-page aligned reads. Dirty job but someone's gotta. */
-
-    uint64_t modulo = offset & mask;
-    uint64_t size = count + modulo;
-    uint8_t *b;
-
-    /* We need a map array to keep track of which blocks have been resolved
-     * or not, and to which snapshot versions. This array must be zero-
-     * initialized. */
-
-    map_size = ((size + SWAP_SECTOR_SIZE - 1) / SWAP_SECTOR_SIZE);
-    if (!(map = calloc(map_size, sizeof(uint64_t)))) {
-        errx(1, "swap: OOM %s %d", __FUNCTION__, __LINE__);
-    }
-
-    /* If beginning of read is not page aligned, we need to go via a tmp
-     * buffer. */
-
-    if (modulo) {
-        if (!(b = malloc(size))) {
-            errx(1, "swap: OOM in %s line %d", __FUNCTION__, __LINE__);
-        }
-    } else {
-        b = buf;
-    }
-
-    r = swap_do_read(s, offset - modulo, size, b, map);
-    if (r < 0) {
-        warn("swap: read error %d", r);
-        if (modulo)
-            free(b);
-        goto out;
-    }
-
-    r = swap_fill_read_holes(s, offset - modulo, size, b, map);
-
-    if (modulo) {
-        memcpy(buf, b + modulo, count);
-        free(b);
-    }
-
-out:
-    free(map);
-    return r;
-}
-
-
-#ifndef SWAP_NO_AIO
 static inline void swap_common_cb(SwapAIOCB *acb)
 {
     BDRVSwapState *s = (BDRVSwapState*) acb->bs->opaque;
@@ -1786,9 +1685,10 @@ static inline void swap_common_cb(SwapAIOCB *acb)
     swap_stats.blocked_time += os_get_clock() - acb->t0;
 #endif
     --(s->ios_outstanding);
-    if (TAILQ_ACTIVE(acb, rlimit_write_entry))
-	TAILQ_REMOVE(&s->rlimit_write_queue, acb,
+    if (TAILQ_ACTIVE(acb, rlimit_write_entry)) {
+        TAILQ_REMOVE(&s->rlimit_write_queue, acb,
                      rlimit_write_entry);
+    }
     aio_del_wait_object(&acb->event);
     aio_release(acb);
 }
@@ -1803,7 +1703,6 @@ static AIOPool swap_aio_pool = {
     .aiocb_size = sizeof(SwapAIOCB),
     .cancel = bdrv_swap_aio_cancel,
 };
-#endif  /* SWAP_NO_AIO */
 
 
 #ifdef _WIN32
@@ -1814,8 +1713,6 @@ static void * swap_read_thread(void *_s)
 {
     BDRVSwapState *s = (BDRVSwapState*) _s;
     SwapAIOCB *acb;
-    size_t map_size;
-    uint64_t *map;
 
     for (;;) {
 
@@ -1851,19 +1748,9 @@ static void * swap_read_thread(void *_s)
              * by a callback triggered by IO completion. */
             SwapAIOCB *next = acb->next;
 
-
-            /* We need a map array to keep track of which blocks have been resolved
-             * or not, and to which snapshot versions. */
-            map_size = ((acb->size + SWAP_SECTOR_SIZE-1) / SWAP_SECTOR_SIZE) * sizeof(uint64_t);
-            if (!(map = malloc(map_size))) {
-                errx(1, "swap: OOM error in %s", __FUNCTION__);
-            }
-            memset(map, 0, map_size);
-
             uint8_t *b = acb->tmp ? acb->tmp : acb->buffer;
-
             int r = swap_do_read(s, acb->block * SWAP_SECTOR_SIZE, acb->size, b,
-                    map);
+                    acb->map);
 
             if (r < 0) {
                 warnx("swap: read error %d", r);
@@ -1873,7 +1760,7 @@ static void * swap_read_thread(void *_s)
             }
 
             r = swap_fill_read_holes(s, acb->block * SWAP_SECTOR_SIZE,
-                    acb->size, b, map);
+                    acb->size, b, acb->map);
             if (r < 0) {
                 acb->result = r;
             }
@@ -1883,14 +1770,12 @@ static void * swap_read_thread(void *_s)
 #endif
 
             ioh_event_set(&acb->event);
-            free(map);
             acb = next;
         }
     }
     /* Never reached. */
 }
 
-#ifndef SWAP_NO_AIO
 
 static SwapAIOCB *swap_aio_get(BlockDriverState *bs,
         BlockDriverCompletionFunc *cb, void *opaque)
@@ -1904,9 +1789,9 @@ static SwapAIOCB *swap_aio_get(BlockDriverState *bs,
     } else {
         ioh_event_reset(&acb->event);
     }
-    acb->rmw_write_issued = 0;
     acb->bs = bs;
     acb->result = -1;
+    acb->map = NULL;
     memset(&acb->rlimit_write_entry, 0, sizeof(acb->rlimit_write_entry));
 
     ++(s->ios_outstanding);
@@ -1928,26 +1813,29 @@ static void swap_read_cb(void *opaque)
         memcpy(acb->buffer, acb->tmp + acb->modulo, acb->size - acb->modulo);
         free(acb->tmp);
     }
+    free(acb->map);
     acb->common.cb(acb->common.opaque, 0);
     swap_common_cb(acb);
 }
+static ssize_t __swap_nonblocking_write(BDRVSwapState *s, const uint8_t *buf,
+                                        uint64_t block, size_t size);
 
 static void swap_rmw_cb(void *opaque)
 {
     SwapAIOCB *acb = opaque;
+    BlockDriverState *bs = acb->bs;
+    BDRVSwapState *s = (BDRVSwapState*) bs->opaque;
 
-    if (!acb->rmw_write_issued) {
-        acb->rmw_write_issued = 1;
-        memcpy(acb->tmp + acb->modulo, acb->buffer, acb->orig_size);
-        acb->result = swap_write(acb->bs, 8 * acb->block, acb->tmp,
-                                 acb->size >> BDRV_SECTOR_BITS, acb);
-        free(acb->tmp);
-    } else {
-        acb->common.cb(acb->common.opaque, 0);
-        swap_common_cb(acb);
-    }
+    memcpy(acb->tmp + acb->modulo, acb->buffer, acb->orig_size);
+    swap_lock(s);
+    __swap_nonblocking_write(s, acb->tmp, acb->block, acb->size);
+    swap_unlock(s);
+    free(acb->tmp);
+    acb->common.cb(acb->common.opaque, 0);
+    swap_common_cb(acb);
 }
 
+#ifndef LIBIMG
 static void swap_write_cb(void *opaque)
 {
     SwapAIOCB *acb = opaque;
@@ -1955,62 +1843,129 @@ static void swap_write_cb(void *opaque)
     acb->common.cb(acb->common.opaque, 0);
     swap_common_cb(acb);
 }
+#endif
 
-static inline void swap_queue_read_acb(BlockDriverState *bs, SwapAIOCB *acb)
+static inline void __swap_queue_read_acb(BlockDriverState *bs, SwapAIOCB *acb)
 {
     BDRVSwapState *s = (BDRVSwapState*) bs->opaque;
     acb->next = NULL;
-    swap_lock(s);
     if (s->read_queue_head == NULL) {
         s->read_queue_head = s->read_queue_tail = acb;
     } else {
         s->read_queue_tail->next = acb;
         s->read_queue_tail = acb;
     }
-    swap_unlock(s);
     swap_signal_read(s);
 }
 
+static ssize_t __swap_nonblocking_read(BDRVSwapState *s, uint8_t *buf,
+                                   uint64_t block, size_t size,
+                                   uint64_t **ret_map)
+{
+    int i;
+    uint64_t found = 0;
+    uint64_t *map;
+    size_t take;
+
+    /* We need a map array to keep track of which blocks have been resolved
+     * or not, and to which snapshot versions. */
+    map = calloc(((size + SWAP_SECTOR_SIZE-1) / SWAP_SECTOR_SIZE),
+                 sizeof(uint64_t));
+    if (!map) {
+        errx(1, "swap: OOM error in %s", __FUNCTION__);
+        return -1;
+    }
+
+    for (i = 0; size > 0; ++i, size -= take) {
+        int j;
+        take = size < SWAP_SECTOR_SIZE ? size : SWAP_SECTOR_SIZE;
+        const uint8_t *b;
+        uint64_t line;
+
+        if (hashtableFind(&s->cached_blocks, block + i, &line)) {
+            b = (void*) lruCacheTouchLine(&s->bc, line)->value;
+            memcpy(buf + SWAP_SECTOR_SIZE * i, b, take);
+            map[i] = s->version;
+            found += take;
+        } else {
+            int a;
+            for (j = 0, a = s->active_radix; j < 2; ++j, a ^= 1) {
+                const uint8_t *b = swap_radix_find(s->radix[a], 0, block + i);
+                if (b) {
+                    memcpy(buf + SWAP_SECTOR_SIZE * i, b, take);
+                    map[i] = s->version;
+                    found += take;
+                    break; /* Don't look in other radix, we found it already. */
+                }
+            }
+        }
+    }
+    *ret_map = map;
+    return found;
+}
+
+SwapAIOCB dummy_acb;
 static BlockDriverAIOCB *swap_aio_read(BlockDriverState *bs,
         int64_t sector_num, uint8_t *buf, int nb_sectors,
         BlockDriverCompletionFunc *cb, void *opaque)
 {
-    //printf("%s %I64d %d\n", __FUNCTION__, sector_num, nb_sectors);
-    SwapAIOCB *acb;
+    //printf("%s %"PRIx64" %d\n", __FUNCTION__, sector_num, nb_sectors);
+    BDRVSwapState *s = (BDRVSwapState*) bs->opaque;
+    SwapAIOCB *acb = NULL;
     const uint64_t mask = SWAP_SECTOR_SIZE - 1;
     uint64_t offset = sector_num << BDRV_SECTOR_BITS;
-    uint64_t aligned_offset = offset & ~mask;
+    uint64_t block = offset / SWAP_SECTOR_SIZE;
+    uint32_t modulo = offset & mask;
+    uint32_t size = (nb_sectors << BDRV_SECTOR_BITS) + modulo;
+    uint8_t *tmp = NULL;
+    uint64_t *map;
+    ssize_t found;
 
-    acb = swap_aio_get(bs, cb, opaque);
-    if (!acb) {
-        debug_printf("swap: unable to allocate acb on line %d\n", __LINE__);
+    if (modulo) {
+        tmp = malloc(size);
+        if (!tmp) {
+            debug_printf("swap: unable to allocate tmp on line %d\n", __LINE__);
+            return NULL;
+        }
+    }
+
+    swap_lock(s);
+    found = __swap_nonblocking_read(s, tmp ? tmp : buf, block, size, &map);
+    if (found < 0) {
+        swap_unlock(s);
+        free(tmp);
         return NULL;
-    }
-    acb->block = aligned_offset / SWAP_SECTOR_SIZE;
-    acb->modulo = offset & mask;
-    acb->size = (nb_sectors << BDRV_SECTOR_BITS) + acb->modulo;
-    acb->buffer = buf;
-
-    if (acb->modulo) {
-        acb->tmp = malloc(acb->size);
-        if (!acb->tmp)
-            goto out;
+    } else if (found == size) {
+        swap_unlock(s);
+        if (tmp) {
+            memcpy(buf, tmp + modulo, size - modulo);
+            free(tmp);
+        }
+        free(map);
+        cb(opaque, 0);
+        acb = &dummy_acb;
     } else {
-        acb->tmp = NULL;
-    }
+        acb = swap_aio_get(bs, cb, opaque);
+        if (!acb) {
+            debug_printf("swap: unable to allocate acb on line %d\n", __LINE__);
+            free(tmp);
+            swap_unlock(s);
+            return NULL;
+        }
+        acb->block = block;
+        acb->modulo = modulo;
+        acb->size = size;
+        acb->buffer = buf;
+        acb->tmp = tmp;
+        acb->map = map;
+        aio_add_wait_object(&acb->event, swap_read_cb, acb);
 
-    aio_add_wait_object(&acb->event, swap_read_cb, acb);
-    swap_queue_read_acb(bs, acb);
+        __swap_queue_read_acb(bs, acb);
+        swap_unlock(s);
+    }
 
     return (BlockDriverAIOCB *)acb;
-out:
-    if (acb) {
-        free(acb->tmp);
-        aio_release(acb);
-    }
-    return NULL;
 }
-#endif  /* SWAP_NO_AIO */
 
 static void
 swap_complete_write_acb(SwapAIOCB *acb)
@@ -2042,77 +1997,22 @@ swap_ratelimit_complete_timer_notify(void *opaque)
 }
 #endif
 
-static int swap_write_unaligned(BlockDriverState *bs, uint64_t offset, const void *buf,
-                                uint64_t count, SwapAIOCB *acb)
+static ssize_t __swap_nonblocking_write(BDRVSwapState *s, const uint8_t *buf,
+                                        uint64_t block, size_t size)
 {
-    ssize_t r;
-    const uint64_t mask = SWAP_SECTOR_SIZE - 1;
-    uint64_t aligned_offset = offset & ~mask;
-    uint64_t aligned_end = (offset + count + mask) & ~mask;
-    uint64_t aligned_count = aligned_end - aligned_offset;
-
-    uint8_t *aligned_buf = (uint8_t*) malloc(aligned_count);
-
-    if (!aligned_buf) {
-        warn("swap: OOM error in %s", __FUNCTION__);
-        return -ENOMEM;
-    }
-
-    /* Read... */
-    r = swap_read(bs, aligned_offset >> BDRV_SECTOR_BITS, aligned_buf,
-                  aligned_count >> BDRV_SECTOR_BITS);
-    if (r < 0) {
-        warn("swap: RMW read failed!");
-        goto out;
-    }
-
-    /* Modify... */
-    memcpy(aligned_buf + (offset & mask), buf, count);
-    /* Write. */
-    r = swap_write(bs, aligned_offset >> BDRV_SECTOR_BITS, aligned_buf,
-                   aligned_count >> BDRV_SECTOR_BITS, acb);
-
-  out:
-    free(aligned_buf);
-    return r;
-}
-
-static int swap_write(BlockDriverState *bs, int64_t sector_num,
-                      const uint8_t *buf, int nb_sectors,
-                      SwapAIOCB *acb)
-{
-    BDRVSwapState *s = (BDRVSwapState*) bs->opaque;
-    uint64_t start;
     int i;
     SwapRadix *rx;
-    int64_t offset = sector_num << BDRV_SECTOR_BITS;
-    int count = nb_sectors << BDRV_SECTOR_BITS;
-    const uint64_t mask = SWAP_SECTOR_SIZE - 1;
     LruCache *bc = &s->bc;
 
-    if ((offset & mask) || (count & mask)) {
-
-        int r = swap_write_unaligned(bs, offset, buf, count, acb);
-        if (r < 0) {
-            warn("swap: unaligned emulation write error %d", r);
-        }
-        return r;
-    }
-
-    /* Getting here, we know that offset and count are
-     * SWAP_SECTOR_SIZE aligned. */
-
-    swap_lock(s);
     rx = s->radix[s->active_radix];
 
-    start = offset / SWAP_SECTOR_SIZE;
-    for (i = 0; i < count / SWAP_SECTOR_SIZE; ++i) {
+    for (i = 0; i < size / SWAP_SECTOR_SIZE; ++i) {
 
         uint64_t line;
         uint8_t *b;
         LruCacheLine *cl;
 
-        if (hashtableFind(&s->cached_blocks, start + i, &line)) {
+        if (hashtableFind(&s->cached_blocks, block + i, &line)) {
             b = (void*) lruCacheTouchLine(&s->bc, line)->value;
             memcpy(b, buf + SWAP_SECTOR_SIZE * i, SWAP_SECTOR_SIZE);
             continue;
@@ -2120,7 +2020,6 @@ static int swap_write(BlockDriverState *bs, int64_t sector_num,
 
         if (!(b = swap_alloc_block(s))) {
             warn("swap: OOM error in %s", __FUNCTION__);
-            swap_unlock(s);
             return -ENOMEM;
         }
 
@@ -2138,57 +2037,20 @@ static int swap_write(BlockDriverState *bs, int64_t sector_num,
         }
 
         memcpy(b, buf + SWAP_SECTOR_SIZE * i, SWAP_SECTOR_SIZE);
-        cl->key = (uintptr_t) start + i;
+        cl->key = (uintptr_t) block + i;
         cl->value = (uintptr_t) b;
-        hashtableInsert(&s->cached_blocks, start + i, line);
+        hashtableInsert(&s->cached_blocks, block + i, line);
     }
-
-    swap_unlock(s);
-
-    /* Make sure our buffering does not completely overtake the dubtree insert
-     * thread. We check after having updated s->buffered above, to make sure
-     * the write thread cannot shut down while we stil have work for it. */
-
-#ifndef LIBIMG
-    swap_signal_write(s);
-    if (__sync_add_and_fetch(&s->buffered, 0) > WRITE_RATELIMIT_THR_BYTES) {
-        /* late completion in order to rate limit writes */
-        acb->ratelimit_complete_timer = new_timer_ms(
-            rt_clock, swap_ratelimit_complete_timer_notify, acb);
-        mod_timer(acb->ratelimit_complete_timer,
-                  get_clock_ms(rt_clock) + WRITE_RATELIMIT_GAP_MS);
-        TAILQ_INSERT_TAIL(&s->rlimit_write_queue, acb, rlimit_write_entry);
-    } else {
-        /* immediate completion */
-        swap_complete_write_acb(acb);
-    }
-#else
-    for (;;) {
-        swap_signal_write(s);
-        if (__sync_add_and_fetch(&s->buffered, 0) > WRITE_RATELIMIT_THR_BYTES) {
-            swap_wait_can_write(s);
-        } else {
-            swap_complete_write_acb(acb);
-            break;
-        }
-    }
-#endif
-
     return 0;
 }
 
-#ifndef SWAP_NO_AIO
 static BlockDriverAIOCB *swap_aio_write(BlockDriverState *bs,
         int64_t sector_num, const uint8_t *buf, int nb_sectors,
         BlockDriverCompletionFunc *cb, void *opaque)
 {
     //debug_printf("%s %I64x %d\n", __FUNCTION__, sector_num, nb_sectors);
-    SwapAIOCB *acb;
-    acb = swap_aio_get(bs, cb, opaque);
-    if (!acb) {
-        debug_printf("swap: unable to allocate acb on line %d\n", __LINE__);
-        return NULL;
-    }
+    BDRVSwapState *s = (BDRVSwapState*) bs->opaque;
+    SwapAIOCB *acb = NULL;
 
     if ((sector_num & 7) || (nb_sectors & 7)) {
         const uint64_t mask = SWAP_SECTOR_SIZE - 1;
@@ -2197,6 +2059,13 @@ static BlockDriverAIOCB *swap_aio_write(BlockDriverState *bs,
         uint64_t aligned_offset = offset & ~mask;
         uint64_t aligned_end = (offset + count + mask) & ~mask;
         uint64_t aligned_count = aligned_end - aligned_offset;
+        ssize_t found;
+
+        acb = swap_aio_get(bs, cb, opaque);
+        if (!acb) {
+            debug_printf("swap: unable to allocate acb on line %d\n", __LINE__);
+            return NULL;
+        }
 
         acb->block = aligned_offset / SWAP_SECTOR_SIZE;
         acb->modulo = offset & mask;
@@ -2212,18 +2081,62 @@ static BlockDriverAIOCB *swap_aio_write(BlockDriverState *bs,
         }
 
         aio_add_wait_object(&acb->event, swap_rmw_cb, acb);
-        swap_queue_read_acb(bs, acb);
+
+        swap_lock(s);
+        found = __swap_nonblocking_read(s, acb->tmp ? acb->tmp : acb->buffer,
+                                        acb->block, acb->size, &acb->map);
+        if (found < 0) {
+            free(acb->tmp);
+            aio_release(acb);
+            acb = NULL;
+        } else if (found == acb->size) {
+            ioh_event_set(&acb->event);
+        } else {
+            __swap_queue_read_acb(bs, acb);
+        }
+        swap_unlock(s);
     } else {
         /* Already done. */
-        aio_add_wait_object(&acb->event, swap_write_cb, acb);
-        acb->result = swap_write(bs, sector_num, buf, nb_sectors, acb);
+
+        swap_lock(s);
+        __swap_nonblocking_write(s, buf, sector_num / 8,
+                                 nb_sectors << BDRV_SECTOR_BITS);
+        swap_unlock(s);
+        swap_signal_write(s);
+        if (__sync_add_and_fetch(&s->buffered, 0) > WRITE_RATELIMIT_THR_BYTES) {
+#ifdef LIBIMG
+            swap_wait_can_write(s);
+            cb(opaque, 0);
+            acb = &dummy_acb;
+#else
+            /* late completion in order to rate limit writes */
+
+            acb = swap_aio_get(bs, cb, opaque);
+            if (!acb) {
+                debug_printf("swap: unable to allocate acb on line %d\n",
+                             __LINE__);
+                return NULL;
+            }
+
+            aio_add_wait_object(&acb->event, swap_write_cb, acb);
+            acb->ratelimit_complete_timer = new_timer_ms(
+                    rt_clock, swap_ratelimit_complete_timer_notify, acb);
+            mod_timer(acb->ratelimit_complete_timer,
+                    get_clock_ms(rt_clock) + WRITE_RATELIMIT_GAP_MS);
+            TAILQ_INSERT_TAIL(&s->rlimit_write_queue, acb, rlimit_write_entry);
+#endif
+        } else {
+            /* immediate completion */
+            cb(opaque, 0);
+            acb = &dummy_acb;
+        }
+
 #ifdef SWAP_STATS
         acb->t1 = os_get_clock();
 #endif
     }
     return (BlockDriverAIOCB *) acb;
 }
-#endif  /* SWAP_NO_AIO */
 
 static int swap_flush(BlockDriverState *bs)
 {
@@ -2412,19 +2325,13 @@ BlockDriver bdrv_swap = {
     .instance_size = sizeof(BDRVSwapState),
     .bdrv_probe = NULL, /* no probe for protocols */
     .bdrv_open = swap_open,
-#ifdef SWAP_NO_AIO
-    .bdrv_read = swap_read,
-    .bdrv_write = swap_write,
-#endif
     .bdrv_close = swap_close,
     .bdrv_create = swap_create,
     .bdrv_flush = swap_flush,
     .bdrv_remove = swap_remove,
 
-#ifndef SWAP_NO_AIO
     .bdrv_aio_read = swap_aio_read,
     .bdrv_aio_write = swap_aio_write,
-#endif
 
     .protocol_name = "swap",
 };
