@@ -6,7 +6,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -1210,12 +1210,6 @@ void domain_unpause_by_systemcontroller(struct domain *d)
         domain_unpause(d);
     }
     hostsched_notify_exception(d);
-}
-
-void domain_initial_unpause(struct domain *d)
-{
-    domain_unpause_by_systemcontroller(d);
-    v4v_resume(d);
 }
 
 void

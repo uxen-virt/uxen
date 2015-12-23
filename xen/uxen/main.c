@@ -2,7 +2,7 @@
  *  uxen_main.c
  *  uxen
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -306,7 +306,7 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
 
         uxen_set_current(v);
         if (!v->vcpu_id)
-            domain_initial_unpause(v->domain);
+            v4v_resume(d);
         break;
 
     case VCI_RUN_MODE_PROCESS_IOREQ:

@@ -1,7 +1,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -827,7 +827,6 @@ void vcpu_unpause(struct vcpu *v);
 void domain_unpause(struct domain *d);
 void domain_pause_by_systemcontroller(struct domain *d);
 void domain_unpause_by_systemcontroller(struct domain *d);
-void domain_initial_unpause(struct domain *d);
 void domain_pause_for_suspend(struct domain *d);
 void domain_unpause_for_suspend(struct domain *d);
 void domain_pause_time(struct domain *d);

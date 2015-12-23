@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -168,7 +168,7 @@ parse_options(int argc, char **argv)
 
       long_index = 0;
 
-      c = getopt_long(argc, argv, "hcC:F:G:l:n:t", long_options, &index);
+      c = getopt_long(argc, argv, "hcC:F:G:l:n:tp", long_options, &index);
       if (c == -1)
 	  break;
 
@@ -362,11 +362,10 @@ main(int argc, char **argv)
     ni_start();
 #endif
 
-    if (vm_start_paused) {
-        vm_set_run_mode(PAUSE_VM);
-        vm_pause();
-    }
     vm_start_run();
+
+    if (!vm_start_paused)
+        vm_unpause();
 
     plog("ready");
     ret = asprintf(&vm_window_str, "0x%"PRIx64, (uint64_t)(uintptr_t)vm_window);
