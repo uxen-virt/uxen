@@ -61,6 +61,7 @@ static uint64_t xcr0_host = 0;
 /* Restore x87 extended state */
 static inline void fpu_xrstor(struct vcpu *v, uint64_t mask)
 {
+#ifndef __UXEN__
     /*
      * XCR0 normally represents what guest OS set. In case of Xen itself, 
      * we set all supported feature mask before doing save/restore.
@@ -68,6 +69,7 @@ static inline void fpu_xrstor(struct vcpu *v, uint64_t mask)
     if ( unlikely(v->arch.xcr0_accum != xcr0_host) && 
          likely(read_cr0() & X86_CR0_TS) )
         asm volatile ( "movdqu %xmm0,%xmm0" );
+#endif  /* __UXEN__ */
     sync_xcr0();
     set_xcr0(v->arch.xcr0_accum); /* XXX optional */
     xrstor(v, mask);
@@ -138,12 +140,14 @@ static inline void fpu_frstor(struct vcpu *v)
 /* Save x87 extended state */
 static inline void fpu_xsave(struct vcpu *v)
 {
+#ifndef __UXEN__
     /* XCR0 normally represents what guest OS set. In case of Xen itself,
      * we set all accumulated feature mask before doing save/restore.
      */
     if ( unlikely(v->arch.xcr0_accum != xcr0_host) && 
          likely(read_cr0() & X86_CR0_TS) )
         asm volatile ( "movdqu %xmm0,%xmm0" );
+#endif  /* __UXEN__ */
     set_xcr0(v->arch.xcr0_accum);
     xsave(v, v->arch.nonlazy_xstate_used ? XSTATE_ALL : XSTATE_LAZY);
     set_xcr0(xcr0_host);    
@@ -223,18 +227,64 @@ void vcpu_restore_fpu_eager(struct vcpu *v)
 }
 #endif  /* __UXEN__ */
 
+#if defined(__i386__) || defined(UXEN_HOST_OSX)
+DEFINE_PER_CPU(uint8_t, host_cr0_ts);
+
+static inline void
+clear_cr0_ts(void)
+{
+#if defined(__i386__)
+    if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD)
+        return;
+#endif  /* __i386__ */
+
+    clts();
+}
+
+static inline void
+save_and_clear_cr0_ts(void)
+{
+#if defined(__i386__)
+    if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD)
+        return;
+#endif  /* __i386__ */
+
+    this_cpu(host_cr0_ts) = !!(read_cr0() & X86_CR0_TS);
+    if (this_cpu(host_cr0_ts))
+        clts();
+}
+
+static inline void
+restore_cr0_ts(void)
+{
+#if defined(__i386__)
+    if (boot_cpu_data.x86_vendor != X86_VENDOR_AMD)
+        return;
+#endif  /* __i386__ */
+
+    if (this_cpu(host_cr0_ts)) {
+        stts();
+        this_cpu(host_cr0_ts) = 0;
+    }
+}
+
+#else  /* __i386__ || UXEN_HOST_OSX */
+#define clear_cr0_ts() do { /* nothing */ } while (0)
+#define save_and_clear_cr0_ts() do { /* nothing */ } while (0)
+#define restore_cr0_ts() do { /* nothing */ } while (0)
+#endif /* __i386__ || UXEN_HOST_OSX */
+
 /* 
  * Restore FPU state when #NM is triggered.
  */
 void vcpu_restore_fpu_lazy(struct vcpu *v)
 {
+    unsigned long flags;
+
     ASSERT(!is_idle_vcpu(v));
 
-#ifdef __i386__
-    /* Avoid recursion. */
-    if (boot_cpu_data.x86_vendor ==  X86_VENDOR_AMD)
-        clts();
-#endif  /* __i386__ */
+    cpu_irq_save(flags);
+    clear_cr0_ts();
 
     if ( v->fpu_dirtied )
         return;
@@ -254,9 +304,11 @@ void vcpu_restore_fpu_lazy(struct vcpu *v)
     } else {
         fpu_init();
         if ( xsave_enabled(v) ) {
+#ifndef __UXEN__
             if ( unlikely(v->arch.xcr0_accum != xcr0_host) && 
                  likely(read_cr0() & X86_CR0_TS) )
                 asm volatile ( "movdqu %xmm0,%xmm0" );
+#endif  /* __UXEN__ */
             sync_xcr0();
             set_xcr0(v->arch.xcr0_accum);
             xrstor(v, 0);           /* init xsave area for xsaveopt */
@@ -270,6 +322,8 @@ void vcpu_restore_fpu_lazy(struct vcpu *v)
         set_xcr0(v->arch.xcr0);
 
     v->fpu_dirtied = 1;
+
+    cpu_irq_restore(flags);
 }
 
 /* 
@@ -278,21 +332,15 @@ void vcpu_restore_fpu_lazy(struct vcpu *v)
  */
 void vcpu_save_fpu(struct vcpu *v)
 {
+    unsigned long flags;
+
     if ( !v->fpu_dirtied )
         return;
 
     ASSERT(!is_idle_vcpu(v));
 
-#ifndef __UXEN__
-    /* This can happen, if a paravirtualised guest OS has set its CR0.TS. */
-    clts();
-#else  /* __UXEN__ */
-#ifdef __i386__
-    /* Avoid recursion. */
-    if (boot_cpu_data.x86_vendor ==  X86_VENDOR_AMD)
-        clts();
-#endif  /* __i386__ */
-#endif  /* __UXEN__ */
+    cpu_irq_save(flags);
+    clear_cr0_ts();
 
     if ( xsave_enabled(v) )
         fpu_xsave(v);
@@ -307,32 +355,44 @@ void vcpu_save_fpu(struct vcpu *v)
 #endif  /* __UXEN__ */
 
     v->fpu_dirtied = 0;
-#ifndef __UXEN__
-    stts();
-#endif  /* __UXEN__ */
+
+    cpu_irq_restore(flags);
 }
 
 void vcpu_save_fpu_host(struct vcpu *v)
 {
+    unsigned long flags;
 
     if (!xsave_enabled(v))
         return;
 
+    cpu_irq_save(flags);
+    save_and_clear_cr0_ts();
+
     set_xcr0(xfeature_mask);
     xsave(dom0->vcpu[smp_processor_id()], xfeature_mask);
     set_xcr0(xcr0_host);
+
+    cpu_irq_restore(flags);
 }
 
 
 void vcpu_restore_fpu_host(struct vcpu *v)
 {
+    unsigned long flags;
 
     if (!xsave_enabled(v))
         return;
 
+    cpu_irq_save(flags);
+    clear_cr0_ts();
+
     set_xcr0(xfeature_mask);
     xrstor(dom0->vcpu[smp_processor_id()], xfeature_mask);
     set_xcr0(xcr0_host);
+
+    restore_cr0_ts();
+    cpu_irq_restore(flags);
 }
 
 /* Initialize FPU's context save area */

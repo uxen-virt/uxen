@@ -18,7 +18,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -1008,11 +1008,7 @@ static int construct_vmcs(struct vcpu *v)
 
     /* Host control registers. */
 #if defined(__UXEN__)
-#if defined(__x86_64__)
-    v->arch.hvm_vmx.host_cr0 = read_cr0();
-#else
     v->arch.hvm_vmx.host_cr0 = read_cr0() & ~X86_CR0_TS;
-#endif
 #else   /* __UXEN__ */
     v->arch.hvm_vmx.host_cr0 = read_cr0() | X86_CR0_TS;
 #endif  /* __UXEN__ */

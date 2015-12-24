@@ -721,8 +721,6 @@ static void vmx_fpu_enter(struct vcpu *v)
 {
     v->arch.hvm_vmx.exception_bitmap &= ~(1u << TRAP_no_device);
     vmx_update_exception_bitmap(v);
-    v->arch.hvm_vmx.host_cr0 &= ~X86_CR0_TS;
-    __vmwrite(HOST_CR0, v->arch.hvm_vmx.host_cr0);
 }
 
 #ifndef __UXEN__
@@ -809,16 +807,16 @@ static void sync_host_vmcs_state(struct vcpu *v)
 
     vmx_vmcs_enter(v);
 
-    cr = read_cr0();
+    cr = read_cr0() & ~X86_CR0_TS;
     if (v->arch.hvm_vmx.host_cr0 != cr) {
         /* printk("%s:%d: cr0 host %"PRIx64" vcpu %"PRIx64"\n", __FUNCTION__, */
         /*        host_processor_id(), cr, v->arch.hvm_vmx.host_cr0); */
         v->arch.hvm_vmx.host_cr0 = cr;
     }
-    if (vmr(HOST_CR0) != (v->arch.hvm_vmx.host_cr0 & ~X86_CR0_TS)) {
+    if (vmr(HOST_CR0) != v->arch.hvm_vmx.host_cr0) {
         printk("%s:%d: cr0 vcpu %lx vmcs %lx\n", __FUNCTION__,
                host_processor_id(), v->arch.hvm_vmx.host_cr0, vmr(HOST_CR0));
-        __vmwrite(HOST_CR0, v->arch.hvm_vmx.host_cr0 & ~X86_CR0_TS);
+        __vmwrite(HOST_CR0, v->arch.hvm_vmx.host_cr0);
     }
 
     cr = read_cr4_cpu();
