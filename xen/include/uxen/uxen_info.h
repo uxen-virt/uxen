@@ -83,7 +83,7 @@
 #define UI_HOST_CALL_ui_memcache_check              UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_memcache_dm_enter           UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_memcache_dm_clear           UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_memcache_dm_map_mfn         UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_map_mfn                     UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_user_access_ok              UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_signal_v4v                  UI_HOST_CALL_SAVE_XMM
 
@@ -215,8 +215,7 @@ struct /* __WINPACKED__ */ uxen_info {
                                                     xen_pfn_t, xen_pfn_t);
     uint64_t (__interface_fn *ui_memcache_dm_clear)(struct vm_info_shared *,
                                                     xen_pfn_t, int);
-    uint64_t (__interface_fn *ui_memcache_dm_map_mfn)(uintptr_t va,
-                                                      xen_pfn_t mfn);
+    uint64_t (__interface_fn *ui_map_mfn)(uintptr_t va, xen_pfn_t mfn);
     char *ui_percpu_area[UXEN_MAXIMUM_PROCESSORS];
     uint64_t (__interface_fn *ui_user_access_ok)(void *, void *, uint64_t);
     void (__interface_fn *ui_signal_v4v)(void);

@@ -24,7 +24,7 @@
 #include <uxen/uxen.h>
 #include <uxen/uxen_memcache_dm.h>
 
-#define map_mfn(va, mfn) UI_HOST_CALL(ui_memcache_dm_map_mfn, va, mfn)
+#define map_mfn(va, mfn) UI_HOST_CALL(ui_map_mfn, va, mfn)
 
 #define MDM_MD_FREE_BITS 64
 #define MDM_MD_FREE_BYTES 8

@@ -898,7 +898,7 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
     uxen_info->ui_memcache_check = uxen_memcache_check;
 
     set_map_mfn_pte_flags();
-    uxen_info->ui_memcache_dm_map_mfn = map_mfn;
+    uxen_info->ui_map_mfn = map_mfn;
 
     uxen_info->ui_user_access_ok = uxen_mem_user_access_ok;
 
