@@ -234,7 +234,7 @@ void vcpu_restore_fpu_lazy(struct vcpu *v)
     /* Avoid recursion. */
     if (boot_cpu_data.x86_vendor ==  X86_VENDOR_AMD)
         clts();
-#endif  /* __UXEN__ */
+#endif  /* __i386__ */
 
     if ( v->fpu_dirtied )
         return;
@@ -286,6 +286,12 @@ void vcpu_save_fpu(struct vcpu *v)
 #ifndef __UXEN__
     /* This can happen, if a paravirtualised guest OS has set its CR0.TS. */
     clts();
+#else  /* __UXEN__ */
+#ifdef __i386__
+    /* Avoid recursion. */
+    if (boot_cpu_data.x86_vendor ==  X86_VENDOR_AMD)
+        clts();
+#endif  /* __i386__ */
 #endif  /* __UXEN__ */
 
     if ( xsave_enabled(v) )
