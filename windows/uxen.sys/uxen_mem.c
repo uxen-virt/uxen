@@ -1968,31 +1968,6 @@ uxen_mem_unmap_page_va(const void *va)
 #endif
 }
 
-uint64_t __cdecl
-uxen_mem_access_page_va(const void *va)
-{
-
-#ifdef MEMCACHE_MAP_FULL
-    return uxen_mem_mapped_va_pfn(va);
-#else  /* MEMCACHE_MAP_FULL */
-    mc_mfn_t mfn;
-
-    mfn = memcache_get_mfn(va);
-#ifdef DBG
-    if (mfn != uxen_mem_mapped_va_pfn(va)) {
-        dprintk("%s: mfn mismatch for va %p: %x != %x\n", __FUNCTION__,
-                va, mfn, uxen_mem_mapped_va_pfn(va));
-        mfn = uxen_mem_mapped_va_pfn(va);
-    }
-#endif  /* DBG */
-#ifdef DEBUG_PAGE_ALLOC
-    DASSERT(mfn >= 0x100000 || pinfotable[mfn].allocated);
-#endif  /* DEBUG_PAGE_ALLOC */
-    memcache_entry_get((mc_mfn_t)mfn);
-    return mfn;
-#endif  /* MEMCACHE_MAP_FULL */
-}
-
 void * __cdecl
 uxen_mem_map_page_range(uint64_t n, uxen_pfn_t *mfn)
 {

@@ -70,7 +70,6 @@
 #define UI_HOST_CALL_ui_unmap_page_global_va        UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_map_page                    UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_unmap_page_va               UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_access_page_va              UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_map_page_range              UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_unmap_page_range            UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_mapped_global_va_pfn        UI_HOST_CALL_SAVE_XMM
@@ -193,7 +192,6 @@ struct /* __WINPACKED__ */ uxen_info {
     uint64_t (__interface_fn *ui_unmap_page_global_va)(const void *);
     void *(__interface_fn *ui_map_page)(xen_pfn_t);
     uint64_t (__interface_fn *ui_unmap_page_va)(const void *);
-    uint64_t (__interface_fn *ui_access_page_va)(const void *);
     void *(__interface_fn *ui_map_page_range)(uint64_t, uxen_pfn_t *);
     uint64_t (__interface_fn *ui_unmap_page_range)(const void *, uint64_t,
                                                    uxen_pfn_t *);

@@ -273,10 +273,10 @@ union p2m_l1_cache {
     struct {
         /* prefix/table for set_entry l1 p2m table page cache */
         uint64_t se_l1_prefix;
-        void *se_l1_table;
+        mfn_t se_l1_mfn;
         /* prefix/table/lock for get_entry l1 p2m table page cache */
         uint64_t ge_l1_prefix[NR_GE_L1_CACHE];
-        void *ge_l1_table[NR_GE_L1_CACHE];
+        mfn_t ge_l1_mfn[NR_GE_L1_CACHE];
 #define ge_l1_cache_hash(gfn) ((gfn >> PAGETABLE_ORDER) & (NR_GE_L1_CACHE - 1))
         mm_lock_t ge_l1_lock;
     };

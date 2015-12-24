@@ -1870,16 +1870,9 @@ _p2m_l1_cache_flush(union p2m_l1_cache *l1c)
 {
     int j;
 
-    if (l1c->se_l1_table) {
-        unmap_domain_page(l1c->se_l1_table);
-        l1c->se_l1_table = NULL;
-    }
-    for (j = 0; j < NR_GE_L1_CACHE; j++) {
-        if (l1c->ge_l1_table[j]) {
-            unmap_domain_page(l1c->ge_l1_table[j]);
-            l1c->ge_l1_table[j] = NULL;
-        }
-    }
+    l1c->se_l1_mfn = _mfn(0);
+    for (j = 0; j < NR_GE_L1_CACHE; j++)
+        l1c->ge_l1_mfn[j] = _mfn(0);
 }
 
 void
@@ -1899,13 +1892,11 @@ p2m_ge_l1_cache_invalidate(struct p2m_domain *p2m, unsigned long gfn,
 
     p2m_ge_l1_cache_lock(p2m);
     for (j = 0; j < NR_GE_L1_CACHE; j++) {
-        if (l1c->ge_l1_table[j] &&
+        if (mfn_valid_page(l1c->ge_l1_mfn[j]) &&
             /* prefix of cached l1 matches non-l1 update prefix? */
             ((gfn & ~((1UL << page_order) - 1)) ==
-             (l1c->ge_l1_prefix[j] & ~((1UL << page_order) - 1)))) {
-            unmap_domain_page(l1c->ge_l1_table[j]);
-            l1c->ge_l1_table[j] = NULL;
-        }
+             (l1c->ge_l1_prefix[j] & ~((1UL << page_order) - 1))))
+            l1c->ge_l1_mfn[j] = _mfn(0);
     }
     p2m_ge_l1_cache_unlock(p2m);
 

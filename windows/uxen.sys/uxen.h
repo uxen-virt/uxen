@@ -353,7 +353,6 @@ int uxen_mem_mmapbatch(struct uxen_mmapbatch_desc *, struct fd_assoc *);
 int uxen_mem_munmap(struct uxen_munmap_desc *, struct fd_assoc *);
 void * __cdecl uxen_mem_map_page(xen_pfn_t);
 uint64_t __cdecl uxen_mem_unmap_page_va(const void *);
-uint64_t __cdecl uxen_mem_access_page_va(const void *);
 void * __cdecl uxen_mem_map_page_range(uint64_t, uxen_pfn_t *);
 uint64_t __cdecl uxen_mem_unmap_page_range(const void *, uint64_t,
                                            uxen_pfn_t *);

@@ -69,13 +69,6 @@ unmap_page_va(const void *va)
     return physmap_va_to_pfn(va);
 }
 
-static uint64_t
-access_page_va(const void *va)
-{
-
-    return physmap_va_to_pfn(va);
-}
-
 struct map_range_handle {
     void *handle;
 };
@@ -678,7 +671,6 @@ uxen_op_init(struct fd_assoc *fda)
 
     uxen_info->ui_map_page = map_page;
     uxen_info->ui_unmap_page_va = unmap_page_va;
-    uxen_info->ui_access_page_va = access_page_va;
     uxen_info->ui_map_page_global = map_page;
     uxen_info->ui_unmap_page_global_va = unmap_page_va;
     uxen_info->ui_map_page_range = map_page_range;

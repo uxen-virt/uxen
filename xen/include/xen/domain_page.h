@@ -208,23 +208,6 @@ uxen_unmap_page_global(const void *va)
 #endif
 }
 
-static inline void
-uxen_access_page(const void *va)
-{
-#ifdef __i386__
-#ifdef DEBUG_MAPCACHE
-    unsigned long _mfn;
-
-    _mfn = UI_HOST_CALL(ui_access_page_va, va);
-    ASSERT(_mfn != INVALID_MFN);
-    ASSERT(atomic_read(&mfn_to_page(_mfn)->mapped));
-    atomic_inc(&mfn_to_page(_mfn)->mapped);
-#else  /* DEBUG_MAPCACHE */
-    UI_HOST_CALL(ui_access_page_va, va);
-#endif  /* DEBUG_MAPCACHE */
-#endif
-}
-
 static inline void *
 uxen_map_domain_page(unsigned long mfn)
 {
@@ -239,14 +222,6 @@ uxen_unmap_domain_page(const void *va)
 
     perfc_incr(unmap_domain_page_count);
     uxen_unmap_page(va);
-}
-
-static inline void
-uxen_access_domain_page(const void *va)
-{
-
-    perfc_incr(access_domain_page_count);
-    uxen_access_page(va);
 }
 
 static inline void *
@@ -284,7 +259,7 @@ uxen_unmap_domain_page_direct(const void *va)
 #define map_domain_page(mfn)                uxen_map_domain_page(mfn)
 #define __map_domain_page(pg)               uxen_map_domain_page(__page_to_mfn(pg))
 #define unmap_domain_page(va)               uxen_unmap_domain_page(va)
-#define access_domain_page(va)              uxen_access_domain_page(va)
+#define mapped_domain_page_va_pfn(va)       virt_to_mfn(va)
 
 #define map_domain_page_direct(mfn)         uxen_map_domain_page_direct(mfn)
 #define unmap_domain_page_direct(va)        uxen_unmap_domain_page_direct(va)
