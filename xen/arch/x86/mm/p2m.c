@@ -96,6 +96,9 @@ boolean_param("hap_2mb", opt_hap_2mb);
 #define page_to_mfn(_pg) _mfn(__page_to_mfn(_pg))
 
 
+static void p2m_l1_cache_flush(struct p2m_domain *p2m);
+
+
 /* Init the datastructures for later use by the p2m code */
 static void p2m_initialise(struct domain *d, struct p2m_domain *p2m)
 {
@@ -527,8 +530,7 @@ void p2m_teardown(struct p2m_domain *p2m)
 #endif
 #endif  /* __UXEN__ */
 
-    if (p2m->p2m_l1_cache_flush)
-        p2m->p2m_l1_cache_flush(p2m);
+    p2m_l1_cache_flush(p2m);
 
     p2m->phys_table = pagetable_null();
 
@@ -1875,7 +1877,7 @@ _p2m_l1_cache_flush(union p2m_l1_cache *l1c)
         l1c->ge_l1_mfn[j] = _mfn(0);
 }
 
-void
+static void
 p2m_l1_cache_flush(struct p2m_domain *p2m)
 {
 

@@ -366,8 +366,8 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
               unsigned int page_order, p2m_type_t p2mt, p2m_access_t p2ma)
 {
     // XXX -- this might be able to be faster iff current->domain == d
-    mfn_t table_mfn = pagetable_get_mfn(p2m_get_pagetable(p2m));
-    void *table =map_domain_page(mfn_x(table_mfn));
+    mfn_t table_mfn;
+    void *table;
     unsigned long i, gfn_remainder = gfn;
     l1_pgentry_t *p2m_entry;
     l1_pgentry_t entry_content;
@@ -378,6 +378,7 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
                                    IOMMUF_readable|IOMMUF_writable:
                                    0; 
     unsigned long old_mfn = 0;
+    union p2m_l1_cache *l1c = &p2m->p2m_l1_cache;
 
     if ( tb_init_done )
     {
@@ -396,6 +397,21 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
         __trace_var(TRC_MEM_SET_P2M_ENTRY, 0, sizeof(t), &t);
     }
 
+    if (!page_order && mfn_valid_page(mfn_x(l1c->se_l1_mfn)) &&
+        p2m_l1_prefix(gfn) == l1c->se_l1_prefix) {
+        perfc_incr(p2m_set_entry_cached);
+        table_mfn = l1c->se_l1_mfn;
+        table = map_domain_page(mfn_x(table_mfn));
+        gfn_remainder = gfn & ((1UL << PAGETABLE_ORDER) - 1);
+        goto cont_l1;
+    }
+    l1c->se_l1_mfn = _mfn(0);
+
+    perfc_incr(p2m_set_entry_walk);
+
+    table_mfn = pagetable_get_mfn(p2m_get_pagetable(p2m));
+    table = map_domain_page(mfn_x(table_mfn));
+
 #if CONFIG_PAGING_LEVELS >= 4
     if ( !p2m_next_level(p2m, &table_mfn, &table, &gfn_remainder, gfn,
                          L4_PAGETABLE_SHIFT - PAGE_SHIFT,
@@ -412,6 +428,11 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
                                    L3_PAGETABLE_SHIFT - PAGE_SHIFT,
                                    L3_PAGETABLE_ENTRIES);
         ASSERT(p2m_entry);
+
+        /* Non-l1 update -- invalidate the get_entry cache */
+        if (l1e_get_flags(*p2m_entry) & _PAGE_PRESENT)
+            p2m_ge_l1_cache_invalidate(p2m, gfn, page_order);
+
         if ( (l1e_get_flags(*p2m_entry) & _PAGE_PRESENT) &&
              !(l1e_get_flags(*p2m_entry) & _PAGE_PSE) )
         {
@@ -462,6 +483,10 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
                              L2_PAGETABLE_ENTRIES, PGT_l1_page_table) )
             goto out;
 
+        l1c->se_l1_prefix = p2m_l1_prefix(gfn);
+        l1c->se_l1_mfn = table_mfn;
+
+      cont_l1:
         p2m_entry = p2m_find_entry(table, &gfn_remainder, gfn,
                                    0, L1_PAGETABLE_ENTRIES);
         ASSERT(p2m_entry);
@@ -496,6 +521,10 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
                                    L2_PAGETABLE_ENTRIES);
         ASSERT(p2m_entry);
         
+        /* Non-l1 update -- invalidate the get_entry cache */
+        if (l1e_get_flags(*p2m_entry) & _PAGE_PRESENT)
+            p2m_ge_l1_cache_invalidate(p2m, gfn, page_order);
+
         /* FIXME: Deal with 4k replaced by 2meg pages */
         if ( (l1e_get_flags(*p2m_entry) & _PAGE_PRESENT) &&
              !(l1e_get_flags(*p2m_entry) & _PAGE_PSE) )
@@ -872,6 +901,8 @@ p2m_gfn_to_mfn(struct p2m_domain *p2m, unsigned long gfn,
     paddr_t addr = ((paddr_t)gfn) << PAGE_SHIFT;
     l2_pgentry_t *l2e;
     l1_pgentry_t *l1e;
+    int ge_l1_cache_slot = ge_l1_cache_hash(gfn);
+    union p2m_l1_cache *l1c = &p2m->p2m_l1_cache;
 
     ASSERT(paging_mode_translate(p2m->domain));
 
@@ -896,6 +927,20 @@ p2m_gfn_to_mfn(struct p2m_domain *p2m, unsigned long gfn,
 #endif  /* __UXEN__ */
 
     mfn = pagetable_get_mfn(p2m_get_pagetable(p2m));
+
+    p2m_ge_l1_cache_lock(p2m);
+    if (mfn_valid_page(mfn_x(l1c->ge_l1_mfn[ge_l1_cache_slot])) &&
+        p2m_l1_prefix(gfn) == l1c->ge_l1_prefix[ge_l1_cache_slot]) {
+        perfc_incr(p2m_get_entry_cached);
+        l1e = map_domain_page(mfn_x(l1c->ge_l1_mfn[ge_l1_cache_slot]));
+        p2m_ge_l1_cache_unlock(p2m);
+        goto cont_l1;
+    }
+
+    l1c->ge_l1_mfn[ge_l1_cache_slot] = _mfn(0);
+    p2m_ge_l1_cache_unlock(p2m);
+
+    perfc_incr(p2m_get_entry_walk);
 
 #if CONFIG_PAGING_LEVELS >= 4
     {
@@ -1013,7 +1058,15 @@ pod_retry_l2:
     mfn = _mfn(l2e_get_pfn(*l2e));
     unmap_domain_page(l2e);
 
+    p2m_ge_l1_cache_lock(p2m);
+    if (!mfn_valid_page(mfn_x(l1c->ge_l1_mfn[ge_l1_cache_slot]))) {
+        l1c->ge_l1_prefix[ge_l1_cache_slot] = p2m_l1_prefix(gfn);
+        l1c->ge_l1_mfn[ge_l1_cache_slot] = mfn;
+    }
+    p2m_ge_l1_cache_unlock(p2m);
+
     l1e = map_domain_page(mfn_x(mfn));
+  cont_l1:
     l1e += l1_table_offset(addr);
 
     mfn = _mfn(INVALID_MFN);
@@ -1221,6 +1274,8 @@ void p2m_pt_init(struct p2m_domain *p2m)
     p2m->change_entry_type_global = p2m_change_type_global;
     p2m->split_super_page_one = npt_split_super_page_one;
     p2m->write_p2m_entry = paging_write_p2m_entry;
+
+    mm_lock_init(&p2m->p2m_l1_cache.ge_l1_lock);
 }
 
 

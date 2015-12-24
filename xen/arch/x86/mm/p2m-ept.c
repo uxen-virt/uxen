@@ -1147,7 +1147,6 @@ void ept_p2m_init(struct p2m_domain *p2m)
     p2m->change_entry_type_global = ept_change_entry_type_global;
     p2m->ro_update_l2_entry = ept_ro_update_l2_entry;
 
-    p2m->p2m_l1_cache_flush = p2m_l1_cache_flush;
     mm_lock_init(&p2m->p2m_l1_cache.ge_l1_lock);
 }
 

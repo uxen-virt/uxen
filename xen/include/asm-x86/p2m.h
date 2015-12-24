@@ -284,7 +284,6 @@ union p2m_l1_cache {
 
 #define p2m_l1_prefix(gfn) ((gfn) & ~((1UL << PAGETABLE_ORDER) - 1))
 
-void p2m_l1_cache_flush(struct p2m_domain *p2m);
 void p2m_ge_l1_cache_invalidate(struct p2m_domain *p2m, unsigned long gfn,
                                 unsigned int page_order);
 
@@ -361,8 +360,6 @@ struct p2m_domain {
     int                (*ro_update_l2_entry)(struct p2m_domain *p2m,
                                              unsigned long gfn, int read_only,
                                              int *need_sync);
-
-    void               (*p2m_l1_cache_flush)(struct p2m_domain *p2m);
 
     /* Default P2M access type for each page in the the domain: new pages,
      * swapped in pages, cleared pages, and pages that are ambiquously
