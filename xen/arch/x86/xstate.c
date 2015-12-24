@@ -7,7 +7,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -300,8 +300,8 @@ void xstate_init(void)
         xsave_cntxt_size = ebx;
         xfeature_mask = xcr0 & XCNTXT_MASK;
         printk("%s: using cntxt_size: 0x%x and states: 0x%"PRIx64
-            " (host states 0x%"PRIx64"\n", __func__, xsave_cntxt_size,
-            xfeature_mask, xcr0);
+            " (masked 0x%"PRIx64")\n", __func__, xsave_cntxt_size,
+               xcr0, xfeature_mask);
 
         /* Check XSAVEOPT feature. */
         cpuid_count(XSTATE_CPUID, 1, &eax, &ebx, &ecx, &edx);
