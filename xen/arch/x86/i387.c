@@ -10,7 +10,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -309,10 +309,11 @@ void vcpu_save_fpu(struct vcpu *v)
 void vcpu_save_fpu_host(struct vcpu *v)
 {
 
-    if ( !xsave_enabled(v)) return;
+    if (!xsave_enabled(v))
+        return;
 
     set_xcr0(xfeature_mask);
-    xsave_host(v, xfeature_mask);
+    xsave(dom0->vcpu[smp_processor_id()], xfeature_mask);
     set_xcr0(xcr0_host);
 }
 
@@ -320,10 +321,11 @@ void vcpu_save_fpu_host(struct vcpu *v)
 void vcpu_restore_fpu_host(struct vcpu *v)
 {
 
-    if ( !xsave_enabled(v)) return;
+    if (!xsave_enabled(v))
+        return;
 
     set_xcr0(xfeature_mask);
-    xrstor_host(v, xfeature_mask);
+    xrstor(dom0->vcpu[smp_processor_id()], xfeature_mask);
     set_xcr0(xcr0_host);
 }
 

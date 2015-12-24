@@ -88,9 +88,7 @@ void sync_xcr0(void);
 void set_xcr0(u64 xfeatures);
 uint64_t get_xcr0(void);
 void xsave(struct vcpu *v, uint64_t mask);
-void xsave_host(struct vcpu *v, uint64_t mask);
 void xrstor(struct vcpu *v, uint64_t mask);
-void xrstor_host(struct vcpu *v, uint64_t mask);
 bool_t xsave_enabled(const struct vcpu *v);
 
 /* extended state init and cleanup functions */

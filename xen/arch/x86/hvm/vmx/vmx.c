@@ -18,7 +18,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -775,6 +775,8 @@ static void vmx_ctxt_switch_from(struct vcpu *v)
 
     if ( cpu_has_rdtscp && hvm_has_rdtscp(v->domain) )
         wrmsrl(MSR_TSC_AUX, this_cpu(host_msr_tsc_aux));
+
+    vcpu_restore_fpu_host(v);
 }
 
 static unsigned long vmr(unsigned long field)
@@ -995,6 +997,8 @@ static void vmx_ctxt_switch_to(struct vcpu *v)
 
     if (v->context_loaded != 0)
         return;
+
+    vcpu_save_fpu_host(v);
 
     ASSERT(v->is_running);
 

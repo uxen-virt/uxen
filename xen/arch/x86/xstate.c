@@ -112,8 +112,9 @@ inline uint64_t get_xcr0(void)
 #endif  /* __UXEN__ */
 
 
-static void _xsave(struct xsave_struct *ptr, uint64_t mask)
+void xsave(struct vcpu *v, uint64_t mask)
 {
+    struct xsave_struct *ptr = v->arch.xsave_area;
     uint32_t hmask = mask >> 32;
     uint32_t lmask = mask;
 
@@ -134,53 +135,22 @@ static void _xsave(struct xsave_struct *ptr, uint64_t mask)
      * need to test cpu feature*/
 }
 
-
-void xsave(struct vcpu *v, uint64_t mask)
-{
-    struct xsave_struct *ptr = v->arch.xsave_area;
-
-    _xsave(ptr, mask);
-}
-
-void xsave_host(struct vcpu *v, uint64_t mask)
-{
-    struct xsave_struct *ptr = v->arch.host_xsave_area;
-
-    _xsave(ptr, mask);
-}
-
-static void _xrstor(struct xsave_struct *ptr, uint64_t mask)
+void xrstor(struct vcpu *v, uint64_t mask)
 {
     uint32_t hmask = mask >> 32;
     uint32_t lmask = mask;
+
+    struct xsave_struct *ptr = v->arch.xsave_area;
+
+#ifdef __UXEN__
+    xsetbv_maybe(XCR_XFEATURE_ENABLED_MASK,
+                 v->domain->domain_id ? v->arch.xcr0_accum : xfeature_mask);
+#endif  /* __UXEN__ */
 
     asm volatile (
         ".byte " REX_PREFIX "0x0f,0xae,0x2f"
         :
         : "m" (*ptr), "a" (lmask), "d" (hmask), "D"(ptr) );
-
-}
-
-void xrstor(struct vcpu *v, uint64_t mask)
-{
-    struct xsave_struct *ptr = v->arch.xsave_area;
-
-#ifdef __UXEN__
-    xsetbv_maybe(XCR_XFEATURE_ENABLED_MASK, v->arch.xcr0_accum);
-#endif  /* __UXEN__ */
-
-    _xrstor(ptr, mask);
-}
-
-void xrstor_host(struct vcpu *v, uint64_t mask)
-{
-    struct xsave_struct *ptr = v->arch.host_xsave_area;
-
-#ifdef __UXEN__
-    xsetbv_maybe(XCR_XFEATURE_ENABLED_MASK, xfeature_mask);
-#endif  /* __UXEN__ */
-
-    _xrstor(ptr, mask);
 }
 
 bool_t xsave_enabled(const struct vcpu *v)
@@ -196,44 +166,29 @@ bool_t xsave_enabled(const struct vcpu *v)
 
 int xstate_alloc_save_area(struct vcpu *v)
 {
-    struct xsave_struct *save_area, *host_save_area;
+    struct xsave_struct *save_area;
 
     if ( !cpu_has_xsave || is_idle_vcpu(v) )
         return 0;
 
     BUG_ON(xsave_cntxt_size < XSTATE_AREA_MIN_SIZE);
 
-
-
-    if (v->domain->domain_id) {  /* no vmi_xsave for dom0 */
+    if (v->domain->domain_id)   /* no vmi_xsave for dom0 */
         save_area = (struct xsave_struct *)(uintptr_t)
             (v->domain->vm_info_shared->vmi_xsave +
-             2 * v->vcpu_id * xsave_cntxt_size);
-        host_save_area = (struct xsave_struct *)(uintptr_t)
-            (v->domain->vm_info_shared->vmi_xsave +
-             (1 + 2 * v->vcpu_id) * xsave_cntxt_size);
-    } else {
+             v->vcpu_id * xsave_cntxt_size);
+    else {
         /* XSAVE/XRSTOR requires the save area be 64-byte-boundary aligned. */
         save_area = _xzalloc(xsave_cntxt_size, 64);
         if ( save_area == NULL )
             return -ENOMEM;
-        host_save_area = _xzalloc(xsave_cntxt_size, 64);
-        if ( host_save_area == NULL ) {
-	    xfree(save_area);
-            return -ENOMEM;
-        }
     }
 
     save_area->fpu_sse.fcw = FCW_DEFAULT;
     save_area->fpu_sse.mxcsr = MXCSR_DEFAULT;
     save_area->xsave_hdr.xstate_bv = XSTATE_FP_SSE;
 
-    host_save_area->fpu_sse.fcw = FCW_DEFAULT;
-    host_save_area->fpu_sse.mxcsr = MXCSR_DEFAULT;
-    host_save_area->xsave_hdr.xstate_bv = xfeature_mask;
-
     v->arch.xsave_area = save_area;
-    v->arch.host_xsave_area = host_save_area;
     v->arch.xcr0 = XSTATE_FP_SSE;
 #ifndef UXEN_HOST_OSX
     /* on windows, save SSE plus whatever the VM uses */
@@ -248,12 +203,9 @@ int xstate_alloc_save_area(struct vcpu *v)
 
 void xstate_free_save_area(struct vcpu *v)
 {
-    if (!v->domain->domain_id) {
+    if (!v->domain->domain_id)
         xfree(v->arch.xsave_area);
-        xfree(v->arch.host_xsave_area);
-    }
     v->arch.xsave_area = NULL;
-    v->arch.host_xsave_area = NULL;
 }
 
 /* Collect the information of processor's extended state */
@@ -308,7 +260,7 @@ void xstate_init(void)
         cpu_has_xsaveopt = !!(eax & XSTATE_FEATURE_XSAVEOPT);
 
         /* XSAVE/XRSTOR requires the save area be 64-byte-boundary aligned. */
-        _uxen_info.ui_xsave_cntxt_size = 2 * ((xsave_cntxt_size + 63) & ~63);
+        _uxen_info.ui_xsave_cntxt_size = (xsave_cntxt_size + 63) & ~63;
     }
     else
     {

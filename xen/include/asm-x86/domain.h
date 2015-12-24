@@ -521,7 +521,6 @@ struct arch_vcpu
      * #NM handler, we XRSTOR the states we XSAVE-ed;
      */
     struct xsave_struct *xsave_area;
-    struct xsave_struct *host_xsave_area;
     uint64_t xcr0;
     /* Accumulated eXtended features mask for using XSAVE/XRESTORE by Xen
      * itself, as we can never know whether guest OS depends on content
