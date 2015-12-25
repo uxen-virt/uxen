@@ -235,8 +235,7 @@ void xstate_init(void)
     curr_xcr0 = xgetbv(XCR_XFEATURE_ENABLED_MASK);
     if ( opt_xfeatures ) {
         sync_xcr0();
-        set_xcr0(((((u64)edx << 32) | eax) & (curr_xcr0 | opt_xfeatures)) &
-                 XCNTXT_MASK);
+        set_xcr0((((u64)edx << 32) | eax) & (curr_xcr0 | opt_xfeatures));
         cpuid_count(XSTATE_CPUID, 0, &eax, &ebx, &ecx, &edx);
         xcr0 = xgetbv(XCR_XFEATURE_ENABLED_MASK);
         set_xcr0(curr_xcr0);             
