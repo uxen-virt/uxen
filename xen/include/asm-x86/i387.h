@@ -14,11 +14,14 @@
 #include <xen/types.h>
 #include <xen/percpu.h>
 
+void fpu_early_init(void);
+
 void vcpu_restore_fpu_eager(struct vcpu *v);
 void vcpu_restore_fpu_lazy(struct vcpu *v);
 void vcpu_save_fpu(struct vcpu *v);
-void vcpu_restore_fpu_host(struct vcpu *v);
+void vcpu_save_fpu_hostcall(struct vcpu *v);
 void vcpu_save_fpu_host(struct vcpu *v);
+void vcpu_restore_fpu_host(struct vcpu *v);
 
 int vcpu_init_fpu(struct vcpu *v);
 void vcpu_destroy_fpu(struct vcpu *v);

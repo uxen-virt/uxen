@@ -21,7 +21,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -1867,7 +1867,8 @@ int hvm_handle_xsetbv(u64 new_bv)
 
     v->arch.xcr0 = new_bv;
     v->arch.xcr0_accum |= new_bv;
-    set_xcr0(new_bv);
+    if (v->fpu_dirtied)
+        set_xcr0(new_bv, XCR0_STATE_VM);
 
     return 0;
 err:

@@ -2517,6 +2517,7 @@ asmlinkage_abi void svm_restore_regs(void)
 {
 
     vcpu_restore_fpu_lazy(current);
+    assert_xcr0_state(XCR0_STATE_VM);
 }
 
 /*

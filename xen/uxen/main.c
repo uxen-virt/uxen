@@ -25,6 +25,7 @@
 #include <asm/mm.h>
 #include <asm/p2m.h>
 #include <asm/hap.h>
+#include <asm/xstate.h>
 #include <public/sched.h>
 
 #include <uxen/uxen.h>
@@ -64,8 +65,6 @@ uint32_t _host_cpu_preemption[NR_CPUS];
 int hostsched_setup_vm(struct domain *, struct vm_info_shared *);
 struct vm_vcpu_info_shared *hostsched_setup_vcpu(struct vcpu *,
                                                  struct vm_vcpu_info_shared *);
-extern void fpu_init(void);
-
 static void
 _cpu_irq_disable(void)
 {
@@ -230,7 +229,6 @@ do_setup_vm(struct uxen_createvm_desc *ucd, struct vm_info_shared *vmi,
         local_irq_disable();
         uxen_set_current(v);
         vcpu_switch_host_cpu(v);
-        fpu_init();
         uxen_set_current(dom0->vcpu[smp_processor_id()]);
         local_irq_enable();
 
@@ -437,6 +435,7 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
     _end_execution(NULL);
 
   out:
+    assert_xcr0_state(XCR0_STATE_HOST);
     if (d)
         put_domain(d);
     return ret;

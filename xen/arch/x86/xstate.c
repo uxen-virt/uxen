@@ -50,6 +50,10 @@ u64 xfeature_mask;
 /* Cached xcr0 for fast read */
 DEFINE_PER_CPU(uint64_t, xcr0);
 
+#ifdef XCR0_STATE_DEBUG
+DEFINE_PER_CPU(int, xcr0_state);
+#endif /* XCR0_STATE_DEBUG */
+
 #ifndef __UXEN__
 /* Because XCR0 is cached for each CPU, xsetbv() is not exposed. Users should 
  * use set_xcr0() instead.
@@ -98,7 +102,7 @@ inline void sync_xcr0(void)
     this_cpu(xcr0_last) = xgetbv(XCR_XFEATURE_ENABLED_MASK);
 }
 
-inline void set_xcr0(u64 xfeatures)
+inline void _set_xcr0(u64 xfeatures)
 {
     this_cpu(xcr0) = xfeatures;
     xsetbv_maybe(XCR_XFEATURE_ENABLED_MASK, xfeatures);
@@ -235,10 +239,11 @@ void xstate_init(void)
     curr_xcr0 = xgetbv(XCR_XFEATURE_ENABLED_MASK);
     if ( opt_xfeatures ) {
         sync_xcr0();
-        set_xcr0((((u64)edx << 32) | eax) & (curr_xcr0 | opt_xfeatures));
+        set_xcr0((((u64)edx << 32) | eax) & (curr_xcr0 | opt_xfeatures),
+                 XCR0_STATE_UNDEF);
         cpuid_count(XSTATE_CPUID, 0, &eax, &ebx, &ecx, &edx);
         xcr0 = xgetbv(XCR_XFEATURE_ENABLED_MASK);
-        set_xcr0(curr_xcr0);             
+        set_xcr0(curr_xcr0, XCR0_STATE_HOST);
     } else
         xcr0 = curr_xcr0;
 

@@ -76,6 +76,7 @@
 #ifndef __UXEN_NOT_YET__
 #include <asm/hvm/nestedhvm.h>
 #endif  /* __UXEN_NOT_YET__ */
+#include <asm/xstate.h>
 
 enum handler_return { HNDL_done, HNDL_unhandled, HNDL_exception_raised };
 
@@ -3461,6 +3462,7 @@ asmlinkage_abi void vmx_restore_regs(uintptr_t host_rsp)
     __vmwrite(GUEST_RFLAGS, regs->eflags);
 
     vcpu_restore_fpu_lazy(current);
+    assert_xcr0_state(XCR0_STATE_VM);
 
     if (vmx_vmcs_late_load)
         pv_vmcs_flush_dirty(this_cpu(current_vmcs_vmx), 0);

@@ -2,7 +2,7 @@
  *  uxen_info.h
  *  uxen
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -51,7 +51,7 @@
     ({                                                  \
         struct vcpu *v = current;                       \
         if (!uxen_info->host_os_is_xmm_clean && v)      \
-            vcpu_save_fpu(v);                           \
+            vcpu_save_fpu_hostcall(v);                  \
     }),
 
 #define UI_HOST_CALL_SAVE_NOTHING 0,

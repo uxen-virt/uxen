@@ -39,7 +39,14 @@
 /* eXtended features mask used by the host. */
 static uint64_t xcr0_host = 0;
 
-/* static */ void fpu_init(void)
+void fpu_early_init(void)
+{
+
+    if ( cpu_has_xsave && !xcr0_host )
+        xcr0_host = xgetbv(XCR_XFEATURE_ENABLED_MASK);
+}
+
+static void fpu_init(void)
 {
     unsigned long val;
     
@@ -50,9 +57,6 @@ static uint64_t xcr0_host = 0;
         val = MXCSR_DEFAULT;
         asm volatile ( "ldmxcsr %0" : : "m" (val) );
     }
-
-    if ( cpu_has_xsave && !xcr0_host )
-        xcr0_host = xgetbv(XCR_XFEATURE_ENABLED_MASK);
 }
 
 /*******************************/
@@ -71,9 +75,8 @@ static inline void fpu_xrstor(struct vcpu *v, uint64_t mask)
         asm volatile ( "movdqu %xmm0,%xmm0" );
 #endif  /* __UXEN__ */
     sync_xcr0();
-    set_xcr0(v->arch.xcr0_accum); /* XXX optional */
+    set_xcr0(v->arch.xcr0_accum, XCR0_STATE_VMALL);
     xrstor(v, mask);
-    set_xcr0(xcr0_host);
 }
 
 DEFINE_PER_CPU(bool_t, ffxse_efer);
@@ -148,9 +151,8 @@ static inline void fpu_xsave(struct vcpu *v)
          likely(read_cr0() & X86_CR0_TS) )
         asm volatile ( "movdqu %xmm0,%xmm0" );
 #endif  /* __UXEN__ */
-    set_xcr0(v->arch.xcr0_accum);
+    set_xcr0(v->arch.xcr0_accum, XCR0_STATE_VMALL);
     xsave(v, v->arch.nonlazy_xstate_used ? XSTATE_ALL : XSTATE_LAZY);
-    set_xcr0(xcr0_host);    
 }
 
 /* Save x87 FPU, MMX, SSE and SSE2 state */
@@ -310,16 +312,15 @@ void vcpu_restore_fpu_lazy(struct vcpu *v)
                 asm volatile ( "movdqu %xmm0,%xmm0" );
 #endif  /* __UXEN__ */
             sync_xcr0();
-            set_xcr0(v->arch.xcr0_accum);
+            set_xcr0(v->arch.xcr0_accum, XCR0_STATE_VMALL);
             xrstor(v, 0);           /* init xsave area for xsaveopt */
             xsave(v, XSTATE_LAZY);
-            set_xcr0(xcr0_host);
         }
         v->fpu_initialised = 1;
     }
 
-    if ( xsave_enabled(v) ) 
-        set_xcr0(v->arch.xcr0);
+    if ( xsave_enabled(v) )
+        set_xcr0(v->arch.xcr0, XCR0_STATE_VM);
 
     v->fpu_dirtied = 1;
 
@@ -359,6 +360,14 @@ void vcpu_save_fpu(struct vcpu *v)
     cpu_irq_restore(flags);
 }
 
+void vcpu_save_fpu_hostcall(struct vcpu *v)
+{
+    vcpu_save_fpu(v);
+    if (cpu_has_xsave)
+        set_xcr0(xcr0_host, XCR0_STATE_HOST);
+    assert_xcr0_state(XCR0_STATE_HOST);
+}
+
 void vcpu_save_fpu_host(struct vcpu *v)
 {
     unsigned long flags;
@@ -369,13 +378,11 @@ void vcpu_save_fpu_host(struct vcpu *v)
     cpu_irq_save(flags);
     save_and_clear_cr0_ts();
 
-    set_xcr0(xfeature_mask);
+    set_xcr0(xfeature_mask, XCR0_STATE_HOSTALL);
     xsave(dom0->vcpu[smp_processor_id()], xfeature_mask);
-    set_xcr0(xcr0_host);
 
     cpu_irq_restore(flags);
 }
-
 
 void vcpu_restore_fpu_host(struct vcpu *v)
 {
@@ -387,9 +394,9 @@ void vcpu_restore_fpu_host(struct vcpu *v)
     cpu_irq_save(flags);
     clear_cr0_ts();
 
-    set_xcr0(xfeature_mask);
+    set_xcr0(xfeature_mask, XCR0_STATE_HOSTALL);
     xrstor(dom0->vcpu[smp_processor_id()], xfeature_mask);
-    set_xcr0(xcr0_host);
+    set_xcr0(xcr0_host, XCR0_STATE_HOST);
 
     restore_cr0_ts();
     cpu_irq_restore(flags);

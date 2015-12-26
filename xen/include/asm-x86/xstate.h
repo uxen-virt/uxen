@@ -85,15 +85,48 @@ struct xsave_struct
 /* extended state operations */
 u64 xgetbv(uint32_t index);
 void sync_xcr0(void);
-void set_xcr0(u64 xfeatures);
+void _set_xcr0(u64 xfeatures);
 uint64_t get_xcr0(void);
 void xsave(struct vcpu *v, uint64_t mask);
 void xrstor(struct vcpu *v, uint64_t mask);
 bool_t xsave_enabled(const struct vcpu *v);
 
+#ifndef NDEBUG
+#define XCR0_STATE_DEBUG 1
+#endif  /* NDEBUG */
+
+#ifdef XCR0_STATE_DEBUG
+/* tag the set_xcr0 calls indicating which xcr0 value is being set,
+ * assert that the host value is used when returning to the host and
+ * the VM value is used when executing the VM */
+enum xcr0_state {
+    XCR0_STATE_HOST = 0,        /* start with host state */
+    XCR0_STATE_HOSTALL,
+    XCR0_STATE_VM,
+    XCR0_STATE_VMALL,
+    XCR0_STATE_UNDEF,
+};
+
+DECLARE_PER_CPU(int, xcr0_state);
+#define set_xcr0(xfeatures, state) do { \
+    _set_xcr0(xfeatures);               \
+    this_cpu(xcr0_state) = (state);     \
+    } while (0)
+#define assert_xcr0_state(state) ASSERT(this_cpu(xcr0_state) == (state))
+#else  /* XCR0_STATE_DEBUG */
+#define set_xcr0(xfeatures, state) _set_xcr0(xfeatures)
+#define assert_xcr0_state(state) do { /* nothing */ } while (0)
+#endif /* XCR0_STATE_DEBUG */
+
 /* extended state init and cleanup functions */
 void xstate_free_save_area(struct vcpu *v);
 int xstate_alloc_save_area(struct vcpu *v);
 void xstate_init(void);
+
+#define XCR0_STATE_HOST 0
+#define XCR0_STATE_VM 1
+#define XCR0_STATE_VMALL 2
+#define XCR0_STATE_HOSTALL 3
+#define XCR0_STATE_UNDEF 4
 
 #endif /* __ASM_XSTATE_H */

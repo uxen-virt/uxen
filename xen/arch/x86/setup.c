@@ -1,7 +1,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -1313,6 +1313,8 @@ intptr_t __init __interface_fn __uxen_start_xen(
     tasklet_subsys_init();
 
     early_cpu_init();
+
+    fpu_early_init();
 
 #ifndef __UXEN__
     paging_init();
