@@ -1168,6 +1168,13 @@ p2m_pod_add_compressed_page(struct p2m_domain *p2m, unsigned long gpfn,
         PAGE_SIZE - sizeof(struct page_data_info)) {
         if (!mfn_x(p2m->page_store.first_data_mfn))
             p2m->page_store.first_data_mfn = new_mfn;
+        else {
+            spin_lock(&d->page_alloc_lock);
+            page_list_del(new_page, &d->page_list);
+            page_list_add_after(new_page, mfn_to_page(p2m->page_store.data_mfn),
+                                &d->page_list);
+            spin_unlock(&d->page_alloc_lock);
+        }
         p2m->page_store.data_mfn = new_mfn;
         p2m->page_store.data_offset = 0;
         new_page = NULL;
@@ -1466,26 +1473,56 @@ p2m_teardown_compressed(struct p2m_domain *p2m)
 {
     struct domain *d = p2m->domain;
     struct page_info *page = NULL, *next;
-    int n = 0;
+    int n = 0, comp = 0, decomp = 0;
+    uint8_t *data = NULL;
+    struct page_data_info *pdi;
+    uint16_t offset = 0;
 
     if (!mfn_x(p2m->page_store.first_data_mfn))
         return;
 
     spin_lock_recursive(&d->page_alloc_lock);
     page = mfn_to_page(p2m->page_store.first_data_mfn);
-    while (page) {
-        next = page_list_next(page, &d->page_list);
-        if (test_and_clear_bit(_PGC_allocated, &page->count_info))
-            put_page(page);
-        n++;
-        if (mfn_x(page_to_mfn(page)) == mfn_x(p2m->page_store.data_mfn))
-            break;
-        page = next;
+    while (mfn_x(page_to_mfn(page)) != mfn_x(p2m->page_store.data_mfn) ||
+           offset != p2m->page_store.data_offset) {
+        if (offset >= PAGE_SIZE) {
+            unmap_domain_page(data);
+            data = NULL;
+            offset -= PAGE_SIZE;
+            next = page_list_next(page, &d->page_list);
+            if (test_and_clear_bit(_PGC_allocated, &page->count_info))
+                put_page(page);
+            n++;
+            page = next;
+            /* re-evaluate end condition */
+            continue;
+        }
+        if (!data)
+            data = map_domain_page(mfn_x(page_to_mfn(page)));
+        comp++;
+        pdi = (struct page_data_info *)&data[offset];
+        offset += sizeof(struct page_data_info);
+        offset += pdi->size;
+        offset = (offset + ((1 << PAGE_STORE_DATA_ALIGN) - 1)) &
+            ~((1 << PAGE_STORE_DATA_ALIGN) - 1);
+        if (mfn_x(pdi->mfn)) {
+            decomp++;
+            if (test_and_clear_bit(_PGC_allocated,
+                                   &mfn_to_page(pdi->mfn)->count_info))
+                put_page(mfn_to_page(pdi->mfn));
+            n++;
+        }
     }
+    if (data)
+        unmap_domain_page(data);
+    if (test_and_clear_bit(_PGC_allocated, &page->count_info))
+        put_page(page);
+    n++;
     p2m->page_store.first_data_mfn = _mfn(0);
     spin_unlock_recursive(&d->page_alloc_lock);
 
-    printk("%s: vm%d %d pages\n", __FUNCTION__, d->domain_id, n);
+    printk("%s: vm%d %d pages %d comp %d decomp\n", __FUNCTION__, d->domain_id,
+           n, comp, decomp);
 }
 
 int dmreq_lazy_template = 1;
