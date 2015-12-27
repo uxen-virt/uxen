@@ -591,16 +591,13 @@ p2m_mapcache_map(struct domain *d, xen_pfn_t gpfn, mfn_t mfn)
     if (!test_and_set_bit(_PGC_mapcache, &page->count_info)) {
         page_list_del2(page, &d->page_list, &d->xenpage_list);
         page_list_add_tail(page, &d->mapcache_page_list);
-    } else {
-        /* This shouldn't really happen -- we're doing a map
-         * operation, but the page is already marked as mapped
-         * in the mapcache. */
-        /* gdprintk(XENLOG_INFO, */
-        /*          "%s: mfn %lx already mapcache mapped " */
-        /*          "in vm%u, duplicating at gpfn %"PRI_xen_pfn"\n", */
-        /*          __FUNCTION__, mfn_x(mfn), d->domain_id, gpfn); */
+    } else
+        /* This happens when a range of pages is being mapped, and
+         * some of those pages are already mapped -- mdm_enter detects
+         * this and does nothing, returning an invalid omfn -- it does
+         * however honour mdm->mdm_takeref, which is why we still call
+         * it from here after this condition is detected. */
         put_page(page);
-    }
     omfn = mdm_enter(d, gpfn, mfn_x(mfn));
     if (__mfn_valid(omfn)) {
         page = __mfn_to_page(omfn);
