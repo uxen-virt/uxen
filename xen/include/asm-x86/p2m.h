@@ -417,6 +417,7 @@ struct p2m_domain {
     uint16_t p2m_l1_cache_id;
 
     struct {
+        mfn_t first_data_mfn;
         mfn_t data_mfn;
         uint16_t data_offset;
     } page_store;
@@ -623,6 +624,9 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd);
 /* Remove page references on pages from other domains */
 int
 p2m_shared_teardown(struct p2m_domain *p2m);
+
+void
+p2m_teardown_compressed(struct p2m_domain *p2m);
 
 
 /*

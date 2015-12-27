@@ -856,6 +856,8 @@ void paging_teardown(struct domain *d)
     p2m_pod_empty_cache(d);
 #endif  /* __UXEN__ */
 
+    p2m_teardown_compressed(p2m_get_hostp2m(d));
+
     if (!p2m_shared_teardown(p2m_get_hostp2m(d)))
         gdprintk(XENLOG_ERR, "%s: p2m_shared_teardown failed\n", __FUNCTION__);
 }

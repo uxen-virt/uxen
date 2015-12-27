@@ -1166,6 +1166,8 @@ p2m_pod_add_compressed_page(struct p2m_domain *p2m, unsigned long gpfn,
      * current data_mfn page full? */
     if (!mfn_x(p2m->page_store.data_mfn) || p2m->page_store.data_offset >
         PAGE_SIZE - sizeof(struct page_data_info)) {
+        if (!mfn_x(p2m->page_store.first_data_mfn))
+            p2m->page_store.first_data_mfn = new_mfn;
         p2m->page_store.data_mfn = new_mfn;
         p2m->page_store.data_offset = 0;
         new_page = NULL;
@@ -1457,6 +1459,33 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
     if (p)
         free_domheap_page(p);
     return ret;
+}
+
+void
+p2m_teardown_compressed(struct p2m_domain *p2m)
+{
+    struct domain *d = p2m->domain;
+    struct page_info *page = NULL, *next;
+    int n = 0;
+
+    if (!mfn_x(p2m->page_store.first_data_mfn))
+        return;
+
+    spin_lock_recursive(&d->page_alloc_lock);
+    page = mfn_to_page(p2m->page_store.first_data_mfn);
+    while (page) {
+        next = page_list_next(page, &d->page_list);
+        if (test_and_clear_bit(_PGC_allocated, &page->count_info))
+            put_page(page);
+        n++;
+        if (mfn_x(page_to_mfn(page)) == mfn_x(p2m->page_store.data_mfn))
+            break;
+        page = next;
+    }
+    p2m->page_store.first_data_mfn = _mfn(0);
+    spin_unlock_recursive(&d->page_alloc_lock);
+
+    printk("%s: vm%d %d pages\n", __FUNCTION__, d->domain_id, n);
 }
 
 int dmreq_lazy_template = 1;
