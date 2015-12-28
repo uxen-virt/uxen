@@ -1719,6 +1719,14 @@ void free_domheap_pages(struct page_info *pg, unsigned int order)
             BUG_ON((pg[i].u.inuse.type_info & PGT_count_mask) != 0);
 #endif  /* __UXEN__ */
             page_list_del2(&pg[i], &d->page_list, &d->arch.relmem_list);
+
+#ifndef NDEBUG
+            if (pg[i].count_info & PGC_count_mask) {
+                printk("%s: mfn %lx count %lx\n", __FUNCTION__,
+                       page_to_mfn(&pg[i]), pg[i].count_info);
+                DEBUG();
+            }
+#endif
         }
 
         d->tot_pages -= 1 << order;
