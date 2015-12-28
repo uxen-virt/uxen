@@ -280,6 +280,7 @@ struct domain
     atomic_t         tmpl_shared_pages; /* # pages template shared  */
 #endif  /* __UXEN__ */
     unsigned int     xenheap_pages;   /* # pages allocated from Xen heap    */
+    unsigned int     host_pages;      /* # host pages mapped    */
 
     union {
         struct {

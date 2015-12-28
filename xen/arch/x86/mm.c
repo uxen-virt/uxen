@@ -2240,34 +2240,6 @@ void put_page(struct page_info *page)
     }
 }
 
-void put_host_page(struct page_info *page, struct domain *d,
-                   struct page_list_head *page_list)
-{
-    unsigned long nx = _put_page(page);
-
-    if ( likely((nx & PGC_count_mask) == 0) )
-    {
-        if ( cleanup_page_cacheattr(page) == 0 ) {
-            bool_t drop_dom_ref = 0;
-            spin_lock(&d->page_alloc_lock);
-            if (!--d->tot_pages)
-                drop_dom_ref = 1;
-            if (page_list)
-                page_list_del(page, page_list);
-            page->count_info &= ~PGC_host_page;
-            page_set_owner(page, NULL);
-            spin_unlock(&d->page_alloc_lock);
-            if (unlikely(drop_dom_ref))
-                put_domain(d);
-        } else
-            MEM_LOG("Leaking pfn %lx", page_to_mfn(page));
-    } else {
-        gdprintk(XENLOG_ERR, "unexpected additional mappings of host mfn %lx\n",
-                 page_to_mfn(page));
-        ASSERT(domain_is_locked(d));
-    }
-}
-
 
 static int always_inline
 _get_page(struct page_info *page)
@@ -5115,7 +5087,7 @@ static int xenmem_add_to_physmap_once(
                          page_get_owner(page)->domain_id);
             } else {
                 put_page(page);
-                put_host_page(page, d, &d->page_list);
+                put_allocated_page(d, page);
             }
         } else if ( p2m_is_ram(pt) )
             /* Normal domain memory is freed, to avoid leaking memory. */
@@ -5152,8 +5124,8 @@ static int xenmem_add_to_physmap_once(
         page_set_owner(page, d);
         wmb(); /* install valid domain ptr before updating refcnt. */
         d->tot_pages++;
-        page_list_add_tail(page, &d->page_list);
         page->count_info = PGC_host_page | 1;
+        d->host_pages++;
         spin_unlock(&d->page_alloc_lock);
         break;
     case XENMAPSPACE_shared_info:

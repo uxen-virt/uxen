@@ -2374,6 +2374,13 @@ int domain_relinquish_resources(struct domain *d)
         if ( ret )
             return ret;
 
+        d->arch.relmem = RELMEM_foreign_pages;
+        /* fallthrough */
+
+    case RELMEM_foreign_pages:
+        if (d->host_pages)
+            return -EAGAIN;
+
         d->arch.relmem = RELMEM_domain_first;
         /* fallthrough */
 

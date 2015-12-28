@@ -342,6 +342,7 @@ struct arch_domain
         RELMEM_l2,
 #endif  /* __UXEN__ */
         RELMEM_page_store,
+        RELMEM_foreign_pages,
         RELMEM_domain_first,
         RELMEM_mapcache,
         RELMEM_domain_final,

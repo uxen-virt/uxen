@@ -413,9 +413,6 @@ void clear_superpage_mark(struct page_info *page);
 
 struct domain *page_get_owner_and_reference(struct page_info *page);
 void put_page(struct page_info *page);
-struct page_list_head;
-void put_host_page(struct page_info *page, struct domain *d,
-                   struct page_list_head *page_list);
 #define put_allocated_page(d, p) put_page(p)
 int  get_page(struct page_info *page, struct domain *domain);
 int _get_page_fast(struct page_info *page

@@ -1677,6 +1677,26 @@ void free_domheap_pages(struct page_info *pg, unsigned int order)
         spin_unlock_recursive(&d->page_alloc_lock);
     }
 #else  /* __UXEN__ */
+    if (unlikely(is_host_page(pg))) {
+        /* This doesn't actually free the page since the page is only
+         * shared with the domain */
+        ASSERT(d != NULL);
+
+        ASSERT(order == 0);
+
+        spin_lock_recursive(&d->page_alloc_lock);
+
+        pg->count_info &= ~PGC_host_page;
+        d->host_pages--;
+
+        page_set_owner(pg, NULL);
+
+        d->tot_pages -= 1 << order;
+        drop_dom_ref = (d->tot_pages == 0);
+
+        spin_unlock_recursive(&d->page_alloc_lock);
+    } else
+
     if ( unlikely(is_xen_page(pg)) )
     {
         /* This doesn't actually free the page since the page is only
