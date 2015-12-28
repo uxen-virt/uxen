@@ -407,6 +407,12 @@ void put_page(struct page_info *page);
 struct page_list_head;
 void put_host_page(struct page_info *page, struct domain *d,
                    struct page_list_head *page_list);
+#define test_and_clear_allocated(d, p)                          \
+    test_and_clear_bit(_PGC_allocated, &(p)->count_info)
+#define put_allocated_page(d, p) do {           \
+        if (test_and_clear_allocated(d, p))     \
+            put_page(p);                        \
+    } while (0)
 int  get_page(struct page_info *page, struct domain *domain);
 int _get_page_fast(struct page_info *page
 #ifndef NDEBUG

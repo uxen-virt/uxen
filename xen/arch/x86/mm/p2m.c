@@ -1167,8 +1167,7 @@ DEBUG();
 #endif  /* __UXEN__ */
 
     /* Decrement guest domain's ref count of the page */
-    if ( test_and_clear_bit(_PGC_allocated, &page->count_info) )
-        put_page(page);
+    put_allocated_page(d, page);
 
     /* Remove mapping from p2m table */
     set_p2m_entry(p2m, gfn, _mfn(INVALID_MFN), PAGE_ORDER_4K, p2m_ram_paged, a);

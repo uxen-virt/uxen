@@ -384,10 +384,7 @@ int guest_remove_page(struct domain *d, unsigned long gmfn)
         put_page_and_type(page);
 #endif  /* __UXEN__ */
             
-#ifndef __UXEN_NOT_YET__
-    if ( test_and_clear_bit(_PGC_allocated, &page->count_info) )
-        put_page(page);
-#endif   /* __UXEN_NOT_YET__ */
+    put_allocated_page(d, page);
 
     guest_physmap_remove_page(d, gmfn, mfn, PAGE_ORDER_4K);
 
@@ -605,7 +602,7 @@ static long memory_exchange(XEN_GUEST_HANDLE(xen_memory_exchange_t) arg)
         {
             unsigned long gfn;
 
-            if ( !test_and_clear_bit(_PGC_allocated, &page->count_info) )
+            if ( !test_and_clear_allocated(d, page) )
                 BUG();
             mfn = page_to_mfn(page);
             gfn = mfn_to_gmfn(d, mfn);

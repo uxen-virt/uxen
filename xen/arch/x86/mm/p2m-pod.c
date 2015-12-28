@@ -347,8 +347,7 @@ p2m_pod_set_cache_target(struct p2m_domain *p2m, unsigned long pod_target, int p
                 put_page_and_type(page+i);
 #endif  /* __UXEN__ */
             
-            if ( test_and_clear_bit(_PGC_allocated, &(page+i)->count_info) )
-                put_page(page+i);
+            put_allocated_page(d, page + i);
 
             put_page(page+i);
 
@@ -1243,7 +1242,7 @@ p2m_pod_add_compressed_page(struct p2m_domain *p2m, unsigned long gpfn,
 
     /* page was not used? */
     if (new_page)
-        free_domheap_page(new_page);
+        put_allocated_page(d, new_page);
     else
         atomic_inc(&d->template.compressed_pdata);
     atomic_inc(&d->template.compressed_pages);
@@ -1309,8 +1308,7 @@ p2m_pod_compress_page(struct p2m_domain *p2m, unsigned long gfn_aligned,
                                 c_size, new_page);
 
     /* drop reference for page replaced in template p2m */
-    if (test_and_clear_bit(_PGC_allocated, &mfn_to_page(mfn)->count_info))
-        put_page(mfn_to_page(mfn));
+    put_allocated_page(d, mfn_to_page(mfn));
 
     p2m_pod_stat_update(d);
     perfc_incr(compressed_pages);
@@ -1464,7 +1462,7 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
     if (data)
         unmap_domain_page_direct(data);
     if (p)
-        free_domheap_page(p);
+        put_allocated_page(page_owner, p);
     return ret;
 }
 
@@ -1490,8 +1488,7 @@ p2m_teardown_compressed(struct p2m_domain *p2m)
             data = NULL;
             offset -= PAGE_SIZE;
             next = page_list_next(page, &d->page_list);
-            if (test_and_clear_bit(_PGC_allocated, &page->count_info))
-                put_page(page);
+            put_allocated_page(d, page);
             n++;
             page = next;
             /* re-evaluate end condition */
@@ -1507,16 +1504,13 @@ p2m_teardown_compressed(struct p2m_domain *p2m)
             ~((1 << PAGE_STORE_DATA_ALIGN) - 1);
         if (mfn_x(pdi->mfn)) {
             decomp++;
-            if (test_and_clear_bit(_PGC_allocated,
-                                   &mfn_to_page(pdi->mfn)->count_info))
-                put_page(mfn_to_page(pdi->mfn));
+            put_allocated_page(d, mfn_to_page(pdi->mfn));
             n++;
         }
     }
     if (data)
         unmap_domain_page(data);
-    if (test_and_clear_bit(_PGC_allocated, &page->count_info))
-        put_page(page);
+    put_allocated_page(d, page);
     n++;
     p2m->page_store.first_data_mfn = _mfn(0);
     spin_unlock_recursive(&d->page_alloc_lock);
@@ -2325,8 +2319,7 @@ p2m_shared_teardown(struct p2m_domain *p2m)
             put_page(page);
             shared_count++;
         } else if (p2m_is_ram(t) && owner == d) {
-            if (test_and_clear_bit(_PGC_allocated, &page->count_info))
-                put_page(page);
+            put_allocated_page(d, page);
             domain_count++;
         }
         put_page(page);
@@ -2421,8 +2414,7 @@ p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
 
     /* Free page and account for the new p2m PoD entry */
     page = mfn_to_page(smfn);
-    if (test_and_clear_bit(_PGC_allocated, &page->count_info))
-        put_page(page);
+    put_allocated_page(d, page);
     if (!p2m_is_pod(p2mt))
         atomic_inc(&d->pod_pages);
     else if (mfn_valid_page(smfn))
@@ -2553,8 +2545,8 @@ guest_physmap_mark_pod_locked(struct domain *d, unsigned long gfn,
 
   out:
     if (page) {
-        if (!rc && test_and_clear_bit(_PGC_allocated, &page->count_info))
-            put_page(page);
+        if (!rc)
+            put_allocated_page(d, page);
         put_page(page);
     }
 

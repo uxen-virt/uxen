@@ -579,8 +579,7 @@ int mem_sharing_share_pages(shr_handle_t sh, shr_handle_t ch)
     mem_sharing_hash_delete(ch);
     atomic_inc(&nr_saved_mfns);
     /* Free the client page */
-    if(test_and_clear_bit(_PGC_allocated, &cpage->count_info))
-        put_page(cpage);
+    put_allocated_page(d, cpage);
     ret = 0;
     
 err_out:
@@ -654,9 +653,8 @@ gfn_found:
         put_gfn(d, gfn);
         shr_unlock();
         put_page_and_type(page);
-        if(last_gfn && 
-           test_and_clear_bit(_PGC_allocated, &page->count_info)) 
-            put_page(page);
+        if(last_gfn)
+            put_allocated_page(d, page);
         return 0;
     }
  
