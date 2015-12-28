@@ -119,6 +119,8 @@ struct hvm_function_table {
      */
     int  (*domain_initialise)(struct domain *d);
     void (*domain_destroy)(struct domain *d);
+    void (*domain_relinquish_memory)(struct domain *d);
+
     int  (*vcpu_initialise)(struct vcpu *v);
     void (*vcpu_destroy)(struct vcpu *v);
 
@@ -221,6 +223,7 @@ extern struct hvm_function_table *start_svm(void);
 extern struct hvm_function_table *start_vmx(void);
 
 int hvm_domain_initialise(struct domain *d);
+void hvm_relinquish_memory(struct domain *d);
 void hvm_domain_relinquish_resources(struct domain *d);
 void hvm_domain_destroy(struct domain *d);
 

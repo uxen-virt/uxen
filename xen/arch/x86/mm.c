@@ -533,10 +533,9 @@ void share_xen_page_with_guest(
             page_list_del(page, &host_page_list);
             spin_unlock_irqrestore(&host_page_list_lock, flags);
         }
-        page->count_info |= PGC_allocated | 1;
+        page->count_info |= 1;
         if ( unlikely(d->xenheap_pages++ == 0) )
             get_knownalive_domain(d);
-        page_list_add_tail(page, &d->xenpage_list);
     }
 
     spin_unlock(&d->page_alloc_lock);

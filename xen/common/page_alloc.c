@@ -1692,7 +1692,6 @@ void free_domheap_pages(struct page_info *pg, unsigned int order)
         spin_lock_recursive(&d->page_alloc_lock);
 
         for ( i = 0; i < (1 << order); i++ ) {
-            page_list_del2(&pg[i], &d->xenpage_list, &d->arch.relmem_list);
             spin_lock_irqsave(&host_page_list_lock, flags);
             page_list_add_tail(&pg[i], &host_page_list);
             spin_unlock_irqrestore(&host_page_list_lock, flags);

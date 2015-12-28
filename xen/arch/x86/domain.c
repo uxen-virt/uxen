@@ -194,21 +194,6 @@ void dump_pageframe_info(struct domain *d)
         }
         spin_unlock(&d->page_alloc_lock);
     }
-
-    spin_lock(&d->page_alloc_lock);
-    page_list_for_each ( page, &d->xenpage_list )
-    {
-#ifndef __UXEN__
-        printk("    XenPage %p: caf=%08lx, taf=%" PRtype_info "\n",
-               _p(page_to_mfn(page)),
-               page->count_info, page->u.inuse.type_info);
-#else  /* __UXEN__ */
-        printk("    XenPage %p: caf=%08lx\n",
-               _p(page_to_mfn(page)),
-               page->count_info);
-#endif  /* __UXEN__ */
-    }
-    spin_unlock(&d->page_alloc_lock);
 }
 
 struct domain *alloc_domain_struct(void)
@@ -2350,11 +2335,13 @@ int domain_relinquish_resources(struct domain *d)
         d->arch.relmem = RELMEM_xen;
         /* fallthrough */
 
-        /* Relinquish every page of memory. */
+        /* Relinquish shared xen pages. */
     case RELMEM_xen:
-        ret = relinquish_memory(d, &d->xenpage_list, ~0UL);
-        if ( ret )
-            return ret;
+        if (d->shared_info)
+            put_page(virt_to_page(d->shared_info));
+        if (is_hvm_domain(d))
+            hvm_relinquish_memory(d);
+
 #ifndef __UXEN__
 #if CONFIG_PAGING_LEVELS >= 4
         d->arch.relmem = RELMEM_l4;
@@ -2393,6 +2380,7 @@ int domain_relinquish_resources(struct domain *d)
         d->arch.relmem = RELMEM_domain_first;
         /* fallthrough */
 
+        /* Relinquish every page of memory. */
     case RELMEM_domain_first:
         ret = relinquish_memory(d, &d->page_list, 0);
         if ( ret )

@@ -929,6 +929,14 @@ int hvm_domain_initialise(struct domain *d)
     return rc;
 }
 
+void
+hvm_relinquish_memory(struct domain *d)
+{
+
+    if (hvm_funcs.domain_relinquish_memory)
+        hvm_funcs.domain_relinquish_memory(d);
+}
+
 void hvm_domain_relinquish_resources(struct domain *d)
 {
     hvm_destroy_ioreq_servers(d);

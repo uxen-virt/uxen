@@ -588,14 +588,9 @@ p2m_mapcache_map(struct domain *d, xen_pfn_t gpfn, mfn_t mfn)
         return -EINVAL;
     }
     spin_lock(&d->page_alloc_lock);
-    if (!test_and_set_bit(_PGC_mapcache, &page->count_info)) {
-        if (is_xen_page(page) &&
-            test_and_clear_bit(_PGC_allocated, &page->count_info)) {
-            page_list_del(page, &d->xenpage_list);
-            put_page(page);
-        }
+    if (!test_and_set_bit(_PGC_mapcache, &page->count_info))
         page_list_add_tail(page, &d->mapcache_page_list);
-    } else
+    else
         /* This happens when a range of pages is being mapped, and
          * some of those pages are already mapped -- mdm_enter detects
          * this and does nothing, returning an invalid omfn -- it does
@@ -612,12 +607,7 @@ p2m_mapcache_map(struct domain *d, xen_pfn_t gpfn, mfn_t mfn)
                      omfn, d->domain_id, gpfn);
         else {
             page_list_del(page, &d->mapcache_page_list);
-            if (is_xen_page(page) &&
-                !test_and_set_bit(_PGC_allocated, &page->count_info))
-                page_list_add_tail(page, &d->xenpage_list);
-            /* don't drop mapcache ref, if we need to re-take xenpage ref */
-            if (!is_xen_page(page))
-                put_page(page);
+            put_page(page);
         }
     }
     spin_unlock(&d->page_alloc_lock);
@@ -1855,8 +1845,6 @@ p2m_mapcache_mappings_teardown(struct domain *d)
         }
 
         total++;
-        if (is_xen_page(page))
-            page_list_add_tail(page, &d->xenpage_list);
         put_page(page);
     }
 
