@@ -314,6 +314,13 @@ struct spage_info
 #define is_host_page(page) ((page)->count_info & PGC_host_page)
 #define is_host_mfn(mfn) \
     (__mfn_valid_page(mfn) && is_host_page(__mfn_to_page(mfn)))
+#define is_mapcache_page(page) ((page)->count_info & PGC_mapcache)
+#define is_mapcache_mfn(mfn) \
+    (__mfn_valid_page(mfn) && is_mapcache_page(__mfn_to_page(mfn)))
+
+/* not any of the above */
+#define is_dom_page(page) \
+    (!((page)->count_info & (PGC_xen_page | PGC_host_page | PGC_mapcache)))
 #endif  /* __UXEN__ */
 
 #if defined(__i386__)
@@ -407,8 +414,17 @@ void put_page(struct page_info *page);
 struct page_list_head;
 void put_host_page(struct page_info *page, struct domain *d,
                    struct page_list_head *page_list);
+#define domlist_drop_page(d, p) (({                                     \
+                spin_lock_recursive(&(d)->page_alloc_lock);             \
+                page_list_del2((p), &(d)->page_list, &(d)->arch.relmem_list); \
+                spin_unlock_recursive(&(d)->page_alloc_lock);           \
+                1;                                                      \
+            }))
+/* when clearing allocated, also drop the page from the domlist, if
+ * it's a dom page */
 #define test_and_clear_allocated(d, p)                          \
-    test_and_clear_bit(_PGC_allocated, &(p)->count_info)
+    test_and_clear_bit(_PGC_allocated, &(p)->count_info) &&     \
+    ((is_dom_page(p) && domlist_drop_page(d, p)), 1)
 #define put_allocated_page(d, p) do {           \
         if (test_and_clear_allocated(d, p))     \
             put_page(p);                        \

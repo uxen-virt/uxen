@@ -1718,7 +1718,10 @@ void free_domheap_pages(struct page_info *pg, unsigned int order)
 #ifndef __UXEN__
             BUG_ON((pg[i].u.inuse.type_info & PGT_count_mask) != 0);
 #endif  /* __UXEN__ */
-            page_list_del2(&pg[i], &d->page_list, &d->arch.relmem_list);
+
+            if (test_and_clear_bit(_PGC_allocated, &pg[i].count_info))
+                page_list_del2(&pg[i], &d->page_list, &d->arch.relmem_list);
+                /* XXX drop count? */
 
 #ifndef NDEBUG
             if (pg[i].count_info & PGC_count_mask) {
