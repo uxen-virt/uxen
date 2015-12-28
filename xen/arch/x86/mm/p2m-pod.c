@@ -2287,8 +2287,8 @@ p2m_shared_teardown(struct p2m_domain *p2m)
     p2m_access_t a;
     unsigned int page_order;
     struct page_info *page;
-    int domain_count = 0, shared_count = 0, zero_count = 0, host_count = 0;
-    int p2m_count = 0;
+    int p2m_count = 0, domain_count = 0;
+    int shared_count = 0, zero_count = 0, host_count = 0, xen_count = 0;
 
     for (gpfn = 0; gpfn <= p2m->max_mapped_pfn; gpfn++) {
         if (!(gpfn & ((1UL << PAGETABLE_ORDER) - 1))) {
@@ -2318,7 +2318,12 @@ p2m_shared_teardown(struct p2m_domain *p2m)
         if (p2m_is_pod(t)) {
             put_page(page);
             shared_count++;
-        } else if (p2m_is_ram(t) && owner == d) {
+        } else if (is_xen_page(page) && owner == d)
+            /* xen pages are not put_page here -- instead they are
+             * relinquished in domain_relinquish_resources during the
+             * RELMEM_xen stage */
+            xen_count++;
+        else if (p2m_is_ram(t) && owner == d) {
             put_allocated_page(d, page);
             domain_count++;
         }
@@ -2329,9 +2334,9 @@ p2m_shared_teardown(struct p2m_domain *p2m)
         unmap_domain_page(l1table);
 
     printk("%s: vm%u cleared %d p2m entries --"
-           " domain=%d shared=%d zero=%d host=%d\n", __FUNCTION__,
+           " domain=%d shared=%d zero=%d host=%d xen=%d\n", __FUNCTION__,
            d->domain_id, p2m_count, domain_count, shared_count, zero_count,
-           host_count);
+           host_count, xen_count);
     return 1;
 }
 
