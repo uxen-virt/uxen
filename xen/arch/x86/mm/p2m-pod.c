@@ -1165,13 +1165,13 @@ p2m_pod_add_compressed_page(struct p2m_domain *p2m, unsigned long gpfn,
      * current data_mfn page full? */
     if (!mfn_x(p2m->page_store.data_mfn) || p2m->page_store.data_offset >
         PAGE_SIZE - sizeof(struct page_data_info)) {
-        if (!mfn_x(p2m->page_store.first_data_mfn))
+        if (!mfn_x(p2m->page_store.first_data_mfn)) {
             p2m->page_store.first_data_mfn = new_mfn;
-        else {
+            page_list_add_tail(new_page, &d->page_store_list);
+        } else {
             spin_lock(&d->page_alloc_lock);
-            page_list_del(new_page, &d->page_list);
             page_list_add_after(new_page, mfn_to_page(p2m->page_store.data_mfn),
-                                &d->page_list);
+                                &d->page_store_list);
             spin_unlock(&d->page_alloc_lock);
         }
         p2m->page_store.data_mfn = new_mfn;
@@ -1214,9 +1214,8 @@ p2m_pod_add_compressed_page(struct p2m_domain *p2m, unsigned long gpfn,
 
         /* use page_list to allow access to new_page from data_mfn */
         spin_lock(&d->page_alloc_lock);
-        page_list_del(new_page, &d->page_list);
         page_list_add_after(new_page, mfn_to_page(p2m->page_store.data_mfn),
-                            &d->page_list);
+                            &d->page_store_list);
         spin_unlock(&d->page_alloc_lock);
 
         data2 = map_domain_page_direct(mfn_x(new_mfn));
@@ -1334,7 +1333,7 @@ p2m_get_compressed_page_data(struct domain *d, mfn_t mfn, uint8_t *data,
     if (offset == PAGE_SIZE) {
         perfc_incr(decompressed_pages_detached);
         spin_lock(&d->page_alloc_lock);
-        p_cont = page_list_next(mfn_to_page(mfn), &d->page_list);
+        p_cont = page_list_next(mfn_to_page(mfn), &d->page_store_list);
         spin_unlock(&d->page_alloc_lock);
         ASSERT(p_cont);
         data_cont = map_domain_page_direct(__page_to_mfn(p_cont));
@@ -1347,7 +1346,7 @@ p2m_get_compressed_page_data(struct domain *d, mfn_t mfn, uint8_t *data,
         }
         memcpy(this_cpu(decompress_buffer), &data[offset], PAGE_SIZE - offset);
         spin_lock(&d->page_alloc_lock);
-        p_cont = page_list_next(mfn_to_page(mfn), &d->page_list);
+        p_cont = page_list_next(mfn_to_page(mfn), &d->page_store_list);
         spin_unlock(&d->page_alloc_lock);
         ASSERT(p_cont);
         data_cont = map_domain_page_direct(__page_to_mfn(p_cont));
@@ -1487,7 +1486,8 @@ p2m_teardown_compressed(struct p2m_domain *p2m)
             unmap_domain_page(data);
             data = NULL;
             offset -= PAGE_SIZE;
-            next = page_list_next(page, &d->page_list);
+            next = page_list_next(page, &d->page_store_list);
+            page_list_del(page, &d->page_store_list);
             put_allocated_page(d, page);
             n++;
             page = next;
@@ -1510,6 +1510,7 @@ p2m_teardown_compressed(struct p2m_domain *p2m)
     }
     if (data)
         unmap_domain_page(data);
+    page_list_del(page, &d->page_store_list);
     put_allocated_page(d, page);
     n++;
     p2m->page_store.first_data_mfn = _mfn(0);

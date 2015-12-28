@@ -2382,6 +2382,14 @@ int domain_relinquish_resources(struct domain *d)
         if ( ret )
             return ret;
 #else  /* __UXEN__ */
+        d->arch.relmem = RELMEM_page_store;
+        /* fallthrough */
+
+    case RELMEM_page_store:
+        ret = relinquish_memory(d, &d->page_store_list, 0);
+        if ( ret )
+            return ret;
+
         d->arch.relmem = RELMEM_domain_first;
         /* fallthrough */
 
