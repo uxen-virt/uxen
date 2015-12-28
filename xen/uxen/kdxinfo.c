@@ -2,7 +2,7 @@
  *  kdxinfo.c
  *  uxen
  *
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -23,8 +23,8 @@ struct uxen_kdxinfo uxen_kdxinfo = {
 
     .sizeof_struct_domain = sizeof(struct domain),
     .domain_domain_id = offsetof(struct domain, domain_id),
-    .domain_page_list_next = offsetof(struct domain, page_list.next),
-    .domain_page_list_tail = offsetof(struct domain, page_list.tail),
+    .domain_page_list_next = 0, // offsetof(struct domain, page_list.next),
+    .domain_page_list_tail = 0, // offsetof(struct domain, page_list.tail),
     .domain_max_vcpus = offsetof(struct domain, max_vcpus),
     .domain_next_in_list = offsetof(struct domain, next_in_list),
     .domain_vcpu = offsetof(struct domain, vcpu),

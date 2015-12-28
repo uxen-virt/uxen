@@ -4,7 +4,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -342,7 +342,9 @@ static void dump_domains(unsigned char key)
 
         rangeset_domain_printk(d);
 
+#ifndef __UXEN__
         dump_pageframe_info(d);
+#endif  /* __UXEN__ */
                
         printk("VCPU information and callbacks for vm%u:\n",
                d->domain_id);

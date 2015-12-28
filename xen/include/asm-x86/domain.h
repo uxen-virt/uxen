@@ -343,9 +343,7 @@ struct arch_domain
 #endif  /* __UXEN__ */
         RELMEM_page_store,
         RELMEM_foreign_pages,
-        RELMEM_domain_first,
         RELMEM_mapcache,
-        RELMEM_domain_final,
         RELMEM_done,
     } relmem;
     struct page_list_head relmem_list;

@@ -264,7 +264,6 @@ struct domain
     spinlock_t       domain_lock;
 
     spinlock_t       page_alloc_lock; /* protects all the following fields  */
-    struct page_list_head page_list;  /* linked list */
     struct page_list_head page_store_list;    /* linked list */
     struct page_list_head mapcache_page_list; /* linked list */
     unsigned int     tot_pages;       /* number of pages currently possesed */

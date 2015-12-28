@@ -161,6 +161,7 @@ void startup_cpu_idle_loop(void)
 }
 #endif  /* __UXEN__ */
 
+#ifndef __UXEN__
 void dump_pageframe_info(struct domain *d)
 {
     struct page_info *page;
@@ -195,6 +196,7 @@ void dump_pageframe_info(struct domain *d)
         spin_unlock(&d->page_alloc_lock);
     }
 }
+#endif  /* __UXEN__ */
 
 struct domain *alloc_domain_struct(void)
 {
@@ -2381,14 +2383,6 @@ int domain_relinquish_resources(struct domain *d)
         if (d->host_pages)
             return -EAGAIN;
 
-        d->arch.relmem = RELMEM_domain_first;
-        /* fallthrough */
-
-        /* Relinquish every page of memory. */
-    case RELMEM_domain_first:
-        ret = relinquish_memory(d, &d->page_list, 0);
-        if ( ret )
-            return ret;
         d->arch.relmem = RELMEM_mapcache;
         /* fallthrough */
 
@@ -2396,13 +2390,7 @@ int domain_relinquish_resources(struct domain *d)
         ret = p2m_mapcache_mappings_teardown(d);
         if (ret)
             return ret;
-        d->arch.relmem = RELMEM_domain_final;
-        /* fallthrough */
 
-    case RELMEM_domain_final:
-        ret = relinquish_memory(d, &d->page_list, 0);
-        if ( ret )
-            return ret;
 #endif  /* __UXEN__ */
         d->arch.relmem = RELMEM_done;
         /* fallthrough */
