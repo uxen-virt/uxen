@@ -2363,9 +2363,12 @@ p2m_clear_gpfn_from_mapcache(struct p2m_domain *p2m, unsigned long gfn,
             break;
         }
         page_list_del(page, &d->mapcache_page_list);
-        page_list_add_tail(page, is_xen_page(page) ?
-                           &d->xenpage_list : &d->page_list);
-        put_page(page);
+        if (is_xen_page(page) &&
+            !test_and_set_bit(_PGC_allocated, &page->count_info))
+            page_list_add_tail(page, &d->xenpage_list);
+        /* don't drop mapcache ref, if we need to re-take xenpage ref */
+        if (!is_xen_page(page))
+            put_page(page);
         break;
     default:
         break;
