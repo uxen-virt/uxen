@@ -1948,8 +1948,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
 #define ONE_CLONE_COUNT 3
         while (smfn_from_clone &&
                (mfn_to_page(smfn)->count_info & PGC_count_mask) <=
-               ONE_CLONE_COUNT +
-               ((mfn_to_page(smfn)->count_info & PGC_allocated) ? 1 : 0)) {
+               ONE_CLONE_COUNT) {
             struct p2m_domain *op2m = p2m_get_hostp2m(d->clone_of);
             struct page_data_info *pdi;
             uint8_t *data;

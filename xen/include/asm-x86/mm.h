@@ -229,9 +229,11 @@ struct page_info
 #define PGT_count_mask    ((1UL<<PGT_count_width)-1)
 #endif  /* __UXEN__ */
 
+#ifndef __UXEN__
  /* Cleared when the owning guest 'frees' this page. */
 #define _PGC_allocated    PG_shift(1)
 #define PGC_allocated     PG_mask(1, 1)
+#endif  /* __UXEN__ */
 #ifndef __UXEN__
  /* Page is Xen heap? */
 #define _PGC_xen_heap     PG_shift(2)

@@ -1580,7 +1580,7 @@ int assign_pages(
     for ( i = 0; i < (1 << order); i++ )
     {
         ASSERT(page_get_owner(&pg[i]) == NULL);
-        ASSERT((pg[i].count_info & ~(PGC_allocated | 1)) == PGC_state_inuse);
+        ASSERT((pg[i].count_info & ~1) == PGC_state_inuse);
         page_set_owner(&pg[i], d);
         wmb(); /* Domain pointer must be visible before updating refcnt. */
         pg[i].count_info = 1;
@@ -1711,24 +1711,20 @@ void free_domheap_pages(struct page_info *pg, unsigned int order)
         /* NB. May recursively lock from relinquish_memory(). */
         spin_lock_recursive(&d->page_alloc_lock);
 
+#ifndef NDEBUG
         for ( i = 0; i < (1 << order); i++ )
         {
 #ifndef __UXEN__
             BUG_ON((pg[i].u.inuse.type_info & PGT_count_mask) != 0);
 #endif  /* __UXEN__ */
 
-            if (test_and_clear_bit(_PGC_allocated, &pg[i].count_info))
-                page_list_del2(&pg[i], &d->page_list, &d->arch.relmem_list);
-                /* XXX drop count? */
-
-#ifndef NDEBUG
             if (pg[i].count_info & PGC_count_mask) {
                 printk("%s: mfn %lx count %lx\n", __FUNCTION__,
                        page_to_mfn(&pg[i]), pg[i].count_info);
                 DEBUG();
             }
-#endif
         }
+#endif
 
         d->tot_pages -= 1 << order;
         drop_dom_ref = (d->tot_pages == 0);

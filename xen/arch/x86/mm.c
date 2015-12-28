@@ -528,7 +528,7 @@ void share_xen_page_with_guest(
     /* Only add to the allocation list if the domain isn't dying. */
     if ( !d->is_dying )
     {
-        if ( is_xen_page(page) && !(page->count_info & PGC_allocated) ) {
+        if ( is_xen_page(page) ) {
             spin_lock_irqsave(&host_page_list_lock, flags);
             page_list_del(page, &host_page_list);
             spin_unlock_irqrestore(&host_page_list_lock, flags);
@@ -2390,13 +2390,13 @@ put_page_last_ref(struct page_info *page, struct domain *d, int refs)
     refs++;
     y = page->count_info;
     do {
-        if ((y & PGC_count_mask) < refs + ((y & PGC_allocated) ? 1 : 0)) {
+        if ((y & PGC_count_mask) < refs) {
             put_page(page);
             return 0;
         }
-        ASSERT((y & PGC_count_mask) >= refs + ((y & PGC_allocated) ? 1 : 0));
+        ASSERT((y & PGC_count_mask) >= refs);
         x  = y;
-        nx = (x - refs - ((y & PGC_allocated) ? 1 : 0)) & ~PGC_allocated;
+        nx = (x - refs);
         if (nx) {
             put_page(page);
             return 0;
@@ -2404,8 +2404,6 @@ put_page_last_ref(struct page_info *page, struct domain *d, int refs)
     } while (unlikely((y = cmpxchg(&page->count_info, x, nx)) != x));
 
     spin_lock_recursive(&d->page_alloc_lock);
-    if (x & PGC_allocated)
-        page_list_del2(page, &d->page_list, &d->arch.relmem_list);
     d->tot_pages -= 1;
     drop_dom_ref = (d->tot_pages == 0);
     spin_unlock_recursive(&d->page_alloc_lock);
@@ -4506,7 +4504,7 @@ int donate_page(
     if ( d->is_dying )
         goto fail;
 
-    if ( page->count_info & ~(PGC_allocated | 1) )
+    if ( page->count_info & ~1 )
         goto fail;
 
     if ( !(memflags & MEMF_no_refcount) )

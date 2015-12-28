@@ -2149,9 +2149,6 @@ static int relinquish_memory(
             goto out;
         }
 
-        if ( test_and_clear_bit(_PGC_allocated, &page->count_info) )
-            put_page(page);
-
 #ifndef __UXEN__
         /*
          * Forcibly invalidate top-most, still valid page tables at this point
