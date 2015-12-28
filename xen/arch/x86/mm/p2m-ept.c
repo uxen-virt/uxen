@@ -565,48 +565,12 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
         atomic_write_ept_entry(ept_entry, new_entry);
     }
 
-    if (!target) {
-        int locked = 0;
-
+    if (!target && old_entry.mfn != mfn_x(mfn)) {
         if (mfn_valid_page(mfn) && mfn_x(mfn) != mfn_x(shared_zero_page))
-            /* get page ref for p2m entry */
             get_page_fast(mfn_to_page(mfn), NULL);
-
-        if (__mfn_valid_page(old_entry.mfn)) {
-            struct page_info *op = __mfn_to_page(old_entry.mfn);
-
-            spin_lock_recursive(&d->page_alloc_lock);
-            locked = 1;
-
-            if (is_dom_page(op) && page_get_owner(op) == d &&
-                !test_and_set_bit(_PGC_allocated, &op->count_info)) {
-                get_page_fast(op, NULL);
-                page_list_add_tail(op, &d->page_list);
-            }
-        }
-
-        if (mfn_valid_page(mfn)) {
-            struct page_info *p = mfn_to_page(mfn);
-
-            if (!locked) {
-                spin_lock_recursive(&d->page_alloc_lock);
-                locked = 1;
-            }
-
-            if (is_dom_page(p) && page_get_owner(p) == d &&
-                test_and_clear_bit(_PGC_allocated, &p->count_info)) {
-                page_list_del2(p, &d->page_list, &d->arch.relmem_list);
-                put_page(p);
-            }
-        }
-
         if (__mfn_valid_page(old_entry.mfn) &&
             old_entry.mfn != mfn_x(shared_zero_page))
-            /* drop page ref for p2m entry */
             put_page(__mfn_to_page(old_entry.mfn));
-
-        if (locked)
-            spin_unlock_recursive(&d->page_alloc_lock);
     }
 
     /* Track the highest gfn for which we have ever had a valid mapping */

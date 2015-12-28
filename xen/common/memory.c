@@ -602,8 +602,6 @@ static long memory_exchange(XEN_GUEST_HANDLE(xen_memory_exchange_t) arg)
         {
             unsigned long gfn;
 
-            if ( !test_and_clear_allocated(d, page) )
-                BUG();
             mfn = page_to_mfn(page);
             gfn = mfn_to_gmfn(d, mfn);
             /* Pages were unshared above */

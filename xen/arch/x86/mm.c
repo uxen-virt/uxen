@@ -4517,9 +4517,8 @@ int donate_page(
         d->tot_pages++;
     }
 
-    page->count_info = PGC_allocated | 1;
+    page->count_info = 1;
     page_set_owner(page, d);
-    page_list_add_tail(page,&d->page_list);
 
     spin_unlock(&d->page_alloc_lock);
     return 0;
@@ -4544,23 +4543,23 @@ int steal_page(
         goto fail;
 
     /*
-     * We require there is just one reference (PGC_allocated). We temporarily
+     * We require there is just one reference. We temporarily
      * drop this reference now so that we can safely swizzle the owner.
      */
     y = page->count_info;
     do {
         x = y;
-        if ( (x & (PGC_count_mask|PGC_allocated)) != (1 | PGC_allocated) )
+        if ( (x & PGC_count_mask) != 1 )
             goto fail;
         y = cmpxchg(&page->count_info, x, x & ~PGC_count_mask);
     } while ( y != x );
 
-    /* Swizzle the owner then reinstate the PGC_allocated reference. */
+    /* Swizzle the owner then reinstate the reference. */
     page_set_owner(page, NULL);
     y = page->count_info;
     do {
         x = y;
-        BUG_ON((x & (PGC_count_mask|PGC_allocated)) != PGC_allocated);
+        BUG_ON((x & PGC_count_mask) != 0);
     } while ( (y = cmpxchg(&page->count_info, x, x | 1)) != x );
 
     /* Unlink from original owner. */
@@ -4604,7 +4603,7 @@ int page_make_sharable(struct domain *d,
 
     /* Check if the ref count is 2. The first from PGT_allocated, and
      * the second from get_page_and_type at the top of this function */
-    if(page->count_info != (PGC_allocated | (2 + expected_refcnt)))
+    if(page->count_info != (2 + expected_refcnt))
     {
         /* Return type count back to zero */
         put_page_and_type(page);

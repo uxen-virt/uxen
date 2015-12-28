@@ -1098,8 +1098,7 @@ DEBUG();
 
     /* Check page count and type */
     page = mfn_to_page(mfn);
-    if ( (page->count_info & (PGC_count_mask | PGC_allocated)) !=
-         (1 | PGC_allocated) )
+    if ( (page->count_info & PGC_count_mask) != 1 )
         goto out;
 
 #ifndef __UXEN__
@@ -1164,8 +1163,7 @@ DEBUG();
         goto out;
 
     /* Check page count and type once more */
-    if ( (page->count_info & (PGC_count_mask | PGC_allocated)) !=
-         (2 | PGC_allocated) )
+    if ( (page->count_info & PGC_count_mask) != 2 )
         goto out_put;
 
 #ifndef __UXEN__

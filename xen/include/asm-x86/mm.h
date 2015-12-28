@@ -414,21 +414,7 @@ void put_page(struct page_info *page);
 struct page_list_head;
 void put_host_page(struct page_info *page, struct domain *d,
                    struct page_list_head *page_list);
-#define domlist_drop_page(d, p) (({                                     \
-                spin_lock_recursive(&(d)->page_alloc_lock);             \
-                page_list_del2((p), &(d)->page_list, &(d)->arch.relmem_list); \
-                spin_unlock_recursive(&(d)->page_alloc_lock);           \
-                1;                                                      \
-            }))
-/* when clearing allocated, also drop the page from the domlist, if
- * it's a dom page */
-#define test_and_clear_allocated(d, p)                          \
-    test_and_clear_bit(_PGC_allocated, &(p)->count_info) &&     \
-    ((is_dom_page(p) && domlist_drop_page(d, p)), 1)
-#define put_allocated_page(d, p) do {           \
-        if (test_and_clear_allocated(d, p))     \
-            put_page(p);                        \
-    } while (0)
+#define put_allocated_page(d, p) put_page(p)
 int  get_page(struct page_info *page, struct domain *domain);
 int _get_page_fast(struct page_info *page
 #ifndef NDEBUG

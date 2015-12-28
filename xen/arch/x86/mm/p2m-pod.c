@@ -1944,7 +1944,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     } else {
         /* check if template page is a decompressed page, only shared
          * in one clone */
-#define ONE_CLONE_COUNT 2
+#define ONE_CLONE_COUNT 3
         while (smfn_from_clone &&
                (mfn_to_page(smfn)->count_info & PGC_count_mask) <=
                ONE_CLONE_COUNT +

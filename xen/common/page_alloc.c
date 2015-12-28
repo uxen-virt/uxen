@@ -1583,8 +1583,7 @@ int assign_pages(
         ASSERT((pg[i].count_info & ~(PGC_allocated | 1)) == PGC_state_inuse);
         page_set_owner(&pg[i], d);
         wmb(); /* Domain pointer must be visible before updating refcnt. */
-        pg[i].count_info = PGC_allocated | 1;
-        page_list_add_tail(&pg[i], &d->page_list);
+        pg[i].count_info = 1;
     }
 
     spin_unlock(&d->page_alloc_lock);
