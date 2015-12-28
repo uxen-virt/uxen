@@ -1830,7 +1830,6 @@ int
 p2m_mapcache_mappings_teardown(struct domain *d)
 {
     struct page_info *page;
-    unsigned long mfn;
     int total = 0, bad = 0;
 
     if (!d->vm_info_shared)
@@ -1842,11 +1841,11 @@ p2m_mapcache_mappings_teardown(struct domain *d)
     spin_lock_recursive(&d->page_alloc_lock);
 
     while ( (page = page_list_remove_head(&d->mapcache_page_list)) ) {
-        mfn = __page_to_mfn(page);
-        if (!test_and_clear_bit(_PGC_mapcache, &page->count_info) && bad < 5) {
-            gdprintk(XENLOG_WARNING,
-                     "Bad mapcache clear for page %lx in vm%u\n",
-                     mfn, d->domain_id);
+        if (!test_and_clear_bit(_PGC_mapcache, &page->count_info)) {
+            if (bad < 5)
+                gdprintk(XENLOG_WARNING,
+                         "Bad mapcache clear for page %lx in vm%u\n",
+                         __page_to_mfn(page), d->domain_id);
             bad++;
         }
 
