@@ -2391,13 +2391,13 @@ put_page_last_ref(struct page_info *page, struct domain *d, int refs)
     refs++;
     y = page->count_info;
     do {
-        if ((y & PGC_count_mask) < refs) {
+        if ((y & PGC_count_mask) < refs + ((y & PGC_allocated) ? 1 : 0)) {
             put_page(page);
             return 0;
         }
-        ASSERT((y & PGC_count_mask) >= refs);
+        ASSERT((y & PGC_count_mask) >= refs + ((y & PGC_allocated) ? 1 : 0));
         x  = y;
-        nx = (x - refs) & ~PGC_allocated;
+        nx = (x - refs - ((y & PGC_allocated) ? 1 : 0)) & ~PGC_allocated;
         if (nx) {
             put_page(page);
             return 0;
@@ -2405,7 +2405,8 @@ put_page_last_ref(struct page_info *page, struct domain *d, int refs)
     } while (unlikely((y = cmpxchg(&page->count_info, x, nx)) != x));
 
     spin_lock_recursive(&d->page_alloc_lock);
-    page_list_del2(page, &d->page_list, &d->arch.relmem_list);
+    if (x & PGC_allocated)
+        page_list_del2(page, &d->page_list, &d->arch.relmem_list);
     d->tot_pages -= 1;
     drop_dom_ref = (d->tot_pages == 0);
     spin_unlock_recursive(&d->page_alloc_lock);
