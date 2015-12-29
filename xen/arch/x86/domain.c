@@ -574,7 +574,9 @@ int arch_domain_create(struct domain *d, unsigned int domcr_flags)
     INIT_LIST_HEAD(&d->arch.pdev_list);
 
     d->arch.relmem = RELMEM_not_started;
+#ifndef __UXEN__
     INIT_PAGE_LIST_HEAD(&d->arch.relmem_list);
+#endif  /* __UXEN__ */
 
 #ifndef __UXEN__
 #if defined(__i386__)
@@ -2100,6 +2102,7 @@ int hypercall_xlat_continuation(unsigned int *id, unsigned int mask, ...)
 }
 #endif  /* __UXEN__ */
 
+#ifndef __UXEN__
 static int relinquish_memory(
     struct domain *d, struct page_list_head *list, unsigned long type)
 {
@@ -2226,6 +2229,7 @@ static int relinquish_memory(
 
     return ret;
 }
+#endif  /* __UXEN__ */
 
 static void vcpu_destroy_pagetables(struct vcpu *v)
 {
@@ -2369,14 +2373,6 @@ int domain_relinquish_resources(struct domain *d)
         if ( ret )
             return ret;
 #else  /* __UXEN__ */
-        d->arch.relmem = RELMEM_page_store;
-        /* fallthrough */
-
-    case RELMEM_page_store:
-        ret = relinquish_memory(d, &d->page_store_list, 0);
-        if ( ret )
-            return ret;
-
         d->arch.relmem = RELMEM_foreign_pages;
         /* fallthrough */
 

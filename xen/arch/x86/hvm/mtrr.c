@@ -17,8 +17,9 @@
  * Place - Suite 330, Boston, MA 02111-1307 USA.
  */
 
-#include <public/hvm/e820.h>
+#include <xen/config.h>
 #include <xen/types.h>
+#include <xen/mm.h>
 #include <asm/e820.h>
 #include <asm/mm.h>
 #include <asm/paging.h>
@@ -27,6 +28,7 @@
 #include <asm/mtrr.h>
 #include <asm/hvm/support.h>
 #include <asm/hvm/cacheattr.h>
+#include <public/hvm/e820.h>
 
 static uint32_t size_or_mask;
 

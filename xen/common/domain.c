@@ -307,7 +307,6 @@ struct domain *domain_create_internal(
     spin_lock_init_prof(d, domain_lock);
     spin_lock_init_prof(d, page_alloc_lock);
     spin_lock_init(&d->hypercall_deadlock_mutex);
-    INIT_PAGE_LIST_HEAD(&d->page_store_list);
  
     rwlock_init(&d->v4v_lock);
 

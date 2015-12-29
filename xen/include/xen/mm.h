@@ -170,6 +170,11 @@ page_list_first(const struct page_list_head *head)
     return head->next;
 }
 static inline struct page_info *
+page_list_last(const struct page_list_head *head)
+{
+    return head->tail;
+}
+static inline struct page_info *
 page_list_next(const struct page_info *page,
                const struct page_list_head *head)
 {

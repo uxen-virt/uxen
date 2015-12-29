@@ -10,6 +10,7 @@
 #include <asm/e820.h>
 #include <asm/mce.h>
 #include <public/vcpu.h>
+#include <xen/page_store.h>
 
 #define has_32bit_shinfo(d)    ((d)->arch.has_32bit_shinfo)
 #define is_pv_32bit_domain(d)  ((d)->arch.is_32bit_pv)
@@ -247,7 +248,8 @@ struct pv_domain
 
 #define P2M_DOMAIN_SIZE                                     \
     (208 + 4 * sizeof(void *) + 2 * sizeof(mfn_t) +         \
-     sizeof(uint16_t) + /* align */ 3 * sizeof(uint16_t))
+     sizeof(uint16_t) + /* align */ 3 * sizeof(uint16_t) +  \
+     sizeof(struct page_store))
 #define P2M_DOMAIN_SIZE_P2M_L1_CACHE (sizeof(uint16_t))
 #ifndef NDEBUG
 #define P2M_DOMAIN_SIZE_DEBUG_EXTRA (sizeof(unsigned long))
@@ -341,12 +343,13 @@ struct arch_domain
         RELMEM_l3,
         RELMEM_l2,
 #endif  /* __UXEN__ */
-        RELMEM_page_store,
         RELMEM_foreign_pages,
         RELMEM_mapcache,
         RELMEM_done,
     } relmem;
+#ifndef __UXEN__
     struct page_list_head relmem_list;
+#endif  /* __UXEN__ */
 
     cpuid_input_t *cpuids;
 
