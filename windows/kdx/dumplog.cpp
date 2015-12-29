@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -24,7 +24,7 @@ ULONG64 EXT_CLASS::get_domain_by_id(uint16_t id)
         if (usym_read_u16(domain, domain_id) == id)
             return usym_addr(domain);
 
-        usym_addr(domain) = usym_read_addr(domain, next_in_list);
+        usym_addr(domain) = usym_read_ptr(domain, next_in_list);
     }
 
     return ~(ULONG64)0;
@@ -140,7 +140,7 @@ EXT_COMMAND(
 
         usym_fetch_struct(domain, { Out("unable to read domain struct\n"); return; } );
 
-        ULONG64 vmi = usym_read_addr(domain, vm_info_shared);
+        ULONG64 vmi = usym_read_ptr(domain, vm_info_shared);
 
         ulbd_r = ExtRemoteTyped("((uxen!vm_info *) @$extin)->vmi_logging_desc", vmi);
     }

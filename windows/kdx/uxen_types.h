@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -21,5 +21,7 @@ typedef unsigned __int64 uintptr_t;
 typedef __int32 intptr_t;
 typedef unsigned __int32 uintptr_t;
 #endif
+
+#define offsetof(a,b) ((unsigned long)&(((a *)0)->b))
 
 #endif	/* _UXEN_TYPES_H_ */

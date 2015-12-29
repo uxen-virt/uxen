@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -27,6 +27,8 @@ EXT_COMMAND(
         usym_fetch_struct(domain, return);
         usym_def_addr(domain, page_list_next);
         usym_def_addr(domain, page_list_tail);
+        int has_page_list = !!usym_ptr(domain, page_list_next);
+        usym_def_addr(domain, shared_info);
 
         if (TranslateVirtualToPhysical(usym_addr(domain), &phys_addr))
             phys_addr >>= 12;
@@ -34,18 +36,35 @@ EXT_COMMAND(
             phys_addr = 0;
 
         Out("[domain %hd:0x%p(0x%08x)]\n"
-            "  frametable:0x%p\n"
-            "  page_list_next:0x%p, page_list_tail:0x%p\n",
+            "  refcnt:%d shared_info:0x%p(0x%x)\n",
             usym_read_u16(domain, domain_id), usym_addr(domain),
             phys_addr,
-            frametable_addr,
-            usym_addr(domain_page_list_next),
-            usym_addr(domain_page_list_tail));
+            usym_read_u32(domain, refcnt),
+            usym_addr(domain_shared_info),
+            usym_read_u32(domain, shared_info_gpfn));
 
-        dump_page_list(HasArg("db") ? usym_addr(domain_page_list_tail) :
-                                      usym_addr(domain_page_list_next),
-                       frametable_addr, HasArg("b"), HasArg("v"),
-                       HasArg("d") ? GetArgU64("d", false) : 0);
+        Out("  total:%d max:%d hidden:%d xen:%d host:%d\n",
+            usym_read_u32(domain, tot_pages), usym_read_u32(domain, max_pages),
+            usym_read_u32(domain, hidden_pages),
+            usym_read_u32(domain, xenheap_pages),
+            usym_read_u32(domain, host_pages));
+        Out("  pod:%d zero_shared:%d tmpl_shared:%d retry:%d\n",
+            usym_read_u32(domain, pod_pages),
+            usym_read_u32(domain, zero_shared_pages),
+            usym_read_u32(domain, tmpl_shared_pages),
+            usym_read_u32(domain, retry_pages));
+
+        if (has_page_list) {
+            Dml("  page_list_next:<exec cmd=\"!pagelist -v 0x%p\">0x%p</exec>, page_list_tail:<exec cmd=\"!pagelist -v -b 0x%p\">0x%p</exec>\n",
+                usym_addr(domain_page_list_next),
+                usym_addr(domain_page_list_next),
+                usym_addr(domain_page_list_tail),
+                usym_addr(domain_page_list_tail));
+            dump_page_list(HasArg("b") ? usym_addr(domain_page_list_tail) :
+                           usym_addr(domain_page_list_next),
+                           frametable_addr, HasArg("b"), HasArg("v"),
+                           HasArg("d") ? GetArgU64("d", false) : 0);
+        }
     } else {
         /* domain address not provided - dump domain list */
         usym_addr(domain) = GetExpression("poi(uxen!domain_list)");
@@ -66,11 +85,10 @@ EXT_COMMAND(
                 phys_addr,
                 domain_max_vcpus, usym_addr(domain_vcpu));
 
-            usym_fetch_array(domain_vcpu, domain_max_vcpus * VM_PTR_SIZE,
-                             VM_PTR_TYPE, goto next_domain);
-
             for (ULONG i = 0; i < domain_max_vcpus; i++) {
-                VM_PTR_TYPE usym_addr(vcpu) = usym_arr(domain_vcpu)[i];
+                VM_PTR_TYPE usym_addr(vcpu) =
+                  get_expr("poi(0x%p)", usym_addr(domain_vcpu) +
+                           i * TARGET_VM_PTR_SIZE);
                 usym_fetch_struct(vcpu, continue);
 
                 Dml("    vcpu[%d]:0x%p, vcpu_id:%d, "
@@ -85,10 +103,7 @@ EXT_COMMAND(
                     usym_read_u64(vcpu, arch_hvm_vmx_vmcs_shadow));
             }
 
-            usym_free_arr(domain_vcpu);
-            
-          next_domain:
-            usym_addr(domain) = usym_read_addr(domain, next_in_list);               
+            usym_addr(domain) = usym_read_ptr(domain, next_in_list);
         }
     }
 }

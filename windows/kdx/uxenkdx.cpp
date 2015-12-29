@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -30,7 +30,9 @@ EXT_COMMAND(
         "Dump domains         ->"
         " <exec cmd=\"!domain\">!domain</exec>\n"
         "Dump host page list  ->"
-        " <exec cmd=\"!hostpages\">!hostpages</exec>\n");
+        " <exec cmd=\"!hostpages\">!hostpages</exec>\n"
+        "Update offsets       ->"
+        " <exec cmd=\"!kdxinfo\">!kdxinfo</exec>\n");
 
     Out("\n");
 }
@@ -59,7 +61,8 @@ EXT_CLASS::dump_page_info(
     idx = (page_info_addr - frametable_addr) / ___usym_sizeof___page_info;
     invalid = page_info_addr < frametable_addr;
 
-    count_info = get_expr("poi(0x%p + 0x8)", page_info_addr);
+    count_info = get_expr("poi(0x%p)", page_info_addr +
+                          usym_offset(page_info, count_info));
 
     Dml("%s[page_info:0x%p, <exec cmd=\"!pageinfo 0x%x\">idx</exec>:0x%08x]"
         " <exec cmd=\"!pageinfo 0x%x\">prev</exec>:0x%08x"
@@ -69,16 +72,22 @@ EXT_CLASS::dump_page_info(
         invalid ? "  !!! invalid " : "  ",
         page_info_addr,
         idx, idx,
-        get_expr("poi(0x%p + 0x4)", page_info_addr) & ~0UL,
-        get_expr("poi(0x%p + 0x4)", page_info_addr) & ~0UL,
-        get_expr("poi(0x%p)", page_info_addr) & ~0UL,
-        get_expr("poi(0x%p)", page_info_addr) & ~0UL,
+        get_expr("poi(0x%p)",
+                 page_info_addr + usym_offset(page_info, list_prev)) & ~0UL,
+        get_expr("poi(0x%p)",
+                 page_info_addr + usym_offset(page_info, list_prev)) & ~0UL,
+        get_expr("poi(0x%p)",
+                 page_info_addr + usym_offset(page_info, list_next)) & ~0UL,
+        get_expr("poi(0x%p)",
+                 page_info_addr + usym_offset(page_info, list_next)) & ~0UL,
         (count_info >> 32) & ~0UL, count_info & ~0UL,
-        page_state_is(count_info, host) ? 
-            "domain" : 
-            page_state_is(count_info, free) ? "order" : "{v}",
-        get_expr("poi(0x%p + 0x14)", page_info_addr) & ~0UL,
-        get_expr("poi(0x%p + 0x10)", page_info_addr) & ~0UL,
+        page_state_is(count_info, inuse) ? "domain" :
+        page_state_is(count_info, free) ? "order" : "{v}",
+        IsPtr64() ?
+        get_expr("poi(0x%p)",
+                 page_info_addr + usym_offset(page_info, v) + 4) & ~0UL : 0UL,
+        get_expr("poi(0x%p)",
+                 page_info_addr + usym_offset(page_info, v)) & ~0UL,
         idx << PAGE_SHIFT);
 
     if (decode_pgc) {
@@ -190,9 +199,9 @@ EXT_COMMAND(
 
     ExtRemoteData kdxinfo_r(kdxinfo_addr, kdxinfo_size);
 
-    if (sizeof(kdxinfo) != kdxinfo_size) {
-        Out("kdxinfo incompatible size %d, supported %d\n", sizeof(kdxinfo),
-            kdxinfo_size);
+    if (sizeof(kdxinfo) < kdxinfo_size) {
+        Out("kdxinfo incompatible size %d, needed %d\n",
+            kdxinfo_size, sizeof(kdxinfo));
         return;
     }
 
@@ -202,9 +211,10 @@ EXT_COMMAND(
         return;
     }
 
-    if (kdxinfo.version != KDXINFO_VERSION) {
-        Out("kdxinfo incompatible version %d, supported %d\n", kdxinfo.version,
-            KDXINFO_VERSION);
+    if (kdxinfo.version < KDXINFO_VERSION_COMPAT ||
+                          kdxinfo.version > KDXINFO_VERSION) {
+        Out("kdxinfo incompatible version %d, supported %d-%d\n",
+            kdxinfo.version, KDXINFO_VERSION_COMPAT, KDXINFO_VERSION);
         return;
     }
 
@@ -215,12 +225,12 @@ EXT_COMMAND(
 
     set_usym_sizeof (domain) = kdxinfo.sizeof_struct_domain;
     set_usym        (domain, domain_id) = kdxinfo.domain_domain_id;
-    set_usym_addr   (domain, page_list_next) = kdxinfo.domain_page_list_next;
-    set_usym_addr   (domain, page_list_tail) = kdxinfo.domain_page_list_tail;
-    set_usym_addr   (domain, vm_info_shared) = kdxinfo.domain_vm_info_shared;
+    set_usym_ptr    (domain, page_list_next) = kdxinfo.domain_page_list_next;
+    set_usym_ptr    (domain, page_list_tail) = kdxinfo.domain_page_list_tail;
+    set_usym_ptr    (domain, vm_info_shared) = kdxinfo.domain_vm_info_shared;
     set_usym        (domain, max_vcpus) = kdxinfo.domain_max_vcpus;
-    set_usym_addr   (domain, next_in_list) = kdxinfo.domain_next_in_list;
-    set_usym_addr   (domain, vcpu) = kdxinfo.domain_vcpu;
+    set_usym_ptr    (domain, next_in_list) = kdxinfo.domain_next_in_list;
+    set_usym_ptr    (domain, vcpu) = kdxinfo.domain_vcpu;
 
     set_usym_sizeof (vcpu) = kdxinfo.sizeof_struct_vcpu;
     set_usym        (vcpu, vcpu_id) = kdxinfo.vcpu_vcpu_id;
@@ -234,4 +244,33 @@ EXT_COMMAND(
         kdxinfo.vcpu_arch_hvm_vmx_active_cpu;
     set_usym        (vcpu, arch_hvm_vmx_launched) =
         kdxinfo.vcpu_arch_hvm_vmx_launched;
+
+    if (kdxinfo.version <= 1)   // KDXINFO_VERSION compat
+      return;
+
+    set_usym_offset (page_info, list_next) = kdxinfo.page_info_list_next;
+    set_usym_offset (page_info, list_prev) = kdxinfo.page_info_list_prev;
+    set_usym_offset (page_info, count_info) = kdxinfo.page_info_count_info;
+    set_usym_offset (page_info, v) = kdxinfo.page_info_v;
+
+    set_usym_offset (page_list, next) = kdxinfo.page_list_next;
+    set_usym_offset (page_list, tail) = kdxinfo.page_list_tail;
+
+    set_usym_ptr    (domain, shared_info) = kdxinfo.domain_shared_info;
+    set_usym_offset (domain, shared_info_gpfn) =
+        kdxinfo.domain_shared_info_gpfn;
+    set_usym_offset (domain, tot_pages) = kdxinfo.domain_tot_pages;
+    set_usym_offset (domain, max_pages) = kdxinfo.domain_max_pages;
+    set_usym_offset (domain, hidden_pages) = kdxinfo.domain_hidden_pages;
+    set_usym_offset (domain, pod_pages) = kdxinfo.domain_pod_pages;
+    set_usym_offset (domain, zero_shared_pages) =
+        kdxinfo.domain_zero_shared_pages;
+    set_usym_offset (domain, retry_pages) = kdxinfo.domain_retry_pages;
+    set_usym_offset (domain, tmpl_shared_pages) =
+        kdxinfo.domain_tmpl_shared_pages;
+    set_usym_offset (domain, xenheap_pages) = kdxinfo.domain_xenheap_pages;
+    set_usym_offset (domain, host_pages) = kdxinfo.domain_host_pages;
+    set_usym_offset (domain, refcnt) = kdxinfo.domain_refcnt;
+    set_usym_ptr    (domain, clone_of) = kdxinfo.domain_clone_of;
+    set_usym_ptr    (domain, arch_p2m) = kdxinfo.domain_arch_p2m;
 }

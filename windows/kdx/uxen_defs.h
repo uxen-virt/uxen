@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -9,10 +9,6 @@
 
 #define PG_shift(idx)   (BITS_PER_LONG - (idx))
 #define PG_mask(x, idx) (x ## ULL << PG_shift(idx))
-
-/* Cleared when the owning guest 'frees' this page. */
-#define _PGC_allocated    PG_shift(1)
-#define PGC_allocated     PG_mask(1, 1)
 
 #define _PGC_xen_page     PG_shift(2)
 #define PGC_xen_page      PG_mask(1, 2)
@@ -37,7 +33,6 @@ void pgc2str(ULONG64 ci, char *out, size_t out_size)
 {
     out[0] = '\0';
 #define chk_set(f) if (ci & (f)) strcat_s(out, out_size, "[" #f "]")
-    chk_set(PGC_allocated);
     chk_set(PGC_xen_page);
     chk_set(PGC_mapcache);
     chk_set(PGC_host_page);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -14,6 +14,10 @@
 
 #define VM_PTR_SIZE 8
 #define VM_PTR_TYPE ULONG64
+#define VM_PTR_SIZE_32 4
+#define VM_PTR_TYPE_32 ULONG
+
+#define TARGET_VM_PTR_SIZE (IsPtr64() ? VM_PTR_SIZE : VM_PTR_SIZE_32)
 
 struct uxen_logging_buffer {
     volatile uint64_t ulb_consumer;

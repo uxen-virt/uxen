@@ -1,10 +1,14 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
 #define usym_sizeof(name) \
     ___usym_sizeof___##name
+#define usym_offset(name, field) \
+    ___usym___##name##___##field
+#define usym_ptr(name, field) \
+    ___usym_ptr___##name##___##field
 #define usym_addr(name) \
     name##___addr
 #define usym_arr(name) \
@@ -12,24 +16,36 @@
 
 #define set_usym(name, field) \
     ___usym___##name##___##field
-#define set_usym_addr(name, field) \
-    usym_addr(___usym___##name##___##field)
 #define set_usym_sizeof(name) \
     usym_sizeof(name)
+#define set_usym_offset(name, field) \
+    usym_offset(name, field)
+#define set_usym_ptr(name, field) \
+    usym_ptr(name, field)
+#define set_usym_addr(name, field) \
+    usym_addr(usym_ptr(name, field))
 
 #define def_usym(name, field) \
     ULONG set_usym(name, field)
-#define def_usym_addr(name, field) \
-    ULONG set_usym_addr(name, field)
 #define def_usym_sizeof(name) \
     ULONG set_usym_sizeof(name)
+#define def_usym_offset(name, field) \
+    ULONG set_usym_offset(name, field)
+#define def_usym_ptr(name, field) \
+    ULONG_PTR set_usym_ptr(name, field)
+#define def_usym_addr(name, field) \
+    ULONG_PTR set_usym_addr(name, field)
 
 #define decl_usym(name, field) \
     extern def_usym(name, field)
-#define decl_usym_addr(name, field) \
-    extern def_usym_addr(name, field)
 #define decl_usym_sizeof(name) \
     extern def_usym_sizeof(name)
+#define decl_usym_offset(name, field) \
+    extern def_usym_offset(name, field)
+#define decl_usym_ptr(name, field) \
+    extern def_usym_ptr(name, field)
+#define decl_usym_addr(name, field) \
+    extern def_usym_addr(name, field)
 
 #define usym_fetch(name, size, fail_action)                                   \
     ExtRemoteData name##_r(usym_addr(name), size);                            \
@@ -76,8 +92,14 @@
 #define usym_read_u8(name, field) \
     (*((UCHAR*)&name##_buf[___usym___##name##___##field]))
 
-#define usym_read_addr(name, field) \
-    (*((VM_PTR_TYPE*)&name##_buf[___usym___##name##___##field##___addr]))
+#define usym_read_ptr(name, field)                                      \
+    (IsPtr64() ?                                                        \
+     (*((VM_PTR_TYPE*)&name##_buf[usym_ptr(name, field)])) : \
+     ((VM_PTR_TYPE)*((LONG*)&name##_buf[usym_ptr(name, field)])))
+#define usym_read_ptr_offset(name, field, offset)                       \
+    (IsPtr64() ?                                                        \
+     (*((VM_PTR_TYPE*)&name##_buf[usym_ptr(name, field) + offset])) : \
+     ((VM_PTR_TYPE)*((LONG*)&name##_buf[usym_ptr(name, field) + offset])))
 
 #define usym_def(name, field, type) \
     type name##_##field = (*((type*)&name##_buf[___usym___##name##___##field]))
@@ -90,19 +112,21 @@
 #define usym_def_u64(name, field) \
     usym_def(name, field, ULONG64)
 #define usym_def_addr(name, field) \
-    VM_PTR_TYPE name##_##field##___addr = \
-        (*((VM_PTR_TYPE*)&name##_buf[___usym___##name##___##field##___addr]))
+    VM_PTR_TYPE name##_##field##___addr = usym_read_ptr(name, field)
+#define usym_def_addr_offset(var, name, field, offset)             \
+    VM_PTR_TYPE var = \
+        usym_read_ptr_offset(name, field, offset)
 
 decl_usym_sizeof (page_info);
 
 decl_usym_sizeof (domain);
 decl_usym        (domain, domain_id);
-decl_usym_addr   (domain, page_list_next);
-decl_usym_addr   (domain, page_list_tail);
-decl_usym_addr   (domain, vm_info_shared);
+decl_usym_ptr    (domain, page_list_next);
+decl_usym_ptr    (domain, page_list_tail);
+decl_usym_ptr    (domain, vm_info_shared);
 decl_usym        (domain, max_vcpus);
-decl_usym_addr   (domain, next_in_list);
-decl_usym_addr   (domain, vcpu);
+decl_usym_ptr    (domain, next_in_list);
+decl_usym_ptr    (domain, vcpu);
 
 decl_usym_sizeof (vcpu);
 decl_usym        (vcpu, vcpu_id);
@@ -112,3 +136,26 @@ decl_usym        (vcpu, arch_hvm_vmx_vmcs_ma);
 decl_usym        (vcpu, arch_hvm_vmx_vmcs_shadow);
 decl_usym        (vcpu, arch_hvm_vmx_active_cpu);
 decl_usym        (vcpu, arch_hvm_vmx_launched);
+
+decl_usym_offset (page_info, list_next);
+decl_usym_offset (page_info, list_prev);
+decl_usym_offset (page_info, count_info);
+decl_usym_offset (page_info, v);
+
+decl_usym_offset (page_list, next);
+decl_usym_offset (page_list, tail);
+
+decl_usym_ptr    (domain, shared_info);
+decl_usym_offset (domain, shared_info_gpfn);
+decl_usym_offset (domain, tot_pages);
+decl_usym_offset (domain, max_pages);
+decl_usym_offset (domain, hidden_pages);
+decl_usym_offset (domain, pod_pages);
+decl_usym_offset (domain, zero_shared_pages);
+decl_usym_offset (domain, retry_pages);
+decl_usym_offset (domain, tmpl_shared_pages);
+decl_usym_offset (domain, xenheap_pages);
+decl_usym_offset (domain, host_pages);
+decl_usym_offset (domain, refcnt);
+decl_usym_ptr    (domain, clone_of);
+decl_usym_ptr    (domain, arch_p2m);
