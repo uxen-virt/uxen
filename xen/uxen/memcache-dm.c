@@ -228,6 +228,8 @@ mdm_enter(struct domain *d, xen_pfn_t pfn, xen_pfn_t mfn)
     if (opfn == d->mdm_undefined_mfn)
         opfn = MDM_MFN_NONE;
 
+    perfc_incr(mdm_enter);
+
 out:
     __smap_restore(aflags);
     return opfn;
