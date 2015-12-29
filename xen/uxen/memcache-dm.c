@@ -214,6 +214,7 @@ mdm_enter(struct domain *d, xen_pfn_t pfn, xen_pfn_t mfn)
      * entirely.  reference counting ensures that nothing is using the
      * old mapping in this slot until the tlb flush.  */
     d->mdm_mapped_pfn[offset] = pfn;
+    d->mdm_mapped_mfn[offset] = mfn;
     wmb();
     *entry = (offset << MEMCACHE_ENTRY_OFFSET_SHIFT) +
 	(mdm->mdm_takeref ? (1 << MEMCACHE_ENTRY_COUNT_SHIFT) : 0);
@@ -277,6 +278,7 @@ mdm_clear(struct domain *d, xen_pfn_t pfn, int force)
     mdm_unmap_mfn(mdm->mdm_va, offset, d->mdm_undefined_mfn);
     offset >>= PAGE_SHIFT;
     d->mdm_mapped_pfn[offset] = ~0U;
+    d->mdm_mapped_mfn[offset] = ~0U;
     ret = -1;
 
 out:
@@ -308,16 +310,63 @@ mdm_init_vm(struct domain *d)
         return -1;
     }
     memset(d->mdm_mapped_pfn, 0xff, s);
+    s = ALIGN_PAGE_UP(sizeof(uint32_t) * d->mdm_map_pfns);
+    d->mdm_mapped_mfn = alloc_host_pages(s >> PAGE_SHIFT, MEMF_multiok);
+    if (!d->mdm_mapped_mfn) {
+        printk(XENLOG_ERR "%s:vm%u failed to allocate mapped_mfn array\n",
+               __FUNCTION__, d->domain_id);
+        return -1;
+    }
+    memset(d->mdm_mapped_mfn, 0xff, s);
     d->mdm_next_offset = 0;
     d->mdm_mfn_to_entry = mdm->mdm_mfn_to_entry;
     d->mdm_end_low_gpfn = mdm->mdm_end_low_gpfn;
     d->mdm_start_high_gpfn = mdm->mdm_start_high_gpfn;
     d->mdm_end_high_gpfn = mdm->mdm_end_high_gpfn;
     d->mdm_undefined_mfn = mdm->mdm_undefined_mfn;
-    printk(XENLOG_INFO "%s:vm%u mdm_mapped_pfn %p "
+    printk(XENLOG_INFO "%s:vm%u mdm_mapped_pfn %p mdm_mapped_mfn %p "
            "mdm_mfn_to_entry %p mdm_*_gpfn %x/%x/%x\n",
-           __FUNCTION__, d->domain_id, d->mdm_mapped_pfn, d->mdm_mfn_to_entry,
+           __FUNCTION__, d->domain_id, d->mdm_mapped_pfn, d->mdm_mapped_mfn,
+           d->mdm_mfn_to_entry,
            d->mdm_end_low_gpfn, d->mdm_start_high_gpfn, d->mdm_end_high_gpfn);
+
+    return 0;
+}
+
+int
+mdm_clear_vm(struct domain *d)
+{
+    int offset;
+    struct page_info *page;
+    int total = 0, bad = 0;
+
+    if (!d->vm_info_shared)
+        return 0;
+
+    if (d->vm_info_shared->vmi_mapcache_active)
+        return -EAGAIN;
+
+    if (!d->mdm_mapped_mfn)
+        return 0;
+
+    for (offset = 0; offset < d->mdm_map_pfns; offset++) {
+        if (d->mdm_mapped_mfn[offset] != ~0U) {
+            page = mfn_to_page(d->mdm_mapped_mfn[offset]);
+            if (!test_and_clear_bit(_PGC_mapcache, &page->count_info)) {
+                if (bad < 5)
+                    gdprintk(XENLOG_WARNING,
+                             "Bad mapcache clear for page %lx in vm%u\n",
+                             page_to_mfn(page), d->domain_id);
+                bad++;
+                continue;
+            }
+            total++;
+            put_page(page);
+        }
+    }
+
+    printk(XENLOG_INFO "%s: vm%u cleared %d pages, %d bad\n",
+           __FUNCTION__, d->domain_id, total, bad);
 
     return 0;
 }
@@ -327,6 +376,11 @@ mdm_destroy_vm(struct domain *d)
 {
     size_t s;
 
+    if (d->mdm_mapped_mfn) {
+        s = ALIGN_PAGE_UP(sizeof(uint32_t) * d->mdm_map_pfns);
+        free_host_pages(d->mdm_mapped_mfn, s >> PAGE_SHIFT);
+        d->mdm_mapped_mfn = NULL;
+    }
     if (d->mdm_mapped_pfn) {
         s = ALIGN_PAGE_UP(sizeof(uint32_t) * d->mdm_map_pfns);
         free_host_pages(d->mdm_mapped_pfn, s >> PAGE_SHIFT);

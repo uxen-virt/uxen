@@ -588,9 +588,7 @@ p2m_mapcache_map(struct domain *d, xen_pfn_t gpfn, mfn_t mfn)
         return -EINVAL;
     }
     spin_lock(&d->page_alloc_lock);
-    if (!test_and_set_bit(_PGC_mapcache, &page->count_info))
-        page_list_add_tail(page, &d->mapcache_page_list);
-    else
+    if (test_and_set_bit(_PGC_mapcache, &page->count_info))
         /* This happens when a range of pages is being mapped, and
          * some of those pages are already mapped -- mdm_enter detects
          * this and does nothing, returning an invalid omfn -- it does
@@ -605,10 +603,8 @@ p2m_mapcache_map(struct domain *d, xen_pfn_t gpfn, mfn_t mfn)
                      "%s: mfn %"PRI_xen_pfn" in mapcache for vm%u gpfn"
                      " %"PRI_xen_pfn" without _PGC_mapcache\n", __FUNCTION__,
                      omfn, d->domain_id, gpfn);
-        else {
-            page_list_del(page, &d->mapcache_page_list);
+        else
             put_page(page);
-        }
     }
     spin_unlock(&d->page_alloc_lock);
     return 0;
@@ -1819,40 +1815,6 @@ p2m_translate(struct domain *d, xen_pfn_t *arr, int nr, int write, int map)
  out:
     p2m_unlock(p2m);
     return rc;
-}
-
-int
-p2m_mapcache_mappings_teardown(struct domain *d)
-{
-    struct page_info *page;
-    int total = 0, bad = 0;
-
-    if (!d->vm_info_shared)
-        return 0;
-
-    if (d->vm_info_shared->vmi_mapcache_active)
-        return -EAGAIN;
-
-    spin_lock_recursive(&d->page_alloc_lock);
-
-    while ( (page = page_list_remove_head(&d->mapcache_page_list)) ) {
-        if (!test_and_clear_bit(_PGC_mapcache, &page->count_info)) {
-            if (bad < 5)
-                gdprintk(XENLOG_WARNING,
-                         "Bad mapcache clear for page %lx in vm%u\n",
-                         __page_to_mfn(page), d->domain_id);
-            bad++;
-        }
-
-        total++;
-        put_page(page);
-    }
-
-    gdprintk(XENLOG_INFO, "%s: total %d in vm%u, %d bad\n",
-             __FUNCTION__, total, d->domain_id, bad);
-    spin_unlock_recursive(&d->page_alloc_lock);
-
-    return 0;
 }
 
 DEFINE_PER_CPU(union p2m_l1_cache, p2m_l1_cache);

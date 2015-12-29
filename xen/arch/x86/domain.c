@@ -78,6 +78,7 @@
 #ifdef CONFIG_COMPAT
 #include <compat/vcpu.h>
 #endif
+#include <uxen/memcache-dm.h>
 
 DEFINE_PER_CPU(struct vcpu *, curr_vcpu);
 DEFINE_PER_CPU(unsigned long, cr4);
@@ -2387,7 +2388,7 @@ int domain_relinquish_resources(struct domain *d)
         /* fallthrough */
 
     case RELMEM_mapcache:
-        ret = p2m_mapcache_mappings_teardown(d);
+        ret = mdm_clear_vm(d);
         if (ret)
             return ret;
 

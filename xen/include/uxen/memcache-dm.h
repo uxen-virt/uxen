@@ -2,7 +2,7 @@
  *  memcache-dm.h
  *  uxen
  *
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -15,6 +15,8 @@ uint64_t
 mdm_enter(struct domain *d, xen_pfn_t pfn, xen_pfn_t mfn);
 int
 mdm_clear(struct domain *d, xen_pfn_t pfn, int force);
+int
+mdm_clear_vm(struct domain *d);
 void
 mdm_destroy_vm(struct domain *d);
 

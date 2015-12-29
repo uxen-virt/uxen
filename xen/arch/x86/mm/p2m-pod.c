@@ -2362,7 +2362,6 @@ p2m_clear_gpfn_from_mapcache(struct p2m_domain *p2m, unsigned long gfn,
                      gfn, d->domain_id);
             break;
         }
-        page_list_del(page, &d->mapcache_page_list);
         put_page(page);
         break;
     default:

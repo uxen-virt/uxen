@@ -265,7 +265,6 @@ struct domain
 
     spinlock_t       page_alloc_lock; /* protects all the following fields  */
     struct page_list_head page_store_list;    /* linked list */
-    struct page_list_head mapcache_page_list; /* linked list */
     unsigned int     tot_pages;       /* number of pages currently possesed */
     unsigned int     max_pages;       /* maximum value for tot_pages        */
     atomic_t         hidden_pages;    /* number of hidden pages             */
@@ -458,6 +457,7 @@ struct domain
 
     uint32_t mdm_map_pfns;
     uint32_t *mdm_mapped_pfn;
+    uint32_t *mdm_mapped_mfn;
     uint32_t mdm_next_offset;
     volatile uint32_t *mdm_mfn_to_entry;
     uxen_pfn_t mdm_end_low_gpfn;
