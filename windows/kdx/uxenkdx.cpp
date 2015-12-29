@@ -82,7 +82,8 @@ EXT_CLASS::dump_page_info(
                  page_info_addr + usym_offset(page_info, list_next)) & ~0UL,
         (count_info >> 32) & ~0UL, count_info & ~0UL,
         page_state_is(count_info, inuse) ? "domain" :
-        page_state_is(count_info, free) ? "order" : "{v}",
+        page_state_is(count_info, free) ? "free" :
+        page_state_is(count_info, dirty) ? "dirty" : "host",
         IsPtr64() ?
         get_expr("poi(0x%p)",
                  page_info_addr + usym_offset(page_info, v) + 4) & ~0UL : 0UL,

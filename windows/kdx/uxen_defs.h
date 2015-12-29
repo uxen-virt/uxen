@@ -20,11 +20,12 @@
 #define _PGC_host_page     PG_shift(7)
 #define PGC_host_page      PG_mask(1, 7)
 
-/* Mutually-exclusive page states: { host, inuse, free }. */
+/* Mutually-exclusive page states: { host, inuse, free, dirty }. */
 #define PGC_state         PG_mask(3, 9)
 #define PGC_state_host    PG_mask(0, 9)
 #define PGC_state_inuse   PG_mask(1, 9)
 #define PGC_state_free    PG_mask(2, 9)
+#define PGC_state_dirty   PG_mask(3, 9)
 
 #define page_state_is(count_info, st) (((count_info) & PGC_state) == PGC_state_##st)
 

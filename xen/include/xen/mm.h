@@ -83,6 +83,8 @@ int offline_page(unsigned long mfn, int broken, uint32_t *status);
 int query_page_offline(unsigned long mfn, uint32_t *status);
 unsigned long total_free_pages(void);
 
+void init_hidden_pages(paddr_t ps, paddr_t pe);
+
 void scrub_heap_pages(void);
 
 int assign_pages(

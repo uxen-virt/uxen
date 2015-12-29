@@ -71,7 +71,7 @@
 #endif
 
 // #define UXEN_ALLOC_DEBUG
-// #define UXEN_ALLOC_HEAP_DEBUG
+// #define UXEN_ALLOC_HIDDEN_DEBUG
 #include <xen/symbols.h>
 
 #ifndef __UXEN__
@@ -250,6 +250,98 @@ unsigned long __init alloc_boot_pages(
 
 
 #if defined(__UXEN__) && defined(__i386__)
+/*************************
+ * hidden memory allocator
+ */
+
+#define HIDDEN_MEMORY_BASE 0x100000
+#define is_hidden_page(pg) (page_to_mfn(pg) >= HIDDEN_MEMORY_BASE)
+
+PAGE_LIST_HEAD(hidden_pages_free_list);
+DEFINE_SPINLOCK(hidden_pages_free_list_lock);
+
+static void
+free_hidden_page(struct page_info *pg)
+{
+    unsigned long flags;
+
+    page_set_owner(pg, NULL);
+    pg->count_info = PGC_state_free;
+
+    atomic_dec(&hidden_pages_allocated);
+    ASSERT(atomic_read(&hidden_pages_allocated) >= 0);
+
+    spin_lock_irqsave(&hidden_pages_free_list_lock, flags);
+    page_list_add(pg, &hidden_pages_free_list);
+    spin_unlock_irqrestore(&hidden_pages_free_list_lock, flags);
+}
+
+void
+init_hidden_pages(paddr_t ps, paddr_t pe)
+{
+    struct page_info *pg;
+    unsigned long nr_pages;
+    unsigned long i;
+    unsigned long flags;
+
+    pg = mfn_to_page(ps >> PAGE_SHIFT);
+    nr_pages = (pe >> PAGE_SHIFT) - (ps >> PAGE_SHIFT);
+
+    atomic_add(nr_pages, &hidden_pages_available);
+#ifndef __UXEN_NOT_YET__
+    atomic_add(nr_pages, &hidden_pages_allocated);
+#endif  /* __UXEN_NOT_YET__ */
+
+    for (i = 0; i < nr_pages; i++) {
+#ifndef __UXEN_NOT_YET__
+        if (opt_bootscrub)
+            scrub_one_page(pg + i);
+        free_hidden_page(pg + i);
+#else  /* __UXEN_NOT_YET__ */
+        page_set_owner(pg, NULL);
+        pg->count_info = PGC_state_dirty;
+
+        spin_lock_irqsave(&hidden_pages_free_list_lock, flags);
+        page_list_add_tail(pg, &hidden_pages_free_list);
+        spin_unlock_irqrestore(&hidden_pages_free_list_lock, flags);
+#endif  /* __UXEN_NOT_YET__ */
+    }
+}
+
+static struct page_info *
+alloc_hidden_page(unsigned int memflags, struct domain *d)
+{
+    struct page_info *pg;
+    unsigned long flags;
+
+    spin_lock_irqsave(&hidden_pages_free_list_lock, flags);
+    pg = page_list_remove_head(&hidden_pages_free_list);
+    spin_unlock_irqrestore(&hidden_pages_free_list_lock, flags);
+
+    if (pg) {
+        if (pg->count_info == PGC_state_dirty) {
+            scrub_one_page(pg);
+            pg->count_info = PGC_state_free;
+        }
+        BUG_ON(pg->count_info != PGC_state_free);
+        pg->count_info = PGC_state_inuse;
+
+        page_set_owner(pg, NULL);
+
+        atomic_inc(&hidden_pages_allocated);
+        ASSERT(atomic_read(&hidden_pages_allocated) <=
+               atomic_read(&hidden_pages_available));
+
+#ifdef UXEN_ALLOC_HIDDEN_DEBUG
+        printk("alloc hidden page: %lx pg %p\n", page_to_mfn(pg), pg);
+#endif  /* UXEN_ALLOC_HIDDEN_DEBUG */
+    }
+
+    return pg;
+}
+#endif  /* defined(__UXEN__) && defined(__i386__) */
+
+#ifndef __UXEN__
 /*************************
  * BINARY BUDDY ALLOCATOR
  */
@@ -528,7 +620,7 @@ static struct page_info *alloc_heap_pages(
 
     return pg;
 }
-#endif  /* defined(__UXEN__) && defined(__i386__) */
+#endif  /* __UXEN__ */
 
 #ifndef __UXEN__
 /* Remove any offlined page in the buddy pointed to by head. */
@@ -608,7 +700,7 @@ static int reserve_offlined_page(struct page_info *head)
 }
 #endif  /* __UXEN__ */
 
-#if defined(__UXEN__) && defined(__i386__)
+#ifndef __UXEN__
 /* Free 2^@order set of pages. */
 static void free_heap_pages(
     struct page_info *pg, unsigned int order)
@@ -719,7 +811,7 @@ static void free_heap_pages(
 
     spin_unlock(&heap_lock);
 }
-#endif  /* defined(__UXEN__) && defined(__i386__) */
+#endif  /* __UXEN__ */
 
 
 #ifndef __UXEN__
@@ -975,7 +1067,7 @@ int query_page_offline(unsigned long mfn, uint32_t *status)
 }
 #endif  /* __UXEN__ */
 
-#if defined(__UXEN__) && defined(__i386__)
+#ifndef __UXEN__
 /*
  * Hand the specified arbitrary page range to the specified heap zone
  * checking the node_id of the previous page.  If they differ and the
@@ -1048,7 +1140,7 @@ unsigned long total_free_pages(void)
 #endif  /* __UXEN__ */
         ;
 }
-#endif  /* defined(__UXEN__) && defined(__i386__) */
+#endif  /* __UXEN__ */
 
 #ifndef __UXEN__
 void __init end_boot_allocator(void)
@@ -1094,7 +1186,7 @@ void __init end_boot_allocator(void)
 }
 #endif  /* __UXEN__ */
 
-#if defined(__UXEN__) && defined(__i386__)
+#ifndef __UXEN__
 #ifdef __UXEN__
 /* Scrub pages above 4GB */
 #define first_valid_mfn 0x100000ULL
@@ -1142,7 +1234,7 @@ void __init scrub_heap_pages(void)
 
     printk("done.\n");
 }
-#endif  /* defined(__UXEN__) && defined(__i386__) */
+#endif  /* __UXEN__ */
 
 
 
@@ -1242,14 +1334,14 @@ free_host_heap_page(struct domain *d, struct page_info *pg)
 {
 
 #ifdef __i386__
-#ifdef UXEN_ALLOC_HEAP_DEBUG
-    printk("free_host_heap_page: %lx pg %p %s\n", page_to_mfn(pg), pg,
-           is_heap_page(pg) ? "is heap" : "not heap");
-#endif  /* UXEN_ALLOC_HEAP_DEBUG */
-    if (is_heap_page(pg)) {
+#ifdef UXEN_ALLOC_HIDDEN_DEBUG
+    printk("%s: %lx pg %p %s\n", __FUNCTION__, page_to_mfn(pg), pg,
+           is_hidden_page(pg) ? "is hidden" : "not hidden");
+#endif  /* UXEN_ALLOC_HIDDEN_DEBUG */
+    if (is_hidden_page(pg)) {
         if (d)                  /* ASSERT(d) */
             atomic_dec(&d->hidden_pages);
-        free_heap_pages(pg, 0);
+        free_hidden_page(pg);
     } else
 #endif
         free_host_page(pg);
@@ -1525,7 +1617,7 @@ free_all_host_pages(void)
  * DOMAIN-HEAP SUB-ALLOCATOR
  */
 
-#if defined(__UXEN__) && defined(__i386__)
+#ifndef __UXEN__
 void init_domheap_pages(paddr_t ps, paddr_t pe)
 {
     unsigned long smfn, emfn;
@@ -1537,7 +1629,7 @@ void init_domheap_pages(paddr_t ps, paddr_t pe)
 
     init_heap_pages(mfn_to_page(smfn), emfn - smfn);
 }
-#endif  /* defined(__UXEN__) && defined(__i386__) */
+#endif  /* __UXEN__ */
 
 
 int assign_pages(
@@ -1634,7 +1726,7 @@ struct page_info *alloc_domheap_pages(
     if (!d || !d->use_hidden_mem)
         memflags |= MEMF_host_page;
     if (!(memflags & MEMF_host_page)) {
-        pg = alloc_heap_pages(0, NR_ZONES - 1, order, memflags, d);
+        pg = alloc_hidden_page(memflags, d);
         if (d && pg)
             atomic_inc(&d->hidden_pages);
     }
@@ -1826,7 +1918,7 @@ unsigned long avail_node_heap_pages(unsigned int nodeid)
 #endif  /* __UXEN__ */
 
 
-#if defined(__UXEN__) && defined(__i386__)
+#ifndef __UXEN__
 static void pagealloc_info(unsigned char key)
 {
     unsigned int zone = 0;
@@ -1860,7 +1952,7 @@ static __init int pagealloc_keyhandler_init(void)
     return 0;
 }
 __initcall(pagealloc_keyhandler_init);
-#endif  /* defined(__UXEN__) && defined(__i386__) */
+#endif  /* __UXEN__ */
 
 
 void scrub_one_page(struct page_info *pg)
@@ -1883,7 +1975,7 @@ void scrub_one_page(struct page_info *pg)
     unmap_domain_page(p);
 }
 
-#if defined(__UXEN__) && defined(__i386__)
+#ifndef __UXEN__
 static void dump_heap(unsigned char key)
 {
     s_time_t      now = NOW();
@@ -1914,7 +2006,7 @@ static __init int register_heap_trigger(void)
     return 0;
 }
 __initcall(register_heap_trigger);
-#endif  /* defined(__UXEN__) && defined(__i386__) */
+#endif  /* __UXEN__ */
 
 /*
  * Local variables:

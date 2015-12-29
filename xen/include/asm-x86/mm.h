@@ -118,13 +118,13 @@ struct page_info
             /* GMFN of guest page we're a shadow of. */
             __pdx_t back;
         } sh;
-#endif  /* __UXEN__ */
 
         /* Page is on a free list. */
         struct {
             /* Order-size of the free chunk this page is the head of. */
             unsigned int order;
         } free;
+#endif  /* __UXEN__ */
 
     } v;
 
@@ -268,6 +268,7 @@ struct page_info
 #define PGC_state_host    PG_mask(0, 9)
 #define PGC_state_inuse   PG_mask(1, 9)
 #define PGC_state_free    PG_mask(2, 9)
+#define PGC_state_dirty   PG_mask(3, 9)
 /* #define PGC_state_offlining PG_mask(1, 9) */
 /* #define PGC_state_offlined PG_mask(2, 9) */
 #define page_state_is(pg, st) (((pg)->count_info&PGC_state) == PGC_state_##st)

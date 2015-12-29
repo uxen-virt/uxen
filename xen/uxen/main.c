@@ -734,7 +734,7 @@ __uxen_add_heap_memory(uint64_t start, uint64_t end)
     uxen_set_current(idle_vcpu[smp_processor_id()]);
     hvm_cpu_on();
 
-    init_domheap_pages(start, end);
+    init_hidden_pages(ALIGN_PAGE_UP(start), ALIGN_PAGE_DOWN(end));
 
     end_execution();
 #endif
