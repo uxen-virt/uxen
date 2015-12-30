@@ -27,6 +27,7 @@
 #include <asm/io.h>
 #include <asm/uaccess.h>
 
+#ifndef __UXEN__
 /*
  * Per-page-frame information.
  * 
@@ -35,6 +36,7 @@
  *  2. Provide a PFN_ORDER() macro for accessing the order of a free page.
  */
 #define PFN_ORDER(_pfn) ((_pfn)->v.free.order)
+#endif  /* __UXEN__ */
 
 /*
  * This definition is solely for the use in struct page_info (and
@@ -50,139 +52,19 @@ struct page_list_entry
     __pdx_t next, prev;
 };
 
+#ifdef __UXEN__
+/* __UXEN__ version of page_info */
 struct page_info
 {
-    union {
-        /* Each frame can be threaded onto a doubly-linked list.
-         *
-         * For unused shadow pages, a list of free shadow pages;
-         * for multi-page shadows, links to the other pages in this shadow;
-         * for pinnable shadows, if pinned, a list of all pinned shadows
-         * (see sh_type_is_pinnable() for the definition of "pinnable" 
-         * shadow types).  N.B. a shadow may be both pinnable and multi-page.
-         * In that case the pages are inserted in order in the list of
-         * pinned shadows and walkers of that list must be prepared 
-         * to keep them all together during updates. 
-         */
-        struct page_list_entry list;
-#ifndef __UXEN__
-        /* For non-pinnable single-page shadows, a higher entry that points
-         * at us. */
-        paddr_t up;
-        /* For shared/sharable pages the sharing handle */
-        uint64_t shr_handle; 
-#endif  /* __UXEN__ */
-    };
+    /* Each frame can be threaded onto a doubly-linked list.
+     */
+    struct page_list_entry list;
 
     /* Reference count and various PGC_xxx flags and fields. */
     unsigned long count_info;
 
-#ifndef __UXEN__
-    /* Context-dependent fields follow... */
-    union {
-
-        /* Page is in use: ((count_info & PGC_count_mask) != 0). */
-        struct {
-            /* Type reference count and various PGT_xxx flags and fields. */
-            unsigned long type_info;
-        } inuse;
-
-        /* Page is in use as a shadow: count_info == 0. */
-        struct {
-            unsigned long type:5;   /* What kind of shadow is this? */
-            unsigned long pinned:1; /* Is the shadow pinned? */
-            unsigned long head:1;   /* Is this the first page of the shadow? */
-            unsigned long count:25; /* Reference count */
-        } sh;
-
-        /* Page is on a free list: ((count_info & PGC_count_mask) == 0). */
-        struct {
-            /* Do TLBs need flushing for safety before next page use? */
-            bool_t need_tlbflush;
-        } free;
-
-    } u;
-#endif  /* __UXEN__ */
-
-    union {
-
-        /* Page is in use, but not as a shadow. */
-        struct {
-            /* Owner of this page (zero if page is anonymous). */
-            __pdx_t _domain;
-        } inuse;
-
-#ifndef __UXEN__
-        /* Page is in use as a shadow. */
-        struct {
-            /* GMFN of guest page we're a shadow of. */
-            __pdx_t back;
-        } sh;
-
-        /* Page is on a free list. */
-        struct {
-            /* Order-size of the free chunk this page is the head of. */
-            unsigned int order;
-        } free;
-#endif  /* __UXEN__ */
-
-    } v;
-
-#ifndef __UXEN__
-    union {
-        /*
-         * Timestamp from 'TLB clock', used to avoid extra safety flushes.
-         * Only valid for: a) free pages, and b) pages with zero type count
-         * (except page table pages when the guest is in shadow mode).
-         */
-        u32 tlbflush_timestamp;
-
-        /*
-         * When PGT_partial is true then this field is valid and indicates
-         * that PTEs in the range [0, @nr_validated_ptes) have been validated.
-         * An extra page reference must be acquired (or not dropped) whenever
-         * PGT_partial gets set, and it must be dropped when the flag gets
-         * cleared. This is so that a get() leaving a page in partially
-         * validated state (where the caller would drop the reference acquired
-         * due to the getting of the type [apparently] failing [-EAGAIN])
-         * would not accidentally result in a page left with zero general
-         * reference count, but non-zero type reference count (possible when
-         * the partial get() is followed immediately by domain destruction).
-         * Likewise, the ownership of the single type reference for partially
-         * (in-)validated pages is tied to this flag, i.e. the instance
-         * setting the flag must not drop that reference, whereas the instance
-         * clearing it will have to.
-         *
-         * If @partial_pte is positive then PTE at @nr_validated_ptes+1 has
-         * been partially validated. This implies that the general reference
-         * to the page (acquired from get_page_from_lNe()) would be dropped
-         * (again due to the apparent failure) and hence must be re-acquired
-         * when resuming the validation, but must not be dropped when picking
-         * up the page for invalidation.
-         *
-         * If @partial_pte is negative then PTE at @nr_validated_ptes+1 has
-         * been partially invalidated. This is basically the opposite case of
-         * above, i.e. the general reference to the page was not dropped in
-         * put_page_from_lNe() (due to the apparent failure), and hence it
-         * must be dropped when the put operation is resumed (and completes),
-         * but it must not be acquired if picking up the page for validation.
-         */
-        struct {
-            u16 nr_validated_ptes;
-            s8 partial_pte;
-        };
-
-        /*
-         * Guest pages with a shadow.  This does not conflict with
-         * tlbflush_timestamp since page table pages are explicitly not
-         * tracked for TLB-flush avoidance when a guest runs in shadow mode.
-         */
-        u32 shadow_flags;
-
-        /* When in use as a shadow, next shadow in this hash chain. */
-        __pdx_t next_shadow;
-    };
-#endif  /* __UXEN__ */
+    /* Owner of this page (zero if page is anonymous). */
+    __pdx_t _domain;
 
 #ifdef DEBUG_MAPCACHE
     atomic_t mapped;
@@ -190,6 +72,134 @@ struct page_info
     void *lastmap0;
 #endif  /* DEBUG_MAPCACHE */
 };
+#else  /* __UXEN__ */
+// struct page_info
+// {
+//     union {
+//         /* Each frame can be threaded onto a doubly-linked list.
+//          *
+//          * For unused shadow pages, a list of free shadow pages;
+//          * for multi-page shadows, links to the other pages in this shadow;
+//          * for pinnable shadows, if pinned, a list of all pinned shadows
+//          * (see sh_type_is_pinnable() for the definition of "pinnable" 
+//          * shadow types).  N.B. a shadow may be both pinnable and multi-page.
+//          * In that case the pages are inserted in order in the list of
+//          * pinned shadows and walkers of that list must be prepared 
+//          * to keep them all together during updates. 
+//          */
+//         struct page_list_entry list;
+//         /* For non-pinnable single-page shadows, a higher entry that points
+//          * at us. */
+//         paddr_t up;
+//         /* For shared/sharable pages the sharing handle */
+//         uint64_t shr_handle; 
+//     };
+// 
+//     /* Reference count and various PGC_xxx flags and fields. */
+//     unsigned long count_info;
+// 
+//     /* Context-dependent fields follow... */
+//     union {
+// 
+//         /* Page is in use: ((count_info & PGC_count_mask) != 0). */
+//         struct {
+//             /* Type reference count and various PGT_xxx flags and fields. */
+//             unsigned long type_info;
+//         } inuse;
+// 
+//         /* Page is in use as a shadow: count_info == 0. */
+//         struct {
+//             unsigned long type:5;   /* What kind of shadow is this? */
+//             unsigned long pinned:1; /* Is the shadow pinned? */
+//             unsigned long head:1;   /* Is this the first page of the shadow? */
+//             unsigned long count:25; /* Reference count */
+//         } sh;
+// 
+//         /* Page is on a free list: ((count_info & PGC_count_mask) == 0). */
+//         struct {
+//             /* Do TLBs need flushing for safety before next page use? */
+//             bool_t need_tlbflush;
+//         } free;
+// 
+//     } u;
+// 
+//     union {
+// 
+//         /* Page is in use, but not as a shadow. */
+//         struct {
+//             /* Owner of this page (zero if page is anonymous). */
+//             __pdx_t _domain;
+//         } inuse;
+// 
+//         /* Page is in use as a shadow. */
+//         struct {
+//             /* GMFN of guest page we're a shadow of. */
+//             __pdx_t back;
+//         } sh;
+// 
+//         /* Page is on a free list. */
+//         struct {
+//             /* Order-size of the free chunk this page is the head of. */
+//             unsigned int order;
+//         } free;
+// 
+//     } v;
+// 
+//     union {
+//         /*
+//          * Timestamp from 'TLB clock', used to avoid extra safety flushes.
+//          * Only valid for: a) free pages, and b) pages with zero type count
+//          * (except page table pages when the guest is in shadow mode).
+//          */
+//         u32 tlbflush_timestamp;
+// 
+//         /*
+//          * When PGT_partial is true then this field is valid and indicates
+//          * that PTEs in the range [0, @nr_validated_ptes) have been validated.
+//          * An extra page reference must be acquired (or not dropped) whenever
+//          * PGT_partial gets set, and it must be dropped when the flag gets
+//          * cleared. This is so that a get() leaving a page in partially
+//          * validated state (where the caller would drop the reference acquired
+//          * due to the getting of the type [apparently] failing [-EAGAIN])
+//          * would not accidentally result in a page left with zero general
+//          * reference count, but non-zero type reference count (possible when
+//          * the partial get() is followed immediately by domain destruction).
+//          * Likewise, the ownership of the single type reference for partially
+//          * (in-)validated pages is tied to this flag, i.e. the instance
+//          * setting the flag must not drop that reference, whereas the instance
+//          * clearing it will have to.
+//          *
+//          * If @partial_pte is positive then PTE at @nr_validated_ptes+1 has
+//          * been partially validated. This implies that the general reference
+//          * to the page (acquired from get_page_from_lNe()) would be dropped
+//          * (again due to the apparent failure) and hence must be re-acquired
+//          * when resuming the validation, but must not be dropped when picking
+//          * up the page for invalidation.
+//          *
+//          * If @partial_pte is negative then PTE at @nr_validated_ptes+1 has
+//          * been partially invalidated. This is basically the opposite case of
+//          * above, i.e. the general reference to the page was not dropped in
+//          * put_page_from_lNe() (due to the apparent failure), and hence it
+//          * must be dropped when the put operation is resumed (and completes),
+//          * but it must not be acquired if picking up the page for validation.
+//          */
+//         struct {
+//             u16 nr_validated_ptes;
+//             s8 partial_pte;
+//         };
+// 
+//         /*
+//          * Guest pages with a shadow.  This does not conflict with
+//          * tlbflush_timestamp since page table pages are explicitly not
+//          * tracked for TLB-flush avoidance when a guest runs in shadow mode.
+//          */
+//         u32 shadow_flags;
+// 
+//         /* When in use as a shadow, next shadow in this hash chain. */
+//         __pdx_t next_shadow;
+//     };
+// };
+#endif  /* __UXEN__ */
 
 #undef __pdx_t
 
@@ -197,102 +207,115 @@ struct page_info
 #define PG_mask(x, idx) (x ## UL << PG_shift(idx))
 
 #ifndef __UXEN__
- /* The following page types are MUTUALLY EXCLUSIVE. */
-#define PGT_none          PG_mask(0, 4)  /* no special uses of this page   */
-#define PGT_l1_page_table PG_mask(1, 4)  /* using as an L1 page table?     */
-#define PGT_l2_page_table PG_mask(2, 4)  /* using as an L2 page table?     */
-#define PGT_l3_page_table PG_mask(3, 4)  /* using as an L3 page table?     */
-#define PGT_l4_page_table PG_mask(4, 4)  /* using as an L4 page table?     */
-#define PGT_seg_desc_page PG_mask(5, 4)  /* using this page in a GDT/LDT?  */
-#define PGT_writable_page PG_mask(7, 4)  /* has writable mappings?         */
-#define PGT_shared_page   PG_mask(8, 4)  /* CoW sharable page              */
-#define PGT_type_mask     PG_mask(15, 4) /* Bits 28-31 or 60-63.           */
-
- /* Owning guest has pinned this page to its current type? */
-#define _PGT_pinned       PG_shift(5)
-#define PGT_pinned        PG_mask(1, 5)
- /* Has this page been validated for use as its current type? */
-#define _PGT_validated    PG_shift(6)
-#define PGT_validated     PG_mask(1, 6)
- /* PAE only: is this an L2 page directory containing Xen-private mappings? */
-#define _PGT_pae_xen_l2   PG_shift(7)
-#define PGT_pae_xen_l2    PG_mask(1, 7)
-/* Has this page been *partially* validated for use as its current type? */
-#define _PGT_partial      PG_shift(8)
-#define PGT_partial       PG_mask(1, 8)
- /* Page is locked? */
-#define _PGT_locked       PG_shift(9)
-#define PGT_locked        PG_mask(1, 9)
-
- /* Count of uses of this frame as its current type. */
-#define PGT_count_width   PG_shift(9)
-#define PGT_count_mask    ((1UL<<PGT_count_width)-1)
+//  /* The following page types are MUTUALLY EXCLUSIVE. */
+// #define PGT_none          PG_mask(0, 4)  /* no special uses of this page   */
+// #define PGT_l1_page_table PG_mask(1, 4)  /* using as an L1 page table?     */
+// #define PGT_l2_page_table PG_mask(2, 4)  /* using as an L2 page table?     */
+// #define PGT_l3_page_table PG_mask(3, 4)  /* using as an L3 page table?     */
+// #define PGT_l4_page_table PG_mask(4, 4)  /* using as an L4 page table?     */
+// #define PGT_seg_desc_page PG_mask(5, 4)  /* using this page in a GDT/LDT?  */
+// #define PGT_writable_page PG_mask(7, 4)  /* has writable mappings?         */
+// #define PGT_shared_page   PG_mask(8, 4)  /* CoW sharable page              */
+// #define PGT_type_mask     PG_mask(15, 4) /* Bits 28-31 or 60-63.           */
+// 
+//  /* Owning guest has pinned this page to its current type? */
+// #define _PGT_pinned       PG_shift(5)
+// #define PGT_pinned        PG_mask(1, 5)
+//  /* Has this page been validated for use as its current type? */
+// #define _PGT_validated    PG_shift(6)
+// #define PGT_validated     PG_mask(1, 6)
+//  /* PAE only: is this an L2 page directory containing Xen-private mappings? */
+// #define _PGT_pae_xen_l2   PG_shift(7)
+// #define PGT_pae_xen_l2    PG_mask(1, 7)
+// /* Has this page been *partially* validated for use as its current type? */
+// #define _PGT_partial      PG_shift(8)
+// #define PGT_partial       PG_mask(1, 8)
+//  /* Page is locked? */
+// #define _PGT_locked       PG_shift(9)
+// #define PGT_locked        PG_mask(1, 9)
+// 
+//  /* Count of uses of this frame as its current type. */
+// #define PGT_count_width   PG_shift(9)
+// #define PGT_count_mask    ((1UL<<PGT_count_width)-1)
 #endif  /* __UXEN__ */
 
-#ifndef __UXEN__
- /* Cleared when the owning guest 'frees' this page. */
-#define _PGC_allocated    PG_shift(1)
-#define PGC_allocated     PG_mask(1, 1)
-#endif  /* __UXEN__ */
-#ifndef __UXEN__
- /* Page is Xen heap? */
-#define _PGC_xen_heap     PG_shift(2)
-#define PGC_xen_heap      PG_mask(1, 2)
-#else  /* __UXEN__ */
+#ifdef __UXEN__
+/* __UXEN__ PGC flags */
+
 #define _PGC_xen_page     PG_shift(2)
 #define PGC_xen_page      PG_mask(1, 2)
-#endif  /* __UXEN__ */
-#ifndef __UXEN__
- /* Set when is using a page as a page table */
-#define _PGC_page_table   PG_shift(3)
-#define PGC_page_table    PG_mask(1, 3)
-#define PGC_mapcache 0
-#else  /* __UXEN__ */
-#define PGC_page_table 0
+
 #define _PGC_mapcache     PG_shift(3)
 #define PGC_mapcache      PG_mask(1, 3)
-#endif  /* __UXEN__ */
+
  /* 3-bit PAT/PCD/PWT cache-attribute hint. */
 #define PGC_cacheattr_base PG_shift(6)
 #define PGC_cacheattr_mask PG_mask(7, 6)
-#ifndef __UXEN__
- /* Page is broken? */
-#define _PGC_broken       PG_shift(7)
-#define PGC_broken        PG_mask(1, 7)
-#else  /* __UXEN__ */
+
 #define _PGC_host_page     PG_shift(7)
 #define PGC_host_page      PG_mask(1, 7)
-#endif  /* __UXEN__ */
- /* Mutually-exclusive page states: { host, inuse, free }. */
+
+ /* Mutually-exclusive page states: { host, inuse, free, dirty }. */
 #define PGC_state         PG_mask(3, 9)
 #define PGC_state_host    PG_mask(0, 9)
 #define PGC_state_inuse   PG_mask(1, 9)
 #define PGC_state_free    PG_mask(2, 9)
 #define PGC_state_dirty   PG_mask(3, 9)
-/* #define PGC_state_offlining PG_mask(1, 9) */
-/* #define PGC_state_offlined PG_mask(2, 9) */
 #define page_state_is(pg, st) (((pg)->count_info&PGC_state) == PGC_state_##st)
 
  /* Count of references to this frame. */
 #define PGC_count_width   PG_shift(9)
 #define PGC_count_mask    ((1UL<<PGC_count_width)-1)
 
-#ifdef __x86_64__
-struct spage_info
-{
-       unsigned long type_info;
-};
+#else  /* __UXEN__ */
+//  /* Cleared when the owning guest 'frees' this page. */
+// #define _PGC_allocated    PG_shift(1)
+// #define PGC_allocated     PG_mask(1, 1)
+//  /* Page is Xen heap? */
+// #define _PGC_xen_heap     PG_shift(2)
+// #define PGC_xen_heap      PG_mask(1, 2)
+//  /* Set when is using a page as a page table */
+// #define _PGC_page_table   PG_shift(3)
+// #define PGC_page_table    PG_mask(1, 3)
+//  /* 3-bit PAT/PCD/PWT cache-attribute hint. */
+// #define PGC_cacheattr_base PG_shift(6)
+// #define PGC_cacheattr_mask PG_mask(7, 6)
+//  /* Page is broken? */
+// #define _PGC_broken       PG_shift(7)
+// #define PGC_broken        PG_mask(1, 7)
+//  /* Mutually-exclusive page states: { host, inuse, free }. */
+// #define PGC_state         PG_mask(3, 9)
+// #define PGC_state_host    PG_mask(0, 9)
+// #define PGC_state_inuse   PG_mask(1, 9)
+// #define PGC_state_free    PG_mask(2, 9)
+// #define PGC_state_dirty   PG_mask(3, 9)
+// /* #define PGC_state_offlining PG_mask(1, 9) */
+// /* #define PGC_state_offlined PG_mask(2, 9) */
+// #define page_state_is(pg, st) (((pg)->count_info&PGC_state) == PGC_state_##st)
+// 
+//  /* Count of references to this frame. */
+// #define PGC_count_width   PG_shift(9)
+// #define PGC_count_mask    ((1UL<<PGC_count_width)-1)
+#endif  /* __UXEN__ */
 
- /* The following page types are MUTUALLY EXCLUSIVE. */
-#define SGT_none          PG_mask(0, 2)  /* superpage not in use */
-#define SGT_mark          PG_mask(1, 2)  /* Marked as a superpage */
-#define SGT_dynamic       PG_mask(2, 2)  /* has been dynamically mapped as a superpage */
-#define SGT_type_mask     PG_mask(3, 2)  /* Bits 30-31 or 62-63. */
-
- /* Count of uses of this superpage as its current type. */
-#define SGT_count_width   PG_shift(3)
-#define SGT_count_mask    ((1UL<<SGT_count_width)-1)
-#endif
+#ifndef __UXEN__
+// #ifdef __x86_64__
+// struct spage_info
+// {
+//        unsigned long type_info;
+// };
+// 
+//  /* The following page types are MUTUALLY EXCLUSIVE. */
+// #define SGT_none          PG_mask(0, 2)  /* superpage not in use */
+// #define SGT_mark          PG_mask(1, 2)  /* Marked as a superpage */
+// #define SGT_dynamic       PG_mask(2, 2)  /* has been dynamically mapped as a superpage */
+// #define SGT_type_mask     PG_mask(3, 2)  /* Bits 30-31 or 62-63. */
+// 
+//  /* Count of uses of this superpage as its current type. */
+// #define SGT_count_width   PG_shift(3)
+// #define SGT_count_mask    ((1UL<<SGT_count_width)-1)
+// #endif
+#endif  /* __UXEN__ */
 
 #ifndef __UXEN__
 #if defined(__i386__)
@@ -338,11 +361,11 @@ struct spage_info
 /* OOS fixup entries */
 #define SHADOW_OOS_FIXUPS 2
 
-#define page_get_owner(_p)                                              \
-    ((struct domain *)((_p)->v.inuse._domain ?                          \
-                       pdx_to_virt((_p)->v.inuse._domain) : NULL))
-#define page_set_owner(_p,_d)                                           \
-    ((_p)->v.inuse._domain = (_d) ? virt_to_pdx(_d) : 0)
+#define page_get_owner(_p)                                      \
+    ((struct domain *)((_p)->_domain ?                          \
+                       pdx_to_virt((_p)->_domain) : NULL))
+#define page_set_owner(_p,_d)                           \
+    ((_p)->_domain = (_d) ? virt_to_pdx(_d) : 0)
 
 #define maddr_get_owner(ma)   (page_get_owner(maddr_to_page((ma))))
 #define vaddr_get_owner(va)   (page_get_owner(virt_to_page((va))))

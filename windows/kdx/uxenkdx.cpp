@@ -85,10 +85,10 @@ EXT_CLASS::dump_page_info(
         page_state_is(count_info, free) ? "free" :
         page_state_is(count_info, dirty) ? "dirty" : "host",
         IsPtr64() ?
-        get_expr("poi(0x%p)",
-                 page_info_addr + usym_offset(page_info, v) + 4) & ~0UL : 0UL,
-        get_expr("poi(0x%p)",
-                 page_info_addr + usym_offset(page_info, v)) & ~0UL,
+        get_expr("poi(0x%p)", page_info_addr +
+                 usym_offset(page_info, domain) + 4) & ~0UL : 0UL,
+        get_expr("poi(0x%p)", page_info_addr +
+                 usym_offset(page_info, domain)) & ~0UL,
         idx << PAGE_SHIFT);
 
     if (decode_pgc) {
@@ -252,7 +252,7 @@ EXT_COMMAND(
     set_usym_offset (page_info, list_next) = kdxinfo.page_info_list_next;
     set_usym_offset (page_info, list_prev) = kdxinfo.page_info_list_prev;
     set_usym_offset (page_info, count_info) = kdxinfo.page_info_count_info;
-    set_usym_offset (page_info, v) = kdxinfo.page_info_v;
+    set_usym_offset (page_info, domain) = kdxinfo.page_info_domain;
 
     set_usym_offset (page_list, next) = kdxinfo.page_list_next;
     set_usym_offset (page_list, tail) = kdxinfo.page_list_tail;

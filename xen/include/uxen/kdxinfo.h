@@ -43,7 +43,7 @@ struct uxen_kdxinfo {
     uint16_t page_info_list_next;
     uint16_t page_info_list_prev;
     uint16_t page_info_count_info;
-    uint16_t page_info_v;
+    uint16_t page_info_domain;
 
     uint16_t page_list_next;
     uint16_t page_list_tail;

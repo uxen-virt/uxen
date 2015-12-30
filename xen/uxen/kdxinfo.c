@@ -45,7 +45,7 @@ struct uxen_kdxinfo uxen_kdxinfo = {
     .page_info_list_next = offsetof(struct page_info, list.next),
     .page_info_list_prev = offsetof(struct page_info, list.prev),
     .page_info_count_info = offsetof(struct page_info, count_info),
-    .page_info_v = offsetof(struct page_info, v),
+    .page_info_domain = offsetof(struct page_info, _domain),
 
     .page_list_next = offsetof(struct page_list_head, next),
     .page_list_tail = offsetof(struct page_list_head, tail),

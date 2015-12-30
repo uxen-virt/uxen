@@ -140,7 +140,7 @@ decl_usym        (vcpu, arch_hvm_vmx_launched);
 decl_usym_offset (page_info, list_next);
 decl_usym_offset (page_info, list_prev);
 decl_usym_offset (page_info, count_info);
-decl_usym_offset (page_info, v);
+decl_usym_offset (page_info, domain);
 
 decl_usym_offset (page_list, next);
 decl_usym_offset (page_list, tail);
