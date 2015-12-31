@@ -1254,16 +1254,16 @@ alloc_host_page(int is_xen_page)
     struct page_info *pg;
     int cpu = smp_processor_id();
 
-    if (!_uxen_info.ui_free_pages[cpu].free_count) {
+    if (!_uxen_info.ui_free_pages[cpu].count) {
         printk("%s: no pages on cpu %d from %S\n", __FUNCTION__, cpu,
                (printk_symbol)__builtin_return_address(0));
         return NULL;
     }
 
-    pg = mfn_to_page(_uxen_info.ui_free_pages[cpu].free_list);
-    _uxen_info.ui_free_pages[cpu].free_list = pg->list.next;
+    pg = mfn_to_page(_uxen_info.ui_free_pages[cpu].list);
+    _uxen_info.ui_free_pages[cpu].list = pg->list.next;
     pg->list.next = 0;
-    _uxen_info.ui_free_pages[cpu].free_count--;
+    _uxen_info.ui_free_pages[cpu].count--;
     atomic_inc(&host_pages_allocated);
 
     BUG_ON(pg->count_info != PGC_state_host);
@@ -1330,10 +1330,10 @@ free_host_page(struct page_info *pg)
     }
 #endif  /* DEBUG_MAPCACHE */
 
-    pg->list.next = _uxen_info.ui_free_pages[cpu].free_list;
+    pg->list.next = _uxen_info.ui_free_pages[cpu].list;
     pg->list.prev = 0;
-    _uxen_info.ui_free_pages[cpu].free_list = page_to_mfn(pg);
-    _uxen_info.ui_free_pages[cpu].free_count++;
+    _uxen_info.ui_free_pages[cpu].list = page_to_mfn(pg);
+    _uxen_info.ui_free_pages[cpu].count++;
     atomic_dec(&host_pages_allocated);
     ASSERT(atomic_read(&host_pages_allocated) >= 0);
 }

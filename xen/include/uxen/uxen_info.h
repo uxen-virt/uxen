@@ -154,9 +154,9 @@
 struct vm_info_shared;
 struct vm_vcpu_info_shared;
 
-struct ui_free_pages {
-    uint32_t free_list;
-    uint32_t free_count;
+struct ui_page_list {
+    uint32_t list;
+    uint32_t count;
 };
 
 struct /* __WINPACKED__ */ uxen_info {
@@ -212,7 +212,7 @@ struct /* __WINPACKED__ */ uxen_info {
     char *ui_percpu_area[UXEN_MAXIMUM_PROCESSORS];
     uint64_t (__interface_fn *ui_user_access_ok)(void *, void *, uint64_t);
     void (__interface_fn *ui_signal_v4v)(void);
-    struct ui_free_pages ui_free_pages[UXEN_MAXIMUM_PROCESSORS];
+    struct ui_page_list ui_free_pages[UXEN_MAXIMUM_PROCESSORS];
 #ifdef UXEN_HOST_WINDOWS
     uintptr_t ui_mapcache_va[UXEN_MAXIMUM_PROCESSORS];
     uint32_t ui_mapcache_size;

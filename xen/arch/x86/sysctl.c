@@ -102,7 +102,7 @@ long arch_do_sysctl(
 #else  /* __UXEN__ */
         pi->used_pages = atomic_read(&host_pages_allocated);
         for_each_present_cpu(cpu)
-            free_pages += _uxen_info.ui_free_pages[cpu].free_count;
+            free_pages += _uxen_info.ui_free_pages[cpu].count;
         pi->free_pages = free_pages;
         pi->total_pages = pi->used_pages + pi->free_pages;
 #ifdef __i386__

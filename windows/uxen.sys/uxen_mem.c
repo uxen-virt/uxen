@@ -796,7 +796,7 @@ _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
 
     disable_preemption(i);
 
-    if (pages <= uxen_info->ui_free_pages[cpu].free_count)
+    if (pages <= uxen_info->ui_free_pages[cpu].count)
         return 0;
 
     pages += extra_pages ? extra_pages : EXTRA_RESERVE;
@@ -807,12 +807,12 @@ _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
         return -1;
     }
 
-    if (pages > uxen_info->ui_free_pages[cpu].free_count)
+    if (pages > uxen_info->ui_free_pages[cpu].count)
         mm_dprintk("%s: cpu%d %d -> %d from %s\n", __FUNCTION__, cpu,
-                   uxen_info->ui_free_pages[cpu].free_count, pages, fn);
+                   uxen_info->ui_free_pages[cpu].count, pages, fn);
 
     while (1) {
-        needed = pages - uxen_info->ui_free_pages[cpu].free_count;
+        needed = pages - uxen_info->ui_free_pages[cpu].count;
         if (needed <= 0)
             break;
         enable_preemption(*i);
@@ -822,16 +822,16 @@ _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
         disable_preemption(i);
         for (n = 0; n < ret; n++) {
             p = (struct page_list_entry *)(frametable + mfn_list[n] * s);
-            p->next = uxen_info->ui_free_pages[cpu].free_list;
+            p->next = uxen_info->ui_free_pages[cpu].list;
             p->prev = 0;
 #ifdef DBG
             ASSERT(!p->count_info);
 #endif
-            uxen_info->ui_free_pages[cpu].free_list = mfn_list[n];
+            uxen_info->ui_free_pages[cpu].list = mfn_list[n];
         }
-        uxen_info->ui_free_pages[cpu].free_count += ret;
+        uxen_info->ui_free_pages[cpu].count += ret;
         if (ret != needed &&
-            (pages - uxen_info->ui_free_pages[cpu].free_count) > 0) {
+            (pages - uxen_info->ui_free_pages[cpu].count) > 0) {
             LARGE_INTEGER delay;
             NTSTATUS status;
             LONG pri;
@@ -841,7 +841,7 @@ _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
                 return -1;
             }
             mm_dprintk("kernel_malloc_mfns need to alloc %d pages\n",
-                       pages - uxen_info->ui_free_pages[cpu].free_count);
+                       pages - uxen_info->ui_free_pages[cpu].count);
             delay.QuadPart = -TIME_MS(50);
             pri = KeSetBasePriorityThread(KeGetCurrentThread(),
                                           LOW_VCPUTHREAD_PRI);
@@ -865,11 +865,11 @@ uxen_pages_retire_one_cpu(int cpu, uint32_t left)
     struct page_list_entry *p;
     uint32_t *plist, free_list, n;
 
-    ASSERT(left < uxen_info->ui_free_pages[cpu].free_count);
+    ASSERT(left < uxen_info->ui_free_pages[cpu].count);
 
 #ifdef DBG
-    plist = &uxen_info->ui_free_pages[cpu].free_list;
-    for (n = 0; n < uxen_info->ui_free_pages[cpu].free_count; n++) {
+    plist = &uxen_info->ui_free_pages[cpu].list;
+    for (n = 0; n < uxen_info->ui_free_pages[cpu].count; n++) {
         p = (struct page_list_entry *)(frametable + (*plist) * s);
         plist = &p->next;
         ASSERT(!p->prev);
@@ -878,7 +878,7 @@ uxen_pages_retire_one_cpu(int cpu, uint32_t left)
     ASSERT(!p->next);
 #endif
 
-    plist = &uxen_info->ui_free_pages[cpu].free_list;
+    plist = &uxen_info->ui_free_pages[cpu].list;
     for (n = 0; n < left; n++) {
         p = (struct page_list_entry *)(frametable + (*plist) * s);
         plist = &p->next;
@@ -889,7 +889,7 @@ uxen_pages_retire_one_cpu(int cpu, uint32_t left)
 
     free_list = *plist;
     *plist = 0;
-    uxen_info->ui_free_pages[cpu].free_count = left;
+    uxen_info->ui_free_pages[cpu].count = left;
 
     return free_list;
 }
@@ -902,12 +902,12 @@ uxen_pages_retire(preemption_t i, int cpu, uint32_t left)
     uint32_t free_list, n;
     KIRQL old_irql;
 
-    if (uxen_info->ui_free_pages[cpu].free_count <= left) {
+    if (uxen_info->ui_free_pages[cpu].count <= left) {
         enable_preemption(i);
         return 0;
     }
 
-    n = uxen_info->ui_free_pages[cpu].free_count - left;
+    n = uxen_info->ui_free_pages[cpu].count - left;
 
     free_list = uxen_pages_retire_one_cpu(cpu, left);
 

@@ -407,7 +407,7 @@ static void dump_domains(unsigned char key)
 #endif
         printk("cpu pool pages:");
         for_each_present_cpu(cpu)
-            printk(" %d:%d", cpu, _uxen_info.ui_free_pages[cpu].free_count);
+            printk(" %d:%d", cpu, _uxen_info.ui_free_pages[cpu].count);
         printk("\n");
     }
 #endif  /* __UXEN__ */
