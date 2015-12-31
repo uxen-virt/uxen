@@ -537,6 +537,8 @@ void p2m_teardown(struct p2m_domain *p2m)
     while ( (pg = page_list_remove_head(&p2m->pages)) )
         d->arch.paging.free_page(d, pg);
     p2m_unlock(p2m);
+
+    dsps_release(d);
 }
 
 #ifndef __UXEN__

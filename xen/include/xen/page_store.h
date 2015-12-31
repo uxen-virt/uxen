@@ -16,7 +16,7 @@ struct page_store
 {
     struct page_list_head page_list;
     uint16_t offset;
-};
+} __attribute__((packed));
 
 #define page_store_empty(store) (page_list_empty(&(store)->page_list))
 #define page_store_clear(store) INIT_PAGE_LIST_HEAD(&(store)->page_list)
@@ -66,5 +66,42 @@ page_store_prev(struct page_store *store, struct page_info *page)
 
     return page_list_prev(page, &store->page_list);
 }
+
+/* ************************ */
+/* discrete size page store */
+
+struct dspage_store_info
+{
+    spinlock_t lock;
+};
+
+#define MAX_DSPS_SLOTS (long)((PAGE_SIZE - sizeof(struct dspage_store_info)) / \
+                              sizeof(struct page_store))
+/* PAGE_SIZE must be a multiple of this */
+#define DSPS_DSIZE 32
+#define DSPS_SLOTS ((PAGE_SIZE + DSPS_DSIZE - 1) / DSPS_DSIZE)
+
+#define DSPS_slot_data_offset sizeof(struct dspage_header)
+#define DSPS_DSIZE_bytes_used(s)                                        \
+    ((s) - (((s) - 1) % DSPS_DSIZE) + (DSPS_DSIZE - 1))
+
+struct dspage_store
+{
+    struct dspage_store_info;
+    struct page_store s[DSPS_SLOTS];
+};
+
+void dsps_init(struct domain *d);
+void dsps_release(struct domain *d);
+void dsps_add(struct domain *d, void *m_data, uint16_t m_size,
+              uint8_t *c_data, uint16_t c_size,
+              struct page_info **page, uint16_t *offset,
+              struct page_info **new_page);
+struct page_info *dsps_next(struct domain *d, uint16_t size,
+                            struct page_info *page);
+int dsps_teardown(struct domain *d,
+                  int (*iter)(void *data, uint16_t size, struct domain *d,
+                              void *opaque),
+                  int *comp, void *opaque);
 
 #endif  /* _PAGE_STORE_H_ */

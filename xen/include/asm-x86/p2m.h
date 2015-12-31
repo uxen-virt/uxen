@@ -416,7 +416,7 @@ struct p2m_domain {
 
     uint16_t p2m_l1_cache_id;
 
-    struct page_store compressed_page_store;
+    struct dspage_store *dsps;
 
 #ifndef NDEBUG
     unsigned long compress_gpfn;

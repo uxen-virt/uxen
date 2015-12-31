@@ -251,7 +251,7 @@ struct pv_domain
 #define P2M_DOMAIN_SIZE                                     \
     (208 + 4 * sizeof(void *) + 2 * sizeof(mfn_t) +         \
      sizeof(uint16_t) + /* align */ 3 * sizeof(uint16_t) +  \
-     sizeof(struct page_store))
+     sizeof(struct dspage_store *))
 #define P2M_DOMAIN_SIZE_P2M_L1_CACHE (sizeof(uint16_t))
 #ifndef NDEBUG
 #define P2M_DOMAIN_SIZE_DEBUG_EXTRA (sizeof(unsigned long))
