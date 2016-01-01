@@ -877,6 +877,7 @@ intptr_t __init __interface_fn __uxen_start_xen(
     max_page = init_e820(memmap_type, e820_raw, &e820_raw_nr);
 #else   /* __UXEN__ */
     max_page = _uxen_info.ui_max_page;
+    max_vframe = _uxen_info.ui_max_vframe;
 #endif  /* __UXEN__ */
 
 #ifndef __UXEN__
@@ -1498,6 +1499,10 @@ intptr_t __init __interface_fn __uxen_start_xen(
     }
 
     printk("Brought up %ld CPUs\n", (long)num_online_cpus());
+
+    /* increase requested number of vframes by number of cpus */
+    _uxen_info.ui_vframes_fill *= max_cpus;
+
 #ifndef __UXEN__
     smp_cpus_done();
 #endif  /* __UXEN__ */

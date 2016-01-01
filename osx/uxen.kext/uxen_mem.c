@@ -31,6 +31,9 @@ static uint32_t pages_reserve[MAX_CPUS];
 
 lck_mtx_t *populate_frametable_lock;
 
+lck_spin_t *populate_vframes_lock;
+uxen_pfn_t vframes_start, vframes_end;
+
 #define L1_PAGETABLE_SHIFT      12
 #define L2_PAGETABLE_SHIFT      21
 #define L3_PAGETABLE_SHIFT      30
@@ -2133,4 +2136,55 @@ uxen_mem_tlb_flush(void)
 {
 
     uxen_cpu_on_selected_async(~0ULL, uxen_mem_tlb_flush_fn_global);
+}
+
+void
+fill_vframes(void)
+{
+    int s = uxen_info->ui_sizeof_struct_page_info;
+    uxen_pfn_t start = 0;
+    struct page_list_entry *p;
+    uint32_t batch = 0, *tail = NULL;
+    uint32_t count, added = 0;
+
+    lck_spin_lock(populate_vframes_lock);
+    count = uxen_info->ui_vframes.count;
+    while (count < uxen_info->ui_vframes_fill + VFRAMES_PCPU_FILL) {
+        start = vframes_start;
+        _populate_frametable(start);
+        /* start vframe frametable entry (vfe) is completely
+         * populated, keep using vframes until the end of the next vfe
+         * is not in the same page as the end of the start vfe -- this
+         * handles specifically the cases where the start vfe crosses
+         * pages, and the case where the next vfe crosses pages */
+        while ((((s * start) + s - 1) >> PAGE_SHIFT) ==
+               (((s * vframes_start) + s - 1) >> PAGE_SHIFT)) {
+            if (vframes_start >= vframes_end) {
+                uxen_info->ui_out_of_vframes = 1;
+                lck_spin_unlock(populate_vframes_lock);
+                return;
+            }
+            p = (struct page_list_entry *)(frametable + vframes_start * s);
+            p->next = batch;
+            if (!tail)
+                tail = &p->next;
+            p->prev = 0;
+            batch = vframes_start;
+            vframes_start++;
+            count++;
+            added++;
+        }
+    }
+    if (!start) {
+        lck_spin_unlock(populate_vframes_lock);
+        return;
+    }
+
+    do {
+        *tail = uxen_info->ui_vframes.list;
+    } while (cmpxchg(&uxen_info->ui_vframes.list, *tail, batch) != *tail);
+
+    atomic_add(added, &uxen_info->ui_vframes.count);
+
+    lck_spin_unlock(populate_vframes_lock);
 }

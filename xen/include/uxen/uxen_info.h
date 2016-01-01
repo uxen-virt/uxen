@@ -228,6 +228,11 @@ struct /* __WINPACKED__ */ uxen_info {
     uint32_t ui_xsave_cntxt_size;
     uint32_t ui_domain_array_pages;
     void *ui_domain_array;
+#define VFRAMES_PCPU_FILL 2048
+    struct ui_page_list ui_vframes;
+    uint32_t ui_vframes_fill;
+    uint32_t ui_out_of_vframes;
+    uint32_t ui_max_vframe;
 
 #if defined(__x86_64__) && defined(__OBJ_PE__)
     uint8_t *ui_xdata_start;
@@ -274,6 +279,7 @@ enum {
     VCI_RUN_MODE_PAGEMAP_CHECK,
     VCI_RUN_MODE_FREEPAGE_CHECK,
     VCI_RUN_MODE_MAP_PAGE_REQUEST,
+    VCI_RUN_MODE_VFRAMES_CHECK,
     VCI_RUN_MODE_SHUTDOWN,
 };
 

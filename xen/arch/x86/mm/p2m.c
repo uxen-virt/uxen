@@ -92,6 +92,8 @@ boolean_param("hap_2mb", opt_hap_2mb);
 #define mfn_valid(_mfn) __mfn_valid(mfn_x(_mfn))
 #undef mfn_valid_page
 #define mfn_valid_page(_mfn) __mfn_valid_page(mfn_x(_mfn))
+#undef mfn_valid_vframe
+#define mfn_valid_vframe(_mfn) __mfn_valid_vframe(mfn_x(_mfn))
 #undef page_to_mfn
 #define page_to_mfn(_pg) _mfn(__page_to_mfn(_pg))
 

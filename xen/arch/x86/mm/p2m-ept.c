@@ -62,6 +62,8 @@
 #define mfn_valid(_mfn) __mfn_valid(mfn_x(_mfn))
 #undef mfn_valid_page
 #define mfn_valid_page(_mfn) __mfn_valid_page(mfn_x(_mfn))
+#undef mfn_valid_page_or_vframe
+#define mfn_valid_page_or_vframe(_mfn) __mfn_valid_page_or_vframe(mfn_x(_mfn))
 #undef page_to_mfn
 #define page_to_mfn(_pg) _mfn(__page_to_mfn(_pg))
 
@@ -566,9 +568,10 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     }
 
     if (!target && old_entry.mfn != mfn_x(mfn)) {
-        if (mfn_valid_page(mfn) && mfn_x(mfn) != mfn_x(shared_zero_page))
+        if (mfn_valid_page_or_vframe(mfn) &&
+            mfn_x(mfn) != mfn_x(shared_zero_page))
             get_page_fast(mfn_to_page(mfn), NULL);
-        if (__mfn_valid_page(old_entry.mfn) &&
+        if (__mfn_valid_page_or_vframe(old_entry.mfn) &&
             old_entry.mfn != mfn_x(shared_zero_page))
             put_page(__mfn_to_page(old_entry.mfn));
     }

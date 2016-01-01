@@ -1363,6 +1363,73 @@ free_host_heap_page(struct domain *d, struct page_info *pg)
 
 
 /*************************
+ * vframe allocator
+ */
+
+atomic_t vframes_allocated = ATOMIC_INIT(0);
+
+struct page_info *
+alloc_vframe(struct domain *d)
+{
+    uint32_t f;
+    struct page_info *pg;
+
+    BUILD_BUG_ON(sizeof(_uxen_info.ui_vframes.count) != sizeof(atomic_t));
+
+    if (!_uxen_info.ui_vframes.count) {
+        printk(XENLOG_ERR "%s: no vframes from %S", __FUNCTION__,
+               (printk_symbol)__builtin_return_address(0));
+        return NULL;
+    }
+
+    do {
+        f = _uxen_info.ui_vframes.list;
+        pg = mfn_to_page(f);
+    } while (cmpxchg(&_uxen_info.ui_vframes.list, f, pg->list.next) != f);
+
+    BUG_ON(!is_vframe_page(pg));
+    BUG_ON(pg->count_info != PGC_state_host);
+
+    pg->list.next = 0;
+    atomic_dec((atomic_t *)&_uxen_info.ui_vframes.count);
+    atomic_inc(&vframes_allocated);
+
+    pg->count_info = PGC_state_inuse | 1;
+    page_set_owner(pg, d);
+
+    if (d) {
+        spin_lock(&d->page_alloc_lock);
+        if (unlikely(d->vframes == 0))
+            get_knownalive_domain(d);
+        d->vframes++;
+        spin_unlock(&d->page_alloc_lock);
+    }
+
+    return pg;
+}
+
+void
+free_vframe(struct page_info *pg)
+{
+    uint32_t f = page_to_mfn(pg);
+
+    pg->domain = DOMID_0;
+
+    BUG_ON(pg->count_info != PGC_state_inuse);
+    pg->count_info = PGC_state_host;
+
+    pg->list.prev = 0;
+    do {
+        pg->list.next = _uxen_info.ui_vframes.list;
+    } while (cmpxchg(&_uxen_info.ui_vframes.list, pg->list.next, f) !=
+             pg->list.next);
+    atomic_inc((atomic_t *)&_uxen_info.ui_vframes.count);
+    atomic_dec(&vframes_allocated);
+    ASSERT(atomic_read(&vframes_allocated) >= 0);
+}
+
+
+/*************************
  * XEN-HEAP SUB-ALLOCATOR
  */
 
@@ -1783,6 +1850,18 @@ void free_domheap_pages(struct page_info *pg, unsigned int order)
         spin_unlock_recursive(&d->page_alloc_lock);
     }
 #else  /* __UXEN__ */
+    if (unlikely(is_vframe_page(pg))) {
+        drop_dom_ref = 0;
+        if (d) {
+            spin_lock_recursive(&d->page_alloc_lock);
+            d->vframes--;
+            if (unlikely(d->vframes == 0))
+                drop_dom_ref = 1;
+            spin_unlock_recursive(&d->page_alloc_lock);
+        }
+        free_vframe(pg);
+    } else
+
     if (unlikely(is_host_page(pg))) {
         /* This doesn't actually free the page since the page is only
          * shared with the domain */

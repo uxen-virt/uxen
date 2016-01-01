@@ -226,6 +226,7 @@ int32_t _uxen_snoop_hypercall(void *udata, int mode);
 #define uxen_snoop_hypercall(udata) _uxen_snoop_hypercall(udata, SNOOP_USER)
 
 #define try_call(r, exception_retval, fn, ...) do {                 \
+        fill_vframes();                                             \
         r fn(__VA_ARGS__);                                          \
     } while (0)
 
@@ -396,6 +397,9 @@ void user_free(void *va, struct fd_assoc *fda);
 void user_free_all_user_mappings(struct fd_assoc *fda);
 int map_host_pages(void *, size_t, uint64_t, struct fd_assoc *);
 int unmap_host_pages(void *, size_t, struct fd_assoc *);
+extern lck_spin_t *populate_vframes_lock;
+void fill_vframes(void);
+extern uxen_pfn_t vframes_start, vframes_end;
 
 /* memcache-dm.c */
 int mdm_init(struct uxen_memcacheinit_desc *, struct fd_assoc *);
@@ -446,6 +450,8 @@ enum {
 
 #define cmpxchg(ptr, cmp, new)                          \
     (OSCompareAndSwap(cmp, new, ptr) ? (cmp) : *(ptr))
+#define atomic_add(val, ptr) \
+    OSAddAtomic(val, ptr)
 
 #if defined(__x86_64__)
 #define affinity_mask(x) (1ULL << (x))

@@ -914,6 +914,10 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
     uxen_info->ui_mapped_global_va_pfn = uxen_mem_mapped_va_pfn;
 
     uxen_info->ui_max_page = max_pfn;
+    /* space for max_pfn virtual frametable entries */
+    vframes_start = max_pfn;
+    vframes_end = vframes_start + max_pfn;
+    uxen_info->ui_max_vframe = vframes_end;
 
     uxen_info->ui_host_needs_preempt = uxen_op_host_needs_preempt;
 
@@ -967,7 +971,8 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
 
     dprintk("uxen mem:   page_info %x\n",
             uxen_info->ui_sizeof_struct_page_info);
-    frametable_size = max_pfn * uxen_info->ui_sizeof_struct_page_info;
+    /* frametable is sized based on vframes */
+    frametable_size = vframes_end * uxen_info->ui_sizeof_struct_page_info;
     frametable_size = ((frametable_size + PAGE_SIZE-1) & ~(PAGE_SIZE-1));
     frametable = kernel_alloc_va(frametable_size >> PAGE_SHIFT);
     if (frametable == NULL || ((uintptr_t)frametable & (PAGE_SIZE - 1))) {
@@ -991,6 +996,8 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
             (((frametable_size >> PAGE_SHIFT) + 7) / 8) >> 10);
     KeInitializeSpinLock(&populate_frametable_lock);
     populate_frametable_physical_memory();
+
+    KeInitializeSpinLock(&populate_vframes_lock);
 
     sizeof_percpu = (uxen_addr_per_cpu_data_end - uxen_addr_per_cpu_start +
                      PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
@@ -1925,6 +1932,9 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
             break;
         case VCI_RUN_MODE_MAP_PAGE_REQUEST:
             /* nothing - handled above */
+            break;
+        case VCI_RUN_MODE_VFRAMES_CHECK:
+            /* nothing */
             break;
         }
     }

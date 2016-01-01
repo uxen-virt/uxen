@@ -52,6 +52,11 @@ void *alloc_host_pages(unsigned int pages, unsigned int memflags);
 void free_host_pages(void *v, unsigned int pages);
 void free_all_host_pages(void);
 
+/* vframe allocator */
+struct page_info *alloc_vframe(struct domain *d);
+void free_vframe(struct page_info *pg);
+extern atomic_t vframes_allocated;
+
 /* Xen suballocator. These functions are interrupt-safe. */
 #ifndef __UXEN__
 void init_xenheap_pages(paddr_t ps, paddr_t pe);

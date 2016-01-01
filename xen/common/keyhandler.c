@@ -303,11 +303,11 @@ static void dump_domains(unsigned char key)
         cpuset_print(tmpstr, sizeof(tmpstr), d->domain_dirty_cpumask);
         printk("    refcnt=%d dying=%d dirty_cpus=%s\n",
                atomic_read(&d->refcnt), d->is_dying, tmpstr);
-        printk("    nr_pages=%d xenheap_pages=%d max_pages=%u"
+        printk("    nr_pages=%d xenheap=%u max=%u vframes=%u"
 #ifdef __i386__
-               " hidden_pages=%d"
+               " hidden=%d"
 #endif
-               "\n", d->tot_pages, d->xenheap_pages, d->max_pages
+               "\n", d->tot_pages, d->xenheap_pages, d->max_pages, d->vframes
 #ifdef __i386__
                , atomic_read(&d->hidden_pages)
 #endif
@@ -405,6 +405,9 @@ static void dump_domains(unsigned char key)
                atomic_read(&hidden_pages_allocated),
                atomic_read(&hidden_pages_available));
 #endif
+        printk("vframes allocated: %d free: %d\n",
+               atomic_read(&vframes_allocated),
+               _uxen_info.ui_vframes.count);
         printk("cpu pool pages:");
         for_each_present_cpu(cpu)
             printk(" %d:%d", cpu, _uxen_info.ui_free_pages[cpu].count);

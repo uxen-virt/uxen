@@ -56,9 +56,16 @@ struct page_list_entry
 /* __UXEN__ version of page_info */
 struct page_info
 {
-    /* Each frame can be threaded onto a doubly-linked list.
-     */
-    struct page_list_entry list;
+    union {
+        /* Each frame can be threaded onto a doubly-linked list. */
+        struct page_list_entry list;
+
+        /* vframe containing page data */
+        struct {
+            __pdx_t page;
+            uint16_t offset;
+        } __attribute__ ((packed)) page_data;
+    };
 
     /* Reference count and various PGC_xxx flags and fields. */
     uint32_t count_info;
@@ -350,6 +357,9 @@ struct page_info
 /* not any of the above */
 #define is_dom_page(page) \
     (!((page)->count_info & (PGC_xen_page | PGC_host_page | PGC_mapcache)))
+
+#define is_vframe_mfn(mfn) (__mfn_valid_vframe(mfn))
+#define is_vframe_page(page) (is_vframe_mfn(page_to_mfn(page)))
 #endif  /* __UXEN__ */
 
 #if defined(__i386__)
@@ -397,6 +407,7 @@ int get_superpage(unsigned long mfn, struct domain *d);
 extern struct page_info *frame_table;
 #endif  /* __UXEN__ */
 extern unsigned long max_page;
+extern unsigned long max_vframe;
 extern unsigned long total_pages;
 void init_frametable(void);
 
@@ -657,10 +668,12 @@ extern bool_t machine_to_phys_mapping_valid;
 #define COMPRESSED_MFN          (0xfffffffffdUL)
 #define ERROR_MFN               (0xfffffffffcUL)
 #define DMREQ_MFN               (0xfffffffffbUL)
+#if 0
 #define P2M_MFN_MFN_BITS        28
 #define P2M_MFN_SPECIAL_BITS    4
 #define P2M_MFN_PAGE_STORE_OFFSET_BITS 8
 #define P2M_MFN_PAGE_STORE_OFFSET_INDEX 32
+#endif
 #else  /* __x86_64__ */
 /* 32 bits */
 #define INVALID_MFN             (0xffffffffUL)
@@ -668,23 +681,28 @@ extern bool_t machine_to_phys_mapping_valid;
 #define COMPRESSED_MFN          (0xfffffffdUL)
 #define ERROR_MFN               (0xfffffffcUL)
 #define DMREQ_MFN               (0xfffffffbUL)
+#if 0
 #define P2M_MFN_MFN_BITS        22
 #define P2M_MFN_SPECIAL_BITS    4
 #define P2M_MFN_PAGE_STORE_OFFSET_BITS 6
 #define P2M_MFN_PAGE_STORE_OFFSET_INDEX 26
+#endif
 #endif /* __x86_64__ */
-#define PAGE_STORE_DATA_ALIGN   (PAGE_SHIFT - P2M_MFN_PAGE_STORE_OFFSET_BITS)
 
 #define __mfn_retry(mfn) ((mfn) == DMREQ_MFN)
 #define mfn_retry(mfn) (__mfn_retry(mfn_x((mfn))))
 
+#if 0
 #define P2M_MFN_MFN_MASK        ((1UL << P2M_MFN_MFN_BITS) - 1)
 #define p2m_mfn_mfn(mfn) _mfn(mfn_x((mfn)) & P2M_MFN_MFN_MASK)
 #define P2M_MFN_SPECIAL_MASK                                    \
     (((1UL << P2M_MFN_SPECIAL_BITS) - 1) << P2M_MFN_MFN_BITS)
-#define P2M_MFN_PAGE_DATA       (1UL << P2M_MFN_MFN_BITS)
-#define p2m_mfn_is_page_data(mfn)                               \
-    ((mfn_x(mfn) & P2M_MFN_SPECIAL_MASK) == P2M_MFN_PAGE_DATA)
+/* #define P2M_MFN_foo             (1UL << P2M_MFN_MFN_BITS) */
+/* #define p2m_mfn_is_foo(mfn)                             \ */
+/*     (((mfn) & P2M_MFN_SPECIAL_MASK) == P2M_MFN_foo) */
+#endif
+#define p2m_mfn_is_vframe(mfn) mfn_valid_vframe(mfn)
+#define p2m_mfn_is_page_data(mfn) p2m_mfn_is_vframe(mfn)
 
 #define compat_pfn_to_cr3(pfn) (((unsigned)(pfn) << 12) | ((unsigned)(pfn) >> 20))
 #define compat_cr3_to_pfn(cr3) (((unsigned)(cr3) >> 12) | ((unsigned)(cr3) << 20))

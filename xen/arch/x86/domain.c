@@ -2319,8 +2319,9 @@ int domain_relinquish_resources(struct domain *d)
     BUG_ON(!cpumask_empty(d->domain_dirty_cpumask));
 
     /* each clone takes a domain ref -- 3 is the base number of refs
-     * that are held on a domain that isn't running */
-    if (d->is_template && atomic_read(&d->refcnt) > 3)
+     * that are held on a template that has no clones, then add 1 if
+     * the template has vframes */
+    if (d->is_template && atomic_read(&d->refcnt) > 3 + (d->vframes ? 1 : 0))
         return -EAGAIN;
 
     switch ( d->arch.relmem )

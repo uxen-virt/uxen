@@ -712,6 +712,10 @@ uxen_op_init(struct fd_assoc *fda)
     uxen_info->ui_mapped_global_va_pfn = physmap_va_to_pfn;
 
     uxen_info->ui_max_page = max_pfn;
+    /* space for max_pfn virtual frametable entries */
+    vframes_start = max_pfn;
+    vframes_end = vframes_start + max_pfn;
+    uxen_info->ui_max_vframe = vframes_end;
 
     uxen_info->ui_host_needs_preempt = host_needs_preempt;
 
@@ -750,7 +754,8 @@ uxen_op_init(struct fd_assoc *fda)
     }
     dprintk("uxen mem:   zero page %x\n", uxen_zero_mfn);
 
-    frametable_size = max_pfn * uxen_info->ui_sizeof_struct_page_info;
+    /* frametable is sized based on vframes */
+    frametable_size = vframes_end * uxen_info->ui_sizeof_struct_page_info;
     frametable_size = ((frametable_size + PAGE_SIZE-1) & ~(PAGE_SIZE-1));
     frametable = kernel_alloc_va(frametable_size >> PAGE_SHIFT);
     if (frametable == NULL || ((uintptr_t)frametable & (PAGE_SIZE - 1))) {
@@ -780,6 +785,13 @@ uxen_op_init(struct fd_assoc *fda)
         goto out;
     }
     populate_frametable_physical_memory();
+
+    populate_vframes_lock = lck_spin_alloc_init(uxen_lck_grp, LCK_ATTR_NULL);
+    if (!populate_vframes_lock) {
+        fail_msg("populate vframes lck alloc failed");
+        ret = ENOMEM;
+        goto out;
+    }
 
     sizeof_percpu = (uxen_addr_per_cpu_data_end - uxen_addr_per_cpu_start +
                      PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
@@ -1575,6 +1587,9 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
             break;
         case VCI_RUN_MODE_MAP_PAGE_REQUEST:
             /* nothing - handled above */
+            break;
+        case VCI_RUN_MODE_VFRAMES_CHECK:
+            /* nothing */
             break;
         }
     }

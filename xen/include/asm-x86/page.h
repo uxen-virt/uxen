@@ -266,6 +266,14 @@ void copy_page_sse2(void *, const void *);
             unsigned long __m_f_n = (mfn);                              \
             likely(__m_f_n) && likely(__m_f_n < max_page);              \
         })
+#define __mfn_valid_vframe(mfn)        ({                               \
+            unsigned long __m_f_n = (mfn);                              \
+            likely(__m_f_n >= max_page) && likely(__m_f_n < max_vframe); \
+        })
+#define __mfn_valid_page_or_vframe(mfn)        ({                       \
+            unsigned long __m_f_n = (mfn);                              \
+            likely(__m_f_n) && likely(__m_f_n < max_vframe);            \
+        })
 #endif  /* __UXEN__ */
 
 #define __mfn_zero_page(mfn)                                        \
@@ -283,6 +291,8 @@ void copy_page_sse2(void *, const void *);
  */
 #define mfn_valid(mfn)      __mfn_valid(mfn)
 #define mfn_valid_page(mfn) __mfn_valid_page(mfn)
+#define mfn_valid_vframe(mfn) __mfn_valid_vframe(mfn)
+#define mfn_valid_page_or_vframe(mfn) __mfn_valid_page_or_vframe(mfn)
 #define mfn_zero_page(mfn)  __mfn_zero_page(mfn)
 #define mfn_compressed_page(mfn) __mfn_compressed_page(mfn)
 #define mfn_error_page(mfn) __mfn_error_page(mfn)

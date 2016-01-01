@@ -286,6 +286,7 @@ struct domain
 #endif  /* __UXEN__ */
     unsigned int     xenheap_pages;   /* # pages allocated from Xen heap    */
     unsigned int     host_pages;      /* # host pages mapped    */
+    unsigned int     vframes;         /* # vframes */
 
     union {
         struct {
@@ -754,8 +755,12 @@ void hypercall_cancel_continuation(void);
     (_uxen_info.ui_free_pages[smp_processor_id()].count < 20 + (n))
 #define check_pagemap_needed()                 \
     (_uxen_info.ui_pagemap_needs_check)
-#define hypercall_needs_checks()                    \
-    (check_free_pages_needed(0) || check_pagemap_needed())
+#define check_vframes_needed()                                          \
+    (_uxen_info.ui_vframes.count < 20 && !_uxen_info.ui_out_of_vframes)
+
+#define hypercall_needs_checks()                                \
+    (check_free_pages_needed(0) || check_pagemap_needed() ||    \
+     check_vframes_needed())
 
 extern struct domain *domain_list;
 

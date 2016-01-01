@@ -59,6 +59,8 @@ struct _uxen_info _uxen_info = {
         .ui_mapcache_size = MAPCACHE_SIZE,
 #endif  /* UXEN_HOST_WINDOWS */
 
+        .ui_vframes_fill = VFRAMES_PCPU_FILL,
+
         .ui_cli = _cpu_irq_disable,
         .ui_sti = _cpu_irq_enable,
         .ui_irq_is_enabled = _cpu_irq_is_enabled,
@@ -383,6 +385,11 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
         }
         if (vci->vci_map_page_range_requested) {
             vci->vci_run_mode = VCI_RUN_MODE_MAP_PAGE_REQUEST;
+            ret = 0;
+            goto out_reset_current;
+        }
+        if (check_vframes_needed()) {
+            vci->vci_run_mode = VCI_RUN_MODE_VFRAMES_CHECK;
             ret = 0;
             goto out_reset_current;
         }

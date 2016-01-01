@@ -177,6 +177,7 @@ uint32_t *_machine_to_phys_mapping;
 #endif  /* __UXEN__ */
 /* Frame table size in pages. */
 unsigned long max_page;
+unsigned long max_vframe;
 #ifndef __UXEN__
 unsigned long total_pages;
 

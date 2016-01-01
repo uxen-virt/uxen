@@ -67,6 +67,10 @@
 #define mfn_valid(_mfn) __mfn_valid(mfn_x(_mfn))
 #undef mfn_valid_page
 #define mfn_valid_page(_mfn) __mfn_valid_page(mfn_x(_mfn))
+#undef mfn_valid_vframe
+#define mfn_valid_vframe(_mfn) __mfn_valid_vframe(mfn_x(_mfn))
+#undef mfn_valid_page_or_vframe
+#define mfn_valid_page_or_vframe(_mfn) __mfn_valid_page_or_vframe(mfn_x(_mfn))
 #undef mfn_zero_page
 #define mfn_zero_page(_mfn) __mfn_zero_page(mfn_x(_mfn))
 #undef page_to_mfn
@@ -1157,7 +1161,7 @@ p2m_pod_add_compressed_page(struct p2m_domain *p2m, unsigned long gpfn,
     struct domain *d = p2m->domain;
     mfn_t mfn;
     struct page_data_info _pdi = { };
-    struct page_info *page;
+    struct page_info *page, *vpage;
     uint16_t offset;
 
     ASSERT(c_size <= CSIZE_MAX);
@@ -1165,22 +1169,19 @@ p2m_pod_add_compressed_page(struct p2m_domain *p2m, unsigned long gpfn,
     if (!p2m->dsps)
         dsps_init(d);
 
+    vpage = alloc_vframe(d);
+    if (!vpage)
+        BUG();
+
     BUILD_BUG_ON(sizeof(struct page_data_info) !=
                  offsetof(struct page_data_info, data));
     _pdi.size = c_size;
     // _pdi.mfn = _mfn(0);
     dsps_add(d, &_pdi, sizeof(_pdi), c_data, c_size, &page, &offset, &new_page);
 
-    /* data_offset is 12 bits but needs to fit in 8 bits (bits 40-32
-     * in ept mfn) -- ensure offset is aligned with low 4 bits cleared
-     * -- on 32b data_offset needs to fit in 6 bits (bits 26-32),
-     * i.e. low 6 bits cleared */
-    ASSERT(!(offset & ((1 << PAGE_STORE_DATA_ALIGN) - 1)));
-
-    /* compute mfn to install in p2m */
-    mfn = _mfn(mfn_x(page_to_mfn(page)) | P2M_MFN_PAGE_DATA |
-               ((uint64_t)offset <<
-                (P2M_MFN_PAGE_STORE_OFFSET_INDEX - PAGE_STORE_DATA_ALIGN)));
+    vpage->page_data.page = page_to_pdx(page);
+    vpage->page_data.offset = offset;
+    mfn = page_to_mfn(vpage);
 
     set_p2m_entry(p2m, gpfn, mfn, 0, p2m_populate_on_demand,
                   p2m->default_access);
@@ -1321,12 +1322,11 @@ int
 _p2m_get_page_data(struct p2m_domain *p2m, mfn_t *mfn, uint8_t **data,
                    uint16_t *data_size, uint16_t *offset, int write_lock)
 {
+    struct page_info *vpage = mfn_to_page(*mfn);
     struct page_data_info *pdi;
 
-    *offset = (mfn_x(*mfn) >>
-               (P2M_MFN_PAGE_STORE_OFFSET_INDEX - PAGE_STORE_DATA_ALIGN)) &
-        ~((1 << PAGE_STORE_DATA_ALIGN) - 1);
-    *mfn = p2m_mfn_mfn(*mfn);
+    *offset = vpage->page_data.offset;
+    *mfn = _mfn(pdx_to_pfn(vpage->page_data.page));
     *data = map_domain_page_direct(mfn_x(*mfn));
 
     pdi = (struct page_data_info *)&(*data)[*offset];
@@ -1661,7 +1661,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             atomic_inc(&d->clone_of->pod_pages);
             p2m_pod_stat_update(d->clone_of);
         }
-        if (mfn_valid_page(smfn)) {
+        if (mfn_valid_page_or_vframe(smfn)) {
             ASSERT(mfn_x(smfn) != mfn_x(shared_zero_page));
             get_page_fast(mfn_to_page(smfn), d->clone_of);
             put_page_parent = smfn;
@@ -2131,8 +2131,10 @@ clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
                 atomic_inc(&d->pod_pages);
         }
         if (p2m_is_pod(t)) {
-            if (mfn_valid_page(mfn) &&
-                unlikely(!get_page_fast(mfn_to_page(mfn), od))) {
+            if (mfn_valid_vframe(mfn))
+                mfn = _mfn(0);
+            else if (mfn_valid_page(mfn) &&
+                     unlikely(!get_page_fast(mfn_to_page(mfn), od))) {
                 gdprintk(XENLOG_ERR, "%s: get_page failed mfn=%08lx\n",
                          __FUNCTION__, mfn_x(mfn));
                 mfn = _mfn(0);
@@ -2153,7 +2155,7 @@ clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
                 atomic_inc(&d->zero_shared_pages);
             else if (mfn_retry(mfn))
                 atomic_inc(&d->retry_pages);
-            else
+            else if (mfn_valid_page(mfn))
                 atomic_inc(&d->tmpl_shared_pages);
         } else if (p2m_is_ram(t)) {
             if (clone_l1_dynamic && !p2m_is_immutable(t))
@@ -2308,7 +2310,7 @@ p2m_shared_teardown(struct p2m_domain *p2m)
     p2m_access_t a;
     unsigned int page_order;
     struct page_info *page;
-    int p2m_count = 0, domain_count = 0;
+    int p2m_count = 0, domain_count = 0, vframe_count = 0;
     int shared_count = 0, zero_count = 0, host_count = 0, xen_count = 0;
 
     for (gpfn = 0; gpfn <= p2m->max_mapped_pfn; gpfn++) {
@@ -2324,7 +2326,7 @@ p2m_shared_teardown(struct p2m_domain *p2m)
         }
         mfn = p2m->parse_entry(l1table, gpfn & ((1UL << PAGETABLE_ORDER) - 1),
                                &t, &a);
-        if (!mfn_valid_page(mfn))
+        if (!mfn_valid_page_or_vframe(mfn))
             continue;
         if (mfn_x(mfn) == mfn_x(shared_zero_page)) {
             zero_count++;
@@ -2337,7 +2339,10 @@ p2m_shared_teardown(struct p2m_domain *p2m)
             continue;
         }
         owner = page_get_owner(page);
-        if (p2m_is_pod(t)) {
+        if (p2m_mfn_is_vframe(mfn)) {
+            put_page(page);
+            vframe_count++;
+        } else if (p2m_is_pod(t)) {
             put_page(page);
             shared_count++;
         } else if (is_xen_page(page) && owner == d) {
@@ -2353,10 +2358,10 @@ p2m_shared_teardown(struct p2m_domain *p2m)
     if (l1table)
         unmap_domain_page(l1table);
 
-    printk("%s: vm%u cleared %d p2m entries --"
-           " domain=%d shared=%d zero=%d host=%d xen=%d\n", __FUNCTION__,
-           d->domain_id, p2m_count, domain_count, shared_count, zero_count,
-           host_count, xen_count);
+    printk(XENLOG_INFO "%s: vm%u cleared %d p2m entries --"
+           " domain=%d shared=%d zero=%d host=%d xen=%d vframe=%d\n",
+           __FUNCTION__, d->domain_id, p2m_count, domain_count, shared_count,
+           zero_count, host_count, xen_count, vframe_count);
     return 1;
 }
 
