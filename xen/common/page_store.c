@@ -22,8 +22,10 @@
 #define page_to_mfn(_pg) _mfn(__page_to_mfn(_pg))
 
 #define DSPS_slot(s)                                                    \
-    ((((s) + DSPS_DSIZE - 1) / DSPS_DSIZE) - 1)
+    ((((s) + DSPS_slot_data_offset + DSPS_DSIZE - 1) / DSPS_DSIZE) - 1)
 #define DSPS_slot_size(slot) (((slot) + 1) * DSPS_DSIZE)
+#define DSPS_slot_data_size(slot)                               \
+    ((((slot) + 1) * DSPS_DSIZE) - DSPS_slot_data_offset)
 #define DSPS_DSIZE_roundup(s)                           \
     ((s) - (((s) - 1) % DSPS_DSIZE) + (DSPS_DSIZE - 1))
 
@@ -58,29 +60,36 @@ dsps_release(struct domain *d)
 }
 
 void
-dsps_add(struct domain *d, void *m_data, uint16_t m_size,
+dsps_add(struct domain *d, uxen_mfn_t vframe,
+         void *m_data, uint16_t m_size,
          uint8_t *c_data, uint16_t c_size,
          struct page_info **s_page, uint16_t *s_offset,
          struct page_info **new_page)
 {
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
+    struct dspage_header header = { };
     uint16_t size = m_size + c_size;
     int slot;
     struct page_store *ps;
     uint8_t *data;
 
+    BUILD_BUG_ON(sizeof(header) != DSPS_slot_data_offset);
+
     slot = DSPS_slot(size);
     ASSERT(slot < DSPS_SLOTS);
     ps = &p2m->dsps->s[slot];
 
+    header.vframe = vframe;
+
     write_lock(&ps->lock);
 
-    ASSERT(m_size < DSPS_DSIZE);
+    ASSERT(DSPS_slot_data_offset + m_size < DSPS_DSIZE);
     /* is there a current page store page to add the data to?  or is
      * the current page store page full? (full == none of the data
      * would be stored in it) */
     if (page_store_empty(ps) ||
-        page_store_offset(ps) + m_size > PAGE_STORE_MAX) {
+        page_store_offset(ps) + DSPS_slot_data_offset + m_size >
+        PAGE_STORE_MAX) {
         page_store_add_page(ps, *new_page);
         *new_page = NULL;
     }
@@ -88,10 +97,12 @@ dsps_add(struct domain *d, void *m_data, uint16_t m_size,
     ASSERT(!(page_store_offset(ps) % DSPS_DSIZE));
 
     *s_page = page_store_page(ps);
-    *s_offset = page_store_offset(ps);
+    *s_offset = page_store_offset(ps) + DSPS_slot_data_offset;
 
-    /* store meta and as much data as fits in current page */
+    /* store header, meta and as much data as fits in current page */
     data = map_domain_page_direct(__page_to_mfn(page_store_page(ps)));
+    memcpy(&data[page_store_offset(ps)], &header, DSPS_slot_data_offset);
+    page_store_offset(ps) += DSPS_slot_data_offset;
     memcpy(&data[page_store_offset(ps)], m_data, m_size);
     page_store_offset(ps) += m_size;
     ASSERT(page_store_offset(ps) <= PAGE_STORE_MAX);
@@ -189,7 +200,8 @@ dsps_teardown(struct domain *d,
                 data = map_domain_page(__page_to_mfn(page));
             (*processed)++;
             if (iter) {
-                ret = iter(&data[offset], DSPS_slot_size(slot), d, opaque);
+                ret = iter(&data[offset + DSPS_slot_data_offset],
+                           DSPS_slot_data_size(slot), d, opaque);
                 if (ret < 0) {
                     write_unlock(&ps->lock);
                     goto out;

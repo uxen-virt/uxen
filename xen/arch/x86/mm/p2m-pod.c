@@ -1151,7 +1151,8 @@ check_decompress_buffer(void)
     return 1;
 }
 
-#define CSIZE_MAX (PAGE_STORE_MAX - sizeof(struct page_data_info))
+#define CSIZE_MAX                                                       \
+    (PAGE_STORE_MAX - DSPS_slot_data_offset - sizeof(struct page_data_info))
 
 static mfn_t
 p2m_pod_add_compressed_page(struct p2m_domain *p2m, unsigned long gpfn,
@@ -1172,16 +1173,17 @@ p2m_pod_add_compressed_page(struct p2m_domain *p2m, unsigned long gpfn,
     vpage = alloc_vframe(d);
     if (!vpage)
         BUG();
+    mfn = page_to_mfn(vpage);
 
     BUILD_BUG_ON(sizeof(struct page_data_info) !=
                  offsetof(struct page_data_info, data));
     _pdi.size = c_size;
     // _pdi.mfn = _mfn(0);
-    dsps_add(d, &_pdi, sizeof(_pdi), c_data, c_size, &page, &offset, &new_page);
+    dsps_add(d, mfn_x(mfn), &_pdi, sizeof(_pdi), c_data, c_size,
+             &page, &offset, &new_page);
 
     vpage->page_data.page = page_to_pdx(page);
     vpage->page_data.offset = offset;
-    mfn = page_to_mfn(vpage);
 
     set_p2m_entry(p2m, gpfn, mfn, 0, p2m_populate_on_demand,
                   p2m->default_access);

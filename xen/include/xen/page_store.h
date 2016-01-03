@@ -93,7 +93,8 @@ struct dspage_store_info
 
 #define DSPS_slot_data_offset sizeof(struct dspage_header)
 #define DSPS_DSIZE_bytes_used(s)                                        \
-    ((s) - (((s) - 1) % DSPS_DSIZE) + (DSPS_DSIZE - 1))
+    ((s) + DSPS_slot_data_offset -                                      \
+     (((s) + DSPS_slot_data_offset - 1) % DSPS_DSIZE) + (DSPS_DSIZE - 1))
 
 struct dspage_store
 {
@@ -101,9 +102,15 @@ struct dspage_store
     struct page_store s[DSPS_SLOTS];
 };
 
+struct dspage_header
+{
+    uxen_mfn_t vframe;
+};
+
 void dsps_init(struct domain *d);
 void dsps_release(struct domain *d);
-void dsps_add(struct domain *d, void *m_data, uint16_t m_size,
+void dsps_add(struct domain *d, uxen_mfn_t vframe,
+              void *m_data, uint16_t m_size,
               uint8_t *c_data, uint16_t c_size,
               struct page_info **page, uint16_t *offset,
               struct page_info **new_page);
