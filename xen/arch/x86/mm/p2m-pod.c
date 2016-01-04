@@ -65,6 +65,10 @@
 #define mfn_to_page(_m) __mfn_to_page(mfn_x(_m))
 #undef mfn_valid
 #define mfn_valid(_mfn) __mfn_valid(mfn_x(_mfn))
+#undef mfn_valid_page
+#define mfn_valid_page(_mfn) __mfn_valid_page(mfn_x(_mfn))
+#undef mfn_zero_page
+#define mfn_zero_page(_mfn) __mfn_zero_page(mfn_x(_mfn))
 #undef page_to_mfn
 #define page_to_mfn(_pg) _mfn(__page_to_mfn(_pg))
 
@@ -120,7 +124,7 @@ p2m_pod_cache_add(struct p2m_domain *p2m,
     for(i=0; i < 1 << order ; i++) {
         struct domain * od;
 
-        p = mfn_to_page(_mfn(mfn_x(mfn) + i));
+        p = __mfn_to_page(mfn_x(mfn) + i);
         od = page_get_owner(p);
         if(od != d)
         {
@@ -142,7 +146,7 @@ p2m_pod_cache_add(struct p2m_domain *p2m,
      */
     for ( i = 0; i < (1 << order); i++ )
     {
-        char *b = map_domain_page_direct(mfn_x(page_to_mfn(page)) + i);
+        char *b = map_domain_page_direct(__page_to_mfn(page) + i);
         clear_page(b);
         unmap_domain_page_direct(b);
     }
@@ -189,7 +193,7 @@ p2m_pod_cache_add_zero(struct p2m_domain *p2m,
     int i;
 
     for (i = 0; i < (1 << order); i++) {
-	char *b = map_domain_page_direct(mfn_x(page_to_mfn(page)) + i);
+	char *b = map_domain_page_direct(__page_to_mfn(page) + i);
 	clear_page(b);
 	unmap_domain_page_direct(b);
     }
@@ -221,11 +225,11 @@ static struct page_info * p2m_pod_cache_get(struct p2m_domain *p2m,
         /* Break up a superpage to make single pages. NB count doesn't
          * need to be adjusted. */
         p = page_list_remove_head(&p2m->pod.super);
-        mfn = mfn_x(page_to_mfn(p));
+        mfn = __page_to_mfn(p);
 
         for ( i=0; i<SUPERPAGE_PAGES; i++ )
         {
-            q = mfn_to_page(_mfn(mfn+i));
+            q = __mfn_to_page(mfn+i));
             page_list_add_tail(q, &p2m->pod.single);
         }
     }
@@ -490,17 +494,17 @@ p2m_pod_offline_or_broken_hit(struct page_info *p)
         return 0;
 
     lock_page_alloc(p2m);
-    bmfn = mfn_x(page_to_mfn(p));
+    bmfn = __page_to_mfn(p);
     page_list_for_each_safe(q, tmp, &p2m->pod.super)
     {
-        mfn = mfn_x(page_to_mfn(q));
+        mfn = __page_to_mfn(q);
         if ( (bmfn >= mfn) && ((bmfn - mfn) < SUPERPAGE_PAGES) )
         {
             unsigned long i;
             page_list_del(q, &p2m->pod.super);
             for ( i = 0; i < SUPERPAGE_PAGES; i++)
             {
-                q = mfn_to_page(_mfn(mfn + i));
+                q = __mfn_to_page(mfn + i);
                 page_list_add_tail(q, &p2m->pod.single);
             }
             page_list_del(p, &p2m->pod.single);
@@ -511,7 +515,7 @@ p2m_pod_offline_or_broken_hit(struct page_info *p)
 
     page_list_for_each_safe(q, tmp, &p2m->pod.single)
     {
-        mfn = mfn_x(page_to_mfn(q));
+        mfn = __page_to_mfn(q);
         if ( mfn == bmfn )
         {
             page_list_del(p, &p2m->pod.single);
@@ -1491,7 +1495,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     /* Check to make sure this is still PoD, also check for spurious
      * read accesses to entries already populated from other vcpus. */
     if (!p2m_is_pod(t) || ((q == p2m_guest_r || q == p2m_alloc_r) &&
-                           mfn_valid_page(mfn_x(smfn)))) {
+                           mfn_valid_page(smfn))) {
         p2m_unlock(p2m);
         return _mfn(0);
     }
@@ -1572,14 +1576,14 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             /* not already SHARED_ZERO_MFN */
             set_p2m_entry(p2m, gfn, _mfn(SHARED_ZERO_MFN), PAGE_ORDER_4K,
                           p2m_populate_on_demand, p2m->default_access);
-        if (!mfn_zero_page(mfn_x(smfn))) {
+        if (!mfn_zero_page(smfn)) {
             /* not already zero shared (SHARED_ZERO_MFN or shared_zero_page) */
             atomic_inc(&d->zero_shared_pages);
             /* replacing non-pod page? */
             if (!p2m_is_pod(t))
                 atomic_inc(&d->pod_pages);
             /* replacing a template shared page? */
-            else if (mfn_valid_page(mfn_x(smfn)))
+            else if (mfn_valid_page(smfn))
                 atomic_dec(&d->tmpl_shared_pages);
             else if (mfn_retry(smfn))
                 atomic_dec(&d->retry_pages);
@@ -1609,7 +1613,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         }
         if ((d->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] &
              HVM_PARAM_CLONE_L1_dynamic) && p2m_is_ram_rw(t)) {
-            ASSERT(mfn_valid_page(mfn_x(smfn)));
+            ASSERT(mfn_valid_page(smfn));
             set_p2m_entry(op2m, gfn_aligned, smfn, 0,
                           p2m_populate_on_demand,
                           op2m->default_access);
@@ -1617,13 +1621,13 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             atomic_inc(&d->clone_of->pod_pages);
             p2m_pod_stat_update(d->clone_of);
         }
-        if (mfn_valid_page(mfn_x(smfn))) {
+        if (mfn_valid_page(smfn)) {
             get_page_fast(mfn_to_page(smfn), d->clone_of);
             put_page_parent = smfn;
         }
         p2m_unlock(op2m);
         if ((q == p2m_guest_r || q == p2m_alloc_r) &&
-            (mfn_valid_page(mfn_x(smfn)) || mfn_x(smfn) == SHARED_ZERO_MFN)) {
+            (mfn_valid_page(smfn) || mfn_x(smfn) == SHARED_ZERO_MFN)) {
             /* read-acces -- add pod entry, i.e. make the gpfn shared */
             ASSERT((!mfn_x(put_page_parent) &&
                     mfn_x(smfn) == SHARED_ZERO_MFN) ||
@@ -1825,7 +1829,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         }
     }
 
-    if (mfn_zero_page(mfn_x(smfn))) {
+    if (mfn_zero_page(smfn)) {
         p = alloc_domheap_page(d, PAGE_ORDER_4K);
         if (!p)
             goto out_of_memory;
@@ -2050,7 +2054,7 @@ clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
                 atomic_inc(&d->pod_pages);
         }
         if (p2m_is_pod(t)) {
-            if (mfn_valid_page(mfn_x(mfn)) &&
+            if (mfn_valid_page(mfn) &&
                 unlikely(!get_page_fast(mfn_to_page(mfn), od)))
                 gdprintk(XENLOG_ERR, "%s: get_page failed mfn=%08lx\n",
                          __FUNCTION__, mfn_x(mfn));
@@ -2073,7 +2077,7 @@ clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
         } else if (p2m_is_ram(t)) {
             if (clone_l1_dynamic && !p2m_is_immutable(t))
                 mfn = _mfn(0);
-            if (mfn_valid_page(mfn_x(mfn)) &&
+            if (mfn_valid_page(mfn) &&
                 unlikely(!get_page_fast(mfn_to_page(mfn), od)))
                 gdprintk(XENLOG_ERR, "%s: get_page failed mfn=%08lx\n",
                          __FUNCTION__, mfn_x(mfn));
@@ -2116,12 +2120,12 @@ p2m_clone_l1(struct p2m_domain *op2m, struct p2m_domain *p2m,
         return 0;
 
     mfn = op2m->get_l1_table(op2m, gpfn, NULL);
-    if (!mfn_valid_page(mfn_x(mfn)))
+    if (!mfn_valid_page(mfn))
         return 0;
     otable = map_domain_page(mfn_x(mfn));
 
     mfn = p2m->parse_entry(entry, 0, &t, &a);
-    if (mfn_valid_page(mfn_x(mfn)))
+    if (mfn_valid_page(mfn))
         table = map_domain_page(mfn_x(mfn));
 
     ret = clone_l1_table(op2m, p2m, &gpfn, otable, table);
@@ -2150,7 +2154,7 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
     for (gpfn = 0; !ret && gpfn <= p2m->max_mapped_pfn; ) {
         if (!(gpfn & ((1UL << PAGETABLE_ORDER) - 1))) {
             mfn = p2m->get_l1_table(p2m, gpfn, &page_order);
-            if (!mfn_valid_page(mfn_x(mfn))) {
+            if (!mfn_valid_page(mfn)) {
                 gpfn |= ((1 << page_order) - 1);
                 gpfn++;
                 continue;
@@ -2161,7 +2165,7 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
             d->arch.hvm_domain.params[HVM_PARAM_CLONE_L1]) {
             /* if l1 exists already in clone, clone the rest of the l1
              * immediately */
-            if (mfn_valid_page(mfn_x(nmfn)))
+            if (mfn_valid_page(nmfn))
                 goto clone_now;
             ret = !set_p2m_entry(np2m, gpfn, _mfn(0), PAGE_ORDER_2M,
                                  p2m_populate_on_demand, np2m->default_access);
@@ -2184,7 +2188,7 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
             if (table)
                 unmap_domain_page(table);
             table = map_domain_page(mfn_x(mfn));
-            if (mfn_valid_page(mfn_x(nmfn)))
+            if (mfn_valid_page(nmfn))
                 ntable = map_domain_page(mfn_x(nmfn));
         }
         ret = clone_l1_table(p2m, np2m, &gpfn, table, ntable);
@@ -2225,7 +2229,7 @@ p2m_shared_teardown(struct p2m_domain *p2m)
     for (gpfn = 0; gpfn <= p2m->max_mapped_pfn; gpfn++) {
         if (!(gpfn & ((1UL << PAGETABLE_ORDER) - 1))) {
             l1mfn = p2m->get_l1_table(p2m, gpfn, &page_order);
-            if (!mfn_valid_page(mfn_x(l1mfn))) {
+            if (!mfn_valid_page(l1mfn)) {
                 gpfn |= ((1 << page_order) - 1);
                 continue;
             }
@@ -2235,7 +2239,7 @@ p2m_shared_teardown(struct p2m_domain *p2m)
         }
         mfn = p2m->parse_entry(l1table, gpfn & ((1UL << PAGETABLE_ORDER) - 1),
                                &t, &a);
-        if (!mfn_valid_page(mfn_x(mfn)))
+        if (!mfn_valid_page(mfn))
             continue;
         if (mfn_x(mfn) == mfn_x(shared_zero_page)) {
             zero_count++;
@@ -2330,7 +2334,7 @@ p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
 
     /* parse entry with lock held */
     smfn = p2m->parse_entry(entry, 0, &p2mt, &p2ma);
-    if (mfn_zero_page(mfn_x(smfn))) {
+    if (mfn_zero_page(smfn)) {
         if (mfn_x(smfn) == mfn_x(shared_zero_page))
             set_p2m_entry(p2m, gfn, _mfn(SHARED_ZERO_MFN), order,
                           p2m_populate_on_demand, p2m->default_access);
@@ -2351,7 +2355,7 @@ p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
         put_page(page);
     if (!p2m_is_pod(p2mt))
         atomic_inc(&d->pod_pages);
-    else if (mfn_valid_page(mfn_x(smfn)))
+    else if (mfn_valid_page(smfn))
         atomic_dec(&d->tmpl_shared_pages);
     atomic_inc(&d->zero_shared_pages);
 
@@ -2397,7 +2401,7 @@ guest_physmap_mark_pod_locked(struct domain *d, unsigned long gfn,
         p2m_access_t a;
         omfn = p2m->get_entry(p2m, gfn + i, &ot, &a, p2m_query, NULL);
 
-        if (unlikely(mfn_zero_page(mfn_x(omfn))) && p2m_is_pod(ot) && !order)
+        if (unlikely(mfn_zero_page(omfn)) && p2m_is_pod(ot) && !order)
             goto out;
 
         if ( p2m_is_ram(ot) )
@@ -2440,7 +2444,7 @@ guest_physmap_mark_pod_locked(struct domain *d, unsigned long gfn,
             /* Count how many PoD entries we'll be replacing if successful */
             if (mfn_x(omfn) == 0)
                 pod_count++;
-            else if (mfn_zero_page(mfn_x(omfn)))
+            else if (mfn_zero_page(omfn))
                 pod_zero_count++;
             else if (mfn_retry(omfn)) {
                 pod_retry_count++;
@@ -2612,7 +2616,7 @@ p2m_pod_compress_template_work(void *_d)
         if (UI_HOST_CALL(ui_host_needs_preempt, NULL))
             break;
         mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, &page_order);
-        if (!mfn_valid_page(mfn_x(mfn))) {
+        if (!mfn_valid_page(mfn)) {
             gpfn |= ((1 << page_order) - 1);
             continue;
         }
@@ -2631,7 +2635,7 @@ p2m_pod_compress_template_work(void *_d)
             (!unshared_only || (page->count_info & PGC_count_mask) < 2)) {
             p2m_lock(p2m);
             mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, &page_order);
-            if (mfn_valid_page(mfn_x(mfn)) &&
+            if (mfn_valid_page(mfn) &&
                 get_page(page = mfn_to_page(mfn), d)) {
                 p2m_unlock(p2m);
                 target = map_domain_page_direct(mfn_x(mfn));
@@ -2693,7 +2697,7 @@ p2m_audit_pod_counts(struct domain *d)
     for (gpfn = 0; gpfn <= p2m->max_mapped_pfn; gpfn++) {
         if (!(gpfn & ((1UL << PAGETABLE_ORDER) - 1))) {
             l1mfn = p2m->get_l1_table(p2m, gpfn, &page_order);
-            if (!mfn_valid_page(mfn_x(l1mfn))) {
+            if (!mfn_valid_page(l1mfn)) {
                 gpfn |= ((1 << page_order) - 1);
                 continue;
             }

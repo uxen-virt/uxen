@@ -55,6 +55,16 @@
 
 #include "mm-locks.h"
 
+/* Override macros from asm/page.h to make them work with mfn_t */
+#undef mfn_to_page
+#define mfn_to_page(_m) __mfn_to_page(mfn_x(_m))
+#undef mfn_valid
+#define mfn_valid(_mfn) __mfn_valid(mfn_x(_mfn))
+#undef mfn_valid_page
+#define mfn_valid_page(_mfn) __mfn_valid_page(mfn_x(_mfn))
+#undef page_to_mfn
+#define page_to_mfn(_pg) _mfn(__page_to_mfn(_pg))
+
 #define atomic_read_ept_entry(__pepte)                              \
     ( (ept_entry_t) { .epte = atomic_read64(&(__pepte)->epte) } )
 #define atomic_write_ept_entry(__pepte, __epte)                     \
@@ -89,7 +99,7 @@ static void ept_p2m_type_to_flags(ept_entry_t *entry, p2m_type_t type, p2m_acces
             break;
         case p2m_populate_on_demand:
             /* allow reads if a valid mfn is set. */
-            entry->r = entry->x = (mfn_valid_page(entry->mfn) ? 1 : 0);
+            entry->r = entry->x = (__mfn_valid_page(entry->mfn) ? 1 : 0);
             entry->w = 0;
             break;
         case p2m_ram_logdirty:
@@ -159,7 +169,7 @@ static int ept_set_middle_entry(struct p2m_domain *p2m, ept_entry_t *ept_entry)
         return 0;
 
     ept_entry->epte = 0;
-    ept_entry->mfn = page_to_mfn(pg);
+    ept_entry->mfn = __page_to_mfn(pg);
     ept_entry->access = p2m->default_access;
 
     ept_entry->r = ept_entry->w = ept_entry->x = 1;
@@ -184,7 +194,7 @@ static void ept_free_entry(struct p2m_domain *p2m, ept_entry_t *ept_entry, int l
         unmap_domain_page(epte);
     }
     
-    p2m_free_ptp(p2m, mfn_to_page(ept_entry->mfn));
+    p2m_free_ptp(p2m, __mfn_to_page(ept_entry->mfn));
 }
 
 static int
@@ -397,7 +407,7 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
      * 2. gfn not exceeding guest physical address width.
      * 3. passing a valid order.
      */
-    if ((mfn_valid_page(mfn_x(mfn)) &&
+    if ((mfn_valid_page(mfn) &&
          ((gfn | mfn_x(mfn)) & ((1UL << order) - 1))) ||
         ((u64)gfn >> ((ept_get_wl(d) + 1) * EPT_TABLE_ORDER)) ||
         (order % EPT_TABLE_ORDER))
@@ -407,7 +417,7 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
            (target == 1 && hvm_hap_has_2mb(d)) ||
            (target == 0));
 
-    if (target || !mfn_valid_page(mfn_x(l1c->se_l1_mfn)) ||
+    if (target || !mfn_valid_page(l1c->se_l1_mfn) ||
         p2m_l1_prefix(gfn, p2m) != l1c->se_l1_prefix) {
         l1c->se_l1_mfn = _mfn(0);
 
@@ -476,7 +486,7 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
          * Read-then-write is OK because we hold the p2m lock. */
         old_entry = *ept_entry;
 
-        if (mfn_valid_page(mfn_x(mfn)) || direct_mmio
+        if (mfn_valid_page(mfn) || direct_mmio
 #ifndef __UXEN__
             || p2m_is_paged(p2mt)
             || p2m_is_paging_in_start(p2mt)
@@ -556,11 +566,11 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     }
 
     if (!target && old_entry.mfn != mfn_x(mfn)) {
-        if (mfn_valid_page(mfn_x(mfn)) && mfn_x(mfn) != mfn_x(shared_zero_page))
-            get_page_fast(mfn_to_page(mfn_x(mfn)), NULL);
-        if (mfn_valid_page(old_entry.mfn) &&
+        if (mfn_valid_page(mfn) && mfn_x(mfn) != mfn_x(shared_zero_page))
+            get_page_fast(mfn_to_page(mfn), NULL);
+        if (__mfn_valid_page(old_entry.mfn) &&
             old_entry.mfn != mfn_x(shared_zero_page))
-            put_page(mfn_to_page(old_entry.mfn));
+            put_page(__mfn_to_page(old_entry.mfn));
     }
 
     /* Track the highest gfn for which we have ever had a valid mapping */
@@ -795,7 +805,7 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
 
     /* Should check if gfn obeys GAW here. */
 
-    if (!mfn_valid_page(mfn_x(l1c->ge_l1_mfn[ge_l1_cache_slot])) ||
+    if (!mfn_valid_page(l1c->ge_l1_mfn[ge_l1_cache_slot]) ||
         p2m_l1_prefix(gfn, p2m) != l1c->ge_l1_prefix[ge_l1_cache_slot]) {
         l1c->ge_l1_mfn[ge_l1_cache_slot] = _mfn(0);
 
@@ -831,7 +841,7 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
         }
 
         if (!i && ret == GUEST_TABLE_NORMAL_PAGE) {
-            if (!mfn_valid_page(mfn_x(l1c->ge_l1_mfn[ge_l1_cache_slot]))) {
+            if (!mfn_valid_page(l1c->ge_l1_mfn[ge_l1_cache_slot])) {
                 l1c->ge_l1_prefix[ge_l1_cache_slot] = p2m_l1_prefix(gfn, p2m);
                 l1c->ge_l1_mfn[ge_l1_cache_slot] =
                     _mfn(mapped_domain_page_va_pfn(table));

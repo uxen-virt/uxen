@@ -639,7 +639,7 @@ p2m_remove_page(struct p2m_domain *p2m, unsigned long gfn, unsigned long mfn,
     if (p2m_debug_more)
     P2M_DEBUG("removing gfn=%#lx mfn=%#lx\n", gfn, mfn);
 
-    if ( mfn_valid(_mfn(mfn)) )
+    if ( __mfn_valid(mfn) )
     {
         for ( i = 0; i < (1UL << page_order); i++ )
         {
@@ -738,8 +738,8 @@ guest_physmap_add_entry(struct domain *d, unsigned long gfn,
                  * old mapping is still present in the p2m -- ok since
                  * this operation is only supported while the VM is
                  * suspended */
-                if (!d->is_shutting_down || !mfn_valid(_mfn(mfn))) {
-                    if (mfn_valid(_mfn(mfn)))
+                if (!d->is_shutting_down || !__mfn_valid(mfn)) {
+                    if (__mfn_valid(mfn))
                         gdprintk(XENLOG_WARNING,
                                  "%s: can't clear mapcache mapped mfn %lx"
                                  " for vm%u gpfn %lx new mfn %lx\n",
@@ -775,7 +775,7 @@ guest_physmap_add_entry(struct domain *d, unsigned long gfn,
     /* Then, look for m->p mappings for this range and deal with them */
     for ( i = 0; i < (1UL << page_order); i++ )
     {
-        if ( page_get_owner(mfn_to_page(_mfn(mfn + i))) != d )
+        if ( page_get_owner(__mfn_to_page(mfn + i)) != d )
             continue;
         ogfn = mfn_to_gfn(d, _mfn(mfn+i));
         if (
@@ -805,7 +805,7 @@ guest_physmap_add_entry(struct domain *d, unsigned long gfn,
 #endif  /* __UXEN__ */
 
     /* Now, actually do the two-way mapping */
-    if ( mfn_valid(_mfn(mfn)) ) 
+    if ( __mfn_valid(mfn) )
     {
         if ( !set_p2m_entry(p2m, gfn, _mfn(mfn), page_order, t, p2m->default_access) )
         {
@@ -1843,7 +1843,7 @@ p2m_mapcache_mappings_teardown(struct domain *d)
     spin_lock_recursive(&d->page_alloc_lock);
 
     while ( (page = page_list_remove_head(&d->mapcache_page_list)) ) {
-        mfn = mfn_x(page_to_mfn(page));
+        mfn = __page_to_mfn(page);
         if (!test_and_clear_bit(_PGC_mapcache, &page->count_info) && bad < 5) {
             gdprintk(XENLOG_WARNING,
                      "Bad mapcache clear for page %lx in vm%u\n",
