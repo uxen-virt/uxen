@@ -5,13 +5,18 @@ VAR16MODE="$2"
 
 # Extract version info
 if [ -e ../../.git ]; then
-    VERSION="`git describe --tags --long --dirty`"
-elif [ -f .version ]; then
-    VERSION="`cat .version`"
+    VERSION="`git log --pretty=format:%H -n 1`"
+    if ! `git diff --quiet`; then
+        VERSION="${VERSION}-dirty"
+    fi
 else
-    VERSION="?"
+    if [ -f .version ]; then
+        VERSION="`cat .version`"
+    else
+        VERSION="?"
+    fi
+    VERSION="${VERSION}-`date +"%Y%m%d_%H%M%S"`-`hostname`"
 fi
-VERSION="${VERSION}-`date +"%Y%m%d_%H%M%S"`-`hostname`"
 echo "Version: ${VERSION}"
 
 # Build header file
