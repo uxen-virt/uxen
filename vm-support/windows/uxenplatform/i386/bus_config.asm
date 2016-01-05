@@ -7,8 +7,9 @@
     .model flat, stdcall
     .code
     public bus_config_read8
+    public bus_config_read_buffer
 
-bus_config_read8        proc NEAR
+bus_config_read8        proc NEAR STDCALL, addr1:DWORD
     push        ebp
     mov         ebp, esp
     mov         esi, [ebp+8]
@@ -18,7 +19,7 @@ bus_config_read8        proc NEAR
     ret
 bus_config_read8        endp
 
-bus_config_read_buffer  proc NEAR
+bus_config_read_buffer  proc NEAR STDCALL, src:DWORD, dst:DWORD, len:DWORD
     push        ebp
     mov         ebp, esp
     mov         esi, [ebp+8]
