@@ -302,7 +302,14 @@ ManifestEntry *man_push(Manifest *man)
     return &man->entries[n];
 }
 
-ManifestEntry* man_push_file(Manifest *out, ntfs_fs_t vol, Variable *var, const wchar_t *name, uint64_t file_size, uint64_t file_id, const wchar_t *rewrite, Action action)
+ManifestEntry* man_push_file(Manifest *out,
+                             ntfs_fs_t vol,
+                             Variable *var,
+                             const wchar_t *name,
+                             uint64_t file_size,
+                             uint64_t file_id,
+                             const wchar_t *rewrite,
+                             Action action)
 {
     ManifestEntry *e = man_push(out);
     e->vol = vol;
@@ -889,7 +896,7 @@ HANDLE WINAPI OpenFileById(
     );
 
 static
-HANDLE open_file_by_id(HANDLE volume, uint64_t file_id, DWORD access)
+HANDLE open_file_by_id(HANDLE volume, uint64_t file_id, DWORD access, DWORD extra_flags)
 {
     HANDLE h;
     FILE_ID_DESCRIPTOR fid = {sizeof(fid), };
@@ -898,13 +905,10 @@ HANDLE open_file_by_id(HANDLE volume, uint64_t file_id, DWORD access)
 
     h = OpenFileById(volume,
             &fid,
-            access, FILE_SHARE_READ | FILE_SHARE_WRITE,
+            access,
+            FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
             NULL,
-            FILE_ATTRIBUTE_NORMAL
-            | FILE_ATTRIBUTE_HIDDEN
-            | FILE_ATTRIBUTE_SYSTEM
-            | FILE_SEQUENTIAL_ONLY
-            | FILE_FLAG_BACKUP_SEMANTICS
+            FILE_FLAG_BACKUP_SEMANTICS | extra_flags
             );
     if (h == INVALID_HANDLE_VALUE) {
         printf("error opening file_id %"PRIx64", err=%u\n",
@@ -913,7 +917,7 @@ HANDLE open_file_by_id(HANDLE volume, uint64_t file_id, DWORD access)
     return h;
 }
 
-HANDLE open_file_by_name(const wchar_t* file_name)
+HANDLE open_file_by_name(const wchar_t* file_name, DWORD extra_flags)
 {
     HANDLE h = CreateFileW(
         file_name,
@@ -921,7 +925,7 @@ HANDLE open_file_by_name(const wchar_t* file_name)
         FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
         NULL,
         OPEN_EXISTING,
-        FILE_ATTRIBUTE_NORMAL | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM | FILE_FLAG_BACKUP_SEMANTICS,
+        FILE_FLAG_BACKUP_SEMANTICS | extra_flags,
         NULL);
     if (h == INVALID_HANDLE_VALUE) {
         DWORD win32_err = GetLastError();
@@ -936,15 +940,14 @@ HANDLE open_file_by_name(const wchar_t* file_name)
     return h;
 }
 
-int stat_file(HANDLE volume, uint64_t file_id, uint64_t *file_size, uint64_t *offset,
-        Action *action)
+int stat_file(HANDLE volume, uint64_t file_id, uint64_t *file_size, uint64_t *offset)
 {
     STARTING_VCN_INPUT_BUFFER in;
     BY_HANDLE_FILE_INFORMATION inf;
     RETRIEVAL_POINTERS_BUFFER retr;
     DWORD bytes;
 
-    HANDLE h = open_file_by_id(volume, file_id, FILE_READ_ATTRIBUTES);
+    HANDLE h = open_file_by_id(volume, file_id, FILE_READ_ATTRIBUTES, 0);
     if (h == INVALID_HANDLE_VALUE || h == 0) {
         return -1;
     }
@@ -1325,11 +1328,15 @@ static void disk_close(struct disk *disk)
     memset(disk, 0, sizeof(*disk));
 }
 
+#define STATUS_FILE_LOCK_CONFLICT (0xC0000054UL)
+#define STATUS_END_OF_FILE (0xC0000011UL)
+
+#define LOCK_WAIT_PERIOD 10000 /* 10s */
+
 #define MAX_IOS 256
 typedef struct IO {
     HANDLE file;
-    ntfs_fs_t vol;
-    const wchar_t *name;
+    ManifestEntry *m;
     void *buffer; // non-NULL if slot in use
     uint64_t size;
     uint64_t offset;
@@ -1337,45 +1344,124 @@ typedef struct IO {
     IO_STATUS_BLOCK iosb;
     int last;
     SHA1_CTX *sha_ctx; // non-NULL if we should calculate the SHA
-    uint8_t *sha;
 } IO;
 
-IO ios[MAX_IOS];
-int io_idx = 0;
+static IO ios[MAX_IOS];
+static int io_idx = 0;
+static int io_nchanged = 0;
 
-void complete_io(IO* io)
+static void init_ios()
 {
+    int i;
+    memset(ios, 0, sizeof(ios));
+    for (i = 0; i < MAX_IOS; ++i) {
+        IO *io = &ios[i];
+        io->event = CreateEvent(NULL, TRUE, TRUE, NULL);
+        assert(io->event);
+    }
+}
+
+static void issue_io(IO* io)
+{
+    LARGE_INTEGER o;
+    o.QuadPart = io->offset;
+    memset(&io->iosb, 0, sizeof(io->iosb));
+    ULONG rc = NtReadFile(io->file, io->event, NULL, NULL, &io->iosb, io->buffer, io->size, &o, NULL);
+    if (rc && rc != STATUS_PENDING) {
+        err(1, "copy_file read returned %x for path [%ls]\n", (uint32_t)rc, io->m->name);
+    }
+}
+
+static void complete_io(IO* io)
+{
+    NTSTATUS status;
     if (WaitForSingleObject(io->event, INFINITE) != WAIT_OBJECT_0) {
-        printf("io wait failed %u\n", (uint32_t) GetLastError());
-        exit(1);
+        err(1, "io wait failed %u\n", (uint32_t) GetLastError());
     }
 
-    if (disklib_write_simple(io->vol, io->name, io->buffer, io->size,
+    /* Inexplicably, winbase-compat.h names this stat not Status... */
+    status = io->iosb.stat;
+
+    if (status == STATUS_FILE_LOCK_CONFLICT) {
+        DWORD result;
+        OVERLAPPED overlapped = {0};
+
+        /* Don't change this logging without also updating tests */
+        printf("Lock conflict error for file [%ls]\n", io->m->name);
+
+        /* We are taking a simplistic approach here, and not attempting to share
+         * the lock across multiple IOs should the file be split into more than
+         * one read. It's unlikely to have been re-locked and we'll handle it ok
+         * by re-acquiring the lock in the unlikely event that it has.
+         */
+        ResetEvent(io->event);
+        overlapped.hEvent = io->event; /* reuse this */
+        LockFileEx(io->file, 0, 0, MAXDWORD, MAXDWORD, &overlapped);
+        result = WaitForSingleObject(overlapped.hEvent, LOCK_WAIT_PERIOD);
+        ResetEvent(io->event);
+        overlapped.hEvent = 0;
+        if (result == WAIT_OBJECT_0) {
+            printf("Lock acquired, retrying copy of [%ls]\n", io->m->name);
+            issue_io(io);
+            /* In this case we wait synchronously for the read to complete */
+            if (WaitForSingleObject(io->event, INFINITE) != WAIT_OBJECT_0) {
+                err(1, "io wait 2 failed %u\n", (uint32_t) GetLastError());
+            }
+            UnlockFileEx(io->file, 0, MAXDWORD, MAXDWORD, &overlapped);
+            status = io->iosb.stat;
+        } else {
+            printf("Lock acquire for [%ls] failed with [%x] err=%u\n", io->m->name, (uint32_t)result, (uint32_t)GetLastError());
+            goto cleanup;
+        }
+    }
+
+    if (status == STATUS_END_OF_FILE) {
+        /* Not fatal. We don't really have to do anything else here (other than
+         * not exit) because the change would get picked up by the usn_phase,
+         * but it makes it easier to test if we do.
+         * Don't change this logging without also updating tests
+         */
+        printf("File [%ls] has shrunk!\n", io->m->name);
+        goto cleanup;
+    } else if (!NT_SUCCESS(status)) {
+        err(1, "Read of [%ls] failed with [%x]\n", io->m->name, (uint32_t)status);
+    }
+
+    if (disklib_write_simple(io->m->vol, io->m->name, io->buffer, io->size,
                 io->offset, 0) < io->size) {
-        printf("ntfs write error: %s\n", strerror(ntfs_get_errno()));
-        exit(1);
-    }
-
-    if (io->last) {
-        CloseHandle(io->file);
-        io->file = INVALID_HANDLE_VALUE;
+        err(1, "ntfs write error: %s\n", strerror(ntfs_get_errno()));
     }
 
     if (io->sha_ctx) {
         SHA1_Update(io->sha_ctx, io->buffer, io->size);
         if (io->last) {
-            SHA1_Final(io->sha_ctx, io->sha);
+            SHA1_Final(io->sha_ctx, io->m->sha);
             free(io->sha_ctx);
             io->sha_ctx = NULL;
         }
     }
 
+    if (io->last && io->m->action == MAN_CHANGE) {
+        /* We successfully copied it, so clear the changed action */
+        io->m->action = MAN_FORCE_COPY;
+        --io_nchanged;
+    }
+
+cleanup:
+    if (io->last) {
+        CloseHandle(io->file);
+        io->file = INVALID_HANDLE_VALUE;
+    }
     free(io->buffer);
     io->buffer = NULL;
     ResetEvent(io->event);
+    if (!NT_SUCCESS(status) && io->m->action != MAN_CHANGE) {
+        io->m->action = MAN_CHANGE;
+        ++io_nchanged;
+    }
 }
 
-void complete_all_ios(void)
+static void complete_all_ios(void)
 {
     int i;
     for (i = 0; i < MAX_IOS; ++i ) {
@@ -1387,28 +1473,29 @@ void complete_all_ios(void)
     }
 }
 
-#define STATUS_FILE_LOCK_CONFLICT (0xC0000054UL)
-#define STATUS_END_OF_FILE (0xC0000011UL)
-
-static int copy_file(ntfs_fs_t vol, const wchar_t *path, HANDLE input, uint64_t size, uint8_t *out_sha)
+static void copy_file(ManifestEntry *m, HANDLE input, int calculate_shas)
 {
-    int result = 0;
+    ntfs_fs_t vol = m->vol;
+    const wchar_t *path = m->name;
+    uint64_t size = m->file_size;
     size_t buf_size = (low_priority ? 1 : 4) << 20;
     uint64_t offset;
     uint64_t take;
     SHA1_CTX *sha_ctx = NULL;
-    if (out_sha) {
+    if (calculate_shas) {
         sha_ctx = (SHA1_CTX*)malloc(sizeof(SHA1_CTX));
         SHA1_Init(sha_ctx);
     }
 
     if (size == 0) {
         /* Special-case empty files. */
-        if (out_sha) {
-            SHA1_Final(sha_ctx, out_sha);
+        if (calculate_shas) {
+            SHA1_Final(sha_ctx, m->sha);
             free(sha_ctx);
         }
-        return disklib_write_simple(vol, path, NULL, 0, 0, 0);
+        if (disklib_write_simple(vol, path, NULL, 0, 0, 0)) {
+            err(1, "ntfs write error: %s\n", strerror(ntfs_get_errno()));
+        }
     }
 
     for (offset = 0; size; size -= take, offset += take) {
@@ -1422,46 +1509,18 @@ static int copy_file(ntfs_fs_t vol, const wchar_t *path, HANDLE input, uint64_t 
         }
 
         io->file = input;
-        io->vol = vol;
-        io->name = path;
+        io->m = m;
         io->size = take;
         io->offset = offset;
         io->sha_ctx = sha_ctx;
-        io->sha = out_sha;
 
         assert(!io->buffer);
         io->buffer = malloc(take);
         io->last = (size == take);
         assert(io->buffer);
 
-        LARGE_INTEGER o;
-        o.QuadPart = offset;
-        memset(&io->iosb, 0, sizeof(io->iosb));
-
-        ULONG rc = NtReadFile(input, io->event, NULL, NULL, &io->iosb, io->buffer, take, &o, NULL);
-
-        if (rc == STATUS_FILE_LOCK_CONFLICT) {
-            /* Note don't change this logging without also updating the tests */
-            printf("Lock conflict error for file [%ls]\n", path);
-            result = rc;
-        } else if (rc == STATUS_END_OF_FILE) {
-            /* Also not fatal */
-            printf("File [%ls] has shrunk!\n", path);
-            result = rc;
-        } else if (rc && rc != STATUS_PENDING) {
-            printf("copy_file read returned %x for path [%ls]\n", (uint32_t) rc, path);
-            exit(1);
-        }
-
-        if (result) {
-            free(io->buffer);
-            io->buffer = NULL;
-            CloseHandle(input);
-            break;
-        }
+        issue_io(io);
     }
-
-    return result;
 }
 
 static int shallow_file(ntfs_fs_t fs,
@@ -1697,8 +1756,8 @@ int stat_files_phase(struct disk *disk, Manifest *suffixes, Manifest *man, wchar
              * will be a command line option. */
             if (action == MAN_COPY || action == MAN_FORCE_COPY) {
                 Action old_action = m->action;
-                if (stat_file(m->var->volume, m->file_id, &m->file_size, &m->offset,
-                            &m->action) < 0) {
+                if (stat_file(m->var->volume, m->file_id, &m->file_size,
+                            &m->offset) < 0) {
                     printf("skipping file %ls (err=%u)\n", m->name,
                             (uint32_t) GetLastError());
                     m->action = MAN_EXCLUDE;
@@ -2296,7 +2355,7 @@ static DWORD WINAPI acl_files_thread(LPVOID lpParam)
 
         assert(m->file_id != 0);
 
-        h = open_file_by_id(m->var->volume, m->file_id, READ_CONTROL);
+        h = open_file_by_id(m->var->volume, m->file_id, READ_CONTROL, 0);
         if (h == INVALID_HANDLE_VALUE || h == 0) {
             printf("Unable to open file %ls (err=%u)\n", m->name,
                     (int)GetLastError());
@@ -2527,13 +2586,12 @@ inline int should_copy_entry(const ManifestEntry *m, int retry)
     }
 }
 
-/* Returns negative number if any locked files encountered, otherwise positive
- * number of changed files */
+/* Returns zero on success, or positive number of changed files */
 int copy_phase(struct disk *disk, Manifest *man, int calculate_shas, int retry)
 {
     int i, j;
     int q = 0;
-    int nchanged = 0, nlocked = 0;
+    io_nchanged = 0;
     const int max_opens = 4096; // windows supports 10k open file handles
     HANDLE h;
     HANDLE handles[max_opens];
@@ -2542,13 +2600,6 @@ int copy_phase(struct disk *disk, Manifest *man, int calculate_shas, int retry)
     uint64_t total_size_force_copied = 0;
 
     ENTER_PHASEN(retry);
-
-    memset(ios, 0, sizeof(ios));
-    for (i = 0; i < MAX_IOS; ++i) {
-        IO *io = &ios[i];
-        io->event = CreateEvent(NULL, TRUE, TRUE, NULL);
-        assert(io->event);
-    }
 
     man_sort_by_offset(man);
 
@@ -2559,11 +2610,13 @@ int copy_phase(struct disk *disk, Manifest *man, int calculate_shas, int retry)
             ManifestEntry *m = &man->entries[i];
             if (should_copy_entry(m, retry)) {
                 assert(m->file_id);
-                h = open_file_by_id(m->var->volume, m->file_id, GENERIC_READ);
+                h = open_file_by_id(m->var->volume, m->file_id, GENERIC_READ,
+                    FILE_FLAG_OVERLAPPED | FILE_FLAG_SEQUENTIAL_SCAN);
                 if (h == INVALID_HANDLE_VALUE) {
                     printf("failed to open %ls by id for copying, retrying by name\n", m->name);
                     wchar_t* filename = prefix(m->var, m->host_name);
-                    h = open_file_by_name(filename);
+                    h = open_file_by_name(filename,
+                        FILE_FLAG_OVERLAPPED | FILE_FLAG_SEQUENTIAL_SCAN);
                 }
 
                 handles[j++] = h;
@@ -2584,10 +2637,8 @@ int copy_phase(struct disk *disk, Manifest *man, int calculate_shas, int retry)
                 }
                 HANDLE h = handles[j++];
                 if (h != INVALID_HANDLE_VALUE) {
-                    int err;
-                    uint8_t *out_sha = (calculate_shas ? m->sha : NULL);
                     if (m->action == MAN_CHANGE) {
-                        ++nchanged;
+                        ++io_nchanged;
                         /* file size may have changed since we first looked it
                          * up in stat_files_phase, need to recalculate. If it
                          * changes again after this point, the usn_phase
@@ -2605,28 +2656,9 @@ int copy_phase(struct disk *disk, Manifest *man, int calculate_shas, int retry)
                         }
                         m->file_size = info.EndOfFile.QuadPart;
                     }
-                    err = copy_file(m->vol, m->name, h, m->file_size, out_sha);
-                    if (err) {
-                        /* File was locked or changed size, flag for
-                         * processing in next copy phase */
-                        if (m->action != MAN_CHANGE) {
-                            m->action = MAN_CHANGE;
-                            ++nchanged;
-                        }
-                        if (err == STATUS_FILE_LOCK_CONFLICT) {
-                            ++nlocked;
-                        }
-                        continue;
-                    }
+                    copy_file(m, h, calculate_shas);
                     total_size_copied += m->file_size;
-                    if (m->action == MAN_CHANGE) {
-                        /* Subsequent phases don't expect any MAN_CHANGES to
-                         * Still be present
-                         */
-                        m->action = MAN_FORCE_COPY;
-                        --nchanged;
-                    }
-                    if (m->action == MAN_FORCE_COPY) {
+                    if (m->action == MAN_FORCE_COPY || m->action == MAN_CHANGE) {
                         total_size_force_copied += m->file_size;
                     }
                     ++q;
@@ -2638,10 +2670,9 @@ int copy_phase(struct disk *disk, Manifest *man, int calculate_shas, int retry)
     complete_all_ios();
     printf("copied %d files, %"PRIu64" bytes\n", q, total_size_copied);
     printf("force-copied files total size: %"PRIu64" bytes\n", total_size_force_copied);
-    printf("number of remaining files needing to be copied: %d\n", nchanged);
-    printf("number of locked files encountered: %d\n", nlocked);
+    printf("number of remaining files needing to be copied: %d\n", io_nchanged);
     LEAVE_PHASEN(retry);
-    return nlocked ? -nlocked : nchanged;
+    return io_nchanged;
 }
 
 int register_with_cow(
@@ -2783,15 +2814,26 @@ int usn_phase(
     uint64_t journal, Manifest *man, int phase)
 {
     ENTER_PHASEN(phase);
-    /* USN phase zero is used to protect between launch up to the shallowing
-     * phase - thus any detected modification causes the ManifestEntry's action
-     * to change from MAN_SHALLOW to MAN_FORCE_COPY. USN phases greater than 0
-     * protect modifications during the copy_phase, and change the action from
-     * MAN_COPY or MAN_FORCE_COPY to MAN_CHANGE. The subsequent copy_phase will
-     * convert the MAN_CHANGE back to a MAN_FORCE_COPY once it has successfully
-     * copied the file (which in the worst case will get converted back to
-     * MAN_CHANGE if the subsequent usn_phase detects that the file was *again*
-     * modified while being copied).
+
+    /*
+     * usn_phase checks for any modification to relevant files, and changes any
+     * such manifest entry's action to MAN_CHANGE.
+     *
+     * USN phase zero is used to protect between launch up to the end of the
+     * shallowing phase. Because the later copy_phases also use the file size
+     * which was calculated in scanning_phase, USN phase zero checks not only
+     * MAN_SHALLOW but also MAN_COPY and MAN_FORCE_COPY.
+     *
+     * USN phases greater than 0 protect modifications during the copy_phase,
+     * and change the action from MAN_COPY or MAN_FORCE_COPY to MAN_CHANGE. The
+     * subsequent copy_phase will convert the MAN_CHANGE back to a
+     * MAN_FORCE_COPY once it has successfully copied the file (which in the
+     * worst case will get converted back to MAN_CHANGE if the subsequent
+     * usn_phase detects that the file was *again* modified while being copied).
+     *
+     * Note that the start_usn for phase N+1 must be the same as the end_usn
+     * for phase N, in order to ensure there are no gaps in the USN record
+     * during which modifications could occur without us noticing.
      */
 
     READ_USN_JOURNAL_DATA read_data = {0};
@@ -2859,13 +2901,13 @@ int usn_phase(
                 filename);
 
             /* We're interested in checking a file if:
-             * - It's a shallow in the first usn_phase (ie when phase==0)
+             * - It's a shallow or copy in usn_phase zero
              * - It's a copy in the usn_phase protecting the first copy_phase
              *   (ie when phase==1)
              * - It's a MAN_CHANGE in any subsequent copy_phase
              */
             if ((phase == 0 && m->action == MAN_SHALLOW)
-                || (phase == 1 && (m->action == MAN_COPY ||
+                || (phase <= 1 && (m->action == MAN_COPY ||
                                    m->action == MAN_FORCE_COPY))
                 || (phase > 1 && m->action == MAN_CHANGE)) {
                 char *cfilename = utf8(m->name);
@@ -2885,7 +2927,7 @@ int usn_phase(
 
                 printf("Going to (re-)copy [%ls]\n", filename);
                 m->action = MAN_CHANGE;
-                num_copies ++;
+                ++num_copies;
             }
 
             heap_pop(&changed_fileids);
@@ -3276,7 +3318,7 @@ int calculate_sha1_for_file(const wchar_t *filename, uint8_t *out_sha)
         err = 1;
         goto out;
     }
-    h = open_file_by_name(filename);
+    h = open_file_by_name(filename, FILE_FLAG_SEQUENTIAL_SCAN);
     if (h == INVALID_HANDLE_VALUE) {
         err = 1;
         goto out;
@@ -3538,9 +3580,9 @@ void print_usage(void)
 #define ARG_NOSHALLOW                    "NOSHALLOW"
 #define ARG_ALL_HASHES                   "ALL_HASHES"
 #define ARG_FILE_METADATA                "FILE_METADATA"
-#define ARG_RETRY_DELAY                  "RETRY_DELAY="
 #define ARG_NUM_RETRIES                  "NUM_RETRIES="
 #define ARG_ABSENT_FILES_FATAL           "ABSENT_FILES_FATAL"
+#define ARG_PAUSE_BEFORE_COPY            "PAUSE_BEFORE_COPY"
 #define ARG_SUBSTITUTION_SIZE            NUMBER_OF(ARG_SUBSTITUTION)
 #define ARG_OUT_MANIFEST_SIZE            NUMBER_OF(ARG_OUT_MANIFEST)
 #define ARG_USN_SIZE                     NUMBER_OF(ARG_USN)
@@ -3554,13 +3596,13 @@ void print_usage(void)
 #define ARG_NOSHALLOW_SIZE               NUMBER_OF(ARG_NOSHALLOW)
 #define ARG_ALL_HASHES_SIZE              NUMBER_OF(ARG_ALL_HASHES)
 #define ARG_FILE_METADATA_SIZE           NUMBER_OF(ARG_FILE_METADATA)
-#define ARG_RETRY_DELAY_SIZE             NUMBER_OF(ARG_RETRY_DELAY)
+#define ARG_PAUSE_BEFORE_COPY_SIZE       NUMBER_OF(ARG_PAUSE_BEFORE_COPY)
 #define ARG_NUM_RETRIES_SIZE             NUMBER_OF(ARG_NUM_RETRIES)
 #define ARG_ABSENT_FILES_FATAL_SIZE      NUMBER_OF(ARG_ABSENT_FILES_FATAL)
 
 int main(int argc, char **argv)
 {
-    int i, nchanged, nlocked;
+    int i, nchanged;
     int r = 0;
     struct disk disk;
     FILE *manifest_file;
@@ -3598,7 +3640,7 @@ int main(int argc, char **argv)
     int skip_usn_phase = 0;
     int calculate_all_hashes = 0;
     int collect_file_metadata = 0;
-    int retry_delay = 1; /* Default 1 second if not specified */
+    int pause_before_copy = 0; /* Only used for unit tests! */
     int num_retries = 5;
 
     while (argc >= 2) {
@@ -3660,11 +3702,11 @@ int main(int argc, char **argv)
         } else if (strncmp(argv[1], ARG_FILE_METADATA, ARG_FILE_METADATA_SIZE) == 0) {
             printf("Will collect metadata for all files\n");
             collect_file_metadata = 1;
-        } else if (strncmp(argv[1], ARG_RETRY_DELAY, ARG_RETRY_DELAY_SIZE) == 0) {
-            retry_delay = atoi(argv[1] + ARG_RETRY_DELAY_SIZE);
-            printf("Using retry delay of %ds\n", retry_delay);
+        } else if (strncmp(argv[1], ARG_PAUSE_BEFORE_COPY, ARG_PAUSE_BEFORE_COPY_SIZE) == 0) {
+            pause_before_copy = 1;
+            printf("Will pause before copy_phase\n");
         } else if (strncmp(argv[1], ARG_NUM_RETRIES, ARG_NUM_RETRIES_SIZE) == 0) {
-            num_retries = atoi(argv[1] + ARG_RETRY_DELAY_SIZE);
+            num_retries = atoi(argv[1] + ARG_NUM_RETRIES_SIZE);
             printf("Using %d retries\n", num_retries);
         } else if (strncmp(argv[1], ARG_ABSENT_FILES_FATAL, ARG_ABSENT_FILES_FATAL_SIZE) == 0) {
             absent_files_fatal = 1;
@@ -3887,6 +3929,7 @@ int main(int argc, char **argv)
             if (usn_phase(drive, start_usn, end_usn, journal, &man_out, 0) < 0) {
                 err(1, "usn_phase failed\n");
             }
+            start_usn = end_usn;
         }
 
         if (!skip_open_handles_phase) {
@@ -3898,20 +3941,21 @@ int main(int argc, char **argv)
 
     /* Moved the man_sort_by_offset into copy_phase */
 
-    for (i = nchanged = nlocked = 0; i < num_retries; ++i) {
+    init_ios();
+
+    /* This option only exists so we can unit-test making changes between
+       stat_files_phase and copy_phase */
+    if (pause_before_copy) {
+        char ch;
+        /* Don't change this logging without also updating test code */
+        printf("Press a key to continue to copy_phase\n");
+        fread(&ch, 1, 1, stdin);
+    }
+
+    for (i = nchanged = 0; i < num_retries; ++i) {
         USN end_usn;
         uint64_t journal;
-        if (get_next_usn(drive, &start_usn, NULL) < 0) {
-            err(1, "Unable to record starting USN entry\n");
-        }
-        r = copy_phase(&disk, &man_out, arg_out_manifest != NULL, i);
-        if (r < 0) {
-            nlocked = -r;
-            nchanged = nlocked;
-        } else {
-            nlocked = 0;
-            nchanged = r;
-        }
+        nchanged = copy_phase(&disk, &man_out, arg_out_manifest != NULL, i);
         r = get_next_usn(drive, &end_usn, &journal);
         if (r < 0) {
             err(1, "Unable to record ending USN entry\n");
@@ -3921,22 +3965,10 @@ int main(int argc, char **argv)
             err(1, "usn_phase %d failed\n", i + 1);
         }
         nchanged += r;
+        start_usn = end_usn;
 
         if (nchanged == 0) {
             break;
-        }
-        /* If some files that we were copying changed during the copy phase,
-         * or if some of the copies experienced a hopefully-transient failure
-         * due to locking then we need to retry the copy. We only delay if there
-         * were locked files however, because it's better to try and out-race
-         * the modifications in the case of files changing.
-         */
-        if (nlocked && retry_delay) {
-            /* This is mainly useful to make the tests reliable, but might be
-             * useful in the general case too, to allow time for locked files to
-             * become free */
-            printf("Waiting %d seconds before retrying\n", retry_delay);
-            Sleep(retry_delay * 1000);
         }
     }
     if (nchanged > 0) {
@@ -3951,7 +3983,7 @@ int main(int argc, char **argv)
          */
         r = copy_phase(&disk, &man_out, arg_out_manifest != NULL, num_retries);
         if (r != 0) {
-            /* Here we treat any remaining locked or changed files as fatal
+            /* Here we treat any remaining changed files as fatal
              * because there isn't really any remedial action we can take short
              * of excluding the file, which will potentially cause much worse
              * problems down the line. */
