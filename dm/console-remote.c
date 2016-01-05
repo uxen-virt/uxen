@@ -224,10 +224,12 @@ handle_message(struct uxenconsole_msg_header *hdr)
         break;
     case UXENCONSOLE_MSG_TYPE_TOUCH_DEVICE_HOTPLUG:
         {
+#if !defined(__APPLE__)
             struct uxenconsole_msg_touch_device_hotplug *msg = (void *)hdr;
             void hotplug_touch_devices(int plug);
 
             hotplug_touch_devices(msg->plug);
+#endif
         }
         break;
     default:
