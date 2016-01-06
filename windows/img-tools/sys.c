@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -107,7 +107,7 @@ void banner(void)
                 1900 + tm->tm_year, 1 + tm->tm_mon, tm->tm_mday,
                 tm->tm_hour, tm->tm_min, tm->tm_sec,
                 (int)(tv.tv_usec / 1000), tz);
-        fputs(prefix, logfile);
+        fprintf(logfile, "\n\n%s", prefix);
     }
     fprintf(logfile, "[%ls]\n\n", GetCommandLineW());
 }
