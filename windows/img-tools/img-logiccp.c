@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -1800,29 +1800,35 @@ int other_linked_files_phase(struct disk *disk, Manifest *man)
 
         /* Enumerate all the hardlink filenames for this file */
         for (;;) {
+            DWORD err = ERROR_SUCCESS;
             length = MAX_PATH_LEN;
             if (h == INVALID_HANDLE_VALUE) {
                 /* First time through loop */
                 h = FindFirstFileNameW(m.name, 0, &length, buffer);
                 if (h == INVALID_HANDLE_VALUE) {
-                    printf("FindFirstFileName() failed on %ls with error %d\n", m.name, (int)GetLastError());
-                    ret = -1;
-                    goto cleanup;
+                    err = GetLastError();
+                    printf("FindFirstFileName() failed on %ls with error %d\n", m.name, (int)err);
                 }
             } else {
                 BOOL ok = FindNextFileNameW(h, &length, buffer);
                 if (!ok) {
-                    DWORD err = GetLastError();
+                    err = GetLastError();
                     FindClose(h);
                     h = INVALID_HANDLE_VALUE;
                     if (err == ERROR_HANDLE_EOF) {
                         break;
                     } else {
                         printf("FindNextFileName() failed on %ls with error %d\n", m.name, (int)err);
-                        ret = -1;
-                        goto cleanup;
                     }
                 }
+            }
+            if ((err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND)
+                && !absent_files_fatal) {
+                /* It's ok for a file to have disappeared since scanning_phase */
+                continue;
+            } else if (err) {
+                ret = -1;
+                goto cleanup;
             }
 
             /* Add another manifest entry for the same file, at a different
@@ -2263,6 +2269,10 @@ sec_error:
     return ret;
 }
 
+/* Note: This function must no longer set anything to be MAN_EXCLUDE because
+ * that can corrupt the vm_links state. Any failures or problems in accessing a
+ * file must degrade the entry to MAN_CHANGE which will mean we'll handle it in
+ * copy_phase, where we can handle errors without peturbing the manifest. */
 static DWORD WINAPI acl_files_thread(LPVOID lpParam)
 {
     assert(lpParam != NULL);
@@ -2290,7 +2300,8 @@ static DWORD WINAPI acl_files_thread(LPVOID lpParam)
         if (h == INVALID_HANDLE_VALUE || h == 0) {
             printf("Unable to open file %ls (err=%u)\n", m->name,
                     (int)GetLastError());
-            m->action = MAN_EXCLUDE;
+            /* Worry about it in copy_phase */
+            m->action = MAN_CHANGE;
             continue;
         }
 
@@ -3840,15 +3851,6 @@ int main(int argc, char **argv)
     /* Copy/shallow phase. */
     printf("copy + shallow %d files\n", man_out.n);
 
-    if (shallow_allowed) {
-        man_sort_by_id(&man_out);
-        if (!skip_acl_phase) {
-            if (acl_phase(&disk, &man_out) < 0) {
-                err(1, "acl_phase failed");
-            }
-        }
-    }
-
     man_sort_by_offset(&man_out);
 
     if (vm_links_phase_1(&disk, &man_out) < 0) {
@@ -3857,6 +3859,12 @@ int main(int argc, char **argv)
 
     if (shallow_allowed) {
         man_sort_by_id(&man_out);
+
+        if (!skip_acl_phase) {
+            if (acl_phase(&disk, &man_out) < 0) {
+                err(1, "acl_phase failed");
+            }
+        }
 
         if (shallow_phase(&disk, &man_out, map_idx) < 0) {
             err(1, "shallow_phase failed");
