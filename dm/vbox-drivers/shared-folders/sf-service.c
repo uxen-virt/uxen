@@ -16,7 +16,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -1076,6 +1076,38 @@ static DECLCALLBACK(void) svcCall (void *unused, VBOXHGCMCALLHANDLE callHandle, 
         {
             pClient->fu32Flags |= SHFL_CF_SYMLINKS;
             rc = VINF_SUCCESS;
+            break;
+        }
+
+        case SHFL_FN_COMPRESSION:
+        {
+            Log(("SharedFolders host service: svcCall: SHFL_FN_COMPRESSION\n"));
+
+            /* Verify parameter count and types. */
+            if (cParms != SHFL_CPARMS_COMPRESSION)
+                rc = VERR_INVALID_PARAMETER;
+            else if (   paParms[0].type != VBOX_HGCM_SVC_PARM_32BIT   /* root */
+                || paParms[1].type != VBOX_HGCM_SVC_PARM_64BIT   /* handle */
+                || paParms[2].type != VBOX_HGCM_SVC_PARM_32BIT   /* ctl */
+                || paParms[3].type != VBOX_HGCM_SVC_PARM_32BIT   /* compression */
+                    )
+                rc = VERR_INVALID_PARAMETER;
+            else {
+                /* Fetch parameters. */
+                SHFLROOT   root = (SHFLROOT)paParms[0].u.uint32;
+                SHFLHANDLE handle = paParms[1].u.uint64;
+                uint32_t   ctl = paParms[2].u.uint32;
+                uint32_t   compression = paParms[3].u.uint32;
+
+                if (ctl == SHFL_COMPRESSION_SET)
+                    rc = vbsfCompressionSet(pClient, root, handle, compression);
+                else if (ctl == SHFL_COMPRESSION_GET) {
+                    rc = vbsfCompressionGet(pClient, root, handle, &compression);
+                    if (RT_SUCCESS(rc))
+                        paParms[3].u.uint32 = compression;
+                } else
+                    rc = VERR_INVALID_PARAMETER;
+            }
             break;
         }
 

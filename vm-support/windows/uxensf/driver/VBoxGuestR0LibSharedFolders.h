@@ -25,7 +25,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -198,7 +198,7 @@ DECLVBGL(int) vboxCallLock (PVBSFCLIENT pClient, PVBSFMAP pMap, SHFLHANDLE hFile
 DECLVBGL(int) vboxCallDirInfo (PVBSFCLIENT pClient, PVBSFMAP pMap, SHFLHANDLE hFile,PSHFLSTRING ParsedPath, uint32_t flags,
                                uint32_t index, uint32_t *pcbBuffer, PSHFLDIRINFO pBuffer, uint32_t *pcFiles);
 DECLVBGL(int) vboxCallFSInfo (PVBSFCLIENT pClient, PVBSFMAP pMap, SHFLHANDLE hFile, uint32_t flags, uint32_t *pcbBuffer, PSHFLDIRINFO pBuffer);
-
+DECLVBGL(int) vboxCallCompression (PVBSFCLIENT pClient, PVBSFMAP pMap, SHFLHANDLE hFile, uint32_t ctl, uint32_t *compr);
 DECLVBGL(int) vboxCallMapFolder (PVBSFCLIENT pClient, PSHFLSTRING szFolderName, PVBSFMAP pMap);
 DECLVBGL(int) vboxCallUnmapFolder (PVBSFCLIENT pClient, PVBSFMAP pMap);
 DECLVBGL(int) vboxCallSetUtf8 (PVBSFCLIENT pClient);

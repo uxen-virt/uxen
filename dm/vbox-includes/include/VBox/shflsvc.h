@@ -104,6 +104,8 @@
 #define SHFL_FN_SYMLINK             (19)
 /** Ask host to show symlinks (as of VBox 4.0) */
 #define SHFL_FN_SET_SYMLINKS        (20)
+/** Query/set compression on file/folder (uxen) */
+#define SHFL_FN_COMPRESSION         (100)
 
 /** @} */
 
@@ -1370,6 +1372,39 @@ typedef struct _VBoxSFSymlink
  */
 
 #define SHFL_CPARMS_SET_STATUS_LED (1)
+
+/**
+ * SHFL_FN_COMPRESSION
+ */
+
+/** Get compression */
+#define SHFL_COMPRESSION_GET   (0x0)
+/** Set compression */
+#define SHFL_COMPRESSION_SET   (0x1)
+
+/** Parameters structure. */
+typedef struct _VBoxSFCompression
+{
+    VBoxGuestHGCMCallInfo callInfo;
+
+    /** pointer, in: SHFLROOT
+     * Root handle of the mapping which name is queried.
+     */
+    HGCMFunctionParameter root;
+
+    /** value64, in:
+     * SHFLHANDLE of object to be listed.
+     */
+    HGCMFunctionParameter handle;
+
+    /** value32, in (SHFL_COMPRESSION_) */
+    HGCMFunctionParameter ctl;
+
+    /** value32, in/out */
+    HGCMFunctionParameter compression;
+} VBoxSFCompression;
+
+#define SHFL_CPARMS_COMPRESSION (4)
 
 /** @} */
 

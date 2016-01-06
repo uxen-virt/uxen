@@ -17,7 +17,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -2026,6 +2026,74 @@ int vbsfSetFSInfo(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, uin
 //        return vbsfVolumeInfo(pClient, root, Handle, flags, pcbBuffer, pBuffer);
     AssertFailed();
     return VERR_INVALID_PARAMETER;
+}
+
+static int
+vbsfCompression(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle,
+                uint32_t *compression, int set)
+{
+    uint32_t type = vbsfQueryHandleType(pClient, Handle);
+    HANDLE winhandle = INVALID_HANDLE_VALUE;
+    int rc = VINF_SUCCESS;
+
+    if (type == SHFL_HF_TYPE_FILE) {
+        SHFLFILEHANDLE *fh =  vbsfQueryFileHandle(pClient, Handle);
+
+        if (!fh)
+            return VERR_INVALID_PARAMETER;
+        winhandle = fh->file.Handle;
+    } else if (type == SHFL_HF_TYPE_DIR) {
+        SHFLFILEHANDLE *fh =  vbsfQueryDirHandle(pClient, Handle);
+        PRTDIR dir = fh->dir.Handle;
+
+        if (!dir || !dir->pwszPath)
+            return VERR_INVALID_PARAMETER;
+
+        winhandle = CreateFileW(dir->pwszPath, GENERIC_READ|GENERIC_WRITE,
+                   FILE_SHARE_READ|FILE_SHARE_WRITE|FILE_SHARE_DELETE,
+                   NULL, OPEN_EXISTING,
+                   FILE_FLAG_BACKUP_SEMANTICS, NULL);
+        if (winhandle == INVALID_HANDLE_VALUE)
+            return RTErrConvertFromWin32(GetLastError());
+    } else
+        return VERR_INVALID_PARAMETER;
+
+    if (set) {
+        USHORT compr = (USHORT) *compression;
+        DWORD nbytes;
+
+        if (!DeviceIoControl(winhandle, FSCTL_SET_COMPRESSION,
+                             &compr, sizeof(compr),
+                             NULL, 0, &nbytes, NULL))
+            rc = RTErrConvertFromWin32(GetLastError());
+    } else {
+        USHORT compr = 0;
+        DWORD nbytes;
+
+        if (!DeviceIoControl(winhandle, FSCTL_GET_COMPRESSION,
+                             NULL, 0,
+                             &compr, sizeof(compr), &nbytes, NULL))
+            rc = RTErrConvertFromWin32(GetLastError());
+        else
+            *compression = compr;
+    }
+
+    if (type == SHFL_HF_TYPE_DIR)
+        CloseHandle(winhandle);
+
+    return rc;
+}
+
+int
+vbsfCompressionSet(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, uint32_t compression)
+{
+    return vbsfCompression(pClient, root, Handle, &compression, 1);
+}
+
+int
+vbsfCompressionGet(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, uint32_t *compression)
+{
+    return vbsfCompression(pClient, root, Handle, compression, 0);
 }
 
 #ifdef UNITTEST

@@ -26,7 +26,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -656,6 +656,37 @@ DECLVBGL(int) vboxCallFSInfo(PVBSFCLIENT pClient, PVBSFMAP pMap, SHFLHANDLE hFil
     }
     return rc;
 }
+
+DECLVBGL(int) vboxCallCompression (PVBSFCLIENT pClient, PVBSFMAP pMap, SHFLHANDLE hFile,
+                                   uint32_t ctl, uint32_t *compr)
+{
+    int rc = VINF_SUCCESS;
+
+    VBoxSFCompression data;
+
+    VBOX_INIT_CALL(&data.callInfo, COMPRESSION, pClient);
+
+    data.root.type                      = VMMDevHGCMParmType_32bit;
+    data.root.u.value32                 = pMap->root;
+    data.handle.type                    = VMMDevHGCMParmType_64bit;
+    data.handle.u.value64               = hFile;
+
+    data.ctl.type                        = VMMDevHGCMParmType_32bit;
+    data.ctl.u.value32                   = ctl;
+    data.compression.type               = VMMDevHGCMParmType_32bit;
+    data.compression.u.value32          = *compr;
+
+    rc = VbglHGCMCall (pClient->handle, &data.callInfo, sizeof (data));
+
+    if (RT_SUCCESS (rc))
+    {
+        rc = data.callInfo.result;
+        *compr = data.compression.u.value32;
+    }
+
+    return rc;
+}
+
 
 DECLVBGL(int) vboxCallLock(PVBSFCLIENT pClient, PVBSFMAP pMap, SHFLHANDLE hFile,
                            uint64_t offset, uint64_t cbSize, uint32_t fLock)

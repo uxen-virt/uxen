@@ -19,7 +19,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -1389,10 +1389,60 @@ NTSTATUS VBoxMRxSetEaInfo(IN OUT PRX_CONTEXT RxContext)
     return STATUS_NOT_IMPLEMENTED;
 }
 
+static NTSTATUS
+FsCompression(IN OUT PRX_CONTEXT RxContext, uint32_t *comprval, int set)
+{
+    NTSTATUS Status = STATUS_SUCCESS;
+
+    RxCaptureFcb;
+    RxCaptureFobx;
+
+    int vboxRC;
+
+    PMRX_VBOX_DEVICE_EXTENSION pDeviceExtension = VBoxMRxGetDeviceExtension(RxContext);
+    PMRX_VBOX_NETROOT_EXTENSION pNetRootExtension = VBoxMRxGetNetRootExtension(capFcb->pNetRoot);
+    PMRX_VBOX_FOBX pVBoxFobx = VBoxMRxGetFileObjectExtension(capFobx);
+
+    Assert(pVBoxFobx && pNetRootExtension && pDeviceExtension);
+
+    vboxRC = vboxCallCompression(&pDeviceExtension->hgcmClient, &pNetRootExtension->map,
+                                 pVBoxFobx->hFile,
+                                 set ? SHFL_COMPRESSION_SET : SHFL_COMPRESSION_GET,
+                                 comprval);
+    Log(("VBOXSF: vboxCallSetCompression returned %Rrc\n", vboxRC));
+
+    return VBoxErrorToNTStatus(vboxRC);
+}
+
 NTSTATUS VBoxMRxFsCtl (IN OUT PRX_CONTEXT RxContext)
 {
-    Log(("VBOXSF: MRxFsCtl\n"));
-    return STATUS_INVALID_DEVICE_REQUEST;
+    uint32_t compr;
+    NTSTATUS status;
+
+    Log(("VBOXSF: MRxFsCtl: FsControlCode = 0x%08X\n",
+         RxContext->LowIoContext.ParamsFor.FsCtl.FsControlCode));
+
+    switch (RxContext->LowIoContext.ParamsFor.FsCtl.FsControlCode) {
+    case FSCTL_SET_COMPRESSION:
+        if ( RxContext->LowIoContext.ParamsFor.FsCtl.InputBufferLength < sizeof(USHORT) ||
+            !RxContext->LowIoContext.ParamsFor.FsCtl.pInputBuffer)
+            return STATUS_INVALID_PARAMETER;
+        compr = *((USHORT*) RxContext->LowIoContext.ParamsFor.IoCtl.pInputBuffer);
+        return FsCompression(RxContext, &compr, 1);
+    case FSCTL_GET_COMPRESSION:
+        if ( RxContext->LowIoContext.ParamsFor.FsCtl.OutputBufferLength < sizeof(USHORT) ||
+            !RxContext->LowIoContext.ParamsFor.FsCtl.pOutputBuffer)
+            return STATUS_INVALID_PARAMETER;
+        status = FsCompression(RxContext, &compr, 0);
+        if (status == STATUS_SUCCESS) {
+            *((USHORT*)RxContext->LowIoContext.ParamsFor.FsCtl.pOutputBuffer) = (USHORT)compr;
+            RxContext->InformationToReturn = sizeof(USHORT);
+        } else
+            RxContext->InformationToReturn = 0;
+        return status;
+    default:
+        return STATUS_INVALID_DEVICE_REQUEST;
+    }
 }
 
 NTSTATUS VBoxMRxNotifyChangeDirectory(IN OUT PRX_CONTEXT RxContext)
