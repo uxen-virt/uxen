@@ -277,12 +277,13 @@ typedef struct Manifest {
      * necessary for performance of find_by_prefix()
      */
     int n_ex;
+    int (*order_fn)(const void *, const void *);
     ManifestEntry **entries_ex;
 } Manifest;
 
 ManifestEntry *find_by_prefix(Manifest *man, const wchar_t *fn);
 
-void man_init(Manifest *man)
+static void man_init(Manifest *man)
 {
     man->entries = NULL;
     man->n = 0;
@@ -290,9 +291,15 @@ void man_init(Manifest *man)
     man->n_ex = 0;
 }
 
-ManifestEntry *man_push(Manifest *man)
+static inline void man_unsorted(Manifest *man)
+{
+    man->order_fn = NULL;
+}
+
+static ManifestEntry *man_push(Manifest *man)
 {
     int n = man->n++;
+    man_unsorted(man);
     if (!(n & (n + 1))) {
         man->entries = realloc(man->entries, 2 * (n + 1) * sizeof(ManifestEntry));
         assert(man->entries);
@@ -334,7 +341,7 @@ ManifestEntry* man_push_file(Manifest *out,
  * name, as a tie-break to impose a consistent ordering on entries that differ
  * only by case.
  */
-int cmp(const void *a, const void *b)
+static int cmp_name_action(const void *a, const void *b)
 {
     const ManifestEntry *ea = (const ManifestEntry *) a;
     const ManifestEntry *eb = (const ManifestEntry *) b;
@@ -352,7 +359,7 @@ int cmp(const void *a, const void *b)
     }
 }
 
-int cmp2(const void *a, const void *b)
+static int cmp_offset_link_action(const void *a, const void *b)
 {
     const ManifestEntry *ea = (const ManifestEntry *) a;
     const ManifestEntry *eb = (const ManifestEntry *) b;
@@ -387,7 +394,7 @@ int cmp2(const void *a, const void *b)
     }
 }
 
-int cmp3(const void *a, const void *b)
+static int cmp_id_action(const void *a, const void *b)
 {
     const ManifestEntry *ea = (const ManifestEntry *) a;
     const ManifestEntry *eb = (const ManifestEntry *) b;
@@ -409,7 +416,7 @@ int cmp3(const void *a, const void *b)
     }
 }
 
-int cmp_system_handle(const void *a, const void *b)
+static int cmp_system_handle(const void *a, const void *b)
 {
     const PSYSTEM_HANDLE_TABLE_ENTRY_INFO pa = (PSYSTEM_HANDLE_TABLE_ENTRY_INFO) a;
     const PSYSTEM_HANDLE_TABLE_ENTRY_INFO pb = (PSYSTEM_HANDLE_TABLE_ENTRY_INFO) b;
@@ -422,48 +429,37 @@ int cmp_system_handle(const void *a, const void *b)
 
 #define LEAVE_FN() printf("%s took %.2fs\n", __FUNCTION__, rtc() - _t)
 
-void man_sort_by_name(Manifest *man)
+static void man_sort(Manifest *man, int (*cmp)(const void *, const void *))
 {
-    ENTER_FN();
-    qsort(man->entries, man->n, sizeof(ManifestEntry), cmp);
-    LEAVE_FN();
-}
-
-void man_sort_by_offset(Manifest *man)
-{
-    ENTER_FN();
-    qsort(man->entries, man->n, sizeof(ManifestEntry), cmp2);
-    LEAVE_FN();
-}
-
-void man_sort_by_id(Manifest *man)
-{
-    ENTER_FN();
-    qsort(man->entries, man->n, sizeof(ManifestEntry), cmp3);
-    LEAVE_FN();
-}
-
-void man_uniq_by_id(Manifest *man)
-{
-    /* uniq'ify manifest. */
-    int i, j;
-    for (i = j = 0; i < man->n; ++i) {
-
-        ManifestEntry *a = &man->entries[i];
-        if (i == 0 || a->file_id != man->entries[j - 1].file_id) {
-            man->entries[j++] = *a;
-        }
+    if (man->order_fn != cmp) {
+        qsort(man->entries, man->n, sizeof(ManifestEntry), cmp);
+        man->order_fn = cmp;
     }
-    man->n = j;
 }
 
-void man_uniq_by_name(Manifest *man)
+static void man_sort_by_name(Manifest *man)
+{
+    man_sort(man, cmp_name_action);
+}
+
+static void man_sort_by_offset_link_action(Manifest *man)
+{
+    man_sort(man, cmp_offset_link_action);
+}
+
+static void man_sort_by_id(Manifest *man)
+{
+    man_sort(man, cmp_id_action);
+}
+
+static void man_uniq_by_name(Manifest *man)
 {
     /* uniq'ify manifest. */
     int i, j;
     if (man->n == 0) {
         return;
     }
+    assert(man->order_fn == cmp_name_action);
     for (i = j = 1; i < man->n; ++i) {
 
         ManifestEntry *a = &man->entries[i];
@@ -477,13 +473,14 @@ void man_uniq_by_name(Manifest *man)
     man->n = j;
 }
 
-void man_uniq_by_name_and_action(Manifest *man)
+static void man_uniq_by_name_and_action(Manifest *man)
 {
     /* uniq'ify manifest. */
     int i, j;
     if (man->n == 0) {
         return;
     }
+    assert(man->order_fn == cmp_name_action);
     for (i = j = 1; i < man->n; ++i) {
 
         ManifestEntry *a = &man->entries[i];
@@ -498,7 +495,7 @@ void man_uniq_by_name_and_action(Manifest *man)
     man->n = j;
 }
 
-void man_filter_excludables(Manifest *man)
+static void man_filter_excludables(Manifest *man)
 {
     /* Set up the _ex variables. These are pointers to all the entries which
      * don't have excludable_single_file_entry set. This is needed for efficient
@@ -810,8 +807,6 @@ ManifestEntry *find_by_suffix(Manifest *man, const wchar_t *fn)
     }
     return match;
 }
-
-int disklib_mkdir_simple(ntfs_fs_t fs, const wchar_t *path);
 
 #define STATUS_SUCCESS ((NTSTATUS)0x00000000)
 #define STATUS_UNSUCCESSFUL ((NTSTATUS)0xC0000001L)
@@ -1718,6 +1713,8 @@ int is_same_file(const ManifestEntry *a, const ManifestEntry *b)
 int stat_files_phase(struct disk *disk, Manifest *suffixes, Manifest *man, wchar_t *file_id_list)
 {
     ENTER_PHASE();
+    assert(man->order_fn == cmp_id_action);
+
     int i;
     ManifestEntry *last = NULL;
     uint64_t link_id = 0;
@@ -1752,8 +1749,7 @@ int stat_files_phase(struct disk *disk, Manifest *suffixes, Manifest *man, wchar
                 ++link_id;
             }
 
-            /* Only stat files we want to copy (leave out ACL checking for now, this
-             * will be a command line option. */
+            /* Only stat files we want to copy. */
             if (action == MAN_COPY || action == MAN_FORCE_COPY) {
                 Action old_action = m->action;
                 if (stat_file(m->var->volume, m->file_id, &m->file_size,
@@ -1761,6 +1757,7 @@ int stat_files_phase(struct disk *disk, Manifest *suffixes, Manifest *man, wchar
                     printf("skipping file %ls (err=%u)\n", m->name,
                             (uint32_t) GetLastError());
                     m->action = MAN_EXCLUDE;
+                    man_unsorted(man);
                 } else if (old_action != m->action) {
                     changed_operations ++;
                 }
@@ -1796,6 +1793,8 @@ int stat_files_phase(struct disk *disk, Manifest *suffixes, Manifest *man, wchar
 int mkdir_phase(struct disk *disk, Manifest *man)
 {
     ENTER_PHASE();
+    assert(man->order_fn == cmp_name_action);
+
     int i;
 
     for (i = 0; i < man->n; ++i) {
@@ -1836,6 +1835,7 @@ static int file_is_excluded(wchar_t *filename, Manifest *man)
 int other_linked_files_phase(struct disk *disk, Manifest *man)
 {
     ENTER_PHASE();
+    assert(man->order_fn == NULL);
 
     int i;
     const int n = man->n;
@@ -1924,8 +1924,7 @@ int other_linked_files_phase(struct disk *disk, Manifest *man)
      * sufficient because they only check against the input manifest which has
      * itself been uniq'd, which isn't enough to guarantee hardlinks won't
      * re-add duplicate entries. */
-    man_sort_by_name(man);
-    man_uniq_by_name(man);
+    man_unsorted(man);
 
 cleanup:
     if (h != INVALID_HANDLE_VALUE) {
@@ -1940,6 +1939,7 @@ cleanup:
 int rewire_phase(struct disk *disk, Manifest *man)
 {
     ENTER_PHASE();
+    assert(man->order_fn == cmp_name_action);
 
     int i;
     const wchar_t bootmgr[] = L"bootmgr";
@@ -1986,6 +1986,7 @@ int rewire_phase(struct disk *disk, Manifest *man)
             m->host_name = wcsdup(m->name);
         }
     }
+    man_unsorted(man);
     LEAVE_PHASE();
     return 0;
 }
@@ -1993,6 +1994,7 @@ int rewire_phase(struct disk *disk, Manifest *man)
 int vm_links_phase_1(struct disk *disk, Manifest *man)
 {
     ENTER_PHASE();
+    assert(man->order_fn == cmp_offset_link_action);
 
     int i;
     ManifestEntry *last = NULL;
@@ -2005,7 +2007,7 @@ int vm_links_phase_1(struct disk *disk, Manifest *man)
             if (last->action != MAN_BOOT && last->action != MAN_EXCLUDE) {
                 free(m->host_name); // Might have been set in rewire_phase
                 m->host_name = last->name;
-                m->action = MAN_LINK;
+                m->action = MAN_LINK; // Preserves sorting order
                 ++q;
             }
         } else {
@@ -2018,13 +2020,14 @@ int vm_links_phase_1(struct disk *disk, Manifest *man)
     return 0;
 }
 
-int vm_links_phase_2(struct disk *disk, Manifest *man)
+int vm_links_phase_2(struct disk *disk, const Manifest *man)
 {
     ENTER_PHASE();
+    assert(man->order_fn == cmp_offset_link_action);
 
     int i;
     for (i = 0; i < man->n; ++i) {
-        ManifestEntry *m = &man->entries[i];
+        const ManifestEntry *m = &man->entries[i];
         if (m->action == MAN_LINK) {
             int err = 0;
             if (disklib_mklink_simple(m->vol, m->host_name, m->name) < 0) {
@@ -2389,6 +2392,7 @@ int acl_phase(struct disk *disk, Manifest *man)
 {
     assert(shallow_allowed);
     ENTER_PHASE();
+    assert(man->order_fn == cmp_id_action);
 
     int ret = 0;
     int i;
@@ -2496,6 +2500,8 @@ int acl_phase(struct disk *disk, Manifest *man)
         }
     }
 
+    man_unsorted(man);
+
     printf("Cache hits = [%d], misses = [%d]\n", cache_hits, cache_misses);
     printf("Number of files that will be force-copied due to acls_phase = [%d]\n",
         num_copies);
@@ -2530,6 +2536,7 @@ int shallow_phase(struct disk *disk, Manifest *man, wchar_t *map_idx)
 {
     assert(shallow_allowed);
     ENTER_PHASE();
+    assert(man->order_fn == cmp_name_action);
 
     int i, j;
     FILE *map_file;
@@ -2600,8 +2607,6 @@ int copy_phase(struct disk *disk, Manifest *man, int calculate_shas, int retry)
     uint64_t total_size_force_copied = 0;
 
     ENTER_PHASEN(retry);
-
-    man_sort_by_offset(man);
 
     for (base = 0; base < man->n; base = i) {
 
@@ -2783,7 +2788,6 @@ void cow_allow_file_access()
 
 int get_next_usn(HANDLE drive, USN *usn, uint64_t *journal)
 {
-    int win32_error = ERROR_SUCCESS;
     assert(usn);
     assert(drive != INVALID_HANDLE_VALUE);
 
@@ -2791,8 +2795,7 @@ int get_next_usn(HANDLE drive, USN *usn, uint64_t *journal)
     DWORD count = 0;
     if (!DeviceIoControl(drive, FSCTL_QUERY_USN_JOURNAL,
             NULL, 0, &journal_entry, sizeof(journal_entry), &count, NULL)) {
-        win32_error = GetLastError();
-        printf("Failed to get journal record: %d\n", win32_error);
+        printf("Failed to get journal record: %u\n", (uint32_t) GetLastError());
         return -1;
     }
 
@@ -2801,10 +2804,6 @@ int get_next_usn(HANDLE drive, USN *usn, uint64_t *journal)
         *journal = journal_entry.UsnJournalID;
     }
     printf("USN = [0x%"PRIx64"]\n", (uint64_t)*usn);
-
-    if (win32_error != ERROR_SUCCESS) {
-        return -1;
-    }
 
     return 0;
 }
@@ -2858,8 +2857,7 @@ int usn_phase(
         memset(buffer, 0, sizeof(buffer));
         if(!DeviceIoControl(drive, FSCTL_READ_USN_JOURNAL, &read_data,
               sizeof(read_data), &buffer, sizeof(buffer), &dwBytes, NULL)) {
-            int win32_error = GetLastError();
-            printf( "Read journal failed (%d)\n", win32_error);
+            printf("Read journal failed (%u)\n", (uint32_t) GetLastError());
             return -1;
         }
 
@@ -2879,13 +2877,8 @@ int usn_phase(
 
     printf("Number of changed files as per USN = [%d]\n", num_changed_fileids);
 
-    if (num_changed_fileids && phase > 0) {
-        /* Then we need to re-sort the manifest because it'll be sorted by
-         * offset after the copy_phase */
-        man_sort_by_id(man);
-    }
-
-    /* Do a basic inner-join based on file-id.  */
+    /* Do a basic inner-join based on file-id.
+     * Caller must have already sorted manifest.  */
     int i;
     int num_copies = 0;
     for (i = 0; i < man->n && !heap_empty(&changed_fileids);) {
@@ -3886,6 +3879,9 @@ int main(int argc, char **argv)
         err(1, "rewiring_phase failed");
     }
 
+    man_sort_by_name(&man_out);
+    man_uniq_by_name(&man_out);
+
     if (mkdir_phase(&disk, &man_out) < 0) {
         err(1, "mkdir_phase failed");
     }
@@ -3893,21 +3889,21 @@ int main(int argc, char **argv)
     /* Copy/shallow phase. */
     printf("copy + shallow %d files\n", man_out.n);
 
-    man_sort_by_offset(&man_out);
-
+    man_sort_by_offset_link_action(&man_out);
     if (vm_links_phase_1(&disk, &man_out) < 0) {
         err(1, "vm_links_phase_1 failed");
     }
 
     if (shallow_allowed) {
-        man_sort_by_id(&man_out);
 
         if (!skip_acl_phase) {
+            man_sort_by_id(&man_out);
             if (acl_phase(&disk, &man_out) < 0) {
                 err(1, "acl_phase failed");
             }
         }
 
+        man_sort_by_name(&man_out);
         if (shallow_phase(&disk, &man_out, map_idx) < 0) {
             err(1, "shallow_phase failed");
         }
@@ -3926,6 +3922,7 @@ int main(int argc, char **argv)
                 err(1, "Unable to record ending USN entry\n");
             }
 
+            man_sort_by_id(&man_out);
             if (usn_phase(drive, start_usn, end_usn, journal, &man_out, 0) < 0) {
                 err(1, "usn_phase failed\n");
             }
@@ -3939,7 +3936,6 @@ int main(int argc, char **argv)
         }
     }
 
-    /* Moved the man_sort_by_offset into copy_phase */
 
     init_ios();
 
@@ -3955,11 +3951,14 @@ int main(int argc, char **argv)
     for (i = nchanged = 0; i < num_retries; ++i) {
         USN end_usn;
         uint64_t journal;
+
+        man_sort_by_offset_link_action(&man_out);
         nchanged = copy_phase(&disk, &man_out, arg_out_manifest != NULL, i);
         r = get_next_usn(drive, &end_usn, &journal);
         if (r < 0) {
             err(1, "Unable to record ending USN entry\n");
         }
+        man_sort_by_id(&man_out);
         r = usn_phase(drive, start_usn, end_usn, journal, &man_out, i + 1);
         if (r < 0) {
             err(1, "usn_phase %d failed\n", i + 1);
@@ -3981,6 +3980,7 @@ int main(int argc, char **argv)
          * we need to do another "best-effort" copy just to put something in
          * there. Also need a copy if we were told not to do any retries at all
          */
+        man_sort_by_offset_link_action(&man_out);
         r = copy_phase(&disk, &man_out, arg_out_manifest != NULL, num_retries);
         if (r != 0) {
             /* Here we treat any remaining changed files as fatal
@@ -3995,6 +3995,8 @@ int main(int argc, char **argv)
         CloseHandle(drive);
         drive = INVALID_HANDLE_VALUE;
     }
+
+    man_sort_by_offset_link_action(&man_out);
 
     if (vm_links_phase_2(&disk, &man_out) < 0) {
         err(1, "vm_links_phase_2 failed");
