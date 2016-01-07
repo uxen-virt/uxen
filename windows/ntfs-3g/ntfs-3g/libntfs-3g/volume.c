@@ -115,6 +115,7 @@ static const char *access_denied_msg =
 "and the mounting user ID. More explanation is provided at\n"
 "http://tuxera.com/community/ntfs-3g-faq/#unprivileged\n";
 
+
 /**
  * ntfs_volume_alloc - Create an NTFS volume object and initialise it
  *
@@ -176,7 +177,7 @@ static int __ntfs_volume_release(ntfs_volume *v)
 	ntfs_attr_free(&v->lcnbmp_na);
 	if (ntfs_inode_free(&v->lcnbmp_ni))
 		ntfs_error_set(&err);
-	
+
 	if (v->mft_ni && NInoDirty(v->mft_ni))
 		ntfs_inode_sync(v->mft_ni);
 	ntfs_attr_free(&v->mftbmp_na);
@@ -973,6 +974,13 @@ ntfs_volume *ntfs_device_mount(struct ntfs_device *dev, unsigned long flags)
 				(long long)vol->lcnbmp_na->data_size, 
 				(long long)vol->lcnbmp_na->allocated_size);
 		goto io_error_exit;
+	}
+
+    /* Open the security inode. */
+	vol->secure_ni = ntfs_inode_open(vol, FILE_Secure);
+	if (!vol->secure_ni) {
+		ntfs_log_perror("Failed to open inode FILE_Secure");
+		goto error_exit;
 	}
 
 	/* Now load the upcase table from $UpCase. */

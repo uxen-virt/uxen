@@ -265,6 +265,8 @@ typedef struct ManifestEntry {
     uint64_t file_size;
     uint64_t link_id;
     uint64_t file_id;
+    uint32_t securid;
+    int cache_index;
     Action action;
     int excludable_single_file_entry;
     uint8_t sha[SHA1_DIGEST_SIZE]; /* only used/populated for file copies */
@@ -306,6 +308,7 @@ static ManifestEntry *man_push(Manifest *man)
 
     }
     memset(&man->entries[n], 0, sizeof(ManifestEntry));
+    man->entries[n].cache_index = -1;
     return &man->entries[n];
 }
 
@@ -423,6 +426,45 @@ static int cmp_system_handle(const void *a, const void *b)
 
     return (pa->ProcessId - pb->ProcessId);
 }
+
+/*
+ * Data used by the acl_phase.
+*/
+static PSID builtin_users = NULL;
+static PSID everyone = NULL;
+
+#define MAX_CACHED 512
+typedef struct {
+    PACL dacl;
+    SECURITY_DESCRIPTOR_RELATIVE *sdr;
+    uint32_t sdrsz;
+    int size;
+    volatile int valid;
+    int readable;
+} CachedAcl;
+
+CachedAcl cached_acls[MAX_CACHED];
+volatile int cache_size = 0;
+
+typedef struct {
+    Manifest *man;
+    int processed_entries;
+    int cache_hits;
+    int cache_misses;
+    volatile int *idx;
+} ACLThreadData;
+
+typedef enum {
+    ACL_Denied = 0,
+    ACL_Allowed = 1,
+    ACL_Absent = 2,
+} ACLType;
+
+/*
+ * End of acl_phase related global data.
+*/
+
+
 
 #define ENTER_FN() double _t = rtc(); \
     printf("\nenter %s\n", __FUNCTION__)
@@ -994,12 +1036,12 @@ int path_exists(wchar_t *fn, uint64_t *file_id, uint64_t *file_size, int *is_dir
         r = 1;
         if (GetFileInformationByHandle(h, &inf)) {
             if (!(inf.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
-                *file_id = ((uint64_t) inf.nFileIndexHigh << 32ULL) | inf.nFileIndexLow;
                 *file_size = ((uint64_t)inf.nFileSizeHigh << 32ULL) | inf.nFileSizeLow;
                 *is_dir = 0;
             } else {
                 *is_dir = 1;
             }
+            *file_id = ((uint64_t) inf.nFileIndexHigh << 32ULL) | inf.nFileIndexLow;
         }
         CloseHandle(h);
     }
@@ -1335,6 +1377,7 @@ typedef struct IO {
     void *buffer; // non-NULL if slot in use
     uint64_t size;
     uint64_t offset;
+    uint32_t securid;
     HANDLE event;
     IO_STATUS_BLOCK iosb;
     int last;
@@ -1423,7 +1466,7 @@ static void complete_io(IO* io)
     }
 
     if (disklib_write_simple(io->m->vol, io->m->name, io->buffer, io->size,
-                io->offset, 0) < io->size) {
+                io->offset, 0, io->securid) < io->size) {
         err(1, "ntfs write error: %s\n", strerror(ntfs_get_errno()));
     }
 
@@ -1488,7 +1531,7 @@ static void copy_file(ManifestEntry *m, HANDLE input, int calculate_shas)
             SHA1_Final(sha_ctx, m->sha);
             free(sha_ctx);
         }
-        if (disklib_write_simple(vol, path, NULL, 0, 0, 0)) {
+        if (disklib_write_simple(vol, path, NULL, 0, 0, 0, m->securid)) {
             err(1, "ntfs write error: %s\n", strerror(ntfs_get_errno()));
         }
     }
@@ -1508,6 +1551,7 @@ static void copy_file(ManifestEntry *m, HANDLE input, int calculate_shas)
         io->size = take;
         io->offset = offset;
         io->sha_ctx = sha_ctx;
+        io->securid = m->securid;
 
         assert(!io->buffer);
         io->buffer = malloc(take);
@@ -1518,11 +1562,170 @@ static void copy_file(ManifestEntry *m, HANDLE input, int calculate_shas)
     }
 }
 
-static int shallow_file(ntfs_fs_t fs,
-        const wchar_t *vm_path,
-        const wchar_t *host_path,
-        uint64_t size,
-        uint64_t file_id)
+int get_relative_sd_from_sd(SECURITY_DESCRIPTOR *sd,
+    PSID owner, PSID group, PACL dacl, PACL sacl,
+    SECURITY_DESCRIPTOR_RELATIVE **sdr, uint32_t *sdrsz)
+{
+    int ret = 0;
+    SECURITY_DESCRIPTOR_RELATIVE *out = NULL;
+
+    assert(sd);
+    assert(sdr && sdrsz);
+
+    int owner_len = (IsValidSid(owner) ? GetLengthSid(owner) : 0);
+    int group_len = (IsValidSid(group) ? GetLengthSid(group) : 0);
+    int sacl_len = (sacl ? sacl->AclSize : 0);
+    int dacl_len = (dacl ? dacl->AclSize : 0);
+
+    *sdrsz = sizeof(SECURITY_DESCRIPTOR_RELATIVE) + owner_len + group_len
+                + sacl_len + dacl_len;
+
+    out = malloc(*sdrsz);
+    if (!out) {
+        printf("Unable to allocate [%d] bytes\n", *sdrsz);
+        ret = -1;
+        goto exit;
+    }
+
+    char *offset = (char *)out;
+    offset += sizeof(SECURITY_DESCRIPTOR_RELATIVE);
+
+    out->Revision = sd->Revision;
+    out->Sbz1 = sd->Sbz1;
+    out->Control = sd->Control;
+
+    if(owner_len) {
+        memcpy(offset, owner, owner_len);
+        out->Owner = offset - (char *)out;
+        offset += owner_len;
+    }
+
+    if(group_len) {
+        memcpy(offset, group, group_len);
+        out->Group = offset - (char *)out;
+        offset += group_len;
+    }
+
+    if ((sd->Control & SE_SACL_PRESENT) && sacl) {
+        memcpy(offset, sacl, sacl_len);
+        out->Sacl = offset - (char *)out;
+        offset += sacl_len;
+    } else {
+        out->Sacl = offset - (char *)out;
+    }
+
+    if ((sd->Control & SE_DACL_PRESENT) && dacl) {
+        memcpy(offset, dacl, dacl_len);
+        out->Dacl = offset - (char *)out;
+        offset += dacl_len;
+    } else {
+        out->Dacl = offset - (char *)out;
+    }
+
+exit:
+    *sdr = out;
+    return ret;
+}
+
+int get_relative_sd_from_handle(HANDLE h, SECURITY_DESCRIPTOR_RELATIVE **sdr, uint32_t *sdrsz)
+{
+    assert(sdr);
+    assert(sdrsz);
+
+    int ret = 0;
+    PSID owner = NULL;
+    PSID group = NULL;
+    PACL dacl = NULL;
+    PACL sacl = NULL;
+    SECURITY_DESCRIPTOR *sd = NULL;
+
+    ret = GetSecurityInfo(h, SE_FILE_OBJECT,
+            OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION
+                | DACL_SECURITY_INFORMATION | SACL_SECURITY_INFORMATION,
+            &owner, &group, &dacl, &sacl, (void **)&sd);
+    if (ret != ERROR_SUCCESS) {
+        printf("GetSecurityInfo failed: [%u].\n", ret);
+        ret = -1;
+        goto exit;
+    }
+
+    ret = get_relative_sd_from_sd(sd, owner, group, dacl, sacl, sdr, sdrsz);
+    if (ret) {
+        printf("Unable to convert sd to relative sd : %d\n", ret);
+        goto exit;
+    }
+
+exit:
+    if (sd) {
+        LocalFree(sd);
+    }
+    return ret;
+}
+
+int get_securid_from_entry(ManifestEntry *m)
+{
+    int ret = 0;
+    SECURITY_DESCRIPTOR_RELATIVE *sdr = NULL;
+    HANDLE h = INVALID_HANDLE_VALUE;
+
+    assert(m);
+    assert(m->vol);
+
+    if (m->file_id == 0) {
+        ret = -1;
+        goto exit;
+    }
+
+    if (m->securid) {
+        ret = 0;
+        goto exit;
+    }
+
+    if (m->cache_index != -1) {
+        m->securid = disklib_ntfs_setsecurityattr(m->vol,
+                        (void*)cached_acls[m->cache_index].sdr,
+                        cached_acls[m->cache_index].sdrsz);
+        if (!m->securid) {
+            printf("disklib_ntfs_setsecurityattr failed\n");
+            ret = -1;
+        }
+        goto exit;
+    }
+
+    h = open_file_by_id(m->var->volume, m->file_id, READ_CONTROL |
+            ACCESS_SYSTEM_SECURITY, 0);
+
+    if (h == INVALID_HANDLE_VALUE || h == 0) {
+        printf("Unable to open %ls (err=%u)\n", m->name, ret);
+        ret = -1;
+        goto exit;
+    }
+
+    uint32_t sdrsz = 0;
+    ret = get_relative_sd_from_handle(h, &sdr, &sdrsz);
+    if (ret) {
+        printf("Error in get_relative_sd_from_handle : %d\n", ret);
+        goto exit;
+    }
+
+    m->securid = disklib_ntfs_setsecurityattr(m->vol, (void*)sdr, sdrsz);
+    if (!m->securid) {
+        printf("Error in disklib_ntfs_setsecurityattr : %d\n", errno);
+        goto exit;
+    }
+
+exit:
+    if (h && (h != INVALID_HANDLE_VALUE)) {
+        CloseHandle(h);
+    }
+    if (sdr) {
+        free(sdr);
+    }
+    return ret;
+}
+
+static int shallow_file(ManifestEntry *m,
+        const wchar_t *host_path)
 {
     size_t buf_size = 16 << 20;
     static void *buf = NULL;
@@ -1539,12 +1742,18 @@ static int shallow_file(ntfs_fs_t fs,
         }
     }
 
+    if (get_securid_from_entry(m)) {
+        printf("Unable to get securid for [%ls]\n",
+            m->host_name ? m->host_name : m->name);
+    }
+
+    uint64_t size = m->file_size;
     for (offset = 0; ; size -= take, offset += take) {
         take = size < buf_size ? size : buf_size;
         char *u = utf8(host_path);
-        set_current_filename(u, offset, file_id);
+        set_current_filename(u, offset, m->file_id);
 
-        if (disklib_write_simple(fs, vm_path, buf, take, offset, 1) < take) {
+        if (disklib_write_simple(m->vol, m->name, buf, take, offset, 1, m->securid) < take) {
             printf("ntfs write error: %s\n", strerror(ntfs_get_errno()));
             exit(1);
         }
@@ -1802,12 +2011,18 @@ int mkdir_phase(struct disk *disk, Manifest *man)
 
         if (m->action == MAN_MKDIR) {
             //printf("mkdir [%ls]\n", m->name);
+
+            if (get_securid_from_entry(m)) {
+                printf("Unable to get securid for [%ls]\n",
+                    m->host_name ? m->host_name : m->name);
+            }
+
             if (wcsncmp(m->name, L"/", MAX_PATH_LEN) == 0) {
                 /* Root is not a dir so need to skip this in case a top-level
                  * manifest entry maps a dir in to the root */
                 continue;
             }
-            if (disklib_mkdir_simple(m->vol, m->name) < 0) {
+            if (disklib_mkdir_simple(m->vol, m->name, m->securid) < 0) {
                 printf("unable to mkdir %ls : %s\n", m->name,
                         strerror(ntfs_get_errno()));
                 return -1;
@@ -2043,7 +2258,7 @@ int vm_links_phase_2(struct disk *disk, const Manifest *man)
                     printf("creating dir for %ls and retrying mklink\n", m->name);
                     wchar_t *dir = wcsdup(m->name);
                     strip_filename(dir);
-                    if (disklib_mkdir_simple(m->vol, dir) >= 0 &&
+                    if (disklib_mkdir_simple(m->vol, dir, m->securid) >= 0 &&
                         disklib_mklink_simple(m->vol, m->host_name, m->name) >= 0) {
                         err = 0;
                     }
@@ -2084,40 +2299,6 @@ int flush_phase(struct disk *disk)
 #if MAX_THREADS > MAXIMUM_WAIT_OBJECTS
 #error "Maximum number of threads can be at most 64(MAXIMUM_WAIT_OBJECTS)."
 #endif
-
-/*
- * Data used by the acl_phase.
-*/
-static PSID builtin_users = NULL;
-static PSID everyone = NULL;
-
-#define MAX_CACHED 512
-typedef struct {
-    ACL *acl;
-    volatile int valid;
-    int readable;
-} CachedAcl;
-
-CachedAcl cached_acls[MAX_CACHED];
-volatile int cache_size = 0;
-
-typedef struct {
-    Manifest *man;
-    int processed_entries;
-    int cache_hits;
-    int cache_misses;
-    volatile int *idx;
-} ACLThreadData;
-
-typedef enum {
-    ACL_Denied = 0,
-    ACL_Allowed = 1,
-    ACL_Absent = 2,
-} ACLType;
-
-/*
- * End of acl_phase related global data.
-*/
 
 /* Compare two ACLs for equality. Idea of caching ACL results seen on Stack Overflow. */
 static int acl_equal(ACL *a, ACL *b)
@@ -2253,7 +2434,7 @@ cleanup:
     return ret;
 }
 
-static int acl_file(HANDLE h, Action *action, int *acls_broken, int *hit)
+static int acl_file(HANDLE h, ManifestEntry *m, int *acls_broken, int *hit)
 {
     int readable = 1;
     int ret = 0;
@@ -2267,23 +2448,35 @@ static int acl_file(HANDLE h, Action *action, int *acls_broken, int *hit)
      * read it when the time comes to do so. */
     if (!*acls_broken) {
         int i;
-        PACL acl = NULL;
-        PSECURITY_DESCRIPTOR sec = NULL;
         DWORD rc;
+        PSID owner = NULL;
+        PSID group = NULL;
+        PACL dacl = NULL;
+        PACL sacl = NULL;
+        SECURITY_DESCRIPTOR *sd = NULL;
+        m->cache_index = -1;
 
-        rc = GetSecurityInfo(h, SE_FILE_OBJECT, DACL_SECURITY_INFORMATION,
-                    NULL, NULL, &acl, NULL, &sec);
-        if (rc != ERROR_SUCCESS || !acl) {
-            printf("GetSecurityInfo failed: [%u]. Handle = [%p]\n",
-                (uint32_t)rc, h);
+        rc = GetSecurityInfo(h, SE_FILE_OBJECT,
+                OWNER_SECURITY_INFORMATION | GROUP_SECURITY_INFORMATION
+                    | DACL_SECURITY_INFORMATION | SACL_SECURITY_INFORMATION,
+                &owner, &group, &dacl, &sacl, (void **)&sd);
+        if (rc != ERROR_SUCCESS) {
+            printf("GetSecurityInfo failed: [%d].\n", (int)rc);
             ret = -1;
             goto sec_error;
         }
 
+        if (!dacl) {
+            printf("got NULL dacl for %ls\n", m->host_name);
+            ret = -1;
+            goto rights_error;
+        }
+
         for (i = 0; i < cache_size; ++i) {
             if (__sync_bool_compare_and_swap(&cached_acls[i].valid, 1, 1)) {
-                if (cached_acls[i].acl && acl_equal(cached_acls[i].acl, acl)) {
+                if (acl_equal(cached_acls[i].dacl, dacl)){
                     *hit = 1;
+                    m->cache_index = i;
                     readable = cached_acls[i].readable;
                     break;
                 }
@@ -2291,7 +2484,7 @@ static int acl_file(HANDLE h, Action *action, int *acls_broken, int *hit)
         }
 
         if (!*hit) { /* ACL not found in cache. */
-            int rc = read_allowed(acl, &readable);
+            int rc = read_allowed(dacl, &readable);
             if (rc < 0) {
                 printf("read_allowed failed, disabling ACL check!\n");
                 *acls_broken = 1;
@@ -2303,9 +2496,17 @@ static int acl_file(HANDLE h, Action *action, int *acls_broken, int *hit)
             if (index >= MAX_CACHED) {
                 printf("Can't cache element as cache is full\n");
             } else {
-                cached_acls[index].acl = malloc(acl->AclSize);
-                assert(cached_acls[index].acl); // XXX error handling
-                memcpy(cached_acls[index].acl, acl, acl->AclSize);
+                cached_acls[index].dacl = malloc(dacl->AclSize);
+                assert(cached_acls[index].dacl); // XXX error handling
+                memcpy(cached_acls[index].dacl, dacl, dacl->AclSize);
+
+                rc = get_relative_sd_from_sd(sd, owner, group, dacl, sacl,
+                        &cached_acls[index].sdr, &cached_acls[index].sdrsz);
+                if (!rc) {
+                    m->cache_index = index;
+                }
+                // TODO: Free all cached_index[index].sdr at exit time
+
                 cached_acls[index].readable = readable;
                 if (!__sync_bool_compare_and_swap(&cached_acls[index].valid, 0, 1)) {
                     printf("Cache error: wrongly initialized for [%d]!\n",
@@ -2320,11 +2521,11 @@ static int acl_file(HANDLE h, Action *action, int *acls_broken, int *hit)
         }
 
 rights_error:
-        LocalFree(sec);
+        LocalFree(sd);
 sec_error:
 
         if (!readable) {
-            *action = MAN_CHANGE;
+            m->action = MAN_CHANGE;
         }
     }
 
@@ -2358,7 +2559,8 @@ static DWORD WINAPI acl_files_thread(LPVOID lpParam)
 
         assert(m->file_id != 0);
 
-        h = open_file_by_id(m->var->volume, m->file_id, READ_CONTROL, 0);
+        h = open_file_by_id(m->var->volume, m->file_id, READ_CONTROL |
+                ACCESS_SYSTEM_SECURITY, 0);
         if (h == INVALID_HANDLE_VALUE || h == 0) {
             printf("Unable to open file %ls (err=%u)\n", m->name,
                     (int)GetLastError());
@@ -2368,7 +2570,7 @@ static DWORD WINAPI acl_files_thread(LPVOID lpParam)
         }
 
         hit = 0;
-        if (acl_file(h, &m->action, &acls_broken, &hit) < 0) {
+        if (acl_file(h, m, &acls_broken, &hit) < 0) {
             printf("acl_file failed for [%ls] : [%d]\n", m->name,
                 (int)GetLastError());
             m->action = MAN_CHANGE;
@@ -2549,7 +2751,7 @@ int shallow_phase(struct disk *disk, Manifest *man, wchar_t *map_idx)
             //printf("%d,%d shallow %ls @ %"PRIx64"\n", i, man->n, m->name, m->offset);
             wchar_t host_name[MAX_PATH_LEN];
             make_unshadowed_host_path(host_name, m);
-            shallow_file(m->vol, m->name, host_name, m->file_size, m->file_id);
+            shallow_file(m, host_name);
             total_size_shallowed += m->file_size;
             ++j;
         }
@@ -2660,6 +2862,20 @@ int copy_phase(struct disk *disk, Manifest *man, int calculate_shas, int retry)
                             continue;
                         }
                         m->file_size = info.EndOfFile.QuadPart;
+                    }
+                    if (!m->securid) {
+                        if (m->cache_index == -1) {
+                            if (get_securid_from_entry(m)) {
+                                printf("Unable to get securid for [%ls]\n",
+                                    man->entries[i].host_name ?
+                                        man->entries[i].host_name
+                                        : man->entries[i].name);
+                            }
+                        } else {
+                            m->securid = disklib_ntfs_setsecurityattr(m->vol,
+                                            (void*)cached_acls[m->cache_index].sdr,
+                                            cached_acls[m->cache_index].sdrsz);
+                        }
                     }
                     copy_file(m, h, calculate_shas);
                     total_size_copied += m->file_size;
@@ -3752,8 +3968,31 @@ int main(int argc, char **argv)
         exit(1);
     }
 
+    /* Find out drive letter of system drive, for use in shallow map. */
+    wchar_t *systemroot;
+    systemroot = _wgetenv(L"SystemDrive");
+    if (systemroot && systemroot[1] == L':') {
+        rootdrive = systemroot[0];
+    }
+
     USN start_usn = 0ULL;
+    HANDLE drive = INVALID_HANDLE_VALUE;
     if (shallow_allowed) {
+        wchar_t unc_systemroot[MAX_PATH_LEN];
+        path_join(unc_systemroot, L"\\\\?\\", systemroot);
+        drive = CreateFileW(
+                        unc_systemroot,
+                        GENERIC_READ,
+                        FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
+                        NULL,
+                        OPEN_ALWAYS,
+                        FILE_FLAG_NO_BUFFERING,
+                        NULL);
+        if (drive == INVALID_HANDLE_VALUE) {
+            err(1, "Unable to open volume [%ls]: %d\n",
+                unc_systemroot, (int)GetLastError());
+        }
+
         if (arg_usn) {
             start_usn = strtoull(arg_usn, NULL, 0);
             if (start_usn == ULLONG_MAX) {
@@ -3761,15 +4000,14 @@ int main(int argc, char **argv)
                 print_usage();
                 exit(1);
             }
+        } else {
+            if (get_next_usn(drive, &start_usn, NULL) < 0) {
+                err(1, "Unable to record starting USN entry\n");
+            }
         }
+        printf("START USN = [0x%"PRIx64"]\n", (uint64_t)start_usn);
     }
 
-    /* Find out drive letter of system drive, for use in shallow map. */
-    wchar_t *systemroot;
-    systemroot = _wgetenv(L"SystemDrive");
-    if (systemroot && systemroot[1] == L':') {
-        rootdrive = systemroot[0];
-    }
     wchar_t *location = _wfullpath(NULL, wide(arg_swap_file), 0);
     normalize_string(location);
     strip_filename(location);
@@ -3796,30 +4034,6 @@ int main(int argc, char **argv)
 
     man_sort_by_name(&suffixes);
     man_uniq_by_name_and_action(&suffixes);
-
-    HANDLE drive = INVALID_HANDLE_VALUE;
-    if (!skip_usn_phase) {
-        wchar_t unc_systemroot[MAX_PATH_LEN];
-        path_join(unc_systemroot, L"\\\\?\\", systemroot);
-        drive = CreateFileW(
-                        unc_systemroot,
-                        GENERIC_READ,
-                        FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE,
-                        NULL,
-                        OPEN_ALWAYS,
-                        FILE_FLAG_NO_BUFFERING,
-                        NULL);
-        if (drive == INVALID_HANDLE_VALUE) {
-            err(1, "Unable to open volume [%ls]: %d\n",
-                unc_systemroot, (int)GetLastError());
-        }
-
-        if (!arg_usn) {
-            if (get_next_usn(drive, &start_usn, NULL) < 0) {
-                err(1, "Unable to record starting USN entry\n");
-            }
-        }
-    }
 
     /* Needed to scan exclusively-opened files when not using VSS, because of
      * how path_exists() is implemented.
@@ -3991,11 +4205,6 @@ int main(int argc, char **argv)
         }
     }
 
-    if (drive != INVALID_HANDLE_VALUE) {
-        CloseHandle(drive);
-        drive = INVALID_HANDLE_VALUE;
-    }
-
     man_sort_by_offset_link_action(&man_out);
 
     if (vm_links_phase_2(&disk, &man_out) < 0) {
@@ -4015,6 +4224,11 @@ int main(int argc, char **argv)
 
     if (flush_phase(&disk) < 0) {
         err(1, "flush_phase failed");
+    }
+
+    if (drive != INVALID_HANDLE_VALUE) {
+        CloseHandle(drive);
+        drive = INVALID_HANDLE_VALUE;
     }
 
     printf("done. exit.\n");

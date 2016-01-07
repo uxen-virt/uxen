@@ -242,6 +242,11 @@ extern int ntfs_sid_to_mbs_size(const SID *sid);
 extern char *ntfs_sid_to_mbs(const SID *sid, char *sid_str,
 		size_t sid_str_size);
 extern void ntfs_generate_guid(GUID *guid);
+
+extern le32 setsecurityattr(ntfs_volume *vol,
+			const SECURITY_DESCRIPTOR_RELATIVE *attr, s64 attrsz);
+extern int update_secur_descr_from_securid(ntfs_volume *vol, ntfs_inode *ni,
+        le32 securid);
 extern int ntfs_sd_add_everyone(ntfs_inode *ni);
 
 extern le32 ntfs_security_hash(const SECURITY_DESCRIPTOR_RELATIVE *sd, 
@@ -301,7 +306,6 @@ int ntfs_get_ntfs_acl(struct SECURITY_CONTEXT *scx, ntfs_inode *ni,
 			char *value, size_t size);
 int ntfs_set_ntfs_acl(struct SECURITY_CONTEXT *scx, ntfs_inode *ni,
 			const char *value, size_t size, int flags); 
-
 int ntfs_get_ntfs_attrib(ntfs_inode *ni, char *value, size_t size);
 int ntfs_set_ntfs_attrib(ntfs_inode *ni,
 			const char *value, size_t size,	int flags);

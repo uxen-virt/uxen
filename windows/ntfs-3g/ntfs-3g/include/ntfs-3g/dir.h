@@ -67,6 +67,20 @@ extern void ntfs_inode_update_mbsname(ntfs_inode *dir_ni, const char *name,
 
 extern ntfs_inode *ntfs_pathname_to_inode(ntfs_volume *vol, ntfs_inode *parent,
 		const char *pathname);
+
+extern le32 ntfs_setsecurityattr(ntfs_volume *vol,
+            const SECURITY_DESCRIPTOR_RELATIVE *attr, s64 attrsz);
+
+extern int ntfs_updatesecurityattr(ntfs_volume *vol,
+            ntfs_inode *ni, le32 securid);
+
+extern struct SECURITY_API *ntfs_initialize_security(ntfs_volume *vol,
+				unsigned long flags);
+
+extern BOOL ntfs_leave_security(struct SECURITY_API *scapi);
+
+extern int ntfs_get_acl(ntfs_volume *vol, ntfs_inode *ni, char *value, le32 size);
+
 extern ntfs_inode *ntfs_create(ntfs_inode *dir_ni, le32 securid,
 		ntfschar *name,	u8 name_len, mode_t type);
 extern ntfs_inode *ntfs_create_device(ntfs_inode *dir_ni, le32 securid,

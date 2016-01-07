@@ -53,9 +53,10 @@ int disklib_ntfs_link(ntfs_fs_t fs, const char *target, const char *link);
 char *disklib_ntfs_readlink(ntfs_fs_t fs, const char *path, unsigned int *type);
 
 /* Simple & fast versions working on wide chars. */
-int disklib_mkdir_simple(ntfs_fs_t fs, const wchar_t *path);
+int disklib_ntfs_setsecurityattr(ntfs_fs_t fs, const void *attr, long long attrsz);
+int disklib_mkdir_simple(ntfs_fs_t fs, const wchar_t *path, uint32_t securid);
 int disklib_write_simple(ntfs_fs_t fs, const wchar_t *path, void *buffer,
-        uint64_t size, uint64_t offset, int force_non_resident);
+        uint64_t size, uint64_t offset, int force_non_resident, uint32_t securid);
 int disklib_mklink_simple(ntfs_fs_t fs, const wchar_t *target, const wchar_t *name);
 
 /* exactly copy an element (file/dir) from one filesystem to another,

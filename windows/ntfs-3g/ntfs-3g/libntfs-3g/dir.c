@@ -1683,6 +1683,36 @@ err_out:
 	return NULL;
 }
 
+le32 ntfs_setsecurityattr(ntfs_volume *vol,
+            const SECURITY_DESCRIPTOR_RELATIVE *attr, s64 attrsz)
+{
+    return setsecurityattr(vol, attr, attrsz);
+}
+
+int ntfs_updatesecurityattr(ntfs_volume *vol,
+            ntfs_inode *ni, le32 securid)
+{
+    return update_secur_descr_from_securid(vol, ni, securid);
+}
+
+int ntfs_get_acl(ntfs_volume *vol, ntfs_inode *ni, char *value, le32 size)
+{
+    struct SECURITY_CONTEXT dummy_ctx = {vol, };
+    return ntfs_get_ntfs_acl(&dummy_ctx, ni, value, size);
+}
+
+struct SECURITY_API *ntfs_initialize_security(ntfs_volume *vol,
+				unsigned long flags)
+{
+    return ntfs_initialize_file_security_without_mount(vol, flags);
+}
+
+BOOL ntfs_leave_security(struct SECURITY_API *scapi)
+{
+    return ntfs_leave_file_security_without_mount(scapi);
+}
+
+
 /**
  * Some wrappers around __ntfs_create() ...
  */

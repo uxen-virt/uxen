@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "compat.h"
 #include "disklib.h"
 #include "partition.h"
 #include "fs-ntfs.h"
@@ -30,6 +31,7 @@
 
 #include "ntdev.h"
 
+static void *sec_context = NULL;
 #if 1
 #define dprintf RTPrintf
 #else
@@ -74,6 +76,10 @@ static void fs_unref(ntfs_fs_t fs)
     fs->ref--;
 
     if ( !fs->ref ) {
+        if (sec_context) {
+            ntfs_leave_security(sec_context);
+            sec_context = NULL;
+        }
         ntfs_umount(fs->vol, 0);
         RTMemFree(fs);
     }
@@ -182,6 +188,13 @@ ntfs_fs_t disklib_ntfs_mount(partition_t part, unsigned rw)
     if ( NULL == fs->vol ) {
         err = mount_error(ntfs_get_errno());
         goto out_free;
+    }
+
+    sec_context = ntfs_initialize_security(fs->vol, flags);
+    if ( NULL == sec_context) {
+        dprintf("%s: failed to secure device\n", __func__);
+        err = DISKLIB_ERR_NO_PRIVILEGE;
+        goto out;
     }
 
     ntfs_set_ignore_case(fs->vol);
@@ -771,8 +784,18 @@ static struct {
 
 static int cache_valid = -1;
 
+int disklib_ntfs_setsecurityattr(ntfs_fs_t fs, const void *attr, long long attrsz)
+{
+    assert (fs);
+    assert(fs->vol);
+    assert(attr);
+
+    return ntfs_setsecurityattr(fs->vol, attr, attrsz);
+}
+
 static
-ntfs_inode *create_simple(ntfs_fs_t fs, const wchar_t *path, int mode)
+ntfs_inode *create_simple(ntfs_fs_t fs, const wchar_t *path, int mode,
+        uint32_t securid)
 {
     ntfs_inode *parent = ntfs_inode_open(fs->vol, FILE_root);
     ntfs_inode *inode = NULL;
@@ -834,13 +857,21 @@ ntfs_inode *create_simple(ntfs_fs_t fs, const wchar_t *path, int mode)
             ++i;
         }
     }
+
+    if (inode && securid && (inode->security_id != securid)) {
+        /* Update the security on the inode */
+        if (ntfs_updatesecurityattr(fs->vol, inode, securid)) {
+            printf("Failed to update standard informations\n");
+        }
+    }
+
 out:
     return inode;
 }
 
-int disklib_mkdir_simple(ntfs_fs_t fs, const wchar_t *path)
+int disklib_mkdir_simple(ntfs_fs_t fs, const wchar_t *path, uint32_t securid)
 {
-    ntfs_inode *dir = create_simple(fs, path, S_IFDIR);
+    ntfs_inode *dir = create_simple(fs, path, S_IFDIR, securid);
     if (!dir) {
         return -1;
     }
@@ -863,12 +894,12 @@ const wchar_t *last_slash(const wchar_t *path)
 }
 
 int disklib_write_simple(ntfs_fs_t fs, const wchar_t *path, void *buffer,
-        uint64_t size, uint64_t offset, int force_non_resident)
+        uint64_t size, uint64_t offset, int force_non_resident, uint32_t securid)
 {
     int64_t r;
     ntfs_attr *na;
 
-    ntfs_inode *ni = create_simple(fs, path, S_IFREG);
+    ntfs_inode *ni = create_simple(fs, path, S_IFREG, securid);
     if (!ni) {
         printf("no inode for %ls\n", path);
         return -1;
@@ -911,14 +942,14 @@ int disklib_mklink_simple(ntfs_fs_t fs, const wchar_t *target,
     if (last) {
         *last = '\0';
     }
-    ntfs_inode *t = create_simple(fs, target, 0);
+    ntfs_inode *t = create_simple(fs, target, 0, 0);
     if (!t) {
         printf("mklink: cannot resolve target %ls\n", target);
         return -1;
     }
     /* We expect the target dir to have been created, so we
      * pass in mode == 0. */
-    ntfs_inode *d = create_simple(fs, dup, 0);
+    ntfs_inode *d = create_simple(fs, dup, 0, 0);
     if (!d) {
         ntfs_inode_close(t);
         printf("mklink: cannot resolve link directory %ls\n", dup);
@@ -1591,6 +1622,7 @@ static ntfs_inode *do_copy(ntfs_fs_t src, ntfs_fs_t dst,
     void *rpdata;
     size_t rpsz;
     int mode;
+    char *attrs = NULL;
 
     if ( cont )
         *cont = NULL;
@@ -1655,7 +1687,18 @@ static ntfs_inode *do_copy(ntfs_fs_t src, ntfs_fs_t dst,
             goto out_close_dst_ni;
     }
 
-    /* TODO: copy over ACL's */
+    ret = ntfs_get_acl(src_ni->vol, src_ni, NULL, 0);
+    if (ret > 0) {
+        attrs = malloc(ret + 1);
+        if (attrs) {
+            ret = ntfs_get_acl(src_ni->vol, src_ni, attrs, ret + 1);
+            if (ret > 0) {
+                le32 securid = ntfs_setsecurityattr(dst->vol,
+                    (const SECURITY_DESCRIPTOR_RELATIVE*)attrs, ret);
+                ntfs_updatesecurityattr(dst->vol, dst_ni, securid);
+            }
+        }
+    }
 
     err = DISKLIB_ERR_SUCCESS;
     goto out_close_src_ni;
@@ -1665,7 +1708,8 @@ out_close_dst_ni:
 out_close_src_ni:
     ntfs_inode_close(src_ni);
 out:
-    disklib__set_errno(err);;
+    free(attrs);
+    disklib__set_errno(err);
     if ( err != DISKLIB_ERR_SUCCESS )
         return NULL;
     return dst_ni;

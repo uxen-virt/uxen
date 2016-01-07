@@ -798,7 +798,7 @@ static le32 entersecurityattr(ntfs_volume *vol,
  *	needed while fuse is not multithreaded
  */
 
-static le32 setsecurityattr(ntfs_volume *vol,
+le32 setsecurityattr(ntfs_volume *vol,
 			const SECURITY_DESCRIPTOR_RELATIVE *attr, s64 attrsz)
 {
 	struct SDH *psdh;	/* this is an image of index (le) */
@@ -893,17 +893,12 @@ static le32 setsecurityattr(ntfs_volume *vol,
 			if (found)
 				securid = psdh->keysecurid;
 			else {
-				if (res) {
-					errno = res;
-					securid = const_cpu_to_le32(0);
-				} else {
-					/*
-					 * no matching key :
-					 * have to build a new one
-					 */
-					securid = entersecurityattr(vol,
-						attr, attrsz, hash);
-				}
+				/*
+				 * no matching key :
+				 * have to build a new one
+				 */
+				securid = entersecurityattr(vol,
+					attr, attrsz, hash);
 			}
 		}
 	}
@@ -983,15 +978,35 @@ static int update_secur_descr(ntfs_volume *vol,
 		}
 #if !FORCE_FORMAT_v1x
 	} else {
+		/* update for NTFS format v3.x */
+		le32 securid;
+		securid = setsecurityattr(vol,
+			(const SECURITY_DESCRIPTOR_RELATIVE*)newattr, (s64)newattrsz);
+        res = update_secur_descr_from_securid(vol, ni, securid);
+	}
+#endif
+
+	/* mark node as dirty */
+	NInoSetDirty(ni);
+	return (res);
+}
+
+int update_secur_descr_from_securid(ntfs_volume *vol, ntfs_inode *ni,
+        le32 securid)
+{
+	int res = 0;
+	ntfs_attr *na;
+
+#if !FORCE_FORMAT_v1x
+	if ((vol->major_ver < 3) || !vol->secure_ni) {
+#endif
+    res = -1;
+
+#if !FORCE_FORMAT_v1x
+	} else {
 
 		/* update for NTFS format v3.x */
-
-		le32 securid;
-
-		securid = setsecurityattr(vol,
-			(const SECURITY_DESCRIPTOR_RELATIVE*)newattr,
-			(s64)newattrsz);
-		if (securid) {
+		if (securid && (ni->security_id != securid)) {
 			na = ntfs_attr_open(ni, AT_STANDARD_INFORMATION,
 				AT_UNNAMED, 0);
 			if (na) {
@@ -1011,13 +1026,11 @@ static int update_secur_descr(ntfs_volume *vol,
 				ni->security_id = securid;
 				ntfs_attr_close(na);
 			} else {
-				ntfs_log_error("Failed to update "
-					"standard informations\n");
+				ntfs_log_error("Failed to update standard informations\n");
 				errno = EIO;
 				res = -1;
 			}
-		} else
-			res = -1;
+		}
 	}
 #endif
 
@@ -1729,7 +1742,7 @@ static char *retrievesecurityattr(ntfs_volume *vol, SII_INDEX_KEY id)
  *	The returned descriptor is dynamically allocated and has to be freed
  */
 
-static char *getsecurityattr(ntfs_volume *vol, ntfs_inode *ni)
+char *getsecurityattr(ntfs_volume *vol, ntfs_inode *ni)
 {
 	SII_INDEX_KEY securid;
 	char *securattr;
@@ -3230,7 +3243,12 @@ int ntfs_sd_add_everyone(ntfs_inode *ni)
 	ace->type = ACCESS_ALLOWED_ACE_TYPE;
 	ace->flags = OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE;
 	ace->size = const_cpu_to_le16(sizeof(ACCESS_ALLOWED_ACE));
-	ace->mask = const_cpu_to_le32(0x1f01ff); /* FIXME */
+
+    /* Bromium: Sane default permissions. */
+    ace->mask = const_cpu_to_le32(0x1f01ff & ~(FILE_WRITE_DATA |
+                FILE_DELETE_CHILD | DELETE | FILE_ADD_FILE |
+                FILE_WRITE_ATTRIBUTES | FILE_WRITE_EA));
+
 	ace->sid.revision = SID_REVISION;
 	ace->sid.sub_authority_count = 1;
 	ace->sid.sub_authority[0] = const_cpu_to_le32(0);
@@ -4253,7 +4271,8 @@ void ntfs_close_secure(struct SECURITY_CONTEXT *scx)
 		ntfs_inode_close(vol->secure_ni);
 		
 	}
-	ntfs_free_mapping(scx->mapping);
+// XXX Jacob: disable this call to avoid crashing
+//	ntfs_free_mapping(scx->mapping);
 	free_caches(scx);
 }
 
@@ -5041,6 +5060,30 @@ int ntfs_get_group(struct SECURITY_API *scapi, const SID *gsid)
  *	Returns an (obscured) struct SECURITY_API* needed for further calls
  *		NULL if not root (EPERM) or device is mounted (EBUSY)
  */
+struct SECURITY_API *ntfs_initialize_file_security_without_mount(ntfs_volume *vol,
+                unsigned long flags)
+{
+	struct SECURITY_API *scapi = NULL;
+	struct SECURITY_CONTEXT *scx = NULL;
+
+    scapi = (struct SECURITY_API*)
+        ntfs_malloc(sizeof(struct SECURITY_API));
+    if (!ntfs_volume_get_free_space(vol)
+        && scapi) {
+        scapi->magic = MAGIC_API;
+        scapi->seccache = (struct PERMISSIONS_CACHE*)NULL;
+        scx = &scapi->security;
+        scx->vol = vol;
+        scx->uid = getuid();
+        scx->gid = getgid();
+        scx->pseccache = &scapi->seccache;
+        scx->vol->secure_flags = 0;
+            /* accept no mapping and no $Secure */
+        ntfs_build_mapping(scx,(const char*)NULL,TRUE);
+        ntfs_open_secure(vol);
+    }
+	return (scapi);
+}
 
 struct SECURITY_API *ntfs_initialize_file_security(const char *device,
 				unsigned long flags)
@@ -5109,4 +5152,14 @@ BOOL ntfs_leave_file_security(struct SECURITY_API *scapi)
 	}
 	return (ok);
 }
+
+BOOL ntfs_leave_file_security_without_mount(struct SECURITY_API *scapi)
+{
+	if (scapi && (scapi->magic == MAGIC_API) && scapi->security.vol) {
+		ntfs_close_secure(&scapi->security);
+		free(scapi);
+	}
+	return TRUE;
+}
+
 
