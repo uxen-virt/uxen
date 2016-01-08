@@ -821,6 +821,7 @@ ntfs_inode *create_simple(ntfs_fs_t fs, const wchar_t *path, int mode,
                         && memcmp(cn, b, sizeof(wchar_t) * name_len) == 0)) {
                 /* Cache miss. */
                 memcpy(cn, b, sizeof(wchar_t) * name_len);
+                cn[name_len] = L'\0';
                 cache[i].name_len = name_len;
 
                 *inum = ntfs_inode_lookup_by_name(parent, cn, name_len);
@@ -833,7 +834,12 @@ ntfs_inode *create_simple(ntfs_fs_t fs, const wchar_t *path, int mode,
             inode = (*inum != ~0ULL) ? ntfs_inode_open(fs->vol, *inum) : NULL;
             if (!inode) {
                 if (mode) {
-                    inode = ntfs_create(parent, 0, cn, name_len, c ? S_IFDIR : mode);
+                    if (c) {
+                        printf("WARNING: creating %ls (for %ls) with no securid!\n",
+                                cn, path);
+                    }
+                    inode = ntfs_create(parent, c ? 0 : securid, cn, name_len,
+                            c ? S_IFDIR : mode);
                     if (!inode) {
                         printf("not able to create %ls : %s\n",
                                 path, strerror(ntfs_get_errno()));
@@ -855,13 +861,6 @@ ntfs_inode *create_simple(ntfs_fs_t fs, const wchar_t *path, int mode,
             parent = inode;
             b = p + 1;
             ++i;
-        }
-    }
-
-    if (inode && securid && (inode->security_id != securid)) {
-        /* Update the security on the inode */
-        if (ntfs_updatesecurityattr(fs->vol, inode, securid)) {
-            printf("Failed to update standard informations\n");
         }
     }
 

@@ -144,6 +144,8 @@ typedef struct HeapElem {
     wchar_t *name;
     uint64_t file_id;
     wchar_t *rerooted_name;
+    int top_level;
+    int recurse;
 } HeapElem;
 
 typedef struct Heap {
@@ -250,8 +252,9 @@ typedef enum { /* actions are ordered from most to least desirable. */
         MAN_SHALLOW = 5, /* normal shallow, e.g. via winsxs name. */
         MAN_COPY_FOLLOW_LINKS = 6, /* deep copy but also populate other host-side linked files. */
         MAN_COPY = 7, /* plain copy from host to vm. */
-        MAN_MKDIR = 8, /* used internally to ensure dirs are created before use. */
-        MAN_LINK = 9, /* used internally to hardlink files with >1 names. */
+        MAN_COPY_EMPTY_DIR = 8, /* plain copy from host to vm. */
+        MAN_MKDIR = 9, /* used internally to ensure dirs are created before use. */
+        MAN_LINK = 10, /* used internally to hardlink files with >1 names. */
     } Action;
 
 typedef struct ManifestEntry {
@@ -282,8 +285,6 @@ typedef struct Manifest {
     int (*order_fn)(const void *, const void *);
     ManifestEntry **entries_ex;
 } Manifest;
-
-ManifestEntry *find_by_prefix(Manifest *man, const wchar_t *fn);
 
 static void man_init(Manifest *man)
 {
@@ -661,7 +662,6 @@ int read_manifest(FILE *f, VarList *vars, Manifest *suffix)
     char whole_line[MAX_PATH_LEN];
     char *fn;
     int line = 1;
-    Variable *dummy_var = varlist_find(vars, L"_dummy_");
 
     printf("reading manifest\n");
     for (line = 1; fgets(whole_line, sizeof(whole_line), f); ++line) {
@@ -747,15 +747,7 @@ int read_manifest(FILE *f, VarList *vars, Manifest *suffix)
                     action = follow_host_links ? MAN_SHALLOW_FOLLOW_LINKS : MAN_SHALLOW;
                     break;
                 case ':': {
-                    action = MAN_MKDIR;
-                    /* These don't have a "left" and "right" so are handled here */
-                    m = man_push(dummy_var->man);
-                    m->name = wide(fn+1);
-                    normalize_string(m->name);
-                    strip_trailing_slash(m->name);
-                    m->name_len = wcslen(m->name);
-                    m->action = action;
-                    ok = 1;
+                    action = MAN_COPY_EMPTY_DIR;
                     break;
                 }
                 default:
@@ -813,7 +805,19 @@ int read_manifest(FILE *f, VarList *vars, Manifest *suffix)
     return 0;
 }
 
-ManifestEntry *find_by_prefix(Manifest *man, const wchar_t *fn)
+static ManifestEntry *find_full_name(Manifest *man, const wchar_t *fn)
+{
+    int i;
+    for (i = 0; i < man->n; ++i) {
+        ManifestEntry *e = &man->entries[i];
+        if (!wcsicmp(fn, e->name)) {
+            return e;
+        }
+    }
+    return NULL;
+}
+
+static ManifestEntry *find_by_prefix(Manifest *man, const wchar_t *fn)
 {
     int i;
     ManifestEntry *match = NULL;
@@ -830,7 +834,7 @@ ManifestEntry *find_by_prefix(Manifest *man, const wchar_t *fn)
     return match;
 }
 
-ManifestEntry *find_by_suffix(Manifest *man, const wchar_t *fn)
+static ManifestEntry *find_by_suffix(Manifest *man, const wchar_t *fn)
 {
     int i;
     size_t fn_len = wcslen(fn);
@@ -985,7 +989,7 @@ int stat_file(HANDLE volume, uint64_t file_id, uint64_t *file_size, uint64_t *of
     DWORD bytes;
 
     HANDLE h = open_file_by_id(volume, file_id, FILE_READ_ATTRIBUTES, 0);
-    if (h == INVALID_HANDLE_VALUE || h == 0) {
+    if (h == INVALID_HANDLE_VALUE) {
         return -1;
     }
 
@@ -1048,9 +1052,13 @@ int path_exists(wchar_t *fn, uint64_t *file_id, uint64_t *file_size, int *is_dir
     return r;
 }
 
-int bfs(Variable *var, Manifest *suffixes,
-        Manifest *out, struct disk *disk,
-        ManifestEntry* toplevel_entry)
+int bfs(Variable *var,
+        Manifest *suffixes,
+        Manifest *out,
+        Manifest *extra_dirs,
+        struct disk *disk,
+        ManifestEntry* toplevel_entry,
+        int recurse)
 {
     assert(disk->bootvol);
 
@@ -1060,7 +1068,6 @@ int bfs(Variable *var, Manifest *suffixes,
     int manifested_action;
     int action;
     const size_t info_sz = 4<<20;
-    ManifestEntry *m = toplevel_entry;
     void *info_buf;
     const wchar_t* dn = toplevel_entry->name;
     assert(min_shallow_size >= SECTOR_SIZE);
@@ -1068,14 +1075,14 @@ int bfs(Variable *var, Manifest *suffixes,
     int is_dir;
     Heap heaps[2];
 
-    manifested_action = m->action;
-    action = m->action;
+    manifested_action = toplevel_entry->action;
+    action = toplevel_entry->action;
 
     /* First check if this is a single file that needs to be included
      * in the output manifest by itself. */
     if (path_exists(prefix(var, dn), &file_id, &file_size, &is_dir)) {
         if (!is_dir) {
-            if (m->excludable_single_file_entry) {
+            if (toplevel_entry->excludable_single_file_entry) {
                 /* Check if we should exclude it or otherwise ignore this entry */
                 ManifestEntry* otherm = find_by_prefix(var->man, dn);
                 if (otherm && otherm->action < action) {
@@ -1089,8 +1096,8 @@ int bfs(Variable *var, Manifest *suffixes,
                           dn,
                           file_size,
                           file_id,
-                          m->rewrite,
-                          m->action);
+                          toplevel_entry->rewrite,
+                          toplevel_entry->action);
             //printf("1.Adding entry [%S]=[%d]=>[%S]\n", e->name, e->action, (e->rewrite ? e->rewrite : L"NULL"));
             return 0;
         } else {
@@ -1101,13 +1108,13 @@ int bfs(Variable *var, Manifest *suffixes,
         }
     } else {
         /* We do not like overly broad manifests, so complain about things not found. */
-        if (!m->excludable_single_file_entry) {
+        if (!toplevel_entry->excludable_single_file_entry) {
             /* But don't complain about things marked as excludable single file
              * entries, as well as honouring excludes these are allowed to not
              * exist.
              */
             uint32_t err = (uint32_t)GetLastError();
-            printf("warning: file not found! [%ls:%ls] err=%u\n", var->path, dn, err);
+            printf("warning: file not found! [%ls%ls] err=%u\n", var->path, dn, err);
         }
         return 0;
     }
@@ -1125,28 +1132,9 @@ int bfs(Variable *var, Manifest *suffixes,
     }
 
     /* Do a modified breadth-first search from the supplied directory name down.  */
-    HeapElem he = {wcsdup(dn), 0, m->rewrite};
+    HeapElem he = {wcsdup(dn), 0, toplevel_entry->rewrite, 1, recurse};
     //printf("1.pushing [%S], [%S]\n", he.name, (he.rerooted_name ? he.rerooted_name : L"NULL"));
     directories++;
-
-    /* Add a MAN_MKDIR for the top-level dir manifest entry in case there are files/hardlinks
-     * included at the top level, at which point a dir otherwise won't exist yet.
-     */
-    ManifestEntry *e = man_push(out);
-    e->vol = disk->bootvol;
-    e->action = MAN_MKDIR;
-    e->var = var;
-    e->rewrite = wcsdup(m->rewrite);
-    e->name = wcsdup(dn);
-    /* These came from user input so require a little more cleaning up.
-     * disklib_mkdir_simple gets upset if you don't strip trailing slashes */
-    if (e->rewrite) {
-        normalize_string(e->rewrite);
-        strip_trailing_slash(e->rewrite);
-    }
-    normalize_string(e->name);
-    strip_trailing_slash(e->name);
-    e->name_len = wcslen(e->name);
 
     heap_push(&heaps[heap_switch], he);
     for (;;) {
@@ -1180,23 +1168,51 @@ int bfs(Variable *var, Manifest *suffixes,
                 size_t sum = 0;
                 int done = 0;
                 do {
+                    ManifestEntry *m;
                     FILE_ID_BOTH_DIR_INFO *info = (FILE_ID_BOTH_DIR_INFO*)
                         ((uint8_t*) info_buf + sum);
 
                     done = (info->NextEntryOffset == 0);
                     sum += info->NextEntryOffset;
 
-                    wchar_t full_name[MAX_PATH_LEN] = L"";
-                    wchar_t rerooted_full_name[MAX_PATH_LEN] = L"";
                     wchar_t fn[MAX_PATH_LEN] = L"";
                     memcpy(fn, info->FileName, info->FileNameLength);
                     fn[info->FileNameLength / sizeof(wchar_t)] = L'\0';
                     DWORD attr = info->FileAttributes;
 
-                    if (!wcscmp(fn, L".") || !wcscmp(fn, L"..")) {
+                    if (!wcscmp(fn, L".")) {
+                        if (q.top_level) {
+                            assert(out);
+                            m = man_push(out);
+                            m->vol = disk->bootvol;
+                            m->action = MAN_MKDIR;
+                            m->var = var;
+                            if (toplevel_entry->rewrite) {
+                                m->rewrite = wcsdup(toplevel_entry->rewrite);
+                                normalize_string(m->rewrite);
+                                strip_trailing_slash(m->rewrite);
+                            }
+                            m->name = wcsdup(q.name);
+                            /* These came from user input so require a little more
+                             * cleaning up.  disklib_mkdir_simple gets upset if you
+                             * don't strip trailing slashes */
+                            normalize_string(m->name);
+                            strip_trailing_slash(m->name);
+                            m->name_len = wcslen(m->name);
+                            m->file_id = info->FileId.QuadPart;
+                            assert(m->file_id);
+                        }
+                        continue;
+                    } else if (!he.recurse) {
                         continue;
                     }
 
+                    if (!wcscmp(fn, L"..")) {
+                        continue;
+                    }
+
+                    wchar_t full_name[MAX_PATH_LEN] = L"";
+                    wchar_t rerooted_full_name[MAX_PATH_LEN] = L"";
                     swprintf(full_name, L"%s/%s", q.name, fn);
                     normalize_string(full_name);
 
@@ -1235,6 +1251,8 @@ int bfs(Variable *var, Manifest *suffixes,
                         he.name = wcsdup(full_name);
                         he.file_id = file_id;
                         he.rerooted_name = NULL;
+                        he.top_level = 0;
+                        he.recurse = 1;
                         if (rerooted_full_name[0] != L'\0') {
                             he.rerooted_name = wcsdup(rerooted_full_name);
                         }
@@ -1266,8 +1284,76 @@ int bfs(Variable *var, Manifest *suffixes,
                     if (rerooted_full_name[0] != L'\0') {
                         rewrite = rerooted_full_name;
                     }
-                    e = man_push_file(out, disk->bootvol, var, full_name, file_size, file_id, rewrite, action);
+                    assert(file_id);
+                    int follow = 0;
+                    if (action == MAN_SHALLOW_FOLLOW_LINKS) {
+                        action = MAN_SHALLOW;
+                        follow = 1;
+                    } else if (action == MAN_COPY_FOLLOW_LINKS) {
+                        action = MAN_COPY;
+                        follow = 1;
+                    }
+                    man_push_file(out, disk->bootvol, var, full_name, file_size, file_id, rewrite, action);
                     //printf("2.Adding entry [%S]=[%d]=>[%S]\n", e->name, e->action, (e->rewrite ? e->rewrite : L"NULL"));
+
+                    if (rewrite || !follow) {
+                        continue;
+                    }
+
+                    DWORD length = 0;
+                    wchar_t link_name[MAX_PATH_LEN];
+                    HANDLE h = INVALID_HANDLE_VALUE;
+                    for (;;) {
+                        length = MAX_PATH_LEN;
+                        if (h == INVALID_HANDLE_VALUE) {
+                            /* First time through loop */
+                            h = FindFirstFileNameW(prefix(var, full_name), 0, &length, link_name);
+                            if (h == INVALID_HANDLE_VALUE) {
+                                err(1,"FindNextFileName() failed on %ls with err=%u",
+                                        full_name, (uint32_t) GetLastError());
+                            }
+                        } else {
+                            if (!FindNextFileNameW(h, &length, link_name)) {
+                                DWORD err = GetLastError();
+                                FindClose(h);
+                                h = INVALID_HANDLE_VALUE;
+                                if (err == ERROR_HANDLE_EOF) {
+                                    break;
+                                } else {
+                                    err(1,"FindNextFileName() failed on %ls with err=%u",
+                                            full_name, (uint32_t) err);
+                                }
+                            }
+                        }
+                        normalize_string(link_name);
+
+                        /* Current file or already covered by manifest? */
+                        if (!wcsncmp(link_name, full_name, length) ||
+                            find_by_prefix(var->man, link_name)) {
+                            continue;
+                        }
+
+                        man_push_file(out, disk->bootvol, var, link_name,
+                                file_size, file_id, rewrite, action);
+
+                        /* Possibly create enclosing dirs. */
+                        for (;;) {
+                            strip_filename(link_name);
+                            if (!*link_name || find_full_name(extra_dirs,
+                                        link_name)) {
+                                break;
+                            }
+                            m = man_push(extra_dirs);
+                            m->name = wcsdup(link_name);
+                            m->name_len = wcslen(m->name);
+                            m->action = MAN_COPY_EMPTY_DIR;
+                        }
+
+                    }
+                    if (h != INVALID_HANDLE_VALUE) {
+                        FindClose(h);
+                        h = INVALID_HANDLE_VALUE;
+                    }
 
                 } while (!done);
             }
@@ -1672,6 +1758,7 @@ int get_securid_from_entry(ManifestEntry *m)
     assert(m->vol);
 
     if (m->file_id == 0) {
+        printf("%ls has no file-id!\n", m->name);
         ret = -1;
         goto exit;
     }
@@ -1694,9 +1781,8 @@ int get_securid_from_entry(ManifestEntry *m)
 
     h = open_file_by_id(m->var->volume, m->file_id, READ_CONTROL |
             ACCESS_SYSTEM_SECURITY, 0);
-
-    if (h == INVALID_HANDLE_VALUE || h == 0) {
-        printf("Unable to open %ls (err=%u)\n", m->name, ret);
+    if (h == INVALID_HANDLE_VALUE) {
+        printf("Unable to open %ls\n", m->name);
         ret = -1;
         goto exit;
     }
@@ -1710,12 +1796,13 @@ int get_securid_from_entry(ManifestEntry *m)
 
     m->securid = disklib_ntfs_setsecurityattr(m->vol, (void*)sdr, sdrsz);
     if (!m->securid) {
-        printf("Error in disklib_ntfs_setsecurityattr : %d\n", errno);
+        printf("error in disklib_ntfs_setsecurityattr: %s\n",
+                strerror(ntfs_get_errno()));
         goto exit;
     }
 
 exit:
-    if (h && (h != INVALID_HANDLE_VALUE)) {
+    if (h != INVALID_HANDLE_VALUE) {
         CloseHandle(h);
     }
     if (sdr) {
@@ -1742,9 +1829,8 @@ static int shallow_file(ManifestEntry *m,
         }
     }
 
-    if (get_securid_from_entry(m)) {
-        printf("Unable to get securid for [%ls]\n",
-            m->host_name ? m->host_name : m->name);
+    if (get_securid_from_entry(m) != 0) {
+        printf("unable to get securid for %ls\n", m->host_name);
     }
 
     uint64_t size = m->file_size;
@@ -1858,8 +1944,11 @@ int scanning_phase(struct disk *disk, VarList *vars,
 {
     ENTER_PHASE();
     int i, r;
+
     for (i = 0; i < vars->n; ++i) {
         int j;
+        Manifest extra_dirs;
+        man_init(&extra_dirs);
         Variable *var = &vars->entries[i];
         if (!var->path) {
             printf("ignoring manifest entries under ${%ls}\n", var->name);
@@ -1891,21 +1980,25 @@ int scanning_phase(struct disk *disk, VarList *vars,
             switch (m->action) {
                 case MAN_SHALLOW:
                 case MAN_COPY:
+                case MAN_COPY_EMPTY_DIR:
                 case MAN_FORCE_COPY:
                 case MAN_SHALLOW_FOLLOW_LINKS:
                 case MAN_COPY_FOLLOW_LINKS:
-                    r = bfs(var, suffixes, man_out, disk, m);
+                    r = bfs(var, suffixes, man_out, &extra_dirs, disk, m, m->action != MAN_COPY_EMPTY_DIR);
                     if (r < 0) {
                         printf("Failed while processing [%ls] : [%d]\n", m->name, r);
                         return r;
                     }
                     break;
-                case MAN_MKDIR:
-                    man_push_file(man_out, disk->bootvol, var, m->name, 0, 0, NULL, m->action);
-                    break;
                 default:
                     break;
             }
+        }
+        man_sort_by_name(&extra_dirs);
+        man_uniq_by_name(&extra_dirs);
+        for (j = 0; j < extra_dirs.n; ++j) {
+            ManifestEntry *m = &extra_dirs.entries[j];
+            bfs(var, &extra_dirs, man_out, NULL, disk, m, 0);
         }
     }
     printf("scanned %d files in %d directories\n", files, directories);
@@ -1919,7 +2012,7 @@ int is_same_file(const ManifestEntry *a, const ManifestEntry *b)
     return (a->var == b->var && a->file_id == b->file_id);
 }
 
-int stat_files_phase(struct disk *disk, Manifest *suffixes, Manifest *man, wchar_t *file_id_list)
+int stat_files_phase(struct disk *disk, Manifest *man, wchar_t *file_id_list)
 {
     ENTER_PHASE();
     assert(man->order_fn == cmp_id_action);
@@ -2012,9 +2105,8 @@ int mkdir_phase(struct disk *disk, Manifest *man)
         if (m->action == MAN_MKDIR) {
             //printf("mkdir [%ls]\n", m->name);
 
-            if (get_securid_from_entry(m)) {
-                printf("Unable to get securid for [%ls]\n",
-                    m->host_name ? m->host_name : m->name);
+            if (get_securid_from_entry(m) != 0) {
+                printf("unable to get securid for %ls\n", m->host_name);
             }
 
             if (wcsncmp(m->name, L"/", MAX_PATH_LEN) == 0) {
@@ -2034,122 +2126,6 @@ int mkdir_phase(struct disk *disk, Manifest *man)
 }
 
 #define SHA1FMT "%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x"
-
-static int file_is_excluded(wchar_t *filename, Manifest *man)
-{
-    ManifestEntry *m = find_by_prefix(man, filename);
-    if (!m) {
-        /* In a manifest with FOLLOW_LINKS lines in, the original source
-         * manifest may not necessarily contain any entries for this path if it
-         * was included because of a followed hardlink */
-        return 0;
-    }
-    return m->action == MAN_EXCLUDE;
-}
-
-int other_linked_files_phase(struct disk *disk, Manifest *man)
-{
-    ENTER_PHASE();
-    assert(man->order_fn == NULL);
-
-    int i;
-    const int n = man->n;
-    int ret = 0;
-    HANDLE h = INVALID_HANDLE_VALUE;
-    DWORD length = 0;
-    wchar_t buffer[MAX_PATH_LEN];
-    int num_files = 0;
-    int num_files_excluded = 0;
-
-    /* Calls to man_push_file in the inner while loop may cause the manifest
-     * buffer to be reallocated which will invalidate any pointers into it. So
-     * keep the current entry copied */
-    ManifestEntry m;
-    for (i = 0; i < n; ++i) {
-        Action action = man->entries[i].action;
-        if (action != MAN_SHALLOW_FOLLOW_LINKS && action != MAN_COPY_FOLLOW_LINKS)
-            continue;
-        man->entries[i].action = (action == MAN_SHALLOW_FOLLOW_LINKS) ? MAN_SHALLOW : MAN_COPY;
-        m = man->entries[i];
-
-        /* Enumerate all the hardlink filenames for this file */
-        for (;;) {
-            DWORD err = ERROR_SUCCESS;
-            length = MAX_PATH_LEN;
-            if (h == INVALID_HANDLE_VALUE) {
-                /* First time through loop */
-                h = FindFirstFileNameW(m.name, 0, &length, buffer);
-                if (h == INVALID_HANDLE_VALUE) {
-                    err = GetLastError();
-                    printf("FindFirstFileName() failed on %ls with error %d\n", m.name, (int)err);
-                }
-            } else {
-                BOOL ok = FindNextFileNameW(h, &length, buffer);
-                if (!ok) {
-                    err = GetLastError();
-                    FindClose(h);
-                    h = INVALID_HANDLE_VALUE;
-                    if (err == ERROR_HANDLE_EOF) {
-                        break;
-                    } else {
-                        printf("FindNextFileName() failed on %ls with error %d\n", m.name, (int)err);
-                    }
-                }
-            }
-            if ((err == ERROR_FILE_NOT_FOUND || err == ERROR_PATH_NOT_FOUND)
-                && !absent_files_fatal) {
-                /* It's ok for a file to have disappeared since scanning_phase */
-                continue;
-            } else if (err) {
-                ret = -1;
-                goto cleanup;
-            }
-
-            /* Add another manifest entry for the same file, at a different
-             * location in the target disk. Later phases will ensure these
-             * are hardlinked to one another inside the target disk thus
-             * this uses no extra space. */
-            normalize_string(buffer);
-            if (wcsncmp(buffer, m.name, length) == 0) {
-                /* This was actually the original file from whom we're following
-                 * links and it already has an entry in the manifest. */
-                continue;
-            }
-
-            /* Exclude lines would normally have been applied by now during
-             * the scanning_phase, but of course at this point we might
-             * be populating files in completely arbitrary locations
-             * on the disk image. Therefore we need to do a bit of extra
-             * effort here to apply the exclusions to whatever files
-             * we might be populating. */
-            if (file_is_excluded(buffer, m.var->man)) {
-                num_files_excluded++;
-                continue;
-            }
-
-            man_push_file(man, disk->bootvol, m.var, buffer, m.file_size, m.file_id, m.rewrite, m.action);
-            num_files++;
-        }
-    }
-    printf("Added %d hardlinked files, excluded %d.\n", num_files, num_files_excluded);
-
-    /* It's necessary to resort and re-uniq the output here because the extra
-     * hardlinks may have ended up creating extra entries and bfs()'s approach
-     * of calling find_by_prefix() (or file_is_excluded() as we do here) isn't
-     * sufficient because they only check against the input manifest which has
-     * itself been uniq'd, which isn't enough to guarantee hardlinks won't
-     * re-add duplicate entries. */
-    man_unsorted(man);
-
-cleanup:
-    if (h != INVALID_HANDLE_VALUE) {
-        FindClose(h);
-        h = INVALID_HANDLE_VALUE;
-    }
-
-    LEAVE_PHASE();
-    return ret;
-}
 
 int rewire_phase(struct disk *disk, Manifest *man)
 {
@@ -2561,7 +2537,7 @@ static DWORD WINAPI acl_files_thread(LPVOID lpParam)
 
         h = open_file_by_id(m->var->volume, m->file_id, READ_CONTROL |
                 ACCESS_SYSTEM_SECURITY, 0);
-        if (h == INVALID_HANDLE_VALUE || h == 0) {
+        if (h == INVALID_HANDLE_VALUE) {
             printf("Unable to open file %ls (err=%u)\n", m->name,
                     (int)GetLastError());
             /* Worry about it in copy_phase */
@@ -2865,11 +2841,9 @@ int copy_phase(struct disk *disk, Manifest *man, int calculate_shas, int retry)
                     }
                     if (!m->securid) {
                         if (m->cache_index == -1) {
-                            if (get_securid_from_entry(m)) {
-                                printf("Unable to get securid for [%ls]\n",
-                                    man->entries[i].host_name ?
-                                        man->entries[i].host_name
-                                        : man->entries[i].name);
+                            if (get_securid_from_entry(m) != 0) {
+                                printf("unable to get securid for %ls\n",
+                                    man->entries[i].host_name);
                             }
                         } else {
                             m->securid = disklib_ntfs_setsecurityattr(m->vol,
@@ -3743,6 +3717,7 @@ int output_manifest_phase(Manifest *man, struct disk* disk,
             break;
 
         case MAN_MKDIR:
+        case MAN_COPY_EMPTY_DIR:
             fprintf(f, ", \"type\": \"dir\"");
             break;
 
@@ -3932,14 +3907,6 @@ int main(int argc, char **argv)
         --argc;
     }
 
-    // And a dummy to hold things from the manifest not associated with a
-    // particular var (like mkdirs)
-    Variable *dummy_var = varlist_push(&vars);
-    dummy_var->man = (Manifest*) malloc(sizeof(Manifest));
-    man_init(dummy_var->man);
-    dummy_var->name = wide("_dummy_");
-    dummy_var->path = wide("");
-
     bootvol_var = varlist_find(&vars, L"BOOTVOL");
     manifest_file = fopen(arg_manifest_file, "r");
     if (!manifest_file) {
@@ -4045,16 +4012,12 @@ int main(int argc, char **argv)
         err(1, "scanning_phase failed");
     }
 
-    if (other_linked_files_phase(&disk, &man_out) < 0) {
-        err(1, "other_linked_files_phase failed");
-    }
-
     /* There should be no further MAN_COPY_FOLLOW_LINKS or
        MAN_SHALLOW_FOLLOW_LINKS from here on. */
 
     /* Stat all files individually. */
     man_sort_by_id(&man_out);
-    if (stat_files_phase(&disk, &suffixes, &man_out, file_id_list) < 0) {
+    if (stat_files_phase(&disk, &man_out, file_id_list) < 0) {
         err(1, "stat_files_phase failed");
     }
 

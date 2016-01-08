@@ -3244,10 +3244,18 @@ int ntfs_sd_add_everyone(ntfs_inode *ni)
 	ace->flags = OBJECT_INHERIT_ACE | CONTAINER_INHERIT_ACE;
 	ace->size = const_cpu_to_le16(sizeof(ACCESS_ALLOWED_ACE));
 
-    /* Bromium: Sane default permissions. */
+#if 0
+    /* Bromium: These would be sane default permissions, but as long
+     * as our tools generate files or dirs without proper ACLs, we
+     * have to default to world-writable to not break things. */
     ace->mask = const_cpu_to_le32(0x1f01ff & ~(FILE_WRITE_DATA |
                 FILE_DELETE_CHILD | DELETE | FILE_ADD_FILE |
                 FILE_WRITE_ATTRIBUTES | FILE_WRITE_EA));
+
+#else
+    ace->mask = const_cpu_to_le32(0x1f01ff); /* FIXME */
+#endif
+
 
 	ace->sid.revision = SID_REVISION;
 	ace->sid.sub_authority_count = 1;
