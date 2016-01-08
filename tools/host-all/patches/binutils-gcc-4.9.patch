@@ -1,0 +1,167 @@
+diff -ru binutils-2.23.1.orig/bfd/coffcode.h binutils-2.23.1/bfd/coffcode.h
+--- binutils-2.23.1.orig/bfd/coffcode.h	2011-09-27 12:03:49.000000000 -0400
++++ binutils-2.23.1/bfd/coffcode.h	2016-01-07 21:09:37.392000000 -0500
+@@ -3442,7 +3442,7 @@
+ 	 incremented in coff_set_section_contents.  This is right for
+ 	 SVR3.2.  */
+       if (strcmp (current->name, _LIB) == 0)
+-	bfd_set_section_vma (abfd, current, 0);
++	(void)bfd_set_section_vma (abfd, current, 0);
+ #endif
+ 
+ #ifdef ALIGN_SECTIONS_IN_FILE
+diff -ru binutils-2.23.1.orig/bfd/opncls.c binutils-2.23.1/bfd/opncls.c
+--- binutils-2.23.1.orig/bfd/opncls.c	2012-05-29 10:23:33.000000000 -0400
++++ binutils-2.23.1/bfd/opncls.c	2016-01-07 21:09:37.400000000 -0500
+@@ -254,7 +254,7 @@
+      then it may have been opened with special flags that make it
+      unsafe to close and reopen the file.  */
+   if (fd == -1)
+-    bfd_set_cacheable (nbfd, TRUE);
++    (void)bfd_set_cacheable (nbfd, TRUE);
+ 
+   return nbfd;
+ }
+diff -ru binutils-2.23.1.orig/bfd/peicode.h binutils-2.23.1/bfd/peicode.h
+--- binutils-2.23.1.orig/bfd/peicode.h	2012-05-04 23:05:25.000000000 -0400
++++ binutils-2.23.1/bfd/peicode.h	2016-01-07 21:09:37.404000000 -0500
+@@ -602,7 +602,7 @@
+ 
+   bfd_set_section_flags (vars->abfd, sec, flags | extra_flags);
+ 
+-  bfd_set_section_alignment (vars->abfd, sec, 2);
++  (void)bfd_set_section_alignment (vars->abfd, sec, 2);
+ 
+   /* Check that we will not run out of space.  */
+   BFD_ASSERT (vars->data + size < vars->bim->buffer + vars->bim->size);
+diff -ru binutils-2.23.1.orig/binutils/dlltool.c binutils-2.23.1/binutils/dlltool.c
+--- binutils-2.23.1.orig/binutils/dlltool.c	2012-05-04 23:05:26.000000000 -0400
++++ binutils-2.23.1/binutils/dlltool.c	2016-01-07 21:09:37.404000000 -0500
+@@ -2468,7 +2468,7 @@
+ 			     si->sec,
+ 			     si->flags & applicable);
+ 
+-      bfd_set_section_alignment(abfd, si->sec, si->align);
++      (void)bfd_set_section_alignment(abfd, si->sec, si->align);
+       si->sec->output_section = si->sec;
+       si->sym = bfd_make_empty_symbol(abfd);
+       si->sym->name = si->sec->name;
+@@ -2891,7 +2891,7 @@
+ 	sinfo *si = secdata + i;
+ 
+ 	bfd_set_section_size (abfd, si->sec, si->size);
+-	bfd_set_section_vma (abfd, si->sec, vma);
++	(void)bfd_set_section_vma (abfd, si->sec, vma);
+       }
+   }
+   /* Write them out.  */
+diff -ru binutils-2.23.1.orig/binutils/objcopy.c binutils-2.23.1/binutils/objcopy.c
+--- binutils-2.23.1.orig/binutils/objcopy.c	2012-05-08 13:49:36.000000000 -0400
++++ binutils-2.23.1/binutils/objcopy.c	2016-01-07 21:09:37.412000000 -0500
+@@ -1781,7 +1781,7 @@
+ 	    /* Umm, not sure what to do in this case.  */
+ 	    debuglink_vma = 0x1000;
+ 
+-	  bfd_set_section_vma (obfd, gnu_debuglink_section, debuglink_vma);
++	  (void)bfd_set_section_vma (obfd, gnu_debuglink_section, debuglink_vma);
+ 	}
+     }
+ 
+diff -ru binutils-2.23.1.orig/gas/subsegs.c binutils-2.23.1/gas/subsegs.c
+--- binutils-2.23.1.orig/gas/subsegs.c	2009-09-11 11:27:33.000000000 -0400
++++ binutils-2.23.1/gas/subsegs.c	2016-01-07 21:09:37.416000000 -0500
+@@ -67,7 +67,7 @@
+     {
+       seginfo = (segment_info_type *) xcalloc (1, sizeof (*seginfo));
+       seginfo->bfd_section = seg;
+-      bfd_set_section_userdata (stdoutput, seg, seginfo);
++      (void)bfd_set_section_userdata (stdoutput, seg, seginfo);
+     }
+ }
+ 
+@@ -169,7 +169,7 @@
+       secptr->output_section = secptr;
+       seginfo = (segment_info_type *) xcalloc (1, sizeof (*seginfo));
+       seginfo->bfd_section = secptr;
+-      bfd_set_section_userdata (stdoutput, secptr, seginfo);
++      (void)bfd_set_section_userdata (stdoutput, secptr, seginfo);
+     }
+   return secptr;
+ }
+diff -ru binutils-2.23.1.orig/gas/write.c binutils-2.23.1/gas/write.c
+--- binutils-2.23.1.orig/gas/write.c	2012-07-02 03:35:06.000000000 -0400
++++ binutils-2.23.1/gas/write.c	2016-01-07 21:09:37.420000000 -0500
+@@ -363,7 +363,7 @@
+     return;
+ 
+   if ((unsigned int) align > bfd_get_section_alignment (stdoutput, seg))
+-    bfd_set_section_alignment (stdoutput, seg, align);
++    (void)bfd_set_section_alignment (stdoutput, seg, align);
+ }
+ 
+ int
+@@ -392,6 +392,7 @@
+   fragS dummy, *prev_frag = &dummy;
+   fixS fix_dummy, *prev_fix = &fix_dummy;
+ 
++  memset(&dummy, 0, sizeof(dummy));
+   for (; frchp; frchp = frchp->frch_next)
+     {
+       prev_frag->fr_next = frchp->frch_root;
+diff -ru binutils-2.23.1.orig/ld/ldlang.c binutils-2.23.1/ld/ldlang.c
+--- binutils-2.23.1.orig/ld/ldlang.c	2012-09-04 10:14:14.000000000 -0400
++++ binutils-2.23.1/ld/ldlang.c	2016-01-07 21:09:37.432000000 -0500
+@@ -4879,7 +4879,7 @@
+ 			   " section %s\n"), os->name);
+ 
+ 		input = os->children.head->input_section.section;
+-		bfd_set_section_vma (os->bfd_section->owner,
++		(void)bfd_set_section_vma (os->bfd_section->owner,
+ 				     os->bfd_section,
+ 				     bfd_section_vma (input->owner, input));
+ 		os->bfd_section->size = input->size;
+@@ -4964,7 +4964,7 @@
+ 			     os->name, (unsigned long) (newdot - savedot));
+ 		  }
+ 
+-		bfd_set_section_vma (0, os->bfd_section, newdot);
++		(void)bfd_set_section_vma (0, os->bfd_section, newdot);
+ 
+ 		os->bfd_section->output_offset = 0;
+ 	      }
+diff -ru binutils-2.23.1.orig/ld/pe-dll.c binutils-2.23.1/ld/pe-dll.c
+--- binutils-2.23.1.orig/ld/pe-dll.c	2012-07-13 09:20:26.000000000 -0400
++++ binutils-2.23.1/ld/pe-dll.c	2016-01-07 21:09:37.436000000 -0500
+@@ -1778,7 +1778,7 @@
+ 
+   sec = bfd_make_section_old_way (abfd, name);
+   bfd_set_section_flags (abfd, sec, flags | SEC_ALLOC | SEC_LOAD | SEC_KEEP);
+-  bfd_set_section_alignment (abfd, sec, align);
++  (void)bfd_set_section_alignment (abfd, sec, align);
+   /* Remember to undo this before trying to link internally!  */
+   sec->output_section = sec;
+ 
+diff -ru binutils-2.23.1.orig/bfd/mach-o.c binutils-2.23.1/bfd/mach-o.c
+--- binutils-2.23.1.orig/bfd/mach-o.c	2012-07-24 17:06:58.000000000 -0400
++++ binutils-2.23.1/bfd/mach-o.c	2016-01-08 03:10:19.468153000 -0500
+@@ -2683,7 +2683,7 @@
+ 	  s->flags = xlat->macho_sectype | xlat->macho_secattr;
+ 	  s->align = xlat->sectalign > bfdalign ? xlat->sectalign 
+ 						: bfdalign;
+-	  bfd_set_section_alignment (abfd, sec, s->align);
++	  (void)bfd_set_section_alignment (abfd, sec, s->align);
+ 	  bfd_flags = bfd_get_section_flags (abfd, sec);
+ 	  if (bfd_flags == SEC_NO_FLAGS)
+ 	    bfd_set_section_flags (abfd, sec, xlat->bfd_flags);
+diff -ru binutils-2.23.1.orig/gas/config/obj-elf.c binutils-2.23.1/gas/config/obj-elf.c
+--- binutils-2.23.1.orig/gas/config/obj-elf.c	2012-06-30 02:32:29.000000000 -0400
++++ binutils-2.23.1/gas/config/obj-elf.c	2016-01-08 03:11:35.760153000 -0500
+@@ -1789,7 +1789,7 @@
+ 
+   /* Force the section to align to a longword boundary.  Without this,
+      UnixWare ar crashes.  */
+-  bfd_set_section_alignment (stdoutput, seg, 2);
++  (void)bfd_set_section_alignment (stdoutput, seg, 2);
+ 
+   /* Make space for this first symbol.  */
+   p = frag_more (12);

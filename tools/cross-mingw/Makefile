@@ -12,7 +12,7 @@ XEN_DISTFILES ?= $(TOPDIR)/../distfiles
 INSTALL_DIR = $(TOOLSDIR)/cross-mingw
 
 BINUTILS_DISTFILES = binutils-2.23.1.tar.bz2
-BINUTILS_PATCHES = binutils-pie-entry-point.patch binutils-texinfo.patch binutils-string.patch binutils-host-osx109.patch
+BINUTILS_PATCHES = binutils-pie-entry-point.patch binutils-texinfo.patch binutils-string.patch binutils-host-osx109.patch binutils-gcc-4.9.patch
 BINUTILS_DIR = binutils-2.23.1
 
 GCC_DISTFILES = gcc-4.7.3.tar.bz2
@@ -21,7 +21,7 @@ GCC_DIR = gcc-4.7.3
 GCC_VERSION = 4.7.3
 
 GDB_DISTFILES = gdb-7.4.tar.bz2
-GDB_PATCHES = gdbserver-argv0.patch gdb-texinfo.patch gdb-fix-remote-qOffsets.patch gdb-host-osx109.patch
+GDB_PATCHES = gdbserver-argv0.patch gdb-texinfo.patch gdb-fix-remote-qOffsets.patch gdb-bfd-texinfo.patch gdb-host-osx109.patch gdb-gcc-4.9.patch
 GDB_DIR = gdb-7.4
 
 MINGW64_DISTFILES = mingw-w64-v2.0.8.tar.gz

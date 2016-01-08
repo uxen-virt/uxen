@@ -12,7 +12,7 @@ XEN_DISTFILES ?= $(TOPDIR)/../distfiles
 INSTALL_DIR = $(TOOLSDIR)/cross-vm
 
 BINUTILS_DISTFILES = binutils-2.23.1.tar.bz2
-BINUTILS_PATCHES = 
+BINUTILS_PATCHES = binutils-texinfo.patch binutils-gcc-4.9.patch
 BINUTILS_DIR = binutils-2.23.1
 
 GCC_DISTFILES = gcc-4.7.2.tar.bz2

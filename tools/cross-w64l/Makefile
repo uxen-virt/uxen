@@ -12,7 +12,7 @@ XEN_DISTFILES ?= $(TOPDIR)/../distfiles
 INSTALL_DIR = $(TOOLSDIR)/cross-w64l
 
 BINUTILS_DISTFILES = binutils-2.21.1a.tar.bz2
-BINUTILS_PATCHES = binutils-link-pdata.patch binutils-cv8.patch binutils-texinfo.patch binutils-host-osx109.patch
+BINUTILS_PATCHES = binutils-link-pdata.patch binutils-cv8.patch binutils-texinfo.patch binutils-host-osx109.patch binutils-gcc-4.9.patch
 BINUTILS_DIR = binutils-2.21.1
 
 GCC_DISTFILES = gcc-core-4.6.2.tar.bz2
@@ -97,12 +97,16 @@ gcc/.core-installed: gcc/.core-built
 	cd $(@D)/build && $(BUILD_ENV) \
 	  $(MAKE) install-gcc
 # 	XXX installed gcc x86_64-w64-mingw32-gcc-4.6.2 is missing "-long"
-	rm -f $(TOOLSDIR)/bin/$(CROSS_TARGET)-gcc-$(GCC_VERSION){,.exe}
+	rm -f $(TOOLSDIR)/bin/$(CROSS_TARGET)-gcc-$(GCC_VERSION)$(HOST_EXE_SUFFIX)
+	rm -f $(TOOLSDIR)/bin/$(CROSS_TARGET)-long-gcc-$(GCC_VERSION)
 	cp $(TOOLSDIR)/bin/$(CROSS_TARGET)-long-gcc \
 	  $(TOOLSDIR)/bin/$(CROSS_TARGET)-long-gcc-$(GCC_VERSION)
-	[ ! -e $(TOOLSDIR)/bin/$(CROSS_TARGET)-gcc ] || \
-	  cp $(TOOLSDIR)/bin/$(CROSS_TARGET)-gcc \
-	    $(TOOLSDIR)/bin/$(CROSS_TARGET)-gcc-$(GCC_VERSION)
+# enable these next lines if non-w64l gcc is the same version
+#	[ ! -e $(TOOLSDIR)/bin/$(CROSS_TARGET)-gcc ] || \
+#	  rm -f $(TOOLSDIR)/bin/$(CROSS_TARGET)-gcc-$(GCC_VERSION)
+#	[ ! -e $(TOOLSDIR)/bin/$(CROSS_TARGET)-gcc ] || \
+#	  cp $(TOOLSDIR)/bin/$(CROSS_TARGET)-gcc \
+#	    $(TOOLSDIR)/bin/$(CROSS_TARGET)-gcc-$(GCC_VERSION)
 	@touch $@
 
 gcc/.core-built: gcc/.configured
