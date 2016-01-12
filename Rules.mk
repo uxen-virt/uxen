@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2015, Bromium, Inc.
+# Copyright 2012-2016, Bromium, Inc.
 # Author: Christian Limpach <Christian.Limpach@gmail.com>
 # SPDX-License-Identifier: ISC
 #
@@ -9,6 +9,15 @@ dist:
 
 ifeq (,$(patsubst tools/%,,$(SUBDIR)/))
 dist: all
+endif
+
+V ?= 0
+
+ifeq (0,$(V))
+_V = @
+_W = @
+else
+_W = @: :
 endif
 
 # Handle out-of-tree builds:
@@ -44,6 +53,8 @@ else
 submake = $(MAKE) --no-print-directory -C $(1) $(2)
 endif # end of out-of-tree build support
 
+ifeq (,$(MAKENOW))
+
 relpath = $(shell echo $(1) | sed 's,[^/][^/]*,..,g')/$(2)
 builddir = $(if $(subst $(BUILDDIR_default),,$(BUILDDIR)),$(BUILDDIR)/$(1),$(call relpath,$(BUILDDIR_default),$(1)/$(BUILDDIR_default)))
 
@@ -76,15 +87,6 @@ endif
 .phony:
 	@ :
 
-V ?= 0
-
-ifeq (0,$(V))
-_V = @
-_W = @
-else
-_W = @: :
-endif
-
 WINDOWS = $(filter-out windows,$(TARGET_HOST))
 OSX = $(filter-out osx,$(TARGET_HOST))
 
@@ -115,6 +117,8 @@ subdir-all-% subdir-dist-% subdir-clean-% subdir-install-%: .phony
 
 subdir-distclean-%: .phony
 	$(MAKE) -C $* clean
+
+endif # MAKENOW
 
 debug-builddir:
 	@printf "%-25s %s\n" "UXEN_BUILDDIR" "$(UXEN_BUILDDIR)"
