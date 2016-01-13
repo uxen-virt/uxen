@@ -1,7 +1,7 @@
-diff -ru binutils-2.23.1.orig/bfd/mach-o.c binutils-2.23.1/bfd/mach-o.c
---- binutils-2.23.1.orig/bfd/mach-o.c	2012-07-25 05:06:58.000000000 +0800
-+++ binutils-2.23.1/bfd/mach-o.c	2013-09-18 16:50:50.000000000 +0800
-@@ -944,6 +944,7 @@
+diff -pruN binutils-2.25.1.orig/bfd/mach-o.c binutils-2.25.1/bfd/mach-o.c
+--- binutils-2.25.1.orig/bfd/mach-o.c	2015-07-21 09:20:58.000000000 +0100
++++ binutils-2.25.1/bfd/mach-o.c	2016-01-13 22:38:07.000000000 +0000
+@@ -1146,6 +1146,7 @@ bfd_mach_o_write_thread (bfd *abfd, bfd_
    unsigned int i;
    struct mach_o_thread_command_external raw;
    unsigned int offset;
@@ -9,45 +9,57 @@ diff -ru binutils-2.23.1.orig/bfd/mach-o.c binutils-2.23.1/bfd/mach-o.c
  
    BFD_ASSERT ((command->type == BFD_MACH_O_LC_THREAD)
  	      || (command->type == BFD_MACH_O_LC_UNIXTHREAD));
-@@ -962,6 +963,15 @@
+@@ -1164,6 +1165,15 @@ bfd_mach_o_write_thread (bfd *abfd, bfd_
            || bfd_bwrite (&raw, sizeof (raw), abfd) != sizeof (raw))
- 	return -1;
+ 	return FALSE;
  
 +      ts = bfd_get_section_by_name(abfd, "LC_THREAD.x86_THREAD_STATE.0");
 +      if (!ts)
-+        return -1;
++        return FALSE;
 +      if (bfd_seek (abfd, command->offset + offset + BFD_MACH_O_LC_SIZE,
 +                    SEEK_SET) != 0
 +          || bfd_bwrite (ts->contents, cmd->flavours[i].size, abfd) !=
 +          cmd->flavours[i].size)
-+	return -1;
++	return FALSE;
 +
        offset += cmd->flavours[i].size + sizeof (raw);
      }
  
-@@ -1442,6 +1452,10 @@
+@@ -1758,6 +1768,10 @@ bfd_mach_o_write_segment_32 (bfd *abfd, 
        || bfd_bwrite (&raw, sizeof (raw), abfd) != sizeof (raw))
-     return -1;
+     return FALSE;
  
 +  /* Don't write sections in core files -- each segment has one section */
 +  if (abfd->format == bfd_core)
-+    return 0;
++    return TRUE;
 +
    for (sec = seg->sect_head; sec != NULL; sec = sec->next)
-     if (bfd_mach_o_write_section_64 (abfd, sec))
-       return -1;
-@@ -1896,9 +1910,7 @@
-       && (mdata->nsects == 0 || mdata->sections != NULL))
-     return TRUE;
+     if (!bfd_mach_o_write_section_32 (abfd, sec))
+       return FALSE;
+@@ -1792,6 +1806,10 @@ bfd_mach_o_write_segment_64 (bfd *abfd, 
+       || bfd_bwrite (&raw, sizeof (raw), abfd) != sizeof (raw))
+     return FALSE;
+ 
++  /* Don't write sections in core files -- each segment has one section */
++  if (abfd->format == bfd_core)
++    return TRUE;
++
+   for (sec = seg->sect_head; sec != NULL; sec = sec->next)
+     if (!bfd_mach_o_write_section_64 (abfd, sec))
+       return FALSE;
+@@ -2403,9 +2421,9 @@ bfd_mach_o_mangle_sections (bfd *abfd, b
+       return FALSE;
+     }
  
 -  mdata->nsects = nsect;
--  mdata->sections = bfd_alloc (abfd, 
--			       mdata->nsects * sizeof (bfd_mach_o_section *));
-+  mdata->sections = bfd_alloc (abfd, nsect * sizeof (bfd_mach_o_section *));
++  mdata->nsects = 0;
+   mdata->sections = bfd_alloc2 (abfd,
+-				mdata->nsects, sizeof (bfd_mach_o_section *));
++				nsect, sizeof (bfd_mach_o_section *));
    if (mdata->sections == NULL)
      return FALSE;
  
-@@ -1916,6 +1928,10 @@
+@@ -2418,6 +2436,10 @@ bfd_mach_o_mangle_sections (bfd *abfd, b
        unsigned bfd_align = bfd_get_section_alignment (abfd, sec);
        bfd_mach_o_section *msect = bfd_mach_o_get_mach_o_section (sec);
  
@@ -58,7 +70,16 @@ diff -ru binutils-2.23.1.orig/bfd/mach-o.c binutils-2.23.1/bfd/mach-o.c
        mdata->sections[target_index] = msect;
  
        msect->addr = bfd_get_section_vma (abfd, sec);
-@@ -2217,6 +2233,143 @@
+@@ -2501,6 +2523,8 @@ bfd_mach_o_write_contents (bfd *abfd)
+       case BFD_MACH_O_LC_LOAD_DYLIB:
+       case BFD_MACH_O_LC_LOAD_DYLINKER:
+       case BFD_MACH_O_LC_MAIN:
++      case BFD_MACH_O_LC_THREAD:
++      case BFD_MACH_O_LC_UNIXTHREAD:
+ 	/* Nothing to do.  */
+ 	break;
+       default:
+@@ -2869,6 +2893,146 @@ bfd_mach_o_build_exec_seg_command (bfd *
    return TRUE;
  }
  
@@ -67,12 +88,15 @@ diff -ru binutils-2.23.1.orig/bfd/mach-o.c binutils-2.23.1/bfd/mach-o.c
 +                                    bfd_mach_o_data_struct *mdata,
 +                                    int idx)
 +{
-+  unsigned i;
++  bfd_mach_o_load_command *cmd;
 +  bfd_mach_o_segment_command *seg;
 +  int is_mho = (segment == NULL || segment[0] == '\0');
++  unsigned int i = 0;
++  (void)idx;
 +
-+  for (i = idx; i < idx + mdata->nsects; i++) {
-+    seg = &mdata->commands[i].command.segment;
++  cmd = mdata->first_command;
++  for (i = 0; i < mdata->nsects; cmd = cmd->next, i++) {
++    seg = &cmd->command.segment;
 +
 +    /* Fill segment command.  */
 +    if (is_mho)
@@ -115,7 +139,7 @@ diff -ru binutils-2.23.1.orig/bfd/mach-o.c binutils-2.23.1/bfd/mach-o.c
 +
 +      /* Although we account for zerofill section sizes in vm order, they are
 +	 placed in the file in source sequence.  */
-+      bfd_mach_o_append_section_to_segment (seg, sec);
++      bfd_mach_o_append_section_to_segment (seg, s);
 +      s->offset = 0;
 +      
 +      /* Zerofill sections have zero file size & offset, 
@@ -199,19 +223,38 @@ diff -ru binutils-2.23.1.orig/bfd/mach-o.c binutils-2.23.1/bfd/mach-o.c
 +  return TRUE;
 +}
 +
- /* Count the number of indirect symbols in the image.
-    Requires that the sections are in their final order.  */
+ /* Layout the commands: set commands size and offset, set ncmds and sizeofcmds
+    fields in header.  */
  
-@@ -2367,6 +2520,7 @@
-   int segcmd_idx = -1;
+@@ -2932,6 +3096,18 @@ bfd_mach_o_layout_commands (bfd_mach_o_d
+ 	  cmd->len = sizeof (struct mach_o_dyld_info_command_external)
+ 		 + BFD_MACH_O_LC_SIZE;
+ 	  break;
++        case BFD_MACH_O_LC_THREAD:
++        {
++          bfd_mach_o_thread_command *thr = &cmd->command.thread;
++          unsigned int i;
++          /* cmd->len already set */
++          cmd->len = (cmd->len + align) & ~align;
++          for (i = 0; i < thr->nflavours; i++)
++              /* adjust thr->offset for here */
++              thr->flavours[i].offset = cmd->offset +
++                  BFD_MACH_O_LC_SIZE + BFD_MACH_O_LC_SIZE;
++        }
++          break;
+ 	default:
+ 	  (*_bfd_error_handler)
+ 	    (_("unable to layout unknown load command 0x%lx"),
+@@ -2993,6 +3169,7 @@ bfd_mach_o_build_commands (bfd *abfd)
+   unsigned int nbr_commands;
    int symtab_idx = -1;
    int dysymtab_idx = -1;
 +  int thread_idx = -1;
-   unsigned long base_offset = 0;
+   int main_idx = -1;
+   unsigned int i;
  
-   /* Return now if commands are already present.  */
-@@ -2377,7 +2531,9 @@
- 
+@@ -3003,7 +3180,9 @@ bfd_mach_o_build_commands (bfd *abfd)
+   /* Fill in the file type, if not already set.  */
    if (mdata->header.filetype == 0)
      {
 -      if (abfd->flags & EXEC_P)
@@ -221,138 +264,67 @@ diff -ru binutils-2.23.1.orig/bfd/mach-o.c binutils-2.23.1/bfd/mach-o.c
          mdata->header.filetype = BFD_MACH_O_MH_EXECUTE;
        else if (abfd->flags & DYNAMIC)
          mdata->header.filetype = BFD_MACH_O_MH_DYLIB;
-@@ -2410,13 +2566,16 @@
-   if (mdata->nsects > 0)
-     {
-       segcmd_idx = 0;
--      mdata->header.ncmds = 1;
-+      if (mdata->header.filetype != BFD_MACH_O_MH_CORE)
-+        mdata->header.ncmds = 1;
-+      else
-+        mdata->header.ncmds = mdata->nsects;
+@@ -3030,6 +3209,10 @@ bfd_mach_o_build_commands (bfd *abfd)
+ 	 optional if there is no sections.  */
+       nbr_segcmd = (mdata->nsects > 0) ? 1 : 0;
      }
- 
-   if (bfd_get_symcount (abfd) > 0)
-     {
-+      symtab_idx = mdata->header.ncmds; /* 0 if the seg command is absent.  */
-       mdata->header.ncmds++;
--      symtab_idx = segcmd_idx + 1; /* 0 if the seg command is absent.  */
-     }
- 
-   /* FIXME:
-@@ -2424,10 +2583,17 @@
-   if (bfd_mach_o_should_emit_dysymtab ()
-       && bfd_get_symcount (abfd))
-     {
--      mdata->header.ncmds++;
-       /* If there should be a case where a dysymtab could be emitted without
- 	 a symtab (seems improbable), this would need amending.  */
--      dysymtab_idx = symtab_idx + 1;
-+      dysymtab_idx = mdata->header.ncmds;
-+      mdata->header.ncmds++;
++  else if (mdata->header.filetype == BFD_MACH_O_MH_CORE)
++    {
++      nbr_segcmd = mdata->nsects;
 +    }
-+
+   else
+     {
+       bfd_mach_o_section *prev_sect = NULL;
+@@ -3068,6 +3251,12 @@ bfd_mach_o_build_commands (bfd *abfd)
+       dysymtab_idx = nbr_commands++;
+     }
+ 
 +  if (mdata->header.filetype == BFD_MACH_O_MH_CORE &&
 +      bfd_get_section_by_name(abfd, "LC_THREAD.x86_THREAD_STATE.0"))
 +    {
-+      thread_idx = mdata->header.ncmds;
-+      mdata->header.ncmds++;
++      thread_idx = nbr_commands++;
++    }
++
+   /* Add an entry point command.  */
+   if (mdata->header.filetype == BFD_MACH_O_MH_EXECUTE
+       && bfd_get_start_address (abfd) != 0)
+@@ -3100,7 +3289,7 @@ bfd_mach_o_build_commands (bfd *abfd)
+       /* For object file, there is only one segment.  */
+       bfd_mach_o_init_segment (mdata, &commands[0], "", mdata->nsects);
      }
+-  else if (nbr_segcmd != 0)
++  else if (nbr_segcmd != 0 && mdata->header.filetype != BFD_MACH_O_MH_CORE)
+     {
+       bfd_mach_o_load_command *cmd;
  
-   if (wide)
-@@ -2448,7 +2614,7 @@
-   if (mdata->commands == NULL)
-     return FALSE;
- 
--  if (segcmd_idx >= 0)
-+  if (segcmd_idx >= 0 && mdata->header.filetype != BFD_MACH_O_MH_CORE)
-     {  
-       bfd_mach_o_load_command *cmd = &mdata->commands[segcmd_idx];
-       bfd_mach_o_segment_command *seg = &cmd->command.segment;
-@@ -2477,6 +2643,35 @@
-       mdata->header.sizeofcmds = cmd->len;
-       mdata->filelen += cmd->len;
+@@ -3131,6 +3320,15 @@ bfd_mach_o_build_commands (bfd *abfd)
+       /* The linkedit.  */
+       bfd_mach_o_init_segment (mdata, cmd, "__LINKEDIT", 0);
      }
-+  else if (segcmd_idx >= 0 && mdata->header.filetype == BFD_MACH_O_MH_CORE)
++  else if (nbr_segcmd != 0 && mdata->header.filetype == BFD_MACH_O_MH_CORE)
 +    {  
-+      unsigned int i;
-+      for (i = segcmd_idx; i < segcmd_idx + mdata->nsects; i++)
++      for (i = 0; i < mdata->nsects; i++)
 +        {
-+          bfd_mach_o_load_command *cmd = &mdata->commands[i];
++          bfd_mach_o_load_command *cmd = &commands[i];
 +
-+          /* Init segment command.  */
-+          if (i > 0)
-+            cmd->offset = mdata->commands[i - 1].offset +
-+              mdata->commands[i - 1].len;
-+          else
-+            cmd->offset = base_offset;
-+          if (wide)
-+            {
-+              cmd->type = BFD_MACH_O_LC_SEGMENT_64;
-+              cmd->len = BFD_MACH_O_LC_SEGMENT_64_SIZE;
-+            }
-+          else
-+            {
-+              cmd->type = BFD_MACH_O_LC_SEGMENT;
-+              cmd->len = BFD_MACH_O_LC_SEGMENT_SIZE;
-+            }
-+
-+          cmd->type_required = FALSE;
-+          mdata->header.sizeofcmds += cmd->len;
-+          mdata->filelen += cmd->len;
++          bfd_mach_o_init_segment (mdata, cmd, mdata->sections[i]->segname, 1);
 +        }
 +    }
  
    if (symtab_idx >= 0)
      {
-@@ -2484,9 +2679,11 @@
-       bfd_mach_o_load_command *cmd = &mdata->commands[symtab_idx];
-   
-       cmd->type = BFD_MACH_O_LC_SYMTAB;
--      cmd->offset = base_offset;
--      if (segcmd_idx >= 0)
--        cmd->offset += mdata->commands[segcmd_idx].len;
-+      if (symtab_idx > 0)
-+        cmd->offset = mdata->commands[symtab_idx - 1].offset +
-+          mdata->commands[symtab_idx - 1].len;
-+      else
-+        cmd->offset = base_offset;
- 
-       cmd->len = sizeof (struct mach_o_symtab_command_external)
- 		 + BFD_MACH_O_LC_SIZE;
-@@ -2502,12 +2699,9 @@
-       bfd_mach_o_load_command *cmd = &mdata->commands[dysymtab_idx];
- 
-       cmd->type = BFD_MACH_O_LC_DYSYMTAB;
--      if (symtab_idx >= 0)
--        cmd->offset = mdata->commands[symtab_idx].offset 
--		    + mdata->commands[symtab_idx].len;
--      else if (segcmd_idx >= 0)
--        cmd->offset = mdata->commands[segcmd_idx].offset 
--		    + mdata->commands[segcmd_idx].len;
-+      if (dysymtab_idx > 0)
-+        cmd->offset = mdata->commands[dysymtab_idx - 1].offset +
-+          mdata->commands[dysymtab_idx - 1].len;
-       else
- 	cmd->offset = base_offset;
- 
-@@ -2519,12 +2713,44 @@
-       mdata->filelen += cmd->len;
+@@ -3163,6 +3361,28 @@ bfd_mach_o_build_commands (bfd *abfd)
+       cmd->command.main.stacksize = 0;
      }
  
 +  if (thread_idx >= 0)
 +    {  
-+      bfd_mach_o_load_command *cmd = &mdata->commands[thread_idx];
++      bfd_mach_o_load_command *cmd = &commands[thread_idx];
 +      bfd_mach_o_thread_command *thr = &cmd->command.thread;
 +      asection *ts;
 +
 +      ts = bfd_get_section_by_name(abfd, "LC_THREAD.x86_THREAD_STATE.0");
 +
-+      if (thread_idx > 0)
-+        cmd->offset = mdata->commands[thread_idx - 1].offset +
-+          mdata->commands[thread_idx - 1].len;
-+      else
-+        cmd->offset = base_offset;
 +      cmd->type = BFD_MACH_O_LC_THREAD;
 +      cmd->len = BFD_MACH_O_LC_SIZE +
 +        sizeof(struct mach_o_thread_command_external) +
@@ -361,24 +333,24 @@ diff -ru binutils-2.23.1.orig/bfd/mach-o.c binutils-2.23.1/bfd/mach-o.c
 +      thr->nflavours = 1;
 +      thr->flavours = bfd_alloc (abfd, 1 * sizeof(bfd_mach_o_thread_flavour));
 +      thr->flavours[0].flavour = BFD_MACH_O_x86_THREAD_STATE;
-+      thr->flavours[0].offset = cmd->offset + BFD_MACH_O_LC_SIZE + 8;
++      // thr->flavours[0].offset = cmd->offset + BFD_MACH_O_LC_SIZE + BFD_MACH_O_LC_SIZE;
 +      thr->flavours[0].size = bfd_section_size(abfd, ts);
 +
 +      cmd->type_required = FALSE;
-+      mdata->header.sizeofcmds += cmd->len;
-+      mdata->filelen += cmd->len;
 +    }
 +
-   /* So, now we have sized the commands and the filelen set to that.
-      Now we can build the segment command and set the section file offsets.  */
--  if (segcmd_idx >= 0
-+  if (segcmd_idx >= 0 && mdata->header.filetype != BFD_MACH_O_MH_CORE
-       && ! bfd_mach_o_build_seg_command 
- 		(NULL, mdata, &mdata->commands[segcmd_idx].command.segment))
+   /* Layout commands.  */
+   if (! bfd_mach_o_layout_commands (mdata))
      return FALSE;
-+  else if (segcmd_idx >= 0 && mdata->header.filetype == BFD_MACH_O_MH_CORE
-+           && ! bfd_mach_o_build_core_seg_commands(NULL, mdata, segcmd_idx))
-+    return FALSE;
- 
-   /* If we're doing a dysymtab, cmd points to its load command.  */
-   if (dysymtab_idx >= 0
+@@ -3176,6 +3396,11 @@ bfd_mach_o_build_commands (bfd *abfd)
+ 	    (abfd, &commands[i].command.segment))
+ 	  return FALSE;
+     }
++  else if (mdata->header.filetype == BFD_MACH_O_MH_CORE)
++    {
++      if (!bfd_mach_o_build_core_seg_commands(NULL, mdata, 0))
++        return FALSE;
++    }
+   else
+     {
+       bfd_vma maxvma = 0;

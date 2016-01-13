@@ -11,10 +11,9 @@ CROSS_TARGET = x86_64-all
 
 INSTALL_DIR = $(TOOLSDIR)/host-all
 
-BINUTILS_DISTFILES = binutils-2.23.1.tar.bz2
-BINUTILS_PATCHES = binutils-texinfo.patch binutils-string.patch
-BINUTILS_PATCHES += binutils-macho-core.patch binutils-gcc-4.9.patch
-BINUTILS_DIR = binutils-2.23.1
+BINUTILS_DISTFILES = binutils-2.25.1.tar.bz2
+BINUTILS_PATCHES = binutils-macho-core.patch binutils-install-libiberty.patch
+BINUTILS_DIR = binutils-2.25.1
 
 VPATH = $(SRCDIR)/patches:$(XEN_DISTFILES)
 

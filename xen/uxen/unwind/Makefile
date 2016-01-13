@@ -1,5 +1,5 @@
 #
-# Copyright 2013-2015, Bromium, Inc.
+# Copyright 2013-2016, Bromium, Inc.
 # Author: Christian Limpach <Christian.Limpach@gmail.com>
 # SPDX-License-Identifier: ISC
 #
@@ -31,6 +31,7 @@ MULTILIBDIR := $(TOOLSDIR)/host-all/lib/`$(CC) -print-multi-os-directory`
 CPPFLAGS += -I$(TOOLSDIR)/host-all/include
 xpdata_extract_LDLIBS = -L$(TOOLSDIR)/host-all/lib -L$(MULTILIBDIR) \
 	-lbfd -liberty
+$(HOST_LINUX)xpdata_extract_LDLIBS += -ldl
 
 xpdata-extract$(HOST_EXE_SUFFIX): $(xpdata_extract_OBJS)
 	$(_W)echo Linking - $@
