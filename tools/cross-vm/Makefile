@@ -11,26 +11,26 @@ XEN_DISTFILES ?= $(TOPDIR)/../distfiles
 
 INSTALL_DIR = $(TOOLSDIR)/cross-vm
 
-BINUTILS_DISTFILES = binutils-2.23.1.tar.bz2
-BINUTILS_PATCHES = binutils-texinfo.patch binutils-gcc-4.9.patch
-BINUTILS_DIR = binutils-2.23.1
+BINUTILS_DISTFILES = binutils-2.25.1.tar.bz2
+BINUTILS_PATCHES = binutils-install-libiberty.patch
+BINUTILS_DIR = binutils-2.25.1
 
-GCC_DISTFILES = gcc-4.7.2.tar.bz2
-GCC_PATCHES = 
-GCC_DIR = gcc-4.7.2
-GCC_VERSION = 4.7.2
+GCC_DISTFILES = gcc-4.9.3.tar.bz2
+GCC_PATCHES =
+GCC_DIR = gcc-4.9.3
+GCC_VERSION = 4.9.3
 
-MPFR_DISTFILES = mpfr-3.1.2.tar.bz2
+MPFR_DISTFILES = mpfr-3.1.3.tar.bz2
 MPFR_PATCHES =
-MPFR_DIR = mpfr-3.1.2
+MPFR_DIR = mpfr-3.1.3
 
-GMP_DISTFILES = gmp-5.1.1.tar.bz2
+GMP_DISTFILES = gmp-6.1.0.tar.bz2
 GMP_PATCHES =
-GMP_DIR = gmp-5.1.1
+GMP_DIR = gmp-6.1.0
 
-MPC_DISTFILES = mpc-1.0.1.tar.gz
+MPC_DISTFILES = mpc-1.0.3.tar.gz
 MPC_PATCHES =
-MPC_DIR = mpc-1.0.1
+MPC_DIR = mpc-1.0.3
 
 VPATH = $(SRCDIR)/patches:$(SRCDIR)/files:$(XEN_DISTFILES)
 
