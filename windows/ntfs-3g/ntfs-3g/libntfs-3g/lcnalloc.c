@@ -576,8 +576,9 @@ err_ret:
 int ntfs_cluster_free_from_rl(ntfs_volume *vol, runlist *rl)
 {
     /* XXX Bromium: we cannot handle clusters getting freed. */
-    fprintf(stderr, "%s - ignoring\n", __FUNCTION__);
     return 0;
+
+#if 0
 	s64 nr_freed = 0;
 	int ret = -1;
 
@@ -610,6 +611,7 @@ out:
 			       (long long)vol->free_clusters, 
 			       (long long)vol->nr_clusters);
 	return ret;
+#endif
 }
 
 /*
@@ -620,9 +622,8 @@ out:
 int ntfs_cluster_free_basic(ntfs_volume *vol, s64 lcn, s64 count)
 {
     /* XXX Bromium: we cannot handle clusters getting freed. */
-    fprintf(stderr, "%s - ignoring\n", __FUNCTION__);
     return 0;
-
+#if 0
 	s64 nr_freed = 0;
 	int ret = -1;
 
@@ -650,6 +651,7 @@ out:
 			       (long long)vol->free_clusters, 
 			       (long long)vol->nr_clusters);
 	return ret;
+#endif
 }
 
 /**
@@ -672,9 +674,9 @@ out:
 int ntfs_cluster_free(ntfs_volume *vol, ntfs_attr *na, VCN start_vcn, s64 count)
 {
     /* XXX Bromium: we cannot handle clusters getting freed. */
-    fprintf(stderr, "%s - ignoring\n", __FUNCTION__);
     return 0;
 
+#if 0
 	runlist *rl;
 	s64 delta, to_free, nr_freed = 0;
 	int ret = -1;
@@ -780,4 +782,5 @@ out:
 leave:	
 	ntfs_log_leave("\n");
 	return ret;
+#endif
 }
