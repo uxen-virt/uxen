@@ -23,7 +23,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -55,7 +55,7 @@ localtime_r(const time_t *timep, struct tm *result)
   struct tm *r;
   r = localtime(timep);
   if (r && result) {
-    memcpy(result, r, sizeof(result));
+    memcpy(result, r, sizeof(*result));
     r = result;
   }
   return r;
