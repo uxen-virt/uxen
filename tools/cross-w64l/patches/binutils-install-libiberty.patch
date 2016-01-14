@@ -1,0 +1,19 @@
+diff -ru binutils-2.25.1.orig/libiberty/Makefile.in binutils-2.25.1/libiberty/Makefile.in
+--- binutils-2.25.1.orig/libiberty/Makefile.in	2016-01-14 16:36:27 -0500
++++ binutils-2.25.1/libiberty/Makefile.in	2016-01-14 16:36:57 -0500
+@@ -363,11 +363,11 @@
+ # since it will be passed the multilib flags.
+ MULTIOSDIR = `$(CC) $(CFLAGS) -print-multi-os-directory`
+ install_to_libdir: all
++	${mkinstalldirs} $(DESTDIR)$(libdir)/$(MULTIOSDIR)
++	$(INSTALL_DATA) $(TARGETLIB) $(DESTDIR)$(libdir)/$(MULTIOSDIR)/$(TARGETLIB)n
++	( cd $(DESTDIR)$(libdir)/$(MULTIOSDIR) ; chmod 644 $(TARGETLIB)n ;$(RANLIB) $(TARGETLIB)n )
++	mv -f $(DESTDIR)$(libdir)/$(MULTIOSDIR)/$(TARGETLIB)n $(DESTDIR)$(libdir)/$(MULTIOSDIR)/$(TARGETLIB)
+ 	if test -n "${target_header_dir}"; then \
+-		${mkinstalldirs} $(DESTDIR)$(libdir)/$(MULTIOSDIR); \
+-		$(INSTALL_DATA) $(TARGETLIB) $(DESTDIR)$(libdir)/$(MULTIOSDIR)/$(TARGETLIB)n; \
+-		( cd $(DESTDIR)$(libdir)/$(MULTIOSDIR) ; chmod 644 $(TARGETLIB)n ;$(RANLIB) $(TARGETLIB)n ); \
+-		mv -f $(DESTDIR)$(libdir)/$(MULTIOSDIR)/$(TARGETLIB)n $(DESTDIR)$(libdir)/$(MULTIOSDIR)/$(TARGETLIB); \
+ 		case "${target_header_dir}" in \
+ 		  /*)    thd=${target_header_dir};; \
+ 		  *)     thd=${includedir}/${target_header_dir};; \

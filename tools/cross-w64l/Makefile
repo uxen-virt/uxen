@@ -11,14 +11,14 @@ XEN_DISTFILES ?= $(TOPDIR)/../distfiles
 
 INSTALL_DIR = $(TOOLSDIR)/cross-w64l
 
-BINUTILS_DISTFILES = binutils-2.21.1a.tar.bz2
-BINUTILS_PATCHES = binutils-link-pdata.patch binutils-cv8.patch binutils-texinfo.patch binutils-host-osx109.patch binutils-gcc-4.9.patch
-BINUTILS_DIR = binutils-2.21.1
+BINUTILS_DISTFILES = binutils-2.25.1.tar.bz2
+BINUTILS_PATCHES = binutils-link-pdata.patch binutils-cv8.patch binutils-install-libiberty.patch
+BINUTILS_DIR = binutils-2.25.1
 
-GCC_DISTFILES = gcc-core-4.6.2.tar.bz2
-GCC_PATCHES = gcc-long.patch gcc-host-4-7.patch
-GCC_DIR = gcc-4.6.2
-GCC_VERSION = 4.6.2
+GCC_DISTFILES = gcc-4.9.3.tar.bz2
+GCC_PATCHES = gcc-long.patch
+GCC_DIR = gcc-4.9.3
+GCC_VERSION = 4.9.3
 
 MINGW64_DISTFILES = mingw-w64-v2.0.1.tar.gz
 MINGW64_DIR = mingw-w64-v2.0.1
@@ -93,7 +93,7 @@ gcc/.built: gcc/.configured
 gcc/.core-installed: gcc/.core-built
 	cd $(@D)/build && $(BUILD_ENV) \
 	  $(MAKE) install-gcc
-# 	XXX installed gcc x86_64-w64-mingw32-gcc-4.6.2 is missing "-long"
+# 	XXX installed gcc x86_64-w64-mingw32-gcc-4.9.3 is missing "-long"
 	rm -f $(TOOLSDIR)/bin/$(CROSS_TARGET)-gcc-$(GCC_VERSION)$(HOST_EXE_SUFFIX)
 	rm -f $(TOOLSDIR)/bin/$(CROSS_TARGET)-long-gcc-$(GCC_VERSION)
 	cp $(TOOLSDIR)/bin/$(CROSS_TARGET)-long-gcc \

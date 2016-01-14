@@ -1,7 +1,7 @@
-diff -pruN -x '*~' binutils-2.21.1.orig/bfd/bfd-in2.h binutils-2.21.1/bfd/bfd-in2.h
---- binutils-2.21.1.orig/bfd/bfd-in2.h	2011-06-27 00:39:01 -0700
-+++ binutils-2.21.1/bfd/bfd-in2.h	2012-09-11 20:47:13 -0700
-@@ -1497,6 +1497,8 @@ typedef struct bfd_section
+diff -pruN binutils-2.25.1.orig/bfd/bfd-in2.h binutils-2.25.1/bfd/bfd-in2.h
+--- binutils-2.25.1.orig/bfd/bfd-in2.h	2016-01-14 13:00:17 -0500
++++ binutils-2.25.1/bfd/bfd-in2.h	2016-01-14 12:36:28 -0500
+@@ -1571,6 +1571,8 @@ typedef struct bfd_section
  
    void *used_by_bfd;
  
@@ -10,7 +10,7 @@ diff -pruN -x '*~' binutils-2.21.1.orig/bfd/bfd-in2.h binutils-2.21.1/bfd/bfd-in
    /* If this is a constructor section then here is a list of the
       relocations created to relocate items within it.  */
    struct relent_chain *constructor_chain;
-@@ -1679,8 +1681,8 @@ extern asection bfd_ind_section;
+@@ -1776,8 +1778,8 @@ extern asection _bfd_std_section[4];
    /* entsize, kept_section, moving_line_filepos,                    */ \
       0,       NULL,          0,                                        \
                                                                         \
@@ -21,18 +21,18 @@ diff -pruN -x '*~' binutils-2.21.1.orig/bfd/bfd-in2.h binutils-2.21.1/bfd/bfd-in
                                                                         \
    /* symbol,                    symbol_ptr_ptr,                    */  \
       (struct bfd_symbol *) SYM, &SEC.symbol,                           \
-diff -pruN -x '*~' binutils-2.21.1.orig/bfd/cofflink.c binutils-2.21.1/bfd/cofflink.c
---- binutils-2.21.1.orig/bfd/cofflink.c	2011-06-27 00:39:02 -0700
-+++ binutils-2.21.1/bfd/cofflink.c	2012-09-11 20:47:13 -0700
-@@ -29,6 +29,7 @@
+diff -pruN binutils-2.25.1.orig/bfd/cofflink.c binutils-2.25.1/bfd/cofflink.c
+--- binutils-2.25.1.orig/bfd/cofflink.c	2016-01-14 13:00:17 -0500
++++ binutils-2.25.1/bfd/cofflink.c	2016-01-14 13:04:58 -0500
+@@ -28,6 +28,7 @@
  #include "coff/internal.h"
  #include "libcoff.h"
  #include "safe-ctype.h"
 +#include "coff/pe_debugS.h"
  
- static bfd_boolean coff_link_add_object_symbols (bfd *abfd, struct bfd_link_info *info);
- static bfd_boolean coff_link_check_archive_element (bfd *abfd, struct bfd_link_info *info, bfd_boolean *pneeded);
-@@ -941,6 +942,42 @@ _bfd_coff_final_link (bfd *abfd,
+ static bfd_boolean coff_link_add_object_symbols (bfd *, struct bfd_link_info *);
+ static bfd_boolean coff_link_check_archive_element
+@@ -856,6 +857,42 @@ _bfd_coff_final_link (bfd *abfd,
  		goto error_return;
  	    }
  	}
@@ -74,8 +74,8 @@ diff -pruN -x '*~' binutils-2.21.1.orig/bfd/cofflink.c binutils-2.21.1/bfd/coffl
 +      }
      }
  
-   if (! bfd_coff_final_link_postscript (abfd, & finfo))
-@@ -2312,6 +2349,7 @@ _bfd_coff_link_input_bfd (struct coff_fi
+   if (flaginfo.info->strip != strip_all && flaginfo.info->discard != discard_all)
+@@ -2316,6 +2353,7 @@ _bfd_coff_link_input_bfd (struct coff_fi
      {
        bfd_byte *contents;
        struct coff_section_tdata *secdata;
@@ -83,7 +83,7 @@ diff -pruN -x '*~' binutils-2.21.1.orig/bfd/cofflink.c binutils-2.21.1/bfd/coffl
  
        if (! o->linker_mark)
  	/* This section was omitted from the link.  */
-@@ -2394,6 +2432,63 @@ _bfd_coff_link_input_bfd (struct coff_fi
+@@ -2398,6 +2436,63 @@ _bfd_coff_link_input_bfd (struct coff_fi
  		   h->root.root.string, o, input_bfd, ps, ps->owner);
  	    }
  
@@ -146,8 +146,8 @@ diff -pruN -x '*~' binutils-2.21.1.orig/bfd/cofflink.c binutils-2.21.1/bfd/coffl
 +
  	  /* Call processor specific code to relocate the section
               contents.  */
- 	  if (! bfd_coff_relocate_section (output_bfd, finfo->info,
-@@ -2490,9 +2585,13 @@ _bfd_coff_link_input_bfd (struct coff_fi
+ 	  if (! bfd_coff_relocate_section (output_bfd, flaginfo->info,
+@@ -2494,9 +2589,13 @@ _bfd_coff_link_input_bfd (struct coff_fi
  
  	      o->output_section->reloc_count += o->reloc_count;
  	    }
@@ -162,10 +162,10 @@ diff -pruN -x '*~' binutils-2.21.1.orig/bfd/cofflink.c binutils-2.21.1/bfd/coffl
        if (secdata == NULL || secdata->stab_info == NULL)
  	{
  	  file_ptr loc = o->output_offset * bfd_octets_per_byte (output_bfd);
-diff -pruN -x '*~' binutils-2.21.1.orig/bfd/section.c binutils-2.21.1/bfd/section.c
---- binutils-2.21.1.orig/bfd/section.c	2011-03-16 01:35:53 -0700
-+++ binutils-2.21.1/bfd/section.c	2012-09-11 20:47:13 -0700
-@@ -504,6 +504,8 @@ CODE_FRAGMENT
+diff -pruN binutils-2.25.1.orig/bfd/section.c binutils-2.25.1/bfd/section.c
+--- binutils-2.25.1.orig/bfd/section.c	2016-01-14 13:00:17 -0500
++++ binutils-2.25.1/bfd/section.c	2016-01-14 12:36:28 -0500
+@@ -508,6 +508,8 @@ CODE_FRAGMENT
  .
  .  void *used_by_bfd;
  .
@@ -174,7 +174,7 @@ diff -pruN -x '*~' binutils-2.21.1.orig/bfd/section.c binutils-2.21.1/bfd/sectio
  .  {* If this is a constructor section then here is a list of the
  .     relocations created to relocate items within it.  *}
  .  struct relent_chain *constructor_chain;
-@@ -686,8 +688,8 @@ CODE_FRAGMENT
+@@ -713,8 +715,8 @@ CODE_FRAGMENT
  .  {* entsize, kept_section, moving_line_filepos,		     *}	\
  .     0,       NULL,	      0,					\
  .									\
@@ -185,10 +185,10 @@ diff -pruN -x '*~' binutils-2.21.1.orig/bfd/section.c binutils-2.21.1/bfd/sectio
  .									\
  .  {* symbol,                    symbol_ptr_ptr,                    *}	\
  .     (struct bfd_symbol *) SYM, &SEC.symbol,				\
-diff -pruN -x '*~' binutils-2.21.1.orig/gas/dwarf2dbg.c binutils-2.21.1/gas/dwarf2dbg.c
---- binutils-2.21.1.orig/gas/dwarf2dbg.c	2011-06-27 00:39:10 -0700
-+++ binutils-2.21.1/gas/dwarf2dbg.c	2012-09-11 20:47:13 -0700
-@@ -1733,6 +1733,7 @@ dwarf2_finish (void)
+diff -pruN binutils-2.25.1.orig/gas/dwarf2dbg.c binutils-2.25.1/gas/dwarf2dbg.c
+--- binutils-2.25.1.orig/gas/dwarf2dbg.c	2016-01-14 13:00:17 -0500
++++ binutils-2.25.1/gas/dwarf2dbg.c	2016-01-14 12:36:28 -0500
+@@ -1853,6 +1853,7 @@ dwarf2_finish (void)
    segT info_seg;
    int emit_other_sections = 0;
    int empty_debug_line = 0;
@@ -196,7 +196,7 @@ diff -pruN -x '*~' binutils-2.21.1.orig/gas/dwarf2dbg.c binutils-2.21.1/gas/dwar
  
    info_seg = bfd_get_section_by_name (stdoutput, ".debug_info");
    emit_other_sections = info_seg == NULL || !seg_not_empty_p (info_seg);
-@@ -1755,10 +1756,6 @@ dwarf2_finish (void)
+@@ -1875,10 +1876,6 @@ dwarf2_finish (void)
    /* Calculate the size of an address for the target machine.  */
    sizeof_address = DWARF2_ADDR_SIZE (stdoutput);
  
@@ -207,7 +207,7 @@ diff -pruN -x '*~' binutils-2.21.1.orig/gas/dwarf2dbg.c binutils-2.21.1/gas/dwar
    /* For each subsection, chain the debug entries together.  */
    for (s = all_segs; s; s = s->next)
      {
-@@ -1772,6 +1769,183 @@ dwarf2_finish (void)
+@@ -1892,6 +1889,183 @@ dwarf2_finish (void)
  	}
      }
  
@@ -391,9 +391,9 @@ diff -pruN -x '*~' binutils-2.21.1.orig/gas/dwarf2dbg.c binutils-2.21.1/gas/dwar
    out_debug_line (line_seg);
  
    /* If this is assembler generated line info, and there is no
-diff -pruN -x '*~' binutils-2.21.1.orig/include/coff/pe_debugS.h binutils-2.21.1/include/coff/pe_debugS.h
---- binutils-2.21.1.orig/include/coff/pe_debugS.h	1969-12-31 16:00:00 -0800
-+++ binutils-2.21.1/include/coff/pe_debugS.h	2012-09-11 20:47:13 -0700
+diff -pruN binutils-2.25.1.orig/include/coff/pe_debugS.h binutils-2.25.1/include/coff/pe_debugS.h
+--- binutils-2.25.1.orig/include/coff/pe_debugS.h	1969-12-31 19:00:00 -0500
++++ binutils-2.25.1/include/coff/pe_debugS.h	2016-01-14 12:36:28 -0500
 @@ -0,0 +1,95 @@
 +
 +#ifndef _PE_DEBUGS_H
@@ -490,19 +490,19 @@ diff -pruN -x '*~' binutils-2.21.1.orig/include/coff/pe_debugS.h binutils-2.21.1
 +};
 +
 +#endif	/* _PE_DEBUGS_H */
-diff -pruN -x '*~' binutils-2.21.1.orig/ld/emultempl/pep.em binutils-2.21.1/ld/emultempl/pep.em
---- binutils-2.21.1.orig/ld/emultempl/pep.em	2011-06-27 00:39:14 -0700
-+++ binutils-2.21.1/ld/emultempl/pep.em	2012-09-11 20:47:13 -0700
-@@ -59,6 +59,7 @@ fragment <<EOF
+diff -pruN binutils-2.25.1.orig/ld/emultempl/pep.em binutils-2.25.1/ld/emultempl/pep.em
+--- binutils-2.25.1.orig/ld/emultempl/pep.em	2016-01-14 13:00:17 -0500
++++ binutils-2.25.1/ld/emultempl/pep.em	2016-01-14 13:11:01 -0500
+@@ -71,6 +71,7 @@ fragment <<EOF
     header in generic PE code.  */
  #include "coff/x86_64.h"
  #include "coff/pe.h"
 +#include "coff/pe_debugS.h"
  
- /* FIXME: This is a BFD internal header file, and we should not be
+ /* FIXME: These are BFD internal header files, and we should not be
     using it here.  */
-@@ -1143,6 +1144,140 @@ debug_section_p (bfd *abfd ATTRIBUTE_UNU
-     *found = 1;
+@@ -1385,6 +1386,140 @@ setup_build_id (bfd *ibfd)
+   return FALSE;
  }
  
 +#define process_debugS_fail(fmt, a...) do { printf( fmt, ## a ); return 1; } while(0)
@@ -642,7 +642,7 @@ diff -pruN -x '*~' binutils-2.21.1.orig/ld/emultempl/pep.em binutils-2.21.1/ld/e
  static void
  gld_${EMULATION_NAME}_after_open (void)
  {
-@@ -1438,11 +1573,217 @@ gld_${EMULATION_NAME}_after_open (void)
+@@ -1708,11 +1843,217 @@ gld_${EMULATION_NAME}_after_open (void)
  	  }
        }
    }
