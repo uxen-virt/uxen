@@ -23,9 +23,6 @@ GCC_VERSION = 4.6.2
 MINGW64_DISTFILES = mingw-w64-v2.0.1.tar.gz
 MINGW64_DIR = mingw-w64-v2.0.1
 
-GMP_DISTFILES = gmp-4.3.2.tar.bz2
-GMP_DIR = gmp-4.3.2
-
 VPATH = $(SRCDIR)/patches:$(XEN_DISTFILES)
 
 BUILD_ENV = PATH="$(TOOLSDIR)/bin:$$PATH"
@@ -200,47 +197,12 @@ mingw64/.extracted: $(MINGW64_DISTFILES)
 	cat $< | (cd $(@D) && tar zxf -)
 	@touch $@
 
-gmp/.installed: gmp/.built
-	cd $(@D)/build && $(BUILD_ENV) \
-	  $(MAKE) install
-	@touch $@
-
-gmp/.built: gmp/.configured
-	cd $(@D)/build && $(BUILD_ENV) \
-	  $(MAKE)
-	@touch $@
-
-gmp/.configured: $(TOOLSDIR)/bin/.exists $(INSTALL_DIR)/.exists
-gmp/.configured: gmp/.extracted
-	@rm -rf $(@D)/build
-	@mkdir -p $(@D)/build
-	cd $(@D)/build && $(BUILD_ENV) \
-	  ../$(GMP_DIR)/configure --prefix=$(INSTALL_DIR) \
-	    --with-sysroot=$(INSTALL_DIR) \
-	    --bindir=$(TOOLSDIR)/bin \
-	    --host=$(CROSS_TARGET) \
-	    --program-prefix=$(CROSS_TARGET)-long-
-	@touch $@
-
-gmp/.patched: gmp/.extracted
-gmp/.patched: $(GMP_PATCHES)
-	cat $< | (cd $(@D)/$(GMP_DIR) && patch -p1)
-	@touch $@
-
-gmp/.extracted: $(GMP_DISTFILES)
-	@rm -rf $(@D)
-	@mkdir -p $(@D)
-	cat $< | (cd $(@D) && tar jxf -)
-	@touch $@
-
-.SECONDARY: binutils/.exists gcc/.exists mingw64/.exists gmp/.exists
+.SECONDARY: binutils/.exists gcc/.exists mingw64/.exists
 binutils-%: binutils/.%
 	@ :
 gcc-%: gcc/.%
 	@ :
 mingw64-%: mingw64/.%
-	@ :
-gmp-%: gmp/.%
 	@ :
 
 endif # MAKENOW
