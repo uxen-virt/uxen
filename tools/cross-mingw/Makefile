@@ -11,31 +11,31 @@ XEN_DISTFILES ?= $(TOPDIR)/../distfiles
 
 INSTALL_DIR = $(TOOLSDIR)/cross-mingw
 
-BINUTILS_DISTFILES = binutils-2.23.1.tar.bz2
-BINUTILS_PATCHES = binutils-pie-entry-point.patch binutils-texinfo.patch binutils-string.patch binutils-host-osx109.patch binutils-gcc-4.9.patch
-BINUTILS_DIR = binutils-2.23.1
+BINUTILS_DISTFILES = binutils-2.25.1.tar.bz2
+BINUTILS_PATCHES = binutils-pie-entry-point.patch binutils-install-libiberty.patch
+BINUTILS_DIR = binutils-2.25.1
 
-GCC_DISTFILES = gcc-4.7.3.tar.bz2
+GCC_DISTFILES = gcc-4.9.3.tar.bz2
 GCC_PATCHES = gcc-cross-mingw-include-path.patch libssp-win32-random-stackguard.patch
-GCC_DIR = gcc-4.7.3
-GCC_VERSION = 4.7.3
+GCC_DIR = gcc-4.9.3
+GCC_VERSION = 4.9.3
 
-GDB_DISTFILES = gdb-7.4.tar.bz2
-GDB_PATCHES = gdbserver-argv0.patch gdb-texinfo.patch gdb-fix-remote-qOffsets.patch gdb-bfd-texinfo.patch gdb-host-osx109.patch gdb-gcc-4.9.patch
-GDB_DIR = gdb-7.4
+GDB_DISTFILES = gdb-7.10.1.tar.gz
+GDB_PATCHES = gdbserver-argv0.patch gdb-fix-remote-qOffsets.patch
+GDB_DIR = gdb-7.10.1
 
 MINGW64_DISTFILES = mingw-w64-v2.0.8.tar.gz
 MINGW64_PATCHES = mingw-w64-v2.0.8-libwinhttp.patch mingw-w64-v2.0.8-d3d9ex.patch mingw-w64-v2.0.8-libfltlib.patch 
 MINGW64_DIR = mingw-w64-v2.0.8
 
-GMP_DISTFILES = gmp-5.1.1.tar.bz2
-GMP_DIR = gmp-5.1.1
+GMP_DISTFILES = gmp-6.1.0.tar.bz2
+GMP_DIR = gmp-6.1.0
 
-MPFR_DISTFILES = mpfr-3.1.2.tar.bz2
-MPFR_DIR = mpfr-3.1.2
+MPFR_DISTFILES = mpfr-3.1.3.tar.bz2
+MPFR_DIR = mpfr-3.1.3
 
-MPC_DISTFILES = mpc-1.0.1.tar.gz
-MPC_DIR = mpc-1.0.1
+MPC_DISTFILES = mpc-1.0.3.tar.gz
+MPC_DIR = mpc-1.0.3
 
 E2FSPROGS_DISTFILES = e2fsprogs-1.42.tar.gz
 E2FSPROGS_PATCHES = e2fsprogs-1.42-mingw.diff
@@ -440,7 +440,7 @@ gdb/.patched: $(GDB_PATCHES)
 gdb/.extracted: $(GDB_DISTFILES)
 	@rm -rf $(@D)
 	@mkdir -p $(@D)
-	cat $< | (cd $(@D) && tar jxf -)
+	cat $< | (cd $(@D) && tar zxf -)
 	@touch $@
 
 e2fsprogs/.installed: e2fsprogs/.built
