@@ -610,6 +610,8 @@ void stdvga_init(struct domain *d)
             break;
         s->vram_page[i] = pg;
         p = __map_domain_page(pg);
+        if ( p == NULL )
+            break;
         clear_page(p);
         unmap_domain_page(p);
     }

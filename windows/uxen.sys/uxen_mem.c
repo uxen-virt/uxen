@@ -2,7 +2,7 @@
  *  uxen_mem.c
  *  uxen
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -1641,7 +1641,12 @@ uxen_mem_map_page(xen_pfn_t mfn)
 	return va;
 #endif
 
-    return memcache_enter((mc_mfn_t)mfn);
+    va = memcache_enter((mc_mfn_t)mfn);
+#ifdef DBG
+    if (!va)
+        dprintk("%s: memcache_enter failed for mfn %x\n", __FUNCTION__, mfn);
+#endif
+    return va;
 }
 
 uint64_t __cdecl
