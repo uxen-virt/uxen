@@ -171,7 +171,7 @@ check_work_vcpu(struct vcpu *v)
         return 1;
     }
 
-    if (UI_HOST_CALL(ui_host_needs_preempt, v->vm_vcpu_info_shared)) {
+    if (UI_HOST_CALL(ui_host_needs_preempt)) {
         cpu_irq_enable();
         return 1;
     }

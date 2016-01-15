@@ -2677,7 +2677,7 @@ p2m_pod_compress_template_work(void *_d)
 
     ct = -NOW();
     for (gpfn = p2m->compress_gpfn; gpfn <= p2m->max_mapped_pfn; gpfn++) {
-        if (UI_HOST_CALL(ui_host_needs_preempt, NULL))
+        if (UI_HOST_CALL(ui_host_needs_preempt))
             break;
         mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, &page_order);
         if (!mfn_valid_page(mfn)) {

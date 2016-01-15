@@ -482,10 +482,9 @@ set_host_preemption(uint64_t disable)
 }
 
 static uint64_t __cdecl
-uxen_op_host_needs_preempt(struct vm_vcpu_info_shared *vcis)
+uxen_op_host_needs_preempt(void)
 {
 #ifdef _WIN64
-    struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
     uint8_t volatile *kprcb =
 	(uint8_t volatile *)__readgsqword(offsetof(KPCR, CurrentPrcb));
 
@@ -533,7 +532,6 @@ uxen_op_host_needs_preempt(struct vm_vcpu_info_shared *vcis)
 
     return 0;
 #else
-    struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
     uint8_t volatile *kprcb =
 	(uint8_t volatile *)__readfsdword(offsetof(KPCR, Prcb));
 

@@ -351,7 +351,7 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
             UI_HOST_CALL(ui_kick_vcpu_cancel, vci);
             atomic_set(&v->event_check, 0);
         }
-        if (v->force_preempt || UI_HOST_CALL(ui_host_needs_preempt, vci)) {
+        if (v->force_preempt || UI_HOST_CALL(ui_host_needs_preempt)) {
             v->force_preempt = 0;
             vci->vci_run_mode = VCI_RUN_MODE_PREEMPT;
             ret = 0;

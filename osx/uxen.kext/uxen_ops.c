@@ -348,7 +348,7 @@ set_host_preemption(uint64_t disable)
 }
 
 static uint64_t __cdecl
-host_needs_preempt(struct vm_vcpu_info_shared *vcis)
+host_needs_preempt(void)
 {
     ast_t *ast = xnu_ast_pending();
 
