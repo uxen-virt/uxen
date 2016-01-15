@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -24,6 +24,7 @@
 
 #define SLIRP_GW_NAME "417007E91B64.bromium.com"
 #define DNS_PACKET_MAXSIZE 700
+#define DEFAULT_MAX_SCHED_DNS_QUERIES 2048
 
 #define GUEST_DNS_SUFFIX ".internal-domain.local"
 
@@ -37,6 +38,9 @@ static int proxy_forbid_nonexistent_dns_name = 0;
 static int debug_resolver = 0;
 static int ipv6_allowed = 1;
 static int no_proxy_mode = 0;
+
+static unsigned max_pending_dns_queries = DEFAULT_MAX_SCHED_DNS_QUERIES;
+static unsigned pending_dns_queries = 0;
 
 static void ndns_close(CharDriverState *chr);
 
@@ -84,6 +88,8 @@ struct ndns_data {
     struct nickel *ni;
     char *dname;
     int denied;
+    int scheduled;
+    int failure;
     struct dns_response response;
     union {
         struct {
@@ -197,9 +203,10 @@ static void response_dns_denied(char *name, union dnsmsg_header *hdr, const char
     hdr->x.rcode = 3;
 }
 
-static void response_dns_server_fail(char *name, union dnsmsg_header *hdr)
+static void response_dns_server_fail(char *name, union dnsmsg_header *hdr, bool log)
 {
-    NETLOG2("DNS server fail response built for %s", name);
+    if (log)
+        NETLOG2("DNS server fail response built for %s", name);
     hdr->x.qr = 1;
     hdr->x.aa = 1;
     hdr->x.rd = 1;
@@ -216,6 +223,13 @@ static void dns_config(yajl_val config)
         debug_printf("%s: IPv6 addresses are allowed and will be processed\n", __FUNCTION__);
     no_proxy_mode = yajl_object_get_bool_default(config, "no-proxy-mode", 0);
     NETLOG("(dns) no-proxy-mode is %s", no_proxy_mode ? "ON" : "OFF");
+
+    max_pending_dns_queries = yajl_object_get_integer_default(config, "max-sched-dns-queries",
+                                                           DEFAULT_MAX_SCHED_DNS_QUERIES);
+    if (max_pending_dns_queries)
+        NETLOG("(dns) max-sched-dns-queries set to %u", max_pending_dns_queries);
+    else
+        NETLOG("(dns) no limit for the number of scheduled DNS queries");
 }
 
 bool dns_is_nickel_domain_name(const char *domain)
@@ -579,6 +593,11 @@ static void dns_input_continue(void *opaque)
     if (dstate->resp_written)
         goto write_response;
 
+    if (dstate->failure) {
+        DDNS(dstate, "response_dns_server_fail");
+        response_dns_server_fail(cname, hdr, false);
+        goto write_response;
+    }
     if (dstate->denied) {
         response_dns_denied(cname, hdr, "denied");
         goto write_response;
@@ -602,7 +621,7 @@ static void dns_input_continue(void *opaque)
         if (dstate->response.err == EAI_NONAME || dstate->response.err == EAI_SERVICE)
             response_dns_nx(cname, hdr);
         else
-            response_dns_server_fail(cname, hdr);
+            response_dns_server_fail(cname, hdr, true);
         goto write_response;
     }
 
@@ -766,6 +785,8 @@ out:
         ni_priv_free(dstate->dname);
         ni_priv_free(dstate->dns_req);
         dns_response_free(&dstate->response);
+        if (dstate->scheduled)
+            pending_dns_queries--;
         free(dstate);
     }
     DDNS(dstate, "exit");
@@ -910,9 +931,27 @@ ndns_chr_write(CharDriverState *chr, const uint8_t *buf, int blen)
         goto dns_continue;
     }
 
+    if (max_pending_dns_queries && pending_dns_queries >= max_pending_dns_queries) {
+        static bool warn_once = false;
+
+        if (!warn_once) {
+            NETLOG("%s: WARN max_pending_dns_queries %u reached - returning DNS error",
+                    __FUNCTION__, max_pending_dns_queries);
+            warn_once = true;
+        }
+
+        dstate->failure = 1;
+        goto dns_continue;
+    }
+
+    dstate->scheduled = 1;
+    pending_dns_queries++;
     // non proxy async dns lookup
-    if (ni_schedule_bh(dstate->ni, dns_sync_query, dns_input_continue, dstate))
+    if (ni_schedule_bh(dstate->ni, dns_sync_query, dns_input_continue, dstate)) {
+        pending_dns_queries--;
+        dstate->scheduled = 0;
         goto cleanup;
+    }
 
     return 0;
 
