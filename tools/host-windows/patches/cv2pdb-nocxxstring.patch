@@ -1,9 +1,9 @@
-diff -aburN cv2pdb-0.31-orig/src/dwarf2pdb.cpp cv2pdb-0.31/src/dwarf2pdb.cpp
---- cv2pdb-0.31-orig/src/dwarf2pdb.cpp	2014-04-14 11:58:28 +0100
-+++ cv2pdb-0.31/src/dwarf2pdb.cpp	2014-04-14 12:44:35 +0100
-@@ -1419,13 +1419,15 @@
- 	return true;
- }
+diff --strip-trailing-cr -pruN cv2pdb-5c63d48.orig/src/dwarflines.cpp cv2pdb-5c63d48/src/dwarflines.cpp
+--- cv2pdb-5c63d48.orig/src/dwarflines.cpp	2015-10-08 03:37:41 -0400
++++ cv2pdb-5c63d48/src/dwarflines.cpp	2016-01-15 10:29:44 -0500
+@@ -10,13 +10,15 @@
+ #include "dwarf.h"
+ #include "readDwarf.h"
  
 -bool isRelativePath(const std::string& s)
 +bool isRelativePath(const char *s)
@@ -20,9 +20,9 @@ diff -aburN cv2pdb-0.31-orig/src/dwarf2pdb.cpp cv2pdb-0.31/src/dwarf2pdb.cpp
  		return true;
  	if(s[1] == ':')
  		return false;
-@@ -1441,6 +1443,9 @@
+@@ -44,6 +46,9 @@ bool printLines(char const *fname, unsig
  
- bool _flushDWARFLines(CV2PDB* cv2pdb, DWARF_LineState& state)
+ bool _flushDWARFLines(const PEImage& img, mspdb::Mod* mod, DWARF_LineState& state)
  {
 +	char fname[MAX_PATH];
 +	int len;
@@ -30,7 +30,7 @@ diff -aburN cv2pdb-0.31-orig/src/dwarf2pdb.cpp cv2pdb-0.31/src/dwarf2pdb.cpp
  	if(state.lineInfo.size() == 0)
  		return true;
  
-@@ -1465,17 +1470,20 @@
+@@ -70,17 +75,20 @@ bool _flushDWARFLines(const PEImage& img
  		dfn = &state.files[state.file - 1];
  	else
  		return false;
@@ -58,27 +58,37 @@ diff -aburN cv2pdb-0.31-orig/src/dwarf2pdb.cpp cv2pdb-0.31/src/dwarf2pdb.cpp
  		if(fname[i] == '/')
  			fname[i] = '\\';
  
-@@ -1501,8 +1509,8 @@
+@@ -94,7 +94,7 @@ bool _flushDWARFLines(const PEImage& img
+ 
+     if (!mod)
+     {
+-        printLines(fname.c_str(), segIndex, img.findSectionSymbolName(segIndex),
++        printLines(fname, segIndex, img.findSectionSymbolName(segIndex),
+                    state.lineInfo.data(), state.lineInfo.size());
+ 		state.lineInfo.resize(0);
+ 		return true;
+@@ -113,8 +121,8 @@ bool _flushDWARFLines(const PEImage& img
  			{
  				unsigned int length = state.lineInfo[entry-1].offset + 1; // firstAddr has been subtracted before
  				if(dump)
 -					printf("AddLines(%08x+%04x, Line=%4d+%3d, %s)\n", firstAddr, length, firstLine, entry - firstEntry, fname.c_str());
--				int rc = mod->AddLines(fname.c_str(), segIndex + 1, firstAddr, length, firstAddr, firstLine,
+-				rc = mod->AddLines(fname.c_str(), segIndex + 1, firstAddr, length, firstAddr, firstLine,
 +					printf("AddLines(%08x+%04x, Line=%4d+%3d, %s)\n", firstAddr, length, firstLine, entry - firstEntry, fname);
-+				int rc = mod->AddLines(fname, segIndex + 1, firstAddr, length, firstAddr, firstLine,
- 									   (unsigned char*) &state.lineInfo[firstEntry], 
- 									   (ln - firstEntry) * sizeof(state.lineInfo[0]));
++				rc = mod->AddLines(fname, segIndex + 1, firstAddr, length, firstAddr, firstLine,
+ 									(unsigned char*) &state.lineInfo[firstEntry], 
+ 									(ln - firstEntry) * sizeof(state.lineInfo[0]));
  				firstLine = state.lineInfo[ln].line;
-@@ -1518,14 +1526,14 @@
+@@ -130,15 +138,15 @@ bool _flushDWARFLines(const PEImage& img
  	}
  	unsigned int length = eaddr - firstAddr;
  	if(dump)
 -		printf("AddLines(%08x+%04x, Line=%4d+%3d, %s)\n", firstAddr, length, firstLine, entry - firstEntry, fname.c_str());
--	int rc = mod->AddLines(fname.c_str(), segIndex + 1, firstAddr, length, firstAddr, firstLine,
+-	rc = mod->AddLines(fname.c_str(), segIndex + 1, firstAddr, length, firstAddr, firstLine,
 +		printf("AddLines(%08x+%04x, Line=%4d+%3d, %s)\n", firstAddr, length, firstLine, entry - firstEntry, fname);
-+	int rc = mod->AddLines(fname, segIndex + 1, firstAddr, length, firstAddr, firstLine,
- 						   (unsigned char*) &state.lineInfo[firstEntry], 
- 						   (entry - firstEntry) * sizeof(state.lineInfo[0]));
++	rc = mod->AddLines(fname, segIndex + 1, firstAddr, length, firstAddr, firstLine,
+ 					    (unsigned char*) &state.lineInfo[firstEntry], 
+ 					    (entry - firstEntry) * sizeof(state.lineInfo[0]));
+ 
  #else
  	unsigned int firstLine = 0;
  	unsigned int firstAddr = 0;

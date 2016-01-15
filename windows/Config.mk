@@ -1,5 +1,5 @@
 #
-# Copyright 2011-2015, Bromium, Inc.
+# Copyright 2011-2016, Bromium, Inc.
 # Author: Christian Limpach <Christian.Limpach@gmail.com>
 # SPDX-License-Identifier: ISC
 #
@@ -61,9 +61,10 @@ ifeq (,$(HOST_WINDOWS))
 sign = ($2 && cmd /c "$(UXEN_WINDOWS_SIGN) $1") || \
 	(rm -f $1; false)
 link = $(LINK.o) -o $1 $2
-install_exe_extra = (dbg=$2; pdb=$${dbg%.*}.pdb;                        \
-                     d=`dirname $1`; f=`basename $1`;                   \
-                     $(call genpdb,$$dbg,$$pdb);                        \
+install_exe_strip = (dbg=$2; pdb=$${dbg%.*}.pdb;                      \
+                     d=$$(dirname $1); f=$$(basename $1);             \
+                     $(call genpdb,$$dbg,$$pdb) &&                    \
+                     $(STRIP) -o $1 $2 && \
                      (cd "$$d" && cmd /c "$(UXEN_WINDOWS_SIGN) $$f"))
 else
 sign = $2

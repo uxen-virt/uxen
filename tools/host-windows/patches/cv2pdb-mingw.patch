@@ -1,7 +1,7 @@
-diff -abruN cv2pdb-0.31-orig/src/Makefile.mingw cv2pdb-0.31/src/Makefile.mingw
---- cv2pdb-0.31-orig/src/Makefile.mingw	1970-01-01 00:00:00 +0000
-+++ cv2pdb-0.31/src/Makefile.mingw	2014-03-18 12:12:06 +0000
-@@ -0,0 +1,23 @@
+diff --strip-trailing-cr -pruN cv2pdb-5c63d48.orig/src/Makefile.mingw cv2pdb-5c63d48/src/Makefile.mingw
+--- cv2pdb-5c63d48.orig/src/Makefile.mingw	1969-12-31 19:00:00 -0500
++++ cv2pdb-5c63d48/src/Makefile.mingw	2016-01-15 10:28:42 -0500
+@@ -0,0 +1,25 @@
 +TARGET = cv2pdb.exe
 +
 +#CFLAGS =
@@ -11,8 +11,10 @@ diff -abruN cv2pdb-0.31-orig/src/Makefile.mingw cv2pdb-0.31/src/Makefile.mingw
 +       cvutil.o \
 +       demangle.o \
 +       dwarf2pdb.o \
++       dwarflines.o \
 +       main.o \
 +       mspdb.o \
++       readdwarf.o \
 +       symutil.o
 +
 +all: $(TARGET)
@@ -25,9 +27,9 @@ diff -abruN cv2pdb-0.31-orig/src/Makefile.mingw cv2pdb-0.31/src/Makefile.mingw
 +
 +clean:
 +	rm -f $(OBJS) $(TARGET)
-diff -abruN cv2pdb-0.31-orig/src/cv2pdb.cpp cv2pdb-0.31/src/cv2pdb.cpp
---- cv2pdb-0.31-orig/src/cv2pdb.cpp	2014-03-01 15:50:02 +0000
-+++ cv2pdb-0.31/src/cv2pdb.cpp	2014-03-18 12:12:06 +0000
+diff --strip-trailing-cr -pruN cv2pdb-5c63d48.orig/src/cv2pdb.cpp cv2pdb-5c63d48/src/cv2pdb.cpp
+--- cv2pdb-5c63d48.orig/src/cv2pdb.cpp	2015-10-08 03:37:41 -0400
++++ cv2pdb-5c63d48/src/cv2pdb.cpp	2016-01-15 10:28:42 -0500
 @@ -11,6 +11,7 @@
  
  #include <stdio.h>
@@ -36,7 +38,7 @@ diff -abruN cv2pdb-0.31-orig/src/cv2pdb.cpp cv2pdb-0.31/src/cv2pdb.cpp
  
  #define REMOVE_LF_DERIVED  1  // types wrong by DMD
  #define PRINT_INTERFACEVERSON 0
-@@ -1490,9 +1491,9 @@
+@@ -1498,9 +1499,9 @@ const char* CV2PDB::appendAssocArray(int
  	char keyname[kMaxNameLen];
  	char elemname[kMaxNameLen];
  	if(!nameOfType(keyType, keyname, sizeof(keyname)))
@@ -48,9 +50,9 @@ diff -abruN cv2pdb-0.31-orig/src/cv2pdb.cpp cv2pdb-0.31/src/cv2pdb.cpp
  
  	sprintf(name, "internal@aaA<%s,%s>", keyname, elemname);
  
-diff -abruN cv2pdb-0.31-orig/src/demangle.cpp cv2pdb-0.31/src/demangle.cpp
---- cv2pdb-0.31-orig/src/demangle.cpp	2014-03-01 15:50:02 +0000
-+++ cv2pdb-0.31/src/demangle.cpp	2014-03-18 12:12:06 +0000
+diff --strip-trailing-cr -pruN cv2pdb-5c63d48.orig/src/demangle.cpp cv2pdb-5c63d48/src/demangle.cpp
+--- cv2pdb-5c63d48.orig/src/demangle.cpp	2015-10-08 03:37:41 -0400
++++ cv2pdb-5c63d48/src/demangle.cpp	2016-01-15 10:28:42 -0500
 @@ -12,6 +12,8 @@
   *	Frits van Bommel
   */
@@ -60,12 +62,10 @@ diff -abruN cv2pdb-0.31-orig/src/demangle.cpp cv2pdb-0.31/src/demangle.cpp
  #include <string>
  #include <ctype.h>
  #include <assert.h>
-@@ -457,11 +459,19 @@
- 			b = (ubyte) ((ascii2hex(name[ni + i * 2]) << 4) + ascii2hex(name[ni + i * 2 + 1]));
- 			p[i] = b;
- 		}
-+
- 		// extract 10-byte double from rdata
+@@ -465,10 +467,17 @@ public:
+ #ifdef _M_X64
+ 		cvt80to64(rdata, &r);
+ #else
 +#if 0
  		__asm {
  			fld TBYTE PTR rdata;
@@ -77,12 +77,25 @@ diff -abruN cv2pdb-0.31-orig/src/demangle.cpp cv2pdb-0.31/src/demangle.cpp
 +                     : "=m" (r)
 +                     : "m" (rdata[0]));
 +#endif
+ #endif
  
  		char num[30];
- 		sprintf(num, "%g", r);
-diff -abruN cv2pdb-0.31-orig/src/main.cpp cv2pdb-0.31/src/main.cpp
---- cv2pdb-0.31-orig/src/main.cpp	2014-03-01 15:50:02 +0000
-+++ cv2pdb-0.31/src/main.cpp	2014-03-18 12:12:06 +0000
+diff --strip-trailing-cr -pruN cv2pdb-5c63d48.orig/src/dwarf2pdb.cpp cv2pdb-5c63d48/src/dwarf2pdb.cpp
+--- cv2pdb-5c63d48.orig/src/dwarf2pdb.cpp	2015-10-08 03:37:41 -0400
++++ cv2pdb-5c63d48/src/dwarf2pdb.cpp	2016-01-15 10:40:56 -0500
+@@ -29,8 +29,7 @@ void CV2PDB::checkDWARFTypeAlloc(int siz
+ 		//allocDwarfTypes += size + add;
+ 		allocDwarfTypes += allocDwarfTypes/2 + size + add;
+ 		dwarfTypes = (BYTE*) realloc(dwarfTypes, allocDwarfTypes);
+-		if (dwarfTypes == nullptr)
+-			__debugbreak();
++		assert (dwarfTypes != nullptr);
+ 	}
+ }
+ 
+diff --strip-trailing-cr -pruN cv2pdb-5c63d48.orig/src/main.cpp cv2pdb-5c63d48/src/main.cpp
+--- cv2pdb-5c63d48.orig/src/main.cpp	2015-10-08 03:37:41 -0400
++++ cv2pdb-5c63d48/src/main.cpp	2016-01-15 10:28:42 -0500
 @@ -9,6 +9,9 @@
  #include "symutil.h"
  
@@ -93,10 +106,10 @@ diff -abruN cv2pdb-0.31-orig/src/main.cpp cv2pdb-0.31/src/main.cpp
  
  double
  #include "../VERSION"
-diff -abruN cv2pdb-0.31-orig/src/mspdb.cpp cv2pdb-0.31/src/mspdb.cpp
---- cv2pdb-0.31-orig/src/mspdb.cpp	2014-03-01 15:50:02 +0000
-+++ cv2pdb-0.31/src/mspdb.cpp	2014-03-18 12:12:06 +0000
-@@ -13,10 +13,10 @@
+diff --strip-trailing-cr -pruN cv2pdb-5c63d48.orig/src/mspdb.cpp cv2pdb-5c63d48/src/mspdb.cpp
+--- cv2pdb-5c63d48.orig/src/mspdb.cpp	2015-10-08 03:37:41 -0400
++++ cv2pdb-5c63d48/src/mspdb.cpp	2016-01-15 10:28:42 -0500
+@@ -13,12 +13,12 @@
  HMODULE modMsPdb;
  mspdb::fnPDBOpen2W *pPDBOpen2W;
  
@@ -104,16 +117,20 @@ diff -abruN cv2pdb-0.31-orig/src/mspdb.cpp cv2pdb-0.31/src/mspdb.cpp
 -char* mspdb100_dll = "mspdb100.dll";
 -char* mspdb110_dll = "mspdb110.dll";
 -char* mspdb120_dll = "mspdb120.dll";
+-char* mspdb140_dll = "mspdb140.dll";
+-// char* mspdb110shell_dll = "mspdbst.dll"; // the VS 2012 Shell uses this file instead of mspdb110.dll, but is missing mspdbsrv.exe
 +const char* mspdb80_dll = "mspdb80.dll";
 +const char* mspdb100_dll = "mspdb100.dll";
 +const char* mspdb110_dll = "mspdb110.dll";
 +const char* mspdb120_dll = "mspdb120.dll";
- // char* mspdb110shell_dll = "mspdbst.dll"; // the VS 2012 Shell uses this file instead of mspdb110.dll, but is missing mspdbsrv.exe
++const char* mspdb140_dll = "mspdb140.dll";
++// const char* mspdb110shell_dll = "mspdbst.dll"; // the VS 2012 Shell uses this file instead of mspdb110.dll, but is missing mspdbsrv.exe
  
  int mspdb::vsVersion = 8;
-diff -abruN cv2pdb-0.31-orig/src/mspdb.h cv2pdb-0.31/src/mspdb.h
---- cv2pdb-0.31-orig/src/mspdb.h	2014-03-01 15:50:02 +0000
-+++ cv2pdb-0.31/src/mspdb.h	2014-03-18 12:12:06 +0000
+ 
+diff --strip-trailing-cr -pruN cv2pdb-5c63d48.orig/src/mspdb.h cv2pdb-5c63d48/src/mspdb.h
+--- cv2pdb-5c63d48.orig/src/mspdb.h	2015-10-08 03:37:41 -0400
++++ cv2pdb-5c63d48/src/mspdb.h	2016-01-15 10:28:42 -0500
 @@ -7,6 +7,7 @@
  #ifndef __MSPDB_H__
  #define __MSPDB_H__
@@ -122,7 +139,7 @@ diff -abruN cv2pdb-0.31-orig/src/mspdb.h cv2pdb-0.31/src/mspdb.h
  #include <stdio.h>
  
  namespace mspdb
-@@ -37,6 +38,14 @@
+@@ -37,6 +38,14 @@ struct IPI;
  struct NameMap;
  struct EnumNameMap;
  
@@ -137,7 +154,7 @@ diff -abruN cv2pdb-0.31-orig/src/mspdb.h cv2pdb-0.31/src/mspdb.h
  #define MRECmp MRECmp2
  #define PDBCommon PDB
  #define SrcCommon Src
-@@ -61,146 +70,146 @@
+@@ -61,137 +70,137 @@ extern int vsVersion;
  */
  
  struct MREUtil {
@@ -355,12 +372,6 @@ diff -abruN cv2pdb-0.31-orig/src/mspdb.h cv2pdb-0.31/src/mspdb.h
 -public: virtual int MRECmp::FStoreDepData(struct DepData *);
 -public: virtual int MRECmp::FRestoreDepData(struct DepData *);
 -public: virtual void MRECmp::structIsBoring(unsigned long);
--};
--
--//public: virtual void * Pool<16384>::AllocBytes(unsigned int);
--//public: virtual void EnumSyms::get(unsigned char * *);
--//public: virtual void * Pool<65536>::AllocBytes(unsigned int);
--//public: virtual void EnumSyms::get(unsigned char * *);
 +public: virtual int FRelease(void);
 +public: virtual int FOpenCompiland(struct MREFile * *,unsigned short const *,unsigned short const *);
 +public: virtual int FCloseCompiland(struct MREFile *,int);
@@ -369,21 +380,10 @@ diff -abruN cv2pdb-0.31-orig/src/mspdb.h cv2pdb-0.31/src/mspdb.h
 +public: virtual int FStoreDepData(struct DepData *);
 +public: virtual int FRestoreDepData(struct DepData *);
 +public: virtual void structIsBoring(unsigned long);
-+};
-+
-+//public: virtual void * AllocBytes(unsigned int);
-+//public: virtual void get(unsigned char * *);
-+//public: virtual void * AllocBytes(unsigned int);
-+//public: virtual void get(unsigned char * *);
+ };
  
--typedef int __cdecl fnPDBOpen2W(unsigned short const *path,char const *mode,long *p,
--				unsigned short *ext,unsigned int flags,struct PDB **pPDB);
-+typedef int __cdecl fnPDBOpen2W(const wchar_t *path,char const *mode,long *p,
-+				wchar_t *ext,unsigned int flags,struct PDB **pPDB);
- 
- struct PDB_part1 {
- public: virtual unsigned long QueryInterfaceVersion(void);
-@@ -231,7 +240,7 @@
+ //public: virtual void * Pool<16384>::AllocBytes(unsigned int);
+@@ -231,7 +240,7 @@ public: virtual int CopyTo(char const *,
  public: virtual int OpenSrc(struct Src * *);
  public: virtual long QueryLastErrorExW(unsigned short *,unsigned int);
  public: virtual unsigned short * QueryPDBNameExW(unsigned short *,unsigned int);
@@ -392,7 +392,7 @@ diff -abruN cv2pdb-0.31-orig/src/mspdb.h cv2pdb-0.31/src/mspdb.h
  public: virtual int CopyToW(unsigned short const *,unsigned long,unsigned long);
  public: virtual int fIsSZPDB(void)const ;
  public: virtual int containsW(unsigned short const *,unsigned long *);
-@@ -249,28 +258,28 @@
+@@ -249,42 +258,42 @@ struct PDB
  public: 
  	static int __cdecl Open2W(unsigned short const *path,char const *mode,long *p,unsigned short *ext,unsigned int flags,struct PDB **pPDB);
  
@@ -429,9 +429,6 @@ diff -abruN cv2pdb-0.31-orig/src/mspdb.h cv2pdb-0.31/src/mspdb.h
  	}
  };
  
-@@ -275,16 +284,16 @@
- };
- 
  struct Src {
 -public: virtual bool Src::Close(void);
 -public: virtual bool SrcCommon::Add(struct SrcHeader const *,void const *);
@@ -456,7 +453,7 @@ diff -abruN cv2pdb-0.31-orig/src/mspdb.h cv2pdb-0.31/src/mspdb.h
  };
  
  #include "pshpack1.h"
-@@ -325,15 +334,19 @@
+@@ -325,15 +334,19 @@ struct TypeChunk
  	unsigned short len;
  	unsigned short type;
  
@@ -476,7 +473,7 @@ diff -abruN cv2pdb-0.31-orig/src/mspdb.h cv2pdb-0.31/src/mspdb.h
  };
  
  struct TypeData
-@@ -345,44 +358,44 @@
+@@ -345,44 +358,44 @@ struct TypeData
  #include "poppack.h"
  
  struct Mod {
@@ -559,7 +556,7 @@ diff -abruN cv2pdb-0.31-orig/src/mspdb.h cv2pdb-0.31/src/mspdb.h
  };
  
  
-@@ -461,23 +474,23 @@
+@@ -461,108 +474,108 @@ struct DBI
  {
      DBI_VS9 vs9;
  
@@ -588,9 +585,6 @@ diff -abruN cv2pdb-0.31-orig/src/mspdb.h cv2pdb-0.31/src/mspdb.h
 -        return vs9.SetMachineType(type);
 +        DBI_VS9 *p = &vs9; return p->SetMachineType(type);
      }
- };
- 
-@@ -482,87 +495,87 @@
  };
  
  struct StreamCached {
@@ -743,10 +737,10 @@ diff -abruN cv2pdb-0.31-orig/src/mspdb.h cv2pdb-0.31/src/mspdb.h
  };
  
  } // namespace mspdb
-diff -abruN cv2pdb-0.31-orig/src/symutil.cpp cv2pdb-0.31/src/symutil.cpp
---- cv2pdb-0.31-orig/src/symutil.cpp	2014-03-01 15:50:02 +0000
-+++ cv2pdb-0.31/src/symutil.cpp	2014-03-18 12:12:06 +0000
-@@ -12,6 +12,9 @@
+diff --strip-trailing-cr -pruN cv2pdb-5c63d48.orig/src/symutil.cpp cv2pdb-5c63d48/src/symutil.cpp
+--- cv2pdb-5c63d48.orig/src/symutil.cpp	2015-10-08 03:37:41 -0400
++++ cv2pdb-5c63d48/src/symutil.cpp	2016-01-15 10:28:42 -0500
+@@ -12,6 +12,9 @@ extern "C" {
  }
  
  #include <assert.h>

@@ -1,5 +1,5 @@
 #
-# Copyright 2011-2015, Bromium, Inc.
+# Copyright 2011-2016, Bromium, Inc.
 # Author: Christian Limpach <Christian.Limpach@gmail.com>
 # SPDX-License-Identifier: ISC
 #
@@ -94,20 +94,18 @@ link = $(LINK.o) -o $1 $2
 sign = $2
 install_lib = install $1 $2
 install_data = install $1 $2
-install_exe_extra = true
-install_exe = ([ -d $2 ] &&                                     \
-               install $1 $2 &&                                 \
+install_exe_strip = $(STRIP) -o $1 $2
+install_exe = ([ -d $2 ] && set -e;                             \
                for src in $1; do                                \
-                 f=`basename "$$src"`;                          \
+                 f=$$(basename "$$src");                        \
                  dst="$2/$$f";                                  \
                  dbg="$2/debug/$$f";                            \
-		 mkdir -p "$2/debug";				\
-                 install $$dst $$dbg &&                         \
-                 $(STRIP) $$dst &&                              \
-                 $(call install_exe_extra,"$$dst","$$dbg") || { \
-		   rm -f "$$dst" "$$dbg";                       \
-		   exit 1;                                      \
-		 }                                              \
+                 mkdir -p "$2/debug" &&                         \
+                 install "$$src" "$$dbg" &&                     \
+                 $(call install_exe_strip,"$$dst","$$dbg") || { \
+                   rm -f "$$dst" "$$dbg";                       \
+                   exit 1;                                      \
+                 }                                              \
                done)
 
 include $(TOPDIR)/$(TARGET_HOST)/Config.mk

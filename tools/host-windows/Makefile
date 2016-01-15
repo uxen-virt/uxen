@@ -23,12 +23,15 @@ REGEX_DIR = mingw-libgnurx-2.5.1
 # extracted and recompressed as tar.bz2
 WIX_DISTFILES = wix37-binaries.tar.bz2
 
-CV2PDB_DISTFILES = cv2pdb-0.31.tar.gz
+CV2PDB_DISTFILES = cv2pdb-5c63d48.tar.bz2
 CV2PDB_PATCHES = cv2pdb-mingw.patch \
 		 cv2pdb-nocxxstring.patch \
 		 cv2pdb-timestamps.patch \
-		 cv2pdb-windows-path-separator.patch
-CV2PDB_DIR = cv2pdb-0.31
+		 cv2pdb-windows-path-separator.patch \
+		 cv2pdb-no-bigobj.patch \
+		 cv2pdb-buildid-and-no-strip.patch \
+		 cv2pdb-pdb-no-path.patch
+CV2PDB_DIR = cv2pdb-5c63d48
 
 VPATH = $(SRCDIR)/patches:$(XEN_DISTFILES)
 
@@ -126,7 +129,7 @@ cv2pdb/.installed: cv2pdb/.built
 cv2pdb/.built: $(TOOLSDIR)/bin/.exists
 cv2pdb/.built: cv2pdb/.patched
 	cd $(@D)/$(CV2PDB_DIR)/src && $(BUILD_ENV) \
-	  $(MAKE) -f Makefile.mingw CXX="c++ -m32"
+	  $(MAKE) -f Makefile.mingw CXX="c++ -m32 -std=c++11"
 	@touch $@
 
 cv2pdb/.patched: cv2pdb/.extracted
@@ -141,7 +144,7 @@ cv2pdb/.patched: $(CV2PDB_PATCHES)
 cv2pdb/.extracted: $(CV2PDB_DISTFILES)
 	@rm -rf $(@D)
 	@mkdir -p $(@D)
-	cat $< | (cd $(@D) && tar zxf -)
+	cat $< | (cd $(@D) && tar jxf -)
 	@touch $@
 
 .SECONDARY: iasl/.exists regex/.exists wix/.exists cv2pdb/.exists
