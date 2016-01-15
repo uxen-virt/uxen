@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -14,6 +14,7 @@ struct async_op_ctx {
     critical_section mx;
     ioh_event thread_exit_ev;
     int threads;
+    int max_threads;
 };
 
 static struct async_op_ctx *default_ctx = NULL;
@@ -74,6 +75,7 @@ async_op_init(void)
     critical_section_init(&ctx->mx);
     ioh_event_init(&ctx->thread_exit_ev);
     ctx->threads = 0;
+    ctx->max_threads = 0;
 
     return ctx;
 }
@@ -147,9 +149,10 @@ async_op_run(void *opaque)
                 break;
             }
         }
-        list_unlock(ctx);
         if (!op)
             break;
+        list_unlock(ctx);
+
         if (op->handle)
             op->handle(op->opaque);
 
@@ -159,7 +162,6 @@ async_op_run(void *opaque)
         list_unlock(ctx);
     }
 
-    list_lock(ctx);
     ctx->threads--;
     ioh_event_set(&ctx->thread_exit_ev);
     list_unlock(ctx);
@@ -171,19 +173,21 @@ int
 async_op_add(struct async_op_ctx *ctx, void *opaque, ioh_event *event,
              void (*handle)(void *), void (*process)(void *))
 {
+    int ret = -1;
     struct async_op_t *op;
     uxen_thread thread_h;
 
     if (!ctx) {
         ctx = default_ctx;
         if (!ctx)
-            return -1;
+            goto out;
     }
 
     op = calloc(1, sizeof(*op));
     if (!op)
-        return -1;
+        goto out;
 
+    ret = 0;
     op->state = handle ? ASOP_INIT : ASOP_PROCESS;
     op->opaque = opaque;
     op->event = event;
@@ -191,18 +195,19 @@ async_op_add(struct async_op_ctx *ctx, void *opaque, ioh_event *event,
     op->process = process;
 
     if (!handle) {
-        int ret;
-
         list_lock(ctx);
         LIST_INSERT_HEAD(&ctx->list, op, entry);
         ret = sched_bh(op);
         list_unlock(ctx);
-
-        return ret;
+        goto out;
     }
 
     list_lock(ctx);
     LIST_INSERT_HEAD(&ctx->list, op, entry);
+    if (ctx->max_threads && ctx->threads >= ctx->max_threads) {
+        list_unlock(ctx);
+        goto out;
+    }
     ctx->threads++;
     if (create_thread(&thread_h, async_op_run, ctx) < 0) {
         Wwarn("%s: create_thread failed", __FUNCTION__);
@@ -211,14 +216,16 @@ async_op_add(struct async_op_ctx *ctx, void *opaque, ioh_event *event,
         ctx->threads--;
         ioh_event_set(&ctx->thread_exit_ev);
         list_unlock(ctx);
-        return -1;
+        ret = -1;
+        goto out;
     }
     list_unlock(ctx);
 
     elevate_thread(thread_h);
     close_thread_handle(thread_h);
 
-    return 0;
+out:
+    return ret;
 }
 
 int
@@ -311,6 +318,12 @@ async_op_process(struct async_op_ctx *ctx)
         }
         list_unlock(ctx);
     }
+}
+
+void async_op_set_max_threads(struct async_op_ctx *ctx, int max_threads)
+{
+    if (ctx && max_threads >= 0)
+        ctx->max_threads = max_threads;
 }
 
 static void __attribute__((constructor)) async_op_init_default(void)

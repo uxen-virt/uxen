@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -74,6 +74,7 @@ struct nickel {
     struct buff noarp_output_list;
     ioh_event deqout_ev;
     struct async_op_ctx *async_op_ctx;
+    int async_op_max_threads;
 #if defined(_WIN32)
     ioh_event so_event;
 #endif

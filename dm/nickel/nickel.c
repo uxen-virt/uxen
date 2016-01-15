@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -71,6 +71,7 @@ unsigned slirp_mru = NI_DEFAULT_MTU, slirp_mtu = NI_DEFAULT_MTU;
 #define FRAME_ALIGN_MASK       (4 - 1)
 #define DEFAULT_TIMEOUT_MS 600000 /* 10 min */
 #define LOOP_DELAY_WARN 800 /* ms */
+#define DEFAULT_MAX_NUMBER_ASOP_THREADS 1024
 
 #if defined(NICKEL_THREADED)
 static void queue_input(struct nickel *ni, struct buff *bf);
@@ -1075,6 +1076,16 @@ config_option(const char *name, const yajl_val arg, void *opaque)
             warnx("crash_dump_on_ipc_rst arg wrong type: expect boolean");
         }
 #endif
+    } else if (!strcmp(name, "max-asop-threads") && ni->async_op_ctx) {
+        if (YAJL_IS_INTEGER(arg)) {
+            int v = YAJL_GET_INTEGER(arg);
+
+            if (v >= 0)
+                ni->async_op_max_threads = v;
+            else
+                warnx("max-asop-threads arg wrong type: expect nonnegative integer");
+        } else
+            warnx("max-asop-threads arg wrong type: expect integer");
     } else {
         warnx("nickel: invalid option %s", name);
     }
@@ -1794,6 +1805,7 @@ int net_init_nickel(QemuOpts *opts, Monitor *mon, const char *name, VLANState *v
     LIST_INIT(&ni->udp_vmfwd);
     LIST_INIT(&ni->prx_fwd);
     ni->async_op_ctx = async_op_init();
+    ni->async_op_max_threads = DEFAULT_MAX_NUMBER_ASOP_THREADS;
     ioh_event_init(&ni->event);
     ioh_event_init(&ni->deqout_ev);
     if (!ioh_event_valid(&ni->event) || !ioh_event_valid(&ni->deqout_ev)) {
@@ -1883,6 +1895,13 @@ int net_init_nickel(QemuOpts *opts, Monitor *mon, const char *name, VLANState *v
 
     if (ni->tcp_disable_window_scale)
         NETLOG("%s: TCP window scale option DISABLED", __FUNCTION__);
+
+    if (ni->async_op_max_threads) {
+        async_op_set_max_threads(ni->async_op_ctx, ni->async_op_max_threads);
+        NETLOG("max number of asop threads set to %d", ni->async_op_max_threads);
+    } else {
+        NETLOG("no limit on the number of asop threads");
+    }
 
     ret = 0;
 out:

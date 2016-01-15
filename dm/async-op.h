@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -37,5 +37,6 @@ int async_op_add_bh(struct async_op_ctx *ctx, void *opaque, void (*cb)(void *));
 
 void async_op_process(struct async_op_ctx *ctx);
 void async_op_exit_wait(struct async_op_ctx *ctx);
+void async_op_set_max_threads(struct async_op_ctx *ctx, int max_threads);
 
 #endif  /* _ASYNC_OP_H_ */
