@@ -1,0 +1,48 @@
+diff -pru binutils-2.25.1.orig/bfd/peXXigen.c binutils-2.25.1/bfd/peXXigen.c
+--- binutils-2.25.1.orig/bfd/peXXigen.c	2015-07-21 04:20:58 -0400
++++ binutils-2.25.1/bfd/peXXigen.c	2016-01-18 17:02:20 -0500
+@@ -1153,6 +1153,7 @@ _bfd_XXi_slurp_codeview_record (bfd * ab
+ 
+   cvinfo->CVSignature = H_GET_32 (abfd, buffer);
+   cvinfo->Age = 0;
++  cvinfo->PdbFileName = NULL;
+ 
+   if ((cvinfo->CVSignature == CVINFO_PDB70_CVSIGNATURE)
+       && (length > sizeof (CV_INFO_PDB70)))
+@@ -1170,7 +1171,7 @@ _bfd_XXi_slurp_codeview_record (bfd * ab
+       memcpy (&(cvinfo->Signature[8]), &(cvinfo70->Signature[8]), 8);
+ 
+       cvinfo->SignatureLength = CV_INFO_SIGNATURE_LENGTH;
+-      // cvinfo->PdbFileName = cvinfo70->PdbFileName;
++      cvinfo->PdbFileName = strdup(cvinfo70->PdbFileName);
+ 
+       return cvinfo;
+     }
+@@ -2689,9 +2690,13 @@ pe_print_debugdata (bfd * abfd, void * v
+           for (i = 0; i < cvinfo->SignatureLength; i++)
+             sprintf (&signature[i*2], "%02x", cvinfo->Signature[i] & 0xff);
+ 
+-          fprintf (file, "(format %c%c%c%c signature %s age %ld)\n",
++          fprintf (file, "(format %c%c%c%c signature %s age %ld%s%s)\n",
+ 		   buffer[0], buffer[1], buffer[2], buffer[3],
+-		   signature, cvinfo->Age);
++		   signature, cvinfo->Age,
++                   cvinfo->PdbFileName ? " pdb " : "",
++                   cvinfo->PdbFileName ? cvinfo->PdbFileName : "");
++          if (cvinfo->PdbFileName)
++              free(cvinfo->PdbFileName);
+         }
+     }
+ 
+diff -pru binutils-2.25.1.orig/include/coff/internal.h binutils-2.25.1/include/coff/internal.h
+--- binutils-2.25.1.orig/include/coff/internal.h	2014-10-14 03:32:04 -0400
++++ binutils-2.25.1/include/coff/internal.h	2016-01-18 15:43:11 -0500
+@@ -167,7 +167,7 @@ typedef struct _CODEVIEW_INFO
+   char          Signature[CV_INFO_SIGNATURE_LENGTH];
+   unsigned int  SignatureLength;
+   unsigned long Age;
+-  // char PdbFileName[];
++  char *PdbFileName;
+ } CODEVIEW_INFO;
+ 
+ /* Default image base for NT.  */

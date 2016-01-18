@@ -12,7 +12,7 @@ XEN_DISTFILES ?= $(TOPDIR)/../distfiles
 INSTALL_DIR = $(TOOLSDIR)/cross-mingw
 
 BINUTILS_DISTFILES = binutils-2.25.1.tar.bz2
-BINUTILS_PATCHES = binutils-pie-entry-point.patch binutils-install-libiberty.patch
+BINUTILS_PATCHES = binutils-pie-entry-point.patch binutils-install-libiberty.patch binutils-display-cv-pdb-name.patch
 BINUTILS_DIR = binutils-2.25.1
 
 GCC_DISTFILES = gcc-4.9.3.tar.bz2
