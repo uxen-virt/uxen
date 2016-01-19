@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -151,6 +151,7 @@ pci_ram_post_save(PCIDevice *d)
         addr = pci_bar_address(d, i, r->type, r->size);
         if (addr != PCI_BAR_UNMAPPED) {
             TAILQ_FOREACH(range, &r->memory->ram_map, link) {
+                range->update_ptr(NULL, range->opaque);
                 unmap_ram(range->ram_ptr, range->length);
                 range->ram_ptr = NULL;
             }

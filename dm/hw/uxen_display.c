@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -185,7 +185,7 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
     uint32_t addr, addr1;
     uint32_t page0, page1, pagei, page_min, page_max;
 
-    if (crtc->flush_pending)
+    if (crtc->regs && crtc->flush_pending)
         crtc_flush(s, crtc_id, crtc->offset, 0);
     if (!crtc->ds)
         return;
