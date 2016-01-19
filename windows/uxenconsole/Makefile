@@ -1,5 +1,5 @@
 #
-# Copyright 2014-2015, Bromium, Inc.
+# Copyright 2014-2016, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -26,7 +26,12 @@ install_libuxenconsole.a: libuxenconsole.a $(SDKDIR_lib)/.exists
 	$(_W)echo Installing -- $(<F)
 	$(_V)$(call install_lib,$<,$(SDKDIR_lib))
 
-dist: uxenconsole$(EXE_SUFFIX) install_uxenconsolelib.h install_libuxenconsole.a
+install_console-dump: console-dump$(EXE_SUFFIX)
+	$(_W)echo Installing from $(abspath $(<D)) to $(DISTDIR)
+	$(_W)echo Installing -- $(<F)
+	$(_V)$(call install_exe,$<,$(DISTDIR))
+
+dist: uxenconsole$(EXE_SUFFIX) install_console-dump install_uxenconsolelib.h install_libuxenconsole.a
 	$(_W)echo Installing from $(abspath $(<D)) to $(DISTDIR)
 	$(_W)echo Installing -- $(<F)
 	$(_V)$(call install_exe,$<,$(DISTDIR))
