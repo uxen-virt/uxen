@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2015, Bromium, Inc.
+# Copyright 2012-2016, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -78,7 +78,7 @@ DISKLIB_OBJS += part.o
 DISKLIB_OBJS += cache.o
 DISKLIB_OBJS += glob.o
 DISKLIB_OBJS += fnmatch.o
-DISKLIB_OBJS += vss$(TARGET_HOST_BITS_32).obj
+DISKLIB_OBJS += vss$(TARGET_HOST_BITS_32).a
 DISKLIB_OBJS += sha1.o
 DISKLIB_OBJS += vd.o
 DISKLIB_OBJS += sys.o
@@ -87,6 +87,10 @@ DISKLIB_OBJS += sys.o
 #vss.obj: cl /c vss.cpp /GS- /nologo
 # in Visual Studio Command Prompt (2010)
 #vss-32.obj: cl /c vss.cpp /GS- /nologo /Fovss-32.obj
+
+vss$(TARGET_HOST_BITS_32).a: vss$(TARGET_HOST_BITS_32).obj
+	$(_W)echo Mangling - $@
+	$(_V)$(OBJCOPY) -R .drectve $< $@
 
 $(IMG_BCDEDIT_OBJS) $(IMG_CONVERT_OBJS) $(IMG_NTFSCP_OBJS) \
 $(IMG_NTFSFIX_OBJS) $(IMG_NTFSLS_OBJS) $(IMG_NTFSPLAN_OBJS) \

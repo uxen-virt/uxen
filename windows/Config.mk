@@ -44,6 +44,7 @@ RANLIB := $(if $(subst ranlib,,$(RANLIB)),$(RANLIB),x86_64-w64-mingw32-ranlib)
 WINDRES := $(if $(subst windres,,$(WINDRES)),$(WINDRES),x86_64-w64-mingw32-windres)
 WINDMC := $(if $(subst windmc,,$(WINDMC)),$(WINDMC),x86_64-w64-mingw32-windmc)
 STRIP := $(if $(subst strip,,$(STRIP)),$(STRIP),x86_64-w64-mingw32-strip)
+OBJCOPY := $(if $(subst objcopy,,$(OBJCOPY)),$(OBJCOPY),x86_64-w64-mingw32-objcopy)
 
 ifeq ($(TARGET_HOST_BITS),32)
 WINDRES_TARGET_FORMAT_OPTION := --target=pe-i386
