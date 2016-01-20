@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -24,7 +24,7 @@
 
 #ifndef _SSIZE_T_DEFINED
 #define _SSIZE_T_DEFINED
-typedef int ssize_t;            //FIXME this needs to be somewhere else
+typedef int ssize_t;            // FIXME this needs to be somewhere else
 #endif
 
 #define V4V_VOLATILE
@@ -65,13 +65,8 @@ typedef int ssize_t;
 
 /************** Structure definitions **********/
 
-#ifdef __i386__
 #define V4V_RING_MAGIC  0xdf6977f231abd910ULL
 #define V4V_PFN_LIST_MAGIC  0x91dd6159045b302dULL
-#else
-#define V4V_RING_MAGIC  0xdf6977f231abd910
-#define V4V_PFN_LIST_MAGIC  0x91dd6159045b302d
-#endif
 #define V4V_DOMID_SELF      (0x7FF0U)
 #define V4V_DOMID_INVALID   (0x7FFFU)
 #define V4V_DOMID_NONE	V4V_DOMID_INVALID
@@ -126,11 +121,7 @@ typedef struct v4v_ring
 } V4V_PACKED v4v_ring_t;
 DEFINE_XEN_GUEST_HANDLE(v4v_ring_t);
 
-#ifdef __i386__
 #define V4V_RING_DATA_MAGIC	0x4ce4d30fbc82e92aULL
-#else
-#define V4V_RING_DATA_MAGIC	0x4ce4d30fbc82e92a
-#endif
 
 #define V4V_RING_DATA_F_EMPTY       1U << 0 /* Ring is empty */
 #define V4V_RING_DATA_F_EXISTS      1U << 1 /* Ring exists */
@@ -165,7 +156,7 @@ DEFINE_XEN_GUEST_HANDLE(v4v_ring_data_t);
 
 /* Messages on the ring are padded to 128 bits */
 /* len here refers to the exact length of the data not including the
- * 128 bit header*/
+ * 128 bit header */
 /* the the message uses ((len +0xf) & ~0xf) +
  * sizeof(v4v_ring_message_header) bytes */
 
@@ -201,7 +192,7 @@ struct v4v_ring_message_header
 /*int, XEN_GUEST_HANDLE(v4v_ring_t) ring, XEN_GUEST_HANDLE(v4v_pfn_list_t) */
 
 /* Registers a ring with Xen, if a ring with the same v4v_ring_id exists,
- * this ring takes its place, registration will not change tx_ptr 
+ * this ring takes its place, registration will not change tx_ptr
  * unless it is invalid */
 
 #define V4VOP_unregister_ring 	2
@@ -213,7 +204,7 @@ struct v4v_ring_message_header
 /* Sends len bytes of buf to dst, giving src as the source address (xen will
  * ignore src->domain and put your domain in the actually message), xen
  * first looks for a ring with id.addr==dst and id.partner==sending_domain
- * if that fails it looks for id.addr==dst and id.partner==DOMID_ANY. 
+ * if that fails it looks for id.addr==dst and id.partner==DOMID_ANY.
  * protocol is the 32 bit protocol number used from the message
  * most likely V4V_PROTO_DGRAM or STREAM. If insufficient space exists
  * it will return -EAGAIN and xen will twing the V4V_INTERRUPT when
@@ -245,7 +236,7 @@ struct v4v_ring_message_header
 #define V4VOP_sendv		5
 /*int, XEN_GUEST_HANDLE(v4v_addr_t) src, XEN_GUEST_HANDLE(v4v_addr_t) dst, XEN_GUEST_HANDLE(v4v_iov_t), uint32_t niov, uint32_t protocol*/
 
-/* Identical to V4VOP_send except rather than buf and len it takes 
+/* Identical to V4VOP_send except rather than buf and len it takes
  * an array of v4v_iov_t and a length of the array */
 
 #define V4VOP_poke		6
@@ -293,7 +284,7 @@ v4v_mb(void)
     _ReadWriteBarrier();
 }
 #elif !defined(__LINUX__)
-static __inline void 
+static __inline void
 v4v_mb(void)
 {
     __sync_synchronize();
@@ -335,7 +326,7 @@ v4v_copy_out(struct v4v_ring *r, struct v4v_addr *from, uint32_t *protocol,
     if (btr < sizeof(*mh))
         return -1;
 
-/*Becuase the message_header is 128 bits long and the ring is 128 bit
+/* Because the message_header is 128 bits long and the ring is 128 bit
  * aligned, we're gaurunteed never to wrap*/
     mh = (volatile struct v4v_ring_message_header *)&r->ring[r->rx_ptr];
 
@@ -349,7 +340,7 @@ v4v_copy_out(struct v4v_ring *r, struct v4v_addr *from, uint32_t *protocol,
 #else
 	/* MSVC can't do the above */
     if (from)
-	memcpy((void *) from, (void *)&(mh->source), sizeof(struct v4v_addr));
+        memcpy((void *)from, (void *)&(mh->source), sizeof(struct v4v_addr));
 #endif
 
     if (protocol)
@@ -366,7 +357,7 @@ v4v_copy_out(struct v4v_ring *r, struct v4v_addr *from, uint32_t *protocol,
     if (bte < len) {
         if (t < bte) {
             if (buf) {
-                memcpy(buf, (void *) &r->ring[rxp], t);
+                memcpy(buf, (void *)&r->ring[rxp], t);
                 buf += t;
             }
 
@@ -375,7 +366,7 @@ v4v_copy_out(struct v4v_ring *r, struct v4v_addr *from, uint32_t *protocol,
             t = 0;
         } else {
             if (buf) {
-                memcpy(buf, (void *) &r->ring[rxp], bte);
+                memcpy(buf, (void *)&r->ring[rxp], bte);
                 buf += bte;
             }
             rxp = 0;
@@ -385,7 +376,7 @@ v4v_copy_out(struct v4v_ring *r, struct v4v_addr *from, uint32_t *protocol,
     }
 
     if (buf && t)
-        memcpy(buf, (void *) &r->ring[rxp], (t < len) ? t : len);
+        memcpy(buf, (void *)&r->ring[rxp], (t < len) ? t : len);
 
     rxp += V4V_ROUNDUP(len);
     if (rxp == r->len)
@@ -423,9 +414,9 @@ v4v_memcpy_skip(void *_dst, const void *_src, size_t len, size_t *skip)
     memcpy(dst, src, len);
 }
 
-/* Copy at most t bytes of the next message in the ring, into the buffer 
- * at _buf, skipping skip bytes, setting from and protocol if they are not 
- * NULL, returns the actual length of the message, or -1 if there is 
+/* Copy at most t bytes of the next message in the ring, into the buffer
+ * at _buf, skipping skip bytes, setting from and protocol if they are not
+ * NULL, returns the actual length of the message, or -1 if there is
  * nothing to read */
 
 static V4V_INLINE ssize_t
@@ -447,7 +438,7 @@ v4v_copy_out_offset(struct v4v_ring *r, struct v4v_addr *from,
     if (btr < sizeof(*mh))
         return -1;
 
-/*Becuase the message_header is 128 bits long and the ring is 128 bit
+/* Because the message_header is 128 bits long and the ring is 128 bit
  * aligned, we're gaurunteed never to wrap*/
     mh = (volatile struct v4v_ring_message_header *)&r->ring[r->rx_ptr];
 
