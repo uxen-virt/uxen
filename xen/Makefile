@@ -366,7 +366,6 @@ uxen.elf: uxen-prelink.o uxen-syms.1.o $(UXEN_LDS)
 	  -N $(filter-out $(UXEN_LDS),$^)
 
 uxen_post_link = true
-$(X86_32_only)uxen_post_link = mv $(1) $(subst .obj,-debug.obj,$(1)) && $(TARGET_STRIP) -g -o $(1) $(subst .obj,-debug.obj,$(1))
 uxen.obj: uxen-prelink.o uxen-syms.1.o $(UXEN_LDS)
 	$(_W)echo Linking - $@
 	$(_V)$(TARGET_LD) $(XEN_LDFLAGS) -T $(UXEN_LDS) -r -o $@ \

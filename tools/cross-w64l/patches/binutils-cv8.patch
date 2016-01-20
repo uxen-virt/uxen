@@ -860,3 +860,373 @@ diff -pruN binutils-2.25.1.orig/ld/emultempl/pep.em binutils-2.25.1/ld/emultempl
    is_underscoring ();
    before_allocation_default ();
  }
+diff -pruN binutils-2.25.1.orig/ld/emultempl/pe.em binutils-2.25.1/ld/emultempl/pe.em
+--- binutils-2.25.1.orig/ld/emultempl/pe.em	2016-01-14 13:00:17 -0500
++++ binutils-2.25.1/ld/emultempl/pe.em	2016-01-14 13:11:01 -0500
+@@ -71,6 +71,7 @@ fragment <<EOF
+    header in generic PE code.  */
+ #include "coff/i386.h"
+ #include "coff/pe.h"
++#include "coff/pe_debugS.h"
+ 
+ /* FIXME: These are BFD internal header files, and we should not be
+    using it here.  */
+@@ -1385,6 +1386,140 @@ setup_build_id (bfd *ibfd)
+   return FALSE;
+ }
+ 
++#define process_debugS_fail(fmt, a...) do { printf( fmt, ## a ); return 1; } while(0)
++
++static int
++process_debugS(bfd *abfd, asection *sec)
++{
++  struct debugS_header *dsh;
++  struct debugS_portion *dsp;
++  struct debugS_linenums *dsl;
++  struct debugS_sourcefileinfo *dssfi;
++  struct debugS_sourcefilename *dssfn;
++  struct debugS_info *di;
++  unsigned int i;
++
++  debugS_printf(".debug\$S section in %s, size %ld\n", abfd->filename,
++		sec->size);
++  if (!(sec->flags & SEC_IN_MEMORY)) {
++    sec->contents = xmalloc(sec->size);
++    bfd_get_section_contents (abfd, sec, sec->contents,
++			      (file_ptr) 0, sec->size);
++    sec->flags |= SEC_IN_MEMORY;
++    sec->rawsize = sec->size;
++  }
++  debugS_printf(".debug\$S section in memory at %p\n", sec->contents);
++
++  di = xmalloc(sizeof(*di));
++  memset(di, 0, sizeof(*di));
++  // sec->lineno = (alent *)di;
++  sec->userdata = di;
++  
++  dsh = (struct debugS_header *)sec->contents;
++  debugS_printf(".debug\$S section version %x\n", dsh->dsh_version);
++  if (dsh->dsh_version != 4)
++    process_debugS_fail("version != 4\n");
++
++  dsp = (struct debugS_portion *)dsh->dsh_data;
++  while ((unsigned char *)dsp < sec->contents + sec->size) {
++    debugS_printf(".debug\$S portion at %lx type %x len %x\n",
++                  (unsigned char *)dsp - sec->contents,
++                  dsp->dsp_type, dsp->dsp_len);
++    if (dsp->dsp_data + dsp->dsp_len > sec->contents + sec->size)
++      break; /* process_debugS_fail("portion extends past section\n"); */
++
++    switch (dsp->dsp_type) {
++    case 0xf2:
++      dsl = (struct debugS_linenums *)dsp->dsp_data;
++      debugS_printf("source line number set\n");
++      if (sizeof(*dsl) > dsp->dsp_len)
++	process_debugS_fail("set extends past portion\n");
++      if (sizeof(*dsl) + (dsl->dsl_nrpairs * sizeof(dsl->dsl_pairs[0])) >
++	  dsp->dsp_len)
++	process_debugS_fail("set extends past portion\n");
++      debugS_printf("  start offset 0x%08x section 0x%x\n", dsl->dsl_secoffset,
++		    dsl->dsl_secindex);
++      debugS_printf("  section length covered 0x%x\n", dsl->dsl_seccovered);
++      debugS_printf("  source file info offset 0x%x\n", dsl->dsl_srcoffset);
++      debugS_printf("  #pairs %d (%d bytes)\n", dsl->dsl_nrpairs,
++		    dsl->dsl_pairslen);
++      if (dsl->dsl_pairslen !=
++	  12 + (dsl->dsl_nrpairs * sizeof(dsl->dsl_pairs[0])))
++	process_debugS_fail("pairs number of bytes field incorrect\n");
++      for (i = 0; i < dsl->dsl_nrpairs; i++)
++	debugS_printf("    offset 0x%x line %d%s\n",
++		      dsl->dsl_pairs[i].dslp_offset,
++		      dsl->dsl_pairs[i].dslp_lineno & 0x7fffffff,
++		      dsl->dsl_pairs[i].dslp_lineno & 0x80000000 ? "*" : "");
++      di->di_nr_f2++;
++      di->di_size_f2 += sizeof(*dsl) +
++	(dsl->dsl_nrpairs * sizeof(dsl->dsl_pairs[0]));
++      break;
++    case 0xf4:
++      dssfi = (struct debugS_sourcefileinfo *)dsp->dsp_data;
++      debugS_printf("source file info set\n");
++      if (di->di_fis)
++	process_debugS_fail("duplicate set\n");
++      di->di_fis = (unsigned char *)dssfi;
++      while ((unsigned char *)dssfi < dsp->dsp_data + dsp->dsp_len) {
++	if ((unsigned char *)dssfi + sizeof(*dssfi) >
++	    dsp->dsp_data + dsp->dsp_len)
++	  process_debugS_fail("set extends past portion\n");
++	debugS_printf("  offset 0x%lx: name offset 0x%x checksum %s\n",
++		      (unsigned char *)dssfi - dsp->dsp_data,
++		      dssfi->dssfi.dssfi_nameoffset,
++		      dssfi->dssfi.dssfi_checksumtype == 0x0110 ?
++		      "MD5" : "none");
++	di->di_nr_fi++;
++	dssfi = (struct debugS_sourcefileinfo *)
++	  ((unsigned char *)dssfi +
++	   (dssfi->dssfi.dssfi_checksumtype == 0x0110 ?
++	    sizeof(struct debugS_sourcefileinfo_with_cs) :
++	    sizeof(struct debugS_sourcefileinfo_without_cs)));
++	if ((unsigned char *)dssfi > dsp->dsp_data + dsp->dsp_len)
++	  process_debugS_fail("set extends past portion\n");
++      }
++      di->di_size_fis = dsp->dsp_len;
++      break;
++    case 0xf3:
++      dssfn = (struct debugS_sourcefilename *)dsp->dsp_data;
++      debugS_printf("source file name set\n");
++      if (di->di_fns)
++	process_debugS_fail("duplicate set\n");
++      di->di_fns = (char *)dssfn;
++      while ((unsigned char *)dssfn < dsp->dsp_data + dsp->dsp_len) {
++	int l;
++	if (dssfn->dssfn_data + 1 > dsp->dsp_data + dsp->dsp_len)
++	  process_debugS_fail("set extends past portion\n");
++	for (l = 0; l < dsp->dsp_data + dsp->dsp_len - dssfn->dssfn_data; l++)
++	  if (!dssfn->dssfn_name[l])
++	    break;
++	debugS_printf("  offset 0x%lx: \"%.*s\"\n",
++		      (unsigned char *)dssfn - dsp->dsp_data, l,
++		      dssfn->dssfn_name);
++	di->di_nr_fn++;
++	dssfn = (struct debugS_sourcefilename *)(dssfn->dssfn_data + l + 1);
++      }
++      di->di_size_fns = dsp->dsp_len;
++      break;
++    default:
++      debugS_printf("unknown type %x -- skipping at %lx\n", dsp->dsp_type,
++                    (unsigned char *)dsp - sec->contents);
++      break;
++    }
++
++    dsp = (struct debugS_portion *)(dsp->dsp_data + dsp->dsp_len);
++  }
++  debugS_printf("Summary:\n");
++  debugS_printf("  %d f2 set%s using %d bytes\n", di->di_nr_f2,
++		di->di_nr_f2 != 1 ? "s" : "", di->di_size_f2);
++  debugS_printf("  %d source file info record%s using %d bytes\n",
++		di->di_nr_fi, di->di_nr_fi != 1 ? "s" : "", di->di_size_fis);
++  debugS_printf("  %d source file name record%s using %d bytes\n",
++		di->di_nr_fn, di->di_nr_fn != 1 ? "s" : "", di->di_size_fns);
++  return 0;
++}
++
+ static void
+ gld_${EMULATION_NAME}_after_open (void)
+ {
+@@ -1708,11 +1843,217 @@ gld_${EMULATION_NAME}_after_open (void)
+ 	  }
+       }
+   }
++  {
++    LANG_FOR_EACH_INPUT_STATEMENT (is)
++    {
++      asection *sec;
++      /* See if this is an import library thunk.  */
++      for (sec = is->the_bfd->sections; sec; sec = sec->next)
++	{
++	  if (strcmp (sec->name, ".debug\$S") == 0)
++	    {
++	      process_debugS(is->the_bfd, sec);
++	    }
++	}
++    }
++  }
++}
++
++static struct bfd_hash_entry *
++debugS_fnhash_newfunc(struct bfd_hash_entry *entry,
++		      struct bfd_hash_table *table,
++		      const char *string)
++{
++  /* Allocate the structure if it has not already been allocated by a
++     subclass.  */
++  if (entry == NULL)
++    {
++      entry = (struct bfd_hash_entry *)
++	bfd_hash_allocate (table, sizeof (struct debugS_fnhash_entry));
++      if (entry == NULL)
++	return entry;
++    }
++
++  /* Call the allocation method of the superclass.  */
++  entry = bfd_hash_newfunc (entry, table, string);
++  if (entry != NULL) {
++    struct debugS_fnhash_entry *fe = (struct debugS_fnhash_entry *)entry;
++    fe->fis_offset = -1;
++  }
++
++  return entry;
++}
++
++#define debugS_fnhash_lookup(table, string, create, copy) \
++  ((struct debugS_fnhash_entry *)			  \
++   bfd_hash_lookup((table), (string), (create), (copy)))
++
++#define prepare_debugS_fail(fmt, a...) do { printf( fmt, ## a ); return 1; } while(0)
++
++static int
++prepare_debugS(bfd *abfd, asection *sec)
++{
++  struct debugS_outinfo *doi;
++  struct debugS_info *di;
++  struct debugS_header *dsh;
++  struct debugS_portion *dsp;
++  struct debugS_linenums *dsl;
++  struct debugS_sourcefileinfo *dssfi;
++  struct debugS_sourcefileinfo_without_cs *dssfi_nocs;
++  struct debugS_fnhash_entry *fe;
++  unsigned int fnoffset, i;
++  char *fname;
++  struct bfd_section *out;
++
++  (void)abfd;
++
++  debugS_printf("section from %s output %p size %ld\n", sec->owner->filename,
++                sec->output_section, sec->size);
++
++  di = sec->userdata;
++  if (di == NULL)
++    return 0;
++
++  debugS_printf("debug$S from %s summary:\n", sec->owner->filename);
++  debugS_printf("  %d f2 set%s using %d bytes\n", di->di_nr_f2,
++		di->di_nr_f2 != 1 ? "s" : "", di->di_size_f2);
++  debugS_printf("  %d source file info record%s using %d bytes\n",
++		di->di_nr_fi, di->di_nr_fi != 1 ? "s" : "",
++		di->di_size_fis);
++  debugS_printf("  %d source file name record%s using %d bytes\n",
++		di->di_nr_fn, di->di_nr_fn != 1 ? "s" : "",
++		di->di_size_fns);
++
++  if ((sec->flags & SEC_HAS_CONTENTS) == 0)
++    return 0;
++
++  /* Discard header unconditionally, for when the section has no
++     content but the header. */
++  sec->size -= sizeof(struct debugS_header);
++
++  /* No relocs = no content. */
++  if ((sec->flags & SEC_RELOC) == 0)
++    return 0;
++
++  out = sec->output_section;
++
++  if (out->debugS_outinfo == NULL) {
++    doi = xmalloc(sizeof(*doi));
++    if (doi == NULL)
++      prepare_debugS_fail("alloc debugS_outinfo\n");
++    memset(doi, 0, sizeof(*doi));
++    out->debugS_outinfo = doi;
++    doi->doi_dot = sizeof(struct debugS_header);
++    if (!bfd_hash_table_init(&doi->doi_fnhash, debugS_fnhash_newfunc,
++			     sizeof(struct debugS_fnhash_entry)))
++      prepare_debugS_fail("debugS_outinfo hash init fail\n");
++    doi->doi_fns_space = 1 /* 4096 */;
++    doi->doi_fns = xmalloc(doi->doi_fns_space);
++    doi->doi_fns[0] = 0;
++    doi->doi_fns_dot = 1; /* fn[0] = "\0" */
++    doi->doi_fis_space = 1 /* 128 */;
++    doi->doi_fis = xmalloc(doi->doi_fis_space);
++    doi->doi_fis_dot = 0;
++
++    sec->size += sizeof(struct debugS_header);
++
++    sec->size += 2 * sizeof(struct debugS_portion); /* f3/f4 */
++    sec->size += doi->doi_fns_dot; /* fn[0] */
++  }
++
++  doi = out->debugS_outinfo;
++
++  dsh = (struct debugS_header *)sec->contents;
++  dsp = (struct debugS_portion *)dsh->dsh_data;
++  while ((unsigned char *)dsp < sec->contents + sec->rawsize) {
++    switch (dsp->dsp_type) {
++    case 0xf2:
++      debugS_printf("debugS 0xf2 portion from %s at 0x%x, len 0x%lx\n",
++		    sec->owner->filename, doi->doi_dot,
++		    sizeof(*dsp) + dsp->dsp_len);
++
++      dsl = (struct debugS_linenums *)dsp->dsp_data;
++      dssfi = (struct debugS_sourcefileinfo *)
++	(di->di_fis + dsl->dsl_srcoffset);
++      fnoffset = dssfi->dssfi.dssfi_nameoffset;
++      fname = di->di_fns + fnoffset;
++      for (i = 0; i < dsl->dsl_nrpairs; i++)
++	debugS_printf("    offset 0x%x line %d%s file %s\n",
++		      dsl->dsl_pairs[i].dslp_offset,
++		      dsl->dsl_pairs[i].dslp_lineno & 0x7fffffff,
++		      dsl->dsl_pairs[i].dslp_lineno & 0x80000000 ? "*" : "",
++		      fname);
++
++      fe = debugS_fnhash_lookup(&doi->doi_fnhash, fname, TRUE,
++				FALSE);
++      if (fe->fis_offset == -1) {
++	int l;
++	/* new entry */
++	fe->fis_offset = doi->doi_fis_dot;
++#define FISE_SIZE (sizeof(struct debugS_sourcefileinfo_without_cs))
++	while (doi->doi_fis_dot + FISE_SIZE > doi->doi_fis_space) {
++	  doi->doi_fis_space *= 2;
++	  doi->doi_fis = xrealloc(doi->doi_fis,
++				  doi->doi_fis_space);
++	}
++	dssfi_nocs = (struct debugS_sourcefileinfo_without_cs *)
++	  &doi->doi_fis[doi->doi_fis_dot];
++	dssfi_nocs->dssfi.dssfi_nameoffset = doi->doi_fns_dot;
++	dssfi_nocs->dssfi.dssfi_checksumtype = 0x0;
++	dssfi_nocs->dssfi_pad1 = 0x0;
++	doi->doi_fis_dot += FISE_SIZE;
++	sec->size += FISE_SIZE;
++
++	l = strlen(fname) + 1;
++
++	while (doi->doi_fns_dot + l > doi->doi_fns_space) {
++	  doi->doi_fns_space *= 2;
++	  doi->doi_fns = xrealloc(doi->doi_fns, doi->doi_fns_space);
++	}
++	strcpy(&doi->doi_fns[doi->doi_fns_dot], fname);
++	doi->doi_fns_dot += l;
++	sec->size += l;
++      }
++
++      dsl->dsl_srcoffset = fe->fis_offset;
++
++      break;
++    default:
++      debugS_printf("debugS 0x%x portion from %s at 0x%x, len 0x%lx\n",
++                    dsp->dsp_type, sec->owner->filename, doi->doi_dot,
++		    sizeof(*dsp) + dsp->dsp_len);
++      sec->size -= sizeof(struct debugS_portion); /* f3/f4/unknown */
++      sec->size -= dsp->dsp_len;
++      break;
++    }
++    dsp = (struct debugS_portion *)(dsp->dsp_data + dsp->dsp_len);
++  }
++
++  debugS_printf("sec from %s new size %ld\n", sec->owner->filename, sec->size);
++
++  free(di);
++  sec->userdata = NULL;
++
++  return 0;
+ }
+ 
+ static void
+ gld_${EMULATION_NAME}_before_allocation (void)
+ {
++  {
++    LANG_FOR_EACH_INPUT_STATEMENT (is)
++    {
++      asection *sec;
++      /* See if this is an import library thunk.  */
++      for (sec = is->the_bfd->sections; sec; sec = sec->next)
++	{
++	  if (strcmp (sec->name, ".debug\$S") == 0)
++	    {
++	      prepare_debugS(is->the_bfd, sec);
++	    }
++	}
++    }
++  }
+ #ifdef TARGET_IS_ppcpe
+   /* Here we rummage through the found bfds to collect toc information.  */
+   {
