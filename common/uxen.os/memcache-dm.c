@@ -144,6 +144,12 @@ mdm_map(struct uxen_memcachemap_desc *umd, struct fd_assoc *fda)
 
     mdm = &vmi->vmi_shared.vmi_mdm;
 
+    if (!mdm->mdm_mfn_to_entry) {
+        fail_msg("memcache not initialized");
+        ret = EINVAL;
+        goto out;
+    }
+
     if ((umd->pfn >= mdm->mdm_end_low_gpfn &&
          umd->pfn < mdm->mdm_start_high_gpfn) ||
         umd->pfn >= mdm->mdm_end_high_gpfn) {
