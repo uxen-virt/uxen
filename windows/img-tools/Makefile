@@ -78,19 +78,9 @@ DISKLIB_OBJS += part.o
 DISKLIB_OBJS += cache.o
 DISKLIB_OBJS += glob.o
 DISKLIB_OBJS += fnmatch.o
-DISKLIB_OBJS += vss$(TARGET_HOST_BITS_32).a
 DISKLIB_OBJS += sha1.o
 DISKLIB_OBJS += vd.o
 DISKLIB_OBJS += sys.o
-
-# in Visual Studio x64 Win64 Command Prompt (2010)
-#vss.obj: cl /c vss.cpp /GS- /nologo
-# in Visual Studio Command Prompt (2010)
-#vss-32.obj: cl /c vss.cpp /GS- /nologo /Fovss-32.obj
-
-vss$(TARGET_HOST_BITS_32).a: vss$(TARGET_HOST_BITS_32).obj
-	$(_W)echo Mangling - $@
-	$(_V)$(OBJCOPY) -R .drectve $< $@
 
 $(IMG_BCDEDIT_OBJS) $(IMG_CONVERT_OBJS) $(IMG_NTFSCP_OBJS) \
 $(IMG_NTFSFIX_OBJS) $(IMG_NTFSLS_OBJS) $(IMG_NTFSPLAN_OBJS) \
@@ -101,7 +91,7 @@ $(IMG_NTFSRM_OBJS) $(IMG_RM_OBJS) $(SWAP_SEAL_OBJS) $(DISKLIB_OBJS): \
 IMG_LIBS = disklib.a
 
 PROGRAMS_LDLIBS = $(LIBIMG_LIBS) $(YAJL_LIBS) $(LIBVHD_LIBS) $(NTFS_3G_LIBS) \
-	-luuid -lole32 -lkernel32 -lvssapi -lpsapi -lshlwapi
+	-luuid -lole32 -lkernel32 -lpsapi -lshlwapi
 
 img-bcdedit$(EXE_SUFFIX): $(IMG_BCDEDIT_OBJS) $(IMG_LIBS)
 	$(_W)echo Linking - $@

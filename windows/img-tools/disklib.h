@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Gianni Tedesco
  * SPDX-License-Identifier: ISC
  */
@@ -13,28 +13,8 @@
 extern "C" {
 #endif
 
-#define DISK_TYPE_VBOX 0
-#define DISK_TYPE_RAW  1
-
-#define DISK_MAX_VSS_BACKINGS 16
-
-/* Our version of a disk handle covering both VBox and raw Windows file
- * backends. Right now we are actually passing the complete handle around by
- * value, which is not pretty but simple. */
-
-typedef struct backing {
-    uint64_t start;
-    uint64_t end;
-    void *handle;
-} backing;
-
 typedef struct _disk_handle {
-    int type;
-    union {
-        PVBOXHDD vboxhandle;
-        struct backing backings[DISK_MAX_VSS_BACKINGS];
-    } u;
-    int num_backings;
+    PVBOXHDD vboxhandle;
 } disk_handle_t;
 
 #define DISKLIB_EXTENT_HOLE     (~0ULL)

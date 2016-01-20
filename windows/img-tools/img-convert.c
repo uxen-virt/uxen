@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Gianni Tedesco
  * SPDX-License-Identifier: ISC
  */
@@ -163,13 +163,12 @@ static int create_from_src(const char *fn, disk_handle_t src, const char *fmt,
     sz = disk_get_size(src);
 
     /* Always create a vbox type handle. */
-    ret.type = DISK_TYPE_VBOX;
-    rc = VDCreate(NULL, VDTYPE_HDD, &ret.u.vboxhandle);
+    rc = VDCreate(NULL, VDTYPE_HDD, &ret.vboxhandle);
 
     if (!RT_SUCCESS(rc))
         return 0;
 
-    rc = VDCreateBase(ret.u.vboxhandle, fmt, fn, sz,
+    rc = VDCreateBase(ret.vboxhandle, fmt, fn, sz,
                   VD_IMAGE_FLAGS_NONE, "Created by bro-vmdkcompact",
                   &geom, &geom2, NULL,
                   VD_OPEN_FLAGS_NORMAL, NULL, NULL);

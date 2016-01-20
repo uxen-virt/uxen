@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Gianni Tedesco
  * SPDX-License-Identifier: ISC
  */
@@ -622,13 +622,7 @@ static int disk_open(char *fn, int rw, struct disk *disk,
     }
 
     if ( sysvol < 0 || bootvol < 0 ) {
-
-        /* For a rawvss backend we don't want to read this from the BCD.
-         * Instead we adopt the rule that sysvol is the first, and bootvol the
-         * last partition. */
-
-        sysvol = 0;
-        bootvol = disk->hdd.num_backings - 1;
+        return ret;
     }
 
     LogRel(("open partition table: %s\n", fn));
@@ -1228,7 +1222,7 @@ static int ntfscp_main(char *fin, char *fout,
         goto out;
     }
 
-    if (do_reordering && din.hdd.type == DISK_TYPE_VBOX) {
+    if (do_reordering) {
         do_reordering = 0;
         RTPrintf("IGNORING reordering option for VBox input backend!\n");
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Gianni Tedesco
  * SPDX-License-Identifier: ISC
  */
@@ -16,8 +16,6 @@
 #include <assert.h>
 
 #define STACK_SEP ';'
-
-extern char *vss_from_guid(const char *sguid);
 
 #ifdef _WIN32
 char *utf8(const wchar_t* ws)
@@ -146,144 +144,25 @@ DECLINLINE(uint64_t) parse_number(const char *c)
 }
 
 
-int disklib_parse_rawvss(disk_handle_t *hdd, char *fn)
-{
-    uint64_t start = 0;
-    int i;
-
-    FILE *f = fopen(fn, "r");
-
-    if (f == NULL) {
-        RTPrintf("failed to open file %s\n", fn);
-        return 0;
-    }
-
-    hdd->num_backings = 0;
-    memset(hdd->u.backings, 0, sizeof(hdd->u.backings));
-
-    for (i = 0; i < DISK_MAX_VSS_BACKINGS; ++i) {
-        backing *b;
-        uint64_t size;
-        char guid[64];
-        char *vss;
-        char s[32];
-
-        int r = fscanf(f, "%s %s\n", s, guid);
-
-        if (r != 2) break;
-
-        /* Don't use fscanf to parse the size because of format string issues. */
-        size = parse_number(s);
-
-        b = hdd->u.backings + i;
-        b->start = start;
-        b->end = start + size;
-        start += size;
-
-        vss = vss_from_guid(guid);
-
-        if (!vss) {
-            LogAlways(("failed to resolve VSS GUID %s to file name err=%u\n", guid,
-                        (uint32_t) GetLastError()));
-            RTPrintf("failed to resolve VSS GUID %s to file name\n", guid);
-            return 0;
-        }
-
-        b->handle = CreateFile(vss, GENERIC_READ,
-                FILE_SHARE_READ| FILE_SHARE_WRITE, NULL,
-                OPEN_EXISTING, FILE_FLAG_OVERLAPPED |
-                FILE_FLAG_NO_BUFFERING, NULL);
-
-        if (b->handle == INVALID_HANDLE_VALUE) {
-            LogAlways(("failed to open VSS backing %s %lu\n", vss, GetLastError()));
-            RTPrintf("failed to open VSS backing %s\n", vss);
-            return 0;
-        }
-
-        ++(hdd->num_backings);
-    }
-    /* Set to max + 1 */
-
-    fclose(f);
-    return 1;
-}
-
-/* Loop over the backings for a VMDK and return the appropriate handle to read
- * from. XXX we really should have a counter or num handles, to avoid an infinite
- * loop here. */
-
-HANDLE disklib_get_sector_handle(backing *backings, uint64_t *base, uint64_t start)
-{
-    int i;
-
-    for (i = 0; i < DISK_MAX_VSS_BACKINGS; ++i) {
-        if (start >= backings[i].start && start < backings[i].end &&
-                backings[i].start != backings[i].end) {
-            *base = backings[i].start;
-            return backings[i].handle;
-        }
-    }
-    return NULL;
-}
-
 /* Open a handle wrapping either a VBox disk object or our own raw version of a
  * VMDK. If not VMDK, or if write access is requested, use VBox as fallback. */
 
 int disklib_open_image(char *path, int rw, disk_handle_t *dh)
 {
-    dh->num_backings = 0;
-
-    if (!strcmp(path + strlen(path)-7, ".rawvss")) {
-
-        /* This is a readonly VMDK, so we will take care of
-         * it without involving VBox, so that we can do overlapped
-         * IO on its VSS segments. */
-
-        dh->type = DISK_TYPE_RAW;
-        return disklib_parse_rawvss(dh, path);
-
-    } else {
-
-        dh->type = DISK_TYPE_VBOX;
-        dh->u.vboxhandle = disklib_open_vbox_image(path, rw);
-        return (dh->u.vboxhandle != NULL) ? 1 : 0;
-
-    }
+    dh->vboxhandle = disklib_open_vbox_image(path, rw);
+    return (dh->vboxhandle != NULL) ? 1 : 0;
 }
 
 void disklib_set_slow_flush(disk_handle_t dh)
 {
-    switch (dh.type) {
-        case DISK_TYPE_VBOX:
-            VDSetOpenFlags(dh.u.vboxhandle, 0, VD_OPEN_FLAGS_SEQUENTIAL);
-            break;
-        case DISK_TYPE_RAW:
-        default:
-            break;
-    }
-
+    VDSetOpenFlags(dh.vboxhandle, 0, VD_OPEN_FLAGS_SEQUENTIAL);
 }
 
 /* Close a disk handle. */
 
 void disklib_close_image(disk_handle_t dh)
 {
-    switch (dh.type) {
-        case DISK_TYPE_VBOX:
-            VDDestroy(dh.u.vboxhandle);
-            break;
-        case DISK_TYPE_RAW:
-            {
-                int i;
-                for (i = 0; i < dh.num_backings; ++i) {
-                    backing *b = dh.u.backings + i;
-                    CloseHandle(b->handle);
-                }
-            }
-        default:
-            break;
-    }
-
+    VDDestroy(dh.vboxhandle);
 }
 
 /* If we failed at a larger read, we will try to read individual sectors in the
@@ -323,84 +202,20 @@ void disk_repair_read(HANDLE handle, uint8_t *buf, uint64_t offset, size_t size)
 int disk_read_sectors(disk_handle_t dh, void *buf,
             uint64_t sec, unsigned int num_sec, void *context)
 {
-    if (dh.type == DISK_TYPE_VBOX) {
-        int rc = VDRead(dh.u.vboxhandle, SECTOR_SIZE * sec, buf, SECTOR_SIZE * num_sec);
-        if (!RT_SUCCESS(rc)) {
-            LogAlways(("%s: unable to read from VBox backend on line %d\n",
-                        __FUNCTION__, __LINE__));
-            disklib__set_errno(DISKLIB_ERR_IO);
-            return 0;
-        }
-
-    } else if (dh.type == DISK_TYPE_RAW) {
-
-        DWORD got;
-        OVERLAPPED _o;
-        OVERLAPPED *o = context ? (OVERLAPPED*) context : &_o;
-        uint64_t base = 0;
-        HANDLE handle = disklib_get_sector_handle(dh.u.backings, &base, sec);
-        uint64_t offset = SECTOR_SIZE * (sec - base);
-
-        /* If we are providing the OVERLAPPED struct, make it zero. */
-        memset(&_o, 0, sizeof(_o));
-
-        o->OffsetHigh = offset >>32ULL;
-        o->Offset = offset & 0xffffffff;
-
-        if (handle == NULL) {
-            memset(buf, 0, SECTOR_SIZE * num_sec);
-
-            if (context != NULL) {
-                SetEvent(o->hEvent);
-            }
-            return 1;
-        }
-
-        if (!ReadFile(handle, buf, SECTOR_SIZE * num_sec, NULL, o)) {
-            if (GetLastError() != ERROR_IO_PENDING) {
-                LogAlways(("%s: ReadFile fails with error %lu\n", __FUNCTION__, GetLastError()));
-                disk_repair_read(handle, buf, offset, SECTOR_SIZE * num_sec);
-                disk_flag_io_error();
-            }
-        }
-
-        /* If caller did not supply a context it means we must wait for
-         * the IO to finish on his behalf. */
-
-        if (context == NULL && !GetOverlappedResult(handle, o, &got, TRUE)) {
-            LogAlways(("%s: failed getting overlapped result %lu\n", __FUNCTION__,
-                        GetLastError()));
-            disk_repair_read(handle, buf, offset, SECTOR_SIZE * num_sec);
-            disk_flag_io_error();
-        }
+    int rc = VDRead(dh.vboxhandle, SECTOR_SIZE * sec, buf, SECTOR_SIZE * num_sec);
+    if (!RT_SUCCESS(rc)) {
+        LogAlways(("%s: unable to read from VBox backend on line %d\n",
+                    __FUNCTION__, __LINE__));
+        disklib__set_errno(DISKLIB_ERR_IO);
+        return 0;
+    } else {
+        disklib__set_errno(DISKLIB_ERR_SUCCESS);
+        return 1;
     }
-
-    disklib__set_errno(DISKLIB_ERR_SUCCESS);
-    return 1;
 }
 
 int disk_read_check_result(disk_handle_t dh, void *_o)
 {
-    if (dh.type == DISK_TYPE_RAW && _o != NULL) {
-
-        OVERLAPPED *o = (OVERLAPPED*) _o;
-        uint64_t base;
-        uint64_t offset = ((uint64_t)(o->OffsetHigh) << 32ULL) | o->Offset;
-        DWORD got;
-        HANDLE handle = disklib_get_sector_handle(dh.u.backings, &base,
-                offset / SECTOR_SIZE);
-
-        if (!GetOverlappedResult(handle, o, &got, FALSE)) {
-            LogAlways(("%s: failed getting overlapped result %u\n", __FUNCTION__,
-                        (uint32_t)GetLastError()));
-            disk_flag_io_error();
-            return 0;
-        }
-    } else {
-        LogAlways(("%s: invalid arguments!\n", __FUNCTION__));
-        return 0;
-    }
-
     return 1;
 }
 
@@ -684,17 +499,9 @@ int disk_write_sectors(disk_handle_t dh, const void *buf,
         return 1;
     }
 
-    if (dh.type == DISK_TYPE_VBOX) {
-
-        int rc = VDWrite(dh.u.vboxhandle, SECTOR_SIZE * sec, buf, SECTOR_SIZE * num_sec);
-        if (!RT_SUCCESS(rc)) {
-            disklib__set_errno(DISKLIB_ERR_IO);
-            return 0;
-        }
-
-    } else if (dh.type == DISK_TYPE_RAW) {
-
-        RTPrintf("%s will not write on native disk!\n", __FUNCTION__);
+    int rc = VDWrite(dh.vboxhandle, SECTOR_SIZE * sec, buf, SECTOR_SIZE * num_sec);
+    if (!RT_SUCCESS(rc)) {
+        disklib__set_errno(DISKLIB_ERR_IO);
         return 0;
     }
 
@@ -707,23 +514,5 @@ int disk_write_sectors(disk_handle_t dh, const void *buf,
 
 uint64_t disk_get_size(disk_handle_t dh)
 {
-    if (dh.type == DISK_TYPE_VBOX) {
-
-        return VDGetSize(dh.u.vboxhandle, 0);
-
-    } else if (dh.type == DISK_TYPE_RAW) {
-
-        /* This is probably not important, but let us sum up the VSS snapshot
-         * sizes and return that as a semi-meaningful answer. */
-
-        int i;
-        size_t sectors = 0;
-
-        for (i = 0; i < dh.num_backings; ++i) {
-            backing *b = dh.u.backings + i;
-            sectors += (b->end - b->start);
-        }
-        return SECTOR_SIZE * sectors;
-    }
-    return 0; /* never reached. */
+    return VDGetSize(dh.vboxhandle, 0);
 }

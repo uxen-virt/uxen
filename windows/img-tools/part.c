@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Gianni Tedesco
  * SPDX-License-Identifier: ISC
  */
@@ -181,38 +181,6 @@ static int read_pt(ptbl_t pt)
     return 1;
 }
 
-/* These tools generally rely on having the ptbl_t struct filled out in memory.
- * However, we have moved to a world where we no longer read the host MBR, so
- * we don't have a real partition table available to go from. Instead we fake
- * one from the contents of the .rawvss file. */
-
-static int concoct_pt(ptbl_t pt)
-{
-    int i;
-    pt->pt_count = pt->pt_hdd.num_backings;
-    pt->pt_sig = 0;
-
-    pt->pt_part = RTMemAllocZ(pt->pt_count * sizeof(*pt->pt_part));
-    if ( NULL == pt->pt_part ) {
-        disklib__set_errno(DISKLIB_ERR_NOMEM);
-        return 0;
-    }
-
-    for (i = 0; i < pt->pt_hdd.num_backings; ++i) {
-
-        backing *b = &pt->pt_hdd.u.backings[i];
-        pt->pt_part[i].p_tbl = pt;
-        pt->pt_part[i].p_status = 0x80;
-        pt->pt_part[i].p_type = PART_TYPE_NTFS;
-
-        pt->pt_part[i].p_lba_start = b->start;
-        pt->pt_part[i].p_lba_end = b->end;
-
-    }
-
-    return 1;
-}
-
 ptbl_t ptbl_open(disk_handle_t hdd)
 {
     ptbl_t pt;
@@ -226,44 +194,20 @@ ptbl_t ptbl_open(disk_handle_t hdd)
 
     pt->pt_hdd = hdd;
 
-    if (pt->pt_hdd.type == DISK_TYPE_VBOX) {
-
-        VDGEOMETRY geom;
-        rc = VDGetLCHSGeometry(pt->pt_hdd.u.vboxhandle, 0, &geom);
-        if (RT_SUCCESS(rc)) {
-            pt->cCylinders = geom.cCylinders;
-            pt->cHeads = geom.cHeads;
-            pt->cSectors = geom.cSectors;
-        } else {
-            /* hopefully sane defaults */
-            pt->cCylinders = 1024;
-            pt->cHeads = 255;
-            pt->cSectors = 63;
-        }
-
+    VDGEOMETRY geom;
+    rc = VDGetLCHSGeometry(pt->pt_hdd.vboxhandle, 0, &geom);
+    if (RT_SUCCESS(rc)) {
+        pt->cCylinders = geom.cCylinders;
+        pt->cHeads = geom.cHeads;
+        pt->cSectors = geom.cSectors;
     } else {
-        /* Our VMDK parsing code will have put this in the hdd handle
-         * struct directly. */
-        pt->cCylinders = 16383;
-        pt->cHeads = 16;
+        /* hopefully sane defaults */
+        pt->cCylinders = 1024;
+        pt->cHeads = 255;
         pt->cSectors = 63;
     }
 
-#if 0
-    dprintf("GEOM: c/h/s = %"PRIu64"/%"PRIu64"/%"PRIu64"\n",
-        pt->cCylinders,
-        pt->cHeads,
-        pt->cSectors);
-#endif
-
-    if (pt->pt_hdd.type == DISK_TYPE_RAW) {
-        if (!concoct_pt(pt)) {
-            LogAlways(("%s: unable to concoct partition table.\n", __FUNCTION__));
-            goto err_free;
-        }
-    }
-
-    else if ( !read_pt(pt) ) {
+    if ( !read_pt(pt) ) {
         LogAlways(("%s: unable to read partition table.\n", __FUNCTION__));
         goto err_free;
     }
@@ -412,17 +356,12 @@ uint64_t part_start_sector(partition_t part)
 
 uint8_t part_fsync(partition_t part)
 {
-    ptbl_t pt = part->p_tbl;
-
-    if (pt->pt_hdd.type == DISK_TYPE_VBOX) {
-        int rc;
-        rc = VDFlush(pt->pt_hdd.u.vboxhandle);
-        if (!RT_SUCCESS(rc)) {
-            disklib__set_errno(DISKLIB_ERR_IO);
-            return 0;
-        }
+    int rc;
+    rc = VDFlush(pt->pt_hdd.vboxhandle);
+    if (!RT_SUCCESS(rc)) {
+        disklib__set_errno(DISKLIB_ERR_IO);
+        return 0;
     }
-
     return 1;
 }
 
