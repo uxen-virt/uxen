@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -360,6 +360,8 @@ get_wga_macs(size_t *len)
     char *p, *str = NULL;
     struct macaddr *macs = NULL;
 
+    *len = 0;
+
     rc = RegGetValueA(HKEY_LOCAL_MACHINE,
                       "SOFTWARE\\Microsoft\\Windows Genuine Advantage",
                       "MAC",
@@ -382,7 +384,6 @@ get_wga_macs(size_t *len)
         return NULL;
     }
 
-    *len = 0;
     p = str;
     do {
         int m[6];
