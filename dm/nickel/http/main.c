@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -5444,7 +5444,10 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
     if (buf && (cx->flags & CXF_RESET_STATE)) {
         CXL4("CXF_RESET_STATE");
         cx->flags &= ~CXF_RESET_STATE;
-        cx_reset(cx, false);
+        if ((cx->flags & CXF_GUEST_PROXY))
+            cx_reset(cx, false);
+        else
+            cx_reset(cx, true);
         if (cx->hp) {
             cx->hp->flags &= (~HF_REUSABLE & ~HF_HTTP_CLOSE);
             if (!(cx->hp->flags & HF_PINNED) && cx_hp_disconnect(cx) < 0)
