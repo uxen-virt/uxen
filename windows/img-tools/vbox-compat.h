@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -223,8 +223,7 @@ typedef FILE *PRTSTREAM;
                 vd = vd_new();                  \
                 if (vd == NULL)                 \
                     _ret = -errno;              \
-                else                            \
-                    *(disk) = vd;               \
+                *(disk) = vd;                   \
                 _ret;                           \
             }))
 #define VDCreateBase(disk, format, filename, size, image_flags, ident,  \
