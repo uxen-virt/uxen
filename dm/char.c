@@ -24,7 +24,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  *
@@ -465,8 +465,8 @@ static int fd_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
 
     critical_section_enter(&s->send_lock);
     TAILQ_INSERT_TAIL(&s->send_queue, b, link);
-    critical_section_leave(&s->send_lock);
     s->send_queue_len += len;
+    critical_section_leave(&s->send_lock);
     ioh_set_write_handler(s->fd_out, chr->iohq, fd_chr_write_cb, chr);
 
     return len;
