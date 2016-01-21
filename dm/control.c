@@ -975,7 +975,8 @@ struct dict_rpc_command control_commands[] = {
     { "audio-mute", control_command_audio_mute,
       .args = (struct dict_rpc_arg_desc[]) {
             { "mute", DICT_RPC_ARG_TYPE_INTEGER, .optional = 0 },
-        }},
+            { NULL, },
+        }, },
 #endif
 #ifdef CONFIG_VBOXDRV
     { "clipboard-render", control_command_clipboard_render, },
@@ -1024,7 +1025,8 @@ struct dict_rpc_command control_commands[] = {
     { "parent-window-key-forward", control_command_set_key_forward,
       .args = (struct dict_rpc_arg_desc[]) {
             { "set", DICT_RPC_ARG_TYPE_ARRAY, .optional = 0 },
-      }, },
+            { NULL, },
+        }, },
     { "pause", control_command_pause, },
     { "quit", control_command_quit, .flags = CONTROL_SUSPEND_OK,
       .args = (struct dict_rpc_arg_desc[]) {
@@ -1037,7 +1039,8 @@ struct dict_rpc_command control_commands[] = {
     { "remote-execute", remote_execute,
       .args = (struct dict_rpc_arg_desc[]) {
             { "command-line", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },
-      }, },
+            { NULL, },
+        }, },
 #ifdef _WIN32
     { "reopen-char-files", control_command_reopen_char_files, },
 #endif
@@ -1045,6 +1048,7 @@ struct dict_rpc_command control_commands[] = {
       .args = (struct dict_rpc_arg_desc[]) {
             { "delete-savefile", DICT_RPC_ARG_TYPE_BOOLEAN, .optional = 1,
               .defval = DICT_RPC_ARG_DEFVAL_BOOLEAN(true) },
+            { NULL, },
         }, },
     { "save", control_command_save,
       .args = (struct dict_rpc_arg_desc[]) {
