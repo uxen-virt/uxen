@@ -109,7 +109,6 @@ SECTIONS
 #endif
 
   . = ALIGN(PAGE_SIZE);             /* Init code and data */
-  __init_begin = .;
   .init.text : {
        _uxen_core_init_text = .;
        _sinittext = .;
