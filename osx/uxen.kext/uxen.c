@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -39,9 +39,10 @@ uint32_t uxen_size = 0;
 enum uxen_mode {
     MODE_IDLE,
     MODE_SYMS_LOADED,
-    MODE_SHUTDOWN,
     MODE_LOADED,
-    MODE_INITIALIZED
+    MODE_FAILED,
+    MODE_INITIALIZED,
+    MODE_SHUTDOWN,
 };
 static enum uxen_mode uxen_mode = MODE_IDLE;
 
@@ -337,7 +338,7 @@ uxen_ioctl(u_long cmd, struct fd_assoc *fda, struct vm_info *vmi,
         break;
     case UXENLOAD:
 #if !defined(__UXEN_EMBEDDED__)
-        CHECK_MODE_NOT(MODE_SHUTDOWN, "UXENLOAD");
+        CHECK_MODE_NOT(MODE_LOADED, "UXENLOAD");
         CHECK_MODE(MODE_SYMS_LOADED, "UXENLOAD");
         CHECK_INPUT_BUFFER("UXENLOAD", struct uxen_load_desc);
         IOCTL_ADMIN_CHECK("UXENLOAD");
@@ -348,7 +349,7 @@ uxen_ioctl(u_long cmd, struct fd_assoc *fda, struct vm_info *vmi,
 #endif
         break;
     case UXENLOADSYMS:
-        CHECK_MODE_NOT(MODE_SHUTDOWN, "UXENLOADSYMS");
+        CHECK_MODE_NOT(MODE_SYMS_LOADED, "UXENLOADSYMS");
         CHECK_INPUT_BUFFER("UXENLOADSYMS", struct uxen_syms_desc);
         IOCTL_ADMIN_CHECK("UXENLOADSYMS");
         ret = uxen_load_xnu_symbols((struct uxen_syms_desc *)in_buf);
@@ -361,28 +362,37 @@ uxen_ioctl(u_long cmd, struct fd_assoc *fda, struct vm_info *vmi,
         SET_MODE(MODE_SYMS_LOADED);
         break;
     case UXENUNLOAD:
-        CHECK_MODE(MODE_SHUTDOWN, "UXENUNLOAD");
+        CHECK_MODE(MODE_LOADED, "UXENUNLOAD");
         IOCTL_ADMIN_CHECK("UXENUNLOAD");
         ret = uxen_unload();
         SET_MODE(MODE_IDLE);
         break;
     case UXENINIT:
-        CHECK_MODE_NOT(MODE_INITIALIZED, "UXENINIT");
+        CHECK_MODE_NOT(MODE_FAILED, "UXENINIT");
 #if !defined(__UXEN_EMBEDDED__)
         CHECK_MODE(MODE_LOADED, "UXENINIT");
 #endif
         ret = uxen_op_init(fda);
-        if (ret)
+        if (ret) {
+            SET_MODE(MODE_FAILED);
             break;
+        }
         SET_MODE(MODE_INITIALIZED);
         break;
     case UXENSHUTDOWN:
+#if defined(__UXEN_EMBEDDED__)
+        CHECK_MODE_NOT(MODE_SHUTDOWN, "UXENSHUTDOWN");
+#endif
         CHECK_MODE(MODE_INITIALIZED, "UXENSHUTDOWN");
         IOCTL_ADMIN_CHECK("UXENSHUTDOWN");
         ret = uxen_op_shutdown();
         if (ret)
             break;
+#if !defined(__UXEN_EMBEDDED__)
+        SET_MODE(MODE_LOADED);
+#else
         SET_MODE(MODE_SHUTDOWN);
+#endif
         break;
     case UXENWAITVMEXIT:
         CHECK_MODE(MODE_LOADED, "UXENWAITVMEXIT");
@@ -733,10 +743,10 @@ uxen_driver_load(void)
 void
 uxen_driver_unload(void)
 {
-    if (uxen_mode >= MODE_INITIALIZED)
+    if (uxen_mode == MODE_INITIALIZED)
         uxen_op_shutdown();
 
-    if (uxen_mode >= MODE_SHUTDOWN)
+    if (uxen_mode >= MODE_LOADED)
         uxen_unload();
 
     SET_MODE(MODE_IDLE);

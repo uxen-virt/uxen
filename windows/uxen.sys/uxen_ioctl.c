@@ -2,7 +2,7 @@
  *  uxen_ioctl.c
  *  uxen
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -32,6 +32,7 @@ static int uxen_mode;
 #define UXEN_MODE_LOADED	1
 #define UXEN_MODE_FAILED        2
 #define UXEN_MODE_INITIALIZED	3
+#define UXEN_MODE_SHUTDOWN      4
 
 static struct fd_assoc *
 lookup_fd_assoc(void *p)
@@ -350,13 +351,20 @@ uxen_ioctl(__inout DEVICE_OBJECT *DeviceObject, __inout IRP *pIRP)
 	break;
     case ICC(UXENSHUTDOWN):
 	IOCTL_TRACE("uxen_ioctl(UXENSHUTDOWN)\n");
+#if defined(__UXEN_EMBEDDED__)
+	UXEN_CHECK_MODE_NOT(UXEN_MODE_SHUTDOWN, "UXENSHUTDOWN");
+#endif
 	UXEN_CHECK_MODE(UXEN_MODE_INITIALIZED, "UXENSHUTDOWN");
         IOCTL_ADMIN_CHECK("UXENSHUTDOWN");
 	ret = uxen_op_shutdown();
 	if (ret)
 	    break;
         uxen_sys_stop_v4v();
+#if !defined(__UXEN_EMBEDDED__)
         SET_UXEN_MODE(UXEN_MODE_LOADED);
+#else
+        SET_UXEN_MODE(UXEN_MODE_SHUTDOWN);
+#endif
 	break;
     case ICC(UXENPROCESSEXITHELPER): {
         KIRQL irql;
