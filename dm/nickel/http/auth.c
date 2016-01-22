@@ -17,11 +17,7 @@
 #include <inttypes.h>
 
 #include "auth-basic.h"
-#if defined(_WIN32)
-#include "auth-sspi.h"
-#elif defined(__APPLE__)
-#include "auth-ntlm.h"
-#endif
+#include "auth-challenge.h"
 
 #define MAX_AUTH_SESSIONS   3
 
@@ -157,13 +153,8 @@ static int auth_init(struct http_auth *auth)
     if (auth->type == AUTH_TYPE_UNKNOWN || auth->type == AUTH_TYPE_NONE)
         goto out;
 
-#if defined(_WIN32)
-    if (IS_SSPI_AUTH(auth->type)) {
-        ret = sspi_init_auth(auth);
-#elif defined(__APPLE__)
-    if (IS_NTLM_AUTH(auth->type)) {
-        ret = ntlm_init_auth(auth);
-#endif
+    if (IS_CHALLENGE_AUTH(auth->type)) {
+        ret = challenge_auth_init_auth(auth);
     } else if (auth->type == AUTH_TYPE_BASIC) {
         ret = basicauth_init_auth(auth);
     }
@@ -173,14 +164,8 @@ out:
 }
 static int change_auth(struct http_auth *auth, enum auth_enum new_type)
 {
-
-#if defined(_WIN32)
-    if (IS_SSPI_AUTH(auth->type)) {
-        sspi_free_auth(auth);
-#elif defined(__APPLE__)
-    if (IS_NTLM_AUTH(auth->type)) {
-        ntlm_free_auth(auth);
-#endif
+    if (IS_CHALLENGE_AUTH(auth->type)) {
+        challenge_auth_free_auth(auth);
     } else if (auth->type == AUTH_TYPE_BASIC) {
         basicauth_free_auth(auth);
     }
@@ -238,14 +223,8 @@ int http_auth_reset(struct http_auth *auth)
         ret = -1;
         goto out;
     }
-#if defined(_WIN32)
-    if (IS_SSPI_AUTH(auth->type))
-        sspi_reset_auth(auth);
-#elif defined(__APPLE__)
-    if (IS_NTLM_AUTH(auth->type))
-        ntlm_reset_auth(auth);
-#endif
-
+    if (IS_CHALLENGE_AUTH(auth->type))
+        challenge_auth_reset_auth(auth);
 out:
     return ret;
 }
@@ -259,19 +238,11 @@ int http_auth_clt(struct http_auth *auth)
     if (auth_reset_header(auth) < 0)
         goto out;
 
-#if defined(_WIN32)
-    if (IS_SSPI_AUTH(auth->type)) {
-        if (sspi_clt(auth)) {
-            AUXL("sspi_step ERROR");
+    if (IS_CHALLENGE_AUTH(auth->type)) {
+        if (challenge_auth_clt(auth)) {
+            AUXL("challenge_auth_clt ERROR");
             goto out;
         }
-#elif defined(__APPLE__)
-    if (IS_NTLM_AUTH(auth->type)) {
-        if (ntlm_clt(auth)) {
-            AUXL("ntlm_step ERROR");
-            goto out;
-        }
-#endif
     } else if (auth->type == AUTH_TYPE_BASIC) {
         if (basicauth_clt(auth)) {
             AUXL("basicauth_step ERROR");
@@ -299,19 +270,11 @@ int http_auth_srv(struct http_auth *auth, struct http_header *h)
 
     auth->authorized = (h->status_code == 407 ? 0 : 1);
 
-#if defined(_WIN32)
-    if (IS_SSPI_AUTH(auth->type)) {
-        if (sspi_srv(auth, auth->authorized)) {
-            AUXL("sspi_srv ERROR");
+    if (IS_CHALLENGE_AUTH(auth->type)) {
+        if (challenge_auth_srv(auth, auth->authorized)) {
+            AUXL("challenge_auth_srv ERROR");
             goto out;
         }
-#elif defined(__APPLE__)
-    if (IS_NTLM_AUTH(auth->type)) {
-        if (ntlm_srv(auth, auth->authorized)) {
-            AUXL("ntlm_srv ERROR");
-            goto out;
-        }
-#endif
     } else if (auth->type == AUTH_TYPE_BASIC) {
         if (basicauth_srv(auth, auth->authorized)) {
             AUXL("basicauth_srv ERROR");
@@ -321,7 +284,6 @@ int http_auth_srv(struct http_auth *auth, struct http_header *h)
         AUXL("unexpected HTTP 407 received, trying to restart the request.");
         auth->needs_restart = 1;
     }
-
 
     if (auth->needs_restart) {
         auth->needs_restart = 0;
@@ -366,13 +328,8 @@ int http_auth_srv_closing(struct http_auth *auth)
         goto out;
     }
 
-#if defined(_WIN32)
-    if (IS_SSPI_AUTH(auth->type))
-        ret = sspi_srv_closing(auth);
-#elif defined(__APPLE__)
-    if (IS_NTLM_AUTH(auth->type))
-        ret = ntlm_srv_closing(auth);
-#endif
+    if (IS_CHALLENGE_AUTH(auth->type))
+        ret = challenge_auth_srv_closing(auth);
     else if (auth->type == AUTH_TYPE_BASIC)
         ret = basicauth_srv_closing(auth);
 
@@ -382,20 +339,10 @@ out:
 
 int http_auth_init(void)
 {
-    int ret = 0;
-
-#if defined(_WIN32)
-    ret = sspi_lib_init();
-#endif
-
-    return ret;
+    return challenge_auth_init();
 }
 
 void http_auth_exit(void)
 {
-
-#if defined(_WIN32)
-    sspi_lib_exit();
-#endif
-
+    challenge_auth_exit();
 }

@@ -1,9 +1,3 @@
-/*
- * Copyright 2015-2016, Bromium, Inc.
- * Author: Paulian Marinca <paulian@marinca.net>
- * SPDX-License-Identifier: ISC
- */
-
 #include <dm/config.h>
 #include <dm/base64.h>
 #include <log.h>
@@ -13,7 +7,8 @@
 #include "proxy.h"
 #include "parser.h"
 #include "auth.h"
-#include "auth-ntlm.h"
+#include "auth-challenge.h"
+#include "ntlm-osx.h"
 #include <inttypes.h>
 #include <unistd.h>
 
@@ -24,13 +19,11 @@
 #define PREFIX "NTLM "
 
 struct ntlm_ctx_t {
-    int step;
-    int nr_steps;
-    char *target_name;
+    struct challenge_ctx_t *cctx;
     struct ntlm_ctx *ntlm_ctx;
 };
 
-int get_ntlm_context(char* server, struct ntlm_ctx *ntlm_ctx)
+static int get_ntlm_context(char* server, struct ntlm_ctx *ntlm_ctx)
 {
     int ret = 0;
     UInt32 returnpasswordLength = 0;
@@ -130,7 +123,7 @@ int get_ntlm_context(char* server, struct ntlm_ctx *ntlm_ctx)
     if (!ntlm_ctx->w_username)
         goto mem_err;
     for (int i = 0; i < usernameLength; i++)
-        ntlm_ctx->w_username[i * 2] = ntlm_ctx->username[i];
+        ntlm_ctx->w_username[i * 2] = toupper(ntlm_ctx->username[i]);
     ntlm_ctx->w_username_len = usernameLength * 2;
     NETLOG5("username for NTLM: %s", ntlm_ctx->username);
 
@@ -182,60 +175,34 @@ mem_err:
     goto out;
 }
 
-int ntlm_init_auth(struct http_auth *auth)
+struct ntlm_ctx_t * ntlm_osx_init_auth(struct challenge_ctx_t *cctx)
 {
-    int ret = -1;
-    struct ntlm_ctx_t *ntlm;
+    struct ntlm_ctx_t *ntlm = NULL;
 
-    assert(!auth->auth_opaque);
+    assert(cctx && cctx->auth);
+
     ntlm = calloc(1, sizeof(*ntlm));
     if (!ntlm)
         goto out;
-    ntlm->nr_steps = 2;
 
     struct ntlm_ctx *context = calloc(1, sizeof(struct ntlm_ctx));
     if (!context) {
         free(ntlm);
+        ntlm = NULL;
         goto out;
     }
+    cctx->nr_steps = 2;
+    ntlm->cctx = cctx;
     ntlm->ntlm_ctx = context;
-
-    auth->auth_opaque = ntlm;
-    ret = 0;
 out:
-    return ret;
+    return ntlm;
 }
 
-void ntlm_free_auth(struct http_auth *auth)
-{
-    struct ntlm_ctx_t *ntlm = auth->auth_opaque;
 
+void ntlm_osx_reset_auth(struct ntlm_ctx_t *ntlm)
+{
     if (!ntlm)
         return;
-
-    AUXL4("");
-    ntlm_reset_auth(auth);
-
-    free(ntlm->ntlm_ctx->username);
-    free(ntlm->ntlm_ctx->domain);
-    free(ntlm->ntlm_ctx->w_username);
-    free(ntlm->ntlm_ctx->w_domain);
-    free(ntlm->ntlm_ctx->ntlm_hash);
-    free(ntlm->ntlm_ctx);
-    free(ntlm->target_name);
-    free(ntlm);
-    auth->auth_opaque = NULL;
-}
-
-void ntlm_reset_auth(struct http_auth *auth)
-{
-    struct ntlm_ctx_t *ntlm = auth->auth_opaque;
-
-    if (!ntlm)
-        return;
-
-    AUXL4("");
-    ntlm->step = 0;
 
     if (ntlm->ntlm_ctx) {
         free(ntlm->ntlm_ctx->ntlm_hash);
@@ -245,167 +212,61 @@ void ntlm_reset_auth(struct http_auth *auth)
     ntlm->ntlm_ctx = context;
 }
 
-int ntlm_clt(struct http_auth *auth)
+void ntlm_osx_free_auth(struct ntlm_ctx_t *ntlm)
+{
+    if (!ntlm)
+        return;
+
+    ntlm_osx_reset_auth(ntlm);
+
+    free(ntlm->ntlm_ctx->username);
+    free(ntlm->ntlm_ctx->domain);
+    free(ntlm->ntlm_ctx->w_username);
+    free(ntlm->ntlm_ctx->w_domain);
+    free(ntlm->ntlm_ctx->ntlm_hash);
+    free(ntlm->ntlm_ctx);
+    free(ntlm);
+}
+
+int ntlm_osx_clt(struct ntlm_ctx_t *ntlm, bool force_saved_auth,
+        unsigned char *buf_in_data, size_t buf_in_data_len,
+        unsigned char **buf_out_data, size_t *buf_out_data_len,
+        int *logon_required, int *needs_reconnect)
 {
     int ret = -1;
-    const char *proxy_name;
-    struct ntlm_ctx_t *ntlm = NULL;
-    unsigned char *buf_in_data = NULL;
-    size_t buf_in_data_len = 0;
-    unsigned char *buf_out_data = NULL;
-    size_t buf_out_data_len = 0;
-    char *buf_encoded = NULL;
-    size_t buf_encoded_len = 0;
 
-    if (!auth)
+    if (!ntlm || !ntlm->cctx)
         goto out;
 
-    assert(auth->proxy);
-    proxy_name = auth->proxy->name;
-
-    ntlm = auth->auth_opaque;
-    assert(ntlm);
-
-    ntlm->step++;
-    auth->last_step = ntlm->step == ntlm->nr_steps;
-    AUXL5("step = %d, last_step = %d", ntlm->step, auth->last_step);
-
-    if (auth->authorized) {
-        auth->last_step = 1;
-        ret = 0;
-        goto out;
-    }
-
-    if (ntlm->step > ntlm->nr_steps) {
+    if (ntlm->cctx->step > ntlm->cctx->nr_steps) {
         NETLOG("%s: failing, nr_steps exceeded", __FUNCTION__);
-        auth->logon_required = 1;
+        *logon_required = 1;
         ret = 0;
         goto out;
     }
 
-    if (!ntlm->target_name) {
-
-        if (!proxy_name) {
-            NETLOG("%s: bug, no proxy_name", __FUNCTION__);
-            goto out;
-        }
-        if (ntlm->target_name) {
-            free(ntlm->target_name);
-            ntlm->target_name = NULL;
-        }
-
-        NETLOG5("target name: %s", proxy_name);
-        ntlm->target_name = strdup(proxy_name);
+    if (!ntlm->cctx->target_name) {
+        NETLOG("%s: bug, target_name empty", __FUNCTION__);
+        goto out;
     }
 
-    if (auth->prx_auth) {
-        buf_in_data = base64_decode(auth->prx_auth, &buf_in_data_len);
-        if (!buf_in_data || !buf_in_data_len) {
-            NETLOG("%s: base64_decode failed for buf_in_data", __FUNCTION__);
-            goto out;
-        }
-        AUXL4("buf_in_data decoded from %u to %u", (unsigned) strlen(auth->prx_auth),
-               (unsigned) buf_in_data_len);
-    }
 
-    if (0 != get_ntlm_context(ntlm->target_name, ntlm->ntlm_ctx)) {
-        NETLOG("%s: No credentials found for %s", __FUNCTION__, ntlm->target_name);
-        auth->logon_required = 1;
+    if (0 != get_ntlm_context(ntlm->cctx->target_name, ntlm->ntlm_ctx)) {
+        NETLOG("%s: No credentials found for %s", __FUNCTION__, ntlm->cctx->target_name);
+        *logon_required = 1;
         ret = 0;
         goto out;
     }
 
-    auth->logon_required = 0;
+    *logon_required = 0;
 
     if (ntlm_get_next_token(ntlm->ntlm_ctx, buf_in_data, buf_in_data_len,
-                &buf_out_data, &buf_out_data_len) < 0) {
+                buf_out_data, buf_out_data_len) < 0) {
         NETLOG("%s: ERROR on ntlm_get_next_token", __FUNCTION__);
         goto out;
     }
 
-    AUXL4("(2) step = %d, last_step = %d", ntlm->step, auth->last_step);
-    if (!buf_out_data || !buf_out_data_len) {
-        NETLOG("%s: ERROR! no buf_out_data", __FUNCTION__);
-        goto out;
-    }
-
-    buf_encoded = base64_encode(buf_out_data, buf_out_data_len);
-    if (!buf_encoded) {
-        NETLOG("%s: base64_encode FAILED, len = %d", __FUNCTION__, (int) buf_out_data_len);
-        goto out;
-    }
-    buf_encoded_len = strlen(buf_encoded);
-
-    assert(auth->auth_header && !auth->auth_header->crt_header);
-    if (auth->auth_header->crt_header >= NUM_HEADERS) {
-        NETLOG("%s: ERROR, max number of headers exceeded", __FUNCTION__);
-        goto out;
-    }
-
-    auth->auth_header->headers[auth->auth_header->crt_header].name =
-        BUFF_NEWSTR(S_PROXY_AUTH_HEADER);
-    if (!auth->auth_header->headers[auth->auth_header->crt_header].name)
-        goto mem_err;
-
-    if (!buff_new_priv(&(auth->auth_header->headers[auth->auth_header->crt_header].value),
-                strlen(PREFIX) + buf_encoded_len))
-        goto mem_err;
-    if (buff_append(auth->auth_header->headers[auth->auth_header->crt_header].value,
-                PREFIX, strlen(PREFIX)) < 0)
-        goto mem_err;
-    if (buff_append(auth->auth_header->headers[auth->auth_header->crt_header].value,
-                buf_encoded, buf_encoded_len) < 0)
-        goto mem_err;
-    auth->auth_header->crt_header++;
-
     ret = 0;
 out:
-    free(buf_in_data);
-    free(buf_out_data);
-    free(buf_encoded);
     return ret;
-
-mem_err:
-    warnx("%s: malloc", __FUNCTION__);
-    goto out;
-}
-
-int ntlm_srv(struct http_auth *auth, int authorized)
-{
-    struct ntlm_ctx_t *ntlm = auth->auth_opaque;
-
-    if (authorized)
-        goto out;
-
-    AUXL4("last_step = %d", auth->last_step);
-    if (auth->last_step) {
-        bool prompt_u = ntlm;
-
-        if (prompt_u && auth->was_authorized) {
-            AUXL2("last sspi step but was once authorized, retry the request.");
-            auth->needs_restart = 1;
-            goto out;
-        }
-
-        AUXL2("last sspi step but not authorized. %s",
-            prompt_u ?  "Prompt for username/pass" : "CUSTOM CREDENTIALS USED. Giving Up.");
-        if (prompt_u)
-            auth->logon_required = 1;
-    }
-
-out:
-    return 0;
-}
-
-
-int ntlm_srv_closing(struct http_auth *auth)
-{
-    struct ntlm_ctx_t *ntlm = auth->auth_opaque;
-
-    if (!ntlm || ntlm->step == 0 || auth->needs_reconnect || auth->logon_required)
-        return 0;
-
-    /* if closes in the middle of auth what can we do ? */
-    NETLOG("%s: h:%"PRIxPTR" unexpected proxy conn close", __FUNCTION__, (uintptr_t) auth->hp);
-    return -1;
 }

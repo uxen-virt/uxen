@@ -1,9 +1,3 @@
-/*
- * Copyright 2014-2015, Bromium, Inc.
- * Author: Paulian Marinca <paulian@marinca.net>
- * SPDX-License-Identifier: ISC
- */
-
 #include <dm/config.h>
 #include <dm/base64.h>
 #include <log.h>
@@ -12,8 +6,7 @@
 #include "strings.h"
 #include "proxy.h"
 #include "parser.h"
-#include "auth.h"
-#include "auth-sspi.h"
+#include "auth-challenge.h"
 #include <inttypes.h>
 
 #include <windows.h>
@@ -24,12 +17,7 @@
 #include <ntsecapi.h>
 #include <wincrypt.h>
 
-#define MAX_SSPI_STEPS 6
-
-#define MAX_TIMEOUT_PRX_MS  (4 * 1000) /* ms */
 #define CRED_TMP_PREFIX "tmp_"
-#define NTLM_TOKEN_SIGNATURE   "NTLMSSP"
-#define MIN_KERB_TOKEN_LEN  1024
 
 #if 0
 SECURITY_STATUS SspiUnmarshalAuthIdentity(unsigned long, char*, void*);
@@ -40,46 +28,22 @@ __attribute__((__stdcall__)) __attribute__((dllimport)) SECURITY_STATUS SspiUnma
 __attribute__((__stdcall__)) __attribute__((dllimport)) SECURITY_STATUS SspiFreeAuthIdentity(
         void *);
 
-extern struct ntlm_ctx *custom_ntlm;
-
 struct sspi_ctx_t {
-    int step;
-    int nr_steps;
-    wchar_t *target_name;
+    struct challenge_ctx_t *cctx;
+    int initialized;
     int handle_acquired;
     CredHandle handle;
     CtxtHandle ctx;
 };
 
-struct sspi_pkg
-{
-    bool initialized;
-    ULONG max_token_length;
-};
-
 static HINSTANCE security_lib = NULL;
 static PSecurityFunctionTableW security_ft = NULL;
 
-enum pkg_type {
-    PACKAGE_TYPE_KERBEROS = 0,
-    PACKAGE_TYPE_NEGOTIATE,
-    PACKAGE_TYPE_NTLM,
-
-    _NUMBER_OF_PACKAGES_
-};
 static const wchar_t *const pkg_names[] = {
     L"Kerberos",
     L"Negotiate",
     L"NTLM"
 };
-
-static const char *const auth_prefix[] = {
-    "Kerberos ",
-    "Negotiate ",
-    "NTLM "
-};
-
-struct sspi_pkg pkg_ctx[_NUMBER_OF_PACKAGES_];
 
 static const char *
 get_sspi_str_status(SECURITY_STATUS sspi_status)
@@ -128,30 +92,6 @@ get_sspi_str_status(SECURITY_STATUS sspi_status)
     }
 
     return "UNKNOWN ERROR";
-}
-
-static int sspi_get_package(enum auth_enum auth_type)
-{
-    int rc = -1;
-
-    switch (auth_type) {
-        case AUTH_TYPE_KERBEROS:
-            rc = PACKAGE_TYPE_KERBEROS;
-            break;
-        case AUTH_TYPE_NEGOTIATE:
-            rc = PACKAGE_TYPE_NEGOTIATE;
-            break;
-        case AUTH_TYPE_NTLM:
-            rc = PACKAGE_TYPE_NTLM;
-            break;
-        default:
-            break;
-    }
-
-    if (rc >= 0 && !pkg_ctx[rc].initialized)
-        return -1;
-
-    return rc;
 }
 
 static int sspi_get_auth_data(const char *target_name, void **pp_auth)
@@ -222,38 +162,7 @@ out:
     return ret;
 }
 
-static bool is_ntlm_token(struct http_auth *auth, const char *token, size_t len)
-{
-    bool ret = false;
-
-    if (len >= sizeof(NTLM_TOKEN_SIGNATURE) &&
-        strncmp(NTLM_TOKEN_SIGNATURE, token, sizeof(NTLM_TOKEN_SIGNATURE) - 1) == 0) {
-        ret = true;
-        goto out;
-    }
-
-    if (NLOG_LEVEL > 3)
-        netlog_print_esc("TOKEN", token, len);
-
-out:
-    AUXL4(" %s", ret ? "NTLM" : "Unknown (Negotiate)");
-    return ret;
-}
-
-bool sspi_islast_step(struct http_auth *auth)
-{
-    struct sspi_ctx_t *sspi;
-
-    if (!auth)
-        return false;
-    sspi = auth->auth_opaque;
-    if (!sspi)
-        return false;
-
-    return sspi->nr_steps == sspi->step;
-}
-
-int sspi_lib_init()
+int sspi_init()
 {
     int rc = 0, i;
 
@@ -296,67 +205,50 @@ int sspi_lib_init()
     return 0;
 }
 
-void sspi_lib_exit()
+void sspi_exit()
 {
     if (security_lib)
         FreeLibrary(security_lib);
     security_lib = NULL;
 }
 
-int sspi_init_auth(struct http_auth *auth)
+struct sspi_ctx_t * sspi_init_auth(struct challenge_ctx_t *cctx)
 {
-    int ret = -1;
     struct sspi_ctx_t *sspi;
 
-    assert(!auth->auth_opaque);
     sspi = calloc(1, sizeof(*sspi));
     if (!sspi)
         goto out;
-    if (auth->type == AUTH_TYPE_KERBEROS)
-        sspi->nr_steps = 1;
-    else if (auth->type == AUTH_TYPE_NTLM)
-        sspi->nr_steps = 2;
-    else
-        sspi->nr_steps = MAX_SSPI_STEPS; // Negotiate
-    auth->auth_opaque = sspi;
-    ret = 0;
+    sspi->cctx = cctx;
+
 out:
-    return ret;
+    return sspi;
 }
 
-void sspi_free_auth(struct http_auth *auth)
-{
-    struct sspi_ctx_t *sspi = auth->auth_opaque;
 
-    if (!sspi)
+void sspi_reset_auth(struct sspi_ctx_t *sspi)
+{
+    if (!sspi || !sspi->cctx)
         return;
 
-    AUXL4("");
-    sspi_reset_auth(auth);
-    free(sspi->target_name);
-    free(sspi);
-    auth->auth_opaque = NULL;
-}
-
-void sspi_reset_auth(struct http_auth *auth)
-{
-    struct sspi_ctx_t *sspi = auth->auth_opaque;
-
-    if (!sspi)
-        return;
-
-    AUXL4("");
-    sspi->step = 0;
-    if (!custom_ntlm) {
+    if (!sspi->cctx->custom_ntlm && sspi->initialized) {
         if (sspi->handle_acquired)
             FreeCredentialsHandle(&sspi->handle);
         sspi->handle_acquired = 0;
         DeleteSecurityContext(&sspi->ctx);
+        sspi->initialized = 0;
     }
     memset(&sspi->ctx, 0, sizeof(sspi->ctx));
 }
 
-static int sspi_clt_step(struct http_auth *auth, bool force_saved_auth,
+void sspi_free_auth(struct sspi_ctx_t *sspi)
+{
+    sspi_reset_auth(sspi);
+    memset(sspi, 0, sizeof(*sspi));
+    free(sspi);
+}
+
+int sspi_clt(struct sspi_ctx_t *sspi, bool force_saved_auth,
         unsigned char *buf_in_data, size_t buf_in_data_len,
         unsigned char **buf_out_data, size_t *buf_out_data_len,
         int *logon_required, int *needs_reconnect)
@@ -364,8 +256,8 @@ static int sspi_clt_step(struct http_auth *auth, bool force_saved_auth,
     int ret = -1;
     int rc;
     enum pkg_type pkg;
-    struct sspi_ctx_t *sspi;
     const char *proxy_name;
+    struct http_auth *auth;
     unsigned char *sspibuf = NULL;
     SecBuffer buf_in = {0};
     SecBuffer buf_out = {0};
@@ -376,9 +268,8 @@ static int sspi_clt_step(struct http_auth *auth, bool force_saved_auth,
     SECURITY_STATUS sec_status = 0;
     ULONG context_req_fl = 0;
 
-    assert(auth);
-    sspi = auth->auth_opaque;
-    assert(sspi);
+    assert(sspi && sspi->cctx && sspi->cctx->auth);
+    auth = sspi->cctx->auth;
 
     proxy_name = auth->proxy->name;
     if (auth->proxy->canon_name && (auth->proxy->ct == AUTH_TYPE_NEGOTIATE ||
@@ -390,7 +281,7 @@ static int sspi_clt_step(struct http_auth *auth, bool force_saved_auth,
 
     if (!security_ft)
         goto out;
-    rc = sspi_get_package(auth->type);
+    rc = get_package(auth->type);
     if (rc < 0) {
         NETLOG("%s: auth package not initialized", __FUNCTION__);
         goto out;
@@ -491,7 +382,7 @@ static int sspi_clt_step(struct http_auth *auth, bool force_saved_auth,
     sec_status = security_ft->InitializeSecurityContextW(
         &(sspi->handle),
         buf_in_data ? &(sspi->ctx) : NULL,
-        sspi->target_name,
+        sspi->cctx->target_name,
         context_req_fl,
         0,
         0,
@@ -501,6 +392,8 @@ static int sspi_clt_step(struct http_auth *auth, bool force_saved_auth,
         &buf_out_desc,
         &attrs,
         &tsDummy);
+
+    sspi->initialized = 1;
 
     /* Check for completion */
     if (sec_status == SEC_I_COMPLETE_AND_CONTINUE || sec_status == SEC_I_COMPLETE_NEEDED /*||
@@ -519,7 +412,7 @@ static int sspi_clt_step(struct http_auth *auth, bool force_saved_auth,
     }
 
     AUXL4("InitializeSecurityContext: target_name:%ls, context_req_fl:0x%lx, IN:%lu bytes%s, OUT:%lu bytes, ret = 0x%lx (%s)",
-            sspi->target_name,
+            sspi->cctx->target_name,
             (unsigned long) context_req_fl,
             (unsigned long) (buf_in_data ? buf_in_data_len : 0),
             buf_in_data ? "" : " (null)",
@@ -551,217 +444,4 @@ static int sspi_clt_step(struct http_auth *auth, bool force_saved_auth,
     ret = 0;
 out:
     return ret;
-}
-
-int sspi_clt(struct http_auth *auth)
-{
-    int ret = -1, rc;
-    enum pkg_type pkg;
-    int len_sspi_prefix;
-    struct sspi_ctx_t *sspi;
-
-    const char *proxy_name;
-    unsigned char *buf_in_data = NULL;
-    size_t buf_in_data_len = 0;
-    unsigned char *buf_out_data = NULL;
-    size_t buf_out_data_len = 0;
-    char *buf_encoded = NULL;
-    size_t buf_encoded_len = 0;
-
-    if (!auth)
-        goto out;
-
-    assert(auth->proxy);
-    proxy_name = auth->proxy->name;
-
-    sspi = auth->auth_opaque;
-    assert(sspi);
-
-    if (!security_ft)
-        goto out;
-    rc = sspi_get_package(auth->type);
-    if (rc < 0) {
-        NETLOG("%s: auth package not initialized", __FUNCTION__);
-        goto out;
-    }
-    pkg = rc;
-    len_sspi_prefix = strlen(auth_prefix[pkg]);
-
-    sspi->step++;
-    auth->last_step = !!sspi_islast_step(auth);
-    AUXL5("step = %d, last_step = %d", sspi->step, auth->last_step);
-
-    if (auth->authorized) {
-        auth->last_step = 1;
-        ret = 0;
-        goto out;
-    }
-
-    if (sspi->step > MAX_SSPI_STEPS) {
-        NETLOG("%s: failing, MAX_SSPI_STEPS exceeded", __FUNCTION__);
-        if (!custom_ntlm)
-            auth->logon_required = 1;
-        ret = 0;
-        goto out;
-    }
-
-    if (!sspi->target_name) {
-        char *tmp;
-
-        if (!proxy_name) {
-            NETLOG("%s: bug, no proxy_name", __FUNCTION__);
-            goto out;
-        }
-        if (sspi->target_name) {
-            free(sspi->target_name);
-            sspi->target_name = NULL;
-        }
-
-        if (auth->type == AUTH_TYPE_KERBEROS || auth->type == AUTH_TYPE_NEGOTIATE) {
-            /* kerberos needs the canonical domain name of the proxy */
-            if (asprintf(&tmp, "%s/%s", "HTTP", auth->proxy->canon_name ?
-                        auth->proxy->canon_name : proxy_name) < 0)
-                goto mem_err;
-            NETLOG5("target name: %s", tmp);
-            sspi->target_name = buff_unicode_encode(tmp);
-            free(tmp);
-        } else {
-            NETLOG5("target name: %s", proxy_name);
-            sspi->target_name = buff_unicode_encode(proxy_name);
-        }
-    }
-
-    if (auth->prx_auth) {
-        buf_in_data = base64_decode(auth->prx_auth, &buf_in_data_len);
-        if (!buf_in_data || !buf_in_data_len) {
-            NETLOG("%s: base64_decode failed for buf_in_data", __FUNCTION__);
-            goto out;
-        }
-        AUXL4("buf_in_data decoded from %u to %u", (unsigned) strlen(auth->prx_auth),
-               (unsigned) buf_in_data_len);
-    }
-
-    auth->logon_required = 0;
-    if (custom_ntlm) {
-        if (ntlm_get_next_token(custom_ntlm, buf_in_data, buf_in_data_len,
-                &buf_out_data, &buf_out_data_len) < 0) {
-
-            NETLOG("%s: ERROR on ntlm_get_next_token", __FUNCTION__);
-            goto out;
-        }
-    } else {
-        int r;
-        int logon_required = 0, needs_reconnect = 0;
-
-        r = sspi_clt_step(auth, false, buf_in_data, buf_in_data_len,
-                          &buf_out_data, &buf_out_data_len,
-                          &logon_required, &needs_reconnect);
-        if (r < 0 || logon_required) {
-            logon_required = 0;
-            r = sspi_clt_step(auth, true, buf_in_data, buf_in_data_len,
-                          &buf_out_data, &buf_out_data_len,
-                          &logon_required, &needs_reconnect);
-        }
-        if (logon_required)
-            auth->logon_required = 1;
-        if (needs_reconnect)
-            auth->needs_reconnect = 1;
-        if (r < 0 || auth->logon_required || auth->needs_reconnect) {
-            ret = r;
-            goto out;
-        }
-    }
-
-    AUXL4("(2) step = %d, last_step = %d", sspi->step, auth->last_step);
-    if (!buf_out_data || !buf_out_data_len) {
-        NETLOG("%s: ERROR! no buf_out_data", __FUNCTION__);
-        goto out;
-    }
-
-    /* we need to find out the number of auth steps if Negotiate */
-    if (!custom_ntlm && auth->type == AUTH_TYPE_NEGOTIATE && sspi->step == 1 &&
-        is_ntlm_token(auth, (const char *) buf_out_data, buf_out_data_len)) {
-
-        sspi->nr_steps = 2; /* NTLM */
-        auth->last_step = 0;
-    }
-
-    buf_encoded = base64_encode(buf_out_data, buf_out_data_len);
-    if (!buf_encoded) {
-        NETLOG("%s: base64_encode FAILED, len = %d", __FUNCTION__, (int) buf_out_data_len);
-        goto out;
-    }
-    buf_encoded_len = strlen(buf_encoded);
-
-    assert(auth->auth_header && !auth->auth_header->crt_header);
-    if (auth->auth_header->crt_header >= NUM_HEADERS) {
-        NETLOG("%s: ERROR, max number of headers exceeded", __FUNCTION__);
-        goto out;
-    }
-
-    auth->auth_header->headers[auth->auth_header->crt_header].name =
-        BUFF_NEWSTR(S_PROXY_AUTH_HEADER);
-    if (!auth->auth_header->headers[auth->auth_header->crt_header].name)
-        goto mem_err;
-
-    if (!buff_new_priv(&(auth->auth_header->headers[auth->auth_header->crt_header].value),
-                len_sspi_prefix + buf_encoded_len))
-        goto mem_err;
-    if (buff_append(auth->auth_header->headers[auth->auth_header->crt_header].value,
-                auth_prefix[pkg], len_sspi_prefix) < 0)
-        goto mem_err;
-    if (buff_append(auth->auth_header->headers[auth->auth_header->crt_header].value,
-                buf_encoded, buf_encoded_len) < 0)
-        goto mem_err;
-    auth->auth_header->crt_header++;
-
-    ret = 0;
-out:
-    free(buf_in_data);
-    free(buf_out_data);
-    free(buf_encoded);
-    return ret;
-
-mem_err:
-    warnx("%s: malloc", __FUNCTION__);
-    goto out;
-}
-
-int sspi_srv(struct http_auth *auth, int authorized)
-{
-    struct sspi_ctx_t *sspi = auth->auth_opaque;
-
-    if (authorized)
-        goto out;
-
-    AUXL4("last_step = %d", auth->last_step);
-    if (auth->last_step) {
-        bool prompt_u = sspi && !custom_ntlm;
-
-        if (prompt_u && auth->was_authorized) {
-            AUXL2("last sspi step but was once authorized, retry the request.");
-            auth->needs_restart = 1;
-            goto out;
-        }
-
-        AUXL2("last sspi step but not authorized. %s",
-            prompt_u ?  "Prompt for username/pass" : "CUSTOM CREDENTIALS USED. Giving Up.");
-        if (prompt_u)
-            auth->logon_required = 1;
-    }
-
-out:
-    return 0;
-}
-
-int sspi_srv_closing(struct http_auth *auth)
-{
-    struct sspi_ctx_t *sspi = auth->auth_opaque;
-
-    if (!sspi || sspi->step == 0 || auth->needs_reconnect || auth->logon_required)
-        return 0;
-
-    /* if closes in the middle of auth what can we do ? */
-    NETLOG("%s: h:%"PRIxPTR" unexpected proxy conn close", __FUNCTION__, (uintptr_t) auth->hp);
-    return -1;
 }

@@ -229,7 +229,6 @@ out:
 }
 #endif
 
-
 static uint16_t read_uint16t(const uint8_t **buf) {
     uint16_t x;
 
@@ -528,12 +527,7 @@ static int generate_type3_msg(struct ntlm_ctx *ntlm, uint8_t *in_token, size_t i
         memcpy(rand_8_bytes, in_token, l);
     }
     if (generate_random_bytes(rand_8_bytes, sizeof(rand_8_bytes)) < 0) {
-#if defined(_WIN32)
-        NETLOG5("%s: error on generate_random_bytes %u", __FUNCTION__,
-                (unsigned int) GetLastError());
-#else
-        NETLOG5("%s: error on generate_random_bytes %d", __FUNCTION__, errno);
-#endif
+        Wwarn("%s: error on generate_random_bytes", __FUNCTION__);
         goto err;
     }
     unicode = (msg.flags & NTLM_NegotiateUnicode) != 0;
@@ -603,11 +597,7 @@ static int generate_type3_msg(struct ntlm_ctx *ntlm, uint8_t *in_token, size_t i
         if (!ntlmv2_buf)
             goto mem_err;
 
-        // XXX: How do we do this in wchar?
-        for (int i = 0; i < ntlm->w_username_len; i++) {
-            ntlmv2_buf[i] = toupper(ntlm->w_username[i]);
-        }
-
+        memcpy(ntlmv2_buf, ntlm->w_username, ntlm->w_username_len);
         if (ntlm->w_domain)
             memcpy(ntlmv2_buf + ntlm->w_username_len, ntlm->w_domain, ntlm->w_domain_len);
 
