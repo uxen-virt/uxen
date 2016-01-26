@@ -10,6 +10,7 @@ XEN_DISTFILES ?= $(TOPDIR)/../distfiles
 CROSS_TARGET = x86_64-all
 
 INSTALL_DIR = $(TOOLSDIR)/host-all
+INSTALL32_DIR = $(TOOLSDIR)/host-all-32
 
 BINUTILS_DISTFILES = binutils-2.25.1.tar.bz2
 BINUTILS_PATCHES = binutils-macho-core.patch binutils-install-libiberty.patch
@@ -31,7 +32,14 @@ BUILD_ENV += LDFLAGS="$(BUILD_ENV_LDFLAGS) $$LDFLAGS"
 BINUTILS_ENV = CFLAGS="$(BUILD_ENV_CFLAGS) $(BUILD_ENV_CPPFLAGS) $$CFLAGS"
 BINUTILS_ENV += LDFLAGS="$(BUILD_ENV_LDFLAGS) $$LDFLAGS"
 
-all: binutils/.libbfd-installed #binutils/.installed
+BUILD_ENV32 = CFLAGS="-m32 $(BUILD_ENV_CFLAGS) $$CFLAGS"
+BUILD_ENV32 += CPPFLAGS="$(BUILD_ENV_CPPFLAGS) $$CPPFLAGS"
+BUILD_ENV32 += LDFLAGS="-m32 $(BUILD_ENV_LDFLAGS) $$LDFLAGS"
+BINUTILS_ENV32 = CFLAGS="-m32 $(BUILD_ENV_CFLAGS) $(BUILD_ENV_CPPFLAGS) $$CFLAGS"
+BINUTILS_ENV32 += LDFLAGS="-m32 $(BUILD_ENV_LDFLAGS) $$LDFLAGS"
+
+all: binutils/.libbfd-installed binutils/.libbfd-installed32
+#binutils/.installed
 
 .PHONY: all clean
 
@@ -104,6 +112,36 @@ binutils/.libbfd-configured: binutils/.patched
 	    --prefix=$(INSTALL_DIR) \
 	    --with-sysroot=$(INSTALL_DIR) \
 	    --bindir=$(TOOLSDIR)/bin \
+	    --enable-targets=x86_64-w64-mingw32,i686-w64-mingw32,x86_64-elf,i686-elf,x86_64-apple-darwin \
+	    --enable-ld=no \
+	    --enable-static --disable-shared \
+	    --disable-nls --disable-intl --without-zlib
+	@touch $@
+
+binutils/.libbfd-installed32: $(TOOLSDIR)/bin/.exists $(INSTALL32_DIR)/.exists
+binutils/.libbfd-installed32: binutils/.libbfd-built32
+	cd $(@D)/build32-libbfd && $(BINUTILS_ENV32) $(BUILD_PATH) \
+	  $(MAKE) install-libiberty install-bfd
+	install $(@D)/$(BINUTILS_DIR)/bfd/mach-o.h \
+	  $(INSTALL32_DIR)/include/
+	@install -d $(INSTALL32_DIR)/include/mach-o
+	install $(@D)/$(BINUTILS_DIR)/include/mach-o/loader.h \
+	  $(INSTALL32_DIR)/include/mach-o/
+	@touch $@
+
+binutils/.libbfd-built32: binutils/.libbfd-configured32
+	cd $(@D)/build32-libbfd && $(BUILD_PATH) \
+	  $(MAKE) $(BINUTILS_ENV32) all-libiberty all-bfd
+	@touch $@
+
+binutils/.libbfd-configured32: binutils/.patched
+	@rm -rf $(@D)/build32-libbfd
+	@mkdir -p $(@D)/build32-libbfd
+	cd $(@D)/build32-libbfd && $(BINUTILS_ENV32) $(BUILD_PATH) \
+	  ../$(BINUTILS_DIR)/$(CONFIGURE) \
+	    --prefix=$(INSTALL32_DIR) \
+	    --with-sysroot=$(INSTALL32_DIR) \
+	    --bindir=$(INSTALL32_DIR)/i686-all/bin \
 	    --enable-targets=x86_64-w64-mingw32,i686-w64-mingw32,x86_64-elf,i686-elf,x86_64-apple-darwin \
 	    --enable-ld=no \
 	    --enable-static --disable-shared \
