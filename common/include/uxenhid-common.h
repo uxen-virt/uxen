@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -24,9 +24,13 @@ typedef unsigned __int64 uint64_t;
 #endif
 
 
-#define UXENHID_PORT 0xe0000
+#define UXENHID_BASE_PORT 0xe0000
 #define UXENHID_RING_SIZE 65536
 #define UXENHID_MAX_MSG_LEN 1024
+
+#define UXENHID_MOUSE_DEVICE    0
+#define UXENHID_PEN_DEVICE      1
+#define UXENHID_TOUCH_DEVICE    2
 
 typedef enum _UXENHID_MSG_TYPE {
     UXENHID_DEVICE_START                = 0x00000000,

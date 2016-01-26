@@ -33,10 +33,10 @@ uint64_t hid_touch_enabled = 0;
 struct uxenhid_state {
     UXenPlatformDevice dev;
 
+    uint32_t type;
     const char *report_descriptor;
     size_t report_descriptor_len;
 
-    uint32_t v4v_port;
     v4v_context_t v4v_context;
     HANDLE rx_event;
     HANDLE tx_event;
@@ -299,7 +299,7 @@ int uxenhid_send_mouse_report(uint8_t buttons, uint16_t x, uint16_t y,
     if (!mouse_state || !mouse_state->ready)
         return -1;
 
-    addr.port = mouse_state->v4v_port;
+    addr.port = mouse_state->type + UXENHID_BASE_PORT;
     addr.domain = vm_id;
 
     b = alloc_async_buf(msglen, (void **)&buf, addr);
@@ -333,7 +333,7 @@ int uxenhid_send_pen_report(uint16_t x, uint16_t y, uint8_t flags,
     if (!pen_state || !pen_state->ready)
         return -1;
 
-    addr.port = pen_state->v4v_port;
+    addr.port = pen_state->type + UXENHID_BASE_PORT;
     addr.domain = vm_id;
 
     b = alloc_async_buf(msglen, (void **)&buf, addr);
@@ -368,7 +368,7 @@ int uxenhid_send_touch_report(uint8_t contact_count, uint16_t contact_id,
     if (!touch_state || !touch_state->ready)
         return -1;
 
-    addr.port = touch_state->v4v_port;
+    addr.port = touch_state->type + UXENHID_BASE_PORT;
     addr.domain = vm_id;
 
     b = alloc_async_buf(msglen, (void **)&buf, addr);
@@ -404,7 +404,7 @@ uxenhid_send_max_contact_count_report(void)
     if (!touch_state || !touch_state->ready)
         return -1;
 
-    addr.port = touch_state->v4v_port;
+    addr.port = touch_state->type + UXENHID_BASE_PORT;
     addr.domain = vm_id;
 
     b = alloc_async_buf(msglen, (void **)&buf, addr);
@@ -613,9 +613,7 @@ uxenhid_init(UXenPlatformDevice *dev)
         return -1;
     }
 
-    s->v4v_port = UXENHID_PORT + uxenplatform_device_get_instance_id(dev);
-
-    id.addr.port = s->v4v_port;
+    id.addr.port = UXENHID_BASE_PORT + s->type;
     id.addr.domain = V4V_DOMID_ANY;
     id.partner = vm_id;
 
@@ -648,6 +646,9 @@ uxenhid_init(UXenPlatformDevice *dev)
     ioh_add_wait_object(&s->rx_event, rx_complete, s, NULL);
     ioh_add_wait_object(&s->tx_event, tx_complete, s, NULL);
 
+    uxenplatform_device_add_property(dev, UXENBUS_PROPERTY_TYPE_HIDTYPE,
+                                     &s->type, 4);
+
     rx_start(s);
 
     return 0;
@@ -663,6 +664,7 @@ uxenhid_create_devices(void)
     if (!dev)
         goto err;
     mouse_state = DO_UPCAST(struct uxenhid_state, dev, dev);
+    mouse_state->type = UXENHID_MOUSE_DEVICE;
     mouse_state->report_descriptor = report_descriptor_mouse;
     mouse_state->report_descriptor_len = sizeof(report_descriptor_mouse);
     ret = qdev_init(&dev->qdev);
@@ -674,6 +676,7 @@ uxenhid_create_devices(void)
         if (!dev)
             goto err;
         pen_state = DO_UPCAST(struct uxenhid_state, dev, dev);
+        pen_state->type = UXENHID_PEN_DEVICE;
         pen_state->report_descriptor = report_descriptor_pen;
         pen_state->report_descriptor_len = sizeof(report_descriptor_pen);
         ret = qdev_init(&dev->qdev);
@@ -686,6 +689,7 @@ uxenhid_create_devices(void)
         if (!dev)
             goto err;
         touch_state = DO_UPCAST(struct uxenhid_state, dev, dev);
+        touch_state->type = UXENHID_TOUCH_DEVICE;
         touch_state->report_descriptor = report_descriptor_touch;
         touch_state->report_descriptor_len = sizeof(report_descriptor_touch);
         ret = qdev_init(&dev->qdev);
@@ -731,6 +735,7 @@ void hotplug_touch_devices(int plug)
         if (!pen_state) {
             dev = uxenplatform_device_create("uxen_hid");
             pen_state = DO_UPCAST(struct uxenhid_state, dev, dev);
+            pen_state->type = UXENHID_PEN_DEVICE;
             pen_state->report_descriptor = report_descriptor_pen;
             pen_state->report_descriptor_len = sizeof(report_descriptor_pen);
             qdev_init(&dev->qdev);
@@ -739,6 +744,7 @@ void hotplug_touch_devices(int plug)
         if (!touch_state) {
             dev = uxenplatform_device_create("uxen_hid");
             touch_state = DO_UPCAST(struct uxenhid_state, dev, dev);
+            touch_state->type = UXENHID_TOUCH_DEVICE;
             touch_state->report_descriptor = report_descriptor_touch;
             touch_state->report_descriptor_len = sizeof(report_descriptor_touch);
             qdev_init(&dev->qdev);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -28,16 +28,24 @@ struct v4v_buf {
     } buf;
 };
 
-struct hid_context
+struct hid_ring
 {
     v4v_context_t v4v_context;
-    int vm_id;
+    int port;
     int ready;
     CRITICAL_SECTION lock;
     struct {
         struct v4v_buf *first;
         struct v4v_buf **last;
     } txlist;
+    int vm_id;
+};
+
+struct hid_context
+{
+    struct hid_ring mouse_ring;
+    struct hid_ring pen_ring;
+    struct hid_ring touch_ring;
 };
 
 static struct v4v_buf *
@@ -62,26 +70,26 @@ free_v4v_buf(struct v4v_buf *b, DWORD len)
     free(b);
 }
 
-static void xmit_complete(struct hid_context *c);
+static void xmit_complete(struct hid_ring *r);
 
 static int
-send_async(struct hid_context *c, struct v4v_buf *b, DWORD len)
+send_async(struct hid_ring *r, struct v4v_buf *b, DWORD len)
 {
     BOOL rc;
     DWORD bytes;
 
     b->len = len + sizeof(v4v_datagram_t);
 
-    rc = WriteFile(c->v4v_context.v4v_handle, (void *)&b->buf,
+    rc = WriteFile(r->v4v_context.v4v_handle, (void *)&b->buf,
                    b->len, &bytes, &b->ovlp);
     if (!rc) {
         if (GetLastError() == ERROR_IO_PENDING) {
-            EnterCriticalSection(&c->lock);
+            EnterCriticalSection(&r->lock);
             b->next = NULL;
-            b->pprev = c->txlist.last;
-            *c->txlist.last = b;
-            c->txlist.last = &b->next;
-            LeaveCriticalSection(&c->lock);
+            b->pprev = r->txlist.last;
+            *r->txlist.last = b;
+            r->txlist.last = &b->next;
+            LeaveCriticalSection(&r->lock);
             return 0;
         }
         free_v4v_buf(b, len);
@@ -97,12 +105,12 @@ send_async(struct hid_context *c, struct v4v_buf *b, DWORD len)
 }
 
 static int
-send_nop(struct hid_context *c)
+send_nop(struct hid_ring *r)
 {
     struct v4v_buf *b;
     UXENHID_MSG_HEADER *hdr;
     DWORD msglen = sizeof (*hdr);
-    v4v_addr_t addr = { .port = UXENHID_PORT, .domain = c->vm_id };
+    v4v_addr_t addr = { .port = r->port, .domain = r->vm_id };
 
     b = alloc_v4v_buf(msglen, (void **)&hdr, addr);
     if (!b)
@@ -113,22 +121,22 @@ send_nop(struct hid_context *c)
     hdr->type = UXENHID_NOP;
     hdr->msglen = msglen;
 
-    return send_async(c, b, msglen);
+    return send_async(r, b, msglen);
 }
 
 static void
-xmit_complete(struct hid_context *c)
+xmit_complete(struct hid_ring *r)
 {
     struct v4v_buf *b, *bn;
     BOOL rc;
     DWORD bytes;
     int disconnected = 0;
 
-    EnterCriticalSection(&c->lock);
-    b = c->txlist.first;
+    EnterCriticalSection(&r->lock);
+    b = r->txlist.first;
     while (b) {
         bn = b->next;
-        rc = GetOverlappedResult(c->v4v_context.v4v_handle, &b->ovlp, &bytes,
+        rc = GetOverlappedResult(r->v4v_context.v4v_handle, &b->ovlp, &bytes,
                                  FALSE);
 
         if (!rc && GetLastError() == ERROR_IO_INCOMPLETE) {
@@ -137,92 +145,122 @@ xmit_complete(struct hid_context *c)
         }
 
         if (!rc && GetLastError() == ERROR_VC_DISCONNECTED) {
-            c->ready = 0;
+            r->ready = 0;
             disconnected = 1;
         }
 
         if (rc) {
-            c->ready = 1;
+            r->ready = 1;
             disconnected = 0;
         }
 
         if (bn)
             bn->pprev = b->pprev;
         else
-            c->txlist.last = b->pprev;
+            r->txlist.last = b->pprev;
         *b->pprev = bn;
         free_v4v_buf(b, b->len);
         b = bn;
     }
-    LeaveCriticalSection(&c->lock);
+    LeaveCriticalSection(&r->lock);
 
     if (disconnected)
-        send_nop(c);
+        send_nop(r);
 }
 
-
-hid_context_t
-uxenconsole_hid_init(int vm_id)
+static int
+ring_init(struct hid_ring *r, int vm_id, int device_type)
 {
-    struct hid_context *c;
     OVERLAPPED o;
     DWORD t;
     v4v_ring_id_t id;
 
-    c = calloc(1, sizeof (*c));
-    if (!c)
-        return NULL;
-
     memset(&o, 0, sizeof(o));
-    if (!v4v_open(&c->v4v_context, UXENHID_RING_SIZE, &o) ||
-        !GetOverlappedResult(c->v4v_context.v4v_handle, &o, &t, TRUE)) {
-        free(c);
-        return NULL;
-    }
+    if (!v4v_open(&r->v4v_context, UXENHID_RING_SIZE, &o) ||
+        !GetOverlappedResult(r->v4v_context.v4v_handle, &o, &t, TRUE))
+        return -1;
 
     id.addr.port = 0;
     id.addr.domain = V4V_DOMID_ANY;
     id.partner = vm_id;
 
-    if (!v4v_bind(&c->v4v_context, &id, &o) ||
-        !GetOverlappedResult(c->v4v_context.v4v_handle, &o, &t, TRUE)) {
-        v4v_close(&c->v4v_context);
-        return NULL;
+    if (!v4v_bind(&r->v4v_context, &id, &o) ||
+        !GetOverlappedResult(r->v4v_context.v4v_handle, &o, &t, TRUE)) {
+        v4v_close(&r->v4v_context);
+        return -1;
     }
 
-    InitializeCriticalSection(&c->lock);
-    c->vm_id = vm_id;
-    c->txlist.first = NULL;
-    c->txlist.last = &c->txlist.first;
+    InitializeCriticalSection(&r->lock);
+    r->txlist.first = NULL;
+    r->txlist.last = &r->txlist.first;
+    r->port = UXENHID_BASE_PORT + device_type;
+    r->vm_id = vm_id;
 
-    send_nop(c);
+    send_nop(r);
 
-    return c;
+    return 0;
 }
 
 BOOL WINAPI CancelIoEx(HANDLE hFile, LPOVERLAPPED lpOverlapped);
+
+static void
+ring_cleanup(struct hid_ring *r)
+{
+    struct v4v_buf *b, *bn;
+
+    EnterCriticalSection(&r->lock);
+    b = r->txlist.first;
+    while (b) {
+        DWORD bytes;
+
+        bn = b->next;
+        if (CancelIoEx(r->v4v_context.v4v_handle, &b->ovlp) ||
+            GetLastError() != ERROR_NOT_FOUND)
+            GetOverlappedResult(r->v4v_context.v4v_handle, &b->ovlp, &bytes, TRUE);
+        free_v4v_buf(b, b->len);
+        b = bn;
+    }
+    LeaveCriticalSection(&r->lock);
+    DeleteCriticalSection(&r->lock);
+    v4v_close(&r->v4v_context);
+}
+
+hid_context_t
+uxenconsole_hid_init(int vm_id)
+{
+    struct hid_context *c;
+
+    c = calloc(1, sizeof (*c));
+    if (!c)
+        return NULL;
+
+    if (ring_init(&c->mouse_ring, vm_id, UXENHID_MOUSE_DEVICE))
+        goto fail_mouse;
+    if (ring_init(&c->pen_ring, vm_id, UXENHID_PEN_DEVICE))
+        goto fail_pen;
+    if (ring_init(&c->touch_ring, vm_id, UXENHID_TOUCH_DEVICE))
+        goto fail_touch;
+
+    return c;
+
+fail_touch:
+    ring_cleanup(&c->pen_ring);
+fail_pen:
+    ring_cleanup(&c->mouse_ring);
+fail_mouse:
+    free(c);
+    return NULL;
+}
 
 void
 uxenconsole_hid_cleanup(hid_context_t context)
 {
     struct hid_context *c = context;
-    struct v4v_buf *b, *bn;
 
-    EnterCriticalSection(&c->lock);
-    b = c->txlist.first;
-    while (b) {
-        DWORD bytes;
+    ring_cleanup(&c->touch_ring);
+    ring_cleanup(&c->pen_ring);
+    ring_cleanup(&c->mouse_ring);
 
-        bn = b->next;
-        if (CancelIoEx(c->v4v_context.v4v_handle, &b->ovlp) ||
-            GetLastError() != ERROR_NOT_FOUND)
-            GetOverlappedResult(c->v4v_context.v4v_handle, &b->ovlp, &bytes, TRUE);
-        free_v4v_buf(b, b->len);
-        b = bn;
-    }
-    LeaveCriticalSection(&c->lock);
-    DeleteCriticalSection(&c->lock);
-    v4v_close(&c->v4v_context);
     free(c);
 }
 
@@ -232,17 +270,18 @@ uxenconsole_hid_mouse_report(hid_context_t context,
                              int wheel, int hwheel)
 {
     struct hid_context *c = context;
+    struct hid_ring *r = &c->mouse_ring;
     struct v4v_buf *b;
     struct {
         UXENHID_MSG_HEADER hdr;
         struct mouse_report report;
     } __attribute__ ((packed)) *buf;
     DWORD msglen = sizeof (*buf);
-    v4v_addr_t addr = { .port = UXENHID_PORT, .domain = c->vm_id };
+    v4v_addr_t addr = { .port = r->port, .domain = r->vm_id };
 
-    xmit_complete(c);
+    xmit_complete(r);
 
-    if (!c->ready)
+    if (!r->ready)
         return -1;
 
     b = alloc_v4v_buf(msglen, (void **)&buf, addr);
@@ -259,7 +298,7 @@ uxenconsole_hid_mouse_report(hid_context_t context,
     buf->report.wheel = wheel;
     buf->report.hwheel = hwheel;
 
-    return send_async(c, b, msglen);
+    return send_async(r, b, msglen);
 }
 
 int
@@ -267,17 +306,18 @@ uxenconsole_hid_pen_report(hid_context_t context,
                            int x, int y, int flags, int pressure)
 {
     struct hid_context *c = context;
+    struct hid_ring *r = &c->pen_ring;
     struct v4v_buf *b;
     struct {
         UXENHID_MSG_HEADER hdr;
         struct pen_report report;
     } __attribute__ ((packed)) *buf;
     DWORD msglen = sizeof (*buf);
-    v4v_addr_t addr = { .port = UXENHID_PORT, .domain = c->vm_id };
+    v4v_addr_t addr = { .port = r->port, .domain = r->vm_id };
 
-    xmit_complete(c);
+    xmit_complete(r);
 
-    if (!c->ready)
+    if (!r->ready)
         return -1;
 
     b = alloc_v4v_buf(msglen, (void **)&buf, addr);
@@ -293,7 +333,7 @@ uxenconsole_hid_pen_report(hid_context_t context,
     buf->report.flags = flags;
     buf->report.pressure = pressure;
 
-    return send_async(c, b, msglen);
+    return send_async(r, b, msglen);
 }
 
 int
@@ -303,17 +343,18 @@ uxenconsole_hid_touch_report(hid_context_t context,
                              int flags)
 {
     struct hid_context *c = context;
+    struct hid_ring *r = &c->touch_ring;
     struct v4v_buf *b;
     struct {
         UXENHID_MSG_HEADER hdr;
         struct touch_report report;
     }  __attribute__ ((packed)) *buf;
     DWORD msglen = sizeof (*buf);
-    v4v_addr_t addr = { .port = UXENHID_PORT, .domain = c->vm_id };
+    v4v_addr_t addr = { .port = r->port, .domain = r->vm_id };
 
-    xmit_complete(c);
+    xmit_complete(r);
 
-    if (!c->ready)
+    if (!r->ready)
         return -1;
 
     b = alloc_v4v_buf(msglen, (void **)&buf, addr);
@@ -332,5 +373,5 @@ uxenconsole_hid_touch_report(hid_context_t context,
     buf->report.flags = flags | 0x4;
     buf->report.contact_count = contact_count;
 
-    return send_async(c, b, msglen);
+    return send_async(r, b, msglen);
 }

@@ -38,6 +38,7 @@ struct uxp_state_bar {
 
 #define UXENBUS_PROPERTY_TYPE_MACADDR   0x0
 #define UXENBUS_PROPERTY_TYPE_MTU       0x1
+#define UXENBUS_PROPERTY_TYPE_HIDTYPE   0x2
 #define UXENBUS_PROPERTY_TYPE_LIST_END  0xff
 
 struct uxp_bus_device_property {
