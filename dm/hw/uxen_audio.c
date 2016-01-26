@@ -16,7 +16,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -725,7 +725,6 @@ static const VMStateDescription vmstate_uxenaudio = {
         VMSTATE_PCI_DEVICE (dev, UXenAudioState),
         VMSTATE_UINT32(unused1, UXenAudioState),
         VMSTATE_UINT64(unused2, UXenAudioState),
-        VMSTATE_INT32(dev_mute, UXenAudioState),
         VMSTATE_STRUCT_ARRAY(voices,
                              UXenAudioState,
                              NVOICE,
@@ -1100,6 +1099,9 @@ uxenaudio_initfn(PCIDevice *dev)
 
     qemu_register_reset(uxenaudio_on_reset, s);
     uxenaudio_on_reset(s);
+
+    if (vm_audio && dict_get_boolean_default(vm_audio, "output-disabled", 0))
+        s->dev_mute = 1;
 
     return 0;
 }
