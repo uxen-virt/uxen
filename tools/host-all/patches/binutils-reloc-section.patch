@@ -1,0 +1,132 @@
+diff -ru binutils-2.25.1.orig/bfd/bfd-in2.h binutils-2.25.1/bfd/bfd-in2.h
+--- binutils-2.25.1.orig/bfd/bfd-in2.h	2015-07-21 04:20:58 -0400
++++ binutils-2.25.1/bfd/bfd-in2.h	2016-01-23 00:38:52 -0500
+@@ -6069,6 +6069,8 @@
+ 
+ /* Adapteva EPIPHANY - 8 bit immediate for 16 bit mov instruction.  */
+   BFD_RELOC_EPIPHANY_IMM8,
++
++  BFD_RELOC_SECTION,
+   BFD_RELOC_UNUSED };
+ 
+ typedef enum bfd_reloc_code_real bfd_reloc_code_real_type;
+diff -ru binutils-2.25.1.orig/bfd/coff-i386.c binutils-2.25.1/bfd/coff-i386.c
+--- binutils-2.25.1.orig/bfd/coff-i386.c	2014-12-23 03:47:10 -0500
++++ binutils-2.25.1/bfd/coff-i386.c	2016-01-25 23:53:24 -0500
+@@ -78,6 +78,11 @@
+     return bfd_reloc_continue;
+ #endif
+ 
++#if defined(COFF_WITH_PE)
++  if (reloc_entry->howto->type == R_SECTION) {
++      diff = symbol->value + symbol->section->index + reloc_entry->addend;
++  } else
++#endif
+   if (bfd_is_com_section (symbol->section))
+     {
+ #ifndef COFF_WITH_PE
+@@ -187,7 +192,7 @@
+ 			       reloc_howto_type *howto)
+ {
+   return ! howto->pc_relative && howto->type != R_IMAGEBASE
+-	 && howto->type != R_SECREL32;
++	 && howto->type != R_SECREL32 && howto->type != R_SECTION;
+ }
+ #endif /* COFF_WITH_PE */
+ 
+@@ -230,7 +235,19 @@
+ 	 0xffffffff,		/* src_mask */
+ 	 0xffffffff,		/* dst_mask */
+ 	 FALSE),		/* pcrel_offset */
+-  EMPTY_HOWTO (010),
++  HOWTO (R_SECTION,		/* type 10 */
++	 0,			/* rightshift */
++	 1,			/* size (0 = byte, 1 = short, 2 = long) */
++	 16,			/* bitsize */
++	 FALSE,			/* pc_relative */
++	 0,			/* bitpos */
++	 complain_overflow_bitfield, /* complain_on_overflow */
++	 coff_i386_reloc,	/* special_function */
++	 "section",		/* name */
++	 TRUE,			/* partial_inplace */
++	 0xffff,		/* src_mask */
++	 0xffff,		/* dst_mask */
++	 FALSE),		/* pcrel_offset */
+   EMPTY_HOWTO (011),
+   EMPTY_HOWTO (012),
+ #ifdef COFF_WITH_PE
+@@ -565,6 +582,8 @@
+     case BFD_RELOC_32_SECREL:
+       return howto_table + R_SECREL32;
+ #endif
++    case BFD_RELOC_SECTION:
++      return howto_table + R_SECTION;
+     default:
+       BFD_FAIL ();
+       return 0;
+diff -ru binutils-2.25.1.orig/bfd/coff-x86_64.c binutils-2.25.1/bfd/coff-x86_64.c
+--- binutils-2.25.1.orig/bfd/coff-x86_64.c	2015-07-21 04:20:58 -0400
++++ binutils-2.25.1/bfd/coff-x86_64.c	2016-01-24 15:40:05 -0500
+@@ -77,6 +77,11 @@
+     return bfd_reloc_continue;
+ #endif
+ 
++#if defined(COFF_WITH_PE)
++  if (reloc_entry->howto->type == R_AMD64_SECTION) {
++      diff = symbol->value + symbol->section->index + reloc_entry->addend;
++  } else
++#endif
+   if (bfd_is_com_section (symbol->section))
+     {
+ #if !defined(COFF_WITH_PE)
+@@ -204,7 +209,7 @@
+ in_reloc_p (bfd *abfd ATTRIBUTE_UNUSED, reloc_howto_type *howto)
+ {
+   return ! howto->pc_relative && howto->type != R_AMD64_IMAGEBASE
+-	 && howto->type != R_AMD64_SECREL;
++	 && howto->type != R_AMD64_SECREL && howto->type != R_AMD64_SECTION;
+ }
+ #endif /* COFF_WITH_PE */
+ 
+@@ -335,7 +340,20 @@
+ 	 0xffffffff,		/* src_mask */
+ 	 0xffffffff,		/* dst_mask */
+ 	 PCRELOFFSET),		/* pcrel_offset */
+-  EMPTY_HOWTO (10), /* R_AMD64_SECTION 10  */
++  // EMPTY_HOWTO (10), /* R_AMD64_SECTION 10  */
++ HOWTO (R_AMD64_SECTION,	/* type 10 */
++	 0,			/* rightshift */
++	 1,			/* size (0 = byte, 1 = short, 2 = long) */
++	 16,			/* bitsize */
++	 FALSE,			/* pc_relative */
++	 0,			/* bitpos */
++	 complain_overflow_signed, /* complain_on_overflow */
++	 coff_amd64_reloc,	/* special_function */
++	 "section",		/* name */
++	 TRUE,			/* partial_inplace */
++	 0xffff,		/* src_mask */
++	 0xffff,		/* dst_mask */
++	 FALSE),		/* pcrel_offset */
+ #if defined(COFF_WITH_PE)
+   /* 32-bit longword section relative relocation (11).  */
+   HOWTO (R_AMD64_SECREL,	/* type */
+@@ -691,6 +709,8 @@
+     case BFD_RELOC_32_SECREL:
+       return howto_table + R_AMD64_SECREL;
+ #endif
++    case BFD_RELOC_SECTION:
++      return howto_table + R_AMD64_SECTION;
+     default:
+       BFD_FAIL ();
+       return 0;
+diff -ru binutils-2.25.1.orig/include/coff/internal.h binutils-2.25.1/include/coff/internal.h
+--- binutils-2.25.1.orig/include/coff/internal.h	2014-10-14 03:32:04 -0400
++++ binutils-2.25.1/include/coff/internal.h	2016-01-23 01:12:09 -0500
+@@ -723,6 +723,7 @@
+ #define R_REL24          5
+ #define R_DIR32 	 6
+ #define R_IMAGEBASE	 7
++#define R_SECTION       10
+ #define R_SECREL32	11
+ #define R_RELBYTE	15
+ #define R_RELWORD	16

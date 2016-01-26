@@ -13,6 +13,7 @@ INSTALL_DIR = $(TOOLSDIR)/host-all
 
 BINUTILS_DISTFILES = binutils-2.25.1.tar.bz2
 BINUTILS_PATCHES = binutils-macho-core.patch binutils-install-libiberty.patch
+BINUTILS_PATCHES += binutils-reloc-section.patch
 BINUTILS_DIR = binutils-2.25.1
 
 VPATH = $(SRCDIR)/patches:$(XEN_DISTFILES)
