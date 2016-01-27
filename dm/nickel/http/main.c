@@ -3285,6 +3285,12 @@ static int hp_srv_process(struct http_ctx *hp)
     if (auth_state == AUTH_PROGRESS) {
         BUFF_RESET(hp->cx->out);
 
+        if (!resp_complete && conn_close && hp->cx && hp->cx->srv_parser &&
+            hp->cx->srv_parser->parser.content_length == ((uint64_t) -1)) {
+
+            HLOG4("connection close, no need to consume the rest of message ");
+            resp_complete = true;
+        }
         /* AUTH_PROGRESS and message complete */
         if (resp_complete)
             goto auth_srv_send;
