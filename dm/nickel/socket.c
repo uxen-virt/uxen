@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -300,7 +300,7 @@ static void so_closing(struct socket *so)
 {
     bool event = true;
 
-    if (so->state == NSO_SS_CLOSING)
+    if (so->state == NSO_SS_CLOSING || so->state == NSO_SS_RECONNECTING)
         event = false;
 
     if (so->state != NSO_SS_RECONNECTING)
