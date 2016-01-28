@@ -251,7 +251,15 @@ mdm_init(struct uxen_memcacheinit_desc *umd, struct fd_assoc *fda)
         goto out;
     }
 
-    nr_gpfn = umd->end_low_gpfn + (umd->end_high_gpfn - umd->start_high_gpfn);
+    if ((umd->end_low_gpfn > umd->start_high_gpfn) ||
+        (umd->start_high_gpfn > umd->end_high_gpfn)) {
+        ret = EINVAL;
+        goto out;
+    }
+
+    nr_gpfn = (uint64_t)umd->end_low_gpfn +
+               ((uint64_t)umd->end_high_gpfn -
+                (uint64_t)umd->start_high_gpfn);
     if (nr_gpfn >= MDM_MAX_PAGE_SANE) {
         ret = EINVAL;
         goto out;
