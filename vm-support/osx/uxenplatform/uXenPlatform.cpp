@@ -9,11 +9,11 @@
 #include <IOKit/IOFilterInterruptEventSource.h>
 #include <IOKit/IOBufferMemoryDescriptor.h>
 #include <sys/types.h>
+#include <uxenvmlib/uxen_hypercall.h>
 
 #include "uXenPlatform.h"
 #include "uXenPlatformDevice.h"
-
-#include <uxenvmlib/uxen_hypercall.h>
+#include "uxenplatform_local.h"
 
 #define super IOService
 
@@ -96,11 +96,13 @@ void
 uXenPlatform::enumerate_devices(void)
 {
     int i;
+    
+    bar2->prepare(kIODirectionIn);
 
     for (i = 0; i < UXENBUS_DEVICE_COUNT; i++) {
         IODeviceMemory *config;
         uXenPlatformDevice *nub;
-        struct uxp_bus_device desc;
+        union uxp_bus_device_config_block desc;
 
         config = IODeviceMemory::withSubRange(bar2, i * UXENBUS_DEVICE_CONFIG_LENGTH,
                                               UXENBUS_DEVICE_CONFIG_LENGTH);
@@ -112,16 +114,17 @@ uXenPlatform::enumerate_devices(void)
 
         nub = (uXenPlatformDevice *)nubs->getObject(i);
 
-        if (nub && (nub->getDeviceType() != desc.device_type ||
-                    nub->getInstanceId() != desc.instance_id)) {
+        if (nub && (nub->getDeviceType() != desc.device.device_type ||
+                    nub->getInstanceId() != desc.device.instance_id)) {
             nub->terminate();
             nubs->removeObject(i);
             nub = nullptr;
         }
 
-        if (nub == nullptr && desc.device_type != UXENBUS_DEVICE_NOT_PRESENT) {
+        if (nub == nullptr
+            && desc.device.device_type != UXENBUS_DEVICE_NOT_PRESENT) {
 
-            nub = uXenPlatformDevice::withConfig(config);
+            nub = uXenPlatformDevice::withConfig(&desc);
             if (!nub)
                 goto next;
 
@@ -140,6 +143,8 @@ uXenPlatform::enumerate_devices(void)
 next:
         config->release();
     }
+    
+    bar2->complete(kIODirectionIn);
 }
 
 void

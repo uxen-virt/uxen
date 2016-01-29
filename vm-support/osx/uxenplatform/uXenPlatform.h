@@ -9,8 +9,6 @@
 
 #include <IOKit/IOService.h>
 
-#include <uxen/platform_interface.h>
-
 #include "uxenplatform_public.h"
 #include "balloon.h"
 
