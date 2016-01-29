@@ -160,7 +160,7 @@ XEN_SRCS =
 XEN_SRCS += uxen/main.c
 
 XEN_SRCS += uxen/kdxinfo.c
-$(X86_32_only)XEN_SRCS += uxen/mapcache.c
+$(HOST_WINDOWS)XEN_SRCS += uxen/mapcache.c
 XEN_SRCS += uxen/memcache-dm.c
 XEN_SRCS += uxen/shadow_subst.c
 XEN_SRCS += uxen/time.c

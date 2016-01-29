@@ -152,9 +152,9 @@ static inline void
 uxen_unmap_page(const void *va)
 {
 
-#ifdef __i386__
+#ifdef UXEN_HOST_WINDOWS
     UI_HOST_CALL(ui_unmap_page_va, va);
-#endif  /* __i386__ */
+#endif  /* UXEN_HOST_WINDOWS */
 }
 
 static inline void *

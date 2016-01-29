@@ -1498,9 +1498,9 @@ intptr_t __init __interface_fn __uxen_start_xen(
     smp_cpus_done();
 #endif  /* __UXEN__ */
 
-#if defined(__UXEN__) && defined(__i386__)
+#ifdef UXEN_HOST_WINDOWS
     mapcache_init();
-#endif  /* __UXEN__ && __i386__ */
+#endif  /* UXEN_HOST_WINDOWS */
 
     do_initcalls();
 
