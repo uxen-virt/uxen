@@ -8,6 +8,7 @@
 #include <IOKit/pci/IOPCIDevice.h>
 #include <IOKit/IOFilterInterruptEventSource.h>
 #include <IOKit/IOBufferMemoryDescriptor.h>
+#include <sys/types.h>
 
 #include "uXenPlatform.h"
 #include "uXenPlatformDevice.h"
@@ -134,10 +135,6 @@ next:
         config->release();
     }
 }
-
-#ifndef offsetof
-#define offsetof(st, m) ((IOByteCount)(&((st *)0)->m))
-#endif
 
 void
 uXenPlatform::enable_interrupt(int events)
