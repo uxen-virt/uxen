@@ -87,7 +87,6 @@ uXenPlatform::stop_devices(void)
         uXenPlatformDevice *nub = (uXenPlatformDevice *)nubs->getObject(i);
         if (nub) {
             nub->terminate();
-            nub->release();
             nubs->removeObject(i);
         }
     }
@@ -116,19 +115,26 @@ uXenPlatform::enumerate_devices(void)
         if (nub && (nub->getDeviceType() != desc.device_type ||
                     nub->getInstanceId() != desc.instance_id)) {
             nub->terminate();
-            nub->release();
             nubs->removeObject(i);
+            nub = nullptr;
         }
 
-        if (desc.device_type != UXENBUS_DEVICE_NOT_PRESENT) {
+        if (nub == nullptr && desc.device_type != UXENBUS_DEVICE_NOT_PRESENT) {
 
             nub = uXenPlatformDevice::withConfig(config);
             if (!nub)
                 goto next;
 
-            nub->attach(this);
-            nub->registerService();
-            nubs->setObject(i, nub);
+            if (nub->attach(this)) {
+                if (nub->start(this)) {
+                    nub->registerService();
+                    // XXX: this will fail if the array is sparse:
+                    nubs->setObject(i, nub);
+                } else {
+                    nub->detach(this);
+                }
+            }
+            nub->release();
         }
 
 next:

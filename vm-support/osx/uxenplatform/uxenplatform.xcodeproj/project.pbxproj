@@ -20,9 +20,9 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		B90DC6C61BF9F23D00C1A5B2 /* uXenPlatformDevice.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = uXenPlatformDevice.cpp; sourceTree = "<group>"; };
-		B90DC6C71BF9F23D00C1A5B2 /* uXenPlatformDevice.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = uXenPlatformDevice.h; sourceTree = "<group>"; };
 		52B2536A1BCD795800E9681F /* uxenplatform.exp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.exports; path = uxenplatform.exp; sourceTree = "<group>"; };
+		B90DC6C61BF9F23D00C1A5B2 /* uXenPlatformDevice.cpp */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 4; lastKnownFileType = sourcecode.cpp.cpp; path = uXenPlatformDevice.cpp; sourceTree = "<group>"; tabWidth = 4; usesTabs = 0; };
+		B90DC6C71BF9F23D00C1A5B2 /* uXenPlatformDevice.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = uXenPlatformDevice.h; sourceTree = "<group>"; };
 		B91712A81A261E130089C954 /* uxenplatform_public.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = uxenplatform_public.h; sourceTree = "<group>"; };
 		B939D9F316E604F90017E868 /* uxenplatform.kext */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = uxenplatform.kext; sourceTree = BUILT_PRODUCTS_DIR; };
 		B939D9F716E604F90017E868 /* Kernel.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Kernel.framework; path = System/Library/Frameworks/Kernel.framework; sourceTree = SDKROOT; };
@@ -33,7 +33,7 @@
 		B96286A01A26315C00FE8457 /* balloon.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = balloon.h; sourceTree = "<group>"; };
 		B98877451A1E626E002933FE /* uXenPlatformClient.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = uXenPlatformClient.cpp; sourceTree = "<group>"; };
 		B98877471A1E6287002933FE /* uXenPlatformClient.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = uXenPlatformClient.h; sourceTree = "<group>"; };
-		B9B9BEBA1A1E4B24005CF73D /* uXenPlatform.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = uXenPlatform.cpp; sourceTree = "<group>"; };
+		B9B9BEBA1A1E4B24005CF73D /* uXenPlatform.cpp */ = {isa = PBXFileReference; fileEncoding = 4; indentWidth = 4; lastKnownFileType = sourcecode.cpp.cpp; path = uXenPlatform.cpp; sourceTree = "<group>"; tabWidth = 4; usesTabs = 0; };
 		B9B9BEBC1A1E4B2E005CF73D /* uXenPlatform.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = uXenPlatform.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
