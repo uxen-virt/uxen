@@ -121,7 +121,7 @@ _end_execution(struct vcpu *vcpu)
 
     if (rcu_pending(cpu))
         rcu_check_callbacks(cpu);
-    process_pending_rcu_softirq();
+    process_pending_cpu_softirqs();
 
     hvm_cpu_off();
     uxen_set_current(vcpu);
@@ -805,7 +805,7 @@ __uxen_flush_rcu(uint32_t complete)
     if (atomic_read(this_cpu(flush_rcu_data).cpu_count)) {
         if (rcu_pending(cpu))
             rcu_check_callbacks(cpu);
-        process_pending_rcu_softirq();
+        process_pending_cpu_softirqs();
     }
 
     hvm_cpu_down();

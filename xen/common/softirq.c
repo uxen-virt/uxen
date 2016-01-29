@@ -11,7 +11,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -67,13 +67,16 @@ static void __do_softirq(unsigned long ignore_mask)
         i = find_first_set_bit(pending);
         clear_bit(i, &softirq_pending(cpu));
 #ifdef __UXEN__
-        /* softirq, other than RCU_SOFTIRQ only ever on cpu0 idle thread */
-        if ((cpu || !is_idle_vcpu(current)) && i != RCU_SOFTIRQ)
+        /* most softirq only ever on cpu0 idle thread */
+        if ((cpu || !is_idle_vcpu(current)) &&
+            i != RCU_SOFTIRQ && i != P2M_L1_CACHE_SOFTIRQ)
             WARN_ONCE();
         switch (i) {
         case SCHEDULE_SOFTIRQ:
             break;
         case RCU_SOFTIRQ:
+            break;
+        case P2M_L1_CACHE_SOFTIRQ:
             break;
         case TIMER_SOFTIRQ:
             perfc_incr(do_TIMER_SOFTIRQ);
@@ -100,11 +103,11 @@ void process_pending_softirqs(void)
                  (is_idle_vcpu(current) ? 0 : (1ul << TIMER_SOFTIRQ)));
 }
 
-void process_pending_rcu_softirq(void)
+void process_pending_cpu_softirqs(void)
 {
     ASSERT(!in_irq() && local_irq_is_enabled());
-    /* Only process rcu softirq. */
-    __do_softirq(~(1ul<<RCU_SOFTIRQ));
+    /* Only process rcu and hap l1 cache softirqs. */
+    __do_softirq(~(1ul << RCU_SOFTIRQ | 1ul << P2M_L1_CACHE_SOFTIRQ));
 }
 
 /* asmlinkage */ void do_softirq(void)
@@ -223,7 +226,7 @@ void cpumask_raise_softirq(const cpumask_t *mask, unsigned int nr)
     int cpu;
     cpumask_t send_mask;
 
-    if (nr != RCU_SOFTIRQ)
+    if (nr != RCU_SOFTIRQ && nr != P2M_L1_CACHE_SOFTIRQ)
         WARN_ONCE();
 
     cpumask_clear(&send_mask);
@@ -252,6 +255,7 @@ void raise_softirq(unsigned int nr)
     ASSERT(softirq_handlers[nr] != NULL);
     switch (nr) {
     case RCU_SOFTIRQ:
+    case P2M_L1_CACHE_SOFTIRQ:
         set_bit(nr, &softirq_pending(smp_processor_id()));
         break;
     default:

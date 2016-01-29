@@ -277,13 +277,22 @@ union p2m_l1_cache {
         /* prefix/table/lock for get_entry l1 p2m table page cache */
         uint64_t ge_l1_prefix[NR_GE_L1_CACHE];
         mfn_t ge_l1_mfn[NR_GE_L1_CACHE];
-#define ge_l1_cache_hash(gfn) ((gfn >> PAGETABLE_ORDER) & (NR_GE_L1_CACHE - 1))
-        mm_lock_t ge_l1_lock;
+#define ge_l1_cache_hash(gfn, p2m)                                      \
+        ((((gfn) >> PAGETABLE_ORDER) + (p2m)->p2m_l1_cache_id) &        \
+         (NR_GE_L1_CACHE - 1))
     };
 };
 
-#define p2m_l1_prefix(gfn) ((gfn) & ~((1UL << PAGETABLE_ORDER) - 1))
+#define p2m_l1_prefix(gfn, p2m)                   \
+    (((uint64_t)(p2m)->p2m_l1_cache_id << 48) |   \
+     ((uint64_t)(_atomic_read(p2m_l1_cache_gen) & \
+                 P2M_L1_CACHE_GEN_MASK) << 40) |  \
+     ((gfn) & ~((1UL << PAGETABLE_ORDER) - 1)))
+DECLARE_PER_CPU(union p2m_l1_cache, p2m_l1_cache);
+extern atomic_t p2m_l1_cache_gen;
+#define P2M_L1_CACHE_GEN_MASK 0xff
 
+void p2m_l1_cache_flush_softirq(void);
 void p2m_ge_l1_cache_invalidate(struct p2m_domain *p2m, unsigned long gfn,
                                 unsigned int page_order);
 
@@ -405,7 +414,7 @@ struct p2m_domain {
         unsigned         max_guest;    /* gpfn of max guest demand-populate */
     } pod;
 
-    union p2m_l1_cache p2m_l1_cache;
+    uint16_t p2m_l1_cache_id;
 
     struct {
         mfn_t data_mfn;

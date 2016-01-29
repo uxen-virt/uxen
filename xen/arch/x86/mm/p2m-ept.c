@@ -389,7 +389,7 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     int needs_sync = 1;
     struct domain *d = p2m->domain;
     ept_entry_t old_entry = { .epte = 0 };
-    union p2m_l1_cache *l1c = &p2m->p2m_l1_cache;
+    union p2m_l1_cache *l1c = &this_cpu(p2m_l1_cache);
 
     /*
      * the caller must make sure:
@@ -408,7 +408,7 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
            (target == 0));
 
     if (target || !mfn_valid_page(mfn_x(l1c->se_l1_mfn)) ||
-        p2m_l1_prefix(gfn) != l1c->se_l1_prefix) {
+        p2m_l1_prefix(gfn, p2m) != l1c->se_l1_prefix) {
         l1c->se_l1_mfn = _mfn(0);
 
         perfc_incr(p2m_set_entry_walk);
@@ -422,7 +422,7 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
                 break;
         }
         if (!target && !i && ret == GUEST_TABLE_NORMAL_PAGE) {
-            l1c->se_l1_prefix = p2m_l1_prefix(gfn);
+            l1c->se_l1_prefix = p2m_l1_prefix(gfn, p2m);
             l1c->se_l1_mfn = _mfn(mapped_domain_page_va_pfn(table));
         }
     } else {
@@ -774,13 +774,13 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
     struct domain *d = p2m->domain;
     ept_entry_t *table = NULL;
     unsigned long gfn_remainder = gfn;
-    int ge_l1_cache_slot = ge_l1_cache_hash(gfn);
+    int ge_l1_cache_slot = ge_l1_cache_hash(gfn, p2m);
     ept_entry_t *ept_entry;
     u32 index;
     int i;
     int ret = 0;
     mfn_t mfn = _mfn(0);
-    union p2m_l1_cache *l1c = &p2m->p2m_l1_cache;
+    union p2m_l1_cache *l1c = &this_cpu(p2m_l1_cache);
 
     perfc_incr(pc11);
 
@@ -795,11 +795,9 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
 
     /* Should check if gfn obeys GAW here. */
 
-    p2m_ge_l1_cache_lock(p2m);
     if (!mfn_valid_page(mfn_x(l1c->ge_l1_mfn[ge_l1_cache_slot])) ||
-        p2m_l1_prefix(gfn) != l1c->ge_l1_prefix[ge_l1_cache_slot]) {
+        p2m_l1_prefix(gfn, p2m) != l1c->ge_l1_prefix[ge_l1_cache_slot]) {
         l1c->ge_l1_mfn[ge_l1_cache_slot] = _mfn(0);
-        p2m_ge_l1_cache_unlock(p2m);
 
         perfc_incr(p2m_get_entry_walk);
         table = map_domain_page(ept_get_asr(d));
@@ -833,18 +831,15 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
         }
 
         if (!i && ret == GUEST_TABLE_NORMAL_PAGE) {
-            p2m_ge_l1_cache_lock(p2m);
             if (!mfn_valid_page(mfn_x(l1c->ge_l1_mfn[ge_l1_cache_slot]))) {
-                l1c->ge_l1_prefix[ge_l1_cache_slot] = p2m_l1_prefix(gfn);
+                l1c->ge_l1_prefix[ge_l1_cache_slot] = p2m_l1_prefix(gfn, p2m);
                 l1c->ge_l1_mfn[ge_l1_cache_slot] =
                     _mfn(mapped_domain_page_va_pfn(table));
             }
-            p2m_ge_l1_cache_unlock(p2m);
         }
     } else {
         perfc_incr(p2m_get_entry_cached);
         table = map_domain_page(mfn_x(l1c->ge_l1_mfn[ge_l1_cache_slot]));
-        p2m_ge_l1_cache_unlock(p2m);
         gfn_remainder = gfn & ((1UL << EPT_TABLE_ORDER) - 1);
         i = 0;
         ret = GUEST_TABLE_NORMAL_PAGE;
@@ -1147,7 +1142,8 @@ void ept_p2m_init(struct p2m_domain *p2m)
     p2m->change_entry_type_global = ept_change_entry_type_global;
     p2m->ro_update_l2_entry = ept_ro_update_l2_entry;
 
-    mm_lock_init(&p2m->p2m_l1_cache.ge_l1_lock);
+    p2m->p2m_l1_cache_id = p2m->domain->domain_id;
+    open_softirq(P2M_L1_CACHE_SOFTIRQ, p2m_l1_cache_flush_softirq);
 }
 
 static void ept_dump_p2m_table(unsigned char key)

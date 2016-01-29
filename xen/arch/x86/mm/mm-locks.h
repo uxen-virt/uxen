@@ -197,15 +197,6 @@ declare_mm_order_constraint(page_alloc)
 #define page_alloc_mm_post_lock(l) mm_enforce_order_lock_post_page_alloc(&(l), NULL)
 #define page_alloc_mm_unlock(l)    mm_enforce_order_unlock((l), NULL)
 
-/* ept_get_entry l1 cache lock (per-p2m-table)
- */
-
-declare_mm_lock(ge_l1_cache)
-#define p2m_ge_l1_cache_lock(p)                         \
-    mm_lock(ge_l1_cache, &(p)->p2m_l1_cache.ge_l1_lock)
-#define p2m_ge_l1_cache_unlock(p)               \
-    mm_unlock(&(p)->p2m_l1_cache.ge_l1_lock)
-
 /* Paging lock (per-domain)
  *
  * For shadow pagetables, this lock protects

@@ -86,7 +86,7 @@
 # define supervisor_mode_kernel (0)
 #endif
 
-#define NR_GE_L1_CACHE 8
+#define NR_GE_L1_CACHE 32
 
 /* Linkage for x86 */
 #define __ALIGN .align 16,0x90

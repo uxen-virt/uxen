@@ -96,7 +96,7 @@ boolean_param("hap_2mb", opt_hap_2mb);
 #define page_to_mfn(_pg) _mfn(__page_to_mfn(_pg))
 
 
-static void p2m_l1_cache_flush(struct p2m_domain *p2m);
+static void p2m_l1_cache_flush(void);
 
 
 /* Init the datastructures for later use by the p2m code */
@@ -530,7 +530,7 @@ void p2m_teardown(struct p2m_domain *p2m)
 #endif
 #endif  /* __UXEN__ */
 
-    p2m_l1_cache_flush(p2m);
+    p2m_l1_cache_flush();
 
     p2m->phys_table = pagetable_null();
 
@@ -1867,6 +1867,9 @@ p2m_mapcache_mappings_teardown(struct domain *d)
     return 0;
 }
 
+DEFINE_PER_CPU(union p2m_l1_cache, p2m_l1_cache);
+atomic_t p2m_l1_cache_gen = ATOMIC_INIT(0);
+
 static void
 _p2m_l1_cache_flush(union p2m_l1_cache *l1c)
 {
@@ -1878,10 +1881,22 @@ _p2m_l1_cache_flush(union p2m_l1_cache *l1c)
 }
 
 static void
-p2m_l1_cache_flush(struct p2m_domain *p2m)
+p2m_l1_cache_flush(void)
+{
+    uint16_t oldgen;
+
+    oldgen = atomic_read(&p2m_l1_cache_gen);
+    atomic_inc(&p2m_l1_cache_gen);
+    if ((oldgen ^ _atomic_read(p2m_l1_cache_gen)) &
+        ((P2M_L1_CACHE_GEN_MASK + 1) >> 1))
+        cpumask_raise_softirq(&cpu_online_map, P2M_L1_CACHE_SOFTIRQ);
+}
+
+void
+p2m_l1_cache_flush_softirq(void)
 {
 
-    _p2m_l1_cache_flush(&p2m->p2m_l1_cache);
+    _p2m_l1_cache_flush(&this_cpu(p2m_l1_cache));
 }
 
 /* Non-l1 update -- invalidate the get_entry cache */
@@ -1889,18 +1904,8 @@ void
 p2m_ge_l1_cache_invalidate(struct p2m_domain *p2m, unsigned long gfn,
                            unsigned int page_order)
 {
-    union p2m_l1_cache *l1c = &p2m->p2m_l1_cache;
-    int j;
-
-    p2m_ge_l1_cache_lock(p2m);
-    for (j = 0; j < NR_GE_L1_CACHE; j++) {
-        if (mfn_valid_page(l1c->ge_l1_mfn[j]) &&
-            /* prefix of cached l1 matches non-l1 update prefix? */
-            ((gfn & ~((1UL << page_order) - 1)) ==
-             (l1c->ge_l1_prefix[j] & ~((1UL << page_order) - 1))))
-            l1c->ge_l1_mfn[j] = _mfn(0);
-    }
-    p2m_ge_l1_cache_unlock(p2m);
+    /* flush all per-cpu caches unconditionally */
+    p2m_l1_cache_flush();
 
     perfc_incr(p2m_get_entry_invalidate);
 }

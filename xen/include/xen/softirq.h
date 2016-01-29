@@ -10,6 +10,7 @@ enum {
 #endif  /* __UXEN__ */
     RCU_SOFTIRQ,
     TASKLET_SOFTIRQ,
+    P2M_L1_CACHE_SOFTIRQ,
     NR_COMMON_SOFTIRQS
 };
 
@@ -45,6 +46,6 @@ void raise_softirq(unsigned int nr);
  */
 void process_pending_softirqs(void);
 
-void process_pending_rcu_softirq(void);
+void process_pending_cpu_softirqs(void);
 
 #endif /* __XEN_SOFTIRQ_H__ */
