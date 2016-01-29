@@ -22,7 +22,20 @@
 	<string>1</string>
 	<key>IOKitPersonalities</key>
 	<dict>
-		<key>V4VNetworkDevice</key>
+		<key>V4VNetworkDeviceXenBus</key>
+		<dict>
+			<key>CFBundleIdentifier</key>
+			<string>org.uxen.driver.$(PRODUCT_NAME:rfc1034identifier)</string>
+			<key>IOClass</key>
+			<string>org_uxen_driver_uxen_net</string>
+			<key>IOProviderClass</key>
+			<string>uXenPlatformDevice</string>
+			<key>XenBusDeviceType</key>
+			<integer>0</integer>
+			<key>Product Name</key>
+			<string>V4V uxennet</string>
+		</dict>
+		<key>V4VNetworkDeviceACPI</key>
 		<dict>
 			<key>CFBundleIdentifier</key>
 			<string>org.uxen.driver.$(PRODUCT_NAME:rfc1034identifier)</string>
@@ -48,6 +61,8 @@
 		<string>10.0</string>
 		<key>org.uxen.driver.uxenv4vservice</key>
 		<string>1.0</string>
+		<key>org.uxen.uxenplatform</key>
+		<string>1.2</string>
 		<key>com.apple.iokit.IOACPIFamily</key>
 		<string>1.4</string>
 		<key>com.apple.kpi.bsd</key>

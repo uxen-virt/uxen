@@ -13,6 +13,7 @@
 #include <sys/errno.h>
 #include <IOKit/network/IOEthernetInterface.h>
 #include <net/ethernet.h>
+#include "../uxenplatform/uXenPlatformDevice.h"
 
 OSDefineMetaClassAndStructors(uxen_net, IOEthernetController);
 
@@ -102,17 +103,13 @@ uxen_net::queryDeviceProperties(IOACPIPlatformDevice *acpi_device)
     }
     memcpy(this->mac_address.bytes, mac_address_data->getBytesNoCopy(0, 6), 6);
     OSSafeReleaseNULL(mac_address_data);
-    IOLog("uxenv4vnet device: MAC %02x:%02x:%02x:%02x:%02x:%02x, MTU %u\n",
-        this->mac_address.bytes[0], this->mac_address.bytes[1],
-        this->mac_address.bytes[2], this->mac_address.bytes[3],
-        this->mac_address.bytes[4], this->mac_address.bytes[5],
-        this->mtu);
 
     return true;
 }
 
 bool uxen_net::start(IOService *provider)
 {
+    uXenPlatformDevice *xenbus_device;
     OSDictionary *medium_dict;
     IONetworkMedium *medium;
     IOOutputQueue *queue;
@@ -123,15 +120,48 @@ bool uxen_net::start(IOService *provider)
     errno_t err;
     uxen_v4v_service *service;
     IOACPIPlatformDevice *acpi_device;
+    OSObject *mtu_prop;
+    OSNumber *mtu_num;
+    OSObject *mac_prop;
+    OSData *mac_data;
 
     acpi_device = OSDynamicCast(IOACPIPlatformDevice, provider);
+    xenbus_device = OSDynamicCast(uXenPlatformDevice, provider);
     if(acpi_device == nullptr) {
+        // Determine device parameters (MTU & MAC)
+        if (!this->queryDeviceProperties(acpi_device))
+            return false;
+    } else if (xenbus_device != nullptr) {
+        // extract MTU
+        mtu_prop =
+            xenbus_device->copyProperty(kUXenPlatformXenBusPropertyMTUKey);
+        mtu_num = OSDynamicCast(OSNumber, mtu_prop);
+        if (mtu_num != nullptr)
+            this->mtu = mtu_num->unsigned16BitValue();
+        else
+            this->mtu = kIOEthernetMaxPacketSize;
+        OSSafeReleaseNULL(mtu_prop);
+        // extract MAC
+        mac_prop =
+            xenbus_device->copyProperty(kUXenPlatformXenBusPropertyMACAddrKey);
+        mac_data = OSDynamicCast(OSData, mac_prop);
+        if (mac_data == nullptr || mac_data->getLength() < 6) {
+            OSSafeReleaseNULL(mac_prop);
+            IOLog(
+                "uxen_net::start Failed to get MAC address from XenBus node\n");
+            return false;
+        }
+        memcpy(this->mac_address.bytes, mac_data->getBytesNoCopy(0, 6), 6);
+        OSSafeReleaseNULL(mac_prop);
+    } else {
         return false;
     }
+    IOLog("uxen_net device: MAC %02x:%02x:%02x:%02x:%02x:%02x, MTU %u\n",
+        this->mac_address.bytes[0], this->mac_address.bytes[1],
+        this->mac_address.bytes[2], this->mac_address.bytes[3],
+        this->mac_address.bytes[4], this->mac_address.bytes[5],
+        this->mtu);
     
-    // Determine device parameters (MTU & MAC)
-    if (!this->queryDeviceProperties(acpi_device))
-        return false;
     
     medium_dict = OSDictionary::withCapacity(1);
     if (medium_dict == nullptr)
