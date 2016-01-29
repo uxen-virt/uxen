@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -16,12 +16,8 @@
 #include "lava.h"
 #include "log.h"
 
-#define DDD(fmt, ...) do { if (NLOG_LEVEL < 5); break; \
-         NETLOG("ni: [%s:%d]" fmt "\n", \
-        __FUNCTION__, __LINE__, ## __VA_ARGS__); } \
-                      while(1 == 0)
-
 #define HFWD_CONNECT_DELAY_MS 300
+#define HFWD_EOF_POLL_MS      200
 #define GC_TIMER    (1 * 60 * 1000)     /* 1 mins */
 #define UDP_SOCK_EXPIRE (2 * 60 * 1000) /* 2 mins */
 #define TCP_FIN_WAIT    (2 * 1000) /* 2 sec */
@@ -47,6 +43,14 @@
 
 #define SEQ_CMP(seq1, seq2)     ((int32_t) ((uint32_t) (seq1) - (uint32_t) (seq2)))
 
+#define DBG4(so, fmt, ...) do {                                               \
+    NETLOG4("%s: s:%"PRIxPTR" c:%"PRIxPTR" f:0x%x (G:%hu -> %s:%hu) -- " fmt, \
+            __FUNCTION__, (uintptr_t) (so), (uintptr_t) (so)->chr,            \
+            (unsigned) (so)->flags,                                           \
+            NI_NTOHS((so)->gaddr.sin_port), inet_ntoa((so)->faddr.sin_addr),  \
+            NI_NTOHS((so)->faddr.sin_port), ## __VA_ARGS__);                  \
+    } while(1 == 0)
+
 struct ni_socket {
     LIST_ENTRY(ni_socket) entry;
     uint8_t type;
@@ -67,6 +71,7 @@ struct ni_socket {
     int64_t delay_ac_ts;
     int64_t ack_1_ts;
     int64_t ack_2_ts;
+    int64_t poll_eof_ts;
     uint32_t fwd_n;
     uint8_t zero_win;
     uint8_t win_state;
@@ -164,7 +169,7 @@ static void socket_reset(struct ni_socket *so)
     so->flags &= ~TF_RETRANSMISSION_RST;
     so->flags &= ~TF_RST_PENDING;
     so->snd_iss = so->snd_off_nxt = so->snd_off_ack = so->rcv_iss = so->rcv_off_ack = 0;
-    so->zero_win = 0; so->ack_1_ts = so->ack_2_ts = 0;
+    so->zero_win = 0; so->ack_1_ts = so->ack_2_ts = so->poll_eof_ts = 0;
     so->chr_win = 0;
     so->win_state = WST_UNKN;
 
@@ -356,6 +361,7 @@ static int tcp_close_socket(struct ni_socket *so, bool rst)
     }
 
     if ((so->flags & TF_HOSTFWD)) {
+        DBG4(so, "closed");
         so->state = TS_CLOSED;
         if (so->fwd_timer)
             free_timer(so->fwd_timer);
@@ -1122,6 +1128,11 @@ static void tcp_send_fin(struct ni_socket *so, CharDriverState *chr_saved)
     }
 }
 
+static int so_chr_is_eof(struct ni_socket *so)
+{
+    return !!(so->chr && qemu_chr_eof(so->chr));
+}
+
 static void fwd_connect_cb(void *opaque)
 {
     struct ni_socket *so = opaque;
@@ -1138,7 +1149,8 @@ static void fwd_connect_cb(void *opaque)
         uint16_t port;
 
         /* check for chr betrayal */
-        if (so->chr && qemu_chr_eof(so->chr)) {
+        if (so_chr_is_eof(so)) {
+            DBG4(so, "host peer hung up while sending SYNs");
             qemu_chr_send_event(so->chr, CHR_EVENT_NI_REFUSED);
             goto free_timer;
         }
@@ -1302,6 +1314,21 @@ static void tcpip_timer(struct nickel *ni, int64_t now, int *timeout)
                 *timeout = (int) diff;
         }
 
+        if (so->poll_eof_ts && so->state == TS_ESTABLISHED) {
+            diff = so->poll_eof_ts + HFWD_EOF_POLL_MS - now;
+            if (diff <= 0) {
+                if (so_chr_is_eof(so)) {
+                    DBG4(so, "host peer hung up");
+                    so->poll_eof_ts = 0;
+                    qemu_chr_send_event(so->chr, CHR_EVENT_NI_REFUSED);
+                } else {
+                    so->poll_eof_ts = now;
+                    diff = HFWD_EOF_POLL_MS;
+                }
+           }
+           if (diff > 0 && (int64_t) (*timeout) > diff)
+                *timeout = (int) diff;
+        }
     }
 }
 
@@ -1537,13 +1564,20 @@ size_t tcpip_can_output(struct ni_socket *so)
 
         win_out:
         so->chr_win = ret;
-        if (!ret)
+        if (!ret) {
             so->zero_win = 1;
+            if ((so->flags & TF_HOSTFWD) && !so->poll_eof_ts && so->chr && so->chr->chr_eof) {
+                DBG4(so, "zero win - starting eof poll timer");
+                so->poll_eof_ts = get_clock_ms(vm_clock);
+            }
+        }
         goto out;
     }
 
-    if ((so->flags & TF_HOSTFWD) && !so->fwd_timer)
+    if ((so->flags & TF_HOSTFWD) && !so->fwd_timer) {
+        DBG4(so, "scheduling TCP SYNs");
         so->fwd_timer = ni_new_vm_timer(so->ni, 1, fwd_connect_cb, so);
+    }
 out:
     return ret;
 }
@@ -2082,6 +2116,7 @@ static int tcp_input(struct nickel *ni, struct ip *ip, const uint8_t *pkt, size_
         so->rcv_win = win;
         if (so->zero_win && so->rcv_win > 0 && !(so->flags & TF_RETRANSMISSION)) {
             so->zero_win = 0;
+            so->poll_eof_ts = 0;
             if (so->chr)
                 q_buff_change = true;
         }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -475,7 +475,8 @@ static void pipe_close_cb(void *opaque)
         ni_close(pipe->ni_opaque);
         pipe->ni_opaque = NULL;
     }
-    NETLOG("%s: closing hostfwd pipe", __FUNCTION__);
+    NETLOG("%s: c:%"PRIxPTR" -- closing hostfwd pipe", __FUNCTION__,
+            (uintptr_t) pipe->chr);
     qemu_chr_close(pipe->chr);
     pipe->chr = NULL;
     pipe->ni_opaque = NULL;
@@ -486,6 +487,8 @@ static void pipe_reconect_cb(void *opaque)
 {
     struct host_pipe_s *pipe = opaque;
 
+    NETLOG4("%s: s:%"PRIxPTR" c:%"PRIxPTR,
+            __FUNCTION__, (uintptr_t) pipe->ni_opaque, (uintptr_t) pipe->chr);
     if (pipe->chr && pipe->chr->chr_reconnect)
         pipe->chr->chr_reconnect(pipe->chr);
     if (pipe->chr->chr_update_read_handler)
