@@ -221,7 +221,7 @@ uXenPlatform::filterInterrupt(IOFilterInterruptEventSource *src)
     uint32_t ev = 0;
 
     bar0->readBytes(offsetof(struct ctl_mmio, cm_events), &ev, sizeof(ev));
-    pending_events |= ev;
+    OSBitOrAtomic(ev, &pending_events);
 
     return true;
 }
@@ -232,9 +232,8 @@ uXenPlatform::handleInterrupt(IOInterruptEventSource *src, int count)
     /*
      * Secondary Interrupt handler, called in workloop context.
      */
-    if (pending_events & CTL_MMIO_EVENT_HOTPLUG) {
-        pending_events &= ~CTL_MMIO_EVENT_HOTPLUG;
-
+    if (CTL_MMIO_EVENT_HOTPLUG
+        & OSBitAndAtomic(~CTL_MMIO_EVENT_HOTPLUG, &pending_events)) {
         enumerate_devices();
     }
 }
