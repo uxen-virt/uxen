@@ -49,11 +49,7 @@ extern "C" {
 #include <uxen_def.h>
 #include <uxen_ioctl.h>
 
-#undef EAGAIN
-#undef ENOSYS
-#undef EMSGSIZE
-#undef ECONNREFUSED
-#include <xen/errno.h>
+#include "xen-errno.h"
 
 #include "events.h"
 #include "uxen_debug.h"

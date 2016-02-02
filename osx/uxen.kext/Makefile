@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2015, Bromium, Inc.
+# Copyright 2012-2016, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -115,11 +115,16 @@ build_info.h:
 	@( echo "#define UXEN_DRIVER_VERSION_CHANGESET \""$$(cd $(SRCDIR) && git log --pretty=format:%h -n 1 && git diff --quiet || echo -dirty)"\""; \
 	   ) >$@
 
+xen-errno.h: $(TOPDIR)/xen/include/xen/errno.h
+	$(_W)echo Generating - $(@F)
+	@mkdir -p $(@D)
+	@sed -e '/XXX osx/ s/^\(#define.\)E/\1X_E/' <$< >$@
+
 $(KEXT_OBJS): .deps/.exists
 
 libelf-loader.o libelf-relocate.o libelf-tools.o: CPPFLAGS += -DNO_XEN_ELF_NOTE
 
-$(KEXT_OBJS): build_info.h
+$(KEXT_OBJS): build_info.h xen-errno.h
 
 $(KEXT_BIN): $(KEXT_OBJS)
 	$(_W)echo Linking - $@.kext
