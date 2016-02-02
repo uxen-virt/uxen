@@ -2,7 +2,7 @@
  *  uxen_link.h
  *  uxen
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -127,9 +127,8 @@ static int get_elf_sym(struct elf_binary *elf, unsigned char *hv,
     } while (/* CONSTCOND */0)
 #else
 #define UXEN_GET_SYM(n, t, v) do {					\
-	extern void *n;							\
-	void *p = &n;							\
-	memcpy(&v, &p, sizeof(t));					\
+	extern t;                                                       \
+	v = &n;                                                         \
 	dprintk("sym %s = %p\n", #v, v);				\
     } while (/* CONSTCOND */0)
 #endif
@@ -141,48 +140,64 @@ static int get_elf_sym(struct elf_binary *elf, unsigned char *hv,
 									\
     /* _uxen_info resolves to _uxen_info, while __uxen_info would */    \
     /* resolve to uxen_info */                                          \
-    UXEN_GET_SYM(_uxen_info, struct uxen_info *, uxen_info);		\
-    UXEN_GET_SYM(prefix ## uxen_start_xen, void (__cdecl *)             \
+    UXEN_GET_SYM(_uxen_info, struct uxen_info _uxen_info, uxen_info);   \
+    UXEN_GET_SYM(prefix ## uxen_start_xen,                              \
+                 intptr_t __cdecl prefix ## uxen_start_xen              \
 		 (const struct uxen_init_desc *, uint64_t),             \
                  uxen_do_start_xen);	                                \
     UXEN_GET_SYM(prefix ## uxen_add_heap_memory,                        \
-                 void (__cdecl *)(uint64_t, uint64_t),                  \
-                 uxen_do_add_heap_memory);                              \
-    UXEN_GET_SYM(prefix ## uxen_lookup_vm, intptr_t (__cdecl *)         \
+                 void __cdecl prefix ## uxen_add_heap_memory            \
+                 (uint64_t, uint64_t), uxen_do_add_heap_memory);        \
+    UXEN_GET_SYM(prefix ## uxen_lookup_vm,                              \
+                 intptr_t __cdecl prefix ## uxen_lookup_vm              \
 		 (xen_domain_handle_t), uxen_do_lookup_vm);             \
-    UXEN_GET_SYM(prefix ## uxen_setup_vm, intptr_t (__cdecl *)          \
+    UXEN_GET_SYM(prefix ## uxen_setup_vm,                               \
+                 intptr_t __cdecl prefix ## uxen_setup_vm               \
 		 (struct uxen_createvm_desc *, struct vm_info_shared *, \
                   struct vm_vcpu_info_shared **), uxen_do_setup_vm);    \
-    UXEN_GET_SYM(prefix ## uxen_run_vcpu, intptr_t (__cdecl *)          \
+    UXEN_GET_SYM(prefix ## uxen_run_vcpu,                               \
+                 intptr_t __cdecl prefix ## uxen_run_vcpu               \
 		 (uint32_t, uint32_t), uxen_do_run_vcpu);               \
-    UXEN_GET_SYM(prefix ## uxen_destroy_vm, intptr_t (__cdecl *)        \
+    UXEN_GET_SYM(prefix ## uxen_destroy_vm,                             \
+                 intptr_t __cdecl prefix ## uxen_destroy_vm             \
 		 (xen_domain_handle_t), uxen_do_destroy_vm);            \
-    UXEN_GET_SYM(prefix ## uxen_dispatch_ipi, void (__cdecl *)          \
+    UXEN_GET_SYM(prefix ## uxen_dispatch_ipi,                           \
+                 void __cdecl prefix ## uxen_dispatch_ipi               \
 		 (unsigned int), uxen_do_dispatch_ipi);			\
-    UXEN_GET_SYM(prefix ## uxen_run_idle_thread, void (__cdecl *)       \
+    UXEN_GET_SYM(prefix ## uxen_run_idle_thread,                        \
+                 void __cdecl prefix ## uxen_run_idle_thread            \
 		 (uint32_t), uxen_do_run_idle_thread);                  \
-    UXEN_GET_SYM(prefix ## uxen_handle_keypress, intptr_t (__cdecl *)   \
+    UXEN_GET_SYM(prefix ## uxen_handle_keypress,                        \
+                 intptr_t __cdecl prefix ## uxen_handle_keypress        \
 		 (unsigned char), uxen_do_handle_keypress);		\
-    UXEN_GET_SYM(prefix ## uxen_shutdown_xen, void (__cdecl *)          \
+    UXEN_GET_SYM(prefix ## uxen_shutdown_xen,                           \
+                 void __cdecl prefix ## uxen_shutdown_xen               \
 		 (void), uxen_do_shutdown_xen);				\
-    UXEN_GET_SYM(prefix ## uxen_suspend_xen_prepare, void (__cdecl *)   \
+    UXEN_GET_SYM(prefix ## uxen_suspend_xen_prepare,                    \
+                 void __cdecl prefix ## uxen_suspend_xen_prepare        \
 		 (void), uxen_do_suspend_xen_prepare);                  \
-    UXEN_GET_SYM(prefix ## uxen_suspend_xen, void (__cdecl *)           \
+    UXEN_GET_SYM(prefix ## uxen_suspend_xen,                            \
+                 void __cdecl prefix ## uxen_suspend_xen                \
 		 (void), uxen_do_suspend_xen);				\
-    UXEN_GET_SYM(prefix ## uxen_resume_xen, void (__cdecl *)            \
+    UXEN_GET_SYM(prefix ## uxen_resume_xen,                             \
+                 void __cdecl prefix ## uxen_resume_xen                 \
 		 (void), uxen_do_resume_xen);				\
-    UXEN_GET_SYM(prefix ## uxen_hypercall, intptr_t (__cdecl *)         \
+    UXEN_GET_SYM(prefix ## uxen_hypercall,                              \
+                 intptr_t __cdecl prefix ## uxen_hypercall              \
                  (struct uxen_hypercall_desc *, struct vm_info_shared *, \
                   void *, uint32_t), uxen_do_hypercall);                \
-    UXEN_GET_SYM(prefix ## uxen_process_ud2, intptr_t (__cdecl *)       \
+    UXEN_GET_SYM(prefix ## uxen_process_ud2,                            \
+                 intptr_t __cdecl prefix ## uxen_process_ud2            \
 		 (struct cpu_user_regs *), uxen_do_process_ud2);        \
-    UXEN_GET_SYM(prefix ## uxen_lookup_symbol, intptr_t (__cdecl *)     \
+    UXEN_GET_SYM(prefix ## uxen_lookup_symbol,                          \
+                 intptr_t __cdecl prefix ## uxen_lookup_symbol          \
 		 (uint64_t, char *, uint32_t), uxen_do_lookup_symbol);	\
-    UXEN_GET_SYM(prefix ## uxen_flush_rcu, intptr_t (__cdecl *)(uint32_t), \
-		 uxen_do_flush_rcu);                                    \
-    UXEN_GET_SYM(__per_cpu_start, uint8_t *,                            \
+    UXEN_GET_SYM(prefix ## uxen_flush_rcu,                              \
+                 intptr_t __cdecl prefix ## uxen_flush_rcu              \
+                 (uint32_t), uxen_do_flush_rcu);                        \
+    UXEN_GET_SYM(__per_cpu_start, uint8_t __per_cpu_start,              \
 		 uxen_addr_per_cpu_start);                              \
-    UXEN_GET_SYM(__per_cpu_data_end, uint8_t *,                         \
+    UXEN_GET_SYM(__per_cpu_data_end, uint8_t __per_cpu_data_end,        \
 		 uxen_addr_per_cpu_data_end);                           \
     return 0;								\
 }
