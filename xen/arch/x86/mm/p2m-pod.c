@@ -1971,7 +1971,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             pdi->mfn = _mfn(0);
             mfn = smfn;
             get_page_fast(mfn_to_page(smfn), d);
-            unmap_domain_page(data);
+            unmap_domain_page_direct(data);
             atomic_dec(&d->clone_of->template.decompressed_shared);
             p2m_unlock(op2m);
             perfc_incr(decompressed_unshared);
