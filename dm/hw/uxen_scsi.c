@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -9,6 +9,9 @@
 #include <dm/hw.h>
 
 #include "uxen_scsi.h"
+#ifdef __APPLE__
+#include "uxen_scsi_osx.h"
+#endif
 
 #if 1
 /*GRR  - no endian.h */
@@ -676,6 +679,28 @@ uxscsi_parse (UXSCSI * s)
       count = uabe32_to_h (&s->cdb[10]);
 
       return uxscsi_write (s, lba, count);
+	  
+#ifdef __APPLE__
+    case SCSIOP_INQUIRY:
+      {
+        const uint8_t standard_inquiry_cdb[6] =
+        { SCSIOP_INQUIRY, 0x00, 0x00, 0x00, 0x24, 0x00 };
+        const uint8_t evpd_supported_inquiry_cdb[6] =
+        { SCSIOP_INQUIRY, 0x01, 0x00, 0x00, 0x40, 0x00 };
+        if (s->cdb_len < 6)
+          return check_condition (s, SCSISK_ILLEGAL_REQUEST, 0, 0);
+        if (0 == memcmp(s->cdb, standard_inquiry_cdb, 6)) {
+          //standard inquiry - get the serial number etc and craft the response
+          s->read_len = uxscsi_inquiry(s->read_ptr, s->read_len);
+          return success (s);
+        } else if (0 == memcmp(s->cdb, evpd_supported_inquiry_cdb, 4)
+                   && s->cdb[5] == evpd_supported_inquiry_cdb[5]) {
+          // Don't support any EVPD, empty response
+          s->read_len = 0;
+          return success (s);
+        }
+      }
+#endif
     }
   return check_condition (s, SCSISK_ILLEGAL_REQUEST, 0, 0);
 }

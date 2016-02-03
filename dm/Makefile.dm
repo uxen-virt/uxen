@@ -248,6 +248,7 @@ DM_SRCS += hw/uxen_null.c
 hw_uxen_null.o: CPPFLAGS += -I$(XENPUBLICDIR)
 DM_SRCS += hw/uxen_stor.c
 DM_SRCS += hw/uxen_scsi.c
+$(OSX)DM_SRCS += hw/uxen_scsi_osx.c
 hw_uxen_stor.o: CPPFLAGS += -I$(XENPUBLICDIR)
 
 $(WINDOWS)DM_SRCS += hw/uxen_v4v_win32.c
@@ -387,6 +388,7 @@ $(OSX)LDLIBS += -framework AppKit
 $(OSX)LDLIBS += -framework Carbon
 $(OSX)LDLIBS += -framework Security
 $(OSX)LDLIBS += -framework IOKit
+$(OSX)LDLIBS += -framework DiskArbitration
 
 $(WINDOWS)LDFLAGS += -mwindows
 $(WINDOWS)LDFLAGS += -Wl,--wrap,malloc,--wrap,realloc,--wrap,calloc,--wrap,free

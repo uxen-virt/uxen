@@ -536,16 +536,6 @@ uxen_v4v_storage_device::SendSCSICommand(
         return false;
     }
     uint32_t cdb_size = GetCommandDescriptorBlockSize(request);
-    if (msg.cdb_data[0] == kSCSICmd_INQUIRY) {
-        // INQUIRY commands aren't handled by uxen SCSI stack, so short-circuit them
-        bool short_circuit = this->shortCircuitRequestResponse(&msg.cdb_data, cdb_size, request);
-        if (short_circuit) {
-            *serviceResponse = kSCSIServiceResponse_Request_In_Process;
-            *taskStatus = kSCSITaskStatus_GOOD;
-            return true;
-        }
-    }
-
     
     tree_entry = task_rb_entry_alloc();
     if (tree_entry == nullptr)
@@ -706,50 +696,6 @@ uxen_v4v_storage_device::SendSCSICommand(
         }
     }
 }
-
-bool uxen_v4v_storage_device::shortCircuitRequestResponse(const SCSICommandDescriptorBlock* cdb_data, uint32_t cdb_size, SCSITaskIdentifier request)
-{
-    const uint8_t standard_inquiry_cdb[6] =
-        { kSCSICmd_INQUIRY, 0x00, 0x00, 0x00, 0x24, 0x00 };
-    const uint8_t evpd_supported_inquiry_cdb[6] =
-        { kSCSICmd_INQUIRY, 0x01, 0x00, 0x00, 0x40, 0x00 };
-
-    if (cdb_size != 6) { // INQUIRY should be 6 bytes
-        return false;
-    } else if (0 == memcmp(*cdb_data, evpd_supported_inquiry_cdb, 4)
-		           && (*cdb_data)[5] == evpd_supported_inquiry_cdb[5]) {
-        // Don't support any EVPD, empty response
-        SetRealizedDataTransferCount(request, 0);
-        CommandCompleted(request, kSCSIServiceResponse_TASK_COMPLETE, kSCSITaskStatus_GOOD);
-        return true;
-    } else if(0 == memcmp(*cdb_data, standard_inquiry_cdb, cdb_size)) {
-        // normal inquiry message, respond with same disk data as QEMU SCSI stack
-        IOMemoryDescriptor* dataBuffer = GetDataBuffer(request);
-        UInt64 dataOffset = GetDataBufferOffset(request);
-        UInt64 dataLength = GetRequestedDataTransferCount(request);
-        const uint8_t inquiry_response[] = {
-            0x00, 0x00, 0x05, 0x02,  0x1F, 0x00, 0x00, 0x10,
-            0x51, 0x45, 0x4D, 0x55,  0x20, 0x20, 0x20, 0x20,
-            0x51, 0x45, 0x4D, 0x55,  0x20, 0x48, 0x41, 0x52,
-            0x44, 0x44, 0x49, 0x53,  0x4B, 0x20, 0x20, 0x20,
-            0x75, 0x58, 0x65, 0x6E };
-        _Static_assert(sizeof(inquiry_response) == 36, "inquiry response should be 36 bytes long");
-        dataBuffer->prepare(kIODirectionIn);
-        dataBuffer->writeBytes(dataOffset, inquiry_response, min(36, dataLength));
-        dataBuffer->complete(kIODirectionIn);
-        SetRealizedDataTransferCount(request, min(36, dataLength));
-        CommandCompleted(request, kSCSIServiceResponse_TASK_COMPLETE, kSCSITaskStatus_GOOD);
-        return true;
-    } else {
-        kprintf("Unexpected SCSI INQUIRY command, can't short-circuit:\n");
-        for(int i = 0; i < cdb_size; i++) {
-            kprintf("%02x ", (*cdb_data)[i]);
-        }
-        kprintf("\n");
-        return false;
-    }
-}
-
 
 
 SCSIServiceResponse

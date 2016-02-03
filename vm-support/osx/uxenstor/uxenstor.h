@@ -96,10 +96,7 @@ protected:
     
     IOSimpleLock *live_tasks_lock;
     SCSITaskIdentifier_rb_head live_tasks;
-    
-    bool shortCircuitRequestResponse(
-        const SCSICommandDescriptorBlock* cdbData, uint32_t cdb_size, SCSITaskIdentifier request);
-    
+        
 public:
     virtual bool start(IOService *provider) override;
     virtual void stop(IOService *provider) override;
