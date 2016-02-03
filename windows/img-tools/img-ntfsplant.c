@@ -124,7 +124,7 @@ static int copy_file(ntfs_fs_t fs, const wchar_t *src, const wchar_t *dst)
             break;
         }
 
-        bytes_read = disklib_write_simple(fs, dst, buf, bytes_read, tot, 0, NULL);
+        bytes_read = disklib_write_simple(fs, dst, buf, bytes_read, tot, 0);
         if (bytes_read <= 0)
             break;
 

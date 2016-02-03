@@ -23,14 +23,6 @@ struct disklib_extent {
     uint64_t len; /* number of bytes */
 };
 
-typedef struct {
-  uint64_t creationTime;
-  uint64_t lastAccessTime;
-  uint64_t lastWriteTime;
-  uint64_t changeTime;
-  uint32_t attributes;
-} SimpleAttributes;
-
 struct disklib_stat {
     uint64_t f_ino;
 
@@ -49,8 +41,6 @@ struct disklib_stat {
 #define DISKLIB_ISRESIDENT      (1<<1)  /* resident (extents won't work) */
 #define DISKLIB_ISSPARSE        (1<<1)  /* sparse file */
     uint8_t a_mode;
-
-    SimpleAttributes attribs;
 };
 
 #define DISKLIB_LINK_SYMBOLIC   1

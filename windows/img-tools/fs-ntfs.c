@@ -863,8 +863,7 @@ const wchar_t *last_slash(const wchar_t *path)
 }
 
 int disklib_write_simple(ntfs_fs_t fs, const wchar_t *path, void *buffer,
-        uint64_t size, uint64_t offset, int force_non_resident,
-        const SimpleAttributes *attribs)
+        uint64_t size, uint64_t offset, int force_non_resident)
 {
     int64_t r;
     ntfs_attr *na;
@@ -892,14 +891,6 @@ int disklib_write_simple(ntfs_fs_t fs, const wchar_t *path, void *buffer,
 
     r = size ? ntfs_attr_pwrite(na, offset, size, buffer) : 0;
     ntfs_attr_close(na);
-
-    if (attribs && offset == 0) {
-        ni->flags |= const_cpu_to_le32(attribs->attributes);
-        ni->creation_time = attribs->creationTime;
-        ni->last_data_change_time = attribs->lastWriteTime;
-        ni->last_mft_change_time = attribs->changeTime;
-        ni->last_access_time = attribs->lastAccessTime;
-    }
     ntfs_inode_close(ni);
     return r;
 }
@@ -1153,7 +1144,7 @@ static int reparse_handled(ntfs_inode *ni)
     return ret;
 }
 
-static void fill_stat(ntfs_inode *ni, ntfs_attr *na, ntfs_attr *stdinfo, struct disklib_stat *st)
+static void fill_stat(ntfs_inode *ni, ntfs_attr *na, struct disklib_stat *st)
 {
     uint8_t isdir, isrep, islnk, ispec, iscmp;
     uint8_t fmode;
@@ -1185,17 +1176,6 @@ static void fill_stat(ntfs_inode *ni, ntfs_attr *na, ntfs_attr *stdinfo, struct 
         amode |= (isspa) ? DISKLIB_ISSPARSE : 0;
     }
 
-    if (stdinfo) {
-        STANDARD_INFORMATION si = {0};
-        ntfs_attr_pread(stdinfo, 0, sizeof(si), &si);
-        /* ignore return value */
-        st->attribs.attributes = const_le32_to_cpu(si.file_attributes);
-        st->attribs.creationTime = si.creation_time;
-        st->attribs.changeTime = si.last_mft_change_time;
-        st->attribs.lastWriteTime = si.last_data_change_time;
-        st->attribs.lastAccessTime = si.last_access_time;
-    }
-
     st->f_ino = ni->mft_no;
     st->f_size = ni->data_size;
     st->f_mode = fmode;
@@ -1204,7 +1184,7 @@ static void fill_stat(ntfs_inode *ni, ntfs_attr *na, ntfs_attr *stdinfo, struct 
 
 int disklib_ntfs_fstat(ntfs_fd_t fd, struct disklib_stat *st)
 {
-    fill_stat(fd->ni, fd->na, NULL, st);
+    fill_stat(fd->ni, fd->na, st);
     disklib__set_errno(DISKLIB_ERR_SUCCESS);
     return 0;
 }
@@ -1212,7 +1192,7 @@ int disklib_ntfs_fstat(ntfs_fd_t fd, struct disklib_stat *st)
 int disklib_ntfs_stat(ntfs_fs_t fs, const char *path, struct disklib_stat *st)
 {
     ntfs_inode *ni;
-    ntfs_attr *na, *stdinfo;
+    ntfs_attr *na;
 
     ni = ntfs_pathname_to_inode(fs->vol, NULL, path);
     if ( NULL == ni ) {
@@ -1221,13 +1201,10 @@ int disklib_ntfs_stat(ntfs_fs_t fs, const char *path, struct disklib_stat *st)
     }
 
     na = ntfs_attr_open(ni, AT_DATA, AT_UNNAMED, 0);
-    stdinfo = ntfs_attr_open(ni, AT_STANDARD_INFORMATION, AT_UNNAMED, 0);
 
-    fill_stat(ni, na, stdinfo, st);
+    fill_stat(ni, na, st);
     if ( na )
         ntfs_attr_close(na);
-    if ( stdinfo )
-        ntfs_attr_close(stdinfo);
     ntfs_inode_close(ni);
     disklib__set_errno(DISKLIB_ERR_SUCCESS);
     return 0;

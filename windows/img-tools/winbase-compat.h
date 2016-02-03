@@ -232,11 +232,3 @@ typedef struct _OBJECT_BASIC_INFORMATION {
 #define ObjectTypeInformation               2
 #define ObjectHandleInformation             3
 
-/* https://msdn.microsoft.com/en-us/library/windows/desktop/aa364217(v=vs.85).aspx */
-typedef struct _FILE_BASIC_INFO {
-  LARGE_INTEGER CreationTime;
-  LARGE_INTEGER LastAccessTime;
-  LARGE_INTEGER LastWriteTime;
-  LARGE_INTEGER ChangeTime;
-  DWORD         FileAttributes;
-} FILE_BASIC_INFO, *PFILE_BASIC_INFO;
