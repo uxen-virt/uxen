@@ -5638,8 +5638,6 @@ long arch_memory_op(int op, XEN_GUEST_HANDLE(void) arg)
         return subarch_memory_op(op, arg);
 #else   /* __UXEN__ */
     default:
-        printk("memop %d\n", op);
-        DEBUG();
         rc = -ENOSYS;
         return rc;
 #endif  /* __UXEN__ */
