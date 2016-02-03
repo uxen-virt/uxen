@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -42,11 +42,9 @@ filebuf_open(const char *fn, const char *mode)
 
     while (*mode) {
         switch (*mode) {
-#ifdef __APPLE__
             case 'n':
                 no_buffering = 1;
                 break;
-#endif  /* __APPLE__ */
 #ifdef _WIN32
             case 's':
                 sequential = 1;
@@ -238,6 +236,9 @@ filebuf_fill(struct filebuf *fb)
         DWORD ret = 0;
         OVERLAPPED o = { };
 
+        fb->consumed = fb->offset & (ALIGN_PAGE_ALIGN - 1);
+        fb->offset -= fb->consumed;
+
         o.Offset = fb->offset;
         o.OffsetHigh = fb->offset >> 32ULL;
 
@@ -268,11 +269,11 @@ filebuf_fill(struct filebuf *fb)
             return -1;
         }
         ret = o;
+        fb->consumed = 0;
 #endif  /* _WIN32 */
         fb->offset += ret;
         fb->buffered = ret;
         fb->eof = (fb->buffered < fb->buffer_max);
-        fb->consumed = 0;
     }
     return 0;
 }
