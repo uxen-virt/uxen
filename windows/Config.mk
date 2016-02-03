@@ -30,6 +30,7 @@ $(REL_ONLY)DDKENV ?= fre
 
 CV2PDB ?= cv2pdb.exe
 GENERATE_PDB ?= true
+DWARFCV ?= $(shell command -v dwarfcv || echo cp)
 
 # everything below only for builds under {vm-support/,}windows/
 ifeq (,$(patsubst $(TARGET_HOST)/%,,$(patsubst vm-support/%,%,$(SUBDIR))))

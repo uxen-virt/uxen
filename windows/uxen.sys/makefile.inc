@@ -8,8 +8,8 @@ SIGNCMD=rem build not signed since UXEN_WINDOWS_SIGN not defined
 POST: $(OBJ_PATH)\$(O)\$(TARGETNAME).sys
     $(SIGNCMD) $(OBJ_PATH)\$(O)\$(TARGETNAME).sys
 
-$(OBJ_PATH)\$(O)\uxen-core.obj: $(BUILDDIR_XEN)\uxen.obj
-	copy $(BUILDDIR_XEN)\uxen.obj $(OBJ_PATH)\$(O)\uxen-core.obj
+$(OBJ_PATH)\$(O)\uxen-core.obj: $(BUILDDIR_XEN)\uxen-cv.obj
+	copy $(BUILDDIR_XEN)\uxen-cv.obj $(OBJ_PATH)\$(O)\uxen-core.obj
 	echo $(OBJ_PATH)\$(O)\uxen-core.obj
 
 $(OBJ_PATH)\$(O)\uxen-xpdata.obj: $(BUILDDIR_XEN)\uxen-xpdata.obj

@@ -12,7 +12,7 @@ include $(XEN_ROOT)/Config.mk
 VPATH = $(SRCDIR)
 
 $(TARGET_elf_only)TARGET = uxen.macho
-$(TARGET_pe_only)TARGET = uxen.obj
+$(TARGET_pe_only)TARGET = uxen-cv.obj
 $(TARGET_pe_only)$(X86_64_only)TARGET += uxen-xpdata.obj
 
 XEN_CFLAGS += $(CFLAGS)
@@ -144,7 +144,7 @@ $(filter $(SDKDIR_include)/uxen/%,$(SDK_include_files)) : $(SDKDIR_include)/uxen
 
 $(BUILDDIR:%=x)clean::
 	rm -f uxen.elf
-	rm -f uxen.obj uxen-xpdata.obj
+	rm -f uxen-cv.obj uxen.obj uxen-xpdata.obj
 	rm -f uxen.check uxen.0.o uxen.1.o
 	rm -f uxen-syms.0.S uxen-syms.1.S
 	rm -f uxen-prelink.o common/symbols-dummy.o
@@ -368,6 +368,10 @@ uxen.elf: uxen-prelink.o uxen-syms.1.o $(UXEN_LDS)
 	$(_W)echo Linking - $@
 	$(_V)$(TARGET_LD) $(XEN_LDFLAGS) -T $(UXEN_LDS) -r -o $@ \
 	  -N $(filter-out $(UXEN_LDS),$^)
+
+uxen-cv.obj: uxen.obj
+	$(_W)echo Generating - $@
+	$(_V)$(DWARFCV) $< $@
 
 uxen_post_link = true
 uxen.obj: uxen-prelink.o uxen-syms.1.o $(UXEN_LDS)
