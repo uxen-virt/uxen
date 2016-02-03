@@ -26,7 +26,6 @@
 #include <ntdef.h>
 #include <psapi.h>
 
-
 static pNtReadFile NtReadFile;
 static pNtQuerySystemInformation NtQuerySystemInformation;
 static pNtDuplicateObject NtDuplicateObject;
@@ -241,6 +240,36 @@ void heap_clear(Heap *hp)
     memset(hp, 0, sizeof(Heap));
 }
 
+static inline
+SimpleAttributes *create_simple_attribs(uint64_t creationTime, uint64_t lastAccessTime,
+                                        uint64_t lastWriteTime, uint64_t changeTime,
+                                        uint32_t fileAttribs)
+{
+    SimpleAttributes *attribs = malloc(sizeof(SimpleAttributes));
+    if (!attribs) {
+        return NULL;
+    }
+    attribs->creationTime = creationTime;
+    attribs->lastAccessTime = lastAccessTime;
+    attribs->lastWriteTime = lastWriteTime;
+    attribs->changeTime = changeTime;
+    attribs->attributes = fileAttribs;
+    return attribs;
+}
+
+static inline
+SimpleAttributes *duplicate_simple_attribs(const SimpleAttributes *original)
+{
+    if (!original) {
+        return NULL;
+    }
+    return create_simple_attribs(original->creationTime,
+                                 original->lastAccessTime,
+                                 original->lastWriteTime,
+                                 original->changeTime,
+                                 original->attributes);
+}
+
 typedef enum { /* actions are ordered from most to least desirable. */
         MAN_CHANGE = 0, /* used internally to degrade something to force copy */
         MAN_EXCLUDE = 1,
@@ -268,6 +297,7 @@ typedef struct ManifestEntry {
     Action action;
     int excludable_single_file_entry;
     uint8_t sha[SHA1_DIGEST_SIZE]; /* only used/populated for file copies */
+    SimpleAttributes* attribs;
 } ManifestEntry;
 
 typedef struct Manifest {
@@ -309,7 +339,8 @@ ManifestEntry* man_push_file(Manifest *out,
                              uint64_t file_size,
                              uint64_t file_id,
                              const wchar_t *rewrite,
-                             Action action)
+                             Action action,
+                             const SimpleAttributes* attribs)
 {
     ManifestEntry *e = man_push(out);
     e->vol = vol;
@@ -320,6 +351,7 @@ ManifestEntry* man_push_file(Manifest *out,
     e->file_id = file_id;
     e->rewrite = rewrite ? wcsdup(rewrite) : NULL;
     e->action = action;
+    e->attribs = duplicate_simple_attribs(attribs);
     if (file_size < min_shallow_size) {
         if (action == MAN_SHALLOW) {
             e->action = MAN_COPY;
@@ -984,7 +1016,42 @@ int stat_file(HANDLE volume, uint64_t file_id, uint64_t *file_size, uint64_t *of
 int files, directories;
 
 static inline
-int path_exists(wchar_t *fn, uint64_t *file_id, uint64_t *file_size, int *is_dir)
+uint64_t file_time_to_uint64(const FILETIME *ft)
+{
+    ULARGE_INTEGER large_int;
+    large_int.LowPart = ft->dwLowDateTime;
+    large_int.HighPart = ft->dwHighDateTime;
+    return large_int.QuadPart;
+}
+
+static inline
+void get_handle_attribs(HANDLE h, BY_HANDLE_FILE_INFORMATION *inf, SimpleAttributes **attribs)
+{
+    FILE_BASIC_INFO basic_info;
+
+    if (*attribs) {
+        return;
+    }
+
+    if (GetFileInformationByHandleEx(h, FileBasicInfo, &basic_info, sizeof(basic_info))) {
+        *attribs = create_simple_attribs(basic_info.CreationTime.QuadPart,
+                                         basic_info.LastAccessTime.QuadPart,
+                                         basic_info.LastWriteTime.QuadPart,
+                                         basic_info.ChangeTime.QuadPart,
+                                         basic_info.FileAttributes);
+    } else if (inf) {
+        *attribs = create_simple_attribs(file_time_to_uint64(&inf->ftCreationTime),
+                                         file_time_to_uint64(&inf->ftLastAccessTime),
+                                         file_time_to_uint64(&inf->ftLastWriteTime),
+                                         /* Copying the last write time (file data) into the change
+                                            time (file metadata too) is the least worst option here. */
+                                         file_time_to_uint64(&inf->ftLastWriteTime),
+                                         inf->dwFileAttributes);
+    }
+}
+
+static inline
+int path_exists(wchar_t *fn, uint64_t *file_id, uint64_t *file_size, int *is_dir, SimpleAttributes **attribs)
 {
     HANDLE h;
     BY_HANDLE_FILE_INFORMATION inf;
@@ -1005,6 +1072,7 @@ int path_exists(wchar_t *fn, uint64_t *file_id, uint64_t *file_size, int *is_dir
             } else {
                 *is_dir = 1;
             }
+            get_handle_attribs(h, &inf, attribs);
         }
         CloseHandle(h);
     }
@@ -1030,18 +1098,20 @@ int bfs(Variable *var, Manifest *suffixes,
     int heap_switch = 0;
     int is_dir;
     Heap heaps[2];
+    SimpleAttributes *attribs = NULL;
 
     manifested_action = m->action;
     action = m->action;
 
     /* First check if this is a single file that needs to be included
      * in the output manifest by itself. */
-    if (path_exists(prefix(var, dn), &file_id, &file_size, &is_dir)) {
+    if (path_exists(prefix(var, dn), &file_id, &file_size, &is_dir, &attribs)) {
         if (!is_dir) {
             if (m->excludable_single_file_entry) {
                 /* Check if we should exclude it or otherwise ignore this entry */
                 ManifestEntry* otherm = find_by_prefix(var->man, dn);
                 if (otherm && otherm->action < action) {
+                    free(attribs);
                     return 0;
                 }
             }
@@ -1053,7 +1123,9 @@ int bfs(Variable *var, Manifest *suffixes,
                           file_size,
                           file_id,
                           m->rewrite,
-                          m->action);
+                          m->action,
+                          attribs);
+            free(attribs);
             //printf("1.Adding entry [%S]=[%d]=>[%S]\n", e->name, e->action, (e->rewrite ? e->rewrite : L"NULL"));
             return 0;
         } else {
@@ -1061,6 +1133,8 @@ int bfs(Variable *var, Manifest *suffixes,
             if (dn[wcslen(dn) - 1] != L'/') {
                 //printf("warning: [%ls] is a directory!\n", dn);
             }
+            free(attribs);
+            attribs = NULL;
         }
     } else {
         /* We do not like overly broad manifests, so complain about things not found. */
@@ -1229,7 +1303,14 @@ int bfs(Variable *var, Manifest *suffixes,
                     if (rerooted_full_name[0] != L'\0') {
                         rewrite = rerooted_full_name;
                     }
-                    e = man_push_file(out, disk->bootvol, var, full_name, file_size, file_id, rewrite, action);
+
+                    SimpleAttributes attribs;
+                    attribs.creationTime = info->CreationTime.QuadPart;
+                    attribs.lastAccessTime = info->LastAccessTime.QuadPart;
+                    attribs.lastWriteTime = info->LastWriteTime.QuadPart;
+                    attribs.changeTime = info->ChangeTime.QuadPart;
+                    attribs.attributes = attr;
+                    e = man_push_file(out, disk->bootvol, var, full_name, file_size, file_id, rewrite, action, &attribs);
                     //printf("2.Adding entry [%S]=[%d]=>[%S]\n", e->name, e->action, (e->rewrite ? e->rewrite : L"NULL"));
 
                 } while (!done);
@@ -1344,6 +1425,7 @@ typedef struct IO {
     IO_STATUS_BLOCK iosb;
     int last;
     SHA1_CTX *sha_ctx; // non-NULL if we should calculate the SHA
+    SimpleAttributes *attribs;
 } IO;
 
 static IO ios[MAX_IOS];
@@ -1428,7 +1510,7 @@ static void complete_io(IO* io)
     }
 
     if (disklib_write_simple(io->m->vol, io->m->name, io->buffer, io->size,
-                io->offset, 0) < io->size) {
+                io->offset, 0, io->attribs) < io->size) {
         err(1, "ntfs write error: %s\n", strerror(ntfs_get_errno()));
     }
 
@@ -1474,6 +1556,7 @@ static void complete_all_ios(void)
 }
 
 static void copy_file(ManifestEntry *m, HANDLE input, int calculate_shas)
+
 {
     ntfs_fs_t vol = m->vol;
     const wchar_t *path = m->name;
@@ -1493,7 +1576,7 @@ static void copy_file(ManifestEntry *m, HANDLE input, int calculate_shas)
             SHA1_Final(sha_ctx, m->sha);
             free(sha_ctx);
         }
-        if (disklib_write_simple(vol, path, NULL, 0, 0, 0)) {
+        if (disklib_write_simple(vol, path, NULL, 0, 0, 0, m->attribs)) {
             err(1, "ntfs write error: %s\n", strerror(ntfs_get_errno()));
         }
     }
@@ -1513,6 +1596,7 @@ static void copy_file(ManifestEntry *m, HANDLE input, int calculate_shas)
         io->size = take;
         io->offset = offset;
         io->sha_ctx = sha_ctx;
+        io->attribs = m->attribs;
 
         assert(!io->buffer);
         io->buffer = malloc(take);
@@ -1527,7 +1611,8 @@ static int shallow_file(ntfs_fs_t fs,
         const wchar_t *vm_path,
         const wchar_t *host_path,
         uint64_t size,
-        uint64_t file_id)
+        uint64_t file_id,
+        const SimpleAttributes *attrs)
 {
     size_t buf_size = 16 << 20;
     static void *buf = NULL;
@@ -1544,22 +1629,21 @@ static int shallow_file(ntfs_fs_t fs,
         }
     }
 
+    char *u = utf8(host_path);
     for (offset = 0; ; size -= take, offset += take) {
         take = size < buf_size ? size : buf_size;
-        char *u = utf8(host_path);
         set_current_filename(u, offset, file_id);
 
-        if (disklib_write_simple(fs, vm_path, buf, take, offset, 1) < take) {
+        if (disklib_write_simple(fs, vm_path, buf, take, offset, 1, attrs) < take) {
             printf("ntfs write error: %s\n", strerror(ntfs_get_errno()));
             exit(1);
         }
-
-        free(u);
 
         if (!take) {
             break;
         }
     }
+    free(u);
 
     return 0;
 }
@@ -1697,7 +1781,7 @@ int scanning_phase(struct disk *disk, VarList *vars,
                     }
                     break;
                 case MAN_MKDIR:
-                    man_push_file(man_out, disk->bootvol, var, m->name, 0, 0, NULL, m->action);
+                    man_push_file(man_out, disk->bootvol, var, m->name, 0, 0, NULL, m->action, NULL);
                     break;
                 default:
                     break;
@@ -1912,7 +1996,7 @@ int other_linked_files_phase(struct disk *disk, Manifest *man)
                 continue;
             }
 
-            man_push_file(man, disk->bootvol, m.var, buffer, m.file_size, m.file_id, m.rewrite, m.action);
+            man_push_file(man, disk->bootvol, m.var, buffer, m.file_size, m.file_id, m.rewrite, m.action, m.attribs);
             num_files++;
         }
     }
@@ -2542,7 +2626,7 @@ int shallow_phase(struct disk *disk, Manifest *man, wchar_t *map_idx)
             //printf("%d,%d shallow %ls @ %"PRIx64"\n", i, man->n, m->name, m->offset);
             wchar_t host_name[MAX_PATH_LEN];
             make_unshadowed_host_path(host_name, m);
-            shallow_file(m->vol, m->name, host_name, m->file_size, m->file_id);
+            shallow_file(m->vol, m->name, host_name, m->file_size, m->file_id, m->attribs);
             total_size_shallowed += m->file_size;
             ++j;
         }
@@ -2655,6 +2739,10 @@ int copy_phase(struct disk *disk, Manifest *man, int calculate_shas, int retry)
                             continue;
                         }
                         m->file_size = info.EndOfFile.QuadPart;
+                        /* Invalidate any attributes and re-read them. */
+                        free(m->attribs);
+                        m->attribs = NULL;
+                        get_handle_attribs(h, NULL, &m->attribs);
                     }
                     copy_file(m, h, calculate_shas);
                     total_size_copied += m->file_size;

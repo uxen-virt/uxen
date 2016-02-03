@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Gianni Tedesco
  * SPDX-License-Identifier: ISC
  */
@@ -124,7 +124,7 @@ static int copy_file(ntfs_fs_t fs, const wchar_t *src, const wchar_t *dst)
             break;
         }
 
-        bytes_read = disklib_write_simple(fs, dst, buf, bytes_read, tot, 0);
+        bytes_read = disklib_write_simple(fs, dst, buf, bytes_read, tot, 0, NULL);
         if (bytes_read <= 0)
             break;
 

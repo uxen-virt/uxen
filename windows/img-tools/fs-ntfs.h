@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Gianni Tedesco
  * SPDX-License-Identifier: ISC
  */
@@ -55,7 +55,8 @@ char *disklib_ntfs_readlink(ntfs_fs_t fs, const char *path, unsigned int *type);
 /* Simple & fast versions working on wide chars. */
 int disklib_mkdir_simple(ntfs_fs_t fs, const wchar_t *path);
 int disklib_write_simple(ntfs_fs_t fs, const wchar_t *path, void *buffer,
-        uint64_t size, uint64_t offset, int force_non_resident);
+        uint64_t size, uint64_t offset, int force_non_resident,
+        const SimpleAttributes *attribs);
 int disklib_mklink_simple(ntfs_fs_t fs, const wchar_t *target, const wchar_t *name);
 
 /* exactly copy an element (file/dir) from one filesystem to another,

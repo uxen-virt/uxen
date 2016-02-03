@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Gianni Tedesco
  * SPDX-License-Identifier: ISC
  */
@@ -194,6 +194,18 @@ static void dump_item(ntfs_fs_t fs, struct disklib_stat *st, const char *name)
 
     if ( !(st->f_mode & DISKLIB_ISDIR) )
         RTPrintf("size=%"PRId64" ", st->f_size);
+
+    if ( st->attribs.attributes & 0x01)
+        RTPrintf("readonly ");
+    if ( st->attribs.attributes & 0x02)
+        RTPrintf("hidden ");
+    if ( st->attribs.attributes & 0x04)
+        RTPrintf("system ");
+    RTPrintf("creationTime=%"PRIu64" lastAccessTime=%"PRIu64"  lastWriteTime=%"PRIu64"  changeTime=%"PRIu64" ",
+        st->attribs.creationTime,
+        st->attribs.lastAccessTime,
+        st->attribs.lastWriteTime,
+        st->attribs.changeTime);
 
     RTPrintf("'%s'", name);
     if ( lnk ) {
