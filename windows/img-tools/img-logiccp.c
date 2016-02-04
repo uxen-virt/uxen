@@ -1620,6 +1620,11 @@ static void copy_file(ManifestEntry *m, HANDLE input, int calculate_shas)
         if (disklib_write_simple(vol, path, NULL, 0, 0, 0, m->securid)) {
             err(1, "ntfs write error: %s\n", strerror(ntfs_get_errno()));
         }
+        if (m->action == MAN_CHANGE) {
+            /* Clearing the MAN_CHANGE is normally done in complete_io() */
+            io->m->action = MAN_FORCE_COPY;
+            --io_nchanged;
+        }
     }
 
     for (offset = 0; size; size -= take, offset += take) {
