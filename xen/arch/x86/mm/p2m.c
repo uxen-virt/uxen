@@ -748,7 +748,8 @@ guest_physmap_add_entry(struct domain *d, unsigned long gfn,
                     p2m_unlock(p2m);
                     return -EINVAL;
                 }
-            }
+            } else if (page_get_owner(mfn_to_page(omfn)) == d)
+                put_page(mfn_to_page(omfn));
 #ifndef __UXEN__
             set_gpfn_from_mfn(mfn_x(omfn), INVALID_M2P_ENTRY);
 #endif  /* __UXEN__ */
