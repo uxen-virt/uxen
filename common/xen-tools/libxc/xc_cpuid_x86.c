@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -49,7 +49,7 @@
 #define clear_bit(idx, dst) ((dst) &= ~(1u << (idx)))
 #define set_bit(idx, dst)   ((dst) |= (1u << (idx)))
 
-#define DEF_MAX_BASE 0x0000000du
+#define DEF_MAX_BASE 0x00000015u
 #define DEF_MAX_INTELEXT  0x80000008u
 #define DEF_MAX_AMDEXT    0x8000001cu
 
@@ -420,6 +420,7 @@ static void xc_cpuid_hvm_policy(
     case 0x00000002: /* Intel cache info (dumped by AMD policy) */
     case 0x00000004: /* Intel cache info (dumped by AMD policy) */
     case 0x0000000a: /* Architectural Performance Monitor Features */
+    case 0x00000015: /* TSC / ART (Always Running Timer) relationship */
     case 0x80000002: /* Processor name string */
     case 0x80000003: /* ... continued         */
     case 0x80000004: /* ... continued         */
