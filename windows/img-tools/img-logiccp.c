@@ -1622,7 +1622,7 @@ static void copy_file(ManifestEntry *m, HANDLE input, int calculate_shas)
         }
         if (m->action == MAN_CHANGE) {
             /* Clearing the MAN_CHANGE is normally done in complete_io() */
-            io->m->action = MAN_FORCE_COPY;
+            m->action = MAN_FORCE_COPY;
             --io_nchanged;
         }
     }
