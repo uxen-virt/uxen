@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2015, Bromium, Inc.
+# Copyright 2012-2016, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -44,7 +44,8 @@ UXENEVENT_OBJS = uxenevent.o \
 		 defroute.o \
 		 input.o \
 		 logging.o \
-                 perf_counters.o \
+		 perf_counters.o \
+		 uxenevent-res.o \
 		 window.o
 
 $(UXENEVENT_OBJS): .deps/.exists
@@ -56,6 +57,10 @@ uxenevent.exe: $(UXENEVENT_OBJS)
 %.o: %.c
 	$(_W)echo Compiling - $@
 	$(_V)$(COMPILE.c) $< -o $@
+
+%.o : %.rc
+	$(_W)echo Compiling - $@
+	$(_V)$(WINDRES) $(WINDRESFLAGS) $(WINDRES_TARGET_FORMAT_OPTION) $< -o $@
 
 -include .deps/*.d
 
