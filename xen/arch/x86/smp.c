@@ -10,7 +10,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -531,14 +531,18 @@ __uxen_dispatch_ipi(int vector)
     unsigned long flags;
     int cpu = smp_processor_id();
     int no_rcu_softirq = 0;
+    uintptr_t ostack_top;
+    /* struct _uxen_info *oinfo; */
+    struct vcpu *ocurrent;
 
-    /* Set unconditionally -- this is the entry called on secondary
-     * cpus.  And this entry is otherwise not used. (to be confirmed) */
-    set_stack_top();
+    save_stack_top(ostack_top);
+    /* set and leave uxen_info set, since the rest of the code relies on it */
+    /* oinfo = get_uxen_info(); */
     set_uxen_info(&_uxen_info);
 
     local_irq_save(flags);
 
+    ocurrent = get_current();
     uxen_set_current(idle_vcpu[cpu]);
 
     perfc_incr(dpc_ipis);
@@ -577,7 +581,9 @@ DEBUG();
         process_pending_softirqs();
     }
 
-    uxen_set_current(NULL);
+    uxen_set_current(ocurrent);
+    /* set_uxen_info(oinfo); */
+    restore_stack_top(ostack_top);
 }
 
 void
