@@ -578,7 +578,8 @@ DEBUG();
     if (!no_rcu_softirq) {
         if (rcu_pending(cpu))
             rcu_check_callbacks(cpu);
-        process_pending_softirqs();
+        if (!in_irq() && local_irq_is_enabled())
+            process_pending_cpu_softirqs();
     }
 
     uxen_set_current(ocurrent);
