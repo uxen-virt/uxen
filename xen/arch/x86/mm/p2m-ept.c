@@ -1153,7 +1153,7 @@ void ept_p2m_init(struct p2m_domain *p2m)
     p2m->ro_update_l2_entry = ept_ro_update_l2_entry;
 
     p2m->p2m_l1_cache_id = p2m->domain->domain_id;
-    open_softirq(P2M_L1_CACHE_SOFTIRQ, p2m_l1_cache_flush_softirq);
+    open_softirq(P2M_L1_CACHE_CPU_SOFTIRQ, p2m_l1_cache_flush_softirq);
 }
 
 static void ept_dump_p2m_table(unsigned char key)

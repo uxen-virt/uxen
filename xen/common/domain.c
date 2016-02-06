@@ -189,7 +189,9 @@ struct vcpu *alloc_vcpu(
     init_timers(&v->timers);
 #endif  /* __UXEN__ */
 
+#ifndef __UXEN__
     tasklet_init(&v->continue_hypercall_tasklet, NULL, 0);
+#endif  /* __UXEN__ */
 
     if ( !zalloc_cpumask_var(&v->cpu_affinity) ||
          !zalloc_cpumask_var(&v->cpu_affinity_tmp) ||
@@ -1019,7 +1021,9 @@ static void complete_domain_destroy(struct rcu_head *head)
     {
         if ( (v = d->vcpu[i]) == NULL )
             continue;
+#ifndef __UXEN__
         tasklet_kill(&v->continue_hypercall_tasklet);
+#endif  /* __UXEN__ */
         vcpu_destroy(v);
         sched_destroy_vcpu(v);
 #ifndef __UXEN__

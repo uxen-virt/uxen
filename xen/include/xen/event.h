@@ -74,13 +74,13 @@ void notify_via_xen_event_channel(struct domain *ld, int lport);
             clear_bit(_VPF_blocked_in_xen, &current->pause_flags);      \
             break;                                                      \
         }                                                               \
-        vcpu_raise_softirq(current, SCHEDULE_SOFTIRQ);			\
+        vcpu_raise_softirq(current, SCHEDULE_VCPU_SOFTIRQ);             \
     } while ( 0 )
 
 #define prepare_wait_on_xen_event_channel(port)                         \
     do {                                                                \
         set_bit(_VPF_blocked_in_xen, &current->pause_flags);            \
-        vcpu_raise_softirq(current, SCHEDULE_SOFTIRQ);			\
+        vcpu_raise_softirq(current, SCHEDULE_VCPU_SOFTIRQ);             \
         mb(); /* set blocked status /then/ caller does his work */      \
     } while ( 0 )
 

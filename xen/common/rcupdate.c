@@ -158,7 +158,7 @@ static void force_quiescent_state(struct rcu_data *rdp,
                                   struct rcu_ctrlblk *rcp)
 {
     cpumask_t cpumask;
-    raise_softirq(RCU_SOFTIRQ);
+    raise_softirq(RCU_CPU_SOFTIRQ);
     if (unlikely(rdp->qlen - rdp->last_rs_qlen > rsinterval)) {
         rdp->last_rs_qlen = rdp->qlen;
         /*
@@ -166,7 +166,7 @@ static void force_quiescent_state(struct rcu_data *rdp,
          * rdp->cpu is the current cpu.
          */
         cpumask_andnot(&cpumask, &rcp->cpumask, cpumask_of(rdp->cpu));
-        cpumask_raise_softirq(&cpumask, RCU_SOFTIRQ);
+        cpumask_raise_softirq(&cpumask, RCU_CPU_SOFTIRQ);
     }
 }
 
@@ -223,7 +223,7 @@ static void rcu_do_batch(struct rcu_data *rdp)
     if (!rdp->donelist)
         rdp->donetail = &rdp->donelist;
     else
-        raise_softirq(RCU_SOFTIRQ);
+        raise_softirq(RCU_CPU_SOFTIRQ);
 }
 
 /*
@@ -414,7 +414,7 @@ int rcu_needs_cpu(int cpu)
 
 void rcu_check_callbacks(int cpu)
 {
-    raise_softirq(RCU_SOFTIRQ);
+    raise_softirq(RCU_CPU_SOFTIRQ);
 }
 
 #ifndef __UXEN__
@@ -497,5 +497,5 @@ void __init rcu_init(void)
     void *cpu = (void *)(long)smp_processor_id();
     cpu_callback(&cpu_nfb, CPU_UP_PREPARE, cpu);
     register_cpu_notifier(&cpu_nfb);
-    open_softirq(RCU_SOFTIRQ, rcu_process_callbacks);
+    open_softirq(RCU_CPU_SOFTIRQ, rcu_process_callbacks);
 }

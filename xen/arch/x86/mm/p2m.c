@@ -1844,7 +1844,7 @@ p2m_l1_cache_flush(void)
     atomic_inc(&p2m_l1_cache_gen);
     if ((oldgen ^ _atomic_read(p2m_l1_cache_gen)) &
         ((P2M_L1_CACHE_GEN_MASK + 1) >> 1))
-        cpumask_raise_softirq(&cpu_online_map, P2M_L1_CACHE_SOFTIRQ);
+        cpumask_raise_softirq(&cpu_online_map, P2M_L1_CACHE_CPU_SOFTIRQ);
 }
 
 void

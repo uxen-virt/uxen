@@ -3012,7 +3012,9 @@ vmx_execute(struct vcpu *v)
         }
     }
 
+#ifndef __UXEN__
     hvm_maybe_deassert_evtchn_irq();
+#endif  /* __UXEN__ */
 
     idtv_info = __vmread(IDT_VECTORING_INFO);
     if (

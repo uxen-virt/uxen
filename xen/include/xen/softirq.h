@@ -3,14 +3,20 @@
 
 /* Low-latency softirqs come first in the following list. */
 enum {
-    TIMER_SOFTIRQ = 0,
-    SCHEDULE_SOFTIRQ,
+    /* cpu0 */
+    TIMER_CPU0_SOFTIRQ = 0,
+
+    /* vcpu */
+    TIMER_VCPU_SOFTIRQ,
+    SCHEDULE_VCPU_SOFTIRQ,
 #ifndef __UXEN__
     NEW_TLBFLUSH_CLOCK_PERIOD_SOFTIRQ,
 #endif  /* __UXEN__ */
-    RCU_SOFTIRQ,
-    TASKLET_SOFTIRQ,
-    P2M_L1_CACHE_SOFTIRQ,
+
+    /* cpu */
+    RCU_CPU_SOFTIRQ,
+    TASKLET_SCHEDULE_CPU_SOFTIRQ,
+
     NR_COMMON_SOFTIRQS
 };
 
@@ -22,7 +28,7 @@ enum {
 #include <asm/hardirq.h>
 #include <asm/softirq.h>
 
-#define NR_SOFTIRQS (NR_COMMON_SOFTIRQS + NR_ARCH_SOFTIRQS)
+#define NR_SOFTIRQS (NR_ARCH_SOFTIRQS)
 
 typedef void (*softirq_handler)(void);
 typedef void (*softirq_handler_vcpu)(struct vcpu *);
@@ -45,7 +51,5 @@ void raise_softirq(unsigned int nr);
  * Use this instead of do_softirq() when you do not want to be preempted.
  */
 void process_pending_softirqs(void);
-
-void process_pending_cpu_softirqs(void);
 
 #endif /* __XEN_SOFTIRQ_H__ */

@@ -321,12 +321,12 @@ void new_tlbflush_clock_period(void)
     ASSERT(tlbflush_clock == 0);
     tlbflush_clock++;
 }
-#endif  /* __UXEN__ */
 
 void smp_send_event_check_mask(const cpumask_t *mask)
 {
     send_IPI_mask(mask, EVENT_CHECK_VECTOR);
 }
+#endif  /* __UXEN__ */
 
 /*
  * Structure and data for smp_call_function()/on_selected_cpus().
@@ -356,16 +356,16 @@ void smp_call_function(
 static __interface_fn_fn uintptr_t
 __uxen_smp_call_function_interrupt(uintptr_t arg)
 {
-    /* uintptr_t old_stack_top; */
+    uintptr_t old_stack_top;
     unsigned long flags;
 
     local_irq_save(flags);
-    /* save_stack_top(old_stack_top); */
+    save_stack_top(old_stack_top);
 
     /* __smp_call_function_interrupt checks if this cpu was targeted */
     __smp_call_function_interrupt();
 
-    /* restore_stack_top(old_stack_top); */
+    restore_stack_top(old_stack_top);
     local_irq_restore(flags);
 
     return 0;
@@ -530,7 +530,6 @@ __uxen_dispatch_ipi(int vector)
 {
     unsigned long flags;
     int cpu = smp_processor_id();
-    int no_rcu_softirq = 0;
     uintptr_t ostack_top;
     /* struct _uxen_info *oinfo; */
     struct vcpu *ocurrent;
@@ -550,14 +549,6 @@ __uxen_dispatch_ipi(int vector)
     {
     case UXEN_RESUME_VECTOR:
         do_hvm_cpu_up(NULL);
-        no_rcu_softirq = 1;
-        break;
-    case INVALIDATE_TLB_VECTOR:
-DEBUG();
-        smp_invalidate_interrupt();
-        break;
-    case EVENT_CHECK_VECTOR:
-        // smp_event_check_interrupt();
         break;
     case CALL_FUNCTION_VECTOR:
 	smp_call_function_interrupt(NULL);
@@ -574,13 +565,6 @@ DEBUG();
     }
 
     local_irq_restore(flags);
-
-    if (!no_rcu_softirq) {
-        if (rcu_pending(cpu))
-            rcu_check_callbacks(cpu);
-        if (!in_irq() && local_irq_is_enabled())
-            process_pending_cpu_softirqs();
-    }
 
     uxen_set_current(ocurrent);
     /* set_uxen_info(oinfo); */
@@ -611,7 +595,6 @@ uxen_ipi_mask(const cpumask_t *cpumask, int vector)
 	printk("uxen_ipi_mask vector %d\n", vector);
 	/* fallthrough */
     case UXEN_RESUME_VECTOR:
-    case EVENT_CHECK_VECTOR:
     case CALL_FUNCTION_VECTOR:
 #ifdef CRASH_DEBUG
     case GDB_STOP_VECTOR:

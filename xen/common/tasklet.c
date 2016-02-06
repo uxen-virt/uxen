@@ -15,7 +15,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -45,7 +45,9 @@ static bool_t tasklets_initialised;
 DEFINE_PER_CPU(unsigned long, tasklet_work_to_do);
 
 static DEFINE_PER_CPU(struct list_head, tasklet_list);
+#ifndef __UXEN__
 static DEFINE_PER_CPU(struct list_head, softirq_tasklet_list);
+#endif  /* __UXEN__ */
 
 /* Protects all lists and tasklet structures. */
 static DEFINE_SPINLOCK(tasklet_lock);
@@ -54,6 +56,7 @@ static void tasklet_enqueue(struct tasklet *t)
 {
     unsigned int cpu = t->scheduled_on;
 
+#ifndef __UXEN__
     if ( t->is_softirq )
     {
         struct list_head *list = &per_cpu(softirq_tasklet_list, cpu);
@@ -63,11 +66,12 @@ static void tasklet_enqueue(struct tasklet *t)
             cpu_raise_softirq(cpu, TASKLET_SOFTIRQ);
     }
     else
+#endif  /* __UXEN__ */
     {
         unsigned long *work_to_do = &per_cpu(tasklet_work_to_do, cpu);
         list_add_tail(&t->list, &per_cpu(tasklet_list, cpu));
         if ( !test_and_set_bit(_TASKLET_enqueued, work_to_do) )
-            cpu_raise_softirq(cpu, SCHEDULE_SOFTIRQ);
+            cpu_raise_softirq(cpu, TASKLET_SCHEDULE_CPU_SOFTIRQ);
     }
 }
 
@@ -157,11 +161,12 @@ void do_tasklet(void)
     if ( list_empty(list) )
         clear_bit(_TASKLET_enqueued, work_to_do);        
 
-    raise_softirq(SCHEDULE_SOFTIRQ);
+    raise_softirq(TASKLET_SCHEDULE_CPU_SOFTIRQ);
 
     spin_unlock_irq(&tasklet_lock);
 }
 
+#ifndef __UXEN__
 /* Softirq context work */
 static void tasklet_softirq_action(void)
 {
@@ -177,6 +182,7 @@ static void tasklet_softirq_action(void)
 
     spin_unlock_irq(&tasklet_lock);
 }
+#endif  /* __UXEN__ */
 
 void tasklet_kill(struct tasklet *t)
 {
@@ -232,12 +238,14 @@ void tasklet_init(
     t->data = data;
 }
 
+#ifndef __UXEN__
 void softirq_tasklet_init(
     struct tasklet *t, void (*func)(unsigned long), unsigned long data)
 {
     tasklet_init(t, func, data);
     t->is_softirq = 1;
 }
+#endif  /* __UXEN__ */
 
 static int cpu_callback(
     struct notifier_block *nfb, unsigned long action, void *hcpu)
@@ -248,12 +256,16 @@ static int cpu_callback(
     {
     case CPU_UP_PREPARE:
         INIT_LIST_HEAD(&per_cpu(tasklet_list, cpu));
+#ifndef __UXEN__
         INIT_LIST_HEAD(&per_cpu(softirq_tasklet_list, cpu));
+#endif  /* __UXEN__ */
         break;
     case CPU_UP_CANCELED:
     case CPU_DEAD:
         migrate_tasklets_from_cpu(cpu, &per_cpu(tasklet_list, cpu));
+#ifndef __UXEN__
         migrate_tasklets_from_cpu(cpu, &per_cpu(softirq_tasklet_list, cpu));
+#endif  /* __UXEN__ */
         break;
     default:
         break;
@@ -267,12 +279,42 @@ static struct notifier_block cpu_nfb = {
     .priority = 99
 };
 
+static void
+tasklet_schedule_action(void)
+{
+    unsigned long *tasklet_work = &this_cpu(tasklet_work_to_do);
+    bool_t tasklet_work_scheduled = 0;
+
+    /* Update tasklet scheduling status. */
+    switch ( *tasklet_work ) {
+    case TASKLET_enqueued:
+        set_bit(_TASKLET_scheduled, tasklet_work);
+    case TASKLET_enqueued|TASKLET_scheduled:
+        tasklet_work_scheduled = 1;
+        break;
+    case TASKLET_scheduled:
+        clear_bit(_TASKLET_scheduled, tasklet_work);
+    case 0:
+        /*tasklet_work_scheduled = 0;*/
+        break;
+    default:
+        BUG();
+    }
+
+    if (tasklet_work_scheduled)
+        do_tasklet();
+}
+
 void __init tasklet_subsys_init(void)
 {
     void *hcpu = (void *)(long)smp_processor_id();
     cpu_callback(&cpu_nfb, CPU_UP_PREPARE, hcpu);
     register_cpu_notifier(&cpu_nfb);
+#ifndef __UXEN__
     open_softirq(TASKLET_SOFTIRQ, tasklet_softirq_action);
+#else  /* __UXEN__ */
+    open_softirq(TASKLET_SCHEDULE_CPU_SOFTIRQ, tasklet_schedule_action);
+#endif  /* __UXEN__ */
     tasklets_initialised = 1;
 }
 

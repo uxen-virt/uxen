@@ -2481,9 +2481,10 @@ void vcpu_kick(struct vcpu *v)
     bool_t running = v->is_running;
     vcpu_unblock(v);
     if ( running && (in_irq() || (v != current)) )
-        vcpu_raise_softirq(v, VCPU_KICK_SOFTIRQ);
+        vcpu_raise_softirq(v, KICK_VCPU_SOFTIRQ);
 }
 
+#ifndef __UXEN__
 void vcpu_mark_events_pending(struct vcpu *v)
 {
     int already_pending = test_and_set_bit(
@@ -2498,6 +2499,7 @@ DEBUG();
     else
         vcpu_kick(v);
 }
+#endif  /* __UXEN__ */
 
 static void vcpu_kick_softirq(struct vcpu *v)
 {
@@ -2510,19 +2512,19 @@ static void vcpu_kick_softirq(struct vcpu *v)
 
 static int __init init_vcpu_kick_softirq(void)
 {
-    open_softirq_vcpu(VCPU_KICK_SOFTIRQ, vcpu_kick_softirq);
+    open_softirq_vcpu(KICK_VCPU_SOFTIRQ, vcpu_kick_softirq);
     return 0;
 }
 __initcall(init_vcpu_kick_softirq);
 
-static void vcpu_tsc_softirq(struct vcpu *v)
+static void vcpu_sync_tsc_softirq(struct vcpu *v)
 {
     hvm_funcs.set_tsc_offset(v, v->arch.hvm_vcpu.cache_tsc_offset);
 }
 
 static int __init init_vcpu_tsc_softirq(void)
 {
-    open_softirq_vcpu(VCPU_TSC_SOFTIRQ, vcpu_tsc_softirq);
+    open_softirq_vcpu(SYNC_TSC_VCPU_SOFTIRQ, vcpu_sync_tsc_softirq);
     return 0;
 }
 __initcall(init_vcpu_tsc_softirq);

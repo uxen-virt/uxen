@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -21,7 +21,7 @@ static void
 hostsched_vcpu_sleep(const struct scheduler *ops, struct vcpu *v)
 {
 
-    vcpu_raise_softirq(v, SCHEDULE_SOFTIRQ);
+    vcpu_raise_softirq(v, SCHEDULE_VCPU_SOFTIRQ);
 }
 
 static void

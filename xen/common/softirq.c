@@ -41,22 +41,17 @@
 irq_cpustat_t irq_stat[NR_CPUS];
 #endif
 
-static softirq_handler softirq_handlers[NR_SOFTIRQS];
-static softirq_handler_vcpu softirq_handlers_vcpu[NR_SOFTIRQS];
+static union {
+    softirq_handler cpu;
+    softirq_handler_vcpu vcpu;
+} softirq_handlers[NR_SOFTIRQS];
 
 static void __do_softirq(unsigned long ignore_mask)
 {
-    unsigned int i, cpu;
+    unsigned int i, cpu = smp_processor_id();
     unsigned long pending;
 
-    for ( ; ; )
-    {
-        /*
-         * Initialise @cpu on every iteration: SCHEDULE_SOFTIRQ may move
-         * us to another processor.
-         */
-        cpu = smp_processor_id();
-
+    for ( ; ; ) {
         if ( rcu_pending(cpu) )
             rcu_check_callbacks(cpu);
 
@@ -66,48 +61,41 @@ static void __do_softirq(unsigned long ignore_mask)
 
         i = find_first_set_bit(pending);
         clear_bit(i, &softirq_pending(cpu));
-#ifdef __UXEN__
-        /* most softirq only ever on cpu0 idle thread */
-        if ((cpu || !is_idle_vcpu(current)) &&
-            i != RCU_SOFTIRQ && i != P2M_L1_CACHE_SOFTIRQ)
-            WARN_ONCE();
         switch (i) {
-        case SCHEDULE_SOFTIRQ:
-            break;
-        case RCU_SOFTIRQ:
-            break;
-        case P2M_L1_CACHE_SOFTIRQ:
-            break;
-        case TIMER_SOFTIRQ:
+        case TIMER_CPU0_SOFTIRQ:
             perfc_incr(do_TIMER_SOFTIRQ);
             break;
-        case TIME_CALIBRATE_SOFTIRQ:
-            perfc_incr(do_TIME_CALIBRATE_SOFTIRQ);
+        case RCU_CPU_SOFTIRQ:
+            break;
+        case TASKLET_SCHEDULE_CPU_SOFTIRQ:
+            break;
+        case P2M_L1_CACHE_CPU_SOFTIRQ:
             break;
         default:
             printk("vm%u.%u softirq %d on cpu %d => %S\n",
                    current->domain->domain_id, current->vcpu_id, i, cpu,
-                   (printk_symbol)softirq_handlers[i]);
+                   (printk_symbol)softirq_handlers[i].cpu);
+            DEBUG();
         }
-        ASSERT(softirq_handlers[i]);
-#endif  /* __UXEN__ */
-        (*softirq_handlers[i])();
+        ASSERT(softirq_handlers[i].cpu);
+        (*softirq_handlers[i].cpu)();
     }
 }
 
 void process_pending_softirqs(void)
 {
-    ASSERT(!in_irq() && local_irq_is_enabled());
-    /* Do not enter scheduler as it can preempt the calling context. */
-    __do_softirq(1ul<<SCHEDULE_SOFTIRQ |
-                 (is_idle_vcpu(current) ? 0 : (1ul << TIMER_SOFTIRQ)));
-}
+    ASSERT(!in_irq());
+    ASSERT(local_irq_is_enabled());
+    __do_softirq(
+        /* timer softirq only on cpu0 idle thread */
+        (!smp_processor_id() && is_idle_vcpu(current) ?
+         0 : (1ul << TIMER_CPU0_SOFTIRQ)) |
+        /* tasklet softirq only on idle thread */
+        (is_idle_vcpu(current) ? 0 : (1ul << TASKLET_SCHEDULE_CPU_SOFTIRQ)));
 
-void process_pending_cpu_softirqs(void)
-{
-    ASSERT(!in_irq() && local_irq_is_enabled());
-    /* Only process rcu and hap l1 cache softirqs. */
-    __do_softirq(~(1ul << RCU_SOFTIRQ | 1ul << P2M_L1_CACHE_SOFTIRQ));
+    /* kick idle thread if any softirqs are still pending (incl. masked) */
+    if (softirq_pending(smp_processor_id()))
+        smp_send_event_check_cpu(smp_processor_id());
 }
 
 /* asmlinkage */ void do_softirq(void)
@@ -126,28 +114,25 @@ static void __do_softirq_vcpu(struct vcpu *v, unsigned long ignore_mask)
 
     ASSERT(v == current);
 
-    for ( ; ; )
-    {
+    for ( ; ; ) {
         if ( (pending = (v->softirq_pending & ~ignore_mask)) == 0)
             break;
 
         i = find_first_set_bit(pending);
         clear_bit(i, &v->softirq_pending);
         switch (i) {
-        case TIMER_SOFTIRQ:
-        case SCHEDULE_SOFTIRQ:
-#if 0
-        case TIME_CALIBRATE_SOFTIRQ:
-#endif
-        case VCPU_KICK_SOFTIRQ:
-        case VCPU_TSC_SOFTIRQ:
+        case TIMER_VCPU_SOFTIRQ:
+        case SCHEDULE_VCPU_SOFTIRQ:
+        case KICK_VCPU_SOFTIRQ:
+        case SYNC_TSC_VCPU_SOFTIRQ:
             break;
         default:
-            printk("softirq %i on vcpu %p => %p\n", i, v,
-                   softirq_handlers_vcpu[i]);
+            printk("softirq %i on vcpu %p => %S\n", i, v,
+                   (printk_symbol)softirq_handlers[i].vcpu);
+            DEBUG();
         }
-        ASSERT(softirq_handlers_vcpu[i]);
-        (*softirq_handlers_vcpu[i])(v);
+        ASSERT(softirq_handlers[i].vcpu);
+        (*softirq_handlers[i].vcpu)(v);
     }
 }
 
@@ -157,7 +142,7 @@ check_vcpu_timer_interrupt(struct vcpu *v)
     struct vm_vcpu_info_shared *vci = v->vm_vcpu_info_shared;
     if (vci && vci->vci_has_timer_interrupt) {
         perfc_incr(vcpu_timer);
-        set_bit(TIMER_SOFTIRQ, &v->softirq_pending);
+        set_bit(TIMER_VCPU_SOFTIRQ, &v->softirq_pending);
         vci->vci_has_timer_interrupt = 0;
     }
 }
@@ -168,7 +153,7 @@ check_vcpu_timer_interrupt(struct vcpu *v)
 
     check_vcpu_timer_interrupt(v);
 
-    /* executes without vmcs loaded, softirqs depending on vmcs
+    /* this executes without vmcs loaded, softirqs depending on vmcs
      * need to be ignored */
     __do_softirq_vcpu(v, VCPU_SOFTIRQ_WITH_VMCS_MASK);
 }
@@ -194,15 +179,13 @@ check_work_vcpu(struct vcpu *v)
     return 0;
 }
 
-DECLARE_PER_CPU(uint8_t, timer_had_timeout);
-
 void
 do_run_idle_thread(uint32_t had_timeout)
 {
 
     if (had_timeout) {
-        this_cpu(timer_had_timeout) = 1;
-        set_bit(TIMER_SOFTIRQ, &softirq_pending(0 /* smp_processor_id() */));
+        ASSERT(!smp_processor_id());
+        set_bit(TIMER_CPU0_SOFTIRQ, &softirq_pending(smp_processor_id()));
         platform_time_sync();
     }
 
@@ -212,22 +195,21 @@ do_run_idle_thread(uint32_t had_timeout)
 void open_softirq(int nr, softirq_handler handler)
 {
     ASSERT(nr < NR_SOFTIRQS);
-    softirq_handlers[nr] = handler;
+    ASSERT(!softirq_handlers[nr].cpu || softirq_handlers[nr].cpu == handler);
+    softirq_handlers[nr].cpu = handler;
 }
 
 void open_softirq_vcpu(int nr, softirq_handler_vcpu handler)
 {
     ASSERT(nr < NR_SOFTIRQS);
-    softirq_handlers_vcpu[nr] = handler;
+    ASSERT(!softirq_handlers[nr].vcpu || softirq_handlers[nr].vcpu == handler);
+    softirq_handlers[nr].vcpu = handler;
 }
 
 void cpumask_raise_softirq(const cpumask_t *mask, unsigned int nr)
 {
     int cpu;
     cpumask_t send_mask;
-
-    if (nr != RCU_SOFTIRQ && nr != P2M_L1_CACHE_SOFTIRQ)
-        WARN_ONCE();
 
     cpumask_clear(&send_mask);
     for_each_cpu(cpu, mask)
@@ -240,25 +222,23 @@ void cpumask_raise_softirq(const cpumask_t *mask, unsigned int nr)
 void cpu_raise_softirq(unsigned int cpu, unsigned int nr)
 {
     if ( !test_and_set_bit(nr, &softirq_pending(cpu))
-#ifndef __UXEN__
          && (cpu != smp_processor_id())
-#else  /* __UXEN__ */
          && (!is_idle_vcpu(current))
-#endif  /* __UXEN__ */
         )
         smp_send_event_check_cpu(cpu);
 }
 
 void raise_softirq(unsigned int nr)
 {
-    extern softirq_handler softirq_handlers[];
-    ASSERT(softirq_handlers[nr] != NULL);
+    ASSERT(softirq_handlers[nr].cpu != NULL);
     switch (nr) {
-    case RCU_SOFTIRQ:
-    case P2M_L1_CACHE_SOFTIRQ:
+    case RCU_CPU_SOFTIRQ:
+    case TASKLET_SCHEDULE_CPU_SOFTIRQ:
+    case P2M_L1_CACHE_CPU_SOFTIRQ:
         set_bit(nr, &softirq_pending(smp_processor_id()));
         break;
     default:
+        WARN_ONCE();
         set_bit(nr, &softirq_pending(0 /* smp_processor_id() */));
         smp_send_event_check_cpu(0 /* smp_processor_id() */);
     }

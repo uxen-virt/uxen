@@ -15,7 +15,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -693,7 +693,7 @@ static long do_block(void)
     else
     {
         TRACE_2D(TRC_SCHED_BLOCK, v->domain->domain_id, v->vcpu_id);
-        vcpu_raise_softirq(v, SCHEDULE_SOFTIRQ);
+        vcpu_raise_softirq(v, SCHEDULE_VCPU_SOFTIRQ);
     }
 
     return 0;
@@ -761,7 +761,7 @@ static long do_poll(struct sched_poll *sched_poll)
         set_timer(&v->poll_timer, sched_poll->timeout);
 
     TRACE_2D(TRC_SCHED_BLOCK, d->domain_id, v->vcpu_id);
-    vcpu_raise_softirq(v, SCHEDULE_SOFTIRQ);
+    vcpu_raise_softirq(v, SCHEDULE_VCPU_SOFTIRQ);
 
     return 0;
 
@@ -783,7 +783,7 @@ static long do_yield(void)
     vcpu_schedule_unlock_irq(v);
 
     TRACE_2D(TRC_SCHED_YIELD, current->domain->domain_id, current->vcpu_id);
-    vcpu_raise_softirq(v, SCHEDULE_SOFTIRQ);
+    vcpu_raise_softirq(v, SCHEDULE_VCPU_SOFTIRQ);
     return 0;
 }
 
@@ -1196,6 +1196,7 @@ void schedule_from_vcpu(struct vcpu *prev)
     spin_unlock_irq(sd->schedule_lock);
 }
 
+#ifndef __UXEN__
 /* 
  * The main function
  * - deschedule the current domain (scheduler independent).
@@ -1203,7 +1204,6 @@ void schedule_from_vcpu(struct vcpu *prev)
  */
 static void schedule(void)
 {
-#ifndef __UXEN__
     struct vcpu          *prev = current, *next = NULL;
     s_time_t              now = NOW();
     struct scheduler     *sched;
@@ -1304,33 +1304,8 @@ static void schedule(void)
     vcpu_periodic_timer_work(next);
 
     context_switch(prev, next);
-#else
-    unsigned long        *tasklet_work = &this_cpu(tasklet_work_to_do);
-    bool_t                tasklet_work_scheduled = 0;
-
-    if (is_idle_vcpu(current)) {
-        /* Update tasklet scheduling status. */
-        switch ( *tasklet_work ) {
-        case TASKLET_enqueued:
-            set_bit(_TASKLET_scheduled, tasklet_work);
-        case TASKLET_enqueued|TASKLET_scheduled:
-            tasklet_work_scheduled = 1;
-            break;
-        case TASKLET_scheduled:
-            clear_bit(_TASKLET_scheduled, tasklet_work);
-        case 0:
-            /*tasklet_work_scheduled = 0;*/
-            break;
-        default:
-            BUG();
-        }
-
-        if (tasklet_work_scheduled)
-            do_tasklet();
-    } else
-        DEBUG();
-#endif
 }
+#endif  /* __UXEN__ */
 
 int
 schedule_vcpu(struct vcpu *next)
@@ -1498,8 +1473,7 @@ void __init scheduler_init(void)
     struct domain *idle_domain;
     int i;
 
-    open_softirq(SCHEDULE_SOFTIRQ, schedule);
-    open_softirq_vcpu(SCHEDULE_SOFTIRQ, schedule_from_vcpu);
+    open_softirq_vcpu(SCHEDULE_VCPU_SOFTIRQ, schedule_from_vcpu);
 
     for ( i = 0; i < ARRAY_SIZE(schedulers); i++ )
     {

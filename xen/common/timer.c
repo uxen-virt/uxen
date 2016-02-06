@@ -57,8 +57,6 @@ static DEFINE_RCU_READ_LOCK(timer_cpu_read_lock);
 
 DEFINE_PER_CPU(s_time_t, timer_deadline);
 
-DEFINE_PER_CPU(uint8_t, timer_had_timeout);
-
 struct susp_iter {
     s_time_t now;
     int n;
@@ -237,11 +235,11 @@ static inline void activate_timer(struct timer *timer)
     list_del(&timer->inactive);
     if (timer->type == TIMER_TYPE_cpu) {
         if ( add_entry(timer, &per_cpu(timers, timer->cpu)) )
-            cpu_raise_softirq(timer->cpu, TIMER_SOFTIRQ);
+            cpu_raise_softirq(timer->cpu, TIMER_CPU0_SOFTIRQ);
     } else {
         ASSERT(timer->type == TIMER_TYPE_vcpu);
         if ( add_entry(timer, &timer->vcpu->timers) )
-            vcpu_raise_softirq(timer->vcpu, TIMER_SOFTIRQ);
+            vcpu_raise_softirq(timer->vcpu, TIMER_VCPU_SOFTIRQ);
     }
 }
 
@@ -249,14 +247,14 @@ static inline void deactivate_timer(struct timer *timer)
 {
     if (timer->type == TIMER_TYPE_cpu) {
         if ( remove_entry(timer, &per_cpu(timers, timer->cpu)) )
-            cpu_raise_softirq(timer->cpu, TIMER_SOFTIRQ);
+            cpu_raise_softirq(timer->cpu, TIMER_CPU0_SOFTIRQ);
 
         timer->status = TIMER_STATUS_inactive;
         list_add(&timer->inactive, &per_cpu(timers, timer->cpu).inactive);
     } else {
         ASSERT(timer->type == TIMER_TYPE_vcpu);
         if ( remove_entry(timer, &timer->vcpu->timers) )
-            vcpu_raise_softirq(timer->vcpu, TIMER_SOFTIRQ);
+            vcpu_raise_softirq(timer->vcpu, TIMER_VCPU_SOFTIRQ);
 
         timer->status = TIMER_STATUS_inactive;
         list_add(&timer->inactive, &timer->vcpu->timers.inactive);
@@ -654,25 +652,15 @@ static void timer_softirq_action(struct timers *ts, struct vcpu *v)
     if ( (ts->list != NULL) && (ts->list->expires < deadline) )
         deadline = ts->list->expires;
     if (!v) {
-        if (this_cpu(timer_had_timeout)) {
-#if 0 /* There's no point doing this since this doesn't condition the host timer clock */
-            if (!executed) {
-                spin_unlock_irq(&ts->lock);
-                platform_time_calibration();
-                spin_lock_irq(&ts->lock);
-            }
-#endif
-            this_cpu(timer_had_timeout) = 0;
-        }
         this_cpu(timer_deadline) =
             (deadline == STIME_MAX) ? 0 : deadline + timer_slop;
         if ( !reprogram_timer(this_cpu(timer_deadline), v) )
-            raise_softirq(TIMER_SOFTIRQ);
+            raise_softirq(TIMER_CPU0_SOFTIRQ);
     } else {
         v->timer_deadline =
             (deadline == STIME_MAX) ? 0 : deadline + timer_slop;
         if ( !reprogram_timer(v->timer_deadline, v) )
-            vcpu_raise_softirq(v, TIMER_SOFTIRQ);
+            vcpu_raise_softirq(v, TIMER_VCPU_SOFTIRQ);
     }
 
     spin_unlock_irq(&ts->lock);
@@ -789,9 +777,9 @@ resume_one_timer(struct timers *ts, struct timer *timer, void *opaque)
         timer->suspended = 0;
         timer->expires += it->now;
         if (timer->type == TIMER_TYPE_cpu)
-            cpu_raise_softirq(timer->cpu, TIMER_SOFTIRQ);
+            cpu_raise_softirq(timer->cpu, TIMER_CPU0_SOFTIRQ);
         else if (timer->type == TIMER_TYPE_vcpu)
-            vcpu_raise_softirq(timer->vcpu, TIMER_SOFTIRQ);
+            vcpu_raise_softirq(timer->vcpu, TIMER_VCPU_SOFTIRQ);
     }
     it->n += s;
 }
@@ -939,7 +927,7 @@ static void migrate_timers_from_cpu(unsigned int old_cpu)
     local_irq_enable();
 
     if ( notify )
-        cpu_raise_softirq(new_cpu, TIMER_SOFTIRQ);
+        cpu_raise_softirq(new_cpu, TIMER_CPU0_SOFTIRQ);
 }
 
 static struct timer *dummy_heap;
@@ -984,8 +972,8 @@ void __init timer_init(void)
 {
     void *cpu = (void *)(long)smp_processor_id();
 
-    open_softirq(TIMER_SOFTIRQ, timer_softirq_action_this_cpu);
-    open_softirq_vcpu(TIMER_SOFTIRQ, timer_softirq_action_vcpu);
+    open_softirq(TIMER_CPU0_SOFTIRQ, timer_softirq_action_this_cpu);
+    open_softirq_vcpu(TIMER_VCPU_SOFTIRQ, timer_softirq_action_vcpu);
 
     /*
      * All CPUs initially share an empty dummy heap. Only those CPUs that

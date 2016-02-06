@@ -174,9 +174,9 @@ void hvm_isa_irq_assert_to_cpu(struct domain *d, unsigned int isa_irq,
     spin_unlock(&d->arch.hvm_domain.irq_lock);
 }
 
+#ifndef __UXEN__
 static void hvm_set_callback_irq_level(struct vcpu *v)
 {
-#ifndef __UXEN__
     struct domain *d = v->domain;
     struct hvm_irq *hvm_irq = &d->arch.hvm_domain.irq;
     unsigned int gsi, pdev, pintx, asserted;
@@ -221,9 +221,6 @@ static void hvm_set_callback_irq_level(struct vcpu *v)
 
  out:
     spin_unlock(&d->arch.hvm_domain.irq_lock);
-#else   /* __UXEN__ */
-    BUG();
-#endif  /* __UXEN__ */
 }
 
 void hvm_maybe_deassert_evtchn_irq(void)
@@ -238,7 +235,6 @@ void hvm_maybe_deassert_evtchn_irq(void)
 
 void hvm_assert_evtchn_irq(struct vcpu *v)
 {
-DEBUG();
     if ( unlikely(in_irq() || !local_irq_is_enabled()) )
     {
         tasklet_schedule(&v->arch.hvm_vcpu.assert_evtchn_irq_tasklet);
@@ -250,6 +246,7 @@ DEBUG();
     else if ( v->vcpu_id == 0 )
         hvm_set_callback_irq_level(v);
 }
+#endif  /* __UXEN__ */
 
 void hvm_set_pci_link_route(struct domain *d, u8 link, u8 isa_irq)
 {

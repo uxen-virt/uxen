@@ -218,11 +218,15 @@ struct vcpu
     /* Bitmask of CPUs which are holding onto this VCPU's state. */
     cpumask_var_t    vcpu_dirty_cpumask;
 
+#ifndef __UXEN__
     /* Tasklet for continue_hypercall_on_cpu(). */
     struct tasklet   continue_hypercall_tasklet;
+#endif  /* __UXEN__ */
 
+#ifndef __UXEN__
     /* Multicall information. */
     struct mc_state  mc_state;
+#endif  /* __UXEN__ */
 
 #ifndef __UXEN__
     struct waitqueue_vcpu *waitqueue_vcpu;

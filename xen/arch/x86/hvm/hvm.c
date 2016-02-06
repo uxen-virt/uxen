@@ -263,7 +263,7 @@ void hvm_set_guest_tsc_all_vcpus(u64 guest_tsc)
         if (v == current)
             hvm_funcs.set_tsc_offset(v, v->arch.hvm_vcpu.cache_tsc_offset);
         else
-            vcpu_raise_softirq(v, VCPU_TSC_SOFTIRQ);
+            vcpu_raise_softirq(v, SYNC_TSC_VCPU_SOFTIRQ);
     }
     domain_unlock(d);
 }
@@ -1471,10 +1471,12 @@ int hvm_vcpu_initialise(struct vcpu *v)
     if ( rc != 0 )
         goto fail5;
 
+#ifndef __UXEN__
     softirq_tasklet_init(
         &v->arch.hvm_vcpu.assert_evtchn_irq_tasklet,
         (void(*)(unsigned long))hvm_assert_evtchn_irq,
         (unsigned long)v);
+#endif  /* __UXEN__ */
 
     v->arch.user_regs.eflags = 2;
 
@@ -1523,7 +1525,9 @@ void hvm_vcpu_destroy(struct vcpu *v)
     free_compat_arg_xlat(v);
 #endif
 
+#ifndef __UXEN__
     tasklet_kill(&v->arch.hvm_vcpu.assert_evtchn_irq_tasklet);
+#endif  /* __UXEN__ */
     hvm_vcpu_cacheattr_destroy(v);
     vlapic_destroy(v);
     hvm_funcs.vcpu_destroy(v);

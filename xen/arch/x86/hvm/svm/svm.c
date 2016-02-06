@@ -2199,7 +2199,9 @@ svm_execute(struct vcpu *v)
                    v->vcpu_id, (uint16_t)exit_reason);
     }
 
+#ifndef __UXEN__
     hvm_maybe_deassert_evtchn_irq();
+#endif  /* __UXEN__ */
 
     vmcb->cleanbits.bytes = cpu_has_svm_cleanbits ? ~0u : 0u;
 
