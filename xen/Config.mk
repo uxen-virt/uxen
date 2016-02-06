@@ -44,3 +44,12 @@ else
 $(error UXEN_TARGET_ABI $(UXEN_TARGET_ABI) not supported)
 endif
 
+ifeq ($(TARGET_HOST),windows)
+TARGET_windows_only :=
+TARGET_osx_only := not-
+else ifeq ($(TARGET_HOST),osx)
+TARGET_windows_only := not-
+TARGET_osx_only :=
+else
+$(error invalid TARGET_HOST)
+endif
