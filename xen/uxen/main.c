@@ -815,7 +815,7 @@ __uxen_flush_rcu(uint32_t complete)
         process_pending_cpu_softirqs();
     }
 
-    hvm_cpu_down();
+    hvm_cpu_off();
     uxen_set_current(NULL);
     return !!atomic_read(this_cpu(flush_rcu_data).cpu_count);
 }
