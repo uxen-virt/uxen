@@ -400,8 +400,12 @@ int hostdrv_except_handler(char *, ...);
 #define uxen_smap_preempt_restore(smap) do { } while(0, 0)
 void set_host_preemption(uint64_t disable);
 void uxen_update_unixtime_generation(void);
-extern KEVENT uxen_idle_thread_event;
-#define uxen_signal_idle_thread() KeSetEvent(&uxen_idle_thread_event, 0, FALSE)
+extern PETHREAD uxen_idle_thread[];
+extern KEVENT uxen_idle_thread_event[];
+#define uxen_signal_idle_thread(cpu) do {                       \
+        if (uxen_idle_thread[cpu])                              \
+            KeSetEvent(&uxen_idle_thread_event[cpu], 0, FALSE); \
+    } while (0)
 int suspend_block(preemption_t i, uint32_t pages, uint32_t *reserve_increase);
 void uxen_op_init_free_allocs(void);
 int uxen_op_init(struct fd_assoc *, struct uxen_init_desc *, uint32_t,

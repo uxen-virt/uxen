@@ -1317,7 +1317,7 @@ uxen_pages_retire(preemption_t i, int cpu, uint32_t left)
                idle_free_count);
     idle_free_count += n;
     lck_spin_unlock(idle_free_lock);
-    signal_idle_thread();
+    signal_idle_thread(0);
     return n;
 }
 

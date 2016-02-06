@@ -38,9 +38,9 @@ static unsigned int percpu_area_size;
 
 uint32_t uxen_zero_mfn = ~0;
 
-static thread_t idle_thread = NULL;
-static semaphore_t idle_thread_exit = NULL;
-struct event_object idle_thread_event = EVENT_OBJECT_NULL;
+thread_t idle_thread[MAX_CPUS];
+static semaphore_t idle_thread_exit[MAX_CPUS];
+struct event_object idle_thread_event[MAX_CPUS];
 static int resume_requested = 0;
 static uint32_t idle_thread_suspended = 0;
 
@@ -200,14 +200,16 @@ update_ui_host_counter(void)
     uxen_info->ui_host_counter = now - host_counter_start;
 }
 
-void
+static void
 uxen_idle_thread_fn(void *context)
 {
+    unsigned int cpu = (unsigned int)context;
+    unsigned int host_cpu;
     uint32_t increase;
 
-    uxen_cpu_pin_first();
+    uxen_cpu_pin(cpu);
 
-    dprintk("idle thread ready\n");
+    dprintk("cpu%u: idle thread ready\n", cpu);
 
     while (uxen_info->ui_running) {
         uint32_t x;
@@ -216,22 +218,26 @@ uxen_idle_thread_fn(void *context)
         int had_timeout = 0;
         int ret;
 
-        now = mach_absolute_time();
+        if (!cpu) {
+            now = mach_absolute_time();
+            timeout = now + uxen_info->ui_host_idle_timeout;
+        }
 
         do {
             ret = event_wait(
-                &idle_thread_event, EVENT_INTERRUPTIBLE,
-                (uxen_info->ui_host_idle_timeout && !idle_thread_suspended) ?
-                now + uxen_info->ui_host_idle_timeout : EVENT_NO_TIMEOUT);
+                &idle_thread_event[cpu], EVENT_INTERRUPTIBLE,
+                (!cpu && uxen_info->ui_host_idle_timeout &&
+                 !idle_thread_suspended) ? timeout : EVENT_NO_TIMEOUT);
             if (ret == -1)
                 had_timeout = 1;
             else if (ret) {
-                dprintk("%s: event_wait error (%d)\n", __FUNCTION__, ret);
+                dprintk("%s: cpu%u event_wait error (%d)\n", __FUNCTION__,
+                        cpu, ret);
                 goto out;
             }
-            event_clear(&idle_thread_event);
+            event_clear(&idle_thread_event[cpu]);
             MemoryBarrier();
-            if (resume_requested) {
+            if (!cpu && resume_requested) {
                 idle_thread_suspended = 0;
                 printk_with_timestamp("power state change: resuming\n");
                 update_ui_host_counter();
@@ -244,13 +250,15 @@ uxen_idle_thread_fn(void *context)
                 fast_event_signal(&uxen_devext->de_suspend_event);
                 uxen_pages_decrease_reserve(i, increase);
                 now = mach_absolute_time();
+                for (host_cpu = 1; host_cpu < MAX_CPUS; host_cpu++)
+                    signal_idle_thread(host_cpu);
             }
         } while (idle_thread_suspended && uxen_info->ui_running);
 
         if (!uxen_info->ui_running)
             break;
 
-        if (uxen_info->ui_host_idle_timeout) {
+        if (!cpu && uxen_info->ui_host_idle_timeout) {
             timeout = now + uxen_info->ui_host_idle_timeout;
             now = mach_absolute_time();
             if (now >= timeout) {
@@ -275,7 +283,7 @@ uxen_idle_thread_fn(void *context)
             uxen_pages_decrease_reserve(i, increase);
             /* Reset a timeout if we were going to signal that a
              * timeout had occurred. */
-            if (had_timeout)
+            if (!cpu && had_timeout)
                 uxen_info->ui_host_idle_timeout = 1;
             continue;
         }
@@ -283,24 +291,28 @@ uxen_idle_thread_fn(void *context)
         if (OSDecrementAtomic(&uxen_devext->de_executing) == 1)
             fast_event_signal(&uxen_devext->de_suspend_event);
         uxen_pages_decrease_reserve(i, increase);
-        if (idle_free_list && idle_free_free_list())
-            signal_idle_thread();
+        if (!cpu && idle_free_list && idle_free_free_list())
+            signal_idle_thread(cpu);
     }
 
   out:
-    dprintk("idle thread exiting\n");
+    dprintk("cpu%u: idle thread exiting\n", cpu);
 
-    semaphore_signal(idle_thread_exit);
+    semaphore_signal(idle_thread_exit[cpu]);
 }
 
-void __cdecl
-signal_idle_thread(void)
+static void __cdecl
+op_signal_idle_thread(uint64_t mask)
 {
+    unsigned int host_cpu;
 
     if (uxen_info->ui_running == 0)
 	return;
 
-    event_signal(&idle_thread_event);
+    for (host_cpu = 0; host_cpu < MAX_CPUS; host_cpu++) {
+        if (mask & affinity_mask(host_cpu))
+            signal_idle_thread(host_cpu);
+    }
 }
 
 void
@@ -709,7 +721,7 @@ uxen_op_init(struct fd_assoc *fda)
     uxen_info->ui_kick_vcpu_cancel = vcpu_ipi_cancel;
     uxen_info->ui_wake_vm = wake_vm;
 
-    uxen_info->ui_signal_idle_thread = signal_idle_thread;
+    uxen_info->ui_signal_idle_thread = op_signal_idle_thread;
     uxen_info->ui_set_timer_vcpu = set_vcpu_timer;
 
     uxen_info->ui_notify_exception = notify_exception;
@@ -851,20 +863,27 @@ uxen_op_init(struct fd_assoc *fda)
     fast_event_clear(&uxen_devext->de_shutdown_done);
     uxen_info->ui_running = 1;
 
-    ret = event_init(&idle_thread_event, 0);
-    if (ret) {
-        fail_msg("create idle thread event failed: %d", ret);
-        goto out;
-    }
-    ret = create_thread(uxen_idle_thread_fn, NULL, &idle_thread,
-                        &idle_thread_exit, 0);
-    if (ret) {
-        fail_msg("create idle thread failed: %d", ret);
-        event_destroy(&idle_thread_event);
-        goto out;
-    }
+    for (host_cpu = 0; host_cpu < MAX_CPUS; host_cpu++) {
+        if ((active_mask & affinity_mask(host_cpu)) == 0)
+            continue;
+        idle_thread[host_cpu] = NULL;
+        ret = event_init(&idle_thread_event[host_cpu], 0);
+        if (ret) {
+            fail_msg("create cpu%u idle thread event failed: %d", host_cpu,
+                     ret);
+            goto out;
+        }
+        ret = create_thread(uxen_idle_thread_fn, (void *)(uintptr_t)host_cpu,
+                            &idle_thread[host_cpu],
+                            &idle_thread_exit[host_cpu], 0);
+        if (ret) {
+            fail_msg("create cpu%u idle thread failed: %d", host_cpu, ret);
+            event_destroy(&idle_thread_event[host_cpu]);
+            goto out;
+        }
 
-    dprintk("setup idle thread done\n");
+        dprintk("setup cpu%u idle thread done\n", host_cpu);
+    }
 
     /* init cpu dpc */
 
@@ -877,7 +896,7 @@ uxen_op_init(struct fd_assoc *fda)
     uxen_cpu_unpin();
 
     /* run idle thread to make it pick up the current timeout */
-    event_signal(&idle_thread_event);
+    signal_idle_thread(0);
 
     if (OSDecrementAtomic(&uxen_devext->de_executing) == 1)
         fast_event_signal(&uxen_devext->de_suspend_event);
@@ -897,6 +916,7 @@ int
 uxen_op_shutdown(void)
 {
     struct vm_info *vmi, *tvmi;
+    unsigned int host_cpu;
 
     if (uxen_info == NULL)
         goto out;
@@ -939,12 +959,15 @@ uxen_op_shutdown(void)
 
     uxen_info->ui_running = 0;
 
-    if (idle_thread) {
-        event_signal(&idle_thread_event);
-        semaphore_wait(idle_thread_exit);
-        semaphore_destroy(kernel_task, idle_thread_exit);
-        event_destroy(&idle_thread_event);
-        idle_thread = NULL;
+    for (host_cpu = 0; host_cpu < MAX_CPUS; host_cpu++)
+        signal_idle_thread(host_cpu);
+    for (host_cpu = 0; host_cpu < MAX_CPUS; host_cpu++) {
+        if (!idle_thread[host_cpu])
+            continue;
+        semaphore_wait(idle_thread_exit[host_cpu]);
+        semaphore_destroy(kernel_task, idle_thread_exit[host_cpu]);
+        event_destroy(&idle_thread_event[host_cpu]);
+        idle_thread[host_cpu] = NULL;
     }
 
     /* KeFlushQueuedDpcs(); */
@@ -1039,7 +1062,7 @@ uxen_op_keyhandler(char *keys, unsigned int num)
     }
 
     /* run idle thread in case a keyhandler changed a timer */
-    event_signal(&idle_thread_event);
+    signal_idle_thread(0);
 
     uxen_exec_dom0_end();
 
@@ -1783,7 +1806,7 @@ uxen_power_state(uint32_t suspend)
 
     if (!suspend) {
         resume_requested = 1;
-        event_signal(&idle_thread_event);
+        signal_idle_thread(0);
     } else {
         preemption_t i;
         int ret;

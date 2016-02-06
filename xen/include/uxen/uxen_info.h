@@ -170,7 +170,7 @@ struct /* __WINPACKED__ */ uxen_info {
     void (__interface_fn *ui_kick_vcpu)(struct vm_vcpu_info_shared *);
     void (__interface_fn *ui_kick_vcpu_cancel)(struct vm_vcpu_info_shared *);
     uint64_t ui_cpu_active_mask __WINPACKED__;
-    void (__interface_fn *ui_signal_idle_thread)(void);
+    void (__interface_fn *ui_signal_idle_thread)(uint64_t);
     uint32_t ui_host_timer_frequency;
     int64_t ui_host_idle_timeout;
     void (__interface_fn *ui_set_timer_vcpu)(struct vm_vcpu_info_shared *,

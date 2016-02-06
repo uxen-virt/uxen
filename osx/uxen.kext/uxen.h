@@ -276,7 +276,12 @@ extern uint8_t *frametable_populated;
 extern struct vm_info *dom0_vmi;
 extern uint32_t uxen_zero_mfn;
 void set_host_preemption(uint64_t disable);
-void __cdecl signal_idle_thread(void);
+extern thread_t idle_thread[];
+extern struct event_object idle_thread_event[];
+#define signal_idle_thread(cpu) do {               \
+        if (idle_thread[cpu])                      \
+            event_signal(&idle_thread_event[cpu]); \
+    } while (0)
 int suspend_block(preemption_t i, uint32_t pages, uint32_t *reserve_increase);
 void uxen_op_init_free_allocs(void);
 int uxen_op_init(struct fd_assoc *fda);

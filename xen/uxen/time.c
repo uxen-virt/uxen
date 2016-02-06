@@ -13,7 +13,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -332,7 +332,7 @@ int reprogram_timer(s_time_t timeout, struct vcpu *v)
 
         _uxen_info.ui_host_idle_timeout = ticks;
         if (!is_idle_vcpu(current))
-            UI_HOST_CALL(ui_signal_idle_thread);
+            smp_send_event_check_cpu(0);
     } else {
         extern void hostsched_set_timer_vcpu(struct vcpu *, uint64_t);
         hostsched_set_timer_vcpu(v, ticks);

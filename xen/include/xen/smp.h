@@ -14,10 +14,8 @@ extern void smp_send_event_check_mask(const cpumask_t *mask);
 #define smp_send_event_check_cpu(cpu) \
     smp_send_event_check_mask(cpumask_of(cpu))
 #else   /* __UXEN__ */
-#define smp_send_event_check_cpu(cpu) ({{		\
-		ASSERT(cpu == 0);			\
-                UI_HOST_CALL(ui_signal_idle_thread);	\
-	    }})
+#define smp_send_event_check_cpu(cpu)                   \
+    UI_HOST_CALL(ui_signal_idle_thread, 1ULL << (cpu))
 extern void hostsched_vcpu_softirq(struct vcpu *);
 #define smp_send_event_check_vcpu(v) \
     hostsched_vcpu_softirq(v)

@@ -45,8 +45,8 @@ uxen_pfn_t uxen_zero_mfn = ~0;
 static KDPC uxen_cpu_ipi_dpc[MAXIMUM_PROCESSORS];
 static KSPIN_LOCK uxen_cpu_ipi_spinlock[MAXIMUM_PROCESSORS];
 static uint32_t uxen_cpu_ipi_raised_vectors[MAXIMUM_PROCESSORS];
-static PETHREAD uxen_idle_thread;
-KEVENT uxen_idle_thread_event;
+PETHREAD uxen_idle_thread[MAXIMUM_PROCESSORS];
+KEVENT uxen_idle_thread_event[MAXIMUM_PROCESSORS];
 static int resume_requested = 0;
 static uint32_t idle_thread_suspended = 0;
 
@@ -362,14 +362,16 @@ update_ui_host_counter(void)
         uxen_host_counter_start.QuadPart;
 }
 
-void
+static void
 uxen_idle_thread_fn(void *context)
 {
+    unsigned int cpu = (unsigned long)context;
+    unsigned int host_cpu;
     uint32_t increase;
 
-    uxen_cpu_pin_first();
+    uxen_cpu_pin(cpu);
 
-    dprintk("idle thread ready\n");
+    dprintk("cpu%u: idle thread ready\n", cpu);
 
     while (uxen_info->ui_running) {
         LONG x;
@@ -377,17 +379,19 @@ uxen_idle_thread_fn(void *context)
         LARGE_INTEGER timeout, now;
         int had_timeout = 0;
 
-        KeQuerySystemTime(&now);
-        timeout.QuadPart = now.QuadPart + uxen_info->ui_host_idle_timeout;
+        if (!cpu) {
+            KeQuerySystemTime(&now);
+            timeout.QuadPart = now.QuadPart + uxen_info->ui_host_idle_timeout;
+        }
 
         do {
             KeWaitForSingleObject(
-                &uxen_idle_thread_event, Executive, KernelMode, TRUE,
-                (uxen_info->ui_host_idle_timeout && !idle_thread_suspended) ?
-                &timeout : NULL);
-            KeClearEvent(&uxen_idle_thread_event);
+                &uxen_idle_thread_event[cpu], Executive, KernelMode, TRUE,
+                (!cpu && uxen_info->ui_host_idle_timeout &&
+                 !idle_thread_suspended) ? &timeout : NULL);
+            KeClearEvent(&uxen_idle_thread_event[cpu]);
             MemoryBarrier();
-            if (resume_requested) {
+            if (!cpu && resume_requested) {
                 idle_thread_suspended = 0;
                 printk_with_timestamp("power state change: resuming\n");
                 update_ui_host_counter();
@@ -400,13 +404,15 @@ uxen_idle_thread_fn(void *context)
                 KeSetEvent(&uxen_devext->de_suspend_event, 0, FALSE);
                 uxen_pages_decrease_reserve(i, increase);
                 KeQuerySystemTime(&now);
+                for (host_cpu = 1; host_cpu < MAXIMUM_PROCESSORS; host_cpu++)
+                    uxen_signal_idle_thread(host_cpu);
             }
         } while (idle_thread_suspended && uxen_info->ui_running);
 
         if (!uxen_info->ui_running)
             break;
 
-        if (uxen_info->ui_host_idle_timeout) {
+        if (!cpu && uxen_info->ui_host_idle_timeout) {
             timeout.QuadPart = now.QuadPart + uxen_info->ui_host_idle_timeout;
             KeQuerySystemTime(&now);
             if (now.QuadPart >= timeout.QuadPart) {
@@ -433,7 +439,7 @@ uxen_idle_thread_fn(void *context)
             uxen_pages_decrease_reserve(i, increase);
             /* Reset a timeout if we were going to signal that a
              * timeout had occurred. */
-            if (had_timeout)
+            if (!cpu && had_timeout)
                 uxen_info->ui_host_idle_timeout = 1;
             continue;
         }
@@ -441,21 +447,25 @@ uxen_idle_thread_fn(void *context)
         if (!InterlockedDecrement(&uxen_devext->de_executing))
             KeSetEvent(&uxen_devext->de_suspend_event, 0, FALSE);
         uxen_pages_decrease_reserve(i, increase);
-        if (idle_free_list && idle_free_free_list())
-            uxen_signal_idle_thread();
+        if (!cpu && idle_free_list && idle_free_free_list())
+            uxen_signal_idle_thread(cpu);
     }
 
-    dprintk("idle thread exiting\n");
+    dprintk("cpu%u: idle thread exiting\n", cpu);
 }
 
 static void __cdecl
-uxen_op_signal_idle_thread(void)
+uxen_op_signal_idle_thread(uint64_t mask)
 {
+    unsigned int host_cpu;
 
     if (uxen_info->ui_running == 0)
 	return;
 
-    uxen_signal_idle_thread();
+    for (host_cpu = 0; host_cpu < MAXIMUM_PROCESSORS; host_cpu++) {
+	if (mask & affinity_mask(host_cpu))
+            uxen_signal_idle_thread(host_cpu);
+    }
 }
 
 void
@@ -598,8 +608,8 @@ uxen_update_unixtime_generation(void)
 
     if (uxen_info) {
         uxen_info->ui_unixtime_generation++;
-        if (uxen_idle_thread)
-            uxen_signal_idle_thread();
+        if (uxen_idle_thread[0])
+            uxen_signal_idle_thread(0);
     }
 }
 
@@ -1103,28 +1113,34 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
     KeResetEvent(&uxen_devext->de_shutdown_done);
     uxen_info->ui_running = 1;
 
-    uxen_idle_thread = NULL;
-    KeInitializeEvent(&uxen_idle_thread_event, NotificationEvent, FALSE);
-    status = PsCreateSystemThread(&handle, 0, NULL, NULL, NULL,
-				  uxen_idle_thread_fn,
-				  (PVOID)(ULONG_PTR)0);
-    if (!NT_SUCCESS(status)) {
-        fail_msg("create idle thread failed: 0x%08X", status);
-        ret = -ENOMEM;
-	goto out;
-    }
+    for (host_cpu = 0; host_cpu < MAXIMUM_PROCESSORS; host_cpu++) {
+	if ((affinity & affinity_mask(host_cpu)) == 0)
+	    continue;
+        uxen_idle_thread[host_cpu] = NULL;
+        KeInitializeEvent(&uxen_idle_thread_event[host_cpu],
+                          NotificationEvent, FALSE);
+        status = PsCreateSystemThread(&handle, 0, NULL, NULL, NULL,
+                                      uxen_idle_thread_fn,
+                                      (PVOID)(ULONG_PTR)host_cpu);
+        if (!NT_SUCCESS(status)) {
+            fail_msg("create cpu%u idle thread failed: 0x%08X",
+                     host_cpu, status);
+            ret = -ENOMEM;
+            goto out;
+        }
 
-    status = ObReferenceObjectByHandle(handle, THREAD_ALL_ACCESS, NULL,
-				       KernelMode,
-				       &uxen_idle_thread, NULL);
-    ZwClose(handle);
-    if (!NT_SUCCESS(status)) {
-        fail_msg("get reference to idle thread failed: 0x%08X", status);
-        ret = -ENOMEM;
-	goto out;
+        status = ObReferenceObjectByHandle(handle, THREAD_ALL_ACCESS, NULL,
+                                           KernelMode,
+                                           &uxen_idle_thread[host_cpu], NULL);
+        ZwClose(handle);
+        if (!NT_SUCCESS(status)) {
+            fail_msg("get reference to cpu%u idle thread failed: 0x%08X",
+                     host_cpu, status);
+            ret = -ENOMEM;
+            goto out;
+        }
+        dprintk("setup cpu%u idle thread done\n", host_cpu);
     }
-
-    dprintk("setup idle thread done\n");
 
     affinity = KeQueryActiveProcessors();
     for (host_cpu = 0; host_cpu < MAXIMUM_PROCESSORS; host_cpu++) {
@@ -1166,7 +1182,7 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
 #endif
 
     /* run idle thread to make it pick up the current timeout */
-    uxen_signal_idle_thread();
+    uxen_signal_idle_thread(0);
 
     if (!InterlockedDecrement(&uxen_devext->de_executing))
         KeSetEvent(&uxen_devext->de_suspend_event, 0, FALSE);
@@ -1188,6 +1204,7 @@ uxen_op_shutdown(void)
 {
     KIRQL irql;
     struct vm_info *vmi, *tvmi;
+    unsigned int host_cpu;
 
     if (uxen_info == NULL)
         goto out;
@@ -1230,12 +1247,15 @@ uxen_op_shutdown(void)
 
     uxen_info->ui_running = 0;
 
-    if (uxen_idle_thread) {
-        uxen_signal_idle_thread();
-        KeWaitForSingleObject(uxen_idle_thread, Executive, KernelMode,
-                              FALSE, NULL);
-        ObDereferenceObject(uxen_idle_thread);
-        uxen_idle_thread = NULL;
+    for (host_cpu = 0; host_cpu < MAXIMUM_PROCESSORS; host_cpu++)
+        uxen_signal_idle_thread(host_cpu);
+    for (host_cpu = 0; host_cpu < MAXIMUM_PROCESSORS; host_cpu++) {
+        if (!uxen_idle_thread[host_cpu])
+            continue;
+        KeWaitForSingleObject(uxen_idle_thread[host_cpu], Executive,
+                              KernelMode, FALSE, NULL);
+        ObDereferenceObject(uxen_idle_thread[host_cpu]);
+        uxen_idle_thread[host_cpu] = NULL;
     }
 
     KeFlushQueuedDpcs();
@@ -1333,7 +1353,7 @@ uxen_op_keyhandler(char *keys, unsigned int num)
     }
 
     /* run idle thread in case a keyhandler changed a timer */
-    uxen_signal_idle_thread();
+    uxen_signal_idle_thread(0);
 
     uxen_exec_dom0_end();
 
@@ -2133,7 +2153,7 @@ uxen_power_state(uint32_t suspend)
 
     if (!suspend) {
         resume_requested = 1;
-        KeSetEvent(&uxen_idle_thread_event, 0, FALSE);
+        uxen_signal_idle_thread(0);
 
 #ifdef __i386__
         InterlockedExchange(&s4_in_progress, FALSE);

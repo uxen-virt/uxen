@@ -260,7 +260,7 @@ void raise_softirq(unsigned int nr)
         break;
     default:
         set_bit(nr, &softirq_pending(0 /* smp_processor_id() */));
-        UI_HOST_CALL(ui_signal_idle_thread);
+        smp_send_event_check_cpu(0 /* smp_processor_id() */);
     }
 }
 
