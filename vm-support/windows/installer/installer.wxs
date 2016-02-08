@@ -2,11 +2,6 @@
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
      xmlns:difx="http://schemas.microsoft.com/wix/DifxAppExtension"
      xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
-    <?if $(var.Win64)=yes ?>
-      <?define ProgramFilesFolder="ProgramFiles64Folder" ?>
-    <?else ?>
-      <?define ProgramFilesFolder="ProgramFilesFolder" ?>
-    <?endif ?>
     <Product Name="uXen VM support" Id="856AD792-7FC9-4A3F-83EA-BE15FA743AA7" UpgradeCode="14A05E48-824F-4A2A-9F44-ACB69825C649" Version="1.0.0" Manufacturer="uXen Project" Language="1033">
         <Package Id="*" Keywords="Installer" Description="uXen VM support installer" Manufacturer="uXen Project" InstallerVersion="200" Compressed="yes" />
         <Media Id='1' Cabinet='uXenDrvInstaller.cab' EmbedCab='yes' DiskPrompt='uXen Media' />
