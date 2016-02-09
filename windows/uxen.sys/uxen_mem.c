@@ -248,6 +248,7 @@ _kernel_malloc_unchecked(size_t size, int line)
           hex[(line >> 8) & 0xf] << 8 |
           'u';
 
+    size = (size + sizeof(uintptr_t) - 1) & ~(sizeof(uintptr_t) - 1);
     p = ExAllocatePoolWithTag(NonPagedPool, size, tag);
     if (p)
         memset(p, 0, size);
@@ -258,6 +259,8 @@ _kernel_malloc_unchecked(size_t size, int line)
 void *
 _kernel_malloc(size_t size, int line)
 {
+
+    size = (size + sizeof(uintptr_t) - 1) & ~(sizeof(uintptr_t) - 1);
     if (size > (1 << 30)) {
         fail_msg("size assert: %Ix", size);
         return NULL;
@@ -270,6 +273,7 @@ void
 kernel_free(void *addr, size_t size)
 {
 
+    /* size = (size + sizeof(uintptr_t) - 1) & ~(sizeof(uintptr_t) - 1); */
     ExFreePool(addr);
 }
 

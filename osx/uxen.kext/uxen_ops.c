@@ -566,7 +566,8 @@ uxen_op_init_free_allocs(void)
     if (frametable_populated) {
         dprintk("uxen mem: free frametable_populated\n");
         depopulate_frametable(frametable_size >> PAGE_SHIFT);
-        kernel_free(frametable_populated, (frametable_size >> PAGE_SHIFT) / 8);
+        kernel_free(frametable_populated,
+                    ((frametable_size >> PAGE_SHIFT) + 7) / 8);
         frametable_populated = NULL;
     }
     if (frametable) {
@@ -732,15 +733,16 @@ uxen_op_init(struct fd_assoc *fda)
             frametable + frametable_size, frametable_size,
 	    frametable_size >> 20);
 
-    frametable_populated = kernel_malloc((frametable_size >> PAGE_SHIFT) / 8);
+    frametable_populated = kernel_malloc(
+        ((frametable_size >> PAGE_SHIFT) + 7) / 8);
     if (!frametable_populated) {
         fail_msg("kernel_malloc(frametable_populated) failed");
         ret = -ENOMEM;
         goto out;
     }
     dprintk("uxen mem: f-populated %p - %p (%dKB)\n", frametable_populated,
-            frametable_populated + (frametable_size >> PAGE_SHIFT) / 8,
-            ((frametable_size >> PAGE_SHIFT) / 8) >> 10);
+            frametable_populated + ((frametable_size >> PAGE_SHIFT) + 7) / 8,
+            (((frametable_size >> PAGE_SHIFT) + 7) / 8) >> 10);
     populate_frametable_lock = lck_spin_alloc_init(uxen_lck_grp, LCK_ATTR_NULL);
     if (!populate_frametable_lock) {
         fail_msg("populate frametable lck alloc failed");

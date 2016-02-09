@@ -729,6 +729,7 @@ kernel_malloc(uint32_t size)
 {
     void *p;
 
+    size = (size + sizeof(uintptr_t) - 1) & ~(sizeof(uintptr_t) - 1);
     if (size > (1 << 30)) {
         fail_msg("size assert: %x", size);
         return NULL;
@@ -747,6 +748,7 @@ void
 kernel_free(void *addr, uint32_t size)
 {
 
+    size = (size + sizeof(uintptr_t) - 1) & ~(sizeof(uintptr_t) - 1);
     OSFree(addr, size, uxen_malloc_tag);
 }
 #else
@@ -799,6 +801,7 @@ kernel_malloc(uint32_t size)
     void *v;
     struct malloc_info *m;
 
+    size = (size + sizeof(uintptr_t) - 1) & ~(sizeof(uintptr_t) - 1);
     if (size > (1 << 30)) {
         fail_msg("size assert: %x", size);
         return NULL;
@@ -843,6 +846,7 @@ kernel_free(void *addr, uint32_t size)
 {
     struct malloc_info *m;
 
+    size = (size + sizeof(uintptr_t) - 1) & ~(sizeof(uintptr_t) - 1);
 #ifdef MALLOC_VERBOSE
     dprintk("%s: addr %p size %d\n", __FUNCTION__, addr, size);
 #endif

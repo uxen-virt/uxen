@@ -716,7 +716,8 @@ uxen_op_init_free_allocs(void)
     if (frametable_populated) {
         dprintk("uxen mem: free frametable_populated\n");
         depopulate_frametable(frametable_size >> PAGE_SHIFT);
-        kernel_free(frametable_populated, (frametable_size >> PAGE_SHIFT) / 8);
+        kernel_free(frametable_populated,
+                    ((frametable_size >> PAGE_SHIFT) + 7) / 8);
         frametable_populated = NULL;
     }
     if (frametable) {
