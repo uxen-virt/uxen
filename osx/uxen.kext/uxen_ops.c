@@ -32,6 +32,7 @@ static uint64_t host_counter_start;
 uint8_t *frametable = NULL;
 unsigned int frametable_size;
 uint8_t *frametable_populated = NULL;
+struct vm_info *dom0_vmi = NULL;
 static void *percpu_area = NULL;
 static unsigned int percpu_area_size;
 
@@ -72,18 +73,27 @@ unmap_page_va(const void *va)
 }
 
 static void *
-map_page_range(uint64_t n, uxen_pfn_t *mfns)
+map_page_range(struct vm_vcpu_info_shared *vcis, uint64_t n, uxen_pfn_t *mfns)
 {
+    /* struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis; */
+    /* struct vm_info *vmi = (struct vm_info *)((uintptr_t)vcis & PAGE_MASK); */
     void *va;
 
     assert(n <= UXEN_MAP_PAGE_RANGE_MAX);
 
     va = map_pfn_array_from_pool(mfns, n);
-    return va;
+    if (va)
+        return va;
+
+    /* dprintk("%s: vm%u.%u failed request %"PRId64" pages\n", __FUNCTION__, */
+    /*         vmi->vmi_shared.vmi_domid, vcis->vci_vcpuid, n); */
+    vcis->vci_map_page_range_requested = n;
+    return NULL;
 }
 
 static uint64_t
-unmap_page_range(const void *va, uint64_t n, uxen_pfn_t *mfns)
+unmap_page_range(struct vm_vcpu_info_shared *vcis, const void *va, uint64_t n,
+                 uxen_pfn_t *mfns)
 {
 
     unmap_pfn_array_from_pool(va, mfns);
@@ -583,6 +593,12 @@ uxen_op_init_free_allocs(void)
 	kernel_free(percpu_area, percpu_area_size);
 	percpu_area = NULL;
     }
+    if (dom0_vmi) {
+        dprintk("uxen mem: free dom0_vmi\n");
+        kernel_free(dom0_vmi,
+                    (size_t)ALIGN_PAGE_UP(sizeof(struct vm_info)));
+        dom0_vmi = NULL;
+    }
     map_pfn_array_pool_clear();
     if (uxen_zero_mfn != ~0) {
 	dprintk("uxen mem: free zero page\n");
@@ -599,6 +615,7 @@ uxen_op_init(struct fd_assoc *fda)
     uint32_t sizeof_percpu;
     int host_cpu;
     int ret = 0;
+    struct vm_vcpu_info_shared *vcis[UXEN_MAX_VCPUS];
 
     uxen_lock();
     while (!OSCompareAndSwap(0, 1, &uxen_devext->de_initialised)) {
@@ -785,7 +802,16 @@ uxen_op_init(struct fd_assoc *fda)
         goto out;
     }
 
-    map_pfn_array_pool_fill();
+    dom0_vmi = kernel_malloc((size_t)ALIGN_PAGE_UP(sizeof(struct vm_info)));
+    if (!dom0_vmi) {
+        fail_msg("kernel_malloc(dom0_vmi) failed");
+        ret = ENOMEM;
+        goto out;
+    }
+    for (host_cpu = 0; host_cpu < UXEN_MAX_VCPUS; host_cpu++)
+        vcis[host_cpu] = &dom0_vmi->vmi_vcpus[host_cpu].vci_shared;
+
+    map_pfn_array_pool_fill(0);
 
     uxen_info->ui_map_page_range_offset = 0;
     uxen_info->ui_map_page_range_max_nr = UXEN_MAP_PAGE_RANGE_MAX;
@@ -836,7 +862,8 @@ uxen_op_init(struct fd_assoc *fda)
     fast_event_signal(&uxen_devext->de_resume_event);
 
     uxen_cpu_pin_first();
-    uxen_call(ret = (int), -EINVAL, NO_RESERVE, uxen_do_start_xen, NULL, 0);
+    uxen_call(ret = (int), -EINVAL, NO_RESERVE, uxen_do_start_xen, NULL, 0,
+              &dom0_vmi->vmi_shared, vcis);
     ret = uxen_translate_xen_errno(ret);
     uxen_cpu_unpin();
 
@@ -1453,8 +1480,19 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
             fast_event_signal(&uxen_devext->de_suspend_event);
 	uxen_cpu_unpin_vcpu(vci);
         uxen_pages_decrease_reserve(i, increase);
+
         if (ret || !vci->vci_shared.vci_runnable)
 	    break;
+
+        if (vci->vci_shared.vci_map_page_range_requested) {
+            /* dprintk("%s: vm%d.%d EMAPPAGERANGE cpu%d\n", __FUNCTION__, */
+            /*         vmi->vmi_shared.vmi_domid, vci->vci_shared.vci_vcpuid, */
+            /*         cpu_number()); */
+            map_pfn_array_pool_fill(
+                vci->vci_shared.vci_map_page_range_requested);
+            vci->vci_shared.vci_map_page_range_requested = 0;
+        }
+
         switch (vci->vci_shared.vci_run_mode) {
         case VCI_RUN_MODE_PROCESS_IOREQ: {
             struct user_notification_event *event =
@@ -1498,6 +1536,9 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
             break;
         case VCI_RUN_MODE_FREEPAGE_CHECK:
             /* nothing */
+            break;
+        case VCI_RUN_MODE_MAP_PAGE_REQUEST:
+            /* nothing - handled above */
             break;
         }
     }

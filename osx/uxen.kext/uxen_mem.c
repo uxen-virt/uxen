@@ -131,9 +131,18 @@ static LIST_HEAD(, map_pfn_array_pool_entry) map_pfn_array_pool =
 static LIST_HEAD(, map_pfn_array_pool_entry) map_pfn_array_pool_used =
     LIST_HEAD_INITIALIZER(&map_pfn_array_pool_used);
 static lck_spin_t *map_pfn_array_pool_lock = NULL;
-static int map_pfn_array_pool_min = 2;
-#define MAP_PFN_ARRAY_POOL_ENTRY_SIZE UXEN_MAP_PAGE_RANGE_MAX
-static uint32_t map_pfn_array_pool_entries = 0;
+static unsigned int map_pfn_array_pool_min = 1;
+static unsigned int map_pfn_array_pool_max = 2;
+static unsigned int map_pfn_array_pool_entries = 0;
+static unsigned int map_pfn_array_pool_requested = 0;
+#define MAP_PFN_ARRAY_POOL_RANGE_SIZE UXEN_MAP_PAGE_RANGE_MAX
+#define MAP_PFN_ARRAY_POOL_RANGE_MAX 257
+static uxen_pfn_t *map_pfn_array_pool_zero_range = NULL;
+
+#ifdef DEBUG_POC_MAP_PAGE_RANGE_RETRY
+#undef MAP_PFN_ARRAY_POOL_RANGE_SIZE
+#define MAP_PFN_ARRAY_POOL_RANGE_SIZE 2
+#endif  /* DEBUG_POC_MAP_PAGE_RANGE_RETRY */
 
 void *
 map_pfn_array(uxen_pfn_t *pfn_array, unsigned int num)
@@ -182,16 +191,52 @@ unmap_pfn_array(const void *va, uxen_pfn_t *pfn_array, unsigned int num)
 }
 
 static int
-alloc_map_pfn_array_pool_entry(struct map_pfn_array_pool_entry *e,
-                               uxen_pfn_t *pfn_array, int num)
+alloc_map_pfn_array_pool_entry(struct map_pfn_array_pool_entry **_e,
+                               int num)
 {
+    struct map_pfn_array_pool_entry *e;
+    uxen_pfn_t *pfn_array;
+    int i;
+    int ret = 0;
+
+    if (num <= MAP_PFN_ARRAY_POOL_RANGE_MAX)
+        pfn_array = map_pfn_array_pool_zero_range;
+    else {
+        pfn_array = (uxen_pfn_t *)kernel_malloc(num * sizeof (uxen_pfn_t));
+        if (!pfn_array) {
+            fail_msg("kernel_malloc failed");
+            return ENOMEM;
+        }
+
+        assert(uxen_zero_mfn != ~0);
+        for (i = 0; i < num; i++)
+            pfn_array[i] = uxen_zero_mfn;
+    }
+
+    e = (struct map_pfn_array_pool_entry *)
+        kernel_malloc(sizeof(struct map_pfn_array_pool_entry));
+    if (!e) {
+        fail_msg("kernel_malloc failed");
+        ret = ENOMEM;
+        goto out;
+    }
 
     e->va = map_pfn_array(pfn_array, num);
-    if (!e->va)
-        return ENOMEM;
+    if (!e->va) {
+        ret = ENOMEM;
+        goto out;
+    }
     e->num = num;
-
-    return 0;
+  out:
+    if (ret) {
+        if (e)
+            kernel_free(e, sizeof(struct map_pfn_array_pool_entry));
+        e = NULL;
+    }
+    if (pfn_array != map_pfn_array_pool_zero_range)
+        kernel_free(pfn_array, num * sizeof(uxen_pfn_t));
+    *_e = e;
+    return ret;
 }
 
 static void
@@ -207,9 +252,48 @@ free_map_pfn_array_pool_entry(struct map_pfn_array_pool_entry *e)
     kernel_free(e, sizeof(struct map_pfn_array_pool_entry));
 }
 
-static uxen_pfn_t *map_pfn_array_pool_zero_range = NULL;
+static void
+map_pfn_array_pool_trim(int n)
+{
+    struct map_pfn_array_pool_entry *e = NULL, *tmp;
+    LIST_HEAD(, map_pfn_array_pool_entry) free_list =
+        LIST_HEAD_INITIALIZER(&free_list);
+
+    if (map_pfn_array_pool_entries <= n && !map_pfn_array_pool_requested)
+        return;
+
+    /* dprintk("%s: freeing %d of %d pool entries, %d requested entries\n", */
+    /*         __FUNCTION__, map_pfn_array_pool_entries - n, */
+    /*         map_pfn_array_pool_entries, map_pfn_array_pool_requested); */
+
+    lck_spin_lock(map_pfn_array_pool_lock);
+    LIST_FOREACH_SAFE(e, &map_pfn_array_pool, list_entry, tmp) {
+        if (e->num == MAP_PFN_ARRAY_POOL_RANGE_SIZE &&
+            map_pfn_array_pool_entries <= n)
+            continue;
+        LIST_REMOVE(e, list_entry);
+        LIST_INSERT_HEAD(&free_list, e, list_entry);
+
+        if (e->num == MAP_PFN_ARRAY_POOL_RANGE_SIZE) {
+            assert(map_pfn_array_pool_entries > 0);
+            map_pfn_array_pool_entries--;
+        } else {
+            assert(map_pfn_array_pool_requested > 0);
+            map_pfn_array_pool_requested--;
+        }
+    }
+    lck_spin_unlock(map_pfn_array_pool_lock);
+
+    while (!LIST_EMPTY(&free_list)) {
+        e = LIST_FIRST(&free_list);
+        assert(e);
+        LIST_REMOVE(e, list_entry);
+        free_map_pfn_array_pool_entry(e);
+    }
+}
+
 int
-map_pfn_array_pool_fill(void)
+map_pfn_array_pool_fill(int n)
 {
     struct map_pfn_array_pool_entry *e = NULL;
     unsigned int i;
@@ -224,9 +308,13 @@ map_pfn_array_pool_fill(void)
         }
 
         map_pfn_array_pool_min = 2 * uxen_nr_cpus;
+        map_pfn_array_pool_max = 2 * map_pfn_array_pool_min;
+#ifdef DEBUG_POC_MAP_PAGE_RANGE_RETRY
+        map_pfn_array_pool_min = map_pfn_array_pool_max = 1;
+#endif  /* DEBUG_POC_MAP_PAGE_RANGE_RETRY */
 
         map_pfn_array_pool_zero_range =
-            (uxen_pfn_t *)kernel_malloc(MAP_PFN_ARRAY_POOL_ENTRY_SIZE *
+            (uxen_pfn_t *)kernel_malloc(MAP_PFN_ARRAY_POOL_RANGE_MAX *
                                         sizeof (uxen_pfn_t));
         if (!map_pfn_array_pool_zero_range) {
             fail_msg("kernel_malloc failed");
@@ -234,31 +322,32 @@ map_pfn_array_pool_fill(void)
             map_pfn_array_pool_lock = NULL;
             return ENOMEM;
         }
+
+        assert(uxen_zero_mfn != ~0);
+        for (i = 0; i < MAP_PFN_ARRAY_POOL_RANGE_MAX; i++)
+            map_pfn_array_pool_zero_range[i] = uxen_zero_mfn;
     }
 
-    if (map_pfn_array_pool_entries >= map_pfn_array_pool_min)
-        return 0;
+    /* trim excessive pool entries, before adding requested entry */
+    if (map_pfn_array_pool_entries > map_pfn_array_pool_max)
+        map_pfn_array_pool_trim(map_pfn_array_pool_max);
 
-    assert(uxen_zero_mfn != ~0);
-    for (i = 0; i < MAP_PFN_ARRAY_POOL_ENTRY_SIZE; i++)
-        map_pfn_array_pool_zero_range[i] = uxen_zero_mfn;
+    if (n && n != MAP_PFN_ARRAY_POOL_RANGE_SIZE) {
+        ret = alloc_map_pfn_array_pool_entry(&e, n);
+        if (ret)
+            goto out;
+        lck_spin_lock(map_pfn_array_pool_lock);
+        LIST_INSERT_HEAD(&map_pfn_array_pool, e, list_entry);
+        map_pfn_array_pool_requested++;
+        lck_spin_unlock(map_pfn_array_pool_lock);
+        /* dprintk("%s: add requested entry %d pages\n", __FUNCTION__, n); */
+    }
 
     while (map_pfn_array_pool_entries < map_pfn_array_pool_min) {
-        e = (struct map_pfn_array_pool_entry *)
-            kernel_malloc(sizeof(struct map_pfn_array_pool_entry));
-        if (!e) {
-            fail_msg("kernel_malloc failed");
-            ret = ENOMEM;
+        ret = alloc_map_pfn_array_pool_entry(
+            &e, MAP_PFN_ARRAY_POOL_RANGE_SIZE);
+        if (ret)
             goto out;
-        }
-
-        ret = alloc_map_pfn_array_pool_entry(e, map_pfn_array_pool_zero_range,
-                                             MAP_PFN_ARRAY_POOL_ENTRY_SIZE);
-        if (ret) {
-            fail_msg("alloc_map_pfn_array_pool_entry failed: %d", ret);
-            goto out;
-        }
-
         lck_spin_lock(map_pfn_array_pool_lock);
         LIST_INSERT_HEAD(&map_pfn_array_pool, e, list_entry);
         map_pfn_array_pool_entries++;
@@ -266,62 +355,64 @@ map_pfn_array_pool_fill(void)
     }
 
   out:
-    dprintk("%s: have %d/%d pool entries\n", __FUNCTION__,
-            map_pfn_array_pool_entries, map_pfn_array_pool_min);
+    /* dprintk("%s: have %d/%d pool entries, %d requested entries\n", */
+    /*         __FUNCTION__, map_pfn_array_pool_entries, */
+    /*         map_pfn_array_pool_min, map_pfn_array_pool_requested); */
     return ret;
 }
 
 void
 map_pfn_array_pool_clear(void)
 {
-    struct map_pfn_array_pool_entry *e = NULL;
 
     if (!map_pfn_array_pool_lock)
         return;
 
-    dprintk("%s: freeing %d pool entries\n", __FUNCTION__,
-            map_pfn_array_pool_entries);
+    map_pfn_array_pool_trim(0);
 
-    lck_spin_lock(map_pfn_array_pool_lock);
-    assert(!LIST_EMPTY(&map_pfn_array_pool));
-    while (!LIST_EMPTY(&map_pfn_array_pool)) {
-        e = LIST_FIRST(&map_pfn_array_pool);
-        assert(e);
-        LIST_REMOVE(e, list_entry);
-        lck_spin_unlock(map_pfn_array_pool_lock);
-
-        free_map_pfn_array_pool_entry(e);
-
-        assert(map_pfn_array_pool_entries > 0);
-        map_pfn_array_pool_entries--;
-
-        lck_spin_lock(map_pfn_array_pool_lock);
-    }
-    lck_spin_unlock(map_pfn_array_pool_lock);
+    assert(LIST_EMPTY(&map_pfn_array_pool));
+    assert(LIST_EMPTY(&map_pfn_array_pool_used));
 
     lck_spin_free(map_pfn_array_pool_lock, uxen_lck_grp);
     map_pfn_array_pool_lock = NULL;
 
     kernel_free(map_pfn_array_pool_zero_range,
-                MAP_PFN_ARRAY_POOL_ENTRY_SIZE * sizeof(uxen_pfn_t));
+                MAP_PFN_ARRAY_POOL_RANGE_MAX * sizeof(uxen_pfn_t));
     map_pfn_array_pool_zero_range = NULL;
 }
 
 void *
 map_pfn_array_from_pool(uxen_pfn_t *pfn_array, unsigned int n)
 {
-    struct map_pfn_array_pool_entry *e;
+    struct map_pfn_array_pool_entry *e, *f = NULL;
     unsigned int i;
 
     assert(map_pfn_array_pool_lock);
 
     lck_spin_lock(map_pfn_array_pool_lock);
-    assert(map_pfn_array_pool_entries > 0);
-    assert(!LIST_EMPTY(&map_pfn_array_pool));
-    e = LIST_FIRST(&map_pfn_array_pool);
-    assert(e);
+    /* dprintk("%s: entries %d request %d pages\n", __FUNCTION__, */
+    /*         map_pfn_array_pool_entries, n); */
+
+    LIST_FOREACH(e, &map_pfn_array_pool, list_entry) {
+        if (e->num == n)
+            break;
+        if (!f && e->num >= n)
+            f = e;
+    }
+
+    if (!e)
+        e = f;
+    if (!e) {
+        lck_spin_unlock(map_pfn_array_pool_lock);
+        return NULL;
+    }
+
     LIST_REMOVE(e, list_entry);
-    map_pfn_array_pool_entries--;
+    if (e->num == MAP_PFN_ARRAY_POOL_RANGE_SIZE)
+        map_pfn_array_pool_entries--;
+    else
+        map_pfn_array_pool_requested--;
+
     LIST_INSERT_HEAD(&map_pfn_array_pool_used, e, list_entry);
     lck_spin_unlock(map_pfn_array_pool_lock);
 
@@ -354,7 +445,10 @@ unmap_pfn_array_from_pool(const void *va, uxen_pfn_t *pfn_array)
 
     lck_spin_lock(map_pfn_array_pool_lock);
     LIST_INSERT_HEAD(&map_pfn_array_pool, e, list_entry);
-    map_pfn_array_pool_entries++;
+    if (e->num == MAP_PFN_ARRAY_POOL_RANGE_SIZE)
+        map_pfn_array_pool_entries++;
+    else
+        map_pfn_array_pool_requested++;
     lck_spin_unlock(map_pfn_array_pool_lock);
 }
 
@@ -534,6 +628,8 @@ user_mmap_xen_mfns(uint32_t num, xen_pfn_t *mfns, struct fd_assoc *fda)
                        VM_PROT_READ|VM_PROT_WRITE, VM_PROT_NONE,
                        0, 1 /*wired*/);
 #ifdef DEBUG
+        /* use single page verify_mapping, since mfns has the wrong
+         * type/size */
         if (verify_mapping((void *)(addr + (i << PAGE_SHIFT)),
                            (uxen_pfn_t *)&mfns[i], 1,
                            __FUNCTION__, __LINE__)) {

@@ -3817,7 +3817,7 @@ int hvm_do_hypercall(struct cpu_user_regs *regs)
     HVM_DBG_LOG(DBG_LEVEL_HCALL, "hcall%u -> %lx",
                 eax, (unsigned long)regs->eax);
 
-    if (regs->eax == -ECONTINUATION) {
+    if (regs->eax == -ECONTINUATION || regs->eax == -EMAPPAGERANGE) {
         regs->eax = eax;
         return HVM_HCALL_preempted;
     }

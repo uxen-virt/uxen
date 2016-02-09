@@ -1508,7 +1508,8 @@ alloc_host_pages(unsigned int pages, unsigned int memflags)
         goto free_out;
 
     if (pages > 1) {
-        v = UI_HOST_CALL(ui_map_page_range, i, pfns);
+        v = UI_HOST_CALL(ui_map_page_range, current->vm_vcpu_info_shared, i,
+                         pfns);
 #ifdef DEBUG_MAPCACHE
         if (v)
             for (i = 0; i < pages; i++) {
@@ -1563,7 +1564,8 @@ void free_host_pages(void *v, unsigned int pages)
         BUG_ON(((unsigned long)v & (PAGE_SIZE - 1)) !=
                _uxen_info.ui_map_page_range_offset);
 
-        ret = UI_HOST_CALL(ui_unmap_page_range, v, pages, pfns);
+        ret = UI_HOST_CALL(ui_unmap_page_range, current->vm_vcpu_info_shared,
+                           v, pages, pfns);
         if (ret) {
             gdprintk(XENLOG_INFO, "Error free_xenheap_pages(%p,%d) ret %d\n",
                      v, pages, ret);

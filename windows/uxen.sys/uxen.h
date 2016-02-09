@@ -89,6 +89,9 @@ struct vm_vcpu_info {
     unsigned long vci_ipi_queued;
     KSPIN_LOCK vci_ipi_lck;
     volatile uint8_t vci_executing;
+#ifdef DEBUG_POC_MAP_PAGE_RANGE_RETRY
+    uint32_t vci_map_page_range_provided;
+#endif  /* DEBUG_POC_MAP_PAGE_RANGE_RETRY */
 };
 
 struct vm_info {
@@ -353,9 +356,10 @@ int uxen_mem_mmapbatch(struct uxen_mmapbatch_desc *, struct fd_assoc *);
 int uxen_mem_munmap(struct uxen_munmap_desc *, struct fd_assoc *);
 void * __cdecl uxen_mem_map_page(xen_pfn_t);
 uint64_t __cdecl uxen_mem_unmap_page_va(const void *);
-void * __cdecl uxen_mem_map_page_range(uint64_t, uxen_pfn_t *);
-uint64_t __cdecl uxen_mem_unmap_page_range(const void *, uint64_t,
-                                           uxen_pfn_t *);
+void * __cdecl uxen_mem_map_page_range(struct vm_vcpu_info_shared *, uint64_t,
+                                       uxen_pfn_t *);
+uint64_t __cdecl uxen_mem_unmap_page_range(
+    struct vm_vcpu_info_shared *, const void *, uint64_t, uxen_pfn_t *);
 uxen_pfn_t __cdecl uxen_mem_mapped_va_pfn(const void *);
 void *__cdecl uxen_mem_mapped_pfn_va(xen_pfn_t);
 void __cdecl uxen_mem_fill_free_pages(void);
@@ -378,6 +382,7 @@ extern MDL *map_page_range_mdl;
 extern uint8_t *frametable;
 extern unsigned int frametable_size;
 extern uint8_t *frametable_populated;
+extern struct vm_info *dom0_vmi;
 extern uxen_pfn_t uxen_zero_mfn;
 extern const rb_tree_ops_t vm_info_rbtree_ops;
 int uxen_except_handler(unsigned int, struct _EXCEPTION_POINTERS *);

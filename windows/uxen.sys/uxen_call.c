@@ -2,7 +2,7 @@
  *  uxen_call.c
  *  uxen
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -48,6 +48,20 @@ uxen_hypercall(struct uxen_hypercall_desc *uhd, int snoop_mode,
         uxen_call(ret =, -EINVAL, _uxen_snoop_hypercall(uhd, snoop_mode),
                   uxen_do_hypercall, uhd, vmis, user_access_opaque,
                   privileged);
+        if (ret == -EMAPPAGERANGE) {
+            /* handle EMAPPAGERANGE on same cpu */
+#ifdef DEBUG_POC_MAP_PAGE_RANGE_RETRY
+            struct vm_vcpu_info *vci = &dom0_vmi->vmi_vcpus[cpu_number()];
+            dprintk("%s: EMAPPAGERANGE cpu%d\n", __FUNCTION__, cpu_number());
+            vci->vci_map_page_range_provided =
+                vci->vci_shared.vci_map_page_range_requested;
+            vci->vci_shared.vci_map_page_range_requested = 0;
+#else  /* DEBUG_POC_MAP_PAGE_RANGE_RETRY */
+            fail_msg("%s: vm%d: unexpected EMAPPAGERANGE", __FUNCTION__,
+                     vmis->vmi_domid);
+            ret = -EINVAL;
+#endif  /* DEBUG_POC_MAP_PAGE_RANGE_RETRY */
+        }
         uxen_exec_dom0_end();
 
         if (ret == -ECONTINUATION && vmis && vmis->vmi_wait_event) {
@@ -69,7 +83,7 @@ uxen_hypercall(struct uxen_hypercall_desc *uhd, int snoop_mode,
             continue;
         }
 
-        if (ret == -ECONTINUATION)
+        if (ret == -ECONTINUATION || ret == -EMAPPAGERANGE)
             continue;
 
         break;

@@ -25,7 +25,9 @@
 
 UXEN_LINK_PROTO_TYPE struct uxen_info *uxen_info;
 UXEN_LINK_PROTO_TYPE
-intptr_t (__cdecl *uxen_do_start_xen) (const struct uxen_init_desc *, uint64_t);
+intptr_t (__cdecl *uxen_do_start_xen) (const struct uxen_init_desc *, uint64_t,
+                                       struct vm_info_shared *,
+                                       struct vm_vcpu_info_shared **);
 UXEN_LINK_PROTO_TYPE
 void (__cdecl *uxen_do_add_heap_memory) (uint64_t, uint64_t);
 UXEN_LINK_PROTO_TYPE
@@ -144,7 +146,8 @@ static int get_elf_sym(struct elf_binary *elf, unsigned char *hv,
                  struct uxen_info prefix ## _uxen_info, uxen_info);     \
     UXEN_GET_SYM(prefix ## _uxen_start_xen,                             \
                  intptr_t __cdecl prefix ## _uxen_start_xen             \
-		 (const struct uxen_init_desc *, uint64_t),             \
+                 (const struct uxen_init_desc *, uint64_t,              \
+                  struct vm_info_shared *, struct vm_vcpu_info_shared **), \
                  uxen_do_start_xen);	                                \
     UXEN_GET_SYM(prefix ## _uxen_add_heap_memory,                       \
                  void __cdecl prefix ## _uxen_add_heap_memory           \

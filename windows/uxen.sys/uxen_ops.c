@@ -29,6 +29,7 @@ unsigned int frametable_size;
 uint8_t *frametable_populated = NULL;
 static char *percpu_area = NULL;
 static size_t percpu_area_size;
+struct vm_info *dom0_vmi = NULL;
 static BOOLEAN ui_hvm_io_bitmap_contiguous = TRUE;
 static uint32_t mapcache_size = 0;
 static uint32_t mapcache_cpus = 0;
@@ -734,6 +735,12 @@ uxen_op_init_free_allocs(void)
 	kernel_free(percpu_area, percpu_area_size);
 	percpu_area = NULL;
     }
+    if (dom0_vmi) {
+        dprintk("uxen mem: free dom0_vmi\n");
+        kernel_free(dom0_vmi,
+                    (size_t)ALIGN_PAGE_UP(sizeof(struct vm_info)));
+        dom0_vmi = NULL;
+    }
     if (uxen_zero_mfn != ~0) {
 	dprintk("uxen mem: free zero page\n");
 	kernel_free_mfn(uxen_zero_mfn);
@@ -786,6 +793,7 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
     BOOLEAN use_hidden = 0;
     int ret = 0;
     uint64_t pae_enabled;
+    struct vm_vcpu_info_shared *vcis[UXEN_MAX_VCPUS];
 
     uxen_lock();
     while (InterlockedCompareExchange(&uxen_devext->de_initialised,
@@ -1016,6 +1024,15 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
         ui_hvm_io_bitmap_contiguous = FALSE;
     }
 
+    dom0_vmi = kernel_malloc((size_t)ALIGN_PAGE_UP(sizeof(struct vm_info)));
+    if (!dom0_vmi) {
+        fail_msg("kernel_malloc(dom0_vmi) failed");
+        ret = -ENOMEM;
+        goto out;
+    }
+    for (host_cpu = 0; host_cpu < UXEN_MAX_VCPUS; host_cpu++)
+        vcis[host_cpu] = &dom0_vmi->vmi_vcpus[host_cpu].vci_shared;
+
 #if defined(__x86_64__) && defined(__UXEN_EMBEDDED__)
     dprintk("uxen xdata start: %p-%p\n", &uxen_xdata_start, &uxen_xdata_end);
     dprintk("uxen pdata start: %p-%p\n", &uxen_pdata_start, &uxen_pdata_end);
@@ -1127,7 +1144,7 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
 
     uxen_cpu_pin_first();
     uxen_call(ret = (int), -EINVAL, STARTXEN_RESERVE, uxen_do_start_xen, &uid,
-              uid_len);
+              uid_len, &dom0_vmi->vmi_shared, vcis);
     uxen_cpu_unpin();
     if (ret) {
         fail_msg("start xen failed: %d", ret);
@@ -1804,8 +1821,26 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
             KeSetEvent(&uxen_devext->de_suspend_event, 0, FALSE);
 	uxen_cpu_unpin_vcpu(vci);
         uxen_pages_decrease_reserve(i, increase);
+
         if (ret || !is_vci_runnable(vci))
 	    break;
+
+        if (vci->vci_shared.vci_map_page_range_requested) {
+#ifdef DEBUG_POC_MAP_PAGE_RANGE_RETRY
+            dprintk("%s: vm%d.%d EMAPPAGERANGE cpu%d\n", __FUNCTION__,
+                    vmi->vmi_shared.vmi_domid, vci->vci_shared.vci_vcpuid,
+                    cpu_number());
+            vci->vci_map_page_range_provided =
+                vci->vci_shared.vci_map_page_range_requested;
+            vci->vci_shared.vci_map_page_range_requested = 0;
+#else  /* DEBUG_POC_MAP_PAGE_RANGE_RETRY */
+            fail_msg("%s: vm%d.%d: unexpected EMAPPAGERANGE", __FUNCTION__,
+                     vmi->vmi_shared.vmi_domid, vci->vci_shared.vci_vcpuid);
+            ret = -EINVAL;
+            goto out;
+#endif  /* DEBUG_POC_MAP_PAGE_RANGE_RETRY */
+        }
+
         switch (vci->vci_shared.vci_run_mode) {
         case VCI_RUN_MODE_PROCESS_IOREQ: {
             KEVENT *event = (KEVENT * volatile)vci->vci_shared.vci_wait_event;
@@ -1856,6 +1891,9 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
             break;
         case VCI_RUN_MODE_FREEPAGE_CHECK:
             /* nothing */
+            break;
+        case VCI_RUN_MODE_MAP_PAGE_REQUEST:
+            /* nothing - handled above */
             break;
         }
     }

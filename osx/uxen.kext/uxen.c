@@ -833,14 +833,28 @@ uxen_hypercall(struct uxen_hypercall_desc *uhd, int snoop_mode,
                uint32_t privileged)
 {
     intptr_t ret = 0;
+    int pfn_array_requested = 0;
 
     while (/* CONSTCOND */ 1) {
-        map_pfn_array_pool_fill();
+        if (pfn_array_requested) {
+            map_pfn_array_pool_fill(pfn_array_requested);
+            pfn_array_requested = 0;
+        }
 
         uxen_exec_dom0_start();
         uxen_call(ret =, -EINVAL, _uxen_snoop_hypercall(uhd, snoop_mode),
                   uxen_do_hypercall, uhd, vmis, user_access_opaque,
                   privileged);
+        if (ret == -EMAPPAGERANGE) {
+            /* handle EMAPPAGERANGE on same cpu */
+            struct vm_vcpu_info *vci = &dom0_vmi->vmi_vcpus[cpu_number()];
+            /* dprintk("%s: EMAPPAGERANGE cpu%d requested %d\n", */
+            /*         __FUNCTION__, cpu_number(), */
+            /*         vci->vci_shared.vci_map_page_range_requested); */
+            pfn_array_requested =
+                vci->vci_shared.vci_map_page_range_requested;
+            vci->vci_shared.vci_map_page_range_requested = 0;
+        }
         uxen_exec_dom0_end();
 
         if (ret == -ECONTINUATION && vmis && vmis->vmi_wait_event) {
@@ -862,7 +876,7 @@ uxen_hypercall(struct uxen_hypercall_desc *uhd, int snoop_mode,
             continue;
         }
 
-        if (ret == -ECONTINUATION)
+        if (ret == -ECONTINUATION || ret == -EMAPPAGERANGE)
             continue;
 
         break;

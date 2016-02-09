@@ -610,7 +610,9 @@ intptr_t __init __interface_fn __uxen_start_xen(
     unsigned long mbi_p
 #else
     const struct uxen_init_desc *uid,
-    uint64_t uid_len
+    uint64_t uid_len,
+    struct vm_info_shared *vmis,
+    struct vm_vcpu_info_shared **vcis
 #endif
     )
 {
@@ -637,6 +639,8 @@ intptr_t __init __interface_fn __uxen_start_xen(
         .parity    = 'n',
         .stop_bits = 1
     };
+    struct vcpu *v;
+    int ret;
 
 #ifdef __UXEN__
     set_stack_top();
@@ -1487,7 +1491,7 @@ intptr_t __init __interface_fn __uxen_start_xen(
 
         if ( (num_online_cpus() < max_cpus) && !cpu_online(i) )
         {
-            int ret = cpu_up(i);
+            ret = cpu_up(i);
             if ( ret != 0 )
                 printk("Failed to bring up CPU %u (error %d)\n", i, ret);
         }
@@ -1518,6 +1522,20 @@ intptr_t __init __interface_fn __uxen_start_xen(
     dom0 = domain_create_internal(0, DOMCRF_s3_integrity, 0);
     if ( (dom0 == NULL) || (alloc_dom0_vcpu0() == NULL) )
         panic("Error creating domain 0\n");
+
+    vmis->vmi_domid = dom0->domain_id;
+    atomic_read_domain_handle(&dom0->handle_atomic,
+                              (uint128_t *)vmis->vmi_uuid);
+    ret = hostsched_setup_vm(dom0, vmis);
+    if (ret)
+        panic("Error setting up dom0 hostsched\n");
+
+    for_each_vcpu(dom0, v) {
+        struct vm_vcpu_info_shared *vci = vcis[v->vcpu_id];
+        vci->vci_vcpuid = v->vcpu_id;
+
+        hostsched_setup_vcpu(v, vci);
+    }
 
     dom0->target = NULL;
 

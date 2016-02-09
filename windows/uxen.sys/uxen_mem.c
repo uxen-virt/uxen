@@ -1973,20 +1973,40 @@ uxen_mem_unmap_page_va(const void *va)
 }
 
 void * __cdecl
-uxen_mem_map_page_range(uint64_t n, uxen_pfn_t *mfn)
+uxen_mem_map_page_range(struct vm_vcpu_info_shared *vcis, uint64_t n,
+                        uxen_pfn_t *mfn)
 {
+    struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
+    struct vm_info *vmi = (struct vm_info *)((uintptr_t)vcis & PAGE_MASK);
+
 #ifdef DEBUG_PAGE_ALLOC
     int i;
 
     for (i = 0; i < n; i++)
         DASSERT(pinfotable[mfn[i]].allocated);
 #endif  /* DEBUG_PAGE_ALLOC */
+
+#ifdef DEBUG_POC_MAP_PAGE_RANGE_RETRY
+    if (n >= 2 && vci) {
+        if (vci->vci_map_page_range_provided != n) {
+            dprintk("%s: vm%u.%u failing request %Id pages\n", __FUNCTION__,
+                    vmi->vmi_shared.vmi_domid, vcis->vci_vcpuid, n);
+            vcis->vci_map_page_range_requested = n;
+            return NULL;
+        }
+        dprintk("%s: vm%u.%u doing request %d pages\n", __FUNCTION__,
+                vmi->vmi_shared.vmi_domid, vcis->vci_vcpuid, n);
+        vci->vci_map_page_range_provided = 0;
+    }
+#endif  /* DEBUG_POC_MAP_PAGE_RANGE_RETRY */
+
     ASSERT(uxen_info->ui_map_page_range_offset == 0);
     return kernel_mmap_pages((int)n, mfn);
 }
 
 uint64_t __cdecl
-uxen_mem_unmap_page_range(const void *va, uint64_t n, uxen_pfn_t *mfn)
+uxen_mem_unmap_page_range(struct vm_vcpu_info_shared *vcis, const void *va,
+                          uint64_t n, uxen_pfn_t *mfn)
 {
     uint64_t ret;
 

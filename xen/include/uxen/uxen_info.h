@@ -192,9 +192,10 @@ struct /* __WINPACKED__ */ uxen_info {
     uint64_t (__interface_fn *ui_unmap_page_global_va)(const void *);
     void *(__interface_fn *ui_map_page)(xen_pfn_t);
     uint64_t (__interface_fn *ui_unmap_page_va)(const void *);
-    void *(__interface_fn *ui_map_page_range)(uint64_t, uxen_pfn_t *);
-    uint64_t (__interface_fn *ui_unmap_page_range)(const void *, uint64_t,
-                                                   uxen_pfn_t *);
+    void *(__interface_fn *ui_map_page_range)(struct vm_vcpu_info_shared *,
+                                              uint64_t, uxen_pfn_t *);
+    uint64_t (__interface_fn *ui_unmap_page_range)(
+        struct vm_vcpu_info_shared *, const void *, uint64_t, uxen_pfn_t *);
     uint32_t ui_map_page_range_offset;
     uint32_t ui_map_page_range_max_nr;
     uxen_pfn_t (__interface_fn *ui_mapped_global_va_pfn)(const void *);
@@ -260,6 +261,7 @@ struct vm_vcpu_info_shared {
     uint32_t vci_host_halted;
     uint32_t vci_has_timer_interrupt;
     void * volatile vci_wait_event;
+    uint32_t vci_map_page_range_requested;
 };
 
 enum {
@@ -271,6 +273,7 @@ enum {
     VCI_RUN_MODE_YIELD,
     VCI_RUN_MODE_MEMCACHE_CHECK,
     VCI_RUN_MODE_FREEPAGE_CHECK,
+    VCI_RUN_MODE_MAP_PAGE_REQUEST,
     VCI_RUN_MODE_SHUTDOWN,
 };
 

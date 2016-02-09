@@ -331,6 +331,7 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
     case VCI_RUN_MODE_PREEMPT:
     case VCI_RUN_MODE_MEMCACHE_CHECK:
     case VCI_RUN_MODE_FREEPAGE_CHECK:
+    case VCI_RUN_MODE_MAP_PAGE_REQUEST:
         uxen_set_current(v);
         hvm_cpu_on();
         break;
@@ -372,6 +373,11 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
             uxen_info->ui_memcache_check &&
             UI_HOST_CALL(ui_memcache_check)) {
             vci->vci_run_mode = VCI_RUN_MODE_MEMCACHE_CHECK;
+            ret = 0;
+            goto out_reset_current;
+        }
+        if (vci->vci_map_page_range_requested) {
+            vci->vci_run_mode = VCI_RUN_MODE_MAP_PAGE_REQUEST;
             ret = 0;
             goto out_reset_current;
         }

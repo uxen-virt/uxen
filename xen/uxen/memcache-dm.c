@@ -288,25 +288,30 @@ _mdm_init_vm(struct domain *d)
     if (!vmis->vmi_mapcache_active)
         return -EINVAL;
 
-    d->mdm_map_pfns = mdm->mdm_map_pfns;
-    printk(XENLOG_INFO "%s:vm%u cache size %x\n", __FUNCTION__, d->domain_id,
-           d->mdm_map_pfns << PAGE_SHIFT);
-    s = ALIGN_PAGE_UP(sizeof(uint32_t) * d->mdm_map_pfns);
-    d->mdm_mapped_pfn = alloc_host_pages(s >> PAGE_SHIFT, MEMF_multiok);
+    ASSERT(!d->mdm_map_pfns);
     if (!d->mdm_mapped_pfn) {
-        printk(XENLOG_ERR "%s:vm%u failed to allocate mapped_pfn array\n",
-               __FUNCTION__, d->domain_id);
-        return -ENOMEM;
+        s = ALIGN_PAGE_UP(sizeof(uint32_t) * mdm->mdm_map_pfns);
+        d->mdm_mapped_pfn = alloc_host_pages(s >> PAGE_SHIFT, MEMF_multiok);
+        if (!d->mdm_mapped_pfn) {
+            printk(XENLOG_DEBUG "%s:vm%u retry mapped_pfn array alloc\n",
+                   __FUNCTION__, d->domain_id);
+            return -EMAPPAGERANGE;
+        }
+        memset(d->mdm_mapped_pfn, 0xff, s);
     }
-    memset(d->mdm_mapped_pfn, 0xff, s);
-    s = ALIGN_PAGE_UP(sizeof(uint32_t) * d->mdm_map_pfns);
-    d->mdm_mapped_mfn = alloc_host_pages(s >> PAGE_SHIFT, MEMF_multiok);
     if (!d->mdm_mapped_mfn) {
-        printk(XENLOG_ERR "%s:vm%u failed to allocate mapped_mfn array\n",
-               __FUNCTION__, d->domain_id);
-        return -ENOMEM;
+        s = ALIGN_PAGE_UP(sizeof(uint32_t) * mdm->mdm_map_pfns);
+        d->mdm_mapped_mfn = alloc_host_pages(s >> PAGE_SHIFT, MEMF_multiok);
+        if (!d->mdm_mapped_mfn) {
+            printk(XENLOG_DEBUG "%s:vm%u retry mapped_mfn array alloc\n",
+                   __FUNCTION__, d->domain_id);
+            return -EMAPPAGERANGE;
+        }
+        memset(d->mdm_mapped_mfn, 0xff, s);
     }
-    memset(d->mdm_mapped_mfn, 0xff, s);
+    printk(XENLOG_INFO "%s:vm%u cache size %x\n", __FUNCTION__, d->domain_id,
+           mdm->mdm_map_pfns << PAGE_SHIFT);
+    d->mdm_map_pfns = mdm->mdm_map_pfns;
     d->mdm_next_offset = 0;
     d->mdm_mfn_to_entry = mdm->mdm_mfn_to_entry;
     d->mdm_end_low_gpfn = mdm->mdm_end_low_gpfn;

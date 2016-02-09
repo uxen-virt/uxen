@@ -6,7 +6,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -530,8 +530,11 @@ long arch_do_domctl(
 
         ret = -ENOMEM;
         c.data = alloc_host_pages(PFN_UP(c.size), MEMF_multiok);
-        if ( c.data == NULL )
+        if ( c.data == NULL ) {
+            if (current->vm_vcpu_info_shared->vci_map_page_range_requested)
+                ret = -EMAPPAGERANGE;
             goto sethvmcontext_out;
+        }
 
         ret = -EFAULT;
         if ( copy_from_guest(c.data, domctl->u.hvmcontext.buffer, c.size) != 0)
@@ -586,8 +589,11 @@ long arch_do_domctl(
         /* Allocate our own marshalling buffer */
         ret = -ENOMEM;
         c.data = alloc_host_pages(PFN_UP(c.size), MEMF_multiok);
-        if ( c.data == NULL )
+        if ( c.data == NULL ) {
+            if (current->vm_vcpu_info_shared->vci_map_page_range_requested)
+                ret = -EMAPPAGERANGE;
             goto gethvmcontext_out;
+        }
 
         domain_pause(d);
         domain_pause_time(d);
