@@ -542,7 +542,6 @@ uxen_ioctl(u_long cmd, struct fd_assoc *fda, struct vm_info *vmi,
         ret = EINVAL;
         break;
     case UXENLOGGING:
-        CHECK_MODE(MODE_INITIALIZED, "UXENLOGGING");
         IOCTL_VM_ADMIN_CHECK("UXENLOGGING");
         ret = init_fd_assoc_events("UXENLOGGING", fda);
         if (ret)
