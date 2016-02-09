@@ -2,7 +2,7 @@
  *  uxen_logging.c
  *  uxen
  *
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -13,7 +13,7 @@
 #include <uxen_ioctl.h>
 
 static struct uxen_logging_buffer_desc
-uxen_logging_buffer_desc = UXEN_LOGGING_BUFFER_DESC_INITIALIZER;
+uxen_sys_logging_buffer_desc = UXEN_LOGGING_BUFFER_DESC_INITIALIZER;
 
 int
 logging_init(struct uxen_logging_buffer_desc *bd, uint32_t size)
@@ -21,7 +21,7 @@ logging_init(struct uxen_logging_buffer_desc *bd, uint32_t size)
     int ret;
 
     if (!bd)
-        bd = &uxen_logging_buffer_desc;
+        bd = &uxen_sys_logging_buffer_desc;
 
     if (bd->buffer)
         return 0;
@@ -32,7 +32,7 @@ logging_init(struct uxen_logging_buffer_desc *bd, uint32_t size)
         size = LOGGING_MAX_BUFFER_SIZE;
 
     bd->size = size;
-    bd->npages = (size + sizeof(struct uxen_logging_buffer) +
+    bd->npages = (size + sizeof(struct uxen_logging_buffer) + 1 +
                   PAGE_SIZE - 1) >> PAGE_SHIFT;
 
     bd->mfns = kernel_malloc(bd->npages * sizeof(bd->mfns[0]));
@@ -94,7 +94,7 @@ uxen_op_logging(struct uxen_logging_desc *uld, struct fd_assoc *fda)
     if (fda->vmi)
         md->buffer_desc = &fda->vmi->vmi_logging_desc;
     else
-        md->buffer_desc = &uxen_logging_buffer_desc;
+        md->buffer_desc = &uxen_sys_logging_buffer_desc;
 
     bd = md->buffer_desc;
     ret = logging_init(bd, uld->uld_size);
@@ -165,7 +165,7 @@ logging_free(struct uxen_logging_buffer_desc *bd)
 
     dprintk("%s\n", __FUNCTION__);
     if (!bd)
-        bd = &uxen_logging_buffer_desc;
+        bd = &uxen_sys_logging_buffer_desc;
 
     spinlock_free(bd->lock);
     if (bd->buffer) {
@@ -199,7 +199,7 @@ uxen_op_logging_vprintk(struct vm_info_shared *vmis,
     if (vmi && vmi->vmi_logging_desc.buffer)
         bd = &vmi->vmi_logging_desc;
     else
-        bd = &uxen_logging_buffer_desc;
+        bd = &uxen_sys_logging_buffer_desc;
 
     if (!bd->buffer)
         return 0;
@@ -266,5 +266,5 @@ uxen_op_logging_vprintk(struct vm_info_shared *vmis,
     if (bd->event && (KeGetCurrentIrql() <= DISPATCH_LEVEL))
         KeSetEvent(bd->event, 0, FALSE);
 
-    return bd != &uxen_logging_buffer_desc;
+    return bd != &uxen_sys_logging_buffer_desc;
 }

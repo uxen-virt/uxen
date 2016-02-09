@@ -127,7 +127,10 @@ EXT_COMMAND(
     ExtRemoteTyped ulbd_r;
 
     if (!usym_addr(domain)) {
-        ulbd_r = ExtRemoteTyped("uxen!uxen_logging_buffer_desc");
+        if (GetExpression("uxen!uxen_sys_logging_buffer_desc"))
+            ulbd_r = ExtRemoteTyped("uxen!uxen_sys_logging_buffer_desc");
+        else
+            ulbd_r = ExtRemoteTyped("uxen!uxen_logging_buffer_desc");
     } else {
 
         if (usym_addr(domain) < 65536)
@@ -155,7 +158,7 @@ EXT_COMMAND(
     RequireKernelMode();
 
     Dml("<exec cmd=\"dt uxen!uxen_logging_buffer_desc 0x%p\">"
-        "uxen_logging_buffer_desc</exec> @ 0x%p\n",
+        "uxen_sys_logging_buffer_desc</exec> @ 0x%p\n",
         ulbd_addr, ulbd_addr);
     Dml("<exec cmd=\"dt uxen!uxen_logging_buffer 0x%p\">"
         "uxen_logging_buffer</exec> @ 0x%p (size=0x%x)\n\n",

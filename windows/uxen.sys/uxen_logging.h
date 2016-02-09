@@ -2,7 +2,7 @@
  *  uxen_logging.h
  *  uxen
  *
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -11,10 +11,10 @@
 #ifndef _UXEN_LOGGING_H_
 #define _UXEN_LOGGING_H_
 
-#define LOGGING_DEFAULT_BUFFER_SIZE                     \
-    ((64 << 10) - sizeof(struct uxen_logging_buffer))
-#define LOGGING_MAX_BUFFER_SIZE                         \
-    ((1024 << 10) - sizeof(struct uxen_logging_buffer))
+#define LOGGING_DEFAULT_BUFFER_SIZE                             \
+    ((64 << 10) - sizeof(struct uxen_logging_buffer) - 1)
+#define LOGGING_MAX_BUFFER_SIZE                                 \
+    ((1024 << 10) - sizeof(struct uxen_logging_buffer) - 1)
 
 struct uxen_logging_buffer_desc {
     struct uxen_logging_buffer *buffer;
