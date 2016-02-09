@@ -34,8 +34,6 @@
 #define MDM_MFN_NONE (mdm_mfn_t)-1
 #define MDM_MFN_EXISTING (mdm_mfn_t)-2
 
-static int mdm_init_vm(struct domain *d);
-
 static int
 mdm_entry_get(struct domain *d, mdm_mfn_t pfn)
 {
@@ -175,16 +173,12 @@ mdm_enter(struct domain *d, xen_pfn_t pfn, xen_pfn_t mfn)
         return MDM_MFN_NONE;
 
     __smap_disable(&aflags);
-  again:
     if (pfn < d->mdm_end_low_gpfn)
         entry = &d->mdm_mfn_to_entry[pfn];
     else if (pfn >= d->mdm_start_high_gpfn && pfn < d->mdm_end_high_gpfn)
         entry = &d->mdm_mfn_to_entry[pfn - (d->mdm_start_high_gpfn -
                                             d->mdm_end_low_gpfn)];
     else {
-        if (!d->mdm_end_low_gpfn && !mdm_init_vm(d))
-            goto again;
-
         opfn = MDM_MFN_NONE;
         goto out;
     }
@@ -249,16 +243,12 @@ mdm_clear(struct domain *d, xen_pfn_t pfn, int force)
         return -1;
 
     __smap_disable(&aflags);
-  again:
     if (pfn < d->mdm_end_low_gpfn)
         entry = &d->mdm_mfn_to_entry[pfn];
     else if (pfn >= d->mdm_start_high_gpfn && pfn < d->mdm_end_high_gpfn)
         entry = &d->mdm_mfn_to_entry[pfn - (d->mdm_start_high_gpfn -
                                             d->mdm_end_low_gpfn)];
     else {
-        if (!d->mdm_end_low_gpfn && !mdm_init_vm(d))
-            goto again;
-
         ret = MDM_MFN_NONE;
         goto out;
     }
@@ -288,18 +278,15 @@ out:
     return ret;
 }
 
-static int
-mdm_init_vm(struct domain *d)
+int
+_mdm_init_vm(struct domain *d)
 {
     struct vm_info_shared *vmis = d->vm_info_shared;
     struct mdm_info *mdm = &vmis->vmi_mdm;
     size_t s;
 
     if (!vmis->vmi_mapcache_active)
-        return -1;
-
-    if (d->mdm_end_low_gpfn)
-        return -1;
+        return -EINVAL;
 
     d->mdm_map_pfns = mdm->mdm_map_pfns;
     printk(XENLOG_INFO "%s:vm%u cache size %x\n", __FUNCTION__, d->domain_id,
@@ -309,7 +296,7 @@ mdm_init_vm(struct domain *d)
     if (!d->mdm_mapped_pfn) {
         printk(XENLOG_ERR "%s:vm%u failed to allocate mapped_pfn array\n",
                __FUNCTION__, d->domain_id);
-        return -1;
+        return -ENOMEM;
     }
     memset(d->mdm_mapped_pfn, 0xff, s);
     s = ALIGN_PAGE_UP(sizeof(uint32_t) * d->mdm_map_pfns);
@@ -317,7 +304,7 @@ mdm_init_vm(struct domain *d)
     if (!d->mdm_mapped_mfn) {
         printk(XENLOG_ERR "%s:vm%u failed to allocate mapped_mfn array\n",
                __FUNCTION__, d->domain_id);
-        return -1;
+        return -ENOMEM;
     }
     memset(d->mdm_mapped_mfn, 0xff, s);
     d->mdm_next_offset = 0;

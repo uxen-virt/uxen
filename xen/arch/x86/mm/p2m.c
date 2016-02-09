@@ -1762,6 +1762,10 @@ p2m_translate(struct domain *d, xen_pfn_t *arr, int nr, int write, int map)
     int j;
     int rc;
 
+    rc = mdm_init_vm(d);
+    if (rc)
+        return rc;
+
     p2m = p2m_get_hostp2m(d);
 
     p2m_lock(p2m);

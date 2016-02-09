@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -1674,6 +1674,18 @@ load_cuckoo_pages(struct filebuf *f, int reusing_vm, int simple_mode)
 static uint8_t *dm_state_load_buf = NULL;
 static int dm_state_load_size = 0;
 
+#define uxenvm_check_mapcache_init() do { \
+        if (!mapcache_init_done) {                                      \
+            if (s_mapcache_params.marker == XC_SAVE_ID_MAPCACHE_PARAMS) \
+                mapcache_init_restore(s_mapcache_params.end_low_pfn,    \
+                                      s_mapcache_params.start_high_pfn, \
+                                      s_mapcache_params.end_high_pfn);  \
+            else                                                        \
+                mapcache_init(vm_mem_mb);                               \
+            mapcache_init_done = 1;                                     \
+        }                                                               \
+    } while (0)
+
 #define uxenvm_check_restore_clone(mode) do {                           \
         if ((mode) == VM_RESTORE_CLONE) {                               \
             ret = xc_domain_clone_physmap(xc_handle, vm_id,             \
@@ -1725,6 +1737,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
     int load_lazy_load_info = vm_lazy_load;
     struct page_offset_info *lli = &dm_lazy_load_info;
     int32_t marker;
+    int mapcache_init_done = 0;
     int ret;
     int size;
 
@@ -1863,6 +1876,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
         case XC_SAVE_ID_CUCKOO_DATA:
             uxenvm_load_read_struct(f, s_cuckoo, marker, ret, err_msg, out);
             uxenvm_check_restore_clone(restore_mode);
+            uxenvm_check_mapcache_init();
             ret = load_cuckoo_pages(f, 0, s_cuckoo.simple_mode);
             if (ret)
                 goto out;
@@ -1933,6 +1947,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
                 goto out;
             }
             uxenvm_check_restore_clone(restore_mode);
+            uxenvm_check_mapcache_init();
             ret = uxenvm_load_zero_bitmap(
                 zero_bitmap, s_zero_bitmap.zero_bitmap_size, pfn_type, err_msg);
             if (ret)
@@ -1954,6 +1969,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
             break;
 	default:
             uxenvm_check_restore_clone(restore_mode);
+            uxenvm_check_mapcache_init();
             ret = uxenvm_load_batch(f, marker, pfn_type, pfn_err, pfn_info,
                                     &dc, vm_lazy_load, populate_compressed,
                                     err_msg);
@@ -1993,12 +2009,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
 	goto out;
     }
 
-    if (s_mapcache_params.marker == XC_SAVE_ID_MAPCACHE_PARAMS)
-        mapcache_init_restore(s_mapcache_params.end_low_pfn,
-                              s_mapcache_params.start_high_pfn,
-                              s_mapcache_params.end_high_pfn);
-    else
-        mapcache_init(vm_mem_mb);
+    uxenvm_check_mapcache_init();
 
     if (load_lazy_load_info) {
         uint64_t page_offsets_pos = 0;
