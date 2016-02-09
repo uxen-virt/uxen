@@ -69,9 +69,6 @@ DEFINE_PER_CPU(uint32_t, host_cpu_preemption);
 uint32_t _host_cpu_preemption[NR_CPUS];
 #endif
 
-int hostsched_setup_vm(struct domain *, struct vm_info_shared *);
-struct vm_vcpu_info_shared *hostsched_setup_vcpu(struct vcpu *,
-                                                 struct vm_vcpu_info_shared *);
 static void
 _cpu_irq_disable(void)
 {

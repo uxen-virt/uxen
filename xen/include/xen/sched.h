@@ -917,6 +917,9 @@ extern void dump_runq(unsigned char key);
 
 #define num_cpupool_cpus(c) cpumask_weight((c)->cpu_valid)
 
+int hostsched_setup_vm(struct domain *, struct vm_info_shared *);
+struct vm_vcpu_info_shared *hostsched_setup_vcpu(struct vcpu *,
+                                                 struct vm_vcpu_info_shared *);
 void hostsched_notify_exception(struct domain *);
 void hostsched_signal_event(struct vcpu *, void *);
 void hostsched_kick_vcpu(struct vcpu *);
