@@ -968,6 +968,10 @@ kernel_alloc_mfn(uxen_pfn_t *mfn, int zeroed)
     if (zeroed)
         memset(physmap_pfn_to_va(*mfn), 0, PAGE_SIZE);
 
+    lck_spin_lock(vm_page_lck);
+    page_lookup[*mfn] = page;
+    lck_spin_unlock(vm_page_lck);
+
     ret = 0;
   out:
     return ret;
