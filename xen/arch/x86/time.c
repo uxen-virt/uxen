@@ -11,7 +11,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -1609,8 +1609,8 @@ static int _disable_pit_irq(void(*hpet_broadcast_setup)(void))
         {
             if ( xen_cpuidle > 0 )
             {
-                print_symbol("%s() failed, turning to PIT broadcast\n",
-                             (unsigned long)hpet_broadcast_setup);
+                printk("%S() failed, turning to PIT broadcast\n",
+                       (printk_symbol)hpet_broadcast_setup);
                 return -1;
             }
             ret = 0;

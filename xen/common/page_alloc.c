@@ -1255,8 +1255,8 @@ alloc_host_page(void)
     int cpu = smp_processor_id();
 
     if (!_uxen_info.ui_free_pages[cpu].free_count) {
-        printk("%s: no pages on cpu %d\n", __FUNCTION__, cpu);
-        print_symbol("from %s\n", (uintptr_t)__builtin_return_address(0));
+        printk("%s: no pages on cpu %d from %S\n", __FUNCTION__, cpu,
+               (printk_symbol)__builtin_return_address(0));
         return NULL;
     }
 
@@ -1310,9 +1310,9 @@ free_host_page(struct page_info *pg)
 #endif  /* __UXEN__ */
 #ifdef DEBUG_MAPCACHE
     if (atomic_read(&pg->mapped) > 1) {
-        printk("%s: mfn %lx still mapped", __FUNCTION__, page_to_mfn(pg));
-        print_symbol(", from %s", (uintptr_t)pg->lastmap);
-        print_symbol(" and %s\n", (uintptr_t)pg->lastmap0);
+        printk("%s: mfn %lx still mapped from %S and %S\n", __FUNCTION__,
+               page_to_mfn(pg), (printk_symbol)pg->lastmap,
+               (printk_symbol)pg->lastmap0);
     }
     if (atomic_read(&pg->mapped)) {
         atomic_set(&pg->mapped, 0);
@@ -1476,14 +1476,14 @@ alloc_host_pages(unsigned int pages, unsigned int memflags)
     ASSERT(!in_irq());
 
     if (pages > 1 && !(memflags & (MEMF_xmalloc | MEMF_multiok))) {
-        printk("%s: non-xmalloc/multiok alloc %d pages from %S", __FUNCTION__,
+        printk("%s: non-xmalloc/multiok alloc %d pages from %S\n", __FUNCTION__,
                pages, (printk_symbol)__builtin_return_address(0));
         BUG();
         return NULL;
     }
 
     if (pages > _uxen_info.ui_map_page_range_max_nr) {
-        printk("%s: alloc pages %d > %d pages from %S", __FUNCTION__,
+        printk("%s: alloc pages %d > %d pages from %S\n", __FUNCTION__,
                pages, _uxen_info.ui_map_page_range_max_nr,
                (printk_symbol)__builtin_return_address(0));
         BUG();
@@ -1521,8 +1521,8 @@ alloc_host_pages(unsigned int pages, unsigned int memflags)
         v = map_xen_page(pfns[0]);
 
 #ifdef UXEN_ALLOC_DEBUG
-    print_symbol("%s: ", (unsigned long)__builtin_return_address(0));
-    printk("alloc host pages -> %p\n", v);
+    printk("%S: alloc host pages -> %p\n",
+           (printk_symbol)__builtin_return_address(0), v);
 #endif  /* UXEN_ALLOC_DEBUG */
 
     if (v)
@@ -1795,8 +1795,8 @@ void free_domheap_pages(struct page_info *pg, unsigned int order)
          * shared with the domain */
         ASSERT(d != NULL);
 #ifdef UXEN_ALLOC_DEBUG
-        print_symbol("%s: ", (unsigned long)__builtin_return_address(0));
-        printk("free xen domheap page mfn %lx\n", page_to_mfn(pg));
+        printk("%s: free xen domheap page mfn %lx from %S\n", __FUNCTION__
+               page_to_mfn(pg), (printk_symbol)__builtin_return_address(0));
 #endif  /* UXEN_ALLOC_DEBUG */
 
         ASSERT(order == 0);

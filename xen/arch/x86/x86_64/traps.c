@@ -53,7 +53,7 @@ static void _show_registers(
 
     printk("RIP:    %04x:[<%016lx>]", regs->cs, regs->rip);
     if ( context == CTXT_hypervisor )
-        print_symbol(" %s", regs->rip);
+        printk(" %S", (printk_symbol)regs->rip);
     printk("\nRFLAGS: %016lx   ", regs->rflags);
 #ifndef __UXEN__
     if ( (context == CTXT_pv_guest) && v && v->vcpu_info )
@@ -254,10 +254,9 @@ asmlinkage_abi void do_double_fault(struct cpu_user_regs *regs)
     /* Find information saved during fault and dump it to the console. */
     printk("*** DOUBLE FAULT ***\n");
     print_xen_info();
-    printk("CPU:    %d\nRIP:    %04x:[<%016lx>]",
-           cpu, regs->cs, regs->rip);
-    print_symbol(" %s", regs->rip);
-    printk("\nRFLAGS: %016lx\n", regs->rflags);
+    printk("CPU:    %d\nRIP:    %04x:[<%016lx>] %S\n",
+           cpu, regs->cs, regs->rip, (printk_symbol)regs->rip);
+    printk("RFLAGS: %016lx\n", regs->rflags);
     printk("rax: %016lx   rbx: %016lx   rcx: %016lx\n",
            regs->rax, regs->rbx, regs->rcx);
     printk("rdx: %016lx   rsi: %016lx   rdi: %016lx\n",

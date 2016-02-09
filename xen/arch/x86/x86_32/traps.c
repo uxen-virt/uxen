@@ -49,7 +49,7 @@ static void _show_registers(
 
     printk("EIP:    %04x:[<%08x>]", regs->cs, regs->eip);
     if ( context == CTXT_hypervisor )
-        print_symbol(" %s", regs->eip);
+        printk(" %S", (printk_symbol)regs->eip);
     printk("\nEFLAGS: %08x   ", regs->eflags);
     if ( (context == CTXT_pv_guest) && v && v->vcpu_info )
         printk("EM: %d   ", !!v->vcpu_info->evtchn_upcall_mask);
@@ -249,9 +249,8 @@ asmlinkage void do_double_fault(void)
     tss = &per_cpu(init_tss, cpu);
     printk("*** DOUBLE FAULT ***\n");
     print_xen_info();
-    printk("CPU:    %d\nEIP:    %04x:[<%08x>]",
-           cpu, tss->cs, tss->eip);
-    print_symbol(" %s\n", tss->eip);
+    printk("CPU:    %d\nEIP:    %04x:[<%08x>] %S\n",
+           cpu, tss->cs, tss->eip, (printk_symbol)tss->eip);
     printk("EFLAGS: %08x\n", tss->eflags);
     printk("CR3:    %08x\n", tss->__cr3);
     printk("eax: %08x   ebx: %08x   ecx: %08x   edx: %08x\n",

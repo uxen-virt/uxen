@@ -20,7 +20,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -235,16 +235,14 @@ static void show_trace(struct cpu_user_regs *regs)
 
     printk("Xen call trace:\n   ");
 
-    printk("[<%p>]", _p(regs->eip));
-    print_symbol(" %s\n   ", regs->eip);
+    printk("[<%p>] %S\n", _p(regs->eip), (printk_symbol)regs->eip);
 
     while ( ((long)stack & (STACK_SIZE-BYTES_PER_LONG)) != 0 )
     {
         addr = *stack++;
         if ( is_kernel_text(addr) || is_kernel_inittext(addr) )
         {
-            printk("[<%p>]", _p(addr));
-            print_symbol(" %s\n   ", addr);
+            printk("[<%p>] %S\n", _p(addr), (printk_symbol)addr);
         }
     }
 
@@ -266,8 +264,7 @@ show_trace(struct cpu_user_regs *regs)
 
     addr = uregs.eip;
     do {
-        printk("   [<%p>]", _p(addr));
-        print_symbol(" %s\n", addr);
+        printk("   [<%p>] %S\n", _p(addr), (printk_symbol)addr);
         if (stack >= this_cpu(stack_top)) {
             printk("   === top of stack reached\n");
             break;
@@ -287,8 +284,7 @@ static void show_trace(struct cpu_user_regs *regs)
 
     printk("Xen call trace:\n   ");
 
-    printk("[<%p>]", _p(regs->eip));
-    print_symbol(" %s\n   ", regs->eip);
+    printk("[<%p>] %S\n", _p(regs->eip), (printk_symbol)regs->eip);
 
     /* Bounds for range of valid frame pointer. */
     low = (unsigned long)(ESP_BEFORE_EXCEPTION(regs) - 2);
@@ -323,8 +319,7 @@ static void show_trace(struct cpu_user_regs *regs)
             addr  = frame[1];
         }
 
-        printk("[<%p>]", _p(addr));
-        print_symbol(" %s\n   ", addr);
+        printk("[<%p>] %S\n", _p(addr), (printk_symbol)addr);
 
         low = (unsigned long)&frame[2];
     }
@@ -394,8 +389,7 @@ void show_stack_overflow(unsigned int cpu, unsigned long esp)
         addr = *stack++;
         if ( is_kernel_text(addr) || is_kernel_inittext(addr) )
         {
-            printk("%p: [<%p>]", stack, _p(addr));
-            print_symbol(" %s\n   ", addr);
+            printk("%p: [<%p>] %S\n", stack, _p(addr), (printk_symbol)addr);
         }
     }
 

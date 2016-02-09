@@ -900,7 +900,7 @@ __uxen_process_ud2(struct cpu_user_regs *regs)
     uint64_t fixup;
     int id, lineno;
 
-    // print_symbol("eip is %s\n", eip);
+    // printk("eip is %S\n", (printk_symbol)eip);
 
     bug = (struct bug_frame *)eip;
     if (memcmp(bug->ud2, "\xf\xb", sizeof(bug->ud2)) ||

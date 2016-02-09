@@ -7,7 +7,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -726,9 +726,9 @@ dump_timer(struct timers *ts, struct timer *t, void *opaque)
 {
     s_time_t now = *((s_time_t*)opaque);
 
-    printk("  ex=%8"PRId64"us timer=%p cb=%p(%p)",
-           (t->expires - now) / 1000, t, t->function, t->data);
-    print_symbol(" %s\n", (unsigned long)t->function);
+    printk("  ex=%8"PRId64"us timer=%p cb=%p(%p) %S\n",
+           (t->expires - now) / 1000, t, t->function, t->data,
+           (printk_symbol)t->function);
 }
 
 /* static */ void dump_timerq(unsigned char key)
