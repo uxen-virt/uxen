@@ -185,7 +185,7 @@ alloc_map_pfn_array_pool_entry(struct map_pfn_array_pool_entry *e,
     if (rc != KERN_SUCCESS)
         return ENOMEM;
 
-    e->va = (void *)(uintptr_t)addr;
+    e->va = (void *)addr;
     e->num = num;
 
     for (i = 0; i < num; i++) {
@@ -199,7 +199,7 @@ alloc_map_pfn_array_pool_entry(struct map_pfn_array_pool_entry *e,
     if (verify_mapping(e->va, pfn_array, num, __FUNCTION__, __LINE__)) {
         fail_msg("verify_mapping failed");
         rc = vm_deallocate(xnu_kernel_map(),
-                         (mach_vm_address_t)(uintptr_t)e->va, num * PAGE_SIZE);
+                           (mach_vm_address_t)e->va, num * PAGE_SIZE);
         if (rc != KERN_SUCCESS)
             fail_msg("vm_deallocate also failed");
         return ENOMEM;
@@ -217,7 +217,7 @@ free_map_pfn_array_pool_entry(struct map_pfn_array_pool_entry *e)
     num = e->num;
 
     rc = vm_deallocate(xnu_kernel_map(),
-                       (vm_offset_t)(uintptr_t)e->va, e->num * PAGE_SIZE);
+                       (vm_offset_t)e->va, e->num * PAGE_SIZE);
     if (rc != KERN_SUCCESS)
         fail_msg("vm_deallocate failed");
 }
@@ -522,8 +522,7 @@ user_mmap_range(uxen_pfn_t *mfns, uint32_t num, int mapping_mode,
     }
 
 #ifdef DEBUG
-    if (verify_mapping((void *)(uintptr_t)addr, mfns, num,
-                       __FUNCTION__, __LINE__)) {
+    if (verify_mapping((void *)addr, mfns, num, __FUNCTION__, __LINE__)) {
         fail_msg("verify_mapping failed");
         goto out;
     }
@@ -535,7 +534,7 @@ user_mmap_range(uxen_pfn_t *mfns, uint32_t num, int mapping_mode,
         goto out;
     }
 
-    um->va.addr = (void *)(uintptr_t)addr;
+    um->va.addr = (void *)addr;
     um->va.size = num * PAGE_SIZE;
     um->fda = fda;
     um->mfns = NULL; /* Discriminator for xen pages */
@@ -546,7 +545,7 @@ user_mmap_range(uxen_pfn_t *mfns, uint32_t num, int mapping_mode,
     rb_tree_insert_node(&umi->rbtree, um);
     lck_spin_unlock(umi->lck);
 
-    va = (void *)(uintptr_t)addr;
+    va = (void *)addr;
 
   out:
     if (va == NULL) {
@@ -606,8 +605,7 @@ user_mmap_xen_mfns(uint32_t num, xen_pfn_t *mfns, struct fd_assoc *fda)
     }
 
 #ifdef DEBUG
-    if (verify_mapping_xen((void *)(uintptr_t)addr,
-                           mfns, num, __FUNCTION__, __LINE__)) {
+    if (verify_mapping_xen((void *)addr, mfns, num, __FUNCTION__, __LINE__)) {
         fail_msg("verify_mapping failed");
         goto out;
     }
@@ -619,7 +617,7 @@ user_mmap_xen_mfns(uint32_t num, xen_pfn_t *mfns, struct fd_assoc *fda)
         goto out;
     }
 
-    um->va.addr = (void *)(uintptr_t)addr;
+    um->va.addr = (void *)addr;
     um->va.size = num * PAGE_SIZE;
     um->fda = fda;
     um->mfns = mfns;
@@ -1164,7 +1162,7 @@ kernel_alloc_va(uint32_t num)
         return NULL;
     }
 
-    return (void *)(uintptr_t)addr;
+    return (void *)addr;
 }
 
 int
@@ -1399,7 +1397,7 @@ remove_host_mfns_mapping(uint64_t gmfn, size_t len, struct fd_assoc *fda)
 static int
 user_remove_host_mfns_user_mapping(struct user_mapping *um)
 {
-    vm_map_offset_t addr = (vm_map_offset_t)(uintptr_t)um->va.addr;
+    vm_map_offset_t addr = (vm_map_offset_t)um->va.addr;
     kern_return_t rc;
 
     assert(um->type == USER_MAPPING_HOST_MFNS);
@@ -1421,7 +1419,7 @@ int
 map_host_pages(void *va, size_t len, uint64_t gmfn,
                struct fd_assoc *fda)
 {
-    vm_map_offset_t addr = (vm_map_offset_t)(uintptr_t)va;
+    vm_map_offset_t addr = (vm_map_offset_t)va;
     struct user_mapping_info *umi = &fda->user_mappings;
     struct vm_info *vmi = fda->vmi;
     struct user_mapping *um = NULL;
@@ -1709,7 +1707,7 @@ user_malloc(size_t size, enum user_mapping_type type, struct fd_assoc *fda)
         goto out;
     }
 
-    um->va.addr = (void *)(uintptr_t)addr;
+    um->va.addr = (void *)addr;
     um->va.size = size;
     um->fda = fda;
     um->vm_map = task_map;
@@ -1720,7 +1718,7 @@ user_malloc(size_t size, enum user_mapping_type type, struct fd_assoc *fda)
     rb_tree_insert_node(&umi->rbtree, um);
     lck_spin_unlock(umi->lck);
 
-    va = (void *)(uintptr_t)addr;
+    va = (void *)addr;
 
   out:
     if (!va) {
@@ -1748,7 +1746,7 @@ user_malloc(size_t size, enum user_mapping_type type, struct fd_assoc *fda)
 static int
 user_free_user_mapping(struct user_mapping *um)
 {
-    vm_map_offset_t addr = (vm_map_offset_t)(uintptr_t)um->va.addr;
+    vm_map_offset_t addr = (vm_map_offset_t)um->va.addr;
     kern_return_t rc;
     pmap_t task_pmap;
     int ret = 0;
@@ -1862,7 +1860,7 @@ int
 uxen_mem_free(struct uxen_free_desc *ufd, struct fd_assoc *fda)
 {
 
-    user_free((void *)(uintptr_t)ufd->ufd_addr, fda);
+    user_free((void *)ufd->ufd_addr, fda);
 
     return 0;
 }
@@ -2019,7 +2017,7 @@ uxen_mem_mmapbatch(struct uxen_mmapbatch_desc *ummapbd, struct fd_assoc *fda)
         goto out;
     }
 
-    ummapbd->umd_addr = (uint64_t)(uintptr_t)addr;
+    ummapbd->umd_addr = (uint64_t)addr;
 
     ret = 0;
   out:
@@ -2044,7 +2042,7 @@ uxen_mem_munmap(struct uxen_munmap_desc *umd, struct fd_assoc *fda)
     if (vmi->vmi_shared.vmi_runnable == 0)
         goto out;
 
-    user_free((void *)(uintptr_t)umd->umd_addr, fda);
+    user_free((void *)umd->umd_addr, fda);
 
     ret = 0;
   out:
