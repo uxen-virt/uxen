@@ -668,7 +668,7 @@ uxen_op_init(struct fd_assoc *fda)
         goto out;
     }
 
-    uxen_info->ui_printf = uxen_dprintk;
+    uxen_info->ui_printf = uxen_printk;
 
     uxen_info->ui_map_page = map_page;
     /* not called through to host */
