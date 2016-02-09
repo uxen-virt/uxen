@@ -54,7 +54,7 @@ logging_init(struct uxen_logging_buffer_desc *bd, uint32_t size)
     }
     ret = 0;
 
-    bd->buffer = map_pfn_array(bd->mfns, bd->npages, &bd->map_handle);
+    bd->buffer = map_pfn_array(bd->mfns, bd->npages);
     if (!bd->buffer) {
         fail_msg("map_pfn_array failed");
         ret = EINVAL;
@@ -73,7 +73,7 @@ logging_init(struct uxen_logging_buffer_desc *bd, uint32_t size)
   out:
     if (ret) {
         if (bd->buffer) {
-            unmap(&bd->map_handle);
+            unmap_pfn_array(bd->buffer, NULL, bd->npages);
             bd->buffer = NULL;
         }
         if (bd->mfns) {
@@ -153,7 +153,7 @@ logging_free(struct uxen_logging_buffer_desc *bd)
 
     spinlock_free(bd->lock);
     if (bd->buffer) {
-        unmap(&bd->map_handle);
+        unmap_pfn_array(bd->buffer, NULL, bd->npages);
         bd->buffer = NULL;
     }
     if (bd->mfns) {

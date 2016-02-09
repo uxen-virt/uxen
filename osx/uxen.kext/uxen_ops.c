@@ -71,10 +71,6 @@ unmap_page_va(const void *va)
     return physmap_va_to_pfn(va);
 }
 
-struct map_range_handle {
-    void *handle;
-};
-
 static void *
 map_page_range(uint64_t n, uxen_pfn_t *mfns)
 {

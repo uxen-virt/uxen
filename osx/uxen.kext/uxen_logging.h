@@ -22,7 +22,6 @@ struct uxen_logging_buffer_desc {
     lck_spin_t *lock;
     int npages;
     uint32_t size;
-    struct map_pfn_array_pool_entry map_handle;
     struct notification_event event;
 };
 #define UXEN_LOGGING_BUFFER_DESC_INITIALIZER { NULL, NULL, 0, 0, }

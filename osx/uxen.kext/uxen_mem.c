@@ -91,7 +91,7 @@ map_mfn(uintptr_t va, xen_pfn_t mfn)
 
 #ifdef DEBUG
 static int
-verify_mapping(void *_va, uint32_t *pfns, int len, const char *fn, int line)
+verify_mapping(void *_va, uxen_pfn_t *pfns, int len, const char *fn, int line)
 {
     int idx;
     uint64_t va = (uint64_t)_va;
@@ -100,52 +100,15 @@ verify_mapping(void *_va, uint32_t *pfns, int len, const char *fn, int line)
     if (!physmap_base)
         return 0;
 
-    // dprintk("%s: ranges %d\n", __FUNCTION__, len);
     for (idx = 0; idx < len; idx++) {
         uint64_t pte, addr;
 
         pte = set_pte(va, ~0ULL);
         addr = (pte & ~0x8000000000000fff);
-        if (addr != (uint64_t)pfns[idx] << PAGE_SHIFT) {
+        if (addr >> PAGE_SHIFT != pfns[idx]) {
             uint64_t cr3;
             dprintk("%s: fail at range %d/%d for mfn %x != %"PRIx64
                     "from %s:%d\n", __FUNCTION__, idx, len,
-                    pfns[idx] << PAGE_SHIFT, addr, fn, line);
-            if (addr) {
-                asm ("movq %%cr3, %0\n"
-                     : "=a" (cr3));
-                dprintk("%s: cr3 %"PRIx64"\n", __FUNCTION__, cr3);
-                debug_break();
-                return 1;
-            }
-        }
-
-        va += PAGE_SIZE;
-    }
-
-    return 0;
-}
-
-static int
-verify_mapping_xen(void *_va, xen_pfn_t *pfns, int len, const char *fn, int line)
-{
-    int idx;
-    uint64_t va = (uint64_t)_va;
-    extern uint64_t physmap_base;
-
-    if (!physmap_base)
-        return 0;
-
-    // dprintk("%s: ranges %d\n", __FUNCTION__, len);
-    for (idx = 0; idx < len; idx++) {
-        uint64_t pte, addr;
-
-        pte = set_pte(va, ~0ULL);
-        addr = (pte & ~0x8000000000000fff);
-        if (addr != pfns[idx] << PAGE_SHIFT) {
-            uint64_t cr3;
-            dprintk("%s: fail at range %d/%d for mfn %"PRIx64" != %"PRIx64
-                    " from %s:%d\n", __FUNCTION__, idx, len,
                     pfns[idx] << PAGE_SHIFT, addr, fn, line);
             if (addr) {
                 asm ("movq %%cr3, %0\n"
@@ -172,9 +135,8 @@ static int map_pfn_array_pool_min = 2;
 #define MAP_PFN_ARRAY_POOL_ENTRY_SIZE UXEN_MAP_PAGE_RANGE_MAX
 static uint32_t map_pfn_array_pool_entries = 0;
 
-static int
-alloc_map_pfn_array_pool_entry(struct map_pfn_array_pool_entry *e,
-                               uint32_t *pfn_array, int num)
+void *
+map_pfn_array(uxen_pfn_t *pfn_array, unsigned int num)
 {
     kern_return_t rc = 0;
     vm_address_t addr = 0;
@@ -183,46 +145,69 @@ alloc_map_pfn_array_pool_entry(struct map_pfn_array_pool_entry *e,
     rc = vm_allocate(xnu_kernel_map(), &addr,
                      num * PAGE_SIZE_64, VM_FLAGS_ANYWHERE);
     if (rc != KERN_SUCCESS)
-        return ENOMEM;
+        return NULL;
 
-    e->va = (void *)addr;
-    e->num = num;
-
-    for (i = 0; i < num; i++) {
-      xnu_pmap_enter(kernel_pmap, addr, pfn_array[i],
-                     VM_PROT_READ|VM_PROT_WRITE, VM_PROT_NONE,
-                     0, 1 /*wired*/);
-      addr += PAGE_SIZE;
-    }
+    for (i = 0; i < num; i++)
+        xnu_pmap_enter(kernel_pmap, addr + (i << PAGE_SHIFT), pfn_array[i],
+                       VM_PROT_READ|VM_PROT_WRITE, VM_PROT_NONE,
+                       0, 1 /*wired*/);
 
 #ifdef DEBUG
-    if (verify_mapping(e->va, pfn_array, num, __FUNCTION__, __LINE__)) {
+    if (verify_mapping((void *)addr, pfn_array, num, __FUNCTION__, __LINE__)) {
         fail_msg("verify_mapping failed");
-        rc = vm_deallocate(xnu_kernel_map(),
-                           (mach_vm_address_t)e->va, num * PAGE_SIZE);
+        rc = vm_deallocate(xnu_kernel_map(), addr, num * PAGE_SIZE);
         if (rc != KERN_SUCCESS)
             fail_msg("vm_deallocate also failed");
-        return ENOMEM;
+        return NULL;
     }
 #endif
+
+    return (void *)addr;
+}
+
+void
+unmap_pfn_array(const void *va, uxen_pfn_t *pfn_array, unsigned int num)
+{
+    unsigned int i;
+
+    for (i = 0; i < num; i++) {
+        uint64_t opte;
+        opte = set_pte((uintptr_t)va + (i << PAGE_SHIFT),
+                       ((uint64_t)uxen_zero_mfn << PAGE_SHIFT) |
+                       0x8000000000000203); /* NX AVAIL0 RW PRESENT */
+        if (pfn_array)
+            pfn_array[i] = (opte & ~0x8000000000000fff) >> PAGE_SHIFT;
+    }
+    uxen_mem_tlb_flush();
+}
+
+static int
+alloc_map_pfn_array_pool_entry(struct map_pfn_array_pool_entry *e,
+                               uxen_pfn_t *pfn_array, int num)
+{
+
+    e->va = map_pfn_array(pfn_array, num);
+    if (!e->va)
+        return ENOMEM;
+    e->num = num;
+
     return 0;
 }
 
 static void
 free_map_pfn_array_pool_entry(struct map_pfn_array_pool_entry *e)
 {
-    int num;
     kern_return_t rc;
-
-    num = e->num;
 
     rc = vm_deallocate(xnu_kernel_map(),
                        (vm_offset_t)e->va, e->num * PAGE_SIZE);
     if (rc != KERN_SUCCESS)
         fail_msg("vm_deallocate failed");
+
+    kernel_free(e, sizeof(struct map_pfn_array_pool_entry));
 }
 
-static uint32_t *map_pfn_array_pool_zero_range = NULL;
+static uxen_pfn_t *map_pfn_array_pool_zero_range = NULL;
 int
 map_pfn_array_pool_fill(void)
 {
@@ -241,8 +226,8 @@ map_pfn_array_pool_fill(void)
         map_pfn_array_pool_min = 2 * uxen_nr_cpus;
 
         map_pfn_array_pool_zero_range =
-            (uint32_t *)kernel_malloc(MAP_PFN_ARRAY_POOL_ENTRY_SIZE *
-                                      sizeof (uint32_t));
+            (uxen_pfn_t *)kernel_malloc(MAP_PFN_ARRAY_POOL_ENTRY_SIZE *
+                                        sizeof (uxen_pfn_t));
         if (!map_pfn_array_pool_zero_range) {
             fail_msg("kernel_malloc failed");
             lck_spin_free(map_pfn_array_pool_lock, uxen_lck_grp);
@@ -306,7 +291,6 @@ map_pfn_array_pool_clear(void)
         lck_spin_unlock(map_pfn_array_pool_lock);
 
         free_map_pfn_array_pool_entry(e);
-        kernel_free(e, sizeof(struct map_pfn_array_pool_entry));
 
         assert(map_pfn_array_pool_entries > 0);
         map_pfn_array_pool_entries--;
@@ -319,13 +303,12 @@ map_pfn_array_pool_clear(void)
     map_pfn_array_pool_lock = NULL;
 
     kernel_free(map_pfn_array_pool_zero_range,
-                MAP_PFN_ARRAY_POOL_ENTRY_SIZE * sizeof (uint32_t));
+                MAP_PFN_ARRAY_POOL_ENTRY_SIZE * sizeof(uxen_pfn_t));
     map_pfn_array_pool_zero_range = NULL;
-
 }
 
 void *
-map_pfn_array_from_pool(uint32_t *pfn_array, uint32_t n)
+map_pfn_array_from_pool(uxen_pfn_t *pfn_array, unsigned int n)
 {
     struct map_pfn_array_pool_entry *e;
     unsigned int i;
@@ -348,81 +331,31 @@ map_pfn_array_from_pool(uint32_t *pfn_array, uint32_t n)
                 0x8000000000000223); /* NX AVAIL0 ACCESSED RW PRESENT */
     }
     uxen_mem_tlb_flush();
-    e->n_mapped = n;
 
     return e->va;
 }
 
 void
-unmap_pfn_array_from_pool(const void *va, uxen_pfn_t *mfns)
+unmap_pfn_array_from_pool(const void *va, uxen_pfn_t *pfn_array)
 {
     struct map_pfn_array_pool_entry *e = NULL;
-    unsigned int i;
 
     assert(map_pfn_array_pool_lock);
 
     lck_spin_lock(map_pfn_array_pool_lock);
     LIST_FOREACH(e, &map_pfn_array_pool_used, list_entry)
-        if (e ->va == va) {
-            /* Exiting right after. No need for FOREACH_SAFE */
-            LIST_REMOVE(e, list_entry);
+        if (e->va == va)
             break;
-        }
     assert(e);
+    LIST_REMOVE(e, list_entry);
     lck_spin_unlock(map_pfn_array_pool_lock);
 
-    for (i = 0; i < e->n_mapped; i++) {
-        uint64_t opte;
-        opte = set_pte((uintptr_t)e->va + (i << PAGE_SHIFT),
-                       ((uint64_t)uxen_zero_mfn << PAGE_SHIFT) |
-                       0x8000000000000203); /* NX AVAIL0 RW PRESENT */
-        mfns[i] = (opte & ~0x8000000000000fff) >> PAGE_SHIFT;
-    }
-    uxen_mem_tlb_flush();
+    unmap_pfn_array(e->va, pfn_array, e->num);
 
     lck_spin_lock(map_pfn_array_pool_lock);
     LIST_INSERT_HEAD(&map_pfn_array_pool, e, list_entry);
     map_pfn_array_pool_entries++;
     lck_spin_unlock(map_pfn_array_pool_lock);
-}
-
-static void *
-map_phys_range(uint32_t *pfn_array, int len,
-               struct map_pfn_array_pool_entry *e)
-{
-    int ret;
-
-    ret = alloc_map_pfn_array_pool_entry(e, pfn_array, len);
-    if (ret) {
-        fail_msg("alloc_map_pfn_array_pool_entry failed: %d", ret);
-        return NULL;
-    }
-
-    return e->va;
-}
-
-void *
-map_pfn_array(uint32_t *pfn_array, uint32_t num_pages,
-              struct map_pfn_array_pool_entry *e)
-{
-    void *ret;
-
-    ret = map_phys_range(pfn_array, num_pages, e);
-
-    return ret;
-}
-
-void *
-map_pfn(uint32_t pfn, struct map_pfn_array_pool_entry *e)
-{
-    return map_phys_range(&pfn, 1, e);
-}
-
-void
-unmap(struct map_pfn_array_pool_entry *e)
-{
-
-    free_map_pfn_array_pool_entry(e);
 }
 
 typedef struct {
@@ -575,7 +508,7 @@ user_mmap_xen_mfns(uint32_t num, xen_pfn_t *mfns, struct fd_assoc *fda)
     kern_return_t rc = 0;
     vm_map_t task_map;
     pmap_t task_pmap;
-    vm_address_t addr = 0, tmp;
+    vm_address_t addr = 0;
     void *va = NULL;
     int i;
 
@@ -596,20 +529,19 @@ user_mmap_xen_mfns(uint32_t num, xen_pfn_t *mfns, struct fd_assoc *fda)
         goto out;
     assert(addr != 0);
 
-    tmp = addr;
     for (i = 0; i < num; i++) {
-        xnu_pmap_enter(task_pmap, tmp, mfns[i],
+        xnu_pmap_enter(task_pmap, addr + (i << PAGE_SHIFT), mfns[i],
                        VM_PROT_READ|VM_PROT_WRITE, VM_PROT_NONE,
                        0, 1 /*wired*/);
-        tmp += PAGE_SIZE;
-    }
-
 #ifdef DEBUG
-    if (verify_mapping_xen((void *)addr, mfns, num, __FUNCTION__, __LINE__)) {
-        fail_msg("verify_mapping failed");
-        goto out;
-    }
+        if (verify_mapping((void *)(addr + (i << PAGE_SHIFT)),
+                           (uxen_pfn_t *)&mfns[i], 1,
+                           __FUNCTION__, __LINE__)) {
+            fail_msg("verify_mapping failed");
+            goto out;
+        }
 #endif
+    }
 
     um = (struct user_mapping *)kernel_malloc(sizeof(struct user_mapping));
     if (!um) {

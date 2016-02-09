@@ -121,8 +121,7 @@ static inline void uxen_smap_preempt_restore(struct smap_state *s)
 struct map_pfn_array_pool_entry {
     LIST_ENTRY(map_pfn_array_pool_entry) list_entry;
     void *va;
-    uint32_t num;
-    uint32_t n_mapped;
+    unsigned int num;
 };
 
 #include "uxen_logging.h"
@@ -319,21 +318,19 @@ int uxen_unload(void);
 /* uxen_mem.c */
 #define set_map_mfn_pte_flags() do { } while (0)
 uint64_t __cdecl map_mfn(uintptr_t va, xen_pfn_t mfn);
+void *map_pfn_array(uxen_pfn_t *pfn_array, unsigned int num_pages);
+void unmap_pfn_array(const void *va, uxen_pfn_t *pfn_array, unsigned int num);
 int map_pfn_array_pool_fill(void);
 void map_pfn_array_pool_clear(void);
-void *map_pfn_array_from_pool(uint32_t *pfn_array, uint32_t num_pages);
-void unmap_pfn_array_from_pool(const void *va, uxen_pfn_t *mfns);
-void *map_pfn_array(uint32_t *pfn_array, uint32_t num_pages,
-                    struct map_pfn_array_pool_entry *e);
-void *map_pfn(uint32_t pfn, struct map_pfn_array_pool_entry *e);
-void unmap(struct map_pfn_array_pool_entry *e);
+void *map_pfn_array_from_pool(uxen_pfn_t *pfn_array, unsigned int num_pages);
+void unmap_pfn_array_from_pool(const void *va, uxen_pfn_t *pfn_array);
 int uxen_mem_malloc(struct uxen_malloc_desc *, struct fd_assoc *);
 int uxen_mem_free(struct uxen_free_desc *, struct fd_assoc *);
 uint64_t uxen_mem_user_access_ok(void *, void *, uint64_t);
 int uxen_mem_mmapbatch(struct uxen_mmapbatch_desc *ummapbd,
                        struct fd_assoc *fda);
 int uxen_mem_munmap(struct uxen_munmap_desc *umd, struct fd_assoc *fda);
-void *user_mmap_pages(uint32_t num, uint32_t *pfn_array,
+void *user_mmap_pages(uint32_t num, uxen_pfn_t *pfn_array,
                       struct fd_assoc *fda);
 int user_munmap_pages(unsigned int num, const void *addr,
                       struct fd_assoc *fda);
