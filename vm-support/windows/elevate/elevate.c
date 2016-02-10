@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -22,7 +22,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         LPSTR szCmdLine, int iCmdShow)
 {
     BOOL rc;
-    SHELLEXECUTEINFO sei;
+    SHELLEXECUTEINFO sei = {0};
     DWORD ret;
     HANDLE out;
 
