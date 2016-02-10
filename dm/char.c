@@ -380,9 +380,7 @@ int send_all(int fd, const void *buf, int len1)
 
 #endif /* !_WIN32 */
 
-#ifndef _WIN32
-
-#define FD_CHR_SEND_QUEUE_MAX 131072 /* 128K */
+#define SEND_QUEUE_MAX 131072 /* 128K */
 
 struct send_buf {
     TAILQ_ENTRY(send_buf) link;
@@ -391,123 +389,222 @@ struct send_buf {
     unsigned char data[];
 };
 
+struct send_queue {
+    struct io_handler_queue *iohq;
+    int fd;
+    int err;
+    TAILQ_HEAD(, send_buf) queue;
+    critical_section lock;
+    size_t len;
+};
+
+static void send_queue_write_cb(void *opaque)
+{
+    struct send_queue *sndq = opaque;
+    struct send_buf *b;
+
+    critical_section_enter(&sndq->lock);
+    while ((b = TAILQ_FIRST(&sndq->queue))) {
+        int rc = send(sndq->fd, (void *)(b->data + b->off), b->len, 0);
+
+        if (rc == -1) {
+#if defined(_WIN32)
+            int err = WSAGetLastError();
+
+            if (err == WSAEWOULDBLOCK) {
+#else
+            int err = errno;
+
+            if (err == EWOULDBLOCK) {
+#endif
+                ioh_set_write_handler(sndq->fd, sndq->iohq, send_queue_write_cb, sndq);
+            } else {
+                ioh_set_write_handler(sndq->fd, sndq->iohq, NULL, sndq);
+                sndq->err = err;
+            }
+            break;
+        }
+
+        b->len -= rc;
+        b->off += rc;
+        sndq->len -= rc;
+        if (!b->len) {
+            TAILQ_REMOVE(&sndq->queue, b, link);
+            free(b);
+        }
+    }
+    critical_section_leave(&sndq->lock);
+}
+
+static int send_queue_write(struct send_queue *sndq, const uint8_t *buf, size_t len)
+{
+    struct send_buf *b;
+    size_t l = len;
+
+    if (l == 0)
+        return 0;
+
+    critical_section_enter(&sndq->lock);
+
+    if (sndq->err) {
+        errno = sndq->err;
+        critical_section_leave(&sndq->lock);
+        return -1;
+    }
+
+    while (TAILQ_EMPTY(&sndq->queue)) {
+        int rc = send(sndq->fd, (void *)buf, l, 0);
+        int err;
+
+        if (rc == -1) {
+#if defined(_WIN32)
+            err = WSAGetLastError();
+            if (err == WSAEWOULDBLOCK)
+#else
+            err = errno;
+            if (err == EWOULDBLOCK)
+#endif
+                break;
+            sndq->err = err;
+            critical_section_leave(&sndq->lock);
+            errno = err;
+            return -1;
+        }
+
+        if (rc == l) {
+            critical_section_leave(&sndq->lock);
+            return len;
+        }
+
+        buf += rc;
+        l -= rc;
+    }
+
+    if ((sndq->len + l) > SEND_QUEUE_MAX) {
+        critical_section_leave(&sndq->lock);
+#if defined(_WIN32)
+        errno = WSAEWOULDBLOCK;
+#else
+        errno = EWOULDBLOCK;
+#endif
+        return -1;
+    }
+
+    b = malloc(sizeof(struct send_buf) + l);
+    if (!b) {
+        critical_section_leave(&sndq->lock);
+        return -1;
+    }
+    b->off = 0;
+    b->len = l;
+    memcpy(b->data, buf, l);
+
+    TAILQ_INSERT_TAIL(&sndq->queue, b, link);
+    sndq->len += b->len;
+    critical_section_leave(&sndq->lock);
+
+    ioh_set_write_handler(sndq->fd, sndq->iohq, send_queue_write_cb, sndq);
+
+    return len;
+}
+
+static void send_queue_flush(struct send_queue *sndq)
+{
+    struct send_buf *b;
+
+    critical_section_enter(&sndq->lock);
+    while ((b = TAILQ_FIRST(&sndq->queue))) {
+        int rc;
+
+        if (sndq->err) {
+            TAILQ_REMOVE(&sndq->queue, b, link);
+            free(b);
+            continue;
+        }
+
+        rc = send(sndq->fd, (void *)(b->data + b->off), b->len, 0);
+        if (rc == -1) {
+#if defined(_WIN32)
+            int err = WSAGetLastError();
+#else
+            int err = errno;
+#endif
+
+            if (err != EAGAIN &&
+#if defined(_WIN32)
+                err != WSAEWOULDBLOCK &&
+#else
+                err != EWOULDBLOCK &&
+#endif
+                err != EINTR) {
+                sndq->err = err;
+                TAILQ_REMOVE(&sndq->queue, b, link);
+                free(b);
+            }
+
+            continue;
+        }
+
+        b->len -= rc;
+        b->off += rc;
+        sndq->len -= rc;
+
+        if (!b->len) {
+            TAILQ_REMOVE(&sndq->queue, b, link);
+            free(b);
+        }
+    }
+    critical_section_leave(&sndq->lock);
+}
+
+static void send_queue_cleanup(struct send_queue *sndq)
+{
+    struct send_buf *b;
+
+    critical_section_enter(&sndq->lock);
+    while ((b = TAILQ_FIRST(&sndq->queue))) {
+        TAILQ_REMOVE(&sndq->queue, b, link);
+        free(b);
+    }
+    critical_section_leave(&sndq->lock);
+
+    ioh_set_write_handler(sndq->fd, sndq->iohq, NULL, sndq);
+    critical_section_free(&sndq->lock);
+}
+
+static void send_queue_init(struct send_queue *sndq, struct io_handler_queue *iohq, int fd)
+{
+    sndq->iohq = iohq;
+    sndq->fd = fd;
+    TAILQ_INIT(&sndq->queue);
+    critical_section_init(&sndq->lock);
+    sndq->err = 0;
+    sndq->len = 0;
+}
+
+#ifndef _WIN32
+
 typedef struct {
     int fd_in, fd_out;
     int max_size;
-    int eof;
-    int err;
-    TAILQ_HEAD(, send_buf) send_queue;
-    critical_section send_lock;
-    size_t send_queue_len;
+    struct send_queue sndq;
 } FDCharDriver;
 
 #define STDIO_MAX_CLIENTS 1
 static int stdio_nb_clients = 0;
 
-static void fd_chr_write_cb(void *opaque)
-{
-    CharDriverState *chr = opaque;
-    FDCharDriver *s = chr->opaque;
-    struct send_buf *b;
-
-    critical_section_enter(&s->send_lock);
-    b = TAILQ_FIRST(&s->send_queue);
-    if (b) {
-        int rc = write(s->fd_out, b->data + b->off, b->len);
-
-        switch (rc) {
-        case 0:
-            s->eof = 1;
-            TAILQ_REMOVE(&s->send_queue, b, link);
-            free(b);
-            break;
-        case -1:
-            s->err = errno;
-            TAILQ_REMOVE(&s->send_queue, b, link);
-            free(b);
-            break;
-        default:
-            b->len -= rc;
-            b->off += rc;
-            s->send_queue_len -= rc;
-            if (!b->len) {
-                TAILQ_REMOVE(&s->send_queue, b, link);
-                free(b);
-            }
-        }
-    } else
-        ioh_set_write_handler(s->fd_out, chr->iohq, NULL, chr);
-    critical_section_leave(&s->send_lock);
-}
-
 static int fd_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
 {
     FDCharDriver *s = chr->opaque;
-    struct send_buf *b;
 
-    if (s->eof)
-        return 0;
-    if (s->err) {
-        errno = s->err;
-        return -1;
-    }
-    if ((s->send_queue_len + len) > FD_CHR_SEND_QUEUE_MAX) {
-        errno = EWOULDBLOCK;
-        return -1;
-    }
-
-    b = malloc(sizeof(struct send_buf) + len);
-    if (!b)
-        return -1;
-    b->off = 0;
-    b->len = len;
-    memcpy(b->data, buf, len);
-
-    critical_section_enter(&s->send_lock);
-    TAILQ_INSERT_TAIL(&s->send_queue, b, link);
-    s->send_queue_len += len;
-    critical_section_leave(&s->send_lock);
-    ioh_set_write_handler(s->fd_out, chr->iohq, fd_chr_write_cb, chr);
-
-    return len;
+    return send_queue_write(&s->sndq, buf, len);
 }
 
 static int fd_chr_write_flush(CharDriverState *chr)
 {
     FDCharDriver *s = chr->opaque;
-    struct send_buf *b;
 
-    critical_section_enter(&s->send_lock);
-    while ((b = TAILQ_FIRST(&s->send_queue))) {
-        int rc;
-
-        if (s->eof || s->err)
-            goto release;
-
-        rc = write(s->fd_out, b->data + b->off, b->len);
-        switch (rc) {
-        case 0:
-            s->eof = 1;
-            goto release;
-        case -1:
-            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
-                break;
-            s->err = errno;
-            goto release;
-        default:
-            b->len -= rc;
-            b->off += rc;
-            s->send_queue_len -= rc;
-            if (!b->len)
-                goto release;
-        }
-
-        continue;
-  release:
-        TAILQ_REMOVE(&s->send_queue, b, link);
-        free(b);
-    }
-    critical_section_leave(&s->send_lock);
+    send_queue_flush(&s->sndq);
 
     return 0;
 }
@@ -556,19 +653,15 @@ static void fd_chr_update_read_handler(CharDriverState *chr)
 static void fd_chr_close(struct CharDriverState *chr)
 {
     FDCharDriver *s = chr->opaque;
-    struct send_buf *b;
 
-    critical_section_enter(&s->send_lock);
-    while ((b = TAILQ_FIRST(&s->send_queue))) {
-        TAILQ_REMOVE(&s->send_queue, b, link);
-        free(b);
+    if (s->fd_out >= 0) {
+        send_queue_cleanup(&s->sndq);
+        close(s->fd_out);
     }
-    critical_section_leave(&s->send_lock);
-
-    if (s->fd_out >= 0)
-        ioh_set_write_handler(s->fd_out, chr->iohq, NULL, chr);
-    if (s->fd_in >= 0)
+    if (s->fd_in >= 0) {
         ioh_set_read_handler(s->fd_in, chr->iohq, NULL, chr);
+        close(s->fd_in);
+    }
 
     free(s);
 }
@@ -591,11 +684,8 @@ static CharDriverState *qemu_chr_open_fd(int fd_in, int fd_out, struct io_handle
     s = calloc(1, sizeof(FDCharDriver));
     s->fd_in = fd_in;
     s->fd_out = fd_out;
-    TAILQ_INIT(&s->send_queue);
-    critical_section_init(&s->send_lock);
-    s->eof = 0;
-    s->err = 0;
-    s->send_queue_len = 0;
+    if (s->fd_out >= 0)
+        send_queue_init(&s->sndq, iohq, s->fd_out);
     chr->opaque = s;
     chr->chr_write = fd_chr_write;
     chr->chr_write_flush = fd_chr_write_flush;
@@ -633,6 +723,7 @@ unix_chr_pipe_reconnect(void *opaque)
     if (s->fd_out < 0 || s->fd_out == s->fd_in)
         return;
 
+    send_queue_cleanup(&s->sndq);
     close(s->fd_out);
     s->fd_out = -1;
 
@@ -643,6 +734,8 @@ unix_chr_pipe_reconnect(void *opaque)
     if (snprintf(filename_out, 255, "%s.out", chr->filename) < 0)
         return;
     s->fd_out = open(filename_out, O_RDWR | O_NONBLOCK | O_BINARY);
+    if (s->fd_out >= 0)
+        send_queue_init(&s->sndq, chr->iohq, s->fd_out);
 }
 
 static CharDriverState *qemu_chr_open_pipe(const char *filename, struct io_handler_queue *iohq)
