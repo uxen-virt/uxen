@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2015, Bromium, Inc.
+# Copyright 2012-2016, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -58,7 +58,8 @@ define loaduxensymbols
     
     set kext-symbol-file-path
     shell kextutil -s . -n -e -a `cat .uxen_address` -r KernelDebugKit/ \
-                   uxen.kext && rm -f .uxen_address
+                   -d System.kext \
+                   -arch x86_64 uxen.kext && rm -f .uxen_address
     
     add-kext uxen.kext
 
@@ -95,6 +96,69 @@ define reboot
     detach
 end
 
+define uxenlog
+  set $n = $arg0
+  set $ulb = uxen_sys_logging_buffer_desc->buffer
+
+  set $ul_prod = $ulb->ulb_producer
+  set $ul_read = 0
+  if $ul_prod & ~0xffffffffULL
+    set $ul_read = $ul_prod - 0x100000000ULL
+  end
+
+  set $ul_a1 = ($ul_prod & 0xffffffffULL) - ($ul_read & 0xffffffffULL)
+  set $ul_a2 = 0
+  if $ul_a1 <= 0
+    set $ul_a1 = $ulb->ulb_size - ($ul_read & 0xffffffffULL)
+    set $ul_a2 = ($ul_prod & 0xffffffffULL)
+  end
+
+  set $avail = $ul_a1 + $ul_a2
+  if $n == 0
+    set $n = $avail
+  end
+  if  $n > $avail
+    set $n = $avail
+  end
+  if $n - $ul_a2 < $ul_a1
+    set $ul_read += $ul_a1 - ($n - $ul_a2)
+    set $ul_a1 = ($n - $ul_a2)
+    set $n -= $ul_a1
+  end
+  if $n < $ul_a2
+    set $ul_read += $ul_a2 - $n
+    set $ul_a2 = $n
+    set $n -= $ul_a2
+  end
+
+  printf "%s", &$ulb->ulb_buffer[($ul_read & 0xffffffffULL)]
+  #while $ul_a1 > 80
+  #  printf "%.80s", &$ulb->ulb_buffer[($ul_read & 0xffffffffULL)]
+  #  set $ul_a1 -= 80
+  #  set $ul_read += 80
+  #end
+  #while $ul_a1 > 10
+  #  printf "%.10s", &$ulb->ulb_buffer[($ul_read & 0xffffffffULL)]
+  #  set $ul_a1 -= 10
+  #  set $ul_read += 10
+  #end
+  #while $ul_a1 >= 1
+  #  printf "%.1s", &$ulb->ulb_buffer[($ul_read & 0xffffffffULL)]
+  #  set $ul_a1 -= 1
+  #  set $ul_read += 1
+  #end
+
+  if $ul_a2 != 0
+    printf "%s", &$ulb->ulb_buffer[0]
+  end
+
+  printf "\n"
+end
+document uxenlog
+| Syntax: uxenlog max (max=0 for all)
+| Display uxen system log
+end
+
 echo Loading uXen GDB Macros package.  Type "help uxen" for more info.\n
 
 define uxen
@@ -109,6 +173,7 @@ document uxen
 |     clearuxensymbols Output the commands to clear uxen.kexet and
 |                      uxen.elf symbols  (alias: uc)
 |     loaduxensymbols  Load symbols for uxen.kext and uxen.elf (alias: us)
+|     uxenlog          Diplay uxen system log
 |     reboot           Reboot the target
 |
 end
