@@ -2,7 +2,7 @@
  *  uxen.h
  *  uxen
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -13,10 +13,11 @@
 
 #include <xen/percpu.h>
 
-#define uxen_info _uxen_info
+#define uxen_info __uxen_info
 #include "uxen_info.h"
 #undef uxen_info
-extern struct _uxen_info _uxen_info;
+extern struct __uxen_info __uxen_info;
+#define _uxen_info __uxen_info
 
 #if defined(UXEN_HOST_WINDOWS)
 #ifdef __x86_64__

@@ -19,7 +19,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -60,32 +60,32 @@
 #if defined(__x86_64__)
 #define r(reg) %r##reg
 #define UREGS_r(_r) UREGS_r ## _r
-#define ABS(label) label ## (%rip)
 #define SIZEOF_REG 8
 #if defined(__MS_ABI__)
 #define CURRENT_vcpu_stack_offset (0x20)
 #define SCRATCH_area_size (0x20)
-#else
+#else /* __MS_ABI__ */
 #define CURRENT_vcpu_stack_offset (0)
 #endif /* __MS_ABI__ */
-#define call_with_abi(fn)                       \
+#define call_with_abi(fn, narg)                 \
         call fn
+#define ABI_ENTRY(fn, narg) ENTRY(fn)
 #ifdef GS_info_offset
 #define call_via_uxen_info(fn, reg)             \
         mov %gs:GS_info_offset, reg;            \
         call *UI_ ## fn(reg)
-#else
+#else /* GS_info_offset */
 #define call_via_uxen_info(fn, reg)             \
         fn
-#endif
+#endif /* GS_info_offset */
 #elif defined(__i386__)
 #define r(reg) %e##reg
 #define UREGS_r(_r) UREGS_e ## _r
-#define ABS(label) _ ## label
 #define SIZEOF_REG 4
 #define CURRENT_vcpu_stack_offset (0)
-#define call_with_abi(fn)                       \
-        call LABEL(fn)
+#define call_with_abi(fn, narg)                 \
+        call LABEL(@fn@narg)
+#define ABI_ENTRY(fn, narg) ENTRY(@fn@narg)
 #ifdef FS_info_offset
 #define call_via_uxen_info(fn, reg)             \
         mov %fs:FS_info_offset, reg;            \
@@ -96,10 +96,10 @@
         fn
 #endif
 #endif
-        
-#define call_with_regs(cur, fn)                 \
+
+#define call_with_regs(cur, fn, narg)           \
         get_user_regs(cur, r_arg);              \
-        call_with_abi(fn)
+        call_with_abi(fn, narg)
 
 #ifdef UXEN_HOST_OSX
 #define SAVE_MORE_STATE 1
@@ -108,7 +108,7 @@
 #define EXTRA_stack_space 48
 #endif  /* SAVE_MORE_STATE */
 
-ENTRY(vmx_asm_vmexit_handler)
+ABI_ENTRY(vmx_asm_vmexit_handler, 0)
 #define savereg(_x) mov r(_x), UREGS_r(_x)(r(di))
         push r(di)
         mov  CURRENT_vcpu_stack_offset+SIZEOF_REG(r(sp)), r(di)
@@ -133,7 +133,7 @@ ENTRY(vmx_asm_vmexit_handler)
 #endif
 #undef savereg
 
-        call_with_abi(vmx_save_regs)
+        call_with_abi(vmx_save_regs, 0)
 
         get_current(r(bx))
 
@@ -196,7 +196,7 @@ ENTRY(vmx_asm_vmexit_handler)
         xor  r(ax),r(ax)
         ret
 
-ENTRY(vmx_asm_do_vmentry)
+ABI_ENTRY(vmx_asm_do_vmentry, SIZEOF_REG)
         push r(bp)
 #ifdef CONFIG_FRAME_POINTER
         mov  r(sp),r(bp)
@@ -230,16 +230,16 @@ ENTRY(vmx_asm_do_vmentry)
         sub  $SCRATCH_area_size,%rsp
 #endif /* __MS_ABI__ */
 
-        call_with_abi(vmx_intr_assist)
+        call_with_abi(vmx_intr_assist, 0)
 #ifndef __UXEN__
-        call_with_abi(nvmx_switch_guest)
+        call_with_abi(nvmx_switch_guest, 0)
 #endif  /* __UXEN__ */
 
         get_current(r(bx))
         call_via_uxen_info(cli, r_arg)
 
         mov  r(bx), r_arg
-        call_with_abi(check_work_vcpu)
+        call_with_abi(check_work_vcpu, SIZEOF_REG)
 
         /* check_work_vcpu returns with 1 if work was done.
 	 * Note: interrupts have been re-enabled in that case. */
@@ -252,10 +252,10 @@ ENTRY(vmx_asm_do_vmentry)
 UNLIKELY_START(nz, realmode)
         cmpw $0,VCPU_vm86_seg_mask(r(bx))
         jnz .Lvmx_goto_emulator
-        call_with_regs(r(bx), vmx_enter_realmode) 
+        call_with_regs(r(bx), vmx_enter_realmode, SIZEOF_REG)
 UNLIKELY_END(realmode)
 
-        call_with_abi(vmx_vmenter_helper)
+        call_with_abi(vmx_vmenter_helper, 0)
         mov  VCPU_hvm_guest_cr2(r(bx)),r(ax)
         mov  r(ax),%cr2
 
@@ -265,7 +265,7 @@ UNLIKELY_END(realmode)
 #endif
 
         mov  r(sp), r_arg
-        call_with_abi(vmx_restore_regs)
+        call_with_abi(vmx_restore_regs, SIZEOF_REG)
 
 #define restreg(_x)  mov UREGS_r(_x)(r(di)), r(_x)
         get_user_regs(r(bx), r(di))
@@ -302,7 +302,7 @@ UNLIKELY_END(realmode)
 #endif
         call_via_uxen_info(sti, r(ax))
         mov $1, r_arg
-        call_with_abi(vm_entry_fail)
+        call_with_abi(vm_entry_fail, SIZEOF_REG)
         jmp .Lret_from_vmx_asm_do_vmentry
 
 .Lvmx_launch:
@@ -314,12 +314,12 @@ UNLIKELY_END(realmode)
 #endif
         call_via_uxen_info(sti, r(ax))
         xor r_arg, r_arg
-        call_with_abi(vm_entry_fail)
+        call_with_abi(vm_entry_fail, SIZEOF_REG)
         jmp .Lret_from_vmx_asm_do_vmentry
 
 .Lvmx_goto_emulator:
         call_via_uxen_info(sti, r(ax))
-        call_with_regs(r(bx), vmx_realmode)
+        call_with_regs(r(bx), vmx_realmode, SIZEOF_REG)
 
 .Lret_from_vmx_asm_do_vmentry:
 #if defined(__MS_ABI__) && defined(__x86_64__)

@@ -2,7 +2,7 @@
  *  uxen_load.c
  *  uxen
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -22,7 +22,11 @@
 
 #define UXEN_DEFINE_SYMBOLS_CODE
 #include <uxen/uxen_link.h>
-UXEN_GET_SYMS(uxen_get_symbols, __)
+#ifdef __x86_64__
+UXEN_GET_SYMS(uxen_get_symbols, _)
+#else  /* __x86_64__ */
+UXEN_GET_SYMS(uxen_get_symbols, )
+#endif  /* __x86_64__ */
 UXEN_CLEAR_SYMS(uxen_clear_symbols)
 
 #if !defined(__UXEN_EMBEDDED__)

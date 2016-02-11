@@ -24,7 +24,7 @@ EXT_COMMAND(
     Dml("Dump uxen log        ->"
         " <exec cmd=\"!uxenkdx.dumplog\">!dumplog</exec>\n"
         "Dump uxen_info       ->"
-        " <exec cmd=\"?? (uxen!uxen_info*)&uxen!_uxen_info\">?? (uxen!uxen_info*)&uxen!_uxen_info</exec>\n"
+        " <exec cmd=\"?? (uxen!uxen_info*)&uxen!__uxen_info\">?? (uxen!uxen_info*)&uxen!__uxen_info</exec>\n"
         "Show uxen pool usage ->"
         " <exec cmd=\"!poolused 1 nexu\">!poolused 1 nexu</exec>\n"
         "Dump domains         ->"

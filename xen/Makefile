@@ -97,6 +97,9 @@ $(X86_32_only)XEN_LD_EMUL = i386pe
 $(X86_64_only)XEN_LD_EMUL = i386pep
 $(TARGET_pe_only)XEN_LDFLAGS += -m $(XEN_LD_EMUL)
 
+$(X86_32_only)$(TARGET_pe_only)XEN_CFLAGS += -fno-leading-underscore
+$(X86_32_only)$(TARGET_pe_only)XEN_LDFLAGS += --no-leading-underscore
+
 $(TARGET_sysvabi_only)XEN_CFLAGS += -D__SYSV_ABI__
 $(TARGET_msabi_only)XEN_CFLAGS += -D__MS_ABI__
 
@@ -390,7 +393,6 @@ uxen.0.o: uxen-prelink.o common/symbols-dummy.o $(UXEN_LDS)
 	  uxen-prelink.o common/symbols-dummy.o
 
 SYMBOLS_ARGS := --all-symbols
-$(X86_32_only)SYMBOLS_ARGS += --symbol-prefix=_
 
 .INTERMEDIATE: uxen-syms.0.o uxen-syms.1.o
 uxen-syms.%.S: uxen.%.o tools/symbols$(HOST_EXE_SUFFIX)

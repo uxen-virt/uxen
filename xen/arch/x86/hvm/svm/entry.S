@@ -20,7 +20,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -70,27 +70,29 @@
 #if defined(__MS_ABI__)
 #define CURRENT_vcpu_stack_offset (0x20)
 #define SCRATCH_area_size (0x20)
-#else
+#else /* __MS_ABI__ */
 #define CURRENT_vcpu_stack_offset (0)
 #endif /* __MS_ABI__ */
-#define call_with_abi(fn)                       \
+#define call_with_abi(fn, narg)                 \
         call fn
+#define ABI_ENTRY(fn, narg) ENTRY(fn)
 #ifdef GS_info_offset
 #define call_via_uxen_info(fn, reg)             \
         mov %gs:GS_info_offset, reg;            \
         call *UI_ ## fn(reg)
-#else
+#else /* GS_info_offset */
 #define call_via_uxen_info(fn, reg)             \
         fn
-#endif
+#endif /* GS_info_offset */
 #elif defined(__i386__)
 #define r(reg) %e##reg
-#define addr_of(lbl) _ ## lbl
+#define addr_of(lbl) lbl
 #define UREGS_r(_r) UREGS_e ## _r
 #define SIZEOF_REG 4
 #define CURRENT_vcpu_stack_offset (0)
-#define call_with_abi(fn)                       \
-        call LABEL(fn)
+#define call_with_abi(fn, narg)                 \
+        call LABEL(@fn@narg)
+#define ABI_ENTRY(fn, narg) ENTRY(@fn@narg)
 #ifdef FS_info_offset
 #define call_via_uxen_info(fn, reg)             \
         mov %fs:FS_info_offset, reg;            \
@@ -106,7 +108,7 @@
         get_user_regs(cur, r_arg);              \
         call_with_abi(fn)
 
-ENTRY(svm_asm_do_vmentry)
+ABI_ENTRY(svm_asm_do_vmentry, SIZEOF_REG)
         push r(bp)
 #ifdef CONFIG_FRAME_POINTER
         mov  r(sp),r(bp)
@@ -130,16 +132,16 @@ ENTRY(svm_asm_do_vmentry)
         sub  $SCRATCH_area_size,%rsp
 #endif /* __MS_ABI__ */
 
-        call_with_abi(svm_intr_assist)
+        call_with_abi(svm_intr_assist,0)
 #ifndef __UXEN_NOT_YET__
-        call_with_abi(nsvm_vcpu_switch)
+        call_with_abi(nsvm_vcpu_switch, SIZEOF_REG)
 #endif  /* __UXEN_NOT_YET__ */
 
         get_current(r(bx))
         CLGI                    /* XXX call_via_uxen_info(cli, r_arg) */
 
         mov  r(bx), r_arg
-        call_with_abi(check_work_vcpu)
+        call_with_abi(check_work_vcpu, SIZEOF_REG)
 
         /* check_work_vcpu returns with 1 if work was done.
 	 * Note: interrupts have been re-enabled in that case. */
@@ -157,11 +159,11 @@ UNLIKELY_START(nz, nsvm_hap)
 UNLIKELY_END(nsvm_hap)
 #endif  /* __UXEN_NOT_YET__ */
 
-        call_with_abi(svm_asid_handle_vmrun)
+        call_with_abi(svm_asid_handle_vmrun, 0)
 
         cmpb $0,addr_of(tb_init_done)
 UNLIKELY_START(nz, svm_trace)
-        call_with_abi(svm_trace_vmentry)
+        call_with_abi(svm_trace_vmentry, 0)
 UNLIKELY_END(svm_trace)
 
 #if defined(__x86_64__) && defined(UXEN_HOST_WINDOWS)
@@ -171,7 +173,7 @@ UNLIKELY_END(svm_trace)
         mov  r(ax),%cr8
 #endif
 
-        call_with_abi(svm_restore_regs)
+        call_with_abi(svm_restore_regs, 0)
 
         get_user_regs(r(bx), r(di))
         mov  VCPU_svm_vmcb(r(bx)),r(cx)

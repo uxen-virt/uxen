@@ -98,11 +98,7 @@
   .globl name;                                  \
   ALIGN;                                        \
   name:
-#ifdef __x86_64__
 #define LABEL(name) name
-#elif defined(__i386__)
-#define LABEL(name) _ ## name
-#endif
 #define ENTRY(name) _ENTRY(LABEL(name))
 #endif
 

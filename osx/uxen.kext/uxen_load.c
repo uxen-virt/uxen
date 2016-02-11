@@ -2,7 +2,7 @@
  *  uxen_load.c
  *  uxen
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  * 
@@ -19,7 +19,7 @@
 
 #define UXEN_DEFINE_SYMBOLS_CODE
 #include <uxen/uxen_link.h>
-UXEN_GET_SYMS(uxen_get_symbols, __)
+UXEN_GET_SYMS(uxen_get_symbols, _)
 UXEN_CLEAR_SYMS(uxen_clear_symbols)
 
 extern kmod_info_t KMOD_INFO_NAME;
