@@ -2645,12 +2645,11 @@ static int tcp_socket_load(QEMUFile *f, struct nickel *ni, int version_id, uint3
         err = -1;
         warnx("%s: malloc failure", __FUNCTION__);
         so = &_so;
-    } else {
-        so->flags |= TF_INPUT;
     }
 
     so->state = qemu_get_byte(f);
     so->flags = qemu_get_be32(f);
+    so->flags |= TF_INPUT;
     if (!(so->flags & TF_VMFWD))
         so->flags |= (TF_RST_PENDING | TF_CLOSED);
 
