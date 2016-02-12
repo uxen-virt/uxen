@@ -1645,7 +1645,7 @@ save_cuckoo_pages(struct filebuf *f, struct page_fingerprint *hashes,
         goto out;
 
     if (simple_mode)
-        ret = cuckoo_compress_vm_simple(f, tn, tfps, n, hashes, &ccb, opaque);
+        ret = -1;
     else
         ret = cuckoo_compress_vm(&cuckoo_context, vm_uuid, f, tn, tfps,
                                  n, hashes, &ccb, opaque);
@@ -1671,7 +1671,7 @@ load_cuckoo_pages(struct filebuf *f, int reusing_vm, int simple_mode)
         return ret;
 
     if (simple_mode)
-        ret = cuckoo_reconstruct_vm_simple(f, reusing_vm, &ccb, opaque);
+        ret = -1;
     else
         ret = cuckoo_reconstruct_vm(&cuckoo_context, vm_uuid, f, reusing_vm,
                                     &ccb, opaque);

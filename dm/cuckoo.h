@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -12,7 +12,6 @@
 
 #define CUCKOO_LOG_MAX_VMS 9
 #define CUCKOO_MAX_VMS (1<<CUCKOO_LOG_MAX_VMS)
-#define CUCKOO_ZERO_BITMAP_SIZE (4<<(30-(12+3))) // bitmap for 4GiB max VM size
 #define CUCKOO_NUM_THREADS 4
 #define CUCKOO_TEMPLATE_PFN (1ULL << 63ULL)
 
@@ -41,6 +40,9 @@ struct cuckoo_page_common {
     uint16_t rotate : 10;             \
     enum cuckoo_page_type type : 2;   \
     uint16_t is_stable : 1;
+#ifdef CUCKOO_VERIFY
+    uint64_t strong_hash;
+#endif
 } __attribute__((__packed__));
 
 struct cuckoo_page_ext {
@@ -178,13 +180,5 @@ int cuckoo_compress_vm(struct cuckoo_context *cc, uuid_t uuid,
 int cuckoo_reconstruct_vm(struct cuckoo_context *cc, uuid_t uuid,
                           struct filebuf *fb, int reusing_vm,
                           struct cuckoo_callbacks *ccb, void *opaque);
-
-/* Simple API. */
-int cuckoo_compress_vm_simple(struct filebuf *fb,
-                              int na, struct page_fingerprint *a,
-                              int nb, struct page_fingerprint *b,
-                              struct cuckoo_callbacks *ccb, void *opaque);
-int cuckoo_reconstruct_vm_simple(struct filebuf *fb, int reusing_vm,
-                                 struct cuckoo_callbacks *ccb, void *opaque);
 
 #endif /* __CUCKOO_H__ */

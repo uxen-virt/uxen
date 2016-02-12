@@ -133,7 +133,6 @@ int zero_encode(uint8_t *out, const uint8_t *in, size_t sz)
     int set;
 
     for (i = j = count = byte = 0; i < sz; ++i) {
-
         c = in[i];
         if (c) {
             *o++ = c;
@@ -196,7 +195,6 @@ size_t zero_decode(uint8_t *out, const uint8_t *in, size_t sz)
     sz -= bsz;
 
     for (i = 0, j = sizeof(uint16_t); i < bsz; ++i) {
-
         int k;
         uint8_t b = bm[i];
         if (b & 0x80) {
@@ -250,71 +248,85 @@ size_t compress(void *out, const void *in, size_t in_sz, int high)
 static inline
 int expand(void *out, const void *in, size_t sz)
 {
+    int unsz;
     if (sz == PAGE_SIZE) {
         memcpy(out, in, sz);
+        unsz = PAGE_SIZE;
     } else {
         uint8_t tmp[PAGE_SIZE];
         size_t lz4_sz = zero_decode(tmp, in, sz);
-
-        int unsz = LZ4_decompress_safe((const char *)tmp, (char *)out,
-                                       lz4_sz, PAGE_SIZE);
-
+        unsz = LZ4_decompress_safe((const char *)tmp, (char *)out,
+                                   lz4_sz, PAGE_SIZE);
         if (unsz < 0) {
             debug_printf("%s: %d\n", __FUNCTION__, unsz);
             return -1;
         }
-        memset(out + unsz, 0, PAGE_SIZE - unsz);
     }
-    return 0;
+    return unsz;
 }
 
 static inline
-size_t diff(void *_out, const void *_base, const void *_version,
-        int rotate)
+int diff(uint8_t *out, const void *_a, const void *_b, int rotate)
 {
-    uint32_t *out = _out;
-    const uint32_t *base = _base;
-    const uint32_t *version = _version;
-    const int n = PAGE_SIZE / sizeof(uint32_t);
-    const int mask = n - 1;
-    int i, j;
-    for (i = j = 0; i < n; ++i) {
-        uint32_t xor = out[i] =
-            base[i] ^ version[(i + rotate) & mask];
-        j = xor ? (1 + i) : j;
+    /* It is faster to do a quick ident-check with memcmp first. */
+    if (!rotate && !memcmp(_a, _b, PAGE_SIZE)) {
+        return 0;
     }
-    return sizeof(uint32_t) * j;
-}
 
-static inline
-void undiff_32(void *_out, const void *_delta)
-{
-    uint32_t *out = _out;
-    const uint32_t *delta = _delta;
+    const uint32_t *a = _a;
+    const uint32_t *b = _b;
+    uint8_t *o = out;
     int i;
-    for (i = 0; i < PAGE_SIZE / sizeof(delta[0]); ++i) {
-        out[i] ^= delta[i];
+    int count = 0;
+    int equals = 0;
+    int last = 0;
+    const int mask = (PAGE_SIZE / sizeof(uint32_t)) - 1;
+    uint32_t *w = (uint32_t *) (o + 1);
+
+    for (i = 0; i < PAGE_SIZE / sizeof(uint32_t); ++i) {
+        uint32_t version = b[(i + rotate) & mask];
+        equals = (a[i] == version);
+
+        if (equals != last || count == 0x7f) {
+            *o = (last << 7) | count;
+            o += sizeof(uint32_t) * (last ? 0 : count) + 1;
+            w = (uint32_t *) (o + 1);
+            count = 0;
+            last = equals;
+        }
+
+        if (!equals) {
+            *w++ = version;
+        }
+        ++count;
     }
+    /* w points to the end, not o. */
+    *o = (last << 7) | count;
+    return ((uint8_t *) w) - out;
 }
 
 static inline
-void undiff_64(void *_out, const void *_delta)
+void undiff(void *_out, const void *_base, const void *_delta)
 {
-    uint64_t *out = _out;
-    const uint64_t *delta = _delta;
-    int i;
-    for (i = 0; i < PAGE_SIZE / sizeof(delta[0]); ++i) {
-        out[i] ^= delta[i];
-    }
-}
+    typedef uint32_t uint32_t;
+    uint8_t *o = _out;
+    uint8_t *end = o + PAGE_SIZE;
+    const uint8_t *s = _delta;
+    const uint8_t *a = _base;
 
-static inline
-void undiff(void *_out, const void *_delta)
-{
-    if (sizeof(void *) == 8) {
-        undiff_64(_out, _delta);
-    } else {
-        undiff_32(_out, _delta);
+    while (o < end) {
+        uint8_t c = *s++;
+        int equals = c & 0x80;
+        int count = (c & 0x7f) * sizeof(uint32_t);
+
+        if (equals) {
+            memcpy(o, a, count);
+        } else {
+            memcpy(o, s, count);
+            s += count;
+        }
+        o += count;
+        a += count;
     }
 }
 
@@ -563,14 +575,16 @@ static uint64_t strong_hash(const void *_p)
 #endif
 
 static inline void
-compress_range(struct thread_context *c, struct work_unit *u, uint8_t **src,
+compress_range(struct thread_context *c,
+               struct work_unit *u, uint8_t **src,
                uint8_t *buffer, uint32_t *buffer_offset)
 {
     struct cuckoo_context *cc = c->cc;
     struct cuckoo_page *ref = u->ref;
     uint8_t b[PAGE_SIZE];
     uint8_t *base;
-    uint8_t tmp[2* PAGE_SIZE];
+    uint8_t tmp[2 * PAGE_SIZE];
+    uint8_t *s;
     struct cuckoo_page *p;
     int k;
     int skip = 0;
@@ -592,7 +606,7 @@ compress_range(struct thread_context *c, struct work_unit *u, uint8_t **src,
         } else {
             ref->c.size = compress(tmp, *src, PAGE_SIZE, 1);
             ref->x.offset = __sync_fetch_and_add(&cc->active->pin_brk,
-                                               ref->c.size);
+                                                 ref->c.size);
             if (ref->x.offset + ref->c.size < pin_size) {
                 memcpy(cc->pin + ref->x.offset, tmp, ref->c.size);
             } else {
@@ -603,7 +617,7 @@ compress_range(struct thread_context *c, struct work_unit *u, uint8_t **src,
             }
 
 #ifdef CUCKOO_VERIFY
-            ref->strong_hash = strong_hash(*src);
+            ref->c.strong_hash = strong_hash(*src);
 #endif
             ref->c.is_stable = 1;
             base = *src;
@@ -615,22 +629,23 @@ compress_range(struct thread_context *c, struct work_unit *u, uint8_t **src,
     }
 
     p = skip ? next(u->p) : u->p;
+
     for (k = skip; k < u->n; ++k, *src += PAGE_SIZE, p = next(p)) {
 #ifdef CUCKOO_VERIFY
-        p->strong_hash = strong_hash(*src);
+        p->c.strong_hash = strong_hash(*src);
 #endif
-        size_t sz0;
-        uint8_t *t;
+        uint32_t sz0;
         if (base != NULL) {
             sz0 = diff(tmp, base, *src, p->c.rotate - ref->c.rotate);
-            t = tmp;
-        } else {
-            /* No point actually XORing with zero page. */
+            s = tmp;
+        }
+        if (base == NULL || sz0 >= PAGE_SIZE) {
             sz0 = PAGE_SIZE;
-            t = *src;
+            p->c.rotate = ref->c.rotate;
+            s = *src;
         }
         if (sz0) {
-            p->c.size = compress(buffer + *buffer_offset, t, sz0, 0);
+            p->c.size = compress(buffer + *buffer_offset, s, sz0, 0);
             *buffer_offset += p->c.size;
         } else {
             p->c.size = 0;
@@ -749,12 +764,19 @@ decompression_thread(void *_c)
                 if (p != ref) {
                     uint16_t size = p->c.size;
                     if (size) {
-                        if (expand(dst, s->buffer + start, size) < 0) {
+                        int sz0;
+                        uint8_t delta[PAGE_SIZE];
+                        sz0 = expand(base ? delta : dst, s->buffer + start, size);
+                        if (sz0 < 0) {
                             debug_printf("expand failed line=%d\n", __LINE__);
                             assert(0);
                         }
                         if (base != NULL) {
-                            undiff(dst, base);
+                            if (sz0 == PAGE_SIZE) {
+                                memcpy(dst, delta, PAGE_SIZE);
+                            } else {
+                                undiff(dst, base, delta);
+                            }
                         }
                         start += size;
                     } else {
@@ -764,17 +786,17 @@ decompression_thread(void *_c)
                         }
                         memcpy(dst, base, PAGE_SIZE);
                     }
-                    int rotate = - (p->c.rotate - ref->c.rotate);
+                    int rotate = ref->c.rotate - p->c.rotate;
                     if (rotate) {
-                        uint8_t tmp[PAGE_SIZE];
-                        memcpy(tmp, dst, PAGE_SIZE);
-                        copy(dst, tmp, rotate);
+                        uint8_t t[PAGE_SIZE];
+                        memcpy(t, dst, PAGE_SIZE);
+                        copy(dst, t, rotate);
                     }
                 } else {
                     memcpy(dst, base, PAGE_SIZE);
                 }
 #ifdef CUCKOO_VERIFY
-                assert(p->strong_hash == strong_hash(dst));
+                assert(p->c.strong_hash == strong_hash(dst));
 #endif
 
                 pfns[i++] = p->c.pfn;
@@ -1030,7 +1052,7 @@ execute_plan(struct cuckoo_context *cc,
             /* Check after increasing u, to ensure progress. */
             if (num_pfns >= max_pfns ||
                     num_tpfns >= max_template_pfns ||
-                    s->size > (1<<19)) {
+                    s->size >= (1<<19)) {
                 break;
             }
         }
@@ -1176,70 +1198,6 @@ static void gc_pin(struct cuckoo_context *cc,
     ccb->free(opaque, pages);
 
     debug_printf("%s took %.2fs\n", __FUNCTION__, rtc() - t0);
-}
-
-static void print_stats(struct cuckoo_shared *s)
-{
-#if 0
-    const struct cuckoo_page *p, *ref, *begin;
-    int64_t size_pin = 0, size_unique = 0;
-    int64_t saved_template = 0, saved_pin = 0, saved_local = 0;
-    int num_shared = 0;
-    int num_template = 0;
-    int num_pin = 0;
-    int num_local = 0;
-    int num_template_ident = 0;
-    int i;
-
-    begin = s->pages;
-    for (i = 0, p = begin, ref = NULL; i < s->num_pages; ++i, p = nextc(p)) {
-        if (is_template(p)) {
-            ref = p;
-        } else if (is_shared(p)) {
-            ref = p;
-            size_pin += p->size;
-            ++num_shared;
-        } else if (p == begin || get_hash(&p[-1]) != get_hash(p)) {
-            ref = p;
-            size_unique += p->size;
-        } else {
-            int ref_size = is_template(ref) ? 1966 : 1730;
-            int saved = ref_size - ((int) p->size + sizeof(*p));
-
-            if (is_template(ref) && p->size == 0 && ref->rotate == p->rotate) {
-                ++num_template_ident;
-            }
-
-            if (p[-1].vm == p->vm) {
-                ++num_local;
-                saved_local += saved;
-            } else if (is_template(ref)) {
-                ++num_template;
-                saved_template += saved;
-            } else if (is_shared(ref)) {
-                ++num_pin;
-                saved_pin += saved;
-            }
-        }
-    }
-
-    debug_printf("#pages=%d #pins=%d "
-                 "nut=%d nup=%d nul=%d nuti=%d "
-                 "szp=%"PRId64" szu=%"PRId64" "
-                 "sat=%"PRId64" sap=%"PRId64" sal=%"PRId64" MiB\n",
-            s->num_pages,
-            num_shared,
-            num_template,
-            num_pin,
-            num_local,
-            num_template_ident,
-            size_pin >> 20,
-            size_unique >> 20,
-            saved_template >> 20,
-            saved_pin >> 20,
-            saved_local >> 20);
-
-#endif
 }
 
 int cuckoo_reconstruct_vm(struct cuckoo_context *cc, uuid_t uuid,
@@ -1490,7 +1448,6 @@ int cuckoo_compress_vm(struct cuckoo_context *cc, uuid_t uuid,
     debug_printf("wrote %2.fMiB for %d pages, %.2fx compression\n",
             (double) ret / (1024.0*1024.0), num_pages, (num_pages *
                 PAGE_SIZE /(double) ret));
-    print_stats(active);
 
 out:
     if (ret >= 0) {
@@ -1517,121 +1474,5 @@ out_force_commit:
                      (double) num_pages / dt);
     }
     ccb->unlock(opaque, cuckoo_mutex_write);
-    return ret;
-}
-
-static int
-strip_unused_template(int num_pages, struct cuckoo_page *pages)
-{
-    int i, j;
-    struct cuckoo_page *p, *q;
-    for (i = j = 0, p = q = pages; i <num_pages; ++i, p = next(p)) {
-        if (!is_template(p) || (i < num_pages - 1 &&
-                    next(p)->x.hash == p->x.hash)) {
-            q->c = p->c;
-            if (p->c.type) {
-                q->x = p->x;
-
-            }
-            q = next(q);
-            ++j;
-        }
-    }
-    return j;
-}
-
-int cuckoo_compress_vm_simple(struct filebuf *fb,
-                              int na, struct page_fingerprint *a,
-                              int nb, struct page_fingerprint *b,
-                              struct cuckoo_callbacks *ccb, void *opaque)
-{
-    int ret = -1;
-    struct cuckoo_page *pa = NULL;
-    struct cuckoo_page *pb = NULL;;
-    struct cuckoo_page *pages = NULL;
-    uint8_t present[] = {1,1};
-    uint32_t n;
-    uint64_t meta_offset;
-    struct cuckoo_page tmpl_proto = {};
-    struct cuckoo_page vm_proto = {};
-    struct work_unit *us;
-    int num_pages;
-    uint32_t used;
-
-    /* sort | uniq of template (vm=0) pages. */
-    tmpl_proto.c.type = cuckoo_page_ref_template;
-    tmpl_proto.c.is_stable = 1;
-    pa = ccb->malloc(opaque, sizeof(pa[0]) * na);
-    if (!pa) {
-        goto out;
-    }
-    pb = ccb->malloc(opaque, sizeof(pb[0]) * nb);
-    if (!pb) {
-        goto out;
-    }
-    na = prepare_pages(na, pa, a, tmpl_proto, ccb, opaque);
-    na = uniq_pages(na, pa);
-
-    /* sort of vm=1 pages. */
-    vm_proto.c.vm = 1;
-    nb = prepare_pages(nb, pb, b, vm_proto, ccb, opaque);
-
-    /* merge sorted arrays. */
-    pages = ccb->malloc(opaque, sizeof(pages[0]) * (na + nb));
-    if (!pages) {
-        goto out;
-    }
-    num_pages = merge(pages, &used, pa, na, pb, nb, present, ccb, opaque);
-
-    /* remove unreferenced template pages from array to save file space. */
-    num_pages = strip_unused_template(num_pages, pages);
-
-    filebuf_flush(fb);
-    meta_offset = filebuf_tell(fb);
-    filebuf_seek(fb, sizeof(n) + sizeof(pages[0]) * num_pages,
-                 FILEBUF_SEEK_CUR);
-
-    us = create_plan(1, pages, num_pages, 1, ccb, opaque);
-    if (us) {
-        ret = execute_plan(NULL, us, fb, 1, 0, ccb, opaque);
-        ccb->free(opaque, us);
-    }
-
-    filebuf_seek(fb, meta_offset, FILEBUF_SEEK_SET);
-    n = num_pages;
-    filebuf_write(fb, &n, sizeof(n));
-    filebuf_write(fb, pages, sizeof(pages[0]) * num_pages);
-    filebuf_flush(fb);
-    filebuf_seek(fb, ret, FILEBUF_SEEK_CUR);
-    debug_printf("wrote %2.fMiB for %d pages, %.2fx compression\n",
-            (double) ret / (1024.0*1024.0), nb, (nb * PAGE_SIZE /(double) ret));
-
-out:
-    ccb->free(opaque, pages);
-    ccb->free(opaque, pb);
-    ccb->free(opaque, pa);
-    return ret;
-}
-
-int cuckoo_reconstruct_vm_simple(struct filebuf *fb, int reusing_vm,
-                                 struct cuckoo_callbacks *ccb, void *opaque)
-{
-    int ret = -1;
-    struct work_unit *us;
-    double t0 = rtc();
-    uint32_t n;
-    struct cuckoo_page *pages;
-
-    filebuf_read(fb, &n, sizeof(n));
-    pages = ccb->malloc(opaque, sizeof(pages[0]) * n);
-    filebuf_read(fb, pages, sizeof(pages[0]) * n);
-
-    us = create_plan(1, pages, n, 0, ccb, opaque);
-    if (us) {
-        ret = execute_plan(NULL, us, fb, 0, reusing_vm, ccb, opaque);
-        ccb->free(opaque, us);
-    }
-    ccb->free(opaque, pages);
-    debug_printf("reconstruct took %.2fs\n", rtc() - t0);
     return ret;
 }
