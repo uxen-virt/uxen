@@ -128,13 +128,13 @@ ioh_object_signalled(void * context)
         devents = events;
         if (ioh->fd_read)
             if (events & IOH_READ_EVENTS) {
-                ioh->fd_read(ioh->opaque);
+                ioh->fd_read(ioh->read_opaque);
                 devents &= ~IOH_READ_EVENTS;
             }
 
         if (ioh->fd_write)
             if (ioh->object_events & IOH_WRITE_EVENTS) {
-                ioh->fd_write(ioh->opaque);
+                ioh->fd_write(ioh->write_opaque);
                 devents &= ~IOH_WRITE_EVENTS;
             }
 #if 0
@@ -150,7 +150,7 @@ np_signalled(void *context)
 {
     IOHandlerRecord *ioh = (IOHandlerRecord *)context;
 
-    ioh->np_read(ioh->opaque);
+    ioh->np_read(ioh->read_opaque);
     ioh->np_read_pending = NP_READ_DONE;
 }
 
@@ -204,7 +204,7 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
                 }
                 if (ioh->np_read_pending == NP_READ_PENDING)
                     continue;
-                if (ioh->np_read_poll && ioh->np_read_poll(ioh->opaque) == 0)
+                if (ioh->np_read_poll && ioh->np_read_poll(ioh->read_opaque) == 0)
                     continue;
                 ioh->np_read_pending = NP_READ_PENDING;
                 ioh_add_wait_object(&ioh->np, np_signalled, ioh, w);
@@ -215,12 +215,12 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
                 if (ioh->fd != -1 && !ioh->deleted) {
                     if (ioh->fd_read &&
                         (!ioh->fd_read_poll ||
-                         ioh->fd_read_poll(ioh->opaque) != 0)) {
+                         ioh->fd_read_poll(ioh->read_opaque) != 0)) {
                         events |= FD_READ | FD_ACCEPT | FD_CLOSE;
                     }
                     if (ioh->fd_write &&
                         (!ioh->fd_write_poll ||
-                         ioh->fd_write_poll(ioh->opaque) != 0)) {
+                         ioh->fd_write_poll(ioh->write_opaque) != 0)) {
                         events |= FD_WRITE | FD_CLOSE;
                     }
                 }
@@ -374,7 +374,7 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
                 }
                 if (ioh->np_read_pending != NP_READ_DONE)
                     continue;
-                if (ioh->np_read_poll && ioh->np_read_poll(ioh->opaque)) {
+                if (ioh->np_read_poll && ioh->np_read_poll(ioh->read_opaque)) {
                     ioh->np_read_pending = NP_READ_PENDING;
                     continue;	    
                 }
@@ -500,7 +500,7 @@ int ioh_set_np_handler2(HANDLE np,
         ioh->np_read_poll = np_read_poll;
         ioh->np_read = np_read;
         ioh->np_write = np_write;
-        ioh->opaque = opaque;
+        ioh->read_opaque = opaque;
         ioh->deleted = 0;
     }
     if (iohq->wait_queue) /* asleep in another thread */
