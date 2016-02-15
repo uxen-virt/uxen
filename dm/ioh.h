@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -100,7 +100,8 @@ typedef struct IOHandlerRecord {
 #endif
     };
     int deleted;
-    void *opaque;
+    void *read_opaque;
+    void *write_opaque;
     TAILQ_ENTRY(IOHandlerRecord) queue;
     union {
 #if defined(CONFIG_NETEVENT)
