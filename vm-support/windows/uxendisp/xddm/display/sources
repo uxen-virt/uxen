@@ -12,6 +12,9 @@ INCLUDES=$(DDK_INC_PATH); ..\include
 
 NTTARGETFILE2 = POST
 
+TARGETLIBS=$(DDK_LIB_PATH)\ntoskrnl.lib \
+           $(DDK_LIB_PATH)\Hal.lib
+
 SOURCES=color.c     \
         debug.c     \
         enable.c    \
