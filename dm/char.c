@@ -1908,6 +1908,7 @@ typedef struct {
     int do_telnetopt;
     int do_nodelay;
     int is_unix;
+    struct send_queue sndq;
 } TCPCharDriver;
 
 static void tcp_chr_accept(void *opaque);
@@ -1929,12 +1930,11 @@ static int tcp_chr_eof(CharDriverState *chr)
 static int tcp_chr_write(CharDriverState *chr, const uint8_t *buf, int len)
 {
     TCPCharDriver *s = chr->opaque;
-    if (s->connected) {
-        return send_all(s->fd, buf, len);
-    } else {
-        /* XXX: indicate an error ? */
-        return len;
-    }
+
+    if (!s->connected)
+        return -1;
+
+    return send_queue_write(&s->sndq, buf, len);
 }
 
 static int tcp_chr_read_poll(void *opaque)
@@ -2017,6 +2017,7 @@ static void tcp_chr_read(void *opaque)
         if (s->listen_fd >= 0) {
             ioh_set_read_handler(s->listen_fd, chr->iohq, tcp_chr_accept, chr);
         }
+        send_queue_cleanup(&s->sndq);
         ioh_set_read_handler(s->fd, chr->iohq, NULL, chr);
         closesocket(s->fd);
         s->fd = -1;
@@ -2096,6 +2097,7 @@ static void tcp_chr_accept(void *opaque)
     if (s->do_nodelay)
         socket_set_nodelay(fd);
     s->fd = fd;
+    send_queue_init(&s->sndq, chr->iohq, fd);
     ioh_set_read_handler(s->listen_fd, chr->iohq, NULL, chr);
     tcp_chr_connect(chr);
 }
@@ -2104,6 +2106,7 @@ static void tcp_chr_close(CharDriverState *chr)
 {
     TCPCharDriver *s = chr->opaque;
     if (s->fd >= 0) {
+        send_queue_cleanup(&s->sndq);
         ioh_set_read_handler(s->fd, chr->iohq, NULL, chr);
         closesocket(s->fd);
     }
@@ -2126,9 +2129,19 @@ static void tcp_chr_reconnect(void *opaque)
     if (s->fd < 0)
         return;
     qemu_chr_event(chr, CHR_EVENT_EOF);
+    send_queue_cleanup(&s->sndq);
     ioh_set_read_handler(s->fd, chr->iohq, NULL, chr);
     closesocket(s->fd);
     s->fd = -1;
+}
+
+static int tcp_chr_write_flush(CharDriverState *chr)
+{
+    TCPCharDriver *s = chr->opaque;
+
+    send_queue_flush(&s->sndq);
+
+    return 0;
 }
 
 static CharDriverState *qemu_chr_open_tcp(const char *host_str,
@@ -2213,6 +2226,7 @@ static CharDriverState *qemu_chr_open_tcp(const char *host_str,
 
     chr->opaque = s;
     chr->chr_write = tcp_chr_write;
+    chr->chr_write_flush = tcp_chr_write_flush;
     chr->chr_close = tcp_chr_close;
     chr->chr_reconnect = tcp_chr_reconnect;
     chr->chr_eof = tcp_chr_eof;
@@ -2225,6 +2239,7 @@ static CharDriverState *qemu_chr_open_tcp(const char *host_str,
     } else {
         s->connected = 1;
         s->fd = fd;
+        send_queue_init(&s->sndq, chr->iohq, fd);
         socket_set_nodelay(fd);
         tcp_chr_connect(chr);
     }
