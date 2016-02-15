@@ -100,8 +100,7 @@ typedef struct IOHandlerRecord {
 #endif
     };
     int deleted;
-    void *read_opaque;
-    void *write_opaque;
+    void *opaque;
     TAILQ_ENTRY(IOHandlerRecord) queue;
     union {
 #if defined(CONFIG_NETEVENT)

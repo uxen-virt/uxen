@@ -128,13 +128,13 @@ ioh_object_signalled(void * context)
         devents = events;
         if (ioh->fd_read)
             if (events & IOH_READ_EVENTS) {
-                ioh->fd_read(ioh->read_opaque);
+                ioh->fd_read(ioh->opaque);
                 devents &= ~IOH_READ_EVENTS;
             }
 
         if (ioh->fd_write)
             if (ioh->object_events & IOH_WRITE_EVENTS) {
-                ioh->fd_write(ioh->write_opaque);
+                ioh->fd_write(ioh->opaque);
                 devents &= ~IOH_WRITE_EVENTS;
             }
 #if 0
@@ -215,12 +215,12 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
                 if (ioh->fd != -1 && !ioh->deleted) {
                     if (ioh->fd_read &&
                         (!ioh->fd_read_poll ||
-                         ioh->fd_read_poll(ioh->read_opaque) != 0)) {
+                         ioh->fd_read_poll(ioh->opaque) != 0)) {
                         events |= FD_READ | FD_ACCEPT | FD_CLOSE;
                     }
                     if (ioh->fd_write &&
                         (!ioh->fd_write_poll ||
-                         ioh->fd_write_poll(ioh->write_opaque) != 0)) {
+                         ioh->fd_write_poll(ioh->opaque) != 0)) {
                         events |= FD_WRITE | FD_CLOSE;
                     }
                 }

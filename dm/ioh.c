@@ -48,10 +48,10 @@ int ioh_set_read_handler2(int fd,
             ioh->fd = fd;
             ioh->fd_write_poll = NULL;
             ioh->fd_write = NULL;
-            ioh->write_opaque = NULL;
+            ioh->opaque = opaque;
             TAILQ_INSERT_HEAD(&iohq->queue, ioh, queue);
 	}
-        ioh->read_opaque = opaque;
+        assert(opaque == ioh->opaque);
         ioh->fd_read_poll = fd_read_poll;
         ioh->fd_read = fd_read;
     }
@@ -86,10 +86,10 @@ int ioh_set_write_handler2(int fd,
             ioh->fd = fd;
             ioh->fd_read_poll = NULL;
             ioh->fd_read = NULL;
-            ioh->read_opaque = NULL;
+            ioh->opaque = opaque;
             TAILQ_INSERT_HEAD(&iohq->queue, ioh, queue);
 	}
-        ioh->write_opaque = opaque;
+        assert(opaque == ioh->opaque);
         ioh->fd_write_poll = fd_write_poll;
         ioh->fd_write = fd_write;
     }
