@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -47,15 +47,14 @@ struct v4v_ring_info
 
     uint32_t len;               /* cached length of the ring (from
                                  * ring->len), protected by L3 */
-    uint32_t npage;
     uint32_t tx_ptr;            /* cached tx pointer location,
                                  * protected by L3 */
     XEN_GUEST_HANDLE(v4v_ring_t) ring; /* guest ring, protected by L3 */
 
-    uint8_t **mfn_mapping;      /* mapped ring pages protected by L3*/
-
-    uint32_t nmfns;
+    uint32_t npage;             /* number of pages in ring */
+    uint32_t nmfns;             /* number of pages translated to mfns */
     mfn_t *mfns;                /* list of mfns of guest ring */
+    uint8_t **mfn_mapping;      /* mapped ring pages protected by L3*/
     struct hlist_head pending;  /* list of struct v4v_pending_ent for
                                  * this ring, L3 */
 };
