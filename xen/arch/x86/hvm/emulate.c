@@ -11,7 +11,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -1147,6 +1147,7 @@ int hvm_emulate_one(
     rc = x86_emulate(&hvmemul_ctxt->ctxt, &hvm_emulate_ops);
 
     if ( rc == X86EMUL_CRASH ) {
+        show_execution_state(regs);
         if ( curr->domain->arch.hvm_domain.params[
                  HVM_PARAM_RESTRICTED_X86_EMUL] != 2 ||
              curr->arch.hvm_vcpu.inject_trap != -1 ) {
