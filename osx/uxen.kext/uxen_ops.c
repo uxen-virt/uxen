@@ -1464,13 +1464,14 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
             struct user_notification_event *event =
                 (struct user_notification_event * volatile)
                 vci->vci_shared.vci_wait_event;
-            assert(event != &dummy_event);
-            ret = fast_event_wait(&event->fast_ev,
-                                  EVENT_INTERRUPTIBLE, EVENT_NO_TIMEOUT);
-            if (ret)
-                goto out;
-            fast_event_clear(&event->fast_ev);
-            vci->vci_shared.vci_wait_event = &dummy_event;
+            if (event != &dummy_event) {
+                ret = fast_event_wait(&event->fast_ev,
+                                      EVENT_INTERRUPTIBLE, EVENT_NO_TIMEOUT);
+                if (ret)
+                    goto out;
+                fast_event_clear(&event->fast_ev);
+                vci->vci_shared.vci_wait_event = &dummy_event;
+            }
             break;
         }
         case VCI_RUN_MODE_PREEMPT:
