@@ -1809,10 +1809,13 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
         switch (vci->vci_shared.vci_run_mode) {
         case VCI_RUN_MODE_PROCESS_IOREQ: {
             KEVENT *event = (KEVENT * volatile)vci->vci_shared.vci_wait_event;
-            EVENT_WAIT(event, 1, 0);
-            /* since timeout == 0, EVENT_WAIT only continues here on SUCCESS */
-            KeClearEvent(event);
-            vci->vci_shared.vci_wait_event = &dummy_event;
+            if (event != &dummy_event) {
+                EVENT_WAIT(event, 1, 0);
+                /* since timeout == 0, EVENT_WAIT only continues here
+                 * on SUCCESS */
+                KeClearEvent(event);
+                vci->vci_shared.vci_wait_event = &dummy_event;
+            }
             break;
         }
         case VCI_RUN_MODE_PREEMPT:
