@@ -107,7 +107,6 @@ ioh_object_signaled(void * context)
 {
     WSANETWORKEVENTS net_events;
     int events;
-    int devents;
 
     IOHandlerRecord *ioh = (IOHandlerRecord *)context;
 
@@ -122,25 +121,12 @@ ioh_object_signaled(void * context)
 
     events = net_events.lNetworkEvents;
 
-#define IOH_READ_EVENTS (FD_READ|FD_ACCEPT|FD_CLOSE)
-#define IOH_WRITE_EVENTS (FD_WRITE|FD_CLOSE)
     if (events) {
-        devents = events;
-        if (ioh->fd_read)
-            if (events & IOH_READ_EVENTS) {
-                ioh->fd_read(ioh->read_opaque);
-                devents &= ~IOH_READ_EVENTS;
-            }
+        if (ioh->fd_read && (events & (FD_READ|FD_ACCEPT|FD_CLOSE)))
+            ioh->fd_read(ioh->read_opaque);
 
-        if (ioh->fd_write)
-            if (ioh->object_events & IOH_WRITE_EVENTS) {
-                ioh->fd_write(ioh->write_opaque);
-                devents &= ~IOH_WRITE_EVENTS;
-            }
-#if 0
-        if (devents)
-            printf("===== unhandled events 0x%x =====\n", devents);
-#endif
+        if (ioh->fd_write && (events & FD_WRITE))
+            ioh->fd_write(ioh->write_opaque);
     }
 }
 #endif  /* CONFIG_NETEVENT */
@@ -221,7 +207,7 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
                     if (ioh->fd_write &&
                         (!ioh->fd_write_poll ||
                          ioh->fd_write_poll(ioh->write_opaque) != 0)) {
-                        events |= FD_WRITE | FD_CLOSE;
+                        events |= FD_WRITE;
                     }
                 }
                 if (events) {
