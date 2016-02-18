@@ -103,7 +103,7 @@ void ioh_del_wait_object(ioh_event *event, WaitObjects *w)
 
 #if defined(CONFIG_NETEVENT)
 static void
-ioh_object_signalled(void * context)
+ioh_object_signaled(void * context)
 {
     WSANETWORKEVENTS net_events;
     int events;
@@ -146,7 +146,7 @@ ioh_object_signalled(void * context)
 #endif  /* CONFIG_NETEVENT */
 
 static void
-np_signalled(void *context)
+np_signaled(void *context)
 {
     IOHandlerRecord *ioh = (IOHandlerRecord *)context;
 
@@ -207,7 +207,7 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
                 if (ioh->np_read_poll && ioh->np_read_poll(ioh->read_opaque) == 0)
                     continue;
                 ioh->np_read_pending = NP_READ_PENDING;
-                ioh_add_wait_object(&ioh->np, np_signalled, ioh, w);
+                ioh_add_wait_object(&ioh->np, np_signaled, ioh, w);
 #if defined(CONFIG_NETEVENT)
             } else {
                 int events = 0;
@@ -229,7 +229,7 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
                         ioh->event = WSACreateEvent();
                     WSAEventSelect(ioh->fd, ioh->event, events);
                     if (!ioh->object_events) {
-                        ioh_add_wait_object(&ioh->event, ioh_object_signalled,
+                        ioh_add_wait_object(&ioh->event, ioh_object_signaled,
                                             ioh, w);
                     }
                 } else {
