@@ -49,6 +49,8 @@ KEVENT uxen_idle_thread_event;
 static int resume_requested = 0;
 static uint32_t idle_thread_suspended = 0;
 
+static KEVENT dummy_event;
+
 static LARGE_INTEGER uxen_start_time;
 static LARGE_INTEGER uxen_host_counter_start, uxen_host_counter_freq;
 
@@ -660,16 +662,17 @@ uxen_op_notify_vram(struct vm_info_shared *vmis)
 
 static uint64_t __cdecl
 uxen_op_signal_event(struct vm_vcpu_info_shared *vcis,
-                     struct host_event_channel *hec, void **_wait_event)
+                     struct host_event_channel *hec,
+                     void * volatile *_wait_event)
 {
     struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
-    KEVENT **wait_event = (KEVENT **)_wait_event;
+    KEVENT * volatile *wait_event = (KEVENT * volatile *)_wait_event;
 
     if (!hec || !hec->request || !is_vci_runnable(vci))
 	return 1;
 
     if (hec->completed && *wait_event != hec->completed) {
-        if (*wait_event) {
+        if (*wait_event && *wait_event != &dummy_event) {
             fail_msg("%s: nested waiting signal event", __FUNCTION__);
             return 1;
         }
@@ -683,14 +686,15 @@ static uint64_t __cdecl
 uxen_op_check_ioreq(struct vm_vcpu_info_shared *vcis)
 {
     struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
+    KEVENT *event = (KEVENT * volatile)vcis->vci_wait_event;
     int ret;
 
-    if ((vcis->vci_wait_event == NULL) || !is_vci_runnable(vci))
+    if (event == &dummy_event || !is_vci_runnable(vci))
 	return 1;
-    ret = KeReadStateEvent(vcis->vci_wait_event);
+    ret = KeReadStateEvent(event);
     if (ret) {
-        KeClearEvent(vcis->vci_wait_event);
-        vcis->vci_wait_event = NULL;
+        KeClearEvent(event);
+        vcis->vci_wait_event = &dummy_event;
     }
     return ret;
 }
@@ -1052,6 +1056,8 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
 
     KeInitializeSpinLock(&idle_free_lock);
 
+    KeInitializeEvent(&dummy_event, NotificationEvent, TRUE);
+
     ret = memcache_init();
     if (ret != 0) {
         fail_msg("memcache_init() failed");
@@ -1410,6 +1416,7 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
         vci->vci_executing = 0;
         vci->vci_thread = 0;
         spinlock_initialize(vci->vci_ipi_lck);
+        vci->vci_shared.vci_wait_event = &dummy_event;
 
         KeInitializeEvent(&vci->vci_runnable, NotificationEvent, FALSE);
         vci->vci_shared.vci_runnable = 1;
@@ -1598,6 +1605,7 @@ uxen_vmi_stop_running(struct vm_info *vmi)
 
     for (i = 0; i < vmi->vmi_shared.vmi_nrvcpus; i++) {
         struct vm_vcpu_info *vci = &vmi->vmi_vcpus[i];
+        KEVENT *event = (KEVENT * volatile)vci->vci_shared.vci_wait_event;
 
         dprintk("  vcpu vm%u.%u runnable %s\n", vmi->vmi_shared.vmi_domid, i,
                 vci->vci_shared.vci_runnable ? "yes" : "no");
@@ -1606,8 +1614,10 @@ uxen_vmi_stop_running(struct vm_info *vmi)
                                        0, 1) == 0)
             continue;
 
-	if (vci->vci_shared.vci_wait_event)
-	    KeSetEvent(vci->vci_shared.vci_wait_event, 0, FALSE);
+        if (event != &dummy_event) {
+            vci->vci_shared.vci_wait_event = &dummy_event;
+            KeSetEvent(event, 0, FALSE);
+        }
 
 	KeSetEvent(&vci->vci_runnable, 0, FALSE);
 
@@ -1797,12 +1807,14 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
         if (ret || !is_vci_runnable(vci))
 	    break;
         switch (vci->vci_shared.vci_run_mode) {
-        case VCI_RUN_MODE_PROCESS_IOREQ:
-            EVENT_WAIT(vci->vci_shared.vci_wait_event, 1, 0);
+        case VCI_RUN_MODE_PROCESS_IOREQ: {
+            KEVENT *event = (KEVENT * volatile)vci->vci_shared.vci_wait_event;
+            EVENT_WAIT(event, 1, 0);
             /* since timeout == 0, EVENT_WAIT only continues here on SUCCESS */
-            KeClearEvent(vci->vci_shared.vci_wait_event);
-            vci->vci_shared.vci_wait_event = NULL;
+            KeClearEvent(event);
+            vci->vci_shared.vci_wait_event = &dummy_event;
             break;
+        }
         case VCI_RUN_MODE_PREEMPT:
             /* nothing */
             break;
