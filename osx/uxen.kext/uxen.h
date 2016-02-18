@@ -357,7 +357,7 @@ void uxen_pages_clear(void);
 extern lck_spin_t *idle_free_lock;
 extern uint32_t idle_free_list;
 int idle_free_free_list(void);
-extern lck_spin_t *populate_frametable_lock;
+extern lck_mtx_t *populate_frametable_lock;
 int _populate_frametable(uxen_pfn_t);
 extern int frametable_check_populate;
 #define populate_frametable(mfn) (!frametable_check_populate ? 0 :      \

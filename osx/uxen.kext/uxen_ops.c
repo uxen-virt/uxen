@@ -579,7 +579,7 @@ uxen_op_init_free_allocs(void)
 	frametable = NULL;
     }
     if (populate_frametable_lock) {
-        lck_spin_free(populate_frametable_lock, uxen_lck_grp);
+        lck_mtx_free(populate_frametable_lock, uxen_lck_grp);
         populate_frametable_lock = NULL;
     }
     if (percpu_area) {
@@ -746,7 +746,7 @@ uxen_op_init(struct fd_assoc *fda)
     dprintk("uxen mem: f-populated %p - %p (%dKB)\n", frametable_populated,
             frametable_populated + ((frametable_size >> PAGE_SHIFT) + 7) / 8,
             (((frametable_size >> PAGE_SHIFT) + 7) / 8) >> 10);
-    populate_frametable_lock = lck_spin_alloc_init(uxen_lck_grp, LCK_ATTR_NULL);
+    populate_frametable_lock = lck_mtx_alloc_init(uxen_lck_grp, LCK_ATTR_NULL);
     if (!populate_frametable_lock) {
         fail_msg("populate frametable lck alloc failed");
         ret = ENOMEM;

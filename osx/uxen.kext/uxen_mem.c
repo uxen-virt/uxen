@@ -28,7 +28,7 @@ static uint32_t idle_free_count = 0;
 
 static uint32_t pages_reserve[MAX_CPUS];
 
-lck_spin_t *populate_frametable_lock;
+lck_mtx_t *populate_frametable_lock;
 
 #define L1_PAGETABLE_SHIFT      12
 #define L2_PAGETABLE_SHIFT      21
@@ -985,12 +985,12 @@ _populate_frametable(uxen_pfn_t mfn)
 
     offset = (s * mfn) >> PAGE_SHIFT;
 
-    lck_spin_lock(populate_frametable_lock);
+    lck_mtx_lock(populate_frametable_lock);
     while (!(frametable_populated[offset / 8] & (1 << (offset % 8)))) {
-        lck_spin_unlock(populate_frametable_lock);
+        lck_mtx_unlock(populate_frametable_lock);
         if (kernel_alloc_mfn(&frametable_mfn, 0))
             return 1;
-        lck_spin_lock(populate_frametable_lock);
+        lck_mtx_lock(populate_frametable_lock);
         if (frametable_populated[offset / 8] & (1 << (offset % 8)))
             break;
         frametable_va = (uintptr_t)frametable + (offset << PAGE_SHIFT);
@@ -1001,7 +1001,7 @@ _populate_frametable(uxen_pfn_t mfn)
         frametable_populated[offset / 8] |= (1 << (offset % 8));
         break;
     }
-    lck_spin_unlock(populate_frametable_lock);
+    lck_mtx_unlock(populate_frametable_lock);
 
     /* Check if last byte of mfn's page_info is in same frametable
      * page, otherwise populate next mfn as well */
