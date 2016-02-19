@@ -1059,6 +1059,7 @@ long arch_do_domctl(
         if ( domctl->cmd == XEN_DOMCTL_get_ext_vcpucontext )
         {
             evc->size = sizeof(*evc);
+#ifndef __UXEN__
 #ifdef __x86_64__
             if ( !is_hvm_domain(d) )
             {
@@ -1077,6 +1078,7 @@ long arch_do_domctl(
             }
             else
 #endif
+#endif  /* __UXEN__ */
             {
                 evc->sysenter_callback_cs      = 0;
                 evc->sysenter_callback_eip     = 0;
@@ -1091,6 +1093,7 @@ long arch_do_domctl(
             ret = -EINVAL;
             if ( evc->size != sizeof(*evc) )
                 goto ext_vcpucontext_out;
+#ifndef __UXEN__
 #ifdef __x86_64__
             if ( !is_hvm_domain(d) )
             {
@@ -1111,6 +1114,7 @@ long arch_do_domctl(
             }
             else
 #endif
+#endif  /* __UXEN__ */
             /* We do not support syscall/syscall32/sysenter on 32-bit Xen. */
             if ( (evc->sysenter_callback_cs & ~3) ||
                  evc->sysenter_callback_eip ||
@@ -1593,9 +1597,11 @@ void arch_get_info_guest(struct vcpu *v, vcpu_guest_context_u c)
     if ( !compat )
     {
         memcpy(&c.nat->user_regs, &v->arch.user_regs, sizeof(c.nat->user_regs));
+#ifndef __UXEN__
         if ( !is_hvm_vcpu(v) )
             memcpy(c.nat->trap_ctxt, v->arch.pv_vcpu.trap_ctxt,
                    sizeof(c.nat->trap_ctxt));
+#endif  /* __UXEN__ */
     }
 #ifdef CONFIG_COMPAT
     else
@@ -1631,6 +1637,7 @@ void arch_get_info_guest(struct vcpu *v, vcpu_guest_context_u c)
         hvm_get_segment_register(v, x86_seg_gs, &sreg);
         c.nat->user_regs.gs = sreg.sel;
     }
+#ifndef __UXEN__
     else
     {
         c(ldt_base = v->arch.pv_vcpu.ldt_base);
@@ -1699,6 +1706,7 @@ void arch_get_info_guest(struct vcpu *v, vcpu_guest_context_u c)
         if ( guest_kernel_mode(v, &v->arch.user_regs) )
             c(flags |= VGCF_in_kernel);
     }
+#endif  /* __UXEN__ */
 
     c(vm_assist = v->domain->vm_assist);
 #undef c

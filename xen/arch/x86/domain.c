@@ -419,16 +419,15 @@ int switch_compat(struct domain *d)
     return -ENOMEM;
 }
 
-#else
-#define setup_compat_l4(v) 0
-#define release_compat_l4(v) ((void)0)
-#endif
+#endif  /* defined(__x86_64__) && !defined(__UXEN__) */
 
+#ifndef __UXEN__
 static inline bool_t standalone_trap_ctxt(struct vcpu *v)
 {
     BUILD_BUG_ON(256 * sizeof(*v->arch.pv_vcpu.trap_ctxt) > PAGE_SIZE);
     return 256 * sizeof(*v->arch.pv_vcpu.trap_ctxt) + sizeof(*v) > PAGE_SIZE;
 }
+#endif  /* __UXEN__ */
 
 int vcpu_initialise(struct vcpu *v)
 {
@@ -476,12 +475,15 @@ int vcpu_initialise(struct vcpu *v)
         goto done;
     }
 
+#ifndef __UXEN__
     v->arch.pv_vcpu.vcpu_info_mfn = INVALID_MFN;
 
     spin_lock_init(&v->arch.pv_vcpu.shadow_ldt_lock);
+#endif  /* __UXEN__ */
 
     if ( !is_idle_domain(d) )
     {
+#ifndef __UXEN__
         if ( standalone_trap_ctxt(v) )
         {
             v->arch.pv_vcpu.trap_ctxt = alloc_xenheap_page();
@@ -495,6 +497,7 @@ int vcpu_initialise(struct vcpu *v)
         else
             v->arch.pv_vcpu.trap_ctxt = (void *)v + PAGE_SIZE -
                 256 * sizeof(*v->arch.pv_vcpu.trap_ctxt);
+#endif  /* __UXEN__ */
 
         /* PV guests by default have a 100Hz ticker. */
         v->periodic_period = MILLISECS(10);
@@ -518,18 +521,20 @@ int vcpu_initialise(struct vcpu *v)
         v->arch.schedule_tail = continue_idle_domain;
         v->arch.cr3           = __pa(idle_pg_table);
     }
-#endif  /* __UXEN__ */
 
     v->arch.pv_vcpu.ctrlreg[4] = real_cr4_to_pv_guest_cr4(mmu_cr4_features);
 
     rc = is_pv_32on64_vcpu(v) ? setup_compat_l4(v) : 0;
+#endif  /* __UXEN__ */
  done:
     if ( rc )
     {
         vcpu_destroy_fpu(v);
 
+#ifndef __UXEN__
         if ( !is_hvm_domain(d) && standalone_trap_ctxt(v) )
             free_xenheap_page(v->arch.pv_vcpu.trap_ctxt);
+#endif  /* __UXEN__ */
     }
 
     return rc;
@@ -900,9 +905,11 @@ int arch_set_info_guest(
         if ( !compat )
         {
             memcpy(&v->arch.user_regs, &c.nat->user_regs, sizeof(c.nat->user_regs));
+#ifndef __UXEN__
             if ( !is_hvm_vcpu(v) )
                 memcpy(v->arch.pv_vcpu.trap_ctxt, c.nat->trap_ctxt,
                        sizeof(c.nat->trap_ctxt));
+#endif  /* __UXEN__ */
         }
 #ifdef CONFIG_COMPAT
         else
@@ -1154,6 +1161,7 @@ void arch_vcpu_reset(struct vcpu *v)
     }
 }
 
+#ifndef __UXEN__
 /* 
  * Unmap the vcpu info page if the guest decided to place it somewhere
  * else.  This is only used from arch_domain_destroy, so there's no
@@ -1176,7 +1184,6 @@ unmap_vcpu_info(struct vcpu *v)
     put_page_and_type(mfn_to_page(mfn));
 }
 
-#ifndef __UXEN__
 /* 
  * Map a guest page in and point the vcpu_info pointer at it.  This
  * makes sure that the vcpu_info is always pointing at a valid piece
@@ -2323,9 +2330,9 @@ int domain_relinquish_resources(struct domain *d)
                  * mappings.
                  */
                 destroy_gdt(v);
-#endif  /* __UXEN__ */
 
                 unmap_vcpu_info(v);
+#endif  /* __UXEN__ */
             }
 
             if ( d->arch.pv_domain.pirq_eoi_map != NULL )

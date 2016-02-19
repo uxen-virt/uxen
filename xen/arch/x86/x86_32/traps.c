@@ -134,6 +134,7 @@ void show_registers(struct cpu_user_regs *regs)
 #endif  /* __UXEN__ */
 }
 
+#ifndef __UXEN__
 void vcpu_show_registers(const struct vcpu *v)
 {
     unsigned long crs[8];
@@ -149,6 +150,7 @@ void vcpu_show_registers(const struct vcpu *v)
 
     _show_registers(&v->arch.user_regs, crs, CTXT_pv_guest, v);
 }
+#endif  /* __UXEN__ */
 
 #ifndef __UXEN__
 void show_page_walk(unsigned long addr)

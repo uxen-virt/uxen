@@ -421,7 +421,9 @@ void vcpu_show_execution_state(struct vcpu *v)
 
     vcpu_pause(v); /* acceptably dangerous */
 
+#ifndef __UXEN__
     vcpu_show_registers(v);
+#endif  /* __UXEN__ */
     if ( guest_kernel_mode(v, &v->arch.user_regs) )
         show_guest_stack(v, &v->arch.user_regs);
 

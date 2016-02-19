@@ -53,6 +53,7 @@ void __dummy__(void)
 
     OFFSET(VCPU_processor, struct vcpu, processor);
     OFFSET(VCPU_vcpu_info, struct vcpu, vcpu_info);
+#ifndef __UXEN__
     OFFSET(VCPU_trap_bounce, struct vcpu, arch.pv_vcpu.trap_bounce);
     OFFSET(VCPU_thread_flags, struct vcpu, arch.flags);
     OFFSET(VCPU_event_sel, struct vcpu, arch.pv_vcpu.event_callback_cs);
@@ -63,6 +64,7 @@ void __dummy__(void)
            arch.pv_vcpu.failsafe_callback_eip);
     OFFSET(VCPU_kernel_ss, struct vcpu, arch.pv_vcpu.kernel_ss);
     OFFSET(VCPU_kernel_sp, struct vcpu, arch.pv_vcpu.kernel_sp);
+#endif  /* __UXEN__ */
     OFFSET(VCPU_guest_context_flags, struct vcpu, arch.vgc_flags);
     OFFSET(VCPU_nmi_pending, struct vcpu, nmi_pending);
     OFFSET(VCPU_mce_pending, struct vcpu, mce_pending);

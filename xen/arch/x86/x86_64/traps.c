@@ -156,18 +156,16 @@ void show_registers(struct cpu_user_regs *regs)
 #endif  /* __UXEN__ */
 }
 
+#ifndef __UXEN__
 void vcpu_show_registers(const struct vcpu *v)
 {
-#ifndef __UXEN__
     const struct cpu_user_regs *regs = &v->arch.user_regs;
     unsigned long crs[8];
-#endif  /* __UXEN__ */
 
     /* No need to handle HVM for now. */
     if ( is_hvm_vcpu(v) )
         return;
 
-#ifndef __UXEN__
     crs[0] = v->arch.pv_vcpu.ctrlreg[0];
     crs[2] = arch_get_cr2(v);
     crs[3] = pagetable_get_paddr(guest_kernel_mode(v, regs) ?
@@ -176,8 +174,8 @@ void vcpu_show_registers(const struct vcpu *v)
     crs[4] = v->arch.pv_vcpu.ctrlreg[4];
 
     _show_registers(regs, crs, CTXT_pv_guest, v);
-#endif  /* __UXEN__ */
 }
+#endif  /* __UXEN__ */
 
 void show_page_walk(unsigned long addr)
 {
