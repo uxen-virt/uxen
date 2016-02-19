@@ -54,7 +54,7 @@ extern struct domain *dom0;
 #define BITS_PER_EVTCHN_WORD(d) (has_32bit_shinfo(d) ? 32 : BITS_PER_LONG)
 #endif
 #define MAX_EVTCHNS(d) (BITS_PER_EVTCHN_WORD(d) * BITS_PER_EVTCHN_WORD(d))
-#define EVTCHNS_PER_BUCKET 128
+#define EVTCHNS_PER_BUCKET 256
 #define NR_EVTCHN_BUCKETS  (NR_EVENT_CHANNELS / EVTCHNS_PER_BUCKET)
 
 struct evtchn
@@ -62,10 +62,12 @@ struct evtchn
 #define ECS_FREE         0 /* Channel is available for use.                  */
 #define ECS_RESERVED     1 /* Channel is reserved.                           */
 #define ECS_UNBOUND      2 /* Channel is waiting to bind to a remote domain. */
+#ifndef __UXEN__
 #define ECS_INTERDOMAIN  3 /* Channel is bound to another domain.            */
 #define ECS_PIRQ         4 /* Channel is bound to a physical IRQ line.       */
 #define ECS_VIRQ         5 /* Channel is bound to a virtual IRQ line.        */
 #define ECS_IPI          6 /* Channel is bound to a virtual IPI line.        */
+#endif  /* __UXEN__ */
 #define ECS_HOST         7 /* Channel is bound to the host.                  */
     u8  state;             /* ECS_* */
     u8  consumer_is_xen;   /* Consumed by Xen or by guest? */
@@ -74,6 +76,7 @@ struct evtchn
         struct {
             domid_t remote_domid;
         } unbound;     /* state == ECS_UNBOUND */
+#ifndef __UXEN__
         struct {
             u16            remote_port;
             struct domain *remote_dom;
@@ -84,6 +87,7 @@ struct evtchn
             u16            prev_port;
         } pirq;        /* state == ECS_PIRQ */
         u16 virq;      /* state == ECS_VIRQ */
+#endif  /* __UXEN__ */
         struct {
             void *host_opaque;
         } host;     /* state == ECS_HOST */

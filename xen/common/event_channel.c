@@ -17,7 +17,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -447,13 +447,19 @@ static long evtchn_bind_host(evtchn_bind_host_t *bind)
 
 static long __evtchn_close(struct domain *d1, int port1)
 {
+#ifndef __UXEN__
     struct domain *d2 = NULL;
     struct vcpu   *v;
     struct evtchn *chn1, *chn2;
     int            port2;
+#else  /* __UXEN__ */
+    struct evtchn *chn1;
+#endif  /* __UXEN__ */
     long           rc = 0;
 
+#ifndef __UXEN__
  again:
+#endif  /* __UXEN__ */
     spin_lock(&d1->event_lock);
 
     if ( !port_is_valid(d1, port1) )
@@ -481,6 +487,7 @@ static long __evtchn_close(struct domain *d1, int port1)
     case ECS_UNBOUND:
         break;
 
+#ifndef __UXEN__
     case ECS_PIRQ: {
 #ifndef __UXEN_NOT_YET__
         struct pirq *pirq = pirq_info(d1, chn1->u.pirq.irq);
@@ -496,7 +503,7 @@ static long __evtchn_close(struct domain *d1, int port1)
         if ( is_hvm_domain(d1) && domain_pirq_to_irq(d1, pirq->pirq) > 0 )
             unmap_domain_pirq_emuirq(d1, pirq->pirq);
 #endif
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_NOT_YET__ */
         BUG();
         break;
     }
@@ -557,6 +564,7 @@ static long __evtchn_close(struct domain *d1, int port1)
         chn2->state = ECS_UNBOUND;
         chn2->u.unbound.remote_domid = d1->domain_id;
         break;
+#endif  /* __UXEN__ */
 
     case ECS_HOST:
         break;
@@ -575,12 +583,14 @@ static long __evtchn_close(struct domain *d1, int port1)
     xsm_evtchn_close_post(chn1);
 
  out:
+#ifndef __UXEN__
     if ( d2 != NULL )
     {
         if ( d1 != d2 )
             spin_unlock(&d2->event_lock);
         put_domain(d2);
     }
+#endif  /* __UXEN__ */
 
     spin_unlock(&d1->event_lock);
 
@@ -1178,16 +1188,15 @@ void notify_via_xen_event_channel(struct domain *ld, int lport)
                                lchn->u.host.host_opaque);
         perfc_incr(signaled_event);
     } else
+#ifndef __UXEN__
     if ( likely(lchn->state == ECS_INTERDOMAIN) )
     {
-        DEBUG();
-#ifndef __UXEN__
         rd    = lchn->u.interdomain.remote_dom;
         rport = lchn->u.interdomain.remote_port;
         rchn  = evtchn_from_port(rd, rport);
         evtchn_set_pending(rd->vcpu[rchn->notify_vcpu_id], rport);
-#endif  /* __UXEN__ */
     } else
+#endif  /* __UXEN__ */
         /* DEBUG() */;
 
     spin_unlock(&ld->event_lock);
@@ -1325,6 +1334,7 @@ static void domain_dump_evtchn_info(struct domain *d)
         case ECS_UNBOUND:
             printk(" d=vm%u", chn->u.unbound.remote_domid);
             break;
+#ifndef __UXEN__
         case ECS_INTERDOMAIN:
             printk(" d=vm%u p=%d",
                    chn->u.interdomain.remote_dom->domain_id,
@@ -1335,6 +1345,10 @@ static void domain_dump_evtchn_info(struct domain *d)
             break;
         case ECS_VIRQ:
             printk(" v=%d", chn->u.virq);
+            break;
+#endif  /* __UXEN__ */
+        case ECS_HOST:
+            printk(" h=%p", chn->u.host.host_opaque);
             break;
         }
         printk(" x=%d\n", chn->consumer_is_xen);
