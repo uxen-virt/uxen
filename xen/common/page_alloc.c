@@ -1522,8 +1522,8 @@ alloc_host_pages(unsigned int pages, unsigned int memflags)
         v = map_xen_page(pfns[0]);
 
 #ifdef UXEN_ALLOC_DEBUG
-    printk("%S: alloc host pages -> %p\n",
-           (printk_symbol)__builtin_return_address(0), v);
+    printk("%S: alloc host pages %d -> %p\n",
+           (printk_symbol)__builtin_return_address(0), pages, v);
 #endif  /* UXEN_ALLOC_DEBUG */
 
     if (v)
@@ -1797,7 +1797,7 @@ void free_domheap_pages(struct page_info *pg, unsigned int order)
          * shared with the domain */
         ASSERT(d != NULL);
 #ifdef UXEN_ALLOC_DEBUG
-        printk("%s: free xen domheap page mfn %lx from %S\n", __FUNCTION__
+        printk("%s: free xen domheap page mfn %lx from %S\n", __FUNCTION__,
                page_to_mfn(pg), (printk_symbol)__builtin_return_address(0));
 #endif  /* UXEN_ALLOC_DEBUG */
 
