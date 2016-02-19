@@ -2177,7 +2177,7 @@ int rewire_phase(struct disk *disk, Manifest *man)
             m->host_name = m->name;
             path_join(fn, m->rewrite, L"");
             m->name = wcsdup(fn);
-            printf("mapping [%S] =[%d]=>[%S]\n", m->host_name, m->action, m->name);
+            // printf("mapping [%S] =[%d]=>[%S]\n", m->host_name, m->action, m->name);
         } else if (!m->host_name) {
             m->host_name = wcsdup(m->name);
         }
