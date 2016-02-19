@@ -54,11 +54,10 @@ integer_param("tevt_mask", opt_tevt_mask);
 #define opt_tbuf_size 0
 #endif  /* __UXEN__ */
 
+#ifndef __UXEN__
 /* Pointers to the meta-data objects for all system trace buffers */
 static struct t_info *t_info;
-#ifndef __UXEN__
 static unsigned int t_info_pages;
-#endif  /* __UXEN__ */
 
 static DEFINE_PER_CPU_READ_MOSTLY(struct t_buf *, t_bufs);
 static DEFINE_PER_CPU_READ_MOSTLY(spinlock_t, t_lock);
@@ -71,18 +70,19 @@ static u32 t_buf_highwater;
 /* Number of records lost due to per-CPU trace buffer being full. */
 static DEFINE_PER_CPU(unsigned long, lost_records);
 static DEFINE_PER_CPU(unsigned long, lost_records_first_tsc);
+#endif  /* __UXEN__ */
 
 /* a flag recording whether initialization has been done */
 /* or more properly, if the tbuf subsystem is enabled right now */
 int tb_init_done __read_mostly;
 
+#ifndef __UXEN__
 /* which CPUs tracing is enabled on */
 static cpumask_t tb_cpu_mask;
 
 /* which tracing events are enabled */
 static u32 tb_event_mask = TRC_ALL;
 
-#ifndef __UXEN__
 /* Return the number of elements _type necessary to store at least _x bytes of data
  * i.e., sizeof(_type) * ans >= _x. */
 #define fit_to_type(_type, _x) (((_x)+sizeof(_type)-1) / sizeof(_type))
@@ -447,13 +447,11 @@ int tb_control(xen_sysctl_tbuf_op_t *tbc)
 
     return rc;
 }
-#endif  /* __UXEN__ */
 
 static inline unsigned int calc_rec_size(bool_t cycles, unsigned int extra) 
 {
     unsigned int rec_size = 4;
 
-DEBUG();
     if ( cycles )
         rec_size += 8;
     rec_size += extra;
@@ -462,7 +460,6 @@ DEBUG();
 
 static inline bool_t bogus(u32 prod, u32 cons)
 {
-DEBUG();
     if ( unlikely(prod & 3) || unlikely(prod >= 2 * data_size) ||
          unlikely(cons & 3) || unlikely(cons >= 2 * data_size) )
     {
@@ -479,7 +476,6 @@ static inline u32 calc_unconsumed_bytes(const struct t_buf *buf)
     u32 prod = buf->prod, cons = buf->cons;
     s32 x;
 
-DEBUG();
     barrier(); /* must read buf->prod and buf->cons only once */
     if ( bogus(prod, cons) )
         return data_size;
@@ -499,7 +495,6 @@ static inline u32 calc_bytes_to_wrap(const struct t_buf *buf)
     u32 prod = buf->prod, cons = buf->cons;
     s32 x;
 
-DEBUG();
     barrier(); /* must read buf->prod and buf->cons only once */
     if ( bogus(prod, cons) )
         return 0;
@@ -530,7 +525,6 @@ static unsigned char *next_record(const struct t_buf *buf, uint32_t *next,
     uint32_t mfn;
     unsigned char *this_page;
 
-DEBUG();
     barrier(); /* must read buf->prod and buf->cons only once */
     *next = x;
     if ( !tb_init_done || bogus(x, cons) )
@@ -580,7 +574,6 @@ static inline void __insert_record(struct t_buf *buf,
     uint32_t offset;
     uint32_t remaining;
 
-DEBUG();
     BUG_ON(local_rec_size != rec_size);
     BUG_ON(extra & 3);
 
@@ -641,7 +634,6 @@ static inline void insert_wrap_record(struct t_buf *buf,
     unsigned int extra_space = space_left - sizeof(u32);
     bool_t cycles = 0;
 
-DEBUG();
     BUG_ON(space_left > size);
 
     /* We may need to add cycles to take up enough space... */
@@ -666,7 +658,6 @@ static inline void insert_lost_records(struct t_buf *buf)
         u64 first_tsc;
     } __attribute__((packed)) ed;
 
-DEBUG();
     ed.vid = current->vcpu_id;
     ed.did = current->domain->domain_id;
     ed.lost_records = this_cpu(lost_records);
@@ -684,13 +675,13 @@ DEBUG();
  */
 static void trace_notify_dom0(unsigned long unused)
 {
-DEBUG();
 #ifndef __UXEN_NOT_YET__
     send_guest_global_virq(dom0, VIRQ_TBUF);
 #endif  /* __UXEN_NOT_YET__ */
 }
 static DECLARE_SOFTIRQ_TASKLET(trace_notify_dom0_tasklet,
                                trace_notify_dom0, 0);
+#endif  /* __UXEN__ */
 
 /**
  * __trace_var - Enters a trace tuple into the trace buffer for the current CPU.
@@ -704,6 +695,7 @@ static DECLARE_SOFTIRQ_TASKLET(trace_notify_dom0_tasklet,
 void __trace_var(u32 event, bool_t cycles, unsigned int extra,
                  const void *extra_data)
 {
+#ifndef __UXEN__
     struct t_buf *buf;
     unsigned long flags;
     u32 bytes_to_tail, bytes_to_wrap;
@@ -711,7 +703,6 @@ void __trace_var(u32 event, bool_t cycles, unsigned int extra,
     unsigned int extra_word;
     bool_t started_below_highwater;
 
-DEBUG();
     if( !tb_init_done )
         return;
 
@@ -838,6 +829,7 @@ unlock:
          && started_below_highwater
          && (calc_unconsumed_bytes(buf) >= t_buf_highwater) )
         tasklet_schedule(&trace_notify_dom0_tasklet);
+#endif  /* __UXEN__ */
 }
 
 /*
