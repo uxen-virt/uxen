@@ -130,7 +130,7 @@ disklib_init(void) {
         *stderr = *logfile;
     }
 
-    setvbuf(logfile, NULL, _IONBF, 0);
+    setvbuf(logfile, NULL, _IOLBF, 1024);
     LoadLibraryA("uxen-backtrace.dll");
     banner();
 }
