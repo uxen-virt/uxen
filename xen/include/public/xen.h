@@ -385,6 +385,9 @@ typedef uint16_t domid_t;
 /* DOMID_INVALID is used to identify pages with unknown owner. */
 #define DOMID_INVALID (0x7FF4U)
 
+/* anonymous page. */
+#define DOMID_ANON (0x7FFEU)
+
 /* Idle domain. */
 #define DOMID_IDLE (0x7FFFU)
 

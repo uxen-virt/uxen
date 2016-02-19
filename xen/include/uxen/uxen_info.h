@@ -73,7 +73,6 @@
 #define UI_HOST_CALL_ui_map_page_range              UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_unmap_page_range            UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_mapped_global_va_pfn        UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_mapped_global_pfn_va        UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_host_needs_preempt          UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_notify_exception            UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_notify_vram                 UI_HOST_CALL_SAVE_XMM
@@ -199,7 +198,6 @@ struct /* __WINPACKED__ */ uxen_info {
     uint32_t ui_map_page_range_offset;
     uint32_t ui_map_page_range_max_nr;
     uxen_pfn_t (__interface_fn *ui_mapped_global_va_pfn)(const void *);
-    void *(__interface_fn *ui_mapped_global_pfn_va)(xen_pfn_t);
     void **ui_dom0_current;
     uint64_t (__interface_fn *ui_host_needs_preempt)(
         struct vm_vcpu_info_shared *);
@@ -229,6 +227,8 @@ struct /* __WINPACKED__ */ uxen_info {
 #define UI_HVM_IO_BITMAP_SIZE (3 << PAGE_SHIFT)
     uint32_t ui_vmi_msrpm_size;
     uint32_t ui_xsave_cntxt_size;
+    uint32_t ui_domain_array_pages;
+    void *ui_domain_array;
 
 #if defined(__x86_64__) && defined(__OBJ_PE__)
     uint8_t *ui_xdata_start;

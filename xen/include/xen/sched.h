@@ -505,6 +505,8 @@ struct domain_setup_info
 extern spinlock_t domlist_update_lock;
 extern rcu_read_lock_t domlist_read_lock;
 
+extern struct domain **domain_array;
+
 extern struct vcpu *idle_vcpu[NR_CPUS];
 #define is_idle_domain(d) ((d)->domain_id == DOMID_IDLE)
 #define is_idle_vcpu(v)   (is_idle_domain((v)->domain))

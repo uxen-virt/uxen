@@ -49,7 +49,6 @@ PERFCOUNTER(unmap_domain_page_global_count,  "unmap_domain_page_global count")
 PERFCOUNTER(map_domain_page_direct_count,  "map_domain_page_direct count")
 PERFCOUNTER(unmap_domain_page_direct_count,  "unmap_domain_page_direct count")
 PERFCOUNTER(map_xen_page_count,     "map_xen_page count")
-PERFCOUNTER(mapped_xen_page_count,  "mapped_xen_page count")
 PERFCOUNTER(unmap_xen_page_count,   "unmap_xen_page count")
 PERFCOUNTER(ptwr_emulations,        "writable pt emulations")
 

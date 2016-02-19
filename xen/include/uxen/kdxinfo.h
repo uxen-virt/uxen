@@ -15,7 +15,7 @@
  * VERSION_COMPAT to VERSION whenever changing (remove/change) fields
  * in struct uxen_kdxinfo in an incompatible way, */
 #define KDXINFO_VERSION_COMPAT 1
-#define KDXINFO_VERSION 2
+#define KDXINFO_VERSION 3
 
 struct uxen_kdxinfo {
     uint16_t version;

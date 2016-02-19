@@ -63,8 +63,8 @@ struct page_info
     /* Reference count and various PGC_xxx flags and fields. */
     unsigned long count_info;
 
-    /* Owner of this page (zero if page is anonymous). */
-    __pdx_t _domain;
+    /* Owner of this page. */
+    domid_t domain;
 
 #ifdef DEBUG_MAPCACHE
     atomic_t mapped;
@@ -361,11 +361,18 @@ struct page_info
 /* OOS fixup entries */
 #define SHADOW_OOS_FIXUPS 2
 
+#ifndef __UXEN__
 #define page_get_owner(_p)                                      \
     ((struct domain *)((_p)->_domain ?                          \
                        pdx_to_virt((_p)->_domain) : NULL))
 #define page_set_owner(_p,_d)                           \
     ((_p)->_domain = (_d) ? virt_to_pdx(_d) : 0)
+#else   /* __UXEN__ */
+#define page_get_owner(_p)                                              \
+    ((_p)->domain < DOMID_FIRST_RESERVED ? domain_array[(_p)->domain] : NULL)
+#define page_set_owner(_p,_d)                                           \
+    ((_p)->domain = (_d) ? ((struct domain *)(_d))->domain_id : DOMID_ANON)
+#endif  /* __UXEN__ */
 
 #define maddr_get_owner(ma)   (page_get_owner(maddr_to_page((ma))))
 #define vaddr_get_owner(va)   (page_get_owner(virt_to_page((va))))

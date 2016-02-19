@@ -47,6 +47,10 @@ static void _cpu_irq_restore(unsigned long x);
 struct _uxen_info _uxen_info = {
         .ui_sizeof_struct_page_info = sizeof(struct page_info),
 
+        .ui_domain_array_pages =
+        (DOMID_FIRST_RESERVED * sizeof(struct domain *) + PAGE_SIZE - 1) >>
+        PAGE_SHIFT,
+
 #ifdef UXEN_HOST_WINDOWS
         .ui_map_page = mapcache_map_page,
         .ui_unmap_page_va = mapcache_unmap_page_va,

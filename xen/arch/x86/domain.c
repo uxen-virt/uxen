@@ -238,6 +238,7 @@ struct domain *alloc_domain_struct(void)
 void free_domain_struct(struct domain *d)
 {
     lock_profile_deregister_struct(LOCKPROF_TYPE_PERDOM, d);
+    domain_array[d->domain_id] = NULL;
     free_xenheap_page(d->extra_1);
     free_xenheap_page(d);
 }

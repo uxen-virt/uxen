@@ -203,36 +203,6 @@ memcache_lookup(mc_mfn_t mfn)
     return memcaches[idx]->md_va + offset;
 }
 
-void *
-memcache_lookup_mapped(mc_mfn_t mfn)
-{
-    uint8_t idx;
-    uint32_t offset;
-
-    BUG_ON(mfn >= uxen_info->ui_max_page);
-    offset = memcache_mfn_to_entry[mfn];
-    if (offset == MEMCACHE_MFN_ENTRY_EMPTY)
-	return NULL;
-
-#ifndef MEMCACHE_MAP_FULL
-    if (((offset & MEMCACHE_COUNT_MASK) >> MEMCACHE_COUNT_SHIFT) == 0) {
-        dprintk("%s: mfn %x has no referenced mapping\n", __FUNCTION__, mfn);
-        return NULL;
-    }
-#endif
-
-    idx = offset & MEMCACHE_INDEX_MASK;
-    offset &= MEMCACHE_OFFSET_MASK;
-#if PAGE_SHIFT >= MEMCACHE_OFFSET_SHIFT
-    offset <<= (PAGE_SHIFT - MEMCACHE_OFFSET_SHIFT);
-#else
-    offset >>= (MEMCACHE_OFFSET_SHIFT - PAGE_SHIFT);
-#endif
-
-    MemoryBarrier();
-    return memcaches[idx]->md_va + offset;
-}
-
 #ifdef __x86_64__
 #define LINEAR_PT_VA 0xfffff68000000000
 #define VA_TO_LINEAR_PTE(v)						\

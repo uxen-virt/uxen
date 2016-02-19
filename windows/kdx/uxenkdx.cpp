@@ -14,6 +14,8 @@
 
 EXT_DECLARE_GLOBALS();
 
+static int page_info_domain_is_domid = 1;
+
 EXT_COMMAND(
     uxen,
     "uxen uber kd command center",
@@ -57,6 +59,7 @@ EXT_CLASS::dump_page_info(
     ULONG64 count_info;
     bool invalid;
     char pgc[128];
+    char page_info_state[128];
 
     idx = (page_info_addr - frametable_addr) / ___usym_sizeof___page_info;
     invalid = page_info_addr < frametable_addr;
@@ -64,10 +67,33 @@ EXT_CLASS::dump_page_info(
     count_info = get_expr("poi(0x%p)", page_info_addr +
                           usym_offset(page_info, count_info));
 
+    if (!page_state_is(count_info, inuse))
+        sprintf(page_info_state, "%s",
+                page_state_is(count_info, free) ? "free" :
+                page_state_is(count_info, dirty) ? "dirty" : "host");
+    else {
+        if (page_info_domain_is_domid) {
+            unsigned short domid =
+                get_expr("poi(0x%p)", page_info_addr +
+                         usym_offset(page_info, domain)) & 0xffff;
+            if ((count_info & PGC_xen_page) && domid > 0x7ff0U)
+                sprintf(page_info_state, "xen");
+            else
+                sprintf(page_info_state, "domain:0n%hd%s",
+                        domid, (count_info & PGC_xen_page) ? " xen" : "");
+        } else
+            sprintf(page_info_state, "domain:0x%08x`%08x",
+                    IsPtr64() ?
+                    get_expr("poi(0x%p)", page_info_addr +
+                             usym_offset(page_info, domain) + 4) & ~0UL : 0UL,
+                    get_expr("poi(0x%p)", page_info_addr +
+                             usym_offset(page_info, domain)) & ~0UL);
+    }
+
     Dml("%s[page_info:0x%p, <exec cmd=\"!pageinfo 0x%x\">idx</exec>:0x%08x]"
         " <exec cmd=\"!pageinfo 0x%x\">prev</exec>:0x%08x"
         ", <exec cmd=\"!pageinfo 0x%x\">next</exec>:0x%08x"
-        ", count_info:0x%08x`%08x, %s:0x%08x`%08x"
+        ", count_info:0x%08x`%08x, %s"
         " <exec cmd=\"!db 0x%x l0x1000\">[raw]</exec>\n",
         invalid ? "  !!! invalid " : "  ",
         page_info_addr,
@@ -81,14 +107,7 @@ EXT_CLASS::dump_page_info(
         get_expr("poi(0x%p)",
                  page_info_addr + usym_offset(page_info, list_next)) & ~0UL,
         (count_info >> 32) & ~0UL, count_info & ~0UL,
-        page_state_is(count_info, inuse) ? "domain" :
-        page_state_is(count_info, free) ? "free" :
-        page_state_is(count_info, dirty) ? "dirty" : "host",
-        IsPtr64() ?
-        get_expr("poi(0x%p)", page_info_addr +
-                 usym_offset(page_info, domain) + 4) & ~0UL : 0UL,
-        get_expr("poi(0x%p)", page_info_addr +
-                 usym_offset(page_info, domain)) & ~0UL,
+        page_info_state,
         idx << PAGE_SHIFT);
 
     if (decode_pgc) {
@@ -221,6 +240,8 @@ EXT_COMMAND(
 
     Out("kdxinfo %p size %x version %x\n", kdxinfo_addr, kdxinfo_size,
         kdxinfo.version);
+
+    page_info_domain_is_domid = (kdxinfo.version >= 3);
 
     set_usym_sizeof (page_info) = kdxinfo.sizeof_struct_page_info;
 

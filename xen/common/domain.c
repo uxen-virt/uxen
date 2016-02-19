@@ -270,6 +270,19 @@ static void __init parse_extra_guest_irqs(const char *s)
 custom_param("extra_guest_irqs", parse_extra_guest_irqs);
 #endif  /* __UXEN__ */
 
+struct domain **domain_array = NULL;
+static int __init
+domain_array_init(void)
+{
+
+    domain_array = _uxen_info.ui_domain_array;
+    if (!domain_array)
+        panic("Error allocating domain array\n");
+    memset(domain_array, 0, _uxen_info.ui_domain_array_pages << PAGE_SHIFT);
+    return 0;
+}
+__initcall(domain_array_init);
+
 struct domain *domain_create_internal(
     domid_t domid, unsigned int domcr_flags, uint32_t ssidref)
 {
@@ -404,6 +417,9 @@ struct domain *domain_create_internal(
         if ( v4v_init(d) != 0 )
             goto fail;
         init_status |= INIT_v4v;
+
+        if (domid && domid < DOMID_FIRST_RESERVED)
+            domain_array[domid] = d;
 
         spin_lock(&domlist_update_lock);
         pd = &domain_list; /* NB. domain_list maintained in order of domid. */

@@ -361,7 +361,6 @@ void * __cdecl uxen_mem_map_page_range(struct vm_vcpu_info_shared *, uint64_t,
 uint64_t __cdecl uxen_mem_unmap_page_range(
     struct vm_vcpu_info_shared *, const void *, uint64_t, uxen_pfn_t *);
 uxen_pfn_t __cdecl uxen_mem_mapped_va_pfn(const void *);
-void *__cdecl uxen_mem_mapped_pfn_va(xen_pfn_t);
 void __cdecl uxen_mem_fill_free_pages(void);
 void __cdecl uxen_mem_clear_free_pages(void);
 void uxen_mem_tlb_flush(void);

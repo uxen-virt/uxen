@@ -716,6 +716,11 @@ uxen_op_init_free_allocs(void)
                 kernel_free(uxen_info->ui_hvm_io_bitmap, UI_HVM_IO_BITMAP_SIZE);
             uxen_info->ui_hvm_io_bitmap = NULL;
         }
+        if (uxen_info->ui_domain_array) {
+            kernel_free(uxen_info->ui_domain_array,
+                        uxen_info->ui_domain_array_pages << PAGE_SHIFT);
+            uxen_info->ui_domain_array = NULL;
+        }
     }
 
     if (frametable_populated) {
@@ -900,7 +905,6 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
     uxen_info->ui_map_page_range = uxen_mem_map_page_range;
     uxen_info->ui_unmap_page_range = uxen_mem_unmap_page_range;
     uxen_info->ui_mapped_global_va_pfn = uxen_mem_mapped_va_pfn;
-    uxen_info->ui_mapped_global_pfn_va = uxen_mem_mapped_pfn_va;
 
     uxen_info->ui_max_page = max_pfn;
 
@@ -1022,6 +1026,14 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
             goto out;
         }
         ui_hvm_io_bitmap_contiguous = FALSE;
+    }
+
+    uxen_info->ui_domain_array =
+        kernel_malloc(uxen_info->ui_domain_array_pages << PAGE_SHIFT);
+    if (!uxen_info->ui_domain_array) {
+        fail_msg("kernel_malloc(ui_domain_array) failed");
+        ret = -ENOMEM;
+        goto out;
     }
 
     dom0_vmi = kernel_malloc((size_t)ALIGN_PAGE_UP(sizeof(struct vm_info)));

@@ -1495,6 +1495,7 @@ alloc_host_pages(unsigned int pages, unsigned int memflags)
         if (pg == NULL)
             break;
         pg->count_info |= PGC_xen_page;
+        pg->domain = DOMID_ANON;
         spin_lock_irqsave(&host_page_list_lock, flags);
         page_list_add_tail(pg, &host_page_list);
         spin_unlock_irqrestore(&host_page_list_lock, flags);
@@ -1534,6 +1535,7 @@ alloc_host_pages(unsigned int pages, unsigned int memflags)
     while (i-- > 0) {
         pg = mfn_to_page(pfns[i]);
         pg->count_info &= ~PGC_xen_page;
+        pg->domain = 0;
         spin_lock_irqsave(&host_page_list_lock, flags);
         page_list_del(pg, &host_page_list);
         spin_unlock_irqrestore(&host_page_list_lock, flags);
@@ -1585,6 +1587,7 @@ void free_host_pages(void *v, unsigned int pages)
     while (pages-- > 0) {
         pg = mfn_to_page(pfns[pages]);
         pg->count_info &= ~PGC_xen_page;
+        pg->domain = 0;
         spin_lock_irqsave(&host_page_list_lock, flags);
         page_list_del(pg, &host_page_list);
         spin_unlock_irqrestore(&host_page_list_lock, flags);
@@ -1605,6 +1608,7 @@ free_all_host_pages(void)
         printk("%s: page %lx\n", __FUNCTION__, page_to_mfn(pg));
 #endif  /* UXEN_ALLOC_DEBUG */
         pg->count_info &= ~PGC_xen_page;
+        pg->domain = 0;
         free_host_page(pg);
         spin_lock_irqsave(&host_page_list_lock, flags);
     }

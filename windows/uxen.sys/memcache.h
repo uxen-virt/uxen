@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -14,7 +14,6 @@
 typedef uint32_t mc_mfn_t;
 
 void *memcache_lookup(mc_mfn_t mfn);
-void *memcache_lookup_mapped(mc_mfn_t mfn);
 void *memcache_enter(mc_mfn_t mfn);
 void memcache_ensure_space(void);
 #ifndef MEMCACHE_MAP_FULL

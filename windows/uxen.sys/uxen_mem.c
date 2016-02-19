@@ -2036,20 +2036,6 @@ uxen_mem_mapped_va_pfn(const void *va)
     return ret;
 }
 
-void *__cdecl
-uxen_mem_mapped_pfn_va(xen_pfn_t mfn)
-{
-    void *va;
-
-    if (mfn > uxen_info->ui_max_page)
-	return NULL;
-
-#ifdef DEBUG_PAGE_ALLOC
-    DASSERT(pinfotable[mfn].allocated);
-#endif  /* DEBUG_PAGE_ALLOC */
-    return memcache_lookup_mapped((mc_mfn_t)mfn);
-}
-
 void
 uxen_mem_tlb_flush(void)
 {
