@@ -1,5 +1,5 @@
 #
-# Copyright 2013-2015, Bromium, Inc.
+# Copyright 2013-2016, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -16,15 +16,15 @@ ifeq (,$(MAKENOW))
 
 VPATH = $(SRCDIR)
 
-CFLAGS += -I$(SRCDIR) -I$(TOPDIR)/dm -O3
+CFLAGS += -I$(SRCDIR) -I$(TOPDIR)/dm -I$(TOPDIR)/common/img-tools -O3
 
 CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
 
 PROGRAMS += swap-seal$(EXE_SUFFIX)
+PROGRAMS += swap-fsck$(EXE_SUFFIX)
 PROGRAMS += img-bootcode$(EXE_SUFFIX)
 PROGRAMS += img-create$(EXE_SUFFIX)
 PROGRAMS += img-hfs$(EXE_SUFFIX)
-PROGRAMS += img-noop$(EXE_SUFFIX)
 PROGRAMS += img-copy$(EXE_SUFFIX)
 PROGRAMS += img-shallow$(EXE_SUFFIX)
 PROGRAMS += img-rm$(EXE_SUFFIX)
@@ -44,13 +44,29 @@ $(patsubst %,install_%,$(PROGRAMS)): install_%: % _install_banner
 
 dist: $(patsubst %,install_%,$(PROGRAMS)) $(DISTDIR)/.exists
 
+swap-seal.o: $(TOPDIR)/common/img-tools/swap-seal.c
+	$(_W)echo Importing - $@
+	$(_V)$(COMPILE.c) -c $< -o $@
+
+swap-fsck.o: $(TOPDIR)/common/img-tools/swap-fsck.c
+	$(_W)echo Importing - $@
+	$(_V)$(COMPILE.c) -c $< -o $@
+
+mt19937-64.o: $(TOPDIR)/common/img-tools/mt19937-64.c
+	$(_W)echo Importing - $@
+	$(_V)$(COMPILE.c) $< -o $@
+
+img-test.o: $(TOPDIR)/common/img-tools/img-test.c
+	$(_W)echo Importing - $@
+	$(_V)$(COMPILE.c) $< -o $@
+
 SWAP_SEAL_OBJS = swap-seal.o
+SWAP_FSCK_OBJS = swap-fsck.o
 IMG_BOOTCODE_OBJS = img-bootcode.o
 IMG_CREATE_OBJS = img-create.o
 IMG_TEST_OBJS = img-test.o mt19937-64.o
 IMG_HFS_OBJS = hfs.o shallow.o btree.o catalog.o extents.o fastunicodecompare.o flatfile.o \
     hfslib.o rawfile.o utility.o volume.o abstractfile.o cache.o
-IMG_NOOP_OBJS = img-noop.o block-swap.o
 IMG_DUMP_RAW_OBJS = img-copy.o block-swap.o
 IMG_SHALLOW_OBJS = img-shallow.o shallow.o btree.o catalog.o extents.o fastunicodecompare.o flatfile.o \
     hfslib.o rawfile.o utility.o volume.o abstractfile.o cache.o
@@ -65,19 +81,19 @@ $(SWAP_SEAL_OBJS): \
 	$(LIBIMG_DEPS) $(LIBVHD_DEPS) $(YAJL_DEPS) \
 	.deps/.exists
 
-mt19937-64.o: $(TOPDIR)/windows/img-tools/mt19937-64.c
-	$(_W)echo Importing - $@
-	$(_V)$(COMPILE.c) $< -o $@
-
-img-test.o: $(TOPDIR)/windows/img-tools/img-test.c
-	$(_W)echo Importing - $@
-	$(_V)$(COMPILE.c) $< -o $@
+$(SWAP_FSCK_OBJS): \
+	$(LIBIMG_DEPS) $(LIBVHD_DEPS) $(YAJL_DEPS) \
+	.deps/.exists
 
 IMG_LIBS = disklib.a
 
 PROGRAMS_LDLIBS = $(LIBIMG_LIBS) $(YAJL_LIBS) $(LIBVHD_LIBS)
 
 swap-seal$(EXE_SUFFIX): $(SWAP_SEAL_OBJS) $(IMG_LIBS)
+	$(_W)echo Linking - $@
+	$(_V)$(LINK.o) -o $@ $^ $(LDLIBS) $(PROGRAMS_LDLIBS)
+
+swap-fsck$(EXE_SUFFIX): $(SWAP_FSCK_OBJS) $(IMG_LIBS)
 	$(_W)echo Linking - $@
 	$(_V)$(LINK.o) -o $@ $^ $(LDLIBS) $(PROGRAMS_LDLIBS)
 
@@ -94,10 +110,6 @@ img-test$(EXE_SUFFIX): $(IMG_TEST_OBJS) $(IMG_LIBS)
 	$(_V)$(LINK.o) -o $@ $^ $(LDLIBS) $(PROGRAMS_LDLIBS)
 
 img-hfs$(EXE_SUFFIX): $(IMG_HFS_OBJS) $(IMG_LIBS)
-	$(_W)echo Linking - $@
-	$(_V)$(LINK.o) -o $@ $^ $(LDLIBS) $(PROGRAMS_LDLIBS)
-
-img-noop$(EXE_SUFFIX): $(IMG_NOOP_OBJS) $(IMG_LIBS)
 	$(_W)echo Linking - $@
 	$(_V)$(LINK.o) -o $@ $^ $(LDLIBS) $(PROGRAMS_LDLIBS)
 

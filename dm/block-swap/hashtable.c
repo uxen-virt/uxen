@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -13,10 +13,10 @@
 #include "hashtable.h"
 #include "hashtable_noise.h"
 
-static int hashtableInsert2(HashTable *ht, HashEntry *bounce);
+static int insert(HashTable *ht, HashEntry *bounce);
 
 static inline
-uint32_t getHash(uint32_t *noise, uint64_t x)
+uint32_t get_hash(uint32_t *noise, uint64_t x)
 {
     int i;
     uint32_t h = 0;
@@ -29,13 +29,13 @@ uint32_t getHash(uint32_t *noise, uint64_t x)
 }
 
 static inline 
-uint32_t HashN(HashTable *ht, uint64_t in, int level)
+uint32_t hash_n(HashTable *ht, uint64_t in, int level)
 {
-    return getHash(hashtable_noise[level],
+    return get_hash(hashtable_noise[level],
             ht->seed ^ in) & ((1 << ht->bits) - 1);
 }
 
-static int hashtableRebuild(HashTable *ht, HashEntry bounce)
+static int rebuild(HashTable *ht, HashEntry bounce)
 {
     int i;
     int retries = 0;
@@ -43,10 +43,23 @@ static int hashtableRebuild(HashTable *ht, HashEntry bounce)
 retry:
     if (5 * ht->load >= 4 * (1<<ht->bits) || retries++ > 5) {
         /* Double table size when 80% full. */
+        size_t sz = sizeof(ht->table[0]) * (1 << ht->bits);
         ++(ht->bits);
         retries = 0;
-        ht->table = (HashEntry*) ht->alloc(ht->table,
-                sizeof(HashEntry) * (1 << ht->bits), ht->data);
+        if (ht->alloc) {
+            ht->table = ht->alloc(ht->table, 2 * sz, ht->data);
+        } else {
+            if (ht->bits <= HASHTABLE_START_BITS) {
+                ht->table = ht->inline_table;
+            } else if (ht->table == ht->inline_table) {
+                void *t = malloc(2 * sz);
+                memcpy(t, ht->table, sz);
+                ht->table = t;
+            } else {
+                ht->table = realloc(ht->table, 2 * sz);
+            }
+            memset(((uint8_t *) ht->table) + sz, 0, sz);
+        }
         if (!ht->table) {
             return -1;
         }
@@ -60,7 +73,7 @@ retry:
         1442695040888963407ULL;
 
     /* Take care of previously bounced element first. */
-    if (hashtableInsert2(ht, &bounce)) {
+    if (insert(ht, &bounce)) {
         goto retry;
     }
 
@@ -68,9 +81,9 @@ retry:
     for (i = 0; i < (1 << ht->bits); ++i) {
         bounce = ht->table[i];
 
-        if (bounce.present && HashN(ht, bounce.key, bounce.level) != i) {
+        if (bounce.present && hash_n(ht, bounce.key, bounce.level) != i) {
             ht->table[i].present = 0;
-            if (hashtableInsert2(ht, &bounce)) {
+            if (insert(ht, &bounce)) {
                 goto retry;
             }
         }
@@ -79,63 +92,43 @@ retry:
     return 0;
 }
 
-static void *hashtableDefaultAlloc(void *ptr, size_t sz, void *data)
+int hashtable_init(HashTable *ht, HashAllocFn alloc, void *data)
 {
-    uint8_t *r = (uint8_t*) realloc(ptr, sz);
-    size_t *old_sz = (size_t*) data;
-    if (r && sz > *old_sz) {
-        memset(r + *old_sz, 0, sz - *old_sz);
-    }
-    *old_sz = sz;
-    return r;
-
-}
-
-int hashtableInit(HashTable *ht, HashAllocFn alloc, void *data)
-{
-    ht->load = 0;
-    ht->seed = 0;
-    if (alloc) {
-        ht->alloc = alloc;
-        ht->data = data;
-    } else {
-        ht->alloc = hashtableDefaultAlloc;
-        ht->data = &ht->alloced_size;
-        ht->alloced_size = 0;
-    }
-    ht->bits = 0;
-    ht->table = NULL;
-    return 0;
-}
-
-int hashtableReinit(HashTable *ht, int bits, HashAllocFn alloc, void *data)
-{
-    size_t sz;
-    ht->bits = bits;
-    ht->alloc = alloc ? alloc : hashtableDefaultAlloc;
+    memset(ht, 0, sizeof(*ht));
+    ht->alloc = alloc;
     ht->data = data;
-
-    sz = sizeof(HashEntry) * (1 << ht->bits);
-    ht->table = (HashEntry*) ht->alloc(NULL, sz, ht->data);
-    if (!ht->table) {
-        return -1;
-    }
     return 0;
 }
 
-void hashtableClear(HashTable *ht)
+/* You can use the reinit call with a custom allocator to fill in the hash
+ * table from the start, e.g, when working over a mmap'ed table. */
+int hashtable_reinit(HashTable *ht, int bits, HashAllocFn alloc, void *data)
 {
-    ht->alloc(ht->table, 0, ht->data);
-    ht->table = NULL;
-    ht->bits = 0;
+    hashtable_init(ht, alloc, data);
+    ht->bits = bits;
+    ht->table = ht->alloc(NULL,
+            sizeof(ht->table[0]) * (1 << ht->bits), ht->data);
+    return ht->table ? 0 : -1;
 }
 
-static int hashtableInsert2(HashTable *ht, HashEntry *bounce)
+void hashtable_clear(HashTable *ht)
+{
+    if (ht->alloc) {
+        ht->alloc(ht->table, 0, ht->data);
+    } else {
+        if (ht->table != ht->inline_table) {
+            free(ht->table);
+        }
+    }
+    hashtable_init(ht, ht->alloc, ht->data);
+}
+
+static int insert(HashTable *ht, HashEntry *bounce)
 {
     unsigned hash;
     bounce->level = 0;
     bounce->present = 1;
-    hash = HashN(ht, bounce->key, 0);
+    hash = hash_n(ht, bounce->key, 0);
     int i;
 
     /* According to the litterature, maxloop should be set as alpha * log2(n).
@@ -154,7 +147,7 @@ static int hashtableInsert2(HashTable *ht, HashEntry *bounce)
          * around after CUCKOO_HASHES-1. */
 
         found.level = (found.level == CUCKOO_HASHES-1) ? 0 : found.level + 1;
-        hash = HashN(ht, found.key, found.level);
+        hash = hash_n(ht, found.key, found.level);
         *bounce = found;
 
         /* If we detect an infinite loop we bounce back the last pushed out
@@ -164,14 +157,14 @@ static int hashtableInsert2(HashTable *ht, HashEntry *bounce)
     return 1;
 }
 
-int hashtableInsert(HashTable *ht, uint64_t key, uint64_t value)
+int hashtable_insert(HashTable *ht, uint64_t key, uint64_t value)
 {
     HashEntry bounce;
     bounce.key = key;
     bounce.value = value;
     ++(ht->load);
-    if (!ht->bits || hashtableInsert2(ht, &bounce)) {
-        if (hashtableRebuild(ht, bounce) < 0) {
+    if (!ht->bits || insert(ht, &bounce)) {
+        if (rebuild(ht, bounce) < 0) {
             return -1;
         }
     }
@@ -179,38 +172,45 @@ int hashtableInsert(HashTable *ht, uint64_t key, uint64_t value)
 }
 
 
-int hashtableFind(HashTable *ht, uint64_t key, uint64_t *value)
+HashEntry *hashtable_find_entry(HashTable *ht, uint64_t key)
 {
     int i;
     if (ht->bits) {
         for (i = 0; i < CUCKOO_HASHES; ++i) {
-            uint32_t hash = HashN(ht, key, i);
-            HashEntry found = ht->table[hash];
-            if (found.key == key && found.present) {
-                *value = found.value;
-                return 1;
-            }
-        }
-    }
-
-    return 0;
-}
-
-void hashtableDelete(HashTable *ht, uint64_t key)
-{
-    int i;
-    if (ht->bits) {
-        for (i = 0; i < CUCKOO_HASHES; ++i) {
-            uint32_t hash = HashN(ht, key, i);
+            uint32_t hash = hash_n(ht, key, i);
             HashEntry *found = &ht->table[hash];
             if (found->key == key && found->present) {
-                found->level = 0;
-                found->present = 0;
-                break;
+                return found;
             }
         }
     }
+    return NULL;
+}
+
+int hashtable_find(HashTable *ht, uint64_t key, uint64_t *value)
+{
+    HashEntry *found = hashtable_find_entry(ht, key);
+    if (found) {
+        *value = found->value;
+        return 1;
+    } else {
+        return 0;
+    }
+}
+
+void hashtable_delete_entry(HashTable *ht, HashEntry *found)
+{
+    found->level = 0;
+    found->present = 0;
     if (--(ht->load) == 0) {
-        hashtableClear(ht);
+        hashtable_clear(ht);
+    }
+}
+
+void hashtable_delete(HashTable *ht, uint64_t key)
+{
+    HashEntry *found = hashtable_find_entry(ht, key);
+    if (found) {
+        hashtable_delete_entry(ht, found);
     }
 }

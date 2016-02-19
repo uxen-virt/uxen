@@ -185,6 +185,7 @@ int main(int argc, char **argv)
     const char *fmt = "VHD";
     char *src, *dst;
     int rc;
+    int uncompressed = 0;
 
     setprogname(argv[0]);
 
@@ -220,6 +221,12 @@ int main(int argc, char **argv)
 
     if ( argc > 3 )
         fmt = argv[3];
+
+        if (!strcmp(fmt, "SWAP-uncompressed")) {
+            uncompressed = 1;
+            fmt = "SWAP";
+        }
+
     else {
         char *_fmt;
         rc = vd_get_format(dst, &_fmt);
@@ -238,6 +245,10 @@ int main(int argc, char **argv)
     if (!create_from_src(dst, in, fmt, &out)) {
         LogAlways(("Failed to create: %s\n", dst));
         return EXIT_FAILURE;
+    }
+
+    if (uncompressed) {
+        vd_set_uncompressed(out.vboxhandle);
     }
 
     rc = do_compact(in, out);

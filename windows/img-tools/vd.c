@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <uuid/uuid.h>
 
 #include "vbox-compat.h"
 #include "queue.h"
@@ -212,6 +213,16 @@ vd_getsize(struct vd *vd)
         return 0;
 
     return bdrv_getlength(vd->bs);
+}
+
+int vd_get_uuid(struct vd *vd, uuid_t uuid)
+{
+    return bdrv_ioctl(vd->bs, 0, uuid);
+}
+
+int vd_set_uncompressed(struct vd *vd)
+{
+    return bdrv_ioctl(vd->bs, 3, NULL);
 }
 
 int

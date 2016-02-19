@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -696,7 +696,6 @@ bdrv_new(const char *device_name)
 
 void bdrv_delete(BlockDriverState *bs)
 {
-
     if (bs->device_name[0])
         TAILQ_REMOVE(&bs_all, bs, entry);
 
@@ -800,6 +799,19 @@ bdrv_get_geometry(BlockDriverState *bs, uint64_t *nb_sectors_ptr)
         length = length >> BDRV_SECTOR_BITS;
 
     *nb_sectors_ptr = length;
+}
+
+int bdrv_ioctl(BlockDriverState *bs, unsigned long int req, void *buf)
+{
+    BlockDriver *drv = bs->drv;
+
+    if (!drv)
+        return -EINVAL;
+
+    if (!drv->bdrv_ioctl)
+        return -ENOTSUP;
+
+    return drv->bdrv_ioctl(bs, req, buf);
 }
 
 struct partition {

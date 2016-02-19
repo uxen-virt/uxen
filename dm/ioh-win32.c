@@ -325,7 +325,7 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
         } else if (ret == WAIT_IO_COMPLETION) {
 	    trace_waitobjects_print("io completion\n");
             ret = 0;
-	    break;
+	    continue;
         } else {
             debug_printf("WaitForMultipleObjects error %d %ld\n", ret,
                          GetLastError());

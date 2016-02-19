@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -59,7 +59,7 @@ int cacheGetDirtyLine(Cache *c, int i, uint64_t *block, void **sector)
 void *cachePeek(Cache *c, uint64_t block, int dirty)
 {
     uint64_t line;
-    if (hashtableFind(&c->ht, block, &line)) {
+    if (hashtable_find(&c->ht, block, &line)) {
         CacheEntry *ce = &c->lines[line];
         cacheTouchLine(c, line);
         ce->dirty |= dirty;
@@ -79,7 +79,7 @@ void cacheStore(Cache *c, uint64_t block, const void *sector,
 
     /* Check for previously cached values to make this idempotent. */
 
-    if (!hashtableFind(&c->ht, block, &line)) {
+    if (!hashtable_find(&c->ht, block, &line)) {
         line = cacheEvictLine(c);
         ce = &c->lines[line];
 
@@ -93,7 +93,7 @@ void cacheStore(Cache *c, uint64_t block, const void *sector,
             }
             ce->sector = NULL;
             ce->dirty = 0;
-            hashtableDelete(&c->ht, ce->block);
+            hashtable_delete(&c->ht, ce->block);
         }
 
         s = malloc(CACHE_SECTORSIZE);
@@ -104,7 +104,7 @@ void cacheStore(Cache *c, uint64_t block, const void *sector,
         ce->sector = s;
         ce->dirty |= dirty;
 
-        hashtableInsert(&c->ht, block, line);
+        hashtable_insert(&c->ht, block, line);
         cacheTouchLine(c, line);
     } else {
         ce = &c->lines[line];
@@ -125,7 +125,7 @@ int cacheInit(Cache *c, unsigned int log_lines)
         return 0;
     }
 
-    hashtableInit(&c->ht, NULL, NULL);
+    hashtable_init(&c->ht, NULL, NULL);
     sz = (1<<c->log_lines) * sizeof(CacheEntry);
     c->lines = (CacheEntry *) malloc(sz);
 
@@ -158,6 +158,6 @@ void cacheFree(Cache *c)
     }
     free(c->lines);
     free(c->bits);
-    hashtableClear(&c->ht);
+    hashtable_clear(&c->ht);
 }
 

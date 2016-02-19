@@ -22,7 +22,7 @@ $(DEBUG_ONLY)CFLAGS += -DDEBUG=1
 
 CFLAGS += -I$(YAJLDIR)/include
 
-LIBIMG_CFLAGS = -I$(TOPDIR)
+LIBIMG_CFLAGS = -I$(TOPDIR) -O3
 
 LIBIMG_SRCS =
 LIBIMG_SRCS += aio.c
@@ -37,10 +37,8 @@ $(OSX)LIBIMG_SRCS += osx.c
 osx.o: CPPFLAGS += -I$(LIBUXENCTLDIR_src)
 LIBIMG_SRCS += block-swap.c
 block-swap.o: CPPFLAGS += $(LZ4_CPPFLAGS)
-LIBIMG_SRCS +=   block-swap/copybuffer.c
 LIBIMG_SRCS +=   block-swap/dubtree.c
 block-swap_dubtree.o: CPPFLAGS += $(LZ4_CPPFLAGS)
-LIBIMG_SRCS +=   block-swap/md5.c
 LIBIMG_SRCS +=   block-swap/simpletree.c
 LIBIMG_SRCS +=   block-swap/hashtable.c
 LIBIMG_SRCS += clock.c
@@ -63,7 +61,7 @@ LZ4_SRCS += lz4.c
 LZ4_OBJS = $(patsubst %.m,%.o,$(patsubst %.c,%.o,$(LZ4_SRCS)))
 LZ4_OBJS := $(subst /,_,$(patsubst %,lz4/%,$(LZ4_OBJS)))
 LIBIMG_OBJS += $(LZ4_OBJS)
-lz4_lz4.o: CFLAGS_debug := $(subst -O0,-O2,$(CFLAGS_debug))
+lz4_lz4.o: CFLAGS_debug := $(subst -O0,-O3,$(CFLAGS_debug))
 
 $(LIBIMG_OBJS): .deps/.exists
 

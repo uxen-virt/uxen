@@ -129,6 +129,7 @@ disklib_init(void) {
         /* Make stderr go to logfile too. */
         *stderr = *logfile;
     }
+    setvbuf(logfile, NULL, _IONBF, 0);
 
     /* Windows doesn't support line buffered output and the CRT
      * appears to always treat stderr as unbuffered, regardless of

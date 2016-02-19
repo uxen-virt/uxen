@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -66,7 +66,7 @@ int cacheCheck(Cache *c, uint64_t block)
 {
     while (c) {
         uint64_t value;
-        if (hashtableFind(c->ht, block, &value)) return 1;
+        if (hashtable_find(c->ht, block, &value)) return 1;
         else c = c->next;
     }
     return 0;
@@ -78,7 +78,7 @@ int cacheLookup(Cache *c, uint64_t block, void *out)
     Cache *prev = NULL;
     while (c) {
         uint64_t line;
-        if (hashtableFind(c->ht, block, &line)) {
+        if (hashtable_find(c->ht, block, &line)) {
             CacheEntry *ce = &c->lines[line];
             cacheTouchLine(c, line);
 
@@ -110,7 +110,7 @@ void cacheStore(Cache *c, uint64_t block, const void *sector)
 
     /* Check for previously cached values to make this idempotent. */
 
-    if (!hashtableFind(c->ht, block, &line)) {
+    if (!hashtable_find(c->ht, block, &line)) {
         line = cacheEvictLine(c);
         ce = &c->lines[line];
 
@@ -121,7 +121,7 @@ void cacheStore(Cache *c, uint64_t block, const void *sector)
             }
             free(ce->sector);
             ce->sector = NULL;
-            hashtableDelete(c->ht, ce->block);
+            hashtable_delete(c->ht, ce->block);
         }
 
         if (c->compressAlways) {
@@ -141,7 +141,7 @@ void cacheStore(Cache *c, uint64_t block, const void *sector)
         ce->block = block;
         ce->sector = s;
 
-        hashtableInsert(c->ht, block, line);
+        hashtable_insert(c->ht, block, line);
         cacheTouchLine(c, line);
     }
 }
@@ -165,7 +165,7 @@ int cacheInit(Cache *c, unsigned int log_lines, Cache *next, int compressAlways)
     if ( c->ht == NULL) {
         return 0;
     }
-    hashtableInit(c->ht, NULL, NULL);
+    hashtable_init(c->ht, NULL, NULL);
     sz = (1<<c->log_lines) * sizeof(CacheEntry);
 
     c->lines = (CacheEntry *) malloc(sz);
@@ -197,7 +197,7 @@ void cacheFree(Cache *c)
             }
         }
         free(c->lines);
-        hashtableClear(c->ht);
+        hashtable_clear(c->ht);
         free(c->ht);
         free(c->bits);
 

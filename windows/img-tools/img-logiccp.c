@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
+#include <uuid/uuid.h>
 
 #include "sys.h"
 #include "disklib.h"
@@ -610,39 +611,47 @@ static inline void normalize_string2(wchar_t *s)
     }
 }
 
-/* Join two strings and place the result in buf, observing MAX_PATH_LEN, and
+/* Join input strings and place the result in buf, observing MAX_PATH_LEN, and
  * null-terminating the result. Exit with err() if the result would be longer
  * than MAX_PATH_LEN - 1. */
 static inline
-wchar_t *path_join(wchar_t *buf, const wchar_t *a, const wchar_t *b)
+wchar_t *path_join_var(wchar_t *buf, ...)
 {
-    const wchar_t *srcs[] = {a, b, NULL};
-    const wchar_t **src = srcs;
     wchar_t *dst = buf;
     wchar_t *end = buf + MAX_PATH_LEN;
+    va_list argp;
+    wchar_t *src;
+    va_start(argp, buf);
 
-    while (*src && dst != end) {
-        wchar_t c = *src[0]++;
-        if (c) {
-            *dst++ = c;
-        } else {
-            ++src;
+    for (src = NULL; dst != end; ) {
+        wchar_t c = src ? *src++ : 0;
+        if (!c) {
+            src = va_arg(argp, wchar_t *);
+            if (!src) {
+                break;
+            } else {
+                continue;
+            }
         }
+        *dst++ = c;
     }
 
+    va_end(argp);
+
     if (dst == end) {
-        errx(1, "path too long: '%ls' + '%ls'", a, b);
+        errx(1, "path too long");
     } else {
         *dst = 0;
         return buf;
     }
 }
+#define path_join_var(...) path_join_var(__VA_ARGS__, NULL)
 
-/* path_join is only supposed to get called with MAX_PATH_LEN output buffers. */
-#define path_join(__a, __b, __c) \
-    do {assert(sizeof((__a))/sizeof(wchar_t) == MAX_PATH_LEN); \
-        path_join((__a), (__b), (__c)); } \
-    while(0);
+static inline
+wchar_t *path_join(wchar_t *buf, const wchar_t *a, const wchar_t *b)
+{
+    return path_join_var(buf, a, b);
+}
 
 static inline wchar_t *prefix(Variable *var, const wchar_t *s)
 {
@@ -4177,9 +4186,21 @@ int main(int argc, char **argv)
     wchar_t cow_dir[MAX_PATH_LEN] = L"";
 
     if (shallow_allowed) {
-        path_join(map_idx, location, L"/swapdata/map.idx");
-        path_join(file_id_list, location, L"/swapdata/fileidlist.idx");
-        path_join(cow_dir, location, L"/swapdata/cow");
+        unsigned char uuid[16];
+        char uuid_str[37];
+        r = vd_get_uuid(disk.hdd.vboxhandle, uuid);
+        if (r == sizeof(uuid_t)) {
+            uuid_unparse_lower(uuid, uuid_str);
+            printf("uuid is %s\n", uuid_str);
+        } else {
+            err(1, "unable to get uuid from disk backend r=%d", r);
+        }
+
+        wchar_t *wuuid = wide(uuid_str);
+
+        path_join_var(map_idx, location, L"/swapdata-", wuuid, L"/map.idx");
+        path_join_var(file_id_list, location, L"/swapdata-", wuuid,L"/fileidlist.idx");
+        path_join_var(cow_dir, location, L"/swapdata-", wuuid, L"/cow");
     }
 
     /* Read and parse user-supplied manifest. */
@@ -4391,6 +4412,8 @@ int main(int argc, char **argv)
     }
 
     printf("done. exit.\n");
+    fflush(stderr);
+    fflush(logfile);
 
     return r;
 }

@@ -843,6 +843,7 @@ ntfs_inode *create_simple(ntfs_fs_t fs, const wchar_t *path, int mode,
                     if (!inode) {
                         printf("not able to create %ls : %s\n",
                                 path, strerror(ntfs_get_errno()));
+                        assert(ntfs_get_errno() != EIO);
                         ntfs_inode_close(parent);
                         cache_valid = i - 1;
                         goto out;
@@ -852,6 +853,7 @@ ntfs_inode *create_simple(ntfs_fs_t fs, const wchar_t *path, int mode,
                 } else {
                     printf("not able to open %ls : %s\n",
                             path, strerror(ntfs_get_errno()));
+                    assert(ntfs_get_errno() != EIO);
                     ntfs_inode_close(parent);
                     cache_valid = i - 1;
                     goto out;
@@ -1044,6 +1046,7 @@ int disklib_ntfs_file_extents(ntfs_fd_t fd,
     rl = ntfs_attr_find_vcn(fd->na, 0);
     if ( NULL == rl ) {
         err = generic_error(ntfs_get_errno());
+        assert(ntfs_get_errno() != EIO);
         goto out;
     }
 
@@ -1052,6 +1055,7 @@ int disklib_ntfs_file_extents(ntfs_fd_t fd,
             rl = ntfs_attr_find_vcn(fd->na, rl->vcn);
             if ( NULL == rl ) {
                 err = generic_error(ntfs_get_errno());
+                assert(ntfs_get_errno() != EIO);
                 goto out;
             }
         }
@@ -1632,7 +1636,7 @@ static int set_reparse_data(ntfs_inode *ni, void *buf, size_t sz)
 static void *get_reparse_data(ntfs_inode *ni, size_t *sz)
 {
     REPARSE_POINT *r;
-    unsigned int type;
+    unsigned int type = 0;
     s64 attr_size;
     char *fn, *tstr;
 
@@ -1649,6 +1653,7 @@ static void *get_reparse_data(ntfs_inode *ni, size_t *sz)
     }
 
     fn = do_readlink(r, attr_size, &type);
+    assert(fn);
     switch(type) {
     case DISKLIB_LINK_SYMBOLIC:
         tstr = "SYMLINK";

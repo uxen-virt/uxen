@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -10,202 +10,150 @@
 #include "dubtree_sys.h"
 #include "dubtree_constants.h"
 
-#ifdef _WIN32
-//#pragma pack(push, 1)
-#endif
-
 typedef uint32_t node_t;
 
-typedef struct SIMPLETREEMETA {
-    volatile node_t root;        /* root node offset */
-    volatile node_t first;       /* leftmost leaf node offset */
-    volatile int maxLevel;       /* Height of tree */
-    volatile uint32_t magic;
-    volatile uint32_t refCount;
-    volatile uint64_t size;        /* How many bytes are addressed by this tree. */
-    volatile uint64_t garbage;     /* How much slack space does the tree skip over. */
-    volatile uint32_t n_versions;
-    volatile uint64_t versions[DUBTREE_MAX_VERSIONS];
-} SIMPLETREEMETA;
+typedef struct SimpleTreeMetaNode {
+    node_t root;        /* root node offset */
+    node_t first;       /* leftmost leaf node offset */
+    int maxLevel;       /* Height of tree */
+    uint32_t magic;
+    uint32_t num_nodes;
+    uint32_t user_size;   /* Size of user-supplied data. */
+} SimpleTreeMetaNode;
 
 /* Per-instance tree handle. Most values are only relevant
  * during tree construction. */
 
-typedef struct SIMPLETREE {
+typedef struct SimpleTree {
     node_t nodes[16];
     node_t prev;
-    node_t m;
     uint8_t *mem;
+    uint64_t size;
     uint32_t magic;
-    uint64_t transaction;
-    volatile node_t *head;
-    volatile node_t *freelist;
 
-} SIMPLETREE;
+} SimpleTree;
 
-typedef struct SIMPLETREEKEY {
-    uint64_t key;
-    uint64_t version;
-} SIMPLETREEKEY;
-
-typedef struct SIMPLETREEINTKEY {
-    uint64_t id : 16;
+typedef struct SimpleTreeInternalKey {
     uint64_t key : 48;
-} SIMPLETREEINTKEY;
+} __attribute__((__packed__)) SimpleTreeInternalKey;
 
 typedef struct {
-    uint64_t a;
-    uint64_t b;
-} SIMPLETREEVALUE;
+    uint32_t chunk : 24;
+    uint32_t offset : 24;
+    uint32_t size : 16;
+} __attribute__((__packed__)) SimpleTreeValue;
 
-typedef struct SIMPLETREERESULT {
-    SIMPLETREEKEY key;
-    SIMPLETREEVALUE value;
-} SIMPLETREERESULT;
+typedef struct SimpleTreeResult {
+    uint64_t key;
+    SimpleTreeValue value;
+} SimpleTreeResult;
 
-typedef struct SIMPLETREEITERATOR {
+typedef struct SimpleTreeIterator {
     size_t index;
     node_t node;
-} SIMPLETREEITERATOR;
+} SimpleTreeIterator;
 
-typedef struct SIMPLETREEINNERNODE {
+typedef struct SimpleTreeInnerNode {
     int count;
-    SIMPLETREEINTKEY keys[SIMPLETREE_INNER_M];
+    SimpleTreeInternalKey keys[SIMPLETREE_INNER_M];
     node_t children[SIMPLETREE_INNER_M + 1];
-} SIMPLETREEINNERNODE ;
+} SimpleTreeInnerNode ;
 
-typedef struct SIMPLETREELEAFNODE {
+typedef struct SimpleTreeLeafNode {
     int count;
     node_t next;
-    SIMPLETREEINTKEY keys[SIMPLETREE_LEAF_M];
-    uint64_t values[SIMPLETREE_LEAF_M];
-} SIMPLETREELEAFNODE ;
+    SimpleTreeInternalKey keys[SIMPLETREE_LEAF_M];
+    SimpleTreeValue values[SIMPLETREE_LEAF_M];
+} SimpleTreeLeafNode ;
 
 typedef enum {
-    SIMPLETREENODE_FREE = 0,
-    SIMPLETREENODE_META = 1,
-    SIMPLETREENODE_INNER = 2,
-    SIMPLETREENODE_LEAF = 3,
-} SIMPLETREENODETYPE;
+    SimpleTreeNode_Free = 0,
+    SimpleTreeNode_Meta = 1,
+    SimpleTreeNode_Inner = 2,
+    SimpleTreeNode_Leaf = 3,
+} SimpleTreeNodeType;
 
-typedef struct SIMPLETREENODE {
+typedef struct SimpleTreeNode {
     uint32_t type;
-    uint64_t transaction;
     union {
-        SIMPLETREEMETA mn;
-        SIMPLETREELEAFNODE ln;
-        SIMPLETREEINNERNODE in;
+        SimpleTreeMetaNode mn;
+        SimpleTreeLeafNode ln;
+        SimpleTreeInnerNode in;
     } u;
-} SIMPLETREENODE;
+} SimpleTreeNode;
 
-#ifdef _WIN32
-//#pragma pack(pop)
-#endif
+void simpletree_init(SimpleTree *st);
 
-static inline uint32_t simpletreeTransact(volatile uint64_t *tid)
-{
-    return ++(*tid);
-}
+void simpletree_clear(SimpleTree *st);
+void simpletree_insert(SimpleTree *st, uint64_t key, SimpleTreeValue v);
+void simpletree_finish(SimpleTree *st);
+int simpletree_find(SimpleTree *st, uint64_t key, SimpleTreeIterator *it);
 
-void simpletreeGC(volatile node_t *head,
-        volatile node_t *freelist,
-        void *mem, volatile uint32_t *levels,
-        size_t numLevels, uint64_t transaction, int max);
-
-void simpletreeInit(SIMPLETREE *st, volatile node_t *head,
-        volatile node_t *freelist, void *mem,
-        uint64_t transaction);
-
-void simpletreeClear(SIMPLETREE *st);
-void simpletreeInsert(SIMPLETREE *st, uint64_t key, uint64_t version, 
-        SIMPLETREEVALUE value);
-SIMPLETREE *simpletreeMerge(SIMPLETREE* a, SIMPLETREE* b, uint64_t transaction);
-void simpletreeFinish(SIMPLETREE *st, uint64_t size, uint64_t garbage);
-int simpletreeFind(SIMPLETREE *st, uint64_t key, uint64_t version, SIMPLETREEITERATOR *it);
-
-SIMPLETREE* simpletreeOpen(volatile node_t *mn, volatile node_t *head,
-        volatile node_t *freelist,
-        void *mem);
-
-int simpletreeClose(SIMPLETREE *st, volatile node_t *mn);
-void simpletreeReference(volatile node_t *mn, 
-        SIMPLETREE *st, volatile node_t *head,
-        volatile node_t *freelist, void *mem);
+void simpletree_open(SimpleTree *st, void *mem);
+void simpletree_set_user(SimpleTree *st, const void *data, size_t size);
+const void *simpletree_get_user(SimpleTree *st);
 
 /* Free the per-process in-memory tree representation and
  * NULL the pointer to it to prevent future use. */
 
-static inline void simpletreeRelease(SIMPLETREE** pst)
-{
-    free(*pst);
-    *pst = NULL;
-}
-
-static inline size_t simpletreeNodeSize(void)
+static inline size_t simpletree_node_size(void)
 {
 #if 0
-    printf("szk %lx\n", sizeof(SIMPLETREEINTKEY));
-    printf("szm %lx\n", sizeof(SIMPLETREEMETA));
-    printf("szln %lx\n", sizeof(SIMPLETREELEAFNODE));
-    printf("szin %lx\n", sizeof(SIMPLETREEINNERNODE));
-    printf("sz %lx\n", sizeof(SIMPLETREENODE));
+    printf("szk %lx\n", sizeof(SimpleTreeInternalKey));
+    printf("szv %lx\n", sizeof(SimpleTreeValue));
+    printf("szm %lx\n", sizeof(SimpleTreeMetaNode));
+    printf("szln %lx\n", sizeof(SimpleTreeLeafNode));
+    printf("szin %lx\n", sizeof(SimpleTreeInnerNode));
+    printf("sz %lx\n", sizeof(SimpleTreeNode));
+    exit(0);
 #endif
-    assert(sizeof(SIMPLETREENODE) <= SIMPLETREE_NODESIZE);
+    assert(sizeof(SimpleTreeNode) <= SIMPLETREE_NODESIZE);
     return SIMPLETREE_NODESIZE;
 }
 
-
-static inline SIMPLETREENODE* OFF2PTR(void *mem, node_t n)
+static inline SimpleTreeNode* off2ptr(void *mem, node_t n)
 {
-    return (SIMPLETREENODE*) ((uint8_t*)mem + simpletreeNodeSize() * n);
+    return (SimpleTreeNode*) ((uint8_t*)mem + simpletree_node_size() * n);
 }
 
-static inline uint64_t simpletreeGetSize(const SIMPLETREE *st)
+static inline size_t simpletree_get_nodes_size(SimpleTree *st)
 {
-    SIMPLETREEMETA *meta = &OFF2PTR(st->mem, st->m)->u.mn;
-    return meta->size;
+    SimpleTreeMetaNode *meta = &off2ptr(st->mem, 0)->u.mn;
+    return simpletree_node_size() * meta->num_nodes;
 }
 
-static inline uint64_t simpletreeGetGarbage(const SIMPLETREE *st)
+static inline void simpletree_begin(const SimpleTree *st, SimpleTreeIterator *it)
 {
-    SIMPLETREEMETA *meta = &OFF2PTR(st->mem, st->m)->u.mn;
-    return meta->garbage;
-}
-
-static inline void simpletreeBegin(const SIMPLETREE *st, SIMPLETREEITERATOR *it)
-{
-    SIMPLETREEMETA *meta = &OFF2PTR(st->mem, st->m)->u.mn;
+    SimpleTreeMetaNode *meta = &off2ptr(st->mem, 0)->u.mn;
     it->node = meta->first;
     it->index = 0;
 }
 
-static inline void simpletreeNext(const SIMPLETREE *st, SIMPLETREEITERATOR *it)
+static inline void simpletree_next(const SimpleTree *st, SimpleTreeIterator *it)
 {
-    SIMPLETREELEAFNODE *n = &OFF2PTR(st->mem, it->node)->u.ln;
+    SimpleTreeLeafNode *n = &off2ptr(st->mem, it->node)->u.ln;
     if (++(it->index) == n->count) {
         it->node = n->next;
         it->index = 0;
     }
 }
 
-static inline int simpletreeAtEnd(const SIMPLETREE *st, SIMPLETREEITERATOR *it)
+static inline int simpletree_at_end(const SimpleTree *st, SimpleTreeIterator *it)
 {
     return (it->node == 0);
 }
 
-static inline void simpletreeRead(const SIMPLETREE *st, SIMPLETREERESULT *r,
-        SIMPLETREEITERATOR *it)
+static inline SimpleTreeResult simpletree_read(const SimpleTree *st,
+        SimpleTreeIterator *it)
 {
-    uint64_t v;
-    SIMPLETREEMETA *meta = &OFF2PTR(st->mem, st->m)->u.mn;
-    const SIMPLETREELEAFNODE *n = &OFF2PTR(st->mem, it->node)->u.ln;
-    const SIMPLETREEINTKEY *k = &n->keys[it->index];
+    assert(st->mem);
+    SimpleTreeResult r;
+    const SimpleTreeLeafNode *n = &off2ptr(st->mem, it->node)->u.ln;
+    const SimpleTreeInternalKey *k = &n->keys[it->index];
 
-    r->key.key = k->key;
-    r->key.version = meta->versions[k->id];
-    v = n->values[it->index];
-    r->value.a = v >> 16ULL;
-    r->value.b = v & 0xffff;
+    r.key = k->key;
+    r.value = n->values[it->index];
+    return r;
 }
 
 #endif /* __SIMPLETREE_H__ */

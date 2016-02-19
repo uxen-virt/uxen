@@ -224,6 +224,33 @@ static inline int unlink_utf8(const char *path)
     return r;
 }
 
+/* UTF-8 compatible wrapper for unlink(). */
+static inline int rmdir_utf8(const char *path)
+{
+    int r = 0;
+    wchar_t *path_w;
+
+    path_w = _utf8_to_wide(path);
+    if (!path_w) {
+        errno = ENOMEM;
+        return -1;
+    }
+
+    if (!RemoveDirectoryW(path_w)) {
+        if (GetLastError() == ERROR_FILE_NOT_FOUND)
+            errno = ENOENT;
+        else if (GetLastError() == ERROR_ACCESS_DENIED)
+            errno = EACCES;
+        else
+            errno = EINVAL;
+        r = -1;
+    }
+
+    free(path_w);
+
+    return r;
+}
+
 /* UTF-8 compatible wrapper for open(). */
 static inline int open_utf8(const char *path, int flags, ...)
 {
@@ -375,6 +402,8 @@ int c99_snprintf(char *buf, size_t len, const char *fmt, ...);
 #define open open_utf8
 #undef unlink
 #define unlink unlink_utf8
+#undef rmdir
+#define rmdir rmdir_utf8
 #undef CreateFile
 #define CreateFile CreateFile_utf8
 #undef CreateDirectory

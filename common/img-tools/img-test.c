@@ -63,12 +63,18 @@ void gen(uint64_t seed, int version, uint8_t *out)
     for (i = 0; i < BDRV_SECTOR_SIZE / sizeof(uint32_t); ++i) {
         *o++ = i % mod;
     }
+    *((uint64_t *) out) = seed;
 }
 
-void cmp(uint64_t sector, uint8_t *buf, uint8_t *buf2)
+void cmp(uint64_t sector, int ver, uint8_t *buf, uint8_t *buf2)
 {
     if (memcmp(buf, buf2, BDRV_SECTOR_SIZE)) {
-        printf("sector 0x%"PRIx64" is BAD!!!!!!!\n", sector);
+        printf("sector 0x%"PRIx64" (ver=%d) (in block %"PRIx64" is BAD!!!!!!!\n", sector, ver, sector / 8);
+        uint64_t perhaps = *((uint64_t *) buf);
+
+        printf("looks like perhaps sector %"PRIx64" from block %"PRIx64"\n",
+                perhaps, perhaps / 8);
+
         int i;
         for (i = 0; i < BDRV_SECTOR_SIZE; i += 32) {
 
@@ -92,7 +98,8 @@ void cmp(uint64_t sector, uint8_t *buf, uint8_t *buf2)
 }
 
 #define MAX_SECTORS (16ULL << (30ULL-9ULL))
-uint8_t sector_map[MAX_SECTORS + 1024*1024];
+//#define MAX_SECTORS (1ULL << (20ULL-9ULL))
+uint16_t sector_map[MAX_SECTORS + 1024*1024];
 
 /* Generate random <offset, len> pair. */
 static inline void rnd(uint64_t *s, uint32_t *l, int align)
@@ -105,6 +112,17 @@ static inline void rnd(uint64_t *s, uint32_t *l, int align)
         *l = ((*l + mask) & ~mask);
     }
 }
+
+#if 0
+/* Generate random <offset, len> pair. */
+static inline void seq(uint64_t *s, uint32_t *l, int align)
+{
+    static int start = 0;
+    *s = start;
+    *l = 16;
+    start += *l;
+}
+#endif
 
 int main(int argc, char **argv)
 {
@@ -148,12 +166,14 @@ int main(int argc, char **argv)
     uint64_t sector;
     uint32_t len;
     int i, j;
+    uint32_t total_sectors;
 
     int round = 0;
 
-    for (round = 0; round < R; ++round) {
+    for (round = 0, total_sectors = 0; round < R; ++round) {
         printf("enter loop %d\n", round);
         double t0 = rtc();
+        double t1, dt;
 
         init_genrand64(round);
         for (i = 0; i < N; ++i) {
@@ -164,21 +184,28 @@ int main(int argc, char **argv)
             }
 
             int r = bdrv_write(bs, sector, buf, len);
+            total_sectors += len;
 
+#if 0
             if (!(i % 1000) && i > 0) {
                 printf("%.2f %s writes/s\n", ((double)i) / (rtc() - t0),
                         align ? "4kiB-aligned" : "unaligned");
-                        
             }
+#endif
 
             if (r < 0) {
                 printf("r %d\n", r);
                 exit(1);
             }
         }
-        printf("writes done\n");
+        bdrv_flush(bs);
+        t1 = rtc();
+        dt = t1 - t0;
+        printf("%.1f writes/s, %.2fMiB/s %s\n", ((double)i) / dt,
+                (double) (total_sectors >> 11) / dt,
+                align ? "4kiB-aligned" : "unaligned");
 
-        t0 = rtc();
+        t0 = t1;
         init_genrand64(round);
         for (i = 0; i < N; ++i) {
             uint8_t buf2[0x20000];
@@ -188,21 +215,32 @@ int main(int argc, char **argv)
             for (j = 0, b = buf; j < len; ++j, b += BDRV_SECTOR_SIZE) {
                 int ver = sector_map[sector + j];
                 gen(sector + j, ver, buf2);
-                cmp(sector + j, b, buf2);
+                cmp(sector + j, ver, b, buf2);
             }
 
+#if 0
             if (!(i % 1000) && i > 0) {
                 printf("%.2f %s reads/s\n", ((double)i) / (rtc() - t0),
                         align ? "4kiB-aligned" : "unaligned");
             }
+#endif
 
             if (r < 0) {
                 printf("r %d\n", r);
                 break;
             }
         }
-        printf("reads done\n");
+        t1 = rtc();
+        dt = t1 - t0;
+        printf("%.1f reads/s, %.2fMiB/s %s\n", ((double)i) / dt,
+                (double) (total_sectors >> 11) / dt,
+                align ? "4kiB-aligned" : "unaligned");
+
+        t0 = t1;
+
     }
+    bdrv_flush(bs);
     bdrv_delete(bs);
+    printf("test complete\n");
     return 0;
 }

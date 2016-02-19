@@ -1,7 +1,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -151,6 +151,7 @@ int bdrv_check_request(BlockDriverState *bs, int64_t sector_num,
 int64_t bdrv_getlength(BlockDriverState *bs);
 void bdrv_get_geometry(BlockDriverState *bs, uint64_t *nb_sectors_ptr);
 void bdrv_guess_geometry(BlockDriverState *bs, int *pcyls, int *pheads, int *psecs);
+int bdrv_get_uuid(BlockDriverState *bs, unsigned char *uuid);
 
 
 typedef struct BlockDriverAIOCB BlockDriverAIOCB;

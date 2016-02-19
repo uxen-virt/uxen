@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <assert.h>
+#include <uuid/uuid.h>
 
 #include <libimg.h>
 #include "cache.h"
@@ -245,6 +246,7 @@ io_func* openFlatFile(const char* fileName)
     FileData *fd;
     char fn[1024];
     char *dn = NULL;
+    int r;
 
     size_t l = strlen(fileName);
     if (l > 5 && strncmp(fileName, "swap:", 5) != 0 && strncmp(fileName + l - 5, ".swap", 5) == 0) {
@@ -264,20 +266,6 @@ io_func* openFlatFile(const char* fileName)
     fd->bs = bdrv_new("");
     cacheInit(&fd->cache, CACHE_LOG_LINES);
 
-    if (dn) {
-        /* Shallow only works with .swap */
-        char map[1024];
-        char watches[1024];
-        fd->is_shallowed = 1;
-        sprintf(map, "%s/swapdata/map.idx", dn);
-        sprintf(watches, "%s/swapdata/watches", dn);
-        free(dn);
-        if (shallow_init(&fd->sm, map, watches) < -1) {
-            fprintf(stderr, "warning: unable to open shallow map for overwrite.\n");
-        }
-    } else
-        fd->is_shallowed = 0;
-
     io = (io_func*) malloc(sizeof(io_func));
     io->data = fd;
 
@@ -286,10 +274,38 @@ io_func* openFlatFile(const char* fileName)
         return NULL;
     }
 
-    int r = bdrv_open(fd->bs, fn, BDRV_O_RDWR);
+    r = bdrv_open(fd->bs, fn, BDRV_O_RDWR);
     if (r < 0) {
         fprintf(stderr, "bdrv_open fails\n");
         return NULL;
+    }
+
+    if (dn) {
+        /* Shallow only works with .swap */
+        char map[1024];
+        char watches[1024];
+        uuid_t uuid;
+        char uuid_str[37];
+
+        r = bdrv_ioctl(fd->bs, 0, uuid);
+        if (r == sizeof(uuid_t)) {
+            uuid_unparse_lower(uuid, uuid_str);
+            printf("uuid is %s\n", uuid_str);
+        } else {
+            fprintf(stderr, "unable to get uuid from disk backend r=%d\n", r);
+            exit(1);
+        }
+
+
+        fd->is_shallowed = 1;
+        sprintf(map, "%s/swapdata-%s/map.idx", dn, uuid_str);
+        sprintf(watches, "%s/swapdata-%s/watches", dn, uuid_str);
+        free(dn);
+        if (shallow_init(&fd->sm, map, watches) < -1) {
+            fprintf(stderr, "warning: unable to open shallow map for overwrite.\n");
+        }
+    } else {
+        fd->is_shallowed = 0;
     }
 
     io->read = &flatFileRead;

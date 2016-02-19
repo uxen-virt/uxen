@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -18,8 +18,8 @@
 #include <unistd.h>
 #endif
 
-#ifdef QEMU_UXEN
-#define printf(...) debug_printf(__VA_ARGS__)
+#if defined(QEMU_UXEN) || defined(LIBIMG)
+#define printf(...) debug_printf("swap: " __VA_ARGS__)
 #else
 extern FILE* logfile;
 #define printf(...) fprintf(logfile, __VA_ARGS__)

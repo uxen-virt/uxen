@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -26,6 +26,8 @@ int vd_get_format(const char *filename, char **fmt);
 int vd_get_lchs_geometry(struct vd *vd, uint32_t *cylinders, uint32_t *heads,
                          uint32_t *sectors);
 uint64_t vd_getsize(struct vd *vd);
+int vd_get_uuid(struct vd *vd, unsigned char *uuid);
+int vd_set_uncompressed(struct vd *vd);
 
 int vd_read(struct vd *vd, uint64_t offset, uint8_t *buf, size_t count);
 int vd_write(struct vd *vd, uint64_t offset, const uint8_t *buf, size_t count);

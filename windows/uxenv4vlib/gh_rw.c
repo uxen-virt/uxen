@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -119,7 +119,7 @@ gh_v4v_do_write(xenv4v_extension_t *pde, xenv4v_context_t *ctx, PIRP irp)
         // Datagram write to a ring which doesn't exist - use the dead letter office to handle it
         status = gh_v4v_create_ring(dst, ctx->ring_object->ring->id.addr.domain);
         if (!NT_SUCCESS(status))
-            return v4v_simple_complete_irp(irp, STATUS_VIRTUAL_CIRCUIT_CLOSED);
+            return v4v_simple_complete_irp(irp, status);
 
         status = gh_v4v_send(&ctx->ring_object->ring->id.addr, dst, protocol, msg, len, &written);
     }

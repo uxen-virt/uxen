@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -8,975 +8,841 @@
 #include "dubtree_io.h"
 
 #include "dubtree.h"
+#include "lrucache.h"
 #include "simpletree.h"
-#include "copybuffer.h"
-#include "md5.h"
-
-#include <lz4.h>
+#include "lz4.h"
 
 #define DUBTREE_FILE_MAGIC_MMAP 0x73776170
-#define DUBTREE_FILE_MAGIC_SAVE 0x73776171
 
-/* XXX: Fix KRY-12506 and then make versions consistent. */
-#ifdef _WIN32
-#define DUBTREE_FILE_VERSION 8
-#else
-#define DUBTREE_FILE_VERSION 7
-#endif
+#define DUBTREE_FILE_VERSION 12
 
 #define DUBTREE_MMAPPED_NAME "top.lvl"
-#define DUBTREE_TMP_NAME "top.tmp"
-#define DUBTREE_SEALED_NAME "top.save"
-#define DUBTREE_MUTEX_NAME "mutex"
+
 
 #ifndef _WIN32
+#include <aio.h>
 #include <sys/mman.h>
 #include <sys/file.h>
 #include <errno.h>
+#include <sys/uio.h>
+#include <limits.h>
+#include <fcntl.h>
 #endif
 
-static inline void dubtreeLockForWrite(DUBTREE *t)
-{
-    uint64_t t0, t1, dt;
-    t0 = os_get_clock();
-#ifdef _WIN32
-    WaitForSingleObject(t->mutex, INFINITE);
-#else
-    int r = flock(t->lockfile, LOCK_EX);
-    assert(r == 0);
-#endif
-    t1 = os_get_clock();
-    dt = t1 - t0;
-    if (dt / SCALE_MS > 10000) {
-        printf("swap: waited %"PRId64"ms for mutex\n", dt / SCALE_MS);
-    }
-    t->t0 = t1;
-}
-
-static inline void dubtreeUnlockForWrite(DUBTREE *t)
-{
-    uint64_t t1, dt;
-#ifdef _WIN32
-    ReleaseMutex(t->mutex);
-#else
-    int r = flock(t->lockfile, LOCK_UN);
-    assert(r == 0);
-#endif
-    t1 = os_get_clock();
-    dt = t1 - t->t0;
-    if (dt / SCALE_MS > 10000) {
-        printf("swap: insert took %"PRId64"ms\n", dt / SCALE_MS);
-    }
-}
-
-
-static inline uint64_t dubtreeGetSlot(DUBTREE *t, int level)
-{
-    uint64_t howMany;
-    uint64_t d = 0;
-    int i;
-
-    for (i = 0, howMany = DUBTREE_M; i < level; ++i, howMany *= DUBTREE_M) {
-        d += DUBTREE_M * howMany * DUBTREE_BLOCK_SIZE;
-    }
-
-    return d;
-}
-
-
-static inline
-int dubtreeIsMutable(DUBTREE *t)
-{
-    int r;
-    char *lockfn;
-    asprintf(&lockfn, "%s/" DUBTREE_SEALED_NAME, t->fn);
-    assert(lockfn);
-    r = file_exists(lockfn) ? 0 : 1;
-    printf("checking for %s, mutable = %d\n", lockfn, r);
-    free(lockfn);
-    return r;
-}
-
-#ifdef _WIN32
-
-void *dubtreeCreateSharedMemRegion(DUBTREE *t, int *created_mmap)
-{
-    DUBTREE_FILE_HANDLE hMap = NULL;
-    PVOID pvFile = NULL;
-    uint64_t limit;
-    uint8_t hash[16];
-    char mutex_name[64];
-    char mapping_name[64];
-
-    t->file = INVALID_HANDLE_VALUE;
-    *created_mmap = 0;
-
-    /* Calculate limit between permanently mapped top of tree
-     * and rest. */
-
-    limit = t->arraysOffset + dubtreeGetSlot(t, DUBTREE_CORELIMIT);
-
-    /* Use md5(filename) to make mutex and address space identifiers globally
-     * unique. */
-
-    md5_sum((uint8_t*) t->fn, strlen(t->fn), hash);
-
-    sprintf(mutex_name,
-            "mutex-%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
-            hash[0], hash[1], hash[2], hash[3],
-            hash[4], hash[5], hash[6], hash[7],
-            hash[8], hash[9], hash[10], hash[11],
-            hash[12], hash[13], hash[14], hash[15]);
-
-    sprintf(mapping_name,
-            "map-%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
-            hash[0], hash[1], hash[2], hash[3],
-            hash[4], hash[5], hash[6], hash[7],
-            hash[8], hash[9], hash[10], hash[11],
-            hash[12], hash[13], hash[14], hash[15]);
-
-    /* We can use CreateMutex to both create a new and open an existing mutex,
-     * and we will know what happened by checking GetLastError() even if the
-     * return value is non-NULL. Mysterious Windows-world. */
-
-    if ((t->mutex = CreateMutexA(NULL, FALSE, mutex_name))) {
-
-        if (GetLastError() != ERROR_ALREADY_EXISTS) {
-            printf("swap: created new mutex\n");
-        }
-
-        /* Create the swapdata directory if not there already. */
-        dubtreeCreateDirectory(t->fn);
-
-        t->is_mutable = dubtreeIsMutable(t);
-
-        /* Create a file to back the shared memory segment. */
-
-        char *topfn;
-        asprintf(&topfn, t->is_mutable ?
-                "%s/" DUBTREE_MMAPPED_NAME :
-                "%s/" DUBTREE_TMP_NAME, t->fn);
-        assert(topfn);
-        printf("swap: using mmapped file: %s\n", topfn);
-
-        t->file = dubtreeOpenNewFile(topfn, !t->is_mutable);
-
-        if (t->file == DUBTREE_INVALID_HANDLE) {
-            printf("swap: could not open file %s (%u).\n", topfn,
-                    (uint32_t)GetLastError());
-            free(topfn);
-            return NULL;
-        }
-        free(topfn);
-
-        if (GetLastError() == ERROR_ALREADY_EXISTS) {
-            *created_mmap = 0;
-        } else {
-            printf("created mapping file!\n");
-            *created_mmap = t->is_mutable;
-        }
-
-        /* Same as above, Create may in fact mean Open if the mapping already
-         * exists. We are happy as long as the result is non-NULL. */
-
-        hMap = CreateFileMappingA(
-                t->file,                 /* use system pagefile or file opened above */
-                NULL,                    /* default security */
-                PAGE_READWRITE,          /* read/write access */
-                (DWORD) ((uint64_t)limit>>32ULL),  /* maximum object size (high-order DWORD) */
-                (DWORD) limit,           /* maximum object size (low-order DWORD) */
-                mapping_name);           /* name of mapping object */
-
-        if (hMap == NULL) {
-            printf("Could not create file mapping object (%x).\n",
-                    (uint32_t)GetLastError());
-            goto out;
-        }
-
-    } else {
-        printf("swap: could not open or create mutex\n");
-        goto out;
-    }
-
-    t->map = hMap;
-    assert(t->arraysOffset > 0);
-
-    pvFile = MapViewOfFile(hMap,   /* handle to map object */
-            FILE_MAP_ALL_ACCESS,            /* read/write permission */
-            0,
-            0,
-            limit);
-
-    if (pvFile == NULL) {
-        printf("swap: could not map view of file (%x)!\n", (uint32_t)GetLastError());
-
-        goto out;
-    }
-
-    /* On success we return with the tree locked for write. */
-    return pvFile;
-
-    /* On failure we unlock the tree and return NULL. */
-out:
-    if (pvFile) {
-        UnmapViewOfFile(pvFile);
-    }
-    if (hMap != INVALID_HANDLE_VALUE) {
-        CloseHandle(hMap);
-    }
-    CloseHandle(t->mutex);
-    return NULL;
-}
-
-void dubtreeClose(DUBTREE *t)
+void dubtree_close(DubTree *t)
 {
     char **fb;
-    copyBufferRelease(t->cb);
-    free(t->cb);
-    free(t->fn);
+
+    hashtable_clear(&t->ht);
+    lruCacheClose(&t->lru);
+
+    free(t->buffered);
+
     fb = t->fallbacks;
     while (*fb) {
         free(*fb++);
     }
-    if (t->is_mutable) {
-        printf("swap: flush in-memory state to disk...\n");
-        FlushViewOfFile(t->mem, 0);
-        printf("swap: flush done.\n");
-    }
-    UnmapViewOfFile(t->mem);
-    CloseHandle(t->map);
-    CloseHandle(t->file);
-    CloseHandle(t->mutex);
-}
 
+#ifdef _WIN32
+    UnmapViewOfFile(t->header);
 #else
-
-void *dubtreeCreateSharedMemRegion(DUBTREE *t,
-        int *created_mmap)
-{
-    DUBTREE_HEADER *h;
-    void *m = NULL;
-    uint64_t limit = t->arraysOffset + dubtreeGetSlot(t, DUBTREE_CORELIMIT);
-    char *top;
-    uint8_t hash[16];
-    char mapping_name[64];
-    char *lockfile_name;
-    char *filename;
-    int first_lock = 0;
-    int exflags;
-    int file = -1;
-
-    dubtreeCreateDirectory(t->fn);
-
-    asprintf(&top, "%s/" DUBTREE_MMAPPED_NAME, t->fn);
-    assert(top);
-
-    *created_mmap = 0;
-    t->is_mutable = dubtreeIsMutable(t);
-
-    md5_sum((uint8_t*) t->fn, strlen(t->fn), hash);
-
-    sprintf(mapping_name,
-            "/dubtree-%02x%02x%02x%02x%02x%02x%02x%02x",
-            hash[0], hash[1], hash[2], hash[3],
-            hash[4], hash[5], hash[6], hash[7]);
-
-    /* First we need a lock file to use flock() on, as we cannot do
-     * that for shm fds on OSX. */
-    asprintf(&lockfile_name, "%s/" DUBTREE_MUTEX_NAME, t->fn);
-    assert(lockfile_name);
-    exflags = O_EXCL | O_CREAT | O_EXLOCK;
-    t->lockfile = open(lockfile_name, exflags, 0600);
-    if (t->lockfile >= 0) {
-        /* We managed to create exclusive, so this must be the first
-         * open ever. */
-        first_lock = 1;
-    } else {
-        exflags &= ~O_EXCL;
-        t->lockfile = open(lockfile_name, exflags, 0600);
-        if (t->lockfile < 0) {
-            printf("unable to open %s: %d (%s)\n",
-                   lockfile_name, errno, strerror(errno));
-            goto out;
-        }
-    }
-
-    if (t->is_mutable) {
-        /* Mmap a named existing file. */
-        filename = top;
-        t->mapping_name = NULL;
-        file = open(filename, O_EXCL | O_CREAT | O_RDWR, 0644);
-        if (file >= 0) {
-            printf("created new file %s\n", filename);
-            if (ftruncate(file, limit) < 0) {
-                printf("unable to truncate %s: %d (%s)\n",
-                        filename, errno, strerror(errno));
-                goto out;
-            }
-            *created_mmap = 1;
-        } else {
-            printf("reopen existing file %s\n", filename);
-            file = open(filename, O_CREAT | O_RDWR, 0644);
-        }
-    } else {
-        /* Mmap a shared shm object. */
-        filename = mapping_name;
-        t->mapping_name = strdup(filename);
-
-        if (first_lock) {
-            /* Unlink any stale object by the same name. */
-            shm_unlink(filename);
-        }
-
-        file = shm_open(filename, O_EXCL | O_CREAT | O_RDWR, 0600);
-        if (file >= 0) {
-            printf("created new shm %s\n", filename);
-            if (ftruncate(file, limit) < 0) {
-                printf("unable to truncate %s: %d (%s)\n",
-                        filename, errno, strerror(errno));
-                goto out;
-            }
-        } else {
-            printf("reopen existing shm %s\n", filename);
-            file = shm_open(filename, O_CREAT | O_RDWR, 0600);
-        }
-    }
-
-    if (file < 0) {
-        printf("unable to open shm or file %s: %d (%s)\n",
-               filename, errno, strerror(errno));
-        goto out;
-    }
-
-    m = mmap(0, limit, PROT_WRITE | PROT_READ, MAP_SHARED, file, 0);
-    if (m == MAP_FAILED) {
-        printf("unable to map name=%s, fd=%d, limit=0x%"PRIx64": %d (%s)\n",
-               filename, file, limit, errno, strerror(errno));
-        m = NULL;
-        goto out;
-    }
-
-    /* Ideally the OS would allow us to create a refcounted shmem segment, but
-     * on non-Windows we have to fake that by maintaining a manual refcount and
-     * unlinking the shm region on last close. */
-    h = (DUBTREE_HEADER*) m;
-    __sync_fetch_and_add(&h->refcount, 1);
-out:
-    if (t->lockfile >= 0 && flock(t->lockfile, LOCK_UN) < 0) {
-        printf("swap: failed to unlock %s, %s\n", lockfile_name, strerror(errno));
-    }
-
-    if (file >= 0 && close(file)) {
-        printf("unable to close fd %d: %d (%s)\n",
-               file, errno, strerror(errno));
-    }
-    free(top);
-    free(lockfile_name);
-    return m;
-}
-
-void dubtreeClose(DUBTREE *t)
-{
-    char **fb;
-    
-    dubtreeLockForWrite(t);
-    /* Do we have a shared memory mapping that should get unlinked on last
-     * close? Unlike on Windows, we have to try and handle this manually. */
-    if (__sync_fetch_and_add(&t->header->refcount, -1) == 1 && t->mapping_name) {
-        printf("unlink shm %s\n", t->mapping_name);
-        shm_unlink(t->mapping_name);
-        free(t->mapping_name);
-    }
-    if (t->is_mutable) {
-        uint64_t limit = t->arraysOffset + dubtreeGetSlot(t, DUBTREE_CORELIMIT);
-        msync(t->mem, limit, MS_SYNC);
-    }
-    /* Closing will release the flock too. */
-    close(t->lockfile);
-    free(t->fn);
-    fb = t->fallbacks;
-    while (*fb) {
-        free(*fb++);
-    }
-}
-
-
+    munmap(t->header, sizeof(DubTreeHeader));
 #endif
-
-
-/* Must be called with tree locked. Return 0 for success. */
-
-static int dubtreeLoad(DUBTREE *t, int force_fallback)
-{
-    int r = -1;
-    DUBTREE_FILE_HANDLE file = DUBTREE_INVALID_HANDLE;
-    char *fn = NULL;
-    void *buffer;
-    size_t sz;
-    uint64_t offset;
-    uint32_t p;
-    uint8_t *page;
-
-    buffer = malloc(LZ4_compressBound(simpletreeNodeSize()));
-    if (!buffer) {
-        printf("swap: OOM on line %d\n", __LINE__);
-        goto out;
-    }
-
-    asprintf(&fn, "%s/" DUBTREE_SEALED_NAME, t->fn); 
-    assert(fn);
-
-    printf("swap: loading compressed tree state from %s force=%d\n", fn, force_fallback);
-
-    /* Fall back to global shared location. */
-    if (force_fallback ||
-            ((file = dubtreeOpenExistingFileReadOnly(fn)) == DUBTREE_INVALID_HANDLE)) {
-
-        char **fb = t->fallbacks;
-        while (*fb && file == DUBTREE_INVALID_HANDLE) {
-            char *path;
-            asprintf(&path, "%s/" DUBTREE_SEALED_NAME, *fb++);
-            printf("swap: fall back to loading %s\n", path);
-            file = dubtreeOpenExistingFileReadOnly(path);
-            free(path);
-        }
-    }
-
-    if (file == DUBTREE_INVALID_HANDLE)
-        goto out;
-
-    /* Read the dubtree header. */
-    offset = 0;
-    sz = sizeof(DUBTREE_HEADER);
-    r = dubtreeReadFileAt(file, t->header, sz, offset, NULL);
-    if (r != sz)
-        goto out;
-    offset += sz;
-
-    /* Check the magic cookie for save files, as well as the settings
-     * that affect the save format here. The rest will be checked by
-     * dubtreeInit() that called us. */
-    if (t->header->magic != DUBTREE_FILE_MAGIC_SAVE) {
-        printf("bad dubtree file magic!\n");
-        r = -1;
-        goto out;
-    }
-    if (t->header->dubtree_max_treenodes != DUBTREE_TREENODES) {
-        printf("bad dubtree file #treenodes!\n");
-        r = -1;
-        goto out;
-    }
-    if (t->header->dubtree_max_levels != DUBTREE_MAX_LEVELS) {
-        printf("bad dubtree file #levels!\n");
-        r = -1;
-        goto out;
-    }
-
-    /* Read the level tree root references. */
-    sz = sizeof(t->levels[0]) * DUBTREE_MAX_LEVELS;
-    r = dubtreeReadFileAt(file, (void*)t->levels, sz, offset, NULL);
-    if (r < 0)
-        goto out;
-    offset += sz;
-
-    /* Read the list of snapshot relations. */
-    sz = sizeof(DUBTREEVERSION) * DUBTREE_MAX_VERSIONS;
-    r = dubtreeReadFileAt(file, t->versions, sz, offset, NULL);
-    if (r < 0)
-        goto out;
-    offset += sz;
-
-    /* Read the freelist of B-tree nodes. */
-    sz = sizeof(node_t) * DUBTREE_TREENODES;
-    r = dubtreeReadFileAt(file, (void*) t->freelist, sz, offset, NULL);
-    if (r < 0)
-        goto out;
-    offset += sz;
-
-    /* Read and uncompress B-tree pages. */
-    for (p = 0; p < DUBTREE_TREENODES; ++p) {
-
-        uint32_t compressed_size;
-        page = t->treeMem + p * simpletreeNodeSize();
-
-        /* Read compressed size. */
-        sz = sizeof(compressed_size);
-        r = dubtreeReadFileAt(file, &compressed_size, sz, offset, NULL);
-        if (r != sz)
-            goto out;
-        offset += sz;
-
-        /* Read compressed bytes, if any. */
-        if (compressed_size > 0) {
-            sz = compressed_size;
-            r = dubtreeReadFileAt(file, buffer, sz, offset, NULL);
-            if (r != sz)
-                goto out;
-            offset += sz;
-
-            if (LZ4_decompress_fast((char*)buffer, (char*)page,
-                                    simpletreeNodeSize())
-                    != compressed_size) {
-                errx(1, "failed to uncompress B-tree page!");
-            }
-        }
-    }
-
-    /* Initialize refcount to 1, this is for the unix-like systems that cannot
-     * figure out how to refcount shared mem sections. */
-    t->header->magic = DUBTREE_FILE_MAGIC_MMAP;
-    t->header->refcount = 1;
-    r = 0;
-out:
-    free(fn);
-    free(buffer);
-    if (file != DUBTREE_INVALID_HANDLE) {
-        dubtreeCloseFile(file);
-    }
-    return r ? -1 : 0;
 }
 
-int dubtreeInit(DUBTREE *t, const char *fn, char **fallbacks)
+int dubtree_init(DubTree *t, char **fallbacks,
+        malloc_callback malloc_cb, free_callback free_cb,
+        void *opaque)
 {
     int i;
-    uint8_t *m;
-    int created_mmap = 0;
+    char *fn;
     char **fb;
-    DUBTREE_HEADER *header;
-    int locked = 0;
+    DubTreeHeader *header;
 
-    memset(t, 0, sizeof(DUBTREE));
-
-    /* Resolve swapdata location to absolute path, as we may link
-     * with tools that like to call chdir... */
-    t->fn = dubtreeRealPath(fn);
-    if (!t->fn) {
-        printf("swap: OOM on line %d\n", __LINE__);
+    if (!malloc_cb || !free_cb) {
         return -1;
     }
 
-    /* Give fallbacks same treatment as above, if supplied. */
+    memset(t, 0, sizeof(DubTree));
+    t->malloc_cb = malloc_cb;
+    t->free_cb = free_cb;
+    t->opaque = opaque;
+    critical_section_init(&t->cache_lock);
+    critical_section_init(&t->write_lock);
+
+    critical_section_enter(&t->cache_lock);
+    hashtable_init(&t->ht, NULL, NULL);
+    lru_cache_init(&t->lru, 9);
+    critical_section_leave(&t->cache_lock);
+
     fb = t->fallbacks;
-    if (fallbacks) {
-        while (*fallbacks) {
-            if (!(*fb++ = dubtreeRealPath(*fallbacks++))) {
-                printf("swap: OOM on line %d\n", __LINE__);
-                return -1;
-            }
+    while (*fallbacks) {
+        if (!(*fb = dubtree_realpath(*fallbacks))) {
+            *fb = strdup(*fallbacks);
         }
+        ++fb;
+        ++fallbacks;
     }
     *fb = NULL;
 
-    /* Create a buffer for copying between arrays. */
-    t->cb = (COPYBUFFER*) malloc(sizeof(COPYBUFFER));
-    if (!t->cb) {
-        printf("swap: OOM on line %d\n", __LINE__);
+    fn = t->fallbacks[0];
+    dubtree_mkdir(fn);
+
+    char *mn;
+    void *m;
+    asprintf(&mn, "%s/"DUBTREE_MMAPPED_NAME, fn);
+    dubtree_handle_t f = dubtree_open_existing(mn);
+    if (f == DUBTREE_INVALID_HANDLE) {
+        f = dubtree_open_new(mn, 0);
+        if (f == DUBTREE_INVALID_HANDLE) {
+            printf("unable to open %s: %s\n", mn, strerror(errno));
+            return -1;
+        }
+        dubtree_set_file_size(f, sizeof(DubTreeHeader));
+    }
+
+#ifdef _WIN32
+    HANDLE h = CreateFileMappingA(f, NULL, PAGE_READWRITE, 0,
+                                  sizeof(DubTreeHeader), NULL);
+    if (!h) {
+        Werr(1, "CreateFileMappingA fails");
+    }
+    m = MapViewOfFile(h, FILE_MAP_WRITE, 0, 0, sizeof(DubTreeHeader));
+    CloseHandle(h);
+    CloseHandle(f);
+    if (!m) {
+        Wwarn("unable to map %s", mn);
         return -1;
     }
-
-    /* The levels with compressed value data. We start those at an offset aligned
-     * with COPYBUFFER_CACHEUNIT (16MB). */
-    t->arraysOffset = COPYBUFFER_CACHEUNIT +
-        (SIMPLETREE_NODESIZE * DUBTREE_TREENODES);
-
-    assert(((SIMPLETREE_NODESIZE * DUBTREE_TREENODES) % COPYBUFFER_CACHEUNIT) == 0);
-
-    /* Get a new or existing shared memory buffer for tree data. */
-    m = dubtreeCreateSharedMemRegion(t, &created_mmap);
-
-    if (m == NULL) {
-        printf("swap: dubtree unable to create shared mem region!\n");
-        return 1;
+#else
+    m = mmap(NULL, sizeof(DubTreeHeader), PROT_READ | PROT_WRITE,
+                          MAP_SHARED, f, 0);
+    close(f);
+    if (m == MAP_FAILED) {
+        warn("unable to map name=%s\n", mn);
+        return -1;
     }
-    t->mem = m;
+#endif
 
-    /* To not have to compute these offsets again and again, we
-     * pre-compute a table of them. */
-    for (i = 0; i < DUBTREE_MAX_LEVELS; ++i) {
-        t->offsets[i] = dubtreeGetSlot(t, i);
-    }
-
-    copyBufferInit(t->cb, 0x1000, t->fn, t->fallbacks, t->arraysOffset, m,
-            dubtreeGetSlot(t, DUBTREE_CORELIMIT), !t->is_mutable);
-
-    /* The shared structure contains a DUBTREE_HEADER struct to begin with. */
-    header = (DUBTREE_HEADER*) m;
+    header = m;
     t->header = header;
-    t->head = &header->freeListHead; /* t->head kept as shorthand for now. */
-
-    /* Per-level counters and tree root pointers. */
-    t->levels = (volatile uint32_t*) m + sizeof(DUBTREE_HEADER);
-    t->versions = ((uint8_t*)t->levels) + sizeof(uint32_t) * DUBTREE_MAX_LEVELS;
-    t->freelist = (volatile node_t*)
-        (uint8_t*)t->versions + sizeof(DUBTREEVERSION) * DUBTREE_MAX_VERSIONS;
-
-    /* Actual tree nodes, 16MB in. */
-    t->treeMem = m + COPYBUFFER_CACHEUNIT;
-
-    /* Arrays with data in them. */
-    t->data = m + t->arraysOffset;
-
-    /* Init a hash table of known versions. dubtreeInsert() will use the
-     * generation counter to decide if to reinit the contents. */
-    hashtableInit(&t->vht, NULL, NULL);
-    t->vht_generation = ~0ULL;
-
-    /* The top-of-tree region is shared across all processes accessing the
-     * tree, so if we came first we have to initialize its state, loading
-     * from disk if there is anything to load. We lock the tree if it needs
-     * initialization, to avoid others trying to use it before it is ready. */
-
-    if (!t->header->dubtree_initialized) {
-        dubtreeLockForWrite(t);
-        locked = 1;
-    }
+    t->levels = header->levels;
 
     if (!t->header->dubtree_initialized) {
 
-        /* This is first create of the tree. */
-
-        if (dubtreeLoad(t, created_mmap) == 0) {
-
-            //printf("swap: loaded persisted tree state\n");
-
-        } else {
-
-            /* Unable to load existing state from disk. */
-
-            //printf("swap: reinit tree\n");
-
-            /* Initialize tree node free list. This is a simple linked list with
-             * t->head pointing to node 1 to begin with. Allocs atomically pop the
-             * head element, and Frees push the freed element as new head. */
-
-            for (i = 0; i < DUBTREE_TREENODES; ++i) {
-                t->freelist[i] = (i < DUBTREE_TREENODES - 1) ?  i + 1 : 0;
-            }
-
-            for (i = 0; i < DUBTREE_MAX_LEVELS; ++i) {
-                t->levels[i] = 0;
-            }
-
-            /* Magic header and version number. */
-            t->header->magic = DUBTREE_FILE_MAGIC_MMAP;
-            t->header->version = DUBTREE_FILE_VERSION;
-            /* Tree node allocs start at node 1, so that 0==nil. */
-            t->header->freeListHead = 1;
-            t->header->transaction = 0;
-            t->header->dubtree_m = DUBTREE_M;
-            t->header->dubtree_corelimit = DUBTREE_CORELIMIT;
-            t->header->dubtree_max_levels = DUBTREE_MAX_LEVELS;
-            t->header->dubtree_max_versions = DUBTREE_MAX_VERSIONS;
-            t->header->dubtree_max_treenodes = DUBTREE_TREENODES;
+        char **fb = t->fallbacks + 1;
+        f = DUBTREE_INVALID_HANDLE;
+        while (f == DUBTREE_INVALID_HANDLE && *fb) {
+            asprintf(&fn, "%s/%s", *fb++, DUBTREE_MMAPPED_NAME);
+            assert(fn);
+            printf("attempt to open fallback %s\n", fn);
+            f = dubtree_open_existing_readonly(fn);
+            free(fn);
         }
 
-        t->header->versions_generation = 1;
+        if (f != DUBTREE_INVALID_HANDLE) {
+            dubtree_pread(f, t->header, sizeof(*(t->header)), 0);
+            dubtree_close_file(f);
+        }
+    }
+
+    if (!t->header->dubtree_initialized) {
+        for (i = 0; i < DUBTREE_MAX_LEVELS; ++i) {
+            t->levels[i] = 0;
+        }
+
+        /* Magic header and version number. */
+        t->header->magic = DUBTREE_FILE_MAGIC_MMAP;
+        t->header->version = DUBTREE_FILE_VERSION;
+        t->header->dubtree_m = DUBTREE_M;
+        t->header->dubtree_slot_size = DUBTREE_SLOT_SIZE;
+        t->header->dubtree_max_levels = DUBTREE_MAX_LEVELS;
+
         __sync_synchronize();
         t->header->dubtree_initialized = 1;
         __sync_synchronize();
     }
 
-    if (locked) {
-        dubtreeUnlockForWrite(t);
-    }
-
     /* Check that shared data structure matches current version and
      * configuration. */
-    if ((t->header->magic == DUBTREE_FILE_MAGIC_MMAP || t->header->magic ==
-                DUBTREE_FILE_MAGIC_SAVE) &&
+    if ((t->header->magic == DUBTREE_FILE_MAGIC_MMAP) &&
         (t->header->version == DUBTREE_FILE_VERSION) &&
-        (t->header->dubtree_m == DUBTREE_M) &&
-        (t->header->dubtree_corelimit = DUBTREE_CORELIMIT) &&
-        (t->header->dubtree_max_levels == DUBTREE_MAX_LEVELS) &&
-        (t->header->dubtree_max_versions == DUBTREE_MAX_VERSIONS) &&
-        (t->header->dubtree_max_treenodes == DUBTREE_TREENODES)) {
+        (t->header->dubtree_slot_size == DUBTREE_SLOT_SIZE) &&
+        (t->header->dubtree_max_levels == DUBTREE_MAX_LEVELS)) {
+
+        for (i = 0; i < DUBTREE_MAX_LEVELS; ++i) {
+            if (t->levels[i]) {
+                printf("level %d = %"PRIu64"\n", i, t->levels[i]);
+            }
+        }
         return 0;
     } else {
-        printf("swap: mismatched dubtree header!\n");
+        printf("mismatched dubtree header!\n");
         return -1;
     }
 }
 
 void
-dubtreeQuiesce(DUBTREE *t)
+dubtree_quiesce(DubTree *t)
 {
-    copyBufferClearCache(t->cb);
 }
 
-/* Only needed by swap-fsck. */
-uint64_t
-dubtreeGetVersionByIndex(const DUBTREE* t, int idx)
+static void __put_chunk(DubTree *t, dubtree_handle_t f, int line);
+static void put_chunk(DubTree *t, dubtree_handle_t f, int line);
+static dubtree_handle_t __get_chunk(DubTree *t, uint64_t chunk_id,
+                                       int dirty, int *l);
+static dubtree_handle_t get_chunk(DubTree *t, uint64_t chunk_id,
+                                     int dirty, int *l);
+
+typedef struct Read {
+    int src_offset;
+    int dst_offset;
+    int size;
+} Read;
+
+typedef struct ChunkReads {
+    uint64_t chunk_id;
+    int num_reads;
+    Read *reads;
+} ChunkReads;
+
+typedef struct Chunk {
+    void *buf;
+    HashTable ht;
+    int n_crs;
+    ChunkReads *crs;
+} Chunk;
+
+static inline void read_chunk(DubTree *t, Chunk *d, uint64_t chunk_id,
+        uint32_t dst_offset, uint32_t src_offset,
+        uint32_t size)
 {
-    DUBTREEVERSION *vs = t->versions;
-    return vs[idx].id;
+    ChunkReads *cr;
+    Read *rd;
+    uint64_t v;
+
+    if (hashtable_find(&d->ht, chunk_id, &v)) {
+        cr = &d->crs[v];
+    } else {
+        int n = d->n_crs++;
+        if (!((n - 1) & n)) {
+            /* XXX we do this once per find(). */
+            d->crs = realloc(d->crs, sizeof(d->crs[0]) * (n ? 2 * n : 1));
+            if (!d->crs) {
+                errx(1, "%s: malloc failed line %d", __FUNCTION__, __LINE__);
+            }
+        }
+
+        cr = &d->crs[n];
+        memset(cr, 0, sizeof(*cr));
+        cr->chunk_id = chunk_id;
+        hashtable_insert(&d->ht, chunk_id, n);
+    }
+
+    int n = cr->num_reads;
+    if (!((n - 1) & n)) {
+        /* XXX we do this once per find(). */
+        cr->reads = realloc(cr->reads,
+                sizeof(cr->reads[0]) * (n ? 2 * n: 1));
+        if (!cr->reads) {
+            errx(1, "%s: malloc failed line %d", __FUNCTION__, __LINE__);
+        }
+    }
+
+    rd = &cr->reads[cr->num_reads++];
+    rd->src_offset = src_offset;
+    rd->dst_offset = dst_offset;
+    rd->size = size;
 }
 
-void dubtreePrepareVersionsHash(DUBTREE* t, HashTable *ht);
+static void set_event_cb(void *opaque, int result)
+{
+#ifdef _WIN32
+    SetEvent(opaque);
+#endif
+}
 
-/* Prepare a context used when calling dubtreeFind(). */
-DUBTREECONTEXT *dubtreePrepareFind(DUBTREE *t, uint64_t version)
+typedef struct CallbackState {
+    read_callback cb;
+    void *opaque;
+    volatile uint32_t counter;
+    int result;
+} CallbackState;
+
+static inline
+void increment_counter(CallbackState *cs)
+{
+    __sync_fetch_and_add(&cs->counter, 1);
+}
+
+static inline
+void decrement_counter(CallbackState *cs)
+{
+    if (__sync_fetch_and_sub(&cs->counter, 1) == 1) {
+        if (cs->cb) {
+            cs->cb(cs->opaque, cs->result);
+        }
+        free(cs);
+    }
+}
+
+#ifdef _WIN32
+typedef struct {
+    OVERLAPPED o; // first
+    DubTree *t;
+    Read *first;
+    int n;
+    uint8_t *dst;
+    uint8_t *buf;
+    int size;
+    CallbackState *cs;
+} ReadContext;
+
+static void CALLBACK read_complete_scatter(DWORD rc, DWORD got, OVERLAPPED *o)
 {
     int i;
-    uint64_t parent;
-    HashTable ht;
-    DUBTREECONTEXT *cx = malloc(sizeof(DUBTREECONTEXT));
-    if (!cx) {
-        printf("%s: OOM line %d\n", __FUNCTION__, __LINE__);
-        return NULL;
+    Read *rd;
+    ReadContext *ctx = (ReadContext *) o;
+    DubTree *t = ctx->t;
+    CallbackState *cs = ctx->cs;
+
+    if (ctx->buf) {
+        uint8_t *in = ctx->buf;
+        int size = 0;
+
+        for (i = 0, rd = ctx->first; i < ctx->n; ++i, ++rd) {
+            size += rd->size;
+            assert(size <= ctx->size);
+            memcpy(ctx->dst + rd->dst_offset, in, rd->size);
+            in += rd->size;
+        }
+
+        t->free_cb(t->opaque, ctx->buf);
+    }
+    free(ctx->first);
+    free(ctx);
+    decrement_counter(cs);
+}
+#endif
+
+static int execute_reads(DubTree *t,
+        uint8_t *dst,
+        dubtree_handle_t f,
+        Read *first, int n,
+        CallbackState *cs)
+{
+    int i;
+    Read *rd;
+
+#ifdef _WIN32
+    uint32_t size;
+    int contig = 1;
+    for (i = size = 0, rd = first; i < n; ++i, ++rd) {
+        if (first->dst_offset + size != rd->dst_offset) {
+            contig = 0;
+        }
+        size += rd->size;
+    }
+    ReadContext *ctx = calloc(1, sizeof(*ctx));
+    ctx->t = t;
+    ctx->first = first;
+    ctx->n = n;
+    ctx->dst = dst;
+    if (contig) {
+        ctx->buf = NULL;
+    } else {
+        ctx->buf = t->malloc_cb(t->opaque, size);
+        if (!ctx->buf) {
+            errx(1, "%s: malloc failed", __FUNCTION__);
+            return -1;
+        }
+    }
+    ctx->size = size;
+    ctx->cs = cs;
+    increment_counter(cs);
+
+    ctx->o.Offset = first->src_offset;
+    if (!ReadFileEx(f, ctx->buf ? ctx->buf : dst + first->dst_offset, size,
+                &ctx->o, read_complete_scatter)) {
+        Werr(1, "ReadFileEx failed");
+        return -1;
+    }
+#else
+
+#ifdef __APPLE__
+
+    int r;
+
+    if (n > 1) {
+        struct radvisory ra = {first->src_offset,
+            first[n - 1].src_offset + first[n - 1].size - first->src_offset};
+        r = fcntl(f, F_RDADVISE, &ra);
+        assert(r >= 0);
     }
 
-    /* Need a hash table mapping versions to their parents to compute
-     * the path to the root. We are using our own copy here, to avoid
-     * racing with dubtreeInsert(), in case someone should choose to call
-     * that function in parallel. */
-    hashtableInit(&ht, NULL, NULL);
-    dubtreePrepareVersionsHash(t, &ht);
-
-    /* Compute the path for chasing keys up the snapshot hierarchy. */
-    for (i = 0; i < sizeof(cx->path) / sizeof(cx->path[0]); ++i) {
-        cx->path[i] = version;
-        if (!version) {
-            break;
+    for (i = 0, rd = first; i < n; ++i, ++rd) {
+        do {
+            r = pread(f, dst + rd->dst_offset, rd->size, rd->src_offset);
+        } while (r < 0 && errno == EINTR);
+        if (r < 0) {
+            err(1, "pread failed f=%d r %d", f, r);
         }
-        if (!hashtableFind(&ht, version, &parent)) {
-            printf("swap: unknown version step=%d v=%"PRIx64" ???\n", i, version);
-            free(cx);
-            cx = NULL;
-            goto out;
+    }
+
+#else
+
+    int take;
+    int r;
+    for (i = 0, rd = first; i < n; i += take) {
+        int j;
+        uint32_t offset;
+        struct iovec v[IOV_MAX];
+        take = (n - i) < IOV_MAX ? (n - i): IOV_MAX;
+
+        for (j = 0, offset = rd->src_offset; j < take; ++j, ++rd) {
+            v[j].iov_base = dst + rd->dst_offset;
+            v[j].iov_len = rd->size;
+        }
+        do {
+            r = preadv(f, v, take, offset);
+        } while (r < 0 && errno == EINTR);
+        if (r < 0) {
+            err(1, "preadv failed f=%d r %d", f, r);
+        }
+    }
+#endif
+    free(first);
+
+#endif
+
+    return 0;
+}
+
+static int flush_chunk(DubTree *t, uint8_t *dst, dubtree_handle_t f,
+        ChunkReads *cr, CallbackState *cs)
+{
+    int i, j;
+    int n = cr->num_reads;
+    Read *reads = cr->reads;
+    Read *first = reads;
+    Read *rd, *prev;
+    int r = 0;
+
+    for (i = 1, j = 0; i < n + 1; ++i) {
+        rd = &reads[i];
+        prev = &reads[i - 1];
+
+        if (i == n || rd->src_offset != prev->src_offset + prev->size) {
+            if (j > 0 || i < n) {
+                first = malloc((i - j) * sizeof(*first));
+                memcpy(first, reads + j, (i - j) * sizeof(*first));
+            }
+            r = execute_reads(t, dst, f, first, i - j, cs);
+            if (r < 0) {
+                printf("execute_reads failed, r=%d\n", r);
+                break;
+            }
+            j = i;
+        }
+    }
+
+    if (first != reads) {
+        free(reads);
+    }
+    return r;
+}
+
+int flush_reads(DubTree *t, Chunk *c, const uint8_t *chunk0, CallbackState *cs)
+{
+    int i, j;
+    int r = 0;
+
+    for (i = 0; i < c->n_crs; ++i) {
+        ChunkReads *cr = &c->crs[i];
+        if (cr->chunk_id == 0) {
+
+            Read *first = cr->reads;
+            Read *rd;
+            for (j = 0, rd = first; j < cr->num_reads; ++j, ++rd) {
+                memcpy(c->buf + rd->dst_offset, chunk0 + rd->src_offset,
+                       rd->size);
+            }
+            free(first);
+            r = 0;
+
         } else {
-            version = parent;
+            dubtree_handle_t f;
+            int l;
+
+            f = get_chunk(t, cr->chunk_id, 0, &l);
+            if (f != DUBTREE_INVALID_HANDLE) {
+                r = flush_chunk(t, c->buf, f, cr, cs);
+                put_chunk(t, f, l);
+            } else {
+                free(cr->reads);
+                r = -1;
+            }
+            if (r < 0) {
+                break;
+            }
         }
     }
-    hashtableClear(&ht);
 
-    cx->cb = malloc(sizeof(COPYBUFFER));
-    if (!cx->cb) {
-        printf("%s: OOM line %d\n", __FUNCTION__, __LINE__);
-        free(cx);
-        return NULL;
+    hashtable_clear(&c->ht);
+    free(c->crs);
+    c->n_crs = 0;
+    c->crs = NULL;
+    return r;
+}
+
+
+static inline void *map_tree(dubtree_handle_t f)
+{
+    void *m;
+    uint64_t sz;
+
+    sz = dubtree_get_file_size(f);
+
+#ifdef _WIN32
+    HANDLE h = CreateFileMappingA(f, NULL, PAGE_READONLY, 0, sz, NULL);
+    if (!h) {
+        Werr(1, "CreateFileMappingA fails");
     }
-    copyBufferInit(cx->cb, 0x1000, t->fn, t->fallbacks, t->arraysOffset, t->mem,
-            dubtreeGetSlot(t, DUBTREE_CORELIMIT), 1);
-out:
-    return cx;
+    m = MapViewOfFile(h, FILE_MAP_READ, 0, 0, sz);
+    assert(m);
+    CloseHandle(h);
+#else
+    m = mmap(NULL, sz, PROT_READ, MAP_PRIVATE, f, 0);
+    if (m == MAP_FAILED) {
+        err(1, "unable to map\n");
+    }
+#endif
+    return m;
 }
 
-void dubtreeQuiesceFind(DUBTREE *t, DUBTREECONTEXT *cx)
+static inline void unmap_tree(void *mem, size_t size)
 {
-    copyBufferClearCache(cx->cb);
+#ifdef _WIN32
+    if (!UnmapViewOfFile(mem)) {
+        printf("UnmapViewOfFile failed, err=%u\n", (uint32_t) GetLastError());
+    }
+#else
+    munmap(mem, size);
+#endif
 }
 
-void dubtreeEndFind(DUBTREE *t, DUBTREECONTEXT *cx)
+typedef struct UserData {
+    uint32_t fragments;
+    uint64_t garbage;
+    uint64_t size;        /* How many bytes are addressed by this tree. */
+    uint32_t num_chunks;
+    uint64_t chunk_ids[0];
+} UserData;
+
+static inline int add_chunk_id(UserData **pud, uint64_t chunk_id)
 {
-    copyBufferRelease(cx->cb);
-    free(cx->cb);
-    free(cx);
+    UserData *ud = *pud;
+    int n = ud->num_chunks++;
+    if (!((n - 1) & n)) {
+        *pud = ud = realloc(ud, sizeof(UserData) +
+                sizeof(uint64_t) * (n ? 2 * n: 1));
+        if (!ud) {
+            errx(1, "%s: malloc failed", __FUNCTION__);
+            return -1;
+        }
+    }
+    ud->chunk_ids[n] = chunk_id;
+    return ud->num_chunks;
 }
 
-static inline SIMPLETREE *dubtreeGetSimpleTree(DUBTREE *t, int level)
+static inline uint64_t get_chunk_id(const UserData *ud, int chunk)
 {
-    return simpletreeOpen(&t->levels[level], t->head, t->freelist,
-            t->treeMem);
+    return ud->chunk_ids[chunk - 1];
 }
 
-static inline void dubtreeSetSimpleTree(DUBTREE *t, int level, SIMPLETREE *st)
+static inline size_t ud_size(const UserData *cud, size_t n)
 {
-    simpletreeReference(&t->levels[level], st, t->head, t->freelist, t->treeMem);
+    return sizeof(*cud) + sizeof(cud->chunk_ids[0]) * n;
 }
 
-int dubtreeFind(DUBTREE *t, uint64_t start, uint64_t numKeys,
-        uint8_t *out, uint64_t *map, size_t *sizes, DUBTREECONTEXT *cx)
+typedef struct CachedTree {
+    struct SimpleTree st;
+    uint64_t chunk;
+    dubtree_handle_t f;
+    int line;
+} CachedTree;
+
+typedef struct FindContext {
+    CachedTree cached_trees[DUBTREE_MAX_LEVELS];
+#ifdef _WIN32
+    HANDLE event;
+#endif
+} FindContext;
+
+void *dubtree_prepare_find(DubTree *t)
+{
+    FindContext *fx = calloc(1, sizeof(FindContext));
+#ifdef _WIN32
+    fx->event = CreateEvent(NULL, FALSE, FALSE, NULL);
+#endif
+    return fx;
+}
+
+void dubtree_end_find(DubTree *t, void *ctx)
+{
+    FindContext *fx = ctx;
+    int i;
+
+    for (i = 0; i < DUBTREE_MAX_LEVELS; ++i) {
+        CachedTree *ct = &fx->cached_trees[i];
+        if (ct->chunk) {
+            unmap_tree(ct->st.mem, simpletree_get_nodes_size(&ct->st));
+            ct->chunk = 0;
+            put_chunk(t, ct->f, ct->line);
+        }
+    }
+#ifdef _WIN32
+    CloseHandle(fx->event);
+#endif
+    free(fx);
+}
+
+int dubtree_find(DubTree *t, uint64_t start, int num_keys,
+        uint8_t *out, uint8_t *map, uint32_t *sizes,
+        read_callback cb, void *opaque, void *ctx)
 {
     int i, r;
-    size_t metaSz = numKeys * sizeof(uint64_t);
-    uint64_t *sources = NULL;
-    uint64_t *versions = NULL;
-    COPYBUFFER *cb = cx->cb;
-    SIMPLETREE *trees[DUBTREE_MAX_LEVELS];
+    struct source {
+        uint64_t chunk_id;
+        int offset;
+        int size;
+    };
+    const int max_inline_keys = 8;
+    struct source inline_sources[max_inline_keys];
+    uint8_t inline_versions[max_inline_keys];
+    struct source *sources = NULL;
+    uint8_t *versions = NULL;
     int succeeded;
-    uint64_t d;
     int missing;
 
-    /* Array of pointers to copy from, one per key in the range queried. */
+    FindContext *fx = ctx;
+    char relevant[DUBTREE_MAX_LEVELS] = {};
 
-    sources = (uint64_t*) malloc(metaSz);
-    if (sources == NULL) {
-        printf("%s: OOM line %d\n", __FUNCTION__, __LINE__);
-        r = -1;
-        goto out;
-    }
-
-    versions = (uint64_t*) malloc(metaSz);
-    if (versions == NULL) {
-        printf("%s: OOM line %d\n", __FUNCTION__, __LINE__);
-        r = -1;
-        goto out;
-    }
-
-    for (;;) {
-
-        /* Initialize result vectors. */
-        memset(sizes, 0, sizeof(size_t) * numKeys);
-        memcpy(versions, map, metaSz);
-        memset(trees, 0, sizeof(trees));
-
-        /* How many keys do we actually need to get? Some may have been
-         * filled out already by the caller so do not count those. */
-
-        for (i = missing = 0; i < numKeys; ++i) {
-            if (map[i] == 0) ++missing;
-        }
-
-        /* Open all the trees. */
-        for (i = 0; i < DUBTREE_MAX_LEVELS; ++i) {
-            trees[i] = dubtreeGetSimpleTree(t, i);
-        }
-
-        /* Check for relevant keys in all trees. */
-        for (i = 0; i < DUBTREE_MAX_LEVELS; ++i) {
-            SIMPLETREE *st = trees[i];
-            SIMPLETREEITERATOR it;
-
-            if (st != NULL) {
-                int relevant = 0; /* anything at all for us this level? */
-                uint64_t *path = cx->path;
-                uint64_t version;
-
-                while (missing && (version = *path++)) {
-
-                    SIMPLETREERESULT k;
-                    if (simpletreeFind(st, start, version, &it)) {
-                        while (missing && !simpletreeAtEnd(st, &it)) {
-
-                            uint64_t block;
-                            size_t idx;
-
-                            simpletreeRead(st, &k, &it);
-                            block = k.key.key;
-                            idx = block - start;
-
-                            if (k.key.version > version || block >= start + numKeys) {
-                                break;
-                            }
-
-                            /* The youngest data is always at the top of the tree,
-                             * so only include a key into the returned result if we
-                             * did not have one already. */
-                            if (!versions[idx]) {
-                                versions[idx] = k.key.version;
-                                sources[idx] = t->offsets[i] + k.value.a;
-                                sizes[idx] = k.value.b;
-
-                                /* We need this tree to stick around until we are done. */
-                                relevant = 1;
-                                --missing;
-                            }
-
-                            simpletreeNext(st, &it);
-                        }
-                    }
-                }
-
-                /* We don't need to hold a reference to this tree any longer. */
-                if (!relevant) {
-                    simpletreeClose(st, &t->levels[i]);
-                    trees[i] = NULL;
-                }
-            }
-        }
-
-        /* Copy out the values we found. */
-        copyBufferStart(cb, out);
-        for (i = 0, d = 0; i < numKeys; ++i) {
-            if (sizes[i] != 0) {
-                copyBufferInsert(cb, sources[i], d, sizes[i]);
-                d += sizes[i];
-            }
-        }
-
-        /* Flush buffered up copies to out buffer. Failure either means data
-         * structures on disk are corrupted, or, in case of EOF, that the
-         * writer truncated files while we were trying to read them, which is
-         * can because we let reads run in parallel with a single writer.  The
-         * 'succeeded' check is supposed to catch this case, so we only
-         * propagate the error up if we were not going to retry anyway. */
-
-        r = copyBufferFlush(cb);
-
-        /* Close the remaining open trees. If a close fails it means we
-         * cannot assume the data we just copied is current, and we must
-         * redo the entire lookup. */
-
-        for (i = 0, succeeded = 1; i < DUBTREE_MAX_LEVELS; ++i) {
-            if (trees[i]) {
-                succeeded &= (!simpletreeClose(trees[i], &t->levels[i]));
-            }
-        }
-
-        /* Wait with checking the flush result until we know if are supposed
-         * to have succeeded with our lookup at all. */
-
-        if (succeeded && r < 0) {
+    if (num_keys > max_inline_keys) {
+        sources = calloc(num_keys, sizeof(sources[0]));
+        if (!sources) {
+            printf("%s: OOM line %d\n", __FUNCTION__, __LINE__);
+            r = -1;
             goto out;
         }
 
-        /* Are we done yet, or do we need to retry? */
-        if (succeeded) break;
+        versions = calloc(num_keys, sizeof(versions[0]));
+        if (!versions) {
+            printf("%s: OOM line %d\n", __FUNCTION__, __LINE__);
+            r = -1;
+            goto out;
+        }
+    } else {
+        memset(inline_sources, 0, sizeof(inline_sources));
+        sources = inline_sources;
+        memset(inline_versions, 0, sizeof(inline_versions));
+        versions = inline_versions;
+    }
+
+    CallbackState *cs = calloc(1, sizeof(CallbackState));
+    if (cb) {
+        cs->cb = cb;
+        cs->opaque = opaque;
+    } else {
+        cs->cb = set_event_cb;
+#ifdef _WIN32
+        cs->opaque = (void *) fx->event;
+#else
+        cs->opaque = NULL;
+#endif
+
+    }
+    increment_counter(cs);
+
+    succeeded = 1; // so far so good.
+
+    /* Initialize result vectors. */
+    memcpy(versions, map, sizeof(versions[0]) * num_keys);
+    memset(sizes, 0, sizeof(sizes[0]) * num_keys);
+
+    /* How many keys do we actually need to get? Some may have been
+     * filled out already by the caller so do not count those. */
+
+    for (i = missing = 0; i < num_keys; ++i) {
+        if (map[i] == 0) ++missing;
+    }
+
+    /* Open all the trees. */
+    critical_section_enter(&t->cache_lock);
+    for (i = 0; i < DUBTREE_MAX_LEVELS; ++i) {
+        CachedTree *ct = &fx->cached_trees[i];
+        if (ct->chunk) {
+            if (ct->chunk != t->levels[i]) {
+                unmap_tree(ct->st.mem, simpletree_get_nodes_size(&ct->st));
+                ct->chunk = 0;
+                if (ct->f != DUBTREE_INVALID_HANDLE) {
+                    __put_chunk(t, ct->f, ct->line);
+                    ct->f = DUBTREE_INVALID_HANDLE;
+                }
+            } else {
+                lru_cache_touch_line(&t->lru, ct->line);
+            }
+        }
+        if (ct->chunk == 0 && (ct->chunk = t->levels[i])) {
+            ct->f = __get_chunk(t, ct->chunk, 0, &ct->line);
+            assert (ct->f != DUBTREE_INVALID_HANDLE);
+            simpletree_open(&ct->st, map_tree(ct->f));
+        }
+    }
+    critical_section_leave(&t->cache_lock);
+
+    /* Check for relevant keys in all fx->cached_trees. */
+    for (i = 0; i < DUBTREE_MAX_LEVELS; ++i) {
+        CachedTree *ct = &fx->cached_trees[i];
+        SimpleTree *st = ct->chunk ? &ct->st : NULL;
+        SimpleTreeIterator it;
+
+        if (st != NULL) {
+
+            SimpleTreeResult k;
+            if (simpletree_find(st, start, &it)) {
+                const UserData *cud = simpletree_get_user(st);
+                while (missing && !simpletree_at_end(st, &it)) {
+
+                    uint64_t block;
+                    int idx;
+
+                    k = simpletree_read(st, &it);
+                    block = k.key;
+                    idx = block - start;
+
+                    if (block >= start + num_keys) {
+                        break;
+                    }
+
+                    /* The youngest data is always at the top of the tree,
+                     * so only include a key into the returned result if we
+                     * did not have one already. */
+                    if (!versions[idx]) {
+                        versions[idx] = 1;
+                        sources[idx].chunk_id = get_chunk_id(cud, k.value.chunk);
+                        sources[idx].offset = k.value.offset;
+                        sources[idx].size = k.value.size;
+                        relevant[i] = 1;
+                        --missing;
+                    }
+                    simpletree_next(st, &it);
+                }
+            }
+        }
+    }
+
+
+    /* Copy out the values we found. */
+    Chunk c = {};
+    c.buf = out;
+    hashtable_init(&c.ht, NULL, NULL);
+
+    int dst;
+    for (i = dst = 0; i < num_keys; ++i) {
+        int size = sources[i].size;
+        if (size) {
+            read_chunk(t, &c, sources[i].chunk_id, dst, sources[i].offset,
+                       size);
+        }
+        sizes[i] = size;
+        dst += size;
+    }
+
+    r = flush_reads(t, &c, NULL, cs);
+    if (r < 0) {
+        succeeded = 0;
+    }
+
+    for (i = 0; i < DUBTREE_MAX_LEVELS; ++i) {
+        CachedTree *ct = &fx->cached_trees[i];
+        if (ct->chunk && ct->chunk != t->levels[i]) {
+            if (relevant[i]) {
+                succeeded = 0;
+            }
+        }
     }
 
     /* Return 0 or positive value indicating number of unresolved blocks on
      * succes. Negative return means error. */
 
-    r = missing;
-
+    r = succeeded ? missing : -EAGAIN;
     /* Since versions array started out as a copy of map, it is safe to
      * copy it back wholesale. */
-    memcpy(map, versions, metaSz);
+    if (succeeded) {
+        memcpy(map, versions, sizeof(map[0]) * num_keys);
+    }
+
+    cs->result = r;
+    decrement_counter(cs);
+    cs = NULL;
+
+#ifdef _WIN32
+    if (!cb) {
+        for (;;) {
+            int r = WaitForSingleObjectEx(fx->event, INFINITE, TRUE);
+            if (r == WAIT_OBJECT_0) {
+                break;
+            } else if (r == WAIT_IO_COMPLETION) {
+                continue;
+            } else {
+                Werr(1, "r %x");
+            }
+        }
+    }
+#endif
 
 out:
-    if (sources) free(sources);
-    if (versions) free(versions);
-
-    if (r < 0) {
-        printf("swap: dubtreeFind fails %d on line %d\n", r, __LINE__);
+    if (num_keys > max_inline_keys) {
+        free(sources);
+        free(versions);
     }
-    return r;///XXX left; /* all OK, return >= 0 blocks not found. */
+    return r; /* negative for error, positive if unresolved blocks. */
 }
 
 
 /* Heap helper functions. */
 
-typedef struct DUBTREEITERTUPLE {
-    SIMPLETREE *st;
-    SIMPLETREEITERATOR it;
+typedef struct {
+    SimpleTree *st;
+    SimpleTreeIterator it;
     int level;
-} DUBTREEITERTUPLE;
+    uint64_t key;
+    int chunk;
+    int offset;
+    int size;
+    uint64_t chunk_id;
+} HeapElem;
 
-static inline int dubtreeIterLessThan(DUBTREE *t, DUBTREEITERTUPLE *a,
-        DUBTREEITERTUPLE *b)
+static inline int heap_less_than(DubTree *t, HeapElem *a,
+        HeapElem *b)
 {
-    SIMPLETREERESULT ka, kb;
-    simpletreeRead(a->st, &ka, &a->it);
-    simpletreeRead(b->st, &kb, &b->it);
-
-    if (ka.key.version != kb.key.version) {
-        return (ka.key.version < kb.key.version);
-    } else if (ka.key.key != kb.key.key) {
-        return (ka.key.key < kb.key.key);
+    if (a->key != b->key) {
+        return (a->key < b->key);
     } else {
         return (a->level < b->level);
     }
 }
 
-static inline void dubtreeSiftUp(DUBTREE *t, DUBTREEITERTUPLE *hp, size_t child)
+static inline void sift_up(DubTree *t, HeapElem **hp, size_t child)
 {
     size_t parent;
     for (; child; child = parent) {
         parent = (child - 1) / 2;
 
-        if (dubtreeIterLessThan(t, &hp[child], &hp[parent])) {
+        if (heap_less_than(t, hp[child], hp[parent])) {
 
-            DUBTREEITERTUPLE tmp = hp[parent];
+            HeapElem *tmp = hp[parent];
             hp[parent] = hp[child];
             hp[child] = tmp;
 
@@ -986,11 +852,11 @@ static inline void dubtreeSiftUp(DUBTREE *t, DUBTREEITERTUPLE *hp, size_t child)
     }
 }
 
-static inline void dubtreeSiftDown(DUBTREE *t, DUBTREEITERTUPLE *hp, size_t end)
+static inline void sift_down(DubTree *t, HeapElem **hp, size_t end)
 {
     size_t parent = 0;
     size_t child;
-    DUBTREEITERTUPLE tmp;
+    HeapElem *tmp;
     for (;; parent = child) {
         child = 2 * parent + 1;
 
@@ -999,12 +865,12 @@ static inline void dubtreeSiftDown(DUBTREE *t, DUBTREEITERTUPLE *hp, size_t end)
 
         /* point to the min child */
         if (child + 1 < end &&
-                dubtreeIterLessThan(t, &hp[child + 1], &hp[child])) {
+                heap_less_than(t, hp[child + 1], hp[child])) {
             ++child;
         }
 
         /* heap condition restored? */
-        if (dubtreeIterLessThan(t, &hp[parent], &hp[child])) {
+        if (heap_less_than(t, hp[parent], hp[child])) {
             break;
         }
 
@@ -1015,868 +881,700 @@ static inline void dubtreeSiftDown(DUBTREE *t, DUBTREEITERTUPLE *hp, size_t end)
     }
 }
 
+#define io_sz (1<<23)
 
-/* During normal use, keys will be spread over the different levels, and some
- * keys may exist in multiple levels. To optimize, and for reasons of crash
- * tolerance, we supply this function that performs an N-way merge from the
- * top to what is assumed to be the bottommost level. The result will be a
- * single level will all keys tightly packed and totally sorted. */
-
-int dubtreeSeal(DUBTREE *t, int destLevel)
+static inline char *name_chunk(const char *prefix, uint64_t chunk_id)
 {
-    int i, j;
-    int r = -1;
-    uint32_t p;
-    DUBTREEITERTUPLE heap[DUBTREE_MAX_LEVELS];
-    SIMPLETREE combinedTree;
-    uint64_t d;
-    uint64_t lastBlock = -1;
-    uint64_t lastVersion = 0;
-    uint8_t *treeBuffer = NULL;
-    volatile node_t head;
-    char *sealed_name = NULL;
-    char *mapped_name = NULL;
-    char *mutex_name = NULL;
-    COPYBUFFER *cb = t->cb;
-    DUBTREE_FILE_HANDLE file = DUBTREE_INVALID_HANDLE;
-    DUBTREE_HEADER header;
-    size_t sz;
-    void *buffer = NULL;
-    uint8_t *page;
-    uint64_t offset;
+    char *fn;
+    asprintf(&fn, "%s/%"PRIx64".lvl", prefix, chunk_id);
+    return fn;
+}
 
-    /* Bit of sanity checking at first. */
+static inline dubtree_handle_t __get_chunk(DubTree *t, uint64_t chunk_id, int dirty, int *l)
+{
+    dubtree_handle_t f = DUBTREE_INVALID_HANDLE;
+    uint64_t line;
+    LruCacheLine *cl;
 
-    if (destLevel < DUBTREE_CORELIMIT) {
-        printf("destination level must be at least %d!\n", DUBTREE_CORELIMIT);
-        goto out;
-    }
-
-    if (!dubtreeIsMutable(t)) {
-        printf("tree is not mutable!\n");
-        goto out;
-    }
-
-    if (t->levels[destLevel] != 0) {
-        printf("destination level %d not empty!\n", destLevel);
-        goto out;
-    }
-
-    /* Some strings we are going to need. */
-    asprintf(&sealed_name, "%s/" DUBTREE_SEALED_NAME, t->fn);
-    if (!sealed_name) {
-        printf("swap: OOM on line %d\n", __LINE__);
-        goto out;
-    }
-    asprintf(&mapped_name, "%s/" DUBTREE_MMAPPED_NAME, t->fn);
-    if (!mapped_name) {
-        printf("swap: OOM on line %d\n", __LINE__);
-        goto out;
-    }
-    asprintf(&mutex_name, "%s/" DUBTREE_MUTEX_NAME, t->fn);
-    if (!mutex_name) {
-        printf("swap: OOM on line %d\n", __LINE__);
-        goto out;
-    }
-
-    /* We will persist tree state when done. */
-    file = dubtreeOpenNewFile(sealed_name, 0);
-    if (file == DUBTREE_INVALID_HANDLE) {
-        printf("unable to open %s for write\n", sealed_name);
-        goto out;
-    }
-
-    buffer = malloc(LZ4_compressBound(simpletreeNodeSize()));
-    if (!buffer) {
-        printf("swap: OOM on line %d\n", __LINE__);
-        goto out;
-    }
-
-    node_t *freelist = malloc(sizeof(node_t) * DUBTREE_TREENODES);
-    if (!freelist) {
-        printf("swap: OOM on line %d\n", __LINE__);
-        goto out;
-    }
-
-    dubtreeLockForWrite(t);
-
-    /* Set up a binary heap for the n-way merge from existing to the
-     * destination level. We will use the simpletree (B-tree) indexes in each
-     * level to guide the merge. Each heap element points to a level B-tree,
-     * and the top-of-heap element points to the B-tree iterator with the
-     * smallest key. */
-
-    for (i = j = 0; i < destLevel; ++i) {
-
-        SIMPLETREE *st;
-        if ((st = dubtreeGetSimpleTree(t, i))) {
-            DUBTREEITERTUPLE *tuple = &heap[j];
-            tuple->level = i;
-            tuple->st = st;
-            simpletreeBegin(st, &tuple->it);
-            assert(!simpletreeAtEnd(st,&tuple->it));
-            dubtreeSiftUp(t, heap, j);
-            ++j;
-        }
-    }
-
-    /* We create the new B-tree in temporary RAM, and memcpy() it over the old
-     * one when it is ready. This saves us from worrying about running out of
-     * B-tree nodes, and also means we get a nicely unfragmented tree at the
-     * destination level when done. We will have to overwrite the old tree
-     * buffer with the new one when we are done. */
-
-    treeBuffer = (uint8_t*) malloc(simpletreeNodeSize() * DUBTREE_TREENODES);
-    memset(treeBuffer, 0, simpletreeNodeSize() * DUBTREE_TREENODES);
-
-    /* The head of the B-tree node freelist starts out pointing to node #1. */
-    head = 1;
-    /* Initialize linked list of free nodes. */
-    for (i = 0; i < DUBTREE_TREENODES; ++i) {
-        freelist[i] = (i < DUBTREE_TREENODES - 1) ? i + 1 : 0;
-    }
-
-    /* Create the new B-tree to index the destination level. */
-    simpletreeInit(&combinedTree, &head, freelist, treeBuffer, 0);
-
-    /* When we are done, everything will be inside a single slot at the
-     * destination level. */
-
-    copyBufferStart(cb, NULL);
-    for (d = 0; j > 0;) {
-
-        /* Loop and copy down until heap empty. */
-
-        SIMPLETREERESULT k;
-        DUBTREEITERTUPLE *tuple = &heap[0];
-
-        simpletreeRead(tuple->st, &k, &tuple->it);
-
-        sz = k.value.b;
-
-        /* The same key may be repeated across levels, so ignore
-         * duplicates. */
-
-        if (k.key.key != lastBlock || k.key.version != lastVersion) {
-            SIMPLETREEVALUE v;
-            uint64_t src = t->offsets[tuple->level] + k.value.a;
-            uint64_t dst = t->offsets[destLevel] + d;
-            v.a = d;
-            v.b = sz;
-
-            simpletreeInsert(&combinedTree, k.key.key, k.key.version, v);
-
-            copyBufferInsert(cb, src, dst, sz);
-            d += sz;
-
-            lastBlock = k.key.key;
-            lastVersion = k.key.version;
+    if (hashtable_find(&t->ht, chunk_id, &line)) {
+        cl = lru_cache_touch_line(&t->lru, line);
+        ++(cl->users);
+        f = (dubtree_handle_t) cl->value;
+    } else {
+        char *fn = NULL;
+        char **fb = t->fallbacks;
+        while (f == DUBTREE_INVALID_HANDLE && *fb) {
+            free(fn);
+            fn = name_chunk(*fb, chunk_id);
+            if (fb == t->fallbacks) {
+                f = dirty ?
+                    dubtree_open_new(fn, 0) :
+                    dubtree_open_existing(fn);
+            } else {
+                f = dubtree_open_existing_readonly(fn);
+            }
+            ++fb;
         }
 
-        simpletreeNext(tuple->st, &tuple->it);
-
-        if (simpletreeAtEnd(tuple->st, &tuple->it)) {
-            simpletreeRelease(&tuple->st);
-            heap[0] = heap[--j];
-        }
-
-        dubtreeSiftDown(t, heap, j);
-    }
-
-    if (copyBufferFlush(cb) < 0) {
-        /* Failing to flush is fatal. */
-        printf("swap: copyBufferFlush fails on line %d\n", __LINE__);
-        return -1;
-    }
-
-    /* Finish the combinedTree before installing a reference to it. */
-    simpletreeFinish(&combinedTree, d, 0);
-
-    /* Install reference to single combined tree at destination level. */
-    /* Last 3 args can be NULL, only needed for clearing existing tree. */
-    simpletreeReference(&t->levels[destLevel], &combinedTree, NULL, NULL, NULL);
-
-    /* Clear all old tree references and free up disk space. */
-    for (i = j = 0; i < destLevel; ++i) {
-        if (t->levels[i]) {
-            j = i;
-            t->levels[i] = 0;
-        }
-    }
-    printf("nuke to and including %d\n", j);
-    copyBufferNuke(cb, t->offsets[j + 1]);
-
-    /* Migrate any lower level trees over to treeBuffer. */
-    for (i = destLevel + 1; i < DUBTREE_MAX_LEVELS; ++i) {
-
-        SIMPLETREE *st;
-        if ((st = dubtreeGetSimpleTree(t, i))) {
-            SIMPLETREE out;
-            SIMPLETREEITERATOR it;
-            SIMPLETREERESULT k;
-
-            simpletreeInit(&out, &head, freelist, treeBuffer, 0);
-
-            simpletreeBegin(st, &it);
-            while (!simpletreeAtEnd(st,&it)) {
-
-                simpletreeRead(st, &k, &it);
-                simpletreeInsert(&out, k.key.key, k.key.version, k.value);
-                simpletreeNext(st, &it);
+        if (f != DUBTREE_INVALID_HANDLE) {
+            for (;;) {
+                line = lru_cache_evict_line(&t->lru);
+                cl = lru_cache_touch_line(&t->lru, line);
+                if (cl->users == 0) {
+                    break;
+                }
+            }
+            if (cl->key) {
+                hashtable_delete(&t->ht, cl->key);
+                dubtree_close_file((dubtree_handle_t) cl->value);
             }
 
-            simpletreeClose(st, &t->levels[i]);
-            simpletreeFinish(&out, simpletreeGetSize(st), 0);
-            t->levels[i] = 0;
-            /* Last 3 args can be NULL, only needed for clearing existing tree. */
-            simpletreeReference(&t->levels[i], &out, NULL, NULL, NULL);
+            cl->key = chunk_id;
+            cl->value = (uint64_t) (uintptr_t) f;
+            cl->users = 1;
+            hashtable_insert(&t->ht, chunk_id, line);
+        } else {
+#ifdef _WIN32
+            Wwarn("open chunk=%"PRIx64" failed, fn=%s", chunk_id, fn);
+#else
+            warn("open chunk=%"PRIx64" failed, fn=%s", chunk_id, fn);
+#endif
         }
+        free(fn);
     }
 
+    if (f != DUBTREE_INVALID_HANDLE) {
+        *l = line;
+    }
+    return f;
+}
 
-    /* Now that we reorganized everything, we will write out the compressed
-     * meta-data to top.save. */
+static dubtree_handle_t get_chunk(DubTree *t, uint64_t chunk_id, int dirty, int *l)
+{
+    dubtree_handle_t f;
+    critical_section_enter(&t->cache_lock);
+    f = __get_chunk(t, chunk_id, dirty, l);
+    critical_section_leave(&t->cache_lock);
+    return f;
+}
 
-    /* Write dubtree header. */
-    offset = 0;
-    memcpy(&header, t->header, sizeof(header));
-    header.magic = DUBTREE_FILE_MAGIC_SAVE;
-    header.freeListHead = head;
-    header.dubtree_initialized = 0;
-    r = dubtreeWriteFileAt(file, &header, sizeof(header), offset, NULL);
-    if (r < 0)
-        goto out;
-    offset += sizeof(header);
+static int unlink_chunk(DubTree *t, uint64_t chunk_id, dubtree_handle_t f)
+{
+    char *fn;
 
-    /* Write the level tree root references. */
-    sz = sizeof(t->levels[0]) * DUBTREE_MAX_LEVELS;
-    r = dubtreeWriteFileAt(file, (void*)t->levels, sz, offset, NULL);
-    if (r < 0)
-        goto out;
-    offset += sz;
-
-    /* Write the list of snapshot relations. */
-    sz = sizeof(DUBTREEVERSION) * DUBTREE_MAX_VERSIONS;
-    r = dubtreeWriteFileAt(file, t->versions, sz, offset, NULL);
-    if (r < 0)
-        goto out;
-    offset += sz;
-
-    /* Write the freelist of B-tree nodes. */
-    sz = sizeof(node_t) * DUBTREE_TREENODES;
-    r = dubtreeWriteFileAt(file, freelist, sz, offset, NULL);
-    if (r < 0)
-        goto out;
-    offset += sz;
-
-    /* Compress and write B-tree pages. */
-    for (p = 0; p < DUBTREE_TREENODES; ++p) {
-
-        uint32_t compressed_size = 0;
-        int j;
-        page = treeBuffer + p * simpletreeNodeSize();
-
-        /* Find and compress non-zero pages. */
-        for (j = 0; j < simpletreeNodeSize() / sizeof(uint64_t); ++j) {
-            if (((uint64_t*) page)[j]) {
-                compressed_size = LZ4_compress((char*)page, buffer, simpletreeNodeSize());
-                break;
-            }
+    if (f != DUBTREE_INVALID_HANDLE) {
+#ifdef _WIN32
+        FILE_DISPOSITION_INFO fdi = {1};
+        if (!SetFileInformationByHandle(f, FileDispositionInfo, &fdi,
+                                        sizeof(fdi)) &&
+                GetLastError() != ERROR_ACCESS_DENIED) {
+            Wwarn("err setting delete disposition for chunk=%"PRIx64"",
+                  chunk_id);
         }
-
-        /* Write compressed size. */
-        sz = sizeof(compressed_size);
-        r = dubtreeWriteFileAt(file, &compressed_size, sz, offset, NULL);
-        if (r != sz)
-            goto out;
-        offset += sz;
-
-        if (compressed_size > 0) {
-            /* Write compressed bytes. */
-            sz = compressed_size;
-            r = dubtreeWriteFileAt(file, buffer, sz, offset, NULL);
-            if (r != sz)
-                goto out;
-            offset += sz;
-        }
+        dubtree_close_file(f);
+        return 0;
+#else
+        ftruncate(f, 0);
+#endif
     }
 
-    r = 0;
-
-out:
-    if (file != DUBTREE_INVALID_HANDLE) {
-        dubtreeCloseFile(file);
+    fn = name_chunk(t->fallbacks[0], chunk_id);
+    if (unlink(fn) < 0 && errno != ENOENT) {
+        printf("unlink %s failed err %s\n", fn, strerror(errno));
     }
-    free(buffer);
-    free(treeBuffer);
-    dubtreeUnlockForWrite(t);
+    free(fn);
 
-    dubtreeClose(t);
-
-    /* Unlink original top.lvl to prevent future use. */
-    r = unlink(mapped_name);
-    if (r < 0) {
-        printf("unlinking %s failed\n", mapped_name);
-    }
 #ifndef _WIN32
-    r = unlink(mutex_name);
-    if (r < 0) {
-        printf("unlinking %s failed\n", mutex_name);
+    dubtree_close_file(f);
+#endif
+    return 0;
+}
+
+static inline void __put_chunk(DubTree *t, dubtree_handle_t _f, int line)
+{
+    LruCacheLine *cl = &t->lru.lines[line];
+    uint64_t chunk_id = 0;
+    int delete = 0;
+    dubtree_handle_t f = DUBTREE_INVALID_HANDLE;
+
+    if (cl->users-- == 1) {
+        if (cl->delete) {
+            chunk_id = cl->key;
+            f = (dubtree_handle_t) cl->value;
+            assert(f == _f);
+            hashtable_delete(&t->ht, cl->key);
+            delete = 1;
+            memset(cl, 0, sizeof(*cl));
+        }
+    }
+
+    if (delete) {
+        unlink_chunk(t, chunk_id, f);
+    }
+}
+
+static void put_chunk(DubTree *t, dubtree_handle_t f, int line)
+{
+    critical_section_enter(&t->cache_lock);
+    __put_chunk(t, f, line);
+    critical_section_leave(&t->cache_lock);
+}
+
+static inline void __free_chunk(DubTree *t, uint64_t chunk_id)
+{
+    uint64_t line;
+    int delete = 1;
+    dubtree_handle_t f = DUBTREE_INVALID_HANDLE;
+
+    if (hashtable_find(&t->ht, chunk_id, &line)) {
+        LruCacheLine *cl = &t->lru.lines[line];
+        if (cl->users > 0) {
+            cl->delete = 1;
+            delete = 0;
+        } else {
+            f = (dubtree_handle_t) cl->value;
+            hashtable_delete(&t->ht, cl->key);
+            cl->key = 0;
+            cl->value = 0;
+        }
+    }
+
+    if (delete) {
+        unlink_chunk(t, chunk_id, f);
+    }
+}
+static inline uint64_t alloc_chunk(DubTree *t)
+{
+    return __sync_add_and_fetch(&t->header->out_chunk, 1);
+}
+
+void write_chunk(DubTree *t, Chunk *c, const uint8_t *chunk0,
+        uint64_t chunk_id, uint32_t size)
+{
+    int l;
+    dubtree_handle_t f = get_chunk(t, chunk_id, 1, &l);
+    if (f == DUBTREE_INVALID_HANDLE) {
+        err(1, "unable to write chunk %"PRIx64, chunk_id);
+        return;
+    }
+
+    CallbackState *cs = calloc(1, sizeof(*cs));
+    if (!cs) {
+        errx(1, "%s: calloc failed", __FUNCTION__);
+        return;
+    }
+
+    increment_counter(cs);
+
+#ifdef _WIN32
+    HANDLE h = CreateFileMappingA(f, NULL, PAGE_READWRITE, 0, size, NULL);
+    if (!h) {
+        Werr(1, "CreateFileMappingA fails");
+    }
+    c->buf = MapViewOfFile(h, FILE_MAP_WRITE, 0, 0, size);
+    CloseHandle(h);
+
+    HANDLE event = CreateEvent(NULL, TRUE, FALSE, NULL);
+    cs->cb = set_event_cb;
+    cs->opaque = (void *) event;
+
+#else
+    c->buf = t->malloc_cb(t->opaque, size);
+    if (!c->buf) {
+        errx(1, "%s: malloc failed", __FUNCTION__);
     }
 #endif
 
-    free(sealed_name);
-    free(mapped_name);
-    free(mutex_name);
+    flush_reads(t, c, chunk0, cs);
+    decrement_counter(cs);
 
-    return r ? -1 : 0;
-}
-
-static inline
-int dubtreeKeyLessThan(SIMPLETREEKEY *a, SIMPLETREEKEY *b)
-{
-    if (!a) {
-        return 0;
-    } else if (!b) {
-        return 1;
-    } else if (a->version != b->version) {
-        return a->version < b->version;
-    } else {
-        return a->key < b->key;
-    }
-}
-
-/* Single-element cache wrapper around expensive dubtreeGetVersion() call. */
-static inline
-int dubtreeIsLiveVersion(DUBTREE *t, uint64_t version,
-        uint64_t *last_version, int *last_live)
-{
-    if (version != *last_version) {
-        uint64_t dummy;
-        *last_live = (hashtableFind(&t->vht, version, &dummy));
-        *last_version = version;
-    }
-    return *last_live;
-}
-
-/* Merge two simpletrees while keeping track of the accummulated garbage. */
-static
-SIMPLETREE *dubtreeMergeTrees(DUBTREE *t, SIMPLETREE *st,
-        const SIMPLETREE* sta, const SIMPLETREE *stb)
-{
-    SIMPLETREERESULT ra, rb;
-    SIMPLETREEKEY *a, *b;
-    SIMPLETREEITERATOR i, j;
-    uint64_t last_a = 0;
-    int last_live_a = 0;
-    uint64_t garbage = simpletreeGetGarbage(sta);
-    simpletreeInit(st, t->head, t->freelist, t->treeMem,
-            t->header->transaction);
-
-    simpletreeBegin(sta, &i);
-    simpletreeBegin(stb, &j);
-
+#ifdef _WIN32
     for (;;) {
-        /* Deref iterators, setting key pointers to NULL if end reached. */
-        if (!simpletreeAtEnd(sta, &i)) {
-            simpletreeRead(sta, &ra, &i);
-            a = &ra.key;
-
-            /* The old tree we merge into may contain non-live versions, and
-             * because we want to bound the number of versions in a tree, we
-             * must check for and skip over them during the merge. */
-            if (!dubtreeIsLiveVersion(t, a->version, &last_a, &last_live_a)) {
-                garbage += ra.value.b;
-                simpletreeNext(sta, &i);
-                continue;
-            }
-
-        } else {
-            a = NULL;
-        }
-
-        if (!simpletreeAtEnd(stb, &j)) {
-            simpletreeRead(stb, &rb, &j);
-            b = &rb.key;
-        } else {
-            b = NULL;
-        }
-
-        /* Both trees at end, we are done. */
-        if (!a && !b) {
+        int r = WaitForSingleObjectEx(event, INFINITE, TRUE);
+        if (r == WAIT_OBJECT_0) {
             break;
-        }
-
-        /* Consume the lesser value, or both if equal. In that case discard
-         * the value from the first tree, and count its size towards garbage. */
-        if (dubtreeKeyLessThan(a, b)) {
-            simpletreeInsert(st, a->key, a->version, ra.value);
-            simpletreeNext(sta, &i);
-        } else if (dubtreeKeyLessThan(b, a)) {
-            simpletreeInsert(st, b->key, b->version, rb.value);
-            simpletreeNext(sta, &j);
+        } else if (r == WAIT_IO_COMPLETION) {
+            continue;
         } else {
-            simpletreeInsert(st, b->key, b->version, rb.value);
-            garbage += ra.value.b;
-            simpletreeNext(sta, &i);
-            simpletreeNext(stb, &j);
+            printf("r %x err %u\n", r, (uint32_t) GetLastError());
         }
     }
-    simpletreeFinish(st, simpletreeGetSize(sta) +
-            simpletreeGetSize(stb), garbage);
-    return st;
+    CloseHandle(event);
+    UnmapViewOfFile(c->buf);
+#else
+    dubtree_pwrite(f, c->buf, size, 0);
+    t->free_cb(t->opaque, c->buf);
+#endif
+
+    free(c);
+    put_chunk(t, f, l);
 }
 
-static void dubtreeMergeIntoTree(DUBTREE *t, int level, SIMPLETREE *oldTree, SIMPLETREE *st)
+
+static inline int chunk_exceeded(size_t size)
 {
-    if (oldTree) {
-        SIMPLETREE combinedTree;
-        dubtreeMergeTrees(t, &combinedTree, oldTree, st);
-        simpletreeClose(oldTree, &t->levels[level]);
-        simpletreeClear(st);
-        dubtreeSetSimpleTree(t, level, &combinedTree);
-    } else {
-        dubtreeSetSimpleTree(t, level, st);
-    }
+    return (size + DUBTREE_BLOCK_SIZE - 1 > io_sz);
 }
 
-/* Update local hashtable, mapping sversion ids to parent ids,
- * from the shared state in t->versions array. */
-void dubtreePrepareVersionsHash(DUBTREE* t, HashTable *ht)
+static inline void insert_kv(SimpleTree *st,
+        uint64_t key, int chunk, int offset, int size)
 {
-    int i;
-    DUBTREEVERSION *vs = t->versions;
-
-    hashtableClear(ht);
-    for (i = 0; i < DUBTREE_MAX_VERSIONS; ++i) {
-        DUBTREEVERSION *v = vs + i;
-        uint64_t dummy;
-        uint64_t id, parent;
-
-        id = v->id;
-        parent = v->parent;
-        if (id && id != ~0ULL && parent != ~0ULL && !hashtableFind(ht, id, &dummy)) {
-            hashtableInsert(ht, id, parent);
-        }
-    }
+    SimpleTreeValue v;
+    v.chunk = chunk;
+    v.offset = offset;
+    v.size = size;
+    simpletree_insert(st, key, v);
 }
 
-/* Create a new tree version, to insert keys under. Returns
- * 0 if all OK, negative otherwise. Inserts are idempotent. */
-int dubtreeCreateVersion(DUBTREE *t, uint64_t id, uint64_t parent)
-{
-    int i;
-    DUBTREEVERSION *vs = t->versions;
-
-    for (i = 0; i < DUBTREE_MAX_VERSIONS; ++i) {
-        DUBTREEVERSION *v = vs + i;
-        if (v->id == id) {
-            printf("swap: re-added version %016"PRIx64" ok.\n", id);
-            return 0;
-        }
-        if (!v->id && __sync_val_compare_and_swap(&v->id, 0, id) == 0) {
-            /* An entry is valid if id and parent are !=0 && != ~0. */
-            v->parent = parent;
-            __sync_fetch_and_add(&t->header->versions_generation, 1);
-            return 0;
-        }
-    }
-    return -1;
-}
-
-int dubtreeDeleteVersion(DUBTREE *t, uint64_t id)
-{
-    int i;
-    int r = -1;
-    DUBTREEVERSION *vs = t->versions;
-
-    printf("swap: delete version %"PRIx64"\n", id);
-    for (i = 0; i < DUBTREE_MAX_VERSIONS; ++i) {
-        DUBTREEVERSION *v = vs + i;
-        if (v->id == id) {
-            /* Delete by first setting id and parent to ~0 ("busy"), and when that has
-             * been made visible, set id to 0 to mark the slot free. */
-            if (__sync_val_compare_and_swap(&v->id, id, ~0ULL) == id) {
-                v->parent = ~0ULL;
-                __sync_synchronize();
-                v->id = 0;
-                r = 0;
-            }
-        }
-    }
-    __sync_fetch_and_add(&t->header->versions_generation, 1);
-    return r;
-}
-
-
-/* Check invariants:
- *
- * - Each level should have size and garbage counters that match
- *   the sum of the sizes of the values referenced from that level.
- *
- * - No referenced value should exceed 4kiB.
- *
- * - The size of each level i should be no more than (M*4kIB)^(i+1).
- */ 
-
-int dubtreeSanityCheck(DUBTREE *t)
-{
-    SIMPLETREE *existing;
-    int i;
-    uint64_t levelSize = DUBTREE_M * DUBTREE_BLOCK_SIZE * DUBTREE_M;
-    int r = 0;
-
-    dubtreeLockForWrite(t);
-    for (i = 0; i < DUBTREE_MAX_LEVELS; ++i) {
-        if ((existing = dubtreeGetSimpleTree(t, i))) {
-            SIMPLETREEITERATOR it;
-            SIMPLETREERESULT k;
-            uint64_t used = simpletreeGetSize(existing);
-            uint64_t garbage = simpletreeGetGarbage(existing);
-            uint64_t sum = 0;
-
-            simpletreeBegin(existing, &it);
-            while (!simpletreeAtEnd(existing, &it)) {
-                simpletreeRead(existing, &k, &it);
-                sum += k.value.b;
-                if (k.value.b > 0x1000) {
-                    printf("too big value found in tree!\n");
-                    r = -1;
-                }
-                simpletreeNext(existing, &it);
-            }
-
-            if (used - garbage != sum) {
-                printf("garbage accounting error in level %d\n", i);
-                r = -1;
-            }
-            if (used > levelSize) {
-                printf("level overflow detected in level %d\n", i);
-                r = -1;
-            }
-
-            simpletreeClose(existing, &t->levels[i]);
-        }
-        levelSize *= DUBTREE_M;
-    }
-    dubtreeUnlockForWrite(t);
-    return r;
-}
-
-int dubtreeInsert(DUBTREE *t, int numKeys, uint64_t* keys, uint64_t version,
-        uint8_t *values, size_t *sizes)
+int dubtree_insert(DubTree *t, int num_keys, uint64_t* keys, uint8_t *values,
+        uint32_t *sizes, int force_level)
 {
     /* Find a free slot at the top level and copy the key there. */
-    SIMPLETREE st;
-    SIMPLETREE *existing;
-    int r = 0; // ok
+    SimpleTree st;
     int i;
-    int j;
-    uint8_t *s;
-    uint64_t d;
-    uint64_t begin;
-    uint64_t lastBlock = -1;
-    uint64_t lastVersion = 0;
-    uint64_t needed;
-    SIMPLETREERESULT k;
-    SIMPLETREEVALUE v;
-    uint64_t src, dst;
-    size_t sz;
-    COPYBUFFER *cb = t->cb;
-    uint64_t *offsets = t->offsets;
+    int j = 0;
+    uint64_t last_key = -1;
+    uint64_t needed = 0;
+    uint32_t fragments = 0;
+    uint64_t garbage = 0;
+    UserData *ud = NULL;
+    HashTable keep;
+    hashtable_init(&keep, NULL, NULL);
 
-    DUBTREEITERTUPLE heap[DUBTREE_MAX_LEVELS];
-    uint64_t slotSize = DUBTREE_M * DUBTREE_BLOCK_SIZE;
-    uint64_t generation = t->header->versions_generation;
+    HeapElem tuples[1 + DUBTREE_MAX_LEVELS];
+    HeapElem *heap[1 + DUBTREE_MAX_LEVELS];
+    HeapElem *min;
+    SimpleTree trees[DUBTREE_MAX_LEVELS];
+    SimpleTree *existing;
+    const UserData *cud;
+    dubtree_handle_t tree_handles[DUBTREE_MAX_LEVELS];
+    int tree_lines[DUBTREE_MAX_LEVELS];
 
-    assert(numKeys <= DUBTREE_M);
-    for (i = 0, needed = 0; i < numKeys; ++i) {
-        assert(sizes[i] <= DUBTREE_BLOCK_SIZE);
-        needed += sizes[i];
-    }
+    uint64_t slot_size = DUBTREE_SLOT_SIZE;
 
-    if (t->vht_generation != generation) {
-        /* We need to update our versions hash table. */
-        dubtreePrepareVersionsHash(t, &t->vht);
-        t->vht_generation = generation;
-    }
+    critical_section_enter(&t->write_lock);
+    struct buf_elem {uint64_t key; int offset; int size;};
+    struct buf_elem *buffered = t->buffered;
 
-    dubtreeLockForWrite(t);
-
-    if (t->header->transaction & 1) {
-        /* Detected crashed insert transaction. */
-        simpletreeGC(t->head, t->freelist, t->treeMem, t->levels, DUBTREE_MAX_LEVELS,
-                t->header->transaction, DUBTREE_TREENODES);
-        simpletreeTransact(&t->header->transaction);
-    }
-
-    for (i = j = 0; i < DUBTREE_MAX_LEVELS; ++i) {
-
-        /* Figure out how many bytes are in use at this level. */
-        uint64_t used;
-        uint64_t garbage;
-
-        if ((existing = dubtreeGetSimpleTree(t, i))) {
-            used = simpletreeGetSize(existing);
-            garbage = simpletreeGetGarbage(existing);
-
-        } else {
-            used = 0;
-            garbage = 0;
+    if (num_keys > 0) {
+        for (i = 0; i < num_keys; ++i) {
+            needed += sizes[i];
         }
-        assert(used >= garbage);
 
-        /* Is this level full enough to need merging, or is it so full of
-         * garbage that we may as well vacuum out while we are at it? */
-        if (DUBTREE_M * slotSize < used + needed || garbage > used / 2) {
-            DUBTREEITERTUPLE *tuple = &heap[j];
-            tuple->level = i;
-            tuple->st = existing;
-            simpletreeBegin(existing, &tuple->it);
-            dubtreeSiftUp(t, heap, j);
-            ++j;
+        min = &tuples[j];
+        memset(min, 0, sizeof(*min));
+        min->level = -1;
+        min->key = keys[0];
+        min->size = sizes[0];
+        heap[j] = min;
+        sift_up(t, heap, j++);
+    }
 
+    for (i = 0; i < DUBTREE_MAX_LEVELS; ++i) {
+        /* Figure out how many bytes are in use at this level. */
+
+        uint64_t used = 0;
+        if (t->levels[i]) {
+            dubtree_handle_t f;
+            SimpleTreeResult k;
+            existing = &trees[i];
+
+            f = get_chunk(t, t->levels[i], 0, &tree_lines[i]);
+            if (f == DUBTREE_INVALID_HANDLE) {
+#ifdef _WIN32
+                Werr(1, "get_chunk failed");
+#else
+                err(1, "get_chunk failed");
+#endif
+            }
+            tree_handles[i] = f;
+            simpletree_open(existing, map_tree(f));
+
+            cud = simpletree_get_user(existing);
+            used = cud->size;
+            garbage = cud->garbage;
+            fragments = cud->fragments;
+            if (used > garbage) {
+                needed += used - garbage;
+            }
+
+            min = &tuples[j];
+            min->level = i;
+            min->st = existing;
+            simpletree_begin(existing, &min->it);
+            k = simpletree_read(existing, &min->it);
+            min->key = k.key;
+            min->chunk = k.value.chunk;
+            min->chunk_id = get_chunk_id(cud, min->chunk);
+            min->offset = k.value.offset;
+            min->size = k.value.size;
+            heap[j] = min;
+            sift_up(t, heap, j++);
         } else {
-            /* We found a level with free space to merge the upper levels to,
-             * so we can stop here. 'existing' will point to an open B-tree
-             * at the destination level, or NULL if the level is empty. */
-            d = used;
+            trees[i].mem = NULL;
+            existing = NULL;
+            fragments = 0;
+            garbage = used = 0;
+            cud = NULL;
+        }
+
+        if (slot_size >= needed && fragments < DUBTREE_M && used >= garbage &&
+                i >= force_level) {
+            if (existing) {
+                int power;
+                for (power = 1; power < cud->num_chunks; power *= 2);
+                ud = malloc(ud_size(cud, power));
+                if (!ud) {
+                    warnx("%s: malloc failed on line %d", __FUNCTION__, __LINE__);
+                    return -1;
+                }
+                memcpy(ud, cud, ud_size(cud, cud->num_chunks));
+            } else {
+                ud = calloc(1, sizeof(*ud));
+                if (!ud) {
+                    warnx("%s: calloc failed on line %d", __FUNCTION__, __LINE__);
+                    return -1;
+                }
+            }
+
             break;
         }
 
-        needed += used - garbage;
-        slotSize *= DUBTREE_M;
+        slot_size *= DUBTREE_M;
     }
+
     if (i == DUBTREE_MAX_LEVELS) {
         printf("all levels full!\n");
         return -1;
     }
 
-    /* Did loop above result in a non-empty heap of levels to merge? */
-    if (j > 0) {
+    /* Create the new B-tree to index the destination level. */
+    simpletree_init(&st);
 
-        /* Start a new transaction for the merge. */
-        simpletreeTransact(&t->header->transaction);
-        begin = d;
-        dst = offsets[i] + d;
+    uint32_t b = 0;
+    int n_buffered = 0;
+    int t_buffered = 0;
+    uint64_t total = 0;
+    int min_idx = 0;
+    uint32_t min_offset = 0;
 
-        /* Create the new B-tree to index the destination level. */
-        simpletreeInit(&st, t->head, t->freelist, t->treeMem, t->header->transaction);
+    int done;
+    uint64_t last_chunk_id = ~0ULL;
+    Chunk *out = NULL;
+    uint64_t out_id;
+    int out_chunk;
+    struct buf_elem *e;
 
-        copyBufferStart(cb, NULL);
-        for (;;) {
-            /* Loop and copy down until heap empty. */
+    for (done = 0;;) {
+        /* Loop and copy down until heap empty. */
 
-            uint64_t dummy;
-            DUBTREEITERTUPLE *tuple = &heap[0];
-            simpletreeRead(tuple->st, &k, &tuple->it);
+        min = heap[0];
+        int end = 0;
 
-            /* Single-element cache to avoid calling dubtreeGetVersion() too
-             * often. If the key to be merged does not have a corresponding
-             * version, it means we should skip over it. */
+        /* Anything to flush before we consume input? */
+        if (n_buffered && ((last_chunk_id != min->chunk_id) || done ||
+                    chunk_exceeded(t_buffered))) {
+            int q;
 
-            if (k.key.version == lastVersion ||
-                    hashtableFind(&t->vht, k.key.version, &dummy)) {
+            if (chunk_exceeded(t_buffered) && last_chunk_id) {
 
-                /* The same key may be repeated across levels, so ignore
-                 * duplicates. */
-                if (k.key.key != lastBlock || k.key.version != lastVersion) {
+                hashtable_insert(&keep, last_chunk_id, 0);
+                int chunk = add_chunk_id(&ud, last_chunk_id);
+                for (q = 0; q < n_buffered; ++q) {
+                    e = &buffered[q];
+                    insert_kv(&st, e->key, chunk, e->offset, e->size);
+                    total += e->size;
+                }
 
-                    src = offsets[tuple->level] + k.value.a;
-                    sz = k.value.b;
+            } else {
 
-                    v.a = d;
-                    v.b = sz;
-                    assert(d + sz <= offsets[i + 1] - offsets[i]);
-                    simpletreeInsert(&st, k.key.key, k.key.version, v);
-                    copyBufferInsert(cb, src, dst, sz);
+                uint32_t b0 = b;
+                uint32_t offset0 = buffered[0].offset;
 
-                    lastBlock = k.key.key;
-                    lastVersion = k.key.version;
-                    d += sz;
-                    dst += sz;
+                for (q = 0; q < n_buffered; ++q) {
+
+                    if (!out) {
+                        out_id = alloc_chunk(t);
+                        out = calloc(1, sizeof(Chunk));
+                        if (!out) {
+                            warnx("%s: calloc failed on line %d",
+                                    __FUNCTION__, __LINE__);
+                            return -1;
+                        }
+                        out_chunk = add_chunk_id(&ud, out_id);
+                    }
+
+                    e = &buffered[q];
+                    insert_kv(&st, e->key, out_chunk, b, e->size);
+                    total += e->size;
+                    b += e->size;
+
+                    if (chunk_exceeded(b)) {
+                        read_chunk(t, out, last_chunk_id, b0, offset0, b - b0);
+                        offset0 = e->offset + e->size;
+
+                        write_chunk(t, out, values, out_id, b);
+                        out = NULL;
+                        b0 = b = 0;
+                    }
+
+                }
+                if (out) {
+                    read_chunk(t, out, last_chunk_id, b0, offset0, b - b0);
                 }
             }
-            simpletreeNext(tuple->st, &tuple->it);
+            n_buffered = t_buffered = 0;
+        }
+        if (done) {
+            if (out) {
+                write_chunk(t, out, values, out_id, b);
+                out = NULL;
+            }
+            break;
+        }
 
-            if (simpletreeAtEnd(tuple->st, &tuple->it)) {
-                simpletreeClose(tuple->st, &t->levels[tuple->level]);
+        /* Process min element from incoming and existing trees. */
+        /* The same key may be repeated across levels, so ignore
+         * duplicates. */
 
-                /* Did we reach the end of the last element on the heap? */
-                if (j == 1) break;
+        if (min->key != last_key) {
+            last_key = min->key;
+
+            if (min->level == i) {
+                insert_kv(&st, min->key, min->chunk, min->offset, min->size);
+                total += min->size;
+            } else {
+
+                if (n_buffered >= t->buffer_max) {
+                    t->buffer_max = t->buffer_max ? 2 * t->buffer_max : 1;
+                    buffered = t->buffered = realloc(t->buffered,
+                                                     sizeof(buffered[0]) *
+                                                     t->buffer_max);
+                    if (!buffered) {
+                        errx(1, "%s: malloc failed", __FUNCTION__);
+                        return -1;
+                    }
+                }
+
+                e = &buffered[n_buffered++];
+                e->key = min->key;
+                e->offset = min->offset;
+                e->size = min->size;
+                t_buffered += min->size;
+            }
+        } else {
+            garbage += min->size;
+        }
+
+        last_chunk_id = min->chunk_id;
+
+        /* Find next min for next round. */
+        if (min->st) {
+            simpletree_next(min->st, &min->it);
+            end = simpletree_at_end(min->st, &min->it);
+        } else {
+            min_offset += sizes[min_idx++];
+            end = (min_idx == num_keys);
+        }
+        if (end) {
+            if (j == 1) {
+                done = 1;
+            } else {
                 heap[0] = heap[--j];
             }
-
-            /* Restore heap condition. */
-            dubtreeSiftDown(t, heap, j);
-        }
-
-        if (copyBufferFlush(cb)) {
-            /* Failing to flush is fatal. */
-            return -1;
-        }
-
-        /* Finish the combined tree and commit the merge by
-         * installing a globally visible reference to the merged
-         * tree. */
-
-        simpletreeFinish(&st, d - begin, 0);
-
-        if (existing) {
-            /* There was already a tree at the destination level, so merge st
-             * into that. We keep st and existing valid until we have decided
-             * if we want to compact back our newly inserted data to the
-             * previous level. */
-            SIMPLETREE combinedTree;
-            dubtreeMergeTrees(t, &combinedTree, existing, &st);
-            dubtreeSetSimpleTree(t, i, &combinedTree);
         } else {
-            /* The destination level was empty, just install a reference to st
-             * there. */
-            dubtreeSetSimpleTree(t, i, &st);
-        }
-
-        /* Clear all tree references above this level. Ideally, this step would
-         * be atomic wrt the referencing of the merged tree, but if we free up
-         * the upper level trees bottom-up the worst that can happen, should we
-         * crash now, is that duplicates of keys will exist in multiple levels.
-         * This will waste some space that will eventually get reclaimed by
-         * future merges. */
-
-        for (j = i - 1; j >= 0; --j) {
-            dubtreeSetSimpleTree(t, j, NULL);
-        }
-        /* Free up disk space used by now-merged levels. */
-        if (i > DUBTREE_CORELIMIT) {
-            copyBufferForget(cb, offsets[DUBTREE_CORELIMIT], offsets[i]);
-        }
-
-        /* Figure out if we need to compact up one level. */
-        if (d - begin < slotSize / 2) {
-            SIMPLETREE compactedTree;
-            SIMPLETREEITERATOR it;
-            uint64_t d2 = 0;
-
-            /* Create a new empty tree, and copy the keys from the target
-             * buffer back there. The trees will be identical, expect for the
-             * values pointers. Perhaps we could optimize this to avoid the
-             * copying, but not clear it would be worth it. */
-
-            simpletreeInit(&compactedTree, t->head, t->freelist, t->treeMem,
-                    t->header->transaction);
-
-            simpletreeBegin(&st, &it);
-            copyBufferStart(cb, NULL);
-
-            while (!simpletreeAtEnd(&st, &it)) {
-                simpletreeRead(&st, &k, &it);
-
-                src = offsets[i] + k.value.a;
-                dst = offsets[i - 1] + d2;
-
-                sz = k.value.b;
-                v.a = d2;
-                v.b = sz;
-
-                simpletreeInsert(&compactedTree, k.key.key, k.key.version, v);
-                copyBufferInsert(cb, src, dst, sz);
-
-                d2 += sz;
-                simpletreeNext(&st, &it);
-            }
-
-            r = copyBufferFlush(cb);
-            if (r < 0) {
-                printf("swap: flush failed during compaction!\n");
-                return r;
-            }
-            simpletreeFinish(&compactedTree, d2, 0);
-            /* Install reference to compactedTree at level above. */
-            dubtreeSetSimpleTree(t, i - 1, &compactedTree);
-
-            /* Revert back to the tree at this level the way it looked
-             * before we merged into it. Unfortunately we cannot just
-             * install a new reference to 'existing', as that will break
-             * the refcounting of concurrent readers. Instead we make a
-             * copy by merging with an empty tree and use that. */
-            
-            if (existing) {
-                SIMPLETREE empty;
-                SIMPLETREE copy;
-                simpletreeInit(&empty, t->head, t->freelist, t->treeMem,
-                        t->header->transaction);
-                simpletreeFinish(&empty, 0, 0);
-                dubtreeMergeTrees(t, &copy, existing, &empty);
-                dubtreeSetSimpleTree(t, i, &copy);
-                simpletreeClear(&empty);
+            if (min->st) {
+                SimpleTreeResult k;
+                cud = simpletree_get_user(min->st);
+                k = simpletree_read(min->st, &min->it);
+                min->key = k.key;
+                min->chunk = k.value.chunk;
+                min->chunk_id = get_chunk_id(cud, min->chunk);
+                min->offset = k.value.offset;
+                min->size = k.value.size;
             } else {
-                dubtreeSetSimpleTree(t, i, NULL);
+                min->key = keys[min_idx];
+                min->offset = min_offset;
+                min->size = sizes[min_idx];
+            }
+        }
+        sift_down(t, heap, j);
+    }
+
+    /* Finish the combined tree and commit the merge by
+     * installing a globally visible reference to the merged
+     * tree. */
+
+    simpletree_finish(&st);
+    ud->size = total;
+    ud->fragments = fragments + 1;
+    ud->garbage = garbage;
+    simpletree_set_user(&st, ud, ud_size(ud, ud->num_chunks));
+    free(ud);
+
+    uint64_t tree_chunk = alloc_chunk(t);
+    int l;
+    dubtree_handle_t f = get_chunk(t, tree_chunk, 1, &l);
+    if (f == DUBTREE_INVALID_HANDLE) {
+        err(1, "unable to open tree chunk %"PRIx64" for write", tree_chunk);
+        return -1;
+    }
+    dubtree_pwrite(f, st.mem, simpletree_get_nodes_size(&st), 0);
+    put_chunk(t, f, l);
+    simpletree_clear(&st);
+
+    critical_section_enter(&t->cache_lock);
+
+    /* Find the smallest level that this tree can fit in, and delete
+     * the rest of the levels from i and up. */
+
+    int dest;
+    for (dest = i; ; --dest) {
+        slot_size /= DUBTREE_M;
+        if (dest == 0 || slot_size < total) {
+            break;
+        }
+    }
+
+    for (j = i; j >= 0; --j) {
+        SimpleTree *st = &trees[j];
+        uint64_t chunk_id = t->levels[j];
+
+        t->levels[j] = dest == j ? tree_chunk : 0;
+        __sync_synchronize();
+
+        if (chunk_id) {
+            if (j != i) {
+                int k;
+                cud = simpletree_get_user(st);
+                for (k = 0; k < cud->num_chunks; ++k) {
+                    uint64_t dead_chunk_id = cud->chunk_ids[k];
+                    if (!hashtable_find_entry(&keep, dead_chunk_id)) {
+                        __free_chunk(t, dead_chunk_id);
+                    }
+                }
             }
 
-            /* Finally free up disk space used by the blocks we compacted up
-             * one level. */
-            copyBufferForget(cb, offsets[i] + begin, offsets[i] + d);
-
-        }
-
-        /* We use 'existing' to determine if 'st' got merged into the destination
-         * level, in which case it is no longer relevant and must be freed, or
-         * installed there and thus should be left alone. */
-        if (existing) {
-            simpletreeClear(&st);
-            /* Also make sure we release the reference to existing. */
-            simpletreeClose(existing, &t->levels[i]);
-        }
-
-        simpletreeTransact(&t->header->transaction);
-
-    } else {
-        /* Close last open tree. Don't be tempted to reuse it for the
-         * actual insert below, because if there was a compaction above
-         * it will no longer be valid! */
-
-        if (existing) {
-            simpletreeClose(existing, &t->levels[0]);
+            unmap_tree(st->mem, simpletree_get_nodes_size(st));
+            __put_chunk(t, tree_handles[j], tree_lines[j]);
+            __free_chunk(t, chunk_id);
         }
     }
+    critical_section_leave(&t->cache_lock);
+    critical_section_leave(&t->write_lock);
+    hashtable_clear(&keep);
 
+    return 0;
+}
 
-    /******** The actual insert into level 0. *************************/
-    simpletreeTransact(&t->header->transaction);
+int dubtree_delete(DubTree *t)
+{
+    int i, j;
 
-    d = offsets[0];
-    if ((existing = dubtreeGetSimpleTree(t, 0))) {
-        d += simpletreeGetSize(existing);
+    critical_section_enter(&t->cache_lock);
+    for (i = 0; i < DUBTREE_MAX_LEVELS; ++i) {
+        uint64_t chunk_id = t->levels[i];
+        if (chunk_id) {
+
+            dubtree_handle_t f;
+            int line;
+            SimpleTree st;
+            const UserData *cud;
+
+            f = get_chunk(t, chunk_id, 0, &line);
+            if (f == DUBTREE_INVALID_HANDLE) {
+                warn("unable to delete tree-chunk=%"PRIx64, chunk_id);
+                return -1;
+            }
+            simpletree_open(&st, map_tree(f));
+
+            cud = simpletree_get_user(&st);
+            for (j = 0; j < cud->num_chunks; ++j) {
+                __free_chunk(t, cud->chunk_ids[j]);
+            }
+
+            unmap_tree(st.mem, simpletree_get_nodes_size(&st));
+            __put_chunk(t, f, line);
+            __free_chunk(t, chunk_id);
+        }
     }
-    begin = d;
+    critical_section_leave(&t->cache_lock);
 
-    simpletreeInit(&st, t->head, t->freelist, t->treeMem, t->header->transaction);
+    char *mn;
+    asprintf(&mn, "%s/"DUBTREE_MMAPPED_NAME, t->fallbacks[0]);
 
-    /* Loop over the input data to find the offsets of individual compressed
-     * blocks, and create a B-tree indexing them. */
+    char *dn;
+    dn = strdup(t->fallbacks[0]);
 
-    for (s = values, i = 0; i < numKeys; ++i) {
-        sz = sizes[i];
-        memcpy(t->data + d, s, sz);
+    dubtree_close(t);
 
-        v.a = d;
-        v.b = sz;
-        simpletreeInsert(&st, keys[i], version, v);
-
-        s += sz;
-        d += sz;
+    if (unlink(mn) < 0) {
+        warn("unable to unlink %s", mn);
+        return -1;
+    }
+    if (rmdir(dn) < 0) {
+        warn("unable to rmdir %s", dn);
+        return -1;
     }
 
-    simpletreeFinish(&st, d - begin, 0);
+    return 0;
+}
 
-    /* Since this is only one of M slots at the top level, merge the new B-tree
-     * into the existing one, to get a complete index for the level. Other than
-     * lookups, the index is also used when merging down to a the next level,
-     * when this one runs full. */
+int dubtree_sanity_check(DubTree *t)
+{
+    int i;
+    for (i = 0; i < DUBTREE_MAX_LEVELS; ++i) {
+        /* Figure out how many bytes are in use at this level. */
 
-    dubtreeMergeIntoTree(t, 0, existing, &st);
+        SimpleTree st;
+        if (t->levels[i]) {
+            dubtree_handle_t f, cf;
+            SimpleTreeIterator it;
+            const UserData *cud;
+            int line;
 
-    simpletreeTransact(&t->header->transaction);
-    dubtreeUnlockForWrite(t);
-    return r;
+            f = get_chunk(t, t->levels[i], 0, &line);
+            if (f == DUBTREE_INVALID_HANDLE) {
+                return -1;
+            }
+            simpletree_open(&st, map_tree(f));
+            simpletree_begin(&st, &it);
+            cud = simpletree_get_user(&st);
+            while (!simpletree_at_end(&st, &it)) {
+                SimpleTreeResult k;
+                uint8_t in[DUBTREE_BLOCK_SIZE];
+                uint8_t out[DUBTREE_BLOCK_SIZE];
+                uint64_t chunk_id;
+                int l;
+                int got;
+
+                k = simpletree_read(&st, &it);
+                chunk_id = get_chunk_id(cud, k.value.chunk);
+                cf = get_chunk(t, chunk_id, 0, &l);
+                if (cf == DUBTREE_INVALID_HANDLE) {
+                    warn("unable to read chunk %"PRIx64, chunk_id);
+                    return -1;
+                }
+                got = dubtree_pread(cf, in, k.value.size, k.value.offset);
+                assert(got == k.value.size);
+                put_chunk(t, cf, l);
+
+                int sz = k.value.size;
+                if (sz < DUBTREE_BLOCK_SIZE) {
+                    int unsz = LZ4_decompress_safe((const char*)in, (char*)out,
+                                                   sz, DUBTREE_BLOCK_SIZE);
+                    if (unsz != DUBTREE_BLOCK_SIZE) {
+                        printf("%d vs %d, offset=%u size=%u\n", unsz, sz,
+                               k.value.offset, sz);
+                        return -1;
+                    }
+                }
+
+                simpletree_next(&st, &it);
+            }
+            unmap_tree(st.mem, simpletree_get_nodes_size(&st));
+            put_chunk(t, f, line);
+        }
+    }
+    return 0;
 }

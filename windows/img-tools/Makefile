@@ -20,7 +20,7 @@ ifeq (,$(MAKENOW))
 
 VPATH = $(SRCDIR)
 
-CFLAGS += -I$(SRCDIR)
+CFLAGS += -I$(SRCDIR) -I $(TOPDIR)/common/img-tools -O3
 
 CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
 
@@ -48,6 +48,23 @@ $(patsubst %,install_%,$(PROGRAMS)): install_%: % _install_banner
 	$(_V)$(call install_exe,$(<),$(DISTDIR))
 
 dist: $(patsubst %,install_%,$(PROGRAMS))
+
+swap-seal.o: $(TOPDIR)/common/img-tools/swap-seal.c
+	$(_W)echo Importing - $@
+	$(_V)$(COMPILE.c) -c $< -o $@
+
+swap-fsck.o: $(TOPDIR)/common/img-tools/swap-fsck.c
+	$(_W)echo Importing - $@
+	$(_V)$(COMPILE.c) -c $< -o $@
+
+mt19937-64.o: $(TOPDIR)/common/img-tools/mt19937-64.c
+	$(_W)echo Importing - $@
+	$(_V)$(COMPILE.c) $< -o $@
+
+img-test.o: $(TOPDIR)/common/img-tools/img-test.c
+	$(_W)echo Importing - $@
+	$(_V)$(COMPILE.c) $< -o $@
+
 
 RES = imgtool-res.o
 IMG_BCDEDIT_OBJS = img-bcdedit.o $(RES)
@@ -159,9 +176,6 @@ part.o: CPPFLAGS += $(NTFS_3G_CPPFLAGS)
 fs2.o: CPPFLAGS += $(NTFS_3G_CPPFLAGS)
 cache.o: CPPFLAGS += $(LZ4_CPPFLAGS)
 
-swap-seal.o: CPPFLAGS += $(LIBIMG_CPPFLAGS)
-swap-fsck.o: CPPFLAGS += $(LIBIMG_CPPFLAGS)
-swap-fsck.o: CPPFLAGS += $(LZ4_CPPFLAGS)
 img-rm.o: CPPFLAGS += $(LIBIMG_CPPFLAGS)
 cache.o: CPPFLAGS += $(LIBIMG_CPPFLAGS)
 

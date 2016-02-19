@@ -1707,8 +1707,8 @@ static void nk_ls(struct hive *hdesc, const char *path, int vofs, int type)
 {
   struct nk_key *key;
   int nkofs;
-  struct ex_data ex;
-  struct vex_data vex;
+  struct ex_data ex = {};
+  struct vex_data vex = {};
   int count = 0, countri = 0;
   
 
@@ -2882,7 +2882,7 @@ static void rdel_keys(struct hive *hdesc, char *path, int vofs)
 {
   struct nk_key *key;
   int nkofs;
-  struct ex_data ex;
+  struct ex_data ex = {};
   int count = 0, countri = 0;
   
 
@@ -3480,8 +3480,8 @@ void reghive_close_key(rhkey_t key)
 
 int reghive_query_info_key(rhkey_t key, struct reg_key_info *info)
 {
-    struct vex_data vex;
-    struct ex_data ex;
+    struct vex_data vex = {};
+    struct ex_data ex = {};
     int c, ri, i;
 
     memset(info, 0, sizeof(*info));
@@ -3513,7 +3513,7 @@ int reghive_query_info_key(rhkey_t key, struct reg_key_info *info)
 
 int reghive_enum_key(rhkey_t key, unsigned int index, char *name, size_t nlen)
 {
-    struct ex_data ex;
+    struct ex_data ex = {};
     int c, ri, i;
 
     for(i = ri = c = 0;
@@ -3542,7 +3542,7 @@ int reghive_enum_value(rhkey_t key, unsigned int index,
                         uint8_t *data, size_t *dlen,
                         unsigned int *type)
 {
-    struct vex_data vex;
+    struct vex_data vex = {};
     int c, i;
 
     for(i = c = 0;
@@ -3592,7 +3592,7 @@ int reghive_get_value(rhkey_t key, const char *subkey, const char *val,
                         unsigned int *type)
 {
     int nkofs = key->k_ofs;
-    struct vex_data vex;
+    struct vex_data vex = {};
     int vkofs;
 
     if ( subkey ) {
