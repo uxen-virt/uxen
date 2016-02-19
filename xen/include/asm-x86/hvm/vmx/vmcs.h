@@ -65,7 +65,7 @@ struct vmx_msr_state {
 #define EPT_DEFAULT_MT      MTRR_TYPE_WRBACK
 
 struct vmx_domain {
-    unsigned long apic_access_mfn;
+    void *apic_access_va;
     union {
         struct {
             u64 ept_mt :3,
