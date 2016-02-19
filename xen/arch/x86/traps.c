@@ -189,7 +189,11 @@ static void show_guest_stack(struct vcpu *v, struct cpu_user_regs *regs)
 #endif
         if ( !vcpu )
         {
+#ifndef __UXEN__
             stack = do_page_walk(v, (unsigned long)stack);
+#else  /* __UXEN__ */
+            stack = NULL;
+#endif  /* __UXEN__ */
             if ( (unsigned long)stack < PAGE_SIZE )
             {
                 printk("Inaccessible guest memory.\n");

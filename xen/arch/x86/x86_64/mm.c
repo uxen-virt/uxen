@@ -139,7 +139,6 @@ l2_pgentry_t *virt_to_xen_l2e(unsigned long v)
     BUG_ON(l3e_get_flags(*pl3e) & _PAGE_PSE);
     return l3e_to_l2e(*pl3e) + l2_table_offset(v);
 }
-#endif  /* __UXEN__ */
 
 void *do_page_walk(struct vcpu *v, unsigned long addr)
 {
@@ -152,7 +151,6 @@ void *do_page_walk(struct vcpu *v, unsigned long addr)
     if ( is_hvm_vcpu(v) )
         return NULL;
 
-DEBUG();
     l4t = mfn_to_virt(mfn);
     l4e = l4t[l4_table_offset(addr)];
     mfn = l4e_get_pfn(l4e);
@@ -184,7 +182,6 @@ DEBUG();
     return mfn_to_virt(mfn) + (addr & ~PAGE_MASK);
 }
 
-#ifndef __UXEN__
 void __init pfn_pdx_hole_setup(unsigned long mask)
 {
     unsigned int i, j, bottom_shift = 0, hole_shift = 0;
