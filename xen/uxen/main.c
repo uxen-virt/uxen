@@ -722,7 +722,6 @@ alloc_dom0_vcpu0(void)
     if ( !dom0->vcpu )
         return NULL;
 
-    _uxen_info.ui_dom0_current = (void **)dom0->vcpu;
     for (i = 0; i < dom0->max_vcpus; i++)
 	if (!alloc_vcpu(dom0, i, i))
 	    return NULL;

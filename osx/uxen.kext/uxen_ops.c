@@ -559,7 +559,6 @@ uxen_op_init_free_allocs(void)
 
     if (uxen_info) {
         uxen_pages_clear();
-	uxen_info->ui_dom0_current = NULL;
         if (uxen_info->ui_hvm_io_bitmap) {
             kernel_free(uxen_info->ui_hvm_io_bitmap, UI_HVM_IO_BITMAP_SIZE);
             uxen_info->ui_hvm_io_bitmap = NULL;

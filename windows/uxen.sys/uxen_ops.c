@@ -707,7 +707,6 @@ uxen_op_init_free_allocs(void)
     if (uxen_info) {
         uxen_pages_clear();
 	memcache_free();
-	uxen_info->ui_dom0_current = NULL;
         if (uxen_info->ui_hvm_io_bitmap) {
             if (ui_hvm_io_bitmap_contiguous)
                 kernel_free_contiguous(uxen_info->ui_hvm_io_bitmap,

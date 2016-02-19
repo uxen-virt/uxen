@@ -198,7 +198,6 @@ struct /* __WINPACKED__ */ uxen_info {
     uint32_t ui_map_page_range_offset;
     uint32_t ui_map_page_range_max_nr;
     uxen_pfn_t (__interface_fn *ui_mapped_global_va_pfn)(const void *);
-    void **ui_dom0_current;
     uint64_t (__interface_fn *ui_host_needs_preempt)(
         struct vm_vcpu_info_shared *);
     void (__interface_fn *ui_notify_exception)(struct vm_info_shared *);
