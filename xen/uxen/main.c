@@ -718,9 +718,7 @@ alloc_dom0_vcpu0(void)
     int i;
 
     dom0->max_vcpus = num_present_cpus();
-    dom0->vcpu = xzalloc_array(struct vcpu *, dom0->max_vcpus);
-    if ( !dom0->vcpu )
-        return NULL;
+    dom0->vcpu = dom0->extra_1->vcpu;
 
     for (i = 0; i < dom0->max_vcpus; i++)
 	if (!alloc_vcpu(dom0, i, i))
