@@ -388,9 +388,9 @@ void start_secondary(void *unused)
      */
     spin_debug_disable();
 
-#ifndef __UXEN__
     percpu_traps_init();
 
+#ifndef __UXEN__
     cpu_init();
 #endif  /* __UXEN__ */
 

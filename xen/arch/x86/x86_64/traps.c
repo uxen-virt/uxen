@@ -145,7 +145,6 @@ void show_registers(struct cpu_user_regs *regs)
     printk("CPU:    %d\n", smp_processor_id());
     _show_registers(&fault_regs, fault_crs, context, v);
 
-#ifndef __UXEN__
     if ( this_cpu(ler_msr) && !guest_mode(regs) )
     {
         u64 from, to;
@@ -153,7 +152,6 @@ void show_registers(struct cpu_user_regs *regs)
         rdmsrl(this_cpu(ler_msr) + 1, to);
         printk("ler: %016lx -> %016lx\n", from, to);
     }
-#endif  /* __UXEN__ */
 }
 
 #ifndef __UXEN__
