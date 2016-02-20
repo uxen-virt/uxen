@@ -2367,8 +2367,10 @@ static int vmx_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
                 goto done;
         }
 
+#ifndef __UXEN__
         if ( vmx_read_guest_msr(msr, msr_content) == 0 )
             break;
+#endif  /* __UXEN__ */
 
         if ( is_last_branch_msr(msr) )
         {
@@ -2464,7 +2466,9 @@ void vmx_vlapic_msr_changed(struct vcpu *v)
 
 static int vmx_msr_write_intercept(unsigned int msr, uint64_t msr_content)
 {
+#ifndef __UXEN__
     struct vcpu *v = current;
+#endif  /* __UXEN__ */
     int r;
 
     HVM_DBG_LOG(DBG_LEVEL_1, "ecx=%x, msr_value=0x%"PRIx64,
@@ -2482,6 +2486,7 @@ static int vmx_msr_write_intercept(unsigned int msr, uint64_t msr_content)
         __vmwrite(GUEST_SYSENTER_EIP, msr_content);
         break;
     case MSR_IA32_DEBUGCTLMSR: {
+#ifndef __UXEN__
         int i, rc = 0;
 
         if ( !msr_content || (msr_content & ~3) )
@@ -2509,6 +2514,7 @@ static int vmx_msr_write_intercept(unsigned int msr, uint64_t msr_content)
             __vmwrite(GUEST_IA32_DEBUGCTL_HIGH, msr_content >> 32);
 #endif
         }
+#endif  /* __UXEN__ */
 
         break;
     }
@@ -2536,7 +2542,10 @@ static int vmx_msr_write_intercept(unsigned int msr, uint64_t msr_content)
         switch ( long_mode_do_msr_write(msr, msr_content) )
         {
             case HNDL_unhandled:
-                if ( (vmx_write_guest_msr(msr, msr_content) != 0) &&
+                if (
+#ifndef __UXEN__
+                     (vmx_write_guest_msr(msr, msr_content) != 0) &&
+#endif  /* __UXEN__ */
                      !is_last_branch_msr(msr) ) {
                     if (wrmsr_hypervisor_regs(msr, msr_content) == -1)
                         return X86EMUL_RETRY;

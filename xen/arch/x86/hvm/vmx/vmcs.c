@@ -1233,6 +1233,7 @@ static int construct_vmcs(struct vcpu *v)
     return 0;
 }
 
+#ifndef __UXEN__
 int vmx_read_guest_msr(u32 msr, u64 *val)
 {
     struct vcpu *curr = current;
@@ -1275,7 +1276,6 @@ int vmx_add_guest_msr(u32 msr)
     unsigned int i, msr_count = curr->arch.hvm_vmx.msr_count;
     struct vmx_msr_entry *msr_area = curr->arch.hvm_vmx.msr_area;
 
-DEBUG();
     if ( msr_area == NULL )
     {
         if ( (msr_area = alloc_xenheap_page()) == NULL )
@@ -1308,7 +1308,6 @@ int vmx_add_host_load_msr(u32 msr)
     unsigned int i, msr_count = curr->arch.hvm_vmx.host_msr_count;
     struct vmx_msr_entry *msr_area = curr->arch.hvm_vmx.host_msr_area;
 
-DEBUG();
     if ( msr_area == NULL )
     {
         if ( (msr_area = alloc_xenheap_page()) == NULL )
@@ -1332,6 +1331,7 @@ DEBUG();
 
     return 0;
 }
+#endif  /* __UXEN__ */
 
 int vmx_create_vmcs(struct vcpu *v)
 {
