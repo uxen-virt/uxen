@@ -74,7 +74,7 @@ void show_registers(struct cpu_user_regs *regs)
     enum context context;
     struct vcpu *v = current;
 
-    if ( is_hvm_vcpu(v) && guest_mode(regs) )
+    if ( v && is_hvm_vcpu(v) && guest_mode(regs) )
     {
         struct segment_register sreg;
         context = CTXT_hvm_guest;
@@ -97,7 +97,9 @@ void show_registers(struct cpu_user_regs *regs)
     }
     else
     {
+#ifndef __UXEN__
         if ( !guest_mode(regs) )
+#endif  /* __UXEN__ */
         {
             context = CTXT_hypervisor;
             fault_regs.esp = (unsigned long)&regs->esp;
@@ -108,11 +110,13 @@ void show_registers(struct cpu_user_regs *regs)
             fault_regs.gs = read_segment_register(gs);
             fault_crs[2] = read_cr2();
         }
+#ifndef __UXEN__
         else
         {
             context = CTXT_pv_guest;
             fault_crs[2] = v->vcpu_info->arch.cr2;
         }
+#endif  /* __UXEN__ */
 
         fault_crs[0] = read_cr0();
         fault_crs[3] = read_cr3();

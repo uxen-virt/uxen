@@ -87,7 +87,7 @@ void show_registers(struct cpu_user_regs *regs)
     enum context context;
     struct vcpu *v = current;
 
-    if ( is_hvm_vcpu(v) && guest_mode(regs) )
+    if ( v && is_hvm_vcpu(v) && guest_mode(regs) )
     {
         struct segment_register sreg;
         context = (v->domain == dom0) ? CTXT_hvm_host : CTXT_hvm_guest;
