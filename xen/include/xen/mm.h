@@ -60,6 +60,7 @@ void free_xenheap_pages(void *v, unsigned int order);
 #define alloc_xenheap_page() (alloc_xenheap_pages(0,0))
 #define free_xenheap_page(v) (free_xenheap_pages(v,0))
 #else  /* __UXEN__ */
+struct page_info *alloc_host_page(int is_xen_page);
 #define alloc_xenheap_pages(order, memflags)    \
     (alloc_host_pages(1 << (order), memflags))
 #define free_xenheap_pages(v, order) (free_host_pages(v, 1 << (order)))

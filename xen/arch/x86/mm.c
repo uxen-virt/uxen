@@ -344,6 +344,7 @@ void __init arch_init_memory(void)
 #ifndef __UXEN__
     unsigned long i, pfn, rstart_pfn, rend_pfn, iostart_pfn, ioend_pfn;
 #endif  /* __UXEN__ */
+    struct page_info *pg;
     void *va;
 
     /* Basic guest-accessible flags: PRESENT, R/W, USER, A/D, AVAIL[0,1,2] */
@@ -442,10 +443,13 @@ void __init arch_init_memory(void)
     mem_sharing_init();
 #endif  /* __UXEN__ */
 
-    va = alloc_xenheap_page();
+    pg = alloc_host_page(1);
+    BUG_ON(!pg);
+    shared_zero_page = _mfn(page_to_mfn(pg));
+    va = map_xen_page(mfn_x(shared_zero_page));
     BUG_ON(!va);
     clear_page(va);
-    shared_zero_page = _mfn(virt_to_mfn(va));
+    unmap_xen_page(va);
 }
 
 #ifndef __UXEN__

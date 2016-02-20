@@ -1248,8 +1248,8 @@ atomic_t hidden_pages_allocated = ATOMIC_INIT(0);
 atomic_t hidden_pages_available = ATOMIC_INIT(0);
 #endif
 
-static struct page_info *
-alloc_host_page(void)
+struct page_info *
+alloc_host_page(int is_xen_page)
 {
     struct page_info *pg;
     int cpu = smp_processor_id();
@@ -1271,6 +1271,15 @@ alloc_host_page(void)
 
     /* Initialise fields which have other uses for free pages. */
     page_set_owner(pg, NULL);
+
+    if (is_xen_page) {
+        unsigned long flags;
+
+        pg->count_info |= PGC_xen_page;
+        spin_lock_irqsave(&host_page_list_lock, flags);
+        page_list_add_tail(pg, &host_page_list);
+        spin_unlock_irqrestore(&host_page_list_lock, flags);
+    }
 
     return pg;
 }
@@ -1491,14 +1500,9 @@ alloc_host_pages(unsigned int pages, unsigned int memflags)
     }
 
     for ( i = 0; i < pages; i++ ) {
-        pg = alloc_host_page();
+        pg = alloc_host_page(1);
         if (pg == NULL)
             break;
-        pg->count_info |= PGC_xen_page;
-        pg->domain = DOMID_ANON;
-        spin_lock_irqsave(&host_page_list_lock, flags);
-        page_list_add_tail(pg, &host_page_list);
-        spin_unlock_irqrestore(&host_page_list_lock, flags);
         pfns[i] = page_to_mfn(pg);
 #ifdef UXEN_ALLOC_DEBUG
         printk("alloc host pages %d/%d: %x\n", i, pages, pfns[i]);
@@ -1738,7 +1742,7 @@ struct page_info *alloc_domheap_pages(
     }
     if (!pg)
 #endif
-        pg = alloc_host_page();
+        pg = alloc_host_page(0);
     if (!pg)
         return NULL;
 
