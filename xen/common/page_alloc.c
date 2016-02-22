@@ -1567,8 +1567,7 @@ void free_host_pages(void *v, unsigned int pages)
 #endif  /* UXEN_ALLOC_DEBUG */
 
     if (pages > 1) {
-        BUG_ON(((unsigned long)v & (PAGE_SIZE - 1)) !=
-               _uxen_info.ui_map_page_range_offset);
+        BUG_ON(((unsigned long)v & (PAGE_SIZE - 1)));
 
         ret = UI_HOST_CALL(ui_unmap_page_range, current->vm_vcpu_info_shared,
                            v, pages, pfns);

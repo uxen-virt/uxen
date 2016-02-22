@@ -2000,7 +2000,6 @@ uxen_mem_map_page_range(struct vm_vcpu_info_shared *vcis, uint64_t n,
     }
 #endif  /* DEBUG_POC_MAP_PAGE_RANGE_RETRY */
 
-    ASSERT(uxen_info->ui_map_page_range_offset == 0);
     return kernel_mmap_pages((int)n, mfn);
 }
 
@@ -2010,7 +2009,6 @@ uxen_mem_unmap_page_range(struct vm_vcpu_info_shared *vcis, const void *va,
 {
     uint64_t ret;
 
-    ASSERT(uxen_info->ui_map_page_range_offset == 0);
     ret = kernel_munmap_pages(va, (int)n, mfn);
 #ifdef DEBUG_PAGE_ALLOC
     {

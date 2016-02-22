@@ -1053,7 +1053,6 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
     uxen_info->ui_pdata_end = &uxen_pdata_end;
 #endif
 
-    uxen_info->ui_map_page_range_offset = 0;
     uxen_info->ui_map_page_range_max_nr = map_page_range_max_nr;
 
     mapcache_size = uxen_info->ui_mapcache_size;

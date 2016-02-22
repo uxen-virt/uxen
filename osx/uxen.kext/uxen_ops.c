@@ -824,7 +824,6 @@ uxen_op_init(struct fd_assoc *fda)
 
     map_pfn_array_pool_fill(0);
 
-    uxen_info->ui_map_page_range_offset = 0;
     uxen_info->ui_map_page_range_max_nr = UXEN_MAP_PAGE_RANGE_MAX;
 
     idle_free_lock = lck_spin_alloc_init(uxen_lck_grp, LCK_ATTR_NULL);

@@ -44,8 +44,7 @@
 #define REAL_FLI        (MAX_FLI - FLI_OFFSET)
 #define MIN_BLOCK_SIZE  (sizeof(struct free_ptr))
 #define BHDR_OVERHEAD   (sizeof(struct bhdr) - MIN_BLOCK_SIZE)
-#define BHDR_WHOLE_PAGE_OVERHEAD                                \
-    (BHDR_OVERHEAD + _uxen_info.ui_map_page_range_offset)
+#define BHDR_WHOLE_PAGE_OVERHEAD (BHDR_OVERHEAD)
 
 #define PTR_MASK        (sizeof(void *) - 1)
 #define BLOCK_SIZE_MASK (0xFFFFFFFF - PTR_MASK)
@@ -633,8 +632,7 @@ void xfree(void *p)
                 break;
         }
 #else   /* __UXEN__ */
-        BUG_ON(((unsigned long)b & (PAGE_SIZE - 1)) !=
-               _uxen_info.ui_map_page_range_offset);
+        BUG_ON(((unsigned long)b & (PAGE_SIZE - 1)));
         free_xenheap_pages((void *)b, get_order_from_bytes(b->size));
 #endif  /* __UXEN__ */
     }

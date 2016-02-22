@@ -195,7 +195,6 @@ struct /* __WINPACKED__ */ uxen_info {
                                               uint64_t, uxen_pfn_t *);
     uint64_t (__interface_fn *ui_unmap_page_range)(
         struct vm_vcpu_info_shared *, const void *, uint64_t, uxen_pfn_t *);
-    uint32_t ui_map_page_range_offset;
     uint32_t ui_map_page_range_max_nr;
     uxen_pfn_t (__interface_fn *ui_mapped_global_va_pfn)(const void *);
     uint64_t (__interface_fn *ui_host_needs_preempt)(
