@@ -263,7 +263,8 @@ v4v_ring_map_page(struct v4v_ring_info *ring_info, int i, uint8_t **page)
 #endif
     }
 
-    *page = ring_info->mfn_mapping[i];
+    if (page)
+        *page = ring_info->mfn_mapping[i];
     return 0;
 }
 
@@ -1000,8 +1001,40 @@ v4v_fill_ring_datas(struct domain *d, int nent,
 /**************************************** ring ************************/
 
 static int
+v4v_find_ring_mfn(struct domain *d, v4v_pfn_t pfn, mfn_t *mfn)
+{
+    int ret = 0;
+
+    if (mfns_dont_belong_xen(d))
+        *mfn = _mfn(pfn);    /* XXX access check / valid check ? */
+    else {
+        p2m_type_t t;
+
+        *mfn = get_gfn_unshare(d, pfn, &t);
+        if (mfn_retry(*mfn)) {
+            put_gfn(d, pfn);
+#ifdef V4V_DEBUG
+            printk(XENLOG_ERR "%s: vm%u retry gpfn %"PRI_xen_pfn
+                   " ring %p seq %d\n", __FUNCTION__, d->domain_id,
+                   pfn, ring_info, i);
+#endif
+            ret = -ECONTINUATION;
+        }
+
+        if (!mfn_valid_page(mfn_x(*mfn)) ||
+            !get_page(mfn_to_page(mfn_x(*mfn)), d)) {
+            put_gfn(d, pfn);
+            ret = -EINVAL;
+        }
+    }
+
+    return ret;
+}
+
+static int
 v4v_find_ring_mfns(struct domain *d, struct v4v_ring_info *ring_info,
-                   XEN_GUEST_HANDLE(v4v_pfn_list_t) pfn_list_hnd)
+                   XEN_GUEST_HANDLE(v4v_pfn_list_t) pfn_list_hnd,
+                   uint32_t len)
 {
     XEN_GUEST_HANDLE(v4v_pfn_t) pfn_hnd;
     XEN_GUEST_HANDLE(uint8_t) slop_hnd;
@@ -1017,7 +1050,7 @@ v4v_find_ring_mfns(struct domain *d, struct v4v_ring_info *ring_info,
     if (pfn_list.magic != V4V_PFN_LIST_MAGIC)
         return -EINVAL;
 
-    if ((pfn_list.npage << PAGE_SHIFT) < ring_info->len)
+    if ((pfn_list.npage << PAGE_SHIFT) < len)
         return -EINVAL;
 
     slop_hnd = guest_handle_cast(pfn_list_hnd, uint8_t);
@@ -1027,17 +1060,40 @@ v4v_find_ring_mfns(struct domain *d, struct v4v_ring_info *ring_info,
     if (pfn_list.npage > (V4V_MAX_RING_SIZE >> PAGE_SHIFT))
         return -EINVAL;
 
-    if (ring_info->mfns && (ring_info->npage != pfn_list.npage ||
-                            ring_info->npage == ring_info->nmfns)) {
-        /* Ring already existed. Unless the ring was partially
-         * populated (nmfns != npages because this call failed), remove
-         * the MFN's from list and then add the new list. */
-        printk(XENLOG_INFO "%s: vm%u re-registering existing v4v ring"
-               " (vm%u:%x vm%d), clearing MFN list\n", __FUNCTION__,
-               current->domain->domain_id, ring_info->id.addr.domain,
-               ring_info->id.addr.port, ring_info->id.partner);
-        v4v_ring_remove_mfns(ring_info, !mfns_dont_belong_xen(current->domain));
-        ASSERT(!ring_info->mfns);
+    if (ring_info->mfns) {
+        /* Ring already existed.  Check if it's the same ring,
+         * i.e. same number of pages and all translated gpfns still
+         * translating to the same mfns */
+        if (ring_info->npage != pfn_list.npage)
+            i = ring_info->nmfns + 1; /* force re-reg */
+        else {
+            for (i = 0; i < ring_info->nmfns; i++) {
+                v4v_pfn_t pfn;
+
+                ret = copy_from_guest_offset_errno(&pfn, pfn_hnd, i, 1);
+                if (ret)
+                    break;
+
+                ret = v4v_find_ring_mfn(d, pfn, &mfn);
+                if (ret)
+                    break;
+
+                if (!mfns_dont_belong_xen(d))
+                    put_page(mfn_to_page(mfn_x(mfn)));
+
+                if (mfn_x(mfn) != mfn_x(ring_info->mfns[i]))
+                    break;
+            }
+        }
+        if (i != ring_info->nmfns) {
+            printk(XENLOG_INFO "%s: vm%u re-registering existing v4v ring"
+                   " (vm%u:%x vm%d), clearing MFN list\n", __FUNCTION__,
+                   current->domain->domain_id, ring_info->id.addr.domain,
+                   ring_info->id.addr.port, ring_info->id.partner);
+            v4v_ring_remove_mfns(ring_info,
+                                 !mfns_dont_belong_xen(current->domain));
+            ASSERT(!ring_info->mfns);
+        }
     }
 
     if (!ring_info->mfns) {
@@ -1060,6 +1116,9 @@ v4v_find_ring_mfns(struct domain *d, struct v4v_ring_info *ring_info,
     }
     ASSERT(ring_info->npage == pfn_list.npage);
 
+    if (ring_info->nmfns == ring_info->npage)
+        return 0;
+
     for (i = ring_info->nmfns; i < ring_info->npage; i++) {
         v4v_pfn_t pfn;
 
@@ -1067,32 +1126,15 @@ v4v_find_ring_mfns(struct domain *d, struct v4v_ring_info *ring_info,
         if (ret)
             break;
 
-        if (mfns_dont_belong_xen(d))
-            mfn = _mfn(pfn);    /* XXX access check / valid check ? */
-        else {
-            p2m_type_t t;
-
-            mfn = get_gfn_unshare(d, pfn, &t);
-            if (mfn_retry(mfn)) {
-                put_gfn(d, pfn);
-#ifdef V4V_DEBUG
-                printk(XENLOG_ERR "%s: vm%u retry gpfn %"PRI_xen_pfn
-                       " ring %p seq %d\n", __FUNCTION__, d->domain_id,
-                       pfn, ring_info, i);
-#endif
-                ret = -ECONTINUATION;
-                break;
-            }
-
-            if (!mfn_valid_page(mfn_x(mfn)) ||
-                !get_page(mfn_to_page(mfn_x(mfn)), d)) {
-                put_gfn(d, pfn);
+        ret = v4v_find_ring_mfn(d, pfn, &mfn);
+        if (ret) {
+            if (ret == -EINVAL)
                 printk(XENLOG_ERR "%s: vm%u passed invalid gpfn %"PRI_xen_pfn
-                       " ring %p seq %d\n", __FUNCTION__, d->domain_id,
-                       pfn, ring_info, i);
-                ret = -EINVAL;
-                break;
-            }
+                       " ring (vm%u:%x vm%d) %p seq %d of %d\n", __FUNCTION__,
+                       d->domain_id, pfn, ring_info->id.addr.domain,
+                       ring_info->id.addr.port, ring_info->id.partner,
+                       ring_info, i, ring_info->npage);
+            break;
         }
 
         ring_info->mfns[i] = mfn;
@@ -1187,6 +1229,13 @@ v4v_ring_remove_mfns(struct v4v_ring_info *ring_info, int put_pages)
         return;
     ASSERT(ring_info->mfn_mapping);
 
+#ifdef V4V_DEBUG
+    printk(XENLOG_ERR "%s: vm%u:%x ring (vm%u:%x vm%d) %p from %S\n",
+           __FUNCTION__, current->domain->domain_id, current->vcpu_id,
+           ring_info->id.addr.domain, ring_info->id.addr.port,
+           ring_info->id.partner, ring_info,
+           (printk_symbol)__builtin_return_address(0));
+#endif
     v4v_ring_unmap(ring_info);
 
     if (put_pages) {
@@ -1468,15 +1517,20 @@ v4v_ring_add(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd,
             spin_lock(&ring_info->lock);
         }
 
-        ring_info->len = ring.len;
         ring_info->tx_ptr = ring.tx_ptr;
         ring_info->ring = ring_hnd;
 
-        ret = v4v_find_ring_mfns(d, ring_info, pfn_list_hnd);
+        ret = v4v_find_ring_mfns(d, ring_info, pfn_list_hnd, ring.len);
+        if (!ret)
+            ret = v4v_ring_map_page(ring_info, 0, NULL);
+        if (!ret)
+            ring_info->len = ring.len;
+
         spin_unlock(&ring_info->lock);
     } while (0);
 
-    v4v_notify_check_pending(d);
+    if (!ret)
+        v4v_notify_check_pending(d);
 
     read_unlock(&v4v_lock);
 
