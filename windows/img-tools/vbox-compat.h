@@ -34,9 +34,12 @@ typedef struct VDTYPE {
 #define Assert(v) assert(v)
 #define AssertFailed() assert(0)
 
-#define RTPrintf(...) fprintf(logfile, __VA_ARGS__)
-#define printf(...) fprintf(logfile, __VA_ARGS__)
+/* See disklib_init in sys.c for an explaination of the fflush here. */
 extern FILE *logfile;
+#define RTPrintf(...) \
+    do {fprintf(logfile, __VA_ARGS__); fflush(logfile);} while (0)
+#define printf(...) \
+    do {fprintf(logfile, __VA_ARGS__); fflush(logfile);} while (0)
 #define error_printf_for_people_who_dont_know_how_to_use_va_args(...) \
     do {fprintf(logfile, __VA_ARGS__); fflush(logfile);} while(0)
 #define Log(l) do {} while(0)

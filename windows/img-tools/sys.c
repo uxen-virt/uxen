@@ -130,7 +130,17 @@ disklib_init(void) {
         *stderr = *logfile;
     }
 
-    setvbuf(logfile, NULL, _IOLBF, 1024);
+    /* Windows doesn't support line buffered output and the CRT
+     * appears to always treat stderr as unbuffered, regardless of
+     * the argument to setvbuf.
+     *
+     * If _IONBUF is set on logfile then each individual byte is
+     * flushed which is slow, especially with debug logging and
+     * tracing.
+     *
+     * Due to it being desirable to have flushed logging prior to any
+     * crash, printf is wrapped in vbox-compat.h to call fflush on
+     * logfile after each invocation. */
     LoadLibraryA("uxen-backtrace.dll");
     banner();
 }
