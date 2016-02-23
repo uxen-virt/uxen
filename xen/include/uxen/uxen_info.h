@@ -78,7 +78,6 @@
 #define UI_HOST_CALL_ui_notify_vram                 UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_signal_event                UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_check_ioreq                 UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_memcache_check              UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_memcache_dm_enter           UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_memcache_dm_clear           UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_map_mfn                     UI_HOST_CALL_SAVE_XMM
@@ -204,8 +203,7 @@ struct /* __WINPACKED__ */ uxen_info {
     uint64_t (__interface_fn *ui_signal_event)(struct vm_vcpu_info_shared *,
                                                void *, void * volatile *);
     uint64_t (__interface_fn *ui_check_ioreq)(struct vm_vcpu_info_shared *);
-    uint32_t ui_memcache_needs_check;
-    uint64_t (__interface_fn *ui_memcache_check)(void);
+    uint32_t ui_pagemap_needs_check;
     uint64_t (__interface_fn *ui_memcache_dm_enter)(struct vm_info_shared *,
                                                     xen_pfn_t, xen_pfn_t);
     uint64_t (__interface_fn *ui_memcache_dm_clear)(struct vm_info_shared *,
@@ -269,7 +267,7 @@ enum {
     VCI_RUN_MODE_PREEMPT,
     VCI_RUN_MODE_HALT,
     VCI_RUN_MODE_YIELD,
-    VCI_RUN_MODE_MEMCACHE_CHECK,
+    VCI_RUN_MODE_PAGEMAP_CHECK,
     VCI_RUN_MODE_FREEPAGE_CHECK,
     VCI_RUN_MODE_MAP_PAGE_REQUEST,
     VCI_RUN_MODE_SHUTDOWN,

@@ -85,7 +85,7 @@ uint64_t __cdecl
 map_mfn(uintptr_t va, xen_pfn_t mfn)
 {
 
-    return set_pte(va, mfn == ~0ULL ? mfn :
+    return set_pte(va, (mfn == ~0ULL || mfn == 0ULL) ? mfn :
                    (((uint64_t)mfn << PAGE_SHIFT) | map_mfn_pte_flags));
 }
 

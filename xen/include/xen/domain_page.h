@@ -178,7 +178,6 @@ uxen_map_page_global(unsigned long mfn)
 static inline void
 uxen_unmap_page_global(const void *va)
 {
-#ifdef __i386__
 #ifdef DEBUG_MAPCACHE
     unsigned long _mfn;
 
@@ -188,7 +187,6 @@ uxen_unmap_page_global(const void *va)
 #else  /* DEBUG_MAPCACHE */
     UI_HOST_CALL(ui_unmap_page_global_va, va);
 #endif  /* DEBUG_MAPCACHE */
-#endif
 }
 
 static inline void *

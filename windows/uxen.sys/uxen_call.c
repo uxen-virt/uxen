@@ -25,7 +25,7 @@
 #define UXEN_DEFINE_SYMBOLS_PROTO
 #include <uxen/uxen_link.h>
 
-#include "memcache.h"
+#include "pagemap.h"
 
 #if defined(_WIN64) 
 typedef uint64_t mfn_t;
@@ -41,8 +41,9 @@ uxen_hypercall(struct uxen_hypercall_desc *uhd, int snoop_mode,
     intptr_t ret = 0;
 
     while (/* CONSTCOND */ 1) {
-        if (KeGetCurrentIrql() < DISPATCH_LEVEL) 
-            memcache_ensure_space();
+        if (uxen_info->ui_pagemap_needs_check &&
+            KeGetCurrentIrql() < DISPATCH_LEVEL)
+            pagemap_check_space();
 
         uxen_exec_dom0_start();
         uxen_call(ret =, -EINVAL, _uxen_snoop_hypercall(uhd, snoop_mode),

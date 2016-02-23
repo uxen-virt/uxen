@@ -20,7 +20,7 @@
 #define UXEN_DEFINE_SYMBOLS_PROTO
 #include <uxen/uxen_link.h>
 
-#include "memcache.h"
+#include "pagemap.h"
 
 static ULONG build_number = 0;
 
@@ -706,7 +706,7 @@ uxen_op_init_free_allocs(void)
 
     if (uxen_info) {
         uxen_pages_clear();
-	memcache_free();
+	pagemap_free();
         if (uxen_info->ui_hvm_io_bitmap) {
             if (ui_hvm_io_bitmap_contiguous)
                 kernel_free_contiguous(uxen_info->ui_hvm_io_bitmap,
@@ -821,7 +821,7 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
         goto out;
     }
 
-    /* early bail out if PAE is disabled to avoid crash in memcache_init */
+    /* early bail out if PAE is disabled to avoid crash in pagemap_init */
 
     /* this fails with an internal compiler error (C1001) on 32-bit, FRE build
        only, for reasons that I can't figure out.  Looks like a compiler bug.
@@ -923,8 +923,7 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
     uxen_info->ui_signal_event = uxen_op_signal_event;
     uxen_info->ui_check_ioreq = uxen_op_check_ioreq;
 
-    uxen_info->ui_memcache_needs_check = 0;
-    uxen_info->ui_memcache_check = uxen_memcache_check;
+    uxen_info->ui_pagemap_needs_check = 0;
 
     set_map_mfn_pte_flags();
     uxen_info->ui_map_mfn = map_mfn;
@@ -1085,9 +1084,9 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
 
     KeInitializeEvent(&dummy_event, NotificationEvent, TRUE);
 
-    ret = memcache_init();
+    ret = pagemap_init(max_pfn);
     if (ret != 0) {
-        fail_msg("memcache_init() failed");
+        fail_msg("pagemap_init() failed");
         goto out;
     }
 
@@ -1896,8 +1895,8 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
         case VCI_RUN_MODE_SHUTDOWN:
             ret = 0;
             goto out;
-        case VCI_RUN_MODE_MEMCACHE_CHECK:
-            memcache_ensure_space();
+        case VCI_RUN_MODE_PAGEMAP_CHECK:
+            pagemap_check_space();
             break;
         case VCI_RUN_MODE_FREEPAGE_CHECK:
             /* nothing */

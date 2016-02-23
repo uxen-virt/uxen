@@ -333,7 +333,7 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
         clear_bit(_VPF_yield, &v->pause_flags);
         /* fall through */
     case VCI_RUN_MODE_PREEMPT:
-    case VCI_RUN_MODE_MEMCACHE_CHECK:
+    case VCI_RUN_MODE_PAGEMAP_CHECK:
     case VCI_RUN_MODE_FREEPAGE_CHECK:
     case VCI_RUN_MODE_MAP_PAGE_REQUEST:
         uxen_set_current(v);
@@ -373,10 +373,8 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
             ret = 0;
             goto out_reset_current;
         }
-        if (check_memcache_needed() &&
-            uxen_info->ui_memcache_check &&
-            UI_HOST_CALL(ui_memcache_check)) {
-            vci->vci_run_mode = VCI_RUN_MODE_MEMCACHE_CHECK;
+        if (check_pagemap_needed()) {
+            vci->vci_run_mode = VCI_RUN_MODE_PAGEMAP_CHECK;
             ret = 0;
             goto out_reset_current;
         }

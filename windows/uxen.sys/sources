@@ -88,8 +88,8 @@ SOURCES= \
   uxen_logging.c \
   uxen_mem.c \
   uxen_ops.c \
-  memcache.c \
   memcache-dm.c \
+  pagemap.c \
   rbtree.c \
   v4v.c \
   uxen.rc

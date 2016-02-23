@@ -9,7 +9,6 @@
  */
 
 #include "uxen.h"
-#include "memcache.h"
 
 #include <stddef.h>
 
@@ -20,6 +19,8 @@
 
 #define UXEN_DEFINE_SYMBOLS_PROTO
 #include <uxen/uxen_link.h>
+
+#include "pagemap.h"
 
 static KSPIN_LOCK map_page_range_lock;
 static MDL *map_page_range_mdl = NULL;
@@ -108,7 +109,7 @@ uint64_t __cdecl
 map_mfn(uintptr_t va, xen_pfn_t mfn)
 {
 
-    return set_pte(va, mfn == ~0ULL ? mfn :
+    return set_pte(va, (mfn == ~0ULL || mfn == 0ULL) ? mfn :
                    (((uint64_t)mfn << PAGE_SHIFT) | map_mfn_pte_flags));
 }
 
@@ -973,8 +974,6 @@ idle_free_free_list(void)
     }
     idle_free_count -= n;
     KeReleaseSpinLock(&idle_free_lock, old_irql);
-
-    memcache_clear_batch(n, pfn_list);
 
     idle_free_mfns_mdl->Size = sizeof(MDL) + sizeof(PFN_NUMBER) * n;
     idle_free_mfns_mdl->ByteCount = n << PAGE_SHIFT;
@@ -1931,18 +1930,11 @@ uxen_mem_map_page(xen_pfn_t mfn)
     DASSERT(mfn >= 0x100000 || pinfotable[mfn].allocated);
 #endif  /* DEBUG_PAGE_ALLOC */
 
-#ifdef MEMCACHE_MAP_FULL
-    /* non-MEMCACHE_MAP_FULL memcache_lookup takes memcache_lock, so
-     * might as well call memcache_enter right away */
-    va = memcache_lookup((mc_mfn_t)mfn);
-    if (va)
-	return va;
-#endif
-
-    va = memcache_enter((mc_mfn_t)mfn);
+    va = pagemap_map_page(mfn);
 #ifdef DBG
     if (!va)
-        dprintk("%s: memcache_enter failed for mfn %x\n", __FUNCTION__, mfn);
+        dprintk("%s: pagemap_map_page failed for mfn %x\n",
+                __FUNCTION__, mfn);
 #endif
     return va;
 }
@@ -1951,25 +1943,7 @@ uint64_t __cdecl
 uxen_mem_unmap_page_va(const void *va)
 {
 
-#ifdef MEMCACHE_MAP_FULL
-    return uxen_mem_mapped_va_pfn(va);
-#else
-    mc_mfn_t mfn;
-
-    mfn = memcache_get_mfn(va);
-#ifdef DBG
-    if (mfn != uxen_mem_mapped_va_pfn(va)) {
-        dprintk("%s: mfn mismatch for va %p: %x != %x\n", __FUNCTION__,
-                va, mfn, uxen_mem_mapped_va_pfn(va));
-        mfn = uxen_mem_mapped_va_pfn(va);
-    }
-#endif  /* DBG */
-#ifdef DEBUG_PAGE_ALLOC
-    DASSERT(mfn >= 0x100000 || pinfotable[mfn].allocated);
-#endif  /* DEBUG_PAGE_ALLOC */
-    memcache_entry_put((mc_mfn_t)mfn);
-    return mfn;
-#endif
+    return pagemap_unmap_page_va(va);
 }
 
 void * __cdecl

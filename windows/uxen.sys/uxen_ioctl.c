@@ -19,8 +19,6 @@
 #define UXEN_DEFINE_SYMBOLS_PROTO
 #include <uxen/uxen_link.h>
 
-#include "memcache.h"
-
 #if 0
 #define IOCTL_TRACE(fmt, ...) dprintk(fmt, __VA_ARGS__)
 #else
