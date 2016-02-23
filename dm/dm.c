@@ -314,6 +314,10 @@ main(int argc, char **argv)
         monitor_init(NULL, 0);
 #endif  /* MONITOR */
 
+#ifdef _WIN32
+    SetProcessShutdownParameters(process_shutdown_priority, 0);
+#endif
+
     xc_handle = xc_interface_open(0, 0, 0, dm_path);
     if (xc_handle == NULL)
         errx(1, "xc_interface_open");
