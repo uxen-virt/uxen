@@ -3933,6 +3933,7 @@ int main(int argc, char **argv)
     }
     if (partition != 1) {
         shallow_allowed = 0;
+        skip_usn_phase = 1; /* Implied by not shallowing */
     }
     if (!disk_open(arg_swap_file, 1, &disk, 0, partition)) {
         printf("Unable to open disk:partition [%s:%d]\n",
@@ -3949,7 +3950,7 @@ int main(int argc, char **argv)
 
     USN start_usn = 0ULL;
     HANDLE drive = INVALID_HANDLE_VALUE;
-    if (shallow_allowed) {
+    if (shallow_allowed && !skip_usn_phase) {
         wchar_t unc_systemroot[MAX_PATH_LEN];
         path_join(unc_systemroot, L"\\\\?\\", systemroot);
         drive = CreateFileW(
@@ -4130,7 +4131,7 @@ int main(int argc, char **argv)
         fread(&ch, 1, 1, stdin);
     }
 
-    for (i = nchanged = 0; i < num_retries; ++i) {
+    for (i = nchanged = 0; !skip_usn_phase && i < num_retries; ++i) {
         USN end_usn;
         uint64_t journal;
 
@@ -4157,10 +4158,11 @@ int main(int argc, char **argv)
          * repeated retries we give up and just copy it as-is below */
         printf("Failed to successfully copy %d files after %d attempts\n", nchanged, i);
     }
-    if (nchanged > 0 || num_retries == 0) {
+    if (nchanged > 0 || num_retries == 0 || skip_usn_phase) {
         /* Since the usn_phase will have deleted any changed file from the image
          * we need to do another "best-effort" copy just to put something in
          * there. Also need a copy if we were told not to do any retries at all
+         * or if we skipped the retry logic entirely due to SKIP_USN_PHASE.
          */
         man_sort_by_offset_link_action(&man_out);
         r = copy_phase(&disk, &man_out, arg_out_manifest != NULL, num_retries);
