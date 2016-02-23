@@ -16,7 +16,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -723,7 +723,11 @@ void vboxClipboardWriteData (VBOXCLIPBOARDCLIENTDATA *pClient, void *pv, uint32_
     /*
      * The guest returns data that was requested in the WM_RENDERFORMAT handler.
      */
-    Assert(pClient->data.pv == NULL && pClient->data.cb == 0 && pClient->data.u32Format == 0);
+    if (!(pClient->data.pv == NULL && pClient->data.cb == 0 &&
+          pClient->data.u32Format == 0)) {
+        LogRel(("clipboard: unexpected write data request\n"));
+        return;
+    }
 
     vboxClipboardDump(pv, cb, u32Format);
 
