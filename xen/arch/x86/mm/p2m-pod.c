@@ -1902,7 +1902,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             /* on read access -- map page pod */
             pod_p2mt = p2m_populate_on_demand;
             if (d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] &
-                HVM_PARAM_CLONE_DECOMPRESSED_shared) {
+                HVM_PARAM_CLONE_DECOMPRESSED_shared && !d->clone_of->is_dying) {
                 if (!smfn_from_clone)
                     atomic_inc(&d->tmpl_shared_pages);
                 page_owner = d->clone_of;
@@ -1917,9 +1917,20 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                 atomic_dec(&d->tmpl_shared_pages);
             page_owner = d;
         }
+      redo_decompress:
         if (!p2m_pod_decompress_page(
                 d->clone_of ? p2m_get_hostp2m(d->clone_of) : p2m, smfn, &mfn,
                 page_owner, p2m_is_pod(pod_p2mt))) {
+            if (page_owner == d->clone_of && d->clone_of->is_dying) {
+                /* template vm was destroyed between the test above
+                 * and the decompress, redo decompress without
+                 * sharing */
+                gdprintk(XENLOG_INFO, "template vm%u died, decompressing page "
+                         "privately.\n", d->clone_of->domain_id);
+                atomic_dec(&d->tmpl_shared_pages);
+                page_owner = d;
+                goto redo_decompress;
+            }
             domain_crash(d);
             goto out_fail;
         }
