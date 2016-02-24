@@ -288,8 +288,10 @@ void vcpu_restore_fpu_lazy(struct vcpu *v)
     cpu_irq_save(flags);
     clear_cr0_ts();
 
-    if ( v->fpu_dirtied )
+    if (v->fpu_dirtied) {
+        cpu_irq_restore(flags);
         return;
+    }
 
     if ( v->fpu_initialised ) {
         if ( xsave_enabled(v) )
