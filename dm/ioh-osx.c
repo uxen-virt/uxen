@@ -354,15 +354,14 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
                     events |= POLLOUT | POLLERR;
                 }
             }
-            if (events) {
-                if (!ioh->object_events)
-                    ioh_add_wait_fd(ioh->fd, events, ioh_object_signalled,
-                                    ioh, w);
-            } else {
+            if (events != ioh->object_events) {
                 if (ioh->object_events)
                     ioh_del_wait_fd(ioh->fd, w);
+                if (events)
+                    ioh_add_wait_fd(ioh->fd, events, ioh_object_signalled,
+                                    ioh, w);
+                ioh->object_events = events;
             }
-            ioh->object_events = events;
 #endif  /* CONFIG_NETEVENT */
         }
         assert(!iohq->wait_queue);
