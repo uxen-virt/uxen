@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -75,8 +75,9 @@ critical_section_init(critical_section *cs)
 
     ret = pthread_mutex_init(cs, &mta_recursive);
     if (ret) {
-        errno = ret;
-        err(1, "%s: pthread_mutex_init failed", __FUNCTION__);
+        debug_printf("%s: pthread_mutex_init failed: %s", __FUNCTION__,
+                     strerror(ret));
+        abort();
     }
 }
 
@@ -87,8 +88,9 @@ critical_section_free(critical_section *cs)
 
     ret = pthread_mutex_destroy(cs);
     if (ret) {
-        errno = ret;
-        err(1, "%s: pthread_mutex_destroy failed", __FUNCTION__);
+        debug_printf( "%s: pthread_mutex_destroy failed: %s", __FUNCTION__,
+                     strerror(ret));
+        abort();
     }
 }
 
@@ -99,8 +101,9 @@ critical_section_enter(critical_section *cs)
 
     ret = pthread_mutex_lock(cs);
     if (ret) {
-        errno = ret;
-        err(1, "%s: pthread_mutex_lock failed", __FUNCTION__);
+        debug_printf( "%s: pthread_mutex_lock failed: %s", __FUNCTION__,
+                     strerror(ret));
+        abort();
     }
 }
 
@@ -111,8 +114,9 @@ critical_section_leave(critical_section *cs)
 
     ret = pthread_mutex_unlock(cs);
     if (ret) {
-        errno = ret;
-        err(1, "%s: pthread_mutex_unlock failed", __FUNCTION__);
+        debug_printf( "%s: pthread_mutex_unlock failed: %s", __FUNCTION__,
+                     strerror(ret));
+        abort();
     }
 }
 
