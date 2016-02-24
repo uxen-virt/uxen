@@ -323,7 +323,7 @@ v4v_update_tx_ptr(struct v4v_ring_info *ring_info, uint32_t tx_ptr)
     if (ret)
         return ret;
 
-    p = (uint32_t *)(dst + offsetof(v4v_ring_t, tx_ptr));
+    p = (volatile uint32_t *)(dst + offsetof(v4v_ring_t, tx_ptr));
     *p = tx_ptr;
 
     return 0;
@@ -439,24 +439,25 @@ v4v_memcpy_to_guest_ring_from_guest(struct v4v_ring_info *ring_info,
 
 /*caller must have L3*/
 static int
-v4v_ringbuf_get_rx_ptr(struct domain *d, struct v4v_ring_info *ring_info,
-                       uint32_t *rx_ptr)
+v4v_ringbuf_get_rx_ptr(struct v4v_ring_info *ring_info, uint32_t *rx_ptr)
 {
-    v4v_ring_t *ringp;
+    uint8_t *src;
+    volatile uint32_t *p;
     int ret;
 
     if (!ring_info->nmfns || ring_info->nmfns < ring_info->npage)
         return -EINVAL;
 
-    ret = v4v_ring_map_page(ring_info, 0, (uint8_t **)&ringp);
+    ret = v4v_ring_map_page(ring_info, 0, &src);
 #ifdef V4V_DEBUG
     printk(XENLOG_ERR "%s: mapped %"PRI_mfn" to %p\n", __FUNCTION__,
-           mfn_x(ring_info->mfns[0]), ringp);
+           mfn_x(ring_info->mfns[0]), src);
 #endif
     if (ret)
         return ret;
 
-    *rx_ptr = *(volatile uint32_t *)&ringp->rx_ptr;
+    p = (volatile uint32_t *)(src + offsetof(v4v_ring_t, rx_ptr));
+    *rx_ptr = *p;
 
     return 0;
 }
@@ -473,7 +474,7 @@ v4v_ringbuf_payload_space(struct domain *d, struct v4v_ring_info *ring_info)
 
     ring.tx_ptr = ring_info->tx_ptr;
 
-    if (v4v_ringbuf_get_rx_ptr(d, ring_info, &ring.rx_ptr))
+    if (v4v_ringbuf_get_rx_ptr(ring_info, &ring.rx_ptr))
         return 0;
 
 #ifdef V4V_DEBUG
@@ -2140,7 +2141,7 @@ dump_domain_ring(struct domain *d, struct v4v_ring_info *ring_info)
     if (!ring_info->len)
         printk(XENLOG_ERR "   (Placeholder)\n");
     else {
-        if (v4v_ringbuf_get_rx_ptr(d, ring_info, &rx_ptr)) {
+        if (v4v_ringbuf_get_rx_ptr(ring_info, &rx_ptr)) {
             printk(XENLOG_ERR "   Failed to read rx_ptr\n");
             return;
         }
