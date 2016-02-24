@@ -958,7 +958,7 @@ HANDLE open_file_by_id(HANDLE volume, uint64_t file_id, DWORD access, DWORD extr
     return h;
 }
 
-HANDLE open_file_by_name(const wchar_t* file_name, DWORD extra_flags)
+static HANDLE open_file_by_name(const wchar_t *file_name, DWORD extra_flags)
 {
     HANDLE h = CreateFileW(
         file_name,
@@ -970,13 +970,7 @@ HANDLE open_file_by_name(const wchar_t* file_name, DWORD extra_flags)
         NULL);
     if (h == INVALID_HANDLE_VALUE) {
         DWORD win32_err = GetLastError();
-        if (!absent_files_fatal &&
-            (win32_err == ERROR_FILE_NOT_FOUND || win32_err == ERROR_PATH_NOT_FOUND)) {
-            // Not considered fatal
-            printf("failed to open %ls for copying, err=%d\n", file_name, (int)win32_err);
-        } else {
-            err(1, "failed to open %ls for copying, err=%d\n", file_name, (int)win32_err);
-        }
+        printf("failed to open %ls for copying, err=%u\n", file_name, (uint32_t)win32_err);
     }
     return h;
 }
@@ -1357,7 +1351,13 @@ int bfs(Variable *var,
 
                 } while (!done);
             }
+            uint32_t err = (uint32_t)GetLastError();
+            if (err && err != ERROR_NO_MORE_FILES) {
+                printf("Enumeration of [%ls] finished with err=%u\n", prefix(var, q.name), err);
+            }
             CloseHandle(dir);
+        } else {
+            printf("Failed to open dir [%ls] err=%u\n", prefix(var, q.name), (uint32_t)GetLastError());
         }
         free(q.name);
     }
@@ -2776,6 +2776,25 @@ inline int should_copy_entry(const ManifestEntry *m, int retry)
     }
 }
 
+static void exclude_from_manifest(Manifest *man, ManifestEntry *entry)
+{
+    ManifestEntry *start = entry;
+    ManifestEntry *end = &man->entries[man->n];
+
+    /* We fix up hardlinks so better be sorted how we expect */
+    assert(man->order_fn == cmp_offset_link_action);
+
+    /* Have to check for other entries linked to this one, otherwise
+     * vm_links_phase_2 will get confused attempting to link to something
+     * non-existant
+     */
+    while (entry < end && is_same_file(start, entry)) {
+        printf("Excluding file %ls from manifest\n", entry->name);
+        entry->action = MAN_EXCLUDE;
+        ++entry;
+    }
+}
+
 /* Returns zero on success, or positive number of changed files */
 int copy_phase(struct disk *disk, Manifest *man, int calculate_shas, int retry)
 {
@@ -2802,9 +2821,20 @@ int copy_phase(struct disk *disk, Manifest *man, int calculate_shas, int retry)
                     FILE_FLAG_OVERLAPPED | FILE_FLAG_SEQUENTIAL_SCAN);
                 if (h == INVALID_HANDLE_VALUE) {
                     printf("failed to open %ls by id for copying, retrying by name\n", m->name);
-                    wchar_t* filename = prefix(m->var, m->host_name);
+                    wchar_t *filename = prefix(m->var, m->host_name);
                     h = open_file_by_name(filename,
                         FILE_FLAG_OVERLAPPED | FILE_FLAG_SEQUENTIAL_SCAN);
+                }
+                if (h == INVALID_HANDLE_VALUE) {
+                    /* It isn't ideal to just skip things we can't open here,
+                     * but we already do just that in stat_files_phase and we
+                     * can't easily distinguish between things we know are ok to
+                     * ignore (like a file about to be deleted) versus something
+                     * bad (like a third-party product interfering with our
+                     * access)
+                     */
+                    printf("failed to open %ls by id or name, skipping\n", m->name);
+                    exclude_from_manifest(man, m);
                 }
 
                 handles[j++] = h;
@@ -3660,7 +3690,8 @@ int output_manifest_phase(Manifest *man, struct disk* disk,
     for (i = 0; i < man->n; i++) {
         ManifestEntry* entry = &man->entries[i];
         int has_sha = 0;
-        if (entry->action == MAN_EXCLUDE) {
+        if (entry->action == MAN_EXCLUDE || entry->action == MAN_CHANGE) {
+            /* MAN_CHANGE could occur for a file that changed then was deleted */
             continue;
         }
 
@@ -3671,7 +3702,6 @@ int output_manifest_phase(Manifest *man, struct disk* disk,
         fprintf(f, ", \"path\": \"%s\"", temp_buf);
 
         switch (entry->action) {
-        case MAN_CHANGE:
             /* Doesn't occur in an output manifest */
             break;
 
@@ -3681,6 +3711,7 @@ int output_manifest_phase(Manifest *man, struct disk* disk,
             fprintf(f, ", \"comment\": \"FOLLOW_LINKS??\"");
             break;
 
+        case MAN_CHANGE:
         case MAN_EXCLUDE:
             /* Already handled */
             break;
