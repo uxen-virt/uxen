@@ -39,7 +39,8 @@ redir_stderr(const char *name, const char *defname, int append)
     setlinebuf(stderr);
 }
 
-void
+#ifdef DEBUG
+static void
 enable_core_dumps(void)
 {
     struct rlimit limit;
@@ -48,6 +49,7 @@ enable_core_dumps(void)
     limit.rlim_max = RLIM_INFINITY;
     setrlimit(RLIMIT_CORE, &limit);
 }
+#endif /* DEBUG */
 
 // this is dm_main per -Dmain=dm_main
 int main(int argc, char **argv);
@@ -76,7 +78,7 @@ main(int argc, char **argv)
 
 #ifdef DEBUG
     enable_core_dumps();
-#endif
+#endif /* DEBUG */
 
     path = realpath(argv[0], NULL);
     if (path) {
