@@ -2216,7 +2216,8 @@ static int tcp_chr_write_flush(CharDriverState *chr)
 {
     TCPCharDriver *s = chr->opaque;
 
-    send_queue_flush(&s->sndq);
+    if (s->connected)
+        send_queue_flush(&s->sndq);
 
     return 0;
 }
