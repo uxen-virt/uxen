@@ -717,8 +717,7 @@ uxen_op_init(struct fd_assoc *fda)
     uxen_info->ui_signal_event = signal_event;
     uxen_info->ui_check_ioreq = check_ioreq;
 
-    uxen_info->ui_memcache_needs_check = 0;
-    /* uxen_info->ui_memcache_check = NULL; */
+    uxen_info->ui_pagemap_needs_check = 0;
 
     set_map_mfn_pte_flags();
     uxen_info->ui_map_mfn = map_mfn;
@@ -1541,7 +1540,7 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
         case VCI_RUN_MODE_SHUTDOWN:
             ret = 0;
             goto out;
-        case VCI_RUN_MODE_MEMCACHE_CHECK:
+        case VCI_RUN_MODE_PAGEMAP_CHECK:
             /* nothing */
             break;
         case VCI_RUN_MODE_FREEPAGE_CHECK:
