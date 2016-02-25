@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -171,6 +171,8 @@ NTSTATUS CVoice::Start(BOOL capture)
     WriteMMIO32(UXAU_V_CTL,0);
     m_bHWRunning=FALSE;
     m_bCapture = capture;
+    m_nWPTR = m_nRPTR = 0;
+    m_nBytesWritten = 0;
 
     DOUT (DBG_REGS, "voice%d: CVoice::Start capture=%d", m_nIndex, capture);
 
@@ -228,13 +230,8 @@ ULONG CVoice::Stats(IN ULONG playback_ptr, IN INT)
     else
         reported_lag=0;
 
-    if (reported_lag<=m_nBufLen) {
-        read_position=m_nWPTR + m_nBufLen - reported_lag;
-        read_position %= m_nBufLen;
-    } else {
-        read_position=m_nWPTR+4;
-        read_position %= m_nBufLen;
-    }
+    read_position = (LONG)(m_nWPTR + m_nBufLen - reported_lag)
+        % m_nBufLen;
 
     /* rounding to winwave buffer length avoids playback startup glitches */
     if (m_nPositionStep) {
@@ -297,49 +294,23 @@ NTSTATUS CVoice::CopyFrom(ULONG offset, IN PUCHAR data, IN UINT len)
 
 NTSTATUS CVoice::CopyTo(ULONG Offset,IN PUCHAR Data,IN UINT Len)
 {
-	//XXX: FIXME check for stalls
-	UINT rptr;
+    //XXX: FIXME check for stalls
 
-	if (Offset>= m_nBufLen) 
-		return STATUS_INVALID_PARAMETER;
+    if (Offset>= m_nBufLen)
+        return STATUS_INVALID_PARAMETER;
 
-	if ((Offset+Len)> m_nBufLen) 
-		return STATUS_INVALID_PARAMETER;
+    if ((Offset+Len)> m_nBufLen)
+        return STATUS_INVALID_PARAMETER;
 
-	CVoice::CopyToBuffer(Data,m_pBufStart+Offset,Len);
+    CVoice::CopyToBuffer(Data,m_pBufStart+Offset,Len);
 
-	rptr=ReadRMMIO32(UXAU_VM_RPTR);
-	m_nWPTR=Offset+Len;
-	m_nWPTR%=m_nBufLen;
+    m_nWPTR = (Offset+Len) % m_nBufLen;
+    m_nBytesWritten += Len;
 
-	m_nBytesWritten+=Len;
+    WriteRMMIO32(UXAU_VM_WPTR,m_nWPTR);
+    WriteRMMIO32(UXAU_VM_SILENCE,m_nSilence);
 
-#if 0
-       	DOUT(DBG_PRINT,"[CVoice::CopyTo] Wrote [%d-%d] m_nWPTR=%d",(int) Offset, (int) (Offset+Len-1),(int) m_nWPTR);
-
-	{
-		PSHORT sd=(PSHORT) Data;
-		SHORT min=sd[0],max=sd[0];	
-		UINT ns=Len/2;
-
-		while (ns--) {
-			if (min>sd[0]) min=sd[0];
-			if (max<sd[0]) max=sd[0];
-			sd++;
-		}
-		sd=(PSHORT) Data;
-
-
-        	DOUT(DBG_PRINT,"xenaudio: transfer in: Offet=%d Len=%d rptr=%d, wptr=%d, %d in [0x%04x 0x%04x ...] [%d,%d]",(int) Offset,(int) Len, (int)rptr,(int)m_nWPTR, (int)Len,(unsigned int)sd[0],(unsigned int) sd[1],min,max);
-
-	}
-#endif
-	
-	WriteRMMIO32(UXAU_VM_WPTR,m_nWPTR);
-	WriteRMMIO32(UXAU_VM_SILENCE,m_nSilence);
-	
-
-	return STATUS_SUCCESS;
+    return STATUS_SUCCESS;
 }
 
 CVoice::CVoice(int index)
