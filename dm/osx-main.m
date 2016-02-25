@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Michael Dales <michael@digitalflapjack.com>
  * SPDX-License-Identifier: ISC
  */
@@ -10,6 +10,7 @@
 #include <pthread.h>
 #include <libgen.h>
 #include <libproc.h>
+#include <sys/resource.h>
 
 #import "osx-app-delegate.h"
 
@@ -38,6 +39,16 @@ redir_stderr(const char *name, const char *defname, int append)
     setlinebuf(stderr);
 }
 
+void
+enable_core_dumps(void)
+{
+    struct rlimit limit;
+
+    limit.rlim_cur = RLIM_INFINITY;
+    limit.rlim_max = RLIM_INFINITY;
+    setrlimit(RLIMIT_CORE, &limit);
+}
+
 // this is dm_main per -Dmain=dm_main
 int main(int argc, char **argv);
 
@@ -62,6 +73,10 @@ main(int argc, char **argv)
 {
     char *path;
     int console_headless = 0;
+
+#ifdef DEBUG
+    enable_core_dumps();
+#endif
 
     path = realpath(argv[0], NULL);
     if (path) {
