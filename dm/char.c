@@ -399,33 +399,6 @@ struct send_queue {
     int is_sock;
 };
 
-static void send_queue_write_cb(void *opaque);
-static int send_queue_do_write(struct send_queue *sndq, uint8_t *data, size_t len)
-{
-    int rc;
-
-    if (sndq->is_sock)
-        rc = send(sndq->fd, (void *)data, len, 0);
-    else
-        rc = write(sndq->fd, (void *)data, len);
-
-    if (rc == -1) {
-        int err;
-#if defined(_WIN32)
-        if ((err = WSAGetLastError()) == WSAEWOULDBLOCK) {
-#else
-        if ((err = errno) == EWOULDBLOCK) {
-#endif
-            ioh_set_write_handler(sndq->fd, sndq->iohq, send_queue_write_cb, sndq);
-        } else {
-            ioh_set_write_handler(sndq->fd, sndq->iohq, NULL, sndq);
-            sndq->err = err;
-        }
-    }
-
-    return rc;
-}
-
 static void send_queue_write_cb(void *opaque)
 {
     struct send_queue *sndq = opaque;
@@ -433,10 +406,30 @@ static void send_queue_write_cb(void *opaque)
 
     critical_section_enter(&sndq->lock);
     while ((b = TAILQ_FIRST(&sndq->queue))) {
-        int rc = send_queue_do_write(sndq, b->data + b->off, b->len);
+        int rc;
 
-        if (rc == -1)
+        if (sndq->is_sock)
+            rc = send(sndq->fd, (void *)(b->data + b->off), b->len, 0);
+        else
+            rc = write(sndq->fd, (void *)(b->data + b->off), b->len);
+
+        if (rc == -1) {
+#if defined(_WIN32)
+            int err = WSAGetLastError();
+
+            if (err == WSAEWOULDBLOCK) {
+#else
+            int err = errno;
+
+            if (err == EWOULDBLOCK) {
+#endif
+                ioh_set_write_handler(sndq->fd, sndq->iohq, send_queue_write_cb, sndq);
+            } else {
+                ioh_set_write_handler(sndq->fd, sndq->iohq, NULL, sndq);
+                sndq->err = err;
+            }
             break;
+        }
 
         b->len -= rc;
         b->off += rc;
@@ -466,8 +459,13 @@ static int send_queue_write(struct send_queue *sndq, const uint8_t *buf, size_t 
     }
 
     while (TAILQ_EMPTY(&sndq->queue)) {
-        int rc = send(sndq->fd, (void *)buf, l, 0);
+        int rc;
         int err;
+
+        if (sndq->is_sock)
+            rc = send(sndq->fd, (void *)buf, l, 0);
+        else
+            rc = write(sndq->fd, (void *)buf, l);
 
         if (rc == -1) {
 #if defined(_WIN32)
@@ -535,7 +533,11 @@ static void send_queue_flush(struct send_queue *sndq)
             continue;
         }
 
-        rc = send(sndq->fd, (void *)(b->data + b->off), b->len, 0);
+        if (sndq->is_sock)
+            rc = send(sndq->fd, (void *)(b->data + b->off), b->len, 0);
+        else
+            rc = write(sndq->fd, (void *)(b->data + b->off), b->len);
+
         if (rc == -1) {
 #if defined(_WIN32)
             int err = WSAGetLastError();
