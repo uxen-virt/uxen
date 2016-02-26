@@ -260,9 +260,9 @@ typedef enum { /* actions are ordered from most to least desirable. */
 typedef struct ManifestEntry {
     ntfs_fs_t vol;
     Variable *var;
-    wchar_t *name; /* guest name */
-    wchar_t *host_name; /* Always set post-rewire_phase. Used differently for hardlinks. */
-    wchar_t *rewrite;
+    wchar_t *name; /* host name */
+    wchar_t *rewrite; /* name that goes into the image. Always set. */
+    wchar_t* target; /* Used for MAN_LINK */
     size_t name_len;
     uint64_t offset;
     uint64_t file_size;
@@ -313,6 +313,18 @@ static ManifestEntry *man_push(Manifest *man)
     return &man->entries[n];
 }
 
+static ManifestEntry *man_push_entry(Manifest *man,
+                                     const wchar_t *name,
+                                     Action action)
+{
+    ManifestEntry *e = man_push(man);
+    e->name = wcsdup(name);
+    e->name_len = wcslen(e->name);
+    e->action = action;
+    e->rewrite = e->name;
+    return e;
+}
+
 ManifestEntry* man_push_file(Manifest *out,
                              ntfs_fs_t vol,
                              Variable *var,
@@ -322,15 +334,12 @@ ManifestEntry* man_push_file(Manifest *out,
                              const wchar_t *rewrite,
                              Action action)
 {
-    ManifestEntry *e = man_push(out);
+    ManifestEntry *e = man_push_entry(out, name, action);
     e->vol = vol;
     e->var = var;
-    e->name = wcsdup(name);
-    e->name_len = wcslen(name);
     e->file_size = file_size;
     e->file_id = file_id;
-    e->rewrite = rewrite ? wcsdup(rewrite) : NULL;
-    e->action = action;
+    e->rewrite = rewrite ? wcsdup(rewrite) : e->name;
     if (file_size < min_shallow_size) {
         if (action == MAN_SHALLOW) {
             e->action = MAN_COPY;
@@ -359,6 +368,28 @@ static int cmp_name_action(const void *a, const void *b)
             return 1;
         } else {
             return wcscmp(ea->name, eb->name);
+        }
+    }
+}
+
+/* Same as cmp_name_action but explicitly using rewrite name - needed for
+ * code which previously used man_sort_by_name() post-rewire_phase to actually
+ * mean the rewrite name
+ */
+static int cmp_rewrite_action(const void *a, const void *b)
+{
+    const ManifestEntry *ea = (const ManifestEntry *) a;
+    const ManifestEntry *eb = (const ManifestEntry *) b;
+    int r = wcsicmp(ea->rewrite, eb->rewrite);
+    if (r != 0) {
+        return r;
+    } else {
+        if (ea->action < eb->action) {
+            return -1;
+        } else if (eb->action < ea->action) {
+            return 1;
+        } else {
+            return wcscmp(ea->rewrite, eb->rewrite);
         }
     }
 }
@@ -392,7 +423,7 @@ static int cmp_offset_link_action(const void *a, const void *b)
             } else {
                 /* All else being equal, compare by names just to
                  * make sure we get the same sort each time. */
-                return wcscmp(ea->name, eb->name);
+                return wcscmp(ea->rewrite, eb->rewrite);
             }
         }
     }
@@ -485,6 +516,11 @@ static void man_sort_by_name(Manifest *man)
     man_sort(man, cmp_name_action);
 }
 
+static void man_sort_by_rewrite_name(Manifest *man)
+{
+    man_sort(man, cmp_rewrite_action);
+}
+
 static void man_sort_by_offset_link_action(Manifest *man)
 {
     man_sort(man, cmp_offset_link_action);
@@ -497,18 +533,17 @@ static void man_sort_by_id(Manifest *man)
 
 static void man_uniq_by_name(Manifest *man)
 {
-    /* uniq'ify manifest. */
+    /* Despite its name this fn has been uniq'ing based on rewrite, not name. */
     int i, j;
     if (man->n == 0) {
         return;
     }
-    assert(man->order_fn == cmp_name_action);
+    assert(man->order_fn == cmp_name_action || man->order_fn == cmp_rewrite_action);
     for (i = j = 1; i < man->n; ++i) {
 
         ManifestEntry *a = &man->entries[i];
-        const wchar_t *aname = a->rewrite ? a->rewrite : a->name;
-        const wchar_t* jname = man->entries[j - 1].rewrite ?
-            man->entries[j - 1].rewrite : man->entries[j - 1].name;
+        const wchar_t *aname = a->rewrite;
+        const wchar_t* jname = man->entries[j - 1].rewrite;
         if (wcsicmp(aname, jname) != 0) {
             man->entries[j++] = *a;
         }
@@ -518,7 +553,7 @@ static void man_uniq_by_name(Manifest *man)
 
 static void man_uniq_by_name_and_action(Manifest *man)
 {
-    /* uniq'ify manifest. */
+    /* Despite its name this fn has been uniq'ing based on rewrite, not name. */
     int i, j;
     if (man->n == 0) {
         return;
@@ -527,9 +562,8 @@ static void man_uniq_by_name_and_action(Manifest *man)
     for (i = j = 1; i < man->n; ++i) {
 
         ManifestEntry *a = &man->entries[i];
-        const wchar_t *aname = a->rewrite ? a->rewrite : a->name;
-        const wchar_t* jname = man->entries[j - 1].rewrite ?
-            man->entries[j - 1].rewrite : man->entries[j - 1].name;
+        const wchar_t *aname = a->name;
+        const wchar_t* jname = man->entries[j - 1].rewrite;
         if (wcsicmp(aname, jname) != 0
                || a->action != man->entries[j - 1].action) {
             man->entries[j++] = *a;
@@ -680,8 +714,6 @@ int read_manifest(FILE *f, VarList *vars, Manifest *suffix)
             /* Add to suffixes manifest. */
             char *c;
             int colon = 0;
-            m = man_push(suffix);
-            m->action = MAN_EXCLUDE;
             for (c = fn + 1; *c; ++c) {
                 if (*c == ':') {
                     *c = '\0';
@@ -689,7 +721,7 @@ int read_manifest(FILE *f, VarList *vars, Manifest *suffix)
                     break;
                 }
             }
-            m->name = wide(fn + 1);
+            m = man_push_entry(suffix, wide(fn + 1), MAN_EXCLUDE);
             m->name_len = c - (fn + 1);
 
             /* Format is .ext:xxMB or .ext:xxKB. If there is no colon
@@ -784,11 +816,10 @@ int read_manifest(FILE *f, VarList *vars, Manifest *suffix)
                         errx(1 ,"undefined variable name '%ls' on line %d.\n", w, line);
                     }
                     free(w);
-                    m = man_push(var->man);
-                    m->name = wide(c);
-                    normalize_string(m->name);
-                    m->name_len = wcslen(m->name);
-                    m->action = action;
+                    w = wide(c);
+                    normalize_string(w);
+                    m = man_push_entry(var->man, w, action);
+                    free(w);
                     if (right) {
                         m->rewrite = wide(right);
                         //printf("in manifest [%S] ==> [%S]\n", m->name, m->rewrite);
@@ -1126,7 +1157,9 @@ int bfs(Variable *var,
     }
 
     /* Do a modified breadth-first search from the supplied directory name down.  */
-    HeapElem he = {wcsdup(dn), 0, toplevel_entry->rewrite, 1, recurse};
+    wchar_t *rewrite = toplevel_entry->rewrite == toplevel_entry->name ? NULL :
+        toplevel_entry->rewrite;
+    HeapElem he = {wcsdup(dn), 0, rewrite, 1, recurse};
     //printf("1.pushing [%S], [%S]\n", he.name, (he.rerooted_name ? he.rerooted_name : L"NULL"));
     directories++;
 
@@ -1177,16 +1210,14 @@ int bfs(Variable *var,
                     if (!wcscmp(fn, L".")) {
                         if (q.top_level) {
                             assert(out);
-                            m = man_push(out);
+                            m = man_push_entry(out, q.name, MAN_MKDIR);
                             m->vol = disk->bootvol;
-                            m->action = MAN_MKDIR;
                             m->var = var;
                             if (toplevel_entry->rewrite) {
                                 m->rewrite = wcsdup(toplevel_entry->rewrite);
                                 normalize_string(m->rewrite);
                                 strip_trailing_slash(m->rewrite);
                             }
-                            m->name = wcsdup(q.name);
                             /* These came from user input so require a little more
                              * cleaning up.  disklib_mkdir_simple gets upset if you
                              * don't strip trailing slashes */
@@ -1327,8 +1358,12 @@ int bfs(Variable *var,
                             continue;
                         }
 
+                        /* We don't attempt to support changing the guest name
+                         * for followed links, so pass in NULL here (previously
+                         * we passed in rewire which would have done the wrong
+                         * thing if rewire had actually been non-NULL) */
                         man_push_file(out, disk->bootvol, var, link_name,
-                                file_size, file_id, rewrite, action);
+                                file_size, file_id, NULL, action);
 
                         /* Possibly create enclosing dirs. */
                         for (;;) {
@@ -1337,10 +1372,7 @@ int bfs(Variable *var,
                                         link_name)) {
                                 break;
                             }
-                            m = man_push(extra_dirs);
-                            m->name = wcsdup(link_name);
-                            m->name_len = wcslen(m->name);
-                            m->action = MAN_COPY_EMPTY_DIR;
+                            m = man_push_entry(extra_dirs, link_name, MAN_COPY_EMPTY_DIR);
                         }
 
                     }
@@ -1511,7 +1543,7 @@ static void complete_io(IO* io)
         OVERLAPPED overlapped = {0};
 
         /* Don't change this logging without also updating tests */
-        printf("Lock conflict error for file [%ls]\n", io->m->name);
+        printf("Lock conflict error for file [%ls]\n", io->m->rewrite);
 
         /* We are taking a simplistic approach here, and not attempting to share
          * the lock across multiple IOs should the file be split into more than
@@ -1551,7 +1583,7 @@ static void complete_io(IO* io)
         err(1, "Read of [%ls] failed with [%x]\n", io->m->name, (uint32_t)status);
     }
 
-    if (disklib_write_simple(io->m->vol, io->m->name, io->buffer, io->size,
+    if (disklib_write_simple(io->m->vol, io->m->rewrite, io->buffer, io->size,
                 io->offset, 0, io->securid) < io->size) {
         err(1, "ntfs write error: %s\n", strerror(ntfs_get_errno()));
     }
@@ -1600,7 +1632,7 @@ static void complete_all_ios(void)
 static void copy_file(ManifestEntry *m, HANDLE input, int calculate_shas)
 {
     ntfs_fs_t vol = m->vol;
-    const wchar_t *path = m->name;
+    const wchar_t *path = m->rewrite;
     uint64_t size = m->file_size;
     size_t buf_size = (low_priority ? 1 : 4) << 20;
     uint64_t offset;
@@ -1835,7 +1867,7 @@ static int shallow_file(ManifestEntry *m,
     }
 
     if (get_securid_from_entry(m) != 0) {
-        printf("unable to get securid for %ls\n", m->host_name);
+        printf("unable to get securid for %ls\n", m->name);
     }
 
     uint64_t size = m->file_size;
@@ -1844,7 +1876,7 @@ static int shallow_file(ManifestEntry *m,
         char *u = utf8(host_path);
         set_current_filename(u, offset, m->file_id);
 
-        if (disklib_write_simple(m->vol, m->name, buf, take, offset, 1, m->securid) < take) {
+        if (disklib_write_simple(m->vol, m->rewrite, buf, take, offset, 1, m->securid) < take) {
             printf("ntfs write error: %s\n", strerror(ntfs_get_errno()));
             exit(1);
         }
@@ -2100,7 +2132,7 @@ int stat_files_phase(struct disk *disk, Manifest *man, wchar_t *file_id_list)
 int mkdir_phase(struct disk *disk, Manifest *man)
 {
     ENTER_PHASE();
-    assert(man->order_fn == cmp_name_action);
+    assert(man->order_fn == cmp_rewrite_action);
 
     int i;
 
@@ -2111,16 +2143,16 @@ int mkdir_phase(struct disk *disk, Manifest *man)
             //printf("mkdir [%ls]\n", m->name);
 
             if (get_securid_from_entry(m) != 0) {
-                printf("unable to get securid for %ls\n", m->host_name);
+                printf("unable to get securid for %ls\n", m->name);
             }
 
-            if (wcsncmp(m->name, L"/", MAX_PATH_LEN) == 0) {
+            if (wcsncmp(m->rewrite, L"/", MAX_PATH_LEN) == 0) {
                 /* Root is not a dir so need to skip this in case a top-level
                  * manifest entry maps a dir in to the root */
                 continue;
             }
-            if (disklib_mkdir_simple(m->vol, m->name, m->securid) < 0) {
-                printf("unable to mkdir %ls : %s\n", m->name,
+            if (disklib_mkdir_simple(m->vol, m->rewrite, m->securid) < 0) {
+                printf("unable to mkdir %ls : %s\n", m->rewrite,
                         strerror(ntfs_get_errno()));
                 return -1;
             }
@@ -2165,23 +2197,9 @@ int rewire_phase(struct disk *disk, Manifest *man)
         //printf("Rewiring %ls to %ls\n", m->name, cookedpath);
         m->action = (m->action == MAN_MKDIR ? MAN_MKDIR : MAN_BOOT);
         m->vol = disk->sysvol;
-        m->host_name = m->name;
-        m->name = wcsdup(cookedpath);
-        m->name_len = wcslen(cookedpath);
+        m->rewrite = wcsdup(cookedpath);
     }
 
-    for (i = 0; i < man->n; ++i) {
-        ManifestEntry *m = &man->entries[i];
-        if (m->rewrite) {
-            wchar_t fn[MAX_PATH_LEN];
-            m->host_name = m->name;
-            path_join(fn, m->rewrite, L"");
-            m->name = wcsdup(fn);
-            // printf("mapping [%S] =[%d]=>[%S]\n", m->host_name, m->action, m->name);
-        } else if (!m->host_name) {
-            m->host_name = wcsdup(m->name);
-        }
-    }
     man_unsorted(man);
     LEAVE_PHASE();
     return 0;
@@ -2201,8 +2219,7 @@ int vm_links_phase_1(struct disk *disk, Manifest *man)
         if (last && m->link_id && is_same_file(m, last)) {
             /* We cannot link files that we moved to /boot on sysvol. */
             if (last->action != MAN_BOOT && last->action != MAN_EXCLUDE) {
-                free(m->host_name); // Might have been set in rewire_phase
-                m->host_name = last->name;
+                m->target = last->rewrite;
                 m->action = MAN_LINK; // Preserves sorting order
                 ++q;
             }
@@ -2226,7 +2243,7 @@ int vm_links_phase_2(struct disk *disk, const Manifest *man)
         const ManifestEntry *m = &man->entries[i];
         if (m->action == MAN_LINK) {
             int err = 0;
-            if (disklib_mklink_simple(m->vol, m->host_name, m->name) < 0) {
+            if (disklib_mklink_simple(m->vol, m->target, m->rewrite) < 0) {
                 err = ntfs_get_errno();
                 if (err == ENOENT) {
                     /* It is not impossible for the link dir to not exist yet.
@@ -2236,11 +2253,11 @@ int vm_links_phase_2(struct disk *disk, const Manifest *man)
                      * but disklib_mklink_simple explicitly doesn't ask ntfslib
                      * for this behaviour.
                      */
-                    printf("creating dir for %ls and retrying mklink\n", m->name);
-                    wchar_t *dir = wcsdup(m->name);
+                    printf("creating dir for %ls and retrying mklink\n", m->rewrite);
+                    wchar_t *dir = wcsdup(m->rewrite);
                     strip_filename(dir);
                     if (disklib_mkdir_simple(m->vol, dir, m->securid) >= 0 &&
-                        disklib_mklink_simple(m->vol, m->host_name, m->name) >= 0) {
+                        disklib_mklink_simple(m->vol, m->target, m->rewrite) >= 0) {
                         err = 0;
                     }
                     free(dir);
@@ -2250,7 +2267,7 @@ int vm_links_phase_2(struct disk *disk, const Manifest *man)
                      * links. For now, just ignore it.
                      */
                     printf("ignoring attempt to link from %ls to %ls\n",
-                        m->host_name, m->name);
+                        m->target, m->rewrite);
                     err = 0;
                 }
             }
@@ -2258,7 +2275,7 @@ int vm_links_phase_2(struct disk *disk, const Manifest *man)
                 printf("link failed : linkid=%"PRIx64" err=%d target=%ls link=%ls\n",
                         m->link_id,
                         err,
-                        m->host_name, m->name);
+                        m->target, m->rewrite);
                 return -1;
             }
         }
@@ -2448,7 +2465,7 @@ static int acl_file(HANDLE h, ManifestEntry *m, int *acls_broken, int *hit)
         }
 
         if (!dacl) {
-            printf("got NULL dacl for %ls\n", m->host_name);
+            printf("got NULL dacl for %ls\n", m->name);
             ret = -1;
             goto rights_error;
         }
@@ -2672,7 +2689,7 @@ int acl_phase(struct disk *disk, Manifest *man)
 
     for (i = 0; i < man->n; i++) {
         if (man->entries[i].action == MAN_CHANGE) {
-            char *cfilename = utf8(man->entries[i].name);
+            char *cfilename = utf8(man->entries[i].rewrite);
             assert(cfilename);
             printf("Degraded [%s] to force-copy\n", cfilename);
             if (disklib_ntfs_unlink(man->entries[i].vol, cfilename) < 0) {
@@ -2697,7 +2714,7 @@ cleanup:
 static void make_unshadowed_host_path(wchar_t* out, ManifestEntry *m)
 {
     // First get full hostname including path components from the prefix (if any)
-    wchar_t* filename = prefix(m->var, m->host_name);
+    wchar_t* filename = prefix(m->var, m->name);
     wchar_t* path;
     if (bootvol_var && !wcsnicmp(filename, bootvol_var->path, wcslen(bootvol_var->path))) {
         // Now replace the volume prefix with the rootdrive
@@ -2708,7 +2725,7 @@ static void make_unshadowed_host_path(wchar_t* out, ManifestEntry *m)
         // important. Note this does mean we don't support shallowing from any
         // volume other than BOOTVOL - this has always been the case but maybe
         // isn't stated explicitly.
-        path = m->host_name;
+        path = m->name;
     }
     swprintf(out, L"%lc:%ls", rootdrive, path);
     // finally, convert back to backslashes
@@ -2719,7 +2736,7 @@ int shallow_phase(struct disk *disk, Manifest *man, wchar_t *map_idx)
 {
     assert(shallow_allowed);
     ENTER_PHASE();
-    assert(man->order_fn == cmp_name_action);
+    assert(man->order_fn == cmp_rewrite_action);
 
     int i, j;
     FILE *map_file;
@@ -2821,7 +2838,7 @@ int copy_phase(struct disk *disk, Manifest *man, int calculate_shas, int retry)
                     FILE_FLAG_OVERLAPPED | FILE_FLAG_SEQUENTIAL_SCAN);
                 if (h == INVALID_HANDLE_VALUE) {
                     printf("failed to open %ls by id for copying, retrying by name\n", m->name);
-                    wchar_t *filename = prefix(m->var, m->host_name);
+                    wchar_t *filename = prefix(m->var, m->name);
                     h = open_file_by_name(filename,
                         FILE_FLAG_OVERLAPPED | FILE_FLAG_SEQUENTIAL_SCAN);
                 }
@@ -2850,7 +2867,7 @@ int copy_phase(struct disk *disk, Manifest *man, int calculate_shas, int retry)
                        that behavior changes, remove the log statement.
                     */
                     printf("Force-copying [%ls] of size [%"PRIu64"]\n",
-                        man->entries[i].host_name,
+                        man->entries[i].name,
                         man->entries[i].file_size);
                 }
                 HANDLE h = handles[j++];
@@ -2868,7 +2885,7 @@ int copy_phase(struct disk *disk, Manifest *man, int calculate_shas, int retry)
                                                           &info,
                                                           sizeof(info))) {
                             printf("Failed to re-get size info for [%ls] err=%d\n",
-                                m->host_name, (int)GetLastError());
+                                m->name, (int)GetLastError());
                             /* Leave as MAN_CHANGE to be picked up in next retry */
                             continue;
                         }
@@ -2878,7 +2895,7 @@ int copy_phase(struct disk *disk, Manifest *man, int calculate_shas, int retry)
                         if (m->cache_index == -1) {
                             if (get_securid_from_entry(m) != 0) {
                                 printf("unable to get securid for %ls\n",
-                                    man->entries[i].host_name);
+                                    man->entries[i].name);
                             }
                         } else {
                             m->securid = disklib_ntfs_setsecurityattr(m->vol,
@@ -3114,7 +3131,7 @@ int usn_phase(
             ++i;
         } else {
             ManifestEntry *m = &man->entries[i];
-            wchar_t *filename = m->host_name;
+            wchar_t *filename = m->name;
             printf("File [%ls] is changed! Will examine it.\n",
                 filename);
 
@@ -3128,7 +3145,7 @@ int usn_phase(
                 || (phase <= 1 && (m->action == MAN_COPY ||
                                    m->action == MAN_FORCE_COPY))
                 || (phase > 1 && m->action == MAN_CHANGE)) {
-                char *cfilename = utf8(m->name);
+                char *cfilename = utf8(m->rewrite);
                 assert(cfilename);
 
                 printf("Deleting [%ls] from target\n", filename);
@@ -3434,12 +3451,12 @@ next:
         } else if (man->entries[i].file_id < he->file_id) {
             ++i;
         } else {
-            wchar_t *filename = man->entries[i].host_name;
+            wchar_t *filename = man->entries[i].name;
             printf("File [%ls] is open! Will examine it.\n",
                 filename);
 
             if (man->entries[i].action == MAN_SHALLOW) {
-                char *cfilename = utf8(man->entries[i].name);
+                char *cfilename = utf8(man->entries[i].rewrite);
                 assert(cfilename);
 
                 printf("Deleting [%ls] from target disk\n", filename);
@@ -3575,7 +3592,7 @@ int hash_shallowed_files_phase(struct disk *disk, Manifest *man)
     for (i = 0; i < man->n; i++) {
         ManifestEntry* entry = &man->entries[i];
         if (entry->action == MAN_SHALLOW || entry->action == MAN_BOOT) {
-            wchar_t *host_name = prefix(entry->var, entry->host_name);
+            wchar_t *host_name = prefix(entry->var, entry->name);
             int err = calculate_sha1_for_file(host_name, entry->sha);
             if (err) {
                 printf("Failed to get SHA1 for %ls\n", host_name);
@@ -3698,16 +3715,13 @@ int output_manifest_phase(Manifest *man, struct disk* disk,
         fprintf(f, "\n{\"partition\": %d",
             entry->vol == disk->sysvol ? sysvol : bootvol);
 
-        json_escape_string(entry->name, temp_buf);
+        json_escape_string(entry->rewrite, temp_buf);
         fprintf(f, ", \"path\": \"%s\"", temp_buf);
 
         switch (entry->action) {
-            /* Doesn't occur in an output manifest */
-            break;
-
         case MAN_SHALLOW_FOLLOW_LINKS:
         case MAN_COPY_FOLLOW_LINKS:
-            /* Also don't appear in output manifests */
+            /* Don't appear in output manifests */
             fprintf(f, ", \"comment\": \"FOLLOW_LINKS??\"");
             break;
 
@@ -3758,7 +3772,7 @@ int output_manifest_phase(Manifest *man, struct disk* disk,
             break;
 
         case MAN_LINK:
-            json_escape_string(entry->host_name, temp_buf);
+            json_escape_string(entry->target, temp_buf);
             fprintf(f, ", \"type\": \"hardlink\", \"target\": \"%s\"", temp_buf);
             break;
         }
@@ -4093,7 +4107,7 @@ int main(int argc, char **argv)
         err(1, "rewiring_phase failed");
     }
 
-    man_sort_by_name(&man_out);
+    man_sort_by_rewrite_name(&man_out);
     man_uniq_by_name(&man_out);
 
     if (mkdir_phase(&disk, &man_out) < 0) {
@@ -4117,7 +4131,7 @@ int main(int argc, char **argv)
             }
         }
 
-        man_sort_by_name(&man_out);
+        man_sort_by_rewrite_name(&man_out);
         if (shallow_phase(&disk, &man_out, map_idx) < 0) {
             err(1, "shallow_phase failed");
         }
