@@ -92,35 +92,11 @@ ULONG DrvEscape(SURFOBJ *pso, ULONG iEsc, ULONG cjIn, PVOID pvIn,
 
             EngWaitForSingleObject(ppdev->virt_lock, NULL);
 
-            if (mode->width < (UINT)ppdev->virt_w) {
-                UINT i;
-                PBYTE src = (PBYTE)ppdev->psoBitmap->pvBits + (ppdev->virt_w << 2);
-                PBYTE dst = (PBYTE)ppdev->psoBitmap->pvBits + (mode->width << 2);
-                for (i = 1; i < min(mode->height, (UINT)ppdev->virt_h); ++i) {
-                    RtlMoveMemory(dst, src, mode->width << 2);
-                    src += ppdev->virt_w << 2;
-                    dst += mode->width << 2;
-                }
-            }
-
             if (EngDeviceIoControl(ppdev->hDriver, IOCTL_UXENDISP_SET_VIRTUAL_MODE,
                                    pvIn, cjIn, NULL, 0, &len)) {
                 DISPDBG((0, "%s: ioctl IOCTL_UXENDISP_SET_VIRTUAL_MODE failed\n", __FUNCTION__));
                 EngSetEvent(ppdev->virt_lock);
                 break;
-            }
-
-            if (mode->width > (UINT)ppdev->virt_w) {
-                INT i;
-                INT height = min(mode->height, (UINT)ppdev->virt_h);
-                PBYTE src = (PBYTE)ppdev->psoBitmap->pvBits + ((height - 1) * (ppdev->virt_w << 2));
-                PBYTE dst = (PBYTE)ppdev->psoBitmap->pvBits + ((height - 1) * (mode->width << 2));
-                for (i = 1; i < height; ++i) {
-                    RtlMoveMemory(dst, src, ppdev->virt_w << 2);
-                    RtlFillMemory(dst + (ppdev->virt_w << 2), (mode->width - ppdev->virt_w) << 2, 0xFF);
-                    src -= ppdev->virt_w << 2;
-                    dst -= mode->width << 2;
-                }
             }
 
             ppdev->virt_w = mode->width;

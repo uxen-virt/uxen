@@ -894,31 +894,7 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetVirtMode(UXENDISPCustomMode *pNewMode)
     mode.ScreenStride = pNewMode->width * 4;
     mode.BitsPerPlane = 32;
 
-    if (pNewMode->width < m_VirtMode.width) {
-        UINT i;
-        PBYTE src = (PBYTE)m_CurrentModes[0].FrameBuffer.Ptr + (m_VirtMode.width << 2);
-        PBYTE dst = (PBYTE)m_CurrentModes[0].FrameBuffer.Ptr + (pNewMode->width << 2);
-        for (i = 1; i < min(pNewMode->height, m_VirtMode.height); ++i) {
-            RtlMoveMemory(dst, src, pNewMode->width << 2);
-            src += m_VirtMode.width << 2;
-            dst += pNewMode->width << 2;
-        }
-    }
-
     hw_set_mode(&m_HwResources, &mode);
-
-    if (pNewMode->width > m_VirtMode.width) {
-        INT i;
-        INT height = min(pNewMode->height, m_VirtMode.height);
-        PBYTE src = (PBYTE)m_CurrentModes[0].FrameBuffer.Ptr + ((height - 1) * (m_VirtMode.width << 2));
-        PBYTE dst = (PBYTE)m_CurrentModes[0].FrameBuffer.Ptr + ((height - 1) * (pNewMode->width << 2));
-        for (i = 1; i < height; ++i) {
-            RtlMoveMemory(dst, src, m_VirtMode.width << 2);
-            RtlFillMemory(dst + (m_VirtMode.width << 2), (m_VirtMode.width - m_VirtMode.width) << 2, 0xFF);
-            src -= m_VirtMode.width << 2;
-            dst -= pNewMode->width << 2;
-        }
-    }
 
     m_VirtMode = *pNewMode;
 
