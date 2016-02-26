@@ -2943,9 +2943,7 @@ vmx_execute(struct vcpu *v)
 
             printk("vm%u.%u: 500k reason %d\n", v->domain->domain_id,
                    v->vcpu_id, (uint16_t)exit_reason);
-            if (verbose_exit_reason ||
-                /* to debug guest getting stuck in virdian spinlock loops */
-                exit_reason == EXIT_REASON_VMCALL)
+            if (verbose_exit_reason)
                 show_execution_state(regs);
         }
     }
