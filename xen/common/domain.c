@@ -329,6 +329,9 @@ struct domain *domain_create_internal(
  
     rwlock_init(&d->v4v_lock);
 
+    INIT_LIST_HEAD(&d->vcpu_idle_tasklet_list);
+    spin_lock_init(&d->vcpu_idle_tasklet_lock);
+
 #ifndef __UXEN__
     spin_lock_init(&d->node_affinity_lock);
 #endif  /* __UXEN__ */

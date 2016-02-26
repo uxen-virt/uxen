@@ -56,6 +56,7 @@ static void tasklet_enqueue(struct tasklet *t)
 {
     unsigned int cpu = t->scheduled_on;
 
+    ASSERT(!t->is_vcpu_idle);
 #ifndef __UXEN__
     if ( t->is_softirq )
     {
@@ -108,6 +109,20 @@ void tasklet_schedule(struct tasklet *t)
                             0
 #endif  /* __UXEN__ */
         );
+}
+
+void
+tasklet_schedule_vcpu_idle(struct tasklet *t, struct domain *d)
+{
+    struct list_head *list = &d->vcpu_idle_tasklet_list;
+    unsigned long flags;
+
+    ASSERT(t->is_vcpu_idle);
+
+    spin_lock_irqsave(&d->vcpu_idle_tasklet_lock, flags);
+    if (!t->is_running && list_empty(&t->list))
+        list_add_tail(&t->list, list);
+    spin_unlock_irqrestore(&d->vcpu_idle_tasklet_lock, flags);
 }
 
 static void do_tasklet_work(unsigned int cpu, struct list_head *list)
@@ -184,6 +199,70 @@ static void tasklet_softirq_action(void)
 }
 #endif  /* __UXEN__ */
 
+/* vcpu idle work */
+int
+vcpu_idle_tasklet_work(struct vcpu *v)
+{
+    struct domain *d = v->domain;
+    struct list_head *list = &d->vcpu_idle_tasklet_list;
+    struct tasklet *t;
+    unsigned long flags;
+    int ret = 0;
+    int n = 0;
+
+    if (list_empty(list)) {
+        printk(XENLOG_DEBUG "%s vm%d.%d on cpu%d idle\n", __FUNCTION__,
+               d->domain_id, v->vcpu_id, smp_processor_id());
+        return ret;
+    }
+    printk(XENLOG_DEBUG "%s vm%d.%d on cpu%d\n", __FUNCTION__, d->domain_id,
+           v->vcpu_id, smp_processor_id());
+
+    spin_lock_irqsave(&d->vcpu_idle_tasklet_lock, flags);
+
+    while (likely(!ret) && likely(!list_empty(list))) {
+        t = list_entry(list->next, struct tasklet, list);
+        list_del_init(&t->list);
+
+        ASSERT(!t->is_running);
+        t->is_running = 1;
+
+        spin_unlock_irqrestore(&d->vcpu_idle_tasklet_lock, flags);
+
+        do {
+            if (UI_HOST_CALL(ui_host_needs_preempt)) {
+                ret = -EPREEMPT;
+                break;
+            }
+            if (work_pending_vcpu(v) ||
+                current->runstate.state < RUNSTATE_blocked)
+                break;
+            ret = t->vcpu_idle_func(v, t->data);
+            n++;
+        } while (ret == -EAGAIN);
+
+        spin_lock_irqsave(&d->vcpu_idle_tasklet_lock, flags);
+
+        ASSERT(t->is_running);
+        t->is_running = 0;
+
+        if (ret == -EAGAIN)
+            list_add(&t->list, list);
+        else {
+            printk(XENLOG_DEBUG "%s: work done from vm%d.%d list %s\n",
+                   __FUNCTION__, d->domain_id, v->vcpu_id,
+                   list_empty(list) ? "empty" : "more");
+            ASSERT(ret == 0 || ret == -EPREEMPT);
+        }
+    }
+
+    spin_unlock_irqrestore(&d->vcpu_idle_tasklet_lock, flags);
+
+    printk(XENLOG_INFO "%s vm%d.%d on cpu%d done %d ops\n", __FUNCTION__,
+           d->domain_id, v->vcpu_id, smp_processor_id(), n);
+    return ret;
+}
+
 void tasklet_kill(struct tasklet *t)
 {
     unsigned long flags;
@@ -246,6 +325,15 @@ void softirq_tasklet_init(
     t->is_softirq = 1;
 }
 #endif  /* __UXEN__ */
+
+void
+vcpu_idle_tasklet_init(struct tasklet *t,
+                       int (*vcpu_idle_func)(struct vcpu *, unsigned long),
+                       unsigned long data)
+{
+    tasklet_init(t, (void (*)(unsigned long))vcpu_idle_func, data);
+    t->is_vcpu_idle = 1;
+}
 
 static int cpu_callback(
     struct notifier_block *nfb, unsigned long action, void *hcpu)

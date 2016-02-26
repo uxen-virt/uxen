@@ -1561,6 +1561,9 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
                     goto out;
             }
             break;
+        case VCI_RUN_MODE_IDLE_WORK:
+            /* nothing */
+            break;
         case VCI_RUN_MODE_SHUTDOWN:
             ret = 0;
             goto out;

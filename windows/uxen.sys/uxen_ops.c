@@ -1911,6 +1911,9 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
             if (vci->vci_shared.vci_host_halted)
                 EVENT_WAIT(&vci->vci_runnable, 1, 0);
             break;
+        case VCI_RUN_MODE_IDLE_WORK:
+            /* nothing */
+            break;
         case VCI_RUN_MODE_SHUTDOWN:
             ret = 0;
             goto out;

@@ -24,6 +24,8 @@
 
 #define ECONTINUATION   129     /* pseudo error code: retry after
                                  * scheduling */
+#define EPREEMPT        130     /* pseudo error code: retry because of
+                                 * preemption */
 #define EMAPPAGERANGE   131     /* pseudo error code: retry after
                                  * handling pending map range
                                  * request */

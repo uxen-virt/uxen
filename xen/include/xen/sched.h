@@ -431,6 +431,9 @@ struct domain
 
     struct rcu_head rcu;
 
+    struct list_head vcpu_idle_tasklet_list;
+    spinlock_t vcpu_idle_tasklet_lock;
+
     /*
      * Hypercall deadlock avoidance lock. Used if a hypercall might
      * cause a deadlock. Acquirers don't spin waiting; they preempt.

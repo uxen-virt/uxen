@@ -21,13 +21,17 @@ struct tasklet
     bool_t is_softirq;
     bool_t is_running;
     bool_t is_dead;
-    void (*func)(unsigned long);
+    bool_t is_vcpu_idle;
+    union {
+        void (*func)(unsigned long);
+        int (*vcpu_idle_func)(struct vcpu *, unsigned long);
+    };
     unsigned long data;
 };
 
 #define _DECLARE_TASKLET(name, func, data, softirq)                     \
     struct tasklet name = {                                             \
-        LIST_HEAD_INIT(name.list), -1, softirq, 0, 0, func, data }
+        LIST_HEAD_INIT(name.list), -1, softirq, 0, 0, 0, { func }, data }
 #define DECLARE_TASKLET(name, func, data)               \
     _DECLARE_TASKLET(name, func, data, 0)
 #define DECLARE_SOFTIRQ_TASKLET(name, func, data)       \
@@ -49,5 +53,11 @@ void tasklet_init(
 void softirq_tasklet_init(
     struct tasklet *t, void (*func)(unsigned long), unsigned long data);
 void tasklet_subsys_init(void);
+
+void tasklet_schedule_vcpu_idle(struct tasklet *t, struct domain *d);
+int vcpu_idle_tasklet_work(struct vcpu *v);
+void vcpu_idle_tasklet_init(
+    struct tasklet *t, int (*vcpu_idle_func)(struct vcpu *, unsigned long),
+    unsigned long data);
 
 #endif /* __XEN_TASKLET_H__ */

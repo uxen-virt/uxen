@@ -327,6 +327,7 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
         break;
 
     case VCI_RUN_MODE_HALT:
+    case VCI_RUN_MODE_IDLE_WORK:
         uxen_set_current(v);
         hvm_cpu_on();
         break;
@@ -424,9 +425,23 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
                     vcpu_schedule_unlock_irq(v);
                     if (!work_pending_vcpu(v) &&
                         current->runstate.state >= RUNSTATE_blocked) {
-                        vci->vci_run_mode = VCI_RUN_MODE_HALT;
-                        ret = 0;
-                        goto out_reset_current;
+                        switch (vcpu_idle_tasklet_work(v)) {
+                        case -EPREEMPT:
+                            vci->vci_run_mode = VCI_RUN_MODE_IDLE_WORK;
+                            ret = 0;
+                            goto out_reset_current;
+                        case -EAGAIN:
+                            vci->vci_run_mode = VCI_RUN_MODE_IDLE_WORK;
+                            break;
+                        default:
+                            vci->vci_run_mode = VCI_RUN_MODE_HALT;
+                            break;
+                        }
+                        if (!work_pending_vcpu(v) &&
+                            current->runstate.state >= RUNSTATE_blocked) {
+                            ret = 0;
+                            goto out_reset_current;
+                        }
                     }
                     atomic_write32(&vci->vci_host_halted, 0);
                 }
