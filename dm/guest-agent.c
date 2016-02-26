@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -348,10 +348,12 @@ guest_agent_sendmsg(void *msg, size_t len, int dlo)
     if (!initialized)
         return -1;
 
-    writelist_complete();
-
     if (agent_present && !agent_seen)
         dlo = 1;
+
+    if (!dlo)
+        writelist_complete();
+
     if (!dlo && !agent_present) {
         /* guest agent is not currently accepting input */
         return -1;
