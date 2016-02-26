@@ -396,7 +396,35 @@ struct send_queue {
     TAILQ_HEAD(, send_buf) queue;
     critical_section lock;
     size_t len;
+    int is_sock;
 };
+
+static void send_queue_write_cb(void *opaque);
+static int send_queue_do_write(struct send_queue *sndq, uint8_t *data, size_t len)
+{
+    int rc;
+
+    if (sndq->is_sock)
+        rc = send(sndq->fd, (void *)data, len, 0);
+    else
+        rc = write(sndq->fd, (void *)data, len);
+
+    if (rc == -1) {
+        int err;
+#if defined(_WIN32)
+        if ((err = WSAGetLastError()) == WSAEWOULDBLOCK) {
+#else
+        if ((err = errno) == EWOULDBLOCK) {
+#endif
+            ioh_set_write_handler(sndq->fd, sndq->iohq, send_queue_write_cb, sndq);
+        } else {
+            ioh_set_write_handler(sndq->fd, sndq->iohq, NULL, sndq);
+            sndq->err = err;
+        }
+    }
+
+    return rc;
+}
 
 static void send_queue_write_cb(void *opaque)
 {
@@ -405,25 +433,10 @@ static void send_queue_write_cb(void *opaque)
 
     critical_section_enter(&sndq->lock);
     while ((b = TAILQ_FIRST(&sndq->queue))) {
-        int rc = send(sndq->fd, (void *)(b->data + b->off), b->len, 0);
+        int rc = send_queue_do_write(sndq, b->data + b->off, b->len);
 
-        if (rc == -1) {
-#if defined(_WIN32)
-            int err = WSAGetLastError();
-
-            if (err == WSAEWOULDBLOCK) {
-#else
-            int err = errno;
-
-            if (err == EWOULDBLOCK) {
-#endif
-                ioh_set_write_handler(sndq->fd, sndq->iohq, send_queue_write_cb, sndq);
-            } else {
-                ioh_set_write_handler(sndq->fd, sndq->iohq, NULL, sndq);
-                sndq->err = err;
-            }
+        if (rc == -1)
             break;
-        }
 
         b->len -= rc;
         b->off += rc;
@@ -572,7 +585,7 @@ static void send_queue_cleanup(struct send_queue *sndq)
     critical_section_free(&sndq->lock);
 }
 
-static void send_queue_init(struct send_queue *sndq, struct io_handler_queue *iohq, int fd)
+static void send_queue_init(struct send_queue *sndq, struct io_handler_queue *iohq, int fd, int is_sock)
 {
     sndq->iohq = iohq;
     sndq->fd = fd;
@@ -580,6 +593,7 @@ static void send_queue_init(struct send_queue *sndq, struct io_handler_queue *io
     critical_section_init(&sndq->lock);
     sndq->err = 0;
     sndq->len = 0;
+    sndq->is_sock = is_sock;
 }
 
 #ifndef _WIN32
@@ -685,7 +699,7 @@ static CharDriverState *qemu_chr_open_fd(int fd_in, int fd_out, struct io_handle
     s->fd_in = fd_in;
     s->fd_out = fd_out;
     if (s->fd_out >= 0)
-        send_queue_init(&s->sndq, iohq, s->fd_out);
+        send_queue_init(&s->sndq, iohq, s->fd_out, 0);
     chr->opaque = s;
     chr->chr_write = fd_chr_write;
     chr->chr_write_flush = fd_chr_write_flush;
@@ -735,7 +749,7 @@ unix_chr_pipe_reconnect(void *opaque)
         return;
     s->fd_out = open(filename_out, O_RDWR | O_NONBLOCK | O_BINARY);
     if (s->fd_out >= 0)
-        send_queue_init(&s->sndq, chr->iohq, s->fd_out);
+        send_queue_init(&s->sndq, chr->iohq, s->fd_out, 0);
 }
 
 static CharDriverState *qemu_chr_open_pipe(const char *filename, struct io_handler_queue *iohq)
@@ -2174,7 +2188,7 @@ static void tcp_chr_accept(void *opaque)
     if (s->do_nodelay)
         socket_set_nodelay(fd);
     s->fd = fd;
-    send_queue_init(&s->sndq, chr->iohq, fd);
+    send_queue_init(&s->sndq, chr->iohq, fd, 1);
     ioh_set_read_handler(s->listen_fd, chr->iohq, NULL, chr);
     tcp_chr_connect(chr);
 }
@@ -2317,7 +2331,7 @@ static CharDriverState *qemu_chr_open_tcp(const char *host_str,
     } else {
         s->connected = 1;
         s->fd = fd;
-        send_queue_init(&s->sndq, chr->iohq, fd);
+        send_queue_init(&s->sndq, chr->iohq, fd, 1);
         socket_set_nodelay(fd);
         tcp_chr_connect(chr);
     }
