@@ -1128,7 +1128,7 @@ p2m_pod_stat_update(struct domain *d)
 #endif /* P2M_POD_STAT_UPDATE */
 
 struct page_data_info {
-    uxen_mfn_t mfn;             /* protected by p2m lock */
+    uxen_mfn_t mfn;             /* protected by page store write lock */
     uint16_t size;
     uint8_t data[];
 } __attribute__ ((packed));
@@ -1318,8 +1318,10 @@ p2m_get_compressed_page_data(struct domain *d, mfn_t mfn, uint8_t *data,
 }
 
 int
-p2m_parse_page_data(mfn_t *mfn, uint8_t **data, uint16_t *offset)
+_p2m_get_page_data(struct p2m_domain *p2m, mfn_t *mfn, uint8_t **data,
+                   uint16_t *data_size, uint16_t *offset, int write_lock)
 {
+    struct page_data_info *pdi;
 
     *offset = (mfn_x(*mfn) >>
                (P2M_MFN_PAGE_STORE_OFFSET_INDEX - PAGE_STORE_DATA_ALIGN)) &
@@ -1327,7 +1329,21 @@ p2m_parse_page_data(mfn_t *mfn, uint8_t **data, uint16_t *offset)
     *mfn = p2m_mfn_mfn(*mfn);
     *data = map_domain_page_direct(mfn_x(*mfn));
 
+    pdi = (struct page_data_info *)&(*data)[*offset];
+    *data_size = sizeof(struct page_data_info) + pdi->size;
+
+    dsps_lock(p2m->domain, *data_size, write_lock);
+
     return 0;
+}
+
+void
+_p2m_put_page_data(struct p2m_domain *p2m, uint8_t *data, uint16_t data_size,
+                   int write_lock)
+{
+
+    unmap_domain_page_direct(data);
+    dsps_unlock(p2m->domain, data_size, write_lock);
 }
 
 static int
@@ -1338,13 +1354,15 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
     struct page_info *p = NULL;
     mfn_t pmfn = mfn;
     uint8_t *data = NULL;
+    uint16_t data_size = 0;
+    int wr_lock = 0;
     struct page_data_info *pdi;
     uint16_t offset;
     void *target = NULL;
     int ret = 1;
 
     p2m_lock_recursive(p2m);
-    if (p2m_parse_page_data(&mfn, &data, &offset)) {
+    if (p2m_get_page_data(p2m, &mfn, &data, &data_size, &offset)) {
         ret = 0;
         p2m_unlock(p2m);
         goto out;
@@ -1375,15 +1393,17 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
         goto out;
 
     if (share && page_owner == d) {
-        unmap_domain_page_direct(data);
+        p2m_put_page_data(p2m, data, data_size);
         data = NULL;
         p2m_lock_recursive(p2m);
         mfn = pmfn;
-        if (p2m_parse_page_data(&mfn, &data, &offset)) {
+        if (p2m_get_page_data_and_write_lock(p2m, &mfn, &data, &data_size,
+                                             &offset)) {
             ret = 0;
             p2m_unlock(p2m);
             goto out;
         }
+        wr_lock = 1;
         pdi = (struct page_data_info *)&data[offset];
         if (pdi->mfn) {
             /* page was decompressed concurrently, share it and free
@@ -1410,7 +1430,7 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
     if (target)
         unmap_domain_page_direct(target);
     if (data)
-        unmap_domain_page_direct(data);
+        _p2m_put_page_data(p2m, data, data_size, wr_lock);
     if (p)
         put_allocated_page(page_owner, p);
     return ret;
@@ -1950,6 +1970,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                ONE_CLONE_COUNT) {
             struct page_data_info *pdi;
             uint8_t *data;
+            uint16_t data_size;
             uint16_t offset;
             mfn_t omfn;
 
@@ -1960,7 +1981,8 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                 p2m_unlock(op2m);
                 break;
             }
-            if (p2m_parse_page_data(&omfn, &data, &offset)) {
+            if (p2m_get_page_data_and_write_lock(op2m, &omfn, &data,
+                                                 &data_size, &offset)) {
                 p2m_unlock(op2m);
                 break;
             }
@@ -1975,13 +1997,13 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             } else
                 ret = -1;
             if (ret) {
-                unmap_domain_page(data);
+                p2m_put_page_data_with_write_lock(op2m, data, data_size);
                 p2m_unlock(op2m);
                 break;
             }
             mfn = smfn;
             get_page_fast(mfn_to_page(smfn), d);
-            unmap_domain_page_direct(data);
+            p2m_put_page_data_with_write_lock(op2m, data, data_size);
             atomic_dec(&d->clone_of->template.decompressed_shared);
             p2m_unlock(op2m);
             perfc_incr(decompressed_unshared);

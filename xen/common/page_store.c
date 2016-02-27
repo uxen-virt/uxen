@@ -31,6 +31,7 @@ void
 dsps_init(struct domain *d)
 {
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
+    int slot;
 
     BUILD_BUG_ON(sizeof(struct dspage_store) > PAGE_SIZE);
     BUILD_BUG_ON(PAGE_SIZE % DSPS_DSIZE);
@@ -41,7 +42,8 @@ dsps_init(struct domain *d)
     p2m->dsps = alloc_xenheap_page();
     BUG_ON(!p2m->dsps);
 
-    spin_lock_init(&p2m->dsps->lock);
+    for (slot = 0; slot < DSPS_SLOTS; slot++)
+        page_store_init(&p2m->dsps->s[slot]);
 }
 
 void
@@ -71,7 +73,7 @@ dsps_add(struct domain *d, void *m_data, uint16_t m_size,
     ASSERT(slot < DSPS_SLOTS);
     ps = &p2m->dsps->s[slot];
 
-    spin_lock(&p2m->dsps->lock);
+    write_lock(&ps->lock);
 
     ASSERT(m_size < DSPS_DSIZE);
     /* is there a current page store page to add the data to?  or is
@@ -121,7 +123,7 @@ dsps_add(struct domain *d, void *m_data, uint16_t m_size,
 
     page_store_offset(ps) = DSPS_DSIZE_roundup(page_store_offset(ps));
 
-    spin_unlock(&p2m->dsps->lock);
+    write_unlock(&ps->lock);
 }
 
 struct page_info *
@@ -136,9 +138,8 @@ dsps_next(struct domain *d, uint16_t size, struct page_info *page)
     ASSERT(slot < DSPS_SLOTS);
     ps = &p2m->dsps->s[slot];
 
-    spin_lock(&p2m->dsps->lock);
+    ASSERT(rw_is_locked(&ps->lock));
     next = page_store_next(ps, page);
-    spin_unlock(&p2m->dsps->lock);
 
     return next;
 }
@@ -160,13 +161,14 @@ dsps_teardown(struct domain *d,
 
     ASSERT(p2m->dsps);
 
-    spin_lock(&p2m->dsps->lock);
-
     for (slot = 0; slot < DSPS_SLOTS; slot++) {
         ps = &p2m->dsps->s[slot];
 
-        if (page_store_empty(ps))
+        write_lock(&ps->lock);
+        if (page_store_empty(ps)) {
+            write_unlock(&ps->lock);
             continue;
+        }
 
         page = page_store_first(ps);
         offset = 0;
@@ -188,8 +190,10 @@ dsps_teardown(struct domain *d,
             (*processed)++;
             if (iter) {
                 ret = iter(&data[offset], DSPS_slot_size(slot), d, opaque);
-                if (ret < 0)
+                if (ret < 0) {
+                    write_unlock(&ps->lock);
                     goto out;
+                }
             }
             offset += DSPS_slot_size(slot);
         }
@@ -201,11 +205,44 @@ dsps_teardown(struct domain *d,
         put_allocated_page(d, page);
         freed++;
         page_store_clear(ps);
+        write_unlock(&ps->lock);
     }
-
-    spin_unlock(&p2m->dsps->lock);
 
     ret = freed;
   out:
     return ret;
+}
+
+void
+dsps_lock(struct domain *d, uint16_t size, int take_write_lock)
+{
+    struct p2m_domain *p2m = p2m_get_hostp2m(d);
+    int slot;
+    struct page_store *ps;
+
+    slot = DSPS_slot(size);
+    ASSERT(slot < DSPS_SLOTS);
+    ps = &p2m->dsps->s[slot];
+
+    if (take_write_lock)
+        write_lock(&ps->lock);
+    else
+        read_lock(&ps->lock);
+}
+
+void
+dsps_unlock(struct domain *d, uint16_t size, int take_write_lock)
+{
+    struct p2m_domain *p2m = p2m_get_hostp2m(d);
+    int slot;
+    struct page_store *ps;
+
+    slot = DSPS_slot(size);
+    ASSERT(slot < DSPS_SLOTS);
+    ps = &p2m->dsps->s[slot];
+
+    if (take_write_lock)
+        write_unlock(&ps->lock);
+    else
+        read_unlock(&ps->lock);
 }
