@@ -1892,7 +1892,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         if (smfn_from_clone)
             atomic_dec(&d->zero_shared_pages);
         unmap_domain_page_direct(target);
-    } else if (p2m_mfn_is_page_data(mfn_x(smfn))) {
+    } else if (p2m_mfn_is_page_data(smfn)) {
         struct domain *page_owner;
         if (!d->clone_of) {
             ASSERT(smfn_from_clone);
@@ -1959,7 +1959,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             int ret;
             p2m_lock(op2m);
             omfn = op2m->get_entry(op2m, gfn_aligned, &t, &a, p2m_query, NULL);
-            if (!p2m_mfn_is_page_data(mfn_x(omfn))) {
+            if (!p2m_mfn_is_page_data(omfn)) {
                 p2m_unlock(op2m);
                 break;
             }

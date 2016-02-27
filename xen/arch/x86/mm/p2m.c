@@ -277,7 +277,7 @@ get_gfn_contents(struct domain *d, unsigned long gpfn, p2m_type_t *t,
         put_page(page);
         goto out;
     }
-    while (p2m_is_pod(*t) && p2m_mfn_is_page_data(mfn_x(mfn))) {
+    while (p2m_is_pod(*t) && p2m_mfn_is_page_data(mfn)) {
         uint16_t offset;
 
         if (p2m_parse_page_data(&mfn, &data, &offset)) {
