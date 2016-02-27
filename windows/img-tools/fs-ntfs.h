@@ -58,6 +58,8 @@ int disklib_mkdir_simple(ntfs_fs_t fs, const wchar_t *path, uint32_t securid);
 int disklib_write_simple(ntfs_fs_t fs, const wchar_t *path, void *buffer,
         uint64_t size, uint64_t offset, int force_non_resident, uint32_t securid);
 int disklib_mklink_simple(ntfs_fs_t fs, const wchar_t *target, const wchar_t *name);
+int disklib_symlink_simple(ntfs_fs_t fs, const wchar_t *link_path,
+                           const wchar_t *path, uint32_t securid);
 
 /* exactly copy an element (file/dir) from one filesystem to another,
  * note that in the case of a directory this is not recursive, giving

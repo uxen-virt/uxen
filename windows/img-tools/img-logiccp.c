@@ -255,6 +255,7 @@ typedef enum { /* actions are ordered from most to least desirable. */
         MAN_COPY_EMPTY_DIR = 8, /* plain copy from host to vm. */
         MAN_MKDIR = 9, /* used internally to ensure dirs are created before use. */
         MAN_LINK = 10, /* used internally to hardlink files with >1 names. */
+        MAN_SYMLINK = 11, /* used internally for symlinks */
     } Action;
 
 typedef struct ManifestEntry {
@@ -691,6 +692,21 @@ static inline void strip_trailing_slash(wchar_t *path) {
     }
 }
 
+#define CONST_WCSLEN(literal) ((sizeof(literal) / sizeof(wchar_t)) - 1)
+#define LONG_PATH_PREFIX L"\\??\\"
+#define LONG_PATH_PREFIX_LEN CONST_WCSLEN(LONG_PATH_PREFIX)
+_STATIC_ASSERT(LONG_PATH_PREFIX_LEN == 4);
+
+static inline const wchar_t *strip_long_path_prefix(const wchar_t *path)
+{
+    /* Remove the \??\ from the start of path, if present */
+    if (wcsncmp(path, LONG_PATH_PREFIX, LONG_PATH_PREFIX_LEN) == 0) {
+        return path + LONG_PATH_PREFIX_LEN;
+    } else {
+        return path;
+    }
+}
+
 int read_manifest(FILE *f, VarList *vars, Manifest *suffix)
 {
     char whole_line[MAX_PATH_LEN];
@@ -836,7 +852,7 @@ int read_manifest(FILE *f, VarList *vars, Manifest *suffix)
     return 0;
 }
 
-static ManifestEntry *find_full_name(Manifest *man, const wchar_t *fn)
+static ManifestEntry *find_full_name(const Manifest *man, const wchar_t *fn)
 {
     int i;
     for (i = 0; i < man->n; ++i) {
@@ -1044,13 +1060,65 @@ int stat_file(HANDLE volume, uint64_t file_id, uint64_t *file_size, uint64_t *of
     return 0;
 }
 
-/* Breadth-first search directory scan. This is faster than DFS due to better
- * access locality. */
+/* From ddk\ntifs.h */
+typedef struct _REPARSE_DATA_BUFFER {
+    ULONG  ReparseTag;
+    USHORT ReparseDataLength;
+    USHORT Reserved;
+    union {
+        struct {
+            USHORT SubstituteNameOffset;
+            USHORT SubstituteNameLength;
+            USHORT PrintNameOffset;
+            USHORT PrintNameLength;
+            ULONG Flags;
+            WCHAR PathBuffer[1];
+        } SymbolicLinkReparseBuffer;
+        struct {
+            USHORT SubstituteNameOffset;
+            USHORT SubstituteNameLength;
+            USHORT PrintNameOffset;
+            USHORT PrintNameLength;
+            WCHAR PathBuffer[1];
+        } MountPointReparseBuffer;
+        struct {
+            UCHAR  DataBuffer[1];
+        } GenericReparseBuffer;
+    } DUMMYUNIONNAME;
+} REPARSE_DATA_BUFFER, *PREPARSE_DATA_BUFFER;
+#define IO_REPARSE_TAG_SYMLINK                  (0xA000000CL)       // winnt
 
-int files, directories;
+static wchar_t *get_symlink_path(HANDLE h)
+{
+    size_t sz = 1024;
+    REPARSE_DATA_BUFFER *buf = malloc(sz);
+    DWORD bytes_returned = 0;
+    BOOL ok = DeviceIoControl(h, FSCTL_GET_REPARSE_POINT, NULL, 0, buf, sz, &bytes_returned, NULL);
+    if (ok) {
+        if (buf->ReparseTag == IO_REPARSE_TAG_SYMLINK) {
+            ULONG n = buf->SymbolicLinkReparseBuffer.SubstituteNameLength;
+            ULONG offset = buf->SymbolicLinkReparseBuffer.SubstituteNameOffset;
+            wchar_t *result = malloc(n + sizeof(wchar_t));
+            memcpy(result, buf->SymbolicLinkReparseBuffer.PathBuffer +
+                (offset / sizeof(wchar_t)), n);
+            result[n / sizeof(wchar_t)] = 0; /* null terminate */
+            free(buf);
+            return result;
+        } else {
+            printf("Skipping unsupported reparse point tag=%08x\n",
+                (uint32_t)buf->ReparseTag);
+        }
+    } else {
+        printf("DeviceIoControl(FSCTL_GET_REPARSE_POINT) failed err=%u\n",
+            (uint32_t)GetLastError());
+    }
+    free(buf);
+    return NULL;
+}
 
 static inline
-int path_exists(wchar_t *fn, uint64_t *file_id, uint64_t *file_size, int *is_dir)
+int path_exists(wchar_t *fn, uint64_t *file_id, uint64_t *file_size,
+                int *is_dir, wchar_t **symlink)
 {
     HANDLE h;
     BY_HANDLE_FILE_INFORMATION inf;
@@ -1058,12 +1126,23 @@ int path_exists(wchar_t *fn, uint64_t *file_id, uint64_t *file_size, int *is_dir
     *is_dir = 0;
     *file_id = 0;
     *file_size = 0;
-    h = CreateFileW(fn, GENERIC_READ, FILE_SHARE_READ
-                | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
-                FILE_FLAG_BACKUP_SEMANTICS, NULL);
+    *symlink = NULL;
+    h = CreateFileW(fn,
+                    GENERIC_READ,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE,
+                    NULL,
+                    OPEN_EXISTING,
+                    FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
+                    NULL);
     if (h != INVALID_HANDLE_VALUE) {
         r = 1;
         if (GetFileInformationByHandle(h, &inf)) {
+            if (inf.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
+                /* Both files and directories can be reparse points (and
+                 * equally there are both file and directory symlinks) */
+                *symlink = get_symlink_path(h);
+            }
+
             if (!(inf.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
                 *file_size = ((uint64_t)inf.nFileSizeHigh << 32ULL) | inf.nFileSizeLow;
                 *is_dir = 0;
@@ -1076,6 +1155,11 @@ int path_exists(wchar_t *fn, uint64_t *file_id, uint64_t *file_size, int *is_dir
     }
     return r;
 }
+
+/* Breadth-first search directory scan. This is faster than DFS due to better
+ * access locality. */
+
+int files, directories;
 
 int bfs(Variable *var,
         Manifest *suffixes,
@@ -1098,6 +1182,7 @@ int bfs(Variable *var,
     assert(min_shallow_size >= SECTOR_SIZE);
     int heap_switch = 0;
     int is_dir;
+    wchar_t *symlink = NULL;
     Heap heaps[2];
 
     manifested_action = toplevel_entry->action;
@@ -1105,8 +1190,9 @@ int bfs(Variable *var,
 
     /* First check if this is a single file that needs to be included
      * in the output manifest by itself. */
-    if (path_exists(prefix(var, dn), &file_id, &file_size, &is_dir)) {
+    if (path_exists(prefix(var, dn), &file_id, &file_size, &is_dir, &symlink)) {
         if (!is_dir) {
+            ManifestEntry *e;
             if (toplevel_entry->excludable_single_file_entry) {
                 /* Check if we should exclude it or otherwise ignore this entry */
                 ManifestEntry* otherm = find_by_prefix(var->man, dn);
@@ -1114,8 +1200,7 @@ int bfs(Variable *var,
                     return 0;
                 }
             }
-
-            man_push_file(out,
+            e = man_push_file(out,
                           disk->bootvol,
                           var,
                           dn,
@@ -1123,6 +1208,10 @@ int bfs(Variable *var,
                           file_id,
                           toplevel_entry->imgname,
                           toplevel_entry->action);
+            if (symlink) {
+                e->action = MAN_SYMLINK;
+                e->target = symlink;
+            }
             //printf("1.Adding entry [%S]=[%d]=>[%S]\n", e->name, e->action, e->imgname);
             return 0;
         } else {
@@ -1291,7 +1380,21 @@ int bfs(Variable *var,
 
                     } else if ((attr & FILE_ATTRIBUTE_REPARSE_POINT) ==
                             FILE_ATTRIBUTE_REPARSE_POINT) {
-                        printf("warning: %ls: unsupported reparse point!\n", full_name);
+                        /* Need to open it to see if it's a symlink */
+                        wchar_t *dest = NULL;
+                        HANDLE h = open_file_by_name(full_name, FILE_FLAG_OPEN_REPARSE_POINT);
+                        if (h == INVALID_HANDLE_VALUE) {
+                            printf("Couldn't open path [%ls] to determine if it's a symlink\n", full_name);
+                        } else {
+                            dest = get_symlink_path(h);
+                            CloseHandle(h);
+                        }
+                        if (dest) {
+                            wchar_t *rewrite = rerooted_full_name[0] ? rerooted_full_name : NULL;
+                            ManifestEntry *e = man_push_file(out, disk->bootvol, var, full_name,
+                                0, 0, rewrite, MAN_SYMLINK);
+                            e->target = dest;
+                        }
                         continue;
                     } else {
                         /* Check if we should exclude the file based on extension and size. */
@@ -2233,14 +2336,14 @@ int vm_links_phase_1(struct disk *disk, Manifest *man)
     return 0;
 }
 
-int vm_links_phase_2(struct disk *disk, const Manifest *man)
+int vm_links_phase_2(struct disk *disk, Manifest *man)
 {
     ENTER_PHASE();
     assert(man->order_fn == cmp_offset_link_action);
 
     int i;
     for (i = 0; i < man->n; ++i) {
-        const ManifestEntry *m = &man->entries[i];
+        ManifestEntry *m = &man->entries[i];
         if (m->action == MAN_LINK) {
             int err = 0;
             if (disklib_mklink_simple(m->vol, m->target, m->imgname) < 0) {
@@ -2277,6 +2380,33 @@ int vm_links_phase_2(struct disk *disk, const Manifest *man)
                         err,
                         m->target, m->imgname);
                 return -1;
+            }
+        } else if (m->action == MAN_SYMLINK) {
+            /* See if target is something we've renamed and if so, fix up */
+            static wchar_t target_buf[MAX_PATH_LEN];
+            const wchar_t *target = strip_long_path_prefix(m->target);
+            if (wcsnicmp(target, &rootdrive, 1) == 0 && target[1] == ':') {
+                /* Target is on root drive so worth checking */
+                path_join(target_buf, target + 2, NULL); /* skip driveletter */
+                normalize_string(target_buf);
+                ManifestEntry *e = find_full_name(man, target_buf);
+                if (e) {
+                    /* The root drive is assumed to always be C: inside the
+                     * image. This should be the case regardless of what the
+                     * host root drive letter is.
+                     */
+                    path_join(target_buf, L"C:", e->imgname);
+                    normalize_string2(target_buf);
+                    printf("Fixing up symlink target %ls => %ls\n",
+                           m->target, target_buf);
+                    free(m->target);
+                    m->target = wcsdup(target_buf);
+                }
+            }
+            if (disklib_symlink_simple(m->vol, m->imgname,
+                                       m->target, m->securid) < 0) {
+                printf("symlink failed for link=%ls target=%ls\n",
+                       m->imgname, m->target);
             }
         }
     }
@@ -3775,7 +3905,13 @@ int output_manifest_phase(Manifest *man, struct disk* disk,
             json_escape_string(entry->target, temp_buf);
             fprintf(f, ", \"type\": \"hardlink\", \"target\": \"%s\"", temp_buf);
             break;
+
+        case MAN_SYMLINK:
+            json_escape_string(entry->target, temp_buf);
+            fprintf(f, ", \"type\": \"symlink\", \"target\": \"%s\"", temp_buf);
+            break;
         }
+
         if (i+1 == man->n) {
             fputs("}", f);
         } else {

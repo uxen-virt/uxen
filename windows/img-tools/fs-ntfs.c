@@ -962,6 +962,65 @@ int disklib_mklink_simple(ntfs_fs_t fs, const wchar_t *target,
     return r;
 }
 
+#define LONG_PATH_PREFIX L"\\??\\"
+#define LONG_PATH_PREFIX_BYTES (sizeof(LONG_PATH_PREFIX) - sizeof(wchar_t))
+_STATIC_ASSERT(LONG_PATH_PREFIX_BYTES == 8);
+
+int disklib_symlink_simple(ntfs_fs_t fs, const wchar_t *link_path,
+        const wchar_t *path, uint32_t securid)
+{
+    int r = -1;
+    ntfs_inode *ni = NULL;
+    REPARSE_POINT *rp = NULL;
+    struct SYMLINK_REPARSE_DATA *sd = NULL;
+
+    uint16_t path_len = wcslen(path) * sizeof(wchar_t); /* in bytes */
+    int is_long = wcsncmp(path, LONG_PATH_PREFIX,
+                          LONG_PATH_PREFIX_BYTES / sizeof(wchar_t)) == 0;
+    int is_abs = is_long || (path_len > 6 && (path[0] == L'\\'
+                         || (path[1] == L':' && path[2] == L'\\')));
+    int add_long = is_abs && !is_long; /* always add for abs paths */
+    uint16_t subst_name_len = path_len + (add_long ? LONG_PATH_PREFIX_BYTES : 0);
+    uint16_t sd_len = sizeof(struct SYMLINK_REPARSE_DATA)
+                      + path_len + subst_name_len;
+    size_t reparse_len = sizeof(REPARSE_POINT) + sd_len;
+    rp = malloc(reparse_len);
+
+    rp->reparse_tag = IO_REPARSE_TAG_SYMLINK;
+    rp->reparse_data_length = sd_len;
+    rp->reserved = 0;
+    sd = (struct SYMLINK_REPARSE_DATA *)rp->reparse_data;
+    sd->flags = is_abs ? 0 : 1;
+    /* In keeping with what ntfs-3g seems to always expect, put printable name
+     * first and "subst" name second */
+    sd->print_name_offset = 0;
+    sd->print_name_length = path_len;
+    memcpy(sd->path_buffer, path, path_len);
+    sd->subst_name_offset = path_len;
+    sd->subst_name_length = subst_name_len;
+    if (add_long) {
+        memcpy(sd->path_buffer + path_len,
+            LONG_PATH_PREFIX, LONG_PATH_PREFIX_BYTES);
+        memcpy(sd->path_buffer + path_len + LONG_PATH_PREFIX_BYTES,
+            path, path_len);
+    } else {
+        memcpy(sd->path_buffer + path_len, path, path_len);
+    }
+
+    ni = create_simple(fs, link_path, S_IFREG, securid);
+    if (!ni) {
+        printf("no inode for %ls\n", link_path);
+        goto out;
+    }
+
+    r = ntfsx_set_reparse_data(ni, (const char *)rp, reparse_len, 1);
+
+out:
+    free(rp);
+    if (ni) ntfs_inode_close(ni);
+    return r;
+}
+
 /* Get runlist for a file */
 int disklib_ntfs_file_extents(ntfs_fd_t fd,
                                 struct disklib_extent **extents,
