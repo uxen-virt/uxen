@@ -668,12 +668,6 @@ extern bool_t machine_to_phys_mapping_valid;
 #define COMPRESSED_MFN          (0xfffffffffdUL)
 #define ERROR_MFN               (0xfffffffffcUL)
 #define DMREQ_MFN               (0xfffffffffbUL)
-#if 0
-#define P2M_MFN_MFN_BITS        28
-#define P2M_MFN_SPECIAL_BITS    4
-#define P2M_MFN_PAGE_STORE_OFFSET_BITS 8
-#define P2M_MFN_PAGE_STORE_OFFSET_INDEX 32
-#endif
 #else  /* __x86_64__ */
 /* 32 bits */
 #define INVALID_MFN             (0xffffffffUL)
@@ -681,26 +675,11 @@ extern bool_t machine_to_phys_mapping_valid;
 #define COMPRESSED_MFN          (0xfffffffdUL)
 #define ERROR_MFN               (0xfffffffcUL)
 #define DMREQ_MFN               (0xfffffffbUL)
-#if 0
-#define P2M_MFN_MFN_BITS        22
-#define P2M_MFN_SPECIAL_BITS    4
-#define P2M_MFN_PAGE_STORE_OFFSET_BITS 6
-#define P2M_MFN_PAGE_STORE_OFFSET_INDEX 26
-#endif
 #endif /* __x86_64__ */
 
 #define __mfn_retry(mfn) ((mfn) == DMREQ_MFN)
 #define mfn_retry(mfn) (__mfn_retry(mfn_x((mfn))))
 
-#if 0
-#define P2M_MFN_MFN_MASK        ((1UL << P2M_MFN_MFN_BITS) - 1)
-#define p2m_mfn_mfn(mfn) _mfn(mfn_x((mfn)) & P2M_MFN_MFN_MASK)
-#define P2M_MFN_SPECIAL_MASK                                    \
-    (((1UL << P2M_MFN_SPECIAL_BITS) - 1) << P2M_MFN_MFN_BITS)
-/* #define P2M_MFN_foo             (1UL << P2M_MFN_MFN_BITS) */
-/* #define p2m_mfn_is_foo(mfn)                             \ */
-/*     (((mfn) & P2M_MFN_SPECIAL_MASK) == P2M_MFN_foo) */
-#endif
 #define p2m_mfn_is_vframe(mfn) mfn_valid_vframe(mfn)
 #define p2m_mfn_is_page_data(mfn) p2m_mfn_is_vframe(mfn)
 
