@@ -4972,9 +4972,6 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
         if ( a.hvmmem_type >= ARRAY_SIZE(memtype) )
             goto param_fail4;
 
-        /* XXX disable immutable memory */
-        goto out_ok;
-
         /* We need HVMMEM_ram_immutable only for now. */
         if (a.hvmmem_type != HVMMEM_ram_immutable)
             goto param_fail4;
@@ -5029,7 +5026,6 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
             put_gfn(d, pfn);
         }
 
-      out_ok: /* XXX disable immutable memory */
         rc = 0;
 
     param_fail4:
