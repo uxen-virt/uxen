@@ -1894,6 +1894,8 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         unmap_domain_page_direct(target);
     } else if (p2m_mfn_is_page_data(smfn)) {
         struct domain *page_owner;
+        int share_decompressed = 0;
+
         if (!d->clone_of) {
             ASSERT(smfn_from_clone);
             pod_p2mt = p2m_ram_rw;
@@ -1904,10 +1906,11 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             /* on read access -- map page pod */
             pod_p2mt = p2m_populate_on_demand;
             if (d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] &
-                HVM_PARAM_CLONE_DECOMPRESSED_shared && !d->clone_of->is_dying) {
+                HVM_PARAM_CLONE_DECOMPRESSED_shared) {
                 if (!smfn_from_clone)
                     atomic_inc(&d->tmpl_shared_pages);
                 page_owner = d->clone_of;
+                share_decompressed = 1;
             } else {
                 /* decompressed page not owned by template, but read-only */
                 if (smfn_from_clone)
@@ -1922,15 +1925,20 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
       redo_decompress:
         if (!p2m_pod_decompress_page(
                 d->clone_of ? p2m_get_hostp2m(d->clone_of) : p2m, smfn, &mfn,
-                page_owner, p2m_is_pod(pod_p2mt))) {
+                page_owner, share_decompressed)) {
             if (page_owner == d->clone_of && d->clone_of->is_dying) {
                 /* template vm was destroyed between the test above
                  * and the decompress, redo decompress without
                  * sharing */
-                gdprintk(XENLOG_INFO, "template vm%u died, decompressing page "
-                         "privately.\n", d->clone_of->domain_id);
+                gdprintk(XENLOG_INFO, "template vm%u destroyed,"
+                         " not sharing decompressed pages\n",
+                         d->clone_of->domain_id);
                 atomic_dec(&d->tmpl_shared_pages);
                 page_owner = d;
+                share_decompressed = 0;
+                pod_p2mt = p2m_ram_rw;
+                d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] &=
+                    ~HVM_PARAM_CLONE_DECOMPRESSED_shared;
                 goto redo_decompress;
             }
             domain_crash(d);
