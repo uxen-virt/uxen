@@ -1436,6 +1436,7 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
         atomic_inc(&d->template.decompressed_shared);
         p2m_unlock(p2m);
         get_page_fast(p, page_owner);
+        perfc_incr(decompressed_shareable);
         update_host_memory_saved(-PAGE_SIZE);
     }
 
