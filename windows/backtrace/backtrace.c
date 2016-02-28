@@ -284,14 +284,14 @@ _backtrace(struct output_buffer *ob, struct bfd_set *set, int depth , LPCONTEXT 
 		const char * file = NULL;
 		const char * func = NULL;
 		unsigned line = 0;
+                ADDR_T displacement = 0;
 
 		if (bc && frame.AddrPC.Offset >= module_base) {
 			find(bc,frame.AddrPC.Offset - module_base,&file,&func,&line);
 		}
 
 		if (file == NULL) {
-			ADDR_T dummy = 0;
-			if (SymGetSymFromAddr(process, frame.AddrPC.Offset, &dummy, symbol)) {
+			if (SymGetSymFromAddr(process, frame.AddrPC.Offset, &displacement, symbol)) {
 				file = symbol->Name;
 			}
 			else {
@@ -299,10 +299,10 @@ _backtrace(struct output_buffer *ob, struct bfd_set *set, int depth , LPCONTEXT 
 			}
 		}
 		if (func == NULL) {
-			output_print(ob,"    0x%x: %s@0x%x: %s\n",
+			output_print(ob,"    0x%x: %s@0x%x: %s+%d\n",
                                      frame.AddrPC.Offset,
                                      module_name, module_base,
-                                     file);
+                                     file, (int)displacement);
 		}
 		else {
 			output_print(ob,"    0x%x: %s@0x%x: %s:%d: %s\n",
