@@ -2751,8 +2751,8 @@ p2m_audit_pod_counts(struct domain *d)
     p2m_type_t t;
     p2m_access_t a;
     unsigned int page_order;
-    int nr_pages = 0, nr_pod = 0, nr_zero = 0, nr_zero_mapped = 0,
-        nr_tmpl = 0, nr_empty = 0;
+    int nr_pages = 0, nr_xen = 0, nr_pod = 0, nr_zero = 0;
+    int nr_zero_mapped = 0, nr_tmpl = 0, nr_empty = 0;
     int nr_immutable = 0;
     void *l1table = NULL;
     mfn_t l1mfn;
@@ -2789,14 +2789,18 @@ p2m_audit_pod_counts(struct domain *d)
             continue;
         }
         if (p2m_is_ram(t)) {
-            nr_pages++;
+            if (!is_xen_mfn(mfn_x(mfn)))
+                nr_pages++;
+            else
+                nr_xen++;
             continue;
         }
     }
     if (l1table)
         unmap_domain_page(l1table);
-    printk("vm%d: pages %d pod %d zero %d/%d tmpl %d empty %d\n", d->domain_id,
-           nr_pages, nr_pod, nr_zero, nr_zero_mapped, nr_tmpl, nr_empty);
+    printk("vm%d: pages %d/%d pod %d zero %d/%d tmpl %d empty %d\n",
+           d->domain_id, nr_pages, nr_xen, nr_pod,
+           nr_zero, nr_zero_mapped, nr_tmpl, nr_empty);
     printk("vm%d: immutable %d\n", d->domain_id, nr_immutable);
     printk("vm%d: nr_pages=%d pod_pages=%d zero_shared=%d tmpl_shared=%d\n",
            d->domain_id, d->tot_pages, atomic_read(&d->pod_pages),
