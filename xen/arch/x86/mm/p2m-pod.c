@@ -1663,6 +1663,8 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         }
         if ((d->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] &
              HVM_PARAM_CLONE_L1_dynamic) && p2m_is_ram_rw(t)) {
+            /* mark regular pages pod in template, so that they are
+             * populated in clone_l1_table */
             ASSERT(mfn_valid_page(smfn));
             set_p2m_entry(op2m, gfn_aligned, smfn, 0,
                           p2m_populate_on_demand,
@@ -1969,8 +1971,9 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             if (mfn_x(pdi->mfn) == mfn_x(smfn)) {
                 ret = change_page_owner(mfn_to_page(pdi->mfn), d,
                                         d->clone_of, ONE_CLONE_COUNT);
-                if (ret == 1)
-                    /* failed to assign page */
+                if (ret != -1)
+                    /* page was assigned (ret == 0), or failed to
+                     * assign page (ret == 1, and page freed) */
                     pdi->mfn = _mfn(0);
             } else
                 ret = -1;
@@ -1979,7 +1982,6 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                 p2m_unlock(op2m);
                 break;
             }
-            pdi->mfn = _mfn(0);
             mfn = smfn;
             get_page_fast(mfn_to_page(smfn), d);
             unmap_domain_page_direct(data);
@@ -2015,6 +2017,9 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                   p2m->default_access);
     if (!p2m_is_pod(pod_p2mt))
         atomic_dec(&d->pod_pages);
+
+    /* XXX mfn has two refs, one can be dropped here since it was only
+     * taken to hold onto mfn before it is added to the p2m */
 
     if (mfn_x(put_page_clone))
         put_page(mfn_to_page(put_page_clone));
