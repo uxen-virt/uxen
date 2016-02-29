@@ -1128,10 +1128,10 @@ p2m_pod_stat_update(struct domain *d)
 #endif /* P2M_POD_STAT_UPDATE */
 
 struct page_data_info {
+    uxen_mfn_t mfn;             /* protected by p2m lock */
     uint16_t size;
-    mfn_t mfn;                  /* protected by p2m lock */
     uint8_t data[];
-};
+} __attribute__ ((packed));
 
 static DEFINE_PER_CPU(uint8_t *, decompress_buffer);
 
@@ -1186,7 +1186,7 @@ p2m_pod_add_compressed_page(struct p2m_domain *p2m, unsigned long gpfn,
     data = map_domain_page_direct(mfn_x(page_to_mfn(page_store_page(ps))));
     pdi = (struct page_data_info *)&data[page_store_offset(ps)];
     pdi->size = c_size;
-    pdi->mfn = _mfn(0);
+    pdi->mfn = 0;
     page_store_offset(ps) += sizeof(struct page_data_info);
     size = pdi->size;
     if (page_store_offset(ps) + size > PAGE_STORE_MAX)
@@ -1400,8 +1400,8 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
 
     /* check if decompressed page exists */
     p2m_lock_recursive(p2m);
-    if (share && page_owner == d && mfn_x(pdi->mfn)) {
-        *tmfn = pdi->mfn;
+    if (share && page_owner == d && pdi->mfn) {
+        *tmfn = _mfn(pdi->mfn);
         get_page_fast(mfn_to_page(*tmfn), page_owner);
         p2m_unlock(p2m);
         perfc_incr(decompressed_shared);
@@ -1423,16 +1423,16 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
 
     if (share && page_owner == d) {
         p2m_lock_recursive(p2m);
-        if (mfn_x(pdi->mfn)) {
+        if (pdi->mfn) {
             /* page was decompressed concurrently, share it and free
              * our page via goto out w/ p != NULL */
-            *tmfn = pdi->mfn;
+            *tmfn = _mfn(pdi->mfn);
             get_page_fast(mfn_to_page(*tmfn), page_owner);
             p2m_unlock(p2m);
             perfc_incr(decompressed_in_vain);
             goto out;
         }
-        pdi->mfn = *tmfn;
+        pdi->mfn = mfn_x(*tmfn);
         atomic_inc(&d->template.decompressed_shared);
         p2m_unlock(p2m);
         get_page_fast(p, page_owner);
@@ -1491,9 +1491,9 @@ p2m_teardown_compressed(struct p2m_domain *p2m)
         offset += pdi->size;
         offset = (offset + ((1 << PAGE_STORE_DATA_ALIGN) - 1)) &
             ~((1 << PAGE_STORE_DATA_ALIGN) - 1);
-        if (mfn_x(pdi->mfn)) {
+        if (pdi->mfn) {
             decomp++;
-            put_allocated_page(d, mfn_to_page(pdi->mfn));
+            put_allocated_page(d, __mfn_to_page(pdi->mfn));
             n++;
         }
     }
@@ -1976,13 +1976,13 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                 break;
             }
             pdi = (struct page_data_info *)&data[offset];
-            if (mfn_x(pdi->mfn) == mfn_x(smfn)) {
-                ret = change_page_owner(mfn_to_page(pdi->mfn), d,
+            if (pdi->mfn == mfn_x(smfn)) {
+                ret = change_page_owner(__mfn_to_page(pdi->mfn), d,
                                         d->clone_of, ONE_CLONE_COUNT);
                 if (ret != -1)
                     /* page was assigned (ret == 0), or failed to
                      * assign page (ret == 1, and page freed) */
-                    pdi->mfn = _mfn(0);
+                    pdi->mfn = 0;
             } else
                 ret = -1;
             if (ret) {
