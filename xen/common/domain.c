@@ -140,7 +140,9 @@ static void __domain_finalise_shutdown(struct domain *d)
 
     domain_pause_time(d);
 
-    v4v_shutdown(d);
+    /* only needed on suspend path, can cause deadlock on SHUTDOWN_crash path */
+    if (d->shutdown_code == SHUTDOWN_suspend)
+        v4v_shutdown_for_suspend(d);
 
     d->is_shut_down = 1;
 #ifndef __UXEN__

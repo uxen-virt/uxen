@@ -22,6 +22,7 @@
 #include <xen/keyhandler.h>
 #include <xsm/xsm.h>
 #include <xen/pci_regs.h>
+#include <public/sched.h>
 
 /* #define V4V_DEBUG */
 
@@ -2086,12 +2087,15 @@ v4v_init(struct domain *d)
 }
 
 void
-v4v_shutdown(struct domain *d)
+v4v_shutdown_for_suspend(struct domain *d)
 {
     int i;
 
     if (!d)
         return;
+
+    /* cannot be called on crash path as can cause deadlock over v4v_lock */
+    BUG_ON(d->shutdown_code == SHUTDOWN_crash);
 
     write_lock(&v4v_lock);
 
