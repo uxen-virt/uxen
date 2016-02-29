@@ -976,6 +976,9 @@ release_page(uint32_t pfn)
 /* same as struct page_info/page_list_entry */
 struct page_list_entry {
     uint32_t next, prev;
+#ifdef DEBUG
+    uintptr_t count_info;
+#endif
 };
 
 int
@@ -1135,6 +1138,9 @@ kernel_malloc_mfns(uint32_t nr_pages, uint32_t *mfn_list, int zeroed)
             idle_free_count--;
             *plist = p->next;
             p->next = 0;
+#ifdef DEBUG
+            assert(!p->count_info);
+#endif
             if (i >= nr_pages)
                 break;
         }
@@ -1244,6 +1250,9 @@ _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
             p = (struct page_list_entry *)(frametable + mfn_list[n] * s);
             p->next = uxen_info->ui_free_pages[cpu].list;
             p->prev = 0;
+#ifdef DEBUG
+            assert(!p->count_info);
+#endif
             uxen_info->ui_free_pages[cpu].list = mfn_list[n];
         }
         uxen_info->ui_free_pages[cpu].count += ret;
@@ -1269,19 +1278,24 @@ uxen_pages_retire_one_cpu(int cpu, uint32_t left)
 
     ASSERT(left < uxen_info->ui_free_pages[cpu].count);
 
-#ifdef DBG
+#ifdef DEBUG
     plist = &uxen_info->ui_free_pages[cpu].list;
     for (n = 0; n < uxen_info->ui_free_pages[cpu].count; n++) {
         p = (struct page_list_entry *)(frametable + (*plist) * s);
         plist = &p->next;
-        ASSERT(!p->prev);
+        assert(!p->prev);
+        assert(!p->count_info);
     }
+    assert(!p->prev);
 #endif
 
     plist = &uxen_info->ui_free_pages[cpu].list;
     for (n = 0; n < left; n++) {
         p = (struct page_list_entry *)(frametable + (*plist) * s);
         plist = &p->next;
+#ifdef DEBUG
+        assert(!p->count_info);
+#endif
     }
 
     free_list = *plist;
@@ -1355,6 +1369,9 @@ idle_free_free_list(void)
         n++;
         *plist = p->next;
         p->next = 0;
+#ifdef DEBUG
+        assert(!p->count_info);
+#endif
         if (n >= INCREASE_RESERVE_BATCH) {
             more = 1;
             break;
