@@ -2,7 +2,7 @@
  *  uxenctl.c
  *  uxen
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -27,6 +27,11 @@
 #ifdef __APPLE__
 #include <libgen.h>
 #endif
+#if defined(_WIN32)
+#define _POSIX
+#endif
+#include <time.h>
+#include <sys/time.h>
 
 #include <uuid/uuid.h>
 
@@ -437,9 +442,56 @@ main(int argc, char **argv, char **envp)
         while (1) {
             buf = uxen_logging_read(logbuf, &pos, &incomplete);
             if (buf) {
-                if (incomplete)
-                    warnx("[logbuf overflow -- output incomplete]");
-                fputs(buf, stderr);
+                static int had_newline = 1;
+                struct tm _tm, *tm = &_tm;
+                struct timeval tv;
+                time_t ltime;
+
+                if (logfile) {
+                    gettimeofday(&tv, NULL);
+                    ltime = (time_t)tv.tv_sec;
+                    tm = localtime_r(&ltime, &_tm);
+                }
+
+                if (incomplete) {
+                    if (!logfile)
+                        warnx("[logbuf overflow -- output incomplete]");
+                    else
+                        warnx("%s%03d-%02d:%02d:%02d.%03d"
+                              " [logbuf overflow -- output incomplete]",
+                              had_newline ? "" : "\n",
+                              tm->tm_yday, tm->tm_hour, tm->tm_min, tm->tm_sec,
+                              (int)(tv.tv_usec / 1000));
+                    had_newline = 1;
+                }
+                if (!logfile)
+                    fputs(buf, stderr);
+                else {
+                    char *b = buf, *e;
+
+                    while (*b) {
+                        e = strchr(b, '\n');
+                        if (e) {
+                            e[0] = 0;
+                            e++;
+                        }
+                        if (!had_newline)
+                            fprintf(stderr, "%s%s", b, e ? "\n" : "");
+                        else
+                            fprintf(stderr, "%03d-%02d:%02d:%02d.%03d %s%s",
+                                    tm->tm_yday, tm->tm_hour, tm->tm_min,
+                                    tm->tm_sec,
+                                    (int)(tv.tv_usec / 1000), b,
+                                    e ? "\n" : "");
+                        if (e) {
+                            had_newline = 1;
+                            b = e;
+                        } else {
+                            had_newline = 0;
+                            break;
+                        }
+                    }
+                }
                 free(buf);
             }
             if (log_dump)

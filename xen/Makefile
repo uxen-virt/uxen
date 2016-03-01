@@ -123,6 +123,12 @@ SDK_include_files += xen/arch-x86/xen.h xen/arch-x86/xen-$(XEN_TARGET_ARCH).h
 SDK_include_files := $(patsubst %,$(SDKDIR_include)/%,$(SDK_include_files))
 
 dist: $(TARGET) $(SDK_include_files)
+ifeq ($(UXEN_TARGET_FORMAT),pe)
+	@mkdir -p $(DISTDIR)/debug
+	$(_W)echo Installing from $(abspath $(<D)) to $(DISTDIR)/debug
+	$(_W)echo Installing -- $(patsubst %-cv.obj,%.obj,$(<F))
+	$(_V)$(call install_data,$(patsubst %-cv.obj,%.obj,$(<)),$(DISTDIR)/debug)
+endif
 ifeq ($(UXEN_TARGET_FORMAT),elf)
 	@mkdir -p $(DISTDIR)
 	$(_W)echo Installing from $(abspath $(<D)) to $(DISTDIR)
