@@ -1385,21 +1385,23 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
 {
     struct domain *d = p2m->domain;
     struct page_info *p = NULL;
+    mfn_t pmfn = mfn;
     uint8_t *data = NULL;
     struct page_data_info *pdi;
     uint16_t offset;
     void *target = NULL;
     int ret = 1;
 
+    p2m_lock_recursive(p2m);
     if (p2m_parse_page_data(&mfn, &data, &offset)) {
         ret = 0;
+        p2m_unlock(p2m);
         goto out;
     }
 
     pdi = (struct page_data_info *)&data[offset];
 
     /* check if decompressed page exists */
-    p2m_lock_recursive(p2m);
     if (share && page_owner == d && pdi->mfn) {
         *tmfn = _mfn(pdi->mfn);
         get_page_fast(mfn_to_page(*tmfn), page_owner);
@@ -1422,7 +1424,16 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
         goto out;
 
     if (share && page_owner == d) {
+        unmap_domain_page_direct(data);
+        data = NULL;
         p2m_lock_recursive(p2m);
+        mfn = pmfn;
+        if (p2m_parse_page_data(&mfn, &data, &offset)) {
+            ret = 0;
+            p2m_unlock(p2m);
+            goto out;
+        }
+        pdi = (struct page_data_info *)&data[offset];
         if (pdi->mfn) {
             /* page was decompressed concurrently, share it and free
              * our page via goto out w/ p != NULL */
@@ -1434,8 +1445,8 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
         }
         pdi->mfn = mfn_x(*tmfn);
         atomic_inc(&d->template.decompressed_shared);
-        p2m_unlock(p2m);
         get_page_fast(p, page_owner);
+        p2m_unlock(p2m);
         perfc_incr(decompressed_shareable);
         update_host_memory_saved(-PAGE_SIZE);
     }
@@ -1493,8 +1504,10 @@ p2m_teardown_compressed(struct p2m_domain *p2m)
         offset = (offset + ((1 << PAGE_STORE_DATA_ALIGN) - 1)) &
             ~((1 << PAGE_STORE_DATA_ALIGN) - 1);
         if (pdi->mfn) {
+            uxen_mfn_t mfn = pdi->mfn;
+            pdi->mfn = 0;
             decomp++;
-            put_allocated_page(d, __mfn_to_page(pdi->mfn));
+            put_allocated_page(d, __mfn_to_page(mfn));
             n++;
         }
     }
