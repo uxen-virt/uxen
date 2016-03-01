@@ -404,11 +404,15 @@ move_frames(UXenAudioVoice *v,
 {
     UXenAudioState *state = v->s;
     int n = src_frames;
-    int align = v->guest_fmt.nBlockAlign;
     int fr_read = 0, fr_written = 0;
     double src_dst_ratio = (double)src_rate / dst_rate;
     double dst_src_ratio = 1.0 / src_dst_ratio;
     int silence = state->dev_mute || v->buf->silence >= SILENCE_SAMPLES;
+    WAVEFORMATEX *dst_fmt = NULL;
+    int dst_align;
+
+    wasapi_get_play_fmt(v->wv, &dst_fmt);
+    dst_align = dst_fmt->nBlockAlign;
 
     if (n > max_dst_frames)
         n = max_dst_frames;
@@ -425,13 +429,13 @@ move_frames(UXenAudioVoice *v,
         n = (int)v->dst_frames_remainder;
         if (n > max_dst_frames)
             n = max_dst_frames;
-        memset(dst, 0, n*align);
+        memset(dst, 0, n*dst_align);
         v->dst_frames_remainder -= n;
         fr_read = src_frames;
         fr_written = n;
     } else if (src_rate == dst_rate && src_channels == dst_channels) {
         /* equal rates and channels, no resampling required */
-        memcpy(dst, src, n*align);
+        memcpy(dst, src, n*dst_align);
         fr_read = fr_written = n;
     } else {
         voice_resample(v, src_dst_ratio, dst_channels,
