@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -851,19 +851,19 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                              pipename, sizeof (pipename),
                              NULL, NULL);
     if (!rc)
-        err(1, "WideCharToMultiByte");
+        Werr(1, "WideCharToMultiByte");
 
     if (wargc < 3 || 1 != swscanf(wargv[2], L"%d", &domid))
         domid = -1;
 
     cons.ctx = uxenconsole_init(&console_ops, &cons, pipename);
     if (!cons.ctx)
-        err(1, "uxenconsole_init");
+        Werr(1, "uxenconsole_init");
 
     if (domid >= 0) {
         cons.disp = uxenconsole_disp_init(domid, &cons, console_invalidate_rect);
         if (!cons.disp)
-            err(1, "uxenconsole_disp_init");
+            Werr(1, "uxenconsole_disp_init");
         cons.hid = uxenconsole_hid_init(domid);
     } else {
         cons.disp = NULL;
@@ -873,7 +873,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     printf("Connecting to %s\n", pipename);
     cons.channel_event = uxenconsole_connect(cons.ctx);
     if (!cons.channel_event)
-        err(1, "uxenconsole_connect");
+        Werr(1, "uxenconsole_connect");
     printf("Connected\n");
     ret = main_loop(&cons);
 
