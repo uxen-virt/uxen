@@ -2,7 +2,7 @@
  *  events.c
  *  uxen
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -248,7 +248,7 @@ create_notification_event(struct notification_event_queue *events,
     id = OSIncrementAtomic(&events->last_id);
     if (id > NOTIFICATION_EVENT_MAXID) {
         fail_msg("%s: Too many events.\n", __FUNCTION__);
-        OSDecrementAtomic(&events->last_id);
+        events->last_id = NOTIFICATION_EVENT_MAXID;
         ret = ENOMEM;
         goto out;
     }
@@ -267,6 +267,8 @@ create_notification_event(struct notification_event_queue *events,
     lck_spin_unlock(events->lck);
     ret = 0;
 out:
+    if (ret)
+        ev->id = -1;
     return ret;
 }
 
@@ -277,4 +279,5 @@ destroy_notification_event(struct notification_event_queue *events,
     lck_spin_lock(events->lck);
     TAILQ_REMOVE(&events->queue, ev, entry);
     lck_spin_unlock(events->lck);
+    ev->id = -1;
 }

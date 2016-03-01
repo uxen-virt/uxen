@@ -39,7 +39,7 @@ logging_init(struct uxen_logging_buffer_desc *bd, uint32_t size)
 
     bd->mfns = kernel_malloc(bd->npages * sizeof(bd->mfns[0]));
     if (!bd->mfns) {
-        fail_msg("kernel_malloc failed");
+        fail_msg("kernel_malloc(mfns) failed");
         ret = ENOMEM;
         return ret;
     }
@@ -60,6 +60,7 @@ logging_init(struct uxen_logging_buffer_desc *bd, uint32_t size)
         ret = EINVAL;
         goto out;
     }
+    memset(bd->buffer, 0, bd->npages << PAGE_SHIFT);
 
     ret = spinlock_initialize(bd->lock);
     if (ret) {
@@ -67,7 +68,6 @@ logging_init(struct uxen_logging_buffer_desc *bd, uint32_t size)
         goto out;
     }
 
-    memset(bd->buffer, 0, bd->npages << PAGE_SHIFT);
     bd->buffer->ulb_size = size;
 
   out:
@@ -118,8 +118,21 @@ uxen_op_logging(struct uxen_logging_desc *uld, struct fd_assoc *fda)
         return ENOMEM;
     }
 
-    if (uld->uld_event)
-        create_notification_event(&fda->events, uld->uld_event, &bd->event);
+    if (uld->uld_event && (!bd->event_fda || bd->event_fda == fda)) {
+        bd->event_fda = fda;
+
+        ret = create_notification_event(&fda->events, uld->uld_event,
+                                        &bd->event);
+        if (ret) {
+            fail_msg("create_notification_event failed");
+            ret = user_munmap_pages(bd->npages, md->user_mapping, fda);
+            if (ret)
+                fail_msg("user_munmap_pages failed: %d", ret);
+            md->user_mapping = NULL;
+            bd->event_fda = NULL;
+            return ret ? ret : EINVAL;
+        }
+    }
 
     uld->uld_buffer = md->user_mapping;
 
@@ -134,8 +147,10 @@ logging_unmap(struct uxen_logging_mapping_desc *md, struct fd_assoc *fda)
 
     /* dprintk("%s\n", __FUNCTION__); */
     bd = md->buffer_desc;
-    bd->event.id = -1;
-
+    if (bd->event.id != -1 && bd->event_fda == fda) {
+        destroy_notification_event(&fda->events, &bd->event);
+        bd->event_fda = NULL;
+    }
     ret = user_munmap_pages(bd->npages, md->user_mapping, fda);
     if (ret)
         fail_msg("user_munmap_pages failed: %d", ret);
@@ -247,5 +262,5 @@ uxen_op_logging_vprintk(struct vm_info_shared *vmis,
     if (bd->event.id != -1)
         signal_notification_event(&bd->event);
 
-    return 0;
+    return bd != &uxen_sys_logging_buffer_desc;
 }

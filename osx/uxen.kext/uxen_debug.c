@@ -2,7 +2,7 @@
  *  uxen_debug.c
  *  uxen
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  * 
@@ -21,6 +21,13 @@
 // #define UXEN_UNSAFE_SYNCHRONOUS_SYSTEM_LOGGING
 
 #ifdef UXEN_UNSAFE_SYNCHRONOUS_SYSTEM_LOGGING
+#ifdef DEBUG
+int kdbgprint = 1;
+#else
+int kdbgprint = 0;
+#endif
+int kdbgprintvm = 0;
+
 static lck_mtx_t *print_lock = NULL;
 #endif
 
@@ -52,24 +59,33 @@ uxen_print_exit(void)
 int
 uxen_vprintk(struct vm_info_shared *vmi, const char *fmt, va_list ap)
 {
+    int ret;
+
 #ifdef UXEN_UNSAFE_SYNCHRONOUS_SYSTEM_LOGGING
     va_list ap2;
 
     va_copy(ap2, ap);
 #endif
 
-    uxen_op_logging_vprintk(vmi, fmt, ap);
+    ret = uxen_op_logging_vprintk(vmi, fmt, ap);
 
 #ifdef UXEN_UNSAFE_SYNCHRONOUS_SYSTEM_LOGGING
+    if (!kdbgprint)
+	return 0;
+    if (!kdbgprintvm && ret)
+        return 0;
+
     if (print_lock)
         lck_mtx_lock(print_lock);
-    vprintf(fmt, ap2);
+    ret = vprintf(fmt, ap2);
     if (print_lock)
         lck_mtx_unlock(print_lock);
     va_end(ap2);
-#endif
 
+    return ret;
+#else
     return 0;
+#endif
 }
 
 #ifdef UXEN_DPRINTK

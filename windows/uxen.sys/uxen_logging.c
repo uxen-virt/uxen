@@ -127,7 +127,7 @@ uxen_op_logging(struct uxen_logging_desc *uld, struct fd_assoc *fda)
             ret = user_munmap_pages(md->user_mapping, bd->npages, bd->mfns,
                                     fda);
             if (ret)
-                fail_msg("unmap_page_range failed: %d", ret);
+                fail_msg("user_munmap_pages failed: %d", ret);
             md->user_mapping = NULL;
             bd->event_fda = NULL;
             return ret ? ret : EINVAL;
@@ -161,7 +161,6 @@ logging_unmap(struct uxen_logging_mapping_desc *md, struct fd_assoc *fda)
 void
 logging_free(struct uxen_logging_buffer_desc *bd)
 {
-    int ret;
 
     dprintk("%s\n", __FUNCTION__);
     if (!bd)

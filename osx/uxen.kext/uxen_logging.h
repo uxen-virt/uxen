@@ -20,6 +20,7 @@ struct uxen_logging_buffer_desc {
     struct uxen_logging_buffer *buffer;
     uxen_pfn_t *mfns;
     lck_spin_t *lock;
+    struct fd_assoc *event_fda;
     int npages;
     uint32_t size;
     struct notification_event event;
