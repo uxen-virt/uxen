@@ -1243,7 +1243,7 @@ p2m_pod_add_compressed_page(struct p2m_domain *p2m, unsigned long gpfn,
 #ifndef NDEBUG
 static int
 p2m_pod_compress_page(struct p2m_domain *p2m, unsigned long gfn_aligned,
-                      mfn_t mfn, void *target)
+                      mfn_t mfn, void *target, int refs)
 {
     struct domain *d = p2m->domain;
     struct page_info *new_page = NULL;
@@ -1264,22 +1264,18 @@ p2m_pod_compress_page(struct p2m_domain *p2m, unsigned long gfn_aligned,
         new_page = alloc_domheap_page(d, PAGE_ORDER_4K);
         if (!new_page)
             return 1;
-    }
+    } else
+        return 1;
 
     p2m_lock(p2m);
 
     /* Check page is not compressed/replaced yet */
     checkmfn = p2m->get_entry(p2m, gfn_aligned, &t, &a, p2m_query, NULL);
-    if (mfn_x(mfn) != mfn_x(checkmfn)) {
+    if (mfn_x(mfn) != mfn_x(checkmfn) ||
+        (refs && (mfn_to_page(mfn)->count_info & PGC_count_mask) != refs)) {
         p2m_unlock(p2m);
         if (new_page)
             free_domheap_page(new_page);
-        return 1;
-    }
-
-    if (c_size == 0) {
-        p2m_unlock(p2m);
-        /* no page was allocated if c_size == 0 */
         return 1;
     }
 
@@ -2717,20 +2713,21 @@ p2m_pod_compress_template_work(void *_d)
         if (p2m_is_ram(t))
             nr_comp_unused++;
         else if (p2m_is_pod(t)) {
-            if ((page->count_info & PGC_count_mask) > 1)
+            if ((page->count_info & PGC_count_mask) > 2)
                 nr_shared++;
             else
                 nr_comp_used++;
         }
         if (p2m_is_ram(t) &&
-            (!unshared_only || (page->count_info & PGC_count_mask) < 2)) {
+            (!unshared_only || (page->count_info & PGC_count_mask) == 2)) {
             p2m_lock(p2m);
             mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, &page_order);
             if (mfn_valid_page(mfn) &&
                 get_page(page = mfn_to_page(mfn), d)) {
                 p2m_unlock(p2m);
                 target = map_domain_page_direct(mfn_x(mfn));
-                (void)p2m_pod_compress_page(p2m, gpfn, mfn, target);
+                (void)p2m_pod_compress_page(p2m, gpfn, mfn, target,
+                                            unshared_only ? 2 + 1 : 0);
                 unmap_domain_page_direct(target);
                 nr_compressed++;
                 put_page(page);
