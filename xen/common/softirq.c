@@ -232,6 +232,9 @@ void raise_softirq(unsigned int nr)
 {
     ASSERT(softirq_handlers[nr].cpu != NULL);
     switch (nr) {
+    case TIMER_CPU0_SOFTIRQ:
+        if (smp_processor_id())
+            WARN_ONCE();
     case RCU_CPU_SOFTIRQ:
     case TASKLET_SCHEDULE_CPU_SOFTIRQ:
     case P2M_L1_CACHE_CPU_SOFTIRQ:
