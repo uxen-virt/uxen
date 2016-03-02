@@ -1769,6 +1769,22 @@ __vmread_safe_direct(unsigned long field, int *error)
     return ecx;
 }
 
+static int 
+__vmptrld_safe_direct(u64 addr)
+{
+    int error;
+
+    asm volatile ( VMPTRLD_OPCODE
+                   MODRM_EAX_06
+                   /* CF==1 or ZF==1 --> rc = -1 */
+                   "setna %b0 ; neg %0"
+                   : "=q" (error)
+                   : "0" (0), "a" (&addr)
+                   : "memory");
+
+    return error;
+}
+
 unsigned long (*__vmread_fn)(unsigned long field) = __vmread_direct;
 void (*__vmwrite_fn)(unsigned long field, unsigned long value) =
     __vmwrite_direct;
@@ -2144,16 +2160,20 @@ vmcs_scan_for_field(void *vmcs, uint64_t vmcs_ma, enum vmcs_field f,
         /* shoot safe value & reload vmcs, assumes little endian */
         __vmpclear(vmcs_ma);
         *((uint16_t*)(vmcs+i)) = shoot_v;
-        __vmptrld(vmcs_ma);
-        /* did we hit bullseye? */
-        v = __vmread_safe_direct(f, &error);
-        if (!error && v == shoot_v) {
-            off = i;
-            break;
-        } else if (error) {
-            printk("HVM/VMX: vmread of vmcs field %x failed!\n", f);
-            off = 0;
-            break;
+        if (!__vmptrld_safe_direct(vmcs_ma)) {
+            /* did we hit bullseye? */
+            v = __vmread_safe_direct(f, &error);
+            if (!error && v == shoot_v) {
+                off = i;
+                break;
+            } else if (error) {
+                printk("HVM/VMX: vmread of vmcs field %x failed!\n", f);
+                off = 0;
+                break;
+            }
+        } else {
+            printk("HVM/VMX: vmptrld of *((uint16_t*)(vmcs+0x%x)) = 0x%x failed\n",
+                   (unsigned)i, (unsigned)shoot_v);
         }
         /* restore 0 */
         *((uint16_t*)(vmcs+i)) = 0;
