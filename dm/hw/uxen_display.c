@@ -457,7 +457,9 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
             bank_reg_write(s, bank_id, 0, sz);
 
         if (w > crtc->xres) {
-            int height = min(h, crtc->yres);
+            int height = h;
+            if (h > crtc->yres)
+                h = crtc->yres;
             uint8_t* src = bank->vram.view + bank_offset + height * crtc->stride;
             uint8_t* dst = bank->vram.view + bank_offset + height * stride;
             for (;;) {
