@@ -1716,6 +1716,7 @@ int net_init_nickel(QemuOpts *opts, Monitor *mon, const char *name, VLANState *v
     struct nickel *ni = NULL;
     const char *vnet;
     uintptr_t ni_p = 0;
+    int threads_cancel = 0, threads_detach = 0;
 
     struct in_addr net  = { .s_addr = htonl(0x0a000200) }; /* 10.0.2.0 */
     struct in_addr mask = { .s_addr = htonl(0xffffff00) }; /* 255.255.255.0 */
@@ -1896,12 +1897,23 @@ int net_init_nickel(QemuOpts *opts, Monitor *mon, const char *name, VLANState *v
     if (ni->tcp_disable_window_scale)
         NETLOG("%s: TCP window scale option DISABLED", __FUNCTION__);
 
-    if (ni->async_op_max_threads) {
-        async_op_set_max_threads(ni->async_op_ctx, ni->async_op_max_threads);
+    if (ni->async_op_max_threads)
         NETLOG("max number of asop threads set to %d", ni->async_op_max_threads);
-    } else {
+    else
         NETLOG("no limit on the number of asop threads");
-    }
+
+    threads_cancel = 0;
+    threads_detach = 0;
+
+#if defined(__APPLE__)
+    threads_cancel = 1;
+    threads_detach = 1;
+#endif
+
+    async_op_set_prop(ni->async_op_ctx, &ni->event,
+                      ni->async_op_max_threads, threads_cancel, threads_detach);
+    NETLOG("async-op threads: cancellable %d, detachable %d", threads_cancel,
+           threads_detach);
 
     ret = 0;
 out:

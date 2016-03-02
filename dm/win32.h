@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -119,8 +119,11 @@ typedef HANDLE uxen_thread;
                     ret = -1;                                           \
                 ret;                                                    \
             }))
+#define cancel_thread(thread) do { } while(0)
+#define setcancel_thread() do { } while(0)
 #define elevate_thread(thread) SetThreadPriority(thread, THREAD_PRIORITY_ABOVE_NORMAL)
 #define wait_thread(thread) WaitForSingleObject(thread, INFINITE)
+#define detach_thread(thread) do { } while(0)
 #define close_thread_handle(thread) CloseHandle(thread)
 
 #undef assert

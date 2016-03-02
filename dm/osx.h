@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -152,9 +152,20 @@ typedef pthread_t uxen_thread;
                     *(thread) = NULL;                                   \
                 ret;                                                    \
             }))
+#define setcancel_thread() (({                                          \
+            int oldstate;                                               \
+            int ret = pthread_setcancelstate(PTHREAD_CANCEL_ENABLE,     \
+                                             &oldstate);                \
+            if (!ret)                                                   \
+                ret = pthread_setcanceltype(PTHREAD_CANCEL_DEFERRED,    \
+                                            &oldstate);                 \
+            ret;                                                        \
+            }))
+#define cancel_thread(thread) pthread_cancel(thread)
 /* TODO: implement */
 #define elevate_thread(thread) do {} while(0)
 #define wait_thread(thread) pthread_join(thread, 0)
+#define detach_thread(thread) pthread_detach(thread)
 #define close_thread_handle(thread) do { } while(0)
 
 int generate_random_bytes(void *buf, size_t len);

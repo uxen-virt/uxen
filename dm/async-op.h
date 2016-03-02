@@ -37,6 +37,7 @@ int async_op_add_bh(struct async_op_ctx *ctx, void *opaque, void (*cb)(void *));
 
 void async_op_process(struct async_op_ctx *ctx);
 void async_op_exit_wait(struct async_op_ctx *ctx);
-void async_op_set_max_threads(struct async_op_ctx *ctx, int max_threads);
+void async_op_set_prop(struct async_op_ctx *ctx, ioh_event *threads_event,
+                       int max_threads, int threads_cancel, int threads_detach);
 
 #endif  /* _ASYNC_OP_H_ */
