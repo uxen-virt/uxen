@@ -1275,7 +1275,7 @@ p2m_pod_compress_page(struct p2m_domain *p2m, unsigned long gfn_aligned,
         (refs && (mfn_to_page(mfn)->count_info & PGC_count_mask) != refs)) {
         p2m_unlock(p2m);
         if (new_page)
-            free_domheap_page(new_page);
+            put_page(new_page);
         return 1;
     }
 
