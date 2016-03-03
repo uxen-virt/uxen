@@ -1051,6 +1051,11 @@ static void check_immutable(p2m_query_t q, struct domain *d, unsigned long gfn)
     }
 }
 
+#ifndef NDEBUG
+// #define P2M_POD_STAT_UPDATE 1
+#endif  /* NDEBUG */
+
+#ifdef P2M_POD_STAT_UPDATE
 static uint64_t host_memory_saved = 0;
 static DEFINE_SPINLOCK(host_memory_saved_lock);
 
@@ -1062,16 +1067,16 @@ update_host_memory_saved(int64_t delta)
     spin_unlock(&host_memory_saved_lock);
 }
 
-#ifndef NDEBUG
-// #define P2M_POD_STAT_UPDATE 1
-#endif  /* NDEBUG */
-#ifdef P2M_POD_STAT_UPDATE
+#define TEMPLATE_STAT_RATE MILLISECS(200)
+#define VM_STAT_RATE MILLISECS(1000)
+
 static void
 p2m_pod_stat_update(struct domain *d)
 {
     static int have_clone = 0;
     s_time_t n;
     uint64_t memory_saved;
+    char m[256];
 
     if (is_template_domain(d) && !have_clone)
         return;
@@ -1084,51 +1089,56 @@ p2m_pod_stat_update(struct domain *d)
     spin_lock(&d->p2m_stat_lock);
 
     n = NOW() - d->p2m_stat_last;
-    if (((d->p2m_stat_ops++ > 100) && (n > MILLISECS(20))) ||
-        (n > MILLISECS(100))) {
-        int id = d->domain_id;
-        if (id >= 26)
+    if (/* ((d->p2m_stat_ops++ > 100) && (n > MILLISECS(20))) || */
+        (n > (is_template_domain(d) ? TEMPLATE_STAT_RATE : VM_STAT_RATE))) {
+        int id = 1 + ((d->domain_id - 1) % 52);
+        if (id > 26)
             id += 6;
         id += 64;
         d->p2m_stat_last = NOW();
         d->p2m_stat_ops = 0;
         if (!is_template_domain(d))
-            UI_HOST_CALL(
-                ui_printf, NULL,
-                "p2m_pod_stat %ld %ld %d %c %"PRId64" %"PRId64
-                " %d %d %d %d %d %d\n",
-                (u64)((d->p2m_stat_last - d->start_time) / 1000000UL),
-                (u64)(d->p2m_stat_last / 1000000UL),
-                d->domain_id, id,
-                atomic_read(&host_pages_allocated), memory_saved,
-                atomic_read(&d->tmpl_shared_pages),
-                atomic_read(&d->zero_shared_pages),
-                d->tot_pages,
-                /* d->tot_pages - */ /* atomic_read(&d->pod_read_pages) */ 0,
-                /* d->tot_pages - */ /* atomic_read(&d->pod_write_pages) */ 0,
-                /* atomic_read(&d->lazy_load_pages) */ 0
+            snprintf(m, sizeof(m) - 1,
+                     "p2m_pod_stat %"PRId64" %"PRId64" %d %c %d %"PRId64
+                     " %d %d %d\n",
+                     (u64)((d->p2m_stat_last - d->start_time) / 1000000UL),
+                     (u64)(d->p2m_stat_last / 1000000UL),
+                     d->domain_id, id,
+#ifdef __i386__
+                     atomic_read(&hidden_pages_allocated) +
+#endif  /* __i386__ */
+                     atomic_read(&host_pages_allocated), memory_saved,
+                     d->tot_pages,
+                     atomic_read(&d->tmpl_shared_pages),
+                     atomic_read(&d->zero_shared_pages)
                 );
         else
-            UI_HOST_CALL(
-                ui_printf, NULL,
-                "p2m_pod_stat %ld %ld %d %c %"PRId64" %"PRId64
-                " %d %d %d %d %d\n",
-                (u64)((d->p2m_stat_last - d->start_time) / 1000000UL),
-                (u64)(d->p2m_stat_last / 1000000UL),
-                d->domain_id, id,
-                atomic_read(&host_pages_allocated), memory_saved,
-                atomic_read(&d->tmpl_shared_pages),
-                atomic_read(&d->zero_shared_pages),
-                atomic_read(&d->template.compressed_pages),
-                atomic_read(&d->template.compressed_pdata),
-                atomic_read(&d->template.decompressed_shared)
+            snprintf(m, sizeof(m) - 1,
+                     "p2m_pod_stat %"PRId64" %"PRId64" %d %c %d %"PRId64
+                     " %d %d %d %d %d %d\n",
+                     (u64)((d->p2m_stat_last - d->start_time) / 1000000UL),
+                     (u64)(d->p2m_stat_last / 1000000UL),
+                     d->domain_id, id,
+#ifdef __i386__
+                     atomic_read(&hidden_pages_allocated) +
+#endif  /* __i386__ */
+                     atomic_read(&host_pages_allocated), memory_saved,
+                     d->tot_pages,
+                     atomic_read(&d->tmpl_shared_pages),
+                     atomic_read(&d->zero_shared_pages),
+                     atomic_read(&d->template.compressed_pages),
+                     atomic_read(&d->template.compressed_pdata),
+                     atomic_read(&d->template.decompressed_shared)
                 );
+        UI_HOST_CALL(ui_printf, NULL, "%s", m);
     }
 
     spin_unlock(&d->p2m_stat_lock);
 }
 #else  /* P2M_POD_STAT_UPDATE */
 #define p2m_pod_stat_update(d) do { (void)(d); } while (/* CONSTCOND */0)
+#define update_host_memory_saved(delta)                 \
+    do { (void)(delta); } while (/* CONSTCOND */0)
 #endif /* P2M_POD_STAT_UPDATE */
 
 struct page_data_info {
@@ -1201,6 +1211,7 @@ p2m_pod_add_compressed_page(struct p2m_domain *p2m, unsigned long gpfn,
     update_host_memory_saved(
         PAGE_SIZE -
         (DSPS_DSIZE_bytes_used(sizeof(struct page_data_info) + c_size)));
+    p2m_pod_stat_update(d);
 
     return mfn;
 }
@@ -1420,6 +1431,7 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
         p2m_unlock(p2m);
         perfc_incr(decompressed_shareable);
         update_host_memory_saved(-PAGE_SIZE);
+        p2m_pod_stat_update(d);
     }
 
     perfc_incr(decompressed_pages);
@@ -1449,6 +1461,7 @@ p2m_teardown_compressed_one_cb(void *_pdi, uint16_t size, struct domain *d,
         (*decomp)++;
         put_allocated_page(d, __mfn_to_page(mfn));
         put_page(__mfn_to_page(mfn));
+        update_host_memory_saved(PAGE_SIZE);
     }
 
     return 0;
@@ -1822,8 +1835,6 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                     smfn = p2m_pod_add_compressed_page(
                         op2m, gfn_aligned, dmreq_vcpu_page,
                         dmreq->dmreq_gpfn_size, p);
-
-                    update_host_memory_saved(-PAGE_SIZE);
                 } else {
                     /* compressed + read -> decompress */
                     if (dmreq->dmreq_gpfn_size != PAGE_SIZE) {
@@ -1853,7 +1864,6 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                     atomic_inc(&tmpl->tmpl_shared_pages);
 
                     unmap_domain_page_direct(target);
-                    update_host_memory_saved(-PAGE_SIZE);
 
                     p2m_pod_stat_update(tmpl);
 
@@ -2581,10 +2591,9 @@ guest_physmap_mark_pod_locked(struct domain *d, unsigned long gfn,
                 pod_count++;
             else if (mfn_zero_page(omfn))
                 pod_zero_count++;
-            else if (mfn_retry(omfn)) {
+            else if (mfn_retry(omfn))
                 pod_retry_count++;
-                update_host_memory_saved(-PAGE_SHIFT);
-            } else
+            else
                 pod_tmpl_count++;
         }
     }
@@ -2605,10 +2614,9 @@ guest_physmap_mark_pod_locked(struct domain *d, unsigned long gfn,
     atomic_sub(pod_count + pod_zero_count + pod_tmpl_count + pod_retry_count,
                &d->pod_pages);
     if (!order) {
-        if (mfn_retry(mfn)) {
+        if (mfn_retry(mfn))
             atomic_add(1 << order, &d->retry_pages);
-            update_host_memory_saved((1 << order) << PAGE_SHIFT);
-        } else
+        else
             atomic_add(1 << order, &d->zero_shared_pages);
     }
     atomic_sub(pod_zero_count, &d->zero_shared_pages);
