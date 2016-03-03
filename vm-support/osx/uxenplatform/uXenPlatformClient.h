@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -14,14 +14,14 @@ class uXenPlatformClient : public IOUserClient
     OSDeclareDefaultStructors(uXenPlatformClient);
 
 public:
-    virtual bool initWithTask(task_t, void *, UInt32, OSDictionary *);
-    virtual bool start(IOService *);
-    virtual IOReturn clientClose(void);
-    virtual void stop(IOService *);
-    virtual void free(void);
+    virtual bool initWithTask(task_t, void *, UInt32, OSDictionary *) override;
+    virtual bool start(IOService *) override;
+    virtual IOReturn clientClose(void) override;
+    virtual void stop(IOService *) override;
+    virtual void free(void) override;
     virtual IOReturn externalMethod(uint32_t, IOExternalMethodArguments *,
                                     IOExternalMethodDispatch *, OSObject *,
-                                    void *);
+                                    void *) override;
 
 private:
     static IOExternalMethodDispatch methods[];

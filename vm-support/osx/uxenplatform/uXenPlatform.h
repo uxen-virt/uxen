@@ -29,12 +29,12 @@ class uXenPlatform : public IOService
 
 public:
     /* IOService */
-    virtual bool init(OSDictionary *dict = NULL);
-    virtual void free(void);
-    virtual IOService *probe(IOService *provider, SInt32 *score);
+    virtual bool init(OSDictionary *dict = NULL) override;
+    virtual void free(void) override;
+    virtual IOService *probe(IOService *provider, SInt32 *score) override;
 
-    virtual bool start(IOService *provider);
-    virtual void stop(IOService *provider);
+    virtual bool start(IOService *provider) override;
+    virtual void stop(IOService *provider) override;
 
     /* client methods */
     IOReturn get_info(struct uXenPlatformInfo *arg);

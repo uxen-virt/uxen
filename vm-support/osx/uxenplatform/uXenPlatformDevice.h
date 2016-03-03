@@ -20,15 +20,15 @@ union uxp_bus_device_config_block;
 class uXenPlatformDevice : public IOService
 {
     OSDeclareDefaultStructors(uXenPlatformDevice);
-
+    using IOService::init;
 public:
     static uXenPlatformDevice *withConfig(const union uxp_bus_device_config_block* config);
 
     /* IOService */
     virtual bool init(const union uxp_bus_device_config_block* config);
-    virtual void free(void);
-    virtual bool attach(IOService *provider);
-    virtual void detach(IOService *provider);
+    virtual void free(void) override;
+    virtual bool attach(IOService *provider) override;
+    virtual void detach(IOService *provider) override;
 
     virtual bool matchPropertyTable(OSDictionary *table) override;
 
