@@ -14,6 +14,7 @@
 #include <mach/mach_vm.h>
 #include <kern/sched_prim.h>
 #include <libkern/libkern.h>
+#include <sys/sysctl.h>
 
 #include <rbtree/rbtree.h>
 
@@ -50,6 +51,10 @@ lck_mtx_t *populate_frametable_lock;
     (((a) >> L3_PAGETABLE_SHIFT) & (L3_PAGETABLE_ENTRIES - 1))
 #define l4_table_offset(a)         \
     (((a) >> L4_PAGETABLE_SHIFT) & (L4_PAGETABLE_ENTRIES - 1))
+
+static uint64_t user_malloc_cur;
+static uint64_t user_malloc_max;
+static lck_spin_t *user_malloc_stats_lock;
 
 static uint64_t
 set_pte(uintptr_t va, uint64_t _new)
@@ -1611,6 +1616,9 @@ unmap_host_pages(void *va, size_t len, struct fd_assoc *fda)
     return user_free_user_mapping(um);
 }
 
+SYSCTL_QUAD(_hw_uxen, OID_AUTO, malloc_max, CTLFLAG_RD, &user_malloc_max, "");
+SYSCTL_QUAD(_hw_uxen, OID_AUTO, malloc_cur, CTLFLAG_RD, &user_malloc_cur, "");
+
 int
 uxen_mem_init(void)
 {
@@ -1635,6 +1643,13 @@ uxen_mem_init(void)
 
     memset(page_lookup, 0, size);
     page_lookup_size = size / sizeof(struct vm_page *);
+
+    user_malloc_stats_lock = lck_spin_alloc_init(uxen_lck_grp, LCK_ATTR_NULL);
+    user_malloc_cur = user_malloc_max = 0;
+
+    sysctl_register_oid(&sysctl__hw_uxen_malloc_max);
+    sysctl_register_oid(&sysctl__hw_uxen_malloc_cur);
+
     return 0;
 }
 
@@ -1679,6 +1694,10 @@ uxen_mem_exit(void)
         dprintk("%s: freed %d leaked page%s\n", __FUNCTION__, freed,
                 (freed != 1) ? "s" : "");
 #endif
+
+    sysctl_unregister_oid(&sysctl__hw_uxen_malloc_max);
+    sysctl_unregister_oid(&sysctl__hw_uxen_malloc_cur);
+    lck_spin_free(user_malloc_stats_lock, uxen_lck_grp);
 }
 
 void *
@@ -1763,6 +1782,14 @@ user_malloc(size_t size, enum user_mapping_type type, struct fd_assoc *fda)
     rb_tree_insert_node(&umi->rbtree, um);
     lck_spin_unlock(umi->lck);
 
+    if (um->type == USER_MAPPING_USER_MALLOC) {
+        lck_spin_lock(user_malloc_stats_lock);
+        user_malloc_cur += size;
+        if (user_malloc_cur > user_malloc_max)
+            user_malloc_max = user_malloc_cur;
+        lck_spin_unlock(user_malloc_stats_lock);
+    }
+
     va = (void *)addr;
 
   out:
@@ -1813,6 +1840,11 @@ user_free_user_mapping(struct user_mapping *um)
             /* Not the best of situations, but keep going. */
         }
         xnu_vm_map_deallocate(um->vm_map); /* put ref */
+        if (um->type == USER_MAPPING_USER_MALLOC) {
+            lck_spin_lock(user_malloc_stats_lock);
+            user_malloc_cur -= um->va.size;
+            lck_spin_unlock(user_malloc_stats_lock);
+        }
         break;
 
     case USER_MAPPING_MEMORY_MAP:
