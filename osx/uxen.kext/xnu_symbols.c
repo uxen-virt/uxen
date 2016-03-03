@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -19,6 +19,9 @@ static char *string_table = NULL;
 static struct xnu_symbol *symbols = NULL;
 static uint32_t str_tbl_sz, sym_tbl_sz;
 static uint32_t symbol_count = 0;
+
+/* uxen.c */
+extern struct sysctl_oid sysctl__hw_uxen;
 
 int
 uxen_load_xnu_symbols(struct uxen_syms_desc *usd)
@@ -217,6 +220,7 @@ init_xnu_symbols(void)
     xnu_vm_page_locks = find_xnu_symbol("_vm_page_locks");
     xnu_vm_page_wire_count = find_xnu_symbol("_vm_page_wire_count");
 #endif
+    sysctl__hw_uxen.oid_parent = find_xnu_symbol("_sysctl__hw_children");
 
     if (!xnu_get_map_pmap) {
         switch (version_major) {

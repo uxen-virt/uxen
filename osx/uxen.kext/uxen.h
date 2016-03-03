@@ -40,6 +40,7 @@ extern "C" {
 #include <libkern/OSMalloc.h>
 #include <libkern/version.h>
 #include <sys/kauth.h>
+#include <sys/sysctl.h>
 
 #include <queue.h>
 #include <rbtree/rbtree.h>
@@ -268,6 +269,8 @@ struct pointer_map {
 };
 
 extern const rb_tree_ops_t pointer_map_rbtree_ops;
+
+extern struct sysctl_oid_list sysctl__hw_uxen_children;
 
 /* uxen_ops.c */
 extern uint8_t *frametable;

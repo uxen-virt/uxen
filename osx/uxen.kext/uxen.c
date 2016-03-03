@@ -36,6 +36,14 @@ static lck_mtx_t *uxen_lck = NULL;
 uint8_t *uxen_hv = NULL;
 uint32_t uxen_size = 0;
 
+struct sysctl_oid_list sysctl__hw_uxen_children;
+struct sysctl_oid sysctl__hw_uxen = {
+    NULL, { 0 },
+    OID_AUTO, CTLTYPE_NODE | CTLFLAG_RW | CTLFLAG_LOCKED | CTLFLAG_OID2,
+    (void*)&sysctl__hw_uxen_children, 0, "uxen", 0, "N", "",
+    SYSCTL_OID_VERSION, 0
+};
+
 enum uxen_mode {
     MODE_IDLE,
     MODE_SYMS_LOADED,
@@ -756,6 +764,8 @@ uxen_driver_unload(void)
 
     uxen_mem_exit();
 
+    sysctl_unregister_oid(&sysctl__hw_uxen);
+
 #ifdef DEBUG_MALLOC
     debug_check_malloc();
 #endif
@@ -780,6 +790,8 @@ static int
 uxen_module_start_finish(void)
 {
     int ret;
+
+    sysctl_register_oid(&sysctl__hw_uxen);
 
     ret = uxen_mem_init();
     if (ret) {
