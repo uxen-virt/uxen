@@ -288,23 +288,21 @@ init_hidden_pages(paddr_t ps, paddr_t pe)
     nr_pages = (pe >> PAGE_SHIFT) - (ps >> PAGE_SHIFT);
 
     atomic_add(nr_pages, &hidden_pages_available);
-#ifndef __UXEN_NOT_YET__
-    atomic_add(nr_pages, &hidden_pages_allocated);
-#endif  /* __UXEN_NOT_YET__ */
 
     for (i = 0; i < nr_pages; i++) {
-#ifndef __UXEN_NOT_YET__
-        if (opt_bootscrub)
-            scrub_one_page(pg + i);
-        free_hidden_page(pg + i);
-#else  /* __UXEN_NOT_YET__ */
+        if (opt_bootscrub) {
+            scrub_one_page(pg);
+            pg->count_info = PGC_state_free;
+        } else
+            pg->count_info = PGC_state_dirty;
+
         page_set_owner(pg, NULL);
-        pg->count_info = PGC_state_dirty;
 
         spin_lock_irqsave(&hidden_pages_free_list_lock, flags);
         page_list_add_tail(pg, &hidden_pages_free_list);
         spin_unlock_irqrestore(&hidden_pages_free_list_lock, flags);
-#endif  /* __UXEN_NOT_YET__ */
+
+        pg++;
     }
 }
 
