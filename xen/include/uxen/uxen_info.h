@@ -91,10 +91,14 @@
 #define UI_HOST_CALL_SELECT_WRAP(...) \
     UI_HOST_CALL_SELECT(__VA_ARGS__) 
 
-#define UI_HOST_CALL_SELECT(B1,B2,B3,B4,B5,B6,B7,B8,B9,B10,B11,B12,B13,B14,B15,N,...) N
+#define UI_HOST_CALL_SELECT(B1,B2,B3,B4,B5,B6,B7,B8,B9,B10,B11,B12,B13,B14,B15,B16,B17,B18,B19,N,...) N
 
 #define UI_HOST_CALLS(...)                      \
     UI_HOST_CALL_N(__VA_ARGS__),                \
+        UI_HOST_CALL_N(__VA_ARGS__),            \
+        UI_HOST_CALL_N(__VA_ARGS__),            \
+        UI_HOST_CALL_N(__VA_ARGS__),            \
+        UI_HOST_CALL_N(__VA_ARGS__),            \
         UI_HOST_CALL_N(__VA_ARGS__),            \
         UI_HOST_CALL_N(__VA_ARGS__),            \
         UI_HOST_CALL_N(__VA_ARGS__),            \
