@@ -84,7 +84,7 @@ uxen_hypercall(struct uxen_hypercall_desc *uhd, int snoop_mode,
             continue;
         }
 
-        if (ret == -ECONTINUATION || ret == -EMAPPAGERANGE)
+        if (ret == -ERETRY || ret == -ECONTINUATION || ret == -EMAPPAGERANGE)
             continue;
 
         break;

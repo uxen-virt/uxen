@@ -27,4 +27,6 @@
 #define EMAPPAGERANGE   131     /* pseudo error code: retry after
                                  * handling pending map range
                                  * request */
+#define ERETRY          132     /* pseudo error code: generic retry from
+                                   hypercall_create_retry_continuation */
 #endif

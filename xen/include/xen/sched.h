@@ -732,6 +732,7 @@ extern void (*dead_idle) (void);
  */
 unsigned long hypercall_create_continuation(
     unsigned int op, const char *format, ...);
+unsigned long hypercall_create_retry_continuation(void);
 void hypercall_cancel_continuation(void);
 
 #ifndef __UXEN__
@@ -743,12 +744,12 @@ void hypercall_cancel_continuation(void);
 #define hypercall_preempt_check() 0
 #endif  /* __UXEN__ */
 
-#define check_free_pages_needed()                                   \
-    (_uxen_info.ui_free_pages[smp_processor_id()].count < 20)
+#define check_free_pages_needed(n)                                  \
+    (_uxen_info.ui_free_pages[smp_processor_id()].count < 20 + (n))
 #define check_pagemap_needed()                 \
     (_uxen_info.ui_pagemap_needs_check)
 #define hypercall_needs_checks()                    \
-    (check_free_pages_needed() || check_pagemap_needed())
+    (check_free_pages_needed(0) || check_pagemap_needed())
 
 extern struct domain *domain_list;
 

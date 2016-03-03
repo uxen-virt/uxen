@@ -1889,7 +1889,8 @@ void hypercall_cancel_continuation(void)
             current->arch.hvm_vcpu.hcall_preempted = 0;
     }
 #else   /* __UXEN__ */
-    BUG();
+    current->arch.hvm_vcpu.hcall_preempted = 0;
+    current->arch.hvm_vcpu.hcall_preempted_retry = 0;
 #endif  /* __UXEN__ */
 }
 
@@ -2008,6 +2009,14 @@ unsigned long hypercall_create_continuation(
     va_end(args);
 
     return op;
+}
+
+unsigned long
+hypercall_create_retry_continuation(void)
+{
+
+    current->arch.hvm_vcpu.hcall_preempted_retry = 1;
+    return -ERETRY;
 }
 
 #ifndef __UXEN__

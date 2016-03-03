@@ -145,6 +145,7 @@ struct hvm_vcpu {
     bool_t              single_step;
 
     bool_t              hcall_preempted;
+    bool_t              hcall_preempted_retry;
     bool_t              hcall_64bit;
 
     struct hvm_vcpu_asid n1asid;

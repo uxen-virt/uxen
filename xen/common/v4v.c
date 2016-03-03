@@ -1121,6 +1121,9 @@ v4v_find_ring_mfns(struct domain *d, struct v4v_ring_info *ring_info,
     if (ring_info->nmfns == ring_info->npage)
         return 0;
 
+    if (check_free_pages_needed(ring_info->npage - ring_info->nmfns))
+        return hypercall_create_retry_continuation();
+
     for (i = ring_info->nmfns; i < ring_info->npage; i++) {
         v4v_pfn_t pfn;
 

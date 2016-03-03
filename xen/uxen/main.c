@@ -368,7 +368,7 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
             ret = 0;
             goto out_reset_current;
         }
-        if (check_free_pages_needed()) {
+        if (check_free_pages_needed(0)) {
             vci->vci_run_mode = VCI_RUN_MODE_FREEPAGE_CHECK;
             ret = 0;
             goto out_reset_current;

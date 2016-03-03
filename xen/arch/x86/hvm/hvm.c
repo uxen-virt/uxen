@@ -3785,6 +3785,7 @@ int hvm_do_hypercall(struct cpu_user_regs *regs)
     }
 
     curr->arch.hvm_vcpu.hcall_preempted = 0;
+    curr->arch.hvm_vcpu.hcall_preempted_retry = 0;
 
 #ifdef __x86_64__
     if ( mode == 8 )
@@ -3821,7 +3822,8 @@ int hvm_do_hypercall(struct cpu_user_regs *regs)
     HVM_DBG_LOG(DBG_LEVEL_HCALL, "hcall%u -> %lx",
                 eax, (unsigned long)regs->eax);
 
-    if (regs->eax == -ECONTINUATION || regs->eax == -EMAPPAGERANGE) {
+    if (regs->eax == -ECONTINUATION || regs->eax == -EMAPPAGERANGE ||
+        curr->arch.hvm_vcpu.hcall_preempted_retry) {
         regs->eax = eax;
         return HVM_HCALL_preempted;
     }
