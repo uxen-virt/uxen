@@ -1151,7 +1151,7 @@ static void fwd_connect_cb(void *opaque)
         /* check for chr betrayal */
         if (so_chr_is_eof(so)) {
             DBG4(so, "host peer hung up while sending SYNs");
-            qemu_chr_send_event(so->chr, CHR_EVENT_NI_REFUSED);
+            qemu_chr_send_event(so->chr, CHR_EVENT_NI_CLOSE);
             goto free_timer;
         }
         socket_reset(so);
@@ -1320,7 +1320,7 @@ static void tcpip_timer(struct nickel *ni, int64_t now, int *timeout)
                 if (so_chr_is_eof(so)) {
                     DBG4(so, "host peer hung up");
                     so->poll_eof_ts = 0;
-                    qemu_chr_send_event(so->chr, CHR_EVENT_NI_REFUSED);
+                    qemu_chr_send_event(so->chr, CHR_EVENT_NI_CLOSE);
                 } else {
                     so->poll_eof_ts = now;
                     diff = HFWD_EOF_POLL_MS;
