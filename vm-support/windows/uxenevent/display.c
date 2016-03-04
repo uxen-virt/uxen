@@ -152,29 +152,31 @@ display_resize(int w, int h)
             return -1;
         }
 
-        FillMemory(&devMode, sizeof(DEVMODE), 0);
-        devMode.dmSize = sizeof(DEVMODE);
-        while ((rc = EnumDisplaySettings(dispDevice.DeviceName, mode, &devMode))) {
-            if (devMode.dmPelsWidth == w && devMode.dmPelsHeight == h)
-                break;
-            mode++;
-        }
+        if (!disp_adapter) {
+            FillMemory(&devMode, sizeof(DEVMODE), 0);
+            devMode.dmSize = sizeof(DEVMODE);
+            while ((rc = EnumDisplaySettings(dispDevice.DeviceName, mode, &devMode))) {
+                if (devMode.dmPelsWidth == w && devMode.dmPelsHeight == h)
+                    break;
+                mode++;
+            }
 
-        if (!disp_adapter && !rc) {
-            warnx("couldn't find desired mode %dx%d", w, h);
-            return -1;
-        }
+            if (!rc) {
+                warnx("couldn't find desired mode %dx%d", w, h);
+                return -1;
+            }
 
-        devMode.dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT;
+            devMode.dmFields = DM_BITSPERPEL | DM_PELSWIDTH | DM_PELSHEIGHT;
 
-        status = ChangeDisplaySettingsEx(dispDevice.DeviceName,
-                                         &devMode,
-                                         NULL,
-                                         0,
-                                         NULL);
-        if (status != DISP_CHANGE_SUCCESSFUL) {
-            warnx("couldn't change display settings");
-            return -1;
+            status = ChangeDisplaySettingsEx(dispDevice.DeviceName,
+                                             &devMode,
+                                             NULL,
+                                             0,
+                                             NULL);
+            if (status != DISP_CHANGE_SUCCESSFUL) {
+                warnx("couldn't change display settings");
+                return -1;
+            }
         }
 
         current_w = w;
