@@ -8,8 +8,8 @@
 #define _ASYNC_OP_H_
 
 enum async_op_type {
-    ASOP_INIT,
-    ASOP_HANDLER,
+    ASOP_SCHED_ASYNC,
+    ASOP_PROCESS_ASYNC,
     ASOP_PROCESS,
     ASOP_DONE,
     ASOP_PERMANENT,
@@ -21,8 +21,8 @@ struct async_op_t {
     ioh_event *event;
 
     enum async_op_type state;
-    void (*handle)(void *);
-    void (*process)(void *);
+    void (*cb_process_async)(void *);
+    void (*cb_process)(void *);
 
     LIST_ENTRY(async_op_t) entry;
 };
@@ -32,7 +32,7 @@ struct async_op_ctx;
 struct async_op_ctx *async_op_init(void);
 void async_op_free(struct async_op_ctx *ctx);
 int async_op_add(struct async_op_ctx *ctx, void *opaque, ioh_event *event,
-                 void (*handle)(void *), void (*process)(void *));
+                 void (*cb_process_async)(void *), void (*cb_process)(void *));
 int async_op_add_bh(struct async_op_ctx *ctx, void *opaque, void (*cb)(void *));
 
 void async_op_process(struct async_op_ctx *ctx);

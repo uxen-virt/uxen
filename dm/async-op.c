@@ -7,7 +7,6 @@
 #include "config.h"
 #include "queue.h"
 #include "async-op.h"
-#include "bh.h"
 
 struct async_op_ctx {
     LIST_HEAD(, async_op_t) list;
@@ -18,49 +17,6 @@ struct async_op_ctx {
 };
 
 static struct async_op_ctx *default_ctx = NULL;
-
-static void
-list_lock(struct async_op_ctx *ctx)
-{
-    critical_section_enter(&ctx->mx);
-}
-
-static void
-list_unlock(struct async_op_ctx *ctx)
-{
-    critical_section_leave(&ctx->mx);
-}
-
-/* async_op_ctx lock needs to be acquired */
-static int sched_bh(struct async_op_t *op)
-{
-    int ret = 0;
-    BH *bh;
-
-    if (!op)
-       return 0;
-
-    if (op->event) {
-        ioh_event_set(op->event);
-        return 0;
-    }
-
-    if (!op->process)
-        goto out_remove;
-
-    bh = bh_new(op->process, op->opaque);
-    if (!bh) {
-        warnx("%s: bh_new failed", __FUNCTION__);
-        ret = -1;
-        goto out_remove;
-    }
-
-    bh_schedule(bh);
-out_remove:
-    LIST_REMOVE(op, entry);
-    free(op);
-    return ret;
-}
 
 struct async_op_ctx *
 async_op_init(void)
@@ -84,20 +40,17 @@ void
 async_op_free(struct async_op_ctx *ctx)
 {
 
-    if (!ctx) {
-        ctx = default_ctx;
-        if (!ctx)
-            return;
-    }
+    if (!ctx && !(ctx = default_ctx))
+        return;
 
-    list_lock(ctx);
+    critical_section_enter(&ctx->mx);
     if (ctx->threads) {
         /* leak if there are pending threads */
         debug_printf("%s: leaked ctx: %d threads\n", __FUNCTION__, ctx->threads);
-        list_unlock(ctx);
+        critical_section_leave(&ctx->mx);
         return;
     }
-    list_unlock(ctx);
+    critical_section_leave(&ctx->mx);
 
     critical_section_free(&ctx->mx);
     free(ctx);
@@ -106,20 +59,17 @@ async_op_free(struct async_op_ctx *ctx)
 void
 async_op_exit_wait(struct async_op_ctx *ctx)
 {
-    if (!ctx) {
-        ctx = default_ctx;
-        if (!ctx)
-            return;
-    }
+    if (!ctx && !(ctx = default_ctx))
+        return;
 
     for (;;) {
-        list_lock(ctx);
+        critical_section_enter(&ctx->mx);
         ioh_event_reset(&ctx->thread_exit_ev);
         if (ctx->threads == 0) {
-            list_unlock(ctx);
+            critical_section_leave(&ctx->mx);
             break;
         }
-        list_unlock(ctx);
+        critical_section_leave(&ctx->mx);
         ioh_event_wait(&ctx->thread_exit_ev);
     }
     async_op_free(ctx);
@@ -140,89 +90,87 @@ async_op_run(void *opaque)
     for (;;) {
         struct async_op_t *elm, *op;
 
-        list_lock(ctx);
+        critical_section_enter(&ctx->mx);
         op = NULL;
         LIST_FOREACH(elm, &ctx->list, entry) {
-            if (elm->state == ASOP_INIT) {
-                elm->state = ASOP_HANDLER;
+            if (elm->state == ASOP_SCHED_ASYNC) {
+                elm->state = ASOP_PROCESS_ASYNC;
                 op = elm;
                 break;
             }
         }
         if (!op)
             break;
-        list_unlock(ctx);
+        critical_section_leave(&ctx->mx);
 
-        if (op->handle)
-            op->handle(op->opaque);
+        if (op->cb_process_async)
+            op->cb_process_async(op->opaque);
 
-        list_lock(ctx);
+        critical_section_enter(&ctx->mx);
         op->state = ASOP_PROCESS;
-        sched_bh(op);
-        list_unlock(ctx);
+        ioh_event_set(op->event);
+        critical_section_leave(&ctx->mx);
     }
 
     ctx->threads--;
     ioh_event_set(&ctx->thread_exit_ev);
-    list_unlock(ctx);
+    critical_section_leave(&ctx->mx);
 
     return 0;
 }
 
 int
 async_op_add(struct async_op_ctx *ctx, void *opaque, ioh_event *event,
-             void (*handle)(void *), void (*process)(void *))
+             void (*cb_process_async)(void *), void (*cb_process)(void *))
 {
     int ret = -1;
     struct async_op_t *op;
-    uxen_thread thread_h;
+    uxen_thread thread_handle;
 
-    if (!ctx) {
-        ctx = default_ctx;
-        if (!ctx)
-            goto out;
-    }
+    if (!ctx && !(ctx = default_ctx))
+        goto out;
 
     op = calloc(1, sizeof(*op));
     if (!op)
         goto out;
 
     ret = 0;
-    op->state = handle ? ASOP_INIT : ASOP_PROCESS;
+    op->state = cb_process_async ? ASOP_SCHED_ASYNC : ASOP_PROCESS;
     op->opaque = opaque;
     op->event = event;
-    op->handle = handle;
-    op->process = process;
+    op->cb_process_async = cb_process_async;
+    op->cb_process = cb_process;
 
-    if (!handle) {
-        list_lock(ctx);
+    if (!cb_process_async) {
+        critical_section_enter(&ctx->mx);
+        op->state = ASOP_PROCESS;
         LIST_INSERT_HEAD(&ctx->list, op, entry);
-        ret = sched_bh(op);
-        list_unlock(ctx);
+        ioh_event_set(op->event);
+        critical_section_leave(&ctx->mx);
         goto out;
     }
 
-    list_lock(ctx);
+    critical_section_enter(&ctx->mx);
     LIST_INSERT_HEAD(&ctx->list, op, entry);
     if (ctx->max_threads && ctx->threads >= ctx->max_threads) {
-        list_unlock(ctx);
+        critical_section_leave(&ctx->mx);
         goto out;
     }
     ctx->threads++;
-    if (create_thread(&thread_h, async_op_run, ctx) < 0) {
+    if (create_thread(&thread_handle, async_op_run, ctx) < 0) {
         Wwarn("%s: create_thread failed", __FUNCTION__);
         LIST_REMOVE(op, entry);
         free(op);
         ctx->threads--;
         ioh_event_set(&ctx->thread_exit_ev);
-        list_unlock(ctx);
+        critical_section_leave(&ctx->mx);
         ret = -1;
         goto out;
     }
-    list_unlock(ctx);
+    critical_section_leave(&ctx->mx);
 
-    elevate_thread(thread_h);
-    close_thread_handle(thread_h);
+    elevate_thread(thread_handle);
+    close_thread_handle(thread_handle);
 
 out:
     return ret;
@@ -233,11 +181,8 @@ async_op_add_bh(struct async_op_ctx *ctx, void *opaque, void (*cb)(void *))
 {
     struct async_op_t *op;
 
-    if (!ctx) {
-        ctx = default_ctx;
-        if (!ctx)
-            return -1;
-    }
+    if (!ctx && !(ctx = default_ctx))
+        return -1;
 
     op = calloc(1, sizeof(*op));
     if (!op)
@@ -245,28 +190,12 @@ async_op_add_bh(struct async_op_ctx *ctx, void *opaque, void (*cb)(void *))
 
     op->state = ASOP_PERMANENT;
     op->opaque = opaque;
-    op->process = cb;
+    op->cb_process = cb;
 
-    list_lock(ctx);
+    critical_section_enter(&ctx->mx);
     LIST_INSERT_HEAD(&ctx->list, op, entry);
-    list_unlock(ctx);
+    critical_section_leave(&ctx->mx);
 
-    return 0;
-}
-
-static int
-async_op_delete(struct async_op_ctx *ctx, struct async_op_t *op)
-{
-    if (!ctx) {
-        ctx = default_ctx;
-        if (!ctx)
-            return -1;
-    }
-
-    list_lock(ctx);
-    LIST_REMOVE(op, entry);
-    list_unlock(ctx);
-    free(op);
     return 0;
 }
 
@@ -276,14 +205,11 @@ async_op_process(struct async_op_ctx *ctx)
     struct async_op_t *elm, *op;
     bool permanent = false;
 
-    if (!ctx) {
-        ctx = default_ctx;
-        if (!ctx)
-            return;
-    }
+    if (!ctx && !(ctx = default_ctx))
+        return;
 
     for (;;) {
-        list_lock(ctx);
+        critical_section_enter(&ctx->mx);
         op = NULL;
         LIST_FOREACH(elm, &ctx->list, entry) {
             if (elm->state == ASOP_PROCESS) {
@@ -299,24 +225,30 @@ async_op_process(struct async_op_ctx *ctx)
                 break;
             }
         }
-        list_unlock(ctx);
+        critical_section_leave(&ctx->mx);
 
         if (!op)
             break;
 
-        if (op->process)
-            op->process(op->opaque);
-        if (elm->state != ASOP_PERMANENT_DONE)
-            async_op_delete(ctx, op);
+        if (op->cb_process)
+            op->cb_process(op->opaque);
+
+        if (op->state == ASOP_PERMANENT_DONE)
+            continue;
+
+        critical_section_enter(&ctx->mx);
+        LIST_REMOVE(op, entry);
+        critical_section_leave(&ctx->mx);
+        free(op);
     }
 
     if (permanent) {
-        list_lock(ctx);
+        critical_section_enter(&ctx->mx);
         LIST_FOREACH(elm, &ctx->list, entry) {
             if (elm->state == ASOP_PERMANENT_DONE)
                 elm->state = ASOP_PERMANENT;
         }
-        list_unlock(ctx);
+        critical_section_leave(&ctx->mx);
     }
 }
 
