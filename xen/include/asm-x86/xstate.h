@@ -112,7 +112,8 @@ DECLARE_PER_CPU(int, xcr0_state);
     _set_xcr0(xfeatures);               \
     this_cpu(xcr0_state) = (state);     \
     } while (0)
-#define assert_xcr0_state(state) ASSERT(this_cpu(xcr0_state) == (state))
+#define assert_xcr0_state(state)                                \
+    ASSERT(!cpu_has_xsave || this_cpu(xcr0_state) == (state))
 #else  /* XCR0_STATE_DEBUG */
 #define set_xcr0(xfeatures, state) _set_xcr0(xfeatures)
 #define assert_xcr0_state(state) do { /* nothing */ } while (0)
