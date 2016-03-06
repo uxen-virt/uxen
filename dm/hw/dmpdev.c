@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -143,7 +143,11 @@ static void process_cmd(DMPDEVState *s)
                    s->ctrl.crash_info.param3, s->ctrl.crash_info.param4);
         if (dmpdev_dump_location &&
             dmpdev_query &&
-            !dmpdev_query_dump_allowed())
+            !dmpdev_query_dump_allowed(s->ctrl.crash_info.code,
+                                       s->ctrl.crash_info.param1,
+                                       s->ctrl.crash_info.param2,
+                                       s->ctrl.crash_info.param3, 
+                                       s->ctrl.crash_info.param4))
         {
             /* don't allow dump creation if RPC query result was negative */
             free(dmpdev_dump_location);

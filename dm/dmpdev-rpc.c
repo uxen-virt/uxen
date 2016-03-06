@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -33,11 +33,14 @@ static void rpc_callback(void *opaque, dict d)
     dict_free(d);
 }
 
-bool dmpdev_query_dump_allowed(void)
+bool dmpdev_query_dump_allowed(uint32_t code,
+                               uint64_t param1, uint64_t param2,
+                               uint64_t param3, uint64_t param4)
 {
     ioh_event event;
     struct rpc_callback_arg_t rpc_callback_arg;
     uint32_t wait_result;
+    dict args;
 
     ioh_event_init(&event);
     if (!event)
@@ -45,7 +48,14 @@ bool dmpdev_query_dump_allowed(void)
 
     rpc_callback_arg.event = event;
     rpc_callback_arg.decision = 0;
-    control_send_command("dmpdev-is-dump-allowed", NULL, rpc_callback,
+
+    args = dict_new();
+    dict_put_integer(args, "crash-code", code);
+    dict_put_integer(args, "crash-param1", param1);
+    dict_put_integer(args, "crash-param2", param2);
+    dict_put_integer(args, "crash-param3", param3);
+    dict_put_integer(args, "crash-param4", param4);
+    control_send_command("dmpdev-is-dump-allowed", args, rpc_callback,
                          &rpc_callback_arg);
 
     wait_result = ioh_event_wait(&event);
