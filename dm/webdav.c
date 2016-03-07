@@ -963,7 +963,7 @@ int dav_MOVE(DavClient *dc)
     const char *dst = dc->destination;
     if (!strncmp(dst, "http://", 7)) {
         dst += 7;
-        while (*dst != '/') {
+        while (*dst != '/' && *dst != 0) {
             ++dst;
         }
     }
