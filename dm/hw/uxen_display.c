@@ -50,9 +50,9 @@ struct crtc_state {
     uint8_t edid[256];
 };
 
-struct bank_state {
+struct alloc_state {
     struct vram_desc vram;
-    uint32_t len;
+    uint32_t vfn;
 };
 
 struct uxendisp_state {
@@ -66,7 +66,7 @@ struct uxendisp_state {
     volatile struct cursor_regs *cursor_regs;
     volatile uint8_t *cursor_data;
     struct crtc_state crtcs[UXENDISP_NB_CRTCS];
-    struct bank_state banks[UXENDISP_NB_BANKS];
+    struct alloc_state allocs[UXENDISP_NB_ALLOCS];
 
     uint32_t io_index;
     uint32_t isr;
@@ -172,9 +172,9 @@ static void
 crtc_draw(struct uxendisp_state *s, int crtc_id)
 {
     struct crtc_state *crtc = &s->crtcs[crtc_id];
-    int bank_id = crtc->offset >> UXENDISP_BANK_ORDER;
-    uint32_t bank_offset = crtc->offset & (UXENDISP_BANK_SIZE - 1);
-    struct bank_state *bank = &s->banks[bank_id];
+    int alloc_id = crtc->offset >> UXDISP_REG_CRTC_ALLOC_INDEX_SHIFT;
+    uint32_t alloc_offset = crtc->offset & UXDISP_REG_CRTC_ALLOC_OFFSET_MASK;
+    struct alloc_state *alloc = &s->allocs[alloc_id];
     int rc;
     int npages;
     uint8_t *dirty;
@@ -190,16 +190,17 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
     if (!crtc->ds)
         return;
 
-    npages = (bank_offset + crtc->stride * crtc->yres +
-              TARGET_PAGE_SIZE - 1) >> TARGET_PAGE_BITS;
-
-    if (npages > (UXENDISP_BANK_SIZE >> TARGET_PAGE_BITS))
+    if ((alloc_offset + crtc->stride * crtc->yres) >
+        alloc->vram.mapped_len)
         return;
+
+    npages = (alloc_offset + crtc->stride * crtc->yres +
+              TARGET_PAGE_SIZE - 1) >> TARGET_PAGE_BITS;
 
     dirty = alloca((npages + 7) / 8);
 
     rc = xen_hvm_track_dirty_vram(
-        bank->vram.gfn,
+        alloc->vram.gfn,
         npages,
         dirty,
         (s->mode & UXDISP_MODE_PAGE_TRACKING_DISABLED) ? 0 : 1);
@@ -210,7 +211,7 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
 
     if (ds_surface_lock(crtc->ds, &d, &linesize))
         return;
-    addr1 = bank_offset;
+    addr1 = alloc_offset;
     y_start = -1;
     page_min = (uint32_t)-1;
     page_max = 0;
@@ -232,20 +233,20 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
             if (page1 > page_max)
                 page_max = page1;
             if (!ds_vram_surface(crtc->ds->surface)) {
-                if ((addr1 + crtc->xres * 4) > bank->vram.mapped_len)
+                if ((addr1 + crtc->xres * 4) > alloc->vram.mapped_len)
                     break;
                 switch (crtc->format) {
                 case UXDISP_CRTC_FORMAT_BGRX_8888:
-                    memcpy(d, bank->vram.view + addr1, crtc->xres * 4);
+                    memcpy(d, alloc->vram.view + addr1, crtc->xres * 4);
                     break;
                 case UXDISP_CRTC_FORMAT_BGR_888:
-                    draw_line_24(d, bank->vram.view + addr1, crtc->xres);
+                    draw_line_24(d, alloc->vram.view + addr1, crtc->xres);
                     break;
                 case UXDISP_CRTC_FORMAT_BGR_565:
-                    draw_line_16(d, bank->vram.view + addr1, crtc->xres);
+                    draw_line_16(d, alloc->vram.view + addr1, crtc->xres);
                     break;
                 case UXDISP_CRTC_FORMAT_BGR_555:
-                    draw_line_15(d, bank->vram.view + addr1, crtc->xres);
+                    draw_line_15(d, alloc->vram.view + addr1, crtc->xres);
                     break;
                 }
             }
@@ -372,11 +373,6 @@ cursor_flush(struct uxendisp_state *s)
                      (uint8_t *)color);
 }
 
-static void bank_reg_write(struct uxendisp_state *s,
-                           int bank_id,
-                           target_phys_addr_t addr,
-                           uint32_t val);
-
 static int fmt_valid(int fmt)
 {
     switch (fmt) {
@@ -394,7 +390,7 @@ static void
 crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
 {
     struct crtc_state *crtc = &s->crtcs[crtc_id];
-    struct bank_state *bank;
+    struct alloc_state *alloc;
     size_t sz;
 
     crtc->flush_pending = 0;
@@ -403,8 +399,8 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
         return;
 
     if (crtc->regs->p.enable) {
-        uint32_t bank_offset = offset & (UXENDISP_BANK_SIZE - 1);
-        int bank_id = offset >> UXENDISP_BANK_ORDER;
+        uint32_t alloc_offset = offset & UXDISP_REG_CRTC_ALLOC_OFFSET_MASK;
+        int alloc_id = offset >> UXDISP_REG_CRTC_ALLOC_INDEX_SHIFT;
         unsigned int w, h, stride, fmt;
 
         if (!crtc->ds)
@@ -431,12 +427,12 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
         if (!fmt_valid(fmt))
             return;
 
-        if (bank_id >= UXENDISP_NB_BANKS)
+        if (alloc_id >= UXENDISP_NB_ALLOCS)
             return;
 
-        bank = &s->banks[bank_id];
-        sz = bank_offset + h * stride;
-        if (sz > UXENDISP_BANK_SIZE)
+        alloc = &s->allocs[alloc_id];
+        sz = alloc_offset + h * stride;
+        if (sz > alloc->vram.mapped_len)
             return;
 
         if (fmt == crtc->format && w < crtc->xres) {
@@ -448,31 +444,28 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
                 dst_off += stride;
                 if ((src_off > (max_off - stride)) || (dst_off > (max_off - stride)))
                     break;
-                if ((bank_offset + dst_off + stride) > bank->vram.mapped_len ||
-                    (bank_offset + src_off + stride) > bank->vram.mapped_len)
+                if ((alloc_offset + dst_off + stride) > alloc->vram.mapped_len ||
+                    (alloc_offset + src_off + stride) > alloc->vram.mapped_len)
                     break;
-                memmove(bank->vram.view + bank_offset + dst_off,
-                        bank->vram.view + bank_offset + src_off, stride);
+                memmove(alloc->vram.view + alloc_offset + dst_off,
+                        alloc->vram.view + alloc_offset + src_off, stride);
             }
         }
-
-        if (bank->len < sz)
-            bank_reg_write(s, bank_id, 0, sz);
 
         if (fmt == crtc->format && w > crtc->xres) {
             int height = h;
             if (h > crtc->yres)
                 height = crtc->yres;
-            uint8_t* src = bank->vram.view + bank_offset + height * crtc->stride;
-            uint8_t* dst = bank->vram.view + bank_offset + height * stride;
+            uint8_t* src = alloc->vram.view + alloc_offset + height * crtc->stride;
+            uint8_t* dst = alloc->vram.view + alloc_offset + height * stride;
             for (;;) {
                 src -= crtc->stride;
                 dst -= stride;
-                if ((src < (bank->vram.view + bank_offset + stride)) ||
-                    (dst < (bank->vram.view + bank_offset + stride)))
+                if ((src < (alloc->vram.view + alloc_offset + stride)) ||
+                    (dst < (alloc->vram.view + alloc_offset + stride)))
                     break;
-                if ((src + crtc->stride) <= (bank->vram.view + bank->vram.mapped_len) &&
-                    (dst + crtc->stride) <= (bank->vram.view + bank->vram.mapped_len)) {
+                if ((src + crtc->stride) <= (alloc->vram.view + alloc->vram.mapped_len) &&
+                    (dst + crtc->stride) <= (alloc->vram.view + alloc->vram.mapped_len)) {
                     memmove(dst, src, crtc->stride);
                     memset(dst + crtc->stride, 0xff, stride - crtc->stride);
                 }
@@ -480,19 +473,19 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
         }
 
         if ((h > crtc->yres) && (crtc->yres > 0)) {
-            uint8_t* dst = bank->vram.view + bank_offset + (crtc->yres * stride);
+            uint8_t* dst = alloc->vram.view + alloc_offset + (crtc->yres * stride);
             int curr_max = crtc->yres * stride;
             int new_max = h * stride;
             if (curr_max < new_max &&
-                (bank_offset + new_max) < bank->vram.mapped_len)
+                (alloc_offset + new_max) < alloc->vram.mapped_len)
                 memset(dst, 0xff, new_max - curr_max);
         }
 
         display_resize_from(crtc->ds, w, h,
                             uxdisp_fmt_to_bpp(fmt),
                             stride,
-                            bank->vram.view,
-                            bank_offset);
+                            alloc->vram.view,
+                            alloc_offset);
 
         crtc->xres = w;
         crtc->yres = h;
@@ -585,35 +578,95 @@ crtc_read(struct uxendisp_state *s, int crtc_id, target_phys_addr_t addr)
 }
 
 static void
-bank_reg_write(struct uxendisp_state *s, int bank_id, target_phys_addr_t addr,
-               uint32_t val)
+alloc_reg_write(struct uxendisp_state *s, int alloc_id, target_phys_addr_t addr,
+                uint32_t val)
 {
-    struct bank_state *bank = &s->banks[bank_id];
+    struct alloc_state *alloc = &s->allocs[alloc_id];
+    int i;
+    int ret;
+    size_t length;
+    uint32_t gfn;
 
-    if (addr != 0)
+    switch (addr) {
+    case UXDISP_REG_ALLOC_PAGE_START:
+        alloc->vfn = val;
+        break;
+    case UXDISP_REG_ALLOC_PAGE_COUNT:
+        length = val * TARGET_PAGE_SIZE;
+
+        if ((alloc_id == 0) && length < (vm_vga_mb_mapped << 20))
+            length = vm_vga_mb_mapped << 20;
+
+        /* overlap checks */
+        for (i = 0; i < UXENDISP_NB_ALLOCS; i++) {
+            struct alloc_state *tmp = &s->allocs[i];
+            size_t alloc_start = memory_region_absolute_offset(&s->vram) +
+                                 (alloc->vfn << TARGET_PAGE_BITS);
+            size_t tmp_start = memory_region_absolute_offset(&s->vram) +
+                                 (tmp->vfn << TARGET_PAGE_BITS);
+
+            if (i == alloc_id)
+                continue;
+
+            if (tmp->vram.mapped_len == 0 || length == 0)
+                continue;
+
+            if (((tmp_start <= alloc_start) && (tmp_start + tmp->vram.mapped_len) > alloc_start) ||
+                ((alloc_start <= tmp_start) && (alloc_start + length) > tmp_start)) {
+                DPRINTF("%s: overlapping ranges for alloc %d start=%x len=%x "
+                        "and alloc %d start=%x len=%x\n", __FUNCTION__,
+                        alloc_id, (int)alloc_start, (int)length,
+                        i, (int)tmp_start, (int)tmp->vram.mapped_len);
+                return;
+            }
+        }
+        ret = vram_unmap(&alloc->vram);
+        if (ret) {
+            DPRINTF("%s: vram_unmap for alloc %d failed.\n",
+                    __FUNCTION__, alloc_id);
+            return;
+        }
+        ret = vram_resize(&alloc->vram, length);
+        if (ret) {
+            DPRINTF("%s: vram_resize with length=%d for alloc %d failed.\n",
+                    __FUNCTION__, (int)length, alloc_id);
+            return;
+        }
+        gfn = (memory_region_absolute_offset(&s->vram) >> TARGET_PAGE_BITS) +
+              alloc->vfn;
+        ret = vram_map(&alloc->vram, gfn);
+        if (ret) {
+            DPRINTF("%s: vram_map with gfn=%x for alloc %d failed.\n",
+                    __FUNCTION__, gfn, alloc_id);
+            return;
+        }
+        break;
+    default:
+        DPRINTF("%s: invalid mmio write for alloc %d @ %"PRIx64"\n",
+                __FUNCTION__, alloc_id, addr);
         return;
-
-    bank->len = val = (val + (TARGET_PAGE_SIZE - 1)) &
-                      ~(TARGET_PAGE_SIZE - 1);
-
-    if ((bank_id == 0) && val < (vm_vga_mb_mapped << 20))
-        val = vm_vga_mb_mapped << 20;
-
-    if (val > UXENDISP_BANK_SIZE)
-        val = UXENDISP_BANK_SIZE;
-
-    vram_resize(&bank->vram, val);
+    }
 }
 
 static uint32_t
-bank_reg_read(struct uxendisp_state *s, int bank_id, target_phys_addr_t addr)
+alloc_reg_read(struct uxendisp_state *s, int alloc_id, target_phys_addr_t addr)
 {
-    struct bank_state *bank = &s->banks[bank_id];
+    struct alloc_state *alloc = &s->allocs[alloc_id];
+    uint32_t ret = ~0;
 
-    if (addr != 0)
-        return ~0;
+    switch (addr) {
+    case UXDISP_REG_ALLOC_PAGE_START:
+        ret = alloc->vfn;
+        break;
+    case UXDISP_REG_ALLOC_PAGE_COUNT:
+        ret = alloc->vram.mapped_len >> TARGET_PAGE_BITS;
+        break;
+    default:
+        DPRINTF("%s: invalid mmio read for alloc %d @ %"PRIx64"\n",
+                __FUNCTION__, alloc_id, addr);
+    }
 
-    return bank->len;
+    return ret;
 }
 
 static void
@@ -635,13 +688,13 @@ uxendisp_mmio_write(void *opaque, target_phys_addr_t addr, uint64_t val,
         return;
     }
 
-    if (addr >= UXDISP_REG_BANK(0) &&
-        addr < UXDISP_REG_BANK(UXENDISP_NB_BANKS)) {
-        int idx = (addr - UXDISP_REG_BANK(0)) / UXDISP_REG_BANK_LEN;
+    if (addr >= UXDISP_REG_ALLOC(0) &&
+        addr < UXDISP_REG_ALLOC(UXENDISP_NB_ALLOCS)) {
+        int idx = (addr - UXDISP_REG_ALLOC(0)) / UXDISP_REG_ALLOC_LEN;
 
-        addr &= (UXDISP_REG_BANK_LEN - 1);
+        addr &= (UXDISP_REG_ALLOC_LEN - 1);
 
-        bank_reg_write(s, idx, addr, (uint32_t)val);
+        alloc_reg_write(s, idx, addr, (uint32_t)val);
         return;
     }
 
@@ -689,13 +742,13 @@ uxendisp_mmio_read(void *opaque, target_phys_addr_t addr, unsigned size)
         return crtc_read(s, idx, addr);
     }
 
-    if (addr >= UXDISP_REG_BANK(0) &&
-        addr < UXDISP_REG_BANK(UXENDISP_NB_BANKS)) {
-        int idx = (addr - UXDISP_REG_BANK(0)) / UXDISP_REG_BANK_LEN;
+    if (addr >= UXDISP_REG_ALLOC(0) &&
+        addr < UXDISP_REG_ALLOC(UXENDISP_NB_ALLOCS)) {
+        int idx = (addr - UXDISP_REG_ALLOC(0)) / UXDISP_REG_ALLOC_LEN;
 
-        addr &= (UXDISP_REG_BANK_LEN - 1);
+        addr &= (UXDISP_REG_ALLOC_LEN - 1);
 
-        return bank_reg_read(s, idx, addr);
+        return alloc_reg_read(s, idx, addr);
     }
 
     switch (addr) {
@@ -705,8 +758,8 @@ uxendisp_mmio_read(void *opaque, target_phys_addr_t addr, unsigned size)
         return (UXENDISP_REVISION_MAJOR << 16) | UXENDISP_REVISION_MINOR;
     case UXDISP_REG_VRAM_SIZE:
         return UXENDISP_VRAM_SIZE;
-    case UXDISP_REG_BANK_ORDER:
-        return UXENDISP_BANK_ORDER;
+    case UXDISP_REG_ALLOC_COUNT:
+        return UXENDISP_NB_ALLOCS;
     case UXDISP_REG_CRTC_COUNT:
         return UXENDISP_NB_CRTCS;
     case UXDISP_REG_STRIDE_ALIGN:
@@ -814,17 +867,17 @@ crtc_data_ptr_update(void *ptr, void *opaque)
  * BAR 0 moved
  */
 static void
-bank_mapping_update(void *opaque)
+alloc_mapping_update(void *opaque)
 {
     struct uxendisp_state *s = opaque;
     int i;
 
-    for (i = 0; i < UXENDISP_NB_BANKS; i++) {
-        struct bank_state *bank = &s->banks[i];
-        uint32_t gfn = (memory_region_absolute_offset(&s->vram) +
-                        i * UXENDISP_BANK_SIZE) >> TARGET_PAGE_BITS;
+    for (i = 0; i < UXENDISP_NB_ALLOCS; i++) {
+        struct alloc_state *alloc = &s->allocs[i];
+        uint32_t gfn = (memory_region_absolute_offset(&s->vram) >>
+                        TARGET_PAGE_BITS) + alloc->vfn;
 
-        vram_map(&bank->vram, gfn);
+        vram_map(&alloc->vram, gfn);
     }
 }
 
@@ -835,13 +888,13 @@ static void vram_change(struct vram_desc *v, void *opaque)
 
     for (crtc_id = 0; crtc_id < UXENDISP_NB_CRTCS; crtc_id++) {
         struct crtc_state *crtc = &s->crtcs[crtc_id];
-        int bank_id = crtc->offset >> UXENDISP_BANK_ORDER;
-        struct bank_state *bank = &s->banks[bank_id];
+        int alloc_id = crtc->offset >> UXDISP_REG_CRTC_ALLOC_INDEX_SHIFT;
+        struct alloc_state *alloc = &s->allocs[alloc_id];
 
-        if (&bank->vram == v) {
-            DPRINTF("%s: bank_id=%d crtc_id=%d\n",
-                    __FUNCTION__, bank_id, crtc_id);
-            dpy_vram_change(crtc->ds, &bank->vram);
+        if (&alloc->vram == v) {
+            DPRINTF("%s: alloc_id=%d crtc_id=%d\n",
+                    __FUNCTION__, alloc_id, crtc_id);
+            dpy_vram_change(crtc->ds, &alloc->vram);
             break;
         }
     }
@@ -884,9 +937,9 @@ uxendisp_resume(void *opaque, int version_id)
     if (ret)
         return ret;
 
-    for (i = 0; i < UXENDISP_NB_BANKS; i++) {
-        struct bank_state *bank = &s->banks[i];
-        ret = vram_resume(&bank->vram);
+    for (i = 0; i < UXENDISP_NB_ALLOCS; i++) {
+        struct alloc_state *alloc = &s->allocs[i];
+        ret = vram_resume(&alloc->vram);
         if (ret)
             return ret;
     }
@@ -900,9 +953,9 @@ uxendisp_post_save(void *opaque)
     struct uxendisp_state *s = opaque;
     int i;
 
-    for (i = 0; i < UXENDISP_NB_BANKS; i++) {
-        struct bank_state *bank = &s->banks[i];
-        vram_suspend(&bank->vram);
+    for (i = 0; i < UXENDISP_NB_ALLOCS; i++) {
+        struct alloc_state *alloc = &s->allocs[i];
+        vram_suspend(&alloc->vram);
     }
     pci_ram_post_save(&s->dev);
 }
@@ -920,14 +973,14 @@ static const VMStateDescription vmstate_uxendisp_crtc = {
     }
 };
 
-static const VMStateDescription vmstate_uxendisp_bank = {
-    .name = "uxendisp-bank",
+static const VMStateDescription vmstate_uxendisp_alloc = {
+    .name = "uxendisp-alloc",
     .version_id = 7,
     .minimum_version_id = 7,
     .minimum_version_id_old = 7,
     .fields = (VMStateField[]) {
-        VMSTATE_VRAM(vram, struct bank_state),
-        VMSTATE_UINT32(len, struct bank_state),
+        VMSTATE_VRAM(vram, struct alloc_state),
+        VMSTATE_UINT32(vfn, struct alloc_state),
         VMSTATE_END_OF_LIST(),
     }
 };
@@ -945,10 +998,10 @@ static const VMStateDescription vmstate_uxendisp = {
         VMSTATE_PCI_DEVICE(dev, struct uxendisp_state),
         VMSTATE_STRUCT(vga, struct uxendisp_state, 0,
                        vmstate_vga, VGAState),
-        VMSTATE_STRUCT_ARRAY(banks, struct uxendisp_state,
-                             UXENDISP_NB_BANKS, 7,
-                             vmstate_uxendisp_bank,
-                             struct bank_state),
+        VMSTATE_STRUCT_ARRAY(allocs, struct uxendisp_state,
+                             UXENDISP_NB_ALLOCS, 7,
+                             vmstate_uxendisp_alloc,
+                             struct alloc_state),
         VMSTATE_STRUCT_ARRAY(crtcs, struct uxendisp_state,
                              UXENDISP_NB_CRTCS, 6,
                              vmstate_uxendisp_crtc,
@@ -991,7 +1044,7 @@ static int uxendisp_initfn(PCIDevice *dev)
                                     crtc_data_ptr_update, &s->crtcs[i]);
     }
     memory_region_init(&s->vram, "uxendisp.vram", UXENDISP_VRAM_SIZE);
-    s->vram.map_cb = bank_mapping_update;
+    s->vram.map_cb = alloc_mapping_update;
     s->vram.map_opaque = s;
 
     /* Note: 0x20 appears to be the minumum size of an IO BAR */
@@ -1006,13 +1059,11 @@ static int uxendisp_initfn(PCIDevice *dev)
     s->crtcs[0].flush_pending = 0;
     edid_init_common(s->crtcs[0].edid, 1024, 768);
 
-    for (i = 0; i < UXENDISP_NB_BANKS; i++) {
-        struct bank_state *bank = &s->banks[i];
+    for (i = 0; i < UXENDISP_NB_ALLOCS; i++) {
+        struct alloc_state *alloc = &s->allocs[i];
 
-        bank->len = 0x1000; /* FIXME: why do we need this ? */
-        vram_init(&bank->vram, UXENDISP_BANK_SIZE);
-        vram_register_change(&bank->vram, vram_change, s);
-        vram_alloc(&bank->vram, bank->len);
+        vram_init(&alloc->vram, UXENDISP_VRAM_SIZE);
+        vram_register_change(&alloc->vram, vram_change, s);
     }
 
     vga_init(v, pci_address_space(dev), pci_address_space_io(dev), s->crtcs[0].ds);

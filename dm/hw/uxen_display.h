@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -8,13 +8,11 @@
 #define _UXEN_DISPLAY_H_
 
 #define UXENDISP_REVISION_MAJOR 0x1
-#define UXENDISP_REVISION_MINOR 0x0
+#define UXENDISP_REVISION_MINOR 0x1
 
-#define UXENDISP_NB_BANKS 4
-#define UXENDISP_BANK_ORDER 0x1b /* 128M */
+#define UXENDISP_NB_ALLOCS 8
 
-#define UXENDISP_BANK_SIZE (1 << UXENDISP_BANK_ORDER)
-#define UXENDISP_VRAM_SIZE (UXENDISP_BANK_SIZE * UXENDISP_NB_BANKS)
+#define UXENDISP_VRAM_SIZE (512 * 1024 * 1024) /* 512M */
 
 #define UXENDISP_NB_CRTCS 4
 #define UXENDISP_MMIO_SIZE 0x20000
