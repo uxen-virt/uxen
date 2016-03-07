@@ -313,8 +313,11 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
     default: {
         struct domain *d;
         d = rcu_lock_domain_by_id(op->domain);
-        if (!d)
-            return -EPERM;
+        if (!d) {
+            gdprintk(XENLOG_ERR, "%s: domctl %d on vm%u: not found\n",
+                     __FUNCTION__, op->cmd, op->domain);
+            return -EEXIST;
+        }
         if (!IS_PRIV_FOR(current->domain, d)) {
             rcu_unlock_domain(d);
             gdprintk(XENLOG_ERR, "%s: domctl %d on vm%u: access denied\n",
