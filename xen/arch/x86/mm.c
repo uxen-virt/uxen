@@ -4941,7 +4941,7 @@ static int xenmem_add_to_physmap_once(
     struct domain *d,
     const struct xen_add_to_physmap *xatp)
 {
-    struct page_info *page, *gmfn_page = NULL;
+    struct page_info *page;
     unsigned long gfn = 0; /* gcc ... */
     unsigned long prev_mfn, mfn = 0, idx;
 #ifndef __UXEN__
@@ -5019,7 +5019,6 @@ static int xenmem_add_to_physmap_once(
             if ( !get_page_from_pagenr(idx, d) )
                 break;
             mfn = idx;
-            gmfn_page = mfn_to_page(mfn);
             break;
         }
         case XENMAPSPACE_host_mfn:
@@ -5054,6 +5053,7 @@ static int xenmem_add_to_physmap_once(
                          xatp->gpfn, mfn,
                          page_get_owner(__mfn_to_page(mfn))->domain_id);
             } else {
+                put_page(mfn_to_page(mfn));
                 gdprintk(XENLOG_ERR, "attempt to map already mapped host "
                          "mfn %lx at gpfn %"PRI_xen_pfn"\n", mfn, xatp->gpfn);
             }
@@ -5071,6 +5071,18 @@ static int xenmem_add_to_physmap_once(
         goto out;
     }
 
+    if (d->is_dying) {
+        /* silently don't add page to p2m when domain is exiting, and
+         * don't remove previous entries from the p2m since it is/has
+         * already being torn down */
+        put_gfn(d, xatp->gpfn);
+        rc = 0;
+        if ( xatp->space == XENMAPSPACE_gmfn ||
+             xatp->space == XENMAPSPACE_gmfn_range )
+            put_gfn(d, gfn);
+        goto out;
+    }
+
     /* Remove previously mapped page if it was present. */
     prev_mfn = mfn_x(get_gfn_query(d, xatp->gpfn, &pt));
     if ( mfn_valid_page(prev_mfn) )
@@ -5082,17 +5094,6 @@ static int xenmem_add_to_physmap_once(
             /* Host frames are unhooked from this phys slot and have
              * their PGC_host_page flag cleared. */
             guest_physmap_remove_page(d, xatp->gpfn, prev_mfn, PAGE_ORDER_4K);
-            page = __mfn_to_page(prev_mfn);
-            if (!get_page(page, d)) {
-                gdprintk(XENLOG_ERR, "unexpected owner for gpfn %"PRI_xen_pfn
-                         " unhook: host mfn %lx owner vm%d\n",
-                         xatp->gpfn, prev_mfn,
-                         !page_get_owner(page) ? -1 :
-                         page_get_owner(page)->domain_id);
-            } else {
-                put_page(page);
-                put_allocated_page(d, page);
-            }
         } else if ( p2m_is_ram(pt) )
             /* Normal domain memory is freed, to avoid leaking memory. */
             guest_remove_page(d, xatp->gpfn);
@@ -5106,15 +5107,6 @@ static int xenmem_add_to_physmap_once(
         }
     }
     put_gfn(d, xatp->gpfn);
-
-    if (d->is_dying) {
-        /* silently don't add page to p2m when domain is exiting */
-        rc = 0;
-        if ( xatp->space == XENMAPSPACE_gmfn ||
-             xatp->space == XENMAPSPACE_gmfn_range )
-            put_gfn(d, gfn);
-        goto out;
-    }
 
     switch (xatp->space) {
     case XENMAPSPACE_host_mfn:
@@ -5138,6 +5130,7 @@ static int xenmem_add_to_physmap_once(
                                       PAGE_ORDER_4K);
             d->shared_info_gpfn = INVALID_GFN;
         }
+        get_page_fast(mfn_to_page(mfn), NULL);
         break;
     case XENMAPSPACE_gmfn:
     case XENMAPSPACE_gmfn_range:
@@ -5147,6 +5140,7 @@ static int xenmem_add_to_physmap_once(
             goto out;
         }
         guest_physmap_remove_page(d, xatp->idx, mfn, PAGE_ORDER_4K);
+        /* ref on mfn taken above */
         break;
     default:
 #ifndef __UXEN__
@@ -5161,6 +5155,7 @@ static int xenmem_add_to_physmap_once(
 
     /* Map at new location. */
     rc = guest_physmap_add_page(d, xatp->gpfn, mfn, PAGE_ORDER_4K);
+    put_page(__mfn_to_page(mfn));
 
     /* In the XENMAPSPACE_gmfn, we took a ref and locked the p2m at the top */
     if ( xatp->space == XENMAPSPACE_gmfn ||
@@ -5170,8 +5165,6 @@ static int xenmem_add_to_physmap_once(
     else if (!rc && xatp->space == XENMAPSPACE_shared_info)
         d->shared_info_gpfn = xatp->gpfn;
   out:
-    if (gmfn_page)
-        put_page(gmfn_page);
     domain_unlock(d);
 
     return rc;

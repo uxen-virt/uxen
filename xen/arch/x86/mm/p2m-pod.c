@@ -1222,6 +1222,7 @@ p2m_pod_add_compressed_page(struct p2m_domain *p2m, unsigned long gpfn,
 
     set_p2m_entry(p2m, gpfn, mfn, 0, p2m_populate_on_demand,
                   p2m->default_access);
+    put_page(vpage);
     atomic_inc(&d->pod_pages);
 
     ASSERT(p2m_locked_by_me(p2m));
@@ -1286,9 +1287,6 @@ p2m_pod_compress_page(struct p2m_domain *p2m, unsigned long gfn_aligned,
     p2m_pod_add_compressed_page(p2m, gfn_aligned, this_cpu(decompress_buffer),
                                 c_size, new_page);
     p2m_unlock(p2m);
-
-    /* drop reference for page replaced in template p2m */
-    put_allocated_page(d, mfn_to_page(mfn));
 
     p2m_pod_stat_update(d);
     perfc_incr(compressed_pages);
@@ -1533,17 +1531,18 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     void *source, *target;
     int smfn_from_clone = 1;
     mfn_t put_page_parent = _mfn(0);
-    mfn_t put_page_clone = _mfn(0);
     struct p2m_domain *op2m = d->clone_of ? p2m_get_hostp2m(d->clone_of) : NULL;
     bool_t op2m_locked = 0;
     long ret;
 
-#define out_fail() (({                          \
-                if (op2m_locked)                \
-                    p2m_unlock(op2m);           \
-                p2m_unlock(p2m);                \
-                domain_crash(d);                \
-                _mfn(INVALID_MFN);              \
+#define out_fail() (({                                          \
+                if (mfn_x(put_page_parent))                     \
+                    put_page(mfn_to_page(put_page_parent));     \
+                if (op2m_locked)                                \
+                    p2m_unlock(op2m);                           \
+                p2m_unlock(p2m);                                \
+                domain_crash(d);                                \
+                _mfn(INVALID_MFN);                              \
             }))
 
 #define out_of_memory() (({                                             \
@@ -1707,6 +1706,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             p2m_pod_stat_update(d->clone_of);
         }
         if (mfn_valid_page(smfn)) {
+            ASSERT(mfn_x(smfn) != mfn_x(shared_zero_page));
             get_page_fast(mfn_to_page(smfn), d->clone_of);
             put_page_parent = smfn;
         }
@@ -1721,10 +1721,14 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             /* read-access to zero page, use shared zero page */
             if (mfn_x(smfn) == SHARED_ZERO_MFN)
                 smfn = shared_zero_page;
-            /* install smfn in clone p2m, with template smfn page ref
-             * taken above */
+            /* install smfn in clone p2m */
             set_p2m_entry(p2m, gfn_aligned, smfn, 0,
                           p2m_populate_on_demand, p2m->default_access);
+            if (mfn_x(smfn) != mfn_x(shared_zero_page)) {
+                ASSERT(mfn_x(smfn) == mfn_x(put_page_parent));
+                put_page(mfn_to_page(smfn));
+                put_page_parent = _mfn(0);
+            }
             if (mfn_x(smfn) == mfn_x(shared_zero_page))
                 atomic_inc(&d->zero_shared_pages);
             else
@@ -1900,10 +1904,10 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                     if (orig_q == p2m_guest_r || orig_q == p2m_alloc_r) {
                         p2m_unlock(op2m);
                         op2m_locked = 0;
-                        get_page_fast(p, tmpl);
                         set_p2m_entry(p2m, gfn_aligned, mfn, 0,
                                       p2m_populate_on_demand,
                                       p2m->default_access);
+                        put_page(p);
                         if (smfn_from_clone)
                             atomic_dec(&d->retry_pages);
                         atomic_inc(&d->tmpl_shared_pages);
@@ -2004,7 +2008,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     } else {
         /* check if template page is a decompressed page, only shared
          * in one clone */
-#define ONE_CLONE_COUNT 3
+#define ONE_CLONE_COUNT 2
         while (smfn_from_clone &&
                (mfn_to_page(smfn)->count_info & PGC_count_mask) <=
                ONE_CLONE_COUNT) {
@@ -2064,8 +2068,6 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         if (smfn_from_clone)
             atomic_dec(&d->tmpl_shared_pages);
 	check_immutable(q, d, gfn_aligned);
-        if (smfn_from_clone)
-            put_page_clone = smfn;
         unmap_domain_page_direct(target);
     }
 
@@ -2075,14 +2077,9 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     if (!p2m_is_pod(pod_p2mt))
         atomic_dec(&d->pod_pages);
 
-    /* XXX mfn has two refs, one can be dropped here since it was only
-     * taken to hold onto mfn before it is added to the p2m */
-
-    if (mfn_x(put_page_clone))
-        put_page(mfn_to_page(put_page_clone));
-
-    if (mfn_x(put_page_parent))
-        put_page(mfn_to_page(put_page_parent));
+    if (mfn_valid_page_or_vframe(mfn) &&
+        mfn_x(mfn) != mfn_x(shared_zero_page))
+        put_page(mfn_to_page(mfn));
 
 #ifndef __UXEN__
     set_gpfn_from_mfn(mfn_x(mfn), gfn_aligned);
@@ -2111,6 +2108,8 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
 
     ret = 0;
   out:
+    if (mfn_x(put_page_parent))
+        put_page(mfn_to_page(put_page_parent));
     if (op2m_locked)
         p2m_unlock(op2m);
     if (!ret)
@@ -2175,11 +2174,15 @@ clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
         }
         if (p2m_is_pod(t)) {
             if (mfn_valid_page(mfn) &&
-                unlikely(!get_page_fast(mfn_to_page(mfn), od)))
+                unlikely(!get_page_fast(mfn_to_page(mfn), od))) {
                 gdprintk(XENLOG_ERR, "%s: get_page failed mfn=%08lx\n",
                          __FUNCTION__, mfn_x(mfn));
+                mfn = _mfn(0);
+            }
             ret = !set_p2m_entry(p2m, gpfn, mfn, 0,
                                  p2m_populate_on_demand, p2m->default_access);
+            if (mfn_valid_page(mfn))
+                put_page(mfn_to_page(mfn));
             if (ret) {
                 gdprintk(XENLOG_ERR, "%s: set_p2m_entry "
                          "copy_on_write failed gpfn=%08lx\n",
@@ -2198,11 +2201,15 @@ clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
             if (clone_l1_dynamic && !p2m_is_immutable(t))
                 mfn = _mfn(0);
             if (mfn_valid_page(mfn) &&
-                unlikely(!get_page_fast(mfn_to_page(mfn), od)))
+                unlikely(!get_page_fast(mfn_to_page(mfn), od))) {
                 gdprintk(XENLOG_ERR, "%s: get_page failed mfn=%08lx\n",
                          __FUNCTION__, mfn_x(mfn));
+                mfn = _mfn(0);
+            }
             ret = !set_p2m_entry(p2m, gpfn, mfn, 0,
                                  p2m_populate_on_demand, p2m->default_access);
+            if (mfn_valid_page(mfn))
+                put_page(mfn_to_page(mfn));
             if (ret) {
                 gdprintk(XENLOG_ERR, "%s: set_p2m_entry failed gpfn=%08lx\n",
                          __FUNCTION__, gpfn);
@@ -2367,6 +2374,7 @@ p2m_shared_teardown(struct p2m_domain *p2m)
         }
         page = mfn_to_page(mfn);
         if (test_bit(_PGC_host_page, &page->count_info)) {
+            put_page(page);
             host_count++;
             continue;
         }
@@ -2374,16 +2382,14 @@ p2m_shared_teardown(struct p2m_domain *p2m)
         if (p2m_is_pod(t)) {
             put_page(page);
             shared_count++;
-        } else if (is_xen_page(page) && owner == d)
-            /* xen pages are not put_page here -- instead they are
-             * relinquished in domain_relinquish_resources during the
-             * RELMEM_xen stage */
+        } else if (is_xen_page(page) && owner == d) {
+            put_page(page);
             xen_count++;
-        else if (p2m_is_ram(t) && owner == d) {
+        } else if (p2m_is_ram(t) && owner == d) {
             put_allocated_page(d, page);
             domain_count++;
-        }
-        put_page(page);
+        } else
+            BUG();
         p2m_count++;
     }
     if (l1table)
@@ -2436,7 +2442,6 @@ p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
     mfn_t smfn;
     p2m_type_t p2mt;
     p2m_access_t p2ma;
-    struct page_info *page;
     int ret = -1;
 
     /* This is called from the p2m lookups, which can happen with or 
@@ -2470,9 +2475,7 @@ p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
     set_p2m_entry(p2m, gfn, _mfn(SHARED_ZERO_MFN), order,
 		  p2m_populate_on_demand, p2m->default_access);
 
-    /* Free page and account for the new p2m PoD entry */
-    page = mfn_to_page(smfn);
-    put_allocated_page(d, page);
+    /* account for the new p2m PoD entry */
     if (!p2m_is_pod(p2mt))
         atomic_inc(&d->pod_pages);
     else if (mfn_valid_page(smfn))
@@ -2508,12 +2511,15 @@ guest_physmap_mark_pod_locked(struct domain *d, unsigned long gfn,
     unsigned long i;
     p2m_type_t ot;
     mfn_t omfn;
-    struct page_info *page = NULL;
     int pod_count = 0, pod_zero_count = 0, pod_tmpl_count = 0,
         pod_retry_count = 0;
     int rc = 0;
 
     // P2M_DEBUG("mark pod gfn=%#lx\n", gfn);
+
+    /* this interface is not for setting p2m entries to actual pages */
+    ASSERT(!mfn_valid_page_or_vframe(mfn) ||
+           mfn_x(mfn) == mfn_x(shared_zero_page));
 
     /* Make sure all gpfns are unused */
     for ( i = 0; i < (1UL << order); i++ )
@@ -2547,18 +2553,6 @@ guest_physmap_mark_pod_locked(struct domain *d, unsigned long gfn,
 #ifndef __UXEN__
             set_gpfn_from_mfn(mfn_x(omfn), INVALID_M2P_ENTRY);
 #endif  /* __UXEN__ */
-
-            /* set page, to be freed after updating p2m entry */
-            page = mfn_to_page(omfn);
-            if (unlikely(!get_page(page, d))) {
-                dprintk(XENLOG_WARNING, "%s: vm%u: could not get page"
-                        " gpfn=%lx mfn=%lx caf=%08x owner=vm%d\n",
-                        __FUNCTION__, d->domain_id, gfn,
-                        __page_to_mfn(page), page->count_info,
-                        page_get_owner(page) ? page_get_owner(page)->domain_id :
-                        -1);
-                page = NULL;
-            }
         }
         else if (p2m_is_pod(ot)) {
             /* Count how many PoD entries we'll be replacing if successful */
@@ -2602,12 +2596,6 @@ guest_physmap_mark_pod_locked(struct domain *d, unsigned long gfn,
 #endif  /* __UXEN__ */
 
   out:
-    if (page) {
-        if (!rc)
-            put_allocated_page(d, page);
-        put_page(page);
-    }
-
     return rc;
 }
 
@@ -2691,6 +2679,7 @@ guest_physmap_mark_populate_on_demand_contents(
             return -1;
         }
         guest_physmap_add_page(d, gpfn, mfn_x(mfn), PAGE_ORDER_4K);
+        put_page(new_page);
 #ifndef __UXEN__
         if (!paging_mode_translate(d))
             set_gpfn_from_mfn(mfn_x(mfn), gpfn);

@@ -181,6 +181,7 @@ static void populate_physmap(struct memop_args *a)
 
             mfn = page_to_mfn(page);
             guest_physmap_add_page(d, gpfn, mfn, a->extent_order);
+            put_page(page);
 
             if ( !paging_mode_translate(d) )
             {
@@ -649,6 +650,7 @@ static long memory_exchange(XEN_GUEST_HANDLE(xen_memory_exchange_t) arg)
 
             mfn = page_to_mfn(page);
             guest_physmap_add_page(d, gpfn, mfn, exch.out.extent_order);
+            /* XXX put ref on mfn */
 
             if ( !paging_mode_translate(d) )
             {

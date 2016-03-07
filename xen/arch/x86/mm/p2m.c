@@ -748,8 +748,7 @@ guest_physmap_add_entry(struct domain *d, unsigned long gfn,
                     p2m_unlock(p2m);
                     return -EINVAL;
                 }
-            } else if (page_get_owner(mfn_to_page(omfn)) == d)
-                put_page(mfn_to_page(omfn));
+            }
 #ifndef __UXEN__
             set_gpfn_from_mfn(mfn_x(omfn), INVALID_M2P_ENTRY);
 #endif  /* __UXEN__ */
@@ -1158,8 +1157,8 @@ DEBUG();
         goto out_put;
 #endif  /* __UXEN__ */
 
-    /* Decrement guest domain's ref count of the page */
-    put_allocated_page(d, page);
+    /* set_p2m_entry decrements guest domain's ref count of the
+     * currently mapped page */
 
     /* Remove mapping from p2m table */
     set_p2m_entry(p2m, gfn, _mfn(INVALID_MFN), PAGE_ORDER_4K, p2m_ram_paged, a);
