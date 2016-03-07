@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Michael Dales <michael@digitalflapjack.com>
  * SPDX-License-Identifier: ISC
  */
@@ -646,6 +646,7 @@ int dav_GET_OR_HEAD(DavClient *dc, int send_body)
         /* 416: Range not satisfiable */
         if (offset >= st.st_size) {
             status = 416;
+            free(payload);
             goto error;
         }
 
@@ -976,6 +977,7 @@ int dav_MOVE(DavClient *dc)
     }
 
     char* canonical_dest = dav_canonical_name(dc, decoded_path);
+    free(decoded_path);
     if (canonical_dest == NULL) {
         return dav_generic(dc, 403);
     }
