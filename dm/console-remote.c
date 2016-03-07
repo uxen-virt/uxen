@@ -200,7 +200,7 @@ handle_message(struct uxenconsole_msg_header *hdr)
 #if !defined(__APPLE__)
             struct uxenconsole_msg_request_resize *msg = (void *)hdr;
 
-            if (guest_agent_window_event(0, 0x0005 /* WM_SIZE */, 0,
+            if (guest_agent_window_event(0, 0x0005 /* WM_SIZE */, msg->flags,
                                          ((msg->height & 0xffff) << 16) |
                                          (msg->width & 0xffff)))
 #endif /* !__APPLE */

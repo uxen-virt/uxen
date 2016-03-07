@@ -67,6 +67,11 @@ typedef struct uxenconsole_ops {
     void (*disconnected)(void *priv);
 } ConsoleOps;
 
+typedef enum uxenconsole_resize_flags {
+    CONSOLE_RESIZE_FLAG_NONE  = 0x0,
+    CONSOLE_RESIZE_FLAG_FORCE = 0x1
+} ConsoleResizeFlags;
+
 uxenconsole_context_t   uxenconsole_init(ConsoleOps *console_ops,
                                          void *console_priv,
                                          char *filename);
@@ -94,7 +99,8 @@ int                     uxenconsole_keyboard_event(uxenconsole_context_t ctx,
 
 int                     uxenconsole_request_resize(uxenconsole_context_t ctx,
                                                    unsigned int width,
-                                                   unsigned int height);
+                                                   unsigned int height,
+                                                   ConsoleResizeFlags flags);
 
 int                     uxenconsole_clipboard_permit(uxenconsole_context_t ctx,
                                                      int permit_type);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -8,7 +8,7 @@
 #define _UXENDISP_RESIZE_H_
 
 int display_get_size(int *w, int *h);
-int display_resize(int w, int h);
+int display_resize(int w, int h, unsigned int flags);
 int display_init(void);
 void display_blank(int blank);
 

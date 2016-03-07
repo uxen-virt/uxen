@@ -18,6 +18,7 @@
 #include "uxenevent.h"
 #include "d3dkmthk_x.h"
 #include "hid_interface.h"
+#include "uxenconsolelib.h"
 
 static HDC hdc;
 static D3DKMT_HANDLE disp_adapter = 0;
@@ -127,19 +128,20 @@ exit:
 }
 
 int
-display_resize(int w, int h)
+display_resize(int w, int h, unsigned int flags)
 {
     RECT work_area = {0};
     UXENDISPCustomMode cm;
     BOOL set_mode = (current_w < w) || (current_h < h);
+    BOOL force_change = (flags & CONSOLE_RESIZE_FLAG_FORCE) != 0;
 
-    if (set_mode || !virtual_mode_change) {
+    if (set_mode || !virtual_mode_change || force_change) {
         DWORD mode = 0;
         DEVMODE devMode;
         LONG status;
         BOOL rc;
 
-        if (virtual_mode_change) {
+        if (virtual_mode_change && !force_change) {
             w = max(w, current_w);
             h = max(h, current_h);
         }
@@ -194,7 +196,7 @@ display_resize(int w, int h)
     if (!virtual_mode_change)
         return 0;
 
-    if (!set_mode) {
+    if (!set_mode && !force_change) {
         cm.esc_code = UXENDISP_ESCAPE_SET_VIRTUAL_MODE;
         cm.width = w;
         cm.height = h;

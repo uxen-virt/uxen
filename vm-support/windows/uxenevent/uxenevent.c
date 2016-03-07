@@ -2,7 +2,7 @@
  *  uxenevent.c
  *  uxen
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -89,6 +89,7 @@ int verbose = 0;
 static HANDLE resize_event;
 static int resize_timer_set = 0;
 static int requested_w, requested_h;
+static unsigned int requested_flags;
 
 static void
 usage(const char *progname)
@@ -187,9 +188,9 @@ process_resize(void)
     if ((requested_w != w) || (requested_h != h)) {
         LARGE_INTEGER timeout;
 
-        debug_log("%s %dx%d", __FUNCTION__, requested_w, requested_h);
+        debug_log("%s %dx%d flags 0x%x", __FUNCTION__, requested_w, requested_h, requested_flags);
 
-        display_resize(requested_w, requested_h);
+        display_resize(requested_w, requested_h, requested_flags);
 
         timeout.QuadPart = -5000000; /* 500ms */
         SetWaitableTimer(resize_event, &timeout, 0, NULL, NULL, 0);
@@ -198,12 +199,13 @@ process_resize(void)
 }
 
 static void
-schedule_resize(int w, int h)
+schedule_resize(int w, int h, unsigned int flags)
 {
     requested_w = w;
     requested_h = h;
+    requested_flags = flags;
 
-    debug_log("%s %dx%d", __FUNCTION__, w, h);
+    debug_log("%s %dx%d flags 0x%x", __FUNCTION__, w, h, flags);
 
     if (!resize_timer_set)
         process_resize();
@@ -216,7 +218,7 @@ process_windows_window_proc(struct ns_event_msg_windows_window_proc *msg)
 
     switch (msg->message) {
     case WM_SIZE:
-        schedule_resize(msg->lParam & 0xffff, (msg->lParam >> 16) & 0xffff);
+        schedule_resize(msg->lParam & 0xffff, (msg->lParam >> 16) & 0xffff, msg->wParam);
         rc = 0;
         break;
 

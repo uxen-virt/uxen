@@ -566,7 +566,8 @@ uxenconsole_keyboard_event(uxenconsole_context_t ctx,
 int
 uxenconsole_request_resize(uxenconsole_context_t ctx,
                            unsigned int width,
-                           unsigned int height)
+                           unsigned int height,
+                           ConsoleResizeFlags flags)
 {
     struct ctx *c = ctx;
     struct uxenconsole_msg_request_resize msg;
@@ -578,6 +579,7 @@ uxenconsole_request_resize(uxenconsole_context_t ctx,
     msg.header.len = sizeof (msg);
     msg.width = width;
     msg.height = height;
+    msg.flags = flags;
 
     rc = channel_write(c, &msg, sizeof (msg));
     if (rc != sizeof (msg))
