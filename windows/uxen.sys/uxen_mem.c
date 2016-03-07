@@ -320,7 +320,7 @@ kernel_query_mfns(void *va, uint32_t nr_pages,
 struct page_list_entry {
     uint32_t next, prev;
 #ifdef DBG
-    uintptr_t count_info;
+    uint32_t count_info;
 #endif
 };
 

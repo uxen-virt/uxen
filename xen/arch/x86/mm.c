@@ -2217,9 +2217,9 @@ static int cleanup_page_cacheattr(struct page_info *page)
 #endif  /* __UXEN__ */
 }
 
-static unsigned long always_inline _put_page(struct page_info *page)
+static uint32_t always_inline _put_page(struct page_info *page)
 {
-    unsigned long nx, x, y = page->count_info;
+    uint32_t nx, x, y = page->count_info;
 
     do {
         ASSERT((y & PGC_count_mask) != 0);
@@ -2228,14 +2228,14 @@ static unsigned long always_inline _put_page(struct page_info *page)
     }
     while ( unlikely((y = cmpxchg(&page->count_info, x, nx)) != x) );
 
-    return nx;
+    return nx & PGC_count_mask;
 }
 
 void put_page(struct page_info *page)
 {
-    unsigned long nx = _put_page(page);
+    uint32_t count = _put_page(page);
 
-    if ( unlikely((nx & PGC_count_mask) == 0) )
+    if ( unlikely(count == 0) )
     {
         if ( cleanup_page_cacheattr(page) == 0 )
             free_domheap_page(page);
@@ -2248,7 +2248,7 @@ void put_page(struct page_info *page)
 static int always_inline
 _get_page(struct page_info *page)
 {
-    unsigned long x, y = page->count_info;
+    uint32_t x, y = page->count_info;
 
     do {
         x = y;
@@ -2316,7 +2316,7 @@ int get_page(struct page_info *page, struct domain *domain)
 
     if ( !domain->is_dying ) {
         gdprintk(XENLOG_INFO,
-                 "Error mfn %lx: rd=%p, od=%p, caf=%08lx\n",
+                 "Error mfn %lx: rd=%p, od=%p, caf=%08x\n",
                  page_to_mfn(page), domain, owner,
                  page->count_info);
     }
@@ -2351,7 +2351,7 @@ static void get_page_light(struct page_info *page)
 static int always_inline
 put_page_last_ref(struct page_info *page, struct domain *d, int refs)
 {
-    unsigned long nx, x, y;
+    uint32_t nx, x, y;
     struct domain *owner = page_get_owner_and_reference(page);
     int drop_dom_ref;
 
@@ -2373,7 +2373,7 @@ put_page_last_ref(struct page_info *page, struct domain *d, int refs)
         ASSERT((y & PGC_count_mask) >= refs);
         x  = y;
         nx = (x - refs);
-        if (nx) {
+        if (nx & PGC_count_mask) {
             put_page(page);
             return 0;
         }

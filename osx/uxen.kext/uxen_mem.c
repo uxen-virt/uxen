@@ -982,7 +982,7 @@ release_page(uint32_t pfn)
 struct page_list_entry {
     uint32_t next, prev;
 #ifdef DEBUG
-    uintptr_t count_info;
+    uint32_t count_info;
 #endif
 };
 

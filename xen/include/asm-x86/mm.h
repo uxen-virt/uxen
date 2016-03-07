@@ -61,7 +61,7 @@ struct page_info
     struct page_list_entry list;
 
     /* Reference count and various PGC_xxx flags and fields. */
-    unsigned long count_info;
+    uint32_t count_info;
 
     /* Owner of this page. */
     domid_t domain;
@@ -203,10 +203,10 @@ struct page_info
 
 #undef __pdx_t
 
-#define PG_shift(idx)   (BITS_PER_LONG - (idx))
-#define PG_mask(x, idx) (x ## UL << PG_shift(idx))
-
 #ifndef __UXEN__
+// #define PG_shift(idx)   (BITS_PER_LONG - (idx))
+// #define PG_mask(x, idx) (x ## UL << PG_shift(idx))
+// 
 //  /* The following page types are MUTUALLY EXCLUSIVE. */
 // #define PGT_none          PG_mask(0, 4)  /* no special uses of this page   */
 // #define PGT_l1_page_table PG_mask(1, 4)  /* using as an L1 page table?     */
@@ -240,6 +240,9 @@ struct page_info
 #endif  /* __UXEN__ */
 
 #ifdef __UXEN__
+#define PG_shift(idx)   (32 /* BITS_PER_UINT32_T */ - (idx))
+#define PG_mask(x, idx) (x ## UL << PG_shift(idx))
+
 /* __UXEN__ PGC flags */
 
 #define _PGC_xen_page     PG_shift(2)

@@ -6,7 +6,7 @@
 #include "kdx.h"
 #include "kdxinfo.h"
 
-def_usym_sizeof (page_info) = 0x18;
+def_usym_sizeof (page_info) = 0x10;
 
 def_usym_sizeof (domain) = 0x1000;
 def_usym        (domain, domain_id) = 0x0000;
@@ -29,7 +29,7 @@ def_usym        (vcpu, arch_hvm_vmx_launched) = 0x065c;
 def_usym_offset (page_info, list_next) = 0;
 def_usym_offset (page_info, list_prev) = 4;
 def_usym_offset (page_info, count_info) = 8;
-def_usym_offset (page_info, domain) = 16;
+def_usym_offset (page_info, domain) = 12;
 
 def_usym_offset (page_list, next) = 0;
 def_usym_offset (page_list, tail) = 8;

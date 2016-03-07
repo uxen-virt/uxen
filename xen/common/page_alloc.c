@@ -1838,7 +1838,7 @@ void free_domheap_pages(struct page_info *pg, unsigned int order)
 #endif  /* __UXEN__ */
 
             if (pg[i].count_info & PGC_count_mask) {
-                printk("%s: mfn %lx count %lx\n", __FUNCTION__,
+                printk("%s: mfn %lx count %x\n", __FUNCTION__,
                        page_to_mfn(&pg[i]), pg[i].count_info);
                 DEBUG();
             }

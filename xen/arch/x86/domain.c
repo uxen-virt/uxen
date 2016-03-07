@@ -189,7 +189,7 @@ void dump_pageframe_info(struct domain *d)
                        "%d pages not displayed\n", d->tot_pages + 1 - n);
                 break;
             }
-            printk("    DomPage %p: caf=%08lx\n",
+            printk("    DomPage %p: caf=%08x\n",
                    _p(page_to_mfn(page)),
                    page->count_info);
 #endif  /* __UXEN__ */

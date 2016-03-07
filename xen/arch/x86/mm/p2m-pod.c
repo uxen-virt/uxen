@@ -2519,7 +2519,7 @@ guest_physmap_mark_pod_locked(struct domain *d, unsigned long gfn,
             page = mfn_to_page(omfn);
             if (unlikely(!get_page(page, d))) {
                 dprintk(XENLOG_WARNING, "%s: vm%u: could not get page"
-                        " gpfn=%lx mfn=%lx caf=%08lx owner=vm%d\n",
+                        " gpfn=%lx mfn=%lx caf=%08x owner=vm%d\n",
                         __FUNCTION__, d->domain_id, gfn,
                         __page_to_mfn(page), page->count_info,
                         page_get_owner(page) ? page_get_owner(page)->domain_id :
