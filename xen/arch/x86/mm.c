@@ -2348,6 +2348,23 @@ static void get_page_light(struct page_info *page)
 }
 #endif  /* __UXEN__ */
 
+void
+put_page_destructor(struct page_info *page,
+                    void (*destructor)(struct page_info *, va_list), ...)
+{
+    uint32_t count = _put_page(page);
+    va_list ap;
+
+    if (unlikely(count == 0)) {
+        if (cleanup_page_cacheattr(page) == 0) {
+            va_start(ap, destructor);
+            destructor(page, ap);
+            va_end(ap);
+        } else
+            MEM_LOG("Leaking pfn %lx", page_to_mfn(page));
+    }
+}
+
 /* put page after dropping refs many references */
 static int always_inline
 put_page_last_ref(struct page_info *page, struct domain *d, int refs)

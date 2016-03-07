@@ -20,7 +20,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -188,6 +188,11 @@
 #define HVM_PARAM_CLONE_DECOMPRESSED_read_only 0x1
 /* share decompressed pages */
 #define HVM_PARAM_CLONE_DECOMPRESSED_shared    0x2
+
+/* control garbage collection of compressed pages */
+#define HVM_PARAM_COMPRESSED_GC 35
+/* remove not-referenced decompressed pages */
+#define HVM_PARAM_COMPRESSED_GC_decompressed 0x1
 
 /* only compress a page on write, if the page is not shared */
 #define HVM_PARAM_CLONE_PAGE_WRITE_COMPRESS_UNSHARED_ONLY 36

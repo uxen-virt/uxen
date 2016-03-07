@@ -381,7 +381,9 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     unsigned int iommu_pte_flags = p2m_is_ram_rw(p2mt) ?
                                    IOMMUF_readable|IOMMUF_writable:
                                    0; 
+#ifndef __UXEN__
     unsigned long old_mfn = 0;
+#endif  /* __UXEN__ */
     union p2m_l1_cache *l1c = &this_cpu(p2m_l1_cache);
 
     if ( tb_init_done )
@@ -455,7 +457,9 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
         if ( entry_content.l1 != 0 )
         {
             p2m_add_iommu_flags(&entry_content, 0, iommu_pte_flags);
+#ifndef __UXEN__
             old_mfn = l1e_get_pfn(*p2m_entry);
+#endif  /* __UXEN__ */
         }
 
         p2m->write_p2m_entry(p2m, gfn, p2m_entry, table_mfn, entry_content, 3);
@@ -482,6 +486,7 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
 
     if ( page_order == PAGE_ORDER_4K )
     {
+        l1_pgentry_t old_entry = l1e_empty();
         if ( !p2m_next_level(p2m, &table_mfn, &table, &gfn_remainder, gfn,
                              L2_PAGETABLE_SHIFT - PAGE_SHIFT,
                              L2_PAGETABLE_ENTRIES, PGT_l1_page_table) )
@@ -494,7 +499,7 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
         p2m_entry = p2m_find_entry(table, &gfn_remainder, gfn,
                                    0, L1_PAGETABLE_ENTRIES);
         ASSERT(p2m_entry);
-        old_mfn = l1e_get_pfn(*p2m_entry);
+        old_entry = *p2m_entry;
 
         if (mfn_valid_page(mfn) ||
             p2m_is_mmio_direct(p2mt) || p2m_is_pod(p2mt))
@@ -509,13 +514,19 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
         p2m->write_p2m_entry(p2m, gfn, p2m_entry, table_mfn, entry_content, 1);
         /* NB: paging_write_p2m_entry() handles tlb flushes properly */
 
-        if (old_mfn != mfn_x(mfn)) {
+        if (l1e_get_pfn(old_entry) != mfn_x(mfn)) {
             if (mfn_valid_page_or_vframe(mfn) &&
                 mfn_x(mfn) != mfn_x(shared_zero_page))
                 get_page_fast(mfn_to_page(mfn), NULL);
-            if (__mfn_valid_page_or_vframe(old_mfn) &&
-                old_mfn != mfn_x(shared_zero_page))
-                put_page(__mfn_to_page(old_mfn));
+            if (__mfn_valid_page_or_vframe(l1e_get_pfn(old_entry)) &&
+                l1e_get_pfn(old_entry) != mfn_x(shared_zero_page)) {
+                if (p2m_flags_to_type(l1e_get_flags(old_entry)) ==
+                    p2m_populate_on_demand)
+                    put_page_destructor(__mfn_to_page(l1e_get_pfn(old_entry)),
+                                        p2m_pod_free_page, p2m->domain, gfn);
+                else
+                    put_page(__mfn_to_page(l1e_get_pfn(old_entry)));
+            }
         }
     }
     else if ( page_order == PAGE_ORDER_2M )
@@ -552,7 +563,9 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
         if ( entry_content.l1 != 0 )
         {
             p2m_add_iommu_flags(&entry_content, 0, iommu_pte_flags);
+#ifndef __UXEN__
             old_mfn = l1e_get_pfn(*p2m_entry);
+#endif  /* __UXEN__ */
         }
 
         p2m->write_p2m_entry(p2m, gfn, p2m_entry, table_mfn, entry_content, 2);
@@ -588,7 +601,6 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
         }
     }
 #else  /* __UXEN__ */
-    (void)old_mfn;
     (void)i;
 #endif  /* __UXEN__ */
 

@@ -572,8 +572,13 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
             mfn_x(mfn) != mfn_x(shared_zero_page))
             get_page_fast(mfn_to_page(mfn), NULL);
         if (__mfn_valid_page_or_vframe(old_entry.mfn) &&
-            old_entry.mfn != mfn_x(shared_zero_page))
-            put_page(__mfn_to_page(old_entry.mfn));
+            old_entry.mfn != mfn_x(shared_zero_page)) {
+            if (old_entry.sa_p2mt == p2m_populate_on_demand)
+                put_page_destructor(__mfn_to_page(old_entry.mfn),
+                                    p2m_pod_free_page, d, gfn);
+            else
+                put_page(__mfn_to_page(old_entry.mfn));
+        }
     }
 
     /* Track the highest gfn for which we have ever had a valid mapping */

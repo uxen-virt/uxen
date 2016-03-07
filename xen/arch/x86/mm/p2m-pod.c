@@ -1373,9 +1373,9 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
     pdi = (struct page_data_info *)&data[offset];
 
     /* check if decompressed page exists */
-    if (share && page_owner == d && pdi->mfn) {
+    if (share && page_owner == d && pdi->mfn &&
+        get_page(__mfn_to_page(pdi->mfn), page_owner)) {
         *tmfn = _mfn(pdi->mfn);
-        get_page_fast(mfn_to_page(*tmfn), page_owner);
         p2m_unlock(p2m);
         perfc_incr(decompressed_shared);
         goto out;
@@ -1407,18 +1407,16 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
         }
         wr_lock = 1;
         pdi = (struct page_data_info *)&data[offset];
-        if (pdi->mfn) {
+        if (pdi->mfn && get_page(__mfn_to_page(pdi->mfn), page_owner)) {
             /* page was decompressed concurrently, share it and free
              * our page via goto out w/ p != NULL */
             *tmfn = _mfn(pdi->mfn);
-            get_page_fast(mfn_to_page(*tmfn), page_owner);
             p2m_unlock(p2m);
             perfc_incr(decompressed_in_vain);
             goto out;
         }
         pdi->mfn = mfn_x(*tmfn);
         atomic_inc(&d->template.decompressed_shared);
-        get_page_fast(p, page_owner);
         p2m_unlock(p2m);
         perfc_incr(decompressed_shareable);
         update_host_memory_saved(-PAGE_SIZE);
@@ -1445,11 +1443,12 @@ p2m_teardown_compressed_one_cb(void *_pdi, uint16_t size, struct domain *d,
     struct page_data_info *pdi = _pdi;
     int *decomp = opaque;
 
-    if (pdi->mfn) {
+    if (pdi->mfn && get_page(__mfn_to_page(pdi->mfn), d)) {
         uxen_mfn_t mfn = pdi->mfn;
         pdi->mfn = 0;
         (*decomp)++;
         put_allocated_page(d, __mfn_to_page(mfn));
+        put_page(__mfn_to_page(mfn));
     }
 
     return 0;
@@ -1966,7 +1965,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     } else {
         /* check if template page is a decompressed page, only shared
          * in one clone */
-#define ONE_CLONE_COUNT 2
+#define ONE_CLONE_COUNT 1
         while (smfn_from_clone &&
                (mfn_to_page(smfn)->count_info & PGC_count_mask) <=
                ONE_CLONE_COUNT) {
@@ -2301,6 +2300,63 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
     return ret;
 }
 
+void
+p2m_pod_free_page(struct page_info *page, va_list ap)
+{
+    unsigned long gpfn;
+    struct domain *d, *owner;
+    struct p2m_domain *p2m;
+    mfn_t mfn;
+    p2m_type_t t;
+    p2m_access_t a;
+    uint8_t *data = NULL;
+    uint16_t data_size;
+    uint16_t offset;
+    struct page_data_info *pdi;
+
+    owner = page_get_owner(page);
+    if (!(owner->arch.hvm_domain.params[HVM_PARAM_COMPRESSED_GC] &
+          HVM_PARAM_COMPRESSED_GC_decompressed))
+        goto out_no_lock;
+
+    d = va_arg(ap, struct domain *);
+    gpfn = va_arg(ap, unsigned long);
+
+    p2m = p2m_get_hostp2m(owner);
+
+    if (d->clone_of != owner)
+        goto out_no_lock;
+
+    p2m_lock(p2m);
+
+    mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, NULL);
+    if (!p2m_mfn_is_page_data(mfn))
+        goto out;
+
+    if (p2m_get_page_data_and_write_lock(p2m, &mfn, &data, &data_size,
+                                         &offset))
+        goto out;
+
+    pdi = (struct page_data_info *)&data[offset];
+    if (pdi->mfn != __page_to_mfn(page))
+        goto out;
+
+    pdi->mfn = 0;
+
+    atomic_dec(&owner->template.decompressed_shared);
+    perfc_incr(decompressed_removed);
+    update_host_memory_saved(PAGE_SIZE);
+    p2m_pod_stat_update(owner);
+
+  out:
+    if (data)
+        p2m_put_page_data_with_write_lock(p2m, data, data_size);
+    p2m_unlock(p2m);
+
+  out_no_lock:
+    free_domheap_page(page);
+}
+
 int
 p2m_shared_teardown(struct p2m_domain *p2m)
 {
@@ -2345,7 +2401,7 @@ p2m_shared_teardown(struct p2m_domain *p2m)
             put_page(page);
             vframe_count++;
         } else if (p2m_is_pod(t)) {
-            put_page(page);
+            put_page_destructor(page, p2m_pod_free_page, d, gpfn);
             shared_count++;
         } else if (is_xen_page(page) && owner == d) {
             put_page(page);

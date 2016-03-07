@@ -773,6 +773,9 @@ int
 p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
                    unsigned int order, p2m_query_t q, void *entry);
 
+void
+p2m_pod_free_page(struct page_info *page, va_list ap);
+
 /*
  * Functions specific to the p2m-pt implementation
  */

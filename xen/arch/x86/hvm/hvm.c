@@ -857,6 +857,8 @@ int hvm_domain_initialise(struct domain *d)
             HVM_PARAM_CLONE_L1_dynamic;
         d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] =
             HVM_PARAM_CLONE_DECOMPRESSED_shared;
+        d->arch.hvm_domain.params[HVM_PARAM_COMPRESSED_GC] =
+            HVM_PARAM_COMPRESSED_GC_decompressed;
     }
 
     /* XXX init debug option */
@@ -879,6 +881,10 @@ int hvm_domain_initialise(struct domain *d)
     if (strstr(opt_debug, ",decompshare,"))
         d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] =
             HVM_PARAM_CLONE_DECOMPRESSED_shared;
+    /* XXX init debug option */
+    if (strstr(opt_debug, ",nogcdecomp,"))
+        d->arch.hvm_domain.params[HVM_PARAM_COMPRESSED_GC] &=
+            ~HVM_PARAM_COMPRESSED_GC_decompressed;
 
 #ifndef __UXEN__
     hvm_init_cacheattr_region_list(d);

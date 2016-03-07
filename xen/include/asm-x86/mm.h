@@ -478,6 +478,9 @@ int  get_page_from_l1e(
     l1_pgentry_t l1e, struct domain *l1e_owner, struct domain *pg_owner);
 void put_page_from_l1e(l1_pgentry_t l1e, struct domain *l1e_owner);
 
+void
+put_page_destructor(struct page_info *page,
+                    void (*destructor)(struct page_info *, va_list), ...);
 int
 change_page_owner(struct page_info *page, struct domain *to,
                   struct domain *from, int refs);
