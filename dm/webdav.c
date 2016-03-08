@@ -1321,11 +1321,23 @@ int dav_close(DavClient *dc)
         free(dc->last_get_request->payload);
         close(dc->last_get_request->fd);
         free(dc->last_get_request);
-        dc->last_get_request = NULL;
     }
 
     free(dc->host_dir);
     free(dc->parser);
+
+    /* Reset parsing state. */
+    free(dc->current_header);
+    free(dc->destination);
+    free(dc->request_path);
+    free(dc->canonical_filename);
+    free(dc->overwrite);
+    free(dc->headerBuf);
+
+    if (dc->put_file)
+        fclose(dc->put_file);
+
+    memset(dc, 0, sizeof(*dc));
 
     return 0;
 }
