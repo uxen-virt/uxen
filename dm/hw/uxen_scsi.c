@@ -313,6 +313,7 @@ uxscsi_read_capacity_10 (UXSCSI * s)
     return check_condition (s, SCSISK_ILLEGAL_REQUEST, 0, 0);
 
   bdrv_get_geometry (s->bs, &n_sectors);
+  --n_sectors; // reply is last addressable block
 
   if (n_sectors > 0xffffffffULL)
     n_sectors = 0xffffffffULL;
@@ -346,6 +347,7 @@ uxscsi_read_capacity_16 (UXSCSI * s, uint64_t count)
   memset (&pd, 0, sizeof (pd));
 
   bdrv_get_geometry (s->bs, &n_sectors);
+  --n_sectors; // reply is last addressable block
 
   pd.lba = be_64 (n_sectors);
   pd.block_len = be_32 (SECTOR);
