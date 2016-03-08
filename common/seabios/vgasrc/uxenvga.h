@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -44,6 +44,16 @@ static inline void uxenvga_write(u16 iobase, u32 addr, u32 val)
 {
     outl(addr, iobase + 0);
     outl(val, iobase + 4);
+}
+
+static inline u32 uxenvga_alloc_read(u16 iobase, u8 alloc, u16 reg)
+{
+    return uxenvga_read(iobase, UXDISP_REG_ALLOC(alloc) + reg);
+}
+
+static inline void uxenvga_alloc_write(u16 iobase, u8 alloc, u16 reg, u32 val)
+{
+    uxenvga_write(iobase, UXDISP_REG_ALLOC(alloc) + reg, val);
 }
 
 static inline u32 uxenvga_crtc_read(u16 iobase, u8 crtc, u16 reg)
