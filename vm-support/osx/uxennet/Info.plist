@@ -35,19 +35,6 @@
 			<key>Product Name</key>
 			<string>V4V uxennet</string>
 		</dict>
-		<key>V4VNetworkDeviceACPI</key>
-		<dict>
-			<key>CFBundleIdentifier</key>
-			<string>org.uxen.driver.$(PRODUCT_NAME:rfc1034identifier)</string>
-			<key>IOClass</key>
-			<string>org_uxen_driver_uxen_net</string>
-			<key>IONameMatch</key>
-			<string>UXN0100</string>
-			<key>IOProviderClass</key>
-			<string>IOACPIPlatformDevice</string>
-			<key>Product Name</key>
-			<string>V4V uxennet</string>
-		</dict>
 	</dict>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2015 uXen Project. All rights reserved.</string>
@@ -63,8 +50,6 @@
 		<string>1.0</string>
 		<key>org.uxen.uxenplatform</key>
 		<string>1.2</string>
-		<key>com.apple.iokit.IOACPIFamily</key>
-		<string>1.4</string>
 		<key>com.apple.kpi.bsd</key>
 		<string>13.0</string>
 		<key>com.apple.iokit.IONetworkingFamily</key>

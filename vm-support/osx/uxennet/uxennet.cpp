@@ -5,7 +5,6 @@
  */
 
 #include "uxennet.h"
-#include <IOKit/acpi/IOACPIPlatformDevice.h>
 #include <IOKit/IOLib.h>
 #include <IOKit/network/IOGatedOutputQueue.h>
 #include <v4v_service_shared.h>
@@ -20,41 +19,15 @@ OSDefineMetaClassAndStructors(uxen_net, IOEthernetController);
 static const unsigned UXENNET_RING_SIZE = 131072;
 static const uint16_t UXENNET_DEST_DOMAIN = 0;
 static const uint32_t UXENNET_DEST_PORT = 0xC0000;
-
-static unsigned acpi_get_number_property(
-    IOACPIPlatformDevice* acpiDevice, const char* propertyName,
-    unsigned default_val);
-static OSData* acpi_get_data_property(
-    IOACPIPlatformDevice* acpi_device, const char* property_name);
-
 #define uxen_net_interface org_uxen_driver_uxen_net_interface
 
 class uxen_net_interface : public IOEthernetInterface
 {
     OSDeclareDefaultStructors(uxen_net_interface);
     friend class uxen_net; // grant access to setMaxTransferUnit
-/*
-protected:
-    virtual SInt32 performCommand(IONetworkController * controller,
-                                  unsigned long         cmd,
-                                  void *                arg0,
-                                  void *                arg1) override;
-*/
 };
 OSDefineMetaClassAndStructors(uxen_net_interface, IOEthernetInterface);
 
-/*
-SInt32 uxen_net_interface::performCommand(IONetworkController * controller,
-                                  unsigned long         cmd,
- void *                arg0,
- void *                arg1)
-{
-    SInt32 result = IOEthernetInterface::performCommand(controller, cmd, arg0, arg1);
-    if (result != 0)
-        IOLog("uxen_net_interface::performCommand result = %d\n controller = %p\n cmd = %lx\n arg0 = %p\n arg1 = %p\n\n", result, &controller, cmd, &arg0, &arg1);
-    return result;
-}
-*/
 
 IONetworkInterface *
 uxen_net::createInterface()
@@ -83,30 +56,6 @@ uxen_net::configureInterface(IONetworkInterface *interface)
     return ok;
 }
 
-bool
-uxen_net::queryDeviceProperties(IOACPIPlatformDevice *acpi_device)
-{
-    this->mtu = acpi_get_number_property(
-        acpi_device, "VMTU", kIOEthernetMaxPacketSize);
-	
-    OSData* mac_address_data = acpi_get_data_property(acpi_device, "VMAC");
-    if (mac_address_data == nullptr) {
-        kprintf(
-            "uxen_net::queryDeviceProperties "
-            "Failed to obtain MAC address for device\n");
-        return false;
-    }
-    if(mac_address_data->getLength() < 6) {
-        kprintf("uxen_net::queryDeviceProperties: VMAC length too short\n");
-        OSSafeReleaseNULL(mac_address_data);
-        return false;
-    }
-    memcpy(this->mac_address.bytes, mac_address_data->getBytesNoCopy(0, 6), 6);
-    OSSafeReleaseNULL(mac_address_data);
-
-    return true;
-}
-
 bool uxen_net::start(IOService *provider)
 {
     uXenPlatformDevice *xenbus_device;
@@ -119,19 +68,14 @@ bool uxen_net::start(IOService *provider)
     uxen_v4v_ring *new_ring;
     errno_t err;
     uxen_v4v_service *service;
-    IOACPIPlatformDevice *acpi_device;
     OSObject *mtu_prop;
     OSNumber *mtu_num;
     OSObject *mac_prop;
     OSData *mac_data;
-
-    acpi_device = OSDynamicCast(IOACPIPlatformDevice, provider);
+    
     xenbus_device = OSDynamicCast(uXenPlatformDevice, provider);
-    if(acpi_device == nullptr) {
-        // Determine device parameters (MTU & MAC)
-        if (!this->queryDeviceProperties(acpi_device))
-            return false;
-    } else if (xenbus_device != nullptr) {
+
+    if (xenbus_device != nullptr) {
         // extract MTU
         mtu_prop =
             xenbus_device->copyProperty(kUXenPlatformXenBusPropertyMTUKey);
@@ -258,47 +202,6 @@ uxen_net::free() {
     /* The output queue uses the send workloop until it's destroyed
      * in IONetworkController::free, so delete it last */
     OSSafeReleaseNULL(this->send_workloop);
-}
-
-
-static OSData*
-acpi_get_data_property(IOACPIPlatformDevice* acpi_device, const char* property_name)
-{
-    OSObject* property = nullptr;
-    IOReturn ret = acpi_device->evaluateObject(property_name, &property, 0, 0, 0);
-    if (ret != kIOReturnSuccess || property == nullptr) {
-        return nullptr;
-    }
-      
-    OSData* property_data = OSDynamicCast(OSData, property);
-    if (property_data == nullptr) {
-        OSSafeReleaseNULL(property);
-        return nullptr;
-    }
-      
-    return property_data;
-}
-
-
-static unsigned
-acpi_get_number_property(
-    IOACPIPlatformDevice* acpi_device, const char* property_name, unsigned default_val)
-{
-    OSObject* property = nullptr;
-    IOReturn ret = acpi_device->evaluateObject(property_name, &property, 0, 0, 0);
-    if (ret != kIOReturnSuccess || property == nullptr) {
-        return default_val;
-    }
-    
-    OSNumber* number = OSDynamicCast(OSNumber, property);
-    if (number == nullptr) {
-        OSSafeReleaseNULL(property);
-        return default_val;
-    }
-    
-    unsigned val = number->unsigned32BitValue();
-    OSSafeRelease(property);
-    return val;
 }
 
 IOReturn

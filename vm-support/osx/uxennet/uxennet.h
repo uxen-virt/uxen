@@ -29,7 +29,6 @@ protected:
 	// Workloop (thread) used for sending. The inherited V4V workloop is used for receiving.
     IOWorkLoop* send_workloop;
     
-    bool queryDeviceProperties(IOACPIPlatformDevice *acpi_device);
     void processReceivedPackets();
     
 public:
