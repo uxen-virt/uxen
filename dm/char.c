@@ -421,7 +421,7 @@ static void send_queue_write_cb(void *opaque)
 #else
             int err = errno;
 
-            if (err == EWOULDBLOCK) {
+            if (err == EWOULDBLOCK || err == EINTR) {
 #endif
                 ioh_set_write_handler(sndq->fd, sndq->iohq, send_queue_write_cb, sndq);
             } else {
@@ -435,6 +435,7 @@ static void send_queue_write_cb(void *opaque)
         b->off += rc;
         sndq->len -= rc;
         if (!b->len) {
+            ioh_set_write_handler(sndq->fd, sndq->iohq, NULL, sndq);
             TAILQ_REMOVE(&sndq->queue, b, link);
             free(b);
         }
