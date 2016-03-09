@@ -567,7 +567,7 @@ int
 uxenconsole_request_resize(uxenconsole_context_t ctx,
                            unsigned int width,
                            unsigned int height,
-                           ConsoleResizeFlags flags)
+                           unsigned int flags)
 {
     struct ctx *c = ctx;
     struct uxenconsole_msg_request_resize msg;
