@@ -83,13 +83,7 @@ static struct pkt recv_pkt;
 static HANDLE recv_event;
 static HANDLE send_event;
 
-
 int verbose = 0;
-
-static HANDLE resize_event;
-static int resize_timer_set = 0;
-static int requested_w, requested_h;
-static unsigned int requested_flags;
 
 static void
 usage(const char *progname)
@@ -179,36 +173,11 @@ send_enqueue(v4v_context_t *c, struct pkt *pkt)
 }
 
 static void
-process_resize(void)
-{
-    int w, h;
-
-    display_get_size(&w, &h);
-
-    if ((requested_w != w) || (requested_h != h)) {
-        LARGE_INTEGER timeout;
-
-        debug_log("%s %dx%d flags 0x%x", __FUNCTION__, requested_w, requested_h, requested_flags);
-
-        display_resize(requested_w, requested_h, requested_flags);
-
-        timeout.QuadPart = -5000000; /* 500ms */
-        SetWaitableTimer(resize_event, &timeout, 0, NULL, NULL, 0);
-        resize_timer_set = 1;
-    }
-}
-
-static void
 schedule_resize(int w, int h, unsigned int flags)
 {
-    requested_w = w;
-    requested_h = h;
-    requested_flags = flags;
-
     debug_log("%s %dx%d flags 0x%x", __FUNCTION__, w, h, flags);
 
-    if (!resize_timer_set)
-        process_resize();
+    display_resize(w, h, flags);
 }
 
 static int
@@ -660,7 +629,7 @@ static void recv_collect(v4v_context_t *c)
 {
     DWORD bytes;
 
-    ResetEvent(recv_event); 
+    ResetEvent(recv_event);
 
     if (!recv_pending) return;
 
@@ -742,7 +711,7 @@ static void v4v_init(v4v_context_t *c)
 }
 
 
-#define NR_EVENTS 3
+#define NR_EVENTS 2
 
 int
 main(int argc, char **argv)
@@ -806,12 +775,8 @@ main(int argc, char **argv)
 
     recv_setup(&v4v_context);
 
-    resize_event = CreateWaitableTimer(NULL, FALSE, NULL);
-    assert(resize_event);
-
     events[0] = recv_event;
     events[1] = send_event;
-    events[2] = resize_event;
 
     while (1) {
 	DWORD err;
@@ -822,9 +787,6 @@ main(int argc, char **argv)
             recv_collect(&v4v_context);
         } else if (err == WAIT_OBJECT_1) {
             send_collect(&v4v_context);
-        } else if (err == WAIT_OBJECT_2) {
-            resize_timer_set = 0;
-            process_resize();
         } else if (err == WAIT_IO_COMPLETION)
             /* nothing */ ;
         else {

@@ -35,14 +35,6 @@ static int current_h = 0;
 static DWORD maximize_message = 0;
 static int virtual_mode_change = 0;
 
-int
-display_get_size(int *w, int *h)
-{
-    if (w) *w = virtual_w;
-    if (h) *h = virtual_h;
-    return 0;
-}
-
 static int
 display_escape(int escape_code, void *in_buf, int in_buf_size)
 {
