@@ -491,7 +491,7 @@ depopulate_frametable(unsigned int pages)
     uint32_t freed_pages = 0;
 
     for (offset = 0; offset < pages; offset++) {
-        if (!frametable_populated[offset / 8] & (1 << (offset % 8)))
+        if (!(frametable_populated[offset / 8] & (1 << (offset % 8))))
             continue;
         if (nr_frametable_mfns == FRAMETABLE_MFNS_BATCH) {
             frametable_page_mdl->Size = sizeof(MDL) +

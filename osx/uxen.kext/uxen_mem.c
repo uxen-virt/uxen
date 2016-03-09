@@ -1100,7 +1100,7 @@ depopulate_frametable(unsigned int pages)
     uint32_t freed_pages = 0;
 
     for (offset = 0; offset < pages; offset++) {
-        if (!frametable_populated[offset / 8] & (1 << (offset % 8)))
+        if (!(frametable_populated[offset / 8] & (1 << (offset % 8))))
             continue;
         frametable_va = (uintptr_t)frametable + (offset << PAGE_SHIFT);
         mfn = pmap_find_phys(kernel_pmap, frametable_va);
