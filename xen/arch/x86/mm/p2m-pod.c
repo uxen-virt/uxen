@@ -1538,6 +1538,21 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     bool_t op2m_locked = 0;
     long ret;
 
+#define out_fail() (({                          \
+                if (op2m_locked)                \
+                    p2m_unlock(op2m);           \
+                p2m_unlock(p2m);                \
+                domain_crash(d);                \
+                _mfn(INVALID_MFN);              \
+            }))
+
+#define out_of_memory() (({                                             \
+                printk(XENLOG_ERR "%s: out of memory --"                \
+                       " tot_pages %u max_pages %u\n",                  \
+                       __FUNCTION__, d->tot_pages, d->max_pages);       \
+                out_fail();                                             \
+            }))
+
     /* This is called from the p2m lookups, which can happen with or 
      * without the lock hed. */
     p2m_lock_recursive(p2m);
@@ -1545,8 +1560,12 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     /* This check is done with the p2m lock held.  This will make sure that
      * even if d->is_dying changes under our feet, p2m_pod_empty_cache() 
      * won't start until we're done. */
-    if ( unlikely(d->is_dying) )
-        goto out_fail;
+    if (unlikely(d->is_dying)) {
+        if (op2m_locked)
+            p2m_unlock(op2m);
+        p2m_unlock(p2m);
+        return _mfn(INVALID_MFN);
+    }
 
     gfn_aligned = (gfn >> order) << order;
 
@@ -1578,8 +1597,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     case PAGE_ORDER_2M:
         if (!d->clone_of) {
             gdprintk(XENLOG_ERR, "PAGE_ORDER_2M pod in non-clone VM\n");
-            domain_crash(d);
-            goto out_fail;
+            return out_fail();
         }
 
         ret = p2m_clone_l1(p2m_get_hostp2m(d->clone_of), p2m, gfn_aligned,
@@ -1615,12 +1633,12 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     lock_page_alloc(p2m);
 
     if ( p2m->pod.count == 0 )
-        goto out_of_memory;
+        retrun out_of_memory();
 
     /* Get a page f/ the cache.  A NULL return value indicates that the
      * 2-meg range should be marked singleton PoD, and retried */
     if ( (p = p2m_pod_cache_get(p2m, order)) == NULL )
-        goto out_of_memory;
+        return out_of_memory();
 
     mfn = page_to_mfn(p);
 
@@ -1726,10 +1744,8 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             dmreq = current->target_vmis->vmi_dmreq;
         else
             dmreq = get_dmreq(current);
-        if (!dmreq || dmreq_gpfn_error(dmreq->dmreq_gpfn_loaded)) {
-            domain_crash(d);
-            goto out_fail;
-        }
+        if (!dmreq || dmreq_gpfn_error(dmreq->dmreq_gpfn_loaded))
+            return out_fail();
 
         if (gfn_aligned != dmreq->dmreq_gpfn ||
             !dmreq_gpfn_set(dmreq->dmreq_gpfn_loaded) ||
@@ -1787,14 +1803,12 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
 
             p = alloc_domheap_page(d, PAGE_ORDER_4K);
             if (!p)
-                goto out_of_memory;
+                return out_of_memory();
             mfn = page_to_mfn(p);
 
             target = map_domain_page_direct(mfn_x(mfn));
-            if (dmreq->dmreq_gpfn_size > PAGE_SIZE) {
-                domain_crash(d);
-                goto out_fail;
-            }
+            if (dmreq->dmreq_gpfn_size > PAGE_SIZE)
+                return out_fail();
             if (dmreq->dmreq_gpfn_size != PAGE_SIZE) {
                 int uc_size;
                 uc_size = LZ4_decompress_safe(dmreq_vcpu_page, target,
@@ -1802,8 +1816,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                                               PAGE_SIZE);
                 if (uc_size != PAGE_SIZE) {
                     unmap_domain_page_direct(target);
-                    domain_crash(d);
-                    goto out_fail;
+                    return out_fail();
                 }
                 perfc_incr(pc18);
             } else
@@ -1826,7 +1839,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
 
             p = alloc_domheap_page(tmpl, PAGE_ORDER_4K);
             if (!p)
-                goto out_of_memory;
+                return out_of_memory();
             mfn = page_to_mfn(p);
 
             if (!op2m_locked) {
@@ -1838,8 +1851,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             if (mfn_retry(smfn)) {
                 if (dmreq->dmreq_gpfn_size > PAGE_SIZE) {
                     put_allocated_page(tmpl, p);
-                    domain_crash(d);
-                    goto out_fail;
+                    return out_fail();
                 }
 
                 /* compressed + write -> add compressed to template,
@@ -1863,8 +1875,8 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                                                       PAGE_SIZE);
                         if (uc_size != PAGE_SIZE) {
                             unmap_domain_page_direct(target);
-                            domain_crash(d);
-                            goto out_fail;
+                            put_allocated_page(tmpl, p);
+                            return out_fail();
                         }
                     } else {
                         /* uncompressed */
@@ -1905,7 +1917,8 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                 }
 
                 perfc_incr(dmreq_populated_template);
-            }
+            } else
+                put_allocated_page(tmpl, p);
             smfn_from_clone = 0;
             ASSERT(p2m_locked_by_me(op2m));
         }
@@ -1921,7 +1934,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         }
         p = alloc_domheap_page(d, PAGE_ORDER_4K);
         if (!p)
-            goto out_of_memory;
+            return out_of_memory();
         mfn = page_to_mfn(p);
         target = map_domain_page_direct(mfn_x(mfn));
         clear_page(target);
@@ -1978,8 +1991,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                     ~HVM_PARAM_CLONE_DECOMPRESSED_shared;
                 goto redo_decompress;
             }
-            domain_crash(d);
-            goto out_fail;
+            return out_fail();
         }
         check_immutable(q, d, gfn_aligned);
     } else if (smfn_from_clone &&
@@ -2042,7 +2054,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
 
         p = alloc_domheap_page(d, PAGE_ORDER_4K);
         if (!p)
-            goto out_of_memory;
+            return out_of_memory();
         mfn = page_to_mfn(p);
         target = map_domain_page_direct(mfn_x(mfn));
         source = map_domain_page(mfn_x(smfn));
@@ -2105,18 +2117,6 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         p2m_pod_stat_update(d);
     p2m_unlock(p2m);
     return _mfn(ret);
-
-out_of_memory:
-#ifndef __UXEN__
-    unlock_page_alloc(p2m);
-#endif  /* __UXEN__ */
-
-    printk("%s: Out of populate-on-demand memory! tot_pages %" PRIu32 " pod_pages %" PRIi32 "\n",
-        __func__, d->tot_pages, atomic_read(&d->pod_pages));
-    domain_crash(d);
-  out_fail:
-    ret = INVALID_MFN;
-    goto out;
 
 #ifndef __UXEN__
 remap_and_retry:
