@@ -894,7 +894,9 @@ int hvm_domain_initialise(struct domain *d)
     if ( rc != 0 )
         goto fail1;
 
+#ifndef __UXEN__
     stdvga_init(d);
+#endif  /* __UXEN__ */
 
     rtc_init(d);
 
@@ -920,7 +922,9 @@ int hvm_domain_initialise(struct domain *d)
 
  fail2:
     rtc_deinit(d);
+#ifndef __UXEN__
     stdvga_deinit(d);
+#endif  /* __UXEN__ */
     vioapic_deinit(d);
  fail1:
 #ifndef __UXEN__
@@ -968,7 +972,9 @@ void hvm_domain_destroy(struct domain *d)
 
     hvm_funcs.domain_destroy(d);
     rtc_deinit(d);
+#ifndef __UXEN__
     stdvga_deinit(d);
+#endif  /* __UXEN__ */
     vioapic_deinit(d);
 #ifndef __UXEN__
     hvm_destroy_cacheattr_region_list(d);

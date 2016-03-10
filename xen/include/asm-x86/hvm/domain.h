@@ -91,7 +91,9 @@ struct hvm_domain {
     struct hvm_irq         irq;
     struct hvm_hw_vpic     vpic[2]; /* 0=master; 1=slave */
     struct hvm_vioapic    *vioapic;
+#ifndef __UXEN__
     struct hvm_hw_stdvga   stdvga;
+#endif  /* __UXEN__ */
 
     /* VCPU which is current target for 8259 interrupts. */
     struct vcpu           *i8259_target;

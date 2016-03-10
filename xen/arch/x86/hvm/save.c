@@ -67,8 +67,10 @@ int arch_hvm_load(struct domain *d, struct hvm_save_header *hdr)
     if ( d->arch.vtsc )
         hvm_set_rdtsc_exiting(d, 1);
 
+#ifndef __UXEN__
     /* VGA state is not saved/restored, so we nobble the cache. */
     d->arch.hvm_domain.stdvga.cache = 0;
+#endif  /* __UXEN__ */
 
     return 0;
 }
