@@ -377,6 +377,7 @@ struct domain
 
     /* Guest has shut down (inc. reason code)? */
     spinlock_t       shutdown_lock;
+    bool_t           is_crashing;
     bool_t           is_shutting_down; /* in process of shutting down? */
     bool_t           is_shut_down;     /* fully shut down? */
     int              shutdown_code;

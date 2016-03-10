@@ -856,6 +856,11 @@ int domain_kill(struct domain *d)
 
 void __domain_crash(struct domain *d)
 {
+
+    if (d->is_crashing)
+        return;
+    d->is_crashing = 1;
+
     if ( d->is_shutting_down )
     {
         /* Print nothing: the domain is already shutting down. */
