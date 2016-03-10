@@ -371,6 +371,7 @@ extern int frametable_check_populate;
                                   _populate_frametable((mfn)))
 int populate_frametable_physical_memory(void);
 void depopulate_frametable(unsigned int);
+void find_stray_pages_in_frametable(unsigned int);
 int kernel_alloc_mfn(uxen_pfn_t *, int zeroed);
 int kernel_malloc_mfns(uint32_t nr_pages, uint32_t *mfn_list, int zeroed);
 void kernel_free_mfn(uint32_t);

@@ -322,9 +322,13 @@ kernel_query_mfns(void *va, uint32_t nr_pages,
 /* same as struct page_info/page_list_entry */
 struct page_list_entry {
     uint32_t next, prev;
-#ifdef DBG
     uint32_t count_info;
-#endif
+    uint16_t domain;
+#ifdef DEBUG_STRAY_PAGES
+    uint16_t pad1;
+    void *alloc0;
+    void *alloc1;
+#endif  /* DEBUG_STRAY_PAGES */
 };
 
 int
@@ -522,6 +526,55 @@ depopulate_frametable(unsigned int pages)
     }
     dprintk("%s: freed %d frametable pages\n", __FUNCTION__, freed_pages);
 }
+
+#ifdef DEBUG_STRAY_PAGES
+void
+find_stray_pages_in_frametable(unsigned int pages)
+{
+    unsigned int offset;
+    uintptr_t frametable_va;
+    int i;
+    int s = uxen_info->ui_sizeof_struct_page_info;
+    int strays = 0;
+
+    for (offset = 0; offset < pages; offset++) {
+        if (!(frametable_populated[offset / 8] & (1 << (offset % 8))))
+            continue;
+        frametable_va = (uintptr_t)frametable + (offset << PAGE_SHIFT);
+        for (i = ((offset << PAGE_SHIFT) % s) ?
+                 (s - ((offset << PAGE_SHIFT) % s)) : 0;
+             i < PAGE_SIZE; i += s) {
+            struct page_list_entry *p =
+                (struct page_list_entry *)(frametable_va + i);
+            if (i + s > PAGE_SIZE &&
+                !(frametable_populated[(offset + 1) / 8] &
+                  (1 << ((offset + 1) % 8))))
+                break;
+            if ((p->count_info && (p->count_info != (2 << (32 - 9))) &&
+                 (p->count_info != (3 << (32 - 9)))) || p->domain) {
+                if (strays < 100) {
+                    char symbol_buffer0[200];
+                    char symbol_buffer1[200];
+                    uxen_do_lookup_symbol((uint64_t)p->alloc0, symbol_buffer0,
+                                          sizeof(symbol_buffer0));
+                    uxen_do_lookup_symbol((uint64_t)p->alloc1, symbol_buffer1,
+                                          sizeof(symbol_buffer0));
+                    dprintk("%s: stray mfn %x caf %x dom %x"
+                            " alloc0 %p/%s alloc1 %p/%s\n", __FUNCTION__,
+                            (uint32_t)((uint8_t *)p - frametable) / s,
+                            p->count_info, p->domain,
+                            p->alloc0, symbol_buffer0,
+                            p->alloc1, symbol_buffer1);
+                }
+                strays++;
+            }
+        }
+    }
+
+    if (strays)
+        printk("%s: %d stray entries in frametable\n", __FUNCTION__, strays);
+}
+#endif  /* DEBUG_STRAY_PAGES */
 
 int
 kernel_malloc_mfns(uint32_t nr_pages, uxen_pfn_t *mfn_list, uint32_t max_mfn)

@@ -52,6 +52,9 @@ struct page_list_entry
     __pdx_t next, prev;
 };
 
+// #define DEBUG_STRAY_PAGES 1
+// #define DEBUG_MAPCACHE 1
+
 #ifdef __UXEN__
 /* __UXEN__ version of page_info */
 struct page_info
@@ -72,6 +75,11 @@ struct page_info
 
     /* Owner of this page. */
     domid_t domain;
+
+#ifdef DEBUG_STRAY_PAGES
+    void *alloc0;
+    void *alloc1;
+#endif  /* DEBUG_STRAY_PAGES */
 
 #ifdef DEBUG_MAPCACHE
     atomic_t mapped;

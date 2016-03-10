@@ -322,9 +322,6 @@ extern unsigned char boot_edid_info[128];
 
 #define CONFIG_X86_32      1
 // #define CONFIG_DOMAIN_PAGE 1
-#ifndef NDEBUG
-// #define DEBUG_MAPCACHE 1
-#endif
 
 #if defined(__MS_ABI__)
 #define asmlinkage __fastcall

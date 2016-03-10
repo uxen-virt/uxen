@@ -2,7 +2,7 @@
  *  uxen_debug.h
  *  uxen
  *
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -15,6 +15,8 @@
 #define UXEN_DPRINTK
 #endif
 // #define UXEN_MM_DPRINTK
+
+// #define DEBUG_STRAY_PAGES
 
 int uxen_print_init(void);
 void uxen_print_exit(void);

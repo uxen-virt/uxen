@@ -2,7 +2,7 @@
  *  uxen_debug.h
  *  uxen
  *
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -21,6 +21,8 @@
 #if defined(DBG) && defined(__i386__)
 #define DEBUG_PAGE_ALLOC
 #endif
+
+// #define DEBUG_STRAY_PAGES
 
 #define PRIuuid \
     "02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x"

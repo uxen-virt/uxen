@@ -1282,6 +1282,10 @@ alloc_host_page(int is_xen_page)
         spin_unlock_irqrestore(&host_page_list_lock, flags);
     }
 
+#ifdef DEBUG_STRAY_PAGES
+    pg->alloc0 = __builtin_return_address(0);
+#endif  /* DEBUG_STRAY_PAGES */
+
     return pg;
 }
 
@@ -1575,6 +1579,9 @@ alloc_host_pages(unsigned int pages, unsigned int memflags)
         pg = alloc_host_page(1);
         if (pg == NULL)
             break;
+#ifdef DEBUG_STRAY_PAGES
+        pg->alloc1 = __builtin_return_address(0);
+#endif  /* DEBUG_STRAY_PAGES */
         pfns[i] = page_to_mfn(pg);
 #ifdef UXEN_ALLOC_DEBUG
         printk("alloc host pages %d/%d: %x\n", i, pages, pfns[i]);
@@ -1816,6 +1823,10 @@ struct page_info *alloc_domheap_pages(
         pg = alloc_host_page(0);
     if (!pg)
         return NULL;
+
+#ifdef DEBUG_STRAY_PAGES
+    pg->alloc1 = __builtin_return_address(0);
+#endif  /* DEBUG_STRAY_PAGES */
 
     if ( (d != NULL) && assign_pages(d, pg, order, memflags) )
     {

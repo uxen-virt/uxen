@@ -1269,6 +1269,13 @@ uxen_op_shutdown(void)
 
     printk("%s: shutdown done\n", __FUNCTION__);
 
+#ifdef DEBUG_STRAY_PAGES
+    if (frametable_populated) {
+        dprintk("checking frametable for stray pages\n");
+        find_stray_pages_in_frametable(frametable_size >> PAGE_SHIFT);
+    }
+#endif  /* DEBUG_STRAY_PAGES */
+
   out:
     return 0;
 }

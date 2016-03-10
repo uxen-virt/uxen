@@ -325,6 +325,7 @@ extern uxen_pfn_t os_max_pfn;
 #endif  /* __i386__ */
 int populate_frametable_physical_memory(void);
 void depopulate_frametable(unsigned int);
+void find_stray_pages_in_frametable(unsigned int);
 int kernel_alloc_mfn(uxen_pfn_t *);
 int kernel_malloc_mfns(uint32_t, uxen_pfn_t *, uint32_t);
 void kernel_free_mfn(uxen_pfn_t);
