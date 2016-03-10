@@ -687,6 +687,7 @@ int arch_domain_create(struct domain *d, unsigned int domcr_flags)
             goto fail;
         }
     }
+#ifndef __UXEN__
     else
     {
         /* 32-bit PV guest by default only if Xen is not 64-bit. */
@@ -695,6 +696,7 @@ int arch_domain_create(struct domain *d, unsigned int domcr_flags)
 
         spin_lock_init(&d->arch.pv_domain.e820_lock);
     }
+#endif  /* __UXEN__ */
 
     /* initialize default tsc behavior in case tools don't */
     tsc_set_info(d, TSC_MODE_DEFAULT, 0UL, 0, 0);
@@ -741,8 +743,10 @@ void arch_domain_destroy(struct domain *d)
 
     if ( is_hvm_domain(d) )
         hvm_domain_destroy(d);
+#ifndef __UXEN__
     else
         xfree(d->arch.pv_domain.e820);
+#endif  /* __UXEN__ */
 
 #ifndef __UXEN_NOT_YET__
     vmce_destroy_msr(d);
@@ -2344,6 +2348,7 @@ int domain_relinquish_resources(struct domain *d)
 #endif  /* __UXEN__ */
             }
 
+#ifndef __UXEN__
             if ( d->arch.pv_domain.pirq_eoi_map != NULL )
             {
                 unmap_domain_page_global(d->arch.pv_domain.pirq_eoi_map);
@@ -2351,6 +2356,7 @@ int domain_relinquish_resources(struct domain *d)
                     mfn_to_page(d->arch.pv_domain.pirq_eoi_map_mfn));
                 d->arch.pv_domain.pirq_eoi_map = NULL;
             }
+#endif  /* __UXEN__ */
         }
 
         d->arch.relmem = RELMEM_xen;

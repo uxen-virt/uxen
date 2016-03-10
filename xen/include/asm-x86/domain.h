@@ -234,6 +234,7 @@ struct time_scale {
     u32 mul_frac;
 };
 
+#ifndef __UXEN__
 struct pv_domain
 {
     /* Shared page for notifying that explicit PIRQ EOI is required. */
@@ -245,6 +246,7 @@ struct pv_domain
     struct e820entry *e820;
     unsigned int nr_e820;
 };
+#endif  /* __UXEN__ */
 
 #define P2M_DOMAIN_SIZE                                     \
     (208 + 4 * sizeof(void *) + 2 * sizeof(mfn_t) +         \
@@ -305,7 +307,9 @@ struct arch_domain
     struct list_head pdev_list;
 
     union {
+#ifndef __UXEN__
         struct pv_domain pv_domain;
+#endif  /* __UXEN__ */
         struct hvm_domain hvm_domain;
     };
 
