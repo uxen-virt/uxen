@@ -278,56 +278,61 @@ uxen_v4v_user_ring::sendTo(
     uint32_t input_size = arguments->structureInputSize;
     void* allocd_mem = nullptr;
     IOMemoryMap* map = nullptr;
-    IOMemoryDescriptor* prepared_desc = nullptr;
-    /*
-    kprintf("UxenV4VUserRing::sendTo: struct input: %p, %u bytes; memory desc: %p, %llu bytes\n",
-        input_data, input_size, arguments->structureInputDescriptor, arguments->structureInputDescriptor ? arguments->structureInputDescriptor->getLength() : 0);
-    */
-    if (arguments->structureInputDescriptor != nullptr)
-    {
+    ssize_t result = 0;
+    IOReturn ret;
+
+    if (arguments->structureInputDescriptor != nullptr) {
         if (arguments->structureInputDescriptor->getLength() > UINT32_MAX)
             return kIOReturnOverrun;
-        
-        // Variant 1: Bounce buffer. Copy into pure kernel memory, pass that to hypercall.
-        input_size = static_cast<uint32_t>(arguments->structureInputDescriptor->getLength());
-        allocd_mem = IOMalloc(input_size);
-        if (!allocd_mem)
-            return kIOReturnNoMemory;
-        
-        arguments->structureInputDescriptor->prepare(kIODirectionOut);
-        arguments->structureInputDescriptor->readBytes(0, allocd_mem, input_size);
-        arguments->structureInputDescriptor->complete(kIODirectionOut);
-        input_data = allocd_mem;
-        //*/
-        
-        /* Variant 2: grab the *userspace* address of the buffer here to pass directly to the hypercall!
-           Works on 10.9, KPs in uxen.kext on 10.10.
-        prepared_desc = arguments->structureInputDescriptor;
-        prepared_desc->prepare(kIODirectionOut);
-        map = arguments->structureInputDescriptor->createMappingInTask(current_task(), 0, kIOMapAnywhere);
+
+        // First try mapping into kernel space.
+        map = arguments->structureInputDescriptor->createMappingInTask(
+            kernel_task,
+            0 /* don't care about mapping address */, kIOMapAnywhere);
+        if (map != nullptr) {
+            /* wireRange() appears to be the correct way to ensure kernel-mapped
+             * memory ranges get prefaulted on OS X 10.10+.
+             * prepare() won't do it; kIOMapPrefault fails for kernel_task. */
+            ret = map->wireRange(kIODirectionOut, 0, map->getLength());
+            if (ret != kIOReturnSuccess) {
+                kprintf(
+                    "uxen_v4v_user_ring::sendTo: wiring mapping failed: %x\n",
+                    ret);
+                OSSafeReleaseNULL(map);
+            }
+        }
         if (map != nullptr) {
             input_data = reinterpret_cast<const void*>(map->getAddress());
             input_size = static_cast<uint32_t>(map->getSize());
+        } else {
+            /* Fallback if mapping fails for some reason: copy to temp bounce
+             * buffer. */
+            input_size = static_cast<uint32_t>(
+                arguments->structureInputDescriptor->getLength());
+            allocd_mem = IOMalloc(input_size);
+            if (!allocd_mem)
+                return kIOReturnNoMemory;
+            
+            arguments->structureInputDescriptor->prepare(kIODirectionOut);
+            arguments->structureInputDescriptor->readBytes(
+                0, allocd_mem, input_size);
+            arguments->structureInputDescriptor->complete(kIODirectionOut);
+            input_data = allocd_mem;
         }
-        else
-        {
-            input_size = 0;
-        }
-        //*/
-        
-        // Variant 3: Map user memory into kernel space. Seems to cause KP in uxen.kext (?)
     }
     
-    ssize_t result = 0;
-    IOReturn ret = this->sendTo(
+    ret = this->sendTo(
         input_data,
         input_size,
-        (v4v_addr_t){ .domain = (domid_t)arguments->scalarInput[0], .port = (uint32_t)arguments->scalarInput[1] },
+        (v4v_addr_t){
+            .domain = (domid_t)arguments->scalarInput[0],
+            .port =  (uint32_t)arguments->scalarInput[1] },
         static_cast<unsigned>(arguments->scalarInput[2]),
         &result);
+    if (map != nullptr)
+        map->wireRange(
+            kIODirectionNone, 0, map->getLength()); // direction=none -> unwire
     OSSafeReleaseNULL(map);
-    if (prepared_desc != nullptr)
-        prepared_desc->complete(kIODirectionOut);
     if (allocd_mem)
         IOFree(allocd_mem, input_size);
     arguments->scalarOutput[0] = static_cast<int64_t>(result);
