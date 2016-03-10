@@ -422,7 +422,7 @@ struct domain *domain_create_internal(
             goto fail;
         init_status |= INIT_v4v;
 
-        if (domid && domid < DOMID_FIRST_RESERVED)
+        if (domid < DOMID_FIRST_RESERVED)
             domain_array[domid] = d;
 
         spin_lock(&domlist_update_lock);

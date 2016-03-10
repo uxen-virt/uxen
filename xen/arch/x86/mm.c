@@ -5040,7 +5040,7 @@ static int xenmem_add_to_physmap_once(
             /* invalid mfn passed in to clear/unhook mapping at gfn */
             if (!mfn_valid(mfn))
                 break;
-            if (!page_get_owner(__mfn_to_page(mfn)))
+            if (page_get_owner(__mfn_to_page(mfn)) == dom0)
                 break;
             if (is_host_page(__mfn_to_page(mfn))) {
                 gdprintk(XENLOG_ERR, "mfn %lx for gpfn %"PRI_xen_pfn

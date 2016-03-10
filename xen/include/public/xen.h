@@ -353,6 +353,8 @@ DEFINE_XEN_GUEST_HANDLE(mmuext_op_t);
 
 typedef uint16_t domid_t;
 
+#define DOMID_0 (0U)
+
 /* Domain ids >= DOMID_FIRST_RESERVED cannot be used for ordinary domains. */
 #define DOMID_FIRST_RESERVED (0x7FF0U)
 

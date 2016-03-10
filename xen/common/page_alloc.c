@@ -265,7 +265,7 @@ free_hidden_page(struct page_info *pg)
 {
     unsigned long flags;
 
-    page_set_owner(pg, NULL);
+    pg->domain = DOMID_0;
     pg->count_info = PGC_state_free;
 
     atomic_dec(&hidden_pages_allocated);
@@ -296,7 +296,7 @@ init_hidden_pages(paddr_t ps, paddr_t pe)
         } else
             pg->count_info = PGC_state_dirty;
 
-        page_set_owner(pg, NULL);
+        pg->domain = DOMID_0;
 
         spin_lock_irqsave(&hidden_pages_free_list_lock, flags);
         page_list_add_tail(pg, &hidden_pages_free_list);
@@ -324,7 +324,7 @@ alloc_hidden_page(unsigned int memflags, struct domain *d)
         BUG_ON(pg->count_info != PGC_state_free);
         pg->count_info = PGC_state_inuse;
 
-        page_set_owner(pg, NULL);
+        pg->domain = DOMID_ANON;
 
         atomic_inc(&hidden_pages_allocated);
         ASSERT(atomic_read(&hidden_pages_allocated) <=
@@ -599,7 +599,7 @@ static struct page_info *alloc_heap_pages(
 #ifndef __UXEN__
         pg[i].u.inuse.type_info = 0;
 #endif  /* __UXEN__ */
-        page_set_owner(&pg[i], NULL);
+        pg[i].domain = DOMID_ANON;
     }
 
     spin_unlock(&heap_lock);
@@ -725,9 +725,11 @@ static void free_heap_pages(
 #endif  /* __UXEN__ */
 
         /* This page is not a guest frame any more. */
-        page_set_owner(&pg[i], NULL); /* set_gpfn_from_mfn snoops pg owner */
 #ifndef __UXEN__
+        page_set_owner(&pg[i], NULL); /* set_gpfn_from_mfn snoops pg owner */
         set_gpfn_from_mfn(mfn + i, INVALID_M2P_ENTRY);
+#else  /* __UXEN__ */
+        pg[i].domain = DOMID_ANON;
 #endif  /* __UXEN__ */
 
         /*
@@ -1268,7 +1270,8 @@ alloc_host_page(int is_xen_page)
     pg->count_info = PGC_state_inuse;
 
     /* Initialise fields which have other uses for free pages. */
-    page_set_owner(pg, NULL);
+    BUG_ON(pg->domain != DOMID_0);
+    pg->domain = DOMID_ANON;
 
     if (is_xen_page) {
         unsigned long flags;
@@ -1288,9 +1291,11 @@ free_host_page(struct page_info *pg)
     int cpu = smp_processor_id();
 
     /* This page is not a guest frame any more. */
-    page_set_owner(pg, NULL); /* set_gpfn_from_mfn snoops pg owner */
 #ifndef __UXEN__
+    page_set_owner(pg, NULL); /* set_gpfn_from_mfn snoops pg owner */
     set_gpfn_from_mfn(page_to_mfn(pg), INVALID_M2P_ENTRY);
+#else  /* __UXEN__ */
+    pg->domain = DOMID_ANON;
 #endif  /* __UXEN__ */
 
     /*
@@ -1315,6 +1320,8 @@ free_host_page(struct page_info *pg)
 #else  /* __UXEN__ */
     pg->count_info = PGC_state_host;
 #endif  /* __UXEN__ */
+    BUG_ON(pg->domain != DOMID_ANON);
+    pg->domain = DOMID_0;
 #ifdef DEBUG_MAPCACHE
     if (atomic_read(&pg->mapped) > 1) {
         printk("%s: mfn %lx still mapped from %S and %S\n", __FUNCTION__,
@@ -1537,7 +1544,7 @@ alloc_host_pages(unsigned int pages, unsigned int memflags)
     while (i-- > 0) {
         pg = mfn_to_page(pfns[i]);
         pg->count_info &= ~PGC_xen_page;
-        pg->domain = 0;
+        pg->domain = DOMID_ANON;
         spin_lock_irqsave(&host_page_list_lock, flags);
         page_list_del(pg, &host_page_list);
         spin_unlock_irqrestore(&host_page_list_lock, flags);
@@ -1588,7 +1595,7 @@ void free_host_pages(void *v, unsigned int pages)
     while (pages-- > 0) {
         pg = mfn_to_page(pfns[pages]);
         pg->count_info &= ~PGC_xen_page;
-        pg->domain = 0;
+        pg->domain = DOMID_ANON;
         spin_lock_irqsave(&host_page_list_lock, flags);
         page_list_del(pg, &host_page_list);
         spin_unlock_irqrestore(&host_page_list_lock, flags);
@@ -1609,7 +1616,7 @@ free_all_host_pages(void)
         printk("%s: page %lx\n", __FUNCTION__, page_to_mfn(pg));
 #endif  /* UXEN_ALLOC_DEBUG */
         pg->count_info &= ~PGC_xen_page;
-        pg->domain = 0;
+        pg->domain = DOMID_ANON;
         free_host_page(pg);
         spin_lock_irqsave(&host_page_list_lock, flags);
     }
@@ -1788,7 +1795,7 @@ void free_domheap_pages(struct page_info *pg, unsigned int order)
         pg->count_info &= ~PGC_host_page;
         d->host_pages--;
 
-        page_set_owner(pg, NULL);
+        pg->domain = DOMID_0;
 
         d->tot_pages -= 1 << order;
         drop_dom_ref = (d->tot_pages == 0);
