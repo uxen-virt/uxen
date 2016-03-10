@@ -35,6 +35,8 @@
 
 int uxen_verbose = 0;
 
+static void free_dom0(void);
+
 DEFINE_PER_CPU(uintptr_t, stack_top);
 DEFINE_PER_CPU(struct uxen_hypercall_desc *, hypercall_args);
 
@@ -537,6 +539,8 @@ __uxen_shutdown_xen(void)
     printk("clearing cpu_online_map\n");
     cpumask_clear(&cpu_online_map);
 
+    free_dom0();
+
     end_execution();
 
     /* freeing host pages makes dom0 current invalid */
@@ -722,6 +726,18 @@ alloc_dom0_vcpu0(void)
 	if (!alloc_vcpu(dom0, i, i))
 	    return NULL;
     return dom0->vcpu[0];
+}
+
+static void
+free_dom0(void)
+{
+    if (!dom0)
+        return;
+
+    if (dom0->shared_info) {
+        free_domheap_page(virt_to_page(dom0->shared_info));
+        free_xenheap_page(dom0->shared_info);
+    }
 }
 
 void __interface_fn
