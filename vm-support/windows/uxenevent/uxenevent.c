@@ -830,6 +830,7 @@ main(int argc, char **argv)
             warnx("%s: WaitForMultipleObjectsEx error %ld %ld",
                     __FUNCTION__, err, GetLastError());
         }
+        display_border_windows_on_top();
     }
 
     return 0;

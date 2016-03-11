@@ -35,6 +35,19 @@ static int current_h = 0;
 static DWORD maximize_message = 0;
 static int virtual_mode_change = 0;
 
+void display_border_windows_on_top()
+{
+    if (right_window) {
+        SetWindowPos(right_window, HWND_TOPMOST, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE);
+    }
+
+    if (bottom_window) {
+        SetWindowPos(bottom_window, HWND_TOPMOST, 0, 0, 0, 0,
+                         SWP_NOMOVE | SWP_NOSIZE);
+    }
+}
+
 static int
 display_escape(int escape_code, void *in_buf, int in_buf_size)
 {
