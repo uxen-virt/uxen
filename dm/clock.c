@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -114,9 +114,13 @@ int64_t _os_get_clock(int type)
 
     if (type == CLOCK_VIRTUAL)
         vm_clock_lock();
-    ret = mach_absolute_time() - start_time;
-    if (type == CLOCK_VIRTUAL)
-        ret -= time_pause_adjust;
+    if (type == CLOCK_VIRTUAL && clock_paused_time)
+        ret = clock_paused_time;
+    else {
+        ret = mach_absolute_time() - start_time;
+        if (type == CLOCK_VIRTUAL)
+            ret -= time_pause_adjust;
+    }
     if (type == CLOCK_VIRTUAL)
         vm_clock_unlock();
 
