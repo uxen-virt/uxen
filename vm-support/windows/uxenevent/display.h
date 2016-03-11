@@ -7,7 +7,6 @@
 #ifndef _UXENDISP_RESIZE_H_
 #define _UXENDISP_RESIZE_H_
 
-int display_get_size(int *w, int *h);
 int display_resize(int w, int h, unsigned int flags);
 int display_init(void);
 void display_blank(int blank);

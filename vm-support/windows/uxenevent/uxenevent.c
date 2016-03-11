@@ -181,16 +181,15 @@ send_enqueue(v4v_context_t *c, struct pkt *pkt)
 static void
 process_resize(void)
 {
-    int w, h;
-
-    display_get_size(&w, &h);
-
-    if ((requested_w != w) || (requested_h != h)) {
+    if ((requested_w > 0) && (requested_h > 0)) {
         LARGE_INTEGER timeout;
 
         debug_log("%s %dx%d flags 0x%x", __FUNCTION__, requested_w, requested_h, requested_flags);
 
         display_resize(requested_w, requested_h, requested_flags);
+        requested_w = 0;
+        requested_h = 0;
+        requested_flags = 0;
 
         timeout.QuadPart = -5000000; /* 500ms */
         SetWaitableTimer(resize_event, &timeout, 0, NULL, NULL, 0);
@@ -660,7 +659,7 @@ static void recv_collect(v4v_context_t *c)
 {
     DWORD bytes;
 
-    ResetEvent(recv_event); 
+    ResetEvent(recv_event);
 
     if (!recv_pending) return;
 
