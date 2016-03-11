@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Piotr Foltyn <piotr.foltyn@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -33,6 +33,7 @@ struct dr_context
     KEVENT safe_to_draw;
     KEVENT safe_to_send;
     struct rect dirty;
+    BOOLEAN clean;
     BOOLEAN force_update;
     BOOLEAN alt_ring_active;
     KSPIN_LOCK lock;
@@ -69,10 +70,7 @@ static void dr_timer_dpc(
                                     sizeof(ctx->dirty), V4V_PROTO_DGRAM);
         }
 
-        ctx->dirty.left = DR_USHRT_MAX;
-        ctx->dirty.top = DR_USHRT_MAX;
-        ctx->dirty.right = 0;
-        ctx->dirty.bottom = 0;
+        ctx->clean = TRUE;
     }
 
     if (!signaled)
@@ -128,6 +126,7 @@ dr_ctx_t dr_init(void *dev, disable_tracking_ptr fn)
 
     ctx->dev = dev;
     ctx->disable_tracking = fn;
+    ctx->clean = TRUE;
 
     ctx->due_time.QuadPart = -DR_PERIOD_MS * DR_ONE_MS_IN_HNS;
     KeInitializeTimer(&ctx->timer);
@@ -191,6 +190,15 @@ void dr_update(dr_ctx_t context, struct rect *rect)
 #else
     KeAcquireSpinLock(&ctx->lock, &irql);
 #endif
+
+    if (ctx->clean) {
+        ctx->clean = FALSE;
+        ctx->dirty.left = DR_USHRT_MAX;
+        ctx->dirty.top = DR_USHRT_MAX;
+        ctx->dirty.right = 0;
+        ctx->dirty.bottom = 0;
+    }
+
     ctx->dirty.left = min(ctx->dirty.left, rect->left);
     ctx->dirty.top = min(ctx->dirty.top, rect->top);
     ctx->dirty.right = max(ctx->dirty.right, rect->right);
