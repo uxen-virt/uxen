@@ -612,7 +612,7 @@ kernel_malloc_mfns(uint32_t nr_pages, uxen_pfn_t *mfn_list, uint32_t max_mfn)
             p->next = 0;
 #ifdef DBG
             ASSERT(!p->count_info);
-#endif
+#endif  /* DBG */
             if (i >= nr_pages)
                 break;
         }
@@ -882,7 +882,7 @@ _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
             p->prev = 0;
 #ifdef DBG
             ASSERT(!p->count_info);
-#endif
+#endif  /* DBG */
             uxen_info->ui_free_pages[cpu].list = mfn_list[n];
         }
         uxen_info->ui_free_pages[cpu].count += ret;
@@ -932,7 +932,7 @@ uxen_pages_retire_one_cpu(int cpu, uint32_t left)
         ASSERT(!p->count_info);
     }
     ASSERT(!p->next);
-#endif
+#endif  /* DBG */
 
     plist = &uxen_info->ui_free_pages[cpu].list;
     for (n = 0; n < left; n++) {
@@ -940,7 +940,7 @@ uxen_pages_retire_one_cpu(int cpu, uint32_t left)
         plist = &p->next;
 #ifdef DBG
         ASSERT(!p->count_info);
-#endif
+#endif  /* DBG */
     }
 
     free_list = *plist;
@@ -1022,7 +1022,7 @@ idle_free_free_list(void)
         p->next = 0;
 #ifdef DBG
         ASSERT(!p->count_info);
-#endif
+#endif  /* DBG */
         if (n >= INCREASE_RESERVE_BATCH) {
             more = 1;
             break;
@@ -1418,14 +1418,14 @@ unmap_page_range(const void *addr, int n, uxen_pfn_t *mfn,
             pa = MmGetPhysicalAddress((uint8_t *)addr + (i << PAGE_SHIFT));
 	    pfn[i] = (PFN_NUMBER)(pa.QuadPart >> PAGE_SHIFT);
         }
-#else
+#else  /* DBG */
         /* In the DBG version, assert that nothing messed with the mdl */
 	pa = MmGetPhysicalAddress((uint8_t *)addr + (i << PAGE_SHIFT));
         if (mdl->MappedSystemVa == addr)
 	    ASSERT(pfn[i] == (PFN_NUMBER)(pa.QuadPart >> PAGE_SHIFT));
 	else
 	    pfn[i] = (PFN_NUMBER)(pa.QuadPart >> PAGE_SHIFT);
-#endif
+#endif  /* DBG */
 	if (mfn)
 	    mfn[i] = (uxen_pfn_t)pfn[i];
     }
@@ -1991,7 +1991,7 @@ uxen_mem_map_page(xen_pfn_t mfn)
     if (!va)
         dprintk("%s: pagemap_map_page failed for mfn %x\n",
                 __FUNCTION__, mfn);
-#endif
+#endif  /* DBG */
     return va;
 }
 

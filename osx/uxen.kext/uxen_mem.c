@@ -132,7 +132,7 @@ verify_mapping(void *_va, uxen_pfn_t *pfns, int len, const char *fn, int line)
 
     return 0;
 }
-#endif  // DEBUG
+#endif  /* DEBUG */
 
 static LIST_HEAD(, map_pfn_array_pool_entry) map_pfn_array_pool =
     LIST_HEAD_INITIALIZER(&map_pfn_array_pool);
@@ -177,7 +177,7 @@ map_pfn_array(uxen_pfn_t *pfn_array, unsigned int num)
             fail_msg("vm_deallocate also failed");
         return NULL;
     }
-#endif
+#endif  /* DEBUG */
 
     return (void *)addr;
 }
@@ -561,7 +561,7 @@ user_mmap_range(uxen_pfn_t *mfns, uint32_t num, int mapping_mode,
         fail_msg("verify_mapping failed");
         goto out;
     }
-#endif
+#endif  /* DEBUG */
 
     um = (struct user_mapping *)kernel_malloc(sizeof(struct user_mapping));
     if (!um) {
@@ -644,7 +644,7 @@ user_mmap_xen_mfns(uint32_t num, xen_pfn_t *mfns, struct fd_assoc *fda)
             fail_msg("verify_mapping failed");
             goto out;
         }
-#endif
+#endif  /* DEBUG */
     }
 
     um = (struct user_mapping *)kernel_malloc(sizeof(struct user_mapping));
@@ -785,7 +785,7 @@ kernel_free(void *addr, uint32_t size)
     size = (size + sizeof(uintptr_t) - 1) & ~(sizeof(uintptr_t) - 1);
     OSFree(addr, size, uxen_malloc_tag);
 }
-#else
+#else  /* DEBUG_MALLOC */
 // #define MALLOC_VERBOSE 1
 static lck_spin_t *malloc_info_lck = NULL;
 
@@ -916,7 +916,7 @@ debug_check_malloc(void)
     lck_spin_free(malloc_info_lck, uxen_lck_grp);
     malloc_info_lck = NULL;
 }
-#endif
+#endif  /* DEBUG_MALLOC */
 
 uxen_pfn_t
 get_max_pfn(void)
@@ -1201,7 +1201,7 @@ kernel_malloc_mfns(uint32_t nr_pages, uint32_t *mfn_list, int zeroed)
             p->next = 0;
 #ifdef DEBUG
             assert(!p->count_info);
-#endif
+#endif  /* DEBUG */
             if (i >= nr_pages)
                 break;
         }
@@ -1313,7 +1313,7 @@ _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
             p->prev = 0;
 #ifdef DEBUG
             assert(!p->count_info);
-#endif
+#endif  /* DEBUG */
             uxen_info->ui_free_pages[cpu].list = mfn_list[n];
         }
         uxen_info->ui_free_pages[cpu].count += ret;
@@ -1348,7 +1348,7 @@ uxen_pages_retire_one_cpu(int cpu, uint32_t left)
         assert(!p->count_info);
     }
     assert(!p->prev);
-#endif
+#endif  /* DEBUG */
 
     plist = &uxen_info->ui_free_pages[cpu].list;
     for (n = 0; n < left; n++) {
@@ -1356,7 +1356,7 @@ uxen_pages_retire_one_cpu(int cpu, uint32_t left)
         plist = &p->next;
 #ifdef DEBUG
         assert(!p->count_info);
-#endif
+#endif  /* DEBUG */
     }
 
     free_list = *plist;
@@ -1432,7 +1432,7 @@ idle_free_free_list(void)
         p->next = 0;
 #ifdef DEBUG
         assert(!p->count_info);
-#endif
+#endif  /* DEBUG */
         if (n >= INCREASE_RESERVE_BATCH) {
             more = 1;
             break;
@@ -1717,7 +1717,7 @@ uxen_mem_exit(void)
     struct vm_page *tmp = NULL;
 #ifdef DEBUG
     int freed = 0;
-#endif
+#endif  /* DEBUG */
 
     if (!vm_page_lck)
         return;
@@ -1735,7 +1735,7 @@ uxen_mem_exit(void)
         tmp = page;
 #ifdef DEBUG
         freed++;
-#endif
+#endif  /* DEBUG */
     }
 
     xnu_vm_page_free_list(page, 0);
@@ -1749,7 +1749,7 @@ uxen_mem_exit(void)
     if (freed)
         dprintk("%s: freed %d leaked page%s\n", __FUNCTION__, freed,
                 (freed != 1) ? "s" : "");
-#endif
+#endif  /* DEBUG */
 
     sysctl_unregister_oid(&sysctl__hw_uxen_malloc_max);
     sysctl_unregister_oid(&sysctl__hw_uxen_malloc_cur);
