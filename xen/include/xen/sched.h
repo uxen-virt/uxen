@@ -308,7 +308,9 @@ struct domain
     struct cpupool  *cpupool;
 
     struct domain   *next_in_list;
+#ifndef __UXEN__
     struct domain   *next_in_hashbucket;
+#endif  /* __UXEN__ */
 
     struct list_head rangesets;
     spinlock_t       rangesets_lock;

@@ -105,9 +105,11 @@ custom_param("cpufreq", setup_cpufreq_option);
 DEFINE_SPINLOCK(domlist_update_lock);
 DEFINE_RCU_READ_LOCK(domlist_read_lock);
 
+#ifndef __UXEN__
 #define DOMAIN_HASH_SIZE 256
 #define DOMAIN_HASH(_id) ((int)(_id)&(DOMAIN_HASH_SIZE-1))
 static struct domain *domain_hash[DOMAIN_HASH_SIZE];
+#endif  /* __UXEN__ */
 struct domain *domain_list;
 
 struct domain *dom0;
@@ -431,9 +433,13 @@ struct domain *domain_create_internal(
             if ( (*pd)->domain_id > d->domain_id )
                 break;
         d->next_in_list = *pd;
+#ifndef __UXEN__
         d->next_in_hashbucket = domain_hash[DOMAIN_HASH(domid)];
         rcu_assign_pointer(*pd, d);
         rcu_assign_pointer(domain_hash[DOMAIN_HASH(domid)], d);
+#else  /* __UXEN__ */
+        rcu_assign_pointer(*pd, d);
+#endif  /* __UXEN__ */
         spin_unlock(&domlist_update_lock);
     }
 
@@ -677,19 +683,14 @@ struct domain *get_domain_by_id(domid_t dom)
 {
     struct domain *d;
 
+    if (dom >= DOMID_FIRST_RESERVED)
+        return NULL;
+
     rcu_read_lock(&domlist_read_lock);
 
-    for ( d = rcu_dereference(domain_hash[DOMAIN_HASH(dom)]);
-          d != NULL;
-          d = rcu_dereference(d->next_in_hashbucket) )
-    {
-        if ( d->domain_id == dom )
-        {
-            if ( unlikely(!get_domain(d)) )
-                d = NULL;
-            break;
-        }
-    }
+    d = domain_array[dom];
+    if (d && unlikely(!get_domain(d)))
+        d = NULL;
 
     rcu_read_unlock(&domlist_read_lock);
 
@@ -701,18 +702,14 @@ struct domain *rcu_lock_domain_by_id(domid_t dom)
 {
     struct domain *d = NULL;
 
+    if (dom >= DOMID_FIRST_RESERVED)
+        return NULL;
+
     rcu_read_lock(&domlist_read_lock);
 
-    for ( d = rcu_dereference(domain_hash[DOMAIN_HASH(dom)]);
-          d != NULL;
-          d = rcu_dereference(d->next_in_hashbucket) )
-    {
-        if ( d->domain_id == dom )
-        {
-            rcu_lock_domain(d);
-            break;
-        }
-    }
+    d = domain_array[dom];
+    if (d)
+        rcu_lock_domain(d);
 
     rcu_read_unlock(&domlist_read_lock);
 
@@ -1112,10 +1109,12 @@ void domain_destroy(struct domain *d)
     while ( *pd != d ) 
         pd = &(*pd)->next_in_list;
     rcu_assign_pointer(*pd, d->next_in_list);
+#ifndef __UXEN__
     pd = &domain_hash[DOMAIN_HASH(d->domain_id)];
     while ( *pd != d ) 
         pd = &(*pd)->next_in_hashbucket;
     rcu_assign_pointer(*pd, d->next_in_hashbucket);
+#endif  /* __UXEN__ */
     spin_unlock(&domlist_update_lock);
 
     /* Schedule RCU asynchronous completion of domain destroy. */
