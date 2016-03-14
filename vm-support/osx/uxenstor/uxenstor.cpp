@@ -596,9 +596,11 @@ uxen_v4v_storage_device::SendSCSICommand(
         
         dataBuffer = GetDataBuffer(request);
         dataOffset = GetDataBufferOffset(request);
-        dataBuffer->prepare(kIODirectionOut);
-        mmap = dataBuffer->createMappingInTask(kernel_task, 0, kIOMapAnywhere | kIOMapReadOnly, dataOffset, dataLength);
-        if (mmap != nullptr && mmap->getLength() >= dataLength) {
+        mmap = dataBuffer->createMappingInTask(kernel_task, 0,
+            kIOMapAnywhere | kIOMapReadOnly, dataOffset, dataLength);
+        if (mmap != nullptr && mmap->getLength() >= dataLength
+              && kIOReturnSuccess
+                 == mmap->wireRange(kIODirectionOut, 0, dataLength)) {
             buffer[1].iov_base = mmap->getAddress();
         } else {
             /* mapping failed or ended up too short - can happen e.g. if it's
@@ -636,7 +638,9 @@ uxen_v4v_storage_device::SendSCSICommand(
         IOLockLock(this->bounce_buffer_lock);
         copy = this->bounce_buffer;
         assert(copy != nullptr);
+        dataBuffer->prepare(kIODirectionOut);
         dataBuffer->readBytes(GetDataBufferOffset(request), copy, dataLength);
+        dataBuffer->complete(kIODirectionOut);
         buffer[1].iov_base = reinterpret_cast<uint64_t>(copy);
 
         bytes_sent = this->v4v_service->sendvOnRing(
@@ -650,8 +654,8 @@ uxen_v4v_storage_device::SendSCSICommand(
     if (copy != nullptr)
         IOLockUnlock(this->bounce_buffer_lock);
     
-    if (dataBuffer != nullptr)
-        dataBuffer->complete(kIODirectionOut);
+    if (mmap != nullptr)
+        mmap->wireRange(kIODirectionNone, 0, dataLength); // direction=none->unwire
     OSSafeReleaseNULL(mmap);
     
     if (bytes_sent > 0) {
