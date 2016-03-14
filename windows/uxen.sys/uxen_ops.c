@@ -1676,6 +1676,7 @@ uxen_vmi_stop_running(struct vm_info *vmi)
     KeFlushQueuedDpcs();
 
     KeClearEvent(&vmi->vmi_notexecuting);
+    MemoryBarrier();
     if (vmi->vmi_running_vcpus)
         KeWaitForSingleObject(&vmi->vmi_notexecuting, Executive, KernelMode,
                               FALSE, NULL);
