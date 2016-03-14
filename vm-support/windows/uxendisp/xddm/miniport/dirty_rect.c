@@ -33,7 +33,7 @@ struct dr_context
     KEVENT safe_to_draw;
     KEVENT safe_to_send;
     struct rect dirty;
-    BOOLEAN clean;
+    struct rect dirty_copy;
     BOOLEAN force_update;
     BOOLEAN alt_ring_active;
     KSPIN_LOCK lock;
@@ -50,7 +50,7 @@ static void dr_timer_dpc(
     KeAcquireSpinLockAtDpcLevel(&ctx->lock);
     signaled = KeReadStateEvent(&ctx->safe_to_send);
     if (ctx->force_update ||
-        (signaled && !ctx->clean && (ctx->dirty.right > 0) && (ctx->dirty.bottom > 0)))
+        (signaled && (ctx->dirty.right > 0) && (ctx->dirty.bottom > 0)))
     {
         KeClearEvent(&ctx->safe_to_draw);
         ctx->force_update = FALSE;
@@ -62,15 +62,20 @@ static void dr_timer_dpc(
         ctx->dirty.right += DR_BRODER_SIZE;
         ctx->dirty.bottom += DR_BRODER_SIZE;
 
-        uxen_v4v_send_from_ring(ctx->ring, &ctx->peer, &ctx->dirty,
-                                sizeof(ctx->dirty), V4V_PROTO_DGRAM);
+        ctx->dirty_copy = ctx->dirty;
+
+        uxen_v4v_send_from_ring(ctx->ring, &ctx->peer, &ctx->dirty_copy,
+                                sizeof(ctx->dirty_copy), V4V_PROTO_DGRAM);
         if (ctx->alt_ring_active)
         {
-            uxen_v4v_send_from_ring(ctx->alt_ring, &ctx->alt_peer, &ctx->dirty,
-                                    sizeof(ctx->dirty), V4V_PROTO_DGRAM);
+            uxen_v4v_send_from_ring(ctx->alt_ring, &ctx->alt_peer, &ctx->dirty_copy,
+                                    sizeof(ctx->dirty_copy), V4V_PROTO_DGRAM);
         }
 
-        ctx->clean = TRUE;
+        ctx->dirty.left = DR_USHRT_MAX;
+        ctx->dirty.top = DR_USHRT_MAX;
+        ctx->dirty.right = 0;
+        ctx->dirty.bottom = 0;
     }
 
     if (!signaled)
@@ -126,7 +131,6 @@ dr_ctx_t dr_init(void *dev, disable_tracking_ptr fn)
 
     ctx->dev = dev;
     ctx->disable_tracking = fn;
-    ctx->clean = TRUE;
 
     ctx->due_time.QuadPart = -DR_PERIOD_MS * DR_ONE_MS_IN_HNS;
     KeInitializeTimer(&ctx->timer);
@@ -190,14 +194,6 @@ void dr_update(dr_ctx_t context, struct rect *rect)
 #else
     KeAcquireSpinLock(&ctx->lock, &irql);
 #endif
-
-    if (ctx->clean) {
-        ctx->clean = FALSE;
-        ctx->dirty.left = DR_USHRT_MAX;
-        ctx->dirty.top = DR_USHRT_MAX;
-        ctx->dirty.right = 0;
-        ctx->dirty.bottom = 0;
-    }
 
     ctx->dirty.left = min(ctx->dirty.left, rect->left);
     ctx->dirty.top = min(ctx->dirty.top, rect->top);
