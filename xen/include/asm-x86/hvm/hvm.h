@@ -238,6 +238,8 @@ bool_t hvm_send_assist_req(struct vcpu *v);
 bool_t hvm_send_dmreq(struct vcpu *v);
 bool_t hvm_send_dom0_dmreq(struct domain *d);
 
+void hvm_set_zp_prefix(struct domain *d);
+
 void hvm_set_guest_tsc(struct vcpu *v, u64 guest_tsc);
 u64 hvm_get_guest_tsc(struct vcpu *v);
 

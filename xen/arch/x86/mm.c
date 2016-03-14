@@ -5693,6 +5693,8 @@ long arch_memory_op(int op, XEN_GUEST_HANDLE(void) arg)
             d->zp_nr++;
         }
 
+        hvm_set_zp_prefix(d);
+
       set_zero_page_ctxt_out:
         rcu_unlock_domain(d);
 

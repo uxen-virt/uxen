@@ -1634,6 +1634,31 @@ hvm_send_dom0_dmreq(struct domain *d)
     return 1;
 }
 
+void
+hvm_set_zp_prefix(struct domain *d)
+{
+    uintptr_t s = ~(uintptr_t)0, e = 0, x;
+    uint32_t nr;
+
+    for (nr = 0; nr < d->zp_nr; nr++) {
+        if (d->zp_ctxt[nr].entry < s)
+            s = d->zp_ctxt[nr].entry;
+        if (d->zp_ctxt[nr].entry > e)
+            e = d->zp_ctxt[nr].entry;
+    }
+
+    x = s ^ e;
+    d->zp_mask = 1;
+    while (x) {
+        d->zp_mask <<= 1;
+        x >>= 1;
+    }
+    d->zp_mask = ~(d->zp_mask - 1);
+    d->zp_prefix = s & d->zp_mask;
+
+    printk(XENLOG_INFO "zp: guest zero page prefix %"PRIxPTR"\n", d->zp_prefix);
+}
+
 static int
 hvm_save_zp(struct domain *d, hvm_domain_context_t *h)
 {
@@ -1657,8 +1682,10 @@ hvm_load_zp(struct domain *d, hvm_domain_context_t *h)
     if (hvm_load_entry(ZP, h, ctxt) != 0)
         return -EINVAL;
 
-    if (ctxt != &dummy && d->zp_ctxt[d->zp_nr].entry)
+    if (ctxt != &dummy && d->zp_ctxt[d->zp_nr].entry) {
         d->zp_nr++;
+        hvm_set_zp_prefix(d);
+    }
 
     return 0;
 }

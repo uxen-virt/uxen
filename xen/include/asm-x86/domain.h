@@ -282,9 +282,13 @@ struct domain_extra_1
     struct {
         struct hvm_zp_context zp_ctxt[XEN_MEMORY_SET_ZERO_PAGE_DESC_MAX];
         uint32_t zp_nr;
+        uintptr_t zp_prefix;
+        uintptr_t zp_mask;
     };
 #define zp_ctxt extra_1->zp_ctxt
 #define zp_nr extra_1->zp_nr
+#define zp_prefix extra_1->zp_prefix
+#define zp_mask extra_1->zp_mask
 };
 
 struct arch_domain
