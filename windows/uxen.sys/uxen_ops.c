@@ -1670,6 +1670,7 @@ uxen_vmi_stop_running(struct vm_info *vmi)
             KeSetEvent(event, 0, FALSE);
         }
 
+        vci->vci_shared.vci_host_halted = 0;
 	KeSetEvent(&vci->vci_runnable, 0, FALSE);
 
 	KeCancelTimer(&vci->vci_timer);

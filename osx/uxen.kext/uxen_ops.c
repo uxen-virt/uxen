@@ -1346,6 +1346,7 @@ uxen_vmi_stop_running(struct vm_info *vmi)
             fast_event_signal(&event->fast_ev);
         }
 
+        vci->vci_shared.vci_host_halted = 0;
         event_signal(&vci->vci_runnable);
 
         interrupt_cpus = 1;
