@@ -154,7 +154,7 @@ NTSTATUS BASIC_DISPLAY_DRIVER::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartIn
         uxen_err("dr_init failed. Unable to communicate with hardware.");
         return STATUS_UNSUCCESSFUL;
     }
-    
+
     return STATUS_SUCCESS;
 }
 
@@ -163,6 +163,7 @@ NTSTATUS BASIC_DISPLAY_DRIVER::StopDevice(VOID)
     dr_deinit(m_DrContext);
     m_DrContext = NULL;
 
+    hw_enable_page_tracking(&m_HwResources);
     hw_cleanup(&m_HwResources);
     CleanUp();
 

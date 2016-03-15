@@ -34,6 +34,9 @@ NTSTATUS hw_pointer_update(
 void hw_disable_page_tracking(
     _In_ PUXEN_HW_RESOURCES pHw);
 
+void hw_enable_page_tracking(
+    _In_ PUXEN_HW_RESOURCES pHw);
+
 NTSTATUS hw_is_virt_mode_enabled(
     _In_ PUXEN_HW_RESOURCES pHw);
 

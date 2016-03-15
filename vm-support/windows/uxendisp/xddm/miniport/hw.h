@@ -25,6 +25,7 @@ BOOLEAN hw_pointer_setpos(PDEVICE_EXTENSION dev, SHORT x, SHORT y);
 BOOLEAN hw_pointer_enable(PDEVICE_EXTENSION dev, BOOLEAN en);
 
 void hw_disable_page_tracking(PDEVICE_EXTENSION dev);
+void hw_enable_page_tracking(PDEVICE_EXTENSION dev);
 
 VP_STATUS hw_is_virt_mode_enabled(PDEVICE_EXTENSION dev);
 

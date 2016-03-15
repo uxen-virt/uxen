@@ -365,6 +365,7 @@ BOOLEAN ResetHw(PVOID dev_ext, ULONG colums, ULONG Rows)
     PDEVICE_EXTENSION dev = dev_ext;
 
     dr_deinit(dev->dr_ctx);
+    hw_enable_page_tracking(dev);
     hw_disable(dev);
 
     return FALSE;

@@ -61,6 +61,13 @@ void hw_disable_page_tracking(PDEVICE_EXTENSION dev)
     uxdisp_write(dev, UXDISP_REG_MODE, val);
 }
 
+void hw_enable_page_tracking(PDEVICE_EXTENSION dev)
+{
+    ULONG val = uxdisp_read(dev, UXDISP_REG_MODE);
+    val &= ~UXDISP_MODE_PAGE_TRACKING_DISABLED;
+    uxdisp_write(dev, UXDISP_REG_MODE, val);
+}
+
 ULONG hw_get_nmodes(PDEVICE_EXTENSION dev)
 {
     return (sizeof (bochs_modes) / sizeof (bochs_modes[0]));
