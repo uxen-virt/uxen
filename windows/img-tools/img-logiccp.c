@@ -563,7 +563,7 @@ static void man_uniq_by_name_and_action(Manifest *man)
     for (i = j = 1; i < man->n; ++i) {
 
         ManifestEntry *a = &man->entries[i];
-        const wchar_t *aname = a->name;
+        const wchar_t *aname = a->imgname;
         const wchar_t* jname = man->entries[j - 1].imgname;
         if (wcsicmp(aname, jname) != 0
                || a->action != man->entries[j - 1].action) {
