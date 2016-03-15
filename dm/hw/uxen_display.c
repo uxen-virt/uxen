@@ -473,7 +473,7 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
             }
         }
 
-        if (h > crtc->yres) {
+        if ((h > crtc->yres) && (crtc->yres > 0)) {
             uint8_t* dst = bank->vram.view + bank_offset + (crtc->yres * stride);
             int curr_max = crtc->yres * stride;
             int new_max = h * stride;
