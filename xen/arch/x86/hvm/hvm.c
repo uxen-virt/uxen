@@ -1693,6 +1693,124 @@ hvm_load_zp(struct domain *d, hvm_domain_context_t *h)
 HVM_REGISTER_SAVE_RESTORE(ZP, hvm_save_zp, hvm_load_zp,
                           XEN_MEMORY_SET_ZERO_PAGE_DESC_MAX, HVMSR_PER_DOM);
 
+static int
+hvm_pod_zp_prefix(struct vcpu *v, unsigned long gpfn, p2m_type_t *t,
+                  p2m_access_t *a)
+{
+    struct domain *d = v->domain;
+    uintptr_t rip = guest_cpu_user_regs()->eip;
+    mfn_t zmfn;
+    int nr;
+    struct hvm_zp_context *ctxt;
+    p2m_query_t zeromode = p2m_zeropop;
+
+    for (nr = 0; nr < d->zp_nr; nr++) {
+        if (!d->zp_ctxt[nr].entry)
+            continue;
+        if (rip == d->zp_ctxt[nr].entry)
+            break;
+    }
+
+    if (nr == d->zp_nr)
+        return 1;
+
+    ctxt = &d->zp_ctxt[nr];
+    if (!ctxt->entry)
+        return 1;
+
+    if (check_free_pages_needed(0))
+        return hypercall_create_retry_continuation();
+
+    if (ctxt->nr_gpfns_mode != XEN_MEMORY_SET_ZERO_PAGE_GVA_MODE_single) {
+        unsigned long nr_gpfns, n, p, gva;
+        p2m_type_t pt;
+        uint32_t pfec;
+
+        switch (ctxt->gva_mode) {
+        case XEN_MEMORY_SET_ZERO_PAGE_GVA_MODE_ecx:
+            gva = guest_cpu_user_regs()->ecx;
+            break;
+        case XEN_MEMORY_SET_ZERO_PAGE_GVA_MODE_edi:
+            gva = guest_cpu_user_regs()->edi;
+            break;
+        default:
+            printk(XENLOG_ERR
+                   "%s: invalid zp gva mode %d -- disabling\n",
+                   __FUNCTION__, ctxt->gva_mode);
+            ctxt->entry = 0;
+            return 1;
+        }
+
+        switch (ctxt->nr_gpfns_mode) {
+        case XEN_MEMORY_SET_ZERO_PAGE_NR_GPFN_MODE_edx_shift_5:
+            nr_gpfns = guest_cpu_user_regs()->edx >> 5;
+            break;
+        case XEN_MEMORY_SET_ZERO_PAGE_NR_GPFN_MODE_edx_shift_6:
+            nr_gpfns = guest_cpu_user_regs()->edx >> 6;
+            break;
+        case XEN_MEMORY_SET_ZERO_PAGE_NR_GPFN_MODE_ecx_shift_10:
+            nr_gpfns = guest_cpu_user_regs()->ecx >> 10;
+            break;
+        default:
+            printk(XENLOG_ERR
+                   "%s: invalid zp nr gpfns mode %d -- disabling\n",
+                   __FUNCTION__, ctxt->nr_gpfns_mode);
+            ctxt->entry = 0;
+            return 1;
+        }
+
+        zeromode = p2m_zeroshare;
+
+        printk(XENLOG_DEBUG
+               "%s: multi zero %lu pages at gva %p\n", __FUNCTION__,
+               nr_gpfns, (void *)gva);
+
+        /* try to zero share all the pages in the batch, bail if any
+         * one of them fails */
+        for (n = 1; n < nr_gpfns; n++) {
+            /* add PAGE_SIZE now since we skip the 1st page */
+            gva += PAGE_SIZE;
+
+            if (check_free_pages_needed(0))
+                return hypercall_create_retry_continuation();
+
+            pfec = PFEC_page_present;
+            p = paging_gva_to_gfn(v, gva, &pfec);
+            if (p == INVALID_GFN)
+                /* XXX check pfec */
+                return 1;
+
+            zmfn = get_gfn_type(d, p, &pt, zeromode);
+            put_gfn(d, p);
+
+            if (!__mfn_zero_page(mfn_x(zmfn)) &&
+                !(mfn_valid_page(mfn_x(zmfn)) && !p2m_is_pod(pt)))
+                return 1;
+        }
+    }
+
+    zmfn = get_gfn_type_access(p2m_get_hostp2m(d), gpfn, t, a, zeromode, NULL);
+    if (__mfn_zero_page(mfn_x(zmfn)) ||
+        (mfn_valid(mfn_x(zmfn)) && !p2m_is_pod(*t))) {
+        printk(XENLOG_DEBUG
+               "%s: %s zero page rt rip %p ret rip %p\n", __FUNCTION__,
+               ctxt->nr_gpfns_mode ==
+               XEN_MEMORY_SET_ZERO_PAGE_GVA_MODE_single ? "single" : "multi",
+               (void *)rip, (void *)(uintptr_t)ctxt->ret);
+
+        guest_cpu_user_regs()->eip = ctxt->ret;
+        switch (ctxt->prologue_mode) {
+        case XEN_MEMORY_SET_ZERO_PAGE_PROLOGUE_clear_edx:
+            guest_cpu_user_regs()->edx = 0;
+            break;
+        }
+    }
+
+    put_gfn(d, gpfn);
+
+    return 0;
+}
+
 void hvm_hlt(unsigned long rflags)
 {
     struct vcpu *curr = current;
@@ -1778,6 +1896,7 @@ int hvm_hap_nested_page_fault(unsigned long gpa,
     p2m_access_t p2ma;
     mfn_t mfn;
     struct vcpu *v = current;
+    struct domain *d = v->domain;
     struct p2m_domain *p2m;
     int rc;
 
@@ -1814,6 +1933,16 @@ int hvm_hap_nested_page_fault(unsigned long gpa,
         }
     }
 #endif  /* __UXEN_NOT_YET__ */
+
+    if (d->zp_prefix && !(gpa & ~PAGE_MASK) && access_w &&
+        (guest_cpu_user_regs()->eip & d->zp_mask) == d->zp_prefix) {
+        int ret;
+        ret = hvm_pod_zp_prefix(v, gfn, &p2mt, &p2ma);
+        if (!ret)
+            return 1;
+        if (ret == -ERETRY)
+            return 1;
+    }
 
     p2m = p2m_get_hostp2m(v->domain);
     mfn = get_gfn_type_access(p2m, gfn, &p2mt, &p2ma,
