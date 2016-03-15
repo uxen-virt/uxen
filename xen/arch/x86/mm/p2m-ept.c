@@ -884,6 +884,7 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
 
         if (is_p2m_zeroshare_any(q)) {
             *t = p2m_populate_on_demand;
+            mfn = _mfn(SHARED_ZERO_MFN);
             goto out;
         }
 
@@ -903,7 +904,7 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
             if (p2m_pod_zero_share(p2m, gfn, PAGE_ORDER_4K, q, ept_entry))
                 goto out;
             *t = p2m_populate_on_demand;
-            mfn = _mfn(INVALID_MFN);
+            mfn = _mfn(SHARED_ZERO_MFN);
             goto out;
         }
 

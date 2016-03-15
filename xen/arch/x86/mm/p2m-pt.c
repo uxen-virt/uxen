@@ -1100,6 +1100,7 @@ pod_retry_l2:
 
         if (is_p2m_zeroshare_any(q)) {
             *t = p2m_populate_on_demand;
+            mfn = _mfn(SHARED_ZERO_MFN);
             goto out;
         }
 
@@ -1115,7 +1116,7 @@ pod_retry_l2:
             if (p2m_pod_zero_share(p2m, gfn, PAGE_ORDER_4K, q, l1e))
                 goto out;
             *t = p2m_populate_on_demand;
-            mfn = _mfn(INVALID_MFN);
+            mfn = _mfn(SHARED_ZERO_MFN);
             goto out;
         }
     }
