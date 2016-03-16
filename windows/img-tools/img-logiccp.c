@@ -351,48 +351,27 @@ ManifestEntry* man_push_file(Manifest *out,
     return e;
 }
 
-/* Sorts by name (insensitively), then by action, then finally by case-sensitive
- * name, as a tie-break to impose a consistent ordering on entries that differ
- * only by case.
+/* Sorts by imgname first (insensitively), then by name (likewise), then by
+ * action, then by case-sensitive name as a tie-break to impose a consistent
+ * ordering on entries that differ only by case.
  */
 static int cmp_name_action(const void *a, const void *b)
-{
-    const ManifestEntry *ea = (const ManifestEntry *) a;
-    const ManifestEntry *eb = (const ManifestEntry *) b;
-    int r = wcsicmp(ea->name, eb->name);
-    if (r != 0) {
-        return r;
-    } else {
-        if (ea->action < eb->action) {
-            return -1;
-        } else if (eb->action < ea->action) {
-            return 1;
-        } else {
-            return wcscmp(ea->name, eb->name);
-        }
-    }
-}
-
-/* Same as cmp_name_action but explicitly using imgname - needed for
- * code which previously used man_sort_by_name() post-rewire_phase to actually
- * mean the imgname
- */
-static int cmp_imgname_action(const void *a, const void *b)
 {
     const ManifestEntry *ea = (const ManifestEntry *) a;
     const ManifestEntry *eb = (const ManifestEntry *) b;
     int r = wcsicmp(ea->imgname, eb->imgname);
     if (r != 0) {
         return r;
-    } else {
-        if (ea->action < eb->action) {
-            return -1;
-        } else if (eb->action < ea->action) {
-            return 1;
-        } else {
-            return wcscmp(ea->imgname, eb->imgname);
-        }
     }
+    r = wcsicmp(ea->name, eb->name);
+    if (r != 0) {
+        return r;
+    }
+    r = (int)ea->action - (int)eb->action;
+    if (r != 0) {
+        return r;
+    }
+    return wcscmp(ea->name, eb->name);
 }
 
 static int cmp_offset_link_action(const void *a, const void *b)
@@ -517,11 +496,6 @@ static void man_sort_by_name(Manifest *man)
     man_sort(man, cmp_name_action);
 }
 
-static void man_sort_by_imgname(Manifest *man)
-{
-    man_sort(man, cmp_imgname_action);
-}
-
 static void man_sort_by_offset_link_action(Manifest *man)
 {
     man_sort(man, cmp_offset_link_action);
@@ -532,14 +506,21 @@ static void man_sort_by_id(Manifest *man)
     man_sort(man, cmp_id_action);
 }
 
+/* Note the criteria for eliminating duplicates in the man_uniq_xxx() fns has to
+ * be compatible with the sort order otherwise the duplicates won't be found
+ * because they aren't adjacent to one another.
+ */
+
 static void man_uniq_by_name(Manifest *man)
 {
-    /* Despite its name this fn has been uniq'ing based on imgname, not name. */
+    /* Uniques based on imgname only (which in cases where we don't care, will
+     * be the same as name). Since cmp_name_action sorts by imgname first, this
+     * is still compatible with man_sort_by_name() */
     int i, j;
     if (man->n == 0) {
         return;
     }
-    assert(man->order_fn == cmp_name_action || man->order_fn == cmp_imgname_action);
+    assert(man->order_fn == cmp_name_action);
     for (i = j = 1; i < man->n; ++i) {
 
         ManifestEntry *a = &man->entries[i];
@@ -554,7 +535,8 @@ static void man_uniq_by_name(Manifest *man)
 
 static void man_uniq_by_name_and_action(Manifest *man)
 {
-    /* Despite its name this fn has been uniq'ing based on imgname, not name. */
+    /* This is called on input manifests therefore an entry is only a duplicate
+     * if all of its name, action AND imgname match */
     int i, j;
     if (man->n == 0) {
         return;
@@ -563,10 +545,10 @@ static void man_uniq_by_name_and_action(Manifest *man)
     for (i = j = 1; i < man->n; ++i) {
 
         ManifestEntry *a = &man->entries[i];
-        const wchar_t *aname = a->imgname;
-        const wchar_t* jname = man->entries[j - 1].imgname;
-        if (wcsicmp(aname, jname) != 0
-               || a->action != man->entries[j - 1].action) {
+        ManifestEntry *b = &man->entries[j - 1];
+        if (wcsicmp(a->name, b->name) != 0
+               || wcsicmp(a->imgname, b->imgname) != 0
+               || a->action != b->action) {
             man->entries[j++] = *a;
         }
     }
@@ -2235,7 +2217,7 @@ int stat_files_phase(struct disk *disk, Manifest *man, wchar_t *file_id_list)
 int mkdir_phase(struct disk *disk, Manifest *man)
 {
     ENTER_PHASE();
-    assert(man->order_fn == cmp_imgname_action);
+    assert(man->order_fn == cmp_name_action);
 
     int i;
 
@@ -2866,7 +2848,7 @@ int shallow_phase(struct disk *disk, Manifest *man, wchar_t *map_idx)
 {
     assert(shallow_allowed);
     ENTER_PHASE();
-    assert(man->order_fn == cmp_imgname_action);
+    assert(man->order_fn == cmp_name_action);
 
     int i, j;
     FILE *map_file;
@@ -4243,7 +4225,9 @@ int main(int argc, char **argv)
         err(1, "rewiring_phase failed");
     }
 
-    man_sort_by_imgname(&man_out);
+    /* Unlikely that rewire_phase meant there's anything additional to uniq,
+     * but just in case rerun */
+    man_sort_by_name(&man_out);
     man_uniq_by_name(&man_out);
 
     if (mkdir_phase(&disk, &man_out) < 0) {
@@ -4267,7 +4251,7 @@ int main(int argc, char **argv)
             }
         }
 
-        man_sort_by_imgname(&man_out);
+        man_sort_by_name(&man_out);
         if (shallow_phase(&disk, &man_out, map_idx) < 0) {
             err(1, "shallow_phase failed");
         }
@@ -4346,13 +4330,13 @@ int main(int argc, char **argv)
          * or if we skipped the retry logic entirely due to SKIP_USN_PHASE.
          */
         man_sort_by_offset_link_action(&man_out);
-        r = copy_phase(&disk, &man_out, arg_out_manifest != NULL, num_retries);
+        r = copy_phase(&disk, &man_out, arg_out_manifest != NULL, i);
         if (r != 0) {
             /* Here we treat any remaining changed files as fatal
              * because there isn't really any remedial action we can take short
              * of excluding the file, which will potentially cause much worse
              * problems down the line. */
-            err(1, "copy_phase %d failed", num_retries);
+            err(1, "copy_phase %d failed", i);
         }
     }
 
