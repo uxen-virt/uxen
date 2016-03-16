@@ -1619,28 +1619,6 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     ASSERT(order == 0);
     ASSERT(mfn_x(smfn) != INVALID_MFN);
 
-    if (is_p2m_zeroshare_any(q)) {
-        if (mfn_x(smfn) != SHARED_ZERO_MFN)
-            /* not already SHARED_ZERO_MFN */
-            set_p2m_entry(p2m, gfn, _mfn(SHARED_ZERO_MFN), PAGE_ORDER_4K,
-                          p2m_populate_on_demand, p2m->default_access);
-        if (!mfn_zero_page(smfn)) {
-            /* not already zero shared (SHARED_ZERO_MFN or shared_zero_page) */
-            atomic_inc(&d->zero_shared_pages);
-            /* replacing non-pod page? */
-            if (!p2m_is_pod(t))
-                atomic_inc(&d->pod_pages);
-            /* replacing a template shared page? */
-            else if (mfn_valid_page(smfn))
-                atomic_dec(&d->tmpl_shared_pages);
-            else if (mfn_retry(smfn))
-                atomic_dec(&d->retry_pages);
-        }
-        audit_p2m(p2m, 1);
-        ret = 0;
-        goto out;
-    }
-
     if (mfn_x(smfn) == 0) {
         p2m_lock(op2m);
         op2m_locked = 1;
@@ -2487,10 +2465,48 @@ p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
 
     ASSERT(order == PAGE_ORDER_4K);
 
-    ASSERT(mfn_x(smfn) != INVALID_MFN);
-
     /* parse entry with lock held */
     smfn = p2m->parse_entry(entry, 0, &p2mt, &p2ma);
+
+    if (p2m_is_pod(p2mt))
+        check_immutable(q, d, gfn);
+
+    if (is_p2m_zeropop(q) && !p2m_is_ram(p2mt)) {
+        struct page_info *p = alloc_domheap_page(d, PAGE_ORDER_4K);
+        if (!p) {
+            printk(XENLOG_ERR "%s: out of memory --"
+                   " tot_pages %u max_pages %u\n",
+                   __FUNCTION__, d->tot_pages, d->max_pages);
+            domain_crash(d);
+            goto out;
+        }
+
+        if (p2m_is_pod(p2mt)) {
+            atomic_dec(&d->pod_pages);
+            if (mfn_zero_page(smfn))
+                atomic_dec(&d->zero_shared_pages);
+            else if (mfn_valid_page(smfn))
+                atomic_dec(&d->tmpl_shared_pages);
+        }
+
+        smfn = page_to_mfn(p);
+        p2mt = p2m_ram_rw;
+        set_p2m_entry(p2m, gfn, smfn, order, p2mt, p2m->default_access);
+        put_page(p);
+        /* page zeroed below in p2m_is_ram(p2mt) */
+    }
+
+    if (p2m_is_ram(p2mt)) {
+        ASSERT(mfn_valid_page(smfn));
+        if (is_p2m_zeropop(q) || p2m_clear_gpfn_from_mapcache(p2m, gfn, smfn)) {
+            char *b = map_domain_page(mfn_x(smfn));
+            clear_page(b);
+            unmap_domain_page(b);
+            ret = 0;
+            goto out;
+        }
+    }
+
     if (mfn_zero_page(smfn)) {
         if (mfn_x(smfn) == mfn_x(shared_zero_page))
             set_p2m_entry(p2m, gfn, _mfn(SHARED_ZERO_MFN), order,
@@ -2498,10 +2514,6 @@ p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
         ret = 0;
         goto out;
     }
-
-    ret = p2m_clear_gpfn_from_mapcache(p2m, gfn, smfn);
-    if (ret)
-        goto out;
 
     set_p2m_entry(p2m, gfn, _mfn(SHARED_ZERO_MFN), order,
 		  p2m_populate_on_demand, p2m->default_access);
@@ -2512,6 +2524,8 @@ p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
     else if (mfn_valid_page(smfn))
         atomic_dec(&d->tmpl_shared_pages);
     atomic_inc(&d->zero_shared_pages);
+
+    ret = 0;
 
     if ( tb_init_done )
     {

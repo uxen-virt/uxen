@@ -866,9 +866,16 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
     index = gfn_remainder >> (i * EPT_TABLE_ORDER);
     ept_entry = table + index;
 
-    while (p2m_is_pod(ept_entry->sa_p2mt)) {
-        if (q == p2m_query)
-            break;
+    mfn = _mfn(INVALID_MFN);
+
+    if (is_p2m_zeroing_any(q)) {
+        ASSERT(i == 0);
+        if (p2m_pod_zero_share(p2m, gfn, PAGE_ORDER_4K, q, ept_entry))
+            goto out;
+        /* set t/a/mfn below */
+
+    } else if (p2m_is_pod(ept_entry->sa_p2mt) &&
+               q != p2m_query) {
 
         if (q == p2m_alloc_r &&
             (d->clone_of || mfn_zero_page(ept_entry->mfn))) {
@@ -877,18 +884,10 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
         }
 
         ASSERT(i == 0);
-        
+
         mfn = p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_4K, q, ept_entry);
         if (mfn_x(mfn))
             goto out;
-
-        if (is_p2m_zeroshare_any(q)) {
-            *t = p2m_populate_on_demand;
-            mfn = _mfn(SHARED_ZERO_MFN);
-            goto out;
-        }
-
-        break;
     }
 
     /* Need to check for all-zeroes because typecode 0 is p2m_ram and an
@@ -898,15 +897,6 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
         *a = ept_entry->access;
 
         mfn = _mfn(ept_entry->mfn);
-
-        if (is_p2m_zeroshare_any(q)) {
-            ASSERT(i == 0);
-            if (p2m_pod_zero_share(p2m, gfn, PAGE_ORDER_4K, q, ept_entry))
-                goto out;
-            *t = p2m_populate_on_demand;
-            mfn = _mfn(SHARED_ZERO_MFN);
-            goto out;
-        }
 
         if ( i )
         {

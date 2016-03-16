@@ -1083,10 +1083,14 @@ pod_retry_l2:
 
     mfn = _mfn(INVALID_MFN);
 
-    /* PoD: Try to populate */
-    while (p2m_is_pod(p2m_flags_to_type(l1e_get_flags(*l1e)))) {
-        if (q == p2m_query)
-            break;
+    if (is_p2m_zeroing_any(q)) {
+        if (p2m_pod_zero_share(p2m, gfn, PAGE_ORDER_4K, q, l1e))
+            goto out;
+        /* set t/mfn below */
+
+    } else if (p2m_is_pod(p2m_flags_to_type(l1e_get_flags(*l1e))) &&
+               q != p2m_query) {
+        /* PoD: Try to populate */
 
         if (q == p2m_alloc_r &&
             (p2m->domain->clone_of || mfn_zero_page(l1e_get_pfn(*l1e)))) {
@@ -1097,28 +1101,11 @@ pod_retry_l2:
         mfn = p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_4K, q, l1e);
         if (mfn_x(mfn))
             goto out;
-
-        if (is_p2m_zeroshare_any(q)) {
-            *t = p2m_populate_on_demand;
-            mfn = _mfn(SHARED_ZERO_MFN);
-            goto out;
-        }
-
-        break;
     }
 
     if (p2m_is_valid(p2m_flags_to_type(l1e_get_flags(*l1e)))) {
         *t = p2m_flags_to_type(l1e_get_flags(*l1e));
-
         mfn = _mfn(l1e_get_pfn(*l1e));
-
-        if (is_p2m_zeroshare_any(q)) {
-            if (p2m_pod_zero_share(p2m, gfn, PAGE_ORDER_4K, q, l1e))
-                goto out;
-            *t = p2m_populate_on_demand;
-            mfn = _mfn(SHARED_ZERO_MFN);
-            goto out;
-        }
     }
 
   out:

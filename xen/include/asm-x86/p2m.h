@@ -142,13 +142,20 @@ typedef enum {
     p2m_guest,              /* Guest demand-fault; implies alloc  */
     p2m_guest_r,            /* Guest demand-fault read access; implies alloc */
     p2m_zeroshare,          /* re-share gpfn with zero page */
+    p2m_zeropop,            /* populate with a zeroed page */
 } p2m_query_t;
 
-#define is_p2m_zeroshare_any(q) ((q) == p2m_zeroshare)
 #define p2m_query_to_mask(_q) (1UL << (_q))
+
 #define P2M_GUEST_QUERY_MASK (p2m_query_to_mask(p2m_guest) |    \
                               p2m_query_to_mask(p2m_guest_r))
 #define is_p2m_guest_query(q) (p2m_query_to_mask(q) & P2M_GUEST_QUERY_MASK)
+
+#define P2M_ZEROING_QUERY_MASK (p2m_query_to_mask(p2m_zeroshare) |      \
+                                p2m_query_to_mask(p2m_zeropop))
+#define is_p2m_zeroing_any(q) (p2m_query_to_mask(q) & P2M_ZEROING_QUERY_MASK)
+#define is_p2m_zeroshare(q) ((q) == p2m_zeroshare)
+#define is_p2m_zeropop(q) ((q) == p2m_zeropop)
 
 /* We use bitmaps and maks to handle groups of types */
 #define p2m_to_mask(_t) (1UL << (_t))

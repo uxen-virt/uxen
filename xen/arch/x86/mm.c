@@ -5630,13 +5630,7 @@ long arch_memory_op(int op, XEN_GUEST_HANDLE(void) arg)
 
         rc = 0;
         for (n = 0; n < list.nr_gpfns; n++) {
-            mfn_t zmfn;
-            zmfn = get_gfn_type(d, gpfns[n], &pt, p2m_zeroshare);
-            if (mfn_valid(mfn_x(zmfn)) && !p2m_is_pod(pt)) {
-                char *b = map_domain_page(mfn_x(zmfn));
-                clear_page(b);
-                unmap_domain_page(b);
-              }
+            get_gfn_type(d, gpfns[n], &pt, p2m_zeroshare);
             put_gfn(d, gpfns[n]);
         }
 
