@@ -18,6 +18,7 @@
 #include <sys/time.h>
 #include <string.h>
 #include <mach/mach.h>
+#include <mach/mach_time.h>
 #include <sys/stat.h>
 
 #include "queue.h"
@@ -451,18 +452,56 @@ out:
     return ret;
 }
 
+static uint64_t
+diff_mach_abs_time_ms(uint64_t start, uint64_t end)
+{
+    mach_timebase_info_data_t timebase_info = {0};
+    mach_timebase_info(&timebase_info);
+
+    uint64_t diff_ns = (end-start)*(timebase_info.numer/timebase_info.denom);
+    return diff_ns / 1000000LU;
+}
+
 void
 cpu_usage(float *user, float *kernel, uint64_t *user_total_ms,
           uint64_t *kernel_total_ms)
 {
-    if (user)
-        *user = 0.0f;
-    if (kernel)
-        *kernel = 0.0f;
-    if (user_total_ms)
-        *user_total_ms = 0;
-    if (kernel_total_ms)
-        *kernel_total_ms = 0;
+    static uint64_t last_kernel_time_ms = 0;
+    static uint64_t last_user_time_ms = 0;
+    static uint64_t last_time = 0;
+    uint64_t current_time;
+    uint64_t kernel_time_ms;
+    uint64_t user_time_ms;
+    uint64_t time_diff_ms;
+    struct rusage r_usage = {{0}};
+    int err = getrusage(RUSAGE_SELF, &r_usage);
+    if (err)
+        return;
+
+    user_time_ms = (r_usage.ru_utime.tv_sec * 1000LU) +
+                   (r_usage.ru_utime.tv_usec / 1000LU);
+    kernel_time_ms = (r_usage.ru_stime.tv_sec * 1000LU) +
+                      (r_usage.ru_stime.tv_usec / 1000LU);
+
+    current_time = mach_absolute_time();
+    time_diff_ms = diff_mach_abs_time_ms(last_time, current_time);
+
+    if (!last_time || (last_time == current_time)) {
+        if (user) *user = .0f;
+        if (kernel) *kernel = .0f;
+    } else {
+        if (user) *user = (float)(user_time_ms - last_user_time_ms) /
+                          (float)time_diff_ms;
+        if (kernel) *kernel = (float)(kernel_time_ms - last_kernel_time_ms) /
+                              (float)time_diff_ms;
+    }
+
+    if (user_total_ms) *user_total_ms = user_time_ms;
+    if (kernel_total_ms) *kernel_total_ms = kernel_time_ms;
+
+    last_kernel_time_ms = kernel_time_ms;
+    last_user_time_ms = user_time_ms;
+    last_time = current_time;
 }
 
 #ifndef LIBIMG
