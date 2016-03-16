@@ -77,7 +77,7 @@ typedef struct coff_tdata
   unsigned long raw_syment_count;
 
   /* These are only valid once writing has begun.  */
-  long int relocbase;
+  unsigned long int relocbase;
 
   /* These members communicate important constants about the symbol table
      to GDB's symbol-reading code.  These `constants' unfortunately vary
@@ -99,6 +99,8 @@ typedef struct coff_tdata
   /* The string table.  May be NULL.  Read by
      _bfd_coff_read_string_table.  */
   char *strings;
+  /* The length of the strings table.  For error checking.  */
+  bfd_size_type strings_len;
   /* If this is TRUE, the strings may not be freed.  */
   bfd_boolean keep_strings;
   /* If this is TRUE, the strings have been written out already.  */
@@ -127,7 +129,9 @@ typedef struct coff_tdata
      used by ARM code.  */
   flagword flags;
 
-    void *_fill1;
+  /* coff-stgo32 EXE stub header after BFD tdata has been allocated.  Its data
+     is kept in internal_filehdr.go32stub beforehand.  */
+  char *go32stub;
 } coff_data_type;
 
 /* Tdata for pe image files.  */

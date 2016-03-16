@@ -43,6 +43,7 @@
 struct bfd_ctx {
 	bfd * handle;
 	asymbol ** symbol;
+    char *imagebase;
 };
 
 struct bfd_set {
@@ -144,11 +145,26 @@ init_bfd_ctx(struct bfd_ctx *bc, const char * procname, struct output_buffer *ob
 		return 1;
 	}
 
-	int r1 = bfd_check_format(b, bfd_object);
-	int r2 = bfd_check_format_matches(b, bfd_object, NULL);
-	int r3 = bfd_get_file_flags(b) & HAS_SYMS;
+        int ret;
+        char **matching;
+        ret = bfd_check_format_matches(b, bfd_object, &matching);
+        if (!ret) {
+            if (bfd_get_error () != bfd_error_file_ambiguously_recognized) {
+              bfd_out:
+                bfd_close(b);
+                return 1;
+            }
+            bfd_close(b);
+            b = bfd_openr(procname, matching[0]);
+            if (!b)
+                return 1;
+            ret = bfd_check_format(b, bfd_object);
+            if (!ret)
+                goto bfd_out;
+        }
 
-	if (!(r1 && r2 && r3)) {
+	ret = bfd_get_file_flags(b) & HAS_SYMS;
+	if (!ret) {
 		bfd_close(b);
 		/* output_print(ob,"Failed to init bfd from (%s)\n", procname); */
 		return 1;
@@ -182,6 +198,8 @@ close_bfd_ctx(struct bfd_ctx *bc)
 		if (bc->handle) {
 			bfd_close(bc->handle);
 		}
+                if (bc->imagebase)
+                    free(bc->imagebase);
 	}
 }
 
@@ -202,6 +220,11 @@ get_bc(struct output_buffer *ob , struct bfd_set *set , const char *procname)
 	set->bc = malloc(sizeof(struct bfd_ctx));
 	memcpy(set->bc, &bc, sizeof(bc));
 	set->name = strdup(procname);
+
+        set->bc->imagebase = calloc(1, 20);
+        if (set->bc->imagebase)
+            snprintf(set->bc->imagebase, 19, "0x%lx", (long)
+                     set->bc->handle->tdata.pe_obj_data->pe_opthdr.ImageBase);
 
 	return set->bc;
 }
@@ -284,33 +307,55 @@ _backtrace(struct output_buffer *ob, struct bfd_set *set, int depth , LPCONTEXT 
 		const char * file = NULL;
 		const char * func = NULL;
 		unsigned line = 0;
-                ADDR_T displacement = 0;
+                unsigned int displacement = 0;
 
 		if (bc && frame.AddrPC.Offset >= module_base) {
 			find(bc,frame.AddrPC.Offset - module_base,&file,&func,&line);
 		}
 
+                ADDR_T _displacement = 0;
+                if (SymGetSymFromAddr(process, frame.AddrPC.Offset,
+                                      &_displacement, symbol)) {
+                    if (!func && !file)
+                        func = symbol->Name;
+                    if (!displacement && func && !strcmp(func, symbol->Name))
+                        displacement = _displacement;
+                }
+		if (!func) {
+                    if (bc && bc->imagebase)
+                        func = bc->imagebase;
+                    if (!func) {
+                        func = strrchr(module_name, '\\');
+                        if (!func)
+                            func = strrchr(module_name, '/');
+                        if (func) {
+                            func++;
+                            if (!*func)
+                                func = NULL;
+                        }
+                    }
+                    if (!func)
+                        func = "[unknown file]";
+                    displacement = frame.AddrPC.Offset - module_base;
+                }
 		if (file == NULL) {
-			if (SymGetSymFromAddr(process, frame.AddrPC.Offset, &displacement, symbol)) {
-				file = symbol->Name;
-			}
-			else {
-				file = "[unknown file]";
-			}
-		}
-		if (func == NULL) {
-			output_print(ob,"    0x%x: %s@0x%x: %s+%d\n",
+			output_print(ob,"    0x%x: %s@0x%x: %s+0x%x\n",
                                      frame.AddrPC.Offset,
                                      module_name, module_base,
-                                     file, (int)displacement);
-		}
-		else {
-			output_print(ob,"    0x%x: %s@0x%x: %s:%d: %s\n",
+                                     func, displacement);
+		} else {
+                    if (displacement)
+			output_print(ob,"    0x%x: %s@0x%x: %s+0x%x: %s:%d\n",
                                      frame.AddrPC.Offset,
                                      module_name, module_base,
-                                     file,
-                                     line,
-                                     func);
+                                     func, displacement,
+                                     file, line);
+                    else
+			output_print(ob,"    0x%x: %s@0x%x: %s: %s:%d\n",
+                                     frame.AddrPC.Offset,
+                                     module_name, module_base,
+                                     func,
+                                     file, line);
 		}
 	}
 }
