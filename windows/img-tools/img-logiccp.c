@@ -1439,20 +1439,20 @@ int bfs(Variable *var,
                             /* First time through loop */
                             h = FindFirstFileNameW(prefix(var, full_name), 0, &length, link_name);
                             if (h == INVALID_HANDLE_VALUE) {
-                                err(1,"FindNextFileName() failed on %ls with err=%u",
+                                printf("FindFirstFileNameW() failed on %ls with err=%u",
                                         full_name, (uint32_t) GetLastError());
+                                /* Give up on this entry, move to next */
+                                break;
                             }
                         } else {
                             if (!FindNextFileNameW(h, &length, link_name)) {
                                 DWORD err = GetLastError();
-                                FindClose(h);
-                                h = INVALID_HANDLE_VALUE;
-                                if (err == ERROR_HANDLE_EOF) {
-                                    break;
-                                } else {
-                                    err(1,"FindNextFileName() failed on %ls with err=%u",
+                                if (err != ERROR_HANDLE_EOF) {
+                                    printf("FindNextFileName() failed on %ls with err=%u",
                                             full_name, (uint32_t) err);
                                 }
+                                /* Give up on this entry, move to next */
+                                break;
                             }
                         }
                         normalize_string(link_name);
