@@ -240,6 +240,46 @@ find_fn(struct module_range *nt, struct xen_memory_set_zero_page_desc *zp,
     uint8_t t[256], o;
     unsigned int i, s = fn->sig_size;
     uint8_t *sig = fn->sig;
+    uint8_t *base = NULL;
+    unsigned int size = 0;
+
+    IMAGE_DOS_HEADER *dos_h = (IMAGE_DOS_HEADER *)nt->base;
+    IMAGE_NT_HEADERS *nt_h;
+    IMAGE_SECTION_HEADER *sec_h;
+    int sec;
+
+    if (dos_h->e_magic != IMAGE_DOS_SIGNATURE) {
+        uxen_err("zp-%s: IMAGE_DOS_SIGNATURE not found", __FUNCTION__);
+        return;
+    }
+
+    nt_h = (IMAGE_NT_HEADERS *)(nt->base + dos_h->e_lfanew);
+    if (nt_h->Signature != IMAGE_NT_SIGNATURE) {
+        uxen_err("zp-%s: IMAGE_NT_SIGNATURE not found", __FUNCTION__);
+        return;
+    }
+
+    sec_h = IMAGE_FIRST_SECTION(nt_h);
+    uxen_debug("dos_h %p nt_h %p nr_sec %d sec_h %p boc %p",
+               dos_h, nt_h, nt_h->FileHeader.NumberOfSections, sec_h,
+               (void *)(nt_h->OptionalHeader.BaseOfCode));
+
+    for (sec = 0; sec < nt_h->FileHeader.NumberOfSections; sec++) {
+        uxen_debug("  sec %.*s va %p size %lx",
+                   IMAGE_SIZEOF_SHORT_NAME, sec_h[sec].Name,
+                   (void *)(nt->base + sec_h[sec].VirtualAddress),
+                   sec_h[sec].Misc.VirtualSize);
+        if (sec_h[sec].VirtualAddress == nt_h->OptionalHeader.BaseOfCode) {
+            base = nt->base + sec_h[sec].VirtualAddress;
+            size = sec_h[sec].Misc.VirtualSize;
+            break;
+        }
+    }
+
+    if (!base) {
+        uxen_msg("zp-%s: no BaseOfCode code section found", __FUNCTION__);
+        return;
+    }
 
     ASSERT(s < 255);
     memset(t, 0, 256);
@@ -247,18 +287,18 @@ find_fn(struct module_range *nt, struct xen_memory_set_zero_page_desc *zp,
         t[sig[i]] = (uint8_t)(i + 1);
 
     i = s - 1;
-    while (i < nt->size) {
-        o = t[nt->base[i]];
+    while (i < size) {
+        o = t[base[i]];
         if (o == s) {
             i -= (o - 1);
-            if (!memcmp(sig, &nt->base[i], s)) {
+            if (!memcmp(sig, &base[i], s)) {
                 uxen_msg("zp-%s: found @ 0x%p (entry:0x%x ret:0x%x, type:%s)",
-                         __FUNCTION__, (void *)&nt->base[i], fn->entry, fn->ret,
+                         __FUNCTION__, (void *)&base[i], fn->entry, fn->ret,
                          (fn->nr_gpfns_mode ==
                           XEN_MEMORY_SET_ZERO_PAGE_NR_GPFN_MODE_single) ?
                          "single" : "multi");
-                zp->entry = (uint64_t)&nt->base[i] + fn->entry;
-                zp->ret = (uint64_t)&nt->base[i] + fn->ret;
+                zp->entry = (uint64_t)&base[i] + fn->entry;
+                zp->ret = (uint64_t)&base[i] + fn->ret;
                 zp->nr_gpfns_mode = fn->nr_gpfns_mode;
                 zp->gva_mode = fn->gva_mode;
                 zp->prologue_mode = fn->prologue_mode;
