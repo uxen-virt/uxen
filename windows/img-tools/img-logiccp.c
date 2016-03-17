@@ -35,7 +35,7 @@ static pFilterConnectCommunicationPort FilterConnectCommunicationPort;
 static pFilterSendMessage FilterSendMessage;
 static int shallow_allowed = 1;
 static int min_shallow_size = SECTOR_SIZE;
-static int absent_files_fatal = 0;
+static int follow_links = 1;
 
 extern int ntfs_get_errno(void);
 
@@ -1418,10 +1418,10 @@ int bfs(Variable *var,
                     int follow = 0;
                     if (action == MAN_SHALLOW_FOLLOW_LINKS) {
                         action = MAN_SHALLOW;
-                        follow = 1;
+                        follow = follow_links;
                     } else if (action == MAN_COPY_FOLLOW_LINKS) {
                         action = MAN_COPY;
-                        follow = 1;
+                        follow = follow_links;
                     }
                     man_push_file(out, disk->bootvol, var, full_name, file_size, file_id, rewrite, action);
                     //printf("2.Adding entry [%S]=[%d]=>[%S]\n", e->name, e->action, imgname);
@@ -3934,7 +3934,7 @@ void print_usage(void)
         "[MINSHALLOW=<minimum shallowing size in decimal bytes>]" \
         "[SKIP_USN_PHASE] [SKIP_ACL_PHASE] [SKIP_OPEN_HANDLES_PHASE]" \
         "[SKIP_COW_REGISTRATION] [NOSHALLOW] [ALL_HASHES] [FILE_METADATA]" \
-        "[ABSENT_FILES_FATAL]\n",
+        "[SKIP_FOLLOW_LINKS]\n",
             getprogname());
 }
 
@@ -3949,6 +3949,7 @@ void print_usage(void)
 #define ARG_SKIP_ACL_PHASE               "SKIP_ACL_PHASE"
 #define ARG_SKIP_OPEN_HANDLES_PHASE      "SKIP_OPEN_HANDLES_PHASE"
 #define ARG_SKIP_COW_REGISTRATION        "SKIP_COW_REGISTRATION"
+#define ARG_SKIP_FOLLOW_LINKS            "SKIP_FOLLOW_LINKS"
 #define ARG_NOSHALLOW                    "NOSHALLOW"
 #define ARG_ALL_HASHES                   "ALL_HASHES"
 #define ARG_FILE_METADATA                "FILE_METADATA"
@@ -3965,6 +3966,7 @@ void print_usage(void)
 #define ARG_SKIP_ACL_PHASE_SIZE          NUMBER_OF(ARG_SKIP_ACL_PHASE)
 #define ARG_SKIP_OPEN_HANDLES_PHASE_SIZE NUMBER_OF(ARG_SKIP_OPEN_HANDLES_PHASE)
 #define ARG_SKIP_COW_REGISTRATION_SIZE   NUMBER_OF(ARG_SKIP_COW_REGISTRATION)
+#define ARG_SKIP_FOLLOW_LINKS_SIZE       NUMBER_OF(ARG_SKIP_FOLLOW_LINKS)
 #define ARG_NOSHALLOW_SIZE               NUMBER_OF(ARG_NOSHALLOW)
 #define ARG_ALL_HASHES_SIZE              NUMBER_OF(ARG_ALL_HASHES)
 #define ARG_FILE_METADATA_SIZE           NUMBER_OF(ARG_FILE_METADATA)
@@ -4065,6 +4067,9 @@ int main(int argc, char **argv)
         } else if (strncmp(argv[1], ARG_SKIP_COW_REGISTRATION, ARG_SKIP_COW_REGISTRATION_SIZE) == 0) {
             skip_cow_registration = 1;
             printf("Will skip COW registration\n");
+        } else if (strncmp(argv[1], ARG_SKIP_FOLLOW_LINKS, ARG_SKIP_FOLLOW_LINKS_SIZE) == 0) {
+            follow_links = 0;
+            printf("Will skip following hardlinks\n");
         } else if (strncmp(argv[1], ARG_NOSHALLOW, ARG_NOSHALLOW_SIZE) == 0) {
             shallow_allowed = 0;
             printf("Not allowing shallowing\n");
@@ -4081,8 +4086,7 @@ int main(int argc, char **argv)
             num_retries = atoi(argv[1] + ARG_NUM_RETRIES_SIZE);
             printf("Using %d retries\n", num_retries);
         } else if (strncmp(argv[1], ARG_ABSENT_FILES_FATAL, ARG_ABSENT_FILES_FATAL_SIZE) == 0) {
-            absent_files_fatal = 1;
-            printf("Absent files are fatal\n");
+            /* No longer has any effect, but for compatibility we silently ignore it */
         } else if (arg_manifest_file == NULL) {
             arg_manifest_file = argv[1];
         } else if (arg_swap_file == NULL) {
