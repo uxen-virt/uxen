@@ -195,20 +195,12 @@ NTSTATUS hw_pointer_update(
 
     if (pSetPointerShape->Flags.Color) {
         bitmap_len = 4 * width * height; /* ARGB data */
-        bitmap_len += ((width + 7) / 8) * height; /* AND mask */
 
         if (bitmap_len > (UXDISP_REG_CRTC(0) - UXDISP_REG_CURSOR_DATA))
             return FALSE;
 
-        s = (PCHAR)pSetPointerShape->pPixels;
         d = pHw->pMmio + UXDISP_REG_CURSOR_DATA;
-        for (y = 0; y < height; y++) {
-            RtlCopyMemory(d, s, (width + 7) / 8);
-            d += (width + 7) / 8;
-            s += (width + 7) / 8;
-        }
         s = (PCHAR)pSetPointerShape->pPixels;
-        s += ((((width + 7) / 8) * height) + 3) & ~3;
         for (y = 0; y < height; y++) {
             RtlCopyMemory(d, s, 4 * width);
             d += 4 * width;
@@ -227,10 +219,8 @@ NTSTATUS hw_pointer_update(
             s += (width + 7) / 8;
         }
 
-        flags |= UXDISP_CURSOR_FLAG_1BPP;
+        flags |= UXDISP_CURSOR_FLAG_1BPP | UXDISP_CURSOR_FLAG_MASK_PRESENT;
     }
-
-    flags |= UXDISP_CURSOR_FLAG_MASK_PRESENT;
 
     uxdisp_write(pHw, UXDISP_REG_CURSOR_WIDTH, pSetPointerShape->Width);
     uxdisp_write(pHw, UXDISP_REG_CURSOR_HEIGHT, pSetPointerShape->Height);
