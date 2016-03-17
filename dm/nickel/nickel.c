@@ -1567,17 +1567,17 @@ void ni_exit(void)
         struct nickel *ni = nc->ni;
 
         assert(ni);
-        ac_exit(ni);
-        tcpip_exit(ni);
-        fakedns_exit(ni);
-        if (ni->pcapf)
-            fflush(ni->pcapf);
         if (ni->async_op_ctx) {
             NETLOG("%s: waiting for async op threads", __FUNCTION__);
             async_op_exit_wait(ni->async_op_ctx);
             ni->async_op_ctx = NULL;
             NETLOG("%s: async op exit ok", __FUNCTION__);
         }
+        ac_exit(ni);
+        tcpip_exit(ni);
+        fakedns_exit(ni);
+        if (ni->pcapf)
+            fflush(ni->pcapf);
 
         NETLOG("%s: rx %u %.03fMiB, tx %u %.03fMiB", __FUNCTION__,
             (unsigned int) ni->n_pkt_rx, ((double) (ni->s_pkt_rx >> 10)) / 1024,
