@@ -237,62 +237,64 @@ find_fn(struct module_range *nt, struct xen_memory_set_zero_page_desc *zp,
         struct fn_sig *fn)
 {
     NTSTATUS status;
-    uint32_t i, ret;
+    uint8_t t[256], o;
+    unsigned int i, s = fn->sig_size;
+    uint8_t *sig = fn->sig;
 
-    i = 0;
-    while (i < (nt->size - fn->sig_size)) {
-        __try {
-            ret = (uint32_t)RtlCompareMemory(
-                fn->sig, (const void *)(nt->base + i),
-                (SIZE_T)fn->sig_size);
-        } __except (EXCEPTION_EXECUTE_HANDLER) {
-            uxen_err("zp-%s: failed to scan NT module: 0x%x", __FUNCTION__,
-                     GetExceptionCode());
-            break;
-        }
+    ASSERT(s < 255);
+    memset(t, 0, 256);
+    for (i = 0; i < s; i++)
+        t[sig[i]] = (uint8_t)(i + 1);
 
-        if (ret == fn->sig_size) {
-            uxen_msg("zp-%s: found @ 0x%p (entry:0x%x ret:0x%x, type:%s)",
-                     __FUNCTION__, (void *)&nt->base[i], fn->entry, fn->ret,
-                     (fn->nr_gpfns_mode ==
-                      XEN_MEMORY_SET_ZERO_PAGE_NR_GPFN_MODE_single) ?
-                     "single" : "multi");
-            zp->entry = (uint64_t)&nt->base[i] + fn->entry;
-            zp->ret = (uint64_t)&nt->base[i] + fn->ret;
-            zp->nr_gpfns_mode = fn->nr_gpfns_mode;
-            zp->gva_mode = fn->gva_mode;
-            zp->prologue_mode = fn->prologue_mode;
-            if (fn->zero_thread_mode ==
-                XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_gs_pcr_188 ||
-                fn->zero_thread_mode ==
-                XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_fs_pcr_124) {
-                status = PsLookupThreadByThreadId(
-                    (HANDLE)fn->zero_thread_info,
-                    (PETHREAD *)&zp->zero_thread_addr);
-                if (!NT_SUCCESS(status)) {
-                    uxen_msg("zp-%s: unable to lookup zero thread id %I64d",
-                             __FUNCTION__, (uint64_t)fn->zero_thread_info);
-                    zp->zero_thread_addr = 0;
-                } else {
-                    uxen_msg("zp-%s: zero thread @ 0x%I64x", __FUNCTION__,
-                             zp->zero_thread_addr);
+    i = s - 1;
+    while (i < nt->size) {
+        o = t[nt->base[i]];
+        if (o == s) {
+            i -= (o - 1);
+            if (!memcmp(sig, &nt->base[i], s)) {
+                uxen_msg("zp-%s: found @ 0x%p (entry:0x%x ret:0x%x, type:%s)",
+                         __FUNCTION__, (void *)&nt->base[i], fn->entry, fn->ret,
+                         (fn->nr_gpfns_mode ==
+                          XEN_MEMORY_SET_ZERO_PAGE_NR_GPFN_MODE_single) ?
+                         "single" : "multi");
+                zp->entry = (uint64_t)&nt->base[i] + fn->entry;
+                zp->ret = (uint64_t)&nt->base[i] + fn->ret;
+                zp->nr_gpfns_mode = fn->nr_gpfns_mode;
+                zp->gva_mode = fn->gva_mode;
+                zp->prologue_mode = fn->prologue_mode;
+                if (fn->zero_thread_mode ==
+                    XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_gs_pcr_188 ||
+                    fn->zero_thread_mode ==
+                    XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_fs_pcr_124) {
+                    status = PsLookupThreadByThreadId(
+                        (HANDLE)fn->zero_thread_info,
+                        (PETHREAD *)&zp->zero_thread_addr);
+                    if (!NT_SUCCESS(status)) {
+                        uxen_msg("zp-%s: unable to lookup zero thread id %I64d",
+                                 __FUNCTION__, (uint64_t)fn->zero_thread_info);
+                        zp->zero_thread_addr = 0;
+                    } else {
+                        uxen_msg("zp-%s: zero thread @ 0x%I64x", __FUNCTION__,
+                                 zp->zero_thread_addr);
+                        zp->zero_thread_mode = fn->zero_thread_mode;
+                    }
+                } else if (fn->zero_thread_mode ==
+                           XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_cr3) {
+                    if (PsGetCurrentProcess() == PsInitialSystemProcess)
+                        zp->zero_thread_cr3 = __readcr3();
+                    else
+                        zp->zero_thread_cr3 =
+                            (uint64_t)PsInitialSystemProcess +
+                            fn->zero_thread_info;
+                    uxen_msg("zp-%s: zero thread cr3 is 0x%I64x", __FUNCTION__,
+                             zp->zero_thread_cr3);
                     zp->zero_thread_mode = fn->zero_thread_mode;
                 }
-            } else if (fn->zero_thread_mode ==
-                       XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_cr3) {
-                if (PsGetCurrentProcess() == PsInitialSystemProcess)
-                    zp->zero_thread_cr3 = __readcr3();
-                else
-                    zp->zero_thread_cr3 =
-                        (uint64_t)PsInitialSystemProcess +
-                        fn->zero_thread_info;
-                uxen_msg("zp-%s: zero thread cr3 is 0x%I64x", __FUNCTION__,
-                         zp->zero_thread_cr3);
-                zp->zero_thread_mode = fn->zero_thread_mode;
+                return;
             }
-            break;
-        }
-        i += (ret ? ret : 1);
+            i += s;
+        } else
+            i += s - o;
     }
 }
 
