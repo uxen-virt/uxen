@@ -1360,24 +1360,6 @@ int bfs(Variable *var,
                         }
                         ++directories;
 
-                    } else if ((attr & FILE_ATTRIBUTE_REPARSE_POINT) ==
-                            FILE_ATTRIBUTE_REPARSE_POINT) {
-                        /* Need to open it to see if it's a symlink */
-                        wchar_t *dest = NULL;
-                        HANDLE h = open_file_by_name(full_name, FILE_FLAG_OPEN_REPARSE_POINT);
-                        if (h == INVALID_HANDLE_VALUE) {
-                            printf("Couldn't open path [%ls] to determine if it's a symlink\n", full_name);
-                        } else {
-                            dest = get_symlink_path(h);
-                            CloseHandle(h);
-                        }
-                        if (dest) {
-                            wchar_t *rewrite = rerooted_full_name[0] ? rerooted_full_name : NULL;
-                            ManifestEntry *e = man_push_file(out, disk->bootvol, var, full_name,
-                                0, 0, rewrite, MAN_SYMLINK);
-                            e->target = dest;
-                        }
-                        continue;
                     } else {
                         /* Check if we should exclude the file based on extension and size. */
                         ManifestEntry *s = find_by_suffix(suffixes, fn);
@@ -1389,7 +1371,45 @@ int bfs(Variable *var,
                         }
                     }
 
-                    /* Getting to here we found a file that we want to include in the output manifest. */
+                    if (attr & FILE_ATTRIBUTE_REPARSE_POINT) {
+                        /* Need to open it to see if it's a symlink */
+                        BY_HANDLE_FILE_INFORMATION inf;
+                        wchar_t *dest = NULL;
+                        HANDLE h = open_file_by_name(full_name, FILE_FLAG_OPEN_REPARSE_POINT);
+                        if (h == INVALID_HANDLE_VALUE) {
+                            printf("Couldn't open path [%ls] to determine if it's a symlink\n", full_name);
+                            continue;
+                        }
+                        /* Get the attributes again. Sometimes we get bad data from
+                         * GetFileInformationByHandleEx(dir, FileIdBothDirectoryInfo, ...)
+                         */
+                        if (GetFileInformationByHandle(h, &inf)) {
+                            attr = inf.dwFileAttributes;
+                        } else {
+                            printf("GetFileInformationByHandle(%ls) failed err=%u\n",
+                                full_name, (uint32_t) GetLastError());
+                        }
+
+                        if (attr & FILE_ATTRIBUTE_REPARSE_POINT) {
+                            dest = get_symlink_path(h);
+                        } else {
+                            printf("[%ls] is not actually a reparse point!\n", full_name);
+                        }
+                        CloseHandle(h);
+
+                        if (dest) {
+                            wchar_t *rewrite = rerooted_full_name[0] ? rerooted_full_name : NULL;
+                            ManifestEntry *e = man_push_file(out, disk->bootvol, var, full_name,
+                                0, 0, rewrite, MAN_SYMLINK);
+                            e->target = dest;
+                        }
+
+                        if (attr & FILE_ATTRIBUTE_REPARSE_POINT) {
+                            continue;
+                        }
+                    }
+
+                    /* Getting to here we found a file/dir that we want to include in the output manifest. */
                     wchar_t* rewrite = NULL;
                     if (rerooted_full_name[0] != L'\0') {
                         rewrite = rerooted_full_name;
