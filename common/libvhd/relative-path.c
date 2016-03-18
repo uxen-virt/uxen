@@ -30,7 +30,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -51,6 +51,10 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+
+#if defined(_WIN32)
+#include <ctype.h>
+#endif  /* _WIN32 */
 
 #include "relative-path.h"
 #include "util.h"
@@ -294,6 +298,20 @@ relative_path_to(char *from, char *to, int *err)
 		*err = common;
 		goto out;
 	}
+
+        if (!common) {
+#if defined(_WIN32)
+            /* on win32, make files relative as long as they have the
+             * same drive letter */
+            if (to_absolute[1] != ':' || from_absolute[1] != ':' ||
+                toupper(from_absolute[0]) != toupper(to_absolute[0]))
+#endif  /* _WIN32 */
+            {
+                relative_path = to_absolute;
+                to_absolute = NULL;
+                goto out;
+            }
+        }
 
 	/* move up to common node */
 	up = up_nodes(from_nodes - common - 1);
