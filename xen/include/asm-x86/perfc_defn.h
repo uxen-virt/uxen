@@ -221,6 +221,11 @@ PERFCOUNTER(dmreq_populated_template, "dmreq populated template pages")
 PERFCOUNTER(dmreq_populated_template_shared,
             "dmreq populated shared template pages")
 
+PERFCOUNTER(zp_single,                  "zp single calls")
+PERFCOUNTER(zp_multi,                   "zp multi calls")
+PERFCOUNTER(zp_shared,                  "zp re-shared pages")
+PERFCOUNTER(zp_zeroed,                  "zp zeroed pages")
+
 PERFCOUNTER(pc0,                        "pc0")
 PERFCOUNTER(pc1,                        "pc1")
 PERFCOUNTER(pc2,                        "pc2")

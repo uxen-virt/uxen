@@ -1703,6 +1703,7 @@ hvm_pod_zp_prefix(struct vcpu *v, unsigned long gpfn, p2m_type_t *t,
     int nr;
     struct hvm_zp_context *ctxt;
     p2m_query_t zeromode = p2m_zeropop;
+    unsigned long nr_gpfns = 1;
 
     for (nr = 0; nr < d->zp_nr; nr++) {
         if (!d->zp_ctxt[nr].entry)
@@ -1722,7 +1723,7 @@ hvm_pod_zp_prefix(struct vcpu *v, unsigned long gpfn, p2m_type_t *t,
         return hypercall_create_retry_continuation();
 
     if (ctxt->nr_gpfns_mode != XEN_MEMORY_SET_ZERO_PAGE_GVA_MODE_single) {
-        unsigned long nr_gpfns, n, p, gva;
+        unsigned long n, p, gva;
         p2m_type_t pt;
         uint32_t pfec;
 
@@ -1805,6 +1806,15 @@ hvm_pod_zp_prefix(struct vcpu *v, unsigned long gpfn, p2m_type_t *t,
             break;
         }
     }
+
+    if (ctxt->nr_gpfns_mode == XEN_MEMORY_SET_ZERO_PAGE_GVA_MODE_single)
+        perfc_incr(zp_single);
+    else
+        perfc_incr(zp_multi);
+    if (zeromode == p2m_zeroshare)
+        perfc_add(zp_shared, nr_gpfns);
+    else
+        perfc_add(zp_zeroed, nr_gpfns);
 
     put_gfn(d, gpfn);
 
