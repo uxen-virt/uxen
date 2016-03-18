@@ -186,6 +186,8 @@ struct hvm_vcpu {
     unsigned long inject_cr2;
 
     struct viridian_vcpu viridian;
+
+    unsigned long zp_pcr_gpfn;
 };
 
 #endif /* __ASM_X86_HVM_VCPU_H__ */

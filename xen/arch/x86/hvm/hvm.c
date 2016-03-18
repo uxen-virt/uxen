@@ -1702,7 +1702,7 @@ hvm_pod_zp_prefix(struct vcpu *v, unsigned long gpfn, p2m_type_t *t,
     mfn_t zmfn;
     int nr;
     struct hvm_zp_context *ctxt;
-    p2m_query_t zeromode = p2m_zeropop;
+    p2m_query_t zeromode = 0;
     unsigned long nr_gpfns = 1;
 
     for (nr = 0; nr < d->zp_nr; nr++) {
@@ -1721,6 +1721,74 @@ hvm_pod_zp_prefix(struct vcpu *v, unsigned long gpfn, p2m_type_t *t,
 
     if (check_free_pages_needed(0))
         return hypercall_create_retry_continuation();
+
+    switch (ctxt->zero_thread_mode) {
+    case XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_none:
+        break;
+    case XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_gs_pcr_188:
+    case XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_fs_pcr_124:
+    {
+        mfn_t mfn;
+        p2m_type_t pt;
+        uint8_t *pcr;
+        uintptr_t addr;
+
+        if (!v->arch.hvm_vcpu.zp_pcr_gpfn) {
+            unsigned long pcr_gpfn;
+            struct segment_register seg;
+            uint32_t pfec;
+
+            if (ctxt->zero_thread_mode ==
+                XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_gs_pcr_188)
+                hvm_get_segment_register(v, x86_seg_gs, &seg);
+            else
+                hvm_get_segment_register(v, x86_seg_fs, &seg);
+
+            pfec = PFEC_page_present;
+            pcr_gpfn = paging_gva_to_gfn(current, seg.base, &pfec);
+            if (pcr_gpfn == INVALID_GFN)
+                break;
+            v->arch.hvm_vcpu.zp_pcr_gpfn = pcr_gpfn;
+        }
+
+        mfn = get_gfn_query(d, v->arch.hvm_vcpu.zp_pcr_gpfn, &pt);
+        if (!mfn_valid_page(mfn_x(mfn)))
+            break;
+
+        pcr = (uint8_t *)map_domain_page(mfn_x(mfn));
+        if (ctxt->zero_thread_mode ==
+            XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_gs_pcr_188)
+            addr = *((uintptr_t *)(&pcr[0x188]));
+        else
+            addr = *((uintptr_t *)(&pcr[0x124]));
+        if (addr == ctxt->zero_thread_addr)
+            zeromode = p2m_zeroshare;
+        else
+            zeromode = p2m_zeropop;
+        unmap_domain_page(pcr);
+        put_gfn(d, v->arch.hvm_vcpu.zp_pcr_gpfn);
+    }
+        break;
+    case XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_cr3:
+        if (v->arch.hvm_vcpu.guest_cr[3] == ctxt->zero_thread_cr3)
+            zeromode = p2m_zeroshare;
+        else
+            zeromode = p2m_zeropop;
+        break;
+    default:
+        printk(XENLOG_ERR
+               "%s: invalid zp zero thread mode %d -- disabling\n",
+               __FUNCTION__, ctxt->zero_thread_mode);
+        ctxt->entry = 0;
+        return 1;
+    }
+
+    if (!zeromode) {
+        if (ctxt->nr_gpfns_mode == XEN_MEMORY_SET_ZERO_PAGE_GVA_MODE_single)
+            zeromode = p2m_zeropop;
+        else
+            zeromode = p2m_zeroshare;
+    }
 
     if (ctxt->nr_gpfns_mode != XEN_MEMORY_SET_ZERO_PAGE_GVA_MODE_single) {
         unsigned long n, p, gva;
@@ -1759,8 +1827,6 @@ hvm_pod_zp_prefix(struct vcpu *v, unsigned long gpfn, p2m_type_t *t,
             ctxt->entry = 0;
             return 1;
         }
-
-        zeromode = p2m_zeroshare;
 
         printk(XENLOG_DEBUG
                "%s: multi zero %lu pages at gva %p\n", __FUNCTION__,
