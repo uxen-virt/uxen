@@ -155,7 +155,7 @@ static uint8_t sig_nt_KiZeroPages_win7_32b[] = {
 };
 
 static struct fn_sig nt_sig_win7[] = {
-    DEF_NT_SIG(KiXMMIZeroPagesNoSave_win7_32b, 6, 5, 8,
+    DEF_NT_SIG(KiXMMIZeroPagesNoSave_win7_32b, 6, 1, 8,
                XEN_MEMORY_SET_ZERO_PAGE_NR_GPFN_MODE_edx_shift_6,
                XEN_MEMORY_SET_ZERO_PAGE_GVA_MODE_ecx,
                XEN_MEMORY_SET_ZERO_PAGE_PROLOGUE_clear_edx,
