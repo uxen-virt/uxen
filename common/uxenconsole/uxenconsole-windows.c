@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: ISC
  */
 
+#define _WIN32_WINNT 0x0601
 #include <windows.h>
 #include <windowsx.h>
 #define ERR_WINDOWS

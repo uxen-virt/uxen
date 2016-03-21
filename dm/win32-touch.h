@@ -79,7 +79,7 @@ typedef enum tagPOINTER_FLAGS {
     POINTER_FLAG_UPDATE         = 0x00020000,
     POINTER_FLAG_UP             = 0x00040000,
     POINTER_FLAG_WHEEL          = 0x00080000,
-    POINTER_FLAG_HWHEEL         = 0x00100000 
+    POINTER_FLAG_HWHEEL         = 0x00100000
 } POINTER_FLAGS;
 
 typedef enum tagPEN_FLAGS {
@@ -138,8 +138,8 @@ typedef struct tagTOUCH_HIT_TESTING_PROXIMITY_EVALUATION {
 } TOUCH_HIT_TESTING_PROXIMITY_EVALUATION, *PTOUCH_HIT_TESTING_PROXIMITY_EVALUATION;
 
 typedef struct tagINPUT_TRANSFORM {
-    __C89_NAMELESS union {
-        __C89_NAMELESS struct {
+    union NAMELESS_UNION {
+        struct NAMELESS_STRUCT {
             float _11;
             float _12;
             float _13;
@@ -157,9 +157,10 @@ typedef struct tagINPUT_TRANSFORM {
             float _43;
             float _44;
         };
-        float  m[4][4];
+        float m[4][4];
     };
 } INPUT_TRANSFORM;
+
 typedef struct tagPOINTER_INFO {
     POINTER_INPUT_TYPE         pointerType;
     UINT32                     pointerId;
@@ -216,19 +217,6 @@ typedef struct tagTouchPredictionParameters {
 
 #define WM_TOUCH 0x0240
 
-typedef struct _TOUCHINPUT {
-    LONG      x;
-    LONG      y;
-    HANDLE    hSource;
-    DWORD     dwID;
-    DWORD     dwFlags;
-    DWORD     dwMask;
-    DWORD     dwTime;
-    ULONG_PTR dwExtraInfo;
-    DWORD     cxContact;
-    DWORD     cyContact;
-} TOUCHINPUT, *PTOUCHINPUT;
-
 #define TOUCHEVENTF_MOVE    0x0001
 #define TOUCHEVENTF_DOWN    0x0002
 #define TOUCHEVENTF_UP  0x0004
@@ -240,11 +228,6 @@ typedef struct _TOUCHINPUT {
 #define TOUCHINPUTMASKF_CONTACTAREA 0x0004
 #define TOUCHINPUTMASKF_EXTRAINFO   0x0002
 #define TOUCHINPUTMASKF_TIMEFROMSYSTEM  0x0001
-
-#define TWF_FINETOUCH 0x1
-#define TWF_WANTPALM 0x2
-
-typedef HANDLE HTOUCHINPUT;
 
 static inline
 BOOL FN_RegisterTouchWindow(HWND hWnd, ULONG ulFlags)

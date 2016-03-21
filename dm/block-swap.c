@@ -47,22 +47,12 @@
 #include "uuidgen.h"
 
 #ifdef _WIN32
-#include <ntdef.h>
+#include <winternl.h>
 #define FILE_OPEN                         0x00000001
 #define FILE_OPEN_BY_FILE_ID              0x00002000
 #define FILE_NON_DIRECTORY_FILE           0x00000040
 #define FILE_SEQUENTIAL_ONLY              0x00000004
 #define FILE_OPEN_FOR_BACKUP_INTENT       0x00004000
-
-typedef struct IO_STATUS_BLOCK
-{
-    union
-    {
-        NTSTATUS stat;
-        PVOID pointer;
-    };
-    ULONG_PTR info;
-} IO_STATUS_BLOCK;
 
 typedef ULONG (__stdcall *pNtCreateFile)(
         PHANDLE FileHandle,

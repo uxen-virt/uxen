@@ -9,12 +9,13 @@
 
 #define WIN32_LEAN_AND_MEAN
 #ifndef WINVER
-#define WINVER 0x0502  /* needed for ipv6 bits */
+#define WINVER 0x0601
 #endif
-#define _WIN32_WINNT 0x0600
+#define _WIN32_WINNT 0x0601
 #include <mm_malloc.h>
-#include <winsock2.h>
 #include <windows.h>
+#include <wincrypt.h>
+#include <winsock2.h>
 #undef POLLIN
 #undef POLLOUT
 #undef POLLERR

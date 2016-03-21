@@ -18,7 +18,8 @@
 #define XC_PRIVATE_H
 
 #if defined(_WIN32)
-#define _WIN32_WINNT 0x0600
+#undef _WIN32_WINNT
+#define _WIN32_WINNT 0x0601
 #include <windows.h>
 #endif
 
