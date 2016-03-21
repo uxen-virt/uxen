@@ -537,6 +537,7 @@ find_stray_pages_in_frametable(unsigned int pages)
     int s = uxen_info->ui_sizeof_struct_page_info;
     int strays = 0;
 
+    uxen_lock();
     for (offset = 0; offset < pages; offset++) {
         if (!(frametable_populated[offset / 8] & (1 << (offset % 8))))
             continue;
@@ -570,6 +571,7 @@ find_stray_pages_in_frametable(unsigned int pages)
             }
         }
     }
+    uxen_unlock();
 
     if (strays)
         printk("%s: %d stray entries in frametable\n", __FUNCTION__, strays);
