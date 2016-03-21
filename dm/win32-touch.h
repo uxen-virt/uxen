@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -63,176 +63,170 @@
 #define TOUCH_FEEDBACK_INDIRECT 0x2
 #define TOUCH_FEEDBACK_NONE 0x3
 
-/* Values not on MSDN
-#define POINTER_MOD_SHIFT
-#define POINTER_MOD_CTRL
-*/
-
 typedef enum tagPOINTER_FLAGS {
-  POINTER_FLAG_NONE           = 0x00000000,
-  POINTER_FLAG_NEW            = 0x00000001,
-  POINTER_FLAG_INRANGE        = 0x00000002,
-  POINTER_FLAG_INCONTACT      = 0x00000004,
-  POINTER_FLAG_FIRSTBUTTON    = 0x00000010,
-  POINTER_FLAG_SECONDBUTTON   = 0x00000020,
-  POINTER_FLAG_THIRDBUTTON    = 0x00000040,
-  POINTER_FLAG_OTHERBUTTON    = 0x00000080,
-  POINTER_FLAG_PRIMARY        = 0x00000100,
-  POINTER_FLAG_CONFIDENCE     = 0x00000200,
-  POINTER_FLAG_CANCELLED      = 0x00000400,
-  POINTER_FLAG_DOWN           = 0x00010000,
-  POINTER_FLAG_UPDATE         = 0x00020000,
-  POINTER_FLAG_UP             = 0x00040000,
-  POINTER_FLAG_WHEEL          = 0x00080000,
-  POINTER_FLAG_HWHEEL         = 0x00100000 
+    POINTER_FLAG_NONE           = 0x00000000,
+    POINTER_FLAG_NEW            = 0x00000001,
+    POINTER_FLAG_INRANGE        = 0x00000002,
+    POINTER_FLAG_INCONTACT      = 0x00000004,
+    POINTER_FLAG_FIRSTBUTTON    = 0x00000010,
+    POINTER_FLAG_SECONDBUTTON   = 0x00000020,
+    POINTER_FLAG_THIRDBUTTON    = 0x00000040,
+    POINTER_FLAG_OTHERBUTTON    = 0x00000080,
+    POINTER_FLAG_PRIMARY        = 0x00000100,
+    POINTER_FLAG_CONFIDENCE     = 0x00000200,
+    POINTER_FLAG_CANCELLED      = 0x00000400,
+    POINTER_FLAG_DOWN           = 0x00010000,
+    POINTER_FLAG_UPDATE         = 0x00020000,
+    POINTER_FLAG_UP             = 0x00040000,
+    POINTER_FLAG_WHEEL          = 0x00080000,
+    POINTER_FLAG_HWHEEL         = 0x00100000 
 } POINTER_FLAGS;
 
 typedef enum tagPEN_FLAGS {
-  PEN_FLAG_NONE             = 0x00000000,
-  PEN_FLAG_BARREL           = 0x00000001,
-  PEN_FLAG_INVERTED         = 0x00000002,
-  PEN_FLAG_ERASER           = 0x00000004
+    PEN_FLAG_NONE             = 0x00000000,
+    PEN_FLAG_BARREL           = 0x00000001,
+    PEN_FLAG_INVERTED         = 0x00000002,
+    PEN_FLAG_ERASER           = 0x00000004
 } PEN_FLAGS;
 
 typedef enum tagPEN_MASK {
-  PEN_MASK_NONE      = 0x00000000,
-  PEN_MASK_PRESSURE  = 0x00000001,
-  PEN_MASK_ROTATION  = 0x00000002,
-  PEN_MASK_TILT_X    = 0x00000004,
-  PEN_MASK_TILT_Y    = 0x00000008
+    PEN_MASK_NONE      = 0x00000000,
+    PEN_MASK_PRESSURE  = 0x00000001,
+    PEN_MASK_ROTATION  = 0x00000002,
+    PEN_MASK_TILT_X    = 0x00000004,
+    PEN_MASK_TILT_Y    = 0x00000008
 } PEN_MASK;
 
 typedef enum tagTOUCH_FLAGS {
-  TOUCH_FLAG_NONE  = 0x00000000
+    TOUCH_FLAG_NONE  = 0x00000000
 } TOUCH_FLAGS;
 
 typedef enum tagTOUCH_MASK {
-  TOUCH_MASK_NONE         = 0x00000000,
-  TOUCH_MASK_CONTACTAREA  = 0x00000001,
-  TOUCH_MASK_ORIENTATION  = 0x00000002,
-  TOUCH_MASK_PRESSURE     = 0x00000004
+    TOUCH_MASK_NONE         = 0x00000000,
+    TOUCH_MASK_CONTACTAREA  = 0x00000001,
+    TOUCH_MASK_ORIENTATION  = 0x00000002,
+    TOUCH_MASK_PRESSURE     = 0x00000004
 } TOUCH_MASK;
 
 
 typedef enum tagPOINTER_INPUT_TYPE {
-  PT_POINTER  = 0x00000001,
-  PT_TOUCH    = 0x00000002,
-  PT_PEN      = 0x00000003,
-  PT_MOUSE    = 0x00000004,
-  PT_TOUCHPAD = 0x00000005
+    PT_POINTER  = 0x00000001,
+    PT_TOUCH    = 0x00000002,
+    PT_PEN      = 0x00000003,
+    PT_MOUSE    = 0x00000004,
+    PT_TOUCHPAD = 0x00000005
 } POINTER_INPUT_TYPE;
 
 /* FIXME: values missing on MSDN! */
 typedef enum _POINTER_BUTTON_CHANGE_TYPE {
-  POINTER_CHANGE_NONE               ,
-  POINTER_CHANGE_FIRSTBUTTON_DOWN   ,
-  POINTER_CHANGE_FIRSTBUTTON_UP     ,
-  POINTER_CHANGE_SECONDBUTTON_DOWN  ,
-  POINTER_CHANGE_SECONDBUTTON_UP    ,
-  POINTER_CHANGE_THIRDBUTTON_DOWN   ,
-  POINTER_CHANGE_THIRDBUTTON_UP     ,
-  POINTER_CHANGE_FOURTHBUTTON_DOWN  ,
-  POINTER_CHANGE_FOURTHBUTTON_UP    ,
-  POINTER_CHANGE_FIFTHBUTTON_DOWN   ,
-  POINTER_CHANGE_FIFTHBUTTON_UP
+    POINTER_CHANGE_NONE               ,
+    POINTER_CHANGE_FIRSTBUTTON_DOWN   ,
+    POINTER_CHANGE_FIRSTBUTTON_UP     ,
+    POINTER_CHANGE_SECONDBUTTON_DOWN  ,
+    POINTER_CHANGE_SECONDBUTTON_UP    ,
+    POINTER_CHANGE_THIRDBUTTON_DOWN   ,
+    POINTER_CHANGE_THIRDBUTTON_UP     ,
+    POINTER_CHANGE_FOURTHBUTTON_DOWN  ,
+    POINTER_CHANGE_FOURTHBUTTON_UP    ,
+    POINTER_CHANGE_FIFTHBUTTON_DOWN   ,
+    POINTER_CHANGE_FIFTHBUTTON_UP
 } POINTER_BUTTON_CHANGE_TYPE;
 
 typedef struct tagTOUCH_HIT_TESTING_PROXIMITY_EVALUATION {
-  UINT16 score;
-  POINT  adjustedPoint;
+    UINT16 score;
+    POINT  adjustedPoint;
 } TOUCH_HIT_TESTING_PROXIMITY_EVALUATION, *PTOUCH_HIT_TESTING_PROXIMITY_EVALUATION;
 
 typedef struct tagINPUT_TRANSFORM {
-  __C89_NAMELESS union {
-    __C89_NAMELESS struct {
-      float _11;
-      float _12;
-      float _13;
-      float _14;
-      float _21;
-      float _22;
-      float _23;
-      float _24;
-      float _31;
-      float _32;
-      float _33;
-      float _34;
-      float _41;
-      float _42;
-      float _43;
-      float _44;
+    __C89_NAMELESS union {
+        __C89_NAMELESS struct {
+            float _11;
+            float _12;
+            float _13;
+            float _14;
+            float _21;
+            float _22;
+            float _23;
+            float _24;
+            float _31;
+            float _32;
+            float _33;
+            float _34;
+            float _41;
+            float _42;
+            float _43;
+            float _44;
+        };
+        float  m[4][4];
     };
-    float  m[4][4];
-  };
 } INPUT_TRANSFORM;
-
 typedef struct tagPOINTER_INFO {
-  POINTER_INPUT_TYPE         pointerType;
-  UINT32                     pointerId;
-  UINT32                     frameId;
-  POINTER_FLAGS              pointerFlags;
-  HANDLE                     sourceDevice;
-  HWND                       hwndTarget;
-  POINT                      ptPixelLocation;
-  POINT                      ptHimetricLocation;
-  POINT                      ptPixelLocationRaw;
-  POINT                      ptHimetricLocationRaw;
-  DWORD                      dwTime;
-  UINT32                     historyCount;
-  INT32                      inputData;
-  DWORD                      dwKeyStates;
-  UINT64                     PerformanceCount;
-  POINTER_BUTTON_CHANGE_TYPE ButtonChangeType;
+    POINTER_INPUT_TYPE         pointerType;
+    UINT32                     pointerId;
+    UINT32                     frameId;
+    POINTER_FLAGS              pointerFlags;
+    HANDLE                     sourceDevice;
+    HWND                       hwndTarget;
+    POINT                      ptPixelLocation;
+    POINT                      ptHimetricLocation;
+    POINT                      ptPixelLocationRaw;
+    POINT                      ptHimetricLocationRaw;
+    DWORD                      dwTime;
+    UINT32                     historyCount;
+    INT32                      inputData;
+    DWORD                      dwKeyStates;
+    UINT64                     PerformanceCount;
+    POINTER_BUTTON_CHANGE_TYPE ButtonChangeType;
 } POINTER_INFO;
 
 typedef struct tagPOINTER_PEN_INFO {
-  POINTER_INFO pointerInfo;
-  PEN_FLAGS    penFlags;
-  PEN_MASK     penMask;
-  UINT32       pressure;
-  UINT32       rotation;
-  INT32        tiltX;
-  INT32        tiltY;
+    POINTER_INFO pointerInfo;
+    PEN_FLAGS    penFlags;
+    PEN_MASK     penMask;
+    UINT32       pressure;
+    UINT32       rotation;
+    INT32        tiltX;
+    INT32        tiltY;
 } POINTER_PEN_INFO;
 
 typedef struct tagPOINTER_TOUCH_INFO {
-  POINTER_INFO pointerInfo;
-  TOUCH_FLAGS  touchFlags;
-  TOUCH_MASK   touchMask;
-  RECT         rcContact;
-  RECT         rcContactRaw;
-  UINT32       orientation;
-  UINT32       pressure;
+    POINTER_INFO pointerInfo;
+    TOUCH_FLAGS  touchFlags;
+    TOUCH_MASK   touchMask;
+    RECT         rcContact;
+    RECT         rcContactRaw;
+    UINT32       orientation;
+    UINT32       pressure;
 } POINTER_TOUCH_INFO;
 
 typedef struct tagTOUCH_HIT_TESTING_INPUT {
-  UINT32 pointerId;
-  POINT  point;
-  RECT   boundingBox;
-  RECT   nonOccludedBoundingBox;
-  UINT32 orientation;
+    UINT32 pointerId;
+    POINT  point;
+    RECT   boundingBox;
+    RECT   nonOccludedBoundingBox;
+    UINT32 orientation;
 } TOUCH_HIT_TESTING_INPUT, *PTOUCH_HIT_TESTING_INPUT;
 
 typedef struct tagTouchPredictionParameters {
-  UINT cbSize;
-  UINT dwLatency;
-  UINT dwSampleTime;
-  UINT bUseHWTimeStamp;
+    UINT cbSize;
+    UINT dwLatency;
+    UINT dwSampleTime;
+    UINT bUseHWTimeStamp;
 } TouchPredictionParameters, *PTouchPredictionParameters;
 
 #define WM_TOUCH 0x0240
 
 typedef struct _TOUCHINPUT {
-  LONG      x;
-  LONG      y;
-  HANDLE    hSource;
-  DWORD     dwID;
-  DWORD     dwFlags;
-  DWORD     dwMask;
-  DWORD     dwTime;
-  ULONG_PTR dwExtraInfo;
-  DWORD     cxContact;
-  DWORD     cyContact;
+    LONG      x;
+    LONG      y;
+    HANDLE    hSource;
+    DWORD     dwID;
+    DWORD     dwFlags;
+    DWORD     dwMask;
+    DWORD     dwTime;
+    ULONG_PTR dwExtraInfo;
+    DWORD     cxContact;
+    DWORD     cyContact;
 } TOUCHINPUT, *PTOUCHINPUT;
 
 #define TOUCHEVENTF_MOVE    0x0001
@@ -253,13 +247,14 @@ typedef struct _TOUCHINPUT {
 typedef HANDLE HTOUCHINPUT;
 
 static inline
-BOOL RegisterTouchWindow(HWND hWnd, ULONG ulFlags)
+BOOL FN_RegisterTouchWindow(HWND hWnd, ULONG ulFlags)
 {
-    static BOOL WINAPI (*fn)(HWND, ULONG) = NULL;
+    typedef BOOL (CALLBACK *PFN_RegisterTouchWindow)(HWND, ULONG);
+    static PFN_RegisterTouchWindow fn = NULL;
 
     if (!fn) {
-        fn = (void *)GetProcAddress(GetModuleHandle("user32.dll"),
-                                    "RegisterTouchWindow");
+        fn = (PFN_RegisterTouchWindow) GetProcAddress(GetModuleHandleA("user32.dll"),
+                                        "RegisterTouchWindow");
         if (!fn)
             return FALSE;
     }
@@ -268,13 +263,14 @@ BOOL RegisterTouchWindow(HWND hWnd, ULONG ulFlags)
 }
 
 static inline
-BOOL UnregisterTouchWindow(HWND hWnd)
+BOOL FN_UnregisterTouchWindow(HWND hWnd)
 {
-    static BOOL WINAPI (*fn)(HWND) = NULL;
+    typedef BOOL (CALLBACK *PFN_UnregisterTouchWindow)(HWND);
+    static PFN_UnregisterTouchWindow fn = NULL;
 
     if (!fn) {
-        fn = (void *)GetProcAddress(GetModuleHandle("user32.dll"),
-                                    "UnregisterTouchWindow");
+        fn = (PFN_UnregisterTouchWindow)GetProcAddress(GetModuleHandleA("user32.dll"),
+                                            "UnregisterTouchWindow");
         if (!fn)
             return FALSE;
     }
@@ -283,14 +279,15 @@ BOOL UnregisterTouchWindow(HWND hWnd)
 }
 
 static inline
-BOOL GetTouchInputInfo(HTOUCHINPUT hTouchInput, UINT cInputs,
+BOOL FN_GetTouchInputInfo(HTOUCHINPUT hTouchInput, UINT cInputs,
                        PTOUCHINPUT pInputs, int cbSize)
 {
-    static BOOL WINAPI (*fn)(HTOUCHINPUT, UINT, PTOUCHINPUT, int) = NULL;
+    typedef BOOL (CALLBACK *PFN_GetTouchInputInfo)(HTOUCHINPUT, UINT, PTOUCHINPUT, int);
+    static PFN_GetTouchInputInfo fn = NULL;
 
     if (!fn) {
-        fn = (void *)GetProcAddress(GetModuleHandle("user32.dll"),
-                                    "GetTouchInputInfo");
+        fn = (PFN_GetTouchInputInfo)GetProcAddress(GetModuleHandleA("user32.dll"),
+                                        "GetTouchInputInfo");
         if (!fn)
             return FALSE;
     }
@@ -299,13 +296,14 @@ BOOL GetTouchInputInfo(HTOUCHINPUT hTouchInput, UINT cInputs,
 }
 
 static inline
-BOOL CloseTouchInputHandle(HTOUCHINPUT hTouchInput)
+BOOL FN_CloseTouchInputHandle(HTOUCHINPUT hTouchInput)
 {
-    static BOOL WINAPI (*fn)(HTOUCHINPUT) = NULL;
+    typedef BOOL (CALLBACK *PFN_CloseTouchInputHandle)(HTOUCHINPUT);
+    static PFN_CloseTouchInputHandle fn = NULL;
 
     if (!fn) {
-        fn = (void *)GetProcAddress(GetModuleHandle("user32.dll"),
-                                    "CloseTouchInputHandle");
+        fn = (PFN_CloseTouchInputHandle)GetProcAddress(GetModuleHandleA("user32.dll"),
+                                            "CloseTouchInputHandle");
         if (!fn)
             return FALSE;
     }
@@ -314,12 +312,13 @@ BOOL CloseTouchInputHandle(HTOUCHINPUT hTouchInput)
 }
 
 static inline
-BOOL GetPointerInfo(UINT32 pointerId, POINTER_INFO *pointerInfo)
+BOOL FN_GetPointerInfo(UINT32 pointerId, POINTER_INFO *pointerInfo)
 {
-    static BOOL WINAPI (*fn)(UINT32, POINTER_INFO *) = NULL;
+    typedef BOOL (CALLBACK *PFN_GetPointerInfo)(UINT32, POINTER_INFO *);
+    static PFN_GetPointerInfo fn = NULL;
 
     if (!fn) {
-        fn = (void *)GetProcAddress(GetModuleHandle("user32.dll"),
+        fn = (PFN_GetPointerInfo)GetProcAddress(GetModuleHandleA("user32.dll"),
                                     "GetPointerInfo");
         if (!fn)
             return FALSE;
@@ -329,12 +328,13 @@ BOOL GetPointerInfo(UINT32 pointerId, POINTER_INFO *pointerInfo)
 }
 
 static inline
-BOOL GetPointerTouchInfo(UINT32 pointerId, POINTER_TOUCH_INFO *touchInfo)
+BOOL FN_GetPointerTouchInfo(UINT32 pointerId, POINTER_TOUCH_INFO *touchInfo)
 {
-    static BOOL WINAPI (*fn)(UINT32, POINTER_TOUCH_INFO *) = NULL;
+    typedef BOOL (CALLBACK *PFN_GetPointerTouchInfo)(UINT32, POINTER_TOUCH_INFO *);
+    static PFN_GetPointerTouchInfo fn = NULL;
 
     if (!fn) {
-        fn = (void *)GetProcAddress(GetModuleHandle("user32.dll"),
+        fn = (PFN_GetPointerTouchInfo)GetProcAddress(GetModuleHandleA("user32.dll"),
                                     "GetPointerTouchInfo");
         if (!fn)
             return FALSE;
@@ -344,14 +344,15 @@ BOOL GetPointerTouchInfo(UINT32 pointerId, POINTER_TOUCH_INFO *touchInfo)
 }
 
 static inline
-BOOL GetPointerFrameTouchInfo(UINT32 pointerId, UINT32 *pointerCount,
-                              POINTER_TOUCH_INFO *touchInfo)
+BOOL FN_GetPointerFrameTouchInfo(UINT32 pointerId, UINT32 *pointerCount,
+                                 POINTER_TOUCH_INFO *touchInfo)
 {
-    static BOOL WINAPI (*fn)(UINT32, UINT32 *, POINTER_TOUCH_INFO *) = NULL;
+    typedef BOOL (CALLBACK *PFN_GetPointerFrameTouchInfo)(UINT32, UINT32 *, POINTER_TOUCH_INFO *);
+    static PFN_GetPointerFrameTouchInfo fn = NULL;
 
     if (!fn) {
-        fn = (void *)GetProcAddress(GetModuleHandle("user32.dll"),
-                                    "GetPointerFrameTouchInfo");
+        fn = (PFN_GetPointerFrameTouchInfo)GetProcAddress(GetModuleHandleA("user32.dll"),
+                                                         "GetPointerFrameTouchInfo");
         if (!fn)
             return FALSE;
     }
@@ -360,14 +361,15 @@ BOOL GetPointerFrameTouchInfo(UINT32 pointerId, UINT32 *pointerCount,
 }
 
 static inline
-BOOL GetPointerFramePenInfo(UINT32 pointerId, UINT32 *pointerCount,
-                            POINTER_PEN_INFO *penInfo)
+BOOL FN_GetPointerFramePenInfo(UINT32 pointerId, UINT32 *pointerCount,
+                               POINTER_PEN_INFO *penInfo)
 {
-    static BOOL WINAPI (*fn)(UINT32, UINT32 *, POINTER_PEN_INFO *) = NULL;
+    typedef BOOL (CALLBACK *PFN_GetPointerFramePenInfo)(UINT32, UINT32 *, POINTER_PEN_INFO *);
+    static PFN_GetPointerFramePenInfo fn = NULL;
 
     if (!fn) {
-        fn = (void *)GetProcAddress(GetModuleHandle("user32.dll"),
-                                    "GetPointerFramePenInfo");
+        fn = (PFN_GetPointerFramePenInfo)GetProcAddress(GetModuleHandleA("user32.dll"),
+                                        "GetPointerFramePenInfo");
         if (!fn)
             return FALSE;
     }
@@ -376,13 +378,14 @@ BOOL GetPointerFramePenInfo(UINT32 pointerId, UINT32 *pointerCount,
 }
 
 static inline
-BOOL SkipPointerFrameMessages(UINT32 pointerId)
+BOOL FN_SkipPointerFrameMessages(UINT32 pointerId)
 {
-    static BOOL WINAPI (*fn)(UINT32) = NULL;
+    typedef BOOL (CALLBACK *PFN_SkipPointerFrameMessages)(UINT32);
+    static PFN_SkipPointerFrameMessages fn = NULL;
 
     if (!fn) {
-        fn = (void *)GetProcAddress(GetModuleHandle("user32.dll"),
-                                    "SkipPointerFrameMessages");
+        fn = (PFN_SkipPointerFrameMessages)GetProcAddress(GetModuleHandleA("user32.dll"),
+                                          "SkipPointerFrameMessages");
         if (!fn)
             return FALSE;
     }

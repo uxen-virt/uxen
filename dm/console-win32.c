@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -1428,16 +1428,16 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
             UINT32 count;
 
             count = 32;
-            if (GetPointerFrameTouchInfo(id, &count, touch_info) &&
+            if (FN_GetPointerFrameTouchInfo(id, &count, touch_info) &&
                 !hid_touch_event(s, touch_info, count)) {
-                SkipPointerFrameMessages(id);
+                FN_SkipPointerFrameMessages(id);
                 return 0;
             }
 
             count = 32;
-            if (GetPointerFramePenInfo(id, &count, pen_info) &&
+            if (FN_GetPointerFramePenInfo(id, &count, pen_info) &&
                 !hid_pen_event(s, pen_info, count)) {
-                SkipPointerFrameMessages(id);
+                FN_SkipPointerFrameMessages(id);
                 return 0;
             }
         }

@@ -471,16 +471,16 @@ sendkey:
             UINT32 count;
 
             count = 32;
-            if (GetPointerFrameTouchInfo(id, &count, touch_info) &&
+            if (FN_GetPointerFrameTouchInfo(id, &count, touch_info) &&
                 !hid_touch_event(cons, touch_info, count)) {
-                SkipPointerFrameMessages(id);
+                FN_SkipPointerFrameMessages(id);
                 return 0;
             }
 
             count = 32;
-            if (GetPointerFramePenInfo(id, &count, pen_info) &&
+            if (FN_GetPointerFramePenInfo(id, &count, pen_info) &&
                 !hid_pen_event(cons, pen_info, count)) {
-                SkipPointerFrameMessages(id);
+                FN_SkipPointerFrameMessages(id);
                 return 0;
             }
         }
