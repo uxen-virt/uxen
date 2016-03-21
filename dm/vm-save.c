@@ -1520,12 +1520,17 @@ static int
 apply_immutable_memory(struct immutable_range *r, int nranges)
 {
     int i;
+    int ret;
 
-    for (i = 0; i < nranges; i++)
-        if (xc_hvm_set_mem_type(xc_handle, vm_id, HVMMEM_ram_immutable,
-                                r[i].base, r[i].size))
+    for (i = 0; i < nranges; i++) {
+        ret = xc_hvm_set_mem_type(xc_handle, vm_id, HVMMEM_ram_immutable,
+                                  r[i].base, r[i].size);
+        if (ret) {
             EPRINTF("xc_hvm_set_mem_type(HVMMEM_ram_immutable) failed: "
                     "pfn 0x%"PRIx64" size 0x%"PRIx64, r[i].base, r[i].size);
+            return ret;
+        }
+    }
     APRINTF("%s: done", __FUNCTION__);
 
     return 0;
@@ -2004,8 +2009,8 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
         preserved in loaded template p2m structures, not in ucvm's savefile.
         */
         if (immutable_ranges)
-            apply_immutable_memory(immutable_ranges,
-                                   s_hvm_introspec.info.n_immutable_ranges);
+            ret = apply_immutable_memory(
+                immutable_ranges, s_hvm_introspec.info.n_immutable_ranges);
 	goto out;
     }
 
