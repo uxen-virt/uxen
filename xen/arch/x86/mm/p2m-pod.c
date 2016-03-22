@@ -1848,6 +1848,9 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                     smfn = mfn;
                 }
 
+                ASSERT(!mfn_x(put_page_parent));
+                put_page_parent = mfn;
+
                 perfc_incr(dmreq_populated_template);
             } else
                 put_allocated_page(tmpl, p);
