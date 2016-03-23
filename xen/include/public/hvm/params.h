@@ -206,6 +206,8 @@
 
 #define HVM_PARAM_ZERO_PAGE 41
 
-#define HVM_NR_PARAMS          42
+#define HVM_PARAM_TEMPLATE_LAZY_LOAD 42
+
+#define HVM_NR_PARAMS          43
 
 #endif /* __XEN_PUBLIC_HVM_PARAMS_H__ */

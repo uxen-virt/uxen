@@ -1483,8 +1483,6 @@ p2m_teardown_compressed(struct p2m_domain *p2m)
            __FUNCTION__, d->domain_id, n + decomp, comp, decomp);
 }
 
-int dmreq_lazy_template = 1;
-
 mfn_t
 p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                         unsigned int order, p2m_query_t q, void *entry)
@@ -1735,15 +1733,22 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         else
             dmreq_vcpu_page = current->arch.hvm_vcpu.dmreq_vcpu_page_va;
 
-        if (!dmreq_lazy_template || !d->clone_of) {
+        if (!d->arch.hvm_domain.params[HVM_PARAM_TEMPLATE_LAZY_LOAD] ||
+            !d->clone_of) {
+          dead_template:
             if (op2m_locked) {
                 p2m_unlock(op2m);
                 op2m_locked = 0;
             }
 
             p = alloc_domheap_page(d, PAGE_ORDER_4K);
-            if (!p)
+            if (!p) {
+                if (tmpl->is_dying) {
+                    d->arch.hvm_domain.params[HVM_PARAM_TEMPLATE_LAZY_LOAD] = 0;
+                    goto dead_template;
+                }
                 return out_of_memory();
+            }
             mfn = page_to_mfn(p);
 
             target = map_domain_page_direct(mfn_x(mfn));

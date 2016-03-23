@@ -890,6 +890,8 @@ int hvm_domain_initialise(struct domain *d)
 
     d->arch.hvm_domain.params[HVM_PARAM_ZERO_PAGE] = 1;
 
+    d->arch.hvm_domain.params[HVM_PARAM_TEMPLATE_LAZY_LOAD] = 1;
+
 #ifndef __UXEN__
     hvm_init_cacheattr_region_list(d);
 #endif  /* __UXEN__ */
