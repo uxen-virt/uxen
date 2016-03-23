@@ -401,6 +401,7 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     int needs_sync = 1;
     struct domain *d = p2m->domain;
     ept_entry_t old_entry = { .epte = 0 };
+    ept_entry_t new_entry = { .epte = 0 };
     union p2m_l1_cache *l1c = &this_cpu(p2m_l1_cache);
 
     /*
@@ -475,7 +476,6 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     if ( i == target )
     {
         /* We reached the target level. */
-        ept_entry_t new_entry = { .epte = 0 };
 
         /* No need to flush if the old entry wasn't valid */
         /* No need to flush if new type is logdirty */
@@ -524,7 +524,6 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     else
     {
         /* We need to split the original page. */
-        ept_entry_t new_entry = { .epte = 0 };
 
         if (!ept_split_super_page(p2m, ept_entry, i, target))
             goto out;
@@ -580,6 +579,9 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
                 put_page(__mfn_to_page(old_entry.mfn));
         }
     }
+    if (!target && old_entry.epte != new_entry.epte)
+        p2m_update_pod_counts(d, old_entry.mfn, old_entry.sa_p2mt,
+                              new_entry.mfn, new_entry.sa_p2mt);
 
     /* Track the highest gfn for which we have ever had a valid mapping */
     if ( mfn_x(mfn) != INVALID_MFN &&

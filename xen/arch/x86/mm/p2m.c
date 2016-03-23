@@ -647,7 +647,6 @@ p2m_remove_page(struct p2m_domain *p2m, unsigned long gfn, unsigned long mfn,
                 set_gpfn_from_mfn(mfn+i, INVALID_M2P_ENTRY);
 #endif  /* __UXEN__ */
             ASSERT( !p2m_is_valid(t) || mfn + i == mfn_x(mfn_return) );
-            p2m_update_pod_counts(p2m->domain, mfn_x(mfn_return), t);
         }
     }
     set_p2m_entry(p2m, gfn, _mfn(INVALID_MFN), page_order, p2m_invalid, p2m->default_access);
@@ -678,7 +677,6 @@ guest_physmap_add_entry(struct domain *d, unsigned long gfn,
     p2m_type_t ot;
     p2m_access_t a;
     mfn_t omfn;
-    int pod_count = 0, pod_zero_count = 0, pod_tmpl_count = 0;
     int rc = 0;
 
     if ( !paging_mode_translate(d) )
@@ -758,15 +756,6 @@ guest_physmap_add_entry(struct domain *d, unsigned long gfn,
             set_gpfn_from_mfn(mfn_x(omfn), INVALID_M2P_ENTRY);
 #endif  /* __UXEN__ */
         }
-        else if (p2m_is_pod(ot)) {
-            /* Count how man PoD entries we'll be replacing if successful */
-            if (mfn_x(omfn) == 0)
-                pod_count++;
-            else if (mfn_zero_page(mfn_x(omfn)))
-                pod_zero_count++;
-            else
-                pod_tmpl_count++;
-        }
     }
 
 #ifndef __UXEN__
@@ -825,18 +814,13 @@ guest_physmap_add_entry(struct domain *d, unsigned long gfn,
         if ( !set_p2m_entry(p2m, gfn, _mfn(INVALID_MFN), page_order, 
                             p2m_invalid, p2m->default_access) )
             rc = -EINVAL;
+#ifndef __UXEN__
         else
         {
-#ifndef __UXEN__
             p2m->pod.entry_count -= pod_count; /* Lock: p2m */
             BUG_ON(p2m->pod.entry_count < 0);
-#else  /* __UXEN__ */
-            atomic_sub(pod_count + pod_zero_count + pod_tmpl_count,
-                &d->pod_pages); /* Lock: p2m */
-            atomic_sub(pod_zero_count, &d->zero_shared_pages);
-            atomic_sub(pod_tmpl_count, &d->tmpl_shared_pages);
-#endif  /* __UXEN__ */
         }
+#endif  /* __UXEN__ */
     }
 
 out:
@@ -941,14 +925,14 @@ set_mmio_p2m_entry(struct domain *d, unsigned long gfn, mfn_t mfn)
     int rc = 0;
     p2m_access_t a;
     p2m_type_t ot;
-    mfn_t omfn;
+    /* mfn_t omfn; */
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
 
     if ( !paging_mode_translate(d) )
         return 0;
 
     p2m_lock(p2m);
-    omfn = p2m->get_entry(p2m, gfn, &ot, &a, p2m_query, NULL);
+    /* omfn = */ p2m->get_entry(p2m, gfn, &ot, &a, p2m_query, NULL);
 #ifndef __UXEN__
     if ( p2m_is_grant(ot) )
     {
@@ -965,7 +949,6 @@ set_mmio_p2m_entry(struct domain *d, unsigned long gfn, mfn_t mfn)
 
     P2M_DEBUG("set mmio %lx %lx\n", gfn, mfn_x(mfn));
     rc = set_p2m_entry(p2m, gfn, mfn, PAGE_ORDER_4K, p2m_mmio_direct, p2m->default_access);
-    p2m_update_pod_counts(p2m->domain, mfn_x(omfn), ot);
     audit_p2m(p2m, 1);
     p2m_unlock(p2m);
     if ( 0 == rc )

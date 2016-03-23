@@ -384,6 +384,7 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
 #ifndef __UXEN__
     unsigned long old_mfn = 0;
 #endif  /* __UXEN__ */
+    struct domain *d = p2m->domain;
     union p2m_l1_cache *l1c = &this_cpu(p2m_l1_cache);
 
     if ( tb_init_done )
@@ -528,6 +529,12 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
                     put_page(__mfn_to_page(l1e_get_pfn(old_entry)));
             }
         }
+        if (old_entry.l1 != entry_content.l1)
+            p2m_update_pod_counts(
+                d, l1e_get_pfn(old_entry),
+                p2m_flags_to_type(l1e_get_flags(old_entry)),
+                l1e_get_pfn(entry_content),
+                p2m_flags_to_type(l1e_get_flags(entry_content)));
     }
     else if ( page_order == PAGE_ORDER_2M )
     {

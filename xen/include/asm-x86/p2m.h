@@ -266,14 +266,25 @@ typedef enum {
 #define p2m_is_immutable(_t) (p2m_to_mask(_t) & p2m_to_mask(p2m_ram_immutable))
 #endif  /* __UXEN__ */
 
-#define p2m_update_pod_counts(d, mfn, t) do {           \
-        if (p2m_is_pod((t))) {                          \
-            if (mfn_zero_page(mfn))                     \
-                atomic_dec(&(d)->zero_shared_pages);    \
-            else                                        \
-                atomic_dec(&(d)->tmpl_shared_pages);    \
-            atomic_dec(&(d)->pod_pages);                \
-        }                                               \
+#define p2m_update_pod_counts(d, omfn, ot, nmfn, nt) do {       \
+        if (p2m_is_pod((ot))) {                                 \
+            if (__mfn_zero_page((omfn)))                        \
+                atomic_dec(&(d)->zero_shared_pages);            \
+            else if (__mfn_valid_page_or_vframe((omfn)))        \
+                atomic_dec(&(d)->tmpl_shared_pages);            \
+            else if (__mfn_retry((omfn)))                       \
+                atomic_dec(&(d)->retry_pages);                  \
+            atomic_dec(&(d)->pod_pages);                        \
+        }                                                       \
+        if (p2m_is_pod((nt))) {                                 \
+            if (__mfn_zero_page((nmfn)))                        \
+                atomic_inc(&(d)->zero_shared_pages);            \
+            else if (__mfn_valid_page_or_vframe((nmfn)))        \
+                atomic_inc(&(d)->tmpl_shared_pages);            \
+            else if (__mfn_retry((nmfn)))                       \
+                atomic_inc(&(d)->retry_pages);                  \
+            atomic_inc(&(d)->pod_pages);                        \
+        }                                                       \
     } while (0)
 
 union p2m_l1_cache {
