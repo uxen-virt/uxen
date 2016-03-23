@@ -220,7 +220,10 @@ co_set_dict_opt(const char *opt, yajl_val arg, void *opaque)
     if (!YAJL_IS_OBJECT(arg))
 	errx(1, "config option %s: map", opt);
 
-    *dict_opt = arg;
+    if (!(*dict_opt))
+        *dict_opt = arg;
+    else
+        yajl_object_merge_objects(*dict_opt, arg);
 
     return 0;
 }
@@ -693,6 +696,7 @@ struct config_option config_options[] = {
     { "hidden-mem", co_set_boolean_opt, &vm_hidden_mem },
     { "hide-log-sensitive-data", co_set_boolean_opt, &hide_log_sensitive_data },
     { "hpet", co_set_integer_opt, &vm_hpet },
+    { "hvm-params", co_set_dict_opt, &vm_hvm_params },
     { "lava", co_set_string_opt, &lava_options },
     { "lazy-load", co_set_boolean_opt, &vm_lazy_load },
     { "log-ratelimit-guest-burst", co_set_integer_opt,

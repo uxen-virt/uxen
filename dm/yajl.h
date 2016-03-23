@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -199,5 +199,28 @@ yajl_gen_printf(yajl_gen g, const char *fmt, ...)
 	  YAJL_IS_ARRAY((obj)) ?				\
 	  ((itvar) < YAJL_GET_ARRAY((obj))->len) : !(itvar));	\
 	 (itvar)++)
+
+/* iterate over object key/value pairs: */
+#define YAJL_FOREACH_OBJECT_KEYS(key, val, obj, itvar)                  \
+    for ((itvar) = 0;                                                   \
+         ((key) = ((itvar) < YAJL_GET_OBJECT((obj))->len) ?             \
+          YAJL_GET_OBJECT((obj))->keys[(itvar)] : NULL,                 \
+          (val) = (key) ? YAJL_GET_OBJECT((obj))->values[(itvar)] : NULL, \
+          (key));                                                       \
+         (itvar)++)
+
+static inline void
+yajl_object_merge_objects(yajl_val object1, yajl_val object2)
+{
+    const char *k;
+    yajl_val v;
+    unsigned int i;
+
+    if (!YAJL_IS_OBJECT(object1) || !YAJL_IS_OBJECT(object2))
+        return;
+
+    YAJL_FOREACH_OBJECT_KEYS(k, v, object2, i)
+        yajl_object_set(object1, k, v);
+}
 
 #endif	/* _YAJL_H_ */

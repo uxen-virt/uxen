@@ -95,6 +95,7 @@ uint64_t guest_drivers_logmask = 0x2; /* Include LogRel, not Log */
 uint64_t debugkey_level = 0;
 uint64_t malloc_limit_bytes = 0;
 dict vm_audio = NULL;
+dict vm_hvm_params = NULL;
 int restore = 0;
 int *disabled_keys = NULL;
 size_t disabled_keys_len = 0;

@@ -12,6 +12,7 @@
 
 #define UXENDM_VERSION "devel"
 
+#include "dict.h"
 #include "hw.h"
 
 extern char *dm_path;
@@ -55,6 +56,7 @@ extern uint64_t vm_v4v_storage;
 extern uint64_t guest_drivers_logmask;
 extern uint64_t debugkey_level;
 extern uint64_t malloc_limit_bytes;
+extern dict vm_hvm_params;
 extern int *disabled_keys;
 extern size_t disabled_keys_len;
 extern uint64_t ps2_fallback;

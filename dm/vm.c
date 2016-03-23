@@ -486,6 +486,32 @@ vm_init(const char *loadvm, int restore_mode)
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_LOG_RATELIMIT_GUEST_MS,
                      log_ratelimit_guest_ms);
 
+    if (vm_hvm_params) {
+        const char *k;
+        yajl_val v;
+        unsigned int i;
+
+        YAJL_FOREACH_OBJECT_KEYS(k, v, vm_hvm_params, i) {
+            unsigned long p;
+
+            p = strtoul(k, NULL, 10);
+            if (p == ULONG_MAX || (!p && errno == EINVAL)) {
+                warnx("invalid hvm-params \"%s\"", k);
+                continue;
+            }
+            if (p >= HVM_NR_PARAMS) {
+                warnx("hvm-params \"%s\" too large", k);
+                continue;
+            }
+            if (!YAJL_IS_INTEGER(v)) {
+                warnx("hvm-params \"%s\" not integer", k);
+                continue;
+            }
+
+            xc_set_hvm_param(xc_handle, vm_id, p, YAJL_GET_INTEGER(v));
+        }
+    }
+
     vm_time_offset = get_timeoffset();
     xc_domain_set_time_offset(xc_handle, vm_id, vm_time_offset);
 
