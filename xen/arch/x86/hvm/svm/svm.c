@@ -50,7 +50,9 @@
 #include <asm/io.h>
 #include <asm/paging.h>
 #include <asm/p2m.h>
+#ifndef __UXEN__
 #include <asm/mem_sharing.h>
+#endif  /* __UXEN__ */
 #include <asm/regs.h>
 #include <asm/cpufeature.h>
 #include <asm/processor.h>

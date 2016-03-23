@@ -138,7 +138,9 @@
 #include <xen/trace.h>
 #include <asm/setup.h>
 #include <asm/fixmap.h>
+#ifndef __UXEN__
 #include <asm/mem_sharing.h>
+#endif  /* __UXEN__ */
 
 #ifndef __UXEN__
 /*

@@ -49,9 +49,11 @@
 #include <asm/paging.h>
 #include <asm/p2m.h>
 #include <xen/iommu.h>
+#ifndef __UXEN__
 #include <asm/mem_event.h>
 #include <public/mem_event.h>
 #include <asm/mem_sharing.h>
+#endif  /* __UXEN__ */
 #include <xen/event.h>
 #include <xen/trace.h>
 #include <asm/hvm/nestedhvm.h>

@@ -38,7 +38,9 @@
 #include <public/domctl.h>
 #include <public/sysctl.h>
 #include <public/vcpu.h>
+#ifndef __UXEN__
 #include <public/mem_event.h>
+#endif  /* __UXEN__ */
 
 #ifdef CONFIG_COMPAT
 #include <compat/vcpu.h>
@@ -246,6 +248,7 @@ struct vcpu
 #define domain_unlock(d) spin_unlock_recursive(&(d)->domain_lock)
 #define domain_is_locked(d) spin_is_locked(&(d)->domain_lock)
 
+#ifndef __UXEN__
 /* Memory event */
 struct mem_event_domain
 {
@@ -261,6 +264,7 @@ struct mem_event_domain
     /* event channel port (vcpu0 only) */
     int xen_port;
 };
+#endif  /* __UXEN__ */
 
 struct domain
 {
@@ -810,9 +814,11 @@ static inline struct domain *next_domain_in_cpupool(
  /* VCPU affinity has changed: migrating to a new CPU. */
 #define _VPF_migrating       3
 #define VPF_migrating        (1UL<<_VPF_migrating)
+#ifndef __UXEN__
  /* VCPU is blocked on memory-event ring. */
 #define _VPF_mem_event       4
 #define VPF_mem_event        (1UL<<_VPF_mem_event)
+#endif  /* __UXEN__ */
  /* VCPU yield. */
 #define _VPF_yield           5
 #define VPF_yield            (1UL<<_VPF_yield)

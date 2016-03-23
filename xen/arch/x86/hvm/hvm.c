@@ -86,8 +86,10 @@
 #include <public/hvm/ioreq.h>
 #include <public/version.h>
 #include <public/memory.h>
+#ifndef __UXEN__
 #include <asm/mem_event.h>
 #include <public/mem_event.h>
+#endif  /* __UXEN__ */
 
 /* Needed for vmread in introspection_mov_to_cr(). Breaks on non-Intel cpus? */
 #include <asm/hvm/vmx/vmx.h>

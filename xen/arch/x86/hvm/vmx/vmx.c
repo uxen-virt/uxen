@@ -56,7 +56,9 @@
 #include <asm/spinlock.h>
 #include <asm/paging.h>
 #include <asm/p2m.h>
+#ifndef __UXEN__
 #include <asm/mem_sharing.h>
+#endif  /* __UXEN__ */
 #include <asm/hvm/emulate.h>
 #include <asm/hvm/hvm.h>
 #include <asm/hvm/support.h>

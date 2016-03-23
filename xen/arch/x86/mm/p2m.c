@@ -50,10 +50,10 @@
 #include <asm/hvm/vmx/vmx.h> /* ept_p2m_init() */
 #ifndef __UXEN__
 #include <xen/iommu.h>
-#endif  /* __UXEN__ */
 #include <asm/mem_event.h>
 #include <public/mem_event.h>
 #include <asm/mem_sharing.h>
+#endif  /* __UXEN__ */
 #include <xen/event.h>
 #ifndef __UXEN__
 #include <asm/hvm/nestedhvm.h>

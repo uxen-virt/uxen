@@ -290,7 +290,6 @@ XEN_SRCS += arch/x86/hvm/vmx/vmx.c
 XEN_SRCS += arch/x86/hvm/vmx/vmcs.c
 ## XEN_SRCS += arch/x86/mm/guest_walk.c  ==> guest_walk_X.o below
 ## XEN_SRCS += arch/x86/mm/hap/guest_walk.c  ==> hap/guest_walk_X.o below
-XEN_SRCS += arch/x86/mm/mem_event.c
 XEN_SRCS += arch/x86/mm/paging.c
 XEN_SRCS += arch/x86/mm/p2m.c
 XEN_SRCS += arch/x86/mm/p2m-ept.c

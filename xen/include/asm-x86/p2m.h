@@ -48,7 +48,9 @@
 
 #include <xen/config.h>
 #include <xen/paging.h>
+#ifndef __UXEN__
 #include <asm/mem_sharing.h>
+#endif  /* __UXEN__ */
 #include <asm/page.h>    /* for pagetable_t */
 
 /*

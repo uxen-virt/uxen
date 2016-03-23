@@ -47,9 +47,11 @@
 #include <xen/hypercall.h> /* for arch_do_domctl */
 #include <xsm/xsm.h>
 #include <xen/iommu.h>
+#ifndef __UXEN__
 #include <asm/mem_event.h>
 #include <public/mem_event.h>
 #include <asm/mem_sharing.h>
+#endif  /* __UXEN__ */
 #include <asm/xstate.h>
 #include <asm/debugger.h>
 #include <xen/pfn.h>
