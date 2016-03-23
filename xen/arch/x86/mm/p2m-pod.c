@@ -1494,7 +1494,6 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     p2m_type_t t, pod_p2mt = p2m_ram_rw;
     p2m_access_t a;
     void *source, *target;
-    int smfn_from_clone = 1;
     mfn_t put_page_parent = _mfn(0);
     struct p2m_domain *op2m = d->clone_of ? p2m_get_hostp2m(d->clone_of) : NULL;
     bool_t op2m_locked = 0;
@@ -1672,7 +1671,6 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             ret = 0;
             goto out;
         }
-        smfn_from_clone = 0;
         ASSERT(p2m_locked_by_me(op2m));
     }
 
@@ -1851,13 +1849,9 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                 perfc_incr(dmreq_populated_template);
             } else
                 put_allocated_page(tmpl, p);
-            smfn_from_clone = 0;
             ASSERT(p2m_locked_by_me(op2m));
         }
     }
-
-    ASSERT(!smfn_from_clone || !op2m_locked);
-    ASSERT(smfn_from_clone || p2m_locked_by_me(op2m));
 
     if (mfn_zero_page(smfn)) {
         if (op2m_locked) {
@@ -1877,7 +1871,6 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         int share_decompressed = 0;
 
         if (!d->clone_of) {
-            ASSERT(smfn_from_clone);
             pod_p2mt = p2m_ram_rw;
             page_owner = d;
             atomic_inc(&d->template.decompressed_permanent);
@@ -1915,8 +1908,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             return out_fail();
         }
         check_immutable(q, d, gfn_aligned);
-    } else if (smfn_from_clone &&
-               /* d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] && */
+    } else if (/* d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] && */
                page_get_owner(mfn_to_page(smfn)) == d) {
         /* read-only mapped page already belonging to the VM - write
            access to previously decompressed page which was mapped
@@ -1926,7 +1918,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         /* check if template page is a decompressed page, only shared
          * in one clone */
 #define ONE_CLONE_COUNT 1
-        while (smfn_from_clone &&
+        while (page_get_owner(mfn_to_page(smfn)) == d->clone_of &&
                (mfn_to_page(smfn)->count_info & PGC_count_mask) <=
                ONE_CLONE_COUNT) {
             struct page_data_info *pdi;
