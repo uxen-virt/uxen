@@ -85,6 +85,7 @@ uint64_t vm_pae = 1;
 uint64_t vm_viridian = 1;
 uint64_t vm_virt_mode_change = 0;
 uint64_t vm_hpet = 1;
+uint64_t vm_zero_page = 1;
 uint64_t vm_apic = 1;
 uint64_t vm_hidden_mem = 1;
 uint64_t vm_use_v4v_net = 0;

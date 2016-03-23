@@ -5658,6 +5658,11 @@ long arch_memory_op(int op, XEN_GUEST_HANDLE(void) arg)
             goto set_zero_page_ctxt_out;
         }
 
+        if (!d->arch.hvm_domain.params[HVM_PARAM_ZERO_PAGE]) {
+            MEM_LOG("zp: vm zero page disabled");
+            goto set_zero_page_ctxt_out;
+        }
+
         for (nr = 0; nr < zp_arg.nr_desc; nr++) {
             if (nr > XEN_MEMORY_SET_ZERO_PAGE_DESC_MAX)
                 break;

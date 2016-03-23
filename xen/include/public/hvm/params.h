@@ -204,6 +204,8 @@
 #define HVM_PARAM_DMREQ_PFN    39
 #define HVM_PARAM_DMREQ_VCPU_PFN 40
 
-#define HVM_NR_PARAMS          41
+#define HVM_PARAM_ZERO_PAGE 41
+
+#define HVM_NR_PARAMS          42
 
 #endif /* __XEN_PUBLIC_HVM_PARAMS_H__ */

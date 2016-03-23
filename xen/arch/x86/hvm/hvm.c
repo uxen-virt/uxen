@@ -886,6 +886,8 @@ int hvm_domain_initialise(struct domain *d)
         d->arch.hvm_domain.params[HVM_PARAM_COMPRESSED_GC] &=
             ~HVM_PARAM_COMPRESSED_GC_decompressed;
 
+    d->arch.hvm_domain.params[HVM_PARAM_ZERO_PAGE] = 1;
+
 #ifndef __UXEN__
     hvm_init_cacheattr_region_list(d);
 #endif  /* __UXEN__ */
@@ -1682,7 +1684,8 @@ hvm_load_zp(struct domain *d, hvm_domain_context_t *h)
     if (hvm_load_entry(ZP, h, ctxt) != 0)
         return -EINVAL;
 
-    if (ctxt != &dummy && d->zp_ctxt[d->zp_nr].entry) {
+    if (d->arch.hvm_domain.params[HVM_PARAM_ZERO_PAGE] &&
+        ctxt != &dummy && d->zp_ctxt[d->zp_nr].entry) {
         d->zp_nr++;
         hvm_set_zp_prefix(d);
     }

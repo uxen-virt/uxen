@@ -733,6 +733,7 @@ struct config_option config_options[] = {
     { "virt-mode-change", co_set_integer_opt, &vm_virt_mode_change },
     { "vpt-align", co_set_boolean_opt, &vm_vpt_align },
     { "vpt-coalesce-period", co_set_integer_opt, &vm_vpt_coalesce_period },
+    { "zero-page", co_set_boolean_opt, &vm_zero_page },
 };
 
 static int

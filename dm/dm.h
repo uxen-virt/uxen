@@ -46,6 +46,7 @@ extern uint64_t vm_pae;
 extern uint64_t vm_viridian;
 extern uint64_t vm_virt_mode_change;
 extern uint64_t vm_hpet;
+extern uint64_t vm_zero_page;
 extern uint64_t vm_apic;
 extern uint64_t vm_hidden_mem;
 extern uint64_t vm_use_v4v_net;
