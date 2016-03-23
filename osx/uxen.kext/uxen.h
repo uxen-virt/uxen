@@ -396,7 +396,7 @@ void *user_malloc(size_t size, enum user_mapping_type type,
                   struct fd_assoc *fda);
 void user_free(void *va, struct fd_assoc *fda);
 void user_free_all_user_mappings(struct fd_assoc *fda);
-int map_host_pages(void *, size_t, uint64_t, struct fd_assoc *);
+int map_host_pages(void *, size_t, uint64_t *, struct fd_assoc *);
 int unmap_host_pages(void *, size_t, struct fd_assoc *);
 extern lck_spin_t *populate_vframes_lock;
 void fill_vframes(void);

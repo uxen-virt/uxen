@@ -2,7 +2,7 @@
  *  uxen_desc_sys.h
  *  uxen
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -111,7 +111,7 @@ struct uxen_free_desc {
 struct uxen_map_host_pages_desc {
     UXEN_PTR(void, umhpd_va);
     uint64_t umhpd_len;
-    uint64_t umhpd_gmfn;
+    UXEN_PTR(uint64_t, umhpd_gpfns);
 };
 
 #endif  /* _UXEN_DESC_SYS_H_ */

@@ -2,7 +2,7 @@
  *  uxenctllib.c
  *  uxen
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -636,14 +636,14 @@ uxen_logging_read(struct uxen_logging_buffer *logbuf, uint64_t *reader,
 }
 
 int
-uxen_map_host_pages(UXEN_HANDLE_T h, void *va, size_t len, uint64_t gmfn)
+uxen_map_host_pages(UXEN_HANDLE_T h, void *va, size_t len, uint64_t *gpfns)
 {
     struct uxen_map_host_pages_desc umhpd = { };
     int ret;
 
     umhpd.umhpd_va = va;
     umhpd.umhpd_len = len;
-    umhpd.umhpd_gmfn = gmfn;
+    umhpd.umhpd_gpfns = gpfns;
 
     ret = uxen_ioctl(h, UXENMAPHOSTPAGES, &umhpd);
     if (ret)

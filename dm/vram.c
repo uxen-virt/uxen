@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -309,11 +309,26 @@ vram_map(struct vram_desc *v, uint32_t gfn)
     }
 
     if (v->mapped_len) {
-        ret = uxen_map_host_pages(uxen_handle, v->view, v->mapped_len, gfn);
+        uint64_t *gpfns;
+        size_t gpfn_num = v->mapped_len >> UXEN_PAGE_SHIFT;
+        int idx;
+
+        gpfns = (uint64_t *)malloc(gpfn_num * sizeof(gpfns[0]));
+        if (!gpfns) {
+            debug_printf("%s: malloc(%"PRIdSIZE") failed", __FUNCTION__,
+                         gpfn_num * sizeof(gpfns[0]));
+            return -1;
+        }
+
+        for (idx = 0; idx < gpfn_num; ++idx)
+            gpfns[idx] = gfn + idx;
+
+        ret = uxen_map_host_pages(uxen_handle, v->view, v->mapped_len, gpfns);
+        free(gpfns);
         if (ret) {
             debug_printf("%s: uxen_map_host_pages failed: %d,"
-                         " gfn=%x view=%p len=%"PRIdSIZE"\n",
-                         __FUNCTION__, errno, gfn, v->view, v->mapped_len);
+                         " view=%p len=%"PRIdSIZE"\n",
+                         __FUNCTION__, errno, v->view, v->mapped_len);
             return -1;
         }
     }

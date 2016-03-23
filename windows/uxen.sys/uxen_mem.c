@@ -152,7 +152,7 @@ struct user_mapping {
                     xen_pfn_t *mfns;
                     uint32_t num;
                 };
-                xen_pfn_t gmfn;
+                xen_pfn_t *gpfns;
             };
             struct fd_assoc *fda;
         };
@@ -1069,13 +1069,13 @@ uxen_pages_clear(void)
 }
 
 static void
-remove_host_mfns_mapping(uint64_t gmfn, size_t len, PFN_NUMBER *pfn_array,
+remove_host_mfns_mapping(uint64_t *gpfns, size_t len, PFN_NUMBER *pfn_array,
                          struct fd_assoc *fda)
 {
     struct vm_info *vmi = fda->vmi;
     unsigned int i;
 
-    if (gmfn == ~0ULL)
+    if (gpfns == NULL)
         return;
 
     for (i = 0; i < (len >> PAGE_SHIFT); i++) {
@@ -1085,7 +1085,7 @@ remove_host_mfns_mapping(uint64_t gmfn, size_t len, PFN_NUMBER *pfn_array,
         memop_arg.size = 1;
         memop_arg.space = XENMAPSPACE_host_mfn;
         memop_arg.idx = ~0ULL;
-        memop_arg.gpfn = gmfn + i;
+        memop_arg.gpfn = gpfns[i];
 
         uxen_dom0_hypercall(&vmi->vmi_shared, &fda->user_mappings,
                             UXEN_UNRESTRICTED_ACCESS_HYPERCALL |
@@ -1108,7 +1108,7 @@ remove_host_mfns_mapping(uint64_t gmfn, size_t len, PFN_NUMBER *pfn_array,
 #define MAX_MDL_LEN ((4ULL << 30) - PAGE_SIZE)
 
 int
-map_host_pages(void *va, size_t len, uint64_t gmfn,
+map_host_pages(void *va, size_t len, uint64_t *gpfns,
                struct fd_assoc *fda)
 {
     struct user_mapping_info *umi = &fda->user_mappings;
@@ -1118,6 +1118,7 @@ map_host_pages(void *va, size_t len, uint64_t gmfn,
     int ret = 0;
     KIRQL old_irql;
     PFN_NUMBER *pfn_array;
+    size_t gpfn_num = len >> PAGE_SHIFT;
     unsigned int i;
 
     if (len > MAX_MDL_LEN) {
@@ -1149,7 +1150,19 @@ map_host_pages(void *va, size_t len, uint64_t gmfn,
         return ENOMEM;
     }
 
-    um->gmfn = ~0ULL;
+    um->gpfns = (uint64_t *)kernel_malloc(gpfn_num * sizeof(gpfns[0]));
+    if (!um->gpfns) {
+        fail_msg("kernel_malloc(um->gpfns) failed");
+        ret = ENOMEM;
+        goto out;
+    }
+
+    ret = copyin(gpfns, um->gpfns, gpfn_num * sizeof(gpfns[0]));
+    if (ret) {
+        fail_msg("copyin failed: %d/0x%p/0x%p", gpfn_num, gpfns, um->gpfns);
+        goto out;
+    }
+
     um->mdl = IoAllocateMdl(va, len, FALSE, FALSE, NULL);
     if (!um->mdl) {
         fail_msg("IoAllocateMdl failed");
@@ -1172,10 +1185,9 @@ map_host_pages(void *va, size_t len, uint64_t gmfn,
     um->va.size = len;
     um->fda = fda;
     um->type = USER_MAPPING_HOST_MFNS;
-    um->gmfn = gmfn;
 
     pfn_array = MmGetMdlPfnArray(um->mdl);
-    for (i = 0; i < (len >> PAGE_SHIFT); i++) {
+    for (i = 0; i < gpfn_num; i++) {
         xen_add_to_physmap_t memop_arg;
 
         /* use _populate_frametable, in case host pages being added
@@ -1185,7 +1197,7 @@ map_host_pages(void *va, size_t len, uint64_t gmfn,
             _populate_frametable(pfn_array[i], 0)) {
             fail_msg("invalid mfn %p or failed to populate physmap:"
                      " gpfn=%p, domid=%d",
-                     pfn_array[i], gmfn + i, vmi->vmi_shared.vmi_domid);
+                     pfn_array[i], um->gpfns[i], vmi->vmi_shared.vmi_domid);
             ret = ENOMEM;
             goto out;
         }
@@ -1193,7 +1205,7 @@ map_host_pages(void *va, size_t len, uint64_t gmfn,
         memop_arg.size = 1;
         memop_arg.space = XENMAPSPACE_host_mfn;
         memop_arg.idx = (xen_ulong_t)pfn_array[i];
-        memop_arg.gpfn = gmfn + i;
+        memop_arg.gpfn = um->gpfns[i];
 
         ret = (int)uxen_dom0_hypercall(&vmi->vmi_shared, &fda->user_mappings,
                                        UXEN_UNRESTRICTED_ACCESS_HYPERCALL |
@@ -1203,7 +1215,7 @@ map_host_pages(void *va, size_t len, uint64_t gmfn,
                                        XENMEM_add_to_physmap, &memop_arg);
         if (ret) {
             fail_msg("failed to add mapping: mfn=%p, gpfn=%p, domid=vm%u",
-                     pfn_array[i], gmfn + i, vmi->vmi_shared.vmi_domid);
+                     pfn_array[i], um->gpfns[i], vmi->vmi_shared.vmi_domid);
             goto out;
         }
 
@@ -1220,7 +1232,11 @@ map_host_pages(void *va, size_t len, uint64_t gmfn,
     ret = 0;
   out:
     if (ret && um) {
-        remove_host_mfns_mapping(um->gmfn, i << PAGE_SHIFT, pfn_array, fda);
+        if (um->gpfns) {
+            remove_host_mfns_mapping(um->gpfns, i << PAGE_SHIFT, pfn_array,
+                                     fda);
+            kernel_free(um->gpfns, gpfn_num * sizeof(um->gpfns[0]));
+        }
         if (um->mdl) {
             if (um->mdl->MdlFlags & MDL_PAGES_LOCKED)
                 MmUnlockPages(um->mdl);
@@ -1629,7 +1645,9 @@ user_free_user_mapping(struct user_mapping *um)
         break;
     case USER_MAPPING_HOST_MFNS:
         pfn_array = MmGetMdlPfnArray(um->mdl);
-        remove_host_mfns_mapping(um->gmfn, um->va.size, pfn_array, um->fda);
+        remove_host_mfns_mapping(um->gpfns, um->va.size, pfn_array, um->fda);
+        kernel_free(
+            um->gpfns, (um->va.size >> PAGE_SHIFT) * sizeof(um->gpfns[0]));
         MmUnlockPages(um->mdl);
         IoFreeMdl(um->mdl);
         break;

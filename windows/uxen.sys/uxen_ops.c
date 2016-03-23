@@ -2251,7 +2251,7 @@ uxen_op_map_host_pages(struct uxen_map_host_pages_desc *umhpd,
 {
 
     return map_host_pages(umhpd->umhpd_va, (size_t)umhpd->umhpd_len,
-                          umhpd->umhpd_gmfn, fda);
+                          umhpd->umhpd_gpfns, fda);
 }
 
 int

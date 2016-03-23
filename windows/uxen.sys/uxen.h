@@ -369,7 +369,7 @@ uxen_pfn_t get_max_pfn(int use_hidden);
 void add_hidden_memory(void);
 #endif
 uint64_t get_highest_user_address(void);
-int map_host_pages(void *, size_t, uint64_t, struct fd_assoc *);
+int map_host_pages(void *, size_t, uint64_t *, struct fd_assoc *);
 int unmap_host_pages(void *, size_t, struct fd_assoc *);
 extern KSPIN_LOCK populate_vframes_lock;
 void fill_vframes(void);

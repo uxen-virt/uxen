@@ -473,7 +473,7 @@ struct user_mapping {
     struct {
         vm_map_t vm_map;
         xen_pfn_t *mfns;
-        xen_pfn_t gmfn;
+        xen_pfn_t *gpfns;
     };
     struct fd_assoc *fda;
     enum user_mapping_type type;
@@ -1477,12 +1477,12 @@ uxen_pages_clear(void)
 }
 
 static void
-remove_host_mfns_mapping(uint64_t gmfn, size_t len, struct fd_assoc *fda)
+remove_host_mfns_mapping(uint64_t *gpfns, size_t len, struct fd_assoc *fda)
 {
     struct vm_info *vmi = fda->vmi;
     int i;
 
-    if (gmfn == ~0ULL || len == 0)
+    if (gpfns == NULL || len == 0)
         return;
 
     for (i = 0; i < (len >> PAGE_SHIFT); i++) {
@@ -1492,7 +1492,7 @@ remove_host_mfns_mapping(uint64_t gmfn, size_t len, struct fd_assoc *fda)
         memop_arg.size = 1;
         memop_arg.space = XENMAPSPACE_host_mfn;
         memop_arg.idx = ~0ULL;
-        memop_arg.gpfn = gmfn + i;
+        memop_arg.gpfn = gpfns[i];
 
         uxen_dom0_hypercall(&vmi->vmi_shared, &fda->user_mappings,
                             UXEN_UNRESTRICTED_ACCESS_HYPERCALL |
@@ -1510,7 +1510,8 @@ user_remove_host_mfns_user_mapping(struct user_mapping *um)
 
     assert(um->type == USER_MAPPING_HOST_MFNS);
 
-    remove_host_mfns_mapping(um->gmfn, um->va.size, um->fda);
+    remove_host_mfns_mapping(um->gpfns, um->va.size, um->fda);
+    kernel_free(um->gpfns, (um->va.size >> PAGE_SHIFT) * sizeof(um->gpfns[0]));
 
     rc = xnu_vm_map_unwire(um->vm_map, addr, addr + um->va.size, 0);
     if (rc != KERN_SUCCESS) {
@@ -1524,7 +1525,7 @@ user_remove_host_mfns_user_mapping(struct user_mapping *um)
 }
 
 int
-map_host_pages(void *va, size_t len, uint64_t gmfn,
+map_host_pages(void *va, size_t len, uint64_t *gpfns,
                struct fd_assoc *fda)
 {
     vm_map_offset_t addr = (vm_map_offset_t)va;
@@ -1537,6 +1538,7 @@ map_host_pages(void *va, size_t len, uint64_t gmfn,
     int wired = 0;
     user_mapping_va key;
     kern_return_t rc;
+    size_t gpfn_num = len >> PAGE_SHIFT;
     int i = 0;
 
     /* Only allow aligned va/len */
@@ -1577,7 +1579,27 @@ map_host_pages(void *va, size_t len, uint64_t gmfn,
     }
     wired = 1;
 
-    for (i = 0; i < (len >> PAGE_SHIFT); i++) {
+    um = (struct user_mapping *)kernel_malloc(sizeof(struct user_mapping));
+    if (!um) {
+        fail_msg("kernel_malloc(user_mapping) failed");
+        goto out;
+    }
+
+    um->gpfns = kernel_malloc(gpfn_num * sizeof(gpfns[0]));
+    if (!um->gpfns) {
+        fail_msg("kernel_malloc(um->gpfns) failed");
+        ret = ENOMEM;
+        goto out;
+    }
+
+    ret = copyin((const user_addr_t)gpfns, um->gpfns,
+                 gpfn_num * sizeof(gpfns[0]));
+    if (ret) {
+        fail_msg("copyin failed: %d/0x%p/0x%p", gpfn_num, gpfns, um->gpfns);
+        goto out;
+    }
+
+    for (i = 0; i < gpfn_num; i++) {
         ppnum_t pn;
         xen_add_to_physmap_t memop_arg = { };
 
@@ -1590,7 +1612,7 @@ map_host_pages(void *va, size_t len, uint64_t gmfn,
         if (pn >= uxen_info->ui_max_page || _populate_frametable(pn)) {
             fail_msg("invalid mfn %x or failed to populate physmap:"
                      " gpfn=%"PRIx64", domid=%d",
-                     pn, gmfn + i, vmi->vmi_shared.vmi_domid);
+                     pn, um->gpfns[i], vmi->vmi_shared.vmi_domid);
             ret = ENOMEM;
             goto out;
         }
@@ -1598,7 +1620,7 @@ map_host_pages(void *va, size_t len, uint64_t gmfn,
         memop_arg.size = 1;
         memop_arg.space = XENMAPSPACE_host_mfn;
         memop_arg.idx = (xen_ulong_t)pn;
-        memop_arg.gpfn = gmfn + i;
+        memop_arg.gpfn = um->gpfns[i];
 
         ret = (int)uxen_dom0_hypercall(&vmi->vmi_shared, &fda->user_mappings,
                                        UXEN_UNRESTRICTED_ACCESS_HYPERCALL |
@@ -1610,17 +1632,10 @@ map_host_pages(void *va, size_t len, uint64_t gmfn,
             goto out;
     }
 
-    um = (struct user_mapping *)kernel_malloc(sizeof(struct user_mapping));
-    if (!um) {
-        fail_msg("kernel_malloc(user_mapping) failed");
-        goto out;
-    }
-
     um->va.addr = va;
     um->va.size = len;
     um->vm_map = task_map;
     um->mfns = NULL;
-    um->gmfn = gmfn;
     um->fda = fda;
     um->type = USER_MAPPING_HOST_MFNS;
 
@@ -1632,10 +1647,13 @@ map_host_pages(void *va, size_t len, uint64_t gmfn,
  out:
 
     if (ret) {
-        if (um)
+        if (um) {
+            if (um->gpfns) {
+                remove_host_mfns_mapping(um->gpfns, i << PAGE_SHIFT, fda);
+                kernel_free(um->gpfns, gpfn_num * sizeof(um->gpfns[0]));
+            }
             kernel_free(um, sizeof(struct user_mapping));
-        if (i != 0)
-            remove_host_mfns_mapping(gmfn, i << PAGE_SHIFT, fda);
+        }
         if (wired)
             xnu_vm_map_unwire(task_map, addr, addr+len, 0);
         if (task_map)
