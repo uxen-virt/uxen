@@ -1745,9 +1745,13 @@ hvm_pod_zp_prefix(struct vcpu *v, unsigned long gpfn, p2m_type_t *t,
                 hvm_get_segment_register(v, x86_seg_fs, &seg);
 
             pfec = PFEC_page_present;
-            pcr_gpfn = paging_gva_to_gfn(current, seg.base, &pfec);
-            if (pcr_gpfn == INVALID_GFN)
+            pcr_gpfn = paging_gva_to_gfn(current, seg.base, paging_g2g_unshare,
+                                         &pfec);
+            if (pcr_gpfn == INVALID_GFN) {
+                if (pfec == PFEC_page_populate)
+                    return hypercall_create_retry_continuation();
                 break;
+            }
             v->arch.hvm_vcpu.zp_pcr_gpfn = pcr_gpfn;
         }
 
@@ -1842,14 +1846,18 @@ hvm_pod_zp_prefix(struct vcpu *v, unsigned long gpfn, p2m_type_t *t,
                 return hypercall_create_retry_continuation();
 
             pfec = PFEC_page_present;
-            p = paging_gva_to_gfn(v, gva, &pfec);
-            if (p == INVALID_GFN)
-                /* XXX check pfec */
+            p = paging_gva_to_gfn(v, gva, paging_g2g_query, &pfec);
+            if (p == INVALID_GFN) {
+                if (pfec == PFEC_page_populate)
+                    return hypercall_create_retry_continuation();
                 return 1;
+            }
 
             zmfn = get_gfn_type(d, p, &pt, zeromode);
             put_gfn(d, p);
 
+            if (mfn_retry(zmfn))
+                return hypercall_create_retry_continuation();
             if (!__mfn_zero_page(mfn_x(zmfn)) &&
                 !(mfn_valid_page(mfn_x(zmfn)) && !p2m_is_pod(pt)))
                 return 1;
@@ -1857,6 +1865,10 @@ hvm_pod_zp_prefix(struct vcpu *v, unsigned long gpfn, p2m_type_t *t,
     }
 
     zmfn = get_gfn_type_access(p2m_get_hostp2m(d), gpfn, t, a, zeromode, NULL);
+    if (mfn_retry(zmfn)) {
+        put_gfn(d, gpfn);
+        return hypercall_create_retry_continuation();
+    }
     if (__mfn_zero_page(mfn_x(zmfn)) ||
         (mfn_valid(mfn_x(zmfn)) && !p2m_is_pod(*t))) {
         printk(XENLOG_DEBUG
@@ -2794,8 +2806,9 @@ static void *hvm_map_entry(unsigned long va, unsigned long *gfn)
      * treat it as a kernel-mode read (i.e. no access checks).
      */
     pfec = PFEC_page_present;
-    *gfn = paging_gva_to_gfn(current, va, &pfec);
+    *gfn = paging_gva_to_gfn(current, va, paging_g2g_unshare, &pfec);
     if ( (pfec == PFEC_page_paged) || (pfec == PFEC_page_shared) )
+        /* XXX retry PFEC_page_paged */
         goto fail;
 
     v = hvm_map_guest_frame_rw(*gfn);
@@ -3180,7 +3193,7 @@ static enum hvm_copy_result __hvm_copy(
 
         if ( flags & HVMCOPY_virt )
         {
-            gfn = paging_gva_to_gfn(curr, addr, &pfec);
+            gfn = paging_gva_to_gfn(curr, addr, paging_g2g_unshare, &pfec);
             if ( gfn == INVALID_GFN )
             {
                 if (pfec == PFEC_page_populate)
@@ -5711,7 +5724,7 @@ int hvm_memory_event_int3(unsigned long gla)
     uint32_t pfec = PFEC_page_present;
     unsigned long gfn;
 DEBUG();
-    gfn = paging_gva_to_gfn(current, gla, &pfec);
+    gfn = paging_gva_to_gfn(current, gla, paging_g2g_unshare, &pfec);
 
     return hvm_memory_event_traps(current->domain->arch.hvm_domain
                                     .params[HVM_PARAM_MEMORY_EVENT_INT3],
@@ -5724,7 +5737,7 @@ int hvm_memory_event_single_step(unsigned long gla)
     uint32_t pfec = PFEC_page_present;
     unsigned long gfn;
 DEBUG();
-    gfn = paging_gva_to_gfn(current, gla, &pfec);
+    gfn = paging_gva_to_gfn(current, gla, paging_g2g_unshare, &pfec);
 
     return hvm_memory_event_traps(current->domain->arch.hvm_domain
             .params[HVM_PARAM_MEMORY_EVENT_SINGLE_STEP],

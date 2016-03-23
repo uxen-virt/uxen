@@ -187,7 +187,8 @@ nestedhap_walk_L1_p2m(struct vcpu *v, paddr_t L2_gpa, paddr_t *L1_gpa,
     nested_cr3 = nhvm_vcpu_hostcr3(v);
 
     /* Walk the guest-supplied NPT table, just as if it were a pagetable */
-    gfn = paging_ga_to_gfn_cr3(v, nested_cr3, L2_gpa, &pfec, page_order);
+    gfn = paging_ga_to_gfn_cr3(v, nested_cr3, L2_gpa, paging_g2g_unshare,
+                               &pfec, page_order);
 
     if ( gfn == INVALID_GFN ) 
         return NESTEDHVM_PAGEFAULT_INJECT;

@@ -40,15 +40,17 @@
 #include <asm/p2m.h>
 
 unsigned long hap_gva_to_gfn(GUEST_PAGING_LEVELS)(
-    struct vcpu *v, struct p2m_domain *p2m, unsigned long gva, uint32_t *pfec)
+    struct vcpu *v, struct p2m_domain *p2m, unsigned long gva,
+    paging_g2g_query_t q, uint32_t *pfec)
 {
     unsigned long cr3 = v->arch.hvm_vcpu.guest_cr[3];
-    return hap_p2m_ga_to_gfn(GUEST_PAGING_LEVELS)(v, p2m, cr3, gva, pfec, NULL);
+    return hap_p2m_ga_to_gfn(GUEST_PAGING_LEVELS)
+        (v, p2m, cr3, gva, q, pfec, NULL);
 }
 
 unsigned long hap_p2m_ga_to_gfn(GUEST_PAGING_LEVELS)(
     struct vcpu *v, struct p2m_domain *p2m, unsigned long cr3,
-    paddr_t ga, uint32_t *pfec, unsigned int *page_order)
+    paddr_t ga, paging_g2g_query_t q, uint32_t *pfec, unsigned int *page_order)
 {
     uint32_t missing;
     mfn_t top_mfn;
@@ -106,8 +108,20 @@ unsigned long hap_p2m_ga_to_gfn(GUEST_PAGING_LEVELS)(
     if ( missing == 0 )
     {
         gfn_t gfn = guest_l1e_get_gfn(gw.l1e);
-        mfn_t mfn = get_gfn_type_access(p2m, gfn_x(gfn), &p2mt, &p2ma,
-                                        p2m_unshare, NULL);
+        mfn_t mfn;
+        p2m_query_t p2m_q = p2m_unshare;
+
+        switch (q) {
+        case paging_g2g_query:
+            p2m_q = p2m_query;
+            break;
+        case paging_g2g_unshare:
+            /* initialized above */
+            /* p2m_q = p2m_unshare; */
+            break;
+        }
+
+        mfn = get_gfn_type_access(p2m, gfn_x(gfn), &p2mt, &p2ma, p2m_q, NULL);
 #ifndef __UXEN__
         if ( p2m_is_paging(p2mt) )
         {
@@ -125,7 +139,7 @@ unsigned long hap_p2m_ga_to_gfn(GUEST_PAGING_LEVELS)(
             return INVALID_GFN;
         }
 #else  /* __UXEN__ */
-        if (mfn_retry(mfn)) {
+        if (p2m_q != p2m_query && mfn_retry(mfn)) {
             pfec[0] = PFEC_page_populate;
             __put_gfn(p2m, gfn_x(gfn));
             return INVALID_GFN;

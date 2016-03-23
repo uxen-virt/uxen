@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -1098,14 +1098,15 @@ hap_write_p2m_entry(struct vcpu *v, unsigned long gfn, l1_pgentry_t *p,
 }
 
 static unsigned long hap_gva_to_gfn_real_mode(
-    struct vcpu *v, struct p2m_domain *p2m, unsigned long gva, uint32_t *pfec)
+    struct vcpu *v, struct p2m_domain *p2m, unsigned long gva,
+    paging_g2g_query_t q, uint32_t *pfec)
 {
     return ((paddr_t)gva >> PAGE_SHIFT);
 }
 
 static unsigned long hap_p2m_ga_to_gfn_real_mode(
     struct vcpu *v, struct p2m_domain *p2m, unsigned long cr3,
-    paddr_t ga, uint32_t *pfec, unsigned int *page_order)
+    paddr_t ga, paging_g2g_query_t q, uint32_t *pfec, unsigned int *page_order)
 {
 DEBUG();
     if ( page_order )

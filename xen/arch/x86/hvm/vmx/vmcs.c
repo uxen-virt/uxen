@@ -1543,7 +1543,7 @@ void vmcs_mini_dump_vcpu(struct vcpu *v, unsigned int exit_reason)
         unsigned long pfn, mfn;
         uint32_t pfec;
         p2m_type_t p2mt;
-        pfn = paging_gva_to_gfn(current, 0x20c53, &pfec);
+        pfn = paging_gva_to_gfn(current, 0x20c53, paging_g2g_unshare, &pfec);
         if (pfn != INVALID_GFN) {
             printk("rip gfn %lx\n", pfn);
             mfn = mfn_x(get_gfn_query(current->domain, pfn, &p2mt));

@@ -401,7 +401,8 @@ static int hvmemul_linear_to_phys(
             return rc;
         pfn = _paddr >> PAGE_SHIFT;
     }
-    else if ( (pfn = paging_gva_to_gfn(curr, addr, &pfec)) == INVALID_GFN )
+    else if ( (pfn = paging_gva_to_gfn(curr, addr, paging_g2g_unshare,
+                                       &pfec)) == INVALID_GFN )
     {
         if ( pfec == PFEC_page_paged || pfec == PFEC_page_shared )
             return X86EMUL_RETRY;
@@ -415,7 +416,7 @@ static int hvmemul_linear_to_phys(
     {
         /* Get the next PFN in the range. */
         addr += reverse ? -PAGE_SIZE : PAGE_SIZE;
-        npfn = paging_gva_to_gfn(curr, addr, &pfec);
+        npfn = paging_gva_to_gfn(curr, addr, paging_g2g_unshare, &pfec);
 
         /* Is it contiguous with the preceding PFNs? If not then we're done. */
         if ( (npfn == INVALID_GFN) || (npfn != (pfn + (reverse ? -i : i))) )

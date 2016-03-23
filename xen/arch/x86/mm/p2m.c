@@ -1728,6 +1728,7 @@ DEBUG();
 
 unsigned long paging_gva_to_gfn(struct vcpu *v,
                                 unsigned long va,
+                                paging_g2g_query_t q,
                                 uint32_t *pfec)
 {
     struct p2m_domain *hostp2m = p2m_get_hostp2m(v->domain);
@@ -1746,15 +1747,15 @@ unsigned long paging_gva_to_gfn(struct vcpu *v,
         /* translate l2 guest va into l2 guest gfn */
         p2m = p2m_get_nestedp2m(v, ncr3);
         mode = paging_get_nestedmode(v);
-        gfn = mode->gva_to_gfn(v, p2m, va, pfec);
+        gfn = mode->gva_to_gfn(v, p2m, va, q, pfec);
 
         /* translate l2 guest gfn into l1 guest gfn */
         return hostmode->p2m_ga_to_gfn(v, hostp2m, ncr3,
-                                       gfn << PAGE_SHIFT, pfec, NULL);
+                                       gfn << PAGE_SHIFT, q, pfec, NULL);
     }
 #endif  /* __UXEN__ */
 
-    return hostmode->gva_to_gfn(v, hostp2m, va, pfec);
+    return hostmode->gva_to_gfn(v, hostp2m, va, q, pfec);
 }
 
 int

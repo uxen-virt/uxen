@@ -66,6 +66,11 @@
 /* flags used for paging debug */
 #define PAGING_DEBUG_LOGDIRTY 0
 
+typedef enum {
+    paging_g2g_query,
+    paging_g2g_unshare
+} paging_g2g_query_t;
+
 /*****************************************************************************
  * Mode-specific entry points into the shadow code.  
  *
@@ -111,11 +116,14 @@ struct paging_mode {
     unsigned long (*gva_to_gfn            )(struct vcpu *v,
                                             struct p2m_domain *p2m,
                                             unsigned long va,
+                                            paging_g2g_query_t q,
                                             uint32_t *pfec);
     unsigned long (*p2m_ga_to_gfn         )(struct vcpu *v,
                                             struct p2m_domain *p2m,
                                             unsigned long cr3,
-                                            paddr_t ga, uint32_t *pfec,
+                                            paddr_t ga,
+                                            paging_g2g_query_t q,
+                                            uint32_t *pfec,
                                             unsigned int *page_order);
     int           (*update_cr3            )(struct vcpu *v, int do_locking);
     int           (*update_paging_modes   )(struct vcpu *v);
@@ -271,6 +279,7 @@ static inline int paging_invlpg(struct vcpu *v, unsigned long va)
 #define INVALID_GFN (-1UL)
 unsigned long paging_gva_to_gfn(struct vcpu *v,
                                 unsigned long va,
+                                paging_g2g_query_t q,
                                 uint32_t *pfec);
 
 /* Translate a guest address using a particular CR3 value.  This is used
@@ -283,11 +292,12 @@ unsigned long paging_gva_to_gfn(struct vcpu *v,
 static inline unsigned long paging_ga_to_gfn_cr3(struct vcpu *v,
                                                  unsigned long cr3,
                                                  paddr_t ga,
+                                                 paging_g2g_query_t q,
                                                  uint32_t *pfec,
                                                  unsigned int *page_order)
 {
     struct p2m_domain *p2m = v->domain->arch.p2m;
-    return paging_get_hostmode(v)->p2m_ga_to_gfn(v, p2m, cr3, ga, pfec,
+    return paging_get_hostmode(v)->p2m_ga_to_gfn(v, p2m, cr3, ga, q, pfec,
         page_order);
 }
 

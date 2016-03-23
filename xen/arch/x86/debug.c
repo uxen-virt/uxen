@@ -52,7 +52,7 @@ dbg_hvm_va2mfn(dbgva_t vaddr, struct domain *dp, int toaddr,
 
     DBGP2("vaddr:%lx vm%u\n", vaddr, dp->domain_id);
 
-    *gfn = paging_gva_to_gfn(dp->vcpu[0], vaddr, &pfec);
+    *gfn = paging_gva_to_gfn(dp->vcpu[0], vaddr, paging_g2g_query, &pfec);
     if ( *gfn == INVALID_GFN )
     {
         DBGP2("kdb:bad gfn from gva_to_gfn\n");
