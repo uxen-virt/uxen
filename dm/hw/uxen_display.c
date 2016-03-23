@@ -439,7 +439,7 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
         if (sz > UXENDISP_BANK_SIZE)
             return;
 
-        if (w < crtc->xres) {
+        if (fmt == crtc->format && w < crtc->xres) {
             int src_off = 0;
             int dst_off = 0;
             int max_off = crtc->yres * crtc->stride;
@@ -447,6 +447,9 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
                 src_off += crtc->stride;
                 dst_off += stride;
                 if ((src_off > (max_off - stride)) || (dst_off > (max_off - stride)))
+                    break;
+                if ((bank_offset + dst_off + stride) > bank->vram.mapped_len ||
+                    (bank_offset + src_off + stride) > bank->vram.mapped_len)
                     break;
                 memmove(bank->vram.view + bank_offset + dst_off,
                         bank->vram.view + bank_offset + src_off, stride);
@@ -456,7 +459,7 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
         if (bank->len < sz)
             bank_reg_write(s, bank_id, 0, sz);
 
-        if (w > crtc->xres) {
+        if (fmt == crtc->format && w > crtc->xres) {
             int height = h;
             if (h > crtc->yres)
                 height = crtc->yres;
@@ -468,8 +471,11 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
                 if ((src < (bank->vram.view + bank_offset + stride)) ||
                     (dst < (bank->vram.view + bank_offset + stride)))
                     break;
-                memmove(dst, src, crtc->stride);
-                memset(dst + crtc->stride, 0xff, stride - crtc->stride);
+                if ((src + crtc->stride) <= (bank->vram.view + bank->vram.mapped_len) &&
+                    (dst + crtc->stride) <= (bank->vram.view + bank->vram.mapped_len)) {
+                    memmove(dst, src, crtc->stride);
+                    memset(dst + crtc->stride, 0xff, stride - crtc->stride);
+                }
             }
         }
 
@@ -477,7 +483,8 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
             uint8_t* dst = bank->vram.view + bank_offset + (crtc->yres * stride);
             int curr_max = crtc->yres * stride;
             int new_max = h * stride;
-            if (curr_max < new_max)
+            if (curr_max < new_max &&
+                (bank_offset + new_max) < bank->vram.mapped_len)
                 memset(dst, 0xff, new_max - curr_max);
         }
 
