@@ -384,8 +384,6 @@ int guest_remove_page(struct domain *d, unsigned long gmfn)
     if ( test_and_clear_bit(_PGT_pinned, &page->u.inuse.type_info) )
         put_page_and_type(page);
 #endif  /* __UXEN__ */
-            
-    put_allocated_page(d, page);
 
     guest_physmap_remove_page(d, gmfn, mfn, PAGE_ORDER_4K);
 
