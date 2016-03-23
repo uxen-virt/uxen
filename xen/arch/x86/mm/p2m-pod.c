@@ -1677,18 +1677,21 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     if (mfn_retry(smfn)) {
         struct dmreq *dmreq;
         void *dmreq_vcpu_page = NULL;
+        uint32_t dmreq_gpfn;
 
         if (current->target_vmis)
             dmreq = current->target_vmis->vmi_dmreq;
         else
             dmreq = get_dmreq(current);
+        dmreq_gpfn = dmreq->dmreq_gpfn;
+        dmreq->dmreq_gpfn = DMREQ_GPFN_UNUSED;
         if (!dmreq || dmreq_gpfn_error(dmreq->dmreq_gpfn_loaded))
             return out_fail();
 
-        if (gfn_aligned != dmreq->dmreq_gpfn ||
-            !dmreq_gpfn_set(dmreq->dmreq_gpfn_loaded) ||
-            dmreq->dmreq_gpfn != dmreq->dmreq_gpfn_loaded) {
-            if (gfn_aligned == dmreq->dmreq_gpfn) {
+        if (gfn_aligned != dmreq_gpfn ||
+            !dmreq_gpfn_valid(dmreq->dmreq_gpfn_loaded) ||
+            dmreq_gpfn != dmreq->dmreq_gpfn_loaded) {
+            if (gfn_aligned == dmreq_gpfn) {
                 gdprintk(
                     XENLOG_DEBUG, "%s: vm%u.%s%u dmreq gpfn %lx %s "
                     "(dmreq_gpfn %x dmreq_gpfn_loaded %x)\n",
@@ -1697,8 +1700,8 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                     current->domain->domain_id,
                     current->target_vmis ? "dom" : "",
                     current->target_vmis ? 0 : current->vcpu_id, gfn_aligned,
-                    !dmreq_gpfn_set(dmreq->dmreq_gpfn_loaded) ? "spurious" :
-                    "mismatch", dmreq->dmreq_gpfn, dmreq->dmreq_gpfn_loaded);
+                    !dmreq_gpfn_valid(dmreq->dmreq_gpfn_loaded) ? "spurious" :
+                    "mismatch", dmreq_gpfn, dmreq->dmreq_gpfn_loaded);
                 /* DEBUG(); */
             }
 
@@ -1726,8 +1729,8 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             goto out;
         }
 
-        ASSERT(dmreq->dmreq_gpfn == dmreq->dmreq_gpfn_loaded);
-        dmreq->dmreq_gpfn = dmreq->dmreq_gpfn_loaded = DMREQ_GPFN_UNUSED;
+        ASSERT(dmreq_gpfn == dmreq->dmreq_gpfn_loaded);
+        dmreq->dmreq_gpfn_loaded = DMREQ_GPFN_UNUSED;
         if (current->target_vmis)
             dmreq_vcpu_page = current->target_vmis->vmi_dmreq_vcpu_page_va;
         else

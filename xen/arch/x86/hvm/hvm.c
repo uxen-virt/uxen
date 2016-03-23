@@ -374,11 +374,10 @@ void hvm_do_resume(struct vcpu *v)
     check_wakeup_from_wait();
 #endif  /* __UXEN__ */
 
-    if (dmreq_gpfn_set(v->arch.hvm_vcpu.dmreq_gpfn)) {
+    if (dmreq_gpfn_valid(v->arch.hvm_vcpu.dmreq_gpfn)) {
         p2m_type_t pt;
         get_gfn_unshare(v->domain, v->arch.hvm_vcpu.dmreq_gpfn, &pt);
         put_gfn(v->domain, v->arch.hvm_vcpu.dmreq_gpfn);
-        v->arch.hvm_vcpu.dmreq_gpfn = DMREQ_GPFN_UNUSED;
         vcpu_end_shutdown_deferral(v);
     }
 

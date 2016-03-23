@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -7,10 +7,14 @@
 #ifndef _XEN_HVM_DMREQ_H_
 #define _XEN_HVM_DMREQ_H_
 
-#define DMREQ_GPFN_UNUSED ~0
-#define DMREQ_GPFN_ERROR ~1
-#define dmreq_gpfn_set(gpfn) ((gpfn) != DMREQ_GPFN_UNUSED)
+#define DMREQ_GPFN_UNUSED ~0x0
+#define DMREQ_GPFN_ERROR ~0x1
+#define DMREQ_GPFN_INVALID ~0x2
+#define DMREQ_GPFN_SET_MASK ~0x3
+#define dmreq_gpfn_valid(gpfn)                                  \
+    (((gpfn) & DMREQ_GPFN_SET_MASK) != DMREQ_GPFN_SET_MASK)
 #define dmreq_gpfn_error(gpfn) ((gpfn) == DMREQ_GPFN_ERROR)
+#define dmreq_gpfn_invalid(gpfn) ((gpfn) == DMREQ_GPFN_INVALID)
 
 #define DMREQ_GPFN_ACCESS_READ 0
 #define DMREQ_GPFN_ACCESS_WRITE 1

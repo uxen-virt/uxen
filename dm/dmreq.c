@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -44,6 +44,8 @@ dmreq_handle(void *arg)
 {
     int vcpu = (int)(intptr_t)arg;
     struct dmreq *dmreq;
+    uint32_t dmreq_gpfn;
+    uint8_t dmreq_gpfn_access;
 #define ID_SIZE 5
     char id[ID_SIZE + 1] = { };
     int ret;
@@ -59,12 +61,17 @@ dmreq_handle(void *arg)
     /* dprintf("%s: %s dmreq lazy load pfn %x\n", __FUNCTION__, id, */
     /*         dmreq->dmreq_gpfn); */
 
-    if (dmreq->dmreq_gpfn_loaded != DMREQ_GPFN_UNUSED)
-        debug_break();
+    if (dmreq_gpfn_valid(dmreq->dmreq_gpfn_loaded))
+        dmreq->dmreq_gpfn_loaded = DMREQ_GPFN_INVALID;
 
-    ret = vm_lazy_load_page(dmreq->dmreq_gpfn,
+    dmreq_gpfn_access = dmreq->dmreq_gpfn_access;
+    dmreq_gpfn = dmreq->dmreq_gpfn;
+    if (!dmreq_gpfn_valid(dmreq_gpfn))
+        return;
+
+    ret = vm_lazy_load_page(dmreq_gpfn,
                             dmreq_state.vcpu_pages + (vcpu << UXEN_PAGE_SHIFT),
-                            dmreq->dmreq_gpfn_access ==
+                            dmreq_gpfn_access ==
                             DMREQ_GPFN_ACCESS_WRITE ? 1 : 0);
     if (ret < 0)
         warnx("%s: %s dmreq lazy load pfn %x failed", __FUNCTION__, id,
