@@ -2047,6 +2047,7 @@ int hvm_hap_nested_page_fault(unsigned long gpa,
         goto out_put_gfn;
     }
 
+#ifndef __UXEN__
     /* Check access permissions first, then handle faults */
     if (mfn_valid_page(mfn_x(mfn))) {
         int violation = 0;
@@ -2082,13 +2083,12 @@ int hvm_hap_nested_page_fault(unsigned long gpa,
 
         if ( violation )
         {
-#ifndef __UXEN__
             p2m_mem_access_check(gpa, gla_valid, gla, access_r, access_w, access_x);
-#endif  /* __UXEN__ */
             rc = 1;
             goto out_put_gfn;
         }
     }
+#endif  /* __UXEN__ */
 
     /*
      * If this GFN is emulated MMIO or marked as read-only, pass the fault

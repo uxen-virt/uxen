@@ -717,6 +717,7 @@ struct xen_domctl_gdbsx_domstatus {
     uint32_t         vcpu_ev;    /* if yes, what event? */
 };
 
+#ifndef __UXEN__
 /*
  * Memory event operations
  */
@@ -813,6 +814,7 @@ struct xen_domctl_mem_sharing_op {
 };
 typedef struct xen_domctl_mem_sharing_op xen_domctl_mem_sharing_op_t;
 DEFINE_XEN_GUEST_HANDLE(xen_domctl_mem_sharing_op_t);
+#endif  /* __UXEN__ */
 
 #if defined(__i386__) || defined(__x86_64__)
 /* XEN_DOMCTL_setvcpuextstate */
@@ -970,8 +972,10 @@ struct xen_domctl {
         struct xen_domctl_set_target        set_target;
         struct xen_domctl_subscribe         subscribe;
         struct xen_domctl_debug_op          debug_op;
+#ifndef __UXEN__
         struct xen_domctl_mem_event_op      mem_event_op;
         struct xen_domctl_mem_sharing_op    mem_sharing_op;
+#endif  /* __UXEN__ */
 #if defined(__i386__) || defined(__x86_64__)
         struct xen_domctl_cpuid             cpuid;
         struct xen_domctl_vcpuextstate      vcpuextstate;
