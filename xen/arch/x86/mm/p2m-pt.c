@@ -1093,7 +1093,7 @@ pod_retry_l2:
     mfn = _mfn(INVALID_MFN);
 
     if (is_p2m_zeroing_any(q)) {
-        if (p2m_pod_zero_share(p2m, gfn, PAGE_ORDER_4K, q, l1e))
+        if (p2m_pod_zero_share(p2m, gfn, q, l1e))
             goto out;
         /* set t/mfn below */
 

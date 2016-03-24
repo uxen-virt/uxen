@@ -872,7 +872,7 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
 
     if (is_p2m_zeroing_any(q)) {
         ASSERT(i == 0);
-        if (p2m_pod_zero_share(p2m, gfn, PAGE_ORDER_4K, q, ept_entry))
+        if (p2m_pod_zero_share(p2m, gfn, q, ept_entry))
             goto out;
         /* set t/a/mfn below */
 

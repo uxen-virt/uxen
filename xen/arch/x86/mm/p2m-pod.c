@@ -2400,7 +2400,7 @@ p2m_clear_gpfn_from_mapcache(struct p2m_domain *p2m, unsigned long gfn,
 
 int
 p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
-                   unsigned int order, p2m_query_t q, void *entry)
+                   p2m_query_t q, void *entry)
 {
     struct domain *d = p2m->domain;
     mfn_t smfn;
@@ -2417,8 +2417,6 @@ p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
      * won't start until we're done. */
     if (unlikely(d->is_dying))
         goto out;
-
-    ASSERT(order == PAGE_ORDER_4K);
 
     /* parse entry with lock held */
     smfn = p2m->parse_entry(entry, 0, &p2mt, &p2ma);
@@ -2438,7 +2436,7 @@ p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
 
         smfn = page_to_mfn(p);
         p2mt = p2m_ram_rw;
-        set_p2m_entry(p2m, gfn, smfn, order, p2mt, p2m->default_access);
+        set_p2m_entry(p2m, gfn, smfn, PAGE_ORDER_4K, p2mt, p2m->default_access);
         put_page(p);
         /* page zeroed below in p2m_is_ram(p2mt) */
     }
@@ -2456,13 +2454,13 @@ p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
 
     if (mfn_zero_page(smfn)) {
         if (mfn_x(smfn) == mfn_x(shared_zero_page))
-            set_p2m_entry(p2m, gfn, _mfn(SHARED_ZERO_MFN), order,
+            set_p2m_entry(p2m, gfn, _mfn(SHARED_ZERO_MFN), PAGE_ORDER_4K,
                           p2m_populate_on_demand, p2m->default_access);
         ret = 0;
         goto out;
     }
 
-    set_p2m_entry(p2m, gfn, _mfn(SHARED_ZERO_MFN), order,
+    set_p2m_entry(p2m, gfn, _mfn(SHARED_ZERO_MFN), PAGE_ORDER_4K,
 		  p2m_populate_on_demand, p2m->default_access);
 
     ret = 0;
@@ -2477,7 +2475,7 @@ p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
         t.gfn = gfn;
         t.mfn = mfn_x(smfn);
         t.d = d->domain_id;
-        t.order = order;
+        t.order = PAGE_ORDER_4K;
         
         __trace_var(TRC_MEM_POD_ZERO_RECLAIM, 0, sizeof(t), &t);
     }
@@ -2635,7 +2633,7 @@ guest_physmap_mark_populate_on_demand_contents(
             free_domheap_page(new_page);
             return -1;
         }
-        guest_physmap_add_page(d, gpfn, mfn_x(mfn), PAGE_ORDER_4K);
+        guest_physmap_add_page(d, gpfn, mfn_x(mfn));
         put_page(new_page);
 #ifndef __UXEN__
         if (!paging_mode_translate(d))

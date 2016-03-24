@@ -551,22 +551,20 @@ void p2m_final_teardown(struct domain *d);
 
 /* Add a page to a domain's p2m table */
 int guest_physmap_add_entry(struct domain *d, unsigned long gfn,
-                            unsigned long mfn, unsigned int page_order, 
-                            p2m_type_t t);
+                            unsigned long mfn, p2m_type_t t);
 
 /* Untyped version for RAM only, for compatibility */
 static inline int guest_physmap_add_page(struct domain *d,
                                          unsigned long gfn,
-                                         unsigned long mfn,
-                                         unsigned int page_order)
+                                         unsigned long mfn)
 {
-    return guest_physmap_add_entry(d, gfn, mfn, page_order, p2m_ram_rw);
+    return guest_physmap_add_entry(d, gfn, mfn, p2m_ram_rw);
 }
 
 /* Remove a page from a domain's p2m table */
 void guest_physmap_remove_page(struct domain *d,
                                unsigned long gfn,
-                               unsigned long mfn, unsigned int page_order);
+                               unsigned long mfn);
 
 /* Set a p2m range as populate-on-demand */
 int
@@ -791,7 +789,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
 /* Called by p2m code when re-sharing a zero page */
 int
 p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
-                   unsigned int order, p2m_query_t q, void *entry);
+                   p2m_query_t q, void *entry);
 
 void
 p2m_pod_free_page(struct page_info *page, va_list ap);

@@ -616,20 +616,14 @@ p2m_mapcache_map(struct domain *d, xen_pfn_t gpfn, mfn_t mfn)
 }
 
 static void
-p2m_remove_page(struct p2m_domain *p2m, unsigned long gfn, unsigned long mfn,
-                unsigned int page_order)
+p2m_remove_page(struct p2m_domain *p2m, unsigned long gfn, unsigned long mfn)
 {
-    unsigned long i;
-    mfn_t mfn_return;
-    p2m_type_t t;
-    p2m_access_t a;
 
     if ( !paging_mode_translate(p2m->domain) )
     {
 #ifndef __UXEN__
         if ( need_iommu(p2m->domain) )
-            for ( i = 0; i < (1 << page_order); i++ )
-                iommu_unmap_page(p2m->domain, mfn + i);
+            iommu_unmap_page(p2m->domain, mfn);
 #endif  /* __UXEN__ */
         return;
     }
@@ -637,43 +631,38 @@ p2m_remove_page(struct p2m_domain *p2m, unsigned long gfn, unsigned long mfn,
     if (p2m_debug_more)
     P2M_DEBUG("removing gfn=%#lx mfn=%#lx\n", gfn, mfn);
 
+#ifndef __UXEN__
     if ( __mfn_valid(mfn) )
     {
-        for ( i = 0; i < (1UL << page_order); i++ )
-        {
-            mfn_return = p2m->get_entry(p2m, gfn + i, &t, &a, p2m_query, NULL);
-#ifndef __UXEN__
-            if ( !p2m_is_grant(t) )
-                set_gpfn_from_mfn(mfn+i, INVALID_M2P_ENTRY);
-#endif  /* __UXEN__ */
-            ASSERT( !p2m_is_valid(t) || mfn + i == mfn_x(mfn_return) );
-        }
+        mfn_t mfn_return;
+        p2m_type_t t;
+        p2m_access_t a;
+
+        mfn_return = p2m->get_entry(p2m, gfn, &t, &a, p2m_query, NULL);
+        ASSERT( !p2m_is_valid(t) || mfn == mfn_x(mfn_return) );
     }
-    set_p2m_entry(p2m, gfn, _mfn(INVALID_MFN), page_order, p2m_invalid, p2m->default_access);
+#endif  /* __UXEN__ */
+    set_p2m_entry(p2m, gfn, _mfn(INVALID_MFN), PAGE_ORDER_4K, p2m_invalid,
+                  p2m->default_access);
 }
 
 void
 guest_physmap_remove_page(struct domain *d, unsigned long gfn,
-                          unsigned long mfn, unsigned int page_order)
+                          unsigned long mfn)
 {
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
     p2m_lock(p2m);
     audit_p2m(p2m, 1);
-    p2m_remove_page(p2m, gfn, mfn, page_order);
+    p2m_remove_page(p2m, gfn, mfn);
     audit_p2m(p2m, 1);
     p2m_unlock(p2m);
 }
 
 int
 guest_physmap_add_entry(struct domain *d, unsigned long gfn,
-                        unsigned long mfn, unsigned int page_order, 
-                        p2m_type_t t)
+                        unsigned long mfn, p2m_type_t t)
 {
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
-    unsigned long i;
-#ifndef __UXEN__
-    unsigned long ogfn;
-#endif  /* __UXEN__ */
     p2m_type_t ot;
     p2m_access_t a;
     mfn_t omfn;
@@ -683,23 +672,17 @@ guest_physmap_add_entry(struct domain *d, unsigned long gfn,
     {
 #ifndef __UXEN__
         if (need_iommu(d) && p2m_is_ram_rw(t)) {
-            for ( i = 0; i < (1 << page_order); i++ )
+            rc = iommu_map_page(d, mfn, mfn, IOMMUF_readable|IOMMUF_writable);
+            if ( rc != 0 )
             {
-                rc = iommu_map_page(
-                    d, mfn + i, mfn + i, IOMMUF_readable|IOMMUF_writable);
-                if ( rc != 0 )
-                {
-                    while ( i-- > 0 )
-                        iommu_unmap_page(d, mfn + i);
-                    return rc;
-                }
+                return rc;
             }
         }
 #endif  /* __UXEN__ */
         return 0;
     }
 
-    rc = p2m_gfn_check_limit(d, gfn, page_order);
+    rc = p2m_gfn_check_limit(d, gfn, PAGE_ORDER_4K);
     if ( rc != 0 )
         return rc;
 
@@ -709,118 +692,65 @@ guest_physmap_add_entry(struct domain *d, unsigned long gfn,
     if (p2m_debug_more)
     P2M_DEBUG("adding gfn=%#lx mfn=%#lx\n", gfn, mfn);
 
-    /* First, remove m->p mappings for existing p->m mappings */
-    for ( i = 0; i < (1UL << page_order); i++ )
+    /* First, remove mapcache mapping for existing gpfn mapping */
+    omfn = p2m->get_entry(p2m, gfn, &ot, &a, p2m_query, NULL);
+#ifndef __UXEN__
+    if ( p2m_is_grant(ot) )
     {
-        omfn = p2m->get_entry(p2m, gfn + i, &ot, &a, p2m_query, NULL);
-#ifndef __UXEN__
-        if ( p2m_is_grant(ot) )
-        {
-            /* Really shouldn't be unmapping grant maps this way */
-            domain_crash(d);
-            p2m_unlock(p2m);
-            
-            return -EINVAL;
-        }
-        else
-#endif  /* __UXEN__ */
-        if (p2m_is_ram(ot)) {
-            ASSERT(mfn_valid(omfn));
-            if (test_bit(_PGC_mapcache, &mfn_to_page(omfn)->count_info) &&
-                p2m_clear_gpfn_from_mapcache(p2m, gfn + i, omfn)) {
-                int ret;
-                /* caller beware that briefly the page seen through
-                 * the userspace mapping is the new mapping while the
-                 * old mapping is still present in the p2m -- ok since
-                 * this operation is only supported while the VM is
-                 * suspended */
-                if (!d->is_shutting_down || !__mfn_valid(mfn)) {
-                    if (__mfn_valid(mfn))
-                        gdprintk(XENLOG_WARNING,
-                                 "%s: can't clear mapcache mapped mfn %lx"
-                                 " for vm%u gpfn %lx new mfn %lx\n",
-                                 __FUNCTION__, mfn_x(omfn), d->domain_id,
-                                 gfn + i, mfn);
-                    domain_crash(d);
-                    p2m_unlock(p2m);
-                    return -EINVAL;
-                }
-                ret = p2m_mapcache_map(d, gfn + i, _mfn(mfn));
-                if (ret) {
-                    domain_crash(d);
-                    p2m_unlock(p2m);
-                    return -EINVAL;
-                }
-            }
-#ifndef __UXEN__
-            set_gpfn_from_mfn(mfn_x(omfn), INVALID_M2P_ENTRY);
-#endif  /* __UXEN__ */
-        }
-    }
+        /* Really shouldn't be unmapping grant maps this way */
+        domain_crash(d);
+        p2m_unlock(p2m);
 
-#ifndef __UXEN__
-    /* Then, look for m->p mappings for this range and deal with them */
-    for ( i = 0; i < (1UL << page_order); i++ )
-    {
-        if ( page_get_owner(__mfn_to_page(mfn + i)) != d )
-            continue;
-        ogfn = mfn_to_gfn(d, _mfn(mfn+i));
-        if (
-#if defined(__x86_64__) && !defined(__UXEN__)
-            (ogfn != 0x5555555555555555L)
-#else
-            (ogfn != 0x55555555L)
-#endif
-            && (ogfn != INVALID_M2P_ENTRY)
-            && (ogfn != gfn + i) )
-        {
-            /* This machine frame is already mapped at another physical
-             * address */
-            P2M_DEBUG("aliased! mfn=%#lx, old gfn=%#lx, new gfn=%#lx\n",
-                      mfn + i, ogfn, gfn + i);
-            omfn = p2m->get_entry(p2m, ogfn, &ot, &a, p2m_query, NULL);
-            if ( p2m_is_ram(ot) )
-            {
-                ASSERT(mfn_valid(omfn));
-                P2M_DEBUG("old gfn=%#lx -> mfn %#lx\n",
-                          ogfn , mfn_x(omfn));
-                if ( mfn_x(omfn) == (mfn + i) )
-                    p2m_remove_page(p2m, ogfn, mfn + i, 0);
+        return -EINVAL;
+    }
+#endif  /* __UXEN__ */
+    if (p2m_is_ram(ot)) {
+        ASSERT(mfn_valid(omfn));
+        if (test_bit(_PGC_mapcache, &mfn_to_page(omfn)->count_info) &&
+            p2m_clear_gpfn_from_mapcache(p2m, gfn, omfn)) {
+            int ret;
+            /* caller beware that briefly the page seen through
+             * the userspace mapping is the new mapping while the
+             * old mapping is still present in the p2m -- ok since
+             * this operation is only supported while the VM is
+             * suspended */
+            if (!d->is_shutting_down || !__mfn_valid(mfn)) {
+                if (__mfn_valid(mfn))
+                    gdprintk(XENLOG_WARNING,
+                             "%s: can't clear mapcache mapped mfn %lx"
+                             " for vm%u gpfn %lx new mfn %lx\n",
+                             __FUNCTION__, mfn_x(omfn), d->domain_id,
+                             gfn, mfn);
+                domain_crash(d);
+                p2m_unlock(p2m);
+                return -EINVAL;
+            }
+            ret = p2m_mapcache_map(d, gfn, _mfn(mfn));
+            if (ret) {
+                domain_crash(d);
+                p2m_unlock(p2m);
+                return -EINVAL;
             }
         }
     }
-#endif  /* __UXEN__ */
 
     /* Now, actually do the two-way mapping */
     if ( __mfn_valid(mfn) )
     {
-        if ( !set_p2m_entry(p2m, gfn, _mfn(mfn), page_order, t, p2m->default_access) )
+        if ( !set_p2m_entry(p2m, gfn, _mfn(mfn), PAGE_ORDER_4K, t,
+                            p2m->default_access) )
         {
             rc = -EINVAL;
             goto out; /* Failed to update p2m, bail without updating m2p. */
         }
-#ifndef __UXEN__
-        if ( !p2m_is_grant(t) )
-        {
-            for ( i = 0; i < (1UL << page_order); i++ )
-                set_gpfn_from_mfn(mfn+i, gfn+i);
-        }
-#endif  /* __UXEN__ */
     }
     else
     {
         gdprintk(XENLOG_WARNING, "Adding bad mfn to p2m map (%#lx -> %#lx)\n",
                  gfn, mfn);
-        if ( !set_p2m_entry(p2m, gfn, _mfn(INVALID_MFN), page_order, 
+        if ( !set_p2m_entry(p2m, gfn, _mfn(INVALID_MFN), PAGE_ORDER_4K,
                             p2m_invalid, p2m->default_access) )
             rc = -EINVAL;
-#ifndef __UXEN__
-        else
-        {
-            p2m->pod.entry_count -= pod_count; /* Lock: p2m */
-            BUG_ON(p2m->pod.entry_count < 0);
-        }
-#endif  /* __UXEN__ */
     }
 
 out:

@@ -4347,7 +4347,7 @@ static int create_grant_p2m_mapping(uint64_t addr, unsigned long frame,
     else
         p2mt = p2m_grant_map_rw;
     rc = guest_physmap_add_entry(current->domain,
-                                 addr >> PAGE_SHIFT, frame, PAGE_ORDER_4K, p2mt);
+                                 addr >> PAGE_SHIFT, frame, p2mt);
     if ( rc )
         return GNTST_general_error;
     else
@@ -4406,7 +4406,7 @@ static int replace_grant_p2m_mapping(
                  type, mfn_x(old_mfn), frame);
         return GNTST_general_error;
     }
-    guest_physmap_remove_page(d, gfn, frame, PAGE_ORDER_4K);
+    guest_physmap_remove_page(d, gfn, frame);
 
     put_gfn(d, gfn);
     return GNTST_okay;
@@ -5109,21 +5109,21 @@ static int xenmem_add_to_physmap_once(
     {
         if ( is_xen_mfn(prev_mfn) )
             /* Xen heap frames are simply unhooked from this phys slot. */
-            guest_physmap_remove_page(d, xatp->gpfn, prev_mfn, PAGE_ORDER_4K);
+            guest_physmap_remove_page(d, xatp->gpfn, prev_mfn);
         else if ( is_host_mfn(prev_mfn) ) {
             /* Host frames are unhooked from this phys slot and have
              * their PGC_host_page flag cleared. */
-            guest_physmap_remove_page(d, xatp->gpfn, prev_mfn, PAGE_ORDER_4K);
+            guest_physmap_remove_page(d, xatp->gpfn, prev_mfn);
         } else if ( p2m_is_ram(pt) )
             /* Normal domain memory is freed, to avoid leaking memory. */
             guest_remove_page(d, xatp->gpfn);
         else if (p2m_is_pod(pt))
             /* pod pages are simply unhooked from this phys slot. */
-            guest_physmap_remove_page(d, xatp->gpfn, prev_mfn, PAGE_ORDER_4K);
+            guest_physmap_remove_page(d, xatp->gpfn, prev_mfn);
         else {
             gdprintk(XENLOG_ERR, "unexpected type for gpfn %"PRI_xen_pfn
                      " type %x\n", xatp->gpfn, pt);
-            guest_physmap_remove_page(d, xatp->gpfn, prev_mfn, PAGE_ORDER_4K);
+            guest_physmap_remove_page(d, xatp->gpfn, prev_mfn);
         }
     }
     put_gfn(d, xatp->gpfn);
@@ -5146,8 +5146,7 @@ static int xenmem_add_to_physmap_once(
         break;
     case XENMAPSPACE_shared_info:
         if (d->shared_info_gpfn != INVALID_GFN) {
-            guest_physmap_remove_page(d, d->shared_info_gpfn, mfn,
-                                      PAGE_ORDER_4K);
+            guest_physmap_remove_page(d, d->shared_info_gpfn, mfn);
             d->shared_info_gpfn = INVALID_GFN;
         }
         get_page_fast(mfn_to_page(mfn), NULL);
@@ -5159,7 +5158,7 @@ static int xenmem_add_to_physmap_once(
             put_gfn(d, gfn);
             goto out;
         }
-        guest_physmap_remove_page(d, xatp->idx, mfn, PAGE_ORDER_4K);
+        guest_physmap_remove_page(d, xatp->idx, mfn);
         /* ref on mfn taken above */
         break;
     default:
@@ -5168,13 +5167,13 @@ static int xenmem_add_to_physmap_once(
         gpfn = get_gpfn_from_mfn(mfn);
         ASSERT( gpfn != SHARED_M2P_ENTRY );
         if ( gpfn != INVALID_M2P_ENTRY )
-            guest_physmap_remove_page(d, gpfn, mfn, PAGE_ORDER_4K);
+            guest_physmap_remove_page(d, gpfn, mfn);
 #endif  /* __UXEN__ */
         break;
     }
 
     /* Map at new location. */
-    rc = guest_physmap_add_page(d, xatp->gpfn, mfn, PAGE_ORDER_4K);
+    rc = guest_physmap_add_page(d, xatp->gpfn, mfn);
     put_page(__mfn_to_page(mfn));
 
     /* In the XENMAPSPACE_gmfn, we took a ref and locked the p2m at the top */

@@ -158,14 +158,26 @@ static void populate_physmap(struct memop_args *a)
         }
         else if (a->memflags & MEMF_populate_from_buffer_compressed)
         {
-            if (a->extent_order)
+            if (a->extent_order) {
+                gdprintk(XENLOG_INFO, "order=%d not supported for extent:"
+                         " id=vm%u memflags=%x (%ld of %d)\n",
+                         a->extent_order, d->domain_id, a->memflags,
+                         i, a->nr_extents);
                 goto out;
+            }
             if (guest_physmap_mark_populate_on_demand_contents(
                     d, gpfn, a->buffer, &a->buffer_pos) < 0)
                 goto out;
         }
         else
         {
+            if (a->extent_order) {
+                gdprintk(XENLOG_INFO, "order=%d not supported for extent:"
+                         " id=vm%u memflags=%x (%ld of %d)\n",
+                         a->extent_order, d->domain_id, a->memflags,
+                         i, a->nr_extents);
+                goto out;
+            }
             page = alloc_domheap_pages(d, a->extent_order, a->memflags);
             if ( unlikely(page == NULL) ) 
             {
@@ -180,16 +192,11 @@ static void populate_physmap(struct memop_args *a)
             }
 
             mfn = page_to_mfn(page);
-            guest_physmap_add_page(d, gpfn, mfn, a->extent_order);
+            guest_physmap_add_page(d, gpfn, mfn);
             put_page(page);
 
             if ( !paging_mode_translate(d) )
             {
-#ifndef __UXEN__
-                for ( j = 0; j < (1 << a->extent_order); j++ )
-                    set_gpfn_from_mfn(mfn + j, gpfn + j);
-#endif  /* __UXEN__ */
-
                 /* Inform the domain of the new page's machine address. */ 
                 if ( unlikely(__copy_to_guest_offset(a->extent_list, i, &mfn, 1)) )
                     goto out;
@@ -335,14 +342,14 @@ int guest_remove_page(struct domain *d, unsigned long gmfn)
 #ifndef __UXEN__
     if ( unlikely(p2m_is_paging(p2mt)) )
     {
-        guest_physmap_remove_page(d, gmfn, mfn, PAGE_ORDER_4K);
+        guest_physmap_remove_page(d, gmfn, mfn);
         p2m_mem_paging_drop_page(d, gmfn);
         put_gfn(d, gmfn);
         return 1;
     }
 #else  /* __UXEN__ */
     if (__mfn_retry(mfn)) {
-        guest_physmap_remove_page(d, gmfn, mfn, PAGE_ORDER_4K);
+        guest_physmap_remove_page(d, gmfn, mfn);
         put_gfn(d, gmfn);
         return 1;
     }
@@ -365,7 +372,7 @@ int guest_remove_page(struct domain *d, unsigned long gmfn)
      * free the page) */
     if(p2m_is_shared(p2mt))
     {
-        guest_physmap_remove_page(d, gmfn, mfn, PAGE_ORDER_4K);
+        guest_physmap_remove_page(d, gmfn, mfn);
         put_page_and_type(page);
         put_gfn(d, gmfn);
         return 1;
@@ -385,7 +392,7 @@ int guest_remove_page(struct domain *d, unsigned long gmfn)
         put_page_and_type(page);
 #endif  /* __UXEN__ */
 
-    guest_physmap_remove_page(d, gmfn, mfn, PAGE_ORDER_4K);
+    guest_physmap_remove_page(d, gmfn, mfn);
 
     put_page(page);
     put_gfn(d, gmfn);
@@ -605,7 +612,7 @@ static long memory_exchange(XEN_GUEST_HANDLE(xen_memory_exchange_t) arg)
             gfn = mfn_to_gmfn(d, mfn);
             /* Pages were unshared above */
             BUG_ON(SHARED_M2P(gfn));
-            guest_physmap_remove_page(d, gfn, mfn, PAGE_ORDER_4K);
+            guest_physmap_remove_page(d, gfn, mfn);
             put_page(page);
         }
 
@@ -648,6 +655,7 @@ static long memory_exchange(XEN_GUEST_HANDLE(xen_memory_exchange_t) arg)
 
             mfn = page_to_mfn(page);
             guest_physmap_add_page(d, gpfn, mfn, exch.out.extent_order);
+#error exch.out.extent_order
             /* XXX put ref on mfn */
 
             if ( !paging_mode_translate(d) )
