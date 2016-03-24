@@ -1745,13 +1745,8 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             }
 
             p = alloc_domheap_page(d, PAGE_ORDER_4K);
-            if (!p) {
-                if (tmpl->is_dying) {
-                    d->arch.hvm_domain.params[HVM_PARAM_TEMPLATE_LAZY_LOAD] = 0;
-                    goto dead_template;
-                }
+            if (!p)
                 return out_of_memory();
-            }
             mfn = page_to_mfn(p);
 
             target = map_domain_page_direct(mfn_x(mfn));
@@ -1786,8 +1781,13 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                 orig_q = current->arch.hvm_vcpu.dmreq_query;
 
             p = alloc_domheap_page(tmpl, PAGE_ORDER_4K);
-            if (!p)
+            if (!p) {
+                if (tmpl->is_dying) {
+                    d->arch.hvm_domain.params[HVM_PARAM_TEMPLATE_LAZY_LOAD] = 0;
+                    goto dead_template;
+                }
                 return out_of_memory();
+            }
             mfn = page_to_mfn(p);
 
             if (!op2m_locked) {
