@@ -623,14 +623,12 @@ TYPE_SAFE(unsigned long,mfn);
  * will use it to store a "physical" frame number to give the appearance of
  * contiguous (or near contiguous) physical memory.
  */
-#ifndef __UXEN__
 #undef  machine_to_phys_mapping
 #define machine_to_phys_mapping  ((unsigned long *)RDWR_MPT_VIRT_START)
 #define INVALID_M2P_ENTRY        (~0UL)
 #define VALID_M2P(_e)            (!((_e) & (1UL<<(BITS_PER_LONG-1))))
 #define SHARED_M2P_ENTRY         (~0UL - 1UL)
 #define SHARED_M2P(_e)           ((_e) == SHARED_M2P_ENTRY)
-#endif  /* __UXEN__ */
 
 #ifdef CONFIG_COMPAT
 #define compat_machine_to_phys_mapping ((unsigned int *)RDWR_COMPAT_MPT_VIRT_START)
@@ -643,7 +641,6 @@ TYPE_SAFE(unsigned long,mfn);
      machine_to_phys_mapping[(mfn)] = (entry));                \
     })
 #else
-#ifndef __UXEN__
 #define _set_gpfn_from_mfn(mfn, pfn) ({                        \
     struct domain *d = page_get_owner(__mfn_to_page(mfn));     \
     if(d && (d == dom_cow))                                    \
@@ -651,7 +648,6 @@ TYPE_SAFE(unsigned long,mfn);
     else                                                       \
         machine_to_phys_mapping[(mfn)] = (pfn);                \
     })
-#endif  /* __UXEN__ */
 #endif
 
 /*

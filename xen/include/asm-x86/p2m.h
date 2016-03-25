@@ -402,38 +402,6 @@ struct p2m_domain {
     /* Highest guest frame that's ever been mapped in the p2m */
     unsigned long max_mapped_pfn;
 
-    /* Populate-on-demand variables
-     * NB on locking.  {super,single,count} are
-     * covered by d->page_alloc_lock, since they're almost always used in
-     * conjunction with that functionality.  {entry_count} is covered by
-     * the domain p2m lock, since it's almost always used in conjunction
-     * with changing the p2m tables.
-     *
-     * At this point, both locks are held in two places.  In both,
-     * the order is [p2m,page_alloc]:
-     * + p2m_pod_decrease_reservation() calls p2m_pod_cache_add(),
-     *   which grabs page_alloc
-     * + p2m_pod_demand_populate() grabs both; the p2m lock to avoid
-     *   double-demand-populating of pages, the page_alloc lock to
-     *   protect moving stuff from the PoD cache to the domain page list.
-     *
-     * We enforce this lock ordering through a construct in mm-locks.h.
-     * This demands, however, that we store the previous lock-ordering
-     * level in effect before grabbing the page_alloc lock. The unlock
-     * level is stored in the arch section of the domain struct.
-     */
-    struct {
-        struct page_list_head super,   /* List of superpages                */
-                         single;       /* Non-super lists                   */
-#ifndef __UXEN__
-        int              count,        /* # of pages in cache lists         */
-                         entry_count;  /* # of pages in p2m marked pod      */
-#endif  /* __UXEN__ */
-        unsigned         reclaim_super; /* Last gpfn of a scan */
-        unsigned         reclaim_single; /* Last gpfn of a scan */
-        unsigned         max_guest;    /* gpfn of max guest demand-populate */
-    } pod;
-
     uint16_t p2m_l1_cache_id;
 
     struct dspage_store *dsps;

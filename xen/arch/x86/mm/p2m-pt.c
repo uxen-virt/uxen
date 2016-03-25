@@ -1539,11 +1539,11 @@ void audit_p2m(struct p2m_domain *p2m, int strict_m2p)
 
     }
 
-    if ( entry_count != p2m->pod.entry_count )
+    if ( entry_count != atomic_read(&d->pod_pages) )
     {
         printk("%s: refcounted entry count %d, audit count %d!\n",
                __func__,
-               p2m->pod.entry_count,
+               atomic_read(&d->pod_pages),
                entry_count);
         BUG();
     }

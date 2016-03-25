@@ -725,12 +725,7 @@ static void free_heap_pages(
 #endif  /* __UXEN__ */
 
         /* This page is not a guest frame any more. */
-#ifndef __UXEN__
-        page_set_owner(&pg[i], NULL); /* set_gpfn_from_mfn snoops pg owner */
-        set_gpfn_from_mfn(mfn + i, INVALID_M2P_ENTRY);
-#else  /* __UXEN__ */
         pg[i].domain = DOMID_ANON;
-#endif  /* __UXEN__ */
 
         /*
          * Cannot assume that count_info == 0, as there are some corner cases
@@ -1295,12 +1290,7 @@ free_host_page(struct page_info *pg)
     int cpu = smp_processor_id();
 
     /* This page is not a guest frame any more. */
-#ifndef __UXEN__
-    page_set_owner(pg, NULL); /* set_gpfn_from_mfn snoops pg owner */
-    set_gpfn_from_mfn(page_to_mfn(pg), INVALID_M2P_ENTRY);
-#else  /* __UXEN__ */
     pg->domain = DOMID_ANON;
-#endif  /* __UXEN__ */
 
     /*
      * Cannot assume that count_info == 0, as there are some corner cases
