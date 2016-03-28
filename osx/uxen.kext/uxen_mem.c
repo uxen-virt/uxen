@@ -1595,7 +1595,7 @@ map_host_pages(void *va, size_t len, uint64_t *gpfns,
     ret = copyin((const user_addr_t)gpfns, um->gpfns,
                  gpfn_num * sizeof(gpfns[0]));
     if (ret) {
-        fail_msg("copyin failed: %d/0x%p/0x%p", gpfn_num, gpfns, um->gpfns);
+        fail_msg("copyin failed: %zu/0x%p/0x%p", gpfn_num, gpfns, um->gpfns);
         goto out;
     }
 
