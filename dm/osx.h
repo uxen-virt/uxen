@@ -8,6 +8,7 @@
 #define _OSX_H_
 
 #include <inttypes.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <stddef.h>
 
