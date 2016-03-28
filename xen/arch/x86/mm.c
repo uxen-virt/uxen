@@ -5666,7 +5666,7 @@ long arch_memory_op(int op, XEN_GUEST_HANDLE(void) arg)
         }
 
         for (nr = 0; nr < zp_arg.nr_desc; nr++) {
-            if (nr > XEN_MEMORY_SET_ZERO_PAGE_DESC_MAX)
+            if (nr >= XEN_MEMORY_SET_ZERO_PAGE_DESC_MAX)
                 break;
             if (!zp_arg.zp[nr].entry)
                 continue;
