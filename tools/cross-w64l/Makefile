@@ -23,6 +23,9 @@ GCC_VERSION = 4.9.3
 MINGW64_DISTFILES = mingw-w64-v2.0.1.tar.gz
 MINGW64_DIR = mingw-w64-v2.0.1
 
+DWARFCV_DISTFILES = dwarfcv-1.1.tar.gz
+DWARFCV_DIR = dwarfcv-1.1
+
 VPATH = $(SRCDIR)/patches:$(XEN_DISTFILES)
 
 BUILD_ENV = PATH="$(TOOLSDIR)/bin:$$PATH"
@@ -33,12 +36,12 @@ endif
 
 BINUTILS_ENV = $(subst CPPFLAGS,CFLAGS,$(BUILD_ENV))
 
-all: gcc/.core-installed
+all: gcc/.core-installed dwarfcv/.installed
 
 .PHONY: all clean
 
 $(BUILDDIR:%=x)clean::
-	rm -rf binutils gcc mingw64
+	rm -rf binutils gcc mingw64 dwarfcv
 
 binutils/.installed: binutils/.built
 	cd $(@D)/build && $(BINUTILS_ENV) \
@@ -197,12 +200,50 @@ mingw64/.extracted: $(MINGW64_DISTFILES)
 	cat $< | (cd $(@D) && tar zxf -)
 	@touch $@
 
-.SECONDARY: binutils/.exists gcc/.exists mingw64/.exists
+DWARFCV_MAKE_ARGS = TOOLSDIR=$(TOOLSDIR)
+DWARFCV_MAKE_ARGS += HOST_WINDOWS=$(HOST_WINDOWS)
+DWARFCV_MAKE_ARGS += SRCDIR=../$(DWARFCV_DIR)
+
+dwarfcv/.installed: dwarfcv/.built
+	cd $(@D)/build && $(BUILD_ENV) \
+	  $(MAKE) install $(DWARFCV_MAKE_ARGS) PREFIX=$(TOOLSDIR)
+	@touch $@
+
+dwarfcv/.built: dwarfcv/.configured
+	cd $(@D)/build && $(BUILD_ENV) \
+	  $(MAKE) $(DWARFCV_MAKE_ARGS)
+	@touch $@
+
+dwarfcv/.configured: $(TOOLSDIR)/bin/.exists $(INSTALL_DIR)/.exists
+dwarfcv/.configured: dwarfcv/.patched
+	@rm -rf $(@D)/build
+	@mkdir -p $(@D)/build
+	@cd $(@D)/build && ln -s ../$(DWARFCV_DIR)/Makefile ./
+	@touch $@
+
+dwarfcv/.patched: dwarfcv/.extracted
+dwarfcv/.patched: $(DWARFCV_PATCHES)
+	@for p in $(filter-out dwarfcv/.extracted,$^); \
+        do \
+          echo Applying $$p; \
+          cat $$p | (cd $(@D)/$(DWARFCV_DIR) && patch -p1); \
+        done
+	@touch $@
+
+dwarfcv/.extracted: $(DWARFCV_DISTFILES)
+	@rm -rf $(@D)
+	@mkdir -p $(@D)
+	cat $< | (cd $(@D) && tar zxf -)
+	@touch $@
+
+.SECONDARY: binutils/.exists gcc/.exists mingw64/.exists dwarfcv/.exists
 binutils-%: binutils/.%
 	@ :
 gcc-%: gcc/.%
 	@ :
 mingw64-%: mingw64/.%
+	@ :
+dwarfcv-%: dwarfcv/.%
 	@ :
 
 endif # MAKENOW
