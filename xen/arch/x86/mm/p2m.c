@@ -415,8 +415,6 @@ int p2m_alloc_table(struct p2m_domain *p2m)
     d->arch.hvm_domain.vmx.ept_control.asr  =
         pagetable_get_pfn(p2m_get_pagetable(p2m));
 
-    p2m_unlock(p2m);
-
 #ifndef __UXEN__
     if ( hap_enabled(d) )
         iommu_share_p2m_table(d);
@@ -430,6 +428,7 @@ int p2m_alloc_table(struct p2m_domain *p2m)
 #endif  /* __UXEN__ */
     if ( !set_p2m_entry(p2m, 0, _mfn(INVALID_MFN), PAGE_ORDER_4K,
                         p2m_invalid, p2m->default_access) ) {
+        p2m_unlock(p2m);
         P2M_PRINTK("failed to initialize p2m table gfn 0\n");
         return -ENOMEM;
     }
@@ -437,6 +436,8 @@ int p2m_alloc_table(struct p2m_domain *p2m)
 #ifndef __UXEN__
     p2m->defer_nested_flush = 0;
 #endif  /* __UXEN__ */
+
+    p2m_unlock(p2m);
 
     P2M_PRINTK("p2m table initialised\n");
     return 0;
