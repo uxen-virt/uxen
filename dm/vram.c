@@ -41,11 +41,11 @@
 #endif
 
 int
-vram_init(struct vram_desc *v, size_t len)
+vram_init(struct vram_desc *v, size_t max_len)
 {
     memset(v, 0, sizeof (*v));
     v->hdl = NULL_HANDLE;
-    v->len = len;
+    v->max_len = max_len;
 
     return 0;
 }
@@ -131,11 +131,11 @@ shm_free(uintptr_t handle, void *view, size_t len)
 int
 vram_suspend(struct vram_desc *v)
 {
-    if (v->mapped_len) {
+    if (v->shm_len) {
         v->last_gfn = v->gfn;
         if (vram_unmap(v))
             err(1, "vram_unmap failed!\n");
-        shm_free(v->hdl, v->view, v->mapped_len);
+        shm_free(v->hdl, v->view, v->shm_len);
         v->hdl = NULL_HANDLE;
         v->view = NULL;
         if (v->notify)
@@ -150,14 +150,14 @@ vram_resume(struct vram_desc *v)
     int ret = 0;
     void *buf;
 
-    if (v->mapped_len) {
-        v->view = shm_malloc(v->mapped_len, &v->hdl);
+    if (v->shm_len) {
+        v->view = shm_malloc(v->shm_len, &v->hdl);
         if (!v->view)
             return -1;
 
         ret = vram_map(v, v->last_gfn);
         if (ret) {
-            shm_free(v->hdl, v->view, v->mapped_len);
+            shm_free(v->hdl, v->view, v->shm_len);
             return ret;
         }
         v->last_gfn = 0;
@@ -167,7 +167,7 @@ vram_resume(struct vram_desc *v)
             if (vm_save_read_dm_offset(buf, v->file_offset, v->lz4_len) ==
                     v->lz4_len) {
                 ret = LZ4_decompress_safe(buf, (void *)v->view, v->lz4_len,
-                                          v->mapped_len);
+                                          v->shm_len);
 
                 if (ret < 0)
                     debug_printf("failed to decompress vram data, r=%d\n", ret);
@@ -183,28 +183,28 @@ vram_resume(struct vram_desc *v)
 }
 
 int
-vram_resize(struct vram_desc *v, uint32_t new_mapped_len)
+vram_resize(struct vram_desc *v, uint32_t new_shm_len)
 {
     int ret;
     uint32_t gfn;
     uintptr_t new_handle, old_handle;
     void *new_view, *old_view;
-    size_t old_mapped_len, l;
+    size_t old_shm_len, l;
 
-    DPRINTF("vram_resize len=%"PRIdSIZE" new_len=%d\n", v->mapped_len,
-            new_mapped_len);
+    DPRINTF("vram_resize len=%"PRIdSIZE" new_len=%d\n", v->shm_len,
+            new_shm_len);
 
-    if (new_mapped_len > v->len) {
+    if (new_shm_len > v->max_len) {
         debug_printf("%s: invalid mapping length %d (max %"PRIdSIZE")\n",
-                     __FUNCTION__, new_mapped_len, v->len);
+                     __FUNCTION__, new_shm_len, v->max_len);
         return -1;
     }
 
-    if (new_mapped_len == v->mapped_len)
+    if (new_shm_len == v->shm_len)
         return 0;
 
     gfn = v->gfn;
-    if (gfn && v->mapped_len) {
+    if (gfn && v->shm_len) {
         ret = vram_unmap(v);
         if (ret) {
             debug_printf("%s: vram_unmap failed\n", __FUNCTION__);
@@ -212,8 +212,8 @@ vram_resize(struct vram_desc *v, uint32_t new_mapped_len)
         }
     }
 
-    if (new_mapped_len) {
-        new_view = shm_malloc(new_mapped_len, &new_handle);
+    if (new_shm_len) {
+        new_view = shm_malloc(new_shm_len, &new_handle);
         if (!new_view) {
             debug_printf("%s: shm_malloc failed\n", __FUNCTION__);
             return -1;
@@ -225,22 +225,22 @@ vram_resize(struct vram_desc *v, uint32_t new_mapped_len)
 
     old_handle = v->hdl;
     old_view = v->view;
-    old_mapped_len = v->mapped_len;
+    old_shm_len = v->shm_len;
 
-    l = (new_mapped_len > old_mapped_len) ? old_mapped_len : new_mapped_len;
+    l = (new_shm_len > old_shm_len) ? old_shm_len : new_shm_len;
     memcpy(new_view, v->view, l);
 
     v->hdl = new_handle;
     v->view = new_view;
-    v->mapped_len = new_mapped_len;
+    v->shm_len = new_shm_len;
 
     if (v->notify)
         v->notify(v, v->priv);
 
-    if (old_mapped_len)
-        shm_free(old_handle, old_view, old_mapped_len);
+    if (old_shm_len)
+        shm_free(old_handle, old_view, old_shm_len);
 
-    if (gfn && new_mapped_len) {
+    if (gfn && new_shm_len) {
         ret = vram_map(v, gfn);
         if (ret) {
             debug_printf("%s: vram_map failed\n", __FUNCTION__);
@@ -252,9 +252,9 @@ vram_resize(struct vram_desc *v, uint32_t new_mapped_len)
 }
 
 int
-vram_alloc(struct vram_desc *v, size_t mapped_len)
+vram_alloc(struct vram_desc *v, size_t shm_len)
 {
-    return vram_resize(v, mapped_len);
+    return vram_resize(v, shm_len);
 }
 
 int
@@ -278,9 +278,10 @@ vram_unmap(struct vram_desc *v)
         if (ret) {
             debug_printf("%s: uxen_unmap_host_pages failed: %d,"
                          " gfn=%x view=%p len=%"PRIdSIZE"\n",
-                         __FUNCTION__, errno, v->gfn, v->view, v->mapped_len);
+                         __FUNCTION__, errno, v->gfn, v->view, v->shm_len);
             return -1;
         }
+        v->mapped_len = 0;
     }
     v->gfn = 0;
 
@@ -292,25 +293,21 @@ vram_map(struct vram_desc *v, uint32_t gfn)
 {
     int ret;
 
-    DPRINTF("vram_map gfn=%x\n", gfn);
-
-    if (gfn == v->gfn)
-        return 0;
-
     if (v->gfn && v->mapped_len) {
         ret = uxen_unmap_host_pages(uxen_handle, v->view, v->mapped_len);
         if (ret) {
             debug_printf("%s: uxen_unmap_host_pages failed: %d,"
                          " gfn=%x view=%p len=%"PRIdSIZE"\n",
-                         __FUNCTION__, errno, v->gfn, v->view, v->mapped_len);
+                         __FUNCTION__, errno, v->gfn, v->view, v->shm_len);
             return -1;
         }
+        v->mapped_len = 0;
         v->gfn = 0;
     }
 
-    if (v->mapped_len) {
+    if (v->shm_len) {
         uint64_t *gpfns;
-        size_t gpfn_num = v->mapped_len >> UXEN_PAGE_SHIFT;
+        size_t gpfn_num = v->shm_len >> UXEN_PAGE_SHIFT;
         int idx;
 
         gpfns = (uint64_t *)malloc(gpfn_num * sizeof(gpfns[0]));
@@ -323,14 +320,15 @@ vram_map(struct vram_desc *v, uint32_t gfn)
         for (idx = 0; idx < gpfn_num; ++idx)
             gpfns[idx] = gfn + idx;
 
-        ret = uxen_map_host_pages(uxen_handle, v->view, v->mapped_len, gpfns);
+        ret = uxen_map_host_pages(uxen_handle, v->view, v->shm_len, gpfns);
         free(gpfns);
         if (ret) {
             debug_printf("%s: uxen_map_host_pages failed: %d,"
                          " view=%p len=%"PRIdSIZE"\n",
-                         __FUNCTION__, errno, v->view, v->mapped_len);
+                         __FUNCTION__, errno, v->view, v->shm_len);
             return -1;
         }
+        v->mapped_len = v->shm_len;
     }
     v->gfn = gfn;
 
@@ -373,12 +371,12 @@ put_vram(QEMUFile *f, void *pv, size_t size)
 {
     struct vram_desc *v = pv;
 
-    qemu_put_be32(f, v->mapped_len);
-    if (v->mapped_len) {
+    qemu_put_be32(f, v->shm_len);
+    if (v->shm_len) {
         size_t lz4_len = 0;
-        void *p = malloc(LZ4_compressBound(v->mapped_len));
+        void *p = malloc(LZ4_compressBound(v->shm_len));
 
-        lz4_len = LZ4_compress((void *)v->view, p, v->mapped_len);
+        lz4_len = LZ4_compress((void *)v->view, p, v->shm_len);
 
         qemu_put_be32(f, lz4_len);
         v->lz4_len = lz4_len;

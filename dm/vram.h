@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -12,7 +12,8 @@
 struct vram_desc {
     uintptr_t hdl;
     uint8_t *view;
-    size_t len;
+    size_t max_len;
+    size_t shm_len;
     size_t mapped_len;
     uint32_t gfn;
     uint32_t last_gfn;
@@ -23,14 +24,14 @@ struct vram_desc {
     void *priv;
 };
 
-int vram_init(struct vram_desc *v, size_t len);
-int vram_alloc(struct vram_desc *v, size_t mapped_len);
+int vram_init(struct vram_desc *v, size_t max_len);
+int vram_alloc(struct vram_desc *v, size_t shm_len);
 int vram_release(struct vram_desc *v);
 int vram_suspend(struct vram_desc *v);
 int vram_resume(struct vram_desc *v);
 int vram_unmap(struct vram_desc *v);
 int vram_map(struct vram_desc *v, uint32_t gfn);
-int vram_resize(struct vram_desc *v, uint32_t new_mapped_len);
+int vram_resize(struct vram_desc *v, uint32_t new_shm_len);
 
 void vram_register_change(struct vram_desc *v,
                      void (*notify)(struct vram_desc *, void *),
