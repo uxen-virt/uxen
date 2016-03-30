@@ -205,6 +205,8 @@
 #define HVM_PARAM_DMREQ_VCPU_PFN 40
 
 #define HVM_PARAM_ZERO_PAGE 41
+#define HVM_PARAM_ZERO_PAGE_enable_setup 0x1
+#define HVM_PARAM_ZERO_PAGE_enable_load 0x2
 
 #define HVM_PARAM_TEMPLATE_LAZY_LOAD 42
 

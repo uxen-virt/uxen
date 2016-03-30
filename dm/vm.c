@@ -464,7 +464,11 @@ vm_init(const char *loadvm, int restore_mode)
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_PAE_ENABLED, vm_pae);
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_VIRIDIAN, vm_viridian);
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_HPET_ENABLED, vm_hpet);
-    xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_ZERO_PAGE, vm_zero_page);
+    xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_ZERO_PAGE,
+                     vm_zero_page ?
+                     (HVM_PARAM_ZERO_PAGE_enable_load |
+                      (vm_zero_page_setup ?
+                       HVM_PARAM_ZERO_PAGE_enable_setup : 0)) : 0);
 
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_RESTRICTED_X86_EMUL,
                      vm_restricted_x86_emul);

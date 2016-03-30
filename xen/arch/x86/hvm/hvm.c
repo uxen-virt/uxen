@@ -887,7 +887,9 @@ int hvm_domain_initialise(struct domain *d)
         d->arch.hvm_domain.params[HVM_PARAM_COMPRESSED_GC] &=
             ~HVM_PARAM_COMPRESSED_GC_decompressed;
 
-    d->arch.hvm_domain.params[HVM_PARAM_ZERO_PAGE] = 1;
+    d->arch.hvm_domain.params[HVM_PARAM_ZERO_PAGE] =
+        HVM_PARAM_ZERO_PAGE_enable_setup |
+        HVM_PARAM_ZERO_PAGE_enable_load;
 
     d->arch.hvm_domain.params[HVM_PARAM_TEMPLATE_LAZY_LOAD] = 1;
 
@@ -1687,7 +1689,8 @@ hvm_load_zp(struct domain *d, hvm_domain_context_t *h)
     if (hvm_load_entry(ZP, h, ctxt) != 0)
         return -EINVAL;
 
-    if (d->arch.hvm_domain.params[HVM_PARAM_ZERO_PAGE] &&
+    if ((d->arch.hvm_domain.params[HVM_PARAM_ZERO_PAGE] &
+         HVM_PARAM_ZERO_PAGE_enable_load) &&
         ctxt != &dummy && d->zp_ctxt[d->zp_nr].entry) {
         d->zp_nr++;
         hvm_set_zp_prefix(d);
