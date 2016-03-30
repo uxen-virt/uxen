@@ -24,10 +24,10 @@
 #define DSPS_slot(s)                                                    \
     ((((s) + DSPS_slot_data_offset + DSPS_DSIZE - 1) / DSPS_DSIZE) - 1)
 #define DSPS_slot_size(slot) (((slot) + 1) * DSPS_DSIZE)
-#define DSPS_slot_data_size(slot)                               \
-    ((((slot) + 1) * DSPS_DSIZE) - DSPS_slot_data_offset)
+#define DSPS_slot_data_size(slot)                       \
+    (DSPS_slot_size(slot) - DSPS_slot_data_offset)
 #define DSPS_DSIZE_roundup(s)                           \
-    ((s) - (((s) - 1) % DSPS_DSIZE) + (DSPS_DSIZE - 1))
+    ((s) - (((s) + DSPS_DSIZE - 1) % DSPS_DSIZE) + (DSPS_DSIZE - 1))
 
 void
 dsps_init(struct domain *d)
