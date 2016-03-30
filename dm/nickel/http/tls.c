@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -158,6 +158,12 @@ static struct cert_ctx_t * cert_init(void);
 static int cert_parse(struct cert_ctx_t *cert_ctx, const uint8_t *buf, size_t len);
 static int clt_hello_parse(struct tls_state_t *tls, const uint8_t *buf, size_t len);
 
+static void hs_rec_reset(struct tls_rec *rec)
+{
+    rec->hs_type = -1;
+    rec->hs_idx = 0;
+    rec->hs_len = 0;
+}
 
 static size_t tls_rec_read(struct tls_state_t *tls, const uint8_t *buf, size_t len, bool is_client)
 {
@@ -212,9 +218,6 @@ static size_t tls_rec_read(struct tls_state_t *tls, const uint8_t *buf, size_t l
         if (rec->hidx < sizeof(struct tls_rec_header))
             goto out;
 
-        rec->hs_type = -1;
-        rec->hs_len = 0;
-        rec->hs_idx = 0;
         rec->hlen = ntohs(rec->header.len);
         TLSL5("TLS rec len %lu, type %d", (unsigned long) rec->hlen, (int) rec->header.type);
 
@@ -296,10 +299,9 @@ tls_handshake_read(struct tls_state_t *tls, const uint8_t *buf, size_t len, bool
             continue;
         }
 
+        /* do data ? */
         if (rec->hs_len == 0) {
-            rec->hs_type = -1;
-            rec->hs_idx = 0;
-
+            hs_rec_reset(rec);
             continue;
         }
 
@@ -328,6 +330,10 @@ tls_handshake_read(struct tls_state_t *tls, const uint8_t *buf, size_t len, bool
 
         ADV_REC(cp);
         rec->hs_len -= cp;
+
+        /* termination */
+        if (rec->hs_len == 0)
+            hs_rec_reset(rec);
     }
 
 out:
@@ -658,6 +664,8 @@ struct tls_state_t * tls_new(struct nickel *ni, const struct http_ctx *hp)
         warnx("%s: malloc", __FUNCTION__);
     tls->ni = ni;
     tls->hp = hp;
+    hs_rec_reset(&tls->clr);
+    hs_rec_reset(&tls->svr);
     tls->refcnt = 1;
     return tls;
 }
