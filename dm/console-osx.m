@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Michael Dales <michael@digitalflapjack.com>
  * SPDX-License-Identifier: ISC
  */
@@ -342,7 +342,7 @@ vram_changed(struct gui_state *state, struct vram_desc *v)
 
     s->vram_view = v->view;
     s->vram_handle = (int)v->hdl;
-    s->vram_len = v->mapped_len;
+    s->vram_len = v->shm_len;
 
     do_dpy_trigger_refresh(NULL);
 }

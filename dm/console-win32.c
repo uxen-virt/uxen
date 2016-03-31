@@ -1457,7 +1457,7 @@ vram_changed(struct gui_state *state, struct vram_desc *v)
 
     s->vram_view = v->view;
     s->vram_handle = (HANDLE)v->hdl;
-    s->vram_size = v->mapped_len;
+    s->vram_size = v->shm_len;
 
     do_dpy_trigger_refresh(NULL);
 }
