@@ -103,9 +103,9 @@ verify_mapping(void *_va, uxen_pfn_t *pfns, int len, const char *fn, int line)
 {
     int idx;
     uint64_t va = (uint64_t)_va;
-    extern uint64_t physmap_base;
+    extern uint64_t physmap_size;
 
-    if (!physmap_base)
+    if (!physmap_size)
         return 0;
 
     for (idx = 0; idx < len; idx++) {

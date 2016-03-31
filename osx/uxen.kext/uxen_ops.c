@@ -681,12 +681,6 @@ uxen_op_init(struct fd_assoc *fda)
         goto out;
     }
 
-    if (physmap_init()) {
-        fail_msg("physmap_init failed");
-        ret = EINVAL;
-        goto out;
-    }
-
     rb_tree_init(&uxen_devext->de_vm_info_rbtree, &vm_info_rbtree_ops);
 
     max_pfn = get_max_pfn();

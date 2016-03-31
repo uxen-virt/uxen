@@ -47,7 +47,11 @@ struct sysctl_oid sysctl__hw_uxen = {
 enum uxen_mode {
     MODE_IDLE,
     MODE_SYMS_LOADED,
+#if !defined(__UXEN_EMBEDDED__)
     MODE_LOADED,
+#else
+    MODE_LOADED = MODE_SYMS_LOADED,
+#endif
     MODE_FAILED,
     MODE_INITIALIZED,
     MODE_SHUTDOWN,
@@ -377,9 +381,7 @@ uxen_ioctl(u_long cmd, struct fd_assoc *fda, struct vm_info *vmi,
         break;
     case UXENINIT:
         CHECK_MODE_NOT(MODE_FAILED, "UXENINIT");
-#if !defined(__UXEN_EMBEDDED__)
         CHECK_MODE(MODE_LOADED, "UXENINIT");
-#endif
         ret = uxen_op_init(fda);
         if (ret) {
             SET_MODE(MODE_FAILED);
@@ -550,6 +552,7 @@ uxen_ioctl(u_long cmd, struct fd_assoc *fda, struct vm_info *vmi,
         ret = EINVAL;
         break;
     case UXENLOGGING:
+        CHECK_MODE(MODE_SYMS_LOADED, "UXENLOGGING");
         IOCTL_VM_ADMIN_CHECK("UXENLOGGING");
         ret = init_fd_assoc_events("UXENLOGGING", fda);
         if (ret)
@@ -792,6 +795,12 @@ uxen_module_start_finish(void)
     int ret;
 
     sysctl_register_oid(&sysctl__hw_uxen);
+
+    if (physmap_init()) {
+        fail_msg("physmap_init failed");
+        ret = EINVAL;
+        goto out;
+    }
 
     ret = uxen_mem_init();
     if (ret) {
