@@ -507,6 +507,9 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
         }
         pdi->mfn = mfn_x(*tmfn);
         atomic_inc(&d->template.decompressed_shared);
+        if (!(page_owner->arch.hvm_domain.params[HVM_PARAM_COMPRESSED_GC] &
+              HVM_PARAM_COMPRESSED_GC_decompressed))
+            get_page_fast(p, page_owner);
         p2m_unlock(p2m);
         perfc_incr(decompressed_shareable);
         update_host_memory_saved(-PAGE_SIZE);
@@ -533,6 +536,12 @@ p2m_teardown_compressed_one_cb(void *_pdi, uint16_t size, struct domain *d,
 {
     struct page_data_info *pdi = _pdi;
     int *decomp = opaque;
+
+    /* if GC_decompressed is enabled, then no reference is held on the
+     * page for pdi->mfn */
+    if (d->arch.hvm_domain.params[HVM_PARAM_COMPRESSED_GC] &
+        HVM_PARAM_COMPRESSED_GC_decompressed)
+        return 0;
 
     if (pdi->mfn && get_page(__mfn_to_page(pdi->mfn), d)) {
         uxen_mfn_t mfn = pdi->mfn;
@@ -1256,14 +1265,10 @@ p2m_pod_free_page(struct page_info *page, va_list ap)
     uint16_t offset;
     struct page_data_info *pdi;
 
-    owner = page_get_owner(page);
-    if (!(owner->arch.hvm_domain.params[HVM_PARAM_COMPRESSED_GC] &
-          HVM_PARAM_COMPRESSED_GC_decompressed))
-        goto out_no_lock;
-
     d = va_arg(ap, struct domain *);
     gpfn = va_arg(ap, unsigned long);
 
+    owner = page_get_owner(page);
     p2m = p2m_get_hostp2m(owner);
 
     if (d->clone_of != owner)
