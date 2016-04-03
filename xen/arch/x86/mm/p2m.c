@@ -1008,6 +1008,11 @@ unsigned long paging_gva_to_gfn(struct vcpu *v,
     struct p2m_domain *hostp2m = p2m_get_hostp2m(v->domain);
     const struct paging_mode *hostmode = paging_get_hostmode(v);
 
+    if (!hostmode) {
+        *pfec = 0;
+        return INVALID_GFN;
+    }
+
 #ifndef __UXEN__
     if ( is_hvm_domain(v->domain)
         && paging_mode_hap(v->domain) 
