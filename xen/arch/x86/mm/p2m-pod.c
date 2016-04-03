@@ -664,7 +664,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     ASSERT(mfn_x(smfn) != INVALID_MFN);
 
     if (mfn_x(smfn) == 0) {
-        p2m_lock(op2m);
+        p2m_lock_recursive(op2m);
         op2m_locked = 1;
 
         smfn = op2m->get_entry(op2m, gfn_aligned, &t, &a, p2m_query, NULL);
@@ -841,7 +841,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             mfn = page_to_mfn(p);
 
             if (!op2m_locked) {
-                p2m_lock(op2m);
+                p2m_lock_recursive(op2m);
                 op2m_locked = 1;
             }
 
@@ -983,7 +983,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             mfn_t omfn;
 
             ASSERT(!op2m_locked);
-            p2m_lock(op2m);
+            p2m_lock_recursive(op2m);
             omfn = op2m->get_entry(op2m, gfn_aligned, &t, &a, p2m_query, NULL);
             if (!p2m_mfn_is_page_data(omfn)) {
                 p2m_unlock(op2m);
