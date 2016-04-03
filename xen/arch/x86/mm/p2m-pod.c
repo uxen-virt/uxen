@@ -962,6 +962,10 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             }
             return out_fail();
         }
+        if (op2m_locked) {
+            p2m_unlock(op2m);
+            op2m_locked = 0;
+        }
         check_immutable(q, d, gfn_aligned);
     } else if (/* d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] && */
                page_get_owner(mfn_to_page(smfn)) == d) {
@@ -969,6 +973,10 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
            access to previously decompressed page which was mapped
            read-only */
         mfn = smfn;
+        if (op2m_locked) {
+            p2m_unlock(op2m);
+            op2m_locked = 0;
+        }
     } else {
         /* check if template page is a decompressed page, only shared
          * in one clone */
@@ -1018,6 +1026,11 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             update_host_memory_saved(PAGE_SIZE);
             p2m_pod_stat_update(d->clone_of);
             goto out_reassigned;
+        }
+
+        if (op2m_locked) {
+            p2m_unlock(op2m);
+            op2m_locked = 0;
         }
 
         p = alloc_domheap_page(d, PAGE_ORDER_4K);
