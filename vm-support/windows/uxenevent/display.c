@@ -85,10 +85,12 @@ SendResolutionToHidDriver()
     HDEVINFO hdev;
     BOOL res;
     BYTE buffer[1024];
-    DWORD size = sizeof buffer;
+    DWORD size;
     PSP_DEVICE_INTERFACE_DETAIL_DATA pdidd = (PSP_DEVICE_INTERFACE_DETAIL_DATA)buffer;
     HANDLE devhdl = INVALID_HANDLE_VALUE;
     struct virt_mode mode = {virtual_w, virtual_h, current_w, current_h};
+    DWORD last_error;
+    DWORD dev_idx = 0;
 
     hdev = SetupDiGetClassDevs(&UXENHID_IFACE_GUID, 0, 0, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
     if (INVALID_HANDLE_VALUE == hdev) {
@@ -96,32 +98,43 @@ SendResolutionToHidDriver()
         goto exit;
     }
 
-    res = SetupDiEnumDeviceInterfaces(hdev, 0, &UXENHID_IFACE_GUID, 0, &did);
-    if (!res) {
-        warnx("SetupDiEnumDeviceInterfaces failed");
-        goto exit;
-    }
+    for (;;) {
+        res = SetupDiEnumDeviceInterfaces(hdev, 0, &UXENHID_IFACE_GUID, dev_idx, &did);
+        last_error = GetLastError();
+        if (!res && (last_error != ERROR_NO_MORE_ITEMS)) {
+            warnx("SetupDiEnumDeviceInterfaces failed");
+            goto exit;
+        }
 
-    pdidd->cbSize = sizeof *pdidd;
-    res = SetupDiGetDeviceInterfaceDetail(hdev, &did, pdidd, size, &size, 0);
-    if (!res) {
-        warnx("SetupDiGetDeviceInterfaceDetail failed");
-        goto exit;
-    }
+        if (last_error == ERROR_NO_MORE_ITEMS)
+            break;
 
-    devhdl = CreateFile(pdidd->DevicePath, GENERIC_READ | GENERIC_WRITE,
-                        FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
-                        FILE_ATTRIBUTE_NORMAL, NULL);
-    if (INVALID_HANDLE_VALUE == devhdl) {
-        warnx("CreateFile failed");
-        goto exit;
-    }
+        pdidd->cbSize = sizeof *pdidd;
+        size = sizeof buffer;
+        res = SetupDiGetDeviceInterfaceDetail(hdev, &did, pdidd, size, &size, 0);
+        if (!res) {
+            warnx("SetupDiGetDeviceInterfaceDetail failed");
+            goto exit;
+        }
 
-    res = DeviceIoControl(devhdl, IOCTL_UXENHID_SET_VIRTUAL_MODE,
-                          &mode, sizeof mode, NULL, 0, &size, NULL);
-    if (!res) {
-        warnx("DeviceIoControl failed");
-        goto exit;
+        devhdl = CreateFile(pdidd->DevicePath, GENERIC_READ | GENERIC_WRITE,
+                            FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
+                            FILE_ATTRIBUTE_NORMAL, NULL);
+        if (INVALID_HANDLE_VALUE == devhdl) {
+            warnx("CreateFile failed");
+            goto exit;
+        }
+
+        res = DeviceIoControl(devhdl, IOCTL_UXENHID_SET_VIRTUAL_MODE,
+                              &mode, sizeof mode, NULL, 0, &size, NULL);
+        if (!res) {
+            warnx("DeviceIoControl failed");
+            goto exit;
+        }
+
+        CloseHandle(devhdl);
+        devhdl = INVALID_HANDLE_VALUE;
+        dev_idx++;
     }
 
 exit:

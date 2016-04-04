@@ -23,7 +23,6 @@ void uxenhid_unload(PDRIVER_OBJECT drvobj);
 #pragma alloc_text(INIT, DriverEntry)
 #endif
 
-static LONG CreateCnt;
 static DRIVER_DISPATCH *ClassCreate;
 static DRIVER_DISPATCH *ClassClose;
 static DRIVER_DISPATCH *ClassDeviceControl;
@@ -101,12 +100,12 @@ uxenhid_add_device(PDRIVER_OBJECT drvobj, PDEVICE_OBJECT devobj)
 NTSTATUS
 uxenhid_create_close(PDEVICE_OBJECT devobj, PIRP irp)
 {
-    if (irp->Flags & IRP_CREATE_OPERATION) {
-        if (InterlockedIncrement(&CreateCnt) == 1)
+    if (irp->RequestorMode == KernelMode) {
+        if (irp->Flags & IRP_CREATE_OPERATION) {
             return ClassCreate(devobj, irp);
-    } else {
-        if (InterlockedDecrement(&CreateCnt) == 0)
+        } else {
             return ClassClose(devobj, irp);
+        }
     }
 
     irp->IoStatus.Information = 0;
