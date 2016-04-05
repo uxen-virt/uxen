@@ -97,6 +97,10 @@ uxenhid_add_device(PDRIVER_OBJECT drvobj, PDEVICE_OBJECT devobj)
     return status;
 }
 
+/*
+ * We need to intercept dispatcher create/close to be able to connect to miniport
+ * driver from user mode. HID class driver block such attempts.
+ */
 NTSTATUS
 uxenhid_create_close(PDEVICE_OBJECT devobj, PIRP irp)
 {
