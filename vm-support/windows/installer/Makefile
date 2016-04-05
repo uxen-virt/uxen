@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2015, Bromium, Inc.
+# Copyright 2012-2016, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -29,7 +29,6 @@ UXENV4VLIB_DIR = $(DISTDIR_VM_SUPPORT)/uxenv4vlib
 UXENV4VGUEST_DIR = $(DISTDIR_VM_SUPPORT)/uxenv4vguest
 UXENNET_DIR = $(DISTDIR_VM_SUPPORT)/uxennet
 UXENNULLNET_DIR = $(DISTDIR_VM_SUPPORT)/uxennullnet
-UXENPRELOAD_DIR = $(DISTDIR_VM_SUPPORT)/uxenpreload
 #UXENZEROSHARE_DIR = $(DISTDIR_VM_SUPPORT)/uxenzeroshare
 UXENHID_DIR = $(DISTDIR_VM_SUPPORT)/uxenhid
 
@@ -70,7 +69,6 @@ WIX_INCLUDES = -delevatedir=$(ELEVATE_DIR) \
 	       -duxennetdir=$(UXENNET_DIR) \
 	       -duxennullnetdir=$(UXENNULLNET_DIR) \
 	       -duxensvcdir=$(UXENSVC_DIR) \
-	       -duxenpreloaddir=$(UXENPRELOAD_DIR) \
 	       -dWin64=$(WIN64) \
 	       -duxenhiddir=$(UXENHID_DIR)
 #	       -duxenstorfltdir=$(UXENSTORFLT_DIR)
@@ -91,7 +89,6 @@ WIX_DEPS = $(ELEVATE_DIR)/elevate.exe \
 	   $(UXENSF_DIR)/uxensf.sys \
 	   $(UXENSTOR_DIR)/uxenstor.sys \
 	   $(UXENSVC_DIR)/uxensvc.exe \
-	   $(UXENPRELOAD_DIR)/uxenpreload.dll \
 	   $(UXENHID_DIR)/uxenhid.sys
 #	   $(UXENSTORFLT_DIR)/uxenstorflt.sys
 #	   $(UXENZEROSHARE_DIR)/uxenzeroshare.sys
@@ -148,8 +145,6 @@ $(UXENSVC_DIR)/uxensvc.exe:
 	$(MAKE) -C $(SRCDIR)/../uxensvc dist
 $(ELEVATE_DIR)/elevate.exe:
 	$(MAKE) -C $(SRCDIR)/../elevate dist
-$(UXENPRELOAD_DIR)/uxenpreload.dll:
-	$(MAKE) -C $(SRCDIR)/../uxenpreload dist
 #$(UXENZEROSHAREDIR)/uxenzeroshare.sys:
 #	$(MAKE) -C $(SRCDIR)/../uxenzeroshare dist
 $(UXENHID_DIR)/uxenhid.sys:

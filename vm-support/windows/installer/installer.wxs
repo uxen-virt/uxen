@@ -108,19 +108,6 @@
                     </Component>
                 </Directory>
 -->
-                <Directory Id='uxenpreload' Name='uxenpreload'>
-                    <Component Id="uxenpreload" Guid="9e8c676d-135b-4e5f-985c-b8df2c9db90f" Win64="$(var.Win64)">
-                        <File Id="uxenpreload.dll" Name="uxenpreload.dll" DiskId="1" Source="$(var.uxenpreloaddir)/uxenpreload.dll" />
-                        <RegistryValue Root="HKLM" Action="write" Key="Software\Microsoft\Windows NT\CurrentVersion\Windows" Name="AppInit_DLLs" Value="[!uxenpreload.dll]" Type="string" />
-                        <RegistryValue Root="HKLM" Action="write" Key="Software\Microsoft\Windows NT\CurrentVersion\Windows" Name="LoadAppInit_DLLs" Value="1" Type="integer" />
-                        <?if $(var.Win64)=yes ?>
-                            <File Id="uxenpreload32.dll" Name="uxenpreload32.dll" DiskId="1" Source="$(var.uxenpreloaddir)/uxenpreload32.dll" />
-                            <RegistryValue Root="HKLM" Action="write" Key="Software\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Windows" Name="AppInit_DLLs" Value="[!uxenpreload32.dll]" Type="string" />
-                            <RegistryValue Root="HKLM" Action="write" Key="Software\Wow6432Node\Microsoft\Windows NT\CurrentVersion\Windows" Name="LoadAppInit_DLLs" Value="1" Type="integer" />
-                        <?endif?>
-                        <File Id="inject.exe" Name="inject.exe" DiskId="1" Source="$(var.uxenpreloaddir)/inject.exe" />
-                    </Component>
-                </Directory>
                 <Directory Id='uxenv4vguest' Name='uxenv4vguest'>
                     <Component Id="uxenv4vguest" Guid="3dba13b3-b439-46d1-914b-a2095218766a" Win64="$(var.Win64)">
                         <File Id="uxenv4vguest.sys" Name="uxenv4vguest.sys" DiskId="1" Source="$(var.uxenv4vguestdir)/uxenv4vguest.sys" />
@@ -190,7 +177,6 @@
             <ComponentRef Id='uxenkmdod' />
             <ComponentRef Id='uxennet' />
             <ComponentRef Id='uxennullnet' />
-            <ComponentRef Id='uxenpreload' />
             <ComponentRef Id='uxenhid' />
 <!--            <ComponentRef Id='uxenzeroshare' /> -->
         </Feature>
