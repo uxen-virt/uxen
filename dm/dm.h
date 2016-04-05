@@ -42,7 +42,6 @@ extern uint64_t vm_timer_mode;
 extern uint64_t vm_tsc_mode;
 extern uint64_t vm_vga_mb;
 extern uint64_t vm_vga_mb_mapped;
-extern char *vm_vga_shm_name;
 extern uint64_t vm_pae;
 extern uint64_t vm_viridian;
 extern uint64_t vm_virt_mode_change;

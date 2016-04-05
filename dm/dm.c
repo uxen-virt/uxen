@@ -80,7 +80,6 @@ uint64_t vm_timer_mode = 0;
 uint64_t vm_tsc_mode = 2;
 uint64_t vm_vga_mb = 0;
 uint64_t vm_vga_mb_mapped = 0;
-char *vm_vga_shm_name = NULL;
 uint64_t vm_pae = 1;
 uint64_t vm_viridian = 1;
 uint64_t vm_virt_mode_change = 0;
