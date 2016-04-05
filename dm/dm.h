@@ -40,7 +40,6 @@ extern uint64_t vm_vcpus;
 extern uint8_t vm_vcpu_avail[];
 extern uint64_t vm_timer_mode;
 extern uint64_t vm_tsc_mode;
-extern uint64_t vm_vga_mb;
 extern uint64_t vm_vga_mb_mapped;
 extern uint64_t vm_pae;
 extern uint64_t vm_viridian;

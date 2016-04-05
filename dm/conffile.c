@@ -730,7 +730,6 @@ struct config_option config_options[] = {
     { "uuid", co_set_uuid, NULL },
     { "v4v-storage", co_set_boolean_opt, &vm_v4v_storage },
     { "vcpus", co_set_integer_opt, &vm_vcpus },
-    { "vga-memory", co_set_integer_opt, &vm_vga_mb },
     { "vga-memory-mapped", co_set_integer_opt, &vm_vga_mb_mapped },
     { "viridian", co_set_integer_opt, &vm_viridian },
     { "virt-mode-change", co_set_integer_opt, &vm_virt_mode_change },

@@ -429,7 +429,6 @@ void
 vm_init(const char *loadvm, int restore_mode)
 {
     uint64_t ram_size = vm_mem_mb << 20;
-    uint32_t vram_size = vm_vga_mb << 20;
     struct hvm_info_table *hvm_info;
     uint8_t *hvm_info_page;
     int i;
@@ -450,7 +449,7 @@ vm_init(const char *loadvm, int restore_mode)
                                       NULL, NULL);
 
     ret = xc_domain_setmaxmem(xc_handle, vm_id,
-			      ((ram_size + vram_size) >> 10) + 1024);
+                              ((ram_size + (512 << 20)) >> 10) + 1024);
     /* 1024 = LIBXL_MAXMEM_CONSTANT */
     if (ret != 0)
 	err(1, "xc_domain_setmaxmem");

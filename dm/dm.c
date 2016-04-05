@@ -78,7 +78,6 @@ uint64_t vm_vcpus = 1;
 uint8_t vm_vcpu_avail[(HVM_MAX_VCPUS + 7) / 8] = {1, 0};
 uint64_t vm_timer_mode = 0;
 uint64_t vm_tsc_mode = 2;
-uint64_t vm_vga_mb = 0;
 uint64_t vm_vga_mb_mapped = 0;
 uint64_t vm_pae = 1;
 uint64_t vm_viridian = 1;
@@ -302,7 +301,6 @@ main(int argc, char **argv)
 #endif  /* MONITOR */
     debug_printf("vm mem mb:       %"PRId64"\n", vm_mem_mb);
     debug_printf("vm name:         %s\n", vm_name);
-    debug_printf("vga ram mb:      %"PRId64"\n", vm_vga_mb);
     debug_printf("vcpus:           %"PRId64"\n", vm_vcpus);
 
 #ifdef MONITOR
