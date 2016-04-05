@@ -2984,9 +2984,9 @@ int copy_phase(struct disk *disk, Manifest *man, int calculate_shas, int retry)
                      */
                     printf("failed to open %ls by id or name, skipping\n", m->name);
                     exclude_from_manifest(man, m);
+                } else {
+                    handles[j++] = h;
                 }
-
-                handles[j++] = h;
             }
         }
         printf("%d opens took %.2fs\n", j, rtc() - t1);
