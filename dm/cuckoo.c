@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -944,6 +944,7 @@ execute_plan(struct cuckoo_context *cc,
     uxen_thread tids[CUCKOO_NUM_THREADS];
     struct thread_context cs[CUCKOO_NUM_THREADS];
     int cancelled = 0;
+    int errored = 0;
     volatile int shared_i = 0;
     uint32_t initial_file_offset;
     uint32_t file_offset;
@@ -991,6 +992,7 @@ execute_plan(struct cuckoo_context *cc,
         if (compressing && s->buffer) {
             if (write_slot(fb, s, file_offset) < 0) {
                 cancelled = 1;
+                errored = 1;
             }
             file_offset += s->size;
             ccb->free(opaque, s->buffer);
@@ -1056,7 +1058,7 @@ execute_plan(struct cuckoo_context *cc,
 
     debug_printf("%s done, cancelled=%d\n", __FUNCTION__, cancelled);
     filebuf_seek(fb, file_offset, FILEBUF_SEEK_SET);
-    return file_offset - initial_file_offset;
+    return errored ? -1 : file_offset - initial_file_offset;
 }
 
 /* List of VMs management. */
