@@ -138,7 +138,7 @@ int uXenDispFB::set_mode(unsigned int width, unsigned int height,
 
     uxdisp_alloc_write(0, UXDISP_REG_ALLOC_PAGE_START, 0);
     uxdisp_alloc_write(0, UXDISP_REG_ALLOC_PAGE_COUNT,
-                       (height * stride + 4095) >> 12);
+                       ((height * stride + 64 /* shared memory header */ + 4095) >> 12) * 2);
     uxdisp_crtc_write(0, UXDISP_REG_CRTC_ENABLE, 1);
     uxdisp_crtc_write(0, UXDISP_REG_CRTC_XRES, width);
     uxdisp_crtc_write(0, UXDISP_REG_CRTC_YRES, height);
