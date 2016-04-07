@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -299,6 +299,10 @@ static void get_immutable_pages_section(char * driver, struct Section * s)
     /* peauth.sys calls MmMapLockedPagesSpecifyCache, and writes to its
            PAGE section */
     if (!strcmp(driver, "peauth.sys") && !strcmp(s->name, "PAGE"))
+        return;
+    /* clipsp.sys writes over frames assigned for its ro sections 
+           (PAGEwx4 etc) */ 
+    if (!strcmp(driver, "clipsp.sys"))
         return;
 #ifdef I_HAVE_PLENTY_OF_TIME_TO_REPRODUCE_AND_DEBUG_SPSYS_WEIRDNESS
     /* spsys.sys also messes with its own PAGE section */
