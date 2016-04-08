@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -19,7 +19,7 @@ extern uint64_t dmpdev_PsLoadedModulesList;
 
 void dmpdev_init(void);
 
-bool dmpdev_query_dump_allowed();
+bool dmpdev_notify_vm_crash();
 
 void dmpdev_notify_dump_complete(bool dump_save_sucessful);
 

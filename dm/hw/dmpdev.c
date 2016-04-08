@@ -143,11 +143,11 @@ static void process_cmd(DMPDEVState *s)
                    s->ctrl.crash_info.param3, s->ctrl.crash_info.param4);
         if (dmpdev_dump_location &&
             dmpdev_query &&
-            !dmpdev_query_dump_allowed(s->ctrl.crash_info.code,
-                                       s->ctrl.crash_info.param1,
-                                       s->ctrl.crash_info.param2,
-                                       s->ctrl.crash_info.param3, 
-                                       s->ctrl.crash_info.param4))
+            !dmpdev_notify_vm_crash(s->ctrl.crash_info.code,
+                                    s->ctrl.crash_info.param1,
+                                    s->ctrl.crash_info.param2,
+                                    s->ctrl.crash_info.param3, 
+                                    s->ctrl.crash_info.param4))
         {
             /* don't allow dump creation if RPC query result was negative */
             free(dmpdev_dump_location);

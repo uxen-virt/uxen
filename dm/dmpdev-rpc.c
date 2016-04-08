@@ -33,9 +33,9 @@ static void rpc_callback(void *opaque, dict d)
     dict_free(d);
 }
 
-bool dmpdev_query_dump_allowed(uint32_t code,
-                               uint64_t param1, uint64_t param2,
-                               uint64_t param3, uint64_t param4)
+bool dmpdev_notify_vm_crash(uint32_t code,
+                            uint64_t param1, uint64_t param2,
+                            uint64_t param3, uint64_t param4)
 {
     ioh_event event;
     struct rpc_callback_arg_t rpc_callback_arg;
@@ -55,7 +55,7 @@ bool dmpdev_query_dump_allowed(uint32_t code,
     dict_put_integer(args, "crash-param2", param2);
     dict_put_integer(args, "crash-param3", param3);
     dict_put_integer(args, "crash-param4", param4);
-    control_send_command("dmpdev-is-dump-allowed", args, rpc_callback,
+    control_send_command("dmpdev-notify-vm-crash", args, rpc_callback,
                          &rpc_callback_arg);
 
     wait_result = ioh_event_wait(&event);
@@ -82,7 +82,7 @@ void dmpdev_notify_dump_complete(bool dump_save_sucessful)
 
 #elif defined(__APPLE__)
 
-bool dmpdev_query_dump_allowed(void)
+bool dmpdev_notify_vm_crash(void)
 {
     /* not implemented */
     return false;
