@@ -2020,12 +2020,41 @@ static bool_t svm_ple_enabled(struct vcpu *v)
               GENERAL1_INTERCEPT_PAUSE);
 }
 
+static void
+svm_dump_vcpu(struct vcpu *v, const char *from)
+{
+    svm_vmcb_dump(from, v->arch.hvm_svm.vmcb);
+}
+
+#ifdef __x86_64__
+#define GUEST_OS_PER_CPU_SEGMENT_BASE(vmcb) vmcb->gs.base
+#else
+#define GUEST_OS_PER_CPU_SEGMENT_BASE(vmcb) vmcb->fs.base
+#endif
+
+static uintptr_t
+svm_exit_info(struct vcpu *v, unsigned int field)
+{
+    struct vmcb_struct *vmcb = v->arch.hvm_svm.vmcb;
+    uintptr_t ret = 0;
+
+    switch (field) {
+    case EXIT_INFO_per_cpu_segment_base:
+        ret = GUEST_OS_PER_CPU_SEGMENT_BASE(vmcb);
+        break;
+    }
+
+    return ret;
+}
+
 static struct hvm_function_table __read_mostly svm_function_table = {
     .name                 = "SVM",
     .cpu_up_prepare       = svm_cpu_up_prepare,
     .cpu_dead             = svm_cpu_dead,
     .cpu_up               = svm_cpu_up,
     .cpu_down             = svm_cpu_down,
+    .dump_vcpu            = svm_dump_vcpu,
+    .exit_info            = svm_exit_info,
     .domain_initialise    = svm_domain_initialise,
     .domain_destroy       = svm_domain_destroy,
     .vcpu_initialise      = svm_vcpu_initialise,

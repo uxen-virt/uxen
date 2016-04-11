@@ -170,6 +170,12 @@ struct hvm_function_table {
     int  (*cpu_up)(enum hvmon);
     void (*cpu_down)(void);
 
+    void (*dump_vcpu)(struct vcpu *v, const char *from);
+
+#define EXIT_INFO_guest_linear_address 0
+#define EXIT_INFO_per_cpu_segment_base 1
+    uintptr_t (*exit_info)(struct vcpu *v, unsigned int field);
+
     /* Copy up to 15 bytes from cached instruction bytes at current rIP. */
     unsigned int (*get_insn_bytes)(struct vcpu *v, uint8_t *buf);
 
@@ -447,6 +453,18 @@ static inline void hvm_cpu_down(void)
 {
     if ( hvm_funcs.cpu_down )
         hvm_funcs.cpu_down();
+}
+
+static inline void
+hvm_dump_vcpu(struct vcpu *v, const char *from)
+{
+    hvm_funcs.dump_vcpu(v, from);
+}
+
+static inline uintptr_t
+hvm_exit_info(struct vcpu *v, unsigned int field)
+{
+    return hvm_funcs.exit_info ? hvm_funcs.exit_info(v, field) : ~0ul;
 }
 
 static inline unsigned int hvm_get_insn_bytes(struct vcpu *v, uint8_t *buf)

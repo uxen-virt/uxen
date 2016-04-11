@@ -2305,16 +2305,9 @@ void send_introspection_ioreq(int subtype)
         -1ULL);
 }
 
-#ifdef __x86_64__
-#define GUEST_OS_PER_CPU_SEGMENT_BASE GUEST_GS_BASE
-#else
-#define GUEST_OS_PER_CPU_SEGMENT_BASE GUEST_FS_BASE
-#endif
-
 static void introspection_mov_to_cr(unsigned int cr, unsigned long val)
 {
     struct vcpu *v = current;
-    int err;
 
     if (cr == 0 &&
         (v->arch.hvm_vcpu.guest_cr[0] & X86_CR0_WP) &&
@@ -2348,7 +2341,7 @@ static void introspection_mov_to_cr(unsigned int cr, unsigned long val)
             send_introspection_ioreq_detailed(
                 XEN_DOMCTL_INTROSPECTION_FEATURE_HIDDEN_PROCESS,
                 val,
-                __vmread_safe(GUEST_OS_PER_CPU_SEGMENT_BASE, &err));
+                hvm_exit_info(current, EXIT_INFO_per_cpu_segment_base));
         v->arch.hvm_vcpu.guest_cr3_last = val;
     }
 }

@@ -439,7 +439,7 @@ int vmx_write_guest_msr(u32 msr, u64 val);
 int vmx_add_guest_msr(u32 msr);
 int vmx_add_host_load_msr(u32 msr);
 void vmx_vmcs_switch(struct vmcs_struct *from, struct vmcs_struct *to);
-void vmcs_mini_dump_vcpu(struct vcpu *v, unsigned int exit_reason);
+void vmcs_mini_dump_vcpu(const char *from, struct vcpu *v, int exit_reason);
 
 void setup_pv_vmcs_access(void);
 

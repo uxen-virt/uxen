@@ -43,7 +43,6 @@
 #include <asm/page.h>
 #include <asm/paging.h>
 #include <asm/p2m.h>
-#include <asm/hvm/vmx/vmx.h> /* ept_p2m_init() */
 #include <xen/iommu.h>
 #ifndef __UXEN__
 #include <asm/mem_event.h>
@@ -56,6 +55,7 @@
 #include <asm/hvm/svm/amd-iommu-proto.h>
 #endif  /* __UXEN__ */
 #include <xen/guest_access.h>
+#include <xen/trace.h>
 #include <lz4.h>
 #include <xen/keyhandler.h>
 #include <uxen/memcache-dm.h>
@@ -111,7 +111,6 @@ static void check_immutable(p2m_query_t q, struct domain *d, unsigned long gfn)
     p2m_type_t t;
     p2m_access_t a;
     mfn_t mfn;
-    int err;
 
 /* The "!is_p2m_guest_query(q)" check is a bit fragile. It is supposed to mean:
    I was called by  hvm_hap_nested_page_fault, via
@@ -127,11 +126,11 @@ static void check_immutable(p2m_query_t q, struct domain *d, unsigned long gfn)
        gdprintk(XENLOG_WARNING, "INVALID_MFN for gfn 0x%lx in the template?\n", gfn);
     else if (p2m_is_immutable(t)) {
         gdprintk(XENLOG_WARNING, "write to immutable gfn 0x%lx\n", gfn);
-        vmcs_mini_dump_vcpu(current, 0xaabbccdd);
+        hvm_dump_vcpu(current, "immutable_memory");
         send_introspection_ioreq_detailed(
             XEN_DOMCTL_INTROSPECTION_FEATURE_IMMUTABLE_MEMORY,
             guest_cpu_user_regs()->eip,
-            __vmread_safe(GUEST_LINEAR_ADDRESS, &err));
+            hvm_exit_info(current, EXIT_INFO_guest_linear_address));
     }
 }
 

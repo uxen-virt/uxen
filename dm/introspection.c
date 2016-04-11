@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -46,7 +46,8 @@ static void send_event(int type, uint64_t rip, uint64_t target)
     _dict_put(args, "rip-info", get_addr_info(rip));
     _dict_put(args, "target-info", get_addr_info(target));
 
-    warnx("sending introspection-event type 0x%x", type);
+    warnx("sending introspection-event type 0x%x rip 0x%"PRIx64
+          " target 0x%"PRIx64, type, rip, target);
 
     control_send_command("introspection-event", args, NULL, NULL);
 }
@@ -69,7 +70,8 @@ static void send_event_pshid(int pid, unsigned char *imagename)
     _dict_put(args, "rip-info", details);
     _dict_put(args, "target-info", get_addr_info(-1ULL));
 
-    warnx("sending introspection-event type 0x%x", type);
+    warnx("sending introspection-event type 0x%x pid %d image %s", type, pid,
+          imagename);
 
     control_send_command("introspection-event", args, NULL, NULL);
 }

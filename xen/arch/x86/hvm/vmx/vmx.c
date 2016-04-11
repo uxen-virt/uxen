@@ -1872,6 +1872,44 @@ static void vmx_set_info_guest(struct vcpu *v)
     vmx_vmcs_exit(v);
 }
 
+static void
+vmx_dump_vcpu(struct vcpu *v, const char *from)
+{
+    vmcs_mini_dump_vcpu(from, v, -1);
+}
+
+#ifdef __x86_64__
+#define GUEST_OS_PER_CPU_SEGMENT_BASE GUEST_GS_BASE
+#else
+#define GUEST_OS_PER_CPU_SEGMENT_BASE GUEST_FS_BASE
+#endif
+
+static uintptr_t
+vmx_exit_info(struct vcpu *v, unsigned int field)
+{
+    uintptr_t ret = 0;
+    int err;
+
+    switch (field) {
+    case EXIT_INFO_guest_linear_address:
+        vmx_vmcs_enter(v);
+        ret = __vmread_safe(GUEST_LINEAR_ADDRESS, &err);
+        if (err)
+            ret = ~0ul;
+        vmx_vmcs_exit(v);
+        break;
+    case EXIT_INFO_per_cpu_segment_base:
+        vmx_vmcs_enter(v);
+        ret = __vmread_safe(GUEST_OS_PER_CPU_SEGMENT_BASE, &err);
+        if (err)
+            ret = 0;
+        vmx_vmcs_exit(v);
+        break;
+    }
+
+    return ret;
+}
+
 static struct hvm_function_table __read_mostly vmx_function_table = {
     .name                 = "VMX",
     .cpu_up_prepare       = vmx_cpu_up_prepare,
@@ -1902,6 +1940,8 @@ static struct hvm_function_table __read_mostly vmx_function_table = {
     .cpu_off              = vmx_cpu_off,
     .cpu_up               = vmx_cpu_up,
     .cpu_down             = vmx_cpu_down,
+    .dump_vcpu            = vmx_dump_vcpu,
+    .exit_info            = vmx_exit_info,
     .cpuid_intercept      = vmx_cpuid_intercept,
     .wbinvd_intercept     = vmx_wbinvd_intercept,
     .fpu_dirty_intercept  = vmx_fpu_dirty_intercept,
@@ -2954,8 +2994,7 @@ vmx_execute(struct vcpu *v)
     if (uxen_dump_vmcs && (exit_reason != EXIT_REASON_IO_INSTRUCTION ||
                            (regs->edx != 0xe9 && regs->edx != 0x3f8 &&
                             regs->edx != 0x3fd))) {
-        extern void vmcs_mini_dump_vcpu(struct vcpu *, unsigned int);
-        vmcs_mini_dump_vcpu(v, exit_reason);
+        vmcs_mini_dump_vcpu("debug", v, exit_reason);
         uxen_dump_vmcs--;
     }
 #endif  /* __UXEN__ */
@@ -3149,11 +3188,7 @@ vmx_execute(struct vcpu *v)
         break;
     case EXIT_REASON_TRIPLE_FAULT:
 #ifdef __UXEN__
-        {
-            extern void vmcs_mini_dump_vcpu(struct vcpu *, unsigned int);
-            printk("vm triple fault:\n");
-            vmcs_mini_dump_vcpu(v, exit_reason);
-        }
+        vmcs_mini_dump_vcpu("triple fault", v, exit_reason);
 #endif  /* __UXEN__ */
         hvm_triple_fault();
         break;

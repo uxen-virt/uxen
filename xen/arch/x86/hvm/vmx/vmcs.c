@@ -1492,19 +1492,24 @@ static void vmx_dump_sel2(char *name, uint32_t lim)
            name, limit, base);
 }
 
-void vmcs_mini_dump_vcpu(struct vcpu *v, unsigned int exit_reason)
+void vmcs_mini_dump_vcpu(const char *from, struct vcpu *v, int exit_reason)
 {
     struct cpu_user_regs *regs = &v->arch.user_regs;
+    unsigned long pfn;
+    uint32_t pfec;
 
     if ( v == current )
         regs = guest_cpu_user_regs();
 
     vmx_vmcs_enter(v);
 
-    printk("CR0=%08lx CR4=%08lx CR3=%08lx" " GUEST_LINEAR_ADDRESS=%08lx" "                        Exit reason: %02d\n",
+    printk("Dumping guest's current state at %s...\n", from);
+
+    printk("CR0=%08lx CR4=%08lx CR3=%08lx\n",
            (unsigned long)vmr(GUEST_CR0),
            (unsigned long)vmr(GUEST_CR4),
-           (unsigned long)vmr(GUEST_CR3),
+           (unsigned long)vmr(GUEST_CR3));
+    printk("GUEST_LINEAR_ADDRESS=%08lx Exit reason: %02d\n",
            (unsigned long)vmr(GUEST_LINEAR_ADDRESS),
            exit_reason);
 #if 0
@@ -1517,10 +1522,10 @@ void vmcs_mini_dump_vcpu(struct vcpu *v, unsigned int exit_reason)
            "edx=%08x esi=%08x edi=%08x\n",
            regs->eax, regs->ebx, regs->ecx, regs->edx,
            regs->esi, regs->edi);
-    printk("eip=%08x esp=%08x ebp=%08x\n",
-           regs->eip, regs->esp, regs->ebp);
+    printk("eip=%08x esp=%08x ebp=%08x eflags=%05x\n",
+           regs->eip, regs->esp, regs->ebp, regs->eflags);
 #else
-    printk("rip=%16lx rflags=%16lx\n"
+    printk("rip=%16lx rflags=%13lx\n"
            "rsp=%16lx rbp=%16lx\n",
            regs->rip, regs->rflags,
            regs->rsp, regs->rbp);
@@ -1539,21 +1544,10 @@ void vmcs_mini_dump_vcpu(struct vcpu *v, unsigned int exit_reason)
            regs->r12, regs->r13,
            regs->r14, regs->r15);
 #endif
-    {
-        unsigned long pfn, mfn;
-        uint32_t pfec;
-        p2m_type_t p2mt;
-        pfn = paging_gva_to_gfn(current, 0x20c53, paging_g2g_unshare, &pfec);
-        if (pfn != INVALID_GFN) {
-            printk("rip gfn %lx\n", pfn);
-            mfn = mfn_x(get_gfn_query(current->domain, pfn, &p2mt));
-            if (mfn_valid(mfn)) {
-                char *p = (char *)map_domain_page(mfn);
-                printk("mfn %lx at %p\n", mfn, p);
-                unmap_domain_page(p);
-            }
-        }
-    }
+
+    pfn = paging_gva_to_gfn(v, regs->eip, paging_g2g_query, &pfec);
+    if (pfn != INVALID_GFN)
+        printk("rip gfn %lx\n", pfn);
 
     vmx_vmcs_exit(v);
 }
