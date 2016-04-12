@@ -96,15 +96,29 @@ int64_t _os_get_clock_ms(int type)
 
 #elif defined(__APPLE__)
 
-#include <mach/mach_time.h>
+#include <mach/clock.h>
+#include <mach/mach.h>
+
+static clock_serv_t calendar_clock;
+static int64_t get_calendar_time(void)
+{
+    mach_timespec_t mts;
+
+    clock_get_time(calendar_clock, &mts);
+    return (int64_t) mts.tv_sec * CLOCK_BASE + (int64_t) mts.tv_nsec;
+}
 
 static void __attribute__((constructor))
 init_get_clock(void)
 {
+    kern_return_t kr;
 
+    kr = host_get_clock_service(mach_host_self(), CALENDAR_CLOCK, &calendar_clock);
+    if (kr != MACH_MSG_SUCCESS)
+        errx(1, "%s: host_get_clock_service failure %d", __FUNCTION__, kr);
 #ifdef RELATIVE_CLOCK
     critical_section_init(&clock_lck);
-    start_time = mach_absolute_time();
+    start_time = get_calendar_time();
 #endif
 }
 
@@ -117,7 +131,7 @@ int64_t _os_get_clock(int type)
     if (type == CLOCK_VIRTUAL && clock_paused_time)
         ret = clock_paused_time;
     else {
-        ret = mach_absolute_time() - start_time;
+        ret = get_calendar_time() - start_time;
         if (type == CLOCK_VIRTUAL)
             ret -= time_pause_adjust;
     }
