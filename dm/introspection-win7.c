@@ -197,6 +197,11 @@ static int get_single_driver_info(uint64_t base, unsigned char * name)
             s->size = page_end - s->base;
         else
             s->size = 0;
+        /* Something (patchguard perhaps) modifies NT headers of a module */
+        if (s->size && s->base == base) {
+            s->base += XC_PAGE_SIZE;
+            s->size -= XC_PAGE_SIZE;
+        }
     }
     driver_trim_edge_rw_pages(driver);
     return 0;
