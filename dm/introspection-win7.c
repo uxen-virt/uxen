@@ -315,6 +315,16 @@ static void get_immutable_pages_section(char * driver, struct Section * s)
     if (!strcmp(driver, "spsys.sys"))
         return;
 #endif
+    /* The following 4 modules get unloaded in win 8.1 clones */
+    if (!strcmp(driver, "monitor.sys"))
+        return;
+    if (!strcmp(driver, "dump_storport.sys"))
+        return;
+    if (!strcmp(driver, "dump_storahci.sys"))
+        return;
+    if (!strcmp(driver, "dump_dumpfve.sys"))
+        return;
+
     warnx("    section %s base=%016"PRIx64" size=%016"PRIx64,
         s->name, s->base, s->size);
     size_needed = s->size / XC_PAGE_SIZE * sizeof(uint64_t) + pages_current_size;
