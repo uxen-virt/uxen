@@ -250,7 +250,7 @@ uxen_idle_thread_fn(void *context)
                 fast_event_signal(&uxen_devext->de_suspend_event);
                 uxen_pages_decrease_reserve(i, increase);
                 now = mach_absolute_time();
-                for (host_cpu = 1; host_cpu < MAX_CPUS; host_cpu++)
+                for (host_cpu = 1; host_cpu < max_host_cpu; host_cpu++)
                     signal_idle_thread(host_cpu);
             }
         } while (idle_thread_suspended && uxen_info->ui_running);
@@ -309,7 +309,7 @@ op_signal_idle_thread(uint64_t mask)
     if (uxen_info->ui_running == 0)
 	return;
 
-    for (host_cpu = 0; host_cpu < MAX_CPUS; host_cpu++) {
+    for (host_cpu = 0; host_cpu < max_host_cpu; host_cpu++) {
         if (mask & affinity_mask(host_cpu))
             signal_idle_thread(host_cpu);
     }
@@ -612,7 +612,9 @@ uxen_op_init_free_allocs(void)
     if (dom0_vmi) {
         dprintk("uxen mem: free dom0_vmi\n");
         kernel_free(dom0_vmi,
-                    (size_t)ALIGN_PAGE_UP(sizeof(struct vm_info)));
+                    (size_t)ALIGN_PAGE_UP(
+                        sizeof(struct vm_info) +
+                        nr_host_cpus * sizeof(struct vm_vcpu_info)));
         dom0_vmi = NULL;
     }
     map_pfn_array_pool_clear();
@@ -627,11 +629,11 @@ int
 uxen_op_init(struct fd_assoc *fda)
 {
     uint32_t max_pfn;
-    uint64_t active_mask;
     uint32_t sizeof_percpu;
-    int host_cpu;
+    unsigned int host_cpu;
+    unsigned int cpu;
     int ret = 0;
-    struct vm_vcpu_info_shared *vcis[UXEN_MAX_VCPUS];
+    struct vm_vcpu_info_shared *vcis[UXEN_MAXIMUM_PROCESSORS];
 
     uxen_lock();
     while (!OSCompareAndSwap(0, 1, &uxen_devext->de_initialised)) {
@@ -686,7 +688,10 @@ uxen_op_init(struct fd_assoc *fda)
     max_pfn = get_max_pfn();
     dprintk("Max PFN = %x\n", max_pfn);
 
-    uxen_cpu_set_active_mask(&active_mask);
+    if (uxen_cpu_set_active_mask(&uxen_info->ui_cpu_active_mask)) {
+        ret = EINVAL;
+        goto out;
+    }
 
     ret = uxen_ipi_init(ipi_dispatch);
     if (ret) {
@@ -736,8 +741,6 @@ uxen_op_init(struct fd_assoc *fda)
     uxen_info->ui_smap_enabled = xnu_pmap_smap_enabled() ? 1 : 0;
 
     printk("uxen mem:     maxpage %x\n", uxen_info->ui_max_page);
-
-    uxen_info->ui_cpu_active_mask = active_mask;
 
     ret = kernel_malloc_mfns(1, &uxen_zero_mfn, 1);
     if (ret != 1) {
@@ -789,13 +792,8 @@ uxen_op_init(struct fd_assoc *fda)
 
     sizeof_percpu = (uxen_addr_per_cpu_data_end - uxen_addr_per_cpu_start +
                      PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
-    percpu_area_size = 0;
     /* skip cpu 0 since uxen stores it in .data */
-    for (host_cpu = 1; host_cpu < MAX_CPUS; host_cpu++) {
-        if ((active_mask & affinity_mask(host_cpu)) == 0)
-	    continue;
-        percpu_area_size += sizeof_percpu;
-    }
+    percpu_area_size = (nr_host_cpus - 1) * sizeof_percpu;
     if (percpu_area_size) {
         percpu_area = kernel_malloc(percpu_area_size);
         if (percpu_area == NULL || ((uintptr_t)percpu_area & (PAGE_SIZE - 1))) {
@@ -803,13 +801,13 @@ uxen_op_init(struct fd_assoc *fda)
             ret = ENOMEM;
             goto out;
         }
-        percpu_area_size = 0;
-        for (host_cpu = 1; host_cpu < MAX_CPUS; host_cpu++) {
-            if ((active_mask & affinity_mask(host_cpu)) == 0)
+        cpu = 0;
+        for (host_cpu = 1; host_cpu < max_host_cpu; host_cpu++) {
+            if ((uxen_info->ui_cpu_active_mask & affinity_mask(host_cpu)) == 0)
                 continue;
             uxen_info->ui_percpu_area[host_cpu] =
-                &percpu_area[percpu_area_size];
-            percpu_area_size += sizeof_percpu;
+                &percpu_area[cpu * sizeof_percpu];
+            cpu++;
         }
         dprintk("uxen mem: percpu_area %p - %p\n", percpu_area,
                 &percpu_area[percpu_area_size]);
@@ -830,14 +828,21 @@ uxen_op_init(struct fd_assoc *fda)
         goto out;
     }
 
-    dom0_vmi = kernel_malloc((size_t)ALIGN_PAGE_UP(sizeof(struct vm_info)));
+    dom0_vmi = kernel_malloc(
+        (size_t)ALIGN_PAGE_UP(sizeof(struct vm_info) +
+                              nr_host_cpus * sizeof(struct vm_vcpu_info)));
     if (!dom0_vmi) {
         fail_msg("kernel_malloc(dom0_vmi) failed");
         ret = ENOMEM;
         goto out;
     }
-    for (host_cpu = 0; host_cpu < UXEN_MAX_VCPUS; host_cpu++)
-        vcis[host_cpu] = &dom0_vmi->vmi_vcpus[host_cpu].vci_shared;
+    cpu = 0;
+    for (host_cpu = 0; host_cpu < max_host_cpu; host_cpu++) {
+        if ((uxen_info->ui_cpu_active_mask & affinity_mask(host_cpu)) == 0)
+            continue;
+        vcis[host_cpu] = &dom0_vmi->vmi_vcpus[cpu].vci_shared;
+        cpu++;
+    }
 
     map_pfn_array_pool_fill(0);
 
@@ -869,8 +874,8 @@ uxen_op_init(struct fd_assoc *fda)
     fast_event_clear(&uxen_devext->de_shutdown_done);
     uxen_info->ui_running = 1;
 
-    for (host_cpu = 0; host_cpu < MAX_CPUS; host_cpu++) {
-        if ((active_mask & affinity_mask(host_cpu)) == 0)
+    for (host_cpu = 0; host_cpu < max_host_cpu; host_cpu++) {
+        if ((uxen_info->ui_cpu_active_mask & affinity_mask(host_cpu)) == 0)
             continue;
         idle_thread[host_cpu] = NULL;
         ret = event_init(&idle_thread_event[host_cpu], 0);
@@ -965,9 +970,9 @@ uxen_op_shutdown(void)
 
     uxen_info->ui_running = 0;
 
-    for (host_cpu = 0; host_cpu < MAX_CPUS; host_cpu++)
+    for (host_cpu = 0; host_cpu < max_host_cpu; host_cpu++)
         signal_idle_thread(host_cpu);
-    for (host_cpu = 0; host_cpu < MAX_CPUS; host_cpu++) {
+    for (host_cpu = 0; host_cpu < max_host_cpu; host_cpu++) {
         if (!idle_thread[host_cpu])
             continue;
         semaphore_wait(idle_thread_exit[host_cpu]);
@@ -1087,7 +1092,7 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
 {
     struct vm_info *vmi;
     struct vm_vcpu_info *vci;
-    struct vm_vcpu_info_shared *vcis[UXEN_MAX_VCPUS];
+    struct vm_vcpu_info_shared *vcis[UXEN_MAXIMUM_VCPUS];
     unsigned int i;
     int ret = 0;
 
@@ -1103,7 +1108,9 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
     if (vmi && ((intptr_t)vmi != -1))
         return EEXIST;
 
-    vmi = kernel_malloc((size_t)ALIGN_PAGE_UP(sizeof(struct vm_info)));
+    vmi = kernel_malloc((size_t)ALIGN_PAGE_UP(
+                            sizeof(struct vm_info) +
+                            ucd->ucd_max_vcpus * sizeof(struct vm_vcpu_info)));
     if (!vmi) {
         ret = ENOMEM;
         goto out;
@@ -1112,10 +1119,10 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
     vmi->vmi_ioemu_exception_event.id = -1;
     vmi->vmi_ioemu_vram_event.id = -1;
 
-    for (i = 0; i < UXEN_MAX_VCPUS; i++)
-        vcis[i] = &vmi->vmi_vcpus[i].vci_shared;
+    vmi->vmi_nrvcpus = ucd->ucd_max_vcpus;
 
-    vmi->vmi_shared.vmi_nrvcpus = ucd->ucd_max_vcpus;
+    for (i = 0; i < vmi->vmi_nrvcpus; i++)
+        vcis[i] = &vmi->vmi_vcpus[i].vci_shared;
 
     if (uxen_info->ui_xsave_cntxt_size) {
         vmi->vmi_shared.vmi_xsave = (uint64_t)kernel_malloc(
@@ -1157,7 +1164,7 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
     /* This reference will be dropped on vm destroy */
     OSIncrementAtomic(&vmi->vmi_active_references);
 
-    for (i = 0; i < vmi->vmi_shared.vmi_nrvcpus; i++) {
+    for (i = 0; i < vmi->vmi_nrvcpus; i++) {
         vci = &vmi->vmi_vcpus[i];
 
         init_timer(&vci->vci_timer, uxen_vcpu_timer_cb, vci);
@@ -1208,7 +1215,9 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
                 vmi->vmi_shared.vmi_xsave = 0;
                 vmi->vmi_shared.vmi_xsave_size = 0;
             }
-            kernel_free(vmi, (size_t)ALIGN_PAGE_UP(sizeof(struct vm_info)));
+            kernel_free(vmi, (size_t)ALIGN_PAGE_UP(
+                            sizeof(struct vm_info) +
+                            vmi->vmi_nrvcpus * sizeof(struct vm_vcpu_info)));
         }
         vmi = NULL;
     }
@@ -1293,7 +1302,9 @@ uxen_vmi_free(struct vm_info *vmi)
     logging_free(&vmi->vmi_logging_desc);
 
     dprintk("%s: vm%u vmi freed\n", __FUNCTION__, vmi->vmi_shared.vmi_domid);
-    kernel_free(vmi, (size_t)ALIGN_PAGE_UP(sizeof(struct vm_info)));
+    kernel_free(vmi, (size_t)ALIGN_PAGE_UP(
+                    sizeof(struct vm_info) +
+                    vmi->vmi_nrvcpus * sizeof(struct vm_vcpu_info)));
 
     fast_event_signal(&uxen_devext->de_vm_cleanup_event);
 }
@@ -1306,7 +1317,7 @@ uxen_vmi_cleanup_vm(struct vm_info *vmi)
 
     dprintk("%s: vm%u refs %d, running %d vcpus\n", __FUNCTION__, domid,
             vmi->vmi_active_references, vmi->vmi_running_vcpus);
-    for (i = 0; i < vmi->vmi_shared.vmi_nrvcpus; i++)
+    for (i = 0; i < vmi->vmi_nrvcpus; i++)
         dprintk("  vcpu vm%u.%u running %s\n", domid, i,
                 vmi->vmi_vcpus[i].vci_shared.vci_runnable ? "yes" : "no");
 
@@ -1326,11 +1337,11 @@ uxen_vmi_stop_running(struct vm_info *vmi)
 
     dprintk("%s: vm%u has %d of %d vcpus running\n", __FUNCTION__,
             vmi->vmi_shared.vmi_domid, vmi->vmi_running_vcpus,
-            vmi->vmi_shared.vmi_nrvcpus);
+            vmi->vmi_nrvcpus);
 
     vmi->vmi_shared.vmi_runnable = 0;
 
-    for (i = 0; i < vmi->vmi_shared.vmi_nrvcpus; i++) {
+    for (i = 0; i < vmi->vmi_nrvcpus; i++) {
         struct vm_vcpu_info *vci = &vmi->vmi_vcpus[i];
         struct user_notification_event *event =
             (struct user_notification_event * volatile)
@@ -1365,11 +1376,11 @@ uxen_vmi_stop_running(struct vm_info *vmi)
                         EVENT_UNINTERRUPTIBLE, EVENT_NO_TIMEOUT);
 
     printk("%s: vm%u all %d vcpus stopped (%d running)\n", __FUNCTION__,
-           vmi->vmi_shared.vmi_domid, vmi->vmi_shared.vmi_nrvcpus,
+           vmi->vmi_shared.vmi_domid, vmi->vmi_nrvcpus,
            vmi->vmi_running_vcpus);
 
     /* cancel timers only after all vcpus stopped */
-    for (i = 0; i < vmi->vmi_shared.vmi_nrvcpus; i++) {
+    for (i = 0; i < vmi->vmi_nrvcpus; i++) {
         struct vm_vcpu_info *vci = &vmi->vmi_vcpus[i];
 
         if (OSCompareAndSwap(1, 0, &vci->vci_timer_created))
@@ -1608,7 +1619,7 @@ uxen_op_execute(struct uxen_execute_desc *ued, struct vm_info *vmi)
     struct vm_vcpu_info *vci;
     int ret = ENOENT;
 
-    if (ued->ued_vcpu >= UXEN_MAX_VCPUS) {
+    if (ued->ued_vcpu >= UXEN_MAXIMUM_VCPUS) {
         fail_msg("invalid vm%u.%u", vmi->vmi_shared.vmi_domid, ued->ued_vcpu);
         return EINVAL;
     }
@@ -1682,7 +1693,7 @@ uxen_op_set_event_channel(
     if (vmi->vmi_shared.vmi_runnable == 0)
         goto out;
 
-    if (uecd->uecd_vcpu >= UXEN_MAX_VCPUS) {
+    if (uecd->uecd_vcpu >= UXEN_MAXIMUM_VCPUS) {
         fail_msg("invalid vcpu");
         ret = EINVAL;
         goto out;
@@ -1863,7 +1874,7 @@ uxen_flush_rcu(void)
     int rcu_pending, cpu_rcu_pending;
     preemption_t i;
 
-    for (host_cpu = 0; host_cpu < MAX_CPUS; host_cpu++) {
+    for (host_cpu = 0; host_cpu < max_host_cpu; host_cpu++) {
         if ((uxen_info->ui_cpu_active_mask & affinity_mask(host_cpu)) == 0)
             continue;
         uxen_cpu_pin(host_cpu);
@@ -1874,7 +1885,7 @@ uxen_flush_rcu(void)
 
     do {
         rcu_pending = 0;
-        for (host_cpu = 0; host_cpu < MAX_CPUS; host_cpu++) {
+        for (host_cpu = 0; host_cpu < max_host_cpu; host_cpu++) {
             if ((uxen_info->ui_cpu_active_mask & affinity_mask(host_cpu)) == 0)
                 continue;
             uxen_cpu_pin(host_cpu);

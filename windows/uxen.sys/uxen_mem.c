@@ -1057,7 +1057,7 @@ uxen_pages_clear(void)
     preemption_t i;
     uint32_t freed = 0;
 
-    for (cpu = 0; cpu < MAXIMUM_PROCESSORS; cpu++) {
+    for (cpu = 0; cpu < max_host_cpu; cpu++) {
         disable_preemption(&i);
         freed += uxen_pages_retire(i, cpu, 0);
     }

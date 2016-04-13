@@ -315,7 +315,7 @@ map_pfn_array_pool_fill(int n)
             return ENOMEM;
         }
 
-        map_pfn_array_pool_min = 2 * uxen_nr_cpus;
+        map_pfn_array_pool_min = 2 * nr_host_cpus;
         map_pfn_array_pool_max = 2 * map_pfn_array_pool_min;
 #ifdef DEBUG_POC_MAP_PAGE_RANGE_RETRY
         map_pfn_array_pool_min = map_pfn_array_pool_max = 1;
@@ -1465,7 +1465,7 @@ uxen_pages_clear(void)
     preemption_t i;
     uint32_t freed = 0;
 
-    for (cpu = 0; cpu < MAX_CPUS; cpu++) {
+    for (cpu = 0; cpu < max_host_cpu; cpu++) {
         disable_preemption(&i);
         freed += uxen_pages_retire(i, cpu, 0);
     }

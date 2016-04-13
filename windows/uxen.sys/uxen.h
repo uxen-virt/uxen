@@ -96,9 +96,9 @@ struct vm_vcpu_info {
 
 struct vm_info {
     struct vm_info_shared vmi_shared;
-    struct vm_vcpu_info vmi_vcpus[UXEN_MAX_VCPUS];
     uint32_t vmi_alive;
     uint32_t vmi_active_references;
+    uint32_t vmi_nrvcpus;
     uint32_t vmi_running_vcpus;
     KEVENT vmi_notexecuting;
     KEVENT vmi_spinloop_wake_event;
@@ -117,6 +117,8 @@ struct vm_info {
     struct fd_assoc *vmi_mdm_fda;
 
     struct uxen_logging_buffer_desc vmi_logging_desc;
+
+    struct vm_vcpu_info vmi_vcpus[];
 };
 
 struct fd_assoc {
@@ -130,7 +132,6 @@ struct fd_assoc {
 };
 
 struct device_extension {
-    struct vm_info de_dom0_vm_info;
     rb_tree_t de_vm_info_rbtree;
 
     struct _CALLBACK_OBJECT *de_power_callback_object;
@@ -234,7 +235,7 @@ extern void uxen_cpu_pin_first(void);
 extern void uxen_cpu_unpin(void);
 extern void uxen_cpu_pin_vcpu(struct vm_vcpu_info *, int);
 extern void uxen_cpu_unpin_vcpu(struct vm_vcpu_info *);
-extern void uxen_cpu_set_active_mask(void *, int);
+extern int uxen_cpu_set_active_mask(void *);
 extern void __cdecl uxen_cpu_on_selected(const void *,
                                          uintptr_t (*)(uintptr_t));
 extern void __cdecl uxen_cpu_interrupt(uintptr_t);
@@ -384,6 +385,8 @@ extern MDL *map_page_range_mdl;
 extern uint8_t *frametable;
 extern unsigned int frametable_size;
 extern uint8_t *frametable_populated;
+extern unsigned int nr_host_cpus;
+extern unsigned int max_host_cpu;
 extern struct vm_info *dom0_vmi;
 extern uxen_pfn_t uxen_zero_mfn;
 extern const rb_tree_ops_t vm_info_rbtree_ops;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Gianluca Guida <glguida@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -9,9 +9,10 @@
 extern "C" kern_return_t _start(kmod_info_t *ki, void *data);
 extern "C" kern_return_t _stop(kmod_info_t *ki, void *data);
 KMOD_EXPLICIT_DECL(org.uxen.uxen, 0, _start, _stop)
-extern "C" kmod_start_func_t *_realmain = 0;
-extern "C" kmod_stop_func_t *_antimain = 0;
-
+extern "C" {
+    kmod_start_func_t *_realmain = 0;
+    kmod_stop_func_t *_antimain = 0;
+};
 
 OSDefineMetaClassAndStructors(uxen_driver, IOService);
 

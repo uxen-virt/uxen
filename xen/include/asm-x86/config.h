@@ -53,7 +53,7 @@
 
 #define OPT_CONSOLE_STR "vga"
 
-#ifndef __UXEN__
+#if !defined(__UXEN__)
 #ifdef MAX_PHYS_CPUS
 #define NR_CPUS MAX_PHYS_CPUS
 #elif defined __i386__
@@ -62,12 +62,18 @@
 #define NR_CPUS 256
 #endif
 #else   /* __UXEN__ */
-/* Same as KAFFINITY */
 #if defined(__x86_64__)
+#ifdef UXEN_HOST_WINDOWS
+/* Same as KAFFINITY */
 #define NR_CPUS 64
-#else
+#else  /* UXEN_HOST_WINDOWS */
+/* From osfmk/i386/mp.h */
 #define NR_CPUS 32
-#endif
+#endif /* UXEN_HOST_WINDOWS */
+#else  /* __x86_64__ */
+/* Same as KAFFINITY */
+#define NR_CPUS 32
+#endif  /* __x86_64__ */
 #endif  /* __UXEN__ */
 
 #ifdef __i386__

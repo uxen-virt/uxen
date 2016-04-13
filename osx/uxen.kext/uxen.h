@@ -146,9 +146,9 @@ struct vm_vcpu_info {
 
 struct vm_info {
     struct vm_info_shared vmi_shared;
-    struct vm_vcpu_info vmi_vcpus[UXEN_MAX_VCPUS];
     uint32_t vmi_alive;
     uint32_t vmi_active_references;
+    uint32_t vmi_nrvcpus;
     uint32_t vmi_running_vcpus;
     struct fast_event_object vmi_notexecuting;
     uint32_t vmi_marked_for_destroy;
@@ -166,6 +166,8 @@ struct vm_info {
     struct fd_assoc *vmi_mdm_fda;
 
     struct uxen_logging_buffer_desc vmi_logging_desc;
+
+    struct vm_vcpu_info vmi_vcpus[];
 };
 
 struct fd_assoc {
@@ -183,7 +185,6 @@ struct fd_assoc {
 };
 
 struct device_extension {
-    struct vm_info de_dom0_vm_info;
     rb_tree_t de_vm_info_rbtree;
 
     /* struct _CALLBACK_OBJECT *de_power_callback_object; */
@@ -277,6 +278,8 @@ extern struct sysctl_oid_list sysctl__hw_uxen_children;
 extern uint8_t *frametable;
 extern unsigned int frametable_size;
 extern uint8_t *frametable_populated;
+extern uint32_t nr_host_cpus;
+extern uint32_t max_host_cpu;
 extern struct vm_info *dom0_vmi;
 extern uint32_t uxen_zero_mfn;
 void set_host_preemption(uint64_t disable);
@@ -413,8 +416,7 @@ void *physmap_pfn_to_va(uint32_t pfn);
 uint32_t physmap_va_to_pfn(const void *va);
 
 /* uxen_cpu.c */
-extern int uxen_nr_cpus;
-void uxen_cpu_set_active_mask(uint64_t *mask);
+int uxen_cpu_set_active_mask(uint64_t *mask);
 void uxen_cpu_pin(int cpu);
 void uxen_cpu_pin_current(void);
 void uxen_cpu_pin_first(void);
@@ -481,6 +483,8 @@ enum {
 
 #ifdef __cplusplus
 }
+
+#undef always_inline
 
 #include <IOKit/IOService.h>
 #include <IOKit/IOUserClient.h>

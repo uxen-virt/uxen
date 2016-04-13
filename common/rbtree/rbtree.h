@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -51,7 +51,7 @@
 #ifndef _SYS_RBTREE_H_
 #define	_SYS_RBTREE_H_
 
-#if defined(__UXEN__)
+#if defined(__UXEN__) && !defined(__UXEN_SYS__)
 #include <xen/types.h>
 #elif defined(_KERNEL) || defined(_STANDALONE) || defined(_WIN32)
 #include <sys/types.h>
@@ -195,7 +195,7 @@ typedef intptr_t (*const rbto_compare_key_fn)(void *,
 typedef struct {
 	rbto_compare_nodes_fn rbto_compare_nodes;
 	rbto_compare_key_fn rbto_compare_key;
-	size_t rbto_node_offset;
+	uintptr_t rbto_node_offset;
 	void *rbto_context;
 } rb_tree_ops_t;
 
@@ -236,7 +236,7 @@ void *	RB_TREE_(iterate)(rb_tree_t *, void *, const unsigned int);
 void	RB_TREE_(check)(const rb_tree_t *, bool);
 #endif
 #ifdef RBSTATS
-void	RB_TREE_(depths)(const rb_tree_t *, size_t *);
+void	RB_TREE_(depths)(const rb_tree_t *, uintptr_t *);
 #endif
 
 __END_DECLS

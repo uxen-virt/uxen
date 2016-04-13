@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -1339,7 +1339,7 @@ RB_TREE_(check)(const struct rb_tree *rbt, bool red_check)
 #ifdef RBSTATS
 static void
 RB_TREE_(mark_depth)(const struct rb_tree *rbt, const struct rb_node *self,
-	size_t *depths, size_t depth)
+	uintptr_t *depths, uintptr_t depth)
 {
 	if (RB_SENTINEL_P(self))
 		return;
@@ -1359,7 +1359,7 @@ RB_TREE_(mark_depth)(const struct rb_tree *rbt, const struct rb_node *self,
 }
 
 void
-RB_TREE_(depths)(const struct rb_tree *rbt, size_t *depths)
+RB_TREE_(depths)(const struct rb_tree *rbt, uintptr_t *depths)
 {
 	RB_TREE_(mark_depth)(rbt, rbt->rbt_root, depths, 1);
 }

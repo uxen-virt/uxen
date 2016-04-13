@@ -1271,6 +1271,12 @@ intptr_t __init __interface_fn __uxen_start_xen(
     BUILD_BUG_ON(MACH2PHYS_VIRT_END   != RO_MPT_VIRT_END);
 #endif  /* __UXEN__ */
 
+    BUILD_BUG_ON(MAX_VIRT_CPUS < NR_CPUS);
+    BUILD_BUG_ON(MAX_VIRT_CPUS != MAX_HVM_VCPUS);
+    BUILD_BUG_ON(NR_CPUS > UXEN_MAXIMUM_PROCESSORS);
+
+    BUILD_BUG_ON(sizeof(_uxen_info) > PAGE_SIZE);
+
     init_frametable();
 
 #ifndef __UXEN__

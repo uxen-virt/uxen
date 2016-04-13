@@ -45,6 +45,7 @@ typedef u64 paddr_t;
 #if !defined(__UXEN_SYS__)
 typedef int intptr_t;
 typedef unsigned int uintptr_t;
+typedef uintptr_t vaddr_t;
 #endif
 #elif defined(__x86_64__)
 typedef signed long s64;
@@ -55,11 +56,11 @@ typedef unsigned long paddr_t;
 #if !defined(__UXEN_SYS__)
 typedef long int intptr_t;
 typedef unsigned long int uintptr_t;
-#endif
-#endif
 typedef uintptr_t vaddr_t;
+#endif
+#endif
 
-#if !defined(WINNT) || (!defined(__XEN_TOOLS__) && !defined(__UXEN_SYS__))
+#if !defined(__UXEN_SYS__)
 typedef uintptr_t size_t;
 #endif
 

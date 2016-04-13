@@ -23,10 +23,10 @@
 
 /* based on sizeof(ui_cpu_active_mask) */
 #define UXEN_MAXIMUM_PROCESSORS (sizeof(uint64_t) * 8)
+/* match UXEN_MAXIMUM_PROCESSORS */
+#define UXEN_MAXIMUM_VCPUS (sizeof(uint64_t) * 8)
 
-#define UXEN_MAX_VCPUS 8
-
-#if defined(__UXEN__) && defined(__GNUC__)
+#if defined(__UXEN__) && !defined(__UXEN_SYS__)
 
 /* Minor quantites of magic here */
 
@@ -288,7 +288,6 @@ struct vm_info_shared {
     domid_t vmi_domid;
     uint32_t vmi_runnable;
     uint32_t vmi_nrpages;
-    uint32_t vmi_nrvcpus;
     uint32_t vmi_mapcache_active;
     uint64_t vmi_msrpm;
     uint32_t vmi_msrpm_size;

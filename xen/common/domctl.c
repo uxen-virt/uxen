@@ -245,9 +245,6 @@ do_domctl_max_vcpus(struct domain *d, unsigned int max)
     ret = -EINVAL;
     if ( (d == current->domain) || /* no domain_pause() */
          (max > MAX_VIRT_CPUS) ||
-#ifdef __UXEN__
-         (max > UXEN_MAX_VCPUS) ||
-#endif
          (is_hvm_domain(d) && (max > MAX_HVM_VCPUS)) )
     {
         rcu_unlock_domain(d);

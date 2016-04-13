@@ -18,7 +18,7 @@ VPATH += :$(TOPDIR)/common/rbtree
 KEXT_BIN = uxen
 KEXT_DSYM = uxen.dwarf
 
-CPPFLAGS += -D__XEN__ -D__UXEN_SYS__
+CPPFLAGS += -D__XEN__ -D__UXEN__ -D__UXEN_SYS__ -DUXEN_HOST_OSX -D__SYSV_ABI__
 CPPFLAGS += -D__UXEN_EMBEDDED__
 
 CPPFLAGS += -I$(BUILDDIR_xen)/include \

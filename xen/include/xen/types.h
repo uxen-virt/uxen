@@ -13,15 +13,16 @@
 #define NULL ((void*)0)
 #endif
 
-#if !defined(WINNT) || (!defined(__XEN_TOOLS__) && !defined(__UXEN_SYS__))
+#if !defined(__UXEN_SYS__)
 #define INT_MAX         ((int)(~0U>>1))
 #define INT_MIN         (-INT_MAX - 1)
 #define UINT_MAX        (~0U)
 #define LONG_MAX        ((long)(~0UL>>1))
 #define LONG_MIN        (-LONG_MAX - 1)
 #define ULONG_MAX       (~0UL)
-#endif	/* !WINNT */
+#endif	/* __UXEN_SYS__ */
 
+#if !defined(__UXEN_SYS__) || !defined(UXEN_HOST_OSX)
 /* bsd */
 typedef unsigned char           u_char;
 typedef unsigned short          u_short;
@@ -49,6 +50,7 @@ typedef         __s32           int32_t;
 typedef         __u64           uint64_t;
 typedef         __u64           u_int64_t;
 typedef         __s64           int64_t;
+#endif  /* __UXEN_SYS__ */
 
 struct domain;
 struct vcpu;

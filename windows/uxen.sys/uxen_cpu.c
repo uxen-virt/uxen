@@ -2,7 +2,7 @@
  *  uxen_cpu.c
  *  uxen
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -13,20 +13,9 @@
 #define UXEN_DEFINE_SYMBOLS_PROTO
 #include <uxen/uxen_link.h>
 
-unsigned long
-uxen_first_cpu(void)
-{
-    KAFFINITY affinity;
-    unsigned long host_cpu;
-
-    affinity = KeQueryActiveProcessors();
-    for (host_cpu = 0; host_cpu < MAXIMUM_PROCESSORS; host_cpu++) {
-	if (affinity & affinity_mask(host_cpu))
-	    break;
-    }
-    BUG_ON(host_cpu == MAXIMUM_PROCESSORS);
-    return host_cpu;
-}
+static unsigned int first_cpu = MAXIMUM_PROCESSORS - 1;
+unsigned int nr_host_cpus = 0;
+unsigned int max_host_cpu = 0;
 
 void
 uxen_cpu_pin(unsigned long host_cpu)
@@ -49,10 +38,8 @@ uxen_cpu_pin_current(void)
 void
 uxen_cpu_pin_first(void)
 {
-    unsigned long cpu;
 
-    cpu = uxen_first_cpu();
-    uxen_cpu_pin(cpu);
+    uxen_cpu_pin(first_cpu);
 }
 
 void
@@ -97,7 +84,6 @@ void
 uxen_cpu_unpin_vcpu(struct vm_vcpu_info *vci)
 {
     KAFFINITY affinity;
-    unsigned long cpu;
 
 #if defined(VM_AFFINITY_USER)
     KeRevertToUserAffinityThread();
@@ -107,9 +93,8 @@ uxen_cpu_unpin_vcpu(struct vm_vcpu_info *vci)
     KeSetSystemAffinityThread(affinity);
     return;
 #elif defined(VM_AFFINITY_ALL_BUT_FIRST)
-    cpu = uxen_first_cpu();
     affinity = KeQueryActiveProcessors();
-    affinity &= ~affinity_mask(cpu);
+    affinity &= ~affinity_mask(first_cpu);
     KeSetSystemAffinityThread(affinity);
     return;
 #elif defined(VM_AFFINITY_ONE)
@@ -118,23 +103,39 @@ uxen_cpu_unpin_vcpu(struct vm_vcpu_info *vci)
 #endif
 }
 
-void
-uxen_cpu_set_active_mask(void *mask, int mask_size)
+int
+uxen_cpu_set_active_mask(uint64_t *mask)
 {
     KAFFINITY affinity;
+    unsigned int host_cpu;
 
     affinity = KeQueryActiveProcessors();
-    BUG_ON(sizeof(affinity) > mask_size);
+    BUG_ON(sizeof(affinity) > sizeof(uint64_t));
+    *mask = 0;
     memcpy(mask, &affinity, sizeof(affinity));
 
+    for (host_cpu = 0; host_cpu < MAXIMUM_PROCESSORS; host_cpu++) {
+        if (host_cpu >= UXEN_MAXIMUM_PROCESSORS) {
+            fail_msg("invalid cpu %d in active mask", host_cpu);
+            return 1;
+        }
+	if ((affinity & affinity_mask(host_cpu)) == 0)
+	    continue;
 #if defined(VM_AFFINITY_ONE)
-    for (uxen_cpu_vm = uxen_first_cpu() + 1; uxen_cpu_vm < MAXIMUM_PROCESSORS;
-	 uxen_cpu_vm++) {
-	if (affinity & affinity_mask(uxen_cpu_vm))
-	    break;
-    }
-    BUG_ON(uxen_cpu_vm == MAXIMUM_PROCESSORS);
+        if (!uxen_cpu_vm && host_cpu > first_cpu)
+            uxen_cpu_vm = host_cpu;
 #endif
+        if (host_cpu < first_cpu)
+            first_cpu = host_cpu;
+        max_host_cpu = host_cpu;
+        nr_host_cpus++;
+    }
+    max_host_cpu++;
+#if defined(VM_AFFINITY_ONE)
+    BUG_ON(!uxen_cpu_vm);
+#endif
+
+    return 0;
 }
 
 void __cdecl

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -11,8 +11,9 @@
 #include <strings.h> /* ffs() */
 
 
-static int first_cpu = MAX_CPUS - 1;
-int uxen_nr_cpus = 0;
+static unsigned int first_cpu = MAX_CPUS - 1;
+unsigned int nr_host_cpus = 0;
+unsigned int max_host_cpu = 0;
 static uint32_t ipi_raised_vector[MAX_CPUS];
 static lck_spin_t *ipi_lock[MAX_CPUS];
 static void (*ipi_dispatch)(unsigned int);
@@ -29,7 +30,7 @@ static int get_cpu_number(cpu_data_t *cpu)
     return *(int *)((uint8_t *)cpu + cpu_offset);
 }
 
-void
+int
 uxen_cpu_set_active_mask(uint64_t *mask)
 {
     cpu_data_t **cpu_data_ptr = xnu_cpu_data_ptr();
@@ -38,23 +39,32 @@ uxen_cpu_set_active_mask(uint64_t *mask)
     *mask = 0;
     dprintk("CPUs:\n");
     for (i = 0; i < MAX_CPUS; i++) {
-        int cpu_num;
+        int host_cpu;
 
         if (!cpu_data_ptr[i])
             continue;
 
-        cpu_num = get_cpu_number(cpu_data_ptr[i]);
+        host_cpu = get_cpu_number(cpu_data_ptr[i]);
         dprintk("    CPU %d active\n", i);
 
-        *mask |= (1 << cpu_num);
+        if (host_cpu >= UXEN_MAXIMUM_PROCESSORS) {
+            fail_msg("invalid cpu %d in active mask", host_cpu);
+            return 1;
+        }
 
-        if (cpu_num < first_cpu)
-            first_cpu = cpu_num;
+        *mask |= (1 << host_cpu);
 
-        uxen_nr_cpus++;
+        if (host_cpu < first_cpu)
+            first_cpu = host_cpu;
+
+        max_host_cpu = host_cpu;
+        nr_host_cpus++;
     }
+    max_host_cpu++;
 
     active_mask = *mask;
+
+    return 0;
 }
 
 void
@@ -159,9 +169,9 @@ uxen_ipi_init(void (*dispatch)(unsigned int))
 {
     int cpu;
 
-    memset(ipi_lock, 0, MAX_CPUS * sizeof(lck_spin_t *));
+    memset(ipi_lock, 0, max_host_cpu * sizeof(lck_spin_t *));
 
-    for (cpu = 0; cpu < MAX_CPUS; cpu++) {
+    for (cpu = 0; cpu < max_host_cpu; cpu++) {
         if ((active_mask & affinity_mask(cpu)) == 0)
             continue;
         ipi_lock[cpu] = lck_spin_alloc_init(uxen_lck_grp, LCK_ATTR_NULL);
@@ -180,7 +190,7 @@ uxen_ipi_cleanup(void)
 {
     int cpu;
 
-    for (cpu = 0; cpu < MAX_CPUS; cpu++) {
+    for (cpu = 0; cpu < max_host_cpu; cpu++) {
         if (ipi_lock[cpu]) {
             lck_spin_free(ipi_lock[cpu], uxen_lck_grp);
             ipi_lock[cpu] = NULL;
@@ -209,7 +219,7 @@ static void ipi_cb(void *arg)
 void
 uxen_cpu_ipi(int cpu, unsigned int vector)
 {
-    assert(cpu < MAX_CPUS && vector < (sizeof (ipi_raised_vector[0]) * 8));
+    assert(cpu < max_host_cpu && vector < (sizeof (ipi_raised_vector[0]) * 8));
 
     lck_spin_lock(ipi_lock[cpu]);
     ipi_raised_vector[cpu] |= (1 << vector);
