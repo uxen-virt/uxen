@@ -303,7 +303,8 @@ static void get_immutable_pages_section(char * driver, struct Section * s)
         return;
     /* peauth.sys calls MmMapLockedPagesSpecifyCache, and writes to its
            PAGE section */
-    if (!strcmp(driver, "peauth.sys") && !strcmp(s->name, "PAGE"))
+    /* on win10, it is in PAGEwx1. Blacklist all PAGE* */
+    if (!strcmp(driver, "peauth.sys") && !strncmp(s->name, "PAGE", 4))
         return;
     /* clipsp.sys writes over frames assigned for its ro sections 
            (PAGEwx4 etc) */ 
