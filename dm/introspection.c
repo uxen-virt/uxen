@@ -116,6 +116,7 @@ void send_introspection_event(ioreq_t *req)
 
     case XEN_DOMCTL_INTROSPECTION_FEATURE_IMMUTABLE_MEMORY:
         type = BRO_EVENT_TYPE_INTRO_IMMUTABLE_MEMORY_VIOLATION;
+        introspection_dump_kernel_modules();
         break;
 
     case XEN_DOMCTL_INTROSPECTION_FEATURE_DR_BACKDOOR:

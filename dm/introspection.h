@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -11,6 +11,7 @@ struct ioreq;
 void send_introspection_event(struct ioreq *req);
 int introspection_get_module_name(uint64_t addr, uint64_t* offset,
     char* basename, char* fullname, int buffer_size);
+void introspection_dump_kernel_modules();
 int introspection_run_hidden_process_detector(uint64_t gsbase, uint64_t cr3,
     unsigned char *imagename);
 #endif  /* _INTROSPECTION_H_ */

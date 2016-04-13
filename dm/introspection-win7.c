@@ -395,18 +395,21 @@ struct guest_introspect_info_t *get_guest_introspect_info()
     return &guest_introspect_info;
 }
 
-int introspection_get_module_name(uint64_t addr, uint64_t *offset,
-    char *basename, char *fullname, int buffer_size)
+int introspection_get_module_name_or_log(uint64_t addr, uint64_t *offset,
+    char *basename, char *fullname, int buffer_size, int log_req)
 {
     uint64_t head = dmpdev_PsLoadedModulesList;
     LDR_MODULE currmodule;
     guest_word_t curr_addr;
     int module_count = 0;
+    int addr_found;
 
     *basename = 0;
     *fullname = 0;
     *offset = -1ULL;
 
+    if (log_req)
+        warnx("loaded kernel modules:\n");
     if (!head || addr == -1ULL)
         return -1;
     if (virt_read_type(head, curr_addr))
@@ -415,12 +418,21 @@ int introspection_get_module_name(uint64_t addr, uint64_t *offset,
         if (virt_read_type(curr_addr, currmodule))
             return -1;
         module_count++;
-        if (currmodule.BaseAddress <= addr &&
-            currmodule.BaseAddress + (currmodule.SizeOfImage&0xffffffff) > addr) {
+        addr_found = (currmodule.BaseAddress <= addr &&
+            currmodule.BaseAddress + (currmodule.SizeOfImage&0xffffffff) > addr);
+        if (log_req || addr_found) {
             get_unicode_string(&currmodule.BaseDllName, (unsigned char*)basename, buffer_size);
             get_unicode_string(&currmodule.FullDllName, (unsigned char*)fullname, buffer_size);
+        }
+        if (addr_found) {
             *offset = addr - currmodule.BaseAddress;
             return 0;
+        }
+        if (log_req) {
+            warnx("%016"PRIx64" size 0x%x basename %s fullname %s",
+                currmodule.BaseAddress,
+                (unsigned int)(currmodule.SizeOfImage&0xffffffff),
+                basename, fullname);
         }
         curr_addr = currmodule.InLoadOrderModuleList.Flink;
     }
@@ -428,7 +440,27 @@ int introspection_get_module_name(uint64_t addr, uint64_t *offset,
         warnx("introspection_get_module_name: more than 300 drivers found?");
         return -1;
     }
+    if (log_req)
+        warnx("end of kernel modules\n");
     return -1;
+}
+
+int introspection_get_module_name(uint64_t addr, uint64_t *offset,
+    char *basename, char *fullname, int buffer_size)
+{
+    return introspection_get_module_name_or_log(addr, offset,
+        basename, fullname, buffer_size, 0);
+}
+
+#define MAX_STRING_SIZE 256
+void introspection_dump_kernel_modules()
+{
+    uint64_t offset;
+    char basename[MAX_STRING_SIZE];
+    char fullname[MAX_STRING_SIZE];
+
+    introspection_get_module_name_or_log(0, &offset,
+        basename, fullname, MAX_STRING_SIZE, 1);
 }
 
 /* Hidden process detection.
