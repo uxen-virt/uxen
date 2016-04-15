@@ -32,7 +32,6 @@ static int virtual_w = 0;
 static int virtual_h = 0;
 static int current_w = 0;
 static int current_h = 0;
-static DWORD maximize_message = 0;
 static int virtual_mode_change = 0;
 
 void display_border_windows_on_top()
@@ -152,6 +151,7 @@ display_resize(int w, int h, unsigned int flags)
     UXENDISPCustomMode cm;
     BOOL set_mode = (current_w < w) || (current_h < h);
     BOOL force_change = (flags & CONSOLE_RESIZE_FLAG_FORCE) != 0;
+	HWND fgwnd, owner;
 
     if (set_mode || !virtual_mode_change || force_change) {
         DWORD mode = 0;
@@ -226,7 +226,9 @@ display_resize(int w, int h, unsigned int flags)
 
     SendResolutionToHidDriver();
     SystemParametersInfo(SPI_SETWORKAREA, 0, &work_area, SPIF_UPDATEINIFILE);
-    BroadcastSystemMessage(BSF_FORCEIFHUNG, BSM_ALLCOMPONENTS, maximize_message, 0, 0);
+    fgwnd = GetForegroundWindow();
+    owner = GetWindow(fgwnd, GW_OWNER);
+    SetWindowPos((owner) ? owner : fgwnd, HWND_TOP, 0, 0, w, h, SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
 
     if (virtual_w != current_w)
         SetWindowPos(right_window, HWND_TOPMOST, virtual_w, 0, current_w, current_h, SWP_SHOWWINDOW);
@@ -335,6 +337,7 @@ display_init(void)
     D3DKMT_OPENADAPTERFROMHDC open_adapter_info;
     UXENDISPCustomMode cm;
     RECT work_area = {0};
+    HWND fgwnd, owner;
 
     /* Sanity check here */
     FillMemory(&dispDevice, sizeof(DISPLAY_DEVICE), 0);
@@ -379,8 +382,6 @@ display_init(void)
     if (NT_SUCCESS(status))
         disp_adapter = open_adapter_info.hAdapter;
 
-    maximize_message = RegisterWindowMessageW(L"Bromium.Maximize");
-
     cm.esc_code = UXENDISP_ESCAPE_IS_VIRT_MODE_ENABLED;
     if (display_escape(UXENDISP_ESCAPE_IS_VIRT_MODE_ENABLED, &cm, sizeof(cm))) {
         warnx("Virtual Mode Change is DISABLED.");
@@ -389,7 +390,9 @@ display_init(void)
         work_area.bottom = virtual_h;
         work_area.right = virtual_w;
         SystemParametersInfo(SPI_SETWORKAREA, 0, &work_area, SPIF_UPDATEINIFILE);
-        BroadcastSystemMessage(BSF_FORCEIFHUNG, BSM_ALLCOMPONENTS, maximize_message, 0, 0);
+        fgwnd = GetForegroundWindow();
+        owner = GetWindow(fgwnd, GW_OWNER);
+        SetWindowPos((owner) ? owner : fgwnd, HWND_TOP, 0, 0, virtual_w, virtual_h, SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
     }
 
 
