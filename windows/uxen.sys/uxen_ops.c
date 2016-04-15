@@ -2175,7 +2175,7 @@ uxen_power_state(uint32_t suspend)
 #ifdef __i386__
         InterlockedExchange(&s4_in_progress, FALSE);
         irp = InterlockedExchangePointer(&wait_for_resume_from_s4_irp, NULL);
-        if (irp) {
+        if (irp && IoSetCancelRoutine(irp, NULL)) {
             dprintk("uxen hiber: \n",);
             irp->IoStatus.Status = STATUS_SUCCESS;
             irp->IoStatus.Information = 0;
