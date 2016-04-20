@@ -30,7 +30,8 @@ CV2PDB_PATCHES = cv2pdb-mingw.patch \
 		 cv2pdb-windows-path-separator.patch \
 		 cv2pdb-no-bigobj.patch \
 		 cv2pdb-buildid-and-no-strip.patch \
-		 cv2pdb-pdb-no-path.patch
+		 cv2pdb-pdb-no-path.patch \
+		 cv2pdb-no-dll-nonfatal.patch
 CV2PDB_DIR = cv2pdb-5c63d48
 
 VPATH = $(SRCDIR)/patches:$(XEN_DISTFILES)
