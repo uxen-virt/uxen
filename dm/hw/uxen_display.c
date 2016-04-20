@@ -194,8 +194,7 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
         alloc->vram.mapped_len)
         return;
 
-    npages = (alloc_offset + crtc->stride * crtc->yres +
-              TARGET_PAGE_SIZE - 1) >> TARGET_PAGE_BITS;
+    npages = alloc->vram.mapped_len >> TARGET_PAGE_BITS;
 
     dirty = alloca((npages + 7) / 8);
 
