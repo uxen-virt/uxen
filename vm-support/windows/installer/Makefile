@@ -22,14 +22,12 @@ UXENMOUSE_DIR = $(DISTDIR_VM_SUPPORT)/uxenmouse
 UXENPLATFORM_DIR = $(DISTDIR_VM_SUPPORT)/uxenplatform
 UXENSF_DIR = $(DISTDIR_VM_SUPPORT)/uxensf
 UXENSTOR_DIR = $(DISTDIR_VM_SUPPORT)/uxenstor
-#UXENSTORFLT_DIR = $(DISTDIR_VM_SUPPORT)/uxenstorflt
 UXENSVC_DIR = $(DISTDIR_VM_SUPPORT)/uxensvc
 UXENVMLIB_DIR = $(DISTDIR_VM_SUPPORT)/uxenvmlib
 UXENV4VLIB_DIR = $(DISTDIR_VM_SUPPORT)/uxenv4vlib
 UXENV4VGUEST_DIR = $(DISTDIR_VM_SUPPORT)/uxenv4vguest
 UXENNET_DIR = $(DISTDIR_VM_SUPPORT)/uxennet
 UXENNULLNET_DIR = $(DISTDIR_VM_SUPPORT)/uxennullnet
-#UXENZEROSHARE_DIR = $(DISTDIR_VM_SUPPORT)/uxenzeroshare
 UXENHID_DIR = $(DISTDIR_VM_SUPPORT)/uxenhid
 
 TARGETS = all dist clean
@@ -44,16 +42,19 @@ WIXFLAGS = -ext WixUIExtension.dll \
 	   -ext WixUtilExtension.dll
 
 ifeq ($(TARGET_VM_SUPPORT_BITS),32)
+DPINST_DIR = $(WINDDK_DIR)/redist/DIFx/dpinst/MultiLin/x86
 WIX_LIBS = $(WIX_DIR)/difxapp_x86.wixlib
 CANDLE_FLAGS = -arch x86
 WIN64=no
 else
+DPINST_DIR = $(WINDDK_DIR)/redist/DIFx/dpinst/MultiLin/amd64
 WIX_LIBS = $(WIX_DIR)/difxapp_x64.wixlib
 CANDLE_FLAGS = -arch x64
 WIN64=yes
 endif
 
-WIX_INCLUDES = -delevatedir=$(ELEVATE_DIR) \
+WIX_INCLUDES = -ddpinstdir=$(DPINST_DIR) \
+	       -delevatedir=$(ELEVATE_DIR) \
 	       -dsrcdir=$(SRCDIR) \
 	       -duxenclipboarddir=$(UXENCLIPBOARD_DIR) \
 	       -duxendispdir=$(UXENDISP_DIR) \
@@ -71,11 +72,10 @@ WIX_INCLUDES = -delevatedir=$(ELEVATE_DIR) \
 	       -duxensvcdir=$(UXENSVC_DIR) \
 	       -dWin64=$(WIN64) \
 	       -duxenhiddir=$(UXENHID_DIR)
-#	       -duxenstorfltdir=$(UXENSTORFLT_DIR)
-#	       -duxenzerosharedir=$(UXENZEROSHARE_DIR)
 
-WIX_DEPS = $(ELEVATE_DIR)/elevate.exe \
-	   $(UXENCLIPBOARD_DIR)/uXenClipboard.exe \
+WIX_DEPS = $(DPINST_DIR)/dpinst.exe \
+	   $(ELEVATE_DIR)/elevate.exe \
+	   $(UXENCLIPBOARD_DIR)/uxenclipboard.exe \
 	   $(UXENDISP_DIR)/uxendisp.sys \
 	   $(UXENAUDIO_DIR)/uxenaudio.sys \
 	   $(UXENDMPDRV_DIR)/uxendmpdrv.sys \
@@ -90,8 +90,6 @@ WIX_DEPS = $(ELEVATE_DIR)/elevate.exe \
 	   $(UXENSTOR_DIR)/uxenstor.sys \
 	   $(UXENSVC_DIR)/uxensvc.exe \
 	   $(UXENHID_DIR)/uxenhid.sys
-#	   $(UXENSTORFLT_DIR)/uxenstorflt.sys
-#	   $(UXENZEROSHARE_DIR)/uxenzeroshare.sys
 
 $(WIX_DEPS): $(UXENVMLIB_DIR)/uxenvmlib.sys $(UXENV4VLIB_DIR)/uxenv4vlib.sys
 
@@ -117,7 +115,7 @@ $(UXENMOUSE_DIR)/uxenmouse.sys:
 	$(MAKE) -C $(SRCDIR)/../uxenmouse dist
 $(UXENSF_DIR)/uxensf.sys:
 	$(MAKE) -C $(SRCDIR)/../uxensf dist
-$(UXENCLIPBOARD_DIR)/uXenClipboard.exe:
+$(UXENCLIPBOARD_DIR)/uxenclipboard.exe:
 	$(MAKE) -C $(SRCDIR)/../uxenclipboard dist
 $(UXENEVENT_DIR)/uxenevent.exe:
 	$(MAKE) -C $(SRCDIR)/../uxenevent dist
@@ -129,8 +127,6 @@ $(UXENPLATFORM_DIR)/uxenplatform.sys:
 	$(MAKE) -C $(SRCDIR)/../uxenplatform dist
 $(UXENSTOR_DIR)/uxenstor.sys:
 	$(MAKE) -C $(SRCDIR)/../uxenstor dist
-#$(UXENSTORFLT_DIR)/uxenstorflt.sys:
-#	$(MAKE) -C $(SRCDIR)/../uxenstorflt dist
 $(UXENV4VGUEST_DIR)/uxenv4vguest.sys:
 	$(MAKE) -C $(SRCDIR)/../uxenv4vguest dist
 $(UXENNET_DIR)/uxennet.sys:
@@ -145,8 +141,6 @@ $(UXENSVC_DIR)/uxensvc.exe:
 	$(MAKE) -C $(SRCDIR)/../uxensvc dist
 $(ELEVATE_DIR)/elevate.exe:
 	$(MAKE) -C $(SRCDIR)/../elevate dist
-#$(UXENZEROSHAREDIR)/uxenzeroshare.sys:
-#	$(MAKE) -C $(SRCDIR)/../uxenzeroshare dist
 $(UXENHID_DIR)/uxenhid.sys:
 	$(MAKE) -C $(SRCDIR)/../uxenhid dist
 

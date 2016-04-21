@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -75,6 +75,20 @@ get_uxenevent_commandline(wchar_t *path)
         return NULL;
 
     _snwprintf(command_line, MAX_PATH, L"%suxenevent.exe", path);
+
+    return command_line;
+}
+
+static wchar_t *
+get_uxenclipboard_commandline(wchar_t *path)
+{
+    wchar_t *command_line;
+
+    command_line = calloc(MAX_PATH, sizeof (wchar_t));
+    if (!command_line)
+        return NULL;
+
+    _snwprintf(command_line, MAX_PATH, L"%suxenclipboard.exe", path);
 
     return command_line;
 }
@@ -240,9 +254,10 @@ session_connect(DWORD session_id)
     command_line = get_uxenevent_commandline(path);
     create_admin_process(session_id, command_line, path);
     free(command_line);
+    command_line = get_uxenclipboard_commandline(path);
+    create_user_process(session_id, command_line, path);
+    free(command_line);
     free(path);
-
-
 }
 
 static HANDLE

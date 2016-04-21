@@ -69,7 +69,7 @@ void hw_disable_page_tracking(_In_ PUXEN_HW_RESOURCES pHw)
 void hw_enable_page_tracking(_In_ PUXEN_HW_RESOURCES pHw)
 {
     ULONG val = uxdisp_read(pHw, UXDISP_REG_MODE);
-    val |= UXDISP_MODE_PAGE_TRACKING_DISABLED;
+    val &= ~UXDISP_MODE_PAGE_TRACKING_DISABLED;
     uxdisp_write(pHw, UXDISP_REG_MODE, val);
 }
 

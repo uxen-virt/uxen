@@ -2,22 +2,52 @@
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
      xmlns:difx="http://schemas.microsoft.com/wix/DifxAppExtension"
      xmlns:util="http://schemas.microsoft.com/wix/UtilExtension">
+
+    <?define INSTALLING = (REMOVE = "" AND PREVIOUSVERSIONSINSTALLED = "") ?>
+    <?define UNINSTALLING = (REMOVE <> "" AND UPGRADINGPRODUCTCODE = "") ?>
+
     <Product Name="uXen VM support" Id="856AD792-7FC9-4A3F-83EA-BE15FA743AA7" UpgradeCode="14A05E48-824F-4A2A-9F44-ACB69825C649" Version="1.0.0" Manufacturer="uXen Project" Language="1033">
         <Package Id="*" Keywords="Installer" Description="uXen VM support installer" Manufacturer="uXen Project" InstallerVersion="200" Compressed="yes" />
         <Media Id='1' Cabinet='uXenDrvInstaller.cab' EmbedCab='yes' DiskPrompt='uXen Media' />
         <Property Id='DiskPrompt' Value='uXen Install Media' />
+
+        <CustomAction Id="CA_uxenplatform" Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenplatform" />
+        <CustomAction Id="CA_uxenv4vguest" Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenv4vguest" />
+        <CustomAction Id="CA_uxendmpdrv"   Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxendmpdrv" />
+        <CustomAction Id="CA_uxenmouse"    Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenmouse" />
+        <CustomAction Id="CA_uxenstor"     Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenstor" />
+        <CustomAction Id="CA_uxendisp"     Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxendisp" />
+        <CustomAction Id="CA_uxenkmdod"    Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenkmdod" />
+        <CustomAction Id="CA_uxenaudio"    Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenaudio" />
+        <CustomAction Id="CA_uxennet"      Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxennet" />
+        <CustomAction Id="CA_uxensf"       Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxensf" />
+        <CustomAction Id="CA_uxenhid"      Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenhid" />
+        <CustomAction Id="CA_uxennullnet"  Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxennullnet" />
+
+        <CustomAction Id="CA_un_uxenplatform" Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenplatform\uxenplatform.inf" />
+        <CustomAction Id="CA_un_uxenv4vguest" Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenv4vguest\uxenv4vguest.inf" />
+        <CustomAction Id="CA_un_uxendmpdrv"   Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxendmpdrv\uxendmpdrv.inf" />
+        <CustomAction Id="CA_un_uxenmouse"    Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenmouse\uxenmouse.inf" />
+        <CustomAction Id="CA_un_uxenstor"     Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenstor\uxenstor.inf" />
+        <CustomAction Id="CA_un_uxendisp"     Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxendisp\uxendisp.inf" />
+        <CustomAction Id="CA_un_uxenkmdod"    Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenkmdod\uxenkmdod.inf" />
+        <CustomAction Id="CA_un_uxenaudio"    Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenaudio\uxenaudio.inf" />
+        <CustomAction Id="CA_un_uxennet"      Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxennet\uxennet.inf" />
+        <CustomAction Id="CA_un_uxensf"       Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxensf\uxensf.inf" />
+        <CustomAction Id="CA_un_uxenhid"      Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenhid\uxenhid.inf" />
+        <CustomAction Id="CA_un_uxennullnet"  Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxennullnet\uxennullnet.inf" />
+
         <Directory Id='TARGETDIR' Name='SourceDir'>
             <Directory Id='INSTALLDIR' Name='uXenGuest'>
+                <Component Id="dpinst" Guid="b49e47e6-f1a0-40be-a3f6-c775b49869df" Win64="$(var.Win64)">
+                    <File Id="dpinst.exe" Name="dpinst.exe" DiskId="1" Source="$(var.dpinstdir)/dpinst.exe" />
+                </Component>
                 <Directory Id='uxendisp' Name='uxendisp'>
                     <Component Id="uxendisp" Guid="263bd36e-b7df-45eb-a57a-0f8b7154ecae" Win64="$(var.Win64)">
-                        <Condition>
-                          <![CDATA[Installed OR (VersionNT < 602)]]>
-                        </Condition>
                         <File Id="uxendisp.inf" Name="uxendisp.inf" DiskId="1" Source="$(var.uxendispdir)/uxendisp.inf" />
                         <File Id="uxendisp.sys" Name="uxendisp.sys" DiskId="1" Source="$(var.uxendispdir)/uxendisp.sys" />
                         <File Id="uxendisp.cat" Name="uxendisp.cat" DiskId="1" Source="$(var.uxendispdir)/uxendisp.cat" />
                         <File Id="uxendispdd.dll" Name="uxendispdd.dll" DiskId="1" Source="$(var.uxendispdir)/uxendispdd.dll" />
-                        <difx:Driver Legacy='yes' ForceInstall='yes' Sequence='4' />
                     </Component>
                 </Directory>
                 <Directory Id='uxenmouse' Name='uxenmouse'>
@@ -26,7 +56,6 @@
                         <File Id="uxenmouse.sys" Name="uxenmouse.sys" DiskId="1" Source="$(var.uxenmousedir)/uxenmouse.sys" />
                         <File Id="uxenmouse.cat" Name="uxenmouse.cat" DiskId="1" Source="$(var.uxenmousedir)/uxenmouse.cat" />
                         <File Id="uxenmouse_coinstaller" Name="WdfCoInstaller01009.dll" DiskId="1" Source="$(var.uxenmousedir)/WdfCoInstaller01009.dll" />
-                        <difx:Driver Legacy='yes' ForceInstall='yes' Sequence='4'/>
                     </Component>
                 </Directory>
                 <Directory Id='uxenaudio' Name='uxenaudio'>
@@ -34,7 +63,6 @@
                       <File Id="uxenaudio.inf" Name="uxenaudio.inf" DiskId="1" Source="$(var.uxenaudiodir)/uxenaudio.inf" />
                       <File Id="uxenaudio.sys" Name="uxenaudio.sys" DiskId="1" Source="$(var.uxenaudiodir)/uxenaudio.sys" />
                       <File Id="uxenaudio.cat" Name="uxenaudio.cat" DiskId="1" Source="$(var.uxenaudiodir)/uxenaudio.cat" />
-                      <difx:Driver Legacy='yes' ForceInstall='yes' Sequence='4'/>
                     </Component>
                 </Directory>
                 <Directory Id='uxensf' Name='uxensf'>
@@ -43,7 +71,6 @@
                         <File Id="uxensf.sys" Name="uxensf.sys" DiskId="1" Source="$(var.uxensfdir)/uxensf.sys" />
                         <File Id="VBoxMRXNP.dll" Name="VBoxMRXNP.dll" DiskId="1" Source="$(var.uxensfdir)/VBoxMRXNP.dll" />
                         <File Id="VBoxMRXNP32.dll" Name="VBoxMRXNP32.dll" DiskId="1" Source="$(var.uxensfdir)/VBoxMRXNP32.dll" />
-                        <difx:Driver Legacy="yes" ForceInstall="yes" Sequence='4'/>
                     </Component>
                 </Directory>
                 <Directory Id='uxenevent' Name='uxenevent'>
@@ -51,14 +78,9 @@
                         <File Id="uxensvc.exe" Name="uxensvc.exe" DiskId="1" Source="$(var.uxensvcdir)/uxensvc.exe" /> <!-- Needs to be first in the list -->
                         <File Id="uxenevent.exe" Name="uxenevent.exe" DiskId="1" Source="$(var.uxeneventdir)/uxenevent.exe" />
                         <File Id="elevate.exe" Name="elevate.exe" DiskId="1" Source="$(var.elevatedir)/elevate.exe" />
+                        <File Id="uxenclipboard.exe" Name="uxenclipboard.exe" DiskId="1" Source="$(var.uxenclipboarddir)/uxenclipboard.exe" />
                         <ServiceInstall Id="ServiceInstaller" Type="ownProcess" Vital="yes" Name="uxensvc" DisplayName="uXen Service" Start="auto" Account="LocalSystem" ErrorControl="ignore" Interactive="no" />
                         <ServiceControl Id="StartService" Start="install" Stop="both" Remove="uninstall" Name="uxensvc" Wait="no" />
-                    </Component>
-                </Directory>
-                <Directory Id='uxenclipboard' Name='uxenclipboard'>
-                    <Component Id="uxenclipboard" Guid="47313697-4aa6-4406-a1fe-f91439bd6625" Win64="$(var.Win64)">
-                        <File Id="uXenClipboard.exe" Name="uXenClipboard.exe" DiskId="1" Source="$(var.uxenclipboarddir)/uXenClipboard.exe" />
-                        <RegistryValue Id="uxenclipboard.reg" Root="HKMU" Action="write" Key="Software\Microsoft\Windows\CurrentVersion\Run" Name="uxenclipboard" Value="[#uXenClipboard.exe]" Type="string" />
                     </Component>
                 </Directory>
                 <Directory Id='uxendmpdrv' Name='uxendmpdrv'>
@@ -66,18 +88,13 @@
                         <File Id="uxendmpdrv.sys" Name="uxendmpdrv.sys" DiskId="1" Source="$(var.uxendmpdrvdir)/uxendmpdrv.sys" />
                         <File Id="uxendmpdrv.cat" Name="uxendmpdrv.cat" DiskId="1" Source="$(var.uxendmpdrvdir)/uxendmpdrv.cat" />
                         <File Id="uxendmpdrv.inf" Name="uxendmpdrv.inf" DiskId="1" Source="$(var.uxendmpdrvdir)/uxendmpdrv.inf" />
-                        <difx:Driver Legacy="yes" ForceInstall="yes" Sequence='1' />
                     </Component>
                 </Directory>
                 <Directory Id='uxenkmdod' Name='uxenkmdod'>
                     <Component Id="uxenkmdod" Guid="0812a642-1d1d-4f46-b50f-5e7760235014">
-                        <Condition>
-                          <![CDATA[Installed OR (VersionNT >= 602)]]>
-                        </Condition>
                         <File Id="uxenkmdod.inf" Name="uxenkmdod.inf" DiskId="1" Source="$(var.uxenkmdoddir)/uxenkmdod.inf" />
                         <File Id="uxenkmdod.sys" Name="uxenkmdod.sys" DiskId="1" Source="$(var.uxenkmdoddir)/uxenkmdod.sys" />
                         <File Id="uxenkmdod.cat" Name="uxenkmdod.cat" DiskId="1" Source="$(var.uxenkmdoddir)/uxenkmdod.cat" />
-                        <difx:Driver Legacy='yes' ForceInstall='yes' />
                     </Component>
                 </Directory>
                 <Directory Id='uxenplatform' Name='uxenplatform'>
@@ -87,7 +104,6 @@
                         <File Id="uxenplatform.cat" Name="uxenplatform.cat" DiskId="1" Source="$(var.uxenplatformdir)/uxenplatform.cat" />
                         <File Id="uxenplatform_coinstaller" Name="WdfCoInstaller01009.dll" DiskId="1" Source="$(var.uxenplatformdir)/WdfCoInstaller01009.dll" />
                         <File Id="uxenvmlib.sys_0" Name="uxenvmlib.sys" DiskId="1" Source="$(var.uxenplatformdir)/uxenvmlib.sys" />
-                        <difx:Driver ForceInstall="yes" Sequence='0' />
                     </Component>
                 </Directory>
                 <Directory Id='uxenstor' Name='uxenstor'>
@@ -95,19 +111,8 @@
                         <File Id="uxenstor.sys" Name="uxenstor.sys" DiskId="1" Source="$(var.uxenstordir)/uxenstor.sys" />
                         <File Id="uxenstor.cat" Name="uxenstor.cat" DiskId="1" Source="$(var.uxenstordir)/uxenstor.cat" />
                         <File Id="uxenstor.inf" Name="uxenstor.inf" DiskId="1" Source="$(var.uxenstordir)/uxenstor.inf" />
-                        <difx:Driver Legacy="yes" ForceInstall="yes" Sequence='7' />
                     </Component>
                 </Directory>
-<!--
-                <Directory Id='uxenstorflt' Name='uxenstorflt'>
-                    <Component Id="uxenstorflt" Guid="a7597652-3d1b-4520-a41a-c474eb1867d5" Win64="$(var.Win64)">
-                        <File Id="uxenstorflt.sys" Name="uxenstorflt.sys" DiskId="1" Source="$(var.uxenstorfltdir)/uxenstorflt.sys" />
-                        <File Id="uxenstorflt.cat" Name="uxenstorflt.cat" DiskId="1" Source="$(var.uxenstorfltdir)/uxenstorflt.cat" />
-                        <File Id="uxenstorflt.inf" Name="uxenstorflt.inf" DiskId="1" Source="$(var.uxenstorfltdir)/uxenstorflt.inf" />
-                        <difx:Driver Legacy="yes" ForceInstall="yes" Sequence='2' />
-                    </Component>
-                </Directory>
--->
                 <Directory Id='uxenv4vguest' Name='uxenv4vguest'>
                     <Component Id="uxenv4vguest" Guid="3dba13b3-b439-46d1-914b-a2095218766a" Win64="$(var.Win64)">
                         <File Id="uxenv4vguest.sys" Name="uxenv4vguest.sys" DiskId="1" Source="$(var.uxenv4vguestdir)/uxenv4vguest.sys" />
@@ -116,7 +121,6 @@
                         <File Id="uxenv4vguestdir_coinstaller" Name="WdfCoInstaller01009.dll" DiskId="1" Source="$(var.uxenv4vguestdir)/WdfCoInstaller01009.dll" />
                         <File Id="uxenv4vlib.sys_0" Name="uxenv4vlib.sys" DiskId="1" Source="$(var.uxenv4vguestdir)/uxenv4vlib.sys" />
                         <File Id="uxenvmlib.sys_1" Name="uxenvmlib.sys" DiskId="1" Source="$(var.uxenv4vguestdir)/uxenvmlib.sys" />
-                        <difx:Driver ForceInstall="yes" Sequence='5' />
                     </Component>
                 </Directory>
                 <Directory Id='uxennet' Name='uxennet'>
@@ -125,7 +129,6 @@
                         <File Id="uxennet.cat" Name="uxennet.cat" DiskId="1" Source="$(var.uxennetdir)/uxennet.cat" />
                         <File Id="uxennet.inf" Name="uxennet.inf" DiskId="1" Source="$(var.uxennetdir)/uxennet.inf" />
                         <File Id="uxenv4vlib.sys_1" Name="uxenv4vlib.sys" DiskId="1" Source="$(var.uxennetdir)/uxenv4vlib.sys" />
-                        <difx:Driver Legacy="yes" ForceInstall="yes" Sequence='6' />
                     </Component>
                 </Directory>
                 <Directory Id='uxennullnet' Name='uxennullnet'>
@@ -133,7 +136,6 @@
                         <File Id="uxennullnet.sys" Name="uxennullnet.sys" DiskId="1" Source="$(var.uxennullnetdir)/uxennullnet.sys" />
                         <File Id="uxennullnet.cat" Name="uxennullnet.cat" DiskId="1" Source="$(var.uxennullnetdir)/uxennullnet.cat" />
                         <File Id="uxennullnet.inf" Name="uxennullnet.inf" DiskId="1" Source="$(var.uxennullnetdir)/uxennullnet.inf" />
-                        <difx:Driver Legacy="yes" ForceInstall="yes" Sequence='6' />
                     </Component>
                 </Directory>
                 <Directory Id='uxenhid' Name='uxenhid'>
@@ -141,45 +143,55 @@
                         <File Id="uxenhid.sys" Name="uxenhid.sys" DiskId="1" Source="$(var.uxenhiddir)/uxenhid.sys" />
                         <File Id="uxenhid.cat" Name="uxenhid.cat" DiskId="1" Source="$(var.uxenhiddir)/uxenhid.cat" />
                         <File Id="uxenhid.inf" Name="uxenhid.inf" DiskId="1" Source="$(var.uxenhiddir)/uxenhid.inf" />
-                        <difx:Driver Legacy="yes" ForceInstall="yes" Sequence='6' />
                     </Component>
                 </Directory>
-<!--
-                <Directory Id='uxenzeroshare' Name='uxenzeroshare'>
-                    <Component Id="uxenzeroshare" Guid="F53A4E7d-03C1-48fA-92FE-E0AB224D084D">
-                        <File Id="uxenzeroshare.cat" Name="uxenzeroshare.cat" DiskId="1" Source="$(var.uxenzerosharedir)/uxenzeroshare.cat" />
-                        <File Id="uxenzeroshare.inf" Name="uxenzeroshare.inf" DiskId="1" Source="$(var.uxenzerosharedir)/uxenzeroshare.inf" />
-                        <File Id="uxenzeroshare.sys" Name="uxenzeroshare.sys" DiskId="1" Source="$(var.uxenzerosharedir)/uxenzeroshare.sys" />
-                        <File Id="uxenzeroshareconsole.exe" Name="uxenzeroshareconsole.exe" DiskId="1" Source="$(var.uxenzerosharedir)/uxenzeroshareconsole.exe" />
-                        <File Id="dbghelp.dll" Name="dbghelp.dll" DiskId="1" Source="$(var.uxenzerosharedir)/dbghelp.dll" />
-                        <File Id="symsrv.dll" Name="symsrv.dll" DiskId="1" Source="$(var.uxenzerosharedir)/symsrv.dll" />
-                        <File Id="symsrv.yes" Name="symsrv.yes" DiskId="1" Source="$(var.uxenzerosharedir)/symsrv.yes" />
-                        <difx:Driver Legacy="yes" ForceInstall="yes" Sequence="2" />
-                    </Component>
-                </Directory>
--->
             </Directory>
         </Directory>
         <Feature Id='Simple' Level='1'>
+            <ComponentRef Id="dpinst" />
             <ComponentRef Id='uxendmpdrv' />
             <ComponentRef Id='uxenplatform' />
-            <ComponentRef Id='uxenstor' />
-<!--            <ComponentRef Id='uxenstorflt' /> -->
             <ComponentRef Id='uxenv4vguest' />
+            <ComponentRef Id='uxenstor' />
         </Feature>
         <Feature Id='Complex' Level='1'>
             <ComponentRef Id='uxendisp' />
             <ComponentRef Id='uxenmouse' />
             <ComponentRef Id='uxenaudio' />
             <ComponentRef Id='uxensf' />
-            <ComponentRef Id='uxenclipboard' />
             <ComponentRef Id='uxenevent' />
             <ComponentRef Id='uxenkmdod' />
             <ComponentRef Id='uxennet' />
             <ComponentRef Id='uxennullnet' />
             <ComponentRef Id='uxenhid' />
-<!--            <ComponentRef Id='uxenzeroshare' /> -->
         </Feature>
+        <InstallExecuteSequence>
+            <Custom Action="CA_uxendmpdrv" After="InstallFiles">$(var.INSTALLING)</Custom>
+            <Custom Action="CA_uxenplatform" After="CA_uxendmpdrv">$(var.INSTALLING)</Custom>
+            <Custom Action="CA_uxenv4vguest" After="CA_uxenplatform">$(var.INSTALLING)</Custom>
+            <Custom Action="CA_uxenstor" After="CA_uxenv4vguest">$(var.INSTALLING)</Custom>
+            <Custom Action="CA_uxenmouse" After="CA_uxenstor">$(var.INSTALLING) AND <![CDATA[&Complex=3]]></Custom>
+            <Custom Action="CA_uxenaudio" After="CA_uxenmouse">$(var.INSTALLING) AND <![CDATA[&Complex=3]]></Custom>
+            <Custom Action="CA_uxennet" After="CA_uxenaudio">$(var.INSTALLING) AND <![CDATA[&Complex=3]]></Custom>
+            <Custom Action="CA_uxensf" After="CA_uxennet">$(var.INSTALLING) AND <![CDATA[&Complex=3]]></Custom>
+            <Custom Action="CA_uxenhid" After="CA_uxensf">$(var.INSTALLING) AND <![CDATA[&Complex=3]]></Custom>
+            <Custom Action="CA_uxennullnet" After="CA_uxenhid">$(var.INSTALLING) AND <![CDATA[&Complex=3]]></Custom>
+            <Custom Action="CA_uxendisp" After="CA_uxennullnet">$(var.INSTALLING) AND <![CDATA[VersionNT < 602]]> AND <![CDATA[&Complex=3]]></Custom>
+            <Custom Action="CA_uxenkmdod" After="CA_uxendisp">$(var.INSTALLING) AND <![CDATA[VersionNT >= 602]]> AND <![CDATA[&Complex=3]]></Custom>
+
+            <Custom Action="CA_un_uxenmouse" Before="RemoveFiles">$(var.UNINSTALLING)</Custom>
+            <Custom Action="CA_un_uxenstor" After="CA_un_uxenmouse">$(var.UNINSTALLING)</Custom>
+            <Custom Action="CA_un_uxenaudio" After="CA_un_uxenstor">$(var.UNINSTALLING)</Custom>
+            <Custom Action="CA_un_uxennet" After="CA_un_uxenaudio">$(var.UNINSTALLING)</Custom>
+            <Custom Action="CA_un_uxensf" After="CA_un_uxennet">$(var.UNINSTALLING)</Custom>
+            <Custom Action="CA_un_uxenhid" After="CA_un_uxensf">$(var.UNINSTALLING)</Custom>
+            <Custom Action="CA_un_uxennullnet" After="CA_un_uxenhid">$(var.UNINSTALLING)</Custom>
+            <Custom Action="CA_un_uxendisp" After="CA_un_uxennullnet">$(var.UNINSTALLING) AND <![CDATA[VersionNT < 602]]></Custom>
+            <Custom Action="CA_un_uxenkmdod" After="CA_un_uxendisp">$(var.UNINSTALLING) AND <![CDATA[VersionNT >= 602]]></Custom>
+            <Custom Action="CA_un_uxenv4vguest" After="CA_un_uxenkmdod">$(var.UNINSTALLING)</Custom>
+            <Custom Action="CA_un_uxenplatform" After="CA_un_uxenv4vguest">$(var.UNINSTALLING)</Custom>
+            <Custom Action="CA_un_uxendmpdrv" After="CA_un_uxenplatform">$(var.UNINSTALLING)</Custom>
+        </InstallExecuteSequence>
         <UIRef Id="WixUI_Minimal" />
     </Product>
 </Wix>
