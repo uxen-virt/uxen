@@ -155,6 +155,7 @@
             <ComponentRef Id='uxenstor' />
         </Feature>
         <Feature Id='Complex' Level='1'>
+            <ComponentRef Id="dpinst" />
             <ComponentRef Id='uxendisp' />
             <ComponentRef Id='uxenmouse' />
             <ComponentRef Id='uxenaudio' />
@@ -166,10 +167,10 @@
             <ComponentRef Id='uxenhid' />
         </Feature>
         <InstallExecuteSequence>
-            <Custom Action="CA_uxendmpdrv" After="InstallFiles">$(var.INSTALLING)</Custom>
-            <Custom Action="CA_uxenplatform" After="CA_uxendmpdrv">$(var.INSTALLING)</Custom>
-            <Custom Action="CA_uxenv4vguest" After="CA_uxenplatform">$(var.INSTALLING)</Custom>
-            <Custom Action="CA_uxenstor" After="CA_uxenv4vguest">$(var.INSTALLING)</Custom>
+            <Custom Action="CA_uxendmpdrv" After="InstallFiles">$(var.INSTALLING) AND <![CDATA[&Simple=3]]></Custom>
+            <Custom Action="CA_uxenplatform" After="CA_uxendmpdrv">$(var.INSTALLING) AND <![CDATA[&Simple=3]]></Custom>
+            <Custom Action="CA_uxenv4vguest" After="CA_uxenplatform">$(var.INSTALLING) AND <![CDATA[&Simple=3]]></Custom>
+            <Custom Action="CA_uxenstor" After="CA_uxenv4vguest">$(var.INSTALLING) AND <![CDATA[&Simple=3]]></Custom>
             <Custom Action="CA_uxenmouse" After="CA_uxenstor">$(var.INSTALLING) AND <![CDATA[&Complex=3]]></Custom>
             <Custom Action="CA_uxenaudio" After="CA_uxenmouse">$(var.INSTALLING) AND <![CDATA[&Complex=3]]></Custom>
             <Custom Action="CA_uxennet" After="CA_uxenaudio">$(var.INSTALLING) AND <![CDATA[&Complex=3]]></Custom>
