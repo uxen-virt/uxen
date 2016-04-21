@@ -431,7 +431,7 @@ int introspection_get_module_name_or_log(uint64_t addr, uint64_t *offset,
         }
         if (log_req) {
             warnx("%016"PRIx64" size 0x%x basename %s fullname %s",
-                currmodule.BaseAddress,
+                (uint64_t)(currmodule.BaseAddress),
                 (unsigned int)(currmodule.SizeOfImage&0xffffffff),
                 basename, fullname);
         }
