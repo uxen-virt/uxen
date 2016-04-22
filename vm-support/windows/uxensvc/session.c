@@ -330,5 +330,10 @@ void session_disconnect(DWORD session_id)
         TerminateProcess(proc, 1);
         CloseHandle(proc);
     }
+    proc = process_lookup(session_id, L"uxenclipboard.exe");
+    if (proc) {
+        TerminateProcess(proc, 1);
+        CloseHandle(proc);
+    }
 }
 
