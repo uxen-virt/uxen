@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -100,9 +100,9 @@ svc_ctl_handler(DWORD control, DWORD event_type, void *event_data,
         {
             WTSSESSION_NOTIFICATION *s = event_data;
 
-            if (event_type == WTS_CONSOLE_CONNECT)
+            if (event_type == WTS_SESSION_LOGON)
                 session_connect(s->dwSessionId);
-            else if (event_type == WTS_CONSOLE_DISCONNECT)
+            else if (event_type == WTS_SESSION_LOGOFF)
                 session_disconnect(s->dwSessionId);
         }
         break;

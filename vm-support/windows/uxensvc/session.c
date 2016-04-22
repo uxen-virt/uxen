@@ -165,7 +165,7 @@ create_user_process(DWORD session_id, wchar_t *command_line, wchar_t *path)
     ret = create_process(primary_token, command_line, path);
     CloseHandle(primary_token);
     if (ret) {
-        svc_printf(SVC_ERROR, L"Failed to create uxenevent process");
+        svc_printf(SVC_ERROR, L"Failed to create uxenclipboard process");
         return ret;
     }
 
@@ -235,6 +235,11 @@ session_connect(DWORD session_id)
     DWORD len = sizeof (session_type);
     wchar_t *path;
     wchar_t *command_line;
+
+    if (session_id == 0) {
+        svc_printf(SVC_ERROR, L"Session 0, we want to wait for user to login.");
+        return;
+    }
 
     rc = WTSQuerySessionInformation(WTS_CURRENT_SERVER_HANDLE,
                                     session_id,
