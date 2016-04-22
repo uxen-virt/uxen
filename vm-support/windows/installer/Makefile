@@ -73,7 +73,8 @@ WIX_INCLUDES = -ddpinstdir=$(DPINST_DIR) \
 	       -dWin64=$(WIN64) \
 	       -duxenhiddir=$(UXENHID_DIR)
 
-WIX_DEPS = $(DPINST_DIR)/dpinst.exe \
+WIX_DEPS = $(SRC_DIR)/run_dpinst.vbs \
+	   $(DPINST_DIR)/dpinst.exe \
 	   $(ELEVATE_DIR)/elevate.exe \
 	   $(UXENCLIPBOARD_DIR)/uxenclipboard.exe \
 	   $(UXENDISP_DIR)/uxendisp.sys \

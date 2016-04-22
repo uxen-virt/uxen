@@ -11,36 +11,61 @@
         <Media Id='1' Cabinet='uXenDrvInstaller.cab' EmbedCab='yes' DiskPrompt='uXen Media' />
         <Property Id='DiskPrompt' Value='uXen Install Media' />
 
-        <CustomAction Id="CA_uxenplatform" Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenplatform" />
-        <CustomAction Id="CA_uxenv4vguest" Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenv4vguest" />
-        <CustomAction Id="CA_uxendmpdrv"   Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxendmpdrv" />
-        <CustomAction Id="CA_uxenmouse"    Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenmouse" />
-        <CustomAction Id="CA_uxenstor"     Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenstor" />
-        <CustomAction Id="CA_uxendisp"     Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxendisp" />
-        <CustomAction Id="CA_uxenkmdod"    Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenkmdod" />
-        <CustomAction Id="CA_uxenaudio"    Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenaudio" />
-        <CustomAction Id="CA_uxennet"      Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxennet" />
-        <CustomAction Id="CA_uxensf"       Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxensf" />
-        <CustomAction Id="CA_uxenhid"      Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenhid" />
-        <CustomAction Id="CA_uxennullnet"  Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /LM /F /SE /SW /C /PATH C:\uXenGuest\uxennullnet" />
+        <CustomAction Id="CA_uxenplatform" Directory="TARGETDIR" Execute="deferred" Return="check" Impersonate="no" 
+            ExeCommand="wscript.exe [#run_dpinst.vbs] &quot;[#dpinst.exe] /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenplatform&quot;" />
+        <CustomAction Id="CA_uxenv4vguest" Directory="TARGETDIR" Execute="deferred" Return="check" Impersonate="no" 
+            ExeCommand="wscript.exe [#run_dpinst.vbs] &quot;[#dpinst.exe] /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenv4vguest&quot;" />
+        <CustomAction Id="CA_uxendmpdrv"   Directory="TARGETDIR" Execute="deferred" Return="check" Impersonate="no" 
+            ExeCommand="wscript.exe [#run_dpinst.vbs] &quot;[#dpinst.exe] /LM /F /SE /SW /C /PATH C:\uXenGuest\uxendmpdrv&quot;" />
+        <CustomAction Id="CA_uxenmouse"    Directory="TARGETDIR" Execute="deferred" Return="check" Impersonate="no" 
+            ExeCommand="wscript.exe [#run_dpinst.vbs] &quot;[#dpinst.exe] /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenmouse&quot;" />
+        <CustomAction Id="CA_uxenstor"     Directory="TARGETDIR" Execute="deferred" Return="check" Impersonate="no" 
+            ExeCommand="wscript.exe [#run_dpinst.vbs] &quot;[#dpinst.exe] /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenstor&quot;" />
+        <CustomAction Id="CA_uxendisp"     Directory="TARGETDIR" Execute="deferred" Return="check" Impersonate="no" 
+            ExeCommand="wscript.exe [#run_dpinst.vbs] &quot;[#dpinst.exe] /LM /F /SE /SW /C /PATH C:\uXenGuest\uxendisp&quot;" />
+        <CustomAction Id="CA_uxenkmdod"    Directory="TARGETDIR" Execute="deferred" Return="check" Impersonate="no" 
+            ExeCommand="wscript.exe [#run_dpinst.vbs] &quot;[#dpinst.exe] /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenkmdod&quot;" />
+        <CustomAction Id="CA_uxenaudio"    Directory="TARGETDIR" Execute="deferred" Return="check" Impersonate="no" 
+            ExeCommand="wscript.exe [#run_dpinst.vbs] &quot;[#dpinst.exe] /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenaudio&quot;" />
+        <CustomAction Id="CA_uxennet"      Directory="TARGETDIR" Execute="deferred" Return="check" Impersonate="no" 
+            ExeCommand="wscript.exe [#run_dpinst.vbs] &quot;[#dpinst.exe] /LM /F /SE /SW /C /PATH C:\uXenGuest\uxennet&quot;" />
+        <CustomAction Id="CA_uxensf"       Directory="TARGETDIR" Execute="deferred" Return="check" Impersonate="no" 
+            ExeCommand="wscript.exe [#run_dpinst.vbs] &quot;[#dpinst.exe] /LM /F /SE /SW /C /PATH C:\uXenGuest\uxensf&quot;" />
+        <CustomAction Id="CA_uxenhid"      Directory="TARGETDIR" Execute="deferred" Return="check" Impersonate="no" 
+            ExeCommand="wscript.exe [#run_dpinst.vbs] &quot;[#dpinst.exe] /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenhid&quot;" />
+        <CustomAction Id="CA_uxennullnet"  Directory="TARGETDIR" Execute="deferred" Return="check" Impersonate="no" 
+            ExeCommand="wscript.exe [#run_dpinst.vbs] &quot;[#dpinst.exe] /LM /F /SE /SW /C /PATH C:\uXenGuest\uxennullnet&quot;" />
 
-        <CustomAction Id="CA_un_uxenplatform" Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenplatform\uxenplatform.inf" />
-        <CustomAction Id="CA_un_uxenv4vguest" Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenv4vguest\uxenv4vguest.inf" />
-        <CustomAction Id="CA_un_uxendmpdrv"   Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxendmpdrv\uxendmpdrv.inf" />
-        <CustomAction Id="CA_un_uxenmouse"    Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenmouse\uxenmouse.inf" />
-        <CustomAction Id="CA_un_uxenstor"     Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenstor\uxenstor.inf" />
-        <CustomAction Id="CA_un_uxendisp"     Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxendisp\uxendisp.inf" />
-        <CustomAction Id="CA_un_uxenkmdod"    Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenkmdod\uxenkmdod.inf" />
-        <CustomAction Id="CA_un_uxenaudio"    Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenaudio\uxenaudio.inf" />
-        <CustomAction Id="CA_un_uxennet"      Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxennet\uxennet.inf" />
-        <CustomAction Id="CA_un_uxensf"       Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxensf\uxensf.inf" />
-        <CustomAction Id="CA_un_uxenhid"      Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenhid\uxenhid.inf" />
-        <CustomAction Id="CA_un_uxennullnet"  Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxennullnet\uxennullnet.inf" />
+        <CustomAction Id="CA_un_uxenplatform" Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" 
+            ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenplatform\uxenplatform.inf" />
+        <CustomAction Id="CA_un_uxenv4vguest" Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" 
+            ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenv4vguest\uxenv4vguest.inf" />
+        <CustomAction Id="CA_un_uxendmpdrv"   Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" 
+            ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxendmpdrv\uxendmpdrv.inf" />
+        <CustomAction Id="CA_un_uxenmouse"    Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" 
+            ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenmouse\uxenmouse.inf" />
+        <CustomAction Id="CA_un_uxenstor"     Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" 
+            ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenstor\uxenstor.inf" />
+        <CustomAction Id="CA_un_uxendisp"     Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" 
+            ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxendisp\uxendisp.inf" />
+        <CustomAction Id="CA_un_uxenkmdod"    Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" 
+            ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenkmdod\uxenkmdod.inf" />
+        <CustomAction Id="CA_un_uxenaudio"    Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" 
+            ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenaudio\uxenaudio.inf" />
+        <CustomAction Id="CA_un_uxennet"      Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" 
+            ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxennet\uxennet.inf" />
+        <CustomAction Id="CA_un_uxensf"       Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" 
+            ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxensf\uxensf.inf" />
+        <CustomAction Id="CA_un_uxenhid"      Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" 
+            ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenhid\uxenhid.inf" />
+        <CustomAction Id="CA_un_uxennullnet"  Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" 
+            ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxennullnet\uxennullnet.inf" />
 
         <Directory Id='TARGETDIR' Name='SourceDir'>
             <Directory Id='INSTALLDIR' Name='uXenGuest'>
                 <Component Id="dpinst" Guid="b49e47e6-f1a0-40be-a3f6-c775b49869df" Win64="$(var.Win64)">
                     <File Id="dpinst.exe" Name="dpinst.exe" DiskId="1" Source="$(var.dpinstdir)/dpinst.exe" />
+                    <File Id="run_dpinst.vbs" Name="run_dpinst.vbs" DiskId="1" Source="$(var.srcdir)/run_dpinst.vbs" />
                 </Component>
                 <Directory Id='uxendisp' Name='uxendisp'>
                     <Component Id="uxendisp" Guid="263bd36e-b7df-45eb-a57a-0f8b7154ecae" Win64="$(var.Win64)">
