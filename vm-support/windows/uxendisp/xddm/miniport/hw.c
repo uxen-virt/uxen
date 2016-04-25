@@ -36,7 +36,7 @@ static void uxdisp_write(PDEVICE_EXTENSION dev, ULONG reg, ULONG val)
 
 static ULONG uxdisp_crtc_read(PDEVICE_EXTENSION dev, ULONG crtc, ULONG reg)
 {
-    uxdisp_read(dev, UXDISP_REG_CRTC(crtc) + reg);
+    return uxdisp_read(dev, UXDISP_REG_CRTC(crtc) + reg);
 }
 
 static void uxdisp_crtc_write(PDEVICE_EXTENSION dev, ULONG crtc, ULONG reg, ULONG val)
@@ -46,7 +46,7 @@ static void uxdisp_crtc_write(PDEVICE_EXTENSION dev, ULONG crtc, ULONG reg, ULON
 
 static ULONG uxdisp_alloc_read(PDEVICE_EXTENSION dev, ULONG alloc, ULONG reg)
 {
-    uxdisp_read(dev, UXDISP_REG_ALLOC(alloc) + reg);
+    return uxdisp_read(dev, UXDISP_REG_ALLOC(alloc) + reg);
 }
 
 static void uxdisp_alloc_write(PDEVICE_EXTENSION dev, ULONG alloc, ULONG reg, ULONG val)
