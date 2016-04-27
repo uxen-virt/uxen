@@ -159,6 +159,7 @@ void getdomaininfo(struct domain *d, struct xen_domctl_getdomaininfo *info)
     xsm_security_domaininfo(d, info);
 
     info->tot_pages         = d->tot_pages;
+    info->host_pages        = d->host_pages;
     info->max_pages         = d->max_pages;
     info->hidden_pages      = atomic_read(&d->hidden_pages);
 #ifndef __UXEN__

@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -270,6 +270,7 @@ int xc_domain_getinfo(xc_interface *xch,
 
         info->ssidref  = domctl.u.getdomaininfo.ssidref;
         info->nr_pages = domctl.u.getdomaininfo.tot_pages;
+        info->nr_host_mapped_pages = domctl.u.getdomaininfo.host_pages;
         info->nr_hidden_pages = domctl.u.getdomaininfo.hidden_pages;
         info->nr_pod_pages = domctl.u.getdomaininfo.pod_pages;
         info->nr_zero_shared_pages = domctl.u.getdomaininfo.zero_shared_pages;

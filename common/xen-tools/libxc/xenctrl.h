@@ -25,7 +25,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -386,6 +386,7 @@ typedef struct xc_dominfo {
                   hvm:1, debugged:1, shutting_down:1;
     unsigned int  shutdown_reason; /* only meaningful if shutdown==1 */
     unsigned long nr_pages; /* current number, not maximum */
+    unsigned long nr_host_mapped_pages;
     unsigned long nr_hidden_pages;
     unsigned long nr_pod_pages;
     unsigned long nr_zero_shared_pages;

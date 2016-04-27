@@ -853,7 +853,7 @@ stats_timer_cb(void *opaque)
     int ret;
     xc_dominfo_t info;
     int balloon_cur, balloon_min, balloon_max;
-    int priv, lowmem, highmem;
+    int priv, lowmem, highmem, vram;
     int pod, tmpl, zero;
     float cpu_u = 0.0f, cpu_k = 0.0f;
     uint64_t cpu_u_total_ms = 0, cpu_k_total_ms = 0;
@@ -871,6 +871,7 @@ stats_timer_cb(void *opaque)
     balloon_cur = balloon_min = balloon_max = 0;
     uxen_platform_get_balloon_size(&balloon_cur, &balloon_min, &balloon_max);
     priv = info.nr_pages * UXEN_PAGE_SIZE;
+    vram = info.nr_host_mapped_pages * UXEN_PAGE_SIZE;
     highmem = info.nr_hidden_pages * UXEN_PAGE_SIZE;
     lowmem = priv - highmem;
     pod = info.nr_pod_pages * UXEN_PAGE_SIZE;
@@ -890,6 +891,7 @@ stats_timer_cb(void *opaque)
         "balloon-min", (int64_t)balloon_min,
         "balloon-max", (int64_t)balloon_max,
         "private-mem", (int64_t)priv,
+        "vram-mem", (int64_t)vram,
         "lowmem", (int64_t)lowmem,
         "highmem", (int64_t)highmem,
         "on-demand-mem", (int64_t)pod,

@@ -102,6 +102,7 @@ struct xen_domctl_getdomaininfo {
 #define XEN_DOMINF_shutdownshift 16
     uint32_t flags;              /* XEN_DOMINF_* */
     uint64_aligned_t tot_pages;
+    uint64_aligned_t host_pages;
     uint64_aligned_t max_pages;
     uint64_aligned_t hidden_pages;
     uint64_aligned_t pod_pages;
