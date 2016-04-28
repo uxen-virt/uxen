@@ -1060,9 +1060,10 @@ static int uxendisp_initfn(PCIDevice *dev)
 
     for (i = 0; i < UXENDISP_NB_ALLOCS; i++) {
         struct alloc_state *alloc = &s->allocs[i];
-
+        alloc->vfn = 0;
         vram_init(&alloc->vram, UXENDISP_VRAM_SIZE);
         vram_register_change(&alloc->vram, vram_change, s);
+        vram_alloc(&alloc->vram, 0x1000);
     }
 
     vga_init(v, pci_address_space(dev), pci_address_space_io(dev), s->crtcs[0].ds);
