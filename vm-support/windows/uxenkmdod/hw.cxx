@@ -31,11 +31,6 @@ void uxdisp_crtc_write(_In_ PUXEN_HW_RESOURCES pHw, ULONG crtc, ULONG reg, ULONG
     uxdisp_write(pHw, UXDISP_REG_CRTC(crtc) + reg, val);
 }
 
-static void uxdisp_alloc_write(_In_ PUXEN_HW_RESOURCES pHw, ULONG alloc, ULONG reg, ULONG val)
-{
-    uxdisp_write(pHw, UXDISP_REG_ALLOC(alloc) + reg, val);
-}
-
 NTSTATUS hw_is_virt_mode_enabled(_In_ PUXEN_HW_RESOURCES pHw)
 {
     if (uxdisp_read(pHw, UXDISP_REG_VIRTMODE_ENABLED))
@@ -122,9 +117,6 @@ NTSTATUS hw_set_mode(
         return STATUS_UNSUCCESSFUL;
     }
 
-    uxdisp_alloc_write(pHw, 0, UXDISP_REG_ALLOC_PAGE_START, 0);
-    uxdisp_alloc_write(pHw, 0, UXDISP_REG_ALLOC_PAGE_COUNT,
-                       (height * stride + 4095) >> 12);
     uxdisp_crtc_write(pHw, 0, UXDISP_REG_CRTC_ENABLE, 1);
     uxdisp_crtc_write(pHw, 0, UXDISP_REG_CRTC_XRES, width);
     uxdisp_crtc_write(pHw, 0, UXDISP_REG_CRTC_YRES, height);

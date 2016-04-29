@@ -136,9 +136,6 @@ int uXenDispFB::set_mode(unsigned int width, unsigned int height,
         return -1;
     }
 
-    uxdisp_alloc_write(0, UXDISP_REG_ALLOC_PAGE_START, 0);
-    uxdisp_alloc_write(0, UXDISP_REG_ALLOC_PAGE_COUNT,
-                       ((height * stride + 64 /* shared memory header */ + 4095) >> 12) * 2);
     uxdisp_crtc_write(0, UXDISP_REG_CRTC_ENABLE, 1);
     uxdisp_crtc_write(0, UXDISP_REG_CRTC_XRES, width);
     uxdisp_crtc_write(0, UXDISP_REG_CRTC_YRES, height);
@@ -277,9 +274,9 @@ uXenDispFB::get_vram_size() const
 {
     size_t len;
 
-    len = uxdisp_read(UXDISP_REG_VRAM_SIZE);
+    len = 1 << uxdisp_read(UXDISP_REG_BANK_ORDER);
 
-    return len;
+    return len * (64 * 1024);
 }
 
 /* IOFramebuffer */
@@ -326,16 +323,17 @@ uXenDispFB::getApertureRange(IOPixelAperture aperture)
     }
 
     dprintk("%s\n", __func__);
-
+  
     /* Determine how much vram is required for the screen. */
-    if (current_mode)
-      screen_bytes = current_mode->pix.bytesPerRow * current_mode->pix.activeHeight;
-    else
+    if (current_mode) {
+      screen_bytes = current_mode->pix.bytesPerRow *current_mode->pix.activeHeight;
+    } else {
       screen_bytes = 0;
-
+    }
+    
     if (screen_bytes > vram_size)
         return NULL;
-
+  
     return IODeviceMemory::withSubRange(vram, 0, screen_bytes);
 }
 
@@ -510,7 +508,7 @@ uXenDispFB::setGammaTable(UInt32 channelCount,
                           UInt32 dataWidth,
                           void *data)
 {
-    /*
+    /* 
      * There's nothing we can do with the gamma table but we
      * return success to reduce the number of errors encountered
      * by the WindowServer and prevent the window server from
@@ -524,10 +522,10 @@ uXenDispFB::getTimingInfoForDisplayMode(IODisplayModeID displayMode,
                                         IOTimingInformation *info)
 {
     dprintk("%s(id=%d)\n", __func__, displayMode);
-
+  
     unsigned int i;
     int mode;
-
+  
     /* Find the display mode. */
     mode = -1;
     for (i = 0; i < n_modes; i++) {
@@ -536,11 +534,11 @@ uXenDispFB::getTimingInfoForDisplayMode(IODisplayModeID displayMode,
             break;
         }
     }
-
+  
     /* Unable to find mode. */
     if (mode == -1)
         return kIOReturnUnsupportedMode;
-
+  
     /* Populate the timing info. */
     dprintk("%s found at index %d\n", __func__, mode);
     info->appleTimingID = kIOTimingIDApple_FixedRateLCD;
@@ -653,23 +651,23 @@ uXenDispFB::start(IOService *provider)
         cleanup();
         return false;
     }
-
+  
     /* Create an IOWorkLoop and IOTimerEventSource to fake-up
        vblank events in the hope that they will keep the driver
        on the straight and narrow. */
-
+  
     vblank_workloop = IOWorkLoop::workLoop();
     if (vblank_workloop == NULL) {
         cleanup();
         return false;
     }
-
+  
     vblank_timer = IOTimerEventSource::timerEventSource(this, &timerCallback);
     if (vblank_timer == NULL) {
         cleanup();
         return false;
     }
-
+  
     ret = vblank_workloop->addEventSource(vblank_timer);
     if (ret != kIOReturnSuccess) {
         cleanup();
@@ -701,11 +699,12 @@ uXenDispFB::cleanup()
         vblank_timer->release();
         vblank_timer = NULL;
     }
-
+  
     if (vblank_workloop) {
         vblank_workloop->release();
         vblank_workloop = NULL;
     }
+  
 }
 
 IOReturn

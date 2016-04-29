@@ -11,7 +11,7 @@
 #define     UXDISP_MAGIC                            0x7558656e
 #define UXDISP_REG_REVISION             0x00004
 #define UXDISP_REG_VRAM_SIZE            0x00008
-#define UXDISP_REG_ALLOC_COUNT          0x0000C
+#define UXDISP_REG_BANK_ORDER           0x0000C
 #define UXDISP_REG_CRTC_COUNT           0x00010
 #define UXDISP_REG_STRIDE_ALIGN         0x00014
 #define UXDISP_REG_INTERRUPT            0x00018
@@ -25,10 +25,9 @@
 #define UXDISP_REG_INTERRUPT_ENABLE     0x00024
 #define UXDISP_REG_VIRTMODE_ENABLED     0x00028
 
-#define UXDISP_REG_ALLOC_LEN            0x00008
-#define UXDISP_REG_ALLOC(x)             (0x00100 + (x) * UXDISP_REG_ALLOC_LEN)
-#define UXDISP_REG_ALLOC_PAGE_START     0x0
-#define UXDISP_REG_ALLOC_PAGE_COUNT     0x4
+#define UXDISP_REG_BANK_LEN             0x00004
+#define UXDISP_REG_BANK(x)              (0x00100 + (x) * UXDISP_REG_BANK_LEN)
+#define UXDISP_REG_BANK_POPULATE        0x0
 
 #define UXDISP_REG_CURSOR_POS_X         0x01000
 #define UXDISP_REG_CURSOR_POS_Y         0x01004
@@ -47,10 +46,6 @@
 #define UXDISP_REG_CRTC(x)              (0x10000 + (x) * UXDISP_REG_CRTC_LEN)
 #define UXDISP_REG_CRTC_STATUS          0x0000
 #define UXDISP_REG_CRTC_OFFSET          0x0004
-#define     UXDISP_REG_CRTC_ALLOC_INDEX_SHIFT        29
-#define     UXDISP_REG_CRTC_ALLOC_INDEX_MASK         0x7
-#define     UXDISP_REG_CRTC_ALLOC_OFFSET_SHIFT       0
-#define     UXDISP_REG_CRTC_ALLOC_OFFSET_MASK        0x1fffffff
 #define UXDISP_REG_CRTC_ENABLE          0x1000
 #define UXDISP_REG_CRTC_XRES            0x1004
 #define UXDISP_REG_CRTC_YRES            0x1008

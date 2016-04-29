@@ -36,22 +36,12 @@ static void uxdisp_write(PDEVICE_EXTENSION dev, ULONG reg, ULONG val)
 
 static ULONG uxdisp_crtc_read(PDEVICE_EXTENSION dev, ULONG crtc, ULONG reg)
 {
-    return uxdisp_read(dev, UXDISP_REG_CRTC(crtc) + reg);
+    uxdisp_read(dev, UXDISP_REG_CRTC(crtc) + reg);
 }
 
 static void uxdisp_crtc_write(PDEVICE_EXTENSION dev, ULONG crtc, ULONG reg, ULONG val)
 {
     uxdisp_write(dev, UXDISP_REG_CRTC(crtc) + reg, val);
-}
-
-static ULONG uxdisp_alloc_read(PDEVICE_EXTENSION dev, ULONG alloc, ULONG reg)
-{
-    return uxdisp_read(dev, UXDISP_REG_ALLOC(alloc) + reg);
-}
-
-static void uxdisp_alloc_write(PDEVICE_EXTENSION dev, ULONG alloc, ULONG reg, ULONG val)
-{
-    uxdisp_write(dev, UXDISP_REG_ALLOC(alloc) + reg, val);
 }
 
 VP_STATUS hw_init(PDEVICE_EXTENSION dev)
@@ -177,9 +167,6 @@ VP_STATUS hw_set_mode(PDEVICE_EXTENSION dev, VIDEO_MODE_INFORMATION *mode)
         return ERROR_INVALID_PARAMETER;
     }
 
-    uxdisp_alloc_write(dev, 0, UXDISP_REG_ALLOC_PAGE_START, 0);
-    uxdisp_alloc_write(dev, 0, UXDISP_REG_ALLOC_PAGE_COUNT,
-                       (height * stride + 4095) >> 12);
     uxdisp_crtc_write(dev, 0, UXDISP_REG_CRTC_ENABLE, 1);
     uxdisp_crtc_write(dev, 0, UXDISP_REG_CRTC_XRES, width);
     uxdisp_crtc_write(dev, 0, UXDISP_REG_CRTC_YRES, height);
@@ -201,7 +188,7 @@ VP_STATUS hw_disable(PDEVICE_EXTENSION dev)
 
 ULONG hw_get_vram_size(PDEVICE_EXTENSION dev)
 {
-    return uxdisp_read(dev, UXDISP_REG_VRAM_SIZE);
+    return 1 << uxdisp_read(dev, UXDISP_REG_BANK_ORDER);
 }
 
 BOOLEAN hw_pointer_update(PDEVICE_EXTENSION dev, ULONG width, ULONG height,

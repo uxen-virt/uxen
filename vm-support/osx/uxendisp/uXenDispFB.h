@@ -138,14 +138,6 @@ private:
     {
         *(uint32_t *)((uint8_t *)mmio->getVirtualAddress() + reg) = val;
     }
-    uint32_t uxdisp_alloc_read(uint32_t alloc, uint32_t reg) const
-    {
-        return uxdisp_read(UXDISP_REG_ALLOC(alloc) + reg);
-    }
-    void uxdisp_alloc_write(uint32_t alloc, uint32_t reg, uint32_t val)
-    {
-        return uxdisp_write(UXDISP_REG_ALLOC(alloc) + reg, val);
-    }
     uint32_t uxdisp_crtc_read(uint32_t crtc, uint32_t reg) const
     {
         return uxdisp_read(UXDISP_REG_CRTC(crtc) + reg);

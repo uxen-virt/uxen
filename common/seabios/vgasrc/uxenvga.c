@@ -22,7 +22,6 @@ struct uxenvga_state {
     u32 yres;
     u32 stride;
     u32 fmt;
-    u32 npages;
 };
 
 static u16 uxenvga_iobase VAR16;
@@ -177,7 +176,7 @@ uxenvga_get_displaystart(struct vgamode_s *vmode_g)
     u16 iobase = GET_GLOBAL(uxenvga_iobase);
     u32 offset = uxenvga_crtc_read(iobase, 0, UXDISP_REG_CRTC_OFFSET);
 
-    return offset & UXDISP_REG_CRTC_ALLOC_OFFSET_MASK;
+    return offset;
 }
 
 int
@@ -185,8 +184,7 @@ uxenvga_set_displaystart(struct vgamode_s *vmode_g, int val)
 {
     u16 iobase = GET_GLOBAL(uxenvga_iobase);
 
-    uxenvga_crtc_write(iobase, 0, UXDISP_REG_CRTC_OFFSET,
-                       val & UXDISP_REG_CRTC_ALLOC_OFFSET_MASK);
+    uxenvga_crtc_write(iobase, 0, UXDISP_REG_CRTC_OFFSET, val);
 
     return 0;
 }
@@ -249,8 +247,6 @@ uxenvga_save_state(u16 seg, void *data, int states)
     SET_FARVAR(seg, st->stride, v);
     v = uxenvga_crtc_read(iobase, 0, UXDISP_REG_CRTC_FORMAT);
     SET_FARVAR(seg, st->fmt, v);
-    v = uxenvga_alloc_read(iobase, 0, UXDISP_REG_ALLOC_PAGE_COUNT);
-    SET_FARVAR(seg, st->npages, v);
 
     return 0;
 }
@@ -271,8 +267,6 @@ uxenvga_restore_state(u16 seg, void *data, int states)
 
     u32 v;
 
-    v = GET_FARVAR(seg, st->npages);
-    uxenvga_alloc_write(iobase, 0, UXDISP_REG_ALLOC_PAGE_COUNT, v);
     v = GET_FARVAR(seg, st->fmt);
     uxenvga_crtc_write(iobase, 0, UXDISP_REG_CRTC_FORMAT, v);
     v = GET_FARVAR(seg, st->stride);
@@ -300,11 +294,6 @@ int
 uxenvga_set_mode(struct vgamode_s *vmode_g, int flags)
 {
     u16 iobase = GET_GLOBAL(uxenvga_iobase);
-    u32 width = GET_GLOBAL(vmode_g->width);
-    u32 height = GET_GLOBAL(vmode_g->height);
-    u8 depth = GET_GLOBAL(vmode_g->depth);
-    u32 linelength = width * ((depth + 7) / 8);
-    u32 npages = (height * linelength + 4095) >> 12;
     u32 v;
 
     if (! is_uxenvga_mode(vmode_g)) {
@@ -313,14 +302,12 @@ uxenvga_set_mode(struct vgamode_s *vmode_g, int flags)
         return stdvga_set_mode(vmode_g, flags);
     }
 
+    u8 depth = GET_GLOBAL(vmode_g->depth);
     if (depth == 4)
         stdvga_set_mode(stdvga_find_mode(0x6a), 0);
     if (depth == 8)
         // XXX load_dac_palette(3);
         ;
-
-    uxenvga_alloc_write(iobase, 0, UXDISP_REG_ALLOC_PAGE_START, 0);
-    uxenvga_alloc_write(iobase, 0, UXDISP_REG_ALLOC_PAGE_COUNT, npages);
 
     uxenvga_crtc_write(iobase, 0, UXDISP_REG_CRTC_ENABLE, 0x1);
 
@@ -345,9 +332,14 @@ uxenvga_set_mode(struct vgamode_s *vmode_g, int flags)
         return -1;
     }
 
+    u32 width = GET_GLOBAL(vmode_g->width);
+    u32 height = GET_GLOBAL(vmode_g->height);
     uxenvga_crtc_write(iobase, 0, UXDISP_REG_CRTC_XRES, width);
     uxenvga_crtc_write(iobase, 0, UXDISP_REG_CRTC_YRES, height);
+
+    u32 linelength = width * ((depth + 7) / 8);
     uxenvga_crtc_write(iobase, 0, UXDISP_REG_CRTC_STRIDE, linelength);
+
     uxenvga_crtc_write(iobase, 0, UXDISP_REG_CRTC_OFFSET, 0);
 
     v = uxenvga_read(iobase, UXDISP_REG_MODE);
@@ -425,7 +417,7 @@ uxenvga_init(void)
         return 0;
 
     u32 revision = uxenvga_read(iobase, UXDISP_REG_REVISION);
-    u32 totalmem = uxenvga_read(iobase, UXDISP_REG_VRAM_SIZE);
+    u32 totalmem = (1 << uxenvga_read(iobase, UXDISP_REG_BANK_ORDER));
 
     u32 lfb_addr = pci_config_readl(bdf, PCI_BASE_ADDRESS_0)
                    & PCI_BASE_ADDRESS_MEM_MASK;
