@@ -227,7 +227,6 @@ int32_t _uxen_snoop_hypercall(void *udata, int mode);
 #define uxen_snoop_hypercall(udata) _uxen_snoop_hypercall(udata, SNOOP_USER)
 
 #define try_call(r, exception_retval, fn, ...) do {                 \
-        fill_vframes();                                             \
         r fn(__VA_ARGS__);                                          \
     } while (0)
 
@@ -401,7 +400,7 @@ void user_free(void *va, struct fd_assoc *fda);
 void user_free_all_user_mappings(struct fd_assoc *fda);
 int map_host_pages(void *, size_t, uint64_t *, struct fd_assoc *);
 int unmap_host_pages(void *, size_t, struct fd_assoc *);
-extern lck_spin_t *populate_vframes_lock;
+extern lck_mtx_t *populate_vframes_lock;
 void fill_vframes(void);
 extern uxen_pfn_t vframes_start, vframes_end;
 

@@ -36,12 +36,12 @@ static PMDL idle_free_mfns_mdl = NULL;
 
 static uint32_t pages_reserve[MAXIMUM_PROCESSORS];
 
-KSPIN_LOCK populate_frametable_lock;
+KGUARDED_MUTEX populate_frametable_mutex;
 static PMDL frametable_page_mdl = NULL;
 #define FRAMETABLE_MFNS_BATCH 256
 static unsigned int nr_frametable_mfns = 0;
 
-KSPIN_LOCK populate_vframes_lock;
+KGUARDED_MUTEX populate_vframes_mutex;
 uxen_pfn_t vframes_start, vframes_end;
 
 #ifdef _WIN64
@@ -374,11 +374,10 @@ _populate_frametable(uxen_pfn_t mfn, uxen_pfn_t pmfn)
     uintptr_t frametable_va;
     PFN_NUMBER frametable_mfn;
     int s = uxen_info->ui_sizeof_struct_page_info;
-    KIRQL old_irql;
 
     offset = (s * mfn) >> PAGE_SHIFT;
 
-    KeAcquireSpinLock(&populate_frametable_lock, &old_irql);
+    KeAcquireGuardedMutex(&populate_frametable_mutex);
     while (!(frametable_populated[offset / 8] & (1 << (offset % 8)))) {
         if (!pmfn && !nr_frametable_mfns) {
             PHYSICAL_ADDRESS low_address;
@@ -386,20 +385,20 @@ _populate_frametable(uxen_pfn_t mfn, uxen_pfn_t pmfn)
             PHYSICAL_ADDRESS skip_bytes;
             PMDL mdl;
 
-            KeReleaseSpinLock(&populate_frametable_lock, old_irql);
+            KeReleaseGuardedMutex(&populate_frametable_mutex);
             low_address.QuadPart = 0;
             high_address.QuadPart = -1;
             skip_bytes.QuadPart = 0;
             mdl = MmAllocatePagesForMdlEx(low_address, high_address, skip_bytes,
                                           FRAMETABLE_MFNS_BATCH << PAGE_SHIFT,
                                           MmCached, 0);
-            KeAcquireSpinLock(&populate_frametable_lock, &old_irql);
+            KeAcquireGuardedMutex(&populate_frametable_mutex);
 
             if (!nr_frametable_mfns) {
                 /* if our allocation failed, take advantage of the
                  * slim chance that another thread filled the mdl */
                 if (!mdl || MmGetMdlByteCount(mdl) < PAGE_SIZE) {
-                    KeReleaseSpinLock(&populate_frametable_lock, old_irql);
+                    KeReleaseGuardedMutex(&populate_frametable_mutex);
                     fail_msg("MmAllocatePagesForMdlEx failed");
                     if (mdl)
                         ExFreePool(mdl);
@@ -430,7 +429,7 @@ _populate_frametable(uxen_pfn_t mfn, uxen_pfn_t pmfn)
         frametable_populated[offset / 8] |= (1 << (offset % 8));
         break;
     }
-    KeReleaseSpinLock(&populate_frametable_lock, old_irql);
+    KeReleaseGuardedMutex(&populate_frametable_mutex);
 
     /* Check if last byte of mfn's page_info is in same frametable
      * page, otherwise populate next mfn as well */
@@ -852,6 +851,7 @@ _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
     if (pages >= MAX_RESERVE)
         return -1;
 
+    fill_vframes();
     disable_preemption(i);
 
     if (pages <= uxen_info->ui_free_pages[cpu].count)
@@ -2431,9 +2431,8 @@ fill_vframes(void)
     struct page_list_entry *p;
     uint32_t batch = 0, *tail = NULL;
     uint32_t count, added = 0;
-    KIRQL old_irql;
 
-    KeAcquireSpinLock(&populate_vframes_lock, &old_irql);
+    KeAcquireGuardedMutex(&populate_vframes_mutex);
     count = uxen_info->ui_vframes.count;
     while (count < uxen_info->ui_vframes_fill + VFRAMES_PCPU_FILL) {
         start = vframes_start;
@@ -2447,7 +2446,7 @@ fill_vframes(void)
                (((s * vframes_start) + s - 1) >> PAGE_SHIFT)) {
             if (vframes_start >= vframes_end) {
                 uxen_info->ui_out_of_vframes = 1;
-                KeReleaseSpinLock(&populate_vframes_lock, old_irql);
+                KeReleaseGuardedMutex(&populate_vframes_mutex);
                 return;
             }
             p = (struct page_list_entry *)(frametable + vframes_start * s);
@@ -2462,7 +2461,7 @@ fill_vframes(void)
         }
     }
     if (!start) {
-        KeReleaseSpinLock(&populate_vframes_lock, old_irql);
+        KeReleaseGuardedMutex(&populate_vframes_mutex);
         return;
     }
 
@@ -2480,5 +2479,5 @@ fill_vframes(void)
              count);
 #endif
 
-    KeReleaseSpinLock(&populate_vframes_lock, old_irql);
+    KeReleaseGuardedMutex(&populate_vframes_mutex);
 }

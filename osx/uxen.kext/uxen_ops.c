@@ -783,7 +783,7 @@ uxen_op_init(struct fd_assoc *fda)
     }
     populate_frametable_physical_memory();
 
-    populate_vframes_lock = lck_spin_alloc_init(uxen_lck_grp, LCK_ATTR_NULL);
+    populate_vframes_lock = lck_mtx_alloc_init(uxen_lck_grp, LCK_ATTR_NULL);
     if (!populate_vframes_lock) {
         fail_msg("populate vframes lck alloc failed");
         ret = ENOMEM;
@@ -1854,6 +1854,7 @@ uxen_power_state(uint32_t suspend)
 
         idle_thread_suspended = suspend;
 
+        fill_vframes();
         disable_preemption(&i);
         try_call(, , uxen_do_suspend_xen_prepare);
         enable_preemption(i);
@@ -1861,6 +1862,7 @@ uxen_power_state(uint32_t suspend)
         quiesce_execution();
 
         /* now we're the only uxen thread executing, safe to take down vmx */
+        fill_vframes();
         disable_preemption(&i);
         try_call(, , uxen_do_suspend_xen);
         enable_preemption(i);
@@ -1878,6 +1880,7 @@ uxen_flush_rcu(void)
         if ((uxen_info->ui_cpu_active_mask & affinity_mask(host_cpu)) == 0)
             continue;
         uxen_cpu_pin(host_cpu);
+        fill_vframes();
         disable_preemption(&i);
         try_call(, , uxen_do_flush_rcu, 0);
         enable_preemption(i);
@@ -1889,6 +1892,7 @@ uxen_flush_rcu(void)
             if ((uxen_info->ui_cpu_active_mask & affinity_mask(host_cpu)) == 0)
                 continue;
             uxen_cpu_pin(host_cpu);
+            fill_vframes();
             disable_preemption(&i);
             try_call(cpu_rcu_pending = (int), 0, uxen_do_flush_rcu, 1);
             enable_preemption(i);
