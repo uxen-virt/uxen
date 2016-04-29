@@ -190,8 +190,7 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
     if (!crtc->ds)
         return;
 
-    npages = (bank_offset + crtc->stride * crtc->yres +
-              TARGET_PAGE_SIZE - 1) >> TARGET_PAGE_BITS;
+    npages = bank->len >> TARGET_PAGE_BITS;
 
     if (npages > (UXENDISP_BANK_SIZE >> TARGET_PAGE_BITS))
         return;
@@ -593,8 +592,7 @@ bank_reg_write(struct uxendisp_state *s, int bank_id, target_phys_addr_t addr,
     if (addr != 0)
         return;
 
-    bank->len = val = (val + (TARGET_PAGE_SIZE - 1)) &
-                      ~(TARGET_PAGE_SIZE - 1);
+    val = (val + (TARGET_PAGE_SIZE - 1)) & ~(TARGET_PAGE_SIZE - 1);
 
     if ((bank_id == 0) && val < (vm_vga_mb_mapped << 20))
         val = vm_vga_mb_mapped << 20;
@@ -602,6 +600,7 @@ bank_reg_write(struct uxendisp_state *s, int bank_id, target_phys_addr_t addr,
     if (val > UXENDISP_BANK_SIZE)
         val = UXENDISP_BANK_SIZE;
 
+    bank->len = val;
     vram_resize(&bank->vram, val);
 }
 

@@ -144,7 +144,11 @@ private:
     }
     void uxdisp_crtc_write(uint32_t crtc, uint32_t reg, uint32_t val)
     {
-        return uxdisp_write(UXDISP_REG_CRTC(crtc) + reg, val);
+        uxdisp_write(UXDISP_REG_CRTC(crtc) + reg, val);
+    }
+    void uxdisp_bank_write(uint32_t bank, uint32_t reg, uint32_t val)
+    {
+        uxdisp_write(UXDISP_REG_BANK(bank) + reg, val);
     }
 };
 
