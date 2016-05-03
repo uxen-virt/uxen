@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -73,6 +73,7 @@ clip_load(QEMUFile *f, void *opaque, int version)
     struct clip_state *s = (struct clip_state*)opaque;
 
     s->guest_connected = qemu_get_be32(f);
+    uxen_clipboard_resume();
     return 0;
 }
 

@@ -17,7 +17,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -1049,6 +1049,11 @@ static DECLCALLBACK(int) svcHostCall (void *unused,
 
     LogRelFlow(("svcHostCall: rc = %d\n", rc));
     return rc;
+}
+
+void uxen_clipboard_resume(void)
+{
+    remote_render_blocked = 0;
 }
 
 int uxen_clipboard_VBoxHGCMSvcLoad (VBOXHGCMSVCFNTABLE *ptable)

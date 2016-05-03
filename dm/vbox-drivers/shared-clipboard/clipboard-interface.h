@@ -23,3 +23,5 @@ int  uxen_clipboard_remote_render_blocked(void);
 /* Check if both channels are opened, if so, init vbox code */ 
 void ns_uclip_try_init();
 
+void uxen_clipboard_resume(void);
+
