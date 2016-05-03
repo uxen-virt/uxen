@@ -29,6 +29,7 @@
 #include "timer.h"
 #include "block.h"
 #include "guest-agent.h"
+#include "vbox-drivers/shared-clipboard/clipboard-interface.h"
 
 #if defined(CONFIG_NICKEL)
 #include "libnickel.h"
@@ -377,6 +378,9 @@ control_command_resume(void *opaque, const char *id, const char *opt,
     vm_save_info.resume_id = id ? strdup(id) : NULL;
 
     vm_save_abort();
+
+    /* required here to handle the aborted save case */
+    uxen_clipboard_resume();
 
     return 0;
 }
