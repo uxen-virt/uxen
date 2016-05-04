@@ -186,6 +186,7 @@ intptr_t uxen_dom0_hypercall(struct vm_info_shared *, void *,
 int32_t _uxen_snoop_hypercall(void *udata, int mode);
 #define uxen_snoop_hypercall(udata) _uxen_snoop_hypercall(udata, SNOOP_USER)
 #define try_call(r, exception_retval, fn, ...) do {                 \
+        fill_vframes();                                             \
         try {                                                       \
             r fn(__VA_ARGS__);                                      \
         } except (UXEN_EXCEPTION_EXECUTE_HANDLER) {                 \
@@ -311,7 +312,7 @@ void uxen_pages_clear(void);
 extern KSPIN_LOCK idle_free_lock;
 extern uint32_t idle_free_list;
 int idle_free_free_list(void);
-extern KGUARDED_MUTEX populate_frametable_mutex;
+extern KSPIN_LOCK populate_frametable_lock;
 int _populate_frametable(uxen_pfn_t, uxen_pfn_t);
 extern int frametable_check_populate;
 #ifdef __i386__
@@ -371,7 +372,7 @@ void add_hidden_memory(void);
 uint64_t get_highest_user_address(void);
 int map_host_pages(void *, size_t, uint64_t *, struct fd_assoc *);
 int unmap_host_pages(void *, size_t, struct fd_assoc *);
-extern KGUARDED_MUTEX populate_vframes_mutex;
+extern KSPIN_LOCK populate_vframes_lock;
 void fill_vframes(void);
 extern uxen_pfn_t vframes_start, vframes_end;
 

@@ -990,11 +990,10 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
     dprintk("uxen mem: f-populated %p - %p (%dKB)\n", frametable_populated,
             frametable_populated + ((frametable_size >> PAGE_SHIFT) + 7) / 8,
             (((frametable_size >> PAGE_SHIFT) + 7) / 8) >> 10);
-    KeInitializeGuardedMutex(&populate_frametable_mutex);
-
+    KeInitializeSpinLock(&populate_frametable_lock);
     populate_frametable_physical_memory();
 
-    KeInitializeGuardedMutex(&populate_vframes_mutex);
+    KeInitializeSpinLock(&populate_vframes_lock);
 
     sizeof_percpu = (uxen_addr_per_cpu_data_end - uxen_addr_per_cpu_start +
                      PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
@@ -2198,7 +2197,6 @@ uxen_power_state(uint32_t suspend)
 
         idle_thread_suspended = suspend;
 
-        fill_vframes();
         disable_preemption(&i);
         try_call(, , uxen_do_suspend_xen_prepare);
         enable_preemption(i);
@@ -2206,7 +2204,6 @@ uxen_power_state(uint32_t suspend)
         quiesce_execution();
 
         /* now we're the only uxen thread executing, safe to take down vmx */
-        fill_vframes();
         disable_preemption(&i);
         try_call(, , uxen_do_suspend_xen);
         enable_preemption(i);
@@ -2224,7 +2221,6 @@ uxen_flush_rcu(void)
         if ((uxen_info->ui_cpu_active_mask & affinity_mask(host_cpu)) == 0)
             continue;
         uxen_cpu_pin(host_cpu);
-        fill_vframes();
         disable_preemption(&i);
         try_call(, , uxen_do_flush_rcu, 0);
         enable_preemption(i);
@@ -2236,7 +2232,6 @@ uxen_flush_rcu(void)
             if ((uxen_info->ui_cpu_active_mask & affinity_mask(host_cpu)) == 0)
                 continue;
             uxen_cpu_pin(host_cpu);
-            fill_vframes();
             disable_preemption(&i);
             try_call(cpu_rcu_pending = (int), 0, uxen_do_flush_rcu, 1);
             enable_preemption(i);
