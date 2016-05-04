@@ -379,8 +379,10 @@ control_command_resume(void *opaque, const char *id, const char *opt,
 
     vm_save_abort();
 
+#if !defined (__APPLE__)
     /* required here to handle the aborted save case */
     uxen_clipboard_resume();
+#endif
 
     return 0;
 }
