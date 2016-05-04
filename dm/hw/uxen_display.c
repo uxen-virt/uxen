@@ -197,11 +197,8 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
 
     dirty = alloca((npages + 7) / 8);
 
-    rc = xen_hvm_track_dirty_vram(
-        bank->vram.gfn,
-        npages,
-        dirty,
-        (s->mode & UXDISP_MODE_PAGE_TRACKING_DISABLED) ? 0 : 1);
+    rc = xen_hvm_track_dirty_vram(bank->vram.gfn,
+        (s->mode & UXDISP_MODE_PAGE_TRACKING_DISABLED) ? 0 : npages, dirty, 1);
     if (rc) {
         DPRINTF("xen_hvm_track_dirty_vram failed: %d\n", errno);
         return;
