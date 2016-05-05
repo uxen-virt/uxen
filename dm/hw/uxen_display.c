@@ -53,6 +53,7 @@ struct crtc_state {
 struct bank_state {
     struct vram_desc vram;
     uint32_t len;
+    uint32_t populate_vram_len;
 };
 
 struct uxendisp_state {
@@ -452,7 +453,7 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
             }
         }
 
-        if (bank->len < sz)
+        if ((bank->len < sz) || (bank->populate_vram_len > 0))
             bank_reg_write(s, bank_id, 0, sz);
 
         if (fmt == crtc->format && w > crtc->xres) {
@@ -483,6 +484,9 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
                 (bank_offset + new_max) < bank->vram.mapped_len)
                 memset(dst, 0xff, new_max - curr_max);
         }
+
+        if (s->mode & UXDISP_MODE_PAGE_TRACKING_DISABLED)
+            xen_hvm_track_dirty_vram(0 , 0, NULL, 0);
 
         display_resize_from(crtc->ds, w, h,
                             uxdisp_fmt_to_bpp(fmt),
@@ -594,6 +598,9 @@ bank_reg_write(struct uxendisp_state *s, int bank_id, target_phys_addr_t addr,
     if ((bank_id == 0) && val < (vm_vga_mb_mapped << 20))
         val = vm_vga_mb_mapped << 20;
 
+    if (bank->populate_vram_len > 0)
+        val = bank->populate_vram_len;
+
     if (val > UXENDISP_BANK_SIZE)
         val = UXENDISP_BANK_SIZE;
 
@@ -634,10 +641,7 @@ uxendisp_mmio_write(void *opaque, target_phys_addr_t addr, uint64_t val,
     if (addr >= UXDISP_REG_BANK(0) &&
         addr < UXDISP_REG_BANK(UXENDISP_NB_BANKS)) {
         int idx = (addr - UXDISP_REG_BANK(0)) / UXDISP_REG_BANK_LEN;
-
-        addr &= (UXDISP_REG_BANK_LEN - 1);
-
-        bank_reg_write(s, idx, addr, (uint32_t)val);
+        s->banks[idx].populate_vram_len = val;
         return;
     }
 
@@ -924,6 +928,7 @@ static const VMStateDescription vmstate_uxendisp_bank = {
     .fields = (VMStateField[]) {
         VMSTATE_VRAM(vram, struct bank_state),
         VMSTATE_UINT32(len, struct bank_state),
+        VMSTATE_UINT32(populate_vram_len, struct bank_state),
         VMSTATE_END_OF_LIST(),
     }
 };
@@ -1006,6 +1011,7 @@ static int uxendisp_initfn(PCIDevice *dev)
         struct bank_state *bank = &s->banks[i];
 
         bank->len = 0x1000; /* FIXME: why do we need this ? */
+        bank->populate_vram_len = 0;
         vram_init(&bank->vram, UXENDISP_BANK_SIZE);
         vram_register_change(&bank->vram, vram_change, s);
         vram_alloc(&bank->vram, bank->len);
