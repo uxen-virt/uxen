@@ -1060,7 +1060,7 @@ uxen_stor_initfn (ISADevice *dev)
 
     present_bitfield_set(unit);
 
-    ioh_add_wait_object (&s->a.recv_event, uxen_stor_read_event, s, NULL);
+    ioh_add_wait_object (&s->a.c.recv_event, uxen_stor_read_event, s, NULL);
     ioh_add_wait_object (&s->tx_event, uxen_stor_write_event, s, NULL);
 #ifndef _WIN32
     ioh_add_wait_object (&s->run_queue_event, uxen_stor_write_event, s, NULL);

@@ -598,7 +598,7 @@ static int retry_transmit(uxen_net_t *s)
 #endif
     s->write_pending = FALSE;
 
-    if (WriteFile(s->a.v4v_handle, s->write_packet, s->write_packet_len,
+    if (WriteFile(s->a.c.v4v_handle, s->write_packet, s->write_packet_len,
                   NULL, &s->write_overlapped)) {
         Wwarn("uxn: fail path 1");
         return 1;
@@ -628,7 +628,7 @@ uxen_net_receive_complete (uxen_net_t *s, BOOLEAN wait)
         return 1;
 
     if (GetOverlappedResult
-        (s->a.v4v_handle, &s->write_overlapped, &writ, wait)) {
+        (s->a.c.v4v_handle, &s->write_overlapped, &writ, wait)) {
         s->write_pending = FALSE;
 
         if (writ != s->write_packet_len ) {
@@ -745,7 +745,7 @@ uxen_net_receive (VLANClientState *nc, const uint8_t *buf, size_t size)
 #endif
 
 
-    if (WriteFile(s->a.v4v_handle, s->write_packet, s->write_packet_len,
+    if (WriteFile(s->a.c.v4v_handle, s->write_packet, s->write_packet_len,
                   NULL, &s->write_overlapped)) {
         warnx("uxn: fail path 7");
         return size;
@@ -1088,13 +1088,13 @@ uxen_net_cleanup (VLANClientState *nc)
     uxen_net_t *s = DO_UPCAST (NICState, nc, nc)->opaque;
 
     ioh_del_wait_object (&s->tx_event, NULL);
-    ioh_del_wait_object (&s->a.recv_event, NULL);
+    ioh_del_wait_object (&s->a.c.recv_event, NULL);
     packet_free_list(&queue);
     packet_free_list(&free_list);
 
     ioh_event_close(&s->tx_event);
 
-    v4v_close (&s->a);
+    v4v_close(&s->a);
     free (s->rx_buf);
 
     s->nic = NULL;
@@ -1170,7 +1170,7 @@ uxen_net_initfn (UXenPlatformDevice *dev)
             break;
         }
 
-        ioh_add_wait_object (&s->a.recv_event, uxen_net_read_event, s, NULL);
+        ioh_add_wait_object (&s->a.c.recv_event, uxen_net_read_event, s, NULL);
         ioh_add_wait_object (&s->tx_event, uxen_net_write_event, s, NULL);
 
         s->dest.domain = vm_id;

@@ -6,34 +6,42 @@
 
 #include "uxen_v4v.h"
 
+#undef v4v_close
+
 int
 v4v_have_v4v(void)
 {
-    _v4v_context_t c = { 0 };
+    _v4v_context_t c = {{ 0 }};
 
-    if (v4v_open (&c, 4096, NULL)) {
-        v4v_close (&c);
+    if (v4v_open (&c.c, 4096, NULL)) {
+        v4v_close_win32 (&c);
         return 1;
     }
 
     return 0;
 }
 
-bool
+void 
+v4v_close_win32(_v4v_context_t *ctx)
+{
+    v4v_close(&ctx->c);
+}
+
+int
 v4v_open_sync(_v4v_context_t *v4v, uint32_t ring_size, int *out_error)
 {
     OVERLAPPED o = { 0 };
     DWORD t;
 
-    v4v->flags = V4V_FLAG_OVERLAPPED;
+    v4v->c.flags = V4V_FLAG_OVERLAPPED;
     memset (&o, 0, sizeof (o));
 
-    if (!v4v_open (v4v, ring_size, &o)) {
+    if (!v4v_open (&v4v->c, ring_size, &o)) {
         *out_error = GetLastError();
         return false;
     }
 
-    if (!GetOverlappedResult (v4v->v4v_handle, &o, &t, TRUE)) {
+    if (!GetOverlappedResult (v4v->c.v4v_handle, &o, &t, TRUE)) {
         *out_error = GetLastError();
         return false;
     }
@@ -41,7 +49,7 @@ v4v_open_sync(_v4v_context_t *v4v, uint32_t ring_size, int *out_error)
     return true;
 }
 
-bool
+int
 v4v_bind_sync(_v4v_context_t *v4v, v4v_ring_id_t *r, int *out_error)
 {
     OVERLAPPED o = { 0 };
@@ -49,13 +57,13 @@ v4v_bind_sync(_v4v_context_t *v4v, v4v_ring_id_t *r, int *out_error)
 
     memset (&o, 0, sizeof (o));
 
-    if (!v4v_bind (v4v, r, &o)) {
+    if (!v4v_bind (&v4v->c, r, &o)) {
         *out_error = GetLastError();
         return false;
     }
 
 
-    if (!GetOverlappedResult (v4v->v4v_handle, &o, &t, TRUE)) {
+    if (!GetOverlappedResult (v4v->c.v4v_handle, &o, &t, TRUE)) {
         *out_error = GetLastError();
         return false;
     }
@@ -72,7 +80,7 @@ uxenv4v_notify_complete(_v4v_context_t *ctx)
         return TRUE;
 
     if (GetOverlappedResult
-        (ctx->v4v_handle, &ctx->notify_overlapped,
+        (ctx->c.v4v_handle, &ctx->notify_overlapped,
          &writ, FALSE /* don't wait */)) {
         ctx->notify_pending = FALSE;
         return TRUE;
@@ -95,7 +103,7 @@ _v4v_notify(_v4v_context_t *ctx)
     }
     memset (&ctx->notify_overlapped, 0, sizeof (OVERLAPPED));
 
-    gh_v4v_notify(ctx, &ctx->notify_overlapped);
+    gh_v4v_notify(&ctx->c, &ctx->notify_overlapped);
 
     ctx->notify_pending = TRUE;
     
@@ -125,7 +133,7 @@ v4v_ring_map_sync(_v4v_context_t *ctx, int *out_error)
         return NULL;
     }
 
-    if (!GetOverlappedResult (ctx->v4v_handle, &o, &t, TRUE)) {
+    if (!GetOverlappedResult (ctx->c.v4v_handle, &o, &t, TRUE)) {
 		*out_error = GetLastError();
         return NULL;
     }
