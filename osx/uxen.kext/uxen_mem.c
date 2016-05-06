@@ -31,7 +31,7 @@ static uint32_t pages_reserve[MAX_CPUS];
 
 lck_mtx_t *populate_frametable_lock;
 
-lck_spin_t *populate_vframes_lock;
+lck_mtx_t *populate_vframes_lock;
 uxen_pfn_t vframes_start, vframes_end;
 
 #define L1_PAGETABLE_SHIFT      12
@@ -1288,6 +1288,9 @@ _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
     if (pages < MIN_RESERVE)
         pages = MIN_RESERVE;
 
+    if (fill_vframes())
+        return -1;
+
     disable_preemption(i);
     *increase = 0;
     if (pages <= uxen_info->ui_free_pages[cpu].count)
@@ -2211,7 +2214,7 @@ uxen_mem_tlb_flush(void)
     uxen_cpu_on_selected_async(~0ULL, uxen_mem_tlb_flush_fn_global);
 }
 
-void
+int
 fill_vframes(void)
 {
     int s = uxen_info->ui_sizeof_struct_page_info;
@@ -2220,7 +2223,11 @@ fill_vframes(void)
     uint32_t batch = 0, *tail = NULL;
     uint32_t count, added = 0;
 
-    lck_spin_lock(populate_vframes_lock);
+    if (!preemption_enabled())
+        return uxen_info->ui_vframes.count < uxen_info->ui_vframes_fill +
+               VFRAMES_PCPU_FILL ? -1 : 0;
+
+    lck_mtx_lock(populate_vframes_lock);
     count = uxen_info->ui_vframes.count;
     while (count < uxen_info->ui_vframes_fill + VFRAMES_PCPU_FILL) {
         start = vframes_start;
@@ -2234,8 +2241,8 @@ fill_vframes(void)
                (((s * vframes_start) + s - 1) >> PAGE_SHIFT)) {
             if (vframes_start >= vframes_end) {
                 uxen_info->ui_out_of_vframes = 1;
-                lck_spin_unlock(populate_vframes_lock);
-                return;
+                lck_mtx_unlock(populate_vframes_lock);
+                return 0;
             }
             p = (struct page_list_entry *)(frametable + vframes_start * s);
             p->next = batch;
@@ -2249,8 +2256,8 @@ fill_vframes(void)
         }
     }
     if (!start) {
-        lck_spin_unlock(populate_vframes_lock);
-        return;
+        lck_mtx_unlock(populate_vframes_lock);
+        return 0;
     }
 
     do {
@@ -2259,5 +2266,6 @@ fill_vframes(void)
 
     atomic_add(added, &uxen_info->ui_vframes.count);
 
-    lck_spin_unlock(populate_vframes_lock);
+    lck_mtx_unlock(populate_vframes_lock);
+    return 0;
 }
