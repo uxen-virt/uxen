@@ -92,7 +92,7 @@ win_surface_unlock(struct display_surface *s)
 
 static struct win_surface *
 win_create_surface(struct win32_gui_state *s,
-                   int width, int height, HANDLE vram_hdl, int vram_offset)
+                   int width, int height, int linesize, HANDLE vram_hdl, int vram_offset)
 {
     struct win_surface *surface;
     HDC hdc;
@@ -123,12 +123,12 @@ win_create_surface(struct win32_gui_state *s,
 
     /* Setup bitmap info struct. */
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = width;
+    bmi.bmiHeader.biWidth = linesize >> 2;
     bmi.bmiHeader.biHeight = -height;
     bmi.bmiHeader.biPlanes = 1;
     bmi.bmiHeader.biBitCount = 32; // four 8-bit components
     bmi.bmiHeader.biCompression = BI_RGB;
-    bmi.bmiHeader.biSizeImage = width * height * 4;
+    bmi.bmiHeader.biSizeImage = linesize * height;
 
     surface->bitmap = CreateDIBSection(surface->dc, &bmi,
                                        DIB_RGB_COLORS,
@@ -141,7 +141,7 @@ win_create_surface(struct win32_gui_state *s,
     }
     SelectObject(surface->dc, surface->bitmap);
 
-    surface->linesize = width * 4;
+    surface->linesize = linesize;
 
     s->surface = surface;
     LeaveCriticalSection(&s->surface_lock);
@@ -154,8 +154,9 @@ create_surface(struct gui_state *state, int width, int height)
 {
     struct win32_gui_state *s = (void *)state;
     struct win_surface *surface;
+    int linesize = width * 4;
 
-    surface = win_create_surface(s, width, height, NULL, 0);
+    surface = win_create_surface(s, width, height, linesize, NULL, 0);
     if (!surface)
         return NULL;
 
@@ -172,12 +173,10 @@ create_vram_surface(struct gui_state *state,
     struct win32_gui_state *s = (void *)state;
     struct win_surface *surface;
 
-    if (vram_ptr != s->vram_view ||
-        depth != 32 ||
-        linesize != (width * 4))
+    if (vram_ptr != s->vram_view || depth != 32)
         return NULL;
 
-    surface = win_create_surface(s, width, height, s->vram_handle, vram_offset);
+    surface = win_create_surface(s, width, height, linesize, s->vram_handle, vram_offset);
     if (!surface)
         return NULL;
 

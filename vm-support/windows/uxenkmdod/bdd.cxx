@@ -29,6 +29,7 @@
 #include "BDD.hxx"
 #include "hw.h"
 #include "perfcnt.h"
+#include "user_vram.h"
 
 extern int use_pv_vblank;
 
@@ -56,6 +57,7 @@ VOID BASIC_DISPLAY_DRIVER::Init(_In_ DEVICE_OBJECT* pPhysicalDeviceObject)
     m_NextMode.width = 1024;
     m_NextMode.height = 768;
     m_VirtMode = m_NextMode;
+    m_VmemMdl = NULL;
     KeInitializeSemaphore(&m_PresentLock, 1, 1);
 }
 
@@ -159,6 +161,11 @@ NTSTATUS BASIC_DISPLAY_DRIVER::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartIn
     }
 
     m_VSync = use_pv_vblank;
+    m_VmemMdl = user_vram_init(m_CurrentModes[0].VideoMemory, m_CurrentModes[0].VideoMemoryLength);
+    if (!m_VmemMdl) {
+        uxen_err("user_vram_init failed. Unable to map vram.");
+        return STATUS_UNSUCCESSFUL;
+    }
 
     return STATUS_SUCCESS;
 }
@@ -500,18 +507,19 @@ NTSTATUS BASIC_DISPLAY_DRIVER::PresentDisplayOnly(_In_ CONST DXGKARG_PRESENT_DIS
             pPresentDisplayOnly->pDirtyRect[i].bottom = min(pPresentDisplayOnly->pDirtyRect[i].bottom, (int)m_VirtMode.height);
         }
 
-        status = m_HardwareBlt[pPresentDisplayOnly->VidPnSourceId].ExecutePresentDisplayOnly(pDst,
-                                                                DstBitPerPixel,
-                                                                m_VirtMode.width * 4,
-                                                                (BYTE*)pPresentDisplayOnly->pSource,
-                                                                pPresentDisplayOnly->BytesPerPixel,
-                                                                pPresentDisplayOnly->Pitch,
-                                                                pPresentDisplayOnly->NumMoves,
-                                                                pPresentDisplayOnly->pMoves,
-                                                                pPresentDisplayOnly->NumDirtyRects,
-                                                                pPresentDisplayOnly->pDirtyRect,
-                                                                RotationNeededByFb);
-
+        if (!m_Flags.StopCopy) {
+            status = m_HardwareBlt[pPresentDisplayOnly->VidPnSourceId].ExecutePresentDisplayOnly(pDst,
+                                                                    DstBitPerPixel,
+                                                                    m_VirtMode.width * 4,
+                                                                    (BYTE*)pPresentDisplayOnly->pSource,
+                                                                    pPresentDisplayOnly->BytesPerPixel,
+                                                                    pPresentDisplayOnly->Pitch,
+                                                                    pPresentDisplayOnly->NumMoves,
+                                                                    pPresentDisplayOnly->pMoves,
+                                                                    pPresentDisplayOnly->NumDirtyRects,
+                                                                    pPresentDisplayOnly->pDirtyRect,
+                                                                    RotationNeededByFb);
+        }
         dr_send(m_DrContext,
                   pPresentDisplayOnly->NumMoves,
                   pPresentDisplayOnly->pMoves,

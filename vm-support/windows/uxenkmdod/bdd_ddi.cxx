@@ -425,8 +425,11 @@ NTSTATUS BddDdiEscape(
             status = pBDD->IsVirtModeEnabled();
             break;
         };
-    } else
+    } else if (pEscape->PrivateDriverDataSize == sizeof(LONG64)) {
+        status = pBDD->MapUserVram((PVOID)pEscape->pPrivateDriverData);
+    } else {
         status = STATUS_INVALID_PARAMETER;
+    }
 
     return status;
 }

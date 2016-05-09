@@ -10,7 +10,7 @@
 #include "dirty_rect.h"
 
 #include <uxendisp_ioctl.h>
-#include <uxendisp_esc.h>
+#include <uxendisp-common.h>
 #include "version.h"
 
 VP_STATUS FindAdapter(PVOID dev_extension,

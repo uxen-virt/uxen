@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -37,7 +37,7 @@
 #include <dispmprt.h>
 
 #include <debug.h>
-#include <uxendisp_esc.h>
+#include <uxendisp-common.h>
 #include "dirty_rect.h"
 #include "version.h"
 

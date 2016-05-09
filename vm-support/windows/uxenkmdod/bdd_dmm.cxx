@@ -28,6 +28,7 @@
 
 #include "BDD.hxx"
 #include "hw.h"
+#include "user_vram.h"
 
 // Display-Only Devices can only return display modes of D3DDDIFMT_A8R8G8B8.
 // Color conversion takes place if the app's fullscreen backbuffer has different format.
@@ -734,6 +735,10 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_M
     mode.VisScreenHeight = pSourceMode->Format.Graphics.PrimSurfSize.cy;
     mode.ScreenStride = pSourceMode->Format.Graphics.Stride;
     mode.BitsPerPlane = 32;
+
+    if (m_Flags.StopCopy) {
+        mode.ScreenStride += (mode.VisScreenWidth & 1) * 4;
+    }
     hw_set_mode(&m_HwResources, &mode);
 
     if (!pCurrentBddMode->Flags.DoNotMapOrUnmap)
@@ -883,6 +888,14 @@ out:
     return status;
 }
 
+NTSTATUS BASIC_DISPLAY_DRIVER::MapUserVram(PVOID data)
+{
+    PVOID mem = user_vram_map(m_VmemMdl);
+    RtlCopyMemory(data, &mem, sizeof mem);
+    m_Flags.StopCopy = TRUE;
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS BASIC_DISPLAY_DRIVER::SetVirtMode(UXENDISPCustomMode *pNewMode)
 {
     VIDEO_MODE_INFORMATION mode;
@@ -894,6 +907,11 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetVirtMode(UXENDISPCustomMode *pNewMode)
     mode.ScreenStride = pNewMode->width * 4;
     mode.BitsPerPlane = 32;
 
+    if (m_Flags.StopCopy) {
+        CURRENT_BDD_MODE* pCurrentBddMode = &m_CurrentModes[0];
+        mode.ScreenStride = pCurrentBddMode->DispInfo.Pitch;
+        mode.ScreenStride += (pCurrentBddMode->DispInfo.Width & 1) * 4;
+    }
     hw_set_mode(&m_HwResources, &mode);
 
     m_VirtMode = *pNewMode;

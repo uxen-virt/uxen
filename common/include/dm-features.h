@@ -12,7 +12,9 @@
 union dm_features {
     struct {
         uint64_t run_patcher : 1;
-        uint64_t reserved : 63;
+        uint64_t seed_generation : 1;
+        uint64_t surf_copy_reduction : 1;
+        uint64_t reserved : 61;
     } bits;
     uint64_t blob;
 };

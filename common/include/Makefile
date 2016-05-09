@@ -15,7 +15,9 @@ VPATH = $(SRCDIR)
 all:
 	@ :
 
-SDK_include_files = $(SDKDIR_include)/err.h $(SDKDIR_include)/dm-features.h
+SDK_include_files = $(SDKDIR_include)/err.h \
+					$(SDKDIR_include)/dm-features.h \
+					$(SDKDIR_include)/uxendisp-common.h
 
 dist: $(SDK_include_files)
 

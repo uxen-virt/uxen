@@ -37,4 +37,5 @@ SOURCES = bdd.cxx \
           hw.cxx \
           perfcnt.cxx \
           dirty_rect.cxx \
+          user_vram.cxx \
           uxenkmdod.rc

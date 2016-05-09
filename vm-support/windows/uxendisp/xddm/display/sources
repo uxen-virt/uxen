@@ -8,7 +8,7 @@ MSC_WARNING_LEVEL=/W3
 
 MSC_WARNING_LEVEL=$(MSC_WARNING_LEVEL) /WX
 
-INCLUDES=$(DDK_INC_PATH); ..\include
+INCLUDES=$(DDK_INC_PATH); ..\include; ..\..\..\..\..\common\include
 
 NTTARGETFILE2 = POST
 

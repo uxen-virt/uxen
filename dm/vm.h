@@ -17,6 +17,8 @@ extern uint64_t vm_vpt_align;
 extern uint64_t vm_vpt_coalesce_period;
 extern critical_section vm_pause_lock;
 
+extern uint64_t seed_generation;
+extern uint64_t surf_copy_reduction;
 extern bool vm_run_patcher;
 
 extern bool vm_quit_interrupt;

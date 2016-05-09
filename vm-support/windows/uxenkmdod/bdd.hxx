@@ -71,7 +71,7 @@ extern "C"
 
     #include <dispmprt.h>
 };
-#include <uxendisp_esc.h>
+#include <uxendisp-common.h>
 #include "../common/debug.h"
 #include "perfcnt.h"
 #include "dirty_rect.h"
@@ -104,10 +104,11 @@ typedef struct _BDD_FLAGS
     UINT EDID_ValidChecksum      : 1; // ( 3) Retrieved EDID has a valid checksum
     UINT EDID_ValidHeader        : 1; // ( 4) Retrieved EDID has a valid header
     UINT EDID_Attempted          : 1; // ( 5) 1 if an attempt was made to retrieve the EDID, successful or not
+    UINT StopCopy                : 1; // ( 6) Stop doing memcpy in Present call
 
     // IMPORTANT: All new flags must be added to just before _LastFlag (i.e. right above this comment), this allows different versions of diagnostics to still be useful.
-    UINT _LastFlag               : 1; // ( 6) Always set to 1, is used to ensure that diagnostic version matches binary version
-    UINT Unused                  : 26;
+    UINT _LastFlag               : 1; // ( 7) Always set to 1, is used to ensure that diagnostic version matches binary version
+    UINT Unused                  : 25;
 } BDD_FLAGS;
 
 // Represents the current mode, may not always be set (i.e. frame buffer mapped) if representing the mode passed in on single mode setups.
@@ -241,6 +242,8 @@ private:
 
     dr_ctx_t m_DrContext;
 
+    MDL *m_VmemMdl;
+
     LARGE_INTEGER due_time;
 
 public:
@@ -351,6 +354,8 @@ public:
     NTSTATUS SetVirtMode(UXENDISPCustomMode* pNewMode);
 
     NTSTATUS IsVirtModeEnabled();
+
+    NTSTATUS MapUserVram(PVOID data);
 
 private:
 

@@ -12,7 +12,7 @@
 #include <Strsafe.h>
 #include <Setupapi.h>
 
-#include <uxendisp_esc.h>
+#include <uxendisp-common.h>
 
 #include "uxenevent.h"
 #include "d3dkmthk_x.h"

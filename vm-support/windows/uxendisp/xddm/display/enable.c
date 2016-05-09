@@ -6,7 +6,7 @@
 
 #include "driver.h"
 
-#include <uxendisp_esc.h>
+#include <uxendisp-common.h>
 #include "perfcnt.h"
 
 // The driver function table with all function index/address pairs
