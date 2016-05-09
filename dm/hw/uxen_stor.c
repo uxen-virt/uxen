@@ -363,7 +363,7 @@ uxen_stor_send_reply (uxen_stor_t *s, uxen_stor_req_t *r)
 
     /*send reply */
     if (WriteFile
-        (s->a.c.v4v_handle, &r->packet,
+        (DEV_V4V_CTX(s).v4v_handle, &r->packet,
          r->reply_size + sizeof (v4v_datagram_t), NULL, &r->overlapped)) {
         Wwarn("%s: fail path 1 seq=%"PRIx64, __FUNCTION__, r->packet.xfr.seq);
         r->state = UXS_STATE_V4V_SENT;
@@ -1060,7 +1060,7 @@ uxen_stor_initfn (ISADevice *dev)
 
     present_bitfield_set(unit);
 
-    ioh_add_wait_object (&s->a.c.recv_event, uxen_stor_read_event, s, NULL);
+    ioh_add_wait_object (&DEV_V4V_CTX(s).recv_event, uxen_stor_read_event, s, NULL);
     ioh_add_wait_object (&s->tx_event, uxen_stor_write_event, s, NULL);
 #ifndef _WIN32
     ioh_add_wait_object (&s->run_queue_event, uxen_stor_write_event, s, NULL);

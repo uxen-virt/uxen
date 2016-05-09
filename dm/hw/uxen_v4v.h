@@ -9,8 +9,10 @@
 
 #ifdef _WIN32
 #include "uxen_v4v_win32.h"
+#define DEV_V4V_CTX(d) d->a.c
 #elif defined(__APPLE__)
 #include "uxen_v4v_osx.h"
+#define DEV_V4V_CTX(d) d->a
 #else
 #error No v4v helper functions defined for this platform
 #endif
