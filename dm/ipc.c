@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -284,12 +284,14 @@ static HANDLE win32_pipe_create_helper(const char *path,
         Wwarn("CreateNamedPipe");
         return NULL;
     }
+    debug_printf("connecting named pipe: %s\n", path);
     if (!ConnectNamedPipe(pipe, overlapped) &&
         GetLastError() != ERROR_IO_PENDING) {
         Wwarn("ConnectNamedPipe");
         CloseHandle(pipe);
         return NULL;
     }
+    debug_printf("pipe connected\n");
 
     return pipe;
 }
