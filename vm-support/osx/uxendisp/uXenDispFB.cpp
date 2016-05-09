@@ -14,7 +14,7 @@
 
 OSDefineMetaClassAndStructors(uXenDispFB, IOFramebuffer);
 
-#define FREQUENCY_TIMER_US 16667 /* 60Hz */
+#define FREQUENCY_TIMER_US 33333 /* 30Hz */
 
 /*
  * Note:
