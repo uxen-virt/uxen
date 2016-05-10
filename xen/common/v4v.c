@@ -1346,19 +1346,26 @@ v4v_ring_create(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_id_t) ring_id_hnd)
 
     do {
         ret = copy_from_guest_errno(&ring_id, ring_id_hnd, 1);
-        if (ret)
+        if (ret) {
+            printk(XENLOG_ERR "%s: vm%u copy_from_guest_errno err %d\n",
+                   __FUNCTION__, current->domain->domain_id, ret);
             break;
+        }
 
         if (ring_id.partner != V4V_DOMID_ANY)
             ring_id.partner = current->domain->domain_id;
 
         dst_d = get_domain_by_id(ring_id.addr.domain);
         if (!dst_d) {
+            printk(XENLOG_ERR "%s: vm%u has no domain\n", __FUNCTION__,
+                   current->domain->domain_id);
             ret = -ENOENT;
             break;
         }
 
         if (!dst_d->v4v) {
+            printk(XENLOG_ERR "%s: vm%u domain without v4v\n", __FUNCTION__,
+                   current->domain->domain_id);
             ret = -ENOENT;
             break;
         }
@@ -1375,6 +1382,11 @@ v4v_ring_create(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_id_t) ring_id_hnd)
         ring_info = v4v_xmalloc(struct v4v_ring_info);
         if (!ring_info) {
             write_unlock(&dst_d->v4v->lock);
+            printk(XENLOG_ERR "%s: vm%u no memory for ring (vm%u:%x vm%d)"
+                   " %p nmfns %d\n", __FUNCTION__, current->domain->domain_id,
+                   ring_id.addr.domain, ring_id.addr.port, ring_id.partner,
+                   ring_info, ring_info->nmfns);
+
             ret = -ENOMEM;
             break;
         }
