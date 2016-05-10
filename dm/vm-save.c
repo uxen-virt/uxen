@@ -43,6 +43,7 @@
 #endif
 
 #include <lz4.h>
+#include <lz4hc.h>
 
 #include <fingerprint.h>
 
@@ -507,7 +508,11 @@ vm_save_read_dm_offset(void *dst, off_t offset, size_t size)
 static inline int
 uxenvm_compress_lz4(const void *src, void *dst, int sz)
 {
-    return LZ4_compress(src, dst, sz);
+    if (vm_save_info.high_compress) {
+        return LZ4_compressHC(src, dst, sz);
+    } else {
+        return LZ4_compress(src, dst, sz);
+    }
 }
 
 static inline int
