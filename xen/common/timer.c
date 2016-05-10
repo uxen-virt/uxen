@@ -334,6 +334,13 @@ static bool_t active_timer(struct timer *timer)
     return (timer->status >= TIMER_STATUS_in_heap);
 }
 
+bool_t vcpu_active_timer(struct timer *timer)
+{
+
+    ASSERT(timer->type == TIMER_TYPE_vcpu);
+    ASSERT(timer->vcpu == current);
+    return active_timer(timer);
+}
 
 void init_timer(
     struct timer *timer,

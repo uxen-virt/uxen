@@ -78,6 +78,8 @@ static void s_timer_fn(void *unused);
 static void vcpu_periodic_timer_fn(void *data);
 static void vcpu_singleshot_timer_fn(void *data);
 static void poll_timer_fn(void *data);
+#else  /* __UXEN__ */
+static void vcpu_throttle_timer_fn(void *data);
 #endif  /* __UXEN__ */
 
 /* This is global for now so that private implementations can reach it */
@@ -245,6 +247,8 @@ int sched_init_vcpu(struct vcpu *v, unsigned int processor)
                v, v->processor);
     init_timer(&v->poll_timer, poll_timer_fn,
                v, v->processor);
+#else  /* __UXEN__ */
+    init_vcpu_timer(&v->vcpu_throttle_timer, vcpu_throttle_timer_fn, v, v);
 #endif  /* __UXEN__ */
 
     /* Idle VCPUs are scheduled immediately. */
@@ -343,6 +347,8 @@ void sched_destroy_vcpu(struct vcpu *v)
     kill_timer(&v->periodic_timer);
     kill_timer(&v->singleshot_timer);
     kill_timer(&v->poll_timer);
+#else  /* __UXEN__ */
+    kill_timer(&v->vcpu_throttle_timer);
 #endif  /* __UXEN__ */
     if ( test_and_clear_bool(v->is_urgent) )
         atomic_dec(&per_cpu(schedule_data, v->processor).urgent_count);
@@ -1185,7 +1191,7 @@ void schedule_from_vcpu(struct vcpu *prev)
     if (vcpu_runnable(prev))
         return;
 
-    sd = &this_cpu(schedule_data);
+    sd = &per_cpu(schedule_data, prev->processor);
 
     spin_lock_irq(sd->schedule_lock);
 
@@ -1400,6 +1406,11 @@ static void poll_timer_fn(void *data)
         vcpu_unblock(v);
 }
 #endif  /* __UXEN__ */
+
+/* vcpu throttle callback. */
+static void vcpu_throttle_timer_fn(void *data)
+{
+}
 
 static int cpu_schedule_up(unsigned int cpu)
 {

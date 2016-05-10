@@ -458,6 +458,24 @@ control_command_unpause(void *opaque, const char *id, const char *opt,
     return 0;
 }
 
+static int
+control_command_throttle(void *opaque, const char *id, const char *opt,
+                         dict d, void *command_opaque)
+{
+    struct control_desc *cd = (struct control_desc *)opaque;
+    uint64_t period, rate;
+
+    period = dict_get_integer(d, "period");
+    rate = dict_get_integer(d, "rate");
+
+    xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_THROTTLE_PERIOD, period);
+    xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_THROTTLE_RATE, rate);
+
+    control_send_ok(cd, opt, id, NULL);
+
+    return 0;
+}
+
 #ifdef _WIN32
 static int
 control_command_open_log(void *opaque, const char *id, const char *opt,
@@ -1124,6 +1142,13 @@ struct dict_rpc_command control_commands[] = {
             { NULL, },
         }, },
 #endif  /* CONTROL_TEST */
+    { "throttle", control_command_throttle,
+      .args = (struct dict_rpc_arg_desc[]) {
+            { "period", DICT_RPC_ARG_TYPE_INTEGER, .optional = 0 },
+            { "rate", DICT_RPC_ARG_TYPE_INTEGER, .optional = 0 },
+            { NULL, },
+        }
+    },
     { "unpause", control_command_unpause, },
 };
 

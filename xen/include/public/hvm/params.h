@@ -210,6 +210,9 @@
 
 #define HVM_PARAM_TEMPLATE_LAZY_LOAD 42
 
-#define HVM_NR_PARAMS          43
+#define HVM_PARAM_THROTTLE_PERIOD 43
+#define HVM_PARAM_THROTTLE_RATE 44
+
+#define HVM_NR_PARAMS          45
 
 #endif /* __XEN_PUBLIC_HVM_PARAMS_H__ */

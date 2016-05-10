@@ -1021,13 +1021,23 @@ mc_vm_audio_mute(Monitor *mon, const dict args)
 }
 #endif /* HAS_AUDIO */
 
-#endif  /* MONITOR */
-
-#ifdef MONITOR
 void
 mc_vm_time_update(Monitor *mon, const dict args)
 {
 
     vm_time_update();
 }
-#endif
+
+void
+mc_vm_throttle(Monitor *mon, const dict args)
+{
+    uint64_t period, rate;
+
+    period = dict_get_integer(args, "period");
+    rate = dict_get_integer(args, "rate");
+
+    xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_THROTTLE_PERIOD, period);
+    xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_THROTTLE_RATE, rate);
+}
+
+#endif  /* MONITOR */

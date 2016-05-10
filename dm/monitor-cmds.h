@@ -26,6 +26,7 @@ void mc_vm_balloon_size(Monitor *mon, const dict args);
 void mc_vm_audio_mute(Monitor *mon, const dict args);
 void mc_touch_unplug(Monitor *mon, const dict args);
 void mc_touch_plug(Monitor *mon, const dict args);
+void mc_vm_throttle(Monitor *mon, const dict args);
 
 void ic_network(Monitor *mon);
 void ic_chr(Monitor *mon);

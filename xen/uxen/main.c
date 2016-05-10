@@ -407,6 +407,38 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
             }
         }
 
+        if (d->arch.hvm_domain.params[HVM_PARAM_THROTTLE_PERIOD] &&
+            v->runstate.state == RUNSTATE_running) {
+            int64_t running;
+            s_time_t period, rate;
+            period = MILLISECS(d->arch.hvm_domain.params[
+                                   HVM_PARAM_THROTTLE_PERIOD]);
+            rate = MILLISECS(d->arch.hvm_domain.params[
+                                 HVM_PARAM_THROTTLE_RATE]);
+            if (v->vcpu_throttle_last_time < NOW() - 3 * period)
+                v->vcpu_throttle_last_time = NOW();
+            running = NOW() - v->vcpu_throttle_last_time;
+            while (running >= period) {
+                v->vcpu_throttle_last_time += period;
+                running = NOW() - v->vcpu_throttle_last_time;
+            }
+            if (running > rate) {
+                set_timer(&v->vcpu_throttle_timer,
+                          v->vcpu_throttle_last_time + period);
+                atomic_write32(&vci->vci_host_halted, 1);
+                if (work_pending_vcpu(v))
+                    do_softirq_vcpu(v);
+                if (vcpu_active_timer(&v->vcpu_throttle_timer)) {
+                    vci->vci_run_mode = VCI_RUN_MODE_HALT;
+                    ret = 0;
+                    perfc_incr(pc7);
+                    goto out_reset_current;
+                }
+                atomic_write32(&vci->vci_host_halted, 0);
+            }
+            perfc_incr(pc8);
+        }
+
         if (!vcpu_runnable(v) || v->runstate.state != RUNSTATE_running ||
             !v->context_loaded) {
             v->arch.ctxt_switch_from(v);

@@ -348,6 +348,8 @@ static mon_cmd_t mon_cmds[] = {
     { .name = "touch-unplug", .mhandler.cmd = mc_touch_unplug,
       .help = "Unplug touch devices" },
 #endif
+    { .name = "throttle", .mhandler.cmd = mc_vm_throttle,
+      .args_type = "n:period,n:rate", .help = "throttle VM execution" },
 };
 
 static void ic_version(Monitor *mon);

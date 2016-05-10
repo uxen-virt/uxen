@@ -111,6 +111,13 @@ void migrate_timer_to_vcpu(struct timer *timer, struct vcpu *v);
  */
 void kill_timer(struct timer *timer);
 
+/*
+ * is vcpu timer active?
+ * can only be called for vcpu timers and from the vcpu's run thread
+ * (i.e. current == timer's vcpu)
+ */
+bool_t vcpu_active_timer(struct timer *timer);
+
 /* Bootstrap initialisation. Must be called before any other timer function. */
 void timer_init(void);
 
