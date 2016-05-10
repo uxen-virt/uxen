@@ -265,6 +265,7 @@ static void cpuset_print(char *set, int size, const cpumask_t *mask)
     *set++ = '\0';
 }
 
+#ifndef __UXEN__
 static void periodic_timer_print(char *str, int size, uint64_t period)
 {
     if ( period == 0 )
@@ -277,6 +278,7 @@ static void periodic_timer_print(char *str, int size, uint64_t period)
              "%u Hz periodic timer (period %u ms)",
              1000000000/(int)period, (int)period/1000000);
 }
+#endif  /* __UXEN__ */
 
 static void dump_domains(unsigned char key)
 {
@@ -362,8 +364,10 @@ static void dump_domains(unsigned char key)
             cpuset_print(tmpstr, sizeof(tmpstr), v->cpu_affinity);
             printk("cpu_affinity=%s\n", tmpstr);
             arch_dump_vcpu_info(v);
+#ifndef __UXEN__
             periodic_timer_print(tmpstr, sizeof(tmpstr), v->periodic_period);
             printk("    %s\n", tmpstr);
+#endif  /* __UXEN__ */
 #ifdef __UXEN__
             {
                 void hostsched_dump_vcpu(struct vcpu *, int);

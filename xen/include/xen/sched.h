@@ -117,12 +117,14 @@ struct vcpu
 
     struct vcpu     *next_in_list;
 
+#ifndef __UXEN__
     s_time_t         periodic_period;
     s_time_t         periodic_last_event;
     struct timer     periodic_timer;
     struct timer     singleshot_timer;
 
     struct timer     poll_timer;    /* timeout for SCHEDOP_poll */
+#endif  /* __UXEN__ */
 
     union {
         void            *sched_priv;    /* scheduler-specific data */

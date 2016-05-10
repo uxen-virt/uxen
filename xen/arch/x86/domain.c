@@ -481,9 +481,9 @@ int vcpu_initialise(struct vcpu *v)
     spin_lock_init(&v->arch.pv_vcpu.shadow_ldt_lock);
 #endif  /* __UXEN__ */
 
+#ifndef __UXEN__
     if ( !is_idle_domain(d) )
     {
-#ifndef __UXEN__
         if ( standalone_trap_ctxt(v) )
         {
             v->arch.pv_vcpu.trap_ctxt = alloc_xenheap_page();
@@ -497,17 +497,15 @@ int vcpu_initialise(struct vcpu *v)
         else
             v->arch.pv_vcpu.trap_ctxt = (void *)v + PAGE_SIZE -
                 256 * sizeof(*v->arch.pv_vcpu.trap_ctxt);
-#endif  /* __UXEN__ */
 
         /* PV guests by default have a 100Hz ticker. */
         v->periodic_period = MILLISECS(10);
 
-#ifndef __UXEN__
         /* PV guests get an emulated PIT too for video BIOSes to use. */
         if ( v->vcpu_id == 0 )
             pit_init(v, cpu_khz);
-#endif  /* __UXEN__ */
     }
+#endif  /* __UXEN__ */
 
 #ifndef __UXEN__
     v->arch.schedule_tail = continue_nonidle_domain;

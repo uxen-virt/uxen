@@ -74,9 +74,11 @@ boolean_param("sched_smt_power_savings", sched_smt_power_savings);
 /* Various timer handlers. */
 static void s_timer_fn(void *unused);
 #endif  /* __UXEN__ */
+#ifndef __UXEN__
 static void vcpu_periodic_timer_fn(void *data);
 static void vcpu_singleshot_timer_fn(void *data);
 static void poll_timer_fn(void *data);
+#endif  /* __UXEN__ */
 
 /* This is global for now so that private implementations can reach it */
 DEFINE_PER_CPU(struct schedule_data, schedule_data);
@@ -235,6 +237,7 @@ int sched_init_vcpu(struct vcpu *v, unsigned int processor)
     else
         cpumask_setall(v->cpu_affinity);
 
+#ifndef __UXEN__
     /* Initialise the per-vcpu timers. */
     init_timer(&v->periodic_timer, vcpu_periodic_timer_fn,
                v, v->processor);
@@ -242,6 +245,7 @@ int sched_init_vcpu(struct vcpu *v, unsigned int processor)
                v, v->processor);
     init_timer(&v->poll_timer, poll_timer_fn,
                v, v->processor);
+#endif  /* __UXEN__ */
 
     /* Idle VCPUs are scheduled immediately. */
     if ( is_idle_domain(d) )
@@ -335,9 +339,11 @@ int sched_move_domain(struct domain *d, struct cpupool *c)
 
 void sched_destroy_vcpu(struct vcpu *v)
 {
+#ifndef __UXEN__
     kill_timer(&v->periodic_timer);
     kill_timer(&v->singleshot_timer);
     kill_timer(&v->poll_timer);
+#endif  /* __UXEN__ */
     if ( test_and_clear_bool(v->is_urgent) )
         atomic_dec(&per_cpu(schedule_data, v->processor).urgent_count);
     SCHED_OP(VCPU2OP(v), remove_vcpu, v);
@@ -1366,40 +1372,34 @@ static void s_timer_fn(void *unused)
 }
 #endif  /* __UXEN__ */
 
+#ifndef __UXEN__
 /* Per-VCPU periodic timer function: sends a virtual timer interrupt. */
 static void vcpu_periodic_timer_fn(void *data)
 {
-#ifndef __UXEN__
     struct vcpu *v = data;
     vcpu_periodic_timer_work(v);
-#else   /* __UXEN__ */
-    BUG();
-#endif  /* __UXEN__ */
 }
+#endif  /* __UXEN__ */
 
+#ifndef __UXEN__
 /* Per-VCPU single-shot timer function: sends a virtual timer interrupt. */
 static void vcpu_singleshot_timer_fn(void *data)
 {
-#ifndef __UXEN__
     struct vcpu *v = data;
     send_timer_event(v);
-#else   /* __UXEN__ */
-    BUG();
-#endif  /* __UXEN__ */
 }
+#endif  /* __UXEN__ */
 
+#ifndef __UXEN__
 /* SCHEDOP_poll timeout callback. */
 static void poll_timer_fn(void *data)
 {
-#ifndef __UXEN__
     struct vcpu *v = data;
 
     if ( test_and_clear_bit(v->vcpu_id, v->domain->poll_mask) )
         vcpu_unblock(v);
-#else   /* __UXEN__ */
-    BUG();
-#endif  /* __UXEN__ */
 }
+#endif  /* __UXEN__ */
 
 static int cpu_schedule_up(unsigned int cpu)
 {
