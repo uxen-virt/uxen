@@ -277,7 +277,6 @@ int uxen_unload(void);
 
 /* uxen_mem.c */
 extern int map_page_range_max_nr;
-void set_map_mfn_pte_flags(void);
 uint64_t __cdecl map_mfn(uintptr_t va, xen_pfn_t mfn);
 int mem_init(void);
 void mem_exit(void);
@@ -378,6 +377,7 @@ extern uxen_pfn_t vframes_start, vframes_end;
 /* uxen_sys.asm */
 ULONG_PTR __stdcall uxen_mem_tlb_flush_fn(ULONG_PTR arg);
 ULONG_PTR __stdcall uxen_mem_tlb_flush_fn_global(ULONG_PTR arg);
+uintptr_t __stdcall read_cr3(void);
 
 /* uxen_ops.c */
 extern MDL *map_page_range_mdl;

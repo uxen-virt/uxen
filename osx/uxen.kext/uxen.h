@@ -329,7 +329,6 @@ int uxen_load_symbols(void);
 int uxen_unload(void);
 
 /* uxen_mem.c */
-#define set_map_mfn_pte_flags() do { } while (0)
 uint64_t __cdecl map_mfn(uintptr_t va, xen_pfn_t mfn);
 void *map_pfn_array(uxen_pfn_t *pfn_array, unsigned int num_pages);
 void unmap_pfn_array(const void *va, uxen_pfn_t *pfn_array, unsigned int num);

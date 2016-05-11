@@ -45,7 +45,8 @@ KGUARDED_MUTEX populate_vframes_mutex;
 uxen_pfn_t vframes_start, vframes_end;
 
 #ifdef _WIN64
-#define LINEAR_PT_VA 0xfffff68000000000
+static uintptr_t linear_pt_va;
+#define LINEAR_PT_VA linear_pt_va
 #define VA_TO_LINEAR_PTE(v)						\
     (uint64_t *)(LINEAR_PT_VA +						\
 		 (((v) & ~0xffff000000000fff) >> (PAGE_SHIFT - 3)))
@@ -76,6 +77,68 @@ uxen_pfn_t os_max_pfn = -1;
 #else
 #define DEFENSIVE_CHECK(type, var, limit, ret_val)
 #endif
+
+#ifdef _WIN64
+static int
+set_linear_pt_va(void)
+{
+    uintptr_t cr3;
+    PMDL mdl = NULL;
+    uint64_t *addr = NULL;
+    unsigned int offset;
+    int ret = 0;
+
+    mdl = IoAllocateMdl(NULL, 1 << PAGE_SHIFT, FALSE, FALSE, NULL);
+    if (!mdl) {
+        fail_msg("%s: IoAllocateMdl failed", __FUNCTION__);
+        ret = ENOMEM;
+        goto out;
+    }
+
+    cr3 = read_cr3();
+
+    mdl->MdlFlags = MDL_PAGES_LOCKED;
+    MmGetMdlPfnArray(mdl)[0] = cr3 >> PAGE_SHIFT;
+    try {
+        addr = MmMapLockedPagesSpecifyCache(
+            mdl, KernelMode,
+            MmCached, NULL, FALSE, LowPagePriority);
+    } except (HOSTDRV_EXCEPTION_EXECUTE_HANDLER(
+                  "MmMapLockedPagesSpecifyCache")) {
+	addr = NULL;
+    }
+
+    for (offset = 0; offset < PAGE_SIZE; offset++)
+        if ((addr[offset / sizeof(addr[0])] & PAGE_MASK) == cr3)
+            break;
+
+    if (offset == PAGE_SIZE) {
+        fail_msg("%s: linear_pt_va not found", __FUNCTION__);
+        ret = EINVAL;
+        goto out;
+    }
+
+    linear_pt_va = (uintptr_t)offset << 36;
+    if (offset >= PAGE_SIZE / 2)
+        linear_pt_va |= 0xffff000000000000;
+    printk("linear pt va %p\n", (void *)linear_pt_va);
+
+  out:
+    if (mdl) {
+        if (addr)
+            MmUnmapLockedPages((uint8_t *)addr, mdl);
+        IoFreeMdl(mdl);
+    }
+    return ret;
+}
+#else  /* _WIN64 */
+static int
+set_linear_pt_va(void)
+{
+
+    return 0;
+}
+#endif  /* _WIN64 */
 
 static uint64_t
 set_pte(uintptr_t va, uint64_t new)
@@ -116,7 +179,7 @@ map_mfn(uintptr_t va, xen_pfn_t mfn)
                    (((uint64_t)mfn << PAGE_SHIFT) | map_mfn_pte_flags));
 }
 
-void
+static void
 set_map_mfn_pte_flags(void)
 {
     uint64_t dummy = 0;
@@ -220,6 +283,12 @@ mem_init(void)
         ret = ENOMEM;
         goto out;
     }
+
+    ret = set_linear_pt_va();
+    if (ret)
+        goto out;
+
+    set_map_mfn_pte_flags();
 
   out:
     return ret;
