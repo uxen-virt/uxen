@@ -11,6 +11,8 @@ ifeq (,$(patsubst tools/%,,$(SUBDIR)/))
 dist: all
 endif
 
+tests:: .phony
+
 V ?= 0
 
 ifeq (0,$(V))
@@ -107,18 +109,25 @@ $(HOST_WINDOW)HOST = windows
 $(HOST_LINUX)HOST = linux
 $(HOST_OSX)HOST = osx
 
-subdirs-all subdirs-dist subdirs-clean subdirs-install subdirs-distclean: .phony
+subdirs-all subdirs-dist subdirs-clean subdirs-tests subdirs-install subdirs-distclean: .phony
 	@set -e; for subdir in $(subst /,_,$(SUBDIRS) $(SUBDIRS-y)); do \
 		$(call submake,.,subdir-$(patsubst subdirs-%,%,$@)-$$subdir); \
 	done
 
-subdir-all-% subdir-dist-% subdir-clean-% subdir-install-%: .phony
+subdir-all-% subdir-dist-% subdir-clean-% subdir-tests-% subdir-install-%: .phony
 	@$(call submake,$(subst _,/,$*),$(patsubst subdir-%-$*,%,$@))
 
 subdir-distclean-%: .phony
 	$(MAKE) -C $* clean
 
 endif # MAKENOW
+
+ifeq (,$(MAKENOW))
+ifneq (,$(SRCDIR))
+-include $(SRCDIR)/Makefile.tests
+-include $(SRCDIR)/tests/*.mk
+endif
+endif
 
 debug-builddir:
 	@printf "%-25s %s\n" "UXEN_BUILDDIR" "$(UXEN_BUILDDIR)"

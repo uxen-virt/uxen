@@ -40,3 +40,6 @@ $(TARGETS): % : subdirs-%
 clean::
 	$(_W)echo Cleaning - $(BUILDDIR)
 	$(_V)rm -rf $(BUILDDIR)
+
+.PHONY: tests
+tests:: subdirs-tests

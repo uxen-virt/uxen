@@ -1,5 +1,5 @@
 #
-# Copyright 2011-2015, Bromium, Inc.
+# Copyright 2011-2016, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -34,6 +34,9 @@ $(TARGETS): % : subdirs-%
 clean::
 	$(_W)echo Cleaning - $(BUILDDIR)
 	$(_V)rm -rf $(BUILDDIR)
+
+.PHONY: tests
+tests:: subdirs-tests
 
 .PHONY: tools
 tools:

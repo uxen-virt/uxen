@@ -29,6 +29,9 @@ clean::
 	$(_W)echo Cleaning - $(BUILDDIR)
 	$(_V)rm -rf $(BUILDDIR)
 
+.PHONY: tests
+tests:: subdirs-tests
+
 .PHONY: tools
 tools:
 	@$(MAKE) -C $(TOPDIR) $@
