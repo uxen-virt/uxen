@@ -8,9 +8,7 @@
 #include <xen/config.h>
 #include <xen/lib.h>
 
-#ifndef __UXEN__
 #undef memcpy
-#endif  /* __UXEN__ */
 void *memcpy(void *dest, const void *src, size_t n)
 {
     long d0, d1, d2;
@@ -26,9 +24,7 @@ void *memcpy(void *dest, const void *src, size_t n)
     return dest;
 }
 
-#ifndef __UXEN__
 #undef memset
-#endif  /* __UXEN__ */
 void *memset(void *s, int c, size_t n)
 {
     long d0, d1;
@@ -42,9 +38,7 @@ void *memset(void *s, int c, size_t n)
     return s;
 }
 
-#ifndef __UXEN__
 #undef memmove
-#endif  /* __UXEN__ */
 void *memmove(void *dest, const void *src, size_t n)
 {
     long d0, d1, d2;

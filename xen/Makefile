@@ -16,11 +16,6 @@ $(TARGET_pe_only)TARGET = uxen-cv.obj
 $(TARGET_pe_only)$(X86_64_only)TARGET += uxen-xpdata.obj
 
 XEN_CFLAGS += $(CFLAGS)
-$(TARGET_pe_only)XEN_CPPFLAGS += -Dmemcpy=__memcpy
-$(TARGET_pe_only)XEN_CPPFLAGS += -Dmemmove=__memmove
-$(TARGET_pe_only)XEN_CPPFLAGS += -Dmemset=__memset
-$(TARGET_pe_only)XEN_CPPFLAGS += -Dstrchr=__strchr
-$(TARGET_pe_only)XEN_CPPFLAGS += -Dstrrchr=__strrchr
 
 $(X86_32_only)XEN_CFLAGS += -m32 -march=i686
 $(X86_32_only)XEN_CFLAGS += -mno-stack-arg-probe
