@@ -431,12 +431,10 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
                 if (vcpu_active_timer(&v->vcpu_throttle_timer)) {
                     vci->vci_run_mode = VCI_RUN_MODE_HALT;
                     ret = 0;
-                    perfc_incr(pc7);
                     goto out_reset_current;
                 }
                 atomic_write32(&vci->vci_host_halted, 0);
             }
-            perfc_incr(pc8);
         }
 
         if (!vcpu_runnable(v) || v->runstate.state != RUNSTATE_running ||
