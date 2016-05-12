@@ -373,6 +373,7 @@ int unmap_host_pages(void *, size_t, struct fd_assoc *);
 extern KGUARDED_MUTEX populate_vframes_mutex;
 int fill_vframes(void);
 extern uxen_pfn_t vframes_start, vframes_end;
+void dump_mem_init_info();
 
 /* uxen_sys.asm */
 ULONG_PTR __stdcall uxen_mem_tlb_flush_fn(ULONG_PTR arg);

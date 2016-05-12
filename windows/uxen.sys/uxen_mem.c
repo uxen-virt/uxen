@@ -45,6 +45,8 @@ KGUARDED_MUTEX populate_vframes_mutex;
 uxen_pfn_t vframes_start, vframes_end;
 
 #ifdef _WIN64
+/* assuming phys addr size to be 36 bit */
+#define PML4_PHYS_ADDR_MASK 0x0000fffffffff000
 static uintptr_t linear_pt_va;
 #define LINEAR_PT_VA linear_pt_va
 #define VA_TO_LINEAR_PTE(v)						\
@@ -109,7 +111,7 @@ set_linear_pt_va(void)
     }
 
     for (offset = 0; offset < PAGE_SIZE; offset++)
-        if ((addr[offset / sizeof(addr[0])] & PAGE_MASK) == cr3)
+        if ((addr[offset / sizeof(addr[0])] & PML4_PHYS_ADDR_MASK) == cr3)
             break;
 
     if (offset == PAGE_SIZE) {
@@ -121,7 +123,6 @@ set_linear_pt_va(void)
     linear_pt_va = (uintptr_t)offset << 36;
     if (offset >= PAGE_SIZE / 2)
         linear_pt_va |= 0xffff000000000000;
-    printk("linear pt va %p\n", (void *)linear_pt_va);
 
   out:
     if (mdl) {
@@ -2556,4 +2557,12 @@ fill_vframes(void)
 
     KeReleaseGuardedMutex(&populate_vframes_mutex);
     return 0;
+}
+
+void 
+dump_mem_init_info()
+{
+#ifdef _WIN64
+    printk("linear pt va %p\n", (void *)linear_pt_va);
+#endif
 }
