@@ -438,7 +438,6 @@ uxen_driver_load(__in PDRIVER_OBJECT DriverObject,
     }
 
     print_uxen_drv_info(RegistryPath, "uxen_driver_load");
-    dump_mem_init_info();
 
     rb_tree_init(&uxen_devext->de_vm_info_rbtree, &vm_info_rbtree_ops);
 

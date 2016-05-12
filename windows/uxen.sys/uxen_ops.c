@@ -899,6 +899,10 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
         goto out;
     }
 
+    ret = mem_late_init();
+    if (ret)
+        goto out;
+
     uxen_info->host_os_is_xmm_clean = 0;
 
     uxen_info->ui_printf = uxen_printk;

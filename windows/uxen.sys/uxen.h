@@ -27,6 +27,7 @@
 #include "version.h"
 
 #define PAGE_MASK (~(PAGE_SIZE - 1))
+#define PAGETABLE_ORDER 9
 
 #include "uxen_def.h"
 #define UXEN_DEVICE_PATH_U		L"\\Device\\" UXEN_DEVICE_NAME_U
@@ -279,6 +280,7 @@ int uxen_unload(void);
 extern int map_page_range_max_nr;
 uint64_t __cdecl map_mfn(uintptr_t va, xen_pfn_t mfn);
 int mem_init(void);
+int mem_late_init(void);
 void mem_exit(void);
 void *_kernel_malloc(size_t, int);
 #define kernel_malloc(size) _kernel_malloc(size, __LINE__)
@@ -373,7 +375,6 @@ int unmap_host_pages(void *, size_t, struct fd_assoc *);
 extern KGUARDED_MUTEX populate_vframes_mutex;
 int fill_vframes(void);
 extern uxen_pfn_t vframes_start, vframes_end;
-void dump_mem_init_info();
 
 /* uxen_sys.asm */
 ULONG_PTR __stdcall uxen_mem_tlb_flush_fn(ULONG_PTR arg);

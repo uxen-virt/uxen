@@ -45,8 +45,9 @@ KGUARDED_MUTEX populate_vframes_mutex;
 uxen_pfn_t vframes_start, vframes_end;
 
 #ifdef _WIN64
-/* assuming phys addr size to be 36 bit */
-#define PML4_PHYS_ADDR_MASK 0x0000fffffffff000
+/* pml phys addrs always have 52 valid bits */
+#define PMLE_ADDR_MASK 0x000ffffffffff000
+#define PAGETABLE_LEVELS 4
 static uintptr_t linear_pt_va;
 #define LINEAR_PT_VA linear_pt_va
 #define VA_TO_LINEAR_PTE(v)						\
@@ -93,7 +94,7 @@ set_linear_pt_va(void)
     mdl = IoAllocateMdl(NULL, 1 << PAGE_SHIFT, FALSE, FALSE, NULL);
     if (!mdl) {
         fail_msg("%s: IoAllocateMdl failed", __FUNCTION__);
-        ret = ENOMEM;
+        ret = -ENOMEM;
         goto out;
     }
 
@@ -110,19 +111,27 @@ set_linear_pt_va(void)
 	addr = NULL;
     }
 
+    if (!addr) {
+        fail_msg("%s: pml4 map failed", __FUNCTION__);
+        ret = -EINVAL;
+        goto out;
+    }
+
     for (offset = 0; offset < PAGE_SIZE; offset++)
-        if ((addr[offset / sizeof(addr[0])] & PML4_PHYS_ADDR_MASK) == cr3)
+        if ((addr[offset / sizeof(addr[0])] & PMLE_ADDR_MASK) == cr3)
             break;
 
     if (offset == PAGE_SIZE) {
         fail_msg("%s: linear_pt_va not found", __FUNCTION__);
-        ret = EINVAL;
+        ret = -EINVAL;
         goto out;
     }
 
-    linear_pt_va = (uintptr_t)offset << 36;
-    if (offset >= PAGE_SIZE / 2)
-        linear_pt_va |= 0xffff000000000000;
+    linear_pt_va = (uintptr_t)offset << (PAGETABLE_LEVELS * PAGETABLE_ORDER);
+    if (offset >= (PAGE_SIZE >> 1))
+        linear_pt_va |=
+            ~0ULL << (PAGETABLE_LEVELS * PAGETABLE_ORDER + PAGE_SHIFT);
+    printk("linear-pt va: %p\n", (void *)linear_pt_va);
 
   out:
     if (mdl) {
@@ -284,6 +293,15 @@ mem_init(void)
         ret = ENOMEM;
         goto out;
     }
+
+  out:
+    return ret;
+}
+
+int
+mem_late_init(void)
+{
+    int ret;
 
     ret = set_linear_pt_va();
     if (ret)
@@ -2557,12 +2575,4 @@ fill_vframes(void)
 
     KeReleaseGuardedMutex(&populate_vframes_mutex);
     return 0;
-}
-
-void 
-dump_mem_init_info()
-{
-#ifdef _WIN64
-    printk("linear pt va %p\n", (void *)linear_pt_va);
-#endif
 }
