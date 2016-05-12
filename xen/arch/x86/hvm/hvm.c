@@ -5022,6 +5022,9 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
                         pt_update_schedule_period(v);
                     break;
                 }
+                case HVM_PARAM_THROTTLE_PERIOD:
+                    aligned_throttle_period = -1ULL;
+                    break;
 
                 }
 

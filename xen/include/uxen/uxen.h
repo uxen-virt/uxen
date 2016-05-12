@@ -79,4 +79,6 @@ DECLARE_PER_CPU(uintptr_t, stack_top);
 
 DECLARE_PER_CPU(struct uxen_hypercall_desc *, hypercall_args);
 
+extern uint64_t aligned_throttle_period;
+
 #endif

@@ -40,6 +40,8 @@ static void free_dom0(void);
 DEFINE_PER_CPU(uintptr_t, stack_top);
 DEFINE_PER_CPU(struct uxen_hypercall_desc *, hypercall_args);
 
+uint64_t aligned_throttle_period = -1ULL;
+
 static void _cpu_irq_disable(void);
 static void _cpu_irq_enable(void);
 static int _cpu_irq_is_enabled(void);
@@ -407,24 +409,27 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
             }
         }
 
-        if (d->arch.hvm_domain.params[HVM_PARAM_THROTTLE_PERIOD] &&
-            v->runstate.state == RUNSTATE_running) {
-            int64_t running;
-            s_time_t period, rate;
-            period = MILLISECS(d->arch.hvm_domain.params[
-                                   HVM_PARAM_THROTTLE_PERIOD]);
-            rate = MILLISECS(d->arch.hvm_domain.params[
-                                 HVM_PARAM_THROTTLE_RATE]);
-            if (v->vcpu_throttle_last_time < NOW() - 3 * period)
-                v->vcpu_throttle_last_time = NOW();
-            running = NOW() - v->vcpu_throttle_last_time;
-            while (running >= period) {
-                v->vcpu_throttle_last_time += period;
-                running = NOW() - v->vcpu_throttle_last_time;
-            }
-            if (running > rate) {
-                set_timer(&v->vcpu_throttle_timer,
-                          v->vcpu_throttle_last_time + period);
+#define THROTTLE_PERIOD(d)                                              \
+            (int64_t)((d)->arch.hvm_domain.params[HVM_PARAM_THROTTLE_PERIOD])
+#define THROTTLE_RATE(d)                                                \
+            (int64_t)((d)->arch.hvm_domain.params[HVM_PARAM_THROTTLE_RATE])
+        if (THROTTLE_PERIOD(d)) {
+            s_time_t period, rate, now;
+            period = MILLISECS(THROTTLE_PERIOD(d));
+            rate = MILLISECS(THROTTLE_RATE(d));
+            now = NOW();
+            v->vcpu_throttle_credit += (now - v->vcpu_throttle_last_time) *
+                THROTTLE_RATE(d);
+            if (v->vcpu_throttle_credit > period * THROTTLE_RATE(d))
+                v->vcpu_throttle_credit = period * THROTTLE_RATE(d);
+            v->vcpu_throttle_last_time = now;
+            if (v->vcpu_throttle_credit < 0 &&
+                v->runstate.state == RUNSTATE_running) {
+                if (aligned_throttle_period > period - rate)
+                    aligned_throttle_period = period - rate;
+                now = aligned_throttle_period + now -
+                    ((now + aligned_throttle_period) % aligned_throttle_period);
+                set_timer(&v->vcpu_throttle_timer, now);
                 atomic_write32(&vci->vci_host_halted, 1);
                 if (work_pending_vcpu(v))
                     do_softirq_vcpu(v);
@@ -499,6 +504,19 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
             goto out_reset_current;
 
         hvm_execute(v);
+
+        if (THROTTLE_PERIOD(d)) {
+            s_time_t period, now;
+            period = MILLISECS(THROTTLE_PERIOD(d));
+            now = NOW();
+            if (now - v->vcpu_throttle_last_time >= period)
+                v->vcpu_throttle_credit += period *
+                    (THROTTLE_RATE(d) - THROTTLE_PERIOD(d));
+            else
+                v->vcpu_throttle_credit += (now - v->vcpu_throttle_last_time) *
+                    (THROTTLE_RATE(d) - THROTTLE_PERIOD(d));
+            v->vcpu_throttle_last_time = now;
+        }
     }
 
   out_reset_current:

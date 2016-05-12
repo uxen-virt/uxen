@@ -126,6 +126,7 @@ struct vcpu
     struct timer     poll_timer;    /* timeout for SCHEDOP_poll */
 #else  /* __UXEN__ */
     uint64_t         vcpu_throttle_last_time;
+    int64_t          vcpu_throttle_credit;
     struct timer     vcpu_throttle_timer;
 #endif  /* __UXEN__ */
 
