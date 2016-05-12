@@ -124,6 +124,8 @@ endif # MAKENOW
 
 ifeq (,$(MAKENOW))
 ifneq (,$(SRCDIR))
+$(SRCDIR)/Makefile.tests: .phony ;
+$(SRCDIR)/tests/*.mk: .phony ;
 -include $(SRCDIR)/Makefile.tests
 -include $(SRCDIR)/tests/*.mk
 endif
