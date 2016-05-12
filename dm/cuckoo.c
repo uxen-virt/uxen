@@ -674,7 +674,7 @@ decompression_thread(void *_c)
     uint8_t *pages;
     struct work_unit *u;
     int max;
-    int i, j;
+    int i;
     int last_tpfs = 0;
 
     pages = ccb->get_buffer(opaque, c->tid, &max);
@@ -705,6 +705,7 @@ decompression_thread(void *_c)
             template_pfns = ccb->malloc(opaque, sizeof(template_pfns[0]) *
                                         num_tpfns);
             template_pages = ccb->malloc(opaque, PAGE_SIZE * num_tpfns);
+            last_tpfs = num_tpfns;
         }
 
         for (u = s->first, num_tpfns = 0; u != s->last; ++u) {
@@ -714,8 +715,10 @@ decompression_thread(void *_c)
             }
         }
 
-        ccb->capture_pfns(opaque, c->tid, num_tpfns, template_pages,
-                          template_pfns);
+        if (num_tpfns) {
+            ccb->capture_pfns(opaque, c->tid, num_tpfns, template_pages,
+                              template_pfns);
+        }
 
         if (s->size) {
             thread_event_wait(&s->data_ready);
@@ -728,7 +731,7 @@ decompression_thread(void *_c)
 #endif
         }
 
-        for (u = s->first, i = j = 0, t = template_pages; u != s->last; ++u) {
+        for (u = s->first, i = 0, t = template_pages; u != s->last; ++u) {
 
             const struct cuckoo_page *ref = u->ref;
             uint8_t b[PAGE_SIZE];
@@ -801,12 +804,15 @@ decompression_thread(void *_c)
 
                 pfns[i++] = p->c.pfn;
 skip_template_ident:
-                if (i == max || u + 1 == s->last) {
+                if (i == max) {
                     ccb->populate_pfns(opaque, c->tid, i, pfns);
-                    j += i;
                     i = 0;
                 }
             }
+        }
+        if (i) {
+            ccb->populate_pfns(opaque, c->tid, i, pfns);
+            i = 0;
         }
 
         if (s->buffer) {
