@@ -1143,7 +1143,7 @@ struct dict_rpc_command control_commands[] = {
             { NULL, },
         }, },
 #endif  /* CONTROL_TEST */
-    { "throttle", control_command_throttle,
+    { "throttle", control_command_throttle, .flags = CONTROL_SUSPEND_OK,
       .args = (struct dict_rpc_arg_desc[]) {
             { "period", DICT_RPC_ARG_TYPE_INTEGER, .optional = 0 },
             { "rate", DICT_RPC_ARG_TYPE_INTEGER, .optional = 0 },
