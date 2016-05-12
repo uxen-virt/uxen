@@ -2323,6 +2323,9 @@ static void srv_tls_check_complete(void *opaque, int revoked, uint32_t err_code)
             dict_free(d);
         }
 
+        if (hp->cx && (hp->cx->flags & CXF_GUEST_PROXY))
+            cx_proxy_response(hp->cx, HMSG_CONNECT_ABORTED_SSL, true);
+
         goto out_close;
     }
 
