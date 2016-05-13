@@ -1357,15 +1357,19 @@ v4v_ring_create(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_id_t) ring_id_hnd)
 
         dst_d = get_domain_by_id(ring_id.addr.domain);
         if (!dst_d) {
-            printk(XENLOG_ERR "%s: vm%u has no domain\n", __FUNCTION__,
-                   current->domain->domain_id);
+            printk(XENLOG_ERR
+                   "%s: vm%u no partner vm for ring (vm%u:%x vm%d)\n",
+                   __FUNCTION__, current->domain->domain_id,
+                   ring_id.addr.domain, ring_id.addr.port, ring_id.partner);
             ret = -ENOENT;
             break;
         }
 
         if (!dst_d->v4v) {
-            printk(XENLOG_ERR "%s: vm%u domain without v4v\n", __FUNCTION__,
-                   current->domain->domain_id);
+            printk(XENLOG_ERR
+                   "%s: vm%u no v4v in partner vm for ring (vm%u:%x vm%d)\n",
+                   __FUNCTION__, current->domain->domain_id,
+                   ring_id.addr.domain, ring_id.addr.port, ring_id.partner);
             ret = -ENOENT;
             break;
         }
