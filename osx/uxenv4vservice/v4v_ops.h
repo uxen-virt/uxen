@@ -23,6 +23,7 @@ struct uxen_v4v_ring {
     uint32_t protocol_number;
     uint32_t local_port;
     domid_t partner_domain;
+    v4v_idtoken_t partner_idtoken;
     bool admin_access;
 };
 
@@ -34,7 +35,8 @@ errno_t uxen_v4v_alloc_and_bind_ring(
     uxen_v4v_ring **created_ring);
 errno_t uxen_v4v_bind_ring_with_buffer(
     uxen_v4v_device *device, unsigned length_bytes,
-    domid_t partner_domain, uint32_t local_port, bool admin_access,
+    domid_t *partner_domain, uint32_t local_port,
+    v4v_idtoken_t *partner_idtoken, bool admin_access,
     uxen_v4v_ring **created_ring, IOBufferMemoryDescriptor* ring_mem);
 errno_t uxen_v4v_reregister_ring(uxen_v4v_device *device, uxen_v4v_ring *ring);
 void uxen_v4v_destroy_ring(uxen_v4v_device *device, uxen_v4v_ring *created_ring);

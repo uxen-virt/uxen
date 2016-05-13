@@ -432,7 +432,7 @@ gh_v4v_link_to_ring_list(xenv4v_extension_t *pde, xenv4v_ring_t *robj)
     robj->reflist = 1;
 
     // Link this context into the adapter list
-    InsertHeadList(&pde->ring_list, &(robj->le));
+    InsertTailList(&pde->ring_list, &(robj->le));
     uxen_v4v_info("added ring object %p to list", robj);
 }
 

@@ -110,7 +110,7 @@ int                     uxenconsole_clipboard_permit(uxenconsole_context_t ctx,
 int                     uxenconsole_touch_device_hotplug(uxenconsole_context_t ctx,
                                                          int plug);
 
-hid_context_t           uxenconsole_hid_init(int vm_id);
+hid_context_t           uxenconsole_hid_init(int vm_id, unsigned char *idtoken);
 void                    uxenconsole_hid_cleanup(hid_context_t context);
 int                     uxenconsole_hid_mouse_report(hid_context_t context,
                                                      int buttons, int x, int y,
@@ -129,7 +129,7 @@ int                     uxenconsole_hid_touch_report(hid_context_t context,
 typedef void *disp_context_t;
 typedef void (*invalidate_rect_t)(void *priv, int x, int y, int w, int h);
 
-disp_context_t          uxenconsole_disp_init(int vm_id,
+disp_context_t          uxenconsole_disp_init(int vm_id, unsigned char *idtoken,
                                               void *priv,
                                               invalidate_rect_t inv_rect);
 void                    uxenconsole_disp_cleanup(disp_context_t context);

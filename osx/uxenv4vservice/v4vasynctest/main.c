@@ -43,7 +43,11 @@ int main(int argc, const char * argv[])
         return 1;
     }
     
-    if (!v4v_bind(&conn, (uint32_t)source_port, partner_domain)) {
+    v4v_bind_values_t bind = { };
+    bind.ring_id.addr.port = source_port;
+    bind.ring_id.addr.domain = V4V_DOMID_ANY;
+    bind.ring_id.partner = partner_domain;
+    if (!v4v_bind(&conn, &bind)) {
         printf("Creating ring failed: %d (%x)\n", errno, errno);
         return 1;
     }

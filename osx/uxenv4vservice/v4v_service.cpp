@@ -76,7 +76,8 @@ uxen_v4v_service::stop(IOService *provider)
 
 int
 uxen_v4v_service::allocAndBindSharedRing(
-    unsigned length, uint16_t partner_domain, uint32_t source_port,
+    unsigned length, uint16_t *partner_domain, uint32_t source_port,
+    v4v_idtoken_t *partner_idtoken,
     uxen_v4v_ring **out_new_ring, IOBufferMemoryDescriptor **out_ring_buf)
 {
     static const uint64_t PFN_ALLOC_MASK = 0xffffffffull << PAGE_SHIFT;
@@ -97,8 +98,8 @@ uxen_v4v_service::allocAndBindSharedRing(
     if (ring_mem == nullptr)
         return ENOMEM;
     result = uxen_v4v_bind_ring_with_buffer(
-        this->v4v_device, length, partner_domain,
-        source_port, admin_access, out_new_ring, ring_mem);
+        this->v4v_device, length, partner_domain, source_port, partner_idtoken,
+        admin_access, out_new_ring, ring_mem);
     if (result != 0) {
         *out_ring_buf = nullptr;
         OSSafeReleaseNULL(ring_mem);

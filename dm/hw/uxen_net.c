@@ -1108,7 +1108,7 @@ static NetClientInfo uxen_net_net_info = {
 static int
 uxen_net_initfn (UXenPlatformDevice *dev)
 {
-    v4v_ring_id_t r;
+    v4v_bind_values_t bind = { };
     int v4v_opened = 0;
     int error;
     extern unsigned slirp_mru;
@@ -1142,16 +1142,20 @@ uxen_net_initfn (UXenPlatformDevice *dev)
         v4v_opened++;
 
 
-        r.addr.port = 0xc0000;
-        r.addr.domain = V4V_DOMID_ANY;
-        r.partner = vm_id;
+        bind.ring_id.addr.port = 0xc0000;
+        bind.ring_id.addr.domain = V4V_DOMID_ANY;
+        bind.ring_id.partner = V4V_DOMID_UUID;
+        memcpy(&bind.partner, v4v_idtoken, sizeof(bind.partner));
 
-        if (!v4v_bind_sync(&s->v4v, &r, &error))
+        if (!v4v_bind_sync(&s->v4v, &bind, &error))
         {
             debug_printf("%s: v4v_bind failed (%x)\n",
                          __FUNCTION__, error);
             break;
         }
+
+        s->dest.domain = bind.ring_id.partner;
+        s->dest.port = bind.ring_id.addr.port;
 
         s->ring = v4v_ring_map_sync(&s->v4v, &error);
         if (!s->ring) {
@@ -1168,9 +1172,6 @@ uxen_net_initfn (UXenPlatformDevice *dev)
 
         ioh_add_wait_object (&s->v4v.recv_event, uxen_net_read_event, s, NULL);
         ioh_add_wait_object (&s->tx_event, uxen_net_write_event, s, NULL);
-
-        s->dest.domain = vm_id;
-        s->dest.port = 0xc0000;
 
         s->nic = qemu_new_nic (&uxen_net_net_info, &s->conf,
                                dev->qdev.info->name, dev->qdev.id, s);

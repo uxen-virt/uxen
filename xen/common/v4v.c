@@ -893,6 +893,21 @@ v4v_pending_cancel(struct v4v_ring_info *ring_info, domid_t src_id)
 
 static int v4v_dm_domid = 0;
 
+static int
+v4v_resolve_token(domid_t *id, uint32_t *port, v4v_idtoken_t *token)
+{
+    struct domain *partner;
+
+    ASSERT(token);
+
+    partner = rcu_lock_domain_by_uuid(token->o);
+    if (!partner)
+        return -ENOENT;
+    *id = partner->domain_id;
+    rcu_unlock_domain(partner);
+    return 0;
+}
+
 
 /*ring data*/
 
@@ -1459,8 +1474,12 @@ v4v_ring_create(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_id_t) ring_id_hnd)
 /* call from guest to publish a ring */
 static long
 v4v_ring_add(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd,
-             XEN_GUEST_HANDLE(v4v_pfn_list_t) pfn_list_hnd)
+             XEN_GUEST_HANDLE(v4v_pfn_list_t) pfn_list_hnd,
+             XEN_GUEST_HANDLE(v4v_idtoken_t) idtoken, uint32_t fail_exist)
 {
+    /* xen_domain_handle_t */ v4v_idtoken_t partner_idtoken;
+    domid_t partner_id;
+    uint32_t partner_port;
     struct v4v_ring ring;
     // struct v4v_ring_data ring_data = { 0 };
     struct v4v_ring_info *ring_info;
@@ -1500,6 +1519,23 @@ v4v_ring_add(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd,
         }
 
         ring.id.addr.domain = d->domain_id;
+        partner_id = ring.id.partner;
+        partner_port = V4V_PORT_NONE;
+        if (partner_id == V4V_DOMID_UUID) {
+            ret = copy_from_guest_errno(&partner_idtoken, idtoken, 1);
+            if (ret)
+                break;
+            ret = v4v_resolve_token(&partner_id, &partner_port,
+                                    &partner_idtoken);
+            if (ret)
+                break;
+        }
+
+        /* return the updated partner id to the caller, unless the
+         * requested partner id was V4V_DOMID_DM */
+        if (ring.id.partner != V4V_DOMID_DM)
+            ring.id.partner = partner_id;
+
         ret = copy_field_to_guest_errno(ring_hnd, &ring, id);
         if (ret)
             break;
@@ -1561,6 +1597,15 @@ v4v_ring_add(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd,
                    ring.id.addr.domain, ring.id.addr.port, ring.id.partner);
         } else {
             write_unlock(&d->v4v->lock);
+
+            /* don't allow adding a ring which already exists and is
+             * setup fully, i.e. is not a placeholder ring or a ring
+             * where v4v_find_ring_mfns or v4v_ring_map_page below
+             * failed for retry */
+            if (fail_exist && ring_info->len) {
+                ret = -EEXIST;
+                break;
+            }
 
             spin_lock(&ring_info->lock);
         }
@@ -1932,13 +1977,17 @@ do_v4v_op(int cmd, XEN_GUEST_HANDLE(void) arg1,
             guest_handle_cast(arg1, v4v_ring_t);
         XEN_GUEST_HANDLE(v4v_pfn_list_t) pfn_list_hnd =
             guest_handle_cast(arg2, v4v_pfn_list_t);
+        XEN_GUEST_HANDLE(v4v_idtoken_t) idtoken =
+            guest_handle_cast(arg3, v4v_idtoken_t);
 
         if (unlikely(!guest_handle_okay(ring_hnd, 1)))
             goto out;
         if (unlikely(!guest_handle_okay(pfn_list_hnd, 1))) //FIXME
             goto out;
+        if (unlikely(!guest_handle_okay(idtoken, 1)))
+            goto out;
 
-        rc = v4v_ring_add(d, ring_hnd, pfn_list_hnd);
+        rc = v4v_ring_add(d, ring_hnd, pfn_list_hnd, idtoken, arg4);
         break;
     }
     case V4VOP_unregister_ring: {

@@ -28,6 +28,7 @@ struct sf_msg {
 
 struct sf_state {
     v4v_channel_t v4v;
+    uint32_t partner_id;
     critical_section lock;
     struct io_handler_queue ioh_queue;
     WaitObjects wait_objects;
@@ -259,7 +260,7 @@ send_bytes(struct sf_state *state, struct sf_msg *msg, int len)
 
     memset(&msg->dgram, 0, sizeof(msg->dgram));
     msg->dgram.addr.port = SF_PORT;
-    msg->dgram.addr.domain = vm_id;
+    msg->dgram.addr.domain = state->partner_id;
     //msg->dgram.flags = V4V_DATAGRAM_FLAG_IGNORE_DLO;
     if ((ret = write_file_timeout(state, (void *)msg, len, &bytes)))
         return ret;
@@ -398,7 +399,7 @@ sf_load(QEMUFile *f, void *opaque, int version)
 static int
 connect_v4v(struct sf_state *s, int domain, int port)
 {
-    v4v_ring_id_t id;
+    v4v_bind_values_t bind = { };
 
     ioh_event_reset(&s->io_ev);
     if (!v4v_open(&s->v4v, RING_SIZE, V4V_FLAG_ASYNC)) {
@@ -407,17 +408,20 @@ connect_v4v(struct sf_state *s, int domain, int port)
         return -1;
     }
 
-    id.addr.port = port;
-    id.addr.domain = V4V_DOMID_ANY;
-    id.partner = domain;
+    bind.ring_id.addr.port = port;
+    bind.ring_id.addr.domain = V4V_DOMID_ANY;
+    bind.ring_id.partner = V4V_DOMID_UUID;
+    memcpy(&bind.partner, v4v_idtoken, sizeof(bind.partner));
 
     ioh_event_reset(&s->io_ev);
-    if (!v4v_bind(&s->v4v, &id)) {
+    if (!v4v_bind(&s->v4v, &bind)) {
         debug_printf("%s: v4v_bind failed (%d)\n",
                      __FUNCTION__, (int)GetLastError());
         v4v_close(&s->v4v);
         return -1;
     }
+
+    s->partner_id = bind.ring_id.partner;
 
     return 0;
 }

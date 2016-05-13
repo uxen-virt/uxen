@@ -95,7 +95,8 @@ typedef struct v4v_init_values_struct {
 } v4v_init_values_t;
 
 typedef struct v4v_bind_values_struct {
-    struct v4v_ring_id ringId;
+    struct v4v_ring_id ring_id;
+    v4v_idtoken_t partner;
 } v4v_bind_values_t;
 
 typedef struct v4v_listen_values_struct {
@@ -257,8 +258,9 @@ typedef struct v4v_poke_values_struct {
 #define V4V_INLINE_API
 #endif
 
-/* Default @ringId for v4v_bind() to specify no specific binding information */
-static const v4v_ring_id_t V4V_DEFAULT_CONNECT_ID = {{V4V_PORT_NONE, V4V_DOMID_NONE}, V4V_DOMID_NONE};
+/* Default @ring_id for v4v_bind() to specify no specific binding information */
+static const v4v_ring_id_t V4V_DEFAULT_CONNECT_ID =     \
+{ { V4V_PORT_NONE, V4V_DOMID_NONE }, V4V_DOMID_NONE };
 
 #define V4V_FLAG_NONE       0x00000000
 #define V4V_FLAG_OVERLAPPED 0x00000001
@@ -375,18 +377,21 @@ _v4v_open(v4v_channel_t *channel, ULONG ring_size, ULONG flags, OVERLAPPED *ov)
 
 /* All users of V4V must call v4v_bind() before calling any of the other V4V
  * functions (excpetion v4v_close()) or before performing IO operations. When
- * binding, the @ringId->addr.domain field must be set to V4V_DOMID_NONE or
- * the bind operation will fail. Internally this value will be set to the
+ * binding, the @bind->ring_id.addr.domain field must be set to V4V_DOMID_NONE
+ * or the bind operation will fail. Internally this value will be set to the
  * current domain ID.
  *
- * For V4V channels intended for datagram use, the @ringId->addr.port field
- * can be specified or not. If not specified, a random port number will be
- * assigned internally. The @ringId->partner value can be specified if
- * datagrams are to only be received from a specific partner domain for the
- * current V4V channel. If V4V_DOMID_ANY is specified, then datagrams from
- * any domain can be recieved. Note that V4V will send datagrams to channels
- * that match a specific domain ID before sending them to one bound with
- * (@ringId->partner == V4V_DOMID_ANY).
+ * For V4V channels intended for datagram use, the @bind->ring_id.addr.port
+ * field can be specified or not. If not specified, a random port number will
+ * be assigned internally. The @bind->ring_id.partner value must be specified
+ * as V4V_DOMID_UUID and @bind->partner filled with the v4v connection token
+ * if datagrams are to only be received from a specific partner domain for the
+ * current V4V channel. If the calling process has adminitrative privileges,
+ * then alternatively an explicit partner domid can be specified as the
+ * @bind->ring_id.partner value or if V4V_DOMID_ANY is specified, then
+ * datagrams from any domain can be received. Note that V4V will send
+ * datagrams to channels that match a specific domain ID before sending them
+ * to one bound with (@bind->ring_id.partner == V4V_DOMID_ANY).
  *
  * The above rules apply when binding to start a listener though in general
  * one would want to specify a well known port for a listener. When binding
@@ -404,24 +409,22 @@ _v4v_open(v4v_channel_t *channel, ULONG ring_size, ULONG flags, OVERLAPPED *ov)
  * v4v_open().
  */
 static V4V_INLINE_API BOOLEAN
-_v4v_bind(v4v_channel_t *channel, v4v_ring_id_t *ringId, OVERLAPPED *ov)
+_v4v_bind(v4v_channel_t *channel, v4v_bind_values_t *bind, OVERLAPPED *ov)
 {
-    v4v_bind_values_t bind;
     OVERLAPPED o = { };
     DWORD br;
     BOOLEAN rc;
 
-    if ((channel == NULL) || (ringId == NULL)) {
+    if ((channel == NULL) || (bind == NULL)) {
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
 
-    memcpy(&bind.ringId, ringId, sizeof(v4v_ring_id_t));
     SetLastError(ERROR_SUCCESS);
 
     rc = DeviceIoControl(channel->v4v_handle, V4V_IOCTL_BIND,
-                         &bind, sizeof(v4v_bind_values_t),
-                         NULL, 0, &br,
+                         bind, sizeof(v4v_bind_values_t),
+                         bind, sizeof(v4v_bind_values_t), &br,
                          v4v_is_overlapped(channel) ? (ov ? : &o) : NULL);
     if (v4v_is_overlapped(channel)) {
         if ((GetLastError() != ERROR_SUCCESS) &&
@@ -765,7 +768,7 @@ _v4v_debug(v4v_channel_t *channel, OVERLAPPED *ov)
 /* ======================================================================== */
 #define v4v_open(channel, ring_size, flags)     \
     _v4v_open(channel, ring_size, flags, NULL)
-#define v4v_bind(channel, ringId) _v4v_bind(channel, ringId, NULL)
+#define v4v_bind(channel, bind) _v4v_bind(channel, bind, NULL)
 #define v4v_get_info(channel, type, infoOut)    \
     _v4v_get_info(channel, type, infoOut, NULL)
 #define v4v_map(channel, ring) _v4v_map(channel, ring, NULL)

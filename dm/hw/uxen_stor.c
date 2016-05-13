@@ -966,7 +966,7 @@ uxen_stor_cleanup (VLANClientState *nc)
 static int
 uxen_stor_initfn (ISADevice *dev)
 {
-    v4v_ring_id_t r;
+    v4v_bind_values_t bind = { };
     int error;
 
     uxen_stor_t *s = DO_UPCAST (uxen_stor_t, dev, dev);
@@ -999,16 +999,20 @@ uxen_stor_initfn (ISADevice *dev)
     }
 
 
-    r.addr.port = 0xd0000 + unit;
-    r.addr.domain = V4V_DOMID_ANY;
-    r.partner = vm_id;
+    bind.ring_id.addr.port = 0xd0000 + unit;
+    bind.ring_id.addr.domain = V4V_DOMID_ANY;
+    bind.ring_id.partner = V4V_DOMID_UUID;
+    memcpy(&bind.partner, v4v_idtoken, sizeof(bind.partner));
 
-    if (!v4v_bind_sync(&s->v4v, &r, &error)) {
+    if (!v4v_bind_sync(&s->v4v, &bind, &error)) {
         debug_printf("%s: v4v_bind failed (%x)\n",
                      __FUNCTION__, error);
         v4v_close(&s->v4v);
         return -1;
     }
+
+    s->dest.domain = bind.ring_id.partner;
+    s->dest.port = bind.ring_id.addr.port;
 
     s->ring = v4v_ring_map_sync(&s->v4v, &error);
     if (!s->ring) {
@@ -1074,9 +1078,6 @@ uxen_stor_initfn (ISADevice *dev)
 #ifndef _WIN32
     ioh_add_wait_object (&s->run_queue_event, uxen_stor_write_event, s, NULL);
 #endif
-
-    s->dest.domain = vm_id;
-    s->dest.port = 0xd0000 + unit;
 
     uxen_stor_read_event(s);
 

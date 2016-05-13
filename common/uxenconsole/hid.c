@@ -169,18 +169,23 @@ xmit_complete(struct hid_ring *r)
 }
 
 static int
-ring_init(struct hid_ring *r, int vm_id, int device_type)
+ring_init(struct hid_ring *r, int vm_id, unsigned char *idtoken,
+          int device_type)
 {
-    v4v_ring_id_t id;
+    v4v_bind_values_t bind = { };
 
     if (!v4v_open(&r->v4v, UXENHID_RING_SIZE, V4V_FLAG_ASYNC))
         return -1;
 
-    id.addr.port = 0;
-    id.addr.domain = V4V_DOMID_ANY;
-    id.partner = vm_id;
+    bind.ring_id.addr.port = 0;
+    bind.ring_id.addr.domain = V4V_DOMID_ANY;
+    if (vm_id == -1) {
+        bind.ring_id.partner = V4V_DOMID_UUID;
+        memcpy(&bind.partner, idtoken, sizeof(bind.partner));
+    } else
+        bind.ring_id.partner = vm_id;
 
-    if (!v4v_bind(&r->v4v, &id)) {
+    if (!v4v_bind(&r->v4v, &bind)) {
         v4v_close(&r->v4v);
         return -1;
     }
@@ -189,7 +194,7 @@ ring_init(struct hid_ring *r, int vm_id, int device_type)
     r->txlist.first = NULL;
     r->txlist.last = &r->txlist.first;
     r->port = UXENHID_BASE_PORT + device_type;
-    r->vm_id = vm_id;
+    r->vm_id = bind.ring_id.partner;
 
     send_nop(r);
 
@@ -221,7 +226,7 @@ ring_cleanup(struct hid_ring *r)
 }
 
 hid_context_t
-uxenconsole_hid_init(int vm_id)
+uxenconsole_hid_init(int vm_id, unsigned char *idtoken)
 {
     struct hid_context *c;
 
@@ -229,11 +234,11 @@ uxenconsole_hid_init(int vm_id)
     if (!c)
         return NULL;
 
-    if (ring_init(&c->mouse_ring, vm_id, UXENHID_MOUSE_DEVICE))
+    if (ring_init(&c->mouse_ring, vm_id, idtoken, UXENHID_MOUSE_DEVICE))
         goto fail_mouse;
-    if (ring_init(&c->pen_ring, vm_id, UXENHID_PEN_DEVICE))
+    if (ring_init(&c->pen_ring, vm_id, idtoken, UXENHID_PEN_DEVICE))
         goto fail_pen;
-    if (ring_init(&c->touch_ring, vm_id, UXENHID_TOUCH_DEVICE))
+    if (ring_init(&c->touch_ring, vm_id, idtoken, UXENHID_TOUCH_DEVICE))
         goto fail_touch;
 
     return c;

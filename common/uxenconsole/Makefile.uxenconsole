@@ -14,6 +14,7 @@ UXENCONSOLE_OBJS = uxenconsole-$(TARGET_HOST).o libuxenconsole.a
 CONSOLEDUMP_OBJS = dump.o libuxenconsole.a
 $(WINDOWS)UXENCONSOLE_OBJS += uxenconsole-res.o
 $(WINDOWS)LDLIBS += -lgdi32
+$(WINDOWS)LDLIBS += -le2fsprogs-uuid
 $(WINDOWS)CPPFLAGS += -I$(SRCROOT) $(LIBXC_CPPFLAGS) $(LIBUXENCTL_CPPFLAGS) -I$(TOPDIR)/common/include -I$(TOPDIR) -I$(TOPDIR)/common/include/xen-public
 $(OSX)LDLIBS += -fobjc-arc -fobjc-link-runtime -framework AppKit
 $(OSX)CFLAGS += -fobjc-arc

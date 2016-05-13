@@ -113,10 +113,11 @@ write_done(DWORD ec, DWORD count, LPOVERLAPPED ovlpd)
 }
 
 disp_context_t
-uxenconsole_disp_init(int vm_id, void *priv, invalidate_rect_t inv_rect)
+uxenconsole_disp_init(int vm_id, unsigned char *idtoken,
+                      void *priv, invalidate_rect_t inv_rect)
 {
     struct disp_context *c;
-    v4v_ring_id_t id;
+    v4v_bind_values_t bind = { };
     DWORD err;
     BOOL rc;
 
@@ -131,21 +132,25 @@ uxenconsole_disp_init(int vm_id, void *priv, invalidate_rect_t inv_rect)
         goto error;
     }
 
-    id.addr.port = UXENDISP_PORT;
-    id.addr.domain = V4V_DOMID_ANY;
-    id.partner = vm_id;
+    bind.ring_id.addr.port = UXENDISP_PORT;
+    bind.ring_id.addr.domain = V4V_DOMID_ANY;
+    if (vm_id == -1) {
+        bind.ring_id.partner = V4V_DOMID_UUID;
+        memcpy(&bind.partner, idtoken, sizeof(bind.partner));
+    } else
+        bind.ring_id.partner = vm_id;
 
-    if (!v4v_bind(&c->v4v, &id)) {
+    if (!v4v_bind(&c->v4v, &bind)) {
         // Allow one additional console to be connected.
-        id.addr.port = UXENDISP_ALT_PORT;
-        if (!v4v_bind(&c->v4v, &id)) {
+        bind.ring_id.addr.port = UXENDISP_ALT_PORT;
+        if (!v4v_bind(&c->v4v, &bind)) {
             err = GetLastError();
             goto error;
         }
     }
 
-    c->conn_msg.dgram.addr.port = id.addr.port;
-    c->conn_msg.dgram.addr.domain = vm_id;
+    c->conn_msg.dgram.addr.port = bind.ring_id.addr.port;
+    c->conn_msg.dgram.addr.domain = bind.ring_id.partner;
     rc = WriteFileEx(c->v4v.v4v_handle,
                      (void *)&c->conn_msg,
                      sizeof(c->conn_msg),

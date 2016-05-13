@@ -43,7 +43,8 @@ public:
 	void* reference, IOExternalMethodArguments* arguments);
     IOReturn createRing(
         uint32_t length, uint16_t partner_domain, uint32_t local_port,
-        uint64_t *out_result);
+        v4v_idtoken_t *partner_idtoken,
+        uint64_t *out_result, uint64_t *out_partner_domain);
 
     IOReturn sendTo(
 	void* reference, IOExternalMethodArguments* arguments);

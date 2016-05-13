@@ -214,14 +214,14 @@ _v4v_sendto(
 }
 
 bool
-_v4v_bind(
-    v4v_channel_t *_channel, uint32_t local_port, domid_t partner)
+_v4v_bind(v4v_channel_t *_channel, v4v_bind_values_t *bind)
 {
     struct _v4v_channel *channel = _channel->_c;
-    uint64_t result = 0;
     kern_return_t ret;
-    const uint64_t inputs[] = { channel->ring_size, partner, local_port };
-    uint32_t outputs = 1;
+    const uint64_t inputs[] =
+        { channel->ring_size, bind->ring_id.partner, bind->ring_id.addr.port };
+    uint64_t outputs[] = { 0, 0 };
+    uint32_t num_outputs = 2;
     mach_vm_address_t address = 0;
     mach_vm_size_t size = 0;
 
@@ -230,12 +230,14 @@ _v4v_bind(
         return false;
     }
 
-    ret = IOConnectCallScalarMethod(
-        channel->ring_connection, kUxenV4V_BindRing, inputs,
-        sizeof(inputs)/sizeof(inputs[0]), &result, &outputs);
+    ret = IOConnectCallMethod(
+        channel->ring_connection, kUxenV4V_BindRing,
+        inputs, sizeof(inputs)/sizeof(inputs[0]),
+        &bind->partner, sizeof(bind->partner),
+        outputs, &num_outputs, NULL, 0);
 
     if (ret != KERN_SUCCESS) {
-        errno = (errno_t)result;
+        errno = (errno_t)outputs[0];
         return false;
     }
 
@@ -248,7 +250,9 @@ _v4v_bind(
     }
 
     channel->ring = (void*)address;
-    channel->partner_domain = partner;
+    channel->partner_domain = outputs[1];
+
+    bind->ring_id.partner = channel->partner_domain;
     return true;
 }
 

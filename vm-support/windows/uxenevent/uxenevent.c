@@ -751,16 +751,16 @@ static int recv_setup(v4v_channel_t *c)
 
 static void v4v_init(v4v_channel_t *c)
 {
-    v4v_ring_id_t id;
+    v4v_bind_values_t bind;
 
     if (!v4v_open(c, RING_SIZE, V4V_FLAG_ASYNC))
         err(1, "v4v_open");
 
-    id.addr.port = DEFAULT_PORT;
-    id.addr.domain = V4V_DOMID_ANY;
-    id.partner = V4V_DOMID_DM;
+    bind.ring_id.addr.port = DEFAULT_PORT;
+    bind.ring_id.addr.domain = V4V_DOMID_ANY;
+    bind.ring_id.partner = V4V_DOMID_DM;
 
-    if (!v4v_bind(c, &id))
+    if (!v4v_bind(c, &bind))
         err(1, "v4v_bind");
 }
 

@@ -225,7 +225,7 @@ int
 main (int argc, char *argv[])
 {
     v4v_channel_t c = { 0 };
-    v4v_ring_id_t r;
+    v4v_bind_values_t bind = { };
 #ifdef MAP
     v4v_mapring_values_t mr;
 #endif
@@ -238,16 +238,16 @@ main (int argc, char *argv[])
     rx = (argc > 1) ? !strcmp (argv[1], "rx") : 1;
     domid = (argc == 3) ? atoi (argv[2]) : 0;
 
-    r.addr.port = rx ? PORT : 0;
-    r.addr.domain = V4V_DOMID_ANY;
-    r.partner = V4V_DOMID_ANY;
+    bind.ring_id.addr.port = rx ? PORT : 0;
+    bind.ring_id.addr.domain = V4V_DOMID_ANY;
+    bind.ring_id.partner = V4V_DOMID_ANY;
 
     if (!v4v_open (&c, RING_SIZE, V4V_FLAG_NONE)) {
         printf ("v4v_open failed\n");
         return -1;
     }
 
-    if (!v4v_bind (&c, &r)) {
+    if (!v4v_bind (&c, &bind)) {
         printf ("v4v_bind failed\n");
         return -1;
     }

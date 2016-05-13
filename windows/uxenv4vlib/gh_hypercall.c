@@ -129,13 +129,19 @@ gh_v4v_register_ring(xenv4v_ring_t *robj)
     err = gh_v4v_hypercall_with_priv(
         robj->admin_access ? UXEN_ADMIN_HYPERCALL : 0,
         V4VOP_register_ring, robj->ring, robj->pfn_list,
-        0, 0, 0);
+        &robj->partner, 0 /* fail_exist */, 0);
     if (err == -ENOSYS) {
         /* Special case - say it all worked and we'll sort it out
          * later when the platform device actually loads and the
          * resume notify fires.  No need to undo v4v_call_page_notify,
          * since it was a no-op */
         /* status = STATUS_SUCCESS; */
+    } else if (err == -EEXIST) {
+        /* does not happen since the fail_exist argument is not set above */
+        uxen_v4v_warn("V4VOP_register_ring (vm%u:%x vm%u) failed ID in use",
+                      robj->ring->id.addr.domain, robj->ring->id.addr.port,
+                      robj->ring->id.partner);
+        status = STATUS_INVALID_DEVICE_REQUEST;
     } else if (err != 0) {
         uxen_v4v_err("V4VOP_register_ring (vm%u:%x vm%u) failed err %d",
                      robj->ring->id.addr.domain, robj->ring->id.addr.port,

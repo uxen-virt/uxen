@@ -170,6 +170,8 @@ typedef struct xenv4v_ring_struct {
     PMDL       mdl;
     void       *user_map;
 
+    v4v_idtoken_t   partner;
+
     // Access control
     BOOLEAN admin_access;
 

@@ -39,10 +39,10 @@ v4v_open_sync(v4v_context_t *v4v, uint32_t ring_size, int *out_error)
 }
 
 int
-v4v_bind_sync(v4v_context_t *v4v, v4v_ring_id_t *r, int *out_error)
+v4v_bind_sync(v4v_context_t *v4v, v4v_bind_values_t *bind, int *out_error)
 {
 
-    if (!_v4v_bind (&v4v->v4v_channel, r, NULL)) {
+    if (!_v4v_bind(&v4v->v4v_channel, bind, NULL)) {
         *out_error = GetLastError();
         return false;
     }

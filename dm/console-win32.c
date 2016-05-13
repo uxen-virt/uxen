@@ -1598,7 +1598,7 @@ gui_init(char *optstr)
 {
     win_register_class();
     guest_agent_init();
-    disp = uxenconsole_disp_init(vm_id, NULL, disp_inv_rect);
+    disp = uxenconsole_disp_init(-1, v4v_idtoken, NULL, disp_inv_rect);
     return 0;
 }
 

@@ -71,6 +71,7 @@ typedef int ssize_t;
 #define V4V_PFN_LIST_MAGIC  0x91dd6159045b302dULL
 #define V4V_DOMID_SELF      (0x7FF0U)
 #define V4V_DOMID_DM        (0x7FF1U)
+#define V4V_DOMID_UUID      (0x7FFEU)
 #define V4V_DOMID_INVALID   (0x7FFFU)
 #define V4V_DOMID_NONE	V4V_DOMID_INVALID
 #define V4V_DOMID_ANY	V4V_DOMID_INVALID
@@ -96,6 +97,15 @@ typedef struct v4v_ring_id
     domid_t partner;
 } V4V_PACKED v4v_ring_id_t;
 DEFINE_XEN_GUEST_HANDLE(v4v_ring_id_t);
+
+typedef struct { uint8_t o[16]; } v4v_idtoken_t;
+DEFINE_XEN_GUEST_HANDLE(v4v_idtoken_t);
+
+typedef struct v4v_bind_id
+{
+    v4v_idtoken_t id;
+} V4V_PACKED v4v_bind_id_t;
+DEFINE_XEN_GUEST_HANDLE(v4v_bind_id_t);
 
 typedef uint64_t v4v_pfn_t;
 DEFINE_XEN_GUEST_HANDLE(v4v_pfn_t);

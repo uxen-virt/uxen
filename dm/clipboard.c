@@ -289,10 +289,12 @@ clip_service_start(void)
     s->response.data = NULL;
     s->request.data = NULL;
     s->notify.data = NULL;
-    s->conn = clip_open(vm_id, CLIP_PORT, __hgcm_malloc, __hgcm_free);
+    s->conn = clip_open(vm_id, CLIP_PORT, v4v_idtoken,
+                        __hgcm_malloc, __hgcm_free);
     if (!s->conn)
         return -1;
-    s->notify_conn = clip_open(vm_id, CLIP_NOTIFY_PORT, __hgcm_malloc, __hgcm_free);
+    s->notify_conn = clip_open(vm_id, CLIP_NOTIFY_PORT, v4v_idtoken,
+                               __hgcm_malloc, __hgcm_free);
     if (!s->notify_conn)
         return -1;
     if (create_thread(&s->thread, clipboard_thread, s)) {

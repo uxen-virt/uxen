@@ -30,6 +30,7 @@
 
 static int v4v_up = 0 ;
 static v4v_channel_t v4v;
+static uint32_t partner_id;
 static HANDLE tx_event;
 static HANDLE rx_event;
 
@@ -371,7 +372,7 @@ guest_agent_sendmsg(void *msg, size_t len, int dlo)
     memcpy(&wm->buf, msg, len);
 
     wm->buf.dgram.addr.port = GUEST_AGENT_PORT;
-    wm->buf.dgram.addr.domain = vm_id;
+    wm->buf.dgram.addr.domain = partner_id;
     wm->buf.dgram.flags = dlo ? 0 : V4V_DATAGRAM_FLAG_IGNORE_DLO;
     wm->len = len;
 
@@ -636,7 +637,7 @@ int
 guest_agent_init(void)
 {
     BOOLEAN ret;
-    v4v_ring_id_t id;
+    v4v_bind_values_t bind = { };
 
     debug_printf("initializing guest agent\n");
     ret = v4v_open(&v4v, RING_SIZE, V4V_FLAG_ASYNC);
@@ -647,16 +648,19 @@ guest_agent_init(void)
 
     debug_printf("guest agent: v4v connection opened\n");
 
-    id.addr.port = 0;
-    id.addr.domain = V4V_DOMID_ANY;
-    id.partner = vm_id;
+    bind.ring_id.addr.port = 0;
+    bind.ring_id.addr.domain = V4V_DOMID_ANY;
+    bind.ring_id.partner = V4V_DOMID_UUID;
+    memcpy(&bind.partner, v4v_idtoken, sizeof(bind.partner));
 
-    ret = v4v_bind(&v4v, &id);
+    ret = v4v_bind(&v4v, &bind);
     if (!ret) {
         Wwarn("%s: v4v_bind", __FUNCTION__);
         v4v_close(&v4v);
         return -1;
     }
+
+    partner_id = bind.ring_id.partner;
 
     v4v_up++;
 

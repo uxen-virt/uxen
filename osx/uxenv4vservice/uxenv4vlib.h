@@ -61,6 +61,17 @@ typedef struct v4v_channel {
 
 static const unsigned V4V_DATAGRAM_FLAG_IGNORE_DLO = (1u << 0);
 
+typedef struct v4v_datagram_struct {
+    v4v_addr_t addr;
+    uint16_t flags;
+    /* data starts here */
+} V4V_PACKED v4v_datagram_t;
+
+typedef struct v4v_bind_values_struct {
+    struct v4v_ring_id ring_id;
+    v4v_idtoken_t partner;
+} v4v_bind_values_t;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -73,7 +84,7 @@ dispatch_source_t _v4v_dispatch_source_create_send(v4v_channel_t *channel,
                                                    dispatch_queue_t queue);
 void _v4v_close(v4v_channel_t *channel);
 
-bool _v4v_bind(v4v_channel_t *channel, uint32_t local_port, domid_t partner);
+bool _v4v_bind(v4v_channel_t *channel, v4v_bind_values_t *bind);
 v4v_ring_t *_v4v_get_mapped_ring(v4v_channel_t *channel);
 
 ssize_t _v4v_recv(v4v_channel_t *channel, void *buf, size_t len);
@@ -95,8 +106,7 @@ mach_port_t _v4v_get_send_port(v4v_channel_t *channel);
 #define v4v_dispatch_source_create_send(channel, queue) \
     _v4v_dispatch_source_create_send(channel, queue)
 #define v4v_close(channel) _v4v_close(channel)
-#define v4v_bind(channel, local_port, partner)  \
-    _v4v_bind(channel, local_port, partner)
+#define v4v_bind(channel, bind) _v4v_bind(channel, bind)
 #define v4v_get_mapped_ring(channel) _v4v_get_mapped_ring(channel)
 #define v4v_recv(channel, buf, len) _v4v_recv(channel, buf, len)
 #define v4v_recvmsg(channel, out_from_addr, protocol, buf, len, consume) \

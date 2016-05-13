@@ -40,7 +40,7 @@ v4v_register_ring(
         device->v4vOpHypercall_with_priv(
             uxen_ring->admin_access ? UXEN_ADMIN_HYPERCALL : 0,
             V4VOP_register_ring, uxen_ring->ring, uxen_ring->pfn_list,
-            NULL, NULL, NULL));
+            &uxen_ring->partner_idtoken, NULL, NULL));
 }
 
 static intptr_t
@@ -132,16 +132,16 @@ uxen_v4v_alloc_and_bind_ring(
         return ENOMEM;
 
     res = uxen_v4v_bind_ring_with_buffer(
-        device, length_bytes,
-        partner_domain, local_port, admin_access, created_ring, ring_mem);
+        device, length_bytes, &partner_domain, local_port, NULL,
+        admin_access, created_ring, ring_mem);
     ring_mem->release();
     return res;
 }
     
 int
 uxen_v4v_bind_ring_with_buffer(
-    uxen_v4v_device *device, unsigned length_bytes,
-    domid_t partner_domain, uint32_t local_port, bool admin_access,
+    uxen_v4v_device *device, unsigned length_bytes, domid_t *partner_domain,
+    uint32_t local_port, v4v_idtoken_t *partner_idtoken, bool admin_access,
     uxen_v4v_ring **created_ring, IOBufferMemoryDescriptor* ring_mem)
 {
     size_t total_bytes;
@@ -173,7 +173,7 @@ uxen_v4v_bind_ring_with_buffer(
     ring = static_cast<v4v_ring_t*>(ring_mem->getBytesNoCopy());
     ring->id.addr.domain = V4V_DOMID_ANY;
     ring->id.addr.port = local_port;
-    ring->id.partner = partner_domain;
+    ring->id.partner = *partner_domain;
     ring->magic = V4V_RING_MAGIC;
     ring->len = length_bytes;
     
@@ -184,6 +184,9 @@ uxen_v4v_bind_ring_with_buffer(
     uxen_ring->length = length_bytes;
     uxen_ring->pfn_list = pfn_list;
     uxen_ring->admin_access = admin_access;
+    if (partner_idtoken)
+        memcpy(&uxen_ring->partner_idtoken, partner_idtoken,
+               sizeof(v4v_idtoken_t));
     
     error = v4v_register_ring(device, uxen_ring);
     if(error != 0) {
@@ -197,9 +200,10 @@ uxen_v4v_bind_ring_with_buffer(
     uxen_ring->source_address.port = ring->id.addr.port;
     uxen_ring->protocol_number = V4V_PROTO_DGRAM;
     uxen_ring->local_port = local_port;
-    uxen_ring->partner_domain = partner_domain;
+    uxen_ring->partner_domain = ring->id.partner;
     
     *created_ring = uxen_ring;
+    *partner_domain = uxen_ring->partner_domain;
     
     ring_mem->retain();
     

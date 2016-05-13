@@ -415,6 +415,8 @@ vm_create(int restore_mode)
     for (i = 0; i < vm_vcpus; i++)
         vm_vcpu_avail[i / 8] |= 1 << (i % 8);
 
+    memcpy(v4v_idtoken, vm_uuid, sizeof(v4v_idtoken));
+
     ret = uxen_create_vm(uxen_handle, vm_uuid,
                          XEN_DOMCTL_CDF_hvm_guest | XEN_DOMCTL_CDF_hap |
                          (restore_mode == VM_RESTORE_TEMPLATE ?

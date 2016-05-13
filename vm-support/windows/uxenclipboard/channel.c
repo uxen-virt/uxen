@@ -23,11 +23,11 @@ int ChannelConnect()
     ns_uclip_open - meaning, 44446 before 44445.
     */
     if (!notify_ctx)
-        if (!(notify_ctx = clip_open(V4V_DOMID_DM, CLIP_NOTIFY_PORT,
+        if (!(notify_ctx = clip_open(V4V_DOMID_DM, CLIP_NOTIFY_PORT, NULL,
                                      malloc, free)))
             return -1;
     if (!clipboard_ctx)
-        if (!(clipboard_ctx = clip_open(V4V_DOMID_DM, CLIP_PORT,
+        if (!(clipboard_ctx = clip_open(V4V_DOMID_DM, CLIP_PORT, NULL,
                                         malloc, free)))
             return -1;
     return 0;

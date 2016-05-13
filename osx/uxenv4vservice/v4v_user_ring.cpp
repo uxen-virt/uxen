@@ -143,8 +143,8 @@ static const IOExternalMethodDispatch USER_METHODS[] =
     {
         &um::external_method<&uxen_v4v_user_ring::createRing>,
         3, // input count: length (bytes), partner domain, source port number
-        0, // input struct size
-        1, // output count: result
+        sizeof(v4v_idtoken_t), // input struct size
+        2, // output count: result, partner domain
         0  // output struct size
         /* return value: IOReturn OR errno (errno is xnu-ified pass-through from
          * hypercall) */
@@ -199,26 +199,45 @@ uxen_v4v_user_ring::createRing(
     uint32_t length = static_cast<uint32_t>(arguments->scalarInput[0]);
     uint16_t partner_domain = static_cast<uint16_t>(arguments->scalarInput[1]);
     uint32_t local_port = static_cast<uint32_t>(arguments->scalarInput[2]);
+    v4v_idtoken_t partner_idtoken;
 
     if (arguments->scalarInput[0] > UINT32_MAX
         || arguments->scalarInput[1] > UINT16_MAX
         || arguments->scalarInput[2] > UINT32_MAX
-        || arguments->scalarInput[3] > UINT32_MAX) {
+        || (arguments->structureInputDescriptor ?
+            arguments->structureInputDescriptor->getLength() :
+            arguments->structureInputSize) != sizeof(v4v_idtoken_t)) {
         IOLog(
             "uxen_v4v_user_ring::createRing: bad argument - length = %llu, "
-            "partner_domain = %llu, local_port = %llu\n",
+            "partner_domain = %llu, local_port = %llu, "
+            "partner_idtoken len = %u\n",
             arguments->scalarInput[0], arguments->scalarInput[1],
-            arguments->scalarInput[2]);
+            arguments->scalarInput[2],
+            arguments->structureInputDescriptor ?
+            (int)arguments->structureInputDescriptor->getLength() :
+            arguments->structureInputSize);
         return kIOReturnBadArgument;
     }
     
+    if (!arguments->structureInputDescriptor)
+        memcpy(&partner_idtoken, arguments->structureInput,
+               sizeof(v4v_idtoken_t));
+    else {
+        arguments->structureInputDescriptor->prepare(kIODirectionOut);
+        arguments->structureInputDescriptor->readBytes(
+            0, &partner_idtoken, sizeof(v4v_idtoken_t));
+        arguments->structureInputDescriptor->complete(kIODirectionOut);
+    }
+    
     return this->createRing(
-        length, partner_domain, local_port, &arguments->scalarOutput[0]);
+        length, partner_domain, local_port, &partner_idtoken,
+        &arguments->scalarOutput[0], &arguments->scalarOutput[1]);
 }
 IOReturn
 uxen_v4v_user_ring::createRing(
     uint32_t length, uint16_t partner_domain, uint32_t local_port,
-    uint64_t *out_result)
+    v4v_idtoken_t *partner_idtoken,
+    uint64_t *out_result, uint64_t *out_partner_domain)
 {
     IOReturn ret;
     uxen_v4v_ring *new_ring = nullptr;
@@ -226,6 +245,7 @@ uxen_v4v_user_ring::createRing(
     int result;
 
     *out_result = EIO;
+    *out_partner_domain = partner_domain;
     IORWLockWrite(this->lock);
     if (this->v4v_service == nullptr) {
         ret = kIOReturnNotReady;
@@ -233,12 +253,14 @@ uxen_v4v_user_ring::createRing(
         ret = kIOReturnInvalid; // ring already created
     } else {
         result = this->v4v_service->allocAndBindSharedRing(
-            length, partner_domain, local_port, &new_ring, &ring_buf);
+            length, &partner_domain, local_port, partner_idtoken,
+            &new_ring, &ring_buf);
         *out_result = result;
         if (result == 0) {
             this->ring = new_ring;
             this->ring_mem = ring_buf;
             this->destination_domain = partner_domain;
+            *out_partner_domain = partner_domain;
             ret = kIOReturnSuccess;
         } else {
             ret = result;

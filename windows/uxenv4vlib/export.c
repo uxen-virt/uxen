@@ -81,14 +81,9 @@ V4V_DLL_EXPORT uxen_v4v_ring_handle_t *uxen_v4v_ring_bind (uint32_t local_port,
 
         KeAcquireInStackQueuedSpinLock (&pde->ring_lock, &lqh);
 
-        if (ret->ring_object->ring->id.addr.port == V4V_PORT_NONE) {
+        if (ret->ring_object->ring->id.addr.port == V4V_PORT_NONE)
             ret->ring_object->ring->id.addr.port =
                 gh_v4v_spare_port_number (pde, random_port);
-        } else if (gh_v4v_ring_id_in_use (pde, &ret->ring_object->ring->id)) {
-            KeReleaseInStackQueuedSpinLock (&lqh);
-            uxen_v4v_warn("ring ID already in use, cannot bind\n");
-            break;
-        }
 
         // Now register the ring, if there's no v4v yet we'll just queue this
         DbgPrint("exprr: Can make hypercall = %d\n", uxen_v4v_can_make_hypercall());
@@ -104,7 +99,6 @@ V4V_DLL_EXPORT uxen_v4v_ring_handle_t *uxen_v4v_ring_bind (uint32_t local_port,
                 break;
             }
         }
-        ret->ring_object->registered = TRUE;
         ret->ring_object->uxen_ring_handle = ret;
 
         // Link it to the main list and set our pointer to it

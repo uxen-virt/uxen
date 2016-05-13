@@ -54,6 +54,7 @@ extern uint64_t vm_use_v4v_disk;
 extern uint64_t vm_v4v_storage;
 extern uint64_t vm_v4v_disable_ahci_clones;
 extern uint64_t vm_vram_dirty_tracking;
+extern uint8_t v4v_idtoken[16];
 extern const char *vmsavefile_on_crash;
 extern const char *vmsavefile_on_restricted_pci;
 extern uint64_t guest_drivers_logmask;

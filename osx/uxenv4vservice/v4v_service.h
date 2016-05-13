@@ -37,8 +37,8 @@ public:
     void notifyV4VRingResetEvent();
     
     errno_t allocAndBindSharedRing(
-        unsigned length, uint16_t partner_domain,
-        uint32_t source_port,
+        unsigned length, uint16_t *partner_domain,
+        uint32_t source_port, v4v_idtoken_t *partner_idtoken,
         uxen_v4v_ring **out_new_ring, IOBufferMemoryDescriptor **out_ring_buf);
     
     errno_t allocAndBindRing(

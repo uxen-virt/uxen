@@ -77,9 +77,9 @@ wait_ov(struct clip_ctx *ctx, char *op, DWORD *bytes)
 }
 
 static int
-connect_v4v(struct clip_ctx *ctx, int domain, int port)
+connect_v4v(struct clip_ctx *ctx, unsigned char *v4v_idtoken)
 {
-    v4v_ring_id_t id;
+    v4v_bind_values_t bind = { };
     int ret;
 
     ResetEvent(ctx->ev);
@@ -90,11 +90,13 @@ connect_v4v(struct clip_ctx *ctx, int domain, int port)
         CLIPLOG("%s: v4v_open error %d\n", __FUNCTION__, ret);
         return -1;
     }
-    id.addr.port = port;
-    id.addr.domain = V4V_DOMID_ANY;
-    id.partner = domain;
+    bind.ring_id.addr.port = ctx->port;
+    bind.ring_id.addr.domain = V4V_DOMID_ANY;
+    bind.ring_id.partner = ctx->domain;
+    if (ctx->domain == V4V_DOMID_UUID)
+        memcpy(&bind.partner, v4v_idtoken, sizeof(bind.partner));
     ResetEvent(ctx->ev);
-    ret = !v4v_bind(&ctx->v4v, &id);
+    ret = !v4v_bind(&ctx->v4v, &bind);
     if (ret)
         ret = GetLastError();
     if (ret) {
@@ -102,12 +104,13 @@ connect_v4v(struct clip_ctx *ctx, int domain, int port)
         v4v_close(&ctx->v4v);
         return -1;
     }
+    ctx->domain = bind.ring_id.partner;
     return 0;
 }
 
 struct clip_ctx*
-clip_open(int domain, int port, void* (*mem_alloc)(size_t),
-          void (*mem_free)(void*))
+clip_open(int domain, int port, unsigned char *v4v_idtoken,
+          void* (*mem_alloc)(size_t), void (*mem_free)(void*))
 {
     struct clip_ctx *ctx = calloc(1, sizeof(struct clip_ctx));
 
@@ -120,7 +123,7 @@ clip_open(int domain, int port, void* (*mem_alloc)(size_t),
     ctx->ev = CreateEvent(NULL, TRUE, FALSE, NULL);
     memset(&ctx->ov, 0, sizeof(ctx->ov));
     ctx->ov.hEvent = ctx->ev;
-    if (connect_v4v(ctx, domain, port)) {
+    if (connect_v4v(ctx, v4v_idtoken)) {
         free(ctx);
         return NULL;
     }

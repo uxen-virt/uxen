@@ -38,6 +38,7 @@ struct uxenhid_state {
     size_t report_descriptor_len;
 
     v4v_channel_t v4v;
+    uint32_t partner_id;
     HANDLE rx_event;
     HANDLE tx_event;
 
@@ -331,7 +332,7 @@ int uxenhid_send_mouse_report(uint8_t buttons, uint16_t x, uint16_t y,
         return -1;
 
     addr.port = mouse_state->type + UXENHID_BASE_PORT;
-    addr.domain = vm_id;
+    addr.domain = mouse_state->partner_id;
 
     b = alloc_async_buf(msglen, (void **)&buf, addr);
     if (!b)
@@ -365,7 +366,7 @@ int uxenhid_send_pen_report(uint16_t x, uint16_t y, uint8_t flags,
         return -1;
 
     addr.port = pen_state->type + UXENHID_BASE_PORT;
-    addr.domain = vm_id;
+    addr.domain = pen_state->partner_id;
 
     b = alloc_async_buf(msglen, (void **)&buf, addr);
     if (!b)
@@ -400,7 +401,7 @@ int uxenhid_send_touch_report(uint8_t contact_count, uint16_t contact_id,
         return -1;
 
     addr.port = touch_state->type + UXENHID_BASE_PORT;
-    addr.domain = vm_id;
+    addr.domain = touch_state->partner_id;
 
     b = alloc_async_buf(msglen, (void **)&buf, addr);
     if (!b)
@@ -466,7 +467,7 @@ uxenhid_send_max_contact_count_report(void)
         return -1;
 
     addr.port = touch_state->type + UXENHID_BASE_PORT;
-    addr.domain = vm_id;
+    addr.domain = touch_state->partner_id;
 
     b = alloc_async_buf(msglen, (void **)&buf, addr);
     if (!b)
@@ -664,7 +665,7 @@ static int
 uxenhid_init(UXenPlatformDevice *dev)
 {
     struct uxenhid_state *s = DO_UPCAST(struct uxenhid_state, dev, dev);
-    v4v_ring_id_t id;
+    v4v_bind_values_t bind = { };
 
     s->ready = 0;
 
@@ -673,15 +674,17 @@ uxenhid_init(UXenPlatformDevice *dev)
         return -1;
     }
 
-    id.addr.port = UXENHID_BASE_PORT + s->type;
-    id.addr.domain = V4V_DOMID_ANY;
-    id.partner = vm_id;
+    bind.ring_id.addr.port = UXENHID_BASE_PORT + s->type;
+    bind.ring_id.addr.domain = V4V_DOMID_ANY;
+    bind.ring_id.partner = V4V_DOMID_UUID;
+    memcpy(&bind.partner, v4v_idtoken, sizeof(bind.partner));
 
-    if (!v4v_bind(&s->v4v, &id)) {
-        Wwarn("%s: v4v_bind port %x", __FUNCTION__, id.addr.port);
+    if (!v4v_bind(&s->v4v, &bind)) {
+        Wwarn("%s: v4v_bind port %x", __FUNCTION__, bind.ring_id.addr.port);
         v4v_close(&s->v4v);
         return -1;
     }
+    s->partner_id = bind.ring_id.partner;
 
     s->tx_event = CreateEvent(NULL, FALSE, FALSE, NULL);
     if (!s->tx_event) {

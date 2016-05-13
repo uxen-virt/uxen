@@ -92,6 +92,7 @@ uint64_t vm_use_v4v_disk = 0;
 uint64_t vm_v4v_storage = 1;
 uint64_t vm_v4v_disable_ahci_clones = 1;
 uint64_t vm_vram_dirty_tracking = 1;
+uint8_t v4v_idtoken[16] = { };
 const char *vmsavefile_on_crash = NULL;
 const char *vmsavefile_on_restricted_pci = NULL;
 uint64_t guest_drivers_logmask = 0x2; /* Include LogRel, not Log */

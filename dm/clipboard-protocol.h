@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -20,8 +20,8 @@ struct __attribute__((packed)) clip_notify_data {
 
 struct clip_ctx;
 
-struct clip_ctx *clip_open(int domain, int port, void* (*mem_alloc)(size_t),
-                           void (*mem_free)(void*));
+struct clip_ctx *clip_open(int domain, int port, unsigned char *v4v_idtoken,
+                           void* (*mem_alloc)(size_t), void (*mem_free)(void*));
 void clip_close(struct clip_ctx*);
 int clip_send_bytes(struct clip_ctx *ctx, void *data, int len);
 int clip_recv_bytes(struct clip_ctx *ctx, void **data, int *len);

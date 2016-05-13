@@ -14,12 +14,6 @@
 #include "../../osx/uxenv4vservice/uxenv4vlib.h"
 #include "../ioh.h"
 
-typedef struct v4v_datagram_struct {
-    v4v_addr_t addr;
-    uint16_t flags;
-    /* data starts here */
-} V4V_PACKED v4v_datagram_t;
-
 typedef struct v4v_context {
     union {
         v4v_channel_t;

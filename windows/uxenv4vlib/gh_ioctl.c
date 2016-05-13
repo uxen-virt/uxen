@@ -110,11 +110,11 @@ gh_v4v_ctrl_bind(xenv4v_extension_t *pde, xenv4v_context_t *ctx, v4v_bind_values
     ASSERT(ctx->ring_object == NULL);
 
     do {
-        if ((bvs->ringId.addr.domain != V4V_DOMID_NONE) &&
-            (bvs->ringId.addr.domain != DOMID_INVALID_COMPAT)) {
+        if ((bvs->ring_id.addr.domain != V4V_DOMID_NONE) &&
+            (bvs->ring_id.addr.domain != DOMID_INVALID_COMPAT)) {
             uxen_v4v_warn("ring (vm%u:%x vm%u) ID domain must be "
-                          "V4V_DOMID_NONE", bvs->ringId.addr.domain,
-                          bvs->ringId.addr.port, bvs->ringId.partner);
+                          "V4V_DOMID_NONE", bvs->ring_id.addr.domain,
+                          bvs->ring_id.addr.port, bvs->ring_id.partner);
             status = STATUS_INVALID_PARAMETER;
             break;
         }
@@ -122,12 +122,15 @@ gh_v4v_ctrl_bind(xenv4v_extension_t *pde, xenv4v_context_t *ctx, v4v_bind_values
         robj = gh_v4v_allocate_ring(ctx->ring_length);
         if (robj == NULL) {
             uxen_v4v_err("gh_v4v_allocate_ring (vm%u:%x vm%u) failed",
-                         bvs->ringId.addr.domain, bvs->ringId.addr.port,
-                         bvs->ringId.partner);
+                         bvs->ring_id.addr.domain, bvs->ring_id.addr.port,
+                         bvs->ring_id.partner);
             status = STATUS_NO_MEMORY;
             break;
         }
-        robj->ring->id = bvs->ringId;
+        robj->ring->id = bvs->ring_id;
+
+        if (robj->ring->id.partner == V4V_DOMID_UUID)
+            memcpy(&robj->partner, &bvs->partner, sizeof(robj->partner));
 
         // Inherit admin access
         robj->admin_access = ctx->admin_access;
@@ -138,16 +141,8 @@ gh_v4v_ctrl_bind(xenv4v_extension_t *pde, xenv4v_context_t *ctx, v4v_bind_values
         // Lock this section since we access the list
         KeAcquireInStackQueuedSpinLock(&pde->ring_lock, &lqh);
 
-        if (robj->ring->id.addr.port == V4V_PORT_NONE) {
+        if (robj->ring->id.addr.port == V4V_PORT_NONE)
             robj->ring->id.addr.port = gh_v4v_spare_port_number(pde, port);
-        } else if (gh_v4v_ring_id_in_use(pde, &robj->ring->id)) {
-            KeReleaseInStackQueuedSpinLock(&lqh);
-            uxen_v4v_warn("gh_v4v_ring_id_in_use (vm%u:%x vm%u)",
-                          robj->ring->id.addr.domain, robj->ring->id.addr.port,
-                          robj->ring->id.partner);
-            status = STATUS_INVALID_DEVICE_REQUEST;
-            break;
-        }
 
         // Now register the ring.
         status = gh_v4v_register_ring(robj);
@@ -159,11 +154,12 @@ gh_v4v_ctrl_bind(xenv4v_extension_t *pde, xenv4v_context_t *ctx, v4v_bind_values
                 robj->ring->id.partner, status);
             break;
         }
-        robj->registered = TRUE;
 
         // Link it to the main list and set our pointer to it
         gh_v4v_link_to_ring_list(pde, robj);
         ctx->ring_object = robj;
+
+        bvs->ring_id.partner = robj->ring->id.partner;
 
         KeReleaseInStackQueuedSpinLock(&lqh);
 
@@ -301,6 +297,8 @@ gh_v4v_dispatch_device_control(PDEVICE_OBJECT fdo, PIRP irp)
                 v4v_bind_values_t *bvs = (v4v_bind_values_t *)io_buffer;
                 if (io_in_len == sizeof(v4v_bind_values_t)) {
                     status = gh_v4v_ctrl_bind(pde, ctx, bvs);
+                    if (NT_SUCCESS(status))
+                        irp->IoStatus.Information = sizeof(v4v_bind_values_t);
                 } else {
                     uxen_v4v_err("ctx %p invalid bind values", ctx);
                     status = STATUS_INVALID_PARAMETER;

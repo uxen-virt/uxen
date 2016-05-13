@@ -1,3 +1,4 @@
 #
 # versioned uxen interfaces
 #
+uxenconsole_windows 1

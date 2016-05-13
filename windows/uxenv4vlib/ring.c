@@ -18,8 +18,7 @@ void uxen_v4v_reregister_all_rings(void)
 
     if (!IsListEmpty(&pde->ring_list)) {
         for ( robj = (xenv4v_ring_t *)pde->ring_list.Flink; robj != (xenv4v_ring_t *)&pde->ring_list ; robj = (xenv4v_ring_t *)robj->le.Flink) {
-            if (robj->registered)
-                gh_v4v_register_ring(robj);
+            gh_v4v_register_ring(robj);
         }
     }
 

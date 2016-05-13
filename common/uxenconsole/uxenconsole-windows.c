@@ -11,6 +11,8 @@
 #define ERR_AUTO_CONSOLE
 #include <err.h>
 #include <getopt.h>
+#define UUID _UUID
+#include <uuid/uuid.h>
 
 #include "uxenconsolelib.h"
 #include "uxenhid-common.h"
@@ -990,9 +992,11 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     wchar_t **argv_w;
     char **argv;
     char *pipename;
-    int domid = -1;
     int interval;
     STARTUPINFO si;
+    int domid = 0;
+    unsigned char idtoken[16] = { };
+    int have_id = 0;
 
     memset(&cons, 0, sizeof (cons));
     cons.instance = hInstance;
@@ -1054,19 +1058,27 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         errx(1, "usage: %s [options] pipename [idtoken]", argv[0]);
 
     pipename = argv[optind];
+    optind++;
 
-    if (optind + 1 >= argc || 1 != sscanf(argv[optind + 1], "%d", &domid))
-        domid = -1;
+    if (optind < argc) {
+        have_id = 1;
+        if (!uuid_parse(argv[optind], idtoken))
+            domid = -1;
+        else if (sscanf(argv[optind], "%d", &domid) != 1)
+            have_id = 0;
+        optind++;
+    }
 
     cons.ctx = uxenconsole_init(&console_ops, &cons, pipename);
     if (!cons.ctx)
         Werr(1, "uxenconsole_init");
 
-    if (domid >= 0) {
-        cons.disp = uxenconsole_disp_init(domid, &cons, console_invalidate_rect);
+    if (have_id) {
+        cons.disp = uxenconsole_disp_init(domid, idtoken, &cons,
+                                          console_invalidate_rect);
         if (!cons.disp)
             Werr(1, "uxenconsole_disp_init");
-        cons.hid = uxenconsole_hid_init(domid);
+        cons.hid = uxenconsole_hid_init(domid, idtoken);
     } else {
         cons.disp = NULL;
         cons.hid = NULL;
