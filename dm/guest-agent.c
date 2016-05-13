@@ -630,6 +630,7 @@ guest_agent_init(void)
     OVERLAPPED o = {0};
     DWORD t;
 
+    debug_printf("initializing guest agent\n");
     memset(&o, 0, sizeof(o));
     ret = v4v_open(&v4v_context, RING_SIZE, &o);
     if (!ret) {
@@ -641,6 +642,7 @@ guest_agent_init(void)
         Wwarn("%s: v4v_open", __FUNCTION__);
         return -1;
     }
+    debug_printf("guest agent: v4v connection opened\n");
 
     id.addr.port = 0;
     id.addr.domain = V4V_DOMID_ANY;
@@ -660,6 +662,8 @@ guest_agent_init(void)
         Wwarn("%s: v4v_open", __FUNCTION__);
         return -1;
     }
+
+    debug_printf("guest agent: v4v connection bound\n");
 
     tx_event = CreateEvent(NULL, FALSE, FALSE, NULL);
     if (!tx_event) {
@@ -690,5 +694,6 @@ guest_agent_init(void)
 
     guest_agent_nop();
 
+    debug_printf("guest agent: initialized\n");
     return 0;
 }

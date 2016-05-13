@@ -507,6 +507,7 @@ int ipc_service_init(struct ipc_service *s, const char *path,
     s->opaque = opaque;
     TAILQ_INIT(&s->clients);
 
+    debug_printf("initializing ipc service, path=%s\n", path);
 #if defined(__APPLE__)
     s->path = strdup(path);
     if (unix_socket_create(s)) {

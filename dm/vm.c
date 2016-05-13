@@ -422,7 +422,7 @@ vm_create(int restore_mode)
         errx(0, "template vm already setup");
     if (ret)
         err(1, "uxen_create_vm");
-
+    debug_printf("created vm: domid %d\n", vm_id);
 }
 
 void

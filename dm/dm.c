@@ -327,10 +327,13 @@ main(int argc, char **argv)
 
     uxen_log_version();
 
+    debug_printf("creating vm\n");
     vm_create(vm_restore_mode);
 
+    debug_printf("initializing device modules\n");
     module_call_init(MODULE_INIT_DEVICE);
 
+    debug_printf("initializing serial devices\n");
     for(i = 0; i < MAX_SERIAL_PORTS; i++) {
 	char label[32];
         if (!serial_devices[i])
@@ -342,9 +345,11 @@ main(int argc, char **argv)
 		 serial_devices[i]);
     }
 
+    debug_printf("initializing console\n");
     if (console_init(console_type))
         errx(1, "Failed to initialize GUI '%s'", console_type);
 
+    debug_printf("initializing vm\n");
     vm_init(vm_loadfile, vm_restore_mode);
 
 #ifdef CONFIG_NET
