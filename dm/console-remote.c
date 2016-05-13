@@ -153,8 +153,8 @@ handle_message(struct uxenconsole_msg_header *hdr)
                 if (msg->flags & MOUSE_EVENT_FLAG_MBUTTON_DOWN)
                     input_event->button_state |= MOUSE_EVENT_MBUTTON;
 
-                s->mouse_x = input_event->x;
-                s->mouse_y = input_event->y;
+                s->mouse_x = msg->x;
+                s->mouse_y = msg->y;
 
                 bh_schedule_one_shot(bh);
             }
