@@ -830,32 +830,70 @@ out:
     return ret;
 }
 
+/* Convert a wide string to CP_ACP. */
+static char *
+cp_acp(const wchar_t *ws)
+{
+    int sz;
+    char *s;
+
+    /* First figure out buffer size needed and malloc it. */
+    sz = WideCharToMultiByte(CP_ACP, 0, ws, -1, NULL, 0, NULL, 0);
+    if (!sz)
+        return NULL;
+
+    s = (char *)malloc(sz + sizeof(char));
+    if (s == NULL)
+        return NULL;
+    s[sz] = 0;
+
+    /* Now perform the actual conversion. */
+    sz = WideCharToMultiByte(CP_ACP, 0, ws, -1, s, sz, NULL, 0);
+    if (!sz) {
+        free(s);
+        s = NULL;
+    }
+
+    return s;
+}
+
 int WINAPI
 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         LPSTR lpCmdLine, int iCmdShow)
 {
     struct console cons;
-    BOOL rc;
     int ret;
-    int wargc;
-    wchar_t **wargv;
-    char pipename[512];
+    int argc, i;
+    wchar_t **argv_w;
+    char **argv;
+    char *pipename;
     int domid = -1;
 
     memset(&cons, 0, sizeof (cons));
     cons.instance = hInstance;
     cons.show = iCmdShow;
 
-    wargv = CommandLineToArgvW(GetCommandLineW(), &wargc);
-    if (wargc < 2)
-        return -1;
-    rc = WideCharToMultiByte(CP_ACP, 0, wargv[1], -1,
-                             pipename, sizeof (pipename),
-                             NULL, NULL);
-    if (!rc)
-        Werr(1, "WideCharToMultiByte");
+    argv_w = CommandLineToArgvW(GetCommandLineW(), &argc);
 
-    if (wargc < 3 || 1 != swscanf(wargv[2], L"%d", &domid))
+    /* Create non-wide-char argv */
+    argv = (char **)malloc(sizeof(char *) * argc);
+    if (argv == NULL)
+        err(1, "malloc");
+
+    for (i = 0; i < argc; i++) {
+        argv[i] = cp_acp(argv_w[i]);
+        if (!argv[i])
+            errx(1, "cp_acp(arg %d)", i);
+    }
+
+    setprogname(argv[0]);
+
+    if (argc < 2 || argc > 3)
+        errx(1, "usage: %s pipename idtoken", argv[0]);
+
+    pipename = argv[1];
+
+    if (argc < 3 || 1 != sscanf(argv[2], "%d", &domid))
         domid = -1;
 
     cons.ctx = uxenconsole_init(&console_ops, &cons, pipename);
