@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -285,13 +285,13 @@ static const v4v_ring_id_t V4V_DEFAULT_CONNECT_ID = {{V4V_PORT_NONE, V4V_DOMID_N
  * should be set before any call to the V4V functions and should not @flags
  * later be changed.
  */
-typedef struct v4v_context_struct {
+typedef struct v4v_channel {
     HANDLE v4v_handle; /* handle for open V4V file */
     HANDLE recv_event; /* data arrival, new connection for accept */
     ULONG  flags;     /* configuration flags set by caller */
-} v4v_context_t;
+} v4v_channel_t;
 
-/* This routine opens a V4V file and associated channel. The @context
+/* This routine opens a V4V file and associated channel. The @channel
  * structure is passed in to the routine and if the call is successful, the
  * @v4v_handle and @recv_event handles will be valid and ready for use in
  * further V4V calls to initialize the channel.
@@ -306,7 +306,7 @@ typedef struct v4v_context_struct {
  *
  * The new open file handle and receive event are returned event though an
  * a overlapped call may not have yet completed. Until an overlapped call
- * completes the values in the @context should not be use.
+ * completes the values in the @channel should not be use.
  *
  * Returns TRUE on success or FALSE on error, in which case more
  * information can be obtained by calling GetLastError().
@@ -314,28 +314,28 @@ typedef struct v4v_context_struct {
 
 
 static V4V_INLINE_API BOOLEAN
-v4v_open(v4v_context_t *context, ULONG ring_size, OVERLAPPED *ov)
+v4v_open(v4v_channel_t *channel, ULONG ring_size, OVERLAPPED *ov)
 {
     HANDLE hd;
     v4v_init_values_t init = {0};
     BOOLEAN rc;
     DWORD br;
 
-    if (context == NULL) {
+    if (channel == NULL) {
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
 
-    /* V4V_CHECK_OVERLAPPED(context, ov); */
-    /* make V4V more liberal about how context is initialized */
-    context->flags = ov ? V4V_FLAG_OVERLAPPED : V4V_FLAG_NONE;
+    /* V4V_CHECK_OVERLAPPED(channel, ov); */
+    /* make V4V more liberal about how channel is initialized */
+    channel->flags = ov ? V4V_FLAG_OVERLAPPED : V4V_FLAG_NONE;
 
-    context->recv_event = NULL;
-    context->v4v_handle = INVALID_HANDLE_VALUE;
+    channel->recv_event = NULL;
+    channel->v4v_handle = INVALID_HANDLE_VALUE;
 
     hd = CreateFileW(V4V_USER_FILE_NAME, GENERIC_READ | GENERIC_WRITE,
                      FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
-                     FILE_ATTRIBUTE_NORMAL | ((context->flags & V4V_FLAG_OVERLAPPED) ? FILE_FLAG_OVERLAPPED : 0),
+                     FILE_ATTRIBUTE_NORMAL | ((channel->flags & V4V_FLAG_OVERLAPPED) ? FILE_FLAG_OVERLAPPED : 0),
                      NULL);
     if (hd == INVALID_HANDLE_VALUE)
         return FALSE;
@@ -351,7 +351,7 @@ v4v_open(v4v_context_t *context, ULONG ring_size, OVERLAPPED *ov)
         SetLastError(ERROR_SUCCESS);
 
         rc = DeviceIoControl(hd, V4V_IOCTL_INITIALIZE, &init, sizeof(v4v_init_values_t), NULL, 0, &br, ov);
-        if (context->flags & V4V_FLAG_OVERLAPPED) {
+        if (channel->flags & V4V_FLAG_OVERLAPPED) {
             if ((GetLastError() != ERROR_SUCCESS) && (GetLastError() != ERROR_IO_PENDING)) {
                 break;
             }
@@ -359,8 +359,8 @@ v4v_open(v4v_context_t *context, ULONG ring_size, OVERLAPPED *ov)
             break;
         }
 
-        context->v4v_handle = hd;
-        context->recv_event = init.rx_event;
+        channel->v4v_handle = hd;
+        channel->recv_event = init.rx_event;
 
         return TRUE;
     } while (FALSE);
@@ -401,24 +401,24 @@ v4v_open(v4v_context_t *context, ULONG ring_size, OVERLAPPED *ov)
  * v4v_open().
  */
 static V4V_INLINE_API BOOLEAN
-v4v_bind(v4v_context_t *context, v4v_ring_id_t *ringId, OVERLAPPED *ov)
+v4v_bind(v4v_channel_t *channel, v4v_ring_id_t *ringId, OVERLAPPED *ov)
 {
     v4v_bind_values_t bind;
     DWORD br;
     BOOLEAN rc;
 
-    if ((context == NULL) || (ringId == NULL)) {
+    if ((channel == NULL) || (ringId == NULL)) {
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
 
-    V4V_CHECK_OVERLAPPED(context, ov);
+    V4V_CHECK_OVERLAPPED(channel, ov);
 
     memcpy(&bind.ringId, ringId, sizeof(v4v_ring_id_t));
     SetLastError(ERROR_SUCCESS);
 
-    rc = DeviceIoControl(context->v4v_handle, V4V_IOCTL_BIND, &bind, sizeof(v4v_bind_values_t), NULL, 0, &br, ov);
-    if (context->flags & V4V_FLAG_OVERLAPPED) {
+    rc = DeviceIoControl(channel->v4v_handle, V4V_IOCTL_BIND, &bind, sizeof(v4v_bind_values_t), NULL, 0, &br, ov);
+    if (channel->flags & V4V_FLAG_OVERLAPPED) {
         if ((GetLastError() != ERROR_SUCCESS) && (GetLastError() != ERROR_IO_PENDING)) {
             return FALSE;
         }
@@ -459,28 +459,28 @@ v4v_bind(v4v_context_t *context, v4v_ring_id_t *ringId, OVERLAPPED *ov)
  * get the information.
  */
 static V4V_INLINE_API BOOLEAN
-v4v_get_info(v4v_context_t *context, v4v_getinfo_type_t type, v4v_getinfo_values_t *infoOut, OVERLAPPED *ov)
+v4v_get_info(v4v_channel_t *channel, v4v_getinfo_type_t type, v4v_getinfo_values_t *infoOut, OVERLAPPED *ov)
 {
     v4v_getinfo_values_t info = {V4V_INFO_UNSET, {{V4V_PORT_NONE, V4V_DOMID_NONE}, V4V_DOMID_NONE}};
     DWORD br;
     BOOLEAN rc;
 
-    if ((context == NULL) || (infoOut == NULL)) {
+    if ((channel == NULL) || (infoOut == NULL)) {
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
 
-    V4V_CHECK_OVERLAPPED(context, ov);
+    V4V_CHECK_OVERLAPPED(channel, ov);
 
     info.type = type;
     ZeroMemory(infoOut, sizeof(v4v_getinfo_values_t));
     infoOut->type = V4V_INFO_UNSET;
     SetLastError(ERROR_SUCCESS);
 
-    rc = DeviceIoControl(context->v4v_handle, V4V_IOCTL_GETINFO,
+    rc = DeviceIoControl(channel->v4v_handle, V4V_IOCTL_GETINFO,
                          &info, sizeof(v4v_getinfo_values_t),
                          infoOut, sizeof(v4v_getinfo_values_t), &br, ov);
-    if (context->flags & V4V_FLAG_OVERLAPPED) {
+    if (channel->flags & V4V_FLAG_OVERLAPPED) {
         if ((GetLastError() != ERROR_SUCCESS) && (GetLastError() != ERROR_IO_PENDING)) {
             return FALSE;
         }
@@ -518,26 +518,26 @@ v4v_get_info(v4v_context_t *context, v4v_getinfo_type_t type, v4v_getinfo_values
  * get the information.
  */
 static V4V_INLINE_API BOOLEAN
-v4v_map(v4v_context_t *context, v4v_mapring_values_t *ring, OVERLAPPED *ov)
+v4v_map(v4v_channel_t *channel, v4v_mapring_values_t *ring, OVERLAPPED *ov)
 {
     DWORD br;
     BOOLEAN rc;
     v4v_mapring_values_t mr = {0};
 
-    if ((context == NULL) || (ring == NULL)) {
+    if ((channel == NULL) || (ring == NULL)) {
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
 
-    V4V_CHECK_OVERLAPPED(context, ov);
+    V4V_CHECK_OVERLAPPED(channel, ov);
 
     ZeroMemory(ring, sizeof(v4v_mapring_values_t));
     SetLastError(ERROR_SUCCESS);
 
-    rc = DeviceIoControl(context->v4v_handle, V4V_IOCTL_MAPRING,
+    rc = DeviceIoControl(channel->v4v_handle, V4V_IOCTL_MAPRING,
                          &mr, sizeof(v4v_mapring_values_t),
                          ring, sizeof(v4v_mapring_values_t), &br, ov);
-    if (context->flags & V4V_FLAG_OVERLAPPED) {
+    if (channel->flags & V4V_FLAG_OVERLAPPED) {
         if ((GetLastError() != ERROR_SUCCESS) && (GetLastError() != ERROR_IO_PENDING)) {
             return FALSE;
         }
@@ -562,22 +562,22 @@ v4v_map(v4v_context_t *context, v4v_mapring_values_t *ring, OVERLAPPED *ov)
  * dump the ring.
  */
 static V4V_INLINE_API BOOLEAN
-gh_v4v_dump_ring(v4v_context_t *context, OVERLAPPED *ov)
+gh_v4v_dump_ring(v4v_channel_t *channel, OVERLAPPED *ov)
 {
     DWORD br;
     BOOLEAN rc;
 
-    if (context == NULL) {
+    if (channel == NULL) {
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
 
-    V4V_CHECK_OVERLAPPED(context, ov);
+    V4V_CHECK_OVERLAPPED(channel, ov);
 
     SetLastError(ERROR_SUCCESS);
 
-    rc = DeviceIoControl(context->v4v_handle, V4V_IOCTL_DUMPRING, NULL, 0, NULL, 0, &br, ov);
-    if (context->flags & V4V_FLAG_OVERLAPPED) {
+    rc = DeviceIoControl(channel->v4v_handle, V4V_IOCTL_DUMPRING, NULL, 0, NULL, 0, &br, ov);
+    if (channel->flags & V4V_FLAG_OVERLAPPED) {
         if ((GetLastError() != ERROR_SUCCESS) && (GetLastError() != ERROR_IO_PENDING)) {
             return FALSE;
         }
@@ -599,22 +599,22 @@ gh_v4v_dump_ring(v4v_context_t *context, OVERLAPPED *ov)
  *
  */
 static V4V_INLINE_API BOOLEAN
-gh_v4v_notify(v4v_context_t *context, OVERLAPPED *ov)
+gh_v4v_notify(v4v_channel_t *channel, OVERLAPPED *ov)
 {
     DWORD br;
     BOOLEAN rc;
 
-    if (context == NULL) {
+    if (channel == NULL) {
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
 
-    V4V_CHECK_OVERLAPPED(context, ov);
+    V4V_CHECK_OVERLAPPED(channel, ov);
 
     SetLastError(ERROR_SUCCESS);
 
-    rc = DeviceIoControl(context->v4v_handle, V4V_IOCTL_NOTIFY, NULL, 0, NULL, 0, &br, ov);
-    if (context->flags & V4V_FLAG_OVERLAPPED) {
+    rc = DeviceIoControl(channel->v4v_handle, V4V_IOCTL_NOTIFY, NULL, 0, NULL, 0, &br, ov);
+    if (channel->flags & V4V_FLAG_OVERLAPPED) {
         if ((GetLastError() != ERROR_SUCCESS) && (GetLastError() != ERROR_IO_PENDING)) {
             return FALSE;
         }
@@ -634,26 +634,26 @@ gh_v4v_notify(v4v_context_t *context, OVERLAPPED *ov)
  *
  */
 static V4V_INLINE_API BOOLEAN
-v4v_poke(v4v_context_t *context, v4v_addr_t *dst, OVERLAPPED *ov)
+v4v_poke(v4v_channel_t *channel, v4v_addr_t *dst, OVERLAPPED *ov)
 {
     v4v_poke_values_t poke;
     DWORD br;
     BOOLEAN rc;
 
-    if ((context == NULL) || (dst == NULL)) {
+    if ((channel == NULL) || (dst == NULL)) {
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
 
-    V4V_CHECK_OVERLAPPED(context, ov);
+    V4V_CHECK_OVERLAPPED(channel, ov);
 
     ZeroMemory(&poke, sizeof(v4v_poke_values_t));
     memcpy(&poke.dst, dst, sizeof(v4v_addr_t));
     SetLastError(ERROR_SUCCESS);
 
-    rc = DeviceIoControl(context->v4v_handle, V4V_IOCTL_POKE, &poke,
+    rc = DeviceIoControl(channel->v4v_handle, V4V_IOCTL_POKE, &poke,
                          sizeof(v4v_poke_values_t), NULL, 0, &br, ov);
-    if (context->flags & V4V_FLAG_OVERLAPPED) {
+    if (channel->flags & V4V_FLAG_OVERLAPPED) {
         if ((GetLastError() != ERROR_SUCCESS) && (GetLastError() != ERROR_IO_PENDING)) {
             return FALSE;
         }
@@ -663,7 +663,7 @@ v4v_poke(v4v_context_t *context, v4v_addr_t *dst, OVERLAPPED *ov)
     return TRUE;
 }
 
-/* This routine should be used to close the @context handles returned from a
+/* This routine should be used to close the @channel handles returned from a
  * call to v4v_open(). It can be called at any time to close the file handle
  * and terminate all outstanding IO.
  *
@@ -671,25 +671,25 @@ v4v_poke(v4v_context_t *context, v4v_addr_t *dst, OVERLAPPED *ov)
  * can be obtained by calling GetLastError().
  */
 static V4V_INLINE_API BOOLEAN
-v4v_close(v4v_context_t *context)
+v4v_close(v4v_channel_t *channel)
 {
     BOOLEAN rc = TRUE;
 
-    if (context == NULL) {
+    if (channel == NULL) {
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
 
-    if (context->recv_event != NULL) {
-        if (CloseHandle(context->recv_event))
-            context->recv_event = NULL;
+    if (channel->recv_event != NULL) {
+        if (CloseHandle(channel->recv_event))
+            channel->recv_event = NULL;
         else
             rc = FALSE;
     }
 
-    if ((context->v4v_handle != INVALID_HANDLE_VALUE) && (context->v4v_handle != NULL)) {
-        if (CloseHandle(context->v4v_handle))
-            context->v4v_handle = INVALID_HANDLE_VALUE;
+    if ((channel->v4v_handle != INVALID_HANDLE_VALUE) && (channel->v4v_handle != NULL)) {
+        if (CloseHandle(channel->v4v_handle))
+            channel->v4v_handle = INVALID_HANDLE_VALUE;
         else
             rc = FALSE;
     }
@@ -698,22 +698,22 @@ v4v_close(v4v_context_t *context)
 }
 
 static V4V_INLINE_API BOOLEAN
-v4v_debug(v4v_context_t *context, OVERLAPPED *ov)
+v4v_debug(v4v_channel_t *channel, OVERLAPPED *ov)
 {
     DWORD br;
     BOOLEAN rc;
 
-    if (context == NULL) {
+    if (channel == NULL) {
         SetLastError(ERROR_INVALID_PARAMETER);
         return FALSE;
     }
 
-    V4V_CHECK_OVERLAPPED(context, ov);
+    V4V_CHECK_OVERLAPPED(channel, ov);
 
     SetLastError(ERROR_SUCCESS);
 
-    rc = DeviceIoControl(context->v4v_handle, V4V_IOCTL_DEBUG, NULL, 0, NULL, 0, &br, ov);
-    if (context->flags & V4V_FLAG_OVERLAPPED) {
+    rc = DeviceIoControl(channel->v4v_handle, V4V_IOCTL_DEBUG, NULL, 0, NULL, 0, &br, ov);
+    if (channel->flags & V4V_FLAG_OVERLAPPED) {
         if ((GetLastError() != ERROR_SUCCESS) && (GetLastError() != ERROR_IO_PENDING)) {
             return FALSE;
         }

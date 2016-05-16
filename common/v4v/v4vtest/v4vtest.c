@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -33,7 +33,7 @@ static char buf[PACKET_SIZE + sizeof (v4v_datagram_t)];
 static int
 have_v4v (void)
 {
-    v4v_context_t c = { 0 };
+    v4v_chanel_t c = { 0 };
 
     if (v4v_open (&c, 4096, NULL)) {
         v4v_close (&c);
@@ -101,7 +101,7 @@ do_foo (struct foo *foo)
 
 
 static void
-write_thread (v4v_context_t *c, int domid)
+write_thread (v4v_channel_t *c, int domid)
 {
     struct foo foo = { 0 };
     v4v_datagram_t to = { };
@@ -139,7 +139,7 @@ write_thread (v4v_context_t *c, int domid)
 
 #ifdef MAP
 static void
-read_thread (v4v_context_t *c, v4v_ring_t *ring)
+read_thread (v4v_channel_t *c, v4v_ring_t *ring)
 {
     ssize_t len;
     v4v_datagram_t from;
@@ -189,7 +189,7 @@ read_thread (v4v_context_t *c, v4v_ring_t *ring)
 }
 #else
 static void
-read_thread (v4v_context_t *c, v4v_ring_t *ring)
+read_thread (v4v_channel_t *c, v4v_ring_t *ring)
 {
     struct foo foo = { 0 };
     DWORD red;
@@ -224,7 +224,7 @@ read_thread (v4v_context_t *c, v4v_ring_t *ring)
 int
 main (int argc, char *argv[])
 {
-    v4v_context_t c = { 0 };
+    v4v_channel_t c = { 0 };
     v4v_ring_id_t r;
 #ifdef MAP
     v4v_mapring_values_t mr;

@@ -32,7 +32,7 @@
 #endif
 
 struct clip_ctx {
-    v4v_context_t v4v;
+    v4v_channel_t v4v;
     HANDLE ev;
     OVERLAPPED ov;
     int domain;

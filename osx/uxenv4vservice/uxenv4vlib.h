@@ -55,8 +55,9 @@
  *   send more. The more high level v4v_recvmsg() will already do this for you.
  */
 
-struct v4v_connection;
-typedef struct v4v_connection* v4v_connection_t;
+typedef struct v4v_channel {
+    struct _v4v_channel *_c;
+} v4v_channel_t;
 
 static const unsigned V4V_DATAGRAM_FLAG_IGNORE_DLO = (1u << 0);
 
@@ -64,35 +65,34 @@ static const unsigned V4V_DATAGRAM_FLAG_IGNORE_DLO = (1u << 0);
 extern "C" {
 #endif
 
-errno_t v4v_open_service(v4v_connection_t* new_connection);
-bool v4v_open(v4v_connection_t* new_connection);
-dispatch_source_t v4v_dispatch_source_create_receive(
-    v4v_connection_t v4v_conn, dispatch_queue_t queue);
-dispatch_source_t v4v_dispatch_source_create_send(
-    v4v_connection_t v4v_conn, dispatch_queue_t queue);
-void v4v_close(v4v_connection_t v4v_conn);
-errno_t v4v_bind(
-    v4v_connection_t v4v_conn, uint32_t ring_len,
-    uint32_t local_port, domid_t partner);
-v4v_ring_t *v4v_get_mapped_ring(v4v_connection_t v4v_conn);
+errno_t v4v_open_service(v4v_channel_t *channel);
+bool v4v_open(v4v_channel_t *channel);
+#define v4v_opened(c) ((c)->_c != NULL)
+dispatch_source_t v4v_dispatch_source_create_receive(v4v_channel_t *channel,
+                                                     dispatch_queue_t queue);
+dispatch_source_t v4v_dispatch_source_create_send(v4v_channel_t *channel,
+                                                  dispatch_queue_t queue);
+void v4v_close(v4v_channel_t *channel);
 
-ssize_t v4v_recv(v4v_connection_t v4v_conn, void *buf, size_t len);
-ssize_t v4v_recvmsg(
-    v4v_connection_t v4v_conn, v4v_addr_t *out_from_addr, uint32_t* protocol,
-    void *buf, size_t len, bool consume);
+errno_t v4v_bind(v4v_channel_t *channel, uint32_t ring_len,
+                 uint32_t local_port, domid_t partner);
+v4v_ring_t *v4v_get_mapped_ring(v4v_channel_t *channel);
 
-ssize_t v4v_sendto(
-    v4v_connection_t v4v_conn, v4v_addr_t dest,
-    const void *buf, size_t len, unsigned flags);
+ssize_t v4v_recv(v4v_channel_t *channel, void *buf, size_t len);
+ssize_t v4v_recvmsg(v4v_channel_t *channel, v4v_addr_t *out_from_addr,
+                    uint32_t *protocol, void *buf, size_t len, bool consume);
 
-errno_t v4v_notify(v4v_connection_t v4v_conn);
+ssize_t v4v_sendto(v4v_channel_t *channel, v4v_addr_t dest,
+                   const void *buf, size_t len, unsigned flags);
 
-mach_port_t v4v_get_receive_port(v4v_connection_t v4v_conn);
-mach_port_t v4v_get_send_port(v4v_connection_t v4v_conn);
+errno_t v4v_notify(v4v_channel_t *channel);
+
+mach_port_t v4v_get_receive_port(v4v_channel_t *channel);
+mach_port_t v4v_get_send_port(v4v_channel_t *channel);
 
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* defined(__UxenV4VService__uxenv4vlib__) */
+#endif /* _UXENV4VLIB_H_ */

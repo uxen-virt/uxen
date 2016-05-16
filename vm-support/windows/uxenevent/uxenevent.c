@@ -106,7 +106,7 @@ socket_cleanup(void)
 
 
 static void
-send_collect(v4v_context_t * c)
+send_collect(v4v_channel_t * c)
 {
     struct send_item **ip, *i;
 
@@ -136,7 +136,7 @@ send_collect(v4v_context_t * c)
 
 
 static int
-send_enqueue(v4v_context_t *c, struct pkt *pkt)
+send_enqueue(v4v_channel_t *c, struct pkt *pkt)
 {
     struct send_item *i;
     DWORD bytes,len;
@@ -584,7 +584,7 @@ void set_high_priority(void)
 
 
 
-void recv_dispatch(v4v_context_t *c,struct pkt *pkt,DWORD bytes)
+void recv_dispatch(v4v_channel_t *c,struct pkt *pkt,DWORD bytes)
 {
     int rc;
 
@@ -653,9 +653,9 @@ void recv_dispatch(v4v_context_t *c,struct pkt *pkt,DWORD bytes)
         send_enqueue(c, pkt);
 }
 
-static int recv_setup(v4v_context_t *c);
+static int recv_setup(v4v_channel_t *c);
 
-static void recv_collect(v4v_context_t *c)
+static void recv_collect(v4v_channel_t *c)
 {
     DWORD bytes;
 
@@ -681,7 +681,7 @@ static void recv_collect(v4v_context_t *c)
 
 
 
-static int recv_setup(v4v_context_t *c)
+static int recv_setup(v4v_channel_t *c)
 {
     DWORD bytes;
     if (recv_pending) recv_collect(c);
@@ -714,7 +714,7 @@ static int recv_setup(v4v_context_t *c)
 }
 
 
-static void v4v_init(v4v_context_t *c)
+static void v4v_init(v4v_channel_t *c)
 {
     v4v_ring_id_t id;
     OVERLAPPED o;
@@ -748,7 +748,7 @@ main(int argc, char **argv)
 {
     WSADATA Data;
     HANDLE events[NR_EVENTS];
-    v4v_context_t v4v_context;
+    v4v_channel_t v4v;
     int ierr;
 
     setprogname(argv[0]);
@@ -791,7 +791,7 @@ main(int argc, char **argv)
 
     atexit(socket_cleanup);
 
-    v4v_init(&v4v_context);
+    v4v_init(&v4v);
 
     recv_event=CreateEvent(NULL,FALSE,FALSE,NULL);
 
@@ -803,7 +803,7 @@ main(int argc, char **argv)
     if (!send_event)
         JPWerr(1, "CreateEvent\n");
 
-    recv_setup(&v4v_context);
+    recv_setup(&v4v);
 
     resize_event = CreateWaitableTimer(NULL, FALSE, NULL);
     assert(resize_event);
@@ -818,9 +818,9 @@ main(int argc, char **argv)
                                        TRUE);
 
         if (err == WAIT_OBJECT_0) {
-            recv_collect(&v4v_context);
+            recv_collect(&v4v);
         } else if (err == WAIT_OBJECT_1) {
-            send_collect(&v4v_context);
+            send_collect(&v4v);
         } else if (err == WAIT_OBJECT_2) {
             resize_timer_set = 0;
             process_resize();

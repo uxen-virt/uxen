@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -27,7 +27,7 @@ struct sf_msg {
 };
 
 struct sf_state {
-    v4v_context_t v4v;
+    v4v_channel_t v4v;
     critical_section lock;
     struct io_handler_queue ioh_queue;
     WaitObjects wait_objects;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Piotr Foltyn <piotr.foltyn@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -21,7 +21,7 @@ struct disp_context {
     OVERLAPPED owrite;
     void *priv;
     invalidate_rect_t inv_rect;
-    v4v_context_t v4v_context;
+    v4v_channel_t v4v;
     uint8_t read_buf[UXENDISP_MAX_MSG_LEN];
     struct {
         v4v_datagram_t dgram;
@@ -45,7 +45,7 @@ timer_done(LPVOID context, DWORD unused1, DWORD unused2)
         return;
     }
 
-    WriteFileEx(c->v4v_context.v4v_handle,
+    WriteFileEx(c->v4v.v4v_handle,
                 (void *)&c->conn_msg,
                 sizeof(c->conn_msg),
                 &c->owrite,
@@ -73,7 +73,7 @@ read_done(DWORD ec, DWORD count, LPOVERLAPPED ovlpd)
                     rect->bottom - rect->top);
     }
 
-    WriteFileEx(c->v4v_context.v4v_handle,
+    WriteFileEx(c->v4v.v4v_handle,
                 (void *)&c->conn_msg,
                 sizeof(c->conn_msg),
                 &c->owrite,
@@ -97,14 +97,14 @@ write_done(DWORD ec, DWORD count, LPOVERLAPPED ovlpd)
         if (!res) {
             // Last resort
             Sleep(DUE_TIME_MS);
-            WriteFileEx(c->v4v_context.v4v_handle,
+            WriteFileEx(c->v4v.v4v_handle,
                         (void *)&c->conn_msg,
                         sizeof(c->conn_msg),
                         &c->owrite,
                         write_done);
         }
     } else {
-        ReadFileEx(c->v4v_context.v4v_handle,
+        ReadFileEx(c->v4v.v4v_handle,
                    c->read_buf,
                    UXENDISP_MAX_MSG_LEN,
                    &c->oread,
@@ -129,8 +129,8 @@ uxenconsole_disp_init(int vm_id, void *priv, invalidate_rect_t inv_rect)
     c->thread_id = GetCurrentThreadId();
 
     memset(&o, 0, sizeof(o));
-    if (!v4v_open(&c->v4v_context, UXENDISP_RING_SIZE, &o) ||
-        !GetOverlappedResult(c->v4v_context.v4v_handle, &o, &t, TRUE)) {
+    if (!v4v_open(&c->v4v, UXENDISP_RING_SIZE, &o) ||
+        !GetOverlappedResult(c->v4v.v4v_handle, &o, &t, TRUE)) {
         err = GetLastError();
         goto error;
     }
@@ -139,13 +139,13 @@ uxenconsole_disp_init(int vm_id, void *priv, invalidate_rect_t inv_rect)
     id.addr.domain = V4V_DOMID_ANY;
     id.partner = vm_id;
 
-    if (!v4v_bind(&c->v4v_context, &id, &o) ||
-        !GetOverlappedResult(c->v4v_context.v4v_handle, &o, &t, TRUE)) {
+    if (!v4v_bind(&c->v4v, &id, &o) ||
+        !GetOverlappedResult(c->v4v.v4v_handle, &o, &t, TRUE)) {
 
         // Allow one additional console to be connected.
         id.addr.port = UXENDISP_ALT_PORT;
-        if (!v4v_bind(&c->v4v_context, &id, &o) ||
-            !GetOverlappedResult(c->v4v_context.v4v_handle, &o, &t, TRUE)) {
+        if (!v4v_bind(&c->v4v, &id, &o) ||
+            !GetOverlappedResult(c->v4v.v4v_handle, &o, &t, TRUE)) {
             err = GetLastError();
             goto error;
         }
@@ -153,7 +153,7 @@ uxenconsole_disp_init(int vm_id, void *priv, invalidate_rect_t inv_rect)
 
     c->conn_msg.dgram.addr.port = id.addr.port;
     c->conn_msg.dgram.addr.domain = vm_id;
-    rc = WriteFileEx(c->v4v_context.v4v_handle,
+    rc = WriteFileEx(c->v4v.v4v_handle,
                      (void *)&c->conn_msg,
                      sizeof(c->conn_msg),
                      &c->owrite,
@@ -192,13 +192,13 @@ uxenconsole_disp_cleanup(disp_context_t ctx)
         assert(c->thread_id == GetCurrentThreadId());
 
         c->exit = TRUE;
-        if (CancelIo(c->v4v_context.v4v_handle) ||
+        if (CancelIo(c->v4v.v4v_handle) ||
             (GetLastError() != ERROR_NOT_FOUND)) {
-            GetOverlappedResult(c->v4v_context.v4v_handle,
+            GetOverlappedResult(c->v4v.v4v_handle,
                                 &c->owrite,
                                 &bytes,
                                 TRUE);
-            GetOverlappedResult(c->v4v_context.v4v_handle,
+            GetOverlappedResult(c->v4v.v4v_handle,
                                 &c->oread,
                                 &bytes,
                                 TRUE);
@@ -207,7 +207,7 @@ uxenconsole_disp_cleanup(disp_context_t ctx)
         // routine to run.
         SleepEx(DUE_TIME_MS, TRUE);
         CloseHandle(c->timer);
-        v4v_close(&c->v4v_context);
+        v4v_close(&c->v4v);
         free(c);
     }
 }

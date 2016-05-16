@@ -21,16 +21,16 @@ typedef struct v4v_datagram_struct {
     /* data starts here */
 } V4V_PACKED v4v_datagram_t;
 
-struct _v4v_context
-{
-	v4v_connection_t v4v_handle;
-	ioh_event recv_event;
-	uint32_t ring_size;
-};
-typedef struct _v4v_context _v4v_context_t;
+typedef struct v4v_context {
+    union {
+        v4v_channel_t;
+        v4v_channel_t v4v_channel;
+    };
+    ioh_event recv_event;
+    uint32_t ring_size;
+} v4v_context_t;
 
 #define v4v_close v4v_close_osx
-void
-v4v_close_osx(_v4v_context_t *ctx);
+void v4v_close_osx(v4v_context_t *v4v);
 
 #endif

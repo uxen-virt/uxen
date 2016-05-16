@@ -29,7 +29,7 @@
 #define RING_SIZE 262144
 
 static int v4v_up = 0 ;
-static v4v_context_t v4v_context;
+static v4v_channel_t v4v;
 static HANDLE tx_event;
 static HANDLE rx_event;
 
@@ -217,7 +217,7 @@ guest_agent_recv_start(void)
     memset(&read_ovlp, 0, sizeof(read_ovlp));
     read_ovlp.hEvent = rx_event;
 
-    ret = ReadFile(v4v_context.v4v_handle, &read_buf, sizeof(read_buf), &bytes,
+    ret = ReadFile(v4v.v4v_handle, &read_buf, sizeof(read_buf), &bytes,
                   &read_ovlp);
     if (ret)
         return 0;
@@ -245,7 +245,7 @@ guest_agent_recv_event(void *opaque)
     if (!read_pending)
         return; /* XXX: shouldn't happen */
 
-    ret = GetOverlappedResult(v4v_context.v4v_handle, &read_ovlp, &bytes,
+    ret = GetOverlappedResult(v4v.v4v_handle, &read_ovlp, &bytes,
                               FALSE);
     if (!ret) {
         switch (GetLastError()) {
@@ -287,7 +287,7 @@ writelist_complete(void)
 
     critical_section_enter(&write_list_lock);
     LIST_FOREACH_SAFE(wm, &write_list, node, nwm) {
-        ret = GetOverlappedResult(v4v_context.v4v_handle, &wm->o, &bytes,
+        ret = GetOverlappedResult(v4v.v4v_handle, &wm->o, &bytes,
                                   FALSE);
         if (!ret && (GetLastError() == ERROR_IO_INCOMPLETE))
             continue;
@@ -375,7 +375,7 @@ guest_agent_sendmsg(void *msg, size_t len, int dlo)
     wm->buf.dgram.flags = dlo ? 0 : V4V_DATAGRAM_FLAG_IGNORE_DLO;
     wm->len = len;
 
-    ret = WriteFile(v4v_context.v4v_handle, (void *)&wm->buf,
+    ret = WriteFile(v4v.v4v_handle, (void *)&wm->buf,
                     wm->len, &bytes, &wm->o);
     if (!ret) {
         switch (GetLastError()) {
@@ -578,20 +578,20 @@ guest_agent_cleanup(void)
     LIST_FOREACH_SAFE(wm, &write_list, node, nwm) {
         DWORD bytes;
 
-        if (CancelIoEx(v4v_context.v4v_handle, &wm->o) ||
+        if (CancelIoEx(v4v.v4v_handle, &wm->o) ||
             GetLastError() != ERROR_NOT_FOUND)
-            GetOverlappedResult(v4v_context.v4v_handle, &wm->o, &bytes, TRUE);
+            GetOverlappedResult(v4v.v4v_handle, &wm->o, &bytes, TRUE);
         LIST_REMOVE(wm, node);
         free(wm);
     }
 
     if (read_pending)
-        CancelIoEx(v4v_context.v4v_handle, &read_ovlp);
+        CancelIoEx(v4v.v4v_handle, &read_ovlp);
 
     critical_section_leave(&write_list_lock);
 
     if (v4v_up)
-        v4v_close(&v4v_context);
+        v4v_close(&v4v);
 
     if (tx_event) {
         ioh_del_wait_object(&tx_event, NULL);
@@ -632,13 +632,13 @@ guest_agent_init(void)
 
     debug_printf("initializing guest agent\n");
     memset(&o, 0, sizeof(o));
-    ret = v4v_open(&v4v_context, RING_SIZE, &o);
+    ret = v4v_open(&v4v, RING_SIZE, &o);
     if (!ret) {
         Wwarn("%s: v4v_open", __FUNCTION__);
         return -1;
     }
 
-    if (!GetOverlappedResult(v4v_context.v4v_handle, &o, &t, TRUE)) {
+    if (!GetOverlappedResult(v4v.v4v_handle, &o, &t, TRUE)) {
         Wwarn("%s: v4v_open", __FUNCTION__);
         return -1;
     }
@@ -649,16 +649,16 @@ guest_agent_init(void)
     id.partner = vm_id;
 
     memset(&o, 0, sizeof(o));
-    ret = v4v_bind(&v4v_context, &id, &o);
+    ret = v4v_bind(&v4v, &id, &o);
     if (!ret) {
         Wwarn("%s: v4v_bind", __FUNCTION__);
-        v4v_close(&v4v_context);
+        v4v_close(&v4v);
         return -1;
     }
 
 	v4v_up++;
 
-     if (!GetOverlappedResult(v4v_context.v4v_handle, &o, &t, TRUE)) {
+     if (!GetOverlappedResult(v4v.v4v_handle, &o, &t, TRUE)) {
         Wwarn("%s: v4v_open", __FUNCTION__);
         return -1;
     }
@@ -667,13 +667,13 @@ guest_agent_init(void)
 
     tx_event = CreateEvent(NULL, FALSE, FALSE, NULL);
     if (!tx_event) {
-        v4v_close(&v4v_context);
+        v4v_close(&v4v);
         return -1;
     }
 
     rx_event = CreateEvent(NULL, FALSE, FALSE, NULL);
     if (!rx_event) {
-        v4v_close(&v4v_context);
+        v4v_close(&v4v);
         CloseHandle(&tx_event);
         return -1;
     }

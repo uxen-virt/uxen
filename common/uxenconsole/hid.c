@@ -30,7 +30,7 @@ struct v4v_buf {
 
 struct hid_ring
 {
-    v4v_context_t v4v_context;
+    v4v_channel_t v4v;
     int port;
     int ready;
     CRITICAL_SECTION lock;
@@ -80,7 +80,7 @@ send_async(struct hid_ring *r, struct v4v_buf *b, DWORD len)
 
     b->len = len + sizeof(v4v_datagram_t);
 
-    rc = WriteFile(r->v4v_context.v4v_handle, (void *)&b->buf,
+    rc = WriteFile(r->v4v.v4v_handle, (void *)&b->buf,
                    b->len, &bytes, &b->ovlp);
     if (!rc) {
         if (GetLastError() == ERROR_IO_PENDING) {
@@ -136,7 +136,7 @@ xmit_complete(struct hid_ring *r)
     b = r->txlist.first;
     while (b) {
         bn = b->next;
-        rc = GetOverlappedResult(r->v4v_context.v4v_handle, &b->ovlp, &bytes,
+        rc = GetOverlappedResult(r->v4v.v4v_handle, &b->ovlp, &bytes,
                                  FALSE);
 
         if (!rc && GetLastError() == ERROR_IO_INCOMPLETE) {
@@ -176,17 +176,17 @@ ring_init(struct hid_ring *r, int vm_id, int device_type)
     v4v_ring_id_t id;
 
     memset(&o, 0, sizeof(o));
-    if (!v4v_open(&r->v4v_context, UXENHID_RING_SIZE, &o) ||
-        !GetOverlappedResult(r->v4v_context.v4v_handle, &o, &t, TRUE))
+    if (!v4v_open(&r->v4v, UXENHID_RING_SIZE, &o) ||
+        !GetOverlappedResult(r->v4v.v4v_handle, &o, &t, TRUE))
         return -1;
 
     id.addr.port = 0;
     id.addr.domain = V4V_DOMID_ANY;
     id.partner = vm_id;
 
-    if (!v4v_bind(&r->v4v_context, &id, &o) ||
-        !GetOverlappedResult(r->v4v_context.v4v_handle, &o, &t, TRUE)) {
-        v4v_close(&r->v4v_context);
+    if (!v4v_bind(&r->v4v, &id, &o) ||
+        !GetOverlappedResult(r->v4v.v4v_handle, &o, &t, TRUE)) {
+        v4v_close(&r->v4v);
         return -1;
     }
 
@@ -214,15 +214,15 @@ ring_cleanup(struct hid_ring *r)
         DWORD bytes;
 
         bn = b->next;
-        if (CancelIoEx(r->v4v_context.v4v_handle, &b->ovlp) ||
+        if (CancelIoEx(r->v4v.v4v_handle, &b->ovlp) ||
             GetLastError() != ERROR_NOT_FOUND)
-            GetOverlappedResult(r->v4v_context.v4v_handle, &b->ovlp, &bytes, TRUE);
+            GetOverlappedResult(r->v4v.v4v_handle, &b->ovlp, &bytes, TRUE);
         free_v4v_buf(b, b->len);
         b = bn;
     }
     LeaveCriticalSection(&r->lock);
     DeleteCriticalSection(&r->lock);
-    v4v_close(&r->v4v_context);
+    v4v_close(&r->v4v);
 }
 
 hid_context_t

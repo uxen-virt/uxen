@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -33,7 +33,7 @@ static char buf[PACKET_SIZE + sizeof (v4v_datagram_t)];
 static int
 have_v4v (void)
 {
-    v4v_context_t c = { 0 };
+    v4v_channel_t c = { 0 };
 
     if (v4v_open (&c, 4096, NULL)) {
         v4v_close (&c);
@@ -79,7 +79,7 @@ do_foo (struct foo *foo)
 
 
 static void
-rr (v4v_context_t *c, v4v_ring_t *ring, int domid, int rx)
+rr (v4v_channel_t *c, v4v_ring_t *ring, int domid, int rx)
 {
 #ifdef MAP
 #error no map, you will not go to space today
@@ -125,7 +125,7 @@ rr (v4v_context_t *c, v4v_ring_t *ring, int domid, int rx)
 int
 main (int argc, char *argv[])
 {
-    v4v_context_t c = { 0 };
+    v4v_channel_t c = { 0 };
     v4v_ring_id_t r;
 #ifdef MAP
     v4v_mapring_values_t mr;

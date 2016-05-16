@@ -37,7 +37,7 @@ struct uxenhid_state {
     const char *report_descriptor;
     size_t report_descriptor_len;
 
-    v4v_context_t v4v_context;
+    v4v_channel_t v4v;
     HANDLE rx_event;
     HANDLE tx_event;
 
@@ -291,7 +291,7 @@ send_async(struct uxenhid_state *s, struct async_buf *b, DWORD len)
 
     b->ovlp.hEvent = s->tx_event;
 
-    rc = WriteFile(s->v4v_context.v4v_handle, (void *)&b->buf,
+    rc = WriteFile(s->v4v.v4v_handle, (void *)&b->buf,
                    b->len, &bytes, &b->ovlp);
     if (!rc) {
         if (GetLastError() == ERROR_IO_PENDING) {
@@ -561,7 +561,7 @@ rx_start(struct uxenhid_state *s)
     s->async_read.ovlp.hEvent = s->rx_event;
 
     do {
-        rc = ReadFile(s->v4v_context.v4v_handle, &s->async_read.buf,
+        rc = ReadFile(s->v4v.v4v_handle, &s->async_read.buf,
                       sizeof (s->async_read.buf), &bytes, &s->async_read.ovlp);
         if (rc) {
             if (bytes >= sizeof (v4v_datagram_t))
@@ -580,7 +580,7 @@ rx_complete(void *opaque)
     BOOL rc;
     DWORD bytes;
 
-    rc = GetOverlappedResult(s->v4v_context.v4v_handle, &s->async_read.ovlp,
+    rc = GetOverlappedResult(s->v4v.v4v_handle, &s->async_read.ovlp,
                              &bytes, FALSE);
     if (!rc) {
         if (GetLastError() == ERROR_IO_INCOMPLETE) {
@@ -610,7 +610,7 @@ tx_complete(void *opaque)
 
     critical_section_enter(&s->async_write_lock);
     TAILQ_FOREACH_SAFE(b, &s->async_write_list, link, bn) {
-        rc = GetOverlappedResult(s->v4v_context.v4v_handle, &b->ovlp, &bytes,
+        rc = GetOverlappedResult(s->v4v.v4v_handle, &b->ovlp, &bytes,
                                  FALSE);
         if (!rc && GetLastError() == ERROR_IO_INCOMPLETE)
             continue;
@@ -637,20 +637,20 @@ uxenhid_exit(UXenPlatformDevice *dev)
     TAILQ_FOREACH_SAFE(b, &s->async_write_list, link, bn) {
         DWORD bytes;
 
-        if (CancelIoEx(s->v4v_context.v4v_handle, &b->ovlp) ||
+        if (CancelIoEx(s->v4v.v4v_handle, &b->ovlp) ||
             GetLastError() != ERROR_NOT_FOUND)
-            GetOverlappedResult(s->v4v_context.v4v_handle, &b->ovlp, &bytes, TRUE);
+            GetOverlappedResult(s->v4v.v4v_handle, &b->ovlp, &bytes, TRUE);
 
         TAILQ_REMOVE(&s->async_write_list, b, link);
         free_async_buf(b, b->len);
     }
     critical_section_leave(&s->async_write_lock);
-    CancelIoEx(s->v4v_context.v4v_handle, &s->async_read.ovlp);
+    CancelIoEx(s->v4v.v4v_handle, &s->async_read.ovlp);
 
     ioh_del_wait_object(&s->rx_event, NULL);
     ioh_del_wait_object(&s->tx_event, NULL);
 
-    v4v_close(&s->v4v_context);
+    v4v_close(&s->v4v);
 
     CloseHandle(s->tx_event);
     CloseHandle(s->rx_event);
@@ -671,8 +671,8 @@ uxenhid_init(UXenPlatformDevice *dev)
     s->ready = 0;
 
     memset(&o, 0, sizeof(o));
-    if (!v4v_open(&s->v4v_context, UXENHID_RING_SIZE, &o) ||
-        !GetOverlappedResult(s->v4v_context.v4v_handle, &o, &t, TRUE)) {
+    if (!v4v_open(&s->v4v, UXENHID_RING_SIZE, &o) ||
+        !GetOverlappedResult(s->v4v.v4v_handle, &o, &t, TRUE)) {
         Wwarn("%s: v4v_open", __FUNCTION__);
         return -1;
     }
@@ -682,17 +682,17 @@ uxenhid_init(UXenPlatformDevice *dev)
     id.partner = vm_id;
 
     memset(&o, 0, sizeof(o));
-    if (!v4v_bind(&s->v4v_context, &id, &o) ||
-        !GetOverlappedResult(s->v4v_context.v4v_handle, &o, &t, TRUE)) {
+    if (!v4v_bind(&s->v4v, &id, &o) ||
+        !GetOverlappedResult(s->v4v.v4v_handle, &o, &t, TRUE)) {
         Wwarn("%s: v4v_bind", __FUNCTION__, id.addr.port);
-        v4v_close(&s->v4v_context);
+        v4v_close(&s->v4v);
         return -1;
     }
 
     s->tx_event = CreateEvent(NULL, FALSE, FALSE, NULL);
     if (!s->tx_event) {
         Wwarn("%s: CreateEvent", __FUNCTION__);
-        v4v_close(&s->v4v_context);
+        v4v_close(&s->v4v);
         return -1;
     }
 
@@ -700,7 +700,7 @@ uxenhid_init(UXenPlatformDevice *dev)
     if (!s->rx_event) {
         Wwarn("%s: CreateEvent", __FUNCTION__);
         CloseHandle(s->tx_event);
-        v4v_close(&s->v4v_context);
+        v4v_close(&s->v4v);
         return -1;
     }
 

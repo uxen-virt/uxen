@@ -7,6 +7,8 @@
 #include "uxenv4vlib.h"
 #include <v4v.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <errno.h>
 
 int main(int argc, const char * argv[])
 {
@@ -22,7 +24,7 @@ int main(int argc, const char * argv[])
         "Testing with remote domain %ld, port %ld, local port %ld\n",
         partner_domain, dest_port, source_port);
     
-    v4v_connection_t conn = NULL;
+    v4v_channel_t conn = { };
     errno_t error = v4v_open_service(&conn);
     switch (error) {
     case ENOENT:
@@ -38,16 +40,16 @@ int main(int argc, const char * argv[])
     if (error != 0)
         return 1;
 
-    error = v4v_bind(conn, 128 * 1024, (uint32_t)source_port, partner_domain);
+    error = v4v_bind(&conn, 128 * 1024, (uint32_t)source_port, partner_domain);
     if (error != 0) {
         printf("Creating ring failed: %d (%x)\n", error, error);
         return 1;
     }
     
     dispatch_source_t port_receive_source =
-        v4v_dispatch_source_create_receive(conn, dispatch_get_main_queue());
+        v4v_dispatch_source_create_receive(&conn, dispatch_get_main_queue());
     dispatch_source_t port_send_source =
-        v4v_dispatch_source_create_send(conn, dispatch_get_main_queue());
+        v4v_dispatch_source_create_send(&conn, dispatch_get_main_queue());
     
     dispatch_source_set_cancel_handler(
         port_receive_source,
@@ -65,14 +67,14 @@ int main(int argc, const char * argv[])
             uint32_t protocol = 0;
             v4v_addr_t from = {};
             ssize_t bytes_read = v4v_recvmsg(
-                conn, &from, &protocol, buf, sizeof(buf), true);
+                &conn, &from, &protocol, buf, sizeof(buf), true);
             while (bytes_read >= 0)
             {
                 printf(
                     "%ld byte message received:\n%*s\n--  \n",
                     bytes_read, (int)bytes_read, buf);
                 bytes_read = v4v_recvmsg(
-                    conn, &from, &protocol, buf, sizeof(buf), true);
+                    &conn, &from, &protocol, buf, sizeof(buf), true);
             }
             printf("No more messages: %ld\n", bytes_read);
         });
@@ -83,7 +85,7 @@ int main(int argc, const char * argv[])
             char msg[] = "V4V message!\n";
             
             ssize_t bytes_sent = v4v_sendto(
-                conn,
+                &conn,
                 (v4v_addr_t){ (uint32_t)dest_port, (domid_t)partner_domain },
                 msg,
                 sizeof(msg),
@@ -102,7 +104,7 @@ int main(int argc, const char * argv[])
 
     char msg[] = "V4V message!\n";
     ssize_t bytes_sent = v4v_sendto(
-        conn,
+        &conn,
         (v4v_addr_t){ (uint32_t)dest_port, (domid_t)partner_domain },
         msg,
         sizeof(msg),

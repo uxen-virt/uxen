@@ -65,12 +65,12 @@
 /* Typedef for internal stream header structure */
 typedef struct v4v_stream_header v4v_stream_t, *Pv4v_stream_t;
 
-typedef struct v4v_context_struct {
+typedef struct v4v_channel {
     HANDLE v4v_handle; /* handle for open V4V file */
     PKEVENT recv_event; /* data arrival, new connection for accept */
     HANDLE recv_event_handle; /* data arrival, new connection for accept */
     ULONG  flags;     /* configuration flags set by caller */
-} v4v_context_t;
+} v4v_channel_t;
 
 typedef enum v4v_status_type_struct {
     V4V_UNINTIALIZED = 1,
@@ -83,7 +83,7 @@ typedef enum v4v_status_type_struct {
 } v4v_status_type_t;
 
 typedef struct  uxen_v4v_struct {
-    v4v_context_t             ctx;
+    v4v_channel_t             channel;
     PFILE_OBJECT            file_object;
     PDEVICE_OBJECT          dev_object;
     v4v_status_type_t         state;
@@ -91,15 +91,15 @@ typedef struct  uxen_v4v_struct {
 
 HANDLE  __inline NTAPI v4v_handle(uxen_v4v_t *v4v)
 {
-    return v4v->ctx.v4v_handle;
+    return v4v->channel.v4v_handle;
 }
 void    __inline NTAPI v4v_set_flag (uxen_v4v_t *v4v, ULONG flags)
 {
-    v4v->ctx.flags = flags;
+    v4v->channel.flags = flags;
 }
 ULONG   __inline NTAPI v4v_flag (uxen_v4v_t *v4v)
 {
-    return v4v->ctx.flags;
+    return v4v->channel.flags;
 }
 void    __inline NTAPI V4VSetState (uxen_v4v_t *v4v, v4v_status_type_t state)
 {
@@ -237,13 +237,14 @@ uxen_v4v_init_dev(uxen_v4v_t *v4v, size_t ring_size)
             status = STATUS_UNSUCCESSFUL;
             break;
         } else {
-            status = ObReferenceObjectByHandle(init.rx_event,
-                                               EVENT_MODIFY_STATE,
-                                               *ExEventObjectType,
-                                               KernelMode,
-                                               (void **)&v4v->ctx.recv_event,
-                                               NULL);
-            v4v->ctx.recv_event_handle = init.rx_event;
+            status = ObReferenceObjectByHandle(
+                init.rx_event,
+                EVENT_MODIFY_STATE,
+                *ExEventObjectType,
+                KernelMode,
+                (void **)&v4v->channel.recv_event,
+                NULL);
+            v4v->channel.recv_event_handle = init.rx_event;
         }
     } while (FALSE);
 
@@ -360,13 +361,13 @@ uxen_v4v_close(uxen_v4v_t *v4v)
 {
     NTSTATUS status;
 
-    ObDereferenceObject(v4v->ctx.recv_event);
+    ObDereferenceObject(v4v->channel.recv_event);
 
     do {
-        status = ZwClose(v4v->ctx.recv_event_handle);
+        status = ZwClose(v4v->channel.recv_event_handle);
         if (!NT_SUCCESS(status)) break;
 
-        status = ZwClose(v4v->ctx.v4v_handle);
+        status = ZwClose(v4v->channel.v4v_handle);
         if (!NT_SUCCESS(status)) break;
     } while (FALSE);
 
@@ -543,9 +544,10 @@ uxen_v4v_open_dgram_port (uxen_v4v_t *v4v, size_t ring_size, domid_t domain, uin
 
     if (status != STATUS_SUCCESS) {
         if (hd) ZwClose(hd);
-        if (v4v->ctx.recv_event_handle) ZwClose(v4v->ctx.recv_event_handle);
+        if (v4v->channel.recv_event_handle)
+            ZwClose(v4v->channel.recv_event_handle);
     } else {
-        v4v->ctx.v4v_handle = hd;
+        v4v->channel.v4v_handle = hd;
     }
     return status;
 }
@@ -602,9 +604,10 @@ uxen_v4v_open_device(uxen_v4v_t *v4v, size_t ring_size, domid_t domain, uint32_t
 
     if (status != STATUS_SUCCESS) {
         if (hd) ZwClose(hd);
-        if (v4v->ctx.recv_event_handle) ZwClose(v4v->ctx.recv_event_handle);
+        if (v4v->channel.recv_event_handle)
+            ZwClose(v4v->channel.recv_event_handle);
     } else {
-        v4v->ctx.v4v_handle = hd;
+        v4v->channel.v4v_handle = hd;
     }
     return status;
 }

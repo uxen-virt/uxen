@@ -128,7 +128,7 @@ typedef struct uxen_stor_req {
 typedef struct uxen_stor {
     ISADevice dev;
     //DeviceState dev;
-    _v4v_context_t a;
+    v4v_context_t v4v;
     v4v_addr_t dest;
 
     ioh_event tx_event;
@@ -364,7 +364,7 @@ uxen_stor_send_reply (uxen_stor_t *s, uxen_stor_req_t *r)
 
     /*send reply */
     if (WriteFile
-        (DEV_V4V_CTX(s).v4v_handle, &r->packet,
+        (s->v4v.v4v_handle, &r->packet,
          r->reply_size + sizeof (v4v_datagram_t), NULL, &r->overlapped)) {
         Wwarn("%s: fail path 1 seq=%"PRIx64, __FUNCTION__, r->packet.xfr.seq);
         r->state = UXS_STATE_V4V_SENT;
@@ -386,7 +386,7 @@ static void
 uxen_stor_send_reply (uxen_stor_t *s, uxen_stor_req_t *r)
 {
     ssize_t sent_bytes = v4v_sendto(
-        s->a.v4v_handle, s->dest,
+        &s->v4v.v4v_channel, s->dest,
         &r->packet.xfr, r->reply_size, r->packet.dg.flags);
     if (sent_bytes == -EAGAIN)
     {
@@ -869,7 +869,7 @@ uxen_stor_read_event (void *_s)
         req_insert_tail (&s->queue, req);
     } while (1);
 
-    _v4v_notify(&s->a);
+    _v4v_notify(&s->v4v);
 
     uxen_stor_run_q (s);
 }
@@ -953,11 +953,11 @@ uxen_stor_cleanup (VLANClientState *nc)
     uxen_stor_t *s = DO_UPCAST (NICState, nc, nc)->opaque;
 
     ioh_del_wait_object (&s->tx_event, NULL);
-    ioh_del_wait_object (&s->a.recv_event, NULL);
+    ioh_del_wait_object (&s->v4v.recv_event, NULL);
 
     CloseHandle (&s->tx_event);
 
-    v4v_close (&s->a);
+    v4v_close (&s->v4v);
 
     s->nic = NULL;
 }
@@ -992,7 +992,7 @@ uxen_stor_initfn (ISADevice *dev)
         return -1;
     }
 
-    if (!v4v_open_sync(&s->a, RING_SIZE, &error)) {
+    if (!v4v_open_sync(&s->v4v, RING_SIZE, &error)) {
         debug_printf("%s: v4v_open failed (%x)\n",
                      __FUNCTION__, error);
         return -1;
@@ -1003,27 +1003,27 @@ uxen_stor_initfn (ISADevice *dev)
     r.addr.domain = V4V_DOMID_ANY;
     r.partner = vm_id;
 
-    if (!v4v_bind_sync(&s->a, &r, &error)) {
+    if (!v4v_bind_sync(&s->v4v, &r, &error)) {
         debug_printf("%s: v4v_bind failed (%x)\n",
                      __FUNCTION__, error);
-        v4v_close(&s->a);
+        v4v_close(&s->v4v);
         return -1;
     }
 
-    s->ring = v4v_ring_map_sync(&s->a, &error);
+    s->ring = v4v_ring_map_sync(&s->v4v, &error);
     if (!s->ring) {
         debug_printf("%s: failed to map ring (%x)\n",
                      __FUNCTION__, error);
-        v4v_close(&s->a);
+        v4v_close(&s->v4v);
         return -1;
     }
-    if (!v4v_init_tx_event(&s->a, &s->tx_event, &error)) {
+    if (!v4v_init_tx_event(&s->v4v, &s->tx_event, &error)) {
         debug_printf("%s: failed to create event (%x)\n",
                      __FUNCTION__, error);
-        v4v_close(&s->a);
+        v4v_close(&s->v4v);
         return -1;
     }
-        
+
 #ifndef _WIN32
     ioh_event_init(&s->run_queue_event);
 #endif
@@ -1031,7 +1031,7 @@ uxen_stor_initfn (ISADevice *dev)
     if (!bs) {
         error_report("uxen-stor: drive property not set");
         ioh_event_close(&s->tx_event);
-        v4v_close(&s->a);
+        v4v_close(&s->v4v);
         return -1;
     }
 
@@ -1060,7 +1060,7 @@ uxen_stor_initfn (ISADevice *dev)
     if (!s->scsi_dev) {
         debug_printf("%s: scsi_bus_legacy_add_drive failed\n", __FUNCTION__);
         ioh_event_close(&s->tx_event);
-        v4v_close(&s->a);
+        v4v_close(&s->v4v);
         return -1;
     }
 #endif
@@ -1069,7 +1069,7 @@ uxen_stor_initfn (ISADevice *dev)
     if (vm_v4v_disable_ahci_clones)
         stor_ctrl |= 0x1;
 
-    ioh_add_wait_object (&DEV_V4V_CTX(s).recv_event, uxen_stor_read_event, s, NULL);
+    ioh_add_wait_object (&s->v4v.recv_event, uxen_stor_read_event, s, NULL);
     ioh_add_wait_object (&s->tx_event, uxen_stor_write_event, s, NULL);
 #ifndef _WIN32
     ioh_add_wait_object (&s->run_queue_event, uxen_stor_write_event, s, NULL);

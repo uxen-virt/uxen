@@ -69,7 +69,7 @@ typedef struct uxen_net {
     UXenPlatformDevice dev;
     NICState *nic;
     NICConf conf;
-    _v4v_context_t a;
+    v4v_context_t v4v;
     v4v_addr_t dest;
 
     ioh_event tx_event;
@@ -598,7 +598,7 @@ static int retry_transmit(uxen_net_t *s)
 #endif
     s->write_pending = FALSE;
 
-    if (WriteFile(DEV_V4V_CTX(s).v4v_handle, s->write_packet, s->write_packet_len,
+    if (WriteFile(s->v4v.v4v_handle, s->write_packet, s->write_packet_len,
                   NULL, &s->write_overlapped)) {
         Wwarn("uxn: fail path 1");
         return 1;
@@ -628,7 +628,7 @@ uxen_net_receive_complete (uxen_net_t *s, BOOLEAN wait)
         return 1;
 
     if (GetOverlappedResult
-        (DEV_V4V_CTX(s).v4v_handle, &s->write_overlapped, &writ, wait)) {
+        (s->v4v.v4v_handle, &s->write_overlapped, &writ, wait)) {
         s->write_pending = FALSE;
 
         if (writ != s->write_packet_len ) {
@@ -745,7 +745,7 @@ uxen_net_receive (VLANClientState *nc, const uint8_t *buf, size_t size)
 #endif
 
 
-    if (WriteFile(DEV_V4V_CTX(s).v4v_handle, s->write_packet, s->write_packet_len,
+    if (WriteFile(s->v4v.v4v_handle, s->write_packet, s->write_packet_len,
                   NULL, &s->write_overlapped)) {
         warnx("uxn: fail path 7");
         return size;
@@ -802,11 +802,11 @@ uxen_net_run_tx_q(uxen_net_t *s)
 {
     ssize_t sent;
     uxen_net_packet_t *p;
-    
+
     while ((p = queue.head))  {
         s->dest.domain = vm_id;
         sent = v4v_sendto(
-            s->a.v4v_handle, s->dest, p->packet->data, p->len, 0 /*flags*/);
+            &s->v4v.v4v_channel, s->dest, p->packet->data, p->len, 0 /*flags*/);
         if (sent <= 0)
             break;
         packet_remove(&queue, p);
@@ -839,7 +839,7 @@ uxen_net_run_tx_q(uxen_net_t *s)
                 memset (&p->overlapped, 0, sizeof (OVERLAPPED));
                 p->overlapped.hEvent = s->tx_event;
 
-                if (WriteFile (DEV_V4V_CTX(s).v4v_handle, p->packet, len, NULL, &p->overlapped)) {
+                if (WriteFile (s->v4v.v4v_handle, p->packet, len, NULL, &p->overlapped)) {
                     /* as we're asynchronous, this should never succeed */
                     warnx("uxn: fail path 1");
                     packet_remove(&queue, p);
@@ -879,7 +879,7 @@ uxen_net_run_tx_q(uxen_net_t *s)
 
 
 
-                if (!GetOverlappedResult (DEV_V4V_CTX(s).v4v_handle, &p->overlapped, &writ, FALSE)) {
+                if (!GetOverlappedResult (s->v4v.v4v_handle, &p->overlapped, &writ, FALSE)) {
 
                     err = GetLastError ();
                     if (err == ERROR_IO_INCOMPLETE) {
@@ -1032,7 +1032,7 @@ uxen_net_read_event (void *_s)
         qemu_send_packet (&s->nic->nc, s->rx_buf, len);
     } while (1);
 
-    if (!_v4v_notify(&s->a))
+    if (!_v4v_notify(&s->v4v))
         return;
     /* XXX: do we really want to run the tx queue here? If it's safe to send
      * some more, surely our tx event would have fired? If we really do want to
@@ -1088,13 +1088,13 @@ uxen_net_cleanup (VLANClientState *nc)
     uxen_net_t *s = DO_UPCAST (NICState, nc, nc)->opaque;
 
     ioh_del_wait_object (&s->tx_event, NULL);
-    ioh_del_wait_object (&DEV_V4V_CTX(s).recv_event, NULL);
+    ioh_del_wait_object (&s->v4v.recv_event, NULL);
     packet_free_list(&queue);
     packet_free_list(&free_list);
 
     ioh_event_close(&s->tx_event);
 
-    v4v_close(&s->a);
+    v4v_close(&s->v4v);
     free (s->rx_buf);
 
     s->nic = NULL;
@@ -1137,7 +1137,7 @@ uxen_net_initfn (UXenPlatformDevice *dev)
         if (!s->rx_buf)
             break;
 
-        if (!v4v_open_sync(&s->a, RING_SIZE, &error)) {
+        if (!v4v_open_sync(&s->v4v, RING_SIZE, &error)) {
             debug_printf("%s: v4v_open failed (%x)\n",
                          __FUNCTION__, error);
             break;
@@ -1150,27 +1150,27 @@ uxen_net_initfn (UXenPlatformDevice *dev)
         r.addr.domain = V4V_DOMID_ANY;
         r.partner = vm_id;
 
-        if (!v4v_bind_sync(&s->a, &r, &error))
+        if (!v4v_bind_sync(&s->v4v, &r, &error))
         {
             debug_printf("%s: v4v_bind failed (%x)\n",
                          __FUNCTION__, error);
             break;
         }
 
-        s->ring = v4v_ring_map_sync(&s->a, &error);
+        s->ring = v4v_ring_map_sync(&s->v4v, &error);
         if (!s->ring) {
             debug_printf("%s: failed to map v4v ring (%x)\n",
                          __FUNCTION__, error);
             break;
         }
 
-        if (!v4v_init_tx_event(&s->a, &s->tx_event, &error)) {
+        if (!v4v_init_tx_event(&s->v4v, &s->tx_event, &error)) {
             debug_printf("%s: failed to create transmit event (%x)\n",
                          __FUNCTION__, error);
             break;
         }
 
-        ioh_add_wait_object (&DEV_V4V_CTX(s).recv_event, uxen_net_read_event, s, NULL);
+        ioh_add_wait_object (&s->v4v.recv_event, uxen_net_read_event, s, NULL);
         ioh_add_wait_object (&s->tx_event, uxen_net_write_event, s, NULL);
 
         s->dest.domain = vm_id;
@@ -1198,7 +1198,7 @@ uxen_net_initfn (UXenPlatformDevice *dev)
     } while (1);
 
     if (v4v_opened)
-        v4v_close (&s->a);
+        v4v_close (&s->v4v);
     if (s->rx_buf)
         free (s->rx_buf);
 

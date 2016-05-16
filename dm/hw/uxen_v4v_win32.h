@@ -14,17 +14,17 @@
 #include <windows/uxenv4vlib/gh_v4vapi.h>
 #define _POSIX
 
-struct _v4v_context
-{
-    v4v_context_t c;
+typedef struct v4v_context {
+    union {
+        v4v_channel_t;
+        v4v_channel_t v4v_channel;
+    };
     OVERLAPPED notify_overlapped;
     BOOLEAN notify_pending;
-};
-
-typedef struct _v4v_context _v4v_context_t;
+} v4v_context_t;
 
 #define v4v_close v4v_close_win32
 void
-v4v_close_win32(_v4v_context_t *ctx);
+v4v_close_win32(v4v_context_t *v4v);
 
 #endif
