@@ -77,8 +77,8 @@ static int get_mode_info(int index, struct mode_info *info)
     info->mode.imageWidth = 0;
     info->mode.imageHeight = 0;
     info->mode.maxDepthIndex = 0;
-
-    info->pix.bytesPerRow = mode->xres * ((mode->bpp + 7) / 8);
+    UInt32 bytesPerRow = mode->xres * ((mode->bpp + 7) / 8);
+    info->pix.bytesPerRow = ((bytesPerRow + 63) >> 6) << 6; /* OS X 64-byte aligns bitmaps */
     info->pix.bytesPerPlane = 0;
     info->pix.bitsPerPixel = mode->bpp;
     info->pix.pixelType = kIORGBDirectPixels;
