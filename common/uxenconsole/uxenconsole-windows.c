@@ -10,11 +10,14 @@
 #define ERR_WINDOWS
 #define ERR_AUTO_CONSOLE
 #include <err.h>
+#include <getopt.h>
 
 #include "uxenconsolelib.h"
 #include "uxenhid-common.h"
 
 #include "../../dm/win32-touch.h"
+
+WINBASEAPI ULONGLONG WINAPI GetTickCount64(void);
 
 DECLARE_PROGNAME;
 
@@ -49,6 +52,7 @@ struct console {
     int resize_pending;
     int stop;
     int kbd_ledstate;
+    void *surface_bits;
 };
 
 enum {
@@ -58,6 +62,11 @@ enum {
     KBD_STATE_COMPKEY_PRESSED,
     KBD_STATE_UNICODE,
 };
+
+static int screenshot_idx = 0;
+static const wchar_t *screenshot_path = L"";
+/* Times are in ms */
+static uint64_t screenshot_interval = 0;
 
 #define SCALE_X(v) \
         (((v) * UXENHID_XY_MAX) / (cons->width - 1))
@@ -588,7 +597,6 @@ alloc_surface(struct console *cons,
 {
     HDC hdc;
     BITMAPINFO bmi;
-    void *p;
 
     if (linesize != (width * 4) || bpp != 32) {
         warnx("Invalid surface format");
@@ -617,7 +625,7 @@ alloc_surface(struct console *cons,
 
     cons->surface = CreateDIBSection(cons->dc, &bmi,
                                      DIB_RGB_COLORS,
-                                     &p,
+                                     &cons->surface_bits,
                                      cons->surface_handle, offset);
     if (!cons->surface) {
         Wwarn("CreateDIBSection");
@@ -765,6 +773,60 @@ console_disconnected(void *priv)
     cons->stop = 1;
 }
 
+static int save_screenshot(struct console *cons)
+{
+    BITMAPFILEHEADER bmfh;
+    BITMAPINFOHEADER bmih;
+    HANDLE f = INVALID_HANDLE_VALUE;
+    DWORD written = 0;
+    wchar_t filename[256];
+    BOOL ok = FALSE;
+
+    swprintf(filename, L"%s%04d.bmp", screenshot_path, screenshot_idx++);
+
+    if (!cons->surface_handle) {
+        Wwarn("save_screenshot");
+        return -1;
+    }
+    f = CreateFileW(filename, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL, NULL);
+    if (f == INVALID_HANDLE_VALUE) {
+        Wwarn("save_screenshot CreateFileW");
+        return -1;
+    }
+
+    bmfh.bfType = 0x4d42; /* Magic number for .bmp files */
+    bmfh.bfReserved1 = bmfh.bfReserved2 = 0;
+    bmih.biSize = sizeof(BITMAPINFOHEADER);
+    bmih.biWidth = cons->width;
+    bmih.biHeight = -cons->height;
+    bmih.biPlanes = 1;
+    bmih.biBitCount = 32;
+    bmih.biCompression = BI_RGB;
+    bmih.biSizeImage = cons->width * cons->height * 4;
+
+    ok = WriteFile(f, &bmfh, sizeof(BITMAPFILEHEADER), &written, NULL);
+    if (!ok) goto out;
+    ok = WriteFile(f, &bmih, sizeof(BITMAPINFOHEADER), &written, NULL);
+    if (!ok) goto out;
+    bmfh.bfOffBits = SetFilePointer(f, 0, NULL, FILE_CURRENT);
+    ok = WriteFile(f, cons->surface_bits, bmih.biSizeImage, &written, NULL);
+    if (!ok) goto out;
+    bmfh.bfSize = SetFilePointer(f, 0, NULL, FILE_CURRENT);
+    SetFilePointer(f, 0, 0, FILE_BEGIN);
+    ok = WriteFile(f, &bmfh, sizeof(BITMAPFILEHEADER), &written, NULL);
+
+out:
+    if (!ok) {
+        FILE_DISPOSITION_INFO info;
+        info.DeleteFile = TRUE;
+        Wwarn("save_screenshot WriteFile");
+        SetFileInformationByHandle(f, FileDispositionInfo, &info, sizeof(info));
+    }
+    CloseHandle(f);
+    return ok ? 0 : -1;
+}
+
 static ConsoleOps console_ops = {
     .resize_surface = console_resize_surface,
     .invalidate_rect = console_invalidate_rect,
@@ -780,11 +842,28 @@ main_loop(struct console *cons)
     HANDLE events[1];
     DWORD w;
     int ret = 0;
+    int64_t next_screenshot = 0;
+    int64_t t;
+    DWORD wait;
+
+    if (screenshot_interval) {
+        next_screenshot = GetTickCount64();
+    }
 
     events[0] = cons->channel_event;
 
     while (!cons->stop) {
-        w = MsgWaitForMultipleObjectsEx(1, events, INFINITE, QS_ALLINPUT, MWMO_ALERTABLE);
+        wait = INFINITE;
+        if (next_screenshot) {
+            t = GetTickCount64();
+            if (t >= next_screenshot && cons->surface_handle) {
+                save_screenshot(cons);
+                next_screenshot = t + screenshot_interval;
+            }
+            wait = (t >= next_screenshot) ? INFINITE : (DWORD)(next_screenshot - t);
+        }
+
+        w = MsgWaitForMultipleObjectsEx(1, events, wait, QS_ALLINPUT, MWMO_ALERTABLE);
         switch (w) {
         case WAIT_IO_COMPLETION:
             break;
@@ -814,6 +893,9 @@ main_loop(struct console *cons)
                     cons->requested_height = 0;
                 }
             }
+            break;
+        case WAIT_TIMEOUT:
+            /* Go round loop again to take screenshot */
             break;
         default:
             Wwarn("MsgWaitForMultipleObjects");
@@ -857,6 +939,38 @@ cp_acp(const wchar_t *ws)
     return s;
 }
 
+/* Convert a CP_ACP narrow string to a wide string. */
+static wchar_t *
+wide(const char *s)
+{
+    /* First figure out buffer size needed and malloc it. */
+    int sz;
+    wchar_t *ws;
+
+    sz = MultiByteToWideChar(CP_ACP, 0, s, -1, NULL, 0);
+    if (!sz)
+        return NULL;
+
+    ws = (wchar_t *)malloc(sizeof(wchar_t) * (sz + 1));
+    if (!ws)
+        return NULL;
+    ws[sz] = 0;
+
+    /* Now perform the actual conversion. */
+    sz = MultiByteToWideChar(CP_ACP, 0, s, -1, ws, sz);
+    if (!sz) {
+        free(ws);
+        ws = NULL;
+    }
+    return ws;
+}
+
+/*
+ * Syntax: uxenconsole.exe [options] <pipe> [<domid>]
+ * Options: -s|--screenshotprefix <screenshot_prefix>
+ *          -i|--interval <screenshot_interval>
+ */
+
 int WINAPI
 WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         LPSTR lpCmdLine, int iCmdShow)
@@ -868,10 +982,18 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     char **argv;
     char *pipename;
     int domid = -1;
+    int interval;
+    STARTUPINFO si;
 
     memset(&cons, 0, sizeof (cons));
     cons.instance = hInstance;
     cons.show = iCmdShow;
+    if (iCmdShow == SW_SHOWDEFAULT) {
+        GetStartupInfo(&si);
+        if (si.dwFlags & STARTF_USESHOWWINDOW) {
+            cons.show = si.wShowWindow;
+        }
+    }
 
     argv_w = CommandLineToArgvW(GetCommandLineW(), &argc);
 
@@ -888,12 +1010,43 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
     setprogname(argv[0]);
 
-    if (argc < 2 || argc > 3)
-        errx(1, "usage: %s pipename idtoken", argv[0]);
+    static const struct option long_options[] = {
+        {"interval",         required_argument, NULL, 'i'},
+        {"screenshotprefix", required_argument, NULL, 's'},
+        {NULL,               0,                 NULL, 0}
+    };
 
-    pipename = argv[1];
+    while (1) {
+        int c = getopt_long(argc, argv, "i:s:", long_options, NULL);
+        if (c == -1)
+            break;
+        switch (c) {
+            case 's':
+                /* getopt permutes the argument order so there is no easy way
+                 * to recover the original wide string pointer from argv_w */
+                screenshot_path = wide(optarg);
+                if (!screenshot_path) {
+                    errx(1, "Error converting %s", optarg);
+                }
+                break;
+            case 'i':
+                if (sscanf(optarg, "%d", &interval) == 1) {
+                    /* screenshot_interval is in ms */
+                    screenshot_interval = interval * 1000;
+                }
+                break;
+            default:
+                break;
+        }
+    }
+    /* At this point optind points to the first non-option argument */
 
-    if (argc < 3 || 1 != sscanf(argv[2], "%d", &domid))
+    if (optind >= argc)
+        errx(1, "usage: %s [options] pipename [idtoken]", argv[0]);
+
+    pipename = argv[optind];
+
+    if (optind + 1 >= argc || 1 != sscanf(argv[optind + 1], "%d", &domid))
         domid = -1;
 
     cons.ctx = uxenconsole_init(&console_ops, &cons, pipename);
