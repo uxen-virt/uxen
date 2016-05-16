@@ -75,7 +75,7 @@ v4v_notification_port_create_and_set(
 }
 
 errno_t
-v4v_open_service(v4v_channel_t *_channel)
+_v4v_open_service(v4v_channel_t *_channel)
 {
     io_service_t v4v_service;
     io_connect_t v4v_ring_conn = IO_OBJECT_NULL;
@@ -119,14 +119,14 @@ v4v_open_service(v4v_channel_t *_channel)
 }
 
 bool
-v4v_open(v4v_channel_t *channel)
+_v4v_open(v4v_channel_t *channel)
 {
 
-    return !v4v_open_service(channel);
+    return !_v4v_open_service(channel);
 }
 
 dispatch_source_t
-v4v_dispatch_source_create_receive(
+_v4v_dispatch_source_create_receive(
     v4v_channel_t *_channel, dispatch_queue_t queue)
 {
     struct _v4v_channel *channel = _channel->_c;
@@ -142,7 +142,7 @@ v4v_dispatch_source_create_receive(
 }
 
 dispatch_source_t
-v4v_dispatch_source_create_send(
+_v4v_dispatch_source_create_send(
     v4v_channel_t *_channel, dispatch_queue_t queue)
 {
     struct _v4v_channel *channel = _channel->_c;
@@ -158,7 +158,7 @@ v4v_dispatch_source_create_send(
 }
 
 void
-v4v_close(v4v_channel_t *_channel)
+_v4v_close(v4v_channel_t *_channel)
 {
     struct _v4v_channel *channel = _channel->_c;
 
@@ -173,7 +173,7 @@ v4v_close(v4v_channel_t *_channel)
 }
 
 ssize_t
-v4v_sendto(
+_v4v_sendto(
     v4v_channel_t *_channel, v4v_addr_t dest,
     const void *buf, size_t len, unsigned flags)
 {
@@ -202,7 +202,7 @@ v4v_sendto(
 }
 
 errno_t
-v4v_bind(
+_v4v_bind(
     v4v_channel_t *_channel, uint32_t ring_len,
     uint32_t local_port, domid_t partner)
 {
@@ -237,14 +237,14 @@ v4v_bind(
 }
 
 ssize_t
-v4v_recv(v4v_channel_t *_channel, void *buf, size_t len)
+_v4v_recv(v4v_channel_t *_channel, void *buf, size_t len)
 {
     struct _v4v_channel *channel = _channel->_c;
     v4v_addr_t addr = {};
     uint32_t protocol = 0;
 
     while (1) {
-        ssize_t result = v4v_recvmsg(
+        ssize_t result = _v4v_recvmsg(
             _channel, &addr, &protocol, buf, len, true /*consume*/);
         if (result < 0)
             return result;
@@ -256,7 +256,7 @@ v4v_recv(v4v_channel_t *_channel, void *buf, size_t len)
 }
 
 ssize_t
-v4v_recvmsg(
+_v4v_recvmsg(
     v4v_channel_t *_channel,
     v4v_addr_t *out_from_addr, uint32_t *out_protocol,
     void *buf, size_t len, bool consume)
@@ -283,12 +283,12 @@ v4v_recvmsg(
     if (bytes_read > 0 && v4v_ring_bytes_to_read(channel->ring) == 0)
         /* the last message has been removed from the ring, notify the
          * sender in case it's waiting */
-        v4v_notify(_channel);
+        _v4v_notify(_channel);
     return bytes_read;
 }
 
 v4v_ring_t *
-v4v_get_mapped_ring(v4v_channel_t *_channel)
+_v4v_get_mapped_ring(v4v_channel_t *_channel)
 {
     struct _v4v_channel *channel = _channel->_c;
 
@@ -296,7 +296,7 @@ v4v_get_mapped_ring(v4v_channel_t *_channel)
 }
 
 errno_t
-v4v_notify(v4v_channel_t *_channel)
+_v4v_notify(v4v_channel_t *_channel)
 {
     struct _v4v_channel *channel = _channel->_c;
     uint64_t result = 0;
@@ -309,7 +309,7 @@ v4v_notify(v4v_channel_t *_channel)
 }
 
 mach_port_t
-v4v_get_receive_port(v4v_channel_t *_channel)
+_v4v_get_receive_port(v4v_channel_t *_channel)
 {
     struct _v4v_channel *channel = _channel->_c;
 
@@ -317,7 +317,7 @@ v4v_get_receive_port(v4v_channel_t *_channel)
 }
 
 mach_port_t
-v4v_get_send_port(v4v_channel_t *_channel)
+_v4v_get_send_port(v4v_channel_t *_channel)
 {
     struct _v4v_channel *channel = _channel->_c;
 

@@ -869,7 +869,7 @@ uxen_stor_read_event (void *_s)
         req_insert_tail (&s->queue, req);
     } while (1);
 
-    _v4v_notify(&s->v4v);
+    v4v_notify(&s->v4v);
 
     uxen_stor_run_q (s);
 }

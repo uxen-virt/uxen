@@ -86,7 +86,7 @@ int main(int argc, const char * argv[])
             
             ssize_t bytes_sent = v4v_sendto(
                 &conn,
-                (v4v_addr_t){ (uint32_t)dest_port, (domid_t)partner_domain },
+                ((v4v_addr_t){ (uint32_t)dest_port, (domid_t)partner_domain }),
                 msg,
                 sizeof(msg),
                 0 /* flags */);
@@ -105,7 +105,7 @@ int main(int argc, const char * argv[])
     char msg[] = "V4V message!\n";
     ssize_t bytes_sent = v4v_sendto(
         &conn,
-        (v4v_addr_t){ (uint32_t)dest_port, (domid_t)partner_domain },
+        ((v4v_addr_t){ (uint32_t)dest_port, (domid_t)partner_domain }),
         msg,
         sizeof(msg),
         0 /* flags */);

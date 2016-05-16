@@ -314,7 +314,7 @@ typedef struct v4v_channel {
 
 
 static V4V_INLINE_API BOOLEAN
-v4v_open(v4v_channel_t *channel, ULONG ring_size, OVERLAPPED *ov)
+_v4v_open(v4v_channel_t *channel, ULONG ring_size, OVERLAPPED *ov)
 {
     HANDLE hd;
     v4v_init_values_t init = {0};
@@ -401,7 +401,7 @@ v4v_open(v4v_channel_t *channel, ULONG ring_size, OVERLAPPED *ov)
  * v4v_open().
  */
 static V4V_INLINE_API BOOLEAN
-v4v_bind(v4v_channel_t *channel, v4v_ring_id_t *ringId, OVERLAPPED *ov)
+_v4v_bind(v4v_channel_t *channel, v4v_ring_id_t *ringId, OVERLAPPED *ov)
 {
     v4v_bind_values_t bind;
     DWORD br;
@@ -459,7 +459,8 @@ v4v_bind(v4v_channel_t *channel, v4v_ring_id_t *ringId, OVERLAPPED *ov)
  * get the information.
  */
 static V4V_INLINE_API BOOLEAN
-v4v_get_info(v4v_channel_t *channel, v4v_getinfo_type_t type, v4v_getinfo_values_t *infoOut, OVERLAPPED *ov)
+_v4v_get_info(v4v_channel_t *channel, v4v_getinfo_type_t type,
+              v4v_getinfo_values_t *infoOut, OVERLAPPED *ov)
 {
     v4v_getinfo_values_t info = {V4V_INFO_UNSET, {{V4V_PORT_NONE, V4V_DOMID_NONE}, V4V_DOMID_NONE}};
     DWORD br;
@@ -518,7 +519,7 @@ v4v_get_info(v4v_channel_t *channel, v4v_getinfo_type_t type, v4v_getinfo_values
  * get the information.
  */
 static V4V_INLINE_API BOOLEAN
-v4v_map(v4v_channel_t *channel, v4v_mapring_values_t *ring, OVERLAPPED *ov)
+_v4v_map(v4v_channel_t *channel, v4v_mapring_values_t *ring, OVERLAPPED *ov)
 {
     DWORD br;
     BOOLEAN rc;
@@ -562,7 +563,7 @@ v4v_map(v4v_channel_t *channel, v4v_mapring_values_t *ring, OVERLAPPED *ov)
  * dump the ring.
  */
 static V4V_INLINE_API BOOLEAN
-gh_v4v_dump_ring(v4v_channel_t *channel, OVERLAPPED *ov)
+_v4v_dump_ring(v4v_channel_t *channel, OVERLAPPED *ov)
 {
     DWORD br;
     BOOLEAN rc;
@@ -599,7 +600,7 @@ gh_v4v_dump_ring(v4v_channel_t *channel, OVERLAPPED *ov)
  *
  */
 static V4V_INLINE_API BOOLEAN
-gh_v4v_notify(v4v_channel_t *channel, OVERLAPPED *ov)
+_v4v_notify(v4v_channel_t *channel, OVERLAPPED *ov)
 {
     DWORD br;
     BOOLEAN rc;
@@ -634,7 +635,7 @@ gh_v4v_notify(v4v_channel_t *channel, OVERLAPPED *ov)
  *
  */
 static V4V_INLINE_API BOOLEAN
-v4v_poke(v4v_channel_t *channel, v4v_addr_t *dst, OVERLAPPED *ov)
+_v4v_poke(v4v_channel_t *channel, v4v_addr_t *dst, OVERLAPPED *ov)
 {
     v4v_poke_values_t poke;
     DWORD br;
@@ -671,7 +672,7 @@ v4v_poke(v4v_channel_t *channel, v4v_addr_t *dst, OVERLAPPED *ov)
  * can be obtained by calling GetLastError().
  */
 static V4V_INLINE_API BOOLEAN
-v4v_close(v4v_channel_t *channel)
+_v4v_close(v4v_channel_t *channel)
 {
     BOOLEAN rc = TRUE;
 
@@ -698,7 +699,7 @@ v4v_close(v4v_channel_t *channel)
 }
 
 static V4V_INLINE_API BOOLEAN
-v4v_debug(v4v_channel_t *channel, OVERLAPPED *ov)
+_v4v_debug(v4v_channel_t *channel, OVERLAPPED *ov)
 {
     DWORD br;
     BOOLEAN rc;
@@ -723,6 +724,18 @@ v4v_debug(v4v_channel_t *channel, OVERLAPPED *ov)
 
     return TRUE;
 }
+
+
+/* ======================================================================== */
+#define v4v_open(channel, ring_size, ov) _v4v_open(channel, ring_size, ov)
+#define v4v_bind(channel, ringId, ov) _v4v_bind(channel, ringId, ov)
+#define v4v_get_info(channel, type, infoOut, ov)        \
+    _v4v_get_info(channel, type, infoOut, ov)
+#define v4v_map(channel, ring, ov) _v4v_map(channel, ring, ov)
+#define v4v_dump_ring(channel, ov) _v4v_dump_ring(channel, ov)
+#define v4v_notify(channel, ov) _v4v_notify(channel, ov)
+#define v4v_close(channel) _v4v_close(channel)
+#define v4v_debug(channel, ov) _v4v_debug(channel, ov)
 
 #endif /* XENV4V_DRIVER */
 

@@ -6,15 +6,13 @@
 
 #include "uxen_v4v.h"
 
-#undef v4v_close
-
 int
 v4v_have_v4v(void)
 {
-    v4v_context_t v4v = { };
+    v4v_channel_t v4v = { };
 
-    if (v4v_open(&v4v.v4v_channel, 4096, NULL)) {
-        v4v_close_win32(&v4v);
+    if (_v4v_open(&v4v, 4096, NULL)) {
+        _v4v_close(&v4v);
         return 1;
     }
 
@@ -22,9 +20,9 @@ v4v_have_v4v(void)
 }
 
 void
-v4v_close_win32(v4v_context_t *v4v)
+v4v_close(v4v_context_t *v4v)
 {
-    v4v_close(&v4v->v4v_channel);
+    _v4v_close(&v4v->v4v_channel);
 }
 
 int
@@ -94,7 +92,7 @@ uxenv4v_notify_complete(v4v_context_t *v4v)
 }
 
 int
-_v4v_notify(v4v_context_t *v4v)
+v4v_notify(v4v_context_t *v4v)
 {
 
     if (!uxenv4v_notify_complete(v4v))
@@ -102,7 +100,7 @@ _v4v_notify(v4v_context_t *v4v)
 
     memset(&v4v->notify_overlapped, 0, sizeof(v4v->notify_overlapped));
 
-    gh_v4v_notify(&v4v->v4v_channel, &v4v->notify_overlapped);
+    _v4v_notify(&v4v->v4v_channel, &v4v->notify_overlapped);
 
     v4v->notify_pending = TRUE;
 

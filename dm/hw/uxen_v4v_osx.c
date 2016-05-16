@@ -5,7 +5,6 @@
  */
 
 #include "uxen_v4v.h"
-#undef v4v_close
 #include "../../osx/uxenv4vservice/uxenv4vlib.c"
 
 int
@@ -24,6 +23,7 @@ v4v_open_sync(v4v_context_t *v4v, uint32_t ring_size, int *out_error)
     v4v->ring_size = ring_size;
     return true;
 }
+
 int
 v4v_bind_sync(v4v_context_t *v4v, v4v_ring_id_t *r, int *out_error)
 {
@@ -38,11 +38,10 @@ v4v_bind_sync(v4v_context_t *v4v, v4v_ring_id_t *r, int *out_error)
 int
 v4v_have_v4v(void)
 {
-    v4v_context_t c = { };
-    int error;
+    v4v_channel_t v4v = { };
 
-    if (v4v_open_sync(&c, 0, &error)) {
-        v4v_close_osx(&c);
+    if (_v4v_open(&v4v)) {
+        _v4v_close(&v4v);
         return 1;
     }
 
@@ -50,20 +49,20 @@ v4v_have_v4v(void)
 }
 
 void
-v4v_close_osx(v4v_context_t *v4v)
+v4v_close(v4v_context_t *v4v)
 {
 
-    if (v4v_opened(&v4v->v4v_channel)) {
-        v4v_close(&v4v->v4v_channel);
+    if (_v4v_opened(&v4v->v4v_channel)) {
+        _v4v_close(&v4v->v4v_channel);
         ioh_event_close(&v4v->recv_event);
     }
 }
 
 int
-_v4v_notify(v4v_context_t *v4v)
+v4v_notify(v4v_context_t *v4v)
 {
 
-    v4v_notify(&v4v->v4v_channel);
+    _v4v_notify(&v4v->v4v_channel);
     return 1;
 }
 

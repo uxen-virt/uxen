@@ -23,8 +23,4 @@ typedef struct v4v_context {
     BOOLEAN notify_pending;
 } v4v_context_t;
 
-#define v4v_close v4v_close_win32
-void
-v4v_close_win32(v4v_context_t *v4v);
-
 #endif

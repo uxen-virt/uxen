@@ -1032,7 +1032,7 @@ uxen_net_read_event (void *_s)
         qemu_send_packet (&s->nic->nc, s->rx_buf, len);
     } while (1);
 
-    if (!_v4v_notify(&s->v4v))
+    if (!v4v_notify(&s->v4v))
         return;
     /* XXX: do we really want to run the tx queue here? If it's safe to send
      * some more, surely our tx event would have fired? If we really do want to

@@ -14,7 +14,6 @@
 #include "../../osx/uxenv4vservice/uxenv4vlib.h"
 #include "../ioh.h"
 
-
 typedef struct v4v_datagram_struct {
     v4v_addr_t addr;
     uint16_t flags;
@@ -29,8 +28,5 @@ typedef struct v4v_context {
     ioh_event recv_event;
     uint32_t ring_size;
 } v4v_context_t;
-
-#define v4v_close v4v_close_osx
-void v4v_close_osx(v4v_context_t *v4v);
 
 #endif
