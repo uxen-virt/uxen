@@ -67,7 +67,7 @@ typedef int ssize_t;
 
 /************** Structure definitions **********/
 
-#define V4V_RING_MAGIC  0xdf6977f231abd910ULL
+#define V4V_RING_MAGIC  0xac67e163e7267f2fULL
 #define V4V_PFN_LIST_MAGIC  0x91dd6159045b302dULL
 #define V4V_DOMID_SELF      (0x7FF0U)
 #define V4V_DOMID_INVALID   (0x7FFFU)
@@ -118,7 +118,7 @@ typedef struct v4v_ring
     uint32_t len;               /* length of ring[], must be a multiple of 8 */
     V4V_VOLATILE uint32_t rx_ptr; /* rx_ptr - modified by domain */
     V4V_VOLATILE uint32_t tx_ptr; /* tx_ptr - modified by xen */
-    uint64_t reserved[4];
+    uint32_t reserved[9];
     V4V_VOLATILE uint8_t ring[];
 } V4V_PACKED v4v_ring_t;
 DEFINE_XEN_GUEST_HANDLE(v4v_ring_t);
