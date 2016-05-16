@@ -12,7 +12,7 @@ ifeq (,$(MAKENOW))
 
 VPATH = $(SRCDIR)
 
-CPPFLAGS += -I$(TOPDIR)/windows/include -I. -I$(TOPDIR)/vm-support/windows/common
+CPPFLAGS += -I$(TOPDIR)/windows/include -I. -I$(TOPDIR)/vm-support/windows/common -I$(TOPDIR)/common/include
 LDFLAGS +=
 LDLIBS += -lws2_32 -ldbghelp -lIphlpapi -lversion -lbcrypt
 

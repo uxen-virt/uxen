@@ -771,6 +771,7 @@ struct config_option config_options[] = {
     { "restricted-pci-emul", co_set_boolean_opt, &vm_restricted_pci_emul },
     { "restricted-vga-emul", co_set_boolean_opt, &vm_restricted_vga_emul },
     { "restricted-x86-emul", co_set_integer_opt, &vm_restricted_x86_emul },
+    { "run-patcher", co_set_boolean_opt, &vm_run_patcher },
     { "save-file-prefix", co_set_string_opt, &save_file_prefix},
     { "serial", co_set_serial, NULL },
     { "shared-folders", co_set_shared_folders, NULL },

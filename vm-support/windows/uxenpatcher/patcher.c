@@ -12,8 +12,10 @@
 
 #include <windows.h>
 #include <winnt.h>
+#include <intrin.h>
 #include <Dbghelp.h>
 #include <strsafe.h>
+#include <dm-features.h>
 #include "logging.h"
 
 #define DXGKRNL "c:\\Windows\\System32\\drivers\\dxgkrnl.sys"
@@ -38,7 +40,7 @@ enum tools
     CERTUTIL
 };
 
-const char* tools[][3] = {
+static const char* tools[][3] = {
     {"c:\\windows\\system32\\takeown.exe",
      "%s /f " DXGKRNL,
      "Taking ownership of " DXGKRNL},
@@ -59,7 +61,7 @@ const char* tools[][3] = {
      "Add temporary certificate to root store"}
 };
 
-struct file_map* create_file_map(LPCSTR filepath)
+static struct file_map* create_file_map(LPCSTR filepath)
 {
     struct file_map* file = NULL;
     DWORD attr = GENERIC_READ | GENERIC_WRITE;
@@ -104,7 +106,7 @@ struct file_map* create_file_map(LPCSTR filepath)
     return file;
 }
 
-void destroy_file_map(struct file_map** file)
+static void destroy_file_map(struct file_map** file)
 {
     if ((file != NULL) && (*file != NULL))
     {
@@ -116,7 +118,7 @@ void destroy_file_map(struct file_map** file)
     }
 }
 
-void pre_kmp(int *pi, char *pattern, int psize)
+static void pre_kmp(int *pi, char *pattern, int psize)
 {
     int k = -1;
     int i = 1;
@@ -132,7 +134,7 @@ void pre_kmp(int *pi, char *pattern, int psize)
     }
 }
 
-int kmp(int *pi, char *target, int tsize, char *pattern, int psize)
+static int kmp(int *pi, char *target, int tsize, char *pattern, int psize)
 {
     int i;
     int k = -1;
@@ -154,7 +156,7 @@ int kmp(int *pi, char *target, int tsize, char *pattern, int psize)
 // and which we expect to use a magic constant within 64 bytes of its end. Should there be
 // more then one function with such properties we expect our function to be the last one.
 // What could possibly go wrong...
-PVOID find_function(PVOID view, PIMAGE_IA64_RUNTIME_FUNCTION_ENTRY rt, ULONG rt_size)
+static PVOID find_function(PVOID view, PIMAGE_IA64_RUNTIME_FUNCTION_ENTRY rt, ULONG rt_size)
 {
     PIMAGE_NT_HEADERS headers = NULL;
     PIMAGE_SECTION_HEADER section = NULL;
@@ -202,7 +204,7 @@ exit:
     return func;
 }
 
-int run_cmd(const char* app, const char* cmd_line, const char* desc)
+static int run_cmd(const char* app, const char* cmd_line, const char* desc)
 {
     int ret = 0;
     HRESULT hres = S_OK;
@@ -280,7 +282,7 @@ exit:
     return ret;
 }
 
-int backup_driver(LPCSTR file)
+static int backup_driver(LPCSTR file)
 {
     BOOL res = FALSE;
     int ret = 0;
@@ -311,7 +313,7 @@ exit:
     return ret;
 }
 
-void log_file_info(LPCSTR file)
+static void log_file_info(LPCSTR file)
 {
     DWORD ver_data_size;
     UINT info_size;
@@ -358,7 +360,7 @@ exit:
         free(ver_data);
 }
 
-int patch_driver(LPCSTR path)
+static int patch_driver(LPCSTR path)
 {
     int ret = 0;
     struct file_map* file;
@@ -402,7 +404,7 @@ exit:
     return ret;
 }
 
-int create_pvk(LPCSTR name)
+static int create_pvk(LPCSTR name)
 {
     DWORD err = 0;
     int ret = 0;
@@ -525,7 +527,7 @@ exit:
     return ret;
 }
 
-int sign_driver(LPCSTR file)
+static int sign_driver(LPCSTR file)
 {
     int ret = 0;
     int tool_idx = 0;
@@ -557,7 +559,7 @@ exit:
     return ret;
 }
 
-void enable_vsync(void)
+static void enable_vsync(void)
 {
     LONG res = 0;
     HKEY kmdod = 0;
@@ -566,7 +568,7 @@ void enable_vsync(void)
     res = RegCreateKeyExA(HKEY_LOCAL_MACHINE, path, 0, NULL, 0, KEY_ALL_ACCESS, NULL, &kmdod, NULL);
     if (res != ERROR_SUCCESS)
     {
-        debug_log("RegOpenKeyEx failed %d", res);
+        debug_log("RegOpenKeyEx failed %ld", res);
         goto exit;
     }
 
@@ -575,14 +577,58 @@ exit:
         RegCloseKey(kmdod);
 }
 
+
+static int get_base_leaf(void)
+{
+    int leaf;
+    union {
+        struct {
+            int eax;
+            char signature[13];
+        };
+        int blob[4];
+    } cpu_info;
+
+    memset(&cpu_info, 0, sizeof cpu_info);
+    for (leaf = 0x40000000; leaf < 0x40010000; leaf += 0x100) {
+        __cpuid(cpu_info.blob, leaf);
+        cpu_info.signature[12] = 0;
+
+        if (!strcmp(cpu_info.signature, "uXenisnotXen"))
+            break;
+    }
+
+    if (leaf >= 0x40010000 || (cpu_info.eax - leaf) < 2)
+        return 0;
+
+    return leaf;
+}
+
 int main()
 {
     int ret = 0;
     PVOID old_value;
+    union dm_features features;
+    int cpuid_base_leaf = 0;
+    int blob[4] = {0};
 
     Wow64DisableWow64FsRedirection(&old_value);
 
     logging_init();
+
+    features.blob = 0;
+    cpuid_base_leaf = get_base_leaf();
+    if (cpuid_base_leaf) {
+        __cpuid(blob, cpuid_base_leaf + 193);
+        features.blob = blob[0];
+        debug_log("patcher cpuid_base_leaf %d. dm-features: 0x%0I64x", cpuid_base_leaf, features.blob);
+    }
+
+    if (!features.bits.run_patcher)
+    {
+        debug_log("patcher disabled in dm-features");
+        return 0;
+    }
 
     debug_log("Backing up %s", DXGKRNL);
     ret = backup_driver(DXGKRNL);
@@ -610,13 +656,12 @@ int main()
         goto exit;
     }
 
+    enable_vsync();
+
 exit:
     if (ret != 0)
-    {
         debug_log("Patching %s has failed with error %d", DXGKRNL, ret);
-    } else {
-        enable_vsync();
+    else
         debug_log("Patching %s succeeded", DXGKRNL);
-    }
     return 0;
 }

@@ -796,6 +796,11 @@ int cpuid_hypervisor_leaves( uint32_t idx, uint32_t sub_idx,
             *edx = (uint32_t)(hi >> 32);
         }
         return 1;
+    case 193:
+        {
+            *eax = (uint32_t)d->arch.hvm_domain.params[HVM_PARAM_DM_FEATURES];
+        }
+        return 1;
     default:
         break;
     }

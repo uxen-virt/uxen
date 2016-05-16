@@ -30,6 +30,7 @@
 #include "shared-folders.h"
 #include "clipboard.h"
 #include "hw/uxen_platform.h"
+#include "dm-features.h"
 
 #if defined(CONFIG_NICKEL)
 #include <dm/libnickel.h>
@@ -61,6 +62,8 @@ static int vm_init_lk = 0;
 uint64_t vm_restricted_x86_emul = 0;
 uint64_t vm_vpt_align = 0;
 uint64_t vm_vpt_coalesce_period = 0;
+
+bool vm_run_patcher = false;
 
 bool vm_quit_interrupt = false;
 
@@ -441,6 +444,7 @@ vm_init(const char *loadvm, int restore_mode)
     int ret;
     uint8_t sum;
     uint64_t rand_seed[2];
+    union dm_features ftres;
 
     if (restore_mode == VM_RESTORE_TEMPLATE)
         atexit(error_template_destroy);
@@ -494,6 +498,10 @@ vm_init(const char *loadvm, int restore_mode)
                      log_ratelimit_guest_burst);
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_LOG_RATELIMIT_GUEST_MS,
                      log_ratelimit_guest_ms);
+
+    ftres.blob = 0;
+    ftres.bits.run_patcher = (vm_run_patcher) ? 1 : 0;
+    xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_DM_FEATURES, ftres.blob);
 
     if (vm_hvm_params) {
         const char *k;

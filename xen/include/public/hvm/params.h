@@ -215,6 +215,8 @@
 
 #define HVM_PARAM_RESTRICTED_HYPERCALLS 45
 
-#define HVM_NR_PARAMS          46
+#define HVM_PARAM_DM_FEATURES 46
+
+#define HVM_NR_PARAMS          47
 
 #endif /* __XEN_PUBLIC_HVM_PARAMS_H__ */
