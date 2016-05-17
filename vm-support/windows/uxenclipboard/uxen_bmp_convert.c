@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -129,32 +129,40 @@ out_release_none:
     return hr;
 }
 
+#ifdef GDIP_CONVERT_BMPS
 static GdiplusStartupOutput gdiplusStartupOutput;
 static ULONG_PTR gdiplusNotificationToken;
 static ULONG_PTR gdiplusToken;
+#endif
 
 int 
 uxenclipboard_gdi_startup()
 {
+#ifdef GDIP_CONVERT_BMPS
     GdiplusStartupInput inp = {1, NULL, TRUE, FALSE};
 
     GdiplusStartup(&gdiplusToken, &inp, &gdiplusStartupOutput);
     if (gdiplusStartupOutput.NotificationHook)
         gdiplusStartupOutput.NotificationHook(&gdiplusNotificationToken);
+#endif
     return 0;
 }
 
 void uxenclipboard_gdi_shutdown()
 {
+#ifdef GDIP_CONVERT_BMPS
     if (gdiplusStartupOutput.NotificationUnhook)
         gdiplusStartupOutput.NotificationUnhook(gdiplusNotificationToken);
    GdiplusShutdown(gdiplusToken);
+#endif
 }
 
 void uxenclipboard_gdi_startup_with_atexit()
 {
+#ifdef GDIP_CONVERT_BMPS
     uxenclipboard_gdi_startup();
     atexit(uxenclipboard_gdi_shutdown);
+#endif
 }
 
 static int getclipboarddata_real(unsigned int fmt, char** output,
@@ -190,6 +198,7 @@ static int getclipboarddata_real(unsigned int fmt, char** output,
     return 0;
 }
 
+#ifdef GDIP_CONVERT_BMPS
 static int try_convert(char* alt_data, unsigned int alt_size, char** output,
     unsigned int* output_size)
 {
@@ -216,6 +225,7 @@ static int try_convert(char* alt_data, unsigned int alt_size, char** output,
     free(converted_data);
     return 0;
 }
+#endif
 
 static
 wchar_t* uxen_recognized_graphics_formats[] = {L"PNG", L"JFIF", L"GIF",
@@ -288,14 +298,18 @@ static int get_content_from_hdrop_for_fmt(int expected_fmt, char** output,
 
 int uxenclipboard_getdata(int format, char** output, unsigned int* output_size) 
 {
-    int i, ret;
+    int ret;
+#ifdef GDIP_CONVERT_BMPS
+    int i;
     wchar_t* fmtname;
     char* data;
     unsigned int datalen;
+#endif
 
     ret = getclipboarddata_real(format, output, output_size);
     if (!ret)
         return 0;
+#ifdef GDIP_CONVERT_BMPS
     if (format != CF_DIB)
         return get_content_from_hdrop_for_fmt(format, output, output_size);
 
@@ -309,6 +323,7 @@ int uxenclipboard_getdata(int format, char** output, unsigned int* output_size)
         if (!ret)
             return 0;
     }
+
     /* No luck with clipboard format conversion to CF_DIB. So, check
     whether the contents of CF_HDROP is usable.*/
     #define ANY_GRAPHICS_FORMAT 0
@@ -317,5 +332,8 @@ int uxenclipboard_getdata(int format, char** output, unsigned int* output_size)
     ret = try_convert(data, datalen, output, output_size);
     free(data);
     return ret;
+#else
+    return get_content_from_hdrop_for_fmt(format, output, output_size);
+#endif
 }
 
