@@ -891,6 +891,8 @@ v4v_pending_cancel(struct v4v_ring_info *ring_info, domid_t src_id)
 }
 
 
+static int v4v_dm_domid = 0;
+
 
 /*ring data*/
 
@@ -907,6 +909,9 @@ v4v_fill_ring_data(struct domain *src_d,
     ret = copy_from_guest_errno(&ent, data_ent_hnd, 1);
     if (ret)
         return ret;
+
+    if (ent.ring.domain == V4V_DOMID_DM)
+        ent.ring.domain = v4v_dm_domid;
 
 #ifdef V4V_DEBUG
     printk(XENLOG_ERR "%s: ent.ring.domain=vm%u, ent.ring.port=%d\n",
@@ -1309,6 +1314,8 @@ v4v_ring_remove(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd)
         }
 
         ring.id.addr.domain = d->domain_id;
+        if (ring.id.partner == V4V_DOMID_DM)
+            ring.id.partner = v4v_dm_domid;
         if (ring.id.partner >= V4V_DOMID_SELF &&
             ring.id.partner != V4V_DOMID_ANY) {
             ret = -ENOENT;
@@ -1497,6 +1504,11 @@ v4v_ring_add(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd,
         if (ret)
             break;
 
+        /* updated ring.id.partner == V4V_DOMID_DM is not copied back
+         * to caller */
+        if (ring.id.partner == V4V_DOMID_DM)
+            ring.id.partner = v4v_dm_domid;
+
         /* no need for a lock yet, because only we know about this */
         /* set the tx pointer if it looks bogus (we don't reset it
          * always because this might be a re-register after S4) */
@@ -1676,6 +1688,9 @@ v4v_poke(v4v_addr_t *dst_addr)
     if (!dst_addr)
         return -EINVAL;
 
+    if (dst_addr->domain == V4V_DOMID_DM)
+        dst_addr->domain = v4v_dm_domid;
+
     v4v_signal_domid(dst_addr->domain);
 
     return 0;
@@ -1705,6 +1720,9 @@ v4v_send(struct domain *src_d, v4v_addr_t *src_addr,
         read_unlock(&v4v_lock);
         return -EINVAL;
     }
+
+    if (dst_addr->domain == V4V_DOMID_DM)
+        dst_addr->domain = v4v_dm_domid;
 
 #if 0
     read_lock(&src_d->v4v->lock);
@@ -1805,6 +1823,9 @@ v4v_sendv(struct domain *src_d, v4v_addr_t *src_addr,
         read_unlock(&v4v_lock);
         return -EINVAL;
     }
+
+    if (dst_addr->domain == V4V_DOMID_DM)
+        dst_addr->domain = v4v_dm_domid;
 
     src_id.addr.port = src_addr->port;
     src_id.addr.domain = src_d->domain_id;

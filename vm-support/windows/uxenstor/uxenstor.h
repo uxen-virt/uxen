@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -131,7 +131,7 @@ typedef struct _XFER_HEADER {
 /* v4v stuffs */
 #define V4V_STOR_RING_LEN (1 << 20)
 #define V4V_STOR_PORT_BASE 0xd0000
-#define V4V_STOR_PARTNER_DOMAIN 0
+#define V4V_STOR_PARTNER_DOMAIN V4V_DOMID_DM
 
 static __inline
 void acquire_stor_v4v_addr(PUXENSTOR_DEV_EXT dev_ext) 

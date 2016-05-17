@@ -581,8 +581,8 @@ hid_init(DEVICE_EXTENSION *devext)
     }
 
     devext->peer.port = UXENHID_BASE_PORT + addr;
-    devext->peer.domain = 0;
-    devext->ring = uxen_v4v_ring_bind(UXENHID_BASE_PORT + addr, 0,
+    devext->peer.domain = V4V_DOMID_DM;
+    devext->ring = uxen_v4v_ring_bind(UXENHID_BASE_PORT + addr, V4V_DOMID_DM,
                                       UXENHID_RING_SIZE,
                                       hid_v4v_cb, devext, NULL);
     if (!devext->ring)

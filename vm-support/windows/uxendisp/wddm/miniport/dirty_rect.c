@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Piotr Foltyn <piotr.foltyn@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -76,8 +76,8 @@ dr_ctx_t dr_init(void *dev, disable_tracking_ptr fn)
     KeInitializeEvent(&ctx->safe_to_draw, SynchronizationEvent, TRUE);
 
     ctx->peer.port = UXENDISP_PORT;
-    ctx->peer.domain = 0;
-    ctx->ring = uxen_v4v_ring_bind(UXENDISP_PORT, 0,
+    ctx->peer.domain = V4V_DOMID_DM;
+    ctx->ring = uxen_v4v_ring_bind(UXENDISP_PORT, V4V_DOMID_DM,
                                    UXENDISP_RING_SIZE,
                                    dr_v4v_dpc, ctx, NULL);
     if (!ctx->ring)
@@ -87,8 +87,8 @@ dr_ctx_t dr_init(void *dev, disable_tracking_ptr fn)
     }
 
     ctx->alt_peer.port = UXENDISP_ALT_PORT;
-    ctx->alt_peer.domain = 0;
-    ctx->alt_ring = uxen_v4v_ring_bind(UXENDISP_ALT_PORT, 0,
+    ctx->alt_peer.domain = V4V_DOMID_DM;
+    ctx->alt_ring = uxen_v4v_ring_bind(UXENDISP_ALT_PORT, V4V_DOMID_DM,
                                        UXENDISP_RING_SIZE,
                                        dr_v4v_dpc, ctx, NULL);
     if (!ctx->alt_ring)

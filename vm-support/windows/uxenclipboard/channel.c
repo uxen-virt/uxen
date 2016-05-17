@@ -7,6 +7,7 @@
 #include <windows.h>
 #include <dm/clipboard-protocol.h>
 #include <iprt/err.h>
+#include <xen/v4v.h>
 
 static struct clip_ctx *clipboard_ctx;
 static struct clip_ctx *notify_ctx;
@@ -22,10 +23,12 @@ int ChannelConnect()
     ns_uclip_open - meaning, 44446 before 44445.
     */
     if (!notify_ctx)
-        if (!(notify_ctx = clip_open(0, CLIP_NOTIFY_PORT, malloc, free)))
+        if (!(notify_ctx = clip_open(V4V_DOMID_DM, CLIP_NOTIFY_PORT,
+                                     malloc, free)))
             return -1;
     if (!clipboard_ctx)
-        if (!(clipboard_ctx = clip_open(0, CLIP_PORT, malloc, free)))
+        if (!(clipboard_ctx = clip_open(V4V_DOMID_DM, CLIP_PORT,
+                                        malloc, free)))
             return -1;
     return 0;
 }

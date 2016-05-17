@@ -17,7 +17,7 @@
 OSDefineMetaClassAndStructors(uxen_net, IOEthernetController);
 
 static const unsigned UXENNET_RING_SIZE = 131072;
-static const uint16_t UXENNET_DEST_DOMAIN = 0;
+static const uint16_t UXENNET_DEST_DOMAIN = V4V_DOMID_DM;
 static const uint32_t UXENNET_DEST_PORT = 0xC0000;
 #define uxen_net_interface org_uxen_driver_uxen_net_interface
 

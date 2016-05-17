@@ -23,7 +23,7 @@ OSDefineMetaClassAndStructors(uxen_ahci_blocker, IOService);
 OSDefineMetaClassAndStructors(uxen_v4v_storage_device, IOSCSIProtocolServices);
 
 static const unsigned UXENSTOR_RING_SIZE = 1048576;
-static const uint16_t UXENSTOR_DEST_DOMAIN = 0;
+static const uint16_t UXENSTOR_DEST_DOMAIN = V4V_DOMID_DM;
 static const uint32_t UXENSTOR_DEST_PORT = 0xD0000;
 
 typedef struct v4v_disk_transfer {

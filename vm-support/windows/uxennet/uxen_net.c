@@ -129,10 +129,12 @@ uxen_net_init_adapter (Uxennet *n)
 
     uxen_msg("Adapter num %d", n->anum);
 
-    n->recv_ring = uxen_v4v_ring_bind(0xc0000 + n->anum, 0, V4V_RING_LEN, uxen_net_callback, n->parent, NULL);
+    n->recv_ring = uxen_v4v_ring_bind(0xc0000 + n->anum, V4V_DOMID_DM,
+                                      V4V_RING_LEN, uxen_net_callback,
+                                      n->parent, NULL);
 
     n->dest_addr.port = 0xc0000 + n->anum;
-    n->dest_addr.domain = 0;
+    n->dest_addr.domain = V4V_DOMID_DM;
 
     uxen_msg("recv_ring %p", n->recv_ring);
 

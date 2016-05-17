@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -16,7 +16,7 @@ static KEVENT resp_ev;
 
 static NTSTATUS __recv(char *buf, int buf_size, int *recv_size)
 {
-    v4v_addr_t src = { PORT, 0 };
+    v4v_addr_t src = { PORT, V4V_DOMID_DM };
     uint32_t proto;
     ssize_t n;
 
@@ -49,7 +49,8 @@ NTSTATUS ChannelConnect(void)
         return STATUS_SUCCESS;
 
     KeInitializeEvent(&resp_ev, SynchronizationEvent, FALSE);
-    ring = uxen_v4v_ring_bind(PORT, 0, RING_SIZE, v4v_callback, NULL, NULL);
+    ring = uxen_v4v_ring_bind(PORT, V4V_DOMID_DM, RING_SIZE, v4v_callback,
+                              NULL, NULL);
     if (!ring)
         return STATUS_UNEXPECTED_IO_ERROR;
 
@@ -71,7 +72,7 @@ NTSTATUS ChannelPrepareReq(void)
 
 NTSTATUS ChannelSend(char *data, int len)
 {
-    v4v_addr_t dst = { PORT, 0 };
+    v4v_addr_t dst = { PORT, V4V_DOMID_DM };
     ssize_t n;
 
     if (!NT_SUCCESS(ChannelConnect()))
