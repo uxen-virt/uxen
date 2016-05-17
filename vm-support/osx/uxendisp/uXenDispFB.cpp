@@ -237,7 +237,7 @@ uXenDispFB::setCustomMode(unsigned long width, unsigned long height)
 
     m->mode.nominalWidth = (UInt32)width;
     m->mode.nominalHeight = (UInt32)height;
-    m->pix.bytesPerRow = (UInt32)(width * 4);
+    m->pix.bytesPerRow = (UInt32)((((width * 4) + 63) >> 6) << 6); /* OS X 64-byte aligns bitmaps */
     m->pix.bitsPerPixel = 32;
     m->pix.activeWidth = (UInt32)width;
     m->pix.activeHeight = (UInt32)height;
