@@ -720,10 +720,9 @@ console_update_cursor(void *priv,
         icon.hbmMask = CreateBitmap(1, 1 * 2, 1, 1, hidden_cursor);
     } else {
         size_t mask_len = (width * height + 7) / 8;
-        char *p;
-
-        p = MapViewOfFile(shm_handle, FILE_MAP_ALL_ACCESS, 0, 0,
-                          mask_offset + mask_len);
+        size_t shm_len = (mask_offset) ? mask_len + mask_offset : width * 4 * height;
+        char *p = (char *)MapViewOfFile(shm_handle, FILE_MAP_ALL_ACCESS, 0, 0,
+                                  shm_len);
         if (!p) {
             Wwarn("MapViewOfFile");
             CloseHandle(shm_handle);
@@ -732,13 +731,15 @@ console_update_cursor(void *priv,
 
         if (flags & CURSOR_UPDATE_FLAG_MONOCHROME) {
             icon.hbmMask = CreateBitmap(width, height * 2, 1, 1, p + mask_offset);
-        } else {
+        } else if (mask_offset != 0) {
             icon.hbmMask = CreateBitmap(width, height, 1, 1, p + mask_offset);
+            icon.hbmColor = CreateBitmap(width, height, 1, 32, p);
+        } else {
+            icon.hbmMask = CreateBitmap(width, height, 1, 1, NULL);
             icon.hbmColor = CreateBitmap(width, height, 1, 32, p);
         }
 
         UnmapViewOfFile(p);
-        CloseHandle(shm_handle);
     }
 
     hcursor = CreateIconIndirect(&icon);
