@@ -909,7 +909,7 @@ stats_timer_cb(void *opaque)
 #endif
 
     ret = dict_rpc_status(control_send, &control,
-        "iiiiiiiiiiiiiiiiiiiii",
+        "iiiiiiiiiiiiiiiiiiiiiiii",
         "mem", (int64_t)vm_mem_mb * (1024 * 1024),
         "balloon-cur", (int64_t)balloon_cur,
         "balloon-min", (int64_t)balloon_min,
@@ -934,6 +934,7 @@ stats_timer_cb(void *opaque)
         "tx", (int64_t)net_tx_rate,
         "rx-nav", (int64_t)net_nav_rx_rate,
         "rx", (int64_t)net_rx_rate,
+        /* !! remember to update format string when making changes !! */
         NULL);
 
     if (ret)
