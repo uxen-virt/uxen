@@ -345,12 +345,11 @@ v4v_memcpy_to_guest_ring(struct v4v_ring_info *ring_info, uint32_t offset,
     while ((offset + len) > PAGE_SIZE) {
         ret = v4v_ring_map_page(ring_info, page, &dst);
         if (ret) {
-            if (ret != -ECONTINUATION)
-                printk(XENLOG_ERR "%s: ring (vm%u:%x vm%d) %p attempted to map"
-                       " page %d of %d\n", __FUNCTION__,
-                       ring_info->id.addr.domain, ring_info->id.addr.port,
-                       ring_info->id.partner, ring_info, page,
-                       ring_info->nmfns);
+            printk(XENLOG_ERR "%s: ring (vm%u:%x vm%d) %p attempted to map"
+                   " page %d of %d\n", __FUNCTION__,
+                   ring_info->id.addr.domain, ring_info->id.addr.port,
+                   ring_info->id.partner, ring_info, page,
+                   ring_info->nmfns);
             return ret;
         }
 
@@ -370,11 +369,10 @@ v4v_memcpy_to_guest_ring(struct v4v_ring_info *ring_info, uint32_t offset,
 
     ret = v4v_ring_map_page(ring_info, page, &dst);
     if (ret) {
-        if (ret != -ECONTINUATION)
-            printk(XENLOG_ERR "%s: ring (vm%u:%x vm%d) %p attempted to map page"
-                   " %d of %d\n", __FUNCTION__, ring_info->id.addr.domain,
-                   ring_info->id.addr.port, ring_info->id.partner, ring_info,
-                   page, ring_info->nmfns);
+        printk(XENLOG_ERR "%s: ring (vm%u:%x vm%d) %p attempted to map page"
+               " %d of %d\n", __FUNCTION__, ring_info->id.addr.domain,
+               ring_info->id.addr.port, ring_info->id.partner, ring_info,
+               page, ring_info->nmfns);
         return ret;
     }
 
@@ -1347,8 +1345,9 @@ v4v_ring_create(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_id_t) ring_id_hnd)
     do {
         ret = copy_from_guest_errno(&ring_id, ring_id_hnd, 1);
         if (ret) {
-            printk(XENLOG_ERR "%s: vm%u copy_from_guest_errno err %d\n",
-                   __FUNCTION__, current->domain->domain_id, ret);
+            if (ret != -ERETRY)
+                printk(XENLOG_ERR "%s: vm%u copy_from_guest_errno err %d\n",
+                       __FUNCTION__, current->domain->domain_id, ret);
             break;
         }
 

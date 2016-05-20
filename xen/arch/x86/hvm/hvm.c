@@ -3391,6 +3391,9 @@ copy_to_hvm_errno(void *to, const void *from, unsigned len)
 {
     int rc;
 
+    if (check_free_pages_needed(0))
+        return hypercall_create_retry_continuation();
+
     rc = hvm_copy_to_guest_virt_nofault((unsigned long)to, (void *)from,
                                         len, 0);
     switch (rc) {
@@ -3411,6 +3414,9 @@ int
 copy_from_hvm_errno(void *to, const void *from, unsigned len)
 {
     int rc;
+
+    if (check_free_pages_needed(0))
+        return hypercall_create_retry_continuation();
 
     rc = hvm_copy_from_guest_virt_nofault(to, (unsigned long)from, len, 0);
     switch (rc) {
