@@ -915,6 +915,9 @@ v4v_fill_ring_data(struct domain *src_d,
 
     ent.flags = 0;
 
+    if (ent.ring.domain >= V4V_DOMID_SELF && ent.ring.domain != V4V_DOMID_ANY)
+        return -ENOENT;
+
     dst_d = get_domain_by_id(ent.ring.domain);
 
     if (dst_d && dst_d->v4v) {
@@ -1302,6 +1305,11 @@ v4v_ring_remove(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd)
         }
 
         ring.id.addr.domain = d->domain_id;
+        if (ring.id.partner >= V4V_DOMID_SELF &&
+            ring.id.partner != V4V_DOMID_ANY) {
+            ret = -ENOENT;
+            break;
+        }
 
         write_lock(&d->v4v->lock);
         ring_info = v4v_ring_find_info(d, &ring.id);
@@ -1348,7 +1356,13 @@ v4v_ring_create(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_id_t) ring_id_hnd)
         }
 
         if (ring_id.partner != V4V_DOMID_ANY)
-            ring_id.partner = current->domain->domain_id;
+            ring_id.partner = d->domain_id;
+
+        if (ring_id.addr.domain >= V4V_DOMID_SELF &&
+            ring_id.addr.domain != V4V_DOMID_ANY) {
+            ret = -ENOENT;
+            break;
+        }
 
         dst_d = get_domain_by_id(ring_id.addr.domain);
         if (!dst_d) {
