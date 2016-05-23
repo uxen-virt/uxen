@@ -237,24 +237,33 @@ uxen_v4v_reregister_ring(uxen_v4v_device *device, uxen_v4v_ring *ring)
 
 intptr_t
 uxen_v4v_send_ring(
-    uxen_v4v_device *device, uxen_v4v_ring *ring, v4v_addr_t *destination_address,
+    uxen_v4v_device *device, uxen_v4v_ring *ring,
+    v4v_addr_t *_destination_address,
     const void *buffer, uint32_t len_bytes)
 {
+    v4v_addr_t destination_address = *_destination_address;
+
+    if (ring->partner_domain != V4V_DOMID_ANY)
+        destination_address.domain = ring->partner_domain;
 
     return v4v_send_ring(
-        device, &ring->source_address, destination_address,
+        device, &ring->source_address, &destination_address,
         buffer, len_bytes, ring->protocol_number);
 }
 
 intptr_t
 uxen_v4v_sendv_ring(
     uxen_v4v_device *device, uxen_v4v_ring *ring,
-    struct v4v_addr *destination_address,
+    struct v4v_addr *_destination_address,
     const v4v_iov_t buffers[], uint32_t num_buffers)
 {
+    v4v_addr_t destination_address = *_destination_address;
+
+    if (ring->partner_domain != V4V_DOMID_ANY)
+        destination_address.domain = ring->partner_domain;
 
     return v4v_sendv_ring(
-        device, &ring->source_address, destination_address,
+        device, &ring->source_address, &destination_address,
         buffers, num_buffers, ring->protocol_number);
 }
 

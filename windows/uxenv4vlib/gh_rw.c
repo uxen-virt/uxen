@@ -79,13 +79,13 @@ gh_v4v_requeue_irps(xenv4v_extension_t *pde, LIST_ENTRY *irps)
 // ---- WRITE ROUTINES ----
 
 static ULONG32
-gh_v4v_get_write_irp_values(xenv4v_context_t *ctx, PIRP irp, v4v_addr_t **dstOut, uint8_t **msgOut, uint32_t *lenOut, uint32_t *dg_flags_out)
+gh_v4v_get_write_irp_values(xenv4v_context_t *ctx, PIRP irp, v4v_addr_t *dstOut, uint8_t **msgOut, uint32_t *lenOut, uint32_t *dg_flags_out)
 {
     PIO_STACK_LOCATION  isl = IoGetCurrentIrpStackLocation(irp);
 
     // For datagrams, destination is in the message
     v4v_datagram_t *dg = (v4v_datagram_t *) irp->MdlAddress->MappedSystemVa;
-    *dstOut = &dg->addr;
+    *dstOut = dg->addr;
     *dg_flags_out = dg->flags;
     *msgOut = ((UCHAR *)(dg + 1));
     *lenOut = isl->Parameters.Write.Length - sizeof(v4v_datagram_t);
@@ -96,7 +96,7 @@ static NTSTATUS
 gh_v4v_do_write(xenv4v_extension_t *pde, xenv4v_context_t *ctx, PIRP irp)
 {
     NTSTATUS    status;
-    v4v_addr_t *dst = NULL;
+    v4v_addr_t  dst;
     uint8_t    *msg = NULL;
     uint32_t    len;
     uint32_t    dg_flags = 0;
@@ -113,15 +113,18 @@ gh_v4v_do_write(xenv4v_extension_t *pde, xenv4v_context_t *ctx, PIRP irp)
     flags = (ULONG_PTR)irp->Tail.Overlay.DriverContext[0];
     written = 0;
 
-    status = gh_v4v_send(&ctx->ring_object->ring->id.addr, dst, protocol, msg, len, &written);
+    if (ctx->ring_object->ring->id.partner != V4V_DOMID_ANY)
+        dst.domain = ctx->ring_object->ring->id.partner;
+
+    status = gh_v4v_send(&ctx->ring_object->ring->id.addr, &dst, protocol, msg, len, &written);
 
     if ((status == STATUS_VIRTUAL_CIRCUIT_CLOSED) && (!(dg_flags & V4V_DATAGRAM_FLAG_IGNORE_DLO))) {
         // Datagram write to a ring which doesn't exist - use the dead letter office to handle it
-        status = gh_v4v_create_ring(dst, ctx->ring_object->ring->id.addr.domain);
+        status = gh_v4v_create_ring(&dst, ctx->ring_object->ring->id.addr.domain);
         if (!NT_SUCCESS(status))
             return v4v_simple_complete_irp(irp, status);
 
-        status = gh_v4v_send(&ctx->ring_object->ring->id.addr, dst, protocol, msg, len, &written);
+        status = gh_v4v_send(&ctx->ring_object->ring->id.addr, &dst, protocol, msg, len, &written);
     }
 
     // Datagram write, add on the ammount send by caller

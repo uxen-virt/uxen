@@ -211,44 +211,71 @@ uxen_v4v_sendv (v4v_addr_t *src, v4v_addr_t *dst, v4v_iov_t *iov,
 
 V4V_DLL_EXPORT ssize_t
 uxen_v4v_send_from_ring (uxen_v4v_ring_handle_t *
-                         ring, v4v_addr_t *dst,
+                         ring, v4v_addr_t *_dst,
                          void *buf, uint32_t len, uint32_t protocol)
 {
-    return uxen_v4v_send_async (&ring->ring_object->ring->id.addr, dst, buf, len,
-                                protocol, NULL, NULL, NULL);
+    v4v_addr_t dst = *_dst;
+
+    if (ring->ring_object->ring->id.partner != V4V_DOMID_ANY)
+        dst.domain = ring->ring_object->ring->id.partner;
+
+    return uxen_v4v_send_async (&ring->ring_object->ring->id.addr, &dst,
+                                buf, len, protocol, NULL, NULL, NULL);
 }
 
 
 V4V_DLL_EXPORT ssize_t
 uxen_v4v_send_from_ring_async (uxen_v4v_ring_handle_t *
-                               ring, v4v_addr_t *dst,
+                               ring, v4v_addr_t *_dst,
                                void *buf, uint32_t len, uint32_t protocol,
-                               uxen_v4v_callback_t *callback, void *callback_data1, void *callback_data2)
+                               uxen_v4v_callback_t *callback,
+                               void *callback_data1, void *callback_data2)
 {
-    return uxen_v4v_send_async (&ring->ring_object->ring->id.addr, dst, buf, len,
-                                protocol, callback, callback_data1, callback_data2);
+    v4v_addr_t dst = *_dst;
+
+    if (ring->ring_object->ring->id.partner != V4V_DOMID_ANY)
+        dst.domain = ring->ring_object->ring->id.partner;
+
+    return uxen_v4v_send_async (&ring->ring_object->ring->id.addr, &dst,
+                                buf, len, protocol,
+                                callback, callback_data1, callback_data2);
 }
 
 
 V4V_DLL_EXPORT ssize_t
 uxen_v4v_sendv_from_ring (uxen_v4v_ring_handle_t *
-                          ring, v4v_addr_t *dst,
+                          ring, v4v_addr_t *_dst,
                           v4v_iov_t *iov, uint32_t niov, uint32_t protocol)
 {
-    return uxen_v4v_sendv_async (&ring->ring_object->ring->id.addr, dst, iov, niov,
+    v4v_addr_t dst = *_dst;
+
+    if (ring->ring_object->ring->id.partner != V4V_DOMID_ANY)
+        dst.domain = ring->ring_object->ring->id.partner;
+
+    return uxen_v4v_sendv_async (&ring->ring_object->ring->id.addr, &dst,
+                                 iov, niov,
                                  protocol, NULL, NULL, NULL);
 }
 
 
 V4V_DLL_EXPORT ssize_t
 uxen_v4v_sendv_from_ring_async (uxen_v4v_ring_handle_t *
-                                ring, v4v_addr_t *dst,
-                                v4v_iov_t *iov, uint32_t niov, uint32_t protocol,
-                                uxen_v4v_callback_t *callback, void *callback_data1, void *callback_data2)
+                                ring, v4v_addr_t *_dst,
+                                v4v_iov_t *iov, uint32_t niov,
+                                uint32_t protocol,
+                                uxen_v4v_callback_t *callback,
+                                void *callback_data1, void *callback_data2)
 
 {
-    return uxen_v4v_sendv_async (&ring->ring_object->ring->id.addr, dst, iov, niov,
-                                 protocol, callback, callback_data1, callback_data2);
+    v4v_addr_t dst = *_dst;
+
+    if (ring->ring_object->ring->id.partner != V4V_DOMID_ANY)
+        dst.domain = ring->ring_object->ring->id.partner;
+
+    return uxen_v4v_sendv_async (&ring->ring_object->ring->id.addr, &dst,
+                                 iov, niov,
+                                 protocol,
+                                 callback, callback_data1, callback_data2);
 }
 
 
