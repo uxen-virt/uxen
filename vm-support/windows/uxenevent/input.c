@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -368,7 +368,7 @@ input_mouse_event(uint32_t x, uint32_t y, int32_t dv, int32_t dh,
 
     rc = SendInput(1, &i, sizeof (i));
     if (!rc) {
-        Wwarn("%s: SendInput failed", __FUNCTION__);
+        debug_log("%s: SendInput failed", __FUNCTION__);
         return -1;
     }
 
@@ -444,7 +444,7 @@ input_wm_mouse_event(UINT message, WPARAM wParam, LPARAM lParam)
 
     rc = SendInput(1, &i, sizeof (i));
     if (!rc) {
-        Wwarn("%s: SendInput failed", __FUNCTION__);
+        debug_log("%s: SendInput failed", __FUNCTION__);
         return -1;
     }
 

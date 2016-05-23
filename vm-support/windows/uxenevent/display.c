@@ -10,7 +10,6 @@
 #include <tchar.h>
 #define __CRT_STRSAFE_IMPL
 #include <Strsafe.h>
-#include <err.h>
 #include <Setupapi.h>
 
 #include <uxendisp_esc.h>
@@ -66,11 +65,11 @@ display_escape(int escape_code, void *in_buf, int in_buf_size)
         escape.hContext = 0;
         ret = !NT_SUCCESS(status = D3DKMTEscape(&escape));
         if (ret)
-            warnx("D3DKMTEscape() failed: 0x%x", (unsigned int)status);
+            debug_log("D3DKMTEscape() failed: 0x%x", (unsigned int)status);
     } else {
         ret = ExtEscape(hdc, escape_code, in_buf_size, in_buf, 0, NULL);
         if (ret <= 0)
-            warnx("ExtEscape() failed: %d", ret);
+            debug_log("ExtEscape() failed: %d", ret);
         ret = ret <= 0;
     }
 
@@ -93,7 +92,7 @@ SendResolutionToHidDriver()
 
     hdev = SetupDiGetClassDevs(&UXENHID_IFACE_GUID, 0, 0, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
     if (INVALID_HANDLE_VALUE == hdev) {
-        warnx("SetupDiGetClassDevs failed");
+        debug_log("SetupDiGetClassDevs failed");
         goto exit;
     }
 
@@ -101,7 +100,7 @@ SendResolutionToHidDriver()
         res = SetupDiEnumDeviceInterfaces(hdev, 0, &UXENHID_IFACE_GUID, dev_idx, &did);
         last_error = GetLastError();
         if (!res && (last_error != ERROR_NO_MORE_ITEMS)) {
-            warnx("SetupDiEnumDeviceInterfaces failed");
+            debug_log("SetupDiEnumDeviceInterfaces failed");
             goto exit;
         }
 
@@ -112,7 +111,7 @@ SendResolutionToHidDriver()
         size = sizeof buffer;
         res = SetupDiGetDeviceInterfaceDetail(hdev, &did, pdidd, size, &size, 0);
         if (!res) {
-            warnx("SetupDiGetDeviceInterfaceDetail failed");
+            debug_log("SetupDiGetDeviceInterfaceDetail failed");
             goto exit;
         }
 
@@ -120,14 +119,14 @@ SendResolutionToHidDriver()
                             FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
                             FILE_ATTRIBUTE_NORMAL, NULL);
         if (INVALID_HANDLE_VALUE == devhdl) {
-            warnx("CreateFile failed");
+            debug_log("CreateFile failed");
             goto exit;
         }
 
         res = DeviceIoControl(devhdl, IOCTL_UXENHID_SET_VIRTUAL_MODE,
                               &mode, sizeof mode, NULL, 0, &size, NULL);
         if (!res) {
-            warnx("DeviceIoControl failed");
+            debug_log("DeviceIoControl failed");
             goto exit;
         }
 
@@ -147,11 +146,9 @@ exit:
 int
 display_resize(int w, int h, unsigned int flags)
 {
-    RECT work_area = {0};
     UXENDISPCustomMode cm;
     BOOL set_mode = (current_w < w) || (current_h < h);
     BOOL force_change = (flags & CONSOLE_RESIZE_FLAG_FORCE) != 0;
-	HWND fgwnd, owner;
 
     if (set_mode || !virtual_mode_change || force_change) {
         DWORD mode = 0;
@@ -168,7 +165,7 @@ display_resize(int w, int h, unsigned int flags)
         cm.width = w;
         cm.height = h;
         if (display_escape(UXENDISP_ESCAPE_SET_CUSTOM_MODE, &cm, sizeof(cm))) {
-            warnx("failed to inject custom mode [%dx%d]", w, h);
+            debug_log("failed to inject custom mode [%dx%d]", w, h);
             return -1;
         }
 
@@ -182,7 +179,7 @@ display_resize(int w, int h, unsigned int flags)
             }
 
             if (!rc) {
-                warnx("couldn't find desired mode %dx%d", w, h);
+                debug_log("couldn't find desired mode %dx%d", w, h);
                 return -1;
             }
 
@@ -191,10 +188,10 @@ display_resize(int w, int h, unsigned int flags)
             status = ChangeDisplaySettingsEx(dispDevice.DeviceName,
                                              &devMode,
                                              NULL,
-                                             0,
+                                             CDS_RESET,
                                              NULL);
             if (status != DISP_CHANGE_SUCCESSFUL) {
-                warnx("couldn't change display settings");
+                debug_log("couldn't change display settings");
                 return -1;
             }
         }
@@ -205,8 +202,6 @@ display_resize(int w, int h, unsigned int flags)
 
     virtual_w = w;
     virtual_h = h;
-    work_area.right = w;
-    work_area.bottom = h;
 
     if (blanking)
         SetWindowPos(blank_window, HWND_TOPMOST, 0, 0, w, h, SWP_SHOWWINDOW);
@@ -219,19 +214,12 @@ display_resize(int w, int h, unsigned int flags)
         cm.width = w;
         cm.height = h;
         if (display_escape(UXENDISP_ESCAPE_SET_VIRTUAL_MODE, &cm, sizeof(cm))) {
-            warnx("failed to inject virtual mode [%dx%d]", w, h);
+            debug_log("failed to inject virtual mode [%dx%d]", w, h);
             return -1;
         }
     }
 
     SendResolutionToHidDriver();
-    SystemParametersInfo(SPI_SETWORKAREA, 0, &work_area, SPIF_UPDATEINIFILE);
-
-    if (!force_change) {
-        fgwnd = GetForegroundWindow();
-        owner = GetWindow(fgwnd, GW_OWNER);
-        SetWindowPos((owner) ? owner : fgwnd, HWND_TOP, 0, 0, w, h, SWP_NOOWNERZORDER | SWP_SHOWWINDOW);
-    }
 
     if (virtual_w != current_w)
         SetWindowPos(right_window, HWND_TOPMOST, virtual_w, 0, current_w, current_h, SWP_SHOWWINDOW);
@@ -288,27 +276,27 @@ blank_loop(void *opaque)
                                   0, 0, current_w, current_h,
                                   NULL, NULL, NULL, NULL);
     if (!blank_window) {
-        warnx("failed to create blank window");
+        debug_log("failed to create blank window");
         ret = -1;
         goto exit;
     }
     ShowWindow(blank_window, SW_HIDE);
 
-    right_window = CreateWindowEx(WS_EX_TOPMOST, "BlankWindow", "Right Window",
+    right_window = CreateWindowEx(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, "BlankWindow", "Right Window",
                                   WS_POPUP, virtual_w, 0, virtual_w + 1, virtual_h,
                                   NULL, NULL, NULL, NULL);
     if (!right_window) {
-        warnx("failed to create right window");
+        debug_log("failed to create right window");
         ret = -1;
         goto exit;
     }
     ShowWindow(right_window, SW_HIDE);
 
-    bottom_window = CreateWindowEx(WS_EX_TOPMOST, "BlankWindow", "Bottom Window",
+    bottom_window = CreateWindowEx(WS_EX_TOPMOST | WS_EX_TOOLWINDOW, "BlankWindow", "Bottom Window",
                                    WS_POPUP, 0, virtual_h, virtual_w, virtual_h + 1,
                                    NULL, NULL, NULL, NULL);
     if (!bottom_window) {
-        warnx("failed to create bottom window");
+        debug_log("failed to create bottom window");
         ret = -1;
         goto exit;
     }
@@ -339,7 +327,6 @@ display_init(void)
     NTSTATUS status;
     D3DKMT_OPENADAPTERFROMHDC open_adapter_info;
     UXENDISPCustomMode cm;
-    RECT work_area = {0};
 
     /* Sanity check here */
     FillMemory(&dispDevice, sizeof(DISPLAY_DEVICE), 0);
@@ -353,7 +340,7 @@ display_init(void)
     }
 
     if (!rc) {
-        warnx("failed to find uXen Display");
+        debug_log("failed to find uXen Display");
         return -1;
     }
 
@@ -362,7 +349,7 @@ display_init(void)
     rc = EnumDisplaySettings(dispDevice.DeviceName, ENUM_CURRENT_SETTINGS, &devMode);
 
     if (!rc) {
-        warnx("failed to retrieve current settings for uXen Display");
+        debug_log("failed to retrieve current settings for uXen Display");
         return -1;
     }
 
@@ -373,7 +360,7 @@ display_init(void)
 
     hdc = CreateDC(dispDevice.DeviceName, dispDevice.DeviceName, NULL, NULL);
     if (!hdc) {
-        warnx("failed to create device context: %d", (int)GetLastError());
+        debug_log("failed to create device context: %d", (int)GetLastError());
         return -1;
     }
 
@@ -386,17 +373,14 @@ display_init(void)
 
     cm.esc_code = UXENDISP_ESCAPE_IS_VIRT_MODE_ENABLED;
     if (display_escape(UXENDISP_ESCAPE_IS_VIRT_MODE_ENABLED, &cm, sizeof(cm))) {
-        warnx("Virtual Mode Change is DISABLED.");
+        debug_log("Virtual Mode Change is DISABLED.");
     } else {
         virtual_mode_change = 1;
-        work_area.bottom = virtual_h;
-        work_area.right = virtual_w;
-        SystemParametersInfo(SPI_SETWORKAREA, 0, &work_area, SPIF_UPDATEINIFILE);
     }
 
     blank_thread = CreateThread(NULL, 0, blank_loop, NULL, 0, NULL);
     if (!blank_thread) {
-        warnx("failed to create blanking thread");
+        debug_log("failed to create blanking thread");
         return -1;
     }
 

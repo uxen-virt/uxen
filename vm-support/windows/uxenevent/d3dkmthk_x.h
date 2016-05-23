@@ -71,7 +71,7 @@ typedef struct _D3DKMT_ESCAPE
             (d3dkmt_ ## fn) = (PFN_ ## fn)                                    \
                 GetProcAddress(GetModuleHandleA("gdi32.dll"), # fn);          \
             if (!(d3dkmt_ ## fn)) {                                           \
-                warnx("Failed to get [%s] address: %d",                       \
+                debug_log("Failed to get [%s] address: %d",                       \
                       # fn, (int)GetLastError());                             \
                 return STATUS_NOT_IMPLEMENTED;                                \
             }                                                                 \

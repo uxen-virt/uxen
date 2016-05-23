@@ -520,7 +520,7 @@ crtc_write(struct uxendisp_state *s, int crtc_id, target_phys_addr_t addr,
 
     switch (addr) {
     case UXDISP_REG_CRTC_OFFSET:
-        crtc_flush(s, crtc_id, val, 0);
+        crtc_flush(s, crtc_id, val, 1);
         break;
     case UXDISP_REG_CRTC_ENABLE:
         crtc->regs->p.enable = val;

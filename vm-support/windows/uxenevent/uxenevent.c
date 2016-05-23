@@ -191,7 +191,7 @@ process_resize(void)
         requested_h = 0;
         requested_flags = 0;
 
-        timeout.QuadPart = -5000000; /* 500ms */
+        timeout.QuadPart = -2500000; /* 250ms */
         SetWaitableTimer(resize_event, &timeout, 0, NULL, NULL, 0);
         resize_timer_set = 1;
     }
@@ -827,7 +827,7 @@ main(int argc, char **argv)
         } else if (err == WAIT_IO_COMPLETION)
             /* nothing */ ;
         else {
-            warnx("%s: WaitForMultipleObjectsEx error %ld %ld",
+            debug_log("%s: WaitForMultipleObjectsEx error %ld %ld",
                     __FUNCTION__, err, GetLastError());
         }
         display_border_windows_on_top();

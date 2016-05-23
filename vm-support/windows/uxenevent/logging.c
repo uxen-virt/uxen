@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -52,7 +52,7 @@ logging_vprintf(const char *fmt, va_list ap)
 
 	err = WSAGetLastError();
 
-        warn("sendto(%d, %p, %d, 0, { .sin_family=%d, .sin_addr.s_addr=%x, .sin_port=%d }, %d) == %d [WSAGetLastError=%d]\n", 
+        debug_log("sendto(%d, %p, %d, 0, { .sin_family=%d, .sin_addr.s_addr=%x, .sin_port=%d }, %d) == %d [WSAGetLastError=%d]\n", 
 		sock, buf, len, (int) sa.sin_family, (unsigned) sa.sin_addr.s_addr,(int) htons(sa.sin_port),(int) sizeof(sa),ret,err);
 
         elen = snprintf(ebuf,sizeof(ebuf),"uxenevent mythical bug: sendto(%d, %p, %d, 0, { .sin_family=%d, .sin_addr.s_addr=%x, .sin_port=%d }, %d) == %d [WSAGetLastError=%d]\n", sock,buf,len,(int) sa.sin_family, (unsigned) sa.sin_addr.s_addr,(int) htons(sa.sin_port),(int) sizeof(sa),ret,err);
@@ -86,14 +86,14 @@ logging_init(void)
 
     sock = socket(PF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
-        warn("socket");
+        debug_log("socket");
         goto fail;
     }
 
 
     ret = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (void *)&one, sizeof(one));
     if (ret < 0) {
-        warn("setsockopt %x", WSAGetLastError());
+        debug_log("setsockopt %x", WSAGetLastError());
         goto fail;
     }
 
@@ -105,7 +105,7 @@ logging_init(void)
 
     ret = bind(sock, (struct sockaddr *)&sa, sizeof(sa));
     if (ret < 0) {
-        warn("bind %x", WSAGetLastError());
+        debug_log("bind %x", WSAGetLastError());
         goto fail;
     }
 
