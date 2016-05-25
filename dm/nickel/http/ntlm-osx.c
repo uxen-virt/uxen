@@ -26,13 +26,13 @@ struct ntlm_ctx_t {
 static int get_ntlm_context(char* server, struct ntlm_ctx *ntlm_ctx)
 {
     int ret = 0;
+    CFTypeRef results = NULL;
     UInt32 returnpasswordLength = 0;
     char *passwordBuffer = NULL;
+    CFStringRef accountName = NULL;
+    char *accountNameBuffer = NULL;
+    UInt32 accountNameLength = 0;
     SecKeychainItemRef itemref = NULL;
-    UInt32 attributeTags[1];
-    UInt32 formatConstants[1];
-    SecKeychainAttributeInfo attributeInfo;
-    SecKeychainAttributeList *attributeList = NULL;
     OSStatus res = 0;
     char *account = NULL;
     char *password = NULL;
@@ -45,51 +45,74 @@ static int get_ntlm_context(char* server, struct ntlm_ctx *ntlm_ctx)
         goto err;
     }
 
-    res = SecKeychainFindInternetPassword(NULL,
-                                          strlen(server),
-                                          server,
-                                          0, NULL,
-                                          0, NULL,
-                                          0, NULL,
-                                          0,
-                                          kSecProtocolTypeAny,
-                                          kSecAuthenticationTypeAny,
-                                          &returnpasswordLength,
-                                          (void**)&passwordBuffer,
-                                          &itemref);
-    if (res != noErr) {
-        NETLOG3("%s: SecKeychainFindInternetPassword failed, error = %d", __FUNCTION__, (int)res);
-        goto err;
+    {
+        CFStringRef serverStr = CFStringCreateWithCString(NULL, server, kCFStringEncodingUTF8);
+        CFStringRef keys[] = {kSecClass, kSecReturnAttributes, kSecMatchLimit, kSecAttrServer, kSecReturnRef};
+        void *values[] = {(void*)kSecClassInternetPassword, (void*)kCFBooleanTrue,
+            (void*)kSecMatchLimitAll, (void*)serverStr, (void*)kCFBooleanTrue};
+        CFDictionaryRef query = CFDictionaryCreate(NULL, (const void **)keys, (const void **)values,
+            sizeof(keys) / sizeof(CFStringRef), &kCFCopyStringDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+        res = SecItemCopyMatching((CFDictionaryRef)query, &results);
+
+        CFRelease(query);
+        CFRelease(serverStr);
+
+        if (res != noErr) {
+            NETLOG3("%s: SecItemCopyMatching failed, error = %d", __FUNCTION__, (int)res);
+            ret = 1;
+            goto out;
+        }
     }
 
-    *attributeTags = kSecAccountItemAttr;
-    *formatConstants = CSSM_DB_ATTRIBUTE_FORMAT_STRING;
-    attributeInfo.count = 1;
-    attributeInfo.tag = attributeTags;
-    attributeInfo.format = formatConstants;
-    res = SecKeychainItemCopyAttributesAndData(itemref, &attributeInfo, NULL, &attributeList, 0, NULL);
+    // Get the most recently modified
+    CFDictionaryRef mostRecent = NULL;
+    for (CFIndex i = 0; i < CFArrayGetCount(results); i++) {
+        CFDictionaryRef val = CFArrayGetValueAtIndex(results, i);
+        if (!CFDictionaryContainsKey(val, kSecAttrModificationDate))
+            continue;
 
+        if (!mostRecent)
+            mostRecent = val;
+        else {
+            CFDateRef mostRecentDate = CFDictionaryGetValue(mostRecent, kSecAttrModificationDate);
+            CFDateRef valDate = CFDictionaryGetValue(val, kSecAttrModificationDate);
+            if (CFDateCompare(valDate, mostRecentDate, NULL) == kCFCompareGreaterThan)
+                mostRecent = val;
+        }
+    }
+
+    if (!mostRecent)
+        goto err;
+    if (!CFDictionaryGetValueIfPresent(mostRecent, kSecAttrAccount, (CFTypeRef*)&accountName))
+        goto err;
+    if (!CFDictionaryGetValueIfPresent(mostRecent, CFSTR("v_Ref"), (CFTypeRef*)&itemref))
+        goto err;
+
+    res = SecKeychainItemCopyAttributesAndData(itemref, NULL, NULL, NULL, &returnpasswordLength,
+                                               (void**)&passwordBuffer);
     if (res != noErr) {
         NETLOG3("%s: SecKeychainItemCopyAttributesAndData failed, error = %d", __FUNCTION__, (int)res);
         goto err;
     }
 
-    SecKeychainAttribute accountNameAttribute = attributeList->attr[0];
-    account = calloc(accountNameAttribute.length + 1, 1);
-    if (!account)
+    accountNameLength = CFStringGetLength(accountName);
+    accountNameBuffer = calloc(accountNameLength + 1, 1);
+    if (!accountNameBuffer)
         goto mem_err;
-    memcpy(account, accountNameAttribute.data, accountNameAttribute.length);
+    if (!CFStringGetCString(accountName, accountNameBuffer, CFStringGetLength(accountName) + 1, kCFStringEncodingUTF8))
+        goto err;
 
     // In the keychain, account is "DOMAIN\username", which we need to split
     int delimiterPosition = -1;
-    for (int i = 0; i < accountNameAttribute.length; i++) {
-        if (account[i] == '\\') {
+    for (UInt32 i = 0; i < accountNameLength; i++) {
+        if (accountNameBuffer[i] == '\\') {
             delimiterPosition = i;
             break;
         }
     }
 
-    int usernameLength = accountNameAttribute.length - (1 + delimiterPosition);
+    int usernameLength = accountNameLength - (1 + delimiterPosition);
     if (usernameLength <= 0) {
         NETLOG3("%s: credentials for %s had no username specified", __FUNCTION__, server);
         goto err;
@@ -104,7 +127,7 @@ static int get_ntlm_context(char* server, struct ntlm_ctx *ntlm_ctx)
         ntlm_ctx->domain = calloc(delimiterPosition + 1, 1);
         if (!ntlm_ctx->domain)
             goto mem_err;
-        memcpy(ntlm_ctx->domain, account, delimiterPosition);
+        memcpy(ntlm_ctx->domain, accountNameBuffer, delimiterPosition);
         ntlm_ctx->w_domain = calloc((delimiterPosition + 1) * 2, 1);
         if (!ntlm_ctx->w_domain)
             goto mem_err;
@@ -117,7 +140,7 @@ static int get_ntlm_context(char* server, struct ntlm_ctx *ntlm_ctx)
     ntlm_ctx->username = calloc(usernameLength + 1, 1);
     if (!ntlm_ctx->username)
         goto mem_err;
-    memcpy(ntlm_ctx->username, account + delimiterPosition + 1, usernameLength);
+    memcpy(ntlm_ctx->username, accountNameBuffer + delimiterPosition + 1, usernameLength);
     ntlm_ctx->w_username = calloc((usernameLength + 1) * 2, 1);
     if (!ntlm_ctx->w_username)
         goto mem_err;
@@ -149,12 +172,12 @@ static int get_ntlm_context(char* server, struct ntlm_ctx *ntlm_ctx)
     }
 
 out:
+    if (accountNameBuffer)
+        free(accountNameBuffer);
+    if (results)
+        CFRelease(results);
     if (passwordBuffer)
-        SecKeychainItemFreeContent(NULL, passwordBuffer);
-    if (itemref)
-        CFRelease(itemref);
-    if (attributeList)
-        SecKeychainItemFreeAttributesAndData(attributeList, NULL);
+        SecKeychainItemFreeAttributesAndData(NULL, passwordBuffer);
     if (account)
         free(account);
     if (passwordWide) {
