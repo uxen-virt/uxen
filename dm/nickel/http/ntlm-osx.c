@@ -41,7 +41,7 @@ static int get_ntlm_context(char* server, struct ntlm_ctx *ntlm_ctx)
     NETLOG3("Attempting to get proxy creds for %s", server);
 
     if (!server) {
-        NETLOG3("%s: Attempt to lookup credentials when no server specified")
+        NETLOG3("%s: Attempt to lookup credentials when no server specified", __FUNCTION__);
         ret = 1;
         goto out;
     }
