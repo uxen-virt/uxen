@@ -42,8 +42,7 @@ static int get_ntlm_context(char* server, struct ntlm_ctx *ntlm_ctx)
 
     if (!server) {
         NETLOG3("%s: Attempt to lookup credentials when no server specified", __FUNCTION__);
-        ret = 1;
-        goto out;
+        goto err;
     }
 
     res = SecKeychainFindInternetPassword(NULL,
@@ -60,8 +59,7 @@ static int get_ntlm_context(char* server, struct ntlm_ctx *ntlm_ctx)
                                           &itemref);
     if (res != noErr) {
         NETLOG3("%s: SecKeychainFindInternetPassword failed, error = %d", __FUNCTION__, (int)res);
-        ret = 1;
-        goto out;
+        goto err;
     }
 
     *attributeTags = kSecAccountItemAttr;
@@ -73,8 +71,7 @@ static int get_ntlm_context(char* server, struct ntlm_ctx *ntlm_ctx)
 
     if (res != noErr) {
         NETLOG3("%s: SecKeychainItemCopyAttributesAndData failed, error = %d", __FUNCTION__, (int)res);
-        ret = 1;
-        goto out;
+        goto err;
     }
 
     SecKeychainAttribute accountNameAttribute = attributeList->attr[0];
@@ -95,8 +92,7 @@ static int get_ntlm_context(char* server, struct ntlm_ctx *ntlm_ctx)
     int usernameLength = accountNameAttribute.length - (1 + delimiterPosition);
     if (usernameLength <= 0) {
         NETLOG3("%s: credentials for %s had no username specified", __FUNCTION__, server);
-        res = 1;
-        goto out;
+        goto err;
     }
 
     if (delimiterPosition <= 0) {
@@ -149,8 +145,7 @@ static int get_ntlm_context(char* server, struct ntlm_ctx *ntlm_ctx)
     if (0 != gethostname((char*)ntlm_ctx->hostname, 255)) {
         int e = errno;
         NETLOG("%s: Failed to get hostname %d %s", __FUNCTION__, e, strerror(e));
-        ret = 1;
-        goto out;
+        goto err;
     }
 
 out:
@@ -174,6 +169,7 @@ out:
     return ret;
 mem_err:
     warnx("%s: malloc", __FUNCTION__);
+err:
     ret = 1;
     goto out;
 }
