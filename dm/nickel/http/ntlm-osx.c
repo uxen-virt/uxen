@@ -40,8 +40,11 @@ static int get_ntlm_context(char* server, struct ntlm_ctx *ntlm_ctx)
 
     NETLOG3("Attempting to get proxy creds for %s", server);
 
-    if (!server)
+    if (!server) {
+        NETLOG3("%s: Attempt to lookup credentials when no server specified")
+        ret = 1;
         goto out;
+    }
 
     res = SecKeychainFindInternetPassword(NULL,
                                           strlen(server),
@@ -91,7 +94,7 @@ static int get_ntlm_context(char* server, struct ntlm_ctx *ntlm_ctx)
 
     int usernameLength = accountNameAttribute.length - (1 + delimiterPosition);
     if (usernameLength <= 0) {
-        NETLOG3("%s: credentials for %s had no domain specified", __FUNCTION__, server);
+        NETLOG3("%s: credentials for %s had no username specified", __FUNCTION__, server);
         res = 1;
         goto out;
     }
