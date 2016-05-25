@@ -90,7 +90,7 @@ void get_tz_offset(char *s, size_t sz, struct tm *tm)
 
 
 static
-void banner(void)
+void banner(const wchar_t *suffix)
 {
     struct tm _tm, *tm;
     time_t ltime;
@@ -109,7 +109,7 @@ void banner(void)
                 (int)(tv.tv_usec / 1000), tz);
         fprintf(logfile, "\n\n%s", prefix);
     }
-    fprintf(logfile, "[%ls]\n\n", GetCommandLineW());
+    fprintf(logfile, "[%ls]\n\n", suffix);
 }
 
 
@@ -142,7 +142,12 @@ disklib_init(void) {
      * crash, printf is wrapped in vbox-compat.h to call fflush on
      * logfile after each invocation. */
     LoadLibraryA("uxen-backtrace.dll");
-    banner();
+    banner(GetCommandLineW());
+}
+
+static void __attribute__((destructor))
+disklib_done(void) {
+    banner(L"done");
 }
 
 /* Convert args to wide and then to UTF-8. */
