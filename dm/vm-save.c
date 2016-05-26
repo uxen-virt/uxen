@@ -594,6 +594,7 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
     struct xc_save_index page_offsets_index = { 0, XC_SAVE_ID_PAGE_OFFSETS };
     struct page_fingerprint *hashes = NULL;
     int hashes_nr = 0;
+    int trivial_nr = 0;
     struct xc_save_vm_fingerprints s_vm_fingerprints;
     struct xc_save_index fingerprints_index = { 0, XC_SAVE_ID_FINGERPRINTS };
     int free_mem;
@@ -717,17 +718,21 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
         for (j = 0; j < batch_done; j++) {
             gpfn_info_list[j].type &= XENMEM_MCGI_TYPE_MASK;
             if (gpfn_info_list[j].type == XENMEM_MCGI_TYPE_NORMAL) {
-                uint64_t *p = (uint64_t *)&mem_buffer[gpfn_info_list[j].offset];
+                uint32_t *p = (uint32_t *)&mem_buffer[gpfn_info_list[j].offset];
                 int i = 0;
-                while (i < (PAGE_SIZE >> 3) && !p[i])
+                while (i < (PAGE_SIZE / sizeof(*p)) && p[i] == p[0])
                     i++;
-                if (i == (PAGE_SIZE >> 3)) {
-                    gpfn_info_list[j].type = XENMEM_MCGI_TYPE_ZERO;
-                    rezero++;
-                    total_rezero++;
-                    /* Always re-share zero pages. */
-                    if (!free_mem)
-                        rezero_pfns[rezero_nr++] = pfn + j;
+                if (i == (PAGE_SIZE / sizeof(*p))) {
+                    if (p[0] == 0) {
+                        gpfn_info_list[j].type = XENMEM_MCGI_TYPE_ZERO;
+                        rezero++;
+                        total_rezero++;
+                        /* Always re-share zero pages. */
+                        if (!free_mem)
+                            rezero_pfns[rezero_nr++] = pfn + j;
+                    } else {
+                        ++trivial_nr;
+                    }
                 }
             }
             if (gpfn_info_list[j].type == XENMEM_MCGI_TYPE_NORMAL) {
@@ -995,8 +1000,9 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
         if (vm_save_info.fingerprint)
             filebuf_write(f, &fingerprints_index, sizeof(fingerprints_index));
 
-        APRINTF("memory: pages %d zero %d rezero %d clone %d", total_pages,
-                total_zero - total_rezero, total_rezero, total_clone);
+        APRINTF("memory: pages %d zero %d rezero %d clone %d trivial %d",
+                total_pages, total_zero - total_rezero, total_rezero,
+                total_clone, trivial_nr);
         if (vm_save_info.compress_mode == VM_SAVE_COMPRESS_LZ4 && total_pages) {
             int pct;
             pct = 10000 * (total_compress_save >> PAGE_SHIFT) / total_pages;
