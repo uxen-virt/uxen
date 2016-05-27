@@ -365,4 +365,8 @@ static struct gui_info osx_gui_info = {
     .cursor_shape = osx_cursor_shape,
 };
 
-console_gui_register(osx_gui_info)
+void early_init_console_osx(void)
+{
+    gui_register_info(&osx_gui_info);
+}
+

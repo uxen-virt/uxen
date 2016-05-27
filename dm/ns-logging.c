@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -107,4 +107,8 @@ static struct ns_desc ns_logging_desc = {
     .service_close = ns_logging_close,
 };
 
-ns_add_service(ns_logging_desc);
+void early_init_ns_logging(void)
+{
+    _ns_add_service(&ns_logging_desc);
+}
+

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -936,7 +936,8 @@ void wasapi_exit(void)
     }
 }
 
-static void __attribute__((constructor)) wasapi_construct(void)
+void
+early_init_wasapi(void)
 {
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
     critical_section_init(&lock);

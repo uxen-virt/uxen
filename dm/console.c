@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -537,8 +537,8 @@ dpy_cursor_shape(struct display_state *ds,
                                w, h, hot_x, hot_y, mask, color);
 }
 
-static void __attribute__((constructor))
-desktop_init(void)
+void
+early_init_console(void)
 {
     TAILQ_INIT(&desktop);
     desktop_width = desktop_height = 0;

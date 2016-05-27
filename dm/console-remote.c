@@ -759,5 +759,7 @@ static struct gui_info remote_gui_info = {
     .cursor_shape = gui_cursor_shape,
 };
 
-console_gui_register(remote_gui_info)
-
+void early_init_console_remote(void)
+{
+    gui_register_info(&remote_gui_info);
+}

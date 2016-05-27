@@ -323,7 +323,7 @@ void async_op_set_prop(struct async_op_ctx *ctx, ioh_event *threads_event,
     ctx->threads_detach = threads_detach;
 }
 
-static void __attribute__((constructor)) async_op_init_default(void)
+void early_init_async_op(void)
 {
     default_ctx = async_op_init();
 }

@@ -1053,4 +1053,8 @@ static struct ns_desc ndns_desc = {
     .service_close = ndns_close,
 };
 
-ns_add_service(ndns_desc);
+void early_init_nickel_dns(void)
+{
+    _ns_add_service(&ndns_desc);
+}
+

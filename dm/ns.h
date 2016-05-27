@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -71,10 +71,5 @@ void ns_reset_send_buffer(struct ns_data *d);
 struct ns_desc *ns_find_service(const char *, int);
 
 void _ns_add_service(struct ns_desc *);
-
-#define ns_add_service(nsd)                                             \
-    static void __attribute__((constructor)) ns_add_service_##nsd(void) { \
-        _ns_add_service(&(nsd));                                        \
-    }                                                                   \
 
 #endif  /* _NS_H_ */

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -169,4 +169,7 @@ static struct ns_desc ns_fwd_desc = {
     .service_open = ns_fwd_open,
 };
 
-ns_add_service(ns_fwd_desc);
+void early_init_ns_fwd(void)
+{
+    _ns_add_service(&ns_fwd_desc);
+}

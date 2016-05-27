@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -491,4 +491,8 @@ static struct prx_fwd prx = {
     .open = cx_open,
     .accept = cx_accept,
 };
-ni_prx_add_service(prx);
+
+void early_init_nickel_tcp(void)
+{
+    _ni_prx_add_service(&prx);
+}

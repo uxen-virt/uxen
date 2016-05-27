@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -62,16 +62,9 @@ redir_stderr(wchar_t *name, wchar_t *defname, int append)
     }
 }
 
-static void __attribute__((constructor))
-logstyle_early_init(void)
+void early_init_win32_logging(void)
 {
-    logstyle_set(getenv("UXENDM_LOGSTYLE"));
-}
-
-static void __attribute__((constructor))
-redir_stderr_init(void)
-{
-
     redir_stderr(_wgetenv(L"UXENDM_LOGFILE"), L"uxendm.log",
                  getenv("UXENDM_LOGFILE_APPEND") != NULL);
+    logstyle_set(getenv("UXENDM_LOGSTYLE"));
 }

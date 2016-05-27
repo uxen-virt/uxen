@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Michael Dales <michael@digitalflapjack.com>
  * SPDX-License-Identifier: ISC
  */
@@ -128,4 +128,8 @@ static struct ns_desc ns_webdav_desc = {
     .service_close = ns_webdav_close,
 };
 
-ns_add_service(ns_webdav_desc);
+void
+early_init_ns_webdav(void)
+{
+    _ns_add_service(&ns_webdav_desc);
+}

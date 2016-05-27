@@ -100,7 +100,7 @@ inet_aton(const char *cp, struct in_addr *ia)
 
 static HCRYPTPROV crypt_provider = 0;
 
-static void __attribute__((constructor))
+void
 os_early_init(void)
 {
     BOOL rc;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -71,7 +71,8 @@ RTDECL(bool)    RTAssertShouldPanic(void)
     return false;
 }
 
-static void __attribute__ ((constructor)) hgcm_heap_init(void)
+void
+early_init_vbox_rt(void)
 {
     priv_heap_create(&hgcm_heap);
 }

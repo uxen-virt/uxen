@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -185,4 +185,9 @@ static struct ns_desc ns_echo_desc = {
     .service_close = ns_echo_close,
 };
 
-ns_add_service(ns_echo_desc);
+void
+early_init_ns_echo(void)
+{
+    _ns_add_service(&ns_echo_desc);
+}
+
