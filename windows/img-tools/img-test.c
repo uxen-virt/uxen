@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -108,6 +108,8 @@ static inline void rnd(uint64_t *s, uint32_t *l, int align)
 
 int main(int argc, char **argv)
 {
+    early_init();
+
 #ifdef _WIN32
     setprogname(argv[0]);
 #endif

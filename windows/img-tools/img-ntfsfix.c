@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Gianni Tedesco
  * SPDX-License-Identifier: ISC
  */
@@ -57,6 +57,8 @@ static int enum_partitions(char *fn)
 int main(int argc, char **argv)
 {
     char *vdfile;
+
+    early_init();
 
     setprogname(argv[0]);
 

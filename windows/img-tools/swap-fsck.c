@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -21,6 +21,7 @@
 
 #include <lz4.h>
 #include "sys.h"
+#include "libimg.h"
 
 uint64_t
 dubtreeGetVersionByIndex(const DUBTREE* t, int idx);
@@ -38,6 +39,8 @@ int main(int argc, char **argv)
     uint64_t start = 0;
     int found = 0;
     uint64_t v = 0;
+
+    early_init();
 
 #ifdef _WIN32
     setprogname(argv[0]);

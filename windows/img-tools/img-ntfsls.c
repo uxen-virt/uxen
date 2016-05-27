@@ -341,6 +341,8 @@ int main(int argc, char **argv)
     int idx;
     int r;
 
+    early_init();
+
     setprogname(argv[0]);
     convert_args(argc, argv);
 

@@ -3983,6 +3983,8 @@ int main(int argc, char **argv)
     Manifest suffixes, man_out;
     VarList vars;
 
+    early_init();
+
     if (init_logiccp() < 0) {
         printf("Unable to initialize\n");
         exit(1);

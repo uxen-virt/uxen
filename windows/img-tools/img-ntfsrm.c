@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2016, Bromium, Inc.
  * Author: Gianni Tedesco
  * SPDX-License-Identifier: ISC
  */
@@ -275,6 +275,8 @@ out_close:
 int main(int argc, char **argv)
 {
     char *vdfile, *rmpath, *expath = NULL;
+
+    early_init();
 
     setprogname(argv[0]);
     convert_args(argc, argv);

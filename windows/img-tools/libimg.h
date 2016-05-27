@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -14,6 +14,7 @@ typedef struct BlockDriverState BlockDriverState;
 #define BDRV_SECTOR_SIZE   (1ULL << BDRV_SECTOR_BITS)
 #define BDRV_SECTOR_MASK   ~(BDRV_SECTOR_SIZE - 1ULL)
 
+void early_init(void);
 void ioh_init(void);
 void bh_init(void);
 void aio_init(void);

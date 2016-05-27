@@ -340,6 +340,8 @@ int main(int argc, char **argv)
     LPWSTR *argv_w;
     int argc_w;
 
+    early_init();
+
     setprogname(argv[0]);
 
     RTR3Init();
