@@ -1924,7 +1924,16 @@ mem_err:
     goto out;
 }
 
-static void __attribute__((constructor)) nickel_static_init(void)
+void early_init_nickel_dns(void);
+void early_init_nickel_tcp(void);
+void early_init_nickel_udp(void);
+void early_init_nickel_main(void);
+
+void early_init_nickel(void)
 {
     ni_priv_heap_err = priv_heap_create(&ni_priv_heap);
+    early_init_nickel_dns();
+    early_init_nickel_tcp();
+    early_init_nickel_udp();
+    early_init_nickel_main();
 }

@@ -5947,5 +5947,8 @@ mem_err:
     return NULL;
 }
 
-ni_prx_add_service(prx);
-ns_add_service(ns_prx_desc);
+void early_init_nickel_main(void)
+{
+    _ni_prx_add_service(&prx);
+    _ns_add_service(&ns_prx_desc);
+}
