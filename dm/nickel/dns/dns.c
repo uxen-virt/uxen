@@ -38,6 +38,7 @@ static int proxy_forbid_nonexistent_dns_name = 0;
 static int debug_resolver = 0;
 static int ipv6_allowed = 1;
 static int no_proxy_mode = 0;
+static int disable_dns_queries = 0;
 
 static unsigned max_pending_dns_queries = DEFAULT_MAX_SCHED_DNS_QUERIES;
 static unsigned pending_dns_queries = 0;
@@ -221,6 +222,9 @@ static void dns_config(yajl_val config)
     ipv6_allowed = yajl_object_get_bool_default(config, "ipv6-allowed", 0);
     if (ipv6_allowed)
         debug_printf("%s: IPv6 addresses are allowed and will be processed\n", __FUNCTION__);
+    disable_dns_queries = yajl_object_get_bool_default(config, "disable-dns-queries", 0);
+    if (disable_dns_queries)
+        debug_printf("%s: external DNS lookups DISABLED by setting\n", __FUNCTION__);
     no_proxy_mode = yajl_object_get_bool_default(config, "no-proxy-mode", 0);
     NETLOG("(dns) no-proxy-mode is %s", no_proxy_mode ? "ON" : "OFF");
 
@@ -911,6 +915,11 @@ ndns_chr_write(CharDriverState *chr, const uint8_t *buf, int blen)
     DDNS(dstate, "q %s", dstate->dname);
     if (!strcasecmp(dstate->dname, SLIRP_GW_NAME)) {
         dstate->is_internal = 1;
+        goto dns_continue;
+    }
+
+    if (disable_dns_queries) {
+        dstate->denied = 1;
         goto dns_continue;
     }
 

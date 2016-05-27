@@ -303,6 +303,7 @@ static char *webdav_host_dir = NULL;
 static Timer *hp_idle_timer = NULL;
 static int disable_crl_check = 0;
 static int no_transparent_proxy = 0;
+static int no_dns_lookups_if_proxy = 0;
 static rb_tree_t hpd_rbtree;
 static int hpd_rbtree_init = 0;
 static int hpd_needs_continue = 0;
@@ -1470,6 +1471,9 @@ static int hp_dns_proxy_check_domain(struct http_ctx *hp)
         HLOG("%s DENIED by containment", hp->h.sv_name);
         goto out;
     }
+
+    if (no_dns_lookups_if_proxy)
+        goto out_allow;
 
     dns = calloc(1, sizeof(*dns));
     if (!dns)
@@ -3982,6 +3986,9 @@ static void set_settings(struct nickel *ni, yajl_val config)
            "DISABLED" : "ENABLED");
     no_transparent_proxy = yajl_object_get_bool_default(config, "no-transparent-proxy-mode", 0);
     NETLOG("%s: no-transparent-proxy-mode is %s", __FUNCTION__, no_transparent_proxy ? "ON" : "OFF");
+    no_dns_lookups_if_proxy = yajl_object_get_bool_default(config, "no-dns-lookups-if-proxy", 0);
+    if (no_dns_lookups_if_proxy)
+        NETLOG("%s: if host proxy active DNS queries disallowed by setting", __FUNCTION__);
 
     custom_ntlm_creds_ = yajl_object_get_string(config, "custom-ntlm-creds");
     if (custom_ntlm_creds_) {
