@@ -136,7 +136,6 @@ namespace
     };
 }
 
-_Static_assert(kUxenV4V_BindRing == 0, "");
 typedef userclient_external_methods<uxen_v4v_user_ring> um;
 static const IOExternalMethodDispatch USER_METHODS[] =
 {
@@ -167,9 +166,6 @@ static const IOExternalMethodDispatch USER_METHODS[] =
         0  // output struct size
     },
 };
-_Static_assert(
-    sizeof(USER_METHODS)/sizeof(USER_METHODS[0]) == kUxenV4V_UserMethodCount,
-    "USER_METHODS length must match kUxenV4V_UserMethodCount");
 
 IOReturn
 uxen_v4v_user_ring::externalMethod(
@@ -177,6 +173,12 @@ uxen_v4v_user_ring::externalMethod(
     IOExternalMethodDispatch* dispatch, OSObject* target, void* reference)
 {
     IOExternalMethodDispatch method;
+    
+    static_assert(kUxenV4V_BindRing == 0, "");
+    static_assert(
+        sizeof(USER_METHODS)/sizeof(USER_METHODS[0]) ==
+        kUxenV4V_UserMethodCount,
+        "USER_METHODS length must match kUxenV4V_UserMethodCount");
     
     if (selector >= kUxenV4V_UserMethodCount)
         return kIOReturnBadArgument;
@@ -325,8 +327,8 @@ uxen_v4v_user_ring::sendTo(
         input_data,
         input_size,
         (v4v_addr_t){
-            .domain = (domid_t)arguments->scalarInput[0],
-            .port =  (uint32_t)arguments->scalarInput[1] },
+            .port =  (uint32_t)arguments->scalarInput[1],
+            .domain = (domid_t)arguments->scalarInput[0] },
         static_cast<unsigned>(arguments->scalarInput[2]),
         &result);
     if (map != nullptr)
@@ -438,11 +440,11 @@ uxen_v4v_user_ring::message(
                     .nent = 1,
                     }
                 };
-            data.hdr.data[0] = (v4v_ring_data_ent_t){
-                this->last_send_dest, 0, this->last_send_size };
+            v4v_ring_data_ent_t *ent = &data.hdr.data[0];
+            *ent = { this->last_send_dest, 0, this->last_send_size };
             
             if (0 == this->v4v_service->notify(&data.hdr)) {
-                if (0 == (data.hdr.data[0].flags & V4V_RING_DATA_F_SUFFICIENT)){
+                if (0 == (ent->flags & V4V_RING_DATA_F_SUFFICIENT)){
                     /* don't trigger a write event as the last failed send
                      * wouldn't succeed anyway. */
                     IORWLockUnlock(this->lock);

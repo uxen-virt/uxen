@@ -16,7 +16,7 @@ VPATH += :$(TOPDIR)/xen/common/libelf
 VPATH += :$(TOPDIR)/common/rbtree
 
 KEXT_BIN = uxen
-KEXT_DSYM = uxen.dwarf
+KEXT_DSYM = $(KEXT_BIN).dwarf
 
 CPPFLAGS += -D__XEN__ -D__UXEN__ -D__UXEN_SYS__ -DUXEN_HOST_OSX -D__SYSV_ABI__
 CPPFLAGS += -D__UXEN_EMBEDDED__
@@ -37,15 +37,17 @@ CPPFLAGS += --sysroot $(OSX_SDK_ROOT)/
 
 # Required stuff to build kext
 CFLAGS += -mkernel -fno-builtin -fno-stack-protector \
-	  -arch x86_64 -msoft-float -fno-common \
-	  -mno-red-zone
+	  -arch x86_64 -msoft-float -fno-common -fstrict-aliasing \
+	  -mno-red-zone -mmacosx-version-min=10.9
 CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti -Wno-non-virtual-dtor \
-	   -Wno-overloaded-virtual -Wno-exit-time-destructors 
+	   -Wno-overloaded-virtual -Wno-exit-time-destructors -std=gnu++11 \
+	   -fapple-kext
 CPPFLAGS += -DKERNEL -DKERNEL_PRIVATE -DDRIVER_PRIVATE -DAPPLE -DNeXT \
+	    -nostdinc \
 	    -I$(OSX_SDK_ROOT)/System/Library/Frameworks/Kernel.framework/Headers
 
 LDFLAGS = -Wall -mkernel -nostdlib -r -lcc_kext -lkmod -arch x86_64 \
-	  -Xlinker -kext
+	  -Xlinker -kext -mmacosx-version-min=10.9
 
 CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
 
@@ -80,13 +82,13 @@ $(REL_ONLY)Info.plist: $(SRCDIR)/uxen-Info.plist
 dist: $(KEXT_BIN) $(KEXT_DSYM) Info.plist install_uxen_desc_sys.h
 	$(_W)echo Installing from $(abspath $(<D)) to $(DISTDIR)
 	$(_W)echo Installing -- $(<F).kext
-	$(_V)install -d $(DISTDIR)/uxen.kext/Contents/MacOS
-	$(_V)install -m 0755 $(KEXT_BIN) $(DISTDIR)/uxen.kext/Contents/MacOS/
-	$(_V)install -m 0644 Info.plist $(DISTDIR)/uxen.kext/Contents/
+	$(_V)install -d $(DISTDIR)/$(<F).kext/Contents/MacOS
+	$(_V)install -m 0755 $(KEXT_BIN) $(DISTDIR)/$(<F).kext/Contents/MacOS/
+	$(_V)install -m 0644 Info.plist $(DISTDIR)/$(<F).kext/Contents/
 	$(_W)echo Installing -- $(<F).kext.dSYM
-	$(_V)install -d $(DISTDIR)/uxen.kext.dSYM/Contents/Resources/DWARF
+	$(_V)install -d $(DISTDIR)/$(<F).kext.dSYM/Contents/Resources/DWARF
 	$(_V)install -m 0644 $(KEXT_DSYM) \
-	  $(DISTDIR)/uxen.kext.dSYM/Contents/Resources/DWARF/$(KEXT_BIN)
+	  $(DISTDIR)/$(<F).kext.dSYM/Contents/Resources/DWARF/$(KEXT_BIN)
 
 KEXT_OBJS = uxen.o \
             uxen_driver.o \

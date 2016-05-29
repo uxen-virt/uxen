@@ -11,6 +11,16 @@
 #include <IOKit/IOBufferMemoryDescriptor.h>
 #include <sys/errno.h>
 
+extern "C" kern_return_t _start(kmod_info_t *ki, void *data);
+extern "C" kern_return_t _stop(kmod_info_t *ki, void *data);
+__attribute__((visibility("default")))
+KMOD_EXPLICIT_DECL(org.uxen.driver.uxenv4vservice, "1.0.0", _start, _stop)
+extern "C" {
+    kmod_start_func_t *_realmain = 0;
+    kmod_stop_func_t *_antimain = 0;
+    int _kext_apple_cc = __APPLE_CC__ ;
+};
+
 OSDefineMetaClassAndStructors(uxen_v4v_service, IOService);
 
 void

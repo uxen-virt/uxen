@@ -258,12 +258,13 @@ uxen_v4v_sendv_ring(
         buffers, num_buffers, ring->protocol_number);
 }
 
-_Static_assert(sizeof(v4v_ring_message_header) == 16, "");
 ssize_t
 uxen_v4v_ring_copy_out(
     uxen_v4v_ring *ring, struct v4v_addr *from, uint32_t *protocol,
     void *buf, size_t buf_len, bool consume)
 {
+
+    static_assert(sizeof(v4v_ring_message_header) == 16, "");
 
     return v4v_copy_out(ring->ring, from, protocol, buf, buf_len, consume);
 }
