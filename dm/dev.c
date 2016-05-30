@@ -103,10 +103,9 @@ dev_init(DeviceState *dev)
     int ret;
 
     ret = dev->info->init(dev, dev->info);
-    if (ret < 0) {
-	dev_free(dev);
+    if (ret < 0)
 	return ret;
-    }
+
     if (dev->info->vmsd)
         vmstate_register_with_alias_id(dev, -1, dev->info->vmsd, dev,
                                        dev->instance_id_alias,
