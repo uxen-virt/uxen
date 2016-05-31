@@ -717,6 +717,8 @@ struct config_option config_options[] = {
     { "process-shutdown-priority", co_ignore, NULL },
 #endif
     { "ps2-fallback", co_set_boolean_opt, &ps2_fallback },
+    { "restore-framebuffer-pattern", co_set_integer_opt,
+      &restore_framebuffer_pattern},
     { "restricted-pci-emul", co_set_boolean_opt, &vm_restricted_pci_emul },
     { "restricted-vga-emul", co_set_boolean_opt, &vm_restricted_vga_emul },
     { "restricted-x86-emul", co_set_integer_opt, &vm_restricted_x86_emul },

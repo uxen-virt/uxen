@@ -93,6 +93,7 @@ uint64_t vm_v4v_storage = 1;
 uint64_t guest_drivers_logmask = 0x2; /* Include LogRel, not Log */
 uint64_t debugkey_level = 0;
 uint64_t malloc_limit_bytes = 0;
+uint64_t restore_framebuffer_pattern = 0xffffffff;
 dict vm_audio = NULL;
 dict vm_hvm_params = NULL;
 int restore = 0;

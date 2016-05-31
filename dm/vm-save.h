@@ -44,6 +44,7 @@ struct vm_save_info {
     int single_page;
     int free_mem;
     int high_compress;
+    int ignore_framebuffer;
     int fingerprint;
 
     int resume_delete;

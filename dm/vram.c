@@ -352,15 +352,29 @@ get_vram(QEMUFile *f, void *pv, size_t size)
 
     len = qemu_get_be32(f);
     if (len) {
-        size_t lz4_len = qemu_get_be32(f);
-        void *p = malloc(lz4_len);
+        size_t lz4_len;
 
-        qemu_get_buffer(f, p, lz4_len);
         vram_resize(v, len);
-        if (!p || LZ4_decompress_safe(p, (void *)v->view, lz4_len, len) < 0)
-            warnx("%s: failed to decompress vram, p=%p lz4_len=%"PRIdSIZE,
-                  __FUNCTION__, p, lz4_len);
-        free(p);
+        lz4_len = qemu_get_be32(f);
+
+        if (lz4_len) {
+            void *p = malloc(lz4_len);
+            if (p) {
+                qemu_get_buffer(f, p, lz4_len);
+                if (LZ4_decompress_safe(p, (void *)v->view, lz4_len, len) < 0)
+                    warnx("%s: failed to decompress vram, lz4_len=%"PRIdSIZE,
+                          __FUNCTION__, lz4_len);
+                free(p);
+            } else
+                warnx("%s: failed to alloc decompress buffer=%"PRIdSIZE,
+                      __FUNCTION__, lz4_len);
+        } else {
+            int i;
+            uint32_t *px = (uint32_t *) v->view;
+            const uint32_t c = restore_framebuffer_pattern;
+            for (i = 0; i < len / sizeof(*px); ++i)
+                px[i] = c;
+        }
     }
 
     return 0;
@@ -373,16 +387,19 @@ put_vram(QEMUFile *f, void *pv, size_t size)
 
     qemu_put_be32(f, v->shm_len);
     if (v->shm_len) {
-        size_t lz4_len = 0;
-        void *p = malloc(LZ4_compressBound(v->shm_len));
-
-        lz4_len = LZ4_compress((void *)v->view, p, v->shm_len);
-
-        qemu_put_be32(f, lz4_len);
-        v->lz4_len = lz4_len;
-        v->file_offset = qemu_ftell(f);
-        qemu_put_buffer(f, p, lz4_len);
-        free(p);
+        if (!vm_save_info.ignore_framebuffer) {
+            void *p = malloc(LZ4_compressBound(v->shm_len));
+            size_t lz4_len = LZ4_compress((void *)v->view, p, v->shm_len);
+            qemu_put_be32(f, lz4_len);
+            v->lz4_len = lz4_len;
+            v->file_offset = qemu_ftell(f);
+            qemu_put_buffer(f, p, lz4_len);
+            free(p);
+        } else {
+            v->lz4_len = 0;
+            v->file_offset = 0;
+            qemu_put_be32(f, 0);
+        }
     }
 }
 

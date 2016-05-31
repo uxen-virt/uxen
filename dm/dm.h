@@ -55,6 +55,7 @@ extern uint64_t vm_v4v_storage;
 extern uint64_t guest_drivers_logmask;
 extern uint64_t debugkey_level;
 extern uint64_t malloc_limit_bytes;
+extern uint64_t restore_framebuffer_pattern;
 extern dict vm_hvm_params;
 extern int *disabled_keys;
 extern size_t disabled_keys_len;
