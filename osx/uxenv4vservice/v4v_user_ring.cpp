@@ -280,12 +280,16 @@ uxen_v4v_user_ring::sendTo(
     uint32_t input_size = arguments->structureInputSize;
     void* allocd_mem = nullptr;
     IOMemoryMap* map = nullptr;
+    IOMemoryDescriptor* prepared_desc = nullptr;
     ssize_t result = 0;
     IOReturn ret;
 
     if (arguments->structureInputDescriptor != nullptr) {
         if (arguments->structureInputDescriptor->getLength() > UINT32_MAX)
             return kIOReturnOverrun;
+
+        prepared_desc = arguments->structureInputDescriptor;
+        prepared_desc->prepare(kIODirectionOut);
 
         // First try mapping into kernel space.
         map = arguments->structureInputDescriptor->createMappingInTask(
@@ -309,16 +313,14 @@ uxen_v4v_user_ring::sendTo(
         } else {
             /* Fallback if mapping fails for some reason: copy to temp bounce
              * buffer. */
-            input_size = static_cast<uint32_t>(
-                arguments->structureInputDescriptor->getLength());
+            input_size = static_cast<uint32_t>(prepared_desc->getLength());
             allocd_mem = IOMalloc(input_size);
-            if (!allocd_mem)
-                return kIOReturnNoMemory;
+            if (!allocd_mem) {
+                ret = kIOReturnNoMemory;
+                goto out;
+            }
             
-            arguments->structureInputDescriptor->prepare(kIODirectionOut);
-            arguments->structureInputDescriptor->readBytes(
-                0, allocd_mem, input_size);
-            arguments->structureInputDescriptor->complete(kIODirectionOut);
+            prepared_desc->readBytes(0, allocd_mem, input_size);
             input_data = allocd_mem;
         }
     }
@@ -331,13 +333,17 @@ uxen_v4v_user_ring::sendTo(
             .domain = (domid_t)arguments->scalarInput[0] },
         static_cast<unsigned>(arguments->scalarInput[2]),
         &result);
-    if (map != nullptr)
+    arguments->scalarOutput[0] = static_cast<int64_t>(result);
+  out:
+    if (map != nullptr) {
         map->wireRange(
             kIODirectionNone, 0, map->getLength()); // direction=none -> unwire
-    OSSafeReleaseNULL(map);
+        OSSafeReleaseNULL(map);
+    }
+    if (prepared_desc != nullptr)
+        prepared_desc->complete(kIODirectionOut);
     if (allocd_mem)
         IOFree(allocd_mem, input_size);
-    arguments->scalarOutput[0] = static_cast<int64_t>(result);
     return ret;
 }
 
