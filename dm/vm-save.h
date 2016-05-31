@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -44,6 +44,7 @@ struct vm_save_info {
     int single_page;
     int free_mem;
     int high_compress;
+    int ignore_framebuffer;
     int fingerprint;
 
     int resume_delete;

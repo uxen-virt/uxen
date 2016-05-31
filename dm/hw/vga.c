@@ -24,7 +24,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  *
@@ -48,6 +48,7 @@
 #include <dm/console.h>
 #include <dm/qemu/hw/pci.h>
 #include <dm/vmstate.h>
+#include <dm/vm-save.h>
 #include <lz4.h>
 
 #include "vga.h"
@@ -1819,10 +1820,13 @@ get_vga_ram(QEMUFile *f, void *pv, size_t size)
     size_t len;
 
     len = qemu_get_be32(f);
-    tmp = malloc(len);
-    qemu_get_buffer(f, tmp, len);
-    LZ4_decompress_fast(tmp, (void *)vmem_ptr, VGA_RAM_SIZE);
-    free(tmp);
+    if (len) {
+        tmp = malloc(len);
+        qemu_get_buffer(f, tmp, len);
+        LZ4_decompress_fast(tmp, (void *)vmem_ptr, VGA_RAM_SIZE);
+        free(tmp);
+    } else
+        memset(vmem_ptr, 0xff, VGA_RAM_SIZE);
 
     return 0;
 }
@@ -1830,15 +1834,17 @@ get_vga_ram(QEMUFile *f, void *pv, size_t size)
 static void
 put_vga_ram(QEMUFile *f, void *pv, size_t size)
 {
-    uint8_t *vmem_ptr = *(uint8_t **)pv;
-    void *tmp;
-    size_t len;
-
-    tmp = malloc(LZ4_compressBound(VGA_RAM_SIZE));
-    len = LZ4_compress((void *)vmem_ptr, tmp, VGA_RAM_SIZE);
-    qemu_put_be32(f, len);
-    qemu_put_buffer(f, tmp, len);
-    free(tmp);
+    if (!vm_save_info.ignore_framebuffer) {
+        uint8_t *vmem_ptr = *(uint8_t **)pv;
+        void *tmp;
+        size_t len;
+        tmp = malloc(LZ4_compressBound(VGA_RAM_SIZE));
+        len = LZ4_compress((void *)vmem_ptr, tmp, VGA_RAM_SIZE);
+        qemu_put_be32(f, len);
+        qemu_put_buffer(f, tmp, len);
+        free(tmp);
+    } else
+        qemu_put_be32(f, 0);
 }
 
 const VMStateInfo vmstate_info_vga_ram = {
