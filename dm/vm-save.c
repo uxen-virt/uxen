@@ -2614,8 +2614,7 @@ vm_load(const char *name, int restore_mode)
 
     APRINTF("device model loading state: %s", name);
 
-    f = filebuf_open(name, (restore_mode == VM_RESTORE_TEMPLATE &&
-                            !vm_lazy_load) ? "rbn" : "rb");
+    f = filebuf_open(name, "rb");
     if (f == NULL) {
 	ret = -errno;
         asprintf(&err_msg, "filebuf_open(%s) failed", name);
