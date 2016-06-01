@@ -317,8 +317,6 @@ int main(int argc, char **argv)
     char *vdfile;
     int fix = 0;
 
-    early_init();
-
     setprogname(argv[0]);
 
     RTR3Init();

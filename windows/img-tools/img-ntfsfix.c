@@ -58,8 +58,6 @@ int main(int argc, char **argv)
 {
     char *vdfile;
 
-    early_init();
-
     setprogname(argv[0]);
 
     RTR3Init();

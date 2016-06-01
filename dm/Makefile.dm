@@ -74,7 +74,6 @@ $(filter no_,$(DM_CONFIG_DUMP_SWAP_STAT))DM_CFLAGS += \
          -DCONFIG_DUMP_SWAP_STAT=1
 
 DM_SRCS =
-DM_SRCS += early-init.c
 DM_SRCS += aio.c
 DM_SRCS += async-op.c
 DM_SRCS += base64.c

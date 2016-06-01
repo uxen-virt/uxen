@@ -108,8 +108,6 @@ static inline void rnd(uint64_t *s, uint32_t *l, int align)
 
 int main(int argc, char **argv)
 {
-    early_init();
-
 #ifdef _WIN32
     setprogname(argv[0]);
 #endif

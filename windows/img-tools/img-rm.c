@@ -25,8 +25,6 @@ int main(int argc, char **argv)
     BlockDriverState *bs;
     const char *img;
 
-    early_init();
-
 #ifdef _WIN32
     setprogname(argv[0]);
     convert_args(argc, argv);

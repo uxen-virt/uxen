@@ -186,8 +186,6 @@ int main(int argc, char **argv)
     char *src, *dst;
     int rc;
 
-    early_init();
-
     setprogname(argv[0]);
 
     RTR3Init();

@@ -2123,8 +2123,6 @@ int main(int argc, char **argv)
     char startTime[1024];
     char endTime[1024];
 
-    early_init();
-
     setprogname(argv[0]);
 
     /* Don't bring up WER dialog box on segfault, exit with failure instead. */

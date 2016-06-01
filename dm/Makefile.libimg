@@ -25,7 +25,6 @@ CFLAGS += -I$(YAJLDIR)/include
 LIBIMG_CFLAGS = -I$(TOPDIR)
 
 LIBIMG_SRCS =
-LIBIMG_SRCS += early-init.c
 LIBIMG_SRCS += aio.c
 LIBIMG_SRCS += bh.c
 block.o: CPPFLAGS += -I$(LIBVHDDIR_src)
