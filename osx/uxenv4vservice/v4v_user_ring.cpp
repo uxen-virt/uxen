@@ -261,12 +261,12 @@ uxen_v4v_user_ring::notify(
 IOReturn
 uxen_v4v_user_ring::notify(int *out_result)
 {
-    IOReturn ret;
+    IOReturn ret = kIOReturnSuccess;
     IORWLockRead(this->lock);
     if (this->v4v_service == nullptr)
         ret = kIOReturnNotReady;
     else
-        ret = *out_result = this->v4v_service->notify();
+        *out_result = this->v4v_service->notify();
     IORWLockUnlock(this->lock);
     return ret;
 }

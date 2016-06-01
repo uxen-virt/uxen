@@ -25,24 +25,26 @@ int main(int argc, const char * argv[])
         partner_domain, dest_port, source_port);
     
     v4v_channel_t conn = { };
-    errno_t error = v4v_open_service(&conn);
-    switch (error) {
-    case ENOENT:
-        fprintf(stderr, "V4V kernel service not found\n");
-        break;
-    case ENODEV:
-        fprintf(stderr, "V4V kernel call failed\n");
-        break;
-    case ENOMEM:
-        fprintf(stderr, "V4V memory issue\n");
-        break;
-    }
-    if (error != 0)
+    if (!v4v_open(&conn, 128 * 1024)) {
+        switch (errno) {
+        case ENOENT:
+            fprintf(stderr, "V4V kernel service not found\n");
+            break;
+        case ENODEV:
+            fprintf(stderr, "V4V kernel call failed\n");
+            break;
+        case ENOMEM:
+            fprintf(stderr, "V4V memory issue\n");
+            break;
+        default:
+            warn("v4v_open");
+            break;
+        }
         return 1;
-
-    error = v4v_bind(&conn, 128 * 1024, (uint32_t)source_port, partner_domain);
-    if (error != 0) {
-        printf("Creating ring failed: %d (%x)\n", error, error);
+    }
+    
+    if (!v4v_bind(&conn, (uint32_t)source_port, partner_domain)) {
+        printf("Creating ring failed: %d (%x)\n", errno, errno);
         return 1;
     }
     

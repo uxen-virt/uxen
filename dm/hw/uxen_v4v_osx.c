@@ -10,29 +10,27 @@
 int
 v4v_open_sync(v4v_context_t *v4v, uint32_t ring_size, int *out_error)
 {
-    errno_t err;
 
-    err = v4v_open_service(&v4v->v4v_channel);
-    if (err) {
-        *out_error = err;
+    if (!v4v_open(&v4v->v4v_channel, ring_size)) {
+        *out_error = errno;
         return false;
     }
 
     ioh_event_init_with_mach_port(
         &v4v->recv_event, v4v_get_receive_port(&v4v->v4v_channel));
-    v4v->ring_size = ring_size;
     return true;
 }
 
 int
 v4v_bind_sync(v4v_context_t *v4v, v4v_ring_id_t *r, int *out_error)
 {
-    errno_t err;
 
-    err = v4v_bind(&v4v->v4v_channel, v4v->ring_size, r->addr.port, r->partner);
-    *out_error = err;
+    if (!v4v_bind(&v4v->v4v_channel, r->addr.port, r->partner)) {
+        *out_error = errno;
+        return false;
+    }
 
-    return err == 0;
+    return true;
 }
 
 int
@@ -40,7 +38,7 @@ v4v_have_v4v(void)
 {
     v4v_channel_t v4v = { };
 
-    if (_v4v_open(&v4v)) {
+    if (_v4v_open(&v4v, 4096)) {
         _v4v_close(&v4v);
         return 1;
     }

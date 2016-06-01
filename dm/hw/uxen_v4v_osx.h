@@ -26,7 +26,6 @@ typedef struct v4v_context {
         v4v_channel_t v4v_channel;
     };
     ioh_event recv_event;
-    uint32_t ring_size;
 } v4v_context_t;
 
 #endif

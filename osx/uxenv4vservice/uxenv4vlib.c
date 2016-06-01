@@ -74,8 +74,8 @@ v4v_notification_port_create_and_set(
     return 0;
 }
 
-errno_t
-_v4v_open_service(v4v_channel_t *_channel)
+bool
+_v4v_open(v4v_channel_t *_channel, uint32_t ring_size)
 {
     io_service_t v4v_service;
     io_connect_t v4v_ring_conn = IO_OBJECT_NULL;
@@ -85,16 +85,22 @@ _v4v_open_service(v4v_channel_t *_channel)
     errno_t err;
     struct _v4v_channel *channel;
 
+    errno = 0;
+
     v4v_service = IOServiceGetMatchingService(
         kIOMasterPortDefault, IOServiceMatching(V4V_SERVICE_CLASSNAME));
-    if (v4v_service == IO_OBJECT_NULL)
-        return ENOENT;
+    if (v4v_service == IO_OBJECT_NULL) {
+        errno = ENOENT;
+        return false;
+    }
 
     ret = IOServiceOpen(
         v4v_service, mach_task_self(), 0 /* type */, &v4v_ring_conn);
     IOObjectRelease(v4v_service);
-    if (ret != KERN_SUCCESS)
-        return ENODEV;
+    if (ret != KERN_SUCCESS) {
+        errno = ENODEV;
+        return false;
+    }
 
     err = v4v_notification_port_create_and_set(
         v4v_ring_conn, kUxenV4VPort_ReceiveEvent, &recv_port);
@@ -108,21 +114,16 @@ _v4v_open_service(v4v_channel_t *_channel)
     if (err != 0) {
         IOServiceClose(v4v_ring_conn);
         IOObjectRelease(v4v_service);
-        return err;
+        errno = err;
+        return false;
     }
 
     channel = _channel->_c = calloc(sizeof(*channel), 1);
     channel->ring_connection = v4v_ring_conn;
     channel->receive_notification_port = recv_port;
     channel->send_notification_port = send_port;
-    return 0;
-}
-
-bool
-_v4v_open(v4v_channel_t *channel)
-{
-
-    return !_v4v_open_service(channel);
+    channel->ring_size = ring_size;
+    return true;
 }
 
 dispatch_source_t
@@ -201,39 +202,43 @@ _v4v_sendto(
     return (ssize_t)outputs[0];
 }
 
-errno_t
+bool
 _v4v_bind(
-    v4v_channel_t *_channel, uint32_t ring_len,
-    uint32_t local_port, domid_t partner)
+    v4v_channel_t *_channel, uint32_t local_port, domid_t partner)
 {
     struct _v4v_channel *channel = _channel->_c;
     uint64_t result = 0;
     kern_return_t ret;
-    const uint64_t inputs[] = { ring_len, partner, local_port };
+    const uint64_t inputs[] = { channel->ring_size, partner, local_port };
     uint32_t outputs = 1;
     mach_vm_address_t address = 0;
     mach_vm_size_t size = 0;
 
-    if (channel->ring != NULL)
-        return EINVAL;
+    if (channel->ring != NULL) {
+        errno = EINVAL;
+        return false;
+    }
 
     ret = IOConnectCallScalarMethod(
         channel->ring_connection, kUxenV4V_BindRing, inputs,
         sizeof(inputs)/sizeof(inputs[0]), &result, &outputs);
 
-    if (ret != KERN_SUCCESS)
-        return (errno_t)result;
+    if (ret != KERN_SUCCESS) {
+        errno = (errno_t)result;
+        return false;
+    }
 
     ret = IOConnectMapMemory64(channel->ring_connection, 0 /* type */,
         mach_task_self(), &address, &size, kIOMapAnywhere /* options*/);
 
-    if (ret != KERN_SUCCESS || address == 0)
-        return ENOMEM;
+    if (ret != KERN_SUCCESS || address == 0) {
+        errno = ENOMEM;
+        return false;
+    }
 
     channel->ring = (void*)address;
-    channel->ring_size = size;
     channel->partner_domain = partner;
-    return 0;
+    return true;
 }
 
 ssize_t
@@ -295,17 +300,22 @@ _v4v_get_mapped_ring(v4v_channel_t *_channel)
     return channel->ring;
 }
 
-errno_t
+bool
 _v4v_notify(v4v_channel_t *_channel)
 {
     struct _v4v_channel *channel = _channel->_c;
     uint64_t result = 0;
     uint32_t outputs = 1;
+    kern_return_t ret;
 
-    (void)IOConnectCallMethod(
+    ret = IOConnectCallMethod(
         channel->ring_connection, kUxenV4V_Notify, NULL, 0, NULL, 0,
         &result, &outputs, NULL, NULL);
-    return (errno_t)result;
+    if (ret != kIOReturnSuccess)
+        errno = EIO;
+    else
+        errno = (errno_t)result;
+    return !errno;
 }
 
 mach_port_t
