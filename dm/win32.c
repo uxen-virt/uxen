@@ -18,6 +18,8 @@
 #include "vm.h"
 #include "guest-agent.h"
 
+int initcall_logging = 0;
+
 #ifndef LIBIMG
 
 DECLARE_PROGNAME = "uxendm";

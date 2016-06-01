@@ -31,6 +31,8 @@
 extern UXEN_HANDLE_T uxen_handle;
 #endif
 
+int initcall_logging = 0;
+
 void
 socket_set_block(int fd)
 {
