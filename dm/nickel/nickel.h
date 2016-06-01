@@ -211,5 +211,8 @@ ni_new_rt_timer(struct nickel *ni, int64_t delay_ms, void (*cb)(void *opaque), v
 
 void ni_wakeup_loop(struct nickel *ni);
 void _np_add_service(struct np_desc *);
-
+#define np_add_service(nspd)                                                  \
+    static void __attribute__((constructor)) np_add_service_##nspd(void) {    \
+        _np_add_service(&(nspd));                                             \
+    }
 #endif /* _NICKEL_H_ */

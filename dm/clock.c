@@ -29,8 +29,8 @@ static void vm_clock_unlock(void);
 #if defined(_WIN32)
 static int64_t clock_freq = 0;
 
-void
-early_init_clock(void)
+static void __attribute__((constructor))
+init_get_clock(void)
 {
     LARGE_INTEGER freq;
 #ifdef RELATIVE_CLOCK
@@ -108,7 +108,8 @@ static int64_t get_calendar_time(void)
     return (int64_t) mts.tv_sec * CLOCK_BASE + (int64_t) mts.tv_nsec;
 }
 
-void early_init_clock(void)
+static void __attribute__((constructor))
+init_get_clock(void)
 {
     kern_return_t kr;
 

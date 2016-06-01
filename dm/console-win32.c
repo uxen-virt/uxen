@@ -1686,7 +1686,4 @@ static struct gui_info win_gui_info = {
 #endif
 };
 
-void early_init_console_win32(void)
-{
-    gui_register_info(&win_gui_info);
-}
+console_gui_register(win_gui_info)

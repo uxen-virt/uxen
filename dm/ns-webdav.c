@@ -128,8 +128,4 @@ static struct ns_desc ns_webdav_desc = {
     .service_close = ns_webdav_close,
 };
 
-void
-early_init_ns_webdav(void)
-{
-    _ns_add_service(&ns_webdav_desc);
-}
+ns_add_service(ns_webdav_desc);

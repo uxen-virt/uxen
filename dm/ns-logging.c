@@ -107,8 +107,4 @@ static struct ns_desc ns_logging_desc = {
     .service_close = ns_logging_close,
 };
 
-void early_init_ns_logging(void)
-{
-    _ns_add_service(&ns_logging_desc);
-}
-
+ns_add_service(ns_logging_desc);

@@ -62,9 +62,16 @@ redir_stderr(wchar_t *name, wchar_t *defname, int append)
     }
 }
 
-void early_init_win32_logging(void)
+static void __attribute__((constructor))
+logstyle_early_init(void)
 {
+    logstyle_set(getenv("UXENDM_LOGSTYLE"));
+}
+
+static void __attribute__((constructor))
+redir_stderr_init(void)
+{
+
     redir_stderr(_wgetenv(L"UXENDM_LOGFILE"), L"uxendm.log",
                  getenv("UXENDM_LOGFILE_APPEND") != NULL);
-    logstyle_set(getenv("UXENDM_LOGSTYLE"));
 }

@@ -201,8 +201,4 @@ static struct prx_fwd prx = {
     .open = udps_open,
     .accept = NULL,
 };
-
-void early_init_nickel_udp(void)
-{
-    _ni_prx_add_service(&prx);
-}
+ni_prx_add_service(prx);

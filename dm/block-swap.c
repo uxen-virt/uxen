@@ -1315,8 +1315,8 @@ swap_open_file_by_id(HANDLE volume, uint64_t file_id)
 }
 
 #if !defined(LIBIMG)
-void
-early_init_swap(void)
+static void __attribute__((constructor))
+swap_early_init(void)
 {
     HANDLE cow_port;
 

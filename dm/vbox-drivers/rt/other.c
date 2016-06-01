@@ -71,8 +71,7 @@ RTDECL(bool)    RTAssertShouldPanic(void)
     return false;
 }
 
-void
-early_init_vbox_rt(void)
+static void __attribute__ ((constructor)) hgcm_heap_init(void)
 {
     priv_heap_create(&hgcm_heap);
 }

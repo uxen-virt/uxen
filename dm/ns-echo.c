@@ -185,9 +185,4 @@ static struct ns_desc ns_echo_desc = {
     .service_close = ns_echo_close,
 };
 
-void
-early_init_ns_echo(void)
-{
-    _ns_add_service(&ns_echo_desc);
-}
-
+ns_add_service(ns_echo_desc);

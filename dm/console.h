@@ -230,4 +230,10 @@ struct gui_info {
 
 void gui_register_info(struct gui_info *info);
 
+#define console_gui_register(gui)                                             \
+    static void __attribute__((constructor)) console_gui_register_##gui(void) \
+    {                                                                         \
+        gui_register_info(&(gui));                                            \
+    }
+
 #endif  /* _CONSOLE_H_ */
