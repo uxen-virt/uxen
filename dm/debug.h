@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -33,5 +33,22 @@ error_printf(const char *fmt, ...);
 #endif
 
 void logstyle_set(const char *logstyle);
+
+/* causes initcall_logging to be set, and extra logging when invoking initcalls */
+#define DEBUG_INITCALLS
+
+extern int initcall_logging;
+
+#define initcall(fn)                                                    \
+    static void fn(void);                                               \
+    static void __attribute__((constructor)) _initcall_##fn(void)       \
+    {                                                                   \
+        if (initcall_logging) {                                         \
+            debug_printf("initcall %s\n", #fn);                         \
+            fflush(stderr);                                             \
+        }                                                               \
+        fn();                                                           \
+    }                                                                   \
+    static void fn(void)
 
 #endif	/* _DEBUG_H_ */

@@ -63,14 +63,17 @@ redir_stderr(wchar_t *name, wchar_t *defname, int append)
 }
 
 static void __attribute__((constructor))
-logstyle_early_init(void)
+logging_prepare(void)
 {
-    logstyle_set(getenv("UXENDM_LOGSTYLE"));
-}
+#ifdef DEBUG_INITCALLS
+    initcall_logging = 1;
+#else
+    char *str;
+    str = getenv("UXENDM_INITCALL_LOG");
+    initcall_logging = str ? atoi(str) : 0;
+#endif
 
-static void __attribute__((constructor))
-redir_stderr_init(void)
-{
+    logstyle_set(getenv("UXENDM_LOGSTYLE"));
 
     redir_stderr(_wgetenv(L"UXENDM_LOGFILE"), L"uxendm.log",
                  getenv("UXENDM_LOGFILE_APPEND") != NULL);

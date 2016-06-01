@@ -72,9 +72,9 @@ struct ns_desc *ns_find_service(const char *, int);
 
 void _ns_add_service(struct ns_desc *);
 
-#define ns_add_service(nsd)                                             \
-    static void __attribute__((constructor)) ns_add_service_##nsd(void) { \
-        _ns_add_service(&(nsd));                                        \
-    }                                                                   \
+#define ns_add_service(nsd)                     \
+    initcall(ns_add_service_##nsd) {            \
+        _ns_add_service(&(nsd));                \
+    }
 
 #endif  /* _NS_H_ */

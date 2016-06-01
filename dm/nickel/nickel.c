@@ -1924,7 +1924,7 @@ mem_err:
     goto out;
 }
 
-static void __attribute__((constructor)) nickel_static_init(void)
+initcall(nickel_static_init)
 {
     ni_priv_heap_err = priv_heap_create(&ni_priv_heap);
 }

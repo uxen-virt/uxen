@@ -936,7 +936,7 @@ void wasapi_exit(void)
     }
 }
 
-static void __attribute__((constructor)) wasapi_construct(void)
+initcall(wasapi_construct)
 {
     CoInitializeEx(NULL, COINIT_MULTITHREADED);
     critical_section_init(&lock);

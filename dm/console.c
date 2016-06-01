@@ -537,8 +537,7 @@ dpy_cursor_shape(struct display_state *ds,
                                w, h, hot_x, hot_y, mask, color);
 }
 
-static void __attribute__((constructor))
-desktop_init(void)
+initcall(desktop_init)
 {
     TAILQ_INIT(&desktop);
     desktop_width = desktop_height = 0;

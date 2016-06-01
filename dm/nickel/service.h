@@ -19,9 +19,9 @@ struct prx_fwd {
     LIST_ENTRY(prx_fwd) entry;
 };
 
-#define ni_prx_add_service(prx)                                               \
-    static void __attribute__((constructor)) prx_add_service_##prx(void) {    \
-        _ni_prx_add_service(&(prx));                                          \
+#define ni_prx_add_service(prx)                 \
+    initcall(prx_add_service_##prx) {           \
+        _ni_prx_add_service(&(prx));            \
     }
 
 yajl_val ni_get_service_config(struct nickel *ni, const char *service_name);

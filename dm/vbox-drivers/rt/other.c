@@ -71,7 +71,7 @@ RTDECL(bool)    RTAssertShouldPanic(void)
     return false;
 }
 
-static void __attribute__ ((constructor)) hgcm_heap_init(void)
+initcall(hgcm_heap_init)
 {
     priv_heap_create(&hgcm_heap);
 }

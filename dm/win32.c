@@ -294,9 +294,6 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     signal(SIGTERM, exit_handler);
     signal(SIGBREAK, exit_handler);
 
-    if (!LoadLibraryA("uxen-backtrace.dll"))
-        Wwarn("LoadLibraryA(uxen-backtrace.dll) failed");
-
     /* Create non-wide-char argv */
     argv = (char **)malloc(sizeof(char *) * argc);
     if (argv == NULL)

@@ -429,7 +429,8 @@ $(WINDOWS)DM_OBJS += uxendm-res.o
 
 # stderr redirect is done from constructor -- this needs to be last
 # in the object file list, apparently constructors are executed in
-# reverse link order
+# reverse link order. win32-backtrace.o is here to setup uxen backtrace early
+$(WINDOWS)DM_OBJS += win32-backtrace.o
 $(WINDOWS)DM_OBJS += win32-logging.o
 
 EXTRA_CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@

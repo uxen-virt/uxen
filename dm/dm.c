@@ -102,6 +102,7 @@ uint64_t ps2_fallback = 1;
 const char *app_dump_command = NULL;
 uint64_t event_service_mouse_moves = 0;
 char *save_file_prefix = "uxenvm-";
+int initcall_logging = 0;
 #if defined(_WIN32)
 const char *console_type = "win32";
 #elif defined(__APPLE__)
