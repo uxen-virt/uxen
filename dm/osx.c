@@ -446,8 +446,7 @@ int set_nofides(void)
 static int fd_random = -1;
 static int fd_urandom = -1;
 
-static void __attribute__((constructor))
-os_early_init(void)
+initcall(os_early_init)
 {
     fd_random = open("/dev/random", O_WRONLY);
     if (fd_random < 0) {

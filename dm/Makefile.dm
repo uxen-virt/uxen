@@ -74,6 +74,9 @@ $(filter no_,$(DM_CONFIG_DUMP_SWAP_STAT))DM_CFLAGS += \
          -DCONFIG_DUMP_SWAP_STAT=1
 
 DM_SRCS =
+# on OSX constructor functions are invoked in linking order, therefore
+# this needs to be first to setup logging
+$(OSX)DM_SRCS += osx-logging.o
 DM_SRCS += aio.c
 DM_SRCS += async-op.c
 DM_SRCS += base64.c
