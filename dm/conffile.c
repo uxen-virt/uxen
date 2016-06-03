@@ -730,6 +730,7 @@ struct config_option config_options[] = {
     { "use-v4v-disk", co_set_integer_opt, &vm_use_v4v_disk },
     { "use-v4v-net", co_set_integer_opt, &vm_use_v4v_net },
     { "uuid", co_set_uuid, NULL },
+    { "v4v-disable-ahci-clones", co_set_boolean_opt, &vm_v4v_disable_ahci_clones },
     { "v4v-storage", co_set_boolean_opt, &vm_v4v_storage },
     { "vcpus", co_set_integer_opt, &vm_vcpus },
     { "vga-memory-mapped", co_set_integer_opt, &vm_vga_mb_mapped },

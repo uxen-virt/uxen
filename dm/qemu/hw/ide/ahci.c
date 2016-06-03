@@ -1469,7 +1469,7 @@ static int ahci_post_load(void *opaque, int version_id)
     extern uint64_t vm_use_v4v_disk;
     AHCIState *s = opaque;
 
-    if (vm_use_v4v_disk) {
+    if (vm_use_v4v_disk && vm_v4v_disable_ahci_clones) {
         ahci_shadow(s);
         return 0;
     }

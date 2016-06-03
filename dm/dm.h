@@ -52,6 +52,7 @@ extern uint64_t vm_hidden_mem;
 extern uint64_t vm_use_v4v_net;
 extern uint64_t vm_use_v4v_disk;
 extern uint64_t vm_v4v_storage;
+extern uint64_t vm_v4v_disable_ahci_clones;
 extern uint64_t guest_drivers_logmask;
 extern uint64_t debugkey_level;
 extern uint64_t malloc_limit_bytes;

@@ -50,6 +50,7 @@ static int processed = 0;
 
 
 static int unit_bitfield[16];
+static int stor_ctrl = 0;
 
 typedef struct v4v_disk_transfer {
     uint64_t seq;
@@ -925,6 +926,12 @@ uxen_stor_ioport_read (void *opaque, uint32_t addr)
     return ret;
 }
 
+static uint32_t
+uxen_stor_ioport_ctrl_read (void *opaque, uint32_t addr)
+{
+    return stor_ctrl;
+}
+
 static void present_bitfield_set(uint32_t devid)
 {
     int offset;
@@ -1059,6 +1066,8 @@ uxen_stor_initfn (ISADevice *dev)
 #endif
 
     present_bitfield_set(unit);
+    if (vm_v4v_disable_ahci_clones)
+        stor_ctrl |= 0x1;
 
     ioh_add_wait_object (&DEV_V4V_CTX(s).recv_event, uxen_stor_read_event, s, NULL);
     ioh_add_wait_object (&s->tx_event, uxen_stor_write_event, s, NULL);
@@ -1131,8 +1140,9 @@ static ISADeviceInfo uxen_stor_info = {
 void
 uxen_stor_late_register (void)
 {
-    debug_printf("%s: registering 0x330 for uxen_stor\n", __FUNCTION__);
+    debug_printf("%s: registering 0x32f and 0x330 for uxen_stor\n", __FUNCTION__);
 
+    register_ioport_read (0x32f, 1, 1, uxen_stor_ioport_ctrl_read, NULL);
     register_ioport_read (0x330, 16, 1, uxen_stor_ioport_read, NULL);
 }
 

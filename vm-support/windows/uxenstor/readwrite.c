@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -419,7 +419,7 @@ void stor_v4v_resume_callback(PKDPC dpc,
     uxen_msg("out-paging_io: %I64d; in-paging_io: %I64d", 
              perfcnt_arr_get(out_bytes, 1), perfcnt_arr_get(in_bytes, 1));
 
-    if (ahci_state) {
+    if (ahci_state && (READ_PORT_USHORT((PUSHORT)0x32f) & 0x1)) {
         uxen_msg("disabling AHCI");
         ahci_state = 0;
     }
