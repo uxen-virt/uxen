@@ -1209,7 +1209,7 @@ map_host_pages(void *va, size_t len, uint64_t *gpfns,
     KIRQL old_irql;
     PFN_NUMBER *pfn_array;
     size_t gpfn_num = len >> PAGE_SHIFT;
-    unsigned int i;
+    unsigned int i = 0;
 
     if (len > MAX_MDL_LEN) {
         fail_msg("len %lx too large", len);
