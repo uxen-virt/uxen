@@ -388,7 +388,7 @@ BOOLEAN Initialize(PVOID dev_ext)
 
     hw_init(dev);
 
-    dev->dr_ctx = dr_init(dev, hw_disable_page_tracking);
+    dev->dr_ctx = dr_init(dev, hw_disable_page_tracking, hw_get_last_mode);
     if (dev->dr_ctx == NULL)
     {
         DBG_ERR("Error dr_init failed.\n");

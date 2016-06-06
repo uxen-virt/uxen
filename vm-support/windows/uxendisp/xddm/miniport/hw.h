@@ -11,6 +11,7 @@ VP_STATUS hw_init(PDEVICE_EXTENSION dev);
 ULONG hw_get_nmodes(PDEVICE_EXTENSION dev);
 VP_STATUS hw_get_mode_info(PDEVICE_EXTENSION dev, ULONG i,
                               VIDEO_MODE_INFORMATION *info);
+void hw_get_last_mode(ULONG* width, ULONG* height);
 VP_STATUS hw_set_mode(PDEVICE_EXTENSION dev, VIDEO_MODE_INFORMATION *mode);
 VP_STATUS hw_disable(PDEVICE_EXTENSION dev);
 ULONG hw_get_vram_size(PDEVICE_EXTENSION dev);

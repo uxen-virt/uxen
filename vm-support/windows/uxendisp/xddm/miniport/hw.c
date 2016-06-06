@@ -24,6 +24,9 @@ static BOCHSMode bochs_modes[] = {
     { 0x138, 1024, 768, 32 },
 };
 
+static ULONG last_mode_width = 0;
+static ULONG last_mode_height = 0;
+
 static ULONG uxdisp_read(PDEVICE_EXTENSION dev, ULONG reg)
 {
     return READ_REGISTER_ULONG((ULONG *)(dev->mmio_start + reg));
@@ -138,6 +141,12 @@ VP_STATUS hw_get_mode_info(PDEVICE_EXTENSION dev, ULONG i,
     return NO_ERROR;
 }
 
+void hw_get_last_mode(ULONG* width, ULONG* height)
+{
+    *width = last_mode_width;
+    *height = last_mode_height;
+}
+
 VP_STATUS hw_set_mode(PDEVICE_EXTENSION dev, VIDEO_MODE_INFORMATION *mode)
 {
     USHORT width = (USHORT)mode->VisScreenWidth;
@@ -175,6 +184,9 @@ VP_STATUS hw_set_mode(PDEVICE_EXTENSION dev, VIDEO_MODE_INFORMATION *mode)
 
     /* Flush */
     uxdisp_crtc_write(dev, 0, UXDISP_REG_CRTC_OFFSET, 0);
+
+    last_mode_width = width;
+    last_mode_height = height;
 
     return NO_ERROR;
 }

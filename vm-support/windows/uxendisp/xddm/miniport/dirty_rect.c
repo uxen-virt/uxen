@@ -23,6 +23,7 @@ struct dr_context
 {
     void *dev;
     disable_tracking_ptr disable_tracking;
+    get_last_mode_ptr get_last_mode;
     v4v_addr_t peer;
     v4v_addr_t alt_peer;
     uxen_v4v_ring_handle_t *ring;
@@ -44,6 +45,8 @@ static void dr_timer_dpc(
 {
     struct dr_context *ctx = deferred_context;
     LONG signaled = 0;
+    ULONG last_mode_width = 0;
+    ULONG last_mode_height = 0;
 
     ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
@@ -63,6 +66,20 @@ static void dr_timer_dpc(
         ctx->dirty.bottom += DR_BRODER_SIZE;
 
         ctx->dirty_copy = ctx->dirty;
+
+        ctx->get_last_mode(&last_mode_width, &last_mode_height);
+        if (ctx->dirty_copy.top > last_mode_height) {
+            ctx->dirty_copy.top = 0;
+        }
+        if (ctx->dirty_copy.left > last_mode_width) {
+            ctx->dirty_copy.left = 0;
+        }
+        if (ctx->dirty_copy.bottom > last_mode_height) {
+            ctx->dirty_copy.bottom = last_mode_height;
+        }
+        if (ctx->dirty_copy.right > last_mode_width) {
+            ctx->dirty_copy.right = last_mode_width;
+        }
 
         uxen_v4v_send_from_ring(ctx->ring, &ctx->peer, &ctx->dirty_copy,
                                 sizeof(ctx->dirty_copy), V4V_PROTO_DGRAM);
@@ -114,7 +131,7 @@ static void dr_v4v_dpc(uxen_v4v_ring_handle_t *ring, void *ctx1, void *ctx2)
     uxen_v4v_notify();
 }
 
-dr_ctx_t dr_init(void *dev, disable_tracking_ptr fn)
+dr_ctx_t dr_init(void *dev, disable_tracking_ptr fn, get_last_mode_ptr fn2)
 {
     NTSTATUS status = STATUS_SUCCESS;
     struct dr_context *ctx = NULL;
@@ -131,6 +148,7 @@ dr_ctx_t dr_init(void *dev, disable_tracking_ptr fn)
 
     ctx->dev = dev;
     ctx->disable_tracking = fn;
+    ctx->get_last_mode = fn2;
 
     ctx->due_time.QuadPart = -DR_PERIOD_MS * DR_ONE_MS_IN_HNS;
     KeInitializeTimer(&ctx->timer);
