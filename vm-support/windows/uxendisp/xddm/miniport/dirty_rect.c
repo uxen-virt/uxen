@@ -52,8 +52,8 @@ static void dr_timer_dpc(
 
     KeAcquireSpinLockAtDpcLevel(&ctx->lock);
     signaled = KeReadStateEvent(&ctx->safe_to_send);
-    if (ctx->force_update ||
-        (signaled && (ctx->dirty.right > 0) && (ctx->dirty.bottom > 0)))
+    if ((ctx->dirty.right > 0) && (ctx->dirty.bottom > 0) && 
+        (signaled || ctx->force_update))
     {
         KeClearEvent(&ctx->safe_to_draw);
         ctx->force_update = FALSE;
@@ -98,6 +98,7 @@ static void dr_timer_dpc(
     if (!signaled)
     {
         ctx->force_update = TRUE;
+        KeSetTimerEx(&ctx->timer, ctx->due_time, DR_PERIOD_MS, &ctx->dpc);
     }
     KeReleaseSpinLockFromDpcLevel(&ctx->lock);
 }
