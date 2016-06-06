@@ -40,11 +40,13 @@ CFLAGS += -mkernel -fno-builtin -fno-stack-protector \
 	  -arch x86_64 -msoft-float -fno-common -fstrict-aliasing \
 	  -mno-red-zone -mmacosx-version-min=10.9
 CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti -Wno-non-virtual-dtor \
-	   -Wno-overloaded-virtual -Wno-exit-time-destructors -std=gnu++11 \
+	   -Wno-overloaded-virtual -Wno-exit-time-destructors \
+	   -Wno-deprecated-register \
 	   -fapple-kext
 CPPFLAGS += -DKERNEL -DKERNEL_PRIVATE -DDRIVER_PRIVATE -DAPPLE -DNeXT \
 	    -nostdinc \
 	    -I$(OSX_SDK_ROOT)/System/Library/Frameworks/Kernel.framework/Headers
+ASFLAGS += -mmacosx-version-min=10.9
 
 LDFLAGS = -Wall -mkernel -nostdlib -r -lcc_kext -lkmod -arch x86_64 \
 	  -Xlinker -kext -mmacosx-version-min=10.9

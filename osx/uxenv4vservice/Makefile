@@ -28,6 +28,7 @@ CFLAGS += -mkernel -fno-builtin -fno-stack-protector \
 	  -mno-red-zone -mmacosx-version-min=10.9
 CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti -Wno-non-virtual-dtor \
 	   -Wno-overloaded-virtual -Wno-exit-time-destructors -std=gnu++11 \
+	   -Wno-deprecated-register \
 	   -fapple-kext
 CPPFLAGS += -DKERNEL -DKERNEL_PRIVATE -DDRIVER_PRIVATE -DAPPLE -DNeXT \
 	    -nostdinc \
