@@ -59,7 +59,11 @@
 #include <sys/conf.h>
 #include <sys/errno.h>
 #include <mach/mach_types.h>
-#include <inttypes.h>
+#define PRIx32 "lx"
+#define PRId32 "ld"
+#define PRIx64 "llx"
+#define PRId64 "lld"
+#define PRIu64 "llu"
 #else
 #error Unsupported OS
 #endif

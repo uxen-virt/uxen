@@ -12,7 +12,8 @@
 
 #include "uxen.h"
 
-#include <alloca.h>
+void    *alloca(size_t);                /* built-in for gcc, no kernel
+                                           header prototype */
 #include <kern/clock.h>
 #include <kern/locks.h>
 

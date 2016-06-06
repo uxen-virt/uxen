@@ -934,7 +934,7 @@ uxen_dom0_hypercall(struct vm_info_shared *vmis, void *user_access_opaque,
         n_arg = 6;
         break;
     default:
-        fail_msg("unknown hypercall op: %"PRId64, op);
+        fail_msg("unknown hypercall op: %lld", op);
         return EINVAL;
     }
 
@@ -994,7 +994,7 @@ _uxen_snoop_hypercall(void *udata, int mode)
                 break;
             if (((1ULL << res.extent_order) * res.nr_extents) >=
                 (1ULL << 31)) {
-                fail_msg("size assert: %"PRIx64,
+                fail_msg("size assert: %llx",
                          (1ULL << res.extent_order) * res.nr_extents);
                 return -ENOMEM;
             }

@@ -8,7 +8,7 @@
 
 #include <kern/sched_prim.h>
 #include <kern/locks.h>
-#include <strings.h> /* ffs() */
+#include <libkern/libkern.h> /* ffs() */
 
 
 static unsigned int first_cpu = MAX_CPUS - 1;

@@ -24,13 +24,12 @@ extern "C" {
 #include <kern/kern_types.h>
 #define MACH_ASSERT 1
 #include <kern/assert.h>
-#include <errno.h>
+#include <sys/errno.h>
 
 #include <i386/eflags.h>
 
 #include <stdarg.h>
 #include <string.h>
-#include <inttypes.h>
 #include <sys/types.h>
 
 #include <sys/conf.h>

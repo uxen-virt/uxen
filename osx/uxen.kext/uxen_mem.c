@@ -115,13 +115,13 @@ verify_mapping(void *_va, uxen_pfn_t *pfns, int len, const char *fn, int line)
         addr = (pte & ~0x8000000000000fff);
         if (addr >> PAGE_SHIFT != pfns[idx]) {
             uint64_t cr3;
-            dprintk("%s: fail at range %d/%d for mfn %x != %"PRIx64
+            dprintk("%s: fail at range %d/%d for mfn %x != %llx "
                     "from %s:%d\n", __FUNCTION__, idx, len,
                     pfns[idx] << PAGE_SHIFT, addr, fn, line);
             if (addr) {
                 asm ("movq %%cr3, %0\n"
                      : "=a" (cr3));
-                dprintk("%s: cr3 %"PRIx64"\n", __FUNCTION__, cr3);
+                dprintk("%s: cr3 %llx\n", __FUNCTION__, cr3);
                 debug_break();
                 return 1;
             }
@@ -1626,7 +1626,7 @@ map_host_pages(void *va, size_t len, uint64_t *gpfns,
          * aren't part of the prepopulated memory regions */
         if (pn >= uxen_info->ui_max_page || _populate_frametable(pn)) {
             fail_msg("invalid mfn %x or failed to populate physmap:"
-                     " gpfn=%"PRIx64", domid=%d",
+                     " gpfn=%llx, domid=%d",
                      pn, um->gpfns[i], vmi->vmi_shared.vmi_domid);
             ret = ENOMEM;
             goto out;

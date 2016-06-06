@@ -57,7 +57,7 @@
 #include <sys/types.h>
 #else
 #include <stdbool.h>
-#include <inttypes.h>
+#include <sys/types.h>
 #endif
 #if defined(_WIN32)
 #define __BEGIN_DECLS
