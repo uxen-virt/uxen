@@ -12,10 +12,19 @@
 
 #include "uxen.h"
 
-void    *alloca(size_t);                /* built-in for gcc, no kernel
-                                           header prototype */
 #include <kern/clock.h>
 #include <kern/locks.h>
+
+/* use alloca built-in for gcc, no kernel header prototype */
+#if defined(__GNUC__) && __GNUC__ >= 3
+void    *alloca(size_t);
+#undef  alloca
+#undef  __alloca
+#define alloca(size)    __alloca(size)
+#define __alloca(size)  __builtin_alloca(size)
+#else
+#error __GNUC__ >= 3 required
+#endif
 
 /* lck_mtx_lock and vprintf aren't safe while preemption is disabled,
  * but system logging is convenient for some types of debugging */
