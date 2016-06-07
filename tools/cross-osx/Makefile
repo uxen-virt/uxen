@@ -14,14 +14,19 @@ OBJCONV_PATCHES =
 OBJCONV_DIR = objconv-2013-Jun-25
 OBJCONV_CFLAGS="-Wno-logical-op-parentheses"
 
+SDK_10_9_DISTFILES = MacOSX10.9.sdk.tar.bz2
+SDK_10_9_DIR = MacOSX10.9.sdk
+XCTOOLCHAIN_6_2_DISTFILES = xctoolchain-6.2.tar.bz2
+XCTOOLCHAIN_6_2_DIR = xctoolchain-6.2
+
 VPATH = $(SRCDIR)/patches:$(SRCDIR)/files:$(XEN_DISTFILES)
 
-all: objconv/.installed
+all: objconv/.installed sdk-10.9/.installed xctoolchain-6.2/.installed
 
 .PHONY: all clean
 
 clean:
-	rm -rf objconv
+	rm -rf objconv sdk-10.9 xctoolchain-6.2
 
 objconv/.installed: $(TOOLSDIR)/bin/.exists
 objconv/.installed: objconv/.built
@@ -51,6 +56,27 @@ objconv/.extracted: $(OBJCONV_DISTFILES)
 
 .SECONDARY: objconv/.exists
 objconv-%: objconv/.%
+	@ :
+
+sdk-10.9/.installed: sdk-10.9/.exists $(TOOLSDIR)/cross-osx/.exists
+sdk-10.9/.installed: $(SDK_10_9_DISTFILES)
+	@rm -rf $(TOOLSDIR)/$(SDK_10_9_DIR)
+	cat $< | (cd $(TOOLSDIR)/cross-osx && tar jxf -)
+	@touch $@
+
+.SECONDARY: sdk-10.9/.exists
+sdk-10.9-%: sdk-10.9/.%
+	@ :
+
+xctoolchain-6.2/.installed: xctoolchain-6.2/.exists
+xctoolchain-6.2/.installed: $(TOOLSDIR)/cross-osx/.exists
+xctoolchain-6.2/.installed: $(XCTOOLCHAIN_6_2_DISTFILES)
+	@rm -rf $(TOOLSDIR)/$(XCTOOLCHAIN_6_2_DIR)
+	cat $< | (cd $(TOOLSDIR)/cross-osx && tar jxf -)
+	@touch $@
+
+.SECONDARY: xctoolchain-6.2/.exists
+xctoolchain-6.2-%: xctoolchain-6.2/.%
 	@ :
 
 endif # MAKENOW
