@@ -1,5 +1,5 @@
 #
-# Copyright 2013-2015, Bromium, Inc.
+# Copyright 2013-2016, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -23,7 +23,7 @@ CFLAGS += -mkernel -fno-builtin -fno-stack-protector \
 CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti -Wno-non-virtual-dtor \
 	   -Wno-overloaded-virtual -Wno-exit-time-destructors 
 CPPFLAGS += -DKERNEL -DKERNEL_PRIVATE -DDRIVER_PRIVATE -DAPPLE -DNeXT \
-	    -I$(OSX_SDK_ROOT)/System/Library/Frameworks/Kernel.framework/Headers
+	    -I$(UXEN_OSX_SDK_ROOT)/System/Library/Frameworks/Kernel.framework/Headers
 
 LDFLAGS = -Wall -mkernel -nostdlib -r -lcc_kext -lkmod -arch x86_64 \
 	  -Xlinker -kext

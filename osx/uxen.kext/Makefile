@@ -33,23 +33,20 @@ CPPFLAGS += -I$(BUILDDIR_xen)/include \
 	    -I.
 $(DEBUG_ONLY)CPPFLAGS += -DDEBUG=1
 
-CPPFLAGS += --sysroot $(OSX_SDK_ROOT)/
-
 # Required stuff to build kext
 CFLAGS += -mkernel -fno-builtin -fno-stack-protector \
 	  -arch x86_64 -msoft-float -fno-common -fstrict-aliasing \
-	  -mno-red-zone -mmacosx-version-min=10.9
+	  -mno-red-zone
 CXXFLAGS = $(CFLAGS) -fno-exceptions -fno-rtti -Wno-non-virtual-dtor \
 	   -Wno-overloaded-virtual -Wno-exit-time-destructors \
 	   -Wno-deprecated-register \
 	   -fapple-kext
 CPPFLAGS += -DKERNEL -DKERNEL_PRIVATE -DDRIVER_PRIVATE -DAPPLE -DNeXT \
 	    -nostdinc \
-	    -I$(OSX_SDK_ROOT)/System/Library/Frameworks/Kernel.framework/Headers
-ASFLAGS += -mmacosx-version-min=10.9
+	    -I$(UXEN_OSX_SDK_ROOT)/System/Library/Frameworks/Kernel.framework/Headers
 
 LDFLAGS = -Wall -mkernel -nostdlib -r -lcc_kext -lkmod -arch x86_64 \
-	  -Xlinker -kext -mmacosx-version-min=10.9
+	  -Xlinker -kext
 
 CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
 

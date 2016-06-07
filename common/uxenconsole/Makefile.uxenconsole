@@ -15,7 +15,7 @@ CONSOLEDUMP_OBJS = dump.o libuxenconsole.a
 $(WINDOWS)UXENCONSOLE_OBJS += uxenconsole-res.o
 $(WINDOWS)LDLIBS += -lgdi32
 $(WINDOWS)CPPFLAGS += -I$(SRCROOT) $(LIBXC_CPPFLAGS) $(LIBUXENCTL_CPPFLAGS) -I$(TOPDIR)/common/include -I$(TOPDIR) -I$(TOPDIR)/common/include/xen-public
-$(OSX)LDLIBS +=  -mmacosx-version-min=10.8 -fobjc-arc -fobjc-link-runtime -framework AppKit 
+$(OSX)LDLIBS += -fobjc-arc -fobjc-link-runtime -framework AppKit
 $(OSX)CFLAGS += -fobjc-arc
 
 $(UXENCONSOLE_OBJS) $(libuxenconsole_OBJS): .deps/.exists
@@ -36,6 +36,10 @@ libuxenconsole.a: $(libuxenconsole_OBJS) Makefile.lib-LIBUXENCONSOLE
 %.o: %.c
 	$(_W)echo Compiling - $@
 	$(_V)$(COMPILE.c) $< -o $@
+
+%.o: %.m
+	$(_W)echo Compiling - $@
+	$(_V)$(COMPILE.m) $< -o $@
 
 %.o : %.rc
 	$(_W)echo Compiling - $@
