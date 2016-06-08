@@ -18,14 +18,14 @@ NTTARGETFILE2 = POST
 BUILDDIR_XEN = $(UXEN_BUILDDIR_xen)
 !else
 !if defined(UXEN_BUILDDIR)
-BUILDDIR_XEN = $(UXEN_BUILDDIR)\uxen.osx
+BUILDDIR_XEN = $(UXEN_BUILDDIR)\uxen.windows
 !else
-BUILDDIR_XEN = ..\..\build\uxen.osx
+BUILDDIR_XEN = ..\..\build\uxen.windows
 !endif
 !endif
 !endif
 
-INCLUDES=..\include; ..\..\xen\include; $(BUILDDIR_XEN)\include; ..\..\common; ..\..\common\include; ..\..\common\include\xen-public; ..\..\xen\common; ..\uxenv4vlib
+INCLUDES=..\include; ..\..\xen\include; $(BUILDDIR_XEN)\include; ..\..\common; ..\..\common\include; ..\..\xen\common; ..\uxenv4vlib
 
 UXENV4VLIB_BUILD_DIR   = \
   $(OBJECT_ROOT)\..\uxenv4vlib\$(WDK_ALTERNATE_MAKEDIR)\..\uxenv4vlib\$(O)

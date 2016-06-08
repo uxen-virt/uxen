@@ -72,7 +72,7 @@
 #ifndef __ASSEMBLY__
 
 int current_domain_id(void);
-#if !defined(WINNT) && !defined(__APPLE__) || (!defined(__XEN_TOOLS__) && !defined(__UXEN_SYS__))
+#if !defined(WINNT) && !defined(__APPLE__) || (!defined(__XEN_TOOLS__) && !defined(__UXEN_SYS__)) && !defined(XENV4V_DRIVER)
 #define dprintk(_l, _f, _a...)                              \
     printk(_l "%s:%d: " _f, __FILE__ , __LINE__ , ## _a )
 #define gdprintk(_l, _f, _a...)                             \

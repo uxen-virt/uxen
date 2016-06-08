@@ -42,7 +42,7 @@ typedef unsigned long long u64;
 typedef u64 paddr_t;
 #define INVALID_PADDR (~0ULL)
 #define PRIpaddr "016llx"
-#if !defined(__UXEN_SYS__)
+#if !defined(__UXEN_SYS__) && !defined(XENV4V_DRIVER)
 typedef int intptr_t;
 typedef unsigned int uintptr_t;
 typedef uintptr_t vaddr_t;
@@ -53,7 +53,7 @@ typedef unsigned long u64;
 typedef unsigned long paddr_t;
 #define INVALID_PADDR (~0UL)
 #define PRIpaddr "016lx"
-#if !defined(__UXEN_SYS__)
+#if !defined(__UXEN_SYS__) && !defined(XENV4V_DRIVER)
 typedef long int intptr_t;
 typedef unsigned long int uintptr_t;
 typedef uintptr_t vaddr_t;

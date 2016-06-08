@@ -14,18 +14,7 @@
 #define UXEN_DEFINE_SYMBOLS_PROTO
 #include <uxen/uxen_link.h>
 
-/* XXX: should include uxenv4vlib.h, but that conflicts */
-typedef uintptr_t (Uxen_v4vlib_hypercall_func)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t);
-void uxen_v4vlib_set_hypercall_func(Uxen_v4vlib_hypercall_func *);
-typedef uintptr_t (Uxen_v4vlib_page_notify_func)(uint64_t *, uint32_t, int);
-void uxen_v4vlib_set_page_notify_func(Uxen_v4vlib_page_notify_func *);
-void uxen_v4vlib_deliver_signal (void);
-void uxen_v4vlib_we_are_dom0(void);
-
-void uxen_v4v_test(void);
-
-typedef void (*uxen_v4v_logger_t)(int lvl, const char *);
-void uxen_v4vlib_set_logger(uxen_v4v_logger_t logger);
+#include <uxenv4vlib.h>
 
 static void
 host_logger(int lvl, const char *str)
@@ -33,20 +22,23 @@ host_logger(int lvl, const char *str)
     printk(str);
 }
 
-static uintptr_t uxen_sys_v4v_hypercall(uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
+static uintptr_t
+uxen_sys_v4v_hypercall(uintptr_t a1, uintptr_t a2, uintptr_t a3,
+                       uintptr_t a4, uintptr_t a5, uintptr_t a6)
 {
     intptr_t ret;
 
-    if (!uxen_info) return (uintptr_t) - ENOSYS;
-    if (!uxen_info->ui_running) return (uintptr_t) - ENOSYS;
+    if (!uxen_info)
+        return (uintptr_t)-ENOSYS;
+    if (!uxen_info->ui_running)
+        return (uintptr_t)-ENOSYS;
 
     ret = uxen_dom0_hypercall(NULL, NULL, UXEN_UNRESTRICTED_ACCESS_HYPERCALL,
                               __HYPERVISOR_v4v_op, a1, a2, a3, a4, a5, a6);
     ret = -ret; //no really
 
-    return (uintptr_t) ret;
+    return (uintptr_t)ret;
 }
-
 
 static uintptr_t
 uxen_sys_v4v_page_notify(uint64_t *pfns, uint32_t npfn, int add)

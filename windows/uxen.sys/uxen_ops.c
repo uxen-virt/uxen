@@ -14,8 +14,8 @@
 
 #include <stddef.h>
 
-#include <xen/domctl.h>
-#include <xen/event_channel.h>
+#include <public/domctl.h>
+#include <public/event_channel.h>
 
 #define UXEN_DEFINE_SYMBOLS_PROTO
 #include <uxen/uxen_link.h>

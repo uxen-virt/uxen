@@ -14,13 +14,11 @@
 #include <stdarg.h>
 
 #include <xen/errno.h>
-#include <xen/xen.h>
-#include <xen/domctl.h>
-#include <xen/event_channel.h>
-#include <xen/hvm/hvm_op.h>
-
-/* Awful hack to get xen-public header rather than xen private header */
-#include <../xen-public/xen/v4v.h>
+#include <public/xen.h>
+#include <public/domctl.h>
+#include <public/event_channel.h>
+#include <public/hvm/hvm_op.h>
+#include <public/v4v.h>
 
 #define UXEN_DEFINE_SYMBOLS_PROTO
 #include <uxen/uxen_link.h>

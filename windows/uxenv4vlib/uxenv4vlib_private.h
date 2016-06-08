@@ -5,20 +5,18 @@
 
 #define UNICODE
 
-#include "gh_stdint.h"
-
 #include <ntifs.h>
 #include <csq.h>
 #include <ntstrsafe.h>
 #include <wdmsec.h>
 #include <sddl.h>
 #include <stdarg.h>
+
+#define XENV4V_DRIVER
+#include <xen/types.h>
 #include <uxen/platform_interface.h>
 
 #define XENV4V_MAX_RING_LENGTH (4*1024*1024UL)
-
-
-#define XENV4V_DRIVER
 
 #define V4V_DLL_EXPORT
 

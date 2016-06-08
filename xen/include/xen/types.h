@@ -22,7 +22,7 @@
 #define ULONG_MAX       (~0UL)
 #endif	/* __UXEN_SYS__ */
 
-#if !defined(__UXEN_SYS__) || !defined(UXEN_HOST_OSX)
+#if (!defined(__UXEN_SYS__) && !defined(XENV4V_DRIVER)) || !defined(UXEN_HOST_OSX)
 /* bsd */
 typedef unsigned char           u_char;
 typedef unsigned short          u_short;

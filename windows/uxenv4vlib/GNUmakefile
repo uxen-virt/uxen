@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Bromium, Inc.
+# Copyright 2015-2016, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -7,6 +7,8 @@ TOPDIR = ../..
 include $(TOPDIR)/Config.mk
 
 ifeq (,$(HOST_WINDOWS))
+
+BUILDDIR_XEN := $(subst /,\\,$(shell cd $(BUILDDIR_xen) && $(NATIVE_PWD)))
 
 ifneq (,$(BUILDDIR))
 BUILDDIR_uxenv4vlib ?= $(shell mkdir -p $(BUILDDIR) && cd $(BUILDDIR) && pwd)
@@ -38,7 +40,7 @@ all: $(OUTDIR_uxenv4vlib)/uxenv4vlib.sys
 $(OUTDIR_uxenv4vlib)/uxenv4vlib.sys: $(OBJDIR_uxenv4vlib)/build_info.h
 	@mkdir -p $(@D)
 	$(_W)echo WinDDK build $@
-	$(_V)cmd /c "set UXEN_BUILD_INFO=\"\"\"../../build_info.h\"\"\"& set MAKEFLAGS=& $(SET_SIGN) $(WINDDK_DIR)\bin\setenv.bat $(WINDDK_DIR)\ $(DDKENV) $(WIN_ARCH) WIN7 no_oacr & cd /D $$(pwd -W) & $(SET_OBJECT_ROOT) $(WINDDK_BUILD) -cZ -jpath $(call dospath,$(OBJDIR_uxenv4vlib))"
+	$(_V)cmd /c "set UXEN_BUILD_INFO=\"\"\"../../build_info.h\"\"\"& set MAKEFLAGS=& set BUILDDIR_XEN=$(BUILDDIR_XEN)& $(SET_SIGN) $(WINDDK_DIR)\bin\setenv.bat $(WINDDK_DIR)\ $(DDKENV) $(WIN_ARCH) WIN7 no_oacr & cd /D $$(pwd -W) & $(SET_OBJECT_ROOT) $(WINDDK_BUILD) -cZ -jpath $(call dospath,$(OBJDIR_uxenv4vlib))"
 
 .PHONY: $(OBJDIR_uxenv4vlib)/build_info.h
 $(OBJDIR_uxenv4vlib)/build_info.h:

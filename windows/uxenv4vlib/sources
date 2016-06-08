@@ -24,7 +24,19 @@ DLLDEF             = uxenv4vlib.def
 
 NTTARGETFILE2 = POST
 
-INCLUDES= ..\..\xen\include; ..\..\common; ..\..\common\include; ..\..\xen\common; $(OBJECT_ROOT)
+!if !defined(BUILDDIR_XEN)
+!if defined(UXEN_BUILDDIR_xen)
+BUILDDIR_XEN = $(UXEN_BUILDDIR_xen)
+!else
+!if defined(UXEN_BUILDDIR)
+BUILDDIR_XEN = $(UXEN_BUILDDIR)\uxen.windows
+!else
+BUILDDIR_XEN = ..\..\build\uxen.windows
+!endif
+!endif
+!endif
+
+INCLUDES= ..\..\xen\include; $(BUILDDIR_XEN)\include; ..\..\common; ..\..\common\include; ..\..\xen\common; $(OBJECT_ROOT)
 
 TARGETLIBS = \
     $(TARGETLIBS) \
