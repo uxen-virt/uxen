@@ -18,8 +18,13 @@ typedef unsigned __int32 uint32_t;
 typedef unsigned __int64 uint64_t;
 #endif
 
+#ifdef XENV4V_DRIVER
+#include <public/xen.h>
+#include <public/v4v.h>
+#else
 #include <xen/xen.h>
 #include <xen/v4v.h>
+#endif
 
 typedef uintptr_t (uxen_v4vlib_hypercall_func_t)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t);
 typedef uintptr_t (uxen_v4vlib_page_notify_func_t)(uint64_t *, uint32_t, int);

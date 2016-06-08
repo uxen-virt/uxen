@@ -24,7 +24,7 @@ DLLDEF             = uxenv4vlib.def
 
 NTTARGETFILE2 = POST
 
-INCLUDES= ..\..\common; ..\..\common\include; ..\..\common\include\xen-public; ..\..\uxen\common; $(OBJECT_ROOT)
+INCLUDES= ..\..\xen\include; ..\..\common; ..\..\common\include; ..\..\xen\common; $(OBJECT_ROOT)
 
 TARGETLIBS = \
     $(TARGETLIBS) \
@@ -41,7 +41,6 @@ SOURCES =               \
     shared.c		\
     plumbing.c 		\
     hook.c		\
-    util.c 		\
     pde.c		\
     resume.c 		\
     ring.c 		\

@@ -5,9 +5,7 @@
 
 #include "uxenv4vlib_private.h"
 
-#define EAGAIN      11  /* Try again */
-
-#define EAGAIN      11  /* Try again */
+#include <xen/errno.h>
 
 V4V_DLL_EXPORT int uxen_v4v_ring_create(v4v_addr_t *dst, domid_t partner)
 {

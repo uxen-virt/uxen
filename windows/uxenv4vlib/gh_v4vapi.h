@@ -52,8 +52,8 @@
 
 #if !defined(XENV4V_DRIVER)
 #define V4V_EXCLUDE_INTERNAL
-#endif
 #include <xen/v4v.h>
+#endif
 
 /* This structure is used for datagram reads and writes. When sending a
  * datagram, extra space must be reserved at the front of the buffer to
