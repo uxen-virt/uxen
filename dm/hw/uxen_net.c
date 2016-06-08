@@ -712,7 +712,6 @@ uxen_net_receive (VLANClientState *nc, const uint8_t *buf, size_t size)
         return -1;
     }
 
-    s->dest.domain = vm_id;       // This aparently gets set after our init function.
     s->write_packet->dg.addr = s->dest;
     s->write_packet->dg.flags = 0;
 
@@ -804,7 +803,6 @@ uxen_net_run_tx_q(uxen_net_t *s)
     uxen_net_packet_t *p;
 
     while ((p = queue.head))  {
-        s->dest.domain = vm_id;
         sent = v4v_sendto(
             &s->v4v.v4v_channel, s->dest, p->packet->data, p->len, 0 /*flags*/);
         if (sent <= 0)
@@ -832,8 +830,6 @@ uxen_net_run_tx_q(uxen_net_t *s)
             case PACKET_IDLE:
                 len = p->len + sizeof (uxen_net_packet_api_t);
 
-                /*Irritatingly packets arrive here before vm_id gets set, so we need to change the address on each retry*/
-                s->dest.domain = vm_id;
                 p->packet->dg.addr = s->dest;
 
                 memset (&p->overlapped, 0, sizeof (OVERLAPPED));
