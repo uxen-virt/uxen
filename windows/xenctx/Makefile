@@ -1,5 +1,5 @@
 #
-# Copyright 2013-2015, Bromium, Inc.
+# Copyright 2013-2016, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -17,14 +17,28 @@ SRCROOT = $(TOPDIR)/common/xen-tools/xentrace
 
 VPATH = $(SRCROOT)
 
+VMSAVEFILE_DIR = $(abspath $(TOPDIR)/dm)
+CUCKOODIR = $(TOPDIR)/common/cuckoo
+CUCKOODIR_include = $(TOPDIR)/common/cuckoo
+
 CPPFLAGS += -I$(SRCROOT) $(LIBXC_CPPFLAGS) $(LIBUXENCTL_CPPFLAGS) -I$(TOPDIR)/common/include
 
 all: xenctx$(EXE_SUFFIX)
 	@ :
 
-xenctx_SRCS  = xenctx.c save.c
-xenctx_OBJS  = $(patsubst %.c,%.o,$(xenctx_SRCS))
-xenctx_OBJS := $(subst /,_,$(xenctx_OBJS))
+vmsavefile_SRCS =
+vmsavefile_SRCS += filebuf.c
+vmsavefile_SRCS += vm-savefile-simple.c
+
+vmsavefile_OBJS = $(patsubst %.m,%.o,$(patsubst %.c,%.o,$(vmsavefile_SRCS)))
+vmsavefile_OBJS := $(subst /,_,$(patsubst %,vmsavefile/%,$(vmsavefile_OBJS)))
+$(vmsavefile_OBJS): CFLAGS += -D_GNU_SOURCE -D_FILE_OFFSET_BITS=64 -D_LARGEFILE_SOURCE -DSTDERR_LOG=1
+$(vmsavefile_OBJS): CFLAGS += -I$(CUCKOODIR_include)
+
+xenctx_SRCS  = xenctx.c
+xenctx_OBJS  = $(patsubst %.m,%.o,$(patsubst %.c,%.o,$(xenctx_SRCS)))
+xenctx_OBJS := $(subst /,_,$(patsubst %,xenctx/%,$(xenctx_OBJS)))
+xenctx_OBJS += $(vmsavefile_OBJS)
 
 OBJS = $(xenctx_OBJS)
 $(OBJS): .deps/.exists
@@ -37,9 +51,14 @@ xenctx$(EXE_SUFFIX): $(xenctx_OBJS) $(LIBXC_DEPS) $(LIBUXENCTL_DEPS)
 	$(_W)echo Linking - $@
 	$(_V)$(call link,$@,$(xenctx_OBJS) $(LDLIBS) $(LIBXC_LIBS) $(LIBUXENCTL_LIBS))
 
-$(xenctx_OBJS): %.o : $(SRCROOT)/%.c
-	$(_W)echo Compiling - $@
+xenctx_%.o: $(SRCROOT)/%.c
+	$(_W)echo Compiling - $(subst xenctx_,xenctx/,$@)
 	$(_V)$(COMPILE.c) $(EXTRA_CFLAGS) $< -o $@
+xenctx_xenctx.o: CFLAGS += -I$(VMSAVEFILE_DIR)
+
+vmsavefile_%.o: $(VMSAVEFILE_DIR)/%.c
+	$(_W)echo Compiling - $(subst vmsavefile_,dm/,$@)
+	$(_V)$(COMPILE.c) $(EXTRA_CFLAGS) -c $< -o $@
 
 dist: xenctx$(EXE_SUFFIX)
 	$(_W)echo Installing from $(abspath $(<D)) to $(DISTDIR)
