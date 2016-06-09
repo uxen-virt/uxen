@@ -7,9 +7,7 @@ ifeq (,$(MAKENOW))
 
 CROSS_TARGET = x86_64-elf
 
-XEN_DISTFILES ?= $(TOPDIR)/../distfiles
-
-INSTALL_DIR = $(TOOLSDIR)/host-windows
+INSTALL_DIR = $(HOST_WINDOWS_INSTALL_DIR)
 
 IASL_DISTFILES = acpica-unix2-20120711.tar.gz
 IASL_PATCHES = acpica-mingw.patch
@@ -35,12 +33,6 @@ CV2PDB_PATCHES = cv2pdb-mingw.patch \
 CV2PDB_DIR = cv2pdb-5c63d48
 
 VPATH = $(SRCDIR)/patches:$(XEN_DISTFILES)
-
-BUILD_ENV = PATH=$(TOOLSDIR)/bin:$$PATH
-ifeq (Darwin,$(shell uname))
-BUILD_ENV += CPPFLAGS="-I/opt/local/include $$CPPFLAGS"
-BUILD_ENV += LDFLAGS="-L/opt/local/lib $$LDFLAGS"
-endif
 
 BINUTILS_ENV = $(subst CPPFLAGS,CFLAGS,$(BUILD_ENV))
 
@@ -81,6 +73,10 @@ iasl/.extracted: $(IASL_DISTFILES)
 	cat $< | (cd $(@D) && tar zxf -)
 	@touch $@
 
+.SECONDARY: iasl/.exists
+iasl-%: iasl/.%
+	@ :
+
 regex/.installed: regex/.built
 	cd $(@D)/build && \
 	  $(MAKE) install
@@ -115,6 +111,10 @@ regex/.extracted: $(REGEX_DISTFILES)
 	cat $< | (cd $(@D) && tar zxf -)
 	@touch $@
 
+.SECONDARY: regex/.exists
+regex-%: regex/.%
+	@ :
+
 wix/.installed: $(WIX_DISTFILES)
 	@rm -rf $(@D)
 	@mkdir -p $(@D)
@@ -122,6 +122,10 @@ wix/.installed: $(WIX_DISTFILES)
 	@mkdir -p $(INSTALL_DIR)/wix
 	cat $< | (cd $(INSTALL_DIR)/wix && tar --strip-components=1 -jxf -)
 	@touch $@
+
+.SECONDARY: wix/.exists
+wix-%: wix/.%
+	@ :
 
 cv2pdb/.installed: cv2pdb/.built
 	@install -m 755 $(@D)/$(CV2PDB_DIR)/src/cv2pdb.exe $(TOOLSDIR)/bin
@@ -148,13 +152,7 @@ cv2pdb/.extracted: $(CV2PDB_DISTFILES)
 	cat $< | (cd $(@D) && tar jxf -)
 	@touch $@
 
-.SECONDARY: iasl/.exists regex/.exists wix/.exists cv2pdb/.exists
-iasl-%: iasl/.%
-	@ :
-regex-%: regex/.%
-	@ :
-wix-%: wix/.%
-	@ :
+.SECONDARY: cv2pdb/.exists
 cv2pdb-%: cv2pdb/.%
 	@ :
 

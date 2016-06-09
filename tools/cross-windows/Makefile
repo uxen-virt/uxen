@@ -5,9 +5,7 @@ include $(TOPDIR)/Config.mk
 
 ifeq (,$(MAKENOW))
 
-XEN_DISTFILES ?= $(TOPDIR)/../distfiles
-
-INSTALL_DIR = $(TOOLSDIR)/cross-windows
+INSTALL_DIR = $(CROSS_WINDOWS_INSTALL_DIR)
 
 WDK8_DISTFILES = wdk8.tar.gz
 WDK8_PATCHES = wdk8-no-sal.patch

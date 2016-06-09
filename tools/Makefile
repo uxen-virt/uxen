@@ -3,13 +3,13 @@ TOPDIR = ..
 include $(TOPDIR)/Config.mk
 
 SUBDIRS :=
+SUBDIRS += host-all
+SUBDIRS += host-$(HOST)
 $(BUILD_WINDOWS_TOOLS)SUBDIRS += cross-w64l
 $(BUILD_WINDOWS_TOOLS)SUBDIRS += cross-mingw
 $(BUILD_WINDOWS_TOOLS)SUBDIRS += cross-windows
 $(BUILD_OSX_TOOLS)SUBDIRS += cross-osx
 SUBDIRS += cross-vm
-SUBDIRS += host-all
-SUBDIRS += host-$(HOST)
 
 .PHONY: all
 all: subdirs-all $(TOOLSDIR)/.tools_revision

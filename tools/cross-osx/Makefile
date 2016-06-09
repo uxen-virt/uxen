@@ -5,9 +5,7 @@ include $(TOPDIR)/Config.mk
 
 ifeq (,$(MAKENOW))
 
-XEN_DISTFILES ?= $(TOPDIR)/../distfiles
-
-INSTALL_DIR = $(TOOLSDIR)/cross-osx
+INSTALL_DIR = $(CROSS_OSX_INSTALL_DIR)
 
 OBJCONV_DISTFILES = objconv-2013-Jun-25.tar.bz2
 OBJCONV_PATCHES = 
@@ -16,6 +14,7 @@ OBJCONV_CFLAGS="-Wno-logical-op-parentheses"
 
 SDK_10_9_DISTFILES = MacOSX10.9.sdk.tar.bz2
 SDK_10_9_DIR = MacOSX10.9.sdk
+
 XCTOOLCHAIN_6_2_DISTFILES = xctoolchain-6.2.tar.bz2
 XCTOOLCHAIN_6_2_DIR = xctoolchain-6.2
 

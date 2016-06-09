@@ -7,9 +7,7 @@ ifeq (,$(MAKENOW))
 
 CROSS_TARGET = x86_64-elf
 
-XEN_DISTFILES ?= $(TOPDIR)/../distfiles
-
-INSTALL_DIR = $(TOOLSDIR)/cross-vm
+INSTALL_DIR = $(CROSS_VM_INSTALL_DIR)
 
 BINUTILS_DISTFILES = binutils-2.25.1.tar.bz2
 BINUTILS_PATCHES = binutils-install-libiberty.patch
@@ -20,27 +18,11 @@ GCC_PATCHES =
 GCC_DIR = gcc-4.9.3
 GCC_VERSION = 4.9.3
 
-MPFR_DISTFILES = mpfr-3.1.3.tar.bz2
-MPFR_PATCHES =
-MPFR_DIR = mpfr-3.1.3
-
-GMP_DISTFILES = gmp-6.1.0.tar.bz2
-GMP_PATCHES =
-GMP_DIR = gmp-6.1.0
-
-MPC_DISTFILES = mpc-1.0.3.tar.gz
-MPC_PATCHES =
-MPC_DIR = mpc-1.0.3
-
 VPATH = $(SRCDIR)/patches:$(SRCDIR)/files:$(XEN_DISTFILES)
 
 BUILD_ENV = PATH="$(TOOLSDIR)/bin:$$PATH"
 
-$(HOST_OSX)BUILD_ENV += CPPFLAGS="-I/opt/local/include $$CPPFLAGS -g"
-$(HOST_OSX)BUILD_ENV += CFLAGS="-Wno-unused-function -Wno-empty-body -Wno-string-plus-int -Wno-self-assign -Wno-deprecated-declarations"
-$(HOST_OSX)BUILD_ENV += LDFLAGS="-L/opt/local/lib $$LDFLAGS -g"
-$(HOST_OSX)GCC_EXTRA_DEPS += gmp/.installed mpfr/.installed mpc/.installed
-$(HOST_OSX)GCC_EXTRA_CONFIG += --with-gmp=$(INSTALL_DIR) --with-mpfr=$(INSTALL_DIR) --with-mpc=$(INSTALL_DIR)
+$(HOST_OSX)BUILD_ENV += CFLAGS="-Wno-unused-function -Wno-empty-body -Wno-string-plus-int -Wno-self-assign -Wno-deprecated-declarations $$CFLAGS"
 
 BINUTILS_ENV = $(subst CPPFLAGS,CFLAGS,$(BUILD_ENV))
 
@@ -114,6 +96,10 @@ binutils/.extracted: $(BINUTILS_DISTFILES)
 	cat $< | (cd $(@D) && tar jxf -)
 	@touch $@
 
+.SECONDARY: binutils/.exists gcc/.exists
+binutils-%: binutils/.%
+	@ :
+
 #gcc/.installed: gcc/.built
 #	cd $(@D)/build && $(BUILD_ENV) \
 #	  $(MAKE) install
@@ -136,7 +122,7 @@ gcc/.core-built: gcc/.configured
 	@touch $@
 
 gcc/.configured: $(TOOLSDIR)/bin/.exists $(INSTALL_DIR)/.exists
-gcc/.configured: gcc/.patched gcc/.headers binutils/.installed $(GCC_EXTRA_DEPS)
+gcc/.configured: gcc/.patched gcc/.headers binutils/.installed
 	@rm -rf $(@D)/build
 	@mkdir -p $(@D)/build
 	cd $(@D)/build && $(BUILD_ENV) \
@@ -150,7 +136,9 @@ gcc/.configured: gcc/.patched gcc/.headers binutils/.installed $(GCC_EXTRA_DEPS)
 	    --enable-languages="c" --enable-lto --with-plugin-ld \
 	    --enable-targets=x86_64-elf,i686-elf \
 	    MAKEINFO=missing \
-	    $(GCC_EXTRA_CONFIG)
+	    --with-gmp=$(HOST_ALL_INSTALL_DIR) \
+	    --with-mpfr=$(HOST_ALL_INSTALL_DIR) \
+	    --with-mpc=$(HOST_ALL_INSTALL_DIR)
 	@touch $@
 
 gcc/.headers: limits.h stdint.h
@@ -173,101 +161,8 @@ gcc/.extracted: $(GCC_DISTFILES)
 	cat $< | (cd $(@D) && tar jxf -)
 	@touch $@
 
-gmp/.installed: gmp/.built
-	cd $(@D)/build && $(BUILD_ENV) \
-	  $(MAKE) install
-	@touch $@
-
-gmp/.built: gmp/.configured
-	cd $(@D)/build && $(BUILD_ENV) \
-	  $(MAKE)
-	@touch $@
-
-gmp/.configured: $(TOOLSDIR)/bin/.exists $(INSTALL_DIR)/.exists
-gmp/.configured: gmp/.extracted
-	@rm -rf $(@D)/build
-	@mkdir -p $(@D)/build
-	cd $(@D)/build && $(BUILD_ENV) \
-	  ../$(GMP_DIR)/configure --prefix=$(INSTALL_DIR)
-	@touch $@
-
-gmp/.patched: gmp/.extracted
-gmp/.patched: $(GMP_PATCHES)
-	cat $< | (cd $(@D)/$(GMP_DIR) && patch -p1)
-	@touch $@
-
-gmp/.extracted: $(GMP_DISTFILES)
-	@rm -rf $(@D)
-	@mkdir -p $(@D)
-	cat $< | (cd $(@D) && tar jxf -)
-	@touch $@
-
-mpfr/.installed: mpfr/.built
-	cd $(@D)/build && $(BUILD_ENV) \
-	  $(MAKE) install
-	@touch $@
-
-mpfr/.built: mpfr/.configured
-	cd $(@D)/build && $(BUILD_ENV) \
-	  $(MAKE)
-	@touch $@
-
-mpfr/.configured: $(TOOLSDIR)/bin/.exists $(INSTALL_DIR)/.exists
-mpfr/.configured: mpfr/.extracted
-	@rm -rf $(@D)/build
-	@mkdir -p $(@D)/build
-	cd $(@D)/build && $(BUILD_ENV) \
-	  ../$(MPFR_DIR)/configure --prefix=$(INSTALL_DIR) \
-	    --with-gmp=$(INSTALL_DIR)
-	@touch $@
-
-mpfr/.patched: mpfr/.extracted
-mpfr/.patched: $(MPFR_PATCHES)
-	cat $< | (cd $(@D)/$(MPFR_DIR) && patch -p1)
-	@touch $@
-
-mpfr/.extracted: $(MPFR_DISTFILES)
-	@rm -rf $(@D)
-	@mkdir -p $(@D)
-	cat $< | (cd $(@D) && tar jxf -)
-	@touch $@
-
-mpc/.installed: mpc/.built
-	cd $(@D)/build && $(BUILD_ENV) \
-	  $(MAKE) install
-	@touch $@
-
-mpc/.built: mpc/.configured
-	cd $(@D)/build && $(BUILD_ENV) \
-	  $(MAKE)
-	@touch $@
-
-mpc/.configured: $(TOOLSDIR)/bin/.exists $(INSTALL_DIR)/.exists
-mpc/.configured: mpc/.extracted
-	@rm -rf $(@D)/build
-	@mkdir -p $(@D)/build
-	cd $(@D)/build && $(BUILD_ENV) \
-	  ../$(MPC_DIR)/configure --prefix=$(INSTALL_DIR) \
-	    --with-gmp=$(INSTALL_DIR) --with-mpfr=$(INSTALL_DIR)
-	@touch $@
-
-mpc/.patched: mpc/.extracted
-mpc/.patched: $(MPC_PATCHES)
-	cat $< | (cd $(@D)/$(MPC_DIR) && patch -p1)
-	@touch $@
-
-mpc/.extracted: $(MPC_DISTFILES)
-	@rm -rf $(@D)
-	@mkdir -p $(@D)
-	cat $< | (cd $(@D) && tar zxf -)
-	@touch $@
-
-.SECONDARY: binutils/.exists gcc/.exists gmp/.exists
-binutils-%: binutils/.%
-	@ :
+.SECONDARY: gcc/.exists
 gcc-%: gcc/.%
-	@ :
-gmp-%: gmp/.%
 	@ :
 
 endif # MAKENOW

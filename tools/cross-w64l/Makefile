@@ -7,9 +7,7 @@ ifeq (,$(MAKENOW))
 
 CROSS_TARGET = x86_64-w64-mingw32
 
-XEN_DISTFILES ?= $(TOPDIR)/../distfiles
-
-INSTALL_DIR = $(TOOLSDIR)/cross-w64l
+INSTALL_DIR = $(CROSS_W64L_INSTALL_DIR)
 
 BINUTILS_DISTFILES = binutils-2.25.1.tar.bz2
 BINUTILS_PATCHES = binutils-link-pdata.patch binutils-cv8.patch binutils-install-libiberty.patch
@@ -28,11 +26,11 @@ DWARFCV_DIR = dwarfcv-1.1
 
 VPATH = $(SRCDIR)/patches:$(XEN_DISTFILES)
 
-BUILD_ENV = PATH="$(TOOLSDIR)/bin:$$PATH"
-ifeq (Darwin,$(shell uname))
-BUILD_ENV += CPPFLAGS="-I/opt/local/include $$CPPFLAGS -g"
-BUILD_ENV += LDFLAGS="-L/opt/local/lib $$LDFLAGS -g"
-endif
+#BUILD_ENV = PATH="$(TOOLSDIR)/bin:$$PATH"
+#ifeq (Darwin,$(shell uname))
+#BUILD_ENV += CPPFLAGS="-I/opt/local/include $$CPPFLAGS -g"
+#BUILD_ENV += LDFLAGS="-L/opt/local/lib $$LDFLAGS -g"
+#endif
 
 BINUTILS_ENV = $(subst CPPFLAGS,CFLAGS,$(BUILD_ENV))
 
@@ -80,6 +78,10 @@ binutils/.extracted: $(BINUTILS_DISTFILES)
 	@mkdir -p $(@D)
 	cat $< | (cd $(@D) && tar jxf -)
 	@touch $@
+
+.SECONDARY: binutils/.exists
+binutils-%: binutils/.%
+	@ :
 
 gcc/.installed: gcc/.built
 	cd $(@D)/build && $(BUILD_ENV) \
@@ -130,7 +132,10 @@ gcc/.configured: gcc/.patched
 	    --enable-version-specific-runtime-libs --enable-threads=win32 \
 	    --enable-fully-dynamic-string --enable-sjlj-exceptions \
 	    --enable-languages="c" --enable-lto --with-plugin-ld \
-        MAKEINFO=missing
+            MAKEINFO=missing \
+	    --with-gmp=$(HOST_ALL_INSTALL_DIR) \
+	    --with-mpfr=$(HOST_ALL_INSTALL_DIR) \
+	    --with-mpc=$(HOST_ALL_INSTALL_DIR)
 	@touch $@
 # XXX Todo: add --enable-targets=all
 
@@ -148,6 +153,10 @@ gcc/.extracted: $(GCC_DISTFILES)
 	@mkdir -p $(@D)
 	cat $< | (cd $(@D) && tar jxf -)
 	@touch $@
+
+.SECONDARY: gcc/.exists
+gcc-%: gcc/.%
+	@ :
 
 mingw64/.installed: mingw64/.built
 	cd $(@D)/build && $(BUILD_ENV) \
@@ -200,6 +209,10 @@ mingw64/.extracted: $(MINGW64_DISTFILES)
 	cat $< | (cd $(@D) && tar zxf -)
 	@touch $@
 
+.SECONDARY: mingw64/.exists
+mingw64-%: mingw64/.%
+	@ :
+
 DWARFCV_MAKE_ARGS = TOOLSDIR=$(TOOLSDIR)
 DWARFCV_MAKE_ARGS += HOST_WINDOWS=$(HOST_WINDOWS)
 DWARFCV_MAKE_ARGS += SRCDIR=../$(DWARFCV_DIR)
@@ -236,13 +249,7 @@ dwarfcv/.extracted: $(DWARFCV_DISTFILES)
 	cat $< | (cd $(@D) && tar zxf -)
 	@touch $@
 
-.SECONDARY: binutils/.exists gcc/.exists mingw64/.exists dwarfcv/.exists
-binutils-%: binutils/.%
-	@ :
-gcc-%: gcc/.%
-	@ :
-mingw64-%: mingw64/.%
-	@ :
+.SECONDARY: dwarfcv/.exists
 dwarfcv-%: dwarfcv/.%
 	@ :
 

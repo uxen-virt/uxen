@@ -7,9 +7,7 @@ ifeq (,$(MAKENOW))
 
 CROSS_TARGET = x86_64-w64-mingw32
 
-XEN_DISTFILES ?= $(TOPDIR)/../distfiles
-
-INSTALL_DIR = $(TOOLSDIR)/cross-mingw
+INSTALL_DIR = $(CROSS_MINGW_INSTALL_DIR)
 
 BINUTILS_DISTFILES = binutils-2.25.1.tar.bz2
 BINUTILS_PATCHES = binutils-pie-entry-point.patch binutils-install-libiberty.patch binutils-display-cv-pdb-name.patch
@@ -28,15 +26,6 @@ MINGW64_DISTFILES = mingw-w64-v2.0.8.tar.gz
 MINGW64_PATCHES = mingw-w64-v2.0.8-libwinhttp.patch mingw-w64-v2.0.8-d3d9ex.patch mingw-w64-v2.0.8-libfltlib.patch 
 MINGW64_DIR = mingw-w64-v2.0.8
 
-GMP_DISTFILES = gmp-6.1.0.tar.bz2
-GMP_DIR = gmp-6.1.0
-
-MPFR_DISTFILES = mpfr-3.1.3.tar.bz2
-MPFR_DIR = mpfr-3.1.3
-
-MPC_DISTFILES = mpc-1.0.3.tar.gz
-MPC_DIR = mpc-1.0.3
-
 E2FSPROGS_DISTFILES = e2fsprogs-1.42.tar.gz
 E2FSPROGS_PATCHES = e2fsprogs-1.42-mingw.diff
 E2FSPROGS_PATCHES += e2fsprogs-1.42-libe2fsprogs-uuid.diff
@@ -52,10 +41,6 @@ export CFLAGS = -O3
 BUILD_PATH = PATH="$(TOOLSDIR)/bin:$$PATH"
 
 BOOTSTRAP_PATH =
-#$(HOST_WINDOWS)BOOTSTRAP_PATH += PATH="/mingw64/bin:$$PATH"
-
-$(HOST_OSX)TOOLCHAIN_ENV_CPPFLAGS += -I/opt/local/include
-$(HOST_OSX)TOOLCHAIN_ENV_LDFLAGS += -L/opt/local/lib
 
 CONFIGURE = configure
 
@@ -64,15 +49,17 @@ CONFIGURE_nongnu := $(CONFIGURE)
 CONFIGURE += --enable-strip
 #$(HOST_WINDOWS)CONFIGURE += --build x86_64-w64-mingw32
 
-#BUILD_ENV = CFLAGS="$$CFLAGS"
+#BUILD_ENV += CFLAGS="$$CFLAGS"
 #BUILD_ENV += CPPFLAGS="$$CPPFLAGS"
 #BUILD_ENV += LDFLAGS="$$LDFLAGS"
-BUILD_ENV32 = CFLAGS="-m32 $$CFLAGS"
+BUILD_ENV32 += CFLAGS="-m32 $$CFLAGS"
 #BUILD_ENV32 += CPPFLAGS="$$CPPFLAGS"
 BUILD_ENV32 += LDFLAGS="-m32 $$LDFLAGS"
-TOOLCHAIN_ENV = CFLAGS="$(TOOLCHAIN_ENV_CFLAGS) $(TOOLCHAIN_ENV_CPPFLAGS) $$CFLAGS"
+TOOLCHAIN_ENV = $(BUILD_ENV)
+TOOLCHAIN_ENV += CFLAGS="$(TOOLCHAIN_ENV_CFLAGS) $(TOOLCHAIN_ENV_CPPFLAGS) $$CFLAGS"
 TOOLCHAIN_ENV += LDFLAGS="$(TOOLCHAIN_ENV_LDFLAGS) $$LDFLAGS"
-TOOLCHAIN_ENV32 = CFLAGS="-m32 $(TOOLCHAIN_ENV_CFLAGS) $(TOOLCHAIN_ENV_CPPFLAGS) $$CFLAGS"
+TOOLCHAIN_ENV32 = $(BUILD_ENV32)
+TOOLCHAIN_ENV32 += CFLAGS="-m32 $(TOOLCHAIN_ENV_CFLAGS) $(TOOLCHAIN_ENV_CPPFLAGS) $$CFLAGS"
 TOOLCHAIN_ENV32 += LDFLAGS="-m32 $(TOOLCHAIN_ENV_LDFLAGS) $$LDFLAGS"
 
 all: gcc/.installed
@@ -190,6 +177,10 @@ binutils/.libbfd-configured32: binutils/.patched
 	    --disable-nls --disable-intl
 	@touch $@
 
+.SECONDARY: binutils/.exists
+binutils-%: binutils/.%
+	@ :
+
 gcc/.installed: gcc/.built
 	cd $(@D)/build && $(TOOLCHAIN_ENV) $(BUILD_PATH) $(BOOTSTRAP_PATH) \
 	  $(MAKE) install
@@ -211,12 +202,9 @@ gcc/.core-built: gcc/.configured
 	  $(MAKE) all-gcc
 	@touch $@
 
-$(HOST_WINDOWS)GCC_EXTRA_CONFIGURE += --with-gmp=$(INSTALL_DIR) \
-	--with-mpfr=$(INSTALL_DIR) --with-mpc=$(INSTALL_DIR)
 gcc/.configured: mingw64/.headers-installed
 gcc/.configured: $(TOOLSDIR)/bin/.exists $(INSTALL_DIR)/.exists
 gcc/.configured: binutils/.installed
-$(HOST_WINDOWS)gcc/.configured: gmp/.installed mpfr/.installed mpc/.installed
 gcc/.configured: gcc/.patched
 	@rm -rf $(@D)/build
 	@mkdir -p $(@D)/build
@@ -235,7 +223,9 @@ gcc/.configured: gcc/.patched
 	    --enable-static --disable-shared \
 	    --enable-targets=x86_64-w64-mingw32,i686-w64-mingw32 \
 	    MAKEINFO=missing \
-	    $(GCC_EXTRA_CONFIGURE)
+	    --with-gmp=$(HOST_ALL_INSTALL_DIR) \
+	    --with-mpfr=$(HOST_ALL_INSTALL_DIR) \
+	    --with-mpc=$(HOST_ALL_INSTALL_DIR)
 	@touch $@
 
 gcc/.patched: gcc/.extracted
@@ -252,6 +242,10 @@ gcc/.extracted: $(GCC_DISTFILES)
 	@mkdir -p $(@D)
 	cat $< | (cd $(@D) && tar jxf -)
 	@touch $@
+
+.SECONDARY: gcc/.exists
+gcc-%: gcc/.%
+	@ :
 
 mingw64/.installed: mingw64/.built
 	cd $(@D)/build && $(BUILD_ENV) $(BUILD_PATH) \
@@ -312,91 +306,9 @@ mingw64/.extracted: $(MINGW64_DISTFILES)
 	cat $< | (cd $(@D) && tar zxf -)
 	@touch $@
 
-gmp/.installed: $(TOOLSDIR)/bin/.exists $(INSTALL_DIR)/.exists
-gmp/.installed: gmp/.built
-	cd $(@D)/build && $(BUILD_ENV) $(BUILD_PATH) $(BOOTSTRAP_PATH) \
-	  $(MAKE) install
-	@touch $@
-
-gmp/.built: gmp/.configured
-	cd $(@D)/build && $(BUILD_ENV) $(BUILD_PATH) $(BOOTSTRAP_PATH) \
-	  $(MAKE)
-	@touch $@
-
-$(HOST_WINDOWS)GMP_EXTRA_CONFIGURE += --build=i686-pc-mingw32
-gmp/.configured: binutils/.installed
-gmp/.configured: gmp/.extracted
-	@rm -rf $(@D)/build
-	@mkdir -p $(@D)/build
-	cd $(@D)/build && $(BUILD_ENV) $(BUILD_PATH) $(BOOTSTRAP_PATH) \
-	  ../$(GMP_DIR)/$(CONFIGURE) --prefix=$(INSTALL_DIR) \
-	    --bindir=$(TOOLSDIR)/bin \
-	    --enable-static --disable-shared \
-	    $(GMP_EXTRA_CONFIGURE)
-	@touch $@
-
-gmp/.extracted: $(GMP_DISTFILES)
-	@rm -rf $(@D)
-	@mkdir -p $(@D)
-	cat $< | (cd $(@D) && tar jxf -)
-	@touch $@
-
-mpfr/.installed: $(TOOLSDIR)/bin/.exists $(INSTALL_DIR)/.exists
-mpfr/.installed: mpfr/.built
-	cd $(@D)/build && $(BUILD_ENV) $(BUILD_PATH) $(BOOTSTRAP_PATH) \
-	  $(MAKE) install
-	@touch $@
-
-mpfr/.built: mpfr/.configured
-	cd $(@D)/build && $(BUILD_ENV) $(BUILD_PATH) $(BOOTSTRAP_PATH) \
-	  $(MAKE)
-	@touch $@
-
-mpfr/.configured: binutils/.installed gmp/.installed
-mpfr/.configured: mpfr/.extracted
-	@rm -rf $(@D)/build
-	@mkdir -p $(@D)/build
-	cd $(@D)/build && $(BUILD_ENV) $(BUILD_PATH) $(BOOTSTRAP_PATH) \
-	  ../$(MPFR_DIR)/$(CONFIGURE) --prefix=$(INSTALL_DIR) \
-	    --bindir=$(TOOLSDIR)/bin \
-	    --with-gmp=$(INSTALL_DIR) \
-	    --enable-static --disable-shared
-	@touch $@
-
-mpfr/.extracted: $(MPFR_DISTFILES)
-	@rm -rf $(@D)
-	@mkdir -p $(@D)
-	cat $< | (cd $(@D) && tar jxf -)
-	@touch $@
-
-mpc/.installed: $(TOOLSDIR)/bin/.exists $(INSTALL_DIR)/.exists
-mpc/.installed: mpc/.built
-	cd $(@D)/build && $(BUILD_ENV) $(BUILD_PATH) $(BOOTSTRAP_PATH) \
-	  $(MAKE) install
-	@touch $@
-
-mpc/.built: mpc/.configured
-	cd $(@D)/build && $(BUILD_ENV) $(BUILD_PATH) $(BOOTSTRAP_PATH) \
-	  $(MAKE)
-	@touch $@
-
-mpc/.configured: binutils/.installed gmp/.installed mpfr/.installed
-mpc/.configured: mpc/.extracted
-	@rm -rf $(@D)/build
-	@mkdir -p $(@D)/build
-	cd $(@D)/build && $(BUILD_ENV) $(BUILD_PATH) $(BOOTSTRAP_PATH) \
-	  ../$(MPC_DIR)/$(CONFIGURE) --prefix=$(INSTALL_DIR) \
-	    --bindir=$(TOOLSDIR)/bin \
-	    --with-gmp=$(INSTALL_DIR) \
-	    --with-mpfr=$(INSTALL_DIR) \
-	    --enable-static --disable-shared
-	@touch $@
-
-mpc/.extracted: $(MPC_DISTFILES)
-	@rm -rf $(@D)
-	@mkdir -p $(@D)
-	cat $< | (cd $(@D) && tar zxf -)
-	@touch $@
+.SECONDARY: mingw64/.exists 
+mingw64-%: mingw64/.%
+	@ :
 
 gdb/.installed: gdb/.built
 	cd $(@D)/build && $(BUILD_ENV) $(BUILD_PATH) \
@@ -442,6 +354,10 @@ gdb/.extracted: $(GDB_DISTFILES)
 	@mkdir -p $(@D)
 	cat $< | (cd $(@D) && tar zxf -)
 	@touch $@
+
+.SECONDARY: gdb/.exists
+gdb-%: gdb/.%
+	@ :
 
 e2fsprogs/.installed: e2fsprogs/.built
 	cd $(@D)/build/lib/uuid && $(BUILD_ENV) $(BUILD_PATH) \
@@ -503,6 +419,10 @@ e2fsprogs/.extracted: $(E2FSPROGS_DISTFILES)
 	@mkdir -p $(@D)
 	cat $< | (cd $(@D) && tar zxf -)
 	@touch $@
+
+.SECONDARY: e2fsprogs/.exists
+e2fsprogs-%: e2fsprogs/.%
+	@ :
 
 libiconv/.installed: libiconv/.built
 	cd $(@D)/build && $(BUILD_ENV) $(BUILD_PATH) \
@@ -572,28 +492,8 @@ libiconv/.extracted: $(LIBICONV_DISTFILES)
 	cat $< | (cd $(@D) && tar zxf -)
 	@touch $@
 
-.SECONDARY: binutils/.exists gcc/.exists mingw64/.exists gdb/.exists
-.SECONDARY: gmp/.exists mpfr/.exists mpc/.exists
-.SECONDARY: e2fsprogs/.exists libiconv/.exists
-binutils-%: binutils/.%
-	@ :
-gcc-%: gcc/.%
-	@ :
-mingw64-%: mingw64/.%
-	@ :
-gdb-%: gdb/.%
-	@ :
-gmp-%: gmp/.%
-	@ :
-mpfr-%: mpfr/.%
-	@ :
-mpc-%: mpc/.%
-	@ :
-e2fsprogs-%: e2fsprogs/.%
-	@ :
+.SECONDARY: libiconv/.exists
 libiconv-%: libiconv/.%
-	@ :
-libbfd-%: binutils/.libbfd-%
 	@ :
 
 endif # MAKENOW

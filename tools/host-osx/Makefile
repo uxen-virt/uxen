@@ -7,9 +7,7 @@ ifeq (,$(MAKENOW))
 
 CROSS_TARGET = x86_64-elf
 
-XEN_DISTFILES ?= $(TOPDIR)/../distfiles
-
-INSTALL_DIR = $(TOOLSDIR)/host-osx
+INSTALL_DIR = $(HOST_OSX_INSTALL_DIR)
 
 GDB_DISTFILES = gdb-1822-stripped.tar.gz
 GDB_PATCHES = gdb-elf-target.patch gdb-elf-debug-sections.patch gdb-macosx-nat-inferior-setjmp.patch
@@ -20,10 +18,6 @@ IASL_PATCHES = iasl-llvm-gcc-fixes.patch
 IASL_DIR = acpica-unix2-20120711
 
 VPATH = $(SRCDIR)/patches:$(XEN_DISTFILES)
-
-BUILD_ENV = PATH=$(TOOLSDIR)/bin:$$PATH
-$(HOST_OSX)BUILD_ENV += CPPFLAGS="-I/opt/local/include $$CPPFLAGS -g"
-$(HOST_OSX)BUILD_ENV += LDFLAGS="-L/opt/local/lib $$LDFLAGS -g"
 
 all: gdb/.installed iasl/.installed
 
@@ -67,6 +61,10 @@ gdb/.extracted: $(GDB_DISTFILES)
 	cat $< | (cd $(@D) && tar zxf -)
 	@touch $@
 
+.SECONDARY: gdb/.exists
+gdb-%: gdb/.%
+	@ :
+
 iasl/.installed: iasl/.built
 	cd $(@D)/$(IASL_DIR)/source/compiler && $(BUILD_ENV) \
 	  $(MAKE) install \
@@ -95,9 +93,7 @@ iasl/.extracted: $(IASL_DISTFILES)
 	cat $< | (cd $(@D) && tar zxf -)
 	@touch $@
 
-.SECONDARY: gdb/.exists iasl/.exists
-gdb-%: gdb/.%
-	@ :
+.SECONDARY: iasl/.exists
 iasl-%: iasl/.%
 	@ :
 
