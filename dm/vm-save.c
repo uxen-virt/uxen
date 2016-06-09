@@ -1091,10 +1091,10 @@ decompress_batch(int batch, xen_pfn_t *pfn_type, uint8_t *mem,
             }
             decompress_pos += sizeof(cs16_t);
             if (cs1 < PAGE_SIZE) {
-                ret = LZ4_decompress_fast(&compress_buf[decompress_pos],
+                ret = LZ4_decompress_safe(&compress_buf[decompress_pos],
                                           (char *)&mem[i << PAGE_SHIFT],
-                                          PAGE_SIZE);
-                if (ret != cs1) {
+                                          cs1, PAGE_SIZE);
+                if (ret != PAGE_SIZE) {
                     asprintf(err_msg, "decompression of page %"PRIx64
                              " failed at byte %d of %d\n",
                              pfn_type ? pfn_type[i] : 0,
@@ -1108,9 +1108,9 @@ decompress_batch(int batch, xen_pfn_t *pfn_type, uint8_t *mem,
             decompress_pos += cs1;
         }
     } else {
-        ret = LZ4_decompress_fast(compress_buf, (char *)mem,
-                                  batch << PAGE_SHIFT);
-        if (ret != compress_size) {
+        ret = LZ4_decompress_safe(compress_buf, (char *)mem,
+                                  compress_size, batch << PAGE_SHIFT);
+        if (ret != batch << PAGE_SHIFT) {
             asprintf(err_msg, "decompression of page %"PRIx64
                      ":%"PRIx64" failed at byte %d of %d\n",
                      pfn_type ? pfn_type[0] : 0,
@@ -1952,13 +1952,14 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
             }
             uxenvm_load_read(f, zero_bitmap_compressed, s_zero_bitmap.size -
                              sizeof(s_zero_bitmap), ret, err_msg, out);
-            ret = LZ4_decompress_fast((const char *)zero_bitmap_compressed,
+            ret = LZ4_decompress_safe((const char *)zero_bitmap_compressed,
                                       (char *)zero_bitmap,
+                                      s_zero_bitmap.size - sizeof(s_zero_bitmap),
                                       s_zero_bitmap.zero_bitmap_size);
-            if (ret != s_zero_bitmap.size - sizeof(s_zero_bitmap)) {
-                asprintf(err_msg, "LZ4_decompress_fast(zero_bitmap) failed:"
-                         " %d != %"PRIdSIZE, ret,
-                         s_zero_bitmap.size - sizeof(s_zero_bitmap));
+            if (ret != s_zero_bitmap.zero_bitmap_size) {
+                asprintf(err_msg, "LZ4_decompress_safe(zero_bitmap) failed:"
+                         " %d != %u", ret,
+                         s_zero_bitmap.zero_bitmap_size);
                 ret = -EINVAL;
                 goto out;
             }
@@ -2275,8 +2276,8 @@ vm_lazy_load_page(uint32_t gpfn, uint8_t *va, int compressed)
                      offset & PAGE_OFFSET_INDEX_PFN_OFF_MASK, cs1);
                 goto out;
             }
-            ret = LZ4_decompress_fast(&page[0], (char *)va, PAGE_SIZE);
-            if (ret != cs1) {
+            ret = LZ4_decompress_safe(&page[0], (char *)va, cs1, PAGE_SIZE);
+            if (ret != PAGE_SIZE) {
                 ret = -EINVAL;
                 warnx("%s: decompress gpfn %x offset %"PRIu64" failed",
                       __FUNCTION__, gpfn,
