@@ -655,6 +655,27 @@ co_set_uuid(const char *opt, yajl_val arg, void *opaque)
 }
 
 static int
+co_set_vm_save(const char *opt, yajl_val arg, void *opaque)
+{
+    if (!YAJL_IS_OBJECT(arg))
+	errx(1, "config option %s: map", opt);
+
+    vmsavefile_on_crash = yajl_object_get_string(arg, "on-crash");
+    if (vmsavefile_on_crash) {
+        debug_printf("%s: vm save file on-crash: %s\n", __FUNCTION__,
+                     vmsavefile_on_crash);
+    }
+    vmsavefile_on_restricted_pci =
+                    yajl_object_get_string(arg, "on-restricted-pci-emul");
+    if (vmsavefile_on_restricted_pci) {
+        debug_printf("%s: vm save file on-restricted-pci-emul: %s\n",
+                     __FUNCTION__, vmsavefile_on_restricted_pci);
+    }
+
+    return 0;
+}
+
+static int
 co_ignore(const char *opt, yajl_val arg, void *opaque)
 {
 
@@ -736,6 +757,7 @@ struct config_option config_options[] = {
     { "vga-memory-mapped", co_set_integer_opt, &vm_vga_mb_mapped },
     { "viridian", co_set_integer_opt, &vm_viridian },
     { "virt-mode-change", co_set_integer_opt, &vm_virt_mode_change },
+    { "vm-save", co_set_vm_save, NULL },
     { "vpt-align", co_set_boolean_opt, &vm_vpt_align },
     { "vpt-coalesce-period", co_set_integer_opt, &vm_vpt_coalesce_period },
     { "zero-page", co_set_boolean_opt, &vm_zero_page },

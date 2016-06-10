@@ -49,6 +49,8 @@
 #include "hw/uxen_audio_ctrl.h"
 #endif
 
+#include "vm-savefile-simple.h"
+
 static struct xc_hvm_oem_info oem_info = { 0 };
 static critical_section vm_run_mode_lock;
 critical_section vm_pause_lock;
@@ -801,6 +803,12 @@ handle_exception_event(void *opaque)
 
         if ((info.shutdown && info.shutdown_reason != SHUTDOWN_suspend) ||
             info.crashed) {
+            if (info.crashed && vmsavefile_on_crash) {
+                debug_printf("%s: domain crash, generating savefile\n",
+                             __FUNCTION__);
+                vmsavefile_save_simple(xc_handle, vmsavefile_on_crash,
+                                       vm_uuid, vm_id);
+            }
             vm_set_run_mode(DESTROY_VM);
             return;
         }

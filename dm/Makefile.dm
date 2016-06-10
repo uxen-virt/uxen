@@ -286,6 +286,7 @@ QEMU_SRCS += hw/scsi-disk.c
 $(OSX_NOT_YET)QEMU_SRCS += hw/intel-hda.c
 QEMU_SRCS += hw/isa-bus.c
 QEMU_SRCS += hw/pci.c
+qemu_hw_pci.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 QEMU_SRCS += hw/pci_host.c
 QEMU_SRCS += hw/pckbd.c
 QEMU_SRCS += hw/piix_pci.c

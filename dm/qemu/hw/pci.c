@@ -37,6 +37,7 @@
 // #include "loader.h"
 #include <dm/qemu/net.h>
 #include <dm/qemu/range.h>
+#include <dm/vm-savefile-simple.h>
 // #include "qmp-commands.h"
 
 //#define DEBUG_PCI
@@ -52,6 +53,19 @@ uint64_t vm_restricted_pci_emul = 0;
 static char *pcibus_get_dev_path(DeviceState *dev);
 // static char *pcibus_get_fw_dev_path(DeviceState *dev);
 // static int pcibus_reset(BusState *qbus);
+
+static void restricted_emul_vmsave(void)
+{
+    static int run_once = 0;
+
+    if (run_once || !vmsavefile_on_restricted_pci)
+        return;
+
+    run_once = 1;
+    debug_printf("%s: generating savefile\n", __FUNCTION__);
+    vmsavefile_save_simple(xc_handle, vmsavefile_on_restricted_pci,
+                           vm_uuid, vm_id);
+}
 
 struct BusInfo pci_bus_info = {
     .name       = "PCI",
@@ -1057,6 +1071,7 @@ uint32_t pci_default_read_config(PCIDevice *d,
     if (vm_restricted_pci_emul) {
 	debug_printf("blocked pci read on dev %s addr %x len %d\n",
                      d->name, address, len);
+	restricted_emul_vmsave();
 	return ~0;
     }
 
@@ -1071,6 +1086,7 @@ void pci_default_write_config(PCIDevice *d, uint32_t addr, uint32_t val, int l)
     if (vm_restricted_pci_emul) {
 	debug_printf("blocked pci write on dev %s addr %x val %x len %d\n",
                      d->name, addr, val, l);
+	restricted_emul_vmsave();
 	return;
     }
 
