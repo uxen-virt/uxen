@@ -919,6 +919,15 @@ v4v_validate_channel(domid_t *s_id, uint32_t *s_port,
 
     if (IS_HOST(d)) {
     } else {
+        if (*s_id == V4V_DOMID_ANY)
+            *s_id = d->domain_id;
+        if (*s_id != d->domain_id) {
+            printk(XENLOG_G_ERR
+                   "%s: !host vm%u s_id vm%u:%x -> vm%u:%x from %S\n",
+                   __FUNCTION__, d->domain_id, *s_id, *s_port, *d_id, *d_port,
+                   (printk_symbol)__builtin_return_address(0));
+            return -EPERM;
+        }
         if (*d_id == V4V_DOMID_DM)
             *d_id = v4v_dm_domid;
         else {
