@@ -36,6 +36,7 @@
 typedef volatile LONG EX_SPIN_LOCK, *PEX_SPIN_LOCK;
 
 #include "prototypes.h"
+#include "alloc.h"
 
 static __inline void check_resume(void)
 {

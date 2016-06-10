@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -128,7 +128,7 @@ gh_v4v_put_all_contexts(xenv4v_extension_t *pde, xenv4v_context_t **ctx_list, UL
         gh_v4v_release_context_internal(pde, ctx_list[i], FALSE);
     }
     KeReleaseInStackQueuedSpinLock(&lqh);
-    ExFreePoolWithTag(ctx_list, XENV4V_TAG);
+    uxen_v4v_fast_free(ctx_list);
 }
 
 xenv4v_context_t **
@@ -148,9 +148,9 @@ gh_v4v_get_all_contexts(xenv4v_extension_t *pde, ULONG *count_out)
     }
     ASSERT(pde->context_count > 0);
 
-    ctx_list = (xenv4v_context_t **)ExAllocatePoolWithTag(NonPagedPool,
-               pde->context_count * sizeof(xenv4v_context_t *),
-               XENV4V_TAG);
+    ctx_list = (xenv4v_context_t **)uxen_v4v_fast_alloc(
+        pde->context_count * sizeof(xenv4v_context_t *));
+
     if (ctx_list == NULL) {
         KeReleaseInStackQueuedSpinLock(&lqh);
         TraceError(("failed to allocate context list - out of memory.\n"));
@@ -239,7 +239,9 @@ gh_v4v_dispatch_create(PDEVICE_OBJECT fdo, PIRP irp)
         return v4v_simple_complete_irp(irp, STATUS_INVALID_HANDLE);
     }
 
-    ctx = (xenv4v_context_t *)ExAllocatePoolWithTag(NonPagedPool, sizeof(xenv4v_context_t), XENV4V_TAG);
+    ctx = (xenv4v_context_t *)ExAllocatePoolWithTag(NonPagedPool,
+                                                    sizeof(xenv4v_context_t),
+                                                    XENV4V_TAG);
     if (ctx == NULL) {
         return v4v_simple_complete_irp(irp, STATUS_NO_MEMORY);
     }

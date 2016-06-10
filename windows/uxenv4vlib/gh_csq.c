@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -403,7 +403,7 @@ gh_v4v_copy_destination_ring_data(xenv4v_extension_t *pde, ULONG *gh_count)
     *gh_count = pde->dest_count;
 
     size = sizeof(v4v_ring_data_t) + (pde->dest_count + extra_count) * sizeof(v4v_ring_data_ent_t);
-    ringData = (v4v_ring_data_t *)ExAllocatePoolWithTag(NonPagedPool, size, XENV4V_TAG);
+    ringData = (v4v_ring_data_t *)uxen_v4v_fast_alloc(size);
     if (ringData == NULL) {
         KeReleaseSpinLock(&pde->queue_lock, irql);
         TraceError(("failed to allocate destination list - out of memory.\n"));

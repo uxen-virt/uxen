@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -104,6 +104,7 @@ typedef struct xenv4v_destination_struct {
 #define XENV4V_DEV_STOPPED   0x00000000
 #define XENV4V_DEV_STARTED   0x00000001
 
+struct xenv4v_prealloc_block;
 
 typedef struct xenv4v_extension_struct {
     ULONG magic;
@@ -122,6 +123,11 @@ typedef struct xenv4v_extension_struct {
 
     // The last power state seen
     SYSTEM_POWER_STATE last_po_state;
+
+    // Pooled allocations
+    KSPIN_LOCK  alloc_lock;
+    struct xenv4v_prealloc_block *prealloc_blocks;
+    void *prealloc_area;
 
     // V4V interrupt
     KDPC        virq_dpc;

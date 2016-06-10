@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -289,6 +289,7 @@ static NTSTATUS gh_remove_device(PDEVICE_OBJECT fdo)
     IoDeleteSymbolicLink(&pde->symbolic_link);
     IoDeleteDevice(fdo);
     uxen_v4v_set_notify_fdo(fdo);
+    uxen_v4v_free_preallocation(pde);
     InterlockedAnd(&g_deviceCreated, 0);
     return status;
 }
@@ -352,6 +353,8 @@ static NTSTATUS gh_add_device(PDRIVER_OBJECT driver_object)
         }
         symlink = TRUE;
 
+        KeInitializeSpinLock(&pde->alloc_lock);
+        pde->prealloc_blocks = NULL;
 
         // Setup the extension
         pde->magic = XENV4V_MAGIC;

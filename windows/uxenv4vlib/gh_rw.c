@@ -242,7 +242,7 @@ gh_v4v_process_notify(xenv4v_extension_t *pde)
     status = gh_v4v_notify(ringData);
     if (!NT_SUCCESS(status)) {
         // That ain't good
-        ExFreePoolWithTag(ringData, XENV4V_TAG);
+        uxen_v4v_fast_free(ringData);
         return;
     }
 
@@ -254,7 +254,7 @@ gh_v4v_process_notify(xenv4v_extension_t *pde)
     if (ringData->nent > gh_count)
         uxen_v4v_notify_process_ring_data(pde,  &ringData->data[gh_count], ringData->nent - gh_count);
 
-    ExFreePoolWithTag(ringData, XENV4V_TAG);
+    uxen_v4v_fast_free(ringData);
 }
 
 VOID

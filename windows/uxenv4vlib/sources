@@ -35,6 +35,7 @@ LINKER_FLAGS=$(LINKER_FLAGS) /SECTION:.shared,RWS /LTCG:NOSTATUS /SECTION:.rsrc,
 
 SOURCES =               \
     main.c              \
+    alloc.c             \
     hypercall.c		\
     export.c		\
     shared.c		\

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -64,7 +64,7 @@ uxen_v4v_notify_dequeue (v4v_addr_t *dst,
             break;
 
         RemoveEntryList (&p->le);
-        ExFreePoolWithTag (p, XENV4V_TAG);
+        uxen_v4v_fast_free (p);
 
         ret = TRUE;
 
@@ -88,15 +88,16 @@ uxen_v4v_notify_enqueue (uint32_t len, v4v_addr_t *dst,
     KIRQL irql;
     int found = 0;
 
-
     pde = uxen_v4v_get_pde ();
 
     if (!pde)
         return;
 
-    n =
-        (uxen_v4v_notify_t *) ExAllocatePoolWithTag (NonPagedPool, sizeof (uxen_v4v_notify_t),
-                XENV4V_TAG);
+    n = (uxen_v4v_notify_t *) uxen_v4v_fast_alloc(sizeof (uxen_v4v_notify_t));
+    if (!n) {
+        uxen_v4v_put_pde (pde);
+        return;
+    }
 
     RtlZeroMemory (n, sizeof (uxen_v4v_notify_t));
     InitializeListHead (&n->le);
@@ -107,11 +108,6 @@ uxen_v4v_notify_enqueue (uint32_t len, v4v_addr_t *dst,
     n->callback_data1 = callback_data1;
     n->callback_data2 = callback_data2;
     n->triggered = 0;
-
-    if (!n) {
-        uxen_v4v_put_pde (pde);
-        return;
-    }
 
     KeAcquireSpinLock (&pde->queue_lock, &irql);
 
@@ -149,7 +145,7 @@ uxen_v4v_notify_enqueue (uint32_t len, v4v_addr_t *dst,
     KeReleaseSpinLock (&pde->queue_lock, irql);
 
     if (found)
-        ExFreePoolWithTag (n, XENV4V_TAG);
+        uxen_v4v_fast_free (n);
 
     uxen_v4v_put_pde (pde);
 
@@ -280,6 +276,6 @@ uxen_v4v_notify_dpc (KDPC *dpc, VOID *dctx, PVOID sarg1, PVOID sarg2)
 
 
         n->callback (NULL, n->callback_data1, n->callback_data2);
-        ExFreePoolWithTag (n, XENV4V_TAG);
+        uxen_v4v_fast_free (n);
     }
 }
