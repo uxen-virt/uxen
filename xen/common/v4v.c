@@ -891,6 +891,8 @@ v4v_pending_cancel(struct v4v_ring_info *ring_info, domid_t src_id)
 }
 
 
+/***** channel sender/receiver validation ******/
+
 static int v4v_dm_domid = 0;
 
 static int
@@ -908,6 +910,39 @@ v4v_resolve_token(domid_t *id, uint32_t *port, v4v_idtoken_t *token)
     return 0;
 }
 
+static int
+v4v_validate_channel(domid_t *s_id, uint32_t *s_port,
+                     domid_t *d_id, uint32_t *d_port)
+{
+    struct vcpu *v = current;
+    struct domain *d = v->domain;
+
+    if (IS_HOST(d)) {
+    } else {
+        if (*d_id == V4V_DOMID_DM)
+            *d_id = v4v_dm_domid;
+        else {
+            printk(XENLOG_G_ERR "%s: !host !DM vm%u:%x -> vm%u:%x from %S\n",
+                   __FUNCTION__, *s_id, *s_port, *d_id, *d_port,
+                   (printk_symbol)__builtin_return_address(0));
+            return -EPERM;
+        }
+    }
+    if (*s_id >= V4V_DOMID_SELF && *s_id != V4V_DOMID_ANY) {
+        printk(XENLOG_G_WARNING "%s: invalid s_id vm%u:%x -> vm%u:%x from %S\n",
+               __FUNCTION__, *s_id, *s_port, *d_id, *d_port,
+               (printk_symbol)__builtin_return_address(0));
+        return -ENOENT;
+    }
+    if (*d_id >= V4V_DOMID_SELF && *d_id != V4V_DOMID_ANY) {
+        printk(XENLOG_G_WARNING "%s: invalid d_id vm%u:%x -> vm%u:%x from %S\n",
+               __FUNCTION__, *s_id, *s_port, *d_id, *d_port,
+               (printk_symbol)__builtin_return_address(0));
+        return -ENOENT;
+    }
+    return 0;
+}
+
 
 /*ring data*/
 
@@ -917,6 +952,7 @@ v4v_fill_ring_data(struct domain *src_d,
                    XEN_GUEST_HANDLE(v4v_ring_data_ent_t) data_ent_hnd)
 {
     v4v_ring_data_ent_t ent;
+    v4v_addr_t src_addr;
     struct domain *dst_d;
     struct v4v_ring_info *ring_info;
     int ret;
@@ -925,8 +961,13 @@ v4v_fill_ring_data(struct domain *src_d,
     if (ret)
         return ret;
 
-    if (ent.ring.domain == V4V_DOMID_DM)
-        ent.ring.domain = v4v_dm_domid;
+    src_addr.domain = src_d->domain_id;
+    src_addr.port = V4V_PORT_NONE;
+    ret = v4v_validate_channel(
+        &src_addr.domain, &src_addr.port,
+        &ent.ring.domain, &ent.ring.port);
+    if (ret)
+        return ret;
 
 #ifdef V4V_DEBUG
     printk(XENLOG_ERR "%s: ent.ring.domain=vm%u, ent.ring.port=%d\n",
@@ -935,16 +976,13 @@ v4v_fill_ring_data(struct domain *src_d,
 
     ent.flags = 0;
 
-    if (ent.ring.domain >= V4V_DOMID_SELF && ent.ring.domain != V4V_DOMID_ANY)
-        return -ENOENT;
-
     dst_d = get_domain_by_id(ent.ring.domain);
 
     if (dst_d && dst_d->v4v) {
         read_lock(&dst_d->v4v->lock);
 
         ring_info = v4v_ring_find_info_by_addr(dst_d, &ent.ring,
-                                               src_d->domain_id);
+                                               src_addr.domain);
         if (ring_info) {
             uint32_t space_avail;
 
@@ -963,10 +1001,10 @@ v4v_fill_ring_data(struct domain *src_d,
 #endif
 
             if (space_avail >= ent.space_required) {
-                v4v_pending_cancel(ring_info, src_d->domain_id);
+                v4v_pending_cancel(ring_info, src_addr.domain);
                 ent.flags |= V4V_RING_DATA_F_SUFFICIENT;
             } else {
-                v4v_pending_requeue(ring_info, src_d->domain_id,
+                v4v_pending_requeue(ring_info, src_addr.domain,
                                     ent.space_required);
                 ent.flags |= V4V_RING_DATA_F_PENDING;
             }
@@ -1307,6 +1345,7 @@ static long
 v4v_ring_remove(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd)
 {
     struct v4v_ring ring;
+    uint32_t dst_port;
     struct v4v_ring_info *ring_info;
     int ret = 0;
 
@@ -1329,13 +1368,12 @@ v4v_ring_remove(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd)
         }
 
         ring.id.addr.domain = d->domain_id;
-        if (ring.id.partner == V4V_DOMID_DM)
-            ring.id.partner = v4v_dm_domid;
-        if (ring.id.partner >= V4V_DOMID_SELF &&
-            ring.id.partner != V4V_DOMID_ANY) {
-            ret = -ENOENT;
+        dst_port = V4V_PORT_NONE;
+        ret = v4v_validate_channel(
+            &ring.id.addr.domain, &ring.id.addr.port,
+            &ring.id.partner, &dst_port);
+        if (ret)
             break;
-        }
 
         write_lock(&d->v4v->lock);
         ring_info = v4v_ring_find_info(d, &ring.id);
@@ -1362,6 +1400,7 @@ static long
 v4v_ring_create(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_id_t) ring_id_hnd)
 {
     struct domain *dst_d = NULL;
+    uint32_t dst_port;
     struct v4v_ring_info *ring_info;
     struct v4v_ring_id ring_id;
     int ret = 0;
@@ -1383,12 +1422,12 @@ v4v_ring_create(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_id_t) ring_id_hnd)
 
         if (ring_id.partner != V4V_DOMID_ANY)
             ring_id.partner = d->domain_id;
-
-        if (ring_id.addr.domain >= V4V_DOMID_SELF &&
-            ring_id.addr.domain != V4V_DOMID_ANY) {
-            ret = -ENOENT;
+        dst_port = V4V_PORT_NONE;
+        ret = v4v_validate_channel(
+            &ring_id.addr.domain, &ring_id.addr.port,
+            &ring_id.partner, &dst_port);
+        if (ret)
             break;
-        }
 
         dst_d = get_domain_by_id(ring_id.addr.domain);
         if (!dst_d) {
@@ -1531,6 +1570,12 @@ v4v_ring_add(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd,
                 break;
         }
 
+        ret = v4v_validate_channel(
+            &ring.id.addr.domain, &ring.id.addr.port,
+            &partner_id, &partner_port);
+        if (ret)
+            break;
+
         /* return the updated partner id to the caller, unless the
          * requested partner id was V4V_DOMID_DM */
         if (ring.id.partner != V4V_DOMID_DM)
@@ -1540,10 +1585,9 @@ v4v_ring_add(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd,
         if (ret)
             break;
 
-        /* updated ring.id.partner == V4V_DOMID_DM is not copied back
-         * to caller */
+        /* update ring.id.partner now if it was V4V_DOMID_DM */
         if (ring.id.partner == V4V_DOMID_DM)
-            ring.id.partner = v4v_dm_domid;
+            ring.id.partner = partner_id;
 
         /* no need for a lock yet, because only we know about this */
         /* set the tx pointer if it looks bogus (we don't reset it
@@ -1730,11 +1774,18 @@ v4v_notify(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_data_t) ring_data_hnd)
 static size_t
 v4v_poke(v4v_addr_t *dst_addr)
 {
+    v4v_addr_t src_addr;
+
     if (!dst_addr)
         return -EINVAL;
 
-    if (dst_addr->domain == V4V_DOMID_DM)
-        dst_addr->domain = v4v_dm_domid;
+    src_addr.domain = current->domain->domain_id;
+    src_addr.port = V4V_PORT_NONE;
+    ret = v4v_validate_channel(
+        &src_addr.domain, &src_addr.port,
+        &dst_addr->domain, &dst_addr->port);
+    if (ret)
+        return ret;
 
     v4v_signal_domid(dst_addr->domain);
 
@@ -1766,8 +1817,13 @@ v4v_send(struct domain *src_d, v4v_addr_t *src_addr,
         return -EINVAL;
     }
 
-    if (dst_addr->domain == V4V_DOMID_DM)
-        dst_addr->domain = v4v_dm_domid;
+    ret = v4v_validate_channel(
+        &src_addr->domain, &src_addr->port,
+        &dst_addr->domain, &dst_addr->port);
+    if (ret) {
+        read_unlock(&v4v_lock);
+        return ret;
+    }
 
 #if 0
     read_lock(&src_d->v4v->lock);
@@ -1782,7 +1838,7 @@ v4v_send(struct domain *src_d, v4v_addr_t *src_addr,
 #endif
 
     src_id.addr.port = src_addr->port;
-    src_id.addr.domain = src_d->domain_id;
+    src_id.addr.domain = src_addr->domain;
     src_id.partner = dst_addr->domain;
 
     dst_d = get_domain_by_id(dst_addr->domain);
@@ -1831,7 +1887,7 @@ v4v_send(struct domain *src_d, v4v_addr_t *src_addr,
                                      buf, len);
             if (ret == -EAGAIN) {
                 /* Schedule a notification when space is there */
-                if (v4v_pending_requeue(ring_info, src_d->domain_id, len))
+                if (v4v_pending_requeue(ring_info, src_addr->domain, len))
                     ret = -ENOMEM;
             }
             spin_unlock(&ring_info->lock);
@@ -1869,11 +1925,16 @@ v4v_sendv(struct domain *src_d, v4v_addr_t *src_addr,
         return -EINVAL;
     }
 
-    if (dst_addr->domain == V4V_DOMID_DM)
-        dst_addr->domain = v4v_dm_domid;
+    ret = v4v_validate_channel(
+        &src_addr->domain, &src_addr->port,
+        &dst_addr->domain, &dst_addr->port);
+    if (ret) {
+        read_unlock(&v4v_lock);
+        return ret;
+    }
 
     src_id.addr.port = src_addr->port;
-    src_id.addr.domain = src_d->domain_id;
+    src_id.addr.domain = src_addr->domain;
     src_id.partner = dst_addr->domain;
 
     dst_d = get_domain_by_id(dst_addr->domain);
@@ -1934,7 +1995,7 @@ v4v_sendv(struct domain *src_d, v4v_addr_t *src_addr,
                                     niov, len);
             if (ret == -EAGAIN) {
                 /* Schedule a notification when space is there */
-                if (v4v_pending_requeue(ring_info, src_d->domain_id, len)) {
+                if (v4v_pending_requeue(ring_info, src_addr->domain, len)) {
                     ret = -ENOMEM;
                 }
             }
@@ -2019,7 +2080,7 @@ do_v4v_op(int cmd, XEN_GUEST_HANDLE(void) arg1,
         if (rc)
             goto out;
 
-        src.domain = current->domain->domain_id;
+        src.domain = d->domain_id;
 
         rc = v4v_send(d, &src, &dst, protocol, arg3, len);
         break;
@@ -2050,7 +2111,7 @@ do_v4v_op(int cmd, XEN_GUEST_HANDLE(void) arg1,
         if (unlikely(!guest_handle_okay(iovs, niov)))
             goto out;
 
-        src.domain = current->domain->domain_id;
+        src.domain = d->domain_id;
 
         rc = v4v_sendv(d, &src, &dst, protocol, iovs, niov);
         break;
