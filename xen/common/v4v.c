@@ -140,17 +140,13 @@ v4v_hexdump(void *_p, int len)
 /* fix me for type 1.5 */
 static int mfns_dont_belong_xen(struct domain *d)
 {
-    return !d->domain_id;
+    return IS_HOST(d);
 }
 
 static int v4v_can_do_create(void)
 {
-#if 0
-    /* Dom0 not priv in uXen */
-    return IS_PRIV(current->domain);
-#else
-    return !current->domain->domain_id;
-#endif
+
+    return IS_HOST(current->domain);
 }
 
 
