@@ -263,6 +263,7 @@ struct http_ctx {
     struct http_auth *auth;
     struct proxy_t *proxy;
     struct tls_state_t *tls;
+    Timer *tls_crl_timer;
 
     uint32_t refcnt;
     int64_t idle_ts;
@@ -302,6 +303,7 @@ static int max_socket_per_proxy = 12;
 static char *webdav_host_dir = NULL;
 static Timer *hp_idle_timer = NULL;
 static int disable_crl_check = 0;
+static int crl_check_timeout = 0;
 static int no_transparent_proxy = 0;
 static int no_dns_lookups_if_proxy = 0;
 static rb_tree_t hpd_rbtree;
@@ -1262,6 +1264,12 @@ static void hp_close(struct http_ctx *hp)
     hp->flags |= HF_CLOSED;
 
     hp_remove_hpd(hp);
+
+    if (hp->tls_crl_timer) {
+        free_timer(hp->tls_crl_timer);
+        hp->tls_crl_timer = NULL;
+        hp_put(hp);
+    }
 
     hp_put(hp);
     LIST_INSERT_HEAD(&http_gc_list, hp, entry);
@@ -2313,6 +2321,12 @@ static void srv_tls_check_complete(void *opaque, int revoked, uint32_t err_code)
     if ((hp->flags & HF_CLOSED))
         goto out;
 
+    if (hp->tls_crl_timer) {
+        free_timer(hp->tls_crl_timer);
+        hp->tls_crl_timer = NULL;
+        hp_put(hp);
+    }
+
     if (revoked) {
         dict d;
 
@@ -2349,6 +2363,27 @@ out:
 out_close:
     hp_close(hp);
     goto out;
+}
+
+static void srv_tls_check_timeout_cb(void *opaque)
+{
+    struct http_ctx *hp = opaque;
+
+    if (hp->tls_crl_timer) {
+        free_timer(hp->tls_crl_timer);
+        hp->tls_crl_timer = NULL;
+        hp_put(hp);
+    }
+
+    if ((hp->flags & HF_CLOSED))
+        return;
+
+    HLOG4("CRL check timeout, resuming TLS stream");
+    if (hp->cx) {
+        hp->cx->flags &= ~CXF_SUSPENDED;
+        wakeup_client(hp);
+        cx_guest_write(hp->cx);
+    }
 }
 
 static int srv_read(struct http_ctx *hp)
@@ -2491,6 +2526,15 @@ static int srv_read(struct http_ctx *hp)
                 tls_free(&hp->tls);
 
                 goto carry_on;
+            }
+            if (crl_check_timeout && !hp->tls_crl_timer) {
+                hp_get(hp);
+                hp->tls_crl_timer = ni_new_rt_timer(hp->ni, crl_check_timeout,
+                                                    srv_tls_check_timeout_cb, hp);
+                if (!hp->tls_crl_timer) {
+                    HLOG("WARNING - ni_new_rt_timer FAILED");
+                    hp_put(hp);
+                }
             }
 
             if (hp->cx)
@@ -3984,6 +4028,18 @@ static void set_settings(struct nickel *ni, yajl_val config)
     disable_crl_check = yajl_object_get_bool_default(config, "disable-crl-check", 0);
     NETLOG("%s: SSL CRL check %s", __FUNCTION__, disable_crl_check ?
            "DISABLED" : "ENABLED");
+
+    if (!disable_crl_check) {
+        crl_check_timeout = yajl_object_get_integer_default(config,
+                                                            "crl-check-timeout-ms", 0);
+        if (crl_check_timeout < 0) {
+            NETLOG("%s: WARNING - crl-check-timeout-ms should be positive", __FUNCTION__);
+            crl_check_timeout = 0;
+        }
+        if (crl_check_timeout)
+            NETLOG("%s: CRL check timeout %d ms", __FUNCTION__, crl_check_timeout);
+    }
+
     no_transparent_proxy = yajl_object_get_bool_default(config, "no-transparent-proxy-mode", 0);
     NETLOG("%s: no-transparent-proxy-mode is %s", __FUNCTION__, no_transparent_proxy ? "ON" : "OFF");
     no_dns_lookups_if_proxy = yajl_object_get_bool_default(config, "no-dns-lookups-if-proxy", 0);
