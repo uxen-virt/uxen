@@ -56,6 +56,10 @@ mt19937-64.o: $(TOPDIR)/common/img-tools/mt19937-64.c
 	$(_W)echo Importing - $@
 	$(_V)$(COMPILE.c) $< -o $@
 
+img-rm.o: $(TOPDIR)/common/img-tools/img-rm.c
+	$(_W)echo Importing - $@
+	$(_V)$(COMPILE.c) $< -o $@
+
 img-test.o: $(TOPDIR)/common/img-tools/img-test.c
 	$(_W)echo Importing - $@
 	$(_V)$(COMPILE.c) $< -o $@

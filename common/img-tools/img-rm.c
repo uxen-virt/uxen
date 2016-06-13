@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -14,10 +14,21 @@
 #include <stdlib.h>
 #include "libimg.h"
 
+#if defined(_WIN32)
+#include "sys.h"
+#include <windows.h>
+DECLARE_PROGNAME;
+#endif	/* _WIN32 */
+
 int main(int argc, char **argv)
 {
     BlockDriverState *bs;
     const char *img;
+
+#ifdef _WIN32
+    setprogname(argv[0]);
+    convert_args(argc, argv);
+#endif
 
     if ( argc != 2 ) {
         fprintf(stderr, "usage: %s <protocol>:<image>\n", argv[0]);
@@ -45,7 +56,5 @@ int main(int argc, char **argv)
         return -1;
     }
 
-    bdrv_flush(bs);
-    bdrv_delete(bs);
     return 0;
 }
