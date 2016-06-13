@@ -30,7 +30,7 @@ int g_showwindow;
 
 uint64_t process_shutdown_priority = 0x280;
 
-static void
+void
 socket_cleanup(void)
 {
 
@@ -46,8 +46,6 @@ socket_init(void)
     ret = WSAStartup(MAKEWORD(2,2), &Data);
     if (ret)
         Werr(1, "WSAStartup: %d", ret);
-
-    atexit(socket_cleanup);
 
     return 0;
 }

@@ -22,6 +22,7 @@
 #include "ioreq.h"
 #include "mapcache.h"
 #include "monitor.h"
+#include "sockets.h"
 #include "hw.h"
 #include "uxen.h"
 #include "vm.h"
@@ -734,6 +735,9 @@ vm_exit(void *opaque)
     control_exit();
     dmreq_exit();
 
+#if defined(_WIN32)
+    socket_cleanup();
+#endif
     exit(0);
 }
 

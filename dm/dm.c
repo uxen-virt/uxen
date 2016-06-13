@@ -430,6 +430,10 @@ main(int argc, char **argv)
     console_exit();
     net_cleanup();
 
+#if defined(_WIN32)
+    socket_cleanup();
+#endif
+
     return 0;
 }
 
