@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -92,4 +92,3 @@ NTSTATUS uxenerrno_to_ntstatus(int err)
     return status;
 }
 #endif
-

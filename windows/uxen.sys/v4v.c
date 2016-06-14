@@ -15,7 +15,6 @@
 #include <uxen/uxen_link.h>
 
 /* XXX: should include uxenv4vlib.h, but that conflicts */
-
 typedef uintptr_t (Uxen_v4vlib_hypercall_func)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t);
 void uxen_v4vlib_set_hypercall_func(Uxen_v4vlib_hypercall_func *);
 typedef uintptr_t (Uxen_v4vlib_page_notify_func)(uint64_t *, uint32_t, int);
@@ -24,6 +23,15 @@ void uxen_v4vlib_deliver_signal (void);
 void uxen_v4vlib_we_are_dom0(void);
 
 void uxen_v4v_test(void);
+
+typedef void (*uxen_v4v_logger_t)(int lvl, const char *);
+void uxen_v4vlib_set_logger(uxen_v4v_logger_t logger);
+
+static void
+host_logger(int lvl, const char *str)
+{
+    printk(str);
+}
 
 static uintptr_t uxen_sys_v4v_hypercall(uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
 {
@@ -63,6 +71,7 @@ uxen_sys_v4v_page_notify(uint64_t *pfns, uint32_t npfn, int add)
 
 void uxen_sys_start_v4v(void)
 {
+    uxen_v4vlib_set_logger(host_logger);
     uxen_v4vlib_we_are_dom0();
     uxen_v4vlib_set_hypercall_func(uxen_sys_v4v_hypercall);
     uxen_v4vlib_set_page_notify_func(uxen_sys_v4v_page_notify);

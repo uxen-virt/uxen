@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -18,7 +18,6 @@ typedef unsigned __int32 uint32_t;
 typedef unsigned __int64 uint64_t;
 #endif
 
-
 #include <xen/xen.h>
 #include <xen/v4v.h>
 
@@ -33,6 +32,14 @@ typedef struct uxen_v4v_ring_handle_struct {
 
 typedef void (uxen_v4v_callback_t)(uxen_v4v_ring_handle_t *, void *private_data1, void *private_data2);
 
+#define V4VLOG_ERROR 0
+#define V4VLOG_WARNING 1
+#define V4VLOG_INFO 2
+#define V4VLOG_NOTICE 3
+#define V4VLOG_VERBOSE 4
+
+typedef void (*uxen_v4v_logger_t)(int lvl, const char *);
+
 #ifndef XENV4V_DRIVER
 
 struct uxp_state_bar;
@@ -43,6 +50,7 @@ DECLSPEC_IMPORT void uxen_v4vlib_set_page_notify_func(uxen_v4vlib_page_notify_fu
 DECLSPEC_IMPORT void uxen_v4vlib_set_state_bar_ptr(struct uxp_state_bar **a);
 DECLSPEC_IMPORT void uxen_v4vlib_we_are_dom0(void);
 DECLSPEC_IMPORT void uxen_v4vlib_deliver_signal (void);
+DECLSPEC_IMPORT void uxen_v4vlib_set_logger(uxen_v4v_logger_t logger);
 DECLSPEC_IMPORT void uxen_v4vlib_init_driver(PDRIVER_OBJECT pdo);
 DECLSPEC_IMPORT void uxen_v4vlib_free_driver(void );
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -20,15 +20,10 @@
 
 #define XENV4V_DRIVER
 
-#define TraceVerbose(a) do { DbgPrint a; } while (0)
-#define TraceInfo(a) do { DbgPrint a; } while (0)
-#define TraceWarning(a) do { DbgPrint a; } while (0)
-#define TraceNotice(a) do { DbgPrint a; } while (0)
-#define TraceError(a) do { DbgPrint a; } while (0)
-
 #define V4V_DLL_EXPORT
 
 #include "uxenv4vlib.h"
+#include "log.h"
 
 #include "gh_xenv4v.h"
 

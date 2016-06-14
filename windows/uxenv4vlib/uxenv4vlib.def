@@ -6,6 +6,7 @@ EXPORTS
     DllInitialize                       PRIVATE
     DllUnload                           PRIVATE
 
+        uxen_v4vlib_set_logger
 	uxen_v4vlib_set_hypercall_func
 	uxen_v4vlib_set_page_notify_func
 	uxen_v4vlib_set_state_bar_ptr

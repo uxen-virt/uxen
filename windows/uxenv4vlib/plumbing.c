@@ -39,6 +39,10 @@ V4V_DLL_EXPORT void uxen_v4vlib_deliver_signal (void )
     gh_signaled();
 }
 
+V4V_DLL_EXPORT void uxen_v4vlib_set_logger(uxen_v4v_logger_t logger)
+{
+    uxen_v4v_logger = logger;
+}
 
 V4V_DLL_EXPORT void uxen_v4vlib_free_driver(void )
 {

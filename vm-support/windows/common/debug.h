@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -57,13 +57,11 @@ _printk(const char *fmt, ...)
             n--;
         }
     }
-
-    WRITE_PORT_UCHAR((PUCHAR)UXEN_DEBUG_PORT, 0xa);
 }
 
 void _printk(const char *fmt, ...);
 #define printk(fmt, ...)                                                      \
-    _printk("%s!%s:%d: " fmt,                                                 \
+    _printk("%s!%s:%d: " fmt "\n",                                            \
             __DRV_NAME__, __FUNCTION__, __LINE__, __VA_ARGS__)
 
 #define uxen_err(fmt, ...) do {                                               \
