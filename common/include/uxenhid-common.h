@@ -32,6 +32,7 @@ enum {
     UXENHID_REPORT_ID_PEN = 2,
     UXENHID_REPORT_ID_TOUCH = 3,
     UXENHID_REPORT_ID_MAX_CONTACT_COUNT = 4,
+    UXENHID_REPORT_ID_MOUSE_AXIS_RES = 5,
 };
 
 #define UXENHID_MOUSE_BUTTON_1  0x01
@@ -101,6 +102,12 @@ struct max_contact_count_report
 {
     uint8_t report_id;
     uint8_t max_contact_count;
+} UXENHID_PACKED;
+
+struct mouse_axis_res_report
+{
+    uint8_t report_id;
+    uint8_t multiplier;
 } UXENHID_PACKED;
 
 #undef UXENHID_PACKED

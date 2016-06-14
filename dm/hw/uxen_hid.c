@@ -70,42 +70,73 @@ static const char report_descriptor_mouse[] = {
     0x05, 0x01,                        /* USAGE_PAGE (Generic Desktop) */
     0x09, 0x02,                        /* USAGE (Mouse) */
     0xa1, 0x01,                        /* COLLECTION (Application) */
+    0x05, 0x01,                        /*   USAGE_PAGE (Generic Desktop) */
+    0x09, 0x02,                        /*   USAGE (Mouse) */
+    0xa1, 0x02,                        /*   COLLECTION (Logical) */
     0x85, _ENC8(UXENHID_REPORT_ID_MOUSE),/*   REPORT_ID (mouse) */
-    0x09, 0x01,                        /*   USAGE (Pointer) */
-    0xa1, 0x00,                        /*   COLLECTION (Physical) */
-    0x05, 0x09,                        /*     USAGE_PAGE (Button) */
-    0x19, 0x01,                        /*     USAGE_MINIMUM (Button 1) */
-    0x29, 0x05,                        /*     USAGE_MAXIMUM (Button 5) */
-    0x15, 0x00,                        /*     LOGICAL_MINIMUM (0) */
-    0x25, 0x01,                        /*     LOGICAL_MAXIMUM (1) */
-    0x95, 0x05,                        /*     REPORT_COUNT (5) */
-    0x75, 0x01,                        /*     REPORT_SIZE (1) */
-    0x81, 0x02,                        /*     INPUT (Data,Var,Abs) */
-    0x95, 0x01,                        /*     REPORT_COUNT (1) */
-    0x75, 0x03,                        /*     REPORT_SIZE (3) */
-    0x81, 0x03,                        /*     INPUT (Cnst,Var,Abs) */
-    0x05, 0x01,                        /*     USAGE_PAGE (Generic Desktop) */
-    0x09, 0x30,                        /*     USAGE (X) */
-    0x09, 0x31,                        /*     USAGE (Y) */
-    0x15, 0x00,                        /*     LOGICAL_MINIMUM (0) */
-    0x26, _ENC16(UXENHID_XY_MAX),      /*     LOGICAL_MAXIMUM (max) */
-    0x75, 0x10,                        /*     REPORT_SIZE (16) */
-    0x95, 0x02,                        /*     REPORT_COUNT (2) */
-    0x81, 0x02,                        /*     INPUT (Data,Var,Abs) */
-    0x05, 0x01,                        /*     USAGE_PAGE (Generic Desktop) */
-    0x09, 0x38,                        /*     USAGE (Wheel) */
-    0x15, _ENC8(UXENHID_WHEEL_MIN),    /*     LOGICAL_MINIMUM (min) */
-    0x25, _ENC8(UXENHID_WHEEL_MAX),    /*     LOGICAL_MAXIMUM (max) */
-    0x75, 0x08,                        /*     REPORT_SIZE (8) */
-    0x95, 0x01,                        /*     REPORT_COUNT (1) */
-    0x81, 0x06,                        /*     INPUT (Data,Var,Rel) */
-    0x05, 0x0c,                        /*     USAGE_PAGE (Consumer Devices) */
-    0x0a, 0x38, 0x02,                  /*     USAGE (AC Pan) */
-    0x15, _ENC8(UXENHID_WHEEL_MIN),    /*     LOGICAL_MINIMUM (min) */
-    0x25, _ENC8(UXENHID_WHEEL_MAX),    /*     LOGICAL_MAXIMUM (max) */
-    0x75, 0x08,                        /*     REPORT_SIZE (8) */
-    0x95, 0x01,                        /*     REPORT_COUNT (1) */
-    0x81, 0x06,                        /*     INPUT (Data,Var,Rel) */
+    0x09, 0x01,                        /*     USAGE (Pointer) */
+    0xa1, 0x00,                        /*     COLLECTION (Physical) */
+    0x05, 0x09,                        /*       USAGE_PAGE (Button) */
+    0x19, 0x01,                        /*       USAGE_MINIMUM (Button 1) */
+    0x29, 0x05,                        /*       USAGE_MAXIMUM (Button 5) */
+    0x95, 0x05,                        /*       REPORT_COUNT (5) */
+    0x75, 0x01,                        /*       REPORT_SIZE (1) */
+    0x15, 0x00,                        /*       LOGICAL_MINIMUM (0) */
+    0x25, 0x01,                        /*       LOGICAL_MAXIMUM (1) */
+    0x81, 0x02,                        /*       INPUT (Data,Var,Abs) */
+    0x95, 0x01,                        /*       REPORT_COUNT (1) */
+    0x75, 0x03,                        /*       REPORT_SIZE (3) */
+    0x81, 0x03,                        /*       INPUT (Cnst,Var,Abs) */
+    0x05, 0x01,                        /*       USAGE_PAGE (Generic Desktop) */
+    0x09, 0x30,                        /*       USAGE (X) */
+    0x09, 0x31,                        /*       USAGE (Y) */
+    0x95, 0x02,                        /*       REPORT_COUNT (2) */
+    0x75, 0x10,                        /*       REPORT_SIZE (16) */
+    0x15, 0x00,                        /*       LOGICAL_MINIMUM (0) */
+    0x26, _ENC16(UXENHID_XY_MAX),      /*       LOGICAL_MAXIMUM (max) */
+    0x81, 0x02,                        /*       INPUT (Data,Var,Abs) */
+    0xa1, 0x02,                        /*       COLLECTION (Logical) */
+    0x85, _ENC8(UXENHID_REPORT_ID_MOUSE_AXIS_RES),/* REPORT_ID (mouse axis res) */
+    0x09, 0x48,                        /*         USAGE (Resolution Multiplier) */
+    0x95, 0x01,                        /*         REPORT_COUNT (1) */
+    0x75, 0x02,                        /*         REPORT_SIZE (2) */
+    0x15, 0x00,                        /*         LOGICAL_MINIMUM (0) */
+    0x25, 0x01,                        /*         LOGICAL_MAXIMUM (1) */
+    0x35, 0x01,                        /*         PHYSICAL_MINIMUM (1) */
+    0x45, 0x04,                        /*         PHYSICAL_MAXIMUM (4) */
+    0xb1, 0x02,                        /*         FEATURE(Data,Var,Abs) */
+    0x85, _ENC8(UXENHID_REPORT_ID_MOUSE),/*       REPORT_ID (mouse) */
+    0x09, 0x38,                        /*         USAGE (Wheel) */
+    0x35, 0x00,                        /*         PHYSICAL_MINIMUM (0) */
+    0x45, 0x00,                        /*         PHYSICAL_MAXIMUM (0) */
+    0x15, _ENC8(UXENHID_WHEEL_MIN),    /*         LOGICAL_MINIMUM (min) */
+    0x25, _ENC8(UXENHID_WHEEL_MAX),    /*         LOGICAL_MAXIMUM (max) */
+    0x75, 0x08,                        /*         REPORT_SIZE (8) */
+    0x81, 0x06,                        /*         INPUT (Data,Var,Rel) */
+    0xc0,                              /*       END_COLLECTION */
+    0xa1, 0x02,                        /*       COLLECTION (Logical) */
+    0x85, _ENC8(UXENHID_REPORT_ID_MOUSE_AXIS_RES),/* REPORT_ID (mouse axis res) */
+    0x09, 0x48,                        /*         USAGE (Resolution Multiplier) */
+    0x95, 0x01,                        /*         REPORT_COUNT (1) */
+    0x75, 0x02,                        /*         REPORT_SIZE (2) */
+    0x15, 0x00,                        /*         LOGICAL_MINIMUM (0) */
+    0x25, 0x01,                        /*         LOGICAL_MAXIMUM (1) */
+    0x35, 0x01,                        /*         PHYSICAL_MINIMUM (1) */
+    0x45, 0x04,                        /*         PHYSICAL_MAXIMUM (4) */
+    0xb1, 0x02,                        /*         FEATURE(Data,Var,Abs) */
+    0x35, 0x00,                        /*         PHYSICAL_MINIMUM (0) */
+    0x45, 0x00,                        /*         PHYSICAL_MAXIMUM (0) */
+    0x75, 0x04,                        /*         REPORT_SIZE (4) */
+    0xb1, 0x03,                        /*         FEATURE(Cnst,Var,Abs) */
+    0x85, _ENC8(UXENHID_REPORT_ID_MOUSE),/*       REPORT_ID (mouse) */
+    0x05, 0x0c,                        /*         USAGE_PAGE (Consumer Devices) */
+    0x15, _ENC8(UXENHID_WHEEL_MIN),    /*         LOGICAL_MINIMUM (min) */
+    0x25, _ENC8(UXENHID_WHEEL_MAX),    /*         LOGICAL_MAXIMUM (max) */
+    0x75, 0x08,                        /*         REPORT_SIZE (8) */
+    0x0a, 0x38, 0x02,                  /*         USAGE (AC Pan) */
+    0x81, 0x06,                        /*         INPUT (Data,Var,Rel) */
+    0xc0,                              /*       END_COLLECTION */
+    0xc0,                              /*     END_COLLECTION */
     0xc0,                              /*   END_COLLECTION */
     0xc0,                              /* END_COLLECTION */
 };
@@ -391,6 +422,33 @@ int uxenhid_send_touch_report(uint8_t contact_count, uint16_t contact_id,
 }
 
 static int
+uxenhid_send_mouse_axis_res_report(void)
+{
+    struct async_buf *b;
+    struct {
+        UXENHID_MSG_HEADER hdr;
+        struct mouse_axis_res_report report;
+    } __attribute__ ((packed)) *buf;
+    DWORD msglen = sizeof (*buf);
+    v4v_addr_t addr = { .port = UXENHID_PORT, .domain = vm_id };
+
+    if (!hid_touch_enabled || !hid_state || !hid_state->ready)
+        return -1;
+
+    b = alloc_async_buf(msglen, (void **)&buf, addr);
+    if (!b)
+        return -1;
+
+    buf->hdr.type = UXENHID_FEATURE_REPORT;
+    buf->hdr.msglen = msglen;
+
+    buf->report.report_id = UXENHID_REPORT_ID_MOUSE_AXIS_RES;
+    buf->report.multiplier = 0;
+
+    return send_async(hid_state, b, msglen);
+}
+
+static int
 uxenhid_send_max_contact_count_report(void)
 {
     struct async_buf *b;
@@ -473,6 +531,9 @@ uxenhid_recv(struct uxenhid_state *s, v4v_datagram_t *dgram,
             switch (*report_id) {
             case UXENHID_REPORT_ID_MAX_CONTACT_COUNT:
                 uxenhid_send_max_contact_count_report();
+                break;
+            case UXENHID_REPORT_ID_MOUSE_AXIS_RES:
+                uxenhid_send_mouse_axis_res_report();
                 break;
             default:
                 return;
