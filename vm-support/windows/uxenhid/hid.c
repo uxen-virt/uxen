@@ -821,9 +821,6 @@ uxenhid_send_feature_query(DEVICE_EXTENSION *devext, IRP *irp)
         return STATUS_PENDING;
     }
 
-    IoCsqRemoveNextIrp(&devext->pending_feature_query_csq, &pkt->reportId);
-    irp->IoStatus.Information = ret;
-
     return STATUS_SUCCESS;
 }
 

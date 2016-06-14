@@ -430,10 +430,13 @@ uxenhid_send_mouse_axis_res_report(void)
         struct mouse_axis_res_report report;
     } __attribute__ ((packed)) *buf;
     DWORD msglen = sizeof (*buf);
-    v4v_addr_t addr = { .port = UXENHID_PORT, .domain = vm_id };
+    v4v_addr_t addr;
 
-    if (!hid_touch_enabled || !hid_state || !hid_state->ready)
+    if (!mouse_state || !mouse_state->ready)
         return -1;
+
+    addr.port = mouse_state->type + UXENHID_BASE_PORT;
+    addr.domain = vm_id;
 
     b = alloc_async_buf(msglen, (void **)&buf, addr);
     if (!b)
@@ -443,9 +446,9 @@ uxenhid_send_mouse_axis_res_report(void)
     buf->hdr.msglen = msglen;
 
     buf->report.report_id = UXENHID_REPORT_ID_MOUSE_AXIS_RES;
-    buf->report.multiplier = 0;
+    buf->report.multiplier = 5;
 
-    return send_async(hid_state, b, msglen);
+    return send_async(mouse_state, b, msglen);
 }
 
 static int
