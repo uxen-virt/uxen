@@ -530,6 +530,7 @@ swap_insert_thread(void * _s)
         uint8_t *cbuf = c->cbuf;
         int n = c->n;
         int i;
+        uint32_t load;
 
         r = dubtree_insert(&s->t, n, keys, cbuf, c->sizes, 0);
         free(c->sizes);
@@ -549,11 +550,12 @@ swap_insert_thread(void * _s)
         free(keys);
         swap_free(c->s, c->cbuf);
         free(c);
+        load = s->busy_blocks.load;
+        swap_unlock(s);
 
-        if (s->busy_blocks.load == 0) {
+        if (load == 0) {
             swap_signal_all_flushed(s);
         }
-        swap_unlock(s);
         if (r < 0) {
             err(1, "dubtree_insert failed, r=%d!", r);
         }
@@ -1180,12 +1182,10 @@ static int swap_open(BlockDriverState *bs, const char *filename, int flags)
     if (create_thread(&s->write_thread, swap_write_thread, (void*) s) < 0) {
         Werr(1, "swap: unable to create thread!");
     }
-    elevate_thread(s->write_thread);
 
     if (create_thread(&s->insert_thread, swap_insert_thread, (void*) s) < 0) {
         Werr(1, "swap: unable to create thread!");
     }
-    elevate_thread(s->insert_thread);
 
     if (create_thread(&s->read_thread, swap_read_thread, (void*) s) < 0) {
         Werr(1, "swap: unable to create read thread!");
@@ -1408,7 +1408,6 @@ static int swap_fill_read_holes(BDRVSwapState *s, uint64_t offset, uint64_t coun
 #ifdef SWAP_STATS
                     uint64_t t0 = os_get_clock();
 #endif
-                    swap_lock(s);
                     if (hashtable_find(&s->open_files, (uint64_t)(uintptr_t)tuple,
                                 &line)) {
                         /* We had a mapping cached already. */
@@ -1508,13 +1507,11 @@ static int swap_fill_read_holes(BDRVSwapState *s, uint64_t offset, uint64_t coun
                             /* When no CoW backup, use the normal shallow file name. */
                             handle = open_file_readonly(filename);
                         }
-
 #endif
 
                         /* No CoW file and no orig. shallow file. We're doomed. */
                         if (handle == DUBTREE_INVALID_HANDLE) {
                             Wwarn("swap: failed to open shallow %s", filename);
-                            swap_unlock(s);
                             goto next;
                         }
 
@@ -1522,9 +1519,6 @@ static int swap_fill_read_holes(BDRVSwapState *s, uint64_t offset, uint64_t coun
                          * then we will perform the read now and continue to the
                          * next block without caching anything. */
                         if (SWAP_SECTOR_SIZE * tuple->size <= take) {
-                            /* Drop the lock, we are done with the cache. */
-                            swap_unlock(s);
-
                             if (dubtree_pread(handle, buffer + readOffset, take,
                                         SWAP_SECTOR_SIZE *
                                         ((block - tuple_start) +
@@ -1554,7 +1548,6 @@ static int swap_fill_read_holes(BDRVSwapState *s, uint64_t offset, uint64_t coun
                              * err(), but quite likely the other threads are
                              * going to fail soon anyway. */
                             warnx("swap: OOM %s %d", __FUNCTION__, __LINE__);
-                            swap_unlock(s);
                             goto next;
                         }
 
@@ -1564,7 +1557,6 @@ static int swap_fill_read_holes(BDRVSwapState *s, uint64_t offset, uint64_t coun
                         if (r < 0) {
                             Wwarn("swap: mapping %s fails", filename);
                             free(file);
-                            swap_unlock(s);
                             goto next;
                         }
 #ifndef _WIN32
@@ -1635,7 +1627,6 @@ static int swap_fill_read_holes(BDRVSwapState *s, uint64_t offset, uint64_t coun
                         swap_stats.shallow_read += os_get_clock() - t0;
 #endif
                     }
-                    swap_unlock(s);
 
                     /* Increment j by how many blocks we were supposed to read,
                      * as we have zero-filled any blocks we did not manage to
@@ -1672,7 +1663,12 @@ static inline void swap_common_cb(SwapAIOCB *acb)
 {
     BDRVSwapState *s = (BDRVSwapState*) acb->bs->opaque;
 #ifdef SWAP_STATS
-    swap_stats.blocked_time += os_get_clock() - acb->t0;
+    int64_t dt = os_get_clock() - acb->t0;
+    if (dt / SCALE_MS > 1000) {
+        debug_printf("%s: aio waited %"PRId64"ms\n", __FUNCTION__,
+                dt / SCALE_MS);
+    }
+    swap_stats.blocked_time += dt;
 #endif
     --(s->ios_outstanding);
     if (TAILQ_ACTIVE(acb, rlimit_write_entry)) {
@@ -1778,11 +1774,14 @@ static SwapAIOCB *swap_aio_get(BlockDriverState *bs,
     acb->bs = bs;
     acb->result = -1;
     acb->map = NULL;
+    acb->splits = 0;
     memset(&acb->rlimit_write_entry, 0, sizeof(acb->rlimit_write_entry));
 
     ++(s->ios_outstanding);
+
 #ifdef SWAP_STATS
     acb->t0 = os_get_clock();
+    acb->t1 = 0;
 #endif
     return acb;
 }
