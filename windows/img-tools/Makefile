@@ -20,8 +20,8 @@ ifeq (,$(MAKENOW))
 
 VPATH = $(SRCDIR)
 
-CFLAGS += -I$(SRCDIR) -I $(TOPDIR)/common/img-tools -O3
-
+CFLAGS := $(subst -O2,-O3,$(CFLAGS))
+CFLAGS += -I$(SRCDIR) -I $(TOPDIR)/common/img-tools
 CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
 
 PROGRAMS = img-bcdedit$(EXE_SUFFIX)

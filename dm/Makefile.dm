@@ -89,12 +89,7 @@ block-vhd.o: $(LIBVHD_DEPS)
 DM_SRCS += block-vhd.c
 $(OSX)DM_SRCS += block-raw-posix.c
 $(WINDOWS)DM_SRCS += block-raw-win32.c
-DM_SRCS += block-swap.c
-block-swap.o: CPPFLAGS += $(LZ4_CPPFLAGS)
-DM_SRCS +=   block-swap/dubtree.c
-block-swap_dubtree.o: CPPFLAGS += $(LZ4_CPPFLAGS)
-DM_SRCS +=   block-swap/simpletree.c
-DM_SRCS +=   block-swap/hashtable.c
+
 DM_SRCS += char.c
 DM_SRCS += clock.c
 DM_SRCS += conffile.c
@@ -117,9 +112,9 @@ console.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
 DM_SRCS += control.c
 control.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 $(OSX_NOT_YET)DM_SRCS += cuckoo.c
+$(OSX_NOT_YET)cuckoo.o: CFLAGS := $(subst -O2,-O3,$(CFLAGS))
 $(OSX_NOT_YET)cuckoo.o: CFLAGS_debug := $(subst -O0,-O2,$(CFLAGS_debug))
-$(OSX_NOT_YET)cuckoo.o: CFLAGS += $(LZ4_CPPFLAGS)
-$(OSX_NOT_YET)cuckoo.o: CPPFLAGS += $(CUCKOO_CPPFLAGS)
+$(OSX_NOT_YET)cuckoo.o: CPPFLAGS += $(CUCKOO_CPPFLAGS) $(LZ4_CPPFLAGS)
 $(OSX_NOT_YET)DM_SRCS += cuckoo-uxen.c
 $(OSX_NOT_YET)cuckoo-uxen.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 $(OSX_NOT_YET)cuckoo-uxen.o: CPPFLAGS += $(LZ4_CPPFLAGS)
@@ -314,6 +309,11 @@ LZ4_SRCS += lz4hc.c
 CUCKOO_CPPFLAGS += -I$(CUCKOODIR_include)
 CUCKOO_SRCS += fingerprint.c
 
+SWAP_SRCS = block-swap.c
+SWAP_SRCS += block-swap/dubtree.c
+SWAP_SRCS += block-swap/hashtable.c
+SWAP_SRCS += block-swap/simpletree.c
+
 NICKEL_CPPFLAGS += -I$(TOPDIR) -I$(TOPDIR)/dm/nickel
 $(CONFIG_VBOXDRV)NICKEL_CPPFLAGS += -DCONFIG_VBOXDRV=1
 $(CONFIG_NICKEL_THREADED)NICKEL_CPPFLAGS += -DNICKEL_THREADED=1
@@ -416,12 +416,21 @@ DM_OBJS += $(LIBELF_OBJS)
 LZ4_OBJS = $(patsubst %.m,%.o,$(patsubst %.c,%.o,$(LZ4_SRCS)))
 LZ4_OBJS := $(subst /,_,$(patsubst %,lz4/%,$(LZ4_OBJS)))
 DM_OBJS += $(LZ4_OBJS)
+lz4_lz4.o: CFLAGS := $(subst -O2,-O3,$(CFLAGS))
 lz4_lz4.o: CFLAGS_debug := $(subst -O0,-O2,$(CFLAGS_debug))
 
 CUCKOO_OBJS = $(patsubst %.m,%.o,$(patsubst %.c,%.o,$(CUCKOO_SRCS)))
 CUCKOO_OBJS := $(subst /,_,$(patsubst %,cuckoo/%,$(CUCKOO_OBJS)))
 DM_OBJS += $(CUCKOO_OBJS)
-cuckoo_fingerprint.o: CFLAGS_debug := $(subst -O0,-O2,$(CFLAGS_debug))
+cuckoo_fingerprint.o: CFLAGS := $(subst -O2,-O3,$(CFLAGS))
+cuckoo_fingerprint.o: CFLAGS_debug := $(subst -O0,-O3,$(CFLAGS_debug))
+
+SWAP_OBJS = $(patsubst %.m,%.o,$(patsubst %.c,%.o,$(SWAP_SRCS)))
+SWAP_OBJS := $(subst /,_,$(SWAP_OBJS))
+$(SWAP_OBJS): CFLAGS := $(subst -O2,-O3,$(CFLAGS))
+$(SWAP_OBJS): CFLAGS_debug := $(subst -O0,-O2,$(CFLAGS_debug))
+$(SWAP_OBJS): CPPFLAGS += $(LZ4_CPPFLAGS)
+DM_OBJS += $(SWAP_OBJS)
 
 NICKEL_OBJS = $(patsubst %.m,%.o,$(patsubst %.c,%.o,$(NICKEL_SRCS)))
 NICKEL_OBJS := $(subst /,_,$(patsubst %,nickel/%,$(NICKEL_OBJS)))

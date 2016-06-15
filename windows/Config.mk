@@ -49,6 +49,7 @@ OBJCOPY := $(if $(subst objcopy,,$(OBJCOPY)),$(OBJCOPY),x86_64-w64-mingw32-objco
 
 ifeq ($(TARGET_HOST_BITS),32)
 WINDRES_TARGET_FORMAT_OPTION := --target=pe-i386
+CFLAGS += -mstackrealign
 else
 WINDRES_TARGET_FORMAT_OPTION := 
 endif
