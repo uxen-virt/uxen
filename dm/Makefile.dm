@@ -117,7 +117,7 @@ console.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
 DM_SRCS += control.c
 control.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 $(OSX_NOT_YET)DM_SRCS += cuckoo.c
-$(OSX_NOT_YET)cuckoo.o: CFLAGS_debug := $(subst -O0,-O3,$(CFLAGS_debug))
+$(OSX_NOT_YET)cuckoo.o: CFLAGS_debug := $(subst -O0,-O2,$(CFLAGS_debug))
 $(OSX_NOT_YET)cuckoo.o: CFLAGS += $(LZ4_CPPFLAGS)
 $(OSX_NOT_YET)cuckoo.o: CPPFLAGS += $(CUCKOO_CPPFLAGS)
 $(OSX_NOT_YET)DM_SRCS += cuckoo-uxen.c
@@ -416,12 +416,12 @@ DM_OBJS += $(LIBELF_OBJS)
 LZ4_OBJS = $(patsubst %.m,%.o,$(patsubst %.c,%.o,$(LZ4_SRCS)))
 LZ4_OBJS := $(subst /,_,$(patsubst %,lz4/%,$(LZ4_OBJS)))
 DM_OBJS += $(LZ4_OBJS)
-lz4_lz4.o: CFLAGS_debug := $(subst -O0,-O3,$(CFLAGS_debug))
+lz4_lz4.o: CFLAGS_debug := $(subst -O0,-O2,$(CFLAGS_debug))
 
 CUCKOO_OBJS = $(patsubst %.m,%.o,$(patsubst %.c,%.o,$(CUCKOO_SRCS)))
 CUCKOO_OBJS := $(subst /,_,$(patsubst %,cuckoo/%,$(CUCKOO_OBJS)))
 DM_OBJS += $(CUCKOO_OBJS)
-cuckoo_fingerprint.o: CFLAGS_debug := $(subst -O0,-O3,$(CFLAGS_debug))
+cuckoo_fingerprint.o: CFLAGS_debug := $(subst -O0,-O2,$(CFLAGS_debug))
 
 NICKEL_OBJS = $(patsubst %.m,%.o,$(patsubst %.c,%.o,$(NICKEL_SRCS)))
 NICKEL_OBJS := $(subst /,_,$(patsubst %,nickel/%,$(NICKEL_OBJS)))
