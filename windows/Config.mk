@@ -33,7 +33,7 @@ GENERATE_PDB ?= true
 DWARFCV ?= $(shell command -v dwarfcv || echo cp)
 
 # everything below only for builds under {vm-support/,}windows/
-ifeq (,$(patsubst $(TARGET_HOST)/%,,$(patsubst vm-support/%,%,$(SUBDIR))))
+ifeq (,$(patsubst $(TARGET_HOST)/%,,$(patsubst vm-support/%,%,$(SUBDIR)/)))
 
 UXEN_WINDOWS_SIGN_FILE := $(call dospath,$(UXEN_WINDOWS_SIGN_FILE))
 

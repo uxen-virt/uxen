@@ -8,7 +8,7 @@ UXEN_TARGET_FORMAT ?= elf
 OSX_SDK_ROOT ?= # Empty for native
 
 # everything below only for builds under osx/
-ifeq (,$(patsubst $(TARGET_HOST)/%,,$(SUBDIR)))
+ifeq (,$(patsubst $(TARGET_HOST)/%,,$(SUBDIR)/))
 
 UXEN_OSX_SDK_VERSION ?= 10.9
 UXEN_OSX_SDK_ROOT ?= $(abspath $(TOOLSDIR)/cross-osx/MacOSX$(UXEN_OSX_SDK_VERSION).sdk)
