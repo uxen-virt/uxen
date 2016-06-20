@@ -20,9 +20,10 @@ ifeq (,$(MAKENOW))
 
 VPATH = $(SRCDIR)
 
+CPPFLAGS += -I$(SRCDIR) -I$(TOPDIR)/dm -I$(TOPDIR)/common/img-tools
+CPPFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
+
 CFLAGS := $(subst -O2,-O3,$(CFLAGS))
-CFLAGS += -I$(SRCDIR) -I $(TOPDIR)/common/img-tools
-CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
 
 PROGRAMS = img-bcdedit$(EXE_SUFFIX)
 PROGRAMS += img-convert$(EXE_SUFFIX)
@@ -51,11 +52,11 @@ dist: $(patsubst %,install_%,$(PROGRAMS))
 
 swap-seal.o: $(TOPDIR)/common/img-tools/swap-seal.c
 	$(_W)echo Importing - $@
-	$(_V)$(COMPILE.c) -c $< -o $@
+	$(_V)$(COMPILE.c) $< -o $@
 
 swap-fsck.o: $(TOPDIR)/common/img-tools/swap-fsck.c
 	$(_W)echo Importing - $@
-	$(_V)$(COMPILE.c) -c $< -o $@
+	$(_V)$(COMPILE.c) $< -o $@
 
 mt19937-64.o: $(TOPDIR)/common/img-tools/mt19937-64.c
 	$(_W)echo Importing - $@

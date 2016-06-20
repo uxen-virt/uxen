@@ -22,8 +22,8 @@ AR := $(if $(subst ar,,$(AR)),$(AR),ar)
 RANLIB := $(if $(subst ranlib,,$(RANLIB)),$(RANLIB),ranlib)
 STRIP := $(if $(subst strip,,$(STRIP)),$(STRIP),strip)
 
-CPPFLAGS += --sysroot $(UXEN_OSX_SDK_ROOT)/
-LDFLAGS += --sysroot $(UXEN_OSX_SDK_ROOT)/
+CPPFLAGS += --sysroot=$(UXEN_OSX_SDK_ROOT)/
+LDFLAGS += --sysroot=$(UXEN_OSX_SDK_ROOT)/
 CFLAGS += -mmacosx-version-min=$(UXEN_OSX_SDK_VERSION)
 ASFLAGS += -mmacosx-version-min=$(UXEN_OSX_SDK_VERSION)
 LDFLAGS += -mmacosx-version-min=$(UXEN_OSX_SDK_VERSION)
