@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -141,6 +141,7 @@ gh_v4v_allocate_pfn_list(uint8_t *buf, uint32_t npages)
 
     pfns = (v4v_pfn_list_t *)ExAllocatePoolWithTag(NonPagedPool, len, XENV4V_TAG);
     if (pfns == NULL) {
+        TraceError(("failed to allocate pfns"));
         return NULL;
     }
     RtlZeroMemory(pfns, len);
@@ -170,6 +171,7 @@ gh_v4v_allocate_ring(uint32_t ring_length)
     // OK, make it
     robj = (xenv4v_ring_t *)ExAllocatePoolWithTag(NonPagedPool, sizeof(xenv4v_ring_t), XENV4V_TAG);
     if (robj == NULL) {
+        TraceError(("failed to allocate ring struct"));
         return NULL;
     }
     RtlZeroMemory(robj, sizeof(xenv4v_ring_t));
@@ -199,6 +201,7 @@ gh_v4v_allocate_ring(uint32_t ring_length)
     robj->mdl = MmAllocatePagesForMdlEx(low, high, low, bytes, MmCached, MM_ALLOCATE_FULLY_REQUIRED);
     if (!robj->mdl) {
         ExFreePoolWithTag(robj, XENV4V_TAG);
+        TraceError(("failed to allocate mdl pages"));
         return NULL;
     }
 
@@ -207,6 +210,7 @@ gh_v4v_allocate_ring(uint32_t ring_length)
         MmFreePagesFromMdl(robj->mdl);
         IoFreeMdl(robj->mdl);
         ExFreePoolWithTag(robj, XENV4V_TAG);
+        TraceError(("failed to map pages"));
         return NULL;
     }
 
