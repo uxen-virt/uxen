@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -85,11 +85,10 @@ connect_v4v(struct clip_ctx *ctx, int domain, int port)
     DWORD bytes;
 
     ResetEvent(ctx->ev);
-    ret = v4v_open(&ctx->v4v, CLIP_RING_SIZE, &ctx->ov);
-    if (!ret && GetLastError() == ERROR_IO_PENDING)
-        ret = wait_ov(ctx, "open", &bytes);
-    else
-        ret = GetLastError();
+    ret = !v4v_open(&ctx->v4v, CLIP_RING_SIZE, &ctx->ov);
+    if (ret)
+        ret = (GetLastError() == ERROR_IO_PENDING) ? wait_ov(ctx, "open", &bytes)
+                                                   : GetLastError();
     if (ret) {
         CLIPLOG("%s: v4v_open error %d\n", __FUNCTION__, ret);
         return -1;
@@ -98,11 +97,10 @@ connect_v4v(struct clip_ctx *ctx, int domain, int port)
     id.addr.domain = V4V_DOMID_ANY;
     id.partner = domain;
     ResetEvent(ctx->ev);
-    ret = v4v_bind(&ctx->v4v, &id, &ctx->ov);
-    if (!ret && GetLastError() == ERROR_IO_PENDING)
-        ret = wait_ov(ctx, "bind", &bytes);
-    else
-        ret = GetLastError();
+    ret = !v4v_bind(&ctx->v4v, &id, &ctx->ov);
+    if (ret)
+        ret = (GetLastError() == ERROR_IO_PENDING) ? wait_ov(ctx, "bind", &bytes)
+                                                   : GetLastError();
     if (ret) {
         CLIPLOG("%s: v4v_bind error %d\n", __FUNCTION__, ret);
         v4v_close(&ctx->v4v);
