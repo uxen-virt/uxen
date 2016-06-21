@@ -122,7 +122,7 @@ uxen_v4v_dev_object(uxen_v4v_t *v4v)
                                        &v4v->file_object,
                                        &v4v->dev_object);
     if (status != STATUS_SUCCESS) {
-        uxen_v4v_err( "%s IoGetDeviceObjectPointer with %d\n", __FUNCTION__, status);
+        uxen_v4v_err("IoGetDeviceObjectPointer failed error 0x%x", status);
     }
     return status;
 };
@@ -141,7 +141,7 @@ uxen_v4v_build_ioctl(uxen_v4v_t *v4v, ULONG ioctl, PKEVENT ioctl_handle,
                                         output_buffer, output_buffer_len, FALSE, ioctl_handle,
                                         &status);
     if (!irp ) {
-        uxen_v4v_err( "%s IoBuildDeviceIoControlRequest failed\n", __FUNCTION__);
+        uxen_v4v_err("IoBuildDeviceIoControlRequest failed error 0x%x", status);
     }
     return irp;
 }
@@ -194,7 +194,7 @@ uxen_v4v_create_kevent(PHANDLE ioctl_handle)
     kevent = IoCreateSynchronizationEvent(&event_name, ioctl_handle);
     if (!kevent) {
         kevent = IoCreateSynchronizationEvent(&event_name, ioctl_handle);
-        uxen_v4v_err( "%s IoCreateSynchronizationEvent failed\n", __FUNCTION__);
+        uxen_v4v_err("IoCreateSynchronizationEvent failed");
         kevent =  NULL;
     }
     return kevent;
@@ -220,7 +220,7 @@ uxen_v4v_init_dev(uxen_v4v_t *v4v, size_t ring_size)
         init.ring_length = (ULONG32)ring_size;
         init.rx_event = event_handle;
         if (init.rx_event == NULL) {
-            uxen_v4v_err( "%s IoCreateSynchronizationEvent failed\n", __FUNCTION__);
+            uxen_v4v_err("uxen_v4v_create_event failed");
             break;
         }
         //KEvent for ioctl call
@@ -233,7 +233,7 @@ uxen_v4v_init_dev(uxen_v4v_t *v4v, size_t ring_size)
         stack = uxen_v4v_irpstack(v4v, irp);
         status = IoCallDriver(v4v->dev_object, irp);
         if (status != STATUS_SUCCESS && status != STATUS_PENDING) {
-            uxen_v4v_err("%s IoCallDriver failed with %d\n", __FUNCTION__, status);
+            uxen_v4v_err("IoCallDriver failed error 0x%x", status);
             status = STATUS_UNSUCCESSFUL;
             break;
         } else {
@@ -280,7 +280,7 @@ uxen_v4v_connect_wait(uxen_v4v_t *v4v)
         status = IoCallDriver(v4v->dev_object, irp);
 
         if (status != STATUS_SUCCESS) {
-            uxen_v4v_err("%s IoCallDriver failed with %d\n", __FUNCTION__, status);
+            uxen_v4v_err("IoCallDriver failed error 0x%x", status);
             break;
         }
     } while (FALSE);
@@ -314,7 +314,7 @@ uxen_v4v_connect(uxen_v4v_t *v4v, domid_t to_domain, uint32_t port)
             status = KeWaitForSingleObject(kevent, Executive, KernelMode, FALSE, NULL);
         }
         if (status != STATUS_SUCCESS) {
-            uxen_v4v_err("%s IoCallDriver failed with %d\n", __FUNCTION__, status);
+            uxen_v4v_err("IoCallDriver failed error 0x%x", status);
             break;
         }
     } while (FALSE);
@@ -343,7 +343,7 @@ uxen_v4v_disconnect(uxen_v4v_t   *v4v)
             status = KeWaitForSingleObject(kevent, Executive, KernelMode, FALSE, NULL);
         }
         if (!NT_SUCCESS(status)) {
-            uxen_v4v_err("%s IoCallDriver failed with %d\n", __FUNCTION__, status);
+            uxen_v4v_err("IoCallDriver failed error 0x%x", status);
             break;
         }
     } while (FALSE);
@@ -395,7 +395,7 @@ uxen_v4v_write(uxen_v4v_t *v4v, PVOID buf, UINT len, PIO_STATUS_BLOCK iosb)
                                            NULL, kevent,
                                            iosb);
         if (!irp ) {
-            uxen_v4v_err( "%s IoBuildSynchronousFsdRequest failed\n", __FUNCTION__);
+            uxen_v4v_err("IoBuildSynchronousFsdRequest failed");
             break;
         }
 
@@ -409,7 +409,7 @@ uxen_v4v_write(uxen_v4v_t *v4v, PVOID buf, UINT len, PIO_STATUS_BLOCK iosb)
         }
 
         if (status != STATUS_SUCCESS) {
-            uxen_v4v_err("%s IoCallDriver failed with %d\n", __FUNCTION__, status);
+            uxen_v4v_err("IoCallDriver failed error 0x%x", status);
             break;
         }
     } while (FALSE);
@@ -434,7 +434,7 @@ uxen_v4v_read(uxen_v4v_t *v4v, PVOID buf, UINT len, PIO_STATUS_BLOCK iosb)
                                            NULL, kevent,
                                            iosb);
         if (!irp ) {
-            uxen_v4v_err( "%s IoBuildSynchronousFsdRequest failed\n", __FUNCTION__);
+            uxen_v4v_err("IoBuildSynchronousFsdRequest failed");
             break;
         }
 
@@ -448,7 +448,7 @@ uxen_v4v_read(uxen_v4v_t *v4v, PVOID buf, UINT len, PIO_STATUS_BLOCK iosb)
         }
 
         if (status != STATUS_SUCCESS) {
-            uxen_v4v_err("%s IoCallDriver failed with %d\n", __FUNCTION__, status);
+            uxen_v4v_err("IoCallDriver failed error 0x%x", status);
             break;
         }
     } while (FALSE);
@@ -486,7 +486,7 @@ uxen_v4v_bind(uxen_v4v_t *v4v, domid_t to_domain, uint32_t port)
         pStack = uxen_v4v_irpstack(v4v, irp);
         status = IoCallDriver(v4v->dev_object, irp);
         if (status != STATUS_SUCCESS && status != STATUS_PENDING ) {
-            uxen_v4v_err( "%s IoCallDriver failed with %d\n", __FUNCTION__, status);
+            uxen_v4v_err("IoCallDriver failed error 0x%x", status);
             status = STATUS_UNSUCCESSFUL;
             break;
         }
@@ -522,7 +522,7 @@ uxen_v4v_open_dgram_port (uxen_v4v_t *v4v, size_t ring_size, domid_t domain, uin
                               NULL, 0);
 
         if (!NT_SUCCESS(status)) {
-            uxen_v4v_err("%s unable to open v4v with error 0x%x\n", __FUNCTION__, status);
+            uxen_v4v_err("ZwCreateFile failed error 0x%x", status);
             break;
 
         } else {
@@ -578,7 +578,7 @@ uxen_v4v_open_device(uxen_v4v_t *v4v, size_t ring_size, domid_t domain, uint32_t
                               NULL, 0);
 
         if (!NT_SUCCESS(status)) {
-            uxen_v4v_err("%s unable to open v4v with error 0X%x\n", __FUNCTION__, status);
+            uxen_v4v_err("ZwCreateFile failed error 0x%x", status);
             break;
 
         } else {

@@ -62,7 +62,8 @@ gh_v4v_hypercall(unsigned int cmd, void *arg2, void *arg3, void *arg4,
 }
 
 static NTSTATUS
-gh_v4v_filter_errno(int err)
+gh_v4v_filter_send_errno(int err, unsigned int cmd,
+                         v4v_addr_t *src, v4v_addr_t *dest)
 {
     NTSTATUS status = STATUS_SUCCESS;
 
@@ -89,7 +90,10 @@ gh_v4v_filter_errno(int err)
                 break;
             case -EFAULT:
             default:
-                uxen_v4v_err("send data fault - hypercall err: %d\n", err);
+                uxen_v4v_err(
+                    "%s data fault (vm%u:%x vm%u:x) err %d",
+                    cmd == V4VOP_send ? "V4VOP_send" : "V4VOP_sendv",
+                    src->domain, src->port, dest->domain, dest->port, err);
                 status = STATUS_UNSUCCESSFUL;
         };
     }
@@ -103,7 +107,9 @@ gh_v4v_register_ring(xenv4v_ring_t *robj)
     int err;
 
     if (v4v_call_page_notify(robj->pfn_list->pages, robj->pfn_list->npage, 1)) {
-        uxen_v4v_err("register ring populate frametable failed\n");
+        uxen_v4v_err("v4v_call_page_notify (vm%u:%x vm%u) failed",
+                     robj->ring->id.addr.domain, robj->ring->id.addr.port,
+                     robj->ring->id.partner);
         return STATUS_UNSUCCESSFUL;
     }
 
@@ -114,7 +120,9 @@ gh_v4v_register_ring(xenv4v_ring_t *robj)
         return STATUS_SUCCESS;
     }
     if (err != 0) {
-        uxen_v4v_err("register ring failed - hypercall err: %d\n", err);
+        uxen_v4v_err("V4VOP_register_ring (vm%u:%x vm%u) failed err %d",
+                     robj->ring->id.addr.domain, robj->ring->id.addr.port,
+                     robj->ring->id.partner, err);
         return STATUS_UNSUCCESSFUL;
     }
 
@@ -130,7 +138,9 @@ gh_v4v_unregister_ring(xenv4v_ring_t *robj)
 
     err = gh_v4v_hypercall(V4VOP_unregister_ring, robj->ring, 0, 0, 0, 0);
     if (err != 0) {
-        uxen_v4v_err("unregister ring failed - hypercall err: %d\n", err);
+        uxen_v4v_err("V4VOP_unregister_ring (vm%u:%x vm%u) failed err %d",
+                     robj->ring->id.addr.domain, robj->ring->id.addr.port,
+                     robj->ring->id.partner, err);
         return STATUS_UNSUCCESSFUL;
     }
 
@@ -152,7 +162,8 @@ gh_v4v_create_ring(v4v_addr_t *dst, domid_t partner)
 
     err = gh_v4v_hypercall(V4VOP_create_ring, &id, 0, 0, 0, 0);
     if (err != 0) {
-        uxen_v4v_err("create destinatino ring failed - hypercall err: %d\n", err);
+        uxen_v4v_err("V4VOP_create_ring (vm%u:%x vm%u) failed err %d",
+                     id.addr.domain, id.addr.port, id.partner, err);
         return STATUS_UNSUCCESSFUL;
     }
 
@@ -167,7 +178,8 @@ gh_v4v_notify(v4v_ring_data_t *ringData)
 
     err = gh_v4v_hypercall(V4VOP_notify, ringData, 0, 0, 0, 0);
     if (err != 0) {
-        uxen_v4v_err("notify ring data failed - hypercall err: %d\n", err);
+        uxen_v4v_err("V4VOP_notify (nent %d) failed err %d",
+                     ringData->nent, err);
         return STATUS_UNSUCCESSFUL;
     }
 
@@ -182,7 +194,7 @@ gh_v4v_debug(void)
 
     err = gh_v4v_hypercall(V4VOP_debug, 0, 0, 0, 0, 0);
     if (err != 0) {
-        uxen_v4v_err("debug failed - hypercall err: %d\n", err);
+        uxen_v4v_err("V4VOP_debug failed err %d", err);
         return STATUS_UNSUCCESSFUL;
     }
 
@@ -203,7 +215,7 @@ gh_v4v_send(v4v_addr_t *src, v4v_addr_t *dest, ULONG32 protocol, VOID *buf, ULON
         *writtenOut = (ULONG32)err;
     }
 
-    return gh_v4v_filter_errno(err);
+    return gh_v4v_filter_send_errno(err, V4VOP_send, src, dest);
 }
 
 NTSTATUS
@@ -220,5 +232,5 @@ gh_v4v_send_vec(v4v_addr_t *src, v4v_addr_t *dest, v4v_iov_t *iovec, ULONG32 nen
         *writtenOut = (ULONG32)err;
     }
 
-    return gh_v4v_filter_errno(err);
+    return gh_v4v_filter_send_errno(err, V4VOP_sendv, src, dest);
 }

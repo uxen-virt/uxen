@@ -65,7 +65,8 @@ gh_v4v_hexdump_ring(void *_b, int len)
 
     buf = (char *)ExAllocatePoolWithTag(NonPagedPool, 2 * (XENV4V_DUMP_SIZE + 1), XENV4V_TAG);
     if (buf == NULL) {
-        uxen_v4v_err("failed to allocate ring dump buffer\n");
+        uxen_v4v_err("ExAllocatePoolWithTag failed size 0x%x",
+                     2 * (XENV4V_DUMP_SIZE + 1));
         return;
     }
     RtlZeroMemory(buf, 2 * (XENV4V_DUMP_SIZE + 1));
@@ -103,8 +104,7 @@ gh_v4v_hexdump_ring(void *_b, int len)
                 RtlStringCchCatA(buf, XENV4V_DUMP_SIZE, " ");
             }
         }
-        RtlStringCchCatA(buf, XENV4V_DUMP_SIZE, "\n");
-        uxen_v4v_notice(buf);
+        uxen_v4v_notice("%s", buf);
     }
 
     ExFreePoolWithTag(buf, XENV4V_TAG);
@@ -114,8 +114,9 @@ gh_v4v_hexdump_ring(void *_b, int len)
 VOID
 gh_v4v_dump_ring(v4v_ring_t *r)
 {
-    uxen_v4v_notice("v4v_ring_t at %p:\n", r);
-    uxen_v4v_notice("r->rx_ptr=%d r->tx_ptr=%d r->len=%d\n", r->rx_ptr, r->tx_ptr, r->len);
+    uxen_v4v_notice("v4v_ring_t at %p:", r);
+    uxen_v4v_notice("r->rx_ptr=%d r->tx_ptr=%d r->len=%d", r->rx_ptr,
+                    r->tx_ptr, r->len);
     gh_v4v_hexdump_ring((void *)r->ring, r->len);
 }
 
@@ -124,7 +125,8 @@ VOID
 gh_v4v_recover_ring(xenv4v_context_t *ctx)
 {
     // It's all gone horribly wrong
-    uxen_v4v_err("something went horribly wrong in a ring - dumping and attempting a recovery\n");
+    uxen_v4v_err("ctx %p something went horribly wrong in a ring "
+                 "- dumping and attempting a recovery", ctx);
 
     gh_v4v_dump_ring(ctx->ring_object->ring);
     // Xen updates tx_ptr atomically to always be pointing somewhere sensible
@@ -378,7 +380,7 @@ gh_v4v_link_to_ring_list(xenv4v_extension_t *pde, xenv4v_ring_t *robj)
 
     // Link this context into the adapter list
     InsertHeadList(&pde->ring_list, &(robj->le));
-    uxen_v4v_info("added ring object %p to list.\n", robj);
+    uxen_v4v_info("added ring object %p to list", robj);
 }
 
 

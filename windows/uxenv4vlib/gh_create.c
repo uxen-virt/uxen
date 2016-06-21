@@ -153,7 +153,8 @@ gh_v4v_get_all_contexts(xenv4v_extension_t *pde, ULONG *count_out)
 
     if (ctx_list == NULL) {
         KeReleaseInStackQueuedSpinLock(&lqh);
-        uxen_v4v_err("failed to allocate context list - out of memory.\n");
+        uxen_v4v_err("ctx_list uxen_v4v_fast_alloc failed size 0x%x",
+                     pde->context_count * sizeof(xenv4v_context_t *));
         return NULL;
     }
 
@@ -182,7 +183,7 @@ gh_v4v_link_to_context_list(xenv4v_extension_t *pde, xenv4v_context_t *ctx)
 
     // Link this context into the adapter list
     InsertHeadList(&pde->context_list, &(ctx->le));
-    uxen_v4v_info("added context %p to list.\n", ctx);
+    uxen_v4v_info("added context %p to list", ctx);
 
     KeReleaseInStackQueuedSpinLock(&lqh);
 }
@@ -227,7 +228,7 @@ gh_v4v_dispatch_create(PDEVICE_OBJECT fdo, PIRP irp)
 
     UNREFERENCED_PARAMETER(fdo);
 
-    uxen_v4v_verbose("====> '%s'.\n", __FUNCTION__);
+    uxen_v4v_verbose("====>");
 
     isl = IoGetCurrentIrpStackLocation(irp);
     isl->FileObject->FsContext = NULL;
@@ -235,7 +236,8 @@ gh_v4v_dispatch_create(PDEVICE_OBJECT fdo, PIRP irp)
     pfo = isl->FileObject;
 
     if (pfo->FsContext != NULL) {
-        uxen_v4v_err("context already associated with the file!\n");
+        uxen_v4v_err("FsContext %p already associated with the file!",
+                     pfo->FsContext);
         return v4v_simple_complete_irp(irp, STATUS_INVALID_HANDLE);
     }
 
@@ -265,7 +267,7 @@ gh_v4v_dispatch_create(PDEVICE_OBJECT fdo, PIRP irp)
     ctx->pfo_parent = isl->FileObject;
     ObReferenceObject(ctx->pfo_parent);
 
-    uxen_v4v_verbose("<==== '%s'.\n", __FUNCTION__);
+    uxen_v4v_verbose("<====");
 
     return v4v_simple_complete_irp(irp, STATUS_SUCCESS);
 }
@@ -281,11 +283,11 @@ gh_v4v_dispatch_cleanup(PDEVICE_OBJECT fdo, PIRP irp)
 
     UNREFERENCED_PARAMETER(fdo);
 
-    uxen_v4v_verbose("====> '%s'.\n", __FUNCTION__);
+    uxen_v4v_verbose("====>");
 
     pfo = isl->FileObject;
 
-    uxen_v4v_info("cleanup file - FsContext: 0x%x.\n", pfo->FsContext);
+    uxen_v4v_info("cleanup file - FsContext: %p", pfo->FsContext);
 
     ctx = (xenv4v_context_t *)pfo->FsContext;
     if (ctx != NULL) {
@@ -306,13 +308,13 @@ gh_v4v_dispatch_cleanup(PDEVICE_OBJECT fdo, PIRP irp)
         gh_v4v_release_context_internal(pde, ctx, TRUE);
     } else {
         // This SNO
-        uxen_v4v_err("cleanup file - no context associated with the file?!?\n");
+        uxen_v4v_err("cleanup file - no context associated with the file?!?");
         status = STATUS_UNSUCCESSFUL;
     }
 
     v4v_simple_complete_irp(irp, status);
 
-    uxen_v4v_verbose("<==== '%s'.\n", __FUNCTION__);
+    uxen_v4v_verbose("<====");
 
     return status;
 }
@@ -324,7 +326,7 @@ gh_v4v_dispatch_close(PDEVICE_OBJECT fdo, PIRP irp)
 
     UNREFERENCED_PARAMETER(fdo);
 
-    uxen_v4v_verbose("====> '%s'.\n", __FUNCTION__);
+    uxen_v4v_verbose("====>");
 
     isl = IoGetCurrentIrpStackLocation(irp);
 
@@ -335,7 +337,7 @@ gh_v4v_dispatch_close(PDEVICE_OBJECT fdo, PIRP irp)
 
     v4v_simple_complete_irp(irp, STATUS_SUCCESS);
 
-    uxen_v4v_verbose("<==== '%s'.\n", __FUNCTION__);
+    uxen_v4v_verbose("<====");
 
     return STATUS_SUCCESS;
 }

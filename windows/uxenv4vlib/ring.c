@@ -50,7 +50,7 @@ void uxen_v4v_send_read_callbacks(xenv4v_extension_t *pde)
 
 static int user_map_exception(void)
 {
-    uxen_v4v_verbose("Failed to map ring to userspace\n");
+    uxen_v4v_verbose("failed to map ring to userspace");
     return EXCEPTION_CONTINUE_EXECUTION;
 }
 

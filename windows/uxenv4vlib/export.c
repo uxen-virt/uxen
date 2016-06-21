@@ -21,7 +21,8 @@ V4V_DLL_EXPORT int uxen_v4v_ring_create(v4v_addr_t *dst, domid_t partner)
     ret = (int) uxen_v4v_hypercall6 ((void *)V4VOP_create_ring, (void *) &id, (void *) 0, (void *) 0, (void *) 0, (void *) 0);
 
     if (ret != 0) {
-        uxen_v4v_err("create destinatino ring failed - hypercall ret: %d\n", ret);
+        uxen_v4v_err("V4VOP_create_ring failed (vm%u:%x vm%u) ret %d",
+                     dst->domain, dst->port, partner, ret);
         return ret;
     }
 
@@ -92,8 +93,11 @@ V4V_DLL_EXPORT uxen_v4v_ring_handle_t *uxen_v4v_ring_bind (uint32_t local_port,
             status = gh_v4v_register_ring (ret->ring_object);
             if (!NT_SUCCESS (status)) {
                 KeReleaseInStackQueuedSpinLock (&lqh);
-                uxen_v4v_err("failed in register ring hypercall - error: 0x%x\n",
-                             status);
+                uxen_v4v_err("gh_v4v_register_ring failed (vm%u:%x vm%u) "
+                             "error: 0x%x",
+                             ret->ring_object->ring->id.addr.domain,
+                             ret->ring_object->ring->id.addr.port,
+                             ret->ring_object->ring->id.partner, status);
                 break;
             }
         }
@@ -347,7 +351,7 @@ void uxen_v4vlib_set_resume_dpc(KDPC *dpc, void *arg1)
     }
     KeReleaseInStackQueuedSpinLock (&lqh);
 
-    uxen_v4v_warn("UXEN_V4VLIB_MAX_RESUME_DPCS set too low, skiping notification\n");
+    uxen_v4v_warn("UXEN_V4VLIB_MAX_RESUME_DPCS too low, skiping notification");
 }
 
 V4V_DLL_EXPORT

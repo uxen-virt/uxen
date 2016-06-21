@@ -31,7 +31,7 @@ extern uxen_v4v_logger_t uxen_v4v_logger;
     }                                                                   \
 
 #define uxen_v4v_log(lvl, fmt, ...)                             \
-    _uxen_v4v_log(lvl, "uxenv4vlib: %s:%d: " fmt,               \
+    _uxen_v4v_log(lvl, "uxenv4vlib: %s:%d: " fmt "\n",          \
                   __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
 //#define uxen_v4v_verbose(fmt, ...) uxen_v4v_log(V4VLOG_VERBOSE, fmt, ##__VA_ARGS__)
