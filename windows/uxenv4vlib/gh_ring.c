@@ -65,7 +65,7 @@ gh_v4v_hexdump_ring(void *_b, int len)
 
     buf = (char *)ExAllocatePoolWithTag(NonPagedPool, 2 * (XENV4V_DUMP_SIZE + 1), XENV4V_TAG);
     if (buf == NULL) {
-        TraceError(("failed to allocate ring dump buffer\n"));
+        uxen_v4v_err("failed to allocate ring dump buffer\n");
         return;
     }
     RtlZeroMemory(buf, 2 * (XENV4V_DUMP_SIZE + 1));
@@ -104,7 +104,7 @@ gh_v4v_hexdump_ring(void *_b, int len)
             }
         }
         RtlStringCchCatA(buf, XENV4V_DUMP_SIZE, "\n");
-        TraceNotice((buf));
+        uxen_v4v_notice(buf);
     }
 
     ExFreePoolWithTag(buf, XENV4V_TAG);
@@ -114,8 +114,8 @@ gh_v4v_hexdump_ring(void *_b, int len)
 VOID
 gh_v4v_dump_ring(v4v_ring_t *r)
 {
-    TraceNotice(("v4v_ring_t at %p:\n", r));
-    TraceNotice(("r->rx_ptr=%d r->tx_ptr=%d r->len=%d\n", r->rx_ptr, r->tx_ptr, r->len));
+    uxen_v4v_notice("v4v_ring_t at %p:\n", r);
+    uxen_v4v_notice("r->rx_ptr=%d r->tx_ptr=%d r->len=%d\n", r->rx_ptr, r->tx_ptr, r->len);
     gh_v4v_hexdump_ring((void *)r->ring, r->len);
 }
 
@@ -124,7 +124,7 @@ VOID
 gh_v4v_recover_ring(xenv4v_context_t *ctx)
 {
     // It's all gone horribly wrong
-    TraceError(("something went horribly wrong in a ring - dumping and attempting a recovery\n"));
+    uxen_v4v_err("something went horribly wrong in a ring - dumping and attempting a recovery\n");
 
     gh_v4v_dump_ring(ctx->ring_object->ring);
     // Xen updates tx_ptr atomically to always be pointing somewhere sensible
@@ -141,7 +141,7 @@ gh_v4v_allocate_pfn_list(uint8_t *buf, uint32_t npages)
 
     pfns = (v4v_pfn_list_t *)ExAllocatePoolWithTag(NonPagedPool, len, XENV4V_TAG);
     if (pfns == NULL) {
-        TraceError(("failed to allocate pfns"));
+        uxen_v4v_err("failed to allocate pfns");
         return NULL;
     }
     RtlZeroMemory(pfns, len);
@@ -171,7 +171,7 @@ gh_v4v_allocate_ring(uint32_t ring_length)
     // OK, make it
     robj = (xenv4v_ring_t *)ExAllocatePoolWithTag(NonPagedPool, sizeof(xenv4v_ring_t), XENV4V_TAG);
     if (robj == NULL) {
-        TraceError(("failed to allocate ring struct"));
+        uxen_v4v_err("failed to allocate ring struct");
         return NULL;
     }
     RtlZeroMemory(robj, sizeof(xenv4v_ring_t));
@@ -201,7 +201,7 @@ gh_v4v_allocate_ring(uint32_t ring_length)
     robj->mdl = MmAllocatePagesForMdlEx(low, high, low, bytes, MmCached, MM_ALLOCATE_FULLY_REQUIRED);
     if (!robj->mdl) {
         ExFreePoolWithTag(robj, XENV4V_TAG);
-        TraceError(("failed to allocate mdl pages"));
+        uxen_v4v_err("failed to allocate mdl pages");
         return NULL;
     }
 
@@ -210,7 +210,7 @@ gh_v4v_allocate_ring(uint32_t ring_length)
         MmFreePagesFromMdl(robj->mdl);
         IoFreeMdl(robj->mdl);
         ExFreePoolWithTag(robj, XENV4V_TAG);
-        TraceError(("failed to map pages"));
+        uxen_v4v_err("failed to map pages");
         return NULL;
     }
 
@@ -378,7 +378,7 @@ gh_v4v_link_to_ring_list(xenv4v_extension_t *pde, xenv4v_ring_t *robj)
 
     // Link this context into the adapter list
     InsertHeadList(&pde->ring_list, &(robj->le));
-    TraceInfo(("added ring object %p to list.\n", robj));
+    uxen_v4v_info("added ring object %p to list.\n", robj);
 }
 
 

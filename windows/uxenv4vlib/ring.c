@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -50,7 +50,7 @@ void uxen_v4v_send_read_callbacks(xenv4v_extension_t *pde)
 
 static int user_map_exception(void)
 {
-    TraceVerbose(("Failed to map ring to userspace\n"));
+    uxen_v4v_verbose("Failed to map ring to userspace\n");
     return EXCEPTION_CONTINUE_EXECUTION;
 }
 

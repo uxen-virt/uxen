@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -23,7 +23,7 @@ V4V_DLL_EXPORT int uxen_v4v_ring_create(v4v_addr_t *dst, domid_t partner)
     ret = (int) uxen_v4v_hypercall6 ((void *)V4VOP_create_ring, (void *) &id, (void *) 0, (void *) 0, (void *) 0, (void *) 0);
 
     if (ret != 0) {
-        TraceError(("create destinatino ring failed - hypercall ret: %d\n", ret));
+        uxen_v4v_err("create destinatino ring failed - hypercall ret: %d\n", ret);
         return ret;
     }
 
@@ -84,7 +84,7 @@ V4V_DLL_EXPORT uxen_v4v_ring_handle_t *uxen_v4v_ring_bind (uint32_t local_port,
                 gh_v4v_spare_port_number (pde, random_port);
         } else if (gh_v4v_ring_id_in_use (pde, &ret->ring_object->ring->id)) {
             KeReleaseInStackQueuedSpinLock (&lqh);
-            TraceWarning (("ring ID already in use, cannot bind\n"));
+            uxen_v4v_warn("ring ID already in use, cannot bind\n");
             break;
         }
 
@@ -94,8 +94,8 @@ V4V_DLL_EXPORT uxen_v4v_ring_handle_t *uxen_v4v_ring_bind (uint32_t local_port,
             status = gh_v4v_register_ring (ret->ring_object);
             if (!NT_SUCCESS (status)) {
                 KeReleaseInStackQueuedSpinLock (&lqh);
-                TraceError (("failed in register ring hypercall - error: 0x%x\n",
-                             status));
+                uxen_v4v_err("failed in register ring hypercall - error: 0x%x\n",
+                             status);
                 break;
             }
         }
@@ -130,7 +130,7 @@ uxen_v4v_ring_free (uxen_v4v_ring_handle_t *ring)
     pde = uxen_v4v_get_pde ();
 
     if (!pde) {
-        TraceError (("Failed to free ring - v. bad"));
+        uxen_v4v_err("Failed to free ring - v. bad");
         /*in order to avoid total death - we'll at least tell the hypervisor and stop callsback */
         ring->ring_object->callback = NULL;
         gh_v4v_unregister_ring (ring->ring_object);
@@ -322,7 +322,7 @@ void uxen_v4vlib_set_resume_dpc(KDPC *dpc, void *arg1)
     }
     KeReleaseInStackQueuedSpinLock (&lqh);
 
-    TraceWarning(("UXEN_V4VLIB_MAX_RESUME_DPCS set too low, skiping notification\n"));
+    uxen_v4v_warn("UXEN_V4VLIB_MAX_RESUME_DPCS set too low, skiping notification\n");
 }
 
 V4V_DLL_EXPORT

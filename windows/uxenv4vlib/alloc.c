@@ -40,7 +40,7 @@ uxen_v4v_preallocate(xenv4v_extension_t *pde)
         BLOCK_SIZE * PREALLOC_BLOCKS,
         PREALLOC_BLK_TAG);
     if (!pde->prealloc_area) {
-        TraceError(("failed to preallocate memory\n"));
+        uxen_v4v_err("failed to preallocate memory\n");
         return STATUS_NO_MEMORY;
     }
 
@@ -49,7 +49,7 @@ uxen_v4v_preallocate(xenv4v_extension_t *pde)
         sizeof(struct xenv4v_prealloc_block) * PREALLOC_BLOCKS,
         XENV4V_TAG);
     if (!pde->prealloc_blocks) {
-        TraceError(("failed to preallocate memory\n"));
+        uxen_v4v_err("failed to preallocate memory\n");
         ExFreePoolWithTag(pde->prealloc_area, PREALLOC_BLK_TAG);
         pde->prealloc_area = NULL;
         return STATUS_NO_MEMORY;
@@ -211,11 +211,11 @@ dump_alloc_stats()
         return;
     t0 = t1;
 
-    TraceWarning(("%s: alloc stats -------------\n", __FUNCTION__));
+    uxen_v4v_warn("%s: alloc stats -------------\n", __FUNCTION__);
     if (stats.num_allocs) {
         int missed = stats.num_allocs - stats.num_pooled_allocs;
 
-        TraceWarning(("%s: allocs %4d/sec (missed %4d = %2d perc), peak=%3d\n\n",
+        uxen_v4v_warn("%s: allocs %4d/sec (missed %4d = %2d perc), peak=%3d\n\n",
                       __FUNCTION__,
                       stats.num_allocs,
                       missed,

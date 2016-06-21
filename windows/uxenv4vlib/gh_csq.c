@@ -175,7 +175,7 @@ gh_v4v_csq_link_destination(xenv4v_extension_t *pde, PIRP irp, BOOLEAN front)
     irp->Tail.Overlay.DriverContext[1] =
         ExAllocateFromNPagedLookasideList(&pde->dest_lookaside_list);
     if (irp->Tail.Overlay.DriverContext[1] == NULL) {
-        TraceError(("failed to allocate irp destinaion record - out of memory.\n"));
+        uxen_v4v_err("failed to allocate irp destinaion record - out of memory.\n");
         return FALSE;
     }
 
@@ -204,7 +204,7 @@ gh_v4v_csq_link_destination(xenv4v_extension_t *pde, PIRP irp, BOOLEAN front)
         ExFreeToNPagedLookasideList(&pde->dest_lookaside_list,
                                     irp->Tail.Overlay.DriverContext[1]);
         irp->Tail.Overlay.DriverContext[1] = NULL;
-        TraceError(("failed to allocate destinaion record - out of memory.\n"));
+        uxen_v4v_err("failed to allocate destinaion record - out of memory.\n");
         return FALSE;
     }
     InitializeListHead(&xdst->le);
@@ -265,7 +265,7 @@ gh_v4v_csq_insert_irp_ex(PIO_CSQ csq, PIRP irp, PVOID unused)
     ASSERT(((pde->pending_irp_count != 0) || (pde->dest_count == 0)));
 
     if (pde->pending_irp_count == XENV4V_MAX_IRP_COUNT) {
-        TraceError(("maximun pended IRP count reached!! max: %d.\n", pde->pending_irp_count));
+        uxen_v4v_err("maximun pended IRP count reached!! max: %d.\n", pde->pending_irp_count);
         return STATUS_QUOTA_EXCEEDED;
     }
 
@@ -375,13 +375,13 @@ gh_v4v_csq_complete_canceled_irp(PIO_CSQ csq, PIRP irp)
     v4v_accept_private_t *priv;
     ULONG               size;
 
-    TraceVerbose(("====> '%s'.\n", __FUNCTION__));
+    uxen_v4v_verbose("====> '%s'.\n", __FUNCTION__);
 
-    TraceVerbose(("Cancelled-IRP %p\n", irp));
+    uxen_v4v_verbose("Cancelled-IRP %p\n", irp);
 
     v4v_simple_complete_irp(irp, STATUS_CANCELLED);
 
-    TraceVerbose(("<==== '%s'.\n", __FUNCTION__));
+    uxen_v4v_verbose("<==== '%s'.\n", __FUNCTION__);
 }
 
 v4v_ring_data_t *
@@ -406,7 +406,7 @@ gh_v4v_copy_destination_ring_data(xenv4v_extension_t *pde, ULONG *gh_count)
     ringData = (v4v_ring_data_t *)uxen_v4v_fast_alloc(size);
     if (ringData == NULL) {
         KeReleaseSpinLock(&pde->queue_lock, irql);
-        TraceError(("failed to allocate destination list - out of memory.\n"));
+        uxen_v4v_err("failed to allocate destination list - out of memory.\n");
         return NULL;
     }
 

@@ -219,7 +219,7 @@ gh_v4v_filter_errno(int err)
                 break;
             case -EFAULT:
             default:
-                TraceError(("send data fault - hypercall err: %d\n", err));
+                uxen_v4v_err("send data fault - hypercall err: %d\n", err);
                 status = STATUS_UNSUCCESSFUL;
         };
     }
@@ -233,7 +233,7 @@ gh_v4v_register_ring(xenv4v_ring_t *robj)
     int err;
 
     if (v4v_call_page_notify(robj->pfn_list->pages, robj->pfn_list->npage, 1)) {
-        TraceError(("register ring populate frametable failed\n"));
+        uxen_v4v_err("register ring populate frametable failed\n");
         return STATUS_UNSUCCESSFUL;
     }
 
@@ -244,7 +244,7 @@ gh_v4v_register_ring(xenv4v_ring_t *robj)
         return STATUS_SUCCESS;
     }
     if (err != 0) {
-        TraceError(("register ring failed - hypercall err: %d\n", err));
+        uxen_v4v_err("register ring failed - hypercall err: %d\n", err);
         return STATUS_UNSUCCESSFUL;
     }
 
@@ -260,7 +260,7 @@ gh_v4v_unregister_ring(xenv4v_ring_t *robj)
 
     err = gh_v4v_hypercall(V4VOP_unregister_ring, robj->ring, 0, 0, 0, 0);
     if (err != 0) {
-        TraceError(("unregister ring failed - hypercall err: %d\n", err));
+        uxen_v4v_err("unregister ring failed - hypercall err: %d\n", err);
         return STATUS_UNSUCCESSFUL;
     }
 
@@ -282,7 +282,7 @@ gh_v4v_create_ring(v4v_addr_t *dst, domid_t partner)
 
     err = gh_v4v_hypercall(V4VOP_create_ring, &id, 0, 0, 0, 0);
     if (err != 0) {
-        TraceError(("create destinatino ring failed - hypercall err: %d\n", err));
+        uxen_v4v_err("create destinatino ring failed - hypercall err: %d\n", err);
         return STATUS_UNSUCCESSFUL;
     }
 
@@ -297,7 +297,7 @@ gh_v4v_notify(v4v_ring_data_t *ringData)
 
     err = gh_v4v_hypercall(V4VOP_notify, ringData, 0, 0, 0, 0);
     if (err != 0) {
-        TraceError(("notify ring data failed - hypercall err: %d\n", err));
+        uxen_v4v_err("notify ring data failed - hypercall err: %d\n", err);
         return STATUS_UNSUCCESSFUL;
     }
 
@@ -312,7 +312,7 @@ gh_v4v_debug(void)
 
     err = gh_v4v_hypercall(V4VOP_debug, 0, 0, 0, 0, 0);
     if (err != 0) {
-        TraceError(("debug failed - hypercall err: %d\n", err));
+        uxen_v4v_err("debug failed - hypercall err: %d\n", err);
         return STATUS_UNSUCCESSFUL;
     }
 

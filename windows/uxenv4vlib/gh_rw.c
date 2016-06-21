@@ -234,7 +234,7 @@ gh_v4v_process_notify(xenv4v_extension_t *pde)
 
     ringData = gh_v4v_copy_destination_ring_data(pde, &gh_count);
     if (ringData == NULL) {
-        TraceError(("failed to allocate ring data - out of memory.\n"));
+        uxen_v4v_err("failed to allocate ring data - out of memory.\n");
         return;
     }
 
@@ -347,7 +347,7 @@ gh_v4v_dispatch_write(PDEVICE_OBJECT fdo, PIRP irp)
             irp->Tail.Overlay.DriverContext[0] = (PVOID)(ULONG_PTR)(XENV4V_PEEK_WRITE);
             break;
         default:
-            TraceWarning(("invalid state 0x%x for context %p write IRP request %p\n", val, ctx, irp));
+            uxen_v4v_warn("invalid state 0x%x for context %p write IRP request %p\n", val, ctx, irp);
             return v4v_simple_complete_irp(irp, STATUS_INVALID_DEVICE_REQUEST);
     }
 
@@ -463,7 +463,7 @@ gh_v4v_process_datagram_reads(xenv4v_extension_t *pde, xenv4v_context_t *ctx, BO
         len = isl->Parameters.Read.Length - sizeof(v4v_datagram_t);
         ret = v4v_copy_out(ctx->ring_object->ring, src, &protocol, msg, len, 1);
         if (ret < 0) {
-            TraceError(("failure reading data into IRP %p\n", nextIrp));
+            uxen_v4v_err("failure reading data into IRP %p\n", nextIrp);
             gh_v4v_recover_ring(ctx);
             // Fail this IRP - let caller know there is a mess
             v4v_simple_complete_irp(nextIrp, STATUS_INTERNAL_DB_CORRUPTION);
@@ -588,7 +588,7 @@ gh_v4v_dispatch_read(PDEVICE_OBJECT fdo, PIRP irp)
             gh_v4v_process_datagram_reads(pde, ctx, &notify);
             break;
         default:
-            TraceWarning(("invalid state 0x%x for context %p read IRP request %p\n", val, ctx, irp));
+            uxen_v4v_warn("invalid state 0x%x for context %p read IRP request %p\n", val, ctx, irp);
             status = v4v_simple_complete_irp(irp, STATUS_INVALID_DEVICE_REQUEST);
     }
 

@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -103,7 +103,7 @@ gh_v4v_ctrl_bind(xenv4v_extension_t *pde, xenv4v_context_t *ctx, v4v_bind_values
     // Use a simple guard variable to enforce the state transition order
     val = InterlockedExchangeAdd(&ctx->state, 0);
     if (val != XENV4V_STATE_IDLE) {
-        TraceWarning(("state not IDLE, cannot complete bind request\n"));
+        uxen_v4v_warn("state not IDLE, cannot complete bind request\n");
         return STATUS_INVALID_DEVICE_REQUEST;
     }
 
@@ -112,15 +112,15 @@ gh_v4v_ctrl_bind(xenv4v_extension_t *pde, xenv4v_context_t *ctx, v4v_bind_values
     do {
         if ((bvs->ringId.addr.domain != V4V_DOMID_NONE) &&
             (bvs->ringId.addr.domain != DOMID_INVALID_COMPAT)) {
-            TraceWarning(("failure - ring ID domain must be V4V_DOMID_NONE - value: 0x%x\n",
-                          bvs->ringId.addr.domain));
+            uxen_v4v_warn("failure - ring ID domain must be V4V_DOMID_NONE - value: 0x%x\n",
+                          bvs->ringId.addr.domain);
             status = STATUS_INVALID_PARAMETER;
             break;
         }
 
         robj = gh_v4v_allocate_ring(ctx->ring_length);
         if (robj == NULL) {
-            TraceError(("failed to allocate the ring\n"));
+            uxen_v4v_err("failed to allocate the ring\n");
             status = STATUS_NO_MEMORY;
             break;
         }
@@ -136,7 +136,7 @@ gh_v4v_ctrl_bind(xenv4v_extension_t *pde, xenv4v_context_t *ctx, v4v_bind_values
             robj->ring->id.addr.port = gh_v4v_spare_port_number(pde, port);
         } else if (gh_v4v_ring_id_in_use(pde, &robj->ring->id)) {
             KeReleaseInStackQueuedSpinLock(&lqh);
-            TraceWarning(("ring ID already in use, cannot bind\n"));
+            uxen_v4v_warn("ring ID already in use, cannot bind\n");
             status = STATUS_INVALID_DEVICE_REQUEST;
             break;
         }
@@ -145,7 +145,7 @@ gh_v4v_ctrl_bind(xenv4v_extension_t *pde, xenv4v_context_t *ctx, v4v_bind_values
         status = gh_v4v_register_ring(robj);
         if (!NT_SUCCESS(status)) {
             KeReleaseInStackQueuedSpinLock(&lqh);
-            TraceError(("failed in register ring hypercall - error: 0x%x\n", status));
+            uxen_v4v_err("failed in register ring hypercall - error: 0x%x\n", status);
             break;
         }
         robj->registered = TRUE;
@@ -176,12 +176,12 @@ gh_v4v_ctrl_initialize_file(xenv4v_context_t *ctx, v4v_init_values_t *invs, PIRP
     NTSTATUS status = STATUS_SUCCESS;
 
     if (ctx == NULL) {
-        TraceError(("no file context!\n"));
+        uxen_v4v_err("no file context!\n");
         return STATUS_INVALID_HANDLE;
     }
 
     if (invs->rx_event == NULL) {
-        TraceError(("no event handle!\n"));
+        uxen_v4v_err("no event handle!\n");
         return STATUS_INVALID_HANDLE;
     }
 
@@ -195,7 +195,7 @@ gh_v4v_ctrl_initialize_file(xenv4v_context_t *ctx, v4v_init_values_t *invs, PIRP
                                            NULL);
 
         if (!NT_SUCCESS(status)) {
-            TraceError(("failed to get a reference to the receive event - error: 0x%x\n", status));
+            uxen_v4v_err("failed to get a reference to the receive event - error: 0x%x\n", status);
             break;
         }
 
@@ -235,7 +235,7 @@ gh_v4v_dispatch_device_control(PDEVICE_OBJECT fdo, PIRP irp)
     xenv4v_context_t     *ctx;
     LONG                ds;
 
-    // TraceVerbose(("====> '%s'.\n", __FUNCTION__));
+    //uxen_v4v_verbose("====> '%s'.\n", __FUNCTION__);
 
     isl           = IoGetCurrentIrpStackLocation(irp);
     io_control_code = isl->Parameters.DeviceIoControl.IoControlCode;
@@ -244,16 +244,16 @@ gh_v4v_dispatch_device_control(PDEVICE_OBJECT fdo, PIRP irp)
     io_out_len      = isl->Parameters.DeviceIoControl.OutputBufferLength;
     ctx           = (xenv4v_context_t *)isl->FileObject->FsContext;
 
-    // TraceVerbose((" =IOCTL= 0x%x\n", io_control_code));
+    //uxen_v4v_verbose(" =IOCTL= 0x%x\n", io_control_code);
 
     irp->IoStatus.Information = 0;
 
     ds = InterlockedExchangeAdd(&pde->state, 0);
     if (ds & XENV4V_DEV_STOPPED) {
-        TraceVerbose(("aborting IOCTL IRP, device is in the stopped state.\n"));
+        uxen_v4v_verbose("aborting IOCTL IRP, device is in the stopped state.\n");
         irp->IoStatus.Status = STATUS_INVALID_DEVICE_STATE;
         IoCompleteRequest(irp, IO_NO_INCREMENT);
-        TraceVerbose(("<==== '%s'.\n", __FUNCTION__));
+        uxen_v4v_verbose("<==== '%s'.\n", __FUNCTION__);
         return STATUS_INVALID_DEVICE_STATE;
     }
 
@@ -267,7 +267,7 @@ gh_v4v_dispatch_device_control(PDEVICE_OBJECT fdo, PIRP irp)
                     init.ring_length = invs32->ring_length;
                     status = gh_v4v_ctrl_initialize_file(ctx, &init, irp);
                 } else {
-                    TraceError(("invalid initialization values.\n"));
+                    uxen_v4v_err("invalid initialization values.\n");
                     status = STATUS_INVALID_PARAMETER;
                 }
 
@@ -279,7 +279,7 @@ gh_v4v_dispatch_device_control(PDEVICE_OBJECT fdo, PIRP irp)
                 if (io_in_len == sizeof(v4v_init_values_t)) {
                     status = gh_v4v_ctrl_initialize_file(ctx, invs, irp);
                 } else {
-                    TraceError(("invalid initialization values.\n"));
+                    uxen_v4v_err("invalid initialization values.\n");
                     status = STATUS_INVALID_PARAMETER;
                 }
 
@@ -290,7 +290,7 @@ gh_v4v_dispatch_device_control(PDEVICE_OBJECT fdo, PIRP irp)
                 if (io_in_len == sizeof(v4v_bind_values_t)) {
                     status = gh_v4v_ctrl_bind(pde, ctx, bvs);
                 } else {
-                    TraceError(("invalid bind values.\n"));
+                    uxen_v4v_err("invalid bind values.\n");
                     status = STATUS_INVALID_PARAMETER;
                 }
 
@@ -301,7 +301,7 @@ gh_v4v_dispatch_device_control(PDEVICE_OBJECT fdo, PIRP irp)
                 if (io_in_len == sizeof(v4v_getinfo_values_t)) {
                     status = gh_v4v_ctrl_get_info(ctx, gi);
                 } else {
-                    TraceError(("invalid get info values.\n"));
+                    uxen_v4v_err("invalid get info values.\n");
                     status = STATUS_INVALID_PARAMETER;
                 }
 
@@ -324,7 +324,7 @@ gh_v4v_dispatch_device_control(PDEVICE_OBJECT fdo, PIRP irp)
                 if (io_in_len == sizeof(v4v_mapring_values_t)) {
                     status = uxen_v4v_mapring(ctx->ring_object, mr);
                 } else {
-                    TraceError(("invalid mapring struct.\n"));
+                    uxen_v4v_err("invalid mapring struct.\n");
                     status = STATUS_INVALID_PARAMETER;
                 }
                 if (NT_SUCCESS(status))
@@ -337,7 +337,7 @@ gh_v4v_dispatch_device_control(PDEVICE_OBJECT fdo, PIRP irp)
                 if (io_in_len == sizeof(v4v_poke_values_t)) {
                     status = uxen_v4v_poke(&p->dst);
                 } else {
-                    TraceError(("invalid poke struct.\n"));
+                    uxen_v4v_err("invalid poke struct.\n");
                     status = STATUS_INVALID_PARAMETER;
                 }
                 if (NT_SUCCESS(status))
@@ -360,7 +360,7 @@ gh_v4v_dispatch_device_control(PDEVICE_OBJECT fdo, PIRP irp)
         IoCompleteRequest(irp, IO_NO_INCREMENT);
     }
 
-    // TraceVerbose(("<==== '%s'.\n", __FUNCTION__));
+    //uxen_v4v_verbose("<==== '%s'.\n", __FUNCTION__);
 
     return status;
 }

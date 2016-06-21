@@ -270,9 +270,9 @@ gh_v4v_start_device_io_completion(PDEVICE_OBJECT fdo, PIRP irp, PVOID context)
     UNREFERENCED_PARAMETER(fdo);
     UNREFERENCED_PARAMETER(irp);
 
-    TraceVerbose(("====> '%s'.\n", __FUNCTION__));
+    uxen_v4v_verbose("====> '%s'.\n", __FUNCTION__);
     KeSetEvent((PKEVENT)context, IO_NO_INCREMENT, FALSE);
-    TraceVerbose(("<==== '%s'.\n", __FUNCTION__));
+    uxen_v4v_verbose("<==== '%s'.\n", __FUNCTION__);
     return STATUS_MORE_PROCESSING_REQUIRED;
 }
 
@@ -306,12 +306,12 @@ static NTSTATUS gh_add_device(PDRIVER_OBJECT driver_object)
     WCHAR            *szSddl = NULL;
     UNICODE_STRING    sddlString;
 
-    TraceVerbose(("====> '%s'.\n", __FUNCTION__));
+    uxen_v4v_verbose("====> '%s'.\n", __FUNCTION__);
 
     // We only allow one instance of this device type. If more than on pdo is created we need
     val = InterlockedCompareExchange(&g_deviceCreated, 1, 0);
     if (val != 0) {
-        TraceWarning(("cannot instantiate more that one v4v device node.\n"));
+        uxen_v4v_warn("cannot instantiate more that one v4v device node.\n");
         return STATUS_UNSUCCESSFUL;
     }
 
@@ -332,7 +332,7 @@ static NTSTATUS gh_add_device(PDRIVER_OBJECT driver_object)
                                  (LPCGUID)&GUID_SD_XENV4V_CONTROL_OBJECT,
                                  &fdo);
         if (!NT_SUCCESS(status)) {
-            TraceError(("failed to create device object - error: 0x%x\n", status));
+            uxen_v4v_err("failed to create device object - error: 0x%x\n", status);
             fdo = NULL;
             break;
         }
@@ -348,7 +348,7 @@ static NTSTATUS gh_add_device(PDRIVER_OBJECT driver_object)
         // Create our symbolic link
         status = IoCreateSymbolicLink(&pde->symbolic_link, &device_name);
         if (!NT_SUCCESS(status)) {
-            TraceError(("failed to create symbolic - error: 0x%x\n", status));
+            uxen_v4v_err("failed to create symbolic - error: 0x%x\n", status);
             break;
         }
         symlink = TRUE;
@@ -411,7 +411,7 @@ static NTSTATUS gh_add_device(PDRIVER_OBJECT driver_object)
         uxen_v4v_install_pde(pde);
     }
 
-    TraceVerbose(("<==== '%s'.\n", __FUNCTION__));
+    uxen_v4v_verbose("<==== '%s'.\n", __FUNCTION__);
 
     return status;
 }
@@ -444,16 +444,16 @@ NTSTATUS gh_create_device(PDRIVER_OBJECT driver_object)
 {
     NTSTATUS status;
 
-    TraceVerbose(("====> '%s'.\n", __FUNCTION__));
+    uxen_v4v_verbose("====> '%s'.\n", __FUNCTION__);
 
     PsGetVersion(&g_osMajorVersion, &g_osMinorVersion, NULL, NULL);
 
     if ((g_osMajorVersion < 5) || ((g_osMajorVersion == 5) && (g_osMinorVersion < 1))) {
-        TraceWarning(("Windows XP or later operating systems supported!\n"));
+        uxen_v4v_warn("Windows XP or later operating systems supported!\n");
         return STATUS_UNSUCCESSFUL;
     }
 
-    TraceInfo(("Starting driver...\n"));
+    uxen_v4v_info("Starting driver...\n");
 
     driver_object->MajorFunction[IRP_MJ_CREATE]         = gh_v4v_dispatch_create;
     driver_object->MajorFunction[IRP_MJ_CLEANUP]        = gh_v4v_dispatch_cleanup;
@@ -465,9 +465,9 @@ NTSTATUS gh_create_device(PDRIVER_OBJECT driver_object)
 
     status = gh_add_device(driver_object);
 
-    TraceVerbose(("DriverEntry returning %d\n", status));
+    uxen_v4v_verbose("DriverEntry returning %d\n", status);
 
-    TraceVerbose(("<==== '%s'.\n", __FUNCTION__));
+    uxen_v4v_verbose("<==== '%s'.\n", __FUNCTION__);
 
     return status;
 }
