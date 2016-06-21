@@ -102,8 +102,6 @@ uxenvm_savevm_initiate(char **err_msg)
     return ret;
 }
 
-#define MAX_BATCH_SIZE 1023
-
 typedef uint16_t cs16_t;
 
 #define PP_BUFFER_PAGES                                                 \

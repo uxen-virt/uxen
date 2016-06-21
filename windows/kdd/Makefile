@@ -1,5 +1,5 @@
 #
-# Copyright 2013-2015, Bromium, Inc.
+# Copyright 2013-2016, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -16,13 +16,16 @@ ifeq (,$(MAKENOW))
 SRCROOT = $(TOPDIR)/common/xen-tools/debugger/kdd
 
 VPATH = $(SRCROOT)
+CUCKOODIR = $(TOPDIR)/common/cuckoo
+CUCKOODIR_include = $(TOPDIR)/common/cuckoo
 
 CPPFLAGS += -I$(SRCROOT) $(LIBXC_CPPFLAGS) $(LIBUXENCTL_CPPFLAGS) -I$(TOPDIR)/common/include
+CPPFLAGS += -D_FILE_OFFSET_BITS=64 -I$(TOPDIR)/dm -I$(CUCKOODIR_include)
 
 all: kdd$(EXE_SUFFIX)
 	@ :
 
-kdd_SRCS  = kdd.c kdd-xen.c memmem.c winsyms.c
+kdd_SRCS  = kdd.c kdd-xen.c kdd-savefile.c memmem.c winsyms.c
 kdd_OBJS  = $(patsubst %.c,%.o,$(kdd_SRCS))
 kdd_OBJS := $(subst /,_,$(kdd_OBJS))
 

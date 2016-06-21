@@ -48,6 +48,7 @@
 #include <uxen_ioctl.h>
 
 #include "kdd.h"
+#include "kdd-savefile.h"
 
 #define MAPSIZE 4093 /* Prime */
 
@@ -57,6 +58,7 @@
 struct kdd_guest {
     struct xentoollog_logger xc_log; /* Must be first for xc log callbacks */
     xc_interface *xc_handle;
+    struct savefile_ctx *svf;
     uint32_t domid;
     char id[80];
     FILE *log;
@@ -67,6 +69,61 @@ struct kdd_guest {
     void * maps[MAPSIZE];
 };
 
+static void munmap_page(struct kdd_guest *g, uint32_t dom, void *addr)
+{
+    if (g->svf)
+        svf_munmap_page(g->svf, dom, addr);
+    else
+        xc_munmap(g->xc_handle, dom, addr, PAGE_SIZE);
+}
+
+static void *map_foreign_page(struct kdd_guest *g, uint32_t dom,
+                            int prot,
+                            unsigned long mfn)
+{
+    if (g->svf)
+        return svf_map_foreign_page(g->svf, dom, prot, mfn);
+
+    return xc_map_foreign_range(g->xc_handle, dom, PAGE_SIZE, prot, mfn);
+}
+
+static int domain_pause(struct kdd_guest *g, uint32_t domid)
+{
+    if (g->svf)
+        return svf_domain_pause(g->svf, domid);
+
+    return xc_domain_pause(g->xc_handle, domid);
+}
+
+static int domain_unpause(struct kdd_guest *g, uint32_t domid)
+{
+    if (g->svf)
+        return svf_domain_unpause(g->svf, domid);
+
+    return xc_domain_unpause(g->xc_handle, domid);
+}
+
+static int domain_hvm_getcontext(struct kdd_guest *g,
+                             uint32_t domid,
+                             uint8_t *ctxt_buf,
+                             uint32_t size)
+{
+
+    if (g->svf)
+        return svf_domain_hvm_getcontext(g->svf, domid, ctxt_buf, size);
+
+    return xc_domain_hvm_getcontext(g->xc_handle, domid, ctxt_buf, size);
+}
+
+static int domain_hvm_setcontext(struct kdd_guest *g,
+                             uint32_t domid,
+                             uint8_t *ctxt_buf,
+                             uint32_t size)
+{
+    if (g->svf)
+        return svf_domain_hvm_setcontext(g->svf, domid, ctxt_buf, size);
+    return xc_domain_hvm_setcontext(g->xc_handle, domid, ctxt_buf, size);
+}
 
 /* Flush any mappings we have of the guest memory: it's not polite
  * top hold on to them while the guest is running */
@@ -75,7 +132,7 @@ static void flush_maps(kdd_guest *g)
     int i;
     for (i = 0; i < MAPSIZE; i++) {
         if (g->maps[i] != NULL)
-            xc_munmap(g->xc_handle, g->domid, g->maps[i], PAGE_SIZE);
+            munmap_page(g, g->domid, g->maps[i]);
         g->maps[i] = NULL;
     }
 }
@@ -87,10 +144,10 @@ void kdd_halt(kdd_guest *g)
     uint32_t sz;
     void *buf;
 
-    xc_domain_pause(g->xc_handle, g->domid);
+    domain_pause(g, g->domid);
 
     /* How much space do we need for the HVM state? */
-    sz = xc_domain_hvm_getcontext(g->xc_handle, g->domid, 0, 0);
+    sz = domain_hvm_getcontext(g, g->domid, 0, 0);
     if (sz == (uint32_t) -1) {
         KDD_LOG(g, "Can't get HVM state size for domid %"PRIu32": %s\n",
                 g->domid, strerror(errno));
@@ -106,7 +163,7 @@ void kdd_halt(kdd_guest *g)
     memset(buf, 0, sz);
 
     /* Get the HVM state */
-    sz = xc_domain_hvm_getcontext(g->xc_handle, g->domid, buf, sz);
+    sz = domain_hvm_getcontext(g, g->domid, buf, sz);
     if (sz == (uint32_t) -1) {
         KDD_LOG(g, "Can't get HVM state for domid %"PRIu32": %s\n",
                 g->domid, strerror(errno));
@@ -125,7 +182,7 @@ int kdd_poll_guest(kdd_guest *g)
 /* Update the HVM state */
 static void hvm_writeback(kdd_guest *g)
 {
-    if (g->hvm_buf && xc_domain_hvm_setcontext(g->xc_handle, g->domid, 
+    if (g->hvm_buf && domain_hvm_setcontext(g, g->domid, 
                                                g->hvm_buf, g->hvm_sz))
         KDD_LOG(g, "Can't set HVM state for domid %"PRIu32": %s\n",
                 g->domid, strerror(errno));
@@ -137,7 +194,7 @@ void kdd_run(kdd_guest *g)
     flush_maps(g);
     /* TODO: check why having below call makes guest gone
      * hvm_writeback(g); */
-    xc_domain_unpause(g->xc_handle, g->domid);
+    domain_unpause(g, g->domid);
 }
 
 /* How many CPUs are there in this guest? */
@@ -350,7 +407,7 @@ int kdd_get_regs(kdd_guest *g, int cpuid, kdd_regs *r, int w64)
 int kdd_set_regs(kdd_guest *g, int cpuid, kdd_regs *r, int w64)
 {
     struct hvm_hw_cpu *cpu; 
-    
+
     cpu = get_cpu(g, cpuid);
     if (!cpu) 
         return -1;
@@ -500,8 +557,8 @@ static uint32_t kdd_access_physical_page(kdd_guest *g, uint64_t addr,
     /* Evict any mapping of the wrong frame from our slot */ 
     if (g->pfns[map_pfn % MAPSIZE] != map_pfn
         && g->maps[map_pfn % MAPSIZE] != NULL) {
-        xc_munmap(g->xc_handle, g->domid,
-                  g->maps[map_pfn % MAPSIZE], PAGE_SIZE);
+        munmap_page(g, g->domid,
+                  g->maps[map_pfn % MAPSIZE]);
         g->maps[map_pfn % MAPSIZE] = NULL;
     }
     g->pfns[map_pfn % MAPSIZE] = map_pfn;
@@ -510,9 +567,8 @@ static uint32_t kdd_access_physical_page(kdd_guest *g, uint64_t addr,
     if (g->maps[map_pfn % MAPSIZE] != NULL)
         map = g->maps[map_pfn % MAPSIZE];
     else {
-        map = xc_map_foreign_range(g->xc_handle,
+        map = map_foreign_page(g,
                                    g->domid,
-                                   PAGE_SIZE,
                                    PROT_READ|PROT_WRITE,
                                    map_pfn);
 
@@ -573,7 +629,7 @@ static void kdd_xc_log(struct xentoollog_logger *logger,
 
 
 /* Set up guest-specific state */
-kdd_guest *kdd_guest_init(char *arg, FILE *log, int verbosity)
+kdd_guest *kdd_guest_init(char *arg, int savefile, FILE *log, int verbosity)
 {
     kdd_guest *g = NULL;
     xc_interface *xch = NULL;
@@ -587,6 +643,15 @@ kdd_guest *kdd_guest_init(char *arg, FILE *log, int verbosity)
         goto err;
     g->log = log;
     g->verbosity = verbosity;
+
+    if (savefile) {
+        g->svf = svf_init(arg, log, verbosity);
+        if (!g->svf)
+            goto err;
+
+        goto out;
+    }
+
     g->xc_log.vmessage = kdd_xc_log;
 
     ret = uuid_parse(arg, uuid);
@@ -612,13 +677,15 @@ kdd_guest *kdd_guest_init(char *arg, FILE *log, int verbosity)
     snprintf(g->id, (sizeof g->id) - 1, 
              "a xen guest with domain id %i", g->domid);
 
+out:
     return g;
 
- err:
+err:
     free(g);
+    g = NULL;
     if (xch)
         xc_interface_close(xch);
-    return NULL;
+    goto out;
 }
 
 /* Say what kind of guest this is */
@@ -631,7 +698,11 @@ char *kdd_guest_identify(kdd_guest *g)
 void kdd_guest_teardown(kdd_guest *g)
 {
     flush_maps(g);
-    xc_interface_close(g->xc_handle);
+    if (g->xc_handle)
+        xc_interface_close(g->xc_handle);
+    if (g->svf)
+        svf_free(g->svf);
+    g->svf = NULL;
     free(g->id);
     free(g->hvm_buf);
     free(g);

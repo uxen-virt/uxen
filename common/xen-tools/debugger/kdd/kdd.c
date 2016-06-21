@@ -1402,7 +1402,7 @@ void kdd_select_callback(kdd_state *s)
 static void usage(void)
 {
     fprintf(stderr, 
-            "usage: kdd [-v] <uuid> <pipe>\n"
+            "usage: kdd [-v] [-savefile] <uuid>|<savefile> <pipe>\n"
             "\n"
             "\tOpens a named pipe <pipe> and speaks the kd serial\n"
             "\tprotocol over it, to debug Xen domain <uuid>.\n"
@@ -1416,6 +1416,7 @@ int main(int argc, char **argv)
 {
     HANDLE hpipe;
     int verbosity = 0;
+    int savefile = 0;
     kdd_state *s;
     kdd_guest *g;
     HANDLE h[1];
@@ -1425,15 +1426,20 @@ int main(int argc, char **argv)
     setprogname(argv[0]);
 #endif	/* _WIN32 */
 
-    while (argc > 3)
-        if (!strcmp(argv[1], "-v")) {
-            verbosity++;
-            argc--;
-            argv++;
-        }
+    while (argc > 3 && !strcmp(argv[1], "-v")) {
+        verbosity++;
+        argc--;
+        argv++;
+    }
+
+    if (argc > 3 && !strcmp(argv[1], "-savefile")) {
+        savefile++;
+        argc--;
+        argv++;
+    }
 
     if (argc != 3
-        || !(g = kdd_guest_init(argv[1], stdout, verbosity))
+        || !(g = kdd_guest_init(argv[1], savefile, stdout, verbosity))
         || !(hpipe = kdd_init(&s, argv[2], g, stdout, verbosity)))
         usage();
 

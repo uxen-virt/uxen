@@ -32,6 +32,8 @@
 #define XC_SAVE_ID_FINGERPRINTS       -22
 #define XC_SAVE_ID_CUCKOO_DATA        -23
 
+#define MAX_BATCH_SIZE 1023
+
 struct xc_save_generic {
     int32_t marker;
     uint32_t size;

@@ -470,7 +470,7 @@ typedef union {
 typedef struct kdd_guest kdd_guest;
 
 /* Init and teardown guest-specific state */
-extern kdd_guest *kdd_guest_init(char *arg, FILE *log, int verbosity);
+extern kdd_guest *kdd_guest_init(char *arg, int savefile, FILE *log, int verbosity);
 extern void kdd_guest_teardown(kdd_guest *g);
 extern char *kdd_guest_identify(kdd_guest *g);
 
