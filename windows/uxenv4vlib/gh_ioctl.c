@@ -120,7 +120,8 @@ gh_v4v_ctrl_bind(xenv4v_extension_t *pde, xenv4v_context_t *ctx, v4v_bind_values
 
         robj = gh_v4v_allocate_ring(ctx->ring_length);
         if (robj == NULL) {
-            uxen_v4v_err("failed to allocate the ring\n");
+            uxen_v4v_err("failed to allocate the ring, port: 0x%x, domain: 0x%x\n",
+                bvs->ringId.addr.port, bvs->ringId.addr.domain);
             status = STATUS_NO_MEMORY;
             break;
         }
@@ -136,7 +137,8 @@ gh_v4v_ctrl_bind(xenv4v_extension_t *pde, xenv4v_context_t *ctx, v4v_bind_values
             robj->ring->id.addr.port = gh_v4v_spare_port_number(pde, port);
         } else if (gh_v4v_ring_id_in_use(pde, &robj->ring->id)) {
             KeReleaseInStackQueuedSpinLock(&lqh);
-            uxen_v4v_warn("ring ID already in use, cannot bind\n");
+            uxen_v4v_warn("ring ID already in use, cannot bind, port: 0x%x, domain: 0x%x\n",
+                robj->ring->id.addr.port, robj->ring->id.addr.domain);
             status = STATUS_INVALID_DEVICE_REQUEST;
             break;
         }
