@@ -399,18 +399,11 @@ static int
 connect_v4v(struct sf_state *s, int domain, int port)
 {
     v4v_ring_id_t id;
-    DWORD bytes;
 
     ioh_event_reset(&s->io_ev);
-    if (!v4v_open(&s->v4v, RING_SIZE, &s->ov)) {
+    if (!v4v_open(&s->v4v, RING_SIZE, V4V_FLAG_ASYNC)) {
         debug_printf("%s: v4v_open failed (%d)\n",
                      __FUNCTION__, (int)GetLastError());
-        return -1;
-    }
-    if (!GetOverlappedResult(s->v4v.v4v_handle, &s->ov, &bytes, TRUE)) {
-        debug_printf("%s: GetOverlappedResult (v4v_open) failed (%d)\n",
-                     __FUNCTION__, (int)GetLastError());
-        v4v_close(&s->v4v);
         return -1;
     }
 
@@ -419,15 +412,8 @@ connect_v4v(struct sf_state *s, int domain, int port)
     id.partner = domain;
 
     ioh_event_reset(&s->io_ev);
-    if (!v4v_bind(&s->v4v, &id, &s->ov)) {
+    if (!v4v_bind(&s->v4v, &id)) {
         debug_printf("%s: v4v_bind failed (%d)\n",
-                     __FUNCTION__, (int)GetLastError());
-        v4v_close(&s->v4v);
-        return -1;
-    }
-
-    if (!GetOverlappedResult(s->v4v.v4v_handle, &s->ov, &bytes, TRUE)) {
-        debug_printf("%s: GetOverlappedResult (v4v_bind) failed (%x)\n",
                      __FUNCTION__, (int)GetLastError());
         v4v_close(&s->v4v);
         return -1;

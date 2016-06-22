@@ -627,41 +627,28 @@ guest_agent_init(void)
 {
     BOOLEAN ret;
     v4v_ring_id_t id;
-    OVERLAPPED o = {0};
-    DWORD t;
 
     debug_printf("initializing guest agent\n");
-    memset(&o, 0, sizeof(o));
-    ret = v4v_open(&v4v, RING_SIZE, &o);
+    ret = v4v_open(&v4v, RING_SIZE, V4V_FLAG_ASYNC);
     if (!ret) {
         Wwarn("%s: v4v_open", __FUNCTION__);
         return -1;
     }
 
-    if (!GetOverlappedResult(v4v.v4v_handle, &o, &t, TRUE)) {
-        Wwarn("%s: v4v_open", __FUNCTION__);
-        return -1;
-    }
     debug_printf("guest agent: v4v connection opened\n");
 
     id.addr.port = 0;
     id.addr.domain = V4V_DOMID_ANY;
     id.partner = vm_id;
 
-    memset(&o, 0, sizeof(o));
-    ret = v4v_bind(&v4v, &id, &o);
+    ret = v4v_bind(&v4v, &id);
     if (!ret) {
         Wwarn("%s: v4v_bind", __FUNCTION__);
         v4v_close(&v4v);
         return -1;
     }
 
-	v4v_up++;
-
-     if (!GetOverlappedResult(v4v.v4v_handle, &o, &t, TRUE)) {
-        Wwarn("%s: v4v_open", __FUNCTION__);
-        return -1;
-    }
+    v4v_up++;
 
     debug_printf("guest agent: v4v connection bound\n");
 

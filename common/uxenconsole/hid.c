@@ -171,21 +171,16 @@ xmit_complete(struct hid_ring *r)
 static int
 ring_init(struct hid_ring *r, int vm_id, int device_type)
 {
-    OVERLAPPED o;
-    DWORD t;
     v4v_ring_id_t id;
 
-    memset(&o, 0, sizeof(o));
-    if (!v4v_open(&r->v4v, UXENHID_RING_SIZE, &o) ||
-        !GetOverlappedResult(r->v4v.v4v_handle, &o, &t, TRUE))
+    if (!v4v_open(&r->v4v, UXENHID_RING_SIZE, V4V_FLAG_ASYNC))
         return -1;
 
     id.addr.port = 0;
     id.addr.domain = V4V_DOMID_ANY;
     id.partner = vm_id;
 
-    if (!v4v_bind(&r->v4v, &id, &o) ||
-        !GetOverlappedResult(r->v4v.v4v_handle, &o, &t, TRUE)) {
+    if (!v4v_bind(&r->v4v, &id)) {
         v4v_close(&r->v4v);
         return -1;
     }

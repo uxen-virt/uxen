@@ -665,14 +665,10 @@ uxenhid_init(UXenPlatformDevice *dev)
 {
     struct uxenhid_state *s = DO_UPCAST(struct uxenhid_state, dev, dev);
     v4v_ring_id_t id;
-    OVERLAPPED o;
-    DWORD t;
 
     s->ready = 0;
 
-    memset(&o, 0, sizeof(o));
-    if (!v4v_open(&s->v4v, UXENHID_RING_SIZE, &o) ||
-        !GetOverlappedResult(s->v4v.v4v_handle, &o, &t, TRUE)) {
+    if (!v4v_open(&s->v4v, UXENHID_RING_SIZE, V4V_FLAG_ASYNC)) {
         Wwarn("%s: v4v_open", __FUNCTION__);
         return -1;
     }
@@ -681,10 +677,8 @@ uxenhid_init(UXenPlatformDevice *dev)
     id.addr.domain = V4V_DOMID_ANY;
     id.partner = vm_id;
 
-    memset(&o, 0, sizeof(o));
-    if (!v4v_bind(&s->v4v, &id, &o) ||
-        !GetOverlappedResult(s->v4v.v4v_handle, &o, &t, TRUE)) {
-        Wwarn("%s: v4v_bind", __FUNCTION__, id.addr.port);
+    if (!v4v_bind(&s->v4v, &id)) {
+        Wwarn("%s: v4v_bind port %x", __FUNCTION__, id.addr.port);
         v4v_close(&s->v4v);
         return -1;
     }

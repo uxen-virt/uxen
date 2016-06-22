@@ -717,27 +717,16 @@ static int recv_setup(v4v_channel_t *c)
 static void v4v_init(v4v_channel_t *c)
 {
     v4v_ring_id_t id;
-    OVERLAPPED o;
-    DWORD t;
 
-    memset(&o, 0, sizeof(o));
-
-    if (!v4v_open(c, RING_SIZE, &o))
-        err(1, "v4v_open");
-    if (!GetOverlappedResult (c->v4v_handle, &o, &t, TRUE))
+    if (!v4v_open(c, RING_SIZE, V4V_FLAG_ASYNC))
         err(1, "v4v_open");
 
     id.addr.port = DEFAULT_PORT;
     id.addr.domain = V4V_DOMID_ANY;
     id.partner = 0;
 
-    memset(&o, 0, sizeof(o));
-
-    if (!v4v_bind(c, &id, &o))
+    if (!v4v_bind(c, &id))
         err(1, "v4v_bind");
-    if (!GetOverlappedResult (c->v4v_handle, &o, &t, TRUE))
-        err(1, "v4v_bind");
-
 }
 
 

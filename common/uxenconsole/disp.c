@@ -116,8 +116,6 @@ disp_context_t
 uxenconsole_disp_init(int vm_id, void *priv, invalidate_rect_t inv_rect)
 {
     struct disp_context *c;
-    OVERLAPPED o;
-    DWORD t;
     v4v_ring_id_t id;
     DWORD err;
     BOOL rc;
@@ -128,9 +126,7 @@ uxenconsole_disp_init(int vm_id, void *priv, invalidate_rect_t inv_rect)
 
     c->thread_id = GetCurrentThreadId();
 
-    memset(&o, 0, sizeof(o));
-    if (!v4v_open(&c->v4v, UXENDISP_RING_SIZE, &o) ||
-        !GetOverlappedResult(c->v4v.v4v_handle, &o, &t, TRUE)) {
+    if (!v4v_open(&c->v4v, UXENDISP_RING_SIZE, V4V_FLAG_ASYNC)) {
         err = GetLastError();
         goto error;
     }
@@ -139,13 +135,10 @@ uxenconsole_disp_init(int vm_id, void *priv, invalidate_rect_t inv_rect)
     id.addr.domain = V4V_DOMID_ANY;
     id.partner = vm_id;
 
-    if (!v4v_bind(&c->v4v, &id, &o) ||
-        !GetOverlappedResult(c->v4v.v4v_handle, &o, &t, TRUE)) {
-
+    if (!v4v_bind(&c->v4v, &id)) {
         // Allow one additional console to be connected.
         id.addr.port = UXENDISP_ALT_PORT;
-        if (!v4v_bind(&c->v4v, &id, &o) ||
-            !GetOverlappedResult(c->v4v.v4v_handle, &o, &t, TRUE)) {
+        if (!v4v_bind(&c->v4v, &id)) {
             err = GetLastError();
             goto error;
         }

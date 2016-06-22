@@ -35,7 +35,7 @@ have_v4v (void)
 {
     v4v_channel_t c = { 0 };
 
-    if (v4v_open (&c, 4096, NULL)) {
+    if (v4v_open (&c, 4096, V4V_FLAG_NONE)) {
         v4v_close (&c);
         return 1;
     }
@@ -143,12 +143,12 @@ main (int argc, char *argv[])
     r.addr.domain = V4V_DOMID_ANY;
     r.partner = V4V_DOMID_ANY;
 
-    if (!v4v_open (&c, RING_SIZE, NULL)) {
+    if (!v4v_open (&c, RING_SIZE, V4V_FLAG_NONE)) {
         printf ("v4v_open failed\n");
         return -1;
     }
 
-    if (!v4v_bind (&c, &r, NULL)) {
+    if (!v4v_bind (&c, &r)) {
         printf ("v4v_bind failed\n");
         return -1;
     }
@@ -156,7 +156,7 @@ main (int argc, char *argv[])
 
 #ifdef MAP
     mr.ring = NULL;
-    if (!v4v_map (&c, &mr, NULL)) {
+    if (!v4v_map (&c, &mr)) {
         printf ("v4v_map failed\n");
         return -1;
     }

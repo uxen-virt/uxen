@@ -11,7 +11,7 @@ v4v_have_v4v(void)
 {
     v4v_channel_t v4v = { };
 
-    if (_v4v_open(&v4v, 4096, NULL)) {
+    if (_v4v_open(&v4v, 4096, V4V_FLAG_NONE, NULL)) {
         _v4v_close(&v4v);
         return 1;
     }
@@ -22,24 +22,15 @@ v4v_have_v4v(void)
 void
 v4v_close(v4v_context_t *v4v)
 {
+
     _v4v_close(&v4v->v4v_channel);
 }
 
 int
 v4v_open_sync(v4v_context_t *v4v, uint32_t ring_size, int *out_error)
 {
-    OVERLAPPED o = { };
-    DWORD t;
 
-    v4v->flags = V4V_FLAG_OVERLAPPED;
-    memset(&o, 0, sizeof(o));
-
-    if (!v4v_open(&v4v->v4v_channel, ring_size, &o)) {
-        *out_error = GetLastError();
-        return false;
-    }
-
-    if (!GetOverlappedResult(v4v->v4v_handle, &o, &t, TRUE)) {
+    if (!_v4v_open(&v4v->v4v_channel, ring_size, V4V_FLAG_ASYNC, NULL)) {
         *out_error = GetLastError();
         return false;
     }
@@ -50,17 +41,8 @@ v4v_open_sync(v4v_context_t *v4v, uint32_t ring_size, int *out_error)
 int
 v4v_bind_sync(v4v_context_t *v4v, v4v_ring_id_t *r, int *out_error)
 {
-    OVERLAPPED o = { };
-    DWORD t;
 
-    memset(&o, 0, sizeof(o));
-
-    if (!v4v_bind (&v4v->v4v_channel, r, &o)) {
-        *out_error = GetLastError();
-        return false;
-    }
-
-    if (!GetOverlappedResult(v4v->v4v_handle, &o, &t, TRUE)) {
+    if (!_v4v_bind (&v4v->v4v_channel, r, NULL)) {
         *out_error = GetLastError();
         return false;
     }
@@ -121,19 +103,10 @@ v4v_init_tx_event(v4v_context_t *v4v, ioh_event *out_event, int *out_error)
 v4v_ring_t *
 v4v_ring_map_sync(v4v_context_t *v4v, int *out_error)
 {
-    DWORD t;
     v4v_mapring_values_t mr;
-    OVERLAPPED o = { };
-
-    memset(&o, 0, sizeof(o));
 
     mr.ring = NULL;
-    if (!v4v_map(&v4v->v4v_channel, &mr, &o)) {
-        *out_error = GetLastError();
-        return NULL;
-    }
-
-    if (!GetOverlappedResult(v4v->v4v_handle, &o, &t, TRUE)) {
+    if (!_v4v_map(&v4v->v4v_channel, &mr, NULL)) {
         *out_error = GetLastError();
         return NULL;
     }
