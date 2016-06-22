@@ -61,10 +61,6 @@ typedef struct _DEVICE_EXTENSION
 #define PDO(DO) \
     (((PHID_DEVICE_EXTENSION)(DO)->DeviceExtension)->PhysicalDeviceObject)
 
-#define UXENHID_V4V_PORT_BASE 0xe0000
-/* 16K plenty enough ? */
-#define UXENHID_V4V_RING_LEN (1 << 14)
-
 #define EAGAIN          11      /* Try again */
 #define ECONNREFUSED	111	/* Endpoint not connected */
 

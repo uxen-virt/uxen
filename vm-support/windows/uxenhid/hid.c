@@ -83,7 +83,7 @@ hid_v4v_cb(uxen_v4v_ring_handle_t *ring, void *ctx, void *ctx2)
         }
 
         if (hdr.type == UXENHID_REQUEST_REPORT_DESCRIPTOR &&
-            hdr.msglen < (65536 + sizeof (hdr))) {
+            hdr.msglen < (UXENHID_RING_SIZE + sizeof (hdr))) {
 
             devext->rpt_desc_len = (USHORT)(hdr.msglen - sizeof (hdr));
             devext->rpt_desc = ExAllocatePoolWithTag(NonPagedPool,
@@ -580,10 +580,10 @@ hid_init(DEVICE_EXTENSION *devext)
         return status;
     }
 
-    devext->peer.port = UXENHID_V4V_PORT_BASE + addr;
+    devext->peer.port = UXENHID_BASE_PORT + addr;
     devext->peer.domain = 0;
-    devext->ring = uxen_v4v_ring_bind(UXENHID_V4V_PORT_BASE + addr, 0,
-                                      UXENHID_V4V_RING_LEN,
+    devext->ring = uxen_v4v_ring_bind(UXENHID_BASE_PORT + addr, 0,
+                                      UXENHID_RING_SIZE,
                                       hid_v4v_cb, devext, NULL);
     if (!devext->ring)
         return STATUS_NO_MEMORY;

@@ -10,7 +10,7 @@
 #include <stdint.h>
 
 #define UXENHID_BASE_PORT 0xe0000
-#define UXENHID_RING_SIZE 65536
+#define UXENHID_RING_SIZE 16384
 #define UXENHID_MAX_MSG_LEN 1024
 
 #define UXENHID_MOUSE_DEVICE    0
