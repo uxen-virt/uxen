@@ -159,14 +159,86 @@ gh_v4v_allocate_pfn_list(uint8_t *buf, uint32_t npages)
     return pfns;
 }
 
+static PMDL
+alloc_partial_mdl_retry(uint32_t *pages)
+{
+    const int MAX_TRIES = 32;
+
+    LARGE_INTEGER delay;
+    PHYSICAL_ADDRESS low, high;
+    uint32_t bytes = *pages << PAGE_SHIFT;
+    int i;
+
+    low.QuadPart = 0;
+    high.QuadPart = -1;
+    delay.QuadPart = -10000; /* 1 ms */
+
+    for (i = 0; i < MAX_TRIES; ++i) {
+        PMDL mdl = MmAllocatePagesForMdlEx(low, high, low, bytes, MmCached, 0);
+
+        if (mdl) {
+            *pages = (MmGetMdlByteCount(mdl) + PAGE_SIZE - 1) >> PAGE_SHIFT;
+            return mdl;
+        }
+        uxen_v4v_warn("failed to allocate partial mdl - retrying...");
+        KeDelayExecutionThread(KernelMode, FALSE, &delay);
+    }
+
+    return NULL;
+ }
+
+static PMDL
+alloc_pages_for_mdl_retry(uint32_t pages)
+{
+    uint32_t allocated = 0;
+    uint32_t i = 0, j;
+    PMDL ret_mdl = NULL;
+    PFN_NUMBER *ret_pfns, *pfns;
+
+    ret_mdl = IoAllocateMdl(NULL, pages << PAGE_SHIFT, FALSE, FALSE, NULL);
+    if (!ret_mdl) {
+        uxen_v4v_err("failed to allocate mdl structure");
+        goto err;
+    }
+
+    ret_pfns = MmGetMdlPfnArray(ret_mdl);
+    RtlZeroMemory(ret_pfns, sizeof(PFN_NUMBER) * pages);
+
+    while (allocated < pages) {
+        PMDL submdl;
+        uint32_t subpages = pages;
+
+        submdl = alloc_partial_mdl_retry(&subpages);
+        if (!submdl) {
+            uxen_v4v_err("failed to allocate partial mdl, %d/%d pages allocated", allocated, pages);
+            goto err;
+        }
+
+        pfns = MmGetMdlPfnArray(submdl);
+        for (j = 0; j < subpages; ++j)
+            ret_pfns[i++] = pfns[j];
+        IoFreeMdl(submdl);
+
+        allocated += subpages;
+    }
+
+    return ret_mdl;
+
+err:
+    if (ret_mdl) {
+        MmFreePagesFromMdl(ret_mdl);
+        IoFreeMdl(ret_mdl);
+    }
+
+    return NULL;
+}
+
 xenv4v_ring_t *
 gh_v4v_allocate_ring(uint32_t ring_length)
 {
     uint32_t     length;
     uint32_t     npages;
     xenv4v_ring_t *robj;
-    PHYSICAL_ADDRESS low, high;
-    SIZE_T bytes;
 
     if (ring_length > XENV4V_MAX_RING_LENGTH) return NULL;
 
@@ -185,22 +257,7 @@ gh_v4v_allocate_ring(uint32_t ring_length)
     length = ring_length + sizeof(v4v_ring_t);
     npages = (length + PAGE_SIZE - 1) >> PAGE_SHIFT;
 
-#if 0
-    robj->ring = (v4v_ring_t *)ExAllocatePoolWithTag(NonPagedPool, length, XENV4V_TAG);
-    if (robj->ring == NULL) {
-        ExFreePoolWithTag(robj, XENV4V_TAG);
-        return NULL;
-    }
-#else
-    low.QuadPart = 0;
-    high.QuadPart = (ULONGLONG) - 1;
-#if 0
-    bytes.QuadPart = length;
-#else
-    bytes = length;
-#endif
-
-    robj->mdl = MmAllocatePagesForMdlEx(low, high, low, bytes, MmCached, MM_ALLOCATE_FULLY_REQUIRED);
+    robj->mdl = alloc_pages_for_mdl_retry(npages);
     if (!robj->mdl) {
         ExFreePoolWithTag(robj, XENV4V_TAG);
         uxen_v4v_err("failed to allocate mdl pages");
@@ -217,8 +274,6 @@ gh_v4v_allocate_ring(uint32_t ring_length)
     }
 
     robj->user_map = NULL;
-#endif
-
 
     RtlZeroMemory(robj->ring, length);
     KeInitializeSpinLock(&robj->lock);
@@ -230,13 +285,9 @@ gh_v4v_allocate_ring(uint32_t ring_length)
 
     robj->pfn_list = gh_v4v_allocate_pfn_list((uint8_t *)robj->ring, npages);
     if (robj->pfn_list == NULL) {
-#if 0
-        ExFreePoolWithTag(robj->ring, XENV4V_TAG);
-#else
         MmUnmapLockedPages(robj->ring, robj->mdl);
         MmFreePagesFromMdl(robj->mdl);
         IoFreeMdl(robj->mdl);
-#endif
         ExFreePoolWithTag(robj, XENV4V_TAG);
         return NULL;
     }
