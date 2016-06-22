@@ -326,6 +326,8 @@ _v4v_open(v4v_channel_t *channel, ULONG ring_size, OVERLAPPED *ov)
         return FALSE;
     }
 
+    memset(channel, 0, sizeof(*channel));
+
     /* V4V_CHECK_OVERLAPPED(channel, ov); */
     /* make V4V more liberal about how channel is initialized */
     channel->flags = ov ? V4V_FLAG_OVERLAPPED : V4V_FLAG_NONE;

@@ -85,7 +85,12 @@ _v4v_open(v4v_channel_t *_channel, uint32_t ring_size)
     errno_t err;
     struct _v4v_channel *channel;
 
-    errno = 0;
+    if (_channel == NULL) {
+        errno = EINVAL;
+        return false;
+    }
+
+    memset(_channel, 0, sizeof(*_channel));
 
     v4v_service = IOServiceGetMatchingService(
         kIOMasterPortDefault, IOServiceMatching(V4V_SERVICE_CLASSNAME));
@@ -111,6 +116,12 @@ _v4v_open(v4v_channel_t *_channel, uint32_t ring_size)
             mach_port_destroy(mach_task_self(), recv_port);
     }
 
+    if (!err) {
+        channel = _channel->_c = calloc(sizeof(*channel), 1);
+        if (!channel)
+            err = ENOMEM;
+    }
+
     if (err != 0) {
         IOServiceClose(v4v_ring_conn);
         IOObjectRelease(v4v_service);
@@ -118,11 +129,11 @@ _v4v_open(v4v_channel_t *_channel, uint32_t ring_size)
         return false;
     }
 
-    channel = _channel->_c = calloc(sizeof(*channel), 1);
     channel->ring_connection = v4v_ring_conn;
     channel->receive_notification_port = recv_port;
     channel->send_notification_port = send_port;
     channel->ring_size = ring_size;
+    errno = 0;
     return true;
 }
 
