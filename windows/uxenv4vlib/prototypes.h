@@ -41,7 +41,7 @@ void NTAPI gh_v4v_csq_complete_canceled_irp(PIO_CSQ csq, PIRP irp);
 v4v_ring_data_t *gh_v4v_copy_destination_ring_data(xenv4v_extension_t *pde, ULONG *gh_count);
 
 /* gh_hypercall.c */
-NTSTATUS gh_v4v_register_ring(xenv4v_ring_t *robj);
+NTSTATUS gh_v4v_register_ring(xenv4v_extension_t *pde, xenv4v_ring_t *robj);
 NTSTATUS gh_v4v_unregister_ring(xenv4v_ring_t *robj);
 NTSTATUS gh_v4v_create_ring(v4v_addr_t *dst, domid_t partner);
 NTSTATUS gh_v4v_notify(v4v_ring_data_t *ringData);

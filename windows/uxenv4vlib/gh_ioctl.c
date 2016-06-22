@@ -145,7 +145,7 @@ gh_v4v_ctrl_bind(xenv4v_extension_t *pde, xenv4v_context_t *ctx, v4v_bind_values
             robj->ring->id.addr.port = gh_v4v_spare_port_number(pde, port);
 
         // Now register the ring.
-        status = gh_v4v_register_ring(robj);
+        status = gh_v4v_register_ring(pde, robj);
         if (!NT_SUCCESS(status)) {
             KeReleaseInStackQueuedSpinLock(&lqh);
             uxen_v4v_err(

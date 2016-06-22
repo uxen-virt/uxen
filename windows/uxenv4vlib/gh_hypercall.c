@@ -113,9 +113,10 @@ gh_v4v_filter_send_errno(int err, unsigned int cmd,
 }
 
 NTSTATUS
-gh_v4v_register_ring(xenv4v_ring_t *robj)
+gh_v4v_register_ring(xenv4v_extension_t *pde, xenv4v_ring_t *robj)
 {
     int err;
+    int fail_exist = 1;
     NTSTATUS status = STATUS_SUCCESS;
 
     if (v4v_call_page_notify(robj->pfn_list->pages, robj->pfn_list->npage, 1)) {
@@ -125,28 +126,38 @@ gh_v4v_register_ring(xenv4v_ring_t *robj)
         return STATUS_UNSUCCESSFUL;
     }
 
-    robj->registered = FALSE;
+  retry:
     err = gh_v4v_hypercall_with_priv(
         robj->admin_access ? UXEN_ADMIN_HYPERCALL : 0,
         V4VOP_register_ring, robj->ring, robj->pfn_list,
-        &robj->partner, 0 /* fail_exist */, 0);
+        &robj->partner, fail_exist, 0);
     if (err == -ENOSYS) {
         /* Special case - say it all worked and we'll sort it out
          * later when the platform device actually loads and the
          * resume notify fires.  No need to undo v4v_call_page_notify,
          * since it was a no-op */
         /* status = STATUS_SUCCESS; */
-    } else if (err == -EEXIST) {
-        /* does not happen since the fail_exist argument is not set above */
+    } else if (fail_exist && err == -EEXIST) {
+        if (robj->registered)
+            return status;
+        if (!gh_v4v_ring_id_in_use(pde, &robj->ring->id)) {
+            uxen_v4v_warn("V4VOP_register_ring (vm%u:%x vm%u) re-registering",
+                          robj->ring->id.addr.domain, robj->ring->id.addr.port,
+                          robj->ring->id.partner);
+            fail_exist = 0;
+            goto retry;
+        }
         uxen_v4v_warn("V4VOP_register_ring (vm%u:%x vm%u) failed ID in use",
                       robj->ring->id.addr.domain, robj->ring->id.addr.port,
                       robj->ring->id.partner);
         status = STATUS_INVALID_DEVICE_REQUEST;
+        robj->registered = FALSE;
     } else if (err != 0) {
         uxen_v4v_err("V4VOP_register_ring (vm%u:%x vm%u) failed err %d",
                      robj->ring->id.addr.domain, robj->ring->id.addr.port,
                      robj->ring->id.partner, err);
         status = STATUS_UNSUCCESSFUL;
+        robj->registered = FALSE;
     } else
         robj->registered = TRUE;
 

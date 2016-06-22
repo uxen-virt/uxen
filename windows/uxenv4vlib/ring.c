@@ -18,7 +18,14 @@ void uxen_v4v_reregister_all_rings(void)
 
     if (!IsListEmpty(&pde->ring_list)) {
         for ( robj = (xenv4v_ring_t *)pde->ring_list.Flink; robj != (xenv4v_ring_t *)&pde->ring_list ; robj = (xenv4v_ring_t *)robj->le.Flink) {
-            gh_v4v_register_ring(robj);
+            if (gh_v4v_register_ring(pde, robj) ==
+                STATUS_INVALID_DEVICE_REQUEST) {
+                /* XXX remove robj from list */
+                uxen_v4v_warn(
+                    "gh_v4v_register_ring (vm%u:%x vm%u) duplicate ring",
+                    robj->ring->id.addr.domain, robj->ring->id.addr.port,
+                    robj->ring->id.partner);
+            }
         }
     }
 

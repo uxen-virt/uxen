@@ -88,7 +88,7 @@ V4V_DLL_EXPORT uxen_v4v_ring_handle_t *uxen_v4v_ring_bind (uint32_t local_port,
         // Now register the ring, if there's no v4v yet we'll just queue this
         DbgPrint("exprr: Can make hypercall = %d\n", uxen_v4v_can_make_hypercall());
         if (uxen_v4v_can_make_hypercall()) {
-            status = gh_v4v_register_ring (ret->ring_object);
+            status = gh_v4v_register_ring (pde, ret->ring_object);
             if (!NT_SUCCESS (status)) {
                 KeReleaseInStackQueuedSpinLock (&lqh);
                 uxen_v4v_err("gh_v4v_register_ring failed (vm%u:%x vm%u) "

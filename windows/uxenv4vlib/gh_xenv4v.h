@@ -327,7 +327,7 @@ gh_v4v_process_context_reads_quick(xenv4v_extension_t *pde, xenv4v_context_t *ct
 
 // Hypercall Interface
 NTSTATUS
-gh_v4v_register_ring(xenv4v_ring_t *robj);
+gh_v4v_register_ring(xenv4v_extension_t *pde, xenv4v_ring_t *robj);
 
 NTSTATUS
 gh_v4v_unregister_ring(xenv4v_ring_t *robj);

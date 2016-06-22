@@ -279,6 +279,7 @@ gh_v4v_allocate_ring(uint32_t ring_length)
 
     RtlZeroMemory(robj->ring, length);
     KeInitializeSpinLock(&robj->lock);
+    robj->registered = FALSE;
     robj->ring->magic = V4V_RING_MAGIC;
     robj->ring->len = ring_length;
     robj->ring->rx_ptr = robj->ring->tx_ptr = 0;
