@@ -78,9 +78,10 @@ void uxen_sys_stop_v4v(void)
 
 void __cdecl uxen_sys_signal_v4v(void)
 {
-    KIRQL oldirql;
-    /*This should only schedule DPCs for dispatch - rather than actually execute them as current */
-    /*is still pointing at the guest cpu */
+
+    /* only schedule DPCs for dispatch - rather than actually execute
+     * them as, when called via ui_signal_v4v, current is still
+     * pointing at the guest cpu */
     uxen_v4vlib_deliver_signal();
 }
 

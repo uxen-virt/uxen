@@ -405,6 +405,7 @@ uxen_idle_thread_fn(void *context)
                 KeQuerySystemTime(&now);
                 for (host_cpu = 1; host_cpu < max_host_cpu; host_cpu++)
                     uxen_signal_idle_thread(host_cpu);
+                uxen_sys_signal_v4v();
             }
         } while (idle_thread_suspended && uxen_info->ui_running);
 

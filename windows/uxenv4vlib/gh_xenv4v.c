@@ -230,10 +230,11 @@ VOID gh_signaled(void)
     if (!pde) return;
 
     if (uxen_v4v_am_dom0) {
-        /* In dom0 we arrive here directly from the upcall, and current in uxen */
-        /* is pointing to the vcpu of the guest we just left, the most we want */
-        /* to do is send Events to userland that things have happened, and */
-        /* absolutely not call back into uxen */
+        /* In dom0 we usually arrive here directly from the upcall,
+         * and current in uxen is pointing to the vcpu of the guest we
+         * just left, the most we want to do is send Events to
+         * userland that things have happened, and absolutely not call
+         * back into uxen. */
 
 #ifdef V4V_QUICK_READ_CALLBACKS
         gh_v4v_virq_quick(pde);
