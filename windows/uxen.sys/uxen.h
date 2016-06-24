@@ -210,12 +210,15 @@ int32_t _uxen_snoop_hypercall(void *udata, int mode);
         }                                                               \
         while ((x = uxen_devext->de_executing) == 0 ||                  \
                InterlockedCompareExchange(                              \
-                   &uxen_devext->de_executing, x + 1, x) != x)          \
-            if (suspend_block(i, pages, &increase)) {                   \
+                   &uxen_devext->de_executing, x + 1, x) != x) {        \
+            int ret;                                                    \
+            ret = suspend_block(i, pages, &increase);                   \
+            if (ret) {                                                  \
+                r ret;                                                  \
                 x = 0;                                                  \
-                r -ENOMEM;                                              \
                 break;                                                  \
             }                                                           \
+        }                                                               \
         if (x == 0)                                                     \
             break;                                                      \
         try_call(r, exception_retval, fn, __VA_ARGS__);                 \

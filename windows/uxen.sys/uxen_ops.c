@@ -627,7 +627,7 @@ uxen_op_wake_vm(struct vm_vcpu_info_shared *vcis)
 int
 suspend_block(preemption_t i, uint32_t pages, uint32_t *reserve_increase)
 {
-    int ret = 0;
+    int ret;
 
     ASSERT(!preemption_enabled());
     while (1) {
@@ -635,13 +635,15 @@ suspend_block(preemption_t i, uint32_t pages, uint32_t *reserve_increase)
         if (uxen_devext->de_executing)
             break;
         uxen_pages_decrease_reserve(i, *reserve_increase);
+        if (i >= DISPATCH_LEVEL)
+            return -EAGAIN;
         KeWaitForSingleObject(&uxen_devext->de_resume_event, Executive,
                               KernelMode, FALSE, NULL);
         ret = uxen_pages_increase_reserve(&i, pages, reserve_increase);
         if (ret)
-            break;
+            return -ENOMEM;
     }
-    return ret;
+    return 0;
 }
 
 static void __cdecl
