@@ -245,6 +245,7 @@ gh_v4v_dispatch_create(PDEVICE_OBJECT fdo, PIRP irp)
                                                     sizeof(xenv4v_context_t),
                                                     XENV4V_TAG);
     if (ctx == NULL) {
+        uxen_v4v_err("allocation of v4v context failed");
         return v4v_simple_complete_irp(irp, STATUS_NO_MEMORY);
     }
     RtlZeroMemory(ctx, sizeof(xenv4v_context_t));

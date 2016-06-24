@@ -54,6 +54,7 @@ V4V_DLL_EXPORT uxen_v4v_ring_handle_t *uxen_v4v_ring_bind (uint32_t local_port,
 
     if (!ret) {
         uxen_v4v_put_pde (pde);
+        uxen_v4v_err("allocation of ring handle failed");
         return NULL;
     }
 

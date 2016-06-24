@@ -96,6 +96,7 @@ uxen_v4v_notify_enqueue (uint32_t len, v4v_addr_t *dst,
     n = (uxen_v4v_notify_t *) uxen_v4v_fast_alloc(sizeof (uxen_v4v_notify_t));
     if (!n) {
         uxen_v4v_put_pde (pde);
+        uxen_v4v_err("allocation of notification failed");
         return;
     }
 
