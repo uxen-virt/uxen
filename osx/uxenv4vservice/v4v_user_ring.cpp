@@ -271,6 +271,18 @@ uxen_v4v_user_ring::notify(int *out_result)
     return ret;
 }
 
+static void
+prefault_mapping(const uint8_t *input_data, uint32_t input_size)
+{
+    const uint8_t *end = input_data + input_size;
+
+    asm volatile("cmpb $0x0,%0\n" : : "m" (input_data[0]));
+    input_data += PAGE_SIZE - ((uintptr_t)input_data & (PAGE_SIZE - 1));
+    while (input_data < end) {
+        asm volatile("cmpb $0x0,%0\n" : : "m" (input_data[0]));
+        input_data += PAGE_SIZE;
+    }
+}
 
 IOReturn
 uxen_v4v_user_ring::sendTo(
@@ -310,6 +322,7 @@ uxen_v4v_user_ring::sendTo(
         if (map != nullptr) {
             input_data = reinterpret_cast<const void*>(map->getAddress());
             input_size = static_cast<uint32_t>(map->getSize());
+            prefault_mapping((const uint8_t *)input_data, input_size);
         } else {
             /* Fallback if mapping fails for some reason: copy to temp bounce
              * buffer. */
