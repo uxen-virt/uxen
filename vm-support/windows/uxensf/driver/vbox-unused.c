@@ -1,11 +1,12 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
 #include <wdm.h>
 #include <VBox/VBoxGuestLib.h>
 #include <ntstrsafe.h>
+#include "../../common/debug.h"
 
 void VBOXCALL VbglTerminate (void)
 {
@@ -43,7 +44,7 @@ RTDECL(size_t) RTLogBackdoorPrintf(const char *pszFormat, ...)
     va_start(args, pszFormat);
     RtlStringCchVPrintfA(logMsg, sizeof(logMsg), pszFormat, args);
     va_end(args);
-    DbgPrintEx(DPFLTR_IHVDRIVER_ID, DPFLTR_ERROR_LEVEL, "%s", logMsg);
+    uxen_err("%s", logMsg);
 #endif
     return 0;
 }
