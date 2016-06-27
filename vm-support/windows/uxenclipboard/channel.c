@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -21,10 +21,12 @@ int ChannelConnect()
     So, arrange for ns_uclip_hostmsg_open being called (and completed) before
     ns_uclip_open - meaning, 44446 before 44445.
     */
-    if (!(notify_ctx = clip_open(0, CLIP_NOTIFY_PORT, malloc, free)))
-        return -1;
-    if (!(clipboard_ctx = clip_open(0, CLIP_PORT, malloc, free)))
-        return -1;
+    if (!notify_ctx)
+        if (!(notify_ctx = clip_open(0, CLIP_NOTIFY_PORT, malloc, free)))
+            return -1;
+    if (!clipboard_ctx)
+        if (!(clipboard_ctx = clip_open(0, CLIP_PORT, malloc, free)))
+            return -1;
     return 0;
 }
 
