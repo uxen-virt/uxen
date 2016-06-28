@@ -234,6 +234,7 @@ static const char *hp_states[] = {
 #define CXF_RESET_STATE             U64BF(32)
 #define CXF_GPROXY_RECEIVED     U64BF(33)
 #define CXF_HTTP_COMPLETE       U64BF(34)
+#define CXF_MIN_GUEST_BUFLEN    U64BF(35)
 
 #define LIST_REMOVE_NULL(elm, field) do {   \
             LIST_REMOVE(elm, field);        \
@@ -2697,7 +2698,7 @@ static int srv_write(struct http_ctx *hp, const uint8_t *b, size_t blen)
         BUFF_CONSUME_ALL(hp->clt_out);
 
         if ((hp->flags & (HF_SAVE_REQ_PRX | HF_SAVE_REQ_RTRY)) &&
-            ((ssize_t) BUFF_BUFFERED(hp->clt_out)) > (((ssize_t) MAX_GUEST_BUF) - BUF_CHUNK * 2)) {
+            ((ssize_t) BUFF_BUFFERED(hp->clt_out)) > (((ssize_t) MAX_GUEST_BUF) - (MIN_GUEST_BUF / 2))) {
 
             HLOG3("WARN buffered too much, cannot save any more req data");
             hp->flags &= (~HF_SAVE_REQ_PRX & ~HF_SAVE_REQ_RTRY);
@@ -2788,7 +2789,8 @@ out:
             blen = spc;
         buff_append(hp->clt_out, (const char*) b + ret, blen);
         ret += blen;
-        HLOG5("BUFFERED %lu ", (unsigned long) blen);
+        HLOG5("BUFFERED %lu, total in the buf %lu", (unsigned long) blen,
+              (unsigned long) BUFF_BUFFERED(hp->clt_out));
     }
     if (sched_wakeup)
         wakeup_client(hp);
@@ -4952,7 +4954,7 @@ static void cx_reset_state(struct clt_ctx *cx, bool soft)
         cx->flags &= ((~CXF_LOCAL_WEBDAV) & (~CXF_LOCAL_WEBDAV_COMPLETE));
     }
     cx->flags &= ((~CXF_HEADERS_OK) & (~CXF_LONG_REQ) & (~CXF_HEAD_REQUEST) &
-                 (~CXF_HEAD_REQUEST_SENT));
+                 (~CXF_HEAD_REQUEST_SENT) & (~CXF_MIN_GUEST_BUFLEN));
     if (cx->clt_parser)
         parser_reset(cx->clt_parser);
     if (cx->srv_parser) {
@@ -4988,9 +4990,20 @@ out:
 static int cx_chr_can_write(void *opaque)
 {
     struct clt_ctx *cx = opaque;
+    int max_available, wr_clen;
 
-    return cx->in ? (BUFF_FREEDOM(cx->in) + cx->in->mx_size -
-            cx->in->size) : 0;
+    if (!cx->in)
+        return 0;
+
+    max_available = BUFF_FREEDOM(cx->in) + cx->in->mx_size - cx->in->size;
+    if (!(cx->flags & CXF_MIN_GUEST_BUFLEN) || !cx->hp || cx->in != cx->hp->clt_out)
+        return max_available;
+
+    if (max_available > MIN_GUEST_BUF)
+        max_available = MIN_GUEST_BUF;
+
+    wr_clen = BUFF_WR_CLEN(cx->in);
+    return wr_clen < max_available ? max_available - wr_clen : 0;
 }
 
 static int cx_chr_can_read(void *opaque)
@@ -5605,11 +5618,17 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
 
             cx->flags |= (CXF_HTTP | CXF_HEADERS_OK);
             CXL5("CXF_HEADERS_OK");
-            if (cx->clt_parser->h.header_length + cx->clt_parser->h.content_length >=
-                MAX_GUEST_BUF) {
+            if (cx->clt_parser->parse_state != PS_MCOMPLETE) {
+                size_t max_buf_long_req;
 
-                CXL4("long HTTP request (>= %u bytes)", (unsigned) MAX_GUEST_BUF);
-                cx->flags |= CXF_LONG_REQ;
+                max_buf_long_req = ac_proxy_set(cx->ni) ? MAX_GUEST_BUF : (2 * MIN_GUEST_BUF);
+                if (cx->clt_parser->h.content_length > (uint64_t) max_buf_long_req ||
+                    cx->clt_parser->h.header_length + cx->clt_parser->h.content_length >=
+                    max_buf_long_req) {
+
+                    CXL4("long HTTP request (>= %u bytes)", (unsigned) max_buf_long_req);
+                    cx->flags |= CXF_LONG_REQ;
+                }
             }
         } else if (!(cx->flags & (CXF_HTTP | CXF_TLS | CXF_BINARY | CXF_GUEST_PROXY)) &&
                     (cx->flags & CXF_TLS_DETECT_OK)) {
@@ -5850,6 +5869,11 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
             cx->flags |= CXF_HEAD_REQUEST;
             cx->flags &= ~CXF_HEAD_REQUEST_SENT;
         }
+    }
+
+    if (!(cx->flags & CXF_MIN_GUEST_BUFLEN)) {
+        CXL5("setting CXF_MIN_GUEST_BUFLEN");
+        cx->flags |= CXF_MIN_GUEST_BUFLEN;
     }
 
     if (!(cx->flags & CXF_LOCAL_WEBDAV) && !cx->hp) {
