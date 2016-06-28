@@ -295,6 +295,9 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
     if (d == NULL)
         goto out;
 
+    if (vcpuid >= d->max_vcpus)
+        goto out;
+
     v = d->vcpu[vcpuid];
     if (v == NULL)
         goto out;

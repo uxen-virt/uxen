@@ -458,6 +458,7 @@ hvm_set_dmreq_page(struct domain *d, unsigned long gmfn)
     unsigned long mfn;
     void *va;
     int i;
+    int ret = 0;
 
     mfn = mfn_x(get_gfn_unshare(d, gmfn, &p2mt));
     if (p2mt != p2m_ram_rw) {
@@ -493,6 +494,10 @@ hvm_set_dmreq_page(struct domain *d, unsigned long gmfn)
     dmrp->page = page;
 
     for (i = 0; i < d->max_vcpus; i++) {
+        if (!d->vcpu[i]) {
+            ret = -EINVAL;
+            break;
+        }
         dmrp->va->dmreq_vcpu[i].dmreq_gpfn = DMREQ_GPFN_UNUSED;
         dmrp->va->dmreq_vcpu[i].dmreq_gpfn_loaded = DMREQ_GPFN_UNUSED;
         d->vcpu[i]->arch.hvm_vcpu.dmreq_gpfn = DMREQ_GPFN_UNUSED;
@@ -505,7 +510,7 @@ hvm_set_dmreq_page(struct domain *d, unsigned long gmfn)
 
     domain_unpause(d);
 
-    return 0;
+    return ret;
 }
 
 static void
@@ -534,7 +539,7 @@ hvm_destroy_dmreq_vcpu_pages(struct domain *d)
     }
 
     for (i = 0; i < d->max_vcpus; i++) {
-        if (!d->vcpu[i]->arch.hvm_vcpu.dmreq_vcpu_page_va)
+        if (!d->vcpu[i] || !d->vcpu[i]->arch.hvm_vcpu.dmreq_vcpu_page_va)
             continue;
         unmap_domain_page_global(d->vcpu[i]->arch.hvm_vcpu.dmreq_vcpu_page_va);
         put_page(d->vcpu[i]->arch.hvm_vcpu.dmreq_vcpu_page);
@@ -588,7 +593,8 @@ hvm_set_dmreq_vcpu_pages(struct domain *d, unsigned long gmfn)
             d->arch.hvm_domain.dmreq_vcpu_page = page;
             d->vm_info_shared->vmi_dmreq_vcpu_page_va = va;
         } else {
-            if (d->vcpu[i]->arch.hvm_vcpu.dmreq_vcpu_page_va || d->is_dying) {
+            if (!d->vcpu[i] || d->vcpu[i]->arch.hvm_vcpu.dmreq_vcpu_page_va ||
+                d->is_dying) {
                 spin_unlock(&d->arch.hvm_domain.dmreq_vcpu_page_lock);
                 unmap_domain_page_global(va);
                 put_page(mfn_to_page(mfn));
