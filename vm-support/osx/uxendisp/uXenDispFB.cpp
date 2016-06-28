@@ -141,10 +141,10 @@ int uXenDispFB::set_mode(unsigned int width, unsigned int height,
     uxdisp_crtc_write(0, UXDISP_REG_CRTC_YRES, height);
     uxdisp_crtc_write(0, UXDISP_REG_CRTC_STRIDE, stride);
     uxdisp_crtc_write(0, UXDISP_REG_CRTC_FORMAT, fmt);
+    uxdisp_bank_write(0, UXDISP_REG_BANK_POPULATE,
+                      (((height * stride + 4096 + 4095) >> 12) << 12) * 2);
     /* Flush */
-    uxdisp_bank_write(0, UXDISP_REG_BANK_POPULATE, (((height * stride + 4096 + 4095) >> 12) << 12) * 2);
-    uxdisp_write(UXDISP_REG_MODE, UXDISP_MODE_VGA_DISABLED |
-                                  UXDISP_MODE_PAGE_TRACKING_DISABLED);
+    uxdisp_write(UXDISP_REG_MODE, UXDISP_MODE_VGA_DISABLED);
 
     return 0;
 }
