@@ -506,20 +506,46 @@ v4v_sanitize_ring(v4v_ring_t *ring, struct v4v_ring_info *ring_info)
 }
 
 
+static ssize_t
+v4v_iov_count(XEN_GUEST_HANDLE(v4v_iov_t) iovs, int niov)
+{
+    v4v_iov_t iov;
+    size_t done = 0;
+    int ret;
+
+    while (niov--) {
+        ret = copy_from_guest_errno(&iov, iovs, 1);
+        if (ret)
+            return ret;
+
+        if (iov.iov_len > V4V_RING_MAX_SIZE)
+            return -EINVAL;
+
+        done += iov.iov_len;
+
+        if (done > V4V_RING_MAX_SIZE)
+            return -EINVAL;
+
+        guest_handle_add_offset(iovs, 1);
+    }
+
+    return done;
+}
+
 /*caller must have L3*/
-static size_t
+static ssize_t
 v4v_ringbuf_insert(struct domain *d,
                    struct v4v_ring_info *ring_info,
                    struct v4v_ring_id *src_id, uint32_t proto,
-                   XEN_GUEST_HANDLE(void) buf_hnd_void, uint32_t len)
+                   XEN_GUEST_HANDLE(uint8_t) buf_hnd, ssize_t _len,
+                   XEN_GUEST_HANDLE(v4v_iov_t) iovs, uint32_t niov)
 {
-    XEN_GUEST_HANDLE(uint8_t) buf_hnd =
-        guest_handle_cast(buf_hnd_void, uint8_t);
     v4v_ring_t ring;
-    struct v4v_ring_message_header mh = { };
+    struct v4v_ring_message_header mh = { 0 };
     int32_t sp;
-    int32_t happy_ret = len;
     int32_t ret = 0;
+    uint32_t iov_len;
+    ssize_t len = _len;
 
     if (!ring_info->len) /* If the ring has zero length - it's a place holder */
         return -EAGAIN;
@@ -568,152 +594,28 @@ v4v_ringbuf_insert(struct domain *d,
         if (ring.tx_ptr == ring_info->len)
             ring.tx_ptr = 0;
 
-        sp = ring.len - ring.tx_ptr;
-        if (len > sp) {
-            ret = v4v_memcpy_to_guest_ring_from_guest(
-                ring_info, ring.tx_ptr + sizeof(v4v_ring_t), buf_hnd, sp);
-            if (ret)
-                break;
+        do {
+            if (!niov)
+                iov_len = len;
+            else {
+                v4v_iov_t iov;
 
-            ring.tx_ptr = 0;
-            len -= sp;
-            guest_handle_add_offset(buf_hnd, sp);
-        }
+                ret = copy_from_guest_errno(&iov, iovs, 1);
+                if (ret)
+                    break;
 
-        ret = v4v_memcpy_to_guest_ring_from_guest(
-            ring_info, ring.tx_ptr + sizeof(v4v_ring_t), buf_hnd, len);
-        if (ret)
-            break;
+                buf_hnd =
+                    guest_handle_from_ptr((uintptr_t)iov.iov_base, uint8_t);
+                iov_len = iov.iov_len;
 
-        ring.tx_ptr += V4V_ROUNDUP(len);
-
-        if (ring.tx_ptr == ring_info->len)
-            ring.tx_ptr = 0;
-
-        mb();
-        ring_info->tx_ptr = ring.tx_ptr;
-
-        ret = v4v_update_tx_ptr(ring_info, ring.tx_ptr);
-        if (ret)
-            break;
-
-    } while(0);
-
-    //v4v_ring_unmap(ring_info);
-
-    return ret ? ret : happy_ret;
-}
-
-static ssize_t
-v4v_iov_count(XEN_GUEST_HANDLE(v4v_iov_t) iovs, int niov)
-{
-    v4v_iov_t iov;
-    size_t done = 0;
-    int ret;
-
-    while (niov--) {
-        ret = copy_from_guest_errno(&iov, iovs, 1);
-        if (ret)
-            return ret;
-
-        if (iov.iov_len > V4V_RING_MAX_SIZE)
-            return -EINVAL;
-
-        done += iov.iov_len;
-
-        if (done > V4V_RING_MAX_SIZE)
-            return -EINVAL;
-
-        guest_handle_add_offset(iovs, 1);
-    }
-
-    return done;
-}
-
-/*caller must have L3*/
-static ssize_t
-v4v_ringbuf_insertv(struct domain *d,
-                    struct v4v_ring_info *ring_info,
-                    struct v4v_ring_id *src_id, uint32_t proto,
-                    XEN_GUEST_HANDLE(v4v_iov_t) iovs, uint32_t niov,
-                    uint32_t len)
-{
-    v4v_ring_t ring;
-    struct v4v_ring_message_header mh = { 0 };
-    int32_t sp;
-    int32_t happy_ret;
-    int32_t ret = 0;
-    uint32_t iov_len;
-
-    happy_ret = len;
-
-    if (!ring_info->len) /*If the ring has zero length - it's a place holder */
-        return -EAGAIN;
-
-    if ((V4V_ROUNDUP(len) + sizeof(struct v4v_ring_message_header)) >=
-        ring_info->len)
-        return -EMSGSIZE;
-
-    do {
-        ret = v4v_memcpy_from_guest_ring(&ring, ring_info, 0, sizeof(ring));
-        if (ret)
-            break;
-
-        v4v_sanitize_ring(&ring, ring_info);
-
-#ifdef V4V_DEBUG
-        printk(XENLOG_ERR "%s: ring.tx_ptr=%d ring.rx_ptr=%d ring.len=%d"
-               " ring_info->tx_ptr=%d\n", __FUNCTION__,
-               ring.tx_ptr, ring.rx_ptr, ring.len, ring_info->tx_ptr);
-#endif
-
-
-        if (ring.rx_ptr == ring.tx_ptr) {
-            sp = ring_info->len;
-        } else {
-            sp = ring.rx_ptr - ring.tx_ptr;
-            if (sp < 0)
-                sp += ring.len;
-        }
-
-        if ((V4V_ROUNDUP(len) + sizeof(struct v4v_ring_message_header)) >= sp) {
-            ret = -EAGAIN;
-            break;
-        }
-
-        mh.len = len + sizeof(struct v4v_ring_message_header);
-        mh.source = src_id->addr;
-        mh.pad = 0;
-        mh.protocol = proto;
-
-        ret = v4v_memcpy_to_guest_ring(
-            ring_info, ring.tx_ptr + sizeof(v4v_ring_t), &mh, sizeof(mh));
-        if (ret)
-            break;
-
-        ring.tx_ptr += sizeof(mh);
-        if (ring.tx_ptr == ring_info->len)
-            ring.tx_ptr = 0;
-
-        while (niov--) {
-            XEN_GUEST_HANDLE(uint8_t) buf_hnd;
-            v4v_iov_t iov;
-
-            ret = copy_from_guest_errno(&iov, iovs, 1);
-            if (ret)
-                break;
-
-            buf_hnd.p = (uint8_t *)(unsigned long)iov.iov_base; //FIXME
-            iov_len = iov.iov_len;
-
-            if (!iov_len) {
-                printk(XENLOG_ERR "%s: iov.iov_len=0, iov.iov_base=%"PRIx64"\n",
-                       __FUNCTION__, iov.iov_base);
-                printk(XENLOG_ERR "%s: ring_info->id = { vm%d -> vm%u:%x }\n",
-                       __FUNCTION__, ring_info->id.partner,
-                       ring_info->id.addr.domain, ring_info->id.addr.port);
-                guest_handle_add_offset(iovs, 1);
-                continue;
+                if (!iov_len) {
+                    printk(XENLOG_ERR "%s: iov.iov_len=0 iov.iov_base=%"
+                           PRIx64" ring (vm%u:%x vm%d)\n", __FUNCTION__,
+                           iov.iov_base, ring_info->id.addr.domain,
+                           ring_info->id.addr.port, ring_info->id.partner);
+                    guest_handle_add_offset(iovs, 1);
+                    continue;
+                }
             }
 
             if (iov_len > V4V_MAX_RING_SIZE) {
@@ -734,33 +636,36 @@ v4v_ringbuf_insertv(struct domain *d,
             if (iov_len) {
                 len -= iov_len;
                 sp = ring.len - ring.tx_ptr;
-    
+
                 if (iov_len > sp) {
                     ret = v4v_memcpy_to_guest_ring_from_guest(
                         ring_info, ring.tx_ptr + sizeof(v4v_ring_t),
                         buf_hnd, sp);
                     if (ret)
                         break;
-    
+
                     ring.tx_ptr = 0;
                     iov_len -= sp;
                     guest_handle_add_offset(buf_hnd, sp);
                 }
-    
+
                 ret = v4v_memcpy_to_guest_ring_from_guest(
                     ring_info, ring.tx_ptr + sizeof(v4v_ring_t),
                     buf_hnd, iov_len);
                 if (ret)
                     break;
-    
+
                 ring.tx_ptr += iov_len;
-    
+
                 if (ring.tx_ptr == ring_info->len)
                     ring.tx_ptr = 0;
             }
 
-            guest_handle_add_offset(iovs, 1);
-        }
+            if (niov)
+                guest_handle_add_offset(iovs, 1);
+
+        } while (niov--);
+
         if (ret)
             break;
 
@@ -776,9 +681,7 @@ v4v_ringbuf_insertv(struct domain *d,
             break;
     } while (0);
 
-    //v4v_ring_unmap(ring_info);
-
-    return ret ? ret : happy_ret;
+    return ret ? ret : _len;
 }
 
 
@@ -1803,13 +1706,14 @@ v4v_poke(v4v_addr_t *dst_addr)
 #endif
 
 
-/*Hypercall to do the send*/
+/* Hypercall to do the send */
 static size_t
 v4v_send(struct domain *src_d, v4v_addr_t *src_addr,
          v4v_addr_t *dst_addr, uint32_t proto,
-         XEN_GUEST_HANDLE(void) buf, size_t len)
+         XEN_GUEST_HANDLE(void) buf, ssize_t len,
+         XEN_GUEST_HANDLE(v4v_iov_t) iovs, size_t niov)
 {
-    struct domain *dst_d;
+    struct domain *dst_d = NULL;
     struct v4v_ring_id src_id;
     struct v4v_ring_info *ring_info;
     int ret = 0;
@@ -1817,206 +1721,87 @@ v4v_send(struct domain *src_d, v4v_addr_t *src_addr,
     if (!dst_addr)
         return -EINVAL;
 
-    if (len > V4V_MAX_RING_SIZE)
-        return -EINVAL;
-
     read_lock(&v4v_lock);
     if (!src_d->v4v) {
-        read_unlock(&v4v_lock);
-        return -EINVAL;
+        ret = -EINVAL;
+        goto out;
     }
 
     ret = v4v_validate_channel(
         &src_addr->domain, &src_addr->port,
         &dst_addr->domain, &dst_addr->port);
-    if (ret) {
-        read_unlock(&v4v_lock);
-        return ret;
-    }
-
-#if 0
-    read_lock(&src_d->v4v->lock);
-    ring_info = v4v_ring_find_info_by_addr(src_d, src_addr, dst_addr->domain);
-    if (ring_info)
-        src_id = ring_info->id;
-    else {
-        src_id.addr.port = V4V_PORT_NONE;
-        src_id.addr.partner = dst_addr->domain;
-    }
-    read_unlock(&src_d->v4v->lock);
-#endif
+    if (ret)
+        goto out;
 
     src_id.addr.port = src_addr->port;
     src_id.addr.domain = src_addr->domain;
     src_id.partner = dst_addr->domain;
 
     dst_d = get_domain_by_id(dst_addr->domain);
-    if (!dst_d) {
-        read_unlock(&v4v_lock);
-        return -ECONNREFUSED;
+    if (!dst_d || !dst_d->v4v) {
+        ret = -ECONNREFUSED;
+        goto out;
     }
 
 #ifdef __V4V_XSM__
     /* XSM: verify if src is allowed to send to dst */
     if (xsm_v4v_send(src_d, dst_d) != 0) {
-        read_unlock(&v4v_lock);
         printk(XENLOG_ERR "V4V: XSM REJECTED %i -> %i\n",
                src_addr->domain, dst_addr->domain);
-        return -EPERM;
+        ret = -EPERM;
+        goto out;
     }
 #endif
 #ifdef __V4V_TABLES__
     /* V4VTables*/
     if (v4v_tables_check(src_addr, dst_addr) != 0) {
-        read_unlock(&v4v_lock);
         printk(XENLOG_ERR "V4V: V4VTables REJECTED %i:%u -> %i:%u\n",
                src_addr->domain, src_addr->port,
                dst_addr->domain, dst_addr->port);
-        return -EPERM;
+        ret = -EPERM;
+        goto out;
     }
 #endif
 
+    read_lock(&dst_d->v4v->lock);
     do {
-        if (!dst_d->v4v) {
-            ret = -ECONNREFUSED;
-            break;
-        }
-
-        read_lock(&dst_d->v4v->lock);
-        ring_info = v4v_ring_find_info_by_addr(dst_d, dst_addr,
-                                               src_addr->domain);
-        if (!ring_info) {
-            v4v_signal_domain(dst_d);
-            ret = -ECONNREFUSED;
-        } else {
-//    printk(XENLOG_ERR "V4V: sending %u bytes to %i:%u\n",(unsigned) len,dst_addr->domain, dst_addr->port);
-
-            spin_lock(&ring_info->lock);
-            ret = v4v_ringbuf_insert(dst_d, ring_info, &src_id, proto,
-                                     buf, len);
-            if (ret == -EAGAIN) {
-                /* Schedule a notification when space is there */
-                if (v4v_pending_requeue(ring_info, src_addr->domain, len))
-                    ret = -ENOMEM;
-            }
-            spin_unlock(&ring_info->lock);
-
-            if (ret >= 0)
-                v4v_signal_domain(dst_d);
-        }
-        read_unlock(&dst_d->v4v->lock);
-    } while (0);
-
-    put_domain(dst_d);
-    read_unlock(&v4v_lock);
-
-    return ret;
-}
-
-/*Hypercall to do the send*/
-static size_t
-v4v_sendv(struct domain *src_d, v4v_addr_t *src_addr,
-          v4v_addr_t *dst_addr, uint32_t proto,
-          XEN_GUEST_HANDLE(v4v_iov_t) iovs, size_t niov)
-{
-    struct domain *dst_d;
-    struct v4v_ring_id src_id;
-    struct v4v_ring_info *ring_info;
-    int ret = 0;
-
-
-    if (!dst_addr)
-        return -EINVAL;
-
-    read_lock(&v4v_lock);
-    if (!src_d->v4v) {
-        read_unlock(&v4v_lock);
-        return -EINVAL;
-    }
-
-    ret = v4v_validate_channel(
-        &src_addr->domain, &src_addr->port,
-        &dst_addr->domain, &dst_addr->port);
-    if (ret) {
-        read_unlock(&v4v_lock);
-        return ret;
-    }
-
-    src_id.addr.port = src_addr->port;
-    src_id.addr.domain = src_addr->domain;
-    src_id.partner = dst_addr->domain;
-
-    dst_d = get_domain_by_id(dst_addr->domain);
-    if (!dst_d) {
-        read_unlock(&v4v_lock);
-        return -ECONNREFUSED;
-    }
-
-#ifdef __V4V_XSM__
-    /* XSM: verify if src is allowed to send to dst */
-    if (xsm_v4v_send(src_d, dst_d) != 0) {
-        read_unlock(&v4v_lock);
-        printk(XENLOG_ERR "V4V: XSM REJECTED %i -> %i\n",
-               src_addr->domain, dst_addr->domain);
-        return -EPERM;
-    }
-#endif
-#ifdef __V4V_TABLES__
-    /* V4VTables*/
-    if (v4v_tables_check(src_addr, dst_addr) != 0) {
-        read_unlock(&v4v_lock);
-        printk(XENLOG_ERR "V4V: V4VTables REJECTED %i:%u -> %i:%u\n",
-               src_addr->domain, src_addr->port,
-               dst_addr->domain, dst_addr->port);
-        return -EPERM;
-    }
-#endif
-
-
-    do {
-
-        if (!dst_d->v4v) {
-            ret = -ECONNREFUSED;
-            break;
-        }
-
-        read_lock(&dst_d->v4v->lock);
         ring_info =
             v4v_ring_find_info_by_addr(dst_d, dst_addr, src_addr->domain);
-
         if (!ring_info) {
             v4v_signal_domain(dst_d);
             ret = -ECONNREFUSED;
-        } else {
-            ssize_t len = v4v_iov_count(iovs, niov);
+            break;
+        }
 
-//    printk(XENLOG_ERR "V4V: sendving %u bytes to %i:%u\n",len,dst_addr->domain, dst_addr->port);
-
+        if (niov) {
+            len = v4v_iov_count(iovs, niov);
+            /* printk(XENLOG_ERR "%s: sending %u bytes to %i:%u\n", */
+            /*        __FUNCTION__, len, dst_addr->domain, dst_addr->port); */
             if (len < 0) {
                 ret = len;
-                read_unlock(&dst_d->v4v->lock);
                 break;
             }
-
-            spin_lock(&ring_info->lock);
-            ret =
-                v4v_ringbuf_insertv(dst_d, ring_info, &src_id, proto, iovs,
-                                    niov, len);
-            if (ret == -EAGAIN) {
-                /* Schedule a notification when space is there */
-                if (v4v_pending_requeue(ring_info, src_addr->domain, len)) {
-                    ret = -ENOMEM;
-                }
-            }
-            spin_unlock(&ring_info->lock);
-
-            if (ret >= 0)
-                v4v_signal_domain(dst_d);
         }
-        read_unlock(&dst_d->v4v->lock);
-    } while (0);
 
-    put_domain(dst_d);
+        spin_lock(&ring_info->lock);
+        ret = v4v_ringbuf_insert(dst_d, ring_info, &src_id, proto,
+                                 guest_handle_cast(buf, uint8_t), len,
+                                 iovs, niov);
+        if (ret == -EAGAIN) {
+            /* Schedule a notification when space is there */
+            if (v4v_pending_requeue(ring_info, src_addr->domain, len))
+                ret = -ENOMEM;
+        }
+        spin_unlock(&ring_info->lock);
+
+        if (ret >= 0)
+            v4v_signal_domain(dst_d);
+    } while (0);
+    read_unlock(&dst_d->v4v->lock);
+
+  out:
+    if (dst_d)
+        put_domain(dst_d);
     read_unlock(&v4v_lock);
     return ret;
 }
@@ -2091,7 +1876,8 @@ do_v4v_op(int cmd, XEN_GUEST_HANDLE(void) arg1,
 
         src.domain = d->domain_id;
 
-        rc = v4v_send(d, &src, &dst, protocol, arg3, len);
+        rc = v4v_send(d, &src, &dst, protocol, arg3, len,
+                      guest_handle_from_ptr(NULL, v4v_iov_t), 0);
         break;
     }
     case V4VOP_sendv: {
@@ -2122,7 +1908,8 @@ do_v4v_op(int cmd, XEN_GUEST_HANDLE(void) arg1,
 
         src.domain = d->domain_id;
 
-        rc = v4v_sendv(d, &src, &dst, protocol, iovs, niov);
+        rc = v4v_send(d, &src, &dst, protocol,
+                      guest_handle_from_ptr(NULL, void), 0, iovs, niov);
         break;
     }
     case V4VOP_notify: {
