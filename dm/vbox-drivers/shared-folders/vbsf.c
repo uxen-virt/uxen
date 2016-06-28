@@ -278,6 +278,22 @@ static int vbsfPathCheck(const char *pUtf8Path, size_t cbPath)
     return rc;
 }
 #endif
+
+static int
+validate_ads_path(PSHFLSTRING path)
+{
+    const wchar_t *str = path->String.ucs2;
+    int i;
+
+    for (i = 0; i < path->u16Length/2; ++i) {
+        if (str[i] == ':') {
+            LogRel(("SharedFolders: path %ws invalid - ADS\n", &path->String.ucs2[0]));
+            return VERR_INVALID_NAME;
+        }
+    }
+    return VINF_SUCCESS;
+}
+
 static int vbsfPathCheckUcs(PSHFLSTRING pPath)
 {
     int i;
@@ -298,7 +314,7 @@ static int vbsfPathCheckUcs(PSHFLSTRING pPath)
         if (wstr[i+2] == ':')
             return VERR_INVALID_PARAMETER;
     }
-    return VINF_SUCCESS;
+    return validate_ads_path(pPath);
 }
 
 static int vbsfBuildFullPathUcs(SHFLCLIENTDATA *pClient, SHFLROOT root, PSHFLSTRING pPath,
@@ -314,9 +330,9 @@ static int vbsfBuildFullPathUcs(SHFLCLIENTDATA *pClient, SHFLROOT root, PSHFLSTR
         return VERR_INVALID_PARAMETER;
     }
     rc = vbsfPathCheckUcs(pPath);
-    if (rc) {
-        Log(("vbsfPathCheck_unc failed!\n"));
-        return VERR_INVALID_PARAMETER;
+    if (!RT_SUCCESS(rc)) {
+        Log(("vbsfPathCheck_ucs failed!\n"));
+        return rc;
     }
     if (pcbFullPathRoot)
         *pcbFullPathRoot = wcslen(pszRoot);

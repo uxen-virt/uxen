@@ -19,7 +19,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -257,6 +257,10 @@ NTSTATUS VBoxErrorToNTStatus (int vboxRC)
 
     case VERR_DISK_FULL:
         Status = STATUS_DISK_FULL;
+        break;
+
+    case VERR_INVALID_NAME:
+        Status = STATUS_OBJECT_NAME_INVALID;
         break;
 
     default:
