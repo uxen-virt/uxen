@@ -537,7 +537,7 @@ static ssize_t
 v4v_ringbuf_insert(struct domain *d,
                    struct v4v_ring_info *ring_info,
                    struct v4v_ring_id *src_id, uint32_t proto,
-                   XEN_GUEST_HANDLE(uint8_t) buf_hnd, ssize_t _len,
+                   XEN_GUEST_HANDLE(uint8_t) buf_hnd, ssize_t *_len,
                    XEN_GUEST_HANDLE(v4v_iov_t) iovs, uint32_t niov)
 {
     v4v_ring_t ring;
@@ -545,10 +545,25 @@ v4v_ringbuf_insert(struct domain *d,
     int32_t sp;
     int32_t ret = 0;
     uint32_t iov_len;
-    ssize_t len = _len;
+    ssize_t len = *_len;
 
-    if (!ring_info->len) /* If the ring has zero length - it's a place holder */
+    if (!ring_info->len) {
+        /* If the ring has zero length - it's a place holder.  Record
+         * zero length for the notification, because when the ring is
+         * eventually created, it will be empty and either the message
+         * fits, or not */
+        *_len = 0;
         return -EAGAIN;
+    }
+
+    if (niov) {
+        len = v4v_iov_count(iovs, niov);
+        /* printk(XENLOG_ERR "%s: sending %u bytes to %i:%u\n", */
+        /*        __FUNCTION__, len, dst_addr->domain, dst_addr->port); */
+        if (len < 0)
+            return len;
+        *_len = len;
+    }
 
     if ((V4V_ROUNDUP(len) + sizeof(struct v4v_ring_message_header)) >=
         ring_info->len)
@@ -681,7 +696,7 @@ v4v_ringbuf_insert(struct domain *d,
             break;
     } while (0);
 
-    return ret ? ret : _len;
+    return ret;
 }
 
 
@@ -1773,19 +1788,9 @@ v4v_send(struct domain *src_d, v4v_addr_t *src_addr,
             break;
         }
 
-        if (niov) {
-            len = v4v_iov_count(iovs, niov);
-            /* printk(XENLOG_ERR "%s: sending %u bytes to %i:%u\n", */
-            /*        __FUNCTION__, len, dst_addr->domain, dst_addr->port); */
-            if (len < 0) {
-                ret = len;
-                break;
-            }
-        }
-
         spin_lock(&ring_info->lock);
         ret = v4v_ringbuf_insert(dst_d, ring_info, &src_id, proto,
-                                 guest_handle_cast(buf, uint8_t), len,
+                                 guest_handle_cast(buf, uint8_t), &len,
                                  iovs, niov);
         if (ret == -EAGAIN) {
             /* Schedule a notification when space is there */
@@ -1794,7 +1799,7 @@ v4v_send(struct domain *src_d, v4v_addr_t *src_addr,
         }
         spin_unlock(&ring_info->lock);
 
-        if (ret >= 0)
+        if (!ret)
             v4v_signal_domain(dst_d);
     } while (0);
     read_unlock(&dst_d->v4v->lock);
@@ -1803,7 +1808,7 @@ v4v_send(struct domain *src_d, v4v_addr_t *src_addr,
     if (dst_d)
         put_domain(dst_d);
     read_unlock(&v4v_lock);
-    return ret;
+    return ret ? : len;
 }
 
 
