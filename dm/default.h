@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -9,8 +9,7 @@
 
 #define DM_DEFAULT_CONFIG "                     \
 {                                               \
-  \"boot-order\" : \"cd\",                      \
-  \"vga-memory\" : 32                           \
+  \"boot-order\" : \"cd\"                       \
 }                                               \
 "
 
