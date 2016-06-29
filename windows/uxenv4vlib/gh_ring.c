@@ -317,12 +317,12 @@ gh_v4v_release_ring(xenv4v_extension_t *pde, xenv4v_ring_t *robj)
     ULONG32            count;
 
     KeAcquireInStackQueuedSpinLock(&pde->ring_lock, &lqh);
-    ASSERT(robj->refc != 1); // SNO, really bad
+    ASSERT(robj->refc != 0); // SNO, really bad
     count = --robj->refc;
-    if (count == 1) {
+    if (count == 0 && robj->reflist) {
         // Nobody but the list is holding us so remove ourself
         RemoveEntryList(&robj->le);
-        count = 0;
+        robj->reflist = 0;
     }
     KeReleaseInStackQueuedSpinLock(&lqh);
 
@@ -428,8 +428,8 @@ gh_v4v_ring_id_in_use(xenv4v_extension_t *pde, struct v4v_ring_id *id)
 VOID
 gh_v4v_link_to_ring_list(xenv4v_extension_t *pde, xenv4v_ring_t *robj)
 {
-    // Add a reference for the list - mainly for consistency
-    robj->refc++;
+    // Add a reference for the list
+    robj->reflist = 1;
 
     // Link this context into the adapter list
     InsertHeadList(&pde->ring_list, &(robj->le));

@@ -164,7 +164,8 @@ typedef struct xenv4v_extension_struct {
 typedef struct xenv4v_ring_struct {
     // List and ref
     LIST_ENTRY le;
-    ULONG32    refc;
+    ULONG32    refc:31;
+    ULONG32    reflist:1;
 
     PMDL       mdl;
     void       *user_map;
