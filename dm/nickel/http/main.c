@@ -1775,7 +1775,7 @@ static int cx_hp_connect(struct clt_ctx *cx, bool *connect_now)
     LIST_FOREACH(hp, &http_list, entry) {
         n_all++;
         if (hp->proxy != cx->proxy ||
-            (hp->flags & (HF_HTTP_CLOSE | HF_TLS | HF_BINARY_STREAM | HF_TUNNEL))) {
+            (hp->flags & (HF_HTTP_CLOSE | HF_TLS | HF_BINARY_STREAM | HF_TUNNEL | HF_PINNED))) {
 
             continue;
         }
@@ -1859,7 +1859,7 @@ static void proxy_connect_cx_next(struct proxy_t *proxy)
     PRXL5("WLIST NOT EMPTY N %d", proxy_number_waiting(proxy));
     LIST_FOREACH(hp, &http_list, entry) {
         if (hp->proxy != proxy ||
-            (hp->flags & (HF_HTTP_CLOSE | HF_TLS | HF_BINARY_STREAM | HF_TUNNEL))) {
+            (hp->flags & (HF_HTTP_CLOSE | HF_TLS | HF_BINARY_STREAM | HF_TUNNEL | HF_PINNED))) {
 
             continue;
         }
@@ -3112,6 +3112,10 @@ static int hp_srv_process(struct http_ctx *hp)
 
                hp->cx->flags &= ~CXF_HEAD_REQUEST_SENT;
                resp_complete = true;
+               if (hp->cx->srv_parser->h.status_code >= 100 && hp->cx->srv_parser->h.status_code < 200) {
+                   hp->flags &= ((~HF_REUSABLE) & (~HF_REUSE_READY));
+                   hp->flags |= HF_PINNED;
+               }
                hp->cx->srv_parser->parse_state = PS_MCOMPLETE;
                HLOG5("NO BODY resp_complete");
         }
