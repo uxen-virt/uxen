@@ -1104,8 +1104,13 @@ static int swap_open(BlockDriverState *bs, const char *filename, int flags)
      * filled out by swap_read_header(). */
     s->fallbacks[0] = swapdata;
 
-    for (i = 0; i < s->num_fallbacks; ++i) {
-        debug_printf("swap: fallback %d %s\n", i, s->fallbacks[i]);
+    debug_printf("swap: swapdata at %s\n", swapdata);
+    for (i = 1; i < s->num_fallbacks; ++i) {
+        const char *fb = s->fallbacks[i];
+        debug_printf("swap: fallback %d %s\n", i, fb);
+        if (!file_exists(fb)) {
+            errx(1, "swap: fallback %s does not exist!", fb);
+        }
     }
 
     if (dubtree_init(&s->t, s->fallbacks, swap_malloc, swap_free, s) != 0) {
