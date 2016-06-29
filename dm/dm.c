@@ -93,6 +93,7 @@ uint64_t vm_v4v_storage = 1;
 uint64_t vm_v4v_disable_ahci_clones = 1;
 uint64_t vm_vram_dirty_tracking = 1;
 uint8_t v4v_idtoken[16] = { };
+uint8_t v4v_idtoken_is_vm_uuid = 1;
 const char *vmsavefile_on_crash = NULL;
 const char *vmsavefile_on_restricted_pci = NULL;
 uint64_t guest_drivers_logmask = 0x2; /* Include LogRel, not Log */
@@ -244,6 +245,7 @@ main(int argc, char **argv)
 {
     char *vm_window_str;
     char *dom_id_str;
+    char *v4v_idtoken_str;
     int i;
     int ret;
 
@@ -391,9 +393,16 @@ main(int argc, char **argv)
     if (ret <= 0)
         err(1, "asprintf dom_id_str failed");
 
-    control_send_status("vm-runstate", "running", "hwnd", vm_window_str, "dom-id", dom_id_str, NULL);
+    ret = asprintf(&v4v_idtoken_str, "%"PRIuuid, PRIuuid_arg(v4v_idtoken));
+    if (ret <= 0)
+        err(1, "asprintf v4v_idtoken_str failed");
+
+    control_send_status("vm-runstate", "running", "hwnd", vm_window_str,
+                        "v4v-idtoken", v4v_idtoken_str, "dom-id", dom_id_str,
+                        NULL);
     free(vm_window_str);
     free(dom_id_str);
+    free(v4v_idtoken_str);
 
     while (1) {
 	int timeout;

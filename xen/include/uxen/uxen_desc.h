@@ -52,6 +52,7 @@ struct uxen_hypercall_desc {
 
 struct uxen_createvm_desc {
     xen_domain_handle_t ucd_vmuuid; /* uuid of the guest to target */
+    xen_domain_handle_t ucd_v4v_token; /* v4v token */
     uint32_t ucd_create_flags;      /* xc_domain_create flags */
     uint32_t ucd_create_ssidref;    /* xc_domain_create ssidref */
     uint32_t ucd_max_vcpus;         /* xc_domain_max_vcpus max */

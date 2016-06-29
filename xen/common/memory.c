@@ -870,7 +870,7 @@ long do_memory_op(unsigned long cmd, XEN_GUEST_HANDLE(void) arg)
         if (copy_from_guest(&cloneinfo, arg, 1))
             return -EFAULT;
 
-        pd = rcu_lock_domain_by_uuid(cloneinfo.parentuuid);
+        pd = rcu_lock_domain_by_uuid(cloneinfo.parentuuid, UUID_HANDLE);
         if (pd == NULL)
             return -ESRCH;
         if (pd->is_dying) {

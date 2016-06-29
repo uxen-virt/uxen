@@ -466,6 +466,7 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
     }
     break;
 
+#ifndef __UXEN__
     case XEN_DOMCTL_createdomain:
     {
         struct domain *d = NULL;
@@ -490,6 +491,7 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
         rcu_unlock_domain(d);
     }
     break;
+#endif  /* __UXEN__ */
 
     case XEN_DOMCTL_max_vcpus:
     {
@@ -771,7 +773,8 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
         spin_lock(&domlist_update_lock);
 
         /* check if requested handle is already used */
-        d_uuid = rcu_lock_domain_by_uuid(op->u.setdomainhandle.handle);
+        d_uuid = rcu_lock_domain_by_uuid(op->u.setdomainhandle.handle,
+                                         UUID_HANDLE);
         if (d_uuid) {
             ret = (d_uuid == d) ? 0 : -EEXIST;
             spin_unlock(&domlist_update_lock);

@@ -292,6 +292,7 @@ uxen_hypercall(UXEN_HANDLE_T h, struct uxen_hypercall_desc *uhd)
 
 int
 uxen_create_vm(UXEN_HANDLE_T h, xen_domain_handle_t vm_uuid,
+               xen_domain_handle_t v4v_token,
                uint32_t create_flags, uint32_t create_ssidref,
                uint32_t max_vcpus, uint32_t *domid)
 {
@@ -309,6 +310,7 @@ uxen_create_vm(UXEN_HANDLE_T h, xen_domain_handle_t vm_uuid,
 #endif
 
     memcpy(ucd.ucd_vmuuid, vm_uuid, sizeof(xen_domain_handle_t));
+    memcpy(ucd.ucd_v4v_token, v4v_token, sizeof(xen_domain_handle_t));
     ucd.ucd_create_flags = create_flags;
     ucd.ucd_create_ssidref = create_ssidref;
     ucd.ucd_max_vcpus = max_vcpus;

@@ -150,7 +150,7 @@ do_lookup_vm(xen_domain_handle_t vm_uuid)
 {
     struct domain *d;
 
-    d = rcu_lock_domain_by_uuid(vm_uuid);
+    d = rcu_lock_domain_by_uuid(vm_uuid, UUID_HANDLE);
     if (d)
         rcu_unlock_domain(d);
 
@@ -196,7 +196,7 @@ do_setup_vm(struct uxen_createvm_desc *ucd, struct vm_info_shared *vmi,
     }
 
     ret = domain_create(ucd->ucd_domid, domcr_flags, ucd->ucd_create_ssidref,
-                        ucd->ucd_vmuuid, &d);
+                        ucd->ucd_vmuuid, ucd->ucd_v4v_token, &d);
     if (ret) {
         domctl_lock_release();
         goto out;
@@ -553,7 +553,7 @@ do_destroy_vm(xen_domain_handle_t vm_uuid)
     struct vcpu *v;
     int ret = -ENOENT;
 
-    d = rcu_lock_domain_by_uuid(vm_uuid);
+    d = rcu_lock_domain_by_uuid(vm_uuid, UUID_HANDLE);
     if (d == NULL)
         goto out;
 

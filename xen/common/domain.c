@@ -498,7 +498,8 @@ static inline int is_free_domid(domid_t dom)
 
 int
 domain_create(domid_t dom, unsigned int flags, uint32_t ssidref,
-              xen_domain_handle_t uuid, struct domain **_d)
+              xen_domain_handle_t uuid, xen_domain_handle_t v4v_token,
+              struct domain **_d)
 {
     struct domain *d, *d_uuid;
     static domid_t rover = 0;
@@ -530,9 +531,17 @@ domain_create(domid_t dom, unsigned int flags, uint32_t ssidref,
     spin_lock(&domlist_update_lock);
 
     /* check if requested handle is already used */
-    d_uuid = rcu_lock_domain_by_uuid(uuid);
+    d_uuid = rcu_lock_domain_by_uuid(uuid, UUID_HANDLE);
     if (d_uuid) {
         printk("vm%u: %" PRIuuid " handle already in use\n",
+               dom, PRIuuid_arg(uuid));
+        spin_unlock(&domlist_update_lock);
+        rcu_unlock_domain(d_uuid);
+        return -EEXIST;
+    }
+    d_uuid = rcu_lock_domain_by_uuid(uuid, UUID_V4V_TOKEN);
+    if (d_uuid) {
+        printk("vm%u: %" PRIuuid " v4v token already in use\n",
                dom, PRIuuid_arg(uuid));
         spin_unlock(&domlist_update_lock);
         rcu_unlock_domain(d_uuid);
@@ -541,6 +550,7 @@ domain_create(domid_t dom, unsigned int flags, uint32_t ssidref,
 
     rcu_lock_domain(d);
 
+    atomic_write_domain_handle(&d->v4v_token_atomic, (uint128_t *)v4v_token);
     atomic_write_domain_handle(&d->handle_atomic, (uint128_t *)uuid);
 
     spin_unlock(&domlist_update_lock);
@@ -749,7 +759,8 @@ int rcu_lock_remote_target_domain_by_id(domid_t dom, struct domain **d)
     return 0;
 }
 
-struct domain *rcu_lock_domain_by_uuid(xen_domain_handle_t uuid)
+struct domain *rcu_lock_domain_by_uuid(xen_domain_handle_t uuid,
+                                       enum uuid_type uuid_type)
 {
     struct domain *d = NULL;
     uint128_t d_uuid;
@@ -760,7 +771,16 @@ struct domain *rcu_lock_domain_by_uuid(xen_domain_handle_t uuid)
           d != NULL;
           d = rcu_dereference(d->next_in_list) )
     {
-        atomic_read_domain_handle(&d->handle_atomic, &d_uuid);
+        switch (uuid_type) {
+        case UUID_HANDLE:
+            atomic_read_domain_handle(&d->handle_atomic, &d_uuid);
+            break;
+        case UUID_V4V_TOKEN:
+            atomic_read_domain_handle(&d->v4v_token_atomic, &d_uuid);
+            break;
+        default:
+            continue;
+        }
         if ( uint128_t_equal((uint128_t *)uuid, &d_uuid) )
         {
             rcu_lock_domain(d);
@@ -777,7 +797,7 @@ struct domain *rcu_lock_domain_by_uuid(xen_domain_handle_t uuid)
 int rcu_lock_target_domain_by_uuid(xen_domain_handle_t uuid, struct domain **d)
 {
 
-    if ( (*d = rcu_lock_domain_by_uuid(uuid)) == NULL )
+    if ( (*d = rcu_lock_domain_by_uuid(uuid, UUID_HANDLE)) == NULL )
         return -ESRCH;
 
     if ( !IS_PRIV_FOR(current->domain, *d) )

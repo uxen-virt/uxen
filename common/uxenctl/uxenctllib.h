@@ -60,7 +60,7 @@ int uxen_hypercall(UXEN_HANDLE_T, struct uxen_hypercall_desc *);
 #ifdef _WIN32
 int uxen_processexit_helper(UXEN_HANDLE_T);
 #endif
-int uxen_create_vm(UXEN_HANDLE_T, xen_domain_handle_t,
+int uxen_create_vm(UXEN_HANDLE_T, xen_domain_handle_t, xen_domain_handle_t,
                    uint32_t, uint32_t, uint32_t, uint32_t *);
 void *uxen_malloc(UXEN_HANDLE_T, uint32_t);
 int uxen_free(UXEN_HANDLE_T, void *, uint32_t);

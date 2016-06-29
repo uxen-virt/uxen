@@ -820,7 +820,7 @@ v4v_resolve_token(domid_t *id, uint32_t *port, v4v_idtoken_t *token)
 
     ASSERT(token);
 
-    partner = rcu_lock_domain_by_uuid(token->o);
+    partner = rcu_lock_domain_by_uuid(token->o, UUID_V4V_TOKEN);
     if (!partner)
         return -ENOENT;
     *id = partner->domain_id;

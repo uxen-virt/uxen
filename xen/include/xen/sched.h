@@ -497,6 +497,11 @@ struct domain
 
     rwlock_t v4v_lock;
     struct v4v_domain *v4v;
+    /* v4v access control token */
+    union {
+        xen_domain_handle_t _v4v_token;
+        atomic_domain_handle_t v4v_token_atomic;
+    };
 
     u64 start_time;
 
@@ -577,7 +582,8 @@ void domain_update_node_affinity(struct domain *d);
 
 int
 domain_create(domid_t dom, unsigned int flags, uint32_t ssidref,
-              xen_domain_handle_t uuid, struct domain **_d);
+              xen_domain_handle_t uuid, xen_domain_handle_t v4v_token,
+              struct domain **_d);
 struct domain *domain_create_internal(
     domid_t domid, unsigned int domcr_flags, uint32_t ssidref);
  /* DOMCRF_hvm: Create an HVM domain, as opposed to a PV domain. */
@@ -630,7 +636,13 @@ int rcu_lock_target_domain_by_id(domid_t dom, struct domain **d);
  */
 int rcu_lock_remote_target_domain_by_id(domid_t dom, struct domain **d);
 
-struct domain *rcu_lock_domain_by_uuid(xen_domain_handle_t uuid);
+enum uuid_type {
+    UUID_HANDLE,
+    UUID_V4V_TOKEN
+};
+
+struct domain *rcu_lock_domain_by_uuid(xen_domain_handle_t uuid,
+                                       enum uuid_type);
 int rcu_lock_target_domain_by_uuid(xen_domain_handle_t uuid, struct domain **d);
 
 /* Finish a RCU critical region started by rcu_lock_domain_by_id(). */

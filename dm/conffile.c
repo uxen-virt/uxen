@@ -30,6 +30,7 @@
 #include "firmware.h"
 #include "lib.h"
 #include "net.h"
+#include "uuidgen.h"
 #include "vm.h"
 
 #include "yajl.h"
@@ -655,6 +656,33 @@ co_set_uuid(const char *opt, yajl_val arg, void *opaque)
 }
 
 static int
+co_set_v4v_idtoken(const char *opt, yajl_val arg, void *opaque)
+{
+    int ret;
+    char *s;
+
+    s = YAJL_GET_STRING(arg);
+    if (!s)
+	errx(1, "config option %s: string", opt);
+
+    if (!strcmp(s, "vm-uuid"))
+        return 0;
+
+    v4v_idtoken_is_vm_uuid = 0;
+
+    if (!strcmp(s, "generated")) {
+        uuid_generate_truly_random(v4v_idtoken);
+        return 0;
+    }
+
+    ret = uuid_parse(s, v4v_idtoken);
+    if (ret)
+      errx(1, "config option %s: invalid v4v idtoken", opt);
+
+    return 0;
+}
+
+static int
 co_set_vm_save(const char *opt, yajl_val arg, void *opaque)
 {
     if (!YAJL_IS_OBJECT(arg))
@@ -752,6 +780,7 @@ struct config_option config_options[] = {
     { "use-v4v-net", co_set_integer_opt, &vm_use_v4v_net },
     { "uuid", co_set_uuid, NULL },
     { "v4v-disable-ahci-clones", co_set_boolean_opt, &vm_v4v_disable_ahci_clones },
+    { "v4v-idtoken", co_set_v4v_idtoken, NULL },
     { "v4v-storage", co_set_boolean_opt, &vm_v4v_storage },
     { "vcpus", co_set_integer_opt, &vm_vcpus },
     { "vga-memory-mapped", co_set_integer_opt, &vm_vga_mb_mapped },
