@@ -1259,13 +1259,6 @@ kernel_alloc_va(uint32_t num)
         return NULL;
     }
 
-    rc = xnu_vm_map_wire(xnu_kernel_map(), addr, addr + (num << PAGE_SHIFT),
-                         VM_PROT_DEFAULT, 0);
-    if (rc != KERN_SUCCESS) {
-        vm_deallocate(xnu_kernel_map(), addr, num << PAGE_SHIFT);
-        fail_msg("vm_map_wire failed");
-        return NULL;
-    }
     return (void *)addr;
 }
 
@@ -1273,11 +1266,6 @@ int
 kernel_free_va(void *va, uint32_t num)
 {
     kern_return_t rc;
-
-    rc = xnu_vm_map_unwire(xnu_kernel_map(), (vm_offset_t)va,
-                          ((vm_offset_t)va) + (num << PAGE_SHIFT), 0);
-    if (rc != KERN_SUCCESS)
-        fail_msg("vm_map_unwire failed");
 
     rc = vm_deallocate(xnu_kernel_map(), (vm_offset_t)va, num << PAGE_SHIFT);
     if (rc != KERN_SUCCESS)
