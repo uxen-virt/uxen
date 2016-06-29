@@ -387,7 +387,7 @@ uxen_v4v_storage_device::start(IOService *provider)
     }
     
     this->max_write_size = max_write_payload_size_for_device(
-        this->v4v_service, this->deviceIndex) >> 2;
+        this->v4v_service, this->deviceIndex);
     if (this->max_write_size == 0) {
         this->detach(this->v4v_service);
         return false;
