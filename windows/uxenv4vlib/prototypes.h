@@ -87,10 +87,7 @@ NTSTATUS gh_create_device(PDRIVER_OBJECT driver_object);
 
 /* hypercall.c */
 int uxen_v4v_can_make_hypercall(void);
-void *uxen_v4v_hypercall1(void *arg1);
-void *uxen_v4v_hypercall2(void *arg1, void *arg2);
-void *uxen_v4v_hypercall3(void *arg1, void *arg2, void *arg3);
-void *uxen_v4v_hypercall6(void *arg1, void *arg2, void *arg3, void *arg4, void *arg5, void *arg6);
+void *uxen_v4v_hypercall(void *arg1, void *arg2, void *arg3, void *arg4, void *arg5, void *arg6);
 
 /* main.c */
 NTSTATUS DllInitialize(PUNICODE_STRING RegistryPath);
@@ -131,7 +128,7 @@ void uxen_v4v_send_read_callbacks(xenv4v_extension_t *pde);
 NTSTATUS uxen_v4v_mapring(xenv4v_ring_t *robj, v4v_mapring_values_t *mr);
 
 /* shared.c */
-extern uxen_v4vlib_hypercall_func_t *hypercall_6_func;
+extern uxen_v4vlib_hypercall_func_t *hypercall_func;
 extern uxen_v4vlib_page_notify_func_t *page_notify_func;
 extern struct uxp_state_bar **state_bar_ptr;
 extern xenv4v_extension_t *uxen_v4v_pde;

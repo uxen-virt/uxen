@@ -56,7 +56,7 @@ gh_v4v_hypercall(unsigned int cmd, void *arg2, void *arg3, void *arg4,
                  ULONG32 arg5, ULONG32 arg6)
 {
 
-    return (int)(uintptr_t)uxen_v4v_hypercall6(
+    return (int)(uintptr_t)uxen_v4v_hypercall(
         (void *)(uintptr_t)cmd, arg2, arg3, arg4,
         (void *)(uintptr_t)arg5, (void *)(uintptr_t)arg6);
 }

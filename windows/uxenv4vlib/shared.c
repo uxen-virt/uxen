@@ -7,7 +7,7 @@
 
 #pragma data_seg(".shared")
 
-uxen_v4vlib_hypercall_func_t *hypercall_6_func;
+uxen_v4vlib_hypercall_func_t *hypercall_func;
 uxen_v4vlib_page_notify_func_t *page_notify_func;
 
 struct uxp_state_bar **state_bar_ptr;

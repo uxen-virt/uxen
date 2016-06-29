@@ -16,7 +16,7 @@ V4V_DLL_EXPORT void uxen_v4vlib_set_state_bar_ptr(struct uxp_state_bar **a)
 V4V_DLL_EXPORT void uxen_v4vlib_set_hypercall_func(uxen_v4vlib_hypercall_func_t *func)
 {
     DbgPrint("uxen_v4v_set_hypercall_func setting func to %p\n", func);
-    hypercall_6_func = func;
+    hypercall_func = func;
     check_resume();
 }
 
