@@ -105,6 +105,7 @@ NTSTATUS
 gh_v4v_register_ring(xenv4v_ring_t *robj)
 {
     int err;
+    NTSTATUS status = STATUS_SUCCESS;
 
     if (v4v_call_page_notify(robj->pfn_list->pages, robj->pfn_list->npage, 1)) {
         uxen_v4v_err("v4v_call_page_notify (vm%u:%x vm%u) failed",
@@ -113,21 +114,26 @@ gh_v4v_register_ring(xenv4v_ring_t *robj)
         return STATUS_UNSUCCESSFUL;
     }
 
-    err = gh_v4v_hypercall(V4VOP_register_ring, robj->ring, robj->pfn_list, 0, 0, 0);
-
+    robj->registered = FALSE;
+    err = gh_v4v_hypercall(V4VOP_register_ring, robj->ring, robj->pfn_list,
+                           0, 0, 0);
     if (err == -ENOSYS) {
-        /* Special case - say it all worked and we'll sort it out later when the platform device actually loads and the resume notify fires */
-        return STATUS_SUCCESS;
-    }
-    if (err != 0) {
+        /* Special case - say it all worked and we'll sort it out
+         * later when the platform device actually loads and the
+         * resume notify fires.  No need to undo v4v_call_page_notify,
+         * since it was a no-op */
+        /* status = STATUS_SUCCESS; */
+    } else if (err != 0) {
         uxen_v4v_err("V4VOP_register_ring (vm%u:%x vm%u) failed err %d",
                      robj->ring->id.addr.domain, robj->ring->id.addr.port,
                      robj->ring->id.partner, err);
-        return STATUS_UNSUCCESSFUL;
-    }
+        status = STATUS_UNSUCCESSFUL;
+    } else
+        robj->registered = TRUE;
 
-
-    return STATUS_SUCCESS;
+    if (!robj->registered)
+        v4v_call_page_notify(robj->pfn_list->pages, robj->pfn_list->npage, 0);
+    return status;
 }
 
 NTSTATUS
