@@ -62,12 +62,14 @@ struct SCSITaskIdentifier_rb_entry
 {
     RB_ENTRY(SCSITaskIdentifier_rb_entry) entry;
     SCSITaskIdentifier task;
+    uint64_t task_id;
     /* The following fields are protected by the device's task lock. If
      * received_response is true before submitted becomes true, then the
      * submitting thread needs to call the completion fn. (and the
      * response-receiving thread must not) */
     bool submitted;
     bool received_response;
+    bool resend;
     SCSITaskStatus response_status;
 };
 RB_HEAD(SCSITaskIdentifier_rb_head, SCSITaskIdentifier_rb_entry);
@@ -94,9 +96,12 @@ protected:
      * V4V ring size. */
     uint32_t max_write_size;
     
+    // For sequential numbering of tasks
+    int64_t next_task_id;
+
     IOSimpleLock *live_tasks_lock;
     SCSITaskIdentifier_rb_head live_tasks;
-        
+    bool resendDataAvailable;
 public:
     virtual bool start(IOService *provider) override;
     virtual void stop(IOService *provider) override;
@@ -120,6 +125,11 @@ public:
         OSObject *owner, void *arg0, void *arg1, void *arg2, void *arg3);
     virtual void free(void) override;
     virtual IOWorkLoop *getWorkLoop() const override;
+    bool SendTheSCSICommand(
+        SCSITaskIdentifier_rb_entry *resend_task,
+        SCSITaskIdentifier request,
+        ssize_t *total_bytes_sent,
+        SCSITaskIdentifier_rb_entry **out_tree_entry);
 };
 
 #endif

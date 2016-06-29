@@ -45,14 +45,13 @@ static int
 SCSITaskIdentifier_rb_entry_compare(struct SCSITaskIdentifier_rb_entry* a,
     struct SCSITaskIdentifier_rb_entry* b)
 {
-    uintptr_t val_a;
-    uintptr_t val_b;
+    int64_t a_id, b_id;
     
-	val_a = reinterpret_cast<uintptr_t>(static_cast<void*>(a->task));
-	val_b = reinterpret_cast<uintptr_t>(static_cast<void*>(b->task));
-    if (val_a == val_b)
+    a_id = a->task_id;
+    b_id = b->task_id;
+    if (a_id == b_id)
         return 0;
-    else if (val_a < val_b)
+    else if (a_id < b_id)
         return 1;
     else
         return -1;
@@ -506,9 +505,11 @@ task_rb_entry_free(SCSITaskIdentifier_rb_entry *e)
 }
 
 bool
-uxen_v4v_storage_device::SendSCSICommand(
-    SCSITaskIdentifier request,
-    SCSIServiceResponse *serviceResponse, SCSITaskStatus *taskStatus)
+uxen_v4v_storage_device::SendTheSCSICommand(
+    SCSITaskIdentifier_rb_entry * const resend_task,
+    SCSITaskIdentifier const request,
+    ssize_t* const total_bytes_sent,
+    SCSITaskIdentifier_rb_entry ** const out_tree_entry)
 {
     SCSITaskIdentifier_rb_entry *tree_entry;
     uint8_t dataDir;
@@ -522,7 +523,7 @@ uxen_v4v_storage_device::SendSCSICommand(
     UInt64 dataLength;
     UInt64 dataOffset;
     ssize_t bytes_sent;
-    bool already_responded;
+    uint32_t cdb_size;
     
     struct
     {
@@ -535,21 +536,25 @@ uxen_v4v_storage_device::SendSCSICommand(
             " failed\n");
         return false;
     }
-    uint32_t cdb_size = GetCommandDescriptorBlockSize(request);
-    
-    tree_entry = task_rb_entry_alloc();
-    if (tree_entry == nullptr)
-        return false;
+    cdb_size = GetCommandDescriptorBlockSize(request);
+
+    if (resend_task == nullptr) {
+        tree_entry = task_rb_entry_alloc();
+        if (tree_entry == nullptr)
+            return false;
+        tree_entry->task_id = OSIncrementAtomic64(&this->next_task_id);
+        tree_entry->received_response = false;
+        tree_entry->resend = false;
+        *out_tree_entry = tree_entry;
+    } else {
+        tree_entry = resend_task;
+    }
     tree_entry->submitted = false;
-    tree_entry->received_response = false;
-    
-    msg.header.seq = reinterpret_cast<uintptr_t>(request);
+
+    msg.header.seq = tree_entry->task_id;
     msg.header.cdb_size = cdb_size;
     dataDir = GetDataTransferDirection(request);
-    writeData = false;
-    if( dataDir == kSCSIDataTransfer_FromInitiatorToTarget) {
-        writeData = true;
-    }
+    writeData = (dataDir == kSCSIDataTransfer_FromInitiatorToTarget);
     
     if (writeData) {
         msg.header.write_size = static_cast<uint32_t>
@@ -619,18 +624,20 @@ uxen_v4v_storage_device::SendSCSICommand(
          * passed to the device if no payload data is being written. */
         tree_entry->submitted = true;
     }
-    
-    tree_entry->task = request;
-    IOSimpleLockLock(this->live_tasks_lock);
-    RB_INSERT(SCSITaskIdentifier_rb_head, &this->live_tasks, tree_entry);
-    IOSimpleLockUnlock(this->live_tasks_lock);
-    
+    if (!resend_task) {
+        tree_entry->task = request;
+        IOSimpleLockLock(this->live_tasks_lock);
+        RB_INSERT(SCSITaskIdentifier_rb_head, &this->live_tasks, tree_entry);
+        IOSimpleLockUnlock(this->live_tasks_lock);
+    }
     bytes_sent = this->v4v_service->sendvOnRing(
         this->v4v_ring,
         v4v_addr_t({ .domain = UXENSTOR_DEST_DOMAIN,
             .port = UXENSTOR_DEST_PORT + this->deviceIndex }),
         buffer,
         num_bufs);
+    *total_bytes_sent = bytes_sent;
+
     if (bytes_sent == -EFAULT && copy == nullptr) {
         /* Hypercall did not like pointer we gave it. Try again with a copy 
          * of the data. */
@@ -659,13 +666,42 @@ uxen_v4v_storage_device::SendSCSICommand(
     OSSafeReleaseNULL(mmap);
     
     if (bytes_sent > 0) {
+        if (writeData && bytes_sent > buffer[0].iov_len) {
+            this->SetRealizedDataTransferCount(request,
+                bytes_sent - buffer[0].iov_len);
+        }
+    } else {
+        kprintf("uxen_v4v_storage_device::SendSCSICommand: error %ld while"
+            "sending %llu + %llu byte request\n",
+            bytes_sent, buffer[0].iov_len, writeData ? buffer[1].iov_len : 0);
+        IOLog("uxen_v4v_storage_device::SendSCSICommand: error %ld while sending"
+            " %llu + %llu byte request\n",
+            bytes_sent, buffer[0].iov_len, writeData ? buffer[1].iov_len : 0);
+    }
+
+    return true;
+}
+
+bool
+uxen_v4v_storage_device::SendSCSICommand(
+    SCSITaskIdentifier request,
+    SCSIServiceResponse *serviceResponse, SCSITaskStatus *taskStatus)
+{
+    ssize_t bytes_sent;
+    SCSITaskIdentifier_rb_entry *tree_entry;
+    bool already_responded, ok;
+    bool is_write;
+
+    is_write = (GetDataTransferDirection(request) == kSCSIDataTransfer_FromInitiatorToTarget);
+    ok = this->SendTheSCSICommand(nullptr, request, &bytes_sent, &tree_entry);
+    if (!ok)
+        return false;
+
+    if (bytes_sent > 0) {
         *serviceResponse = kSCSIServiceResponse_Request_In_Process;
         *taskStatus = kSCSITaskStatus_GOOD;
-        if (writeData) {
-            if (bytes_sent > buffer[0].iov_len)
-                this->SetRealizedDataTransferCount(request,
-                    bytes_sent - buffer[0].iov_len);
-            
+
+        if (is_write) {
             IOSimpleLockLock(this->live_tasks_lock);
             tree_entry->submitted = true;
             already_responded = tree_entry->received_response;
@@ -688,19 +724,12 @@ uxen_v4v_storage_device::SendSCSICommand(
             //not enough space
             return false;
         } else {
-            kprintf("uxen_v4v_storage_device::SendSCSICommand: error %ld while"
-                "sending %llu + %llu byte request\n",
-                bytes_sent, buffer[0].iov_len, writeData ? buffer[1].iov_len : 0);
-            IOLog("uxen_v4v_storage_device::SendSCSICommand: error %ld while sending"
-                " %llu + %llu byte request\n",
-                bytes_sent, buffer[0].iov_len, writeData ? buffer[1].iov_len : 0);
             *serviceResponse = kSCSIServiceResponse_SERVICE_DELIVERY_OR_TARGET_FAILURE;
             *taskStatus = kSCSITaskStatus_DeliveryFailure;
             return true;
         }
     }
 }
-
 
 SCSIServiceResponse
 uxen_v4v_storage_device::AbortSCSICommand (SCSITaskIdentifier request)
@@ -791,7 +820,7 @@ find_and_remove_task(IOSimpleLock *lock, SCSITaskIdentifier_rb_head* task_tree,
     SCSITaskIdentifier_rb_entry *found;
     SCSITaskIdentifier_rb_entry find;
 
-    find = {{}, static_cast<SCSITaskIdentifier>(reinterpret_cast<void*>(seq)) };
+    find = { .task_id = seq };
     IOSimpleLockLock(lock);
     found = RB_FIND(SCSITaskIdentifier_rb_head, task_tree, &find);
     if (found != nullptr)
@@ -815,7 +844,11 @@ uxen_v4v_storage_device::processCompletedRequests(bool resetRing)
     size_t actual_payload_size;
     SCSI_Sense_Data senseData;
     size_t actual_sense_size;
-    bool complete;
+    bool complete, ok;
+    bool already_responded;
+    ssize_t bytes_sent;
+    void *dataAddress;
+    SCSITaskIdentifier_rb_entry *resend_task;
 
     if (this->v4v_ring == nullptr)
         return;
@@ -863,7 +896,7 @@ uxen_v4v_storage_device::processCompletedRequests(bool resetRing)
             actual_payload_size = min(min(header.read_size, dataLength),
                 messageSize - sizeof(header));
             if (mmap != nullptr) {
-                void* dataAddress = reinterpret_cast<void*>(mmap->getAddress());
+                dataAddress = reinterpret_cast<void*>(mmap->getAddress());
                 v4v_copy_out_offset(
                     this->v4v_ring->ring,
                     nullptr, nullptr,
@@ -927,6 +960,61 @@ uxen_v4v_storage_device::processCompletedRequests(bool resetRing)
                 "Requesting thread not finished yet.\n");
         } */
     }
+
+    if (resetRing) {
+        IOSimpleLockLock(this->live_tasks_lock);
+        RB_FOREACH(task_entry, SCSITaskIdentifier_rb_head, &this->live_tasks)
+        {
+            task_entry->resend = true;
+            resendDataAvailable = true;
+        }
+        IOSimpleLockUnlock(this->live_tasks_lock);
+    }
+
+    while (this->resendDataAvailable) {
+        resend_task = nullptr;
+
+        IOSimpleLockLock(this->live_tasks_lock);
+        RB_FOREACH(task_entry, SCSITaskIdentifier_rb_head, &this->live_tasks)
+        {
+            if(task_entry->resend) {
+                resend_task = task_entry;
+                break;
+            }
+        }
+        IOSimpleLockUnlock(this->live_tasks_lock);
+        if (resend_task == nullptr) {
+            this->resendDataAvailable = false;
+            break;
+        } else {
+            bytes_sent = 0;
+            ok = this->SendTheSCSICommand(resend_task, resend_task->task, &bytes_sent, nullptr);
+            if (ok && bytes_sent > 0) {
+                IOSimpleLockLock(this->live_tasks_lock);
+                resend_task->submitted = true;
+                resend_task->resend = false;
+                already_responded = resend_task->received_response;
+                IOSimpleLockUnlock(this->live_tasks_lock);
+
+                assert(!already_responded); // shouldn't happen, as we're on the work loop
+            } else if (ok && bytes_sent == -EAGAIN) {
+                // retry on next interrupt
+                break;
+            } else {
+                // Some other error, cancel the command altogether
+                IOSimpleLockLock(this->live_tasks_lock);
+                RB_REMOVE(SCSITaskIdentifier_rb_head, &this->live_tasks, resend_task);
+                IOSimpleLockUnlock(this->live_tasks_lock);
+                this->SetRealizedDataTransferCount(resend_task->task, 0);
+                CommandCompleted(
+                    resend_task->task,
+                    kSCSIServiceResponse_SERVICE_DELIVERY_OR_TARGET_FAILURE,
+                    kSCSITaskStatus_DeliveryFailure);
+                task_rb_entry_free(resend_task);
+            }
+        }
+    }
+
     if (a_message_received) {
         this->v4v_service->notify();
     }
