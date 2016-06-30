@@ -1068,12 +1068,9 @@ uint32_t pci_default_read_config(PCIDevice *d,
 {
     uint32_t val = 0;
 
-    if (vm_restricted_pci_emul) {
-	debug_printf("blocked pci read on dev %s addr %x len %d\n",
+    if (vm_restricted_pci_emul)
+        debug_printf("pci read on dev %s addr %x len %d\n",
                      d->name, address, len);
-	restricted_emul_vmsave();
-	return ~0;
-    }
 
     memcpy(&val, d->config + address, len);
     return le32_to_cpu(val);
