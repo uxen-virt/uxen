@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -9,5 +9,7 @@
 
 void session_connect(DWORD session_id);
 void session_disconnect(DWORD session_id);
+
+extern CRITICAL_SECTION session_lock;
 
 #endif /* SESSION_H_ */

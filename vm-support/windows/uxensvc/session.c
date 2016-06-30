@@ -17,6 +17,8 @@
 
 extern wchar_t *svc_path;
 
+CRITICAL_SECTION session_lock;
+
 /* This struct seems to be missing from headers */
 typedef struct _TOKEN_MANDATORY_LABEL {
       SID_AND_ATTRIBUTES Label;
@@ -226,15 +228,39 @@ create_admin_process(DWORD session_id, wchar_t *command_line, wchar_t *path)
     return ret;
 }
 
+static DWORD WINAPI
+session_connect_worker(LPVOID param)
+{
+    DWORD session_id = (DWORD) (uintptr_t)param;
+    wchar_t *path;
+    wchar_t *command_line;
+    int i;
+    const int max_tries = 6;
 
-void
-session_connect(DWORD session_id)
+    EnterCriticalSection(&session_lock);
+    path = get_uxenevent_path();
+    command_line = get_uxenevent_commandline(path);
+    create_admin_process(session_id, command_line, path);
+    free(command_line);
+    command_line = get_uxenclipboard_commandline(path);
+    for (i = 0; i < max_tries; ++i) {
+        if (!create_user_process(session_id, command_line, path))
+            break;
+        Sleep(500);
+    }
+    free(command_line);
+    free(path);
+    LeaveCriticalSection(&session_lock);
+
+    return 0;
+}
+
+void session_connect(DWORD session_id)
 {
     BOOL rc;
     USHORT *session_type;
     DWORD len = sizeof (session_type);
-    wchar_t *path;
-    wchar_t *command_line;
+    HANDLE th;
 
     if (session_id == 0) {
         svc_printf(SVC_ERROR, L"Session 0, we want to wait for user to login.");
@@ -255,14 +281,14 @@ session_connect(DWORD session_id)
     if (*session_type != 0) /* not console */
         return;
 
-    path = get_uxenevent_path();
-    command_line = get_uxenevent_commandline(path);
-    create_admin_process(session_id, command_line, path);
-    free(command_line);
-    command_line = get_uxenclipboard_commandline(path);
-    create_user_process(session_id, command_line, path);
-    free(command_line);
-    free(path);
+    th = CreateThread(NULL, 0, session_connect_worker,
+                      (LPVOID)(uintptr_t)session_id, 0, NULL);
+    if (!th) {
+        svc_printf(SVC_ERROR, L"Failed to start session connect worker thread (%d)",
+                   GetLastError());
+        return;
+    }
+    CloseHandle(th);
 }
 
 static HANDLE
@@ -326,10 +352,13 @@ process_lookup(DWORD session_id, wchar_t *basename)
     return ret;
 }
 
-void session_disconnect(DWORD session_id)
+static DWORD WINAPI
+session_disconnect_worker(LPVOID param)
 {
+    DWORD session_id = (DWORD) (uintptr_t)param;
     HANDLE proc;
 
+    EnterCriticalSection(&session_lock);
     proc = process_lookup(session_id, L"uxenevent.exe");
     if (proc) {
         TerminateProcess(proc, 1);
@@ -340,5 +369,22 @@ void session_disconnect(DWORD session_id)
         TerminateProcess(proc, 1);
         CloseHandle(proc);
     }
+    LeaveCriticalSection(&session_lock);
+
+    return 0;
+}
+
+void session_disconnect(DWORD session_id)
+{
+    HANDLE th;
+
+    th = CreateThread(NULL, 0, session_disconnect_worker,
+                      (LPVOID)(uintptr_t)session_id, 0, NULL);
+    if (!th) {
+        svc_printf(SVC_ERROR, L"Failed to start session disnect worker thread (%d)",
+                   GetLastError());
+        return;
+    }
+    CloseHandle(th);
 }
 

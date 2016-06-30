@@ -180,8 +180,11 @@ svc_init(DWORD argc, wchar_t **argv)
     platform_update_system_time();
 
     active_session = WTSGetActiveConsoleSessionId();
-    if (active_session && active_session != (DWORD)-1)
+    if (active_session && active_session != (DWORD)-1) {
+        svc_printf(SVC_INFO, L"Active session %d already present",
+                   active_session);
         session_connect(active_session);
+    }
     svc_report_status(SERVICE_RUNNING, NO_ERROR, 0);
 
     while (1) {
@@ -232,6 +235,8 @@ stop:
 static void WINAPI
 svc_main(DWORD argc, wchar_t **argv)
 {
+    InitializeCriticalSection(&session_lock);
+
     svc_status_handle = RegisterServiceCtrlHandlerExW(svc_name,
                                                       svc_ctl_handler,
                                                       NULL);
