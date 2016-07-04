@@ -168,6 +168,13 @@ xnu_get_map_pmap_10_11(vm_map_t map)
     return *(pmap_t *)(map_ptr + 0x50);
 }
 
+static pmap_t
+xnu_get_map_pmap_10_12(vm_map_t map)
+{
+    uintptr_t map_ptr = (uintptr_t)map;
+    return *(pmap_t *)(map_ptr + 0x48);
+}
+
 int
 init_xnu_symbols(void)
 {
@@ -230,6 +237,9 @@ init_xnu_symbols(void)
                 /* fall through */
             case 15: /* OS X 10.11 */
                 xnu_get_map_pmap = xnu_get_map_pmap_10_11;
+                break;
+            case 16: /* OS X 10.12 */
+                xnu_get_map_pmap = xnu_get_map_pmap_10_12;
                 break;
         }
     }
