@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -75,8 +75,8 @@ void *__wrap_realloc(void *ptr, size_t size)
 
 void *__wrap_calloc(size_t nmemb, size_t size)
 {
-    assert_always(nmemb < (1<<31));
-    assert_always(size < (1<<31));
+    assert_always(nmemb < (1ULL<<31));
+    assert_always(size < (1ULL<<31));
     uint64_t product = (uint64_t) nmemb * (uint64_t) size;
     size_t total = sizeof(AllocHeader) + (size_t) product;
     assert_always(total > product); /* In case size_t is 32-bit. */
