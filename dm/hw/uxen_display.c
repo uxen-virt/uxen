@@ -422,7 +422,7 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
             return;
 
         if (w > UXENDISP_XRES_MAX || h > UXENDISP_YRES_MAX ||
-            stride > UXENDISP_STRIDE_MAX)
+            stride > UXENDISP_STRIDE_MAX || stride == 0)
             return;
 
         if (!fmt_valid(fmt))
