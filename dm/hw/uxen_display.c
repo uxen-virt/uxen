@@ -471,7 +471,8 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
                 if ((src + crtc->stride) <= (bank->vram.view + bank->vram.mapped_len) &&
                     (dst + crtc->stride) <= (bank->vram.view + bank->vram.mapped_len)) {
                     memmove(dst, src, crtc->stride);
-                    memset(dst + crtc->stride, 0xff, stride - crtc->stride);
+                    if (stride > crtc->stride)
+                        memset(dst + crtc->stride, 0xff, stride - crtc->stride);
                 }
             }
         }
