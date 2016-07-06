@@ -376,9 +376,9 @@ pending_report_peek(IO_CSQ *csq, IRP *irp, void *ctx)
     if (irp)
         entry = irp->Tail.Overlay.ListEntry.Flink;
     else
-        entry = devext->pending_request_list.Flink;
+        entry = devext->pending_report_list.Flink;
 
-    while (entry != &devext->pending_request_list) {
+    while (entry != &devext->pending_report_list) {
         irp = CONTAINING_RECORD(entry, IRP, Tail.Overlay.ListEntry);
 
         if (!ctx)
