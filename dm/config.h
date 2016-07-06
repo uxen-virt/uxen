@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -52,5 +52,7 @@
 #ifdef MONITOR
 #include "monitor-cmds.h"
 #endif  /* MONITOR */
+
+#include "defensive.h"
 
 #endif	/* _CONFIG_H_ */

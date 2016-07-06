@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -146,5 +146,10 @@
 
 #define BUILD_ASSERT_SIZEOF(s, v)   BUILD_ASSERT(sizeof(s) == (v))
 #define BUILD_ASSERT_SIZEOF_X(s, v) BUILD_ASSERT((sizeof(s) % (v)) == 0)
+
+#define ASSERT_ARG(arg, cond)                                   \
+    (({ typeof((arg)) ARG = (arg);                              \
+            ((cond) ? (ARG) : *(volatile typeof(arg) *)0);      \
+        }))
 
 #endif	/* _COMPILER_H_ */
