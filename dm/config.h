@@ -55,4 +55,8 @@
 
 #include "defensive.h"
 
+#ifdef CONFIG_CHECK_NAME
+uint8_t __CONCAT_EXPAND(config_check_, CONFIG_CHECK_NAME);
+#endif /* CONFIG_CHECK_NAME */
+
 #endif	/* _CONFIG_H_ */

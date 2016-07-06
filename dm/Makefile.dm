@@ -14,6 +14,8 @@ $(OSX)OSX_NOT_YET = no_
 $(OSX_NOT_YET)OSX_CONFIG_NOT = no_
 $(OSX_CONFIG_NOT)CPPFLAGS += -DOSX_NOT_YET
 
+$(DEBUG_ONLY)CPPFLAGS += -DCONFIG_CHECK_NAME=$(subst -,_,$(subst .,_,$(@F)))
+
 $(REL_ONLY)CONFIG_CONTROL_TEST ?= no_
 
 $(REL_ONLY)CONFIG_MONITOR ?= no_
@@ -452,10 +454,12 @@ EXTRA_CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
 
 $(DM_OBJS): $(YAJL_DEPS) .deps/.exists
 
+$(DEBUG_ONLY)CONFIG_H_CHECK = check-config-include.o
+
 uxendm$(EXE_SUFFIX): $(LIBVHD_DEPS) $(LIBUXENCTL_DEPS) $(LIBXC_DEPS)
-uxendm$(EXE_SUFFIX): $(DM_OBJS)
+uxendm$(EXE_SUFFIX): $(DM_OBJS) $(CONFIG_H_CHECK)
 	$(_W)echo Linking - $@
-	$(_V)$(call link,$@,$(DM_OBJS) $(LDLIBS))
+	$(_V)$(call link,$@,$(DM_OBJS) $(CONFIG_H_CHECK) $(LDLIBS))
 
 %.o: %.c
 	$(_W)echo Compiling - $@
@@ -583,6 +587,23 @@ check-build_info.h build_info.h:
 	         echo -dirty)"\""; \
 	       echo "#define UXEN_DM_BUILDDATE \""$$(LC_ALL=C date)"\""; \
 	   ) >$(subst check-,,$@)
+
+CONFIG_CHECK_OBJS = $(subst -,_,$(patsubst %.o,config_check_%_o DELIM, \
+                                  $(filter-out uxendm-res.o,$(DM_OBJS))))
+check-config-include.c:
+	$(_W)echo Generating - config.h link time check
+	$(_V)( echo '#include <stdint.h>'                                     ;\
+	echo '#define config_check_nickel_http_parser_http_parser_o \'        ;\
+	echo '        defensive_check_nickel_http_parser_http_parser_o'       ;\
+	echo '#define DELIM ,'                                                ;\
+	echo extern uint8_t                                                   ;\
+	echo $(CONFIG_CHECK_OBJS)                                             ;\
+	echo 'config_check_unused;'                                           ;\
+	echo '#undef DELIM'                                                   ;\
+	echo '#define DELIM +'                                                ;\
+	echo 'uint8_t check_config_include(void) { return '                   ;\
+	echo $(CONFIG_CHECK_OBJS)                                             ;\
+	echo '0;}' ) > $@
 
 SDK_src_files = dict.c dict.h dict-rpc.c dict-rpc.h lib.c lib.h queue.h yajl.h
 $(OSX)SDK_src_files += clock.h
