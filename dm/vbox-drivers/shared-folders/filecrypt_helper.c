@@ -1,10 +1,10 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
 
-#define _WIN32_WINNT 0x0600
+#include <dm/config.h>
 #include "filecrypt_helper.h"
 #include "mappings.h"
 

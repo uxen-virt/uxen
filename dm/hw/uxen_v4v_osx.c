@@ -4,8 +4,9 @@
  * SPDX-License-Identifier: ISC
  */
 
+#include <dm/config.h>
 #include "uxen_v4v.h"
-#include "../../osx/uxenv4vservice/uxenv4vlib.c"
+#include <osx/uxenv4vservice/uxenv4vlib.c>
 
 int
 v4v_open_sync(v4v_context_t *v4v, uint32_t ring_size, int *out_error)

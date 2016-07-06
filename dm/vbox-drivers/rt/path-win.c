@@ -28,6 +28,7 @@
 /*******************************************************************************
 *   Header Files                                                               *
 *******************************************************************************/
+#include <dm/config.h>
 #define LOG_GROUP RTLOGGROUP_PATH
 #include <windows.h>
 #include <shlobj.h>

@@ -1,9 +1,10 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
 
+#include <dm/config.h>
 #include "os.h"
 #include <uuid/uuid.h>
 

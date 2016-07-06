@@ -31,7 +31,9 @@
    - LZ4 source repository : http://code.google.com/p/lz4/
 */
 
-
+#ifdef CONFIG_CHECK_NAME
+#include <dm/config.h>
+#endif
 
 /**************************************
    Tuning Parameter

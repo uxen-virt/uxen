@@ -85,6 +85,7 @@
  *
  * This section may be written in the future :)
  */
+#include <dm/config.h>
 #include <dm/os.h>
 #include <dm/vbox-drivers/heap.h>
 #include "VBoxClipboardSvc.h"

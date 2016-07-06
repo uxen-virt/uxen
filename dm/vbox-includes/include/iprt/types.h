@@ -205,7 +205,7 @@ typedef uint8_t bool;
 typedef _Bool bool;
 #   endif
 #  else
-#   if defined(RT_OS_DARWIN) && defined(_STDBOOL_H)
+#   if (defined(RT_OS_WINDOWS) || defined(RT_OS_DARWIN)) && defined(_STDBOOL_H)
 #    undef bool
 #   endif
 typedef _Bool bool;

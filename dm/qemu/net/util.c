@@ -22,6 +22,7 @@
  * THE SOFTWARE.
  */
 
+#include <dm/config.h>
 #include "util.h"
 #include <errno.h>
 #include <stdlib.h>

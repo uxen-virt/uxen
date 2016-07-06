@@ -16,7 +16,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -32,6 +32,7 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <dm/config.h>
 #ifdef UNITTEST
 # include "testcase/tstSharedFolderService.h"
 #endif
@@ -383,6 +384,7 @@ void testMappingsQuery(RTTEST hTest)
  */
 int vbsfMappingsQuery(PSHFLCLIENTDATA pClient, PSHFLMAPPING pMappings, uint32_t *pcMappings)
 {
+    uint32_t i;
     int rc = VINF_SUCCESS;
 
     uint32_t cMappings = 0; /* Will contain actual valid mappings. */
@@ -391,7 +393,7 @@ int vbsfMappingsQuery(PSHFLCLIENTDATA pClient, PSHFLMAPPING pMappings, uint32_t 
     LogFlow(("vbsfMappingsQuery: pClient = %p, pMappings = %p, pcMappings = %p, *pcMappings = %d\n",
              pClient, pMappings, pcMappings, *pcMappings));
 
-    for (uint32_t i = 0; i < SHFL_MAX_MAPPINGS; i++)
+    for (i = 0; i < SHFL_MAX_MAPPINGS; i++)
     {
         MAPPING *pFolderMapping = vbsfMappingGetByRoot(i);
         if (   pFolderMapping != NULL

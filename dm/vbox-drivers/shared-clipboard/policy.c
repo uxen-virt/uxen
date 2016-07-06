@@ -1,8 +1,9 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
+#include <dm/config.h>
 #include <iprt/log.h>
 #undef _WIN32_WINNT /* any cleaner way to include both log.h and config.h ? */
 #include "config.h"

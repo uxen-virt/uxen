@@ -31,6 +31,10 @@
    - LZ4 public forum : https://groups.google.com/forum/#!forum/lz4c
 */
 
+#ifdef CONFIG_CHECK_NAME
+#include <dm/config.h>
+#endif
+
 /**************************************
    Tuning parameters
 **************************************/

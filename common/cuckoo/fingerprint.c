@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -10,6 +10,9 @@
  *
  */
 
+#ifdef CONFIG_CHECK_NAME
+#include <dm/config.h>
+#endif
 #include <stdint.h>
 
 #define PAGE_SIZE 4096

@@ -4,9 +4,8 @@
  * SPDX-License-Identifier: ISC
  */
 
+#include <dm/config.h>
 #include "uxen_scsi_osx.h"
-#include "../debug.h"
-#include <stdint.h>
 #include <DiskArbitration/DADisk.h>
 #include <IOKit/storage/IOStorageDeviceCharacteristics.h>
 

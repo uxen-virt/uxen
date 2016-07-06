@@ -1,8 +1,9 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
+#include <dm/config.h>
 #include <string.h>
 #include <stdlib.h>
 #include <sys/types.h>

@@ -33,6 +33,8 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <dm/config.h>
+#include <winioctl.h>
 #ifdef UNITTEST
 # include "testcase/tstSharedFolderService.h"
 #endif
@@ -2401,7 +2403,8 @@ int vbsfSymlink(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLSTRING *pNewPath, SH
  */
 int vbsfDisconnect(SHFLCLIENTDATA *pClient)
 {
-    for (int i=0; i<SHFLHANDLE_MAX; i++)
+    int i;
+    for (i=0; i<SHFLHANDLE_MAX; i++)
     {
         SHFLHANDLE Handle = (SHFLHANDLE)i;
         if (vbsfQueryHandleType(pClient, Handle))

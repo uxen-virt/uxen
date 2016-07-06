@@ -1,12 +1,10 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
 
-#if defined(_WIN32)
-#include <dm/win32.h>
-#endif
+#include "config.h"
 #include <err.h>
 #include <stdbool.h>
 #include <stdint.h>

@@ -32,6 +32,7 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <dm/config.h>
 #include <VBox/shflsvc.h>
 
 

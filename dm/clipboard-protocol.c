@@ -4,8 +4,7 @@
  * SPDX-License-Identifier: ISC
  */
 
-#undef  _WIN32_WINNT
-#define _WIN32_WINNT 0x0600
+#include <dm/config.h>
 #define V4V_USE_INLINE_API
 
 #include <stdint.h>

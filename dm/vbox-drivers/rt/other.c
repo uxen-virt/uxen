@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: ISC
  */
 
+#include <dm/config.h>
 #include <os.h>
 #include <iprt/alloc.h>
 #include <iprt/err.h>

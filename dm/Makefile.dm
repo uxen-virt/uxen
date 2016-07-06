@@ -298,15 +298,15 @@ $(CONFIG_MONITOR)QEMU_SRCS += readline.c
 QEMU_SRCS += savevm.c
 
 LIBELF_CPPFLAGS += -DNO_XEN_ELF_NOTE
-LIBELF_CPPFLAGS += -I$(LIBELFDIR_include) -I$(XENDIR_include)
+LIBELF_CPPFLAGS += -I$(LIBELFDIR_include) -I$(XENDIR_include) -I$(TOPDIR)
 LIBELF_SRCS += libelf-loader.c
 LIBELF_SRCS += libelf-tools.c
 
-LZ4_CPPFLAGS += -I$(LZ4DIR_include)
+LZ4_CPPFLAGS += -I$(LZ4DIR_include) -I$(TOPDIR)
 LZ4_SRCS += lz4.c
 LZ4_SRCS += lz4hc.c
 
-CUCKOO_CPPFLAGS += -I$(CUCKOODIR_include)
+CUCKOO_CPPFLAGS += -I$(CUCKOODIR_include) -I$(TOPDIR)
 CUCKOO_SRCS += fingerprint.c
 
 SWAP_SRCS = block-swap.c
@@ -501,7 +501,7 @@ proxy_%.o: proxy/%.c
 
 nickel_http-parser_%.o: $(NICKELDIR)/http-parser/%.c
 	$(_W)echo Compiling - $(subst nickel_http-parser_,nickel/http-parser/,$@)
-	$(_V)$(COMPILE.c) $(EXTRA_CFLAGS) -c $< -o $@
+	$(_V)$(COMPILE.c) -I$(TOPDIR) $(EXTRA_CFLAGS) -c $< -o $@
 
 $(NICKEL_OBJS): CFLAGS += $(NICKEL_CFLAGS)
 $(NICKEL_OBJS): CPPFLAGS += $(NICKEL_CPPFLAGS)
@@ -527,8 +527,6 @@ $(VBOXDRV_OBJS): CFLAGS += -I$(FILECRYPT_INCLUDES)
 $(VBOXDRV_OBJS): CFLAGS += -DVBOX -DIN_RING3 -DVBOX_WITH_HGCM
 $(VBOXDRV_OBJS): CFLAGS += -DVBOX_WITH_64_BITS_GUESTS -DARCH_BITS=64
 $(VBOXDRV_OBJS): CFLAGS += -DRT_OS_WINDOWS -DLOG_ENABLED -DLOG_USE_C99
-vbox-drivers_shared-folders_mappings.o: CFLAGS += -std=c99
-vbox-drivers_shared-folders_vbsf.o: CFLAGS += -std=c99
 vbox-drivers_shared-clipboard_rpc.o: CFLAGS += -I$(TOPDIR)/dm
 vbox-drivers_%.o: $(VBOXDRVDIR)/%.c
 	$(_W)echo Compiling - $(subst vbox-drivers_,vbox-drivers/,$@)
@@ -585,7 +583,6 @@ check-build_info.h build_info.h:
 	         echo -dirty)"\""; \
 	       echo "#define UXEN_DM_BUILDDATE \""$$(LC_ALL=C date)"\""; \
 	   ) >$(subst check-,,$@)
-
 
 SDK_src_files = dict.c dict.h dict-rpc.c dict-rpc.h lib.c lib.h queue.h yajl.h
 $(OSX)SDK_src_files += clock.h

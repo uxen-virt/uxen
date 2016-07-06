@@ -1,9 +1,10 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
 
+#include <dm/config.h>
 #include <dm/os.h>
 #include "mappings.h"
 #include "shflhandle.h"

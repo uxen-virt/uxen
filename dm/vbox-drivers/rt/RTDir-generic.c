@@ -28,6 +28,7 @@
 /*******************************************************************************
 *   Header Files                                                               *
 *******************************************************************************/
+#include <dm/config.h>
 #define LOG_GROUP RTLOGGROUP_DIR
 #ifdef RT_OS_WINDOWS /* dir.h has host specific stuff */
 # include <windows.h>

@@ -33,6 +33,7 @@
  */
 
 #define BROMIUM_CHANGES 1
+#include <dm/config.h>
 #include "os.h"
 #include <windows.h>
 
