@@ -192,17 +192,17 @@ alloc_pages_for_mdl_retry(uint32_t pages)
 {
     uint32_t allocated = 0;
     uint32_t i = 0, j;
-    PMDL ret_mdl = NULL;
-    PFN_NUMBER *ret_pfns, *pfns;
+    PMDL mdl = NULL;
+    PFN_NUMBER *pfns, *subpfns;
 
-    ret_mdl = IoAllocateMdl(NULL, pages << PAGE_SHIFT, FALSE, FALSE, NULL);
-    if (!ret_mdl) {
+    mdl = IoAllocateMdl(NULL, pages << PAGE_SHIFT, FALSE, FALSE, NULL);
+    if (!mdl) {
         uxen_v4v_err("failed to allocate mdl structure");
         goto err;
     }
 
-    ret_pfns = MmGetMdlPfnArray(ret_mdl);
-    RtlZeroMemory(ret_pfns, sizeof(PFN_NUMBER) * pages);
+    pfns = MmGetMdlPfnArray(mdl);
+    RtlZeroMemory(pfns, sizeof(PFN_NUMBER) * pages);
 
     while (allocated < pages) {
         PMDL submdl;
@@ -214,20 +214,20 @@ alloc_pages_for_mdl_retry(uint32_t pages)
             goto err;
         }
 
-        pfns = MmGetMdlPfnArray(submdl);
+        subpfns = MmGetMdlPfnArray(submdl);
         for (j = 0; j < subpages; ++j)
-            ret_pfns[i++] = pfns[j];
+            pfns[i++] = subpfns[j];
         IoFreeMdl(submdl);
 
         allocated += subpages;
     }
 
-    return ret_mdl;
+    return mdl;
 
 err:
-    if (ret_mdl) {
-        MmFreePagesFromMdl(ret_mdl);
-        IoFreeMdl(ret_mdl);
+    if (mdl) {
+        MmFreePagesFromMdl(mdl);
+        IoFreeMdl(mdl);
     }
 
     return NULL;
