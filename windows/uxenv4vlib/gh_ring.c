@@ -201,6 +201,8 @@ alloc_pages_for_mdl_retry(uint32_t pages)
         goto err;
     }
 
+    mdl->MdlFlags = MDL_PAGES_LOCKED;
+
     pfns = MmGetMdlPfnArray(mdl);
     RtlZeroMemory(pfns, sizeof(PFN_NUMBER) * pages);
 
