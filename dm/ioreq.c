@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -333,7 +333,8 @@ static void ioreq_move(ioreq_t *req)
         } else if (req->dir == IOREQ_WRITE) {
             src = req->data;
             dest = req->addr;
-        }
+        } else
+            return;
         for (i = 0; i < req->count; i++) {
             read_physical(src + (sign * i * req->size), req->size, &tmp);
             write_physical(dest + (sign * i * req->size), req->size, &tmp);

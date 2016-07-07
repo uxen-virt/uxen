@@ -299,7 +299,7 @@ static void delete_rebalance(struct fileset *s,
 
 void rbtree_delete_node(struct fileset *s, struct fileset_node *n)
 {
-	struct fileset_node *child, *parent;
+	struct fileset_node *child = NULL, *parent;
 	int color;
 
 	if ( n->rb_child[0] && n->rb_child[1] ) {

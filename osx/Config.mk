@@ -32,4 +32,6 @@ CPPFLAGS += -I$(abspath $(TOPDIR)/osx/include)
 CPPFLAGS += -I$(abspath $(TOPDIR)/common/include)
 #CPPFLAGS += -I$(abspath $(TOOLSDIR)/cross-xxx/include)
 
+CFLAGS_debug := $(subst $(CFLAG_OPTIMIZE_DEBUG),$(CFLAG_OPTIMIZE_DEBUG_legacy),$(CFLAGS_debug))
+
 endif

@@ -21,7 +21,7 @@ CFLAGS += -DLIBIMG=1
 $(DEBUG_ONLY)CFLAGS += -DDEBUG=1
 
 CFLAGS += -I$(YAJLDIR)/include
-CFLAGS := $(subst -O2,-O3,$(CFLAGS))
+CFLAGS := $(subst $(CFLAG_OPTIMIZE_DEFAULT),$(CFLAG_OPTIMIZE_HIGH),$(CFLAGS))
 
 LIBIMG_CFLAGS = -I$(TOPDIR)
 
@@ -62,7 +62,7 @@ LZ4_SRCS += lz4.c
 LZ4_OBJS = $(patsubst %.m,%.o,$(patsubst %.c,%.o,$(LZ4_SRCS)))
 LZ4_OBJS := $(subst /,_,$(patsubst %,lz4/%,$(LZ4_OBJS)))
 LIBIMG_OBJS += $(LZ4_OBJS)
-lz4_lz4.o: CFLAGS_debug := $(subst -O0,-O3,$(CFLAGS_debug))
+lz4_lz4.o: CFLAGS_debug := $(subst $(CFLAG_OPTIMIZE_DEBUG),$(CFLAG_OPTIMIZE_HIGH),$(CFLAGS_debug))
 
 $(LIBIMG_OBJS): .deps/.exists
 

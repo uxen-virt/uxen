@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -109,7 +109,7 @@ base64_encode(const unsigned char *data, size_t len)
         unsigned char i0;
         unsigned char i1 = 0;
         unsigned char i2 = 0;
-        char o0, o1;
+        char o0 = '\0', o1 = '\0';
         char o2 = '=';
         char o3 = '=';
 

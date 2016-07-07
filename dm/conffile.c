@@ -274,7 +274,7 @@ co_set_block(const char *opt, yajl_val arg, void *opaque)
 {
     yajl_val v;
     unsigned int i;
-    int ret;
+    int ret = 0;
 
     if (!YAJL_IS_OBJECT(arg) && !YAJL_IS_ARRAY(arg))
 	errx(1, "config option %s: map or array of map", opt);
@@ -526,7 +526,7 @@ co_set_net(const char *opt, yajl_val arg, void *opaque)
 #ifdef CONFIG_NET
     yajl_val v;
     unsigned int i;
-    int ret;
+    int ret = 0;
 
     if (!YAJL_IS_OBJECT(arg) && !YAJL_IS_ARRAY(arg))
 	errx(1, "config option %s: map or array of map", opt);
