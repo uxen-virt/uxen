@@ -658,6 +658,8 @@ uxendisp_mmio_write(void *opaque, target_phys_addr_t addr, uint64_t val,
         return;
     case UXDISP_REG_MODE:
         s->mode = val;
+        if (!vm_vram_dirty_tracking)
+            s->mode |= UXDISP_MODE_PAGE_TRACKING_DISABLED;
         crtc_flush(s, 0, s->crtcs[0].offset, 1);
         uxendisp_invalidate(&s->crtcs[0]);
         return;
@@ -1019,6 +1021,11 @@ static int uxendisp_initfn(PCIDevice *dev)
     }
 
     vga_init(v, pci_address_space(dev), pci_address_space_io(dev), s->crtcs[0].ds);
+
+    if (!vm_vram_dirty_tracking) {
+        debug_printf("%s: vram dirty tracking disabled\n", __FUNCTION__);
+        s->mode |= UXDISP_MODE_PAGE_TRACKING_DISABLED;
+    }
 
     qemu_register_reset(uxendisp_reset, s);
     uxendisp_reset(s);

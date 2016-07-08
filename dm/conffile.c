@@ -760,6 +760,7 @@ struct config_option config_options[] = {
     { "vm-save", co_set_vm_save, NULL },
     { "vpt-align", co_set_boolean_opt, &vm_vpt_align },
     { "vpt-coalesce-period", co_set_integer_opt, &vm_vpt_coalesce_period },
+    { "vram-dirty-tracking", co_set_boolean_opt, &vm_vram_dirty_tracking },
     { "zero-page", co_set_boolean_opt, &vm_zero_page },
     { "zero-page-setup", co_set_boolean_opt, &vm_zero_page_setup },
 };
