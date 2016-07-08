@@ -113,11 +113,10 @@ const char *console_type = "osx";
 #endif
 static char *control_path = NULL;
 
-#define DEFAULT_CLIPBOARD_FORMAT_WHITELIST "CF_DIB,CF_DIBV5,CF_TEXT,CF_UNICODETEXT,Rich Text Format,Csv,Art::GVML ClipFormat"
-const char *clipboard_formats_blacklist_host2vm;
-const char *clipboard_formats_whitelist_host2vm = DEFAULT_CLIPBOARD_FORMAT_WHITELIST;
-const char *clipboard_formats_blacklist_vm2host;
-const char *clipboard_formats_whitelist_vm2host = DEFAULT_CLIPBOARD_FORMAT_WHITELIST;
+const char *clipboard_formats_blacklist_host2vm = NULL;
+const char *clipboard_formats_whitelist_host2vm = NULL;
+const char *clipboard_formats_blacklist_vm2host = NULL;
+const char *clipboard_formats_whitelist_vm2host = NULL;
 uint64_t deferred_clipboard = 0;
 
 xc_interface *xc_handle;

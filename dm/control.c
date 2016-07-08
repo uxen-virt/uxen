@@ -658,6 +658,51 @@ control_command_audio_mute(void *opaque, const char *id, const char *opt,
 #endif
 
 #ifdef CONFIG_VBOXDRV
+
+static void
+clip_update_policy_list(char **listp, dict d, char *listname)
+{
+    const char *str = dict_get_string(d, listname);
+
+    if (!str)
+        return;
+
+    if (*listp)
+        free(*listp);
+
+    if (!strlen(str)) {
+        *listp = NULL;
+        debug_printf("clipboard policy list %s cleared\n", listname);
+    } else {
+        *listp = strdup(str);
+        debug_printf("clipboard policy list %s: %s\n", listname, *listp);
+    }
+}
+
+static int
+control_command_clipboard_policy(void *opaque, const char *id, const char *opt,
+                        dict d, void *command_opaque)
+{
+    struct control_desc *cd = (struct control_desc *)opaque;
+    const char *policy = dict_get_string(d, "policy");
+
+    if (policy) {
+        debug_printf("clipboard policy: %s\n", policy);
+        uxen_clipboard_set_policy(policy);
+    }
+    clip_update_policy_list((char**)&clipboard_formats_blacklist_host2vm,
+                            d, "clipboard-formats-blacklist-host2vm");
+    clip_update_policy_list((char**)&clipboard_formats_blacklist_vm2host,
+                            d, "clipboard-formats-blacklist-vm2host");
+    clip_update_policy_list((char**)&clipboard_formats_whitelist_host2vm,
+                            d, "clipboard-formats-whitelist-host2vm");
+    clip_update_policy_list((char**)&clipboard_formats_whitelist_vm2host,
+                            d, "clipboard-formats-whitelist-vm2host");
+    control_send_ok(cd, opt, id, NULL);
+
+    return 0;
+}
+
 static int
 control_command_clipboard_render(void *opaque, const char *id, const char *opt,
                         dict d, void *command_opaque)
@@ -1007,6 +1052,15 @@ struct dict_rpc_command control_commands[] = {
         }, },
 #endif
 #ifdef CONFIG_VBOXDRV
+    { "clipboard-policy", control_command_clipboard_policy,
+      .args = (struct dict_rpc_arg_desc[]) {
+            { "policy", DICT_RPC_ARG_TYPE_STRING, .optional = 1 },
+            { "clipboard-formats-blacklist-host2vm", DICT_RPC_ARG_TYPE_STRING, .optional = 1 },
+            { "clipboard-formats-blacklist-vm2host", DICT_RPC_ARG_TYPE_STRING, .optional = 1 },
+            { "clipboard-formats-whitelist-host2vm", DICT_RPC_ARG_TYPE_STRING, .optional = 1 },
+            { "clipboard-formats-whitelist-vm2host", DICT_RPC_ARG_TYPE_STRING, .optional = 1 },
+            { NULL, },
+        }, },
     { "clipboard-render", control_command_clipboard_render, },
 #endif /* CONFIG_VBOXDRV */
     { "collect-performance-data", collect_performance_data, },

@@ -14,6 +14,8 @@
 #include <dm/vbox-drivers/shared-clipboard/clipboard-interface.h>
 #include <dm/clipboard-protocol.h>
 
+#define DEFAULT_CLIPBOARD_FORMAT_WHITELIST "CF_DIB,CF_DIBV5,CF_TEXT,CF_UNICODETEXT,Rich Text Format,Csv,Art::GVML ClipFormat"
+
 struct req {
     void *data;
     int bytes;
@@ -93,6 +95,10 @@ __init(void)
         }
         register_savevm(NULL, "clipboard-service", 0, 1, clip_save, clip_load, s);
         uxen_clipboard_connect();
+
+        clipboard_formats_whitelist_host2vm = strdup(DEFAULT_CLIPBOARD_FORMAT_WHITELIST);
+        clipboard_formats_whitelist_vm2host = strdup(DEFAULT_CLIPBOARD_FORMAT_WHITELIST);
+
         s->init_done = 1;
     }
     return 0;
