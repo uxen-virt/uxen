@@ -1,0 +1,12 @@
+diff -aburN mingw-w64-v2.0.8.orig/mingw-w64-headers/include/pdh.h mingw-w64-v2.0.8/mingw-w64-headers/include/pdh.h
+--- mingw-w64-v2.0.8.orig/mingw-w64-headers/include/pdh.h	2011-02-11 09:17:15.000000000 -0500
++++ mingw-w64-v2.0.8/mingw-w64-headers/include/pdh.h	2016-07-08 13:23:38.000000000 -0400
+@@ -581,7 +581,7 @@
+   LPCSTR szFullPathBuffer
+ );
+ 
+-PDH_STATUS PdhValidatePathExA(
++PDH_STATUS PdhValidatePathExW(
+   PDH_HLOG hDataSource,
+   LPCWSTR szFullPathBuffer
+ );
