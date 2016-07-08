@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -678,13 +678,42 @@ NTSTATUS stor_dispatch_power(PDEVICE_OBJECT dev_obj, PIRP irp)
 {
     NTSTATUS status;
     PUXENSTOR_DEV_EXT dev_ext;
+    PIO_STACK_LOCATION io_stack;
 
     ASSERT(dev_obj);
     ASSERT(irp);
     
-    uxen_debug("[0x%p:0x%p] called: 0x%x",
-               dev_obj, irp,
-               IoGetCurrentIrpStackLocation(irp)->MinorFunction);
+    io_stack = IoGetCurrentIrpStackLocation(irp);
+
+    switch (io_stack->MinorFunction) {
+    case IRP_MN_WAIT_WAKE:
+        uxen_msg("[0x%p:0x%p] called: IRP_MN_WAIT_WAKE (%d)",
+                 dev_obj, irp, io_stack->Parameters.WaitWake.PowerState);
+        break;
+    case IRP_MN_POWER_SEQUENCE:
+        uxen_msg("[0x%p:0x%p] called: IRP_MN_POWER_SEQUENCE (0x%p)",
+                 dev_obj, irp, 
+                 io_stack->Parameters.PowerSequence.PowerSequence);
+        break;
+    case IRP_MN_SET_POWER:
+        uxen_msg("[0x%p:0x%p] called: IRP_MN_SET_POWER (%d, %d, %d)",
+                 dev_obj, irp, 
+                 io_stack->Parameters.Power.Type,
+                 io_stack->Parameters.Power.State,
+                 io_stack->Parameters.Power.ShutdownType);
+        break;
+    case IRP_MN_QUERY_POWER:
+        uxen_msg("[0x%p:0x%p] called: IRP_MN_QUERY_POWER (%d, %d, %d)",
+                 dev_obj, irp, 
+                 io_stack->Parameters.Power.Type,
+                 io_stack->Parameters.Power.State,
+                 io_stack->Parameters.Power.ShutdownType);
+        break;
+
+    default:
+        uxen_msg("[0x%p:0x%p] called: 0x%x",
+                 dev_obj, irp, io_stack->MinorFunction);
+    }
 
     dev_ext = (PUXENSTOR_DEV_EXT)dev_obj->DeviceExtension;
     status = IoAcquireRemoveLock(&dev_ext->remove_lock, irp);
