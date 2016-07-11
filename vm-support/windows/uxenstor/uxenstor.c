@@ -683,6 +683,16 @@ NTSTATUS stor_dispatch_power(PDEVICE_OBJECT dev_obj, PIRP irp)
     ASSERT(dev_obj);
     ASSERT(irp);
     
+    dev_ext = (PUXENSTOR_DEV_EXT)dev_obj->DeviceExtension;
+    status = IoAcquireRemoveLock(&dev_ext->remove_lock, irp);
+    if (!NT_SUCCESS(status)) {
+        uxen_debug("[0x%p:0x%p] IoAcquireRemoveLock() failed: 0x%08x",
+                   dev_obj, irp, status);
+        irp->IoStatus.Status = status;
+        IoCompleteRequest(irp, IO_NO_INCREMENT);
+        goto out;
+    }
+
     io_stack = IoGetCurrentIrpStackLocation(irp);
 
     switch (io_stack->MinorFunction) {
@@ -701,6 +711,19 @@ NTSTATUS stor_dispatch_power(PDEVICE_OBJECT dev_obj, PIRP irp)
                  io_stack->Parameters.Power.Type,
                  io_stack->Parameters.Power.State,
                  io_stack->Parameters.Power.ShutdownType);
+#ifndef _M_AMD64
+        if (!ahci_state && (io_stack->Parameters.Power.Type == DevicePowerState)) {
+            uxen_msg("[0x%p:0x%p] called: completing IRP_MN_SET_POWER",
+                     dev_obj, irp);
+
+            PoStartNextPowerIrp(irp);
+            irp->IoStatus.Status = STATUS_SUCCESS;
+            IoCompleteRequest(irp, IO_NO_INCREMENT);
+
+            IoReleaseRemoveLock(&dev_ext->remove_lock, irp); 
+            goto out;
+        }
+#endif
         break;
     case IRP_MN_QUERY_POWER:
         uxen_msg("[0x%p:0x%p] called: IRP_MN_QUERY_POWER (%d, %d, %d)",
@@ -713,16 +736,6 @@ NTSTATUS stor_dispatch_power(PDEVICE_OBJECT dev_obj, PIRP irp)
     default:
         uxen_msg("[0x%p:0x%p] called: 0x%x",
                  dev_obj, irp, io_stack->MinorFunction);
-    }
-
-    dev_ext = (PUXENSTOR_DEV_EXT)dev_obj->DeviceExtension;
-    status = IoAcquireRemoveLock(&dev_ext->remove_lock, irp);
-    if (!NT_SUCCESS(status)) {
-        uxen_debug("[0x%p:0x%p] IoAcquireRemoveLock() failed: 0x%08x",
-                   dev_obj, irp, status);
-        irp->IoStatus.Status = status;
-        IoCompleteRequest(irp, IO_NO_INCREMENT);
-        goto out;
     }
 
     IoSkipCurrentIrpStackLocation(irp);
