@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -25,6 +25,7 @@ enum ns_event_msg_proto {
     NS_EVENT_MSG_MOUSE_INPUT,
     NS_EVENT_MSG_TOUCH_INPUT,
     NS_EVENT_MSG_NOP,
+    NS_EVENT_MSG_PROTO_WINDOWS_SET_DYNAMIC_TIME_ZONE_INFORMATION,
 
     NS_EVENT_MSG_PROTO_MAX, /* Not a message ID */
 };
@@ -44,6 +45,11 @@ struct ns_event_msg_start_command_prompt {
 struct ns_event_msg_windows_set_time_zone_information {
     struct ns_event_msg_header msg;
     uint8_t time_zone_information[];
+};
+
+struct ns_event_msg_windows_set_dynamic_time_zone_information {
+    struct ns_event_msg_header msg;
+    uint8_t dynamic_time_zone_information[];
 };
 
 struct ns_event_msg_change_kb_layout {

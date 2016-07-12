@@ -79,11 +79,11 @@ get_timeoffset(void)
 void
 windows_time_update(void)
 {
-    TIME_ZONE_INFORMATION tzi;
+    DYNAMIC_TIME_ZONE_INFORMATION dtzi;
 
-    GetTimeZoneInformation(&tzi);
+    GetDynamicTimeZoneInformation(&dtzi);
 
-    guest_agent_set_time_zone(&tzi);
+    guest_agent_set_dynamic_time_zone(&dtzi);
 }
 
 int

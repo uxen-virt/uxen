@@ -9,6 +9,12 @@
  */
 
 #ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#ifndef WINVER
+#define WINVER 0x0601
+#endif
+#define _WIN32_WINNT 0x0601
+#include <windows.h>
 #include <winsock2.h>
 #endif
 
@@ -487,6 +493,30 @@ process_windows_set_time_zone_information(
 }
 
 static int
+process_windows_set_dynamic_time_zone_information(
+    struct ns_event_msg_windows_set_dynamic_time_zone_information *msg)
+{
+    DYNAMIC_TIME_ZONE_INFORMATION *dtzi =
+        (DYNAMIC_TIME_ZONE_INFORMATION *)msg->dynamic_time_zone_information;
+    HANDLE hToken;
+    TOKEN_PRIVILEGES tkp;
+    int rc = 0;
+
+    OpenProcessToken(GetCurrentProcess(),
+                     TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &hToken);
+    LookupPrivilegeValue(NULL, SE_TIME_ZONE_NAME, &tkp.Privileges[0].Luid);
+    tkp.PrivilegeCount = 1;
+    tkp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
+    AdjustTokenPrivileges(hToken, FALSE, &tkp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
+    if (!SetDynamicTimeZoneInformation(dtzi))
+        debug_log("SetDynamicTimeZoneInformation failed");
+    tkp.Privileges[0].Attributes = 0;
+    AdjustTokenPrivileges(hToken, FALSE, &tkp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
+
+    return rc;
+}
+
+static int
 process_remote_execute(struct ns_event_msg_remote_execute *msg)
 {
     int cmd_len;
@@ -642,6 +672,10 @@ void recv_dispatch(v4v_channel_t *c,struct pkt *pkt,DWORD bytes)
 #endif
     case NS_EVENT_MSG_NOP:
         rc = 0;
+        break;
+    case NS_EVENT_MSG_PROTO_WINDOWS_SET_DYNAMIC_TIME_ZONE_INFORMATION:
+        CHECKBUFSZ(ns_event_msg_windows_set_dynamic_time_zone_information);
+        rc = process_windows_set_dynamic_time_zone_information((void *)pkt->data);
         break;
     default:
         debug_log("unknown message proto %d", pkt->hdr.proto);

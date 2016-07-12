@@ -539,25 +539,28 @@ guest_agent_window_event(uint64_t hwnd, uint64_t message,
 }
 
 int
-guest_agent_set_time_zone(void *tzi)
+guest_agent_set_dynamic_time_zone(void *dtzi)
 {
-    DECL_V4V_BUF(ns_event_msg_windows_set_time_zone_information) *buf;
+    DECL_V4V_BUF(ns_event_msg_windows_set_dynamic_time_zone_information) *buf;
     size_t len;
     int ret;
 
-    if (!tzi)
+    if (!dtzi)
         return -1;
 
-    len = sizeof(*buf) + sizeof(TIME_ZONE_INFORMATION);
+    len = sizeof(*buf) + sizeof(DYNAMIC_TIME_ZONE_INFORMATION);
 
     buf = calloc(1, len);
     if (!buf)
         return -1;
 
-    buf->msg.msg.proto = NS_EVENT_MSG_PROTO_WINDOWS_SET_TIME_ZONE_INFORMATION;
+    buf->msg.msg.proto = 
+        NS_EVENT_MSG_PROTO_WINDOWS_SET_DYNAMIC_TIME_ZONE_INFORMATION;
     buf->msg.msg.len = len - sizeof(buf->dgram);
 
-    memcpy(buf->msg.time_zone_information, tzi, sizeof(TIME_ZONE_INFORMATION));
+    memcpy(buf->msg.dynamic_time_zone_information,
+           dtzi,
+           sizeof(DYNAMIC_TIME_ZONE_INFORMATION));
 
     ret = guest_agent_sendmsg(buf, len, 1);
 
