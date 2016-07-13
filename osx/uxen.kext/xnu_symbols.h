@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -59,12 +59,15 @@ typedef struct vm_page {
 
 #define VM_PAGE_PHYS_OFFSET_10_9  60
 #define VM_PAGE_PHYS_OFFSET_10_10 56
+#define VM_PAGE_PHYS_OFFSET_10_12 48
 
 #define vm_page_get_phys(_page)                          \
     *(ppnum_t *)((uint8_t *)(_page) +                    \
                  ((version_major <= 13) ?                \
                   VM_PAGE_PHYS_OFFSET_10_9 :             \
-                  VM_PAGE_PHYS_OFFSET_10_10))
+                  ((version_major <= 15) ?               \
+                  VM_PAGE_PHYS_OFFSET_10_10 :            \
+                  VM_PAGE_PHYS_OFFSET_10_12)))
 
 /* From i386/cpu_data.h */
 typedef struct cpu_data cpu_data_t;
