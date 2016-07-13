@@ -2098,7 +2098,7 @@ static int cx_proxy_response(struct clt_ctx *cx, int msg, bool close)
 
     BUFF_RESET(cx->out);
     if (msg == HMSG_DNS_LOOKUP_FAILED) {
-        buff_appendf(cx->out, "HTTP/1.0 577 DNS ERROR\r\n"
+        buff_appendf(cx->out, "HTTP/1.0 502 DNS ERROR\r\n"
                 "Content-Length: 0\r\nProxy-Connection: Close\r\n\r\n");
     } else if (msg == HMSG_CONNECT_FAILED) {
         buff_appendf(cx->out, "HTTP/1.0 504 CONNECT FAILED\r\n"
