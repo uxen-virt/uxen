@@ -1103,17 +1103,28 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
     unsigned int i;
     int ret = 0;
 
-    if (fda->vmi)
+    if (fda->vmi) {
+        fail_msg("domain %d: %" PRIuuid " vmi already exists",
+                 fda->vmi->vmi_shared.vmi_domid, PRIuuid_arg(ucd->ucd_vmuuid));
         return EEXIST;
+    }
 
     aff = uxen_exec_dom0_start();
-    uxen_call(vmi = (struct vm_info *), -1, NO_RESERVE,
+    uxen_call(vmi = (struct vm_info *), -ENOENT, NO_RESERVE,
               uxen_do_lookup_vm, ucd->ucd_vmuuid);
     uxen_exec_dom0_end(aff);
 
-    /* Found the vm or -1 means uuid not found */
-    if (vmi && ((intptr_t)vmi != -1))
+    /* Found the vm or lookup failed */
+    if (vmi && (intptr_t)vmi != -ENOENT) {
+        if (is_neg_errno((intptr_t)vmi)) {
+            fail_msg("%" PRIuuid " lookup failed: %d",
+                     PRIuuid_arg(ucd->ucd_vmuuid), -(int)(intptr_t)vmi);
+            return uxen_translate_xen_errno((intptr_t)vmi);
+        }
+        fail_msg("domain %d: %" PRIuuid " already exists",
+                 vmi->vmi_shared.vmi_domid, PRIuuid_arg(ucd->ucd_vmuuid));
         return EEXIST;
+    }
 
     vmi = kernel_malloc((size_t)ALIGN_PAGE_UP(
                             sizeof(struct vm_info) +
@@ -1251,13 +1262,16 @@ uxen_op_target_vm(struct uxen_targetvm_desc *utd, struct fd_assoc *fda)
         return EEXIST;
 
     aff = uxen_exec_dom0_start();
-    uxen_call(vmi = (struct vm_info *), -1, NO_RESERVE,
+    uxen_call(vmi = (struct vm_info *), -ENOENT, NO_RESERVE,
               uxen_do_lookup_vm, utd->utd_vmuuid);
     uxen_exec_dom0_end(aff);
 
-    /* Not found or -1 means uuid not found */
-    if (!vmi || (intptr_t)vmi == -1)
+    /* Not found */
+    if (!vmi)
         return ENOENT;
+    /* or lookup failed */
+    if (is_neg_errno((intptr_t)vmi))
+        return uxen_translate_xen_errno((intptr_t)vmi);
 
     utd->utd_domid = vmi->vmi_shared.vmi_domid;
 
@@ -1456,13 +1470,13 @@ uxen_op_destroy_vm(struct uxen_destroyvm_desc *udd, struct fd_assoc *fda)
 
     aff = uxen_lock();
     aff_locked = uxen_exec_dom0_start();
-    uxen_call(vmi = (struct vm_info *), -1, NO_RESERVE,
+    uxen_call(vmi = (struct vm_info *), -ENOENT, NO_RESERVE,
               uxen_do_lookup_vm, udd->udd_vmuuid);
     uxen_exec_dom0_end(aff_locked);
 
-    /* Found the vm or -1 means uuid not found */
-    if ((intptr_t)vmi == -1) {
-        ret = ENOENT;
+    /* Found the vm or -errno means uuid not found or other error */
+    if (is_neg_errno((intptr_t)vmi)) {
+        ret = uxen_translate_xen_errno((intptr_t)vmi);
         uxen_unlock(aff);
         goto out;
     }

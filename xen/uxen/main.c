@@ -154,7 +154,7 @@ do_lookup_vm(xen_domain_handle_t vm_uuid)
     if (d)
         rcu_unlock_domain(d);
 
-    return d ? (intptr_t)d->vm_info_shared : -1;
+    return d ? (intptr_t)d->vm_info_shared : -ENOENT;
 }
 
 intptr_t __interface_fn

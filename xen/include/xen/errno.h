@@ -31,4 +31,8 @@
                                  * request */
 #define ERETRY          132     /* pseudo error code: generic retry from
                                    hypercall_create_retry_continuation */
+
+#define is_errno(e) ((e) >= EPERM && (e) <= ERETRY)
+#define is_neg_errno(e) is_errno(-(e))
+
 #endif
