@@ -36,6 +36,7 @@ uxen_hypercall(struct uxen_hypercall_desc *uhd, int snoop_mode,
                struct vm_info_shared *vmis, void *user_access_opaque,
                uint32_t privileged)
 {
+    affinity_t aff;
     intptr_t ret = 0;
 
     while (/* CONSTCOND */ 1) {
@@ -43,7 +44,7 @@ uxen_hypercall(struct uxen_hypercall_desc *uhd, int snoop_mode,
             KeGetCurrentIrql() < DISPATCH_LEVEL)
             pagemap_check_space();
 
-        uxen_exec_dom0_start();
+        aff = uxen_exec_dom0_start();
         uxen_call(ret =, -EINVAL, _uxen_snoop_hypercall(uhd, snoop_mode),
                   uxen_do_hypercall, uhd, vmis, user_access_opaque,
                   privileged);
@@ -61,7 +62,7 @@ uxen_hypercall(struct uxen_hypercall_desc *uhd, int snoop_mode,
             ret = -EINVAL;
 #endif  /* DEBUG_POC_MAP_PAGE_RANGE_RETRY */
         }
-        uxen_exec_dom0_end();
+        uxen_exec_dom0_end(aff);
 
         if (ret == -ECONTINUATION && vmis && vmis->vmi_wait_event) {
             KEVENT *completed = (KEVENT *)vmis->vmi_wait_event;

@@ -49,6 +49,8 @@
 
 #define LOW_VCPUTHREAD_PRI (-1)
 
+typedef KAFFINITY affinity_t;
+
 typedef KIRQL preemption_t;
 #define spinlock_acquire(lock, p) KeAcquireSpinLock(&(lock), &(p))
 #define spinlock_release(lock, p) KeReleaseSpinLock(&(lock), p)
@@ -172,10 +174,10 @@ extern struct device_extension *uxen_devext;
 extern DRIVER_OBJECT *uxen_drvobj;
 extern uint8_t *uxen_hv;
 extern size_t uxen_size;
-void uxen_lock(void);
-void uxen_unlock(void);
-void uxen_exec_dom0_start(void);
-void uxen_exec_dom0_end(void);
+affinity_t uxen_lock(void);
+void uxen_unlock(affinity_t);
+affinity_t uxen_exec_dom0_start(void);
+void uxen_exec_dom0_end(affinity_t);
 
 /* uxen_call.c */
 intptr_t uxen_hypercall(struct uxen_hypercall_desc *, int,
@@ -231,13 +233,13 @@ int32_t _uxen_snoop_hypercall(void *udata, int mode);
 #define cpu_number() KeGetCurrentProcessorNumber()
 extern unsigned long uxen_cpu_vm;
 extern unsigned long uxen_cpu_first(void);
-extern void uxen_cpu_pin(unsigned long);
-extern void uxen_cpu_pin_current(void);
-extern void uxen_cpu_pin_first(void);
+extern affinity_t uxen_cpu_pin(unsigned long);
+extern affinity_t uxen_cpu_pin_current(void);
+extern affinity_t uxen_cpu_pin_first(void);
 #define uxen_cpu_pin_dom0() uxen_cpu_pin_current()
-extern void uxen_cpu_unpin(void);
-extern void uxen_cpu_pin_vcpu(struct vm_vcpu_info *, int);
-extern void uxen_cpu_unpin_vcpu(struct vm_vcpu_info *);
+extern void uxen_cpu_unpin(affinity_t);
+extern affinity_t uxen_cpu_pin_vcpu(struct vm_vcpu_info *, int);
+extern void uxen_cpu_unpin_vcpu(struct vm_vcpu_info *, affinity_t);
 extern int uxen_cpu_set_active_mask(void *);
 extern void __cdecl uxen_cpu_on_selected(const void *,
                                          uintptr_t (*)(uintptr_t));

@@ -2477,6 +2477,7 @@ get_max_pfn(int use_hidden)
 void
 add_hidden_memory(void)
 {
+    affinity_t aff;
     uint64_t end;
     int i;
 
@@ -2495,10 +2496,10 @@ add_hidden_memory(void)
         }
         dprintk("adding heap memory %016I64x - %016I64x\n",
                 hidden_memory[i].start, end << PAGE_SHIFT);
-        uxen_exec_dom0_start();
+        aff = uxen_exec_dom0_start();
         uxen_call(, , NO_RESERVE, uxen_do_add_heap_memory,
                   hidden_memory[i].start, end << PAGE_SHIFT);
-        uxen_exec_dom0_end();
+        uxen_exec_dom0_end(aff);
     }
 
     kernel_free(hidden_memory, HIDDEN_MEM_STRUCT_MAX);

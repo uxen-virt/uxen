@@ -632,23 +632,24 @@ uxen_op_init(struct fd_assoc *fda)
     uint32_t sizeof_percpu;
     unsigned int host_cpu;
     unsigned int cpu;
+    affinity_t aff;
     int ret = 0;
     struct vm_vcpu_info_shared *vcis[UXEN_MAXIMUM_PROCESSORS];
 
-    uxen_lock();
+    aff = uxen_lock();
     while (!OSCompareAndSwap(0, 1, &uxen_devext->de_initialised)) {
-        uxen_unlock();
+        uxen_unlock(aff);
         ret = fast_event_wait(&uxen_devext->de_init_done,
                               EVENT_INTERRUPTIBLE, EVENT_NO_TIMEOUT);
         if (ret)
             return EINTR;
         if (uxen_devext->de_initialised)
             return 0;
-        uxen_lock();
+        aff = uxen_lock();
     }
     uxen_devext->de_executing = 2;
     fast_event_clear(&uxen_devext->de_init_done);
-    uxen_unlock();
+    uxen_unlock(aff);
 
     if (!fda->admin_access) {
         fail_msg("access denied");
@@ -899,12 +900,12 @@ uxen_op_init(struct fd_assoc *fda)
 
     fast_event_signal(&uxen_devext->de_resume_event);
 
-    uxen_cpu_pin_first();
+    aff = uxen_cpu_pin_first();
     uxen_call(ret = (int), -EINVAL, NO_RESERVE, uxen_do_start_xen, NULL, 0,
               &dom0_vmi->vmi_shared, vcis);
     ret = uxen_translate_xen_errno(ret);
-    uxen_cpu_unpin();
-    
+    uxen_cpu_unpin(aff);
+
     uxen_driver_publish_v4v_service();
 
     /* run idle thread to make it pick up the current timeout */
@@ -929,6 +930,7 @@ uxen_op_shutdown(void)
 {
     struct vm_info *vmi, *tvmi;
     unsigned int host_cpu;
+    affinity_t aff;
 
     if (uxen_info == NULL)
         goto out;
@@ -936,7 +938,7 @@ uxen_op_shutdown(void)
     printk("%s: destroying VMs (core is %srunning)\n", __FUNCTION__,
            uxen_info->ui_running ? "" : "not ");
 
-    uxen_lock();
+    aff = uxen_lock();
     RB_TREE_FOREACH_SAFE(vmi, &uxen_devext->de_vm_info_rbtree, tvmi) {
         dprintk("uxen shutdown: destroy vm%u\n", vmi->vmi_shared.vmi_domid);
         uxen_vmi_destroy_vm(vmi);
@@ -950,10 +952,10 @@ uxen_op_shutdown(void)
     }
 
     if (RB_TREE_MIN(&uxen_devext->de_vm_info_rbtree)) {
-        uxen_unlock();
+        uxen_unlock(aff);
         goto out;
     }
-    uxen_unlock();
+    uxen_unlock(aff);
 
     if (!OSCompareAndSwap(1, 0, &uxen_devext->de_initialised)) {
         fast_event_wait(&uxen_devext->de_shutdown_done,
@@ -965,9 +967,9 @@ uxen_op_shutdown(void)
 
     uxen_flush_rcu();
 
-    uxen_lock();
+    aff = uxen_lock();
     uxen_call((void), , NO_RESERVE, uxen_do_shutdown_xen);
-    uxen_unlock();
+    uxen_unlock(aff);
 
     uxen_info->ui_running = 0;
 
@@ -1002,42 +1004,44 @@ uxen_op_shutdown(void)
 void
 uxen_complete_shutdown(void)
 {
+    affinity_t aff;
 
     while (uxen_devext->de_initialised) {
         uxen_op_shutdown();
 
-        uxen_lock();
+        aff = uxen_lock();
         if (RB_TREE_MIN(&uxen_devext->de_vm_info_rbtree)) {
             fast_event_clear(&uxen_devext->de_vm_cleanup_event);
             if (RB_TREE_MIN(&uxen_devext->de_vm_info_rbtree)) {
-                uxen_unlock();
+                uxen_unlock(aff);
                 fast_event_wait(&uxen_devext->de_vm_cleanup_event,
                                 EVENT_UNINTERRUPTIBLE, EVENT_NO_TIMEOUT);
-                uxen_lock();
+                aff = uxen_lock();
             }
         }
-        uxen_unlock();
+        uxen_unlock(aff);
     }
 }
 
 int
 uxen_op_wait_vm_exit(void)
 {
+    affinity_t aff;
     int ret;
 
-    uxen_lock();
+    aff = uxen_lock();
     while (RB_TREE_MIN(&uxen_devext->de_vm_info_rbtree)) {
         fast_event_clear(&uxen_devext->de_vm_cleanup_event);
         if (RB_TREE_MIN(&uxen_devext->de_vm_info_rbtree)) {
-            uxen_unlock();
+            uxen_unlock(aff);
             ret = fast_event_wait(&uxen_devext->de_vm_cleanup_event,
                                   EVENT_INTERRUPTIBLE, EVENT_NO_TIMEOUT);
             if (ret)
                 return EINTR;
-            uxen_lock();
+            aff = uxen_lock();
         }
     }
-    uxen_unlock();
+    uxen_unlock(aff);
 
     return 0;
 }
@@ -1058,10 +1062,11 @@ uxen_op_version(struct uxen_version_desc *uvd)
 int
 uxen_op_keyhandler(char *keys, unsigned int num)
 {
+    affinity_t aff;
     unsigned int i;
     int ret = 0;
 
-    uxen_exec_dom0_start();
+    aff = uxen_exec_dom0_start();
 
     for (i = 0; i < num && keys[i]; i++) {
         unsigned char key = keys[i];
@@ -1083,7 +1088,7 @@ uxen_op_keyhandler(char *keys, unsigned int num)
     /* run idle thread in case a keyhandler changed a timer */
     signal_idle_thread(0);
 
-    uxen_exec_dom0_end();
+    uxen_exec_dom0_end(aff);
 
     return ret;
 }
@@ -1094,16 +1099,17 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
     struct vm_info *vmi;
     struct vm_vcpu_info *vci;
     struct vm_vcpu_info_shared *vcis[UXEN_MAXIMUM_VCPUS];
+    affinity_t aff;
     unsigned int i;
     int ret = 0;
 
     if (fda->vmi)
         return EEXIST;
 
-    uxen_exec_dom0_start();
+    aff = uxen_exec_dom0_start();
     uxen_call(vmi = (struct vm_info *), -1, NO_RESERVE,
               uxen_do_lookup_vm, ucd->ucd_vmuuid);
-    uxen_exec_dom0_end();
+    uxen_exec_dom0_end(aff);
 
     /* Found the vm or -1 means uuid not found */
     if (vmi && ((intptr_t)vmi != -1))
@@ -1144,11 +1150,11 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
 
     vci->vci_host_cpu = cpu_number();
 
-    uxen_cpu_pin_vcpu(vci, vci->vci_host_cpu);
+    aff = uxen_cpu_pin_vcpu(vci, vci->vci_host_cpu);
     uxen_call(ret = (int), -EFAULT, SETUPVM_RESERVE, uxen_do_setup_vm,
               ucd, &vmi->vmi_shared, vcis);
     ret = uxen_translate_xen_errno(ret);
-    uxen_cpu_unpin();
+    uxen_cpu_unpin(aff);
     if (ret) {
 	ret = EINVAL;
 	goto out;
@@ -1180,9 +1186,9 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
         vci->vci_shared.vci_runnable = 1;
     }
 
-    uxen_lock();
+    aff = uxen_lock();
     rb_tree_insert_node(&uxen_devext->de_vm_info_rbtree, vmi);
-    uxen_unlock();
+    uxen_unlock(aff);
 
     ret = kernel_malloc_mfns(1, &vmi->vmi_undefined_mfn, 1);
     if (ret != 1) {
@@ -1202,14 +1208,14 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
   out:
     if (vmi && ret) {
         if (vmi->vmi_alive) {
-            uxen_lock();
+            aff = uxen_lock();
             uxen_vmi_destroy_vm(vmi);
-            uxen_unlock();
+            uxen_unlock(aff);
         } else {
-            uxen_exec_dom0_start();
+            aff = uxen_exec_dom0_start();
             uxen_call((void), , NO_RESERVE, uxen_do_destroy_vm,
                       ucd->ucd_vmuuid);
-            uxen_exec_dom0_end();
+            uxen_exec_dom0_end(aff);
             if (vmi->vmi_shared.vmi_xsave) {
                 kernel_free((void *)vmi->vmi_shared.vmi_xsave,
                             vmi->vmi_shared.vmi_xsave_size);
@@ -1238,15 +1244,16 @@ int
 uxen_op_target_vm(struct uxen_targetvm_desc *utd, struct fd_assoc *fda)
 {
     struct vm_info *vmi;
+    affinity_t aff;
     int ret = 0;
 
     if (fda->vmi)
         return EEXIST;
 
-    uxen_exec_dom0_start();
+    aff = uxen_exec_dom0_start();
     uxen_call(vmi = (struct vm_info *), -1, NO_RESERVE,
               uxen_do_lookup_vm, utd->utd_vmuuid);
-    uxen_exec_dom0_end();
+    uxen_exec_dom0_end(aff);
 
     /* Not found or -1 means uuid not found */
     if (!vmi || (intptr_t)vmi == -1)
@@ -1392,6 +1399,7 @@ uxen_vmi_stop_running(struct vm_info *vmi)
 static int
 uxen_vmi_destroy_vm(struct vm_info *vmi)
 {
+    affinity_t aff;
     /* unsigned int i; */
     int ret;
 
@@ -1406,10 +1414,10 @@ uxen_vmi_destroy_vm(struct vm_info *vmi)
 
     uxen_vmi_stop_running(vmi);
 
-    uxen_exec_dom0_start();
+    aff = uxen_exec_dom0_start();
     uxen_call(ret = (int), -EINVAL, NO_RESERVE,
               uxen_do_destroy_vm, vmi->vmi_shared.vmi_uuid);
-    uxen_exec_dom0_end();
+    uxen_exec_dom0_end(aff);
     ret = uxen_translate_xen_errno(ret);
     if (ret == ENOENT)
         ret = 0;
@@ -1433,6 +1441,7 @@ int
 uxen_op_destroy_vm(struct uxen_destroyvm_desc *udd, struct fd_assoc *fda)
 {
     struct vm_info *vmi;
+    affinity_t aff, aff_locked;
     int ret = 0;
 
     /* allow destroy if admin or if this handle created the vm/vmi */
@@ -1445,16 +1454,16 @@ uxen_op_destroy_vm(struct uxen_destroyvm_desc *udd, struct fd_assoc *fda)
         goto out;
     }
 
-    uxen_lock();
-    uxen_exec_dom0_start();
+    aff = uxen_lock();
+    aff_locked = uxen_exec_dom0_start();
     uxen_call(vmi = (struct vm_info *), -1, NO_RESERVE,
               uxen_do_lookup_vm, udd->udd_vmuuid);
-    uxen_exec_dom0_end();
+    uxen_exec_dom0_end(aff_locked);
 
     /* Found the vm or -1 means uuid not found */
     if ((intptr_t)vmi == -1) {
         ret = ENOENT;
-        uxen_unlock();
+        uxen_unlock(aff);
         goto out;
     }
 
@@ -1464,13 +1473,13 @@ uxen_op_destroy_vm(struct uxen_destroyvm_desc *udd, struct fd_assoc *fda)
         if (!ret)
             uxen_vmi_cleanup_vm(vmi);
         uxen_vmi_free(vmi);
-        uxen_unlock();
+        uxen_unlock(aff);
     } else {
-        uxen_unlock();
-        uxen_exec_dom0_start();
+        uxen_unlock(aff);
+        aff = uxen_exec_dom0_start();
         uxen_call(ret = (int), -EINVAL, NO_RESERVE,
                   uxen_do_destroy_vm, udd->udd_vmuuid);
-        uxen_exec_dom0_end();
+        uxen_exec_dom0_end(aff);
         ret = uxen_translate_xen_errno(ret);
     }
 
@@ -1496,6 +1505,7 @@ thread_status_suspended(thread_t thread)
 static int
 uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
 {
+    affinity_t aff;
     int ret = 0;
     thread_t self = current_thread();
     ast_t *ast = xnu_ast_pending();
@@ -1505,7 +1515,7 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
         uint32_t increase;
         preemption_t i;
 
-        uxen_cpu_pin_vcpu(vci, cpu_number());
+        aff = uxen_cpu_pin_vcpu(vci, cpu_number());
         /* like uxen_call, except unpin cpu before re-enabling
          * preemption */
         if (uxen_pages_increase_reserve_extra(&i, VCPU_RUN_RESERVE,
@@ -1522,7 +1532,7 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
                 }
             }
         if (x == 0) {
-            uxen_cpu_unpin_vcpu(vci);
+            uxen_cpu_unpin_vcpu(vci, aff);
             enable_preemption(i);
             continue;
         }
@@ -1535,7 +1545,7 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
                      ret);
         if (OSDecrementAtomic(&uxen_devext->de_executing) == 1)
             fast_event_signal(&uxen_devext->de_suspend_event);
-	uxen_cpu_unpin_vcpu(vci);
+	uxen_cpu_unpin_vcpu(vci, aff);
         uxen_pages_decrease_reserve(i, increase);
 
         if (ret || !vci->vci_shared.vci_runnable)
@@ -1787,8 +1797,9 @@ int
 uxen_op_query_vm(struct uxen_queryvm_desc *uqd)
 {
     struct vm_info *vmi;
+    affinity_t aff;
 
-    uxen_lock();
+    aff = uxen_lock();
 
     vmi = rb_tree_find_node_geq(&uxen_devext->de_vm_info_rbtree,
                                 &uqd->uqd_domid);
@@ -1799,7 +1810,7 @@ uxen_op_query_vm(struct uxen_queryvm_desc *uqd)
     } else
         uqd->uqd_domid = -1;
 
-    uxen_unlock();
+    uxen_unlock(aff);
 
     return 0;
 }
@@ -1872,6 +1883,9 @@ uxen_flush_rcu(void)
     unsigned int host_cpu;
     int rcu_pending, cpu_rcu_pending;
     preemption_t i;
+    affinity_t aff;
+
+    aff = uxen_cpu_pin_current();
 
     for (host_cpu = 0; host_cpu < max_host_cpu; host_cpu++) {
         if ((uxen_info->ui_cpu_active_mask & affinity_mask(host_cpu)) == 0)
@@ -1897,7 +1911,7 @@ uxen_flush_rcu(void)
         }
     } while (rcu_pending);
 
-    uxen_cpu_unpin();
+    uxen_cpu_unpin(aff);
 }
 
 int

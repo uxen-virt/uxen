@@ -67,6 +67,8 @@ extern "C" {
 
 #define UXEN_MAP_PAGE_RANGE_MAX 16
 
+typedef processor_t affinity_t;
+
 typedef uint32_t preemption_t;
 void disable_preemption(preemption_t *i);
 void enable_preemption(preemption_t i);
@@ -213,10 +215,10 @@ int uxen_open(struct fd_assoc *fda, task_t task);
 int uxen_ioctl(u_long cmd, struct fd_assoc *fda, struct vm_info *vmi,
                void *in_buf, size_t in_len, void *out_buf, size_t out_len);
 void uxen_close(struct fd_assoc *fda);
-void uxen_lock(void);
-void uxen_unlock(void);
-void uxen_exec_dom0_start(void);
-void uxen_exec_dom0_end(void);
+affinity_t uxen_lock(void);
+void uxen_unlock(affinity_t);
+affinity_t uxen_exec_dom0_start(void);
+void uxen_exec_dom0_end(affinity_t);
 intptr_t uxen_hypercall(struct uxen_hypercall_desc *, int,
                         struct vm_info_shared *, void *, uint32_t);
 intptr_t uxen_dom0_hypercall(struct vm_info_shared *, void *,
@@ -415,12 +417,12 @@ uint32_t physmap_va_to_pfn(const void *va);
 
 /* uxen_cpu.c */
 int uxen_cpu_set_active_mask(uint64_t *mask);
-void uxen_cpu_pin(int cpu);
-void uxen_cpu_pin_current(void);
-void uxen_cpu_pin_first(void);
-void uxen_cpu_unpin(void);
-void uxen_cpu_pin_vcpu(struct vm_vcpu_info *vci, int cpu);
-void uxen_cpu_unpin_vcpu(struct vm_vcpu_info *);
+affinity_t uxen_cpu_pin(int cpu);
+affinity_t uxen_cpu_pin_current(void);
+affinity_t uxen_cpu_pin_first(void);
+void uxen_cpu_unpin(affinity_t);
+affinity_t uxen_cpu_pin_vcpu(struct vm_vcpu_info *vci, int cpu);
+void uxen_cpu_unpin_vcpu(struct vm_vcpu_info *, affinity_t);
 void uxen_cpu_call(int cpu, void (*fn)(void *), void *arg);
 void uxen_cpu_on_selected(const void *mask, uintptr_t (*fn)(uintptr_t));
 void uxen_cpu_on_selected_async(uintptr_t mask, uintptr_t (*fn)(uintptr_t));

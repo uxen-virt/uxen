@@ -17,41 +17,42 @@ static unsigned int first_cpu = MAXIMUM_PROCESSORS - 1;
 unsigned int nr_host_cpus = 0;
 unsigned int max_host_cpu = 0;
 
-void
+affinity_t
 uxen_cpu_pin(unsigned long host_cpu)
 {
     KAFFINITY affinity;
 
     affinity = affinity_mask(host_cpu);
-    KeSetSystemAffinityThread(affinity);
+    return KeSetSystemAffinityThreadEx(affinity);
 }
 
-void
+affinity_t
 uxen_cpu_pin_current(void)
 {
     unsigned long cpu;
 
     cpu = KeGetCurrentProcessorNumber();
-    uxen_cpu_pin(cpu);
+    return uxen_cpu_pin(cpu);
 }
 
-void
+affinity_t
 uxen_cpu_pin_first(void)
 {
 
-    uxen_cpu_pin(first_cpu);
+    return uxen_cpu_pin(first_cpu);
 }
 
 void
-uxen_cpu_unpin(void)
+uxen_cpu_unpin(affinity_t aff)
 {
 
-    KeRevertToUserAffinityThread();
+    KeRevertToUserAffinityThreadEx(aff);
 }
 
-void
+affinity_t
 uxen_cpu_pin_vcpu(struct vm_vcpu_info *vci, int cpu)
 {
+    affinity_t aff;
     preemption_t pre;
 
     spinlock_acquire(vci->vci_ipi_lck, pre);
@@ -63,15 +64,17 @@ uxen_cpu_pin_vcpu(struct vm_vcpu_info *vci, int cpu)
     }
     spinlock_release(vci->vci_ipi_lck, pre);
 
-    uxen_cpu_pin(cpu);
+    aff = uxen_cpu_pin(cpu);
     vci->vci_host_cpu = cpu;
+
+    return aff;
 }
 
 void
-uxen_cpu_unpin_vcpu(struct vm_vcpu_info *vci)
+uxen_cpu_unpin_vcpu(struct vm_vcpu_info *vci, affinity_t aff)
 {
 
-    KeRevertToUserAffinityThread();
+    KeRevertToUserAffinityThreadEx(aff);
 }
 
 int

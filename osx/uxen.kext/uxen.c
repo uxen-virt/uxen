@@ -130,6 +130,7 @@ static void
 release_fd_assoc(struct fd_assoc *fda)
 {
     struct vm_info *vmi;
+    affinity_t aff;
 
     /* unmap logging buffer before freeing vmi,
      * in case logging is per-vm logging */
@@ -140,7 +141,7 @@ release_fd_assoc(struct fd_assoc *fda)
 
     vmi = fda->vmi;
     if (vmi) {
-        uxen_lock();
+        aff = uxen_lock();
         if (vmi->vmi_mdm_fda == fda)
             mdm_clear_all(vmi);
         prepare_release_fd_assoc(fda);
@@ -148,7 +149,7 @@ release_fd_assoc(struct fd_assoc *fda)
             vmi->vmi_marked_for_destroy = 1;
         OSDecrementAtomic(&vmi->vmi_active_references);
         uxen_vmi_cleanup_vm(vmi);
-        uxen_unlock();
+        uxen_unlock(aff);
     }
 }
 
@@ -819,34 +820,37 @@ uxen_module_start_finish(void)
     return ret;
 }
 
-void
+affinity_t
 uxen_lock(void)
 {
+    affinity_t aff;
 
-    uxen_cpu_pin_current();
+    aff = uxen_cpu_pin_current();
     lck_mtx_lock(uxen_lck);
+
+    return aff;
 }
 
 void
-uxen_unlock(void)
+uxen_unlock(affinity_t aff)
 {
 
     lck_mtx_unlock(uxen_lck);
-    uxen_cpu_unpin();
+    uxen_cpu_unpin(aff);
 }
 
-void
+affinity_t
 uxen_exec_dom0_start(void)
 {
 
-    uxen_cpu_pin_current();
+    return uxen_cpu_pin_current();
 }
 
 void
-uxen_exec_dom0_end(void)
+uxen_exec_dom0_end(affinity_t aff)
 {
 
-    uxen_cpu_unpin();
+    uxen_cpu_unpin(aff);
 }
 
 intptr_t
@@ -854,6 +858,7 @@ uxen_hypercall(struct uxen_hypercall_desc *uhd, int snoop_mode,
                struct vm_info_shared *vmis, void *user_access_opaque,
                uint32_t privileged)
 {
+    affinity_t aff;
     intptr_t ret = 0;
     int pfn_array_requested = 0;
 
@@ -863,7 +868,7 @@ uxen_hypercall(struct uxen_hypercall_desc *uhd, int snoop_mode,
             pfn_array_requested = 0;
         }
 
-        uxen_exec_dom0_start();
+        aff = uxen_exec_dom0_start();
         uxen_call(ret =, -EINVAL, _uxen_snoop_hypercall(uhd, snoop_mode),
                   uxen_do_hypercall, uhd, vmis, user_access_opaque,
                   privileged);
@@ -877,7 +882,7 @@ uxen_hypercall(struct uxen_hypercall_desc *uhd, int snoop_mode,
                 vci->vci_shared.vci_map_page_range_requested;
             vci->vci_shared.vci_map_page_range_requested = 0;
         }
-        uxen_exec_dom0_end();
+        uxen_exec_dom0_end(aff);
 
         if (ret == -ECONTINUATION && vmis && vmis->vmi_wait_event) {
             struct user_notification_event *completed =

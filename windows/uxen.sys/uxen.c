@@ -476,28 +476,34 @@ uxen_driver_load(__in PDRIVER_OBJECT DriverObject,
     return status;
 }
 
-void
+affinity_t
 uxen_lock(void)
 {
-    uxen_cpu_pin_current();
+    affinity_t aff;
+
+    aff = uxen_cpu_pin_current();
     KeAcquireGuardedMutex(&uxen_mutex);
+
+    return aff;
 }
 
 void
-uxen_unlock(void)
+uxen_unlock(affinity_t aff)
 {
     KeReleaseGuardedMutex(&uxen_mutex);
-    uxen_cpu_unpin();
+    uxen_cpu_unpin(aff);
 }
 
-void
+affinity_t
 uxen_exec_dom0_start(void)
 {
-    uxen_cpu_pin_current();
+
+    return uxen_cpu_pin_current();
 }
 
 void
-uxen_exec_dom0_end(void)
+uxen_exec_dom0_end(affinity_t aff)
 {
-    uxen_cpu_unpin();
+
+    uxen_cpu_unpin(aff);
 }

@@ -78,6 +78,7 @@ release_fd_assoc(void *p)
 {
     struct fd_assoc *fda;
     struct vm_info *vmi;
+    affinity_t aff;
 
     fda = lookup_fd_assoc(p);
     if (!fda)
@@ -90,7 +91,7 @@ release_fd_assoc(void *p)
         fda->logging_mapping.user_mapping = NULL;
     }
 
-    uxen_lock();
+    aff = uxen_lock();
     vmi = fda->vmi;
     if (vmi) {
         if (vmi->vmi_mdm_fda == fda)
@@ -99,7 +100,7 @@ release_fd_assoc(void *p)
         if (fda->vmi_destroy_on_close)
             vmi->vmi_marked_for_destroy = 1;
     }
-    uxen_unlock();
+    uxen_unlock(aff);
 }
 
 void
@@ -107,19 +108,20 @@ final_release_fd_assoc(void *p)
 {
     struct fd_assoc *fda;
     struct vm_info *vmi;
+    affinity_t aff;
 
     fda = lookup_fd_assoc(p);
     if (!fda)
         return;
 
-    uxen_lock();
+    aff = uxen_lock();
     vmi = fda->vmi;
     if (vmi) {
         uxen_vmi_cleanup_vm(vmi);
         uxen_vmi_free(vmi);
         fda->vmi = NULL;
     }
-    uxen_unlock();
+    uxen_unlock(aff);
 
     kernel_free(fda, sizeof(struct fd_assoc));
     *(struct fd_assoc **)p = NULL;
@@ -244,11 +246,13 @@ processexit_cancel_routine(__inout PDEVICE_OBJECT pDeviceObject,
 
     fda = pIRP->Tail.Overlay.DriverContext[3];
     if (fda->vmi) {
+        affinity_t aff;
         int ret;
-        uxen_exec_dom0_start();
+
+        aff = uxen_exec_dom0_start();
         uxen_call(ret = (int), -EINVAL, NO_RESERVE,
                   uxen_do_destroy_vm, fda->vmi->vmi_shared.vmi_uuid);
-        uxen_exec_dom0_end();
+        uxen_exec_dom0_end(aff);
     }
     pIRP->Tail.Overlay.DriverContext[3] = NULL;
 

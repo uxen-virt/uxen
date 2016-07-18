@@ -67,58 +67,71 @@ uxen_cpu_set_active_mask(uint64_t *mask)
     return 0;
 }
 
-void
+affinity_t
 uxen_cpu_pin(int cpu)
 {
+    affinity_t aff;
     processor_t processor = xnu_cpu_to_processor(cpu);
-    if (!processor)
-        return;
 
-    xnu_thread_bind(processor);
+    if (!processor)
+        return PROCESSOR_NULL;
+
+    aff = xnu_thread_bind(processor);
     if (cpu != cpu_number())
         thread_block(THREAD_CONTINUE_NULL);
+
+    return aff;
 }
 
-void
+affinity_t
 uxen_cpu_pin_current(void)
 {
+    affinity_t aff;
     int cpu = cpu_number();
     processor_t processor = xnu_cpu_to_processor(cpu);
-    if (!processor)
-        return;
 
-    xnu_thread_bind(processor);
+    if (!processor)
+        return PROCESSOR_NULL;
+
+    aff = xnu_thread_bind(processor);
     if (cpu != cpu_number())
+        thread_block(THREAD_CONTINUE_NULL);
+
+    return aff;
+}
+
+affinity_t
+uxen_cpu_pin_first(void)
+{
+
+    return uxen_cpu_pin(first_cpu);
+}
+
+void
+uxen_cpu_unpin(affinity_t aff)
+{
+
+    xnu_thread_bind(aff);
+    if (aff != PROCESSOR_NULL)
         thread_block(THREAD_CONTINUE_NULL);
 }
 
-void
-uxen_cpu_pin_first(void)
-{
-    uxen_cpu_pin(first_cpu);
-}
-
-void
-uxen_cpu_unpin(void)
-{
-
-    xnu_thread_bind(PROCESSOR_NULL);
-    /* thread_block(THREAD_CONTINUE_NULL); */
-}
-
-void
+affinity_t
 uxen_cpu_pin_vcpu(struct vm_vcpu_info *vci, int cpu)
 {
+    affinity_t aff;
 
-    uxen_cpu_pin(cpu);
+    aff = uxen_cpu_pin(cpu);
     vci->vci_host_cpu = cpu;
+
+    return aff;
 }
 
 void
-uxen_cpu_unpin_vcpu(struct vm_vcpu_info *vci)
+uxen_cpu_unpin_vcpu(struct vm_vcpu_info *vci, affinity_t aff)
 {
 
-    uxen_cpu_unpin();
+    uxen_cpu_unpin(aff);
 }
 
 static void
