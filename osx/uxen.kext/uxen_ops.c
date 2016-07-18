@@ -1500,8 +1500,6 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
     thread_t self = current_thread();
     ast_t *ast = xnu_ast_pending();
 
-    uxen_cpu_unpin_vcpu(vci);
-
     while (!ret && vci->vci_shared.vci_runnable) {
         uint32_t x;
         uint32_t increase;
@@ -1609,8 +1607,6 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
     }
 
   out:
-    uxen_cpu_unpin();
-
     return ret;
 }
 

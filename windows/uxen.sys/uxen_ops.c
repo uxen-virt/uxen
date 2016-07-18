@@ -1804,8 +1804,6 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
 {
     int ret;
 
-    uxen_cpu_unpin_vcpu(vci);
-
 #define EVENT_WAIT(object, interruptible, timeout)                      \
     do {                                                                \
         NTSTATUS status;                                                \
@@ -1954,8 +1952,6 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
 #undef EVENT_WAIT
 
   out:
-    uxen_cpu_unpin();
-
     return ret;
 }
 

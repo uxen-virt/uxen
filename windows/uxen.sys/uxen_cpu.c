@@ -67,40 +67,11 @@ uxen_cpu_pin_vcpu(struct vm_vcpu_info *vci, int cpu)
     vci->vci_host_cpu = cpu;
 }
 
-/* This controls which cpus the vm execution thread is pinned to when
- * it's not running.  The thread pins itself to whichever cpu it is
- * running on when it gets to run again, thus this controls the
- * possible cpus for the thread. */
-#define VM_AFFINITY_USER 1
-// #define VM_AFFINITY_ALL 1
-// #define VM_AFFINITY_ALL_BUT_FIRST 1
-// #define VM_AFFINITY_ONE 1
-
-#if defined(VM_AFFINITY_ONE)
-static unsigned long uxen_cpu_vm = 0;
-#endif
-
 void
 uxen_cpu_unpin_vcpu(struct vm_vcpu_info *vci)
 {
-    KAFFINITY affinity;
 
-#if defined(VM_AFFINITY_USER)
     KeRevertToUserAffinityThread();
-    return;
-#elif defined(VM_AFFINITY_ALL)
-    affinity = KeQueryActiveProcessors();
-    KeSetSystemAffinityThread(affinity);
-    return;
-#elif defined(VM_AFFINITY_ALL_BUT_FIRST)
-    affinity = KeQueryActiveProcessors();
-    affinity &= ~affinity_mask(first_cpu);
-    KeSetSystemAffinityThread(affinity);
-    return;
-#elif defined(VM_AFFINITY_ONE)
-    uxen_cpu_pin(uxen_cpu_vm);
-    return;
-#endif
 }
 
 int
