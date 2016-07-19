@@ -1459,7 +1459,8 @@ p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
 
     if (p2m_is_ram(p2mt)) {
         ASSERT(mfn_valid_page(smfn));
-        if (is_p2m_zeropop(q) || p2m_clear_gpfn_from_mapcache(p2m, gfn, smfn)) {
+        if (is_p2m_zeropop(q) || p2m_clear_gpfn_from_mapcache(p2m, gfn, smfn) ||
+            (mfn_to_page(smfn)->count_info & PGC_count_mask) > 1) {
             char *b = map_domain_page(mfn_x(smfn));
             clear_page(b);
             unmap_domain_page(b);
