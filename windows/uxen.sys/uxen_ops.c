@@ -428,15 +428,17 @@ uxen_idle_thread_fn(void *context)
          * to wait for idle_thread_event */
         if (uxen_pages_increase_reserve(&i, IDLE_RESERVE, &increase))
             x = 0;
-        else
+        else {
             while ((x = uxen_devext->de_executing) == 0 ||
                    InterlockedCompareExchange(
                        &uxen_devext->de_executing, x + 1, x) != x) {
                 if (x == 0)
                     break;
             }
+            if (x == 0)
+                uxen_pages_decrease_reserve(i, increase);
+        }
         if (x == 0) {
-            uxen_pages_decrease_reserve(i, increase);
             /* Reset a timeout if we were going to signal that a
              * timeout had occurred. */
             if (!cpu && had_timeout)

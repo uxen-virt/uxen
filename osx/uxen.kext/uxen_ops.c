@@ -273,14 +273,16 @@ uxen_idle_thread_fn(void *context)
          * to wait for idle_thread_event */
         if (uxen_pages_increase_reserve(&i, IDLE_RESERVE, &increase))
             x = 0;
-        else
+        else {
             while ((x = uxen_devext->de_executing) == 0 ||
                    !OSCompareAndSwap(x, x + 1, &uxen_devext->de_executing)) {
                 if (x == 0)
                     break;
             }
+            if (x == 0)
+                uxen_pages_decrease_reserve(i, increase);
+        }
         if (x == 0) {
-            uxen_pages_decrease_reserve(i, increase);
             /* Reset a timeout if we were going to signal that a
              * timeout had occurred. */
             if (!cpu && had_timeout)
@@ -423,7 +425,7 @@ wake_vm(struct vm_vcpu_info_shared *vcis)
 int
 suspend_block(preemption_t i, uint32_t pages, uint32_t *reserve_increase)
 {
-    int ret = 0;
+    int ret;
 
     ASSERT(!preemption_enabled());
     while (1) {
@@ -431,13 +433,15 @@ suspend_block(preemption_t i, uint32_t pages, uint32_t *reserve_increase)
         if (uxen_devext->de_executing)
             break;
         uxen_pages_decrease_reserve(i, *reserve_increase);
+        if (i)
+            return -EAGAIN;
         fast_event_wait(&uxen_devext->de_resume_event, EVENT_UNINTERRUPTIBLE,
                         EVENT_NO_TIMEOUT);
         ret = uxen_pages_increase_reserve(&i, pages, reserve_increase);
         if (ret)
-            break;
+            return -ENOMEM;
     }
-    return ret;
+    return 0;
 }
 
 static void __cdecl

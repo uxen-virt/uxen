@@ -1286,19 +1286,34 @@ _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
     struct page_list_entry *p;
     int ret;
 
+    *i = preemption_enabled();
+    *increase = 0;
     if (pages < MIN_RESERVE)
         pages = MIN_RESERVE;
+    if (pages >= MAX_RESERVE)
+        return -1;
 
     if (fill_vframes())
         return -1;
 
     disable_preemption(i);
-    *increase = 0;
+
     if (pages <= uxen_info->ui_free_pages[cpu].count)
         return 0;
 
+    /* don't attempt memory allocation if preemption was disabled */
+    if (*i) {
+        enable_preemption(*i);
+        return -1;
+    }
+
     pages += extra_pages ? extra_pages : EXTRA_RESERVE;
     pages_reserve[cpu] += pages;
+    if (pages_reserve[cpu] >= MAX_PAGES_RESERVE_CPU) {
+        pages_reserve[cpu] -= pages;
+        enable_preemption(*i);
+        return -1;
+    }
 
     if (pages > uxen_info->ui_free_pages[cpu].count)
         mm_dprintk("%s: cpu%d %d -> %d from %s\n", __FUNCTION__, cpu,

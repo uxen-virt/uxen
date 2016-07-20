@@ -203,20 +203,20 @@ int32_t _uxen_snoop_hypercall(void *udata, int mode);
         uint32_t pages = _pages;                                        \
         uint32_t increase = 0;                                          \
         if (_pages < 0) {                                               \
-            r _pages;                                                   \
+            r (intptr_t)_pages;                                         \
             break;                                                      \
         }                                                               \
         if (uxen_pages_increase_reserve(&i, pages, &increase)) {        \
-            r -ENOMEM;                                                  \
+            r (intptr_t)-ENOMEM;                                        \
             break;                                                      \
         }                                                               \
         while ((x = uxen_devext->de_executing) == 0 ||                  \
                InterlockedCompareExchange(                              \
                    &uxen_devext->de_executing, x + 1, x) != x) {        \
-            int ret;                                                    \
-            ret = suspend_block(i, pages, &increase);                   \
-            if (ret) {                                                  \
-                r ret;                                                  \
+            int32_t _r;                                                 \
+            _r = suspend_block(i, pages, &increase);                    \
+            if (_r) {                                                   \
+                r (intptr_t)_r;                                         \
                 x = 0;                                                  \
                 break;                                                  \
             }                                                           \

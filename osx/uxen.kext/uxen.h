@@ -238,20 +238,23 @@ int32_t _uxen_snoop_hypercall(void *udata, int mode);
         uint32_t pages = _pages;                                        \
         uint32_t increase = 0;                                          \
         if (_pages < 0) {                                               \
-            r _pages;                                                   \
+            r (intptr_t)_pages;                                         \
             break;                                                      \
         }                                                               \
         if (uxen_pages_increase_reserve(&i, pages, &increase)) {        \
-            r -ENOMEM;                                                  \
+            r (intptr_t)-ENOMEM;                                        \
             break;                                                      \
         }                                                               \
         while ((x = uxen_devext->de_executing) == 0 ||                  \
-               !OSCompareAndSwap(x, x + 1, &uxen_devext->de_executing)) \
-            if (suspend_block(i, pages, &increase)) {                   \
+               !OSCompareAndSwap(x, x + 1, &uxen_devext->de_executing)) { \
+            int32_t _r;                                                 \
+            _r = suspend_block(i, pages, &increase);                    \
+            if (_r) {                                                   \
+                r (intptr_t)_r;                                         \
                 x = 0;                                                  \
-                r -ENOMEM;                                              \
                 break;                                                  \
             }                                                           \
+        }                                                               \
         if (x == 0)                                                     \
             break;                                                      \
         try_call(r, exception_retval, fn, __VA_ARGS__);                 \
@@ -363,6 +366,8 @@ void uxen_pages_decrease_reserve(preemption_t i, uint32_t decrease);
 #define IDLE_RESERVE 326
 #define VCPU_RUN_RESERVE 64
 #define VCPU_RUN_EXTRA_RESERVE 448
+#define MAX_RESERVE (1<<18)
+#define MAX_PAGES_RESERVE_CPU (4 << 18)
 void uxen_pages_clear(void);
 extern lck_spin_t *idle_free_lock;
 extern uint32_t idle_free_list;

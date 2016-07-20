@@ -933,6 +933,7 @@ _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
     struct page_list_entry *p;
     int n, needed, ret;
 
+    *i = KeGetCurrentIrql();
     *increase = 0;
     if (pages < MIN_RESERVE)
         pages = MIN_RESERVE;
