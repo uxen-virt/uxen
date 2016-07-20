@@ -528,36 +528,40 @@ uxenconsole_keyboard_event(uxenconsole_context_t ctx,
                            unsigned int scancode,
                            unsigned int flags,
                            void *chars,
-                           unsigned int nchars)
+                           unsigned int nchars,
+                           void *chars_bare,
+                           unsigned int nchars_bare)
 {
     struct ctx *c = ctx;
-    struct uxenconsole_msg_keyboard_event *msg;
+    struct uxenconsole_msg_keyboard_event msg;
     int rc;
-    unsigned int len;
     unsigned int charlen;
+    unsigned int char_bare_len;
 
     snd_complete(c);
 
-    if (nchars > 256)
-        return -1;
-
     charlen = (flags & KEYBOARD_EVENT_FLAG_UCS2) ? nchars * 2 : nchars;
-    len = charlen + sizeof (*msg);
-    msg = calloc(1, len);
-    if (!msg)
+    char_bare_len = (flags & KEYBOARD_EVENT_FLAG_UCS2) ? nchars_bare * 2 : nchars_bare;
+
+    if (charlen > UXENCONSOLE_MSG_KEYBOARD_MAX_LEN)
         return -1;
 
-    msg->header.type = UXENCONSOLE_MSG_TYPE_KEYBOARD_EVENT;
-    msg->header.len = len;
-    msg->keycode = keycode;
-    msg->repeat = repeat;
-    msg->scancode = scancode;
-    msg->flags = flags;
-    memcpy(msg->chars, chars, charlen);
+    if (char_bare_len > UXENCONSOLE_MSG_KEYBOARD_MAX_LEN)
+        return -2;
 
-    rc = channel_write(c, msg, len);
-    free(msg);
-    if (rc != len)
+    msg.header.type = UXENCONSOLE_MSG_TYPE_KEYBOARD_EVENT;
+    msg.header.len = sizeof msg;
+    msg.keycode = keycode;
+    msg.repeat = repeat;
+    msg.scancode = scancode;
+    msg.flags = flags;
+    msg.charslen = charlen;
+    msg.chars_bare_len = char_bare_len;
+    memcpy(msg.chars, chars, charlen);
+    memcpy(msg.chars_bare, chars_bare, char_bare_len);
+
+    rc = channel_write(c, &msg, sizeof msg);
+    if (rc != sizeof msg)
         return -1;
 
     return 0;

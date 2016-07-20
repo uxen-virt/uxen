@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -590,7 +590,7 @@ static ConsoleOps console_ops = {
         if (osx_keymap[keycode].extended)
             flags |= KEYBOARD_EVENT_FLAG_EXTENDED;
         
-        uxenconsole_keyboard_event(self.ctx, keycode, 1, scancode, flags, NULL, 0);
+        uxenconsole_keyboard_event(self.ctx, keycode, 1, scancode, flags, NULL, 0, NULL, 0);
         
     }
 }

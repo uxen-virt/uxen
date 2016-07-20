@@ -95,7 +95,9 @@ int                     uxenconsole_keyboard_event(uxenconsole_context_t ctx,
                                                    unsigned int scancode,
                                                    unsigned int flags,
                                                    void *chars,
-                                                   unsigned int nchars);
+                                                   unsigned int nchars,
+                                                   void *chars_bare,
+                                                   unsigned int nchars_bare);
 
 int                     uxenconsole_request_resize(uxenconsole_context_t ctx,
                                                    unsigned int width,

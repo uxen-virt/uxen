@@ -465,7 +465,8 @@ guest_agent_cmd_prompt(void)
 
 int
 guest_agent_kbd_event(uint8_t keycode, uint16_t repeat, uint8_t scancode,
-                      uint8_t flags, int16_t nchars, wchar_t *chars)
+                      uint8_t flags, int16_t nchars, wchar_t *chars,
+                      int16_t nchars_bare, wchar_t *chars_bare)
 {
     DECL_V4V_BUF(ns_event_msg_kbd_input) buf;
     size_t l;
@@ -479,10 +480,16 @@ guest_agent_kbd_event(uint8_t keycode, uint16_t repeat, uint8_t scancode,
     buf.msg.flags = flags;
 
     l = ((nchars == -1) ? 1 : nchars) * sizeof(wchar_t);
-    if (l > sizeof(buf.msg.buffer))
-        l = sizeof(buf.msg.buffer);
-    memcpy(buf.msg.buffer, chars, l);
+    if (l > NS_EVENT_MSG_KBD_INPUT_LEN)
+        l = NS_EVENT_MSG_KBD_INPUT_LEN;
+    memcpy(buf.msg.chars, chars, l);
     buf.msg.nchars = nchars;
+
+    l = ((nchars_bare == -1) ? 1 : nchars_bare) * sizeof(wchar_t);
+    if (l > NS_EVENT_MSG_KBD_INPUT_LEN)
+        l = NS_EVENT_MSG_KBD_INPUT_LEN;
+    memcpy(buf.msg.chars_bare, chars_bare, l);
+    buf.msg.nchars_bare = nchars_bare;
 
     return guest_agent_sendmsg(&buf, sizeof(buf), 0);
 }

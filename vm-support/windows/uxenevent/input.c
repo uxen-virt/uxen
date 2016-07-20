@@ -215,10 +215,43 @@ keycode_to_char(uint8_t scancode, uint8_t keycode)
 }
 
 static int
-inject_char(wchar_t ch, int up)
+handle_ctrl_shortcuts(wchar_t ch, uint8_t keycode, wchar_t ch_bare, int up)
+{
+    struct kbd_state s1, s2;
+    int alt_up;
+    int ctrl_down;
+
+    get_kbd_state(&s1);
+    s2 = s1;
+    alt_up = !s1.lalt_down && !s1.ralt_down;
+    ctrl_down = s1.lctrl_down || s1.rctrl_down;
+
+    if (!up && alt_up && ctrl_down && (ch != ch_bare) && (keycode >= VK_OEM_1)) {
+        UINT mapped_ch = MapVirtualKey(keycode, MAPVK_VK_TO_CHAR) & 0xff;
+        DPRINTF("mapped_ch=%04x keycode=%04x ch_bare=%04x wctob=%04x",
+                mapped_ch, keycode, ch_bare, wctob(ch_bare));
+        if ((mapped_ch > 0) && (mapped_ch != wctob(ch_bare))) {
+            s1.lshift_down = 1;
+        } else {
+            s1.lshift_down = 0;
+        }
+        set_kbd_state(&s1);
+        inject_key(keycode, up, 0);
+        set_kbd_state(&s2);
+        return 0;
+    }
+    return -1;
+}
+
+static int
+inject_char(wchar_t ch, uint8_t keycode, wchar_t ch_bare, int up)
 {
     uint16_t scan;
     int ret = 0;
+
+    ret = handle_ctrl_shortcuts(ch, keycode, ch_bare, up);
+    if (ret == 0)
+        return ret;
 
     scan = VkKeyScanW(ch);
     DPRINTF("ch=%04x up=%d scan=%04x", ch, up, scan);
@@ -274,7 +307,8 @@ inject_char(wchar_t ch, int up)
 
 int
 input_key_event(uint8_t keycode, uint16_t repeat, uint8_t scancode,
-                uint8_t flags, int nchars, wchar_t *chars)
+                uint8_t flags, int nchars, wchar_t *chars,
+                int nchars_bare, wchar_t *chars_bare)
 {
     int ret = 0;
     int up = scancode & 0x80;
@@ -290,8 +324,12 @@ input_key_event(uint8_t keycode, uint16_t repeat, uint8_t scancode,
             (keycode_to_char(scancode, keycode) == chars[0]))
             ret = inject_key(keycode, up, extended);
         else {
-            for (i = 0; i < nchars; i++)
-                ret |= inject_char(chars[i], up);
+            for (i = 0; i < nchars; i++) {
+                wchar_t ch_bare = 0;
+                if (i < nchars_bare)
+                    ch_bare = chars_bare[i];
+                ret |= inject_char(chars[i], keycode, ch_bare, up);
+            }
         }
     }
 

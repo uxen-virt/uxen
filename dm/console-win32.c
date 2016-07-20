@@ -326,11 +326,12 @@ start_perf_data_collection(void)
 static void
 key_event_send(int force_ps2,
                uint8_t keycode, uint16_t repeat, uint8_t scancode,
-               uint8_t flags, int16_t nchars, wchar_t *chars)
+               uint8_t flags, int16_t nchars, wchar_t *chars,
+               int16_t nchars_bare, wchar_t *chars_bare)
 {
     if (force_ps2 ||
         guest_agent_kbd_event(keycode, repeat, scancode, flags, nchars,
-                              chars)) {
+                              chars, nchars_bare, chars_bare)) {
         struct input_event *input_event;
         BH *bh;
 
@@ -889,11 +890,13 @@ handle_key_event(HWND hwnd, int message, int wParam, int lParam)
 
     if (is_numpad_key(wParam))
         key_event_send(1, wParam, lParam & 0xffff, scancode,
-                       lParam >> 24, 0, NULL);
+                       lParam >> 24, 0, NULL, 0, NULL);
     else {
         unsigned char state[256];
         wchar_t chars[4];
         int nchars;
+        wchar_t chars_bare[4] = {0};
+        int nchars_bare = 0;
         HKL layout;
 
         layout = GetKeyboardLayout(0);
@@ -908,6 +911,12 @@ handle_key_event(HWND hwnd, int message, int wParam, int lParam)
         if (nchars > 0) {
             nchars = ToUnicodeEx(wParam, scancode, state, chars,
                                  sizeof(chars) / sizeof (wchar_t),
+                                 0, layout);
+
+            state[VK_CONTROL] = state[VK_LCONTROL] = state[VK_RCONTROL] = 0;
+            state[VK_MENU] = state[VK_LMENU] = state[VK_RMENU] = 0;
+            nchars_bare = ToUnicodeEx(wParam, scancode, state, chars_bare,
+                                 sizeof(chars_bare) / sizeof (wchar_t),
                                  0, layout);
         }
 
@@ -968,7 +977,8 @@ sendkey:
                 kbd_dead_key = 0;
             else
                 key_event_send(0, wParam, lParam & 0xffff, scancode,
-                               lParam >> 24, nchars, chars);
+                               lParam >> 24, nchars, chars,
+                               nchars_bare, chars_bare);
             break;
         default:
             assert(0);
@@ -1216,9 +1226,9 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
             uint8_t scancode = (lParam >> 16) & 0x7f;
 
             key_event_send(0, kbd_last_key, lParam & 0xffff, scancode,
-                           lParam >> 24, 1, &ch);
+                           lParam >> 24, 1, &ch, 0, NULL);
             key_event_send(0, kbd_last_key, lParam & 0xffff, scancode | 0x80,
-                           lParam >> 24, 1, &ch);
+                           lParam >> 24, 1, &ch, 0, NULL);
 
             return 0;
         }

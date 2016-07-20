@@ -35,7 +35,7 @@ libuxenconsole.a: $(libuxenconsole_OBJS) Makefile.lib-LIBUXENCONSOLE
 
 %.o: %.c
 	$(_W)echo Compiling - $@
-	$(_V)$(COMPILE.c) $< -o $@
+	$(_V)$(COMPILE.c:-fstack-protector%=) $< -o $@
 
 %.o: %.m
 	$(_W)echo Compiling - $@

@@ -580,7 +580,8 @@ static int
 process_kbd_input(struct ns_event_msg_kbd_input *msg)
 {
     return input_key_event(msg->keycode, msg->repeat, msg->scancode,
-                           msg->flags, msg->nchars, (wchar_t *)msg->buffer);
+                           msg->flags, msg->nchars, (wchar_t *)msg->chars,
+                           msg->nchars_bare, (wchar_t *)msg->chars_bare);
 }
 
 static int

@@ -74,6 +74,8 @@ struct ns_event_msg_blank_display {
     int enable;
 };
 
+#define NS_EVENT_MSG_KBD_INPUT_LEN 32
+
 struct ns_event_msg_kbd_input {
     struct ns_event_msg_header msg;
     uint8_t keycode;
@@ -81,7 +83,9 @@ struct ns_event_msg_kbd_input {
     uint8_t scancode;
     uint8_t flags;
     int16_t nchars;
-    uint8_t buffer[8];
+    uint8_t chars[NS_EVENT_MSG_KBD_INPUT_LEN];
+    int16_t nchars_bare;
+    uint8_t chars_bare[NS_EVENT_MSG_KBD_INPUT_LEN];
 };
 
 struct ns_event_msg_mouse_input {

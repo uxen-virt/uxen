@@ -163,19 +163,23 @@ handle_message(struct uxenconsole_msg_header *hdr)
     case UXENCONSOLE_MSG_TYPE_KEYBOARD_EVENT:
         {
             struct uxenconsole_msg_keyboard_event *msg = (void *)hdr;
-            int nchars = msg->header.len - sizeof(*msg);
+            int nchars = msg->charslen;
+            int nchars_bare = msg->chars_bare_len;
 
 #ifdef NOTIFY_CLIPBOARD_SERVICE
             input_notify_clipboard_about_keypress(msg->scancode);
 #endif
 
-            if (msg->flags & KEYBOARD_EVENT_FLAG_UCS2)
+            if (msg->flags & KEYBOARD_EVENT_FLAG_UCS2) {
                 nchars /= 2;
+                nchars_bare /= 2;
+            }
 
 #if !defined(__APPLE__)
             if (guest_agent_kbd_event(msg->keycode, msg->repeat, msg->scancode,
                                       msg->flags & 0xffff, nchars,
-                                      (wchar_t *)msg->chars))
+                                      (wchar_t *)msg->chars, nchars_bare,
+                                      (wchar_t *)msg->chars_bare))
 #endif /* !__APPLE */
             {
                 struct input_event *input_event;

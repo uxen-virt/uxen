@@ -347,6 +347,8 @@ window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
             unsigned char state[256];
             wchar_t chars[4];
             int nchars;
+            wchar_t chars_bare[4] = {0};
+            int nchars_bare = 0;
             HKL layout;
             int up = (message == WM_KEYUP) || (message == WM_SYSKEYUP);
             unsigned int scancode = (lParam >> 16) & 0x7f;
@@ -363,6 +365,12 @@ window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
             if (nchars > 0) {
                 nchars = ToUnicodeEx(wParam, scancode, state, chars,
                                      sizeof(chars) / sizeof (wchar_t),
+                                     0, layout);
+
+                state[VK_CONTROL] = state[VK_LCONTROL] = state[VK_RCONTROL] = 0;
+                state[VK_MENU] = state[VK_LMENU] = state[VK_RMENU] = 0;
+                nchars_bare = ToUnicodeEx(wParam, scancode, state, chars_bare,
+                                     sizeof(chars_bare) / sizeof (wchar_t),
                                      0, layout);
             }
 
@@ -427,7 +435,7 @@ sendkey:
                             lParam & 0xffff,
                             scancode | (up ? 0x80 : 0x0),
                             (lParam >> 24) | KEYBOARD_EVENT_FLAG_UCS2,
-                            chars, nchars);
+                            chars, nchars, chars_bare, nchars_bare);
                 break;
             default:
                 /* assert */
@@ -448,14 +456,14 @@ sendkey:
                     lParam & 0xffff,
                     scancode,
                     (lParam >> 24) | KEYBOARD_EVENT_FLAG_UCS2,
-                    &ch, 1);
+                    &ch, 1, NULL, 0);
             uxenconsole_keyboard_event(
                     cons->ctx,
                     cons->kbd_last_key,
                     lParam & 0xffff,
                     scancode | 0x80,
                     (lParam >> 24) | KEYBOARD_EVENT_FLAG_UCS2,
-                    &ch, 1);
+                    &ch, 1, NULL, 0);
             return 0;
         }
         break;

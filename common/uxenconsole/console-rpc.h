@@ -56,13 +56,18 @@ struct uxenconsole_msg_mouse_event {
     unsigned int flags;
 };
 
+#define UXENCONSOLE_MSG_KEYBOARD_MAX_LEN 32
+
 struct uxenconsole_msg_keyboard_event {
     struct uxenconsole_msg_header header;
     uint32_t keycode;
     uint32_t repeat;
     uint32_t scancode;
     uint32_t flags;
-    uint8_t chars[0];
+    uint8_t charslen;
+    uint8_t chars[UXENCONSOLE_MSG_KEYBOARD_MAX_LEN];
+    uint8_t chars_bare_len;
+    uint8_t chars_bare[UXENCONSOLE_MSG_KEYBOARD_MAX_LEN];
 };
 
 struct uxenconsole_msg_update_cursor {

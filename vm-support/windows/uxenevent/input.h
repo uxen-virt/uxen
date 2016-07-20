@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2016, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -15,7 +15,8 @@
 #endif
 
 int input_key_event(uint8_t keycode, uint16_t repeat, uint8_t scancode,
-                    uint8_t flags, int nchars, wchar_t *chars);
+                    uint8_t flags, int nchars, wchar_t *chars,
+                    int nchars_bare, wchar_t *chars_bare);
 int input_mouse_event(uint32_t x, uint32_t y, int32_t dv, int32_t dh,
                       uint32_t flags);
 int input_wm_mouse_event(UINT message, WPARAM wParam, LPARAM lParam);
