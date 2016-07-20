@@ -44,8 +44,14 @@ void dubtree_close(DubTree *t)
     }
 
 #ifdef _WIN32
+    if (!FlushViewOfFile(t->header, 0)) {
+        Wwarn("FlushViewOfFile");
+    }
     UnmapViewOfFile(t->header);
 #else
+    if (msync(t->header, sizeof(DubTreeHeader), MS_SYNC) != 0) {
+        warn("msync");
+    }
     munmap(t->header, sizeof(DubTreeHeader));
 #endif
 }
