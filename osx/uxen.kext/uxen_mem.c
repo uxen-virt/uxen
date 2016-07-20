@@ -1472,9 +1472,11 @@ idle_free_free_list(void)
 void
 uxen_pages_decrease_reserve(preemption_t i, uint32_t decrease)
 {
+    int cpu = cpu_number();
 
-    pages_reserve[cpu_number()] -= decrease;
-    uxen_pages_retire(i, cpu_number(), 768 + pages_reserve[cpu_number()]);
+    ASSERT(decrease <= pages_reserve[cpu]);
+    pages_reserve[cpu] -= decrease;
+    uxen_pages_retire(i, cpu, 768 + pages_reserve[cpu]);
 }
 
 void
