@@ -95,6 +95,7 @@ HANDLE WINAPI (*_AvSetMmThreadCharacteristics)(LPCSTR, LPDWORD)=0;
 BOOL WINAPI (*_AvRevertMmThreadCharacteristics)(HANDLE)=0;
 BOOL WINAPI (*_AvSetMmThreadPriority)(HANDLE, AVRT_PRIORITY)=0;
 
+static int use_avrt;
 static HANDLE mm_task;
 static HANDLE mm_prioritize_ev;
 static HANDLE devchange_ev;
@@ -405,6 +406,10 @@ create_audio_client(wasapi_voice_t v, IMMDevice *pMMDevice,
 void __mm_prioritize(HANDLE *ptask, int on)
 {
     DWORD task_index = 0;
+
+    if (!use_avrt)
+        return;
+
     if (on) {
         if (*ptask)
             return;
@@ -892,23 +897,35 @@ static void devchange_cb(void *opaque)
     critical_section_leave(&lock);
 }
 
-static void load_avrt()
+static void
+load_avrt()
 {
     HANDLE h;
 
     if (_AvSetMmThreadCharacteristics)
         return;
     h = LoadLibrary("avrt.dll");
-    assert(h);
+    if (!h)
+        goto err;
     _AvSetMmThreadCharacteristics =
         (HANDLE WINAPI (*)(LPCSTR, LPDWORD))
         GetProcAddress(h, "AvSetMmThreadCharacteristicsA");
+    if (!_AvSetMmThreadCharacteristics)
+        goto err;
     _AvRevertMmThreadCharacteristics =
         (BOOL WINAPI (*)(HANDLE))
         GetProcAddress(h, "AvRevertMmThreadCharacteristics");
+    if (!_AvRevertMmThreadCharacteristics)
+        goto err;
     _AvSetMmThreadPriority =
         (BOOL WINAPI (*)(HANDLE, AVRT_PRIORITY))
         GetProcAddress(h, "AvSetMmThreadPriority");
+    if (!_AvSetMmThreadPriority)
+        goto err;
+    use_avrt = 1;
+    return;
+err:
+    debug_printf("failed to setup avrt.dll\n");
 }
 
 void wasapi_init(void)
