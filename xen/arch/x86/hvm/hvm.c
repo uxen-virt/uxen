@@ -3843,9 +3843,14 @@ static long hvm_memory_op(int cmd, XEN_GUEST_HANDLE(void) arg)
         current->domain->arch.hvm_domain.qemu_mapcache_invalidate = 1;
         return rc;
 #else  /* __UXEN__ */
-    case XENMEM_add_to_physmap:
     case XENMEM_share_zero_pages:
     case XENMEM_set_zero_page_ctxt:
+        break;
+    case XENMEM_add_to_physmap:
+        if (restricted_hvm_hypercalls(current->domain)) {
+            gdprintk(XENLOG_WARNING, "hvm_memory_op restricted cmd %d\n", cmd);
+            return -ENOSYS;
+        }
         break;
     default:
         gdprintk(XENLOG_WARNING, "hvm_memory_op cmd %d\n", cmd);
@@ -5612,10 +5617,16 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
 
 static long do_hvm_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
 {
+
     switch (op) {
+    case HVMOP_xenlog:
+        break;
     case HVMOP_set_param:
     case HVMOP_get_param:
-    case HVMOP_xenlog:
+        if (restricted_hvm_hypercalls(current->domain)) {
+            gdprintk(XENLOG_WARNING, "do_hvm_hvm_op restricted op %lu\n", op);
+            return -ENOSYS;
+        }
         break;
     default:
         gdprintk(XENLOG_WARNING, "do_hvm_hvm_op op %lu\n", op);

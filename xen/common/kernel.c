@@ -319,6 +319,9 @@ DO(xen_version)(int cmd, XEN_GUEST_HANDLE(void) arg)
     {
         xen_domain_handle_t handle;
 
+        if (restricted_hvm_hypercalls(current->domain))
+            return -ENOSYS;
+
         atomic_read_domain_handle(&current->domain->handle_atomic,
                                   (uint128_t *)handle);
 
@@ -338,6 +341,9 @@ DO(xen_version)(int cmd, XEN_GUEST_HANDLE(void) arg)
 
     case XENVER_opt_debug:
     {
+        if (!IS_HOST(current->domain))
+            return -ENOSYS;
+
         if ( copy_to_guest(arg, opt_debug, ARRAY_SIZE(opt_debug)) )
             return -EFAULT;
         return 0;

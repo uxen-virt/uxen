@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2016, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -586,6 +586,16 @@ int main(void)
         bios->bios_info_finish();
 
     xenbus_shutdown();
+
+    {
+        struct xen_hvm_param p = {
+            .domid = DOMID_SELF,
+            .index = HVM_PARAM_RESTRICTED_HYPERCALLS,
+            .value = 1,
+        };
+
+        hypercall_hvm_op(HVMOP_set_param, &p);
+    }
 
     printf("Invoking %s ...\n", bios->name);
     return 0;

@@ -190,7 +190,8 @@ uxenvm_savevm_write_info(struct filebuf *f, uint8_t *dm_state_buf,
         { HVM_PARAM_IO_PFN_LAST, "io pfn last" },
         { HVM_PARAM_SHARED_INFO_PFN, "shared info pfn" },
         { HVM_PARAM_DMREQ_VCPU_PFN, "dmreq vcpu pfn" }, /* dmreq vcpu first */
-        { HVM_PARAM_DMREQ_PFN, "dmreq pfn" }
+        { HVM_PARAM_DMREQ_PFN, "dmreq pfn" },
+        { HVM_PARAM_RESTRICTED_HYPERCALLS, "restricted_hypercalls" }
     };
     struct xc_save_hvm_context s_hvm_context;
     struct xc_save_hvm_dm s_hvm_dm;
