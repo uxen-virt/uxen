@@ -3849,6 +3849,7 @@ static long hvm_memory_op(int cmd, XEN_GUEST_HANDLE(void) arg)
         break;
     default:
         gdprintk(XENLOG_WARNING, "hvm_memory_op cmd %d\n", cmd);
+    case XENMEM_populate_physmap:
         return -ENOSYS;
 #endif  /* __UXEN__ */
     }
