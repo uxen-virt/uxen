@@ -47,11 +47,21 @@ vmsavefile_save_simple(xc_interface *_xc_handle, const char *savefile,
     struct xc_save_version_info s_version_info;
     struct xc_save_tsc_info s_tsc_info;
     struct xc_save_vcpu_info s_vcpu_info;
-    struct xc_save_hvm_generic_chunk s_hvm_ident_pt;
-    struct xc_save_hvm_generic_chunk s_hvm_vm86_tss;
-    struct xc_save_hvm_generic_chunk s_hvm_console_pfn;
-    struct xc_save_hvm_generic_chunk s_hvm_acpi_ioports_location;
-    struct xc_save_hvm_magic_pfns s_hvm_magic_pfns;
+    struct xc_save_hvm_params s_hvm_params;
+    int nr_hvm_params = 0;
+    struct {
+        uint16_t idx;
+        char *name;
+    } saved_hvm_params[] = {
+        { HVM_PARAM_IDENT_PT, "ident_pt" },
+        { HVM_PARAM_VM86_TSS, "vm86_tss" },
+        { HVM_PARAM_ACPI_IOPORTS_LOCATION, "acpi_ioports_location" },
+        { HVM_PARAM_IO_PFN_FIRST, "io pfn first" },
+        { HVM_PARAM_IO_PFN_LAST, "io pfn last" },
+        { HVM_PARAM_SHARED_INFO_PFN, "shared info pfn" },
+        { HVM_PARAM_DMREQ_VCPU_PFN, "dmreq vcpu pfn" }, /* dmreq vcpu first */
+        { HVM_PARAM_DMREQ_PFN, "dmreq pfn" }
+    };
     struct xc_save_hvm_context s_hvm_context;
     struct xc_save_vm_uuid s_vm_uuid;
     int p2m_size;
@@ -110,57 +120,26 @@ vmsavefile_save_simple(xc_interface *_xc_handle, const char *savefile,
 	    s_vcpu_info.vcpumap);
     filebuf_write(f, &s_vcpu_info, sizeof(s_vcpu_info));
 
-    s_hvm_ident_pt.marker = XC_SAVE_ID_HVM_IDENT_PT;
-    s_hvm_ident_pt.data = 0;
-    xc_get_hvm_param(_xc_handle, domid, HVM_PARAM_IDENT_PT,
-		     &s_hvm_ident_pt.data);
-    DPRINTF("ident_pt %"PRIx64, s_hvm_ident_pt.data);
-    if (s_hvm_ident_pt.data)
-	filebuf_write(f, &s_hvm_ident_pt, sizeof(s_hvm_ident_pt));
+    for (nr_hvm_params = 0; nr_hvm_params < ARRAY_SIZE(saved_hvm_params);
+         nr_hvm_params++) {
+        s_hvm_params.params[nr_hvm_params].idx =
+            saved_hvm_params[nr_hvm_params].idx;
+        s_hvm_params.params[nr_hvm_params].data = 0;
+        xc_get_hvm_param(_xc_handle, domid,
+                         s_hvm_params.params[nr_hvm_params].idx,
+                         &s_hvm_params.params[nr_hvm_params].data);
+        DPRINTF("hvm param %s/%d %"PRIx64,
+                saved_hvm_params[nr_hvm_params].name,
+                s_hvm_params.params[nr_hvm_params].idx,
+                s_hvm_params.params[nr_hvm_params].data);
+    }
 
-    s_hvm_vm86_tss.marker = XC_SAVE_ID_HVM_VM86_TSS;
-    s_hvm_vm86_tss.data = 0;
-    xc_get_hvm_param(_xc_handle, domid, HVM_PARAM_VM86_TSS,
-		     &s_hvm_vm86_tss.data);
-    DPRINTF("vm86_tss %"PRIx64, s_hvm_vm86_tss.data);
-    if (s_hvm_vm86_tss.data)
-	filebuf_write(f, &s_hvm_vm86_tss, sizeof(s_hvm_vm86_tss));
-
-    s_hvm_console_pfn.marker = XC_SAVE_ID_HVM_CONSOLE_PFN;
-    s_hvm_console_pfn.data = 0;
-    xc_get_hvm_param(_xc_handle, domid, HVM_PARAM_CONSOLE_PFN,
-		     &s_hvm_console_pfn.data);
-    DPRINTF("console_pfn %"PRIx64, s_hvm_console_pfn.data);
-    if (s_hvm_console_pfn.data)
-	filebuf_write(f, &s_hvm_console_pfn, sizeof(s_hvm_console_pfn));
-
-    s_hvm_acpi_ioports_location.marker = XC_SAVE_ID_HVM_ACPI_IOPORTS_LOCATION;
-    s_hvm_acpi_ioports_location.data = 0;
-    xc_get_hvm_param(_xc_handle, domid, HVM_PARAM_ACPI_IOPORTS_LOCATION,
-		     &s_hvm_acpi_ioports_location.data);
-    DPRINTF("acpi_ioports_location %"PRIx64, s_hvm_acpi_ioports_location.data);
-    if (s_hvm_acpi_ioports_location.data)
-	filebuf_write(f, &s_hvm_acpi_ioports_location,
-                      sizeof(s_hvm_acpi_ioports_location));
-
-    s_hvm_magic_pfns.marker = XC_SAVE_ID_HVM_MAGIC_PFNS;
-    memset(s_hvm_magic_pfns.magic_pfns, 0, sizeof(s_hvm_magic_pfns.magic_pfns));
-    xc_get_hvm_param(_xc_handle, domid, HVM_PARAM_IO_PFN_FIRST,
-		     &s_hvm_magic_pfns.magic_pfns[0]);
-    xc_get_hvm_param(_xc_handle, domid, HVM_PARAM_IO_PFN_LAST,
-		     &s_hvm_magic_pfns.magic_pfns[1]);
-    xc_get_hvm_param(_xc_handle, domid, HVM_PARAM_SHARED_INFO_PFN,
-		     &s_hvm_magic_pfns.magic_pfns[2]);
-    xc_get_hvm_param(_xc_handle, domid, HVM_PARAM_DMREQ_PFN,
-                     &s_hvm_magic_pfns.magic_pfns[3]);
-    xc_get_hvm_param(_xc_handle, domid, HVM_PARAM_DMREQ_VCPU_PFN,
-                     &s_hvm_magic_pfns.magic_pfns[4]);
-    DPRINTF("ioreq pfn %"PRIx64"-%"PRIx64
-            " shared info pfn %"PRIx64" dmreq pfn %"PRIx64"/%"PRIx64,
-            s_hvm_magic_pfns.magic_pfns[0], s_hvm_magic_pfns.magic_pfns[1],
-            s_hvm_magic_pfns.magic_pfns[2], s_hvm_magic_pfns.magic_pfns[3],
-            s_hvm_magic_pfns.magic_pfns[4]);
-    filebuf_write(f, &s_hvm_magic_pfns, sizeof(s_hvm_magic_pfns));
+    if (nr_hvm_params) {
+        s_hvm_params.marker = XC_SAVE_ID_HVM_PARAMS;
+        s_hvm_params.size = nr_hvm_params * sizeof(s_hvm_params.params[0]);
+	filebuf_write(f, &s_hvm_params,
+                      sizeof(struct xc_save_generic) + s_hvm_params.size);
+    }
 
     hvm_buf_size = xc_domain_hvm_getcontext(_xc_handle, domid, 0, 0);
     if (hvm_buf_size == -1) {

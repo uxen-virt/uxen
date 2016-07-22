@@ -9,16 +9,12 @@
 
 #include "introspection_info.h"
 #include <fingerprint.h>
+#include <xen/hvm/params.h>
 
-#define SAVE_FORMAT_VERSION 4
+#define SAVE_FORMAT_VERSION 5
 // #include <xg_save_restore.h>
 #define XC_SAVE_ID_VCPU_INFO          -2 /* Additional VCPU info */
-#define XC_SAVE_ID_HVM_IDENT_PT       -3 /* (HVM-only) */
-#define XC_SAVE_ID_HVM_VM86_TSS       -4 /* (HVM-only) */
 #define XC_SAVE_ID_TSC_INFO           -7
-#define XC_SAVE_ID_HVM_CONSOLE_PFN    -8 /* (HVM-only) */
-#define XC_SAVE_ID_HVM_ACPI_IOPORTS_LOCATION -10
-#define XC_SAVE_ID_HVM_MAGIC_PFNS     -11
 #define XC_SAVE_ID_HVM_CONTEXT        -12
 #define XC_SAVE_ID_HVM_DM             -13
 #define XC_SAVE_ID_VM_UUID            -14
@@ -31,6 +27,7 @@
 #define XC_SAVE_ID_ZERO_BITMAP        -21
 #define XC_SAVE_ID_FINGERPRINTS       -22
 #define XC_SAVE_ID_CUCKOO_DATA        -23
+#define XC_SAVE_ID_HVM_PARAMS         -24
 
 #define MAX_BATCH_SIZE 1023
 
@@ -58,15 +55,13 @@ struct xc_save_vcpu_info {
     uint64_t vcpumap;
 };
 
-struct xc_save_hvm_generic_chunk {
-    int32_t marker;
-    uint32_t pad;
-    uint64_t data;
-};
+struct xc_save_hvm_params {
+    struct xc_save_generic;
 
-struct xc_save_hvm_magic_pfns {
-    int32_t marker;
-    uint64_t magic_pfns[5];
+    struct {
+        uint16_t idx;
+        uint64_t data;
+    } params[HVM_NR_PARAMS];
 };
 
 struct xc_save_hvm_context {

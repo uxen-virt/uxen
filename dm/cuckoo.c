@@ -27,7 +27,9 @@
 #include "filebuf.h"
 #include "thread-event.h"
 
+#ifndef PAGE_SIZE
 #define PAGE_SIZE 0x1000 /* You knew it */
+#endif
 
 #ifndef QEMU_UXEN
 #define debug_printf printf

@@ -15,7 +15,9 @@
 #endif
 #include <stdint.h>
 
+#ifndef PAGE_SIZE
 #define PAGE_SIZE 4096
+#endif
 
 /* Compute a rolling hash over a 64 byte window for every 32b offset
  * in the page, and return the min and max values combined into a

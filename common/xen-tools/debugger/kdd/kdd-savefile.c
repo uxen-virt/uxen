@@ -14,6 +14,15 @@
 #define SKIP_MARKER_STRUCT(f, sz) do { \
         fseek(f, (sz) - sizeof(int32_t), SEEK_CUR); \
     } while (1 == 0)
+#define SKIP_GENERIC_STRUCT(f, _log, _out) do {         \
+        int32_t size;                                   \
+        if (fread(&size, sizeof(size), 1, f) != 1) {    \
+            if (_log)                                   \
+                fprintf(_log, "error reading size\n");  \
+            goto _out;                                  \
+        }                                               \
+        fseek(f, size, SEEK_CUR);                       \
+    } while (0)
 
 enum batch_type_e {
     BATCH_UNKNOWN = 0,
@@ -27,10 +36,29 @@ struct page_node {
     void *ptr;
 };
 
+/* backwards compatibility */
 struct xc_save_hvm_magic_pfns_v2 {
     int32_t marker;
     uint64_t magic_pfns[3];
 };
+
+struct xc_save_hvm_magic_pfns_v4 {
+    int32_t marker;
+    uint64_t magic_pfns[5];
+};
+
+struct xc_save_hvm_generic_chunk_v4 {
+    int32_t marker;
+    uint32_t pad;
+    uint64_t data;
+};
+
+#define XC_SAVE_ID_HVM_IDENT_PT_v4       -3 /* (HVM-only) */
+#define XC_SAVE_ID_HVM_VM86_TSS_v4       -4 /* (HVM-only) */
+#define XC_SAVE_ID_HVM_CONSOLE_PFN_v4    -8 /* (HVM-only) */
+#define XC_SAVE_ID_HVM_ACPI_IOPORTS_LOCATION_v4 -10
+#define XC_SAVE_ID_HVM_MAGIC_PFNS_v4     -11
+/* end backwards compatibility */
 
 #define PGS_ALLOC_GRAN  1024
 
@@ -60,7 +88,8 @@ svf_init(const char *save_file, FILE *log, int verbosity)
     size_t i;
     int64_t pos;
     uint32_t nzero = 0, npages = 0;
-    int v2_savefile = 0;
+    int magic_pfns_v2 = 0;
+    int chunks_v4 = 0;
 
     pfn_info = malloc(MAX_BATCH_SIZE * sizeof(*pfn_info));
 
@@ -90,9 +119,16 @@ svf_init(const char *save_file, FILE *log, int verbosity)
         goto err;
     }
 
-    if (version_info.version == 2) {
-        v2_savefile = 1;
-    } else if (version_info.version != SAVE_FORMAT_VERSION) {
+    switch (version_info.version) {
+    case 2:
+        magic_pfns_v2 = 1;
+    case 3:
+    case 4:
+        chunks_v4 = 1;
+        break;
+    case SAVE_FORMAT_VERSION:
+        break;
+    default:
         fprintf(log, "error, unknown savefile version %d \n",
                (int) version_info.version);
         goto err;
@@ -126,17 +162,8 @@ svf_init(const char *save_file, FILE *log, int verbosity)
         case XC_SAVE_ID_VCPU_INFO:
             SKIP_MARKER_STRUCT(svf->f, sizeof(struct xc_save_vcpu_info));
             break;
-        case XC_SAVE_ID_HVM_IDENT_PT:
-        case XC_SAVE_ID_HVM_VM86_TSS:
-        case XC_SAVE_ID_HVM_CONSOLE_PFN:
-        case XC_SAVE_ID_HVM_ACPI_IOPORTS_LOCATION:
-            SKIP_MARKER_STRUCT(svf->f, sizeof(struct xc_save_hvm_generic_chunk));
-            break;
-        case XC_SAVE_ID_HVM_MAGIC_PFNS:
-            if (v2_savefile)
-                SKIP_MARKER_STRUCT(svf->f, sizeof(struct xc_save_hvm_magic_pfns_v2));
-            else
-                SKIP_MARKER_STRUCT(svf->f, sizeof(struct xc_save_hvm_magic_pfns));
+        case XC_SAVE_ID_HVM_PARAMS:
+            SKIP_GENERIC_STRUCT(svf->f, log, err);
             break;
         case XC_SAVE_ID_HVM_CONTEXT:
             fseek(svf->f, - (long) sizeof(int32_t), SEEK_CUR);
@@ -249,6 +276,36 @@ svf_init(const char *save_file, FILE *log, int verbosity)
                 goto err;
             }
             break;
+            /* backwards compatibility */
+        case XC_SAVE_ID_HVM_IDENT_PT_v4:
+        case XC_SAVE_ID_HVM_VM86_TSS_v4:
+        case XC_SAVE_ID_HVM_CONSOLE_PFN_v4:
+        case XC_SAVE_ID_HVM_ACPI_IOPORTS_LOCATION_v4:
+            if (!chunks_v4) {
+                if (log)
+                    fprintf(log, "savefile v%d: chunk %d unexpected\n",
+                            version_info.version, marker);
+                goto err;
+            }
+            SKIP_MARKER_STRUCT(svf->f,
+                               sizeof(struct xc_save_hvm_generic_chunk_v4));
+            break;
+         case XC_SAVE_ID_HVM_MAGIC_PFNS_v4:
+            if (!chunks_v4) {
+                if (log)
+                    fprintf(log, "savefile v%d: "
+                            "XC_SAVE_ID_HVM_MAGIC_PFNS unexpected\n",
+                            version_info.version);
+                goto err;
+            }
+            if (magic_pfns_v2)
+                SKIP_MARKER_STRUCT(svf->f,
+                                   sizeof(struct xc_save_hvm_magic_pfns_v2));
+            else
+                SKIP_MARKER_STRUCT(svf->f,
+                                   sizeof(struct xc_save_hvm_magic_pfns_v4));
+            break;
+            /* end backwards compatibility */
         }
     }
 
