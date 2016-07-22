@@ -433,7 +433,7 @@ suspend_block(preemption_t i, uint32_t pages, uint32_t *reserve_increase)
         if (uxen_devext->de_executing)
             break;
         uxen_pages_decrease_reserve(i, *reserve_increase);
-        if (i)
+        if (!i)
             return -EAGAIN;
         fast_event_wait(&uxen_devext->de_resume_event, EVENT_UNINTERRUPTIBLE,
                         EVENT_NO_TIMEOUT);

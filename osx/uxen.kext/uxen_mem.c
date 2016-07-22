@@ -1302,7 +1302,7 @@ _uxen_pages_increase_reserve(preemption_t *i, uint32_t pages,
         return 0;
 
     /* don't attempt memory allocation if preemption was disabled */
-    if (*i) {
+    if (!*i) {
         enable_preemption(*i);
         return -1;
     }
