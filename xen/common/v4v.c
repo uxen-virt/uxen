@@ -828,14 +828,29 @@ v4v_resolve_token(domid_t *id, uint32_t *port, v4v_idtoken_t *token)
     return 0;
 }
 
+#define V4V_VALIDATE_PREAUTH 0x1
+
 static int
 v4v_validate_channel(domid_t *s_id, uint32_t *s_port,
-                     domid_t *d_id, uint32_t *d_port)
+                     domid_t *d_id, uint32_t *d_port, int flags)
 {
     struct vcpu *v = current;
-    struct domain *d = v->domain;
+    struct domain *d = v->domain, *t;
+    int ret;
 
     if (IS_HOST(d)) {
+        if (!(flags & V4V_VALIDATE_PREAUTH)) {
+            ret = rcu_lock_remote_target_domain_by_id(*d_id, &t);
+            if (ret) {
+                printk(XENLOG_ERR
+                       "%s: host %s vm%u:%x -> vm%u:%x from %S\n",
+                       __FUNCTION__, ret == -EPERM ? "not priv" : "not found",
+                       *s_id, *s_port, *d_id, *d_port,
+                       (printk_symbol)__builtin_return_address(0));
+                return ret;
+            }
+            rcu_unlock_domain(t);
+        }
     } else {
         if (*s_id == V4V_DOMID_ANY)
             *s_id = d->domain_id;
@@ -892,7 +907,7 @@ v4v_fill_ring_data(struct domain *src_d,
     src_addr.port = V4V_PORT_NONE;
     ret = v4v_validate_channel(
         &src_addr.domain, &src_addr.port,
-        &ent.ring.domain, &ent.ring.port);
+        &ent.ring.domain, &ent.ring.port, V4V_VALIDATE_PREAUTH);
     if (ret)
         return ret;
 
@@ -1298,7 +1313,7 @@ v4v_ring_remove(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd)
         dst_port = V4V_PORT_NONE;
         ret = v4v_validate_channel(
             &ring.id.addr.domain, &ring.id.addr.port,
-            &ring.id.partner, &dst_port);
+            &ring.id.partner, &dst_port, V4V_VALIDATE_PREAUTH);
         if (ret)
             break;
 
@@ -1352,7 +1367,7 @@ v4v_ring_create(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_id_t) ring_id_hnd)
         dst_port = V4V_PORT_NONE;
         ret = v4v_validate_channel(
             &ring_id.addr.domain, &ring_id.addr.port,
-            &ring_id.partner, &dst_port);
+            &ring_id.partner, &dst_port, V4V_VALIDATE_PREAUTH);
         if (ret)
             break;
 
@@ -1450,6 +1465,7 @@ v4v_ring_add(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd,
     // struct v4v_ring_data ring_data = { 0 };
     struct v4v_ring_info *ring_info;
     uint16_t hash;
+    int authorized = 0;
     int ret = 0;
 
     if (!(guest_handle_is_aligned(ring_hnd, ~PAGE_MASK)))
@@ -1495,11 +1511,12 @@ v4v_ring_add(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd,
                                     &partner_idtoken);
             if (ret)
                 break;
+            authorized = V4V_VALIDATE_PREAUTH;
         }
 
         ret = v4v_validate_channel(
             &ring.id.addr.domain, &ring.id.addr.port,
-            &partner_id, &partner_port);
+            &partner_id, &partner_port, authorized);
         if (ret)
             break;
 
@@ -1710,7 +1727,7 @@ v4v_poke(v4v_addr_t *dst_addr)
     src_addr.port = V4V_PORT_NONE;
     ret = v4v_validate_channel(
         &src_addr.domain, &src_addr.port,
-        &dst_addr->domain, &dst_addr->port);
+        &dst_addr->domain, &dst_addr->port, V4V_VALIDATE_PREAUTH);
     if (ret)
         return ret;
 
@@ -1744,7 +1761,7 @@ v4v_send(struct domain *src_d, v4v_addr_t *src_addr,
 
     ret = v4v_validate_channel(
         &src_addr->domain, &src_addr->port,
-        &dst_addr->domain, &dst_addr->port);
+        &dst_addr->domain, &dst_addr->port, V4V_VALIDATE_PREAUTH);
     if (ret)
         goto out;
 
