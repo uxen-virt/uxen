@@ -209,6 +209,7 @@ extern uint8_t *uxen_hv;
 extern uint32_t uxen_size;
 extern OSMallocTag uxen_malloc_tag;
 extern lck_grp_t *uxen_lck_grp;
+int uxen_authorize_action(int action, bool *admin_access);
 int uxen_driver_load(void);
 void uxen_driver_unload(void);
 int uxen_open(struct fd_assoc *fda, task_t task);

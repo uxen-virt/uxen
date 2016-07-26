@@ -1007,9 +1007,13 @@ v4v_find_ring_mfn(struct domain *d, v4v_pfn_t pfn, mfn_t *mfn)
 {
     int ret = 0;
 
-    if (mfns_dont_belong_xen(d))
-        *mfn = _mfn(pfn);    /* XXX access check / valid check ? */
-    else {
+    if (mfns_dont_belong_xen(d)) {
+        if (!IS_PRIV_SYS())
+            return -EPERM;
+        if (!mfn_valid(pfn))
+            return -EINVAL;
+        *mfn = _mfn(pfn);
+    } else {
         p2m_type_t t;
 
         *mfn = get_gfn_unshare(d, pfn, &t);
@@ -1895,6 +1899,10 @@ do_v4v_op(int cmd, XEN_GUEST_HANDLE(void) arg1,
     printk(XENLOG_ERR "->do_v4v_op(%d,%p,%p,%p,%d,%d)\n", cmd,
            arg1.p, arg2.p, arg3.p, arg4, arg5);
 #endif
+
+    /* don't allow host callers via generic hypercall interface */
+    if (IS_HOST(d) && !IS_PRIV_SYS())
+        return -EPERM;
 
     domain_lock(d);
     switch (cmd) {

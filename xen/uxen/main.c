@@ -767,6 +767,8 @@ __uxen_hypercall(struct uxen_hypercall_desc *uhd,
         current->always_access_ok = 1;
     if (privileged & UXEN_ADMIN_HYPERCALL)
         current->is_privileged = 1;
+    if (privileged & UXEN_SYSTEM_HYPERCALL)
+        current->is_sys_privileged = 1;
     if (target_vmis) {
         if (privileged & UXEN_VMI_OWNER)
             current->target_vmis_owner = 1;
@@ -779,6 +781,7 @@ __uxen_hypercall(struct uxen_hypercall_desc *uhd,
     current->user_access_opaque = NULL;
     current->target_vmis = NULL;
     current->target_vmis_owner = 0;
+    current->is_sys_privileged = 0;
     current->is_privileged = 0;
     current->always_access_ok = 0;
     end_execution();

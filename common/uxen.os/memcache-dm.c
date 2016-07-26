@@ -194,6 +194,7 @@ mdm_map(struct uxen_memcachemap_desc *umd, struct fd_assoc *fda)
         &vmi->vmi_shared, &fda->user_mappings,
         UXEN_UNRESTRICTED_ACCESS_HYPERCALL |
         (fda->admin_access ? UXEN_ADMIN_HYPERCALL : 0) |
+        UXEN_SYSTEM_HYPERCALL |
         (fda->vmi_owner ? UXEN_VMI_OWNER : 0), __HYPERVISOR_memory_op,
         (uintptr_t)XENMEM_translate_gpfn_list_for_map, (uintptr_t)&umemopa);
     uxen_mem_tlb_flush();       /* deferred from mdm_enter */

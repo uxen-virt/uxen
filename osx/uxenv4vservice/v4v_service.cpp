@@ -82,7 +82,11 @@ uxen_v4v_service::allocAndBindSharedRing(
     static const uint64_t PFN_ALLOC_MASK = 0xffffffffull << PAGE_SHIFT;
     size_t total_bytes;
     IOBufferMemoryDescriptor *ring_mem;
+    bool admin_access = false;
     int result;
+
+    if (this->v4v_device->authorize_action(UXEN_AUTH_OPEN, &admin_access))
+        return EPERM;
 
     total_bytes = uxen_v4v_ring_mem_size_for_length(length);
     // kIOMemoryMapperNone: physical addresses in CPU space, not I/O space
@@ -94,7 +98,7 @@ uxen_v4v_service::allocAndBindSharedRing(
         return ENOMEM;
     result = uxen_v4v_bind_ring_with_buffer(
         this->v4v_device, length, partner_domain,
-        source_port, out_new_ring, ring_mem);
+        source_port, admin_access, out_new_ring, ring_mem);
     if (result != 0) {
         *out_ring_buf = nullptr;
         OSSafeReleaseNULL(ring_mem);
@@ -109,9 +113,14 @@ uxen_v4v_service::allocAndBindRing(
     unsigned length, uint16_t partner_domain, uint32_t source_port,
     uxen_v4v_ring **out_new_ring)
 {
+    bool admin_access = false;
+
+    if (this->v4v_device->authorize_action(UXEN_AUTH_OPEN, &admin_access))
+        return EPERM;
 
     return uxen_v4v_alloc_and_bind_ring(
-        this->v4v_device, length, partner_domain, source_port, out_new_ring);
+        this->v4v_device, length, partner_domain, source_port, admin_access,
+        out_new_ring);
 }
 
 errno_t

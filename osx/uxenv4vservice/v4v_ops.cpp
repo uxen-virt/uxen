@@ -10,6 +10,7 @@
 #include <IOKit/IOLib.h>
 #include <sys/errno.h>
 #include <uxen_xnu_errno.h>
+#include <uxen/uxen_desc.h>
 
 static const uint64_t PFN_ALLOC_MASK = 0xffffffffull << PAGE_SHIFT;
 
@@ -32,12 +33,14 @@ xnu_size_or_errno_from_uxen(ssize_t ret)
 
 static errno_t
 v4v_register_ring(
-    uxen_v4v_device *device, v4v_ring_t *ring, v4v_pfn_list_t *pfn_list)
+    uxen_v4v_device *device, uxen_v4v_ring *uxen_ring)
 {
 
     return xnu_errno_from_uxen(
-        device->v4vOpHypercall(
-            V4VOP_register_ring, ring, pfn_list, NULL, NULL, NULL));
+        device->v4vOpHypercall_with_priv(
+            uxen_ring->admin_access ? UXEN_ADMIN_HYPERCALL : 0,
+            V4VOP_register_ring, uxen_ring->ring, uxen_ring->pfn_list,
+            NULL, NULL, NULL));
 }
 
 static intptr_t
@@ -91,12 +94,12 @@ uxen_v4v_notify(uxen_v4v_device *device, v4v_ring_data_t *notify_data)
 
 
 static errno_t
-v4v_unregister_ring(uxen_v4v_device *device, v4v_ring_t *ring)
+v4v_unregister_ring(uxen_v4v_device *device, uxen_v4v_ring *uxen_ring)
 {
 
     return xnu_errno_from_uxen(
         device->v4vOpHypercall(
-            V4VOP_unregister_ring, ring, NULL, NULL, NULL, NULL));
+            V4VOP_unregister_ring, uxen_ring->ring, NULL, NULL, NULL, NULL));
 }
 
 size_t
@@ -109,7 +112,7 @@ uxen_v4v_ring_mem_size_for_length(unsigned length_bytes)
 errno_t
 uxen_v4v_alloc_and_bind_ring(
     uxen_v4v_device *device, unsigned length_bytes, domid_t partner_domain,
-    uint32_t local_port, uxen_v4v_ring **created_ring)
+    uint32_t local_port, bool admin_access, uxen_v4v_ring **created_ring)
 {
     size_t total_bytes;
     IOBufferMemoryDescriptor *ring_mem;
@@ -130,7 +133,7 @@ uxen_v4v_alloc_and_bind_ring(
 
     res = uxen_v4v_bind_ring_with_buffer(
         device, length_bytes,
-        partner_domain, local_port, created_ring, ring_mem);
+        partner_domain, local_port, admin_access, created_ring, ring_mem);
     ring_mem->release();
     return res;
 }
@@ -138,7 +141,7 @@ uxen_v4v_alloc_and_bind_ring(
 int
 uxen_v4v_bind_ring_with_buffer(
     uxen_v4v_device *device, unsigned length_bytes,
-    domid_t partner_domain, uint32_t local_port,
+    domid_t partner_domain, uint32_t local_port, bool admin_access,
     uxen_v4v_ring **created_ring, IOBufferMemoryDescriptor* ring_mem)
 {
     size_t total_bytes;
@@ -174,19 +177,22 @@ uxen_v4v_bind_ring_with_buffer(
     ring->magic = V4V_RING_MAGIC;
     ring->len = length_bytes;
     
-    error = v4v_register_ring(device, ring, pfn_list);
-    if(error != 0) {
-        IOFreeAligned(pfn_list, pfn_bytes);
-        kprintf("v4v_register_ring: returned %d\n", error);
-        return error;
-    }
-    
     uxen_ring = static_cast<uxen_v4v_ring*>(
         IOMallocAligned(sizeof(uxen_v4v_ring), alignof(uxen_v4v_ring)));
     uxen_ring->ring = ring;
     uxen_ring->ring_mem = ring_mem;
     uxen_ring->length = length_bytes;
     uxen_ring->pfn_list = pfn_list;
+    uxen_ring->admin_access = admin_access;
+    
+    error = v4v_register_ring(device, uxen_ring);
+    if(error != 0) {
+        IOFreeAligned(pfn_list, pfn_bytes);
+        IOFreeAligned(uxen_ring, sizeof(uxen_v4v_ring));
+        kprintf("v4v_register_ring: returned %d\n", error);
+        return error;
+    }
+    
     uxen_ring->source_address.domain = ring->id.addr.domain;
     uxen_ring->source_address.port = ring->id.addr.port;
     uxen_ring->protocol_number = V4V_PROTO_DGRAM;
@@ -206,7 +212,7 @@ uxen_v4v_destroy_ring(uxen_v4v_device *device, uxen_v4v_ring *created_ring)
     int error;
     size_t pfn_list_size;
     
-    error = v4v_unregister_ring(device, created_ring->ring);
+    error = v4v_unregister_ring(device, created_ring);
     if(error != 0) {
         kprintf("v4v_destroy_ring: error %d", error);
     }
@@ -221,18 +227,18 @@ uxen_v4v_destroy_ring(uxen_v4v_device *device, uxen_v4v_ring *created_ring)
 }
 
 errno_t
-uxen_v4v_reregister_ring(uxen_v4v_device *device, uxen_v4v_ring *ring)
+uxen_v4v_reregister_ring(uxen_v4v_device *device, uxen_v4v_ring *uxen_ring)
 {
 
-    v4v_unregister_ring(device, ring->ring);
+    v4v_unregister_ring(device, uxen_ring);
     
-    ring->ring->id.addr.domain = V4V_DOMID_ANY;
-    ring->ring->id.addr.port = ring->local_port;
-    ring->ring->id.partner = ring->partner_domain;
-    ring->ring->magic = V4V_RING_MAGIC;
-    ring->ring->len = static_cast<uint32_t>(ring->length);
+    uxen_ring->ring->id.addr.domain = V4V_DOMID_ANY;
+    uxen_ring->ring->id.addr.port = uxen_ring->local_port;
+    uxen_ring->ring->id.partner = uxen_ring->partner_domain;
+    uxen_ring->ring->magic = V4V_RING_MAGIC;
+    uxen_ring->ring->len = static_cast<uint32_t>(uxen_ring->length);
     
-    return v4v_register_ring(device, ring->ring, ring->pfn_list);
+    return v4v_register_ring(device, uxen_ring);
 }
 
 intptr_t

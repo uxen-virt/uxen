@@ -131,13 +131,30 @@ uxen_dom0_v4v_device::stop(IOService* provider)
 }
 
 intptr_t
-uxen_dom0_v4v_device::v4vOpHypercall(
-    int cmd, void* arg1, void* arg2, void* arg3, void* arg4, void* arg5)
+uxen_dom0_v4v_device::v4vOpHypercall_with_priv(
+    int privileged, int cmd, void* arg1, void* arg2,
+    void* arg3, void* arg4, void* arg5)
 {
+
+    /* v4vOpHypercall callers need to ensure all referenced
+     * memory is valid, i.e. access doesn't fail and the caller is
+     * supposed to have access to the memory
+     * (UXEN_UNRESTRICTED_ACCESS_HYPERCALL) and that the arguments to
+     * the call have been validated by the system/kernel
+     * (UXEN_SYSTEM_HYPERCALL) */
     return uxen_dom0_hypercall(
-        NULL, NULL, UXEN_UNRESTRICTED_ACCESS_HYPERCALL, __HYPERVISOR_v4v_op,
+        NULL, NULL,
+        UXEN_UNRESTRICTED_ACCESS_HYPERCALL | UXEN_SYSTEM_HYPERCALL | privileged,
+        __HYPERVISOR_v4v_op,
         (uintptr_t)cmd, (uintptr_t)arg1, (uintptr_t)arg2,
         (uintptr_t)arg3, (uintptr_t)arg4, (uintptr_t)arg5);
+}
+
+int
+uxen_dom0_v4v_device::authorize_action(int action, bool *admin_access)
+{
+
+    return uxen_authorize_action(action, admin_access);
 }
 
 IOWorkLoop*

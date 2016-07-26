@@ -2111,6 +2111,7 @@ uxen_op_set_event_channel(struct uxen_event_channel_desc *uecd,
         &vmi->vmi_shared, &fda->user_mappings,
         UXEN_UNRESTRICTED_ACCESS_HYPERCALL |
         (fda->admin_access ? UXEN_ADMIN_HYPERCALL : 0) |
+        UXEN_SYSTEM_HYPERCALL |
         (fda->vmi_owner ? UXEN_VMI_OWNER : 0), __HYPERVISOR_event_channel_op,
         (uintptr_t)EVTCHNOP_bind_host, (uintptr_t)&bind);
     if (ret) {

@@ -28,6 +28,7 @@ CPPFLAGS += -I$(BUILDDIR_xen)/include \
 	    -I$(TOPDIR)/common/uxen.os \
 	    -I$(TOPDIR)/common/include \
 	    -I$(TOPDIR)/common/include/xen-public/xen \
+	    -I$(TOPDIR)/osx/uxenv4vservice \
 	    -I$(SRCDIR) \
 	    -iquote $(SRCDIR)/../include \
 	    -I.

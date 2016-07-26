@@ -177,8 +177,12 @@ struct vcpu
 
     bool_t           always_access_ok;
 
-    /* Is this guest fully privileged (aka dom0)? */
+    /* Is executing context privileged (aka dom0)? */
     bool_t           is_privileged;
+
+    /* Is executing context privileged within the caller (aka
+     * system/kernel) */
+    bool_t           is_sys_privileged;
 
     bool_t           target_vmis_owner;
 
@@ -915,6 +919,9 @@ void watchdog_domain_destroy(struct domain *d);
                     current->target_vmis->vmi_domid == (_t)->domain_id))) : \
                  (current->domain == (_d) &&                            \
                   (_d)->domain_id == (_t)->domain_id));                 \
+            }))
+#define IS_PRIV_SYS() (({                       \
+                current->is_sys_privileged;     \
             }))
 #define IS_HOST(_d) (({                         \
                 !(_d)->domain_id;               \

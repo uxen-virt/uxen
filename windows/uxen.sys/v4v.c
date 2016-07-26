@@ -34,8 +34,15 @@ uxen_sys_v4v_hypercall(uintptr_t privileged,
     if (!uxen_info->ui_running)
         return (uintptr_t)-ENOSYS;
 
+    /* uxen_sys_v4v_hypercall callers need to ensure all referenced
+     * memory is valid, i.e. access doesn't fail and the caller is
+     * supposed to have access to the memory
+     * (UXEN_UNRESTRICTED_ACCESS_HYPERCALL) and that the arguments to
+     * the call have been validated by the system/kernel
+     * (UXEN_SYSTEM_HYPERCALL) */
     ret = uxen_dom0_hypercall(NULL, NULL,
-                              UXEN_UNRESTRICTED_ACCESS_HYPERCALL | privileged,
+                              UXEN_UNRESTRICTED_ACCESS_HYPERCALL |
+                              UXEN_SYSTEM_HYPERCALL | privileged,
                               __HYPERVISOR_v4v_op, a1, a2, a3, a4, a5, a6);
     ret = -ret; //no really
 

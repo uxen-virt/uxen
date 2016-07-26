@@ -1183,6 +1183,7 @@ remove_host_mfns_mapping(uint64_t *gpfns, size_t len, PFN_NUMBER *pfn_array,
         uxen_dom0_hypercall(&vmi->vmi_shared, &fda->user_mappings,
                             UXEN_UNRESTRICTED_ACCESS_HYPERCALL |
                             (fda->admin_access ? UXEN_ADMIN_HYPERCALL : 0) |
+                            UXEN_SYSTEM_HYPERCALL |
                             UXEN_VMI_OWNER, __HYPERVISOR_memory_op,
                             XENMEM_add_to_physmap, &memop_arg);
 
@@ -1304,6 +1305,7 @@ map_host_pages(void *va, size_t len, uint64_t *gpfns,
                                        UXEN_UNRESTRICTED_ACCESS_HYPERCALL |
                                        (fda->admin_access ?
                                         UXEN_ADMIN_HYPERCALL : 0) |
+                                       UXEN_SYSTEM_HYPERCALL |
                                        UXEN_VMI_OWNER, __HYPERVISOR_memory_op,
                                        XENMEM_add_to_physmap, &memop_arg);
         if (ret) {
@@ -1590,7 +1592,8 @@ release_user_mapping_range(xen_pfn_t *mfns, uint32_t num,
                              &mfns[done]);
         _ret = (int)uxen_dom0_hypercall(
             NULL, &fda->user_mappings,
-            UXEN_UNRESTRICTED_ACCESS_HYPERCALL | UXEN_ADMIN_HYPERCALL,
+            UXEN_UNRESTRICTED_ACCESS_HYPERCALL | UXEN_ADMIN_HYPERCALL |
+            UXEN_SYSTEM_HYPERCALL,
             __HYPERVISOR_memory_op,
             (uintptr_t)XENMEM_translate_gpfn_list_for_map, (uintptr_t)&umemopa);
         if (_ret) {
@@ -2023,6 +2026,7 @@ uxen_mem_mmapbatch(struct uxen_mmapbatch_desc *ummapbd, struct fd_assoc *fda)
             &vmi->vmi_shared, &fda->user_mappings,
             UXEN_UNRESTRICTED_ACCESS_HYPERCALL |
             (fda->admin_access ? UXEN_ADMIN_HYPERCALL : 0) |
+            UXEN_SYSTEM_HYPERCALL |
             (fda->vmi_owner ? UXEN_VMI_OWNER : 0), __HYPERVISOR_memory_op,
             (uintptr_t)XENMEM_translate_gpfn_list_for_map, (uintptr_t)&umemopa);
 	if (ret) {

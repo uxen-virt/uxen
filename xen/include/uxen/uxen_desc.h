@@ -38,7 +38,8 @@
 
 #define UXEN_UNRESTRICTED_ACCESS_HYPERCALL 0x01
 #define UXEN_ADMIN_HYPERCALL 0x02
-#define UXEN_VMI_OWNER 0x04
+#define UXEN_SYSTEM_HYPERCALL 0x04
+#define UXEN_VMI_OWNER 0x08
 
 /* this must match struct privcmd_hypercall below */
 struct uxen_hypercall_desc {

@@ -31,9 +31,10 @@ public:
     virtual void free() override;
     virtual bool start(IOService* provider) override;
     virtual void stop(IOService* provider) override;
-    virtual intptr_t v4vOpHypercall(
-        int cmd, void* arg1, void* arg2,
+    virtual intptr_t v4vOpHypercall_with_priv(
+        int privileged, int cmd, void* arg1, void* arg2,
         void* arg3, void* arg4, void* arg5) override;
+    virtual int authorize_action(int action, bool *admin_access) override;
     virtual IOWorkLoop* getWorkLoop() const override;
 };
 

@@ -9,6 +9,7 @@
 #include <uxenvmlib/uxen_hypercall.h>
 #include <uxenplatform/uXenPlatform.h>
 #include <uxen/platform_interface.h>
+#include <sys/errno.h>
 #include <IOKit/IOLib.h>
 #include <IOKit/IOBufferMemoryDescriptor.h>
 
@@ -142,8 +143,9 @@ uxen_guest_v4v_device::interruptAction(
 }
 
 intptr_t
-uxen_guest_v4v_device::v4vOpHypercall(
-    int cmd, void *arg1, void *arg2, void *arg3, void *arg4, void *arg5)
+uxen_guest_v4v_device::v4vOpHypercall_with_priv(
+    int privileged, int cmd, void *arg1, void *arg2,
+    void *arg3, void *arg4, void *arg5)
 {
 
     return (intptr_t)uxen_hypercall6(
@@ -152,3 +154,16 @@ uxen_guest_v4v_device::v4vOpHypercall(
         (uintptr_t)arg4, (uintptr_t)arg5);
 }
 
+int
+uxen_guest_v4v_device::authorize_action(int action, bool *admin_access)
+{
+
+    switch (action) {
+    case UXEN_AUTH_OPEN:
+        *admin_access = true;
+        return 0;
+    default:
+        *admin_access = false;
+        return EINVAL;
+    }
+}

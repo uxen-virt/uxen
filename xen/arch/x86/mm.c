@@ -5041,6 +5041,8 @@ static int xenmem_add_to_physmap_once(
         }
         case XENMAPSPACE_host_mfn:
         {
+            if (!IS_PRIV_SYS())
+                return -EPERM;
             mfn = xatp->idx;
             break;
         }
@@ -5513,6 +5515,9 @@ long arch_memory_op(int op, XEN_GUEST_HANDLE(void) arg)
         struct page_info *page = NULL;
         xen_pfn_t *arr = NULL;
         unsigned int k, n, i;
+
+        if (!IS_PRIV_SYS())
+            return -EPERM;
 
         if ( copy_from_guest(&list, arg, 1) )
             return -EFAULT;

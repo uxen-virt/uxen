@@ -19,6 +19,7 @@
 #include <xen/hvm/hvm_op.h>
 #include <xen/xen.h>
 #include <v4v.h>
+#include <v4v_device.h>
 
 #define UXEN_DEFINE_SYMBOLS_PROTO
 #include <uxen/uxen_link.h>
@@ -196,8 +197,7 @@ uxen_open(struct fd_assoc *fda, task_t task)
 
     memset((void *)fda, 0, sizeof(struct fd_assoc));
 
-    ret = kauth_authorize_action(uxen_kauth_scope, kauth_cred_get(),
-                                 UXEN_KAUTH_OP_OPEN, (uintptr_t)fda, 0, 0, 0);
+    ret = uxen_authorize_action(UXEN_AUTH_OPEN, &fda->admin_access);
     if (!ret)
         fda->task = task;
 
@@ -609,11 +609,11 @@ uxen_kauth_scope_listener(kauth_cred_t credential,
 
     switch (action) {
     case UXEN_KAUTH_OP_OPEN: {
-        struct fd_assoc *fda = (struct fd_assoc *)arg0;
+        bool *admin_access = (bool *)arg0;
         gid_t gid;
         int _ret;
 
-        fda->admin_access = false;
+        *admin_access = false;
 
         gid = 0;
         _ret = kauth_cred_guid2gid(&uxen_kauth_admin_group_guid, &gid);
@@ -623,7 +623,7 @@ uxen_kauth_scope_listener(kauth_cred_t credential,
              !kauth_cred_ismember_guid(credential,
                                        &uxen_kauth_admin_group_guid,
                                        &is_member) && is_member)) {
-            fda->admin_access = true;
+            *admin_access = true;
             ret = KAUTH_RESULT_ALLOW;
             break;
         }
@@ -650,6 +650,25 @@ uxen_kauth_scope_listener(kauth_cred_t credential,
         fail_msg("denied action: %d", action);
 
     return ret;
+}
+
+int
+uxen_authorize_action(int action, bool *admin_access)
+{
+    int kauth_action;
+
+    switch (action) {
+    case UXEN_AUTH_OPEN:
+        kauth_action = UXEN_KAUTH_OP_OPEN;
+        break;
+    default:
+        *admin_access = false;
+        return EINVAL;
+    }
+
+    return kauth_authorize_action(
+        uxen_kauth_scope, kauth_cred_get(),
+        kauth_action, (uintptr_t)admin_access, 0, 0, 0);
 }
 
 int
