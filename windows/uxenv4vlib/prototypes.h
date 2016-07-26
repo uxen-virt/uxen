@@ -87,6 +87,7 @@ NTSTATUS gh_create_device(PDRIVER_OBJECT driver_object);
 
 /* hypercall.c */
 int uxen_v4v_can_make_hypercall(void);
+void *uxen_v4v_hypercall_with_priv(int privileged, void *arg1, void *arg2, void *arg3, void *arg4, void *arg5, void *arg6);
 void *uxen_v4v_hypercall(void *arg1, void *arg2, void *arg3, void *arg4, void *arg5, void *arg6);
 
 /* main.c */

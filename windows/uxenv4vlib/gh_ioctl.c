@@ -129,6 +129,9 @@ gh_v4v_ctrl_bind(xenv4v_extension_t *pde, xenv4v_context_t *ctx, v4v_bind_values
         }
         robj->ring->id = bvs->ringId;
 
+        // Inherit admin access
+        robj->admin_access = ctx->admin_access;
+
         // Have to grab this outside of lock at IRQL PASSIVE
         port = gh_v4v_random_port(pde);
 

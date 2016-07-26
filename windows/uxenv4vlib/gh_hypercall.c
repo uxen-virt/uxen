@@ -50,15 +50,26 @@
 #include "uxenv4vlib_private.h"
 
 #include <xen/errno.h>
+#define __XEN__
+#include <uxen/uxen_desc.h>
 
 static __declspec(inline) int
-gh_v4v_hypercall(unsigned int cmd, void *arg2, void *arg3, void *arg4,
-                 ULONG32 arg5, ULONG32 arg6)
+gh_v4v_hypercall_with_priv(
+    unsigned int privileged, unsigned int cmd,
+    void *arg2, void *arg3, void *arg4, ULONG32 arg5, ULONG32 arg6)
 {
 
-    return (int)(uintptr_t)uxen_v4v_hypercall(
-        (void *)(uintptr_t)cmd, arg2, arg3, arg4,
+    return (int)(uintptr_t)uxen_v4v_hypercall_with_priv(
+        privileged, (void *)(uintptr_t)cmd, arg2, arg3, arg4,
         (void *)(uintptr_t)arg5, (void *)(uintptr_t)arg6);
+}
+
+static __declspec(inline) int
+gh_v4v_hypercall(unsigned int cmd,
+                 void *arg2, void *arg3, void *arg4, ULONG32 arg5, ULONG32 arg6)
+{
+
+    return gh_v4v_hypercall_with_priv(0, cmd, arg2, arg3, arg4, arg5, arg6);
 }
 
 static NTSTATUS
@@ -115,8 +126,10 @@ gh_v4v_register_ring(xenv4v_ring_t *robj)
     }
 
     robj->registered = FALSE;
-    err = gh_v4v_hypercall(V4VOP_register_ring, robj->ring, robj->pfn_list,
-                           0, 0, 0);
+    err = gh_v4v_hypercall_with_priv(
+        robj->admin_access ? UXEN_ADMIN_HYPERCALL : 0,
+        V4VOP_register_ring, robj->ring, robj->pfn_list,
+        0, 0, 0);
     if (err == -ENOSYS) {
         /* Special case - say it all worked and we'll sort it out
          * later when the platform device actually loads and the

@@ -15,6 +15,7 @@
 #endif
 
 typedef uintptr_t (uxen_v4vlib_hypercall_func_t)(
+    uintptr_t,
     uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t);
 typedef uintptr_t (uxen_v4vlib_page_notify_func_t)(uint64_t *, uint32_t, int);
 struct v4v_ring;

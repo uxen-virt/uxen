@@ -66,6 +66,7 @@ V4V_DLL_EXPORT uxen_v4v_ring_handle_t *uxen_v4v_ring_bind (uint32_t local_port,
             break;
         ret->ring = ret->ring_object->ring;
 
+        /* XXX add interface for admin_access */
 
         ret->ring_object->ring->id.addr.port = local_port;
         ret->ring_object->ring->id.addr.domain = V4V_DOMID_ANY;

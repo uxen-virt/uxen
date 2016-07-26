@@ -224,6 +224,8 @@ gh_v4v_dispatch_create(PDEVICE_OBJECT fdo, PIRP irp)
     xenv4v_extension_t   *pde = v4v_get_device_extension(fdo);
     PIO_STACK_LOCATION  isl;
     FILE_OBJECT        *pfo;
+    PEPROCESS process;
+    PACCESS_TOKEN token;
     xenv4v_context_t     *ctx;
 
     UNREFERENCED_PARAMETER(fdo);
@@ -252,6 +254,18 @@ gh_v4v_dispatch_create(PDEVICE_OBJECT fdo, PIRP irp)
 
     InitializeListHead(&ctx->le);
     ctx->state = XENV4V_STATE_UNINITIALIZED;
+
+    ctx->admin_access = FALSE;
+    process = IoGetRequestorProcess(irp);
+    if (!process)
+        process = IoGetCurrentProcess();
+
+    token = PsReferencePrimaryToken(process);
+    if (token) {
+        if (SeTokenIsAdmin(token) == TRUE)
+            ctx->admin_access = TRUE;
+        PsDereferencePrimaryToken(token);
+    }
 
     // Add one ref count for the handle file object/handle reference
     ctx->refc++;

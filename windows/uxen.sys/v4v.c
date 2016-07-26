@@ -23,7 +23,8 @@ host_logger(int lvl, const char *str)
 }
 
 static uintptr_t
-uxen_sys_v4v_hypercall(uintptr_t a1, uintptr_t a2, uintptr_t a3,
+uxen_sys_v4v_hypercall(uintptr_t privileged,
+                       uintptr_t a1, uintptr_t a2, uintptr_t a3,
                        uintptr_t a4, uintptr_t a5, uintptr_t a6)
 {
     intptr_t ret;
@@ -33,7 +34,8 @@ uxen_sys_v4v_hypercall(uintptr_t a1, uintptr_t a2, uintptr_t a3,
     if (!uxen_info->ui_running)
         return (uintptr_t)-ENOSYS;
 
-    ret = uxen_dom0_hypercall(NULL, NULL, UXEN_UNRESTRICTED_ACCESS_HYPERCALL,
+    ret = uxen_dom0_hypercall(NULL, NULL,
+                              UXEN_UNRESTRICTED_ACCESS_HYPERCALL | privileged,
                               __HYPERVISOR_v4v_op, a1, a2, a3, a4, a5, a6);
     ret = -ret; //no really
 

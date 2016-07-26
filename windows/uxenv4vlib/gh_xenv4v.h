@@ -170,6 +170,9 @@ typedef struct xenv4v_ring_struct {
     PMDL       mdl;
     void       *user_map;
 
+    // Access control
+    BOOLEAN admin_access;
+
     // Ring bits
     v4v_ring_t     *ring;
     v4v_pfn_list_t *pfn_list;
@@ -215,6 +218,8 @@ typedef struct xenv4v_context_struct {
     // State and type
     LONG state;
 
+    // Access control
+    BOOLEAN admin_access;
 
     // Ring pieces
     xenv4v_ring_t *ring_object;

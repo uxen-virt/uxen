@@ -12,8 +12,12 @@ guest_logger(int lvl, const char *str)
     _printk(str);
 }
 
-static uintptr_t v4v_hypercall(uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
+static uintptr_t
+v4v_hypercall(uintptr_t privileged,
+              uintptr_t a1, uintptr_t a2, uintptr_t a3,
+              uintptr_t a4, uintptr_t a5, uintptr_t a6)
 {
+    (void)privileged;
     return uxen_hypercall6(__HYPERVISOR_v4v_op, a1, a2, a3, a4, a5, a6);
 }
 
