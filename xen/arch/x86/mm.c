@@ -5015,10 +5015,8 @@ static int xenmem_add_to_physmap_once(
                 break;
             }
 
-            if (hypercall_needs_checks()) {
-                put_gfn(d, gfn);
+            if (hypercall_needs_checks())
                 return -EAGAIN;
-            }
             idx = mfn_x(get_gfn_unshare(d, xatp->idx, &p2mt));
 #ifndef __UXEN__
             /* If the page is still shared, exit early */
