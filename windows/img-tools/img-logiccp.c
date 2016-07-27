@@ -127,6 +127,18 @@ Variable *varlist_find(VarList *vl, const wchar_t *name)
     return NULL;
 }
 
+Variable *varlist_find_by_path(VarList *vl, const wchar_t *path)
+{
+    int i;
+    for (i = 0; i < vl->n; ++i) {
+        Variable *e = &vl->entries[i];
+        if (e->path && !wcsicmp(e->path, path)) {
+            return e;
+        }
+    }
+    return NULL;
+}
+
 /* disk handle, code duplicated from img-ntfscp.c */
 struct disk {
     disk_handle_t hdd;
@@ -4044,11 +4056,22 @@ int main(int argc, char **argv)
             }
 
             Variable *e = varlist_push(&vars);
-            e->man = (Manifest*) malloc(sizeof(Manifest));
-            man_init(e->man);
             e->name = wide(v);
             /* path can be NULL, which means skip manifest lines under this var. */
             e->path = *c ? wide(c) : NULL;
+            if (e->path) {
+                /* Check for other Variables sharing the same path, and have
+                 * them use the same Manifest.
+                 */
+                Variable *existing = varlist_find_by_path(&vars, e->path);
+                if (existing && existing != e) {
+                    e->man = existing->man;
+                }
+            }
+            if (!e->man) {
+                e->man = (Manifest*) malloc(sizeof(Manifest));
+                man_init(e->man);
+            }
         } else if (strncmp(argv[1], ARG_OUT_MANIFEST, ARG_OUT_MANIFEST_SIZE) == 0) {
             arg_out_manifest = argv[1];
             arg_out_manifest += ARG_OUT_MANIFEST_SIZE;
