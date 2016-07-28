@@ -3625,13 +3625,25 @@ int hvm_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
          *msr_content = 0;
          break;
 
+    case MSR_IA32_MCG_CAP:
+    case MSR_IA32_MCG_CTL:
+    case MSR_IA32_MCG_STATUS:
+    case MSR_IA32_MC0_CTL...MSR_IA32_MCx_CTL(max_nr_mce_banks) - 1:
+    case MSR_IA32_MC0_CTL2...MSR_IA32_MC0_CTL2 + max_nr_mce_banks - 1:
+        *msr_content = 0;       /* no vMCE */
+        break;
+
     default:
+#ifndef __UXEN_NOT_YET__
         if ( (ret = vmce_rdmsr(msr, msr_content)) < 0 )
             goto gp_fault;
         /* If ret == 0 then this is not an MCE MSR, see other MSRs. */
         ret = ((ret == 0)
                ? hvm_funcs.msr_read_intercept(msr, msr_content)
                : X86EMUL_OKAY);
+#else  /* __UXEN_NOT_YET__ */
+        ret = hvm_funcs.msr_read_intercept(msr, msr_content);
+#endif  /* __UXEN_NOT_YET__ */
         break;
     }
 
@@ -3742,12 +3754,16 @@ int hvm_msr_write_intercept(unsigned int msr, uint64_t msr_content)
         break;
 
     default:
+#ifndef __UXEN_NOT_YET__
         if ( (ret = vmce_wrmsr(msr, msr_content)) < 0 )
             goto gp_fault;
         /* If ret == 0 then this is not an MCE MSR, see other MSRs. */
         ret = ((ret == 0)
                ? hvm_funcs.msr_write_intercept(msr, msr_content)
                : X86EMUL_OKAY);
+#else  /* __UXEN_NOT_YET__ */
+        ret = hvm_funcs.msr_write_intercept(msr, msr_content);
+#endif  /* __UXEN_NOT_YET__ */
         break;
     }
 

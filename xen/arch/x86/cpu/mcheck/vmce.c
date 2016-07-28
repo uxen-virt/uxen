@@ -18,7 +18,6 @@
 #include "mce.h"
 #include "x86_mca.h"
 
-#ifndef __UXEN__
 #define dom_vmce(x)   ((x)->arch.vmca_msrs)
 
 static uint64_t __read_mostly g_mcg_cap;
@@ -138,7 +137,6 @@ static int bank_mce_rdmsr(struct domain *d, uint32_t msr, uint64_t *val)
 
     return ret;
 }
-#endif  /* __UXEN__ */
 
 /*
  * < 0: Unsupported and will #GP fault to guest
@@ -147,7 +145,6 @@ static int bank_mce_rdmsr(struct domain *d, uint32_t msr, uint64_t *val)
  */
 int vmce_rdmsr(uint32_t msr, uint64_t *val)
 {
-#ifndef __UXEN__
     struct domain *d = current->domain;
     struct domain_mca_msrs *vmce = dom_vmce(d);
     int ret = 1;
@@ -182,12 +179,8 @@ int vmce_rdmsr(uint32_t msr, uint64_t *val)
 
     spin_unlock(&dom_vmce(d)->lock);
     return ret;
-#else   /* __UXEN__ */
-    return 0;
-#endif  /* __UXEN__ */
 }
 
-#ifndef __UXEN__
 static int bank_mce_wrmsr(struct domain *d, u32 msr, u64 val)
 {
     int bank, ret = 1;
@@ -246,7 +239,6 @@ static int bank_mce_wrmsr(struct domain *d, u32 msr, u64 val)
 
     return ret;
 }
-#endif  /* __UXEN__ */
 
 /*
  * < 0: Unsupported and will #GP fault to guest
@@ -255,7 +247,6 @@ static int bank_mce_wrmsr(struct domain *d, u32 msr, u64 val)
  */
 int vmce_wrmsr(u32 msr, u64 val)
 {
-#ifndef __UXEN__
     struct domain *d = current->domain;
     struct bank_entry *entry = NULL;
     struct domain_mca_msrs *vmce = dom_vmce(d);
@@ -308,12 +299,8 @@ int vmce_wrmsr(u32 msr, u64 val)
 
     spin_unlock(&vmce->lock);
     return ret;
-#else   /* __UXEN__ */
-    return 0;
-#endif  /* __UXEN__ */
 }
 
-#ifndef __UXEN__
 int inject_vmce(struct domain *d)
 {
     int cpu = smp_processor_id();
@@ -612,5 +599,4 @@ int unmmap_broken_page(struct domain *d, mfn_t mfn, unsigned long gfn)
 
     return rc;
 }
-#endif  /* __UXEN__ */
 

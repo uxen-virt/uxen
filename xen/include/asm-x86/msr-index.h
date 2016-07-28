@@ -148,6 +148,8 @@
 #define MSR_IA32_MC8_ADDR		0x00000422
 #define MSR_IA32_MC8_MISC		0x00000423
 
+#define max_nr_mce_banks 32
+
 #define MSR_IA32_MCx_CTL(x)		(MSR_IA32_MC0_CTL + 4*(x))
 #define MSR_IA32_MCx_STATUS(x)		(MSR_IA32_MC0_STATUS + 4*(x))
 #define MSR_IA32_MCx_ADDR(x)		(MSR_IA32_MC0_ADDR + 4*(x))

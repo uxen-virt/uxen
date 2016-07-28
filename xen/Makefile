@@ -246,7 +246,6 @@ XEN_SRCS += arch/x86/cpu/amd.c
 XEN_SRCS += arch/x86/cpu/common.c
 XEN_SRCS += arch/x86/cpu/intel.c
 XEN_SRCS += arch/x86/cpu/intel_cacheinfo.c
-XEN_SRCS += arch/x86/cpu/mcheck/vmce.c
 XEN_SRCS += arch/x86/cpu/mtrr/main.c
 XEN_SRCS += arch/x86/hvm/asid.c
 XEN_SRCS += arch/x86/hvm/debug_port.c
