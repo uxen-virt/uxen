@@ -2443,12 +2443,6 @@ static int vmx_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
              rdmsr_hypervisor_regs(msr, msr_content) )
             break;
 
-        if ( msr > 0x600 && msr < 0x700) {
-            dprintk(XENLOG_WARNING,
-                    "Injecting #GP for unsupported MSR 0x%x\n", msr);
-            goto gp_fault;
-        }
-
         if ( rdmsr_safe(msr, *msr_content) == 0 )
             break;
 
