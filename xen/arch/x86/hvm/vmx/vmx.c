@@ -170,7 +170,9 @@ static int vmx_vcpu_initialise(struct vcpu *v)
         return rc;
     }
 
+#ifndef __UXEN_NOT_YET__
     vpmu_initialise(v);
+#endif  /* __UXEN_NOT_YET__ */
 
     vmx_install_vlapic_mapping(v);
 
@@ -184,7 +186,9 @@ static int vmx_vcpu_initialise(struct vcpu *v)
 static void vmx_vcpu_destroy(struct vcpu *v)
 {
     vmx_destroy_vmcs(v);
+#ifndef __UXEN_NOT_YET__
     vpmu_destroy(v);
+#endif  /* __UXEN_NOT_YET__ */
 #ifndef __UXEN__
     passive_domain_destroy(v);
 #endif  /* __UXEN__ */
@@ -1831,8 +1835,12 @@ static int vmx_event_pending(struct vcpu *v)
 
 static int vmx_do_pmu_interrupt(struct cpu_user_regs *regs)
 {
-DEBUG();
+
+#ifndef __UXEN__
     return vpmu_do_interrupt(regs);
+#else  /* __UXEN_NOT_YET__ */
+    return 0;
+#endif  /* __UXEN_NOT_YET__ */
 }
 
 static void vmx_set_uc_mode(struct vcpu *v)
@@ -2391,10 +2399,21 @@ static int vmx_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
         /* Debug Trace Store is not supported. */
         *msr_content |= MSR_IA32_MISC_ENABLE_BTS_UNAVAIL |
                        MSR_IA32_MISC_ENABLE_PEBS_UNAVAIL;
+        /* XXX this should FALLTHROUGH with vPMU support */
+        break;
+    case MSR_P6_PERFCTR(0)...MSR_P6_PERFCTR(7):
+    case MSR_P6_EVNTSEL(0)...MSR_P6_EVNTSEL(3):
+    case MSR_CORE_PERF_FIXED_CTR0...MSR_CORE_PERF_FIXED_CTR2:
+    case MSR_CORE_PERF_FIXED_CTR_CTRL...MSR_CORE_PERF_GLOBAL_OVF_CTRL:
+    case MSR_IA32_PEBS_ENABLE:
+    case MSR_IA32_DS_AREA:
+        *msr_content = 0;       /* no vPMU */
         break;
     default:
+#ifndef __UXEN_NOT_YET__
         if ( vpmu_do_rdmsr(msr, msr_content) )
             break;
+#endif  /* __UXEN_NOT_YET__ */
 #ifndef __UXEN__
         if ( passive_domain_do_rdmsr(msr, msr_content) )
             goto done;
@@ -2567,9 +2586,19 @@ static int vmx_msr_write_intercept(unsigned int msr, uint64_t msr_content)
 #endif  /* __UXEN_NOT_YET__ */
             goto gp_fault;
         break;
+     case MSR_P6_PERFCTR(0)...MSR_P6_PERFCTR(7):
+     case MSR_P6_EVNTSEL(0)...MSR_P6_EVNTSEL(7):
+     case MSR_CORE_PERF_FIXED_CTR0...MSR_CORE_PERF_FIXED_CTR2:
+     case MSR_CORE_PERF_FIXED_CTR_CTRL...MSR_CORE_PERF_GLOBAL_OVF_CTRL:
+     case MSR_IA32_PEBS_ENABLE:
+     case MSR_IA32_DS_AREA:
+         /* no vPMU */
+         break;
     default:
+#ifndef __UXEN_NOT_YET__
         if ( vpmu_do_wrmsr(msr, msr_content) )
             return X86EMUL_OKAY;
+#endif  /* __UXEN_NOT_YET__ */
 #ifndef __UXEN__
         if ( passive_domain_do_wrmsr(msr, msr_content) )
             return X86EMUL_OKAY;

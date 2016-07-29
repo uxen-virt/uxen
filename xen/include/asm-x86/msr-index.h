@@ -159,6 +159,8 @@
 #define MSR_P6_PERFCTR1			0x000000c2
 #define MSR_P6_EVNTSEL0			0x00000186
 #define MSR_P6_EVNTSEL1			0x00000187
+#define MSR_P6_PERFCTR(n)		(0x000000c1 + (n))
+#define MSR_P6_EVNTSEL(n)		(0x00000186 + (n))
 
 /* MSRs & bits used for VMX enabling */
 #define MSR_IA32_VMX_BASIC                      0x480

@@ -1064,14 +1064,18 @@ static int svm_vcpu_initialise(struct vcpu *v)
         return rc;
     }
 
+#ifndef __UXEN_NOT_YET__
     vpmu_initialise(v);
+#endif  /* __UXEN_NOT_YET__ */
     return 0;
 }
 
 static void svm_vcpu_destroy(struct vcpu *v)
 {
     svm_destroy_vmcb(v);
+#ifndef __UXEN_NOT_YET__
     vpmu_destroy(v);
+#endif  /* __UXEN_NOT_YET__ */
 #ifndef __UXEN__
     passive_domain_destroy(v);
 #endif  /* __UXEN__ */
@@ -1143,7 +1147,11 @@ static int svm_event_pending(struct vcpu *v)
 
 static int svm_do_pmu_interrupt(struct cpu_user_regs *regs)
 {
+#ifndef __UXEN_NOT_YET__
     return vpmu_do_interrupt(regs);
+#else  /* __UXEN_NOT_YET__ */
+    return 0;
+#endif  /* __UXEN_NOT_YET__ */
 }
 
 static void svm_cpu_dead(unsigned int cpu)
@@ -1553,7 +1561,11 @@ static int svm_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
     case MSR_AMD_FAM15H_EVNTSEL3:
     case MSR_AMD_FAM15H_EVNTSEL4:
     case MSR_AMD_FAM15H_EVNTSEL5:
+#ifndef __UXEN_NOT_YET__
         vpmu_do_rdmsr(msr, msr_content);
+#else  /* __UXEN_NOT_YET__ */
+        *msr_content = 0;       /* no vPMU */
+#endif  /* __UXEN_NOT_YET__ */
         break;
 
     default:
@@ -1680,7 +1692,11 @@ static int svm_msr_write_intercept(unsigned int msr, uint64_t msr_content)
     case MSR_AMD_FAM15H_EVNTSEL3:
     case MSR_AMD_FAM15H_EVNTSEL4:
     case MSR_AMD_FAM15H_EVNTSEL5:
+#ifndef __UXEN_NOT_YET__
         vpmu_do_wrmsr(msr, msr_content);
+#else  /* __UXEN_NOT_YET__ */
+        /* no vPMU */
+#endif  /* __UXEN_NOT_YET__ */
         break;
 
     case MSR_IA32_MC4_MISC: /* Threshold register */
