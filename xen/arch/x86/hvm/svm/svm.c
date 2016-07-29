@@ -1409,6 +1409,10 @@ static void svm_cpuid_intercept(
         /* Fix up VLAPIC details. */
         if ( vlapic_hw_disabled(vcpu_vlapic(v)) )
             __clear_bit(X86_FEATURE_APIC & 31, edx);
+        /* No support for OS Visible Workaround OSVW */
+        __clear_bit(X86_FEATURE_OSVW & 31, ecx);
+        /* No support fot data breakpoint extension DBEXT */
+        __clear_bit(X86_FEATURE_DBEXT & 31, ecx);
         break;
     case 0x8000001c: 
     {
@@ -1568,6 +1572,14 @@ static int svm_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
 #endif  /* __UXEN_NOT_YET__ */
         break;
 
+    case MSR_AMD64_DR0_ADDRESS_MASK:
+    case MSR_AMD64_DR1_ADDRESS_MASK ... MSR_AMD64_DR3_ADDRESS_MASK:
+        goto gpf;               /* no DBEXT */
+
+    case MSR_AMD_OSVW_ID_LENGTH:
+    case MSR_AMD_OSVW_STATUS:
+        goto gpf;               /* no OSVW */
+
     default:
 #ifndef __UXEN_NOT_YET__
         ret = nsvm_rdmsr(v, msr, msr_content);
@@ -1698,6 +1710,14 @@ static int svm_msr_write_intercept(unsigned int msr, uint64_t msr_content)
         /* no vPMU */
 #endif  /* __UXEN_NOT_YET__ */
         break;
+
+     case MSR_AMD64_DR0_ADDRESS_MASK:
+     case MSR_AMD64_DR1_ADDRESS_MASK ... MSR_AMD64_DR3_ADDRESS_MASK:
+         goto gpf;              /* no DBEXT */
+
+     case MSR_AMD_OSVW_ID_LENGTH:
+     case MSR_AMD_OSVW_STATUS:
+         goto gpf;              /* no OSVW */
 
     case MSR_IA32_MC4_MISC: /* Threshold register */
     case MSR_F10_MC4_MISC1 ... MSR_F10_MC4_MISC3:
