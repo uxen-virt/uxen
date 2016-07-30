@@ -258,7 +258,9 @@ clip_send_bytes(struct clip_ctx *ctx, void *data, int len)
     memset(msg, 0, sizeof(*msg));
     msg->dgram.addr.port = ctx->port;
     msg->dgram.addr.domain = ctx->domain;
-    //msg->dgram.flags = V4V_DATAGRAM_FLAG_IGNORE_DLO;
+#ifdef CLIP_CLIENT
+    msg->dgram.flags = V4V_DATAGRAM_FLAG_IGNORE_DLO;
+#endif  /* CLIP_CLIENT */
     msg->type = CLIP_MSG_DATA;
     msg->magic = CLIP_MAGIC;
     msg->seqid = seqid++;
