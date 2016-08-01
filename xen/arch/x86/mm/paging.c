@@ -889,6 +889,7 @@ int paging_enable(struct domain *d, u32 mode)
 #endif  /* __UXEN__ */
 }
 
+#ifndef __UXEN__
 /* Called from the guest to indicate that a process is being torn down
  * and therefore its pagetables will soon be discarded */
 void pagetable_dying(struct domain *d, paddr_t gpa)
@@ -901,6 +902,7 @@ DEBUG();
     v = d->vcpu[0];
     v->arch.paging.mode->shadow.pagetable_dying(v, gpa);
 }
+#endif  /* __UXEN__ */
 
 /* Print paging-assistance info to the console */
 void paging_dump_domain_info(struct domain *d)
@@ -929,6 +931,7 @@ void paging_dump_vcpu_info(struct vcpu *v)
     if ( paging_mode_enabled(v->domain) )
     {
         printk("    paging assistance: ");
+#ifndef __UXEN__
         if ( paging_mode_shadow(v->domain) )
         {
             if ( paging_get_hostmode(v) )
@@ -938,7 +941,9 @@ void paging_dump_vcpu_info(struct vcpu *v)
             else
                 printk("not shadowed\n");
         }
-        else if ( paging_mode_hap(v->domain) && paging_get_hostmode(v) )
+        else
+#endif  /* __UXEN__ */
+        if ( paging_mode_hap(v->domain) && paging_get_hostmode(v) )
             printk("hap, %u levels\n",
                    paging_get_hostmode(v)->guest_levels);
         else

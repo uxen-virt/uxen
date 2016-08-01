@@ -5426,7 +5426,6 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
         rcu_unlock_domain(d);
         break;
     }
-#endif  /* __UXEN__ */
 
     case HVMOP_pagetable_dying:
     {
@@ -5452,7 +5451,6 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
         break;
     }
 
-#ifndef __UXEN__
     case HVMOP_get_time: {
         xen_hvm_get_time_t gxt;
 

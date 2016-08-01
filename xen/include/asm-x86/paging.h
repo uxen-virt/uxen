@@ -71,6 +71,7 @@ typedef enum {
     paging_g2g_unshare
 } paging_g2g_query_t;
 
+#ifndef __UXEN__
 /*****************************************************************************
  * Mode-specific entry points into the shadow code.  
  *
@@ -104,6 +105,7 @@ struct shadow_paging_mode {
     /* For outsiders to tell what mode we're in */
     unsigned int shadow_levels;
 };
+#endif  /* __UXEN__ */
 
 
 /************************************************/
@@ -144,8 +146,10 @@ struct paging_mode {
 #endif  /* __UXEN__ */
     unsigned int guest_levels;
 
+#ifndef __UXEN__
     /* paging support extension */
     struct shadow_paging_mode shadow;
+#endif  /* __UXEN__ */
 };
 
 /*****************************************************************************

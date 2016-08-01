@@ -89,6 +89,7 @@ void toggle_guest_mode(struct vcpu *);
  */
 void hypercall_page_initialise(struct domain *d, void *);
 
+#ifndef __UXEN__
 /************************************************/
 /*          shadow paging extension             */
 /************************************************/
@@ -153,6 +154,7 @@ struct shadow_vcpu {
 
     int pagetable_dying;
 };
+#endif  /* __UXEN__ */
 
 /************************************************/
 /*            hardware assisted paging          */
@@ -209,7 +211,6 @@ struct paging_vcpu {
 #ifndef __UXEN__
     /* Nested Virtualization: paging mode of nested guest */
     const struct paging_mode *nestedmode;
-#endif  /* __UXEN__ */
     /* HVM guest: last emulate was to a pagetable */
     unsigned int last_write_was_pt:1;
     /* HVM guest: last write emulation succeeds */
@@ -220,6 +221,7 @@ struct paging_vcpu {
 
     /* paging support extension */
     struct shadow_vcpu shadow;
+#endif  /* __UXEN__ */
 };
 
 #define MAX_CPUID_INPUT 40
