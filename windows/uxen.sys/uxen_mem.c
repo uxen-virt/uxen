@@ -723,7 +723,6 @@ kernel_malloc_mfns(uint32_t nr_pages, uxen_pfn_t *mfn_list, uint32_t max_mfn)
             goto out;
         }
 
-        KeAcquireSpinLock(&idle_free_lock, &old_irql);
         k = MmGetMdlByteCount(mdl) >> PAGE_SHIFT;
         mfnarray = MmGetMdlPfnArray(mdl);
         for (j = 0; j < k && i < nr_pages; j++) {
@@ -743,7 +742,6 @@ kernel_malloc_mfns(uint32_t nr_pages, uxen_pfn_t *mfn_list, uint32_t max_mfn)
 #endif  /* DEBUG_PAGE_ALLOC */
             i++;
         }
-        KeReleaseSpinLock(&idle_free_lock, old_irql);
     }
 
   out:
