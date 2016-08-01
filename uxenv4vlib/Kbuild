@@ -1,0 +1,5 @@
+obj-m += uxenv4vlib.o
+
+uxenv4vlib-y := v4v.o
+uxenv4vlib-$(LX_TARGET_AX) += ax.o
+uxenv4vlib-$(LX_TARGET_UXEN) += acpi.o

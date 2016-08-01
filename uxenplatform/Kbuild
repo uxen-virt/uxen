@@ -1,0 +1,5 @@
+obj-m += uxenplatform.o
+
+uxenplatform-y := platform.o
+uxenplatform-$(LX_TARGET_AX) += ax.o
+uxenplatform-$(LX_TARGET_UXEN) += pci.o

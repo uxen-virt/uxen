@@ -1,0 +1,3 @@
+obj-m += uxenhc.o
+
+uxenhc-y := hypercall.o
