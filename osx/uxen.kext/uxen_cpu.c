@@ -9,7 +9,7 @@
 #include <kern/sched_prim.h>
 #include <kern/locks.h>
 #include <libkern/libkern.h> /* ffs() */
-
+#include <i386/proc_reg.h>
 
 static unsigned int first_cpu = MAX_CPUS - 1;
 unsigned int nr_host_cpus = 0;
@@ -241,3 +241,14 @@ uxen_cpu_ipi(int cpu, unsigned int vector)
     xnu_mp_cpus_call((1 << cpu), NOSYNC, ipi_cb, NULL);
 }
 
+uint64_t __cdecl
+uxen_cpu_rdmsr_safe(uint32_t msr, uint64_t *val)
+{
+    uint32_t lo, hi;
+    int ret;
+
+    ret = rdmsr_carefully(msr, &lo, &hi);
+    if (!ret)
+        *val = lo | ((uint64_t)hi << 32);
+    return ret ? -EFAULT : 0;
+}

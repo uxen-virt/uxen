@@ -36,7 +36,7 @@ static inline void wrmsrl(unsigned int msr, __u64 val)
 }
 
 /* rdmsr with exception handling */
-#define rdmsr_safe(msr,val) ({\
+#define _rdmsr_safe(msr,val) ({\
     int _rc; \
     uint32_t lo, hi; \
     __asm__ __volatile__( \
@@ -48,8 +48,13 @@ static inline void wrmsrl(unsigned int msr, __u64 val)
         _ASM_EXTABLE(1b, 3b) \
         : "=a" (lo), "=d" (hi), "=&r" (_rc) \
         : "c" (msr), "2" (0), "i" (-EFAULT)); \
-    val = lo | ((uint64_t)hi << 32); \
+    (val) = lo | ((uint64_t)hi << 32); \
     _rc; })
+#ifdef UXEN_HOST_OSX
+#define rdmsr_safe(msr, val) UI_HOST_CALL(ui_rdmsr_safe, msr, &val)
+#else  /* UXEN_HOST_OSX */
+#define rdmsr_safe(msr, val) _rdmsr_safe(msr, val)
+#endif  /* UXEN_HOST_OSX */
 
 /* wrmsr with exception handling */
 static inline int wrmsr_safe(unsigned int msr, uint64_t val)

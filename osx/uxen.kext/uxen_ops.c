@@ -744,6 +744,8 @@ uxen_op_init(struct fd_assoc *fda)
     uxen_info->ui_user_access_ok = uxen_mem_user_access_ok;
     uxen_info->ui_smap_enabled = xnu_pmap_smap_enabled() ? 1 : 0;
 
+    uxen_info->ui_rdmsr_safe = uxen_cpu_rdmsr_safe;
+
     printk("uxen mem:     maxpage %x\n", uxen_info->ui_max_page);
 
     ret = kernel_malloc_mfns(1, &uxen_zero_mfn, 1);

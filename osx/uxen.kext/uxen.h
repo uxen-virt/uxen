@@ -436,6 +436,7 @@ void uxen_cpu_interrupt(uintptr_t mask);
 int uxen_ipi_init(void (*dispatch)(unsigned int));
 void uxen_ipi_cleanup(void);
 void uxen_cpu_ipi(int cpu, unsigned int vector);
+uint64_t __cdecl uxen_cpu_rdmsr_safe(uint32_t msr, uint64_t *val);
 
 /* From osfmk/i386/mp.h */
 #define MAX_CPUS 32
