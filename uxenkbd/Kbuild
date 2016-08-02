@@ -1,0 +1,3 @@
+obj-m += uxenkbd.o
+
+uxenkbd-y := kbd.o
