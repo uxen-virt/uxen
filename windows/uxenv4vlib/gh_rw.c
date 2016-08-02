@@ -304,7 +304,7 @@ gh_v4v_process_context_writes(xenv4v_extension_t *pde, xenv4v_context_t *ctx)
     gh_v4v_requeue_irps(pde, &returnIrps);
 
     if (queue_notify)
-        KeInsertQueueDpc (&pde->virq_dpc, NULL, NULL);
+        KeSetEvent(&pde->virq_event, IO_NO_INCREMENT, FALSE);
 }
 
 NTSTATUS NTAPI

@@ -167,8 +167,8 @@ gh_v4v_virq_quick(xenv4v_extension_t *pde)
     ULONG              count = 0, i;
     KLOCK_QUEUE_HANDLE lqh;
 
-    // In MP guests when not using VIRQs, have to lock the DPC processing
-    KeAcquireInStackQueuedSpinLockAtDpcLevel(&pde->dpc_lock, &lqh);
+    // In MP guests when not using VIRQs, have to lock the notify processing
+    KeAcquireInStackQueuedSpinLock(&pde->virq_lock, &lqh);
 
     // Get a list of active contexts and their rings
     ctx_list = gh_v4v_get_all_contexts(pde, &count);
@@ -181,26 +181,21 @@ gh_v4v_virq_quick(xenv4v_extension_t *pde)
     // Return the context list and drop the ref count
     gh_v4v_put_all_contexts(pde, ctx_list, count);
 
-    KeReleaseInStackQueuedSpinLockFromDpcLevel(&lqh);
+    KeReleaseInStackQueuedSpinLock(&lqh);
 }
 #endif
 
-static VOID
-gh_v4v_virq_notify_dpc(KDPC *dpc, VOID *dctx, PVOID sarg1, PVOID sarg2)
+static void
+gh_v4v_virq_work(xenv4v_extension_t *pde)
 {
-    xenv4v_extension_t  *pde = v4v_get_device_extension((DEVICE_OBJECT *)dctx);
     xenv4v_context_t   **ctx_list;
     ULONG              count = 0, i;
     KLOCK_QUEUE_HANDLE lqh;
 
-    UNREFERENCED_PARAMETER(dpc);
-    UNREFERENCED_PARAMETER(sarg1);
-    UNREFERENCED_PARAMETER(sarg2);
-
     check_resume();
 
-    // In MP guests when not using VIRQs, have to lock the DPC processing
-    KeAcquireInStackQueuedSpinLockAtDpcLevel(&pde->dpc_lock, &lqh);
+    // In MP guests when not using VIRQs, have to lock the notify processing
+    KeAcquireInStackQueuedSpinLock(&pde->virq_lock, &lqh);
 
     // Get a list of active contexts and their rings
     ctx_list = gh_v4v_get_all_contexts(pde, &count);
@@ -220,9 +215,25 @@ gh_v4v_virq_notify_dpc(KDPC *dpc, VOID *dctx, PVOID sarg1, PVOID sarg2)
 
     check_resume();
 
-    KeReleaseInStackQueuedSpinLockFromDpcLevel(&lqh);
+    KeReleaseInStackQueuedSpinLock(&lqh);
 }
 
+static void
+gh_v4v_virq_thread(void *context)
+{
+    xenv4v_extension_t *pde =
+        v4v_get_device_extension((DEVICE_OBJECT *)context);
+
+    while (InterlockedExchangeAdd(&pde->virq_thread_running, 0)) {
+        KeWaitForSingleObject(&pde->virq_event, Executive, KernelMode, TRUE,
+                              NULL);
+        KeClearEvent(&pde->virq_event);
+        if (!InterlockedExchangeAdd(&pde->virq_thread_running, 0))
+            break;
+
+        gh_v4v_virq_work(pde);
+    }
+}
 
 VOID gh_signaled(void)
 {
@@ -240,13 +251,10 @@ VOID gh_signaled(void)
         gh_v4v_virq_quick(pde);
         uxen_v4v_send_read_callbacks(pde);
 #endif
-
-        /*Leave the rest of the work to the DPC*/
-        KeInsertQueueDpc(&pde->virq_dpc, NULL, NULL);
-    } else {
-        /* In a guest we arrive here from the ISR's DPC so we can do anything we like */
-        gh_v4v_virq_notify_dpc(&pde->virq_dpc, (VOID *) pde->fdo, NULL, NULL);
     }
+
+    /* Leave the rest of the work to the thread */
+    KeSetEvent(&pde->virq_event, IO_NO_INCREMENT, FALSE);
 
     uxen_v4v_put_pde(pde);
 }
@@ -285,6 +293,17 @@ static NTSTATUS gh_remove_device(PDEVICE_OBJECT fdo)
     // Stop our device's IO processing
     gh_v4v_stop_device(fdo, pde);
 
+    InterlockedAnd(&pde->notify_thread_running, 0);
+    KeSetEvent(&pde->notify_event, IO_NO_INCREMENT, FALSE);
+    KeWaitForSingleObject(pde->notify_thread, Executive, KernelMode, FALSE,
+                          NULL);
+    ObDereferenceObject(pde->notify_thread);
+
+    InterlockedAnd(&pde->virq_thread_running, 0);
+    KeSetEvent(&pde->virq_event, IO_NO_INCREMENT, FALSE);
+    KeWaitForSingleObject(pde->virq_thread, Executive, KernelMode, FALSE, NULL);
+    ObDereferenceObject(pde->virq_thread);
+
     // Then detach and cleanup our device
     ExDeleteNPagedLookasideList(&pde->dest_lookaside_list);
     IoDeleteSymbolicLink(&pde->symbolic_link);
@@ -306,6 +325,7 @@ static NTSTATUS gh_add_device(PDRIVER_OBJECT driver_object)
     LARGE_INTEGER     seed;
     WCHAR            *szSddl = NULL;
     UNICODE_STRING    sddlString;
+    HANDLE handle;
 
     uxen_v4v_verbose("====>");
 
@@ -363,8 +383,25 @@ static NTSTATUS gh_add_device(PDRIVER_OBJECT driver_object)
         IoInitializeRemoveLock(&pde->remove_lock, 'v4vx', 0, 0);
         pde->state = XENV4V_DEV_STOPPED; // wait for start
         pde->last_po_state = PowerSystemWorking;
-        KeInitializeDpc(&pde->virq_dpc, gh_v4v_virq_notify_dpc, fdo);
-        KeInitializeSpinLock(&pde->dpc_lock);
+
+        pde->virq_thread_running = 1;
+        KeInitializeEvent(&pde->virq_event, NotificationEvent, FALSE);
+        status = PsCreateSystemThread(&handle, 0, NULL, NULL, NULL,
+                                      gh_v4v_virq_thread, fdo);
+        if (!NT_SUCCESS(status)) {
+            uxen_v4v_err("PsCreateSystemThread(virq) failed: 0x%08X",
+                         status);
+            break;
+        }
+        status = ObReferenceObjectByHandle(handle, THREAD_ALL_ACCESS, NULL,
+                                           KernelMode, &pde->virq_thread, NULL);
+        ZwClose(handle);
+        if (!NT_SUCCESS(status)) {
+            uxen_v4v_err("get reference to virq thread failed: 0x%08X",
+                         status);
+            break;
+        }
+        KeInitializeSpinLock(&pde->virq_lock);
 
         InitializeListHead(&pde->context_list);
         KeInitializeSpinLock(&pde->context_lock);
@@ -384,7 +421,26 @@ static NTSTATUS gh_add_device(PDRIVER_OBJECT driver_object)
         InitializeListHead(&pde->dest_list);
         pde->dest_count = 0;
         InitializeListHead(&pde->notify_list);
-        KeInitializeDpc(&pde->notify_dpc, uxen_v4v_notify_dpc, fdo);
+
+        pde->notify_thread_running = 1;
+        KeInitializeEvent(&pde->notify_event, NotificationEvent, FALSE);
+        status = PsCreateSystemThread(&handle, 0, NULL, NULL, NULL,
+                                      uxen_v4v_notify_thread, fdo);
+        if (!NT_SUCCESS(status)) {
+            uxen_v4v_err("PsCreateSystemThread(notify) failed: 0x%08X",
+                         status);
+            break;
+        }
+        status = ObReferenceObjectByHandle(handle, THREAD_ALL_ACCESS, NULL,
+                                           KernelMode, &pde->notify_thread,
+                                           NULL);
+        ZwClose(handle);
+        if (!NT_SUCCESS(status)) {
+            uxen_v4v_err("get reference to notify thread failed: 0x%08X",
+                         status);
+            break;
+        }
+
         ExInitializeNPagedLookasideList(&pde->dest_lookaside_list,
                                         NULL,
                                         NULL,

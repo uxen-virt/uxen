@@ -130,8 +130,10 @@ typedef struct xenv4v_extension_struct {
     void *prealloc_area;
 
     // V4V interrupt
-    KDPC        virq_dpc;
-    KSPIN_LOCK  dpc_lock;
+    PETHREAD    virq_thread;
+    KEVENT      virq_event;
+    LONG volatile virq_thread_running;
+    KSPIN_LOCK  virq_lock;
 
     // Active file context list
     LIST_ENTRY context_list;
@@ -152,7 +154,9 @@ typedef struct xenv4v_extension_struct {
     NPAGED_LOOKASIDE_LIST dest_lookaside_list;
 
     LIST_ENTRY notify_list;
-    KDPC       notify_dpc;
+    PETHREAD   notify_thread;
+    KEVENT     notify_event;
+    LONG volatile notify_thread_running;
 
     // Seed for generating random-ish numbers for ports and conids
     ULONG seed;

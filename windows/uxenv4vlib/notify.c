@@ -216,7 +216,7 @@ uxen_v4v_notify_process_ring_data (xenv4v_extension_t *pde,
 {
     KIRQL irql;
     unsigned int i;
-    unsigned int run_dpc = 0;
+    unsigned int run_notify = 0;
     uxen_v4v_notify_t *p;
 
     KeAcquireSpinLock (&pde->queue_lock, &irql);
@@ -234,30 +234,30 @@ uxen_v4v_notify_process_ring_data (xenv4v_extension_t *pde,
             if (ring_data[i].ring.domain != p->dst.domain)
                 continue;
             p->triggered = 1;
-            run_dpc = 1;
+            run_notify = 1;
         }
     }
 
 
     KeReleaseSpinLock (&pde->queue_lock, irql);
 
-    if (run_dpc)
-        KeInsertQueueDpc (&pde->notify_dpc, NULL, NULL);
+    if (run_notify)
+        KeSetEvent(&pde->notify_event, IO_NO_INCREMENT, FALSE);
 
 }
 
-void
-uxen_v4v_notify_dpc (KDPC *dpc, VOID *dctx, PVOID sarg1, PVOID sarg2)
+static void
+uxen_v4v_notify_work(xenv4v_extension_t *pde)
 {
-    xenv4v_extension_t *pde = v4v_get_device_extension ((DEVICE_OBJECT *) dctx);
     uxen_v4v_notify_t *p, *n;
     KIRQL irql;
 
+    KeRaiseIrql(DISPATCH_LEVEL, &irql);
     for (;;) {
 
         n = NULL;
 
-        KeAcquireSpinLock (&pde->queue_lock, &irql);
+        KeAcquireSpinLockAtDpcLevel(&pde->queue_lock);
 
         for (p = (uxen_v4v_notify_t *) pde->notify_list.Flink;
              p != (uxen_v4v_notify_t *) & pde->notify_list;
@@ -270,13 +270,31 @@ uxen_v4v_notify_dpc (KDPC *dpc, VOID *dctx, PVOID sarg1, PVOID sarg2)
         }
 
 
-        KeReleaseSpinLock (&pde->queue_lock, irql);
+        KeReleaseSpinLockFromDpcLevel(&pde->queue_lock);
 
         if (!n)
-            return;
+            break;
 
 
         n->callback (NULL, n->callback_data1, n->callback_data2);
         uxen_v4v_fast_free (n);
+    }
+    KeLowerIrql(irql);
+}
+
+void
+uxen_v4v_notify_thread(void *context)
+{
+    xenv4v_extension_t *pde =
+        v4v_get_device_extension((DEVICE_OBJECT *)context);
+
+    while (InterlockedExchangeAdd(&pde->notify_thread_running, 0)) {
+        KeWaitForSingleObject(&pde->notify_event, Executive, KernelMode, TRUE,
+                              NULL);
+        KeClearEvent(&pde->notify_event);
+        if (!InterlockedExchangeAdd(&pde->notify_thread_running, 0))
+            break;
+
+        uxen_v4v_notify_work(pde);
     }
 }

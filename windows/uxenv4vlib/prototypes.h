@@ -117,7 +117,7 @@ BOOLEAN uxen_v4v_notify_dequeue (v4v_addr_t *dst, uxen_v4v_callback_t *callback,
 unsigned int uxen_v4v_notify_count (xenv4v_extension_t *pde);
 unsigned int uxen_v4v_notify_fill_ring_data (xenv4v_extension_t *pde, v4v_ring_data_ent_t *ring_data, unsigned int count);
 void uxen_v4v_notify_process_ring_data (xenv4v_extension_t *pde, v4v_ring_data_ent_t *ring_data, unsigned int count);
-void uxen_v4v_notify_dpc (KDPC *dpc, VOID *dctx, PVOID sarg1, PVOID sarg2);
+void uxen_v4v_notify_thread(void *context);
 
 /* resume.c */
 void uxen_v4v_check_resume(void);
