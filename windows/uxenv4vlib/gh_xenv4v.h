@@ -143,6 +143,7 @@ typedef struct xenv4v_extension_struct {
     // Active ring object list
     LIST_ENTRY ring_list;
     KSPIN_LOCK ring_lock;
+    LONG volatile ring_gen;
 
     // IRP queuing and cancel safe queues
     LIST_ENTRY pending_irp_queue;

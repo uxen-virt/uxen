@@ -408,6 +408,7 @@ static NTSTATUS gh_add_device(PDRIVER_OBJECT driver_object)
         pde->context_count = 0;
         InitializeListHead(&pde->ring_list);
         KeInitializeSpinLock(&pde->ring_lock);
+        pde->ring_gen = 0;
         InitializeListHead(&pde->pending_irp_queue);
         pde->pending_irp_count = 0;
         KeInitializeSpinLock(&pde->queue_lock);

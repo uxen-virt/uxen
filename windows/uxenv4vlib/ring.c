@@ -39,19 +39,28 @@ void uxen_v4v_send_read_callbacks(xenv4v_extension_t *pde)
 {
     KLOCK_QUEUE_HANDLE lqh;
     xenv4v_ring_t *robj;
+    LONG gen;
 
-    //KeAcquireInStackQueuedSpinLock(&pde->ring_lock, &lqh);
+    KeAcquireInStackQueuedSpinLock(&pde->ring_lock, &lqh);
+  again:
+    gen = InterlockedExchangeAdd(&pde->ring_gen, 0);
 
     if (!IsListEmpty(&pde->ring_list)) {
         for ( robj = (xenv4v_ring_t *)pde->ring_list.Flink; robj != (xenv4v_ring_t *)&pde->ring_list ; robj = (xenv4v_ring_t *)robj->le.Flink) {
             if (!robj->direct_access) continue;
             if (robj->ring->rx_ptr == robj->ring->tx_ptr) continue;
-            if (robj->callback)
-                robj->callback(robj->uxen_ring_handle, robj->callback_data1, robj->callback_data2);
+            if (robj->callback) {
+                KeReleaseInStackQueuedSpinLock(&lqh);
+                robj->callback(robj->uxen_ring_handle, robj->callback_data1,
+                               robj->callback_data2);
+                KeAcquireInStackQueuedSpinLock(&pde->ring_lock, &lqh);
+                if (gen != InterlockedExchangeAdd(&pde->ring_gen, 0))
+                    goto again;
+            }
         }
     }
 
-    //KeReleaseInStackQueuedSpinLock(&lqh);
+    KeReleaseInStackQueuedSpinLock(&lqh);
 }
 
 static int user_map_exception(void)
