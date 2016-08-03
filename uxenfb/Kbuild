@@ -1,0 +1,3 @@
+obj-m += uxenfb.o
+
+uxenfb-y := fb.o
