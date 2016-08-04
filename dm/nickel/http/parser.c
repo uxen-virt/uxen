@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -145,7 +145,7 @@ static int resp_on_message_begin(struct http_parser *parser)
     return 0;
 }
 
-static int resp_on_status_complete(struct http_parser *parser)
+static int resp_on_status(struct http_parser *parser, const char *at, size_t len)
 {
     struct parser_ctx *p = (struct parser_ctx *) parser->data;
 
@@ -301,7 +301,7 @@ int parser_create_response(struct parser_ctx **pp, void *hx)
     if (!parser)
         goto out;
     parser->settings.on_message_begin = resp_on_message_begin;
-    parser->settings.on_status_complete = resp_on_status_complete;
+    parser->settings.on_status = resp_on_status;
     parser->settings.on_headers_complete = resp_on_headers_complete;
     parser->settings.on_header_field = resp_on_header_field;
     parser->settings.on_header_value = resp_on_header_value;
