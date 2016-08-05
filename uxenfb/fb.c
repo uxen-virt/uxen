@@ -39,6 +39,7 @@
 #include <linux/io.h>
 #include <linux/mutex.h>
 #include <linux/slab.h>
+#include <linux/wait.h>
 #include <video/edid.h>
 
 #include <uxen/platform_interface.h>
@@ -48,11 +49,33 @@
 
 #define DEFAULT_XRES 1024
 #define DEFAULT_YRES 768
+#define MAX_XRES 4096
+#define MAX_YRES 2160
+
 #define DEFAULT_FB_ADDR 0xC0000000
 #define DEFAULT_FB_SIZEMAX 0x2000000
 
+#define V4V_PORT 0xD1581
+#define V4V_RING_LEN 4096
+
+#define UXEN_FB_MSG_SETMODE 1
+#define UXEN_FB_MSG_SETMODE_RET 2
+
+struct uxenfb_msg {
+    uint8_t type;
+    uint16_t xres, yres, stride;
+} __attribute__((packed));
+
 struct uxenfb_par {
     u32 xres, yres, bpp, stride;
+
+    int cmap_allocated, registered;
+    uxen_v4v_ring_t *ring;
+    v4v_addr_t dst_addr;
+    wait_queue_head_t wq;
+    struct tasklet_struct tasklet;
+    struct uxenfb_msg resp;
+    int resp_ready;
 };
 
 static struct fb_fix_screeninfo uxenfb_fix = {
@@ -64,28 +87,42 @@ static struct fb_fix_screeninfo uxenfb_fix = {
 
 static ulong fb_addr = DEFAULT_FB_ADDR;
 static ulong fb_sizemax = DEFAULT_FB_SIZEMAX;
+static bool fb_v4vexts = 1;
 
 module_param(fb_addr, ulong, 0444);
 module_param(fb_sizemax, ulong, 0444);
+module_param(fb_v4vexts, bool, 0444);
 
-#if 0
-static
-void process_edid(struct fb_info *info, int *xres, int *yres)
+static void
+send(struct uxenfb_par *par, struct uxenfb_msg *msg)
 {
-    struct uxenfb_par *par = (struct uxenfb_par*) info->par;
-    struct fb_var_screeninfo var = { };
-    u8 edid[256];
-    int i;
+    ssize_t r;
 
-    for (i = 0; i < sizeof(edid); ++i)
-        edid[i] = ioread8(par->regbase + UXDISP_REG_CRTC(0) +
-                          UXDISP_REG_CRTC_EDID_DATA + i);
-    fb_parse_edid(edid, &var);
-    printk("edid resolution %dx%d\n", var.xres, var.yres);
-    *xres = var.xres;
-    *yres = var.yres;
+    r = uxen_v4v_send_from_ring(par->ring, &par->dst_addr, msg, sizeof(struct uxenfb_msg),
+                                V4V_PROTO_DGRAM);
+    BUG_ON( r != sizeof(*msg) );
 }
-#endif
+
+static void
+send_and_wait(struct uxenfb_par *par, struct uxenfb_msg *msg)
+{
+    par->resp_ready = 0;
+    send(par, msg);
+    wait_event_interruptible(par->wq, par->resp_ready == 1);
+}
+
+static void
+remote_set_mode(struct uxenfb_par *par, int xres, int yres, int stride)
+{
+    struct uxenfb_msg msg;
+
+    msg.type = UXEN_FB_MSG_SETMODE;
+    msg.xres = xres;
+    msg.yres = yres;
+    msg.stride = stride;
+
+    send_and_wait(par, &msg);
+}
 
 static int
 uxenfb_setcolreg(unsigned regno, unsigned red, unsigned green,
@@ -128,14 +165,15 @@ uxenfb_blank(int blank, struct fb_info *info)
 static void
 uxenfb_setup_var(struct fb_var_screeninfo *var,
                  struct fb_info *info,
-                 int xres, int yres, int bpp)
+                 int xres, int yres)
 {
     var->xres = xres;
     var->yres = yres;
-    var->bits_per_pixel = bpp;
+    var->bits_per_pixel = 32;
     var->xres_virtual = var->xres;
     var->yres_virtual = var->yres;
 
+    /* BGR */
     var->blue.offset = 0;
     var->green.offset = 8;
     var->red.offset = 16;
@@ -150,14 +188,11 @@ static int
 uxenfb_check_var(struct fb_var_screeninfo *var,
                  struct fb_info *info)
 {
-    if (var->xres > 8192 || var->yres > 8192)
-        return -EINVAL;
-    if (var->xres <= 0 || var->yres <= 0)
+    if (var->xres > MAX_XRES || var->yres > MAX_YRES)
         return -EINVAL;
     if (var->bits_per_pixel != 32)
         return -EINVAL;
-    uxenfb_setup_var(var, info, var->xres, var->yres, var->bits_per_pixel);
-    printk("uxenfb: check_var %d %d %d ok\n", var->xres, var->yres, var->bits_per_pixel);
+    uxenfb_setup_var(var, info, var->xres, var->yres);
     return 0;
 }
 
@@ -169,11 +204,14 @@ uxenfb_set_par(struct fb_info *info)
     par->xres = info->var.xres;
     par->yres = info->var.yres;
     par->bpp = info->var.bits_per_pixel;
-    info->fix.line_length = par->xres * par->bpp / 8;
-    par->stride = info->fix.line_length;
+    par->stride = (par->xres * par->bpp) >> 3;
+    info->fix.line_length = par->stride;
 
-    printk("uxenfb: mode change %dx%d@%d, stride=%d\n", par->xres, par->yres,
-           par->bpp, par->stride);
+    if (fb_v4vexts)
+        remote_set_mode(par, par->xres, par->yres, par->stride);
+
+    printk("uxenfb: mode change %dx%d, stride=%d\n", par->xres, par->yres,
+           par->stride);
     return 0;
 }
 
@@ -190,22 +228,77 @@ static struct fb_ops uxenfb_ops = {
     .fb_set_par = uxenfb_set_par,
 };
 
+static void
+uxenfb_tasklet_run(unsigned long opaque)
+{
+    struct uxenfb_par *par = (void*)opaque;
+    ssize_t len;
+
+    BUG_ON( !par->ring );
+
+    len = uxen_v4v_copy_out(par->ring, NULL, NULL, NULL, 0, 0);
+    if (len <= 0)
+        return;
+
+    BUG_ON( len != sizeof(par->resp) );
+
+    uxen_v4v_copy_out(par->ring, NULL, NULL, &par->resp, sizeof(par->resp), 1);
+    par->resp_ready = 1;
+    wake_up_interruptible(&par->wq);
+}
+
+static void
+uxenfb_irq(void *opaque)
+{
+    struct uxenfb_par *par = opaque;
+
+    tasklet_schedule(&par->tasklet);
+}
+
 static int
-uxenfb_probe(struct uxen_device *dev)
+init_v4v_ring(struct uxenfb_par *par)
 {
     int err = 0;
-    uint32_t magic;
-    struct uxenfb_par *par = 0;
-    struct fb_info *info = 0;
-    int have_cmap = 0;
-    int xres=0,yres=0;
 
-    info = framebuffer_alloc(sizeof(*par) + sizeof(u32) * 256,
-                             &dev->dev);
-    if (!info) {
+    par->dst_addr.port = V4V_PORT;
+    par->dst_addr.domain = 0;
+
+    tasklet_init(&par->tasklet, uxenfb_tasklet_run, (unsigned long) par);
+    par->ring = uxen_v4v_ring_bind(
+        par->dst_addr.port, par->dst_addr.domain,
+        V4V_RING_LEN, uxenfb_irq, par);
+    if (!par->ring) {
         err = -ENOMEM;
         goto out;
     }
+    if (IS_ERR(par->ring)) {
+        err = PTR_ERR(par->ring);
+        par->ring = NULL;
+        goto out;
+    }
+
+out:
+    if (err)
+        tasklet_kill(&par->tasklet);
+    return err;
+}
+
+static void
+cleanup_v4v_ring(struct uxenfb_par *par)
+{
+    if (par->ring) {
+        uxen_v4v_ring_free(par->ring);
+        tasklet_kill(&par->tasklet);
+        par->ring = NULL;
+    }
+}
+
+static int
+setup_fb_info(struct fb_info *info)
+{
+    struct uxenfb_par *par = info->par;
+    int err = 0;
+
     INIT_LIST_HEAD(&info->modelist);
 
     info->fbops = &uxenfb_ops;
@@ -230,18 +323,64 @@ uxenfb_probe(struct uxen_device *dev)
     }
 
     err = fb_alloc_cmap(&info->cmap, 256, 0);
-    if (err)
+    if (err) {
+        printk(KERN_ERR "uxenfb: failed to alloc cmap\n");
         goto out;
-    have_cmap = 1;
+    }
+    par->cmap_allocated = 1;
+
+    err = init_v4v_ring(par);
+    if (err) {
+        printk(KERN_ERR "uxenfb: failed to init v4v ring\n");
+        goto out;
+    }
+
+    init_waitqueue_head(&par->wq);
+
+out:
+    return err;
+}
+
+static void
+cleanup_fb_info(struct fb_info *info)
+{
+    struct uxenfb_par *par;
+
+    if (!info)
+        return;
 
     par = info->par;
+    if (par->registered)
+        unregister_framebuffer(info);
+    cleanup_v4v_ring(par);
+    if (!list_empty(&info->modelist))
+        fb_destroy_modelist(&info->modelist);
+    fb_destroy_modedb(info->monspecs.modedb);
+    if (par->cmap_allocated)
+        fb_dealloc_cmap(&info->cmap);
+    if (info->screen_base)
+        iounmap(info->screen_base);
+    framebuffer_release(info);
+}
 
-/*  FIXME! resolution setup
-    process_edid(info, &xres, &yres);
-*/
-    xres = DEFAULT_XRES;
-    yres = DEFAULT_YRES;
-    uxenfb_setup_var(&info->var, info, xres, yres, 32);
+static int
+uxenfb_probe(struct uxen_device *dev)
+{
+    int err = 0;
+    struct uxenfb_par *par = 0;
+    struct fb_info *info = 0;
+
+    info = framebuffer_alloc(sizeof(*par) + sizeof(u32) * 256,
+                             &dev->dev);
+    if (!info) {
+        err = -ENOMEM;
+        goto out;
+    }
+
+    setup_fb_info(info);
+
+    par = info->par;
+    uxenfb_setup_var(&info->var, info, DEFAULT_XRES, DEFAULT_YRES);
 
     printk("uxenfb: registering framebuffer @ %p (mapped @ %p)\n",
            (void*)info->fix.smem_start,
@@ -254,41 +393,18 @@ uxenfb_probe(struct uxen_device *dev)
     dev->priv = info;
 
 out:
-    if (err) {
-        if (info) {
-            if (!list_empty(&info->modelist))
-		fb_destroy_modelist(&info->modelist);
-            fb_destroy_modedb(info->monspecs.modedb);
-            if (have_cmap)
-                fb_dealloc_cmap(&info->cmap);
-            if (info->screen_base)
-                iounmap(info->screen_base);
-            framebuffer_release(info);
-        }
-    }
+    if (err)
+        cleanup_fb_info(info);
     return err;
 }
 
-static void
-uxenfb_cleanup(struct fb_info *info)
-{
-    struct uxenfb_par *par = (struct uxenfb_par*)info->par;
-
-    unregister_framebuffer(info);
-    if (!list_empty(&info->modelist))
-        fb_destroy_modelist(&info->modelist);
-    fb_destroy_modedb(info->monspecs.modedb);
-    fb_dealloc_cmap(&info->cmap);
-    iounmap(info->screen_base);
-    framebuffer_release(info);
-}
-
-static void
+static int
 uxenfb_remove(struct uxen_device *dev)
 {
     struct fb_info *info = dev->priv;
 
-    uxenfb_cleanup(info);
+    cleanup_fb_info(info);
+    return 0;
 }
 
 static struct uxen_driver uxenfb_driver = {
