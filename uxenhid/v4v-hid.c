@@ -525,7 +525,7 @@ static int v4v_ring_init(struct uxenhid_dev *dev)
 
 	spin_lock_init(&dev->v4v_lock);
 	dev->peer.port = 0xe0000;
-	dev->peer.domain = 0;
+	dev->peer.domain = V4V_DOMID_DM;
 	dev->ring = uxen_v4v_ring_bind(dev->peer.port, dev->peer.domain,
 				       V4V_RING_LEN, v4v_ring_event, dev);
 	if (!dev->ring)

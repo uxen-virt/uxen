@@ -186,7 +186,7 @@ static void uxenstor_softirq(unsigned long opaque)
 static int uxenstor_v4v_ring_init(struct uxenstor_dev *dev)
 {
     dev->dest_addr.port = V4V_STOR_PORT_BASE + dev->host_id;
-    dev->dest_addr.domain = 0;
+    dev->dest_addr.domain = V4V_DOMID_DM;
     dev->recv_ring = uxen_v4v_ring_bind(dev->dest_addr.port, dev->dest_addr.domain,
                                         V4V_STOR_RING_LEN, uxenstor_irq, dev);
     if (!dev->recv_ring)

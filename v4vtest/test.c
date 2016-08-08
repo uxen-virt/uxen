@@ -156,7 +156,7 @@ int main(int argc, char **argv)
     if (bind(fd, (const struct sockaddr *) &addr, sizeof(addr)) < 0)
         err(1, "bind %d", (int) errno);
 
-    addr.v4v.domain = 0;
+    addr.v4v.domain = V4V_DOMID_DM;
     addr.v4v.port = PORT;
     if (connect(fd, (const struct sockaddr *) &addr, sizeof(addr)) < 0)
         err(1, "connect %d", (int) errno);

@@ -136,7 +136,7 @@ static int v4v_ring_init(struct uxenkbd_dev *dev)
     int ret = 0;
 
     dev->dest_addr.port = V4V_BASE_PORT;
-    dev->dest_addr.domain = 0;
+    dev->dest_addr.domain = V4V_DOMID_DM;
     tasklet_init(&dev->tasklet, uxenkbd_softirq, (unsigned long) dev);
     dev->recv_ring = uxen_v4v_ring_bind(dev->dest_addr.port, dev->dest_addr.domain,
                                         V4V_RING_LEN, uxenkbd_irq, dev);

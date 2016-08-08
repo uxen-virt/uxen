@@ -261,7 +261,7 @@ init_v4v_ring(struct uxenfb_par *par)
     int err = 0;
 
     par->dst_addr.port = V4V_PORT;
-    par->dst_addr.domain = 0;
+    par->dst_addr.domain = V4V_DOMID_DM;
 
     tasklet_init(&par->tasklet, uxenfb_tasklet_run, (unsigned long) par);
     par->ring = uxen_v4v_ring_bind(
