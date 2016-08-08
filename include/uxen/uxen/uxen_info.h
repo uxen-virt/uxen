@@ -83,6 +83,7 @@
 #define UI_HOST_CALL_ui_map_mfn                     UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_user_access_ok              UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_signal_v4v                  UI_HOST_CALL_SAVE_XMM
+#define UI_HOST_CALL_ui_rdmsr_safe                  UI_HOST_CALL_SAVE_NOTHING
 
 
 #define UI_HOST_CALL(...) \
@@ -233,6 +234,9 @@ struct /* __WINPACKED__ */ uxen_info {
     uint32_t ui_vframes_fill;
     uint32_t ui_out_of_vframes;
     uint32_t ui_max_vframe;
+#ifdef UXEN_HOST_OSX
+    uint64_t (__interface_fn *ui_rdmsr_safe)(uint32_t, uint64_t *);
+#endif  /* UXEN_HOST_OSX */
 
 #if defined(__x86_64__) && defined(__OBJ_PE__)
     uint8_t *ui_xdata_start;
