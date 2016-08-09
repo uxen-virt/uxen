@@ -52,9 +52,6 @@ logging_vprintf(const char *fmt, va_list ap)
 
 	err = WSAGetLastError();
 
-        debug_log("sendto(%d, %p, %d, 0, { .sin_family=%d, .sin_addr.s_addr=%x, .sin_port=%d }, %d) == %d [WSAGetLastError=%d]\n", 
-		sock, buf, len, (int) sa.sin_family, (unsigned) sa.sin_addr.s_addr,(int) htons(sa.sin_port),(int) sizeof(sa),ret,err);
-
         elen = snprintf(ebuf,sizeof(ebuf),"uxenevent mythical bug: sendto(%d, %p, %d, 0, { .sin_family=%d, .sin_addr.s_addr=%x, .sin_port=%d }, %d) == %d [WSAGetLastError=%d]\n", sock,buf,len,(int) sa.sin_family, (unsigned) sa.sin_addr.s_addr,(int) htons(sa.sin_port),(int) sizeof(sa),ret,err);
 
     	(void) sendto(sock, ebuf, elen, 0, (struct sockaddr *)&sa, sizeof(sa));
@@ -86,14 +83,12 @@ logging_init(void)
 
     sock = socket(PF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
-        debug_log("socket");
         goto fail;
     }
 
 
     ret = setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (void *)&one, sizeof(one));
     if (ret < 0) {
-        debug_log("setsockopt %x", WSAGetLastError());
         goto fail;
     }
 
@@ -105,7 +100,6 @@ logging_init(void)
 
     ret = bind(sock, (struct sockaddr *)&sa, sizeof(sa));
     if (ret < 0) {
-        debug_log("bind %x", WSAGetLastError());
         goto fail;
     }
 
