@@ -30,6 +30,18 @@
 #include "hw.h"
 #include "perfcnt.h"
 
+#define TIMEOUT_MS 33
+#define ONE_MS_IN_HNS 10000
+
+static void vsync_timer_dpc(
+    struct _KDPC*, void *deferred_context, void*, void*)
+{
+    DXGKRNL_INTERFACE *dxgkInterface = (DXGKRNL_INTERFACE *)deferred_context;
+    DXGKARGCB_NOTIFY_INTERRUPT_DATA data = { DXGK_INTERRUPT_DISPLAYONLY_VSYNC, 0 };
+    dxgkInterface->DxgkCbNotifyInterrupt((HANDLE)dxgkInterface->DeviceHandle, &data);
+    dxgkInterface->DxgkCbQueueDpc((HANDLE)dxgkInterface->DeviceHandle);
+}
+
 VOID BASIC_DISPLAY_DRIVER::Init(_In_ DEVICE_OBJECT* pPhysicalDeviceObject)
 {
     *((UINT*)&m_Flags) = 0;
@@ -154,6 +166,10 @@ NTSTATUS BASIC_DISPLAY_DRIVER::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartIn
         uxen_err("dr_init failed. Unable to communicate with hardware.");
         return STATUS_UNSUCCESSFUL;
     }
+
+    due_time.QuadPart = -TIMEOUT_MS * ONE_MS_IN_HNS;
+    KeInitializeTimer(&timer);
+    KeInitializeDpc(&dpc, vsync_timer_dpc, &m_DxgkInterface);
 
     return STATUS_SUCCESS;
 }
@@ -325,6 +341,30 @@ NTSTATUS BASIC_DISPLAY_DRIVER::QueryDeviceDescriptor(_In_    ULONG              
     {
         return STATUS_MONITOR_NO_MORE_DESCRIPTOR_DATA;
     }
+}
+
+NTSTATUS BASIC_DISPLAY_DRIVER::GetScanLine(_In_ DXGKARG_GETSCANLINE* pGetScanLine)
+{
+    uxen_debug("GetScanLine");
+    pGetScanLine->InVerticalBlank = FALSE;
+    pGetScanLine->ScanLine = 767;
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS BASIC_DISPLAY_DRIVER::ControlInterrupt(_In_ CONST DXGK_INTERRUPT_TYPE InterruptType, _In_ BOOLEAN Enable)
+{
+    uxen_debug("InterruptType: %d -> %s", (int)InterruptType, (Enable) ? "Enable" : "Disable");
+    if (InterruptType == DXGK_INTERRUPT_DISPLAYONLY_VSYNC) {
+        if (Enable) {
+            DXGKARGCB_NOTIFY_INTERRUPT_DATA data = { DXGK_INTERRUPT_DISPLAYONLY_VSYNC, 0 };
+            m_DxgkInterface.DxgkCbNotifyInterrupt((HANDLE)m_DxgkInterface.DeviceHandle, &data);
+            m_DxgkInterface.DxgkCbQueueDpc((HANDLE)m_DxgkInterface.DeviceHandle);
+            KeSetTimerEx(&timer, due_time, TIMEOUT_MS, &dpc);
+        } else {
+            KeCancelTimer(&timer);
+        }
+    }
+    return STATUS_SUCCESS;
 }
 
 NTSTATUS BASIC_DISPLAY_DRIVER::QueryAdapterInfo(_In_ CONST DXGKARG_QUERYADAPTERINFO* pQueryAdapterInfo)

@@ -65,6 +65,8 @@ DriverEntry(
     InitialData.DxgkDdiEnumVidPnCofuncModality      = BddDdiEnumVidPnCofuncModality;
     InitialData.DxgkDdiSetVidPnSourceVisibility     = BddDdiSetVidPnSourceVisibility;
     InitialData.DxgkDdiCommitVidPn                  = BddDdiCommitVidPn;
+    InitialData.DxgkDdiControlInterrupt             = BddDdiControlInterrupt;
+    InitialData.DxgkDdiGetScanLine                  = BddDdiGetScanLine;
     InitialData.DxgkDdiUpdateActiveVidPnPresentPath = BddDdiUpdateActiveVidPnPresentPath;
     InitialData.DxgkDdiRecommendMonitorModes        = BddDdiRecommendMonitorModes;
     InitialData.DxgkDdiQueryVidPnHWCapability       = BddDdiQueryVidPnHWCapability;
@@ -517,6 +519,41 @@ BddDdiCommitVidPn(
         return STATUS_UNSUCCESSFUL;
     }
     return pBDD->CommitVidPn(pCommitVidPn);
+}
+
+NTSTATUS
+APIENTRY
+BddDdiGetScanLine(
+    _In_ CONST HANDLE                     hAdapter,
+    _In_ DXGKARG_GETSCANLINE*             pGetScanLine)
+{
+    ASSERT(hAdapter != NULL);
+
+    BASIC_DISPLAY_DRIVER* pBDD = (BASIC_DISPLAY_DRIVER*)(hAdapter);
+    if (!pBDD->IsDriverActive())
+    {
+        ASSERT_FAIL("BDD (0x%I64x) is being called when not active!", pBDD);
+        return STATUS_UNSUCCESSFUL;
+    }
+    return pBDD->GetScanLine(pGetScanLine);
+}
+
+NTSTATUS
+APIENTRY
+BddDdiControlInterrupt(
+    _In_ CONST HANDLE                     hAdapter,
+    _In_ CONST DXGK_INTERRUPT_TYPE        InterruptType,
+    _In_       BOOLEAN                    Enable)
+{
+    ASSERT(hAdapter != NULL);
+
+    BASIC_DISPLAY_DRIVER* pBDD = (BASIC_DISPLAY_DRIVER*)(hAdapter);
+    if (!pBDD->IsDriverActive())
+    {
+        ASSERT_FAIL("BDD (0x%I64x) is being called when not active!", pBDD);
+        return STATUS_UNSUCCESSFUL;
+    }
+    return pBDD->ControlInterrupt(InterruptType, Enable);
 }
 
 NTSTATUS

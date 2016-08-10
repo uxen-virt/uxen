@@ -947,20 +947,21 @@ NTSTATUS BASIC_DISPLAY_DRIVER::AddSingleSourceMode(_In_ CONST DXGK_VIDPNSOURCEMO
     return STATUS_SUCCESS;
 }
 
+#define VSYNC_RATE 30
+#define HSYNC_RATE 23456
 
 #define InitVideoSignalParams(vsi, w, h, s) do {                              \
     (vsi)->VideoStandard = D3DKMDT_VSS_OTHER;                                 \
     (vsi)->TotalSize.cx = (w);                                                \
     (vsi)->TotalSize.cy = (h);                                                \
     (vsi)->ActiveSize = (s);                                                  \
-    (vsi)->VSyncFreq.Numerator = D3DKMDT_FREQUENCY_NOTSPECIFIED;              \
-    (vsi)->VSyncFreq.Denominator = D3DKMDT_FREQUENCY_NOTSPECIFIED;            \
-    (vsi)->HSyncFreq.Numerator = D3DKMDT_FREQUENCY_NOTSPECIFIED;              \
-    (vsi)->HSyncFreq.Denominator = D3DKMDT_FREQUENCY_NOTSPECIFIED;            \
-    (vsi)->PixelRate = D3DKMDT_FREQUENCY_NOTSPECIFIED;                        \
+    (vsi)->VSyncFreq.Numerator = VSYNC_RATE;              \
+    (vsi)->VSyncFreq.Denominator = 1;            \
+    (vsi)->HSyncFreq.Numerator = HSYNC_RATE;              \
+    (vsi)->HSyncFreq.Denominator = 1;            \
+    (vsi)->PixelRate = VSYNC_RATE * (h + 100) * (w + 100);                        \
     (vsi)->ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;                       \
 } while (0, 0)
-                  
 
 // Add the current mode information (acquired from the POST frame buffer) as the target mode.
 NTSTATUS BASIC_DISPLAY_DRIVER::AddSingleTargetMode(_In_ CONST DXGK_VIDPNTARGETMODESET_INTERFACE* pVidPnTargetModeSetInterface,

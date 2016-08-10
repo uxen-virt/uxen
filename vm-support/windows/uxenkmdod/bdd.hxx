@@ -237,6 +237,10 @@ private:
     
     dr_ctx_t m_DrContext;
 
+    KTIMER timer;
+    KDPC dpc;
+    LARGE_INTEGER due_time;
+
 public:
     VOID Init(_In_ DEVICE_OBJECT* pPhysicalDeviceObject);
     VOID CleanUp();
@@ -309,6 +313,10 @@ public:
     NTSTATUS SetVidPnSourceVisibility(_In_ CONST DXGKARG_SETVIDPNSOURCEVISIBILITY* pSetVidPnSourceVisibility);
 
     NTSTATUS CommitVidPn(_In_ CONST DXGKARG_COMMITVIDPN* CONST pCommitVidPn);
+
+    NTSTATUS GetScanLine(_In_ DXGKARG_GETSCANLINE* pGetScanLine);
+
+    NTSTATUS ControlInterrupt(_In_ CONST DXGK_INTERRUPT_TYPE InterruptType, _In_ BOOLEAN Enable);
 
     NTSTATUS UpdateActiveVidPnPresentPath(_In_ CONST DXGKARG_UPDATEACTIVEVIDPNPRESENTPATH* CONST pUpdateActiveVidPnPresentPath);
 
@@ -596,6 +604,19 @@ APIENTRY
 BddDdiCommitVidPn(
     _In_ CONST HANDLE                         hAdapter,
     _In_ CONST DXGKARG_COMMITVIDPN* CONST     pCommitVidPn);
+
+NTSTATUS
+APIENTRY
+BddDdiGetScanLine(
+    _In_ CONST HANDLE                     hAdapter,
+    _In_ DXGKARG_GETSCANLINE*             pGetScanLine);
+
+NTSTATUS
+APIENTRY
+BddDdiControlInterrupt(
+    _In_ CONST HANDLE                     hAdapter,
+    _In_ CONST DXGK_INTERRUPT_TYPE        InterruptType,
+    _In_       BOOLEAN                    Enable);
 
 NTSTATUS
 APIENTRY
