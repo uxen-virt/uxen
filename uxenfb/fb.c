@@ -67,6 +67,8 @@
 
 #define UXEN_FB_MSG_SETMODE 1
 #define UXEN_FB_MSG_SETMODE_RET 2
+#define UXEN_FB_MSG_QUERYCONF 3
+#define UXEN_FB_MSG_QUERYCONF_RET 4
 
 struct uxenfb_rect {
     int32_t left;
@@ -154,7 +156,7 @@ send_and_wait(struct uxenfb_par *par, struct uxenfb_msg *msg)
 static void
 remote_set_mode(struct uxenfb_par *par, int xres, int yres, int stride)
 {
-    struct uxenfb_msg msg;
+    struct uxenfb_msg msg = { };
 
     msg.type = UXEN_FB_MSG_SETMODE;
     msg.xres = xres;
@@ -162,6 +164,20 @@ remote_set_mode(struct uxenfb_par *par, int xres, int yres, int stride)
     msg.stride = stride;
 
     send_and_wait(par, &msg);
+}
+
+static void
+remote_query_conf(struct uxenfb_par *par, int *xres, int *yres, int *stride)
+{
+    struct uxenfb_msg msg = { };
+
+    msg.type = UXEN_FB_MSG_QUERYCONF;
+
+    send_and_wait(par, &msg);
+
+    *xres = par->resp.xres;
+    *yres = par->resp.yres;
+    *stride = par->resp.stride;
 }
 
 static int
@@ -730,6 +746,7 @@ uxenfb_probe(struct uxen_device *dev)
     int err = 0;
     struct uxenfb_par *par = 0;
     struct fb_info *info = 0;
+    int xres = DEFAULT_XRES, yres = DEFAULT_YRES;
 
     info = framebuffer_alloc(sizeof(*par) + sizeof(u32) * 256,
                              &dev->dev);
@@ -740,7 +757,16 @@ uxenfb_probe(struct uxen_device *dev)
 
     setup_fb_info(info);
     par = info->par;
-    uxenfb_setup_var(&info->var, info, DEFAULT_XRES, DEFAULT_YRES);
+    if (fb_v4vexts) {
+        int r_xres=0, r_yres=0, r_stride=0;
+
+        remote_query_conf(par, &r_xres, &r_yres, &r_stride);
+        if (r_xres && r_yres) {
+            xres = r_xres;
+            yres = r_yres;
+        }
+    }
+    uxenfb_setup_var(&info->var, info, xres, yres);
 
     printk("uxenfb: registering framebuffer @ %p (mapped @ %p)\n",
            (void*)info->fix.smem_start,
