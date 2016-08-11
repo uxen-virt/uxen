@@ -167,7 +167,6 @@ NTSTATUS BASIC_DISPLAY_DRIVER::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartIn
         return STATUS_UNSUCCESSFUL;
     }
 
-    due_time.QuadPart = -TIMEOUT_MS * ONE_MS_IN_HNS;
     KeInitializeTimer(&timer);
     KeInitializeDpc(&dpc, vsync_timer_dpc, &m_DxgkInterface);
 
@@ -346,8 +345,8 @@ NTSTATUS BASIC_DISPLAY_DRIVER::QueryDeviceDescriptor(_In_    ULONG              
 NTSTATUS BASIC_DISPLAY_DRIVER::GetScanLine(_In_ DXGKARG_GETSCANLINE* pGetScanLine)
 {
     uxen_debug("GetScanLine");
-    pGetScanLine->InVerticalBlank = FALSE;
-    pGetScanLine->ScanLine = 767;
+    pGetScanLine->InVerticalBlank = TRUE;
+    pGetScanLine->ScanLine = 0;
     return STATUS_SUCCESS;
 }
 
@@ -356,9 +355,12 @@ NTSTATUS BASIC_DISPLAY_DRIVER::ControlInterrupt(_In_ CONST DXGK_INTERRUPT_TYPE I
     uxen_debug("InterruptType: %d -> %s", (int)InterruptType, (Enable) ? "Enable" : "Disable");
     if (InterruptType == DXGK_INTERRUPT_DISPLAYONLY_VSYNC) {
         if (Enable) {
+            int vsync = ((m_NextMode.vsync <= 75) && (m_NextMode.vsync > 0)) ? m_NextMode.vsync : 30;
             DXGKARGCB_NOTIFY_INTERRUPT_DATA data = { DXGK_INTERRUPT_DISPLAYONLY_VSYNC, 0 };
             m_DxgkInterface.DxgkCbNotifyInterrupt((HANDLE)m_DxgkInterface.DeviceHandle, &data);
             m_DxgkInterface.DxgkCbQueueDpc((HANDLE)m_DxgkInterface.DeviceHandle);
+
+            due_time.QuadPart = -1 * (1000 / vsync) * ONE_MS_IN_HNS;
             KeSetTimerEx(&timer, due_time, TIMEOUT_MS, &dpc);
         } else {
             KeCancelTimer(&timer);

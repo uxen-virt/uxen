@@ -571,6 +571,7 @@ int
 uxenconsole_request_resize(uxenconsole_context_t ctx,
                            unsigned int width,
                            unsigned int height,
+                           unsigned int vsync,
                            unsigned int flags)
 {
     struct ctx *c = ctx;
@@ -583,6 +584,7 @@ uxenconsole_request_resize(uxenconsole_context_t ctx,
     msg.header.len = sizeof (msg);
     msg.width = width;
     msg.height = height;
+    msg.vsync = vsync;
     msg.flags = flags;
 
     rc = channel_write(c, &msg, sizeof (msg));

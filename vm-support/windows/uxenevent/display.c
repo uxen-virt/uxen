@@ -144,7 +144,7 @@ exit:
 }
 
 int
-display_resize(int w, int h, unsigned int flags)
+display_resize(int w, int h, int vsync, unsigned int flags)
 {
     UXENDISPCustomMode cm;
     BOOL set_mode = (current_w < w) || (current_h < h);
@@ -164,6 +164,7 @@ display_resize(int w, int h, unsigned int flags)
         cm.esc_code = UXENDISP_ESCAPE_SET_CUSTOM_MODE;
         cm.width = w;
         cm.height = h;
+        cm.vsync = vsync;
         if (display_escape(UXENDISP_ESCAPE_SET_CUSTOM_MODE, &cm, sizeof(cm))) {
             debug_log("failed to inject custom mode [%dx%d]", w, h);
             return -1;
@@ -213,6 +214,7 @@ display_resize(int w, int h, unsigned int flags)
         cm.esc_code = UXENDISP_ESCAPE_SET_VIRTUAL_MODE;
         cm.width = w;
         cm.height = h;
+        cm.vsync = vsync;
         if (display_escape(UXENDISP_ESCAPE_SET_VIRTUAL_MODE, &cm, sizeof(cm))) {
             debug_log("failed to inject virtual mode [%dx%d]", w, h);
             return -1;

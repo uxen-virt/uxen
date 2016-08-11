@@ -847,10 +847,10 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetNextMode(UXENDISPCustomMode *pNewMode)
 
     perfcnt_inc(SetNextMode);
 #ifdef DBG
-    uxen_debug("called: %dx%d", pNewMode->width, pNewMode->height);
+    uxen_debug("called: %dx%d@%dHz", pNewMode->width, pNewMode->height, pNewMode->vsync);
 #else
     if (perfcnt_get(SetNextMode) < 64)
-        uxen_msg("called: %dx%d", pNewMode->width, pNewMode->height);
+        uxen_msg("called: %dx%d@%dHz", pNewMode->width, pNewMode->height, pNewMode->vsync);
 #endif  /* DBG */
 
     m_NextMode = *pNewMode;
@@ -950,16 +950,16 @@ NTSTATUS BASIC_DISPLAY_DRIVER::AddSingleSourceMode(_In_ CONST DXGK_VIDPNSOURCEMO
 #define VSYNC_RATE 30
 #define HSYNC_RATE 23456
 
-#define InitVideoSignalParams(vsi, w, h, s) do {                              \
+#define InitVideoSignalParams(vsi, w, h, r, s) do {                           \
     (vsi)->VideoStandard = D3DKMDT_VSS_OTHER;                                 \
     (vsi)->TotalSize.cx = (w);                                                \
     (vsi)->TotalSize.cy = (h);                                                \
     (vsi)->ActiveSize = (s);                                                  \
-    (vsi)->VSyncFreq.Numerator = VSYNC_RATE;              \
-    (vsi)->VSyncFreq.Denominator = 1;            \
-    (vsi)->HSyncFreq.Numerator = HSYNC_RATE;              \
-    (vsi)->HSyncFreq.Denominator = 1;            \
-    (vsi)->PixelRate = VSYNC_RATE * (h + 100) * (w + 100);                        \
+    (vsi)->VSyncFreq.Numerator = (r);                                           \
+    (vsi)->VSyncFreq.Denominator = 1;                                         \
+    (vsi)->HSyncFreq.Numerator = HSYNC_RATE;                                  \
+    (vsi)->HSyncFreq.Denominator = 1;                                         \
+    (vsi)->PixelRate = (r) * (h + 100) * (w + 100);                             \
     (vsi)->ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;                       \
 } while (0, 0)
 
@@ -985,6 +985,7 @@ NTSTATUS BASIC_DISPLAY_DRIVER::AddSingleTargetMode(_In_ CONST DXGK_VIDPNTARGETMO
         &pVidPnTargetModeInfo->VideoSignalInfo,
         m_NextMode.width,
         m_NextMode.height,
+        ((m_NextMode.vsync <= 75) && (m_NextMode.vsync > 0)) ? m_NextMode.vsync : VSYNC_RATE,
         pVidPnTargetModeInfo->VideoSignalInfo.TotalSize);
 
     pVidPnTargetModeInfo->Preference = D3DKMDT_MP_PREFERRED;
@@ -1017,6 +1018,7 @@ NTSTATUS BASIC_DISPLAY_DRIVER::AddSingleMonitorMode(_In_ CONST DXGKARG_RECOMMEND
         &pMonitorSourceMode->VideoSignalInfo,
         m_NextMode.width,
         m_NextMode.height,
+        ((m_NextMode.vsync <= 75) && (m_NextMode.vsync > 0)) ? m_NextMode.vsync : VSYNC_RATE,
         pMonitorSourceMode->VideoSignalInfo.TotalSize);
 
     // We set the preference to PREFERRED since this is the only supported mode

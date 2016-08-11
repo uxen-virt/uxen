@@ -94,7 +94,7 @@ int verbose = 0;
 
 static HANDLE resize_event;
 static int resize_timer_set = 0;
-static int requested_w, requested_h;
+static int requested_w, requested_h, requested_vsync;
 static unsigned int requested_flags;
 
 static void
@@ -190,11 +190,12 @@ process_resize(void)
     if ((requested_w > 0) && (requested_h > 0)) {
         LARGE_INTEGER timeout;
 
-        debug_log("%s %dx%d flags 0x%x", __FUNCTION__, requested_w, requested_h, requested_flags);
+        debug_log("%s %dx%d@%dHz flags 0x%x", __FUNCTION__, requested_w, requested_h, requested_vsync, requested_flags);
 
-        display_resize(requested_w, requested_h, requested_flags);
+        display_resize(requested_w, requested_h, requested_vsync, requested_flags);
         requested_w = 0;
         requested_h = 0;
+        requested_vsync = 0;
         requested_flags = 0;
 
         timeout.QuadPart = -2500000; /* 250ms */
@@ -204,13 +205,14 @@ process_resize(void)
 }
 
 static void
-schedule_resize(int w, int h, unsigned int flags)
+schedule_resize(int w, int h, int vsync, unsigned int flags)
 {
     requested_w = w;
     requested_h = h;
+    requested_vsync = vsync;
     requested_flags = flags;
 
-    debug_log("%s %dx%d flags 0x%x", __FUNCTION__, w, h, flags);
+    debug_log("%s %dx%d@%dHz flags 0x%x", __FUNCTION__, w, h, vsync, flags);
 
     if (!resize_timer_set)
         process_resize();
@@ -223,7 +225,7 @@ process_windows_window_proc(struct ns_event_msg_windows_window_proc *msg)
 
     switch (msg->message) {
     case WM_SIZE:
-        schedule_resize(msg->lParam & 0xffff, (msg->lParam >> 16) & 0xffff, msg->wParam);
+        schedule_resize(msg->lParam & 0xffff, (msg->lParam >> 16) & 0xffff, (msg->lParam >> 32) & 0xffff, msg->wParam);
         rc = 0;
         break;
 
