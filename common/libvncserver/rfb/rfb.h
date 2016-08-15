@@ -153,6 +153,7 @@ typedef void (*rfbDisplayFinishedHookPtr)(struct _rfbClientRec* cl, int result);
 /** support the capability to view the caps/num/scroll states of the X server */
 typedef int  (*rfbGetKeyboardLedStateHookPtr)(struct _rfbScreenInfo* screen);
 typedef rfbBool (*rfbXvpHookPtr)(struct _rfbClientRec* cl, uint8_t, uint8_t);
+typedef void (*rfbMangleServerFormatHookPtr)(struct _rfbScreenInfo* screen);
 /**
  * If x==1 and y==1 then set the whole display
  * else find the window underneath x and y and set the framebuffer to the dimensions
@@ -389,6 +390,8 @@ typedef struct _rfbScreenInfo
     SOCKET listen6Sock;
     int http6Port;
     SOCKET httpListen6Sock;
+    /*  */
+    rfbMangleServerFormatHookPtr mangleServerFormatHook;
 } rfbScreenInfo, *rfbScreenInfoPtr;
 
 

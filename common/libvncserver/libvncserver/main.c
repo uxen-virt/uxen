@@ -930,6 +930,7 @@ rfbScreenInfoPtr rfbGetScreen(int* argc,char** argv,
    screen->displayFinishedHook = NULL;
    screen->getKeyboardLedStateHook = NULL;
    screen->xvpHook = NULL;
+   screen->mangleServerFormatHook = NULL;
 
    /* initialize client list and iterator mutex */
    rfbClientListInit(screen);
@@ -968,6 +969,8 @@ void rfbNewFramebuffer(rfbScreenInfoPtr screen, char *framebuffer,
   screen->paddedWidthInBytes = width*bytesPerPixel;
 
   rfbInitServerFormat(screen, bitsPerSample);
+  if (screen->mangleServerFormatHook)
+      screen->mangleServerFormatHook(screen);
 
   if (memcmp(&screen->serverFormat, &old_format,
              sizeof(rfbPixelFormat)) != 0) {
