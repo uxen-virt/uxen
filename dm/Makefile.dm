@@ -10,10 +10,6 @@ build-uxendm install-uxendm: check-build_info.h
 build-uxendm: uxendm$(EXE_SUFFIX)
 install-uxendm: $(DISTDIR)/uxendm$(EXE_SUFFIX)
 
-$(OSX)OSX_NOT_YET = no_
-$(OSX_NOT_YET)OSX_CONFIG_NOT = no_
-$(OSX_CONFIG_NOT)CPPFLAGS += -DOSX_NOT_YET
-
 $(DEBUG_ONLY)CPPFLAGS += -DCONFIG_CHECK_NAME=$(subst -,_,$(subst .,_,$(@F)))
 
 $(REL_ONLY)CONFIG_CONTROL_TEST ?= no_
