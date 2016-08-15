@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -168,7 +168,7 @@ static char *
 lv_encode_string(const char *str, size_t max_len)
 {
     char *resp = NULL;
-    char buf[MLEN_FIELD + 1], *p;
+    char buf[MLEN_FIELD + 2], *p;
     const char *q;
     size_t i;
     bool exit_loop;
@@ -176,7 +176,7 @@ lv_encode_string(const char *str, size_t max_len)
     if (!str)
         goto out;
 
-    memset(buf, 0, MLEN_FIELD + 1);
+    memset(buf, 0, MLEN_FIELD + 2);
     if (max_len > MLEN_FIELD)
         max_len = MLEN_FIELD;
 
