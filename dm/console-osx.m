@@ -128,7 +128,7 @@ create_vram_surface(struct gui_state *state,
     return &surface->s;
 }
 
-void
+static void
 free_surface(struct gui_state *state, struct display_surface *surface)
 {
     struct osx_gui_state *s = (void *)state;
@@ -295,7 +295,7 @@ gui_create(struct gui_state *state, struct display_state *ds)
     return 0;
 }
 
-void
+static void
 gui_destroy(struct gui_state *state)
 {
     struct osx_gui_state *s = (void *)state;
@@ -313,7 +313,7 @@ gui_destroy(struct gui_state *state)
     });
 }
 
-void
+static void
 gui_start(struct gui_state *state)
 {
     struct osx_gui_state *s = (void *)state;
