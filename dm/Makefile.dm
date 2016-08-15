@@ -104,6 +104,10 @@ console-remote.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 console-remote.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
 console-remote.o: CPPFLAGS += -I$(TOPDIR)/common/uxenconsole
 $(CONFIG_VBOXDRV)console-remote.o: CPPFLAGS += -DNOTIFY_CLIPBOARD_SERVICE
+$(UXENDM_VNCSERVER)DM_SRCS += console-vnc.o
+console-vnc.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
+console-vnc.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
+console-vnc.o: CPPFLAGS += $(LIBVNCSERVER_CPPFLAGS)
 DM_SRCS += console.c
 console.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 console.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
@@ -377,6 +381,7 @@ LDLIBS += $(LIBVHD_LIBS)
 LDLIBS += $(LIBUXENCTL_LIBS)
 LDLIBS += $(LIBXC_LIBS)
 LDLIBS += $(YAJL_LIBS)
+$(UXENDM_VNCSERVER)LDLIBS += $(LIBVNCSERVER_LIBS)
 
 $(OSX)LDLIBS += -lm -lz
 

@@ -1,0 +1,19 @@
+
+dist: all
+
+all: $(abspath install)/lib/libvncserver.a
+all: $(abspath install)/include/rfb/rfb.h
+all: Makefile.lib-LIBVNCSERVER
+
+$(abspath install)/lib/libvncserver.a $(abspath install)/include/rfb/rfb.h: Makefile
+	$(MAKE) -f $< install
+
+Makefile:
+	$(SRCROOT)/configure --prefix=$(abspath install) \
+	  --with-jpeg=/opt/local
+
+Makefile.lib-LIBVNCSERVER:
+	@rm -f $@
+	@(echo "LIBVNCSERVER_CPPFLAGS = -I$(abspath install)/include" ;\
+	  echo "LIBVNCSERVER_LIBS = -L$(abspath install)/lib -lvncserver" ;\
+	  echo "LIBVNCSERVER_DEPS = $(abspath install)/lib/libvncserver.a" ) >$@

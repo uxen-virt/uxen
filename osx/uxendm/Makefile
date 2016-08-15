@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2015, Bromium, Inc.
+# Copyright 2012-2016, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -12,6 +12,9 @@ $(call include_lib,LIBVHD,../libvhd)
 $(call include_lib,LIBXC,../libxc)
 $(call include_lib,LIBUXENCTL,../uxenctl)
 $(call include_lib,YAJL,../yajl)
+ifeq (,$(UXENDM_VNCSERVER))
+$(call include_lib,LIBVNCSERVER,../libvncserver)
+endif
 
 ifeq (,$(MAKENOW))
 
