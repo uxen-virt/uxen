@@ -16,6 +16,10 @@
 #include <dm/control.h>
 #include <xc_private.h>
 
+#if defined(__APPLE__)
+#include <sys/time.h>
+#endif
+
 #undef DPRINTF
 
 #define DEBUG_PLATFORM
@@ -86,6 +90,12 @@ platform_get_ftime(PCI_uxen_platform_state *s)
     s->ftime = ftime.dwHighDateTime;
     s->ftime <<= 32;
     s->ftime |= ftime.dwLowDateTime;
+#elif defined(__APPLE__)
+    struct timeval tv = { };
+
+    gettimeofday(&tv, NULL);
+    s->ftime = (tv.tv_sec * 1000000ULL + tv.tv_usec) * 10ULL +
+        116444736000000000ULL;
 #else
     /* Implement me */
     s->ftime = 0ULL;
