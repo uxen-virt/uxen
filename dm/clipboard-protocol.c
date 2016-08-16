@@ -93,8 +93,10 @@ connect_v4v(struct clip_ctx *ctx, unsigned char *v4v_idtoken)
     bind.ring_id.addr.port = ctx->port;
     bind.ring_id.addr.domain = V4V_DOMID_ANY;
     bind.ring_id.partner = ctx->domain;
-    if (ctx->domain == V4V_DOMID_UUID)
+    if (ctx->domain == -1 && v4v_idtoken) {
+        bind.ring_id.partner = V4V_DOMID_UUID;
         memcpy(&bind.partner, v4v_idtoken, sizeof(bind.partner));
+    }
     ResetEvent(ctx->ev);
     ret = !v4v_bind(&ctx->v4v, &bind);
     if (ret)
