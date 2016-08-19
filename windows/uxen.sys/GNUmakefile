@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2015, Bromium, Inc.
+# Copyright 2012-2016, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -80,8 +80,13 @@ install_uxenv4vlib.sys: $(OUTDIR_uxensys)/uxenv4vlib.sys
 	$(_W)echo Installing - $(<F:sys=pdb)
 	$(_V)install $(<:sys=pdb) $(DISTDIR)
 
+install_uxen.inf: $(TOPDIR)/windows/uxen.sys/uxen.inf
+	$(_W)echo
+	$(_W)echo Installing from $(abspath $(<D)) to $(DISTDIR)
+	$(_W)echo Installing -- $(<F)
+	$(_V)$(call install_data,$<,$(DISTDIR))
 
-dist: install_uxen.sys install_uxenv4vlib.sys
+dist: install_uxen.sys install_uxenv4vlib.sys install_uxen.inf
 
 endif # HOST_WINDOWS
 
