@@ -1,0 +1,14 @@
+#
+
+SRCDIR ?= .
+TOPDIR = $(abspath $(SRCDIR)/../..)
+include $(TOPDIR)/Config.mk
+
+ifeq (,$(MAKENOW))
+
+include $(SRCDIR)/gcc-deps.mk
+
+# pkgs
+$(eval $(call packages,$(PKGS)))
+
+endif # MAKENOW

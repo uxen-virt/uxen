@@ -1,0 +1,14 @@
+diff -pru cv2pdb-5c63d48.orig/src/cv2pdb.cpp cv2pdb-5c63d48/src/cv2pdb.cpp
+--- cv2pdb-5c63d48.orig/src/cv2pdb.cpp	2016-01-16 14:27:53 -0500
++++ cv2pdb-5c63d48/src/cv2pdb.cpp	2016-01-16 15:01:25 -0500
+@@ -139,6 +139,10 @@ bool CV2PDB::openPDB(const TCHAR* pdbnam
+ 	wchar_t pdbnameW[260]; // = L"c:\\tmp\\aa\\ddoc4.pdb";
+ 	mbstowcs (pdbnameW, pdbname, 260);
+ #endif
++        if (!pdbref && strrchr(pdbnameA, '\\'))
++            pdbnameA = strrchr(pdbnameA, '\\') + 1;
++        if (!pdbref && strrchr(pdbnameA, '/'))
++            pdbnameA = strrchr(pdbnameA, '/') + 1;
+ 
+ 	if (!initMsPdb ())
+ 		return setError("cannot load PDB helper DLL");

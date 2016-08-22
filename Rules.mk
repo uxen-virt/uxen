@@ -105,7 +105,7 @@ HOST_NOT_OSX = $(patsubst %,n-,$(filter Darwin,$(shell uname -s)))
 
 $(HOST_WINDOWS)HOST_EXE_SUFFIX=.exe
 
-$(HOST_WINDOW)HOST = windows
+$(HOST_WINDOWS)HOST = windows
 $(HOST_LINUX)HOST = linux
 $(HOST_OSX)HOST = osx
 

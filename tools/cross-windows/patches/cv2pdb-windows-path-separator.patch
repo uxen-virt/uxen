@@ -1,0 +1,19 @@
+diff -burN cv2pdb-0.31-orig/src/PEImage.cpp cv2pdb-0.31/src/PEImage.cpp
+--- cv2pdb-0.31-orig/src/PEImage.cpp	2015-11-19 12:14:20 +0000
++++ cv2pdb-0.31/src/PEImage.cpp	2015-11-19 12:18:10 +0000
+@@ -186,6 +186,15 @@
+ 	memset(newdata + dump_total_len, 0, fill);
+ 	memcpy(newdata + dump_total_len + fill, data, datalen);
+ 
++        // swap to windows path separator
++        OMFSignatureRSDS *rsds = (OMFSignatureRSDS*) (newdata + dump_total_len + fill);
++        char *path = rsds->name;
++        while (*path) {
++            if (*path == '/')
++                *path = '\\';
++            ++path;
++        }
++
+ 	if(!dbgDir)
+ 	{
+ 		debugdir.Type = 2;

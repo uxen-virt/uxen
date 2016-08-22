@@ -1,0 +1,22 @@
+#! /bin/bash
+
+_x="${0##*/}"
+case "$_x" in
+    *-gcc-ar)
+	exec "${0%/*}/i686-w64-mingw32-ar" "$@"
+        ;;
+    *-gcc-nm)
+	exec "${0%/*}/i686-w64-mingw32-nm" "$@"
+        ;;
+    *-gcc-ranlib)
+	exec "${0%/*}/i686-w64-mingw32-ranlib" "$@"
+        ;;
+    *-gcc*)
+	exec "${0%/*}/${_x/i686/x86_64}" -m32 "$@"
+	;;
+    *-gcov)
+	exec "${0%/*}/${_x/i686/x86_64}" "$@"
+	;;
+esac
+
+exit 1

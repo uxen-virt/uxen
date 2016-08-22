@@ -1,0 +1,99 @@
+diff -pruN cv2pdb-5c63d48.orig/src/dwarflines.cpp cv2pdb-5c63d48/src/dwarflines.cpp
+--- cv2pdb-5c63d48.orig/src/dwarflines.cpp	2015-10-08 03:37:41 -0400
++++ cv2pdb-5c63d48/src/dwarflines.cpp	2016-01-15 10:29:44 -0500
+@@ -10,13 +10,15 @@
+ #include "dwarf.h"
+ #include "readDwarf.h"
+ 
+-bool isRelativePath(const std::string& s)
++bool isRelativePath(const char *s)
+ {
+-	if(s.length() < 1)
++	int l = strlen(s);
++
++	if(l < 1)
+ 		return true;
+ 	if(s[0] == '/' || s[0] == '\\')
+ 		return false;
+-	if(s.length() < 2)
++	if(l < 2)
+ 		return true;
+ 	if(s[1] == ':')
+ 		return false;
+@@ -44,6 +46,9 @@ bool printLines(char const *fname, unsig
+ 
+ bool _flushDWARFLines(const PEImage& img, mspdb::Mod* mod, DWARF_LineState& state)
+ {
++	char fname[MAX_PATH];
++	int len;
++
+ 	if(state.lineInfo.size() == 0)
+ 		return true;
+ 
+@@ -70,17 +75,20 @@ bool _flushDWARFLines(const PEImage& img
+ 		dfn = &state.files[state.file - 1];
+ 	else
+ 		return false;
+-	std::string fname = dfn->file_name;
+ 	
+-	if(isRelativePath(fname) && 
++	if(isRelativePath(dfn->file_name) && 
+ 	   dfn->dir_index > 0 && dfn->dir_index <= state.include_dirs.size())
+ 	{
+-		std::string dir = state.include_dirs[dfn->dir_index - 1];
+-		if(dir.length() > 0 && dir[dir.length() - 1] != '/' && dir[dir.length() - 1] != '\\')
+-			dir.append("\\");
+-		fname = dir + fname;
++		const char *dir = state.include_dirs[dfn->dir_index - 1];
++		int l = strlen(dir);
++		if(l > 0 && dir[l - 1] != '/' && dir[l - 1] != '\\')
++			len = snprintf(fname, sizeof(fname), "%s\\%s", dir, dfn->file_name);
++		else
++			len = snprintf(fname, sizeof(fname), "%s%s", dir, dfn->file_name);
+ 	}
+-	for(size_t i = 0; i < fname.length(); i++)
++	else
++		len = snprintf(fname, sizeof(fname), "%s", dfn->file_name);
++	for(size_t i = 0; i < len; i++)
+ 		if(fname[i] == '/')
+ 			fname[i] = '\\';
+ 
+@@ -94,7 +94,7 @@ bool _flushDWARFLines(const PEImage& img
+ 
+     if (!mod)
+     {
+-        printLines(fname.c_str(), segIndex, img.findSectionSymbolName(segIndex),
++        printLines(fname, segIndex, img.findSectionSymbolName(segIndex),
+                    state.lineInfo.data(), state.lineInfo.size());
+ 		state.lineInfo.resize(0);
+ 		return true;
+@@ -113,8 +121,8 @@ bool _flushDWARFLines(const PEImage& img
+ 			{
+ 				unsigned int length = state.lineInfo[entry-1].offset + 1; // firstAddr has been subtracted before
+ 				if(dump)
+-					printf("AddLines(%08x+%04x, Line=%4d+%3d, %s)\n", firstAddr, length, firstLine, entry - firstEntry, fname.c_str());
+-				rc = mod->AddLines(fname.c_str(), segIndex + 1, firstAddr, length, firstAddr, firstLine,
++					printf("AddLines(%08x+%04x, Line=%4d+%3d, %s)\n", firstAddr, length, firstLine, entry - firstEntry, fname);
++				rc = mod->AddLines(fname, segIndex + 1, firstAddr, length, firstAddr, firstLine,
+ 									(unsigned char*) &state.lineInfo[firstEntry], 
+ 									(ln - firstEntry) * sizeof(state.lineInfo[0]));
+ 				firstLine = state.lineInfo[ln].line;
+@@ -130,15 +138,15 @@ bool _flushDWARFLines(const PEImage& img
+ 	}
+ 	unsigned int length = eaddr - firstAddr;
+ 	if(dump)
+-		printf("AddLines(%08x+%04x, Line=%4d+%3d, %s)\n", firstAddr, length, firstLine, entry - firstEntry, fname.c_str());
+-	rc = mod->AddLines(fname.c_str(), segIndex + 1, firstAddr, length, firstAddr, firstLine,
++		printf("AddLines(%08x+%04x, Line=%4d+%3d, %s)\n", firstAddr, length, firstLine, entry - firstEntry, fname);
++	rc = mod->AddLines(fname, segIndex + 1, firstAddr, length, firstAddr, firstLine,
+ 					    (unsigned char*) &state.lineInfo[firstEntry], 
+ 					    (entry - firstEntry) * sizeof(state.lineInfo[0]));
+ 
+ #else
+ 	unsigned int firstLine = 0;
+ 	unsigned int firstAddr = 0;
+-	int rc = mod->AddLines(fname.c_str(), segIndex + 1, saddr, eaddr - saddr, firstAddr, firstLine,
++	int rc = mod->AddLines(fname, segIndex + 1, saddr, eaddr - saddr, firstAddr, firstLine,
+ 						   (unsigned char*) &state.lineInfo[0], state.lineInfo.size() * sizeof(state.lineInfo[0]));
+ #endif
+ 

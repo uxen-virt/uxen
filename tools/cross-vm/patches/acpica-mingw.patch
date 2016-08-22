@@ -43,7 +43,7 @@ diff -x '*.o' -ru acpica-unix2-20120711.orig/source/os_specific/service_layers/o
   *****************************************************************************/
  
 +#if defined(WIN32) || defined(WIN64)
-+extern void Sleep(UINT64);
++extern void __stdcall Sleep(unsigned int);
 +#endif
 +
  void

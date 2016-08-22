@@ -1,0 +1,34 @@
+
+TOPDIR = ..
+include $(TOPDIR)/Config.mk
+
+SUBDIRS :=
+SUBDIRS += build-all
+SUBDIRS += host-all
+SUBDIRS += host-$(UXEN_TOOLS_HOST)
+$(BUILD_WINDOWS_TOOLS)SUBDIRS += cross-w64l
+$(BUILD_WINDOWS_TOOLS)SUBDIRS += cross-mingw
+$(BUILD_WINDOWS_TOOLS)SUBDIRS += cross-windows
+$(BUILD_OSX_TOOLS)SUBDIRS += cross-osx
+SUBDIRS += cross-vm
+
+.PHONY: all
+all: subdirs-all $(TOOLSDIR)/.tools_revision
+
+ALL_SUBDIRS = build-all
+ALL_SUBDIRS += cross-mingw cross-osx cross-vm cross-w64l cross-windows
+ALL_SUBDIRS += host-all host-linux host-osx host-windows
+define ALL_SUBDIR_template
+.PHONY: $(1)/%
+$(1)/%:
+	$(MAKE) -C $(1) $*
+endef
+$(foreach s,$(ALL_SUBDIRS),$(eval $(call ALL_SUBDIR_template,$(s))))
+
+.PHONY: clean
+clean: subdirs-clean
+
+.PHONY: $(TOOLSDIR)/.tools_revision
+$(TOOLSDIR)/.tools_revision: | subdirs-all
+	$(_W)echo Generating $(@F) in $(@D)
+	$(_V)git write-tree --prefix tools/ >$@

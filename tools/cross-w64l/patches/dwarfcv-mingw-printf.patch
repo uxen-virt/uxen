@@ -1,0 +1,124 @@
+diff -ru dwarfcv-1.1.orig/err.h dwarfcv-1.1/err.h
+--- dwarfcv-1.1.orig/err.h	2016-03-28 12:29:46.000000000 -0400
++++ dwarfcv-1.1/err.h	2016-08-24 03:15:12.504000000 -0400
+@@ -108,8 +108,14 @@
+ }
+ #endif
+ 
++#if !defined(__MINGW_PRINTF_FORMAT)
++#define __ERR_PRINTF_FORMAT printf
++#else
++#define __ERR_PRINTF_FORMAT __MINGW_PRINTF_FORMAT
++#endif
++
+ #ifndef _err_vprintf
+-__attribute__ ((__format__ (printf, 6, 0)))
++__attribute__ ((__format__ (__ERR_PRINTF_FORMAT, 6, 0)))
+ static inline void
+ _err_vprintf(const char *function, int line,
+              const char *type,
+@@ -164,7 +170,7 @@
+ 
+ 
+ static inline void
+-__attribute__ ((__format__ (printf, 3, 0)))
++__attribute__ ((__format__ (__ERR_PRINTF_FORMAT, 3, 0)))
+ _vwarn(const char *function, int line, const char *fmt, va_list ap)
+ {
+     int saved_errno;
+@@ -180,7 +186,7 @@
+ }
+ 
+ static inline void
+-__attribute__ ((__format__ (printf, 3, 0)))
++__attribute__ ((__format__ (__ERR_PRINTF_FORMAT, 3, 0)))
+ _vwarnx(const char *function, int line, const char *fmt, va_list ap)
+ {
+     int saved_errno;
+@@ -196,7 +202,7 @@
+ }
+ 
+ static inline void
+-__attribute__ ((__format__ (printf, 3, 4)))
++__attribute__ ((__format__ (__ERR_PRINTF_FORMAT, 3, 4)))
+ _warn(const char *function, int line, const char *fmt, ...)
+ {
+     va_list ap;
+@@ -207,7 +213,7 @@
+ }
+ 
+ static inline void
+-__attribute__ ((__format__ (printf, 3, 4)))
++__attribute__ ((__format__ (__ERR_PRINTF_FORMAT, 3, 4)))
+ _warnx(const char *function, int line, const char *fmt, ...)
+ {
+     va_list ap;
+@@ -218,7 +224,7 @@
+ }
+ 
+ static inline void
+-__attribute__ ((__noreturn__, __format__ (printf, 4, 0)))
++__attribute__ ((__noreturn__, __format__ (__ERR_PRINTF_FORMAT, 4, 0)))
+ _verr(const char *function, int line, int eval, const char *fmt, va_list ap)
+ {
+     int saved_errno;
+@@ -238,7 +244,7 @@
+ }
+ 
+ static inline void
+-__attribute__ ((__noreturn__, __format__ (printf, 4, 0)))
++__attribute__ ((__noreturn__, __format__ (__ERR_PRINTF_FORMAT, 4, 0)))
+ _verrx(const char *function, int line, int eval, const char *fmt, va_list ap)
+ {
+     int saved_errno;
+@@ -258,7 +264,7 @@
+ }
+ 
+ static inline void
+-__attribute__ ((__noreturn__, __format__ (printf, 4, 5)))
++__attribute__ ((__noreturn__, __format__ (__ERR_PRINTF_FORMAT, 4, 5)))
+ _err(const char *function, int line, int eval, const char *fmt, ...)
+ {
+     va_list ap;
+@@ -269,7 +275,7 @@
+ }
+ 
+ static inline void
+-__attribute__ ((__noreturn__, __format__ (printf, 4, 5)))
++__attribute__ ((__noreturn__, __format__ (__ERR_PRINTF_FORMAT, 4, 5)))
+ _errx(const char *function, int line, int eval, const char *fmt, ...)
+ {
+     va_list ap;
+diff -ru dwarfcv-1.1.orig/Makefile dwarfcv-1.1/Makefile
+--- dwarfcv-1.1.orig/Makefile	2016-03-28 12:29:46.000000000 -0400
++++ dwarfcv-1.1/Makefile	2016-08-24 03:21:01.348000000 -0400
+@@ -17,12 +17,10 @@
+ # 
+ 
+ TOOLSDIR ?= /uxen/tools
++BFD_DIR ?= $(TOOLSDIR)/host-all
+ SRCDIR ?= .
+ VPATH = $(SRCDIR)
+ 
+-$(HOST_WINDOWS)CC := $(TOOLSDIR)/bin/x86_64-w64-mingw32-gcc
+-$(HOST_WINDOWS)HOST_EXE_SUFFIX = .exe
+-
+ all dist: dwarfcv$(HOST_EXE_SUFFIX) dump-cv$(HOST_EXE_SUFFIX)
+ 	@ :
+ 
+@@ -34,12 +32,9 @@
+ dumpcv_OBJS  = $(patsubst %.c,%.o,$(dumpcv_SRCS))
+ dumpcv_OBJS := $(subst /,_,$(dumpcv_OBJS))
+ 
+-MULTILIBDIR := $(TOOLSDIR)/host-all/lib/`$(CC) -print-multi-os-directory`
+-CPPFLAGS += -I$(TOOLSDIR)/host-all/include
+-dwarfcv_LDLIBS = -L$(TOOLSDIR)/host-all/lib -L$(MULTILIBDIR) \
+-	-lbfd -liberty
+-dumpcv_LDLIBS = -L$(TOOLSDIR)/host-all/lib -L$(MULTILIBDIR) \
+-	-lbfd -liberty
++CPPFLAGS += -I$(BFD_DIR)/include
++dwarfcv_LDLIBS = -L$(BFD_DIR)/lib -lbfd -liberty
++dumpcv_LDLIBS = -L$(BFD_DIR)/lib -lbfd -liberty
+ 
+ CFLAGS += -g -Wall -Werror
+ CFLAGS += -Wp,-MD,.$(subst /,_,$@).d -Wp,-MT,$@

@@ -1,0 +1,252 @@
+diff -pru cv2pdb-5c63d48.orig/src/PEImage.cpp cv2pdb-5c63d48/src/PEImage.cpp
+--- cv2pdb-5c63d48.orig/src/PEImage.cpp	2016-01-16 14:27:54 -0500
++++ cv2pdb-5c63d48/src/PEImage.cpp	2016-01-17 15:01:21 -0500
+@@ -53,6 +53,7 @@ PEImage::PEImage(const TCHAR* iname)
+ , symtable(0)
+ , strtable(0)
+ , bigobj(false)
++, copy_symstr(true)
+ {
+ 	if(iname)
+ 		loadExe(iname);
+@@ -149,23 +150,47 @@ bool PEImage::replaceDebugSection (const
+ 	// assume there is place for another section because of section alignment
+ 	int s;
+ 	DWORD lastVirtualAddress = 0;
++	DWORD lastRawEnd = 0;
++	DWORD lastVirtualAddressALL = 0;
++	DWORD lastRawEndALL = 0;
+     int firstDWARFsection = -1;
++    int debug_section = -1;
+ 	int cntSections = countSections();
+ 	for(s = 0; s < cntSections; s++)
+ 	{
+-		const char* name = (const char*) sec[s].Name;
+-		if(name[0] == '/')
++                char *_name[9];
++		const char* name;
++		if(((const char*)sec[s].Name)[0] == '/')
+ 		{
+-			int off = strtol(name + 1, 0, 10);
++			int off = strtol((const char*)sec[s].Name + 1, 0, 10);
+ 			name = strtable + off;
+-		}
++		} else {
++                    memset(_name, 0, 9);
++                    memcpy(_name, sec[s].Name, 8);
++                    name = (const char *)_name;
++                }
++
++#if 0
+ 		if (strncmp (name, ".debug_", 7) != 0)
+ 			firstDWARFsection = -1;
+ 		else if (firstDWARFsection < 0)
+ 			firstDWARFsection = s;
++#endif
+ 
+-		if (strcmp (name, ".debug") == 0)
++		if (debug_section < 0 &&
++                    strncmp (name, ".buildid", 8) == 0) { // binutils
++                    if (datalen + sizeof(debugdir) < sec[s].SizeOfRawData) {
++                        debug_section = s;
++			firstDWARFsection = -1;
++                    }
++                }
++
++		if (debug_section < 0 && strcmp (name, ".debug") == 0)
+ 		{
++                    if (datalen + sizeof(debugdir) < sec[s].SizeOfRawData) {
++                        debug_section = s;
++			firstDWARFsection = -1;
++                    } else {
+ 			if (s == cntSections - 1)
+ 			{
+ 				dump_total_len = sec[s].PointerToRawData;
+@@ -173,15 +198,42 @@ bool PEImage::replaceDebugSection (const
+ 			}
+ 			strcpy ((char*) sec [s].Name, ".ddebug");
+ 			printf("warning: .debug not last section, cannot remove section\n");
++                    }
+ 		}
+-		lastVirtualAddress = sec[s].VirtualAddress + sec[s].Misc.VirtualSize;
++
++                if (sec[s].VirtualAddress + sec[s].Misc.VirtualSize >
++                    lastVirtualAddressALL) {
++                    if (firstDWARFsection <= 0 || s == firstDWARFsection)
++                        lastVirtualAddress = sec[s].VirtualAddress + sec[s].Misc.VirtualSize;
++                    lastVirtualAddressALL = sec[s].VirtualAddress + sec[s].Misc.VirtualSize;
++                }
++                if (sec[s].PointerToRawData + sec[s].SizeOfRawData >
++                    lastRawEndALL) {
++                    if (firstDWARFsection <= 0 || s == firstDWARFsection)
++                        lastRawEnd = sec[s].PointerToRawData + sec[s].SizeOfRawData;
++                    lastRawEndALL = sec[s].PointerToRawData + sec[s].SizeOfRawData;
++                }
+ 	}
++
++        int symstrlen = dump_total_len - IMGHDR(FileHeader.PointerToSymbolTable);
++        if (!symtable || !copy_symstr)
++            symstrlen = 0;
++
+     if (firstDWARFsection > 0)
+     {
+         s = firstDWARFsection;
+ 		dump_total_len = sec[s].PointerToRawData;
+ 		lastVirtualAddress = sec[s-1].VirtualAddress + sec[s-1].Misc.VirtualSize;
++    } else {
++        lastVirtualAddress = lastVirtualAddressALL;
++        lastRawEnd = lastRawEndALL;
++        // XXX check there's space for another section
++        dump_total_len = lastRawEnd;
+     }
++
++        if (debug_section >= 0)
++            s = debug_section;
++
+ 	int align = IMGHDR(OptionalHeader.FileAlignment);
+ 	int align_len = xdatalen;
+ 	int fill = 0;
+@@ -191,7 +243,7 @@ bool PEImage::replaceDebugSection (const
+ 		fill = (align - (dump_total_len % align)) % align;
+ 		align_len = ((xdatalen + align - 1) / align) * align;
+ 	}
+-	char* newdata = (char*) alloc_aligned(dump_total_len + fill + xdatalen, 0x1000);
++	char* newdata = (char*) alloc_aligned(dump_total_len + fill + align_len + symstrlen, 0x1000);
+ 	if(!newdata)
+ 		return setError("cannot alloc new image");
+ 
+@@ -203,31 +255,62 @@ bool PEImage::replaceDebugSection (const
+ 		salign_len = ((xdatalen + align - 1) / align) * align;
+ 	}
+ 
+-	strcpy((char*) sec[s].Name, ".debug");
+-	sec[s].Misc.VirtualSize = align_len; // union with PhysicalAddress;
+-	sec[s].VirtualAddress = lastVirtualAddress;
+-	sec[s].SizeOfRawData = xdatalen;
+-	sec[s].PointerToRawData = dump_total_len + fill;
++	sec[s].Misc.VirtualSize = xdatalen; // union with PhysicalAddress;
++	sec[s].SizeOfRawData = align_len;
+ 	sec[s].PointerToRelocations = 0;
+ 	sec[s].PointerToLinenumbers = 0;
+ 	sec[s].NumberOfRelocations = 0;
+ 	sec[s].NumberOfLinenumbers = 0;
+-	sec[s].Characteristics = IMAGE_SCN_MEM_WRITE | IMAGE_SCN_MEM_READ | IMAGE_SCN_MEM_DISCARDABLE | IMAGE_SCN_CNT_INITIALIZED_DATA;
++	sec[s].Characteristics = // IMAGE_SCN_MEM_WRITE |
++            IMAGE_SCN_MEM_READ | // IMAGE_SCN_MEM_DISCARDABLE |
++            IMAGE_SCN_CNT_INITIALIZED_DATA |
++            IMAGE_SCN_ALIGN_4BYTES;
++
++        if (debug_section < 0) {
++
++	strcpy((char*) sec[s].Name, ".debug");
++	sec[s].VirtualAddress = lastVirtualAddress;
++	sec[s].PointerToRawData = dump_total_len + fill;
+ 
+ 	IMGHDR(FileHeader.NumberOfSections) = s + 1;
++
+ 	// hdr->OptionalHeader.SizeOfImage += salign_len;
+ 	IMGHDR(OptionalHeader.SizeOfImage) = sec[s].VirtualAddress + salign_len;
+ 
+-	IMGHDR(OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG].VirtualAddress) = lastVirtualAddress + datalen;
++        } else {
++            align_len = 0;
++        }
++
++	IMGHDR(OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG].VirtualAddress) = sec[s].VirtualAddress + datalen;
+ 	IMGHDR(OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_DEBUG].Size) = sizeof(IMAGE_DEBUG_DIRECTORY);
+ 
++        if (!symstrlen) {
++            IMGHDR(FileHeader.PointerToSymbolTable) = 0;
++            IMGHDR(FileHeader.NumberOfSymbols) = 0;
++        } else {
++            IMGHDR(FileHeader.PointerToSymbolTable) = dump_total_len + fill + align_len;
++        }
++
+ 	// append debug data chunk to existing file image
+ 	memcpy(newdata, dump_base, dump_total_len);
++
++        if (debug_section < 0) {
++
+ 	memset(newdata + dump_total_len, 0, fill);
+ 	memcpy(newdata + dump_total_len + fill, data, datalen);
++        dump_total_len += fill;
++        if (symstrlen)
++            dump_total_len += align_len;
++        else
++            dump_total_len += xdatalen;
++
++        } else {
++            memset(newdata + sec[s].PointerToRawData, 0, sec[s].SizeOfRawData);
++            memcpy(newdata + sec[s].PointerToRawData, data, datalen);
++        }
+ 
++        OMFSignatureRSDS *rsds = (OMFSignatureRSDS*) (newdata + sec[s].PointerToRawData);
+         // swap to windows path separator
+-        OMFSignatureRSDS *rsds = (OMFSignatureRSDS*) (newdata + dump_total_len + fill);
+         char *path = rsds->name;
+         while (*path) {
+             if (*path == '/')
+@@ -239,7 +322,7 @@ bool PEImage::replaceDebugSection (const
+ 	{
+ 		debugdir.Type = 2;
+ 	}
+-	dbgDir = (IMAGE_DEBUG_DIRECTORY*) (newdata + dump_total_len + fill + datalen);
++	dbgDir = (IMAGE_DEBUG_DIRECTORY*) (newdata + sec[s].PointerToRawData + datalen);
+ 	memcpy(dbgDir, &debugdir, sizeof(debugdir));
+ 
+ 	dbgDir->PointerToRawData = sec[s].PointerToRawData;
+@@ -248,12 +331,16 @@ bool PEImage::replaceDebugSection (const
+ 	dbgDir->SizeOfData = sec[s].SizeOfRawData;
+ #else // suggested by Z3N
+ 	dbgDir->AddressOfRawData = sec[s].VirtualAddress;
+-	dbgDir->SizeOfData = sec[s].SizeOfRawData - sizeof(IMAGE_DEBUG_DIRECTORY);
++	dbgDir->SizeOfData = datalen;
+ #endif
+ 
++        if (symstrlen) {
++            memcpy(newdata + dump_total_len, symtable, symstrlen);
++            dump_total_len += symstrlen;
++        }
++
+ 	free_aligned(dump_base);
+ 	dump_base = newdata;
+-	dump_total_len += fill + xdatalen;
+ 
+ 	return !initCV || initCVPtr(false);
+ }
+@@ -307,6 +307,15 @@ bool PEImage::initCVPtr(bool initDbgDir)
+ 		OMFSignature* sig = DPV<OMFSignature>(cv_base, dbgDir->SizeOfData);
+ 		if (!sig)
+ 			return setError("invalid debug data base address and size");
++                if (memcmp(sig->Signature, "RSDS", 4) == 0)
++                {
++                    OMFSignatureRSDS* rsds_sig = (OMFSignatureRSDS*)sig;
++                    if (!rsds_sig->name[0]) {
++			dirHeader = 0;
++			dirEntry = 0;
++			return false;
++                    }
++                }
+ 		if (memcmp(sig->Signature, "NB09", 4) != 0 && memcmp(sig->Signature, "NB11", 4) != 0)
+ 		{
+ 			// return setError("can only handle debug info of type NB09 and NB11");
+@@ -401,7 +491,7 @@ bool PEImage::initDWARFObject()
+     else
+ 	    return setError("Unknown object file format");
+ 
+-    if (!symtable || !strtable)
++    if ((!symtable || !strtable) && !(!symtable && !strtable))
+ 	    return setError("Unknown object file format");
+ 
+     initDWARFSegments();
+diff -pru cv2pdb-5c63d48.orig/src/PEImage.h cv2pdb-5c63d48/src/PEImage.h
+--- cv2pdb-5c63d48.orig/src/PEImage.h	2015-10-08 03:37:41 -0400
++++ cv2pdb-5c63d48/src/PEImage.h	2016-01-15 17:54:24 -0500
+@@ -112,6 +112,7 @@ private:
+     const char* symtable;
+     const char* strtable;
+     bool bigobj;
++    bool copy_symstr;
+ 
+ public:
+ 	//dwarf

@@ -7,44 +7,69 @@ ifeq (,$(MAKENOW))
 
 INSTALL_DIR = $(CROSS_WINDOWS_INSTALL_DIR)
 
-WDK8_DISTFILES = wdk8.tar.gz
-WDK8_PATCHES = wdk8-no-sal.patch
-WDK8_DIR = wdk8
+wdk8_DISTFILES = wdk8.tar.gz
+wdk8_PATCHES = wdk8-no-sal.patch
+wdk8_DIR = wdk8
 
-VPATH = $(SRCDIR)/patches:$(SRCDIR)/files:$(XEN_DISTFILES)
+# http://wixtoolset.org/releases/v3.7.1126.0/wix37-binaries.zip
+# extracted and recompressed as tar.bz2
+wix_DISTFILES = wix37-binaries.tar.bz2
 
-all: wdk8/.installed
+cv2pdb_DISTFILES = cv2pdb-5c63d48.tar.bz2
+cv2pdb_PATCHES = cv2pdb-mingw.patch \
+		 cv2pdb-nocxxstring.patch \
+		 cv2pdb-timestamps.patch \
+		 cv2pdb-windows-path-separator.patch \
+		 cv2pdb-no-bigobj.patch \
+		 cv2pdb-buildid-and-no-strip.patch \
+		 cv2pdb-pdb-no-path.patch \
+		 cv2pdb-no-dll-nonfatal.patch
+cv2pdb_DIR = cv2pdb-5c63d48
 
-.PHONY: all clean
+all: wdk8/.installed wix/.installed
+$(HOST_WINDOWS)all: cv2pdb/.installed
 
-$(BUILDDIR:%=x)clean::
-	rm -rf wdk8
+PKGS += wdk8
+PKGS += wix
+PKGS += cv2pdb
 
-wdk8/.installed: $(INSTALL_DIR)/.exists
-wdk8/.installed: wdk8/.patched
+# wdk8
+wdk8/.installed: wdk8/.configured
 	@install -d $(INSTALL_DIR)/wdk8
-	cd $(@D)/$(WDK8_DIR) && \
+	cd $(@D)/$(wdk8_DIR) && \
 	  cp -R inc lib $(INSTALL_DIR)/wdk8
 	@touch $@
-
-wdk8/.patched: wdk8/.extracted
-wdk8/.patched: $(WDK8_PATCHES)
-	@for p in $(filter-out wdk8/.extracted,$^); \
-        do \
-          echo Applying $$p; \
-          cat $$p | (cd $(@D)/$(WDK8_DIR) && patch -p1); \
-        done
+wdk8/.configured: wdk8/.patched
 	@touch $@
+$(eval $(call goal-patched,wdk8))
+$(eval $(call goal-extracted,wdk8))
 
-wdk8/.extracted: $(WDK8_DISTFILES)
+# wix
+wix/.installed: $(wix_DISTFILES)
 	@rm -rf $(@D)
 	@mkdir -p $(@D)
-	cat $< | (cd $(@D) && tar zxf -)
+	@rm -rf $(INSTALL_DIR)/wix
+	@mkdir -p $(INSTALL_DIR)/wix
+	cat $< | (cd $(INSTALL_DIR)/wix && tar --strip-components=1 -jxf -)
+	chmod -R go+rX $(INSTALL_DIR)/wix
 	@touch $@
 
-.SECONDARY: wdk8/.exists
+# cv2pdb
+cv2pdb/.installed: cv2pdb/.built
+	install -m 755 $(@D)/$(cv2pdb_DIR)/src/cv2pdb.exe $(INSTALL_BIN_DIR)
+	@touch $@
+cv2pdb/.built: cv2pdb/.configured
+	cd $(@D)/$(cv2pdb_DIR)/src && $(HOST_TOOLS_ENV) \
+	  $(MAKE) -f Makefile.mingw \
+	    CXX="$(TOOLS_HOST_PREFIX)g++ -std=c++11" \
+	    LDFLAGS="-static-libgcc -static-libstdc++ $$LDFLAGS"
+	@touch $@
+cv2pdb/.configured: cv2pdb/.patched
+	@touch $@
+$(eval $(call goal-patched,cv2pdb))
+$(eval $(call goal-extracted,cv2pdb))
 
-wdk8-%: wdk8/.%
-	@ :
+# pkgs
+$(eval $(call packages,$(PKGS)))
 
 endif # MAKENOW

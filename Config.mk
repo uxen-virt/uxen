@@ -52,7 +52,9 @@ endif
 UXEN_TOOLS_GITREMOTE ?= origin
 UXEN_TOOLS_GITREPO ?= https://git.uxen.org/tools/uxen-tools-$(HOST).git
 
+ifneq (tools,$(SUBDIR1))
 PATH := $(abspath $(TOOLSDIR)/bin):$(PATH)
+endif
 
 UXEN_DISTDIR ?= $(abspath $(TOPDIR)/dist)
 UXEN_DISTDIR := $(call absdir_fmt,$(UXEN_DISTDIR))

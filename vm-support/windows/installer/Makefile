@@ -34,7 +34,7 @@ TARGETS = all dist clean
 
 .PHONY: $(TARGETS)
 
-WIX_DIR = $(TOOLSDIR)/host-windows/wix
+WIX_DIR = $(TOOLSDIR)/cross-windows/wix
 CANDLE = $(WIX_DIR)/candle.exe
 LIGHT = $(WIX_DIR)/light.exe
 WIXFLAGS = -ext WixUIExtension.dll \

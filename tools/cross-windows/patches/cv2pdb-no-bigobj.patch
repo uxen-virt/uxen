@@ -1,0 +1,72 @@
+diff -pruN cv2pdb-5c63d48.orig/src/PEImage.cpp cv2pdb-5c63d48/src/PEImage.cpp
+--- cv2pdb-5c63d48.orig/src/PEImage.cpp	2016-01-15 10:30:34 -0500
++++ cv2pdb-5c63d48/src/PEImage.cpp	2016-01-15 14:01:14 -0500
+@@ -366,6 +372,7 @@ bool PEImage::initDWARFObject()
+ 	if(!dos)
+ 		return setError("file too small for COFF header");
+ 
++#if 0
+ 	if (hdr->Machine == IMAGE_FILE_MACHINE_UNKNOWN && hdr->NumberOfSections == 0xFFFF)
+ 	{
+         static CLSID bigObjClSID = { 0xD1BAA1C7, 0xBAEE, 0x4ba9, { 0xAF, 0x20, 0xFA, 0xF6, 0x6A, 0xA4, 0xDC, 0xB8 } };
+@@ -379,7 +386,9 @@ bool PEImage::initDWARFObject()
+         nsym = bighdr->NumberOfSymbols;
+ 	    strtable = symtable + nsym * sizeof(IMAGE_SYMBOL_EX);
+ 	}
+-    else if (hdr->Machine != IMAGE_FILE_MACHINE_UNKNOWN)
++    else
++#endif
++    if (hdr->Machine != IMAGE_FILE_MACHINE_UNKNOWN)
+     {
+         sec = (IMAGE_SECTION_HEADER*)(hdr + 1);
+         nsec = hdr->NumberOfSections;
+@@ -496,6 +505,7 @@ int PEImage::getRelocationInSegment(int
+     for (int i = 0; i < cnt; i++)
+         if (rel[i].VirtualAddress == offset)
+         {
++#if 0
+             if (bigobj)
+             {
+                 IMAGE_SYMBOL_EX* sym = (IMAGE_SYMBOL_EX*)(symtable + rel[i].SymbolTableIndex * sizeof(IMAGE_SYMBOL_EX));
+@@ -504,6 +514,7 @@ int PEImage::getRelocationInSegment(int
+                 return sym->SectionNumber;
+             }
+             else
++#endif
+             {
+                 IMAGE_SYMBOL* sym = (IMAGE_SYMBOL*)(symtable + rel[i].SymbolTableIndex * IMAGE_SIZEOF_SYMBOL);
+                 if (!sym)
+@@ -697,15 +708,21 @@ const char* PEImage::findSectionSymbolNa
+     if (!(sec[s].Characteristics & IMAGE_SCN_LNK_COMDAT))
+         return 0;
+ 
++#if 0
+     if (bigobj)
+         return t_findSectionSymbolName<IMAGE_SYMBOL_EX> (s);
+     else
++#endif
+         return t_findSectionSymbolName<IMAGE_SYMBOL> (s);
+ }
+ 
+ int PEImage::findSymbol(const char* name, unsigned long& off) const
+ {
++#if 0
+     int sizeof_sym = bigobj ? sizeof(IMAGE_SYMBOL_EX) : IMAGE_SIZEOF_SYMBOL;
++#else
++    int sizeof_sym = IMAGE_SIZEOF_SYMBOL;
++#endif
+ 	for(int i = 0; i < nsym; i++)
+ 	{
+ 		IMAGE_SYMBOL* sym = (IMAGE_SYMBOL*) (symtable + i * sizeof_sym);
+@@ -713,7 +730,11 @@ int PEImage::findSymbol(const char* name
+ 		if(strcmp(symname, name) == 0 || (symname[0] == '_' && strcmp(symname + 1, name) == 0))
+ 		{
+ 			off = sym->Value;
++#if 0
+ 			return bigobj ? ((IMAGE_SYMBOL_EX*)sym)->SectionNumber : sym->SectionNumber;
++#else
++                        return sym->SectionNumber;
++#endif
+ 		}
+ 	}
+ 	return -1;

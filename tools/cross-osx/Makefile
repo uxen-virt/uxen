@@ -7,75 +7,55 @@ ifeq (,$(MAKENOW))
 
 INSTALL_DIR = $(CROSS_OSX_INSTALL_DIR)
 
-OBJCONV_DISTFILES = objconv-2013-Jun-25.tar.bz2
-OBJCONV_PATCHES = 
-OBJCONV_DIR = objconv-2013-Jun-25
-OBJCONV_CFLAGS="-Wno-logical-op-parentheses"
+objconv_DISTFILES = objconv-2013-Jun-25.tar.bz2
+objconv_PATCHES =
+objconv_DIR = objconv-2013-Jun-25
+objconv_CFLAGS="-Wno-logical-op-parentheses"
 
-SDK_10_9_DISTFILES = MacOSX10.9.sdk.tar.bz2
-SDK_10_9_DIR = MacOSX10.9.sdk
+sdk_10_9_DISTFILES = MacOSX10.9.sdk.tar.bz2
+sdk_10_9_DIR = MacOSX10.9.sdk
 
-XCTOOLCHAIN_6_2_DISTFILES = xctoolchain-6.2.tar.bz2
-XCTOOLCHAIN_6_2_DIR = xctoolchain-6.2
+xctoolchain_6_2_DISTFILES = xctoolchain-6.2.tar.bz2
+xctoolchain_6_2_DIR = xctoolchain-6.2
 
-VPATH = $(SRCDIR)/patches:$(SRCDIR)/files:$(XEN_DISTFILES)
+all: objconv/.installed sdk_10_9/.installed xctoolchain_6_2/.installed
 
-all: objconv/.installed sdk-10.9/.installed xctoolchain-6.2/.installed
+PKGS += objconv
+PKGS += sdk_10_9
+PKGS += xctoolchain_6_2
 
-.PHONY: all clean
-
-clean:
-	rm -rf objconv sdk-10.9 xctoolchain-6.2
-
-objconv/.installed: $(TOOLSDIR)/bin/.exists
+# objconv
 objconv/.installed: objconv/.built
-	cp $(@D)/build/objconv $(TOOLSDIR)/bin
+	cp $(@D)/build/objconv $(INSTALL_BIN_DIR)/
 	@touch $@
-
-objconv/.built: objconv/.patched
-	@mkdir -p $(@D)/build
+objconv/.built: objconv/.configured
 	cd $(@D)/build && \
-	  g++ -o objconv -O2 ../$(OBJCONV_DIR)/*.cpp $(OBJCONV_CFLAGS)
+	  g++ -o objconv -O2 ../$(objconv_DIR)/*.cpp $(objconv_CFLAGS)
 	@touch $@
-
-objconv/.patched: objconv/.extracted
-objconv/.patched: $(OBJCONV_PATCHES)
-	@for p in $(filter-out objconv/.extracted,$^); \
-        do \
-          echo Applying $$p; \
-          cat $$p | (cd $(@D)/$(OBJCONV_DIR) && patch -p1); \
-        done
+objconv/.configured: objconv/.patched
+	@rm -rf $(@D)/build
+	@mkdir -p $(@D)/build
 	@touch $@
+$(eval $(call goal-patched,objconv))
+$(eval $(call goal-extracted,objconv))
 
-objconv/.extracted: $(OBJCONV_DISTFILES)
-	@rm -rf $(@D)
+# sdk
+sdk_10_9/.installed: $(sdk_10_9_DISTFILES)
 	@mkdir -p $(@D)
-	cat $< | (cd $(@D) && tar jxf -)
-	@touch $@
-
-.SECONDARY: objconv/.exists
-objconv-%: objconv/.%
-	@ :
-
-sdk-10.9/.installed: sdk-10.9/.exists $(TOOLSDIR)/cross-osx/.exists
-sdk-10.9/.installed: $(SDK_10_9_DISTFILES)
-	@rm -rf $(TOOLSDIR)/$(SDK_10_9_DIR)
+	@rm -rf $(TOOLSDIR)/cross-osx/$(sdk_10_9_DIR)
+	@mkdir -p $(TOOLSDIR)/cross-osx
 	cat $< | (cd $(TOOLSDIR)/cross-osx && tar jxf -)
 	@touch $@
 
-.SECONDARY: sdk-10.9/.exists
-sdk-10.9-%: sdk-10.9/.%
-	@ :
-
-xctoolchain-6.2/.installed: xctoolchain-6.2/.exists
-xctoolchain-6.2/.installed: $(TOOLSDIR)/cross-osx/.exists
-xctoolchain-6.2/.installed: $(XCTOOLCHAIN_6_2_DISTFILES)
-	@rm -rf $(TOOLSDIR)/$(XCTOOLCHAIN_6_2_DIR)
+# xctoolchain
+xctoolchain_6_2/.installed: $(xctoolchain_6_2_DISTFILES)
+	@mkdir -p $(@D)
+	@rm -rf $(TOOLSDIR)/cross-osx/$(xctoolchain_6_2_DIR)
+	@mkdir -p $(TOOLSDIR)/cross-osx
 	cat $< | (cd $(TOOLSDIR)/cross-osx && tar jxf -)
 	@touch $@
 
-.SECONDARY: xctoolchain-6.2/.exists
-xctoolchain-6.2-%: xctoolchain-6.2/.%
-	@ :
+# pkgs
+$(eval $(call packages,$(PKGS)))
 
 endif # MAKENOW

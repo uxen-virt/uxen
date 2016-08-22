@@ -1,0 +1,14 @@
+diff -ru cv2pdb-0.31-orig/src/PEImage.cpp cv2pdb-0.31/src/PEImage.cpp
+--- cv2pdb-0.31-orig/src/PEImage.cpp	2015-02-26 12:06:36 +0000
++++ cv2pdb-0.31/src/PEImage.cpp	2015-02-26 12:08:35 +0000
+@@ -119,6 +119,10 @@
+ 		memset(&debugdir, 0, sizeof(debugdir));
+ 	int xdatalen = datalen + sizeof(debugdir);
+ 
++        if (hdr64)
++            debugdir.TimeDateStamp = hdr64->FileHeader.TimeDateStamp;
++         else if (hdr32)
++            debugdir.TimeDateStamp = hdr32->FileHeader.TimeDateStamp;
+ 	// assume there is place for another section because of section alignment
+ 	int s;
+ 	DWORD lastVirtualAddress = 0;

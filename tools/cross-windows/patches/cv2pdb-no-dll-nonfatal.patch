@@ -1,0 +1,33 @@
+diff -pruN -x '*~' cv2pdb-5c63d48.orig/src/main.cpp cv2pdb-5c63d48/src/main.cpp
+--- cv2pdb-5c63d48.orig/src/main.cpp	2016-04-20 22:34:36 +0100
++++ cv2pdb-5c63d48/src/main.cpp	2016-04-20 22:44:57 +0100
+@@ -53,6 +53,16 @@ void fatal(const char *message, ...)
+ 	exit(1);
+ }
+ 
++void nonfatal(const char *message, ...)
++{
++	va_list argptr;
++	va_start(argptr, message);
++	vprintf(message, argptr);
++	va_end(argptr);
++	printf("\n");
++	exit(0);
++}
++
+ void makefullpath(TCHAR* pdbname)
+ {
+ 	TCHAR* pdbstart = pdbname;
+@@ -179,8 +189,11 @@ int T_main(int argc, TCHAR* argv[])
+ 
+ 	T_unlink(pdbname);
+ 
+-	if(!cv2pdb.openPDB(pdbname, pdbref))
++	if(!cv2pdb.openPDB(pdbname, pdbref)) {
++          if (!strcmp(cv2pdb.getLastError(), "cannot load PDB helper DLL"))
++		nonfatal(SARG ": %s", pdbname, cv2pdb.getLastError());
+ 		fatal(SARG ": %s", pdbname, cv2pdb.getLastError());
++        }
+ 
+ 	if(img.hasDWARF())
+ 	{

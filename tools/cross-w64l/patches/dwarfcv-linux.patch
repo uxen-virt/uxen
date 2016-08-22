@@ -1,0 +1,29 @@
+diff -x '*~' -ru dwarfcv-1.1.orig/err.h dwarfcv-1.1/err.h
+--- dwarfcv-1.1.orig/err.h	2016-08-31 14:35:01.980000000 -0400
++++ dwarfcv-1.1/err.h	2016-08-31 15:02:53.592000000 -0400
+@@ -8,6 +8,10 @@
+ #ifndef _ERR_H_
+ #define _ERR_H_
+ 
++#if defined(__linux__)
++#define _GNU_SOURCE /* for program_invocation_short_name from errno.h */
++#endif  /* __linux__ */
++
+ #include <errno.h>
+ #include <stdarg.h>
+ #include <stdio.h>
+@@ -106,7 +110,13 @@
+     _progname = name;
+ #endif
+ }
+-#endif
++#elif defined(__GLIBC__)
++static inline const char *
++getprogname(void)
++{
++    return program_invocation_name;
++}
++#endif  /* __GLIBC__ */
+ 
+ #if !defined(__MINGW_PRINTF_FORMAT)
+ #define __ERR_PRINTF_FORMAT printf
