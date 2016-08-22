@@ -269,7 +269,8 @@ static void write_src(void)
 	printf("#endif\n");
 	for (i = 0; i < table_cnt; i++) {
 		expand_symbol(table[i].sym, table[i].len, buf);
-		printf("\tPTR\t%#llx - SYMBOLS_ORIGIN /* %s */\n", table[i].addr, buf + 1);
+		printf("\tPTR\t%#lx - SYMBOLS_ORIGIN /* %s */\n",
+		       (unsigned long)table[i].addr, buf + 1);
 	}
 	printf("\n");
 
