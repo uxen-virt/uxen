@@ -103,7 +103,11 @@ inject_key(int keycode, int up, int extended)
     INPUT i = {0};
     int rc;
 
-    DPRINTF("keycode=%08x up=%d ext=%d", keycode, !!up, extended);
+    if ((keycode < 0x30) || ((keycode > 0x5A) && (keycode < VK_NUMPAD0)) || (keycode > VK_NUMPAD9)) {
+        debug_log("%s -> keycode=0x%08x up=%d ext=%d", __FUNCTION__, keycode, !!up, extended);
+    } else {
+        DPRINTF("keycode=0x%08x up=%d ext=%d", keycode, !!up, extended);
+    }
 
     switch (keycode) {
     case VK_SHIFT:
@@ -315,8 +319,13 @@ input_key_event(uint8_t keycode, uint16_t repeat, uint8_t scancode,
     int extended = flags & 0x1;
     int i;
 
-    DPRINTF("keycode=%02x up=%d ext=%d nchars=%d",
-            keycode, !!up, extended, nchars);
+    if ((keycode < 0x30) || ((keycode > 0x5A) && (keycode < VK_NUMPAD0)) || (keycode > VK_NUMPAD9)) {
+        debug_log("%s -> keycode=0x%02x up=%d ext=%d nchars=%d",
+                __FUNCTION__, keycode, !!up, extended, nchars);
+    } else {
+        DPRINTF("keycode=0x%02x up=%d ext=%d nchars=%d",
+                keycode, !!up, extended, nchars);
+    }
     if (nchars == 0) {
         ret = inject_key(keycode, up, extended);
     } else if (nchars > 0) {
