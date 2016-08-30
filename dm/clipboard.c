@@ -96,9 +96,10 @@ __init(void)
         register_savevm(NULL, "clipboard-service", 0, 1, clip_save, clip_load, s);
         uxen_clipboard_connect();
 
-        clipboard_formats_whitelist_host2vm = strdup(DEFAULT_CLIPBOARD_FORMAT_WHITELIST);
-        clipboard_formats_whitelist_vm2host = strdup(DEFAULT_CLIPBOARD_FORMAT_WHITELIST);
-
+        if (!clipboard_formats_whitelist_host2vm)
+            clipboard_formats_whitelist_host2vm = strdup(DEFAULT_CLIPBOARD_FORMAT_WHITELIST);
+        if (!clipboard_formats_whitelist_vm2host)
+            clipboard_formats_whitelist_vm2host = strdup(DEFAULT_CLIPBOARD_FORMAT_WHITELIST);
         s->init_done = 1;
     }
     return 0;
