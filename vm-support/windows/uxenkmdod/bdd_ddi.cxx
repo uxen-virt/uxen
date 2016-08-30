@@ -65,8 +65,11 @@ DriverEntry(
     InitialData.DxgkDdiEnumVidPnCofuncModality      = BddDdiEnumVidPnCofuncModality;
     InitialData.DxgkDdiSetVidPnSourceVisibility     = BddDdiSetVidPnSourceVisibility;
     InitialData.DxgkDdiCommitVidPn                  = BddDdiCommitVidPn;
-    InitialData.DxgkDdiControlInterrupt             = BddDdiControlInterrupt;
-    InitialData.DxgkDdiGetScanLine                  = BddDdiGetScanLine;
+    if (STATUS_SUCCESS == RtlCheckRegistryKey(RTL_REGISTRY_SERVICES, L"\\uxenkmdod\\vsync"))
+    {
+        InitialData.DxgkDdiControlInterrupt             = BddDdiControlInterrupt;
+        InitialData.DxgkDdiGetScanLine                  = BddDdiGetScanLine;
+    }
     InitialData.DxgkDdiUpdateActiveVidPnPresentPath = BddDdiUpdateActiveVidPnPresentPath;
     InitialData.DxgkDdiRecommendMonitorModes        = BddDdiRecommendMonitorModes;
     InitialData.DxgkDdiQueryVidPnHWCapability       = BddDdiQueryVidPnHWCapability;

@@ -29,6 +29,7 @@ UXENV4VGUEST_DIR = $(DISTDIR_VM_SUPPORT)/uxenv4vguest
 UXENNET_DIR = $(DISTDIR_VM_SUPPORT)/uxennet
 UXENNULLNET_DIR = $(DISTDIR_VM_SUPPORT)/uxennullnet
 UXENHID_DIR = $(DISTDIR_VM_SUPPORT)/uxenhid
+UXENPATCHER_DIR = $(DISTDIR_VM_SUPPORT)/uxenpatcher
 
 TARGETS = all dist clean
 
@@ -43,17 +44,20 @@ WIXFLAGS = -ext WixUIExtension.dll \
 
 ifeq ($(TARGET_VM_SUPPORT_BITS),32)
 DPINST_DIR = $(WINDDK_DIR)/redist/DIFx/dpinst/MultiLin/x86
+CERT_DIR = $(WINDDK_DIR)/bin/x86
 WIX_LIBS = $(WIX_DIR)/difxapp_x86.wixlib
 CANDLE_FLAGS = -arch x86
 WIN64=no
 else
 DPINST_DIR = $(WINDDK_DIR)/redist/DIFx/dpinst/MultiLin/amd64
+CERT_DIR = $(WINDDK_DIR)/bin/amd64
 WIX_LIBS = $(WIX_DIR)/difxapp_x64.wixlib
 CANDLE_FLAGS = -arch x64
 WIN64=yes
 endif
 
 WIX_INCLUDES = -ddpinstdir=$(DPINST_DIR) \
+	       -dcertdir=$(CERT_DIR) \
 	       -delevatedir=$(ELEVATE_DIR) \
 	       -dsrcdir=$(SRCDIR) \
 	       -duxenclipboarddir=$(UXENCLIPBOARD_DIR) \
@@ -71,10 +75,14 @@ WIX_INCLUDES = -ddpinstdir=$(DPINST_DIR) \
 	       -duxennullnetdir=$(UXENNULLNET_DIR) \
 	       -duxensvcdir=$(UXENSVC_DIR) \
 	       -dWin64=$(WIN64) \
-	       -duxenhiddir=$(UXENHID_DIR)
+	       -duxenhiddir=$(UXENHID_DIR) \
+	       -duxenpatcherdir=$(UXENPATCHER_DIR)
 
 WIX_DEPS = $(SRC_DIR)/run_dpinst.vbs \
 	   $(DPINST_DIR)/dpinst.exe \
+	   $(CERT_DIR)/makecert.exe \
+	   $(CERT_DIR)/pvk2pfx.exe \
+	   $(CERT_DIR)/signtool.exe \
 	   $(ELEVATE_DIR)/elevate.exe \
 	   $(UXENCLIPBOARD_DIR)/uxenclipboard.exe \
 	   $(UXENDISP_DIR)/uxendisp.sys \
@@ -90,7 +98,8 @@ WIX_DEPS = $(SRC_DIR)/run_dpinst.vbs \
 	   $(UXENSF_DIR)/uxensf.sys \
 	   $(UXENSTOR_DIR)/uxenstor.sys \
 	   $(UXENSVC_DIR)/uxensvc.exe \
-	   $(UXENHID_DIR)/uxenhid.sys
+	   $(UXENHID_DIR)/uxenhid.sys \
+	   $(UXENPATCHER_DIR)/uxenpatcher.exe
 
 $(WIX_DEPS): $(UXENVMLIB_DIR)/uxenvmlib.sys $(UXENV4VLIB_DIR)/uxenv4vlib.sys
 
@@ -144,6 +153,8 @@ $(ELEVATE_DIR)/elevate.exe:
 	$(MAKE) -C $(SRCDIR)/../elevate dist
 $(UXENHID_DIR)/uxenhid.sys:
 	$(MAKE) -C $(SRCDIR)/../uxenhid dist
+$(UXENPATCHER_DIR)/uxenpatcher.exe:
+	$(MAKE) -C $(SRCDIR)/../uxenpatcher dist
 
 $(INSTALLER): $(INSTALLER_WIXOBJS) $(WIX_DEPS)
 	$(_W)echo Linking - $@

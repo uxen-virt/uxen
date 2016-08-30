@@ -65,6 +65,7 @@ VOID BASIC_DISPLAY_DRIVER::Init(_In_ DEVICE_OBJECT* pPhysicalDeviceObject)
     m_NextMode.width = 1024;
     m_NextMode.height = 768;
     m_VirtMode = m_NextMode;
+    m_VSync = STATUS_SUCCESS == RtlCheckRegistryKey(RTL_REGISTRY_SERVICES, L"\\uxenkmdod\\vsync");
     KeInitializeSemaphore(&m_PresentLock, 1, 1);
 }
 

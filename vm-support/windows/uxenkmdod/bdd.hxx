@@ -233,6 +233,8 @@ private:
     // Device information
     DXGK_DEVICE_INFO m_DeviceInfo;
 
+    int m_VSync;
+
     UXEN_HW_RESOURCES m_HwResources;
     
     dr_ctx_t m_DrContext;

@@ -955,11 +955,11 @@ NTSTATUS BASIC_DISPLAY_DRIVER::AddSingleSourceMode(_In_ CONST DXGK_VIDPNSOURCEMO
     (vsi)->TotalSize.cx = (w);                                                \
     (vsi)->TotalSize.cy = (h);                                                \
     (vsi)->ActiveSize = (s);                                                  \
-    (vsi)->VSyncFreq.Numerator = (r);                                           \
-    (vsi)->VSyncFreq.Denominator = 1;                                         \
-    (vsi)->HSyncFreq.Numerator = HSYNC_RATE;                                  \
-    (vsi)->HSyncFreq.Denominator = 1;                                         \
-    (vsi)->PixelRate = (r) * (h + 100) * (w + 100);                             \
+    (vsi)->VSyncFreq.Numerator = (m_VSync) ? (r) : D3DKMDT_FREQUENCY_NOTSPECIFIED;               \
+    (vsi)->VSyncFreq.Denominator = (m_VSync) ? 1 : D3DKMDT_FREQUENCY_NOTSPECIFIED;               \
+    (vsi)->HSyncFreq.Numerator = (m_VSync) ? HSYNC_RATE : D3DKMDT_FREQUENCY_NOTSPECIFIED;        \
+    (vsi)->HSyncFreq.Denominator = (m_VSync) ? 1 : D3DKMDT_FREQUENCY_NOTSPECIFIED;               \
+    (vsi)->PixelRate = (m_VSync) ? (r) * (h + 100) * (w + 100) : D3DKMDT_FREQUENCY_NOTSPECIFIED; \
     (vsi)->ScanLineOrdering = D3DDDI_VSSLO_PROGRESSIVE;                       \
 } while (0, 0)
 
