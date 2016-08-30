@@ -620,6 +620,7 @@ voice_re_start(UXenAudioVoice *v)
 
     v->buf->rptr = v->rptr;
     v->buf->sts = 0;
+    v->buf->silence = 0;
 
     v->running = true;
     voice_start_internal(v, v->regs.fmt);
