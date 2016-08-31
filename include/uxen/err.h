@@ -108,6 +108,12 @@ setprogname(const char *name)
     _progname = name;
 #endif
 }
+#else
+static inline const char *
+getprogname(void)
+{
+    return "";
+}
 #endif
 
 #ifndef _err_vprintf

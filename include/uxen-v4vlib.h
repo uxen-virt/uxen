@@ -11,7 +11,9 @@
 #include <xen/v4v.h>
 
 #include <linux/socket.h>
-#define AF_VSOCK    40
+//#define AF_VSOCK    40
+
+typedef unsigned int u32;
 
 struct sockaddr_vm {
     unsigned short family;
