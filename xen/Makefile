@@ -499,14 +499,14 @@ include/xen/compile.h: $(patsubst %,$(TOPDIR)/common/%,$(COMMON_SRCS))
 tools/symbols$(HOST_EXE_SUFFIX): tools/symbols.c
 	@$(MAKE) -C $(SRCDIR)/tools symbols$(HOST_EXE_SUFFIX)
 
-tools/figlet/figlet$(HOST_EXE_SUFFIX):
+tools/figlet/figlet$(HOST_EXE_SUFFIX): tools/figlet/figlet.c
 	@$(MAKE) -C $(SRCDIR)/tools/figlet
 
 uxen/unwind/xpdata-extract$(HOST_EXE_SUFFIX): uxen/unwind/xpdata-extract.c
 	@$(MAKE) -C $(SRCDIR)/uxen/unwind xpdata-extract$(HOST_EXE_SUFFIX)
 
 .banner: tools/figlet/figlet$(HOST_EXE_SUFFIX) Makefile
-	$(_V)./$< -d $(SRCDIR)/tools/figlet µXen unlimited 2>$@2 >$@1
+	$(_V)./$< -d $(SRCDIR)/tools/figlet -e %00b5Xen unlimited 2>$@2 >$@1
 	@cat $@1 $@2 >$@
 	@rm -f $@1 $@2
 

@@ -882,7 +882,7 @@ void getparams()
   outputwidth = DEFAULTCOLUMNS;
   gn[1] = 0x80;
   gr = 1;
-  while ((c = getopt(Myargc,Myargv,"ADEXLRI:xlcrpntvm:w:d:f:C:NFskSWo"))!= -1) {
+  while ((c = getopt(Myargc,Myargv,"ADEXLRI:xlcrpntvm:w:d:f:C:NFskSWoe"))!= -1) {
       /* Note: -F is not a legal option -- prints a special err message.  */
     switch (c) {
       case 'A':
@@ -1021,6 +1021,9 @@ void getparams()
         fprintf(stderr,"under UNIX utilities.\n");
         exit(1);
         break;
+      case 'e': /* escaped mode */
+	multibyte = 5;
+	break;
       default:
         printusage(stderr);
         exit(1);
@@ -1857,6 +1860,18 @@ inchr c;
 
 *****************************************************************************/
 
+#define hex_or_eof(c) do {		\
+    if ((c) == EOF)			\
+      return EOF;			\
+    (c) |= 32;				\
+    if ((c) >= 'a' && (c) <= 'f')	\
+      (c) -= 'a' - 10;			\
+    else if ((c) >= '0' && (c) <= '9')	\
+      (c) -= '0';			\
+    else				\
+      return EOF;			\
+  } while (0)
+
 inchr getinchr()
 {
   int ch, ch2, ch3, ch4, ch5, ch6;
@@ -1927,6 +1942,20 @@ inchr getinchr()
          (ch >= 0xE0 && ch <= 0xEF)) {
        ch = (ch << 8) + Agetchar();
        }
+     return ch;
+   case 5: /* escape mode */
+     ch = Agetchar();
+     if (ch == '%') {
+       ch = Agetchar();
+       hex_or_eof(ch);
+       ch2 = Agetchar();
+       hex_or_eof(ch2);
+       ch3 = Agetchar();
+       hex_or_eof(ch3);
+       ch4 = Agetchar();
+       hex_or_eof(ch4);
+       return ch4 + (ch3 << 4) + (ch2 << 8) + (ch << 12);
+     }
      return ch;
    default:
      return 0x80;
