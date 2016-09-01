@@ -45,6 +45,7 @@ unwind-dump$(HOST_EXE_SUFFIX): $(unwind_dump_OBJS)
 	$(_W)echo Linking - $@
 	$(_V)$(call link,$@,$^ $(unwind_dump_LDLIBS))
 
+$(HOST_OSX)$(xpdata_extract_OBJS): CFLAGS = $(HOSTCFLAGS)
 %.o: %.c
 	$(_W)echo Compiling - $@
 	$(_V)$(COMPILE.c) $< -o $@
