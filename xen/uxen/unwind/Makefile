@@ -27,9 +27,10 @@ xpdata_extract_SRCS = xpdata-extract.c
 xpdata_extract_OBJS  = $(patsubst %.c,%.o,$(xpdata_extract_SRCS))
 xpdata_extract_OBJS := $(subst /,_,$(xpdata_extract_OBJS))
 
-MULTILIBDIR := $(TOOLSDIR)/host-all/lib/`$(CC) -print-multi-os-directory`
-CPPFLAGS += -I$(TOOLSDIR)/host-all/include
-xpdata_extract_LDLIBS = -L$(TOOLSDIR)/host-all/lib -L$(MULTILIBDIR) \
+$(HOST_WINDOWS)CPPFLAGS += -I$(TOOLSDIR)/cross-mingw/include
+$(HOST_WINDOWS)xpdata_extract_LDLIBS = -lbfd -liberty
+$(HOST_NOT_WINDOWS)CPPFLAGS += -I$(TOOLSDIR)/host-all/include
+$(HOST_NOT_WINDOWS)xpdata_extract_LDLIBS = -L$(TOOLSDIR)/host-all/lib \
 	-lbfd -liberty
 $(HOST_LINUX)xpdata_extract_LDLIBS += -ldl
 
