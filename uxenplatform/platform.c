@@ -13,6 +13,9 @@
 #include "ax.h"
 #include "pci.h"
 
+extern void uxen_v4v_suspend(void);
+extern void uxen_v4v_resume(void);
+
 static int bus_match(struct device *_dev, struct device_driver *_drv)
 {
     struct uxen_device *dev = dev_to_uxen(_dev);
@@ -38,6 +41,29 @@ static int bus_remove(struct device *_dev)
        drv->remove(dev);
     return 0;
 }
+
+static int bus_suspend(struct device *_dev, pm_message_t state)
+{
+    struct uxen_device *dev = dev_to_uxen(_dev);
+    struct uxen_driver *drv = drv_to_uxen(_dev->driver);
+
+    if (drv->suspend)
+        drv->suspend(dev);
+    uxen_v4v_suspend();
+    return 0;
+}
+
+static int bus_resume(struct device *_dev)
+{
+    struct uxen_device *dev = dev_to_uxen(_dev);
+    struct uxen_driver *drv = drv_to_uxen(_dev->driver);
+
+    uxen_v4v_resume();
+    if (drv->resume)
+        drv->resume(dev);
+    return 0;
+}
+
 static int device_remove(struct device *_dev, void *data)
 {
     struct uxen_device *dev = dev_to_uxen(_dev);
@@ -54,6 +80,8 @@ static struct bus_type uxen_bus = {
     .match =		bus_match,
     .probe =		bus_probe,
     .remove =		bus_remove,
+    .suspend =          bus_suspend,
+    .resume =           bus_resume,
 };
 
 int uxen_driver_register(struct uxen_driver *drv)

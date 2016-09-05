@@ -653,6 +653,28 @@ static int uxenhid_remove(struct uxen_device *device)
 	return 0;
 }
 
+static int uxenhid_suspend(struct uxen_device *device)
+{
+    struct uxenhid_dev *dev = device->priv;
+    int ret;
+
+    ret = uxenhid_v4v_device_stop(dev);
+    if (ret)
+        printk(KERN_ERR "%s: failed to stop device err=%d\n", __FUNCTION__, ret);
+    return 0;
+}
+
+static int uxenhid_resume(struct uxen_device *device)
+{
+    struct uxenhid_dev *dev = device->priv;
+    int ret;
+
+    ret = uxenhid_v4v_device_start(dev);
+    if (ret)
+        printk(KERN_ERR "%s: failed to restart device err=%d\n", __FUNCTION__, ret);
+    return 0;
+}
+
 static struct uxen_driver uxenhid_driver = {
     .drv = {
         .name = "uxenhid",
@@ -661,6 +683,8 @@ static struct uxen_driver uxenhid_driver = {
     .type = UXENBUS_DEVICE_TYPE_HID,
     .probe = uxenhid_probe,
     .remove = uxenhid_remove,
+    .suspend = uxenhid_suspend,
+    .resume = uxenhid_resume,
 };
 
 static int __init uxenhid_init(void)

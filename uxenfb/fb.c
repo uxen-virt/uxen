@@ -98,7 +98,7 @@ struct uxenfb_par {
     struct tasklet_struct cmd_tasklet, dirty_tasklet;
     wait_queue_head_t wq;
     struct uxenfb_msg resp;
-    int resp_ready;
+    int resp_ready, resp_intr;
 
     atomic_t map_count;
 
@@ -148,9 +148,12 @@ send(struct uxenfb_par *par, struct uxenfb_msg *msg)
 static void
 send_and_wait(struct uxenfb_par *par, struct uxenfb_msg *msg)
 {
+    par->resp_intr = 0;
     par->resp_ready = 0;
-    send(par, msg);
-    wait_event_interruptible(par->wq, par->resp_ready == 1);
+    do {
+        send(par, msg);
+        wait_event_interruptible(par->wq, par->resp_ready || par->resp_intr);
+    } while (par->resp_intr);
 }
 
 static void
@@ -793,6 +796,25 @@ uxenfb_remove(struct uxen_device *dev)
     return 0;
 }
 
+static int
+uxenfb_suspend(struct uxen_device *dev)
+{
+    return 0;
+}
+
+static int
+uxenfb_resume(struct uxen_device *dev)
+{
+    struct fb_info *info = dev->priv;
+    struct uxenfb_par *par = info->par;
+
+    /* resend any pending */
+    par->resp_intr = 1;
+    wake_up_interruptible(&par->wq);
+
+    return 0;
+}
+
 static struct uxen_driver uxenfb_driver = {
     .drv = {
         .name = "uxenfb",
@@ -801,6 +823,8 @@ static struct uxen_driver uxenfb_driver = {
     .type = UXENBUS_DEVICE_TYPE_FB,
     .probe = uxenfb_probe,
     .remove = uxenfb_remove,
+    .suspend = uxenfb_suspend,
+    .resume = uxenfb_resume,
 };
 
 static int __init uxenfb_init(void)

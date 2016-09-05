@@ -32,6 +32,8 @@ struct uxen_driver {
     int type;
     int (*probe) (struct uxen_device *dev);
     int (*remove) (struct uxen_device *dev);
+    int (*suspend) (struct uxen_device *dev);
+    int (*resume) (struct uxen_device *dev);
 };
 
 static inline struct uxen_device *dev_to_uxen(struct device *_dev)

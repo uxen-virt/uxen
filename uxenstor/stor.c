@@ -61,7 +61,9 @@ typedef struct _XFER_HEADER {
 } XFER_HEADER, *PXFER_HEADER;
 
 static unsigned v4v_storage = 0;
+#if 0
 static struct work_struct scan_work;
+#endif
 
 static struct Scsi_Host * hosts[MAX_HOSTS];
 
@@ -347,14 +349,14 @@ out:
 #if 0
 static int uxenstor_abort(struct scsi_cmnd *sc)
 {
-    return -ENOSYS;
+    return 0;
 }
+#endif
 
 static int uxenstor_device_reset(struct scsi_cmnd *sc)
 {
-    return -ENOSYS;
+    return 0;
 }
-#endif
 
 static struct scsi_host_template uxenstor_scsi_template = {
         .module = THIS_MODULE,
@@ -364,14 +366,14 @@ static struct scsi_host_template uxenstor_scsi_template = {
         .this_id = -1,
 #if 0
         .eh_abort_handler = uxenstor_abort,
-        .eh_device_reset_handler = uxenstor_device_reset,
 #endif
+        .eh_device_reset_handler = uxenstor_device_reset,
 
         .can_queue = 1024,
         .dma_boundary = UINT_MAX,
 };
 
-static int __init uxenstor_init(void)
+int __init uxenstor_init(void)
 {
     int ret;
     unsigned i;
@@ -380,7 +382,7 @@ static int __init uxenstor_init(void)
 
     v4v_storage = 0;
 #ifdef LX_TARGET_AX
-    v4v_storage = 1; // hardcoded 1 disk
+    v4v_storage = 3; // FIXME: hardcoded 2 disks (2nd is for swap/hibernation image)
 #elif defined(LX_TARGET_UXEN)
     v4v_storage = inw(UXENSTOR_BITMAP_PORT);
 #endif
@@ -433,8 +435,11 @@ static int __init uxenstor_init(void)
         uxstor->shost_added = 1;
     }
 
+#if 0
     INIT_WORK(&scan_work, uxenstor_scan_all);
     schedule_work(&scan_work);
+#endif
+    uxenstor_scan_all(NULL);
 
     ret = 0;
 out:
@@ -449,6 +454,8 @@ static void __exit uxenstor_exit(void)
 {
     uxenstor_remove_all();
 }
+
+EXPORT_SYMBOL(uxenstor_init);
 
 module_init(uxenstor_init);
 module_exit(uxenstor_exit);

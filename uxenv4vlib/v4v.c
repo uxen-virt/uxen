@@ -30,6 +30,7 @@
 
 static int v4v_irq;
 static int irq_ok;
+static int suspended;
 
 static u32 last_port;
 static rwlock_t ring_list_lock;
@@ -359,6 +360,49 @@ static void __exit uxenv4v_exit(void)
 {
     driver_cleanup();
 }
+
+void uxen_v4v_suspend(void)
+{
+    unsigned long flags;
+    struct uxen_v4v_ring *r;
+
+    write_lock_irqsave(&ring_list_lock, flags);
+    if (!suspended) {
+        suspended = 1;
+        list_for_each_entry(r, &ring_list, node) {
+            r->irq_enabled = 0;
+        }
+    }
+    write_unlock_irqrestore(&ring_list_lock, flags);
+}
+EXPORT_SYMBOL_GPL(uxen_v4v_suspend);
+
+void uxen_v4v_resume(void)
+{
+    unsigned long flags;
+    int err;
+
+    /* re-register all rings on resume */
+    write_lock_irqsave(&ring_list_lock, flags);
+    if (suspended) {
+        struct uxen_v4v_ring *r;
+
+        list_for_each_entry(r, &ring_list, node) {
+            if (r->registered) {
+                err = uxen_hypercall_v4v_op(V4VOP_register_ring, r->ring, &r->pfn_list, 0, 0, 0);
+                if (err) {
+                    printk(KERN_ERR "%s: uxen_hypercall_v4v_op(V4VOP_register_ring) failed %d\n",
+                           __FUNCTION__, err);
+                    continue;
+                }
+                r->irq_enabled = 1;
+            }
+        }
+        suspended = 0;
+    }
+    write_unlock_irqrestore(&ring_list_lock, flags);
+}
+EXPORT_SYMBOL_GPL(uxen_v4v_resume);
 
 module_init(uxenv4v_init);
 module_exit(uxenv4v_exit);
