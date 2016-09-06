@@ -11,7 +11,11 @@
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/workqueue.h>
+#include <linux/vmalloc.h>
+#include <linux/wait.h>
 #include <xen/xen.h>
+#include <uxen/platform_interface.h>
+#include <uxen-platform.h>
 #include <uxen-v4vlib.h>
 
 #include <scsi/scsi_cmnd.h>
@@ -30,11 +34,10 @@
 #define UXENSTOR_DEBUG 0
 
 #if UXENSTOR_DEBUG
-#define DBG(fmt, ...) printk(KERN_DEBUG "(uxenstor) %s: " fmt "\n", __FUNCTION__, ## __VA_ARGS__)
+#define STORDBG(fmt, ...) printk(KERN_DEBUG "(uxenstor) %s: " fmt "\n", __FUNCTION__, ## __VA_ARGS__)
 #else
-#define DBG(fmt, ...) do { } while(0)
+#define STORDBG(fmt, ...) do { } while(0)
 #endif
-
 
 #define MAX_HOSTS   4
 
@@ -47,6 +50,7 @@ struct uxenstor_dev {
     v4v_addr_t dest_addr;
     struct idr seq_map;
     spinlock_t lk_seq_map;
+    wait_queue_head_t wq;
 };
 
 typedef struct _XFER_HEADER {
@@ -60,12 +64,11 @@ typedef struct _XFER_HEADER {
     u8  data[];
 } XFER_HEADER, *PXFER_HEADER;
 
-static unsigned v4v_storage = 0;
-#if 0
-static struct work_struct scan_work;
-#endif
+struct uxenstor_state {
+    struct Scsi_Host *hosts[MAX_HOSTS];
+};
 
-static struct Scsi_Host * hosts[MAX_HOSTS];
+static unsigned v4v_storage = 0;
 
 static void uxenstor_irq(void *opaque)
 {
@@ -91,7 +94,7 @@ static void uxenstor_softirq(unsigned long opaque)
         if (len < 0)
             break;
         if (len < sizeof(hdr)) {
-            DBG("wrong dgram received!");
+            printk(KERN_ERR "wrong dgram received!");
             goto sc_done;
         }
 
@@ -101,8 +104,7 @@ static void uxenstor_softirq(unsigned long opaque)
         sc = idr_find(&uxstor->seq_map, req_id);
         spin_unlock(&uxstor->lk_seq_map);
 
-        if (!sc)
-            goto sc_done;
+        BUG_ON(!sc);
 
         if (hdr.sense_size > 0) {
             len = 0;
@@ -127,7 +129,7 @@ static void uxenstor_softirq(unsigned long opaque)
 
             buflen = scsi_bufflen(sc);
             if (hdr.read_size > buflen) {
-                DBG("recv data length too large!");
+                printk(KERN_ERR "recv data length too large!");
 
                 set_host_byte(sc, DID_ERROR);
                 goto sc_done;
@@ -178,6 +180,7 @@ static void uxenstor_softirq(unsigned long opaque)
             idr_remove(&uxstor->seq_map, req_id);
             spin_unlock(&uxstor->lk_seq_map);
             sc->scsi_done(sc);
+            wake_up(&uxstor->wq);
         }
     }
 
@@ -210,17 +213,17 @@ static void uxenstor_v4v_ring_free(struct uxenstor_dev *dev)
     dev->recv_ring = NULL;
 }
 
-
-static void uxenstor_remove_all(void)
+static void uxenstor_remove_all(struct uxen_device *dev)
 {
-    unsigned i;
+    struct uxenstor_state *s = dev->priv;
+    int i;
 
     for (i = 0; i < MAX_HOSTS; i++) {
         struct uxenstor_dev *uxstor;
 
-        if (!hosts[i])
+        if (!s->hosts[i])
             continue;
-        uxstor = shost_priv(hosts[i]);
+        uxstor = shost_priv(s->hosts[i]);
         if (!uxstor)
             continue;
         if (uxstor->recv_ring)
@@ -229,26 +232,27 @@ static void uxenstor_remove_all(void)
             scsi_remove_host(uxstor->shost);
         idr_destroy(&uxstor->seq_map);
         scsi_host_put(uxstor->shost);
-        hosts[i] = NULL;
+        s->hosts[i] = NULL;
     }
 }
 
-static void uxenstor_scan_all(struct work_struct *unused)
+static void uxenstor_scan_all(struct uxen_device *dev)
 {
-    unsigned i;
+    struct uxenstor_state *s = dev->priv;
+    int i;
 
     for (i = 0; i < MAX_HOSTS; i++) {
         struct uxenstor_dev *uxstor;
 
-        if (!hosts[i])
+        if (!s->hosts[i])
             continue;
-        uxstor = shost_priv(hosts[i]);
+        uxstor = shost_priv(s->hosts[i]);
         if (!uxstor)
             continue;
         if (!uxstor->recv_ring)
             continue;
         scsi_scan_host(uxstor->shost);
-        DBG("scsi_scan_host done");
+        STORDBG("scsi_scan_host done");
     }
 }
 
@@ -266,9 +270,7 @@ static int uxenstor_queuecommand(struct Scsi_Host *sh, struct scsi_cmnd *sc)
     struct scatterlist *sg;
     unsigned sg_count = 0, j;
 
-#if 0
-    DBG("cmd %p cdb %02x", sc, (unsigned) (sc->cmnd ? *(sc->cmnd) : -1));
-#endif
+    STORDBG("cmd %p cdb %02x", sc, (unsigned) (sc->cmnd ? *(sc->cmnd) : -1));
 
     uxstor = shost_priv(sh);
     if (!uxstor || !uxstor->recv_ring) {
@@ -332,7 +334,7 @@ static int uxenstor_queuecommand(struct Scsi_Host *sh, struct scsi_cmnd *sc)
         spin_lock(&uxstor->lk_seq_map);
         idr_remove(&uxstor->seq_map, req_id);
         spin_unlock(&uxstor->lk_seq_map);
-        DBG("uxen_v4v_sendv_from_ring failed %d", (int) ret);
+        printk(KERN_ERR "uxen_v4v_sendv_from_ring failed %d", (int) ret);
         if (ret == -EAGAIN)
             ret = SCSI_MLQUEUE_DEVICE_BUSY;
         goto out;
@@ -373,12 +375,79 @@ static struct scsi_host_template uxenstor_scsi_template = {
         .dma_boundary = UINT_MAX,
 };
 
-int __init uxenstor_init(void)
+static int uxenstor_has_pending(struct uxenstor_dev *uxstor)
+{
+    return !(idr_is_empty(&uxstor->seq_map));
+}
+
+static int uxenstor_suspend_one(struct uxenstor_dev *uxstor)
+{
+    printk("uxenstor suspend host %d\n", uxstor->host_id);
+    scsi_block_requests(uxstor->shost);
+    /* wait for pending requests to complete */
+    wait_event_interruptible(uxstor->wq, !uxenstor_has_pending(uxstor));
+    tasklet_disable(&uxstor->tasklet);
+    return 0;
+}
+
+static int uxenstor_suspend(struct uxen_device *dev)
+{
+    struct uxenstor_state *s = dev->priv;
+    int i, err;
+
+    for (i = 0; i < MAX_HOSTS; i++) {
+        struct uxenstor_dev *uxstor;
+
+        if (!s->hosts[i])
+            continue;
+        uxstor = shost_priv(s->hosts[i]);
+        if (!uxstor)
+            continue;
+        err = uxenstor_suspend_one(uxstor);
+        if (err)
+            return err;
+    }
+    return 0;
+}
+
+static int uxenstor_resume_one(struct uxenstor_dev *uxstor)
+{
+    printk("uxenstor resume host %d\n", uxstor->host_id);
+    tasklet_enable(&uxstor->tasklet);
+    scsi_unblock_requests(uxstor->shost);
+    return 0;
+}
+
+static int uxenstor_resume(struct uxen_device *dev)
+{
+    struct uxenstor_state *s = dev->priv;
+    int i, err;
+
+    for (i = 0; i < MAX_HOSTS; i++) {
+        struct uxenstor_dev *uxstor;
+
+        if (!s->hosts[i])
+            continue;
+        uxstor = shost_priv(s->hosts[i]);
+        if (!uxstor)
+            continue;
+        err = uxenstor_resume_one(uxstor);
+        if (err)
+            return err;
+    }
+    return 0;
+}
+
+static int uxenstor_probe(struct uxen_device *dev)
 {
     int ret;
     unsigned i;
+    struct uxenstor_state *state;
 
-    memset(hosts, 0, sizeof(hosts));
+    state = vzalloc(sizeof(*state));
+    if (!state)
+        return -ENOMEM;
+    dev->priv = state;
 
     v4v_storage = 0;
 #ifdef LX_TARGET_AX
@@ -392,7 +461,7 @@ int __init uxenstor_init(void)
         ret = -ENODEV;
         goto fail;
     }
-    DBG("v4v-storage bitmap 0x%x", v4v_storage);
+    STORDBG("v4v-storage bitmap 0x%x", v4v_storage);
 
     for (i = 0; i < MAX_HOSTS; i++) {
         struct Scsi_Host *shost = NULL;
@@ -414,6 +483,7 @@ int __init uxenstor_init(void)
         spin_lock_init(&uxstor->lk_seq_map);
         idr_init(&uxstor->seq_map);
         tasklet_init(&uxstor->tasklet, uxenstor_softirq, (unsigned long) uxstor);
+        init_waitqueue_head(&uxstor->wq);
 
         /* tweak ? */
         shost->sg_tablesize = 168; // FIXME
@@ -423,7 +493,7 @@ int __init uxenstor_init(void)
         shost->max_channel = 0;
         shost->max_cmd_len = 16;
 
-        hosts[i] = shost;
+        state->hosts[i] = shost;
 
         ret = uxenstor_v4v_ring_init(uxstor);
         if (ret)
@@ -435,24 +505,48 @@ int __init uxenstor_init(void)
         uxstor->shost_added = 1;
     }
 
-#if 0
-    INIT_WORK(&scan_work, uxenstor_scan_all);
-    schedule_work(&scan_work);
-#endif
-    uxenstor_scan_all(NULL);
+    uxenstor_scan_all(dev);
 
     ret = 0;
 out:
     return ret;
 
 fail:
-    uxenstor_remove_all();
+    uxenstor_remove_all(dev);
     goto out;
+}
+
+static int uxenstor_remove(struct uxen_device *dev)
+{
+    struct uxenstor_state *state = dev->priv;
+
+    uxenstor_remove_all(dev);
+    if (state) {
+        vfree(state);
+    }
+    return 0;
+}
+
+static struct uxen_driver uxenstor_drv = {
+    .drv = {
+        .name = "uxenstor",
+        .owner = THIS_MODULE,
+    },
+    .type = UXENBUS_DEVICE_TYPE_STOR,
+    .probe = uxenstor_probe,
+    .remove = uxenstor_remove,
+    .suspend = uxenstor_suspend,
+    .resume = uxenstor_resume,
+};
+
+int __init uxenstor_init(void)
+{
+    return uxen_driver_register(&uxenstor_drv);
 }
 
 static void __exit uxenstor_exit(void)
 {
-    uxenstor_remove_all();
+    uxen_driver_unregister(&uxenstor_drv);
 }
 
 EXPORT_SYMBOL(uxenstor_init);

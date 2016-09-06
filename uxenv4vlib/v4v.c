@@ -15,7 +15,6 @@
 #include <linux/list.h>
 #include <linux/interrupt.h>
 
-
 #include <xen/xen.h>
 #include <xen/v4v.h>
 
@@ -30,7 +29,8 @@
 
 static int v4v_irq;
 static int irq_ok;
-static int suspended;
+
+static int v4v_suspended;
 
 static u32 last_port;
 static rwlock_t ring_list_lock;
@@ -367,8 +367,8 @@ void uxen_v4v_suspend(void)
     struct uxen_v4v_ring *r;
 
     write_lock_irqsave(&ring_list_lock, flags);
-    if (!suspended) {
-        suspended = 1;
+    if (!v4v_suspended) {
+        v4v_suspended = 1;
         list_for_each_entry(r, &ring_list, node) {
             r->irq_enabled = 0;
         }
@@ -384,21 +384,21 @@ void uxen_v4v_resume(void)
 
     /* re-register all rings on resume */
     write_lock_irqsave(&ring_list_lock, flags);
-    if (suspended) {
+    if (v4v_suspended) {
         struct uxen_v4v_ring *r;
 
         list_for_each_entry(r, &ring_list, node) {
             if (r->registered) {
+                r->irq_enabled = 1;
                 err = uxen_hypercall_v4v_op(V4VOP_register_ring, r->ring, &r->pfn_list, 0, 0, 0);
                 if (err) {
                     printk(KERN_ERR "%s: uxen_hypercall_v4v_op(V4VOP_register_ring) failed %d\n",
                            __FUNCTION__, err);
                     continue;
                 }
-                r->irq_enabled = 1;
             }
         }
-        suspended = 0;
+        v4v_suspended = 0;
     }
     write_unlock_irqrestore(&ring_list_lock, flags);
 }

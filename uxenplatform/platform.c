@@ -47,7 +47,7 @@ static int bus_suspend(struct device *_dev, pm_message_t state)
     struct uxen_device *dev = dev_to_uxen(_dev);
     struct uxen_driver *drv = drv_to_uxen(_dev->driver);
 
-    if (drv->suspend)
+    if (drv && drv->suspend)
         drv->suspend(dev);
     uxen_v4v_suspend();
     return 0;
@@ -59,7 +59,7 @@ static int bus_resume(struct device *_dev)
     struct uxen_driver *drv = drv_to_uxen(_dev->driver);
 
     uxen_v4v_resume();
-    if (drv->resume)
+    if (drv && drv->resume)
         drv->resume(dev);
     return 0;
 }

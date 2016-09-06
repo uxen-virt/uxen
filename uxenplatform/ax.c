@@ -87,6 +87,20 @@ int ax_platform_init(struct bus_type *uxen_bus)
         kfree(dev);
     }
 
+    // add stor
+    dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+    if (!dev)
+        return -ENOMEM;
+    dev->type = UXENBUS_DEVICE_TYPE_STOR;
+    dev->dev.bus = uxen_bus;
+    dev->dev.release = device_release;
+    dev_set_name(&dev->dev, "%s-0", "uxenstor");
+
+    if ((err = device_register(&dev->dev))) {
+        printk(KERN_WARNING "%s: device_register failed %d", __FUNCTION__, err);
+        kfree(dev);
+    }
+
     return 0;
 }
 
