@@ -20,6 +20,10 @@
 
 #define ATTO_MSG_GETURL 0
 #define ATTO_MSG_GETURL_RET 1
+#define ATTO_MSG_GETBOOT 2
+#define ATTO_MSG_GETBOOT_RET 3
+
+static int request;
 
 struct atto_agent_msg {
     uint8_t type;
@@ -34,7 +38,7 @@ talk(int fd)
     struct atto_agent_msg msg;
     ssize_t len;
 
-    msg.type = ATTO_MSG_GETURL;
+    msg.type = request;
 
     len = send(fd, &msg, sizeof(msg), 0);
     if (len < 0)
@@ -44,9 +48,8 @@ talk(int fd)
         err(1, "recv error %d\n", errno);
     if (len != sizeof(msg))
         err(1, "short recv, %d != %d\n", len, sizeof(msg));
-    if (msg.type != ATTO_MSG_GETURL_RET)
-        err(1, "bad msg type %d\n", msg.type);
-    printf("URL: %s\n", msg.string);
+
+    printf("%s\n", msg.string);
 }
 
 int main(int argc, char **argv)
@@ -54,6 +57,15 @@ int main(int argc, char **argv)
     int fd;
     struct sockaddr_vm addr;
     int tx = 1;
+
+    if (argc < 2)
+        err(1, "bad args");
+    if (!strcmp(argv[1], "get-url")) {
+        request = ATTO_MSG_GETURL;
+    } else if (!strcmp(argv[1], "get-boot")) {
+        request = ATTO_MSG_GETBOOT;
+    } else
+        err(1, "bad args");
 
     fd = socket(AF_VSOCK, SOCK_DGRAM, 0);
     if (fd < 0)
