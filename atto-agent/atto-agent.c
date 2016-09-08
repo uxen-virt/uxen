@@ -11,10 +11,11 @@
 #include <err.h>
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <poll.h>
 
-#include "../include/uxen-v4vlib.h"
+#include <uxen-v4vlib.h>
 
 #define V4V_PORT 44449
 
@@ -22,6 +23,10 @@
 #define ATTO_MSG_GETURL_RET 1
 #define ATTO_MSG_GETBOOT 2
 #define ATTO_MSG_GETBOOT_RET 3
+#define ATTO_MSG_RESIZE 4
+#define ATTO_MSG_RESIZE_RET 5
+
+#define RESIZE_SCRIPT   "./x-resize.sh"
 
 static int request;
 
@@ -29,6 +34,10 @@ struct atto_agent_msg {
     uint8_t type;
     union {
         char string[4096];
+        struct {
+            uint32_t xres;
+            uint32_t yres;
+        };
     };
 } __attribute__((packed));
 
@@ -43,20 +52,64 @@ talk(int fd)
     len = send(fd, &msg, sizeof(msg), 0);
     if (len < 0)
         err(1, "send error %d\n", errno);
-    len = recv(fd, &msg, sizeof(msg), 0);
-    if (len < 0)
-        err(1, "recv error %d\n", errno);
-    if (len != sizeof(msg))
-        err(1, "short recv, %d != %d\n", len, sizeof(msg));
+    for (;;) {
+        len = recv(fd, &msg, sizeof(msg), 0);
+        if (len < 0)
+            err(1, "recv error %d\n", errno);
+        if (len != sizeof(msg))
+            err(1, "short recv, %d != %d\n", (int) len, (int) sizeof(msg));
+        if (msg.type != request + 1)
+            continue;
+        break;
+    }
 
     printf("%s\n", msg.string);
+}
+
+void
+event_loop(int fd)
+{
+    struct atto_agent_msg msg;
+    ssize_t len;
+    static int32_t lastx = 0, lasty = 0;
+    int32_t w, h;
+    char command[1024];
+
+    for (;;) {
+
+        len = recv(fd, &msg, sizeof(msg), 0);
+        if (len < 0)
+            err(1, "recv error %d\n", errno);
+        if (len != sizeof(msg))
+            err(1, "short recv, %d != %d\n", (int) len, (int) sizeof(msg));
+
+        switch(msg.type) {
+        case ATTO_MSG_RESIZE_RET:
+            w = (int32_t) msg.xres;
+            h = (int32_t) msg.yres;
+
+            if (lastx && abs(w-lastx) < 3 && lasty && abs(h-lasty) < 3)
+                continue;
+            lastx = w;
+            lasty = h;
+            memset(command, 0, sizeof(command));
+            snprintf(command, sizeof(command) - 1,
+                     "%s %d %d", RESIZE_SCRIPT,
+                     (int) w, (int) h);
+            system(command);
+            break;
+        default:
+            warnx("unknown message type %d", (int) msg.type);
+            break;
+        }
+    }
 }
 
 int main(int argc, char **argv)
 {
     int fd;
     struct sockaddr_vm addr;
-    int tx = 1;
+    int daemon = 0;
 
     if (argc < 2)
         err(1, "bad args");
@@ -64,6 +117,8 @@ int main(int argc, char **argv)
         request = ATTO_MSG_GETURL;
     } else if (!strcmp(argv[1], "get-boot")) {
         request = ATTO_MSG_GETBOOT;
+    } else if (!strcmp(argv[1], "daemon")) {
+        daemon = 1;
     } else
         err(1, "bad args");
 
@@ -82,7 +137,11 @@ int main(int argc, char **argv)
 
     if (connect(fd, (const struct sockaddr *) &addr, sizeof(addr)) < 0)
         err(1, "connect %d", (int) errno);
-    talk(fd);
+
+    if (!daemon)
+        talk(fd);
+    else
+        event_loop(fd);
 
     close(fd);
 
