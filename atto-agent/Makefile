@@ -3,21 +3,21 @@
 # SPDX-License-Identifier: ISC
 #
 
-CC = gcc
+CC ?= gcc
 
 SRC = atto-agent.o
 
-CFLAGS = -O2 -g -Wall -I../include -I../include/uxen
+EXTRA_CFLAGS = -O2 -g -Wall -I../include -I../include/uxen
 
 DEBUG = -DDEBUG
 
 all: atto-agent
 
 atto-agent: $(SRC)
-	gcc $(SRC) -o $@ $(CFLAGS) $(LDFLAGS) $(LIBS)
+	$(CC) $(SRC) -o $@ $(CFLAGS) $(EXTRA_CFLAGS) $(LDFLAGS) $(LIBS)
 
 %.o : %.c
-	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
+	$(CC) -c $(EXTRA_CFLAGS) $(DEBUG) $< -o $@
 
 clean :
 	rm -f *.o atto-agent

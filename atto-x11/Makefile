@@ -4,24 +4,24 @@
 # SPDX-License-Identifier: ISC
 #
 
-CC = gcc
+CC ?= gcc
 
 SRC = atto-wm.o
 
-LIBS = -lX11
+EXTRA_LIBS = -lX11
 
-LDFLAGS = -L/usr/X11R6/lib
-CFLAGS = -O2 -g -Wall -I/usr/X11R6/include
+EXTRA_LDFLAGS = -L/usr/X11R6/lib
+EXTRA_CFLAGS = -O2 -g -Wall -I/usr/X11R6/include
 
 #DEBUG = -DDEBUG
 
 all: atto-wm
 
 atto-wm: $(SRC)
-	gcc $(SRC) -o $@ $(CFLAGS) $(LDFLAGS) $(LIBS)
+	$(CC) $(SRC) -o $@ $(EXTRA_CFLAGS) $(EXTRA_LDFLAGS) $(EXTRA_LIBS)
 
 %.o : %.c
-	$(CC) -c $(CFLAGS) $(DEBUG) $< -o $@
+	$(CC) -c $(EXTRA_CFLAGS) $(DEBUG) $< -o $@
 
 clean :
 	rm -f *.o atto-wm
