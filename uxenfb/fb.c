@@ -507,12 +507,18 @@ static int
 uxenfb_set_par(struct fb_info *info)
 {
     struct uxenfb_par *par = (struct uxenfb_par*)info->par;
+    void *p;
 
     par->xres = info->var.xres;
     par->yres = info->var.yres;
     par->bpp = info->var.bits_per_pixel;
     par->stride = (par->xres * par->bpp) >> 3;
     info->fix.line_length = par->stride;
+
+    /* clear fb */
+    p = ioremap(info->fix.smem_start, info->fix.line_length * par->yres);
+    memset(p, 0, info->fix.line_length * par->yres);
+    iounmap(p);
 
     if (fb_v4vexts)
         remote_set_mode(par, par->xres, par->yres, par->stride);
