@@ -26,7 +26,7 @@
 #define ATTO_MSG_RESIZE 4
 #define ATTO_MSG_RESIZE_RET 5
 
-#define RESIZE_SCRIPT   "./x-resize.sh"
+#define RESIZE_SCRIPT   "/usr/bin/x-resize.sh"
 
 static int request;
 
