@@ -118,10 +118,12 @@ static struct fb_fix_screeninfo uxenfb_fix = {
 static ulong fb_addr = DEFAULT_FB_ADDR;
 static ulong fb_sizemax = DEFAULT_FB_SIZEMAX;
 static bool fb_v4vexts = 1;
+static bool fb_mmap_only = 1;
 
 module_param(fb_addr, ulong, 0444);
 module_param(fb_sizemax, ulong, 0444);
 module_param(fb_v4vexts, bool, 0444);
+module_param(fb_mmap_only, bool, 0444);
 
 static int
 send_rect(struct uxenfb_par *par, struct uxenfb_rect *rect)
@@ -292,6 +294,8 @@ uxenfb_refresh(struct fb_info *info, int x1, int y1, int w, int h, int console)
 static void
 uxenfb_fillrect(struct fb_info *info, const struct fb_fillrect *rect)
 {
+    if (fb_mmap_only)
+        return;
     sys_fillrect(info, rect);
     uxenfb_refresh(info, rect->dx, rect->dy, rect->width, rect->height, 1);
 }
@@ -299,6 +303,8 @@ uxenfb_fillrect(struct fb_info *info, const struct fb_fillrect *rect)
 static void
 uxenfb_imageblit(struct fb_info *info, const struct fb_image *image)
 {
+    if (fb_mmap_only)
+        return;
     sys_imageblit(info, image);
     uxenfb_refresh(info, image->dx, image->dy, image->width, image->height, 1);
 }
@@ -306,6 +312,8 @@ uxenfb_imageblit(struct fb_info *info, const struct fb_image *image)
 static void
 uxenfb_copyarea(struct fb_info *info, const struct fb_copyarea *area)
 {
+    if (fb_mmap_only)
+        return;
     sys_copyarea(info, area);
     uxenfb_refresh(info, area->dx, area->dy, area->width, area->height, 1);
 }
