@@ -1,5 +1,5 @@
 #
-# Copyright 2011-2016, Bromium, Inc.
+# Copyright 2011-2018, Bromium, Inc.
 # Author: Christian Limpach <Christian.Limpach@gmail.com>
 # SPDX-License-Identifier: ISC
 #
@@ -92,9 +92,10 @@ CFLAG_OPTIMIZE_DEBUG ?= -Og
 CFLAG_OPTIMIZE_DEBUG_legacy ?= -O0
 CFLAG_OPTIMIZE_DEFAULT ?= -O2
 CFLAG_OPTIMIZE_HIGH ?= -O3
-$(REL_ONLY)CFLAGS_debug += $(CFLAG_OPTIMIZE_DEFAULT) -g
-$(DEBUG_ONLY)CFLAGS_debug += $(CFLAG_OPTIMIZE_DEBUG) -g
-$(DEBUG_ONLY)LDFLAGS_debug += -g
+CFLAG_DEBUG ?= -g
+$(REL_ONLY)CFLAGS_debug += $(CFLAG_OPTIMIZE_DEFAULT) $(CFLAG_DEBUG)
+$(DEBUG_ONLY)CFLAGS_debug += $(CFLAG_OPTIMIZE_DEBUG) $(CFLAG_DEBUG)
+$(DEBUG_ONLY)LDFLAGS_debug += $(CFLAG_DEBUG)
 CFLAGS += $(CFLAGS_debug)
 LDFLAGS += $(LDFLAGS_debug)
 
