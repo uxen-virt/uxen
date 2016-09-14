@@ -63,6 +63,9 @@ talk(int fd)
         break;
     }
 
+    if (msg.type == ATTO_MSG_RESIZE)
+        return;
+
     printf("%s\n", msg.string);
 }
 
@@ -117,6 +120,8 @@ int main(int argc, char **argv)
         request = ATTO_MSG_GETURL;
     } else if (!strcmp(argv[1], "get-boot")) {
         request = ATTO_MSG_GETBOOT;
+    } else if (!strcmp(argv[1], "resize")) {
+        request = ATTO_MSG_RESIZE;
     } else if (!strcmp(argv[1], "daemon")) {
         daemon = 1;
     } else
