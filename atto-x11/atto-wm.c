@@ -197,6 +197,7 @@ static int x_error_handler(Display *d, XErrorEvent *e)
 int main(int argc, char *argv[])
 {
     Display *display;
+    XColor color, unused;
 
     display = XOpenDisplay(NULL);
     if (!display) {
@@ -220,6 +221,11 @@ int main(int argc, char *argv[])
 	         SubstructureRedirectMask | SubstructureNotifyMask |
 	         StructureNotifyMask);
     XSync(display, False);
+
+    if (XAllocNamedColor(display, DefaultColormap(display, 0), "white", &color, &unused)) {
+        XSetWindowBackground(display, root_window, color.pixel);
+        XClearWindow(display, root_window);
+    }
 
     events_loop(display);
     return 0;
