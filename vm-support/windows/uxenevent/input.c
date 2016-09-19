@@ -242,9 +242,9 @@ handle_ctrl_shortcuts(wchar_t ch, uint8_t keycode, wchar_t ch_bare, int up)
         set_kbd_state(&s1);
         inject_key(keycode, up, 0);
         set_kbd_state(&s2);
-        return 0;
+        return 1;
     }
-    return -1;
+    return 0;
 }
 
 static int
@@ -254,8 +254,8 @@ inject_char(wchar_t ch, uint8_t keycode, wchar_t ch_bare, int up)
     int ret = 0;
 
     ret = handle_ctrl_shortcuts(ch, keycode, ch_bare, up);
-    if (ret == 0)
-        return ret;
+    if (ret)
+        return 0;
 
     scan = VkKeyScanW(ch);
     DPRINTF("ch=%04x up=%d scan=%04x", ch, up, scan);
