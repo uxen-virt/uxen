@@ -130,7 +130,7 @@ VP_STATUS hw_get_mode_info(PDEVICE_EXTENSION dev, ULONG i,
     info->ScreenStride                 = mode->xres * ((mode->bpp + 7) / 8);
     info->NumberOfPlanes               = 1;
     info->BitsPerPlane                 = mode->bpp;
-    info->Frequency                    = 60;
+    info->Frequency                    = 30;
     info->XMillimeter                  = 320;
     info->YMillimeter                  = 240;
     info->VideoMemoryBitmapWidth       = mode->xres;
