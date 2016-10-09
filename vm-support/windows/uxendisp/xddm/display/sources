@@ -15,8 +15,7 @@ NTTARGETFILE2 = POST
 TARGETLIBS=$(DDK_LIB_PATH)\ntoskrnl.lib \
            $(DDK_LIB_PATH)\Hal.lib
 
-SOURCES=color.c     \
-        debug.c     \
+SOURCES=debug.c     \
         enable.c    \
         palette.c   \
         pointer.c   \

@@ -23,7 +23,6 @@ static DRVFN gadrvfn[] =
     {   INDEX_DrvSetPalette,            (PFN) DrvSetPalette         },
     {   INDEX_DrvMovePointer,           (PFN) DrvMovePointer        },
     {   INDEX_DrvSetPointerShape,       (PFN) DrvSetPointerShape    },
-    {   INDEX_DrvDitherColor,           (PFN) DrvDitherColor        },
     {   INDEX_DrvGetModes,              (PFN) DrvGetModes           },
     {   INDEX_DrvDisableDriver,         (PFN) DrvDisableDriver      },
     {   INDEX_DrvEscape,                (PFN) DrvEscape             },
