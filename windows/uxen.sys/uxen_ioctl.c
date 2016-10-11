@@ -263,6 +263,28 @@ processexit_cancel_routine(__inout PDEVICE_OBJECT pDeviceObject,
     /* dprintk("%s done\n", __FUNCTION__); */
 }
 
+static BOOLEAN is_restricted_caller()
+{
+    PACCESS_TOKEN Token;
+    NTSTATUS Status;
+    ULONG Level;
+
+    Token = PsReferencePrimaryToken(PsGetCurrentProcess());
+    Status = SeQueryInformationToken(Token, TokenIntegrityLevel,
+                (PVOID)&Level);
+    PsDereferencePrimaryToken(Token);
+
+    if (!NT_SUCCESS(Status)) {
+        fail_msg("SeQueryInformationToken returned 0x%x\n", Status);
+        return TRUE;
+    }
+
+    if (Level < SECURITY_MANDATORY_MEDIUM_RID)
+        return TRUE;
+    else
+        return FALSE;
+}
+
 NTSTATUS
 uxen_ioctl(__inout DEVICE_OBJECT *DeviceObject, __inout IRP *pIRP)
 {
@@ -286,6 +308,15 @@ uxen_ioctl(__inout DEVICE_OBJECT *DeviceObject, __inout IRP *pIRP)
 
     devext = DeviceObject->DeviceExtension;
 
+    if (InputBufferLength < OutputBufferLength)
+        memset((char *)OutputBuffer + InputBufferLength, 0,
+               OutputBufferLength - InputBufferLength);
+
+    if (is_restricted_caller()) {
+        IOCTL_FAILURE(STATUS_ACCESS_DENIED,
+            "%s: uxen_ioctl by a process with integrity<MEDIUM", __FUNCTION__);
+        goto out;
+    }
     fda = lookup_fd_assoc(&pIoStack->FileObject->FsContext);
     if (!fda) {
         IOCTL_FAILURE(UXEN_NTSTATUS_FROM_ERRNO(ENOMEM),
@@ -293,10 +324,6 @@ uxen_ioctl(__inout DEVICE_OBJECT *DeviceObject, __inout IRP *pIRP)
         goto out;
     }
     vmi = fda->vmi;
-
-    if (InputBufferLength < OutputBufferLength)
-        memset((char *)OutputBuffer + InputBufferLength, 0,
-               OutputBufferLength - InputBufferLength);
 
     switch (IoControlCode) {
     case ICC(UXENVERSION):

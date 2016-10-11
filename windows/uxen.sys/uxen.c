@@ -313,8 +313,7 @@ uxen_driver_load(__in PDRIVER_OBJECT DriverObject,
     (void)RtlInitUnicodeString(&devicename, UXEN_DEVICE_PATH_U);
 
     //
-    // We will create a secure deviceobject so that only processes running
-    // in admin and local system account can access the device. Refer
+    // Refer
     // "Security Descriptor String Format" section in the platform
     // SDK documentation to understand the format of the sddl string.
     // We need to do because this is a legacy driver and there is no INF
@@ -339,7 +338,7 @@ uxen_driver_load(__in PDRIVER_OBJECT DriverObject,
     //
 
     (void)RtlInitUnicodeString(&secdesc,
-			       L"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;IU)");
+			       L"D:P(A;;GA;;;SY)(A;;GA;;;BA)(A;;GR;;;IU)");
 
     status = IoCreateDeviceSecure(DriverObject, sizeof(struct device_extension),
 				  &devicename, FILE_DEVICE_UNKNOWN,
