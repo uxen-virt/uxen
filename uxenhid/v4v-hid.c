@@ -85,7 +85,8 @@ request_lookup(struct uxenhid_dev *dev, u8 report_id, u8 report_type)
 {
 	struct uxenhid_request *req;
 
-	BUG_ON(!spin_is_locked(&dev->req_lock));
+        // always fails on uniprocessor
+	// BUG_ON(!spin_is_locked(&dev->req_lock));
 
 	list_for_each_entry(req, &dev->req_list, entry) {
 		if (req->report_id == req->report_id &&
