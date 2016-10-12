@@ -129,6 +129,8 @@ struct fd_assoc {
     struct user_mapping_info user_mappings;
     KGUARDED_MUTEX user_malloc_mutex;
     struct uxen_logging_mapping_desc logging_mapping;
+    PEPROCESS file_creator;
+    HANDLE file_creator_pid;
     BOOLEAN admin_access;
     BOOLEAN vmi_owner;
     BOOLEAN vmi_destroy_on_close;

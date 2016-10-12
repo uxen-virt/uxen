@@ -56,6 +56,8 @@ associate_fd_assoc(void *p)
 
     KeInitializeGuardedMutex(&fda->user_malloc_mutex);
     KeInitializeSpinLock(&fda->user_mappings.lck);
+    fda->file_creator = PsGetCurrentProcess();
+    fda->file_creator_pid = PsGetCurrentProcessId();
 
     *(struct fd_assoc **)p = fda;
 
@@ -321,6 +323,12 @@ uxen_ioctl(__inout DEVICE_OBJECT *DeviceObject, __inout IRP *pIRP)
     if (!fda) {
         IOCTL_FAILURE(UXEN_NTSTATUS_FROM_ERRNO(ENOMEM),
                       "%s: lookup_fd_assoc failed", __FUNCTION__);
+        goto out;
+    }
+    if (fda->file_creator != PsGetCurrentProcess() ||
+        fda->file_creator_pid != PsGetCurrentProcessId()) {
+        IOCTL_FAILURE(STATUS_ACCESS_DENIED,
+            "%s: caller is not CDO handle creator", __FUNCTION__);
         goto out;
     }
     vmi = fda->vmi;
