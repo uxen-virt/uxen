@@ -86,7 +86,8 @@ static void uxenstor_softirq(unsigned long opaque)
     int req_id;
     struct scsi_cmnd *sc;
 
-    BUG_ON(!uxstor->recv_ring);
+    if (!uxstor->recv_ring)
+      return;
 
     while (readlen <= V4V_STOR_RING_LEN) {
         sc = NULL;
