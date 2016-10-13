@@ -310,6 +310,11 @@ uxen_ioctl(__inout DEVICE_OBJECT *DeviceObject, __inout IRP *pIRP)
 
     devext = DeviceObject->DeviceExtension;
 
+    if (METHOD_FROM_CTL_CODE(IoControlCode) != METHOD_BUFFERED) {
+        IOCTL_FAILURE(STATUS_ACCESS_DENIED,
+            "%s: method is not METHOD_BUFFERED", __FUNCTION__);
+        goto out;
+    }
     if (InputBufferLength < OutputBufferLength)
         memset((char *)OutputBuffer + InputBufferLength, 0,
                OutputBufferLength - InputBufferLength);
