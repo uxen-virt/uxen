@@ -184,7 +184,10 @@ voice_stop(UXenAudioVoice *v)
     voice_stop_noreset(v, NULL);
 
     v->running = 0;
-    v->rptr = 0;
+    if (!v->capture)
+      v->rptr = 0;
+    else
+      v->wptr = 0;
 }
 
 static void
@@ -618,7 +621,10 @@ voice_re_start(UXenAudioVoice *v)
     if (v->regs.fmt != UXAU_V_AVFMT_44100_16_2)
         return;
 
-    v->buf->rptr = v->rptr;
+    if (!v->capture)
+      v->buf->rptr = v->rptr;
+    else
+      v->buf->wptr = v->wptr;
     v->buf->sts = 0;
     v->buf->silence = 0;
 
@@ -635,8 +641,13 @@ voice_start(UXenAudioVoice *v)
     if (!s->ram_ptr)
         return;
 
-    v->rptr = v->buf->rptr = 0;
-    v->wptr = v->buf->wptr = 0;
+    if (!v->capture) {
+      v->wptr = v->buf->wptr % v->buf_len;
+      v->rptr = 0;
+    } else {
+      v->wptr = 0;
+      v->rptr = v->buf->rptr % v->buf_len;
+    }
     v->position_offset = 0;
     voice_re_start(v);
 }
@@ -657,7 +668,10 @@ uxenaudio_post_load(void *opaque, int version_id)
 
         if (v->running) {
             if (s->ram_ptr) {
-                v->buf->wptr = v->wptr;
+                if (!v->capture)
+                    v->buf->wptr = v->wptr;
+                else
+                    v->buf->rptr = v->rptr;
                 /* transient virtual position reporting avoids
                  * position stall and rare but total wreck of
                  * restored audio stream */
@@ -682,7 +696,10 @@ uxenaudio_pre_save(void *opaque)
         for (i = 0; i < NVOICE; ++i) {
             UXenAudioVoice *v = &s->voices[i];
 
-            v->wptr = v->buf->wptr;
+            if (!v->capture)
+              v->wptr = v->buf->wptr;
+            else
+              v->rptr = v->buf->rptr;
             if (v->running)
                 voice_stop_noreset(v, &v->position_offset);
         }

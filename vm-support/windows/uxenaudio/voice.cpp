@@ -171,10 +171,16 @@ NTSTATUS CVoice::Start(BOOL capture)
     WriteMMIO32(UXAU_V_CTL,0);
     m_bHWRunning=FALSE;
     m_bCapture = capture;
-    m_nWPTR = m_nRPTR = 0;
-    m_nBytesWritten = 0;
 
     DOUT (DBG_REGS, "voice%d: CVoice::Start capture=%d", m_nIndex, capture);
+
+    if (!m_bCapture) {
+      WriteRMMIO32(UXAU_VM_WPTR, m_nWPTR);
+      m_nRPTR = 0;
+    } else {
+      m_nWPTR = 0;
+      WriteRMMIO32(UXAU_VM_RPTR, m_nRPTR);
+    }
 
     WriteMMIO32(UXAU_V_CTL, cmd);
     m_bHWRunning=TRUE;
@@ -191,10 +197,16 @@ NTSTATUS CVoice::Stop(VOID)
 
     WriteMMIO32(UXAU_V_CTL,0);
 
-    m_nWPTR=ReadRMMIO32(UXAU_VM_RPTR);
-    WriteRMMIO32(UXAU_VM_WPTR,m_nWPTR);
+    if (!m_bCapture) {
+      m_nWPTR = 0;
+      WriteRMMIO32(UXAU_VM_WPTR, 0);
+    } else {
+      m_nRPTR = 0;
+      WriteRMMIO32(UXAU_VM_RPTR, 0);
+    }
 
-    m_nBytesWritten=0;
+    m_nBytesWritten = 0;
+    m_nSilence = 0;
 
     m_bRunning=FALSE;
     m_bHWRunning=FALSE;
@@ -295,7 +307,6 @@ NTSTATUS CVoice::CopyFrom(ULONG offset, IN PUCHAR data, IN UINT len)
 NTSTATUS CVoice::CopyTo(ULONG Offset,IN PUCHAR Data,IN UINT Len)
 {
     //XXX: FIXME check for stalls
-
     if (Offset>= m_nBufLen)
         return STATUS_INVALID_PARAMETER;
 
@@ -316,13 +327,12 @@ NTSTATUS CVoice::CopyTo(ULONG Offset,IN PUCHAR Data,IN UINT Len)
 CVoice::CVoice(int index)
     : m_nIndex(index)
 {
+    m_nWPTR = m_nRPTR = 0;
+    m_nBytesWritten = 0;
 }
 
 CVoice::~CVoice(VOID)
 {
 if (m_bHWRunning) Stop();
 }
-
-
-	
 
