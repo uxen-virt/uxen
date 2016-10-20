@@ -37,7 +37,8 @@ enum tools
     MAKECERT,
     PVK2PFX,
     SIGNTOOL,
-    CERTUTIL
+    CERTUTIL,
+    BCDEDIT
 };
 
 static const char* tools[][3] = {
@@ -58,7 +59,10 @@ static const char* tools[][3] = {
      "Signing " DXGKRNL " with temporary certificate"},
     {"c:\\windows\\system32\\certutil.exe",
      "%s -f -p \"\" -importpfx \"Root\" " PFX_PART,
-     "Add temporary certificate to root store"}
+     "Add temporary certificate to root store"},
+    {"c:\\windows\\system32\\bcdedit.exe",
+     "%s -set TESTSIGNING ON",
+     "Enable test signing"}
 };
 
 static struct file_map* create_file_map(LPCSTR filepath)
@@ -540,7 +544,7 @@ static int sign_driver(LPCSTR file)
         goto exit;
     }
 
-    for (tool_idx = MAKECERT; tool_idx <= CERTUTIL; ++tool_idx)
+    for (tool_idx = MAKECERT; tool_idx <= BCDEDIT; ++tool_idx)
     {
         tool = tools[tool_idx];
         ret = run_cmd(tool[0], tool[1], tool[2]);
