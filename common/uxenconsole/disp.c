@@ -52,26 +52,50 @@ timer_done(LPVOID context, DWORD unused1, DWORD unused2)
                 write_done);
 }
 
+static int
+parse_message(struct disp_context *c, void *buf, int size)
+{
+    if (size >= sizeof(struct dirty_rect)) {
+        struct dirty_rect *rect = (struct dirty_rect*)buf;
+
+        if (c->inv_rect)
+            c->inv_rect(c->priv,
+                        rect->left,
+                        rect->top,
+                        rect->right - rect->left,
+                        rect->bottom - rect->top);
+        return sizeof(struct dirty_rect);
+    } else
+        return size; /* eat unrecognized content */
+}
+
+static void
+parse_messages(struct disp_context *c, void *buf, int size)
+{
+    void *p = buf;
+
+    while (size >= sizeof(v4v_datagram_t)) {
+        int bytes = parse_message(c, p + sizeof(v4v_datagram_t),
+                                  size - sizeof(v4v_datagram_t));
+        bytes += sizeof(v4v_datagram_t);
+        p += bytes;
+        size -= bytes;
+    }
+}
+
 static void CALLBACK
 read_done(DWORD ec, DWORD count, LPOVERLAPPED ovlpd)
 {
     struct disp_context *c =
         CONTAINING_RECORD(ovlpd, struct disp_context, oread);
-    struct dirty_rect *rect =
-        (struct dirty_rect *)&c->read_buf[sizeof(v4v_datagram_t)];
 
     if (c->exit) {
         c->exit = FALSE;
         return;
     }
 
-    if ((ec == 0) && (count == UXENDISP_MAX_MSG_LEN) && c->inv_rect) {
-        c->inv_rect(c->priv,
-                    rect->left,
-                    rect->top,
-                    rect->right - rect->left,
-                    rect->bottom - rect->top);
-    }
+    if (ec == 0)
+        parse_messages(c, c->read_buf, count);
 
     WriteFileEx(c->v4v.v4v_handle,
                 (void *)&c->conn_msg,

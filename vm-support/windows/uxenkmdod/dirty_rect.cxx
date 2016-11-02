@@ -16,6 +16,7 @@ extern "C"
 #define DR_TIMEOUT_MS 10
 #define DR_ONE_MS_IN_HNS 10000
 #define DR_USHRT_MAX 0xffff
+//#define WAIT_SEND
 
 struct dr_context
 {
@@ -28,6 +29,7 @@ struct dr_context
     KEVENT safe_to_draw;
     BOOLEAN enabled;
     BOOLEAN alt_ring_active;
+    BOOLEAN first;
 };
 
 static void dr_v4v_dpc(uxen_v4v_ring_handle_t *ring, void *ctx1, void *ctx2)
@@ -74,6 +76,7 @@ dr_ctx_t dr_init(void *dev, disable_tracking_ptr fn)
 
     ctx->dev = dev;
     ctx->disable_tracking = fn;
+    ctx->first = TRUE;
 
     KeInitializeEvent(&ctx->safe_to_draw, SynchronizationEvent, TRUE);
 
@@ -115,8 +118,15 @@ void dr_send(dr_ctx_t context, ULONG m_num, D3DKMT_MOVE_RECT *move_rect,
         return;
 
     timeout.QuadPart = -DR_TIMEOUT_MS * DR_ONE_MS_IN_HNS;
+#ifdef WAIT_SEND
     KeWaitForSingleObject(&ctx->safe_to_draw, Executive, KernelMode, FALSE,
                           &timeout);
+#else
+    if (ctx->first)
+        KeWaitForSingleObject(&ctx->safe_to_draw, Executive, KernelMode, FALSE,
+                              &timeout);
+    ctx->first = FALSE;
+#endif
 
     rect.left = DR_USHRT_MAX;
     rect.top = DR_USHRT_MAX;

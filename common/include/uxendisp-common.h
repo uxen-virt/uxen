@@ -17,7 +17,7 @@ typedef __int32 int32_t;
 #define UXENDISP_ALT_PORT 0xd1581
 #define UXENDISP_VBLANK_PORT 0xd1582
 #define UXENDISP_RING_SIZE 4096
-#define UXENDISP_MAX_MSG_LEN 24
+#define UXENDISP_MAX_MSG_LEN 1024
 
 #if defined(_MSC_VER)
 #define UXENDISP_PACKED
