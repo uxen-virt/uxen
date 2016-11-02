@@ -1164,6 +1164,21 @@ print_surface(HANDLE shm, struct win_surface *surface)
     return 1;
 }
 
+static void
+count_fps(void)
+{
+    static int fps;
+    static uint64_t fps_t0, fps_t1;
+
+    fps++;
+    fps_t1 = os_get_clock_ms();
+    if (fps_t1 - fps_t0 >= 1000) {
+        debug_printf("display fps: %d\n", fps);
+        fps = 0;
+        fps_t0 = fps_t1;
+    }
+}
+
 /* Callback for Window events. */
 LRESULT CALLBACK
 win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
@@ -1358,6 +1373,9 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 
             EndPaint (hwnd, &ps);
             LeaveCriticalSection(&s->surface_lock);
+
+            if (disp_fps_counter)
+                count_fps();
         }
         return ret;
 

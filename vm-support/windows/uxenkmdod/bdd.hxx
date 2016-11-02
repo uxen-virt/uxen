@@ -76,7 +76,6 @@ extern "C"
 #include "perfcnt.h"
 #include "dirty_rect.h"
 
-
 #define MIN_BYTES_PER_PIXEL_REPORTED   4
 
 #define BITS_PER_BYTE                  8
@@ -198,9 +197,12 @@ typedef struct _UXEN_HW_RESOURCES {
 
 class BASIC_DISPLAY_DRIVER
 {
+public:
+  int m_track_vblank;
+  DXGKRNL_INTERFACE m_DxgkInterface;
+
 private:
     DEVICE_OBJECT* m_pPhysicalDevice;
-    DXGKRNL_INTERFACE m_DxgkInterface;
 
     // Information passed in by StartDevice DDI
     DXGK_START_INFO m_StartInfo;
@@ -236,11 +238,9 @@ private:
     int m_VSync;
 
     UXEN_HW_RESOURCES m_HwResources;
-    
+
     dr_ctx_t m_DrContext;
 
-    KTIMER timer;
-    KDPC dpc;
     LARGE_INTEGER due_time;
 
 public:

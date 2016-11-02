@@ -40,4 +40,20 @@ void hw_enable_page_tracking(
 NTSTATUS hw_is_virt_mode_enabled(
     _In_ PUXEN_HW_RESOURCES pHw);
 
+int hw_is_pv_vblank_capable(
+    _In_ PUXEN_HW_RESOURCES pHw);
+
+void hw_pv_vblank_enable(
+    _In_ PUXEN_HW_RESOURCES pHw,
+    _In_ int enable);
+
+int hw_pv_vblank_getrate(
+    _In_ PUXEN_HW_RESOURCES pHw);
+
+void hw_clearirq(
+    _In_ PUXEN_HW_RESOURCES pHw, int irq);
+
+void hw_clearvblankirq(
+    _In_ PUXEN_HW_RESOURCES pHw);
+
 #endif /* _HW_H_ */

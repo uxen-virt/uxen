@@ -733,6 +733,8 @@ struct config_option config_options[] = {
     { "deferred-clipboard", co_set_boolean_opt, &deferred_clipboard },
     { "device", co_set_device, NULL },
     { "disabled-keys", co_set_disabled_keys, NULL },
+    { "disp-fps-counter", co_set_integer_opt, &disp_fps_counter },
+    { "disp-pv-vblank", co_set_integer_opt, &disp_pv_vblank },
     { "dmpdev", co_set_dmpdev, NULL },
     { "event-service-mouse-moves", co_set_boolean_opt, &event_service_mouse_moves},
     { "firmware", co_set_firmware, NULL },

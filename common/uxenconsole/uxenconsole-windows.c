@@ -899,7 +899,6 @@ main_loop(struct console *cons)
                     uxenconsole_request_resize(cons->ctx,
                                                cons->requested_width,
                                                cons->requested_height,
-                                               0,
                                                CONSOLE_RESIZE_FLAG_NONE);
                     cons->requested_width = 0;
                     cons->requested_height = 0;

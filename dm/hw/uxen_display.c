@@ -18,6 +18,8 @@
 
 #include "uxen_display.h"
 #include "uxdisp_hw.h"
+#include "uxendisp-common.h"
+#include "pv_vblank.h"
 
 #define DEBUG_UXENDISP
 
@@ -74,23 +76,42 @@ struct uxendisp_state {
     uint32_t interrupt_en;
     uint32_t cursor_en;
     uint32_t mode;
+    uint32_t xtra_ctrl;
     int resumed;
+
+    critical_section irq_lock;
+    struct vblank_ctx *vblank_ctx;
 };
 
 #define crtc_to_state(c) (container_of((c), struct uxendisp_state, crtcs[(c)->id]))
 
+static uint32_t
+xtra_caps(void)
+{
+    uint32_t caps = 0;
+
+    if (disp_pv_vblank != PV_VBLANK_OFF)
+        caps |= UXDISP_XTRA_CAPS_PV_VBLANK;
+
+    return caps;
+}
+
 /*
  * Interrupts
  */
-static void
-set_interrupt(struct uxendisp_state *s, int irq)
+void
+uxendisp_set_interrupt(struct uxendisp_state *s, int irq)
 {
-    int m = s->interrupt_en & irq;
+    int m;
+
+    critical_section_enter(&s->irq_lock);
+    m = s->interrupt_en & irq;
 
     if (m) {
         s->isr |= m;
         qemu_set_irq(s->dev.irq[0], 1);
     }
+    critical_section_leave(&s->irq_lock);
 }
 
 /*
@@ -113,7 +134,7 @@ uxendisp_set_display_identification(struct uxendisp_state *s, int crtc_id,
     } else
         crtc->status = 0;
 
-    set_interrupt(s, UXDISP_INTERRUPT_HOTPLUG);
+    uxendisp_set_interrupt(s, UXDISP_INTERRUPT_HOTPLUG);
 }
 
 /*
@@ -267,7 +288,7 @@ static void uxendisp_update(void *opaque)
     struct crtc_state *crtc = opaque;
     struct uxendisp_state *s = crtc_to_state(crtc);
 
-    set_interrupt(s, UXDISP_INTERRUPT_VBLANK);
+    uxendisp_set_interrupt(s, UXDISP_INTERRUPT_VBLANK);
 
     if (crtc->id == 0 && !(s->mode & UXDISP_MODE_VGA_DISABLED)) {
         vga_update_display(&s->vga);
@@ -621,6 +642,27 @@ bank_reg_read(struct uxendisp_state *s, int bank_id, target_phys_addr_t addr)
 }
 
 static void
+xtra_ctrl_write(struct uxendisp_state *s, uint64_t val)
+{
+    uint32_t old_ctrl = s->xtra_ctrl;
+    uint32_t new_ctrl = val & xtra_caps();
+#ifdef _WIN32
+    {
+    uint32_t old_pv_vblank = old_ctrl & UXDISP_XTRA_CTRL_PV_VBLANK_ENABLE;
+    uint32_t new_pv_vblank = new_ctrl & UXDISP_XTRA_CTRL_PV_VBLANK_ENABLE;
+
+    if (old_pv_vblank != new_pv_vblank) {
+        if (new_pv_vblank)
+            pv_vblank_start(s->vblank_ctx);
+        else
+            pv_vblank_stop(s->vblank_ctx);
+    }
+    }
+#endif
+    s->xtra_ctrl = new_ctrl;
+}
+
+static void
 uxendisp_mmio_write(void *opaque, target_phys_addr_t addr, uint64_t val,
                     unsigned size)
 {
@@ -648,9 +690,11 @@ uxendisp_mmio_write(void *opaque, target_phys_addr_t addr, uint64_t val,
 
     switch (addr) {
     case UXDISP_REG_INTERRUPT:
+        critical_section_enter(&s->irq_lock);
         s->isr ^= (uint32_t)val;
         if (s->isr == 0)
             qemu_set_irq(s->dev.irq[0], 0);
+        critical_section_leave(&s->irq_lock);
         return;
     case UXDISP_REG_CURSOR_ENABLE:
         s->cursor_en = val & 0x1;
@@ -665,6 +709,9 @@ uxendisp_mmio_write(void *opaque, target_phys_addr_t addr, uint64_t val,
         return;
     case UXDISP_REG_INTERRUPT_ENABLE:
         s->interrupt_en = val;
+        return;
+    case UXDISP_REG_XTRA_CTRL:
+        xtra_ctrl_write(s, val);
         return;
     default:
         break;
@@ -724,6 +771,13 @@ uxendisp_mmio_read(void *opaque, target_phys_addr_t addr, unsigned size)
         return s->interrupt_en;
     case UXDISP_REG_VIRTMODE_ENABLED:
         return vm_virt_mode_change;
+    case UXDISP_REG_XTRA_CAPS:
+        return xtra_caps();
+    case UXDISP_REG_XTRA_CTRL:
+        return s->xtra_ctrl;
+    case UXDISP_REG_VSYNC_HZ: {
+        return pv_vblank_get_reported_vsync_hz();
+    }
     default:
         break;
     }
@@ -893,6 +947,8 @@ uxendisp_resume(void *opaque, int version_id)
         if (ret)
             return ret;
     }
+    if (s->xtra_ctrl & UXDISP_XTRA_CTRL_PV_VBLANK_ENABLE)
+        pv_vblank_start(s->vblank_ctx);
     s->resumed = 1;
     return 0;
 }
@@ -908,6 +964,7 @@ uxendisp_post_save(void *opaque)
         vram_suspend(&bank->vram);
     }
     pci_ram_post_save(&s->dev);
+    pv_vblank_stop(s->vblank_ctx);
 }
 
 static const VMStateDescription vmstate_uxendisp_crtc = {
@@ -962,6 +1019,7 @@ static const VMStateDescription vmstate_uxendisp = {
         VMSTATE_UINT32(interrupt_en, struct uxendisp_state),
         VMSTATE_UINT32(cursor_en, struct uxendisp_state),
         VMSTATE_UINT32(mode, struct uxendisp_state),
+        VMSTATE_UINT32(xtra_ctrl, struct uxendisp_state),
         VMSTATE_END_OF_LIST()
     }
 };
@@ -979,6 +1037,18 @@ static int uxendisp_initfn(PCIDevice *dev)
     struct uxendisp_state *s = DO_UPCAST(struct uxendisp_state, dev, dev);
     VGAState *v = &s->vga;
     int i;
+
+    critical_section_init(&s->irq_lock);
+
+#ifdef _WIN32
+    if (disp_pv_vblank != PV_VBLANK_OFF) {
+        s->vblank_ctx = pv_vblank_init(s, disp_pv_vblank);
+        if (!s->vblank_ctx) {
+            debug_printf("pv vblank init failed\n");
+            return -1;
+        }
+    }
+#endif
 
     dev->config[PCI_INTERRUPT_PIN] = 1;
     memory_region_init_io(&s->mmio, &mmio_ops, s, "uxendisp.mmio",
@@ -1037,6 +1107,10 @@ static int uxendisp_exitfn(PCIDevice *dev)
 {
     struct uxendisp_state *s = DO_UPCAST(struct uxendisp_state, dev, dev);
     VGAState *v = &s->vga;
+
+#ifdef _WIN32
+    pv_vblank_cleanup(s->vblank_ctx);
+#endif
 
     vga_exit(v);
 

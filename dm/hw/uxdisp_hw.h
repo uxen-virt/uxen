@@ -7,6 +7,9 @@
 #ifndef UXDISP_HW_H_
 #define UXDISP_HW_H_
 
+#define UXDISP_XTRA_CAPS_PV_VBLANK        0x1
+#define UXDISP_XTRA_CTRL_PV_VBLANK_ENABLE 0x1
+
 #define UXDISP_REG_MAGIC                0x00000
 #define     UXDISP_MAGIC                            0x7558656e
 #define UXDISP_REG_REVISION             0x00004
@@ -24,6 +27,10 @@
 #define     UXDISP_MODE_PAGE_TRACKING_DISABLED      0x2
 #define UXDISP_REG_INTERRUPT_ENABLE     0x00024
 #define UXDISP_REG_VIRTMODE_ENABLED     0x00028
+
+#define UXDISP_REG_XTRA_CAPS            0x0002c
+#define UXDISP_REG_XTRA_CTRL            0x00030
+#define UXDISP_REG_VSYNC_HZ             0x00034
 
 #define UXDISP_REG_BANK_LEN             0x00004
 #define UXDISP_REG_BANK(x)              (0x00100 + (x) * UXDISP_REG_BANK_LEN)

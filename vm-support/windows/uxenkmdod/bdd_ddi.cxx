@@ -29,9 +29,66 @@
 #include "BDD.hxx"
 #include "version.h"
 
+extern "C"
+{
+    #include <uxenvmlib.h>
+    #include <uxenv4vlib.h>
+    #include <uxendisp-common.h>
+}
+
 #ifdef ALLOC_PRAGMA
 #pragma alloc_text(INIT, DriverEntry)
 #endif
+
+int use_pv_vblank = 0;
+
+static void checkvbl_response_dpc(uxen_v4v_ring_handle_t *ring, void *ctx1, void *ctx2)
+{
+    KEVENT *resp_ev = (KEVENT*)ctx1;
+    int *penabled = (int*)ctx2;
+    int en = 0;
+    int len;
+
+    len = uxen_v4v_copy_out(ring, NULL, NULL, NULL, 0, 0);
+    if (len >= sizeof(en)) {
+        uxen_v4v_copy_out(ring, NULL, NULL, &en, sizeof(en), 1);
+        uxen_v4v_notify();
+    }
+    *penabled = en;
+    KeSetEvent(resp_ev, 0, FALSE);
+}
+
+static int checkvbl(void)
+{
+    static KEVENT resp_ev;
+    uxen_v4v_ring_handle_t *ring;
+    v4v_addr_t peer;
+    int enabled = 0;
+    int dummy = 0;
+
+    KeInitializeEvent(&resp_ev, SynchronizationEvent, FALSE);
+    KeResetEvent(&resp_ev);
+
+    peer.port = UXENDISP_VBLANK_PORT;
+    peer.domain = V4V_DOMID_DM;
+
+    ring = uxen_v4v_ring_bind(UXENDISP_VBLANK_PORT, V4V_DOMID_DM,
+                              UXENDISP_RING_SIZE,
+                              checkvbl_response_dpc, &resp_ev, &enabled);
+    if (!ring)
+        return 0;
+
+    uxen_v4v_send_from_ring(ring, &peer, &dummy, sizeof(dummy),
+                            V4V_PROTO_DGRAM);
+
+    KeWaitForSingleObject(&resp_ev, Executive, KernelMode, FALSE, NULL);
+
+    uxen_v4v_ring_free(ring);
+
+    uxen_msg("pv vblank: %d\n", enabled);
+
+    return enabled;
+}
 
 extern "C" NTSTATUS
 DriverEntry(
@@ -65,11 +122,13 @@ DriverEntry(
     InitialData.DxgkDdiEnumVidPnCofuncModality      = BddDdiEnumVidPnCofuncModality;
     InitialData.DxgkDdiSetVidPnSourceVisibility     = BddDdiSetVidPnSourceVisibility;
     InitialData.DxgkDdiCommitVidPn                  = BddDdiCommitVidPn;
-    if (STATUS_SUCCESS == RtlCheckRegistryKey(RTL_REGISTRY_SERVICES, L"\\uxenkmdod\\vsync"))
-    {
+
+    use_pv_vblank = checkvbl();
+    if (use_pv_vblank) {
         InitialData.DxgkDdiControlInterrupt             = BddDdiControlInterrupt;
         InitialData.DxgkDdiGetScanLine                  = BddDdiGetScanLine;
     }
+
     InitialData.DxgkDdiUpdateActiveVidPnPresentPath = BddDdiUpdateActiveVidPnPresentPath;
     InitialData.DxgkDdiRecommendMonitorModes        = BddDdiRecommendMonitorModes;
     InitialData.DxgkDdiQueryVidPnHWCapability       = BddDdiQueryVidPnHWCapability;

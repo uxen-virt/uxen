@@ -18,7 +18,6 @@ typedef struct {
     int esc_code;
     unsigned long width;
     unsigned long height;
-    unsigned long vsync;
     /* bpp ? */
 } UXENDISPCustomMode;
 

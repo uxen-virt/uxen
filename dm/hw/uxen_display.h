@@ -47,4 +47,8 @@ struct crtc_regs {
     uint8_t edid[256];
 } __attribute__ ((packed));
 
+struct uxendisp_state;
+
+void uxendisp_set_interrupt(struct uxendisp_state *s, int irq);
+
 #endif /* _UXEN_DISPLAY_H_ */

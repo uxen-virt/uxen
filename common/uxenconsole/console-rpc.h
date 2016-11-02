@@ -85,7 +85,6 @@ struct uxenconsole_msg_request_resize {
     struct uxenconsole_msg_header header;
     uint32_t width;
     uint32_t height;
-    uint32_t vsync;
     uint32_t flags;
 };
 

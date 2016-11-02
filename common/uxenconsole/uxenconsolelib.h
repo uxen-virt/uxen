@@ -102,7 +102,6 @@ int                     uxenconsole_keyboard_event(uxenconsole_context_t ctx,
 int                     uxenconsole_request_resize(uxenconsole_context_t ctx,
                                                    unsigned int width,
                                                    unsigned int height,
-                                                   unsigned int vsync,
                                                    unsigned int flags);
 
 int                     uxenconsole_clipboard_permit(uxenconsole_context_t ctx,

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2016, Bromium, Inc.
  * Author: Piotr Foltyn <piotr.foltyn@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -15,6 +15,7 @@ typedef __int32 int32_t;
 
 #define UXENDISP_PORT 0xd1580
 #define UXENDISP_ALT_PORT 0xd1581
+#define UXENDISP_VBLANK_PORT 0xd1582
 #define UXENDISP_RING_SIZE 4096
 #define UXENDISP_MAX_MSG_LEN 24
 

@@ -847,10 +847,10 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetNextMode(UXENDISPCustomMode *pNewMode)
 
     perfcnt_inc(SetNextMode);
 #ifdef DBG
-    uxen_debug("called: %dx%d@%dHz", pNewMode->width, pNewMode->height, pNewMode->vsync);
+//    uxen_debug("called: %dx%d@%dHz", pNewMode->width, pNewMode->height, pNewMode->vsync);
 #else
-    if (perfcnt_get(SetNextMode) < 64)
-        uxen_msg("called: %dx%d@%dHz", pNewMode->width, pNewMode->height, pNewMode->vsync);
+//    if (perfcnt_get(SetNextMode) < 64)
+//        uxen_msg("called: %dx%d@%dHz", pNewMode->width, pNewMode->height, pNewMode->vsync);
 #endif  /* DBG */
 
     m_NextMode = *pNewMode;
@@ -947,7 +947,6 @@ NTSTATUS BASIC_DISPLAY_DRIVER::AddSingleSourceMode(_In_ CONST DXGK_VIDPNSOURCEMO
     return STATUS_SUCCESS;
 }
 
-#define VSYNC_RATE 30
 #define HSYNC_RATE 23456
 
 #define InitVideoSignalParams(vsi, w, h, r, s) do {                           \
@@ -985,7 +984,7 @@ NTSTATUS BASIC_DISPLAY_DRIVER::AddSingleTargetMode(_In_ CONST DXGK_VIDPNTARGETMO
         &pVidPnTargetModeInfo->VideoSignalInfo,
         m_NextMode.width,
         m_NextMode.height,
-        ((m_NextMode.vsync <= 75) && (m_NextMode.vsync > 0)) ? m_NextMode.vsync : VSYNC_RATE,
+        hw_pv_vblank_getrate(&m_HwResources),
         pVidPnTargetModeInfo->VideoSignalInfo.TotalSize);
 
     pVidPnTargetModeInfo->Preference = D3DKMDT_MP_PREFERRED;
@@ -1018,7 +1017,7 @@ NTSTATUS BASIC_DISPLAY_DRIVER::AddSingleMonitorMode(_In_ CONST DXGKARG_RECOMMEND
         &pMonitorSourceMode->VideoSignalInfo,
         m_NextMode.width,
         m_NextMode.height,
-        ((m_NextMode.vsync <= 75) && (m_NextMode.vsync > 0)) ? m_NextMode.vsync : VSYNC_RATE,
+        hw_pv_vblank_getrate(&m_HwResources),
         pMonitorSourceMode->VideoSignalInfo.TotalSize);
 
     // We set the preference to PREFERRED since this is the only supported mode

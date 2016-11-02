@@ -75,7 +75,8 @@ extern uint64_t deferred_clipboard;
 extern uint64_t event_service_mouse_moves;
 extern uint64_t hid_touch_enabled;
 extern char *save_file_prefix;
-
+extern uint64_t disp_fps_counter;
+extern uint64_t disp_pv_vblank;
 struct xc_interface_core;
 extern struct xc_interface_core *xc_handle;
 extern int xen_logdirty_enabled;

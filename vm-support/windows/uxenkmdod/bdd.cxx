@@ -30,17 +30,7 @@
 #include "hw.h"
 #include "perfcnt.h"
 
-#define TIMEOUT_MS 33
-#define ONE_MS_IN_HNS 10000
-
-static void vsync_timer_dpc(
-    struct _KDPC*, void *deferred_context, void*, void*)
-{
-    DXGKRNL_INTERFACE *dxgkInterface = (DXGKRNL_INTERFACE *)deferred_context;
-    DXGKARGCB_NOTIFY_INTERRUPT_DATA data = { DXGK_INTERRUPT_DISPLAYONLY_VSYNC, 0 };
-    dxgkInterface->DxgkCbNotifyInterrupt((HANDLE)dxgkInterface->DeviceHandle, &data);
-    dxgkInterface->DxgkCbQueueDpc((HANDLE)dxgkInterface->DeviceHandle);
-}
+extern int use_pv_vblank;
 
 VOID BASIC_DISPLAY_DRIVER::Init(_In_ DEVICE_OBJECT* pPhysicalDeviceObject)
 {
@@ -52,6 +42,7 @@ VOID BASIC_DISPLAY_DRIVER::Init(_In_ DEVICE_OBJECT* pPhysicalDeviceObject)
     RtlZeroMemory(&m_DeviceInfo, sizeof(m_DeviceInfo));
     RtlZeroMemory(&m_HwResources, sizeof(m_HwResources));
 
+    m_track_vblank = 0;
     m_pPhysicalDevice = pPhysicalDeviceObject;
     m_MonitorPowerState = PowerDeviceD0;
     m_AdapterPowerState = PowerDeviceD0;
@@ -65,7 +56,6 @@ VOID BASIC_DISPLAY_DRIVER::Init(_In_ DEVICE_OBJECT* pPhysicalDeviceObject)
     m_NextMode.width = 1024;
     m_NextMode.height = 768;
     m_VirtMode = m_NextMode;
-    m_VSync = STATUS_SUCCESS == RtlCheckRegistryKey(RTL_REGISTRY_SERVICES, L"\\uxenkmdod\\vsync");
     KeInitializeSemaphore(&m_PresentLock, 1, 1);
 }
 
@@ -168,8 +158,7 @@ NTSTATUS BASIC_DISPLAY_DRIVER::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartIn
         return STATUS_UNSUCCESSFUL;
     }
 
-    KeInitializeTimer(&timer);
-    KeInitializeDpc(&dpc, vsync_timer_dpc, &m_DxgkInterface);
+    m_VSync = use_pv_vblank;
 
     return STATUS_SUCCESS;
 }
@@ -345,6 +334,9 @@ NTSTATUS BASIC_DISPLAY_DRIVER::QueryDeviceDescriptor(_In_    ULONG              
 
 NTSTATUS BASIC_DISPLAY_DRIVER::GetScanLine(_In_ DXGKARG_GETSCANLINE* pGetScanLine)
 {
+    if (!m_VSync)
+        return STATUS_NOT_IMPLEMENTED;
+
     uxen_debug("GetScanLine");
     pGetScanLine->InVerticalBlank = TRUE;
     pGetScanLine->ScanLine = 0;
@@ -353,18 +345,21 @@ NTSTATUS BASIC_DISPLAY_DRIVER::GetScanLine(_In_ DXGKARG_GETSCANLINE* pGetScanLin
 
 NTSTATUS BASIC_DISPLAY_DRIVER::ControlInterrupt(_In_ CONST DXGK_INTERRUPT_TYPE InterruptType, _In_ BOOLEAN Enable)
 {
+    if (!m_VSync)
+        return STATUS_NOT_IMPLEMENTED;
+
     uxen_debug("InterruptType: %d -> %s", (int)InterruptType, (Enable) ? "Enable" : "Disable");
     if (InterruptType == DXGK_INTERRUPT_DISPLAYONLY_VSYNC) {
         if (Enable) {
-            int vsync = ((m_NextMode.vsync <= 75) && (m_NextMode.vsync > 0)) ? m_NextMode.vsync : 30;
             DXGKARGCB_NOTIFY_INTERRUPT_DATA data = { DXGK_INTERRUPT_DISPLAYONLY_VSYNC, 0 };
             m_DxgkInterface.DxgkCbNotifyInterrupt((HANDLE)m_DxgkInterface.DeviceHandle, &data);
             m_DxgkInterface.DxgkCbQueueDpc((HANDLE)m_DxgkInterface.DeviceHandle);
 
-            due_time.QuadPart = -1 * (1000 / vsync) * ONE_MS_IN_HNS;
-            KeSetTimerEx(&timer, due_time, TIMEOUT_MS, &dpc);
+            m_track_vblank = 1;
+            hw_pv_vblank_enable(&m_HwResources, 1);
         } else {
-            KeCancelTimer(&timer);
+            m_track_vblank = 0;
+            hw_pv_vblank_enable(&m_HwResources, 0);
         }
     }
     return STATUS_SUCCESS;
@@ -698,8 +693,17 @@ BOOLEAN BASIC_DISPLAY_DRIVER::InterruptRoutine(_In_  ULONG MessageNumber)
 {
     UNREFERENCED_PARAMETER(MessageNumber);
 
-    // BDD cannot handle interrupts
-    return FALSE;
+    if (m_track_vblank) {
+        DXGKRNL_INTERFACE *dxgk_iface = &m_DxgkInterface;
+        DXGKARGCB_NOTIFY_INTERRUPT_DATA data = { DXGK_INTERRUPT_DISPLAYONLY_VSYNC, 0 };
+
+        dxgk_iface->DxgkCbNotifyInterrupt((HANDLE)dxgk_iface->DeviceHandle, &data);
+        dxgk_iface->DxgkCbQueueDpc((HANDLE)dxgk_iface->DeviceHandle);
+    }
+
+    hw_clearvblankirq(&m_HwResources);
+
+    return TRUE;
 }
 
 VOID BASIC_DISPLAY_DRIVER::ResetDevice(VOID)

@@ -37,6 +37,7 @@
 #include "vm-save.h"
 #include "uuidgen.h"
 #include "uxen.h"
+#include "hw/pv_vblank.h"
 
 #if defined(CONFIG_NICKEL)
 #include "libnickel.h"
@@ -109,6 +110,8 @@ uint64_t ps2_fallback = 1;
 const char *app_dump_command = NULL;
 uint64_t event_service_mouse_moves = 0;
 char *save_file_prefix = "uxenvm-";
+uint64_t disp_fps_counter = 0;
+uint64_t disp_pv_vblank = PV_VBLANK_NATIVE;
 #if defined(_WIN32)
 const char *console_type = "win32";
 #elif defined(__APPLE__)

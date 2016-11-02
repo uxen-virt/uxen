@@ -233,3 +233,53 @@ NTSTATUS hw_pointer_update(
 
     return STATUS_SUCCESS;
 }
+
+int hw_is_pv_vblank_capable(
+    _In_ PUXEN_HW_RESOURCES pHw)
+{
+    ULONG caps = uxdisp_read(pHw, UXDISP_REG_XTRA_CAPS);
+
+    return !!(caps & UXDISP_XTRA_CAPS_PV_VBLANK);
+}
+
+void hw_pv_vblank_enable(
+    _In_ PUXEN_HW_RESOURCES pHw,
+    _In_ int enable)
+{
+    ULONG ctrl = uxdisp_read(pHw, UXDISP_REG_XTRA_CTRL);
+    ULONG new_ctrl = ctrl;
+
+    if (enable)
+        new_ctrl |= UXDISP_XTRA_CTRL_PV_VBLANK_ENABLE;
+    else
+        new_ctrl &= ~UXDISP_XTRA_CTRL_PV_VBLANK_ENABLE;
+
+    if (new_ctrl != ctrl) {
+        /* enable/disable pv vblank ctrl */
+        uxdisp_write(pHw, UXDISP_REG_XTRA_CTRL, new_ctrl);
+        /* enable/disable irqs */
+        uxdisp_write(pHw, UXDISP_REG_INTERRUPT_ENABLE,
+                     (new_ctrl & UXDISP_XTRA_CTRL_PV_VBLANK_ENABLE) ? UXDISP_INTERRUPT_VBLANK : 0);
+    }
+}
+
+int hw_pv_vblank_getrate(
+    _In_ PUXEN_HW_RESOURCES pHw)
+{
+    int r = uxdisp_read(pHw, UXDISP_REG_VSYNC_HZ);
+    return (r > 0 && r <= 480) ? r : 60;
+}
+
+void hw_clearirq(
+    _In_ PUXEN_HW_RESOURCES pHw, int irq)
+{
+    uxdisp_write(pHw, UXDISP_REG_INTERRUPT, irq);
+}
+
+void hw_clearvblankirq(
+    _In_ PUXEN_HW_RESOURCES pHw)
+{
+    hw_clearirq(pHw, UXDISP_INTERRUPT_VBLANK);
+}
+
+
