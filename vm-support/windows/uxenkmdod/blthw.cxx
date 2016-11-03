@@ -109,8 +109,9 @@ BDD_HWBLT::ExecutePresentDisplayOnly(
 
 --*/
 {
+#if 0
     NTSTATUS Status = STATUS_SUCCESS;
-
+#endif
     UNREFERENCED_PARAMETER(SrcBytesPerPixel);
 
     SIZE_T sizeMoves = NumMoves*sizeof(D3DKMT_MOVE_RECT);
@@ -134,7 +135,7 @@ BDD_HWBLT::ExecutePresentDisplayOnly(
     ctx->DstStride        = DstPitch;
     ctx->SrcWidth         = pModeCur->SrcModeWidth;
     ctx->SrcHeight        = pModeCur->SrcModeHeight;
-    ctx->SrcAddr          = NULL;
+    ctx->SrcAddr          = SrcAddr;
     ctx->SrcPitch         = SrcPitch;
     ctx->Rotation         = Rotation;
     ctx->NumMoves         = NumMoves;
@@ -146,6 +147,7 @@ BDD_HWBLT::ExecutePresentDisplayOnly(
     ctx->Mdl              = NULL;
     ctx->DisplaySource    = this;
 
+#if 0
     {
         // Map Source into kernel space, as Blt will be executed by system worker thread
         UINT sizeToMap = SrcPitch*pModeCur->SrcModeHeight;
@@ -188,6 +190,7 @@ BDD_HWBLT::ExecutePresentDisplayOnly(
         // Save Mdl to unmap and unlock the pages in worker thread
         ctx->Mdl = mdl;
     }
+#endif
 
     BYTE* rects = (BYTE*)(ctx+1);
 
@@ -283,11 +286,12 @@ HwExecutePresentDisplayOnly(
     }
 
     // Unmap unmap and unlock the pages.
+#if 0
     if (ctx->Mdl)
     {
         MmUnlockPages(ctx->Mdl);
         IoFreeMdl(ctx->Mdl);
     }
-
+#endif
     ExFreePool(ctx);
 }
