@@ -927,6 +927,9 @@ uxendisp_post_load(void *opaque, int version_id)
     for (crtc_id = 0; crtc_id < UXENDISP_NB_CRTCS; crtc_id++)
         s->crtcs[crtc_id].flush_pending = 1;
 
+    if (s->xtra_ctrl & UXDISP_XTRA_CTRL_PV_VBLANK_ENABLE)
+        pv_vblank_start(s->vblank_ctx);
+
     return 0;
 }
 
@@ -947,8 +950,6 @@ uxendisp_resume(void *opaque, int version_id)
         if (ret)
             return ret;
     }
-    if (s->xtra_ctrl & UXDISP_XTRA_CTRL_PV_VBLANK_ENABLE)
-        pv_vblank_start(s->vblank_ctx);
     s->resumed = 1;
     return 0;
 }
