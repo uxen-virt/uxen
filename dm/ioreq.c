@@ -273,7 +273,8 @@ static void ioreq_pio(ioreq_t *req)
 
     sign = req->df ? -1 : 1;
 
-    assert(req->size <= 4);
+    if (req->size > sizeof(uint32_t))
+        errx(1, "PIO: bad size (%u)", req->size);
 
     if (req->dir == IOREQ_READ) {
         if (!req->data_is_ptr)
@@ -309,6 +310,9 @@ static void ioreq_timeoffset(ioreq_t *req)
 static void ioreq_move(ioreq_t *req)
 {
     int i, sign;
+
+    if (req->size > sizeof(req->data))
+        errx(1, "MMIO: bad size (%u)", req->size);
 
     sign = req->df ? -1 : 1;
 
@@ -415,9 +419,12 @@ handle_ioreq(void *opaque)
     uint64_t t0, t1;
 
     if (req) {
+        ioreq_t copy = *req;
         t0 = unbiased_time_ms();
 
-        __handle_ioreq(req);
+        xen_rmb();
+        __handle_ioreq(&copy);
+        req->data = copy.data;
 
         if (req->state != STATE_IOREQ_INPROCESS) {
             warnx("Badness in I/O request ... not in service?!: "
