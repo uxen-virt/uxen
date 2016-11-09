@@ -41,13 +41,14 @@ struct vblank_query_msg {
 struct vblank_ctx {
     OVERLAPPED vblank_ov; /* must be first member */
     uxen_thread vblank_thread;
+    ioh_event vblank_ev;
+    ioh_event vblank_write_ev;
     int vblank_exit;
     int vblank_running;
     int hw_vblank_present;
     int hw_vblank_failing;
     int precise_soft_vblank;
     v4v_channel_t v4v;
-    HANDLE vblank_write_ev;
     uint64_t vblank_t0;
     uint64_t soft_vblank_period;
     uint64_t frame;
@@ -163,6 +164,15 @@ pv_vblank_get_reported_vsync_hz(void)
     return r;
 }
 
+static void
+vblank_event_cb(void *opaque)
+{
+    struct vblank_ctx *ctx = opaque;
+
+    ioh_event_reset(&ctx->vblank_ev);
+    uxendisp_set_interrupt(ctx->disp_state, UXDISP_INTERRUPT_VBLANK);
+}
+
 struct vblank_ctx *
 pv_vblank_init(struct uxendisp_state *s, int method)
 {
@@ -195,11 +205,10 @@ pv_vblank_init(struct uxendisp_state *s, int method)
         goto error;
     }
 
-    ctx->vblank_write_ev = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (!ctx->vblank_write_ev) {
-        debug_printf("%s: error creating event\n", __FUNCTION__);
-        goto error;
-    }
+    ioh_event_init(&ctx->vblank_write_ev);
+    ioh_event_init(&ctx->vblank_ev);
+
+    ioh_add_wait_object(&ctx->vblank_ev, vblank_event_cb, ctx, NULL);
 
     debug_printf("pv vblank initialised method=%d rate=%d mult=%d div=%d skip=%d, host rate @ %dhz\n",
                  (int)method,
@@ -224,7 +233,10 @@ pv_vblank_cleanup(struct vblank_ctx *ctx)
     pv_vblank_stop(ctx);
     debug_printf("stopped pv vblank\n");
 
-    CloseHandle(ctx->vblank_write_ev);
+    ioh_del_wait_object(&ctx->vblank_ev, NULL);
+
+    ioh_event_close(&ctx->vblank_ev);
+    ioh_event_close(&ctx->vblank_write_ev);
 
     v4v_close(&ctx->v4v);
 
@@ -407,10 +419,8 @@ vblank_thread_run(PVOID opaque)
             soft_wait_vblank(ctx);
 
         /* inject guest vblank, every other real vblank if skipping enabled */
-        if (!disp_vsync_skip || (ctx->frame&1) == 0) {
-            if (ctx->disp_state)
-                uxendisp_set_interrupt(ctx->disp_state, UXDISP_INTERRUPT_VBLANK);
-        }
+        if (!disp_vsync_skip || (ctx->frame&1) == 0)
+            ioh_event_set(&ctx->vblank_ev);
         ctx->frame++;
     }
 

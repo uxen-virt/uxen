@@ -79,7 +79,6 @@ struct uxendisp_state {
     uint32_t xtra_ctrl;
     int resumed;
 
-    critical_section irq_lock;
     struct vblank_ctx *vblank_ctx;
 };
 
@@ -104,14 +103,12 @@ uxendisp_set_interrupt(struct uxendisp_state *s, int irq)
 {
     int m;
 
-    critical_section_enter(&s->irq_lock);
     m = s->interrupt_en & irq;
 
     if (m) {
         s->isr |= m;
         qemu_set_irq(s->dev.irq[0], 1);
     }
-    critical_section_leave(&s->irq_lock);
 }
 
 /*
@@ -690,11 +687,9 @@ uxendisp_mmio_write(void *opaque, target_phys_addr_t addr, uint64_t val,
 
     switch (addr) {
     case UXDISP_REG_INTERRUPT:
-        critical_section_enter(&s->irq_lock);
         s->isr ^= (uint32_t)val;
         if (s->isr == 0)
             qemu_set_irq(s->dev.irq[0], 0);
-        critical_section_leave(&s->irq_lock);
         return;
     case UXDISP_REG_CURSOR_ENABLE:
         s->cursor_en = val & 0x1;
@@ -1038,8 +1033,6 @@ static int uxendisp_initfn(PCIDevice *dev)
     struct uxendisp_state *s = DO_UPCAST(struct uxendisp_state, dev, dev);
     VGAState *v = &s->vga;
     int i;
-
-    critical_section_init(&s->irq_lock);
 
 #ifdef _WIN32
     if (disp_pv_vblank != PV_VBLANK_OFF) {
