@@ -105,10 +105,10 @@ typedef struct _BDD_FLAGS
     UINT EDID_ValidHeader        : 1; // ( 4) Retrieved EDID has a valid header
     UINT EDID_Attempted          : 1; // ( 5) 1 if an attempt was made to retrieve the EDID, successful or not
     UINT StopCopy                : 1; // ( 6) Stop doing memcpy in Present call
-
+    UINT UserDraw                : 1; // ( 7) Stop doing any drawing in Present call, userspace draws via mapped fb
     // IMPORTANT: All new flags must be added to just before _LastFlag (i.e. right above this comment), this allows different versions of diagnostics to still be useful.
-    UINT _LastFlag               : 1; // ( 7) Always set to 1, is used to ensure that diagnostic version matches binary version
-    UINT Unused                  : 25;
+    UINT _LastFlag               : 1; // ( 8) Always set to 1, is used to ensure that diagnostic version matches binary version
+    UINT Unused                  : 24;
 } BDD_FLAGS;
 
 // Represents the current mode, may not always be set (i.e. frame buffer mapped) if representing the mode passed in on single mode setups.
@@ -355,8 +355,15 @@ public:
 
     NTSTATUS IsVirtModeEnabled();
 
-    NTSTATUS MapUserVram(PVOID data);
+    NTSTATUS MapUserVram(void **data);
 
+    NTSTATUS UnmapUserVram(void *data);
+
+    NTSTATUS UpdateRect(int x, int y, int w, int h);
+
+    NTSTATUS SetUserDrawOnly(BOOLEAN ud);
+
+    NTSTATUS SetNoPresentCopy(BOOLEAN nocopy);
 private:
 
     NTSTATUS CommonStart();

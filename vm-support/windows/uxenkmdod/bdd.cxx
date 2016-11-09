@@ -444,6 +444,9 @@ NTSTATUS BASIC_DISPLAY_DRIVER::PresentDisplayOnly(_In_ CONST DXGKARG_PRESENT_DIS
         return STATUS_INVALID_PARAMETER;
     }
 
+    if (m_Flags.UserDraw)
+        return STATUS_SUCCESS;
+
     // If it is in monitor off state or source is not supposed to be visible, don't present anything to the screen
     if ((m_MonitorPowerState > PowerDeviceD0) ||
         (m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].Flags.SourceNotVisible))
@@ -531,6 +534,36 @@ NTSTATUS BASIC_DISPLAY_DRIVER::PresentDisplayOnly(_In_ CONST DXGKARG_PRESENT_DIS
         return status;
     }
 
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS BASIC_DISPLAY_DRIVER::UpdateRect(int x, int y, int w, int h)
+{
+    RECT r = { };
+
+    r.left = x;
+    r.top = y;
+    r.right = x + w-1;
+    r.bottom = y + h-1;
+
+    dr_send(m_DrContext, 0, NULL, 1, &r);
+
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS BASIC_DISPLAY_DRIVER::SetUserDrawOnly(BOOLEAN ud)
+{
+    m_Flags.UserDraw = ud;
+
+    uxen_msg("set user draw %d\n", (int)ud);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS BASIC_DISPLAY_DRIVER::SetNoPresentCopy(BOOLEAN nocopy)
+{
+    m_Flags.StopCopy = nocopy;
+
+    uxen_msg("set no present copy %d\n", (int)nocopy);
     return STATUS_SUCCESS;
 }
 

@@ -34,25 +34,37 @@ struct dirty_rect {
     int32_t bottom;
 } UXENDISP_PACKED;
 
-#undef UXENDISP_PACKED
-#if defined(_MSC_VER)
-#pragma warning(pop)
-#pragma pack(pop)
-#endif
-
 /* Escape code: GDI->display driver */
 enum {
     UXENDISP_ESCAPE_SET_CUSTOM_MODE = 0x10001,
     UXENDISP_ESCAPE_SET_VIRTUAL_MODE = 0x10002,
     UXENDISP_ESCAPE_IS_VIRT_MODE_ENABLED = 0x10003,
+    UXENDISP_ESCAPE_MAP_FB = 0x10004,
+    UXENDISP_ESCAPE_UNMAP_FB = 0x10005,
+    UXENDISP_ESCAPE_UPDATE_RECT = 0x10006,
+    UXENDISP_ESCAPE_SET_USER_DRAW_ONLY = 0x10007,
+    UXENDISP_ESCAPE_SET_NO_PRESENT_COPY = 0x10008,
 };
 
-typedef struct {
+struct _UXENDISPCustomMode {
     int esc_code;
     unsigned long width;
     unsigned long height;
-    unsigned long vsync;
+    unsigned long x, y;
+    union {
+        int user_draw;
+        int no_present_copy;
+        void *ptr;
+    };
     /* bpp ? */
-} UXENDISPCustomMode;
+} UXENDISP_PACKED;
+
+typedef struct _UXENDISPCustomMode UXENDISPCustomMode;
+
+#undef UXENDISP_PACKED
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#pragma pack(pop)
+#endif
 
 #endif // _DISP_H_

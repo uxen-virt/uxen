@@ -34,3 +34,9 @@ PVOID user_vram_map(PMDL vram_mdl)
         return NULL;
     }
 }
+
+void user_vram_unmap(PMDL vram_mdl, PVOID mapped)
+{
+    MmUnmapLockedPages(mapped, vram_mdl);
+}
+

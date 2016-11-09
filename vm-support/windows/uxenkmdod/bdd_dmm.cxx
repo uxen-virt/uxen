@@ -888,11 +888,17 @@ out:
     return status;
 }
 
-NTSTATUS BASIC_DISPLAY_DRIVER::MapUserVram(PVOID data)
+NTSTATUS BASIC_DISPLAY_DRIVER::MapUserVram(void **data)
 {
-    PVOID mem = user_vram_map(m_VmemMdl);
-    RtlCopyMemory(data, &mem, sizeof mem);
-    m_Flags.StopCopy = TRUE;
+    *data = user_vram_map(m_VmemMdl);
+
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS BASIC_DISPLAY_DRIVER::UnmapUserVram(void *data)
+{
+    user_vram_unmap(m_VmemMdl, data);
+
     return STATUS_SUCCESS;
 }
 

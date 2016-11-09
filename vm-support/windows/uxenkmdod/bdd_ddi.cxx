@@ -398,7 +398,7 @@ NTSTATUS BddDdiEscape(
     IN_CONST_PDXGKARG_ESCAPE pEscape)
 {
     NTSTATUS status = STATUS_SUCCESS;
-    UXENDISPCustomMode mode;
+    UXENDISPCustomMode inp, *out;
 
     ASSERT(hAdapter != NULL);
 
@@ -412,21 +412,39 @@ NTSTATUS BddDdiEscape(
     }
 
     /* for now we can just assume that there is only one kind of escape calls */
-    if (pEscape->PrivateDriverDataSize == sizeof(mode)) {
-        mode = *((UXENDISPCustomMode*)pEscape->pPrivateDriverData);
-        switch (mode.esc_code) {
+    if (pEscape->PrivateDriverDataSize == sizeof(inp)) {
+        out  = (UXENDISPCustomMode*)pEscape->pPrivateDriverData;
+        inp = *out;
+        switch (inp.esc_code) {
         case UXENDISP_ESCAPE_SET_CUSTOM_MODE:
-            status = pBDD->SetNextMode(&mode);
+            status = pBDD->SetNextMode(&inp);
             break;
         case UXENDISP_ESCAPE_SET_VIRTUAL_MODE:
-            status = pBDD->SetVirtMode(&mode);
+            status = pBDD->SetVirtMode(&inp);
             break;
         case UXENDISP_ESCAPE_IS_VIRT_MODE_ENABLED:
             status = pBDD->IsVirtModeEnabled();
             break;
+        case UXENDISP_ESCAPE_MAP_FB: {
+            void *fb = NULL;
+
+            status = pBDD->MapUserVram(&fb);
+            out->ptr = fb;
+            break;
+        }
+        case UXENDISP_ESCAPE_UNMAP_FB:
+            status = pBDD->UnmapUserVram(inp.ptr);
+            break;
+        case UXENDISP_ESCAPE_SET_USER_DRAW_ONLY:
+            status = pBDD->SetUserDrawOnly((BOOLEAN)inp.user_draw);
+            break;
+        case UXENDISP_ESCAPE_SET_NO_PRESENT_COPY:
+            status = pBDD->SetNoPresentCopy((BOOLEAN)inp.no_present_copy);
+            break;
+        case UXENDISP_ESCAPE_UPDATE_RECT:
+            status = pBDD->UpdateRect(inp.x, inp.y, inp.width, inp.height);
+            break;
         };
-    } else if (pEscape->PrivateDriverDataSize == sizeof(LONG64)) {
-        status = pBDD->MapUserVram((PVOID)pEscape->pPrivateDriverData);
     } else {
         status = STATUS_INVALID_PARAMETER;
     }
