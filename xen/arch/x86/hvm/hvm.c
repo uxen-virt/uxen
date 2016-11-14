@@ -590,14 +590,14 @@ hvm_set_dmreq_vcpu_pages(struct domain *d, unsigned long gmfn)
 
         page = mfn_to_page(mfn);
         if (!get_page(page, d)) {
-            put_gfn(d, gmfn);
+            put_gfn(d, gmfn + i);
             return -EINVAL;
         }
 
         va = map_domain_page_global(mfn);
         if (!va) {
             put_page(page);
-            put_gfn(d, gmfn);
+            put_gfn(d, gmfn + i);
             return -ENOMEM;
         }
 
@@ -608,7 +608,7 @@ hvm_set_dmreq_vcpu_pages(struct domain *d, unsigned long gmfn)
                 spin_unlock(&d->arch.hvm_domain.dmreq_vcpu_page_lock);
                 unmap_domain_page_global(va);
                 put_page(mfn_to_page(mfn));
-                put_gfn(d, gmfn);
+                put_gfn(d, gmfn + i);
                 return -EINVAL;
             }
             d->arch.hvm_domain.dmreq_vcpu_page_va = va;
@@ -620,7 +620,7 @@ hvm_set_dmreq_vcpu_pages(struct domain *d, unsigned long gmfn)
                 spin_unlock(&d->arch.hvm_domain.dmreq_vcpu_page_lock);
                 unmap_domain_page_global(va);
                 put_page(mfn_to_page(mfn));
-                put_gfn(d, gmfn);
+                put_gfn(d, gmfn + i);
                 return -EINVAL;
             }
             d->vcpu[i]->arch.hvm_vcpu.dmreq_vcpu_page_va = va;
@@ -628,7 +628,7 @@ hvm_set_dmreq_vcpu_pages(struct domain *d, unsigned long gmfn)
         }
 
         spin_unlock(&d->arch.hvm_domain.dmreq_vcpu_page_lock);
-        put_gfn(d, gmfn);
+        put_gfn(d, gmfn + i);
     }
 
     domain_unpause(d);
