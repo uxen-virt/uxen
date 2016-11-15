@@ -87,8 +87,8 @@ endif
 
 
 LDLIBS_ssp += -lssp
-CFLAGS_ssp += -D_FORTIFY_SOURCE=2 -fstack-protector \
-	--param ssp-buffer-size=4 -Wformat -Wformat-security
+CFLAGS_ssp += -D_FORTIFY_SOURCE=2 -fstack-protector-strong \
+	-Wformat -Wformat-security
 LDLIBS += $(LDLIBS_ssp)
 CFLAGS += $(CFLAGS_ssp)
 
