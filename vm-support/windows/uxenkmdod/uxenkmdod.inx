@@ -28,7 +28,7 @@ uxenkmdod.sys = 0
 Include      = msdv.inf
 FeatureScore = F9
 CopyFiles    = uxenkmdod.Files
-AddReg       = uxenkmdod_SoftwareDeviceSettings
+AddReg       = uxenkmdod_SoftwareDeviceSettings,uxenkmdod.TdrSettings
 
 [uxenkmdod_Inst.Services]
 AddService = uxenkmdod, 0x00000002, uxenkmdod_Service_Inst,
@@ -44,6 +44,15 @@ AddReg = uxenkmdod_SoftwareDeviceSettings
 
 [uxenkmdod_SoftwareDeviceSettings]
 HKR, , VgaCompatible, %REG_DWORD%, 0
+
+[uxenkmdod.TdrSettings]
+HKLM, System\CurrentControlSet\Control\GraphicsDrivers, TdrLevel, %REG_DWORD%, 1
+HKLM, System\CurrentControlSet\Control\GraphicsDrivers, TdrDelay, %REG_DWORD%, 600
+HKLM, System\CurrentControlSet\Control\GraphicsDrivers, TdrDdiDelay, %REG_DWORD%, 600
+HKLM, System\CurrentControlSet\Control\GraphicsDrivers, TdrDodVSyncDelay, %REG_DWORD%, 600
+HKLM, System\CurrentControlSet\Control\GraphicsDrivers, TdrDodPresentDelay, %REG_DWORD%, 600
+HKLM, System\CurrentControlSet\Control\GraphicsDrivers, TdrLimitCount, %REG_DWORD%, 200
+
 
 [uxenkmdod.Files]
 uxenkmdod.sys
