@@ -455,6 +455,7 @@ hvm_set_dmreq_page(struct domain *d, unsigned long gmfn)
     struct hvm_dmreq_page *dmrp = &d->arch.hvm_domain.dmreq;
     struct page_info *page;
     p2m_type_t p2mt;
+    p2m_type_t nt;
     unsigned long mfn;
     void *va;
     int i;
@@ -466,6 +467,16 @@ hvm_set_dmreq_page(struct domain *d, unsigned long gmfn)
         return -EINVAL;
     }
     ASSERT(mfn_valid(mfn));
+
+    nt = p2m_change_type(d, gmfn, p2mt, p2m_ram_ro);
+    if (nt != p2mt) {
+        printk(XENLOG_ERR
+               "%s: type of pfn 0x%lx changed from %d to %d while "
+               "we were trying to change it to %d\n", __FUNCTION__,
+               gmfn, p2mt, nt, p2m_ram_ro);
+        put_gfn(d, gmfn);
+        return -EINVAL;
+    }
 
     page = mfn_to_page(mfn);
     if (!get_page(page, d)) {
@@ -554,6 +565,7 @@ hvm_set_dmreq_vcpu_pages(struct domain *d, unsigned long gmfn)
 {
     struct page_info *page;
     p2m_type_t p2mt;
+    p2m_type_t nt;
     unsigned long mfn;
     void *va;
     int i;
@@ -565,6 +577,16 @@ hvm_set_dmreq_vcpu_pages(struct domain *d, unsigned long gmfn)
             return -EINVAL;
         }
         ASSERT(mfn_valid(mfn));
+
+        nt = p2m_change_type(d, gmfn + i, p2mt, p2m_ram_ro);
+        if (nt != p2mt) {
+            printk(XENLOG_ERR
+                   "%s: type of pfn 0x%lx changed from %d to %d while "
+                   "we were trying to change it to %d\n", __FUNCTION__,
+                   gmfn + i, p2mt, nt, p2m_ram_ro);
+            put_gfn(d, gmfn + i);
+            return -EINVAL;
+        }
 
         page = mfn_to_page(mfn);
         if (!get_page(page, d)) {
@@ -735,6 +757,7 @@ static int hvm_set_ioreq_page(
 {
     struct page_info *page;
     p2m_type_t p2mt;
+    p2m_type_t nt;
     unsigned long mfn;
     void *va;
 
@@ -763,6 +786,16 @@ static int hvm_set_ioreq_page(
     }
 #endif  /* __UXEN__ */
     ASSERT(mfn_valid(mfn));
+
+    nt = p2m_change_type(d, gmfn, p2mt, p2m_ram_ro);
+    if (nt != p2mt) {
+        printk(XENLOG_ERR
+               "%s: type of pfn 0x%lx changed from %d to %d while "
+               "we were trying to change it to %d\n", __FUNCTION__,
+               gmfn, p2mt, nt, p2m_ram_ro);
+        put_gfn(d, gmfn);
+        return -EINVAL;
+    }
 
     page = mfn_to_page(mfn);
     if ( !get_page_and_type(page, d, PGT_writable_page) )
