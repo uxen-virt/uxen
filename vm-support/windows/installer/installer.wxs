@@ -222,9 +222,9 @@
             <Custom Action="CA_uxenkmdod" After="CA_uxendisp">$(var.INSTALLING) AND <![CDATA[VersionNT >= 602]]> AND <![CDATA[&Complex=3]]></Custom>
             <Custom Action="CA_uxenpatcher" After="CA_uxenkmdod">$(var.INSTALLING) AND <![CDATA[VersionNT >= 602]]> AND <![CDATA[&Complex=3]]></Custom>
 
-            <Custom Action="CA_setPowercfg" After="CA_uxenkmdod">$(var.INSTALLING) AND <![CDATA[&Complex=3]]></Custom>
-            <Custom Action="CA_powercfg1" After="CA_setPowercfg">$(var.INSTALLING) AND <![CDATA[&Complex=3]]></Custom>
-            <Custom Action="CA_powercfg2" After="CA_powercfg1">$(var.INSTALLING) AND <![CDATA[&Complex=3]]></Custom>
+            <Custom Action="CA_setPowercfg" After="CA_uxenkmdod">$(var.INSTALLING) AND <![CDATA[VersionNT >= 602]]> AND <![CDATA[&Complex=3]]></Custom>
+            <Custom Action="CA_powercfg1" After="CA_setPowercfg">$(var.INSTALLING) AND <![CDATA[VersionNT >= 602]]> AND <![CDATA[&Complex=3]]></Custom>
+            <Custom Action="CA_powercfg2" After="CA_powercfg1">$(var.INSTALLING) AND <![CDATA[VersionNT >= 602]]> AND <![CDATA[&Complex=3]]></Custom>
 
             <Custom Action="CA_un_uxenmouse" Before="RemoveFiles">$(var.UNINSTALLING)</Custom>
             <Custom Action="CA_un_uxenstor" After="CA_un_uxenmouse">$(var.UNINSTALLING)</Custom>
