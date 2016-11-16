@@ -63,6 +63,11 @@
         <CustomAction Id="CA_un_uxennullnet"  Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" 
             ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxennullnet\uxennullnet.inf" />
 
+        <!-- disable display turn off in power schemas (doesn't cope with DOD vsync control) -->
+        <CustomAction Id="CA_setPowercfg" Property="POWERCFG" Value="[%systemroot]\system32\powercfg.exe"/>
+        <CustomAction Id="CA_powercfg1" Impersonate="no" Execute="deferred" ExeCommand="-x -monitor-timeout-ac 0" Return="ignore" Property="POWERCFG"/>
+        <CustomAction Id="CA_powercfg2" Impersonate="no" Execute="deferred" ExeCommand="-x -monitor-timeout-dc 0" Return="ignore" Property="POWERCFG"/>
+
         <Directory Id='TARGETDIR' Name='SourceDir'>
             <Directory Id='INSTALLDIR' Name='uXenGuest'>
                 <Component Id="dpinst" Guid="b49e47e6-f1a0-40be-a3f6-c775b49869df" Win64="$(var.Win64)">
@@ -203,6 +208,10 @@
             <ComponentRef Id='uxenpatcher' />
         </Feature>
         <InstallExecuteSequence>
+            <Custom Action="CA_setPowercfg" After="InstallFiles">$(var.INSTALLING) AND <![CDATA[&Simple=3]]></Custom>
+            <Custom Action="CA_powercfg1" After="CA_setPowercfg">$(var.INSTALLING) AND <![CDATA[&Simple=3]]></Custom>
+            <Custom Action="CA_powercfg2" After="CA_powercfg1">$(var.INSTALLING) AND <![CDATA[&Simple=3]]></Custom>
+
             <Custom Action="CA_uxendmpdrv" After="InstallFiles">$(var.INSTALLING) AND <![CDATA[&Simple=3]]></Custom>
             <Custom Action="CA_uxenplatform" After="CA_uxendmpdrv">$(var.INSTALLING) AND <![CDATA[&Simple=3]]></Custom>
             <Custom Action="CA_uxenv4vguest" After="CA_uxenplatform">$(var.INSTALLING) AND <![CDATA[&Simple=3]]></Custom>
