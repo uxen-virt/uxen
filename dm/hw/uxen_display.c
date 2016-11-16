@@ -1035,12 +1035,10 @@ static int uxendisp_initfn(PCIDevice *dev)
     int i;
 
 #ifdef _WIN32
-    if (disp_pv_vblank != PV_VBLANK_OFF) {
-        s->vblank_ctx = pv_vblank_init(s, disp_pv_vblank);
-        if (!s->vblank_ctx) {
-            debug_printf("pv vblank init failed\n");
-            return -1;
-        }
+    s->vblank_ctx = pv_vblank_init(s, disp_pv_vblank);
+    if (!s->vblank_ctx) {
+        debug_printf("pv vblank init failed\n");
+        return -1;
     }
 #endif
 
