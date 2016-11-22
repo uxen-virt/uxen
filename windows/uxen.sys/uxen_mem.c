@@ -2,7 +2,7 @@
  *  uxen_mem.c
  *  uxen
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -1015,6 +1015,7 @@ uxen_pages_retire_one_cpu(int cpu, uint32_t left)
     ASSERT(left < uxen_info->ui_free_pages[cpu].count);
 
 #ifdef DBG
+    p = NULL;
     plist = &uxen_info->ui_free_pages[cpu].list;
     for (n = 0; n < uxen_info->ui_free_pages[cpu].count; n++) {
         p = (struct page_list_entry *)(frametable + (*plist) * s);
@@ -1022,7 +1023,7 @@ uxen_pages_retire_one_cpu(int cpu, uint32_t left)
         ASSERT(!p->prev);
         ASSERT(!p->count_info);
     }
-    ASSERT(!p->next);
+    ASSERT(!p || !p->next);
 #endif  /* DBG */
 
     plist = &uxen_info->ui_free_pages[cpu].list;
@@ -1209,7 +1210,7 @@ map_host_pages(void *va, size_t len, uint64_t *gpfns,
     user_mapping_va key;
     int ret = 0;
     KIRQL old_irql;
-    PFN_NUMBER *pfn_array;
+    PFN_NUMBER *pfn_array = NULL;
     size_t gpfn_num = len >> PAGE_SHIFT;
     unsigned int i = 0;
 
@@ -1326,8 +1327,9 @@ map_host_pages(void *va, size_t len, uint64_t *gpfns,
   out:
     if (ret && um) {
         if (um->gpfns) {
-            remove_host_mfns_mapping(um->gpfns, i << PAGE_SHIFT, pfn_array,
-                                     fda);
+            if (pfn_array)
+                remove_host_mfns_mapping(um->gpfns, i << PAGE_SHIFT, pfn_array,
+                                         fda);
             kernel_free(um->gpfns, gpfn_num * sizeof(um->gpfns[0]));
         }
         if (um->mdl) {

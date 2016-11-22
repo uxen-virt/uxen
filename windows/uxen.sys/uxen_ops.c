@@ -363,7 +363,7 @@ update_ui_host_counter(void)
 static void
 uxen_idle_thread_fn(void *context)
 {
-    unsigned int cpu = (unsigned long)context;
+    unsigned int cpu = (uintptr_t)context;
     unsigned int host_cpu;
     uint32_t increase;
 
@@ -1381,7 +1381,7 @@ uxen_op_keyhandler(char *keys, unsigned int num)
 int
 uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
 {
-    struct vm_info *vmi;
+    struct vm_info *vmi = NULL;
     struct vm_vcpu_info *vci;
     struct vm_vcpu_info_shared *vcis[UXEN_MAXIMUM_VCPUS];
     KIRQL irql;
@@ -1559,7 +1559,7 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
 int
 uxen_op_target_vm(struct uxen_targetvm_desc *utd, struct fd_assoc *fda)
 {
-    struct vm_info *vmi;
+    struct vm_info *vmi = NULL;
     affinity_t aff;
     int ret = 0;
 
@@ -1766,7 +1766,7 @@ uxen_vmi_destroy_vm(struct vm_info *vmi)
 int
 uxen_op_destroy_vm(struct uxen_destroyvm_desc *udd, struct fd_assoc *fda)
 {
-    struct vm_info *vmi;
+    struct vm_info *vmi = NULL;
     affinity_t aff, aff_locked;
     int ret = 0;
 

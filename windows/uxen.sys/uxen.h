@@ -509,7 +509,7 @@ ffs(uint32_t i)
 #define ALIGN_PAGE_UP(x) (((x) + PAGE_SIZE - 1) & PAGE_MASK)
 
 /* Force a compilation error if condition is true */
-#define BUILD_BUG_ON(condition) ((void)sizeof(struct { int:-!!(condition); }))
+#define BUILD_BUG_ON(condition) ((void)sizeof(struct { int:-(int)!!(condition); }))
 
 #define ASSERT_IRQL(irql) (ASSERT(KeGetCurrentIrql() <= (irql)))
 

@@ -1,12 +1,11 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
 #define UNICODE
 
 #include <ntifs.h>
-#include <csq.h>
 #include <ntstrsafe.h>
 #include <wdmsec.h>
 #include <sddl.h>

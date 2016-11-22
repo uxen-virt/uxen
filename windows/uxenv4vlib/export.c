@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -18,8 +18,8 @@ V4V_DLL_EXPORT int uxen_v4v_ring_create(v4v_addr_t *dst, domid_t partner)
     id.addr.domain = dst->domain;
     id.partner = partner;
 
-    ret = (int)uxen_v4v_hypercall((void *)V4VOP_create_ring,
-                                  (void *)&id, NULL, NULL, NULL, NULL);
+    ret = (int)(intptr_t)uxen_v4v_hypercall(
+        (void *)V4VOP_create_ring, (void *)&id, NULL, NULL, NULL, NULL);
 
     if (ret != 0) {
         uxen_v4v_err("V4VOP_create_ring failed (vm%u:%x vm%u) ret %d",
@@ -152,11 +152,13 @@ uxen_v4v_send_async (v4v_addr_t *src, v4v_addr_t *dst, void *buf,
 
     check_resume();
 
-    ret = (int)uxen_v4v_hypercall((void *)V4VOP_send,
-                                  (void *)src, (void *)dst, (void *)buf,
-                                  (void *)len, (void *)protocol);
+    ret = (int)(intptr_t)uxen_v4v_hypercall(
+        (void *)V4VOP_send, (void *)src, (void *)dst, (void *)buf,
+        (void *)len, (void *)protocol);
 
-    if ((ret == -EAGAIN) && callback)  uxen_v4v_notify_enqueue(len, dst, callback, callback_data1, callback_data2);
+    if ((ret == -EAGAIN) && callback)
+        uxen_v4v_notify_enqueue(len, dst,
+                                callback, callback_data1, callback_data2);
 
     return ret;
 }
@@ -172,14 +174,16 @@ uxen_v4v_sendv_async (v4v_addr_t *src, v4v_addr_t *dst, v4v_iov_t *iov,
 
     check_resume();
 
-    ret = (int)uxen_v4v_hypercall((void *)V4VOP_sendv,
-                                  (void *)src, (void *)dst,
-                                  (void *)iov, (void *)niov, (void *)protocol);
+    ret = (int)(intptr_t)uxen_v4v_hypercall(
+        (void *)V4VOP_sendv, (void *)src, (void *)dst,
+        (void *)iov, (void *)niov, (void *)protocol);
 
     if ((ret == -EAGAIN) && callback) {
         len = 0;
-        while (niov--) len += (iov++)->iov_len;
-        uxen_v4v_notify_enqueue((uint32_t) len, dst, callback, callback_data1, callback_data2);
+        while (niov--)
+            len += (iov++)->iov_len;
+        uxen_v4v_notify_enqueue((uint32_t)len, dst,
+                                callback, callback_data1, callback_data2);
     }
 
     return ret;
@@ -187,7 +191,8 @@ uxen_v4v_sendv_async (v4v_addr_t *src, v4v_addr_t *dst, v4v_iov_t *iov,
 
 V4V_DLL_EXPORT BOOLEAN uxen_v4v_cancel_async(v4v_addr_t *dst, uxen_v4v_callback_t *callback, void *callback_data1, void *callback_data2)
 {
-    return uxen_v4v_notify_dequeue(dst, callback, callback_data1, callback_data2);
+    return uxen_v4v_notify_dequeue(dst,
+                                   callback, callback_data1, callback_data2);
 }
 
 
@@ -307,8 +312,8 @@ uxen_v4v_poke (v4v_addr_t *dst)
 
     check_resume();
 
-    ret = (int)uxen_v4v_hypercall((void *)V4VOP_poke,
-                                  (void *)dst,  NULL, NULL, NULL, NULL);
+    ret = (int)(intptr_t)uxen_v4v_hypercall(
+        (void *)V4VOP_poke, (void *)dst,  NULL, NULL, NULL, NULL);
 
     return ret;
 }

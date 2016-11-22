@@ -2,7 +2,7 @@
  *  uxen.c
  *  uxen
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -137,8 +137,8 @@ uxen_cleanup(__in PDEVICE_OBJECT DeviceObject,
 static void
 uxen_power(__in void *context, __in void *_arg1, __in void *_arg2)
 {
-    unsigned arg1 = (unsigned)_arg1;
-    unsigned arg2 = (unsigned)_arg2;
+    uintptr_t arg1 = (uintptr_t)_arg1;
+    uintptr_t arg2 = (uintptr_t)_arg2;
 
     dprintk("%s\n", __FUNCTION__);
 
@@ -167,8 +167,8 @@ uxen_power(__in void *context, __in void *_arg1, __in void *_arg2)
 void
 uxen_set_system_time(__in void *context, __in void *_arg1, __in void *_arg2)
 {
-    unsigned arg1 = (unsigned)_arg1;
-    unsigned arg2 = (unsigned)_arg2;
+    uintptr_t arg1 = (uintptr_t)_arg1;
+    uintptr_t arg2 = (uintptr_t)_arg2;
 
     dprintk("%s\n", __FUNCTION__);
 
@@ -187,7 +187,7 @@ reg_read_str(PUNICODE_STRING key_name, PWSTR val_name,
     struct {
         KEY_VALUE_PARTIAL_INFORMATION info;
         UCHAR data[1];
-    } *val;
+    } *val = NULL;
     UNICODE_STRING val_name_us;
     ULONG val_len, bytes_read;
 
@@ -304,7 +304,7 @@ uxen_driver_load(__in PDRIVER_OBJECT DriverObject,
     OBJECT_ATTRIBUTES powerstate_attr;
     OBJECT_ATTRIBUTES setsystemtime_attr;
     DEVICE_OBJECT *devobj;
-    struct device_extension *devext;
+    struct device_extension *devext = NULL;
 
     dprintk("uxen_driver_load\n");
 
@@ -459,14 +459,16 @@ uxen_driver_load(__in PDRIVER_OBJECT DriverObject,
     if (!NT_SUCCESS(status)) {
         logging_free(NULL);
         mem_exit();
-        if (devext->de_power_callback)
-            ExUnregisterCallback(devext->de_power_callback);
-        if (devext->de_power_callback_object)
-            ObDereferenceObject(devext->de_power_callback_object);
-        if (devext->de_system_time_callback)
-            ExUnregisterCallback(devext->de_system_time_callback);
-        if (devext->de_system_time_callback_object)
-            ObDereferenceObject(devext->de_system_time_callback_object);
+        if (devext) {
+            if (devext->de_power_callback)
+                ExUnregisterCallback(devext->de_power_callback);
+            if (devext->de_power_callback_object)
+                ObDereferenceObject(devext->de_power_callback_object);
+            if (devext->de_system_time_callback)
+                ExUnregisterCallback(devext->de_system_time_callback);
+            if (devext->de_system_time_callback_object)
+                ObDereferenceObject(devext->de_system_time_callback_object);
+        }
         IoDeleteSymbolicLink(&devicename_dos);
         IoDeleteDevice(devobj);
         uxen_v4vlib_free_driver_unhook();
