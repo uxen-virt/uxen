@@ -169,7 +169,7 @@ xmit_complete(struct hid_ring *r)
 }
 
 static int
-ring_init(struct hid_ring *r, int vm_id, unsigned char *idtoken,
+ring_init(struct hid_ring *r, int vm_id, const unsigned char *idtoken,
           int device_type)
 {
     v4v_bind_values_t bind = { };
@@ -226,7 +226,7 @@ ring_cleanup(struct hid_ring *r)
 }
 
 hid_context_t
-uxenconsole_hid_init(int vm_id, unsigned char *idtoken)
+uxenconsole_hid_init(int vm_id, const unsigned char *idtoken)
 {
     struct hid_context *c;
 

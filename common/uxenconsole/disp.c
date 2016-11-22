@@ -137,7 +137,7 @@ write_done(DWORD ec, DWORD count, LPOVERLAPPED ovlpd)
 }
 
 disp_context_t
-uxenconsole_disp_init(int vm_id, unsigned char *idtoken,
+uxenconsole_disp_init(int vm_id, const unsigned char *idtoken,
                       void *priv, invalidate_rect_t inv_rect)
 {
     struct disp_context *c;
