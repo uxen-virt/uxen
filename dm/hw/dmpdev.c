@@ -411,6 +411,9 @@ static void dmpdev_data_write_commandl(void *opaque, uint32_t addr, uint32_t val
         return;
     }
 
+    if (s->bytes_collected + sizeof(val) > s->bytes_to_collect)
+        return;
+
     *((uint32_t *)&s->ctrl.raw[s->bytes_collected]) = val;
     s->bytes_collected += sizeof(val);
 
