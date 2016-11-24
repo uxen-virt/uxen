@@ -11,13 +11,9 @@
 #include "auth.h"
 #include "ntlm.h"
 
-#if defined(_WIN32)
 #include <windows.h>
 #define SECURITY_WIN32 1
 #include <wincrypt.h>
-#elif defined(__APPLE__)
-#import <CommonCrypto/CommonDigest.h>
-#endif
 
 #ifdef WORDS_BIGENDIAN
 #error BIGENDIAN not supported at the moment
@@ -106,7 +102,6 @@ struct type2_msg {
 
 static int md5(const uint8_t *buf, size_t len, uint8_t *hash16)
 {
-#if defined(_WIN32)
     int ret = -1;
     HCRYPTPROV hCryptProv;
     HCRYPTHASH hCryptHash;
@@ -135,14 +130,8 @@ static int md5(const uint8_t *buf, size_t len, uint8_t *hash16)
     ret = 0;
 out:
     return ret;
-#elif defined(__APPLE__)
-    CC_MD5(buf, len, hash16);
-    return 0;
-#endif
 }
 
-
-#if defined(_WIN32)
 // Set odd parity bit (in least significant bit position).
 static uint8_t des_set_key_parity(uint8_t x)
 {
@@ -227,6 +216,25 @@ static int des_encrypt(const uint8_t *key, const uint8_t *src, uint8_t *hash)
 out:
     return ret;
 }
+
+
+#if 0
+static void ntlm_hash(const char *password, uint8_t* hash) {
+#ifdef WORDS_BIGENDIAN
+  uint32 len = password.length();
+  uint8* passbuf;
+
+  passbuf = static_cast<uint8*>(malloc(len * 2));
+  WriteUnicodeLE(passbuf, password.data(), len);
+  weak_crypto::MD4Sum(passbuf, len * 2, hash);
+
+  ZapBuf(passbuf, len * 2);
+  free(passbuf);
+#else
+  weak_crypto::MD4Sum(reinterpret_cast<const uint8*>(password.data()),
+                      password.length() * 2, hash);
+#endif
+}
 #endif
 
 static uint16_t read_uint16t(const uint8_t **buf) {
@@ -289,7 +297,6 @@ write_sec_buf(uint8_t *buf, uint16_t length, uint32_t offset)
     return buf;
 }
 
-#if defined(_WIN32)
 // lm_response generates the LM response given a 16-byte password hash and the
 // challenge from the Type-2 message.
 //
@@ -316,7 +323,6 @@ static int lm_response(const uint8_t *hash, const uint8_t *challenge, uint8_t *r
 
     return 0;
 }
-#endif
 
 static int
 hmac_md5_ntlm(const uint8_t *in_hash, const uint8_t *data, size_t data_len, uint8_t *out_hash)
@@ -527,7 +533,8 @@ static int generate_type3_msg(struct ntlm_ctx *ntlm, uint8_t *in_token, size_t i
         memcpy(rand_8_bytes, in_token, l);
     }
     if (generate_random_bytes(rand_8_bytes, sizeof(rand_8_bytes)) < 0) {
-        Wwarn("%s: error on generate_random_bytes", __FUNCTION__);
+        NETLOG("%s: error on generate_random_bytes %u", __FUNCTION__,
+                (unsigned int) GetLastError());
         goto err;
     }
     unicode = (msg.flags & NTLM_NegotiateUnicode) != 0;
@@ -662,7 +669,6 @@ static int generate_type3_msg(struct ntlm_ctx *ntlm, uint8_t *in_token, size_t i
         if (NLOG_LEVEL > 4)
             netlog_print_esc("ntlmv2_buf for hash2", (const char *)ntlmv2_buf, ntlm_buf_len);
     } else {
-#if defined(_WIN32)
         // NTLMv1
         ntlm_buf_len = NTLM_RESP_LEN;
         if ((msg.flags & NTLM_NegotiateNTLM2Key)) {
@@ -688,10 +694,6 @@ static int generate_type3_msg(struct ntlm_ctx *ntlm, uint8_t *in_token, size_t i
             // in both the LM and NTLM response fields.
             lm_response(ntlm->ntlm_hash, msg.challenge, lm_resp);
         }
-#else
-        NETLOG("%s: NTLMv1 not supported", __FUNCTION__);
-        goto err;
-#endif
     }
 
     //

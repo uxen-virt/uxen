@@ -16,8 +16,10 @@
 #include "auth.h"
 #include <inttypes.h>
 
+#if defined(_WIN32)
 #include "auth-basic.h"
-#include "auth-challenge.h"
+#include "auth-sspi.h"
+#endif
 
 #define MAX_AUTH_SESSIONS   3
 
@@ -153,22 +155,27 @@ static int auth_init(struct http_auth *auth)
     if (auth->type == AUTH_TYPE_UNKNOWN || auth->type == AUTH_TYPE_NONE)
         goto out;
 
-    if (IS_CHALLENGE_AUTH(auth->type)) {
-        ret = challenge_auth_init_auth(auth);
+#if defined(_WIN32)
+    if (IS_SSPI_AUTH(auth->type)) {
+        ret = sspi_init_auth(auth);
     } else if (auth->type == AUTH_TYPE_BASIC) {
         ret = basicauth_init_auth(auth);
     }
+#endif
 
 out:
     return ret;
 }
 static int change_auth(struct http_auth *auth, enum auth_enum new_type)
 {
-    if (IS_CHALLENGE_AUTH(auth->type)) {
-        challenge_auth_free_auth(auth);
+
+#if defined(_WIN32)
+    if (IS_SSPI_AUTH(auth->type)) {
+        sspi_free_auth(auth);
     } else if (auth->type == AUTH_TYPE_BASIC) {
         basicauth_free_auth(auth);
     }
+#endif
 
     auth->type = new_type;
     return auth_init(auth);
@@ -223,8 +230,11 @@ int http_auth_reset(struct http_auth *auth)
         ret = -1;
         goto out;
     }
-    if (IS_CHALLENGE_AUTH(auth->type))
-        challenge_auth_reset_auth(auth);
+#if defined(_WIN32)
+    if (IS_SSPI_AUTH(auth->type))
+        sspi_reset_auth(auth);
+#endif
+
 out:
     return ret;
 }
@@ -238,9 +248,10 @@ int http_auth_clt(struct http_auth *auth)
     if (auth_reset_header(auth) < 0)
         goto out;
 
-    if (IS_CHALLENGE_AUTH(auth->type)) {
-        if (challenge_auth_clt(auth)) {
-            AUXL("challenge_auth_clt ERROR");
+#if defined(_WIN32)
+    if (IS_SSPI_AUTH(auth->type)) {
+        if (sspi_clt(auth)) {
+            AUXL("sspi_step ERROR");
             goto out;
         }
     } else if (auth->type == AUTH_TYPE_BASIC) {
@@ -249,6 +260,7 @@ int http_auth_clt(struct http_auth *auth)
             goto out;
         }
     }
+#endif
 
     ret = 0;
 out:
@@ -270,9 +282,10 @@ int http_auth_srv(struct http_auth *auth, struct http_header *h)
 
     auth->authorized = (h->status_code == 407 ? 0 : 1);
 
-    if (IS_CHALLENGE_AUTH(auth->type)) {
-        if (challenge_auth_srv(auth, auth->authorized)) {
-            AUXL("challenge_auth_srv ERROR");
+#if defined(_WIN32)
+    if (IS_SSPI_AUTH(auth->type)) {
+        if (sspi_srv(auth, auth->authorized)) {
+            AUXL("sspi_srv ERROR");
             goto out;
         }
     } else if (auth->type == AUTH_TYPE_BASIC) {
@@ -284,6 +297,7 @@ int http_auth_srv(struct http_auth *auth, struct http_header *h)
         AUXL("unexpected HTTP 407 received, trying to restart the request.");
         auth->needs_restart = 1;
     }
+#endif
 
     if (auth->needs_restart) {
         auth->needs_restart = 0;
@@ -328,10 +342,12 @@ int http_auth_srv_closing(struct http_auth *auth)
         goto out;
     }
 
-    if (IS_CHALLENGE_AUTH(auth->type))
-        ret = challenge_auth_srv_closing(auth);
+#if defined(_WIN32)
+    if (IS_SSPI_AUTH(auth->type))
+        ret = sspi_srv_closing(auth);
     else if (auth->type == AUTH_TYPE_BASIC)
         ret = basicauth_srv_closing(auth);
+#endif
 
 out:
     return ret;
@@ -339,10 +355,20 @@ out:
 
 int http_auth_init(void)
 {
-    return challenge_auth_init();
+    int ret = 0;
+
+#if defined(_WIN32)
+    ret = sspi_lib_init();
+#endif
+
+    return ret;
 }
 
 void http_auth_exit(void)
 {
-    challenge_auth_exit();
+
+#if defined(_WIN32)
+    sspi_lib_exit();
+#endif
+
 }

@@ -19,9 +19,8 @@
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 #endif
 
-#define IS_CHALLENGE_AUTH(a) ((a) == AUTH_TYPE_NTLM || (a) == AUTH_TYPE_NEGOTIATE || \
+#define IS_SSPI_AUTH(a) ((a) == AUTH_TYPE_NTLM || (a) == AUTH_TYPE_NEGOTIATE || \
         (a) == AUTH_TYPE_KERBEROS)
-#define IS_NTLM_AUTH(a) ((a) == AUTH_TYPE_NTLM || (a) == AUTH_TYPE_NEGOTIATE)
 
 enum auth_enum {
 #define XX(num, name, string) AUTH_TYPE_##name = num,

@@ -17,26 +17,18 @@
 #include "strings.h"
 #include "auth-basic.h"
 
-#if defined(_WIN32)
 #include <windows.h>
 #define SECURITY_WIN32 1
 #include <security.h>
 #include <wincred.h>
 #include <ntsecapi.h>
 #include <wincrypt.h>
-#elif defined(__APPLE__)
-#include <CoreFoundation/CoreFoundation.h>
-#include <Security/Security.h>
-#include <CoreServices/CoreServices.h>
-#endif
 
 #define BASIC_PREFIX "Basic "
 #define CRED_TMP_PREFIX "tmp_"
 #define START_REALM "realm=\""
 
-#if defined(_WIN32)
 #define TARGET_TEMPLATE "Microsoft_WinInet_%s:%d/%s"
-#endif
 
 /* Get the realm of the proxy authentication from the received challenge */
 static char * get_realm(const char *proxy_challenge)
@@ -67,7 +59,6 @@ out:
  * The return value is the base64 encoded payload. */
 static char *get_user_credentials(const char *server, uint16_t port, const char *realm)
 {
-#if defined(_WIN32)
     char *encoded_credentials = NULL;
     char *target_name = NULL;
     PCREDENTIALA pcred = NULL;
@@ -157,96 +148,6 @@ out:
 mem_err:
     warnx("%s: malloc", __FUNCTION__);
     goto out;
-#elif defined(__APPLE__)
-    char *encoded_credentials = NULL;
-    UInt32 returnpasswordLength = 0;
-    char *passwordBuffer = NULL;
-    SecKeychainItemRef itemref = NULL;
-    UInt32 attributeTags[1];
-    UInt32 formatConstants[1];
-    SecKeychainAttributeInfo attributeInfo;
-    SecKeychainAttributeList *attributeList = NULL;
-    OSStatus res = 0;
-    char *account = NULL;
-    char *password = NULL;
-    char *credentials = NULL;
-
-    NETLOG3("Attempting to get proxy creds for %s:%d", server, port);
-
-    if (!server)
-        goto out;
-
-    res = SecKeychainFindInternetPassword(NULL,
-                                          strlen(server),
-                                          server,
-                                          0, NULL,
-                                          0, NULL,
-                                          0, NULL,
-                                          port,
-                                          kSecProtocolTypeAny,
-                                          kSecAuthenticationTypeAny,
-                                          &returnpasswordLength,
-                                          (void**)&passwordBuffer,
-                                          &itemref);
-    if (res != noErr) {
-        NETLOG3("%s: SecKeychainFindInternetPassword failed, error = %d", __FUNCTION__, (int)res);
-        goto out;
-    }
-
-    *attributeTags = kSecAccountItemAttr;
-    *formatConstants = CSSM_DB_ATTRIBUTE_FORMAT_STRING;
-    attributeInfo.count = 1;
-    attributeInfo.tag = attributeTags;
-    attributeInfo.format = formatConstants;
-    res = SecKeychainItemCopyAttributesAndData(itemref, &attributeInfo, NULL, &attributeList, 0, NULL);
-
-    if (res != noErr) {
-        NETLOG3("%s: SecKeychainItemCopyAttributesAndData failed, error = %d", __FUNCTION__, (int)res);
-        goto out;
-    }
-
-    SecKeychainAttribute accountNameAttribute = attributeList->attr[0];
-    account = calloc(accountNameAttribute.length + 1, 1);
-    if (!account)
-        goto mem_err;
-    memcpy(account, accountNameAttribute.data, accountNameAttribute.length);
-
-    password = calloc(returnpasswordLength + 1, 1);
-    if (!password)
-        goto mem_err;
-    memcpy(password, passwordBuffer, returnpasswordLength);
-
-    if (asprintf(&credentials, "%s:%s", account, password) < 0) {
-        goto mem_err;
-    }
-
-    encoded_credentials = base64_encode((const unsigned char *)credentials, strlen(credentials));
-    if (!encoded_credentials)
-        goto mem_err;
-
-out:
-    if (passwordBuffer)
-        SecKeychainItemFreeContent(NULL, passwordBuffer);
-    if (itemref)
-        CFRelease(itemref);
-    if (attributeList)
-        SecKeychainItemFreeAttributesAndData(attributeList, NULL);
-    if (credentials) {
-        bzero(credentials, strlen(credentials));
-        free(credentials);
-    }
-    if (account)
-        free(account);
-    if (password) {
-        bzero(password, returnpasswordLength);
-        free(password);
-    }
-
-    return encoded_credentials;
-mem_err:
-    warnx("%s: malloc", __FUNCTION__);
-    goto out;
-#endif
 }
 
 int basicauth_init_auth(struct http_auth *auth)
@@ -318,11 +219,7 @@ int basicauth_clt(struct http_auth *auth)
     ret = 0;
 out:
     if (encoded_credentials)
-#if defined(_WIN32)
         SecureZeroMemory(encoded_credentials, cred_len);
-#else
-        bzero(encoded_credentials, cred_len);
-#endif
     free(encoded_credentials);
     return ret;
 mem_err:
