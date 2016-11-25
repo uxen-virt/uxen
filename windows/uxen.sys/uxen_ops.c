@@ -514,9 +514,11 @@ uxen_op_host_needs_preempt(void)
     case 9600:
     case 10240:
     case 10586:
+    case 14393:
         /* Windows8.1.u1.9600 */
-        /* Windows10.10240 */
-        /* Windows10.10586 */
+        /* Windows10.10240 TH1 */
+        /* Windows10.10586 TH2 */
+        /* Windows10.14393 RS1/AU */
         // +0x2de9 QuantumEnd       : UChar
         // +0x2d80 DpcData          : [2] _KDPC_DATA
         //        +0x018 DpcQueueDepth    : Int4B
