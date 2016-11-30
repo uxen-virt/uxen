@@ -51,9 +51,20 @@
 #define __V4VAPI_H__
 
 #if !defined(XENV4V_DRIVER)
+#if defined(_MSC_VER)
+#if defined(_M_X64)
+#define __x86_64__
+#elif defined(_M_IX86)
+#define __i386__
+#endif
+#include <stdint.h>
+#include <Windows.h>
+#include <WinIoCtl.h>
+#endif
 #define V4V_EXCLUDE_INTERNAL
 #include <xen/v4v.h>
 #endif
+
 
 /* This structure is used for datagram reads and writes. When sending a
  * datagram, extra space must be reserved at the front of the buffer to

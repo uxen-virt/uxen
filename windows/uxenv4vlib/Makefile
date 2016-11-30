@@ -188,7 +188,13 @@ install_uxenv4vlib.h: uxenv4vlib.h
 	$(_W)echo Installing - $(<F)
 	$(_V)install $(<) $(SDKDIR_include_uxenv4vlib)
 
-dist: install_uxenv4vlib.sys install_uxenv4vlib.h
+install_gh_v4vapi.h: gh_v4vapi.h
+	@mkdir -p $(SDKDIR_include_uxenv4vlib)
+	$(_W)echo Installing from $(abspath $(<D)) to $(SDKDIR_include_uxenv4vlib)
+	$(_W)echo Installing - $(<F)
+	$(_V)install $(<) $(SDKDIR_include_uxenv4vlib)
+
+dist: install_uxenv4vlib.sys install_uxenv4vlib.h install_gh_v4vapi.h
 
 .PHONY: build_info.h
 build_info.h:
