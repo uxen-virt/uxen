@@ -55,8 +55,6 @@
       <SuppressStartupBanner>true</SuppressStartupBanner>
       <TreatWarningAsError>true</TreatWarningAsError>
       <WarningLevel>Level4</WarningLevel>
-      <PreprocessorDefinitions Condition="'$(Platform)'=='x64'">__x86_64__</PreprocessorDefinitions>
-      <PreprocessorDefinitions Condition="'$(Platform)'=='Win32'">__i386__</PreprocessorDefinitions>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;_WINDOWS;NDEBUG;WIN32;_WIN32_WINNT=0x0602;WINVER=0x0602;NOMINMAX;_HAS_EXCEPTIONS=0;STRICT;_UNICODE;UNICODE;STRSAFE_NO_DEPRECATE;_SDL_BANNED_RECOMMENDED;U_USING_ICU_NAMESPACE=0;U_STATIC_IMPLEMENTATION;_ATL_ALL_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ObjectFileName>$(IntDir)</ObjectFileName>
     </ClCompile>
