@@ -306,6 +306,8 @@ uxen_driver_load(__in PDRIVER_OBJECT DriverObject,
     DEVICE_OBJECT *devobj;
     struct device_extension *devext = NULL;
 
+    ExInitializeDriverRuntime(DrvRtPoolNxOptIn);
+
     dprintk("uxen_driver_load\n");
 
     uxen_drvobj = DriverObject;

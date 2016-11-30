@@ -1,6 +1,6 @@
 /* uxenvmlib: main.c */
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -23,6 +23,7 @@ DllInitialize (PUNICODE_STRING RegistryPath)
 
     RegistryPath;
 
+    ExInitializeDriverRuntime(DrvRtPoolNxOptIn);
 
     //uxen_msg("uxenvmlib!DllInitialize() called %u time(s)", calls);
     calls++;
@@ -66,6 +67,8 @@ DriverEntry (DRIVER_OBJECT *Driver, UNICODE_STRING *ServicesKey)
 {
     Driver;
     ServicesKey;
+
+    ExInitializeDriverRuntime(DrvRtPoolNxOptIn);
 
     return STATUS_SUCCESS;
 }
