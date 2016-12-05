@@ -33,6 +33,15 @@ int ChannelConnect()
     return 0;
 }
 
+void ChannelClose(void)
+{
+    clip_close(clipboard_ctx);
+    clip_close(notify_ctx);
+
+    clipboard_ctx = NULL;
+    notify_ctx = NULL;
+}
+
 int ChannelSendNotify(char *buffer, int count)
 {
     return clip_send_bytes(notify_ctx, buffer, count);
