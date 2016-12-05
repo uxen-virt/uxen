@@ -161,7 +161,7 @@ NTSTATUS BASIC_DISPLAY_DRIVER::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartIn
     }
 
     m_VSync = use_pv_vblank;
-    m_VmemMdl = user_vram_init(m_CurrentModes[0].VideoMemory, m_CurrentModes[0].VideoMemoryLength);
+    m_VmemMdl = user_vram_init(m_CurrentModes[0].VideoMemory, (SIZE_T)m_CurrentModes[0].VideoMemoryLength);
     if (!m_VmemMdl) {
         uxen_err("user_vram_init failed. Unable to map vram.");
         return STATUS_UNSUCCESSFUL;
