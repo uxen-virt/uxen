@@ -215,4 +215,13 @@ uxendisp_set_no_present_copy(uxendisp_ctrl_ctx_t *ctx, int nc)
     uxendisp_escape(ctx,0, &m, sizeof(m));
 }
 
+static void
+uxendisp_flush(uxendisp_ctrl_ctx_t *ctx)
+{
+    UXENDISPCustomMode m = { 0 };
+
+    m.esc_code = UXENDISP_ESCAPE_FLUSH;
+    uxendisp_escape(ctx,0, &m, sizeof(m));
+}
+
 #endif

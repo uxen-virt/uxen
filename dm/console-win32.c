@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -42,6 +42,7 @@
 
 static UINT wm_print_surface = 0;
 static disp_context_t disp;
+static uint64_t current_rect;
 
 struct win_surface
 {
@@ -1375,6 +1376,8 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 
             if (disp_fps_counter)
                 count_fps();
+
+            uxenconsole_disp_ack_rect(disp, current_rect);
         }
         return ret;
 
@@ -1605,8 +1608,10 @@ mon_resize_screen(struct gui_state *s, Monitor *mon, const dict args)
 }
 #endif  /* MONITOR */
 
-static void disp_inv_rect(void *priv, int x, int y, int w, int h)
+static void
+disp_inv_rect(void *priv, int x, int y, int w, int h, uint64_t rect_id)
 {
+    current_rect = rect_id;
     dpy_desktop_update(x, y, w, h);
 }
 
@@ -1615,7 +1620,9 @@ gui_init(char *optstr)
 {
     win_register_class();
     guest_agent_init();
-    disp = uxenconsole_disp_init(-1, v4v_idtoken, NULL, disp_inv_rect);
+
+    disp = uxenconsole_disp_init(-1, v4v_idtoken, NULL, disp_inv_rect, 0);
+
     return 0;
 }
 

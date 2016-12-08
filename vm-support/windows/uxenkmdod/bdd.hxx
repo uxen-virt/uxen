@@ -9,7 +9,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2017, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -246,6 +246,8 @@ private:
 
     LARGE_INTEGER due_time;
 
+    KDPC m_resume_dpc;
+
 public:
     VOID Init(_In_ DEVICE_OBJECT* pPhysicalDeviceObject);
     VOID CleanUp();
@@ -265,6 +267,7 @@ public:
     // Must be Non-Paged
     VOID ResetDevice(VOID);
 
+    void Resume();
 
     const CURRENT_BDD_MODE* GetCurrentMode(UINT SourceId) const
     {
@@ -364,6 +367,9 @@ public:
     NTSTATUS SetUserDrawOnly(BOOLEAN ud);
 
     NTSTATUS SetNoPresentCopy(BOOLEAN nocopy);
+
+    NTSTATUS Flush();
+
 private:
 
     NTSTATUS CommonStart();

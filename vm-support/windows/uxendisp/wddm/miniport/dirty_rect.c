@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * Author: Piotr Foltyn <piotr.foltyn@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -23,7 +23,6 @@ struct dr_context
     v4v_addr_t alt_peer;
     uxen_v4v_ring_handle_t *ring;
     uxen_v4v_ring_handle_t *alt_ring;
-    KEVENT safe_to_draw;
     BOOLEAN enabled;
     BOOLEAN alt_ring_active;
 };
@@ -32,7 +31,7 @@ static void dr_v4v_dpc(uxen_v4v_ring_handle_t *ring, void *ctx1, void *ctx2)
 {
     struct dr_context *ctx = (struct dr_context *)ctx1;
     ssize_t len;
-    int dummy;
+    struct update_msg dummy;
 
     UNREFERENCED_PARAMETER(ctx2);
     ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
@@ -50,7 +49,6 @@ static void dr_v4v_dpc(uxen_v4v_ring_handle_t *ring, void *ctx1, void *ctx2)
         {
             ctx->alt_ring_active = TRUE;
         }
-        KeSetEvent(&ctx->safe_to_draw, 0, FALSE);
     }
 
     uxen_v4v_notify();
@@ -72,8 +70,6 @@ dr_ctx_t dr_init(void *dev, disable_tracking_ptr fn)
 
     ctx->dev = dev;
     ctx->disable_tracking = fn;
-
-    KeInitializeEvent(&ctx->safe_to_draw, SynchronizationEvent, TRUE);
 
     ctx->peer.port = UXENDISP_PORT;
     ctx->peer.domain = V4V_DOMID_DM;
@@ -105,15 +101,10 @@ void dr_send(dr_ctx_t context, ULONG d_num, RECT *dirty_rect)
 {
     struct dr_context *ctx = (struct dr_context *)context;
     ULONG idx;
-    LARGE_INTEGER timeout;
-    struct dirty_rect rect;
+    struct dirty_rect_msg rect = { 0 };
 
     if (!ctx->enabled)
         return;
-
-    timeout.QuadPart = -DR_TIMEOUT_MS * DR_ONE_MS_IN_HNS;
-    KeWaitForSingleObject(&ctx->safe_to_draw, Executive, KernelMode, FALSE,
-                          &timeout);
 
     rect.left = DR_USHRT_MAX;
     rect.top = DR_USHRT_MAX;

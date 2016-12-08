@@ -444,6 +444,9 @@ NTSTATUS BddDdiEscape(
         case UXENDISP_ESCAPE_UPDATE_RECT:
             status = pBDD->UpdateRect(inp.x, inp.y, inp.width, inp.height);
             break;
+        case UXENDISP_ESCAPE_FLUSH:
+            status = pBDD->Flush();
+            break;
         };
     } else {
         status = STATUS_INVALID_PARAMETER;

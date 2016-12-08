@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2017, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -707,6 +707,17 @@ console_invalidate_rect(void *priv,
 }
 
 static void
+console_invalidate_rect_with_id(void *priv,
+                        int x,
+                        int y,
+                        int w,
+                        int h,
+                        uint64_t rect_id)
+{
+    console_invalidate_rect(priv, x, y, w, h);
+}
+
+static void
 console_update_cursor(void *priv,
                       unsigned int width,
                       unsigned int height,
@@ -1075,7 +1086,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
     if (have_id) {
         cons.disp = uxenconsole_disp_init(domid, idtoken, &cons,
-                                          console_invalidate_rect);
+                                          console_invalidate_rect_with_id, 0);
         if (!cons.disp)
             Werr(1, "uxenconsole_disp_init");
         cons.hid = uxenconsole_hid_init(domid, idtoken);

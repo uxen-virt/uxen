@@ -29,11 +29,21 @@ typedef unsigned __int64 uint64_t;
 #define UXENDISP_PACKED __attribute__((packed))
 #endif
 
-struct dirty_rect {
+#define DISP_INVALID_RECT_ID           0xFFFFFFFFFFFFFFFFULL
+
+/* frontend -> backend */
+struct dirty_rect_msg {
     int32_t left;
     int32_t top;
     int32_t right;
     int32_t bottom;
+    uint64_t rect_id;
+} UXENDISP_PACKED;
+
+/* backend -> frontend */
+struct update_msg {
+    /* last processed dirty rectangle id */
+    uint64_t rect_done;
 } UXENDISP_PACKED;
 
 /* Escape code: GDI->display driver */
@@ -46,6 +56,7 @@ enum {
     UXENDISP_ESCAPE_UPDATE_RECT = 0x10006,
     UXENDISP_ESCAPE_SET_USER_DRAW_ONLY = 0x10007,
     UXENDISP_ESCAPE_SET_NO_PRESENT_COPY = 0x10008,
+    UXENDISP_ESCAPE_FLUSH = 0x10009,
 };
 
 struct _UXENDISPCustomMode {

@@ -9,7 +9,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2017, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -30,8 +30,23 @@
 #include "hw.h"
 #include "perfcnt.h"
 #include "user_vram.h"
+extern "C"
+{
+    #include <uxenvmlib.h>
+    #include <uxenv4vlib.h>
+}
 
 extern int use_pv_vblank;
+
+static void
+bdd_resume(PKDPC dpc, PVOID deferred_context, PVOID arg1, PVOID arg2)
+{
+    BASIC_DISPLAY_DRIVER *bdd = (BASIC_DISPLAY_DRIVER*) deferred_context;
+
+    dpc; arg1; arg2;
+
+    bdd->Resume();
+}
 
 VOID BASIC_DISPLAY_DRIVER::Init(_In_ DEVICE_OBJECT* pPhysicalDeviceObject)
 {
@@ -59,6 +74,7 @@ VOID BASIC_DISPLAY_DRIVER::Init(_In_ DEVICE_OBJECT* pPhysicalDeviceObject)
     m_VirtMode = m_NextMode;
     m_VmemMdl = NULL;
     KeInitializeSemaphore(&m_PresentLock, 1, 1);
+    KeInitializeDpc(&m_resume_dpc, bdd_resume, this);
 }
 
 NTSTATUS BASIC_DISPLAY_DRIVER::GetResources(_In_ PCM_RESOURCE_LIST pResList)
@@ -220,6 +236,8 @@ NTSTATUS BASIC_DISPLAY_DRIVER::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartIn
 
     log_tdr_values();
 
+    uxen_v4vlib_set_resume_dpc(&m_resume_dpc, NULL);
+
     return STATUS_SUCCESS;
 }
 
@@ -251,6 +269,10 @@ VOID BASIC_DISPLAY_DRIVER::CleanUp()
     }
 }
 
+void BASIC_DISPLAY_DRIVER::Resume()
+{
+    dr_resume(m_DrContext);
+}
 
 NTSTATUS BASIC_DISPLAY_DRIVER::DispatchIoRequest(_In_  ULONG                 VidPnSourceId,
                                                  _In_  VIDEO_REQUEST_PACKET* pVideoRequestPacket)
@@ -581,6 +603,8 @@ NTSTATUS BASIC_DISPLAY_DRIVER::PresentDisplayOnly(_In_ CONST DXGKARG_PRESENT_DIS
                   pPresentDisplayOnly->pMoves,
                   pPresentDisplayOnly->NumDirtyRects,
                   pPresentDisplayOnly->pDirtyRect);
+        if (m_Flags.StopCopy)
+            dr_flush(m_DrContext);
 
         KeReleaseSemaphore(&m_PresentLock, 0, 1, FALSE);
 
@@ -617,6 +641,13 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetNoPresentCopy(BOOLEAN nocopy)
     m_Flags.StopCopy = nocopy;
 
     uxen_msg("set no present copy %d\n", (int)nocopy);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS BASIC_DISPLAY_DRIVER::Flush()
+{
+    dr_flush(m_DrContext);
+
     return STATUS_SUCCESS;
 }
 

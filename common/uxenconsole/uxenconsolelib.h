@@ -1,11 +1,13 @@
 /*
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2017, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
 
 #ifndef _UXENCONSOLELIB_H_
 #define _UXENCONSOLELIB_H_
+
+#include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,6 +27,8 @@ extern "C" {
 
 #define CLIPBOARD_PERMIT_COPY           0x1
 #define CLIPBOARD_PERMIT_PASTE          0x2
+
+#define DISP_FLAG_MANUAL_ACK_RECT       0x1
 
 #ifndef QEMU_UXEN
 typedef void *uxenconsole_context_t;
@@ -126,13 +130,18 @@ int                     uxenconsole_hid_touch_report(hid_context_t context,
                                                      int flags);
 #endif /* !QEMU_UXEN */
 
-typedef void *disp_context_t;
-typedef void (*invalidate_rect_t)(void *priv, int x, int y, int w, int h);
+typedef void (*inv_rect_t)(void *priv, int x, int y, int w, int h, uint64_t rect_id);
 
-disp_context_t          uxenconsole_disp_init(int vm_id, const unsigned char *idtoken,
+typedef void *disp_context_t;
+
+disp_context_t          uxenconsole_disp_init(int vm_id,
+                                              const unsigned char *idtoken,
                                               void *priv,
-                                              invalidate_rect_t inv_rect);
+                                              inv_rect_t inv_rect,
+                                              uint32_t flags);
 void                    uxenconsole_disp_cleanup(disp_context_t context);
+void                    uxenconsole_disp_ack_rect(disp_context_t context,
+                                                  uint64_t rect_id);
 
 #ifdef __cplusplus
 }

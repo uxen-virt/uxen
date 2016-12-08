@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * Author: Piotr Foltyn <piotr.foltyn@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -44,6 +44,7 @@ static void dr_timer_dpc(
     struct _KDPC *dpc, void *deferred_context, void *unused1, void *unused2)
 {
     struct dr_context *ctx = deferred_context;
+
     LONG signaled = 0;
     ULONG last_mode_width = 0;
     ULONG last_mode_height = 0;
@@ -55,6 +56,8 @@ static void dr_timer_dpc(
     if ((ctx->dirty.right > 0) && (ctx->dirty.bottom > 0) && 
         (signaled || ctx->force_update))
     {
+        struct dirty_rect_msg msg = { 0 };
+
         KeClearEvent(&ctx->safe_to_draw);
         ctx->force_update = FALSE;
 
@@ -81,12 +84,17 @@ static void dr_timer_dpc(
             ctx->dirty_copy.right = last_mode_width;
         }
 
-        uxen_v4v_send_from_ring(ctx->ring, &ctx->peer, &ctx->dirty_copy,
-                                sizeof(ctx->dirty_copy), V4V_PROTO_DGRAM);
+        msg.left = ctx->dirty_copy.left;
+        msg.top = ctx->dirty_copy.top;
+        msg.right = ctx->dirty_copy.right;
+        msg.bottom = ctx->dirty_copy.bottom;
+
+        uxen_v4v_send_from_ring(ctx->ring, &ctx->peer, &msg,
+                                sizeof(msg), V4V_PROTO_DGRAM);
         if (ctx->alt_ring_active)
         {
-            uxen_v4v_send_from_ring(ctx->alt_ring, &ctx->alt_peer, &ctx->dirty_copy,
-                                    sizeof(ctx->dirty_copy), V4V_PROTO_DGRAM);
+            uxen_v4v_send_from_ring(ctx->alt_ring, &ctx->alt_peer, &msg,
+                                    sizeof(msg), V4V_PROTO_DGRAM);
         }
 
         ctx->dirty.left = DR_USHRT_MAX;
@@ -107,7 +115,7 @@ static void dr_v4v_dpc(uxen_v4v_ring_handle_t *ring, void *ctx1, void *ctx2)
 {
     struct dr_context *ctx = ctx1;
     ssize_t len;
-    int dummy;
+    struct update_msg dummy;
 
     ASSERT(KeGetCurrentIrql() == DISPATCH_LEVEL);
 
