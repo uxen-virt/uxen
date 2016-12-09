@@ -372,7 +372,19 @@ uxen.elf: uxen-prelink.o uxen-syms.1.o $(UXEN_LDS)
 
 uxen-cv.obj: uxen.obj
 	$(_W)echo Generating - $@
-	$(_V)$(DWARFCV) $< $@
+	$(_V)$(DWARFCV) $< $@.tmp
+	$(_V)$(TARGET_OBJCOPY) \
+	  -R .debug_aranges \
+	  -R .debug_info \
+	  -R .debug_abbrev \
+	  -R .debug_line \
+	  -R .debug_frame \
+	  -R .debug_str \
+	  -R .debug_ranges \
+	  -R '.odebug$$S' \
+	  $@.tmp $@ || \
+	  (rm -f $@.tmp; false)
+	@rm -f $@.tmp
 
 uxen_post_link = true
 uxen.obj: uxen-prelink.o uxen-syms.1.o $(UXEN_LDS)
