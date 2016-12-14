@@ -1421,6 +1421,7 @@ static void * ni_thread_run(void *opaque)
         delay_ms = get_clock_ms(rt_clock);
         ioh_wait_for_objects(&ni->io_handlers, &ni->wait_objects, ni->active_timers,
                 &timeout, &wait_time);
+        ioh_event_reset(&ni->event);
     }
 
     NETLOG("%s: thread exit", __FUNCTION__);
@@ -1485,7 +1486,6 @@ void ni_prepare(struct nickel *ni, int *timeout)
     struct nc_nickel_s *nc;
 
     if (ni) {
-        ioh_event_reset(&ni->event);
         async_op_process(ni->async_op_ctx);
         tcpip_prepare(ni, timeout);
         so_prepare(ni, timeout);
