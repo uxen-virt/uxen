@@ -11,7 +11,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2016, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -118,3 +118,33 @@ UnmapFrameBuffer(
     return STATUS_SUCCESS;
 }
 
+NTSTATUS
+RegGetDWORD(ULONG RelativeTo, PWSTR Path, PWSTR  ParameterName, PULONG ParameterValue)
+{
+    NTSTATUS status;
+    RTL_QUERY_REGISTRY_TABLE tab[2];
+    ULONG def;
+
+    if ((NULL == Path) || (NULL == ParameterName) || (NULL == ParameterValue))
+        return STATUS_INVALID_PARAMETER;
+
+    RtlZeroMemory( tab, sizeof(tab) );
+
+    def = *ParameterValue;
+
+    tab[0].Flags         = RTL_QUERY_REGISTRY_DIRECT;
+    tab[0].Name          = ParameterName;
+    tab[0].EntryContext  = ParameterValue;
+    tab[0].DefaultType   = REG_DWORD;
+    tab[0].DefaultData   = &def;
+    tab[0].DefaultLength = sizeof(ULONG);
+
+    status = RtlQueryRegistryValues(
+        RelativeTo | RTL_REGISTRY_OPTIONAL,
+        Path,
+        &tab[0],
+        NULL,
+        NULL);
+
+    return status;
+}

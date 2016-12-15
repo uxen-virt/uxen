@@ -99,6 +99,57 @@ NTSTATUS BASIC_DISPLAY_DRIVER::GetResources(_In_ PCM_RESOURCE_LIST pResList)
     return (VideoMemoryReady && MmioMemoryReady) ? STATUS_SUCCESS : STATUS_UNSUCCESSFUL;
 }
 
+static void
+log_tdr_values(void)
+{
+    PSTR keys[] = {
+        "TdrLevel",
+        "TdrDelay",
+        "TdrDdiDelay",
+        "TdrDodVSyncDelay",
+        "TdrDodPresentDelay",
+        "TdrLimitCount",
+        NULL };
+    const PWSTR path = L"\\Registry\\Machine\\SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers";
+    int i;
+    WCHAR buffer[64];
+    UNICODE_STRING ustr;
+    ANSI_STRING astr;
+    NTSTATUS status;
+
+    for (i = 0; keys[i]; i++) {
+        ULONG  val = 0xFFFFFFFF;
+        size_t len = 0;
+
+        status = RtlStringCbLengthA(keys[i], 32, &len);
+        if (status != STATUS_SUCCESS) {
+            uxen_err("unexpected %x\n", (int)status);
+            break;
+        }
+
+        RtlZeroMemory(&buffer[0], sizeof(buffer));
+        ustr.Length = 0;
+        ustr.MaximumLength = sizeof(buffer);
+        ustr.Buffer = &buffer[0];
+
+        astr.Length = (USHORT)len;
+        astr.MaximumLength = (USHORT)len;
+        astr.Buffer = keys[i];
+
+        status = RtlAnsiStringToUnicodeString(&ustr, &astr, FALSE);
+        if (status != STATUS_SUCCESS) {
+            uxen_err("failed to get unicode string %x\n", (int)status);
+            break;
+        }
+        status = RegGetDWORD(RTL_REGISTRY_ABSOLUTE, path, &buffer[0], &val);
+        if (status != STATUS_SUCCESS) {
+            uxen_err("failed to read registry key %s %x\n", keys[i], (int)status);
+            break;
+        }
+        uxen_msg("tdr key %s = %d\n", keys[i], (int)val);
+    }
+}
+
 NTSTATUS BASIC_DISPLAY_DRIVER::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartInfo,
                                            _In_  DXGKRNL_INTERFACE* pDxgkInterface,
                                            _Out_ ULONG*             pNumberOfViews,
@@ -166,6 +217,8 @@ NTSTATUS BASIC_DISPLAY_DRIVER::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartIn
         uxen_err("user_vram_init failed. Unable to map vram.");
         return STATUS_UNSUCCESSFUL;
     }
+
+    log_tdr_values();
 
     return STATUS_SUCCESS;
 }

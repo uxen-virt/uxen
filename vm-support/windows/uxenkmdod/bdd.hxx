@@ -698,6 +698,9 @@ BOOLEAN
 IsEdidChecksumValid(const BYTE* pEdid);
 #endif  /* VERIFY_EDID */
 
+NTSTATUS
+RegGetDWORD(ULONG RelativeTo, PWSTR Path, PWSTR  ParameterName, PULONG ParameterValue);
+
 // Pool allocation tag for the Sample Display Driver. All allocations use this tag.
 #define BDDTAG 'DDBS'
 
