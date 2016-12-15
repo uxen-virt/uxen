@@ -143,6 +143,7 @@ static const char *hp_states[] = {
 #define HF_SAVE_REQ_RTRY    U32BF(28)
 #define HF_SAVE_REQ_PRX     U32BF(29)
 #define HF_MONITOR_407      U32BF(30)
+#define HF_HEADERS_RECEIVED U32BF(31)
 
 #define IS_RESOLVED(hp) ((hp)->flags & HF_RESOLVED)
 #define IS_TUNNEL(hp)   ((hp)->flags & HF_TUNNEL)
@@ -154,6 +155,7 @@ static const char *hp_states[] = {
 #define HMSG_CONNECT_OK         4
 #define HMSG_CONNECT_ABORTED_SSL    5
 #define HMSG_CONNECT_DENIED     6
+#define HMSG_HPROXY_FAILURE     7
 
 #define TLS_HANDSHAKE_STEP(hp) (((hp)->flags & HF_TLS) && !((hp)->flags &   \
             HF_TLS_CERT_DONE) && (!(hp)->proxy || (IS_TUNNEL(hp) &&         \
@@ -584,6 +586,22 @@ static void cx_remove_hpd(struct clt_ctx *cx)
     cx->hpd = NULL;
 }
 
+static inline int hp_response_restartable(struct http_ctx *hp)
+{
+    if ((hp->flags & HF_HEADERS_RECEIVED))
+        return 0;
+    if (!(hp->flags & HF_RESP_RECEIVED))
+        return 1;
+    if (!hp->proxy)
+        return 0;
+    if ((hp->flags & HF_TLS))
+        return 1;
+    if (hp->cx && (hp->cx->flags & (CXF_TLS | CXF_BINARY)))
+        return 1;
+
+    return 0;
+}
+
 static void hpd_add_hp(struct hpd_t *hpd, struct http_ctx *hp)
 {
     if (hp->hpd == hpd || !RLIST_EMPTY(hp, direct_hp_list))
@@ -863,6 +881,15 @@ static int start_tunnel(struct http_ctx *hp)
         BUFF_RESET(hp->cx->out);
     if (hp_cx_connect_buffs(hp, false) < 0)
         goto out;
+    if ((hp->cx->flags & CXF_TUNNEL_DETECTED) && !(hp->cx->flags & CXF_TUNNEL_RESPONSE)) {
+        if (hp->cx->in)
+            BUFF_RESET(hp->cx->in);
+        if (hp->clt_out)
+            BUFF_RESET(hp->clt_out);
+        hp->cx->flags |= CXF_TUNNEL_RESPONSE;
+        if (cx_proxy_response(hp->cx, HMSG_CONNECT_OK, false) < 0)
+            goto out;
+    }
     if (hp->clt_out)
         BUFF_UNCONSUME(hp->clt_out);
     srv_write(hp, NULL, 0);
@@ -1928,6 +1955,7 @@ static int cx_hp_disconnect_ex(struct clt_ctx *cx, bool no_cx_close)
          !(cx->flags & CXF_FLUSH_CLOSE)) {
 
         cx->flags |= CXF_FORCE_CLOSE;
+        CXL5("CXF_FORCE_CLOSE");
         f_cx_close = true;
     }
 
@@ -2113,6 +2141,9 @@ static int cx_proxy_response(struct clt_ctx *cx, int msg, bool close)
                 "Content-Length: 0\r\nProxy-Connection: Close\r\n\r\n");
     } else if (msg == HMSG_CONNECT_OK) {
         buff_appendf(cx->out, "HTTP/1.0 200 Connection established\r\n\r\n");
+    } else if (msg == HMSG_HPROXY_FAILURE) {
+        buff_appendf(cx->out, "HTTP/1.0 503 HPROXY FAILED\r\n"
+                "Content-Length: 0\r\nProxy-Connection: Close\r\n\r\n");
     } else {
         goto out;
     }
@@ -2175,13 +2206,13 @@ static int srv_reconnect_bad_proxy(struct http_ctx *hp)
     char *alternative_proxies;
 
     HLOG4("");
-    if (!hp->cx || !hp->proxy || hp->cstate == S_CONNECTED)
+    if (!hp->cx || !hp->proxy)
         goto out;
 
     hp->proxy->connection_ok = 0;
 
     /* too late */
-    if ((hp->flags & HF_RESP_RECEIVED))
+    if (!hp_response_restartable(hp))
         goto out;
 
     /* try to obtain an alternative proxy */
@@ -2189,7 +2220,17 @@ static int srv_reconnect_bad_proxy(struct http_ctx *hp)
     hp->cx->alternative_proxies = NULL;
     http_auth_free(&hp->auth);
     proxy_reset(hp->proxy);
+    if (hp->cx->out) {
+        BUFF_RESET(hp->cx->out);
+        hp->cx->flags &= ~CXF_FLUSH_CLOSE;
+    }
+    hp->flags &= ~HF_FATAL_ERROR;
+    hp->cx->flags &= ~CXF_FORCE_CLOSE;
 
+    if (hp->cstate == S_CONNECTED && hp->so) {
+        so_close(hp->so);
+        hp->so = NULL;
+    }
     hp->cstate = S_RESOLVED;
     HLOG4("rpc_connect_proxy");
     ret = rpc_connect_proxy(hp, hp->h.sv_name, hp->h.daddr.sin_port, hp->proxy, alternative_proxies);
@@ -2292,7 +2333,7 @@ static int srv_connected(struct http_ctx *hp)
         }
     }
 
-    if (hp->cx && (hp->cx->flags & CXF_TUNNEL_DETECTED)) {
+    if (!hp->proxy && hp->cx && (hp->cx->flags & CXF_TUNNEL_DETECTED)) {
         hp->cx->flags |= CXF_TUNNEL_RESPONSE;
         if (cx_proxy_response(hp->cx, HMSG_CONNECT_OK, false) < 0) {
             cx_close(hp->cx);
@@ -2639,9 +2680,22 @@ static int srv_closing(struct http_ctx *hp, int err)
         goto close;
     }
 
-    if ((hp->flags & HF_RESP_RECEIVED) || !hp->auth)
+    /* determine whether we can failover next proxy */
+    assert(hp->proxy);
+    if (!hp->cx)
+        goto close;
+    /* too late */
+    if (!hp_response_restartable(hp))
         goto close;
 
+    if (!hp->auth) {
+        if (srv_reconnect_bad_proxy(hp) == 0)
+            goto out;
+
+        goto close;
+    }
+
+    assert(hp->auth);
     if (hp->hstate >= HP_RESPONSE && hp->hstate <= HP_AUTH_SEND) {
         bool same_proxy;
 
@@ -3002,6 +3056,7 @@ static int cx_closing(struct clt_ctx *cx, bool rst)
 
     if (rst) {
         cx->flags |= CXF_FORCE_CLOSE;
+        CXL5("CXF_FORCE_CLOSE");
         goto out_close;
     }
     if ((cx->flags & CXF_NI_FIN))
@@ -3066,6 +3121,11 @@ static int hp_srv_process(struct http_ctx *hp)
                     hp->cx->srv_parser->parse_state == PS_HCOMPLETE)) {
 
             headers_just_received = true;
+            hp->flags |= HF_HEADERS_RECEIVED;
+            if (hp->cx->alternative_proxies) {
+                free(hp->cx->alternative_proxies);
+                hp->cx->alternative_proxies = NULL;
+            }
             hp->cx->srv_parser->headers_parsed = 1;
             hp->flags &= ~HF_KEEP_ALIVE;
             if (!conn_close && ((hp->cx->srv_parser->h.http_major == 1 &&
@@ -3370,7 +3430,9 @@ static int hp_srv_process(struct http_ctx *hp)
             if (!hide_log_sensitive_data)
                 HLOG_DMP(BUFF_CSTR(hp->cx->out), hp->cx->out->len);
 
-            goto err;
+            hp->flags &= (~HF_HTTP_CLOSE & ~HF_FATAL_ERROR);
+            hp->cx->flags &= (~CXF_FLUSH_CLOSE & ~CXF_FORCE_CLOSE);
+            goto out_close;
         }
 
         goto prepare_tunnel;
@@ -3469,11 +3531,6 @@ mem_err:
 static void srv_response_received(struct http_ctx *hp)
 {
     hp->flags |= HF_RESP_RECEIVED;
-
-    if (hp->cx && hp->cx->alternative_proxies) {
-        free(hp->cx->alternative_proxies);
-        hp->cx->alternative_proxies = NULL;
-    }
 }
 
 static void refresh_prompt_cred_states(int cancel)
@@ -4904,6 +4961,7 @@ static int cx_closing_response(struct clt_ctx *cx)
 {
     int ret = -1;
 
+    CXL5("");
     if ((cx->flags & (CXF_CLOSED | CXF_FORCE_CLOSE)))
         goto out;
 
@@ -4912,6 +4970,13 @@ static int cx_closing_response(struct clt_ctx *cx)
 
     if ((cx->flags & CXF_FLUSH_CLOSE)) {
         ret = cx_guest_write(cx);
+        goto out;
+    }
+
+    if (cx->proxy && (cx->flags & CXF_TUNNEL_DETECTED) &&
+        !(cx->flags & CXF_TUNNEL_RESPONSE_OK)) {
+
+        ret = cx_proxy_response(cx, HMSG_HPROXY_FAILURE, true);
         goto out;
     }
 
@@ -5065,6 +5130,11 @@ static void cx_chr_save(struct CharDriverState *chr,  QEMUFile *f)
 
     if ((cx->flags & CXF_TUNNEL_RESPONSE_OK) && !(cx->flags & CXF_TUNNEL_GUEST_SENT)) {
         save_state = CXSV_SSL_ABORT;
+        goto out;
+    }
+
+    if ((cx->flags & CXF_TUNNEL_DETECTED) && !(cx->flags & CXF_TUNNEL_RESPONSE_OK)) {
+        save_state = CXSV_CONNFAILED;
         goto out;
     }
 
