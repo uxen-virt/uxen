@@ -18,6 +18,8 @@
 extern wchar_t *svc_path;
 
 CRITICAL_SECTION session_lock;
+static int uxenevent_running;
+static int uxenclipboard_running;
 
 /* This struct seems to be missing from headers */
 typedef struct _TOKEN_MANDATORY_LABEL {
@@ -232,24 +234,36 @@ static DWORD WINAPI
 session_connect_worker(LPVOID param)
 {
     DWORD session_id = (DWORD) (uintptr_t)param;
-    wchar_t *path;
-    wchar_t *command_line;
+    wchar_t *path = NULL;
+    wchar_t *command_line = NULL;
     int i;
     const int max_tries = 6;
 
     EnterCriticalSection(&session_lock);
+
     path = get_uxenevent_path();
-    command_line = get_uxenevent_commandline(path);
-    create_admin_process(session_id, command_line, path);
-    free(command_line);
-    command_line = get_uxenclipboard_commandline(path);
-    for (i = 0; i < max_tries; ++i) {
-        if (!create_user_process(session_id, command_line, path))
-            break;
-        Sleep(500);
+
+    if (!uxenevent_running) {
+        command_line = get_uxenevent_commandline(path);
+        if (!create_admin_process(session_id, command_line, path))
+            uxenevent_running = 1;
+        free(command_line);
     }
-    free(command_line);
+
+    if (!uxenclipboard_running) {
+        command_line = get_uxenclipboard_commandline(path);
+        for (i = 0; i < max_tries; ++i) {
+            if (!create_user_process(session_id, command_line, path)) {
+                uxenclipboard_running = 1;
+                break;
+            }
+            Sleep(500);
+        }
+        free(command_line);
+    }
+
     free(path);
+
     LeaveCriticalSection(&session_lock);
 
     return 0;
@@ -261,6 +275,8 @@ void session_connect(DWORD session_id)
     USHORT *session_type;
     DWORD len = sizeof (session_type);
     HANDLE th;
+
+    svc_printf(SVC_INFO, L"connect session %d", (int)session_id);
 
     if (session_id == 0) {
         svc_printf(SVC_ERROR, L"Session 0, we want to wait for user to login.");
@@ -364,11 +380,13 @@ session_disconnect_worker(LPVOID param)
         TerminateProcess(proc, 1);
         CloseHandle(proc);
     }
+    uxenevent_running = 0;
     proc = process_lookup(session_id, L"uxenclipboard.exe");
     if (proc) {
         TerminateProcess(proc, 1);
         CloseHandle(proc);
     }
+    uxenclipboard_running = 0;
     LeaveCriticalSection(&session_lock);
 
     return 0;
@@ -377,6 +395,8 @@ session_disconnect_worker(LPVOID param)
 void session_disconnect(DWORD session_id)
 {
     HANDLE th;
+
+    svc_printf(SVC_INFO, L"disconnect session %d", (int)session_id);
 
     th = CreateThread(NULL, 0, session_disconnect_worker,
                       (LPVOID)(uintptr_t)session_id, 0, NULL);
