@@ -119,11 +119,24 @@ gh_v4v_do_write(xenv4v_extension_t *pde, xenv4v_context_t *ctx, PIRP irp)
     status = gh_v4v_send(&ctx->ring_object->ring->id.addr, &dst, protocol, msg, len, &written);
 
     if ((status == STATUS_VIRTUAL_CIRCUIT_CLOSED) && (!(dg_flags & V4V_DATAGRAM_FLAG_IGNORE_DLO))) {
+        uxen_v4v_warn("ring src (vm%u:%x vm%u) dst (vm%u:%x) - creating placeholder ring",
+                      ctx->ring_object->ring->id.addr.domain,
+                      ctx->ring_object->ring->id.addr.port,
+                      ctx->ring_object->ring->id.partner,
+                      dst.domain,
+                      dst.port);
         // Datagram write to a ring which doesn't exist - use the dead letter office to handle it
         status = gh_v4v_create_ring(&dst, ctx->ring_object->ring->id.addr.domain);
-        if (!NT_SUCCESS(status))
+        if (!NT_SUCCESS(status)) {
+            uxen_v4v_err("ring src (vm%u:%x vm%u) dst (vm%u:%x) - failed to create placeholder ring, status %x",
+                         ctx->ring_object->ring->id.addr.domain,
+                         ctx->ring_object->ring->id.addr.port,
+                         ctx->ring_object->ring->id.partner,
+                         dst.domain,
+                         dst.port,
+                         status);
             return v4v_simple_complete_irp(irp, status);
-
+        }
         status = gh_v4v_send(&ctx->ring_object->ring->id.addr, &dst, protocol, msg, len, &written);
     }
 
@@ -135,6 +148,13 @@ gh_v4v_do_write(xenv4v_extension_t *pde, xenv4v_context_t *ctx, PIRP irp)
         // Ring is full, just return retry
         return status;
     } else if (!NT_SUCCESS(status)) {
+        uxen_v4v_err("ring src (vm%u:%x vm%u) dst (vm%u:%x)- error during send, status %x",
+                     ctx->ring_object->ring->id.addr.domain,
+                     ctx->ring_object->ring->id.addr.port,
+                     ctx->ring_object->ring->id.partner,
+                     dst.domain,
+                     dst.port,
+                     status);
 
         // Actual error, dump it and try another one
         return v4v_simple_complete_irp(irp, status);
@@ -184,7 +204,9 @@ gh_v4v_process_destination_writes(xenv4v_extension_t *pde, v4v_ring_data_ent_t *
         // IRPs indicating such.
         if ((entry->flags & V4V_RING_DATA_F_EXISTS) == 0) {
             KeReleaseInStackQueuedSpinLock(&lqh);
-
+            uxen_v4v_err("ring (vm%u:%x) - destination is closed",
+                         entry->ring.domain,
+                         entry->ring.port);
             v4v_simple_complete_irp(nextIrp, STATUS_VIRTUAL_CIRCUIT_CLOSED);
             continue;
         }

@@ -1089,7 +1089,7 @@ v4v_find_ring_mfns(struct domain *d, struct v4v_ring_info *ring_info,
             }
         }
         if (i != ring_info->nmfns) {
-            printk(XENLOG_INFO "%s: vm%u re-registering existing v4v ring"
+            printk(/*XENLOG_INFO*/ "%s: vm%u re-registering existing v4v ring"
                    " (vm%u:%x vm%d), clearing MFN list\n", __FUNCTION__,
                    current->domain->domain_id, ring_info->id.addr.domain,
                    ring_info->id.addr.port, ring_info->id.partner);
@@ -1322,7 +1322,6 @@ v4v_ring_remove(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd)
 
         if (ring_info)
             v4v_ring_remove_info(ring_info, !mfns_dont_belong_xen(d)); //Fixme for type1.5
-
         write_unlock(&d->v4v->lock);
 
         if (!ring_info) {
@@ -1330,6 +1329,9 @@ v4v_ring_remove(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd)
             break;
         }
 
+        printk(/*XENLOG_INFO*/ "%s: vm%u removed ring (vm%u:%x vm%d)\n",
+               __FUNCTION__, current->domain->domain_id,
+               ring.id.addr.domain, ring.id.addr.port, ring.id.partner);
     } while (0);
 
     read_unlock(&v4v_lock);
@@ -1432,7 +1434,7 @@ v4v_ring_create(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_id_t) ring_id_hnd)
 
         write_unlock(&dst_d->v4v->lock);
 
-        printk(XENLOG_INFO "%s: vm%u creating placeholder ring (vm%u:%x vm%d)"
+        printk(/*XENLOG_INFO*/ "%s: vm%u creating placeholder ring (vm%u:%x vm%d)"
                " %p nmfns %d\n", __FUNCTION__, current->domain->domain_id,
                ring_id.addr.domain, ring_id.addr.port, ring_id.partner,
                ring_info, ring_info->nmfns);
@@ -1580,7 +1582,7 @@ v4v_ring_add(struct domain *d, XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd,
 
             write_unlock(&d->v4v->lock);
 
-            printk(XENLOG_INFO "%s: vm%u registering ring (vm%u:%x vm%d)\n",
+            printk(/*XENLOG_INFO*/ "%s: vm%u registering ring (vm%u:%x vm%d)\n",
                    __FUNCTION__, current->domain->domain_id,
                    ring.id.addr.domain, ring.id.addr.port, ring.id.partner);
         } else {
@@ -1771,6 +1773,11 @@ v4v_send(struct domain *src_d, v4v_addr_t *src_addr,
 
     dst_d = get_domain_by_id(dst_addr->domain);
     if (!dst_d || !dst_d->v4v) {
+        printk(XENLOG_ERR "%s: vm%u connection refused, src (vm%u:%x) "
+               "dst (vm%u:%x)\n",
+               __FUNCTION__, current->domain->domain_id,
+               src_id.addr.domain, src_id.addr.port,
+               dst_addr->domain, dst_addr->port);
         ret = -ECONNREFUSED;
         goto out;
     }
@@ -1801,6 +1808,11 @@ v4v_send(struct domain *src_d, v4v_addr_t *src_addr,
             v4v_ring_find_info_by_addr(dst_d, dst_addr, src_addr->domain);
         if (!ring_info) {
             v4v_signal_domain(dst_d);
+            printk(XENLOG_ERR "%s: vm%u connection refused, src (vm%u:%x) "
+                   "dst (vm%u:%x)\n",
+                   __FUNCTION__, current->domain->domain_id,
+                   src_id.addr.domain, src_id.addr.port,
+                   dst_addr->domain, dst_addr->port);
             ret = -ECONNREFUSED;
             break;
         }
