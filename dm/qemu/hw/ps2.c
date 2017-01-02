@@ -545,6 +545,9 @@ ps2_absolute_event(void *opaque, int x, int y, int dz, int buttons_state)
     if (!(s->mouse_status & MOUSE_STATUS_ENABLED))
 	return;
 
+    if (!s->mouse_shared_page)
+        return;
+
     now = get_clock_ns(vm_clock);
     s->mouse_dz += dz;
     if (s->mouse_dz == 0 && s->mouse_buttons == buttons_state) {
