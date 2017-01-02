@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2017, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -13,6 +13,9 @@ void *__real_calloc(size_t nmemb, size_t size);
 void __real_free(void * ptr);
 
 #define ALLOC_MAGIC 0xfedeabe7
+/* adding HEAP_SLACK_SPACE to each allocation is intended to help with
+short overflows, say one-byte when null-terminating a string */
+#define HEAP_SLACK_SPACE 8
 
 typedef struct __attribute__ ((__packed__)) AllocHeader {
     uint32_t magic;
@@ -36,7 +39,7 @@ void update_malloc_stats(int64_t delta)
 
 void *__wrap_malloc(size_t size)
 {
-    size_t total = sizeof(AllocHeader) + size;
+    size_t total = sizeof(AllocHeader) + HEAP_SLACK_SPACE + size;
     assert_always(total > size);
     AllocHeader *h = __real_malloc(total);
     assert_always(h);
@@ -52,7 +55,7 @@ void *__wrap_malloc(size_t size)
 void *__wrap_realloc(void *ptr, size_t size)
 {
     AllocHeader *h = NULL;
-    size_t total = sizeof(AllocHeader) + size;
+    size_t total = sizeof(AllocHeader) + HEAP_SLACK_SPACE + size;
     assert_always(total > size);
     if (ptr) {
         h = (AllocHeader *) ((uint8_t *) ptr - offsetof(AllocHeader, bytes));
@@ -78,7 +81,7 @@ void *__wrap_calloc(size_t nmemb, size_t size)
     assert_always(nmemb < (1ULL<<31));
     assert_always(size < (1ULL<<31));
     uint64_t product = (uint64_t) nmemb * (uint64_t) size;
-    size_t total = sizeof(AllocHeader) + (size_t) product;
+    size_t total = sizeof(AllocHeader) + HEAP_SLACK_SPACE + (size_t) product;
     assert_always(total > product); /* In case size_t is 32-bit. */
 
     AllocHeader *h = __real_calloc(1, total);
