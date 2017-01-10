@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2016, Bromium, Inc.
+ * Copyright 2013-2017, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -80,6 +80,38 @@ void dmpdev_notify_dump_complete(bool dump_save_sucessful)
     control_send_command("dmpdev-dump-status", args, NULL, NULL);
 }
 
+uint8_t dmpdev_notify_process_created(uint8_t *proc_name)
+{
+    ioh_event event;
+    struct rpc_callback_arg_t rpc_callback_arg;
+    uint32_t wait_result;
+    dict args;
+
+    ioh_event_init(&event);
+    if (!event)
+        return false;
+
+    rpc_callback_arg.event = event;
+    rpc_callback_arg.decision = 0;
+
+    args = dict_new();
+    dict_put_string(args, "process-created",(const char*) proc_name);
+    control_send_command("dmpdev-notify-process-created", args,  rpc_callback,
+        &rpc_callback_arg);
+
+    wait_result = ioh_event_wait(&event);
+    if (WAIT_OBJECT_0 != wait_result) {
+        Wwarn("dmpdev-rpc: WaitForSingleObject() failed: %d", wait_result);
+        rpc_callback_arg.decision = false;
+    } else
+        debug_printf("dmpdev: listening for process creations is %s\n",
+                     rpc_callback_arg.decision ? "allowed" : "denied");
+
+    ioh_event_close(&event);
+
+    return rpc_callback_arg.decision;
+}
+
 #elif defined(__APPLE__)
 
 bool dmpdev_notify_vm_crash(void)
@@ -91,6 +123,12 @@ bool dmpdev_notify_vm_crash(void)
 void dmpdev_notify_dump_complete(bool dump_save_successful)
 {
     /* not implemented */
+}
+
+uint8_t dmpdev_notify_process_created(uint8_t *proc_name)
+{
+    /* not implemented */
+    return 0;
 }
 
 #endif

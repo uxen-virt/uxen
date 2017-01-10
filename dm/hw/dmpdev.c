@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2016, Bromium, Inc.
+ * Copyright 2013-2017, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -16,6 +16,7 @@
 #include <unistd.h>
 
 bool dmpdev_enabled = true;
+uint8_t dmpdev_cfg = 0;
 char *dmpdev_dump_location = NULL;
 uint8_t dmpdev_max_dumps = 8;
 uint64_t dmpdev_max_dump_size = 0;
@@ -49,6 +50,7 @@ static const DMPDEVCtrlDesc ctrl_desc[] = {
     {.ctrl_code = DMPDEV_CTRL_MODULE_INFO,  .data_size = sizeof(DMPDEV_MODULES_INFO)},
     {.ctrl_code = DMPDEV_CTRL_DUMP_DATA,    .data_size = sizeof(DMPDEV_DUMP_DATA)},
     {.ctrl_code = DMPDEV_CTRL_GLOBALS_INFO, .data_size = sizeof(DMPDEV_GLOBALS_INFO)},
+    {.ctrl_code = DMPDEV_CTRL_PROCESS,      .data_size = sizeof(DMPDEV_PROCESS)},
 };
 
 typedef struct DMPDEVState {
@@ -64,6 +66,7 @@ typedef struct DMPDEVState {
         DMPDEV_MODULES_INFO modules_info;
         DMPDEV_DUMP_DATA dump_data;
         DMPDEV_GLOBALS_INFO globals_info;
+        DMPDEV_PROCESS proc;
         uint8_t raw[1];
     } ctrl;
 
@@ -117,6 +120,11 @@ static void dmpdev_cmd_write_command(void *opaque, uint32_t addr, uint32_t val)
     s->ctrl_code        = val;
     s->bytes_to_collect = ctrl_desc[val].data_size;
     s->bytes_collected  = 0;
+}
+
+static uint32_t dmpdev_cmd_read_state(void *opaque, uint32_t addr)
+{
+    return dmpdev_cfg;
 }
 
 static void process_cmd(DMPDEVState *s)
@@ -372,6 +380,16 @@ static void process_cmd(DMPDEVState *s)
                    " dmpdev_PsActiveProcessHead at 0x%"PRIx64"\n",
                    dmpdev_PsLoadedModulesList, dmpdev_PsActiveProcessHead);
         break;
+    case DMPDEV_CTRL_PROCESS:
+        s->ctrl.proc.name[DMPDEV_PROC_NAME_MAX - 1] = 0;
+        if (is_str_printable((uint8_t*)s->ctrl.proc.name)) {
+            dmpdev_log("DMPDEV_CTRL_PROCESS: %s\n", (char*)s->ctrl.proc.name);
+            if (!dmpdev_notify_process_created((uint8_t *)s->ctrl.proc.name)) {
+                dmpdev_log("Stop listening for further process creations");
+                dmpdev_cfg &= ~(DMPDEV_CFG_MONITOR_PROCESS_ENABLED);
+            }
+        }
+        break;
     default:
         dmpdev_log("cmd-%d not implemented yet\n", s->ctrl_code);
     }
@@ -426,7 +444,7 @@ static void dmpdev_data_write_commandl(void *opaque, uint32_t addr, uint32_t val
 }
 
 static const MemoryRegionPortio dmpdev_cmd_portio[] = {
-    {0, 1, 1, .read = NULL, .write = dmpdev_cmd_write_command},
+    {0, 1, 1, .read = dmpdev_cmd_read_state, .write = dmpdev_cmd_write_command},
     PORTIO_END_OF_LIST()
 };
 

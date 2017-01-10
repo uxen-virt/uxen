@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2017, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -15,14 +15,27 @@
 
 extern "C" DRIVER_INITIALIZE DriverEntry;
 static KBUGCHECK_REASON_CALLBACK_ROUTINE BugcheckDumpIoCallback;
-                               
+static void DisableProcessNotificationWorkRoutine(PVOID Parameter);
+typedef NTSTATUS (*QUERY_INFO_PROCESS) (
+    __in HANDLE ProcessHandle,
+    __in PROCESSINFOCLASS ProcessInformationClass,
+    __out_bcount(ProcessInformationLength) PVOID ProcessInformation,
+    __in ULONG ProcessInformationLength,
+    __out_opt PULONG ReturnLength);
+
+QUERY_INFO_PROCESS ZwQueryInformationProcess;
+
 #define MEMTAG_DUMP_HEADER ((ULONG)'10dd')
+#define MEMTAG_WORK_ITEM ((ULONG) '11dd')
 
 const UCHAR bugCheckTag[] = "CrashDumpDriver";
 
 KBUGCHECK_REASON_CALLBACK_RECORD g_bugCheckReasonCbRecord;
 
 PHYSICAL_ADDRESS highestAcceptableAddress = {(ULONG)-1, -1};
+
+uint8_t dmpdevCfg = 0;
+static PWORK_QUEUE_ITEM disableProcessNotificationWorkItem;
 
 // KeInitializeCrashDumpHeader is documented
 // (http://msdn.microsoft.com/en-us/library/windows/hardware/ff552118(v=vs.85).aspx)
@@ -77,6 +90,11 @@ static __inline VOID SendCommand(
     }
 }
 
+static __inline uint8_t ReadDmpdevCfg()
+{
+    return READ_PORT_UCHAR((PUCHAR)DMPDEV_CONTROL_PORT);
+}
+
 static __inline VOID ReportDmpDrvFailure(
     __in DMPDRV_FAILURE_TYPE type,
     __in ULONG code)
@@ -101,8 +119,8 @@ static VOID ReportLoadedModules()
     }
 
     status = AuxKlibQueryModuleInformation(&cbModulesSize,
-                                            sizeof(*pModules),
-                                            NULL);
+                                           sizeof(*pModules),
+                                           NULL);
     if ((!NT_SUCCESS(status)) || (0 == cbModulesSize)) {
         ReportDmpDrvFailure(DMPDRV_QMODULE_QSIZE_FAILED, status);
         return;
@@ -346,6 +364,91 @@ static VOID BugcheckDumpIoCallback(
     }
 }
 
+static VOID CreateProcessNotifyEx(
+    __inout PEPROCESS pProcess,
+    __in HANDLE pProcessId,
+    __in_opt PPS_CREATE_NOTIFY_INFO pCreateInfo)
+{
+    UNREFERENCED_PARAMETER(pProcess);
+    UNREFERENCED_PARAMETER(pProcessId);
+    DMPDEV_PROCESS data = {0};
+    static BOOLEAN unregisterProcessCreateCallback = FALSE;
+    ANSI_STRING fullImageName;
+    PCHAR pImageName;
+    USHORT cbImageNameLength;
+    NTSTATUS status;
+
+    if (!pCreateInfo) {
+        return;
+    }
+
+    dmpdevCfg = ReadDmpdevCfg();
+
+    if (!(dmpdevCfg & DMPDEV_CFG_MONITOR_PROCESS_ENABLED) && !unregisterProcessCreateCallback) {
+        uxen_msg("Unregistering callback");
+        unregisterProcessCreateCallback = TRUE;
+        disableProcessNotificationWorkItem = (PWORK_QUEUE_ITEM)ExAllocatePoolWithTag(
+            NonPagedPool,
+            sizeof(WORK_QUEUE_ITEM),
+            MEMTAG_WORK_ITEM);
+#pragma warning (push)
+// Disable the warning about deprecated functions and declarations.
+// We can safely use these functions because we don't unload uxendmpdrv.sys
+#pragma warning (disable : 4995 4996)
+        ExInitializeWorkItem(
+            disableProcessNotificationWorkItem,
+            DisableProcessNotificationWorkRoutine,
+            disableProcessNotificationWorkItem);
+        ExQueueWorkItem(disableProcessNotificationWorkItem, DelayedWorkQueue);
+#pragma warning (pop)
+
+        return;
+    }
+
+    // Convert to ANSI string.
+    status = RtlUnicodeStringToAnsiString(&fullImageName,
+                                          pCreateInfo->ImageFileName,
+                                          TRUE);
+    if (!NT_SUCCESS(status)) {
+        return;
+    }
+
+    // Locate image name (exclude path).
+    pImageName = AnsiStringReverseFindChar(&fullImageName, '\\');
+    if (NULL == pImageName) {
+        cbImageNameLength = min(fullImageName.Length, DMPDEV_PROC_NAME_MAX);
+    } else {
+        ASSERT(pImageName >= fullImageName.Buffer);
+        cbImageNameLength = 
+            (USHORT)min(fullImageName.Length - (pImageName - fullImageName.Buffer),
+                        DMPDEV_PROC_NAME_MAX);
+    }
+
+    if (pCreateInfo->FileOpenNameAvailable) {
+        pImageName += 1;
+    }
+
+    // Module details.
+    RtlCopyMemory(data.name, pImageName, cbImageNameLength);
+    uxen_debug("Extracted out the process name: %s", data.name);
+
+    SendCommand(DMPDEV_CTRL_PROCESS, (PVOID)&data, sizeof(data));
+    RtlFreeAnsiString(&fullImageName);
+}
+
+static VOID DisableProcessNotificationWorkRoutine(PVOID Parameter)
+{
+    NTSTATUS status;
+    uxen_msg("Unregistering process creation callback from the work item");
+
+    status = PsSetCreateProcessNotifyRoutineEx(&CreateProcessNotifyEx, TRUE);
+    if (!NT_SUCCESS(status)) {
+        // Non-fatal.
+        ReportDmpDrvFailure(DMPDRV_SET_CREATE_PROCESS_CB_REG_FAILED, status);
+    }
+    ExFreePoolWithTag(Parameter, MEMTAG_WORK_ITEM);
+}
+
 extern "C" NTSTATUS DriverEntry(
     __in DRIVER_OBJECT *pDriver,
     __in UNICODE_STRING *pServiceKey)
@@ -358,7 +461,6 @@ extern "C" NTSTATUS DriverEntry(
     UNREFERENCED_PARAMETER(pServiceKey);
 
     uxen_msg("begin version: %s", UXEN_DRIVER_VERSION_CHANGESET);
-
     SendCommand(DMPDEV_CTRL_VERSION, (PVOID)&version, sizeof(version));
 
     KeInitializeCallbackRecord(&g_bugCheckReasonCbRecord);
@@ -380,6 +482,16 @@ extern "C" NTSTATUS DriverEntry(
     if (!NT_SUCCESS(status)) {
         // Non-fatal.
         ReportDmpDrvFailure(DMPDRV_IMAGE_LOAD_CB_REG_FAILED, status);
+    }
+
+    dmpdevCfg = ReadDmpdevCfg();
+    if (dmpdevCfg & DMPDEV_CFG_MONITOR_PROCESS_ENABLED) {
+        status = PsSetCreateProcessNotifyRoutineEx(&CreateProcessNotifyEx,
+                                                   FALSE);
+        if (!NT_SUCCESS(status)) {
+            uxen_debug("Failed to register for process creation callbacks. Status: 0x%x",
+                       status);
+        }
     }
 
     uxen_msg("end");

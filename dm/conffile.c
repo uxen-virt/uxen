@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -517,6 +517,8 @@ co_set_dmpdev(const char *opt, yajl_val arg, void *opaque)
         errx(1, "config option %s: max dump size 0x%"PRIx64" >= 0x%"PRIx64,
              opt, dmpdev_max_dump_size, max_max_dump_size);
     }
+
+    dmpdev_cfg = yajl_object_get_integer_default(arg, "cfg", 0);
 
     return 0;
 }

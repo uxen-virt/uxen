@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2017, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -21,9 +21,14 @@ typedef enum _DMPDEV_CTRL_CODE {
     DMPDEV_CTRL_MODULE_INFO,
     DMPDEV_CTRL_DUMP_DATA,
     DMPDEV_CTRL_GLOBALS_INFO,
+    DMPDEV_CTRL_PROCESS,
 
     DMPDEV_CTRL_MAX
 } DMPDEV_CTRL_CODE;
+
+typedef enum _DMPDEV_STATE_FLAGS {
+    DMPDEV_CFG_MONITOR_PROCESS_ENABLED = 0x01,
+} DMPDEV_STATE_FLAGS;
 
 typedef struct _DMPDEV_VERSION {
     uint32_t version;
@@ -52,6 +57,7 @@ typedef enum _DMPDRV_FAILURE_TYPE {
     DMPDRV_DMP_HDR_INIT_1_FAILED    = 0x09,
     DMPDRV_DMP_HDR_ALLOC_FAILED     = 0x0A,
     DMPDRV_DMP_HDR_INIT_2_FAILED    = 0x0B,
+    DMPDRV_SET_CREATE_PROCESS_CB_REG_FAILED = 0x0C,
 } DMPDRV_FAILURE_TYPE;
 
 typedef struct _DMPDRV_FAILURE_INFO {
@@ -99,5 +105,10 @@ typedef struct _DMPDEV_MODULE_ENTRY_32 {
     uint16_t name_offset;
     uint8_t full_name[1];
 } DMPDEV_MODULE_ENTRY_32, *PDMPDEV_MODULE_ENTRY_32;
+
+#define DMPDEV_PROC_NAME_MAX 16
+typedef struct _DMPDEV_PROCESS {
+    uint8_t name[DMPDEV_PROC_NAME_MAX];
+} DMPDEV_PROCESS, *PDMPDEV_PROCESS;
 
 #endif /* _DMPDEV_PROT_H_ */
