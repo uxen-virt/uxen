@@ -8,17 +8,17 @@
 
 #include "attoxen-api/hv_tests.h"
 
-int ax_present;
+int ax_present = 0;
 
-int ax_setup (void)
+int ax_setup(void)
 {
+
 #ifndef __i386__
-
-  if (hv_tests_hyperv_running() && hv_tests_ax_running()) {
-    printk ("Hv and AX detected\n");
-    ax_present = 1;
-  }
-
+    if (hv_tests_hyperv_running() && hv_tests_ax_running()) {
+        printk("Hv and AX detected\n");
+        ax_present = 1;
+    }
 #endif
-  return 0;
+
+    return 0;
 }

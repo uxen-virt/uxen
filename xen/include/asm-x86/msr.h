@@ -35,6 +35,20 @@ static inline void wrmsrl(unsigned int msr, __u64 val)
         wrmsr(msr, lo, hi);
 }
 
+#define pv_rdmsrl(msr, var, vcpu) do {          \
+        if (!ax_present)                        \
+            rdmsrl(msr, var);                   \
+        else                                    \
+            ax_vmcs_x_rdmsrl(vcpu, msr, var);   \
+    } while (0)
+
+#define pv_wrmsrl(msr, val, vcpu) do {          \
+        if (!ax_present)                        \
+            wrmsrl(msr, val);                   \
+        else                                    \
+            ax_vmcs_x_wrmsrl(vcpu, msr, val);   \
+    } while (0)
+
 /* rdmsr with exception handling */
 #define _rdmsr_safe(msr,val) ({\
     int _rc; \

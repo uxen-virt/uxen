@@ -795,8 +795,8 @@ void vmx_restore_host_env(void)
 {
 
 #ifdef UXEN_HOST_WINDOWS
+    /* Host's GDT/IDT limits are not saved in VMCS - restore them manually */
     if (!ax_present) {
-        /* Host's GDT/IDT limits are not saved in VMCS - restore them manually */
         __asm__ __volatile__( "lgdt %0" : "=m" (this_cpu(gdt_save)) );
         __asm__ __volatile__( "lidt %0" : "=m" (this_cpu(idt_save)) );
     }

@@ -212,25 +212,20 @@ static u32 msr_index[] =
         set_bit(VMX_INDEX_MSR_ ## address, &host_msr_state->flags);     \
         break
 #else   /* __UXEN__ */
-#define WRITE_MSR(address)                                                  \
-        guest_msr_state->msrs[VMX_INDEX_MSR_ ## address] = msr_content;     \
-	if (!ax_present) {						            \
-            if (!test_and_set_bit(VMX_INDEX_MSR_ ## address,                \
-                                  &guest_msr_state->flags)) {               \
-                ASSERT(!test_bit(VMX_INDEX_MSR_ ## address,                 \
-                                 &host_msr_state->flags));                  \
-                rdmsrl(MSR_ ## address,                                     \
-                       host_msr_state->msrs[VMX_INDEX_MSR_ ## address]);    \
-                set_bit(VMX_INDEX_MSR_ ## address, &host_msr_state->flags); \
-                if (host_msr_state->msrs[VMX_INDEX_MSR_ ## address] ==      \
-                    msr_content)                                            \
-                    break;                                                  \
-            }                                                               \
-            wrmsrl(MSR_ ## address, msr_content);                           \
-        } else {                                                            \
-            set_bit(VMX_INDEX_MSR_ ## address, &guest_msr_state->flags);    \
-            ax_vmcs_x_wrmsrl(v, MSR_ ## address, msr_content);                  \
-        }								    \
+#define WRITE_MSR(address)                                              \
+        guest_msr_state->msrs[VMX_INDEX_MSR_ ## address] = msr_content; \
+        if (!test_and_set_bit(VMX_INDEX_MSR_ ## address,                \
+                              &guest_msr_state->flags) && !ax_present) { \
+            ASSERT(!test_bit(VMX_INDEX_MSR_ ## address,                 \
+                             &host_msr_state->flags));                  \
+            rdmsrl(MSR_ ## address,                                     \
+                   host_msr_state->msrs[VMX_INDEX_MSR_ ## address]);    \
+            set_bit(VMX_INDEX_MSR_ ## address, &host_msr_state->flags); \
+            if (host_msr_state->msrs[VMX_INDEX_MSR_ ## address] ==      \
+                msr_content)                                            \
+                break;                                                  \
+        }                                                               \
+        pv_wrmsrl(MSR_ ## address, msr_content, v);                     \
         break
 #endif  /* __UXEN__ */
 
@@ -251,7 +246,7 @@ long_mode_do_msr_read(unsigned int msr, uint64_t *msr_content)
         break;
 
     case MSR_SHADOW_GS_BASE:
-	if (!ax_present)
+        if (!ax_present)
             rdmsrl(MSR_SHADOW_GS_BASE, *msr_content);
         break;
 
@@ -313,11 +308,8 @@ long_mode_do_msr_write(unsigned int msr, uint64_t msr_content)
             __vmwrite(GUEST_FS_BASE, msr_content);
         else if ( msr == MSR_GS_BASE )
             __vmwrite(GUEST_GS_BASE, msr_content);
-        else if (ax_present) {
-            ax_vmcs_x_wrmsrl(v,MSR_SHADOW_GS_BASE, msr_content);
-        } else {
-            wrmsrl(MSR_SHADOW_GS_BASE, msr_content);
-        }
+        else
+            pv_wrmsrl(MSR_SHADOW_GS_BASE, msr_content, v);
 
         break;
 
@@ -366,14 +358,8 @@ static void vmx_restore_host_msrs(struct vcpu *v)
      * We cannot cache SHADOW_GS_BASE while the VCPU runs, as it can
      * be updated at any time via SWAPGS, which we cannot trap.
      */
-    if (!ax_present) {
-        rdmsrl(MSR_SHADOW_GS_BASE,
-               guest_msr_state->msrs[VMX_INDEX_MSR_SHADOW_GS_BASE]);
-    } else {
-        ax_vmcs_x_rdmsrl(v, MSR_SHADOW_GS_BASE,
-                     &guest_msr_state->msrs[VMX_INDEX_MSR_SHADOW_GS_BASE]);
-        return;
-    }
+    pv_rdmsrl(MSR_SHADOW_GS_BASE,
+              guest_msr_state->msrs[VMX_INDEX_MSR_SHADOW_GS_BASE]);
 
     while ( host_msr_state->flags )
     {
@@ -399,14 +385,13 @@ static void vmx_restore_guest_msrs(struct vcpu *v)
     {
         i = find_first_set_bit(guest_flags);
 
-	if (!ax_present) {
+        if (!ax_present) {
             rdmsrl(msr_index[i], host_msr_state->msrs[i]);
             set_bit(i, &host_msr_state->flags);
             if (host_msr_state->msrs[i] != guest_msr_state->msrs[i]) {
-
                 HVM_DBG_LOG(DBG_LEVEL_2,
-                        "restore guest's index %d msr %x with value %lx",
-                        i, msr_index[i], guest_msr_state->msrs[i]);
+                            "restore guest's index %d msr %x with value %lx",
+                            i, msr_index[i], guest_msr_state->msrs[i]);
                 wrmsrl(msr_index[i], guest_msr_state->msrs[i]);
             }
         } else
@@ -2462,8 +2447,8 @@ static int vmx_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
             break;
 
         if ( ax_present && msr != MSR_INTEL_PLATFORM_INFO &&
-                      msr != MSR_INTEL_TEMPERATURE_TARGET &&
-                      msr != MSR_INTEL_TURBO_RATIO_LIMIT )
+             msr != MSR_INTEL_TEMPERATURE_TARGET &&
+             msr != MSR_INTEL_TURBO_RATIO_LIMIT )
         {
             printk("GP fault for rdmsr(%x)\n", msr);
             goto gp_fault;
@@ -2794,10 +2779,8 @@ ept_handle_violation(unsigned long qualification, paddr_t gpa)
         gdprintk(XENLOG_ERR, " --- GLA %#lx\n", gla);
     }
 
-    if (ax_present) {						            \
-        // go round again
+    if (ax_present)
         return;
-    }
 
     domain_crash(d);
 }
@@ -3016,13 +2999,13 @@ vmx_execute(struct vcpu *v)
         else if ( vector == TRAP_nmi &&
                   (intr_info & INTR_INFO_INTR_TYPE_MASK) ==
                   (X86_EVENTTYPE_NMI << 8) ) {
-	    if (!ax_present) {
-                /* self-inject NMI early, to allow logging via windbg --
-                 * DO NOT do any logging between return from
-                 * vmx_asm_do_vmentry and here! */
+            /* self-inject NMI early, to allow logging via windbg --
+             * DO NOT do any logging between return from
+             * vmx_asm_do_vmentry and here! */
+            if (!ax_present) {
                 HVMTRACE_0D(NMI);
                 self_nmi(); /* Real NMI, vector 2: normal processing. */
-	    } else
+            } else
                 v->force_preempt = 1;
         }
         break;
@@ -3510,10 +3493,8 @@ vmx_execute(struct vcpu *v)
     }
 
     case EXIT_REASON_VMX_PREEMPTION_TIMER_EXPIRED:
-        if (ax_present) {
-            v->force_preempt = 1;
-	    break;
-        }
+        v->force_preempt = 1;
+        break;
 
     case EXIT_REASON_ACCESS_GDTR_OR_IDTR:
     case EXIT_REASON_ACCESS_LDTR_OR_TR:
