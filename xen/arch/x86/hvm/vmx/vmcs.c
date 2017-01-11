@@ -18,7 +18,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -46,6 +46,7 @@
 #include <asm/processor.h>
 #include <asm/msr.h>
 #include <asm/xstate.h>
+#include <asm/hvm/ax.h>
 #include <asm/hvm/hvm.h>
 #include <asm/hvm/io.h>
 #include <asm/hvm/support.h>
@@ -794,9 +795,11 @@ void vmx_restore_host_env(void)
 {
 
 #ifdef UXEN_HOST_WINDOWS
-    /* Host's GDT/IDT limits are not saved in VMCS - restore them manually */
-    __asm__ __volatile__( "lgdt %0" : "=m" (this_cpu(gdt_save)) );
-    __asm__ __volatile__( "lidt %0" : "=m" (this_cpu(idt_save)) );
+    if (!ax_present) {
+        /* Host's GDT/IDT limits are not saved in VMCS - restore them manually */
+        __asm__ __volatile__( "lgdt %0" : "=m" (this_cpu(gdt_save)) );
+        __asm__ __volatile__( "lidt %0" : "=m" (this_cpu(idt_save)) );
+    }
 #endif /* UXEN_HOST_WINDOWS */
 }
 

@@ -22,6 +22,9 @@
 
 #include "pagemap.h"
 
+#include "attoxen-api/ax_constants.h"
+#include "attoxen-api/hv_tests.h"
+
 static ULONG build_number = 0;
 
 uint8_t *frametable = NULL;
@@ -776,6 +779,100 @@ uxen_op_init_free_allocs(void)
 #endif  /* DEBUG_PAGE_ALLOC */
 }
 
+
+#ifndef __i386__
+/* If bit set in mask, bit must be set in reply */
+static int test_ax_compatibility_masks(uint32_t *masks, unsigned n_masks)
+{
+    uint64_t  rax, rbx, rcx, rdx;
+    unsigned i;
+
+    for (i = 0; i < n_masks; ++i) {
+	rax = AX_CPUID_AX_FEATURES;
+        rcx = i;
+        rdx = 0;
+
+	hv_tests_cpuid(&rax, &rbx, &rcx, &rdx);
+
+        if ((masks[i] & rdx) != masks[i])  {
+            fail_msg("ax_compatibility: AX feature missing ECX: 0x%x needed %08x got %08x", i, masks[i], (uint32_t) rdx);
+            return 1; 
+        }
+    }
+
+    return 0;
+}
+
+/* If bit set in reply, bit must be set in mask */
+static int test_ln_compatibility_masks(uint32_t *masks, unsigned n_masks)
+{
+    uint64_t  rax, rbx, rcx, rdx;
+    unsigned i;
+
+    for (i = 0; i < n_masks; ++i) {
+	rax = AX_CPUID_LN_FEATURES;
+        rcx = i;
+        rdx = 0;
+
+	hv_tests_cpuid(&rax, &rbx, &rcx, &rdx);
+
+        if ((rdx & masks[i]) != rdx)  {
+            fail_msg("ax_compatibility: uXen feature missing ECX: 0x%x needed %08x got %08x", i, (uint32_t) rdx, 
+                                                                                              masks[i]);
+            return 1; 
+        }
+    }
+
+    if (rcx > n_masks) {
+        fail_msg("ax_compatibility: uXen feature missing ECX: 0x%x, n_masks 0x%x", (uint32_t) rcx, n_masks);
+        return 1; 
+    }
+
+    return 0;
+}
+
+static int test_ax_compatibility_l1(void)
+{
+    /* There is currently no defined PV L1 interface for AX, so bail */
+    fail_msg("This uxen binary does not support running at L1 under AX");
+    return -1; 
+}
+
+static int test_ax_compatibility_l2(void)
+{
+    uint32_t ax_masks[]={ AX_FEATURES_AX_L2_VMX };
+    uint32_t ln_masks[]={ AX_FEATURES_LN_VMCS_X_V1 | AX_FEATURES_LN_NO_RESTORE_DT_LIMITS | 
+                          AX_FEATURES_LN_ACCEPT_LAZY_EPT_FAULTS };
+    int err = 0;
+
+    err |= test_ax_compatibility_masks(ax_masks, sizeof(ax_masks)/sizeof(ax_masks[0]));
+    err |= test_ln_compatibility_masks(ln_masks, sizeof(ln_masks)/sizeof(ln_masks[0]));
+
+    if (!err) 
+	printk("AX and uXen are compatible\n");
+
+    return err;
+}
+
+
+static int test_ax_compatibility(void) 
+{
+    if (!hv_tests_ax_running()) {
+        printk("AX is not running\n");
+        return 0;
+    }
+    printk("AX is running\n");
+
+    if (!hv_tests_hyperv_running())  {
+        printk("Hyper-v is not running\n");
+	return test_ax_compatibility_l1();
+    } else {
+        printk("Hyper-v is running\n");
+	return test_ax_compatibility_l2();
+    }
+}
+#endif
+
 static NTSTATUS
 init_cpu_dpc(KDPC *dpc, unsigned int host_cpu,
 	     void (*cb)(KDPC *, void *, void *, void *), void *arg)
@@ -842,6 +939,13 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
         ret = -EPERM;
         goto out;
     }
+
+#ifndef __i386__
+    if (test_ax_compatibility()) {
+        ret = -EPERM;
+        goto out;
+    }
+#endif
 
     memset(&uid, 0, sizeof(uid));
     if (uid_len > sizeof(uid))
