@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Bromium, Inc.
+# Copyright 2015-2017, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -20,4 +20,5 @@ BUILDDIR_uxenv4vlib := $(BUILDDIR_uxenv4vlib)
 export BUILDDIR_uxenv4vlib
 
 all dist clean install distclean: %: .phony
+	@mkdir -p $(DISTDIR_uxenv4vlib)
 	@$(MAKE) -C $(TOPDIR)/windows/uxenv4vlib $*
