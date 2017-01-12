@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -236,11 +236,11 @@ main (int argc, char *argv[])
 
 
     rx = (argc > 1) ? !strcmp (argv[1], "rx") : 1;
-    domid = (argc == 3) ? atoi (argv[2]) : 0;
+    domid = (argc == 3) ? atoi (argv[2]) : V4V_DOMID_DM;
 
     bind.ring_id.addr.port = rx ? PORT : 0;
     bind.ring_id.addr.domain = V4V_DOMID_ANY;
-    bind.ring_id.partner = V4V_DOMID_ANY;
+    bind.ring_id.partner = domid;
 
     if (!v4v_open (&c, RING_SIZE, V4V_FLAG_NONE)) {
         printf ("v4v_open failed\n");
