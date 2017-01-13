@@ -1,7 +1,12 @@
 #
-# Copyright 2013-2015, Bromium, Inc.
+# Copyright 2013-2017, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
+
+# use WDK7 signtool for driver projects
+ifneq (,$(shell find $(_SRCDIR) -name sources))
+UXEN_WINDOWS_SIGN                       := $(WDK7_UXEN_WINDOWS_SIGN)
+endif
 
 UXEN_TARGET_VM_SUPPORT_OS               := win7
 

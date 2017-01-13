@@ -45,6 +45,8 @@ UXEN_WINDOWS_SIGN_tool ?= $(EWDK_KIT_DIR_bin)/signtool.exe
 UXEN_WINDOWS_SIGN_args ?= sign //q //f $(call dosdir,$(UXEN_WINDOWS_SIGN_FILE))
 UXEN_WINDOWS_SIGN ?= $(UXEN_WINDOWS_SIGN_tool) $(UXEN_WINDOWS_SIGN_args)
 
+WDK7_UXEN_WINDOWS_SIGN ?= $(WINDDK_DIR)\bin\x86\signtool sign /q /f $(UXEN_WINDOWS_SIGN_FILE)
+
 $(HOST_WINDOWS)NATIVE_PWD = pwd -W
 $(HOST_NOT_WINDOWS)NATIVE_PWD = pwd
 
