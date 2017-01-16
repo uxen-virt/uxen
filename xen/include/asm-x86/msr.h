@@ -39,7 +39,7 @@ static inline void wrmsrl(unsigned int msr, __u64 val)
         if (!ax_present)                        \
             rdmsrl(msr, var);                   \
         else                                    \
-            ax_vmcs_x_rdmsrl(vcpu, msr, var);   \
+            ax_vmcs_x_rdmsrl(vcpu, msr, &var);  \
     } while (0)
 
 #define pv_wrmsrl(msr, val, vcpu) do {          \

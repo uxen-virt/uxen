@@ -359,7 +359,8 @@ static void vmx_restore_host_msrs(struct vcpu *v)
      * be updated at any time via SWAPGS, which we cannot trap.
      */
     pv_rdmsrl(MSR_SHADOW_GS_BASE,
-              guest_msr_state->msrs[VMX_INDEX_MSR_SHADOW_GS_BASE]);
+              guest_msr_state->msrs[VMX_INDEX_MSR_SHADOW_GS_BASE],
+              v);
 
     while ( host_msr_state->flags )
     {
