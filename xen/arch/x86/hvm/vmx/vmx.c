@@ -212,20 +212,23 @@ static u32 msr_index[] =
         set_bit(VMX_INDEX_MSR_ ## address, &host_msr_state->flags);     \
         break
 #else   /* __UXEN__ */
-#define WRITE_MSR(address)                                              \
-        guest_msr_state->msrs[VMX_INDEX_MSR_ ## address] = msr_content; \
-        if (!test_and_set_bit(VMX_INDEX_MSR_ ## address,                \
-                              &guest_msr_state->flags) && !ax_present) { \
-            ASSERT(!test_bit(VMX_INDEX_MSR_ ## address,                 \
-                             &host_msr_state->flags));                  \
-            rdmsrl(MSR_ ## address,                                     \
-                   host_msr_state->msrs[VMX_INDEX_MSR_ ## address]);    \
-            set_bit(VMX_INDEX_MSR_ ## address, &host_msr_state->flags); \
-            if (host_msr_state->msrs[VMX_INDEX_MSR_ ## address] ==      \
-                msr_content)                                            \
-                break;                                                  \
-        }                                                               \
-        pv_wrmsrl(MSR_ ## address, msr_content, v);                     \
+#define WRITE_MSR(address)                                                  \
+        guest_msr_state->msrs[VMX_INDEX_MSR_ ## address] = msr_content;     \
+        if (!ax_present) {                                                  \
+            if (!test_and_set_bit(VMX_INDEX_MSR_ ## address,                \
+                                  &guest_msr_state->flags)) {               \
+                ASSERT(!test_bit(VMX_INDEX_MSR_ ## address,                 \
+                                 &host_msr_state->flags));                  \
+                rdmsrl(MSR_ ## address,                                     \
+                       host_msr_state->msrs[VMX_INDEX_MSR_ ## address]);    \
+                set_bit(VMX_INDEX_MSR_ ## address, &host_msr_state->flags); \
+                if (host_msr_state->msrs[VMX_INDEX_MSR_ ## address] ==      \
+                    msr_content)                                            \
+                    break;                                                  \
+            }                                                               \
+        } else                                                              \
+            set_bit(VMX_INDEX_MSR_ ## address, &guest_msr_state->flags);    \
+        pv_wrmsrl(MSR_ ## address, msr_content, v);                         \
         break
 #endif  /* __UXEN__ */
 
