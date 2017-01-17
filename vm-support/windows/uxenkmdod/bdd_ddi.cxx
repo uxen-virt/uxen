@@ -9,7 +9,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2017, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -429,11 +429,11 @@ NTSTATUS BddDdiEscape(
             void *fb = NULL;
 
             status = pBDD->MapUserVram(&fb);
-            out->ptr = fb;
+            out->ptr = (uintptr_t) fb;
             break;
         }
         case UXENDISP_ESCAPE_UNMAP_FB:
-            status = pBDD->UnmapUserVram(inp.ptr);
+            status = pBDD->UnmapUserVram((void*)(uintptr_t)inp.ptr);
             break;
         case UXENDISP_ESCAPE_SET_USER_DRAW_ONLY:
             status = pBDD->SetUserDrawOnly((BOOLEAN)inp.user_draw);

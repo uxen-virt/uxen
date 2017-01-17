@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * Author: Piotr Foltyn <piotr.foltyn@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -11,6 +11,8 @@
 #include <stdint.h>
 #else
 typedef __int32 int32_t;
+typedef unsigned __int32 uint32_t;
+typedef unsigned __int64 uint64_t;
 #endif
 
 #define UXENDISP_PORT 0xd1580
@@ -47,15 +49,16 @@ enum {
 };
 
 struct _UXENDISPCustomMode {
-    int esc_code;
-    unsigned long width;
-    unsigned long height;
-    unsigned long x, y;
+    int32_t esc_code;
+    uint32_t width;
+    uint32_t height;
+    uint32_t x, y;
+
     union {
         int user_draw;
         int no_present_copy;
-        void *ptr;
-    };
+        uint64_t ptr;
+    } UXENDISP_PACKED;
     /* bpp ? */
 } UXENDISP_PACKED;
 

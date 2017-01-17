@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, Bromium, Inc.
+ * Copyright 2016-2017, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -169,7 +169,7 @@ uxendisp_map_fb(uxendisp_ctrl_ctx_t *ctx)
     if (uxendisp_escape(ctx, 0, &m, sizeof(m)))
         return NULL;
 
-    return m.ptr;
+    return (void*)(uintptr_t)m.ptr;
 }
 
 static void
@@ -178,7 +178,7 @@ uxendisp_unmap_fb(uxendisp_ctrl_ctx_t *ctx, void *mapped)
     UXENDISPCustomMode m = { 0 };
 
     m.esc_code = UXENDISP_ESCAPE_UNMAP_FB;
-    m.ptr = mapped;
+    m.ptr = (uintptr_t)mapped;
     uxendisp_escape(ctx,0, &m, sizeof(m));
 }
 
