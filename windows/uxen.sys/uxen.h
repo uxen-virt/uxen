@@ -2,7 +2,7 @@
  *  uxen.h
  *  uxen
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -431,6 +431,7 @@ int uxen_op_version(struct uxen_version_desc *);
 int uxen_op_keyhandler(char *, unsigned int);
 int uxen_op_create_vm(struct uxen_createvm_desc *, struct fd_assoc *);
 int uxen_op_target_vm(struct uxen_targetvm_desc *, struct fd_assoc *);
+int uxen_vmi_destroy_vm(struct vm_info *);
 void uxen_vmi_free(struct vm_info *);
 void uxen_vmi_cleanup_vm(struct vm_info *);
 int uxen_op_destroy_vm(struct uxen_destroyvm_desc *, struct fd_assoc *);
