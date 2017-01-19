@@ -1985,6 +1985,9 @@ struct hvm_function_table * __init start_vmx(void)
     if ( !test_bit(X86_FEATURE_VMXE, &boot_cpu_data.x86_capability) )
         return NULL;
 
+    if (ax_setup())
+        return NULL;
+
     if ( vmx_cpu_up(hvmon_default) )
     {
         printk("VMX: failed to initialise.\n");
