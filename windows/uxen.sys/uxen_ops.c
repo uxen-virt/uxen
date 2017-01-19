@@ -60,6 +60,7 @@ static LARGE_INTEGER uxen_host_counter_start, uxen_host_counter_freq;
 extern BOOLEAN *KdDebuggerEnabled;
 
 static void __cdecl uxen_op_wake_vm(struct vm_vcpu_info_shared *vcis);
+static int uxen_vmi_destroy_vm(struct vm_info *vmi);
 static void quiesce_execution(void);
 static void resume_execution(void);
 static void uxen_flush_rcu(void);
@@ -1836,7 +1837,7 @@ uxen_vmi_stop_running(struct vm_info *vmi)
            vmi->vmi_running_vcpus);
 }
 
-int
+static int
 uxen_vmi_destroy_vm(struct vm_info *vmi)
 {
     affinity_t aff;

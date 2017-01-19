@@ -247,8 +247,15 @@ processexit_cancel_routine(__inout PDEVICE_OBJECT pDeviceObject,
     IoReleaseCancelSpinLock(pIRP->CancelIrql);
 
     fda = pIRP->Tail.Overlay.DriverContext[3];
-    if (fda->vmi)
-        uxen_vmi_destroy_vm(fda->vmi);
+    if (fda->vmi) {
+        affinity_t aff;
+        int ret;
+
+        aff = uxen_exec_dom0_start();
+        uxen_call(ret = (int), -EINVAL, NO_RESERVE,
+                  uxen_do_destroy_vm, fda->vmi->vmi_shared.vmi_uuid);
+        uxen_exec_dom0_end(aff);
+    }
     pIRP->Tail.Overlay.DriverContext[3] = NULL;
 
     IoStatus->Status = STATUS_CANCELLED;
