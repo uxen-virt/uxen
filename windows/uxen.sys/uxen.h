@@ -99,7 +99,8 @@ struct vm_vcpu_info {
 
 struct vm_info {
     struct vm_info_shared vmi_shared;
-    uint32_t vmi_alive;
+    uint32_t vmi_alive;         /* VM ise setup and operational */
+    uint32_t vmi_exists;        /* VM exists at core level */
     uint32_t vmi_active_references;
     uint32_t vmi_nrvcpus;
     uint32_t vmi_running_vcpus;
@@ -433,6 +434,7 @@ int uxen_op_create_vm(struct uxen_createvm_desc *, struct fd_assoc *);
 int uxen_op_target_vm(struct uxen_targetvm_desc *, struct fd_assoc *);
 void uxen_vmi_free(struct vm_info *);
 void uxen_vmi_cleanup_vm(struct vm_info *);
+int uxen_destroy_vm(struct vm_info *vmi);
 int uxen_op_destroy_vm(struct uxen_destroyvm_desc *, struct fd_assoc *);
 int uxen_op_execute(struct uxen_execute_desc *ued, struct vm_info *);
 int uxen_op_set_event(struct uxen_event_desc *, struct vm_info *);
