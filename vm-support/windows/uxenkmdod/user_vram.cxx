@@ -1,11 +1,12 @@
 /*
- * Copyright 2016, Bromium, Inc.
+ * Copyright 2016-2017, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
 
 #include <wdm.h>
 #include "user_vram.h"
+#include "../common/debug.h"
 
 PMDL user_vram_init(PHYSICAL_ADDRESS vram_start, SIZE_T vram_size)
 {
@@ -19,18 +20,18 @@ PMDL user_vram_init(PHYSICAL_ADDRESS vram_start, SIZE_T vram_size)
     return vram_mdl;
 }
 
-static int user_map_exception(void)
-{
-    return EXCEPTION_CONTINUE_EXECUTION;
-}
 
 PVOID user_vram_map(PMDL vram_mdl)
 {
     __try {
-        return MmMapLockedPagesSpecifyCache(vram_mdl, UserMode, MmNonCached,
-                NULL, FALSE, NormalPagePriority);
+        PVOID p = MmMapLockedPagesSpecifyCache(vram_mdl, UserMode, MmNonCached,
+                                               NULL, FALSE, NormalPagePriority);
+        if (!p)
+            uxen_err("error mapping user vram, not enough resources\n");
+        return p;
     }
-    __except (user_map_exception()) {
+    __except ( EXCEPTION_EXECUTE_HANDLER ) {
+        uxen_err("exception mapping user vram, code %x\n", (int)GetExceptionCode());
         return NULL;
     }
 }
