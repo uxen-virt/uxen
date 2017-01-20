@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2015, Bromium, Inc.
+# Copyright 2012-2017, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -16,7 +16,6 @@ SET_OBJECT_ROOT :=
 OBJDIR_uxendisp := .
 endif
 
-SET_SIGN := set UXEN_WINDOWS_SIGN=$(UXEN_WINDOWS_SIGN)&
 SET_STAMPINF_DATE := set STAMPINF_DATE=$(shell TZ=GMT date +%m/%d/%Y)&
 
 SET_UXENDIRS := set UXEN_DISTDIR_VM_SUPPORT=$(call dospath,$(DISTDIR_VM_SUPPORT))& set UXEN_SDKDIR_INCLUDE=$(call dospath,$(SDKDIR_include))& set UXEN_SDKDIR_LIB=$(call dospath,$(SDKDIR_lib))&
@@ -24,14 +23,26 @@ SET_UXENDIRS := set UXEN_DISTDIR_VM_SUPPORT=$(call dospath,$(DISTDIR_VM_SUPPORT)
 OUTDIR_uxendisp := $(OBJDIR_uxendisp)/miniport/$(OBJDIR_ddk)
 
 .PHONY: all
-all: $(OUTDIR_uxendisp)/uxendisp.sys
+all: $(OUTDIR_uxendisp)/uxendisp.sys $(OUTDIR_uxendisp)/uxendispdd.dll $(OUTDIR_uxendisp)/uxendisp.cat
 
 # NOTE: no space after set foo=xxx since cmd otherwise includes the space in foo
 .PHONY: $(OUTDIR_uxendisp)/uxendisp.sys
 $(OUTDIR_uxendisp)/uxendisp.sys: $(OBJDIR_uxendisp)/build_info.h
 	@mkdir -p $(@D)
 	$(_W)echo WinDDK build $@
-	$(_V)cmd /c "set UXEN_BUILD_INFO=\"\"\"../../../build_info.h\"\"\"& set MAKEFLAGS=& $(SET_STAMPINF_DATE) $(SET_SIGN) $(SET_UXENDIRS) $(WINDDK_DIR)\bin\setenv.bat $(WINDDK_DIR)\ $(DDKENV) $(UXEN_TARGET_VM_SUPPORT_ARCH_NAME) $(UXEN_TARGET_VM_SUPPORT_OS) no_oacr & cd /D $$(pwd -W) & $(SET_OBJECT_ROOT) $(WINDDK_BUILD) -cZ -jpath $(call dospath,$(OBJDIR_uxendisp))"
+	$(_V)cmd /c "set UXEN_BUILD_INFO=\"\"\"../../../build_info.h\"\"\"& set MAKEFLAGS=& $(SET_STAMPINF_DATE) $(SET_UXENDIRS) $(WINDDK_DIR)\bin\setenv.bat $(WINDDK_DIR)\ $(DDKENV) $(UXEN_TARGET_VM_SUPPORT_ARCH_NAME) $(UXEN_TARGET_VM_SUPPORT_OS) no_oacr & cd /D $$(pwd -W) & $(SET_OBJECT_ROOT) $(WINDDK_BUILD) -cZ -jpath $(call dospath,$(OBJDIR_uxendisp))"
+	$(_W)echo Signing - $@
+	$(_V)cmd //c $(UXEN_WINDOWS_SIGN) $@ || { rm -f $@; false; }
+
+.PHONY: $(OUTDIR_uxendisp)/uxendispdd.dll
+$(OUTDIR_uxendisp)/uxendispdd.dll: $(OBJDIR_uxendisp)/build_info.h
+	$(_W)echo Signing - $@
+	$(_V)cmd //c $(UXEN_WINDOWS_SIGN) $(call dospath, $@) || { rm -f $@; false; }
+
+.PHONY: $(OUTDIR_uxendisp)/uxendisp.cat
+$(OUTDIR_uxendisp)/uxendisp.cat: $(OUTDIR_uxendisp)/uxendisp.sys $(OUTDIR_uxendisp)/uxendispdd.dll
+	$(_W)echo Signing - $@
+	$(_V)cmd //c $(UXEN_WINDOWS_SIGN) $(call dospath, $@) || { rm -f $@; false; }
 
 .PHONY: $(OBJDIR_uxendisp)/build_info.h
 $(OBJDIR_uxendisp)/build_info.h:

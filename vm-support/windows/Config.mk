@@ -3,11 +3,6 @@
 # SPDX-License-Identifier: ISC
 #
 
-# use WDK7 signtool for driver projects
-ifneq (,$(shell find $(_SRCDIR) -name sources))
-UXEN_WINDOWS_SIGN                       := $(WDK7_UXEN_WINDOWS_SIGN)
-endif
-
 UXEN_TARGET_VM_SUPPORT_OS               := win7
 
 UXEN_TARGET_VM_SUPPORT_ARCH_32_BIT      := x86

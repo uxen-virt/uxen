@@ -194,7 +194,7 @@ uxen.sys: $(uxen_sys_RES) $(uxen_sys_OBJ_asm) $(uxen_sys_OBJ_c)
 	  $(EWDK_LIBS) \
 	  $(uxen_sys_LDOBJS)
 	$(_W)echo Signing - $@
-	$(_V)$(UXEN_WINDOWS_SIGN) $@ || { rm -f $@; false; }
+	$(_V)cmd //c $(UXEN_WINDOWS_SIGN) $@ || { rm -f $@; false; }
 
 install_uxen.sys: uxen.sys
 	$(_W)echo Installing from $(abspath $(<D)) to $(DISTDIR)

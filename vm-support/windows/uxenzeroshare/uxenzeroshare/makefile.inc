@@ -26,7 +26,5 @@ COPY: $(OBJ_PATH)\$(O)\symsrv.dll
 COPY: $(OBJ_PATH)\$(O)\symsrv.yes
 
 POST: $(OBJ_PATH)\$(O)\$(INF_NAME).inf
-  $(SIGNCMD) $(OBJ_PATH)\$(O)\$(TARGETNAME).$(TARGETEXT)
   $(INF2CAT)
-  $(SIGNCMD) $(OBJ_PATH)\$(O)\$(TARGETNAME).cat
 

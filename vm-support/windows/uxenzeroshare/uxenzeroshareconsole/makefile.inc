@@ -12,9 +12,3 @@ $(OBJ_PATH)\$(O)\symsrv.yes:
 COPY: $(OBJ_PATH)\$(O)\dbghelp.dll
 COPY: $(OBJ_PATH)\$(O)\symsrv.dll
 COPY: $(OBJ_PATH)\$(O)\symsrv.yes
-
-POST: 
-  $(SIGNCMD) $(OBJ_PATH)\$(O)\$(TARGETNAME).$(TARGETEXT)
-
-
-

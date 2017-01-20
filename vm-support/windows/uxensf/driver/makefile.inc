@@ -12,8 +12,4 @@ $(OBJ_PATH)\$(O)\install.bat: install.bat
 
 COPY: $(OBJ_PATH)\$(O)\VBoxMRXNP.dll $(OBJ_PATH)\$(O)\install.bat
 
-POST: $(OBJ_PATH)\$(O)\$(INF_NAME).inf
-    $(SIGNCMD) $(OBJ_PATH)\$(O)\$(TARGETNAME).sys
-
-#    $(INF2CAT)
-#    $(SIGNCAT) $(OBJ_PATH)\$(O)\$(TARGETNAME).cat
+POST:

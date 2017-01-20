@@ -43,9 +43,14 @@ UXEN_WINDOWS_SIGN_CERT ?= $(UXEN_WINDOWS_SIGN_FILE:%.pfx=%.cer)
 #UXEN_WINDOWS_SIGN ?= $(call dosdir,$(EWDK_KIT_DIR_bin)/signtool.exe) sign //q //f $(call dosdir,$(UXEN_WINDOWS_SIGN_FILE))
 UXEN_WINDOWS_SIGN_tool ?= $(EWDK_KIT_DIR_bin)/signtool.exe
 UXEN_WINDOWS_SIGN_args ?= sign //q //f $(call dosdir,$(UXEN_WINDOWS_SIGN_FILE))
-UXEN_WINDOWS_SIGN ?= $(UXEN_WINDOWS_SIGN_tool) $(UXEN_WINDOWS_SIGN_args)
 
-WDK7_UXEN_WINDOWS_SIGN ?= $(WINDDK_DIR)\bin\x86\signtool sign /q /f $(UXEN_WINDOWS_SIGN_FILE)
+ifndef UXEN_WINDOWS_SIGN
+UXEN_WINDOWS_SIGN ?= $(call dosdir,$(UXEN_WINDOWS_SIGN_tool)) $(UXEN_WINDOWS_SIGN_args)
+else
+# NOTE: this implies UXEN_WINDOWS_SIGN env variable containing standard windows 
+#       path (single backslash as path component separator)
+UXEN_WINDOWS_SIGN := $(subst \,\\,$(UXEN_WINDOWS_SIGN))
+endif
 
 $(HOST_WINDOWS)NATIVE_PWD = pwd -W
 $(HOST_NOT_WINDOWS)NATIVE_PWD = pwd
@@ -89,14 +94,14 @@ genpdb = true
 endif
 
 ifeq (,$(HOST_WINDOWS))
-sign = ($2 && $(UXEN_WINDOWS_SIGN) $1) || \
+sign = ($2 && cmd //c $(UXEN_WINDOWS_SIGN) $1) || \
 	(rm -f $1; false)
 link = $(LINK.o) -o $1 $2
 install_exe_strip = (dbg=$2; pdb=$${dbg%.*}.pdb;                      \
                      d=$$(dirname $1); f=$$(basename $1);             \
                      $(call genpdb,$$dbg,$$pdb) &&                    \
                      $(STRIP) -o $1 $2 && \
-                     (cd "$$d" && $(UXEN_WINDOWS_SIGN) $$f))
+                     (cd "$$d" && cmd //c $(UXEN_WINDOWS_SIGN) $$f))
 else
 sign = $2
 link = $(LINK.o) -o $1 $2

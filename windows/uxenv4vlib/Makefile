@@ -165,7 +165,7 @@ uxenv4vlib.sys: $(uxenv4vlib_RES) $(uxenv4vlib_OBJ_asm) $(uxenv4vlib_OBJ_c)
 	  //out:$(call dospath,$@) $^ \
 	  $(EWDK_LIBS)
 	$(_W)echo Signing - $@
-	$(_V)$(UXEN_WINDOWS_SIGN) $@ || { rm -f $@; false; }
+	$(_V)cmd //c $(UXEN_WINDOWS_SIGN) $@ || { rm -f $@; false; }
 
 install_uxenv4vlib.sys: uxenv4vlib.sys
 	$(_W)echo Installing from $(abspath $(<D)) to $(DISTDIR_uxenv4vlib)

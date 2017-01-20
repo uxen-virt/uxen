@@ -1,5 +1,5 @@
 #
-# Copyright 2014-2015, Bromium, Inc.
+# Copyright 2014-2017, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -16,7 +16,6 @@ SET_OBJECT_ROOT :=
 OBJDIR_uxenkmdod := .
 endif
 
-SET_SIGN := set UXEN_WINDOWS_SIGN=$(UXEN_WINDOWS_SIGN)&
 SET_STAMPINF_DATE := set STAMPINF_DATE=$(shell TZ=GMT date +%m/%d/%Y)&
 SET_WDK8_PATH := set WDK8_PATH=$(call dospath,$(TOOLSDIR)/cross-windows/wdk8)&
 
@@ -32,7 +31,14 @@ all: $(OUTDIR_uxenkmdod)/uxenkmdod.sys
 $(OUTDIR_uxenkmdod)/uxenkmdod.sys: $(OBJDIR_uxenkmdod)/build_info.h
 	@mkdir -p $(@D)
 	$(_W)echo WinDDK build $@
-	$(_V)cmd /c "set UXEN_BUILD_INFO=\"\"\"../../build_info.h\"\"\"& set MAKEFLAGS=& $(SET_WDK8_PATH) $(SET_STAMPINF_DATE) $(SET_SIGN) $(SET_UXENDIRS) $(WINDDK_DIR)\bin\setenv.bat $(WINDDK_DIR)\ $(DDKENV) $(UXEN_TARGET_VM_SUPPORT_ARCH_NAME) $(UXEN_TARGET_VM_SUPPORT_OS) no_oacr & cd /D $$(pwd -W) & $(SET_OBJECT_ROOT) $(WINDDK_BUILD) -w -cZ -jpath $(call dospath,$(OBJDIR_uxenkmdod))"
+	$(_V)cmd /c "set UXEN_BUILD_INFO=\"\"\"../../build_info.h\"\"\"& set MAKEFLAGS=& $(SET_WDK8_PATH) $(SET_STAMPINF_DATE) $(SET_UXENDIRS) $(WINDDK_DIR)\bin\setenv.bat $(WINDDK_DIR)\ $(DDKENV) $(UXEN_TARGET_VM_SUPPORT_ARCH_NAME) $(UXEN_TARGET_VM_SUPPORT_OS) no_oacr & cd /D $$(pwd -W) & $(SET_OBJECT_ROOT) $(WINDDK_BUILD) -w -cZ -jpath $(call dospath,$(OBJDIR_uxenkmdod))"
+	$(_W)echo Signing - $@
+	$(_V)cmd //c $(UXEN_WINDOWS_SIGN) $@ || { rm -f $@; false; }
+
+.PHONY: $(OUTDIR_uxenkmdod)/uxenkmdod.cat
+$(OUTDIR_uxenkmdod)/uxenkmdod.cat: $(OUTDIR_uxenkmdod)/uxenkmdod.sys
+	$(_W)echo Signing - $@
+	$(_V)cmd //c $(UXEN_WINDOWS_SIGN) $(call dospath, $@) || { rm -f $@; false; }
 
 .PHONY: $(OBJDIR_uxenkmdod)/build_info.h
 $(OBJDIR_uxenkmdod)/build_info.h:

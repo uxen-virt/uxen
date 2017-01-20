@@ -17,11 +17,6 @@ DEVCON_ARCH_SUBDIR=i386
 INF2CAT_OS=7_X86
 !endif
 
-!if defined(UXEN_WINDOWS_SIGN)
-SIGNCMD=$(UXEN_WINDOWS_SIGN)
-!else
-SIGNCMD=rem build not signed since UXEN_WINDOWS_SIGN not defined
-!endif
 INF2CAT=inf2cat /driver:$(OBJ_PATH)\$(O)\ /os:$(INF2CAT_OS)
 
 COPY_DEVCON = $(OBJ_PATH)\$(O)\devcon.exe

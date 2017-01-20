@@ -11,6 +11,4 @@ $(OBJ_PATH)\$(O)\uxenvmlib.sys:
 COPY: $(OBJ_PATH)\$(O)\uxenvmlib.sys
 
 POST: $(OBJ_PATH)\$(O)\$(INF_NAME).inf
-    $(SIGNCMD) $(OBJ_PATH)\$(O)\$(TARGETNAME).sys
     $(INF2CAT)
-    $(SIGNCMD) $(OBJ_PATH)\$(O)\$(TARGETNAME).cat

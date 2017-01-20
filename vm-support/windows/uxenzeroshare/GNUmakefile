@@ -1,5 +1,5 @@
 #
-# Copyright 2013-2015, Bromium, Inc.
+# Copyright 2013-2017, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -19,7 +19,6 @@ SET_OBJECT_ROOT :=
 OBJDIR_uxenzeroshare := .
 endif
 
-SET_SIGN := set UXEN_WINDOWS_SIGN=$(UXEN_WINDOWS_SIGN)&
 SET_STAMPINF_DATE := set STAMPINF_DATE=$(shell TZ=GMT date +%m/%d/%Y)&
 
 OUTDIR_uxenzeroshare := $(OBJDIR_uxenzeroshare)/uxenzeroshare/$(OBJDIR_ddk)
@@ -44,7 +43,9 @@ all: $(OUTDIR_uxenzeroshare)/uxenzeroshare.sys
 $(OUTDIR_uxenzeroshare)/uxenzeroshare.sys:
 	@mkdir -p $(@D)
 	$(_W)echo WinDDK build $@
-	$(_V)cmd /c "set MAKEFLAGS=& $(SET_STAMPINF_DATE) $(SET_SIGN) $(SET_COMMON_DIR) $(WINDDK_DIR)\bin\setenv.bat $(WINDDK_DIR)\ $(DDKENV) $(UXEN_TARGET_VM_SUPPORT_ARCH_NAME) $(UXEN_TARGET_VM_SUPPORT_OS) no_oacr & cd /D $$(pwd -W) & $(SET_OBJECT_ROOT) $(WINDDK_BUILD) -cZ -jpath $(call dospath,$(OBJDIR_uxenzeroshare))"
+	$(_V)cmd /c "set MAKEFLAGS=& $(SET_STAMPINF_DATE) $(SET_COMMON_DIR) $(WINDDK_DIR)\bin\setenv.bat $(WINDDK_DIR)\ $(DDKENV) $(UXEN_TARGET_VM_SUPPORT_ARCH_NAME) $(UXEN_TARGET_VM_SUPPORT_OS) no_oacr & cd /D $$(pwd -W) & $(SET_OBJECT_ROOT) $(WINDDK_BUILD) -cZ -jpath $(call dospath,$(OBJDIR_uxenzeroshare))"
+	$(_W)echo Signing - $@
+	$(_V)cmd //c $(UXEN_WINDOWS_SIGN) $@ || { rm -f $@; false; }
 
 _install_banner: $(INSTALL_DIR)/.exists
 	$(_W)echo Installing from $(abspath $(OUTDIR_uxenzeroshare)) to $(INSTALL_DIR)

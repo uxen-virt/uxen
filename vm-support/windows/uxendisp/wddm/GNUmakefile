@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Bromium, Inc.
+# Copyright 2015-2017, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -16,7 +16,6 @@ SET_OBJECT_ROOT :=
 OBJDIR_uxendisp := .
 endif
 
-SET_SIGN := set UXEN_WINDOWS_SIGN=$(UXEN_WINDOWS_SIGN)&
 SET_STAMPINF_DATE := set STAMPINF_DATE=$(shell TZ=GMT date +%m/%d/%Y)&
 SET_WDK8_PATH := set WDK8_PATH=$(call dospath,$(TOOLSDIR)/cross-windows/wdk8)&
 
@@ -35,12 +34,16 @@ $(OUTDIR_uxendisp)/uxendisp.sys: $(OBJDIR_uxendisp)/build_info.h $(OUTDIR_uxendi
 	$(_W)echo WinDDK build $@
 	$(_V)cmd /c "del /F /Q /S $(call dospath,$(OUTDIR_uxendisp)/) >nul 2>&1"
 	$(_V)cmd /c "%systemroot%\System32\xcopy.exe /Y $(call dospath,$(OUTDIR_uxendisp32)/uxend3d.dll) $(call dospath,$(OUTDIR_uxendisp)/uxend3d32.dll)*"
-	$(_V)cmd /c "set UXEN_BUILD_INFO=\"\"\"../../../build_info.h\"\"\"& set MAKEFLAGS=& $(SET_WDK8_PATH) $(SET_STAMPINF_DATE) $(SET_SIGN) $(SET_UXENDIRS) $(WINDDK_DIR)\bin\setenv.bat $(WINDDK_DIR)\ $(DDKENV) $(UXEN_TARGET_VM_SUPPORT_ARCH_NAME) $(UXEN_TARGET_VM_SUPPORT_OS) no_oacr & cd /D $$(pwd -W) & $(SET_OBJECT_ROOT) $(WINDDK_BUILD) -w -Z -jpath $(call dospath,$(OBJDIR_uxendisp))"
+	$(_V)cmd /c "set UXEN_BUILD_INFO=\"\"\"../../../build_info.h\"\"\"& set MAKEFLAGS=& $(SET_WDK8_PATH) $(SET_STAMPINF_DATE) $(SET_UXENDIRS) $(WINDDK_DIR)\bin\setenv.bat $(WINDDK_DIR)\ $(DDKENV) $(UXEN_TARGET_VM_SUPPORT_ARCH_NAME) $(UXEN_TARGET_VM_SUPPORT_OS) no_oacr & cd /D $$(pwd -W) & $(SET_OBJECT_ROOT) $(WINDDK_BUILD) -w -Z -jpath $(call dospath,$(OBJDIR_uxendisp))"
+	$(_W)echo Signing - $@
+	$(_V)cmd //c $(UXEN_WINDOWS_SIGN) $@ || { rm -f $@; false; }
 
 $(OUTDIR_uxendisp32)/uxend3d.dll:
 	@mkdir -p $(@D)
 	$(_W)echo WinDDK i386 build $@
-	$(_V)cmd /c "set MAKEFLAGS=& $(SET_WDK8_PATH) $(SET_STAMPINF_DATE) $(SET_SIGN) $(SET_UXENDIRS) $(WINDDK_DIR)\bin\setenv.bat $(WINDDK_DIR)\ $(DDKENV) $(UXEN_TARGET_VM_SUPPORT_ARCH_NAME_32_BIT) $(UXEN_TARGET_VM_SUPPORT_OS) no_oacr & cd /D $$(pwd -W)/display & $(SET_OBJECT_ROOT) $(WINDDK_BUILD) -cZ -jpath $(call dospath,$(OBJDIR_uxendisp)/display)"
+	$(_V)cmd /c "set MAKEFLAGS=& $(SET_WDK8_PATH) $(SET_STAMPINF_DATE) $(SET_UXENDIRS) $(WINDDK_DIR)\bin\setenv.bat $(WINDDK_DIR)\ $(DDKENV) $(UXEN_TARGET_VM_SUPPORT_ARCH_NAME_32_BIT) $(UXEN_TARGET_VM_SUPPORT_OS) no_oacr & cd /D $$(pwd -W)/display & $(SET_OBJECT_ROOT) $(WINDDK_BUILD) -cZ -jpath $(call dospath,$(OBJDIR_uxendisp)/display)"
+	$(_W)echo Signing - $@
+	$(_V)cmd //c $(UXEN_WINDOWS_SIGN) $@ || { rm -f $@; false; }
 
 .PHONY: $(OBJDIR_uxendisp)/build_info.h
 $(OBJDIR_uxendisp)/build_info.h:
