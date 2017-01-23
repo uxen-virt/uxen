@@ -6,7 +6,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -503,6 +503,12 @@ domain_create(domid_t dom, unsigned int flags, uint32_t ssidref,
 {
     struct domain *d, *d_uuid;
     static domid_t rover = 0;
+
+#define REQUIRED_FLAGS (DOMCRF_hvm | DOMCRF_hap)
+    if ((flags & REQUIRED_FLAGS) != REQUIRED_FLAGS) {
+        printk("domain_create with incorrect flags 0x%x\n", flags);
+        return -EINVAL;
+    }
 
     if ((dom > 0) && (dom < DOMID_FIRST_RESERVED)) {
         if ( !is_free_domid(dom) ) {
