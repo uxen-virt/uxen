@@ -101,7 +101,9 @@ release_fd_assoc(void *p)
         prepare_release_fd_assoc(fda);
         if (fda->vmi_destroy_on_close)
             vmi->vmi_marked_for_destroy = 1;
-    }
+    } else
+        prepare_release_fd_assoc(fda);
+
     uxen_unlock(aff);
 }
 
