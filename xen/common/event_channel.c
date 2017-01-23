@@ -17,7 +17,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -1141,6 +1141,7 @@ void free_xen_event_channel(
 {
     struct evtchn *chn;
     struct domain *d = local_vcpu->domain;
+    int port_is_sane;
 
     spin_lock(&d->event_lock);
 
@@ -1150,37 +1151,45 @@ void free_xen_event_channel(
         return;
     }
 
-    BUG_ON(!port_is_valid(d, port));
-    chn = evtchn_from_port(d, port);
-    BUG_ON(!chn->consumer_is_xen);
-    chn->consumer_is_xen = 0;
-
+    port_is_sane = port_is_valid(d, port);
+    if (port_is_sane) {
+        chn = evtchn_from_port(d, port);
+        port_is_sane = chn->consumer_is_xen;
+        if (port_is_sane)
+            chn->consumer_is_xen = 0;
+    }
     spin_unlock(&d->event_lock);
 
-    (void)__evtchn_close(d, port);
+    if (port_is_sane)
+        (void)__evtchn_close(d, port);
+    else
+         gdprintk(XENLOG_ERR, "attempt to free (bad) port %d, domain %d\n",
+            port, d->domain_id);
 }
 
 
 void notify_via_xen_event_channel(struct domain *ld, int lport)
 {
-    struct evtchn *lchn;
+    struct evtchn *lchn = NULL;
 #ifndef __UXEN__
     struct evtchn *rchn;
     struct domain *rd;
     int            rport;
 #endif  /* __UXEN__ */
+    int port_is_sane = 1;
 
     spin_lock(&ld->event_lock);
 
     if ( unlikely(ld->is_dying) )
-    {
-        spin_unlock(&ld->event_lock);
-        return;
-    }
+        goto out_unlock;
 
-    ASSERT(port_is_valid(ld, lport));
-    lchn = evtchn_from_port(ld, lport);
-    ASSERT(lchn->consumer_is_xen);
+    port_is_sane = port_is_valid(ld, lport);
+    if (port_is_sane) {
+        lchn = evtchn_from_port(ld, lport);
+        port_is_sane = lchn->consumer_is_xen;
+    }
+    if (!port_is_sane)
+        goto out_unlock;
 
     if ( likely(lchn->state == ECS_HOST) )
     {
@@ -1199,7 +1208,13 @@ void notify_via_xen_event_channel(struct domain *ld, int lport)
 #endif  /* __UXEN__ */
         /* DEBUG() */;
 
+    out_unlock:
     spin_unlock(&ld->event_lock);
+
+    if (!port_is_sane)
+         gdprintk(XENLOG_ERR,
+            "notify_via_xen_event_channel (bad) port %d, domain %d\n",
+            lport, ld->domain_id);
 }
 
 void *
