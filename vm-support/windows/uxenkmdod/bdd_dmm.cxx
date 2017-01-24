@@ -9,7 +9,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2017, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -736,9 +736,6 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_M
     mode.ScreenStride = pSourceMode->Format.Graphics.Stride;
     mode.BitsPerPlane = 32;
 
-    if (m_Flags.StopCopy) {
-        mode.ScreenStride += (mode.VisScreenWidth & 1) * 4;
-    }
     hw_set_mode(&m_HwResources, &mode);
 
     if (!pCurrentBddMode->Flags.DoNotMapOrUnmap)
@@ -913,11 +910,6 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetVirtMode(UXENDISPCustomMode *pNewMode)
     mode.ScreenStride = pNewMode->width * 4;
     mode.BitsPerPlane = 32;
 
-    if (m_Flags.StopCopy) {
-        CURRENT_BDD_MODE* pCurrentBddMode = &m_CurrentModes[0];
-        mode.ScreenStride = pCurrentBddMode->DispInfo.Pitch;
-        mode.ScreenStride += (pCurrentBddMode->DispInfo.Width & 1) * 4;
-    }
     hw_set_mode(&m_HwResources, &mode);
 
     m_VirtMode = *pNewMode;
