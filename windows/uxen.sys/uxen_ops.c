@@ -1584,6 +1584,15 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
 	goto out;
     }
 
+    aff = uxen_lock();
+    ret = (vmi == rb_tree_insert_node(&uxen_devext->de_vm_info_rbtree, vmi));
+    uxen_unlock(aff);
+    if (!ret) {
+        fail_msg("domain ID already present in de_vm_info_rbtree");
+        ret = -EINVAL;
+        goto out;
+    }
+
     InterlockedIncrement(&vmi->vmi_exists);
     InterlockedIncrement(&vmi->vmi_alive);
 
@@ -1611,10 +1620,6 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
 
     KeInitializeEvent(&vmi->vmi_notexecuting, NotificationEvent, FALSE);
     KeInitializeEvent(&vmi->vmi_spinloop_wake_event, NotificationEvent, FALSE);
-
-    aff = uxen_lock();
-    rb_tree_insert_node(&uxen_devext->de_vm_info_rbtree, vmi);
-    uxen_unlock(aff);
 
     ret = kernel_malloc_mfns(1, &vmi->vmi_undefined_mfn, 0);
     if (ret != 1) {
