@@ -23,7 +23,13 @@
 #define AX_CPUID_AX_FEATURES  0x351f9505
 #define AX_CPUID_LN_FEATURES  0x3583c6ea
 #define AX_CPUID_TREE_LOG     0x3527bbda
-#define AX_CPUID_EPT_FLUSH    0x35091554
+#define AX_CPUID_PV_EPT_WRITE 0x35091554
+#define AX_CPUID_PV_EPT_WRITE_LEVEL_MASK        0x07
+#define AX_CPUID_PV_EPT_WRITE_VALID             0x10
+#define AX_CPUID_PV_EPT_WRITE_INVEPT_ALL        0x20
+#define AX_CPUID_INVEPT_ALL   0x359ee514
+
+
 
 #define AX_FEATURES_AX_L1_VMX     (1ULL << 0)
 #define AX_FEATURES_AX_L2_VMX     (1ULL << 1)
@@ -34,7 +40,11 @@
 #define AX_FEATURES_LN_NO_RESTORE_DT_LIMITS  (1ULL << 2)
 #define AX_FEATURES_LN_ACCEPT_LAZY_EPT_FAULTS (1ULL << 3)
 
-#define AX_VMCS_X_FLAGS_FLUSH_EPT 0x1
+#define AX_VMCS_X_FLAGS_FLUSH_EPT        (1ULL << 0)
+
+#define AX_VMCS_X_PV_EPT_WRITE_LEVEL_MASK       AX_CPUID_PV_EPT_WRITE_LEVEL_MASK
+#define AX_VMCS_X_PV_EPT_WRITE_VALID            AX_CPUID_PV_EPT_WRITE_VALID
+#define AX_VMCS_X_PV_EPT_WRITE_INVEPT_ALL       AX_CPUID_PV_EPT_WRITE_INVEPT_ALL
 
 #define AX_INSTBITS_INSTALLED            (1UL << 0) /* system transitioned from ax uninstalled -> installed */
 #define AX_INSTBITS_UNINSTALLED          (1UL << 1) /* system transitioned from ax installed -> uninstalled */
