@@ -196,10 +196,12 @@ set_map_mfn_pte_flags(void)
 
     /* ---DA--UW-V and avail2 */
     map_mfn_pte_flags = 0x0000000000000867;
-    
+
     /* set NX bit if it's used for stack PTE */
+    /* set WsleAge bits according to stack PTE */
     map_mfn_pte_flags |= (*((uint64_t *)VA_TO_LINEAR_PTE((size_t)&dummy)) &
-                          0x8000000000000000);
+                          0x8F00000000000000);
+    printk("%s: %Ix\n", __FUNCTION__, map_mfn_pte_flags);
 
     if (!(map_mfn_pte_flags & 0x8000000000000000))
         printk("NX is disabled\n");

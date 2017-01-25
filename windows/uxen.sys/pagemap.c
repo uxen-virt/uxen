@@ -2,7 +2,7 @@
  *  pagemap.c
  *  uxen
  *
- * Copyright 2016, Bromium, Inc.
+ * Copyright 2016-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -286,7 +286,7 @@ pagemap_unmap_page_va(const void *va)
     if (!(pte & 1/* _PAGE_PRESENT */))
         mfn = -1; /* INVALID_MFN */
     else
-        mfn = (pte & ~0x8000000000000fff) >> PAGE_SHIFT;
+        mfn = (pte & ~0xffff000000000fff) >> PAGE_SHIFT;
 
     _bittestandreset(s->map, slot);
     pagemap_slots_free++;
