@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2017, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -438,7 +438,7 @@ surface_unlock(struct display_surface *surface)
 }
 
 static struct remote_surface *
-alloc_surface(struct remote_gui_state *s, int width, int height)
+alloc_surface(struct remote_gui_state *s, int width, int height, int linesize)
 {
     struct remote_surface *surface;
 
@@ -451,7 +451,7 @@ alloc_surface(struct remote_gui_state *s, int width, int height)
     surface->s.pf = default_pixelformat(32);
     surface->s.lock = surface_lock;
     surface->s.unlock = surface_unlock;
-    surface->linesize = width * 4;
+    surface->linesize = linesize;
 
     s->surface = surface;
 
@@ -466,7 +466,7 @@ create_surface(struct gui_state *state, int width, int height)
 
     DPRINTF("%s %d %d\n", __FUNCTION__, width, height);
 
-    surf = alloc_surface(s, width, height);
+    surf = alloc_surface(s, width, height, width * 4);
 
     surf->len = width * height * 4;
     surf->segment_view = create_shm_segment(surf->len, &surf->segment_handle);
@@ -491,12 +491,10 @@ create_vram_surface(struct gui_state *state,
 
     DPRINTF("%s %d %d\n", __FUNCTION__, width, height);
 
-    if (vram_ptr != s->vram_view ||
-        depth != 32 ||
-        linesize != (width * 4))
+    if (vram_ptr != s->vram_view || depth != 32)
         return NULL;
 
-    surf = alloc_surface(s, width, height);
+    surf = alloc_surface(s, width, height, linesize);
 #if 0
     memcpy(surf->name, s->vram_name, sizeof(surf->name));
 #endif
