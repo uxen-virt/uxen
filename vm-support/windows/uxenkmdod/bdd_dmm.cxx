@@ -910,6 +910,16 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetVirtMode(UXENDISPCustomMode *pNewMode)
     mode.ScreenStride = pNewMode->width * 4;
     mode.BitsPerPlane = 32;
 
+    /* Preserve current stride in StopCopy mode. It can work because virtual mode changes
+     * are always to lower resolution only. Preserving stride is required as dwm is not notified
+     * about virtual mode change and doesn't update it's surfaces stride either */
+    if (m_Flags.StopCopy) {
+        CURRENT_BDD_MODE* pCurrentBddMode = &m_CurrentModes[0];
+        mode.ScreenStride = pCurrentBddMode->DispInfo.Pitch;
+        uxen_msg("virtual mode change %dx%d, preserving stride=%d\n",
+                 (int)mode.VisScreenWidth, (int)mode.VisScreenHeight,
+                 (int)mode.ScreenStride);
+    }
     hw_set_mode(&m_HwResources, &mode);
 
     m_VirtMode = *pNewMode;
