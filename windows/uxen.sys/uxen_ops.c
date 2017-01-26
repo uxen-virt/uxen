@@ -822,7 +822,7 @@ test_ln_compatibility_masks(uint32_t *masks, unsigned n_masks)
 
         if ((rdx & masks[i]) != rdx)  {
             fail_msg("ax_compatibility: uXen feature missing ECX: 0x%x "
-                     "needed %08x got %08x", i, (uint32_t)rdx, masks[i]);
+                     "needed %08x got %08x", i, masks[i], (uint32_t)rdx);
             return 1;
         }
     }
