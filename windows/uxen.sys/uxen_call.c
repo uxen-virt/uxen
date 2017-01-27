@@ -2,7 +2,7 @@
  *  uxen_call.c
  *  uxen
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -224,7 +224,7 @@ _uxen_snoop_hypercall(void *udata, int mode)
                 	return -ret;
 
 		mem_needed = (sizeof(mfn_t) + sizeof(uint8_t *) ) * pl.npage;
-		mem_needed += 4096; /*v4v_ring_info and other non public structures */
+		mem_needed += 8 * 4096; /*v4v_ring_info and other non public structures */
 
 		mem_needed +=PAGE_SIZE - 1 ;
 		pages += mem_needed >> PAGE_SHIFT;
