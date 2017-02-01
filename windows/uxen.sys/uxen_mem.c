@@ -1364,19 +1364,24 @@ unmap_host_pages(void *va, size_t len, struct fd_assoc *fda)
 
     KeAcquireSpinLock(&umi->lck, &old_irql);
     um = (struct user_mapping *)rb_tree_find_node(&umi->rbtree, &key);
-    if (um)
+    if (um && um->type == USER_MAPPING_HOST_MFNS)
         rb_tree_remove_node(&umi->rbtree, um);
     KeReleaseSpinLock(&umi->lck, old_irql);
     if (!um) {
         fail_msg("va %p not locked", va);
         return EINVAL;
     }
+    if (um->type != USER_MAPPING_HOST_MFNS) {
+        fail_msg("invalid type for va %p mapping", va);
+        return EPERM;
+    }
 
     return user_free_user_mapping(um);
 }
 
 static void *
-map_page_range(int n, uxen_pfn_t *mfn, int mode, struct fd_assoc *fda)
+map_page_range(int n, uxen_pfn_t *mfn, int mode, enum user_mapping_type type,
+               struct fd_assoc *fda)
 {
     struct user_mapping_info *umi = fda ? &fda->user_mappings : NULL;
     PFN_NUMBER *pfn;
@@ -1385,6 +1390,11 @@ map_page_range(int n, uxen_pfn_t *mfn, int mode, struct fd_assoc *fda)
     struct user_mapping *um = NULL;
     uint32_t max_mfn;
     int i;
+
+    if (type != USER_MAPPING_MEMORY_MAP && type != USER_MAPPING_USER_MAP) {
+        fail_msg("invalid mapping type %d", type);
+        return NULL;
+    }
 
     max_mfn = uxen_info ? uxen_info->ui_max_page : -1;
 
@@ -1447,7 +1457,7 @@ map_page_range(int n, uxen_pfn_t *mfn, int mode, struct fd_assoc *fda)
         um->va.size = n << PAGE_SHIFT;
         um->fda = fda;
         um->num = n;
-        um->type = USER_MAPPING_MEMORY_MAP;
+        um->type = type;
 
         KeAcquireSpinLock(&umi->lck, &old_irql);
         rb_tree_insert_node(&umi->rbtree, um);
@@ -1470,7 +1480,8 @@ kernel_mmap_pages(int n, uxen_pfn_t *mfn)
     KIRQL old_irql;
 
     KeAcquireSpinLock(&map_page_range_lock, &old_irql);
-    addr = map_page_range(n, mfn, MAP_PAGE_RANGE_KERNEL_MODE, NULL);
+    addr = map_page_range(n, mfn, MAP_PAGE_RANGE_KERNEL_MODE,
+                          USER_MAPPING_MEMORY_MAP, NULL);
     KeReleaseSpinLock(&map_page_range_lock, old_irql);
 
     return addr;
@@ -1480,12 +1491,13 @@ void *
 user_mmap_pages(int n, uxen_pfn_t *mfn, int mode, struct fd_assoc *fda)
 {
 
-    return map_page_range(n, mfn, MAP_PAGE_RANGE_USER_MODE | mode, fda);
+    return map_page_range(n, mfn, MAP_PAGE_RANGE_USER_MODE | mode,
+                          USER_MAPPING_MEMORY_MAP, fda);
 }
 
 static int
 unmap_page_range(const void *addr, int n, uxen_pfn_t *mfn,
-                 struct fd_assoc *fda)
+                 enum user_mapping_type type, struct fd_assoc *fda)
 {
     struct user_mapping_info *umi = fda ? &fda->user_mappings : NULL;
     PFN_NUMBER *pfn;
@@ -1504,13 +1516,17 @@ unmap_page_range(const void *addr, int n, uxen_pfn_t *mfn,
 
         KeAcquireSpinLock(&umi->lck, &old_irql);
         um = (struct user_mapping *)rb_tree_find_node(&umi->rbtree, &va);
-        if (um)
+        if (um && um->type == type)
             rb_tree_remove_node(&umi->rbtree, um);
         KeReleaseSpinLock(&umi->lck, old_irql);
 
         if (!um) {
             fail_msg("va %p not mapped", addr);
             return EINVAL;
+        }
+        if (um->type != type) {
+            fail_msg("invalid type for va %p mapping", addr);
+            return EPERM;
         }
 
         return user_free_user_mapping(um);
@@ -1559,7 +1575,7 @@ kernel_munmap_pages(const void *addr, int n, uxen_pfn_t *mfn)
     KIRQL old_irql;
 
     KeAcquireSpinLock(&map_page_range_lock, &old_irql);
-    ret = unmap_page_range(addr, n, mfn, NULL);
+    ret = unmap_page_range(addr, n, mfn, USER_MAPPING_MEMORY_MAP, NULL);
     KeReleaseSpinLock(&map_page_range_lock, old_irql);
 
     return ret;
@@ -1614,7 +1630,7 @@ int
 user_munmap_pages(const void *addr, int n, uxen_pfn_t *mfn,
                   struct fd_assoc *fda)
 {
-    return unmap_page_range(addr, n, mfn, fda);
+    return unmap_page_range(addr, n, mfn, USER_MAPPING_MEMORY_MAP, fda);
 }
 
 void *
@@ -1632,7 +1648,8 @@ uxen_mem_user_va_with_page(uint32_t num, uint32_t mfn,
     for (i = 0; i < num; i++)
         r[i] = mfn;
 
-    va = map_page_range(num, r, MAP_PAGE_RANGE_USER_MODE, fda);
+    va = map_page_range(num, r, MAP_PAGE_RANGE_USER_MODE,
+                        USER_MAPPING_MEMORY_MAP, fda);
 
     kernel_free(r, num * sizeof (uxen_pfn_t));
 
@@ -1728,6 +1745,7 @@ user_free_user_mapping(struct user_mapping *um)
 
     switch (um->type) {
     case USER_MAPPING_MEMORY_MAP:
+    case USER_MAPPING_USER_MAP:
         MmUnmapLockedPages((uint8_t *)um->va.addr, um->mdl);
         if (um->mfns != NULL) {
             release_user_mapping_range(um->mfns, um->num, um->fda);
@@ -1756,7 +1774,7 @@ user_free_user_mapping(struct user_mapping *um)
 }
 
 void
-user_free(void *addr, struct fd_assoc *fda)
+user_free(void *addr, enum user_mapping_type type, struct fd_assoc *fda)
 {
     struct user_mapping_info *umi = &fda->user_mappings;
     struct user_mapping *um;
@@ -1768,11 +1786,13 @@ user_free(void *addr, struct fd_assoc *fda)
 
     KeAcquireSpinLock(&umi->lck, &old_irql);
     um = (struct user_mapping *)rb_tree_find_node(&umi->rbtree, &va);
-    if (um)
+    if (um && um->type == type)
         rb_tree_remove_node(&umi->rbtree, um);
     KeReleaseSpinLock(&umi->lck, old_irql);
 
     if (!um)
+        return;
+    if (um->type != type)
         return;
 
     user_free_user_mapping(um);
@@ -1791,8 +1811,10 @@ user_free_all_user_mappings(struct fd_assoc *fda)
         KeReleaseSpinLock(&umi->lck, old_irql);
         mm_dprintk("%s: freeing user mapping %p type %s\n", __FUNCTION__,
                    um->va.addr,
-                   um->type == USER_MAPPING_MEMORY_MAP ? "mmap" :
-                   um->type == USER_MAPPING_HOST_MFNS ? "host" : "malloc");
+                   um->type == USER_MAPPING_USER_MAP ? "mmap" :
+                   um->type == USER_MAPPING_USER_MALLOC ? "malloc" :
+                   um->type == USER_MAPPING_MEMORY_MAP ? "sys" :
+                   um->type == USER_MAPPING_HOST_MFNS ? "host" : "buffer");
         user_free_user_mapping(um);
         KeAcquireSpinLock(&umi->lck, &old_irql);
     }
@@ -1857,7 +1879,7 @@ user_mmap_xen_mfns(unsigned int num, xen_pfn_t *mfns,
         um->fda = fda;
         um->num = num;
         um->mfns = mfns;
-        um->type = USER_MAPPING_MEMORY_MAP;
+        um->type = USER_MAPPING_USER_MAP;
 
         KeAcquireSpinLock(&umi->lck, &old_irql);
         rb_tree_insert_node(&umi->rbtree, um);
@@ -1896,7 +1918,7 @@ uxen_mem_free(struct uxen_free_desc *ufd, struct fd_assoc *fda)
 {
 
     KeAcquireGuardedMutex(&fda->user_malloc_mutex);
-    user_free((void *)(uintptr_t)ufd->ufd_addr, fda);
+    user_free((void *)(uintptr_t)ufd->ufd_addr, USER_MAPPING_USER_MALLOC, fda);
     KeReleaseGuardedMutex(&fda->user_malloc_mutex);
 
     return 0;
@@ -2084,7 +2106,7 @@ uxen_mem_munmap(struct uxen_munmap_desc *umd, struct fd_assoc *fda)
     if (vmi->vmi_shared.vmi_runnable == 0)
         goto out;
 
-    user_free((void *)(uintptr_t)umd->umd_addr, fda);
+    user_free((void *)(uintptr_t)umd->umd_addr, USER_MAPPING_USER_MAP, fda);
 
     ret = 0;
   out:

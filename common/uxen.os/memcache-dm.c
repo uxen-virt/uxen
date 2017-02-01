@@ -314,7 +314,8 @@ mdm_free_all(struct vm_info *vmi)
         mdm->mdm_va = NULL;
     }
     if (mdm->mdm_mfn_to_entry) {
-        user_free((void *)mdm->mdm_mfn_to_entry, vmi->vmi_mdm_fda);
+        user_free((void *)mdm->mdm_mfn_to_entry, USER_MAPPING_BUFFER,
+                  vmi->vmi_mdm_fda);
         mdm->mdm_mfn_to_entry = NULL;
     }
     vmi->vmi_mdm_fda = NULL;

@@ -353,10 +353,11 @@ enum user_mapping_type {
     USER_MAPPING_MEMORY_MAP,
     USER_MAPPING_BUFFER,
     USER_MAPPING_USER_MALLOC,
+    USER_MAPPING_USER_MAP,
     USER_MAPPING_HOST_MFNS,
 };
 void *user_malloc(size_t, enum user_mapping_type, struct fd_assoc *);
-void user_free(void *va, struct fd_assoc *);
+void user_free(void *va, enum user_mapping_type, struct fd_assoc *);
 void user_free_all_user_mappings(struct fd_assoc *);
 int uxen_mem_malloc(struct uxen_malloc_desc *, struct fd_assoc *);
 int uxen_mem_free(struct uxen_free_desc *, struct fd_assoc *);
