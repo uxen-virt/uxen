@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2016, Bromium, Inc.
+# Copyright 2012-2017, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -289,6 +289,7 @@ QEMU_SRCS += hw/pci.c
 qemu_hw_pci.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 QEMU_SRCS += hw/pci_host.c
 QEMU_SRCS += hw/pckbd.c
+qemu_hw_pckbd.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 QEMU_SRCS += hw/piix_pci.c
 QEMU_SRCS += hw/ps2.c
 QEMU_SRCS += hw/qdev-properties.c

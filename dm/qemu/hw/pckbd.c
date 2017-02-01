@@ -28,14 +28,15 @@
 // #include "pc.h"
 #include "ps2.h"
 // #include "sysemu.h"
+#include <dm/vm-savefile-simple.h>
 
 /* debug PC keyboard */
 //#define DEBUG_KBD
 #ifdef DEBUG_KBD
-#define DPRINTF(fmt, ...)                                       \
+#define KBD_DPRINTF(fmt, ...)                                       \
     do { printf("KBD: " fmt , ## __VA_ARGS__); } while (0)
 #else
-#define DPRINTF(fmt, ...)
+#define KBD_DPRINTF(fmt, ...)
 #endif
 
 /*	Keyboard Controller Commands */
@@ -144,6 +145,19 @@ typedef struct KBDState {
     target_phys_addr_t mask;
 } KBDState;
 
+static void kbd_reboot_vmsave(void)
+{
+    static int run_once = 0;
+
+    if (run_once || !vmsavefile_on_kbd_reboot)
+        return;
+
+    run_once = 1;
+    debug_printf("%s: generating savefile\n", __FUNCTION__);
+    vmsavefile_save_simple(xc_handle, vmsavefile_on_kbd_reboot,
+                           vm_uuid, vm_id);
+}
+
 /* update irq and KBD_STAT_[MOUSE_]OBF */
 /* XXX: not generating the irqs if KBD_MODE_DISABLE_KBD is set may be
    incorrect, but it avoids having to simulate exact delays */
@@ -201,7 +215,7 @@ static uint32_t kbd_read_status(void *opaque, uint32_t addr)
     KBDState *s = opaque;
     int val;
     val = s->status;
-    DPRINTF("kbd: read status=0x%02x\n", val);
+    KBD_DPRINTF("kbd: read status=0x%02x\n", val);
     return val;
 }
 
@@ -215,12 +229,13 @@ static void kbd_queue(KBDState *s, int b, int aux)
 
 static void outport_write(KBDState *s, uint32_t val)
 {
-    DPRINTF("kbd: write outport=0x%02x\n", val);
+    KBD_DPRINTF("kbd: write outport=0x%02x\n", val);
     s->outport = val;
     if (s->a20_out) {
         qemu_set_irq(*s->a20_out, (val >> 1) & 1);
     }
     if (!(val & 1)) {
+        kbd_reboot_vmsave();
         vm_set_run_mode(POWEROFF_VM);
     }
 }
@@ -229,7 +244,7 @@ static void kbd_write_command(void *opaque, uint32_t addr, uint32_t val)
 {
     KBDState *s = opaque;
 
-    DPRINTF("kbd: write cmd=0x%02x\n", val);
+    KBD_DPRINTF("kbd: write cmd=0x%02x\n", val);
 
     /* Bits 3-0 of the output port P2 of the keyboard controller may be pulsed
      * low for approximately 6 micro seconds. Bits 3-0 of the KBD_CCMD_PULSE
@@ -299,6 +314,7 @@ static void kbd_write_command(void *opaque, uint32_t addr, uint32_t val)
         s->outport &= ~KBD_OUT_A20;
         break;
     case KBD_CCMD_RESET:
+        kbd_reboot_vmsave();
         vm_set_run_mode(POWEROFF_VM);
         break;
     case KBD_CCMD_NO_OP:
@@ -320,7 +336,7 @@ static uint32_t kbd_read_data(void *opaque, uint32_t addr)
     else
         val = ps2_read_data(s->kbd);
 
-    DPRINTF("kbd: read data=0x%02x\n", val);
+    KBD_DPRINTF("kbd: read data=0x%02x\n", val);
     return val;
 }
 
@@ -328,7 +344,7 @@ static void kbd_write_data(void *opaque, uint32_t addr, uint32_t val)
 {
     KBDState *s = opaque;
 
-    DPRINTF("kbd: write data=0x%02x\n", val);
+    KBD_DPRINTF("kbd: write data=0x%02x\n", val);
 
     switch(s->write_cmd) {
     case 0:

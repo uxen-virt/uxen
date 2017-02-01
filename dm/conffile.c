@@ -701,6 +701,12 @@ co_set_vm_save(const char *opt, yajl_val arg, void *opaque)
         debug_printf("%s: vm save file on-restricted-pci-emul: %s\n",
                      __FUNCTION__, vmsavefile_on_restricted_pci);
     }
+    vmsavefile_on_kbd_reboot =
+                    yajl_object_get_string(arg, "on-kbd-reboot");
+    if (vmsavefile_on_kbd_reboot) {
+        debug_printf("%s: vm save file on-kbd-reboot: %s\n",
+                     __FUNCTION__, vmsavefile_on_kbd_reboot);
+    }
 
     return 0;
 }

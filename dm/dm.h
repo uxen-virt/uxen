@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -58,6 +58,7 @@ extern uint8_t v4v_idtoken[16];
 extern uint8_t v4v_idtoken_is_vm_uuid;
 extern const char *vmsavefile_on_crash;
 extern const char *vmsavefile_on_restricted_pci;
+extern const char *vmsavefile_on_kbd_reboot;
 extern uint64_t guest_drivers_logmask;
 extern uint64_t debugkey_level;
 extern uint64_t malloc_limit_bytes;

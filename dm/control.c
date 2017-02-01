@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -37,6 +37,8 @@
 
 #include <xenctrl.h>
 #include <xc_private.h>
+
+#include "vm-savefile-simple.h"
 
 #define CONTROL_MAX_LINE_LEN 4096
 #define CONTROL_INPUT_REALLOC_SIZE 512
@@ -458,6 +460,30 @@ control_command_unpause(void *opaque, const char *id, const char *opt,
 
     return 0;
 }
+
+static int
+control_command_generate_savefile(void *opaque, const char *id,
+                                  const char *opt,
+                                  dict d, void *command_opaque)
+{
+    int ret;
+    struct control_desc *cd = (struct control_desc *)opaque;
+    const char *file;
+
+    file = dict_get_string(d, "file");
+    if (!file)
+        return -1;
+
+    debug_printf("%s: generating savefile to %s\n", __FUNCTION__, file);
+    ret = vmsavefile_save_simple(xc_handle, file, vm_uuid, vm_id);
+    if (ret)
+	control_send_error(cd, opt, id, ret, NULL);
+    else
+	control_send_ok(cd, opt, id, NULL);
+
+    return 0;
+}
+
 
 static int
 control_command_throttle(void *opaque, const char *id, const char *opt,
@@ -1070,6 +1096,11 @@ struct dict_rpc_command control_commands[] = {
             { NULL, },
         }, },
     { "collect-vm-stats-once", collect_vm_stats_once, .flags = CONTROL_SUSPEND_OK, },
+    { "generate-full-savefile", control_command_generate_savefile,
+      .args = (struct dict_rpc_arg_desc[]) {
+            { "file", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },
+            { NULL, },
+        }, },
     { "inject-ctrl-alt-delete", inject_ctrl_alt_delete, },
     { "inject-trap", control_command_inject_trap,
       .args = (struct dict_rpc_arg_desc[]) {
