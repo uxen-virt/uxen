@@ -182,6 +182,28 @@ uxendisp_unmap_fb(uxendisp_ctrl_ctx_t *ctx, void *mapped)
     uxendisp_escape(ctx,0, &m, sizeof(m));
 }
 
+static void*
+uxendisp_map_scratch_fb(uxendisp_ctrl_ctx_t *ctx)
+{
+    UXENDISPCustomMode m = { 0 };
+
+    m.esc_code = UXENDISP_ESCAPE_MAP_SCRATCH_FB;
+    if (uxendisp_escape(ctx, 0, &m, sizeof(m)))
+        return NULL;
+
+    return (void*)(uintptr_t)m.ptr;
+}
+
+static void
+uxendisp_unmap_scratch_fb(uxendisp_ctrl_ctx_t *ctx, void *mapped)
+{
+    UXENDISPCustomMode m = { 0 };
+
+    m.esc_code = UXENDISP_ESCAPE_UNMAP_SCRATCH_FB;
+    m.ptr = (uintptr_t)mapped;
+    uxendisp_escape(ctx,0, &m, sizeof(m));
+}
+
 static void
 uxendisp_update_rect(uxendisp_ctrl_ctx_t *ctx, int x, int y, int w, int h)
 {
@@ -193,6 +215,28 @@ uxendisp_update_rect(uxendisp_ctrl_ctx_t *ctx, int x, int y, int w, int h)
     m.width = w;
     m.height = h;
     uxendisp_escape(ctx,0, &m, sizeof(m));
+}
+
+static int
+uxendisp_get_user_draw(uxendisp_ctrl_ctx_t *ctx)
+{
+    UXENDISPCustomMode m = { 0 };
+
+    m.esc_code = UXENDISP_ESCAPE_SET_USER_DRAW_ONLY;
+    uxendisp_escape(ctx,0, &m, sizeof(m));
+
+    return m.user_draw;
+}
+
+static int
+uxendisp_get_no_present_copy(uxendisp_ctrl_ctx_t *ctx)
+{
+    UXENDISPCustomMode m = { 0 };
+
+    m.esc_code = UXENDISP_ESCAPE_SET_NO_PRESENT_COPY;
+    uxendisp_escape(ctx,0, &m, sizeof(m));
+
+    return m.no_present_copy;
 }
 
 static void

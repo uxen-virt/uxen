@@ -887,14 +887,28 @@ out:
 
 NTSTATUS BASIC_DISPLAY_DRIVER::MapUserVram(void **data)
 {
-    *data = user_vram_map(m_VmemMdl);
+    *data = m_vram_mapper.user_map();
 
     return STATUS_SUCCESS;
 }
 
 NTSTATUS BASIC_DISPLAY_DRIVER::UnmapUserVram(void *data)
 {
-    user_vram_unmap(m_VmemMdl, data);
+    m_vram_mapper.user_unmap(data);
+
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS BASIC_DISPLAY_DRIVER::MapScratchVram(void **data)
+{
+    *data = m_vram_mapper.scratch_map();
+
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS BASIC_DISPLAY_DRIVER::UnmapScratchVram(void *data)
+{
+    m_vram_mapper.scratch_unmap(data);
 
     return STATUS_SUCCESS;
 }

@@ -75,6 +75,7 @@ extern "C"
 #include "../common/debug.h"
 #include "perfcnt.h"
 #include "dirty_rect.h"
+#include "user_vram.h"
 
 #define MIN_BYTES_PER_PIXEL_REPORTED   4
 
@@ -242,7 +243,7 @@ private:
 
     dr_ctx_t m_DrContext;
 
-    MDL *m_VmemMdl;
+    UserVramMapper m_vram_mapper;
 
     LARGE_INTEGER due_time;
 
@@ -362,9 +363,17 @@ public:
 
     NTSTATUS UnmapUserVram(void *data);
 
+    NTSTATUS MapScratchVram(void **data);
+
+    NTSTATUS UnmapScratchVram(void *data);
+
     NTSTATUS UpdateRect(int x, int y, int w, int h);
 
+    NTSTATUS GetUserDrawOnly(BOOLEAN *ud);
+
     NTSTATUS SetUserDrawOnly(BOOLEAN ud);
+
+    NTSTATUS GetNoPresentCopy(BOOLEAN *nocopy);
 
     NTSTATUS SetNoPresentCopy(BOOLEAN nocopy);
 

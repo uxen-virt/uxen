@@ -435,9 +435,33 @@ NTSTATUS BddDdiEscape(
         case UXENDISP_ESCAPE_UNMAP_FB:
             status = pBDD->UnmapUserVram((void*)(uintptr_t)inp.ptr);
             break;
+        case UXENDISP_ESCAPE_MAP_SCRATCH_FB: {
+            void *fb = NULL;
+
+            status = pBDD->MapScratchVram(&fb);
+            out->ptr = (uintptr_t) fb;
+            break;
+        }
+        case UXENDISP_ESCAPE_UNMAP_SCRATCH_FB:
+            status = pBDD->UnmapScratchVram((void*)(uintptr_t)inp.ptr);
+            break;
+        case UXENDISP_ESCAPE_GET_USER_DRAW_ONLY: {
+            BOOLEAN v;
+
+            status = pBDD->GetUserDrawOnly(&v);
+            out->user_draw = v;
+            break;
+        }
         case UXENDISP_ESCAPE_SET_USER_DRAW_ONLY:
             status = pBDD->SetUserDrawOnly((BOOLEAN)inp.user_draw);
             break;
+        case UXENDISP_ESCAPE_GET_NO_PRESENT_COPY: {
+            BOOLEAN v;
+
+            status = pBDD->GetNoPresentCopy(&v);
+            out->no_present_copy = v;
+            break;
+        }
         case UXENDISP_ESCAPE_SET_NO_PRESENT_COPY:
             status = pBDD->SetNoPresentCopy((BOOLEAN)inp.no_present_copy);
             break;

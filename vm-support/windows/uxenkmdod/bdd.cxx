@@ -72,7 +72,6 @@ VOID BASIC_DISPLAY_DRIVER::Init(_In_ DEVICE_OBJECT* pPhysicalDeviceObject)
     m_NextMode.width = 1024;
     m_NextMode.height = 768;
     m_VirtMode = m_NextMode;
-    m_VmemMdl = NULL;
     KeInitializeSemaphore(&m_PresentLock, 1, 1);
     KeInitializeDpc(&m_resume_dpc, bdd_resume, this);
 }
@@ -228,8 +227,7 @@ NTSTATUS BASIC_DISPLAY_DRIVER::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartIn
     }
 
     m_VSync = use_pv_vblank;
-    m_VmemMdl = user_vram_init(m_CurrentModes[0].VideoMemory, (SIZE_T)m_CurrentModes[0].VideoMemoryLength);
-    if (!m_VmemMdl) {
+    if (!m_vram_mapper.init(this, m_CurrentModes[0].VideoMemory, (SIZE_T)m_CurrentModes[0].VideoMemoryLength)) {
         uxen_err("user_vram_init failed. Unable to map vram.");
         return STATUS_UNSUCCESSFUL;
     }
@@ -243,6 +241,8 @@ NTSTATUS BASIC_DISPLAY_DRIVER::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartIn
 
 NTSTATUS BASIC_DISPLAY_DRIVER::StopDevice(VOID)
 {
+    m_vram_mapper.cleanup();
+
     dr_deinit(m_DrContext);
     m_DrContext = NULL;
 
@@ -628,11 +628,25 @@ NTSTATUS BASIC_DISPLAY_DRIVER::UpdateRect(int x, int y, int w, int h)
     return STATUS_SUCCESS;
 }
 
+NTSTATUS BASIC_DISPLAY_DRIVER::GetUserDrawOnly(BOOLEAN *ud)
+{
+    *ud = !!m_Flags.UserDraw;
+
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS BASIC_DISPLAY_DRIVER::SetUserDrawOnly(BOOLEAN ud)
 {
     m_Flags.UserDraw = ud;
 
     uxen_msg("set user draw %d\n", (int)ud);
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS BASIC_DISPLAY_DRIVER::GetNoPresentCopy(BOOLEAN *nocopy)
+{
+    *nocopy = !!m_Flags.StopCopy;
+
     return STATUS_SUCCESS;
 }
 
