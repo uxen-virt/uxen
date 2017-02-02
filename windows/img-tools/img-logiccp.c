@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2016, Bromium, Inc.
+ * Copyright 2013-2017, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -2519,30 +2519,40 @@ static int read_allowed(PACL acl, int *readable)
 
     for (i = 0; i < (int)acl_size_info.AceCount; i++) {
         void *ace;
+        PACE_HEADER header;
         if (!GetAce(acl, i, &ace)) {
             printf("GetAce failed: %d\n", (int)GetLastError());
             ret = -1;
             goto cleanup;
         }
+        header = (PACE_HEADER)ace;
 
         SID *sid = NULL;
         int mask;
         ACLType acl_set = ACL_Absent;
 
         /* Check type of ACE and whether it's inherited or not */
-        if (((ACCESS_ALLOWED_ACE *)ace)->Header.AceType == ACCESS_ALLOWED_ACE_TYPE) {
+        if (header->AceType == ACCESS_ALLOWED_ACE_TYPE) {
             ACCESS_ALLOWED_ACE *access = (ACCESS_ALLOWED_ACE *)ace;
             sid = (SID *)&access->SidStart;
             mask = access->Mask;
             acl_set = ACL_Allowed;
-        } else if (((ACCESS_DENIED_ACE *)ace)->Header.AceType == ACCESS_DENIED_ACE_TYPE) {
+        } else if (header->AceType == ACCESS_DENIED_ACE_TYPE) {
             ACCESS_DENIED_ACE *access = (ACCESS_DENIED_ACE *)ace;
             sid = (SID *)&access->SidStart;
             mask = access->Mask;
             acl_set = ACL_Denied;
+        } else if (header->AceType == ACCESS_ALLOWED_CALLBACK_ACE_TYPE) {
+            /* We don't handle these, but equally we don't care about them.
+             * We're only interested in whether the file is unconditionally
+             * world-readable or not.
+             */
+            continue;
         } else {
-            ret = -1;
-            printf("Unknown ACE type encountered\n");
+            printf("Unknown ACE type %d encountered\n",
+                (int)header->AceType);
+            /* Be paranoid; assume this means the file can't be read */
+            *readable = 0;
             break;
         }
 
@@ -2637,8 +2647,9 @@ static int acl_file(HANDLE h, ManifestEntry *m, int *acls_broken, int *hit)
         if (!*hit) { /* ACL not found in cache. */
             int rc = read_allowed(dacl, &readable);
             if (rc < 0) {
-                printf("read_allowed failed, disabling ACL check!\n");
-                *acls_broken = 1;
+                printf("read_allowed failed for %ls, assuming not readable\n",
+                    m->name);
+                readable = 0;
                 ret = -1;
                 goto rights_error;
             }
