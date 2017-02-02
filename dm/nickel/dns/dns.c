@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2017, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -236,6 +236,20 @@ static void dns_config(yajl_val config)
         NETLOG("(dns) no limit for the number of scheduled DNS queries");
 }
 
+const char *
+netaddr_tostr(const struct net_addr *addr)
+{
+    static char buf[NETADDR_MAXSTRLEN + 1];
+
+    buf[0] = buf[NETADDR_MAXSTRLEN] = 0;
+    if (addr->family == AF_INET)
+        inet_ntop(AF_INET, (void *) &addr->ipv4, buf, INET_ADDRSTRLEN);
+    else if (addr->family == AF_INET6)
+        inet_ntop(AF_INET6, (void *) &addr->ipv6, buf, INET6_ADDRSTRLEN);
+
+    return (const char *) buf;
+}
+
 bool dns_is_nickel_domain_name(const char *domain)
 {
     return strcasecmp(SLIRP_GW_NAME, domain) == 0;
@@ -430,11 +444,11 @@ const struct net_addr * dns_hyb_addr(struct net_addr *a)
 
 static void dns_lookup_check(void *opaque)
 {
-    struct in_addr *ips = NULL;
+    struct net_addr *ips = NULL;
     char *ret_mask = NULL;
     struct ndns_data *dstate = opaque;
 
-    size_t len4, len;
+    size_t len46, len;
     int i, j, k = 0;
 
     DDNS(dstate, "");
@@ -450,19 +464,21 @@ static void dns_lookup_check(void *opaque)
         goto out;
     }
 
-    /* FIXME! only check ipv4 addrs for now ... */
-    len4 = 0;
+    len46 = 0;
     i = 0;
     while (dstate->response.a[i].family) {
-        if (dstate->response.a[i].family == AF_INET)
-            len4++;
+        if (dstate->response.a[i].family == AF_INET ||
+            dstate->response.a[i].family == AF_INET6) {
+
+            len46++;
+        }
         i++;
     }
-    if (!len4)
+    if (!len46)
         goto out;
     len = i;
-    ret_mask = calloc(1, (len4 + 1) * sizeof (char));
-    ips = calloc(1, len4 * sizeof(*ips));
+    ret_mask = calloc(1, (len46 + 1) * sizeof (char));
+    ips = (struct net_addr *) calloc(1, len46 * sizeof(*ips));
     if (!ret_mask || !ips) {
         warnx("%s: memory error", __FUNCTION__);
         dstate->response.err = EAI_MEMORY;
@@ -473,12 +489,15 @@ static void dns_lookup_check(void *opaque)
     i = 0;
     k = 0;
     while (dstate->response.a[i].family) {
-        if (dstate->response.a[i].family == AF_INET)
-            ips[k++] = dstate->response.a[i].ipv4;
+        if (dstate->response.a[i].family == AF_INET ||
+            dstate->response.a[i].family == AF_INET6) {
+
+            ips[k++] = dstate->response.a[i];
+        }
         i++;
     }
 
-    if (dstate->ni && ac_check_list_ips(dstate->ni, ips, ret_mask, len4) < 0) {
+    if (dstate->ni && ac_check_list_ips(dstate->ni, ips, ret_mask, len46) < 0) {
         dstate->denied = 1;
         goto out;
     }
@@ -486,7 +505,8 @@ static void dns_lookup_check(void *opaque)
     j = -1;
     i = k = 0;
     while (dstate->response.a[i].family) {
-        if (dstate->response.a[i].family != AF_INET) {
+        if (dstate->response.a[i].family != AF_INET &&
+            dstate->response.a[i].family != AF_INET6) {
 
             i++;
             continue;

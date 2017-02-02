@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -13,10 +13,6 @@
 #include "log.h"
 #include "rpc.h"
 #include "lava.h"
-
-#if defined(_WIN32)
-PCSTR WSAAPI inet_ntop (INT Family, PVOID pAddr, PSTR pStringBuf, size_t StringBufSize);
-#endif
 
 #define DEFAULT_RPC_EVENT_LEN   256
 #define NUMBER_EVENTS_TRIGGER   6

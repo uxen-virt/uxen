@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2017, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -1485,7 +1485,7 @@ out:
 static int hp_dns_proxy_check_domain(struct http_ctx *hp)
 {
     int ret = -1;
-    struct in_addr addr = {.s_addr = 0};
+    struct net_addr addr = { 0 };
     struct sockaddr_in saddr;
     struct dns_connect_ctx *dns = NULL;
 
@@ -1494,9 +1494,20 @@ static int hp_dns_proxy_check_domain(struct http_ctx *hp)
     if (!hp->ni->ac_enabled || !hp->h.sv_name)
         goto out_allow;
 
-    if (inet_aton(hp->h.sv_name, &addr) != 0) {
+    if (inet_aton(hp->h.sv_name, &addr.ipv4) != 0) {
+        addr.family = AF_INET;
         if (!ac_is_ip_allowed(hp->ni, &addr)) {
             HLOG("IP %s DENIED by containment", hp->h.sv_name);
+            goto out;
+        }
+
+        goto out_allow;
+    }
+
+    if (inet_pton(AF_INET6, hp->h.sv_name, (void *) &addr.ipv6) == 1) {
+        addr.family = AF_INET6;
+        if (!ac_is_ip_allowed(hp->ni, &addr)) {
+            HLOG("IPv6 %s DENIED by containment", hp->h.sv_name);
             goto out;
         }
 
@@ -3899,7 +3910,7 @@ static void on_fakeip_update(struct in_addr fkaddr, struct net_addr *a)
 
 static int hp_connecting_containment(struct http_ctx *hp, const struct net_addr *a, uint16_t port)
 {
-    struct sockaddr_in saddr, daddr;
+    struct sockaddr_in saddr;
 
     if (hp->proxy || (hp->flags & HF_IP_CHECKED))
         return 0;
@@ -3907,16 +3918,14 @@ static int hp_connecting_containment(struct http_ctx *hp, const struct net_addr 
     if (!hp->cx)
         return 0;
 
-    if (!a || a->family != AF_INET)
-        return 0; // XXX check IPv6
-    daddr.sin_addr.s_addr = a->ipv4.s_addr;
-    daddr.sin_port = port;
+    if (!a || (a->family != AF_INET && a->family != AF_INET6))
+        return 0;
 
     hp->flags |= HF_IP_CHECKED;
     memset(&saddr, 0, sizeof(saddr));
     if (hp->cx && hp->cx->ni_opaque)
         saddr = tcpip_get_gaddr(hp->cx->ni_opaque);
-    return ac_gproxy_allow(hp->ni, saddr, daddr) ? 0 : -1;
+    return ac_gproxy_allow(hp->ni, saddr, a, port) ? 0 : -1;
 }
 
 static int srv_connect(struct http_ctx *hp, const struct net_addr *a, uint16_t port)

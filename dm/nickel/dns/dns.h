@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2017, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -16,6 +16,10 @@
 #include <netdb.h>
 #endif
 
+#if defined(_WIN32)
+PCSTR WSAAPI inet_ntop (INT Family, PVOID pAddr, PSTR pStringBuf, size_t StringBufSize);
+#endif
+
 struct nickel;
 struct net_addr {
     uint16_t family;
@@ -23,8 +27,37 @@ struct net_addr {
         struct in_addr  ipv4;
         struct in6_addr ipv6;
     };
-    int64_t ts_hyb;
+    union {
+        int64_t ts_hyb;
+        uint8_t prefix_len;
+    };
 };
+
+
+#define NETADDR_MAXSTRLEN  (16 + MAX(INET_ADDRSTRLEN, INET6_ADDRSTRLEN))
+#define NETADDR_CMP(n1,n2,prefix) (({                           \
+            int ret = 0;                                        \
+            uint32_t pm = (uint32_t) ((((uint32_t) 1)           \
+                                        << (prefix)) - 1);      \
+                                                                \
+            if ((n1)->family != (n2)->family) {                 \
+                ret = (n1)->family == AF_INET ? -1 : 1;         \
+            } else if ((n1)->family == AF_INET) {               \
+                if (((n1)->ipv4.s_addr & pm) ==                 \
+                   ((n2)->ipv4.s_addr & pm)) {                  \
+                                                                \
+                    ret = 0;                                    \
+                } else  {                                       \
+                    ret = ((n1)->ipv4.s_addr & pm) <            \
+                          ((n2)->ipv4.s_addr & pm) ? -1 : 1;    \
+                }                                               \
+            } else {                                            \
+                ret = memcmp(&(n1)->ipv6, &(n2)->ipv6,          \
+                             sizeof((n1)->ipv6));               \
+            }                                                   \
+            ret;                                                \
+        }))
+
 
 struct dns_response {
     const char *cname;
@@ -34,6 +67,9 @@ struct dns_response {
     int denied;
     int64_t cost_ms;
 };
+
+const char *
+netaddr_tostr(const struct net_addr *addr);
 
 bool dns_is_nickel_domain_name(const char *domain);
 void dns_http_proxy_enabled(void);

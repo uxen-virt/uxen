@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2017, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -10,6 +10,7 @@
 #include <dm/async-op.h>
 
 #include "access-control.h"
+#include "dns/dns.h"
 #include "dns/dns-fake.h"
 #include "log.h"
 #include "nickel.h"
@@ -44,8 +45,7 @@ struct ac_host {
 
 struct ac_network {
     struct ac_network  *next;
-    struct in_addr  net_ip;
-    uint8_t         prefix_len;
+    struct net_addr net_ip;
     uint32_t        options;
     uint64_t        accessed_tsc;
 };
@@ -57,8 +57,9 @@ static void query_proxy_config(struct nickel *ni);
 
 /* RPC */
 #define RPC_STR_ALLOC_GRAN  256
-static int ac_rpc_IsIPAddressAllowed(struct nickel *ni, unsigned long addr, unsigned long options,
-        uint8_t *prefix_len, int *allowed)
+static int ac_rpc_IsIPAddressAllowed(struct nickel *ni, const struct net_addr *addr,
+                                     unsigned long options,
+                                     uint8_t *prefix_len, int *allowed)
 {
     int ret = 0;
     char buf[64];
@@ -66,8 +67,7 @@ static int ac_rpc_IsIPAddressAllowed(struct nickel *ni, unsigned long addr, unsi
 
     args = dict_new();
 
-    snprintf(buf, 64, "%lu", addr);
-    dict_put_string(args, "addr", buf);
+    dict_put_string(args, "addr", netaddr_tostr(addr));
 
     snprintf(buf, 64, "%lu", options);
     dict_put_string(args, "options", buf);
@@ -84,11 +84,11 @@ out:
     return ret;
 }
 
-static int ac_rpc_IsListIPAddressAllowed(struct nickel *ni, const struct in_addr **ips, int len,
+static int ac_rpc_IsListIPAddressAllowed(struct nickel *ni, const struct net_addr **ips, int len,
         unsigned long options, uint8_t *prefix_len, char **ret_mask)
 {
     int ret = 0, i;
-    char buf[64];
+    char buf[NETADDR_MAXSTRLEN];
     dict args = NULL, response;
     char *addr_list = NULL, *tmp;
     const char *tmp2;
@@ -102,8 +102,9 @@ static int ac_rpc_IsListIPAddressAllowed(struct nickel *ni, const struct in_addr
         goto mem_err;
     blen += RPC_STR_ALLOC_GRAN;
 
+    buf[NETADDR_MAXSTRLEN - 1] = 0;
     for (i = 0; i < len; i++) {
-        if (strlen(addr_list) + 64 > blen) {
+        if (strlen(addr_list) + NETADDR_MAXSTRLEN > blen) {
             tmp = realloc(addr_list, blen + RPC_STR_ALLOC_GRAN + 1);
             if (!tmp)
                 goto mem_err;
@@ -112,8 +113,7 @@ static int ac_rpc_IsListIPAddressAllowed(struct nickel *ni, const struct in_addr
         }
 
         buf[63] = 0;
-        if (snprintf(buf, 63, "%lu", (unsigned long) (ips[i]->s_addr)) <= 0)
-            goto mem_err;
+        strncpy(buf, netaddr_tostr(ips[i]), NETADDR_MAXSTRLEN-1);
         if (*addr_list)
             strcat(addr_list, ",");
         strcat(addr_list, buf);
@@ -348,31 +348,30 @@ static void hash_insert_host(struct nickel *ni, const char *hostname, struct ac_
     critical_section_leave(&ni->ac_lk);
 }
 
-static bool hash_find_ip(struct nickel *ni, const struct in_addr *ip, struct ac_network **networks)
+static bool hash_find_ip(struct nickel *ni, const struct net_addr *ip, struct ac_network **networks)
 {
     bool ret = false;
     struct ac_network *network, **pnetwork;
     uint64_t tsc;
-    uint32_t net_ip;
 
     critical_section_enter(&ni->ac_lk);
 
     NETLOG5("(ac) search %s in %s network.",
-                inet_ntoa(*ip),
+                netaddr_tostr(ip),
                 networks == ni->ac_denied_networks ? "denied" : "allowed");
 
 
-    network = networks[BAC_HASH(ip->s_addr)];
-    pnetwork = &networks[BAC_HASH(ip->s_addr)];
+    network = networks[BAC_HASHADDR(ip)];
+    pnetwork = &networks[BAC_HASHADDR(ip)];
     tsc = _rdtsc();    //RDTSC is the fastest
 
     while (network) {
-        net_ip = ip->s_addr & ((1ULL << network->prefix_len) - 1);
-        if (net_ip == network->net_ip.s_addr) {
+        if (NETADDR_CMP(ip, &network->net_ip, network->net_ip.prefix_len) == 0) {
             network->accessed_tsc = tsc;
             NETLOG5("(ac) found %s network %s/%d.",
                         networks == ni->ac_denied_networks ? "denied" : "allowed",
-                        inet_ntoa(network->net_ip), (int) network->prefix_len);
+                        netaddr_tostr(&network->net_ip),
+                        (int) network->net_ip.prefix_len);
             ret = true;
             goto out;
         }
@@ -381,8 +380,8 @@ static bool hash_find_ip(struct nickel *ni, const struct in_addr *ip, struct ac_
             (tsc - network->accessed_tsc) > FLUSH_TSC_GAP)
         {
             NETLOG5("(ac) remove entry %s/%d.",
-                        inet_ntoa(network->net_ip),
-                        (int) network->prefix_len);
+                        netaddr_tostr(&network->net_ip),
+                        (int) network->net_ip.prefix_len);
 
             *pnetwork = network->next;
             free(network);
@@ -403,7 +402,7 @@ out:
     return ret;
 }
 
-static void hash_insert_network(struct nickel *ni, const struct in_addr *ip,
+static void hash_insert_network(struct nickel *ni, const struct net_addr *ip,
                                 uint8_t prefix_len,
                                 uint32_t options,
                                 struct ac_network **networks)
@@ -417,18 +416,20 @@ static void hash_insert_network(struct nickel *ni, const struct in_addr *ip,
 
     critical_section_enter(&ni->ac_lk);
 
-    new->net_ip.s_addr = ip->s_addr & ((1ULL << prefix_len) - 1);
-    new->prefix_len    = prefix_len;
+    new->net_ip = *ip;
+    if (ip->family == AF_INET)
+        new->net_ip.ipv4.s_addr &= ((1ULL << prefix_len) - 1);
+    new->net_ip.prefix_len    = prefix_len;
     new->options       = options;
     new->accessed_tsc  = _rdtsc(); //RDTSC should be the fastest
 
-    hash = BAC_HASH(ip->s_addr);
+    hash = BAC_HASHADDR(ip);
     new->next = networks[hash];
     networks[hash] = new;
 
     NETLOG5("(ac) adding %s ip %s/%d options %x.",
                 networks == ni->ac_denied_networks ? "denied" : "allowed",
-                inet_ntoa(new->net_ip), (int) prefix_len, (unsigned int) options);
+                netaddr_tostr(&new->net_ip), (int) prefix_len, (unsigned int) options);
 
     if (networks == ni->ac_denied_networks)
         ni->ac_n_denied_networks++;
@@ -518,7 +519,7 @@ static void hash_flush_all(struct nickel *ni)
     hash_flush(ni, 0);
 }
 
-static void allow_ip_from_dns(struct nickel *ni, const struct in_addr *dns_ip)
+static void allow_ip_from_dns(struct nickel *ni, const struct net_addr *dns_ip)
 {
     if (!ni->ac_dns_ip_only)
         return;
@@ -529,12 +530,12 @@ static void allow_ip_from_dns(struct nickel *ni, const struct in_addr *dns_ip)
     hash_insert_network(ni, dns_ip, 32, HASH_CACHE_NO_FLUSH, ni->ac_allowed_networks);
 }
 
-static int get_dns_ips(struct nickel *ni, uint32_t **dns_ips, uint32_t *dns_ips_size)
+static int get_dns_ips(struct nickel *ni, struct net_addr **dns_ips, uint32_t *dns_ips_size)
 {
     int ret = 1;
     struct ac_network *network;
     int i, nr_dns_ips;
-    uint32_t *ips;
+    struct net_addr *ips;
 
     critical_section_enter(&ni->ac_lk);
     if (dns_ips_size == NULL || dns_ips == NULL) {
@@ -551,7 +552,7 @@ static int get_dns_ips(struct nickel *ni, uint32_t **dns_ips, uint32_t *dns_ips_
 
     nr_dns_ips = ni->ac_n_allowed_dns_ips;
 
-    ips = calloc(1, sizeof(uint32_t) * 2 * nr_dns_ips);
+    ips = calloc(1, sizeof(*ips) * nr_dns_ips);
     if (ips == NULL) {
         ret = 0;
         goto out;
@@ -572,8 +573,7 @@ static int get_dns_ips(struct nickel *ni, uint32_t **dns_ips, uint32_t *dns_ips_
                     goto out;
                 }
 
-                *ips++ = network->net_ip.s_addr;
-                *ips++ = network->prefix_len;
+                *ips++ = network->net_ip;
                 nr_dns_ips--;
             }
             network = network->next;
@@ -586,19 +586,17 @@ out:
     return ret;
 }
 
-static void set_dns_ips(struct nickel *ni, uint32_t *dns_ips, uint32_t dns_ips_size)
+static void set_dns_ips(struct nickel *ni, struct net_addr *dns_ips, uint32_t dns_ips_size)
 {
     int i;
-    struct in_addr net_ip;
-    uint8_t prefix_len;
+    struct net_addr net_ip;
 
     if (dns_ips_size)
         ni->ac_dns_ip_only = 1;
 
     for (i = 0; i < dns_ips_size; i++) {
-        net_ip.s_addr = *dns_ips++;
-        prefix_len    = *dns_ips++;
-        if (prefix_len == 32)
+        net_ip = *dns_ips++;
+        if (net_ip.family == AF_INET6 || net_ip.prefix_len == 32)
             allow_ip_from_dns(ni, &net_ip);
     }
 }
@@ -655,13 +653,13 @@ static void query_proxy_config(struct nickel *ni)
 }
 
 static bool
-allow_list_ip(struct nickel *ni, const struct in_addr *dst_ips, unsigned int options,
+allow_list_ip(struct nickel *ni, const struct net_addr *dst_ips, unsigned int options,
         char *ret_mask, int len)
 {
     bool ret = true;
     int i, j, k;
     uint8_t prefix_len;
-    const struct in_addr **list_ips = NULL;
+    const struct net_addr **list_ips = NULL;
     char *rpc_resp_mask = NULL;
 
     if (len <= 0)
@@ -745,7 +743,7 @@ out:
     return ret;
 }
 
-static bool allow_ip(struct nickel *ni, const struct in_addr *dst_ip, unsigned int options)
+static bool allow_ip(struct nickel *ni, const struct net_addr *dst_ip, unsigned int options)
 {
     int ret;
     uint8_t prefix_len;
@@ -756,10 +754,10 @@ static bool allow_ip(struct nickel *ni, const struct in_addr *dst_ip, unsigned i
     if (ni->ac_policy == DENY_ALL)
         return false;
 
-        if (fakedns_is_fake(dst_ip))
-            return !fakedns_is_denied(dst_ip);
+        if (dst_ip->family == AF_INET && fakedns_is_fake(&dst_ip->ipv4))
+            return !fakedns_is_denied(&dst_ip->ipv4);
 
-    NETLOG5("(ac) check ip %s in local cache ...", inet_ntoa(*dst_ip));
+    NETLOG5("(ac) check ip %s in local cache ...", netaddr_tostr(dst_ip));
 
     /* local cache lookup first */
     if (hash_find_ip(ni, dst_ip, ni->ac_denied_networks))
@@ -769,14 +767,14 @@ static bool allow_ip(struct nickel *ni, const struct in_addr *dst_ip, unsigned i
         return true;
 
     /* slow path */
-    NETLOG5("(ac) fall to slow path to check ip %s ...", inet_ntoa(*dst_ip));
-    if (!ac_rpc_IsIPAddressAllowed(ni, dst_ip->s_addr, options & EXAMINE_IP_FROM_DNS,
+    NETLOG5("(ac) fall to slow path to check ip %s ...", netaddr_tostr(dst_ip));
+    if (!ac_rpc_IsIPAddressAllowed(ni, dst_ip, options & EXAMINE_IP_FROM_DNS,
                 &prefix_len, &ret)) {
-        NETLOG("(ac) ERROR when querying IP %s", inet_ntoa(*dst_ip));
+        NETLOG("(ac) ERROR when querying IP %s", netaddr_tostr(dst_ip));
         return false;
     }
 
-    NETLOG2("(ac) ip %s/%d %s", inet_ntoa(*dst_ip), (int) prefix_len,
+    NETLOG2("(ac) ip %s/%d %s", netaddr_tostr(dst_ip), (int) prefix_len,
                 ret ? "allowed" : "DENIED");
 
     if (ret) {
@@ -865,12 +863,12 @@ bool ac_is_dnsname_allowed(struct nickel *ni, const char *hostname)
     return false;
 }
 
-bool ac_is_ip_allowed(struct nickel *ni, struct in_addr *addr)
+bool ac_is_ip_allowed(struct nickel *ni, struct net_addr *addr)
 {
     return allow_ip(ni, addr, 0);
 }
 
-int ac_check_list_ips(struct nickel *ni, struct in_addr *ips, char *ret_mask, int len)
+int ac_check_list_ips(struct nickel *ni, struct net_addr *ips, char *ret_mask, int len)
 {
     if (!ni->ac_enabled)
         return -1;
@@ -887,6 +885,7 @@ int ac_tcp_input_syn(struct nickel *ni, struct sockaddr_in saddr,
         struct sockaddr_in daddr)
 {
     int ret = -1;
+    struct net_addr addr;
 
     if (!ni->ac_enabled)
         return 0;
@@ -920,7 +919,9 @@ int ac_tcp_input_syn(struct nickel *ni, struct sockaddr_in saddr,
         goto allow;
     }
 
-    if (!allow_ip(ni, &daddr.sin_addr, 0) || !allow_port(ni, daddr.sin_port)) {
+    addr.family = AF_INET;
+    addr.ipv4 = daddr.sin_addr;
+    if (!allow_ip(ni, &addr, 0) || !allow_port(ni, daddr.sin_port)) {
         NETLOG("(ac) outgoing tcp connection to %s:%d DENIED",
                 inet_ntoa(daddr.sin_addr), (int) ntohs(daddr.sin_port));
 
@@ -933,7 +934,8 @@ out:
     return ret;
 }
 
-bool ac_gproxy_allow(struct nickel *ni, struct sockaddr_in saddr, struct sockaddr_in daddr)
+bool ac_gproxy_allow(struct nickel *ni, struct sockaddr_in saddr, const struct net_addr *daddr,
+                     uint16_t dport)
 {
     bool allow = false;
 
@@ -942,9 +944,9 @@ bool ac_gproxy_allow(struct nickel *ni, struct sockaddr_in saddr, struct sockadd
         goto out;
     }
 
-    if (!allow_ip(ni, &daddr.sin_addr, 0) || !allow_port(ni, daddr.sin_port)) {
+    if (!allow_ip(ni, daddr, 0) || !allow_port(ni, dport)) {
         NETLOG("(ac) outgoing guest proxy tcp connection to %s:%d DENIED",
-                inet_ntoa(daddr.sin_addr), (int) ntohs(daddr.sin_port));
+                netaddr_tostr(daddr), (int) ntohs(dport));
         goto out;
     }
 
@@ -958,6 +960,7 @@ int ac_udp_input(struct nickel *ni, struct sockaddr_in saddr,
         struct sockaddr_in daddr)
 {
     int ret = 0;
+    struct net_addr addr;
 
     if (!ni->ac_enabled)
         goto out;
@@ -982,7 +985,9 @@ int ac_udp_input(struct nickel *ni, struct sockaddr_in saddr,
         goto out;
     }
 
-    if (!allow_ip(ni, &daddr.sin_addr, 0)) {
+    addr.family = AF_INET;
+    addr.ipv4 = daddr.sin_addr;
+    if (!allow_ip(ni, &addr, 0)) {
         ret = -1;
         goto out;
     }
@@ -1070,7 +1075,8 @@ void ac_exit(struct nickel *ni)
 
 void ac_save(QEMUFile *f, struct nickel *ni)
 {
-    uint32_t *dns_ips = NULL, i, nr_dns_ips = 0;
+    struct net_addr *dns_ips = NULL;
+    uint32_t i, nr_dns_ips = 0;
 
     if (!ni->ac_enabled)
         return;
@@ -1079,8 +1085,8 @@ void ac_save(QEMUFile *f, struct nickel *ni)
     qemu_put_be32(f, nr_dns_ips);
 
     for (i = 0; i < nr_dns_ips; i++) {
-        qemu_put_be32(f, dns_ips[2 * i]);
-        qemu_put_be32(f,  dns_ips[2 * i + 1]);
+        qemu_put_be32(f, sizeof(dns_ips[i]));
+        qemu_put_buffer(f, (uint8_t *) &dns_ips[i], sizeof(dns_ips[i]));
     }
     NETLOG("%s: %u ips saved", __FUNCTION__, (unsigned int) nr_dns_ips);
 
@@ -1090,7 +1096,8 @@ void ac_save(QEMUFile *f, struct nickel *ni)
 int ac_load(QEMUFile *f, struct nickel *ni, int version_id)
 {
     int ret = 0;
-    uint32_t *dns_ips = NULL , i, nr_dns_ips = 0;
+    struct net_addr *dns_ips = NULL;
+    uint32_t i, nr_dns_ips = 0;
 
     if (!ni->ac_enabled)
         goto out;
@@ -1101,7 +1108,7 @@ int ac_load(QEMUFile *f, struct nickel *ni, int version_id)
     nr_dns_ips = qemu_get_be32(f);
     if (!nr_dns_ips)
         goto out;
-    dns_ips = (uint32_t *) calloc(1, sizeof(uint32_t) * 2 * nr_dns_ips);
+    dns_ips = (struct net_addr *) calloc(1, sizeof(*dns_ips) * nr_dns_ips);
     if (!dns_ips) {
         NETLOG("%s: malloc ERROR! we are doomed", __FUNCTION__);
         ret = -1;
@@ -1109,8 +1116,16 @@ int ac_load(QEMUFile *f, struct nickel *ni, int version_id)
     }
 
     for (i = 0; i < nr_dns_ips; i++) {
-        dns_ips[2 * i] = qemu_get_be32(f);
-        dns_ips[2 * i + 1] = qemu_get_be32(f);
+        uint32_t l;
+
+        l = qemu_get_be32(f);
+        if (l != sizeof(dns_ips[i])) {
+            NETLOG("%s: ERROR - len != sizeof(*dns_ips) - %u != %u !",
+                   __FUNCTION__, (unsigned) l, (unsigned) sizeof(dns_ips[i]));
+            ret = -1;
+            goto out;
+        }
+        qemu_get_buffer(f, (uint8_t *) &dns_ips[i], l);
     }
 
     set_dns_ips(ni, dns_ips, nr_dns_ips);
