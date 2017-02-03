@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -200,21 +200,11 @@ gh_v4v_process_destination_writes(xenv4v_extension_t *pde, v4v_ring_data_ent_t *
         // Lock our ring to access it
         KeAcquireInStackQueuedSpinLock(&ctx->ring_object->lock, &lqh);
 
-        // If this particular entry specifies the destination is closed then complete all the
-        // IRPs indicating such.
-        if ((entry->flags & V4V_RING_DATA_F_EXISTS) == 0) {
-            KeReleaseInStackQueuedSpinLock(&lqh);
-            uxen_v4v_err("ring (vm%u:%x) - destination is closed",
-                         entry->ring.domain,
-                         entry->ring.port);
-            v4v_simple_complete_irp(nextIrp, STATUS_VIRTUAL_CIRCUIT_CLOSED);
-            continue;
-        }
-
         // In the case of the first write, check the flag to see if the next size we reported will
         // fit at this point, if not then end here. If we get the first item in then we can just try
         // subsequent writes. If any fail with retry, we will get an interrupt later.
-        if ((counter == 0) && ((entry->flags & V4V_RING_DATA_F_SUFFICIENT) == 0)) {
+        if (((entry->flags & V4V_RING_DATA_F_EXISTS) != 0) && (counter == 0) &&
+            ((entry->flags & V4V_RING_DATA_F_SUFFICIENT) == 0)) {
             KeReleaseInStackQueuedSpinLock(&lqh);
             InsertTailList(&returnIrps, &nextIrp->Tail.Overlay.ListEntry);
             break;
@@ -222,6 +212,7 @@ gh_v4v_process_destination_writes(xenv4v_extension_t *pde, v4v_ring_data_ent_t *
 
         // Call the send helper to do the actual send of the data to the ring. For
         // all non retry/pending statuses, IRPs are completed internally.
+        // If destination is closed, attempt write anyway to trigger DLO.
         status = gh_v4v_do_write(pde, ctx, nextIrp);
 
         // Unlock the ring to lower contention before processing the final send status
