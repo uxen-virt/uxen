@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2016, Bromium, Inc.
+# Copyright 2012-2017, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -29,6 +29,7 @@ SUBDIRS += uxennullnet
 SUBDIRS += uxensf
 SUBDIRS += uxenhid
 SUBDIRS += uxenpatcher
+SUBDIRS += uxenh264
 SUBDIRS += installer
 
 TARGETS = all dist

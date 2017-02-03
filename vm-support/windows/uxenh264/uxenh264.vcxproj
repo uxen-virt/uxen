@@ -1,0 +1,93 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{FF84A423-8A67-4B41-96EB-B83010767329}</ProjectGuid>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseOfMfc>false</UseOfMfc>
+    <CharacterSet>Unicode</CharacterSet>
+    <PlatformToolset>v140</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup>
+    <OutDir Condition="'$(Platform)'=='x64'">..\..\..\dist\windows\</OutDir>
+    <IntDir Condition="'$(Platform)'=='x64'">..\..\..\build\windows\uxenh264\</IntDir>
+    <OutDir Condition="'$(Platform)'=='Win32'">..\..\..\dist\windows-32\</OutDir>
+    <IntDir Condition="'$(Platform)'=='Win32'">..\..\..\build-32\windows\uxenh264\</IntDir>
+    <TargetName Condition="'$(Platform)'=='x64'">uxenh26464</TargetName>
+    <TargetName Condition="'$(Platform)'=='Win32'">uxenh26432</TargetName>
+    <TargetExt>.dll</TargetExt>
+    <LinkIncremental>false</LinkIncremental>
+    <GenerateManifest>true</GenerateManifest>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <AdditionalIncludeDirectories>..\common;..\..\..\windows\uxenv4vlib\;..\..\..\common\include\xen-public\;..\..\..\common\uxenh264\;..\..\..\common\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <BufferSecurityCheck>true</BufferSecurityCheck>
+      <CompileAs>CompileAsCpp</CompileAs>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <InlineFunctionExpansion>AnySuitable</InlineFunctionExpansion>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+      <Optimization>
+      </Optimization>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <SuppressStartupBanner>true</SuppressStartupBanner>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <WarningLevel>Level4</WarningLevel>
+      <PreprocessorDefinitions Condition="'$(Platform)'=='x64'">__x86_64__</PreprocessorDefinitions>
+      <PreprocessorDefinitions Condition="'$(Platform)'=='Win32'">__i386__</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;WIN32;_WINDOWS;NDEBUG;WIN32;_WIN32_WINNT=0x0602;WINVER=0x0602;NOMINMAX;_HAS_EXCEPTIONS=0;STRICT;_UNICODE;UNICODE;STRSAFE_NO_DEPRECATE;_SDL_BANNED_RECOMMENDED;U_USING_ICU_NAMESPACE=0;U_STATIC_IMPLEMENTATION;_ATL_ALL_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <ObjectFileName>$(IntDir)</ObjectFileName>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>dxgi.lib;d3d11.lib;kernel32.lib;user32.lib;gdi32.lib;winspool.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;comdlg32.lib;advapi32.lib;mfuuid.lib;Mfplat.lib;evr.lib;Propsys.lib</AdditionalDependencies>
+      <AdditionalLibraryDirectories>$(IntermediateOutputPath);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <IgnoreSpecificDefaultLibraries>libcprtd;LIBCRTD</IgnoreSpecificDefaultLibraries>
+      <ImportLibrary>$(IntDir)\$(TargetName).lib</ImportLibrary>
+      <ModuleDefinitionFile>uxenh264.def</ModuleDefinitionFile>
+      <OptimizeReferences>true</OptimizeReferences>
+      <SubSystem>Console</SubSystem>
+      <Version>
+      </Version>
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+      <ImageHasSafeExceptionHandlers Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">false</ImageHasSafeExceptionHandlers>
+      <ImageHasSafeExceptionHandlers Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">false</ImageHasSafeExceptionHandlers>
+      <ImageHasSafeExceptionHandlers Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">false</ImageHasSafeExceptionHandlers>
+      <ImageHasSafeExceptionHandlers Condition="'$(Configuration)|$(Platform)'=='Release|x64'">false</ImageHasSafeExceptionHandlers>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="CAutoLock.h" />
+    <ClInclude Include="uxenh264.h" />
+    <ClCompile Include="..\..\..\common\uxenh264\uxenh264lib.cpp" />
+    <ClCompile Include="..\..\..\common\uxenh264\uxenh264pipeline.cpp" />
+    <ClCompile Include="uxenh264.cpp" />
+    <ClCompile Include="uxenh264_IMFTransform_Impl.cpp" />
+    <ClCompile Include="uxenh264_IUnknown_Impl.cpp" />
+    <ClCompile Include="dllmain.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

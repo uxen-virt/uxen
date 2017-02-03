@@ -219,6 +219,9 @@ DM_SRCS += vram.c
 vram.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 vram.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
 vram.o: CPPFLAGS += $(LZ4_CPPFLAGS)
+$(WINDOWS)DM_SRCS += uxenh264.c
+uxenh264.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
+uxenh264.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
 
 DM_SRCS += hw/applesmc.c
 DM_SRCS += hw/dmpdev.c
@@ -459,7 +462,7 @@ $(DM_OBJS): $(YAJL_DEPS) .deps/.exists
 
 $(DEBUG_ONLY)CONFIG_H_CHECK = check-config-include.o
 
-uxendm$(EXE_SUFFIX): $(LIBVHD_DEPS) $(LIBUXENCTL_DEPS) $(LIBXC_DEPS)
+uxendm$(EXE_SUFFIX): $(LIBVHD_DEPS) $(LIBUXENCTL_DEPS) $(LIBXC_DEPS) $(LIBUXENH264_DEPS)
 uxendm$(EXE_SUFFIX): $(DM_OBJS) $(CONFIG_H_CHECK)
 	$(_W)echo Linking - $@
 	$(_V)$(call link,$@,$(DM_OBJS) $(CONFIG_H_CHECK) $(LDLIBS))
@@ -472,9 +475,11 @@ uxendm$(EXE_SUFFIX): $(DM_OBJS) $(CONFIG_H_CHECK)
 	$(_W)echo Compiling - $@
 	$(_V)$(COMPILE.m) $(EXTRA_CFLAGS) $(DM_CFLAGS) -c $< -o $@
 
-%.o : %.rc
+%.o : %.rc force_recompile
 	$(_W)echo Compiling - $@
-	$(_V)$(WINDRES) $(WINDRESFLAGS) $(WINDRES_TARGET_FORMAT_OPTION) $< -o $@
+	$(_V)$(WINDRES) $(WINDRESFLAGS) $(WINDRES_TARGET_FORMAT_OPTION) $(LIBUXENH264_RES) $< -o $@
+
+force_recompile:
 
 block-swap_%.o: block-swap/%.c
 	$(_W)echo Compiling - $(subst _,/,$@)

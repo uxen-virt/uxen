@@ -2,6 +2,7 @@
 *.o
 *.exe
 *.vpj
+*.swp
 build
 build-32
 TAGS
@@ -17,6 +18,8 @@ obj
 .deps
 .exists
 .gdbinit
+.vs
+nppbackup
 windows/uxen.sys/objchk_win7_amd64
 windows/uxen.sys/objrel_win7_amd64
 windows/uxen.sys/buildchk_win7_amd64.log

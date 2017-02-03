@@ -67,6 +67,8 @@ typedef struct uxenconsole_ops {
     void (*keyboard_ledstate)(void *priv,
                               int state);
 
+    void (*set_shared_surface)(void *priv, file_handle_t handle);
+
     void (*enable_write_event)(void *priv, file_handle_t handle, int enable);
     void (*disconnected)(void *priv);
 } ConsoleOps;
@@ -113,6 +115,9 @@ int                     uxenconsole_clipboard_permit(uxenconsole_context_t ctx,
 
 int                     uxenconsole_touch_device_hotplug(uxenconsole_context_t ctx,
                                                          int plug);
+
+int                     uxenconsole_set_shared_surface(uxenconsole_context_t ctx,
+                                                       file_handle_t surface);
 
 hid_context_t           uxenconsole_hid_init(int vm_id, const unsigned char *idtoken);
 void                    uxenconsole_hid_cleanup(hid_context_t context);

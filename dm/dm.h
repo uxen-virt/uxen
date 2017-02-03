@@ -82,6 +82,7 @@ struct xc_interface_core;
 extern struct xc_interface_core *xc_handle;
 extern int xen_logdirty_enabled;
 extern uint64_t cuckoo_debug_on;
+extern uint64_t h264_offload;
 
 extern FILE *logfile;
 extern int loglevel;

@@ -1,11 +1,10 @@
 /*
  * Copyright 2017, Bromium, Inc.
- * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
 
-#ifndef _COMMON_DEBUG_USER_H_
-#define _COMMON_DEBUG_USER_H_
+#ifndef _DEBUG_USER_H_
+#define _DEBUG_USER_H_
 
 #include <stdarg.h>
 #include <stdint.h>
@@ -20,47 +19,15 @@
 #ifndef DEF_UXEN_UD_MASK
 #define DEF_UXEN_UD_MASK        (UXEN_UD_ERR | UXEN_UD_MSG | UXEN_UD_DBG)
 #endif
+#define UXEN_UD_PROGNAME uxen_ud_progname
 
-#define UXEN_DEBUG_CPUID_8  0x54545400
-#define UXEN_DEBUG_CPUID_32 0x54545404
-
+typedef void(*_printk_type)(const char *fmt, ...);
+__declspec(selectany)
+_printk_type _printk = NULL;
 __declspec(selectany)
 unsigned int uxen_ud_mask = DEF_UXEN_UD_MASK;
 __declspec(selectany)
 char uxen_ud_progname[64] = "null";
-
-#ifndef _MSC_VER
-static inline void
-__user_dbg_out(unsigned int fun, unsigned int val)
-{
-    int ebx, edx;
-
-    asm volatile ("cpuid": "+a" (fun), "=b" (ebx), "+c" (val), "=d" (edx)::"cc");
-}
-#else
-#include <intrin.h>
-
-static inline void
-__user_dbg_out(unsigned int fun, unsigned int val)
-{
-    union _ {
-        struct __ {
-            int eax;
-            int ebx;
-            int ecx;
-            int edx;
-        } regs;
-        int blob[4];
-    } cpu_info = {};
-
-    cpu_info.regs.eax = fun;
-    cpu_info.regs.ecx = val;
-    __cpuidex(cpu_info.blob, fun, val);
-}
-#endif
-
-#define __user_dbg_out_char(x) __user_dbg_out(UXEN_DEBUG_CPUID_8 , x)
-#define __user_dbg_out_uint(x) __user_dbg_out(UXEN_DEBUG_CPUID_32, x)
 
 static inline void uxen_ud_set_progname(const char *name)
 {
@@ -68,40 +35,10 @@ static inline void uxen_ud_set_progname(const char *name)
     memcpy(uxen_ud_progname, name, strlen(name));
 }
 
-#define UXEN_UD_PROGNAME uxen_ud_progname
-
-static inline void
-_printk(const char *fmt, ...)
+static inline void uxen_ud_set_printk(void* pfn)
 {
-    size_t n;
-    char buf[1024], *p;
-    va_list args;
-
-    va_start(args, fmt);
-    n = vsnprintf(&buf[0], sizeof(buf), fmt, args);
-    va_end(args);
-
-    p = buf;
-    while (n && ((uintptr_t)p & 3)) {
-        __user_dbg_out_char(*p);
-        p++;
-        n--;
-    }
-    if (n) {
-        while (n > 3) {
-            __user_dbg_out_uint(*(unsigned int*)p);
-            p += 4;
-            n -= 4;
-        }
-        while (n) {
-            __user_dbg_out_char(*p);
-            p++;
-            n--;
-        }
-    }
+    _printk = (_printk_type)pfn;
 }
-
-void _printk(const char *fmt, ...);
 
 #define printk(fmt, ...)                                                \
     _printk("%s!%s:%d: " fmt "\n",                                      \

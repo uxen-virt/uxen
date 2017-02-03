@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2017, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -272,6 +272,8 @@ static HANDLE win32_pipe_create_helper(const char *path,
                                        OVERLAPPED *overlapped)
 {
     HANDLE pipe;
+    DWORD err;
+    BOOL res;
 
     pipe = CreateNamedPipe(path,
                            PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
@@ -285,8 +287,9 @@ static HANDLE win32_pipe_create_helper(const char *path,
         return NULL;
     }
     debug_printf("connecting named pipe: %s\n", path);
-    if (!ConnectNamedPipe(pipe, overlapped) &&
-        GetLastError() != ERROR_IO_PENDING) {
+    res = ConnectNamedPipe(pipe, overlapped);
+    err = GetLastError();
+    if (!res && (err != ERROR_IO_PENDING) && (err != ERROR_PIPE_CONNECTED)) {
         Wwarn("ConnectNamedPipe");
         CloseHandle(pipe);
         return NULL;

@@ -1,5 +1,5 @@
 #
-# Copyright 2011-2016, Bromium, Inc.
+# Copyright 2011-2017, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -13,6 +13,7 @@ SUBDIRS += uxenctl
 SUBDIRS += vhd-util
 SUBDIRS += libxc
 SUBDIRS += filecrypt
+SUBDIRS += uxenh264
 SUBDIRS += uxendm
 SUBDIRS += backtrace
 SUBDIRS += build

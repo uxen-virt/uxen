@@ -748,6 +748,7 @@ struct config_option config_options[] = {
     { "event-service-mouse-moves", co_set_boolean_opt, &event_service_mouse_moves},
     { "firmware", co_set_firmware, NULL },
     { "guest_drivers_logmask", co_set_integer_opt, &guest_drivers_logmask },
+    { "h264-offload", co_set_boolean_opt, &h264_offload },
 #ifdef _WIN32
     { "hid-touch", co_set_boolean_opt, &hid_touch_enabled },
 #else

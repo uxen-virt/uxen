@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -94,7 +94,7 @@ typedef HANDLE ioh_wait_event;
                  __FUNCTION__, GetLastError());                     \
     } while(0)
 #define ioh_event_set(ev) SetEvent(*(ev))
-#define ioh_event_reset(ev) ResetEvent(*(ev))
+#define ioh_event_reset(ev) do { if (*(ev)) ResetEvent(*(ev)); } while(0)
 #define ioh_event_wait(ev) WaitForSingleObject(*(ev), INFINITE)
 #define ioh_event_close(ev) do {                                    \
         CloseHandle(*(ev)); *(ev) = NULL;                           \

@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2016, Bromium, Inc.
+# Copyright 2012-2017, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -30,6 +30,7 @@ UXENNET_DIR = $(DISTDIR_VM_SUPPORT)/uxennet
 UXENNULLNET_DIR = $(DISTDIR_VM_SUPPORT)/uxennullnet
 UXENHID_DIR = $(DISTDIR_VM_SUPPORT)/uxenhid
 UXENPATCHER_DIR = $(DISTDIR_VM_SUPPORT)/uxenpatcher
+UXENH264_DIR = $(DISTDIR_VM_SUPPORT)/uxenh264
 
 TARGETS = all dist clean
 
@@ -76,7 +77,8 @@ WIX_INCLUDES = -ddpinstdir=$(DPINST_DIR) \
 	       -duxensvcdir=$(UXENSVC_DIR) \
 	       -dWin64=$(WIN64) \
 	       -duxenhiddir=$(UXENHID_DIR) \
-	       -duxenpatcherdir=$(UXENPATCHER_DIR)
+	       -duxenpatcherdir=$(UXENPATCHER_DIR) \
+	       -duxenh264dir=$(UXENH264_DIR)
 
 WIX_DEPS = $(SRC_DIR)/run_dpinst.vbs \
 	   $(DPINST_DIR)/dpinst.exe \
@@ -99,7 +101,10 @@ WIX_DEPS = $(SRC_DIR)/run_dpinst.vbs \
 	   $(UXENSTOR_DIR)/uxenstor.sys \
 	   $(UXENSVC_DIR)/uxensvc.exe \
 	   $(UXENHID_DIR)/uxenhid.sys \
-	   $(UXENPATCHER_DIR)/uxenpatcher.exe
+	   $(UXENPATCHER_DIR)/uxenpatcher.exe \
+	   $(UXENH264_DIR)/uxenh26432.dll \
+	   $(UXENH264_DIR)/uxenh26464.dll \
+	   $(UXENH264_DIR)/uxenh264.cmd
 
 $(WIX_DEPS): $(UXENVMLIB_DIR)/uxenvmlib.sys $(UXENV4VLIB_DIR)/uxenv4vlib.sys
 
@@ -155,6 +160,8 @@ $(UXENHID_DIR)/uxenhid.sys:
 	$(MAKE) -C $(SRCDIR)/../uxenhid dist
 $(UXENPATCHER_DIR)/uxenpatcher.exe:
 	$(MAKE) -C $(SRCDIR)/../uxenpatcher dist
+$(UXENH264_DIR)/uxenh264.dll:
+	$(MAKE) -C $(SRCDIR)/../uxenh264 dist
 
 $(INSTALLER): $(INSTALLER_WIXOBJS) $(WIX_DEPS)
 	$(_W)echo Linking - $@

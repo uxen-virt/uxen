@@ -21,6 +21,7 @@
 #include "uxdisp_hw.h"
 #include "uxendisp-common.h"
 #include "pv_vblank.h"
+#include "uxenh264-common.h"
 
 #define DEBUG_UXENDISP
 
@@ -453,6 +454,11 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
 
         bank = &s->banks[bank_id];
         sz = bank_offset + h * stride;
+
+        if (h264_offload) {
+            sz += UXENH264_OUTPUT_WIDTH * UXENH264_OUTPUT_HEIGHT * UXENH264_OUTPUT_BYTES_PER_PIXEL;
+        }
+
         if (sz > UXENDISP_BANK_SIZE)
             return;
 

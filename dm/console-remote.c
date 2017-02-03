@@ -236,6 +236,16 @@ handle_message(struct uxenconsole_msg_header *hdr)
 #endif
         }
         break;
+    case UXENCONSOLE_MSG_TYPE_SET_SHARED_SURFACE:
+        {
+#if !defined(__APPLE__)
+            struct uxenconsole_msg_set_shared_surface *msg = (void *)hdr;
+            struct ipc_client *c;
+            TAILQ_FOREACH(c, &console_svc.clients, link)
+                ipc_client_send(c, msg, sizeof(*msg));
+#endif
+        }
+        break;
     default:
         break;
     }

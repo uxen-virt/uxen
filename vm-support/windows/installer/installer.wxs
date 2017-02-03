@@ -69,6 +69,19 @@
         <CustomAction Id="CA_powercfg2" Impersonate="no" Execute="deferred" ExeCommand="-x -monitor-timeout-dc 0" Return="ignore" Property="POWERCFG"/>
 
         <Directory Id='TARGETDIR' Name='SourceDir'>
+            <Directory Id="SystemFolder" Name="SystemFolder" />
+            <Directory Id="ProgramFilesFolder">
+                <Directory Id="InternetExplorerDir" Name="Internet Explorer">
+                    <Directory Id="IeCopiedFilesDir" Name="iexplore.exe.local">
+                        <Component Id="uxenh264" Guid="B4B7D3FC-576B-4E54-815D-303B1410FA26" Win64="no">
+                            <Condition>VersionNT > 602</Condition>
+                            <File Id="uxenh26432.dll" Name="msmpeg2vdec.dll" DiskId="1" Source="$(var.uxenh264dir)/uxenh26432.dll" />
+                            <CopyFile Id="CopyMsmpeg2vdec.dll" DestinationDirectory="SystemFolder" DestinationName="_msmpeg2vdec.dll" SourceDirectory="SystemFolder" SourceName="msmpeg2vdec.dll" />
+                            <RegistryValue Root="HKLM" Key="Software\Microsoft\Windows NT\CurrentVersion\Image File Execution Options" Type="integer" Name="DevOverrideEnable" Value="1"/>
+                        </Component>
+                    </Directory>
+                </Directory>
+            </Directory>
             <Directory Id='INSTALLDIR' Name='uXenGuest'>
                 <Component Id="dpinst" Guid="b49e47e6-f1a0-40be-a3f6-c775b49869df" Win64="$(var.Win64)">
                     <File Id="dpinst.exe" Name="dpinst.exe" DiskId="1" Source="$(var.dpinstdir)/dpinst.exe" />
@@ -193,6 +206,7 @@
             <ComponentRef Id='uxenplatform' />
             <ComponentRef Id='uxenv4vguest' />
             <ComponentRef Id='uxenstor' />
+            <ComponentRef Id='uxenh264' /> <!-- vSentry won't install it, but that is fine for now -->
         </Feature>
         <Feature Id='Complex' Level='1'>
             <ComponentRef Id="dpinst" />
@@ -221,7 +235,6 @@
             <Custom Action="CA_uxendisp" After="CA_uxennullnet">$(var.INSTALLING) AND <![CDATA[VersionNT < 602]]> AND <![CDATA[&Complex=3]]></Custom>
             <Custom Action="CA_uxenkmdod" After="CA_uxendisp">$(var.INSTALLING) AND <![CDATA[VersionNT >= 602]]> AND <![CDATA[&Complex=3]]></Custom>
             <Custom Action="CA_uxenpatcher" After="CA_uxenkmdod">$(var.INSTALLING) AND <![CDATA[VersionNT >= 602]]> AND <![CDATA[&Complex=3]]></Custom>
-
             <Custom Action="CA_setPowercfg" After="CA_uxenkmdod">$(var.INSTALLING) AND <![CDATA[VersionNT >= 602]]> AND <![CDATA[&Complex=3]]></Custom>
             <Custom Action="CA_powercfg1" After="CA_setPowercfg">$(var.INSTALLING) AND <![CDATA[VersionNT >= 602]]> AND <![CDATA[&Complex=3]]></Custom>
             <Custom Action="CA_powercfg2" After="CA_powercfg1">$(var.INSTALLING) AND <![CDATA[VersionNT >= 602]]> AND <![CDATA[&Complex=3]]></Custom>

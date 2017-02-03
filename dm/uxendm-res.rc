@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -23,3 +23,6 @@ BEGIN
     VALUE "Translation", 0x409, 1200
   END
 END
+
+UXENH264_RES_ID RCDATA UXENH264_DLL_PATH
+

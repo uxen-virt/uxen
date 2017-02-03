@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2017, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -145,6 +145,14 @@ handle_message(struct ctx *c, struct uxenconsole_msg_header *hdr)
 
             if (c->ops->keyboard_ledstate)
                 c->ops->keyboard_ledstate(c->priv, msg->state);
+        }
+        break;
+    case UXENCONSOLE_MSG_TYPE_SET_SHARED_SURFACE:
+        {
+            struct uxenconsole_msg_set_shared_surface *msg = (void *)hdr;
+
+            if (c->ops->set_shared_surface)
+                c->ops->set_shared_surface(c->priv, (file_handle_t)msg->surface);
         }
         break;
     default:
@@ -330,6 +338,7 @@ uxenconsole_connect(uxenconsole_context_t ctx)
             WaitNamedPipe(c->filename, 1000);
         else {
             CloseHandle(c->oread.hEvent);
+            c->oread.hEvent = NULL;
             SetLastError(err);
             return NULL;
         }
@@ -344,6 +353,8 @@ uxenconsole_connect(uxenconsole_context_t ctx)
     if (err != ERROR_IO_PENDING) {
         CloseHandle(c->pipe);
         CloseHandle(c->oread.hEvent);
+        c->pipe = NULL;
+        c->oread.hEvent = NULL;
         SetLastError(err);
         return NULL;
     }
@@ -461,9 +472,13 @@ uxenconsole_disconnect(uxenconsole_context_t ctx)
             b = bn;
         }
         LeaveCriticalSection(&c->sndlock);
-        CancelIo(c->pipe);
-        CloseHandle(c->pipe);
-        CloseHandle(c->oread.hEvent);
+        if (c->pipe) {
+            CancelIo(c->pipe);
+            CloseHandle(c->pipe);
+        }
+        if (c->oread.hEvent) {
+            CloseHandle(c->oread.hEvent);
+        }
         c->oread.hEvent = NULL;
         c->pipe = NULL;
     }
@@ -613,6 +628,26 @@ uxenconsole_clipboard_permit(uxenconsole_context_t ctx,
     return 0;
 }
 
+int
+uxenconsole_set_shared_surface(uxenconsole_context_t ctx,
+                               file_handle_t surface)
+{
+    struct ctx *c = ctx;
+    struct uxenconsole_msg_set_shared_surface msg;
+    int rc;
+
+    snd_complete(c);
+
+    msg.header.type = UXENCONSOLE_MSG_TYPE_SET_SHARED_SURFACE;
+    msg.header.len = sizeof (msg);
+    msg.surface = (uintptr_t)surface;
+
+    rc = channel_write(c, &msg, sizeof (msg));
+    if (rc != sizeof (msg))
+        return -1;
+
+    return 0;
+}
 
 int
 uxenconsole_touch_device_hotplug(uxenconsole_context_t ctx,
