@@ -91,6 +91,7 @@ typedef struct Variable {
     wchar_t *path;
     struct Manifest *man;
     HANDLE volume;
+    int alias;
 } Variable;
 
 typedef struct VarList {
@@ -427,6 +428,14 @@ static int cmp_id_action(const void *a, const void *b)
     const ManifestEntry *ea = (const ManifestEntry *) a;
     const ManifestEntry *eb = (const ManifestEntry *) b;
 
+    if (ea->var != eb->var) {
+        int cmp = wcscmp(ea->var->path, eb->var->path);
+        if (cmp) {
+            /* The files are on different volumes */
+            return cmp;
+        }
+        /* Otherwise, same volume just different Variables */
+    }
     if (ea->file_id < eb->file_id) {
         return -1;
     } else if (eb->file_id < ea->file_id) {
@@ -2116,6 +2125,10 @@ int scanning_phase(struct disk *disk, VarList *vars,
         if (!var->path) {
             printf("ignoring manifest entries under ${%ls}\n", var->name);
             continue; /* command-line argument -sPATH= so we ignore this variable */
+        } else if (var->alias) {
+            printf("Not scanning ${%ls} as it's an alias to another variable\n",
+                var->name);
+            continue;
         }
         Manifest *man = var->man;
         if (var->path[0]) {
@@ -2172,7 +2185,8 @@ int scanning_phase(struct disk *disk, VarList *vars,
 static inline
 int is_same_file(const ManifestEntry *a, const ManifestEntry *b)
 {
-    return (a->var == b->var && a->file_id == b->file_id);
+    int same_vol = (a->var == b->var) || (wcscmp(a->var->path, b->var->path) == 0);
+    return (same_vol && a->file_id == b->file_id);
 }
 
 int stat_files_phase(struct disk *disk, Manifest *man, wchar_t *file_id_list)
@@ -4077,6 +4091,7 @@ int main(int argc, char **argv)
                 Variable *existing = varlist_find_by_path(&vars, e->path);
                 if (existing && existing != e) {
                     e->man = existing->man;
+                    e->alias = 1;
                 }
             }
             if (!e->man) {
@@ -4421,10 +4436,6 @@ int main(int argc, char **argv)
 
     man_sort_by_offset_link_action(&man_out);
 
-    if (vm_links_phase_2(&disk, &man_out) < 0) {
-        err(1, "vm_links_phase_2 failed");
-    }
-
     if (arg_out_manifest != NULL) {
         r = output_manifest_phase(&man_out, &disk, 0, partition,
                                   arg_out_manifest, calculate_all_hashes,
@@ -4435,6 +4446,11 @@ int main(int argc, char **argv)
     } else {
         printf("Skipping output_manifest_phase.\n");
     }
+
+    if (vm_links_phase_2(&disk, &man_out) < 0) {
+        err(1, "vm_links_phase_2 failed");
+    }
+
 
     if (flush_phase(&disk) < 0) {
         err(1, "flush_phase failed");
