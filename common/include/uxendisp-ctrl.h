@@ -222,7 +222,7 @@ uxendisp_get_user_draw(uxendisp_ctrl_ctx_t *ctx)
 {
     UXENDISPCustomMode m = { 0 };
 
-    m.esc_code = UXENDISP_ESCAPE_SET_USER_DRAW_ONLY;
+    m.esc_code = UXENDISP_ESCAPE_GET_USER_DRAW_ONLY;
     uxendisp_escape(ctx,0, &m, sizeof(m));
 
     return m.user_draw;
@@ -233,7 +233,7 @@ uxendisp_get_no_present_copy(uxendisp_ctrl_ctx_t *ctx)
 {
     UXENDISPCustomMode m = { 0 };
 
-    m.esc_code = UXENDISP_ESCAPE_SET_NO_PRESENT_COPY;
+    m.esc_code = UXENDISP_ESCAPE_GET_NO_PRESENT_COPY;
     uxendisp_escape(ctx,0, &m, sizeof(m));
 
     return m.no_present_copy;
