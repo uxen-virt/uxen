@@ -736,6 +736,10 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_M
     mode.ScreenStride = pSourceMode->Format.Graphics.Stride;
     mode.BitsPerPlane = 32;
 
+    if (m_Flags.StopCopy) {
+        mode.ScreenStride += (mode.VisScreenWidth & 1) * 4;
+    }
+
     hw_set_mode(&m_HwResources, &mode);
 
     if (!pCurrentBddMode->Flags.DoNotMapOrUnmap)
@@ -930,6 +934,7 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetVirtMode(UXENDISPCustomMode *pNewMode)
     if (m_Flags.StopCopy) {
         CURRENT_BDD_MODE* pCurrentBddMode = &m_CurrentModes[0];
         mode.ScreenStride = pCurrentBddMode->DispInfo.Pitch;
+        mode.ScreenStride += (pCurrentBddMode->DispInfo.Width & 1) * 4;
         uxen_msg("virtual mode change %dx%d, preserving stride=%d\n",
                  (int)mode.VisScreenWidth, (int)mode.VisScreenHeight,
                  (int)mode.ScreenStride);
