@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: ISC
  */
 
+#include <Ntddk.h>
 #include <wdm.h>
 #include "user_vram.h"
 #include "../common/debug.h"
@@ -110,6 +111,8 @@ void *UserVramMapper::user_map()
                                                NULL, FALSE, NormalPagePriority);
         if (!p)
             uxen_err("error mapping user vram, not enough resources\n");
+        uxen_msg("vram @ %p mapped into process %p\n",
+            p, PsGetCurrentProcessId());
         return p;
     }
     __except ( EXCEPTION_EXECUTE_HANDLER ) {
@@ -121,6 +124,8 @@ void *UserVramMapper::user_map()
 void UserVramMapper::user_unmap(void *mapped)
 {
     MmUnmapLockedPages(mapped, m_vram_mdl);
+    uxen_msg("vram @ %p unmapped from process %p\n",
+        mapped, PsGetCurrentProcessId());
 }
 
 void *UserVramMapper::scratch_map()
@@ -130,6 +135,8 @@ void *UserVramMapper::scratch_map()
                                                NULL, FALSE, NormalPagePriority);
         if (!p)
             uxen_err("error mapping scratch vram, not enough resources\n");
+        uxen_msg("scratch vram @ %p mapped into process %p\n",
+            p, PsGetCurrentProcessId());
         return p;
     }
     __except ( EXCEPTION_EXECUTE_HANDLER ) {
@@ -141,6 +148,8 @@ void *UserVramMapper::scratch_map()
 void UserVramMapper::scratch_unmap(void *mapped)
 {
     MmUnmapLockedPages(mapped, m_scratch_vram_mdl);
+    uxen_msg("scratch vram @ %p unmapped from process %p\n",
+        mapped, PsGetCurrentProcessId());
 }
 
 
