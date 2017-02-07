@@ -19,6 +19,10 @@ WINDDK_DIR_dos = $(subst \,\\,$(WINDDK_DIR))
 EWDK_DIR ?= C:/WinDDK/EnterpriseWDK_rs1_release_14393_20160715-1616
 EWDK_DIR_path = $(shell cd $(EWDK_DIR) && pwd)
 
+ifeq ($(wildcard $(EWDK_DIR)/.*),)
+$(error No EWDK in $(EWDK_DIR))
+endif
+
 # directories added the PATH
 EWDK_PATH_CRT = $(EWDK_DIR)/Program Files/Microsoft Visual Studio 14.0/VC/redist/x86/Microsoft.VC140.CRT/
 EWDK_PATH_BIN = $(EWDK_DIR)/Program Files/Microsoft Visual Studio 14.0/VC/bin/
