@@ -11,7 +11,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -75,8 +75,14 @@ hvmemul_prepare_assist(ioreq_t *p)
     int sign;
     uint32_t data = ~0;
 
-    if (p->type == IOREQ_TYPE_PCI_CONFIG)
+    if (p->type == IOREQ_TYPE_PCI_CONFIG) {
+        if (unlikely(p->state != STATE_IOREQ_READY)) {
+            gdprintk(XENLOG_ERR, "%s: unexpected type IOREQ_TYPE_PCI_CONFIG "
+                     "not sent to dm\n", __FUNCTION__);
+            return X86EMUL_OKAY;
+        }
         return X86EMUL_UNHANDLEABLE;
+    }
 
     spin_lock(&v->domain->arch.hvm_domain.ioreq_server_lock);
     for (s = v->domain->arch.hvm_domain.ioreq_server_list; s; s = s->next) {
@@ -240,9 +246,10 @@ static int hvmemul_do_io(
     vio->io_size = size;
 
     /* Use the default shared page */
-    current->arch.hvm_vcpu.ioreq = &curr->domain->arch.hvm_domain.ioreq;
-    p = get_ioreq(current);
+    current->arch.hvm_vcpu.ioreq_page = &curr->domain->arch.hvm_domain.ioreq;
 
+    p = get_ioreq(current);
+    p->state = STATE_IOREQ_NONE;
     p->dir = dir;
     p->data_is_ptr = value_is_ptr;
     p->type = is_mmio ? IOREQ_TYPE_COPY : IOREQ_TYPE_PIO;

@@ -21,7 +21,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -381,7 +381,7 @@ void hvm_do_resume(struct vcpu *v)
         vcpu_end_shutdown_deferral(v);
     }
 
-    p = get_ioreq(v);
+    p = get_dm_ioreq(v);
 
     /* NB. Optimised for common case (p->state == STATE_IOREQ_NONE). */
     while (p->state != STATE_IOREQ_NONE) {
@@ -1488,7 +1488,7 @@ int hvm_vcpu_initialise(struct vcpu *v)
     if (rc != 0)
         goto fail4;
 
-    v->arch.hvm_vcpu.ioreq = &v->domain->arch.hvm_domain.ioreq;
+    v->arch.hvm_vcpu.ioreq_page = &v->domain->arch.hvm_domain.ioreq;
 
     /* Create dmreq event channel. */
     rc = alloc_unbound_xen_event_channel(v, 0);
@@ -1625,7 +1625,7 @@ bool_t hvm_send_assist_req(struct vcpu *v)
     if ( unlikely(!vcpu_start_shutdown_deferral(v)) )
         return 0; /* implicitly bins the i/o operation */
 
-    p = get_ioreq(v);
+    p = get_dm_ioreq(v);
     if ( unlikely(p->state != STATE_IOREQ_NONE) )
     {
         /* This indicates a bug in the device model. Crash the domain. */

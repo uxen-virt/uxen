@@ -129,7 +129,8 @@ struct hvm_vcpu {
     spinlock_t          tm_lock;
     struct list_head    tm_list;
 
-    struct hvm_ioreq_page *ioreq;
+    struct hvm_ioreq_page *ioreq_page;
+    ioreq_t             ioreq;
 
     int                 dmreq_port;
     struct page_info   *dmreq_vcpu_page;

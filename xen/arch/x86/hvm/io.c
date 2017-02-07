@@ -21,7 +21,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -333,10 +333,22 @@ void hvm_io_assist(void)
     struct vcpu *curr = current;
     struct hvm_vcpu_io *vio = &curr->arch.hvm_vcpu.hvm_io;
     ioreq_t *p = get_ioreq(curr);
+    ioreq_t *dm_p = get_dm_ioreq(curr);
     enum hvm_io_state io_state;
 
     rmb(); /* see IORESP_READY /then/ read contents of ioreq */
 
+    if (p->state == STATE_IOREQ_READY) {
+        dm_p->state = STATE_IOREQ_NONE;
+        p->dir = dm_p->dir;
+        p->data_is_ptr = dm_p->data_is_ptr;
+        p->type = dm_p->type;
+        p->size = dm_p->size;
+        p->addr = dm_p->addr;
+        p->count = dm_p->count;
+        p->df = dm_p->df;
+        p->data = dm_p->data;
+    }
     p->state = STATE_IOREQ_NONE;
 
     io_state = vio->io_state;

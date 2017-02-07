@@ -39,11 +39,22 @@ get_dmreq(struct vcpu *v)
     return &d->arch.hvm_domain.dmreq.va->dmreq_vcpu[v->vcpu_id];
 }
 
-static inline ioreq_t *get_ioreq(struct vcpu *v)
+static inline ioreq_t *
+get_ioreq(struct vcpu *v)
 {
-    shared_iopage_t *p = v->arch.hvm_vcpu.ioreq->va;
-    ASSERT((v == current) || spin_is_locked(&v->arch.hvm_vcpu.ioreq->lock));
-    ASSERT(v->arch.hvm_vcpu.ioreq->va != NULL);
+
+    ASSERT(v == current);
+    return &v->arch.hvm_vcpu.ioreq;
+}
+
+static inline ioreq_t *
+get_dm_ioreq(struct vcpu *v)
+{
+    shared_iopage_t *p = v->arch.hvm_vcpu.ioreq_page->va;
+
+    ASSERT((v == current) ||
+           spin_is_locked(&v->arch.hvm_vcpu.ioreq_page->lock));
+    ASSERT(v->arch.hvm_vcpu.ioreq_page->va != NULL);
     return &p->vcpu_ioreq[v->vcpu_id];
 }
 
@@ -52,9 +63,9 @@ set_ioreq(struct vcpu *v, struct hvm_ioreq_page *page, ioreq_t *p)
 {
     ioreq_t *np;
 
-    v->arch.hvm_vcpu.ioreq = page;
-    spin_lock(&v->arch.hvm_vcpu.ioreq->lock);
-    np = get_ioreq(v);
+    v->arch.hvm_vcpu.ioreq_page = page;
+    spin_lock(&page->lock);
+    np = get_dm_ioreq(v);
     np->dir = p->dir;
     np->data_is_ptr = p->data_is_ptr;
     np->type = p->type;
@@ -63,7 +74,8 @@ set_ioreq(struct vcpu *v, struct hvm_ioreq_page *page, ioreq_t *p)
     np->count = p->count;
     np->df = p->df;
     np->data = p->data;
-    spin_unlock(&v->arch.hvm_vcpu.ioreq->lock);
+    spin_unlock(&page->lock);
+    p->state = STATE_IOREQ_READY;
 }
 
 #define HVM_DELIVER_NO_ERROR_CODE  -1
