@@ -69,9 +69,21 @@ static intptr_t
 vm_info_compare_key(void *ctx, const void *b, const void *key)
 {
     const struct vm_info * const pnp = b;
-    const domid_t * const fhp = key;
+    const struct vm_info_shared * const fhp = key;
+    int i;
 
-    return pnp->vmi_shared.vmi_domid - *fhp;
+    if (pnp->vmi_shared.vmi_domid < fhp->vmi_domid)
+        return -1;
+    if (pnp->vmi_shared.vmi_domid > fhp->vmi_domid)
+        return 1;
+
+    for (i = 0; i < sizeof(fhp->vmi_uuid); i++) {
+        if (pnp->vmi_shared.vmi_uuid[i] < fhp->vmi_uuid[i])
+            return -1;
+        if (pnp->vmi_shared.vmi_uuid[i] > fhp->vmi_uuid[i])
+            return 1;
+    }
+    return 0;
 }
 
 static intptr_t
@@ -79,7 +91,7 @@ vm_info_compare_nodes(void *ctx, const void *parent, const void *node)
 {
     const struct vm_info * const np = node;
 
-    return vm_info_compare_key(ctx, parent, &np->vmi_shared.vmi_domid);
+    return vm_info_compare_key(ctx, parent, &np->vmi_shared);
 }
 
 const rb_tree_ops_t vm_info_rbtree_ops = {
@@ -2283,12 +2295,16 @@ int
 uxen_op_query_vm(struct uxen_queryvm_desc *uqd)
 {
     struct vm_info *vmi;
+    struct vm_info_shared vmis;
     affinity_t aff;
+
+    memset(&vmis, 0, sizeof(vmis));
+    vmis.vmi_domid = uqd->uqd_domid;
 
     aff = uxen_lock();
 
     vmi = rb_tree_find_node_geq(&uxen_devext->de_vm_info_rbtree,
-                                &uqd->uqd_domid);
+                                &vmis);
     if (vmi) {
         uqd->uqd_domid = vmi->vmi_shared.vmi_domid;
         memcpy(uqd->uqd_vmuuid, vmi->vmi_shared.vmi_uuid,
