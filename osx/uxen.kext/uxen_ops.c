@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -1183,6 +1183,15 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
         goto out;
     }
 
+    aff = uxen_lock();
+    ret = (vmi == rb_tree_insert_node(&uxen_devext->de_vm_info_rbtree, vmi));
+    uxen_unlock(aff);
+    if (!ret) {
+        fail_msg("domain ID already present in de_vm_info_rbtree");
+        ret = EINVAL;
+        goto out;
+    }
+
     OSIncrementAtomic(&vmi->vmi_alive);
 
     /* This reference will be dropped on vm destroy */
@@ -1202,10 +1211,6 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
         }
         vci->vci_shared.vci_runnable = 1;
     }
-
-    aff = uxen_lock();
-    rb_tree_insert_node(&uxen_devext->de_vm_info_rbtree, vmi);
-    uxen_unlock(aff);
 
     ret = kernel_malloc_mfns(1, &vmi->vmi_undefined_mfn, 1);
     if (ret != 1) {
