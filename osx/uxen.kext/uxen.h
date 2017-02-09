@@ -149,6 +149,7 @@ struct vm_vcpu_info {
 struct vm_info {
     struct vm_info_shared vmi_shared;
     uint32_t vmi_alive;
+    uint32_t vmi_exists;
     uint32_t vmi_active_references;
     uint32_t vmi_nrvcpus;
     uint32_t vmi_running_vcpus;
@@ -305,6 +306,7 @@ int uxen_op_keyhandler(char *keys, unsigned int num);
 int uxen_op_create_vm(struct uxen_createvm_desc *utd, struct fd_assoc *fda);
 int uxen_op_target_vm(struct uxen_targetvm_desc *utd, struct fd_assoc *fda);
 void uxen_vmi_cleanup_vm(struct vm_info *vmi);
+int uxen_destroy_vm(struct vm_info *vmi);
 int uxen_op_destroy_vm(struct uxen_destroyvm_desc *, struct fd_assoc *fda);
 int uxen_op_query_vm(struct uxen_queryvm_desc *);
 int uxen_op_execute(struct uxen_execute_desc *ued, struct vm_info *vmi);

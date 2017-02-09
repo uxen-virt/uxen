@@ -1192,6 +1192,7 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
         goto out;
     }
 
+    OSIncrementAtomic(&vmi->vmi_exists);
     OSIncrementAtomic(&vmi->vmi_alive);
 
     /* This reference will be dropped on vm destroy */
@@ -1421,11 +1422,34 @@ uxen_vmi_stop_running(struct vm_info *vmi)
     }
 }
 
+int
+uxen_destroy_vm(struct vm_info *vmi)
+{
+    affinity_t aff;
+    int ret;
+
+    if (!OSCompareAndSwap(1, 0, &vmi->vmi_exists))
+        return 0;
+
+    aff = uxen_exec_dom0_start();
+    uxen_call(ret = (int), -EINVAL, NO_RESERVE,
+              uxen_do_destroy_vm, vmi->vmi_shared.vmi_uuid);
+    uxen_exec_dom0_end(aff);
+    ret = uxen_translate_xen_errno(ret);
+    if (ret == ENOENT)
+        ret = 0;
+    if (ret) {
+        printk("%s: vm%u not destroyed: %d\n", __FUNCTION__,
+               vmi->vmi_shared.vmi_domid, ret);
+        OSIncrementAtomic(&vmi->vmi_exists);
+    }
+
+    return ret;
+}
+
 static int
 uxen_vmi_destroy_vm(struct vm_info *vmi)
 {
-    affinity_t aff;
-    /* unsigned int i; */
     int ret;
 
     dprintk("%s: vm%u alive %s, refs %d, running %d vcpus\n", __FUNCTION__,
@@ -1439,13 +1463,7 @@ uxen_vmi_destroy_vm(struct vm_info *vmi)
 
     uxen_vmi_stop_running(vmi);
 
-    aff = uxen_exec_dom0_start();
-    uxen_call(ret = (int), -EINVAL, NO_RESERVE,
-              uxen_do_destroy_vm, vmi->vmi_shared.vmi_uuid);
-    uxen_exec_dom0_end(aff);
-    ret = uxen_translate_xen_errno(ret);
-    if (ret == ENOENT)
-        ret = 0;
+    ret = uxen_destroy_vm(vmi);
     if (ret) {
         printk("%s: vm%u not destroyed: %d\n", __FUNCTION__,
                vmi->vmi_shared.vmi_domid, ret);
