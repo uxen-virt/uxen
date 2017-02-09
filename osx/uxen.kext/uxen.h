@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -399,11 +399,12 @@ enum user_mapping_type {
     USER_MAPPING_MEMORY_MAP,
     USER_MAPPING_BUFFER,
     USER_MAPPING_USER_MALLOC,
+    USER_MAPPING_USER_MAP,
     USER_MAPPING_HOST_MFNS,
 };
 void *user_malloc(size_t size, enum user_mapping_type type,
                   struct fd_assoc *fda);
-void user_free(void *va, struct fd_assoc *fda);
+void user_free(void *va, enum user_mapping_type, struct fd_assoc *fda);
 void user_free_all_user_mappings(struct fd_assoc *fda);
 int map_host_pages(void *, size_t, uint64_t *, struct fd_assoc *);
 int unmap_host_pages(void *, size_t, struct fd_assoc *);

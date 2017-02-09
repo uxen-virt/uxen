@@ -2,7 +2,7 @@
  *  uxen_mem.c
  *  uxen
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * Author: Gianluca Guida <glguida@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -658,7 +658,7 @@ user_mmap_xen_mfns(uint32_t num, xen_pfn_t *mfns, struct fd_assoc *fda)
     um->fda = fda;
     um->mfns = mfns;
     um->vm_map = task_map;
-    um->type = USER_MAPPING_MEMORY_MAP;
+    um->type = USER_MAPPING_USER_MAP;
     lck_spin_lock(umi->lck);
     rb_tree_insert_node(&umi->rbtree, um);
     lck_spin_unlock(umi->lck);
@@ -748,12 +748,16 @@ user_munmap_pages(unsigned int num, const void *addr, struct fd_assoc *fda)
 
     lck_spin_lock(umi->lck);
     um = (struct user_mapping *)rb_tree_find_node(&umi->rbtree, &va);
-    if (um)
+    if (um && um->type == USER_MAPPING_MEMORY_MAP)
         rb_tree_remove_node(&umi->rbtree, um);
     lck_spin_unlock(umi->lck);
 
     if (!um)
         return EINVAL;
+    if (um->type != USER_MAPPING_MEMORY_MAP) {
+        fail_msg("invalid type for va %p mapping", addr);
+        return EPERM;
+    }
 
     return user_free_user_mapping(um);
 }
@@ -1705,12 +1709,16 @@ unmap_host_pages(void *va, size_t len, struct fd_assoc *fda)
 
     lck_spin_lock(umi->lck);
     um = (struct user_mapping *)rb_tree_find_node(&umi->rbtree, &key);
-    if (um)
+    if (um && um->type == USER_MAPPING_HOST_MFNS)
         rb_tree_remove_node(&umi->rbtree, um);
     lck_spin_unlock(umi->lck);
     if (!um) {
         fail_msg("va %p not locked", va);
         return EINVAL;
+    }
+    if (um->type != USER_MAPPING_HOST_MFNS) {
+        fail_msg("invalid type for va %p mapping", va);
+        return EPERM;
     }
 
     return user_free_user_mapping(um);
@@ -1948,6 +1956,7 @@ user_free_user_mapping(struct user_mapping *um)
         break;
 
     case USER_MAPPING_MEMORY_MAP:
+    case USER_MAPPING_USER_MAP:
         task_pmap = xnu_get_map_pmap(um->vm_map);
         assert(task_pmap);
         xnu_pmap_remove(task_pmap, addr, addr + um->va.size);
@@ -1960,7 +1969,6 @@ user_free_user_mapping(struct user_mapping *um)
 
         if (um->mfns) {
             size_t num;
-            assert(um->type == USER_MAPPING_MEMORY_MAP);
             num = ALIGN_PAGE_UP(um->va.size) >> PAGE_SHIFT;
             release_user_mapping_range(um->mfns, num, um->fda);
             kernel_free(um->mfns, num * sizeof(xen_pfn_t));
@@ -1980,7 +1988,7 @@ user_free_user_mapping(struct user_mapping *um)
 }
 
 void
-user_free(void *addr, struct fd_assoc *fda)
+user_free(void *addr, enum user_mapping_type type, struct fd_assoc *fda)
 {
     struct user_mapping_info *umi = &fda->user_mappings;
     struct user_mapping *um;
@@ -1991,11 +1999,13 @@ user_free(void *addr, struct fd_assoc *fda)
 
     lck_spin_lock(umi->lck);
     um = (struct user_mapping *)rb_tree_find_node(&umi->rbtree, &va);
-    if (um)
+    if (um && um->type == type)
         rb_tree_remove_node(&umi->rbtree, um);
     lck_spin_unlock(umi->lck);
 
     if (!um)
+        return;
+    if (um->type != type)
         return;
 
     user_free_user_mapping(um);
@@ -2013,7 +2023,10 @@ user_free_all_user_mappings(struct fd_assoc *fda)
         lck_spin_unlock(umi->lck);
         mm_dprintk("%s: freeing user mapping %p type %s\n", __FUNCTION__,
                    um->va.addr,
-                   um->type == USER_MAPPING_MEMORY_MAP ? "mmap" : "malloc");
+                   um->type == USER_MAPPING_USER_MAP ? "mmap" :
+                   um->type == USER_MAPPING_USER_MALLOC ? "malloc" :
+                   um->type == USER_MAPPING_MEMORY_MAP ? "sys" :
+                   um->type == USER_MAPPING_HOST_MFNS ? "host" : "buffer");
         user_free_user_mapping(um);
         lck_spin_lock(umi->lck);
     }
@@ -2037,7 +2050,7 @@ int
 uxen_mem_free(struct uxen_free_desc *ufd, struct fd_assoc *fda)
 {
 
-    user_free((void *)ufd->ufd_addr, fda);
+    user_free((void *)ufd->ufd_addr, USER_MAPPING_USER_MALLOC, fda);
 
     return 0;
 }
@@ -2220,7 +2233,7 @@ uxen_mem_munmap(struct uxen_munmap_desc *umd, struct fd_assoc *fda)
     if (vmi->vmi_shared.vmi_runnable == 0)
         goto out;
 
-    user_free((void *)umd->umd_addr, fda);
+    user_free((void *)umd->umd_addr, USER_MAPPING_USER_MAP, fda);
 
     ret = 0;
   out:
