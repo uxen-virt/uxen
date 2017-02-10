@@ -75,14 +75,8 @@ hvmemul_prepare_assist(ioreq_t *p)
     int sign;
     uint32_t data = ~0;
 
-    if (p->type == IOREQ_TYPE_PCI_CONFIG) {
-        if (unlikely(p->state != STATE_IOREQ_READY)) {
-            gdprintk(XENLOG_ERR, "%s: unexpected type IOREQ_TYPE_PCI_CONFIG "
-                     "not sent to dm\n", __FUNCTION__);
-            return X86EMUL_OKAY;
-        }
+    if (p->type == IOREQ_TYPE_PCI_CONFIG)
         return X86EMUL_UNHANDLEABLE;
-    }
 
     spin_lock(&v->domain->arch.hvm_domain.ioreq_server_lock);
     for (s = v->domain->arch.hvm_domain.ioreq_server_list; s; s = s->next) {

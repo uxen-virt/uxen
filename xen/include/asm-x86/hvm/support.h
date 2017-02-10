@@ -75,7 +75,6 @@ set_ioreq(struct vcpu *v, struct hvm_ioreq_page *page, ioreq_t *p)
     np->df = p->df;
     np->data = p->data;
     spin_unlock(&page->lock);
-    p->state = STATE_IOREQ_READY;
 }
 
 #define HVM_DELIVER_NO_ERROR_CODE  -1

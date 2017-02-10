@@ -1620,13 +1620,15 @@ void hvm_vcpu_down(struct vcpu *v)
 
 bool_t hvm_send_assist_req(struct vcpu *v)
 {
-    ioreq_t *p;
+    ioreq_t *dm_p, *p;
 
     if ( unlikely(!vcpu_start_shutdown_deferral(v)) )
         return 0; /* implicitly bins the i/o operation */
 
-    p = get_dm_ioreq(v);
-    if ( unlikely(p->state != STATE_IOREQ_NONE) )
+    p = get_ioreq(v);
+
+    dm_p = get_dm_ioreq(v);
+    if ( unlikely(dm_p->state != STATE_IOREQ_NONE) )
     {
         /* This indicates a bug in the device model. Crash the domain. */
         gdprintk(XENLOG_ERR, "Device model set bad IO state %d.\n", p->state);
@@ -1634,14 +1636,14 @@ bool_t hvm_send_assist_req(struct vcpu *v)
         return 0;
     }
 
-    prepare_wait_on_xen_event_channel(p->vp_eport);
+    prepare_wait_on_xen_event_channel(dm_p->vp_eport);
 
     /*
      * Following happens /after/ blocking and setting up ioreq contents.
      * prepare_wait_on_xen_event_channel() is an implicit barrier.
      */
-    p->state = STATE_IOREQ_READY;
-    notify_via_xen_event_channel(v->domain, p->vp_eport);
+    dm_p->state = p->state = STATE_IOREQ_READY;
+    notify_via_xen_event_channel(v->domain, dm_p->vp_eport);
 
     return 1;
 }
