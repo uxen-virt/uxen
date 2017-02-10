@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -641,10 +641,9 @@ bank_reg_read(struct uxendisp_state *s, int bank_id, target_phys_addr_t addr)
 static void
 xtra_ctrl_write(struct uxendisp_state *s, uint64_t val)
 {
-    uint32_t old_ctrl = s->xtra_ctrl;
     uint32_t new_ctrl = val & xtra_caps();
 #ifdef _WIN32
-    {
+    uint32_t old_ctrl = s->xtra_ctrl;
     uint32_t old_pv_vblank = old_ctrl & UXDISP_XTRA_CTRL_PV_VBLANK_ENABLE;
     uint32_t new_pv_vblank = new_ctrl & UXDISP_XTRA_CTRL_PV_VBLANK_ENABLE;
 
@@ -654,8 +653,7 @@ xtra_ctrl_write(struct uxendisp_state *s, uint64_t val)
         else
             pv_vblank_stop(s->vblank_ctx);
     }
-    }
-#endif
+#endif  /* _WIN32 */
     s->xtra_ctrl = new_ctrl;
 }
 
@@ -770,9 +768,10 @@ uxendisp_mmio_read(void *opaque, target_phys_addr_t addr, unsigned size)
         return xtra_caps();
     case UXDISP_REG_XTRA_CTRL:
         return s->xtra_ctrl;
-    case UXDISP_REG_VSYNC_HZ: {
+#ifdef _WIN32
+    case UXDISP_REG_VSYNC_HZ:
         return pv_vblank_get_reported_vsync_hz();
-    }
+#endif  /* _WIN32 */
     default:
         break;
     }
@@ -922,8 +921,10 @@ uxendisp_post_load(void *opaque, int version_id)
     for (crtc_id = 0; crtc_id < UXENDISP_NB_CRTCS; crtc_id++)
         s->crtcs[crtc_id].flush_pending = 1;
 
+#ifdef _WIN32
     if (s->xtra_ctrl & UXDISP_XTRA_CTRL_PV_VBLANK_ENABLE)
         pv_vblank_start(s->vblank_ctx);
+#endif  /* _WIN32 */
 
     return 0;
 }
@@ -960,7 +961,9 @@ uxendisp_post_save(void *opaque)
         vram_suspend(&bank->vram);
     }
     pci_ram_post_save(&s->dev);
+#ifdef _WIN32
     pv_vblank_stop(s->vblank_ctx);
+#endif  /* _WIN32 */
 }
 
 static const VMStateDescription vmstate_uxendisp_crtc = {
