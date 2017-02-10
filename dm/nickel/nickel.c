@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2017, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -1723,6 +1723,7 @@ int net_init_nickel(QemuOpts *opts, Monitor *mon, const char *name, VLANState *v
     struct in_addr host = { .s_addr = htonl(0x0a000202) }; /* 10.0.2.2 */
     struct in_addr dhcp = { .s_addr = htonl(0x0a00020f) }; /* 10.0.2.15 */
 
+    debug_printf("nickel config init\n");
     epoch_ts = get_epoch_ts();
     if (!vlan)
         vlan = qemu_find_vlan(0, 1);
