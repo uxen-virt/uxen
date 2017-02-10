@@ -102,7 +102,6 @@ static int ac_rpc_IsListIPAddressAllowed(struct nickel *ni, const struct net_add
         goto mem_err;
     blen += RPC_STR_ALLOC_GRAN;
 
-    buf[NETADDR_MAXSTRLEN - 1] = 0;
     for (i = 0; i < len; i++) {
         if (strlen(addr_list) + NETADDR_MAXSTRLEN > blen) {
             tmp = realloc(addr_list, blen + RPC_STR_ALLOC_GRAN + 1);
@@ -112,7 +111,7 @@ static int ac_rpc_IsListIPAddressAllowed(struct nickel *ni, const struct net_add
             addr_list = tmp;
         }
 
-        buf[63] = 0;
+        buf[NETADDR_MAXSTRLEN - 1] = 0;
         strncpy(buf, netaddr_tostr(ips[i]), NETADDR_MAXSTRLEN-1);
         if (*addr_list)
             strcat(addr_list, ",");
@@ -121,7 +120,7 @@ static int ac_rpc_IsListIPAddressAllowed(struct nickel *ni, const struct net_add
 
     dict_put_string(args, "addr-list", addr_list);
 
-    snprintf(buf, 64, "%lu", options);
+    snprintf(buf, NETADDR_MAXSTRLEN, "%lu", options);
     dict_put_string(args, "options", buf);
 
     if (ni_rpc_send_sync(ni, "nc_IsListIPAddressAllowed", args, &response))
