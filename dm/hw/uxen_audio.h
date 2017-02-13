@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -71,6 +71,7 @@ struct UXenAudioVoice_struct
     uxenaudio_out_mode_t omode;
     uint32_t last_realpos;
     uint64_t virt_pos_t0;
+    uint32_t virt_pos_max;
     struct resampler_16_2 *resampler;
     double dst_frames_remainder;
 #ifdef USE_QEMUS_BROKEN_AUDIO

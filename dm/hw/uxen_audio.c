@@ -16,7 +16,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2013-2016, Bromium, Inc.
+ * Copyright 2013-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -144,6 +144,7 @@ voice_start_internal(UXenAudioVoice *v, uint32_t fmt)
     v->wv = 0;
     v->frames_written = 0;
     v->virt_pos_t0 = qemu_get_clock(rt_clock);
+    v->virt_pos_max = 0;
     v->resampler = 0;
     v->dst_frames_remainder = 0;
 
@@ -270,6 +271,8 @@ out_where(UXenAudioVoice *v)
         break;
     case UXENAUDIO_OUT_NULL:
         ret = stream_virt_pos(v);
+        if (ret > v->virt_pos_max)
+            ret = v->virt_pos_max;
         break;
     case UXENAUDIO_OUT_HOST_VIRT_POS:
         spos = stream_pos(v);
@@ -286,6 +289,7 @@ out_where(UXenAudioVoice *v)
 
     ret /= AUDIO_QUANTUM_BYTES;
     ret *= AUDIO_QUANTUM_BYTES;
+
     return v->position_offset + ret;
 }
 
@@ -471,6 +475,9 @@ consume_out_samples(UXenAudioVoice *v, uint8_t *src, int frames)
     if (!wv)
         return 0;
 
+    if (v->omode == UXENAUDIO_OUT_NULL)
+        return frames;
+
     wasapi_get_play_fmt(wv, &fmt);
     dst_rate = fmt->nSamplesPerSec;
     dst_channels = fmt->nChannels;
@@ -569,6 +576,8 @@ transfer_out(UXenAudioVoice *v)
     }
 
     v->buf->rptr = v->rptr;
+    v->virt_pos_max += sum_fr_read * align;
+
     return sum_fr_read;
 }
 
@@ -808,7 +817,15 @@ voice_io_read(UXenAudioState *s, unsigned int vn, uint32_t offset)
     case UXAU_V_POSITION:
         if (v->running) {
             test_voice_lost(v);
-            ret = v->capture ? inp_where(v) : out_where(v);
+            if (v->capture)
+                ret = inp_where(v);
+            else {
+                /* in null output mode we don't get data needed callbacks, so
+                 * call transfer here to update ring ptrs etc */
+                if (v->omode == UXENAUDIO_OUT_NULL)
+                    transfer(v);
+                ret = out_where(v);
+            }
         } else
             ret = ~0;
         break;
