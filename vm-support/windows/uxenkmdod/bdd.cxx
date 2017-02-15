@@ -637,9 +637,14 @@ NTSTATUS BASIC_DISPLAY_DRIVER::GetUserDrawOnly(BOOLEAN *ud)
 
 NTSTATUS BASIC_DISPLAY_DRIVER::SetUserDrawOnly(BOOLEAN ud)
 {
+    if (ud && !hw_is_user_draw_capable(&m_HwResources)) {
+        uxen_err("cannot set user draw, no backend capability\n");
+        return STATUS_UNSUCCESSFUL;
+    }
+    hw_user_draw_enable(&m_HwResources, ud);
     m_Flags.UserDraw = ud;
-
     uxen_msg("set user draw %d\n", (int)ud);
+
     return STATUS_SUCCESS;
 }
 
@@ -663,6 +668,11 @@ NTSTATUS BASIC_DISPLAY_DRIVER::Flush()
     dr_flush(m_DrContext);
 
     return STATUS_SUCCESS;
+}
+
+NTSTATUS BASIC_DISPLAY_DRIVER::ScratchifyProcess(HANDLE pid, int enable)
+{
+    return m_vram_mapper.process_scratchify(pid, enable);
 }
 
 NTSTATUS BASIC_DISPLAY_DRIVER::StopDeviceAndReleasePostDisplayOwnership(_In_  D3DDDI_VIDEO_PRESENT_TARGET_ID TargetId,

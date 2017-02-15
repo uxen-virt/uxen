@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -26,6 +26,7 @@ enum ns_event_msg_proto {
     NS_EVENT_MSG_TOUCH_INPUT,
     NS_EVENT_MSG_NOP,
     NS_EVENT_MSG_PROTO_WINDOWS_SET_DYNAMIC_TIME_ZONE_INFORMATION,
+    NS_EVENT_MSG_PROTO_USER_DRAW_ENABLE,
 
     NS_EVENT_MSG_PROTO_MAX, /* Not a message ID */
 };
@@ -127,6 +128,11 @@ struct ns_event_msg_touch_input {
 
 struct ns_event_msg_nop {
     struct ns_event_msg_header msg;
+};
+
+struct ns_event_msg_user_draw_enable {
+    struct ns_event_msg_header msg;
+    uint32_t enable;
 };
 
 #endif  /* _GUEST_AGENT_PROTO_H_ */

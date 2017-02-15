@@ -445,6 +445,12 @@ NTSTATUS BddDdiEscape(
         case UXENDISP_ESCAPE_UNMAP_SCRATCH_FB:
             status = pBDD->UnmapScratchVram((void*)(uintptr_t)inp.ptr);
             break;
+        case UXENDISP_ESCAPE_SCRATCHIFY_PROCESS:
+            status = pBDD->ScratchifyProcess((void*)(uintptr_t)inp.ptr, 1);
+            break;
+        case UXENDISP_ESCAPE_UNSCRATCHIFY_PROCESS:
+            status = pBDD->ScratchifyProcess((void*)(uintptr_t)inp.ptr, 0);
+            break;
         case UXENDISP_ESCAPE_GET_USER_DRAW_ONLY: {
             BOOLEAN v;
 

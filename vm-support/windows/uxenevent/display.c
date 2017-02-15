@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2016, Bromium, Inc.
+ * Copyright 2013-2017, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -141,6 +141,23 @@ exit:
 
     if (hdev != INVALID_HANDLE_VALUE)
         SetupDiDestroyDeviceInfoList(hdev);
+}
+
+int
+display_scratchify_process(DWORD pid, int enable)
+{
+    UXENDISPCustomMode cm;
+    int code = enable ? UXENDISP_ESCAPE_SCRATCHIFY_PROCESS
+        : UXENDISP_ESCAPE_UNSCRATCHIFY_PROCESS;
+
+    cm.esc_code = code;
+    cm.ptr = (uintptr_t)pid;
+    int ret = display_escape(code, &cm, sizeof(cm));
+    if (ret) {
+        debug_log("failed to scratchify process %x, error %x\n", pid, ret);
+        return -1;
+    }
+    return 0;
 }
 
 int

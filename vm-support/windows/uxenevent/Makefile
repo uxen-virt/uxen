@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2016, Bromium, Inc.
+# Copyright 2012-2017, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -49,6 +49,7 @@ UXENEVENT_OBJS = uxenevent.o \
 		 input.o \
 		 logging.o \
 		 perf_counters.o \
+		 process.o \
 		 uxenevent-res.o \
 		 window.o
 

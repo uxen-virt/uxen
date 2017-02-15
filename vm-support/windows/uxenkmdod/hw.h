@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -43,7 +43,14 @@ NTSTATUS hw_is_virt_mode_enabled(
 int hw_is_pv_vblank_capable(
     _In_ PUXEN_HW_RESOURCES pHw);
 
+int hw_is_user_draw_capable(
+    _In_ PUXEN_HW_RESOURCES pHw);
+
 void hw_pv_vblank_enable(
+    _In_ PUXEN_HW_RESOURCES pHw,
+    _In_ int enable);
+
+void hw_user_draw_enable(
     _In_ PUXEN_HW_RESOURCES pHw,
     _In_ int enable);
 

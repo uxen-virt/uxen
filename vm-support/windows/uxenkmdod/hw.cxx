@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -242,6 +242,14 @@ int hw_is_pv_vblank_capable(
     return !!(caps & UXDISP_XTRA_CAPS_PV_VBLANK);
 }
 
+int hw_is_user_draw_capable(
+    _In_ PUXEN_HW_RESOURCES pHw)
+{
+    ULONG caps = uxdisp_read(pHw, UXDISP_REG_XTRA_CAPS);
+
+    return !!(caps & UXDISP_XTRA_CAPS_USER_DRAW);
+}
+
 void hw_pv_vblank_enable(
     _In_ PUXEN_HW_RESOURCES pHw,
     _In_ int enable)
@@ -261,6 +269,22 @@ void hw_pv_vblank_enable(
         uxdisp_write(pHw, UXDISP_REG_INTERRUPT_ENABLE,
                      (new_ctrl & UXDISP_XTRA_CTRL_PV_VBLANK_ENABLE) ? UXDISP_INTERRUPT_VBLANK : 0);
     }
+}
+
+void hw_user_draw_enable(
+    _In_ PUXEN_HW_RESOURCES pHw,
+    _In_ int enable)
+{
+    ULONG ctrl = uxdisp_read(pHw, UXDISP_REG_XTRA_CTRL);
+    ULONG new_ctrl = ctrl;
+
+    if (enable)
+        new_ctrl |= UXDISP_XTRA_CTRL_USER_DRAW_ENABLE;
+    else
+        new_ctrl &= ~UXDISP_XTRA_CTRL_USER_DRAW_ENABLE;
+
+    if (new_ctrl != ctrl)
+        uxdisp_write(pHw, UXDISP_REG_XTRA_CTRL, new_ctrl);
 }
 
 int hw_pv_vblank_getrate(

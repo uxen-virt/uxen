@@ -2,7 +2,7 @@
  *  uxenevent.c
  *  uxen
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -62,6 +62,7 @@
 #include "display.h"
 #include "uxenevent.h"
 #include "window.h"
+#include "process.h"
 
 DECLARE_PROGNAME;
 
@@ -517,6 +518,35 @@ process_windows_set_dynamic_time_zone_information(
 }
 
 static int
+process_user_draw_enable(
+    struct ns_event_msg_user_draw_enable *msg)
+{
+    DWORD pid = find_pid("dwm.exe");
+    DWORD err;
+
+    if (pid) {
+        /* if enabling user draw, replace framebuffer mapping in dwm.exe with
+         * scratch framebuffer mapping; needs to be done on suspended process */
+
+        err = suspend_pid(pid);
+        if (err) {
+            debug_log("suspend of dwm.exe failed: %x\n", err);
+            goto out;
+        }
+
+        /* replace any user fb mappings in the dwm process with scratch mappings */
+        display_scratchify_process(pid, msg->enable);
+
+        err = resume_pid(pid);
+        if (err)
+            debug_log("resume of dwm.exe failed: %x\n", err);
+    }
+
+out:
+    return 0;
+}
+
+static int
 process_remote_execute(struct ns_event_msg_remote_execute *msg)
 {
     int cmd_len;
@@ -677,6 +707,10 @@ void recv_dispatch(v4v_channel_t *c,struct pkt *pkt,DWORD bytes)
     case NS_EVENT_MSG_PROTO_WINDOWS_SET_DYNAMIC_TIME_ZONE_INFORMATION:
         CHECKBUFSZ(ns_event_msg_windows_set_dynamic_time_zone_information);
         rc = process_windows_set_dynamic_time_zone_information((void *)pkt->data);
+        break;
+    case NS_EVENT_MSG_PROTO_USER_DRAW_ENABLE:
+        CHECKBUFSZ(ns_event_msg_user_draw_enable);
+        rc = process_user_draw_enable((void *)pkt->data);
         break;
     default:
         debug_log("unknown message proto %d", pkt->hdr.proto);

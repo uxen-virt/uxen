@@ -379,6 +379,9 @@ public:
 
     NTSTATUS Flush();
 
+    // Replace all user framebuffer mappings in a given process with scratch mappings
+    NTSTATUS ScratchifyProcess(HANDLE pid, int enable);
+
 private:
 
     NTSTATUS CommonStart();

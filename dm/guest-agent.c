@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -575,6 +575,18 @@ guest_agent_set_dynamic_time_zone(void *dtzi)
     free(buf);
 
     return ret;
+}
+
+int
+guest_agent_user_draw_enable(int enable)
+{
+    DECL_V4V_BUF(ns_event_msg_user_draw_enable) buf;
+
+    buf.msg.msg.proto = NS_EVENT_MSG_PROTO_USER_DRAW_ENABLE;
+    buf.msg.msg.len = sizeof(buf.msg);
+    buf.msg.enable = enable;
+
+    return guest_agent_sendmsg(&buf, sizeof(buf), 1);
 }
 
 int

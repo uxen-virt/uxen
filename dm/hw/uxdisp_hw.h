@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -8,7 +8,10 @@
 #define UXDISP_HW_H_
 
 #define UXDISP_XTRA_CAPS_PV_VBLANK        0x1
+#define UXDISP_XTRA_CAPS_USER_DRAW        0x2
+
 #define UXDISP_XTRA_CTRL_PV_VBLANK_ENABLE 0x1
+#define UXDISP_XTRA_CTRL_USER_DRAW_ENABLE 0x2
 
 #define UXDISP_REG_MAGIC                0x00000
 #define     UXDISP_MAGIC                            0x7558656e

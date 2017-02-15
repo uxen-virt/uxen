@@ -13,6 +13,7 @@
 #include <dm/vram.h>
 #include <dm/edid.h>
 #include <dm/hw/vga.h>
+#include <dm/guest-agent.h>
 #include "pci.h"
 #include "pci-ram.h"
 
@@ -91,6 +92,7 @@ xtra_caps(void)
 
     if (disp_pv_vblank != PV_VBLANK_OFF)
         caps |= UXDISP_XTRA_CAPS_PV_VBLANK;
+    caps |= UXDISP_XTRA_CAPS_USER_DRAW;
 
     return caps;
 }
@@ -639,6 +641,13 @@ bank_reg_read(struct uxendisp_state *s, int bank_id, target_phys_addr_t addr)
 }
 
 static void
+uxendisp_user_draw_enable(int enable)
+{
+    debug_printf("%s: user draw enable = %d\n", __FUNCTION__, enable);
+    guest_agent_user_draw_enable(enable);
+}
+
+static void
 xtra_ctrl_write(struct uxendisp_state *s, uint64_t val)
 {
     uint32_t new_ctrl = val & xtra_caps();
@@ -646,6 +655,8 @@ xtra_ctrl_write(struct uxendisp_state *s, uint64_t val)
     uint32_t old_ctrl = s->xtra_ctrl;
     uint32_t old_pv_vblank = old_ctrl & UXDISP_XTRA_CTRL_PV_VBLANK_ENABLE;
     uint32_t new_pv_vblank = new_ctrl & UXDISP_XTRA_CTRL_PV_VBLANK_ENABLE;
+    uint32_t old_user_draw = old_ctrl & UXDISP_XTRA_CTRL_USER_DRAW_ENABLE;
+    uint32_t new_user_draw = new_ctrl & UXDISP_XTRA_CTRL_USER_DRAW_ENABLE;
 
     if (old_pv_vblank != new_pv_vblank) {
         if (new_pv_vblank)
@@ -653,6 +664,9 @@ xtra_ctrl_write(struct uxendisp_state *s, uint64_t val)
         else
             pv_vblank_stop(s->vblank_ctx);
     }
+
+    if (old_user_draw != new_user_draw)
+        uxendisp_user_draw_enable(!!new_user_draw);
 #endif  /* _WIN32 */
     s->xtra_ctrl = new_ctrl;
 }
