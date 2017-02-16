@@ -199,7 +199,7 @@ dr_flush(dr_ctx_t context)
         if (delta_ms >= FLUSH_TIMEOUT_MS) {
             KIRQL irq;
 
-            uxen_msg("flush timeout, rect sent %d done %d, resetting\n", ctx->rect_sent, ctx->rect_done);
+            //uxen_msg("flush timeout, rect sent %d done %d, resetting\n", ctx->rect_sent, ctx->rect_done);
             KeAcquireSpinLock(&ctx->rect_lock, &irq);
             ctx->rect_sent = 0;
             ctx->rect_done = 0;
