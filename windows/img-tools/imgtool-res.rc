@@ -1,13 +1,15 @@
+#include <uxen-resources.h>
+
 1 VERSIONINFO
 BEGIN
   BLOCK "StringFileInfo"
   BEGIN
     BLOCK "040904B0"
     BEGIN
-      VALUE "CompanyName", "Bromium"
-      VALUE "FileDescription", "Bromium Image Tool"
-      VALUE "LegalCopyright", "Copyright (c) 2011-2014 Bromium"
-      VALUE "ProductName", "Bromium vSentry"
+      VALUE "CompanyName", COMPANY_NAME
+      VALUE "FileDescription", "Image Tool"
+      VALUE "LegalCopyright", COPYRIGHT
+      VALUE "ProductName", PRODUCT_NAME
     END
   END
 

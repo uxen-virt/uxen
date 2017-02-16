@@ -65,7 +65,8 @@ uxenv4vlib_CPPFLAGS = \
 uxenv4vlib_CFLAGS = \
 	//Gm- //Gz //hotpatch //Oy-
 uxenv4vlib_RCFLAGS = \
-	-DSXS_PROCESSOR_ARCHITECTURE="x86"
+	-DSXS_PROCESSOR_ARCHITECTURE="x86" \
+	$(WINDRESFLAGS)
 uxenv4vlib_LDFLAGS = \
 	//safeseh \
 	//functionpadmin:5 \
@@ -76,7 +77,8 @@ uxenv4vlib_CPPFLAGS = \
 uxenv4vlib_CFLAGS = \
 	//GL //homeparams
 uxenv4vlib_RCFLAGS = \
-	-DSXS_PROCESSOR_ARCHITECTURE="AMD64"
+	-DSXS_PROCESSOR_ARCHITECTURE="AMD64" \
+	$(WINDRESFLAGS)
 uxenv4vlib_LDFLAGS = \
 	//LTCG:NOSTATUS \
 	//functionpadmin:6 \

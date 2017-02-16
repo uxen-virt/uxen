@@ -2,7 +2,7 @@
  *  uxen.rc
  *  uxen
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -10,17 +10,18 @@
 
 #include <windows.h>
 #include <ntverp.h>
+#include <uxen-resources.h>
 
 #define VER_FILETYPE			VFT_DRV
 #define VER_FILESUBTYPE			VFT2_DRV_SYSTEM
 #define VER_FILEDESCRIPTION_STR		"uXen VMM driver"
 #define VER_INTERNALNAME_STR		"uxen.sys"
 #undef VER_PRODUCTNAME_STR
-#define VER_PRODUCTNAME_STR		"uXen VMM"
+#define VER_PRODUCTNAME_STR		PRODUCT_NAME
 #undef VER_COMPANYNAME_STR
-#define VER_COMPANYNAME_STR		"uXen Project"
-#define VER_LEGALCOPYRIGHT_STR		"Copyright © uXen Project. All rights reserved."
-#define VER_LEGALCOPYRIGHT_STR_WITH_YEARS "Copyright © 2013 uXen Project. All rights reserved."
+#define VER_COMPANYNAME_STR		COMPANY_NAME
+#define VER_LEGALCOPYRIGHT_STR		COPYRIGHT
+#define VER_LEGALCOPYRIGHT_STR_WITH_YEARS COPYRIGHT
 
 #include "version.h"
 

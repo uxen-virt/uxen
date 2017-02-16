@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2016, Bromium, Inc.
+# Copyright 2012-2017, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -190,7 +190,7 @@ cache.o: CPPFLAGS += $(LIBIMG_CPPFLAGS)
 
 %.o : %.rc
 	$(_W)echo Compiling resource - $@
-	$(_V)$(WINDRES) $(WINDRES_TARGET_FORMAT_OPTION) $< -o $@
+	$(_V)$(WINDRES) $(WINDRESFLAGS) $(WINDRES_TARGET_FORMAT_OPTION) $< -o $@
 
 -include .deps/*.d
 

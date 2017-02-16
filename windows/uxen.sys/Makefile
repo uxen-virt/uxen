@@ -72,7 +72,8 @@ uxen_sys_CPPFLAGS = \
 uxen_sys_CFLAGS = \
 	//Gm- //Gz //hotpatch //Oy-
 uxen_sys_RCFLAGS = \
-	-DSXS_PROCESSOR_ARCHITECTURE="x86"
+	-DSXS_PROCESSOR_ARCHITECTURE="x86" \
+	$(WINDRESFLAGS)
 uxen_sys_LDFLAGS = \
 	//functionpadmin:5 \
 	//entry:GsDriverEntry@8
@@ -87,7 +88,8 @@ uxen_sys_CPPFLAGS = \
 uxen_sys_CFLAGS = \
 	//GL //homeparams
 uxen_sys_RCFLAGS = \
-	-DSXS_PROCESSOR_ARCHITECTURE="AMD64"
+	-DSXS_PROCESSOR_ARCHITECTURE="AMD64" \
+	$(WINDRESFLAGS)
 uxen_sys_LDFLAGS = \
 	//LTCG:NOSTATUS \
 	//functionpadmin:6 \
