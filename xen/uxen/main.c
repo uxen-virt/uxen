@@ -2,7 +2,7 @@
  *  uxen_main.c
  *  uxen
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -36,6 +36,7 @@
 int uxen_verbose = 0;
 
 static void free_dom0(void);
+static void do_hvm_cpu_down(void *);
 
 DEFINE_PER_CPU(uintptr_t, stack_top);
 DEFINE_PER_CPU(struct uxen_hypercall_desc *, hypercall_args);
@@ -607,7 +608,7 @@ __uxen_shutdown_xen(void)
 
     console_start_sync();
 
-    smp_send_stop();
+    on_selected_cpus(&cpu_online_map, do_hvm_cpu_down, NULL, 1);
 
     printk("clearing cpu_online_map\n");
     cpumask_clear(&cpu_online_map);

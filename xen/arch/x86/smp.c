@@ -10,7 +10,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -439,6 +439,7 @@ void __stop_this_cpu(void)
 #endif  /* __UXEN__ */
 }
 
+#ifndef __UXEN__
 static void
 __uxen_stop_this_cpu(void *arg)
 {
@@ -464,7 +465,6 @@ void smp_send_stop(void)
     on_selected_cpus(&cpu_online_map, __uxen_stop_this_cpu, NULL, 1);
 }
 
-#ifndef __UXEN__
 void smp_send_nmi_allbutself(void)
 {
     send_IPI_mask(&cpu_online_map, APIC_DM_NMI);
