@@ -2,7 +2,7 @@
  *  uxen_cpu.c
  *  uxen
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -116,21 +116,6 @@ void __cdecl
 uxen_cpu_on_selected(const void *mask, uintptr_t (*fn)(uintptr_t))
 {
     KeIpiGenericCall((PKIPI_BROADCAST_WORKER)fn, 0);
-}
-
-static ULONG_PTR
-interrupt_noop(ULONG_PTR arg)
-{
-
-    /* nothing */
-    return 0;
-}
-
-void __cdecl
-uxen_cpu_interrupt(uintptr_t mask)
-{
-
-    KeIpiGenericCall(interrupt_noop, 0);
 }
 
 #define CPUID_STRING_LEN 13

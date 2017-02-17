@@ -246,7 +246,6 @@ extern void uxen_cpu_unpin_vcpu(struct vm_vcpu_info *, affinity_t);
 extern int uxen_cpu_set_active_mask(void *);
 extern void __cdecl uxen_cpu_on_selected(const void *,
                                          uintptr_t (*)(uintptr_t));
-extern void __cdecl uxen_cpu_interrupt(uintptr_t);
 extern int pv_vmware(void);
 #define UXEN_CPU_VENDOR_UNKNOWN 0
 #define UXEN_CPU_VENDOR_INTEL 1

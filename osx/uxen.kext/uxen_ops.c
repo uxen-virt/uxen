@@ -1367,7 +1367,6 @@ static void
 uxen_vmi_stop_running(struct vm_info *vmi)
 {
     unsigned int i;
-    int interrupt_cpus = 0;
 
     dprintk("%s: vm%u has %d of %d vcpus running\n", __FUNCTION__,
             vmi->vmi_shared.vmi_domid, vmi->vmi_running_vcpus,
@@ -1395,11 +1394,8 @@ uxen_vmi_stop_running(struct vm_info *vmi)
         vci->vci_shared.vci_host_halted = 0;
         event_signal(&vci->vci_runnable);
 
-        interrupt_cpus = 1;
+        uxen_cpu_interrupt(1ULL << vci->vci_host_cpu);
     }
-
-    if (interrupt_cpus)
-        uxen_cpu_interrupt(~0ULL);
 
     /* KeFlushQueuedDpcs(); */
 
