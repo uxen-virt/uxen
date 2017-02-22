@@ -25,3 +25,4 @@ void ns_uclip_try_init();
 
 void uxen_clipboard_resume(void);
 
+void uxen_clipboard_reannounce(void);

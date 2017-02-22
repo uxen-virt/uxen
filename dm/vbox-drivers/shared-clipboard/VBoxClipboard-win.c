@@ -16,7 +16,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -374,6 +374,12 @@ int vm_renderclipboard(int wait)
         }
     }
     return 0;
+}
+
+void uxen_clipboard_reannounce(void)
+{
+    if (g_ctx.hwnd)
+        PostMessage(g_ctx.hwnd, WM_CLIPBOARDUPDATE, 0, 0);
 }
 
 static LRESULT CALLBACK vboxClipboardWndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)

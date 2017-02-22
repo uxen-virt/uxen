@@ -724,6 +724,8 @@ control_command_clipboard_policy(void *opaque, const char *id, const char *opt,
                             d, "clipboard-formats-whitelist-host2vm");
     clip_update_policy_list((char**)&clipboard_formats_whitelist_vm2host,
                             d, "clipboard-formats-whitelist-vm2host");
+    uxen_clipboard_reannounce();
+
     control_send_ok(cd, opt, id, NULL);
 
     return 0;
