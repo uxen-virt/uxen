@@ -1,5 +1,5 @@
 #
-# Copyright 2011-2016, Bromium, Inc.
+# Copyright 2011-2017, Bromium, Inc.
 # Author: Christian Limpach <Christian.Limpach@gmail.com>
 # SPDX-License-Identifier: ISC
 #
