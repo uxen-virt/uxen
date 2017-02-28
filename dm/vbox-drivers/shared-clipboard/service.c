@@ -17,7 +17,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -98,6 +98,8 @@
 
 #include "VBoxClipboard.h"
 #include "clipboard-interface.h"
+
+#define METADATA_FORMAT_NAME "Bromium vSentry Metadata"
 
 static void VBoxHGCMParmUInt32Set (VBOXHGCMSVCPARM *pParm, uint32_t u32)
 {
@@ -445,7 +447,17 @@ bool isClipboardWriteDataAllowed(uint32_t remotefmt)
         return false;
 }
 
-bool isClipboardReadDataAllowed(void)
+static bool
+is_metadata(int fmt)
+{
+    char name[256] = { 0 };
+
+    uxenclipboard_get_format_name(fmt, name, sizeof(name));
+
+    return !strncmp(name, METADATA_FORMAT_NAME, sizeof(name));
+}
+
+bool isClipboardReadDataAllowed(int fmt)
 {
     bool ret;
 #ifdef EXTRA_LOGGING
@@ -456,6 +468,10 @@ bool isClipboardReadDataAllowed(void)
     if (paste_allowed_timestamp_delta() < CLIPBOARD_GRACE_PERIOD) {
         return true;
     }
+    /* metadata format can be read from guest/host hooks inside EnumClipboardFormats. Always
+     * allow that w/o prompt since we don't prompt for EnumClipboardFormats either */
+    if (is_metadata(fmt))
+        return true;
     /* If we haven't seen a mouse click, deny. Apparently Office2007
     likes to get clipboard on startup.
     */
@@ -856,7 +872,7 @@ static DECLCALLBACK(void) svcCall (void *unused,
                             break;
                         }
 
-                        if (!isClipboardReadDataAllowed()) {
+                        if (!isClipboardReadDataAllowed(u32Format)) {
                             paParms[1].u.pointer.size = 0;
                             break;
                         }
