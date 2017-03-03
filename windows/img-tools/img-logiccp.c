@@ -354,7 +354,9 @@ ManifestEntry* man_push_file(Manifest *out,
     e->var = var;
     e->file_size = file_size;
     e->file_id = file_id;
-    e->imgname = imgname ? wcsdup(imgname) : e->name;
+    if (imgname) {
+        e->imgname = wcsdup(imgname);
+    }
     if (file_size < min_shallow_size) {
         if (action == MAN_SHALLOW) {
             e->action = MAN_COPY;
@@ -1100,8 +1102,9 @@ typedef struct _REPARSE_DATA_BUFFER {
 } REPARSE_DATA_BUFFER, *PREPARSE_DATA_BUFFER;
 #define IO_REPARSE_TAG_SYMLINK                  (0xA000000CL)       // winnt
 
-static wchar_t *get_symlink_path(HANDLE h)
+static wchar_t *get_symlink_path(HANDLE h, const wchar_t *path)
 {
+    /* path used for logging only */
     size_t sz = 1024;
     REPARSE_DATA_BUFFER *buf = malloc(sz);
     DWORD bytes_returned = 0;
@@ -1117,8 +1120,8 @@ static wchar_t *get_symlink_path(HANDLE h)
             free(buf);
             return result;
         } else {
-            printf("Skipping unsupported reparse point tag=%08x\n",
-                (uint32_t)buf->ReparseTag);
+            printf("Skipping unsupported reparse point tag=%08x for [%ls]\n",
+                (uint32_t)buf->ReparseTag, path);
         }
     } else {
         printf("DeviceIoControl(FSCTL_GET_REPARSE_POINT) failed err=%u\n",
@@ -1129,7 +1132,7 @@ static wchar_t *get_symlink_path(HANDLE h)
 }
 
 static inline
-int path_exists(wchar_t *fn, uint64_t *file_id, uint64_t *file_size,
+int path_exists(const wchar_t *fn, uint64_t *file_id, uint64_t *file_size,
                 int *is_dir, wchar_t **symlink)
 {
     HANDLE h;
@@ -1152,7 +1155,7 @@ int path_exists(wchar_t *fn, uint64_t *file_id, uint64_t *file_size,
             if (inf.dwFileAttributes & FILE_ATTRIBUTE_REPARSE_POINT) {
                 /* Both files and directories can be reparse points (and
                  * equally there are both file and directory symlinks) */
-                *symlink = get_symlink_path(h);
+                *symlink = get_symlink_path(h, fn);
             }
 
             if (!(inf.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
@@ -1421,7 +1424,7 @@ int bfs(Variable *var,
                         }
 
                         if (attr & FILE_ATTRIBUTE_REPARSE_POINT) {
-                            dest = get_symlink_path(h);
+                            dest = get_symlink_path(h, full_name);
                         } else {
                             printf("[%ls] is not actually a reparse point!\n", full_name);
                         }
@@ -1456,7 +1459,7 @@ int bfs(Variable *var,
                     man_push_file(out, disk->bootvol, var, full_name, file_size, file_id, rewrite, action);
                     //printf("2.Adding entry [%S]=[%d]=>[%S]\n", e->name, e->action, imgname);
 
-                    if (rewrite || !follow) {
+                    if (!follow) {
                         continue;
                     }
 
@@ -1464,6 +1467,8 @@ int bfs(Variable *var,
                     wchar_t link_name[MAX_PATH_LEN];
                     HANDLE h = INVALID_HANDLE_VALUE;
                     for (;;) {
+                        ManifestEntry *prefix_entry = NULL;
+                        rewrite = NULL;
                         length = MAX_PATH_LEN;
                         if (h == INVALID_HANDLE_VALUE) {
                             /* First time through loop */
@@ -1488,17 +1493,24 @@ int bfs(Variable *var,
                         normalize_string(link_name);
 
                         /* Current file or already covered by manifest? */
-                        if (!wcsncmp(link_name, full_name, length) ||
-                            find_by_prefix(var->man, link_name)) {
+                        if (!wcsncmp(link_name, full_name, length)) {
+                            continue;
+                        }
+                        prefix_entry = find_by_prefix(var->man, link_name);
+                        if (prefix_entry && prefix_entry->action < action) {
                             continue;
                         }
 
-                        /* We don't attempt to support changing the guest name
-                         * for followed links, so pass in NULL here (previously
-                         * we passed in rewire which would have done the wrong
-                         * thing if rewire had actually been non-NULL) */
+                        /* See if the link target needs to be renamed */
+                        if (prefix_entry) {
+                            /* Note this assumes the prefix_entry imgname
+                             * correctly ends in a slash */
+                            path_join(rerooted_full_name, prefix_entry->imgname, link_name + prefix_entry->name_len);
+                            rewrite = rerooted_full_name;
+                        }
+
                         man_push_file(out, disk->bootvol, var, link_name,
-                                file_size, file_id, NULL, action);
+                                file_size, file_id, rewrite, action);
 
                         /* Possibly create enclosing dirs. */
                         for (;;) {
@@ -1508,6 +1520,10 @@ int bfs(Variable *var,
                                 break;
                             }
                             m = man_push_entry(extra_dirs, link_name, MAN_COPY_EMPTY_DIR);
+                            if (rewrite) {
+                                strip_filename(rewrite);
+                                m->imgname = wcsdup(rewrite);
+                            }
                         }
 
                     }
@@ -2286,7 +2302,7 @@ int mkdir_phase(struct disk *disk, Manifest *man)
                 printf("unable to get securid for %ls\n", m->name);
             }
 
-            if (wcsncmp(m->imgname, L"/", MAX_PATH_LEN) == 0) {
+            if (!*m->imgname || wcsncmp(m->imgname, L"/", MAX_PATH_LEN) == 0) {
                 /* Root is not a dir so need to skip this in case a top-level
                  * manifest entry maps a dir in to the root */
                 continue;
@@ -2318,18 +2334,18 @@ int rewire_phase(struct disk *disk, Manifest *man)
     for (i = 0; i < man->n; ++i) {
         ManifestEntry *m = &man->entries[i];
 
-        if (!wcsnicmp(m->name, bios_bootloader_files,
+        if (!wcsnicmp(m->imgname, bios_bootloader_files,
                     wcslen(bios_bootloader_files))) {
-            if (!wcsnicmp(m->name + wcslen(m->name) - wcslen(bootmgr),
+            if (!wcsnicmp(m->imgname + wcslen(m->imgname) - wcslen(bootmgr),
                         bootmgr, wcslen(bootmgr))) {
                 path_join(cookedpath, L"/", bootmgr);
             } else {
-                path_join(cookedpath, L"/Boot", m->name + wcslen(bios_bootloader_files));
+                path_join(cookedpath, L"/Boot", m->imgname + wcslen(bios_bootloader_files));
             }
 
-        } else if (!wcsnicmp(m->name, bootloader_fonts,
+        } else if (!wcsnicmp(m->imgname, bootloader_fonts,
                     wcslen(bootloader_fonts))) {
-            path_join(cookedpath, L"/Boot/Fonts/", m->name + wcslen(bootloader_fonts));
+            path_join(cookedpath, L"/Boot/Fonts/", m->imgname + wcslen(bootloader_fonts));
         } else {
             continue;
         }
