@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -19,5 +19,6 @@ struct debug_port_state
 };
 
 void hvm_init_debug_port(struct domain *d);
+void hvm_debug_write(uint32_t sz, uint32_t v);
 
 #endif /* __XEN_HVM_DEBUG_PORT_H__ */

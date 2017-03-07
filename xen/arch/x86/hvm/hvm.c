@@ -54,6 +54,7 @@
 #include <xen/paging.h>
 #include <xen/cpu.h>
 #include <xen/wait.h>
+#include <xen/hvm/debug_port.h>
 #include <asm/setup.h>
 #include <asm/shadow.h>
 #include <asm/hap.h>
@@ -105,6 +106,9 @@ static bool_t __initdata opt_hvmonoff = 0;
 boolean_param("hvmonoff", opt_hvmonoff);
 enum hvmon hvmon_default __read_mostly = hvmon_always;
 DEFINE_PER_CPU(enum hvmon, hvmon);
+
+#define HVM_DEBUG_CPUID_8  0x54545400
+#define HVM_DEBUG_CPUID_32 0x54545404
 
 static long do_hvm_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg);
 static long do_hvm_sched_op(unsigned long op, XEN_GUEST_HANDLE(void) arg);
@@ -3553,6 +3557,12 @@ void hvm_cpuid(unsigned int input, unsigned int *eax, unsigned int *ebx,
         /* Only expose NX if host enabled it */
         if ( !(read_efer() & EFER_NX) )
             *edx &= ~cpufeat_mask(X86_FEATURE_NX);
+        break;
+    case HVM_DEBUG_CPUID_8:
+        hvm_debug_write(1, count);
+        break;
+    case HVM_DEBUG_CPUID_32:
+        hvm_debug_write(4, count);
         break;
     }
 }

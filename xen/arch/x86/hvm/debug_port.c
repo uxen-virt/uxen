@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -67,6 +67,16 @@ debug_write(int dir, uint32_t port, uint32_t size, uint32_t *val)
         size--;
     }
     return X86EMUL_OKAY;
+}
+
+void
+hvm_debug_write(uint32_t sz, uint32_t v)
+{
+    uint32_t val = v;
+
+    if (sz > 4)
+        sz = 4;
+    debug_write(IOREQ_WRITE, 0, sz, &val);
 }
 
 void
