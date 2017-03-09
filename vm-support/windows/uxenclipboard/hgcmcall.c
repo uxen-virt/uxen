@@ -26,7 +26,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -54,6 +54,7 @@
 #include "../uxensf/driver/hgcm-limits.h"
 #include "channel.h"
 #include <VBox/VBoxGuestLib.h>
+#include "../common/debug-user.h"
 
 #define STATUS_NOT_IMPLEMENTED VERR_INVALID_PARAMETER
 #define STATUS_INFO_LENGTH_MISMATCH VINF_BUFFER_OVERFLOW
@@ -89,13 +90,13 @@ int VbglHGCMCall(VBGLHGCMHANDLE handle, VBoxGuestHGCMCallInfo* info,
     *(TcpMarshallHeader*)tmpbuf = header;
 
     rc = ChannelSend(tmpbuf, sizeof(header) + header.size);
-    Log(("BRHVSF: sent %d bytes rc=%d\n", sizeof(header)+header.size, rc));
+    uxen_debug("BRHVSF: sent %d bytes rc=%d\n", sizeof(header)+header.size, rc);
     free(tmpbuf);
     tmpbuf = NULL;
 
     if (!rc)
         rc = ChannelRecv((void**)&tmpbuf, &resp_len);
-    Log(("BRHVSF: received %d bytes\n", resp_len));
+    uxen_debug("BRHVSF: received %d bytes\n", resp_len);
     resp_hdr = (TcpMarshallHeader*)tmpbuf;
     if (!rc && resp_len < sizeof(TcpMarshallHeader)) {
         free(tmpbuf);
@@ -103,15 +104,15 @@ int VbglHGCMCall(VBGLHGCMHANDLE handle, VBoxGuestHGCMCallInfo* info,
     }
     if (!rc && resp_hdr->magic != HGCMMagicSimple)
         return STATUS_INFO_LENGTH_MISMATCH;
-    Log(("BRHVSF: sfdebug: channelrecv2 rc=0x%x\n", rc));
+    uxen_debug("BRHVSF: sfdebug: channelrecv2 rc=0x%x\n", rc);
     if (!rc)
         rc = VbglHGCMCall_tcp_unmarshall(info, tmpbuf + sizeof(TcpMarshallHeader),
                                          info->cParms, true, resp_len - sizeof(TcpMarshallHeader));
-    Log(("BRHVSF: sfdebug: unmarshall rc=0x%x\n", rc));
+    uxen_debug("BRHVSF: sfdebug: unmarshall rc=0x%x\n", rc);
     if (!rc) {
         info->result = resp_hdr->u.status;
         if (resp_hdr)
-            Log(("BRHVSF: sfdebug: resp.u.status 0x%x\n", resp_hdr->u.status));
+            uxen_debug("BRHVSF: sfdebug: resp.u.status 0x%x\n", resp_hdr->u.status);
     }
     free(tmpbuf);
     return rc;

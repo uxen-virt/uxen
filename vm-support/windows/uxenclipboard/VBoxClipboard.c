@@ -18,7 +18,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2013-2016, Bromium, Inc.
+ * Copyright 2013-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -41,6 +41,7 @@
 #include "clipboardformats.h"
 #include "uxen_bmp_convert.h"
 #include <dm/clipboard-protocol.h>
+#include "../common/debug-user.h"
 
 typedef struct _VBOXCLIPBOARDCONTEXT
 {
@@ -82,8 +83,12 @@ BOOL OpenClipboardWithRetry(HWND hwnd)
         Sleep((GetCurrentProcessId() & 0x7f) + 100);
         count++;
     }
-    Log(("OpenClipboardWithRetry count %d\n", count));
-    return count < MAX_OPENCLIPBOARD_RETRIES;
+    if (count < MAX_OPENCLIPBOARD_RETRIES)
+        return TRUE;
+    else {
+        uxen_err("OpenClipboardWithRetry count %d\n", count);
+        return FALSE;
+    }
 }
 
 #ifdef USE_OBSOLETE_FORMATS_CHANGE_MESSAGE
@@ -105,7 +110,7 @@ static int vboxClipboardChanged(VBOXCLIPBOARDCONTEXT *pCtx)
 
         while ((format = EnumClipboardFormats (format)) != 0)
         {
-            Log(("BrHVTray: brhvClipboardChanged: format = 0x%08X\n", format));
+            uxen_msg("BrHVTray: brhvClipboardChanged: format = 0x%08X\n", format);
             switch (format)
             {
                 case CF_UNICODETEXT:
@@ -164,7 +169,7 @@ static int vboxClipboardChanged(VBOXCLIPBOARDCONTEXT *pCtx)
         u32Formats |= VBOX_SHARED_CLIPBOARD_FMT_BITMAP;
     if (!u32Formats && (count = CountClipboardFormats()) > 0) {
         u32Formats = VBOX_SHARED_CLIPBOARD_FMT_UNSUPPORTED;
-        Log(("BrHVTray: CountClipboardFormats = %d\n", count));
+        uxen_msg("BrHVTray: CountClipboardFormats = %d\n", count);
     }
     return VbglR3ClipboardReportFormats(pCtx->u32ClientID, u32Formats);
 }
@@ -175,10 +180,10 @@ static int vboxClipboardChanged(VBOXCLIPBOARDCONTEXT *pCtx)
     char buf[16384];
     int len = uxenclipboard_prepare_format_announce(buf, sizeof(buf));
     if (len < 0) {
-        Log(("BrHVTray:prepare_format_announce %d\n", len));
+        uxen_err("BrHVTray:prepare_format_announce %d\n", len);
         return VERR_NO_MEMORY;
     }
-    Log(("BrHVTray:prepare_format_announce %d\n", len));
+    uxen_msg("BrHVTray:prepare_format_announce %d\n", len);
     return VbglR3ClipboardReportFormatsV2(pCtx->u32ClientID, buf, len);
 }
 #endif /* USE_OBSOLETE_FORMATS_CHANGE_MESSAGE */
@@ -197,20 +202,20 @@ static int send_one_format(VBOXCLIPBOARDCONTEXT *pCtx, uint32_t u32Format)
         err = GetLastError();
         CloseClipboard();
         SetEvent(pCtx->closeDoneEvent);
-        Log(("send_one_format CloseClipboard done\n"));
+        uxen_err("send_one_format CloseClipboard done\n");
         available = IsClipboardFormatAvailable(u32Format);
-        Log(("send_one_format: GetClipboardData failed with 0x%x for fmt 0x%x lasterror 0x%x IsClipboardFormatAvailable 0x%x\n", ret, u32Format, err, available));
+        uxen_err("send_one_format: GetClipboardData failed with 0x%x for fmt 0x%x lasterror 0x%x IsClipboardFormatAvailable 0x%x\n", ret, u32Format, err, available);
         return ret;
     }
 
     CloseClipboard();
     SetEvent(pCtx->closeDoneEvent);
-    Log(("send_one_format CloseClipboard done\n"));
-    Log(("BrHVTray: brhvClipboardProcessMsg: WM_USER + 1: 0x%x\n", u32Format));
+    uxen_msg("send_one_format CloseClipboard done\n");
+    uxen_msg("BrHVTray: brhvClipboardProcessMsg: WM_USER + 1: 0x%x\n", u32Format);
     vboxrc = VbglR3ClipboardWriteData(pCtx->u32ClientID, u32Format,
         data, data_size);
     if (vboxrc)
-        Log(("BrHVTray: VbglR3ClipboardWriteData failed with rc=0x%x\n", vboxrc));
+        uxen_err("BrHVTray: VbglR3ClipboardWriteData failed with rc=0x%x\n", vboxrc);
     free(data);
     return ret;
 }
@@ -219,7 +224,7 @@ static bool get_openclipboard_mutex(VBOXCLIPBOARDCONTEXT *pCtx)
 {
     DWORD err = WaitForSingleObject(pCtx->openClipboardMutex, 10 * 1000);
     if (err != WAIT_OBJECT_0) {
-        Log(("WaitForSingleObject(pCtx->mutex ret 0x%x\n", err));
+        uxen_err("WaitForSingleObject(pCtx->mutex ret 0x%x\n", err);
         return false;
     } else
         return true;
@@ -233,7 +238,7 @@ static void release_openclipboard_mutex(VBOXCLIPBOARDCONTEXT *pCtx)
 
     if (!ret) {
         DWORD err = GetLastError();
-        Log(("ReleaseMutex(pCtx->mutex) error 0x%x\n", err));
+        uxen_err("ReleaseMutex(pCtx->mutex) error 0x%x\n", err);
     }
 }
 
@@ -263,7 +268,7 @@ static LRESULT vboxClipboardProcessMsg(VBOXCLIPBOARDCONTEXT *pCtx, HWND hwnd, UI
     {
         case WM_CLIPBOARDUPDATE:
         {
-            Log(("BrHVTray: brhvClipboardProcessMsg: WM_CLIPBOARDUPDATE , hwnd %p\n", pCtx->hwnd));
+            uxen_msg("BrHVTray: WM_CLIPBOARDUPDATE, hwnd %p\n", pCtx->hwnd);
 
             if (GetClipboardOwner () != hwnd)
             {
@@ -271,7 +276,7 @@ static LRESULT vboxClipboardProcessMsg(VBOXCLIPBOARDCONTEXT *pCtx, HWND hwnd, UI
                 /* WM_CLIPBOARDUPDATE always expects a return code of 0, so don't change "rc" here. */
                 int vboxrc = vboxClipboardChanged(pCtx);
                 if (RT_FAILURE(vboxrc))
-                    Log(("BrHVTray: brhvClipboardProcessMsg: brhvClipboardChanged failed, rc = %Rrc\n", vboxrc));
+                    uxen_err("BrHVTray: brhvClipboardProcessMsg: brhvClipboardChanged failed, rc = %Rrc\n", vboxrc);
             }
 
         } break;
@@ -287,16 +292,16 @@ static LRESULT vboxClipboardProcessMsg(VBOXCLIPBOARDCONTEXT *pCtx, HWND hwnd, UI
             UINT format = (UINT)wParam;
             uint32_t u32Format = uxenclipboard_translate_announced_format(format);
             if (!u32Format) {
-                Log(("BrHVTray: translate_announced_format is zero\n"));
+                uxen_err("BrHVTray: translate_announced_format is zero\n");
                 break;
             }
 
-            Log(("BrHVTray: brhvClipboardProcessMsg: WM_RENDERFORMAT, format = %x u32format 0x%x\n", format, u32Format));
+            uxen_msg("BrHVTray: WM_RENDERFORMAT, format = %x u32format 0x%x\n", format, u32Format);
 
             if (u32Format == 0)
             {
                 /* Unsupported clipboard format is requested. */
-                Log(("BrHVTray: brhvClipboardProcessMsg: Unsupported clipboard format requested: %ld\n", u32Format));
+                uxen_err("BrHVTray: brhvClipboardProcessMsg: Unsupported clipboard format requested: %ld\n", u32Format);
                 EmptyClipboard();
             }
             else
@@ -309,18 +314,18 @@ static LRESULT vboxClipboardProcessMsg(VBOXCLIPBOARDCONTEXT *pCtx, HWND hwnd, UI
 
                 /* Preallocate a buffer, most of small text transfers will fit into it. */
                 HANDLE hMem = GlobalAlloc(GMEM_DDESHARE | GMEM_MOVEABLE, cbPrealloc);
-                Log(("BrHVTray: brhvClipboardProcessMsg: Preallocated handle hMem = %p\n", hMem));
+                uxen_debug("BrHVTray: brhvClipboardProcessMsg: Preallocated handle hMem = %p\n", hMem);
 
                 if (hMem)
                 {
                     void *pMem = GlobalLock(hMem);
-                    Log(("BrHVTray: brhvClipboardProcessMsg: Locked pMem = %p, GlobalSize = %ld\n", pMem, GlobalSize(hMem)));
+                    uxen_debug("BrHVTray: brhvClipboardProcessMsg: Locked pMem = %p, GlobalSize = %ld\n", pMem, GlobalSize(hMem));
 
                     if (pMem)
                     {
                         /* Read the host data to the preallocated buffer. */
                         int vboxrc = VbglR3ClipboardReadData(pCtx->u32ClientID, u32Format, pMem, cbPrealloc, &cb);
-                        Log(("BrHVTray: brhvClipboardProcessMsg: VbglR3ClipboardReadData returned with rc = %Rrc\n",  vboxrc));
+                        uxen_debug("BrHVTray: brhvClipboardProcessMsg: VbglR3ClipboardReadData returned with rc = %Rrc\n",  vboxrc);
 
                         if (RT_SUCCESS(vboxrc))
                         {
@@ -339,19 +344,19 @@ static LRESULT vboxClipboardProcessMsg(VBOXCLIPBOARDCONTEXT *pCtx, HWND hwnd, UI
 
                                 /* The preallocated buffer is too small, adjust the size. */
                                 hMem = GlobalReAlloc(hMem, cb, 0);
-                                Log(("BrHVTray: brhvClipboardProcessMsg: Reallocated hMem = %p\n", hMem));
+                                uxen_debug("BrHVTray: brhvClipboardProcessMsg: Reallocated hMem = %p\n", hMem);
 
                                 if (hMem)
                                 {
                                     pMem = GlobalLock(hMem);
-                                    Log(("BrHVTray: brhvClipboardProcessMsg: Locked pMem = %p, GlobalSize = %ld\n", pMem, GlobalSize(hMem)));
+                                    uxen_debug("BrHVTray: brhvClipboardProcessMsg: Locked pMem = %p, GlobalSize = %ld\n", pMem, GlobalSize(hMem));
 
                                     if (pMem)
                                     {
                                         /* Read the host data to the preallocated buffer. */
                                         uint32_t cbNew = 0;
                                         vboxrc = VbglR3ClipboardReadData(pCtx->u32ClientID, u32Format, pMem, cb, &cbNew);
-                                        Log(("BrHVTray: VbglR3ClipboardReadData returned with rc = %Rrc, cb = %d, cbNew = %d\n", vboxrc, cb, cbNew));
+                                        uxen_debug("BrHVTray: VbglR3ClipboardReadData returned with rc = %Rrc, cb = %d, cbNew = %d\n", vboxrc, cb, cbNew);
 
                                         if (RT_SUCCESS (vboxrc) && cbNew <= cb)
                                         {
@@ -407,14 +412,14 @@ static LRESULT vboxClipboardProcessMsg(VBOXCLIPBOARDCONTEXT *pCtx, HWND hwnd, UI
                                 GlobalUnlock(hMem);
 
                                 hMem = GlobalReAlloc(hMem, cb, 0);
-                                Log(("BrHVTray: brhvClipboardProcessMsg: Reallocated hMem = %p\n", hMem));
+                                uxen_debug("BrHVTray: brhvClipboardProcessMsg: Reallocated hMem = %p\n", hMem);
 
                                 if (hMem)
                                 {
                                     /* 'hMem' contains the host clipboard data.
                                      * size is 'cb' and format is 'format'. */
                                     HANDLE hClip = SetClipboardData(format, hMem);
-                                    Log(("BrHVTray: brhvClipboardProcessMsg: WM_RENDERFORMAT hClip = %p\n", hClip));
+                                    uxen_debug("BrHVTray: brhvClipboardProcessMsg: WM_RENDERFORMAT hClip = %p\n", hClip);
 
                                     if (hClip)
                                     {
@@ -455,7 +460,7 @@ static LRESULT vboxClipboardProcessMsg(VBOXCLIPBOARDCONTEXT *pCtx, HWND hwnd, UI
             /* Announce available formats. Do not insert data, they will be inserted in WM_RENDER*. */
             if (FALSE == OpenClipboardWithRetry(hwnd))
             {
-                Log(("BrHVTray: brhvClipboardProcessMsg: WM_USER: Failed to open clipboard! Last error = %ld\n", GetLastError()));
+                uxen_err("BrHVTray: brhvClipboardProcessMsg: WM_USER: Failed to open clipboard! Last error = %ld\n", GetLastError());
             }
             else
             {
@@ -465,7 +470,7 @@ static LRESULT vboxClipboardProcessMsg(VBOXCLIPBOARDCONTEXT *pCtx, HWND hwnd, UI
                 unsigned int local, remote;
 
                 while (!uxenclipboard_get_announced_format(i, &local, &remote)) {
-                    Log(("BrHVTray: got format 0x%d\n", local));
+                    uxen_debug("BrHVTray: got format 0x%d\n", local);
                     SetClipboardData(local, NULL);
                     ok = 1;
                     i++;
@@ -473,7 +478,7 @@ static LRESULT vboxClipboardProcessMsg(VBOXCLIPBOARDCONTEXT *pCtx, HWND hwnd, UI
                 if (!ok)
                     insert_warning(hwnd);
                 CloseClipboard();
-                Log(("WM_USER CloseClipboard done\n"));
+                uxen_debug("WM_USER CloseClipboard done\n");
             }
         } break;
 
@@ -483,12 +488,12 @@ static LRESULT vboxClipboardProcessMsg(VBOXCLIPBOARDCONTEXT *pCtx, HWND hwnd, UI
             uint32_t u32Format = (uint32_t)lParam;
             int ret = -1;
 
-            LogFlow(("vboxClipboardProcessMsg WM_USER in format=0x%x\n", 
-                u32Format));
+            uxen_debug("vboxClipboardProcessMsg WM_USER in format=0x%x\n", 
+                u32Format);
             if (!get_openclipboard_mutex(pCtx))
                 break;
             if (FALSE == OpenClipboardWithRetry(hwnd)) {
-                Log(("BrHVTray: brhvClipboardProcessMsg: WM_USER: Failed to open clipboard! Last error = %ld\n", GetLastError()));
+                uxen_err("BrHVTray: brhvClipboardProcessMsg: WM_USER: Failed to open clipboard! Last error = %ld\n", GetLastError());
                 release_openclipboard_mutex(pCtx);
             } else {
                 ResetEvent(pCtx->closeDoneEvent);
@@ -504,7 +509,7 @@ static LRESULT vboxClipboardProcessMsg(VBOXCLIPBOARDCONTEXT *pCtx, HWND hwnd, UI
             if (ret)
             {
                 /* Requested clipboard format is not available, send empty data. */
-                Log(("empty data for fmt 0x%x\n", u32Format));
+                uxen_err("empty data for fmt 0x%x\n", u32Format);
                 VbglR3ClipboardWriteData(pCtx->u32ClientID, 0, NULL, 0);
             }
         } break;
@@ -515,7 +520,8 @@ static LRESULT vboxClipboardProcessMsg(VBOXCLIPBOARDCONTEXT *pCtx, HWND hwnd, UI
         }
     }
 
-    Log(("BrHVTray: brhvClipboardProcessMsg returned with rc = %ld\n", rc));
+    uxen_debug("BrHVTray: returned with rc = %ld\n", rc);
+
     return rc;
 }
 
@@ -531,7 +537,7 @@ static int createIPCEvents(VBOXCLIPBOARDCONTEXT *pCtx)
         FALSE /*init state*/, L"uxenclipboard_ingetdata");
     if (!pCtx->openClipboardMutex || !pCtx->closeDoneEvent ||
         !pCtx->inGetDataEvent) {
-        Log(("uxenclipboard: cannot create IPC events!\n"));
+        uxen_err("uxenclipboard: cannot create IPC events!\n");
         if (pCtx->openClipboardMutex)
             CloseHandle(pCtx->openClipboardMutex);
         if (pCtx->closeDoneEvent)
@@ -573,8 +579,8 @@ static int vboxClipboardInit (VBOXCLIPBOARDCONTEXT *pCtx)
                                      gachWindowClassName, gachWindowClassName,
                                      WS_POPUPWINDOW,
                                      -200, -200, 100, 100, NULL, NULL, pCtx->pEnv->hInstance, NULL);
-        LogFlow(("CreateWindowEx ret %p, pCtx=%p\n", pCtx->hwnd,
-            pCtx));
+        uxen_debug("CreateWindowEx ret %p, pCtx=%p\n", pCtx->hwnd,
+            pCtx);
         if (pCtx->hwnd == NULL)
         {
             rc = VERR_NOT_SUPPORTED;
@@ -586,14 +592,15 @@ static int vboxClipboardInit (VBOXCLIPBOARDCONTEXT *pCtx)
 
             if (!mingw_AddClipboardFormatListener(pCtx->hwnd)) {
                 int err = GetLastError();
-                LogRel(("AddClipboardFormatListener error %d\n", err));
+                uxen_err("AddClipboardFormatListener error %d\n", err);
                 rc = VERR_NOT_SUPPORTED;
             } else
                 rc = createIPCEvents(pCtx);
         }
     }
 
-    Log(("BrHVTray: brhvClipboardInit returned with rc = %Rrc\n", rc));
+    if (rc)
+        uxen_err("BrHVTray: brhvClipboardInit returned with rc = %Rrc\n", rc);
     return rc;
 }
 
@@ -623,7 +630,7 @@ static LRESULT CALLBACK vboxClipboardWndProc(HWND hwnd, UINT msg, WPARAM wParam,
 
 int VBoxClipboardInit(const VBOXSERVICEENV *pEnv, void **ppInstance, bool *pfStartThread)
 {
-    Log(("BrHVTray: VboxClipboardInit\n"));
+    uxen_msg("BrHVTray: ClipboardInit\n");
     if (gCtx.pEnv)
     {
         /* Clipboard was already initialized. 2 or more instances are not supported. */
@@ -664,6 +671,9 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
     int ret = -1;
     int attempts = 30;
 
+    uxen_ud_set_progname("uxenclipboard");
+    uxen_ud_mask = UXEN_UD_ERR | UXEN_UD_MSG;
+
     uxenclipboard_gdi_startup();
     while (attempts-- > 0) {
         ret = ChannelConnect();
@@ -672,7 +682,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
         Sleep(1000);
     }
     if (ret) {
-        LogRel(("BrHVTray: ChannelConnect error 0x%x\n", ret));
+        uxen_err("BrHVTray: ChannelConnect error 0x%x\n", ret);
         goto out;
     }
     vboxEnv.hStopEvent = CreateEvent(NULL, TRUE, FALSE, NULL);
@@ -680,7 +690,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLi
     if (VBoxClipboardInit(&vboxEnv, &instance, &startThread))
         goto out;
     if (!CreateThread(NULL, 0x10000, VBoxClipboardThread, instance, 0, NULL)) {
-        LogRel(("BrHVTray: VBoxClipboardThread create failed\n"));
+        uxen_err("BrHVTray: ClipboardThread create failed\n");
         ret = 0;
         goto out;
     }
@@ -700,12 +710,12 @@ out:
 static DWORD WINAPI
 VBoxClipboardThread(void *pInstance)
 {
-    Log(("BrHVTray: BrHVClipboardThread\n"));
+    uxen_debug("BrHVTray: BrHVClipboardThread\n");
     int ret;
 
     VBOXCLIPBOARDCONTEXT *pCtx = (VBOXCLIPBOARDCONTEXT *)pInstance;
     AssertPtr(pCtx);
-    LogFlow(("VBoxClipboardThread, pCtx=%p, hwnd=%p\n", pCtx, pCtx->hwnd));
+    uxen_debug("VBoxClipboardThread, pCtx=%p, hwnd=%p\n", pCtx, pCtx->hwnd);
     // notify guest connected
     ChannelSendNotify("X", 1);
     /* The thread waits for incoming messages from the host. */
@@ -716,11 +726,11 @@ VBoxClipboardThread(void *pInstance)
         int rc = ChannelRecvNotify(&msg, &msglen);
 
         if (rc) {
-            Log(("BrHVTray: notification receive error %d\n", rc));
+            uxen_err("BrHVTray: notification receive error %d\n", rc);
        } else {
             ndata = (struct clip_notify_data*) msg;
-            Log(("BrHVTray: BrHVClipboardThread: VbglR3ClipboardGetHostMsg type %d len %d\n",
-                 ndata->type, ndata->len));
+            uxen_debug("BrHVTray: BrHVClipboardThread: VbglR3ClipboardGetHostMsg type %d len %d\n",
+                 ndata->type, ndata->len);
             switch (ndata->type) {
             case VBOX_SHARED_CLIPBOARD_HOST_MSG_FORMATS:
                 /* The host has announced available clipboard formats.
@@ -729,7 +739,7 @@ VBoxClipboardThread(void *pInstance)
                 ret = uxenclipboard_parse_remote_format_announce(
                     (char*)ndata->data, ndata->len);
                 if (ret) {
-                    Log(("BrHVTray: uxenclipboard_parse_remote_format_announce error %d", ret));
+                    uxen_err("BrHVTray: uxenclipboard_parse_remote_format_announce error %d", ret);
                 } else
                     PostMessage (pCtx->hwnd, WM_USER, 0, 0);
                 break;
@@ -746,7 +756,7 @@ VBoxClipboardThread(void *pInstance)
                 break;
 
             default:
-                Log(("BrHVTray: BrHVClipboardThread: Unsupported message from host!\n"));
+                uxen_err("BrHVTray: BrHVClipboardThread: Unsupported message from host!\n");
                 break;
             }
             free(msg);
@@ -760,7 +770,7 @@ void VBoxClipboardDestroy(const VBOXSERVICEENV *pEnv, void *pInstance)
     VBOXCLIPBOARDCONTEXT *pCtx = (VBOXCLIPBOARDCONTEXT *)pInstance;
     if (pCtx != &gCtx)
     {
-        Log(("BrHVTray: BrHVClipboardDestroy: invalid instance %p (our = %p)!\n", pCtx, &gCtx));
+        uxen_err("BrHVTray: BrHVClipboardDestroy: invalid instance %p (our = %p)!\n", pCtx, &gCtx);
         pCtx = &gCtx;
     }
 

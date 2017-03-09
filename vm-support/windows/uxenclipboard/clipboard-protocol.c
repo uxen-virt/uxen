@@ -1,10 +1,10 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
-#include <VBox/Log.h>
-#define CLIPLOG(...) Log((__VA_ARGS__))
+#include "../common/debug-user.h"
+#define CLIPLOG(fmt, ...) uxen_msg(fmt, ##__VA_ARGS__)
 
 #define CLIP_CLIENT
 
