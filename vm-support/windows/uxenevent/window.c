@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2017, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -17,8 +17,8 @@
 int
 window_event(UINT message, WPARAM wParam, LPARAM lParam)
 {
-    debug_log("message=%x wParam=%x lParam=%x",
-              message, (int)wParam, (int)lParam);
+    uxen_debug("message=%x wParam=%x lParam=%x",
+        message, (int)wParam, (int)lParam);
 
     switch (message) {
     case WM_KILLFOCUS:

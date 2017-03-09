@@ -65,11 +65,11 @@ display_escape(int escape_code, void *in_buf, int in_buf_size)
         escape.hContext = 0;
         ret = !NT_SUCCESS(status = D3DKMTEscape(&escape));
         if (ret)
-            debug_log("D3DKMTEscape() failed: 0x%x", (unsigned int)status);
+            uxen_err("D3DKMTEscape() failed: 0x%x", (unsigned int)status);
     } else {
         ret = ExtEscape(hdc, escape_code, in_buf_size, in_buf, 0, NULL);
         if (ret <= 0)
-            debug_log("ExtEscape() failed: %d", ret);
+            uxen_err("ExtEscape() failed: %d", ret);
         ret = ret <= 0;
     }
 
@@ -92,7 +92,7 @@ SendResolutionToHidDriver()
 
     hdev = SetupDiGetClassDevs(&UXENHID_IFACE_GUID, 0, 0, DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
     if (INVALID_HANDLE_VALUE == hdev) {
-        debug_log("SetupDiGetClassDevs failed");
+        uxen_err("SetupDiGetClassDevs failed");
         goto exit;
     }
 
@@ -100,7 +100,7 @@ SendResolutionToHidDriver()
         res = SetupDiEnumDeviceInterfaces(hdev, 0, &UXENHID_IFACE_GUID, dev_idx, &did);
         last_error = GetLastError();
         if (!res && (last_error != ERROR_NO_MORE_ITEMS)) {
-            debug_log("SetupDiEnumDeviceInterfaces failed");
+            uxen_err("SetupDiEnumDeviceInterfaces failed");
             goto exit;
         }
 
@@ -111,7 +111,7 @@ SendResolutionToHidDriver()
         size = sizeof buffer;
         res = SetupDiGetDeviceInterfaceDetail(hdev, &did, pdidd, size, &size, 0);
         if (!res) {
-            debug_log("SetupDiGetDeviceInterfaceDetail failed");
+            uxen_err("SetupDiGetDeviceInterfaceDetail failed");
             goto exit;
         }
 
@@ -119,14 +119,14 @@ SendResolutionToHidDriver()
                             FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
                             FILE_ATTRIBUTE_NORMAL, NULL);
         if (INVALID_HANDLE_VALUE == devhdl) {
-            debug_log("CreateFile failed");
+            uxen_err("CreateFile failed");
             goto exit;
         }
 
         res = DeviceIoControl(devhdl, IOCTL_UXENHID_SET_VIRTUAL_MODE,
                               &mode, sizeof mode, NULL, 0, &size, NULL);
         if (!res) {
-            debug_log("DeviceIoControl failed");
+            uxen_err("DeviceIoControl failed");
             goto exit;
         }
 
@@ -154,7 +154,7 @@ display_scratchify_process(DWORD pid, int enable)
     cm.ptr = (uintptr_t)pid;
     int ret = display_escape(code, &cm, sizeof(cm));
     if (ret) {
-        debug_log("failed to scratchify process %x, error %x\n", pid, ret);
+        uxen_err("failed to scratchify process %x, error %x\n", pid, ret);
         return -1;
     }
     return 0;
@@ -182,7 +182,7 @@ display_resize(int w, int h, unsigned int flags)
         cm.width = w;
         cm.height = h;
         if (display_escape(UXENDISP_ESCAPE_SET_CUSTOM_MODE, &cm, sizeof(cm))) {
-            debug_log("failed to inject custom mode [%dx%d]", w, h);
+            uxen_err("failed to inject custom mode [%dx%d]", w, h);
             return -1;
         }
 
@@ -196,7 +196,7 @@ display_resize(int w, int h, unsigned int flags)
             }
 
             if (!rc) {
-                debug_log("couldn't find desired mode %dx%d", w, h);
+                uxen_err("couldn't find desired mode %dx%d", w, h);
                 return -1;
             }
 
@@ -208,7 +208,7 @@ display_resize(int w, int h, unsigned int flags)
                                              CDS_RESET,
                                              NULL);
             if (status != DISP_CHANGE_SUCCESSFUL) {
-                debug_log("couldn't change display settings");
+                uxen_err("couldn't change display settings");
                 return -1;
             }
         }
@@ -231,7 +231,7 @@ display_resize(int w, int h, unsigned int flags)
         cm.width = w;
         cm.height = h;
         if (display_escape(UXENDISP_ESCAPE_SET_VIRTUAL_MODE, &cm, sizeof(cm))) {
-            debug_log("failed to inject virtual mode [%dx%d]", w, h);
+            uxen_err("failed to inject virtual mode [%dx%d]", w, h);
             return -1;
         }
     }
@@ -254,7 +254,7 @@ display_resize(int w, int h, unsigned int flags)
 void
 display_blank(int blank)
 {
-    debug_log("%s blank=%d", __FUNCTION__, blank);
+    uxen_msg("blank=%d", blank);
 
     if (blank)
         SetWindowPos(blank_window, HWND_TOPMOST,
@@ -293,7 +293,7 @@ blank_loop(void *opaque)
                                   0, 0, current_w, current_h,
                                   NULL, NULL, NULL, NULL);
     if (!blank_window) {
-        debug_log("failed to create blank window");
+        uxen_err("failed to create blank window");
         ret = -1;
         goto exit;
     }
@@ -303,7 +303,7 @@ blank_loop(void *opaque)
                                   WS_POPUP, virtual_w, 0, virtual_w + 1, virtual_h,
                                   NULL, NULL, NULL, NULL);
     if (!right_window) {
-        debug_log("failed to create right window");
+        uxen_err("failed to create right window");
         ret = -1;
         goto exit;
     }
@@ -313,7 +313,7 @@ blank_loop(void *opaque)
                                    WS_POPUP, 0, virtual_h, virtual_w, virtual_h + 1,
                                    NULL, NULL, NULL, NULL);
     if (!bottom_window) {
-        debug_log("failed to create bottom window");
+        uxen_err("failed to create bottom window");
         ret = -1;
         goto exit;
     }
@@ -357,7 +357,7 @@ display_init(void)
     }
 
     if (!rc) {
-        debug_log("failed to find uXen Display");
+        uxen_err("failed to find uXen Display");
         return -1;
     }
 
@@ -366,7 +366,7 @@ display_init(void)
     rc = EnumDisplaySettings(dispDevice.DeviceName, ENUM_CURRENT_SETTINGS, &devMode);
 
     if (!rc) {
-        debug_log("failed to retrieve current settings for uXen Display");
+        uxen_err("failed to retrieve current settings for uXen Display");
         return -1;
     }
 
@@ -377,7 +377,7 @@ display_init(void)
 
     hdc = CreateDC(dispDevice.DeviceName, dispDevice.DeviceName, NULL, NULL);
     if (!hdc) {
-        debug_log("failed to create device context: %d", (int)GetLastError());
+        uxen_err("failed to create device context: %d", (int)GetLastError());
         return -1;
     }
 
@@ -390,14 +390,14 @@ display_init(void)
 
     cm.esc_code = UXENDISP_ESCAPE_IS_VIRT_MODE_ENABLED;
     if (display_escape(UXENDISP_ESCAPE_IS_VIRT_MODE_ENABLED, &cm, sizeof(cm))) {
-        debug_log("Virtual Mode Change is DISABLED.");
+        uxen_msg("Virtual Mode Change is DISABLED.");
     } else {
         virtual_mode_change = 1;
     }
 
     blank_thread = CreateThread(NULL, 0, blank_loop, NULL, 0, NULL);
     if (!blank_thread) {
-        debug_log("failed to create blanking thread");
+        uxen_err("failed to create blanking thread");
         return -1;
     }
 

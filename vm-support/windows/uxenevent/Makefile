@@ -47,7 +47,6 @@ UXENEVENT_OBJS = uxenevent.o \
 		 display.o \
 		 defroute.o \
 		 input.o \
-		 logging.o \
 		 perf_counters.o \
 		 process.o \
 		 uxenevent-res.o \

@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2017, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -17,9 +17,6 @@
 
 #include "uxenevent.h"
 #include "perf_counters.h"
-
-#define pc_log(fmt, ...)                       \
-    debug_log("perfcnt: " fmt, ## __VA_ARGS__)
 
 typedef struct _PERF_COUNTER_CONTEXT {
     char                        counter_class_name[MAX_PATH];
@@ -63,20 +60,20 @@ int construct_paths(PERF_COUNTER_CONTEXT *pcc,
     pcc->cpe_array = malloc(sizeof(*pcc->cpe_array) *
                             pcc->counters_number * pcc->instances_number);
     if (!pcc->cpe_array) {
-        pc_log("unable to allocate counter paths array");
+        uxen_err("unable to allocate counter paths array");
         goto out;
     }
 
     pcc->hc_array = malloc(sizeof(*pcc->hc_array) *
                            pcc->counters_number * pcc->instances_number);
     if (!pcc->hc_array) {
-        pc_log("unable to allocate counter handles array");
+        uxen_err("unable to allocate counter handles array");
         goto out;
     }
 
     status = PdhOpenQueryA(NULL, 0, &pcc->query);
     if (ERROR_SUCCESS != status) {
-        pc_log("PdhOpenQueryA() failed: 0x%08x", (uint32_t)status);
+        uxen_err("PdhOpenQueryA() failed: 0x%08x", (uint32_t)status);
         goto out;
     }
 
@@ -104,7 +101,7 @@ int construct_paths(PERF_COUNTER_CONTEXT *pcc,
                                          (LPDWORD)&counter_path_max_len,
                                          0);
             if (ERROR_SUCCESS != status) {
-                pc_log("PdhMakeCounterPathA() failed: 0x%08x", (uint32_t)status);
+                uxen_err("PdhMakeCounterPathA() failed: 0x%08x", (uint32_t)status);
                 *counter_paths_size = 0;
                 ret = -1;
                 goto out;
@@ -112,7 +109,7 @@ int construct_paths(PERF_COUNTER_CONTEXT *pcc,
 
             status = PdhAddCounterA(pcc->query, counter_path, 0, hc);
             if (ERROR_SUCCESS != status) {
-                pc_log("PdhAddCounterA() failed: 0x%08x", (uint32_t)status);
+                uxen_err("PdhAddCounterA() failed: 0x%08x", (uint32_t)status);
                 *counter_paths_size = 0;
                 ret = -1;
                 goto out;
@@ -186,13 +183,13 @@ int refresh_sys_perf_counters()
         DWORD exit_code;
         WaitForSingleObject(pi.hProcess, INFINITE);
         if (!GetExitCodeProcess(pi.hProcess, &exit_code) || 0 != exit_code) {
-            pc_log("lodctr failed: %d(%d)", (int)exit_code, (int)GetLastError());
+            uxen_err("lodctr failed: %d(%d)", (int)exit_code, (int)GetLastError());
             ret = -1;
         }
         CloseHandle(pi.hThread);
         CloseHandle(pi.hProcess);
     } else {
-        pc_log("failed to run lodctr: %d", (int)GetLastError());
+        uxen_err("failed to run lodctr: %d", (int)GetLastError());
         ret = -1;
     }
 
@@ -231,7 +228,7 @@ int perf_counters_create(void **ctx,
                                  NULL, (PDWORD)&instances_size,
                                  PERF_DETAIL_WIZARD, 0);
     if (PDH_MORE_DATA != status) {
-        pc_log("PdhEnumObjectItemsA(%s) failed (size query): 0x%08x",
+        uxen_err("PdhEnumObjectItemsA(%s) failed (size query): 0x%08x",
                counter_class_name, (uint32_t)status);
         goto out;
     }
@@ -239,13 +236,13 @@ int perf_counters_create(void **ctx,
     /* get names */
     counters = malloc(counters_size);
     if (!counters) {
-        pc_log("unable to allocate counter names buffer");
+        uxen_err("unable to allocate counter names buffer");
         goto out;
     }
     if (instances_size > 0) {
         instances = malloc(instances_size);
         if (!instances) {
-            pc_log("unable to allocate instance names buffer");
+            uxen_err("unable to allocate instance names buffer");
             goto out;
         }
     } else
@@ -255,13 +252,13 @@ int perf_counters_create(void **ctx,
                                  instances, (PDWORD)&instances_size,
                                  PERF_DETAIL_WIZARD, 0);
     if (ERROR_SUCCESS != status) {
-        pc_log("PdhEnumObjectItemsA() failed: 0x%08x", (uint32_t)status);
+        uxen_err("PdhEnumObjectItemsA() failed: 0x%08x", (uint32_t)status);
         goto out;
     }
 
     pcc = malloc(sizeof(*pcc));
     if (!pcc) {
-        pc_log("unable to allocate context buffer");
+        uxen_err("unable to allocate context buffer");
         goto out;
     }
     memset(pcc, 0, sizeof(*pcc));
@@ -307,7 +304,7 @@ int perf_counters_create(void **ctx,
         goto out;
     }
     if (buffer_size > *fmt_values_size) {
-        pc_log("formatted counters buffer is too small (%d) - %d bytes required",
+        uxen_err("formatted counters buffer is too small (%d) - %d bytes required",
                *fmt_values_size, buffer_size);
         *fmt_values_size = buffer_size;
         ret = -1;
@@ -369,7 +366,7 @@ int perf_counters_query(void *ctx)
 
     status = PdhCollectQueryData(pcc->query);
     if (ERROR_SUCCESS != status) {
-        pc_log("PdhCollectQueryData() failed: 0x%08x", (uint32_t)status);
+        uxen_err("PdhCollectQueryData() failed: 0x%08x", (uint32_t)status);
         return -1;
     }
 
@@ -384,7 +381,7 @@ int perf_counters_query(void *ctx)
                                              &pcc->fmt_values[j]);
         if (ERROR_SUCCESS != status) {
             if (PDH_INVALID_DATA != status)
-                pc_log("PdhGetFormattedCounterValue() failed: 0x%08x",
+                uxen_err("PdhGetFormattedCounterValue() failed: 0x%08x",
                        (uint32_t)status);
             pcc->fmt_values[j].doubleValue = -1;
             ret = -1;
@@ -417,7 +414,7 @@ int perf_counters_init()
             } else {
                 continue;
             }
-            pc_log("PdhEnumObjects() failed: 0x%08x\n", (uint32_t)status);
+            uxen_err("PdhEnumObjects() failed: 0x%08x\n", (uint32_t)status);
             ret = -1;
             break;
         }
@@ -489,7 +486,7 @@ DWORD WINAPI data_collection_thread(void *param)
             {
                 perf_counters_query(counters_desc[j].ctx);
                 for (i = 0; i < counters_desc[j].values_number; i++) {
-                    pc_log("%d, %s, %3.3f",
+                    uxen_msg("%d, %s, %3.3f",
                            i, 
                            counters_desc[j].paths_array[i], 
                            counters_desc[j].values[i].doubleValue);
@@ -513,13 +510,13 @@ void perf_start_sampling(uint64_t counters_mask,
     DATA_COLL_THREAD_CTX *thread_ctx;
 
     if (data_collection_in_progress) {
-        pc_log("data collection already in progress");
+        uxen_err("data collection already in progress");
         return;
     }
 
     thread_ctx = malloc(sizeof(DATA_COLL_THREAD_CTX));
     if (!thread_ctx) {
-        pc_log("failed to allocate 0x%x bytes for thread ctx",
+        uxen_err("failed to allocate 0x%x bytes for thread ctx",
                (uint32_t)sizeof(DATA_COLL_THREAD_CTX));
     } else {
         data_collection_in_progress = TRUE;
@@ -531,7 +528,7 @@ void perf_start_sampling(uint64_t counters_mask,
         if (thread) {
             CloseHandle(thread);
         } else {
-            pc_log("failed to create data collection thread: %d",
+            uxen_err("failed to create data collection thread: %d",
                    (uint32_t)GetLastError());
             free(thread_ctx);
             data_collection_in_progress = FALSE;

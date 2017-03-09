@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2016, Bromium, Inc.
+ * Copyright 2013-2017, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -25,7 +25,7 @@
 static unsigned int keycnt = 0;
 
 #ifdef DEBUG_INPUT
-#define DPRINTF(fmt, ...) debug_log("%08x %s:" fmt, keycnt, __FUNCTION__, ## __VA_ARGS__)
+#define DPRINTF(fmt, ...) uxen_msg("%08x:" fmt, keycnt, ## __VA_ARGS__)
 #define DPRINT_KBD_STATE(state) print_kbd_state(__FUNCTION__, state)
 #else
 #define DPRINTF(fmt, ...) do {} while (0)
@@ -48,7 +48,7 @@ static struct kbd_state {
 static void
 print_kbd_state(const char *func, struct kbd_state *st)
 {
-    debug_log("%08x %s: lshift=%d rshift=%d lctrl=%d rctrl=%d lalt=%d ralt=%d"
+    uxen_msg("%08x %s: lshift=%d rshift=%d lctrl=%d rctrl=%d lalt=%d ralt=%d"
               " capslock=%d cs_toggled=%d",
             keycnt, func,
             current_state.lshift_down,
@@ -103,10 +103,9 @@ inject_key(int keycode, int up, int extended)
     INPUT i = {0};
     int rc;
 
+    DPRINTF("keycode=0x%08x up=%d ext=%d", keycode, !!up, extended);
     if ((keycode < 0x30) || ((keycode > 0x5A) && (keycode < VK_NUMPAD0)) || (keycode > VK_NUMPAD9)) {
-        debug_log("%s -> keycode=0x%08x up=%d ext=%d", __FUNCTION__, keycode, !!up, extended);
-    } else {
-        DPRINTF("keycode=0x%08x up=%d ext=%d", keycode, !!up, extended);
+        //uxen_msg("keycode=0x%08x up=%d ext=%d", keycode, !!up, extended);
     }
 
     switch (keycode) {
@@ -319,13 +318,11 @@ input_key_event(uint8_t keycode, uint16_t repeat, uint8_t scancode,
     int extended = flags & 0x1;
     int i;
 
+    DPRINTF("keycode=0x%02x up=%d ext=%d nchars=%d", keycode, !!up, extended, nchars);
     if ((keycode < 0x30) || ((keycode > 0x5A) && (keycode < VK_NUMPAD0)) || (keycode > VK_NUMPAD9)) {
-        debug_log("%s -> keycode=0x%02x up=%d ext=%d nchars=%d",
-                __FUNCTION__, keycode, !!up, extended, nchars);
-    } else {
-        DPRINTF("keycode=0x%02x up=%d ext=%d nchars=%d",
-                keycode, !!up, extended, nchars);
+        //uxen_msg("keycode=0x%02x up=%d ext=%d nchars=%d", keycode, !!up, extended, nchars);
     }
+
     if (nchars == 0) {
         ret = inject_key(keycode, up, extended);
     } else if (nchars > 0) {
@@ -415,7 +412,7 @@ input_mouse_event(uint32_t x, uint32_t y, int32_t dv, int32_t dh,
 
     rc = SendInput(1, &i, sizeof (i));
     if (!rc) {
-        debug_log("%s: SendInput failed", __FUNCTION__);
+        uxen_err("SendInput failed");
         return -1;
     }
 
@@ -491,7 +488,7 @@ input_wm_mouse_event(UINT message, WPARAM wParam, LPARAM lParam)
 
     rc = SendInput(1, &i, sizeof (i));
     if (!rc) {
-        debug_log("%s: SendInput failed", __FUNCTION__);
+        uxen_err("SendInput failed");
         return -1;
     }
 
@@ -508,7 +505,7 @@ int input_touch_init(void)
 
     rc = InitializeTouchInjection(256, TOUCH_FEEDBACK_NONE);
     if (!rc) {
-        debug_log("InitializeTouchInjection failed: %d", GetLastError());
+        uxen_err("InitializeTouchInjection failed: %d", GetLastError());
         return -1;
     }
 
@@ -526,7 +523,7 @@ int input_touch_event(int count, struct ns_event_touch_contact *contacts)
         return -1;
 
     if (count > MAX_TOUCH_CONTACTS) {
-        debug_log("Too many contact points %d (max:%d)",
+        uxen_err("Too many contact points %d (max:%d)",
                   count, MAX_TOUCH_CONTACTS);
         return -1;
     }
@@ -577,7 +574,7 @@ int input_touch_event(int count, struct ns_event_touch_contact *contacts)
 
     rc = InjectTouchInput(i, touch_info);
     if (!rc)
-        debug_log("InjectTouchInput failed: %d", GetLastError());
+        uxen_err("InjectTouchInput failed: %d", GetLastError());
 
     free(touch_info);
 

@@ -130,8 +130,7 @@ send_collect(v4v_channel_t * c)
                 continue;
             }
 
-            debug_log ("%s: WriteFile failed: %d", __FUNCTION__,
-                       GetLastError ());
+            uxen_err("WriteFile failed: %d", GetLastError ());
         }
 
 
@@ -173,7 +172,7 @@ send_enqueue(v4v_channel_t *c, struct pkt *pkt)
         case ERROR_IO_PENDING:
             break;
         default:
-            debug_log("%s: WriteFile failed: %d", __FUNCTION__, GetLastError());
+            uxen_err("WriteFile failed: %d", GetLastError());
 
             free(i);
             return -1;
@@ -191,7 +190,7 @@ process_resize(void)
     if ((requested_w > 0) && (requested_h > 0)) {
         LARGE_INTEGER timeout;
 
-        debug_log("%s %dx%d flags 0x%x", __FUNCTION__, requested_w, requested_h, requested_flags);
+        uxen_msg("%dx%d flags 0x%x", requested_w, requested_h, requested_flags);
 
         display_resize(requested_w, requested_h, requested_flags);
         requested_w = 0;
@@ -211,7 +210,7 @@ schedule_resize(int w, int h, unsigned int flags)
     requested_h = h;
     requested_flags = flags;
 
-    debug_log("%s %dx%d flags 0x%x", __FUNCTION__, w, h, flags);
+    uxen_msg("%dx%d flags 0x%x", w, h, flags);
 
     if (!resize_timer_set)
         process_resize();
@@ -285,13 +284,13 @@ execute_as_user(TCHAR *command_line, TCHAR *path,
     STARTUPINFO si;
     void *env = NULL; /* Never EVER call your variable "environ" */
 
-    debug_log("%s: command line: \"%s\", path: \"%s\"", __FUNCTION__,
-              command_line, path);
+//    debug_log("%s: command line: \"%s\", path: \"%s\"", __FUNCTION__,
+//              command_line, path);
     ProcessIdToSessionId(GetCurrentProcessId(), &session_id);
-    debug_log("%s: session ID %ld", __FUNCTION__, session_id);
+    uxen_msg("session ID %ld", session_id);
     rc = WTSQueryUserToken(session_id, &token);
     if (!rc) {
-        debug_log("WTSQueryUserToken failed (%ld)", GetLastError());
+        uxen_err("WTSQueryUserToken failed (%ld)", GetLastError());
         return -1;
     }
     rc = DuplicateTokenEx(token,
@@ -301,12 +300,12 @@ execute_as_user(TCHAR *command_line, TCHAR *path,
                           TokenPrimary, &primary_token);
     CloseHandle(token);
     if (!rc) {
-        debug_log("DuplicateTokenEx failed (%ld)", GetLastError());
+        uxen_err("DuplicateTokenEx failed (%ld)", GetLastError());
         return -1;
     }
     rc = CreateEnvironmentBlock(&env, primary_token, FALSE);
     if (!rc) {
-        debug_log("CreateEnvironmentBlock failed (%ld)", GetLastError());
+        uxen_err("CreateEnvironmentBlock failed (%ld)", GetLastError());
         CloseHandle(primary_token);
         return -1;
     }
@@ -335,7 +334,7 @@ execute_as_user(TCHAR *command_line, TCHAR *path,
     DestroyEnvironmentBlock(env);
 
     if (!rc) {
-        debug_log("CreateProcessAsUser failed (%ld)", GetLastError());
+        uxen_err("CreateProcessAsUser failed (%ld)", GetLastError());
         return -1;
     }
 
@@ -356,14 +355,14 @@ cmd_watch_thread(void *param)
 
     command_line = calloc(PATH_MAX, sizeof (TCHAR));
     if (!command_line) {
-        debug_log("Allocation error");
+        uxen_err("Allocation error");
         goto out;
     }
 
     rc = GetModuleFileName(NULL, command_line, MAX_PATH);
     if (!rc) {
         free(command_line);
-        debug_log("GetModuleFileName failed (%ld)", GetLastError());
+        uxen_err("GetModuleFileName failed (%ld)", GetLastError());
         goto out;
     }
 
@@ -378,7 +377,7 @@ cmd_watch_thread(void *param)
     rc = CreatePipe(&pr, &pw, &sattr, 0);
     if (!rc) {
         free(command_line);
-        debug_log("CreatePipe failed");
+        uxen_err("CreatePipe failed");
         goto out;
     }
     SetHandleInformation(pr, HANDLE_FLAG_INHERIT, 0);
@@ -386,7 +385,7 @@ cmd_watch_thread(void *param)
     ret = execute_as_user(command_line, _T("C:\\"), pw, &pi);
     free(command_line);
     if (ret) {
-        debug_log("execute_as_user failed");
+        uxen_err("execute_as_user failed");
         goto out;
     }
 
@@ -397,11 +396,11 @@ cmd_watch_thread(void *param)
     if (!rc || !r) {
         CloseHandle(pw);
         CloseHandle(pr);
-        debug_log("ReadFile failed (%ld)", GetLastError());
+        uxen_err("ReadFile failed (%ld)", GetLastError());
         goto out;
     }
 
-    debug_log("Created elevated process %ld", pid);
+    uxen_msg("Created elevated process %ld", pid);
 
     CloseHandle(pw);
     CloseHandle(pr);
@@ -418,7 +417,7 @@ cmd_watch_thread(void *param)
 
         proc = OpenProcess(PROCESS_QUERY_INFORMATION, FALSE, pid);
         if (!proc) {
-            debug_log("OpenProcess failed (%ld)", GetLastError());
+            uxen_err("OpenProcess failed (%ld)", GetLastError());
             goto out;
         }
 
@@ -428,13 +427,13 @@ cmd_watch_thread(void *param)
             rc = GetExitCodeProcess(proc, &exit_code);
             if (!rc) {
                 CloseHandle(proc);
-                debug_log("GetExitCodeProcess failed (%ld)", GetLastError());
+                uxen_err("GetExitCodeProcess failed (%ld)", GetLastError());
                 goto out;
             }
         } while (exit_code == STILL_ACTIVE);
 
         CloseHandle(proc);
-        debug_log("Process terminated with exit code %ld", exit_code);
+        uxen_msg("Process terminated with exit code %ld", exit_code);
     }
     ret = 0;
 
@@ -486,7 +485,7 @@ process_windows_set_time_zone_information(
     tkp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
     AdjustTokenPrivileges(hToken, FALSE, &tkp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
     if (!SetTimeZoneInformation(tzi))
-        debug_log("SetTimeZoneInformation failed");
+        uxen_err("SetTimeZoneInformation failed");
     tkp.Privileges[0].Attributes = 0;
     AdjustTokenPrivileges(hToken, FALSE, &tkp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
 
@@ -510,7 +509,7 @@ process_windows_set_dynamic_time_zone_information(
     tkp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
     AdjustTokenPrivileges(hToken, FALSE, &tkp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
     if (!SetDynamicTimeZoneInformation(dtzi))
-        debug_log("SetDynamicTimeZoneInformation failed");
+        uxen_err("SetDynamicTimeZoneInformation failed");
     tkp.Privileges[0].Attributes = 0;
     AdjustTokenPrivileges(hToken, FALSE, &tkp, 0, (PTOKEN_PRIVILEGES)NULL, 0);
 
@@ -530,7 +529,7 @@ process_user_draw_enable(
 
         err = suspend_pid(pid);
         if (err) {
-            debug_log("suspend of dwm.exe failed: %x\n", err);
+            uxen_err("suspend of dwm.exe failed: %x\n", err);
             goto out;
         }
 
@@ -539,7 +538,7 @@ process_user_draw_enable(
 
         err = resume_pid(pid);
         if (err)
-            debug_log("resume of dwm.exe failed: %x\n", err);
+            uxen_err("resume of dwm.exe failed: %x\n", err);
     }
 
 out:
@@ -560,7 +559,7 @@ process_remote_execute(struct ns_event_msg_remote_execute *msg)
 
     cmd_len = msg->msg.len - sizeof(*msg);
     if (cmd_len <= 0 || msg->command[cmd_len - 1]) {
-        debug_log("%s: bad command", __FUNCTION__);
+        uxen_err("bad command");
         return -1;
     }
 
@@ -568,18 +567,17 @@ process_remote_execute(struct ns_event_msg_remote_execute *msg)
     rc = MultiByteToWideChar(CP_ACP, 0, msg->command, -1, &command_line,
                              sizeof(command_line));
     if (!rc) {
-        debug_log("%s: WideChar conversion failed (%d)", __FUNCTION__,
-                  GetLastError());
+        uxen_err("WideChar conversion failed (%d)", GetLastError());
         return -1;
     }
 #else
     command_line = msg->command;
 #endif
 
-    debug_log("%s: exec %s", __FUNCTION__, command_line);
+    uxen_msg("exec %s", msg->command);
     rc = execute_as_user(command_line, NULL, NULL, &pi);
     if (rc) {
-        debug_log("%s: exec failed", __FUNCTION__);
+        uxen_err("exec failed");
         return rc;
     }
 
@@ -634,11 +632,11 @@ process_touch_input(struct ns_event_msg_touch_input *msg)
 void set_high_priority(void)
 {
     if (!SetPriorityClass(GetCurrentProcess(), HIGH_PRIORITY_CLASS)) {
-        debug_log("INFO: Unable to enter high prio mode for process, error=%u\n",
+        uxen_err("INFO: Unable to enter high prio mode for process, error=%u\n",
                 (uint32_t)GetLastError());
     }
     if (!SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_HIGHEST)) {
-        debug_log("INFO: Unable to enter high prio mode for thread, error=%u\n",
+        uxen_err("INFO: Unable to enter high prio mode for thread, error=%u\n",
                 (uint32_t)GetLastError());
     }
 }
@@ -651,13 +649,13 @@ void recv_dispatch(v4v_channel_t *c,struct pkt *pkt,DWORD bytes)
 
     if ((bytes < sizeof (pkt->dgram) + sizeof (pkt->hdr)) ||
         (bytes < sizeof (pkt->dgram) + pkt->hdr.len)) {
-        debug_log("incomplete read, bytes=%d", bytes);
+        uxen_err("incomplete read, bytes=%d", bytes);
         return;
     }
 
 #define CHECKBUFSZ(type) \
         if (bytes < sizeof (pkt->dgram) + sizeof(struct type)) { \
-            debug_log("invalid message size for proto %d (%d)", \
+            uxen_err("invalid message size for proto %d (%d)",  \
                       pkt->hdr.proto, bytes); \
             return; \
         }
@@ -713,7 +711,7 @@ void recv_dispatch(v4v_channel_t *c,struct pkt *pkt,DWORD bytes)
         rc = process_user_draw_enable((void *)pkt->data);
         break;
     default:
-        debug_log("unknown message proto %d", pkt->hdr.proto);
+        uxen_err("unknown message proto %d", pkt->hdr.proto);
         return;
     }
 
@@ -738,7 +736,7 @@ static void recv_collect(v4v_channel_t *c)
                 return;
         }
 
-        debug_log("%s: GetOverLappedResult err=%d\n", __FUNCTION__, GetLastError());
+        uxen_err("GetOverLappedResult err=%d\n", GetLastError());
     } else {
       recv_dispatch(c,&recv_pkt,bytes);
     }
@@ -774,7 +772,7 @@ static int recv_setup(v4v_channel_t *c)
         case ERROR_IO_PENDING:
             break;
         default:
-            debug_log("%s: ReadFile failed: %d", __FUNCTION__, GetLastError());
+            uxen_err("ReadFile failed: %d", GetLastError());
             return -1;
     }
 
@@ -787,15 +785,19 @@ static void v4v_init(v4v_channel_t *c)
 {
     v4v_bind_values_t bind;
 
-    if (!v4v_open(c, RING_SIZE, V4V_FLAG_ASYNC))
+    if (!v4v_open(c, RING_SIZE, V4V_FLAG_ASYNC)) {
+        uxen_err("v4v_open failed");
         err(1, "v4v_open");
+    }
 
     bind.ring_id.addr.port = DEFAULT_PORT;
     bind.ring_id.addr.domain = V4V_DOMID_ANY;
     bind.ring_id.partner = V4V_DOMID_DM;
 
-    if (!v4v_bind(c, &bind))
+    if (!v4v_bind(c, &bind)) {
+        uxen_err("v4v_bind failed");
         err(1, "v4v_bind");
+    }
 }
 
 
@@ -810,6 +812,8 @@ main(int argc, char **argv)
     int ierr;
 
     setprogname(argv[0]);
+    uxen_ud_set_progname("uxenevent");
+    uxen_ud_mask = UXEN_UD_ERR | UXEN_UD_MSG;
 
     while (1) {
         int c, index = 0;
@@ -836,8 +840,6 @@ main(int argc, char **argv)
 
     if ((ierr=WSAStartup(MAKEWORD(2,2), &Data)))
         JPWerr(1, "WSAStartup: %d, WSAGetLastError=%x \n",ierr,WSAGetLastError());
-
-    logging_init();
 
     set_high_priority();
 
@@ -885,8 +887,7 @@ main(int argc, char **argv)
         } else if (err == WAIT_IO_COMPLETION)
             /* nothing */ ;
         else {
-            debug_log("%s: WaitForMultipleObjectsEx error %ld %ld",
-                    __FUNCTION__, err, GetLastError());
+            uxen_err("WaitForMultipleObjectsEx error %ld %ld", err, GetLastError());
         }
         display_border_windows_on_top();
     }
