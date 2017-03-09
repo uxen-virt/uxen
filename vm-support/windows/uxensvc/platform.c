@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -13,7 +13,7 @@
 #include "platform.h"
 #include "platform_public.h"
 
-#include "logging.h"
+#include "../common/debug-user.h"
 
 #include <xen/xen.h>
 
@@ -43,7 +43,7 @@ platform_open(void)
                                        0,
                                        &device_interface_data);
     if (ret) {
-        /* svc_printf(SVC_WARN, L"SetupDiEnumDeviceInterfaces failed"); */
+        /* uxen_err("SetupDiEnumDeviceInterfaces failed"); */
         goto out;
     }
 
@@ -52,13 +52,13 @@ platform_open(void)
                                            NULL, 0,
                                            &required_length, NULL);
     if (ret && GetLastError() != ERROR_INSUFFICIENT_BUFFER) {
-        svc_printf(SVC_WARN, L"SetupDiGetDeviceInterfaceDetail probe failed");
+        uxen_err("SetupDiGetDeviceInterfaceDetail probe failed");
         goto out;
     }
 
     device_interface_detail_data = calloc(1, required_length);
     if (!device_interface_detail_data) {
-        svc_printf(SVC_WARN, L"calloc failed");
+        uxen_err("calloc failed");
         ret = -1;
         goto out;
     }
@@ -72,7 +72,7 @@ platform_open(void)
                                            required_length, &required_length,
                                            NULL);
     if (ret) {
-        svc_printf(SVC_WARN, L"SetupDiGetDeviceInterfaceDetail failed");
+        uxen_err("SetupDiGetDeviceInterfaceDetail failed");
         goto out;
     }
 
@@ -80,7 +80,7 @@ platform_open(void)
                                  GENERIC_READ | GENERIC_WRITE, 0, NULL,
                                  OPEN_EXISTING, FILE_FLAG_OVERLAPPED, NULL);
     if (platform_device == INVALID_HANDLE_VALUE) {
-        svc_printf(SVC_WARN, L"CreateFile failed");
+        uxen_err("CreateFile failed");
         ret = -1;
         goto out;
     }
@@ -124,7 +124,7 @@ uxen_ioctl(HANDLE h, uint64_t ctl, ...)
         ret = !GetOverlappedResult(h, &ov, &outlen, TRUE);
     if (!ret && (func & UXEN_FLAG_OUTBUFFER) && outlen != BufferLength) {
         _set_errno(EINVAL);
-        svc_printf(SVC_WARN, L"DeviceIoControl %llx invalid OutputBuffer", ctl);
+        uxen_err("DeviceIoControl %llx invalid OutputBuffer", ctl);
         ret = -1;
         goto out;
     }
@@ -132,10 +132,10 @@ uxen_ioctl(HANDLE h, uint64_t ctl, ...)
 	ret = GetLastError();
 	if (UXEN_IS_ERRNO_NTSTATUS(ret)) {
 	    _set_errno(UXEN_ERRNO_FROM_NTSTATUS(ret));
-	    svc_printf(SVC_WARN, L"DeviceIoControl %llx", ctl);
+	    uxen_err("DeviceIoControl %llx", ctl);
 	    ret = -1;
 	} else {
-	    svc_printf(SVC_WARN, L"DeviceIoControl %llx", ctl);
+	    uxen_err("DeviceIoControl %llx", ctl);
 	    _set_errno(EINVAL);
 	    ret = -1;
 	}
@@ -158,7 +158,7 @@ platform_set_time_update_event(HANDLE event)
     ret = uxen_ioctl(platform_device, IOCTL_UXEN_PLATFORM_SET_TIME_UPDATE_EVENT,
                      &d);
     if (ret)
-        svc_printf(SVC_WARN, L"ioctl(IOCTL_UXEN_PLATFORM_SET_TIME_UPDATE_EVENT)");
+        uxen_err("ioctl(IOCTL_UXEN_PLATFORM_SET_TIME_UPDATE_EVENT)");
 
     return ret;
 }
@@ -173,7 +173,7 @@ platform_service_balloon_update_event(HANDLE event)
     ret = uxen_ioctl(platform_device, IOCTL_UXEN_PLATFORM_SET_BALLOON_UPDATE_EVENT,
                      &d);
     if (ret)
-        svc_printf(SVC_WARN, L"ioctl(IOCTL_UXEN_PLATFORM_SET_BALLOON_UPDATE_EVENT)");
+        uxen_err("ioctl(IOCTL_UXEN_PLATFORM_SET_BALLOON_UPDATE_EVENT)");
 
     return ret;
 }
@@ -186,7 +186,7 @@ platform_map_shared_info(void)
 
     ret = uxen_ioctl(platform_device, IOCTL_UXEN_PLATFORM_MAP_SHARED_INFO, &d);
     if (ret) {
-        svc_printf(SVC_WARN, L"ioctl(IOCTL_UXEN_PLATFORM_MAP_SHARED_INFO)");
+        uxen_err("ioctl(IOCTL_UXEN_PLATFORM_MAP_SHARED_INFO)");
         d.shared_info = NULL;
         goto out;
     }
@@ -267,8 +267,7 @@ platform_service_balloon(void)
         ret = uxen_ioctl(platform_device,
                 IOCTL_UXEN_PLATFORM_BALLOON_SET_CONFIGURATION, &cfg);
         if (ret) {
-            svc_printf(SVC_WARN,
-                    L"ioctl(IOCTL_UXEN_PLATFORM_BALLOON_SET_CONFIGURATION)");
+            uxen_err("ioctl(IOCTL_UXEN_PLATFORM_BALLOON_SET_CONFIGURATION)");
         }
     }
     return ret;
@@ -301,11 +300,12 @@ platform_update_system_time(void)
     FileTimeToSystemTime(&filetime, &st);
     ret = !SetSystemTime(&st);
     if (ret) {
-        svc_printf(SVC_WARN, L"%s: SetSystemTime failed", __FUNCTION__);
+        uxen_err("%s: SetSystemTime failed", __FUNCTION__);
         return ret;
     }
+
     if (verbose) {
-        svc_printf(SVC_INFO, L"%04d-%02d-%02d %02d:%02d:%02d.%03d %d",
+        uxen_msg("updated system time %04d-%02d-%02d %02d:%02d:%02d.%03d %d",
                    st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute,
                    st.wSecond, st.wMilliseconds, st.wDayOfWeek);
     }

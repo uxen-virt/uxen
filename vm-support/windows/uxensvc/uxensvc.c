@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2016, Bromium, Inc.
+ * Copyright 2013-2017, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -11,7 +11,7 @@
 errno_t rand_s(   unsigned int* randomValue);
 #include "platform.h"
 #include "session.h"
-#include "logging.h"
+#include "../common/debug-user.h"
 
 wchar_t                         *svc_name = L"uxensvc";
 wchar_t                         *svc_path;
@@ -29,16 +29,15 @@ svc_set_privilege(const char *priv_name)
 
     rc = LookupPrivilegeValue(NULL, priv_name, &tok_priv.Privileges[0].Luid);
     if (!rc) {
-        svc_printf(SVC_ERROR, L"LookupPrivilegeValue failed (%d)",
-                   (int)GetLastError());
+        uxen_err("LookupPrivilegeValue failed (%d)",
+            (int)GetLastError());
         return -1;
     }
 
     rc = OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES,
                           &token);
     if (!rc) {
-        svc_printf(SVC_ERROR, L"OpenProcessToken failed (%d)",
-                   (int)GetLastError());
+        uxen_err("OpenProcessToken failed (%d)", (int)GetLastError());
         return -1;
     }
 
@@ -48,8 +47,7 @@ svc_set_privilege(const char *priv_name)
     rc = AdjustTokenPrivileges(token, FALSE, &tok_priv, 0, NULL, NULL);
     CloseHandle(token);
     if (!rc) {
-        svc_printf(SVC_ERROR, L"AdjustTokenPrivileges failed (%d)",
-                   (int)GetLastError());
+        uxen_err("AdjustTokenPrivileges failed (%d)", (int)GetLastError());
         return -1;
     }
 
@@ -133,23 +131,21 @@ svc_init(DWORD argc, wchar_t **argv)
 
     rc = svc_set_privilege(SE_INCREASE_QUOTA_NAME);
     if (rc){
-        svc_printf(SVC_ERROR,
-                   L"Failed to set SE_INCREASE_QUOTA_NAME privilege");
+        uxen_err("Failed to set SE_INCREASE_QUOTA_NAME privilege");
         err = GetLastError();
         goto stop;
     }
 
     rc = svc_set_privilege(SE_ASSIGNPRIMARYTOKEN_NAME);
     if (rc){
-        svc_printf(SVC_ERROR,
-                   L"Failed to set SE_ASSIGNPRIMARYTOKEN_NAME privilege");
+        uxen_err("Failed to set SE_ASSIGNPRIMARYTOKEN_NAME privilege");
         err = GetLastError();
         goto stop;
     }
 
     rc = platform_open();
     if (rc) {
-        svc_printf(SVC_ERROR, L"platform_open() failed (%d)", rc);
+        uxen_err("platform_open() failed (%d)", rc);
         err = rc;
         goto stop;
     }
@@ -158,8 +154,7 @@ svc_init(DWORD argc, wchar_t **argv)
 
     rc = platform_set_time_update_event(events[1]);
     if (rc) {
-        svc_printf(SVC_ERROR, L"platform_set_time_update_event() failed (%d)",
-                   rc);
+        uxen_err("platform_set_time_update_event() failed (%d)", rc);
         err = rc;
         goto stop;
     }
@@ -168,8 +163,7 @@ svc_init(DWORD argc, wchar_t **argv)
 
     rc = platform_service_balloon_update_event(events[2]);
     if (rc) {
-        svc_printf(SVC_ERROR, L"platform_set_balloon_update_event() failed (%d)",
-                   rc);
+        uxen_err("platform_set_balloon_update_event() failed (%d)", rc);
         err = rc;
         goto stop;
     }
@@ -181,8 +175,7 @@ svc_init(DWORD argc, wchar_t **argv)
 
     active_session = WTSGetActiveConsoleSessionId();
     if (active_session && active_session != (DWORD)-1) {
-        svc_printf(SVC_INFO, L"Active session %d already present",
-                   active_session);
+        uxen_msg("Active session %d already present", active_session);
         session_connect(active_session);
     }
     svc_report_status(SERVICE_RUNNING, NO_ERROR, 0);
@@ -213,8 +206,7 @@ svc_init(DWORD argc, wchar_t **argv)
         case WAIT_IO_COMPLETION:
             break;
         default:
-            svc_printf(SVC_ERROR, L"WaitForMultipleObjectEx failed (%d)",
-                       (int)GetLastError());
+            uxen_err("WaitForMultipleObjectEx failed (%d)", (int)GetLastError());
             goto stop;
         }
     }
@@ -241,8 +233,7 @@ svc_main(DWORD argc, wchar_t **argv)
                                                       svc_ctl_handler,
                                                       NULL);
     if (!svc_status_handle) {
-        svc_printf(SVC_ERROR, L"RegisterServiceCtrlHandler failed (%d)",
-                   (int)GetLastError());
+        uxen_err("RegisterServiceCtrlHandler failed (%d)", (int)GetLastError());
         return;
     }
 
@@ -263,8 +254,7 @@ svc_install(void)
     scm = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
 
     if (!scm) {
-        wprintf(L"OpenSCManager failed (%d)\n",
-                (int)GetLastError());
+        uxen_err("OpenSCManager failed (%d)\n", (int)GetLastError());
         return -1;
     }
 
@@ -284,12 +274,12 @@ svc_install(void)
                              NULL);
 
     if (!service) {
-        wprintf(L"CreateService failed (%d)\n", (int)GetLastError());
+        uxen_err("CreateService failed (%d)\n", (int)GetLastError());
         CloseServiceHandle(scm);
         return -1;
     }
 
-    wprintf(L"Service installed successfully\n");
+    uxen_msg("Service installed successfully\n");
 
     CloseServiceHandle(service);
     CloseServiceHandle(scm);
@@ -307,28 +297,27 @@ svc_delete(void)
     scm = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
 
     if (!scm) {
-        wprintf(L"OpenSCManager failed (%d)\n",
-                (int)GetLastError());
+        uxen_err("OpenSCManager failed (%d)\n", (int)GetLastError());
         return -1;
     }
 
 
     service = OpenServiceW(scm, svc_name, DELETE);
     if (!service) {
-        wprintf(L"OpenService failed (%d)\n", (int)GetLastError());
+        uxen_err("OpenService failed (%d)\n", (int)GetLastError());
         CloseServiceHandle(scm);
         return -1;
     }
 
     rc = DeleteService(service);
     if (!rc) {
-        wprintf(L"DeleteService failed (%d)\n", (int)GetLastError());
+        uxen_err("DeleteService failed (%d)\n", (int)GetLastError());
         CloseServiceHandle(service);
         CloseServiceHandle(scm);
         return -1;
     }
 
-    wprintf(L"Service deleted successfully\n");
+    uxen_msg("Service deleted successfully\n");
 
     CloseServiceHandle(service);
     CloseServiceHandle(scm);
@@ -346,28 +335,27 @@ svc_start(int argc, const wchar_t **argv)
     scm = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
 
     if (!scm) {
-        wprintf(L"OpenSCManager failed (%d)\n",
-                (int)GetLastError());
+        uxen_err("OpenSCManager failed (%d)\n", (int)GetLastError());
         return -1;
     }
 
 
     service = OpenServiceW(scm, svc_name, SERVICE_ALL_ACCESS);
     if (!service) {
-        wprintf(L"OpenService failed (%d)\n", (int)GetLastError());
+        uxen_err("OpenService failed (%d)\n", (int)GetLastError());
         CloseServiceHandle(scm);
         return -1;
     }
 
     rc = StartServiceW(service, argc, argv);
     if (!rc) {
-        wprintf(L"StartService failed (%d)\n", (int)GetLastError());
+        uxen_err("StartService failed (%d)\n", (int)GetLastError());
         CloseServiceHandle(service);
         CloseServiceHandle(scm);
         return -1;
     }
 
-    wprintf(L"Service started successfully\n");
+    uxen_msg("Service started successfully\n");
 
     CloseServiceHandle(service);
     CloseServiceHandle(scm);
@@ -396,28 +384,27 @@ svc_stop(void)
     scm = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
 
     if (!scm) {
-        wprintf(L"OpenSCManager failed (%d)\n",
-                (int)GetLastError());
+        uxen_err("OpenSCManager failed (%d)\n", (int)GetLastError());
         return -1;
     }
 
 
     service = OpenServiceW(scm, svc_name, SERVICE_STOP);
     if (!service) {
-        wprintf(L"OpenService failed (%d)\n", (int)GetLastError());
+        uxen_err("OpenService failed (%d)\n", (int)GetLastError());
         CloseServiceHandle(scm);
         return -1;
     }
 
     rc = ControlService(service, SERVICE_CONTROL_STOP, &status);
     if (!rc) {
-        wprintf(L"ControlService failed (%d)\n", (int)GetLastError());
+        uxen_err("ControlService failed (%d)\n", (int)GetLastError());
         CloseServiceHandle(service);
         CloseServiceHandle(scm);
         return -1;
     }
 
-    wprintf(L"Service status: %s\n", status_str[status.dwCurrentState]);
+    uxen_msg("Service status: %s\n", status_str[status.dwCurrentState]);
 
     CloseServiceHandle(service);
     CloseServiceHandle(scm);
@@ -437,15 +424,14 @@ svc_query(void)
     scm = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
 
     if (!scm) {
-        wprintf(L"OpenSCManager failed (%d)\n",
-                (int)GetLastError());
+        uxen_err("OpenSCManager failed (%d)\n", (int)GetLastError());
         return -1;
     }
 
 
     service = OpenServiceW(scm, svc_name, SERVICE_ALL_ACCESS);
     if (!service) {
-        wprintf(L"OpenService failed (%d)\n", (int)GetLastError());
+        uxen_err("OpenService failed (%d)\n", (int)GetLastError());
         CloseServiceHandle(scm);
         return -1;
     }
@@ -453,13 +439,13 @@ svc_query(void)
     rc = QueryServiceStatusEx(service, SC_STATUS_PROCESS_INFO, (void *)&status,
                               sizeof (status), &len);
     if (!rc) {
-        wprintf(L"QueryServiceStatusEx failed (%d)\n", (int)GetLastError());
+        uxen_err("QueryServiceStatusEx failed (%d)\n", (int)GetLastError());
         CloseServiceHandle(service);
         CloseServiceHandle(scm);
         return -1;
     }
 
-    wprintf(L"Service status: %s\n", status_str[status.dwCurrentState]);
+    uxen_msg("Service status: %s\n", status_str[status.dwCurrentState]);
 
     CloseServiceHandle(service);
     CloseServiceHandle(scm);
@@ -499,18 +485,18 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         { NULL, NULL }
     };
 
+    uxen_ud_set_progname("uxensvc");
+
     argv = CommandLineToArgvW(GetCommandLineW(), &argc);
     if (!argv) {
-        wprintf(L"CommandLineToArgvW failed (%d)\n",
-                (int)GetLastError());
+        uxen_err("CommandLineToArgvW failed (%d)\n", (int)GetLastError());
         return -1;
     }
 
     svc_path = calloc(PATH_MAX, sizeof (wchar_t));
 
     if (!GetModuleFileNameW(NULL, svc_path, MAX_PATH)) {
-        wprintf(L"GetModuleFileNameW failed (%d)\n",
-                (int)GetLastError());
+        uxen_err("GetModuleFileNameW failed (%d)\n",  (int)GetLastError());
         return -1;
     }
 
@@ -542,8 +528,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         if (err == ERROR_FAILED_SERVICE_CONTROLLER_CONNECT)
             usage(argv[0]);
         else
-            svc_printf(SVC_ERROR, L"StartServiceCtrlDispatcher failed (%d)",
-                       err);
+            uxen_err("StartServiceCtrlDispatcher failed (%d)", err);
 
         return -1;
     }

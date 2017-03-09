@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2016, Bromium, Inc.
+ * Copyright 2013-2017, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -13,7 +13,7 @@
 #include <stdio.h>
 
 #include "session.h"
-#include "logging.h"
+#include "../common/debug-user.h"
 
 extern wchar_t *svc_path;
 
@@ -35,7 +35,7 @@ set_high_integrity(HANDLE token)
 
     rc = ConvertStringSidToSidW(L"S-1-16-12288", &sid);
     if (!rc) {
-        svc_printf(SVC_ERROR, L"ConvertStringToSidW failed (%d)",
+        uxen_err("ConvertStringToSidW failed (%d)",
                    GetLastError());
         return -1;
     }
@@ -47,7 +47,7 @@ set_high_integrity(HANDLE token)
                              sizeof (label) + GetLengthSid(sid));
     LocalFree(sid);
     if (!rc) {
-        svc_printf(SVC_ERROR, L"SetTokenInformation failed (%d)",
+        uxen_err("SetTokenInformation failed (%d)",
                    GetLastError());
         return -1;
     }
@@ -107,7 +107,7 @@ create_process(HANDLE token, wchar_t *command_line, wchar_t *path)
 
     rc = CreateEnvironmentBlock(&env, token, FALSE);
     if (!rc) {
-        svc_printf(SVC_ERROR, L"CreateEnvironmentBlock failed (%d)",
+        uxen_err("CreateEnvironmentBlock failed (%d)",
                    GetLastError());
         return -1;
     }
@@ -129,14 +129,14 @@ create_process(HANDLE token, wchar_t *command_line, wchar_t *path)
                               &si, &pi);
     DestroyEnvironmentBlock(env);
     if (!rc) {
-        svc_printf(SVC_ERROR, L"CreateProcessAsUserW failed (%d)",
+        uxen_err("CreateProcessAsUserW failed (%d)",
                    GetLastError());
         return -1;
     }
 
     CloseHandle(pi.hProcess);
     CloseHandle(pi.hThread);
-    svc_printf(SVC_INFO, L"Created process with PID %d", pi.dwProcessId);
+    uxen_msg("Created process with PID %d", pi.dwProcessId);
 
     return 0;
 }
@@ -150,7 +150,7 @@ create_user_process(DWORD session_id, wchar_t *command_line, wchar_t *path)
 
     rc = WTSQueryUserToken(session_id, &token);
     if (!rc) {
-        svc_printf(SVC_ERROR, L"WTSQueryUserToken failed (%d)",
+        uxen_err("WTSQueryUserToken failed (%d)",
                    GetLastError());
         return -1;
     }
@@ -162,14 +162,14 @@ create_user_process(DWORD session_id, wchar_t *command_line, wchar_t *path)
                           TokenPrimary, &primary_token);
     CloseHandle(token);
     if (!rc) {
-        svc_printf(SVC_ERROR, L"DuplicateTokenEx failed (%d)", GetLastError());
+        uxen_err("DuplicateTokenEx failed (%d)", GetLastError());
         return -1;
     }
 
     ret = create_process(primary_token, command_line, path);
     CloseHandle(primary_token);
     if (ret) {
-        svc_printf(SVC_ERROR, L"Failed to create uxenclipboard process");
+        uxen_err("Failed to create uxenclipboard process");
         return ret;
     }
 
@@ -188,7 +188,7 @@ create_admin_process(DWORD session_id, wchar_t *command_line, wchar_t *path)
     rc = OpenProcessToken(proc, MAXIMUM_ALLOWED, &token);
     CloseHandle(proc);
     if (!rc) {
-        svc_printf(SVC_ERROR, L"OpenProcessToken failed (%d)", GetLastError());
+        uxen_err("OpenProcessToken failed (%d)", GetLastError());
         return -1;
     }
 
@@ -199,31 +199,30 @@ create_admin_process(DWORD session_id, wchar_t *command_line, wchar_t *path)
                           TokenPrimary, &primary_token);
     CloseHandle(token);
     if (!rc) {
-        svc_printf(SVC_ERROR, L"DuplicateTokenEx failed (%d)", GetLastError());
+        uxen_err("DuplicateTokenEx failed (%d)", GetLastError());
         return -1;
     }
 
     rc = SetTokenInformation(primary_token, TokenSessionId, &session_id,
                              sizeof (session_id));
     if (!rc) {
-        svc_printf(SVC_ERROR, L"SetTokenInformation failed (%d)",
+        uxen_err("SetTokenInformation failed (%d)",
                    GetLastError());
         return -1;
     }
 
     ret = set_high_integrity(primary_token);
     if (ret) {
-        svc_printf(SVC_ERROR, L"Failed to set process integrity level");
+        uxen_err("Failed to set process integrity level");
         return ret;
     }
 
-    svc_printf(SVC_INFO, L"Starting \"%s\" in session %lx", command_line,
-               session_id);
+    uxen_msg("Starting in session %d", session_id);
 
     ret = create_process(primary_token, command_line, path);
     CloseHandle(primary_token);
     if (ret) {
-        svc_printf(SVC_ERROR, L"Failed to create uxenevent process");
+        uxen_err("Failed to create uxenevent process");
         return ret;
     }
 
@@ -276,10 +275,10 @@ void session_connect(DWORD session_id)
     DWORD len = sizeof (session_type);
     HANDLE th;
 
-    svc_printf(SVC_INFO, L"connect session %d", (int)session_id);
+    uxen_msg("connect session %d", (int)session_id);
 
     if (session_id == 0) {
-        svc_printf(SVC_ERROR, L"Session 0, we want to wait for user to login.");
+        uxen_err("Session 0, we want to wait for user to login.");
         return;
     }
 
@@ -289,7 +288,7 @@ void session_connect(DWORD session_id)
                                     (char **)&session_type,
                                     &len);
     if (!rc) {
-        svc_printf(SVC_ERROR, L"WTSQuerySessionInformation(%d) failed (%d)",
+        uxen_err("WTSQuerySessionInformation(%d) failed (%d)",
                    session_id, GetLastError());
         return;
     }
@@ -300,7 +299,7 @@ void session_connect(DWORD session_id)
     th = CreateThread(NULL, 0, session_connect_worker,
                       (LPVOID)(uintptr_t)session_id, 0, NULL);
     if (!th) {
-        svc_printf(SVC_ERROR, L"Failed to start session connect worker thread (%d)",
+        uxen_err("Failed to start session connect worker thread (%d)",
                    GetLastError());
         return;
     }
@@ -321,14 +320,14 @@ process_lookup(DWORD session_id, wchar_t *basename)
         buf_len += 1024;
         procs = realloc(procs, buf_len);
         if (!procs) {
-            svc_printf(SVC_ERROR, L"Allocation failure (%d)",
+            uxen_err("Allocation failure (%d)",
                        GetLastError());
             return NULL;
         }
 
         rc = EnumProcesses(procs, buf_len, &len);
         if (!rc) {
-            svc_printf(SVC_ERROR, L"EnumProcesses failed (%d)",
+            uxen_err("EnumProcesses failed (%d)",
                        GetLastError());
             return NULL;
         }
@@ -351,7 +350,7 @@ process_lookup(DWORD session_id, wchar_t *basename)
 
         l = GetModuleBaseNameW(proc, NULL, name, 64);
         if (!l) {
-            svc_printf(SVC_ERROR, L"GetModuleBaseNameW failed (%d)",
+            uxen_err("GetModuleBaseNameW failed (%d)",
                        GetLastError());
             break;
         }
@@ -396,12 +395,12 @@ void session_disconnect(DWORD session_id)
 {
     HANDLE th;
 
-    svc_printf(SVC_INFO, L"disconnect session %d", (int)session_id);
+    uxen_msg("disconnect session %d", (int)session_id);
 
     th = CreateThread(NULL, 0, session_disconnect_worker,
                       (LPVOID)(uintptr_t)session_id, 0, NULL);
     if (!th) {
-        svc_printf(SVC_ERROR, L"Failed to start session disnect worker thread (%d)",
+        uxen_err("Failed to start session disnect worker thread (%d)",
                    GetLastError());
         return;
     }

@@ -1,5 +1,5 @@
 #
-# Copyright 2013-2015, Bromium, Inc.
+# Copyright 2013-2017, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -34,7 +34,6 @@ dist: $(patsubst %,install_%,$(INSTALL_FILES))
 
 UXENSVC_OBJS = uxensvc.o \
 	       session.o \
-	       logging.o \
 	       platform.o \
 	       msg.res
 
