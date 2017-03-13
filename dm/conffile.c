@@ -798,6 +798,7 @@ struct config_option config_options[] = {
     { "vcpus", co_set_integer_opt, &vm_vcpus },
     { "vga-memory-mapped", co_set_integer_opt, &vm_vga_mb_mapped },
     { "viridian", co_set_integer_opt, &vm_viridian },
+    { "viridian-crash-domain", co_set_integer_opt, &vm_viridian_crash_domain },
     { "virt-mode-change", co_set_integer_opt, &vm_virt_mode_change },
     { "vm-save", co_set_vm_save, NULL },
     { "vpt-align", co_set_boolean_opt, &vm_vpt_align },

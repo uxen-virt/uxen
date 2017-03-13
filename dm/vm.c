@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -60,6 +60,7 @@ static ioh_event vm_run_mode_change;
 static int vm_init_lk = 0;
 
 uint64_t vm_restricted_x86_emul = 0;
+uint64_t vm_viridian_crash_domain = 0;
 uint64_t vm_vpt_align = 0;
 uint64_t vm_vpt_coalesce_period = 0;
 
@@ -483,6 +484,8 @@ vm_init(const char *loadvm, int restore_mode)
 
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_RESTRICTED_X86_EMUL,
                      vm_restricted_x86_emul);
+    xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_VIRIDIAN_CRASH_DOMAIN,
+                     vm_viridian_crash_domain);
 
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_TIMER_MODE,
                      vm_timer_mode);

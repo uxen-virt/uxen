@@ -6,7 +6,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -378,6 +378,13 @@ int wrmsr_viridian_regs(uint32_t idx, uint64_t val)
         printk(XENLOG_G_INFO "vm%u: viridian-crash-notification: p%d = %"
                PRIx64"\n", current_domain_id(),
                (idx - VIRIDIAN_MSR_CRASH_P0), val);
+        if ( d->arch.hvm_domain.params[
+                HVM_PARAM_VIRIDIAN_CRASH_DOMAIN] == 1 ) {
+            printk(XENLOG_G_INFO "vm%u: viridian-crash-notification: crashing domain\n",
+                   current_domain_id());
+            __domain_crash(d);
+            return -1;
+        }
         break;
 
     default:

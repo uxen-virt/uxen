@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -13,6 +13,7 @@ extern dict vm_audio;
 extern uint64_t vm_restricted_pci_emul;
 extern uint64_t vm_restricted_vga_emul;
 extern uint64_t vm_restricted_x86_emul;
+extern uint64_t vm_viridian_crash_domain;
 extern uint64_t vm_vpt_align;
 extern uint64_t vm_vpt_coalesce_period;
 extern critical_section vm_pause_lock;

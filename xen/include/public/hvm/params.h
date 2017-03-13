@@ -20,7 +20,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -217,6 +217,8 @@
 
 #define HVM_PARAM_DM_FEATURES 46
 
-#define HVM_NR_PARAMS          47
+#define HVM_PARAM_VIRIDIAN_CRASH_DOMAIN 47
+
+#define HVM_NR_PARAMS          48
 
 #endif /* __XEN_PUBLIC_HVM_PARAMS_H__ */
