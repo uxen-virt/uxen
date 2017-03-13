@@ -456,6 +456,7 @@ typedef struct {
     uint64_t cr8;
     uint8_t u2[40];
     uint64_t efer; // XXX find out where EFER actually goes
+    uint64_t unknown;
 } PACKED kdd_ctrl_x86_64;
 
 typedef union {
