@@ -2,7 +2,7 @@
  *  uxen_debug.h
  *  uxen
  *
- * Copyright 2013-2016, Bromium, Inc.
+ * Copyright 2013-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -76,5 +76,14 @@ extern void _ud2(void);
         if (condition)                                          \
             KeBugCheckEx(DRIVER_VIOLATION, 0, 0, 0, __LINE__);  \
     } while (0)
+
+extern uint32_t crash_on;
+
+#define CRASH_ON_VA_ALLOC_FAILURE       (1UL << 0)
+#define CRASH_ON_PAGE_ALLOC_FAILURE     (1UL << 1)
+#define CRASH_ON_POOL_ALLOC_FAILURE     (1UL << 2)
+#define CRASH_ON_CONTIG_ALLOC_FAILURE   (1UL << 3)
+
+#define CRASH_ON(c) BUG_ON(!!((c) & crash_on))
 
 #endif  /* _UXEN_DEBUG_H_ */

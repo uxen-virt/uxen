@@ -2,7 +2,7 @@
  *  uxen_desc.h
  *  uxen
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -220,6 +220,9 @@ struct uxen_init_desc {
     uint64_t opt_hvmonoff;
 #     define UXEN_INIT_opt_hvmonoff       		(1ULL << 25)
 #     define UXEN_INIT_opt_hvmonoff_MASK                mask0
+    uint64_t opt_crash_on;
+#     define UXEN_INIT_opt_crash_on			(1ULL << 26)
+#     define UXEN_INIT_opt_crash_on_MASK                mask0
 };
 
 #endif

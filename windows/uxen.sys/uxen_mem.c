@@ -278,6 +278,7 @@ mem_init(void)
         NonPagedPool, sizeof(MDL) +
         sizeof(PFN_NUMBER) * map_page_range_max_nr, UXEN_POOL_TAG);
     if (!map_page_range_mdl) {
+        CRASH_ON(CRASH_ON_POOL_ALLOC_FAILURE);
         ret = ENOMEM;
         goto out;
     }
@@ -292,6 +293,7 @@ mem_init(void)
         NonPagedPool, sizeof(MDL) +
         sizeof(PFN_NUMBER) * INCREASE_RESERVE_BATCH, UXEN_POOL_TAG);
     if (!idle_free_mfns_mdl) {
+        CRASH_ON(CRASH_ON_POOL_ALLOC_FAILURE);
         ret = ENOMEM;
         goto out;
     }
@@ -346,6 +348,8 @@ _kernel_malloc_unchecked(size_t size, int line)
     p = ExAllocatePoolWithTag(NonPagedPool, size, tag);
     if (p)
         memset(p, 0, size);
+    else
+        CRASH_ON(CRASH_ON_POOL_ALLOC_FAILURE);
 
     return p;
 }
@@ -440,6 +444,7 @@ kernel_alloc_mfn(uxen_pfn_t *mfn)
                                   MM_ALLOCATE_FULLY_REQUIRED);
     if (mdl == NULL) {
         fail_msg("MmAllocatePagesForMdlEx failed");
+        CRASH_ON(CRASH_ON_PAGE_ALLOC_FAILURE);
         goto out;
     }
 
@@ -482,6 +487,8 @@ _populate_frametable(uxen_pfn_t mfn, uxen_pfn_t pmfn)
             mdl = MmAllocatePagesForMdlEx(low_address, high_address, skip_bytes,
                                           FRAMETABLE_MFNS_BATCH << PAGE_SHIFT,
                                           MmCached, 0);
+            if (!mdl)
+                CRASH_ON(CRASH_ON_PAGE_ALLOC_FAILURE);
             KeAcquireGuardedMutex(&populate_frametable_mutex);
 
             if (!nr_frametable_mfns) {
@@ -722,6 +729,7 @@ kernel_malloc_mfns(uint32_t nr_pages, uxen_pfn_t *mfn_list, uint32_t max_mfn)
                                       MM_ALLOCATE_NO_WAIT);
         if (mdl == NULL || MmGetMdlByteCount(mdl) < PAGE_SIZE) {
             fail_msg("MmAllocatePagesForMdlEx failed: %d pages", k);
+            CRASH_ON(CRASH_ON_PAGE_ALLOC_FAILURE);
             goto out;
         }
 
@@ -790,6 +798,8 @@ kernel_alloc_contiguous(uint32_t size)
 #endif
 
     va = MmAllocateContiguousMemory(size, highest_contiguous);
+    if (size > 0 && !va)
+        CRASH_ON(CRASH_ON_CONTIG_ALLOC_FAILURE);
 
     ret = kernel_query_mfns(va, 1, &mfn, 0);
     if (ret)
@@ -843,6 +853,7 @@ kernel_alloc_va(uint32_t num)
     va = MmAllocateMappingAddress(num << PAGE_SHIFT, UXEN_MAPPING_TAG);
     if (va == NULL) {
         fail_msg("MmAllocateMappingAddress failed: %d pages", num);
+        CRASH_ON(CRASH_ON_VA_ALLOC_FAILURE);
         return NULL;
     }
 
@@ -851,6 +862,7 @@ kernel_alloc_va(uint32_t num)
         UXEN_POOL_TAG);
     if (mdl == NULL) {
         fail_msg("ExAllocatePoolWithTag failed: %d pfns", num);
+        CRASH_ON(CRASH_ON_POOL_ALLOC_FAILURE);
         goto out;
     }
     memset(mdl, 0, sizeof(*mdl));
@@ -1700,6 +1712,7 @@ user_malloc(size_t size, enum user_mapping_type type,
                                       MM_ALLOCATE_FULLY_REQUIRED);
     if (um->mdl == NULL || MmGetMdlByteCount(um->mdl) < size) {
         fail_msg("MmAllocatePagesForMdlEx failed: %d pages", nr_pages);
+        CRASH_ON(CRASH_ON_PAGE_ALLOC_FAILURE);
         goto out;
     }
 

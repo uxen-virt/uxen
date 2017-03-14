@@ -976,6 +976,11 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
         memcpy(&uid, _uid, uid_len);
     uid_len = sizeof(uid);
 
+    if (uid.UXEN_INIT_opt_crash_on_MASK & UXEN_INIT_opt_crash_on)
+        crash_on = uid.opt_crash_on;
+    if (crash_on)
+        printk("set crash_on: %x\n", crash_on);
+
     is_checked = PsGetVersion(&major_version, &minor_version, &build_number,
                               NULL);
 

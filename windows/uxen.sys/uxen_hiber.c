@@ -2,7 +2,7 @@
  *  uxen_hiber.c
  *  uxen
  *
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2017, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -276,6 +276,7 @@ enable_hooking()
         if (!page_addr) {
             fail_msg("failed to allocate %x bytes below %08x for stub region",
                      stub_size, range_size);
+            CRASH_ON(CRASH_ON_CONTIG_ALLOC_FAILURE);
             ret = -1;
             goto out;
         }
