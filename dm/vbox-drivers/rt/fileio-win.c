@@ -26,7 +26,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -942,7 +942,7 @@ RTDECL(int) RTFileMoveUcs(const wchar_t *pszSrc, const wchar_t *pszDst, unsigned
                                    : MOVEFILE_COPY_ALLOWED,
                                    RTFS_TYPE_FILE);
 
-    LogFlow(("RTFileMove(%p:{%s}, %p:{%s}, %#x): returns 0x%x\n",
+    LogFlow(("RTFileMove(%p:{%ls}, %p:{%ls}, %#x): returns 0x%x\n",
              pszSrc, pszSrc, pszDst, pszDst, fMove, rc));
     return rc;
 }
