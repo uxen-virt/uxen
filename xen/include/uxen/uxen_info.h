@@ -2,7 +2,7 @@
  *  uxen_info.h
  *  uxen
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -181,6 +181,7 @@ struct /* __WINPACKED__ */ uxen_info {
     void (__interface_fn *ui_set_timer_vcpu)(struct vm_vcpu_info_shared *,
 					     uint64_t);
     uint32_t ui_unixtime_generation;
+    uint32_t ui_exception_event_all;
     uint64_t (__interface_fn *ui_get_unixtime)(void);
     uint64_t ui_host_counter;
     uint64_t ui_host_counter_tsc;

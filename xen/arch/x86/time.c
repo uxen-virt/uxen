@@ -11,7 +11,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -975,12 +975,12 @@ void update_domain_rtc(void)
     rcu_read_lock(&domlist_read_lock);
 
     for_each_domain ( d )
-        if ( is_hvm_domain(d) ) {
+        if ( is_hvm_domain(d) )
             rtc_update_clock(d);
-            hostsched_notify_exception(d);
-        }
 
     rcu_read_unlock(&domlist_read_lock);
+
+    uxen_info->ui_exception_event_all = 1;
 }
 
 void domain_set_time_offset(struct domain *d, int32_t time_offset_seconds)

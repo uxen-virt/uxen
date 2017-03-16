@@ -201,6 +201,20 @@ update_ui_host_counter(void)
 }
 
 static void
+uxen_exception_event_all(void)
+{
+    affinity_t aff;
+    struct vm_info *vmi, *tvmi;
+
+    aff = uxen_lock();
+    RB_TREE_FOREACH_SAFE(vmi, &uxen_devext->de_vm_info_rbtree, tvmi) {
+        if (vmi->vmi_ioemu_exception_event.id != -1)
+            signal_notification_event(&vmi->vmi_ioemu_exception_event);
+    }
+    uxen_unlock(aff);
+}
+
+static void
 uxen_idle_thread_fn(void *context)
 {
     unsigned int cpu = (unsigned int)context;
@@ -293,8 +307,14 @@ uxen_idle_thread_fn(void *context)
         if (OSDecrementAtomic(&uxen_devext->de_executing) == 1)
             fast_event_signal(&uxen_devext->de_suspend_event);
         uxen_pages_decrease_reserve(i, increase);
-        if (!cpu && idle_free_list && idle_free_free_list())
-            signal_idle_thread(cpu);
+        if (!cpu) {
+            if (idle_free_list && idle_free_free_list())
+                signal_idle_thread(cpu);
+            if (uxen_info->ui_exception_event_all) {
+                uxen_info->ui_exception_event_all = 0;
+                uxen_exception_event_all();
+            }
+        }
     }
 
   out:
