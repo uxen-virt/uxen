@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -200,7 +200,13 @@ gh_v4v_create_ring(v4v_addr_t *dst, domid_t partner)
     if (err != 0) {
         uxen_v4v_err("V4VOP_create_ring (vm%u:%x vm%u) failed err %d",
                      id.addr.domain, id.addr.port, id.partner, err);
-        return STATUS_UNSUCCESSFUL;
+        switch (err) {
+        case -ENOENT:
+            /* domain doesn't exist anymore, notfiy connection closed */
+            return STATUS_VIRTUAL_CIRCUIT_CLOSED;
+        default:
+            return STATUS_UNSUCCESSFUL;
+        }
     }
 
     return STATUS_SUCCESS;
