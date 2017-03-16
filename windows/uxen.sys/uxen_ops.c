@@ -2386,6 +2386,7 @@ uxen_power_state(uint32_t suspend)
         }
 #endif /* __i386__ */
     } else {
+        affinity_t aff;
         preemption_t i;
         NTSTATUS status;
 
@@ -2401,9 +2402,11 @@ uxen_power_state(uint32_t suspend)
         idle_thread_suspended = suspend;
 
         fill_vframes();
+        aff = uxen_lock();
         disable_preemption(&i);
         try_call(, , uxen_do_suspend_xen_prepare);
         enable_preemption(i);
+        uxen_unlock(aff);
 
         quiesce_execution();
 

@@ -1908,6 +1908,7 @@ uxen_power_state(uint32_t suspend)
         resume_requested = 1;
         signal_idle_thread(0);
     } else {
+        affinity_t aff;
         preemption_t i;
         int ret;
 
@@ -1923,9 +1924,11 @@ uxen_power_state(uint32_t suspend)
         idle_thread_suspended = suspend;
 
         fill_vframes();
+        aff = uxen_lock();
         disable_preemption(&i);
         try_call(, , uxen_do_suspend_xen_prepare);
         enable_preemption(i);
+        uxen_unlock(aff);
 
         quiesce_execution();
 
