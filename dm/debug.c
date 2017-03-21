@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -109,6 +109,7 @@ debug_vprintf(const char *fmt, va_list ap)
     time_t ltime;
     struct timeval tv;
     char prefix[32];
+    int print_prefix = 0;
     char *buf;
     static int had_newline = 1;
     static int last_sec = -1;
@@ -131,21 +132,30 @@ debug_vprintf(const char *fmt, va_list ap)
         last_sec = (int)tv.tv_sec;
 	if (tm) {
 	    log_prefix_fn(prefix, sizeof(prefix), tm, &tv);
-	    fputs(prefix, stderr);
+            print_prefix = 1;
 	}
-	had_newline = 0;
     }
 
+    had_newline = fmt[strlen(fmt) - 1] == '\n';
+
     vasprintf(&buf, fmt, ap);
+
+    if (buf && print_prefix) {
+        char *prefixed_buf = NULL;
+
+        asprintf(&prefixed_buf, "%s%s", prefix, buf);
+        free(buf);
+        buf = prefixed_buf;
+    }
+
     if (buf) {
         fwrite(buf, strlen(buf), 1, stderr);
         free(buf);
     } else {
+        if (print_prefix)
+            fputs(prefix, stderr);
         vfprintf(stderr, fmt, ap2); /* slowpath on malloc failure. */
     }
-
-    if (fmt[strlen(fmt) - 1] == '\n')
-	had_newline = 1;
 
 #ifdef MONITOR
     monitor_vprintf(NULL, fmt, ap_mon);
