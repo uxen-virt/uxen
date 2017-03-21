@@ -737,6 +737,7 @@ struct config_option config_options[] = {
         &clipboard_formats_whitelist_host2vm },
     { "clipboard-formats-whitelist-vm2host", co_set_string_opt,
         &clipboard_formats_whitelist_vm2host },
+    { "cuckoo-debug", co_set_boolean_opt, &cuckoo_debug_on },
     { "debugkey-level", co_set_integer_opt, &debugkey_level },
     { "deferred-clipboard", co_set_boolean_opt, &deferred_clipboard },
     { "device", co_set_device, NULL },

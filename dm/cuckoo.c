@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -37,6 +37,8 @@
 
 static const size_t idx_size = (128 << 20);
 static const size_t pin_size = (128 << 20);
+
+uint64_t cuckoo_debug_on = 0;
 
 #ifdef _WIN32
 static inline double rtc(void)
@@ -548,6 +550,7 @@ struct io_slot {
     int size;
     int done;
 #ifdef _WIN32
+    LONG io_queued;
     OVERLAPPED o;
 #endif
 };
@@ -679,6 +682,7 @@ decompression_thread(void *_c)
     int i;
     int last_tpfs = 0;
 
+    cuckoo_debug("decompression thread start %d\n", c->tid);
     pages = ccb->get_buffer(opaque, c->tid, &max);
     pfns = ccb->malloc(opaque, sizeof(pfns[0]) * max);
 
@@ -690,6 +694,7 @@ decompression_thread(void *_c)
         int start = 0;
 
         thread_event_wait(&s->metadata_ready);
+        cuckoo_debug("detected metadata ready\n");
         if (s->done) {
             thread_event_set(&s->processed);
             break;
@@ -730,6 +735,8 @@ decompression_thread(void *_c)
                 Wwarn("GetOverlappedResult failed line=%d", __LINE__);
                 assert(0);
             }
+            InterlockedDecrement(&s->io_queued);
+            cuckoo_debug("got overlapped io result, slot_sz=%d, bytes=%d\n", s->size, (int)got);
 #endif
         }
 
@@ -830,6 +837,8 @@ skip_template_ident:
 
     ccb->free(opaque, pfns);
     __sync_synchronize();
+    cuckoo_debug("decompression thread stop %d\n", c->tid);
+
     return 0;
 }
 
@@ -849,6 +858,7 @@ compression_thread(void *_c)
     struct work_unit *u;
     uint32_t buffer_offset;
 
+    cuckoo_debug("compression thread start %d\n", c->tid);
     for (;;) {
         int idx = __sync_fetch_and_add(c->idx, 1);
         int num_pfns = 0;
@@ -897,6 +907,8 @@ compression_thread(void *_c)
     }
 
     __sync_synchronize();
+    cuckoo_debug("compression thread stop %d\n", c->tid);
+
     return 0;
 }
 
@@ -909,6 +921,8 @@ read_slot(struct filebuf *fb, struct io_slot *s, uint32_t start)
     memset(&s->o, 0, sizeof(OVERLAPPED));
     s->o.Offset = start;
     s->o.hEvent = s->data_ready;
+    InterlockedIncrement(&s->io_queued);
+    cuckoo_debug("read slot offset %d size %d\n", start, s->size);
     if (!ReadFile(fb->file, s->buffer, s->size, NULL, &s->o)) {
         if (GetLastError() != ERROR_IO_PENDING) {
             Werr(1, "%s:%d ReadFile fails", __FUNCTION__, __LINE__);
@@ -937,6 +951,8 @@ write_slot(struct filebuf *fb, struct io_slot *s, uint32_t start)
     memset(&s->o, 0, sizeof(s->o));
     s->o.Offset = start;
     s->o.hEvent = s->data_ready;
+
+    cuckoo_debug("write slot offset %d size %d\n", start, s->size);
     if (!WriteFile(fb->file, s->buffer, s->size, NULL, &s->o)) {
         if (GetLastError() != ERROR_IO_PENDING) {
             Wwarn("WriteFilefails");
@@ -995,6 +1011,7 @@ execute_plan(struct cuckoo_context *cc,
     struct io_slot slots[num_slots];
     memset(slots, 0, sizeof(slots));
 
+    cuckoo_debug("executing plan\n");
     for (i = 0; i < num_slots; ++i) {
         thread_event_init(&slots[i].metadata_ready);
         thread_event_init(&slots[i].data_ready);
@@ -1079,6 +1096,7 @@ execute_plan(struct cuckoo_context *cc,
                 file_offset += s->size;
             }
         }
+        cuckoo_debug("set metadata ready\n");
         thread_event_set(&s->metadata_ready);
         ++outstanding;
     }
@@ -1086,12 +1104,16 @@ execute_plan(struct cuckoo_context *cc,
     for (i = 0; i < CUCKOO_NUM_THREADS; ++i) {
         wait_thread(tids[i]);
         close_thread_handle(tids[i]);
+        cuckoo_debug("finished wait for %d\n", i);
     }
     for (i = 0; i < num_slots; ++i) {
         struct io_slot *s = &slots[i];
         thread_event_close(&s->metadata_ready);
         thread_event_close(&s->data_ready);
         thread_event_close(&s->processed);
+
+        if (s->io_queued)
+            debug_printf("unexpected outstanding i/o (%d) on slot %d\n", (int)s->io_queued, i);
     }
 
     debug_printf("%s done, cancelled=%d\n", __FUNCTION__, cancelled);

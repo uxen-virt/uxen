@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -21,6 +21,14 @@
 typedef HANDLE cuckoo_handle_t;
 #else
 typedef int cuckoo_handle_t;
+#endif
+
+extern uint64_t cuckoo_debug_on;
+
+#ifdef _WIN32
+ #define cuckoo_debug(fmt, ...) { if (cuckoo_debug_on) debug_printf("CUCKOO:%5x:" fmt, (int)GetCurrentThreadId(), ##__VA_ARGS__); }
+#else
+ #define cuckoo_debug(fmt, ...)
 #endif
 
 struct filebuf;

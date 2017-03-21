@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -39,12 +39,21 @@ struct ctx {
 static void *alloc_mem(void *opaque, size_t sz)
 {
     struct ctx *ctx = (struct ctx *) opaque;
-    return sz ? priv_malloc(ctx->heap, sz) : NULL;
+    void *p;
+
+    cuckoo_debug("alloc heap %p size %d\n", ctx->heap, (int)sz);
+    p = sz ? priv_malloc(ctx->heap, sz) : NULL;
+    cuckoo_debug("alloc heap %p size %d DONE @ %p\n", ctx->heap, (int)sz, p);
+
+    return p;
 }
 
 static void free_mem(void *opaque, void *ptr)
 {
     struct ctx *ctx = (struct ctx *) opaque;
+
+    cuckoo_debug("free heap %p addr %p\n", ctx->heap, ptr);
+
     priv_free(ctx->heap, ptr);
 }
 
@@ -360,6 +369,8 @@ void cuckoo_uxen_close(struct cuckoo_context *cuckoo_context, void *opaque)
 {
     struct ctx *ctx = opaque;
     int i;
+
+    cuckoo_debug("uxen close\n");
 
     for (i = 0; i < CUCKOO_NUM_THREADS; ++i) {
         struct thread_ctx *tc = &ctx->tcs[i];
