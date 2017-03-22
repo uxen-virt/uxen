@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -434,7 +434,7 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
 #define MEM_BUFFER_SIZE (MAX_BATCH_SIZE * PAGE_SIZE)
     xen_memory_capture_gpfn_info_t *gpfn_info_list = NULL;
     uint64_t mem_pos = 0, pos;
-    struct page_offset_info poi;
+    struct page_offset_info poi = { 0 };
     int rezero_nr = 0;
     xen_pfn_t *rezero_pfns = NULL;
     struct xc_save_vm_page_offsets s_vm_page_offsets;
@@ -872,6 +872,7 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
                                        MEM_BUFFER_SIZE >> PAGE_SHIFT);
     free(zero_bitmap);
     free(zero_bitmap_compressed);
+    free(poi.pfn_off);
     free(rezero_pfns);
     free(hashes);
     free(pfn_batch);
