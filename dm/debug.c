@@ -138,12 +138,14 @@ debug_vprintf(const char *fmt, va_list ap)
 
     had_newline = fmt[strlen(fmt) - 1] == '\n';
 
-    vasprintf(&buf, fmt, ap);
+    if (vasprintf(&buf, fmt, ap) < 0)
+        buf = NULL;
 
     if (buf && print_prefix) {
         char *prefixed_buf = NULL;
 
-        asprintf(&prefixed_buf, "%s%s", prefix, buf);
+        if (asprintf(&prefixed_buf, "%s%s", prefix, buf) < 0)
+            prefixed_buf = NULL;
         free(buf);
         buf = prefixed_buf;
     }
