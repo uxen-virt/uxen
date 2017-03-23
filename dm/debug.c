@@ -110,7 +110,7 @@ debug_vprintf(const char *fmt, va_list ap)
     struct timeval tv;
     char prefix[32];
     int print_prefix = 0;
-    char *buf;
+    char *buf = NULL;
     static int had_newline = 1;
     static int last_sec = -1;
     int flush = 0;
