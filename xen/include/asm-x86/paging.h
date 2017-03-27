@@ -130,7 +130,7 @@ struct paging_mode {
     int           (*update_cr3            )(struct vcpu *v, int do_locking);
     int           (*update_paging_modes   )(struct vcpu *v);
     void          (*write_p2m_entry       )(struct vcpu *v, unsigned long gfn,
-                                            l1_pgentry_t *p, mfn_t table_mfn, 
+                                            l1_pgentry_t *p,
                                             l1_pgentry_t new, 
                                             unsigned int level);
     int           (*write_guest_entry     )(struct vcpu *v, intpte_t *p,
@@ -377,7 +377,7 @@ static inline void safe_write_pte(l1_pgentry_t *p, l1_pgentry_t new)
 struct p2m_domain;
 
 void paging_write_p2m_entry(struct p2m_domain *p2m, unsigned long gfn, 
-                            l1_pgentry_t *p, mfn_t table_mfn,
+                            l1_pgentry_t *p,
                             l1_pgentry_t new, unsigned int level);
 
 /* Called from the guest to indicate that the a process is being

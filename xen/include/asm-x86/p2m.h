@@ -26,7 +26,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -383,7 +383,7 @@ struct p2m_domain {
     
     void               (*write_p2m_entry)(struct p2m_domain *p2m,
                                           unsigned long gfn, l1_pgentry_t *p,
-                                          mfn_t table_mfn, l1_pgentry_t new,
+                                          l1_pgentry_t new,
                                           unsigned int level);
 
     int                (*ro_update_l2_entry)(struct p2m_domain *p2m,

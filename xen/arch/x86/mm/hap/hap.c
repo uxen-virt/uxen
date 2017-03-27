@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -1046,7 +1046,7 @@ DEBUG();
 
 static void
 hap_write_p2m_entry(struct vcpu *v, unsigned long gfn, l1_pgentry_t *p,
-                    mfn_t table_mfn, l1_pgentry_t new, unsigned int level)
+                    l1_pgentry_t new, unsigned int level)
 {
     struct domain *d = v->domain;
     uint32_t old_flags;

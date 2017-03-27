@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -973,7 +973,7 @@ void paging_update_nestedmode(struct vcpu *v)
 #endif  /* __UXEN__ */
 
 void paging_write_p2m_entry(struct p2m_domain *p2m, unsigned long gfn,
-                            l1_pgentry_t *p, mfn_t table_mfn,
+                            l1_pgentry_t *p,
                             l1_pgentry_t new, unsigned int level)
 {
     struct domain *d = p2m->domain;
@@ -982,8 +982,7 @@ void paging_write_p2m_entry(struct p2m_domain *p2m, unsigned long gfn,
         v = d->vcpu ? d->vcpu[0] : NULL;
     if ( likely(v && paging_mode_enabled(d) && paging_get_hostmode(v) != NULL) )
     {
-        return paging_get_hostmode(v)->write_p2m_entry(v, gfn, p, table_mfn,
-                                                       new, level);
+        return paging_get_hostmode(v)->write_p2m_entry(v, gfn, p, new, level);
     }
     else
         safe_write_pte(p, new);
