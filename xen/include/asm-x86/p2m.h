@@ -375,16 +375,23 @@ struct p2m_domain {
                                        unsigned int *page_order);
     mfn_t              (*parse_entry)(void *table, unsigned long index,
                                       p2m_type_t *t, p2m_access_t* a);
+    int                (*write_entry)(struct p2m_domain *p2m, void *table,
+                                      unsigned long gfn, mfn_t mfn, int target,
+                                      p2m_type_t p2mt, p2m_access_t p2ma,
+                                      int *needs_sync);
     int                (*split_super_page_one)(struct p2m_domain *p2m,
-                                               void *entry, int order);
+                                               void *entry, unsigned long gpfn,
+                                               int order);
     void               (*change_entry_type_global)(struct p2m_domain *p2m,
                                                    p2m_type_t ot,
                                                    p2m_type_t nt);
     
+#ifndef __UXEN__
     void               (*write_p2m_entry)(struct p2m_domain *p2m,
                                           unsigned long gfn, l1_pgentry_t *p,
                                           l1_pgentry_t new,
                                           unsigned int level);
+#endif  /* __UXEN__ */
 
     int                (*ro_update_l2_entry)(struct p2m_domain *p2m,
                                              unsigned long gfn, int read_only,
@@ -601,6 +608,11 @@ p2m_pod_offline_or_broken_hit(struct page_info *p);
 void
 p2m_pod_offline_or_broken_replace(struct page_info *p);
 
+/* Clone one l1 table in p2m */
+int
+p2m_clone_l1(struct p2m_domain *op2m, struct p2m_domain *p2m,
+             unsigned long gpfn, void *entry, int needs_sync);
+
 /* Clone p2m */
 int
 p2m_clone(struct p2m_domain *p2m, struct domain *nd);
@@ -793,8 +805,10 @@ void p2m_flush(struct vcpu *v, struct p2m_domain *p2m);
 /* Flushes all nested p2m tables */
 void p2m_flush_nestedp2m(struct domain *d);
 
+#ifndef __UXEN_NOT_YET__
 void nestedp2m_write_p2m_entry(struct p2m_domain *p2m, unsigned long gfn,
     l1_pgentry_t *p, mfn_t table_mfn, l1_pgentry_t new, unsigned int level);
+#endif  /* __UXEN_NOT_YET__ */
 
 int
 p2m_clear_gpfn_from_mapcache(struct p2m_domain *p2m, unsigned long gfn,

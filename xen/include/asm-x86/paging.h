@@ -129,10 +129,12 @@ struct paging_mode {
                                             unsigned int *page_order);
     int           (*update_cr3            )(struct vcpu *v, int do_locking);
     int           (*update_paging_modes   )(struct vcpu *v);
+#ifndef __UXEN__
     void          (*write_p2m_entry       )(struct vcpu *v, unsigned long gfn,
                                             l1_pgentry_t *p,
                                             l1_pgentry_t new, 
                                             unsigned int level);
+#endif  /* __UXEN__ */
     int           (*write_guest_entry     )(struct vcpu *v, intpte_t *p,
                                             intpte_t new, mfn_t gmfn);
     int           (*cmpxchg_guest_entry   )(struct vcpu *v, intpte_t *p,
@@ -376,9 +378,11 @@ static inline void safe_write_pte(l1_pgentry_t *p, l1_pgentry_t new)
  * we are writing. */
 struct p2m_domain;
 
+#ifndef __UXEN__
 void paging_write_p2m_entry(struct p2m_domain *p2m, unsigned long gfn, 
                             l1_pgentry_t *p,
                             l1_pgentry_t new, unsigned int level);
+#endif  /* __UXEN__ */
 
 /* Called from the guest to indicate that the a process is being
  * torn down and its pagetables will soon be discarded */

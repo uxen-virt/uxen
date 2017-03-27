@@ -203,7 +203,7 @@ static void ept_free_entry(struct p2m_domain *p2m, ept_entry_t *ept_entry, int l
 
 static int
 _ept_split_super_page(struct p2m_domain *p2m, ept_entry_t *ept_entry,
-                      int level, int target)
+                      unsigned long gpfn, int level, int target)
 {
     ept_entry_t new_ept, *table;
     uint64_t trunk;
@@ -217,6 +217,17 @@ _ept_split_super_page(struct p2m_domain *p2m, ept_entry_t *ept_entry,
 
     if ( !ept_set_middle_entry(p2m, &new_ept) )
         return 0;
+
+    if (level == 1 &&
+        p2m->domain->clone_of &&
+        !(p2m->domain->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] &
+          (HVM_PARAM_CLONE_L1_lazy_populate | HVM_PARAM_CLONE_L1_dynamic))) {
+        struct p2m_domain *op2m = p2m_get_hostp2m(p2m->domain->clone_of);
+        rv = !p2m_clone_l1(op2m, p2m, gpfn & ~((1UL << EPT_TABLE_ORDER) - 1),
+                           &new_ept, 0);
+        if (rv)
+            goto out;
+    }
 
     table = map_domain_page(new_ept.mfn);
     perfc_incr(pc11);
@@ -256,13 +267,23 @@ _ept_split_super_page(struct p2m_domain *p2m, ept_entry_t *ept_entry,
 
         ASSERT(is_epte_superpage(epte));
 
-        rv = _ept_split_super_page(p2m, epte, level - 1, target);
+        rv = _ept_split_super_page(p2m, epte, gpfn + i * trunk,
+                                   level - 1, target);
         if (!rv)
             break;
     }
 
     unmap_domain_page(table);
 
+    if (level == 1 &&
+        p2m_is_pod(ept_entry->sa_p2mt) &&
+        !p2m_is_pod(new_ept.sa_p2mt)) {
+        ASSERT(!is_template_domain(p2m->domain));
+        atomic_dec(&p2m->domain->clone.l1_pod_pages);
+        atomic_add(1 << PAGE_ORDER_2M, &p2m->domain->pod_pages);
+    }
+
+  out:
     /* Even failed we should install the newly allocated ept page. */
     *ept_entry = new_ept;
 
@@ -271,7 +292,7 @@ _ept_split_super_page(struct p2m_domain *p2m, ept_entry_t *ept_entry,
 
 static int
 ept_split_super_page(struct p2m_domain *p2m, ept_entry_t *ept_entry,
-                     int level, int target)
+                     unsigned long gpfn, int level, int target)
 {
     ept_entry_t split_ept_entry;
     int rv;
@@ -281,17 +302,10 @@ ept_split_super_page(struct p2m_domain *p2m, ept_entry_t *ept_entry,
 
     split_ept_entry = atomic_read_ept_entry(ept_entry);
 
-    rv = _ept_split_super_page(p2m, &split_ept_entry, level, target);
+    rv = _ept_split_super_page(p2m, &split_ept_entry, gpfn, level, target);
     if (!rv) {
         ept_free_entry(p2m, &split_ept_entry, level);
         goto out;
-    }
-
-    if (p2m_is_pod(ept_entry->sa_p2mt) &&
-        !p2m_is_pod(split_ept_entry.sa_p2mt)) {
-        ASSERT(!is_template_domain(p2m->domain));
-        atomic_dec(&p2m->domain->clone.l1_pod_pages);
-        atomic_add(1 << PAGE_ORDER_2M, &p2m->domain->pod_pages);
     }
 
     /* now install the newly split ept sub-tree */
@@ -310,7 +324,8 @@ ept_split_super_page(struct p2m_domain *p2m, ept_entry_t *ept_entry,
 }
 
 static int
-ept_split_super_page_one(struct p2m_domain *p2m, void *entry, int order)
+ept_split_super_page_one(struct p2m_domain *p2m, void *entry,
+                         unsigned long gpfn, int order)
 {
     ept_entry_t *ept_entry = (ept_entry_t *)entry;
     int level;
@@ -319,7 +334,7 @@ ept_split_super_page_one(struct p2m_domain *p2m, void *entry, int order)
     if (!level)
         return 1;
 
-    return !ept_split_super_page(p2m, ept_entry, level, level - 1);
+    return !ept_split_super_page(p2m, ept_entry, gpfn, level, level - 1);
 }
 
 /* Take the currently mapped table, find the corresponding gfn entry,
@@ -384,6 +399,92 @@ static int ept_next_level(struct p2m_domain *p2m, bool_t read_only,
     return GUEST_TABLE_NORMAL_PAGE;
 }
 
+int
+ept_write_entry(struct p2m_domain *p2m, void *table, unsigned long gfn,
+                mfn_t mfn, int target, p2m_type_t p2mt, p2m_access_t p2ma,
+                int *needs_sync)
+{
+    struct domain *d = p2m->domain;
+    unsigned long index = (gfn >> (target * EPT_TABLE_ORDER)) &
+        ((1UL << PAGETABLE_ORDER) - 1);
+    bool_t direct_mmio = p2m_is_mmio_direct(p2mt);
+    uint8_t ipat = 0;
+    ept_entry_t *ept_entry = (ept_entry_t *)table + index;
+    ept_entry_t old_entry;
+    ept_entry_t new_entry = { .epte = 0 };
+
+    /* Read-then-write is OK because we hold the p2m lock. */
+    old_entry = *ept_entry;
+
+    if (mfn_valid_page(mfn) || direct_mmio
+#ifndef __UXEN__
+        || p2m_is_paged(p2mt)
+        || p2m_is_paging_in_start(p2mt)
+#endif  /* __UXEN__ */
+        || p2m_is_pod(p2mt))
+    {
+        /* Construct the new entry, and then write it once */
+        new_entry.emt = epte_get_entry_emt(d, gfn, mfn, &ipat, direct_mmio);
+
+        new_entry.ipat = ipat;
+        new_entry.sp = target ? 1 : 0;
+        new_entry.sa_p2mt = p2mt;
+        new_entry.access = p2ma;
+#ifndef __UXEN__
+        new_entry.rsvd2_snp = (iommu_enabled && iommu_snoop);
+#else   /* __UXEN__ */
+        new_entry.rsvd2_snp = 0;
+#endif  /* __UXEN__ */
+
+        new_entry.mfn = mfn_x(mfn);
+
+#ifndef __UXEN__
+        if ( old_entry.mfn == new_entry.mfn )
+            need_modify_vtd_table = 0;
+#endif  /* __UXEN__ */
+
+        ept_p2m_type_to_flags(&new_entry, p2mt, p2ma);
+    }
+
+    /* No need to flush if the old entry wasn't valid */
+    if (!is_epte_present(ept_entry))
+        *needs_sync = 0;
+
+    atomic_write_ept_entry(ept_entry, new_entry);
+    if (*needs_sync) {
+        if (ax_pv_ept)
+            ax_pv_ept_write(p2m, target, gfn, new_entry.epte, *needs_sync);
+        if (xen_pv_ept)
+            xen_pv_ept_write(p2m, target, gfn, new_entry.epte, *needs_sync);
+        if (ax_pv_ept || xen_pv_ept)
+            *needs_sync = 0;
+    }
+
+    if (!target && old_entry.mfn != mfn_x(mfn)) {
+        if (mfn_valid_page_or_vframe(mfn) &&
+            mfn_x(mfn) != mfn_x(shared_zero_page))
+            get_page_fast(mfn_to_page(mfn), NULL);
+        if (__mfn_valid_page_or_vframe(old_entry.mfn) &&
+            old_entry.mfn != mfn_x(shared_zero_page)) {
+            if (old_entry.sa_p2mt == p2m_populate_on_demand)
+                put_page_destructor(__mfn_to_page(old_entry.mfn),
+                                    p2m_pod_free_page, d, gfn);
+            else
+                put_page(__mfn_to_page(old_entry.mfn));
+        }
+    }
+    if (!target && old_entry.epte != new_entry.epte)
+        p2m_update_pod_counts(d, old_entry.mfn, old_entry.sa_p2mt,
+                              new_entry.mfn, new_entry.sa_p2mt);
+
+    /* Track the highest gfn for which we have ever had a valid mapping */
+    if (mfn_x(mfn) != INVALID_MFN &&
+        (gfn + (1UL << (target * EPT_TABLE_ORDER)) - 1 > p2m->max_mapped_pfn))
+        p2m->max_mapped_pfn = gfn + (1UL << (target * EPT_TABLE_ORDER)) - 1;
+
+    return 0;
+}
+
 /*
  * ept_set_entry() computes 'need_modify_vtd_table' for itself,
  * by observing whether any gfn->mfn translations are modified.
@@ -401,8 +502,6 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     int i, target = order / EPT_TABLE_ORDER;
     int rv = 0;
     int ret = 0;
-    bool_t direct_mmio = p2m_is_mmio_direct(p2mt);
-    uint8_t ipat = 0;
 #ifndef __UXEN__
     int need_modify_vtd_table = 1;
     int vtd_pte_present = 0;
@@ -410,7 +509,6 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     int needs_sync = 1;
     struct domain *d = p2m->domain;
     ept_entry_t old_entry = { .epte = 0 };
-    ept_entry_t new_entry = { .epte = 0 };
     union p2m_l1_cache *l1c = &this_cpu(p2m_l1_cache);
 
     /*
@@ -473,72 +571,10 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     vtd_pte_present = is_epte_present(ept_entry) ? 1 : 0;
 #endif  /* __UXEN__ */
 
-    /*
-     * If we're here with i > target, we must be at a leaf node, and
-     * we need to break up the superpage.
-     *
-     * If we're here with i == target and i > 0, we need to check to see
-     * if we're replacing a non-leaf entry (i.e., pointing to an N-1 table)
-     * with a leaf entry (a 1GiB or 2MiB page), and handle things appropriately.
-     */
-
-    if ( i == target )
-    {
-        /* We reached the target level. */
-
-        /* No need to flush if the old entry wasn't valid */
-        /* No need to flush if new type is logdirty */
-        if (!is_epte_present(ept_entry) || (!target && p2m_is_logdirty(p2mt)))
-            needs_sync = 0;
-
-        /* If we're replacing a non-leaf entry with a leaf entry (1GiB or 2MiB),
-         * the intermediate tables will be freed below after the ept flush
-         *
-         * Read-then-write is OK because we hold the p2m lock. */
-        old_entry = *ept_entry;
-
-        if (mfn_valid_page(mfn) || direct_mmio
-#ifndef __UXEN__
-            || p2m_is_paged(p2mt)
-            || p2m_is_paging_in_start(p2mt)
-#endif  /* __UXEN__ */
-            || p2m_is_pod(p2mt))
-        {
-            /* Construct the new entry, and then write it once */
-            new_entry.emt = epte_get_entry_emt(p2m->domain, gfn, mfn, &ipat,
-                                                direct_mmio);
-
-            new_entry.ipat = ipat;
-            new_entry.sp = order ? 1 : 0;
-            new_entry.sa_p2mt = p2mt;
-            new_entry.access = p2ma;
-#ifndef __UXEN__
-            new_entry.rsvd2_snp = (iommu_enabled && iommu_snoop);
-#else   /* __UXEN__ */
-            new_entry.rsvd2_snp = 0;
-#endif  /* __UXEN__ */
-
-            new_entry.mfn = mfn_x(mfn);
-
-#ifndef __UXEN__
-            if ( old_entry.mfn == new_entry.mfn )
-                need_modify_vtd_table = 0;
-#endif  /* __UXEN__ */
-
-            ept_p2m_type_to_flags(&new_entry, p2mt, p2ma);
-        }
-
-        atomic_write_ept_entry(ept_entry, new_entry);
-        if (ax_pv_ept)
-            ax_pv_ept_write(p2m, target, gfn, new_entry.epte, needs_sync);
-        if (xen_pv_ept)
-            xen_pv_ept_write(p2m, target, gfn, new_entry.epte, needs_sync);
-    }
-    else
-    {
-        /* We need to split the original page. */
-
-        if (!ept_split_super_page(p2m, ept_entry, i, target))
+    if (i > target) {
+        /* If we're here with i > target, we must be at a leaf node, and
+         * we need to break up the superpage. */
+        if (!ept_split_super_page(p2m, ept_entry, gfn, i, target))
             goto out;
 
         /* then move to the level we want to make real changes */
@@ -548,70 +584,35 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
         ASSERT(i == target);
 
         index = gfn_remainder >> (i * EPT_TABLE_ORDER);
-#ifndef __UXEN__
-        offset = gfn_remainder & ((1UL << (i * EPT_TABLE_ORDER)) - 1);
-#endif  /* __UXEN__ */
-
         ept_entry = table + index;
-
-        new_entry.emt = epte_get_entry_emt(d, gfn, mfn, &ipat, direct_mmio);
-        new_entry.ipat = ipat;
-        new_entry.sp = i ? 1 : 0;
-        new_entry.sa_p2mt = p2mt;
-        new_entry.access = p2ma;
-#ifndef __UXEN__
-        new_entry.rsvd2_snp = (iommu_enabled && iommu_snoop);
-#else   /* __UXEN__ */
-        new_entry.rsvd2_snp = 0;
-#endif  /* __UXEN__ */
-
-        /* the caller should take care of the previous page */
-        new_entry.mfn = mfn_x(mfn);
-
-#ifndef __UXEN__
-        /* Safe to read-then-write because we hold the p2m lock */
-        if ( ept_entry->mfn == new_entry.mfn )
-             need_modify_vtd_table = 0;
-#endif  /* __UXEN__ */
-
-        ept_p2m_type_to_flags(&new_entry, p2mt, p2ma);
-
-        atomic_write_ept_entry(ept_entry, new_entry);
-        if (ax_pv_ept)
-            ax_pv_ept_write(p2m, i, gfn, new_entry.epte, needs_sync);
-        if (xen_pv_ept)
-            xen_pv_ept_write(p2m, i, gfn, new_entry.epte, needs_sync);
     }
 
-    if (!target && old_entry.mfn != mfn_x(mfn)) {
-        if (mfn_valid_page_or_vframe(mfn) &&
-            mfn_x(mfn) != mfn_x(shared_zero_page))
-            get_page_fast(mfn_to_page(mfn), NULL);
-        if (__mfn_valid_page_or_vframe(old_entry.mfn) &&
-            old_entry.mfn != mfn_x(shared_zero_page)) {
-            if (old_entry.sa_p2mt == p2m_populate_on_demand)
-                put_page_destructor(__mfn_to_page(old_entry.mfn),
-                                    p2m_pod_free_page, d, gfn);
-            else
-                put_page(__mfn_to_page(old_entry.mfn));
-        }
-    }
-    if (!target && old_entry.epte != new_entry.epte)
-        p2m_update_pod_counts(d, old_entry.mfn, old_entry.sa_p2mt,
-                              new_entry.mfn, new_entry.sa_p2mt);
+    /* We reached the target level. */
 
-    /* Track the highest gfn for which we have ever had a valid mapping */
-    if ( mfn_x(mfn) != INVALID_MFN &&
-         (gfn + (1UL << order) - 1 > p2m->max_mapped_pfn) )
-        p2m->max_mapped_pfn = gfn + (1UL << order) - 1;
+    /* If we're here with target > 0, we need to check to see
+     * if we're replacing a non-leaf entry (i.e., pointing to an N-1 table)
+     * with a leaf entry (a 1GiB or 2MiB page), and handle things appropriately.
+     */
+    /* If we're replacing a non-leaf entry with a leaf entry (1GiB or 2MiB),
+     * the intermediate tables will be freed below after the ept flush */
+    if (target)
+        old_entry = *ept_entry;
+
+    /* No need to flush if new type is logdirty */
+    /* XXX Could also skip if old type is logdirty, w/ check that mfn
+     * is same, or check in pt_write_entry that only R->W changed */
+    if (!target && p2m_is_logdirty(p2mt))
+        needs_sync = 0;
+
+    ept_write_entry(p2m, table, gfn, mfn, target, p2mt, p2ma, &needs_sync);
 
     /* Success */
     rv = 1;
 
-out:
+  out:
     unmap_domain_page(table);
 
-    if ( needs_sync && !ax_pv_ept && !xen_pv_ept )
+    if (needs_sync)
         pt_sync_domain(p2m->domain);
 
 #ifndef __UXEN__
@@ -655,8 +656,10 @@ out:
        last thing we do, after the ept_sync_domain() and removal
        from the iommu tables, so as to avoid a potential
        use-after-free. */
-    if ( target && is_epte_present(&old_entry) )
+    if (is_epte_present(&old_entry)) {
+        ASSERT(target);
         ept_free_entry(p2m, &old_entry, target);
+    }
 
     return rv;
 }
@@ -1181,6 +1184,7 @@ void ept_p2m_init(struct p2m_domain *p2m)
     p2m->get_entry = ept_get_entry;
     p2m->get_l1_table = ept_get_l1_table;
     p2m->parse_entry = ept_parse_entry;
+    p2m->write_entry = ept_write_entry;
     p2m->split_super_page_one = ept_split_super_page_one;
     p2m->change_entry_type_global = ept_change_entry_type_global;
     p2m->ro_update_l2_entry = ept_ro_update_l2_entry;

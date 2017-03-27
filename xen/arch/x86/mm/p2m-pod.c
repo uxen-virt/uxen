@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -81,10 +81,6 @@
 #ifndef __UXEN__
 #define superpage_aligned(_x)  (((_x)&(SUPERPAGE_PAGES-1))==0)
 #endif  /* __UXEN__ */
-
-static int
-p2m_clone_l1(struct p2m_domain *op2m, struct p2m_domain *p2m,
-             unsigned long gpfn, void *entry);
 
 /* Enforce lock ordering when grabbing the "external" page_alloc lock */
 static inline void lock_page_alloc(struct p2m_domain *p2m)
@@ -654,7 +650,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         }
 
         ret = p2m_clone_l1(p2m_get_hostp2m(d->clone_of), p2m, gfn_aligned,
-                           entry);
+                           entry, 1);
         p2m_unlock(p2m);
         return ret ? _mfn(INVALID_MFN) : _mfn(0);
     }
@@ -1086,7 +1082,8 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
 
 static int
 clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
-               unsigned long *_gpfn, void *otable, void *table)
+               unsigned long *_gpfn, void *otable, void *table,
+               int _needs_sync)
 {
     struct domain *od = op2m->domain;
     struct domain *d = p2m->domain;
@@ -1098,6 +1095,7 @@ clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
     bool_t clone_l1_dynamic = !!(d->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] &
                                  HVM_PARAM_CLONE_L1_dynamic);
     int ret = 0;
+    int needs_sync_any = 0;
 
     while (index < L1_PAGETABLE_ENTRIES) {
         mfn = op2m->parse_entry(otable, index, &t, &a);
@@ -1115,8 +1113,16 @@ clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
                          __FUNCTION__, mfn_x(mfn));
                 mfn = _mfn(0);
             }
-            ret = !set_p2m_entry(p2m, gpfn, mfn, 0,
-                                 p2m_populate_on_demand, p2m->default_access);
+            if (table) {
+                int needs_sync = _needs_sync;
+                ret = p2m->write_entry(p2m, table, gpfn, mfn, 0,
+                                       p2m_populate_on_demand,
+                                       p2m->default_access, &needs_sync);
+                if (needs_sync)
+                    needs_sync_any = 1;
+            } else
+                ret = !set_p2m_entry(p2m, gpfn, mfn, 0, p2m_populate_on_demand,
+                                     p2m->default_access);
             if (mfn_valid_page(mfn))
                 put_page(mfn_to_page(mfn));
             if (ret) {
@@ -1134,8 +1140,16 @@ clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
                          __FUNCTION__, mfn_x(mfn));
                 mfn = _mfn(0);
             }
-            ret = !set_p2m_entry(p2m, gpfn, mfn, 0,
-                                 p2m_populate_on_demand, p2m->default_access);
+            if (table) {
+                int needs_sync = _needs_sync;
+                ret = p2m->write_entry(p2m, table, gpfn, mfn, 0,
+                                       p2m_populate_on_demand,
+                                       p2m->default_access, &needs_sync);
+                if (needs_sync)
+                    needs_sync_any = 1;
+            } else
+                ret = !set_p2m_entry(p2m, gpfn, mfn, 0, p2m_populate_on_demand,
+                                     p2m->default_access);
             if (mfn_valid_page(mfn))
                 put_page(mfn_to_page(mfn));
             if (ret) {
@@ -1149,13 +1163,15 @@ clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
     }
 
   out:
+    if (needs_sync_any)
+        pt_sync_domain(p2m->domain);
     *_gpfn = gpfn;
     return ret;
 }
 
-static int
+int
 p2m_clone_l1(struct p2m_domain *op2m, struct p2m_domain *p2m,
-             unsigned long gpfn, void *entry)
+             unsigned long gpfn, void *entry, int needs_sync)
 {
     void *otable = NULL, *table = NULL;
     mfn_t mfn;
@@ -1167,7 +1183,7 @@ p2m_clone_l1(struct p2m_domain *op2m, struct p2m_domain *p2m,
 
     if ((p2m->domain->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] &
          HVM_PARAM_CLONE_L1_lazy_populate) && p2m->split_super_page_one &&
-        !p2m->split_super_page_one(p2m, entry, PAGE_ORDER_2M))
+        !p2m->split_super_page_one(p2m, entry, gpfn, PAGE_ORDER_2M))
         return 0;
 
     mfn = op2m->get_l1_table(op2m, gpfn, NULL);
@@ -1179,7 +1195,7 @@ p2m_clone_l1(struct p2m_domain *op2m, struct p2m_domain *p2m,
     if (mfn_valid_page(mfn))
         table = map_domain_page(mfn_x(mfn));
 
-    ret = clone_l1_table(op2m, p2m, &gpfn, otable, table);
+    ret = clone_l1_table(op2m, p2m, &gpfn, otable, table, needs_sync);
 
     if (table)
         unmap_domain_page(table);
@@ -1243,7 +1259,7 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
             if (mfn_valid_page(nmfn))
                 ntable = map_domain_page(mfn_x(nmfn));
         }
-        ret = clone_l1_table(p2m, np2m, &gpfn, table, ntable);
+        ret = clone_l1_table(p2m, np2m, &gpfn, table, ntable, 1);
     }
     if (ntable)
         unmap_domain_page(ntable);

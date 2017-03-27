@@ -972,7 +972,6 @@ void paging_update_nestedmode(struct vcpu *v)
         /* TODO: shadow-on-shadow */
         v->arch.paging.nestedmode = NULL;
 }
-#endif  /* __UXEN__ */
 
 void paging_write_p2m_entry(struct p2m_domain *p2m, unsigned long gfn,
                             l1_pgentry_t *p,
@@ -989,6 +988,7 @@ void paging_write_p2m_entry(struct p2m_domain *p2m, unsigned long gfn,
     else
         safe_write_pte(p, new);
 }
+#endif  /* __UXEN__ */
 
 /*
  * Local variables:
