@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -50,9 +50,13 @@ void uxen_v4v_send_read_callbacks(xenv4v_extension_t *pde)
             if (!robj->direct_access) continue;
             if (robj->ring->rx_ptr == robj->ring->tx_ptr) continue;
             if (robj->callback) {
+                KIRQL irql;
+
                 KeReleaseInStackQueuedSpinLock(&lqh);
+                KeRaiseIrql(DISPATCH_LEVEL, &irql);
                 robj->callback(robj->uxen_ring_handle, robj->callback_data1,
                                robj->callback_data2);
+                KeLowerIrql(irql);
                 KeAcquireInStackQueuedSpinLock(&pde->ring_lock, &lqh);
                 if (gen != InterlockedExchangeAdd(&pde->ring_gen, 0))
                     goto again;

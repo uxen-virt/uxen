@@ -210,6 +210,7 @@ int32_t _uxen_snoop_hypercall(void *udata, int mode);
             break;                                                      \
         }                                                               \
         if (uxen_pages_increase_reserve(&i, pages, &increase)) {        \
+            fail_msg(#fn " increase reserve failed");                   \
             r (intptr_t)-ENOMEM;                                        \
             break;                                                      \
         }                                                               \

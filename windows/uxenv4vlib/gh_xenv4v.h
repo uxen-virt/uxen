@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -315,7 +315,7 @@ gh_v4v_copy_destination_ring_data(xenv4v_extension_t *pde, ULONG *gh_count);
 VOID
 gh_v4v_cancel_all_file_irps(xenv4v_extension_t *pde, FILE_OBJECT *pfo);
 
-VOID
+NTSTATUS
 gh_v4v_process_notify(xenv4v_extension_t *pde);
 
 VOID

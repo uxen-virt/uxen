@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -77,13 +77,8 @@ typedef struct xenv4v_marker_struct {
  * and we will be holding many locks at this point.
  *
  * By default the upcall will schedule a DPC to do the same
- * work. But if V4V_QUICK_READ_CALLBACKS is defined
- * sending pending read events for mapped rings will be
- * done in the upcall rather than the DPC
- * some people beleive this will improve performance
- * YMMV - JMM
+ * work.
  */
-#undef V4V_QUICK_READ_CALLBACKS
 
 __declspec(dllexport) xenv4v_marker_t __xenv4v = {
     0x800000B9, WINVER, __DATE__, __TIME__, XENV4V_BUILD_TYPE, XENV4V_HW_TYPE
@@ -159,43 +154,15 @@ static const GUID GUID_SD_XENV4V_CONTROL_OBJECT =
 // ---- EVENT CHANNEL ROUTINES ----
 
 
-#ifdef V4V_QUICK_READ_CALLBACKS
 static VOID
-gh_v4v_virq_quick(xenv4v_extension_t *pde)
-{
-    xenv4v_context_t   **ctx_list;
-    ULONG              count = 0, i;
-    KLOCK_QUEUE_HANDLE lqh;
-
-    // In MP guests when not using VIRQs, have to lock the notify processing
-    KeAcquireInStackQueuedSpinLock(&pde->virq_lock, &lqh);
-
-    // Get a list of active contexts and their rings
-    ctx_list = gh_v4v_get_all_contexts(pde, &count);
-
-    // Loop over the contexts and process read IO for each.
-    for (i = 0; ((ctx_list != NULL) && (i < count)); i++) {
-        gh_v4v_process_context_reads_quick(pde, ctx_list[i]);
-    }
-
-    // Return the context list and drop the ref count
-    gh_v4v_put_all_contexts(pde, ctx_list, count);
-
-    KeReleaseInStackQueuedSpinLock(&lqh);
-}
-#endif
-
-static void
 gh_v4v_virq_work(xenv4v_extension_t *pde)
 {
     xenv4v_context_t   **ctx_list;
     ULONG              count = 0, i;
     KLOCK_QUEUE_HANDLE lqh;
+    NTSTATUS status;
 
     check_resume();
-
-    // In MP guests when not using VIRQs, have to lock the notify processing
-    KeAcquireInStackQueuedSpinLock(&pde->virq_lock, &lqh);
 
     // Get a list of active contexts and their rings
     ctx_list = gh_v4v_get_all_contexts(pde, &count);
@@ -209,13 +176,14 @@ gh_v4v_virq_work(xenv4v_extension_t *pde)
     gh_v4v_put_all_contexts(pde, ctx_list, count);
 
     // Now process the notify and satisfy writes that are queued
+    // gh_v4v_process_notify invokes hypercalls and therefore can allocate - low irql needed
+    // to benefit from automatic allocation retries
+    ASSERT(KeGetCurrentIrql() <= PASSIVE_LEVEL);
     gh_v4v_process_notify(pde);
 
     uxen_v4v_send_read_callbacks(pde);
 
     check_resume();
-
-    KeReleaseInStackQueuedSpinLock(&lqh);
 }
 
 static void
@@ -239,19 +207,6 @@ VOID gh_signaled(void)
 {
     xenv4v_extension_t *pde = uxen_v4v_get_pde();
     if (!pde) return;
-
-    if (uxen_v4v_am_dom0) {
-        /* In dom0 we usually arrive here directly from the upcall,
-         * and current in uxen is pointing to the vcpu of the guest we
-         * just left, the most we want to do is send Events to
-         * userland that things have happened, and absolutely not call
-         * back into uxen. */
-
-#ifdef V4V_QUICK_READ_CALLBACKS
-        gh_v4v_virq_quick(pde);
-        uxen_v4v_send_read_callbacks(pde);
-#endif
-    }
 
     /* Leave the rest of the work to the thread */
     KeSetEvent(&pde->virq_event, IO_NO_INCREMENT, FALSE);

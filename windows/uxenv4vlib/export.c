@@ -85,12 +85,15 @@ V4V_DLL_EXPORT uxen_v4v_ring_handle_t *uxen_v4v_ring_bind (uint32_t local_port,
             ret->ring_object->ring->id.addr.port =
                 gh_v4v_spare_port_number (pde, random_port);
 
+        KeReleaseInStackQueuedSpinLock (&lqh);
+
         // Now register the ring, if there's no v4v yet we'll just queue this
         DbgPrint("exprr: Can make hypercall = %d\n", uxen_v4v_can_make_hypercall());
         if (uxen_v4v_can_make_hypercall()) {
+            // low irql needed to benefit from automatic allocation retries
+            ASSERT(KeGetCurrentIrql() <= PASSIVE_LEVEL);
             status = gh_v4v_register_ring (pde, ret->ring_object);
             if (!NT_SUCCESS (status)) {
-                KeReleaseInStackQueuedSpinLock (&lqh);
                 uxen_v4v_err("gh_v4v_register_ring failed (vm%u:%x vm%u) "
                              "error: 0x%x",
                              ret->ring_object->ring->id.addr.domain,
@@ -99,6 +102,9 @@ V4V_DLL_EXPORT uxen_v4v_ring_handle_t *uxen_v4v_ring_bind (uint32_t local_port,
                 break;
             }
         }
+
+        KeAcquireInStackQueuedSpinLock (&pde->ring_lock, &lqh);
+
         ret->ring_object->uxen_ring_handle = ret;
 
         // Link it to the main list and set our pointer to it
@@ -328,7 +334,9 @@ uxen_v4v_notify (void /*hmm */ )
     if (!pde)
         return;
 
-    gh_v4v_process_notify (pde);
+    if (gh_v4v_process_notify (pde) == STATUS_NO_MEMORY)
+        /* notify later from virq thread */
+        KeSetEvent(&pde->virq_event, IO_NO_INCREMENT, FALSE);
 
     uxen_v4v_put_pde (pde);
 

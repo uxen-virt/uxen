@@ -147,6 +147,16 @@ gh_v4v_do_write(xenv4v_extension_t *pde, xenv4v_context_t *ctx, PIRP irp)
     if (status == STATUS_RETRY) {
         // Ring is full, just return retry
         return status;
+    } else if (status == STATUS_NO_MEMORY) {
+        // No memory, retry later
+        uxen_v4v_err("ring src (vm%u:%x vm%u) dst (vm%u:%x)- error during send, status %x - no memory",
+                     ctx->ring_object->ring->id.addr.domain,
+                     ctx->ring_object->ring->id.addr.port,
+                     ctx->ring_object->ring->id.partner,
+                     dst.domain,
+                     dst.port,
+                     status);
+        return status;
     } else if (!NT_SUCCESS(status)) {
         uxen_v4v_err("ring src (vm%u:%x vm%u) dst (vm%u:%x)- error during send, status %x",
                      ctx->ring_object->ring->id.addr.domain,
@@ -179,6 +189,7 @@ gh_v4v_process_destination_writes(xenv4v_extension_t *pde, v4v_ring_data_ent_t *
     KLOCK_QUEUE_HANDLE  lqh;
     LIST_ENTRY          returnIrps;
     ULONG               counter = 0;
+    int                 queue_notify = 0;
 
     peek.ops   = XENV4V_PEEK_WRITE;    // writes ops
     peek.pfo   = NULL;                 // not using file object search
@@ -224,6 +235,15 @@ gh_v4v_process_destination_writes(xenv4v_extension_t *pde, v4v_ring_data_ent_t *
             // we can just break and wait for the next interrupt.
             InsertTailList(&returnIrps, &nextIrp->Tail.Overlay.ListEntry);
             break;
+        } else if (status == STATUS_NO_MEMORY) {
+            // Requeue & retry later
+            uxen_v4v_err("ring src (vm%u:%x vm%u) no memory - retry later",
+                ctx->ring_object->ring->id.addr.domain,
+                ctx->ring_object->ring->id.addr.port,
+                ctx->ring_object->ring->id.partner);
+            InsertTailList(&returnIrps, &nextIrp->Tail.Overlay.ListEntry);
+            queue_notify++;
+            break;
         } else if (status == STATUS_PENDING) {
             // This was a connect SYN successfully written and swizzled. Requeue it, bump counter and
             // go on.
@@ -238,9 +258,11 @@ gh_v4v_process_destination_writes(xenv4v_extension_t *pde, v4v_ring_data_ent_t *
 
     // Put the uncompleted ones back
     gh_v4v_requeue_irps(pde, &returnIrps);
+    if (queue_notify)
+        KeSetEvent(&pde->virq_event, IO_NO_INCREMENT, FALSE);
 }
 
-VOID
+NTSTATUS
 gh_v4v_process_notify(xenv4v_extension_t *pde)
 {
     NTSTATUS         status;
@@ -251,7 +273,7 @@ gh_v4v_process_notify(xenv4v_extension_t *pde)
     ringData = gh_v4v_copy_destination_ring_data(pde, &gh_count);
     if (ringData == NULL) {
         uxen_v4v_err("gh_v4v_copy_destination_ring_data failed");
-        return;
+        return STATUS_UNSUCCESSFUL;
     }
 
     // Now do the actual notify
@@ -259,7 +281,7 @@ gh_v4v_process_notify(xenv4v_extension_t *pde)
     if (!NT_SUCCESS(status)) {
         // That ain't good
         uxen_v4v_fast_free(ringData);
-        return;
+        return status;
     }
 
     // Process each of the destinations
@@ -271,6 +293,8 @@ gh_v4v_process_notify(xenv4v_extension_t *pde)
         uxen_v4v_notify_process_ring_data(pde,  &ringData->data[gh_count], ringData->nent - gh_count);
 
     uxen_v4v_fast_free(ringData);
+
+    return STATUS_SUCCESS;
 }
 
 VOID
@@ -308,6 +332,15 @@ gh_v4v_process_context_writes(xenv4v_extension_t *pde, xenv4v_context_t *ctx)
             // Ring is full, put the IRP back and try another.
             InsertTailList(&returnIrps, &nextIrp->Tail.Overlay.ListEntry);
             queue_notify++;
+        } else if (status == STATUS_NO_MEMORY) {
+             uxen_v4v_err("ring src (vm%u:%x vm%u) no memory - retry later",
+                ctx->ring_object->ring->id.addr.domain,
+                ctx->ring_object->ring->id.addr.port,
+                ctx->ring_object->ring->id.partner);
+           // No memory, put IRP back and retry later
+            InsertTailList(&returnIrps, &nextIrp->Tail.Overlay.ListEntry);
+            queue_notify++;
+            break;
         }
     } while (TRUE);
 

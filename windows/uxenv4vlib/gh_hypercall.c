@@ -152,6 +152,12 @@ gh_v4v_register_ring(xenv4v_extension_t *pde, xenv4v_ring_t *robj)
                       robj->ring->id.partner);
         status = STATUS_INVALID_DEVICE_REQUEST;
         robj->registered = FALSE;
+    } else if (err == -ENOMEM) {
+        uxen_v4v_err("V4VOP_register_ring (vm%u:%x vm%u) failed err %d",
+                      robj->ring->id.addr.domain, robj->ring->id.addr.port,
+                      robj->ring->id.partner, err);
+        status = STATUS_NO_MEMORY;
+        robj->registered = FALSE;
     } else if (err != 0) {
         uxen_v4v_err("V4VOP_register_ring (vm%u:%x vm%u) failed err %d",
                      robj->ring->id.addr.domain, robj->ring->id.addr.port,
@@ -222,6 +228,8 @@ gh_v4v_notify(v4v_ring_data_t *ringData)
     if (err != 0) {
         uxen_v4v_err("V4VOP_notify (nent %d) failed err %d",
                      ringData->nent, err);
+        if (err == -ENOMEM)
+            return STATUS_NO_MEMORY;
         return STATUS_UNSUCCESSFUL;
     }
 

@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -144,10 +144,13 @@ gh_v4v_ctrl_bind(xenv4v_extension_t *pde, xenv4v_context_t *ctx, v4v_bind_values
         if (robj->ring->id.addr.port == V4V_PORT_NONE)
             robj->ring->id.addr.port = gh_v4v_spare_port_number(pde, port);
 
+        KeReleaseInStackQueuedSpinLock(&lqh);
+
         // Now register the ring.
+        // low irql needed to benefit from automatic allocation retries
+        ASSERT(KeGetCurrentIrql() <= PASSIVE_LEVEL);
         status = gh_v4v_register_ring(pde, robj);
         if (!NT_SUCCESS(status)) {
-            KeReleaseInStackQueuedSpinLock(&lqh);
             uxen_v4v_err(
                 "gh_v4v_register_ring (vm%u:%x vm%u) failed error 0x%x",
                 robj->ring->id.addr.domain, robj->ring->id.addr.port,
@@ -155,6 +158,7 @@ gh_v4v_ctrl_bind(xenv4v_extension_t *pde, xenv4v_context_t *ctx, v4v_bind_values
             break;
         }
 
+        KeAcquireInStackQueuedSpinLock(&pde->ring_lock, &lqh);
         // Link it to the main list and set our pointer to it
         gh_v4v_link_to_ring_list(pde, robj);
         ctx->ring_object = robj;
