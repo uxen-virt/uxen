@@ -46,3 +46,11 @@ static __inline void check_resume(void)
 #define UXEN_V4VLIB_MAX_RESUME_DPCS 16
 
 #define FISH do { DbgPrint("%s:%s:%d\n",__FILE__,__FUNCTION__,__LINE__); } while(0)
+
+#undef ASSERT
+#define ASSERT(expr) do {                                               \
+        if (!(expr)) {                                                  \
+            uxen_v4v_err("ASSERT(%s) failed", # expr);                  \
+        }                                                               \
+    } while (0, 0)
+
