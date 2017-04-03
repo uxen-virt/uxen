@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -53,8 +53,10 @@ uxen_net_send_packet (Uxennet *n, PNDIS_PACKET p)
 
     ret = uxen_v4v_sendv_from_ring(n->recv_ring, &n->dest_addr, iov, niov, V4V_PROTO_DGRAM);
 
-    if (ret != len)
+    if (ret != len) {
+        uxen_err("sendv failed: %d\n", ret);
         return NDIS_STATUS_FAILURE;
+    }
 
     return NDIS_STATUS_SUCCESS;
 }
