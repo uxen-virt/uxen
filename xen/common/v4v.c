@@ -3,7 +3,7 @@
  *
  * V4V (2nd cut of v2v)
  *
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -186,7 +186,8 @@ v4v_signal_domain(struct domain *d)
         hvm_pci_intx_assert(d, V4V_PCI_SLOT, V4V_PCI_INTX);
         hvm_pci_intx_deassert(d, V4V_PCI_SLOT, V4V_PCI_INTX);
 #else
-        hvm_isa_irq_assert(d, 7);
+        // affinity for v4v irq in guest is set to cpu #0
+        hvm_isa_irq_assert_to_cpu(d, 7, 0);
         hvm_isa_irq_deassert(d, 7);
 #endif
     }

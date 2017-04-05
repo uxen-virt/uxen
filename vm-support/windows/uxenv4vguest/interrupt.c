@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -119,6 +119,9 @@ UxvgInterruptCreate(
     if ( !NT_SUCCESS(status) ) {
         uxen_err( "WdfInterruptCreate failed: %x", status);
     }
+
+    WdfInterruptSetPolicy(devExt->Interrupt, WdfIrqPolicySpecifiedProcessors,
+        WdfIrqPriorityNormal, 1);
 
     return status;
 }
