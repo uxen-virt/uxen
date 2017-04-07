@@ -2,7 +2,7 @@
  *  block-vhd.c
  *  uxen
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -669,6 +669,8 @@ static void bdrv_vhd_aio_queue_reissue(void)
 	    vhd_queue_write(driver, qt->treq);
 	    break;
 	}
+
+        free(qt);
     }
 }
 
