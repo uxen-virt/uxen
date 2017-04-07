@@ -561,6 +561,16 @@ uxen_op_host_needs_preempt(void)
             return 1;
         if (*(uint32_t volatile *)(kprcb + 0x2d80 + 0x018))
             return 1;
+    case 15063:
+        /* Windows10.15063 RS2/CU */
+        // +0x2e69 QuantumEnd       : UChar
+        // +0x2e00 DpcData          : [2] _KDPC_DATA
+        //        +0x018 DpcQueueDepth    : Int4B
+        if (*(kprcb + 0x2e69))
+            return 1;
+        if (*(uint32_t volatile *)(kprcb + 0x2e00 + 0x018))
+            return 1;
+        break;
     }
 
     return 0;
