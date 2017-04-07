@@ -35,13 +35,11 @@ typedef volatile LONG EX_SPIN_LOCK, *PEX_SPIN_LOCK;
 #include "prototypes.h"
 #include "alloc.h"
 
-static __inline void check_resume(void)
-{
-    if (!state_bar_ptr) return;
-    if (!*state_bar_ptr) return;
-    if ((*state_bar_ptr)->v4v_running) return;
-    uxen_v4v_resume();
-}
+#define check_resume()                                                  \
+    if (state_bar_ptr && *state_bar_ptr && !((*state_bar_ptr)->v4v_running)) { \
+        uxen_v4v_warn("resuming v4v");                                  \
+        uxen_v4v_resume();                                              \
+    }
 
 #define UXEN_V4VLIB_MAX_RESUME_DPCS 16
 
