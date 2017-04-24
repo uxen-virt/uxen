@@ -1622,6 +1622,8 @@ gui_init(char *optstr)
     guest_agent_init();
 
     disp = uxenconsole_disp_init(-1, v4v_idtoken, NULL, disp_inv_rect, 0);
+    if (!disp)
+        Wwarn("%s: uxenconsole_disp_init failed", __FUNCTION__);
 
     return 0;
 }
