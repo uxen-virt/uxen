@@ -37,8 +37,7 @@ struct net_addr {
 #define NETADDR_MAXSTRLEN  (16 + MAX(INET_ADDRSTRLEN, INET6_ADDRSTRLEN))
 #define NETADDR_CMP(n1,n2,prefix) (({                           \
             int ret = 0;                                        \
-            uint32_t pm = (uint32_t) ((((uint32_t) 1)           \
-                                        << (prefix)) - 1);      \
+            uint32_t pm = (uint32_t) ((1ULL << (prefix)) - 1);  \
                                                                 \
             if ((n1)->family != (n2)->family) {                 \
                 ret = (n1)->family == AF_INET ? -1 : 1;         \
