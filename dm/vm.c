@@ -63,8 +63,6 @@ uint64_t vm_restricted_x86_emul = 0;
 uint64_t vm_viridian_crash_domain = 0;
 uint64_t vm_vpt_align = 0;
 uint64_t vm_vpt_coalesce_period = 0;
-
-bool vm_run_patcher = false;
 uint64_t seed_generation = 1;
 uint64_t surf_copy_reduction = 1;
 
@@ -505,7 +503,6 @@ vm_init(const char *loadvm, int restore_mode)
                      log_ratelimit_guest_ms);
 
     ftres.blob = 0;
-	ftres.bits.run_patcher = (vm_run_patcher) ? 1 : 0;
     ftres.bits.seed_generation = (!!seed_generation) ? 1 : 0;
     ftres.bits.surf_copy_reduction = (!!surf_copy_reduction) ? 1 : 0;
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_DM_FEATURES, ftres.blob);

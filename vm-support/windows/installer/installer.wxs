@@ -35,8 +35,6 @@
             ExeCommand="wscript.exe [#run_dpinst.vbs] &quot;[#dpinst.exe] /LM /F /SE /SW /C /PATH C:\uXenGuest\uxenhid&quot;" />
         <CustomAction Id="CA_uxennullnet"  Directory="TARGETDIR" Execute="deferred" Return="check" Impersonate="no" 
             ExeCommand="wscript.exe [#run_dpinst.vbs] &quot;[#dpinst.exe] /LM /F /SE /SW /C /PATH C:\uXenGuest\uxennullnet&quot;" />
-        <CustomAction Id="CA_uxenpatcher"  Directory="TARGETDIR" Execute="deferred" Return="check" Impersonate="no" 
-            ExeCommand="[#uxenpatcher.exe]" />
 
         <CustomAction Id="CA_un_uxenplatform" Directory="TARGETDIR" Execute="deferred" Return="ignore" Impersonate="no" 
             ExeCommand="&quot;[#dpinst.exe]&quot; /s /sw /c /u C:\uXenGuest\uxenplatform\uxenplatform.inf" />
@@ -87,14 +85,6 @@
                     <File Id="dpinst.exe" Name="dpinst.exe" DiskId="1" Source="$(var.dpinstdir)/dpinst.exe" />
                     <File Id="run_dpinst.vbs" Name="run_dpinst.vbs" DiskId="1" Source="$(var.srcdir)/run_dpinst.vbs" />
                 </Component>
-                <Directory Id='uxenpatcher' Name='uxenpatcher'>
-                    <Component Id="uxenpatcher" Guid="a6e0f47f-ef44-4f11-af91-f21f92c87158" Win64="$(var.Win64)">
-                        <File Id="uxenpatcher.exe" Name="uxenpatcher.exe" DiskId="1" Source="$(var.uxenpatcherdir)/uxenpatcher.exe" />
-                        <File Id="makecert.exe" Name="makecert.exe" DiskId="1" Source="$(var.certdir)/makecert.exe" />
-                        <File Id="pvk2pfx.exe" Name="pvk2pfx.exe" DiskId="1" Source="$(var.certdir)/pvk2pfx.exe" />
-                        <File Id="signtool.exe" Name="signtool.exe" DiskId="1" Source="$(var.certdir)/signtool.exe" />
-                    </Component>
-                </Directory>
                 <Directory Id='uxendisp' Name='uxendisp'>
                     <Component Id="uxendisp" Guid="263bd36e-b7df-45eb-a57a-0f8b7154ecae" Win64="$(var.Win64)">
                         <File Id="uxendisp.inf" Name="uxendisp.inf" DiskId="1" Source="$(var.uxendispdir)/uxendisp.inf" />
@@ -219,7 +209,6 @@
             <ComponentRef Id='uxennet' />
             <ComponentRef Id='uxennullnet' />
             <ComponentRef Id='uxenhid' />
-            <ComponentRef Id='uxenpatcher' />
         </Feature>
         <InstallExecuteSequence>
             <Custom Action="CA_uxendmpdrv" After="InstallFiles">$(var.INSTALLING) AND <![CDATA[&Simple=3]]></Custom>
@@ -234,7 +223,6 @@
             <Custom Action="CA_uxennullnet" After="CA_uxenhid">$(var.INSTALLING) AND <![CDATA[&Complex=3]]></Custom>
             <Custom Action="CA_uxendisp" After="CA_uxennullnet">$(var.INSTALLING) AND <![CDATA[VersionNT < 602]]> AND <![CDATA[&Complex=3]]></Custom>
             <Custom Action="CA_uxenkmdod" After="CA_uxendisp">$(var.INSTALLING) AND <![CDATA[VersionNT >= 602]]> AND <![CDATA[&Complex=3]]></Custom>
-            <Custom Action="CA_uxenpatcher" After="CA_uxenkmdod">$(var.INSTALLING) AND <![CDATA[VersionNT >= 602]]> AND <![CDATA[&Complex=3]]></Custom>
             <Custom Action="CA_setPowercfg" After="CA_uxenkmdod">$(var.INSTALLING) AND <![CDATA[VersionNT >= 602]]> AND <![CDATA[&Complex=3]]></Custom>
             <Custom Action="CA_powercfg1" After="CA_setPowercfg">$(var.INSTALLING) AND <![CDATA[VersionNT >= 602]]> AND <![CDATA[&Complex=3]]></Custom>
             <Custom Action="CA_powercfg2" After="CA_powercfg1">$(var.INSTALLING) AND <![CDATA[VersionNT >= 602]]> AND <![CDATA[&Complex=3]]></Custom>

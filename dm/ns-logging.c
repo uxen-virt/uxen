@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2016, Bromium, Inc.
+ * Copyright 2013-2017, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -25,7 +25,6 @@ static const struct {
     int source_port;
 } logging_ports[] = {
     { "uxenevent",  5001 },
-    { "uxenpatcher",  5002 },
 };
 
 struct ns_logging_data {
