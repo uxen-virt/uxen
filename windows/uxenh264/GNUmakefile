@@ -46,6 +46,5 @@ clean::
 
 Makefile.lib-LIBUXENH264:
 	$(_V)rm -f $(BUILDDIR_uxenh264)/$@
-	$(_V)echo "LIBUXENH264_RES = -D UXENH264_RES_ID=UXENH264 -D UXENH264_DLL_PATH=$(subst \,\\,$(OUTDIR_uxenh264)\\uxenh264.dll)" > $(BUILDDIR_uxenh264)/$@
 	$(_V)echo "LIBUXENH264_DEPS = $(DISTDIR)/uxenh264.dll" >> $(BUILDDIR_uxenh264)/$@
 

@@ -475,11 +475,9 @@ uxendm$(EXE_SUFFIX): $(DM_OBJS) $(CONFIG_H_CHECK)
 	$(_W)echo Compiling - $@
 	$(_V)$(COMPILE.m) $(EXTRA_CFLAGS) $(DM_CFLAGS) -c $< -o $@
 
-%.o : %.rc force_recompile
+%.o : %.rc
 	$(_W)echo Compiling - $@
-	$(_V)$(WINDRES) $(WINDRESFLAGS) $(WINDRES_TARGET_FORMAT_OPTION) $(LIBUXENH264_RES) $< -o $@
-
-force_recompile:
+	$(_V)$(WINDRES) $(WINDRESFLAGS) $(WINDRES_TARGET_FORMAT_OPTION) $< -o $@
 
 block-swap_%.o: block-swap/%.c
 	$(_W)echo Compiling - $(subst _,/,$@)
