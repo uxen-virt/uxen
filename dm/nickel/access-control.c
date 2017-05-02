@@ -55,6 +55,8 @@ static void query_access_policy(struct nickel *ni);
 static void query_access_policy(struct nickel *ni);
 static void query_proxy_config(struct nickel *ni);
 
+static struct net_addr ipv6_loopback_addr = { 0 };
+
 /* RPC */
 #define RPC_STR_ALLOC_GRAN  256
 static int ac_rpc_IsIPAddressAllowed(struct nickel *ni, const struct net_addr *addr,
@@ -529,6 +531,11 @@ static void allow_ip_from_dns(struct nickel *ni, const struct net_addr *dns_ip)
     hash_insert_network(ni, dns_ip, 32, HASH_CACHE_NO_FLUSH, ni->ac_allowed_networks);
 }
 
+static bool is_ipv6_loopback_address(const struct net_addr *addr)
+{
+    return NETADDR_CMP(&ipv6_loopback_addr, addr, 0) == 0;
+}
+
 static int get_dns_ips(struct nickel *ni, struct net_addr **dns_ips, uint32_t *dns_ips_size)
 {
     int ret = 1;
@@ -682,6 +689,12 @@ allow_list_ip(struct nickel *ni, const struct net_addr *dst_ips, unsigned int op
     }
     memset(ret_mask, '2', len);
     for (i = 0; i < len; i++) {
+        if (is_ipv6_loopback_address(dst_ips + i)) {
+            NETLOG5("IPv6 lookup address DENIED");
+            ret_mask[i] = '0';
+            continue;
+        }
+
         /* local cache lookup first */
         if (hash_find_ip(ni, dst_ips + i, ni->ac_denied_networks)) {
             ret_mask[i] = '0';
@@ -755,6 +768,15 @@ static bool allow_ip(struct nickel *ni, const struct net_addr *dst_ip, unsigned 
 
         if (dst_ip->family == AF_INET && fakedns_is_fake(&dst_ip->ipv4))
             return !fakedns_is_denied(&dst_ip->ipv4);
+
+    if (is_ipv6_loopback_address(dst_ip)) {
+        static int log_once = 0;
+
+        if (!log_once)
+            NETLOG4("(ac) IPv6 loopback address destination (always) DENIED");
+        log_once = 1;
+        return false;
+    }
 
     NETLOG5("(ac) check ip %s in local cache ...", netaddr_tostr(dst_ip));
 
@@ -1018,6 +1040,12 @@ int ac_init(struct nickel *ni)
     int err = 0;
 
     critical_section_init(&ni->ac_lk);
+    if (inet_pton(AF_INET6, "::1", (void *) &ipv6_loopback_addr.ipv6) == 1) {
+        ipv6_loopback_addr.family = AF_INET6;
+    } else {
+        NETLOG("WARNING - inet_pton(::1) FAILED !");
+        /* shall we fail here ? */
+    }
     ni->ac_prev_policy = -1;
     if (!ni->ac_enabled)
         goto out;
