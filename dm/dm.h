@@ -44,6 +44,7 @@ extern uint64_t vm_vga_mb_mapped;
 extern uint64_t vm_pae;
 extern uint64_t vm_viridian;
 extern uint64_t vm_virt_mode_change;
+extern uint64_t vm_virt_mode_change_restrict;
 extern uint64_t vm_hpet;
 extern uint64_t vm_zero_page;
 extern uint64_t vm_zero_page_setup;

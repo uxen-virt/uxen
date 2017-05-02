@@ -98,6 +98,20 @@ xtra_caps(void)
     return caps;
 }
 
+static uint32_t
+virt_mode_change(void)
+{
+    uint32_t caps = 0;
+    DWORD version = GetVersion();
+    DWORD major = (DWORD) (LOBYTE(LOWORD(version)));
+    DWORD minor = (DWORD) (HIBYTE(LOWORD(version)));
+
+    if (vm_virt_mode_change_restrict && (major == 6) && (minor < 3))
+        caps = vm_virt_mode_change;
+
+    return caps;
+}
+
 /*
  * Interrupts
  */
@@ -783,7 +797,7 @@ uxendisp_mmio_read(void *opaque, target_phys_addr_t addr, unsigned size)
     case UXDISP_REG_INTERRUPT_ENABLE:
         return s->interrupt_en;
     case UXDISP_REG_VIRTMODE_ENABLED:
-        return vm_virt_mode_change;
+        return virt_mode_change();
     case UXDISP_REG_XTRA_CAPS:
         return xtra_caps();
     case UXDISP_REG_XTRA_CTRL:
