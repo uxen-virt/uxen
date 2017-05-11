@@ -86,7 +86,16 @@ BOOL OpenClipboardWithRetry(HWND hwnd)
     if (count < MAX_OPENCLIPBOARD_RETRIES)
         return TRUE;
     else {
-        uxen_err("OpenClipboardWithRetry count %d\n", count);
+        HWND owner = GetClipboardOwner();
+        HWND root = GetAncestor(owner, GA_ROOT);
+        char clsname[256] = { 0 };
+        char clsname_root[256] = { 0 };
+
+        GetClassNameA(owner, clsname, sizeof(clsname));
+        GetClassNameA(root, clsname_root, sizeof(clsname_root));
+        uxen_err("OpenClipboardWithRetry count %d, owner class %s, owner root class %s\n",
+          count, clsname, clsname_root);
+
         return FALSE;
     }
 }
