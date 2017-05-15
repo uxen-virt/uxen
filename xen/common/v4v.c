@@ -2021,7 +2021,7 @@ v4v_destroy(struct domain *d)
     printk(XENLOG_ERR "%s:%d: d->v=%p\n", __FUNCTION__, __LINE__, d->v4v);
 #endif
 
-    if (d->v4v)
+    if (d->v4v) {
         for (i = 0; i < V4V_HTABLE_SIZE; i++) {
             struct hlist_node *node, *next;
             struct v4v_ring_info *ring_info;
@@ -2029,6 +2029,8 @@ v4v_destroy(struct domain *d)
                                       &d->v4v->ring_hash[i], node)
                 v4v_ring_remove_info(ring_info, !mfns_dont_belong_xen(d));
         }
+        v4v_xfree(d->v4v);
+    }
 
     d->v4v = NULL;
     write_unlock(&v4v_lock);
