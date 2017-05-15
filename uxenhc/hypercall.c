@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, Bromium, Inc.
+ * Copyright 2016-2017, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -32,6 +32,27 @@
 int uxen_ax;
 void *uxen_hcbase;
 EXPORT_SYMBOL_GPL(uxen_hcbase);
+
+#ifdef LX_TARGET_AX
+static inline uint64_t
+ax_cpuid_call (void *rax, void *a1, void* a2, void* a3, void* a4, void* a5, void* a6)
+{
+  register void* _rax asm  ("rax") = rax;
+  register void* _a1  asm  ("rcx") = a1;
+  register void* _a2  asm  ("rbx") = a2;
+  register void* _a3  asm  ("rdx") = a3;
+  register void* _a4  asm  ("r8") = a4;
+  register void* _a5  asm  ("r9") = a5;
+  register void* _a6  asm  ("r10") = a6;
+
+  asm volatile ("cpuid"
+    : "+r" (rax)
+    : "r" (_a1), "r" (_a2), "r" (_a3), "r" (_a4), "r" (_a5), "r" (_a6)
+    : "cc"
+  );
+  return rax;
+}
+#endif
 
 int uxen_ax_hypervisor(void)
 {
@@ -69,9 +90,15 @@ EXPORT_SYMBOL_GPL(uxen_hypercall_hvm_op);
 int
 uxen_hypercall_v4v_op(int cmd, void *arg1, void *arg2, void *arg3, void *arg4, void *arg5)
 {
+#ifdef LX_TARGET_AX
+  uint64_t rax = 0x35af3466;
+  rax = ax_cpuid_call((void*)rax, (void*)(uintptr_t)cmd, arg1, arg2, arg3, arg4, arg5);
+  return rax;
+#else
     if (!uxen_hcbase)
 	return -ENOENT;
     return HYPERVISOR_v4v_op(cmd, arg1, arg2, arg3, arg4, arg5);
+#endif
 }
 EXPORT_SYMBOL_GPL(uxen_hypercall_v4v_op);
 
