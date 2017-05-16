@@ -73,6 +73,7 @@
 #include <asm/spinlock.h>
 #include <asm/mce.h>
 #include <asm/hvm/hvm.h>
+#include <asm/hvm/ax.h>
 #include <asm/hvm/vpt.h>
 #include <asm/hvm/support.h>
 #include <asm/hvm/cacheattr.h>
@@ -935,6 +936,9 @@ int hvm_domain_initialise(struct domain *d)
         HVM_PARAM_ZERO_PAGE_enable_load;
 
     d->arch.hvm_domain.params[HVM_PARAM_TEMPLATE_LAZY_LOAD] = 1;
+
+    if (ax_present) 
+        d->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] ^= HVM_PARAM_CLONE_L1_lazy_populate;
 
 #ifndef __UXEN__
     hvm_init_cacheattr_region_list(d);

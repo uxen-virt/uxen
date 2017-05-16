@@ -419,6 +419,46 @@ static void vmx_free_vmcs(struct vmcs_struct *vmcs)
     free_xenheap_page(vmcs);
 }
 
+static DEFINE_SPINLOCK(vmx_clear_lock);
+
+static void vmx_clear_active_vmcs_ax(struct vcpu *v)
+{
+    unsigned long flags, flags2;
+    int cpu;
+    struct arch_vmx_struct *arch_vmx = &v->arch.hvm_vmx;
+
+    cpu_irq_save(flags);
+    while (!spin_trylock_irqsave(&vmx_clear_lock, flags2))
+        rep_nop();
+
+    while (ax_remote_vmclear(arch_vmx->vmcs_ma)) {
+        /*VMCS in use, ax is working on it */
+        spin_unlock_irqrestore(&vmx_clear_lock, flags2);
+
+        rep_nop();
+
+        while (!spin_trylock_irqsave(&vmx_clear_lock, flags2))
+            rep_nop();
+    }
+
+    cpu=arch_vmx->active_cpu;
+
+    arch_vmx->launched   = 0;
+    arch_vmx->active_cpu = -1;
+
+    list_del(&arch_vmx->active_list);
+
+    if (cpu!=-1) {
+        if (per_cpu(current_vmcs_vmx,cpu) == arch_vmx)
+            per_cpu(current_vmcs_vmx,cpu) = NULL;
+        if (per_cpu(active_vmcs,cpu) == arch_vmx->vmcs)
+            per_cpu(active_vmcs,cpu) = NULL;
+    }
+
+    spin_unlock_irqrestore(&vmx_clear_lock, flags2);
+    cpu_irq_restore(flags);
+}
+
 static void __vmx_clear_vmcs(void *info)
 {
     struct vcpu *v = info;
@@ -456,21 +496,33 @@ static void vmx_clear_vmcs(struct vcpu *v)
 {
     int cpu = v->arch.hvm_vmx.active_cpu;
 
-    if ( cpu != -1 )
+    if (cpu == -1)
+        return;
+
+    if (!ax_present)
         on_selected_cpus(cpumask_of(cpu), __vmx_clear_vmcs_isr, v, 1);
+    else
+        vmx_clear_active_vmcs_ax(v);
 }
 
 static void vmx_load_vmcs(struct vcpu *v)
 {
-    unsigned long flags;
+    unsigned long flags, flags2 = 0;
     int do_load = !vmx_vmcs_late_load;
 
+    if (ax_present)
+        spin_lock_irqsave(&vmx_clear_lock, flags2);
     cpu_irq_save(flags);
 
     if (vmx_vmcs_late_load && !v->arch.hvm_vmx.vmentry_gen)
         do_load = 1;
 
     if (v->arch.hvm_vmx.active_cpu != smp_processor_id()) {
+        if (ax_present && v->arch.hvm_vmx.active_cpu != -1) {
+            spin_unlock_irqrestore(&vmx_clear_lock, flags2);
+            BUG();
+        }
+
         ASSERT(v->arch.hvm_vmx.active_cpu == -1);
         list_add(&v->arch.hvm_vmx.active_list, &this_cpu(active_vmcs_list));
         v->arch.hvm_vmx.active_cpu = smp_processor_id();
@@ -487,13 +539,17 @@ static void vmx_load_vmcs(struct vcpu *v)
     this_cpu(current_vmcs_vmx) = &v->arch.hvm_vmx;
 
     cpu_irq_restore(flags);
+    if (ax_present)
+        spin_unlock_irqrestore(&vmx_clear_lock, flags2);
 }
 
 void vmx_unload_vmcs(struct vcpu *v)
 {
     struct arch_vmx_struct *arch_vmx = &v->arch.hvm_vmx;
-    unsigned long flags;
+    unsigned long flags, flags2 = 0;
 
+    if (ax_present)
+        spin_lock_irqsave(&vmx_clear_lock, flags2);
     cpu_irq_save(flags);
 
     ASSERT(arch_vmx == this_cpu(current_vmcs_vmx));
@@ -502,6 +558,8 @@ void vmx_unload_vmcs(struct vcpu *v)
     this_cpu(current_vmcs_vmx) = NULL;
 
     cpu_irq_restore(flags);
+    if (ax_present)
+        spin_unlock_irqrestore(&vmx_clear_lock, flags2);
 }
 
 int vmx_cpu_up_prepare(unsigned int cpu)
@@ -527,13 +585,17 @@ DEBUG();
 int vmx_cpu_on(void)
 {
     int cpu = smp_processor_id();
-    unsigned long flags;
+    unsigned long flags, flags2 = 0;
     u32 vmx_basic_msr_low, vmx_basic_msr_high;
 
+    if (ax_present)
+        spin_lock_irqsave(&vmx_clear_lock, flags2);
     cpu_irq_save(flags);
 
     if (this_cpu(hvmon)) {
         cpu_irq_restore(flags);
+        if (ax_present)
+            spin_unlock_irqrestore(&vmx_clear_lock, flags2);
         return 0;
     }
 
@@ -546,6 +608,8 @@ int vmx_cpu_on(void)
     {
     case -2: /* #UD or #GP */
         cpu_irq_restore(flags);
+        if (ax_present)
+            spin_unlock_irqrestore(&vmx_clear_lock, flags2);
         printk("CPU%d: unexpected VMXON failure\n", cpu);
         return -EINVAL;
     case -1: /* CF==1 or ZF==1 */
@@ -553,9 +617,12 @@ int vmx_cpu_on(void)
         this_cpu(hvmon) = hvmon_on;
         break;
     default:
+        spin_unlock_irqrestore(&vmx_clear_lock, flags2);
         BUG();
     }
     cpu_irq_restore(flags);
+    if (ax_present)
+        spin_unlock_irqrestore(&vmx_clear_lock, flags2);
 
     hvm_asid_init(cpu_has_vmx_vpid ? (1u << VMCS_VPID_WIDTH) : 0);
 
@@ -573,13 +640,17 @@ int vmx_cpu_on(void)
 void vmx_cpu_off(void)
 {
     struct list_head *active_vmcs_list = &this_cpu(active_vmcs_list);
-    unsigned long flags;
+    unsigned long flags, flags2 = 0;
 
+    if (ax_present)
+        spin_lock_irqsave(&vmx_clear_lock, flags2);
     cpu_irq_save(flags);
 
     /* only turn off if turned on via vmx_cpu_on */
     if ( this_cpu(hvmon) != hvmon_on ) {
         cpu_irq_restore(flags);
+        if (ax_present)
+            spin_unlock_irqrestore(&vmx_clear_lock, flags2);
         return;
     }
 
@@ -594,6 +665,8 @@ void vmx_cpu_off(void)
     clear_in_cr4_cpu(X86_CR4_VMXE);
 
     cpu_irq_restore(flags);
+    if (ax_present)
+        spin_unlock_irqrestore(&vmx_clear_lock, flags2);
 }
 
 int vmx_cpu_up(enum hvmon hvmon_mode)
@@ -699,11 +772,13 @@ int vmx_cpu_up(enum hvmon hvmon_mode)
 void vmx_cpu_down(void)
 {
     struct list_head *active_vmcs_list = &this_cpu(active_vmcs_list);
-    unsigned long flags;
+    unsigned long flags, flags2 = 0;
 
     if ( !this_cpu(hvmon) )
         return;
 
+    if (ax_present)
+        spin_lock_irqsave(&vmx_clear_lock, flags2);
     cpu_irq_save(flags);
 
     while ( !list_empty(active_vmcs_list) )
@@ -717,6 +792,8 @@ void vmx_cpu_down(void)
     clear_in_cr4(X86_CR4_VMXE);
 
     cpu_irq_restore(flags);
+    if (ax_present)
+        spin_unlock_irqrestore(&vmx_clear_lock, flags2);
 }
 
 struct foreign_vmcs {

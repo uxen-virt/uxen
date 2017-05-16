@@ -1036,8 +1036,12 @@ static void vmx_ctxt_switch_to(struct vcpu *v)
         /* Test-and-test-and-set this CPU in the EPT-is-synced mask. */
         if ( !cpumask_test_cpu(cpu, d->arch.hvm_domain.vmx.ept_synced) &&
              !cpumask_test_and_set_cpu(cpu,
-                                       d->arch.hvm_domain.vmx.ept_synced) )
+                                       d->arch.hvm_domain.vmx.ept_synced) ) {
+            struct p2m_domain *p2m = p2m_get_hostp2m(d);
+
             __invept(INVEPT_SINGLE_CONTEXT, ept_get_eptp(d), 0);
+            p2m->virgin = 1;
+        }
     }
 
     vmx_restore_guest_msrs(v);
@@ -1640,23 +1644,29 @@ static void __ept_sync_domain(void *info)
 
 static void ept_sync_domain(struct domain *d)
 {
+    struct p2m_domain *p2m = p2m_get_hostp2m(d);
     /* Only if using EPT and this domain has some VCPUs to dirty. */
     if ( !paging_mode_hap(d) || !d->vcpu || !d->vcpu[0] )
         return;
 
     ASSERT(local_irq_is_enabled());
 
-    /*
-     * Flush active cpus synchronously. Flush others the next time this domain
-     * is scheduled onto them. We accept the race of other CPUs adding to
-     * the ept_synced mask before on_selected_cpus() reads it, resulting in
-     * unnecessary extra flushes, to avoid allocating a cpumask_t on the stack.
-     */
-    cpumask_and(d->arch.hvm_domain.vmx.ept_synced,
-                d->domain_dirty_cpumask, &cpu_online_map);
+    if (ax_present)
+        ax_invept_all_cpus();
+    else {
+        /*
+         * Flush active cpus synchronously. Flush others the next time this domain
+         * is scheduled onto them. We accept the race of other CPUs adding to
+         * the ept_synced mask before on_selected_cpus() reads it, resulting in
+         * unnecessary extra flushes, to avoid allocating a cpumask_t on the stack.
+         */
+        cpumask_and(d->arch.hvm_domain.vmx.ept_synced,
+                    d->domain_dirty_cpumask, &cpu_online_map);
 
-    on_selected_cpus(d->arch.hvm_domain.vmx.ept_synced,
-                     __ept_sync_domain, d, 1);
+        on_selected_cpus(d->arch.hvm_domain.vmx.ept_synced,
+                         __ept_sync_domain, d, 1);
+        p2m->virgin = 1;
+    }
 }
 
 #ifndef __UXEN_NOT_YET__
@@ -2968,6 +2978,11 @@ vmx_execute(struct vcpu *v)
 #endif  /* __UXEN__ */
 
     ASSERT(v);
+
+    if ( paging_mode_hap(v->domain) ) {
+        struct p2m_domain *p2m = p2m_get_hostp2m(v->domain);
+        p2m->virgin = 0;
+    }
 
     if (vmx_asm_do_vmentry(v))
         return;

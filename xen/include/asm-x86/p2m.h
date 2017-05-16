@@ -26,7 +26,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -406,6 +406,8 @@ struct p2m_domain {
 
     struct dspage_store *dsps;
 
+    int virgin;
+ 
 #ifndef NDEBUG
     unsigned long compress_gpfn;
 #endif  /* NDEBUG */

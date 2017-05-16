@@ -889,7 +889,9 @@ test_ax_compatibility_l1(void)
 static int
 test_ax_compatibility_l2(void)
 {
-    uint32_t ax_masks[]={ AX_FEATURES_AX_L2_VMX };
+    uint32_t ax_masks[]={ AX_FEATURES_AX_L2_VMX | AX_FEATURES_AX_L2_VMCLEAR |
+                          AX_FEATURES_AX_L2_FLUSHTLB };
+
     uint32_t ln_masks[]={ AX_FEATURES_LN_VMCS_X_V1 |
                           AX_FEATURES_LN_NO_RESTORE_DT_LIMITS |
                           AX_FEATURES_LN_ACCEPT_LAZY_EPT_FAULTS };
@@ -905,7 +907,6 @@ test_ax_compatibility_l2(void)
 
     return err;
 }
-
 
 static int
 test_ax_compatibility(void)

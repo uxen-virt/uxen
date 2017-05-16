@@ -26,7 +26,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -60,6 +60,7 @@
 #include <asm/hvm/svm/amd-iommu-proto.h>
 #endif  /* __UXEN__ */
 #include <uxen/memcache-dm.h>
+#include <asm/hvm/ax.h>
 
 #include "mm-locks.h"
 
@@ -414,6 +415,9 @@ int p2m_alloc_table(struct p2m_domain *p2m)
     p2m->phys_table = pagetable_from_mfn(page_to_mfn(p2m_top));
     d->arch.hvm_domain.vmx.ept_control.asr  =
         pagetable_get_pfn(p2m_get_pagetable(p2m));
+
+    if (ax_pv_ept) 
+        ax_pv_ept_flush(p2m);
 
 #ifndef __UXEN__
     if ( hap_enabled(d) )

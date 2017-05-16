@@ -7,6 +7,7 @@
 #define __ASM_X86_HVM_AX_H__
 
 #include <asm/msr-index.h>
+#include <asm/p2m.h>
 #include <asm/hvm/hvm.h>
 #include <asm/hvm/support.h>
 #include <asm/hvm/vmx/vmx.h>
@@ -21,7 +22,9 @@
                                  sizeof(ax_vmcs_extensions_v1_t)))
 
 extern int ax_present;
-extern void ax_flush_ept(struct domain *d);
+extern int ax_pv_ept;
+extern void ax_mark_ept_dirty(struct domain *d);
+extern void ax_pv_ept_flush(struct p2m_domain *p2m);
 extern int ax_setup(void);
 
 static inline
@@ -60,7 +63,6 @@ void ax_vmcs_x_wrmsrl(struct vcpu *v, uint32_t msr, uint64_t value)
     }
 }
 
-
 static inline
 void ax_vmcs_x_rdmsrl(struct vcpu *v, uint32_t msr, uint64_t *value)
 {
@@ -88,5 +90,24 @@ void ax_vmcs_x_rdmsrl(struct vcpu *v, uint32_t msr, uint64_t *value)
         return;
     }
 }
+
+static inline void ax_invept_all_cpus(void)
+{
+#ifdef __x86_64__
+    uint64_t rax, rbx, rcx, rdx;
+
+    rax = AX_CPUID_INVEPT_ALL;
+    rbx = 0;
+    rcx = 0;
+    rdx = 0;
+
+    asm volatile ("cpuid":"+a" (rax), "+b" (rbx), "+c" (rcx), "+d" (rdx)::"cc");
+#endif
+}
+
+int ax_remote_vmclear(uint64_t pa);
+void ax_remote_tblflush(void);
+void ax_pv_ept_write(struct p2m_domain *p2m, int level, uint64_t gfn,
+                     uint64_t new_entry, int invept);
 
 #endif /* __ASM_X86_HVM_AX_H__ */

@@ -18,7 +18,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -45,6 +45,7 @@
 #include <asm/p2m.h>
 #include <asm/hvm/vmx/vmx.h>
 #include <asm/hvm/vmx/vmcs.h>
+#include <asm/hvm/ax.h>
 #ifndef __UXEN__
 #include <xen/iommu.h>
 #endif  /* __UXEN__ */
@@ -294,6 +295,11 @@ ept_split_super_page(struct p2m_domain *p2m, ept_entry_t *ept_entry,
 
     /* now install the newly split ept sub-tree */
     /* NB: please make sure domian is paused and no in-fly VT-d DMA. */
+
+    if (ax_pv_ept) {
+        printk(KERN_ERR "AX_PV_EPT: splitting page - leaving to async path\n");
+        //FIXME Eventually: ax_pv_ept_write(p2m, target, gfn << PAGE_SHIFT, new_entry, needs_sync);
+    }
     atomic_write_ept_entry(ept_entry, split_ept_entry);
 
   out:
@@ -520,6 +526,8 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
         }
 
         atomic_write_ept_entry(ept_entry, new_entry);
+        if (ax_pv_ept)
+            ax_pv_ept_write(p2m, target, gfn, new_entry.epte, needs_sync);
     }
     else
     {
@@ -564,6 +572,8 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
         ept_p2m_type_to_flags(&new_entry, p2mt, p2ma);
 
         atomic_write_ept_entry(ept_entry, new_entry);
+        if (ax_pv_ept)
+            ax_pv_ept_write(p2m, i, gfn, new_entry.epte, needs_sync);
     }
 
     if (!target && old_entry.mfn != mfn_x(mfn)) {
@@ -594,7 +604,7 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
 out:
     unmap_domain_page(table);
 
-    if ( needs_sync )
+    if ( needs_sync && !ax_pv_ept )
         pt_sync_domain(p2m->domain);
 
 #ifndef __UXEN__
@@ -701,6 +711,8 @@ ept_ro_update_l2_entry(struct p2m_domain *p2m, unsigned long gfn,
             atomic_write_ept_entry(ept_entry, new_entry);
             if (read_only && need_sync)
                 *need_sync = 1;
+            if (ax_pv_ept)
+                ax_pv_ept_write(p2m, target, gfn, new_entry.epte, 0);
         }
 
         /* Success */
@@ -1101,6 +1113,11 @@ static void ept_change_entry_type_page(mfn_t ept_page_mfn, int ept_page_level,
 
     perfc_incr(pc11);
 
+    if (ax_pv_ept) {
+        printk(KERN_ERR "AX_PV_EPT: changing page type - leaving to async path\n");
+        //FIXME Eventually: ax_pv_ept_write(p2m, target, gfn << PAGE_SHIFT, new_entry, needs_sync);
+    }
+
 DEBUG();
     for ( int i = 0; i < EPT_PAGETABLE_ENTRIES; i++ )
     {
@@ -1155,6 +1172,8 @@ void ept_p2m_init(struct p2m_domain *p2m)
 
     p2m->p2m_l1_cache_id = p2m->domain->domain_id;
     open_softirq(P2M_L1_CACHE_CPU_SOFTIRQ, p2m_l1_cache_flush_softirq);
+
+    p2m->virgin = 1;
 }
 
 static void ept_dump_p2m_table(unsigned char key)

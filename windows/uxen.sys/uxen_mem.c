@@ -22,6 +22,9 @@
 
 #include "pagemap.h"
 
+#include "attoxen-api/ax_constants.h"
+#include "attoxen-api/hv_tests.h"
+
 static KSPIN_LOCK map_page_range_lock;
 static MDL *map_page_range_mdl = NULL;
 int map_page_range_max_nr = 64;
@@ -2222,7 +2225,28 @@ void
 uxen_mem_tlb_flush(void)
 {
 
+#ifdef __i386__
     KeIpiGenericCall(uxen_mem_tlb_flush_fn_global, 0);
+#else
+    static int test_ax = 1;
+    static int have_ax;
+
+    if (test_ax) {
+        have_ax = hv_tests_ax_running();
+        test_ax = 0;
+    }
+
+    if (!have_ax)
+        KeIpiGenericCall(uxen_mem_tlb_flush_fn_global, 0);
+    else {
+        uint64_t rax = AX_CPUID_FLUSHTLB;
+        uint64_t rbx = 0;
+        uint64_t rcx = 0;
+        uint64_t rdx = 0;
+
+        hv_tests_cpuid(&rax, &rbx, &rcx, &rdx);
+    }
+#endif
 }
 
 #ifdef __i386__
