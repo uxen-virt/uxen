@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, Bromium, Inc.
+ * Copyright 2016-2017, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -113,6 +113,9 @@ static void uxenhid_bh(unsigned long opaque)
 	ssize_t len;
 	struct uxenhid_sendv *sendv, *sendv_t;
 
+        if (!dev->ring)
+          return;
+
 	spin_lock(&dev->v4v_lock);
 	/* TX */
 	spin_lock(&dev->snd_lock);
@@ -127,6 +130,10 @@ static void uxenhid_bh(unsigned long opaque)
 
 	/* RX */
 	len = uxen_v4v_copy_out(dev->ring, NULL, NULL, &hdr, sizeof(hdr), 0);
+        if (len < 0) {
+          spin_unlock(&dev->v4v_lock);
+          return;
+        }
 	while (len >= 0) {
 		if (len < sizeof(hdr)) {
 			uxen_v4v_copy_out(dev->ring, NULL, NULL, NULL, 0, 1);
@@ -558,6 +565,7 @@ static int uxenhid_probe(struct uxen_device *device)
 		ret = -ENOMEM;
 		goto err_dev_alloc;
 	}
+        memset(dev, 0, sizeof(*dev));
 
 	hdev = hid_allocate_device();
 	if (!hdev) {
