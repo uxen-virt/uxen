@@ -91,6 +91,8 @@ struct ndns_data {
     int denied;
     int scheduled;
     int failure;
+    uint16_t connection_port;
+    int guest_lookup;
     struct dns_response response;
     union {
         struct {
@@ -444,7 +446,8 @@ static void dns_lookup_check(void *opaque)
     DDNS(dstate, "dns_lookup err %d", dstate->response.err);
     if (!dstate->ni || !dstate->ni->ac_enabled)
         goto out;
-    // blocking check IP adress here
+
+
     if (dstate->response.err || !dstate->response.a ||
             !dstate->response.a[0].family) {
         goto out;
@@ -457,11 +460,18 @@ static void dns_lookup_check(void *opaque)
             dstate->response.a[i].family == AF_INET6) {
 
             len46++;
+            if (dstate->guest_lookup)
+                ac_add_ip_from_dns(dstate->ni, &dstate->response.a[i]);
         }
         i++;
     }
     if (!len46)
         goto out;
+
+    if (!dstate->connection_port)
+        goto out;
+
+    // blocking check IP:port here
     len = i;
     ret_mask = calloc(1, (len46 + 1) * sizeof (char));
     ips = (struct net_addr *) calloc(1, len46 * sizeof(*ips));
@@ -483,7 +493,8 @@ static void dns_lookup_check(void *opaque)
         i++;
     }
 
-    if (dstate->ni && ac_check_list_ips(dstate->ni, ips, ret_mask, len46) < 0) {
+    if (dstate->ni && ac_check_dns_ips_port(dstate->ni, ips, dstate->connection_port,
+                                             ret_mask, len46) < 0) {
         dstate->denied = 1;
         goto out;
     }
@@ -553,13 +564,16 @@ static void dns_sync_query(void *opaque)
     dns_lookup_check(dstate);
 }
 
-struct dns_response dns_lookup_containment(struct nickel *ni, const char *name, int proxy_on)
+struct dns_response dns_lookup_containment(struct nickel *ni, const char *name, uint16_t port,
+                                           int proxy_on)
 {
     struct ndns_data dstate;
 
     memset(&dstate, 0, sizeof(dstate));
     dstate.ni = ni;
     dstate.dname = ni_priv_strdup(name);
+    assert(port);
+    dstate.connection_port = port;
     dstate.proxy_on = proxy_on;
     if (no_proxy_mode)
         dstate.proxy_on = 0;
@@ -687,6 +701,7 @@ process:
             ndstate->ni = dstate->ni;
             ndstate->dname = ni_priv_strdup(dstate->dname);
             ndstate->fake_ip = *faddr;
+            ndstate->guest_lookup = 1;
             if (ni_schedule_bh(ndstate->ni, dns_lookup_check, dns_lookup_check_continue,
                         ndstate)) {
 
@@ -859,6 +874,7 @@ ndns_chr_write(CharDriverState *chr, const uint8_t *buf, int blen)
     if (!dstate)
         goto cleanup;
     dstate->ni = dns_chr->ni;
+    dstate->guest_lookup = 1;
     DDNS(dstate, "id 0x%x", DNS_GET_ID(buf));
     if (blen <= off)
         goto cleanup;

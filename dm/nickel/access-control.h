@@ -31,16 +31,13 @@ int ac_post_init(struct nickel *ni);
 bool ac_proxy_set(struct nickel *ni);
 void ac_save(QEMUFile *f, struct nickel *ni);
 int ac_load(QEMUFile *f, struct nickel *ni, int version_id);
-bool ac_gproxy_allow(struct nickel *ni, struct sockaddr_in saddr, const struct net_addr *daddr,
-                     uint16_t dport);
 int ac_tcp_input_syn(struct nickel *ni, struct sockaddr_in saddr,
         struct sockaddr_in daddr);
 int ac_udp_input(struct nickel *ni, struct sockaddr_in saddr,
         struct sockaddr_in daddr);
-void ac_query_access_policy(struct nickel *ni);
+void ac_add_ip_from_dns(struct nickel *ni, const struct net_addr *a);
 bool ac_is_dnsname_allowed(struct nickel *ni, const char *name);
-bool ac_is_ip_allowed(struct nickel *ni, struct net_addr *addr);
-int ac_check_list_ips(struct nickel *ni, struct net_addr *ips, char *ret_mask, int len);
-void ac_stub_event_log(struct nickel *ni, struct sockaddr_in saddr, bool allowed);
-
+bool ac_is_ip_port_allowed(struct nickel *ni, const struct net_addr *addr, uint16_t port);
+int ac_check_dns_ips_port(struct nickel *ni, struct net_addr *ips, uint16_t port,
+                           char *ret_mask, int len);
 #endif

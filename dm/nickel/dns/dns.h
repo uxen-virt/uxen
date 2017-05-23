@@ -30,10 +30,7 @@ struct net_addr {
         struct in_addr  ipv4;
         struct in6_addr ipv6;
     };
-    union {
-        int64_t ts_hyb;
-        uint8_t prefix_len;
-    };
+    int64_t ts_hyb;
 };
 
 
@@ -108,7 +105,8 @@ struct dns_response {
 bool dns_is_nickel_domain_name(const char *domain);
 void dns_http_proxy_enabled(void);
 struct dns_response dns_lookup(const char *dname);
-struct dns_response dns_lookup_containment(struct nickel *ni, const char *name, int proxy_on);
+struct dns_response dns_lookup_containment(struct nickel *ni, const char *name, uint16_t port,
+                                           int proxy_on);
 void dns_hyb_update(struct net_addr *a, struct net_addr cn_addr);
 const struct net_addr * dns_hyb_addr(struct net_addr *a);
 struct net_addr * dns_ips_dup(const struct net_addr *a);
