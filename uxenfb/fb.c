@@ -8,7 +8,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2016, Bromium, Inc.
+ * Copyright 2016-2017, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -48,6 +48,8 @@
 #include <uxen-v4vlib.h>
 #include <uxen-platform.h>
 #include <uxen-util.h>
+
+#define USE_DIRTY_RECTS
 
 #define DEFAULT_XRES 1024
 #define DEFAULT_YRES 768
@@ -125,6 +127,8 @@ module_param(fb_sizemax, ulong, 0444);
 module_param(fb_v4vexts, bool, 0444);
 module_param(fb_mmap_only, bool, 0444);
 
+#ifdef USE_DIRTY_RECTS
+
 static int
 send_rect(struct uxenfb_par *par, struct uxenfb_rect *rect)
 {
@@ -136,6 +140,8 @@ send_rect(struct uxenfb_par *par, struct uxenfb_rect *rect)
         return -1;
     return 0;
 }
+
+#endif
 
 static void
 send(struct uxenfb_par *par, struct uxenfb_msg *msg)
@@ -284,11 +290,13 @@ uxenfb_refresh(struct fb_info *info, int x1, int y1, int w, int h, int console)
             rc->bottom = b;
     }
 
+#ifdef USE_DIRTY_RECTS
     if (send_rect(info->par, rc) == 0) {
         /* send ok, clear rect */
         rc->left = -1;
         rc->right = -1;
     }
+#endif
 }
 
 static void
@@ -540,7 +548,9 @@ static struct fb_ops uxenfb_ops = {
     .owner = THIS_MODULE,
     .fb_read = fb_sys_read,
     .fb_write = fb_sys_write,
+#ifdef USE_DIRTY_RECTS
     .fb_mmap = uxenfb_mmap,
+#endif
     .fb_setcolreg = uxenfb_setcolreg,
     .fb_blank = uxenfb_blank,
     .fb_fillrect = uxenfb_fillrect,
