@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Bromium, Inc.
+# Copyright 2015-2017, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -45,7 +45,7 @@ filecrypt$(EXE_SUFFIX): $(filecrypt_OBJS) libfilecrypt.a
 $(libfilecrypt_OBJS): .deps/.exists
 $(libfilecrypt_OBJS): %.o : $(SRCROOT)/%.c
 	$(_W)echo Compiling - $@
-	$(_V)$(COMPILE.c) $(EXTRA_CFLAGS) $(libfilecrypt_CPPFLAGS) $< -o $@
+	$(_V)$(COMPILE.c:-fstack-protector%=) $(EXTRA_CFLAGS) $(libfilecrypt_CPPFLAGS) $< -o $@
 
 $(filecrypt_OBJS): .deps/.exists
 $(filecrypt_OBJS): %.o : $(SRCROOT)/%.c
