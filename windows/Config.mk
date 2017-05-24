@@ -117,6 +117,9 @@ CPPFLAGS += -I$(abspath $(TOOLSDIR)/cross-mingw/include)
 
 $(REL_ONLY)LDFLAGS += -Wl,--dynamicbase -Wl,--nxcompat -pie 
 ifeq ($(TARGET_HOST_BITS),32)
+#mark binaries as not using SEH, so that SAFESEH feature works
+LDFLAGS += -Wl,--no-seh
+
 # For some reason binutils sets the wrong entry address in binaries linked with -pie 
 # (it works on 64bit by accident so we probably want to pull this across)
 $(REL_ONLY)LDFLAGS += -Wl,-e_mainCRTStartup
