@@ -16,6 +16,7 @@
 #include <log.h>
 #include "dns.h"
 #include "dns-fake.h"
+#include "lava.h"
 
 
 #define HYB_EXPIRE_MS   (10 * 60 * 1000)
@@ -450,6 +451,17 @@ static void dns_lookup_check(void *opaque)
 
     if (dstate->response.err || !dstate->response.a ||
             !dstate->response.a[0].family) {
+
+        struct lava_event *lv;
+        struct sockaddr_in unused;
+
+        memset(&unused, 0, sizeof(unused));
+        lv = lava_event_create(dstate->ni, unused, unused, false);
+        if (lv) {
+            lava_event_dns_error(lv, dstate->dname, dstate->response.err);
+            lava_event_complete(lv, true);
+        }
+
         goto out;
     }
 

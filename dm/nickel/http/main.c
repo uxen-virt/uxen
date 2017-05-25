@@ -2641,6 +2641,14 @@ static int srv_closing(struct http_ctx *hp, int err)
     assert(hp->so);
     HLOG3(" err %d", err);
 
+    if (err && hp->cx) {
+        struct lava_event *lv;
+
+        lv = tcpip_lava_get(hp->cx->ni_opaque);
+        if (lv)
+            lava_event_tcp_socket_error(lv, err);
+    }
+
     if (hp->cstate == S_CONNECTED && hp->cx && !(hp->cx->flags & CXF_GUEST_PROXY)) {
         if (hp->cx->out && BUFF_BUFFERED(hp->cx->out)) {
             hp->cx->flags |= CXF_FLUSH_CLOSE;
@@ -3119,6 +3127,7 @@ static int hp_srv_process(struct http_ctx *hp)
 
         bool headers_just_received = false;
         bool parse_error = false;
+        struct lava_event *lv;
 
         lparsed = HTTP_PARSE_BUFF(hp->cx->srv_parser, hp->cx->out);
         needs_consume = true;
@@ -3142,6 +3151,10 @@ static int hp_srv_process(struct http_ctx *hp)
                 free(hp->cx->alternative_proxies);
                 hp->cx->alternative_proxies = NULL;
             }
+            lv = tcpip_lava_get(hp->cx->ni_opaque);
+            if (lv)
+                lava_event_http_response(lv, hp->cx->srv_parser->h.status_code);
+
             hp->cx->srv_parser->headers_parsed = 1;
             hp->flags &= ~HF_KEEP_ALIVE;
             if (!conn_close && ((hp->cx->srv_parser->h.http_major == 1 &&

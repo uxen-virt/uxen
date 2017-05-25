@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -31,5 +31,9 @@ void lava_event_complete(struct lava_event *lv, bool del);
 void lava_event_save_and_clear(QEMUFile *f, struct lava_event *lv);
 struct lava_event * lava_event_restore(struct nickel *ni, QEMUFile *f);
 int lava_send_icmp(struct nickel *ni, uint32_t daddr, uint8_t type, bool denied);
+void lava_event_dns_error(struct lava_event *lv, const char *domain, int error);
+void lava_event_tcp_socket_error(struct lava_event *lv, int error);
+void lava_event_http_response(struct lava_event *lv, int http_code);
+
 
 #endif /* _NICKEL_LAVA_LOG_ */

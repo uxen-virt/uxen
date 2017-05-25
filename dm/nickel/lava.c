@@ -23,6 +23,7 @@
 #define LVI_STARTED       U32BF(0)
 #define LVI_CONNECTED     U32BF(1)
 #define LVI_SUBMITTED     U32BF(2)
+#define LVI_FIRST_HTTP_RESPONSE U32BF(3)
 
 #define LVF_TCP                 U32BF(0)
 #define LVF_ESTABLISHED         U32BF(1)
@@ -32,6 +33,9 @@
 #define LVF_GPROXY              U32BF(5)
 #define LVF_REMOTE_ESTABLISHED  U32BF(6)
 #define LVF_ICMP                U32BF(7)
+#define LVF_SOCKET_ERROR        U32BF(8)
+#define LVF_DNS                 U32BF(9)
+#define LVF_HTTP_RESPONSE       U32BF(10)
 
 struct lava_event_sv {
     uint32_t internal;
@@ -52,9 +56,12 @@ struct lava_event {
     char *http_method;
     char *http_domain;
     char *http_url;
+    char *dns_domain;
     uint16_t http_port;
     struct net_addr remote_addr;
     uint16_t remote_port;
+    int sock_error_code;
+    int http_response_code;
 };
 
 static struct buff lava_rpc_list;
@@ -282,6 +289,7 @@ static void lv_free(struct lava_event *lv)
     ni_priv_free(lv->http_method);
     ni_priv_free(lv->http_domain);
     ni_priv_free(lv->http_url);
+    ni_priv_free(lv->dns_domain);
     free(lv);
 }
 
@@ -318,8 +326,8 @@ int lava_send_icmp(struct nickel *ni, uint32_t daddr, uint8_t type, bool denied)
     if (!str_daddr)
         str_daddr = "";
 
-    if (buff_appendf(bf, "\"%u\",\"%u\",\"%hu\",\"%s\",\"%s\",\"%s\",\"%hu\",\"%s\",\"%hu\"",
-            (unsigned) flags, (unsigned) 0, (uint16_t) 0, "", "", "", (uint16_t) 0, str_daddr,
+    if (buff_appendf(bf, "\"%lu\",\"%u\",\"%hu\",\"%s\",\"%s\",\"%s\",\"%hu\",\"%s\",\"%hu\"",
+            (unsigned long) flags, (unsigned) 0, (uint16_t) 0, "", "", "", (uint16_t) 0, str_daddr,
             (uint16_t) 0) < 0) {
 
         goto mem_err;
@@ -368,16 +376,43 @@ static void lv_submit_and_reset(struct lava_event *lv)
         }
     }
 
-    if (buff_appendf(bf, "\"%u\",\"%u\",\"%hu\",\"%s\",\"%s\",\"%s\",\"%hu\",\"%s\",\"%hu\"",
-            (unsigned) lv->flags, (unsigned) lv->conn_id, ntohs(lv->guest_port),
-            lv->http_method ? lv->http_method : "",
-            lv->http_domain ? lv->http_domain : "",
-            lv->http_url ? lv->http_url : "",
-            lv->http_port,
-            remote_ip ? remote_ip : "",
-            ntohs(lv->remote_port)) < 0) {
+    if (lv->flags & LVF_ICMP)
+        goto out; /* this should not happen though */
 
-        goto mem_err;
+    if ((lv->flags & LVF_SOCKET_ERROR) && (lv->flags & LVF_DNS)) {
+        if (buff_appendf(bf, "\"%lu\",\"%s\",\"%d\",\"\",\"\",\"\",\"\",\"\",\"\"",
+                (unsigned long) lv->flags,
+                lv->dns_domain ? lv->dns_domain : "",
+                lv->sock_error_code) < 0) {
+
+            goto mem_err;
+        }
+    } else if ((lv->flags & LVF_SOCKET_ERROR) && (lv->flags & LVF_TCP)) {
+        if (buff_appendf(bf, "\"%lu\",\"%u\",\"%hu\",\"%d\",\"\",\"\",\"\",\"\",\"\"",
+                (unsigned long) lv->flags, (unsigned) lv->conn_id, ntohs(lv->guest_port),
+                lv->sock_error_code) < 0) {
+
+            goto mem_err;
+        }
+    } else if (lv->flags & LVF_HTTP_RESPONSE) {
+        if (buff_appendf(bf, "\"%lu\",\"%u\",\"%hu\",\"%d\",\"\",\"\",\"\",\"\",\"\"",
+                (unsigned long) lv->flags, (unsigned) lv->conn_id, ntohs(lv->guest_port),
+                lv->http_response_code)) {
+
+            goto mem_err;
+        }
+    } else {
+        if (buff_appendf(bf, "\"%lu\",\"%u\",\"%hu\",\"%s\",\"%s\",\"%s\",\"%hu\",\"%s\",\"%hu\"",
+                (unsigned long) lv->flags, (unsigned) lv->conn_id, ntohs(lv->guest_port),
+                lv->http_method ? lv->http_method : "",
+                lv->http_domain ? lv->http_domain : "",
+                lv->http_url ? lv->http_url : "",
+                lv->http_port,
+                remote_ip ? remote_ip : "",
+                ntohs(lv->remote_port)) < 0) {
+
+            goto mem_err;
+        }
     }
 
     free(remote_ip);
@@ -396,6 +431,7 @@ static void lv_submit_and_reset(struct lava_event *lv)
 out:
     lv->internal &= ~LVI_STARTED;
     lv->flags &= ((~LVF_DENIED) & (~LVF_PROXY) & (~LVF_REMOTE_ESTABLISHED));
+    lv->flags &= ((~LVF_SOCKET_ERROR) & (~LVF_HTTP_RESPONSE) & (~LVF_DNS));
     ni_priv_free(lv->http_method);
     lv->http_method = NULL;
     ni_priv_free(lv->http_domain);
@@ -405,6 +441,8 @@ out:
     lv->remote_port = 0;
     memset(&lv->remote_addr, 0, sizeof(lv->remote_addr));
     lv->http_port = 0;
+    ni_priv_free(lv->dns_domain);
+    lv->dns_domain = NULL;
     return;
 
 mem_err:
@@ -492,6 +530,20 @@ void lava_event_set_http(struct lava_event *lv, const char *method,
     lv->http_port = port;
 }
 
+void lava_event_http_response(struct lava_event *lv, int http_code)
+{
+    if (!lv)
+        return;
+    if (lv->internal & LVI_FIRST_HTTP_RESPONSE)
+        return;
+    if (lv->internal & LVI_STARTED)
+        lv_submit_and_reset(lv);
+    lv->internal |= (LVI_STARTED | LVI_FIRST_HTTP_RESPONSE);
+    lv->flags |= LVF_HTTP_RESPONSE;
+    lv->http_response_code = http_code;
+    lv_submit_and_reset(lv);
+}
+
 void lava_event_remote_connect(struct lava_event *lv)
 {
     if (!lv)
@@ -524,6 +576,35 @@ void lava_event_remote_established(struct lava_event *lv, struct net_addr *a, ui
     lv->internal |= LVI_STARTED;
     lv->flags |= LVF_REMOTE_ESTABLISHED;
     lv_set_remote(lv, a, port);
+    lv_submit_and_reset(lv);
+}
+
+void lava_event_dns_error(struct lava_event *lv, const char *domain, int error)
+{
+    if (!lv)
+        return;
+    lv->internal |= LVI_STARTED;
+    lv->flags |= (LVF_DNS | LVF_SOCKET_ERROR);
+    if (lv->dns_domain)
+        ni_priv_free(lv->dns_domain);
+    lv->dns_domain = ni_priv_strdup(domain);
+    if (!lv->dns_domain) {
+        warn("%s: memory error\n", __FUNCTION__);
+        return;
+    }
+    lv->sock_error_code = error;
+    lv_submit_and_reset(lv);
+}
+
+void lava_event_tcp_socket_error(struct lava_event *lv, int error)
+{
+    if (!lv)
+        return;
+    if (lv->internal & LVI_STARTED)
+        lv_submit_and_reset(lv);
+    lv->internal |= LVI_STARTED;
+    lv->flags |= LVF_SOCKET_ERROR;
+    lv->sock_error_code = error;
     lv_submit_and_reset(lv);
 }
 
