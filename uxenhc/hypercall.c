@@ -29,15 +29,22 @@
 #define HV_CPUID_LEAF_RANGE 0x10000
 #define HV_CPUID_LEAD_SKIP 0x100
 
-int uxen_ax;
+int uxen, axen;
+
 void *uxen_hcbase;
 EXPORT_SYMBOL_GPL(uxen_hcbase);
 
-int uxen_ax_hypervisor(void)
+int uxen_hypervisor(void)
 {
-    return !!uxen_ax;
+  return !!uxen;
 }
-EXPORT_SYMBOL_GPL(uxen_ax_hypervisor);
+EXPORT_SYMBOL_GPL(uxen_hypervisor);
+
+int axen_hypervisor(void)
+{
+  return !!axen;
+}
+EXPORT_SYMBOL_GPL(axen_hypervisor);
 
 int
 uxen_hypercall_version(int cmd, void *arg)
@@ -75,49 +82,53 @@ uxen_hypercall_v4v_op(int cmd, void *arg1, void *arg2, void *arg3, void *arg4, v
 }
 EXPORT_SYMBOL_GPL(uxen_hypercall_v4v_op);
 
+static void
+detect_ux_ax(void)
+{
+    register void* _rax asm  ("rax") = (void*)HV_CPUID_LEAF_BASE;
+    register void* _rcx asm  ("rcx") = 0;
+    register void* _rbx asm  ("rbx") = 0;
+    register void* _rdx asm  ("rdx") = 0;
+
+    asm volatile (
+        "cpuid"
+        : "+r" (_rax), "+r" (_rcx), "+r" (_rbx), "+r" (_rdx)
+        :
+        : "cc"
+    );
+
+    /* uXenisnotXen */
+    uxen = (_rbx == (void*)0x6e655875) && (_rcx == (void*)0x6f6e7369) && (_rdx == (void*)0x6e655874);
+    /* aXenisnotXen */
+    axen = (_rbx == (void*)0x6e655861) && (_rcx == (void*)0x6f6e7369) && (_rdx == (void*)0x6e655874);
+}
+
 static int __init uxen_hypercall_init(void)
 {
     int ret = -1;
-    u32 eax, ebx, ecx, edx;
+    u32 eax=0, ebx=0, ecx=0, edx=0;
     char signature[13];
-    u32 leaf;
     u64 addr;
     xen_extraversion_t extraversion;
 
-    uxen_ax = 0;
-#ifdef LX_TARGET_AX
-    uxen_ax = 1;
-#endif
+    detect_ux_ax();
 
-    if (uxen_ax) {
-        uxen_hcbase = (void *) (unsigned long) (AX_CPUID_LEAF_BASE + 0x10);
-        printk(KERN_INFO "using ax hypervisor");
-#if 0 // NOT YET
+    if (axen) {
+        uxen_hcbase = (void *) (unsigned long) (AX_CPUID_LEAF_BASE + 0x10); // FIXME?
+        printk(KERN_INFO "using ax hypervisor\n");
         ret = 0;
         goto out;
-#else
+    } else {
         uxen_hcbase = NULL;
-#endif
     }
 
-    for (leaf = 0; leaf < HV_CPUID_LEAF_RANGE; leaf += HV_CPUID_LEAD_SKIP) {
-        cpuid(HV_CPUID_LEAF_BASE + leaf, &eax, &ebx, &ecx, &edx);
-        *(u32 *)(signature + 0) = ebx;
-        *(u32 *)(signature + 4) = ecx;
-        *(u32 *)(signature + 8) = edx;
-        signature[12] = 0;
-
-        if (!strcmp("uXenisnotXen", signature))
-            break;
-    }
-
-    if (leaf >= HV_CPUID_LEAF_RANGE || (eax - (HV_CPUID_LEAF_BASE + leaf)) < 2) {
-        printk(KERN_INFO "uxenhc: hypervisor not found: leaf %x eax %x", leaf, eax);
+    if (!uxen) {
+        printk(KERN_INFO "uxenhc: hypervisor not found\n");
         ret = -ENODEV;
         goto out;
     }
 
-    printk(KERN_INFO "uxenplatform: hypervisor found at %x eax %x", HV_CPUID_LEAF_BASE + leaf, eax);
+    printk(KERN_INFO "using uxen hypervisor\n");
 
     if (!uxen_hcbase) {
         uxen_hcbase =  __vmalloc(PAGE_SIZE, GFP_KERNEL, PAGE_KERNEL_EXEC);
@@ -128,11 +139,11 @@ static int __init uxen_hypercall_init(void)
     }
     memset(uxen_hcbase, 0xc3 /* ret */, PAGE_SIZE);
     addr = ((u64) virtual_to_pfn(uxen_hcbase)) << PAGE_SHIFT;
-    cpuid(HV_CPUID_LEAF_BASE + leaf + 2, &eax, &ebx, &ecx, &edx);
+    cpuid(HV_CPUID_LEAF_BASE + 2, &eax, &ebx, &ecx, &edx);
     wrmsr_safe(ebx, (u32)addr, (u32)(addr >> 32));
     wbinvd();
 
-    cpuid(HV_CPUID_LEAF_BASE + leaf + 1, &eax, &ebx, &ecx, &edx);
+    cpuid(HV_CPUID_LEAF_BASE + 1, &eax, &ebx, &ecx, &edx);
     ret = uxen_hypercall_version(XENVER_extraversion, extraversion);
     if (!ret)
         printk(KERN_INFO "uxenplatform: hypervisor version uXen v%u.%u%s\n", eax >> 16, eax & 0xffff,

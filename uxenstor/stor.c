@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, Bromium, Inc.
+ * Copyright 2016-2017, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -17,6 +17,7 @@
 #include <uxen/platform_interface.h>
 #include <uxen-platform.h>
 #include <uxen-v4vlib.h>
+#include <uxen-hypercall.h>
 
 #include <scsi/scsi_cmnd.h>
 #include <scsi/scsi_host.h>
@@ -451,11 +452,10 @@ static int uxenstor_probe(struct uxen_device *dev)
     dev->priv = state;
 
     v4v_storage = 0;
-#ifdef LX_TARGET_AX
-    v4v_storage = 3; // FIXME: hardcoded 2 disks (2nd is for swap/hibernation image)
-#elif defined(LX_TARGET_UXEN)
-    v4v_storage = inw(UXENSTOR_BITMAP_PORT);
-#endif
+    if (axen_hypervisor())
+        v4v_storage = 3; // FIXME: hardcoded 2 disks (2nd is for swap/hibernation image)
+    else
+        v4v_storage = inw(UXENSTOR_BITMAP_PORT);
 
     if (!v4v_storage) {
         printk(KERN_INFO "%s: no v4v storage found\n", __FUNCTION__);

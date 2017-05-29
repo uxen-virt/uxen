@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, Bromium, Inc.
+ * Copyright 2016-2017, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -27,10 +27,8 @@
 
 #define XENV4V_MAX_RING_LENGTH (4*1024*1024UL)
 
-#ifdef LX_TARGET_AX
 typedef void (*ax_irq_handler_t)(struct pt_regs*);
 extern void set_ax_irq_handler(ax_irq_handler_t h);
-#endif
 
 static int v4v_irq;
 static int irq_ok;
@@ -41,8 +39,8 @@ static u32 last_port;
 static rwlock_t ring_list_lock;
 static struct list_head ring_list;
 
-static void run_irq_tasklet(unsigned long);
-DECLARE_TASKLET(irq_tasklet, run_irq_tasklet, 0);
+//static void run_irq_tasklet(unsigned long);
+//DECLARE_TASKLET(irq_tasklet, run_irq_tasklet, 0);
 
 struct uxen_v4v_ring {
     v4v_ring_t *ring; /* first */
@@ -305,7 +303,7 @@ out:
 EXPORT_SYMBOL_GPL(uxen_v4v_notify_space);
 
 static void
-run_irq_tasklet(unsigned long opaque)
+run_v4v_callbacks(void)
 {
     unsigned long flags;
     struct uxen_v4v_ring *r;
@@ -318,43 +316,29 @@ run_irq_tasklet(unsigned long opaque)
     read_unlock_irqrestore(&ring_list_lock, flags);
 }
 
-static void
-v4v_irq_handler(struct pt_regs *regs)
+static void uxenv4v_isr_ax(struct pt_regs *regs)
 {
-    if (!irq_ok)
-      return;
-    tasklet_schedule(&irq_tasklet);
+    if (irq_ok)
+        run_v4v_callbacks();
 }
 
-#if 0
 static irqreturn_t uxenv4v_isr(int irq, void *unused)
 {
-    unsigned long flags;
-    struct uxen_v4v_ring *r;
-
-    read_lock_irqsave(&ring_list_lock, flags);
-    list_for_each_entry(r, &ring_list, node) {
-        if (r->irq_enabled && r->callback)
-            r->callback(r->callback_opaque);
-    }
-    read_unlock_irqrestore(&ring_list_lock, flags);
-
+    if (irq_ok)
+        run_v4v_callbacks();
     return IRQ_HANDLED;
 }
-#endif
 
 static void driver_cleanup(void)
 {
-#ifndef LX_TARGET_AX
-    if (irq_ok)
-        free_irq(v4v_irq, NULL);
-#endif
     irq_ok = 0;
-#ifdef LX_TARGET_AX
-    ax_exit();
-#elif defined(LX_TARGET_UXEN)
-    acpi_exit();
-#endif
+    if (axen_hypervisor()) {
+        ax_exit();
+    } else {
+        if (irq_ok)
+            free_irq(v4v_irq, NULL);
+        acpi_exit();
+    }
 }
 
 static int __init uxenv4v_init(void)
@@ -364,27 +348,24 @@ static int __init uxenv4v_init(void)
     rwlock_init (&ring_list_lock);
     INIT_LIST_HEAD(&ring_list);
 
-#ifdef LX_TARGET_AX
-    v4v_irq = ax_init_irq_line();
-#elif defined(LX_TARGET_UXEN)
-    v4v_irq = acpi_init_irq_line();
-#else
-    v4v_irq = -ENODEV;
-#endif
-
+    if (axen_hypervisor())
+        v4v_irq = ax_init_irq_line();
+    else if (uxen_hypervisor())
+        v4v_irq = acpi_init_irq_line();
+    else
+        v4v_irq = -ENODEV;
 
     if (v4v_irq <= 0) {
         ret = -ENODEV;
         goto cleanup;
     }
 
-#ifdef LX_TARGET_AX
-    set_ax_irq_handler(v4v_irq_handler);
-#else
-    ret = request_irq(v4v_irq, uxenv4v_isr, IRQF_TRIGGER_RISING, KBUILD_MODNAME, NULL);
+    if (axen_hypervisor())
+        set_ax_irq_handler(uxenv4v_isr_ax);
+    else
+        ret = request_irq(v4v_irq, uxenv4v_isr, IRQF_TRIGGER_RISING, KBUILD_MODNAME, NULL);
     if (ret)
       goto cleanup;
-#endif
     irq_ok = 1;
 
 out:

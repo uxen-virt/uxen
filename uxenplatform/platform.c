@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, Bromium, Inc.
+ * Copyright 2016-2017, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -107,12 +107,16 @@ static int __init uxen_platform_init(void)
         return ret;
     }
 
-#ifdef LX_TARGET_AX
+#ifndef CONFIG_PCI
+    /* no pci, assume ax vm */
     ret = ax_platform_init(&uxen_bus);
-#elif defined(LX_TARGET_UXEN)
-    ret = pci_platform_init(&uxen_bus);
 #else
-    ret = -ENODEV;
+    if (axen_hypervisor())
+      ret = ax_platform_init(&uxen_bus);
+    else if (uxen_hypervisor())
+      ret = pci_platform_init(&uxen_bus);
+    else
+      ret = -ENODEV;
 #endif
 
     if (ret)
@@ -126,10 +130,13 @@ static void __exit uxen_platform_exit(void)
     bus_for_each_dev(&uxen_bus, NULL, NULL, device_remove);
     bus_unregister(&uxen_bus);
 
-#ifdef LX_TARGET_AX
+#ifndef CONFIG_PCI
     ax_platform_exit();
-#elif defined(LX_TARGET_UXEN)
-    pci_platform_exit();
+#else
+    if (axen_hypervisor())
+      ax_platform_exit();
+    else if (uxen_hypervisor())
+      pci_platform_exit();
 #endif
 }
 

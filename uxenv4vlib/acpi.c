@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, Bromium, Inc.
+ * Copyright 2016-2017, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -7,6 +7,9 @@
 #include <linux/acpi.h>
 #include <linux/completion.h>
 
+#define DEFAULT_V4V_IRQ_LINE 7
+
+#ifdef CONFIG_ACPI
 
 static struct completion probe_event;
 static int driver_registered = 0;
@@ -80,3 +83,16 @@ void acpi_exit(void)
     if (driver_registered)
         acpi_bus_unregister_driver(&uxenv4v_driver);
 }
+
+#else /* CONFIG_ACPI */
+
+int acpi_init_irq_line(void)
+{
+    return DEFAULT_V4V_IRQ_LINE;
+}
+
+void acpi_exit(void)
+{
+}
+
+#endif

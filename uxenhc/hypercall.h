@@ -83,12 +83,17 @@
  */
 
 typedef struct { char _entry[32]; } t_hcpage_entry;
-extern int uxen_ax;
+extern int axen;
+extern int uxen;
 extern void *uxen_hcbase;
 
-//#define __HYPERCALL_AX		"cpuid" // not yet !
-#define __HYPERCALL_AX		"call *%%rax"
+int uxen_hypervisor(void);
+int axen_hypervisor(void);
 
+#define AX_CPUID_V4VOP 0x35af3466
+
+//#define __HYPERCALL_AX		"cpuid" // not yet !
+//#define __HYPERCALL_AX		"call *%%rax"
 #ifdef CONFIG_X86_32
 #define __HYPERCALL		"call *%%eax"
 #else
@@ -270,15 +275,15 @@ extern void *uxen_hcbase;
 #endif
 
 static inline uint64_t
-ax_cpuid_call (void *rax, void *a1, void* a2, void* a3, void* a4, void* a5, void* a6)
+_ax_hypercall6(void *a1, void* a2, void* a3, void* a4, void* a5, void* a6)
 {
-  register void* _rax asm  ("rax") = rax;
+  register void* _rax asm  ("rax") = (void*) AX_CPUID_V4VOP;
   register void* _a1  asm  ("rdi") = a1;
   register void* _a2  asm  ("rsi") = a2;
   register void* _a3  asm  ("rdx") = a3;
   register void* _a4  asm  ("r10") = a4;
-  register void* _a5  asm  ("r9") = a5;
-  register void* _a6  asm  ("r8") = a6;
+  register void* _a5  asm  ( "r9") = a5;
+  register void* _a6  asm  ( "r8") = a6;
 
   asm volatile (
     "cpuid"
@@ -292,8 +297,8 @@ ax_cpuid_call (void *rax, void *a1, void* a2, void* a3, void* a4, void* a5, void
 static inline int
 HYPERVISOR_memory_op(unsigned int cmd, void *arg)
 {
-    if (uxen_ax)
-        return _hypercall2(__HYPERCALL_AX, int, memory_op, cmd, arg);
+    if (axen)
+        return -ENOSYS; //_hypercall2(__HYPERCALL_AX, int, memory_op, cmd, arg);
     else
         return _hypercall2(__HYPERCALL, int, memory_op, cmd, arg);
 }
@@ -301,8 +306,8 @@ HYPERVISOR_memory_op(unsigned int cmd, void *arg)
 static inline int
 HYPERVISOR_xen_version(int cmd, void *arg)
 {
-    if (uxen_ax)
-        return _hypercall2(__HYPERCALL_AX, int, xen_version, cmd, arg);
+    if (axen)
+        return -ENOSYS; //_hypercall2(__HYPERCALL_AX, int, xen_version, cmd, arg);
     else
         return _hypercall2(__HYPERCALL, int, xen_version, cmd, arg);
 }
@@ -310,8 +315,8 @@ HYPERVISOR_xen_version(int cmd, void *arg)
 static inline unsigned long __must_check
 HYPERVISOR_hvm_op(int op, void *arg)
 {
-    if (uxen_ax)
-        return _hypercall2(__HYPERCALL_AX, unsigned long, hvm_op, op, arg);
+    if (axen)
+        return -ENOSYS; //_hypercall2(__HYPERCALL_AX, unsigned long, hvm_op, op, arg);
     else
         return _hypercall2(__HYPERCALL, unsigned long, hvm_op, op, arg);
 }
@@ -319,11 +324,9 @@ HYPERVISOR_hvm_op(int op, void *arg)
 static inline int
 HYPERVISOR_v4v_op(int op, void *arg1, void *arg2, void *arg3, void *arg4, void *arg5)
 {
-    if (uxen_ax) {
-        //FIXME: magic numbers
-        uint64_t cpuid = 0x35af3466;
-        return (int)ax_cpuid_call((void*)cpuid, (void*)(uintptr_t)op, arg1, arg2, arg3, arg4, arg5);
-    } else
+    if (axen)
+        return _ax_hypercall6((void*)(uintptr_t)op, arg1, arg2, arg3, arg4, arg5);
+    else
         return _hypercall6(__HYPERCALL, int, v4v_op, op, arg1, arg2, arg3, arg4, arg5);
 }
 
