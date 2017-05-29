@@ -49,7 +49,8 @@
 #include <uxen-platform.h>
 #include <uxen-util.h>
 
-#define USE_DIRTY_RECTS
+//FIXME: broken on new uxen?
+//#define USE_DIRTY_RECTS
 
 #define DEFAULT_XRES 1024
 #define DEFAULT_YRES 768
