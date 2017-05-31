@@ -218,6 +218,12 @@ static BOOL brh264_recv(struct context* ctx)
     ctx->recv_data.params_size = ctx->recv_msg.params_size;
     ctx->recv_data.data_size = ctx->recv_msg.data_size;
 
+    if (ctx->recv_msg.params_size + ctx->recv_msg.data_size > UXENH264_SIZE_LIMIT) {
+        uxen_err("payload too large: size %d, limit: %d",
+                ctx->recv_msg.params_size + ctx->recv_msg.data_size, UXENH264_SIZE_LIMIT);
+        return FALSE;
+    }
+
     ctx->recv_data.params = (PBYTE)malloc(ctx->recv_msg.params_size + ctx->recv_msg.data_size);
     if (!ctx->recv_data.params) {
         uxen_err("malloc failed: size %d", ctx->recv_msg.params_size + ctx->recv_msg.data_size);
