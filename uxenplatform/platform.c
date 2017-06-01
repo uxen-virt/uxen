@@ -7,11 +7,15 @@
 #include <linux/init.h>
 #include <linux/device.h>
 #include <linux/module.h>
+#include <linux/random.h>
+#include <linux/kthread.h>
 
 #include <uxen-hypercall.h>
 #include <uxen-platform.h>
 #include "ax.h"
 #include "pci.h"
+
+static struct task_struct *entropy_thread;
 
 extern void uxen_v4v_suspend(void);
 extern void uxen_v4v_resume(void);
@@ -97,6 +101,20 @@ void uxen_driver_unregister(struct uxen_driver *drv)
 }
 EXPORT_SYMBOL_GPL(uxen_driver_unregister);
 
+extern void add_hwgenerator_randomness(const char *buffer, size_t count,
+    size_t entropy);
+
+static int
+uxen_entropy_thread(void *data)
+{
+    for (;;) {
+        uint64_t tsc = rdtsc();
+        add_hwgenerator_randomness((const char*)&tsc, sizeof(tsc), sizeof(tsc)*8);
+    }
+
+    return 0;
+}
+
 static int __init uxen_platform_init(void)
 {
     int ret = -ENODEV;
@@ -119,14 +137,25 @@ static int __init uxen_platform_init(void)
       ret = -ENODEV;
 #endif
 
-    if (ret)
+    if (ret) {
         bus_unregister(&uxen_bus);
+        goto out;
+    }
+
+    entropy_thread = kthread_run(uxen_entropy_thread, NULL, "uxentropy");
+    if (!entropy_thread) {
+      ret = -ENOMEM;
+      goto out;
+    }
+out:
 
     return ret;
 }
 
 static void __exit uxen_platform_exit(void)
 {
+    if (entropy_thread)
+        kthread_stop(entropy_thread);
     bus_for_each_dev(&uxen_bus, NULL, NULL, device_remove);
     bus_unregister(&uxen_bus);
 
