@@ -1761,6 +1761,8 @@ uxen_vmi_free(struct vm_info *vmi)
 {
     uint32_t refs;
 
+    printk("%s: vm%u refs %d\n", __FUNCTION__,
+           vmi->vmi_shared.vmi_domid, vmi->vmi_active_references);
     do {
         refs = vmi->vmi_active_references;
     } while (InterlockedCompareExchange(&vmi->vmi_active_references,
@@ -1812,7 +1814,7 @@ uxen_vmi_free(struct vm_info *vmi)
 
     logging_free(&vmi->vmi_logging_desc);
 
-    dprintk("%s: vm%u vmi freed\n", __FUNCTION__, vmi->vmi_shared.vmi_domid);
+    printk("%s: vm%u vmi freed\n", __FUNCTION__, vmi->vmi_shared.vmi_domid);
     kernel_free(vmi, (size_t)ALIGN_PAGE_UP(
                     sizeof(struct vm_info) +
                     vmi->vmi_nrvcpus * sizeof(struct vm_vcpu_info)));
@@ -1826,7 +1828,7 @@ uxen_vmi_cleanup_vm(struct vm_info *vmi)
     int domid = vmi->vmi_shared.vmi_domid;
     unsigned int i;
 
-    dprintk("%s: vm%u refs %d, running %d vcpus\n", __FUNCTION__, domid,
+    printk("%s: vm%u refs %d, running %d vcpus\n", __FUNCTION__, domid,
             vmi->vmi_active_references, vmi->vmi_running_vcpus);
     for (i = 0; i < vmi->vmi_nrvcpus; i++)
         dprintk("  vcpu vm%u.%u running %s\n", domid, i,
@@ -1845,6 +1847,7 @@ uxen_vmi_stop_running(struct vm_info *vmi)
 {
     unsigned int i;
 
+    printk("%s: vm%u\n", __FUNCTION__, vmi->vmi_shared.vmi_domid);
     dprintk("%s: vm%u has %d of %d vcpus running\n", __FUNCTION__,
             vmi->vmi_shared.vmi_domid, vmi->vmi_running_vcpus,
             vmi->vmi_nrvcpus);
@@ -1895,6 +1898,7 @@ uxen_destroy_vm(struct vm_info *vmi)
     affinity_t aff;
     int ret;
 
+    printk("%s: vm%u\n", __FUNCTION__, vmi->vmi_shared.vmi_domid);
     if (InterlockedCompareExchange(&vmi->vmi_exists, 0, 1) == 0)
         return 0;
 
@@ -1920,7 +1924,7 @@ uxen_vmi_destroy_vm(struct vm_info *vmi)
     unsigned int i;
     int ret;
 
-    dprintk("%s: vm%u alive %s, refs %d, running %d vcpus\n", __FUNCTION__,
+    printk("%s: vm%u alive %s, refs %d, running %d vcpus\n", __FUNCTION__,
             vmi->vmi_shared.vmi_domid, vmi->vmi_alive ? "yes" : "no",
             vmi->vmi_active_references, vmi->vmi_running_vcpus);
 
@@ -1979,6 +1983,7 @@ uxen_op_destroy_vm(struct uxen_destroyvm_desc *udd, struct fd_assoc *fda)
     }
 
     if (vmi) {
+        printk("%s: vm%u\n", __FUNCTION__, vmi->vmi_shared.vmi_domid);
         InterlockedIncrement(&vmi->vmi_active_references);
         ret = uxen_vmi_destroy_vm(vmi);
         if (!ret)
@@ -1986,6 +1991,7 @@ uxen_op_destroy_vm(struct uxen_destroyvm_desc *udd, struct fd_assoc *fda)
         uxen_vmi_free(vmi);
         uxen_unlock(aff);
     } else {
+        printk("%s: no vmi\n", __FUNCTION__);
         uxen_unlock(aff);
         aff = uxen_exec_dom0_start();
         uxen_call(ret = (int), -EINVAL, NO_RESERVE,

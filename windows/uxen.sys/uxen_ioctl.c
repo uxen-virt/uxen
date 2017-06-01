@@ -121,10 +121,13 @@ final_release_fd_assoc(void *p)
     aff = uxen_lock();
     vmi = fda->vmi;
     if (vmi) {
+        printk("%s: vm%u refs %d\n", __FUNCTION__,
+               vmi->vmi_shared.vmi_domid, vmi->vmi_active_references);
         uxen_vmi_cleanup_vm(vmi);
         uxen_vmi_free(vmi);
         fda->vmi = NULL;
-    }
+    } else
+        printk("%s: no vmi\n", __FUNCTION__);
     uxen_unlock(aff);
 
     kernel_free(fda, sizeof(struct fd_assoc));
@@ -244,7 +247,7 @@ processexit_cancel_routine(__inout PDEVICE_OBJECT pDeviceObject,
     IO_STATUS_BLOCK *IoStatus = &pIRP->IoStatus;
     struct fd_assoc *fda;
 
-    /* dprintk("%s\n", __FUNCTION__); */
+    printk("%s\n", __FUNCTION__);
 
     IoReleaseCancelSpinLock(pIRP->CancelIrql);
 
@@ -261,7 +264,7 @@ processexit_cancel_routine(__inout PDEVICE_OBJECT pDeviceObject,
     IoStatus->Information = 0;
     IoCompleteRequest(pIRP, IO_NO_INCREMENT);
 
-    /* dprintk("%s done\n", __FUNCTION__); */
+    printk("%s done\n", __FUNCTION__);
 }
 
 static BOOLEAN is_restricted_caller()
