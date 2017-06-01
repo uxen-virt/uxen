@@ -104,6 +104,10 @@ EXPORT_SYMBOL_GPL(uxen_driver_unregister);
 extern void add_hwgenerator_randomness(const char *buffer, size_t count,
     size_t entropy);
 
+/*
+ * FIXME: this fills entropy pool (on demand) from tsc values, so it is always full.
+ * Pretty terrible and likely not random enough
+ */
 static int
 uxen_entropy_thread(void *data)
 {
