@@ -388,9 +388,11 @@ static void lv_submit_and_reset(struct lava_event *lv)
             goto mem_err;
         }
     } else if ((lv->flags & LVF_SOCKET_ERROR) && (lv->flags & LVF_TCP)) {
-        if (buff_appendf(bf, "\"%lu\",\"%u\",\"%hu\",\"%d\",\"\",\"\",\"\",\"\",\"\"",
+        if (buff_appendf(bf, "\"%lu\",\"%u\",\"%hu\",\"%d\",\"%s\",\"%hu\",\"\",\"\",\"\"",
                 (unsigned long) lv->flags, (unsigned) lv->conn_id, ntohs(lv->guest_port),
-                lv->sock_error_code) < 0) {
+                lv->sock_error_code,
+                remote_ip ? remote_ip : "",
+                ntohs(lv->remote_port)) < 0) {
 
             goto mem_err;
         }
