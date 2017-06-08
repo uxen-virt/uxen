@@ -6,7 +6,8 @@ CVT=/usr/bin/cvt
 xres=$1
 yres=$2
 
-modeline=$($CVT -r $xres $yres | tail -n1 | sed -e 's/^[^"]*"[^"]*"//')
+#modeline=$($CVT -r $xres $yres | tail -n1 | sed -e 's/^[^"]*"[^"]*"//')
+modeline="60.00 $xres $xres $xres $xres $yres $yres $yres $yres +hsync -vsync"
 
 export DISPLAY=":0.0"
 omode=0

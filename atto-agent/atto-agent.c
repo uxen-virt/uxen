@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, Bromium, Inc.
+ * Copyright 2016-2017, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -78,6 +78,10 @@ event_loop(int fd)
     int32_t w, h;
     char command[1024];
 
+    msg.type = ATTO_MSG_RESIZE;
+    len = send(fd, &msg, sizeof(msg), 0);
+    if (len < 0)
+        err(1, "send error %d\n", errno);
     for (;;) {
 
         len = recv(fd, &msg, sizeof(msg), 0);
@@ -90,6 +94,9 @@ event_loop(int fd)
         case ATTO_MSG_RESIZE_RET:
             w = (int32_t) msg.xres;
             h = (int32_t) msg.yres;
+
+            if (w == 0 || h == 0)
+                continue;
 
             if (lastx && abs(w-lastx) < 3 && lasty && abs(h-lasty) < 3)
                 continue;
