@@ -17,6 +17,8 @@
 
 #include <uxen-v4vlib.h>
 
+#include "winlayouts.h"
+
 #define V4V_PORT 44449
 
 #define ATTO_MSG_GETURL 0
@@ -25,6 +27,14 @@
 #define ATTO_MSG_GETBOOT_RET 3
 #define ATTO_MSG_RESIZE 4
 #define ATTO_MSG_RESIZE_RET 5
+#define ATTO_MSG_CURSOR_TYPE        6
+#define ATTO_MSG_CURSOR_TYPE_RET    7
+#define ATTO_MSG_CURSOR_CHANGE      8
+#define ATTO_MSG_CURSOR_CHANGE_RET  9
+#define ATTO_MSG_CURSOR_GET_SM      10
+#define ATTO_MSG_CURSOR_GET_SM_RET  11
+#define ATTO_MSG_KBD_LAYOUT         12
+#define ATTO_MSG_KBD_LAYOUT_RET     13
 
 #define RESIZE_SCRIPT   "/usr/bin/x-resize.sh"
 
@@ -38,6 +48,7 @@ struct atto_agent_msg {
             uint32_t xres;
             uint32_t yres;
         };
+        unsigned win_kbd_layout;
     };
 } __attribute__((packed));
 
@@ -108,6 +119,39 @@ event_loop(int fd)
                      (int) w, (int) h);
             system(command);
             break;
+        case ATTO_MSG_KBD_LAYOUT_RET:
+        {
+            int i;
+
+            for (i = 0;; i++) {
+                WinKBLayoutRec *lrec;
+
+                lrec = &winKBLayouts[i];
+                if (lrec->winlayout == (unsigned int) (-1) ||
+                    lrec->xkbmodel == NULL) {
+
+                    break;
+                }
+
+                if (lrec->winlayout == msg.win_kbd_layout) {
+                    memset(command, 0, sizeof(command));
+                    if (lrec->xkblayout && lrec->xkbvariant) {
+                        snprintf(command, sizeof(command) - 1,
+                                 "DISPLAY=:0.0 /usr/bin/setxkbmap -model %s -layout %s -variant %s",
+                                 lrec->xkbmodel, lrec->xkblayout, lrec->xkbvariant);
+                    } else if (lrec->xkblayout) {
+                        snprintf(command, sizeof(command) - 1,
+                                 "DISPLAY=:0.0 /usr/bin/setxkbmap -model %s -layout %s",
+                                 lrec->xkbmodel, lrec->xkblayout);
+                    } else {
+                        snprintf(command, sizeof(command) - 1,
+                                 "DISPLAY=:0.0 /usr/bin/setxkbmap -model %s", lrec->xkbmodel);
+                    }
+                    system(command);
+                    break;
+                }
+            }
+        }
         default:
             warnx("unknown message type %d", (int) msg.type);
             break;
