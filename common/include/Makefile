@@ -1,5 +1,5 @@
 #
-# Copyright 2015-2016, Bromium, Inc.
+# Copyright 2015-2017, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -17,7 +17,8 @@ all:
 
 SDK_include_files = $(SDKDIR_include)/err.h \
 					$(SDKDIR_include)/dm-features.h \
-					$(SDKDIR_include)/uxendisp-common.h
+					$(SDKDIR_include)/uxendisp-common.h \
+					$(SDKDIR_include)/uxenhid-common.h
 
 dist: $(SDK_include_files)
 
