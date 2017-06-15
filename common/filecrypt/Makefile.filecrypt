@@ -15,7 +15,7 @@ filecrypt_OBJS  = $(patsubst %.c,%.o,$(filecrypt_SRCS))
 filecrypt_OBJS := $(subst /,_,$(filecrypt_OBJS))
 filecrypt_LIBS = $(LDLIBS) -L. -lfilecrypt
 
-EXTRA_CFLAGS += -fno-stack-protector -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
+EXTRA_CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
 
 install_filecrypt.h: filecrypt.h $(SDKDIR_include)/.exists
 	$(_W)echo Installing from $(abspath $(<D)) to $(SDKDIR_include)
