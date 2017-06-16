@@ -18,7 +18,8 @@ all:
 SDK_include_files = $(SDKDIR_include)/err.h \
 					$(SDKDIR_include)/dm-features.h \
 					$(SDKDIR_include)/uxendisp-common.h \
-					$(SDKDIR_include)/uxenhid-common.h
+					$(SDKDIR_include)/uxenhid-common.h \
+					$(SDKDIR_include)/uxendisp-ctrl.h
 
 dist: $(SDK_include_files)
 
