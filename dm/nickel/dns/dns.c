@@ -236,20 +236,6 @@ static void dns_config(yajl_val config)
         NETLOG("(dns) no limit for the number of scheduled DNS queries");
 }
 
-const char *
-netaddr_tostr(const struct net_addr *addr)
-{
-    static char buf[NETADDR_MAXSTRLEN + 1];
-
-    buf[0] = buf[NETADDR_MAXSTRLEN] = 0;
-    if (addr->family == AF_INET)
-        inet_ntop(AF_INET, (void *) &addr->ipv4, buf, INET_ADDRSTRLEN);
-    else if (addr->family == AF_INET6)
-        inet_ntop(AF_INET6, (void *) &addr->ipv6, buf, INET6_ADDRSTRLEN);
-
-    return (const char *) buf;
-}
-
 bool dns_is_nickel_domain_name(const char *domain)
 {
     return strcasecmp(SLIRP_GW_NAME, domain) == 0;

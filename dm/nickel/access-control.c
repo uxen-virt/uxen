@@ -66,10 +66,11 @@ static int ac_rpc_IsIPAddressAllowed(struct nickel *ni, const struct net_addr *a
     int ret = 0;
     char buf[64];
     dict args, response;
+    char netabuf[NETADDR_MAXSTRLEN];
 
     args = dict_new();
 
-    dict_put_string(args, "addr", netaddr_tostr(addr));
+    dict_put_string(args, "addr", NETADDR_STR(addr, netabuf, sizeof(netabuf)));
 
     snprintf(buf, 64, "%lu", options);
     dict_put_string(args, "options", buf);
@@ -91,6 +92,7 @@ static int ac_rpc_IsListIPAddressAllowed(struct nickel *ni, const struct net_add
 {
     int ret = 0, i;
     char buf[NETADDR_MAXSTRLEN];
+    char netabuf[NETADDR_MAXSTRLEN];
     dict args = NULL, response;
     char *addr_list = NULL, *tmp;
     const char *tmp2;
@@ -114,7 +116,8 @@ static int ac_rpc_IsListIPAddressAllowed(struct nickel *ni, const struct net_add
         }
 
         buf[NETADDR_MAXSTRLEN - 1] = 0;
-        strncpy(buf, netaddr_tostr(ips[i]), NETADDR_MAXSTRLEN-1);
+        strncpy(buf, NETADDR_STR(ips[i], netabuf, sizeof(netabuf)),
+                NETADDR_MAXSTRLEN-1);
         if (*addr_list)
             strcat(addr_list, ",");
         strcat(addr_list, buf);
@@ -354,11 +357,12 @@ static bool hash_find_ip(struct nickel *ni, const struct net_addr *ip, struct ac
     bool ret = false;
     struct ac_network *network, **pnetwork;
     uint64_t tsc;
+    char netabuf[NETADDR_MAXSTRLEN];
 
     critical_section_enter(&ni->ac_lk);
 
     NETLOG5("(ac) search %s in %s network.",
-                netaddr_tostr(ip),
+                NETADDR_STR(ip, netabuf, sizeof(netabuf)),
                 networks == ni->ac_denied_networks ? "denied" : "allowed");
 
 
@@ -371,7 +375,7 @@ static bool hash_find_ip(struct nickel *ni, const struct net_addr *ip, struct ac
             network->accessed_tsc = tsc;
             NETLOG5("(ac) found %s network %s/%d.",
                         networks == ni->ac_denied_networks ? "denied" : "allowed",
-                        netaddr_tostr(&network->net_ip),
+                        NETADDR_STR(&network->net_ip, netabuf, sizeof(netabuf)),
                         (int) network->net_ip.prefix_len);
             ret = true;
             goto out;
@@ -381,7 +385,7 @@ static bool hash_find_ip(struct nickel *ni, const struct net_addr *ip, struct ac
             (tsc - network->accessed_tsc) > FLUSH_TSC_GAP)
         {
             NETLOG5("(ac) remove entry %s/%d.",
-                        netaddr_tostr(&network->net_ip),
+                        NETADDR_STR(&network->net_ip, netabuf, sizeof(netabuf)),
                         (int) network->net_ip.prefix_len);
 
             *pnetwork = network->next;
@@ -410,6 +414,7 @@ static void hash_insert_network(struct nickel *ni, const struct net_addr *ip,
 {
     struct ac_network *new;
     uint32_t hash;
+    char netabuf[NETADDR_MAXSTRLEN];
 
     new = calloc(1, sizeof(struct ac_network));
     if (!new)
@@ -430,7 +435,8 @@ static void hash_insert_network(struct nickel *ni, const struct net_addr *ip,
 
     NETLOG5("(ac) adding %s ip %s/%d options %x.",
                 networks == ni->ac_denied_networks ? "denied" : "allowed",
-                netaddr_tostr(&new->net_ip), (int) prefix_len, (unsigned int) options);
+                NETADDR_STR(&new->net_ip, netabuf, sizeof(netabuf)),
+                (int) prefix_len, (unsigned int) options);
 
     if (networks == ni->ac_denied_networks)
         ni->ac_n_denied_networks++;
@@ -667,6 +673,7 @@ allow_list_ip(struct nickel *ni, const struct net_addr *dst_ips, unsigned int op
     uint8_t prefix_len;
     const struct net_addr **list_ips = NULL;
     char *rpc_resp_mask = NULL;
+    char netabuf[NETADDR_MAXSTRLEN];
 
     if (len <= 0)
         goto out;
@@ -705,6 +712,15 @@ allow_list_ip(struct nickel *ni, const struct net_addr *dst_ips, unsigned int op
             ret_mask[i] = '1';
             continue;
         }
+
+        netabuf[0] = 0;
+        NETADDR_STR(dst_ips + i, netabuf, sizeof(netabuf));
+        if (netabuf[0] == 0) {
+            NETLOG2("WARN - NETADDR_STR failed - IP DENIED");
+            ret_mask[i] = '0';
+            continue;
+        }
+
         list_ips[k++] = dst_ips + i;
     }
 
@@ -759,6 +775,7 @@ static bool allow_ip(struct nickel *ni, const struct net_addr *dst_ip, unsigned 
 {
     int ret;
     uint8_t prefix_len;
+    char netabuf[NETADDR_MAXSTRLEN];
 
     if (ni->ac_policy == ALLOW_ALL)
         return true;
@@ -778,7 +795,8 @@ static bool allow_ip(struct nickel *ni, const struct net_addr *dst_ip, unsigned 
         return false;
     }
 
-    NETLOG5("(ac) check ip %s in local cache ...", netaddr_tostr(dst_ip));
+    NETLOG5("(ac) check ip %s in local cache ...",
+            NETADDR_STR(dst_ip, netabuf, sizeof(netabuf)));
 
     /* local cache lookup first */
     if (hash_find_ip(ni, dst_ip, ni->ac_denied_networks))
@@ -787,16 +805,25 @@ static bool allow_ip(struct nickel *ni, const struct net_addr *dst_ip, unsigned 
     if (hash_find_ip(ni, dst_ip, ni->ac_allowed_networks))
         return true;
 
-    /* slow path */
-    NETLOG5("(ac) fall to slow path to check ip %s ...", netaddr_tostr(dst_ip));
-    if (!ac_rpc_IsIPAddressAllowed(ni, dst_ip, options & EXAMINE_IP_FROM_DNS,
-                &prefix_len, &ret)) {
-        NETLOG("(ac) ERROR when querying IP %s", netaddr_tostr(dst_ip));
+    netabuf[0] = 0;
+    NETADDR_STR(dst_ip, netabuf, sizeof(netabuf));
+    if (netabuf[0] == 0) {
+        NETLOG2("NETADDR_STR failed - IP DENIED");
         return false;
     }
 
-    NETLOG2("(ac) ip %s/%d %s", netaddr_tostr(dst_ip), (int) prefix_len,
-                ret ? "allowed" : "DENIED");
+    /* slow path */
+    NETLOG5("(ac) fall to slow path to check ip %s ...",
+            NETADDR_STR(dst_ip, netabuf, sizeof(netabuf)));
+    if (!ac_rpc_IsIPAddressAllowed(ni, dst_ip, options & EXAMINE_IP_FROM_DNS,
+                &prefix_len, &ret)) {
+        NETLOG("(ac) ERROR when querying IP %s",
+                NETADDR_STR(dst_ip, netabuf, sizeof(netabuf)));
+        return false;
+    }
+
+    NETLOG2("(ac) ip %s/%d %s", NETADDR_STR(dst_ip, netabuf, sizeof(netabuf)),
+            (int) prefix_len, ret ? "allowed" : "DENIED");
 
     if (ret) {
 
@@ -959,6 +986,7 @@ bool ac_gproxy_allow(struct nickel *ni, struct sockaddr_in saddr, const struct n
                      uint16_t dport)
 {
     bool allow = false;
+    char netabuf[NETADDR_MAXSTRLEN];
 
     if (!ni->ac_enabled) {
         allow = true;
@@ -967,7 +995,8 @@ bool ac_gproxy_allow(struct nickel *ni, struct sockaddr_in saddr, const struct n
 
     if (!allow_ip(ni, daddr, 0) || !allow_port(ni, dport)) {
         NETLOG("(ac) outgoing guest proxy tcp connection to %s:%d DENIED",
-                netaddr_tostr(daddr), (int) ntohs(dport));
+                NETADDR_STR(daddr, netabuf, sizeof(netabuf)),
+                (int) ntohs(dport));
         goto out;
     }
 

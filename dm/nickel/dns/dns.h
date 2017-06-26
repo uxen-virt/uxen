@@ -18,6 +18,9 @@
 
 #if defined(_WIN32)
 PCSTR WSAAPI inet_ntop (INT Family, PVOID pAddr, PSTR pStringBuf, size_t StringBufSize);
+#ifndef errno
+#define errno ((int) WSAGetLastError())
+#endif
 #endif
 
 struct nickel;
@@ -57,6 +60,41 @@ struct net_addr {
             ret;                                                \
         }))
 
+#define NETADDR_STR(_paddr, _buf, _maxlen) (({                  \
+    const struct net_addr *paddr = _paddr;                      \
+    char *buf = _buf;                                           \
+    size_t maxlen = _maxlen;                                    \
+                                                                \
+    do {                                                        \
+        *buf = 0;                                               \
+        if (maxlen < NETADDR_MAXSTRLEN) {                       \
+            warn("%s: NETADDR_STR fails as too short buffer\n", \
+                 __FUNCTION__);                                 \
+            break;                                              \
+        }                                                       \
+        buf[NETADDR_MAXSTRLEN - 1] = 0;                         \
+        if (paddr->family == AF_INET) {                         \
+            if (inet_ntop(AF_INET, (void *) &paddr->ipv4,       \
+                          buf, NETADDR_MAXSTRLEN) == NULL) {    \
+                warn("%s: inet_ntop failed %d\n",               \
+                     __FUNCTION__, errno);                      \
+            }                                                   \
+            break;                                              \
+        }                                                       \
+        if (paddr->family == AF_INET6) {                        \
+            if (inet_ntop(AF_INET6, (void *) &paddr->ipv6,      \
+                          buf, NETADDR_MAXSTRLEN) == NULL) {    \
+                warn("%s: inet_ntop failed %d\n",               \
+                     __FUNCTION__, errno);                      \
+            }                                                   \
+            break;                                              \
+        }                                                       \
+        warn("%s: NETADDR_STR unknown family %d\n",             \
+             __FUNCTION__, (int) paddr->family);                \
+        break;                                                  \
+    } while (0);                                                \
+    buf;                                                        \
+}))
 
 struct dns_response {
     const char *cname;
@@ -66,9 +104,6 @@ struct dns_response {
     int denied;
     int64_t cost_ms;
 };
-
-const char *
-netaddr_tostr(const struct net_addr *addr);
 
 bool dns_is_nickel_domain_name(const char *domain);
 void dns_http_proxy_enabled(void);
