@@ -50,8 +50,11 @@
 #define     UXDISP_CURSOR_FLAG_1BPP                 0x1
 #define     UXDISP_CURSOR_FLAG_MASK_PRESENT         0x2
 
-#define UXDISP_REG_CURSOR_DATA          0x08000
+#define UXDISP_CURSOR_WIDTH_MAX         128
+#define UXDISP_CURSOR_HEIGHT_MAX        128
+#define UXDISP_REG_CURSOR_DATA          (UXDISP_CURSOR_WIDTH_MAX * UXDISP_CURSOR_HEIGHT_MAX * 4)
 
+#define UXDISP_NB_CRTCS                 1
 #define UXDISP_REG_CRTC_LEN             0x02000
 #define UXDISP_REG_CRTC(x)              (0x10000 + (x) * UXDISP_REG_CRTC_LEN)
 #define UXDISP_REG_CRTC_STATUS          0x0000

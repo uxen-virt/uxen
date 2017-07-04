@@ -498,9 +498,16 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetPointerPosition(_In_ CONST DXGKARG_SETPOINTERP
 
 NTSTATUS BASIC_DISPLAY_DRIVER::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAPE* pSetPointerShape)
 {
+    NTSTATUS status = STATUS_SUCCESS;
+
     ASSERT(pSetPointerShape != NULL);
 
-    return hw_pointer_update(&m_HwResources, pSetPointerShape);
+    status = hw_pointer_update(&m_HwResources, pSetPointerShape);
+    if (!NT_SUCCESS(status)) {
+        uxen_err("Setting cursor has failed. Most likely the size is too big: %dx%d",
+                pSetPointerShape->Width, pSetPointerShape->Height);
+    }
+    return status;
 }
 
 

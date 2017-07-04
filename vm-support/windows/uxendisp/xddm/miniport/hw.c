@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -217,13 +217,13 @@ BOOLEAN hw_pointer_update(PDEVICE_EXTENSION dev, ULONG width, ULONG height,
         bitmap_len = 4 * width * height; /* ARGB data */
         bitmap_len += ((width + 7) / 8) * height; /* AND mask */
 
-        if (bitmap_len > (UXDISP_REG_CRTC(0) - UXDISP_REG_CURSOR_DATA))
+        if (bitmap_len > UXDISP_REG_CURSOR_DATA) {
+            ASSERT(bitmap_len > UXDISP_REG_CURSOR_DATA);
             return FALSE;
-
-
+        }
 
         s = pixels;
-        d = dev->mmio_start + UXDISP_REG_CURSOR_DATA;
+        d = dev->mmio_start + UXDISP_REG_CRTC(UXDISP_NB_CRTCS);
         for (y = 0; y < height; y++) {
             VideoPortMoveMemory(d, s, (width + 7) / 8);
             d += (width + 7) / 8;
@@ -238,11 +238,13 @@ BOOLEAN hw_pointer_update(PDEVICE_EXTENSION dev, ULONG width, ULONG height,
         }
     } else {
         bitmap_len = ((width + 7) / 8) * height * 2;
-        if (bitmap_len > (UXDISP_REG_CRTC(0) - UXDISP_REG_CURSOR_DATA))
+        if (bitmap_len > UXDISP_REG_CURSOR_DATA) {
+            ASSERT(bitmap_len > UXDISP_REG_CURSOR_DATA);
             return FALSE;
+        }
 
         s = pixels;
-        d = dev->mmio_start + UXDISP_REG_CURSOR_DATA;
+        d = dev->mmio_start + UXDISP_REG_CRTC(UXDISP_NB_CRTCS);
         for (y = 0; y < (height * 2); y++) {
             VideoPortMoveMemory(d, s, (width + 7) / 8);
             d += (width + 7) / 8;

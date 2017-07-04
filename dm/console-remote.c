@@ -29,6 +29,8 @@
 
 #include "ipc.h"
 
+#include "hw/uxdisp_hw.h"
+
 /* uxenconsolelib */
 #include "uxenconsolelib.h"
 #include "console-rpc.h"
@@ -602,8 +604,10 @@ gui_cursor_shape(struct gui_state *state,
 
 
     /* Sanity checks */
-    if (w > 128 || w < 0 || h > 128 || h < 0)
+    if (w > UXDISP_CURSOR_WIDTH_MAX || w < 0 || h > UXDISP_CURSOR_HEIGHT_MAX || h < 0) {
+        debug_printf("cursor size check failed: (%d > %d) or (%d > %d)\n", w, UXDISP_CURSOR_WIDTH_MAX, h, UXDISP_CURSOR_HEIGHT_MAX);
         return;
+    }
 
     if (w != 0 && h != 0) {
         size_t colorlen = 0;

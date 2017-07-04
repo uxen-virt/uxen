@@ -70,7 +70,7 @@ struct uxendisp_state {
 
     volatile struct cursor_regs *cursor_regs;
     volatile uint8_t *cursor_data;
-    struct crtc_state crtcs[UXENDISP_NB_CRTCS];
+    struct crtc_state crtcs[UXDISP_NB_CRTCS];
     struct bank_state banks[UXENDISP_NB_BANKS];
 
     uint32_t io_index;
@@ -380,8 +380,11 @@ cursor_flush(struct uxendisp_state *s)
     w = s->cursor_regs->width;
     h = s->cursor_regs->height;
 
-    if ((w > UXENDISP_CURSOR_MAX_WIDTH) || (h > UXENDISP_CURSOR_MAX_HEIGHT))
+    if ((w > UXDISP_CURSOR_WIDTH_MAX) || (h > UXDISP_CURSOR_HEIGHT_MAX)) {
+        debug_printf("%s: cursor size check failed: (%d > %d) or (%d > %d)\n",
+                     __FUNCTION__, w, UXDISP_CURSOR_WIDTH_MAX, h, UXDISP_CURSOR_HEIGHT_MAX);
         return;
+    }
 
     if (s->cursor_regs->flags & UXDISP_CURSOR_FLAG_1BPP) {
         if (!(s->cursor_regs->flags & UXDISP_CURSOR_FLAG_MASK_PRESENT))
@@ -701,7 +704,7 @@ uxendisp_mmio_write(void *opaque, target_phys_addr_t addr, uint64_t val,
         goto invalid;
 
     if (addr >= UXDISP_REG_CRTC(0) &&
-        addr < UXDISP_REG_CRTC(UXENDISP_NB_CRTCS)) {
+        addr < UXDISP_REG_CRTC(UXDISP_NB_CRTCS)) {
         int idx = (addr - UXDISP_REG_CRTC(0)) / UXDISP_REG_CRTC_LEN;
 
         addr &= (UXDISP_REG_CRTC_LEN - 1);
@@ -758,7 +761,7 @@ uxendisp_mmio_read(void *opaque, target_phys_addr_t addr, unsigned size)
         goto invalid;
 
     if (addr >= UXDISP_REG_CRTC(0) &&
-        addr < UXDISP_REG_CRTC(UXENDISP_NB_CRTCS)) {
+        addr < UXDISP_REG_CRTC(UXDISP_NB_CRTCS)) {
         int idx = (addr - UXDISP_REG_CRTC(0)) / UXDISP_REG_CRTC_LEN;
 
         addr &= (UXDISP_REG_CRTC_LEN - 1);
@@ -785,7 +788,7 @@ uxendisp_mmio_read(void *opaque, target_phys_addr_t addr, unsigned size)
     case UXDISP_REG_BANK_ORDER:
         return UXENDISP_BANK_ORDER;
     case UXDISP_REG_CRTC_COUNT:
-        return UXENDISP_NB_CRTCS;
+        return UXDISP_NB_CRTCS;
     case UXDISP_REG_STRIDE_ALIGN:
         return 0;
     case UXDISP_REG_INTERRUPT:
@@ -918,7 +921,7 @@ static void vram_change(struct vram_desc *v, void *opaque)
     struct uxendisp_state *s = opaque;
     int crtc_id;
 
-    for (crtc_id = 0; crtc_id < UXENDISP_NB_CRTCS; crtc_id++) {
+    for (crtc_id = 0; crtc_id < UXDISP_NB_CRTCS; crtc_id++) {
         struct crtc_state *crtc = &s->crtcs[crtc_id];
         int bank_id = crtc->offset >> UXENDISP_BANK_ORDER;
         struct bank_state *bank = &s->banks[bank_id];
@@ -952,7 +955,7 @@ uxendisp_post_load(void *opaque, int version_id)
 
     pci_ram_post_load(&s->dev, version_id);
 
-    for (crtc_id = 0; crtc_id < UXENDISP_NB_CRTCS; crtc_id++)
+    for (crtc_id = 0; crtc_id < UXDISP_NB_CRTCS; crtc_id++)
         s->crtcs[crtc_id].flush_pending = 1;
 
 #ifdef _WIN32
@@ -1044,7 +1047,7 @@ static const VMStateDescription vmstate_uxendisp = {
                              vmstate_uxendisp_bank,
                              struct bank_state),
         VMSTATE_STRUCT_ARRAY(crtcs, struct uxendisp_state,
-                             UXENDISP_NB_CRTCS, 6,
+                             UXDISP_NB_CRTCS, 6,
                              vmstate_uxendisp_crtc,
                              struct crtc_state),
         VMSTATE_UINT32(io_index, struct uxendisp_state),
@@ -1084,15 +1087,15 @@ static int uxendisp_initfn(PCIDevice *dev)
                           UXENDISP_MMIO_SIZE);
     memory_region_add_ram_range(&s->mmio, 0x1000, 0x1000,
                                 cursor_regs_ptr_update, s);
-    memory_region_add_ram_range(&s->mmio, 0x8000, 0x8000,
-                                cursor_data_ptr_update, s);
-    for (i = 0; i < UXENDISP_NB_CRTCS; i++) {
+    for (i = 0; i < UXDISP_NB_CRTCS; i++) {
         s->crtcs[i].id = i;
         memory_region_add_ram_range(&s->mmio,
                                     UXDISP_REG_CRTC(i) + 0x1000,
                                     0x1000,
                                     crtc_data_ptr_update, &s->crtcs[i]);
     }
+    memory_region_add_ram_range(&s->mmio, UXDISP_REG_CRTC(UXDISP_NB_CRTCS), UXDISP_REG_CURSOR_DATA,
+                                cursor_data_ptr_update, s);
     memory_region_init(&s->vram, "uxendisp.vram", UXENDISP_VRAM_SIZE);
     s->vram.map_cb = bank_mapping_update;
     s->vram.map_opaque = s;
