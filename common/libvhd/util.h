@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -119,9 +119,9 @@ _asprintf(char **strp, const char *fmt, ...)
     va_start(ap, fmt);
     while (1) {
 	ret = vsnprintf(*strp, buflen, fmt, ap);
-	if (ret >= 0 && ret <= buflen)
+	if (ret >= 0 && ret < buflen)
 	    break;
-	if (ret > buflen)
+	if (ret > 0 && ret > buflen)
 	    buflen = ret;
 	else
 	    buflen *= 2;
