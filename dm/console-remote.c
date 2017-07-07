@@ -710,8 +710,8 @@ gui_create(struct gui_state *state, struct display_state *ds)
     s->state.height = 480;
 
     s->ds = ds;
-    s->cursor_mask_offset = 128 * 128 * 4;
-    s->cursor_len = s->cursor_mask_offset + 128 * 128 * 2 / 8;
+    s->cursor_mask_offset = UXDISP_REG_CURSOR_DATA;
+    s->cursor_len = s->cursor_mask_offset + UXDISP_CURSOR_WIDTH_MAX * UXDISP_CURSOR_HEIGHT_MAX * 2 / 8;
     s->cursor_view = create_shm_segment(s->cursor_len, &s->cursor_handle);
     if (!s->cursor_view) {
         return -1;
