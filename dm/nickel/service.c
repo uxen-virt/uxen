@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2017, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -315,6 +315,9 @@ ni_prx_open(struct nickel *ni, bool udp, struct sockaddr_in saddr,
             daddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
         else
             return NULL;
+    }
+    if (daddr.sin_addr.s_addr == ni->loopback_redirect_addr.s_addr) {
+        daddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     }
     LIST_FOREACH(prx, &ni->prx_fwd, entry) {
         if (is_udp != prx->is_udp)

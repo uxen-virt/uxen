@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2017, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -57,6 +57,7 @@ struct nickel {
     struct in_addr network_mask;
     struct in_addr host_addr;
     struct in_addr dhcp_startaddr;
+    struct in_addr loopback_redirect_addr;
 
     int eth_vm_resolved;
     uint8_t eth_vm[ETH_ALEN];
@@ -123,6 +124,7 @@ struct nickel {
     int ac_block_other_udp_icmp;
     int ac_allow_well_known_ports;
     int ac_dns_ip_only;
+    int ac_allow_loopback_redirect;
     size_t ac_max_tcp_conn;
 
     void (*http_evt_cb) (void *);

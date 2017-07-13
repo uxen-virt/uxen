@@ -953,16 +953,27 @@ int ac_tcp_input_syn(struct nickel *ni, struct sockaddr_in saddr,
 
             NETLOG5("(ac) outgoing tcp connection to %s:%d allowed",
                     inet_ntoa(daddr.sin_addr), (int) ntohs(daddr.sin_port));
-        } else {
-            NETLOG("(ac) outgoing tcp connection to %s:%d DENIED",
-                    inet_ntoa(daddr.sin_addr), (int) ntohs(daddr.sin_port));
-
-            goto out;
+            goto allow;
         }
 
-        goto allow;
+        if (ni->ac_allow_loopback_redirect && daddr.sin_addr.s_addr ==
+                                            ni->loopback_redirect_addr.s_addr) {
+
+            NETLOG5("(ac) outgoing tcp connection to %s:%d "
+                    "will be redirected to the host loopback address",
+                    inet_ntoa(daddr.sin_addr), (int) ntohs(daddr.sin_port));
+
+            daddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+            goto check_ip;
+        }
+
+        NETLOG("(ac) outgoing tcp connection to %s:%d DENIED",
+                inet_ntoa(daddr.sin_addr), (int) ntohs(daddr.sin_port));
+
+        goto out;
     }
 
+check_ip:
     addr.family = AF_INET;
     addr.ipv4 = daddr.sin_addr;
 
@@ -1063,6 +1074,9 @@ int ac_init(struct nickel *ni)
                 (unsigned int) ni->ac_max_tcp_conn);
     if (ni->ac_block_other_udp_icmp)
         NETLOG("icmp and non-service udp packets will be blocked");
+    if (ni->ac_allow_loopback_redirect)
+        NETLOG("conections to special IP address allowed to be redirected to the"
+               " host loopback address");
 out:
     return err;
 }

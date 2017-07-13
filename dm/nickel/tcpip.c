@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2017, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -509,7 +509,9 @@ static void arp_input(struct nickel *ni, const uint8_t *pkt, size_t len)
             goto out;
         }
 
-        if (ah->ar_tip != ni->host_addr.s_addr)
+        if ((ah->ar_tip & ni->network_mask.s_addr) != ni->network_addr.s_addr)
+            goto out;
+        if (ah->ar_tip == ni->dhcp_startaddr.s_addr)
             goto out;
         l = MAX(ETH_HLEN + sizeof(struct arphdr), 256);
         bf = ni_netbuff(ni, l);
@@ -519,9 +521,11 @@ static void arp_input(struct nickel *ni, const uint8_t *pkt, size_t len)
         reh = (struct ethhdr *)arp_reply;
         rah = (struct arphdr *)(arp_reply + ETH_HLEN);
 
-        /* ARP request for alias/dns mac address */
+        /* ARP request for alias/dns/host loopback redir mac address */
         memcpy(reh->h_dest, pkt + ETH_ALEN, ETH_ALEN);
         memcpy(reh->h_source, ni->eth_nickel, ETH_ALEN);
+        assert(ETH_ALEN >= 6);
+        memcpy(reh->h_source + 2, (uint8_t *) (&ah->ar_tip), 4);
         reh->h_proto = NI_HTONS(ETH_P_ARP);
 
         rah->ar_hrd = NI_HTONS(1);

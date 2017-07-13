@@ -976,6 +976,8 @@ static int ac_config(struct nickel *ni, const yajl_val d)
     ni->ac_allow_well_known_ports = yajl_object_get_bool_default(d, "allow_well_known_ports", 0);
     ni->ac_max_tcp_conn = yajl_object_get_integer_default(d, "max-tcp-connections", 0);
     ni->ac_block_other_udp_icmp = yajl_object_get_bool_default(d, "block-other-udp-icmp", 0);
+    ni->ac_allow_loopback_redirect = yajl_object_get_bool_default(d,
+                                        "allow-redirect-to-loopback-addr", 0);
 
     ni->lava_events_per_host = 1;
     if (yajl_object_get_bool_default(d, "lava-all-events", 0))
@@ -1169,7 +1171,11 @@ ni_tcp_connect(struct nickel *ni, struct sockaddr_in saddr,
     } else if ((daddr.sin_addr.s_addr & ni->network_mask.s_addr) ==
                ni->network_addr.s_addr) {
 
-        goto out;
+        if (daddr.sin_addr.s_addr != ni->loopback_redirect_addr.s_addr ||
+            (ni->ac_enabled && !ni->ac_allow_loopback_redirect)) {
+
+            goto out;
+        }
     }
 
     tcpip_set_sock_type(so, SS_NAV);
@@ -1722,6 +1728,7 @@ int net_init_nickel(QemuOpts *opts, Monitor *mon, const char *name, VLANState *v
     struct in_addr mask = { .s_addr = htonl(0xffffff00) }; /* 255.255.255.0 */
     struct in_addr host = { .s_addr = htonl(0x0a000202) }; /* 10.0.2.2 */
     struct in_addr dhcp = { .s_addr = htonl(0x0a00020f) }; /* 10.0.2.15 */
+    struct in_addr loopback_redirect = { .s_addr = htonl(0x0a0002fe) }; /* 10.0.2.254 */
 
     debug_printf("nickel config init\n");
     epoch_ts = get_epoch_ts();
@@ -1771,6 +1778,7 @@ int net_init_nickel(QemuOpts *opts, Monitor *mon, const char *name, VLANState *v
         net.s_addr &= mask.s_addr;
         host.s_addr = net.s_addr | (htonl(0x0202) & ~mask.s_addr);
         dhcp.s_addr = net.s_addr | (htonl(0x020f) & ~mask.s_addr);
+        loopback_redirect.s_addr = net.s_addr | (htonl(0x02fe) & ~mask.s_addr);
     }
 
     nc_n = (struct nc_nickel_s *) qemu_new_net_client(&net_nickel_info, vlan, NULL, "user", name);
@@ -1848,6 +1856,7 @@ int net_init_nickel(QemuOpts *opts, Monitor *mon, const char *name, VLANState *v
     ni->network_mask = mask;
     ni->host_addr = host;
     ni->dhcp_startaddr = dhcp;
+    ni->loopback_redirect_addr = loopback_redirect;
     memcpy(ni->eth_nickel, special_ethaddr, sizeof(special_ethaddr));
     memcpy(ni->eth_nickel + 2, (uint8_t *) (&host.s_addr), 4);
 
