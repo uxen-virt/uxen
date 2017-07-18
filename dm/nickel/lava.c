@@ -440,8 +440,6 @@ out:
     lv->http_domain = NULL;
     ni_priv_free(lv->http_url);
     lv->http_url = NULL;
-    lv->remote_port = 0;
-    memset(&lv->remote_addr, 0, sizeof(lv->remote_addr));
     lv->http_port = 0;
     ni_priv_free(lv->dns_domain);
     lv->dns_domain = NULL;
