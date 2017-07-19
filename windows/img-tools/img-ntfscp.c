@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Gianni Tedesco
  * SPDX-License-Identifier: ISC
  */
@@ -2124,10 +2124,6 @@ int main(int argc, char **argv)
     char endTime[1024];
 
     setprogname(argv[0]);
-
-    /* Don't bring up WER dialog box on segfault, exit with failure instead. */
-    SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOALIGNMENTFAULTEXCEPT |
-            SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
 
     RTTimeNow(& runtimes.Total.t0);
     RTR3Init();
