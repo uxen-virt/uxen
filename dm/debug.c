@@ -23,6 +23,8 @@ static void (*log_prefix_fn)(char *target,
                              struct tm *tm,
                              struct timeval *tv) = NULL;
 
+#define log_prefix_default log_prefix_iso_8601
+
 int
 verbose_logging(void)
 {
@@ -30,7 +32,7 @@ verbose_logging(void)
 }
 
 static void
-log_prefix_default(char *target, size_t len, struct tm *tm, struct timeval *tv)
+log_prefix_uxen(char *target, size_t len, struct tm *tm, struct timeval *tv)
 {
     snprintf(target, len, "%03d-%02d:%02d:%02d.%03d ",
              tm->tm_yday, tm->tm_hour, tm->tm_min, tm->tm_sec,
@@ -94,6 +96,9 @@ logstyle_set(const char *log_timestamp_style)
     } else if (!strcmp(log_timestamp_style, "iso-8601")) {
 
         log_prefix_fn = log_prefix_iso_8601;
+    } else if (!strcmp(log_timestamp_style, "uxen")) {
+
+        log_prefix_fn = log_prefix_uxen;
     } else {
 
         fprintf(stderr, "log timestamp style '%s' unknown, "
