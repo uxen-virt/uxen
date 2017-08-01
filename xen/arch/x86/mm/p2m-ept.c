@@ -712,7 +712,7 @@ ept_ro_update_l2_entry(struct p2m_domain *p2m, unsigned long gfn,
             if (read_only && need_sync)
                 *need_sync = 1;
             if (ax_pv_ept)
-                ax_pv_ept_write(p2m, target, gfn, new_entry.epte, 0);
+                ax_pv_ept_write(p2m, target, gfn, new_entry.epte, read_only);
         }
 
         /* Success */
