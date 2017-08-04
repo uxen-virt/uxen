@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -499,6 +499,41 @@ uxscsi_mode_sense_10 (UXSCSI * s, int dbd, uint8_t pc, uint8_t page,
   return success (s);
 }
 
+typedef struct v4v_scsi_inquiry_response {
+    uint8_t peripheral;
+    uint8_t reserved;
+    uint8_t version;
+    uint8_t response_data;
+    uint8_t additional_length;
+    uint8_t flag_bits[3];
+    uint8_t vendor_id[8];
+    uint8_t product_id[16];
+    uint8_t product_rev_level[4];
+    uint8_t serial_num[8];
+} v4v_scsi_inquiry_response_t;
+
+size_t
+uxscsi_inquiry_dummy(void* dest, size_t max_len)
+{
+    v4v_scsi_inquiry_response_t scsi_response = {
+        .peripheral = 0x00,
+        .reserved = 0x00,
+        .version = 0x05, // complies with standard
+        .response_data = 0x02, // standard response data format
+        .additional_length = sizeof(scsi_response) - 5,
+        .flag_bits = {0x00, 0x00, 0x10}
+    };
+    memset(&scsi_response.vendor_id, ' ', sizeof(scsi_response.vendor_id));
+    memcpy(&scsi_response.vendor_id, "UXEN", 4);
+    memset(&scsi_response.product_id, ' ', sizeof(scsi_response.product_id));
+    memcpy(&scsi_response.product_id, "UXEN DISK", 9);
+    memset(dest, 0, max_len);
+    if (max_len > sizeof(scsi_response)) {
+        max_len = sizeof(scsi_response);
+    }
+    memcpy(dest, &scsi_response, max_len);
+    return max_len;
+}
 
 static int
 uxscsi_parse (UXSCSI * s)
@@ -682,18 +717,24 @@ uxscsi_parse (UXSCSI * s)
 
       return uxscsi_write (s, lba, count);
 	  
-#ifdef __APPLE__
     case SCSIOP_INQUIRY:
       {
         const uint8_t standard_inquiry_cdb[6] =
         { SCSIOP_INQUIRY, 0x00, 0x00, 0x00, 0x24, 0x00 };
+        const uint8_t standard_inquiry_cdb_44[6] =
+        { SCSIOP_INQUIRY, 0x00, 0x00, 0x00, 0x2c, 0x00 };
         const uint8_t evpd_supported_inquiry_cdb[6] =
         { SCSIOP_INQUIRY, 0x01, 0x00, 0x00, 0x40, 0x00 };
         if (s->cdb_len < 6)
           return check_condition (s, SCSISK_ILLEGAL_REQUEST, 0, 0);
-        if (0 == memcmp(s->cdb, standard_inquiry_cdb, 6)) {
+        if (0 == memcmp(s->cdb, standard_inquiry_cdb, 6) ||
+            0 == memcmp(s->cdb, standard_inquiry_cdb_44, 6)) {
           //standard inquiry - get the serial number etc and craft the response
+#ifdef __APPLE__
           s->read_len = uxscsi_inquiry(s->read_ptr, s->read_len);
+#else
+          s->read_len = uxscsi_inquiry_dummy(s->read_ptr, s->read_len);
+#endif
           return success (s);
         } else if (0 == memcmp(s->cdb, evpd_supported_inquiry_cdb, 4)
                    && s->cdb[5] == evpd_supported_inquiry_cdb[5]) {
@@ -702,7 +743,52 @@ uxscsi_parse (UXSCSI * s)
           return success (s);
         }
       }
-#endif
+      break;
+    case SCSIOP_REPORT_LUNS:
+        {
+            int len;
+
+            len = MIN(8 + 8, s->read_len);
+            if (len < 8)
+                break;
+            memset(s->read_ptr, 0, len);
+            s->read_ptr[3] = 8;
+            s->read_len = len;
+            return success(s);
+        }
+        break;
+    case SCSIOP_MAINTENANCE_IN:
+        if (s->cdb[1] != 0x0c || s->read_len < 2)
+            break;
+        switch (s->cdb[3]) {
+            case SCSIOP_REQUEST_SENSE:
+            case SCSIOP_START_STOP_UNIT:
+            case SCSIOP_TEST_UNIT_READY:
+            case SCSIOP_MODE_SENSE_6:
+            case SCSIOP_MODE_SENSE_10:
+            case SCSIOP_READ_CAPACITY_10:
+            case SCSIOP_READ_CAPACITY_16:
+            case SCSIOP_SYNCHRONIZE_CACHE_10:
+            case SCSIOP_SYNCHRONIZE_CACHE_16:
+            case SCSIOP_READ_6:
+            case SCSIOP_READ_10:
+            case SCSIOP_READ_12:
+            case SCSIOP_READ_16:
+            case SCSIOP_WRITE_6:
+            case SCSIOP_WRITE_10:
+            case SCSIOP_WRITE_12:
+            case SCSIOP_WRITE_16:
+            case SCSIOP_INQUIRY:
+            case SCSIOP_REPORT_LUNS:
+                s->read_ptr[1] = 3;
+                return success(s);
+            break;
+            default:
+                s->read_ptr[1] = 0;
+                return success(s);
+            break;
+        }
+        break;
     }
   return check_condition (s, SCSISK_ILLEGAL_REQUEST, 0, 0);
 }

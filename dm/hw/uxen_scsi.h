@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -69,6 +69,8 @@
 #define SCSIOP_MODE_SENSE_10         0x5a
 #define SCSIOP_PERSISTENT_RESERVE_IN 0x5e
 #define SCSIOP_PERSISTENT_RESERVE_OUT 0x5f
+#define SCSIOP_REPORT_LUNS           0xa0
+#define SCSIOP_MAINTENANCE_IN        0xa3
 #define SCSIOP_MOVE_MEDIUM           0xa5
 #define SCSIOP_READ_16               0x88
 #define SCSIOP_WRITE_16              0x8a
