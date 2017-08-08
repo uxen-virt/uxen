@@ -1628,7 +1628,8 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
               ucd, &vmi->vmi_shared, vcis);
     uxen_cpu_unpin(aff);
     if (ret) {
-	ret = -EINVAL;
+        fail_msg("domain %d: %" PRIuuid " setup vm failed: %d",
+            vmi->vmi_shared.vmi_domid, PRIuuid_arg(ucd->ucd_vmuuid), ret);
 	goto out;
     }
 
