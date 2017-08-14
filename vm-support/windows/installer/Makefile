@@ -43,19 +43,16 @@ WIXFLAGS = -ext WixUIExtension.dll \
 	   -ext WixUtilExtension.dll
 
 ifeq ($(TARGET_VM_SUPPORT_BITS),32)
-DPINST_DIR = $(WINDDK_DIR)/redist/DIFx/dpinst/MultiLin/x86
 WIX_LIBS = $(WIX_DIR)/difxapp_x86.wixlib
 CANDLE_FLAGS = -arch x86
 WIN64=no
 else
-DPINST_DIR = $(WINDDK_DIR)/redist/DIFx/dpinst/MultiLin/amd64
 WIX_LIBS = $(WIX_DIR)/difxapp_x64.wixlib
 CANDLE_FLAGS = -arch x64
 WIN64=yes
 endif
 
-WIX_INCLUDES = -ddpinstdir=$(DPINST_DIR) \
-	       -delevatedir=$(ELEVATE_DIR) \
+WIX_INCLUDES = -delevatedir=$(ELEVATE_DIR) \
 	       -dsrcdir=$(SRCDIR) \
 	       -duxenclipboarddir=$(UXENCLIPBOARD_DIR) \
 	       -duxendispdir=$(UXENDISP_DIR) \
@@ -75,9 +72,7 @@ WIX_INCLUDES = -ddpinstdir=$(DPINST_DIR) \
 	       -duxenhiddir=$(UXENHID_DIR) \
 	       -duxenh264dir=$(UXENH264_DIR)
 
-WIX_DEPS = $(SRC_DIR)/run_dpinst.vbs \
-	   $(DPINST_DIR)/dpinst.exe \
-	   $(ELEVATE_DIR)/elevate.exe \
+WIX_DEPS = $(ELEVATE_DIR)/elevate.exe \
 	   $(UXENCLIPBOARD_DIR)/uxenclipboard.exe \
 	   $(UXENDISP_DIR)/uxendisp.sys \
 	   $(UXENAUDIO_DIR)/uxenaudio.sys \
