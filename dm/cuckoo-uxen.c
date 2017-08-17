@@ -101,17 +101,19 @@ static void *map_section(void *opaque, enum cuckoo_section_type t, size_t sz)
             }
         }
     } else {
-        Werr(1, "CreateFileMappingA fails");
+        Werr(1, "%s: CreateFileMappingA failed for '%s' (max:%d)",
+             __FUNCTION__, mn, sz);
     }
     mapping = MapViewOfFile(h, FILE_MAP_WRITE, 0, 0, sz);
+    if (!mapping) {
+        Werr(1, "%s: MapViewOfFile failed to map %d bytes for '%s'",
+             __FUNCTION__, sz, mn);
+    }
     if (!keep_handle) {
         CloseHandle(h);
     }
     free(mn);
     ctx->mappings[t] = mapping;
-    if (!mapping) {
-        Werr(1, "MapViewOfFile");
-    }
     return mapping;
 }
 
