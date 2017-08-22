@@ -1219,7 +1219,11 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
 
     p2m_lock(np2m);
     ct = -NOW();
-    for (gpfn = 0; !ret && gpfn <= p2m->max_mapped_pfn; ) {
+    for (gpfn = np2m->clone_gpfn; !ret && gpfn <= p2m->max_mapped_pfn; ) {
+        if (hypercall_needs_checks() || UI_HOST_CALL(ui_host_needs_preempt)) {
+            ret = -EAGAIN;
+            break;
+        }
         if (!(gpfn & ((1UL << PAGETABLE_ORDER) - 1))) {
             mfn = p2m->get_l1_table(p2m, gpfn, &page_order);
             if (!mfn_valid_page(mfn)) {
@@ -1266,17 +1270,22 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
     if (table)
         unmap_domain_page(table);
     ct += NOW();
+    np2m->clone_time += ct;
     p2m_unlock(np2m);
 
-    printk("%s: vm%u took %"PRIu64".%06"PRIu64"ms\n",
-           __FUNCTION__, nd->domain_id, ct / 1000000UL, ct % 1000000UL);
-    printk("vm%u: pod_pages=%d zero_shared=%d tmpl_shared=%d\n",
-           nd->domain_id, atomic_read(&nd->pod_pages),
-           atomic_read(&nd->zero_shared_pages),
-           atomic_read(&nd->tmpl_shared_pages));
-    if (atomic_read(&nd->clone.l1_pod_pages))
-        printk("vm%u: l1_pod_pages=%d\n",
-               nd->domain_id, atomic_read(&nd->clone.l1_pod_pages));
+    np2m->clone_gpfn = gpfn;
+    if (gpfn > p2m->max_mapped_pfn) {
+        printk("%s: vm%u took %"PRIu64".%06"PRIu64"ms\n",
+               __FUNCTION__, nd->domain_id,
+               np2m->clone_time / 1000000UL, np2m->clone_time % 1000000UL);
+        printk("vm%u: pod_pages=%d zero_shared=%d tmpl_shared=%d\n",
+               nd->domain_id, atomic_read(&nd->pod_pages),
+               atomic_read(&nd->zero_shared_pages),
+               atomic_read(&nd->tmpl_shared_pages));
+        if (atomic_read(&nd->clone.l1_pod_pages))
+            printk("vm%u: l1_pod_pages=%d\n",
+                   nd->domain_id, atomic_read(&nd->clone.l1_pod_pages));
+    }
     return ret;
 }
 
