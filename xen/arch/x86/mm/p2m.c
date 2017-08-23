@@ -137,6 +137,12 @@ static void p2m_initialise(struct domain *d, struct p2m_domain *p2m)
     else if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
         p2m_pt_init(p2m);
 
+    if (is_template_domain(d)) {
+        init_timer(&p2m->template.gc_timer,
+                   p2m_pod_gc_template_pages_work, d, 0);
+        set_timer(&p2m->template.gc_timer, NOW() + SECONDS(10));
+    }
+
     return;
 }
 

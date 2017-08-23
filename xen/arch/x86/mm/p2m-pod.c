@@ -1697,6 +1697,337 @@ guest_physmap_mark_populate_on_demand_contents(
     return 0;
 }
 
+#define GC_PERIOD (5 * 60)
+static uxen_mfn_t gc_mfns[L1_PAGETABLE_ENTRIES];
+static mfn_t gc_mfns_diag[L1_PAGETABLE_ENTRIES];
+
+void
+p2m_pod_gc_template_pages_work(void *_d)
+{
+    struct domain *d = (struct domain *)_d;
+    struct p2m_domain *p2m = p2m_get_hostp2m(d);
+    unsigned long gpfn, gpfn_aligned, scrub_gpfn, scrub_gpfn_end;
+    mfn_t mfn, l1mfn;
+    p2m_type_t t;
+    p2m_access_t a;
+    unsigned int page_order;
+    struct page_data_info *pdi;
+    uint8_t *data;
+    uint16_t data_size;
+    uint16_t offset;
+    struct domain *c;
+    void *l1table;
+    int i;
+    int nr_per_iter;
+    int nr_repod_iter = 0, nr_repod = 0, nr_scrub = 0;
+    s_time_t timer_next = SECONDS(1);
+
+    /* all timers execute from cpu0, so we only need one gc_mfns */
+    ASSERT(smp_processor_id() == 0);
+
+    p2m_lock_recursive(p2m);
+
+    gpfn = p2m->template.gc_decompressed_gpfn;
+
+    nr_per_iter = p2m->template.gc_per_iter;
+    if (!p2m->template.gc_was_preempted) {
+        nr_per_iter += (d->vframes + GC_PERIOD - 1) / GC_PERIOD;
+
+        p2m->template.gc_scrub_gpfn[p2m->template.gc_scrub_index++] = gpfn;
+        if (p2m->template.gc_scrub_index == GC_SCRUB_DELAY)
+            p2m->template.gc_scrub_index = 0;
+    } else {
+        /* there might be multiple preempts, this is correct for the
+         * case of a single preempt */
+        timer_next -= MILLISECS(50);
+        p2m->template.gc_was_preempted = 0;
+    }
+
+    scrub_gpfn = p2m->template.gc_scrub_gpfn[p2m->template.gc_scrub_index];
+    scrub_gpfn_end = p2m->template.gc_scrub_gpfn[
+        (p2m->template.gc_scrub_index + 1) % GC_SCRUB_DELAY];
+    if (scrub_gpfn_end < scrub_gpfn)
+        scrub_gpfn_end += p2m->max_mapped_pfn;
+
+    printk(XENLOG_DEBUG "BEGIN gpfn %lx index %d scrub %lx-%lx nr/iter %d "
+           "max %lx\n", gpfn, p2m->template.gc_scrub_index, scrub_gpfn,
+           scrub_gpfn_end, nr_per_iter, p2m->max_mapped_pfn);
+
+    while (1) {
+
+      repod_template:
+        printk(XENLOG_DEBUG "repod gpfn %lx index %d scrub %lx-%lx nr/iter %d "
+               "max %lx\n", gpfn, p2m->template.gc_scrub_index, scrub_gpfn,
+               scrub_gpfn_end, nr_per_iter, p2m->max_mapped_pfn);
+
+        if (UI_HOST_CALL(ui_host_needs_preempt)) {
+            printk(XENLOG_INFO "PREEMPT gpfn %lx idx %d scrub %lx-%lx "
+                   "nr/iter %d max %lx\n", gpfn, p2m->template.gc_scrub_index,
+                   scrub_gpfn, scrub_gpfn_end, nr_per_iter,
+                   p2m->max_mapped_pfn);
+            if (nr_per_iter > 0 || scrub_gpfn < scrub_gpfn_end) {
+                timer_next = MILLISECS(50);
+                p2m->template.gc_was_preempted = 1;
+            }
+            break;
+        }
+
+        if (nr_per_iter <= 0) {
+            if (scrub_gpfn >= scrub_gpfn_end)
+                break;
+            goto scrub_template;
+        }
+
+        mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, &page_order);
+        if (!mfn_valid_page_or_vframe(mfn)) {
+            gpfn |= ((1 << page_order) - 1);
+            goto repod_next;
+        }
+
+        gpfn_aligned = gpfn & ~((1UL << PAGETABLE_ORDER) - 1);
+
+        l1mfn = p2m->get_l1_table(p2m, gpfn_aligned, NULL);
+        if (!mfn_valid_page(l1mfn)) {
+            gpfn |= ((1UL << PAGETABLE_ORDER) - 1);
+            goto repod_next;
+        }
+
+        l1table = map_domain_page(mfn_x(l1mfn));
+
+        for (i = gpfn - gpfn_aligned; i < L1_PAGETABLE_ENTRIES; i++) {
+            gc_mfns[i] = 0;
+
+            mfn = p2m->parse_entry(l1table, i, &t, &a);
+            gc_mfns_diag[i] = mfn;
+            if (mfn_valid_page(mfn)) {
+                gc_mfns[i] = mfn_x(mfn) | 0x80000000;
+                continue;
+            }
+            if (!mfn_valid_vframe(mfn))
+                continue;
+
+            if (test_bit(_PGC_host_page,
+                         &mfn_to_page(mfn)->count_info)) {
+                printk(XENLOG_ERR "template host page mfn %lx gpfn %lx "
+                       "ci %x\n", mfn_x(mfn), gpfn_aligned + i,
+                       mfn_to_page(mfn)->count_info);
+                BUG();
+                continue;
+            }
+
+            if (p2m_get_page_data_and_write_lock (p2m, &mfn, &data,
+                                                  &data_size, &offset))
+                continue;
+
+            pdi = (struct page_data_info *)&data[offset];
+
+            gc_mfns[i] = pdi->mfn;
+            nr_per_iter--;
+            nr_repod_iter++;
+
+            p2m_put_page_data_with_write_lock (p2m, data, data_size);
+        }
+
+        unmap_domain_page(l1table);
+
+        p2m_unlock(p2m);
+
+        for_each_domain(c) {
+            struct p2m_domain *cp2m;
+            mfn_t cmfn;
+
+            if (c->clone_of != d)
+                continue;
+
+            cp2m = p2m_get_hostp2m(c);
+            p2m_lock_recursive(cp2m);
+            if (!cp2m->is_alive) {
+                p2m_unlock(cp2m);
+                continue;
+            }
+
+            l1mfn = cp2m->get_l1_table(cp2m, gpfn_aligned, NULL);
+            if (mfn_valid_page(l1mfn)) {
+                l1table = map_domain_page(mfn_x(l1mfn));
+                for (i = gpfn - gpfn_aligned; i < L1_PAGETABLE_ENTRIES; i++) {
+                    cmfn = cp2m->parse_entry(l1table, i, &t, &a);
+                    if (mfn_valid_page(cmfn) && p2m_is_pod(t) &&
+                        page_get_owner(mfn_to_page(cmfn)) == d) {
+                        int ok = 1;
+                        if (!gc_mfns[i]) {
+                            mfn_t checkmfn;
+                            p2m_type_t ct;
+                            p2m_access_t ca;
+                            printk(XENLOG_ERR "template page: gpfn %lx mfn %lx "
+                                   "ci %x tmfn %x mfns_diag %lx mp %lx "
+                                   "mv %lx\n", gpfn_aligned + i, mfn_x(cmfn),
+                                   mfn_to_page(cmfn)->count_info,
+                                   gc_mfns[i], mfn_x(gc_mfns_diag[i]),
+                                   max_page, max_vframe);
+                            checkmfn = p2m->get_entry(p2m, gpfn_aligned + i,
+                                                      &ct, &ca, p2m_query,
+                                                      NULL);
+                            if (mfn_valid_page(checkmfn))
+                                printk(XENLOG_ERR "checkmfn %lx valid page\n",
+                                       mfn_x(checkmfn));
+                            else if (!mfn_valid_vframe(checkmfn))
+                                printk(XENLOG_ERR "checkmfn %lx not valid page "
+                                       "or vframe\n", mfn_x(checkmfn));
+                            else {
+                                struct page_data_info *pdi;
+                                uint8_t *data;
+                                uint16_t data_size;
+                                uint16_t offset;
+                                p2m_lock_recursive(p2m);
+                                if (!p2m_get_page_data(p2m, &checkmfn, &data,
+                                                       &data_size, &offset)) {
+                                    pdi =
+                                        (struct page_data_info *)&data[offset];
+                                    printk(XENLOG_ERR "checkmfn %lx "
+                                           "pdi->mfn %x\n",
+                                           mfn_x(checkmfn), pdi->mfn);
+                                    gc_mfns[i] = pdi->mfn;
+                                    p2m_put_page_data(p2m, data, data_size);
+                                }
+                                p2m_unlock(p2m);
+                            }
+                            if (!gc_mfns[i])
+                                ok = 0;
+                        }
+                        if (test_bit(_PGC_host_page,
+                                     &mfn_to_page(cmfn)->count_info)) {
+                            printk(XENLOG_ERR "host page: gpfn %lx mfn %lx "
+                                   "ci %x tmfn %x\n", gpfn_aligned + i,
+                                   mfn_x(cmfn), mfn_to_page(cmfn)->count_info,
+                                   gc_mfns[i]);
+                            ok = 0;
+                        }
+                        if (p2m_mfn_is_vframe(cmfn)) {
+                            printk(XENLOG_ERR "vframe: gpfn %lx mfn %lx "
+                                   "ci %x\n", gpfn_aligned + i, mfn_x(cmfn),
+                                   mfn_to_page(cmfn)->count_info);
+                            ok = 0;
+                        }
+                        if ((mfn_x(cmfn) | 0x80000000) == gc_mfns[i])
+                            continue;
+                        if (mfn_x(cmfn) != gc_mfns[i]) {
+                            printk(XENLOG_ERR "mfn: gpfn %lx mfn %lx ci %x "
+                                   "tmfn %x\n", gpfn_aligned + i, mfn_x(cmfn),
+                                   mfn_to_page(cmfn)->count_info, gc_mfns[i]);
+                            ok = 0;
+                        }
+                        if (!ok) {
+                            BUG();
+                            continue;
+                        }
+                        set_p2m_entry(cp2m, gpfn_aligned + i, _mfn(0), 0,
+                                      p2m_populate_on_demand,
+                                      cp2m->default_access);
+                        nr_repod++;
+                    }
+                }
+                unmap_domain_page(l1table);
+            }
+
+            p2m_unlock(cp2m);
+            printk(XENLOG_DEBUG "vm%d: %lx tmpl_shared=%d\n", c->domain_id,
+                   gpfn_aligned, atomic_read(&c->tmpl_shared_pages));
+        }
+
+        p2m_lock_recursive(p2m);
+
+        gpfn |= ((1UL << PAGETABLE_ORDER) - 1);
+
+      repod_next:
+        gpfn++;
+        if (gpfn > p2m->max_mapped_pfn)
+            gpfn = 0;
+
+      scrub_template:
+        if (scrub_gpfn >= scrub_gpfn_end)
+            goto repod_template;
+
+        mfn = p2m->get_entry(p2m, scrub_gpfn, &t, &a, p2m_query,
+                             &page_order);
+        if (!mfn_valid_page_or_vframe(mfn)) {
+            scrub_gpfn |= ((1 << page_order) - 1);
+            goto scrub_next;
+        }
+
+        gpfn_aligned = scrub_gpfn & ~((1UL << PAGETABLE_ORDER) - 1);
+
+        l1mfn = p2m->get_l1_table(p2m, gpfn_aligned, NULL);
+        if (!mfn_valid_page(l1mfn)) {
+            scrub_gpfn |= ((1UL << PAGETABLE_ORDER) - 1);
+            goto scrub_next;
+        }
+
+        l1table = map_domain_page(mfn_x(l1mfn));
+
+        for (i = scrub_gpfn - gpfn_aligned; i < L1_PAGETABLE_ENTRIES; i++) {
+            mfn = p2m->parse_entry(l1table, i, &t, &a);
+
+            if (!p2m_mfn_is_page_data(mfn))
+                continue;
+            if (p2m_get_page_data_and_write_lock(p2m, &mfn, &data,
+                                                 &data_size, &offset))
+                continue;
+
+            pdi = (struct page_data_info *)&data[offset];
+            if (pdi->mfn &&
+                (__mfn_to_page(pdi->mfn)->count_info & PGC_count_mask) == 1) {
+                if (get_page(__mfn_to_page(pdi->mfn), d)) {
+                    uxen_mfn_t mfn = pdi->mfn;
+                    pdi->mfn = 0;
+                    atomic_dec(&d->template.decompressed_shared);
+                    put_allocated_page(d, __mfn_to_page(mfn));
+                    put_page(__mfn_to_page(mfn));
+                    update_host_memory_saved(PAGE_SIZE);
+                }
+                nr_scrub++;
+            }
+            p2m_put_page_data_with_write_lock(p2m, data, data_size);
+        }
+
+        unmap_domain_page(l1table);
+
+        scrub_gpfn |= ((1UL << PAGETABLE_ORDER) - 1);
+
+      scrub_next:
+        scrub_gpfn++;
+        if (scrub_gpfn > p2m->max_mapped_pfn) {
+            scrub_gpfn = 0;
+            ASSERT(scrub_gpfn_end >= p2m->max_mapped_pfn);
+            scrub_gpfn_end -= p2m->max_mapped_pfn;
+            printk(XENLOG_INFO "SCRUB gpfn %lx idx %d scrub %lx-%lx nr/iter %d "
+                   "max %lx\n", gpfn, p2m->template.gc_scrub_index, scrub_gpfn,
+                   scrub_gpfn_end, nr_per_iter, p2m->max_mapped_pfn);
+        }
+    }
+
+    if (scrub_gpfn < scrub_gpfn_end) {
+        ASSERT(p2m->template.gc_was_preempted);
+        p2m->template.gc_scrub_gpfn[p2m->template.gc_scrub_index] = scrub_gpfn;
+        printk(XENLOG_INFO "SHORT gpfn %lx idx %d scrub %lx-%lx nr/iter %d "
+               "max %lx\n", gpfn, p2m->template.gc_scrub_index, scrub_gpfn,
+               scrub_gpfn_end, nr_per_iter, p2m->max_mapped_pfn);
+    }
+
+    printk(XENLOG_DEBUG "=== gpfn %lx index %d scrub %lx-%lx nr/iter %d "
+           "max %lx\n", gpfn, p2m->template.gc_scrub_index, scrub_gpfn,
+           scrub_gpfn_end, nr_per_iter, p2m->max_mapped_pfn);
+
+    p2m->template.gc_per_iter = nr_per_iter;
+
+    p2m->template.gc_decompressed_gpfn = gpfn;
+    p2m_unlock(p2m);
+    set_timer(&p2m->template.gc_timer, NOW() + timer_next);
+    printk(XENLOG_INFO "vm%d: %lx decomp_shared=%d iter %d repod %d "
+           "scrub %d pages\n", d->domain_id, gpfn,
+           atomic_read(&d->template.decompressed_shared), nr_repod_iter,
+           nr_repod, nr_scrub);
+}
+
 #ifndef NDEBUG
 static struct timer p2m_pod_compress_template_timer;
 

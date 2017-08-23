@@ -421,6 +421,18 @@ struct p2m_domain {
 
     struct dspage_store *dsps;
 
+    union {
+        struct {
+            uint32_t gc_decompressed_gpfn;
+#define GC_SCRUB_DELAY 30
+            uint32_t gc_scrub_gpfn[GC_SCRUB_DELAY];
+            struct timer gc_timer;
+            short gc_per_iter;
+            short gc_scrub_index;
+            bool_t gc_was_preempted;
+        } template;
+    };
+
 #ifndef NDEBUG
     unsigned long compress_gpfn;
 #endif  /* NDEBUG */
@@ -633,6 +645,9 @@ p2m_shared_teardown(struct p2m_domain *p2m);
 
 void
 p2m_teardown_compressed(struct p2m_domain *p2m);
+
+void
+p2m_pod_gc_template_pages_work(void *_d);
 
 
 /*

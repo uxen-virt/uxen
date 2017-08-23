@@ -864,6 +864,9 @@ void paging_teardown(struct domain *d)
     p2m_pod_empty_cache(d);
 #endif  /* __UXEN__ */
 
+    if (is_template_domain(d))
+        kill_timer(&p2m->template.gc_timer);
+
     p2m_teardown_compressed(p2m);
 
     if (!p2m_shared_teardown(p2m))
