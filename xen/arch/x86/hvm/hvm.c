@@ -907,6 +907,8 @@ int hvm_domain_initialise(struct domain *d)
     /* XXX init debug option */
     if (!strstr(opt_debug, ",uncomptmpl,")) {
         /* defaults for compressed template */
+        d->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] =
+            HVM_PARAM_CLONE_L1_decompressed;
         d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] =
             HVM_PARAM_CLONE_DECOMPRESSED_shared;
     }

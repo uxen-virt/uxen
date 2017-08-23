@@ -182,6 +182,13 @@
 /* dynamically populate l1 pages */
 #define HVM_PARAM_CLONE_L1_dynamic       0x4
 
+#define HVM_PARAM_CLONE_L1_lazy_mask                                    \
+    (HVM_PARAM_CLONE_L1_lazy | HVM_PARAM_CLONE_L1_lazy_populate |       \
+     HVM_PARAM_CLONE_L1_dynamic)
+
+/* populate l1 entries if decompressed page exists */
+#define HVM_PARAM_CLONE_L1_decompressed  0x8
+
 /* control decompressed pages from read accesses */
 #define HVM_PARAM_CLONE_DECOMPRESSED 34
 /* keep pages mapped read-only */
