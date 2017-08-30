@@ -268,4 +268,36 @@ uxendisp_flush(uxendisp_ctrl_ctx_t *ctx)
     uxendisp_escape(ctx,0, &m, sizeof(m));
 }
 
+static NTSTATUS
+uxendisp_update_composed_rects(uxendisp_ctrl_ctx_t *ctx, int count, UXENDISPComposedRect *rects)
+{
+  SIZE_T data_sz = count * sizeof(UXENDISPComposedRect);
+  UXENDISPCustomMode *m = (UXENDISPCustomMode*)
+    LocalAlloc(LPTR, sizeof(UXENDISPCustomMode) + data_sz);
+  NTSTATUS status;
+
+  if (!m)
+    return STATUS_NO_MEMORY;
+
+  m->esc_code = UXENDISP_ESCAPE_UPDATE_COMPOSED_RECTS;
+  m->count = count;
+  if (count)
+    CopyMemory(m + 1, rects, data_sz);
+
+  status = uxendisp_escape(ctx, 0, m, sizeof(UXENDISPCustomMode) + (int)data_sz);
+  LocalFree(m);
+
+  return status;
+}
+
+static NTSTATUS
+uxendisp_set_compose_mode(uxendisp_ctrl_ctx_t *ctx, int mode)
+{
+    UXENDISPCustomMode m = { 0 };
+
+    m.esc_code = UXENDISP_ESCAPE_SET_COMPOSE_MODE;
+    m.param = mode;
+    return uxendisp_escape(ctx,0, &m, sizeof(m));
+}
+
 #endif

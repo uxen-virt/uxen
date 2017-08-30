@@ -178,7 +178,11 @@ NTSTATUS BASIC_DISPLAY_DRIVER::StartDevice(_In_  DXGK_START_INFO*   pDxgkStartIn
     RtlCopyMemory(&m_StartInfo, pDxgkStartInfo, sizeof(m_StartInfo));
     RtlCopyMemory(&m_DxgkInterface, pDxgkInterface, sizeof(m_DxgkInterface));
     RtlZeroMemory(m_CurrentModes, sizeof(m_CurrentModes));
+    RtlZeroMemory(&m_HwMode, sizeof(m_HwMode));
     m_CurrentModes[0].DispInfo.TargetId = D3DDDI_ID_UNINITIALIZED;
+
+    m_comp_rects_nb = 0;
+    m_comp_mode = DISP_COMPOSE_MODE_NONE;
 
     // Get device information from OS.
     NTSTATUS Status = m_DxgkInterface.DxgkCbGetDeviceInformation(m_DxgkInterface.DeviceHandle, &m_DeviceInfo);
@@ -514,7 +518,6 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetPointerShape(_In_ CONST DXGKARG_SETPOINTERSHAP
 NTSTATUS BASIC_DISPLAY_DRIVER::PresentDisplayOnly(_In_ CONST DXGKARG_PRESENT_DISPLAYONLY* pPresentDisplayOnly)
 {
     NTSTATUS status;
-    LARGE_INTEGER timeout = {0};
 
     ASSERT(pPresentDisplayOnly != NULL);
     ASSERT(pPresentDisplayOnly->VidPnSourceId < MAX_VIEWS);
@@ -548,7 +551,7 @@ NTSTATUS BASIC_DISPLAY_DRIVER::PresentDisplayOnly(_In_ CONST DXGKARG_PRESENT_DIS
         D3DKMDT_VIDPN_PRESENT_PATH_ROTATION RotationNeededByFb = pPresentDisplayOnly->Flags.Rotate ?
                                                                  m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].Rotation :
                                                                  D3DKMDT_VPPR_IDENTITY;
-        BYTE* pDst = (BYTE*)m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].FrameBuffer.Ptr;
+        BYTE* pDst = (BYTE*)GetDWMFramebufferPtr(pPresentDisplayOnly->VidPnSourceId);
         UINT DstBitPerPixel = BPPFromPixelFormat(m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].DispInfo.ColorFormat);
         if (m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].Scaling == D3DKMDT_VPPS_CENTERED)
         {
@@ -559,17 +562,19 @@ NTSTATUS BASIC_DISPLAY_DRIVER::PresentDisplayOnly(_In_ CONST DXGKARG_PRESENT_DIS
             pDst += (int)CenterShift/2;
         }
 
-        status = KeWaitForSingleObject(&m_PresentLock, Executive, KernelMode, FALSE, &timeout);
-        if (status != STATUS_SUCCESS)
+        status = KeWaitForSingleObject(&m_PresentLock, Executive, KernelMode, FALSE, NULL);
+        if (status != STATUS_SUCCESS) {
+            uxen_err("wait interrupted: %x\n", status);
             return STATUS_SUCCESS;
+        }
 
         for (unsigned int i = 0; i < pPresentDisplayOnly->NumMoves; ++i) {
             POINT *pt = &pPresentDisplayOnly->pMoves[i].SourcePoint;
             RECT *rct = &pPresentDisplayOnly->pMoves[i].DestRect;
             int diff;
 
-            if ((pt->x > (int)m_VirtMode.width) || (pt->y > (int)m_VirtMode.height) ||
-                (rct->left > (int)m_VirtMode.width) || (rct->top > (int)m_VirtMode.height)) {
+            if ((pt->x >= (int)m_VirtMode.width) || (pt->y >= (int)m_VirtMode.height) ||
+                (rct->left >= (int)m_VirtMode.width) || (rct->top >= (int)m_VirtMode.height)) {
                 RtlZeroMemory(&pPresentDisplayOnly->pMoves[i], sizeof pPresentDisplayOnly->pMoves[i]);
                 continue;
             }
@@ -605,6 +610,25 @@ NTSTATUS BASIC_DISPLAY_DRIVER::PresentDisplayOnly(_In_ CONST DXGKARG_PRESENT_DIS
                                                                     pPresentDisplayOnly->pDirtyRect,
                                                                     RotationNeededByFb);
         }
+
+        /* compose into display buffer before sending update, if in composing mode */
+        if (m_comp_mode == DISP_COMPOSE_MODE_OVERLAY_DWM_RECTS) {
+            int crtc = pPresentDisplayOnly->VidPnSourceId;
+
+            for (unsigned int i = 0; i < pPresentDisplayOnly->NumDirtyRects; ++i) {
+                RECT *r = &pPresentDisplayOnly->pDirtyRect[i];
+                /* the diffs should be +1 in theory but it makes things unhappy, these calcs few doznes lines
+                 * above are screwed in similar fashion */
+                ComposeDWMRects(crtc, r->left, r->top,
+                    r->right - r->left, r->bottom - r->top);
+            }
+            for (unsigned int i = 0; i < pPresentDisplayOnly->NumMoves; ++i) {
+                RECT *r = &pPresentDisplayOnly->pMoves[i].DestRect;
+                ComposeDWMRects(crtc, r->left, r->top,
+                    r->right - r->left, r->bottom - r->top);
+            }
+        }
+
         dr_send(m_DrContext,
                   pPresentDisplayOnly->NumMoves,
                   pPresentDisplayOnly->pMoves,
@@ -621,9 +645,90 @@ NTSTATUS BASIC_DISPLAY_DRIVER::PresentDisplayOnly(_In_ CONST DXGKARG_PRESENT_DIS
     return STATUS_SUCCESS;
 }
 
+static UINT CompBufferOffset(UINT buf_idx, UINT h, UINT stride)
+{
+    UINT off = h * stride * buf_idx;
+
+    off +=   PAGE_SIZE-1;
+    off &= ~(PAGE_SIZE-1);
+
+    return off;
+}
+
+static void CopyRect(BYTE *dst, BYTE *src, UINT stride,
+    UINT x, UINT y, UINT w, UINT h)
+{
+    UINT w_4 = w * 4;
+
+    dst = dst + y * stride + x * 4;
+    src = src + y * stride + x * 4;
+
+    while (h--) {
+        RtlCopyMemory(dst, src, w_4);
+        dst += stride;
+        src += stride;
+    }
+}
+
+void* BASIC_DISPLAY_DRIVER::GetDWMFramebufferPtr(int crtc)
+{
+    BYTE* p = (BYTE*)m_CurrentModes[crtc].FrameBuffer.Ptr;
+
+    if (m_comp_mode == DISP_COMPOSE_MODE_OVERLAY_DWM_RECTS) {
+        /* dwm redirected to secondary fb */
+        p += CompBufferOffset(1, m_HwMode.VisScreenHeight, m_HwMode.ScreenStride);
+    }
+
+    return p;
+}
+
+NTSTATUS BASIC_DISPLAY_DRIVER::ComposeDWMRects(int crtc, int x, int y, int w, int h)
+{
+    UINT screen_h = m_HwMode.VisScreenHeight;
+    UINT stride = m_HwMode.ScreenStride;
+    BYTE* fb_composed = (BYTE*)m_CurrentModes[crtc].FrameBuffer.Ptr;
+    BYTE* fb_dwm = fb_composed + CompBufferOffset(1, screen_h, stride);
+
+    if (x < 0) x = 0;
+    if (y < 0) y = 0;
+    if (x > (int)m_HwMode.VisScreenWidth-1 ) x = (int)m_HwMode.VisScreenWidth-1;
+    if (y > (int)m_HwMode.VisScreenHeight-1) y = (int)m_HwMode.VisScreenHeight-1;
+
+    /* compose rectangles in buffer 1 (dwm) over buffer 0 (display) */
+    for (UINT i = 0; i < m_comp_rects_nb; ++i) {
+        UXENDISPComposedRect *rc = &m_comp_rects[i];
+
+        int x0 = rc->x;
+        int y0 = rc->y;
+        int x1 = rc->x + rc->w - 1;
+        int y1 = rc->y + rc->h - 1;
+
+        if (x0 < x) x0 = x;
+        if (y0 < y) y0 = y;
+        if (x1 > x + w - 1) x1 = x + w - 1;
+        if (y1 > y + h - 1) y1 = y + h - 1;
+        int w_ = x1 - x0 + 1;
+        int h_ = y1 - y0 + 1;
+
+        if (w_ > 0 && h_ > 0 && w_ < 8192 && h_ < 8192) {
+            CopyRect(fb_composed, fb_dwm, stride, x0, y0, w_, h_);
+        }
+    }
+
+    return STATUS_SUCCESS;
+}
+
 NTSTATUS BASIC_DISPLAY_DRIVER::UpdateRect(int x, int y, int w, int h)
 {
     RECT r = { };
+
+    if (m_comp_mode == DISP_COMPOSE_MODE_OVERLAY_DWM_RECTS) {
+        NTSTATUS status = KeWaitForSingleObject(&m_PresentLock, Executive, KernelMode, FALSE, NULL);
+        if (status != STATUS_SUCCESS)
+            uxen_err("wait interrupted: %x\n", status);
+        ComposeDWMRects(0, x, y, w, h);
+        KeReleaseSemaphore(&m_PresentLock, 0, 1, FALSE);
+    }
 
     r.left = x;
     r.top = y;
@@ -632,6 +737,100 @@ NTSTATUS BASIC_DISPLAY_DRIVER::UpdateRect(int x, int y, int w, int h)
 
     dr_send(m_DrContext, 0, NULL, 1, &r);
 
+    return STATUS_SUCCESS;
+}
+
+UINT BASIC_DISPLAY_DRIVER::GetFBMapLength(int crtc)
+{
+    /* fb mapping length is double of the screen size to accomodate secondary buffer. Page aligned. */
+    UINT screen_bytes = m_CurrentModes[crtc].DispInfo.Pitch * m_CurrentModes[crtc].DispInfo.Height;
+
+    return ((screen_bytes + PAGE_SIZE-1) & ~(PAGE_SIZE-1)) + screen_bytes;
+}
+
+UINT BASIC_DISPLAY_DRIVER::GetCRTCOffset(int crtc, VIDEO_MODE_INFORMATION *mode)
+{
+    crtc;
+    mode;
+
+    return 0;
+}
+
+UINT BASIC_DISPLAY_DRIVER::GetCRTCBuffers(int crtc)
+{
+    crtc;
+    if (m_comp_mode == DISP_COMPOSE_MODE_OVERLAY_DWM_RECTS)
+        return 2;
+    return 1;
+}
+
+NTSTATUS BASIC_DISPLAY_DRIVER::UpdateComposedRects(UINT count, UXENDISPComposedRect *rects)
+{
+    if (count > DISP_COMPOSE_RECT_MAX)
+        count = DISP_COMPOSE_RECT_MAX;
+
+    NTSTATUS status = KeWaitForSingleObject(&m_PresentLock, Executive, KernelMode, FALSE, NULL);
+    if (status != STATUS_SUCCESS)
+        uxen_err("wait interrupted: %x\n", status);
+
+    RtlCopyMemory(&m_comp_rects, rects, sizeof(UXENDISPComposedRect) * count);
+
+    m_comp_rects_nb = count;
+
+    KeReleaseSemaphore(&m_PresentLock, 0, 1, FALSE);
+
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS BASIC_DISPLAY_DRIVER::SetComposeMode(UINT mode)
+{
+    int crtc = 0;
+    UINT off, buffers;
+    NTSTATUS status;
+
+    status = KeWaitForSingleObject(&m_PresentLock, Executive, KernelMode, FALSE, NULL);
+    if (status != STATUS_SUCCESS)
+        uxen_err("wait interrupted: %x\n", status);
+
+    if (mode == m_comp_mode) {
+        KeReleaseSemaphore(&m_PresentLock, 0, 1, FALSE);
+        return STATUS_SUCCESS;
+    }
+
+    off = 0;
+    buffers = (mode == DISP_COMPOSE_MODE_OVERLAY_DWM_RECTS) ? 2 : 1;
+
+    uxen_msg("changing compose mode: %d, offset %x, buffers %d\n", mode, off, buffers);
+
+    UINT h = m_HwMode.VisScreenHeight;
+    UINT stride = m_HwMode.ScreenStride;
+    UINT fbsize = h * stride;
+    BYTE* fb = (BYTE*)m_CurrentModes[crtc].FrameBuffer.Ptr;
+
+    if (mode == DISP_COMPOSE_MODE_NONE) {
+        /* migrate DWM framebuffer: 1 -> 0 */
+        RtlCopyMemory(
+            fb+CompBufferOffset(0, h, stride),
+            fb+CompBufferOffset(1, h, stride),
+            fbsize);
+    }
+
+    hw_update_crtc_buffers(&m_HwResources, crtc, buffers);
+    /* needs to be after buffers update to do crtc flush */
+    hw_update_crtc_offset(&m_HwResources, crtc, off);
+
+    if (mode == DISP_COMPOSE_MODE_OVERLAY_DWM_RECTS) {
+        /* migrate DWM framebuffer: 0 -> 1 */
+        RtlCopyMemory(
+            fb+CompBufferOffset(1, h, stride),
+            fb+CompBufferOffset(0, h, stride),
+            fbsize);
+    }
+    m_comp_mode = mode;
+
+    KeReleaseSemaphore(&m_PresentLock, 0, 1, FALSE);
+
+    uxen_msg("changing compose mode: %d, offset %x, buffers %d DONE\n", mode, off, buffers);
     return STATUS_SUCCESS;
 }
 

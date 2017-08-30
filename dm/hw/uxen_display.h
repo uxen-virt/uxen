@@ -11,7 +11,7 @@
 #define UXENDISP_REVISION_MINOR 0x0
 
 #define UXENDISP_NB_BANKS 1
-#define UXENDISP_BANK_ORDER 0x1b /* 128M */
+#define UXENDISP_BANK_ORDER 0x1c /* 256M */
 
 #define UXENDISP_BANK_SIZE (1 << UXENDISP_BANK_ORDER)
 #define UXENDISP_VRAM_SIZE (UXENDISP_BANK_SIZE * UXENDISP_NB_BANKS)
@@ -37,6 +37,7 @@ struct crtc_regs {
             uint32_t yres;
             uint32_t stride;
             uint32_t format;
+            uint32_t buffers;
         } p;
         uint8_t padding[256];
     };

@@ -412,7 +412,7 @@ NTSTATUS BddDdiEscape(
     }
 
     /* for now we can just assume that there is only one kind of escape calls */
-    if (pEscape->PrivateDriverDataSize == sizeof(inp)) {
+    if (pEscape->PrivateDriverDataSize >= sizeof(inp)) {
         out  = (UXENDISPCustomMode*)pEscape->pPrivateDriverData;
         inp = *out;
         switch (inp.esc_code) {
@@ -476,6 +476,18 @@ NTSTATUS BddDdiEscape(
             break;
         case UXENDISP_ESCAPE_FLUSH:
             status = pBDD->Flush();
+            break;
+        case UXENDISP_ESCAPE_UPDATE_COMPOSED_RECTS:
+            if ((pEscape->PrivateDriverDataSize == sizeof(inp) + inp.count * sizeof(UXENDISPComposedRect)) &&
+                (inp.count <= DISP_COMPOSE_RECT_MAX)) {
+                void *rects = (uint8_t*) pEscape->pPrivateDriverData + sizeof(inp);
+                status = pBDD->UpdateComposedRects(inp.count, (UXENDISPComposedRect*)rects);
+            } else{
+                status = STATUS_INVALID_PARAMETER;
+            }
+            break;
+        case UXENDISP_ESCAPE_SET_COMPOSE_MODE:
+            status = pBDD->SetComposeMode((UINT)inp.param);
             break;
         };
     } else {

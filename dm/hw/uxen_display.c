@@ -47,6 +47,7 @@ struct crtc_state {
     uint32_t yres;
     uint32_t stride;
     uint32_t format;
+    uint32_t buffers;
 
     volatile struct crtc_regs *regs;
     struct display_state *ds;
@@ -440,7 +441,7 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
     if (crtc->regs->p.enable) {
         uint32_t bank_offset = offset & (UXENDISP_BANK_SIZE - 1);
         int bank_id = offset >> UXENDISP_BANK_ORDER;
-        unsigned int w, h, stride, fmt;
+        unsigned int w, h, stride, fmt, buffers;
 
         if (!crtc->ds)
             crtc->ds = display_create(&uxendisp_hw_ops, crtc, DCF_START_GUI);
@@ -449,6 +450,7 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
         h = crtc->regs->p.yres;
         stride = crtc->regs->p.stride;
         fmt = crtc->regs->p.format;
+        buffers = crtc->regs->p.buffers;
 
         /* Filter out spurious mode changes */
         if (!force &&
@@ -456,12 +458,18 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
             crtc->yres == h &&
             crtc->stride == stride &&
             crtc->format == fmt &&
+            crtc->buffers == buffers &&
             crtc->offset == offset && !s->resumed)
             return;
 
         if (w > UXENDISP_XRES_MAX || h > UXENDISP_YRES_MAX ||
             stride > UXENDISP_STRIDE_MAX || stride == 0)
             return;
+
+        if (buffers < 1)
+            buffers = 1;
+        if (buffers > UXDISP_NB_BUFFERS)
+            buffers = UXDISP_NB_BUFFERS;
 
         if (!fmt_valid(fmt))
             return;
@@ -470,7 +478,13 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
             return;
 
         bank = &s->banks[bank_id];
-        sz = bank_offset + h * stride;
+
+        /* space to hold all framebuffers */
+        sz  = (h * stride + ALIGN_PAGE_ALIGN-1) & ~(ALIGN_PAGE_ALIGN-1);
+        sz *= buffers;
+        /* possibly enlarge if display offset set past it */
+        if (bank_offset + h * stride > sz)
+            sz = bank_offset + h * stride;
 
         if (h264_offload) {
             sz += UXENH264_OUTPUT_WIDTH * UXENH264_OUTPUT_HEIGHT * UXENH264_OUTPUT_BYTES_PER_PIXEL;
@@ -543,6 +557,7 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
         crtc->stride = stride;
         crtc->format = fmt;
         crtc->offset = offset;
+        crtc->buffers = buffers;
         s->resumed = 0;
 
     } else {
@@ -565,6 +580,9 @@ crtc_write(struct uxendisp_state *s, int crtc_id, target_phys_addr_t addr,
     switch (addr) {
     case UXDISP_REG_CRTC_OFFSET:
         crtc_flush(s, crtc_id, val, 1);
+        break;
+    case UXDISP_REG_CRTC_BUFFERS:
+        crtc->regs->p.buffers = val;
         break;
     case UXDISP_REG_CRTC_ENABLE:
         crtc->regs->p.enable = val;

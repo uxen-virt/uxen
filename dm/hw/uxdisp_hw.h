@@ -54,6 +54,7 @@
 #define UXDISP_CURSOR_HEIGHT_MAX        128
 #define UXDISP_REG_CURSOR_DATA          (UXDISP_CURSOR_WIDTH_MAX * UXDISP_CURSOR_HEIGHT_MAX * 4)
 
+#define UXDISP_NB_BUFFERS               2
 #define UXDISP_NB_CRTCS                 1
 #define UXDISP_REG_CRTC_LEN             0x02000
 #define UXDISP_REG_CRTC(x)              (0x10000 + (x) * UXDISP_REG_CRTC_LEN)
@@ -68,6 +69,7 @@
 #define     UXDISP_CRTC_FORMAT_BGR_888              0x00000001
 #define     UXDISP_CRTC_FORMAT_BGR_565              0x00000002
 #define     UXDISP_CRTC_FORMAT_BGR_555              0x00000004
+#define UXDISP_REG_CRTC_BUFFERS         0x1014
 #define UXDISP_REG_CRTC_EDID_DATA       0x1100
 
 #if defined(_MSC_VER)

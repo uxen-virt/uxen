@@ -77,6 +77,9 @@ void hw_cleanup(_Inout_ PUXEN_HW_RESOURCES pHw)
 
 NTSTATUS hw_set_mode(
     _In_ PUXEN_HW_RESOURCES pHw,
+    _In_ int crtc,
+    _In_ UINT offset,
+    _In_ UINT buffers,
     VIDEO_MODE_INFORMATION *mode)
 {
     USHORT width = (USHORT)mode->VisScreenWidth;
@@ -114,14 +117,43 @@ NTSTATUS hw_set_mode(
         return STATUS_UNSUCCESSFUL;
     }
 
-    uxdisp_crtc_write(pHw, 0, UXDISP_REG_CRTC_ENABLE, 1);
-    uxdisp_crtc_write(pHw, 0, UXDISP_REG_CRTC_XRES, width);
-    uxdisp_crtc_write(pHw, 0, UXDISP_REG_CRTC_YRES, height);
-    uxdisp_crtc_write(pHw, 0, UXDISP_REG_CRTC_STRIDE, stride);
-    uxdisp_crtc_write(pHw, 0, UXDISP_REG_CRTC_FORMAT, fmt);
+    uxdisp_crtc_write(pHw, crtc, UXDISP_REG_CRTC_ENABLE, 1);
+    uxdisp_crtc_write(pHw, crtc, UXDISP_REG_CRTC_XRES, width);
+    uxdisp_crtc_write(pHw, crtc, UXDISP_REG_CRTC_YRES, height);
+    uxdisp_crtc_write(pHw, crtc, UXDISP_REG_CRTC_STRIDE, stride);
+    uxdisp_crtc_write(pHw, crtc, UXDISP_REG_CRTC_FORMAT, fmt);
+    uxdisp_crtc_write(pHw, crtc, UXDISP_REG_CRTC_BUFFERS, buffers);
 
     /* Flush */
-    uxdisp_crtc_write(pHw, 0, UXDISP_REG_CRTC_OFFSET, 0);
+    uxdisp_crtc_write(pHw, crtc, UXDISP_REG_CRTC_OFFSET, offset);
+
+    return STATUS_SUCCESS;
+}
+
+void hw_update_crtc_offset(
+    _In_ PUXEN_HW_RESOURCES pHw,
+    _In_ int crtc,
+    _In_ UINT offset)
+{
+    uxdisp_crtc_write(pHw, crtc, UXDISP_REG_CRTC_OFFSET, offset);
+}
+
+void hw_update_crtc_buffers(
+    _In_ PUXEN_HW_RESOURCES pHw,
+    _In_ int crtc,
+    _In_ UINT buffers)
+{
+    uxdisp_crtc_write(pHw, crtc, UXDISP_REG_CRTC_BUFFERS, buffers);
+}
+
+NTSTATUS hw_disable_crtc(
+    _In_ PUXEN_HW_RESOURCES pHw,
+    _In_ int crtc)
+{
+    uxdisp_crtc_write(pHw, crtc, UXDISP_REG_CRTC_ENABLE, 0);
+
+    /* Flush */
+    uxdisp_crtc_write(pHw, crtc, UXDISP_REG_CRTC_OFFSET, 0);
 
     return STATUS_SUCCESS;
 }
@@ -305,5 +337,3 @@ void hw_clearvblankirq(
 {
     hw_clearirq(pHw, UXDISP_INTERRUPT_VBLANK);
 }
-
-

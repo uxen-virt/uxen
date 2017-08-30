@@ -31,6 +31,10 @@ typedef unsigned __int64 uint64_t;
 
 #define DISP_INVALID_RECT_ID           0xFFFFFFFFFFFFFFFFULL
 
+#define DISP_COMPOSE_RECT_MAX                  32
+#define DISP_COMPOSE_MODE_NONE                 0x0
+#define DISP_COMPOSE_MODE_OVERLAY_DWM_RECTS    0x1
+
 /* frontend -> backend */
 struct dirty_rect_msg {
     int32_t left;
@@ -63,7 +67,15 @@ enum {
     UXENDISP_ESCAPE_UNMAP_SCRATCH_FB = 0x1000d,
     UXENDISP_ESCAPE_SCRATCHIFY_PROCESS = 0x1000e,
     UXENDISP_ESCAPE_UNSCRATCHIFY_PROCESS = 0x1000f,
+    UXENDISP_ESCAPE_UPDATE_COMPOSED_RECTS = 0x10010,
+    UXENDISP_ESCAPE_SET_COMPOSE_MODE = 0x10011,
 };
+
+struct _UXENDISPComposedRect {
+    uint32_t x, y, w, h;
+} UXENDISP_PACKED;
+
+typedef struct _UXENDISPComposedRect UXENDISPComposedRect;
 
 struct _UXENDISPCustomMode {
     int32_t esc_code;
@@ -72,11 +84,15 @@ struct _UXENDISPCustomMode {
     uint32_t x, y;
 
     union {
+        uint64_t param;
         int user_draw;
         int no_present_copy;
         uint64_t ptr;
+        uint32_t count;
     } UXENDISP_PACKED;
     /* bpp ? */
+
+    /* composed rectangle data might follow */
 } UXENDISP_PACKED;
 
 typedef struct _UXENDISPCustomMode UXENDISPCustomMode;

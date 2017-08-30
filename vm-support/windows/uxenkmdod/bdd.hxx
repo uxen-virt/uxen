@@ -218,6 +218,9 @@ private:
     UXENDISPCustomMode m_NextMode;
 
     UXENDISPCustomMode m_VirtMode;
+
+    VIDEO_MODE_INFORMATION m_HwMode;
+
     KSEMAPHORE         m_PresentLock;
 
     BDD_HWBLT        m_HardwareBlt[MAX_VIEWS];
@@ -248,6 +251,12 @@ private:
     LARGE_INTEGER due_time;
 
     KDPC m_resume_dpc;
+
+    UXENDISPComposedRect m_comp_rects[DISP_COMPOSE_RECT_MAX];
+
+    UINT m_comp_rects_nb;
+
+    UINT m_comp_mode;
 
 public:
     VOID Init(_In_ DEVICE_OBJECT* pPhysicalDeviceObject);
@@ -382,6 +391,10 @@ public:
     // Replace all user framebuffer mappings in a given process with scratch mappings
     NTSTATUS ScratchifyProcess(HANDLE pid, int enable);
 
+    NTSTATUS UpdateComposedRects(UINT count, UXENDISPComposedRect *rects);
+
+    NTSTATUS SetComposeMode(UINT mode);
+
 private:
 
     NTSTATUS CommonStart();
@@ -462,6 +475,16 @@ private:
 
     // Set the information in the registry as described here: http://msdn.microsoft.com/en-us/library/windows/hardware/ff569240(v=vs.85).aspx
     NTSTATUS RegisterHWInfo();
+
+    NTSTATUS ComposeDWMRects(int crtc, int x, int y, int w, int h);
+
+    void* GetDWMFramebufferPtr(int crtc);
+
+    UINT GetFBMapLength(int crtc);
+
+    UINT GetCRTCOffset(int crtc, VIDEO_MODE_INFORMATION *mode);
+
+    UINT GetCRTCBuffers(int crtc);
 };
 
 //

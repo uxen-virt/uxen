@@ -18,7 +18,14 @@ void hw_query_mouse_pointer_caps(
 
 NTSTATUS hw_set_mode(
     _In_ PUXEN_HW_RESOURCES pHw,
+    _In_ int crtc,
+    _In_ UINT offset,
+    _In_ UINT buffers,
     _In_ VIDEO_MODE_INFORMATION *mode);
+
+NTSTATUS hw_disable_crtc(
+    _In_ PUXEN_HW_RESOURCES pHw,
+    _In_ int crtc);
 
 NTSTATUS hw_disable(
     _In_ PUXEN_HW_RESOURCES pHw);
@@ -62,5 +69,15 @@ void hw_clearirq(
 
 void hw_clearvblankirq(
     _In_ PUXEN_HW_RESOURCES pHw);
+
+void hw_update_crtc_buffers(
+    _In_ PUXEN_HW_RESOURCES pHw,
+    _In_ int crtc,
+    _In_ UINT buffers);
+
+void hw_update_crtc_offset(
+    _In_ PUXEN_HW_RESOURCES pHw,
+    _In_ int crtc,
+    _In_ UINT offset);
 
 #endif /* _HW_H_ */
