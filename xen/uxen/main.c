@@ -555,6 +555,7 @@ do_destroy_vm(xen_domain_handle_t vm_uuid)
     int ret = -ENOENT;
 
     d = rcu_lock_domain_by_uuid(vm_uuid, UUID_HANDLE);
+    printk("%s: dom:%p\n", __FUNCTION__, d);
     if (d == NULL)
         goto out;
 

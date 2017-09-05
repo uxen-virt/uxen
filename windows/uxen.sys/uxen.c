@@ -140,28 +140,28 @@ uxen_power(__in void *context, __in void *_arg1, __in void *_arg2)
     uintptr_t arg1 = (uintptr_t)_arg1;
     uintptr_t arg2 = (uintptr_t)_arg2;
 
-    dprintk("%s\n", __FUNCTION__);
+    printk("%s\n", __FUNCTION__);
 
     switch (arg1) {
     case PO_CB_AC_STATUS:
-        dprintk("PO_CB_AC_STATUS %s\n", arg2 ? "AC" : "BATT");
+        printk("PO_CB_AC_STATUS %s\n", arg2 ? "AC" : "BATT");
         break;
     case PO_CB_LID_SWITCH_STATE:
-        dprintk("PO_CB_LID_SWITCH_STATE %s\n", arg2 ? "closed" : "open");
+        printk("PO_CB_LID_SWITCH_STATE %s\n", arg2 ? "closed" : "open");
         break;
     case PO_CB_PROCESSOR_POWER_POLICY:
-        dprintk("PO_CB_PROCESSOR_POWER_POLICY\n");
+        printk("PO_CB_PROCESSOR_POWER_POLICY\n");
         break;
     case PO_CB_SYSTEM_POWER_POLICY:
-        dprintk("PO_CB_PROCESSOR_POWER_POLICY\n");
+        printk("PO_CB_PROCESSOR_POWER_POLICY\n");
         break;
     case PO_CB_SYSTEM_STATE_LOCK:
-        dprintk("PO_CB_SYSTEM_STATE_LOCK %s S0\n", arg2 ? "enter" : "leave");
+        printk("PO_CB_SYSTEM_STATE_LOCK %s S0\n", arg2 ? "enter" : "leave");
         uxen_power_state(arg2 ? 0 : 1);
         break;
     }
 
-    dprintk("%s done\n", __FUNCTION__);
+    printk("%s done\n", __FUNCTION__);
 }
 
 void

@@ -15,7 +15,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -363,6 +363,7 @@ int sched_init_domain(struct domain *d)
 
 void sched_destroy_domain(struct domain *d)
 {
+    printk("%s: vm%u\n", __FUNCTION__, d->domain_id);
     SCHED_OP(DOM2OP(d), destroy_domain, d);
 }
 

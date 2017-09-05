@@ -8,7 +8,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -510,10 +510,14 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
     case XEN_DOMCTL_destroydomain:
     {
         struct domain *d = rcu_lock_domain_by_id(op->domain);
+        int tret;
+        printk("%s: d:%p, opdom:%u\n", __FUNCTION__, d, op->domain);
         ret = -ESRCH;
         if ( d != NULL )
         {
-            ret = xsm_destroydomain(d) ? : domain_kill(d);
+            tret = xsm_destroydomain(d);
+            printk("%s: d:%p, %d\n", __FUNCTION__, d, tret);
+            ret = tret ? : domain_kill(d);
             rcu_unlock_domain(d);
         }
     }

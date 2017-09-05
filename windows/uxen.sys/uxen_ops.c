@@ -699,10 +699,24 @@ suspend_block(preemption_t i, uint32_t pages, uint32_t *reserve_increase)
 static void __cdecl
 uxen_op_notify_exception(struct vm_info_shared *vmis)
 {
-    struct vm_info *vmi = (struct vm_info *)vmis;
+    struct vm_info *vmi, *tvmi, *evmi;
+    int vmi_exists = 0;
+
+    vmi = (struct vm_info *)vmis;
+
+    RB_TREE_FOREACH_SAFE(evmi, &uxen_devext->de_vm_info_rbtree, tvmi) {
+        if (vmi == evmi) {
+            printk("%s: vmi %p in rbt\n", __FUNCTION__, vmi);
+            vmi_exists = 1;
+            break;
+        }
+    }
+
+    if (vmi_exists == 0)
+        printk("%s: vmi %p not in rbt (about to crash)\n", __FUNCTION__, vmi);
 
     if (vmi->vmi_ioemu_exception_event)
-	KeSetEvent(vmi->vmi_ioemu_exception_event, 0, FALSE);
+        KeSetEvent(vmi->vmi_ioemu_exception_event, 0, FALSE);
 }
 
 static void __cdecl

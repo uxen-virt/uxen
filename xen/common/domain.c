@@ -821,6 +821,9 @@ int domain_kill(struct domain *d)
     struct domain *clone_of;
     int rc = 0;
 
+    printk("%s: dom:%p, curr_dom:%p, is_dying:%d\n",
+           __FUNCTION__, d, current->domain, d->is_dying);
+
     if ( d == current->domain )
         return -EINVAL;
 
@@ -848,6 +851,8 @@ int domain_kill(struct domain *d)
                 /* break links between uxen level template domain and
                  * driver level structures, which will be freed on
                  * return from here */
+                printk("%s:%d: sched_destroy_domain() for vm%u\n",
+                       __FUNCTION__, __LINE__, d->domain_id);
                 sched_destroy_domain(d);
                 rc = 0;
             }
@@ -864,6 +869,8 @@ int domain_kill(struct domain *d)
 #else   /* __UXEN__ */
         hostsched_notify_exception(d);
 #endif  /* __UXEN__ */
+        printk("%s:%d: sched_destroy_domain() for vm%u\n",
+               __FUNCTION__, __LINE__, d->domain_id);
         sched_destroy_domain(d);
         put_domain(d);
         if (clone_of && clone_of->is_dying &&
@@ -1078,6 +1085,8 @@ static void complete_domain_destroy(struct rcu_head *head)
 
     cpupool_rm_domain(d);
 
+    printk("%s:%d: sched_destroy_domain() for vm%u\n",
+           __FUNCTION__, __LINE__, d->domain_id);
     sched_destroy_domain(d);
 
 #ifndef __UXEN__
