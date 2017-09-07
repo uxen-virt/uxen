@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2017, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -11,6 +11,14 @@ struct smbios_struct_header {
     uint8_t     type;
     uint8_t     length;
     uint16_t    handle;
+};
+
+struct smbios_header {
+    uint8_t     calling_method;
+    uint8_t     major_version;
+    uint8_t     minor_version;
+    uint8_t     dmi_revision;
+    uint32_t    length;
 };
 
 void *
