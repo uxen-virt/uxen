@@ -89,10 +89,11 @@ void get_tz_offset(char *s, size_t sz, struct tm *tm)
 #endif
 }
 
-
 /* Crash handling - pasted from uxendm's win32-backtrace.c, until such time as
    we have a convenient shared place for it. */
 typedef HRESULT (WINAPI* wer_register_module_function)(PCWSTR, PVOID);
+
+static
 HRESULT wer_register_rem(PCWSTR path, PVOID context)
 {
     HMODULE kernel32;
@@ -104,22 +105,28 @@ HRESULT wer_register_rem(PCWSTR path, PVOID context)
         api_addr = GetProcAddress(kernel32, "WerRegisterRuntimeExceptionModule");
         if (api_addr != NULL) {
             result = ((wer_register_module_function)api_addr)(path, context);
-        }
+            if (!SUCCEEDED(result))
+                fprintf(logfile, "WerRegisterRuntimeExceptionModule(%ls) failed: %x",
+                        path, (uint32_t)result);
+        } else
+            fprintf(logfile, "Failed to get WerRegisterRuntimeExceptionModule() address");
         FreeLibrary(kernel32);
     }
+
     return result;
 }
 
+static
 bool init_dump_handling()
 {
     wchar_t *s = _wgetenv(L"UXENDM_WER");
+
     if (s != NULL) {
         SetErrorMode(SEM_FAILCRITICALERRORS);
         _set_error_mode(_OUT_TO_STDERR);
         return SUCCEEDED(wer_register_rem(s, NULL));
-    } else {
+    } else
         return LoadLibraryA("uxen-backtrace.dll") != NULL;
-    }
 }
 
 
