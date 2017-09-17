@@ -80,6 +80,7 @@
 #include <asm/hvm/nestedhvm.h>
 #endif  /* __UXEN_NOT_YET__ */
 #include <asm/xstate.h>
+#include <asm/hvm/xen_pv.h>
 
 enum handler_return { HNDL_done, HNDL_unhandled, HNDL_exception_raised };
 
@@ -2023,6 +2024,8 @@ struct hvm_function_table * __init start_vmx(void)
     setup_vmcs_dump();
 
     setup_pv_vmx();
+
+    xen_pv_ept_probe();
 
     return &vmx_function_table;
 }

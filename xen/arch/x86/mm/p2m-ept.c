@@ -46,6 +46,7 @@
 #include <asm/hvm/vmx/vmx.h>
 #include <asm/hvm/vmx/vmcs.h>
 #include <asm/hvm/ax.h>
+#include <asm/hvm/xen_pv.h>
 #ifndef __UXEN__
 #include <xen/iommu.h>
 #endif  /* __UXEN__ */
@@ -300,6 +301,9 @@ ept_split_super_page(struct p2m_domain *p2m, ept_entry_t *ept_entry,
         printk(KERN_ERR "AX_PV_EPT: splitting page - leaving to async path\n");
         //FIXME Eventually: ax_pv_ept_write(p2m, target, gfn << PAGE_SHIFT, new_entry, needs_sync);
     }
+    if (xen_pv_ept) {
+        printk(KERN_ERR "XEN_PV_EPT: splitting page - leaving to async path\n");
+    }
     atomic_write_ept_entry(ept_entry, split_ept_entry);
 
   out:
@@ -528,6 +532,8 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
         atomic_write_ept_entry(ept_entry, new_entry);
         if (ax_pv_ept)
             ax_pv_ept_write(p2m, target, gfn, new_entry.epte, needs_sync);
+        if (xen_pv_ept)
+            xen_pv_ept_write(p2m, target, gfn, new_entry.epte, needs_sync);
     }
     else
     {
@@ -574,6 +580,8 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
         atomic_write_ept_entry(ept_entry, new_entry);
         if (ax_pv_ept)
             ax_pv_ept_write(p2m, i, gfn, new_entry.epte, needs_sync);
+        if (xen_pv_ept)
+            xen_pv_ept_write(p2m, i, gfn, new_entry.epte, needs_sync);
     }
 
     if (!target && old_entry.mfn != mfn_x(mfn)) {
@@ -604,7 +612,7 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
 out:
     unmap_domain_page(table);
 
-    if ( needs_sync && !ax_pv_ept )
+    if ( needs_sync && !ax_pv_ept && !xen_pv_ept )
         pt_sync_domain(p2m->domain);
 
 #ifndef __UXEN__
@@ -713,6 +721,8 @@ ept_ro_update_l2_entry(struct p2m_domain *p2m, unsigned long gfn,
                 *need_sync = 1;
             if (ax_pv_ept)
                 ax_pv_ept_write(p2m, target, gfn, new_entry.epte, read_only);
+            if (xen_pv_ept)
+                xen_pv_ept_write(p2m, target, gfn, new_entry.epte, read_only);
         }
 
         /* Success */
@@ -1116,6 +1126,9 @@ static void ept_change_entry_type_page(mfn_t ept_page_mfn, int ept_page_level,
     if (ax_pv_ept) {
         printk(KERN_ERR "AX_PV_EPT: changing page type - leaving to async path\n");
         //FIXME Eventually: ax_pv_ept_write(p2m, target, gfn << PAGE_SHIFT, new_entry, needs_sync);
+    }
+    if (xen_pv_ept) {
+        printk(KERN_ERR "XEN_PV_EPT: changing page type - leaving to async path\n");
     }
 
 DEBUG();
