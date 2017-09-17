@@ -2025,8 +2025,6 @@ struct hvm_function_table * __init start_vmx(void)
 
     setup_pv_vmx();
 
-    xen_pv_ept_probe();
-
     return &vmx_function_table;
 }
 
@@ -3635,6 +3633,8 @@ setup_pv_vmx(void)
         return;
 
     setup_pv_vmcs_access();
+
+    xen_pv_ept_probe();
 }
 
 /*
