@@ -301,9 +301,8 @@ ept_split_super_page(struct p2m_domain *p2m, ept_entry_t *ept_entry,
         printk(KERN_ERR "AX_PV_EPT: splitting page - leaving to async path\n");
         //FIXME Eventually: ax_pv_ept_write(p2m, target, gfn << PAGE_SHIFT, new_entry, needs_sync);
     }
-    if (xen_pv_ept) {
+    if (xen_pv_ept)
         printk(KERN_ERR "XEN_PV_EPT: splitting page - leaving to async path\n");
-    }
     atomic_write_ept_entry(ept_entry, split_ept_entry);
 
   out:
@@ -1127,9 +1126,8 @@ static void ept_change_entry_type_page(mfn_t ept_page_mfn, int ept_page_level,
         printk(KERN_ERR "AX_PV_EPT: changing page type - leaving to async path\n");
         //FIXME Eventually: ax_pv_ept_write(p2m, target, gfn << PAGE_SHIFT, new_entry, needs_sync);
     }
-    if (xen_pv_ept) {
+    if (xen_pv_ept)
         printk(KERN_ERR "XEN_PV_EPT: changing page type - leaving to async path\n");
-    }
 
 DEBUG();
     for ( int i = 0; i < EPT_PAGETABLE_ENTRIES; i++ )

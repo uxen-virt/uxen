@@ -26,7 +26,11 @@ void xen_pv_ept_flush(struct p2m_domain *p2m)
 }
 
 
-static inline void xen_pv_ept_write_invept(struct p2m_domain *p2m, int level, uint64_t gfn, uint64_t new_entry, int invept)
+static inline void xen_pv_ept_write_invept(struct p2m_domain *p2m, 
+                                           int level,
+                                           uint64_t gfn,
+                                           uint64_t new_entry,
+                                           int invept)
 {
     int type = XEN_PV_INVEPT_PVEPT_CONTEXT;
     struct xen_pv_invept_desc desc;
@@ -39,11 +43,10 @@ static inline void xen_pv_ept_write_invept(struct p2m_domain *p2m, int level, ui
     if (invept)
         desc.L2_gpa |= XEN_PV_INVEPT_PVEPT_INVALIDATE;
 
-    desc.L21e=new_entry;
+    desc.L21e = new_entry;
 
     if (!desc.eptp)
         BUG();
-
 
     asm volatile ( INVEPT_OPCODE
                    MODRM_EAX_08
@@ -52,13 +55,11 @@ static inline void xen_pv_ept_write_invept(struct p2m_domain *p2m, int level, ui
                    :
                    : "a" (&desc), "c" (type)
                    : "memory" );
-
-
 }
 
 
 void xen_pv_ept_write(struct p2m_domain *p2m, int level, uint64_t gfn,
-                     uint64_t new_entry, int invept)
+                      uint64_t new_entry, int invept)
 {
     if (p2m->virgin)
         return;
@@ -79,7 +80,6 @@ void xen_pv_ept_probe(void)
     char signature[13];
     struct xen_pv_invept_desc desc;
 
-
     for (leaf = 0; leaf < PV_VMX_XEN_CPUID_LEAF_RANGE;
          leaf += PV_VMX_XEN_CPUID_LEAD_SKIP) {
         cpuid(PV_VMX_XEN_CPUID_LEAF_BASE + leaf, &eax,
@@ -93,16 +93,14 @@ void xen_pv_ept_probe(void)
 
     if (leaf >= PV_VMX_XEN_CPUID_LEAF_RANGE ||
         (eax - (PV_VMX_XEN_CPUID_LEAF_BASE + leaf)) < 2) {
-	printk("uXen Xen PV EPT disabled as not running on Xen\n");
-	return;
+        dprintk(XENLOG_INFO, "uXen Xen PV EPT disabled as not running on Xen\n");
+        return;
     }
-
 
     desc.eptp = 0;
     desc.L2_gpa = 0;
     desc.L2_gpa |= 0;
     desc.L2_gpa |= XEN_PV_INVEPT_PVEPT_VALID;
-
 
     asm volatile ( INVEPT_OPCODE
                    MODRM_EAX_08
@@ -112,14 +110,11 @@ void xen_pv_ept_probe(void)
                    : "a" (&desc), "c" (type)
                    : "memory" );
 
+    if (!present) {
+        printk("uXen Xen PV EPT disabled as this version of Xen lacks support\n");
+        return;
+    }
 
-   if (!present) {
-	printk("uXen Xen PV EPT disabled as this version of Xen lacks support\n");
-	return;
-   }
-
-   printk("uXen Xen PV EPT enabled\n");
-   xen_pv_ept = 1;
-
-
+    printk("uXen Xen PV EPT enabled\n");
+    xen_pv_ept = 1;
 }

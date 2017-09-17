@@ -34,7 +34,7 @@ struct xen_pv_invept_desc
 extern int xen_pv_ept;
 
 void xen_pv_ept_write(struct p2m_domain *p2m, int level, uint64_t gfn,
-                     uint64_t new_entry, int invept);
+                      uint64_t new_entry, int invept);
 
 void xen_pv_ept_flush(struct p2m_domain *p2m);
 
