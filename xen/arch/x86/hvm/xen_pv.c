@@ -71,18 +71,15 @@ void xen_pv_ept_write(struct p2m_domain *p2m, int level, uint64_t gfn,
 }
 
 
-void xen_pv_ept_probe(void)
+uint32_t running_on_xen(uint32_t *eax)
 {
-    int type = XEN_PV_INVEPT_PVEPT_CONTEXT;
-    uint32_t eax = 0;
     uint32_t leaf;
-    int present = 1;
     char signature[13];
-    struct xen_pv_invept_desc desc;
 
+    *eax = 0;
     for (leaf = 0; leaf < PV_VMX_XEN_CPUID_LEAF_RANGE;
          leaf += PV_VMX_XEN_CPUID_LEAD_SKIP) {
-        cpuid(PV_VMX_XEN_CPUID_LEAF_BASE + leaf, &eax,
+        cpuid(PV_VMX_XEN_CPUID_LEAF_BASE + leaf, eax,
               (uint32_t *)&signature[0], (uint32_t *)&signature[4],
               (uint32_t *)&signature[8]);
         signature[12] = 0;
@@ -92,7 +89,21 @@ void xen_pv_ept_probe(void)
     }
 
     if (leaf >= PV_VMX_XEN_CPUID_LEAF_RANGE ||
-        (eax - (PV_VMX_XEN_CPUID_LEAF_BASE + leaf)) < 2) {
+        (*eax - (PV_VMX_XEN_CPUID_LEAF_BASE + leaf)) < 2)
+        return (uint32_t)-1;
+
+    return leaf;
+}
+
+
+void xen_pv_ept_probe(void)
+{
+    int type = XEN_PV_INVEPT_PVEPT_CONTEXT;
+    uint32_t eax;
+    int present = 1;
+    struct xen_pv_invept_desc desc;
+
+    if (running_on_xen(&eax) == (uint32_t)-1) {
         dprintk(XENLOG_INFO, "uXen Xen PV EPT disabled as not running on Xen\n");
         return;
     }

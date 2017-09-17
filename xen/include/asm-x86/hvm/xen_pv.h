@@ -33,6 +33,8 @@ struct xen_pv_invept_desc
 
 extern int xen_pv_ept;
 
+uint32_t running_on_xen(uint32_t *eax);
+
 void xen_pv_ept_write(struct p2m_domain *p2m, int level, uint64_t gfn,
                       uint64_t new_entry, int invept);
 

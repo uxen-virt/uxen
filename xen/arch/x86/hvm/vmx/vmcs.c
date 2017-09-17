@@ -56,6 +56,7 @@
 #include <xen/event.h>
 #include <xen/kernel.h>
 #include <xen/keyhandler.h>
+#include <asm/hvm/xen_pv.h>
 #include <asm/shadow.h>
 #include <asm/tboot.h>
 
@@ -2367,23 +2368,11 @@ verify_pv_xen_vmcs_layout(void)
 static int
 setup_pv_vmcs_access_xen(void)
 {
-    uint32_t eax = 0, ebx, ecx, edx;
+    uint32_t eax, ebx, ecx, edx;
     uint32_t leaf;
-    char signature[13];
 
-    for (leaf = 0; leaf < PV_VMX_XEN_CPUID_LEAF_RANGE;
-         leaf += PV_VMX_XEN_CPUID_LEAD_SKIP) {
-        cpuid(PV_VMX_XEN_CPUID_LEAF_BASE + leaf, &eax,
-              (uint32_t *)&signature[0], (uint32_t *)&signature[4],
-              (uint32_t *)&signature[8]);
-        signature[12] = 0;
-
-        if (!strcmp(signature, "XenVMMXenVMM"))
-            break;
-    }
-
-    if (leaf >= PV_VMX_XEN_CPUID_LEAF_RANGE ||
-        (eax - (PV_VMX_XEN_CPUID_LEAF_BASE + leaf)) < 2)
+    leaf = running_on_xen(&eax);
+    if (leaf == (uint32_t)-1)
         return -1;
 
     cpuid(PV_VMX_XEN_CPUID_LEAF_BASE + leaf + 1, &eax,
