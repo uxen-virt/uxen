@@ -18,6 +18,7 @@
 
         <Directory Id='TARGETDIR' Name='SourceDir'>
             <Directory Id="SystemFolder" Name="SystemFolder" />
+            <!--
             <Directory Id="ProgramFilesFolder">
                 <Directory Id="InternetExplorerDir" Name="Internet Explorer">
                     <Directory Id="IeCopiedFilesDir" Name="iexplore.exe.local">
@@ -29,7 +30,7 @@
                         </Component>
                     </Directory>
                 </Directory>
-            </Directory>
+            </Directory> -->
             <Directory Id='INSTALLDIR' Name='uXenGuest'>
                 <Directory Id='uxendisp' Name='uxendisp'>
                     <Component Id="uxendisp" Guid="263bd36e-b7df-45eb-a57a-0f8b7154ecae" Win64="$(var.Win64)">
@@ -159,7 +160,6 @@
             <ComponentRef Id='uxenplatform' />
             <ComponentRef Id='uxenv4vguest' />
             <ComponentRef Id='uxenstor' />
-            <ComponentRef Id='uxenh264' /> <!-- vSentry won't install it, but that is fine for now -->
         </Feature>
         <Feature Id='Complex' Level='1'>
             <ComponentRef Id='uxendisp' />
