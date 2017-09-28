@@ -619,6 +619,7 @@ NTSTATUS BASIC_DISPLAY_DRIVER::PresentDisplayOnly(_In_ CONST DXGKARG_PRESENT_DIS
                 RECT *r = &pPresentDisplayOnly->pDirtyRect[i];
                 /* the diffs should be +1 in theory but it makes things unhappy, these calcs few doznes lines
                  * above are screwed in similar fashion */
+                /* update: it's required because the calculation on the backend side expects right/bottom to be +1 */
                 ComposeDWMRects(crtc, r->left, r->top,
                     r->right - r->left, r->bottom - r->top);
             }
@@ -732,8 +733,9 @@ NTSTATUS BASIC_DISPLAY_DRIVER::UpdateRect(int x, int y, int w, int h)
 
     r.left = x;
     r.top = y;
-    r.right = x + w-1;
-    r.bottom = y + h-1;
+    /* backend expects sent rect right/bottom to be +1 rather than exact coord */
+    r.right = x + w;
+    r.bottom = y + h;
 
     dr_send(m_DrContext, 0, NULL, 1, &r);
 
