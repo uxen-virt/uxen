@@ -7,7 +7,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -29,6 +29,7 @@
 #include <asm/current.h>
 #include <asm/processor.h>
 #include <asm/hvm/support.h>
+#include <asm/hvm/ax.h>
 #include <asm/xstate.h>
 #include <asm/asm_defns.h>
 
@@ -74,6 +75,8 @@ DEFINE_PER_CPU(uint64_t, xcr0_last);
 static inline void xsetbv_maybe(u32 index, u64 xfeatures)
 {
 
+    if (AX_ON_AMD_PRESENT())
+	return;
     if (this_cpu(xcr0_last) != xfeatures ||
         index != XCR_XFEATURE_ENABLED_MASK) {
         u32 hi = xfeatures >> 32;

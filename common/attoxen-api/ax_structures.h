@@ -18,4 +18,14 @@ typedef struct ax_vmcs_extensions_v1 {
   uint64_t msr_syscall_mask;
 } ax_vmcs_extensions_v1_t;
 
+struct ax_vmcb_extra {
+    uint32_t flags;
+    uint32_t g_cr8;
+    uint64_t vmsave_pa;
+    uint64_t vmsave_root_pa;
+    uint64_t xsave_pa;
+    uint64_t uregs_pa;
+    ax_vmcs_extensions_v1_t ext;
+} __attribute__ ((packed));
+
 #endif /* __AX_STRUCTURES_H__ */

@@ -155,11 +155,22 @@ static int hv_tests_ax_running (void)
 
 static int hv_tests_cpu_has_vmx (void)
 {
-  uint64_t rax = 1, rbx = 0, rcx = 0, rdx = 0;
 
-  hv_tests_cpuid (&rax, &rbx, &rcx, &rdx);
+  if (hv_tests_cpu_is_intel()) {
+    uint64_t rax = 1, rbx = 0, rcx = 0, rdx = 0;
 
-  return !! (rcx & (1UL << 5));
+    hv_tests_cpuid (&rax, &rbx, &rcx, &rdx);
+    return !! (rcx & (1UL << 5));
+  }
+
+  if (hv_tests_cpu_is_amd()) {
+    uint64_t rax = 0x80000001, rbx = 0, rcx = 0, rdx = 0;
+
+    hv_tests_cpuid (&rax, &rbx, &rcx, &rdx);
+    return !! (rcx & (1UL << 2));
+  }
+
+  return 0;
 }
 
 

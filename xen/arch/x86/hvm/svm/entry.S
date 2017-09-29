@@ -20,7 +20,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -45,6 +45,7 @@
 #include <asm/apicdef.h>
 #include <asm/page.h>
 #include <public/xen.h>
+#include <attoxen-api/ax_constants.h>
 
 #define VMRUN  .byte 0x0F,0x01,0xD8
 #define STGI   .byte 0x0F,0x01,0xDC
@@ -299,6 +300,75 @@ UNLIKELY_END(svm_trace)
         pop  r(bx)
         pop  r(bp)
 
+        ret
+
+ABI_ENTRY(svm_asm_ax_vmentry, SIZEOF_REG)
+        push r(bp)
+#ifdef CONFIG_FRAME_POINTER
+        mov  r(sp),r(bp)
+#endif
+        push r(bx)
+#ifdef __MS_ABI__
+        push r(si)
+        push r(di)
+#endif /* __MS_ABI__ */
+
+#if defined(__x86_64__)
+        push r(12)
+        push r(13)
+        push r(14)
+        push r(15)
+#endif
+
+        push r_arg              /* arg = current */
+
+#if defined(__MS_ABI__) && defined(__x86_64__)
+        sub  $SCRATCH_area_size,%rsp
+#endif /* __MS_ABI__ */
+
+        call_with_abi(svm_intr_assist,0)
+
+        get_current(r(bx))
+        call_via_uxen_info(cli, r_arg)
+
+        mov r(bx), r_arg
+        call_with_abi(check_work_vcpu, SIZEOF_REG)
+        /* check_work_vcpu returns with 1 if work was done.
+	 * Note: interrupts have been re-enabled in that case. */
+        test %eax, %eax
+        jne  .Lret_from_svm_asm_ax_vmentry
+
+        call_with_abi(svm_asid_handle_vmrun, 0)
+
+        mov $AX_CPUID_SVM_VMRUN, r(ax)
+        mov VCPU_svm_vmcb_pa(r(bx)), r(bx)
+        cpuid
+
+        call_via_uxen_info(sti, r_arg)
+
+        xor  r(ax),r(ax)
+
+.Lret_from_svm_asm_ax_vmentry:
+#if defined(__MS_ABI__) && defined(__x86_64__)
+        add  $SCRATCH_area_size,%rsp
+#endif /* __MS_ABI__ */
+
+        pop r_arg
+
+#if defined(__x86_64__)
+        pop  r(15)
+        pop  r(14)
+        pop  r(13)
+        pop  r(12)
+#endif
+
+#ifdef __MS_ABI__
+        pop r(di)
+        pop r(si)
+#endif /* __MS_ABI__ */
+
+        pop r(bx)
+        pop r(bp)
         ret
 
 #if 0
