@@ -544,6 +544,8 @@ static void vmx_load_vmcs(struct vcpu *v)
         spin_unlock_irqrestore(&vmx_clear_lock, flags2);
 }
 
+static void __vmx_clear_vmcs(void *info);
+
 void vmx_unload_vmcs(struct vcpu *v)
 {
     struct arch_vmx_struct *arch_vmx = &v->arch.hvm_vmx;
@@ -557,6 +559,9 @@ void vmx_unload_vmcs(struct vcpu *v)
     ASSERT(arch_vmx->active_cpu == smp_processor_id());
 
     this_cpu(current_vmcs_vmx) = NULL;
+
+    if (!ax_present) /* maybe or maybenot? need to check perf */
+        __vmx_clear_vmcs(v);
 
     cpu_irq_restore(flags);
     if (ax_present)
