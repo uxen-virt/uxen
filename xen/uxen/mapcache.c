@@ -24,6 +24,8 @@
 #include <uxen/uxen.h>
 #include <uxen/mapcache.h>
 
+#include <asm/hvm/ax.h>
+
 static DEFINE_PER_CPU(uint16_t, mapcache_next);
 static DEFINE_PER_CPU(uint32_t[MAPCACHE_SIZE / 32], mapcache_map);
 
@@ -94,6 +96,9 @@ mapcache_map_page(xen_pfn_t mfn)
     uint16_t slot, first;
     uintptr_t va;
     struct hash_entry *entry;
+
+    if (AX_ON_AMD_PRESENT() && ax_l1_invlpg_intercept)
+        return uxen_map_page_global(mfn);
 
     entry = &this_cpu(mapcache_hash)[HASH_FN(mfn)];
     if (entry->mfn == mfn) {

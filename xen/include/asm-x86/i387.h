@@ -14,6 +14,7 @@
 #include <xen/types.h>
 #include <xen/percpu.h>
 
+void fpu_init(void);
 void fpu_early_init(void);
 
 void vcpu_restore_fpu_eager(struct vcpu *v);

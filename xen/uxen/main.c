@@ -22,6 +22,7 @@
 #include <asm/current.h>
 #include <asm/guest_access.h>
 #include <asm/hvm/hvm.h>
+#include <asm/hvm/ax.h>
 #include <asm/mm.h>
 #include <asm/p2m.h>
 #include <asm/hap.h>
@@ -121,8 +122,9 @@ vmexec_irq_enable(void)
      * interrupts were disabled in {vmx,svm}/entry.S:
      * on intel - interrupts disabled via cli
      * on amd - interrupts disabled via clgi
+     * on amd+ax - interrupts disabled via cli
      */
-    if (boot_cpu_data.x86_vendor ==  X86_VENDOR_INTEL)
+    if ((boot_cpu_data.x86_vendor ==  X86_VENDOR_INTEL) || ax_present)
         asm volatile ( "sti" : : : "memory" );
     else
         asm volatile ( "stgi" : : : "memory" );

@@ -100,5 +100,6 @@ extern u32 svm_feature_flags;
 #define vcpu_tsc_ratio(v)       TSC_RATIO((v)->domain->arch.tsc_khz, cpu_khz)
 
 asmlinkage_abi int svm_asm_do_vmentry(struct vcpu *);
+asmlinkage_abi int svm_asm_ax_vmentry(struct vcpu *v);
 
 #endif /* __ASM_X86_HVM_SVM_H__ */

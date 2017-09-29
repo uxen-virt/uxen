@@ -1418,6 +1418,8 @@ void p2m_pt_init(struct p2m_domain *p2m)
 
     p2m->p2m_l1_cache_id = p2m->domain->domain_id;
     open_softirq(P2M_L1_CACHE_CPU_SOFTIRQ, p2m_l1_cache_flush_softirq);
+
+    p2m->virgin = 1;
 }
 
 
