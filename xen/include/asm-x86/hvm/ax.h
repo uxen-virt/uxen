@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, Bromium, Inc.
+ * Copyright 2017-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -21,11 +21,16 @@
     ((ax_vmcs_extensions_v1_t *)(((uint8_t *)v) + 0x1000 - \
                                  sizeof(ax_vmcs_extensions_v1_t)))
 
+#define AX_ON_AMD_PRESENT()   (ax_present && (boot_cpu_data.x86_vendor == X86_VENDOR_AMD))
 extern int ax_present;
 extern int ax_pv_ept;
+extern int ax_l1_invlpg_intercept;
 extern void ax_mark_ept_dirty(struct domain *d);
 extern void ax_pv_ept_flush(struct p2m_domain *p2m);
 extern int ax_setup(void);
+extern int ax_svm_vmrun(struct vcpu *v, struct vmcb_struct *vmcb,
+                        struct cpu_user_regs *regs);
+extern void ax_svm_vmsave_root(struct vcpu *v);
 
 static inline
 void ax_vmcs_x_flags_set(struct vcpu *v, uint64_t val)

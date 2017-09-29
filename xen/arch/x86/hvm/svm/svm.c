@@ -19,7 +19,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -85,6 +85,7 @@
 #include <asm/apic.h>
 #include <asm/debugger.h>
 #include <asm/xstate.h>
+#include <asm/hvm/ax.h>
 
 u32 svm_feature_flags;
 
@@ -965,7 +966,10 @@ static void svm_ctxt_switch_to(struct vcpu *v)
     svm_restore_dr(v);
 #endif  /* __UXEN_NOT_YET__ */
 
-    svm_vmsave(per_cpu(root_vmcb, cpu));
+    if (ax_present)
+        ax_svm_vmsave_root(v);
+    else
+        svm_vmsave(per_cpu(root_vmcb, cpu));
 #ifndef __UXEN__
     svm_vmload(vmcb);
 #else  /* __UXEN__ */
@@ -1257,6 +1261,9 @@ struct hvm_function_table * __init start_svm(void)
     bool_t printed = 0;
 
     if ( !test_bit(X86_FEATURE_SVM, &boot_cpu_data.x86_capability) )
+        return NULL;
+
+    if (ax_setup())
         return NULL;
 
     /* Sanity check hvm_io_bitmap */
@@ -2152,12 +2159,18 @@ svm_execute(struct vcpu *v)
 
     ASSERT(v);
 
-    if (svm_asm_do_vmentry(v))
+    if (!ax_present && svm_asm_do_vmentry(v))
+        return;
+    if (ax_present && ax_svm_vmrun(v, vmcb, regs))
         return;
 
-    if ( paging_mode_hap(v->domain) )
+    if ( paging_mode_hap(v->domain) ) {
+        struct p2m_domain *p2m = p2m_get_hostp2m(v->domain);
+
         v->arch.hvm_vcpu.guest_cr[3] = v->arch.hvm_vcpu.hw_cr[3] =
             vmcb_get_cr3(vmcb);
+        p2m->virgin = 0;
+    }
 
     if ( nestedhvm_enabled(v->domain) && nestedhvm_vcpu_in_guestmode(v) )
         vcpu_guestmode = 1;

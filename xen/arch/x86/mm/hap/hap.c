@@ -63,6 +63,7 @@
 #include <asm/hvm/nestedhvm.h>
 #endif  /* __UXEN__ */
 #include <asm/hvm/vmx/vmx.h>
+#include <asm/hvm/ax.h>
 
 #include "private.h"
 
@@ -1049,7 +1050,8 @@ hap_write_p2m_entry(struct vcpu *v, unsigned long gfn, l1_pgentry_t *p,
                     mfn_t table_mfn, l1_pgentry_t new, unsigned int level)
 {
     struct domain *d = v->domain;
-    //uint32_t old_flags;
+    uint32_t old_flags;
+    int ax_tlbflush = 0;
 #ifndef __UXEN__
     bool_t flush_nestedp2m = 0;
 #endif  /* __UXEN__ */
@@ -1060,7 +1062,7 @@ hap_write_p2m_entry(struct vcpu *v, unsigned long gfn, l1_pgentry_t *p,
      * vcpu. */
 
     paging_lock(d);
-    //old_flags = l1e_get_flags(*p);
+    old_flags = l1e_get_flags(*p);
 
 #ifndef __UXEN__
     if ( nestedhvm_enabled(d) && (old_flags & _PAGE_PRESENT) 
@@ -1075,11 +1077,13 @@ hap_write_p2m_entry(struct vcpu *v, unsigned long gfn, l1_pgentry_t *p,
 #endif  /* __UXEN__ */
 
     safe_write_pte(p, new);
-#if 0
     if ( (old_flags & _PAGE_PRESENT)
-         && (level == 1 || (level == 2 && (old_flags & _PAGE_PSE))) )
-             flush_tlb_mask(d->domain_dirty_cpumask);
-#endif
+         && (level == 1 || (level == 2 && (old_flags & _PAGE_PSE))) ) {
+             if (!ax_pv_ept)
+                flush_tlb_mask(d->domain_dirty_cpumask);
+             else
+                ax_tlbflush = 1;
+    }
 
 #ifndef __UXEN__
 #if CONFIG_PAGING_LEVELS == 3
@@ -1090,6 +1094,12 @@ hap_write_p2m_entry(struct vcpu *v, unsigned long gfn, l1_pgentry_t *p,
         p2m_install_entry_in_monitors(d, (l3_pgentry_t *)p);
 #endif
 #endif  /* __UXEN__ */
+
+    if (ax_pv_ept && (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)) {
+        struct p2m_domain *p2m = p2m_get_hostp2m(v->domain);
+
+        ax_pv_ept_write(p2m, level - 1, gfn, *((uint64_t *) &new), ax_tlbflush);
+    }
 
     paging_unlock(d);
 
