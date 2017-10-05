@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -1191,7 +1191,6 @@ int
 p2m_clone(struct p2m_domain *p2m, struct domain *nd)
 {
     struct p2m_domain *np2m = p2m_get_hostp2m(nd);
-    struct domain *d = p2m->domain;
     unsigned long gpfn;
     mfn_t mfn = _mfn(0);        /* compiler */
     mfn_t nmfn = _mfn(0);
@@ -1212,8 +1211,9 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
             }
             nmfn = np2m->get_l1_table(np2m, gpfn, NULL);
         }
+#ifdef LAZY_POPULATE_CLONE_L1
         if (hvm_hap_has_2mb(d) &&
-            d->arch.hvm_domain.params[HVM_PARAM_CLONE_L1]) {
+            p2m->domain->arch.hvm_domain.params[HVM_PARAM_CLONE_L1]) {
             /* if l1 exists already in clone, clone the rest of the l1
              * immediately */
             if (mfn_valid_page(nmfn))
@@ -1231,6 +1231,7 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
             continue;
         }
       clone_now:
+#endif /* LAZY_POPULATE_CLONE_L1 */
         if (!(gpfn & ((1UL << PAGETABLE_ORDER) - 1))) {
             if (ntable) {
                 unmap_domain_page(ntable);
