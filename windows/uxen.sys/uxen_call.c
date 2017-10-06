@@ -164,6 +164,12 @@ _uxen_snoop_hypercall(void *udata, int mode)
     switch(uhd->uhd_op) {
     case __HYPERVISOR_memory_op:
         switch (uhd->uhd_arg[0]) {
+        case XENMEM_clone_physmap:
+           pages += 1024; /* 2G with 4k pages and 512 entries a page gives 1024 L3 pages */
+           pages += 2; /* which needs 2 pages to map at L2 */
+           pages += 1; /* which needs 1 page to map at L1 */
+           pages += 1; /* which needs 1 page to map at L0 */
+           break;
         case XENMEM_populate_physmap: {
             xen_memory_reservation_t res;
 
