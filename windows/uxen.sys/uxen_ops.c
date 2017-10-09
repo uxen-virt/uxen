@@ -715,10 +715,11 @@ uxen_op_notify_exception(struct vm_info_shared *vmis)
     }
 
     if (vmi_exists == 0)
-        printk("%s: vmi %p not in rbt (about to crash)\n", __FUNCTION__, vmi);
-
-    if (vmi->vmi_ioemu_exception_event)
-        KeSetEvent(vmi->vmi_ioemu_exception_event, 0, FALSE);
+        printk("%s: vmi %p not in rbt (avoiding crash)\n", __FUNCTION__, vmi);
+    else {
+        if (vmi->vmi_ioemu_exception_event)
+            KeSetEvent(vmi->vmi_ioemu_exception_event, 0, FALSE);
+    }
 }
 
 static void __cdecl
