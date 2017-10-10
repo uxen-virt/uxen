@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -94,4 +94,8 @@ void __cdecl uxen_sys_signal_v4v(void)
     uxen_v4vlib_deliver_signal();
 }
 
+void __cdecl uxen_sys_set_v4v_thread_priority(LONG priority)
+{
+    uxen_v4vlib_set_thread_priority(priority);
+}
 

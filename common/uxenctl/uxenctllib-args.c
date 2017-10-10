@@ -95,6 +95,7 @@ static struct uxen_param params[] = {
     STRING_OPTION("debug", opt_debug),
     BOOLEAN_OPTION("hvmonoff", opt_hvmonoff),
     UINT_OPTION("crash_on", opt_crash_on),
+    UINT_OPTION("v4v_thread_priority", opt_v4v_thread_priority),
     LAST_OPTION
 };
 

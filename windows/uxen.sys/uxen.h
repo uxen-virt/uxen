@@ -471,6 +471,7 @@ extern void uxen_cpu_xmm_restore_guest(void *);
 void uxen_sys_start_v4v(void);
 void uxen_sys_stop_v4v(void);
 void __cdecl uxen_sys_signal_v4v(void);
+void __cdecl uxen_sys_set_v4v_thread_priority(LONG priority);
 
 /* uxen_stackwalk.c */
 extern void uxen_stacktrace(PCONTEXT);

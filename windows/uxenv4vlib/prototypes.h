@@ -82,6 +82,7 @@ NTSTATUS gh_v4v_send_acknowledge(xenv4v_extension_t *pde, xenv4v_context_t *ctx)
 void gh_v4v_start_connection_timer(xenv4v_extension_t *pde);
 void gh_v4v_stop_connection_timer(xenv4v_extension_t *pde, BOOLEAN immediate);
 void gh_signaled(void);
+void gh_set_thread_priority(LONG priority);
 NTSTATUS gh_destroy_device(PDRIVER_OBJECT driver_object);
 NTSTATUS gh_create_device(PDRIVER_OBJECT driver_object);
 

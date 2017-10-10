@@ -1026,6 +1026,11 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
     if (crash_on)
         printk("set crash_on: %x\n", crash_on);
 
+    if (uid.UXEN_INIT_opt_v4v_thread_priority_MASK & UXEN_INIT_opt_v4v_thread_priority) {
+        printk("setting v4v threads priority to %d\n", (int) uid.opt_v4v_thread_priority);
+        uxen_sys_set_v4v_thread_priority(uid.opt_v4v_thread_priority);
+    }
+
     is_checked = PsGetVersion(&major_version, &minor_version, &build_number,
                               NULL);
 

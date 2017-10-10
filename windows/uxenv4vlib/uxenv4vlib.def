@@ -11,6 +11,7 @@ EXPORTS
 	uxen_v4vlib_set_page_notify_func
 	uxen_v4vlib_set_state_bar_ptr
 	uxen_v4vlib_we_are_dom0
+	uxen_v4vlib_set_thread_priority
 
 	uxen_v4vlib_set_resume_dpc
 	uxen_v4vlib_unset_resume_dpc
