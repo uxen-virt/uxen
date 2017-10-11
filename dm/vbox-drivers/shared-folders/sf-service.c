@@ -16,7 +16,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -40,6 +40,7 @@
 #include "mappings.h"
 #include "shflhandle.h"
 #include "vbsf.h"
+#include "redir.h"
 #include <iprt/alloc.h>
 #include <iprt/string.h>
 #include <iprt/assert.h>
@@ -1327,6 +1328,7 @@ int sf_VBoxHGCMSvcLoad (VBOXHGCMSVCFNTABLE *ptable)
         AssertRC(rc);
 
         vbsfMappingInit();
+        sf_redirect_init();
     }
 
     return rc;

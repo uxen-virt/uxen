@@ -17,7 +17,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -45,6 +45,7 @@
 #include "shflhandle.h"
 #include "filecrypt_helper.h"
 #include "quota.h"
+#include "redir.h"
 
 #include <iprt/alloc.h>
 #include <iprt/assert.h>
@@ -68,6 +69,8 @@
 
 #define SHFL_RT_LINK(pClient) ((pClient)->fu32Flags & SHFL_CF_SYMLINKS ? RTPATH_F_ON_LINK : RTPATH_F_FOLLOW_LINK)
 #define CRYPT_HDR_FIXED_SIZE 4096
+
+wchar_t *sf_redirect_path(SHFLROOT root, wchar_t*);
 
 static int resize_file(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle,
                        uint64_t sz);
@@ -324,9 +327,11 @@ static int vbsfBuildFullPathUcs(SHFLCLIENTDATA *pClient, SHFLROOT root, PSHFLSTR
                              bool fWildCard, bool fPreserveLastComponent)
 {
     wchar_t *pszFullPath = NULL;
+    wchar_t *pszPathRedir = NULL;
     int rc;
     int len;
     const wchar_t *pszRoot = vbsfMappingsQueryHostRoot(root);
+
     if (!pszRoot) {
         Log(("vbsfBuildFullPath: invalid root!\n"));
         return VERR_INVALID_PARAMETER;
@@ -336,6 +341,14 @@ static int vbsfBuildFullPathUcs(SHFLCLIENTDATA *pClient, SHFLROOT root, PSHFLSTR
         Log(("vbsfPathCheck_ucs failed!\n"));
         return rc;
     }
+    /* path redirection */
+    pszPathRedir = sf_redirect_path(root, pPath->String.ucs2);
+    if (pszPathRedir) {
+        *ppszFullPath = pszPathRedir;
+        LogFlow(("vbsfBuildPath: redirected %ls -> %ls\n", pPath->String.ucs2, pszPathRedir));
+        return VINF_SUCCESS;
+    }
+
     if (pcbFullPathRoot)
         *pcbFullPathRoot = wcslen(pszRoot);
     len = 2 * (wcslen(pszRoot) + wcslen(pPath->String.ucs2) + 1 + 1);
@@ -347,6 +360,7 @@ static int vbsfBuildFullPathUcs(SHFLCLIENTDATA *pClient, SHFLROOT root, PSHFLSTR
         wcscat(pszFullPath, L"\\");
     wcscat(pszFullPath, pPath->String.ucs2);
     *ppszFullPath = pszFullPath;
+
     return VINF_SUCCESS;
 }
    

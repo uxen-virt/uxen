@@ -31,6 +31,10 @@
 #include "guest-agent.h"
 #include "vbox-drivers/shared-clipboard/clipboard-interface.h"
 
+#ifdef CONFIG_VBOXDRV
+#include "vbox-drivers/shared-folders/redir.h"
+#endif
+
 #if defined(CONFIG_NICKEL)
 #include "libnickel.h"
 #endif
@@ -782,6 +786,36 @@ control_command_sf_set_subfolder_scramble_mode(
 }
 
 static int
+control_command_sf_add_redirect(
+    void *opaque,
+    const char *id,
+    const char *opt,
+    dict d,
+    void *command_opaque)
+{
+    struct control_desc *cd = (struct control_desc *)opaque;
+    const char *name = dict_get_string(d, "name");
+    const char *src = dict_get_string(d, "src");
+    const char *dst = dict_get_string(d, "dst");
+    wchar_t *name_w = _utf8_to_wide(name);
+    wchar_t *src_w = _utf8_to_wide(src);
+    wchar_t *dst_w = _utf8_to_wide(dst);
+
+    int rc;
+
+    rc  = sf_redirect_add(name_w, src_w, dst_w);
+    if (rc)
+      control_send_error(cd, opt, id, rc, NULL);
+    else
+      control_send_ok(cd, opt, id, NULL);
+    free(name_w);
+    free(src_w);
+    free(dst_w);
+
+    return 0;
+}
+
+static int
 control_command_sf_add_subfolder_opt(
     void *opaque,
     const char *id,
@@ -806,6 +840,33 @@ control_command_sf_add_subfolder_opt(
         control_send_ok(cd, opt, id, NULL);
     free(name_w);
     free(subfolder_w);
+    return 0;
+}
+
+static int
+control_command_sf_del_redirect(
+    void *opaque,
+    const char *id,
+    const char *opt,
+    dict d,
+    void *command_opaque)
+{
+    struct control_desc *cd = (struct control_desc *)opaque;
+    const char *name = dict_get_string(d, "name");
+    const char *src = dict_get_string(d, "src");
+    wchar_t *name_w = _utf8_to_wide(name);
+    wchar_t *src_w = _utf8_to_wide(src);
+
+    int rc;
+
+    rc  = sf_redirect_del(name_w, src_w);
+    if (rc)
+      control_send_error(cd, opt, id, rc, NULL);
+    else
+      control_send_ok(cd, opt, id, NULL);
+    free(name_w);
+    free(src_w);
+
     return 0;
 }
 
@@ -1186,6 +1247,14 @@ struct dict_rpc_command control_commands[] = {
             { NULL, },
       }, },
 #if defined(CONFIG_VBOXDRV)
+    { "sf-add-redirect", control_command_sf_add_redirect,
+      .args = (struct dict_rpc_arg_desc[]) {
+            { "name", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },
+            { "src", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },
+            { "dst", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },
+            { NULL, },
+      }
+    },
     { "sf-add-subfolder-opt", control_command_sf_add_subfolder_opt,
       .args = (struct dict_rpc_arg_desc[]) {
             { "name", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },
@@ -1194,6 +1263,13 @@ struct dict_rpc_command control_commands[] = {
             { "value", DICT_RPC_ARG_TYPE_INTEGER, .optional = 0 },
             { NULL, },
         }
+    },
+    { "sf-del-redirect", control_command_sf_del_redirect,
+      .args = (struct dict_rpc_arg_desc[]) {
+            { "name", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },
+            { "src", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },
+            { NULL, },
+      }
     },
     { "sf-del-subfolder-opt", control_command_sf_del_subfolder_opt,
       .args = (struct dict_rpc_arg_desc[]) {

@@ -359,6 +359,8 @@ shared-folders/filecrypt_helper.o: $(LIBFILECRYPT_DEPS)
 VBOXDRV_SRCS += shared-folders/sf-server.c
 VBOXDRV_SRCS += shared-folders/mappings.c
 VBOXDRV_SRCS += shared-folders/mappings-opts.c
+VBOXDRV_SRCS += shared-folders/redir.c
+VBOXDRV_SRCS += shared-folders/util.c
 VBOXDRV_SRCS += shared-folders/sf-service.c
 VBOXDRV_SRCS += shared-folders/shflhandle.c
 VBOXDRV_SRCS += shared-folders/quota.c

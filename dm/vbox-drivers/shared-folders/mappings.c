@@ -16,7 +16,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -39,6 +39,7 @@
 
 #include "mappings.h"
 #include "mappings-opts.h"
+#include "util.h"
 #include <iprt/alloc.h>
 #include <iprt/assert.h>
 #include <iprt/string.h>
@@ -137,7 +138,7 @@ static SHFLROOT vbsfMappingGetRootFromIndex(SHFLROOT iMapping)
     return SHFL_ROOT_NIL;
 }
 
-static MAPPING *vbsfMappingGetByName (PRTUTF16 pwszName, SHFLROOT *pRoot)
+MAPPING *vbsfMappingGetByName (PRTUTF16 pwszName, SHFLROOT *pRoot)
 {
     unsigned i;
 
@@ -166,14 +167,6 @@ static MAPPING *vbsfMappingGetByName (PRTUTF16 pwszName, SHFLROOT *pRoot)
     }
 
     return NULL;
-}
-
-static SHFLROOT
-root_by_name(wchar_t *name)
-{
-    SHFLROOT root = SHFL_ROOT_NIL;
-    vbsfMappingGetByName(name, &root);
-    return root;
 }
 
 static void vbsfRootHandleAdd(SHFLROOT iMapping)
@@ -657,7 +650,7 @@ vbsfMappingsUpdateQuota(PSHFLCLIENTDATA pClient, SHFLROOT root,
 int
 sf_set_opt(wchar_t *name, wchar_t *subfolder, uint64_t opt)
 {
-    SHFLROOT r = root_by_name(name);
+    SHFLROOT r = sf_root_by_name(name);
 
     if (r == SHFL_ROOT_NIL)
         return VERR_FILE_NOT_FOUND;
@@ -668,7 +661,7 @@ sf_set_opt(wchar_t *name, wchar_t *subfolder, uint64_t opt)
 int
 sf_mod_opt(wchar_t *name, wchar_t *subfolder, uint64_t opt, int add)
 {
-    SHFLROOT r = root_by_name(name);
+    SHFLROOT r = sf_root_by_name(name);
 
     if (r == SHFL_ROOT_NIL)
         return VERR_FILE_NOT_FOUND;
@@ -679,7 +672,7 @@ sf_mod_opt(wchar_t *name, wchar_t *subfolder, uint64_t opt, int add)
 int
 sf_mod_opt_dynamic(wchar_t *name, wchar_t *subfolder, uint64_t opt, int add)
 {
-    SHFLROOT r = root_by_name(name);
+    SHFLROOT r = sf_root_by_name(name);
 
     if (r == SHFL_ROOT_NIL)
         return VERR_FILE_NOT_FOUND;
@@ -690,7 +683,7 @@ sf_mod_opt_dynamic(wchar_t *name, wchar_t *subfolder, uint64_t opt, int add)
 int
 sf_restore_opt(wchar_t *name, wchar_t *subfolder, uint64_t opt)
 {
-    SHFLROOT r = root_by_name(name);
+    SHFLROOT r = sf_root_by_name(name);
 
     if (r == SHFL_ROOT_NIL)
         return VERR_FILE_NOT_FOUND;

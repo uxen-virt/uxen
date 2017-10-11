@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -8,6 +8,7 @@
 #include <dm/os.h>
 #include "mappings.h"
 #include "shflhandle.h"
+#include "util.h"
 #include <dm/config.h>
 #include <dm/qemu_glue.h>
 #include <dm/debug.h>
@@ -126,12 +127,6 @@ state_load(QEMUFile *f, void *opaque, int version_id)
     return 0;
 }
 
-static int
-is_sep(wchar_t c)
-{
-    return (c == PATH_SEP || c == PATH_SEP_ALT);
-}
-
 static wchar_t *
 get_path_suffix(wchar_t *prefix, wchar_t *path)
 {
@@ -139,8 +134,8 @@ get_path_suffix(wchar_t *prefix, wchar_t *path)
         prefix += 4;
     if (!wcsncmp(L"\\\\?\\", path, 4))
         path += 4;
-    while (is_sep(*prefix)) ++prefix;
-    while (is_sep(*path)) ++path;
+    while (sf_is_sep(*prefix)) ++prefix;
+    while (sf_is_sep(*path)) ++path;
 
     while (*path && *prefix) {
         wchar_t a = towlower(*path);
@@ -153,7 +148,7 @@ get_path_suffix(wchar_t *prefix, wchar_t *path)
 
     if (*prefix)
         return NULL;
-    while (is_sep(*path))
+    while (sf_is_sep(*path))
         ++path;
     return path;
 }

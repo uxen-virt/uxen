@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -11,6 +11,7 @@
 #include "yajl.h"
 #include "shared-folders.h"
 #include <dm/vbox-drivers/heap.h>
+#include <dm/vbox-drivers/shared-folders/redir.h>
 
 #include <windowsx.h>
 #include <winioctl.h>
@@ -130,6 +131,58 @@ sf_parse_subfolder_config(const char *folder_name, yajl_val folder,
     return 0;
 }
 
+static int
+sf_parse_redirect_config(const char *folder_name, yajl_val folder)
+{
+    const char * redirect_path[] = {"redirect", NULL};
+    yajl_val redirect, v;
+    int i, rc;
+
+    redirect = yajl_tree_get(folder, redirect_path, yajl_t_array);
+    if (!redirect)
+        return 0;
+
+    if (!YAJL_IS_OBJECT(redirect) && !YAJL_IS_ARRAY(redirect)) {
+        warnx("shared-folders: wrong type");
+        return -1;
+    }
+
+    YAJL_FOREACH_ARRAY_OR_OBJECT(v, redirect, i) {
+        const char *src, *dst;
+        wchar_t *folder_name_w, *src_w, *dst_w;
+
+        if (!YAJL_IS_OBJECT(v))
+            continue;
+
+        src = yajl_object_get_string(v, "src");
+        if (!src) {
+            warnx("redirect missing src");
+            return -1;
+        }
+        dst = yajl_object_get_string(v, "dst");
+        if (!dst) {
+            warnx("redirect missing dst");
+            return -1;
+        }
+
+        folder_name_w = _utf8_to_wide(folder_name);
+        src_w = _utf8_to_wide(src);
+        dst_w = _utf8_to_wide(dst);
+
+        rc = sf_redirect_add(folder_name_w, src_w, dst_w);
+        if (rc) {
+            warnx("failed to add redirect: %d", rc);
+            return -1;
+        }
+
+        free(folder_name_w);
+        free(src_w);
+        free(dst_w);
+    }
+
+    return 0;
+}
+
 int
 sf_parse_config(yajl_val config)
 {
@@ -171,6 +224,9 @@ sf_parse_config(yajl_val config)
                 return -1;
             }
             rc = sf_parse_subfolder_config(name, v, opts);
+            if (rc)
+                return -1;
+            rc = sf_parse_redirect_config(name, v);
             if (rc)
                 return -1;
         }
