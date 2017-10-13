@@ -861,8 +861,14 @@ int domain_kill(struct domain *d)
         /* release ref held on template domain, now that our memory
          * has been torn down */
         clone_of = d->clone_of;
-        if (clone_of)
+        if (clone_of) {
+            printk("%s:%d: vm%u before put_domain for template vm%u: "
+                "refcnt=%d tot_pages=%d xenheap_pages=%d vframes=%d\n",
+                __FUNCTION__, __LINE__, d->domain_id, d->clone_of->domain_id,
+                atomic_read(&d->clone_of->refcnt),
+                d->clone_of->tot_pages, d->clone_of->xenheap_pages, d->clone_of->vframes);
             put_domain(clone_of);
+        }
         d->is_dying = DOMDYING_dead;
 #ifndef __UXEN__
         send_guest_global_virq(dom0, VIRQ_DOM_EXC);
@@ -872,10 +878,18 @@ int domain_kill(struct domain *d)
         printk("%s:%d: sched_destroy_domain() for vm%u\n",
                __FUNCTION__, __LINE__, d->domain_id);
         sched_destroy_domain(d);
+        printk("%s:%d: vm%u before put_domain: refcnt=%d tot_pages=%d xenheap_pages=%d vframes=%d\n",
+            __FUNCTION__, __LINE__, d->domain_id,
+            atomic_read(&d->refcnt), d->tot_pages, d->xenheap_pages, d->vframes);
         put_domain(d);
         if (clone_of && clone_of->is_dying &&
             domain_relinquish_resources(clone_of) == 0) {
             clone_of->is_dying = DOMDYING_dead;
+            printk("%s:%d: vm%u before put_domain for template vm%u: "
+                "refcnt=%d tot_pages=%d xenheap_pages=%d vframes=%d\n",
+                __FUNCTION__, __LINE__, d->domain_id, d->clone_of->domain_id,
+                atomic_read(&d->clone_of->refcnt),
+                d->clone_of->tot_pages, d->clone_of->xenheap_pages, d->clone_of->vframes);
             put_domain(clone_of);
         }
         /* fallthrough */
@@ -1133,6 +1147,8 @@ void domain_destroy(struct domain *d)
 
     BUG_ON(!d->is_dying);
 
+    printk("domain_destroy for vm%u\n", d->domain_id);
+
     /* May be already destroyed, or get_domain() can race us. */
     _atomic_set(old, 0);
     _atomic_set(new, DOMAIN_DESTROYED);
@@ -1155,6 +1171,7 @@ void domain_destroy(struct domain *d)
 #endif  /* __UXEN__ */
     spin_unlock(&domlist_update_lock);
 
+    printk("schedule rcu complete_domain_destroy for vm%u\n", d->domain_id);
     /* Schedule RCU asynchronous completion of domain destroy. */
     call_rcu(&d->rcu, complete_domain_destroy);
 }
