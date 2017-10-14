@@ -18,7 +18,13 @@
 #define UXEN_DEFINE_SYMBOLS_PROTO
 #include <uxen/uxen_link.h>
 
+#ifdef __x86_64__
 #define PAGEMAP_SPACE_SIZE (16 /* MB */ * 1024 * 1024 / PAGE_SIZE)
+#define MAX_PAGEMAP_ALLOC_RETRY 1
+#else
+#define PAGEMAP_SPACE_SIZE (4 /* MB */ * 1024 * 1024 / PAGE_SIZE)
+#define MAX_PAGEMAP_ALLOC_RETRY 10
+#endif
 
 #define PAGEMAP_SLOTS_FREE_RESERVE 2048
 
@@ -88,8 +94,9 @@ alloc_next_space(void)
 {
     struct pagemap_space *s;
     void *va;
-    int n;
+    int n, i;
     KIRQL irql;
+    LARGE_INTEGER delay;
 
     s = (struct pagemap_space *)kernel_malloc(sizeof(struct pagemap_space));
     if (!s) {
@@ -97,10 +104,18 @@ alloc_next_space(void)
         return -ENOMEM;
     }
 
-    va = kernel_alloc_va(PAGEMAP_SPACE_SIZE);
+    delay.QuadPart = -TIME_MS(1000);
+    for (i = 0; i < MAX_PAGEMAP_ALLOC_RETRY; i++) {
+        va = kernel_alloc_va(PAGEMAP_SPACE_SIZE);
+        if (!va) {
+            printk("kernel_alloc_va(s->va) failed (attempt %d)", i);
+            KeDelayExecutionThread(KernelMode, FALSE, &delay);
+        } else
+            break;
+    }
     if (!va) {
         kernel_free(s, sizeof(struct pagemap_space));
-        fail_msg("kernel_alloc_va(s->va) failed");
+        fail_msg("unable to allocate address space");
         return -ENOMEM;
     }
 
@@ -162,11 +177,11 @@ pagemap_init(int max_pfn)
 
     rb_tree_init(&space_rbtree, &space_rbtree_ops);
 
+    KeInitializeSpinLock(&pagemap_lock);
+
     ret = alloc_next_space();
     if (ret)
         return ret;
-
-    KeInitializeSpinLock(&pagemap_lock);
 
     return 0;
 }
