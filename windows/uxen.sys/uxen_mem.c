@@ -2255,7 +2255,7 @@ struct hidden_mem {
     uint64_t end;
 };
 
-#define MAX_HIDDEN_MEM 0x200000000ULL /* 8GB */
+uint64_t max_hidden_mem = 8ULL /* GB */ << 30;
 #define HIDDEN_MEM_STRUCT_MAX 4096
 static struct hidden_mem *hidden_memory = NULL;
 /* with >= 6GB, populate sub-4GB frametable lazily */
@@ -2373,7 +2373,7 @@ get_top_of_ram(void)
         /* We can't do better here, as vmware emulates a 440BX AGPset */
         /* so it doesn't have a concept of ram > 4Gb. */
         dprintk("uxen mem: PV vmware\n");
-        ret = MAX_HIDDEN_MEM;
+        ret = max_hidden_mem;
     } else {
         switch (uxen_cpu_vendor()) {
         case UXEN_CPU_VENDOR_INTEL:
@@ -2447,11 +2447,11 @@ get_hidden_mem(uxen_pfn_t max_pfn)
     nr = 0;
     hm[nr].start = 0;
 
-    while (&re[1] <= re_end && mem_start < MAX_HIDDEN_MEM) {
+    while (&re[1] <= re_end && mem_start < max_hidden_mem) {
         /* dprintk("  base %016I64x size %08x\n", re->base, re->size); */
         if (mem_start >= 0x100000000ULL) {
-            if (re->base > MAX_HIDDEN_MEM)
-                re->base = MAX_HIDDEN_MEM;
+            if (re->base > max_hidden_mem)
+                re->base = max_hidden_mem;
             probe_mem(&hm[nr], mem_start, re->base);
             if (hm[nr].start) {
                 printk("memory physical region %016I64x - %016I64x (hidden)\n",
@@ -2469,7 +2469,7 @@ get_hidden_mem(uxen_pfn_t max_pfn)
     /* probe mem above 4GB or after last region */
     if (mem_start < 0x100000000ULL)
         mem_start = 0x100000000ULL;
-    mem_end = min(get_top_of_ram(), MAX_HIDDEN_MEM);
+    mem_end = min(get_top_of_ram(), max_hidden_mem);
     mem_ok = mem_start;
     mem_bad = mem_end;
     while (mem_ok + PAGE_SIZE < mem_end) {

@@ -969,7 +969,7 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
     ULONG major_version, minor_version;
     BOOLEAN is_checked;
     NTSTATUS status;
-    BOOLEAN use_hidden = 0;
+    uint64_t use_hidden = 0;
     int ret = 0;
     uint64_t pae_enabled;
     struct vm_vcpu_info_shared *vcis[UXEN_MAXIMUM_PROCESSORS];
@@ -1068,9 +1068,13 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
 
 #ifdef __i386__
     use_hidden = 1;
-    if (uid.UXEN_INIT_use_hidden_mem_MASK & UXEN_INIT_use_hidden_mem)
-        use_hidden = (BOOLEAN)uid.use_hidden_mem;
-    printk("%susing hidden memory\n", use_hidden ? "" : "not ");
+    if (uid.UXEN_INIT_use_hidden_mem_MASK & UXEN_INIT_use_hidden_mem) {
+        use_hidden = uid.use_hidden_mem;
+        if (use_hidden > 3)
+            max_hidden_mem = use_hidden << 30;
+    }
+    printk("%susing hidden memory (%016I64x)\n", 
+           use_hidden ? "" : "not ", max_hidden_mem);
     if (use_hidden) {
         status = IoRegisterShutdownNotification(devobj);
         if (!NT_SUCCESS(status)) {

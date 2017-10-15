@@ -83,7 +83,7 @@ static struct uxen_param params[] = {
     STRING_OPTION("gdb", opt_gdb),
     BOOLEAN_OPTION("hap_1gb", opt_hap_1gb),
     BOOLEAN_OPTION("hap_2mb", opt_hap_2mb),
-    BOOLEAN_OPTION("hiddenmem", use_hidden_mem),
+    UINT_OPTION("hiddenmem", use_hidden_mem),
     UINT_OPTION("hvm_debug", opt_hvm_debug_level),
     BOOLEAN_OPTION("ler", opt_ler),
     UINT_OPTION("ple_gap", ple_gap),

@@ -285,6 +285,9 @@ int uxen_load_symbols(void);
 int uxen_unload(void);
 
 /* uxen_mem.c */
+#ifdef __i386__
+extern uint64_t max_hidden_mem;
+#endif /* __i386__ */
 extern int map_page_range_max_nr;
 uint64_t __cdecl map_mfn(uintptr_t va, xen_pfn_t mfn);
 int mem_init(void);
