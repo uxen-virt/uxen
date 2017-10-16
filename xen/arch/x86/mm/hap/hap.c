@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -95,7 +95,7 @@ static int hap_enable_vram_tracking(struct domain *d)
                           p2m_ram_rw, p2m_ram_logdirty);
     pt_sync_domain(d);
 
-    flush_tlb_mask(d->domain_dirty_cpumask);
+    //flush_tlb_mask(d->domain_dirty_cpumask);
     return 0;
 }
 
@@ -114,7 +114,7 @@ static int hap_disable_vram_tracking(struct domain *d)
     p2m_change_type_range(d, dirty_vram->begin_pfn, dirty_vram->end_pfn, 
                           p2m_ram_logdirty, p2m_ram_rw);
 
-    flush_tlb_mask(d->domain_dirty_cpumask);
+    //flush_tlb_mask(d->domain_dirty_cpumask);
     return 0;
 }
 
@@ -130,7 +130,7 @@ static void hap_clean_vram_tracking(struct domain *d)
                           p2m_ram_rw, p2m_ram_logdirty);
     pt_sync_domain(d);
 
-    flush_tlb_mask(d->domain_dirty_cpumask);
+    //flush_tlb_mask(d->domain_dirty_cpumask);
 }
 
 static int hap_enable_vram_tracking_l2(struct domain *d)
@@ -150,7 +150,7 @@ static int hap_enable_vram_tracking_l2(struct domain *d)
                              p2m_ram_rw, p2m_ram_logdirty);
     pt_sync_domain(d);
 
-    flush_tlb_mask(d->domain_dirty_cpumask);
+    //flush_tlb_mask(d->domain_dirty_cpumask);
     return 0;
 }
 
@@ -169,7 +169,7 @@ static int hap_disable_vram_tracking_l2(struct domain *d)
     p2m_change_type_range_l2(d, dirty_vram->begin_pfn, dirty_vram->end_pfn, 
                              p2m_ram_logdirty, p2m_ram_rw);
 
-    flush_tlb_mask(d->domain_dirty_cpumask);
+    //flush_tlb_mask(d->domain_dirty_cpumask);
     return 0;
 }
 
@@ -185,7 +185,7 @@ static void hap_clean_vram_tracking_l2(struct domain *d)
                              p2m_ram_rw, p2m_ram_logdirty);
     pt_sync_domain(d);
 
-    flush_tlb_mask(d->domain_dirty_cpumask);
+    //flush_tlb_mask(d->domain_dirty_cpumask);
 }
 
 static void hap_vram_tracking_init(struct domain *d)
@@ -293,7 +293,7 @@ static int hap_enable_log_dirty(struct domain *d)
     p2m_change_entry_type_global(d, p2m_ram_rw, p2m_ram_logdirty);
     pt_sync_domain(d);
 
-    flush_tlb_mask(d->domain_dirty_cpumask);
+    //flush_tlb_mask(d->domain_dirty_cpumask);
     return 0;
 }
 
@@ -314,7 +314,7 @@ static void hap_clean_dirty_bitmap(struct domain *d)
     p2m_change_entry_type_global(d, p2m_ram_rw, p2m_ram_logdirty);
     pt_sync_domain(d);
 
-    flush_tlb_mask(d->domain_dirty_cpumask);
+    //flush_tlb_mask(d->domain_dirty_cpumask);
 }
 
 void hap_logdirty_init(struct domain *d)
@@ -1049,7 +1049,7 @@ hap_write_p2m_entry(struct vcpu *v, unsigned long gfn, l1_pgentry_t *p,
                     mfn_t table_mfn, l1_pgentry_t new, unsigned int level)
 {
     struct domain *d = v->domain;
-    uint32_t old_flags;
+    //uint32_t old_flags;
 #ifndef __UXEN__
     bool_t flush_nestedp2m = 0;
 #endif  /* __UXEN__ */
@@ -1060,7 +1060,7 @@ hap_write_p2m_entry(struct vcpu *v, unsigned long gfn, l1_pgentry_t *p,
      * vcpu. */
 
     paging_lock(d);
-    old_flags = l1e_get_flags(*p);
+    //old_flags = l1e_get_flags(*p);
 
 #ifndef __UXEN__
     if ( nestedhvm_enabled(d) && (old_flags & _PAGE_PRESENT) 
@@ -1075,9 +1075,11 @@ hap_write_p2m_entry(struct vcpu *v, unsigned long gfn, l1_pgentry_t *p,
 #endif  /* __UXEN__ */
 
     safe_write_pte(p, new);
+#if 0
     if ( (old_flags & _PAGE_PRESENT)
          && (level == 1 || (level == 2 && (old_flags & _PAGE_PSE))) )
              flush_tlb_mask(d->domain_dirty_cpumask);
+#endif
 
 #ifndef __UXEN__
 #if CONFIG_PAGING_LEVELS == 3
