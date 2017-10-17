@@ -4755,6 +4755,9 @@ hvmop_map_io_range_to_ioreq_server(
     struct domain *d;
     int rc;
 
+    if (a->s > a->e)
+        return -EINVAL;
+
     rc = rcu_lock_remote_target_domain_by_id(a->domid, &d);
     if (rc != 0)
         return rc;
