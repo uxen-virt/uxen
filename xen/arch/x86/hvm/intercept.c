@@ -20,7 +20,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -89,6 +89,7 @@ static int hvm_mmio_access(struct vcpu *v,
         {
             int ret;
 
+            data = 0;
             rc = read_handler(v, p->addr + (sign * i * p->size), p->size,
                               &data);
             if ( rc != X86EMUL_OKAY )
@@ -108,6 +109,7 @@ static int hvm_mmio_access(struct vcpu *v,
     {
         for ( i = 0; i < p->count; i++ )
         {
+            data = 0;
             switch ( hvm_copy_from_guest_phys(&data,
                                               p->data + sign * i * p->size,
                                               p->size) )
@@ -182,6 +184,7 @@ process_pciconfig_intercept(pciconfig_action_t action, ioreq_t *p)
 
     if (p->dir == IOREQ_READ) {
         for (i = 0; i < p->count; i++) {
+            data = 0;
             rc = action(IOREQ_READ, p->addr, p->size, &data);
             if (rc != X86EMUL_OKAY)
                 break;
@@ -233,6 +236,7 @@ static int process_portio_intercept(portio_action_t action, ioreq_t *p)
     {
         for ( i = 0; i < p->count; i++ )
         {
+            data = 0;
             rc = action(IOREQ_READ, p->addr, p->size, &data);
             if ( rc != X86EMUL_OKAY )
                 break;

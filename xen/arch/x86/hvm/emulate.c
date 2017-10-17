@@ -168,6 +168,7 @@ static int hvmemul_do_io(
 
     if ( (p_data != NULL) && (dir == IOREQ_WRITE) )
     {
+        value = 0;
         memcpy(&value, p_data, size);
         p_data = NULL;
     }
