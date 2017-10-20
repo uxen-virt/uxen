@@ -38,6 +38,7 @@ struct pagemap_space {
     int id;
 #endif  /* DEBUG_PAGEMAP */
     uint32_t map[PAGEMAP_SPACE_SIZE / 32];
+    uint32_t stale_map[PAGEMAP_SPACE_SIZE / 32];
 };
 
 static struct pagemap_space **pagemap_spaces;
@@ -124,6 +125,7 @@ alloc_next_space(void)
     pagemap_spaces[n] = s;
     s->va = (uintptr_t)va;
     memset(s->map, 0, sizeof(uint32_t) * PAGEMAP_SPACE_SIZE / 32);
+    memset(s->stale_map, 0, sizeof(uint32_t) * PAGEMAP_SPACE_SIZE / 32);
 
     s->key.size = PAGEMAP_SPACE_SIZE << PAGE_SHIFT;
     rb_tree_insert_node(&space_rbtree, s);
@@ -216,16 +218,29 @@ pagemap_map_page(xen_pfn_t mfn)
         first = pagemap_max;
     do {
         if (pagemap_next == pagemap_max) {
+            uint16_t ip, islot;
+            struct pagemap_space *is = NULL;
+
             pagemap_next = 0;
+            pagemap_slots_free = 0;
+            for (ip = 0; ip < pagemap_max; ip += PAGEMAP_SPACE_SIZE) {
+                is = pagemap_spaces[ip / PAGEMAP_SPACE_SIZE];
+                memcpy(is->stale_map, is->map, sizeof(is->map));
+                for (islot = 0; islot < PAGEMAP_SPACE_SIZE; islot++)
+                    if (!_bittest(is->map, islot))
+                        pagemap_slots_free++;
+            }
             uxen_mem_tlb_flush();
         }
         if (!s || !(pagemap_next % PAGEMAP_SPACE_SIZE))
             s = pagemap_spaces[pagemap_next / PAGEMAP_SPACE_SIZE];
         slot = pagemap_next++ % PAGEMAP_SPACE_SIZE;
-    } while (_interlockedbittestandset(s->map, slot) &&
+    } while ((_bittest(s->stale_map, slot) ||
+             _interlockedbittestandset(s->map, slot)) &&
              pagemap_next != first);
 
     if (pagemap_next == first) {
+        KeReleaseSpinLockFromDpcLevel(&pagemap_lock);
         fail_msg("out of space in host map");
         return NULL;
     }
@@ -289,7 +304,8 @@ pagemap_unmap_page_va(const void *va)
         mfn = (pte & ~0xffff000000000fff) >> PAGE_SHIFT;
 
     _bittestandreset(s->map, slot);
-    pagemap_slots_free++;
+    if (!_bittest(s->stale_map, slot))
+        pagemap_slots_free++;
 
 #ifdef DEBUG_PAGEMAP
     dprintk("%s: mfn %Ix va %p slot %d:%d\n", __FUNCTION__,
