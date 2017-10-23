@@ -543,9 +543,13 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
         }
         pdi->mfn = mfn_x(*tmfn);
         atomic_inc(&d->template.decompressed_shared);
+#if 0
         if (!(page_owner->arch.hvm_domain.params[HVM_PARAM_COMPRESSED_GC] &
               HVM_PARAM_COMPRESSED_GC_decompressed))
             get_page_fast(p, page_owner);
+#else
+	get_page_fast(p, page_owner);
+#endif
         p2m_unlock(p2m);
         perfc_incr(decompressed_shareable);
         update_host_memory_saved(-PAGE_SIZE);
@@ -575,9 +579,11 @@ p2m_teardown_compressed_one_cb(void *_pdi, uint16_t size, struct domain *d,
 
     /* if GC_decompressed is enabled, then no reference is held on the
      * page for pdi->mfn */
+#if 0
     if (d->arch.hvm_domain.params[HVM_PARAM_COMPRESSED_GC] &
         HVM_PARAM_COMPRESSED_GC_decompressed)
         return 0;
+#endif
 
     if (pdi->mfn && get_page(__mfn_to_page(pdi->mfn), d)) {
         uxen_mfn_t mfn = pdi->mfn;
@@ -1016,7 +1022,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     } else {
         /* check if template page is a decompressed page, only shared
          * in one clone */
-#define ONE_CLONE_COUNT 1
+#define ONE_CLONE_COUNT 0
         while (page_get_owner(mfn_to_page(smfn)) == d->clone_of &&
                (mfn_to_page(smfn)->count_info & PGC_count_mask) <=
                ONE_CLONE_COUNT) {
