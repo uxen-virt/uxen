@@ -438,6 +438,43 @@ _p2m_put_page_data(struct p2m_domain *p2m, uint8_t *data, uint16_t data_size,
 }
 
 static int
+p2m_pod_get_decompressed_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
+                              struct domain *page_owner)
+{
+    struct domain *d = p2m->domain;
+    uint8_t *data = NULL;
+    uint16_t data_size = 0;
+    int wr_lock = 0;
+    struct page_data_info *pdi;
+    uint16_t offset;
+    int ret = 1;
+
+    p2m_lock_recursive(p2m);
+    if (p2m_get_page_data(p2m, &mfn, &data, &data_size, &offset)) {
+        ret = 0;
+        p2m_unlock(p2m);
+        goto out;
+    }
+
+    pdi = (struct page_data_info *)&data[offset];
+
+    /* check if decompressed page exists */
+    if (page_owner == d && pdi->mfn &&
+        get_page(__mfn_to_page(pdi->mfn), page_owner)) {
+        *tmfn = _mfn(pdi->mfn);
+        p2m_unlock(p2m);
+        perfc_incr(decompressed_shared);
+        goto out;
+    }
+    p2m_unlock(p2m);
+    ret = 0;
+  out:
+    if (data)
+        _p2m_put_page_data(p2m, data, data_size, wr_lock);
+    return ret;
+}
+
+static int
 p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
                         struct domain *page_owner, int share)
 {
@@ -1107,8 +1144,13 @@ clone_l1_table(struct p2m_domain *op2m, struct p2m_domain *p2m,
             p2m->parse_entry(table, index, &_t, &_a);
         }
         if (p2m_is_pod(t)) {
-            if (mfn_valid_vframe(mfn))
-                mfn = _mfn(0);
+            if (mfn_valid_vframe(mfn)) {
+                if (!p2m_pod_get_decompressed_page(op2m, mfn, &mfn, od)) {
+                    perfc_incr(pc15);
+                    mfn = _mfn(0);
+                } else
+                    perfc_incr(pc14);
+            }
             else if (mfn_valid_page(mfn) &&
                      unlikely(!get_page_fast(mfn_to_page(mfn), od))) {
                 gdprintk(XENLOG_ERR, "%s: get_page failed mfn=%08lx\n",
