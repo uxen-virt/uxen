@@ -402,6 +402,9 @@ struct p2m_domain {
     /* Highest guest frame that's ever been mapped in the p2m */
     unsigned long max_mapped_pfn;
 
+    unsigned long clone_gpfn;
+    s64 clone_time;
+
     uint16_t p2m_l1_cache_id;
 
     struct dspage_store *dsps;

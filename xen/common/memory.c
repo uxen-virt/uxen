@@ -9,7 +9,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -883,9 +883,16 @@ long do_memory_op(unsigned long cmd, XEN_GUEST_HANDLE(void) arg)
             return rc;
         }
 
-        if (get_domain(pd)) {
+        if (d->clone_of &&
+            !(d->clone_of == pd && p2m_get_hostp2m(d)->clone_gpfn))
+            rc = -EINVAL;
+        else if (d->clone_of == pd || get_domain(pd)) {
             d->clone_of = pd;
             rc = p2m_clone(p2m_get_hostp2m(pd), d);
+            if (rc == -EAGAIN)
+                rc = hypercall_create_continuation(
+                    __HYPERVISOR_memory_op, "lh",
+                    op, arg);
         } else
             rc = -EEXIST;
 
