@@ -473,7 +473,12 @@ void p2m_teardown(struct p2m_domain *p2m)
     p2m->phys_table = pagetable_null();
 
     while ( (pg = page_list_remove_head(&p2m->pages)) )
+    {
+        p2m_unlock(p2m);
         d->arch.paging.free_page(d, pg);
+        p2m_lock(p2m);
+    }
+
     p2m_unlock(p2m);
 
     dsps_release(d);
