@@ -370,7 +370,8 @@ static void vmx_restore_host_msrs(struct vcpu *v)
     {
         i = find_first_set_bit(host_msr_state->flags);
         if (host_msr_state->msrs[i] != guest_msr_state->msrs[i])
-            wrmsrl(msr_index[i], host_msr_state->msrs[i]);
+            if (wrmsr_safe(msr_index[i], host_msr_state->msrs[i]))
+                wrmsrl(msr_index[i],0);
         clear_bit(i, &host_msr_state->flags);
     }
 }
@@ -397,7 +398,8 @@ static void vmx_restore_guest_msrs(struct vcpu *v)
                 HVM_DBG_LOG(DBG_LEVEL_2,
                             "restore guest's index %d msr %x with value %lx",
                             i, msr_index[i], guest_msr_state->msrs[i]);
-                wrmsrl(msr_index[i], guest_msr_state->msrs[i]);
+                if (wrmsr_safe(msr_index[i], guest_msr_state->msrs[i]))
+                    wrmsrl(msr_index[i], 0);
             }
         } else
             ax_vmcs_x_wrmsrl(v, msr_index[i], guest_msr_state->msrs[i]);
