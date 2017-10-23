@@ -76,6 +76,8 @@ struct vmx_domain {
         u64 eptp;
     } ept_control;
     cpumask_var_t ept_synced;
+    cpumask_var_t ept_in_use;
+    cpumask_var_t ept_dirty;
 };
 
 #define ept_get_wl(d)   \

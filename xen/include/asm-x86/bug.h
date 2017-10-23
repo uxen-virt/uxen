@@ -38,6 +38,11 @@ struct bug_frame {
     UI_HOST_CALL(ui_printf, NULL, "Xen WARN at %.50s:%d\n", __FILE__, __LINE__);
 #endif
 
+#define WARNISH() do {                                                 \
+        UI_HOST_CALL(ui_printf, NULL,                                  \
+                     "Xen WARNISH at %.50s:%d\n", __FILE__, __LINE__); \
+    } while (0)
+
 #define WARN_ONCE() do {                        \
         static int warned = 0;                  \
         if (!warned) {                          \
