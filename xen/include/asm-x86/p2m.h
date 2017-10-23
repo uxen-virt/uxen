@@ -407,6 +407,13 @@ struct p2m_domain {
     struct dspage_store *dsps;
 
     int virgin;
+
+    union {
+        struct {
+            unsigned long gc_decompressed_gpfn;
+            struct timer gc_timer;
+        } template;
+    };
  
 #ifndef NDEBUG
     unsigned long compress_gpfn;
@@ -611,6 +618,9 @@ p2m_shared_teardown(struct p2m_domain *p2m);
 
 void
 p2m_teardown_compressed(struct p2m_domain *p2m);
+
+void
+p2m_pod_gc_template_pages_work(void *_d);
 
 
 /*
