@@ -1703,6 +1703,106 @@ guest_physmap_mark_populate_on_demand_contents(
     return 0;
 }
 
+void
+p2m_pod_gc_template_pages_work(void *_d)
+{
+    struct domain *d = (struct domain *)_d;
+    struct p2m_domain *p2m = p2m_get_hostp2m(d);
+    unsigned long gpfn;
+    mfn_t mfn;
+    p2m_type_t t;
+    p2m_access_t a;
+    unsigned int page_order;
+    struct page_data_info *pdi;
+    uint8_t *data;
+    uint16_t data_size;
+    uint16_t offset;
+    struct domain *c;
+#define GC_PERIOD (5 * 60)
+    int nr_per_iter = (d->vframes + GC_PERIOD - 1) / GC_PERIOD;
+    int nr = 0, nr2 = 0, nr3 = 0;
+
+    p2m_lock_recursive(p2m);
+    for (gpfn = p2m->template.gc_decompressed_gpfn;
+         gpfn <= p2m->max_mapped_pfn; gpfn++) {
+        if (nr2 >= nr_per_iter)
+            break;
+        mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, &page_order);
+        if (!mfn_valid_page_or_vframe(mfn)) {
+            gpfn |= ((1 << page_order) - 1);
+            continue;
+        }
+        if (!(gpfn & ((1UL << PAGETABLE_ORDER) - 1))) {
+            p2m_unlock(p2m);
+            for_each_domain(c) {
+                struct p2m_domain *cp2m;
+                mfn_t cmfn, l1mfn;
+                void *l1table;
+                int i;
+
+                if (c->clone_of != d)
+                    continue;
+                cp2m = p2m_get_hostp2m(c);
+                p2m_lock_recursive(cp2m);
+                l1mfn = cp2m->get_l1_table(cp2m, gpfn, NULL);
+                if (mfn_valid_page(l1mfn)) {
+                    l1table = map_domain_page(mfn_x(l1mfn));
+                    for (i = 0; i < (1 << PAGETABLE_ORDER); i++) {
+                        cmfn = cp2m->parse_entry(l1table, i, &t, &a);
+                        if (mfn_valid_page(cmfn) && p2m_is_pod(t) &&
+                            page_get_owner(mfn_to_page(cmfn)) == d) {
+                            set_p2m_entry(cp2m, gpfn + i, _mfn(0), 0,
+                                          p2m_populate_on_demand,
+                                          p2m->default_access);
+                            nr3++;
+                        }
+                    }
+                    unmap_domain_page(l1table);
+                }
+                p2m_unlock(cp2m);
+                printk("vm%d: %lx tmpl_shared=%d\n", c->domain_id, gpfn,
+                       atomic_read(&c->tmpl_shared_pages));
+            }
+            p2m_lock_recursive(p2m);
+            /* re-query template in case the gpfn entry has changed */
+            mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, &page_order);
+            if (!mfn_valid_page_or_vframe(mfn)) {
+                gpfn |= ((1 << page_order) - 1);
+                continue;
+            }
+        }
+        if (!p2m_mfn_is_page_data(mfn))
+            continue;
+        if (p2m_get_page_data_and_write_lock(p2m, &mfn, &data,
+                                             &data_size, &offset))
+            continue;
+        pdi = (struct page_data_info *)&data[offset];
+        nr2++;
+        if (pdi->mfn &&
+            (__mfn_to_page(pdi->mfn)->count_info & PGC_count_mask) == 1) {
+            if (get_page(__mfn_to_page(pdi->mfn), d)) {
+                uxen_mfn_t mfn = pdi->mfn;
+                pdi->mfn = 0;
+                atomic_dec(&d->template.decompressed_shared);
+                put_allocated_page(d, __mfn_to_page(mfn));
+                put_page(__mfn_to_page(mfn));
+                update_host_memory_saved(PAGE_SIZE);
+            }
+            nr++;
+        }
+        p2m_put_page_data_with_write_lock(p2m, data, data_size);
+    }
+    if (gpfn > p2m->max_mapped_pfn)
+        gpfn = 0;
+    p2m->template.gc_decompressed_gpfn = gpfn;
+    p2m_unlock(p2m);
+    set_timer(&p2m->template.gc_timer, NOW() + SECONDS(1));
+    if (1)
+        printk("vm%d: %lx decomp_shared=%d found %d/%d %d pages\n",
+               d->domain_id, gpfn,
+               atomic_read(&d->template.decompressed_shared), nr, nr2, nr3);
+}
+
 #ifndef NDEBUG
 static struct timer p2m_pod_compress_template_timer;
 
