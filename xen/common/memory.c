@@ -884,7 +884,7 @@ long do_memory_op(unsigned long cmd, XEN_GUEST_HANDLE(void) arg)
         }
 
         if (d->clone_of &&
-            !(d->clone_of == pd && p2m_get_hostp2m(d)->clone_gpfn))
+            !(d->clone_of == pd /*&& p2m_get_hostp2m(d)->clone_gpfn*/))
             rc = -EINVAL;
         else if (d->clone_of == pd || get_domain(pd)) {
             d->clone_of = pd;
