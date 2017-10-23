@@ -26,7 +26,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -131,6 +131,12 @@ static void p2m_initialise(struct domain *d, struct p2m_domain *p2m)
         p2m_pt_init(p2m);
     else
         if (d->domain_id && d->domain_id < DOMID_FIRST_RESERVED) DEBUG();
+
+    if (is_template_domain(d)) {
+        init_timer(&p2m->template.gc_timer,
+                   p2m_pod_gc_template_pages_work, d, 0);
+        set_timer(&p2m->template.gc_timer, NOW() + SECONDS(1));
+    }
 
     return;
 }
