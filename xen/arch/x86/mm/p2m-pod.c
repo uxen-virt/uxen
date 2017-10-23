@@ -1247,14 +1247,14 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
     int ret = 0;
     s64 ct;
 
-    printk("%s: enter %lx\n", __FUNCTION__, np2m->clone_gpfn);
+//    printk("%s: enter %lx\n", __FUNCTION__, np2m->clone_gpfn);
 
     p2m_lock(np2m);
     ct = -NOW();
     for (gpfn = np2m->clone_gpfn; !ret && gpfn <= p2m->max_mapped_pfn; ) {
-        if (hypercall_needs_checks() || UI_HOST_CALL(ui_host_needs_preempt)) {
+        if (hypercall_needs_checks() || UI_HOST_CALL(ui_host_needs_preempt) || check_free_pages_needed(512)) {
             ret = -EAGAIN;
-            printk("%s: break %lx\n", __FUNCTION__, gpfn);
+//            printk("%s: break %lx\n", __FUNCTION__, gpfn);
             break;
         }
         if (!(gpfn & ((1UL << PAGETABLE_ORDER) - 1))) {
