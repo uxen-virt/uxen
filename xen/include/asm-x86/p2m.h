@@ -410,11 +410,12 @@ struct p2m_domain {
     struct dspage_store *dsps;
 
     int virgin;
+    
+    int is_dying;
 
     union {
         struct {
             unsigned long gc_decompressed_gpfn;
-            struct timer gc_timer;
         } template;
     };
  
