@@ -606,7 +606,12 @@ p2m_teardown_compressed(struct p2m_domain *p2m)
     if (!p2m->dsps)
         return;
 
+    p2m->is_dying = 1;
+
+    p2m_lock_recursive(p2m);
     n = dsps_teardown(d, p2m_teardown_compressed_one_cb, &comp, &decomp);
+    p2m_unlock(p2m);
+
     if (n < 0) {
         printk(XENLOG_ERR "%s: dsps_teardown failed ret %d\n", __FUNCTION__, n);
         return;
@@ -1393,6 +1398,9 @@ p2m_shared_teardown(struct p2m_domain *p2m)
     int p2m_count = 0, domain_count = 0, vframe_count = 0;
     int shared_count = 0, zero_count = 0, host_count = 0, xen_count = 0;
 
+    p2m->is_dying = 1;
+    p2m_lock_recursive(p2m);
+
     for (gpfn = 0; gpfn <= p2m->max_mapped_pfn; gpfn++) {
         if (!(gpfn & ((1UL << PAGETABLE_ORDER) - 1))) {
             l1mfn = p2m->get_l1_table(p2m, gpfn, &page_order);
@@ -1442,6 +1450,9 @@ p2m_shared_teardown(struct p2m_domain *p2m)
            " domain=%d shared=%d zero=%d host=%d xen=%d vframe=%d\n",
            __FUNCTION__, d->domain_id, p2m_count, domain_count, shared_count,
            zero_count, host_count, xen_count, vframe_count);
+
+    p2m_unlock(p2m);
+
     return 1;
 }
 
@@ -1717,106 +1728,378 @@ guest_physmap_mark_populate_on_demand_contents(
     return 0;
 }
 
-void
-p2m_pod_gc_template_pages_work(void *_d)
-{
-    struct domain *d = (struct domain *)_d;
-    struct p2m_domain *p2m = p2m_get_hostp2m(d);
-    unsigned long gpfn;
-    mfn_t mfn;
-    p2m_type_t t;
-    p2m_access_t a;
-    unsigned int page_order;
-    struct page_data_info *pdi;
-    uint8_t *data;
-    uint16_t data_size;
-    uint16_t offset;
-    struct domain *c;
+
+#define PTES_PER_PDE (1UL << PAGETABLE_ORDER)
 #define GC_PERIOD (5 * 60)
-    int nr_per_iter = (d->vframes + GC_PERIOD - 1) / GC_PERIOD;
-    int nr = 0, nr2 = 0, nr3 = 0;
 
-    p2m_lock_recursive(p2m);
-    for (gpfn = p2m->template.gc_decompressed_gpfn;
-         gpfn <= p2m->max_mapped_pfn; gpfn++) {
-        if (nr2 >= nr_per_iter)
-            break;
-        mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, &page_order);
-        if (!mfn_valid_page_or_vframe(mfn)) {
-            gpfn |= ((1 << page_order) - 1);
-            continue;
-        }
-        if (!(gpfn & ((1UL << PAGETABLE_ORDER) - 1))) {
-            p2m_unlock(p2m);
-            for_each_domain(c) {
-                struct p2m_domain *cp2m;
-                mfn_t cmfn, l1mfn;
-                void *l1table;
-                int i;
+static DEFINE_SPINLOCK (gc_spinlock);
+unsigned long gc_mfns[PTES_PER_PDE];
+#if 0
+void  gc_bp(int phase);
 
-                if (c->clone_of != d)
-                    continue;
-                cp2m = p2m_get_hostp2m(c);
-                p2m_lock_recursive(cp2m);
-                l1mfn = cp2m->get_l1_table(cp2m, gpfn, NULL);
-                if (mfn_valid_page(l1mfn)) {
-                    l1table = map_domain_page(mfn_x(l1mfn));
-                    for (i = 0; i < (1 << PAGETABLE_ORDER); i++) {
-                        cmfn = cp2m->parse_entry(l1table, i, &t, &a);
-                        if (mfn_valid_page(cmfn) && p2m_is_pod(t) &&
-                            page_get_owner(mfn_to_page(cmfn)) == d) {
-                            set_p2m_entry(cp2m, gpfn + i, _mfn(0), 0,
-                                          p2m_populate_on_demand,
-                                          p2m->default_access);
-                            nr3++;
-                        }
-                    }
-                    unmap_domain_page(l1table);
-                }
-                p2m_unlock(cp2m);
-                printk("vm%d: %lx tmpl_shared=%d\n", c->domain_id, gpfn,
-                       atomic_read(&c->tmpl_shared_pages));
-            }
-            p2m_lock_recursive(p2m);
-            /* re-query template in case the gpfn entry has changed */
-            mfn = p2m->get_entry(p2m, gpfn, &t, &a, p2m_query, &page_order);
-            if (!mfn_valid_page_or_vframe(mfn)) {
-                gpfn |= ((1 << page_order) - 1);
-                continue;
-            }
-        }
-        if (!p2m_mfn_is_page_data(mfn))
-            continue;
-        if (p2m_get_page_data_and_write_lock(p2m, &mfn, &data,
-                                             &data_size, &offset))
-            continue;
-        pdi = (struct page_data_info *)&data[offset];
-        nr2++;
-        if (pdi->mfn &&
-            (__mfn_to_page(pdi->mfn)->count_info & PGC_count_mask) == 1) {
-            if (get_page(__mfn_to_page(pdi->mfn), d)) {
-                uxen_mfn_t mfn = pdi->mfn;
-                pdi->mfn = 0;
-                atomic_dec(&d->template.decompressed_shared);
-                put_allocated_page(d, __mfn_to_page(mfn));
-                put_page(__mfn_to_page(mfn));
-                update_host_memory_saved(PAGE_SIZE);
-            }
-            nr++;
-        }
-        p2m_put_page_data_with_write_lock(p2m, data, data_size);
-    }
+
+
+int  gc_check(int phase, struct p2m_domain *p2m,mfn_t c_mfn,unsigned long gpfn, p2m_type_t c_t,p2m_access_t c_a)
+{
+  p2m_type_t t;
+  p2m_access_t a;
+  unsigned int page_order;
+  mfn_t mfn;
+
+
+   mfn = p2m->get_entry (p2m, gpfn, &t, &a, p2m_query, &page_order);
+
+
+  if (mfn_x(mfn)!=mfn_x(c_mfn)) {
+	gc_bp(phase);
+	return 1;
+  }
+
+
+  if (t!=c_t) {
+	gc_bp(phase);
+	return 1;
+  }
+
+  if (a!=c_a) {
+	gc_bp(phase);
+	return 1;
+  }
+
+return 0;
+}
+#endif
+
+static unsigned gc_scan_template_pde (struct p2m_domain *p2m, unsigned long gpfn, unsigned long *mfns)
+{
+  mfn_t l1mfn, mfn;
+  void *l1table = NULL;
+  p2m_type_t t;
+  p2m_access_t a;
+  struct page_data_info *pdi;
+  uint8_t *data;
+  uint16_t data_size;
+  uint16_t offset;
+  unsigned i;
+  unsigned pages_template = 0;
+
+  memset (mfns, 0, sizeof (*mfns)*PTES_PER_PDE);
+
+  p2m_lock_recursive (p2m);
+
+  do {
+
     if (gpfn > p2m->max_mapped_pfn)
-        gpfn = 0;
-    p2m->template.gc_decompressed_gpfn = gpfn;
-    p2m_unlock(p2m);
-    set_timer(&p2m->template.gc_timer, NOW() + SECONDS(1));
-    if (1)
-        printk("vm%d: %lx decomp_shared=%d found %d/%d %d pages\n",
-               d->domain_id, gpfn,
-               atomic_read(&d->template.decompressed_shared), nr, nr2, nr3);
+      break;
+
+    if ((gpfn + PTES_PER_PDE - 1) > p2m->max_mapped_pfn)
+      break;
+
+    if (p2m->is_dying)
+      break;
+
+    l1mfn = p2m->get_l1_table (p2m, gpfn, NULL);
+
+    if (!mfn_valid_page (l1mfn))
+      break;
+
+    l1table = map_domain_page (mfn_x (l1mfn));
+
+    for (i = 0; i < PTES_PER_PDE; i++) {
+      mfn = p2m->parse_entry (l1table, i, &t, &a);
+
+//      if (gc_check(1,p2m,mfn,gpfn+i,t,a)) continue;
+
+      if (!mfn_valid_page_or_vframe (mfn))
+        continue;
+
+      if (mfn_x (mfn) == mfn_x (shared_zero_page))
+        continue;
+
+      if (!p2m_mfn_is_vframe (mfn))
+        continue;
+
+      if (p2m_get_page_data_and_write_lock (p2m, &mfn, &data,
+                                            &data_size, &offset))
+        continue;
+
+      /*mfn now points to pdi page FWIW */
+
+      pages_template++;
+
+      pdi = (struct page_data_info *) &data[offset];
+
+      mfns[i] = pdi->mfn;
+
+      p2m_put_page_data_with_write_lock (p2m, data, data_size);
+    }
+
+  } while (0);
+
+  if (l1table)
+    unmap_domain_page (l1table);
+
+  p2m_unlock (p2m);
+
+  return pages_template;
 }
 
+static void  gc_repod_clone_pde (struct domain *d, struct p2m_domain *p2m, unsigned long gpfn, unsigned long *mfns, unsigned *pages_repoded, unsigned *pages_canary)
+{
+  mfn_t l1mfn, mfn;
+  void *l1table = NULL;
+  p2m_type_t t;
+  p2m_access_t a;
+  unsigned i;
+  struct page_info *page;
+
+  p2m_lock_recursive (p2m);
+
+  do {
+
+
+    if (gpfn > p2m->max_mapped_pfn)
+      break;
+
+    if ((gpfn + PTES_PER_PDE - 1) > p2m->max_mapped_pfn)
+      break;
+
+
+    if (p2m->is_dying)
+      break;
+
+
+    l1mfn = p2m->get_l1_table (p2m, gpfn, NULL);
+
+    if (!mfn_valid_page (l1mfn))
+      break;
+
+    l1table = map_domain_page (mfn_x (l1mfn));
+
+    for (i = 0; i < PTES_PER_PDE; i++) {
+      mfn = p2m->parse_entry (l1table, i, &t, &a);
+
+      if (!mfn_valid_page_or_vframe (mfn))
+        continue;
+
+//      if (gc_check(2,p2m,mfn,gpfn+i,t,a)) continue;
+
+
+      if (!p2m_is_pod (t))
+        continue;
+
+
+
+
+      if (mfn_x (mfn) == mfn_x (shared_zero_page))
+        continue;
+
+      page = mfn_to_page (mfn);
+
+      if (test_bit (_PGC_host_page, &page->count_info))
+        continue;
+
+      if (page_get_owner (page) != d)
+        continue;
+
+      if (p2m_mfn_is_vframe (mfn))
+        continue;
+
+      if (mfn_x (mfn) == mfns[i]) {
+        set_p2m_entry (p2m, gpfn + i, _mfn (0), 0,
+                       p2m_populate_on_demand,
+                       p2m->default_access);
+
+        (*pages_repoded)++;
+      } else
+        (*pages_canary)++;
+
+    }
+
+  } while (0);
+
+  if (l1table)
+    unmap_domain_page (l1table);
+
+
+  p2m_unlock (p2m);
+
+}
+
+
+static void gc_scrub_template_pde (struct domain *d, struct p2m_domain *p2m, unsigned long gpfn, unsigned *pages_freed, unsigned *pages_template_3)
+{
+
+  mfn_t l1mfn, mfn;
+  void *l1table = NULL;
+  p2m_type_t t;
+  p2m_access_t a;
+  struct page_data_info *pdi;
+  uint8_t *data;
+  uint16_t data_size;
+  uint16_t offset;
+  unsigned i;
+  struct page_info *page;
+
+  p2m_lock_recursive (p2m);
+
+  do {
+
+    if (gpfn > p2m->max_mapped_pfn)
+      break;
+
+    if ((gpfn + PTES_PER_PDE - 1) > p2m->max_mapped_pfn)
+      break;
+
+    if (p2m->is_dying)
+      break;
+
+    l1mfn = p2m->get_l1_table (p2m, gpfn, NULL);
+
+    if (!mfn_valid_page (l1mfn))
+      break;
+
+    l1table = map_domain_page (mfn_x (l1mfn));
+
+    for (i = 0; i < PTES_PER_PDE; i++) {
+      mfn = p2m->parse_entry (l1table, i, &t, &a);
+
+//      if (gc_check(3,p2m,mfn,gpfn+i,t,a)) continue;
+
+      if (!mfn_valid_page_or_vframe (mfn))
+        continue;
+
+      if (mfn_x (mfn) == mfn_x (shared_zero_page))
+        continue;
+
+      if (!p2m_mfn_is_vframe (mfn))
+        continue;
+
+      if (p2m_get_page_data_and_write_lock (p2m, &mfn, &data,
+                                            &data_size, &offset))
+        continue;
+
+      /*mfn now points to pdi page FWIW */
+
+      pdi = (struct page_data_info *) &data[offset];
+
+      if (pdi->mfn) {
+
+        (*pages_template_3)++;
+
+        page = __mfn_to_page (pdi->mfn);
+
+        if ((page->count_info & PGC_count_mask) == 1) {
+          pdi->mfn = 0;
+          atomic_dec (&d->template.decompressed_shared);
+
+          (*pages_freed)++;
+          put_allocated_page (d, page);
+
+        }
+      }
+
+      p2m_put_page_data_with_write_lock (p2m, data, data_size);
+    }
+
+
+  } while (0);
+
+  if (l1table)
+    unmap_domain_page (l1table);
+
+  p2m_unlock (p2m);
+
+}
+
+
+
+static void
+p2m_pod_gc_template_pages (struct domain *d)
+{
+  struct p2m_domain *p2m = p2m_get_hostp2m (d);
+  unsigned long gpfn_reset_to_pod_base, gpfn_reclaim_pages_base;
+
+  unsigned int pages_freed_per_iter = (d->vframes + GC_PERIOD - 1) / GC_PERIOD;
+  unsigned pages_freed = 0, pages_scanned = 0, pages_repoded = 0, pages_canary = 0, 
+             pages_template_1 = 0, pages_template_3 = 0;
+
+  struct domain *c;
+
+  unsigned long pfn_top = p2m->max_mapped_pfn;
+
+  pfn_top +=(PTES_PER_PDE - 1);
+  pfn_top &= ~(PTES_PER_PDE -1);
+
+  for (gpfn_reclaim_pages_base = p2m->template.gc_decompressed_gpfn;
+       gpfn_reclaim_pages_base <= p2m->max_mapped_pfn;
+       gpfn_reclaim_pages_base += PTES_PER_PDE) {
+
+    gpfn_reset_to_pod_base =
+      gpfn_reclaim_pages_base +
+      ((pages_freed_per_iter * 30) & ~(PTES_PER_PDE -1));
+
+
+    while (gpfn_reset_to_pod_base > pfn_top)
+      gpfn_reset_to_pod_base -= pfn_top;
+
+
+    spin_lock (&gc_spinlock); //protects gc_mfns
+
+    /* Step 1, scan the template p2m for decompressed mfns */
+
+    pages_template_1 += gc_scan_template_pde (p2m, gpfn_reset_to_pod_base, gc_mfns);
+
+    /* Step 2, for each cloned domain, scan the clone p2m for matches */
+    if (pages_template_1) {
+      for_each_domain (c) {
+
+        if (c == d)
+          continue;
+
+        if (c->clone_of != d)
+          continue;
+
+        gc_repod_clone_pde (d, p2m_get_hostp2m (c), gpfn_reset_to_pod_base, gc_mfns, &pages_repoded, &pages_canary);
+      }
+    }
+
+    spin_unlock (&gc_spinlock);
+
+    /* Step 3, scan the template 30s behind for unused decompressed pages */
+
+    gc_scrub_template_pde (d, p2m, gpfn_reset_to_pod_base, &pages_freed, &pages_template_3);
+
+    if (pages_template_1 || pages_template_3)
+      pages_scanned += (1UL << PAGETABLE_ORDER);
+
+    if (pages_scanned >= pages_freed_per_iter)
+      break;
+
+  }
+
+  if (gpfn_reclaim_pages_base > p2m->max_mapped_pfn)
+    gpfn_reclaim_pages_base = 0;
+
+  p2m->template.gc_decompressed_gpfn = gpfn_reclaim_pages_base;
+
+  printk ("vm%d: %lx/%lx decomp_shared=%d (p%d, b%d, t%d, f%d, t%d)/%d\n",
+          d->domain_id, gpfn_reclaim_pages_base, p2m->max_mapped_pfn,
+          atomic_read (&d->template.decompressed_shared), 
+          pages_repoded, pages_canary, pages_template_1,
+          pages_freed, pages_template_3, pages_scanned);
+}
+
+int p2m_pod_groom_templates (void)
+{
+  struct domain *d;
+  for_each_domain (d) {
+    if (is_template_domain (d))
+      p2m_pod_gc_template_pages (d);
+  }
+
+  return 0;
+}
 #ifndef NDEBUG
 static struct timer p2m_pod_compress_template_timer;
 

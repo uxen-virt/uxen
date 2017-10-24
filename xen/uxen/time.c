@@ -13,7 +13,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -119,7 +119,8 @@ static void atomic_set_global_time(struct cpu_time *t)
 
 
 /* Calibrate all CPUs to platform timer every EPOCH. */
-#define EPOCH MILLISECS(20000)
+//#define EPOCH MILLISECS(20000)
+#define EPOCH MILLISECS(1000)
 static u64 calibration_epoch;
 static struct timer calibration_timer;
 
@@ -616,8 +617,10 @@ s_time_t get_s_time(void)
     return now;
 }
 
+int p2m_pod_groom_templates(void);
 void platform_time_sync(void)
 {
+    p2m_pod_groom_templates();
 }
 
 static void time_calibration(void *unused)
