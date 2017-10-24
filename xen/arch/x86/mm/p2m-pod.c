@@ -1254,6 +1254,7 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
 
 //    printk("%s: enter %lx\n", __FUNCTION__, np2m->clone_gpfn);
 
+    p2m_lock(p2m);
     p2m_lock(np2m);
     ct = -NOW();
     for (gpfn = np2m->clone_gpfn; !ret && gpfn <= p2m->max_mapped_pfn; ) {
@@ -1312,6 +1313,7 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
     ct += NOW();
     np2m->clone_time += ct;
     p2m_unlock(np2m);
+    p2m_unlock(p2m);
 
     if (gpfn <= p2m->max_mapped_pfn)
         np2m->clone_gpfn = gpfn;
