@@ -2070,7 +2070,7 @@ p2m_pod_gc_template_pages (struct domain *d)
 
     /* Step 3, scan the template 30s behind for unused decompressed pages */
 
-    gc_scrub_template_pde (d, p2m, gpfn_reset_to_pod_base, &pages_freed, &pages_template_3);
+    gc_scrub_template_pde (d, p2m, gpfn_reclaim_pages_base, &pages_freed, &pages_template_3);
 
     if (pages_template_1 || pages_template_3)
       pages_scanned += (1UL << PAGETABLE_ORDER);
