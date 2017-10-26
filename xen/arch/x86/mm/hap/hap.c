@@ -96,7 +96,12 @@ static int hap_enable_vram_tracking(struct domain *d)
                           p2m_ram_rw, p2m_ram_logdirty);
     pt_sync_domain(d);
 
-    //flush_tlb_mask(d->domain_dirty_cpumask);
+    if (!ax_pv_ept) {
+        if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+            flush_tlb_mask(d->domain_dirty_cpumask);
+    } else
+        ax_pv_ept_flush(p2m_get_hostp2m(d));
+
     return 0;
 }
 
@@ -115,7 +120,12 @@ static int hap_disable_vram_tracking(struct domain *d)
     p2m_change_type_range(d, dirty_vram->begin_pfn, dirty_vram->end_pfn, 
                           p2m_ram_logdirty, p2m_ram_rw);
 
-    //flush_tlb_mask(d->domain_dirty_cpumask);
+    if (!ax_pv_ept) {
+        if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+            flush_tlb_mask(d->domain_dirty_cpumask);
+    } else
+        ax_pv_ept_flush(p2m_get_hostp2m(d));
+
     return 0;
 }
 
@@ -131,7 +141,11 @@ static void hap_clean_vram_tracking(struct domain *d)
                           p2m_ram_rw, p2m_ram_logdirty);
     pt_sync_domain(d);
 
-    //flush_tlb_mask(d->domain_dirty_cpumask);
+    if (!ax_pv_ept) {
+        if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+            flush_tlb_mask(d->domain_dirty_cpumask);
+    } else
+        ax_pv_ept_flush(p2m_get_hostp2m(d));
 }
 
 static int hap_enable_vram_tracking_l2(struct domain *d)
@@ -151,7 +165,11 @@ static int hap_enable_vram_tracking_l2(struct domain *d)
                              p2m_ram_rw, p2m_ram_logdirty);
     pt_sync_domain(d);
 
-    //flush_tlb_mask(d->domain_dirty_cpumask);
+    if (!ax_pv_ept) {
+        if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+            flush_tlb_mask(d->domain_dirty_cpumask);
+    } else
+        ax_pv_ept_flush(p2m_get_hostp2m(d));
     return 0;
 }
 
@@ -170,7 +188,11 @@ static int hap_disable_vram_tracking_l2(struct domain *d)
     p2m_change_type_range_l2(d, dirty_vram->begin_pfn, dirty_vram->end_pfn, 
                              p2m_ram_logdirty, p2m_ram_rw);
 
-    //flush_tlb_mask(d->domain_dirty_cpumask);
+    if (!ax_pv_ept) {
+        if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+            flush_tlb_mask(d->domain_dirty_cpumask);
+    } else
+        ax_pv_ept_flush(p2m_get_hostp2m(d));
     return 0;
 }
 
@@ -186,7 +208,11 @@ static void hap_clean_vram_tracking_l2(struct domain *d)
                              p2m_ram_rw, p2m_ram_logdirty);
     pt_sync_domain(d);
 
-    //flush_tlb_mask(d->domain_dirty_cpumask);
+    if (!ax_pv_ept) {
+        if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+            flush_tlb_mask(d->domain_dirty_cpumask);
+    } else
+        ax_pv_ept_flush(p2m_get_hostp2m(d));
 }
 
 static void hap_vram_tracking_init(struct domain *d)
@@ -294,7 +320,12 @@ static int hap_enable_log_dirty(struct domain *d)
     p2m_change_entry_type_global(d, p2m_ram_rw, p2m_ram_logdirty);
     pt_sync_domain(d);
 
-    //flush_tlb_mask(d->domain_dirty_cpumask);
+    if (!ax_pv_ept) {
+        if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+            flush_tlb_mask(d->domain_dirty_cpumask);
+    } else
+        ax_pv_ept_flush(p2m_get_hostp2m(d));
+
     return 0;
 }
 
@@ -315,7 +346,11 @@ static void hap_clean_dirty_bitmap(struct domain *d)
     p2m_change_entry_type_global(d, p2m_ram_rw, p2m_ram_logdirty);
     pt_sync_domain(d);
 
-    //flush_tlb_mask(d->domain_dirty_cpumask);
+    if (!ax_pv_ept) {
+        if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
+            flush_tlb_mask(d->domain_dirty_cpumask);
+    } else
+        ax_pv_ept_flush(p2m_get_hostp2m(d));
 }
 
 void hap_logdirty_init(struct domain *d)
@@ -1079,10 +1114,11 @@ hap_write_p2m_entry(struct vcpu *v, unsigned long gfn, l1_pgentry_t *p,
     safe_write_pte(p, new);
     if ( (old_flags & _PAGE_PRESENT)
          && (level == 1 || (level == 2 && (old_flags & _PAGE_PSE))) ) {
-             if (!ax_pv_ept)
+        if (!ax_pv_ept) {
+            if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
                 flush_tlb_mask(d->domain_dirty_cpumask);
-             else
-                ax_tlbflush = 1;
+        } else
+            ax_tlbflush = 1;
     }
 
 #ifndef __UXEN__
@@ -1102,7 +1138,7 @@ hap_write_p2m_entry(struct vcpu *v, unsigned long gfn, l1_pgentry_t *p,
     }
 
     paging_unlock(d);
-
+    
 #ifndef __UXEN__
     if ( flush_nestedp2m )
         p2m_flush_nestedp2m(d);
