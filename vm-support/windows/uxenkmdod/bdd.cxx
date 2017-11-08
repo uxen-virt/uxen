@@ -543,6 +543,12 @@ NTSTATUS BASIC_DISPLAY_DRIVER::PresentDisplayOnly(_In_ CONST DXGKARG_PRESENT_DIS
     if (m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].Flags.FrameBufferIsActive)
     {
 
+        status = KeWaitForSingleObject(&m_PresentLock, Executive, KernelMode, FALSE, NULL);
+        if (status != STATUS_SUCCESS) {
+            uxen_err("wait interrupted: %x\n", status);
+            return STATUS_SUCCESS;
+        }
+
         // If actual pixels are coming through, will need to completely zero out physical address next time in BlackOutScreen
         m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].ZeroedOutStart.QuadPart = 0;
         m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].ZeroedOutEnd.QuadPart = 0;
@@ -560,12 +566,6 @@ NTSTATUS BASIC_DISPLAY_DRIVER::PresentDisplayOnly(_In_ CONST DXGKARG_PRESENT_DIS
             CenterShift += (m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].DispInfo.Width -
                 m_CurrentModes[pPresentDisplayOnly->VidPnSourceId].SrcModeWidth)*DstBitPerPixel/8;
             pDst += (int)CenterShift/2;
-        }
-
-        status = KeWaitForSingleObject(&m_PresentLock, Executive, KernelMode, FALSE, NULL);
-        if (status != STATUS_SUCCESS) {
-            uxen_err("wait interrupted: %x\n", status);
-            return STATUS_SUCCESS;
         }
 
         for (unsigned int i = 0; i < pPresentDisplayOnly->NumMoves; ++i) {
@@ -802,12 +802,13 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetComposeMode(UINT mode)
     off = 0;
     buffers = (mode == DISP_COMPOSE_MODE_OVERLAY_DWM_RECTS) ? 2 : 1;
 
-    uxen_msg("changing compose mode: %d, offset %x, buffers %d\n", mode, off, buffers);
-
     UINT h = m_HwMode.VisScreenHeight;
     UINT stride = m_HwMode.ScreenStride;
     UINT fbsize = h * stride;
     BYTE* fb = (BYTE*)m_CurrentModes[crtc].FrameBuffer.Ptr;
+
+    uxen_msg("changing compose mode: %d, offset %x, buffers %d, fb %p, fbsize %d, stride %d, h %d\n", mode, off, buffers,
+      fb, fbsize, stride, h);
 
     if (mode == DISP_COMPOSE_MODE_NONE) {
         /* migrate DWM framebuffer: 1 -> 0 */

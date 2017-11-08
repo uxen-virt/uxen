@@ -512,6 +512,13 @@ NTSTATUS BASIC_DISPLAY_DRIVER::CommitVidPn(_In_ CONST DXGKARG_COMMITVIDPN* CONST
     CONST D3DKMDT_VIDPN_PRESENT_PATH*        pVidPnPresentPath = NULL;
     CONST D3DKMDT_VIDPN_SOURCE_MODE*         pPinnedVidPnSourceModeInfo = NULL;
 
+    Status = KeWaitForSingleObject(&m_PresentLock, Executive, KernelMode, FALSE, NULL);
+    if (Status != STATUS_SUCCESS) {
+        uxen_err("wait interrupted: %x\n", Status);
+        /* continue anyway */
+        Status = STATUS_SUCCESS;
+    }
+
     // Check this CommitVidPn is for the mode change notification when monitor is in power off state.
     if (pCommitVidPn->Flags.PathPoweredOff)
     {
@@ -688,6 +695,8 @@ CommitVidPnExit:
         NT_ASSERT(NT_SUCCESS(TempStatus));
     }
 
+    KeReleaseSemaphore(&m_PresentLock, 0, 1, FALSE);
+
     return Status;
 }
 
@@ -716,14 +725,7 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_M
 {
     CURRENT_BDD_MODE* pCurrentBddMode = &m_CurrentModes[pPath->VidPnSourceId];
     VIDEO_MODE_INFORMATION mode;
-
     NTSTATUS Status = STATUS_SUCCESS;
-    Status = KeWaitForSingleObject(&m_PresentLock, Executive, KernelMode, FALSE, NULL);
-    if (Status != STATUS_SUCCESS) {
-      uxen_err("wait interrupted: %x\n", Status);
-      /* continue anyway */
-      Status = STATUS_SUCCESS;
-    }
 
     pCurrentBddMode->Scaling = pPath->ContentTransformation.Scaling;
     pCurrentBddMode->SrcModeWidth = pSourceMode->Format.Graphics.PrimSurfSize.cx;
@@ -770,8 +772,6 @@ NTSTATUS BASIC_DISPLAY_DRIVER::SetSourceModeAndPath(CONST D3DKMDT_VIDPN_SOURCE_M
         // Mark that the next present should be fullscreen so the screen doesn't go from black to actual pixels one dirty rect at a time.
         pCurrentBddMode->Flags.FullscreenPresent = TRUE;
     }
-
-    KeReleaseSemaphore(&m_PresentLock, 0, 1, FALSE);
 
     return Status;
 }
