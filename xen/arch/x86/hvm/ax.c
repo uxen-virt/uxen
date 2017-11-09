@@ -101,6 +101,11 @@ int ax_setup(void)
         printk("Hv and AX detected\n");
         ax_present = 1;
 
+        if (hvmon_default == hvmon_on) {
+            printk("AX present, but hvmonoff=1, disabling hvmonoff\n");
+            hvmon_default = hvmon_always;
+        }
+
         rax = AX_CPUID_AX_FEATURES;
         rbx = 0;
         rcx = 0;
