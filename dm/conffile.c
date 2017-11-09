@@ -801,7 +801,6 @@ struct config_option config_options[] = {
     { "viridian", co_set_integer_opt, &vm_viridian },
     { "viridian-crash-domain", co_set_integer_opt, &vm_viridian_crash_domain },
     { "virt-mode-change", co_set_integer_opt, &vm_virt_mode_change },
-    { "virt-mode-change-restrict", co_set_integer_opt, &vm_virt_mode_change_restrict },
     { "vm-save", co_set_vm_save, NULL },
     { "vpt-align", co_set_boolean_opt, &vm_vpt_align },
     { "vpt-coalesce-period", co_set_integer_opt, &vm_vpt_coalesce_period },

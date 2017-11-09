@@ -84,7 +84,6 @@ uint64_t vm_vga_mb_mapped = 0;
 uint64_t vm_pae = 1;
 uint64_t vm_viridian = 1;
 uint64_t vm_virt_mode_change = 0;
-uint64_t vm_virt_mode_change_restrict = 0;
 uint64_t vm_hpet = 1;
 uint64_t vm_zero_page = 1;
 uint64_t vm_zero_page_setup = 1;
