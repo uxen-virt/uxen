@@ -28,6 +28,7 @@ SUBDIRS += uxennet
 SUBDIRS += uxennullnet
 SUBDIRS += uxensf
 SUBDIRS += uxenhid
+SUBDIRS += uxenpatcher
 SUBDIRS += uxenh264
 SUBDIRS += installer
 

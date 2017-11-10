@@ -25,6 +25,7 @@ static const struct {
     int source_port;
 } logging_ports[] = {
     { "uxenevent",  5001 },
+    { "uxenpatcher",  5002 },
 };
 
 struct ns_logging_data {

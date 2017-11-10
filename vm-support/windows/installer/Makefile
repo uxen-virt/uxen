@@ -29,6 +29,7 @@ UXENV4VGUEST_DIR = $(DISTDIR_VM_SUPPORT)/uxenv4vguest
 UXENNET_DIR = $(DISTDIR_VM_SUPPORT)/uxennet
 UXENNULLNET_DIR = $(DISTDIR_VM_SUPPORT)/uxennullnet
 UXENHID_DIR = $(DISTDIR_VM_SUPPORT)/uxenhid
+UXENPATCHER_DIR = $(DISTDIR_VM_SUPPORT)/uxenpatcher
 UXENH264_DIR = $(DISTDIR_VM_SUPPORT)/uxenh264
 
 TARGETS = all dist clean
@@ -43,16 +44,19 @@ WIXFLAGS = -ext WixUIExtension.dll \
 	   -ext WixUtilExtension.dll
 
 ifeq ($(TARGET_VM_SUPPORT_BITS),32)
+CERT_DIR = $(EWDK_KIT_DIR)/bin/x86
 WIX_LIBS = $(WIX_DIR)/difxapp_x86.wixlib
 CANDLE_FLAGS = -arch x86
 WIN64=no
 else
+CERT_DIR = $(EWDK_KIT_DIR)/bin/x64
 WIX_LIBS = $(WIX_DIR)/difxapp_x64.wixlib
 CANDLE_FLAGS = -arch x64
 WIN64=yes
 endif
 
 WIX_INCLUDES = -delevatedir=$(ELEVATE_DIR) \
+	       -dcertdir=$(CERT_DIR) \
 	       -dsrcdir=$(SRCDIR) \
 	       -duxenclipboarddir=$(UXENCLIPBOARD_DIR) \
 	       -duxendispdir=$(UXENDISP_DIR) \
@@ -70,9 +74,14 @@ WIX_INCLUDES = -delevatedir=$(ELEVATE_DIR) \
 	       -duxensvcdir=$(UXENSVC_DIR) \
 	       -dWin64=$(WIN64) \
 	       -duxenhiddir=$(UXENHID_DIR) \
+	       -duxenpatcherdir=$(UXENPATCHER_DIR) \
 	       -duxenh264dir=$(UXENH264_DIR)
 
+
 WIX_DEPS = $(ELEVATE_DIR)/elevate.exe \
+	   $(CERT_DIR)/makecert.exe \
+	   $(CERT_DIR)/pvk2pfx.exe \
+	   $(CERT_DIR)/signtool.exe \
 	   $(UXENCLIPBOARD_DIR)/uxenclipboard.exe \
 	   $(UXENDISP_DIR)/uxendisp.sys \
 	   $(UXENAUDIO_DIR)/uxenaudio.sys \
@@ -88,6 +97,7 @@ WIX_DEPS = $(ELEVATE_DIR)/elevate.exe \
 	   $(UXENSTOR_DIR)/uxenstor.sys \
 	   $(UXENSVC_DIR)/uxensvc.exe \
 	   $(UXENHID_DIR)/uxenhid.sys \
+	   $(UXENPATCHER_DIR)/uxenpatcher.exe \
 	   $(UXENH264_DIR)/uxenh26432.dll \
 	   $(UXENH264_DIR)/uxenh26464.dll
 
@@ -143,6 +153,8 @@ $(ELEVATE_DIR)/elevate.exe:
 	$(MAKE) -C $(SRCDIR)/../elevate dist
 $(UXENHID_DIR)/uxenhid.sys:
 	$(MAKE) -C $(SRCDIR)/../uxenhid dist
+$(UXENPATCHER_DIR)/uxenpatcher.exe:
+	$(MAKE) -C $(SRCDIR)/../uxenpatcher dist
 $(UXENH264_DIR)/uxenh264.dll:
 	$(MAKE) -C $(SRCDIR)/../uxenh264 dist
 
