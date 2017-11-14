@@ -726,7 +726,7 @@ uxendisp_mmio_write(void *opaque, target_phys_addr_t addr, uint64_t val,
 
     switch (addr) {
     case UXDISP_REG_INTERRUPT:
-        s->isr ^= (uint32_t)val;
+        s->isr &= ~((uint32_t)val);
         if (s->isr == 0)
             qemu_set_irq(s->dev.irq[0], 0);
         return;
