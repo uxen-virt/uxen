@@ -65,13 +65,13 @@ static const char* tools[][3] = {
      "Enable test signing"}
 };
 
-static struct file_map* create_file_map(LPCSTR filepath)
+static struct file_map* create_file_map(LPCSTR filepath, BOOL writable)
 {
     struct file_map* file = NULL;
-    DWORD attr = GENERIC_READ | GENERIC_WRITE;
+    DWORD attr = writable ? GENERIC_READ | GENERIC_WRITE : GENERIC_READ;
     DWORD share = FILE_SHARE_DELETE | FILE_SHARE_READ | FILE_SHARE_WRITE;
-    DWORD protect = PAGE_READWRITE;
-    DWORD access = FILE_MAP_ALL_ACCESS;
+    DWORD protect = writable ? PAGE_READWRITE : PAGE_READONLY;
+    DWORD access = writable ? FILE_MAP_ALL_ACCESS : FILE_MAP_READ;
 
     file = (struct file_map*)malloc(sizeof(*file));
     if (file == NULL)
@@ -154,6 +154,37 @@ static int kmp(int *pi, char *target, int tsize, char *pattern, int psize)
             return i - k;
     }
     return -1;
+}
+
+static BOOL find_section(PVOID view, char *name, DWORD *sec_start, DWORD *sec_size)
+{
+    PIMAGE_NT_HEADERS headers = NULL;
+    PIMAGE_SECTION_HEADER section = NULL;
+    int n_sections;
+    int i;
+
+    headers = ImageNtHeader(view);
+    if (headers == NULL) {
+        DWORD err = GetLastError();
+        uxen_err("ImageNtHeader failed %ld", err);
+        return FALSE;
+    }
+
+    n_sections = headers->FileHeader.NumberOfSections;
+    section = (PIMAGE_SECTION_HEADER)(headers + 1);
+    for (i = 0; i < n_sections; i++) {
+        if (_strcmpi((char*)section->Name, name) == 0) {
+            uxen_msg("found section %s: 0x%08x size 0x%08x",
+                name, section->VirtualAddress, section->Misc.VirtualSize);
+            *sec_start = section->VirtualAddress;
+            *sec_size = section->Misc.VirtualSize;
+
+            return TRUE;
+        }
+        section++;
+    }
+
+    return FALSE;
 }
 
 // We try to locate ProcessVSyncTdrWorker function which we expect to find in PAGE section
@@ -286,7 +317,7 @@ exit:
     return ret;
 }
 
-static int backup_driver(LPCSTR file)
+int backup_driver(LPCSTR file)
 {
     BOOL res = FALSE;
     int ret = 0;
@@ -364,7 +395,51 @@ exit:
         free(ver_data);
 }
 
-static int patch_driver(LPCSTR path)
+int scan_driver(LPCSTR path)
+{
+    int ret = 0;
+    struct file_map* file;
+    ULONG except_size = 0;
+    PIMAGE_IA64_RUNTIME_FUNCTION_ENTRY except = NULL;
+    DWORD data_start, data_end;
+
+    file = create_file_map(path, FALSE);
+    if (file == NULL) {
+        uxen_err("create_file_map file failed");
+        ret = -1;
+        goto exit;
+    }
+
+    except = (PIMAGE_IA64_RUNTIME_FUNCTION_ENTRY)
+        ImageDirectoryEntryToDataEx(file->view, FALSE, IMAGE_DIRECTORY_ENTRY_EXCEPTION, &except_size, NULL);
+    if (except == NULL) {
+        DWORD err = GetLastError();
+        uxen_err("ImageDirectoryEntryToDataEx IMAGE_DIRECTORY_ENTRY_EXCEPTION failed %ld", err);
+        ret = -2;
+        goto exit;
+    }
+
+    if (!find_section(file->view, ".data", &data_start, &data_end)) {
+        uxen_err("section .data not found");
+    } else {
+        HKEY hkey;
+        if (RegCreateKeyEx(HKEY_LOCAL_MACHINE, "System\\CurrentControlSet\\Services\\uxenkmdod",
+                0, NULL, 0, KEY_ALL_ACCESS, NULL, &hkey, NULL) == ERROR_SUCCESS) {
+            RegSetValueEx(hkey, "DxgDataStart", 0, REG_DWORD, (void*)&data_start, sizeof(data_start));
+            RegSetValueEx(hkey, "DxgDataSize", 0, REG_DWORD, (void*)&data_end, sizeof(data_end));
+            RegCloseKey(hkey);
+        } else {
+            uxen_err("failed to open uxenkmdod key");
+        }
+    }
+exit:
+    UnmapViewOfFile(except);
+    destroy_file_map(&file);
+
+    return ret;
+}
+
+int patch_driver(LPCSTR path)
 {
     int ret = 0;
     struct file_map* file;
@@ -373,7 +448,7 @@ static int patch_driver(LPCSTR path)
     PVOID func;
     int patch = 0x909090C3;
 
-    file = create_file_map(path);
+    file = create_file_map(path, TRUE);
     if (file == NULL)
     {
         uxen_err("create_file_map file failed");
@@ -531,7 +606,7 @@ exit:
     return ret;
 }
 
-static int sign_driver(LPCSTR file)
+int sign_driver(LPCSTR file)
 {
     int ret = 0;
     int tool_idx = 0;
@@ -616,6 +691,14 @@ int main()
         return 0;
     }
 
+    log_file_info(DXGKRNL);
+    ret = scan_driver(DXGKRNL);
+    if (ret < 0)
+    {
+        uxen_err("scan_driver failed %d", ret);
+        goto exit;
+    }
+#if 0
     uxen_msg("Backing up %s", DXGKRNL);
     ret = backup_driver(DXGKRNL);
     if (ret < 0)
@@ -641,11 +724,12 @@ int main()
         uxen_err("sign_driver failed %d", ret);
         goto exit;
     }
+#endif
 
 exit:
     if (ret != 0)
-        uxen_err("Patching %s has failed with error %d", DXGKRNL, ret);
+        uxen_err("Patcher for %s has failed with error %d", DXGKRNL, ret);
     else
-        uxen_msg("Patching %s succeeded", DXGKRNL);
+        uxen_msg("Patcher for %s succeeded", DXGKRNL);
     return 0;
 }

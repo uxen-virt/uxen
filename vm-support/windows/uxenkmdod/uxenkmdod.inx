@@ -48,10 +48,10 @@ HKR, , VgaCompatible, %REG_DWORD%, 0
 [uxenkmdod.TdrSettings]
 HKLM, System\CurrentControlSet\Control\GraphicsDrivers, TdrLevel, %REG_DWORD%, 1
 HKLM, System\CurrentControlSet\Control\GraphicsDrivers, TdrDelay, %REG_DWORD%, 600
-HKLM, System\CurrentControlSet\Control\GraphicsDrivers, TdrDdiDelay, %REG_DWORD%, 600
-HKLM, System\CurrentControlSet\Control\GraphicsDrivers, TdrDodVSyncDelay, %REG_DWORD%, 600
-HKLM, System\CurrentControlSet\Control\GraphicsDrivers, TdrDodPresentDelay, %REG_DWORD%, 600
-HKLM, System\CurrentControlSet\Control\GraphicsDrivers, TdrLimitCount, %REG_DWORD%, 200
+HKLM, System\CurrentControlSet\Control\GraphicsDrivers, TdrDdiDelay, %REG_DWORD%, 603
+HKLM, System\CurrentControlSet\Control\GraphicsDrivers, TdrDodVSyncDelay, %REG_DWORD%, 605
+HKLM, System\CurrentControlSet\Control\GraphicsDrivers, TdrDodPresentDelay, %REG_DWORD%, 611
+HKLM, System\CurrentControlSet\Control\GraphicsDrivers, TdrLimitCount, %REG_DWORD%, 32
 
 
 [uxenkmdod.Files]

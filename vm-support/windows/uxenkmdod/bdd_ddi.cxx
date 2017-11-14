@@ -28,6 +28,8 @@
 
 #include "BDD.hxx"
 #include "version.h"
+#include <Aux_klib.h>
+#include <wdm.h>
 
 extern "C"
 {
@@ -41,6 +43,9 @@ extern "C"
 #endif
 
 int use_pv_vblank = 0;
+
+static DWORD g_DxgDataStart;
+static DWORD g_DxgDataSize;
 
 static void checkvbl_response_dpc(uxen_v4v_ring_handle_t *ring, void *ctx1, void *ctx2)
 {
@@ -88,6 +93,33 @@ static int checkvbl(void)
     uxen_msg("pv vblank: %d\n", enabled);
 
     return enabled;
+}
+
+
+NTSTATUS
+GetRegistrySettings(
+    _In_ PUNICODE_STRING RegistryPath
+   )
+{
+    NTSTATUS                    ntStatus;
+    RTL_QUERY_REGISTRY_TABLE    paramTable[] = {
+        { NULL,   RTL_QUERY_REGISTRY_DIRECT, L"DxgDataStart", &g_DxgDataStart, REG_DWORD, &g_DxgDataStart, sizeof(ULONG)},
+        { NULL,   RTL_QUERY_REGISTRY_DIRECT, L"DxgDataSize", &g_DxgDataSize, REG_DWORD, &g_DxgDataSize, sizeof(ULONG)},
+        { NULL,   0, NULL, NULL, 0, NULL, 0}
+    };
+
+    ntStatus = RtlQueryRegistryValues(
+                 RTL_REGISTRY_ABSOLUTE | RTL_REGISTRY_OPTIONAL,
+                 RegistryPath->Buffer,
+                 &paramTable[0],
+                 NULL,
+                 NULL
+                );
+
+    if (!NT_SUCCESS(ntStatus))
+        uxen_err("RtlQueryRegistryValues failed, using default values, 0x%x", ntStatus);
+
+    return STATUS_SUCCESS;
 }
 
 extern "C" NTSTATUS
@@ -142,6 +174,8 @@ DriverEntry(
         uxen_err("DxgkInitializeDisplayOnlyDriver failed with Status: 0x%I64x", Status);
     else
         uxen_msg("end");
+
+    GetRegistrySettings(pRegistryPath);
 
     return Status;
 }
@@ -211,6 +245,121 @@ BddDdiRemoveDevice(
     return STATUS_SUCCESS;
 }
 
+struct TdrConfig {
+    uint32_t TdrLevel;
+    uint32_t TdrDelay;
+    uint32_t TdrDodPresentDelay;
+    uint32_t TdrDodVSyncDelay;
+    uint32_t TdrDdiDelay;
+};
+
+static BOOL is_tdr_config(void *blob)
+{
+/* these consts must be same as set in registry by uxenkmdod.inf */
+#define MAGIC_TDR_LEVEL 1
+#define MAGIC_TDR_DDI_DELAY 603
+#define MAGIC_TDR_DELAY 600
+#define MAGIC_TDR_PRESENT_DELAY 611
+#define MAGIC_TDR_VSYNC_DELAY 605
+
+    struct TdrConfig *c = (struct TdrConfig*) blob;
+
+    return c->TdrLevel == MAGIC_TDR_LEVEL &&
+        c->TdrDelay == MAGIC_TDR_DELAY &&
+        c->TdrDodPresentDelay == MAGIC_TDR_PRESENT_DELAY &&
+        c->TdrDodVSyncDelay == MAGIC_TDR_VSYNC_DELAY &&
+        c->TdrDdiDelay == MAGIC_TDR_DDI_DELAY;
+}
+
+static VOID patch_dxgkrnl()
+{
+    static int patched = 0;
+    NTSTATUS status = STATUS_UNSUCCESSFUL;
+    AUX_MODULE_EXTENDED_INFO *pModules = NULL;
+    ULONG cbModulesSize = 0;
+    static PHYSICAL_ADDRESS highestAcceptableAddress = {(ULONG)-1, -1};
+    STRING dxgkrnlRefStr;
+    STRING modpathStr;
+
+    if (patched)
+        return;
+
+    RtlInitString(&dxgkrnlRefStr, "\\SystemRoot\\System32\\drivers\\dxgkrnl.sys");
+
+    uxen_msg("begin");
+
+    status = AuxKlibInitialize();
+    if (!NT_SUCCESS(status)) {
+        uxen_err("fail");
+        return;
+    }
+
+    status = AuxKlibQueryModuleInformation(&cbModulesSize,
+        sizeof(*pModules),
+        NULL);
+    if ((!NT_SUCCESS(status)) || (0 == cbModulesSize)) {
+        uxen_err("fail");
+        return;
+    }
+
+    pModules = (AUX_MODULE_EXTENDED_INFO *)MmAllocateContiguousMemory(
+        ROUND_TO_PAGES(cbModulesSize),
+        highestAcceptableAddress);
+    if (NULL == pModules) {
+        uxen_err("fail");
+        return;
+    }
+
+    RtlZeroMemory(pModules, cbModulesSize);
+    status = AuxKlibQueryModuleInformation(&cbModulesSize,
+        sizeof(*pModules),
+        pModules);
+    if (!NT_SUCCESS(status)) {
+        uxen_err("fail");
+        goto out;
+    }
+
+    if (!g_DxgDataStart || !g_DxgDataSize) {
+        uxen_msg("DGX data section location not present in registry");
+        goto out;
+    }
+
+    int mods = cbModulesSize / sizeof(*pModules);
+    for (int i = 0; i < mods; i++) {
+        AUX_MODULE_EXTENDED_INFO *m = &pModules[i];
+        RtlInitString(&modpathStr, (char*)m->FullPathName);
+        if (RtlEqualString(&dxgkrnlRefStr, &modpathStr, TRUE)) {
+            uxen_msg("Found dxgkrnl.sys @ %p", m->BasicInfo.ImageBase);
+
+            uint8_t *p = (uint8_t*)m->BasicInfo.ImageBase + g_DxgDataStart;
+            uint8_t *end = p + g_DxgDataSize - sizeof(struct TdrConfig);
+            while (p < end) {
+                if (is_tdr_config(p)) {
+                    uint32_t *cfg = (uint32_t*)p;
+                    uxen_msg("Found TdrConfig @ %p", p);
+                    uxen_msg("%08x %08x %08x %08x %08x %08x %08x %08x",
+                        cfg[0], cfg[1], cfg[2], cfg[3], cfg[4], cfg[5], cfg[6], cfg[7]);
+                    cfg[1] = 0x7FFFFFFF;
+                    cfg[2] = 0x7FFFFFFF;
+                    cfg[3] = 0x7FFFFFFF;
+                    cfg[4] = 0x7FFFFFFF;
+                    uxen_msg("%08x %08x %08x %08x %08x %08x %08x %08x",
+                        cfg[0], cfg[1], cfg[2], cfg[3], cfg[4], cfg[5], cfg[6], cfg[7]);
+                    patched = 1;
+                    goto out;
+                }
+                p += 4;
+            }
+        }
+    }
+    uxen_msg("TdrConfig not found");
+
+out:
+    MmFreeContiguousMemory(pModules);
+
+    uxen_msg("end");
+}
+
 NTSTATUS
 BddDdiStartDevice(
     _In_  VOID*              pDeviceContext,
@@ -223,6 +372,8 @@ BddDdiStartDevice(
 
     perfcnt_inc(DxgkDdiStartDevice);
     uxen_msg("called");
+
+    patch_dxgkrnl();
 
     BASIC_DISPLAY_DRIVER* pBDD = (BASIC_DISPLAY_DRIVER*)(pDeviceContext);
     return pBDD->StartDevice(pDxgkStartInfo, pDxgkInterface, pNumberOfViews, pNumberOfChildren);

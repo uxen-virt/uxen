@@ -64,7 +64,7 @@ uint64_t vm_viridian_crash_domain = 0;
 uint64_t vm_vpt_align = 0;
 uint64_t vm_vpt_coalesce_period = 0;
 
-bool vm_run_patcher = false;
+bool vm_run_patcher = true;
 uint64_t seed_generation = 1;
 uint64_t surf_copy_reduction = 1;
 

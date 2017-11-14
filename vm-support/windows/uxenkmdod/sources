@@ -24,6 +24,7 @@ LIB_ARCH_PATH = x86
 LINKER_FLAGS = $(LINKER_FLAGS) /LTCG:NOSTATUS /SECTION:.rsrc,!d
 
 TARGETLIBS = $(DDK_LIB_PATH)\wdmsec.lib \
+             $(DDK_LIB_PATH)\aux_klib.lib \
              $(WDK8_PATH)\lib\$(LIB_ARCH_PATH)\displib.lib \
              $(UXENVMLIB_LIB) \
              $(UXENV4VLIB_LIB)
