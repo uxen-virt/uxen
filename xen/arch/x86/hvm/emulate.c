@@ -1115,6 +1115,7 @@ int hvm_emulate_one(
 
     hvmemul_ctxt->ctxt.emulation_restricted =
         curr->domain->arch.hvm_domain.params[HVM_PARAM_RESTRICTED_X86_EMUL];
+    hvmemul_ctxt->ctxt.silent_fake_emulation = curr->domain->silent_fake_emulation;
 
     if ( hvm_long_mode_enabled(curr) &&
          hvmemul_ctxt->seg_reg[x86_seg_cs].attr.fields.l )
@@ -1169,6 +1170,8 @@ int hvm_emulate_one(
 
     if ( rc != X86EMUL_OKAY )
         return rc;
+
+    curr->domain->silent_fake_emulation = hvmemul_ctxt->ctxt.silent_fake_emulation;
 
     new_intr_shadow = hvmemul_ctxt->intr_shadow;
 

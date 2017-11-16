@@ -1,7 +1,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -398,6 +398,7 @@ struct domain
     bool_t           is_shutting_down; /* in process of shutting down? */
     bool_t           is_shut_down;     /* fully shut down? */
     int              shutdown_code;
+    bool_t           silent_fake_emulation;
 
     /* If this is not 0, send suspend notification here instead of
      * raising DOM_EXC */

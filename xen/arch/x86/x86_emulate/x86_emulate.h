@@ -381,6 +381,8 @@ struct x86_emulate_ctxt
 
     uint8_t emulation_restricted;
 
+    uint8_t silent_fake_emulation;
+
     /* Retirement state, set by the emulator (valid only on X86EMUL_OKAY). */
     union {
         struct {

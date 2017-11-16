@@ -23,7 +23,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -1374,6 +1374,44 @@ x86_emulate(
 
 #define tb(x) ((x) | (1 << 8))
     if (ctxt->emulation_restricted) {
+        if (rep_prefix == REPE_PREFIX /* F3 */ &&  (b|(twobyte<<8)) == tb(0x6f)) {
+            /* KRY-40310 fake emulate two movdqu forms in restricted emu mode, used
+             * for process dmps
+             * nt!memcpy+0xa0:
+             * fffff802`b85dc820 f30f6f040a      movdqu  xmm0,xmmword ptr [rdx+rcx]
+             * fffff802`b85dc825 f30f6f4c0a10    movdqu  xmm1,xmmword ptr [rdx+rcx+10h]
+             */
+            switch (insn_fetch_type(uint8_t)) {
+            case 0x04:
+                if (insn_fetch_type(uint8_t) == 0x0A) {
+                    if (!ctxt->silent_fake_emulation) {
+                        gdprintk(XENLOG_WARNING, "WARN: fake movdqu xmm0,xmmword ptr [rdx+rcx]  rip %p\n",
+                            _p(ctxt->regs->eip));
+                        ctxt->silent_fake_emulation = 1;
+                    }
+
+                    dst.type = OP_NONE;
+                    goto writeback;
+                }
+                break;
+            case 0x4C:
+                if (insn_fetch_type(uint8_t) == 0x0A &&
+                    insn_fetch_type(uint8_t) == 0x10) {
+                    if (!ctxt->silent_fake_emulation) {
+                        gdprintk(XENLOG_WARNING, "WARN: fake movdqu xmm1,xmmword ptr [rdx+rcx+10h]  rip %p\n",
+                            _p(ctxt->regs->eip));
+                        ctxt->silent_fake_emulation = 0;
+                    }
+
+                    dst.type = OP_NONE;
+                    goto writeback;
+                }
+                break;
+            default:
+                break;
+            }
+        }
+
         if (override_seg != -1 || lock_prefix || rep_prefix) {
             gdprintk(XENLOG_WARNING, "instruction emulation restricted: "
                      "seg %x lock %x rep %x\n", override_seg, lock_prefix,
