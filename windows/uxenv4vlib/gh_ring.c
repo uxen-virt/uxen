@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -208,7 +208,7 @@ alloc_pages_for_mdl_retry(uint32_t pages)
 
     while (allocated < pages) {
         PMDL submdl;
-        uint32_t subpages = pages;
+        uint32_t subpages = pages - allocated;
 
         submdl = alloc_partial_mdl_retry(&subpages);
         if (!submdl) {
