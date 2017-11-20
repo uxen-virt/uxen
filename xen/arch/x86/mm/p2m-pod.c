@@ -62,6 +62,20 @@
 
 #include "mm-locks.h"
 
+/* XSA-246/247: set_p2m_entry() can fail if it needs to shatter a superpage and 
+ * cannot allocate a new page directory to map the 4k pages. The upstream 
+ * patches are not simple to apply, but crashing the world seems strictly  
+ * better than silently failing to map (or unmap) as this can lead to hang, 
+ * infinite loop, or information leaks. -- KAF */
+#define SET_P2M_UNEXPECTED_FAIL() BUG()
+static inline void set_p2m_entry_unchecked(
+    struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn, 
+    unsigned int page_order, p2m_type_t p2mt, p2m_access_t p2ma)
+{
+    if (!set_p2m_entry(p2m, gfn, mfn, page_order, p2mt, p2ma))
+        SET_P2M_UNEXPECTED_FAIL();
+}
+
 /* Override macros from asm/page.h to make them work with mfn_t */
 #undef mfn_to_page
 #define mfn_to_page(_m) __mfn_to_page(mfn_x(_m))
@@ -278,8 +292,8 @@ p2m_pod_add_compressed_page(struct p2m_domain *p2m, unsigned long gpfn,
     vpage->page_data.page = page_to_pdx(page);
     vpage->page_data.offset = offset;
 
-    set_p2m_entry(p2m, gpfn, mfn, 0, p2m_populate_on_demand,
-                  p2m->default_access);
+    set_p2m_entry_unchecked(p2m, gpfn, mfn, 0, p2m_populate_on_demand,
+                            p2m->default_access);
     put_page(vpage);
 
     ASSERT(p2m_locked_by_me(p2m));
@@ -690,8 +704,8 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
          * set_p2m_entry() should automatically shatter the 1GB page into 
          * 512 2MB pages. The rest of 511 calls are unnecessary.
          */
-        set_p2m_entry(p2m, gfn_aligned, _mfn(0), PAGE_ORDER_2M,
-                      p2m_populate_on_demand, p2m->default_access);
+        set_p2m_entry_unchecked(p2m, gfn_aligned, _mfn(0), PAGE_ORDER_2M,
+                                p2m_populate_on_demand, p2m->default_access);
         audit_p2m(p2m, 1);
         p2m_unlock(p2m);
         return _mfn(0);
@@ -727,7 +741,7 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
              * from the template (clone_l1_table), or more often in
              * the case where the l1 table is populated lazily
              * (HVM_PARAM_CLONE_L1_lazy_populate) */
-            set_p2m_entry(p2m, gfn_aligned, _mfn(0), 0, 0, 0);
+            set_p2m_entry_unchecked(p2m, gfn_aligned, _mfn(0), 0, 0, 0);
             ret = 0;
             goto out;
         }
@@ -736,9 +750,9 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             /* mark regular pages pod in template, so that they are
              * populated in clone_l1_table */
             ASSERT(mfn_valid_page(smfn));
-            set_p2m_entry(op2m, gfn_aligned, smfn, 0,
-                          p2m_populate_on_demand,
-                          op2m->default_access);
+            set_p2m_entry_unchecked(op2m, gfn_aligned, smfn, 0,
+                                    p2m_populate_on_demand,
+                                    op2m->default_access);
             p2m_pod_stat_update(d->clone_of);
         }
         if (mfn_valid_page_or_vframe(smfn)) {
@@ -758,8 +772,9 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
             if (mfn_x(smfn) == SHARED_ZERO_MFN)
                 smfn = shared_zero_page;
             /* install smfn in clone p2m */
-            set_p2m_entry(p2m, gfn_aligned, smfn, 0,
-                          p2m_populate_on_demand, p2m->default_access);
+            set_p2m_entry_unchecked(p2m, gfn_aligned, smfn, 0,
+                                    p2m_populate_on_demand,
+                                    p2m->default_access);
             if (mfn_x(smfn) != mfn_x(shared_zero_page)) {
                 ASSERT(mfn_x(smfn) == mfn_x(put_page_parent));
                 put_page(mfn_to_page(smfn));
@@ -928,9 +943,9 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                     }
 
                     /* add uncompressed or decompressed to template */
-                    set_p2m_entry(op2m, gfn_aligned, mfn, 0,
-                                  p2m_populate_on_demand,
-                                  op2m->default_access);
+                    set_p2m_entry_unchecked(op2m, gfn_aligned, mfn, 0,
+                                            p2m_populate_on_demand,
+                                            op2m->default_access);
 
                     unmap_domain_page_direct(target);
 
@@ -940,9 +955,9 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                     if (orig_q == p2m_guest_r || orig_q == p2m_alloc_r) {
                         p2m_unlock(op2m);
                         op2m_locked = 0;
-                        set_p2m_entry(p2m, gfn_aligned, mfn, 0,
-                                      p2m_populate_on_demand,
-                                      p2m->default_access);
+                        set_p2m_entry_unchecked(p2m, gfn_aligned, mfn, 0,
+                                                p2m_populate_on_demand,
+                                                p2m->default_access);
                         put_page(p);
                         perfc_incr(dmreq_populated_template_shared);
                         ret = 0;
@@ -1094,8 +1109,8 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
     }
 
   out_reassigned:
-    set_p2m_entry(p2m, gfn_aligned, mfn, PAGE_ORDER_4K, pod_p2mt,
-                  p2m->default_access);
+    set_p2m_entry_unchecked(p2m, gfn_aligned, mfn, PAGE_ORDER_4K, pod_p2mt,
+                            p2m->default_access);
 
     if (mfn_valid_page_or_vframe(mfn) &&
         mfn_x(mfn) != mfn_x(shared_zero_page))
@@ -1528,7 +1543,8 @@ p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
 
         smfn = page_to_mfn(p);
         p2mt = p2m_ram_rw;
-        set_p2m_entry(p2m, gfn, smfn, PAGE_ORDER_4K, p2mt, p2m->default_access);
+        set_p2m_entry_unchecked(p2m, gfn, smfn, PAGE_ORDER_4K, p2mt,
+                                p2m->default_access);
         put_page(p);
         /* page zeroed below in p2m_is_ram(p2mt) */
     }
@@ -1547,14 +1563,16 @@ p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
 
     if (mfn_zero_page(smfn)) {
         if (mfn_x(smfn) == mfn_x(shared_zero_page))
-            set_p2m_entry(p2m, gfn, _mfn(SHARED_ZERO_MFN), PAGE_ORDER_4K,
-                          p2m_populate_on_demand, p2m->default_access);
+            set_p2m_entry_unchecked(p2m, gfn, _mfn(SHARED_ZERO_MFN),
+                                    PAGE_ORDER_4K,
+                                    p2m_populate_on_demand,
+                                    p2m->default_access);
         ret = 0;
         goto out;
     }
 
-    set_p2m_entry(p2m, gfn, _mfn(SHARED_ZERO_MFN), PAGE_ORDER_4K,
-		  p2m_populate_on_demand, p2m->default_access);
+    set_p2m_entry_unchecked(p2m, gfn, _mfn(SHARED_ZERO_MFN), PAGE_ORDER_4K,
+                            p2m_populate_on_demand, p2m->default_access);
 
     ret = 0;
 
