@@ -12,7 +12,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2017, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -833,41 +833,51 @@ static int __printk_ratelimit(int ratelimit_ms, int ratelimit_burst,
     static DEFINE_SPINLOCK(ratelimit_lock);
     unsigned long flags;
     unsigned long long now = NOW(); /* ns */
-    unsigned long ms;
+    unsigned long diff;
+    int lost;
 
     do_div(now, 1000000);
-    ms = (unsigned long)now;
 
     spin_lock_irqsave(&ratelimit_lock, flags);
-    if (*toks > ms - *last_msg)
-        *toks -= ms - *last_msg;
-    else
-        *toks = 0;
-    *last_msg = ms;
-    if ( *toks < (ratelimit_burst * ratelimit_ms) )
+
+    diff = (unsigned long)now - *last_msg;
+    *last_msg = (unsigned long)now;
+
+    if (diff < ratelimit_ms)
     {
-        int lost = *missed;
-        *missed = 0;
-        *toks += ratelimit_ms;
-        spin_unlock(&ratelimit_lock);
-        if ( lost )
+        // Too quick.
+
+        if (*toks >= ratelimit_burst)
         {
-            char lost_str[8];
-            snprintf(lost_str, sizeof(lost_str), "%d", lost);
-            /* console_lock may already be acquired by printk(). */
-            spin_lock_recursive(&console_lock);
-            printk_start_of_line();
-            __putstr("printk: ");
-            __putstr(lost_str);
-            __putstr(" messages suppressed.\n");
-            spin_unlock_recursive(&console_lock);
+            *missed += 1;
+            spin_unlock_irqrestore(&ratelimit_lock, flags);
+            return 0;
         }
-        local_irq_restore(flags);
-        return 1;
+        else
+            *toks += 1;
     }
-    *missed++;
-    spin_unlock_irqrestore(&ratelimit_lock, flags);
-    return 0;
+    else if (*toks > 0)
+        *toks = 0;
+
+    lost = *missed;
+    *missed = 0;
+
+    spin_unlock(&ratelimit_lock);
+
+    if ( lost )
+    {
+        char lost_str[8];
+        snprintf(lost_str, sizeof(lost_str), "%d", lost);
+        /* console_lock may already be acquired by printk(). */
+        spin_lock_recursive(&console_lock);
+        printk_start_of_line();
+        __putstr("printk: ");
+        __putstr(lost_str);
+        __putstr(" messages suppressed.\n");
+        spin_unlock_recursive(&console_lock);
+    }
+    local_irq_restore(flags);
+    return 1;
 }
 
 /* minimum time in ms between messages */
