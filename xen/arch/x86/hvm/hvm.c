@@ -149,8 +149,10 @@ static int __init hvm_enable(void)
 
     BUILD_BUG_ON(UI_HVM_IO_BITMAP_SIZE != IOPM_SIZE);
 
-    if (opt_hvmonoff)
+    if (opt_hvmonoff) {
         hvmon_default = hvmon_on;
+        printk("hvmonoff is enabled\n");
+    }
 
     switch ( boot_cpu_data.x86_vendor )
     {
