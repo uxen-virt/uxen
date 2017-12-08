@@ -332,13 +332,10 @@ static irqreturn_t uxenv4v_isr(int irq, void *unused)
 static void driver_cleanup(void)
 {
     irq_ok = 0;
-    if (axen_hypervisor()) {
+    free_irq(v4v_irq, NULL);
+    acpi_exit();
+    if (axen_hypervisor())
         ax_exit();
-    } else {
-        if (irq_ok)
-            free_irq(v4v_irq, NULL);
-        acpi_exit();
-    }
 }
 
 static int __init uxenv4v_init(void)
@@ -360,10 +357,7 @@ static int __init uxenv4v_init(void)
         goto cleanup;
     }
 
-    if (axen_hypervisor())
-        set_ax_irq_handler(uxenv4v_isr_ax);
-    else
-        ret = request_irq(v4v_irq, uxenv4v_isr, IRQF_TRIGGER_RISING, KBUILD_MODNAME, NULL);
+    ret = request_irq(v4v_irq, uxenv4v_isr, IRQF_TRIGGER_RISING, KBUILD_MODNAME, NULL);
     if (ret)
       goto cleanup;
     irq_ok = 1;
