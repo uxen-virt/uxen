@@ -33,11 +33,22 @@ long do_sysctl(XEN_GUEST_HANDLE(xen_sysctl_t) u_sysctl)
     struct xen_sysctl curop, *op = &curop;
     static DEFINE_SPINLOCK(sysctl_lock);
 
-    if ( !IS_PRIV(current->domain) )
-        return -EPERM;
-
     if ( copy_from_guest(op, u_sysctl, 1) )
         return -EFAULT;
+
+    switch ( op->cmd )
+    {
+    /* Sysctls that do **not** require privilege to execute. */
+    case XEN_SYSCTL_physinfo:
+        break;
+
+    /* The rest do, by default. */
+    default:
+        if ( !IS_PRIV(current->domain) )
+            return -EPERM;
+
+        break;
+    }
 
     if ( op->interface_version != XEN_SYSCTL_INTERFACE_VERSION )
         return -EACCES;

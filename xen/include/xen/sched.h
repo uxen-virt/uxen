@@ -1,7 +1,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -177,11 +177,11 @@ struct vcpu
 
     bool_t           always_access_ok;
 
-    /* Is executing context privileged (aka dom0)? */
-    bool_t           is_privileged;
-
     /* Is executing context privileged within the caller (aka
      * system/kernel) */
+    bool_t           is_privileged;
+
+    /* Is executing context privileged (aka dom0)? */
     bool_t           is_sys_privileged;
 
     bool_t           target_vmis_owner;
