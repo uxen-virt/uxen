@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2017, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -43,7 +43,7 @@ fch_query_crypt_by_handle(SHFLCLIENTDATA *client,
                           int *crypt_mode)
 {
     return fch_query_crypt_by_path(
-        client, root, vbsfQueryHandlePath(client, handle), crypt_mode);
+        client, root, vbsfQueryHandleGuestPath(client, handle), crypt_mode);
 }
 
 int fch_create_crypt_hdr(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle)

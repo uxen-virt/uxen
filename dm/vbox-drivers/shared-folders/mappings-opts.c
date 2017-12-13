@@ -128,6 +128,14 @@ state_load(QEMUFile *f, void *opaque, int version_id)
 }
 
 static wchar_t *
+eat_leading_sep(wchar_t *path)
+{
+    while (*path && *path == PATH_SEP)
+        path++;
+    return path;
+}
+
+static wchar_t *
 get_path_suffix(wchar_t *prefix, wchar_t *path)
 {
     if (!wcsncmp(L"\\\\?\\", prefix, 4))
@@ -159,6 +167,7 @@ is_path_prefixof(wchar_t *prefix, wchar_t *path)
     return get_path_suffix(prefix, path) ? 1 : 0;
 }
 
+#if 0
 static void
 catpath(wchar_t *buf, wchar_t *path)
 {
@@ -172,6 +181,7 @@ catpath(wchar_t *buf, wchar_t *path)
     while (*path)
         *p++ = *path++;
 }
+#endif
 
 static wchar_t *
 get_mapname(SHFLROOT root)
@@ -201,31 +211,22 @@ find_exact_entry(wchar_t *mapname, wchar_t *subfolder, int dyn)
 static folder_opt_entry_t *
 find_entry_for_path(SHFLROOT root, wchar_t *path)
 {
-    wchar_t *rootpath = (wchar_t*)vbsfMappingsQueryHostRoot(root);
     wchar_t *mapname = get_mapname(root);
     folder_opt_entry_t *e, *found = NULL;
     int maxlen = 0, len;
     int dyn;
 
-    if (!rootpath || !mapname)
+    if (!mapname)
         return NULL;
 
+    path = eat_leading_sep(path);
     for (dyn = 1; dyn >= 0; dyn--) {
         TAILQ_FOREACH(e, &folder_opt_entries, entry) {
-            wchar_t subfolder_fullpath[SUBFOLDER_PATHMAX] = { 0 };
-
             if (e->dynamic != dyn)
                 continue;
-            if (wcslen(rootpath) + wcslen(e->subfolder) >= SUBFOLDER_PATHMAX) {
-                warnx("shared-folders: path too long");
-                continue;
-            }
-
-            wcsncpy(subfolder_fullpath, rootpath, SUBFOLDER_PATHMAX);
-            catpath(subfolder_fullpath, e->subfolder);
 
             if (!wcsncmp(mapname, e->mapname, SUBFOLDER_PATHMAX) &&
-                is_path_prefixof(subfolder_fullpath, path))
+                is_path_prefixof(e->subfolder, path))
             {
                 len = wcslen(e->subfolder);
                 if (len >= maxlen) {
@@ -295,15 +296,17 @@ _sf_hidden_path(SHFLROOT root, wchar_t *path)
     folder_opt_entry_t *e;
     MAPPING *mapping = vbsfMappingGetByRoot(root);
     wchar_t *mapname = get_mapname(root);
-    wchar_t *rootpath = (wchar_t*)vbsfMappingsQueryHostRoot(root);
+    int dyn;
 
-    if (!mapping || !mapname || !rootpath)
+    if (!mapping || !mapname)
         return 0;
-    path = get_path_suffix(rootpath, path);
-    if (!path)
-        return 0;
+
     critical_section_enter(&folder_opt_lock);
-    e = find_exact_entry(mapname, path, -1);
+    path = eat_leading_sep(path);
+    for (dyn = 1; dyn >= 0; dyn--) {
+        e = find_exact_entry(mapname, path, dyn);
+        if (e) break;
+    }
     critical_section_leave(&folder_opt_lock);
 
     return e ? (e->opts & SF_OPT_HIDE) : 0;

@@ -608,9 +608,10 @@ static int vbsfConvertFileOpenFlags(unsigned fShflFlags, RTFMODE fMode, SHFLHAND
  *                               created
  * @retval pParms->Info          On success the parameters of the file opened or created
  */
-static int vbsfOpenFile(SHFLCLIENTDATA *pClient, SHFLROOT root, const wchar_t *pszPath, SHFLCREATEPARMS *pParms)
+static int vbsfOpenFile(SHFLCLIENTDATA *pClient, SHFLROOT root, const wchar_t *pszPath,
+  const wchar_t *pszGuestPath, SHFLCREATEPARMS *pParms)
 {
-    LogFlow(("vbsfOpenFile: pszPath = %ls, pParms = %p\n", pszPath, pParms));
+    LogFlow(("vbsfOpenFile: pszPath = %ls (guest: %ls), pParms = %p\n", pszPath, pszGuestPath, pParms));
     Log(("SHFL create flags %08x\n", pParms->CreateFlags));
 
     SHFLHANDLE      handle = SHFL_HANDLE_NIL;
@@ -628,7 +629,7 @@ static int vbsfOpenFile(SHFLCLIENTDATA *pClient, SHFLROOT root, const wchar_t *p
     if (RT_SUCCESS(rc))
     {
         rc = VERR_NO_MEMORY;  /* Default error. */
-        handle  = vbsfAllocFileHandle(pClient, pszPath, fOpen);
+        handle  = vbsfAllocFileHandle(pClient, pszPath, pszGuestPath, fOpen);
         if (handle != SHFL_HANDLE_NIL)
         {
             pHandle = vbsfQueryFileHandle(pClient, handle);
@@ -637,7 +638,7 @@ static int vbsfOpenFile(SHFLCLIENTDATA *pClient, SHFLROOT root, const wchar_t *p
                 int already_exists = 0, created = 0, truncated = 0;
                 struct quota_op qop;
 
-                quota_start_op(&qop, pClient, root, SHFL_HANDLE_NIL, pszPath);
+                quota_start_op(&qop, pClient, root, SHFL_HANDLE_NIL, pszPath, pszGuestPath);
                 quota_set_delta(&qop, -quota_get_filesize(&qop));
 
                 rc = RTFileOpenUcs(&pHandle->file.Handle, pszPath, fOpen, &already_exists, &created,
@@ -799,7 +800,7 @@ static int vbsfOpenFile(SHFLCLIENTDATA *pClient, SHFLROOT root, const wchar_t *p
 
         d = vbsfQueryHandleData(pClient, handle);
         if (d) {
-            d->folder_opts = _sf_get_opt(root, (wchar_t*)pszPath);
+            d->folder_opts = _sf_get_opt(root, (wchar_t*)pszGuestPath);
             if (d->folder_opts & SF_OPT_NO_FLUSH)
                 pParms->CreateFlags |= SHFL_CF_NO_FLUSH;
             LogFlow(("vbsfOpenFile: opts=0x%" PRIx64 "\n", d->folder_opts));
@@ -823,13 +824,13 @@ static int vbsfOpenFile(SHFLCLIENTDATA *pClient, SHFLROOT root, const wchar_t *p
  * @note folders are created with fMode = 0777
  */
 static int vbsfOpenDirUcs(SHFLCLIENTDATA *pClient, SHFLROOT root, const wchar_t *pszPath,
-                       SHFLCREATEPARMS *pParms)
+    const wchar_t *pszGuestPath, SHFLCREATEPARMS *pParms)
 {
-    LogFlow(("vbsfOpenDir: pszPath = %ls, pParms = %p\n", pszPath, pParms));
+    LogFlow(("vbsfOpenDir: pszPath = %ls (guest %ls), pParms = %p\n", pszPath, pszGuestPath, pParms));
     Log(("SHFL create flags %08x\n", pParms->CreateFlags));
 
     int rc = VERR_NO_MEMORY;
-    SHFLHANDLE      handle = vbsfAllocDirHandle(pClient);
+    SHFLHANDLE      handle  = vbsfAllocDirHandle(pClient, pszPath, pszGuestPath);
     SHFLFILEHANDLE *pHandle = vbsfQueryDirHandle(pClient, handle);
     if (0 != pHandle)
     {
@@ -1152,11 +1153,11 @@ int vbsfCreate(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLSTRING *pPath, uint32
             {
                 if (BIT_FLAG(pParms->CreateFlags, SHFL_CF_DIRECTORY))
                 {
-                    rc = vbsfOpenDirUcs(pClient, root, pszFullPath, pParms);
+                    rc = vbsfOpenDirUcs(pClient, root, pszFullPath, pPath->String.ucs2, pParms);
                 }
                 else
                 {
-                    rc = vbsfOpenFile(pClient, root, pszFullPath, pParms);
+                    rc = vbsfOpenFile(pClient, root, pszFullPath, pPath->String.ucs2, pParms);
                 }
             }
             else
@@ -1349,7 +1350,7 @@ int vbsfWrite(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, uint64_
     if (!pHandle)
         return VERR_INVALID_HANDLE;
     hostoffset = fch_host_fileoffset(pClient, root, Handle, offset);
-    quota_start_op(&qop, pClient, root, Handle, NULL);
+    quota_start_op(&qop, pClient, root, Handle, NULL, NULL);
     delta = hostoffset + *pcbBuffer - quota_get_filesize(&qop);
     if (delta > 0) {
         if (RT_FAILURE(quota_set_delta(&qop, delta))) {
@@ -1506,7 +1507,8 @@ int vbsfDirList(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, SHFLS
     }
 
     crypt_mode = 0;
-    fch_query_crypt_by_path(pClient, root, DirHandle->pwszPath, &crypt_mode);
+    fch_query_crypt_by_path(pClient, root, vbsfQueryHandleGuestPath(pClient, Handle),
+        &crypt_mode);
 
     while (cbBufferOrg)
     {
@@ -1540,7 +1542,8 @@ int vbsfDirList(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, SHFLS
             }
         }
 
-        if (hidden(root, DirHandle->pwszPath, (wchar_t*)pDirEntry->szName))
+        if (hidden(root, vbsfQueryHandleGuestPath(pClient, Handle),
+                (wchar_t*)pDirEntry->szName))
             continue;
 
         cbNeeded = RT_OFFSETOF(SHFLDIRINFO, name.String);
@@ -1863,7 +1866,7 @@ int resize_file(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle,
     prev_sz = fileinfo.cbObject;
     fch_guest_fsinfo(pClient, root, handle, &fileinfo);
     prev_sz_guest = fileinfo.cbObject;
-    quota_start_op(&qop, pClient, root, handle, NULL);
+    quota_start_op(&qop, pClient, root, handle, NULL, NULL);
     if (RT_FAILURE(quota_set_delta(&qop, sz - prev_sz)))
         return VERR_DISK_FULL;
     rc = RTFileSetSize(pHandle->file.Handle, sz);
@@ -2272,7 +2275,8 @@ int vbsfRemove(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLSTRING *pPath, uint32
             else if (flags & SHFL_REMOVE_FILE) {
                 struct quota_op qop;
 
-                quota_start_op(&qop, pClient, root, SHFL_HANDLE_NIL, pszFullPath);
+                quota_start_op(&qop, pClient, root, SHFL_HANDLE_NIL, pszFullPath,
+                    pPath->String.ucs2);
                 quota_set_delta(&qop, -quota_get_filesize(&qop));
                 rc = RTFileDeleteUcs(pszFullPath);
                 if (RT_SUCCESS(rc))

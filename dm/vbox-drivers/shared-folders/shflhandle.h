@@ -18,7 +18,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -86,15 +86,15 @@ struct shfl_handle_data {
     int quota_cachedattrs;
 };
 
-SHFLHANDLE      vbsfAllocDirHandle(PSHFLCLIENTDATA pClient);
-SHFLHANDLE      vbsfAllocFileHandle(PSHFLCLIENTDATA pClient, const wchar_t *pwsFileName, uint32_t uOpenFlags);
+SHFLHANDLE      vbsfAllocDirHandle(PSHFLCLIENTDATA pClient, const wchar_t *pwszPath, const wchar_t *pwszGuestPath);
+SHFLHANDLE      vbsfAllocFileHandle(PSHFLCLIENTDATA pClient, const wchar_t *pwszFileName, const wchar_t *pwszGuestPath, uint32_t uOpenFlags);
 void            vbsfFreeFileHandle (PSHFLCLIENTDATA pClient, SHFLHANDLE hHandle);
 
 int         vbsfInitHandleTable();
 int         vbsfFreeHandleTable();
 SHFLHANDLE  vbsfAllocHandle(PSHFLCLIENTDATA pClient, uint32_t uType,
                             uintptr_t pvUserData, const wchar_t *pwszFilename,
-                            uint32_t uOpenFlags);
+                            const wchar_t *pwszGuestPath, uint32_t uOpenFlags);
 SHFLFILEHANDLE *vbsfQueryFileHandle(PSHFLCLIENTDATA pClient,
                                     SHFLHANDLE handle);
 SHFLFILEHANDLE *vbsfQueryDirHandle(PSHFLCLIENTDATA pClient, SHFLHANDLE handle);
@@ -103,6 +103,7 @@ uint32_t        vbsfQueryHandleType(PSHFLCLIENTDATA pClient,
 int             vbsfQueryHandleFileExistence(SHFLHANDLE handle);
 int             vbsfQueryHandleFileScrambled(SHFLHANDLE handle);
 wchar_t*        vbsfQueryHandlePath(PSHFLCLIENTDATA pClient, SHFLHANDLE handle);
+wchar_t*        vbsfQueryHandleGuestPath(PSHFLCLIENTDATA pClient, SHFLHANDLE handle);
 uint32_t        vbsfQueryHandleFlags(PSHFLCLIENTDATA pClient,
                                      SHFLHANDLE handle);
 void            vbsfModifyHandleFlags(PSHFLCLIENTDATA pClient,

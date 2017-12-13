@@ -18,7 +18,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2017, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -65,7 +65,7 @@ typedef struct
     uint32_t         uFlags;
     uintptr_t        pvUserData;
     PSHFLCLIENTDATA  pClient;
-    const wchar_t    *pwszFilename;
+    const wchar_t    *pwszFilename, *pwszGuestPath;
     uint32_t         uOpenFlags;
     uint8_t          bFileNotFound, bOpening, bReopening;
     struct timeout_open_ctx *to_ctx;
@@ -214,7 +214,7 @@ reopen_file(SHFLINTHANDLE *h)
 
     fOpen = (fOpen & ~(RTFILE_O_ACTION_MASK|RTFILE_O_TRUNCATE)) |
         RTFILE_O_OPEN; /* Effective OPEN_EXISTING */
-    LogRel(("Shared folders: reopening file %ws\n", h->pwszFilename));
+    LogRel(("Shared folders: reopening file %ws (%ws)\n", h->pwszFilename, h->pwszGuestPath));
     for (delay = 10;;delay += 10) {
         rc = timeout_open(FILE_REOPEN_TIMEOUT_MS, h,
                           &fh->file.Handle, h->pwszFilename, fOpen, NULL);
@@ -236,6 +236,8 @@ reopen_file(SHFLINTHANDLE *h)
 
         RTMemFree((void*)(h->pwszFilename));
         h->pwszFilename = NULL;
+        RTMemFree((void*)(h->pwszGuestPath));
+        h->pwszGuestPath = NULL;
         h->uOpenFlags = 0;
         h->pvUserData = 0;
         goto out;
@@ -267,7 +269,8 @@ reopen_files(LPVOID opaque)
     int i;
     LogRel(("Shared folders: reopening handles in background\n"));
     for (i = 1; i < SHFLHANDLE_MAX; ++i) {
-        if (pHandles[i].pwszFilename) {
+        if ((pHandles[i].uFlags & SHFL_HF_TYPE_FILE) &&
+            pHandles[i].pwszFilename) {
             reopen_file(&pHandles[i]);
         }
     }
@@ -357,14 +360,18 @@ void vbsfSaveHandleTable(QEMUFile *f)
         for (i = 1; i < SHFLHANDLE_MAX; ++i)
         {
             const wchar_t *pwszFilename = pHandles[i].pwszFilename;
+            const wchar_t *pwszGuestPath = pHandles[i].pwszGuestPath;
 
-            if (pwszFilename != NULL)
+            if (pwszFilename != NULL && pwszGuestPath != NULL)
             {
                 uint32_t len = sizeof(wchar_t) * (wcslen(pwszFilename) + 1);
+                uint32_t len2= sizeof(wchar_t) * (wcslen(pwszGuestPath) + 1);
                 qemu_put_be32(f, i);
                 qemu_put_be32(f, pHandles[i].uFlags);
                 qemu_put_be32(f, len);
                 qemu_put_buffer(f, (uint8_t*)pwszFilename, len);
+                qemu_put_be32(f, len2);
+                qemu_put_buffer(f, (uint8_t*)pwszGuestPath, len2);
                 qemu_put_be32(f, pHandles[i].uOpenFlags);
                 qemu_put_be64(f, pHandles[i].data.folder_opts);
             }
@@ -385,7 +392,7 @@ void vbsfSaveHandleTable(QEMUFile *f)
 int vbsfLoadHandleTable(QEMUFile *f)
 {
     int rc;
-    wchar_t *pwszFilename;
+    wchar_t *pwszFilename, *pwszGuestPath;
 
     LogRel(("Shared folders - loading handle table\n"));
 
@@ -418,19 +425,26 @@ int vbsfLoadHandleTable(QEMUFile *f)
         }
 
         pHandles[idx].uFlags = qemu_get_be32(f);
+
         len = qemu_get_be32(f);
-
         pwszFilename = (wchar_t*) RTMemAlloc(len);
-
-        if (pwszFilename == NULL)
-        {
+        if (pwszFilename == NULL) {
             rc = VERR_NO_MEMORY;
             break;
         }
-
         qemu_get_buffer(f, (uint8_t*)pwszFilename, len);
 
+        len = qemu_get_be32(f);
+        pwszGuestPath = (wchar_t*) RTMemAlloc(len);
+        if (pwszGuestPath == NULL) {
+            RTMemFree(pwszFilename);
+            rc = VERR_NO_MEMORY;
+            break;
+        }
+        qemu_get_buffer(f, (uint8_t*)pwszGuestPath, len);
+
         pHandles[idx].pwszFilename = pwszFilename;
+        pHandles[idx].pwszGuestPath = pwszGuestPath;
         pHandles[idx].uOpenFlags = qemu_get_be32(f);
         pHandles[idx].data.folder_opts = qemu_get_be64(f);
         pHandles[idx].bFileNotFound = 0;
@@ -456,7 +470,8 @@ int vbsfLoadHandleTable(QEMUFile *f)
 
 
 SHFLHANDLE  vbsfAllocHandle(PSHFLCLIENTDATA pClient, uint32_t uType,
-    uintptr_t pvUserData, const wchar_t *pwszFilename, uint32_t uOpenFlags)
+    uintptr_t pvUserData, const wchar_t *pwszFilename, const wchar_t *pwszGuestPath,
+    uint32_t uOpenFlags)
 {
     SHFLHANDLE handle;
 
@@ -499,6 +514,7 @@ SHFLHANDLE  vbsfAllocHandle(PSHFLCLIENTDATA pClient, uint32_t uType,
     pHandles[handle].pvUserData = pvUserData;
     pHandles[handle].pClient    = pClient;
     pHandles[handle].pwszFilename = pwszFilename;
+    pHandles[handle].pwszGuestPath = pwszGuestPath;
     pHandles[handle].uOpenFlags = uOpenFlags;
     pHandles[handle].bOpening = 0;
     pHandles[handle].cryptchanged = 1; /* mark so that it's tested on 1st write */
@@ -529,6 +545,12 @@ int vbsfFreeHandle(PSHFLCLIENTDATA pClient, SHFLHANDLE handle)
             pHandles[handle].pwszFilename = NULL;
         }
 
+        if (pHandles[handle].pwszGuestPath != NULL)
+        {
+            RTMemFree((void*) pHandles[handle].pwszGuestPath);
+            pHandles[handle].pwszGuestPath = NULL;
+        }
+
         if (pHandles[handle].crypt) {
             fc_free_hdr(pHandles[handle].crypt);
             pHandles[handle].crypt = NULL;
@@ -546,9 +568,10 @@ int vbsfFreeHandle(PSHFLCLIENTDATA pClient, SHFLHANDLE handle)
     return VERR_INVALID_HANDLE;
 }
 
-SHFLHANDLE vbsfAllocFileHandle (PSHFLCLIENTDATA pClient, const wchar_t *pwszFilename, uint32_t uOpenFlags)
+SHFLHANDLE vbsfAllocFileHandle (PSHFLCLIENTDATA pClient, const wchar_t *pwszFilename,
+    const wchar_t *pwszGuestPath, uint32_t uOpenFlags)
 {
-    wchar_t *pszDup;
+    wchar_t *pszDup, *pszDupGp;
     SHFLFILEHANDLE *pHandle = (SHFLFILEHANDLE *)RTMemAllocZ (sizeof (SHFLFILEHANDLE));
 
     if (pHandle)
@@ -559,15 +582,19 @@ SHFLHANDLE vbsfAllocFileHandle (PSHFLCLIENTDATA pClient, const wchar_t *pwszFile
          * for use when saving VM. */
 
         pszDup = RTwcsdup((wchar_t*)pwszFilename);
-
-        if (pszDup == NULL)
-        {
+        if (pszDup == NULL) {
+            RTMemFree((void*) pHandle);
+            return SHFL_HANDLE_NIL;
+        }
+        pszDupGp = RTwcsdup((wchar_t*)pwszGuestPath);
+        if (pszDupGp == NULL) {
+            RTMemFree(pszDup);
             RTMemFree((void*) pHandle);
             return SHFL_HANDLE_NIL;
         }
 
         return vbsfAllocHandle(pClient, pHandle->Header.u32Flags, (uintptr_t)pHandle,
-                pszDup, uOpenFlags);
+            pszDup, pszDupGp, uOpenFlags);
     }
 
     return SHFL_HANDLE_NIL;
@@ -679,9 +706,11 @@ vbsfNotifyCryptChanged(void)
     /* Start from 1, 0 is the invalid file handle and we
      * use it to mark the end of the saved list. */
     for (i = 1; i < SHFLHANDLE_MAX; ++i) {
-        const wchar_t *pwszFilename = pHandles[i].pwszFilename;
-        if (pwszFilename != NULL)
-            pHandles[i].cryptchanged = 1;
+        if (pHandles[i].uFlags & SHFL_HF_TYPE_FILE) {
+            const wchar_t *pwszFilename = pHandles[i].pwszFilename;
+            if (pwszFilename != NULL)
+                pHandles[i].cryptchanged = 1;
+        }
     }
 }
 
@@ -693,6 +722,18 @@ wchar_t *vbsfQueryHandlePath(PSHFLCLIENTDATA pClient, SHFLHANDLE handle)
         && (pHandles[handle].uFlags & SHFL_HF_VALID)
         && pHandles[handle].pClient == pClient)
         return (wchar_t*)pHandles[handle].pwszFilename;
+    else
+        return NULL;
+}
+
+wchar_t *vbsfQueryHandleGuestPath(PSHFLCLIENTDATA pClient, SHFLHANDLE handle)
+{
+    wait_handle_ready(handle);
+
+    if (   handle < SHFLHANDLE_MAX
+        && (pHandles[handle].uFlags & SHFL_HF_VALID)
+        && pHandles[handle].pClient == pClient)
+        return (wchar_t*)pHandles[handle].pwszGuestPath;
     else
         return NULL;
 }
@@ -729,15 +770,33 @@ vbsfQueryHandleData(PSHFLCLIENTDATA pClient, SHFLHANDLE handle)
         return NULL;
 }
 
-SHFLHANDLE vbsfAllocDirHandle(PSHFLCLIENTDATA pClient)
+SHFLHANDLE vbsfAllocDirHandle(PSHFLCLIENTDATA pClient,
+    const wchar_t *pwszPath, const wchar_t *pwszGuestPath)
 {
     SHFLFILEHANDLE *pHandle = (SHFLFILEHANDLE *)RTMemAllocZ (sizeof (SHFLFILEHANDLE));
+    wchar_t *pszDup, *pszDupGp;
 
     if (pHandle)
     {
         pHandle->Header.u32Flags = SHFL_HF_TYPE_DIR;
+
+        /* Duplicate file name string to be stored in handle table,
+         * for use when saving VM. */
+
+        pszDup = RTwcsdup((wchar_t*)pwszPath);
+        if (pszDup == NULL) {
+            RTMemFree((void*) pHandle);
+            return SHFL_HANDLE_NIL;
+        }
+        pszDupGp = RTwcsdup((wchar_t*)pwszGuestPath);
+        if (pszDupGp == NULL) {
+            RTMemFree(pszDup);
+            RTMemFree((void*) pHandle);
+            return SHFL_HANDLE_NIL;
+        }
+
         return vbsfAllocHandle(pClient, pHandle->Header.u32Flags,
-                               (uintptr_t)pHandle, NULL, 0);
+            (uintptr_t)pHandle, pszDup, pszDupGp, 0);
     }
 
     return SHFL_HANDLE_NIL;
