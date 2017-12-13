@@ -907,9 +907,6 @@ int hvm_domain_initialise(struct domain *d)
     /* XXX init debug option */
     if (!strstr(opt_debug, ",uncomptmpl,")) {
         /* defaults for compressed template */
-        d->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] =
-            HVM_PARAM_CLONE_L1_lazy_populate |
-            HVM_PARAM_CLONE_L1_dynamic;
         d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] =
             HVM_PARAM_CLONE_DECOMPRESSED_shared;
         d->arch.hvm_domain.params[HVM_PARAM_COMPRESSED_GC] =
@@ -946,9 +943,6 @@ int hvm_domain_initialise(struct domain *d)
         HVM_PARAM_ZERO_PAGE_enable_load;
 
     d->arch.hvm_domain.params[HVM_PARAM_TEMPLATE_LAZY_LOAD] = 1;
-
-    if (ax_present) 
-        d->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] ^= HVM_PARAM_CLONE_L1_lazy_populate;
 
 #ifndef __UXEN__
     hvm_init_cacheattr_region_list(d);

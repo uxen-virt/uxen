@@ -1227,7 +1227,6 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
             }
             nmfn = np2m->get_l1_table(np2m, gpfn, NULL);
         }
-#ifdef LAZY_POPULATE_CLONE_L1
         if (hvm_hap_has_2mb(d) &&
             p2m->domain->arch.hvm_domain.params[HVM_PARAM_CLONE_L1]) {
             /* if l1 exists already in clone, clone the rest of the l1
@@ -1247,7 +1246,6 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
             continue;
         }
       clone_now:
-#endif /* LAZY_POPULATE_CLONE_L1 */
         if (!(gpfn & ((1UL << PAGETABLE_ORDER) - 1))) {
             if (ntable) {
                 unmap_domain_page(ntable);
