@@ -976,7 +976,9 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         /* check if template page is a decompressed page, only shared
          * in one clone */
 #define ONE_CLONE_COUNT 1
-        while (page_get_owner(mfn_to_page(smfn)) == d->clone_of &&
+        while ((d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] &
+                HVM_PARAM_CLONE_DECOMPRESSED_gift) &&
+               page_get_owner(mfn_to_page(smfn)) == d->clone_of &&
                (mfn_to_page(smfn)->count_info & PGC_count_mask) <=
                ONE_CLONE_COUNT) {
             struct page_data_info *pdi;
