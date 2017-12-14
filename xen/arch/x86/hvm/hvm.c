@@ -909,8 +909,6 @@ int hvm_domain_initialise(struct domain *d)
         /* defaults for compressed template */
         d->arch.hvm_domain.params[HVM_PARAM_CLONE_DECOMPRESSED] =
             HVM_PARAM_CLONE_DECOMPRESSED_shared;
-        d->arch.hvm_domain.params[HVM_PARAM_COMPRESSED_GC] =
-            HVM_PARAM_COMPRESSED_GC_decompressed;
     }
 
     /* XXX init debug option */
