@@ -1789,7 +1789,7 @@ vmx_pt_sync_domain(struct domain *d)
             spin_lock_irqsave(&ept_sync_lock, flags2);
 
             if ((misery++) > 1000000) {
-                WARNISH();
+                WARN();
                 break;
             }
 
