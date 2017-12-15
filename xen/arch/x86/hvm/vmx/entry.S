@@ -19,7 +19,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -300,7 +300,6 @@ UNLIKELY_END(realmode)
         mov  CPU_cr8(r(bx)),r(ax)
         mov  r(ax),%cr8
 #endif
-        call_via_uxen_info(sti, r(ax))
         mov $1, r_arg
         call_with_abi(vm_entry_fail, SIZEOF_REG)
         jmp .Lret_from_vmx_asm_do_vmentry
@@ -312,7 +311,6 @@ UNLIKELY_END(realmode)
         mov  CPU_cr8(r(bx)),r(ax)
         mov  r(ax),%cr8
 #endif
-        call_via_uxen_info(sti, r(ax))
         xor r_arg, r_arg
         call_with_abi(vm_entry_fail, SIZEOF_REG)
         jmp .Lret_from_vmx_asm_do_vmentry
