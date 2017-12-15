@@ -395,6 +395,8 @@ void on_selected_cpus(
     call_data.info = info;
     call_data.wait = wait;
 
+    /* wait == 1 -- deprecated,
+       wait == 2 -- use send_IPI_mask, but wait for function completion */
     if (wait == 1) {
 	if (cpumask_equal(&call_data.selected, cpumask_of(smp_processor_id())))
 	    goto this_cpu;
@@ -404,6 +406,10 @@ void on_selected_cpus(
                      __uxen_smp_call_function_interrupt);
 	goto wait;
     }
+#ifndef NDEBUG
+    else if (wait && wait != 2)
+	WARN();
+#endif	/* NDEBUG */
 
     send_IPI_mask(&call_data.selected, CALL_FUNCTION_VECTOR);
 

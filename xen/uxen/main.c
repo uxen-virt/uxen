@@ -44,8 +44,6 @@ DEFINE_PER_CPU(struct uxen_hypercall_desc *, hypercall_args);
 
 uint64_t aligned_throttle_period = -1ULL;
 
-static cpumask_t cpu_down_map;
-
 struct _uxen_info _uxen_info = {
         .ui_sizeof_struct_page_info = sizeof(struct page_info),
 
@@ -599,13 +597,7 @@ __uxen_shutdown_xen)(void)
 
     console_start_sync();
 
-    cpumask_copy(&cpu_down_map,&cpu_online_map);
-
-    on_selected_cpus(&cpu_online_map, do_hvm_cpu_down, NULL, 0);
-
-    printk("waiting to bring all cpus home\n");
-    while (!cpumask_empty(&cpu_down_map))
-        rep_nop();
+    on_selected_cpus(&cpu_online_map, do_hvm_cpu_down, NULL, 2);
 
     printk("clearing cpu_online_map\n");
     cpumask_clear(&cpu_online_map);
@@ -623,7 +615,6 @@ do_hvm_cpu_down(void *arg)
 {
 
     hvm_cpu_down();
-    cpumask_test_and_clear_cpu(smp_processor_id(), &cpu_down_map);
 }
 
 void UXEN_INTERFACE_FN(
@@ -659,14 +650,7 @@ __uxen_suspend_xen)(void)
     uxen_set_current(dom0->vcpu[smp_processor_id()]);
     current->is_privileged = 1;
 
-    cpumask_copy(&cpu_down_map,&cpu_online_map);
-
-    on_selected_cpus(&cpu_online_map, do_hvm_cpu_down, NULL, 0);
-
-    printk("waiting to bring all cpus home\n");
-    while (!cpumask_empty(&cpu_down_map))
-        rep_nop();
-
+    on_selected_cpus(&cpu_online_map, do_hvm_cpu_down, NULL, 2);
     suspend_platform_time();
 
     current->is_privileged = 0;
