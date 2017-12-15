@@ -1650,7 +1650,8 @@ static void vmx_update_guest_efer(struct vcpu *v)
 }
 
 /* Caller must hold ept_sync_lock */
-static void ept_maybe_sync_cpu_no_lock(struct domain *d, unsigned int cpu)
+static void
+ept_maybe_sync_cpu_no_lock(struct domain *d, unsigned int cpu)
 {
     if (!cpumask_test_cpu(cpu, d->arch.hvm_domain.vmx.ept_synced)) {
         struct p2m_domain *p2m = p2m_get_hostp2m(d);
@@ -1662,7 +1663,8 @@ static void ept_maybe_sync_cpu_no_lock(struct domain *d, unsigned int cpu)
     }
 }
 
-static inline void ept_maybe_sync_cpu(struct domain *d)
+static inline void
+ept_maybe_sync_cpu(struct domain *d)
 {
     unsigned long flags, flags2;
 
@@ -1672,19 +1674,20 @@ static inline void ept_maybe_sync_cpu(struct domain *d)
     cpu_irq_save(flags); 
     spin_lock_irqsave(&ept_sync_lock, flags2);
 
-    ept_maybe_sync_cpu_no_lock(d,smp_processor_id());
+    ept_maybe_sync_cpu_no_lock(d, smp_processor_id());
 
     spin_unlock_irqrestore(&ept_sync_lock, flags2);
     cpu_irq_restore(flags); 
 }
 
-static void ept_maybe_sync_cpu_enter(struct domain *d)
+static void
+ept_maybe_sync_cpu_enter(struct domain *d)
 {
     unsigned int cpu = smp_processor_id();
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
     unsigned long flags, flags2;
 
-    if ( !paging_mode_hap(d) )
+    if (!paging_mode_hap(d))
         return;
 
     poke_setup_cpu();
@@ -1703,9 +1706,10 @@ static void ept_maybe_sync_cpu_enter(struct domain *d)
     cpu_irq_restore(flags); 
 }
 
-static void ept_maybe_sync_cpu_leave(struct domain *d)
+static void
+ept_maybe_sync_cpu_leave(struct domain *d)
 {
-    unsigned int cpu=smp_processor_id();
+    unsigned int cpu = smp_processor_id();
     unsigned long flags, flags2;
 
     if (!paging_mode_hap(d))
@@ -1722,7 +1726,8 @@ static void ept_maybe_sync_cpu_leave(struct domain *d)
     cpu_irq_restore(flags);
 }
 
-static void ept_sync_domain(struct domain *d)
+static void
+ept_sync_domain(struct domain *d)
 {
     int misery = 0;
     unsigned long flags, flags2;
@@ -1740,16 +1745,17 @@ static void ept_sync_domain(struct domain *d)
 
         cpu_irq_save(flags); 
         spin_lock_irqsave(&ept_sync_lock, flags2);
+
         cpumask_clear(d->arch.hvm_domain.vmx.ept_synced);
 
-        ept_maybe_sync_cpu_no_lock(d,smp_processor_id());
+        ept_maybe_sync_cpu_no_lock(d, smp_processor_id());
 
-        cpumask_andnot(d->arch.hvm_domain.vmx.ept_dirty, 
-                       d->arch.hvm_domain.vmx.ept_in_use, 
+        cpumask_andnot(d->arch.hvm_domain.vmx.ept_dirty,
+                       d->arch.hvm_domain.vmx.ept_in_use,
                        d->arch.hvm_domain.vmx.ept_synced);
 
         while (!cpumask_empty(d->arch.hvm_domain.vmx.ept_dirty)) {
-            unsigned cpu;
+            unsigned int cpu;
 
             spin_unlock_irqrestore(&ept_sync_lock, flags2);
             cpu_irq_restore(flags); 
@@ -1777,8 +1783,8 @@ static void ept_sync_domain(struct domain *d)
 
             ept_maybe_sync_cpu_no_lock(d, smp_processor_id());
 
-            cpumask_andnot(d->arch.hvm_domain.vmx.ept_dirty, 
-                           d->arch.hvm_domain.vmx.ept_in_use, 
+            cpumask_andnot(d->arch.hvm_domain.vmx.ept_dirty,
+                           d->arch.hvm_domain.vmx.ept_in_use,
                            d->arch.hvm_domain.vmx.ept_synced);
         }
 

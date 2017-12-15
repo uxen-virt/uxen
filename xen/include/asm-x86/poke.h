@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, Bromium, Inc.
+ * Copyright 2017-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -9,14 +9,15 @@
 #include <xen/cpu.h>
 #include <xen/percpu.h>
 
-
 DECLARE_PER_CPU(int, poke_ready);
 
 extern void _poke_setup_cpu(void);
 extern void poke_cpu(unsigned);
 
-
-static inline void poke_setup_cpu(void)
+static inline void
+poke_setup_cpu(void)
 {
-    if (!this_cpu(poke_ready)) _poke_setup_cpu();
+
+    if (!this_cpu(poke_ready))
+      _poke_setup_cpu();
 }
