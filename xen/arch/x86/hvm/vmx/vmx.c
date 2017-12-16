@@ -1682,8 +1682,6 @@ ept_maybe_sync_cpu_enter(struct domain *d)
     if (!paging_mode_hap(d))
         return;
 
-    poke_setup_cpu();
-
     /* We're about to do a vmenter, which should clear this */
 
     cpu_irq_save(flags); 
