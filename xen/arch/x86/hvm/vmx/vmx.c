@@ -3138,15 +3138,8 @@ vmx_do_execute(struct vcpu *v)
 
     ASSERT(v);
 
-    cpu_irq_disable();
-
-    ept_maybe_sync_cpu_enter(v->domain);
-
-    if (vmx_asm_do_vmentry(v)) {
-        ept_maybe_sync_cpu_leave(v->domain);
-        cpu_irq_enable();
+    if (vmx_asm_do_vmentry(v))
         return;
-    }
 
     if ( paging_mode_hap(v->domain) && hvm_paging_enabled(v) )
         v->arch.hvm_vcpu.guest_cr[3] = v->arch.hvm_vcpu.hw_cr[3] =
@@ -3154,8 +3147,6 @@ vmx_do_execute(struct vcpu *v)
 
     exit_reason = !vmx_vmcs_late_load ? __vmread(VM_EXIT_REASON) :
         v->arch.hvm_vmx.exit_reason;
-
-    ept_maybe_sync_cpu_leave(v->domain);
 
     if ( hvm_long_mode_enabled(v) )
         HVMTRACE_ND(VMEXIT64, 0, 1/*cycles*/, 3, exit_reason,
@@ -3754,6 +3745,8 @@ asmlinkage_abi void vmx_restore_regs(uintptr_t host_rsp)
     if (vmx_vmcs_late_load)
         pv_vmcs_flush_dirty(this_cpu(current_vmcs_vmx), 0);
 
+    ept_maybe_sync_cpu_enter(current->domain);
+
     if (update_host_vm_ibrs &&
         current->arch.hvm_vcpu.msr_spec_ctrl != host_msr_spec_ctrl)
         wrmsrl(MSR_IA32_SPEC_CTRL, current->arch.hvm_vcpu.msr_spec_ctrl);
@@ -3777,6 +3770,8 @@ asmlinkage_abi void vmx_save_regs(void)
         }
     } else
         lfence();
+
+    ept_maybe_sync_cpu_leave(current->domain);
 
     if (!vmx_vmcs_late_load)
         current->arch.hvm_vmx.launched = 1;
@@ -3821,6 +3816,8 @@ asmlinkage_abi void vm_entry_fail(uintptr_t resume)
         }
     } else
         lfence();
+
+    ept_maybe_sync_cpu_leave(current->domain);
 
     cpu_irq_enable();
 
