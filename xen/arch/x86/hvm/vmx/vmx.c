@@ -3103,15 +3103,13 @@ vmx_execute(struct vcpu *v)
 
     ASSERT(v);
 
-    cpu_irq_disable();
-
-    ept_maybe_sync_cpu_enter(v->domain);
-
-    if (vmx_asm_do_vmentry(v)) {
-        ept_maybe_sync_cpu_leave(v->domain);
-        cpu_irq_enable();
-        return;
+    if ( paging_mode_hap(v->domain) ) {
+        struct p2m_domain *p2m = p2m_get_hostp2m(v->domain);
+        p2m->virgin = 0;
     }
+
+    if (vmx_asm_do_vmentry(v))
+        return;
 
     if ( paging_mode_hap(v->domain) && hvm_paging_enabled(v) )
         v->arch.hvm_vcpu.guest_cr[3] = v->arch.hvm_vcpu.hw_cr[3] =
@@ -3119,8 +3117,6 @@ vmx_execute(struct vcpu *v)
 
     exit_reason = !vmx_vmcs_late_load ? __vmread(VM_EXIT_REASON) :
         v->arch.hvm_vmx.exit_reason;
-
-    ept_maybe_sync_cpu_leave(v->domain);
 
     if ( hvm_long_mode_enabled(v) )
         HVMTRACE_ND(VMEXIT64, 0, 1/*cycles*/, 3, exit_reason,
@@ -3718,11 +3714,15 @@ asmlinkage_abi void vmx_restore_regs(uintptr_t host_rsp)
 
     if (vmx_vmcs_late_load)
         pv_vmcs_flush_dirty(this_cpu(current_vmcs_vmx), 0);
+
+    ept_maybe_sync_cpu_enter(current->domain);
 }
 
 asmlinkage_abi void vmx_save_regs(void)
 {
     struct cpu_user_regs *regs = &current->arch.user_regs;
+
+    ept_maybe_sync_cpu_leave(current->domain);
 
     if (!vmx_vmcs_late_load)
         current->arch.hvm_vmx.launched = 1;
@@ -3752,6 +3752,8 @@ asmlinkage_abi void vmx_save_regs(void)
 asmlinkage_abi void vm_entry_fail(uintptr_t resume)
 {
     unsigned long error = __vmread(VM_INSTRUCTION_ERROR);
+
+    ept_maybe_sync_cpu_leave(current->domain);
 
     cpu_irq_enable();
 
