@@ -18,7 +18,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -3741,6 +3741,18 @@ asmlinkage_abi void vmx_save_regs(void)
     regs->eip = __vmread(GUEST_RIP);
     regs->esp = __vmread(GUEST_RSP);
     regs->eflags = __vmread(GUEST_RFLAGS);
+}
+
+asmlinkage_abi void vm_entry_fail(uintptr_t resume)
+{
+    unsigned long error = __vmread(VM_INSTRUCTION_ERROR);
+
+    cpu_irq_enable();
+
+    printk("<vm_%s_fail> error code %lx\n",
+           resume ? "resume" : "launch", error);
+    vmcs_dump_vcpu(current);
+    __domain_crash(current->domain);
 }
 
 static bool_t __initdata disable_pv_vmx;
