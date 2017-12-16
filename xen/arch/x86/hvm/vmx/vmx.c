@@ -1753,9 +1753,9 @@ ept_sync_domain(struct domain *d)
             cpu_irq_restore(flags); 
 
             for_each_cpu(cpu, ept_dirty) {
-                if (cpu == smp_processor_id())
-                    continue;
-                poke_cpu(cpu);
+                ASSERT(cpu != smp_processor_id());
+                if (!cpumask_test_cpu(cpu, d->arch.hvm_domain.vmx.ept_synced))
+                    poke_cpu(cpu);
             }
 
             rep_nop();
