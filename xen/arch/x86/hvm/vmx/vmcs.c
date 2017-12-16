@@ -1482,18 +1482,6 @@ void vmx_destroy_vmcs(struct vcpu *v)
     free_xenheap_page(v->arch.hvm_vmx.msr_bitmap);
 }
 
-asmlinkage_abi void vm_entry_fail(uintptr_t resume)
-{
-    unsigned long error = __vmread(VM_INSTRUCTION_ERROR);
-
-    cpu_irq_enable();
-
-    printk("<vm_%s_fail> error code %lx\n",
-           resume ? "resume" : "launch", error);
-    vmcs_dump_vcpu(current);
-    __domain_crash(current->domain);
-}
-
 #ifndef __UXEN__
 static void wbinvd_ipi(void *info)
 {
