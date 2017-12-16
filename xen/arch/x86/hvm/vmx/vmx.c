@@ -131,15 +131,8 @@ static int vmx_domain_initialise(struct domain *d)
         return -ENOMEM;
     }
 
-    if ( !zalloc_cpumask_var(&d->arch.hvm_domain.vmx.ept_dirty) ) {
-        free_cpumask_var(d->arch.hvm_domain.vmx.ept_in_use);
-        free_cpumask_var(d->arch.hvm_domain.vmx.ept_synced);
-        return -ENOMEM;
-    }
-
     if ( (rc = vmx_alloc_vlapic_mapping(d)) != 0 )
     {
-        free_cpumask_var(d->arch.hvm_domain.vmx.ept_dirty);
         free_cpumask_var(d->arch.hvm_domain.vmx.ept_in_use);
         free_cpumask_var(d->arch.hvm_domain.vmx.ept_synced);
         return rc;
@@ -159,7 +152,6 @@ static void vmx_domain_destroy(struct domain *d)
         on_each_cpu(__ept_sync_domain, d, 1);
 #endif
 
-    free_cpumask_var(d->arch.hvm_domain.vmx.ept_dirty);
     free_cpumask_var(d->arch.hvm_domain.vmx.ept_in_use);
     free_cpumask_var(d->arch.hvm_domain.vmx.ept_synced);
     vmx_free_vlapic_mapping(d);
@@ -1741,6 +1733,8 @@ ept_sync_domain(struct domain *d)
     if (ax_present)
         ax_invept_all_cpus();
     else {
+        cpumask_var_t ept_dirty;
+
         /* Misery: only the test_and_set_bit operations are properly atomic */
 
         cpu_irq_save(flags); 
@@ -1750,17 +1744,17 @@ ept_sync_domain(struct domain *d)
 
         ept_maybe_sync_cpu_no_lock(d, smp_processor_id());
 
-        cpumask_andnot(d->arch.hvm_domain.vmx.ept_dirty,
+        cpumask_andnot(ept_dirty,
                        d->arch.hvm_domain.vmx.ept_in_use,
                        d->arch.hvm_domain.vmx.ept_synced);
 
-        while (!cpumask_empty(d->arch.hvm_domain.vmx.ept_dirty)) {
+        while (!cpumask_empty(ept_dirty)) {
             unsigned int cpu;
 
             spin_unlock_irqrestore(&ept_sync_lock, flags2);
             cpu_irq_restore(flags); 
 
-            for_each_cpu(cpu, d->arch.hvm_domain.vmx.ept_dirty) {
+            for_each_cpu(cpu, ept_dirty) {
                 if (cpu == smp_processor_id())
                     continue;
                 poke_cpu(cpu);
@@ -1783,7 +1777,7 @@ ept_sync_domain(struct domain *d)
 
             ept_maybe_sync_cpu_no_lock(d, smp_processor_id());
 
-            cpumask_andnot(d->arch.hvm_domain.vmx.ept_dirty,
+            cpumask_andnot(ept_dirty,
                            d->arch.hvm_domain.vmx.ept_in_use,
                            d->arch.hvm_domain.vmx.ept_synced);
         }
