@@ -86,7 +86,7 @@
 enum handler_return { HNDL_done, HNDL_unhandled, HNDL_exception_raised };
 
 static DEFINE_PER_CPU(unsigned long, host_msr_tsc_aux);
-DEFINE_SPINLOCK(ept_sync_lock);
+static DEFINE_SPINLOCK(ept_sync_lock);
 
 static void vmx_ctxt_switch_from(struct vcpu *v);
 static void vmx_ctxt_switch_to(struct vcpu *v);
