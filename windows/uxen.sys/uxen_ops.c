@@ -2,7 +2,7 @@
  *  uxen_ops.c
  *  uxen
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -909,10 +909,16 @@ test_ax_compatibility_l2(void)
     uint32_t ax_masks[]={ AX_FEATURES_AX_L2_VMX | AX_FEATURES_AX_L2_VMCLEAR |
                           AX_FEATURES_AX_L2_FLUSHTLB };
 
-    uint32_t ln_masks[]={ AX_FEATURES_LN_VMCS_X_V1 |
-                          AX_FEATURES_LN_NO_RESTORE_DT_LIMITS |
+    uint32_t ln_masks[]={ AX_FEATURES_LN_NO_RESTORE_DT_LIMITS |
                           AX_FEATURES_LN_ACCEPT_LAZY_EPT_FAULTS };
+
     int err = 0;
+
+    if (hv_tests_cpu_is_intel()) {
+        ln_masks[0] |=  AX_FEATURES_LN_VMCS_X_V1;
+    } else if (hv_tests_cpu_is_amd()) {
+        ln_masks[0] |=  AX_FEATURES_LN_VMCB_X_V1;
+    }
 
     err |= test_ax_compatibility_masks(ax_masks,
                                        sizeof(ax_masks) / sizeof(ax_masks[0]));
