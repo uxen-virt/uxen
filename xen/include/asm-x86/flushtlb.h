@@ -67,7 +67,7 @@ static inline unsigned long read_cr3(void)
     unsigned long cr3;
     __asm__ __volatile__ (
         "mov %%cr3, %0" : "=r" (cr3) : );
-    return cr3;
+    return cr3 & PAGE_MASK;
 }
 
 /* Write pagetable base and implicitly tick the tlbflush clock. */

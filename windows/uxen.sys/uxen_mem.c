@@ -101,7 +101,7 @@ set_linear_pt_va(void)
         goto out;
     }
 
-    cr3 = read_cr3();
+    cr3 = read_cr3() & ~(0xfffULL) ;
 
     mdl->MdlFlags = MDL_PAGES_LOCKED;
     MmGetMdlPfnArray(mdl)[0] = cr3 >> PAGE_SHIFT;
