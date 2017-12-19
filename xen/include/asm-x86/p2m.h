@@ -406,6 +406,8 @@ struct p2m_domain {
      * pause domain.  Otherwise, remove access restrictions. */
     bool_t       access_required;
 
+    bool_t virgin;
+
     /* Highest guest frame that's ever been mapped in the p2m */
     unsigned long max_mapped_pfn;
 
@@ -416,8 +418,6 @@ struct p2m_domain {
 
     struct dspage_store *dsps;
 
-    int virgin;
- 
 #ifndef NDEBUG
     unsigned long compress_gpfn;
 #endif  /* NDEBUG */
