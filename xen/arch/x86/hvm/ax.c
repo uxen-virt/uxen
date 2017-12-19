@@ -110,16 +110,16 @@ void ax_pv_ept_write(struct p2m_domain *p2m, int level, uint64_t gfn,
 void ax_svm_vmsave_root(struct vcpu *v)
 {
     struct vmcb_struct *vmcb = v->arch.hvm_svm.vmcb;
-    struct ax_vmcb_extra *ax =
-            (struct ax_vmcb_extra *) (((uint8_t *) vmcb) + AX_VMCB_OFFSET);
+    struct ax_vmcb_extra_v1 *ax =
+            (struct ax_vmcb_extra_v1 *) (((uint8_t *) vmcb) + AX_VMCB_OFFSET_V1);
 
     ax->flags |= AX_SVM_FLAGS_VMSAVE_ROOT;
 }
 
 int ax_svm_vmrun(struct vcpu *v, struct vmcb_struct *vmcb, struct cpu_user_regs *regs)
 {
-    volatile struct ax_vmcb_extra *ax =
-            (struct ax_vmcb_extra *) (((uint8_t *) vmcb) + AX_VMCB_OFFSET);
+    volatile struct ax_vmcb_extra_v1 *ax =
+            (struct ax_vmcb_extra_v1 *) (((uint8_t *) vmcb) + AX_VMCB_OFFSET_V1);
 
     if (!v->fpu_initialised) {
         clts();
@@ -133,6 +133,8 @@ int ax_svm_vmrun(struct vcpu *v, struct vmcb_struct *vmcb, struct cpu_user_regs 
     ax->vmsave_pa = v->arch.hvm_svm.vmcb_pa;
     ax->vmsave_root_pa = v->arch.hvm_svm.root_vmcb_pa;
     ax->xsave_pa = (uint64_t) __pa(v->arch.xsave_area);
+
+    /*This is ok because there is compile time code to check these structures are compatible */
     ax->uregs_pa = (uint64_t) __pa(regs);
 
     if (svm_asm_ax_vmentry(v))
@@ -167,15 +169,58 @@ int ax_setup(void)
         ax_pv_ept = !!(AX_FEATURES_AX_SHADOW_EPT & rdx);
         printk ("Using PV-%s %d\n", cpu_is_intel ? "EPT" : "NPT (async active, smart invept)", ax_pv_ept);
         if (!cpu_is_intel) {
-            rax = AX_CPUID_SVM_L1_CHECK_INVLPG_INTERCEPT;
+            rax = AX_CPUID_VMCB_CHECK_MY;
             rbx = 0;
             rcx = 0;
             rdx = 0;
             hv_tests_cpuid(&rax, &rbx, &rcx, &rdx);
-            ax_l1_invlpg_intercept = !!rdx;
+            ax_l1_invlpg_intercept = !!(rdx & AX_CPUID_VMCB_CHECK_INTERCEPT_INVLPG);
             printk("L1 intercepts INVLPG: %s\n", ax_l1_invlpg_intercept ? "YES" : "NO");
         }
     }
 #endif
     return 0;
 }
+
+
+
+#ifdef __x86_64__
+
+/* Errors in this section indicate that struct cpu_user_regs is incompatible with struct ax_cpu_user_regs_v1 */
+
+#define TEST_EQUAL(f, a, b) \
+	static uint8_t __attribute__((unused)) cpu_regs_test_ ## f ## _1[ (a) - (b) ]; \
+	static uint8_t __attribute__((unused)) cpu_regs_test_ ## f ## _1[ (b) - (a) ]
+
+#define TEST_OFFSET(f) TEST_EQUAL(f, offsetof(struct cpu_user_regs, f), offsetof(struct ax_cpu_user_regs_v1, f))
+
+TEST_OFFSET(r15);
+TEST_OFFSET(r14);
+TEST_OFFSET(r13);
+TEST_OFFSET(r12);
+TEST_OFFSET(rbp);
+TEST_OFFSET(rbx);
+TEST_OFFSET(r11);
+TEST_OFFSET(r10);
+TEST_OFFSET(r9);
+TEST_OFFSET(r8);
+TEST_OFFSET(rax);
+TEST_OFFSET(rcx);
+TEST_OFFSET(rdx);
+TEST_OFFSET(rsi);
+TEST_OFFSET(rdi);
+TEST_OFFSET(error_code);
+TEST_OFFSET(entry_vector);
+TEST_OFFSET(rip);
+TEST_OFFSET(cs);
+/*TEST_OFFSET(saved_upcall_mask);*/
+TEST_OFFSET(rflags);
+TEST_OFFSET(rsp);
+TEST_OFFSET(ss);
+TEST_OFFSET(es);
+TEST_OFFSET(ds);
+TEST_OFFSET(fs);
+TEST_OFFSET(gs);
+
+#endif
+
