@@ -408,6 +408,9 @@ struct p2m_domain {
 
     bool_t virgin;
 
+    /* controls whether asynchronous operations on the p2m are allowed */
+    bool_t is_alive;
+
     /* Highest guest frame that's ever been mapped in the p2m */
     unsigned long max_mapped_pfn;
 
@@ -519,6 +522,10 @@ static inline unsigned long mfn_to_gfn(struct domain *d, mfn_t mfn)
 
 /* Init the datastructures for later use by the p2m code */
 int p2m_init(struct domain *d);
+
+/* Mark p2m table alive -- this controls from when asynchronous
+ * operations on the p2m are allowed */
+int p2m_alive(struct domain *d);
 
 /* Allocate a new p2m table for a domain. 
  *

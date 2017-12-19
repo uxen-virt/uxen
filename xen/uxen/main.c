@@ -325,6 +325,7 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
         hvm_cpu_on();
         if (!v->vcpu_id)
             v4v_resume(d);
+        p2m_alive(d);
         break;
 
     case VCI_RUN_MODE_PROCESS_IOREQ:

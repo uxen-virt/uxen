@@ -843,6 +843,12 @@ int paging_domctl(struct domain *d, xen_domctl_shadow_op_t *sc,
 /* Call when destroying a domain */
 void paging_teardown(struct domain *d)
 {
+    struct p2m_domain *p2m = p2m_get_hostp2m(d);
+
+    p2m_lock_recursive(p2m);
+    p2m->is_alive = 0;
+    p2m_unlock(p2m);
+
     if ( hap_enabled(d) )
         hap_teardown(d);
 #ifndef __UXEN__
@@ -858,9 +864,9 @@ void paging_teardown(struct domain *d)
     p2m_pod_empty_cache(d);
 #endif  /* __UXEN__ */
 
-    p2m_teardown_compressed(p2m_get_hostp2m(d));
+    p2m_teardown_compressed(p2m);
 
-    if (!p2m_shared_teardown(p2m_get_hostp2m(d)))
+    if (!p2m_shared_teardown(p2m))
         gdprintk(XENLOG_ERR, "%s: p2m_shared_teardown failed\n", __FUNCTION__);
 }
 

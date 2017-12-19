@@ -187,6 +187,15 @@ int p2m_init(struct domain *d)
     return rc;
 }
 
+int
+p2m_alive(struct domain *d)
+{
+
+    p2m_get_hostp2m(d)->is_alive = 1;
+
+    return 0;
+}
+
 void p2m_change_entry_type_global(struct domain *d,
                                   p2m_type_t ot, p2m_type_t nt)
 {
