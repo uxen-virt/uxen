@@ -67,6 +67,11 @@ static inline unsigned long read_cr3(void)
     unsigned long cr3;
     __asm__ __volatile__ (
         "mov %%cr3, %0" : "=r" (cr3) : );
+
+#ifdef __x86_64__
+    cr3 &= PAGE_MASK;
+#endif
+
     return cr3;
 }
 

@@ -103,6 +103,10 @@ set_linear_pt_va(void)
 
     cr3 = read_cr3();
 
+#ifdef __x86_64__
+    cr3 &= ~(0xfffULL);
+#endif
+
     mdl->MdlFlags = MDL_PAGES_LOCKED;
     MmGetMdlPfnArray(mdl)[0] = cr3 >> PAGE_SHIFT;
     try {
