@@ -2,7 +2,7 @@
  *  uxen_debug.h
  *  uxen
  *
- * Copyright 2013-2017, Bromium, Inc.
+ * Copyright 2013-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -34,7 +34,8 @@
 
 struct vm_info_shared;
 
-int kdbgprint;
+extern int kdbgprint;
+
 int uxen_vprintk(struct vm_info_shared *,
                  const __format_string char *, va_list);
 
