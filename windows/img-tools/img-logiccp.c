@@ -4223,7 +4223,7 @@ int main(int argc, char **argv)
 
     USN start_usn = 0ULL;
     HANDLE drive = INVALID_HANDLE_VALUE;
-    if (shallow_allowed && !skip_usn_phase) {
+    if (!skip_usn_phase) {
         wchar_t unc_systemroot[MAX_PATH_LEN];
         path_join(unc_systemroot, L"\\\\?\\", systemroot);
         drive = CreateFileW(
