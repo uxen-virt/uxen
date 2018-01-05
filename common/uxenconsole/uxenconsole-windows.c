@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2017, Bromium, Inc.
+ * Copyright 2014-2018, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -542,7 +542,7 @@ create_window(struct console *cons)
     wndclass.hInstance      = cons->instance;
     wndclass.hIcon          = LoadIcon(NULL, IDI_APPLICATION);
     wndclass.hIconSm        = LoadIcon(NULL, IDI_APPLICATION);
-    wndclass.hCursor        = LoadCursor(NULL, IDC_ARROW);
+    wndclass.hCursor        = LoadCursor(NULL, IDC_CROSS);
     wndclass.hbrBackground  = (HBRUSH)GetStockObject(WHITE_BRUSH);
     wndclass.lpszClassName  = L"uXenConsole";
     wndclass.lpszMenuName   = NULL;
