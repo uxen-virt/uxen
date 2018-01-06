@@ -119,7 +119,7 @@ void show_registers(struct cpu_user_regs *regs)
 #endif  /* __UXEN__ */
 
         fault_crs[0] = read_cr0();
-        fault_crs[3] = read_cr3();
+        fault_crs[3] = read_actual_cr3();
         fault_crs[4] = read_cr4();
     }
 
@@ -157,7 +157,7 @@ void vcpu_show_registers(const struct vcpu *v)
 #ifndef __UXEN__
 void show_page_walk(unsigned long addr)
 {
-    unsigned long pfn, mfn, cr3 = read_cr3();
+    unsigned long pfn, mfn, cr3 = read_paging_base();
     l3_pgentry_t l3e, *l3t;
     l2_pgentry_t l2e, *l2t;
     l1_pgentry_t l1e, *l1t;

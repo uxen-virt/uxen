@@ -61,8 +61,18 @@ do {                                                                    \
 void new_tlbflush_clock_period(void);
 #endif  /* __UXEN__ */
 
+/* Read the value of cr3  */
+static inline unsigned long read_actual_cr3(void)
+{
+    unsigned long cr3;
+    __asm__ __volatile__ (
+        "mov %%cr3, %0" : "=r" (cr3) : );
+
+    return cr3;
+}
+
 /* Read pagetable base. */
-static inline unsigned long read_cr3(void)
+static inline unsigned long read_paging_base(void)
 {
     unsigned long cr3;
     __asm__ __volatile__ (

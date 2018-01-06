@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -1023,7 +1023,7 @@ static int hap_update_paging_modes(struct vcpu *v)
         hvm_update_host_cr3(v);
     }
 #else   /* __UXEN__ */
-    cr3 = read_cr3();
+    cr3 = read_actual_cr3();
     if (v->arch.cr3 != cr3) {
         make_cr3(v, cr3);
         hvm_update_host_cr3(v);

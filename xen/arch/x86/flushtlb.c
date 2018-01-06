@@ -138,7 +138,7 @@ void flush_area_local(const void *va, unsigned int flags)
             if ( !(flags & FLUSH_TLB_GLOBAL) || !(read_cr4() & X86_CR4_PGE) )
             {
                 asm volatile ( "mov %0, %%cr3"
-                               : : "r" (read_cr3()) : "memory" );
+                               : : "r" (read_actual_cr3()) : "memory" );
             }
             else
 #endif

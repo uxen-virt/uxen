@@ -20,7 +20,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -180,12 +180,12 @@ static void show_guest_stack(struct vcpu *v, struct cpu_user_regs *regs)
 
         ASSERT(guest_kernel_mode(v, regs));
 #ifndef __x86_64__
-        addr = read_cr3();
+        addr = read_actual_cr3();
         for_each_vcpu( v->domain, vcpu )
             if ( vcpu->arch.cr3 == addr )
                 break;
 #else
-        vcpu = maddr_get_owner(read_cr3()) == v->domain ? v : NULL;
+        vcpu = maddr_get_owner(read_paging_base()) == v->domain ? v : NULL;
 #endif
         if ( !vcpu )
         {
@@ -1295,7 +1295,7 @@ enum pf_type {
 static enum pf_type __page_fault_type(
     unsigned long addr, unsigned int error_code)
 {
-    unsigned long mfn, cr3 = read_cr3();
+    unsigned long mfn, cr3 = read_paging_base();
 #if CONFIG_PAGING_LEVELS >= 4
     l4_pgentry_t l4e, *l4t;
 #endif

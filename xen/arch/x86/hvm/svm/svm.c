@@ -19,7 +19,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -909,7 +909,7 @@ static void sync_host_state(struct vcpu *v)
 
     /* vmx_set_host_env(v); */
 
-    cr = read_cr3();
+    cr = read_actual_cr3();
     if (v->arch.cr3 != cr) {
         make_cr3(v, cr);
         hvm_update_host_cr3(v);
@@ -944,7 +944,7 @@ static void svm_ctxt_switch_to(struct vcpu *v)
 #endif  /* __UXEN__ */
 
 #ifdef DEBUG
-    /* ASSERT(!v->context_loaded || v->arch.cr3 == read_cr3()); */
+    /* ASSERT(!v->context_loaded || v->arch.cr3 == read_actual_cr3()); */
 #endif
 
     if (v->context_loaded != 0)

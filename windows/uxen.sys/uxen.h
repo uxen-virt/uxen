@@ -2,7 +2,7 @@
  *  uxen.h
  *  uxen
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -391,7 +391,7 @@ extern uxen_pfn_t vframes_start, vframes_end;
 /* uxen_sys.asm */
 ULONG_PTR __stdcall uxen_mem_tlb_flush_fn(ULONG_PTR arg);
 ULONG_PTR __stdcall uxen_mem_tlb_flush_fn_global(ULONG_PTR arg);
-uintptr_t __stdcall read_cr3(void);
+uintptr_t __stdcall read_paging_base(void);
 
 /* uxen_ops.c */
 extern MDL *map_page_range_mdl;

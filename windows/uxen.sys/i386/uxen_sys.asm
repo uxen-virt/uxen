@@ -2,7 +2,7 @@
 	;; uxen_sys.asm
 	;; uxen
 	;;
-	;; Copyright 2013-2015, Bromium, Inc.
+	;; Copyright 2013-2018, Bromium, Inc.
 	;; SPDX-License-Identifier: ISC
 	;;
 
@@ -51,13 +51,13 @@ _out:
 
 uxen_mem_tlb_flush_fn_global	endp
 
-	; uintptr_t read_cr3(void)
-	public read_cr3
+	; uintptr_t read_paging_base(void)
+	public read_paging_base
 
-read_cr3	proc uses eax
+read_paging_base	proc uses eax
 	mov eax, cr3
 	ret
 
-read_cr3	endp
+read_paging_base	endp
 
 	end

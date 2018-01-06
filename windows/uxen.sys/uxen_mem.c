@@ -2,7 +2,7 @@
  *  uxen_mem.c
  *  uxen
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -101,11 +101,7 @@ set_linear_pt_va(void)
         goto out;
     }
 
-    cr3 = read_cr3();
-
-#ifdef __x86_64__
-    cr3 &= ~(0xfffULL);
-#endif
+    cr3 = read_paging_base();
 
     mdl->MdlFlags = MDL_PAGES_LOCKED;
     MmGetMdlPfnArray(mdl)[0] = cr3 >> PAGE_SHIFT;

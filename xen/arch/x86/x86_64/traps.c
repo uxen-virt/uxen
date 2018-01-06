@@ -133,7 +133,7 @@ void show_registers(struct cpu_user_regs *regs)
         }
 
         fault_crs[0] = read_cr0();
-        fault_crs[3] = read_cr3();
+        fault_crs[3] = read_actual_cr3();
         fault_crs[4] = read_cr4();
         fault_regs.ds = read_segment_register(ds);
         fault_regs.es = read_segment_register(es);
@@ -178,7 +178,7 @@ void vcpu_show_registers(const struct vcpu *v)
 void show_page_walk(unsigned long addr)
 {
 #ifndef __UXEN__
-    unsigned long pfn, mfn = read_cr3() >> PAGE_SHIFT;
+    unsigned long pfn, mfn = read_paging_base() >> PAGE_SHIFT;
     l4_pgentry_t l4e, *l4t;
     l3_pgentry_t l3e, *l3t;
     l2_pgentry_t l2e, *l2t;
