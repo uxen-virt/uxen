@@ -21,7 +21,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -1834,7 +1834,8 @@ hvm_pod_zp_prefix(struct vcpu *v, unsigned long gpfn, p2m_type_t *t,
     }
         break;
     case XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_cr3:
-        if (v->arch.hvm_vcpu.guest_cr[3] == ctxt->zero_thread_cr3)
+        if ((v->arch.hvm_vcpu.guest_cr[3] & PAGE_MASK) ==
+            ctxt->zero_thread_paging_base)
             zeromode = p2m_zeroshare;
         else
             zeromode = p2m_zeropop;

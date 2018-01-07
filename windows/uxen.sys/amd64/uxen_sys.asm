@@ -2,7 +2,7 @@
 	;; uxen_sys.asm
 	;; uxen
 	;;
-	;; Copyright 2012-2015, Bromium, Inc.
+	;; Copyright 2012-2018, Bromium, Inc.
 	;; SPDX-License-Identifier: ISC
 	;;
 
@@ -48,13 +48,16 @@ _out:
 
 uxen_mem_tlb_flush_fn_global	endp
 
-	; uintptr_t read_cr3(void)
-	public read_cr3
+	; uintptr_t read_paging_base(void)
+	public read_paging_base
 
-read_cr3	proc
+	; 64bit only no PAE to worry about
+
+read_paging_base	proc
 	mov rax, cr3
+	and ax, 0f000h
 	ret
 
-read_cr3	endp
+read_paging_base	endp
 
 	end

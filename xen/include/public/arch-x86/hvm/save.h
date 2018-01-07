@@ -595,7 +595,7 @@ struct hvm_zp_context {
     uintptr_t ret;
     union {
         uintptr_t zero_thread_addr;
-        uintptr_t zero_thread_cr3;
+        uintptr_t zero_thread_paging_base;
     };
     uint8_t nr_gpfns_mode;
     uint8_t gva_mode;

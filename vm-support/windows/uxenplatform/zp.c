@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -321,13 +321,14 @@ find_fn(struct module_range *nt, struct xen_memory_set_zero_page_desc *zp,
                 } else if (fn->zero_thread_mode ==
                            XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_cr3) {
                     if (PsGetCurrentProcess() == PsInitialSystemProcess)
-                        zp->zero_thread_cr3 = __readcr3();
+                        zp->zero_thread_paging_base =
+                            __readcr3() & ~((uint64_t)0xfff);
                     else
-                        zp->zero_thread_cr3 =
+                        zp->zero_thread_paging_base =
                             (uint64_t)PsInitialSystemProcess +
                             fn->zero_thread_info;
-                    uxen_msg("zp-%s: zero thread cr3 is 0x%I64x", __FUNCTION__,
-                             zp->zero_thread_cr3);
+                    uxen_msg("zp-%s: zero thread paging base is 0x%I64x",
+                             __FUNCTION__, zp->zero_thread_paging_base);
                     zp->zero_thread_mode = fn->zero_thread_mode;
                 }
                 return;

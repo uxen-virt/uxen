@@ -21,7 +21,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -5687,8 +5687,8 @@ long arch_memory_op(int op, XEN_GUEST_HANDLE(void) arg)
                     zp_arg.zp[nr].zero_thread_addr;
                 break;
             case XEN_MEMORY_SET_ZERO_PAGE_ZERO_THREAD_MODE_cr3:
-                d->zp_ctxt[d->zp_nr].zero_thread_cr3 =
-                    zp_arg.zp[nr].zero_thread_cr3;
+                d->zp_ctxt[d->zp_nr].zero_thread_paging_base =
+                    zp_arg.zp[nr].zero_thread_paging_base;
                 break;
             }
             MEM_LOG("zp: vm zero page fn @ %"PRIxPTR" - %"PRIxPTR

@@ -157,7 +157,7 @@ void vcpu_show_registers(const struct vcpu *v)
 #ifndef __UXEN__
 void show_page_walk(unsigned long addr)
 {
-    unsigned long pfn, mfn, cr3 = read_cr3();
+    unsigned long pfn, mfn, cr3 = read_paging_base();
     l3_pgentry_t l3e, *l3t;
     l2_pgentry_t l2e, *l2t;
     l1_pgentry_t l1e, *l1t;

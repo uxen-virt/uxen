@@ -1276,7 +1276,7 @@ int handle_memadd_fault(unsigned long addr, struct cpu_user_regs *regs)
          (addr >= MACH2PHYS_COMPAT_VIRT_END) )
         return 0;
 
-    mfn = (read_cr3()) >> PAGE_SHIFT;
+    mfn = (read_paging_base()) >> PAGE_SHIFT;
 
     pl4e = map_domain_page(mfn);
 

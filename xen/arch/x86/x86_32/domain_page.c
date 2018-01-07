@@ -35,7 +35,7 @@ static inline struct vcpu *mapcache_current_vcpu(void)
         if ( (v = idle_vcpu[smp_processor_id()]) == current )
             sync_local_execstate();
         /* We must now be running on the idle page table. */
-        ASSERT(read_cr3() == __pa(idle_pg_table));
+        ASSERT(read_paging_base() == __pa(idle_pg_table));
     }
 
     return v;
