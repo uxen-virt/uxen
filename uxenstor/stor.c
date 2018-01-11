@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017, Bromium, Inc.
+ * Copyright 2016-2018, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -451,11 +451,7 @@ static int uxenstor_probe(struct uxen_device *dev)
         return -ENOMEM;
     dev->priv = state;
 
-    v4v_storage = 0;
-    if (axen_hypervisor())
-        v4v_storage = 3; // FIXME: hardcoded 2 disks (2nd is for swap/hibernation image)
-    else
-        v4v_storage = inw(UXENSTOR_BITMAP_PORT);
+    v4v_storage = inw(UXENSTOR_BITMAP_PORT);
 
     if (!v4v_storage) {
         printk(KERN_INFO "%s: no v4v storage found\n", __FUNCTION__);
