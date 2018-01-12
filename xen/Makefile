@@ -254,6 +254,7 @@ XEN_SRCS += arch/x86/hvm/asid.c
 XEN_SRCS += arch/x86/hvm/ax.c
 XEN_SRCS += arch/x86/hvm/xen_pv.c
 arch/x86/hvm/ax.o: XEN_CFLAGS += -Wno-unused-function
+XEN_SRCS += arch/x86/hvm/xcfm.c
 XEN_SRCS += arch/x86/hvm/debug_port.c
 XEN_SRCS += arch/x86/hvm/emulate.c
 XEN_SRCS += arch/x86/hvm/i8254.c
