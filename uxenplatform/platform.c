@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017, Bromium, Inc.
+ * Copyright 2016-2018, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -16,6 +16,7 @@
 #include "pci.h"
 
 static struct task_struct *entropy_thread;
+int use_rdrand = 0;
 
 extern void uxen_v4v_suspend(void);
 extern void uxen_v4v_resume(void);
@@ -104,16 +105,19 @@ EXPORT_SYMBOL_GPL(uxen_driver_unregister);
 extern void add_hwgenerator_randomness(const char *buffer, size_t count,
     size_t entropy);
 
-/*
- * FIXME: this fills entropy pool (on demand) from tsc values, so it is always full.
- * Pretty terrible and likely not random enough
- */
+/* fill entropy pool with RDRAND values */
 static int
 uxen_entropy_thread(void *data)
 {
     for (;;) {
-        uint64_t tsc = rdtsc();
-        add_hwgenerator_randomness((const char*)&tsc, sizeof(tsc), sizeof(tsc)*8);
+        unsigned long v;
+        if (use_rdrand) {
+            if (!arch_get_random_long(&v))
+                panic("failed to rdrand\n");
+        } else {
+            v = rdtsc(); /* crap quality random value */
+        }
+        add_hwgenerator_randomness((const char*)&v, sizeof(v), sizeof(v)*8);
     }
 
     return 0;
@@ -146,6 +150,7 @@ static int __init uxen_platform_init(void)
         goto out;
     }
 
+    printk("entropy: %s RDRAND\n", use_rdrand ? "using" : "NOT using");
     entropy_thread = kthread_run(uxen_entropy_thread, NULL, "uxentropy");
     if (!entropy_thread) {
       ret = -ENOMEM;

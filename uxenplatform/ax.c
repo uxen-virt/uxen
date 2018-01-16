@@ -1,13 +1,16 @@
 /*
- * Copyright 2016, Bromium, Inc.
+ * Copyright 2016-2018, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
 
 #include <linux/device.h>
 #include <linux/slab.h>
+#include <linux/random.h>
 #include <uxen-platform.h>
 #include <uxen/platform_interface.h>
+
+extern int use_rdrand;
 
 static int device_net_get_property(struct uxen_device *dev,
                                    int prop_id, void *prop, size_t *prop_len)
@@ -43,6 +46,12 @@ int ax_platform_init(struct bus_type *uxen_bus)
 {
     int err;
     struct uxen_device *dev;
+
+    use_rdrand = arch_has_random();
+    if (!use_rdrand) {
+      printk(KERN_WARNING "RDRAND not available but required");
+      return -ENODEV;
+    }
 
     // add nic
     dev = kzalloc(sizeof(*dev), GFP_KERNEL);
