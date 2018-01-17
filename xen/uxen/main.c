@@ -60,8 +60,6 @@ struct _uxen_info _uxen_info = {
         PAGE_SHIFT,
 
 #ifdef UXEN_HOST_WINDOWS
-        .ui_map_page = mapcache_map_page,
-        .ui_unmap_page_va = mapcache_unmap_page_va,
         .ui_mapcache_size = MAPCACHE_SIZE,
 #endif  /* UXEN_HOST_WINDOWS */
 

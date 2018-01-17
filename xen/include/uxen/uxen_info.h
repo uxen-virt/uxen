@@ -2,7 +2,7 @@
  *  uxen_info.h
  *  uxen
  *
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -194,8 +194,6 @@ struct /* __WINPACKED__ */ uxen_info {
                                                uintptr_t (*)(uintptr_t));
     void *(__interface_fn *ui_map_page_global)(xen_pfn_t);
     uint64_t (__interface_fn *ui_unmap_page_global_va)(const void *);
-    void *(__interface_fn *ui_map_page)(xen_pfn_t);
-    uint64_t (__interface_fn *ui_unmap_page_va)(const void *);
     void *(__interface_fn *ui_map_page_range)(struct vm_vcpu_info_shared *,
                                               uint64_t, uxen_pfn_t *);
     uint64_t (__interface_fn *ui_unmap_page_range)(

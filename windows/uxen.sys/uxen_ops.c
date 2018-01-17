@@ -1093,9 +1093,6 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
 
     uxen_info->ui_printf = uxen_printk;
 
-    /* not called through to host (both map and unmap on windows) */
-    /* uxen_info->ui_map_page = uxen_mem_map_page; */
-    /* uxen_info->ui_unmap_page_va = uxen_mem_unmap_page_va; */
     uxen_info->ui_map_page_global = uxen_mem_map_page;
     uxen_info->ui_unmap_page_global_va = uxen_mem_unmap_page_va;
     uxen_info->ui_map_page_range = uxen_mem_map_page_range;

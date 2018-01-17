@@ -8,7 +8,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -145,7 +145,11 @@ static inline void *
 uxen_map_page(unsigned long mfn)
 {
 
-    return UI_HOST_CALL(ui_map_page, mfn);
+#ifdef UXEN_HOST_WINDOWS
+    return mapcache_map_page(mfn);
+#else  /* UXEN_HOST_WINDOWS */
+    return UI_HOST_CALL(ui_map_page_global, mfn);
+#endif  /* UXEN_HOST_WINDOWS */
 }
 
 static inline void
@@ -153,7 +157,7 @@ uxen_unmap_page(const void *va)
 {
 
 #ifdef UXEN_HOST_WINDOWS
-    UI_HOST_CALL(ui_unmap_page_va, va);
+    mapcache_unmap_page_va(va);
 #endif  /* UXEN_HOST_WINDOWS */
 }
 
