@@ -275,13 +275,6 @@ struct /* __WINPACKED__ */ uxen_info {
 #endif
 
     uint32_t host_os_is_xmm_clean;
-
-    /* internal */
-    void (*ui_cli)(void);
-    void (*ui_sti)(void);
-    int (*ui_irq_is_enabled)(void);
-    void (*ui_irq_save)(unsigned long *);
-    void (*ui_irq_restore)(unsigned long);
 };
 
 struct domain;

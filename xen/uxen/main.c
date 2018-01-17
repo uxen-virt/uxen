@@ -44,12 +44,6 @@ DEFINE_PER_CPU(struct uxen_hypercall_desc *, hypercall_args);
 
 uint64_t aligned_throttle_period = -1ULL;
 
-static void _cpu_irq_disable(void);
-static void _cpu_irq_enable(void);
-static int _cpu_irq_is_enabled(void);
-static void _cpu_irq_save(unsigned long *x);
-static void _cpu_irq_restore(unsigned long x);
-
 static cpumask_t cpu_down_map;
 
 struct _uxen_info _uxen_info = {
@@ -64,12 +58,6 @@ struct _uxen_info _uxen_info = {
 #endif  /* UXEN_HOST_WINDOWS */
 
         .ui_vframes_fill = VFRAMES_PCPU_FILL,
-
-        .ui_cli = _cpu_irq_disable,
-        .ui_sti = _cpu_irq_enable,
-        .ui_irq_is_enabled = _cpu_irq_is_enabled,
-        .ui_irq_save = _cpu_irq_save,
-        .ui_irq_restore = _cpu_irq_restore,
 };
 
 /* SSS: use per_cpu for this? */
@@ -81,14 +69,14 @@ DEFINE_PER_CPU(uint32_t, host_cpu_preemption);
 uint32_t _host_cpu_preemption[NR_CPUS];
 #endif
 
-static void
+asmlinkage_abi void
 _cpu_irq_disable(void)
 {
 
     asm volatile ( "cli" : : : "memory" );
 }
 
-static void
+asmlinkage_abi void
 _cpu_irq_enable(void)
 {
 
@@ -98,14 +86,14 @@ _cpu_irq_enable(void)
         asm volatile ( "stgi" : : : "memory" );
 }
 
-static void
+void
 _cpu_irq_save_flags(unsigned long *x)
 {
 
     asm volatile ( "pushf" __OS " ; pop" __OS " %0" : "=g" (*x));
 }
 
-static int
+int
 _cpu_irq_is_enabled(void)
 {
     unsigned long flags;
@@ -114,7 +102,7 @@ _cpu_irq_is_enabled(void)
     return !!(flags & (1<<9)); /* EFLAGS_IF */
 }
 
-static void
+void
 _cpu_irq_save(unsigned long *x)
 {
 
@@ -122,7 +110,7 @@ _cpu_irq_save(unsigned long *x)
     _cpu_irq_disable();
 }
 
-static void
+void
 _cpu_irq_restore(unsigned long x)
 {
 

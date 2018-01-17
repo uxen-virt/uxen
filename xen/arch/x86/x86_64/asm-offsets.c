@@ -197,8 +197,5 @@ void __dummy__(void)
 #ifdef UXEN_GS_INFO_OFFSET
     DEFINE(GS_info_offset, UXEN_GS_INFO_OFFSET);
     BLANK();
-
-    OFFSET(UI_cli, struct _uxen_info, ui_cli);
-    OFFSET(UI_sti, struct _uxen_info, ui_sti);
 #endif
 }

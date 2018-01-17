@@ -169,11 +169,17 @@ static always_inline unsigned long __cmpxchg(
 
 #define lfence() asm volatile("lfence":::"memory")
 
-#define cpu_irq_disable()     uxen_info->ui_cli()
-#define cpu_irq_enable()      uxen_info->ui_sti()
-#define cpu_irq_is_enabled()  uxen_info->ui_irq_is_enabled()
-#define cpu_irq_save(x)       uxen_info->ui_irq_save(&(x))
-#define cpu_irq_restore(x)    uxen_info->ui_irq_restore(x)
+asmlinkage_abi void _cpu_irq_disable(void);
+asmlinkage_abi void _cpu_irq_enable(void);
+int _cpu_irq_is_enabled(void);
+void _cpu_irq_save(unsigned long *x);
+void _cpu_irq_restore(unsigned long x);
+
+#define cpu_irq_disable()     _cpu_irq_disable()
+#define cpu_irq_enable()      _cpu_irq_enable()
+#define cpu_irq_is_enabled()  _cpu_irq_is_enabled()
+#define cpu_irq_save(x)       _cpu_irq_save(&(x))
+#define cpu_irq_restore(x)    _cpu_irq_restore(x)
 
 #define local_irq_disable()     host_preemption_irq_disable()
 #define local_irq_enable()      host_preemption_irq_enable()

@@ -20,7 +20,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -76,14 +76,6 @@
 #define call_with_abi(fn, narg)                 \
         call fn
 #define ABI_ENTRY(fn, narg) ENTRY(fn)
-#ifdef GS_info_offset
-#define call_via_uxen_info(fn, reg)             \
-        mov %gs:GS_info_offset, reg;            \
-        call *UI_ ## fn(reg)
-#else /* GS_info_offset */
-#define call_via_uxen_info(fn, reg)             \
-        fn
-#endif /* GS_info_offset */
 #elif defined(__i386__)
 #define r(reg) %e##reg
 #define addr_of(lbl) lbl
@@ -93,15 +85,6 @@
 #define call_with_abi(fn, narg)                 \
         call LABEL(@fn@narg)
 #define ABI_ENTRY(fn, narg) ENTRY(@fn@narg)
-#ifdef FS_info_offset
-#define call_via_uxen_info(fn, reg)             \
-        mov %fs:FS_info_offset, reg;            \
-        call *UI_ ## fn(reg)
-#else
-/* XXX simplified version for cli/sti */
-#define call_via_uxen_info(fn, reg)             \
-        fn
-#endif
 #endif
         
 #define call_with_regs(cur, fn)                 \
@@ -138,7 +121,7 @@ ABI_ENTRY(svm_asm_do_vmentry, SIZEOF_REG)
 #endif  /* __UXEN_NOT_YET__ */
 
         get_current(r(bx))
-        CLGI                    /* XXX call_via_uxen_info(cli, r_arg) */
+        CLGI                    /* XXX call_with_abi(_cpu_irq_disable, 0) */
 
         mov  r(bx), r_arg
         call_with_abi(check_work_vcpu, SIZEOF_REG)
@@ -274,7 +257,7 @@ UNLIKELY_END(svm_trace)
         mov  VCPU_svm_root_vmcb_pa(r(bx)),r(ax)
         VMLOAD
 
-        STGI                    /* XXX call_via_uxen_info(sti, r(ax)) */
+        STGI                    /* XXX call_with_abi(_cpu_irq_enable, 0) */
 
         xor  r(ax),r(ax)
 
@@ -308,13 +291,13 @@ svm_stgi_label:
         jmp  svm_asm_do_resume
 
 .Lsvm_process_softirqs:
-        STGI                    /* XXX call_via_uxen_info(sti, r(ax)) */
+        STGI                    /* XXX call_with_abi(_cpu_irq_enable, 0) */
         call do_softirq
         jmp  svm_asm_do_resume
 
 .Lsvm_nsvm_no_p2m:
         /* Someone shot down our nested p2m table; go round again
          * and nsvm_vcpu_switch() will fix it for us. */
-        STGI                    /* XXX call_via_uxen_info(sti, r(ax)) */
+        STGI                    /* XXX call_with_abi(_cpu_irq_enable, 0) */
         jmp  svm_asm_do_resume
 #endif

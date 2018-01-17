@@ -162,8 +162,5 @@ void __dummy__(void)
 #ifdef UXEN_FS_INFO_OFFSET
     DEFINE(FS_info_offset, UXEN_FS_INFO_OFFSET);
     BLANK();
-
-    OFFSET(UI_cli, struct _uxen_info, ui_cli);
-    OFFSET(UI_sti, struct _uxen_info, ui_sti);
 #endif
 }
