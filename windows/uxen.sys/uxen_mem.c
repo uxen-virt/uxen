@@ -193,8 +193,16 @@ set_pte(uintptr_t va, uint64_t new)
 
 static uint64_t map_mfn_pte_flags = 0;
 
-uint64_t __cdecl
+uint64_t
 map_mfn(uintptr_t va, xen_pfn_t mfn)
+{
+
+    return set_pte(va, (mfn == ~0ULL || mfn == 0ULL) ? mfn :
+                   (((uint64_t)mfn << PAGE_SHIFT) | map_mfn_pte_flags));
+}
+
+uint64_t __cdecl
+ui_map_mfn(uintptr_t va, xen_pfn_t mfn)
 {
 
     return set_pte(va, (mfn == ~0ULL || mfn == 0ULL) ? mfn :
@@ -1950,7 +1958,7 @@ uxen_mem_free(struct uxen_free_desc *ufd, struct fd_assoc *fda)
 }
 
 uint64_t __cdecl
-uxen_mem_user_access_ok(void *_umi, void *addr, uint64_t size)
+ui_user_access_ok(void *_umi, void *addr, uint64_t size)
 {
     struct user_mapping_info *umi = (struct user_mapping_info *)_umi;
     struct user_mapping *um;
@@ -2141,7 +2149,7 @@ uxen_mem_munmap(struct uxen_munmap_desc *umd, struct fd_assoc *fda)
 }
 
 void * __cdecl
-uxen_mem_map_page(xen_pfn_t mfn)
+ui_map_page_global(xen_pfn_t mfn)
 {
     void *va;
 
@@ -2162,15 +2170,15 @@ uxen_mem_map_page(xen_pfn_t mfn)
 }
 
 uint64_t __cdecl
-uxen_mem_unmap_page_va(const void *va)
+ui_unmap_page_global_va(const void *va)
 {
 
     return pagemap_unmap_page_va(va);
 }
 
 void * __cdecl
-uxen_mem_map_page_range(struct vm_vcpu_info_shared *vcis, uint64_t n,
-                        uxen_pfn_t *mfn)
+ui_map_page_range(struct vm_vcpu_info_shared *vcis, uint64_t n,
+                  uxen_pfn_t *mfn)
 {
     struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
     struct vm_info *vmi = (struct vm_info *)((uintptr_t)vcis & PAGE_MASK);
@@ -2200,8 +2208,8 @@ uxen_mem_map_page_range(struct vm_vcpu_info_shared *vcis, uint64_t n,
 }
 
 uint64_t __cdecl
-uxen_mem_unmap_page_range(struct vm_vcpu_info_shared *vcis, const void *va,
-                          uint64_t n, uxen_pfn_t *mfn)
+ui_unmap_page_range(struct vm_vcpu_info_shared *vcis, const void *va,
+                    uint64_t n, uxen_pfn_t *mfn)
 {
     uint64_t ret;
 
@@ -2217,7 +2225,7 @@ uxen_mem_unmap_page_range(struct vm_vcpu_info_shared *vcis, const void *va,
 }
 
 uxen_pfn_t __cdecl
-uxen_mem_mapped_va_pfn(const void *va)
+ui_mapped_global_va_pfn(const void *va)
 {
     PHYSICAL_ADDRESS pa;
     uxen_pfn_t ret;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -85,7 +85,8 @@ void uxen_sys_stop_v4v(void)
     uxen_v4vlib_set_hypercall_func(NULL);
 }
 
-void __cdecl uxen_sys_signal_v4v(void)
+void __cdecl
+ui_signal_v4v(void)
 {
 
     /* only schedule DPCs for dispatch - rather than actually execute
@@ -94,7 +95,8 @@ void __cdecl uxen_sys_signal_v4v(void)
     uxen_v4vlib_deliver_signal();
 }
 
-void __cdecl uxen_sys_set_v4v_thread_priority(LONG priority)
+void
+uxen_sys_set_v4v_thread_priority(LONG priority)
 {
     uxen_v4vlib_set_thread_priority(priority);
 }

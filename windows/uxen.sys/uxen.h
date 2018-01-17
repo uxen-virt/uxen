@@ -244,8 +244,6 @@ extern void uxen_cpu_unpin(affinity_t);
 extern affinity_t uxen_cpu_pin_vcpu(struct vm_vcpu_info *, int);
 extern void uxen_cpu_unpin_vcpu(struct vm_vcpu_info *, affinity_t);
 extern int uxen_cpu_set_active_mask(void *);
-extern void __cdecl uxen_cpu_on_selected(const void *,
-                                         uintptr_t (*)(uintptr_t));
 extern int pv_vmware(void);
 #define UXEN_CPU_VENDOR_UNKNOWN 0
 #define UXEN_CPU_VENDOR_INTEL 1
@@ -284,7 +282,7 @@ int uxen_unload(void);
 extern uint64_t max_hidden_mem;
 #endif /* __i386__ */
 extern int map_page_range_max_nr;
-uint64_t __cdecl map_mfn(uintptr_t va, xen_pfn_t mfn);
+uint64_t map_mfn(uintptr_t va, xen_pfn_t mfn);
 int mem_init(void);
 int mem_late_init(void);
 void mem_exit(void);
@@ -359,18 +357,8 @@ void user_free(void *va, enum user_mapping_type, struct fd_assoc *);
 void user_free_all_user_mappings(struct fd_assoc *);
 int uxen_mem_malloc(struct uxen_malloc_desc *, struct fd_assoc *);
 int uxen_mem_free(struct uxen_free_desc *, struct fd_assoc *);
-uint64_t __cdecl uxen_mem_user_access_ok(void *, void *, uint64_t);
 int uxen_mem_mmapbatch(struct uxen_mmapbatch_desc *, struct fd_assoc *);
 int uxen_mem_munmap(struct uxen_munmap_desc *, struct fd_assoc *);
-void * __cdecl uxen_mem_map_page(xen_pfn_t);
-uint64_t __cdecl uxen_mem_unmap_page_va(const void *);
-void * __cdecl uxen_mem_map_page_range(struct vm_vcpu_info_shared *, uint64_t,
-                                       uxen_pfn_t *);
-uint64_t __cdecl uxen_mem_unmap_page_range(
-    struct vm_vcpu_info_shared *, const void *, uint64_t, uxen_pfn_t *);
-uxen_pfn_t __cdecl uxen_mem_mapped_va_pfn(const void *);
-void __cdecl uxen_mem_fill_free_pages(void);
-void __cdecl uxen_mem_clear_free_pages(void);
 void uxen_mem_tlb_flush(void);
 uxen_pfn_t get_max_pfn(int use_hidden);
 #ifdef __i386__
@@ -468,8 +456,7 @@ extern void uxen_cpu_xmm_restore_guest(void *);
 /* v4v.c */
 void uxen_sys_start_v4v(void);
 void uxen_sys_stop_v4v(void);
-void __cdecl uxen_sys_signal_v4v(void);
-void __cdecl uxen_sys_set_v4v_thread_priority(LONG priority);
+void uxen_sys_set_v4v_thread_priority(LONG priority);
 
 /* uxen_stackwalk.c */
 extern void uxen_stacktrace(PCONTEXT);

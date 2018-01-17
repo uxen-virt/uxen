@@ -332,7 +332,7 @@ int uxen_load_symbols(void);
 int uxen_unload(void);
 
 /* uxen_mem.c */
-uint64_t __cdecl map_mfn(uintptr_t va, xen_pfn_t mfn);
+uint64_t map_mfn(uintptr_t va, xen_pfn_t mfn);
 void *map_pfn_array(uxen_pfn_t *pfn_array, unsigned int num_pages);
 void unmap_pfn_array(const void *va, uxen_pfn_t *pfn_array, unsigned int num);
 int map_pfn_array_pool_fill(int);
@@ -435,7 +435,6 @@ void uxen_cpu_interrupt(uintptr_t mask);
 int uxen_ipi_init(void (*dispatch)(unsigned int));
 void uxen_ipi_cleanup(void);
 void uxen_cpu_ipi(int cpu, unsigned int vector);
-uint64_t __cdecl uxen_cpu_rdmsr_safe(uint32_t msr, uint64_t *val);
 
 /* From osfmk/i386/mp.h */
 #define MAX_CPUS 32

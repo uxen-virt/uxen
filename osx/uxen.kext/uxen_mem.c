@@ -2,7 +2,7 @@
  *  uxen_mem.c
  *  uxen
  *
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Gianluca Guida <glguida@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -89,8 +89,16 @@ set_pte(uintptr_t va, uint64_t _new)
 /* NX AVAIL0 ACCESSED USER RW PRESENT */
 #define map_mfn_pte_flags 0x8000000000000227
 
-uint64_t __cdecl
+uint64_t
 map_mfn(uintptr_t va, xen_pfn_t mfn)
+{
+
+    return set_pte(va, (mfn == ~0ULL || mfn == 0ULL) ? mfn :
+                   (((uint64_t)mfn << PAGE_SHIFT) | map_mfn_pte_flags));
+}
+
+uint64_t __cdecl
+ui_map_mfn(uintptr_t va, xen_pfn_t mfn)
 {
 
     return set_pte(va, (mfn == ~0ULL || mfn == 0ULL) ? mfn :
@@ -2056,7 +2064,7 @@ uxen_mem_free(struct uxen_free_desc *ufd, struct fd_assoc *fda)
 }
 
 uint64_t __cdecl
-uxen_mem_user_access_ok(void *_umi, void *addr, uint64_t size)
+ui_user_access_ok(void *_umi, void *addr, uint64_t size)
 {
     struct user_mapping_info *umi = (struct user_mapping_info *)_umi;
     struct user_mapping *um;

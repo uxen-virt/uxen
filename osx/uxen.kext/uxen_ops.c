@@ -52,8 +52,8 @@ struct host_event_channel {
     struct host_event_channel *next;
 };
 
-static void *
-map_page(xen_pfn_t mfn)
+void * __cdecl
+ui_map_page_global(xen_pfn_t mfn)
 {
 
     /*
@@ -62,8 +62,8 @@ map_page(xen_pfn_t mfn)
     return (void *)physmap_pfn_to_va(mfn);
 }
 
-static uint64_t
-unmap_page_va(const void *va)
+uint64_t __cdecl
+ui_unmap_page_global_va(const void *va)
 {
 
     /*
@@ -72,8 +72,9 @@ unmap_page_va(const void *va)
     return physmap_va_to_pfn(va);
 }
 
-static void *
-map_page_range(struct vm_vcpu_info_shared *vcis, uint64_t n, uxen_pfn_t *mfns)
+void * __cdecl
+ui_map_page_range(struct vm_vcpu_info_shared *vcis, uint64_t n,
+                  uxen_pfn_t *mfns)
 {
     /* struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis; */
     /* struct vm_info *vmi = (struct vm_info *)((uintptr_t)vcis & PAGE_MASK); */
@@ -91,17 +92,24 @@ map_page_range(struct vm_vcpu_info_shared *vcis, uint64_t n, uxen_pfn_t *mfns)
     return NULL;
 }
 
-static uint64_t
-unmap_page_range(struct vm_vcpu_info_shared *vcis, const void *va, uint64_t n,
-                 uxen_pfn_t *mfns)
+uint64_t __cdecl
+ui_unmap_page_range(struct vm_vcpu_info_shared *vcis, const void *va,
+                    uint64_t n, uxen_pfn_t *mfns)
 {
 
     unmap_pfn_array_from_pool(va, mfns);
     return 0;
 }
 
+uint64_t __cdecl
+ui_mapped_global_va_pfn(const void *va)
+{
 
-static void __cdecl wake_vm(struct vm_vcpu_info_shared *vcis);
+    return physmap_va_to_pfn(va);
+}
+
+
+void __cdecl ui_wake_vm(struct vm_vcpu_info_shared *vcis);
 static int uxen_vmi_destroy_vm(struct vm_info *vmi);
 static void quiesce_execution(void);
 static void resume_execution(void);
@@ -138,8 +146,8 @@ ipi_dispatch(unsigned int vector)
     uxen_do_dispatch_ipi(0xff - vector);
 }
 
-static void
-kick_cpu(uint64_t cpu, uint64_t vector)
+void __cdecl
+ui_kick_cpu(uint64_t cpu, uint64_t vector)
 {
 
     if (uxen_info->ui_running == 0)
@@ -157,8 +165,8 @@ uxen_vcpu_ipi_cb(void *arg)
 	return;
 }
 
-static void __cdecl
-vcpu_ipi(struct vm_vcpu_info_shared *vcis)
+void __cdecl
+kick_vcpu(struct vm_vcpu_info_shared *vcis)
 {
     struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
 
@@ -171,8 +179,8 @@ vcpu_ipi(struct vm_vcpu_info_shared *vcis)
     uxen_cpu_call(vci->vci_host_cpu, uxen_vcpu_ipi_cb, vci);
 }
 
-static void __cdecl
-vcpu_ipi_cancel(struct vm_vcpu_info_shared *vcis)
+void __cdecl
+ui_kick_vcpu_cancel(struct vm_vcpu_info_shared *vcis)
 {
     struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
 
@@ -323,8 +331,8 @@ uxen_idle_thread_fn(void *context)
     semaphore_signal(idle_thread_exit[cpu]);
 }
 
-static void __cdecl
-op_signal_idle_thread(uint64_t mask)
+void __cdecl
+ui_signal_idle_thread(uint64_t mask)
 {
     unsigned int host_cpu;
 
@@ -369,8 +377,8 @@ set_host_preemption(uint64_t disable)
     }
 }
 
-static uint64_t __cdecl
-host_needs_preempt(void)
+uint64_t __cdecl
+ui_host_needs_preempt(void)
 {
     ast_t *ast = xnu_ast_pending();
 
@@ -386,15 +394,15 @@ uxen_vcpu_timer_cb(void *param0, void *param1)
 	return;
 
     vci->vci_shared.vci_has_timer_interrupt = 1;
-    wake_vm(&vci->vci_shared);
+    ui_wake_vm(&vci->vci_shared);
     /* Check if vcpu started running on another cpu after the timer
      * fired.  If so, interrupt it there. */
     if (vci->vci_host_cpu != cpu_number())
         vcpu_ipi(&vci->vci_shared);
 }
 
-static void __cdecl
-set_vcpu_timer(struct vm_vcpu_info_shared *vcis, uint64_t expire)
+void __cdecl
+ui_set_timer_vcpu(struct vm_vcpu_info_shared *vcis, uint64_t expire)
 {
     uint64_t now = mach_absolute_time();
     struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
@@ -415,15 +423,15 @@ set_vcpu_timer(struct vm_vcpu_info_shared *vcis, uint64_t expire)
     set_timer(&vci->vci_timer, expire);
 }
 
-static uint64_t
-get_host_counter(void)
+uint64_t __cdecl
+ui_get_host_counter(void)
 {
 
     return mach_absolute_time() - host_counter_start;
 }
 
-static uint64_t
-get_unixtime(void)
+uint64_t __cdecl
+ui_get_unixtime(void)
 {
     clock_sec_t sec;
     clock_nsec_t nsec;
@@ -433,8 +441,8 @@ get_unixtime(void)
     return (sec * 1000000000ULL) + nsec;
 }
 
-static void __cdecl
-wake_vm(struct vm_vcpu_info_shared *vcis)
+void __cdecl
+ui_wake_vm(struct vm_vcpu_info_shared *vcis)
 {
     struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
 
@@ -464,8 +472,8 @@ suspend_block(preemption_t i, uint32_t pages, uint32_t *reserve_increase)
     return 0;
 }
 
-static void __cdecl
-notify_exception(struct vm_info_shared *vmis)
+void __cdecl
+ui_notify_exception(struct vm_info_shared *vmis)
 {
     struct vm_info *vmi = (struct vm_info *)vmis;
 
@@ -473,8 +481,8 @@ notify_exception(struct vm_info_shared *vmis)
         signal_notification_event(&vmi->vmi_ioemu_exception_event);
 }
 
-static void __cdecl
-notify_vram(struct vm_info_shared *vmis)
+void __cdecl
+ui_notify_vram(struct vm_info_shared *vmis)
 {
     struct vm_info *vmi = (struct vm_info *)vmis;
 
@@ -482,9 +490,9 @@ notify_vram(struct vm_info_shared *vmis)
         signal_notification_event(&vmi->vmi_ioemu_vram_event);
 }
 
-static uint64_t __cdecl
-signal_event(struct vm_vcpu_info_shared *vcis, void *_hec,
-             void * volatile *_wait_event)
+uint64_t __cdecl
+ui_signal_event(struct vm_vcpu_info_shared *vcis, void *_hec,
+                void * volatile *_wait_event)
 {
     struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
     struct host_event_channel *hec = (struct host_event_channel *)_hec;
@@ -505,8 +513,8 @@ signal_event(struct vm_vcpu_info_shared *vcis, void *_hec,
     return 0;
 }
 
-static uint64_t __cdecl
-check_ioreq(struct vm_vcpu_info_shared *vcis)
+uint64_t __cdecl
+ui_check_ioreq(struct vm_vcpu_info_shared *vcis)
 {
     struct vm_vcpu_info *vci = (struct vm_vcpu_info *)vcis;
     struct user_notification_event *event =
@@ -722,44 +730,15 @@ uxen_op_init(struct fd_assoc *fda)
         goto out;
     }
 
-    uxen_info->ui_printf = uxen_printk;
-
-    uxen_info->ui_map_page_global = map_page;
-    uxen_info->ui_unmap_page_global_va = unmap_page_va;
-    uxen_info->ui_map_page_range = map_page_range;
-    uxen_info->ui_unmap_page_range = unmap_page_range;
-    uxen_info->ui_mapped_global_va_pfn = physmap_va_to_pfn;
-
     uxen_info->ui_max_page = max_pfn;
     /* space for max_pfn virtual frametable entries */
     vframes_start = max_pfn;
     vframes_end = vframes_start + max_pfn;
     uxen_info->ui_max_vframe = vframes_end;
 
-    uxen_info->ui_host_needs_preempt = host_needs_preempt;
-
-    uxen_info->ui_on_selected_cpus = uxen_cpu_on_selected;
-    uxen_info->ui_kick_cpu = kick_cpu;
-    uxen_info->ui_kick_vcpu= vcpu_ipi;
-    uxen_info->ui_kick_vcpu_cancel = vcpu_ipi_cancel;
-    uxen_info->ui_wake_vm = wake_vm;
-
-    uxen_info->ui_signal_idle_thread = op_signal_idle_thread;
-    uxen_info->ui_set_timer_vcpu = set_vcpu_timer;
-
-    uxen_info->ui_notify_exception = notify_exception;
-    uxen_info->ui_notify_vram = notify_vram;
-    uxen_info->ui_signal_event = signal_event;
-    uxen_info->ui_check_ioreq = check_ioreq;
-
     uxen_info->ui_pagemap_needs_check = 0;
 
-    uxen_info->ui_map_mfn = map_mfn;
-
-    uxen_info->ui_user_access_ok = uxen_mem_user_access_ok;
     uxen_info->ui_smap_enabled = xnu_pmap_smap_enabled() ? 1 : 0;
-
-    uxen_info->ui_rdmsr_safe = uxen_cpu_rdmsr_safe;
 
     printk("uxen mem:     maxpage %x\n", uxen_info->ui_max_page);
 
@@ -885,8 +864,6 @@ uxen_op_init(struct fd_assoc *fda)
     host_counter_start = mach_absolute_time();
     update_ui_host_counter();
     uxen_info->ui_host_counter_frequency = 1000000000;
-    uxen_info->ui_get_unixtime = get_unixtime;
-    uxen_info->ui_get_host_counter = get_host_counter;
     uxen_info->ui_host_timer_frequency = UXEN_HOST_TIMER_FREQUENCY;
 
     uxen_info->ui_host_gsoff_cpu = CPU_DATA_CPUNUMBER();

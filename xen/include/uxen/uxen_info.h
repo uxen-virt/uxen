@@ -124,13 +124,25 @@
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated"
 
+#if defined(__x86_64__)
 #define UI_HOST_CALL_0(a,b...) \
     (UI_HOST_CALL_ ## a        \
-     (uxen_info->a)())
+     a())
 
 #define UI_HOST_CALL_N(a,b...) \
     (UI_HOST_CALL_ ## a        \
-     (uxen_info->a)(b))
+     a(b))
+
+#else  /* __x86_64__ */
+#define UI_HOST_CALL_0(a,b...) \
+    (UI_HOST_CALL_ ## a        \
+     _ ## a())
+
+#define UI_HOST_CALL_N(a,b...) \
+    (UI_HOST_CALL_ ## a        \
+     _ ## a(b))
+
+#endif  /* __x86_64__ */
 
 #pragma GCC diagnostic pop
 
@@ -168,57 +180,70 @@ struct ui_page_list {
     uint32_t count;
 };
 
+#if defined(__x86_64__)
+#define UI_interface_fn(fn) __interface_fn ui_ ## fn
+#else  /* __x86_64__ */
+#if !defined(_MSC_VER)
+#define UI_interface_fn(fn) __interface_fn _ui_ ## fn
+#else  /* _MSC_VER */
+#define UI_interface_fn(fn) __interface_fn ui_ ## fn
+#endif  /* _MSC_VER */
+#endif  /* __x86_64__ */
+
+uint64_t UI_interface_fn(printf)(struct vm_info_shared *,
+                                 const char *fmt, ...);
+void UI_interface_fn(kick_cpu)(uint64_t, uint64_t);
+void UI_interface_fn(kick_vcpu)(struct vm_vcpu_info_shared *);
+void UI_interface_fn(kick_vcpu_cancel)(struct vm_vcpu_info_shared *);
+void UI_interface_fn(signal_idle_thread)(uint64_t);
+void UI_interface_fn(set_timer_vcpu)(struct vm_vcpu_info_shared *, uint64_t);
+uint64_t UI_interface_fn(get_unixtime)(void);
+uint64_t UI_interface_fn(get_host_counter)(void);
+void UI_interface_fn(wake_vm)(struct vm_vcpu_info_shared *);
+void UI_interface_fn(on_selected_cpus)(const void *,
+                                       __interface_fn_fn
+                                       uintptr_t (*)(uintptr_t));
+void *UI_interface_fn(map_page_global)(xen_pfn_t);
+uint64_t UI_interface_fn(unmap_page_global_va)(const void *);
+void *UI_interface_fn(map_page_range)(struct vm_vcpu_info_shared *,
+                                      uint64_t, uxen_pfn_t *);
+uint64_t UI_interface_fn(unmap_page_range)(
+    struct vm_vcpu_info_shared *, const void *, uint64_t, uxen_pfn_t *);
+uxen_pfn_t UI_interface_fn(mapped_global_va_pfn)(const void *);
+uint64_t UI_interface_fn(host_needs_preempt)(void);
+void UI_interface_fn(notify_exception)(struct vm_info_shared *);
+void UI_interface_fn(notify_vram)(struct vm_info_shared *);
+uint64_t UI_interface_fn(signal_event)(struct vm_vcpu_info_shared *,
+                                       void *, void * volatile *);
+uint64_t UI_interface_fn(check_ioreq)(struct vm_vcpu_info_shared *);
+uint64_t UI_interface_fn(memcache_dm_enter)(struct vm_info_shared *,
+                                            xen_pfn_t, xen_pfn_t);
+uint64_t UI_interface_fn(memcache_dm_clear)(struct vm_info_shared *,
+                                            xen_pfn_t, int);
+uint64_t UI_interface_fn(map_mfn)(uintptr_t va, xen_pfn_t mfn);
+uint64_t UI_interface_fn(user_access_ok)(void *, void *, uint64_t);
+void UI_interface_fn(signal_v4v)(void);
+#ifdef UXEN_HOST_OSX
+uint64_t UI_interface_fn(rdmsr_safe)(uint32_t, uint64_t *);
+#endif  /* UXEN_HOST_OSX */
+
 struct /* __WINPACKED__ */ uxen_info {
     uint32_t ui_running;
-    uint64_t (__interface_fn *ui_printf)(struct vm_info_shared *,
-                                         const char *fmt, ...);
     uint32_t ui_sizeof_struct_page_info;
     uint32_t ui_max_page;
     void *ui_frametable;
-    void (__interface_fn *ui_kick_cpu)(uint64_t, uint64_t);
-    void (__interface_fn *ui_kick_vcpu)(struct vm_vcpu_info_shared *);
-    void (__interface_fn *ui_kick_vcpu_cancel)(struct vm_vcpu_info_shared *);
     uint64_t ui_cpu_active_mask __WINPACKED__;
-    void (__interface_fn *ui_signal_idle_thread)(uint64_t);
     uint32_t ui_host_timer_frequency;
     int64_t ui_host_idle_timeout;
-    void (__interface_fn *ui_set_timer_vcpu)(struct vm_vcpu_info_shared *,
-					     uint64_t);
     uint32_t ui_unixtime_generation;
     uint32_t ui_exception_event_all;
-    uint64_t (__interface_fn *ui_get_unixtime)(void);
     uint64_t ui_host_counter;
     uint64_t ui_host_counter_tsc;
     uint64_t ui_host_counter_unixtime;
-    uint64_t (__interface_fn *ui_get_host_counter)(void);
     uint32_t ui_host_counter_frequency;
-    void (__interface_fn *ui_wake_vm)(struct vm_vcpu_info_shared *);
-    void (__interface_fn *ui_on_selected_cpus)(const void *,
-					       __interface_fn_fn
-                                               uintptr_t (*)(uintptr_t));
-    void *(__interface_fn *ui_map_page_global)(xen_pfn_t);
-    uint64_t (__interface_fn *ui_unmap_page_global_va)(const void *);
-    void *(__interface_fn *ui_map_page_range)(struct vm_vcpu_info_shared *,
-                                              uint64_t, uxen_pfn_t *);
-    uint64_t (__interface_fn *ui_unmap_page_range)(
-        struct vm_vcpu_info_shared *, const void *, uint64_t, uxen_pfn_t *);
     uint32_t ui_map_page_range_max_nr;
-    uxen_pfn_t (__interface_fn *ui_mapped_global_va_pfn)(const void *);
-    uint64_t (__interface_fn *ui_host_needs_preempt)(void);
-    void (__interface_fn *ui_notify_exception)(struct vm_info_shared *);
-    void (__interface_fn *ui_notify_vram)(struct vm_info_shared *);
-    uint64_t (__interface_fn *ui_signal_event)(struct vm_vcpu_info_shared *,
-                                               void *, void * volatile *);
-    uint64_t (__interface_fn *ui_check_ioreq)(struct vm_vcpu_info_shared *);
     uint32_t ui_pagemap_needs_check;
-    uint64_t (__interface_fn *ui_memcache_dm_enter)(struct vm_info_shared *,
-                                                    xen_pfn_t, xen_pfn_t);
-    uint64_t (__interface_fn *ui_memcache_dm_clear)(struct vm_info_shared *,
-                                                    xen_pfn_t, int);
-    uint64_t (__interface_fn *ui_map_mfn)(uintptr_t va, xen_pfn_t mfn);
     char *ui_percpu_area[UXEN_MAXIMUM_PROCESSORS];
-    uint64_t (__interface_fn *ui_user_access_ok)(void *, void *, uint64_t);
-    void (__interface_fn *ui_signal_v4v)(void);
     struct ui_page_list ui_free_pages[UXEN_MAXIMUM_PROCESSORS];
 #ifdef UXEN_HOST_WINDOWS
     uintptr_t ui_mapcache_va[UXEN_MAXIMUM_PROCESSORS];
@@ -237,9 +262,6 @@ struct /* __WINPACKED__ */ uxen_info {
     uint32_t ui_vframes_fill;
     uint32_t ui_out_of_vframes;
     uint32_t ui_max_vframe;
-#ifdef UXEN_HOST_OSX
-    uint64_t (__interface_fn *ui_rdmsr_safe)(uint32_t, uint64_t *);
-#endif  /* UXEN_HOST_OSX */
 
 #if defined(__x86_64__) && defined(__OBJ_PE__)
     uint8_t *ui_xdata_start;

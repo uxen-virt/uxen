@@ -2,7 +2,7 @@
  *  uxen_debug.c
  *  uxen
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  * 
@@ -121,6 +121,19 @@ uxen_dprintk(struct vm_info_shared *vmi, const char *fmt, ...)
 
 uint64_t
 uxen_printk(struct vm_info_shared *vmi, const char *fmt, ...)
+{
+    va_list ap;
+    int ret;
+
+    va_start(ap, fmt);
+    ret = uxen_vprintk(vmi, fmt, ap);
+    va_end(ap);
+
+    return ret;
+}
+
+uint64_t __cdecl
+ui_printf(struct vm_info_shared *vmi, const char *fmt, ...)
 {
     va_list ap;
     int ret;

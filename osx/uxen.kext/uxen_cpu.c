@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -160,8 +160,8 @@ uxen_cpu_call(int cpu, void (*fn)(void *), void *arg)
     xnu_mp_cpus_call(mask, NOSYNC, fn, arg);
 }
 
-void
-uxen_cpu_on_selected(const void *_mask, uintptr_t (*fn)(uintptr_t))
+void __cdecl
+ui_on_selected_cpus(const void *_mask, uintptr_t (*fn)(uintptr_t))
 {
     uintptr_t mask = *(uintptr_t *)_mask;
 
@@ -242,7 +242,7 @@ uxen_cpu_ipi(int cpu, unsigned int vector)
 }
 
 uint64_t __cdecl
-uxen_cpu_rdmsr_safe(uint32_t msr, uint64_t *val)
+ui_rdmsr_safe(uint32_t msr, uint64_t *val)
 {
     uint32_t lo, hi;
     int ret;

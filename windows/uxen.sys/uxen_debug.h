@@ -39,8 +39,8 @@ extern int kdbgprint;
 int uxen_vprintk(struct vm_info_shared *,
                  const __format_string char *, va_list);
 
-uint64_t __cdecl uxen_dprintk(struct vm_info_shared *,
-                              const __format_string char *, ...);
+uint64_t uxen_dprintk(struct vm_info_shared *,
+                      const __format_string char *, ...);
 #ifdef UXEN_DPRINTK
 #define dprintk(fmt, ...) uxen_dprintk(NULL, fmt, ## __VA_ARGS__)
 #else
@@ -52,13 +52,13 @@ uint64_t __cdecl uxen_dprintk(struct vm_info_shared *,
 #define mm_dprintk(fmt, ...) do {} while (0)
 #endif
 
-uint64_t __cdecl uxen_printk(struct vm_info_shared *,
-                             const __format_string char *, ...);
+uint64_t uxen_printk(struct vm_info_shared *,
+                     const __format_string char *, ...);
 #define printk(fmt, ...) uxen_printk(NULL, fmt, ## __VA_ARGS__)
 #define fail_msg(fmt, ...) uxen_printk(NULL, "uxen: %s:%d: " fmt "\n",  \
                                        __FUNCTION__, __LINE__, ## __VA_ARGS__)
-uint64_t  __cdecl uxen_printk_with_timestamp(struct vm_info_shared *,
-                                             const __format_string char *, ...);
+uint64_t uxen_printk_with_timestamp(struct vm_info_shared *,
+                                    const __format_string char *, ...);
 #define printk_with_timestamp(fmt, ...)                         \
     uxen_printk_with_timestamp(NULL, fmt, ## __VA_ARGS__)
 
