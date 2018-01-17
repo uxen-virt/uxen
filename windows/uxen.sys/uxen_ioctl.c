@@ -2,7 +2,7 @@
  *  uxen_ioctl.c
  *  uxen
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -354,17 +354,6 @@ uxen_ioctl(__inout DEVICE_OBJECT *DeviceObject, __inout IRP *pIRP)
     case ICC(UXENLOAD):
 	IOCTL_TRACE("uxen_ioctl(UXENLOAD, %p, %x)\n", InputBuffer,
 		    InputBufferLength);
-#if !defined(__UXEN_EMBEDDED__)
-	UXEN_CHECK_MODE_NOT(UXEN_MODE_LOADED, "UXENLOAD");
-        UXEN_CHECK_INPUT_BUFFER("UXENLOAD", struct uxen_load_desc);
-        IOCTL_ADMIN_CHECK("UXENLOAD");
-        ret = uxen_load((struct uxen_load_desc *)InputBuffer);
-        if (ret == 0)
-            SET_UXEN_MODE(UXEN_MODE_LOADED);
-        else
-            IOCTL_FAILURE(UXEN_NTSTATUS_FROM_ERRNO(-ret),
-                          "uxen_ioctl(UXENLOAD) fail: %d", -ret);
-#endif
 	break;
     case ICC(UXENUNLOAD):
 	IOCTL_TRACE("uxen_ioctl(UXENUNLOAD)\n");
@@ -378,9 +367,6 @@ uxen_ioctl(__inout DEVICE_OBJECT *DeviceObject, __inout IRP *pIRP)
     case ICC(UXENINIT):
 	IOCTL_TRACE("uxen_ioctl(UXENINIT)\n");
 	UXEN_CHECK_MODE_NOT(UXEN_MODE_FAILED, "UXENINIT");
-#if !defined(__UXEN_EMBEDDED__)
-	UXEN_CHECK_MODE(UXEN_MODE_LOADED, "UXENINIT");
-#endif
         uxen_sys_start_v4v();
         /* uxen_op_init does UXEN_CHECK_INPUT_BUFFER(struct uxen_init_desc) */
         ret = uxen_op_init(fda, (struct uxen_init_desc *)InputBuffer,
@@ -395,20 +381,14 @@ uxen_ioctl(__inout DEVICE_OBJECT *DeviceObject, __inout IRP *pIRP)
 	break;
     case ICC(UXENSHUTDOWN):
 	IOCTL_TRACE("uxen_ioctl(UXENSHUTDOWN)\n");
-#if defined(__UXEN_EMBEDDED__)
 	UXEN_CHECK_MODE_NOT(UXEN_MODE_SHUTDOWN, "UXENSHUTDOWN");
-#endif
 	UXEN_CHECK_MODE(UXEN_MODE_INITIALIZED, "UXENSHUTDOWN");
         IOCTL_ADMIN_CHECK("UXENSHUTDOWN");
 	ret = uxen_op_shutdown();
 	if (ret)
 	    break;
         uxen_sys_stop_v4v();
-#if !defined(__UXEN_EMBEDDED__)
-        SET_UXEN_MODE(UXEN_MODE_LOADED);
-#else
         SET_UXEN_MODE(UXEN_MODE_SHUTDOWN);
-#endif
 	break;
     case ICC(UXENPROCESSEXITHELPER): {
         KIRQL irql;

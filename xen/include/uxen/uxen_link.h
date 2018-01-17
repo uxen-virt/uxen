@@ -2,7 +2,7 @@
  *  uxen_link.h
  *  uxen
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -84,56 +84,11 @@ uint8_t *uxen_addr_per_cpu_data_end;
 #endif
 #endif
 
-#if !defined(__UXEN_EMBEDDED__)
-static int get_elf_sym(struct elf_binary *elf, unsigned char *hv,
-		       const char *n, int vsize, void *vp)
-{
-    uint64_t v;
-    uint64_t base;
-    int shndx;
-    const elf_sym *sym;
-    const elf_shdr *shdr;
-
-    sym = elf_sym_by_name(elf, n);
-    if (sym == NULL)
-	return -1;
-    shndx = elf_uval(elf, sym, st_shndx);
-    switch (shndx) {
-    case SHN_UNDEF:
-    case SHN_ABS:
-	base = 0;
-	break;
-    case SHN_COMMON:
-	return -1;
-	break;
-    default:
-	shdr = elf_shdr_by_index(elf, shndx);
-	if ( shdr == NULL )
-	    return -1;
-	base = elf_uval(elf, shdr, sh_addr) + (uint64_t)(uintptr_t)hv;
-	break;
-    }
-    v = elf_uval(elf, sym, st_value) + base;
-    dprintk("sym %s = %" PRIx64 " (base %" PRIx64 ")\n", n, v, base);
-    memcpy(vp, &v, vsize);
-    return 0;
-}
-
-#define UXEN_GET_SYM(n, t, v) do {				\
-	int ret = get_elf_sym(elf, hv, #n, sizeof(t), &v);	\
-	if (ret) {						\
-	    if (missing_symbol)					\
-		*missing_symbol = #n;				\
-	    return ret;						\
-	}							\
-    } while (/* CONSTCOND */0)
-#else
 #define UXEN_GET_SYM(n, t, v) do {					\
 	extern t;                                                       \
 	v = &n;                                                         \
 	dprintk("sym %s = %p\n", #v, v);				\
     } while (/* CONSTCOND */0)
-#endif
 
 #define UXEN_GET_SYMS(fn_name, prefix) int                              \
     fn_name(struct elf_binary *elf, unsigned char *hv,			\

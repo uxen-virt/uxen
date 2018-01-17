@@ -276,11 +276,7 @@ int copyout(const void *kaddr, void *uaddr, size_t size);
 int copyin_kernel(const void *uaddr, void *kaddr, size_t size);
 
 /* uxen_load.c */
-#if !defined(__UXEN_EMBEDDED__)
-int uxen_load(struct uxen_load_desc *);
-#else
 int uxen_load_symbols(void);
-#endif
 int uxen_unload(void);
 
 /* uxen_mem.c */
@@ -455,7 +451,7 @@ int mdm_init(struct uxen_memcacheinit_desc *, struct fd_assoc *);
 int mdm_map(struct uxen_memcachemap_desc *, struct fd_assoc *);
 void mdm_clear_all(struct vm_info *);
 
-#if defined(__x86_64__) && defined(__UXEN_EMBEDDED__)
+#if defined(__x86_64__)
 /* uxen_xpdata.obj */
 extern uint8_t uxen_xdata_start;
 extern uint8_t uxen_xdata_end;

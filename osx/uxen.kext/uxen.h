@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -328,11 +328,7 @@ int uxen_op_unmap_host_pages(struct uxen_map_host_pages_desc *,
                              struct fd_assoc *);
 
 /* uxen_load.c */
-#if !defined(__UXEN_EMBEDDED__)
-int uxen_load(struct uxen_load_desc *);
-#else
 int uxen_load_symbols(void);
-#endif
 int uxen_unload(void);
 
 /* uxen_mem.c */

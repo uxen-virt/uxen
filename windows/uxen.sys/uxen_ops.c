@@ -185,9 +185,6 @@ uxen_except_handler(unsigned int code, struct _EXCEPTION_POINTERS *ep)
     else
         strncpy(symbol_buffer, "???", 4);
     printk("rip %Ix sym %s\n", ep->ContextRecord->Rip, symbol_buffer);
-#if !defined(__UXEN_EMBEDDED__)
-    dprintk("lduxen 0x%p; gdb uxen\n", uxen_hv);
-#endif
     printk(".cxr 0x%p\n", ep->ContextRecord);
     if (*KdDebuggerEnabled)
 	DbgBreakPoint();
@@ -1048,25 +1045,17 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
            build_number, is_checked ? " checked" : "");
     printk("===============================================================\n");
 
-#if defined(__UXEN_EMBEDDED__)
     ret = uxen_load_symbols();
     if (ret) {
         fail_msg("uxen_load_symbols failed: %d", ret);
 	goto out;
     }
-#endif
 
     if (uxen_info->ui_sizeof_struct_page_info == 0) {
         fail_msg("invalid sizeof(struct page_info)");
         ret = -EINVAL;
 	goto out;
     }
-
-#if !defined(__UXEN_EMBEDDED__)
-    dprintk("vvvvvvvvvvvvvvvvv\n"
-	    "lduxen %p; gdb uxen\n"
-	    "^^^^^^^^^^^^^^^^^\n", uxen_hv);
-#endif
 
 #ifdef __i386__
     use_hidden = 1;
@@ -1256,7 +1245,7 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
         cpu++;
     }
 
-#if defined(__x86_64__) && defined(__UXEN_EMBEDDED__)
+#if defined(__x86_64__)
     dprintk("uxen xdata start: %p-%p\n", &uxen_xdata_start, &uxen_xdata_end);
     dprintk("uxen pdata start: %p-%p\n", &uxen_pdata_start, &uxen_pdata_end);
     uxen_info->ui_xdata_start = &uxen_xdata_start;

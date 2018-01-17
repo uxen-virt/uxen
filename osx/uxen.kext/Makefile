@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2016, Bromium, Inc.
+# Copyright 2012-2018, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -12,14 +12,12 @@ ifeq (,$(MAKENOW))
 
 VPATH = $(SRCDIR)
 VPATH += :$(TOPDIR)/common/uxen.os
-VPATH += :$(TOPDIR)/xen/common/libelf
 VPATH += :$(TOPDIR)/common/rbtree
 
 KEXT_BIN = uxen
 KEXT_DSYM = $(KEXT_BIN).dwarf
 
 CPPFLAGS += -D__XEN__ -D__UXEN__ -D__UXEN_SYS__ -DUXEN_HOST_OSX -D__SYSV_ABI__
-CPPFLAGS += -D__UXEN_EMBEDDED__
 
 CPPFLAGS += -I$(BUILDDIR_xen)/include \
 	    -I$(TOPDIR)/common/include/xen-public \
@@ -105,9 +103,6 @@ KEXT_OBJS = uxen.o \
 	    uxen_logging.o \
 	    events.o \
 	    memcache-dm.o \
-	    libelf-loader.o \
-	    libelf-relocate.o \
-	    libelf-tools.o \
 	    rbtree.o \
 	    xnu_symbols.o \
 	    dom0_v4v_device.o \
@@ -125,8 +120,6 @@ xen-errno.h: $(TOPDIR)/xen/include/xen/errno.h
 	@sed -e '/XXX osx/ s/^\(#define.\)E/\1X_E/' <$< >$@
 
 $(KEXT_OBJS): .deps/.exists $(SRCDIR)/uxen_driver.exports
-
-libelf-loader.o libelf-relocate.o libelf-tools.o: CPPFLAGS += -DNO_XEN_ELF_NOTE
 
 $(KEXT_OBJS): build_info.h xen-errno.h
 
@@ -149,10 +142,6 @@ $(KEXT_DSYM): $(KEXT_BIN)
 %.o: %.S
 	$(_W)echo Compiling - $@
 	$(_V)$(COMPILE.S) $< -o $@
-
-libelf-loader.o: CPPFLAGS += -Delf_printk=uxen_dprintk
-libelf-relocate.o: CPPFLAGS += -Delf_printk=uxen_dprintk
-libelf-tools.o: CPPFLAGS += -Delf_printk=uxen_dprintk
 
 -include .deps/*.d
 

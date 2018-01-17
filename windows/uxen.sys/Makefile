@@ -1,5 +1,5 @@
 #
-# Copyright 2016-2017, Bromium, Inc.
+# Copyright 2016-2018, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -121,7 +121,7 @@ uxen_sys_CPPFLAGS += \
 	//DNTDDI_VERSION=0x06010000 \
 	//D_KERNEL_MODE \
 	//D__XEN__ //D__UXEN__ //D__UXEN_SYS__ \
-	//D__MS_ABI__ //D__UXEN_EMBEDDED__ //D__OBJ_PE__ \
+	//D__MS_ABI__ //D__OBJ_PE__ \
 	//DUXEN_HOST_WINDOWS \
 	//D__KERNEL__ //D_DEFENSIVE_LIMITS \
 	//DBUILD_INFO="\"build_info.h\""

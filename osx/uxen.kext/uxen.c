@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -49,11 +49,7 @@ struct sysctl_oid sysctl__hw_uxen = {
 enum uxen_mode {
     MODE_IDLE,
     MODE_SYMS_LOADED,
-#if !defined(__UXEN_EMBEDDED__)
-    MODE_LOADED,
-#else
     MODE_LOADED = MODE_SYMS_LOADED,
-#endif
     MODE_FAILED,
     MODE_INITIALIZED,
     MODE_SHUTDOWN,
@@ -351,16 +347,6 @@ uxen_ioctl(u_long cmd, struct fd_assoc *fda, struct vm_info *vmi,
         ret = uxen_op_version((struct uxen_version_desc *)out_buf);
         break;
     case UXENLOAD:
-#if !defined(__UXEN_EMBEDDED__)
-        CHECK_MODE_NOT(MODE_LOADED, "UXENLOAD");
-        CHECK_MODE(MODE_SYMS_LOADED, "UXENLOAD");
-        CHECK_INPUT_BUFFER("UXENLOAD", struct uxen_load_desc);
-        IOCTL_ADMIN_CHECK("UXENLOAD");
-        ret = uxen_load((struct uxen_load_desc *)in_buf);
-        if (ret)
-            break;
-        SET_MODE(MODE_LOADED);
-#endif
         break;
     case UXENLOADSYMS:
         CHECK_MODE_NOT(MODE_SYMS_LOADED, "UXENLOADSYMS");
@@ -392,19 +378,13 @@ uxen_ioctl(u_long cmd, struct fd_assoc *fda, struct vm_info *vmi,
         SET_MODE(MODE_INITIALIZED);
         break;
     case UXENSHUTDOWN:
-#if defined(__UXEN_EMBEDDED__)
         CHECK_MODE_NOT(MODE_SHUTDOWN, "UXENSHUTDOWN");
-#endif
         CHECK_MODE(MODE_INITIALIZED, "UXENSHUTDOWN");
         IOCTL_ADMIN_CHECK("UXENSHUTDOWN");
         ret = uxen_op_shutdown();
         if (ret)
             break;
-#if !defined(__UXEN_EMBEDDED__)
-        SET_MODE(MODE_LOADED);
-#else
         SET_MODE(MODE_SHUTDOWN);
-#endif
         break;
     case UXENWAITVMEXIT:
         CHECK_MODE(MODE_LOADED, "UXENWAITVMEXIT");
