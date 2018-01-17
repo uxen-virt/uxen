@@ -13,6 +13,12 @@
 
 #include "uxen_os.h"
 
+#if defined(__x86_64__)
+#define UXEN_INTERFACE_FN(fn) __interface_fn fn
+#else  /* __x86_64__ */
+#define UXEN_INTERFACE_FN(fn) __interface_fn _ ## fn
+#endif  /* __x86_64__ */
+
 #if defined(UXEN_DEFINE_SYMBOLS_PROTO) || defined(UXEN_DEFINE_SYMBOLS_CODE)
 
 #include "uxen_desc.h"
@@ -24,45 +30,64 @@
 #endif
 
 UXEN_LINK_PROTO_TYPE struct uxen_info *uxen_info;
-UXEN_LINK_PROTO_TYPE
-intptr_t (__cdecl *uxen_do_start_xen) (const struct uxen_init_desc *, uint64_t,
-                                       struct vm_info_shared *,
-                                       struct vm_vcpu_info_shared **);
-UXEN_LINK_PROTO_TYPE
-void (__cdecl *uxen_do_add_heap_memory) (uint64_t, uint64_t);
-UXEN_LINK_PROTO_TYPE
-intptr_t (__cdecl *uxen_do_lookup_vm) (xen_domain_handle_t);
-UXEN_LINK_PROTO_TYPE
-intptr_t (__cdecl *uxen_do_setup_vm) (struct uxen_createvm_desc *,
-                                      struct vm_info_shared *,
-                                      struct vm_vcpu_info_shared **);
-UXEN_LINK_PROTO_TYPE
-intptr_t (__cdecl *uxen_do_run_vcpu) (uint32_t, uint32_t);
-UXEN_LINK_PROTO_TYPE
-intptr_t (__cdecl *uxen_do_destroy_vm) (xen_domain_handle_t);
-UXEN_LINK_PROTO_TYPE
-void (__cdecl *uxen_do_dispatch_ipi) (unsigned int);
-UXEN_LINK_PROTO_TYPE
-void (__cdecl *uxen_do_run_idle_thread) (uint32_t);
-UXEN_LINK_PROTO_TYPE
-intptr_t (__cdecl *uxen_do_handle_keypress) (unsigned char);
-UXEN_LINK_PROTO_TYPE
-void (__cdecl *uxen_do_shutdown_xen) (void);
-UXEN_LINK_PROTO_TYPE
-void (__cdecl *uxen_do_suspend_xen_prepare) (void);
-UXEN_LINK_PROTO_TYPE
-void (__cdecl *uxen_do_suspend_xen) (void);
-UXEN_LINK_PROTO_TYPE
-void (__cdecl *uxen_do_resume_xen) (void);
-UXEN_LINK_PROTO_TYPE
-intptr_t (__cdecl *uxen_do_hypercall) (
-    struct uxen_hypercall_desc *, struct vm_info_shared *, void *, uint32_t);
-UXEN_LINK_PROTO_TYPE
-intptr_t (__cdecl *uxen_do_process_ud2) (struct cpu_user_regs *);
-UXEN_LINK_PROTO_TYPE
-intptr_t (__cdecl *uxen_do_lookup_symbol) (uint64_t, char *, uint32_t);
-UXEN_LINK_PROTO_TYPE
-intptr_t (__cdecl *uxen_do_flush_rcu) (uint32_t);
+
+intptr_t __cdecl __uxen_start_xen(const struct uxen_init_desc *, uint64_t,
+                                  struct vm_info_shared *,
+                                  struct vm_vcpu_info_shared **);
+#define uxen_do_start_xen __uxen_start_xen
+
+void __cdecl __uxen_add_heap_memory(uint64_t, uint64_t);
+#define uxen_do_add_heap_memory __uxen_add_heap_memory
+
+intptr_t __cdecl __uxen_lookup_vm(xen_domain_handle_t);
+#define uxen_do_lookup_vm __uxen_lookup_vm
+
+intptr_t __cdecl __uxen_setup_vm(struct uxen_createvm_desc *,
+                                 struct vm_info_shared *,
+                                 struct vm_vcpu_info_shared **);
+#define uxen_do_setup_vm __uxen_setup_vm
+
+intptr_t __cdecl __uxen_run_vcpu(uint32_t, uint32_t);
+#define uxen_do_run_vcpu __uxen_run_vcpu
+
+intptr_t __cdecl __uxen_destroy_vm(xen_domain_handle_t);
+#define uxen_do_destroy_vm __uxen_destroy_vm
+
+void __cdecl __uxen_dispatch_ipi(unsigned int);
+#define uxen_do_dispatch_ipi __uxen_dispatch_ipi
+
+void __cdecl __uxen_run_idle_thread(uint32_t);
+#define uxen_do_run_idle_thread __uxen_run_idle_thread
+
+intptr_t __cdecl __uxen_handle_keypress(unsigned char);
+#define uxen_do_handle_keypress __uxen_handle_keypress
+
+void __cdecl __uxen_shutdown_xen(void);
+#define uxen_do_shutdown_xen __uxen_shutdown_xen
+
+void __cdecl __uxen_suspend_xen_prepare(void);
+#define uxen_do_suspend_xen_prepare __uxen_suspend_xen_prepare
+
+void __cdecl __uxen_suspend_xen(void);
+#define uxen_do_suspend_xen __uxen_suspend_xen
+
+void __cdecl __uxen_resume_xen(void);
+#define uxen_do_resume_xen __uxen_resume_xen
+
+intptr_t __cdecl __uxen_hypercall(struct uxen_hypercall_desc *,
+                                  struct vm_info_shared *,
+                                  void *, uint32_t);
+#define uxen_do_hypercall __uxen_hypercall
+
+intptr_t __cdecl __uxen_process_ud2(struct cpu_user_regs *);
+#define uxen_do_process_ud2 __uxen_process_ud2
+
+intptr_t __cdecl __uxen_lookup_symbol(uint64_t, char *, uint32_t);
+#define uxen_do_lookup_symbol __uxen_lookup_symbol
+
+intptr_t __cdecl __uxen_flush_rcu(uint32_t);
+#define uxen_do_flush_rcu __uxen_flush_rcu
+
 UXEN_LINK_PROTO_TYPE
 uint8_t *uxen_addr_per_cpu_start;
 UXEN_LINK_PROTO_TYPE
@@ -99,61 +124,6 @@ uint8_t *uxen_addr_per_cpu_data_end;
     /* resolve to uxen_info */                                          \
     UXEN_GET_SYM(prefix ## _uxen_info,                                  \
                  struct uxen_info prefix ## _uxen_info, uxen_info);     \
-    UXEN_GET_SYM(prefix ## _uxen_start_xen,                             \
-                 intptr_t __cdecl prefix ## _uxen_start_xen             \
-                 (const struct uxen_init_desc *, uint64_t,              \
-                  struct vm_info_shared *, struct vm_vcpu_info_shared **), \
-                 uxen_do_start_xen);	                                \
-    UXEN_GET_SYM(prefix ## _uxen_add_heap_memory,                       \
-                 void __cdecl prefix ## _uxen_add_heap_memory           \
-                 (uint64_t, uint64_t), uxen_do_add_heap_memory);        \
-    UXEN_GET_SYM(prefix ## _uxen_lookup_vm,                             \
-                 intptr_t __cdecl prefix ## _uxen_lookup_vm             \
-		 (xen_domain_handle_t), uxen_do_lookup_vm);             \
-    UXEN_GET_SYM(prefix ## _uxen_setup_vm,                              \
-                 intptr_t __cdecl prefix ## _uxen_setup_vm              \
-		 (struct uxen_createvm_desc *, struct vm_info_shared *, \
-                  struct vm_vcpu_info_shared **), uxen_do_setup_vm);    \
-    UXEN_GET_SYM(prefix ## _uxen_run_vcpu,                              \
-                 intptr_t __cdecl prefix ## _uxen_run_vcpu              \
-		 (uint32_t, uint32_t), uxen_do_run_vcpu);               \
-    UXEN_GET_SYM(prefix ## _uxen_destroy_vm,                            \
-                 intptr_t __cdecl prefix ## _uxen_destroy_vm            \
-		 (xen_domain_handle_t), uxen_do_destroy_vm);            \
-    UXEN_GET_SYM(prefix ## _uxen_dispatch_ipi,                          \
-                 void __cdecl prefix ## _uxen_dispatch_ipi              \
-		 (unsigned int), uxen_do_dispatch_ipi);			\
-    UXEN_GET_SYM(prefix ## _uxen_run_idle_thread,                       \
-                 void __cdecl prefix ## _uxen_run_idle_thread           \
-		 (uint32_t), uxen_do_run_idle_thread);                  \
-    UXEN_GET_SYM(prefix ## _uxen_handle_keypress,                       \
-                 intptr_t __cdecl prefix ## _uxen_handle_keypress       \
-		 (unsigned char), uxen_do_handle_keypress);		\
-    UXEN_GET_SYM(prefix ## _uxen_shutdown_xen,                          \
-                 void __cdecl prefix ## _uxen_shutdown_xen              \
-		 (void), uxen_do_shutdown_xen);				\
-    UXEN_GET_SYM(prefix ## _uxen_suspend_xen_prepare,                   \
-                 void __cdecl prefix ## _uxen_suspend_xen_prepare       \
-		 (void), uxen_do_suspend_xen_prepare);                  \
-    UXEN_GET_SYM(prefix ## _uxen_suspend_xen,                           \
-                 void __cdecl prefix ## _uxen_suspend_xen               \
-		 (void), uxen_do_suspend_xen);				\
-    UXEN_GET_SYM(prefix ## _uxen_resume_xen,                            \
-                 void __cdecl prefix ## _uxen_resume_xen                \
-		 (void), uxen_do_resume_xen);				\
-    UXEN_GET_SYM(prefix ## _uxen_hypercall,                             \
-                 intptr_t __cdecl prefix ## _uxen_hypercall             \
-                 (struct uxen_hypercall_desc *, struct vm_info_shared *, \
-                  void *, uint32_t), uxen_do_hypercall);                \
-    UXEN_GET_SYM(prefix ## _uxen_process_ud2,                           \
-                 intptr_t __cdecl prefix ## _uxen_process_ud2           \
-		 (struct cpu_user_regs *), uxen_do_process_ud2);        \
-    UXEN_GET_SYM(prefix ## _uxen_lookup_symbol,                         \
-                 intptr_t __cdecl prefix ## _uxen_lookup_symbol         \
-		 (uint64_t, char *, uint32_t), uxen_do_lookup_symbol);	\
-    UXEN_GET_SYM(prefix ## _uxen_flush_rcu,                             \
-                 intptr_t __cdecl prefix ## _uxen_flush_rcu             \
-                 (uint32_t), uxen_do_flush_rcu);                        \
     UXEN_GET_SYM(prefix ## _per_cpu_start, uint8_t prefix ## _per_cpu_start, \
 		 uxen_addr_per_cpu_start);                              \
     UXEN_GET_SYM(prefix ## _per_cpu_data_end,                           \
@@ -167,23 +137,6 @@ uint8_t *uxen_addr_per_cpu_data_end;
 {									\
 									\
     uxen_info = NULL;							\
-    uxen_do_start_xen = NULL;						\
-    uxen_do_add_heap_memory = NULL;                                     \
-    uxen_do_lookup_vm = NULL;						\
-    uxen_do_setup_vm = NULL;						\
-    uxen_do_run_vcpu = NULL;						\
-    uxen_do_destroy_vm = NULL;						\
-    uxen_do_dispatch_ipi = NULL;					\
-    uxen_do_run_idle_thread = NULL;                                     \
-    uxen_do_handle_keypress = NULL;					\
-    uxen_do_shutdown_xen = NULL;					\
-    uxen_do_suspend_xen_prepare = NULL;                                 \
-    uxen_do_suspend_xen = NULL;                                         \
-    uxen_do_resume_xen = NULL;                                          \
-    uxen_do_hypercall = NULL;						\
-    uxen_do_process_ud2 = NULL;						\
-    uxen_do_lookup_symbol = NULL;					\
-    uxen_do_flush_rcu = NULL;                                           \
     uxen_addr_per_cpu_start = 0;                                        \
     uxen_addr_per_cpu_data_end = 0;                                     \
 }

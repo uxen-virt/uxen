@@ -30,6 +30,7 @@
 
 #include <uxen/uxen.h>
 #include <uxen/uxen_desc.h>
+#include <uxen/uxen_link.h>
 #include <uxen/mapcache.h>
 #include <uxen/memcache-dm.h>
 
@@ -160,8 +161,8 @@ do_lookup_vm(xen_domain_handle_t vm_uuid)
     return d ? (intptr_t)d->vm_info_shared : -ENOENT;
 }
 
-intptr_t __interface_fn
-__uxen_lookup_vm(xen_domain_handle_t vm_uuid)
+intptr_t UXEN_INTERFACE_FN(
+__uxen_lookup_vm)(xen_domain_handle_t vm_uuid)
 {
     intptr_t ret;
 
@@ -262,9 +263,9 @@ do_setup_vm(struct uxen_createvm_desc *ucd, struct vm_info_shared *vmi,
     return ret;
 }
 
-intptr_t __interface_fn
-__uxen_setup_vm(struct uxen_createvm_desc *ucd, struct vm_info_shared *vmi,
-                struct vm_vcpu_info_shared **vcis)
+intptr_t UXEN_INTERFACE_FN(
+__uxen_setup_vm)(struct uxen_createvm_desc *ucd, struct vm_info_shared *vmi,
+                 struct vm_vcpu_info_shared **vcis)
 {
     intptr_t ret;
 
@@ -539,8 +540,8 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
     return ret;
 }
 
-intptr_t __interface_fn
-__uxen_run_vcpu(uint32_t domid, uint32_t vcpuid)
+intptr_t UXEN_INTERFACE_FN(
+__uxen_run_vcpu)(uint32_t domid, uint32_t vcpuid)
 {
     intptr_t ret;
 
@@ -580,8 +581,8 @@ do_destroy_vm(xen_domain_handle_t vm_uuid)
     return ret;
 }
 
-intptr_t __interface_fn
-__uxen_destroy_vm(xen_domain_handle_t vm_uuid)
+intptr_t UXEN_INTERFACE_FN(
+__uxen_destroy_vm)(xen_domain_handle_t vm_uuid)
 {
     int ret;
 
@@ -599,8 +600,8 @@ __uxen_destroy_vm(xen_domain_handle_t vm_uuid)
     return ret;
 }
 
-void __interface_fn
-__uxen_shutdown_xen(void)
+void UXEN_INTERFACE_FN(
+__uxen_shutdown_xen)(void)
 {
 
     if (!dom0 || !dom0->vcpu)
@@ -639,8 +640,8 @@ do_hvm_cpu_down(void *arg)
     cpumask_test_and_clear_cpu(smp_processor_id(), &cpu_down_map);
 }
 
-void __interface_fn
-__uxen_suspend_xen_prepare(void)
+void UXEN_INTERFACE_FN(
+__uxen_suspend_xen_prepare)(void)
 {
     struct domain *d;
 
@@ -662,8 +663,8 @@ __uxen_suspend_xen_prepare(void)
     end_execution();
 }
 
-void __interface_fn
-__uxen_suspend_xen(void)
+void UXEN_INTERFACE_FN(
+__uxen_suspend_xen)(void)
 {
 
     if (!dom0 || !dom0->vcpu)
@@ -697,8 +698,8 @@ do_hvm_cpu_up(void *arg)
     cpumask_clear_cpu(smp_processor_id(), &hvm_cpu_up_mask);
 }
 
-void __interface_fn
-__uxen_resume_xen(void)
+void UXEN_INTERFACE_FN(
+__uxen_resume_xen)(void)
 {
     struct domain *d;
 
@@ -767,11 +768,11 @@ do_hypercall(struct uxen_hypercall_desc *uhd)
     return -ENOSYS;
 }
 
-intptr_t __interface_fn
-__uxen_hypercall(struct uxen_hypercall_desc *uhd,
-                 struct vm_info_shared *target_vmis,
-                 void *user_access_opaque,
-                 uint32_t privileged)
+intptr_t UXEN_INTERFACE_FN(
+__uxen_hypercall)(struct uxen_hypercall_desc *uhd,
+                  struct vm_info_shared *target_vmis,
+                  void *user_access_opaque,
+                  uint32_t privileged)
 {
     intptr_t ret;
 
@@ -834,8 +835,8 @@ free_dom0(void)
     }
 }
 
-void __interface_fn
-__uxen_add_heap_memory(uint64_t start, uint64_t end)
+void UXEN_INTERFACE_FN(
+__uxen_add_heap_memory)(uint64_t start, uint64_t end)
 {
 
 #ifdef __i386__
@@ -852,8 +853,8 @@ __uxen_add_heap_memory(uint64_t start, uint64_t end)
 #endif
 }
 
-intptr_t __interface_fn
-__uxen_handle_keypress(unsigned char key)
+intptr_t UXEN_INTERFACE_FN(
+__uxen_handle_keypress)(unsigned char key)
 {
 
     if (!idle_vcpu[smp_processor_id()])
@@ -870,8 +871,8 @@ __uxen_handle_keypress(unsigned char key)
     return 0;
 }
 
-void __interface_fn
-__uxen_run_idle_thread(uint32_t had_timeout)
+void UXEN_INTERFACE_FN(
+__uxen_run_idle_thread)(uint32_t had_timeout)
 {
 
     if (!idle_vcpu[smp_processor_id()])
@@ -905,8 +906,8 @@ static void rcu_barrier_callback(struct rcu_head *head)
 
 static DEFINE_PER_CPU(struct rcu_barrier_data, flush_rcu_data);
 
-intptr_t __interface_fn
-__uxen_flush_rcu(uint32_t complete)
+intptr_t UXEN_INTERFACE_FN(
+__uxen_flush_rcu)(uint32_t complete)
 {
     int cpu = host_processor_id();
 
@@ -1003,8 +1004,8 @@ options_parse(const struct uxen_init_desc *init_options,
 }
 
 /* adapted from arch/x86/traps.c:do_invalid_op */
-intptr_t __interface_fn
-__uxen_process_ud2(struct cpu_user_regs *regs)
+intptr_t UXEN_INTERFACE_FN(
+__uxen_process_ud2)(struct cpu_user_regs *regs)
 {
     struct bug_frame *bug;
     struct bug_frame_str *bug_str;
@@ -1093,8 +1094,8 @@ __uxen_process_ud2(struct cpu_user_regs *regs)
     return 1;
 }
 
-intptr_t __interface_fn
-__uxen_lookup_symbol(uint64_t address, char *buffer, uint32_t buflen)
+intptr_t UXEN_INTERFACE_FN(
+__uxen_lookup_symbol)(uint64_t address, char *buffer, uint32_t buflen)
 {
     const char *name;
     unsigned long offset, size, flags;

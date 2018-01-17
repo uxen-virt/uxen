@@ -10,7 +10,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -42,6 +42,8 @@
 #include <asm/hardirq.h>
 #include <asm/hvm/support.h>
 #include <mach_apic.h>
+
+#include <uxen/uxen_link.h>
 
 int hard_smp_processor_id(void)
 {
@@ -527,8 +529,8 @@ fastcall void smp_call_function_interrupt(struct cpu_user_regs *regs)
 }
 
 #ifdef __UXEN__
-void __interface_fn
-__uxen_dispatch_ipi(int vector)
+void UXEN_INTERFACE_FN(
+__uxen_dispatch_ipi)(int vector)
 {
     unsigned long flags;
     int cpu = smp_processor_id();
