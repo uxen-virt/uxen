@@ -43,9 +43,13 @@
 
 #include <asm/i387.h>
 
+#if 0
 #define __host_call __attribute__                                       \
     (( deprecated("don't call host functions from uxen_info directly, " \
                   "use the UI_HOST_CALL macro") ))
+#else
+#define __host_call
+#endif
 
 #define UI_HOST_CALL_SAVE_XMM                           \
     ({                                                  \
