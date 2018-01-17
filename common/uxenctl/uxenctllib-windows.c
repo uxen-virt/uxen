@@ -2,7 +2,7 @@
  *  uxenctllib-windows.c
  *  uxen
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -11,6 +11,7 @@
 #define ERR_WINDOWS
 #define ERR_NO_PROGNAME
 #define ERR_STDERR _uxenctllib_stderr
+#define _err_vprintf uxen_err_vprintf
 #include <err.h>
 #include <inttypes.h>
 #include <stdint.h>
@@ -21,6 +22,73 @@
 #include <uxen_def.h>
 
 #include "uxenctllib.h"
+
+/* Code to handle debug output. */
+
+FILE *_uxenctllib_stderr = NULL;
+
+static void
+uxen_log_to_stderr(const char *line, enum uxen_logtype type)
+{
+    (void)type;
+
+    fputs(line, _uxenctllib_stderr);
+}
+
+static uxen_log_fnc log_sinker = &uxen_log_to_stderr;
+
+static const size_t log_buf_len = 2048;
+/* Should be more than enough for anything that this static library could spew. */
+
+void
+uxen_set_logfile(FILE *f)
+{
+    _uxenctllib_stderr = f;
+}
+
+void
+uxen_set_log_function(uxen_log_fnc fnc)
+{
+    if (fnc)
+        log_sinker = fnc;
+    else
+        log_sinker = &uxen_log_to_stderr;
+}
+
+void
+uxen_err_vprintf(const char *function, int line,
+                 const char *type,
+                 int errval, const char *errdesc,
+                 const char *fmt, va_list ap)
+{
+    enum uxen_logtype printType = uxen_logtype_err;
+    int i = 0;  /* Index within the buffer. */
+    char buf[log_buf_len];
+    memset(buf, 0, log_buf_len); /* Security. */
+
+    /* i += snprintf(buf, log_buf_len, "%s: ", getprogname()); */
+    /* Useless because of the ERR_NO_PROGNAME defined above. */
+
+    if (fmt) {
+        i += vsnprintf(buf + i, log_buf_len - i, fmt, ap);
+
+        if (errdesc)
+            i += snprintf(buf + i, log_buf_len - i, ": %s (%08X)", errdesc, errval);
+        else if (errval)
+            i += snprintf(buf + i, log_buf_len - i, ": (%08X)", errval);
+    }
+
+    if (log_buf_len - i >= 2)
+        buf[i++] = '\n';
+    else
+        buf[log_buf_len - 2] = '\n';
+    /* Note: v?snprintf guarantees that the given string will be null-terminated. */
+
+    if (type && !strncmp(type, "warn", 4))
+        printType = uxen_logtype_warn;
+
+    log_sinker(buf, printType);
+}
 
 int uxen_ioctl(UXEN_HANDLE_T h, uint64_t ctl, ...);
 

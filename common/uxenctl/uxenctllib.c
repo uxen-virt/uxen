@@ -2,7 +2,7 @@
  *  uxenctllib.c
  *  uxen
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -12,6 +12,7 @@
 #define ERR_WINDOWS
 #define ERR_NO_PROGNAME
 #define ERR_STDERR _uxenctllib_stderr
+#define _err_vprintf uxen_err_vprintf
 #endif
 #include <err.h>
 #include <errno.h>
@@ -42,17 +43,6 @@ int uxen_ioctl(UXEN_HANDLE_T h, uint64_t ctl, ...);
 #include <xen/domctl.h>
 #endif
 #include <xen/sysctl.h>
-
-#ifdef _WIN32
-FILE *_uxenctllib_stderr = NULL;
-
-void
-uxen_set_logfile(FILE *f)
-{
-
-    _uxenctllib_stderr = f;
-}
-#endif
 
 int
 uxen_init(UXEN_HANDLE_T h, const struct uxen_init_desc *uid)
