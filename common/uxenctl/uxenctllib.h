@@ -2,7 +2,7 @@
  *  uxenctllib.h
  *  uxen
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -42,7 +42,13 @@ typedef xen_sysctl_physinfo_t uxen_physinfo_t;
 
 #ifdef _WIN32
 void uxen_set_logfile(FILE *);
+
+enum uxen_logtype { uxen_logtype_err = 0, uxen_logtype_warn = 1 };
+
+typedef void (*uxen_log_fnc)(const char *line, enum uxen_logtype type);
+void uxen_set_log_function(uxen_log_fnc fnc);
 #endif
+
 struct uxen_init_desc;
 int uxen_parse_init_arg(struct uxen_init_desc *,const char *);
 int uxen_manage_driver(BOOLEAN, BOOLEAN, const char *);
