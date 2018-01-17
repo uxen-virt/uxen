@@ -7,10 +7,35 @@
 #include <linux/device.h>
 #include <linux/slab.h>
 #include <linux/random.h>
+#include <linux/kobject.h>
 #include <uxen-platform.h>
 #include <uxen/platform_interface.h>
 
 extern int use_rdrand;
+static struct kobject *ax_kobj;
+
+#define SESSION_KEY_BYTES 64
+#define AX_CPUID_QUERYOP 0x35af3471
+#define AX_QUERYOP_TSC_KHZ 1
+#define AX_QUERYOP_SESSION_KEY 2
+
+static
+uint32_t ax_queryop(uint32_t op, uint64_t arg1)
+{
+  register void* _rax asm ("rax") = (void*)(uintptr_t)AX_CPUID_QUERYOP;
+  register void* _rcx asm ("rcx") = (void*)(uintptr_t)op;
+  register void* _rdx asm ("rdx") = (void*)(uintptr_t)arg1;
+  register void* _r8  asm ("r8")  = (void*)0;
+
+  asm volatile (
+    "cpuid"
+    : "+r" (_rax), "+r" (_rcx), "+r" (_rdx), "+r" (_r8)
+    :
+    : "cc"
+  );
+
+  return (uint32_t)(uintptr_t)_rax;
+}
 
 static int device_net_get_property(struct uxen_device *dev,
                                    int prop_id, void *prop, size_t *prop_len)
@@ -41,6 +66,35 @@ static void device_release(struct device *_dev)
 
     kfree(dev);
 }
+
+static ssize_t sessionkey_show(struct kobject *kobj, struct kobj_attribute *attr,
+                      char *buf)
+{
+    uint8_t sessionkey[SESSION_KEY_BYTES] = { 0 };
+    int i, err;
+
+    err = ax_queryop(AX_QUERYOP_SESSION_KEY, &sessionkey[0]);
+    if (err) {
+        printk(KERN_WARNING "%s: failed to query session key: %d\n", __FUNCTION__, err);
+        return 0;
+    }
+
+    for (i = 0; i < SESSION_KEY_BYTES; i++) {
+        sprintf(buf + i*2, "%02x", sessionkey[i]);
+    }
+    sprintf(buf + SESSION_KEY_BYTES * 2, "\n");
+
+    return SESSION_KEY_BYTES * 2 + 1;
+}
+
+static ssize_t sessionkey_store(struct kobject *kobj, struct kobj_attribute *attr,
+                      char *buf, size_t count)
+{
+    return 0;
+}
+
+static struct kobj_attribute sessionkey_attribute =
+  __ATTR(sessionkey, 0440, sessionkey_show,  sessionkey_store);
 
 int ax_platform_init(struct bus_type *uxen_bus)
 {
@@ -110,10 +164,23 @@ int ax_platform_init(struct bus_type *uxen_bus)
         kfree(dev);
     }
 
+    ax_kobj = kobject_create_and_add("ax", kernel_kobj);
+    if (!ax_kobj) {
+      printk(KERN_WARNING "%s: failed to create kobject", __FUNCTION__);
+      return -ENOMEM;
+    }
+
+    err = sysfs_create_file(ax_kobj, &sessionkey_attribute.attr);
+    if (err) {
+      printk(KERN_WARNING "%s: failed to create sysfs file: %d\n", __FUNCTION__, err);
+      return err;
+    }
+
     return 0;
 }
 
 void ax_platform_exit(void)
 {
-
+  if (ax_kobj)
+    kobject_put(ax_kobj);
 }
