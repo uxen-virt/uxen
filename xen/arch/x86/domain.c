@@ -456,9 +456,9 @@ int vcpu_initialise(struct vcpu *v)
         }
     }
 #endif
-#endif  /* __UXEN__ */
 
     pae_l3_cache_init(&v->arch.pae_l3_cache);
+#endif  /* __UXEN__ */
 
     paging_vcpu_init(v);
 

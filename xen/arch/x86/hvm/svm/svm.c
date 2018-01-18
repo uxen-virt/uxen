@@ -863,7 +863,7 @@ static inline void svm_tsc_ratio_load(struct vcpu *v)
         wrmsrl(MSR_AMD64_TSC_RATIO, vcpu_tsc_ratio(v));
 }
 
-static void svm_ctxt_switch_from(struct vcpu *v)
+void svm_ctxt_switch_from(struct vcpu *v)
 {
 #ifndef __UXEN__
     int cpu = smp_processor_id();
@@ -922,7 +922,7 @@ static void sync_host_state(struct vcpu *v)
     }
 }
 
-static void svm_ctxt_switch_to(struct vcpu *v)
+void svm_ctxt_switch_to(struct vcpu *v)
 {
     struct vmcb_struct *vmcb = v->arch.hvm_svm.vmcb;
     int cpu = smp_processor_id();
@@ -1065,9 +1065,11 @@ svm_vcpu_initialise(struct vcpu *v)
 {
     int rc;
 
+#ifndef __UXEN__
     v->arch.schedule_tail    = svm_do_resume;
     v->arch.ctxt_switch_from = svm_ctxt_switch_from;
     v->arch.ctxt_switch_to   = svm_ctxt_switch_to;
+#endif  /* __UXEN__ */
 
     v->arch.hvm_svm.launch_core = -1;
 

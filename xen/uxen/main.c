@@ -438,7 +438,7 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
 
         if (!vcpu_runnable(v) || v->runstate.state != RUNSTATE_running ||
             !v->context_loaded) {
-            v->arch.ctxt_switch_from(v);
+            HVM_FUNCS(ctxt_switch_from, v);
             v->is_running = 0;
 
             while ((v->runstate.state >= RUNSTATE_blocked &&
@@ -483,7 +483,7 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
                 }
             }
 
-            v->arch.ctxt_switch_to(v);
+            HVM_FUNCS(ctxt_switch_to, v);
         }
 
         if (!vci->vci_runnable)
@@ -515,7 +515,7 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
 
   out_reset_current:
     hvm_do_suspend(v);
-    v->arch.ctxt_switch_from(v);
+    HVM_FUNCS(ctxt_switch_from, v);
     v->is_running = 0;
     _end_execution(NULL);
 

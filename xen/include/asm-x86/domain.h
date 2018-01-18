@@ -502,14 +502,18 @@ struct arch_vcpu
 
     /* other state */
 
+#ifndef __UXEN__
     struct pae_l3_cache pae_l3_cache;
+#endif  /* __UXEN__ */
 
     unsigned long      flags; /* TF_ */
 
+#ifndef __UXEN__
     void (*schedule_tail) (struct vcpu *);
 
     void (*ctxt_switch_from) (struct vcpu *);
     void (*ctxt_switch_to) (struct vcpu *);
+#endif  /* __UXEN__ */
 
     /* Virtual Machine Extensions */
     union {

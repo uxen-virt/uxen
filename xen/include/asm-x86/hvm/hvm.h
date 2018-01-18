@@ -185,7 +185,10 @@ extern struct hvm_function_table hvm_funcs;
     void prefix ## _set_uc_mode(struct vcpu *v);                        \
     void prefix ## _set_info_guest(struct vcpu *v);                     \
     void prefix ## _set_rdtsc_exiting(struct vcpu *v, bool_t);          \
-    bool_t prefix ## _ple_enabled(struct vcpu *v);
+    bool_t prefix ## _ple_enabled(struct vcpu *v);                      \
+                                                                        \
+    void prefix ## _ctxt_switch_from(struct vcpu *v);                   \
+    void prefix ## _ctxt_switch_to(struct vcpu *v);
 
 #ifndef __UXEN_NOT_YET__
     /* Nested HVM */                                                    \

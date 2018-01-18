@@ -95,9 +95,6 @@ static bool_t __read_mostly enable_host_ibpb;
 static bool_t __read_mostly enable_host_ibpb_noibrs;
 static DEFINE_SPINLOCK(ept_sync_lock);
 
-static void vmx_ctxt_switch_from(struct vcpu *v);
-static void vmx_ctxt_switch_to(struct vcpu *v);
-
 static int  vmx_alloc_vlapic_mapping(struct domain *d);
 static void vmx_free_vlapic_mapping(struct domain *d);
 static void vmx_install_vlapic_mapping(struct vcpu *v);
@@ -182,9 +179,11 @@ vmx_vcpu_initialise(struct vcpu *v)
     set_bit(VMX_INDEX_MSR_SHADOW_GS_BASE, &v->arch.hvm_vmx.msr_state.flags);
 #endif
 
+#ifndef __UXEN__
     v->arch.schedule_tail    = vmx_do_resume;
     v->arch.ctxt_switch_from = vmx_ctxt_switch_from;
     v->arch.ctxt_switch_to   = vmx_ctxt_switch_to;
+#endif  /* __UXEN__ */
 
     if ( (rc = vmx_create_vmcs(v)) != 0 )
     {
@@ -803,7 +802,7 @@ DEBUG();
 }
 #endif  /* __UXEN__ */
 
-static void vmx_ctxt_switch_from(struct vcpu *v)
+void vmx_ctxt_switch_from(struct vcpu *v)
 {
     if (v->context_loaded == 0)
         return;
@@ -1028,7 +1027,7 @@ static void sync_host_vmcs_state(struct vcpu *v)
     vmx_vmcs_exit(v);
 }
 
-static void vmx_ctxt_switch_to(struct vcpu *v)
+void vmx_ctxt_switch_to(struct vcpu *v)
 {
     struct domain *d = v->domain;
 #ifndef __UXEN__
