@@ -865,7 +865,7 @@ static int __printk_ratelimit(int ratelimit_ms, int ratelimit_burst,
         local_irq_restore(flags);
         return 1;
     }
-    *missed++;
+    *missed += 1;
     spin_unlock_irqrestore(&ratelimit_lock, flags);
     return 0;
 }
