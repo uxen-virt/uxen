@@ -49,6 +49,7 @@ XEN_CFLAGS += -Wall -Wstrict-prototypes -Wno-unused-value
 XEN_CFLAGS += -Wdeclaration-after-statement
 XEN_CFLAGS += -nostdinc
 XEN_CFLAGS += -fno-builtin -fno-common
+XEN_CFLAGS += -fno-jump-tables
 XEN_CFLAGS += -iwithprefix include
 XEN_CFLAGS += -Werror -Wno-pointer-arith -pipe
 XEN_CPPFLAGS += -I$(abspath include)
