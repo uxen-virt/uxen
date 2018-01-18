@@ -759,7 +759,7 @@ static void load_shadow_guest_state(struct vcpu *v)
     hvm_set_cr4(__get_vvmcs(vvmcs, GUEST_CR4));
     hvm_set_cr3(__get_vvmcs(vvmcs, GUEST_CR3));
 
-    hvm_funcs.set_tsc_offset(v, v->arch.hvm_vcpu.cache_tsc_offset);
+    HVM_FUNCS(set_tsc_offset, v, v->arch.hvm_vcpu.cache_tsc_offset);
 
     vvmcs_to_shadow(vvmcs, VM_ENTRY_INTR_INFO);
     vvmcs_to_shadow(vvmcs, VM_ENTRY_EXCEPTION_ERROR_CODE);
@@ -889,7 +889,7 @@ static void load_vvmcs_host_state(struct vcpu *v)
     hvm_set_cr4(__get_vvmcs(vvmcs, HOST_CR4));
     hvm_set_cr3(__get_vvmcs(vvmcs, HOST_CR3));
 
-    hvm_funcs.set_tsc_offset(v, v->arch.hvm_vcpu.cache_tsc_offset);
+    HVM_FUNCS(set_tsc_offset, v, v->arch.hvm_vcpu.cache_tsc_offset);
 
     __set_vvmcs(vvmcs, VM_ENTRY_INTR_INFO, 0);
 }

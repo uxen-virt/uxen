@@ -73,8 +73,7 @@ nestedhvm_vcpu_reset(struct vcpu *v)
 
     hvm_asid_flush_vcpu_asid(&nv->nv_n2asid);
 
-    if ( hvm_funcs.nhvm_vcpu_reset )
-        hvm_funcs.nhvm_vcpu_reset(v);
+    HVM_FUNCS(nhvm_vcpu_reset, v);
 
     /* vcpu is in host mode */
     nestedhvm_vcpu_exit_guestmode(v);
@@ -85,8 +84,7 @@ nestedhvm_vcpu_initialise(struct vcpu *v)
 {
     int rc = -EOPNOTSUPP;
 
-    if ( !hvm_funcs.nhvm_vcpu_initialise ||
-         ((rc = hvm_funcs.nhvm_vcpu_initialise(v)) != 0) )
+    if ( ((rc = HVM_FUNCS(nhvm_vcpu_initialise, v)) != 0) )
          return rc;
 
     nestedhvm_vcpu_reset(v);
@@ -96,8 +94,8 @@ nestedhvm_vcpu_initialise(struct vcpu *v)
 void
 nestedhvm_vcpu_destroy(struct vcpu *v)
 {
-    if ( nestedhvm_enabled(v->domain) && hvm_funcs.nhvm_vcpu_destroy )
-        hvm_funcs.nhvm_vcpu_destroy(v);
+    if ( nestedhvm_enabled(v->domain) )
+        HVM_FUNCS(nhvm_vcpu_destroy, v);
 }
 
 static void

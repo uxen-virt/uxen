@@ -106,10 +106,6 @@ static DEFINE_PER_CPU(unsigned long, host_msr_tsc_aux);
 
 static void svm_do_resume(struct vcpu *v);
 
-void svm_do_execute(struct vcpu *);
-
-void svm_do_suspend(struct vcpu *);
-
 static bool_t amd_erratum383_found __read_mostly;
 
 void __update_guest_eip(struct cpu_user_regs *regs, unsigned int inst_len)
@@ -135,12 +131,6 @@ void __update_guest_eip(struct cpu_user_regs *regs, unsigned int inst_len)
 
     if ( regs->eflags & X86_EFLAGS_TF )
         hvm_inject_exception(TRAP_debug, HVM_DELIVER_NO_ERROR_CODE, 0);
-}
-
-void
-svm_cpu_down(void)
-{
-    write_efer(read_efer() & ~EFER_SVME);
 }
 
 unsigned long *
@@ -1065,6 +1055,11 @@ svm_domain_destroy(struct domain *d)
 {
 }
 
+void
+svm_domain_relinquish_memory(struct domain *d)
+{
+}
+
 int
 svm_vcpu_initialise(struct vcpu *v)
 {
@@ -1187,6 +1182,17 @@ svm_cpu_dead(unsigned int cpu)
 }
 
 int
+svm_cpu_on(void)
+{
+    return 0;
+}
+
+void
+svm_cpu_off(void)
+{
+}
+
+int
 svm_cpu_up_prepare(unsigned int cpu)
 {
     if ( ((per_cpu(hsa, cpu) == NULL) &&
@@ -1276,6 +1282,12 @@ svm_cpu_up(enum hvmon hvmon_mode)
 #endif
 
     return 0;
+}
+
+void
+svm_cpu_down(void)
+{
+    write_efer(read_efer() & ~EFER_SVME);
 }
 
 struct hvm_function_table * __init start_svm(void)
@@ -2116,58 +2128,7 @@ svm_exit_info(struct vcpu *v, unsigned int field)
 }
 
 static struct hvm_function_table __read_mostly svm_function_table = {
-    .name                 = "SVM",
-    .cpu_up_prepare       = svm_cpu_up_prepare,
-    .cpu_dead             = svm_cpu_dead,
-    .cpu_up               = svm_cpu_up,
-    .cpu_down             = svm_cpu_down,
-    .dump_vcpu            = svm_dump_vcpu,
-    .exit_info            = svm_exit_info,
-    .domain_initialise    = svm_domain_initialise,
-    .domain_destroy       = svm_domain_destroy,
-    .vcpu_initialise      = svm_vcpu_initialise,
-    .vcpu_destroy         = svm_vcpu_destroy,
-    .save_cpu_ctxt        = svm_save_cpu_ctxt,
-    .load_cpu_ctxt        = svm_load_cpu_ctxt,
-    .get_interrupt_shadow = svm_get_interrupt_shadow,
-    .set_interrupt_shadow = svm_set_interrupt_shadow,
-    .guest_x86_mode       = svm_guest_x86_mode,
-    .get_segment_register = svm_get_segment_register,
-    .set_segment_register = svm_set_segment_register,
-    .update_host_cr3      = svm_update_host_cr3,
-    .update_guest_cr      = svm_update_guest_cr,
-    .update_guest_efer    = svm_update_guest_efer,
-    .set_tsc_offset       = svm_set_tsc_offset,
-    .inject_exception     = svm_inject_exception,
-    .init_hypercall_page  = svm_init_hypercall_page,
-    .event_pending        = svm_event_pending,
-    .do_pmu_interrupt     = svm_do_pmu_interrupt,
-    .do_execute           = svm_do_execute,
-    .do_suspend           = svm_do_suspend,
-    .pt_sync_domain       = svm_pt_sync_domain,
-    .cpuid_intercept      = svm_cpuid_intercept,
-    .wbinvd_intercept     = svm_wbinvd_intercept,
-    .fpu_dirty_intercept  = svm_fpu_dirty_intercept,
-    .msr_read_intercept   = svm_msr_read_intercept,
-    .msr_write_intercept  = svm_msr_write_intercept,
-    .invlpg_intercept     = svm_invlpg_intercept,
-    .set_rdtsc_exiting    = svm_set_rdtsc_exiting,
-    .get_insn_bytes       = svm_get_insn_bytes,
-    .ple_enabled          = svm_ple_enabled,
-#ifndef __UXEN_NOT_YET__
-    .nhvm_vcpu_initialise = svm_nhvm_vcpu_initialise,
-    .nhvm_vcpu_destroy = svm_nhvm_vcpu_destroy,
-    .nhvm_vcpu_reset = svm_nhvm_vcpu_reset,
-    .nhvm_vcpu_hostrestore = svm_nhvm_vcpu_hostrestore,
-    .nhvm_vcpu_vmexit = svm_nhvm_vcpu_vmexit,
-    .nhvm_vcpu_vmexit_trap = svm_nhvm_vcpu_vmexit_trap,
-    .nhvm_vcpu_guestcr3 = svm_nhvm_vcpu_guestcr3,
-    .nhvm_vcpu_hostcr3 = svm_nhvm_vcpu_hostcr3,
-    .nhvm_vcpu_asid = svm_nhvm_vcpu_asid,
-    .nhvm_vmcx_guest_intercepts_trap = svm_nhvm_vmcx_guest_intercepts_trap,
-    .nhvm_vmcx_hap_enabled = svm_nhvm_vmcx_hap_enabled,
-    .nhvm_intr_blocked = svm_nhvm_intr_blocked,
-#endif  /* __UXEN_NOT_YET__ */
+    .name = "SVM",
 };
 
 void

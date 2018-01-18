@@ -101,23 +101,9 @@ static void vmx_ctxt_switch_to(struct vcpu *v);
 static int  vmx_alloc_vlapic_mapping(struct domain *d);
 static void vmx_free_vlapic_mapping(struct domain *d);
 static void vmx_install_vlapic_mapping(struct vcpu *v);
-int vmx_update_guest_cr(struct vcpu *v, unsigned int cr);
-void vmx_update_guest_efer(struct vcpu *v);
-void vmx_cpuid_intercept(
-    unsigned int *eax, unsigned int *ebx,
-    unsigned int *ecx, unsigned int *edx);
-void vmx_wbinvd_intercept(void);
-void vmx_fpu_dirty_intercept(void);
-int vmx_msr_read_intercept(unsigned int msr, uint64_t *msr_content);
-int vmx_msr_write_intercept(unsigned int msr, uint64_t msr_content);
-void vmx_invlpg_intercept(unsigned long vaddr);
 static inline void ept_maybe_sync_cpu(struct domain *d);
 
 static void setup_pv_vmx(void);
-
-void vmx_do_execute(struct vcpu *v);
-
-void vmx_do_suspend(struct vcpu *v);
 
 int
 vmx_domain_initialise(struct domain *d)
@@ -2091,60 +2077,14 @@ vmx_exit_info(struct vcpu *v, unsigned int field)
     return ret;
 }
 
+unsigned int
+vmx_get_insn_bytes(struct vcpu *v, uint8_t *buf)
+{
+    return 0;
+}
+
 static struct hvm_function_table __read_mostly vmx_function_table = {
-    .name                 = "VMX",
-    .cpu_up_prepare       = vmx_cpu_up_prepare,
-    .cpu_dead             = vmx_cpu_dead,
-    .domain_initialise    = vmx_domain_initialise,
-    .domain_destroy       = vmx_domain_destroy,
-    .domain_relinquish_memory = vmx_domain_relinquish_memory,
-    .vcpu_initialise      = vmx_vcpu_initialise,
-    .vcpu_destroy         = vmx_vcpu_destroy,
-    .save_cpu_ctxt        = vmx_save_cpu_ctxt,
-    .load_cpu_ctxt        = vmx_load_cpu_ctxt,
-    .get_interrupt_shadow = vmx_get_interrupt_shadow,
-    .set_interrupt_shadow = vmx_set_interrupt_shadow,
-    .guest_x86_mode       = vmx_guest_x86_mode,
-    .get_segment_register = vmx_get_segment_register,
-    .set_segment_register = vmx_set_segment_register,
-    .update_host_cr3      = vmx_update_host_cr3,
-    .update_guest_cr      = vmx_update_guest_cr,
-    .update_guest_efer    = vmx_update_guest_efer,
-    .set_tsc_offset       = vmx_set_tsc_offset,
-    .inject_exception     = vmx_inject_exception,
-    .init_hypercall_page  = vmx_init_hypercall_page,
-    .event_pending        = vmx_event_pending,
-    .do_pmu_interrupt     = vmx_do_pmu_interrupt,
-    .do_execute           = vmx_do_execute,
-    .do_suspend           = vmx_do_suspend,
-    .pt_sync_domain       = vmx_pt_sync_domain,
-    .cpu_on               = vmx_cpu_on,
-    .cpu_off              = vmx_cpu_off,
-    .cpu_up               = vmx_cpu_up,
-    .cpu_down             = vmx_cpu_down,
-    .dump_vcpu            = vmx_dump_vcpu,
-    .exit_info            = vmx_exit_info,
-    .cpuid_intercept      = vmx_cpuid_intercept,
-    .wbinvd_intercept     = vmx_wbinvd_intercept,
-    .fpu_dirty_intercept  = vmx_fpu_dirty_intercept,
-    .msr_read_intercept   = vmx_msr_read_intercept,
-    .msr_write_intercept  = vmx_msr_write_intercept,
-    .invlpg_intercept     = vmx_invlpg_intercept,
-    .set_uc_mode          = vmx_set_uc_mode,
-    .set_info_guest       = vmx_set_info_guest,
-    .set_rdtsc_exiting    = vmx_set_rdtsc_exiting,
-    .ple_enabled          = vmx_ple_enabled,
-#ifndef __UXEN_NOT_YET__
-    .nhvm_vcpu_initialise = vmx_nhvm_vcpu_initialise,
-    .nhvm_vcpu_destroy    = vmx_nhvm_vcpu_destroy,
-    .nhvm_vcpu_reset      = vmx_nhvm_vcpu_reset,
-    .nhvm_vcpu_guestcr3   = vmx_nhvm_vcpu_guestcr3,
-    .nhvm_vcpu_hostcr3    = vmx_nhvm_vcpu_hostcr3,
-    .nhvm_vcpu_asid       = vmx_nhvm_vcpu_asid,
-    .nhvm_vmcx_guest_intercepts_trap = vmx_nhvm_vmcx_guest_intercepts_trap,
-    .nhvm_vcpu_vmexit_trap = vmx_nhvm_vcpu_vmexit_trap,
-    .nhvm_intr_blocked    = vmx_nhvm_intr_blocked
-#endif  /* __UXEN_NOT_YET__ */
+    .name = "VMX",
 };
 
 struct hvm_function_table * __init start_vmx(void)

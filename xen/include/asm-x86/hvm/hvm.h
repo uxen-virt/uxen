@@ -113,112 +113,116 @@ struct hvm_function_table {
 
     /* Indicate HAP capabilities. */
     int hap_capabilities;
-
-    /*
-     * Initialise/destroy HVM domain/vcpu resources
-     */
-    int  (*domain_initialise)(struct domain *d);
-    void (*domain_destroy)(struct domain *d);
-    void (*domain_relinquish_memory)(struct domain *d);
-
-    int  (*vcpu_initialise)(struct vcpu *v);
-    void (*vcpu_destroy)(struct vcpu *v);
-
-    /* save and load hvm guest cpu context for save/restore */
-    void (*save_cpu_ctxt)(struct vcpu *v, struct hvm_hw_cpu *ctxt);
-    int (*load_cpu_ctxt)(struct vcpu *v, struct hvm_hw_cpu *ctxt);
-
-    /* Examine specifics of the guest state. */
-    unsigned int (*get_interrupt_shadow)(struct vcpu *v);
-    void (*set_interrupt_shadow)(struct vcpu *v, unsigned int intr_shadow);
-    int (*guest_x86_mode)(struct vcpu *v);
-    void (*get_segment_register)(struct vcpu *v, enum x86_segment seg,
-                                 struct segment_register *reg);
-    void (*set_segment_register)(struct vcpu *v, enum x86_segment seg,
-                                 struct segment_register *reg);
-
-    /* 
-     * Re-set the value of CR3 that Xen runs on when handling VM exits.
-     */
-    void (*update_host_cr3)(struct vcpu *v);
-
-    /*
-     * Called to inform HVM layer that a guest CRn or EFER has changed.
-     */
-    int  (*update_guest_cr)(struct vcpu *v, unsigned int cr);
-    void (*update_guest_efer)(struct vcpu *v);
-
-    void (*set_tsc_offset)(struct vcpu *v, u64 offset);
-
-    void (*inject_exception)(unsigned int trapnr, int errcode,
-                             unsigned long cr2);
-
-    void (*init_hypercall_page)(struct domain *d, void *hypercall_page);
-
-    int  (*event_pending)(struct vcpu *v);
-    int  (*do_pmu_interrupt)(struct cpu_user_regs *regs);
-
-    void (*do_execute)(struct vcpu *v);
-
-    void (*do_suspend)(struct vcpu *v);
-
-    void (*pt_sync_domain)(struct domain *d);
-
-    int  (*cpu_up_prepare)(unsigned int cpu);
-    void (*cpu_dead)(unsigned int cpu);
-
-    int  (*cpu_on)(void);
-    void (*cpu_off)(void);
-    int  (*cpu_up)(enum hvmon);
-    void (*cpu_down)(void);
-
-    void (*dump_vcpu)(struct vcpu *v, const char *from);
-
-#define EXIT_INFO_guest_linear_address 0
-#define EXIT_INFO_per_cpu_segment_base 1
-    uintptr_t (*exit_info)(struct vcpu *v, unsigned int field);
-
-    /* Copy up to 15 bytes from cached instruction bytes at current rIP. */
-    unsigned int (*get_insn_bytes)(struct vcpu *v, uint8_t *buf);
-
-    /* Instruction intercepts: non-void return values are X86EMUL codes. */
-    void (*cpuid_intercept)(
-        unsigned int *eax, unsigned int *ebx,
-        unsigned int *ecx, unsigned int *edx);
-    void (*wbinvd_intercept)(void);
-    void (*fpu_dirty_intercept)(void);
-    int (*msr_read_intercept)(unsigned int msr, uint64_t *msr_content);
-    int (*msr_write_intercept)(unsigned int msr, uint64_t msr_content);
-    void (*invlpg_intercept)(unsigned long vaddr);
-    void (*set_uc_mode)(struct vcpu *v);
-    void (*set_info_guest)(struct vcpu *v);
-    void (*set_rdtsc_exiting)(struct vcpu *v, bool_t);
-    bool_t (*ple_enabled)(struct vcpu *v);
-
-    /* Nested HVM */
-    int (*nhvm_vcpu_initialise)(struct vcpu *v);
-    void (*nhvm_vcpu_destroy)(struct vcpu *v);
-    int (*nhvm_vcpu_reset)(struct vcpu *v);
-    int (*nhvm_vcpu_hostrestore)(struct vcpu *v,
-                                struct cpu_user_regs *regs);
-    int (*nhvm_vcpu_vmexit)(struct vcpu *v, struct cpu_user_regs *regs,
-                                uint64_t exitcode);
-    int (*nhvm_vcpu_vmexit_trap)(struct vcpu *v,
-                                unsigned int trapnr,
-                                int errcode,
-                                unsigned long cr2);
-    uint64_t (*nhvm_vcpu_guestcr3)(struct vcpu *v);
-    uint64_t (*nhvm_vcpu_hostcr3)(struct vcpu *v);
-    uint32_t (*nhvm_vcpu_asid)(struct vcpu *v);
-    int (*nhvm_vmcx_guest_intercepts_trap)(struct vcpu *v, 
-                               unsigned int trapnr, int errcode);
-
-    bool_t (*nhvm_vmcx_hap_enabled)(struct vcpu *v);
-
-    enum hvm_intblk (*nhvm_intr_blocked)(struct vcpu *v);
 };
 
 extern struct hvm_function_table hvm_funcs;
+
+#define EXIT_INFO_guest_linear_address 0
+#define EXIT_INFO_per_cpu_segment_base 1
+
+#define HVM_FUNCS_proto(prefix) \
+    /* Initialise/destroy HVM domain/vcpu resources */                  \
+    int prefix ## _domain_initialise(struct domain *d);                 \
+    void prefix ## _domain_destroy(struct domain *d);                   \
+    void prefix ## _domain_relinquish_memory(struct domain *d);         \
+    int prefix ## _vcpu_initialise(struct vcpu *v);                     \
+    void prefix ## _vcpu_destroy(struct vcpu *v);                       \
+                                                                        \
+    /* save and load hvm guest cpu context for save/restore */          \
+    void prefix ## _save_cpu_ctxt(struct vcpu *v, struct hvm_hw_cpu *ctxt); \
+    int prefix ## _load_cpu_ctxt(struct vcpu *v, struct hvm_hw_cpu *ctxt); \
+                                                                        \
+    /* Examine specifics of the guest state. */                         \
+    unsigned int prefix ## _get_interrupt_shadow(struct vcpu *v);       \
+    void prefix ## _set_interrupt_shadow(struct vcpu *v,                \
+                                         unsigned int intr_shadow);     \
+    int prefix ## _guest_x86_mode(struct vcpu *v);                      \
+    void prefix ## _get_segment_register(struct vcpu *v, enum x86_segment seg, \
+                                         struct segment_register *reg); \
+    void prefix ## _set_segment_register(struct vcpu *v, enum x86_segment seg, \
+                                         struct segment_register *reg); \
+                                                                        \
+    /* Re-set the value of CR3 that Xen runs on when handling VM exits. */ \
+    void prefix ## _update_host_cr3(struct vcpu *v);                    \
+                                                                        \
+    /* Called to inform HVM layer that a guest CRn or EFER has changed. */ \
+    int prefix ## _update_guest_cr(struct vcpu *v, unsigned int cr);    \
+    void prefix ## _update_guest_efer(struct vcpu *v);                  \
+                                                                        \
+    void prefix ## _set_tsc_offset(struct vcpu *v, u64 offset);         \
+    void prefix ## _inject_exception(unsigned int trapnr, int errcode,  \
+                                     unsigned long cr2);                \
+    void prefix ## _init_hypercall_page(struct domain *d,               \
+                                        void *hypercall_page);          \
+    int prefix ## _event_pending(struct vcpu *v);                       \
+    int prefix ## _do_pmu_interrupt(struct cpu_user_regs *regs);        \
+    void prefix ## _do_execute(struct vcpu *v);                         \
+    void prefix ## _do_suspend(struct vcpu *v);                         \
+    void prefix ## _pt_sync_domain(struct domain *d);                   \
+    int prefix ## _cpu_up_prepare(unsigned int cpu);                    \
+    void prefix ## _cpu_dead(unsigned int cpu);                         \
+    int prefix ## _cpu_on(void);                                        \
+    void prefix ## _cpu_off(void);                                      \
+    int prefix ## _cpu_up(enum hvmon);                                  \
+    void prefix ## _cpu_down(void);                                     \
+    void prefix ## _dump_vcpu(struct vcpu *v, const char *from);        \
+    uintptr_t prefix ## _exit_info(struct vcpu *v, unsigned int field); \
+                                                                        \
+    /* Copy up to 15 bytes from cached instruction bytes at current rIP. */ \
+    unsigned int prefix ## _get_insn_bytes(struct vcpu *v, uint8_t *buf); \
+                                                                        \
+    /* Instruction intercepts: non-void return values are X86EMUL codes. */ \
+    void prefix ## _cpuid_intercept(unsigned int *eax, unsigned int *ebx, \
+                                    unsigned int *ecx, unsigned int *edx); \
+    void prefix ## _wbinvd_intercept(void);                             \
+    void prefix ## _fpu_dirty_intercept(void);                          \
+    int prefix ## _msr_read_intercept(unsigned int msr,                 \
+                                      uint64_t *msr_content);           \
+    int prefix ## _msr_write_intercept(unsigned int msr,                \
+                                       uint64_t msr_content);           \
+    void prefix ## _invlpg_intercept(unsigned long vaddr);              \
+                                                                        \
+    void prefix ## _set_uc_mode(struct vcpu *v);                        \
+    void prefix ## _set_info_guest(struct vcpu *v);                     \
+    void prefix ## _set_rdtsc_exiting(struct vcpu *v, bool_t);          \
+    bool_t prefix ## _ple_enabled(struct vcpu *v);
+
+#ifndef __UXEN_NOT_YET__
+    /* Nested HVM */                                                    \
+    int prefix ## _nhvm_vcpu_initialise(struct vcpu *v);                \
+    void prefix ## _nhvm_vcpu_destroy(struct vcpu *v);                  \
+    int prefix ## _nhvm_vcpu_reset(struct vcpu *v);                     \
+    int prefix ## _nhvm_vcpu_hostrestore(struct vcpu *v,                \
+                                         struct cpu_user_regs *regs);   \
+    int prefix ## _nhvm_vcpu_vmexit(struct vcpu *v,                     \
+                                    struct cpu_user_regs *regs,         \
+                                    uint64_t exitcode);                 \
+    int prefix ## _nhvm_vcpu_vmexit_trap(struct vcpu *v,                \
+                                         unsigned int trapnr,           \
+                                         int errcode,                   \
+                                         unsigned long cr2);            \
+    uint64_t prefix ## _nhvm_vcpu_guestcr3(struct vcpu *v);             \
+    uint64_t prefix ## _nhvm_vcpu_hostcr3(struct vcpu *v);              \
+    uint32_t prefix ## _nhvm_vcpu_asid(struct vcpu *v);                 \
+    int prefix ## _nhvm_vmcx_guest_intercepts_trap(struct vcpu *v,      \
+                                                   unsigned int trapnr, \
+                                                   int errcode);        \
+    bool_t prefix ## _nhvm_vmcx_hap_enabled(struct vcpu *v);            \
+    enum hvm_intblk prefix ## _nhvm_intr_blocked(struct vcpu *v);
+#endif  /* __UXEN_NOT_YET__ */
+
+HVM_FUNCS_proto(vmx)
+HVM_FUNCS_proto(svm)
+
+#define HVM_FUNCS(fn, ...) (                              \
+        (boot_cpu_data.x86_vendor == X86_VENDOR_INTEL) ?  \
+        vmx_ ## fn(__VA_ARGS__) : svm_ ## fn(__VA_ARGS__) \
+        )
+/* intel only */
+// #define HVM_FUNCS(fn, args) (vmx_ ## fn(args))
+/* amd only */
+// #define HVM_FUNCS(fn, args) (svm_ ## fn(args))
+
 extern bool_t hvm_enabled;
 extern bool_t cpu_has_lmsl;
 #ifndef __UXEN__
@@ -298,23 +302,23 @@ static inline int
 hvm_guest_x86_mode(struct vcpu *v)
 {
     ASSERT(v == current);
-    return hvm_funcs.guest_x86_mode(v);
+    return HVM_FUNCS(guest_x86_mode, v);
 }
 
 static inline void
 hvm_update_host_cr3(struct vcpu *v)
 {
-    hvm_funcs.update_host_cr3(v);
+    HVM_FUNCS(update_host_cr3, v);
 }
 
 static inline int hvm_update_guest_cr(struct vcpu *v, unsigned int cr)
 {
-    return hvm_funcs.update_guest_cr(v, cr);
+    return HVM_FUNCS(update_guest_cr, v, cr);
 }
 
 static inline void hvm_update_guest_efer(struct vcpu *v)
 {
-    hvm_funcs.update_guest_efer(v);
+    HVM_FUNCS(update_guest_efer, v);
 }
 
 /*
@@ -335,14 +339,14 @@ static inline void
 hvm_get_segment_register(struct vcpu *v, enum x86_segment seg,
                          struct segment_register *reg)
 {
-    hvm_funcs.get_segment_register(v, seg, reg);
+    HVM_FUNCS(get_segment_register, v, seg, reg);
 }
 
 static inline void
 hvm_set_segment_register(struct vcpu *v, enum x86_segment seg,
                          struct segment_register *reg)
 {
-    hvm_funcs.set_segment_register(v, seg, reg);
+    HVM_FUNCS(set_segment_register, v, seg, reg);
 }
 
 #define is_viridian_domain(_d)                                             \
@@ -364,22 +368,22 @@ void hvm_inject_exception(unsigned int trapnr, int errcode, unsigned long cr2);
 
 static inline int hvm_event_pending(struct vcpu *v)
 {
-    return hvm_funcs.event_pending(v);
+    return HVM_FUNCS(event_pending, v);
 }
 
 static inline int hvm_do_pmu_interrupt(struct cpu_user_regs *regs)
 {
-    return hvm_funcs.do_pmu_interrupt(regs);
+    return HVM_FUNCS(do_pmu_interrupt, regs);
 }
 
 static inline void hvm_execute(struct vcpu *v)
 {
-    hvm_funcs.do_execute(v);
+    HVM_FUNCS(do_execute, v);
 }
 
 static inline void pt_sync_domain(struct domain *d)
 {
-    hvm_funcs.pt_sync_domain(d);
+    HVM_FUNCS(pt_sync_domain, d);
 }
 
 /* These reserved bits in lower 32 remain 0 after any load of CR0 */
@@ -441,41 +445,39 @@ bool_t hvm_ple_enabled(struct vcpu *v);
 
 static inline int hvm_cpu_on(void)
 {
-    return (hvm_funcs.cpu_on ? hvm_funcs.cpu_on() : 0);
+    return HVM_FUNCS(cpu_on);
 }
 
 static inline void hvm_cpu_off(void)
 {
-    if ( hvm_funcs.cpu_off )
-        hvm_funcs.cpu_off();
+    HVM_FUNCS(cpu_off);
 }
 
 static inline int hvm_cpu_up(enum hvmon hvmon_mode)
 {
-    return (hvm_funcs.cpu_up ? hvm_funcs.cpu_up(hvmon_mode) : 0);
+    return HVM_FUNCS(cpu_up, hvmon_mode);
 }
 
 static inline void hvm_cpu_down(void)
 {
-    if ( hvm_funcs.cpu_down )
-        hvm_funcs.cpu_down();
+    HVM_FUNCS(cpu_down);
 }
 
 static inline void
 hvm_dump_vcpu(struct vcpu *v, const char *from)
 {
-    hvm_funcs.dump_vcpu(v, from);
+    HVM_FUNCS(dump_vcpu, v, from);
 }
 
 static inline uintptr_t
 hvm_exit_info(struct vcpu *v, unsigned int field)
 {
-    return hvm_funcs.exit_info ? hvm_funcs.exit_info(v, field) : ~0ul;
+    return HVM_FUNCS(exit_info, v, field);
 }
 
 static inline unsigned int hvm_get_insn_bytes(struct vcpu *v, uint8_t *buf)
 {
-    return (hvm_funcs.get_insn_bytes ? hvm_funcs.get_insn_bytes(v, buf) : 0);
+    return HVM_FUNCS(get_insn_bytes, v, buf);
 }
 
 enum hvm_task_switch_reason { TSW_jmp, TSW_iret, TSW_call_or_int };
@@ -504,8 +506,7 @@ void hvm_unmap_guest_frame(void *p);
 
 static inline void hvm_set_info_guest(struct vcpu *v)
 {
-    if ( hvm_funcs.set_info_guest )
-        return hvm_funcs.set_info_guest(v);
+    return HVM_FUNCS(set_info_guest, v);
 }
 
 int hvm_debug_op(struct vcpu *v, int32_t op);

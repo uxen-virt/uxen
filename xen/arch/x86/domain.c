@@ -6,7 +6,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -2533,7 +2533,7 @@ __initcall(init_vcpu_kick_softirq);
 
 static void vcpu_sync_tsc_softirq(struct vcpu *v)
 {
-    hvm_funcs.set_tsc_offset(v, v->arch.hvm_vcpu.cache_tsc_offset);
+    HVM_FUNCS(set_tsc_offset, v, v->arch.hvm_vcpu.cache_tsc_offset);
 }
 
 static int __init init_vcpu_tsc_softirq(void)

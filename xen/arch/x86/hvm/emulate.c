@@ -11,7 +11,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -976,7 +976,7 @@ static int hvmemul_write_msr(
 static int hvmemul_wbinvd(
     struct x86_emulate_ctxt *ctxt)
 {
-    hvm_funcs.wbinvd_intercept();
+    HVM_FUNCS(wbinvd_intercept);
     return X86EMUL_OKAY;
 }
 
@@ -987,7 +987,7 @@ static int hvmemul_cpuid(
     unsigned int *edx,
     struct x86_emulate_ctxt *ctxt)
 {
-    hvm_funcs.cpuid_intercept(eax, ebx, ecx, edx);
+    HVM_FUNCS(cpuid_intercept, eax, ebx, ecx, edx);
     return X86EMUL_OKAY;
 }
 
@@ -1044,7 +1044,7 @@ static int hvmemul_get_fpu(
     }
 
     if ( !curr->fpu_dirtied )
-        hvm_funcs.fpu_dirty_intercept();
+        HVM_FUNCS(fpu_dirty_intercept);
 
     curr->arch.hvm_vcpu.fpu_exception_callback = exception_callback;
     curr->arch.hvm_vcpu.fpu_exception_callback_arg = exception_callback_arg;
@@ -1073,7 +1073,7 @@ static int hvmemul_invlpg(
         seg, offset, 1, &reps, hvm_access_none, hvmemul_ctxt, &addr);
 
     if ( rc == X86EMUL_OKAY )
-        hvm_funcs.invlpg_intercept(addr);
+        HVM_FUNCS(invlpg_intercept, addr);
 
     return rc;
 }
@@ -1190,7 +1190,7 @@ int hvm_emulate_one(
     if ( hvmemul_ctxt->intr_shadow != new_intr_shadow )
     {
         hvmemul_ctxt->intr_shadow = new_intr_shadow;
-        hvm_funcs.set_interrupt_shadow(curr, new_intr_shadow);
+        HVM_FUNCS(set_interrupt_shadow, curr, new_intr_shadow);
     }
 
     if ( hvmemul_ctxt->ctxt.retire.flags.hlt &&
@@ -1206,7 +1206,7 @@ void hvm_emulate_prepare(
     struct hvm_emulate_ctxt *hvmemul_ctxt,
     struct cpu_user_regs *regs)
 {
-    hvmemul_ctxt->intr_shadow = hvm_funcs.get_interrupt_shadow(current);
+    hvmemul_ctxt->intr_shadow = HVM_FUNCS(get_interrupt_shadow, current);
     hvmemul_ctxt->ctxt.regs = regs;
     hvmemul_ctxt->ctxt.force_writeback = 1;
     hvmemul_ctxt->seg_reg_accessed = 0;

@@ -123,14 +123,14 @@ static int cpu_callback(
     switch ( action )
     {
     case CPU_UP_PREPARE:
-        rc = hvm_funcs.cpu_up_prepare(cpu);
+        rc = HVM_FUNCS(cpu_up_prepare, cpu);
         break;
     case CPU_DYING:
         hvm_cpu_down();
         break;
     case CPU_UP_CANCELED:
     case CPU_DEAD:
-        hvm_funcs.cpu_dead(cpu);
+        HVM_FUNCS(cpu_dead, cpu);
         break;
     default:
         break;
@@ -248,12 +248,12 @@ void hvm_set_rdtsc_exiting(struct domain *d, bool_t enable)
     struct vcpu *v;
 
     for_each_vcpu ( d, v )
-        hvm_funcs.set_rdtsc_exiting(v, enable);
+        HVM_FUNCS(set_rdtsc_exiting, v, enable);
 }
 
 bool_t hvm_ple_enabled(struct vcpu *v)
 {
-    return hvm_funcs.ple_enabled(v);
+    return HVM_FUNCS(ple_enabled, v);
 }
 
 static
@@ -270,7 +270,7 @@ void hvm_set_guest_tsc_all_vcpus(u64 guest_tsc)
     for_each_vcpu(d, v) {
         v->arch.hvm_vcpu.cache_tsc_offset = guest_tsc - tsc;
         if (v == current)
-            hvm_funcs.set_tsc_offset(v, v->arch.hvm_vcpu.cache_tsc_offset);
+            HVM_FUNCS(set_tsc_offset, v, v->arch.hvm_vcpu.cache_tsc_offset);
         else
             vcpu_raise_softirq(v, SYNC_TSC_VCPU_SOFTIRQ);
     }
@@ -296,7 +296,7 @@ void hvm_set_guest_tsc(struct vcpu *v, u64 guest_tsc)
     }
 
     v->arch.hvm_vcpu.cache_tsc_offset = guest_tsc - tsc;
-    hvm_funcs.set_tsc_offset(v, v->arch.hvm_vcpu.cache_tsc_offset);
+    HVM_FUNCS(set_tsc_offset, v, v->arch.hvm_vcpu.cache_tsc_offset);
 }
 
 u64 hvm_get_guest_tsc(struct vcpu *v)
@@ -370,7 +370,7 @@ void hvm_do_suspend(struct vcpu *v)
     if (!list_empty(&v->arch.hvm_vcpu.tm_list))
         pt_save_timer(v);
 
-    hvm_funcs.do_suspend(v);
+    HVM_FUNCS(do_suspend, v);
 }
 
 void hvm_do_resume(struct vcpu *v)
@@ -976,7 +976,7 @@ int hvm_domain_initialise(struct domain *d)
     if (hvm_init_pci_emul(d))
         goto fail2;
 
-    rc = hvm_funcs.domain_initialise(d);
+    rc = HVM_FUNCS(domain_initialise, d);
     if ( rc != 0 )
         goto fail2;
 
@@ -1001,8 +1001,7 @@ void
 hvm_relinquish_memory(struct domain *d)
 {
 
-    if (hvm_funcs.domain_relinquish_memory)
-        hvm_funcs.domain_relinquish_memory(d);
+    HVM_FUNCS(domain_relinquish_memory, d);
 }
 
 void hvm_domain_relinquish_resources(struct domain *d)
@@ -1034,7 +1033,7 @@ void hvm_domain_destroy(struct domain *d)
     if ( is_template_domain(d) || !d->hvm_domain_initialised )
         return;
 
-    hvm_funcs.domain_destroy(d);
+    HVM_FUNCS(domain_destroy, d);
     rtc_deinit(d);
 #ifndef __UXEN__
     stdvga_deinit(d);
@@ -1059,7 +1058,7 @@ static int hvm_save_cpu_ctxt(struct domain *d, hvm_domain_context_t *h)
             continue;
 
         /* Architecture-specific vmcs/vmcb bits */
-        hvm_funcs.save_cpu_ctxt(v, &ctxt);
+        HVM_FUNCS(save_cpu_ctxt, v, &ctxt);
 
         ctxt.msr_tsc_aux = hvm_msr_tsc_aux(v);
 
@@ -1253,7 +1252,7 @@ static int hvm_load_cpu_ctxt(struct domain *d, hvm_domain_context_t *h)
 #undef UNFOLD_ARBYTES
 
     /* Architecture-specific vmcs/vmcb bits */
-    ret = hvm_funcs.load_cpu_ctxt(v, &ctxt);
+    ret = HVM_FUNCS(load_cpu_ctxt, v, &ctxt);
     if (ret < 0)
         return ret;
 
@@ -1493,7 +1492,7 @@ int hvm_vcpu_initialise(struct vcpu *v)
     if ( (rc = vlapic_init(v)) != 0 )
         goto fail1;
 
-    if ( (rc = hvm_funcs.vcpu_initialise(v)) != 0 )
+    if ( (rc = HVM_FUNCS(vcpu_initialise, v)) != 0 )
         goto fail2;
 
 #ifndef __UXEN_NOT_YET__
@@ -1584,7 +1583,7 @@ int hvm_vcpu_initialise(struct vcpu *v)
     nestedhvm_vcpu_destroy(v);
  fail3:
 #endif  /* __UXEN_NOT_YET__ */
-    hvm_funcs.vcpu_destroy(v);
+    HVM_FUNCS(vcpu_destroy, v);
  fail2:
     vlapic_destroy(v);
  fail1:
@@ -1606,7 +1605,7 @@ void hvm_vcpu_destroy(struct vcpu *v)
 #endif  /* __UXEN__ */
     hvm_vcpu_cacheattr_destroy(v);
     vlapic_destroy(v);
-    hvm_funcs.vcpu_destroy(v);
+    HVM_FUNCS(vcpu_destroy, v);
 
     /* Event channel is already freed by evtchn_destroy(). */
     /*free_xen_event_channel(v, v->arch.hvm_vcpu.xen_port);*/
@@ -2004,17 +2003,17 @@ void hvm_inject_exception(unsigned int trapnr, int errcode, unsigned long cr2)
 
 #ifndef __UXEN_NOT_YET__
     if ( !nestedhvm_enabled(v->domain) ) {
-        hvm_funcs.inject_exception(trapnr, errcode, cr2);
+        HVM_FUNCS(inject_exception, trapnr, errcode, cr2);
         return;
     }
 
     if ( nestedhvm_vmswitch_in_progress(v) ) {
-        hvm_funcs.inject_exception(trapnr, errcode, cr2);
+        HVM_FUNCS(inject_exception, trapnr, errcode, cr2);
         return;
     }
 
     if ( !nestedhvm_vcpu_in_guestmode(v) ) {
-        hvm_funcs.inject_exception(trapnr, errcode, cr2);
+        HVM_FUNCS(inject_exception, trapnr, errcode, cr2);
         return;
     }
 
@@ -2038,7 +2037,7 @@ void hvm_inject_exception(unsigned int trapnr, int errcode, unsigned long cr2)
     }
 #endif  /* __UXEN_NOT_YET__ */
 
-    hvm_funcs.inject_exception(trapnr, errcode, cr2);
+    HVM_FUNCS(inject_exception, trapnr, errcode, cr2);
 }
 
 int hvm_hap_nested_page_fault(unsigned long gpa,
@@ -2329,10 +2328,14 @@ DEBUG();
 #ifndef __UXEN__
     shadow_blow_tables_per_domain(v->domain);
 #endif  /* __UXEN__ */
-    if ( hvm_funcs.set_uc_mode )
-        return hvm_funcs.set_uc_mode(v);
+    return HVM_FUNCS(set_uc_mode, v);
 }
 #endif  /* __UXEN__ */
+
+void
+svm_set_info_guest(struct vcpu *v)
+{
+}
 
 /* based on send_invalidate_req */
 void send_introspection_ioreq_detailed(int subtype, uint64_t addr,
@@ -3705,10 +3708,10 @@ int hvm_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
             goto gp_fault;
         /* If ret == 0 then this is not an MCE MSR, see other MSRs. */
         ret = ((ret == 0)
-               ? hvm_funcs.msr_read_intercept(msr, msr_content)
+               ? HVM_FUNCS(msr_read_intercept, msr, msr_content)
                : X86EMUL_OKAY);
 #else  /* __UXEN_NOT_YET__ */
-        ret = hvm_funcs.msr_read_intercept(msr, msr_content);
+        ret = HVM_FUNCS(msr_read_intercept, msr, msr_content);
 #endif  /* __UXEN_NOT_YET__ */
         break;
     }
@@ -3825,10 +3828,10 @@ int hvm_msr_write_intercept(unsigned int msr, uint64_t msr_content)
             goto gp_fault;
         /* If ret == 0 then this is not an MCE MSR, see other MSRs. */
         ret = ((ret == 0)
-               ? hvm_funcs.msr_write_intercept(msr, msr_content)
+               ? HVM_FUNCS(msr_write_intercept, msr, msr_content)
                : X86EMUL_OKAY);
 #else  /* __UXEN_NOT_YET__ */
-        ret = hvm_funcs.msr_write_intercept(msr, msr_content);
+        ret = HVM_FUNCS(msr_write_intercept, msr, msr_content);
 #endif  /* __UXEN_NOT_YET__ */
         break;
     }
@@ -3860,7 +3863,7 @@ enum hvm_intblk hvm_interrupt_blocked(struct vcpu *v, struct hvm_intack intack)
          !(guest_cpu_user_regs()->eflags & X86_EFLAGS_IF) )
         return hvm_intblk_rflags_ie;
 
-    intr_shadow = hvm_funcs.get_interrupt_shadow(v);
+    intr_shadow = HVM_FUNCS(get_interrupt_shadow, v);
 
     if ( intr_shadow & (HVM_INTR_SHADOW_STI|HVM_INTR_SHADOW_MOV_SS) )
         return hvm_intblk_shadow;
@@ -4284,7 +4287,7 @@ void hvm_hypercall_page_initialise(struct domain *d,
                                    void *hypercall_page)
 {
     hvm_latch_shinfo_size(d);
-    hvm_funcs.init_hypercall_page(d, hypercall_page);
+    HVM_FUNCS(init_hypercall_page, d, hypercall_page);
 }
 
 static int hvmop_set_pci_intx_level(
@@ -4403,7 +4406,7 @@ void hvm_vcpu_reset_state(struct vcpu *v, uint16_t cs, uint16_t ip)
     /* Sync AP's TSC with BSP's. */
     v->arch.hvm_vcpu.cache_tsc_offset =
         v->domain->vcpu[0]->arch.hvm_vcpu.cache_tsc_offset;
-    hvm_funcs.set_tsc_offset(v, v->arch.hvm_vcpu.cache_tsc_offset);
+    HVM_FUNCS(set_tsc_offset, v, v->arch.hvm_vcpu.cache_tsc_offset);
 
     paging_update_paging_modes(v);
 
@@ -5131,7 +5134,7 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
                 case HVM_PARAM_MEMORY_EVENT_CR3:
                 {
                     for_each_vcpu ( d, v )
-                        hvm_funcs.update_guest_cr(v, 0); /* Latches new CR3 mask through CR0 code */
+                        HVM_FUNCS(update_guest_cr, v, 0); /* Latches new CR3 mask through CR0 code */
                     break;
                 }
                 case HVM_PARAM_VPT_ALIGN:
@@ -5886,64 +5889,50 @@ DEBUG();
 #ifndef __UXEN_NOT_YET__
 int nhvm_vcpu_hostrestore(struct vcpu *v, struct cpu_user_regs *regs)
 {
-    if (hvm_funcs.nhvm_vcpu_hostrestore)
-        return hvm_funcs.nhvm_vcpu_hostrestore(v, regs);
-    return -EOPNOTSUPP;
+    return HVM_FUNCS(nhvm_vcpu_hostrestore, v, regs);
 }
 
 int nhvm_vcpu_vmexit(struct vcpu *v, struct cpu_user_regs *regs,
                      uint64_t exitcode)
 {
-    if (hvm_funcs.nhvm_vcpu_vmexit)
-        return hvm_funcs.nhvm_vcpu_vmexit(v, regs, exitcode);
-    return -EOPNOTSUPP;
+    return HVM_FUNCS(nhvm_vcpu_vmexit, v, regs, exitcode);
 }
 
 int
 nhvm_vcpu_vmexit_trap(struct vcpu *v, unsigned int trapnr,
                        int errcode, unsigned long cr2)
 {
-    return hvm_funcs.nhvm_vcpu_vmexit_trap(v, trapnr, errcode, cr2);
+    return HVM_FUNCS(nhvm_vcpu_vmexit_trap, v, trapnr, errcode, cr2);
 }
 
 uint64_t nhvm_vcpu_guestcr3(struct vcpu *v)
 {
-    if (hvm_funcs.nhvm_vcpu_guestcr3)
-        return hvm_funcs.nhvm_vcpu_guestcr3(v);
-    return -EOPNOTSUPP;
+    return HVM_FUNCS(nhvm_vcpu_guestcr3, v);
 }
 
 uint64_t nhvm_vcpu_hostcr3(struct vcpu *v)
 {
-    if (hvm_funcs.nhvm_vcpu_hostcr3)
-        return hvm_funcs.nhvm_vcpu_hostcr3(v);
-    return -EOPNOTSUPP;
+    return HVM_FUNCS(nhvm_vcpu_hostcr3, v);
 }
 
 uint32_t nhvm_vcpu_asid(struct vcpu *v)
 {
-    if (hvm_funcs.nhvm_vcpu_asid)
-        return hvm_funcs.nhvm_vcpu_asid(v);
-    return -EOPNOTSUPP;
+    return HVM_FUNCS(nhvm_vcpu_asid, v);
 }
 
 int nhvm_vmcx_guest_intercepts_trap(struct vcpu *v, unsigned int trap, int errcode)
 {
-    if (hvm_funcs.nhvm_vmcx_guest_intercepts_trap)
-        return hvm_funcs.nhvm_vmcx_guest_intercepts_trap(v, trap, errcode);
-    return -EOPNOTSUPP;
+    return HVM_FUNCS(nhvm_vmcx_guest_intercepts_trap, v, trap, errcode);
 }
 
 bool_t nhvm_vmcx_hap_enabled(struct vcpu *v)
 {
-    if (hvm_funcs.nhvm_vmcx_hap_enabled)
-        return hvm_funcs.nhvm_vmcx_hap_enabled(v);
-    return -EOPNOTSUPP;
+    return HVM_FUNCS(nhvm_vmcx_hap_enabled, v);
 }
 
 enum hvm_intblk nhvm_interrupt_blocked(struct vcpu *v)
 {
-    return hvm_funcs.nhvm_intr_blocked(v);
+    return HVM_FUNCS(nhvm_intr_blocked, v);
 }
 #endif  /* __UXEN_NOT_YET__ */
 
