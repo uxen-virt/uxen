@@ -92,7 +92,8 @@ int nestedsvm_vmcb_map(struct vcpu *v, uint64_t vmcbaddr)
 }
 
 /* Interface methods */
-int nsvm_vcpu_initialise(struct vcpu *v)
+int
+svm_nhvm_vcpu_initialise(struct vcpu *v)
 {
     void *msrpm;
     struct nestedvcpu *nv = &vcpu_nestedhvm(v);
@@ -122,7 +123,8 @@ err:
     return -ENOMEM;
 }
 
-void nsvm_vcpu_destroy(struct vcpu *v)
+void
+svm_nhvm_vcpu_destroy(struct vcpu *v)
 {
     struct nestedvcpu *nv = &vcpu_nestedhvm(v);
     struct nestedsvm *svm = &vcpu_nestedsvm(v);
@@ -146,7 +148,8 @@ void nsvm_vcpu_destroy(struct vcpu *v)
         svm->ns_iomap = NULL;
 }
 
-int nsvm_vcpu_reset(struct vcpu *v)
+int
+svm_nhvm_vcpu_reset(struct vcpu *v)
 {
     struct nestedsvm *svm = &vcpu_nestedsvm(v);
 
@@ -241,7 +244,8 @@ static int nsvm_vcpu_hostsave(struct vcpu *v, unsigned int inst_len)
     return 0;
 }
 
-int nsvm_vcpu_hostrestore(struct vcpu *v, struct cpu_user_regs *regs)
+int
+svm_nhvm_vcpu_hostrestore(struct vcpu *v, struct cpu_user_regs *regs)
 {
     struct nestedvcpu *nv = &vcpu_nestedhvm(v);
     struct nestedsvm *svm = &vcpu_nestedsvm(v);
@@ -752,8 +756,8 @@ nsvm_vcpu_vmrun(struct vcpu *v, struct cpu_user_regs *regs)
 }
 
 int
-nsvm_vcpu_vmexit_inject(struct vcpu *v, struct cpu_user_regs *regs,
-    uint64_t exitcode)
+svm_nhvm_vcpu_vmexit(struct vcpu *v, struct cpu_user_regs *regs,
+                     uint64_t exitcode)
 {
     struct nestedvcpu *nv = &vcpu_nestedhvm(v);
     struct nestedsvm *svm = &vcpu_nestedsvm(v);
@@ -802,8 +806,8 @@ nsvm_vcpu_vmexit_inject(struct vcpu *v, struct cpu_user_regs *regs,
 }
 
 int
-nsvm_vcpu_vmexit_trap(struct vcpu *v, unsigned int trapnr,
-                      int errcode, unsigned long cr2)
+svm_nhvm_vcpu_vmexit_trap(struct vcpu *v, unsigned int trapnr,
+                          int errcode, unsigned long cr2)
 {
     ASSERT(vcpu_nestedhvm(v).nv_vvmcx != NULL);
 
@@ -811,17 +815,20 @@ nsvm_vcpu_vmexit_trap(struct vcpu *v, unsigned int trapnr,
     return NESTEDHVM_VMEXIT_DONE;
 }
 
-uint64_t nsvm_vcpu_guestcr3(struct vcpu *v)
+uint64_t
+svm_nhvm_vcpu_guestcr3(struct vcpu *v)
 {
     return vcpu_nestedsvm(v).ns_vmcb_guestcr3;
 }
 
-uint64_t nsvm_vcpu_hostcr3(struct vcpu *v)
+uint64_t
+svm_nhvm_vcpu_hostcr3(struct vcpu *v)
 {
     return vcpu_nestedsvm(v).ns_vmcb_hostcr3;
 }
 
-uint32_t nsvm_vcpu_asid(struct vcpu *v)
+uint32_t
+svm_nhvm_vcpu_asid(struct vcpu *v)
 {
     return vcpu_nestedsvm(v).ns_guest_asid;
 }
@@ -979,7 +986,8 @@ nsvm_vmcb_guest_intercepts_exitcode(struct vcpu *v,
 }
 
 int
-nsvm_vmcb_guest_intercepts_trap(struct vcpu *v, unsigned int trapnr, int errcode)
+svm_nhvm_vmcx_guest_intercepts_trap(struct vcpu *v, unsigned int trapnr,
+                                    int errcode)
 {
     return nsvm_vmcb_guest_intercepts_exitcode(v,
         guest_cpu_user_regs(), VMEXIT_EXCEPTION_DE + trapnr);
@@ -1152,12 +1160,13 @@ nsvm_vmcb_prepare4vmexit(struct vcpu *v)
 }
 
 bool_t
-nsvm_vmcb_hap_enabled(struct vcpu *v)
+svm_nhvm_vmcx_hap_enabled(struct vcpu *v)
 {
     return vcpu_nestedsvm(v).ns_hap_enabled;
 }
 
-enum hvm_intblk nsvm_intr_blocked(struct vcpu *v)
+enum hvm_intblk
+svm_nhvm_intr_blocked(struct vcpu *v)
 {
     struct nestedsvm *svm = &vcpu_nestedsvm(v);
     struct nestedvcpu *nv = &vcpu_nestedhvm(v);

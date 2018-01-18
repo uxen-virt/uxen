@@ -30,7 +30,8 @@
 
 static void nvmx_purge_vvmcs(struct vcpu *v);
 
-int nvmx_vcpu_initialise(struct vcpu *v)
+int
+vmx_nhvm_vcpu_initialise(struct vcpu *v)
 {
     struct nestedvmx *nvmx = &vcpu_2_nvmx(v);
     struct nestedvcpu *nvcpu = &vcpu_nestedhvm(v);
@@ -52,8 +53,9 @@ int nvmx_vcpu_initialise(struct vcpu *v)
 out:
     return -ENOMEM;
 }
- 
-void nvmx_vcpu_destroy(struct vcpu *v)
+
+void
+vmx_nhvm_vcpu_destroy(struct vcpu *v)
 {
     struct nestedvcpu *nvcpu = &vcpu_nestedhvm(v);
 
@@ -64,27 +66,31 @@ void nvmx_vcpu_destroy(struct vcpu *v)
         nvcpu->nv_n2vmcx = NULL;
     }
 }
- 
-int nvmx_vcpu_reset(struct vcpu *v)
+
+int
+vmx_nhvm_vcpu_reset(struct vcpu *v)
 {
     return 0;
 }
 
-uint64_t nvmx_vcpu_guestcr3(struct vcpu *v)
-{
-    /* TODO */
-    ASSERT(0);
-    return 0;
-}
-
-uint64_t nvmx_vcpu_hostcr3(struct vcpu *v)
+uint64_t
+vmx_nhvm_vcpu_guestcr3(struct vcpu *v)
 {
     /* TODO */
     ASSERT(0);
     return 0;
 }
 
-uint32_t nvmx_vcpu_asid(struct vcpu *v)
+uint64_t
+vmx_nhvm_vcpu_hostcr3(struct vcpu *v)
+{
+    /* TODO */
+    ASSERT(0);
+    return 0;
+}
+
+uint32_t
+vmx_nhvm_vcpu_asid(struct vcpu *v)
 {
     /* TODO */
     ASSERT(0);
@@ -400,8 +406,9 @@ static void vmreturn(struct cpu_user_regs *regs, enum vmx_ops_result ops_res)
     regs->eflags = eflags;
 }
 
-int nvmx_intercepts_exception(struct vcpu *v, unsigned int trap,
-                               int error_code)
+int
+vmx_nhvm_vmcx_guest_intercepts_trap(struct vcpu *v, unsigned int trap,
+                                    int error_code)
 {
     struct nestedvcpu *nvcpu = &vcpu_nestedhvm(v);
     u32 exception_bitmap, pfec_match=0, pfec_mask=0;

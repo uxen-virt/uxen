@@ -570,7 +570,8 @@ void vmx_unload_vmcs(struct vcpu *v)
         spin_unlock_irqrestore(&vmx_clear_lock, flags2);
 }
 
-int vmx_cpu_up_prepare(unsigned int cpu)
+int
+vmx_cpu_up_prepare(unsigned int cpu)
 {
     if ( per_cpu(vmxon_region, cpu) != NULL )
         return 0;
@@ -583,14 +584,16 @@ int vmx_cpu_up_prepare(unsigned int cpu)
     return -ENOMEM;
 }
 
-void vmx_cpu_dead(unsigned int cpu)
+void
+vmx_cpu_dead(unsigned int cpu)
 {
 DEBUG();
     vmx_free_vmcs(per_cpu(vmxon_region, cpu));
     per_cpu(vmxon_region, cpu) = NULL;
 }
 
-int vmx_cpu_on(void)
+int
+vmx_cpu_on(void)
 {
     int cpu = smp_processor_id();
     unsigned long flags, flags2 = 0;
@@ -645,7 +648,8 @@ int vmx_cpu_on(void)
     return 0;
 }
 
-void vmx_cpu_off(void)
+void
+vmx_cpu_off(void)
 {
     struct list_head *active_vmcs_list = &this_cpu(active_vmcs_list);
     unsigned long flags, flags2 = 0;
@@ -677,7 +681,8 @@ void vmx_cpu_off(void)
         spin_unlock_irqrestore(&vmx_clear_lock, flags2);
 }
 
-int vmx_cpu_up(enum hvmon hvmon_mode)
+int
+vmx_cpu_up(enum hvmon hvmon_mode)
 {
     u32 eax, edx;
     int rc, bios_locked, cpu = smp_processor_id();
@@ -777,7 +782,8 @@ int vmx_cpu_up(enum hvmon hvmon_mode)
     return 0;
 }
 
-void vmx_cpu_down(void)
+void
+vmx_cpu_down(void)
 {
     struct list_head *active_vmcs_list = &this_cpu(active_vmcs_list);
     unsigned long flags, flags2 = 0;
