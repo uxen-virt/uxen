@@ -9,6 +9,7 @@
 #include <linux/module.h>
 #include <linux/random.h>
 #include <linux/kthread.h>
+#include <linux/delay.h>
 
 #include <uxen-hypercall.h>
 #include <uxen-platform.h>
@@ -16,7 +17,7 @@
 #include "pci.h"
 
 static struct task_struct *entropy_thread;
-int use_rdrand = 0;
+int use_rdrand = 0, use_rdseed = 0;
 
 extern void uxen_v4v_suspend(void);
 extern void uxen_v4v_resume(void);
@@ -109,15 +110,29 @@ extern void add_hwgenerator_randomness(const char *buffer, size_t count,
 static int
 uxen_entropy_thread(void *data)
 {
+#define RDSEED_RETRY 1000
+
     for (;;) {
+        int i, got = 0;
         unsigned long v;
-        if (use_rdrand) {
-            if (!arch_get_random_long(&v))
-                panic("failed to rdrand\n");
+        if (use_rdseed) {
+            for (i = 0; i < RDSEED_RETRY; i++)
+                if (arch_get_random_seed_long(&v)) {
+                    got = 1;
+                    break;
+                }
+        } else if (use_rdrand) {
+            got = arch_get_random_long(&v);
         } else {
-            v = rdtsc(); /* crap quality random value */
+            v = rdtsc(); /* bad quality seed, just for debugging under uxen */
+            got = 1;
         }
-        add_hwgenerator_randomness((const char*)&v, sizeof(v), sizeof(v)*8);
+        if (got) {
+            add_hwgenerator_randomness((const char*)&v, sizeof(v), sizeof(v)*8);
+        } else {
+            printk(KERN_WARNING "failed to acquire entropy bits, retrying");
+            mdelay(1);
+        }
     }
 
     return 0;
@@ -150,7 +165,9 @@ static int __init uxen_platform_init(void)
         goto out;
     }
 
-    printk("entropy: %s RDRAND\n", use_rdrand ? "using" : "NOT using");
+    printk("entropy generator: RDSEED %s, RDRAND %s\n",
+      use_rdseed ? "available" : "not available",
+      use_rdrand ? "available" : "not available");
     entropy_thread = kthread_run(uxen_entropy_thread, NULL, "uxentropy");
     if (!entropy_thread) {
       ret = -ENOMEM;

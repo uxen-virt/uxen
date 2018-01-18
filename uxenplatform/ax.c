@@ -11,7 +11,7 @@
 #include <uxen-platform.h>
 #include <uxen/platform_interface.h>
 
-extern int use_rdrand;
+extern int use_rdrand, use_rdseed;
 static struct kobject *ax_kobj;
 
 #define SESSION_KEY_BYTES 64
@@ -68,12 +68,12 @@ static void device_release(struct device *_dev)
 }
 
 static ssize_t sessionkey_show(struct kobject *kobj, struct kobj_attribute *attr,
-                      char *buf)
+    char *buf)
 {
     uint8_t sessionkey[SESSION_KEY_BYTES] = { 0 };
     int i, err;
 
-    err = ax_queryop(AX_QUERYOP_SESSION_KEY, &sessionkey[0]);
+    err = ax_queryop(AX_QUERYOP_SESSION_KEY, (uintptr_t)&sessionkey[0]);
     if (err) {
         printk(KERN_WARNING "%s: failed to query session key: %d\n", __FUNCTION__, err);
         return 0;
@@ -88,7 +88,7 @@ static ssize_t sessionkey_show(struct kobject *kobj, struct kobj_attribute *attr
 }
 
 static ssize_t sessionkey_store(struct kobject *kobj, struct kobj_attribute *attr,
-                      char *buf, size_t count)
+    const char *buf, size_t count)
 {
     return 0;
 }
@@ -102,8 +102,9 @@ int ax_platform_init(struct bus_type *uxen_bus)
     struct uxen_device *dev;
 
     use_rdrand = arch_has_random();
-    if (!use_rdrand) {
-      printk(KERN_WARNING "RDRAND not available but required");
+    use_rdseed = arch_has_random_seed();
+    if (!use_rdrand && !use_rdseed) {
+      printk(KERN_WARNING "RDRAND/RDSEED not available but required");
       return -ENODEV;
     }
 
