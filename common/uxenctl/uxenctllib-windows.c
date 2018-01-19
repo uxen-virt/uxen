@@ -35,7 +35,7 @@ uxen_log_to_stderr(const char *line, enum uxen_logtype type)
     fputs(line, _uxenctllib_stderr);
 }
 
-static uxen_log_fnc log_sinker = &uxen_log_to_stderr;
+static uxen_logfnc log_sinker = &uxen_log_to_stderr;
 
 static const size_t log_buf_len = 2048;
 /* Should be more than enough for anything that this static library could spew. */
@@ -47,7 +47,7 @@ uxen_set_logfile(FILE *f)
 }
 
 void
-uxen_set_log_function(uxen_log_fnc fnc)
+uxen_set_log_function(uxen_logfnc fnc)
 {
     if (fnc)
         log_sinker = fnc;
