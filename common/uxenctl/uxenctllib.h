@@ -45,8 +45,8 @@ void uxen_set_logfile(FILE *);
 
 enum uxen_logtype { uxen_logtype_err = 0, uxen_logtype_warn = 1 };
 
-typedef void (*uxen_log_fnc)(const char *line, enum uxen_logtype type);
-void uxen_set_log_function(uxen_log_fnc fnc);
+typedef void (*uxen_logfnc)(const char *line, enum uxen_logtype type);
+void uxen_set_log_function(uxen_logfnc fnc);
 #endif
 
 struct uxen_init_desc;
