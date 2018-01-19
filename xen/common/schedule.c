@@ -15,7 +15,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -260,8 +260,8 @@ int sched_init_vcpu(struct vcpu *v, unsigned int processor)
 
     TRACE_2D(TRC_SCHED_DOM_ADD, v->domain->domain_id, v->vcpu_id);
 
-    v->sched_priv = SCHED_OP(DOM2OP(d), alloc_vdata, v, d->sched_priv);
 #ifndef __UXEN__
+    v->sched_priv = SCHED_OP(DOM2OP(d), alloc_vdata, v, d->sched_priv);
     if ( v->sched_priv == NULL )
         return 1;
 #endif  /* __UXEN__ */
@@ -353,12 +353,18 @@ void sched_destroy_vcpu(struct vcpu *v)
     if ( test_and_clear_bool(v->is_urgent) )
         atomic_dec(&per_cpu(schedule_data, v->processor).urgent_count);
     SCHED_OP(VCPU2OP(v), remove_vcpu, v);
+#ifndef __UXEN__
     SCHED_OP(VCPU2OP(v), free_vdata, v->sched_priv);
+#endif  /* __UXEN__ */
 }
 
 int sched_init_domain(struct domain *d)
 {
+#ifndef __UXEN__
     return SCHED_OP(DOM2OP(d), init_domain, d);
+#else  /* __UXEN__ */
+    return 0;
+#endif  /* __UXEN__ */
 }
 
 void sched_destroy_domain(struct domain *d)
@@ -1435,13 +1441,18 @@ static int cpu_schedule_up(unsigned int cpu)
     if ( idle_vcpu[cpu] == NULL )
         return -ENOMEM;
 
+#ifndef __UXEN__
     if ( (ops.alloc_pdata != NULL) &&
          ((sd->sched_priv = ops.alloc_pdata(&ops, cpu)) == NULL) )
         return -ENOMEM;
+#else  /* __UXEN__ */
+    ASSERT(!ops.alloc_pdata);
+#endif /* __UXEN__ */
 
     return 0;
 }
 
+#ifndef __UXEN__
 static void cpu_schedule_down(unsigned int cpu)
 {
     struct schedule_data *sd = &per_cpu(schedule_data, cpu);
@@ -1452,6 +1463,7 @@ DEBUG();
 
     kill_timer(&sd->s_timer);
 }
+#endif  /* __UXEN__ */
 
 static int cpu_schedule_callback(
     struct notifier_block *nfb, unsigned long action, void *hcpu)
@@ -1466,7 +1478,9 @@ static int cpu_schedule_callback(
         break;
     case CPU_UP_CANCELED:
     case CPU_DEAD:
+#ifndef __UXEN__
         cpu_schedule_down(cpu);
+#endif  /* __UXEN__ */
         break;
     default:
         break;
@@ -1513,8 +1527,10 @@ void __init scheduler_init(void)
     register_cpu_notifier(&cpu_schedule_nfb);
 
     printk("Using scheduler: %s (%s)\n", ops.name, ops.opt_name);
+#ifndef __UXEN__
     if ( SCHED_OP(&ops, init) )
         panic("scheduler returned error on init\n");
+#endif  /* __UXEN__ */
 
     idle_domain = domain_create_internal(DOMID_IDLE, 0, 0);
     BUG_ON(idle_domain == NULL);
