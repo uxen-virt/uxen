@@ -2,7 +2,7 @@
  *  uxen_main.c
  *  uxen
  *
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -738,33 +738,32 @@ typedef unsigned long uxen_hypercall_t(unsigned long, unsigned long,
 				       unsigned long, unsigned long,
 				       unsigned long, unsigned long);
 
-#define HYPERCALL(x)						\
-    [ __HYPERVISOR_ ## x ] = (uxen_hypercall_t *) do_ ## x
-
-static uxen_hypercall_t *uxen_hypercall_table[NR_hypercalls] = {
-    HYPERCALL(memory_op),
-    HYPERCALL(xen_version),
-    HYPERCALL(hvm_op),
-    HYPERCALL(domctl),
-    HYPERCALL(sched_op),
-    HYPERCALL(event_channel_op),
-    HYPERCALL(v4v_op),
-    HYPERCALL(sysctl),
-};
+#define HYPERCALL(x)                                                   \
+    case __HYPERVISOR_ ## x: {                                         \
+        uxen_hypercall_t *uh = (uxen_hypercall_t *)do_ ## x;           \
+        return uh(                                                     \
+            uhd->uhd_arg[0], uhd->uhd_arg[1], uhd->uhd_arg[2],         \
+            uhd->uhd_arg[3], uhd->uhd_arg[4], uhd->uhd_arg[5]);        \
+    }
 
 intptr_t
 do_hypercall(struct uxen_hypercall_desc *uhd)
 {
 
-    if (uhd->uhd_op >= NR_hypercalls ||
-	uxen_hypercall_table[uhd->uhd_op] == NULL)
-	return -ENOSYS;
-
     this_cpu(hypercall_args) = uhd;
 
-    return uxen_hypercall_table[uhd->uhd_op](uhd->uhd_arg[0], uhd->uhd_arg[1],
-                                             uhd->uhd_arg[2], uhd->uhd_arg[3],
-                                             uhd->uhd_arg[4], uhd->uhd_arg[5]);
+    switch (uhd->uhd_op) {
+        HYPERCALL(memory_op);
+        HYPERCALL(xen_version);
+        HYPERCALL(hvm_op);
+        HYPERCALL(domctl);
+        HYPERCALL(sched_op);
+        HYPERCALL(event_channel_op);
+        HYPERCALL(v4v_op);
+        HYPERCALL(sysctl);
+    }
+
+    return -ENOSYS;
 }
 
 intptr_t __interface_fn
