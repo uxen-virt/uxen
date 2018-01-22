@@ -385,9 +385,10 @@ static void xc_cpuid_hvm_policy(
                         bitmaskof(X86_FEATURE_ERMS) |
                         bitmaskof(X86_FEATURE_FSGSBASE) |
                         bitmaskof(X86_FEATURE_INVPCID));
+            regs[3] &= (bitmaskof(X86_FEATURE_SPEC_CTRL));
         } else
-            regs[1] = 0;
-        regs[0] = regs[2] = regs[3] = 0;
+            regs[1] = regs[3] = 0;
+        regs[0] = regs[2] = 0;
         break;
 
     case 0x0000000d:
