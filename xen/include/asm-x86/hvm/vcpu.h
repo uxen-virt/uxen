@@ -153,6 +153,8 @@ struct hvm_vcpu {
 
     u32                 msr_tsc_aux;
 
+    unsigned long       msr_spec_ctrl;
+
     /* VPMU */
     struct vpmu_struct  vpmu;
 

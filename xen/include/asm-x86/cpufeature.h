@@ -111,6 +111,9 @@
 #define X86_FEATURE_RDRAND 	(4*32+30) /* Digital Random Number Generator */
 #define X86_FEATURE_HYPERVISOR	(4*32+31) /* Running under some hypervisor */
 
+/* Intel-defined CPU features, CPUID level 0x00000007:0 (edx), word 5 */
+#define X86_FEATURE_SPEC_CTRL   (5*32+26) /* Control Speculation Control */
+
 /* More extended AMD flags: CPUID level 0x80000001, ecx, word 6 */
 #define X86_FEATURE_LAHF_LM     (6*32+ 0) /* LAHF/SAHF in long mode */
 #define X86_FEATURE_CMP_LEGACY  (6*32+ 1) /* If yes HyperThreading not valid */
@@ -225,6 +228,8 @@
 #define cpu_has_vmx		boot_cpu_has(X86_FEATURE_VMXE)
 
 #define cpu_has_cpuid_faulting	boot_cpu_has(X86_FEATURE_CPUID_FAULTING)
+
+#define cpu_has_spec_ctrl	boot_cpu_has(X86_FEATURE_SPEC_CTRL)
 
 #endif /* __ASM_I386_CPUFEATURE_H */
 

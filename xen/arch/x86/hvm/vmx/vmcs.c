@@ -1109,6 +1109,10 @@ static int construct_vmcs(struct vcpu *v)
         vmx_disable_intercept_for_msr(v, MSR_IA32_SYSENTER_EIP);
         if ( cpu_has_vmx_pat && paging_mode_hap(d) )
             vmx_disable_intercept_for_msr(v, MSR_IA32_CR_PAT);
+        if (cpu_has_spec_ctrl) {
+            vmx_disable_intercept_for_msr(v, MSR_IA32_SPEC_CTRL);
+            vmx_disable_intercept_for_msr(v, MSR_IA32_PRED_CMD);
+        }
 
         vmx_disable_intercept_for_msr(v, MSR_SHADOW_GS_BASE);
     }
