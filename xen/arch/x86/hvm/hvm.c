@@ -3524,6 +3524,9 @@ void hvm_cpuid(unsigned int input, unsigned int *eax, unsigned int *ebx,
               *ebx &= ~cpufeat_mask(X86_FEATURE_SMEP);
 
             *ebx &= ~cpufeat_mask(X86_FEATURE_MPX);
+
+            if (!cpu_has_vmx_invpcid)
+                *ebx &= ~cpufeat_mask(X86_FEATURE_INVPCID);
         }
         break;
     case 0xb:

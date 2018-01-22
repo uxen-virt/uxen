@@ -123,6 +123,7 @@ static void __init vmx_display_features(void)
     P(cpu_has_vmx_vnmi, "Virtual NMI");
     P(cpu_has_vmx_msr_bitmap, "MSR direct-access bitmap");
     P(cpu_has_vmx_unrestricted_guest, "Unrestricted Guest");
+    P(cpu_has_vmx_invpcid, "Invalidate Process Context ID");
 #undef P
 
     if ( !printed )
@@ -222,7 +223,8 @@ static int vmx_init_vmcs_config(void)
                SECONDARY_EXEC_WBINVD_EXITING |
                SECONDARY_EXEC_ENABLE_EPT |
                SECONDARY_EXEC_ENABLE_RDTSCP |
-               SECONDARY_EXEC_PAUSE_LOOP_EXITING);
+               SECONDARY_EXEC_PAUSE_LOOP_EXITING |
+               SECONDARY_EXEC_ENABLE_INVPCID);
         if ( opt_vpid_enabled )
             opt |= SECONDARY_EXEC_ENABLE_VPID;
         if ( opt_unrestricted_guest_enabled )
@@ -1049,11 +1051,25 @@ static int construct_vmcs(struct vcpu *v)
     {
         v->arch.hvm_vmx.secondary_exec_control &= 
             ~(SECONDARY_EXEC_ENABLE_EPT | 
-              SECONDARY_EXEC_UNRESTRICTED_GUEST);
+              SECONDARY_EXEC_UNRESTRICTED_GUEST |
+              SECONDARY_EXEC_ENABLE_INVPCID);
         vmexit_ctl &= ~(VM_EXIT_SAVE_GUEST_PAT |
                         VM_EXIT_LOAD_HOST_PAT);
         vmentry_ctl &= ~VM_ENTRY_LOAD_GUEST_PAT;
     }
+
+#if 0
+    /* XXX Ideally we'd check here if the guest cpuid flag for invpcid
+       is set, but alas there is no interface for that, since
+       the *_cpuid functions use current. */
+    if (cpu_has_vmx_invpcid) {
+        unsigned int eax, ebx, ecx = 0, edx;
+        hvm_cpuid(7, &eax, &ebx, &ecx, &edx);
+        if (!(ebx & cpufeat_mask(X86_FEATURE_INVPCID)))
+            v->arch.hvm_vmx.secondary_exec_control &=
+                ~(SECONDARY_EXEC_ENABLE_INVPCID);
+    }
+#endif
 
     /* Do not enable Monitor Trap Flag unless start single step debug */
     v->arch.hvm_vmx.exec_control &= ~CPU_BASED_MONITOR_TRAP_FLAG;

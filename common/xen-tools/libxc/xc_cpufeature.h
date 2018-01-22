@@ -77,6 +77,7 @@
 #define X86_FEATURE_CX16        13 /* CMPXCHG16B */
 #define X86_FEATURE_XTPR        14 /* Send Task Priority Messages */
 #define X86_FEATURE_PDCM        15 /* Perf/Debug Capability MSR */
+#define X86_FEATURE_PCID        17 /* Process Context ID */
 #define X86_FEATURE_DCA         18 /* Direct Cache Access */
 #define X86_FEATURE_SSE4_1      19 /* Streaming SIMD Extensions 4.1 */
 #define X86_FEATURE_SSE4_2      20 /* Streaming SIMD Extensions 4.2 */
@@ -127,5 +128,6 @@
 #define X86_FEATURE_FSGSBASE     0 /* {RD,WR}{FS,GS}BASE instructions */
 #define X86_FEATURE_SMEP         7 /* Supervisor Mode Execution Protection */
 #define X86_FEATURE_ERMS         9 /* Enhanced REP MOVSB/STOSB */
+#define X86_FEATURE_INVPCID     10 /* Invalidate Process Context ID */
 
 #endif /* __LIBXC_CPUFEATURE_H */

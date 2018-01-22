@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -331,6 +331,7 @@ static void xc_cpuid_hvm_policy(
                     bitmaskof(X86_FEATURE_PCLMULQDQ) |
                     bitmaskof(X86_FEATURE_SSSE3) |
                     bitmaskof(X86_FEATURE_CX16) |
+                    bitmaskof(X86_FEATURE_PCID) |
                     bitmaskof(X86_FEATURE_SSE4_1) |
                     bitmaskof(X86_FEATURE_SSE4_2) |
                     bitmaskof(X86_FEATURE_POPCNT) |
@@ -382,7 +383,8 @@ static void xc_cpuid_hvm_policy(
         if ( input[1] == 0 ) {
             regs[1] &= (bitmaskof(X86_FEATURE_SMEP) |
                         bitmaskof(X86_FEATURE_ERMS) |
-                        bitmaskof(X86_FEATURE_FSGSBASE));
+                        bitmaskof(X86_FEATURE_FSGSBASE) |
+                        bitmaskof(X86_FEATURE_INVPCID));
         } else
             regs[1] = 0;
         regs[0] = regs[2] = regs[3] = 0;
