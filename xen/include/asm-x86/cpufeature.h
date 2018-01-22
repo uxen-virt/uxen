@@ -149,6 +149,7 @@
 #define X86_FEATURE_FSGSBASE	(7*32+ 0) /* {RD,WR}{FS,GS}BASE instructions */
 #define X86_FEATURE_SMEP	(7*32+ 7) /* Supervisor Mode Execution Protection */
 #define X86_FEATURE_ERMS	(7*32+ 9) /* Enhanced REP MOVSB/STOSB */
+#define X86_FEATURE_INVPCID     (7*32+10) /* Invalidate Process Context ID */
 #define X86_FEATURE_MPX		(7*32+14) /* Memory Protection eXentions */
 
 #define cpu_has(c, bit)		test_bit(bit, (c)->x86_capability)
@@ -216,6 +217,7 @@
 #define cpu_has_smep            boot_cpu_has(X86_FEATURE_SMEP)
 
 #define cpu_has_pcid            boot_cpu_has(X86_FEATURE_PCID)
+#define cpu_has_invpcid         boot_cpu_has(X86_FEATURE_INVPCID)
 
 #define cpu_has_ffxsr           ((boot_cpu_data.x86_vendor == X86_VENDOR_AMD) \
                                  && boot_cpu_has(X86_FEATURE_FFXSR))
