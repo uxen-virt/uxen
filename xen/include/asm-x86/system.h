@@ -167,6 +167,8 @@ static always_inline unsigned long __cmpxchg(
 #define set_mb(var, value) do { xchg(&var, value); } while (0)
 #define set_wmb(var, value) do { var = value; wmb(); } while (0)
 
+#define lfence() asm volatile("lfence":::"memory")
+
 #define cpu_irq_disable()     uxen_info->ui_cli()
 #define cpu_irq_enable()      uxen_info->ui_sti()
 #define cpu_irq_is_enabled()  uxen_info->ui_irq_is_enabled()

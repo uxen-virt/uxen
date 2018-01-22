@@ -34,6 +34,13 @@
 /* Intel MSRs. Some also available on other CPUs */
 #define MSR_CORE_THREAD_COUNT		0x35
 
+#define MSR_IA32_SPEC_CTRL		0x00000048
+#define SPEC_CTRL_FEATURE_DISABLE_IBRS	(0 << 0)
+#define SPEC_CTRL_FEATURE_ENABLE_IBRS	(1 << 0)
+
+#define MSR_IA32_PRED_CMD		0x00000049
+#define PRED_CMD_IBPB			(1UL << 0)
+
 #define MSR_IA32_PERFCTR0		0x000000c1
 #define MSR_IA32_PERFCTR1		0x000000c2
 #define MSR_FSB_FREQ			0x000000cd

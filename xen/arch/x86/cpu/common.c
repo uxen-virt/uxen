@@ -233,7 +233,7 @@ static void __init early_cpu_detect(void)
 
 void __cpuinit generic_identify(struct cpuinfo_x86 * c)
 {
-	u32 tfms, xlvl, capability, excap, ebx;
+	u32 tfms, xlvl, capability, excap, ebx, edx;
 
 	/* Get vendor name */
 	cpuid(0x00000000, &c->cpuid_level,
@@ -273,8 +273,9 @@ void __cpuinit generic_identify(struct cpuinfo_x86 * c)
 	/* Intel-defined flags: level 0x00000007 */
 	if ( c->cpuid_level >= 0x00000007 ) {
 		u32 dummy;
-		cpuid_count(0x00000007, 0, &dummy, &ebx, &dummy, &dummy);
+		cpuid_count(0x00000007, 0, &dummy, &ebx, &dummy, &edx);
 		c->x86_capability[X86_FEATURE_FSGSBASE / 32] = ebx;
+		c->x86_capability[X86_FEATURE_SPEC_CTRL / 32] = edx;
 	}
 
 	early_intel_workaround(c);
