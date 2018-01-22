@@ -2460,7 +2460,9 @@ vmx_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
              rdmsr_hypervisor_regs(msr, msr_content) )
             break;
 
-        if ( ax_present && msr != MSR_INTEL_PLATFORM_INFO &&
+        if ( msr != MSR_IA32_PLATFORM_ID &&
+             msr != MSR_IA32_UCODE_REV &&
+             msr != MSR_INTEL_PLATFORM_INFO &&
              msr != MSR_INTEL_TEMPERATURE_TARGET &&
              msr != MSR_INTEL_TURBO_RATIO_LIMIT )
         {
