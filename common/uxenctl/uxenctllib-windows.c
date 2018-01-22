@@ -37,23 +37,21 @@ uxen_log_to_stderr(const char *line, enum uxen_logtype type)
 
 static uxen_logfnc log_sinker = &uxen_log_to_stderr;
 
-static const size_t log_buf_len = 2048;
-/* Should be more than enough for anything that this static library could spew. */
-
 void
 uxen_set_logfile(FILE *f)
 {
     _uxenctllib_stderr = f;
+    log_sinker = NULL;
 }
 
 void
 uxen_set_log_function(uxen_logfnc fnc)
 {
-    if (fnc)
-        log_sinker = fnc;
-    else
-        log_sinker = &uxen_log_to_stderr;
+    log_sinker = fnc;
 }
+
+static const size_t log_buf_len = 2048;
+/* Should be more than enough for anything that this static library could spew. */
 
 void
 uxen_err_vprintf(const char *function, int line,
@@ -61,33 +59,49 @@ uxen_err_vprintf(const char *function, int line,
                  int errval, const char *errdesc,
                  const char *fmt, va_list ap)
 {
-    enum uxen_logtype printType = uxen_logtype_err;
-    int i = 0;  /* Index within the buffer. */
-    char buf[log_buf_len];
-    memset(buf, 0, log_buf_len); /* Security. */
+    if (log_sinker)
+    {
+        enum uxen_logtype printType = uxen_logtype_err;
+        int i = 0;  /* Index within the buffer. */
+        char buf[log_buf_len];
+        memset(buf, 0, log_buf_len); /* Security. */
 
-    /* i += snprintf(buf, log_buf_len, "%s: ", getprogname()); */
-    /* Useless because of the ERR_NO_PROGNAME defined above. */
+        /* i += snprintf(buf, log_buf_len, "%s: ", getprogname()); */
+        /* Useless because of the ERR_NO_PROGNAME defined above. */
 
-    if (fmt) {
-        i += vsnprintf(buf + i, log_buf_len - i, fmt, ap);
+        if (fmt) {
+            i += vsnprintf(buf + i, log_buf_len - i, fmt, ap);
 
-        if (errdesc)
-            i += snprintf(buf + i, log_buf_len - i, ": %s (%08X)", errdesc, errval);
-        else if (errval)
-            i += snprintf(buf + i, log_buf_len - i, ": (%08X)", errval);
+            if (errdesc)
+                i += snprintf(buf + i, log_buf_len - i, ": %s (%08X)", errdesc, errval);
+            else if (errval)
+                i += snprintf(buf + i, log_buf_len - i, ": (%08X)", errval);
+        }
+
+        if (log_buf_len - i >= 2)
+            buf[i++] = '\n';
+        else
+            buf[log_buf_len - 2] = '\n';
+        /* Note: v?snprintf guarantees that the given string will be null-terminated. */
+
+        if (type && !strncmp(type, "warn", 4))
+            printType = uxen_logtype_warn;
+
+        log_sinker(buf, printType);
     }
-
-    if (log_buf_len - i >= 2)
-        buf[i++] = '\n';
     else
-        buf[log_buf_len - 2] = '\n';
-    /* Note: v?snprintf guarantees that the given string will be null-terminated. */
+    {
+        if (fmt) {
+            vfprintf(_uxenctllib_stderr, fmt, ap);
 
-    if (type && !strncmp(type, "warn", 4))
-        printType = uxen_logtype_warn;
+            if (errdesc)
+                fprintf(_uxenctllib_stderr, ": %s (%08X)", errdesc, errval);
+            else if (errval)
+                fprintf(_uxenctllib_stderr, ": (%08X)", errval);
+        }
 
-    log_sinker(buf, printType);
+        fputs("\n", _uxenctllib_stderr);
+    }
 }
 
 int uxen_ioctl(UXEN_HANDLE_T h, uint64_t ctl, ...);
