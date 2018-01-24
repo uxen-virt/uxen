@@ -26,7 +26,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -129,7 +129,7 @@ int VBOXCALL VbglHGCMCall (VBGLHGCMHANDLE handle, VBoxGuestHGCMCallInfo* info, u
         KeInitializeMutex(&g_Mutex, 0);
     }
     status = KeWaitForMutexObject(&g_Mutex,
-                                  UserRequest,
+                                  Executive,
                                   KernelMode,
                                   FALSE,
                                   NULL);
