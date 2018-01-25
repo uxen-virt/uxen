@@ -88,60 +88,69 @@ uxen_pfn_t os_max_pfn = -1;
 static int
 set_linear_pt_va(void)
 {
-    uintptr_t cr3;
+    PHYSICAL_ADDRESS low_address;
+    PHYSICAL_ADDRESS high_address;
+    PHYSICAL_ADDRESS skip_bytes;
     PMDL mdl = NULL;
-    uint64_t *addr = NULL;
-    unsigned int offset;
-    int ret = 0;
+    void *addr = NULL;
+    uint64_t *pte, pa, entry, offset;
+    int ret = 1;
 
-    mdl = IoAllocateMdl(NULL, 1 << PAGE_SHIFT, FALSE, FALSE, NULL);
-    if (!mdl) {
-        fail_msg("%s: IoAllocateMdl failed", __FUNCTION__);
-        ret = -ENOMEM;
+    low_address.QuadPart = 0;
+    high_address.QuadPart = -1;
+    skip_bytes.QuadPart = 0;
+
+    mdl = MmAllocatePagesForMdlEx(low_address, high_address, skip_bytes,
+                                  1 << PAGE_SHIFT, MmCached,
+                                  MM_ALLOCATE_FULLY_REQUIRED);
+    if (mdl == NULL) {
+        fail_msg("MmAllocatePagesForMdlEx failed");
         goto out;
     }
 
-    cr3 = read_paging_base();
-
-    mdl->MdlFlags = MDL_PAGES_LOCKED;
-    MmGetMdlPfnArray(mdl)[0] = cr3 >> PAGE_SHIFT;
     try {
         addr = MmMapLockedPagesSpecifyCache(
             mdl, KernelMode,
             MmCached, NULL, FALSE, LowPagePriority);
     } except (HOSTDRV_EXCEPTION_EXECUTE_HANDLER(
                   "MmMapLockedPagesSpecifyCache")) {
-	addr = NULL;
-    }
-
-    if (!addr) {
-        fail_msg("%s: pml4 map failed", __FUNCTION__);
-        ret = -EINVAL;
+        addr = NULL;
         goto out;
     }
 
-    for (offset = 0; offset < PAGE_SIZE; offset++)
-        if ((addr[offset / sizeof(addr[0])] & PMLE_ADDR_MASK) == cr3)
-            break;
+    pa = (uxen_pfn_t)MmGetMdlPfnArray(mdl)[0];
+    pa <<= PAGE_SHIFT;
 
-    if (offset == PAGE_SIZE) {
-        fail_msg("%s: linear_pt_va not found", __FUNCTION__);
-        ret = -EINVAL;
-        goto out;
+    for (entry = 0; entry < 512; ++entry) {
+        offset = entry << 3;
+
+        linear_pt_va = (uintptr_t)offset << (PAGETABLE_LEVELS * PAGETABLE_ORDER);
+        if (offset >= (PAGE_SIZE >> 1))
+            linear_pt_va |=
+                ~0ULL << (PAGETABLE_LEVELS * PAGETABLE_ORDER + PAGE_SHIFT);
+
+        pte = VA_TO_LINEAR_PTE((size_t)addr);
+
+        if (!MmIsAddressValid(pte))
+            continue;
+
+        if ((*pte & PMLE_ADDR_MASK) != pa)
+            continue;
+
+        ret = 0;
+        break;
     }
 
-    linear_pt_va = (uintptr_t)offset << (PAGETABLE_LEVELS * PAGETABLE_ORDER);
-    if (offset >= (PAGE_SIZE >> 1))
-        linear_pt_va |=
-            ~0ULL << (PAGETABLE_LEVELS * PAGETABLE_ORDER + PAGE_SHIFT);
     printk("linear-pt va: %p\n", (void *)linear_pt_va);
 
   out:
+    if (addr)
+        MmUnmapLockedPages(addr, mdl);
     if (mdl) {
-        if (addr)
-            MmUnmapLockedPages((uint8_t *)addr, mdl);
-        IoFreeMdl(mdl);
+        MmFreePagesFromMdl(mdl);
+        ExFreePool(mdl);
     }
+
     return ret;
 }
 #else  /* _WIN64 */
