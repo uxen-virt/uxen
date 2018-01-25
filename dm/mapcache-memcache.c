@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -24,6 +24,8 @@
 
 #include <uxen/uxen_memcache_dm.h>
 #include <xen/hvm/e820.h>
+
+#define SIMPLE_MDM
 
 static uint32_t mapcache_end_low_pfn = 0;
 static uint32_t mapcache_start_high_pfn = 0;
@@ -93,6 +95,109 @@ int debug_memcache_concurrent_count = 0;
 int debug_memcache_max_count = 0;
 int debug_memcache_map_count = 0;
 int debug_memcache_cache_count = 0;
+
+#ifdef __x86_64__
+int use_simple_mapping = 1;
+#else
+int use_simple_mapping = 0;
+#endif
+
+typedef struct simple_mapping {
+    struct simple_mapping *next;
+
+    uint8_t *base;
+    uint64_t start_pa;
+    uint64_t end_pa;
+} Simple_mapping;
+
+static Simple_mapping *simple_mappings;
+
+static Simple_mapping *simple_make_mapping (uint64_t start, uint64_t end)
+{
+    Simple_mapping *ret;
+    xen_pfn_t pfn = start >> XC_PAGE_SHIFT;
+    uint8_t *va;
+
+    va = xc_map_foreign_range (xc_handle, vm_id, end - start, PROT_READ | PROT_WRITE, pfn);
+
+    if (!va)
+        return NULL;
+
+    ret = malloc (sizeof (*ret));
+
+    if (!ret) return NULL;
+
+    ret->next = NULL;
+    ret->base = va;
+    ret->start_pa = start;
+    ret->end_pa = end;
+
+    return ret;
+}
+
+static Simple_mapping *simple_find_mapping (uint64_t start, uint64_t end)
+{
+    Simple_mapping **retp, *ret;
+
+    critical_section_enter (&cs);
+
+    for (retp = &simple_mappings; (ret = *retp) ; retp = & ((*retp)->next)) {
+        if ((ret->start_pa <= start) && (end <= ret->end_pa)) {
+            *retp = ret->next;
+            ret->next = simple_mappings;
+            simple_mappings = ret;
+            break;
+        }
+    }
+
+    critical_section_leave (&cs);
+
+    return ret;
+}
+
+static Simple_mapping *simple_find_or_make_mapping (uint64_t start, uint64_t end)
+{
+    Simple_mapping *ret;
+
+    ret = simple_find_mapping (start, end);
+
+    if (ret)
+        return ret;
+
+    start &= XC_PAGE_MASK;
+
+    end += (XC_PAGE_SIZE - 1);
+    end &= XC_PAGE_MASK;
+
+    ret = simple_make_mapping (start, end);
+
+    if (!ret)
+        return ret;
+
+    critical_section_enter (&cs);
+
+    ret->next = simple_mappings;
+    simple_mappings = ret;
+
+    critical_section_leave (&cs);
+
+    return ret;
+}
+
+static uint8_t *
+simple_mapcache_map (uint64_t pa, uint64_t *len, uint8_t lock)
+{
+    Simple_mapping *m;
+
+    uint64_t end_pa = pa + *len;
+
+    m = simple_find_or_make_mapping (pa, end_pa);
+
+    if (m)
+        return m->base + (pa - m->start_pa);
+
+    return NULL;
+}
 
 static uint32_t
 memcache_entry_update(uint32_t pfn, int get, uint32_t lock)
@@ -179,6 +284,9 @@ mapcache_map(uint64_t phys_addr, uint64_t *len, uint8_t lock)
     uint32_t offset;
     int ret;
 
+    if (use_simple_mapping)
+        return simple_mapcache_map(phys_addr, len, lock);
+
     critical_section_enter(&cs);
 
     if (pfn < mapcache_end_low_pfn) {
@@ -249,6 +357,9 @@ mapcache_unmap(uint64_t phys_addr, uint64_t len, uint8_t lock)
     uint32_t end_pfn = ((phys_addr + len - 1) >> UXEN_PAGE_SHIFT) + 1;
     uint64_t cleared = 0;
 
+    if (use_simple_mapping)
+        return;
+
     if (pfn < mapcache_end_low_pfn) {
         if (end_pfn >= mapcache_end_low_pfn) {
             /* ">=" because need to adjust len, if end_pfn == max_pfn */
@@ -296,6 +407,7 @@ mapcache_invalidate(void)
 void
 ic_memcache(Monitor *mon)
 {
+#ifdef SIMPLE_MDM
     uint32_t pfn;
     uint32_t offset;
     int count, lock, mapped = 0;
@@ -332,5 +444,6 @@ ic_memcache(Monitor *mon)
                    debug_memcache_map_count);
     monitor_printf(mon, "memcache      cache count: %d\n",
                    debug_memcache_cache_count);
+#endif
 }
 #endif  /* MONITOR */
