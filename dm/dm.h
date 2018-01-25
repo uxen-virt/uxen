@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -54,6 +54,8 @@ extern uint64_t vm_use_v4v_disk;
 extern uint64_t vm_v4v_storage;
 extern uint64_t vm_v4v_disable_ahci_clones;
 extern uint64_t vm_vram_dirty_tracking;
+extern uint64_t use_simple_mapping;
+extern uint64_t simple_map_size;
 extern uint8_t v4v_idtoken[16];
 extern uint8_t v4v_idtoken_is_vm_uuid;
 extern const char *vmsavefile_on_crash;

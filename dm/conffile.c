@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -788,9 +788,11 @@ struct config_option config_options[] = {
     { "seed-generation", co_set_boolean_opt, &seed_generation },
     { "serial", co_set_serial, NULL },
     { "shared-folders", co_set_shared_folders, NULL },
+    { "simple-map-size", co_set_integer_opt, &simple_map_size },
     { "surf-copy-reduction", co_set_boolean_opt, &surf_copy_reduction },
     { "timer-mode", co_set_integer_opt, &vm_timer_mode },
     { "tsc-mode", co_set_integer_opt, &vm_tsc_mode },
+    { "use-simple-mapping", co_set_integer_opt, &use_simple_mapping },
     { "use-v4v-disk", co_set_integer_opt, &vm_use_v4v_disk },
     { "use-v4v-net", co_set_integer_opt, &vm_use_v4v_net },
     { "uuid", co_set_uuid, NULL },

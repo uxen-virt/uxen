@@ -162,6 +162,32 @@ set_linear_pt_va(void)
 }
 #endif  /* _WIN64 */
 
+#ifdef _WIN64
+static uint64_t
+set_pte_mfn_only(uintptr_t va, xen_pfn_t mfn)
+{
+    volatile uint64_t *pteaddr = VA_TO_LINEAR_PTE(va);
+    uint64_t old ,new;
+
+    new = old = *pteaddr;
+
+    if (mfn == ~0ULL || mfn == 0ULL) {
+        new &= ~(uint64_t)1; /* mask out the present bit */
+    } else {
+        new &= 0xfff0000000000fffULL; /* mask out the old mfn */
+        new |= 1; /* set the present bit */
+        new |= ((uint64_t)mfn) << PAGE_SHIFT;
+    }
+
+    *pteaddr = new;
+
+    if (!(old & 1)) 
+        old = 0;
+
+    return old;
+}
+#endif
+
 static uint64_t
 set_pte(uintptr_t va, uint64_t new)
 {
@@ -196,6 +222,11 @@ static uint64_t map_mfn_pte_flags = 0;
 uint64_t __cdecl
 map_mfn(uintptr_t va, xen_pfn_t mfn)
 {
+#ifdef _WIN64
+    /* For user mapped pages we'll only change the MFN and nothing else */
+    if (!(va & (1ULL << 63)))
+        return set_pte_mfn_only(va, mfn);
+#endif
 
     return set_pte(va, (mfn == ~0ULL || mfn == 0ULL) ? mfn :
                    (((uint64_t)mfn << PAGE_SHIFT) | map_mfn_pte_flags));
