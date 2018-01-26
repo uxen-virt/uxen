@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -84,6 +84,10 @@ struct uxendisp_state {
 
     struct vblank_ctx *vblank_ctx;
 };
+
+#define REFRESH_TIMEOUT_MS 200
+static struct Timer *refresh_timer = NULL;
+static int stop_refresh_timer = 1;
 
 #define crtc_to_state(c) (container_of((c), struct uxendisp_state, crtcs[(c)->id]))
 
@@ -226,6 +230,9 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
         DPRINTF("xen_hvm_track_dirty_vram failed: %d\n", errno);
         return;
     }
+
+    if (!stop_refresh_timer)
+        memset(dirty, 0xff, (npages + 7) / 8);
 
     if (ds_surface_lock(crtc->ds, &d, &linesize))
         return;
@@ -733,6 +740,7 @@ uxendisp_mmio_write(void *opaque, target_phys_addr_t addr, uint64_t val,
     case UXDISP_REG_CURSOR_ENABLE:
         s->cursor_en = val & 0x1;
         cursor_flush(s);
+        stop_refresh_timer = 1;
         return;
     case UXDISP_REG_MODE:
         s->mode = val;
@@ -1072,6 +1080,17 @@ uxendisp_reset(void *opaque)
     (void)s;
 }
 
+static void
+refresh(void *opaque)
+{
+    do_dpy_trigger_refresh(NULL);
+
+    if (!stop_refresh_timer && refresh_timer)
+        mod_timer(refresh_timer, get_clock_ms(vm_clock) + REFRESH_TIMEOUT_MS);
+    else
+        debug_printf("%s: vram refresh timer is off\n", __FUNCTION__);
+}
+
 static int uxendisp_initfn(PCIDevice *dev)
 {
     struct uxendisp_state *s = DO_UPCAST(struct uxendisp_state, dev, dev);
@@ -1136,6 +1155,13 @@ static int uxendisp_initfn(PCIDevice *dev)
     qemu_register_reset(uxendisp_reset, s);
     uxendisp_reset(s);
 
+    if (!vm_vram_dirty_tracking) {
+        debug_printf("%s: vram refresh timer is on\n", __FUNCTION__);
+        stop_refresh_timer = 0;
+        refresh_timer = new_timer_ms(vm_clock, refresh, NULL);
+        mod_timer(refresh_timer, get_clock_ms(vm_clock) + REFRESH_TIMEOUT_MS);
+    }
+
     return 0;
 }
 
@@ -1143,6 +1169,12 @@ static int uxendisp_exitfn(PCIDevice *dev)
 {
     struct uxendisp_state *s = DO_UPCAST(struct uxendisp_state, dev, dev);
     VGAState *v = &s->vga;
+
+    if (refresh_timer) {
+        del_timer(refresh_timer);
+        free_timer(refresh_timer);
+        refresh_timer = NULL;
+    }
 
 #ifdef _WIN32
     pv_vblank_cleanup(s->vblank_ctx);
