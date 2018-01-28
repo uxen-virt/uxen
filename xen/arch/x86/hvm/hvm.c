@@ -369,6 +369,9 @@ void hvm_do_suspend(struct vcpu *v)
 {
     if (!list_empty(&v->arch.hvm_vcpu.tm_list))
         pt_save_timer(v);
+
+    if (cpu_has_spec_ctrl)
+        wrmsrl(MSR_IA32_PRED_CMD, PRED_CMD_IBPB);
 }
 
 void hvm_do_resume(struct vcpu *v)
