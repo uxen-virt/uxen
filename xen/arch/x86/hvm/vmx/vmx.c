@@ -2552,6 +2552,14 @@ static int vmx_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
     case MSR_IA32_DS_AREA:
         *msr_content = 0;       /* no vPMU */
         break;
+    case MSR_IA32_SPEC_CTRL:
+        *msr_content = current->arch.hvm_vcpu.msr_spec_ctrl;
+        if (cpu_has_spec_ctrl && !current->arch.hvm_vcpu.use_spec_ctrl) {
+            current->arch.hvm_vcpu.use_spec_ctrl = 1;
+            vmx_disable_intercept_for_msr(current, MSR_IA32_SPEC_CTRL);
+        } else
+            goto gp_fault;
+        break;
     default:
 #ifndef __UXEN_NOT_YET__
         if ( vpmu_do_rdmsr(msr, msr_content) )
@@ -2739,6 +2747,14 @@ static int vmx_msr_write_intercept(unsigned int msr, uint64_t msr_content)
      case MSR_IA32_DS_AREA:
          /* no vPMU */
          break;
+    case MSR_IA32_SPEC_CTRL:
+        current->arch.hvm_vcpu.msr_spec_ctrl = msr_content;
+        if (cpu_has_spec_ctrl && !current->arch.hvm_vcpu.use_spec_ctrl) {
+            current->arch.hvm_vcpu.use_spec_ctrl = 1;
+            vmx_disable_intercept_for_msr(current, MSR_IA32_SPEC_CTRL);
+        } else
+            goto gp_fault;
+        break;
     default:
 #ifndef __UXEN_NOT_YET__
         if ( vpmu_do_wrmsr(msr, msr_content) )
@@ -3726,7 +3742,8 @@ asmlinkage_abi void vmx_save_regs(void)
     struct cpu_user_regs *regs = &current->arch.user_regs;
 
     if (!ax_present && cpu_has_spec_ctrl) {
-        rdmsrl(MSR_IA32_SPEC_CTRL, current->arch.hvm_vcpu.msr_spec_ctrl);
+        if (current->arch.hvm_vcpu.use_spec_ctrl)
+            rdmsrl(MSR_IA32_SPEC_CTRL, current->arch.hvm_vcpu.msr_spec_ctrl);
         if (this_cpu(host_msr_spec_ctrl))
             wrmsrl(MSR_IA32_SPEC_CTRL, SPEC_CTRL_FEATURE_ENABLE_IBRS);
         else {
@@ -3770,7 +3787,8 @@ asmlinkage_abi void vm_entry_fail(uintptr_t resume)
     unsigned long error = __vmread(VM_INSTRUCTION_ERROR);
 
     if (!ax_present && cpu_has_spec_ctrl) {
-        rdmsrl(MSR_IA32_SPEC_CTRL, current->arch.hvm_vcpu.msr_spec_ctrl);
+        if (current->arch.hvm_vcpu.use_spec_ctrl)
+            rdmsrl(MSR_IA32_SPEC_CTRL, current->arch.hvm_vcpu.msr_spec_ctrl);
         if (this_cpu(host_msr_spec_ctrl))
             wrmsrl(MSR_IA32_SPEC_CTRL, SPEC_CTRL_FEATURE_ENABLE_IBRS);
         else {
