@@ -3730,6 +3730,7 @@ asmlinkage_abi void vmx_save_regs(void)
             lfence();
             if (current->arch.hvm_vcpu.msr_spec_ctrl)
                 wrmsrl(MSR_IA32_SPEC_CTRL, SPEC_CTRL_FEATURE_DISABLE_IBRS);
+            wrmsrl(MSR_IA32_PRED_CMD, PRED_CMD_IBPB);
         }
     } else
         lfence();
@@ -3773,6 +3774,7 @@ asmlinkage_abi void vm_entry_fail(uintptr_t resume)
             lfence();
             if (current->arch.hvm_vcpu.msr_spec_ctrl)
                 wrmsrl(MSR_IA32_SPEC_CTRL, SPEC_CTRL_FEATURE_DISABLE_IBRS);
+            wrmsrl(MSR_IA32_PRED_CMD, PRED_CMD_IBPB);
         }
     } else
         lfence();
