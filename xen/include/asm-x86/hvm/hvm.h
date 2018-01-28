@@ -20,7 +20,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -159,6 +159,8 @@ struct hvm_function_table {
     int  (*do_pmu_interrupt)(struct cpu_user_regs *regs);
 
     void (*do_execute)(struct vcpu *v);
+
+    void (*do_suspend)(struct vcpu *v);
 
     void (*pt_sync_domain)(struct domain *d);
 

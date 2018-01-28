@@ -111,6 +111,8 @@ static void setup_pv_vmx(void);
 
 static void vmx_execute(struct vcpu *v);
 
+static void vmx_do_suspend(struct vcpu *v);
+
 static int vmx_domain_initialise(struct domain *d)
 {
     int rc;
@@ -1065,7 +1067,7 @@ static void vmx_ctxt_switch_to(struct vcpu *v)
             wrmsrl(MSR_TSC_AUX, tsc_aux);
     }
 
-    if (!ax_present && cpu_has_spec_ctrl)
+    if (cpu_has_spec_ctrl)
         rdmsrl(MSR_IA32_SPEC_CTRL, this_cpu(host_msr_spec_ctrl));
 
     v->context_loaded = 1;
@@ -2080,6 +2082,7 @@ static struct hvm_function_table __read_mostly vmx_function_table = {
     .event_pending        = vmx_event_pending,
     .do_pmu_interrupt     = vmx_do_pmu_interrupt,
     .do_execute           = vmx_execute,
+    .do_suspend           = vmx_do_suspend,
     .pt_sync_domain       = ept_sync_domain,
     .cpu_on               = vmx_cpu_on,
     .cpu_off              = vmx_cpu_off,
@@ -3787,6 +3790,14 @@ asmlinkage_abi void vm_entry_fail(uintptr_t resume)
            resume ? "resume" : "launch", error);
     vmcs_dump_vcpu(current);
     __domain_crash(current->domain);
+}
+
+void
+vmx_do_suspend(struct vcpu *v)
+{
+
+    if (cpu_has_spec_ctrl && this_cpu(host_msr_spec_ctrl))
+        wrmsrl(MSR_IA32_PRED_CMD, PRED_CMD_IBPB);
 }
 
 static bool_t __initdata disable_pv_vmx;

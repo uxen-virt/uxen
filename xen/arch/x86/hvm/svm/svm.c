@@ -109,6 +109,8 @@ static void svm_do_resume(struct vcpu *v);
 
 static void svm_execute(struct vcpu *);
 
+static void svm_do_suspend(struct vcpu *);
+
 static bool_t amd_erratum383_found __read_mostly;
 
 void __update_guest_eip(struct cpu_user_regs *regs, unsigned int inst_len)
@@ -2118,6 +2120,7 @@ static struct hvm_function_table __read_mostly svm_function_table = {
     .event_pending        = svm_event_pending,
     .do_pmu_interrupt     = svm_do_pmu_interrupt,
     .do_execute           = svm_execute,
+    .do_suspend           = svm_do_suspend,
     .pt_sync_domain       = svm_pt_sync_domain,
     .cpuid_intercept      = svm_cpuid_intercept,
     .wbinvd_intercept     = svm_wbinvd_intercept,
@@ -2600,6 +2603,11 @@ asmlinkage_abi void svm_restore_regs(void)
 
     vcpu_restore_fpu_lazy(current);
     assert_xcr0_state(XCR0_STATE_VM);
+}
+
+void
+svm_do_suspend(struct vcpu *v)
+{
 }
 
 /*
