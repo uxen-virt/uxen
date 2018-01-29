@@ -86,7 +86,7 @@
 enum handler_return { HNDL_done, HNDL_unhandled, HNDL_exception_raised };
 
 static DEFINE_PER_CPU(unsigned long, host_msr_tsc_aux);
-static DEFINE_PER_CPU(unsigned long, host_msr_spec_ctrl);
+static unsigned long __read_mostly host_msr_spec_ctrl;
 static DEFINE_SPINLOCK(ept_sync_lock);
 
 static void vmx_ctxt_switch_from(struct vcpu *v);
@@ -1066,9 +1066,6 @@ static void vmx_ctxt_switch_to(struct vcpu *v)
         if (this_cpu(host_msr_tsc_aux) != tsc_aux)
             wrmsrl(MSR_TSC_AUX, tsc_aux);
     }
-
-    if (cpu_has_spec_ctrl)
-        rdmsrl(MSR_IA32_SPEC_CTRL, this_cpu(host_msr_spec_ctrl));
 
     v->context_loaded = 1;
 }
@@ -2146,6 +2143,14 @@ struct hvm_function_table * __init start_vmx(void)
     setup_vmcs_dump();
 
     setup_pv_vmx();
+
+    if (cpu_has_spec_ctrl) {
+        rdmsrl(MSR_IA32_SPEC_CTRL, host_msr_spec_ctrl);
+        printk(XENLOG_INFO "SPEC CTRL: host (%lx) IBRS %sabled\n",
+               host_msr_spec_ctrl,
+               (host_msr_spec_ctrl & SPEC_CTRL_FEATURE_IBRS_mask) ?
+               "en" : "dis");
+    }
 
     return &vmx_function_table;
 }
@@ -3731,7 +3736,7 @@ asmlinkage_abi void vmx_restore_regs(uintptr_t host_rsp)
         pv_vmcs_flush_dirty(this_cpu(current_vmcs_vmx), 0);
 
     if (!ax_present && cpu_has_spec_ctrl &&
-        current->arch.hvm_vcpu.msr_spec_ctrl != this_cpu(host_msr_spec_ctrl))
+        current->arch.hvm_vcpu.msr_spec_ctrl != host_msr_spec_ctrl)
         wrmsrl(MSR_IA32_SPEC_CTRL, current->arch.hvm_vcpu.msr_spec_ctrl);
 
     ept_maybe_sync_cpu_enter(current->domain);
@@ -3744,8 +3749,8 @@ asmlinkage_abi void vmx_save_regs(void)
     if (!ax_present && cpu_has_spec_ctrl) {
         if (current->arch.hvm_vcpu.use_spec_ctrl)
             rdmsrl(MSR_IA32_SPEC_CTRL, current->arch.hvm_vcpu.msr_spec_ctrl);
-        if (this_cpu(host_msr_spec_ctrl))
-            wrmsrl(MSR_IA32_SPEC_CTRL, SPEC_CTRL_FEATURE_ENABLE_IBRS);
+        if (host_msr_spec_ctrl)
+            wrmsrl(MSR_IA32_SPEC_CTRL, host_msr_spec_ctrl);
         else {
             lfence();
             if (current->arch.hvm_vcpu.msr_spec_ctrl)
@@ -3789,8 +3794,8 @@ asmlinkage_abi void vm_entry_fail(uintptr_t resume)
     if (!ax_present && cpu_has_spec_ctrl) {
         if (current->arch.hvm_vcpu.use_spec_ctrl)
             rdmsrl(MSR_IA32_SPEC_CTRL, current->arch.hvm_vcpu.msr_spec_ctrl);
-        if (this_cpu(host_msr_spec_ctrl))
-            wrmsrl(MSR_IA32_SPEC_CTRL, SPEC_CTRL_FEATURE_ENABLE_IBRS);
+        if (host_msr_spec_ctrl)
+            wrmsrl(MSR_IA32_SPEC_CTRL, host_msr_spec_ctrl);
         else {
             lfence();
             if (current->arch.hvm_vcpu.msr_spec_ctrl)
@@ -3814,7 +3819,7 @@ void
 vmx_do_suspend(struct vcpu *v)
 {
 
-    if (cpu_has_spec_ctrl && this_cpu(host_msr_spec_ctrl))
+    if (/* cpu_has_spec_ctrl && */ host_msr_spec_ctrl)
         wrmsrl(MSR_IA32_PRED_CMD, PRED_CMD_IBPB);
 }
 
