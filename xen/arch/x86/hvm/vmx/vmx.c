@@ -87,6 +87,7 @@ enum handler_return { HNDL_done, HNDL_unhandled, HNDL_exception_raised };
 
 static DEFINE_PER_CPU(unsigned long, host_msr_tsc_aux);
 static unsigned long __read_mostly host_msr_spec_ctrl;
+static bool_t __read_mostly update_host_vm_ibrs;
 static DEFINE_SPINLOCK(ept_sync_lock);
 
 static void vmx_ctxt_switch_from(struct vcpu *v);
@@ -2158,6 +2159,7 @@ struct hvm_function_table * __init start_vmx(void)
                host_msr_spec_ctrl,
                (host_msr_spec_ctrl & SPEC_CTRL_FEATURE_IBRS_mask) ?
                "en" : "dis");
+        update_host_vm_ibrs = !ax_present;
     }
 
     return &vmx_function_table;
@@ -3747,7 +3749,7 @@ asmlinkage_abi void vmx_restore_regs(uintptr_t host_rsp)
     if (vmx_vmcs_late_load)
         pv_vmcs_flush_dirty(this_cpu(current_vmcs_vmx), 0);
 
-    if (!ax_present && cpu_has_spec_ctrl &&
+    if (update_host_vm_ibrs &&
         current->arch.hvm_vcpu.msr_spec_ctrl != host_msr_spec_ctrl)
         wrmsrl(MSR_IA32_SPEC_CTRL, current->arch.hvm_vcpu.msr_spec_ctrl);
 }
@@ -3756,7 +3758,7 @@ asmlinkage_abi void vmx_save_regs(void)
 {
     struct cpu_user_regs *regs = &current->arch.user_regs;
 
-    if (!ax_present && cpu_has_spec_ctrl) {
+    if (update_host_vm_ibrs) {
         if (current->arch.hvm_vcpu.use_spec_ctrl)
             rdmsrl(MSR_IA32_SPEC_CTRL, current->arch.hvm_vcpu.msr_spec_ctrl);
         if (host_msr_spec_ctrl)
@@ -3799,7 +3801,7 @@ asmlinkage_abi void vm_entry_fail(uintptr_t resume)
 {
     unsigned long error = __vmread(VM_INSTRUCTION_ERROR);
 
-    if (!ax_present && cpu_has_spec_ctrl) {
+    if (update_host_vm_ibrs) {
         if (current->arch.hvm_vcpu.use_spec_ctrl)
             rdmsrl(MSR_IA32_SPEC_CTRL, current->arch.hvm_vcpu.msr_spec_ctrl);
         if (host_msr_spec_ctrl)
