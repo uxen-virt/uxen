@@ -3190,6 +3190,7 @@ static inline int vcpumask_to_pcpumask(
             vcpu_id += vcpu_bias;
             if ( (vcpu_id >= d->max_vcpus) )
                 return 0;
+            vcpu_id = array_index_nospec(vcpu_id, d->max_vcpus);
             if ( ((v = d->vcpu[vcpu_id]) != NULL) )
                 cpumask_or(pmask, pmask, v->vcpu_dirty_cpumask);
         }

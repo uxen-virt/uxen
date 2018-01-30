@@ -6,7 +6,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -212,7 +212,9 @@ struct vcpu *alloc_vcpu(
         v->runstate.state_entry_time = NOW();
         set_bit(_VPF_down, &v->pause_flags);
         v->vcpu_info = ((vcpu_id < XEN_LEGACY_MAX_VCPUS)
-                        ? (vcpu_info_t *)&shared_info(d, vcpu_info[vcpu_id])
+                        ? (vcpu_info_t *)&shared_info(
+                            d, vcpu_info[array_index_nospec(
+                                    vcpu_id, XEN_LEGACY_MAX_VCPUS)])
                         : &dummy_vcpu_info);
 #ifndef __UXEN__
         init_waitqueue_vcpu(v);
@@ -626,7 +628,8 @@ domain_set_max_vcpus(struct domain *d, unsigned int max)
 
     /* We cannot reduce maximum VCPUs. */
     ret = -EINVAL;
-    if ( (max < d->max_vcpus) && (d->vcpu[max] != NULL) )
+    if ((max < d->max_vcpus) &&
+        (d->vcpu[array_index_nospec(max, d->max_vcpus)] != NULL))
         goto out;
 
     /*
@@ -707,6 +710,7 @@ struct domain *get_domain_by_id(domid_t dom)
 
     rcu_read_lock(&domlist_read_lock);
 
+    dom = array_index_nospec(dom, DOMID_FIRST_RESERVED);
     d = domain_array[dom];
     if (d && unlikely(!get_domain(d)))
         d = NULL;
@@ -726,6 +730,7 @@ struct domain *rcu_lock_domain_by_id(domid_t dom)
 
     rcu_read_lock(&domlist_read_lock);
 
+    dom = array_index_nospec(dom, DOMID_FIRST_RESERVED);
     d = domain_array[dom];
     if (d)
         rcu_lock_domain(d);
@@ -1363,7 +1368,10 @@ long do_vcpu_op(int cmd, int vcpuid, XEN_GUEST_HANDLE(void) arg)
     if ( (vcpuid < 0) || (vcpuid >= MAX_VIRT_CPUS) )
         return -EINVAL;
 
-    if ( vcpuid >= d->max_vcpus || (v = d->vcpu[vcpuid]) == NULL )
+    if (vcpuid >= d->max_vcpus)
+        return -ENOENT;
+    vcpuid = array_index_nospec(vcpuid, d->max_vcpus);
+    if ((v = d->vcpu[vcpuid]) == NULL)
         return -ENOENT;
 
     switch ( cmd )

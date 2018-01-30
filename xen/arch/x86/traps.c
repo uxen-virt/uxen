@@ -3700,6 +3700,7 @@ int guest_has_trap_callback(struct domain *d, uint16_t vcpuid, unsigned int trap
     /* Sanity check - XXX should be more fine grained. */
     BUG_ON(trap_nr > TRAP_syscall);
 
+    vcpuid = array_index_nospec(vcpuid, d->max_vcpus);
     v = d->vcpu[vcpuid];
     t = &v->arch.pv_vcpu.trap_ctxt[trap_nr];
 
@@ -3714,6 +3715,7 @@ int send_guest_trap(struct domain *d, uint16_t vcpuid, unsigned int trap_nr)
 
     BUG_ON(d == NULL);
     BUG_ON(vcpuid >= d->max_vcpus);
+    vcpuid = array_index_nospec(vcpuid, d->max_vcpus);
     v = d->vcpu[vcpuid];
 
     switch (trap_nr) {

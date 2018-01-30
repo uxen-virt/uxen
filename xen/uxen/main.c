@@ -302,6 +302,7 @@ do_run_vcpu(uint32_t domid, uint32_t vcpuid)
     if (vcpuid >= d->max_vcpus)
         goto out;
 
+    vcpuid = array_index_nospec(vcpuid, d->max_vcpus);
     v = d->vcpu[vcpuid];
     if (v == NULL)
         goto out;
