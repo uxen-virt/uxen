@@ -74,6 +74,10 @@
     __asm__ ("" : "=r"(__ptr) : "0"(ptr));      \
     (typeof(ptr)) (__ptr + (off)); })
 
+/* Make the optimizer believe the variable can be manipulated arbitrarily. */
+#define OPTIMIZER_HIDE_VAR(var)                 \
+    __asm__ ("" : "=r" (var) : "0" (var))
+
 #ifndef __OBJ_PE__
 #ifndef __ASSEMBLY__
 #define _ASM_SUBSECTION ".subsection"
