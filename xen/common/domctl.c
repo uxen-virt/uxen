@@ -8,7 +8,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -357,8 +357,11 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
             goto svc_out;
 
         ret = -EINVAL;
-        if ( (d == current->domain) || /* no domain_pause() */
-             (vcpu >= d->max_vcpus) || ((v = d->vcpu[vcpu]) == NULL) )
+        if ((d == current->domain) || /* no domain_pause() */
+            (vcpu >= d->max_vcpus))
+            goto svc_out;
+        vcpu = array_index_nospec(vcpu, d->max_vcpus);
+        if ((v = d->vcpu[vcpu]) == NULL)
             goto svc_out;
 
         if ( guest_handle_is_null(op->u.vcpucontext.ctxt) )
@@ -543,6 +546,8 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
         if ( op->u.vcpuaffinity.vcpu >= d->max_vcpus )
             goto vcpuaffinity_out;
 
+        op->u.vcpuaffinity.vcpu =
+            array_index_nospec(op->u.vcpuaffinity.vcpu, d->max_vcpus);
         ret = -ESRCH;
         if ( (v = d->vcpu[op->u.vcpuaffinity.vcpu]) == NULL )
             goto vcpuaffinity_out;
@@ -643,6 +648,8 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
         if ( op->u.vcpucontext.vcpu >= d->max_vcpus )
             goto getvcpucontext_out;
 
+        op->u.vcpucontext.vcpu =
+            array_index_nospec(op->u.vcpucontext.vcpu, d->max_vcpus);
         ret = -ESRCH;
         if ( (v = d->vcpu[op->u.vcpucontext.vcpu]) == NULL )
             goto getvcpucontext_out;
@@ -705,6 +712,8 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
         if ( op->u.getvcpuinfo.vcpu >= d->max_vcpus )
             goto getvcpuinfo_out;
 
+        op->u.getvcpuinfo.vcpu =
+            array_index_nospec(op->u.getvcpuinfo.vcpu, d->max_vcpus);
         ret = -ESRCH;
         if ( (v = d->vcpu[op->u.getvcpuinfo.vcpu]) == NULL )
             goto getvcpuinfo_out;

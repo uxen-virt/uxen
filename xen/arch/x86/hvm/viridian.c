@@ -6,7 +6,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -600,12 +600,15 @@ static int viridian_load_vcpu_ctxt(struct domain *d, hvm_domain_context_t *h)
     struct hvm_viridian_vcpu_context ctxt;
 
     vcpuid = hvm_load_instance(h);
-    if ( vcpuid >= d->max_vcpus || (v = d->vcpu[vcpuid]) == NULL )
-    {
+    if (vcpuid >= d->max_vcpus) {
+      no_vcpu:
         gdprintk(XENLOG_ERR, "HVM restore: no vcpu vm%u.%u\n", d->domain_id,
                  vcpuid);
         return -EINVAL;
     }
+    vcpuid = array_index_nospec(vcpuid, d->max_vcpus);
+    if ((v = d->vcpu[vcpuid]) == NULL)
+        goto no_vcpu;
 
     if ( hvm_load_entry(VIRIDIAN_VCPU, h, &ctxt) != 0 )
         return -EINVAL;

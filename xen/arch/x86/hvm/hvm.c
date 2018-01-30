@@ -1188,12 +1188,15 @@ static int hvm_load_cpu_ctxt(struct domain *d, hvm_domain_context_t *h)
 
     /* Which vcpu is this? */
     vcpuid = hvm_load_instance(h);
-    if ( vcpuid >= d->max_vcpus || (v = d->vcpu[vcpuid]) == NULL )
-    {
+    if (vcpuid >= d->max_vcpus) {
+      no_vcpu:
         gdprintk(XENLOG_ERR, "HVM restore: no vcpu vm%u.%u\n", d->domain_id,
                  vcpuid);
         return -EINVAL;
     }
+    vcpuid = array_index_nospec(vcpuid, d->max_vcpus);
+    if ((v = d->vcpu[vcpuid]) == NULL)
+        goto no_vcpu;
 
     /* Need to init this vcpu before loading its contents */
     rc = 0;
@@ -1410,12 +1413,15 @@ static int hvm_load_cpu_xsave_states(struct domain *d, hvm_domain_context_t *h)
 
     /* Which vcpu is this? */
     vcpuid = hvm_load_instance(h);
-    if ( vcpuid >= d->max_vcpus || (v = d->vcpu[vcpuid]) == NULL )
-    {
+    if (vcpuid >= d->max_vcpus) {
+      no_vcpu:
         gdprintk(XENLOG_ERR, "HVM restore: no vcpu vm%u.%u\n", d->domain_id,
                  vcpuid);
         return -EINVAL;
     }
+    vcpuid = array_index_nospec(vcpuid, d->max_vcpus);
+    if ((v = d->vcpu[vcpuid]) == NULL)
+        goto no_vcpu;
 
     /* Fails since we can't restore an img saved on xsave-capable host. */
     if ( !xsave_enabled(v) )
@@ -4897,6 +4903,7 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
 
         if ( a.index >= HVM_NR_PARAMS )
             return -EINVAL;
+        a.index = array_index_nospec(a.index, HVM_NR_PARAMS);
 
         rc = rcu_lock_target_domain_by_id(a.domid, &d);
         if ( rc != 0 )
@@ -5385,6 +5392,8 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
         if (a.hvmmem_type != HVMMEM_ram_immutable)
             goto param_fail4;
 
+        a.hvmmem_type = array_index_nospec(a.hvmmem_type, (unsigned long)ARRAY_SIZE(memtype));
+
         for ( pfn = a.first_pfn; pfn < a.first_pfn + a.nr; pfn++ )
         {
             p2m_type_t t;
@@ -5573,7 +5582,10 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
             goto param_fail8;
 
         rc = -ENOENT;
-        if ( tr.vcpuid >= d->max_vcpus || (v = d->vcpu[tr.vcpuid]) == NULL )
+        if (tr.vcpuid >= d->max_vcpus)
+            goto param_fail8;
+        tr.vcpuid = array_index_nospec(tr.vcpuid, d->max_vcpus);
+        if ((v = d->vcpu[tr.vcpuid]) == NULL)
             goto param_fail8;
         
         if ( v->arch.hvm_vcpu.inject_trap != -1 )
@@ -5670,6 +5682,8 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
 
         if (xl.len >= HVMOP_xenlog_msgmax)
             return -EFAULT;
+
+        xl.len = array_index_nospec(xl.len, HVMOP_xenlog_msgmax);
 
         for (i = 0; i < xl.len; i++) {
             c = xl.msg[i];
