@@ -3984,13 +3984,15 @@ typedef unsigned long hvm_hypercall_t(
     unsigned long, unsigned long, unsigned long, unsigned long, unsigned long,
     unsigned long);
 
+#ifndef __UXEN__
 #define HYPERCALL(x)                                        \
     [ __HYPERVISOR_ ## x ] = (hvm_hypercall_t *) do_ ## x
+#endif  /* __UXEN__ */
 
 #if defined(__i386__)
 
-static hvm_hypercall_t *hvm_hypercall32_table[NR_hypercalls] = {
 #ifndef __UXEN__
+static hvm_hypercall_t *hvm_hypercall32_table[NR_hypercalls] = {
     [ __HYPERVISOR_memory_op ] = (hvm_hypercall_t *)hvm_memory_op,
     [ __HYPERVISOR_grant_table_op ] = (hvm_hypercall_t *)hvm_grant_table_op,
     [ __HYPERVISOR_vcpu_op ] = (hvm_hypercall_t *)hvm_vcpu_op,
@@ -4003,14 +4005,8 @@ static hvm_hypercall_t *hvm_hypercall32_table[NR_hypercalls] = {
     HYPERCALL(sysctl),
     HYPERCALL(tmem_op),
     HYPERCALL(v4v_op)
-#else   /* __UXEN__ */
-    [ __HYPERVISOR_memory_op ] = (hvm_hypercall_t *)hvm_memory_op,
-    HYPERCALL(xen_version),
-    [ __HYPERVISOR_hvm_op ] = (hvm_hypercall_t *)do_hvm_hvm_op,
-    [ __HYPERVISOR_sched_op ] = (hvm_hypercall_t *)do_hvm_sched_op,
-    [ __HYPERVISOR_v4v_op ] = (hvm_hypercall_t *)do_v4v_op,
-#endif  /* __UXEN__ */
 };
+#endif  /* __UXEN__ */
 
 #else /* defined(__x86_64__) */
 
@@ -4089,8 +4085,8 @@ DEBUG();
 }
 #endif  /* __UXEN__ */
 
-static hvm_hypercall_t *hvm_hypercall64_table[NR_hypercalls] = {
 #ifndef __UXEN__
+static hvm_hypercall_t *hvm_hypercall64_table[NR_hypercalls] = {
     [ __HYPERVISOR_memory_op ] = (hvm_hypercall_t *)hvm_memory_op,
     [ __HYPERVISOR_grant_table_op ] = (hvm_hypercall_t *)hvm_grant_table_op,
     [ __HYPERVISOR_vcpu_op ] = (hvm_hypercall_t *)hvm_vcpu_op,
@@ -4103,14 +4099,8 @@ static hvm_hypercall_t *hvm_hypercall64_table[NR_hypercalls] = {
     HYPERCALL(sysctl),
     HYPERCALL(tmem_op),
     HYPERCALL(v4v_op)
-#else   /* __UXEN__ */
-    [ __HYPERVISOR_memory_op ] = (hvm_hypercall_t *)hvm_memory_op,
-    HYPERCALL(xen_version),
-    [ __HYPERVISOR_hvm_op ] = (hvm_hypercall_t *)do_hvm_hvm_op,
-    [ __HYPERVISOR_sched_op ] = (hvm_hypercall_t *)do_hvm_sched_op,
-    [ __HYPERVISOR_v4v_op ] = (hvm_hypercall_t *)do_v4v_op,
-#endif  /* __UXEN__ */
 };
+#endif  /* __UXEN__ */
 
 #ifndef __UXEN__
 #define COMPAT_CALL(x)                                        \
@@ -4130,8 +4120,6 @@ static hvm_hypercall_t *hvm_hypercall32_table[NR_hypercalls] = {
     HYPERCALL(tmem_op),
     HYPERCALL(v4v_op)
 };
-#else   /* __UXEN__ */
-#define hvm_hypercall32_table hvm_hypercall64_table
 #endif  /* __UXEN__ */
 
 #endif /* defined(__x86_64__) */
@@ -4164,7 +4152,7 @@ int hvm_do_hypercall(struct cpu_user_regs *regs)
     if ( (eax & 0x80000000) && is_viridian_domain(curr->domain) )
         return viridian_hypercall(regs);
 
-    if ( (eax >= NR_hypercalls) || !hvm_hypercall32_table[eax] )
+    if ( (eax >= NR_hypercalls) )
     {
         regs->eax = -ENOSYS;
         return HVM_HCALL_completed;
@@ -4181,12 +4169,26 @@ int hvm_do_hypercall(struct cpu_user_regs *regs)
                     regs->r10, regs->r8, regs->r9);
 
         curr->arch.hvm_vcpu.hcall_64bit = 1;
-        regs->rax = hvm_hypercall64_table[eax](regs->rdi,
-                                               regs->rsi,
-                                               regs->rdx,
-                                               regs->r10,
-                                               regs->r8,
-                                               regs->r9); 
+
+#define HYPERCALL(n, f)                                                 \
+        case __HYPERVISOR_ ## n: {                                      \
+            hvm_hypercall_t *hh = (hvm_hypercall_t *)f;                 \
+            regs->rax = hh(regs->rdi, regs->rsi, regs->rdx, regs->r10,  \
+                           regs->r8, regs->r9);                         \
+            break;                                                      \
+        }
+        switch (eax) {
+            HYPERCALL(memory_op, hvm_memory_op);
+            HYPERCALL(xen_version, do_xen_version);
+            HYPERCALL(hvm_op, do_hvm_hvm_op);
+            HYPERCALL(sched_op, do_hvm_sched_op);
+            HYPERCALL(v4v_op, do_v4v_op);
+        default:
+            regs->eax = -ENOSYS;
+            return HVM_HCALL_completed;
+        }
+#undef HYPERCALL
+
         curr->arch.hvm_vcpu.hcall_64bit = 0;
     }
     else
@@ -4197,13 +4199,26 @@ int hvm_do_hypercall(struct cpu_user_regs *regs)
                     (uint32_t)regs->edx, (uint32_t)regs->esi,
                     (uint32_t)regs->edi, (uint32_t)regs->ebp);
 
-        regs->eax = hvm_hypercall32_table[eax]((uint32_t)regs->ebx,
-                                               (uint32_t)regs->ecx,
-                                               (uint32_t)regs->edx,
-                                               (uint32_t)regs->esi,
-                                               (uint32_t)regs->edi,
-                                               (uint32_t)regs->ebp);
+#define HYPERCALL(n, f)                                                 \
+        case __HYPERVISOR_ ## n: {                                      \
+            hvm_hypercall_t *hh = (hvm_hypercall_t *)f;                 \
+            regs->eax = hh((uint32_t)regs->ebx, (uint32_t)regs->ecx,    \
+                           (uint32_t)regs->edx, (uint32_t)regs->esi,    \
+                           (uint32_t)regs->edi, (uint32_t)regs->ebp);   \
+            break;                                                      \
+        }
+        switch (eax) {
+            HYPERCALL(memory_op, hvm_memory_op);
+            HYPERCALL(xen_version, do_xen_version);
+            HYPERCALL(hvm_op, do_hvm_hvm_op);
+            HYPERCALL(sched_op, do_hvm_sched_op);
+            HYPERCALL(v4v_op, do_v4v_op);
+        default:
+            regs->eax = -ENOSYS;
+            return HVM_HCALL_completed;
+        }
     }
+#undef HYPERCALL
 
     HVM_DBG_LOG(DBG_LEVEL_HCALL, "hcall%u -> %lx",
                 eax, (unsigned long)regs->eax);
