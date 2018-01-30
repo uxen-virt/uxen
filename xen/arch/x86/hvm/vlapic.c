@@ -20,7 +20,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -1145,12 +1145,15 @@ static int lapic_load_hidden(struct domain *d, hvm_domain_context_t *h)
     
     /* Which vlapic to load? */
     vcpuid = hvm_load_instance(h); 
-    if ( vcpuid >= d->max_vcpus || (v = d->vcpu[vcpuid]) == NULL )
-    {
+    if (vcpuid >= d->max_vcpus) {
+      no_vcpu:
         gdprintk(XENLOG_ERR, "HVM restore: no vcpu vm%u.%u\n", d->domain_id,
                  vcpuid);
         return -EINVAL;
     }
+    vcpuid = array_index_nospec(vcpuid, d->max_vcpus);
+    if ((v = d->vcpu[vcpuid]) == NULL)
+        goto no_vcpu;
     s = vcpu_vlapic(v);
     
     if ( hvm_load_entry_zeroextend(LAPIC, h, &s->hw) != 0 ) 
@@ -1169,12 +1172,15 @@ static int lapic_load_regs(struct domain *d, hvm_domain_context_t *h)
     
     /* Which vlapic to load? */
     vcpuid = hvm_load_instance(h); 
-    if ( vcpuid >= d->max_vcpus || (v = d->vcpu[vcpuid]) == NULL )
-    {
+    if (vcpuid >= d->max_vcpus) {
+      no_vcpu:
         gdprintk(XENLOG_ERR, "HVM restore: no vcpu vm%u.%u\n", d->domain_id,
                  vcpuid);
         return -EINVAL;
     }
+    vcpuid = array_index_nospec(vcpuid, d->max_vcpus);
+    if ((v = d->vcpu[vcpuid]) == NULL)
+        goto no_vcpu;
     s = vcpu_vlapic(v);
     
     if ( hvm_load_entry(LAPIC_REGS, h, s->regs) != 0 ) 
