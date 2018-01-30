@@ -11,6 +11,9 @@
 #include <xen/compiler.h>
 #endif
 #include <asm/config.h>
+#ifndef __ASSEMBLY__
+#include <asm/nospec.h>
+#endif
 
 #define EXPORT_SYMBOL(var)
 #define EXPORT_SYMBOL_GPL(var)
