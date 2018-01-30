@@ -85,9 +85,14 @@
 
 enum handler_return { HNDL_done, HNDL_unhandled, HNDL_exception_raised };
 
+unsigned int __devinitdata opt_spec_ctrl = 0;
+integer_param("spec_ctrl", opt_spec_ctrl);
+
 static DEFINE_PER_CPU(unsigned long, host_msr_tsc_aux);
 static unsigned long __read_mostly host_msr_spec_ctrl;
 static bool_t __read_mostly update_host_vm_ibrs;
+static bool_t __read_mostly enable_host_ibpb;
+static bool_t __read_mostly enable_host_ibpb_noibrs;
 static DEFINE_SPINLOCK(ept_sync_lock);
 
 static void vmx_ctxt_switch_from(struct vcpu *v);
@@ -2160,6 +2165,39 @@ struct hvm_function_table * __init start_vmx(void)
                (host_msr_spec_ctrl & SPEC_CTRL_FEATURE_IBRS_mask) ?
                "en" : "dis");
         update_host_vm_ibrs = !ax_present;
+        /*
+         * opt_spec_ctrl == 0: don't use ibpb
+         *                  1: use ibpb on return from vcpu run thread
+         *                  2: if host is not using ibrs, use ibpb on
+         *                     return from non-root mode, and skip
+         *                     ibpb on return from vcpu run thread,
+         *                     if host is using ibrs, same as 1
+         *                  3: use ibpb on return from vcpu run thread,
+         *                     only if host is using ibrs
+         */
+        if (opt_spec_ctrl & ~3u)
+            printk(XENLOG_ERR
+                   "SPEC CTRL: opt_spec_ctrl unexpected value %x, using %x\n",
+                   opt_spec_ctrl, opt_spec_ctrl & 3);
+        switch (opt_spec_ctrl & 3) {
+        case 1:
+            enable_host_ibpb = 1;
+            break;
+        case 2:
+            if (!(host_msr_spec_ctrl & SPEC_CTRL_FEATURE_IBRS_mask))
+                enable_host_ibpb_noibrs = 1;
+            else
+                enable_host_ibpb = 1;
+            break;
+        case 3:
+            if (host_msr_spec_ctrl & SPEC_CTRL_FEATURE_IBRS_mask)
+                enable_host_ibpb = 1;
+            break;
+        }
+        printk(XENLOG_INFO
+               "SPEC CTRL: host_ibpb %sabled, host_ibpb_noibrs %sable\n",
+               enable_host_ibpb ? "en" : "dis",
+               enable_host_ibpb_noibrs ? "en" : "dis");
     }
 
     return &vmx_function_table;
@@ -3767,7 +3805,8 @@ asmlinkage_abi void vmx_save_regs(void)
             lfence();
             if (current->arch.hvm_vcpu.msr_spec_ctrl)
                 wrmsrl(MSR_IA32_SPEC_CTRL, SPEC_CTRL_FEATURE_DISABLE_IBRS);
-            wrmsrl(MSR_IA32_PRED_CMD, PRED_CMD_IBPB);
+            if (enable_host_ibpb_noibrs)
+                wrmsrl(MSR_IA32_PRED_CMD, PRED_CMD_IBPB);
         }
     } else
         lfence();
@@ -3810,7 +3849,8 @@ asmlinkage_abi void vm_entry_fail(uintptr_t resume)
             lfence();
             if (current->arch.hvm_vcpu.msr_spec_ctrl)
                 wrmsrl(MSR_IA32_SPEC_CTRL, SPEC_CTRL_FEATURE_DISABLE_IBRS);
-            wrmsrl(MSR_IA32_PRED_CMD, PRED_CMD_IBPB);
+            if (enable_host_ibpb_noibrs)
+                wrmsrl(MSR_IA32_PRED_CMD, PRED_CMD_IBPB);
         }
     } else
         lfence();
@@ -3827,7 +3867,7 @@ void
 vmx_do_suspend(struct vcpu *v)
 {
 
-    if (/* cpu_has_spec_ctrl && */ host_msr_spec_ctrl)
+    if (enable_host_ibpb)
         wrmsrl(MSR_IA32_PRED_CMD, PRED_CMD_IBPB);
 }
 

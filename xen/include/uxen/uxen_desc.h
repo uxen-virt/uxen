@@ -2,7 +2,7 @@
  *  uxen_desc.h
  *  uxen
  *
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -226,6 +226,9 @@ struct uxen_init_desc {
     uint64_t opt_v4v_thread_priority;
 #     define UXEN_INIT_opt_v4v_thread_priority		(1ULL << 27)
 #     define UXEN_INIT_opt_v4v_thread_priority_MASK     mask0
+    uint64_t opt_spec_ctrl;
+#     define UXEN_INIT_opt_spec_ctrl			(1ULL << 28)
+#     define UXEN_INIT_opt_spec_ctrl_MASK		mask0
 
 };
 
