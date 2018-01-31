@@ -26,6 +26,7 @@
 #include "attoxen-api/hv_tests.h"
 
 static KSPIN_LOCK map_page_range_lock;
+static MDL *map_page_range_mdl = NULL;
 int map_page_range_max_nr = 64;
 
 KSPIN_LOCK idle_free_lock;
@@ -34,6 +35,7 @@ static uint32_t idle_free_count = 0;
 
 #define INCREASE_RESERVE_BATCH 512
 
+static PMDL idle_free_mfns_mdl = NULL;
 
 static uint32_t pages_reserve[MAXIMUM_PROCESSORS];
 
@@ -315,7 +317,29 @@ mem_init(void)
 
     KeInitializeSpinLock(&map_page_range_lock);
 
+    map_page_range_mdl = ExAllocatePoolWithTag(
+        NonPagedPool, sizeof(MDL) +
+        sizeof(PFN_NUMBER) * map_page_range_max_nr, UXEN_POOL_TAG);
+    if (!map_page_range_mdl) {
+        CRASH_ON(CRASH_ON_POOL_ALLOC_FAILURE);
+        ret = ENOMEM;
+        goto out;
+    }
+
+    memset(map_page_range_mdl, 0, sizeof(*map_page_range_mdl));
+    map_page_range_mdl->Size = sizeof(MDL) +
+        sizeof(PFN_NUMBER) * map_page_range_max_nr;
+
     BUILD_BUG_ON(sizeof(PFN_NUMBER) != sizeof(uintptr_t));
+
+    idle_free_mfns_mdl = ExAllocatePoolWithTag(
+        NonPagedPool, sizeof(MDL) +
+        sizeof(PFN_NUMBER) * INCREASE_RESERVE_BATCH, UXEN_POOL_TAG);
+    if (!idle_free_mfns_mdl) {
+        CRASH_ON(CRASH_ON_POOL_ALLOC_FAILURE);
+        ret = ENOMEM;
+        goto out;
+    }
 
   out:
     return ret;
@@ -339,6 +363,16 @@ mem_late_init(void)
 void
 mem_exit(void)
 {
+
+    if (map_page_range_mdl != NULL) {
+        ExFreePoolWithTag(map_page_range_mdl, UXEN_POOL_TAG);
+        map_page_range_mdl = NULL;
+    }
+
+    if (idle_free_mfns_mdl != NULL) {
+        ExFreePoolWithTag(idle_free_mfns_mdl, UXEN_POOL_TAG);
+        idle_free_mfns_mdl = NULL;
+    }
 }
 
 void *
@@ -772,23 +806,23 @@ kernel_malloc_mfns(uint32_t nr_pages, uxen_pfn_t *mfn_list, uint32_t max_mfn)
 void
 kernel_free_mfn(uxen_pfn_t mfn)
 {
-    PMDL mdl;
+    uint8_t _mdl[sizeof(MDL) + sizeof(PFN_NUMBER)];
+    PMDL mdl = (PMDL)&_mdl;
     PFN_NUMBER *pfn;
-
-    mdl = IoAllocateMdl(NULL, PAGE_SIZE, FALSE, FALSE, NULL);
-    ASSERT(mdl);
 
 #ifdef DEBUG_PAGE_ALLOC
     DASSERT(pinfotable[mfn].allocated);
     pinfotable[mfn].allocated = 0;
 #endif  /* DEBUG_PAGE_ALLOC */
+    memset(mdl, 0, sizeof(MDL));
     mdl->MdlFlags = MDL_PAGES_LOCKED;
+    mdl->Size = sizeof(MDL) + sizeof(PFN_NUMBER);
+    mdl->ByteCount = PAGE_SIZE;
 
     pfn = MmGetMdlPfnArray(mdl);
     pfn[0] = (PFN_NUMBER)mfn;
 
     MmFreePagesFromMdl(mdl);
-    IoFreeMdl(mdl);
 }
 
 void *
@@ -866,12 +900,18 @@ kernel_alloc_va(uint32_t num)
         return NULL;
     }
 
-    mdl = IoAllocateMdl(NULL, num << PAGE_SHIFT, FALSE, FALSE, NULL);
+    mdl = ExAllocatePoolWithTag(
+        NonPagedPool, sizeof(MDL) + sizeof(PFN_NUMBER) * num,
+        UXEN_POOL_TAG);
     if (mdl == NULL) {
         fail_msg("ExAllocatePoolWithTag failed: %d pfns", num);
         CRASH_ON(CRASH_ON_POOL_ALLOC_FAILURE);
         goto out;
     }
+    memset(mdl, 0, sizeof(*mdl));
+
+    mdl->Size = sizeof(MDL) + sizeof(PFN_NUMBER) * num;
+    mdl->ByteCount = num << PAGE_SHIFT;
     mdl->MdlFlags = MDL_PAGES_LOCKED;
 
     pfn = MmGetMdlPfnArray(mdl);
@@ -905,7 +945,7 @@ kernel_alloc_va(uint32_t num)
 
   out:
     if (mdl)
-        IoFreeMdl(mdl);
+        ExFreePoolWithTag(mdl, UXEN_POOL_TAG);
     if (failed && va) {
         MmFreeMappingAddress(va, UXEN_MAPPING_TAG);
         va = NULL;
@@ -1098,17 +1138,20 @@ idle_free_free_list(void)
     struct page_list_entry *p;
     uint32_t *plist;
     int more = 0;
-    int n = 0, m;
+    int n = 0;
     int ret;
     KIRQL old_irql;
-    PMDL idle_free_mfns_mdl;
-    uxen_pfn_t mfn_list[INCREASE_RESERVE_BATCH];
 
     KeAcquireSpinLock(&idle_free_lock, &old_irql);
     if (!idle_free_count) {
         KeReleaseSpinLock(&idle_free_lock, old_irql);
         return 0;
     }
+
+    memset(idle_free_mfns_mdl, 0, sizeof(MDL));
+    idle_free_mfns_mdl->MdlFlags = MDL_PAGES_LOCKED;
+
+    pfn_list = MmGetMdlPfnArray(idle_free_mfns_mdl);
 
     plist = &idle_free_list;
     while (*plist) {
@@ -1118,10 +1161,10 @@ idle_free_free_list(void)
             more = 1;
             continue;
         }
-        mfn_list[n] = (PFN_NUMBER)*plist;
+        pfn_list[n] = (PFN_NUMBER)*plist;
 #ifdef DEBUG_PAGE_ALLOC
-        DASSERT(pinfotable[mfn_list[n]].allocated);
-        pinfotable[mfn_list[n]].allocated = 0;
+        DASSERT(pinfotable[pfn_list[n]].allocated);
+        pinfotable[pfn_list[n]].allocated = 0;
 #endif  /* DEBUG_PAGE_ALLOC */
         n++;
         *plist = p->next;
@@ -1137,16 +1180,9 @@ idle_free_free_list(void)
     idle_free_count -= n;
     KeReleaseSpinLock(&idle_free_lock, old_irql);
 
-    idle_free_mfns_mdl = IoAllocateMdl(NULL, n << PAGE_SHIFT, FALSE, FALSE, NULL);
-    ASSERT(idle_free_mfns_mdl);
-    pfn_list = MmGetMdlPfnArray(idle_free_mfns_mdl);
-
-    for (m=0;m<n;++m)
-        pfn_list[m]=mfn_list[m];
-
+    idle_free_mfns_mdl->Size = sizeof(MDL) + sizeof(PFN_NUMBER) * n;
+    idle_free_mfns_mdl->ByteCount = n << PAGE_SHIFT;
     MmFreePagesFromMdl(idle_free_mfns_mdl);
-
-    IoFreeMdl(idle_free_mfns_mdl);
 
     mm_dprintk("%s: freed %d pages, %d pages left\n", __FUNCTION__, n,
                idle_free_count);
@@ -1440,7 +1476,8 @@ map_page_range(int n, uxen_pfn_t *mfn, int mode, enum user_mapping_type type,
             return NULL;
         }
 
-        mdl = IoAllocateMdl(NULL, n << PAGE_SHIFT, FALSE, FALSE, NULL);
+        mdl = map_page_range_mdl;
+        mdl->ByteCount = n << PAGE_SHIFT;
     }
 
     mdl->MdlFlags = MDL_PAGES_LOCKED;
@@ -1467,9 +1504,6 @@ map_page_range(int n, uxen_pfn_t *mfn, int mode, enum user_mapping_type type,
                 "MmMapLockedPagesSpecifyCache")) {
 	addr = NULL;
     }
-
-    if (!umi)
-        IoFreeMdl(mdl);
 
     if (addr && umi) {
         KIRQL old_irql;
@@ -1558,7 +1592,8 @@ unmap_page_range(const void *addr, int n, uxen_pfn_t *mfn,
         return EINVAL;
     }
 
-    mdl = IoAllocateMdl(NULL, n << PAGE_SHIFT, FALSE, FALSE, NULL);
+    mdl = map_page_range_mdl;
+    mdl->ByteCount = n << PAGE_SHIFT;
     mdl->MdlFlags = MDL_PAGES_LOCKED | MDL_MAPPED_TO_SYSTEM_VA;
 
     pfn = MmGetMdlPfnArray(mdl);
