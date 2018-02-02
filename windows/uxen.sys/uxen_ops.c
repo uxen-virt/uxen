@@ -563,8 +563,10 @@ uxen_op_host_needs_preempt(void)
             return 1;
     case 15063:
     case 16299:
+    case 17083:
         /* Windows10.15063 RS2/CU */
         /* Windows10.16299 RS3/FCU */
+        /* Windows10.17083 RS4 preview */
         // +0x2e69 QuantumEnd       : UChar
         // +0x2e00 DpcData          : [2] _KDPC_DATA
         //        +0x018 DpcQueueDepth    : Int4B
