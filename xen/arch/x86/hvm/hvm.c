@@ -5392,7 +5392,7 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
         if (a.hvmmem_type != HVMMEM_ram_immutable)
             goto param_fail4;
 
-        a.hvmmem_type = array_index_nospec(a.hvmmem_type, ARRAY_SIZE(memtype));
+        a.hvmmem_type = array_index_nospec(a.hvmmem_type, (unsigned long)ARRAY_SIZE(memtype));
 
         for ( pfn = a.first_pfn; pfn < a.first_pfn + a.nr; pfn++ )
         {
