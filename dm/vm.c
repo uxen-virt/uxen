@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -840,7 +840,7 @@ handle_exception_event(void *opaque)
             return;
         }
 
-        if (!info.shutdown && !info.shutting_down)
+        if (!info.shutdown && !info.shutting_down && !vm_save_info.awaiting_suspend)
             vm_set_run_mode(RUNNING_VM);
     }
 }
