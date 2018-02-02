@@ -6,6 +6,7 @@
 #ifdef IN_RING0
     #pragma  hdrstop
     #include "VBoxGuestR0LibSharedFolders.h"
+    #include "dbghlp.h"
 #else
     #include <VBox/VBoxGuest2.h>
     #include <VBox/VMMDev.h>
@@ -13,10 +14,10 @@
     #include <string.h>
     #define STATUS_NOT_IMPLEMENTED VERR_INVALID_PARAMETER
     #define STATUS_INFO_LENGTH_MISMATCH VINF_BUFFER_OVERFLOW
+    #define verify_on_stack(p)
 #endif
 
 #include "hgcm-limits.h"
-#include "dbghlp.h"
 
 typedef struct _Buf {
     char * buf;
