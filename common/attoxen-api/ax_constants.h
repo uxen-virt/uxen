@@ -151,6 +151,35 @@
 //
 
 #define AX_CPUID_CRASH_GUEST      0x35533fa3
+// CRASH_GUEST
+// on the next available L2 entry, inject an NMI into this cpu. Only in non-production builds.
+
+
+#define AX_CPUID_PV_VMACCESS		0x35327f4e
+// PV_VMACCESS
+// Currently only supported for L2
+// CPL 0 is required
+// on entry RBX is zero to disable PV_VMACCESS, or one to enable. 
+// The effect is immediate and applies to all CPUs.  
+// RCX contains NULL or a pointer to PAGE of memory that starts and ends 
+// wih AX_PV_VMACCESS_SIG1, AX_PV_VMACCESS_SIG2 and will be replaced with 
+// the pv_vmread code.
+// RDX contains NULL or a pointer to a similar PAGE of memory, and will
+// be replaced with the pv_vmwrite code
+// On exit RAX contains one if AX is configured to permit PV_VMACCESS
+// RBX contains the context pointer for _this_ cpu or NULL
+// RCX is unchanged or NULL
+// RDX is unchanged or NULL
+//
+// You'd typically call it once to patch and then n or n-1 times
+// to get the CTX pointers for all CPUs
+// the vmread and vmwrite functions fall back if the ctx pointer
+// is NULL.
+//
+#define AX_PV_VMACCESS_SIG_1    0xa5420b0f
+#define AX_PV_VMACCESS_SIG_2    0x6212bf65
+
+
 
 // FIXME: document these
 #define AX_CPUID_INVEPT_BASE			0x359ff327
@@ -166,6 +195,7 @@
 #define AX_FEATURES_AX_SHADOW_EPT  (1ULL << 2)
 #define AX_FEATURES_AX_L2_VMCLEAR  (1ULL << 3)
 #define AX_FEATURES_AX_L2_FLUSHTLB (1ULL << 4)
+#define AX_FEATURES_AX_PV_VMCS     (1ULL << 5)
 
 #define AX_FEATURES_LN_VMCS_X_V1    (1ULL << 0)
 #define AX_FEATURES_LN_VMCB_X_V1    (1ULL << 0)

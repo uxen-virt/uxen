@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, Bromium, Inc.
+ * Copyright 2017-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -67,21 +67,10 @@ int ax_config_fetch (void *buf, size_t buf_len)
 {
   uint64_t rcx = 0, rbx = 0, rax = 0, rdx = 0;
   uint64_t i;
+  uint8_t *ptr;
   size_t len;
 
-  void *ptr;
-
-  if (!hv_tests_ax_running())
-    return -1;
-
-
-  rax = AX_CPUID_CONFIG;
-  rcx = 0;
-
-  ax_config_fetch_cpuid (&rax, &rbx, &rcx, &rdx);
-
-
-  len = rcx & 0xffffffff;
+  len = ax_config_fetch_len();
 
   if (!len)
     return -1;
@@ -89,7 +78,7 @@ int ax_config_fetch (void *buf, size_t buf_len)
   if (len > buf_len)
     return -1;
 
-  for (i = 0; i < ax_config_len; i += 0x10) {
+  for (ptr = buf, i = 0; i < len; i += 0x10) {
 
     rax = AX_CPUID_CONFIG;
     rcx = i;
