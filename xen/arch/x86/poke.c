@@ -291,7 +291,7 @@ poke_x2apic_send_int (uint32_t dest)
 }
 
 void
-poke_setup_cpu (void)
+_poke_setup_cpu (void)
 {
   this_cpu(poke_is_x2apic)=poke_x2apic_enabled();
 
@@ -308,14 +308,15 @@ poke_setup_cpu (void)
 
   mb ();
   this_cpu (poke_ready) = 1;
-  printk("poke: cpu%d lapic id %p\n",
-	 (int) smp_processor_id(),
-	 (void *) (size_t) this_cpu (poke_lapic_id));
+  UI_HOST_CALL(ui_printf, NULL, "poke: cpu%d lapic id %p\n",
+               (int) smp_processor_id(),
+               (void *) (size_t) this_cpu (poke_lapic_id));
 }
 
 void
 poke_cpu (unsigned cpu)
 {
+  poke_setup_cpu();
 
   if (!per_cpu (poke_ready, cpu))
     return;
@@ -325,39 +326,3 @@ poke_cpu (unsigned cpu)
   else 
     poke_xapic_send_int (per_cpu (poke_lapic_id, cpu));
 }
-
-static int
-cpu_poke_callback(struct notifier_block *nfb, unsigned long action, void *hcpu)
-{
-    int rc = 0;
-
-    switch (action) {
-    case CPU_STARTING:
-	poke_setup_cpu();
-	break;
-    default:
-	break;
-    }
-
-    return !rc ? NOTIFY_DONE : notifier_from_errno(rc);
-}
-
-static struct notifier_block cpu_poke_nfb = {
-    .notifier_call = cpu_poke_callback
-};
-
-static int __init
-poke_presmp_init(void)
-{
-    register_cpu_notifier(&cpu_poke_nfb);
-    return 0;
-}
-presmp_initcall(poke_presmp_init);
-
-static int __init
-poke_init(void)
-{
-    poke_setup_cpu();
-    return 0;
-}
-__initcall(poke_init);
