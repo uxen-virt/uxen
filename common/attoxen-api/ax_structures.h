@@ -7,6 +7,7 @@
 #define __AX_STRUCTURES_H__
 
 typedef struct ax_vmcs_extensions_v1 {
+  uint64_t msr_spec_ctrl;
   uint64_t pv_ept_gpa_level_and_flags;
   uint64_t pv_ept_base;
   uint64_t pv_ept_pte;
