@@ -65,6 +65,10 @@ void ax_vmcs_x_wrmsrl(struct vcpu *v, uint32_t msr, uint64_t value)
     case MSR_SYSCALL_MASK:
         x->msr_syscall_mask = value;
         return;
+
+    case MSR_IA32_SPEC_CTRL:
+        x->msr_spec_ctrl = value;
+        return;
     }
 }
 
@@ -92,6 +96,10 @@ void ax_vmcs_x_rdmsrl(struct vcpu *v, uint32_t msr, uint64_t *value)
 
     case MSR_SYSCALL_MASK:
         *value = x->msr_syscall_mask;
+        return;
+
+    case MSR_IA32_SPEC_CTRL:
+        *value = x->msr_spec_ctrl;
         return;
     }
 }
