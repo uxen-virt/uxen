@@ -365,6 +365,9 @@ static void vmx_restore_host_msrs(struct vcpu *v)
               guest_msr_state->msrs[VMX_INDEX_MSR_SHADOW_GS_BASE],
               v);
 
+    if (ax_present)
+        pv_rdmsrl(MSR_IA32_SPEC_CTRL, v->arch.hvm_vcpu.msr_spec_ctrl, v);
+
     while ( host_msr_state->flags )
     {
         i = find_first_set_bit(host_msr_state->flags);
@@ -404,6 +407,9 @@ static void vmx_restore_guest_msrs(struct vcpu *v)
             ax_vmcs_x_wrmsrl(v, msr_index[i], guest_msr_state->msrs[i]);
         clear_bit(i, &guest_flags);
     }
+
+    if (ax_present)
+        ax_vmcs_x_wrmsrl(v, MSR_IA32_SPEC_CTRL, v->arch.hvm_vcpu.msr_spec_ctrl);
 
 #ifndef __UXEN__
     if ( (v->arch.hvm_vcpu.guest_efer ^ read_efer()) & EFER_SCE )
