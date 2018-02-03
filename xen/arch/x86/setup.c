@@ -1515,10 +1515,6 @@ __uxen_start_xen)(
     smp_cpus_done();
 #endif  /* __UXEN__ */
 
-#ifdef UXEN_HOST_WINDOWS
-    mapcache_init();
-#endif  /* UXEN_HOST_WINDOWS */
-
     do_initcalls();
 
 #ifndef __UXEN__

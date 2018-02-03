@@ -2,7 +2,7 @@
  *  mapcache.c
  *  uxen
  *
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -15,6 +15,7 @@
 #include <xen/sched.h>
 #include <xen/domain_page.h>
 #include <xen/softirq.h>
+#include <xen/cpu.h>
 #include <asm/current.h>
 #include <asm/flushtlb.h>
 #include <asm/mm.h>
@@ -39,20 +40,52 @@ typedef struct hash_entry {
 static DEFINE_PER_CPU(hash_entry_t[HASH_ENTRIES], mapcache_hash);
 #define SLOT_UNUSED ((uint16_t)-1)
 
-void __init
-mapcache_init(void)
+static void
+mapcache_setup_cpu(unsigned int cpu)
 {
-    int cpu, i;
+    int i;
 
-    for_each_present_cpu(cpu) {
-        printk("%s: cpu %d va %p-%p\n", __FUNCTION__, cpu,
-               (void *)_uxen_info.ui_mapcache_va[cpu],
-               (void *)(_uxen_info.ui_mapcache_va[cpu] +
-                        (_uxen_info.ui_mapcache_size << PAGE_SHIFT)));
-        for (i = 0; i < HASH_ENTRIES; i++)
-            per_cpu(mapcache_hash, cpu)[i].slot = SLOT_UNUSED;
-    }
+    printk("%s: cpu %d va %p-%p\n", __FUNCTION__, cpu,
+           (void *)_uxen_info.ui_mapcache_va[cpu],
+           (void *)(_uxen_info.ui_mapcache_va[cpu] +
+                    (_uxen_info.ui_mapcache_size << PAGE_SHIFT)));
+    for (i = 0; i < HASH_ENTRIES; i++)
+        per_cpu(mapcache_hash, cpu)[i].slot = SLOT_UNUSED;
 }
+
+static int
+mapcache_init_callback(struct notifier_block *nfb, unsigned long action,
+                       void *hcpu)
+{
+    unsigned int cpu = (unsigned long)hcpu;
+    int rc = 0;
+
+    switch (action) {
+    case CPU_UP_PREPARE:
+        mapcache_setup_cpu(cpu);
+        break;
+    default:
+        break;
+    }
+
+    return !rc ? NOTIFY_DONE : notifier_from_errno(rc);
+}
+
+static struct notifier_block mapcache_init_nfb = {
+    .notifier_call = mapcache_init_callback
+};
+
+static int __init
+mapcache_presmp_init(void)
+{
+    register_cpu_notifier(&mapcache_init_nfb);
+
+    ASSERT(smp_processor_id() == 0);
+    mapcache_setup_cpu(0);
+
+    return 0;
+}
+presmp_initcall(mapcache_presmp_init);
 
 void *
 mapcache_map_page(xen_pfn_t mfn)
