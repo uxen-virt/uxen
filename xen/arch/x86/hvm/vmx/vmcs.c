@@ -779,6 +779,9 @@ vmx_cpu_up(enum hvmon hvmon_mode)
     if ( cpu_has_vmx_vpid )
         vpid_sync_all();
 
+    if (ax_pv_vmcs_enabled)
+        ax_pv_vmcs_setup();
+
     return 0;
 }
 
@@ -2971,6 +2974,15 @@ void
 setup_pv_vmcs_access(void)
 {
     int ret;
+
+    if (ax_has_pv_vmcs && ax_pv_vmcs_setup()) {
+        __vmread_fn = ax_pv_vmcs_read;
+        __vmwrite_fn = ax_pv_vmcs_write;
+        __vmread_safe_fn = ax_pv_vmcs_read_safe;
+
+        vmx_vmcs_late_load = 0;
+	return;
+    }
 
     if (!boot_cpu_has(X86_FEATURE_HYPERVISOR))
         return;

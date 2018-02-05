@@ -25,6 +25,8 @@ extern int ax_present;
 extern int ax_present_intel;
 extern int ax_present_amd;
 extern int ax_pv_ept;
+extern int ax_has_pv_vmcs;
+extern int ax_pv_vmcs_enabled;
 extern int ax_l1_invlpg_intercept;
 extern void ax_mark_ept_dirty(struct domain *d);
 extern void ax_pv_ept_flush(struct p2m_domain *p2m);
@@ -32,6 +34,10 @@ extern int ax_setup(void);
 extern int ax_svm_vmrun(struct vcpu *v, struct vmcb_struct *vmcb,
                         struct cpu_user_regs *regs);
 extern void ax_svm_vmsave_root(struct vcpu *v);
+extern unsigned long ax_pv_vmcs_read(unsigned long field);
+extern unsigned long ax_pv_vmcs_read_safe(unsigned long field, int *error);
+extern void ax_pv_vmcs_write(unsigned long field, unsigned long value);
+extern int ax_pv_vmcs_setup(void);
 
 static inline
 void ax_vmcs_x_flags_set(struct vcpu *v, uint64_t val)
@@ -119,9 +125,10 @@ static inline void ax_invept_all_cpus(void)
 #endif
 }
 
-int ax_remote_vmclear(uint64_t pa);
-void ax_remote_tblflush(void);
-void ax_pv_ept_write(struct p2m_domain *p2m, int level, uint64_t gfn,
+
+extern int ax_remote_vmclear(uint64_t pa);
+extern void ax_remote_tblflush(void);
+extern void ax_pv_ept_write(struct p2m_domain *p2m, int level, uint64_t gfn,
                      uint64_t new_entry, int invept);
 
 #endif /* __ASM_X86_HVM_AX_H__ */

@@ -42,3 +42,36 @@ TEST_OFFSET(fs);
 TEST_OFFSET(gs);
 
 #endif
+
+
+static inline int
+vmread(uint64_t field, uint64_t *value)
+{
+    int ret;
+    asm volatile(
+        "   xor %0,%0       \n"
+        "   vmread %2,%1    \n"
+        "   jnbe 1f         \n"
+        "   inc %0          \n"
+        "1:                 \n"
+        : "=&r" (ret), "=rm" (*value)  : "r" (field):"cc");
+
+    return ret;
+}
+
+static inline int
+vmwrite(uint64_t field, uint64_t value)
+{
+    int ret;
+    asm volatile(
+        "   xor %0,%0       \n"
+        "   vmwrite %1,%2   \n"
+        "   jnbe 1f         \n"
+        "   inc %0          \n"
+        "1:                 \n"
+        : "=&r" (ret) : "rm" (value), "r" (field):"cc");
+
+    return ret;
+}
+
+

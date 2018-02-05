@@ -18,6 +18,13 @@ int ax_present_intel = 0;
 int ax_present_amd = 0;
 int ax_pv_ept = 0;
 int ax_l1_invlpg_intercept = 0;
+int ax_has_pv_vmcs = 0;
+int ax_pv_vmcs_enabled = 0;
+
+extern int ax_pv_vmread(void *, uint64_t field, uint64_t *value);
+extern int ax_pv_vmwrite(void *, uint64_t field, uint64_t value);
+
+static DEFINE_PER_CPU_READ_MOSTLY (void *, ax_pv_vmcs_ctx);
 
 void ax_pv_ept_flush(struct p2m_domain *p2m)
 {
@@ -148,45 +155,131 @@ int ax_svm_vmrun(struct vcpu *v, struct vmcb_struct *vmcb, struct cpu_user_regs 
     return 0;
 }
 
+unsigned long ax_pv_vmcs_read(unsigned long field)
+{
+    uint64_t value;
+
+    if (ax_pv_vmcs_enabled)
+        ax_pv_vmread(this_cpu(ax_pv_vmcs_ctx), field, &value);
+    else
+        vmread(field, &value);
+
+    return value;
+}
+
+
+unsigned long ax_pv_vmcs_read_safe(unsigned long field, int *error)
+{
+    uint64_t value;
+
+    if (ax_pv_vmcs_enabled)
+        *error = ax_pv_vmread(this_cpu(ax_pv_vmcs_ctx), field, &value);
+    else
+        *error = vmread(field, &value);
+
+    return value;
+}
+
+void ax_pv_vmcs_write(unsigned long field, unsigned long value)
+{
+    if (ax_pv_vmcs_enabled)
+        ax_pv_vmwrite(this_cpu(ax_pv_vmcs_ctx), field, value);
+    else
+        vmwrite(field, value);
+}
+
 int ax_setup(void)
 {
-#ifndef __i386__
+#ifdef __x86_64__
     uint64_t rax, rbx, rcx, rdx;
     int cpu_is_intel = (boot_cpu_data.x86_vendor == X86_VENDOR_INTEL);
 
-    if (hv_tests_hyperv_running() && hv_tests_ax_running()) {
-        printk("Hv and AX detected\n");
-        ax_present = 1;
+    if (!hv_tests_hyperv_running())
+        return 0;
 
-        if (hvmon_default == hvmon_on) {
-            printk("AX present, but hvmonoff=1, disabling hvmonoff\n");
-            hvmon_default = hvmon_always;
-        }
+    if (!hv_tests_ax_running())
+        return 0;
 
-        rax = AX_CPUID_AX_FEATURES;
+
+    printk("Hv and AX detected\n");
+    ax_present = 1;
+
+    if (hvmon_default == hvmon_on) {
+        printk("AX present, but hvmonoff=1, disabling hvmonoff\n");
+        hvmon_default = hvmon_always;
+    }
+
+    rax = AX_CPUID_AX_FEATURES;
+    rbx = 0;
+    rcx = 0;
+    rdx = 0;
+
+    hv_tests_cpuid(&rax, &rbx, &rcx, &rdx);
+
+    ax_pv_ept = !! (AX_FEATURES_AX_SHADOW_EPT & rdx);
+    printk("Using PV-HAP %d\n", ax_pv_ept);
+
+
+    if (cpu_is_intel) {
+        ax_present_intel = 1;
+        ax_has_pv_vmcs = !! (AX_FEATURES_AX_PV_VMCS);
+        printk("AX has PV VMCS %d\n", ax_has_pv_vmcs);
+    } else {
+        ax_present_amd = 1;
+        rax = AX_CPUID_VMCB_CHECK_MY;
         rbx = 0;
         rcx = 0;
         rdx = 0;
-
         hv_tests_cpuid(&rax, &rbx, &rcx, &rdx);
-
-        ax_pv_ept = !!(AX_FEATURES_AX_SHADOW_EPT & rdx);
-        printk ("Using PV-%s %d\n", cpu_is_intel ? "EPT" : "NPT (async active, smart invept)", ax_pv_ept);
-        if (cpu_is_intel)
-            ax_present_intel = 1;
-        else {
-            ax_present_amd = 1;
-            rax = AX_CPUID_VMCB_CHECK_MY;
-            rbx = 0;
-            rcx = 0;
-            rdx = 0;
-            hv_tests_cpuid(&rax, &rbx, &rcx, &rdx);
-            ax_l1_invlpg_intercept = !!(rdx & AX_CPUID_VMCB_CHECK_INTERCEPT_INVLPG);
-            printk("L1 intercepts INVLPG: %s\n", ax_l1_invlpg_intercept ? "YES" : "NO");
-            vmexec_fpu_ctxt_switch = 1;
-            uxen_info->host_os_is_xmm_clean = 1;
-        }
+        ax_l1_invlpg_intercept = !!(rdx & AX_CPUID_VMCB_CHECK_INTERCEPT_INVLPG);
+        printk("L1 intercepts INVLPG: %s\n", ax_l1_invlpg_intercept ? "YES" : "NO");
+        vmexec_fpu_ctxt_switch = 1;
+        uxen_info->host_os_is_xmm_clean = 1;
     }
 #endif
+
     return 0;
 }
+
+int ax_pv_vmcs_setup(void)
+{
+    uint64_t rax, rbx, rcx, rdx;
+    static int patched = 0;
+
+    if (!ax_has_pv_vmcs) return 0;
+
+    rax = AX_CPUID_PV_VMACCESS;
+    rbx = 1;
+
+    if (!patched) {
+        rcx = (size_t) ax_pv_vmread;
+        rdx = (size_t) ax_pv_vmwrite;
+    } else {
+        rcx = 0;
+        rdx = 0;
+    }
+
+
+#ifdef __x86_64__
+    asm volatile("cpuid":"+a" (rax), "+b" (rbx), "+c" (rcx), "+d" (rdx)::"cc");
+#endif
+
+    printk("AX PV Call returns %d %lx %lx %lx %lx\n", (int) smp_processor_id(), 
+		(unsigned long) rax, (unsigned long) rbx, 
+		(unsigned long) rcx, (unsigned long) rdx);
+
+    if (rax != 1)  {
+        ax_pv_vmcs_enabled = 0;
+        return 0;
+    }
+
+    patched = 1;
+
+    this_cpu(ax_pv_vmcs_ctx) = (void *) (size_t) rbx;
+
+    ax_pv_vmcs_enabled = 1;
+
+    return 1;
+}
+
+
