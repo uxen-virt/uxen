@@ -2,7 +2,7 @@
  *  uxen_ops.c
  *  uxen
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -1668,7 +1668,6 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
         goto out;
     }
 
-    InterlockedIncrement(&vmi->vmi_exists);
     InterlockedIncrement(&vmi->vmi_alive);
 
     /* This reference will be dropped on vm destroy */
@@ -1925,8 +1924,6 @@ uxen_destroy_vm(struct vm_info *vmi)
     int ret;
 
     printk("%s: vm%u\n", __FUNCTION__, vmi->vmi_shared.vmi_domid);
-    if (InterlockedCompareExchange(&vmi->vmi_exists, 0, 1) == 0)
-        return 0;
 
     aff = uxen_exec_dom0_start();
     uxen_call(ret = (int), -EINVAL, NO_RESERVE,
@@ -1934,11 +1931,9 @@ uxen_destroy_vm(struct vm_info *vmi)
     uxen_exec_dom0_end(aff);
     if (ret == -ENOENT)
         ret = 0;
-    if (ret) {
+    if (ret)
         printk("%s: vm%u not destroyed: %d\n", __FUNCTION__,
                vmi->vmi_shared.vmi_domid, ret);
-        InterlockedIncrement(&vmi->vmi_exists);
-    }
 
     return ret;
 }

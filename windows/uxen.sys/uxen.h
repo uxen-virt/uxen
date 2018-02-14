@@ -100,7 +100,6 @@ struct vm_vcpu_info {
 struct vm_info {
     struct vm_info_shared vmi_shared;
     uint32_t vmi_alive;         /* VM ise setup and operational */
-    uint32_t vmi_exists;        /* VM exists at core level */
     uint32_t vmi_active_references;
     uint32_t vmi_nrvcpus;
     uint32_t vmi_running_vcpus;
