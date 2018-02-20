@@ -18,6 +18,7 @@
 #include "os.h"
 #include "queue.h"
 #include "uxen.h"
+#include "rbtree.h"
 
 #include <uxenctllib.h>
 #include <xenctrl.h>
@@ -33,6 +34,7 @@ static mdm_mfn_entry_t *memcache_mfn_to_entry;
 
 uint64_t use_simple_mapping = 1;
 uint64_t simple_map_size = XC_PAGE_SIZE;
+static void simple_init(void);
 
 static critical_section cs;
 
@@ -41,6 +43,9 @@ mapcache_init(uint64_t mem_mb)
 {
 
     critical_section_init(&cs);
+
+    if (use_simple_mapping)
+	simple_init();
 
     mapcache_end_low_pfn = mem_mb << (20 - UXEN_PAGE_SHIFT);
     if (mapcache_end_low_pfn <= PCI_HOLE_START >> UXEN_PAGE_SHIFT) {
@@ -67,6 +72,9 @@ mapcache_init_restore(uint32_t end_low_pfn,
 
     critical_section_init(&cs);
 
+    if (use_simple_mapping)
+	simple_init();
+
     mapcache_end_low_pfn = end_low_pfn;
     mapcache_start_high_pfn = start_high_pfn;
     mapcache_end_high_pfn = end_high_pfn;
@@ -90,40 +98,66 @@ mapcache_get_params(uint32_t *end_low_pfn,
         *end_high_pfn = mapcache_end_high_pfn;
 }
 
+/****************************************** SIMPLE MAPPER **********************************************/
 
-int debug_memcache_global_count = 0;
-int debug_memcache_concurrent_count = 0;
-int debug_memcache_max_count = 0;
-int debug_memcache_map_count = 0;
-int debug_memcache_cache_count = 0;
+typedef uint64_t Simple_mapping_key;
 
-typedef struct _simple_mapping {
-    struct _simple_mapping *next;
-
-    uint8_t *base;
-    uint64_t start_pa;
+typedef struct simple_mapping {
+    /* This needs to be first otherwise the tests for NULL/Sentinel node don't work */
+    struct rb_node simple_mapping_rbnode; 
+    Simple_mapping_key start_pa;
     uint64_t end_pa;
-} simple_mapping;
+    void *base;
+} Simple_mapping;
 
-static simple_mapping *simple_mappings;
-
-static simple_mapping *
-simple_make_mapping(uint64_t start, uint64_t end)
+static int
+simple_mapping_compare_key(void *ctx, const void *_node, const void *_key)
 {
-    simple_mapping *ret;
+    const Simple_mapping * const node = _node;
+    const Simple_mapping_key * const key = _key;
+
+    if (node->start_pa  < *key) 
+	return -1;
+    if (node->start_pa  > *key) 
+	return 1;
+
+    return 0;
+}
+
+static int
+simple_mapping_compare_nodes(void *ctx, const void *_parent, const void *_node)
+{
+    const Simple_mapping * const node = _node;
+
+    return simple_mapping_compare_key(ctx, _parent, &node->start_pa);
+}
+
+static rb_tree_t simple_mapping_rbtree;
+
+static const rb_tree_ops_t simple_mapping_rbtree_ops = {
+    .rbto_compare_nodes = simple_mapping_compare_nodes,
+    .rbto_compare_key = simple_mapping_compare_key,
+    .rbto_node_offset = offsetof(struct simple_mapping, simple_mapping_rbnode),
+    .rbto_context = NULL
+};
+
+static Simple_mapping *simple_make_mapping (uint64_t start, uint64_t end)
+{
+    Simple_mapping *ret;
     xen_pfn_t pfn = start >> XC_PAGE_SHIFT;
     uint8_t *va;
 
-    va = xc_map_foreign_range(xc_handle, vm_id, end - start,
-                              PROT_READ | PROT_WRITE, pfn);
+    va = xc_map_foreign_range (xc_handle, vm_id, end - start, 
+                               PROT_READ | PROT_WRITE, pfn);
+
     if (!va)
         return NULL;
 
     ret = malloc(sizeof(*ret));
-    if (!ret)
-        return NULL;
 
-    ret->next = NULL;
+    if (!ret) //FIXME unmap on out of memory.
+	return NULL;
+
     ret->base = va;
     ret->start_pa = start;
     ret->end_pa = end;
@@ -131,55 +165,51 @@ simple_make_mapping(uint64_t start, uint64_t end)
     return ret;
 }
 
-static simple_mapping *
-simple_find_mapping(uint64_t start, uint64_t end)
+static Simple_mapping *simple_find_mapping (uint64_t start, uint64_t end)
 {
-    simple_mapping **retp, *ret;
+    Simple_mapping *ret;
+    Simple_mapping_key key = start;
 
     critical_section_enter(&cs);
 
-    for (retp = &simple_mappings; (ret = *retp); retp = &((*retp)->next)) {
-        if ((ret->start_pa <= start) && (end <= ret->end_pa)) {
-            *retp = ret->next;
-            ret->next = simple_mappings;
-            simple_mappings = ret;
-            break;
-        }
-    }
+    ret=(Simple_mapping *) rb_tree_find_node_leq(&simple_mapping_rbtree, &key);
+
+    /* The above claims that ret->start_pa <= start, so check the end */
+    if (ret && (ret->end_pa < end))
+	ret = NULL;
 
     critical_section_leave(&cs);
 
     return ret;
 }
 
-static simple_mapping *
-simple_find_or_make_mapping(uint64_t _start, uint64_t _end)
+
+static Simple_mapping *simple_find_or_make_mapping (uint64_t _start, uint64_t _end)
 {
-    simple_mapping *ret;
+    Simple_mapping *ret;
     uint64_t start, end, size;
 
     ret = simple_find_mapping(_start, _end);
+
     if (ret)
         return ret;
 
-    for (size = simple_map_size; size >= XC_PAGE_SIZE; size >>= 1) {
+    for (size = simple_map_size; size >= XC_PAGE_SIZE; size >>= 1)
+    {
         start = _start & ~(size - 1);
         end = _end + (size - 1);
         end &= ~(size - 1);
 
         ret = simple_make_mapping(start, end);
-        if (ret)
-            break;
+
+        if (ret) break;
     }
 
     if (!ret)
         return ret;
 
     critical_section_enter(&cs);
-
-    ret->next = simple_mappings;
-    simple_mappings = ret;
-
+    rb_tree_insert_node(&simple_mapping_rbtree, ret);
     critical_section_leave(&cs);
 
     return ret;
@@ -188,15 +218,34 @@ simple_find_or_make_mapping(uint64_t _start, uint64_t _end)
 static uint8_t *
 simple_mapcache_map(uint64_t pa, uint64_t *len, uint8_t lock)
 {
-    simple_mapping *m;
+    Simple_mapping *m;
+
     uint64_t end_pa = pa + *len;
 
     m = simple_find_or_make_mapping(pa, end_pa);
+
     if (m)
         return m->base + (pa - m->start_pa);
 
     return NULL;
 }
+
+static void simple_init(void)
+{
+    critical_section_enter (&cs);
+    rb_tree_init(&simple_mapping_rbtree, &simple_mapping_rbtree_ops);
+    critical_section_leave(&cs);
+}
+
+/*****************************************************************************************************/
+
+
+int debug_memcache_global_count = 0;
+int debug_memcache_concurrent_count = 0;
+int debug_memcache_max_count = 0;
+int debug_memcache_map_count = 0;
+int debug_memcache_cache_count = 0;
+
 
 static uint32_t
 memcache_entry_update(uint32_t pfn, int get, uint32_t lock)
