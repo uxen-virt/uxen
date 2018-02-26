@@ -93,9 +93,7 @@ static int hap_enable_vram_tracking(struct domain *d)
     /* set l1e entries of P2M table to be read-only. */
     p2m_change_type_range(d, dirty_vram->begin_pfn, dirty_vram->end_pfn, 
                           p2m_ram_rw, p2m_ram_logdirty);
-    pt_sync_domain(d);
 
-    flush_tlb_mask(d->domain_dirty_cpumask);
     return 0;
 }
 
@@ -114,7 +112,6 @@ static int hap_disable_vram_tracking(struct domain *d)
     p2m_change_type_range(d, dirty_vram->begin_pfn, dirty_vram->end_pfn, 
                           p2m_ram_logdirty, p2m_ram_rw);
 
-    flush_tlb_mask(d->domain_dirty_cpumask);
     return 0;
 }
 
@@ -128,9 +125,6 @@ static void hap_clean_vram_tracking(struct domain *d)
     /* set l1e entries of P2M table to be read-only. */
     p2m_change_type_range(d, dirty_vram->begin_pfn, dirty_vram->end_pfn, 
                           p2m_ram_rw, p2m_ram_logdirty);
-    pt_sync_domain(d);
-
-    flush_tlb_mask(d->domain_dirty_cpumask);
 }
 
 static int hap_enable_vram_tracking_l2(struct domain *d)
@@ -148,9 +142,7 @@ static int hap_enable_vram_tracking_l2(struct domain *d)
     /* set l2e entries of P2M table to be read-only. */
     p2m_change_type_range_l2(d, dirty_vram->begin_pfn, dirty_vram->end_pfn, 
                              p2m_ram_rw, p2m_ram_logdirty);
-    pt_sync_domain(d);
 
-    flush_tlb_mask(d->domain_dirty_cpumask);
     return 0;
 }
 
@@ -169,7 +161,6 @@ static int hap_disable_vram_tracking_l2(struct domain *d)
     p2m_change_type_range_l2(d, dirty_vram->begin_pfn, dirty_vram->end_pfn, 
                              p2m_ram_logdirty, p2m_ram_rw);
 
-    flush_tlb_mask(d->domain_dirty_cpumask);
     return 0;
 }
 
@@ -183,9 +174,6 @@ static void hap_clean_vram_tracking_l2(struct domain *d)
     /* set l1e entries of P2M table to be read-only. */
     p2m_change_type_range_l2(d, dirty_vram->begin_pfn, dirty_vram->end_pfn, 
                              p2m_ram_rw, p2m_ram_logdirty);
-    pt_sync_domain(d);
-
-    flush_tlb_mask(d->domain_dirty_cpumask);
 }
 
 static void hap_vram_tracking_init(struct domain *d)
@@ -291,9 +279,7 @@ static int hap_enable_log_dirty(struct domain *d)
 
     /* set l1e entries of P2M table to be read-only. */
     p2m_change_entry_type_global(d, p2m_ram_rw, p2m_ram_logdirty);
-    pt_sync_domain(d);
 
-    flush_tlb_mask(d->domain_dirty_cpumask);
     return 0;
 }
 
@@ -305,6 +291,7 @@ static int hap_disable_log_dirty(struct domain *d)
 
     /* set l1e entries of P2M table with normal mode */
     p2m_change_entry_type_global(d, p2m_ram_logdirty, p2m_ram_rw);
+
     return 0;
 }
 
@@ -312,9 +299,6 @@ static void hap_clean_dirty_bitmap(struct domain *d)
 {
     /* set l1e entries of P2M table to be read-only. */
     p2m_change_entry_type_global(d, p2m_ram_rw, p2m_ram_logdirty);
-    pt_sync_domain(d);
-
-    flush_tlb_mask(d->domain_dirty_cpumask);
 }
 
 void hap_logdirty_init(struct domain *d)
@@ -1076,6 +1060,7 @@ hap_write_p2m_entry(struct vcpu *v, unsigned long gfn, l1_pgentry_t *p,
 
     safe_write_pte(p, new);
     if ( (old_flags & _PAGE_PRESENT)
+         && !p2m_is_logdirty(p2m_flags_to_type(l1e_get_flags(new)))
          && (level == 1 || (level == 2 && (old_flags & _PAGE_PSE))) )
              flush_tlb_mask(d->domain_dirty_cpumask);
 

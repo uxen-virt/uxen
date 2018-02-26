@@ -2092,7 +2092,7 @@ void
 svm_pt_sync_domain(struct domain *d)
 {
 
-    /* nothing */
+    flush_tlb_mask(d->domain_dirty_cpumask);
 }
 
 bool_t

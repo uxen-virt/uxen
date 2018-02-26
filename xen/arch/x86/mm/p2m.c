@@ -195,6 +195,9 @@ void p2m_change_entry_type_global(struct domain *d,
     p2m_lock(p2m);
     p2m->change_entry_type_global(p2m, ot, nt);
     p2m_unlock(p2m);
+
+    if (p2m_is_logdirty(nt))
+        pt_sync_domain(d);
 }
 
 mfn_t get_gfn_type_access(struct p2m_domain *p2m, unsigned long gfn,
@@ -754,6 +757,9 @@ void p2m_change_type_range(struct domain *d,
         p2m_flush_nestedp2m(d);
 #endif  /* __UXEN__ */
     p2m_unlock(p2m);
+
+    if (p2m_is_logdirty(nt))
+        pt_sync_domain(d);
 }
 
 /* Modify the p2m type of a range of gfns from ot to nt.
