@@ -258,6 +258,8 @@ UNLIKELY_END(svm_trace)
         mov  VCPU_svm_root_vmcb_pa(r(bx)),r(ax)
         VMLOAD
 
+        call_with_abi(svm_save_regs, 0)
+
         STGI
 
         xor  r(ax),r(ax)

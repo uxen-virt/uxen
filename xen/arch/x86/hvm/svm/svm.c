@@ -85,6 +85,7 @@
 #include <asm/apic.h>
 #include <asm/debugger.h>
 #include <asm/xstate.h>
+#include <asm/poke.h>
 
 u32 svm_feature_flags;
 
@@ -103,6 +104,10 @@ static DEFINE_PER_CPU_READ_MOSTLY(void *, hsa);
 static DEFINE_PER_CPU_READ_MOSTLY(void *, root_vmcb);
 
 static DEFINE_PER_CPU(unsigned long, host_msr_tsc_aux);
+
+static DEFINE_SPINLOCK(pt_sync_lock);
+
+static inline void pt_maybe_sync_cpu(struct domain *d);
 
 static void svm_do_resume(struct vcpu *v);
 
@@ -968,6 +973,8 @@ void svm_ctxt_switch_to(struct vcpu *v)
     cpumask_set_cpu(cpu, v->domain->domain_dirty_cpumask);
     cpumask_set_cpu(cpu, v->vcpu_dirty_cpumask);
 
+    pt_maybe_sync_cpu(v->domain);
+
 #ifndef __UXEN_NOT_YET__
     svm_restore_dr(v);
 #endif  /* __UXEN_NOT_YET__ */
@@ -1047,12 +1054,24 @@ static void svm_do_resume(struct vcpu *v)
 int
 svm_domain_initialise(struct domain *d)
 {
+
+    if ( !zalloc_cpumask_var(&d->arch.hvm_domain.svm.pt_synced) )
+        return -ENOMEM;
+
+    if ( !zalloc_cpumask_var(&d->arch.hvm_domain.svm.pt_in_use) ) {
+        free_cpumask_var(d->arch.hvm_domain.svm.pt_synced);
+        return -ENOMEM;
+    }
+
     return 0;
 }
 
 void
 svm_domain_destroy(struct domain *d)
 {
+
+    free_cpumask_var(d->arch.hvm_domain.svm.pt_in_use);
+    free_cpumask_var(d->arch.hvm_domain.svm.pt_synced);
 }
 
 void
@@ -2088,11 +2107,151 @@ svm_invlpg_intercept(unsigned long vaddr)
     svm_asid_g_invlpg(curr, vaddr);
 }
 
+/* Caller must hold pt_sync_lock */
+static void
+pt_maybe_sync_cpu_no_lock(struct domain *d, unsigned int cpu)
+{
+
+    if (!cpumask_test_cpu(cpu, d->arch.hvm_domain.svm.pt_synced)) {
+        struct p2m_domain *p2m = p2m_get_hostp2m(d);
+
+        cpumask_set_cpu(cpu, d->arch.hvm_domain.svm.pt_synced);
+
+        flush_tlb_local();
+        p2m->virgin = 1;
+    }
+}
+
+static inline void
+pt_maybe_sync_cpu(struct domain *d)
+{
+    unsigned long flags, flags2;
+
+    if (!paging_mode_hap(d))
+        return;
+
+    cpu_irq_save(flags);
+    spin_lock_irqsave(&pt_sync_lock, flags2);
+
+    pt_maybe_sync_cpu_no_lock(d, smp_processor_id());
+
+    spin_unlock_irqrestore(&pt_sync_lock, flags2);
+    cpu_irq_restore(flags);
+}
+
+static void
+pt_maybe_sync_cpu_enter(struct domain *d)
+{
+    unsigned int cpu = smp_processor_id();
+    struct p2m_domain *p2m = p2m_get_hostp2m(d);
+    unsigned long flags, flags2;
+
+    if (!paging_mode_hap(d))
+        return;
+
+    /* We're about to do a vmenter, which should clear this */
+
+    cpu_irq_save(flags);
+    spin_lock_irqsave(&pt_sync_lock, flags2);
+
+    cpumask_set_cpu(cpu, d->arch.hvm_domain.svm.pt_in_use);
+
+    pt_maybe_sync_cpu_no_lock(d, cpu);
+
+    p2m->virgin = 0;
+    spin_unlock_irqrestore(&pt_sync_lock, flags2);
+    cpu_irq_restore(flags);
+}
+
+static void
+pt_maybe_sync_cpu_leave(struct domain *d)
+{
+    unsigned int cpu = smp_processor_id();
+    unsigned long flags, flags2;
+
+    if (!paging_mode_hap(d))
+        return;
+
+    cpu_irq_save(flags);
+    spin_lock_irqsave(&pt_sync_lock, flags2);
+
+    pt_maybe_sync_cpu_no_lock(d, cpu);
+
+    cpumask_clear_cpu(cpu, d->arch.hvm_domain.svm.pt_in_use);
+
+    spin_unlock_irqrestore(&pt_sync_lock, flags2);
+    cpu_irq_restore(flags);
+}
+
 void
 svm_pt_sync_domain(struct domain *d)
 {
+    int misery = 0;
+    unsigned long flags, flags2;
 
-    flush_tlb_mask(d->domain_dirty_cpumask);
+    /* Only if using NPT and this domain has some VCPUs to dirty. */
+    if ( !paging_mode_hap(d) || !d->vcpu || !d->vcpu[0] )
+        return;
+    ASSERT(local_irq_is_enabled());
+
+    if (ax_present)
+        ax_pv_ept_flush(p2m_get_hostp2m(d));
+    else {
+#if NR_CPUS > 2 * BITS_PER_LONG
+#error FIXME cpumask_var_t for NR_CPUS > 2 * BITS_PER_LONG
+#endif
+        cpumask_var_t pt_dirty;
+
+        /* Misery: only the test_and_set_bit operations are properly atomic */
+
+        cpu_irq_save(flags);
+        spin_lock_irqsave(&pt_sync_lock, flags2);
+
+        cpumask_clear(d->arch.hvm_domain.svm.pt_synced);
+
+        pt_maybe_sync_cpu_no_lock(d, smp_processor_id());
+
+        cpumask_andnot(pt_dirty,
+                       d->arch.hvm_domain.svm.pt_in_use,
+                       d->arch.hvm_domain.svm.pt_synced);
+
+        while (!cpumask_empty(pt_dirty)) {
+            unsigned int cpu;
+
+            spin_unlock_irqrestore(&pt_sync_lock, flags2);
+            cpu_irq_restore(flags);
+
+            for_each_cpu(cpu, pt_dirty) {
+                ASSERT(cpu != smp_processor_id());
+                if (!cpumask_test_cpu(cpu, d->arch.hvm_domain.svm.pt_synced))
+                    poke_cpu(cpu);
+            }
+
+            rep_nop();
+            rep_nop();
+            rep_nop();
+            rep_nop();
+            rep_nop();
+            rep_nop();
+
+            cpu_irq_save(flags);
+            spin_lock_irqsave(&pt_sync_lock, flags2);
+
+            if ((misery++) > 1000000) {
+                WARN();
+                break;
+            }
+
+            pt_maybe_sync_cpu_no_lock(d, smp_processor_id());
+
+            cpumask_andnot(pt_dirty,
+                           d->arch.hvm_domain.svm.pt_in_use,
+                           d->arch.hvm_domain.svm.pt_synced);
+        }
+
+        spin_unlock_irqrestore(&pt_sync_lock, flags2);
+        cpu_irq_restore(flags);
+    }
 }
 
 bool_t
@@ -2583,6 +2742,14 @@ asmlinkage_abi void svm_restore_regs(void)
 
     vcpu_restore_fpu_lazy(current);
     assert_xcr0_state(XCR0_STATE_VM);
+
+    pt_maybe_sync_cpu_enter(current->domain);
+}
+
+asmlinkage_abi void svm_save_regs(void)
+{
+
+    pt_maybe_sync_cpu_leave(current->domain);
 }
 
 void
