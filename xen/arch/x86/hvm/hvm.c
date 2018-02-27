@@ -5830,43 +5830,44 @@ pt_maybe_sync_cpu_enter(struct domain *d)
 {
     unsigned int cpu = smp_processor_id();
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
-    unsigned long flags, flags2;
+    unsigned long flags;
 
     if (!paging_mode_hap(d))
         return;
 
     /* We're about to do a vmenter, which should clear this */
 
-    cpu_irq_save(flags);
-    spin_lock_irqsave(&pt_sync_lock, flags2);
+    ASSERT(!cpu_irq_is_enabled() ||
+           /* no query available for global interrupt flag */
+           boot_cpu_data.x86_vendor == X86_VENDOR_AMD);
+    spin_lock_irqsave(&pt_sync_lock, flags);
 
     cpumask_set_cpu(cpu, d->arch.hvm_domain.pt_in_use);
 
     HVM_FUNCS(pt_maybe_sync_cpu_no_lock, d, cpu);
 
     p2m->virgin = 0;
-    spin_unlock_irqrestore(&pt_sync_lock, flags2);
-    cpu_irq_restore(flags);
+    spin_unlock_irqrestore(&pt_sync_lock, flags);
 }
 
 void
 pt_maybe_sync_cpu_leave(struct domain *d)
 {
     unsigned int cpu = smp_processor_id();
-    unsigned long flags, flags2;
+    unsigned long flags;
 
     if (!paging_mode_hap(d))
         return;
 
-    cpu_irq_save(flags);
-    spin_lock_irqsave(&pt_sync_lock, flags2);
+    ASSERT(!cpu_irq_is_enabled() ||
+           boot_cpu_data.x86_vendor != X86_VENDOR_INTEL);
+    spin_lock_irqsave(&pt_sync_lock, flags);
 
     HVM_FUNCS(pt_maybe_sync_cpu_no_lock, d, cpu);
 
     cpumask_clear_cpu(cpu, d->arch.hvm_domain.pt_in_use);
 
-    spin_unlock_irqrestore(&pt_sync_lock, flags2);
-    cpu_irq_restore(flags);
+    spin_unlock_irqrestore(&pt_sync_lock, flags);
 }
 
 void
