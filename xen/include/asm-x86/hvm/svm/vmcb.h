@@ -493,8 +493,6 @@ struct svm_domain {
 #if CONFIG_PAGING_LEVELS == 3
     bool_t npt_4gb_warning;
 #endif
-    cpumask_var_t pt_synced;
-    cpumask_var_t pt_in_use;
 };
 
 struct arch_svm_struct {

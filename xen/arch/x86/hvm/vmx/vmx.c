@@ -81,7 +81,6 @@
 #endif  /* __UXEN_NOT_YET__ */
 #include <asm/xstate.h>
 #include <asm/hvm/xen_pv.h>
-#include <asm/poke.h>
 
 enum handler_return { HNDL_done, HNDL_unhandled, HNDL_exception_raised };
 
@@ -93,12 +92,10 @@ static unsigned long __read_mostly host_msr_spec_ctrl;
 static bool_t __read_mostly update_host_vm_ibrs;
 static bool_t __read_mostly enable_host_ibpb;
 static bool_t __read_mostly enable_host_ibpb_noibrs;
-static DEFINE_SPINLOCK(ept_sync_lock);
 
 static int  vmx_alloc_vlapic_mapping(struct domain *d);
 static void vmx_free_vlapic_mapping(struct domain *d);
 static void vmx_install_vlapic_mapping(struct vcpu *v);
-static inline void ept_maybe_sync_cpu(struct domain *d);
 
 static void setup_pv_vmx(void);
 
@@ -116,18 +113,8 @@ vmx_domain_initialise(struct domain *d)
     d->arch.hvm_domain.vmx.ept_control.asr  =
         pagetable_get_pfn(p2m_get_pagetable(p2m_get_hostp2m(d)));
 
-    if ( !zalloc_cpumask_var(&d->arch.hvm_domain.vmx.ept_synced) )
-        return -ENOMEM;
-
-    if ( !zalloc_cpumask_var(&d->arch.hvm_domain.vmx.ept_in_use) ) {
-        free_cpumask_var(d->arch.hvm_domain.vmx.ept_synced);
-        return -ENOMEM;
-    }
-
     if ( (rc = vmx_alloc_vlapic_mapping(d)) != 0 )
     {
-        free_cpumask_var(d->arch.hvm_domain.vmx.ept_in_use);
-        free_cpumask_var(d->arch.hvm_domain.vmx.ept_synced);
         return rc;
     }
 
@@ -146,8 +133,6 @@ vmx_domain_destroy(struct domain *d)
         on_each_cpu(__ept_sync_domain, d, 1);
 #endif
 
-    free_cpumask_var(d->arch.hvm_domain.vmx.ept_in_use);
-    free_cpumask_var(d->arch.hvm_domain.vmx.ept_synced);
     vmx_free_vlapic_mapping(d);
 }
 
@@ -1050,7 +1035,7 @@ void vmx_ctxt_switch_to(struct vcpu *v)
     cpumask_set_cpu(cpu, v->domain->domain_dirty_cpumask);
     cpumask_set_cpu(cpu, v->vcpu_dirty_cpumask);
 
-    ept_maybe_sync_cpu(d);
+    pt_maybe_sync_cpu(d);
 
     vmx_restore_guest_msrs(v);
 #ifndef __UXEN_NOT_YET__
@@ -1653,150 +1638,18 @@ vmx_update_guest_efer(struct vcpu *v)
 #endif  /* __UXEN__ */
 }
 
-/* Caller must hold ept_sync_lock */
-static void
-ept_maybe_sync_cpu_no_lock(struct domain *d, unsigned int cpu)
+/* Caller must hold pt_sync_lock */
+void
+vmx_pt_maybe_sync_cpu_no_lock(struct domain *d, unsigned int cpu)
 {
-    if (!cpumask_test_cpu(cpu, d->arch.hvm_domain.vmx.ept_synced)) {
+
+    if (!cpumask_test_cpu(cpu, d->arch.hvm_domain.pt_synced)) {
         struct p2m_domain *p2m = p2m_get_hostp2m(d);
 
-        cpumask_set_cpu(cpu, d->arch.hvm_domain.vmx.ept_synced);
+        cpumask_set_cpu(cpu, d->arch.hvm_domain.pt_synced);
 
         __invept(INVEPT_SINGLE_CONTEXT, ept_get_eptp(d), 0);
         p2m->virgin = 1;
-    }
-}
-
-static inline void
-ept_maybe_sync_cpu(struct domain *d)
-{
-    unsigned long flags, flags2;
-
-    if (!paging_mode_hap(d))
-        return;
-
-    cpu_irq_save(flags); 
-    spin_lock_irqsave(&ept_sync_lock, flags2);
-
-    ept_maybe_sync_cpu_no_lock(d, smp_processor_id());
-
-    spin_unlock_irqrestore(&ept_sync_lock, flags2);
-    cpu_irq_restore(flags); 
-}
-
-static void
-ept_maybe_sync_cpu_enter(struct domain *d)
-{
-    unsigned int cpu = smp_processor_id();
-    struct p2m_domain *p2m = p2m_get_hostp2m(d);
-    unsigned long flags, flags2;
-
-    if (!paging_mode_hap(d))
-        return;
-
-    /* We're about to do a vmenter, which should clear this */
-
-    cpu_irq_save(flags); 
-    spin_lock_irqsave(&ept_sync_lock, flags2);
-
-    cpumask_set_cpu(cpu, d->arch.hvm_domain.vmx.ept_in_use);
-
-    ept_maybe_sync_cpu_no_lock(d, cpu);
-
-    p2m->virgin = 0;
-    spin_unlock_irqrestore(&ept_sync_lock, flags2);
-    cpu_irq_restore(flags); 
-}
-
-static void
-ept_maybe_sync_cpu_leave(struct domain *d)
-{
-    unsigned int cpu = smp_processor_id();
-    unsigned long flags, flags2;
-
-    if (!paging_mode_hap(d))
-        return;
-
-    cpu_irq_save(flags);
-    spin_lock_irqsave(&ept_sync_lock, flags2);
-
-    ept_maybe_sync_cpu_no_lock(d, cpu);
-
-    cpumask_clear_cpu(cpu, d->arch.hvm_domain.vmx.ept_in_use);
-
-    spin_unlock_irqrestore(&ept_sync_lock, flags2);
-    cpu_irq_restore(flags);
-}
-
-void
-vmx_pt_sync_domain(struct domain *d)
-{
-    int misery = 0;
-    unsigned long flags, flags2;
-
-    /* Only if using EPT and this domain has some VCPUs to dirty. */
-    if ( !paging_mode_hap(d) || !d->vcpu || !d->vcpu[0] )
-        return;
-
-    ASSERT(local_irq_is_enabled());
-
-    if (ax_present)
-        ax_invept_all_cpus();
-    else {
-#if NR_CPUS > 2 * BITS_PER_LONG
-#error FIXME cpumask_var_t for NR_CPUS > 2 * BITS_PER_LONG
-#endif
-        cpumask_var_t ept_dirty;
-
-        /* Misery: only the test_and_set_bit operations are properly atomic */
-
-        cpu_irq_save(flags); 
-        spin_lock_irqsave(&ept_sync_lock, flags2);
-
-        cpumask_clear(d->arch.hvm_domain.vmx.ept_synced);
-
-        ept_maybe_sync_cpu_no_lock(d, smp_processor_id());
-
-        cpumask_andnot(ept_dirty,
-                       d->arch.hvm_domain.vmx.ept_in_use,
-                       d->arch.hvm_domain.vmx.ept_synced);
-
-        while (!cpumask_empty(ept_dirty)) {
-            unsigned int cpu;
-
-            spin_unlock_irqrestore(&ept_sync_lock, flags2);
-            cpu_irq_restore(flags); 
-
-            for_each_cpu(cpu, ept_dirty) {
-                ASSERT(cpu != smp_processor_id());
-                if (!cpumask_test_cpu(cpu, d->arch.hvm_domain.vmx.ept_synced))
-                    poke_cpu(cpu);
-            }
-
-            rep_nop();
-            rep_nop();
-            rep_nop();
-            rep_nop();
-            rep_nop();
-            rep_nop();
-
-            cpu_irq_save(flags); 
-            spin_lock_irqsave(&ept_sync_lock, flags2);
-
-            if ((misery++) > 1000000) {
-                WARN();
-                break;
-            }
-
-            ept_maybe_sync_cpu_no_lock(d, smp_processor_id());
-
-            cpumask_andnot(ept_dirty,
-                           d->arch.hvm_domain.vmx.ept_in_use,
-                           d->arch.hvm_domain.vmx.ept_synced);
-        }
-
-        spin_unlock_irqrestore(&ept_sync_lock, flags2);
-        cpu_irq_restore(flags); 
     }
 }
 
@@ -3740,7 +3593,7 @@ asmlinkage_abi void vmx_restore_regs(uintptr_t host_rsp)
     if (vmx_vmcs_late_load)
         pv_vmcs_flush_dirty(this_cpu(current_vmcs_vmx), 0);
 
-    ept_maybe_sync_cpu_enter(current->domain);
+    pt_maybe_sync_cpu_enter(current->domain);
 
     if (update_host_vm_ibrs &&
         current->arch.hvm_vcpu.msr_spec_ctrl != host_msr_spec_ctrl)
@@ -3766,7 +3619,7 @@ asmlinkage_abi void vmx_save_regs(void)
     } else
         lfence();
 
-    ept_maybe_sync_cpu_leave(current->domain);
+    pt_maybe_sync_cpu_leave(current->domain);
 
     if (!vmx_vmcs_late_load)
         current->arch.hvm_vmx.launched = 1;
@@ -3812,7 +3665,7 @@ asmlinkage_abi void vm_entry_fail(uintptr_t resume)
     } else
         lfence();
 
-    ept_maybe_sync_cpu_leave(current->domain);
+    pt_maybe_sync_cpu_leave(current->domain);
 
     cpu_irq_enable();
 

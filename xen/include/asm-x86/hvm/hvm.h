@@ -158,7 +158,8 @@ extern struct hvm_function_table hvm_funcs;
     int prefix ## _do_pmu_interrupt(struct cpu_user_regs *regs);        \
     void prefix ## _do_execute(struct vcpu *v);                         \
     void prefix ## _do_suspend(struct vcpu *v);                         \
-    void prefix ## _pt_sync_domain(struct domain *d);                   \
+    void prefix ## _pt_maybe_sync_cpu_no_lock(struct domain *d,         \
+                                              unsigned int cpu);        \
     int prefix ## _cpu_up_prepare(unsigned int cpu);                    \
     void prefix ## _cpu_dead(unsigned int cpu);                         \
     int prefix ## _cpu_on(void);                                        \
@@ -384,11 +385,6 @@ static inline void hvm_execute(struct vcpu *v)
     HVM_FUNCS(do_execute, v);
 }
 
-static inline void pt_sync_domain(struct domain *d)
-{
-    HVM_FUNCS(pt_sync_domain, d);
-}
-
 /* These reserved bits in lower 32 remain 0 after any load of CR0 */
 #define HVM_CR0_GUEST_RESERVED_BITS             \
     (~((unsigned long)                          \
@@ -535,6 +531,11 @@ int hvm_hap_nested_page_fault(unsigned long gpa,
 
 int hvm_x2apic_msr_read(struct vcpu *v, unsigned int msr, uint64_t *msr_content);
 int hvm_x2apic_msr_write(struct vcpu *v, unsigned int msr, uint64_t msr_content);
+
+void pt_maybe_sync_cpu(struct domain *d);
+void pt_maybe_sync_cpu_enter(struct domain *d);
+void pt_maybe_sync_cpu_leave(struct domain *d);
+void pt_sync_domain(struct domain *d);
 
 #ifdef __x86_64__
 /* Called for current VCPU on crX changes by guest */

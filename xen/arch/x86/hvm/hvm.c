@@ -92,6 +92,7 @@
 #include <asm/mem_event.h>
 #include <public/mem_event.h>
 #endif  /* __UXEN__ */
+#include <asm/poke.h>
 
 /* Needed for vmread in introspection_mov_to_cr(). Breaks on non-Intel cpus? */
 #include <asm/hvm/vmx/vmx.h>
@@ -110,6 +111,8 @@ DEFINE_PER_CPU(enum hvmon, hvmon);
 
 #define HVM_DEBUG_CPUID_8  0x54545400
 #define HVM_DEBUG_CPUID_32 0x54545404
+
+static DEFINE_SPINLOCK(pt_sync_lock);
 
 static long do_hvm_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg);
 static long do_hvm_sched_op(unsigned long op, XEN_GUEST_HANDLE(void) arg);
@@ -979,14 +982,25 @@ int hvm_domain_initialise(struct domain *d)
     if (hvm_init_pci_emul(d))
         goto fail2;
 
+    if ( !zalloc_cpumask_var(&d->arch.hvm_domain.pt_synced) )
+        goto fail2;
+
+    if ( !zalloc_cpumask_var(&d->arch.hvm_domain.pt_in_use) ) {
+        free_cpumask_var(d->arch.hvm_domain.pt_synced);
+        goto fail2;
+    }
+
     rc = HVM_FUNCS(domain_initialise, d);
     if ( rc != 0 )
-        goto fail2;
+        goto fail3;
 
     d->hvm_domain_initialised = 1;
 
     return 0;
 
+ fail3:
+    free_cpumask_var(d->arch.hvm_domain.pt_in_use);
+    free_cpumask_var(d->arch.hvm_domain.pt_synced);
  fail2:
     rtc_deinit(d);
 #ifndef __UXEN__
@@ -1037,6 +1051,10 @@ void hvm_domain_destroy(struct domain *d)
         return;
 
     HVM_FUNCS(domain_destroy, d);
+
+    free_cpumask_var(d->arch.hvm_domain.pt_in_use);
+    free_cpumask_var(d->arch.hvm_domain.pt_synced);
+
     rtc_deinit(d);
 #ifndef __UXEN__
     stdvga_deinit(d);
@@ -5788,6 +5806,139 @@ DEBUG();
 #else   /* __UXEN__ */
     BUG(); return 0;
 #endif  /* __UXEN__ */
+}
+
+void
+pt_maybe_sync_cpu(struct domain *d)
+{
+    unsigned long flags, flags2;
+
+    if (!paging_mode_hap(d))
+        return;
+
+    cpu_irq_save(flags);
+    spin_lock_irqsave(&pt_sync_lock, flags2);
+
+    HVM_FUNCS(pt_maybe_sync_cpu_no_lock, d, smp_processor_id());
+
+    spin_unlock_irqrestore(&pt_sync_lock, flags2);
+    cpu_irq_restore(flags);
+}
+
+void
+pt_maybe_sync_cpu_enter(struct domain *d)
+{
+    unsigned int cpu = smp_processor_id();
+    struct p2m_domain *p2m = p2m_get_hostp2m(d);
+    unsigned long flags, flags2;
+
+    if (!paging_mode_hap(d))
+        return;
+
+    /* We're about to do a vmenter, which should clear this */
+
+    cpu_irq_save(flags);
+    spin_lock_irqsave(&pt_sync_lock, flags2);
+
+    cpumask_set_cpu(cpu, d->arch.hvm_domain.pt_in_use);
+
+    HVM_FUNCS(pt_maybe_sync_cpu_no_lock, d, cpu);
+
+    p2m->virgin = 0;
+    spin_unlock_irqrestore(&pt_sync_lock, flags2);
+    cpu_irq_restore(flags);
+}
+
+void
+pt_maybe_sync_cpu_leave(struct domain *d)
+{
+    unsigned int cpu = smp_processor_id();
+    unsigned long flags, flags2;
+
+    if (!paging_mode_hap(d))
+        return;
+
+    cpu_irq_save(flags);
+    spin_lock_irqsave(&pt_sync_lock, flags2);
+
+    HVM_FUNCS(pt_maybe_sync_cpu_no_lock, d, cpu);
+
+    cpumask_clear_cpu(cpu, d->arch.hvm_domain.pt_in_use);
+
+    spin_unlock_irqrestore(&pt_sync_lock, flags2);
+    cpu_irq_restore(flags);
+}
+
+void
+pt_sync_domain(struct domain *d)
+{
+    int misery = 0;
+    unsigned long flags, flags2;
+
+    /* Only if using NPT and this domain has some VCPUs to dirty. */
+    if ( !paging_mode_hap(d) || !d->vcpu || !d->vcpu[0] )
+        return;
+    ASSERT(local_irq_is_enabled());
+
+    if (ax_present) {
+        ax_pv_ept_flush(p2m_get_hostp2m(d));
+        ax_invept_all_cpus();
+    } else {
+#if NR_CPUS > 2 * BITS_PER_LONG
+#error FIXME cpumask_var_t for NR_CPUS > 2 * BITS_PER_LONG
+#endif
+        cpumask_var_t pt_dirty;
+
+        /* Misery: only the test_and_set_bit operations are properly atomic */
+
+        cpu_irq_save(flags);
+        spin_lock_irqsave(&pt_sync_lock, flags2);
+
+        cpumask_clear(d->arch.hvm_domain.pt_synced);
+
+        HVM_FUNCS(pt_maybe_sync_cpu_no_lock, d, smp_processor_id());
+
+        cpumask_andnot(pt_dirty,
+                       d->arch.hvm_domain.pt_in_use,
+                       d->arch.hvm_domain.pt_synced);
+
+        while (!cpumask_empty(pt_dirty)) {
+            unsigned int cpu;
+
+            spin_unlock_irqrestore(&pt_sync_lock, flags2);
+            cpu_irq_restore(flags);
+
+            for_each_cpu(cpu, pt_dirty) {
+                ASSERT(cpu != smp_processor_id());
+                if (!cpumask_test_cpu(cpu, d->arch.hvm_domain.pt_synced))
+                    poke_cpu(cpu);
+            }
+
+            rep_nop();
+            rep_nop();
+            rep_nop();
+            rep_nop();
+            rep_nop();
+            rep_nop();
+
+            cpu_irq_save(flags);
+            spin_lock_irqsave(&pt_sync_lock, flags2);
+
+            if ((misery++) > 1000000) {
+                WARN();
+                break;
+            }
+
+            HVM_FUNCS(pt_maybe_sync_cpu_no_lock, d, smp_processor_id());
+
+            cpumask_andnot(pt_dirty,
+                           d->arch.hvm_domain.pt_in_use,
+                           d->arch.hvm_domain.pt_synced);
+        }
+
+        spin_unlock_irqrestore(&pt_sync_lock, flags2);
+        cpu_irq_restore(flags);
+    }
 }
 
 #ifndef __UXEN__

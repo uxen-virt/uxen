@@ -141,6 +141,9 @@ struct hvm_domain {
         struct vmx_domain vmx;
         struct svm_domain svm;
     };
+
+    cpumask_var_t pt_synced;
+    cpumask_var_t pt_in_use;
 };
 
 #define hap_enabled(d)  ((d)->arch.hvm_domain.hap_enabled)
