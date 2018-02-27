@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2018, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -202,7 +202,7 @@ proxy_cache_find(const char *schema, const char *domain, int port)
     buff_strtolower(url);
     pc = rb_tree_find_node(&cache_rbtree, url);
 out:
-    if (url) {
+    if (url && !hide_log_sensitive_data) {
         NETLOG5("%s: url %s %"PRIxPTR, __FUNCTION__, url,
                 (uintptr_t) (pc ? pc->proxy : NULL));
     }

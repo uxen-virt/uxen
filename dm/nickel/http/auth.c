@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2018, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -117,7 +117,8 @@ static int http_auth_get_proxy_auth(struct http_auth *auth, struct http_header *
 
     p = strchr(BUFF_CSTR(h->headers[i].value), ' ');
     if (p && *++p) {
-        AUXL4("prx_auth %s", p);
+        if (!hide_log_sensitive_data)
+            AUXL4("prx_auth %s", p);
         auth->prx_auth = ni_priv_strdup(p);
         if (!auth->prx_auth)
             goto mem_err;

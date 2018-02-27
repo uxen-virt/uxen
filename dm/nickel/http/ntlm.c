@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -445,7 +445,7 @@ static int parse_type2_msg(struct ntlm_ctx *ntlm, uint8_t *in_token,
         }
     }
 
-    if (NLOG_LEVEL > 4) {
+    if (NLOG_LEVEL > 4 && !hide_log_sensitive_data) {
         NETLOG5("%s: NTLM type 2 message, challenge (and info), flags 0x%x", __FUNCTION__,
                 (unsigned int) msg->flags);
         netlog_print_esc("target", (const char *)msg->target, msg->target_len);
@@ -666,7 +666,7 @@ static int generate_type3_msg(struct ntlm_ctx *ntlm, uint8_t *in_token, size_t i
 
         ntlm_buf_len = i;
         use_ntlmv2 = true;
-        if (NLOG_LEVEL > 4)
+        if (NLOG_LEVEL > 4 && !hide_log_sensitive_data)
             netlog_print_esc("ntlmv2_buf for hash2", (const char *)ntlmv2_buf, ntlm_buf_len);
     } else {
         // NTLMv1

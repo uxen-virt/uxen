@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2017, Bromium, Inc.
+ * Copyright 2014-2018, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -1031,10 +1031,12 @@ static int create_http_header(bool prx_auth, const char *sv_name, int use_head, 
     const char *method = NULL;
     const char *s_url = NULL;
 
-    NETLOG5("create_http_header: sv_name %s, horig->method %s, horig->url %s",
-            sv_name ? sv_name : "(null)",
-            horig && horig->method ? horig->method : "(null)",
-            horig && horig->url ? BUFF_CSTR(horig->url) : "(null)");
+    if (!hide_log_sensitive_data) {
+        NETLOG5("create_http_header: sv_name %s, horig->method %s, horig->url %s",
+                sv_name ? sv_name : "(null)",
+                horig && horig->method ? horig->method : "(null)",
+                horig && horig->url ? BUFF_CSTR(horig->url) : "(null)");
+    }
     if (!horig) {
         NETLOG("%s: ERROR - bug, no horig", __FUNCTION__);
         goto out;
@@ -4143,7 +4145,8 @@ static void set_settings(struct nickel *ni, yajl_val config)
             user_agent = strdup(tmp);
             if (!user_agent)
                 goto mem_err;
-            NETLOG2("%s: user-agent '%s'", __FUNCTION__, user_agent);
+            if (!hide_log_sensitive_data)
+                NETLOG2("%s: user-agent '%s'", __FUNCTION__, user_agent);
         }
 
         if (!user_agent && ni_schedule_bh(ni, NULL, get_uset_agent_cb, ni) < 0) {
@@ -4308,8 +4311,10 @@ static void set_settings(struct nickel *ni, yajl_val config)
             if (wdomain && wusername) {
                 memcpy((uint8_t *)wdomain, custom_ntlm->w_domain, custom_ntlm->w_domain_len);
                 memcpy((uint8_t *)wusername, custom_ntlm->w_username, custom_ntlm->w_username_len);
-                NETLOG("%s: custom NTLM creds set for user %ls\\%ls", __FUNCTION__,
-                        wdomain, wusername);
+                if (!hide_log_sensitive_data) {
+                    NETLOG("%s: custom NTLM creds set for user %ls\\%ls", __FUNCTION__,
+                            wdomain, wusername);
+                }
                 free(wusername);
                 free(wdomain);
             }
@@ -4379,7 +4384,8 @@ static void rpc_user_agent_cb(void *opaque, dict d)
         warnx("%s: malloc", __FUNCTION__);
         return;
     }
-    NETLOG2("%s: user-agent '%s'", __FUNCTION__, user_agent);
+    if (!hide_log_sensitive_data)
+        NETLOG2("%s: user-agent '%s'", __FUNCTION__, user_agent);
 }
 
 static void rpc_connect_proxy_cb(void *opaque, dict d)
@@ -5729,7 +5735,7 @@ static int cx_process(struct clt_ctx *cx, const uint8_t *buf, int len_buf)
         assert(len_buf >= ret);
         if (buff_append(cx->in, (const char*) buf + ret , len_buf - ret) < 0)
             goto err;
-        if (NLOG_LEVEL > 5) {
+        if (NLOG_LEVEL > 5 && !hide_log_sensitive_data) {
             CXL6("cx->in :");
             netlog_print_esc("cx->in", BUFF_CSTR(cx->in), cx->in->len);
         }

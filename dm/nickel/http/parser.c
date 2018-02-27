@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2018, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -234,8 +234,10 @@ static int resp_on_header_field(struct http_parser *parser, const char *at, size
         goto out;
     if (buff_append(h->headers[h->crt_header].name, at, length) < 0)
         goto out;
-    NETLOG5("%s: hx %"PRIxPTR" '%s'", __FUNCTION__, (uintptr_t) p->hx,
-            BUFF_CSTR(h->headers[h->crt_header].name));
+    if (!hide_log_sensitive_data) {
+        NETLOG5("%s: hx %"PRIxPTR" '%s'", __FUNCTION__, (uintptr_t) p->hx,
+                BUFF_CSTR(h->headers[h->crt_header].name));
+    }
     h->hint_size += length;
     ret = 0;
 out:
@@ -256,8 +258,10 @@ static int resp_on_header_value(struct http_parser *parser, const char *at, size
         goto out;
     if (buff_append(h->headers[h->crt_header].value, at, length) < 0)
         goto out;
-    NETLOG5("%s: hx %"PRIxPTR" '%s'", __FUNCTION__, (uintptr_t) p->hx,
-            BUFF_CSTR(h->headers[h->crt_header].value));
+    if (!hide_log_sensitive_data) {
+        NETLOG5("%s: hx %"PRIxPTR" '%s'", __FUNCTION__, (uintptr_t) p->hx,
+                BUFF_CSTR(h->headers[h->crt_header].value));
+    }
     h->hint_size += length;
     ret = 0;
 out:
