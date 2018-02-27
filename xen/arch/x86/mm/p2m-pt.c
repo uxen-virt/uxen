@@ -618,6 +618,70 @@ out:
     return rv;
 }
 
+static int
+pt_ro_update_l2_entry(struct p2m_domain *p2m, unsigned long gfn,
+                      int read_only, int *_need_sync)
+{
+    mfn_t table_mfn;
+    void *table = NULL;
+    unsigned long gfn_remainder = gfn;
+    l1_pgentry_t *p2m_entry;
+    unsigned long mfn;
+    int rv = 0;
+    int need_sync = 0;
+
+    table_mfn = pagetable_get_mfn(p2m_get_pagetable(p2m));
+    table = map_domain_page(mfn_x(table_mfn));
+
+#if CONFIG_PAGING_LEVELS >= 4
+    if ( !p2m_next_level(p2m, &table, &gfn_remainder, gfn,
+                         L4_PAGETABLE_SHIFT - PAGE_SHIFT,
+                         L4_PAGETABLE_ENTRIES, PGT_l3_page_table) )
+        goto out;
+#endif
+    if ( !p2m_next_level(p2m, &table, &gfn_remainder, gfn,
+                         L3_PAGETABLE_SHIFT - PAGE_SHIFT,
+                         ((CONFIG_PAGING_LEVELS == 3)
+                          ? (hap_enabled(p2m->domain) ? 4 : 8)
+                          : L3_PAGETABLE_ENTRIES),
+                         PGT_l2_page_table) )
+        goto out;
+
+    p2m_entry = p2m_find_entry(table, &gfn_remainder, gfn,
+                               L2_PAGETABLE_SHIFT - PAGE_SHIFT,
+                               L2_PAGETABLE_ENTRIES);
+    ASSERT(p2m_entry);
+
+    mfn = l1e_get_pfn(*p2m_entry);
+    if (__mfn_valid_page(mfn)) {
+        int flags;
+
+        flags = l1e_get_flags(*p2m_entry);
+
+        if (((flags & _PAGE_RW) ? 0 : 1) != read_only) {
+            l1_pgentry_t new_entry;
+
+            flags ^= _PAGE_RW;
+
+            new_entry = l1e_from_pfn(mfn, flags);
+
+            /* NB: paging_write_p2m_entry() doesn't handle tlb flushes
+             * for level == 2 */
+            p2m->write_p2m_entry(p2m, gfn, p2m_entry, new_entry, 2);
+            need_sync = *_need_sync && read_only;
+        }
+
+        /* Success */
+        rv = 1;
+    }
+
+  out:
+    *_need_sync = need_sync;
+    if (table)
+        unmap_domain_page(table);
+
+    return rv;
+}
 
 #ifndef __UXEN__
 /* Read the current domain's p2m table (through the linear mapping). */
@@ -1277,6 +1341,7 @@ void p2m_pt_init(struct p2m_domain *p2m)
     p2m->change_entry_type_global = p2m_change_type_global;
     p2m->split_super_page_one = npt_split_super_page_one;
     p2m->write_p2m_entry = paging_write_p2m_entry;
+    p2m->ro_update_l2_entry = pt_ro_update_l2_entry;
 
     p2m->p2m_l1_cache_id = p2m->domain->domain_id;
     open_softirq(P2M_L1_CACHE_CPU_SOFTIRQ, p2m_l1_cache_flush_softirq);

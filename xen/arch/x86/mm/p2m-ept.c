@@ -663,9 +663,9 @@ out:
 
 int
 ept_ro_update_l2_entry(struct p2m_domain *p2m, unsigned long gfn,
-                       int read_only, int *need_sync)
+                       int read_only, int *_need_sync)
 {
-    ept_entry_t *table, *ept_entry = NULL;
+    ept_entry_t *table = NULL, *ept_entry = NULL;
     unsigned long gfn_remainder = gfn;
     u32 index;
     int i, target = 1, order = PAGE_ORDER_2M;
@@ -673,6 +673,7 @@ ept_ro_update_l2_entry(struct p2m_domain *p2m, unsigned long gfn,
     int ret = 0;
     struct domain *d = p2m->domain;
     ept_entry_t old_entry = { .epte = 0 };
+    int need_sync = 0;
 
     /*
      * the caller must make sure:
@@ -683,7 +684,7 @@ ept_ro_update_l2_entry(struct p2m_domain *p2m, unsigned long gfn,
     if ( ((gfn) & ((1UL << order) - 1)) ||
          ((u64)gfn >> ((ept_get_wl(d) + 1) * EPT_TABLE_ORDER)) ||
          (order % EPT_TABLE_ORDER) )
-        return 0;
+        goto out;
 
     table = map_domain_page(ept_get_asr(d));
     perfc_incr(pc11);
@@ -716,12 +717,15 @@ ept_ro_update_l2_entry(struct p2m_domain *p2m, unsigned long gfn,
 
         if (new_entry.w != old_entry.w) {
             atomic_write_ept_entry(ept_entry, new_entry);
-            if (read_only && need_sync)
-                *need_sync = 1;
-            if (ax_pv_ept)
-                ax_pv_ept_write(p2m, target, gfn, new_entry.epte, read_only);
-            if (xen_pv_ept)
-                xen_pv_ept_write(p2m, target, gfn, new_entry.epte, read_only);
+            need_sync = *_need_sync && read_only;
+            if (need_sync) {
+                if (ax_pv_ept)
+                    ax_pv_ept_write(p2m, target, gfn, new_entry.epte, 1);
+                if (xen_pv_ept)
+                    xen_pv_ept_write(p2m, target, gfn, new_entry.epte, 1);
+                if (ax_pv_ept || xen_pv_ept)
+                    need_sync = 0;
+            }
         }
 
         /* Success */
@@ -729,7 +733,9 @@ ept_ro_update_l2_entry(struct p2m_domain *p2m, unsigned long gfn,
     }
 
   out:
-    unmap_domain_page(table);
+    *_need_sync = need_sync;
+    if (table)
+        unmap_domain_page(table);
 
     return rv;
 }

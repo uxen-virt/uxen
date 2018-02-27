@@ -341,6 +341,7 @@ paging_mark_dirty_check_vram_l2(struct vcpu *v, unsigned long gfn)
     p2m_access_t p2ma;
     struct p2m_domain *p2m;
     unsigned long gfn_l2;
+    int need_sync;
 
     if (!paging_mode_log_dirty(d) || !dirty_vram ||
         gfn < dirty_vram->begin_pfn || gfn >= dirty_vram->end_pfn)
@@ -361,7 +362,8 @@ paging_mark_dirty_check_vram_l2(struct vcpu *v, unsigned long gfn)
     }
 
     /* ro->rw transition - no need to sync */
-    p2m->ro_update_l2_entry(p2m, gfn_l2, 0, NULL);
+    need_sync = 0;
+    p2m->ro_update_l2_entry(p2m, gfn_l2, 0, &need_sync);
 
     if (dirty_vram->want_events) {
         dirty_vram->want_events = 0;

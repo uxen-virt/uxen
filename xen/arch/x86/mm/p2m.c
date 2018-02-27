@@ -778,8 +778,12 @@ void p2m_change_type_range_l2(struct domain *d,
 
     p2m_lock(p2m);
 
-    for ( gfn = start; gfn < end; gfn += (1ul << PAGE_ORDER_2M) )
-        p2m->ro_update_l2_entry(p2m, gfn, p2m_is_logdirty(nt), &need_sync);
+    for ( gfn = start; gfn < end; gfn += (1ul << PAGE_ORDER_2M) ) {
+        int ns = 1;
+        p2m->ro_update_l2_entry(p2m, gfn, p2m_is_logdirty(nt), &ns);
+        if (ns)
+            need_sync = 1;
+    }
 
     if (need_sync)
         pt_sync_domain(p2m->domain);
