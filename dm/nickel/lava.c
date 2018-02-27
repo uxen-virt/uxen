@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -8,6 +8,7 @@
 #include <dm/dict.h>
 #include <dm/dict-rpc.h>
 #include <dm/control.h>
+#include <dm/dm.h>
 #include "nickel.h"
 #include "dns/dns.h"
 #include "log.h"
@@ -143,7 +144,8 @@ static void * lava_thread_run(void *opaque)
 
             d = dict_new();
             if (d) {
-                NETLOG5("%s:LAVA_RPC: %s", __FUNCTION__, rpc_buf);
+                if (!hide_log_sensitive_data)
+                    NETLOG5("%s:LAVA_RPC: %s", __FUNCTION__, rpc_buf);
                 dict_put_string(d, "events", rpc_buf);
                 ni_rpc_send(ni, "nc_LavaEvents", d, NULL, NULL);
                 dict_free(d);
