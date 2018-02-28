@@ -181,6 +181,8 @@ void _cpu_irq_restore(unsigned long x);
 #define cpu_irq_save(x)       _cpu_irq_save(&(x))
 #define cpu_irq_restore(x)    _cpu_irq_restore(x)
 
+void vmexec_irq_enable(void);
+
 #define local_irq_disable()     host_preemption_irq_disable()
 #define local_irq_enable()      host_preemption_irq_enable()
 

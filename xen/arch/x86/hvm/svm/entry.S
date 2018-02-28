@@ -121,13 +121,14 @@ ABI_ENTRY(svm_asm_do_vmentry, SIZEOF_REG)
 #endif  /* __UXEN_NOT_YET__ */
 
         get_current(r(bx))
-        CLGI                    /* XXX call_with_abi(_cpu_irq_disable, 0) */
+        CLGI
 
         mov  r(bx), r_arg
         call_with_abi(check_work_vcpu, SIZEOF_REG)
 
         /* check_work_vcpu returns with 1 if work was done.
-	 * Note: interrupts have been re-enabled in that case. */
+	 * Note: interrupts have been re-enabled in that case.
+	 * See vmexec_irq_enable(). */
         test %eax, %eax
         jne  .Lret_from_svm_asm_do_vmentry
 
@@ -257,7 +258,7 @@ UNLIKELY_END(svm_trace)
         mov  VCPU_svm_root_vmcb_pa(r(bx)),r(ax)
         VMLOAD
 
-        STGI                    /* XXX call_with_abi(_cpu_irq_enable, 0) */
+        STGI
 
         xor  r(ax),r(ax)
 
@@ -291,13 +292,13 @@ svm_stgi_label:
         jmp  svm_asm_do_resume
 
 .Lsvm_process_softirqs:
-        STGI                    /* XXX call_with_abi(_cpu_irq_enable, 0) */
+        STGI
         call do_softirq
         jmp  svm_asm_do_resume
 
 .Lsvm_nsvm_no_p2m:
         /* Someone shot down our nested p2m table; go round again
          * and nsvm_vcpu_switch() will fix it for us. */
-        STGI                    /* XXX call_with_abi(_cpu_irq_enable, 0) */
+        STGI
         jmp  svm_asm_do_resume
 #endif

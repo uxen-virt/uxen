@@ -242,13 +242,14 @@ ABI_ENTRY(vmx_asm_do_vmentry, SIZEOF_REG)
 #endif  /* __UXEN__ */
 
         get_current(r(bx))
-        call_with_abi(_cpu_irq_disable, 0)
+        cli
 
         mov  r(bx), r_arg
         call_with_abi(check_work_vcpu, SIZEOF_REG)
 
         /* check_work_vcpu returns with 1 if work was done.
-	 * Note: interrupts have been re-enabled in that case. */
+	 * Note: interrupts have been re-enabled in that case.
+	 * See vmexec_irq_enable(). */
         test %eax, %eax
         jne  .Lret_from_vmx_asm_do_vmentry
 
@@ -322,7 +323,7 @@ UNLIKELY_END(realmode)
         jmp .Lret_from_vmx_asm_do_vmentry
 
 .Lvmx_goto_emulator:
-        call_with_abi(_cpu_irq_enable, 0)
+        sti
         call_with_regs(r(bx), vmx_realmode, SIZEOF_REG)
 
 .Lret_from_vmx_asm_do_vmentry:

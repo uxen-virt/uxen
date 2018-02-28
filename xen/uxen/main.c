@@ -78,10 +78,7 @@ asmlinkage_abi void
 _cpu_irq_enable(void)
 {
 
-    if (boot_cpu_data.x86_vendor ==  X86_VENDOR_INTEL)
-        asm volatile ( "sti" : : : "memory" );
-    else
-        asm volatile ( "stgi" : : : "memory" );
+    asm volatile ( "sti" : : : "memory" );
 }
 
 void
@@ -114,6 +111,21 @@ _cpu_irq_restore(unsigned long x)
 
     asm volatile ( "push" __OS " %0 ; popf" __OS
                    : : "g" (x) : "memory", "cc" );
+}
+
+void
+vmexec_irq_enable(void)
+{
+
+    /* irq enable used from check_work_vcpu to re-enable interrupts,
+     * interrupts were disabled in {vmx,svm}/entry.S:
+     * on intel - interrupts disabled via cli
+     * on amd - interrupts disabled via clgi
+     */
+    if (boot_cpu_data.x86_vendor ==  X86_VENDOR_INTEL)
+        asm volatile ( "sti" : : : "memory" );
+    else
+        asm volatile ( "stgi" : : : "memory" );
 }
 
 static void
