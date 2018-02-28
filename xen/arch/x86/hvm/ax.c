@@ -14,6 +14,8 @@
 #include "ax_private.h"
 
 int ax_present = 0;
+int ax_present_intel = 0;
+int ax_present_amd = 0;
 int ax_pv_ept = 0;
 int ax_l1_invlpg_intercept = 0;
 
@@ -170,7 +172,10 @@ int ax_setup(void)
 
         ax_pv_ept = !!(AX_FEATURES_AX_SHADOW_EPT & rdx);
         printk ("Using PV-%s %d\n", cpu_is_intel ? "EPT" : "NPT (async active, smart invept)", ax_pv_ept);
-        if (!cpu_is_intel) {
+        if (cpu_is_intel)
+            ax_present_intel = 1;
+        else {
+            ax_present_amd = 1;
             rax = AX_CPUID_VMCB_CHECK_MY;
             rbx = 0;
             rcx = 0;

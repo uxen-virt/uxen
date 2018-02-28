@@ -66,7 +66,7 @@ void fpu_init(void)
 /* Restore x87 extended state */
 static inline void fpu_xrstor(struct vcpu *v, uint64_t mask)
 {
-    if (AX_ON_AMD_PRESENT())
+    if (ax_present_amd)
         return;
 #ifndef __UXEN__
     /*
@@ -146,8 +146,8 @@ static inline void fpu_frstor(struct vcpu *v)
 /* Save x87 extended state */
 static inline void fpu_xsave(struct vcpu *v)
 {
-    if (AX_ON_AMD_PRESENT())
-	return;
+    if (ax_present_amd)
+        return;
 #ifndef __UXEN__
     /* XCR0 normally represents what guest OS set. In case of Xen itself,
      * we set all accumulated feature mask before doing save/restore.
@@ -288,8 +288,8 @@ void vcpu_restore_fpu_lazy(struct vcpu *v)
 {
     unsigned long flags;
 
-    if (AX_ON_AMD_PRESENT())
-	return;
+    if (ax_present_amd)
+        return;
 
     ASSERT(!is_idle_vcpu(v));
 
@@ -353,11 +353,11 @@ void vcpu_save_fpu(struct vcpu *v)
     cpu_irq_save(flags);
     clear_cr0_ts();
 
-    if (AX_ON_AMD_PRESENT()) {
-	fpu_xsave(v);
-	v->fpu_dirtied = 0;
-	cpu_irq_restore(flags);
-	return;
+    if (ax_present_amd) {
+        fpu_xsave(v);
+        v->fpu_dirtied = 0;
+        cpu_irq_restore(flags);
+        return;
     }
 
     if ( xsave_enabled(v) )
@@ -380,8 +380,8 @@ void vcpu_save_fpu(struct vcpu *v)
 void vcpu_save_fpu_hostcall(struct vcpu *v)
 {
     vcpu_save_fpu(v);
-    if (AX_ON_AMD_PRESENT())
-	return;
+    if (ax_present_amd)
+        return;
     if (cpu_has_xsave)
         set_xcr0(xcr0_host, XCR0_STATE_HOST);
     assert_xcr0_state(XCR0_STATE_HOST);
@@ -391,7 +391,7 @@ void vcpu_save_fpu_host(struct vcpu *v)
 {
     unsigned long flags;
 
-    if (AX_ON_AMD_PRESENT() || !xsave_enabled(v))
+    if (ax_present_amd || !xsave_enabled(v))
         return;
 
     cpu_irq_save(flags);
@@ -407,7 +407,7 @@ void vcpu_restore_fpu_host(struct vcpu *v)
 {
     unsigned long flags;
 
-    if (AX_ON_AMD_PRESENT() || !xsave_enabled(v))
+    if (ax_present_amd || !xsave_enabled(v))
         return;
 
     cpu_irq_save(flags);

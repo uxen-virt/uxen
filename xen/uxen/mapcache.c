@@ -97,7 +97,7 @@ mapcache_map_page(xen_pfn_t mfn)
     uintptr_t va;
     struct hash_entry *entry;
 
-    if (AX_ON_AMD_PRESENT() && ax_l1_invlpg_intercept)
+    if (ax_l1_invlpg_intercept)
         return uxen_map_page_global(mfn);
 
     entry = &this_cpu(mapcache_hash)[HASH_FN(mfn)];

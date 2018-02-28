@@ -75,8 +75,8 @@ DEFINE_PER_CPU(uint64_t, xcr0_last);
 static inline void xsetbv_maybe(u32 index, u64 xfeatures)
 {
 
-    if (AX_ON_AMD_PRESENT())
-	return;
+    if (ax_present_amd)
+        return;
     if (this_cpu(xcr0_last) != xfeatures ||
         index != XCR_XFEATURE_ENABLED_MASK) {
         u32 hi = xfeatures >> 32;
