@@ -66,8 +66,6 @@ void fpu_init(void)
 /* Restore x87 extended state */
 static inline void fpu_xrstor(struct vcpu *v, uint64_t mask)
 {
-    if (ax_present_amd)
-        return;
 #ifndef __UXEN__
     /*
      * XCR0 normally represents what guest OS set. In case of Xen itself, 
@@ -146,8 +144,6 @@ static inline void fpu_frstor(struct vcpu *v)
 /* Save x87 extended state */
 static inline void fpu_xsave(struct vcpu *v)
 {
-    if (ax_present_amd)
-        return;
 #ifndef __UXEN__
     /* XCR0 normally represents what guest OS set. In case of Xen itself,
      * we set all accumulated feature mask before doing save/restore.
@@ -354,7 +350,6 @@ void vcpu_save_fpu(struct vcpu *v)
     clear_cr0_ts();
 
     if (ax_present_amd) {
-        fpu_xsave(v);
         v->fpu_dirtied = 0;
         cpu_irq_restore(flags);
         return;
