@@ -114,6 +114,8 @@ DEFINE_PER_CPU(enum hvmon, hvmon);
 
 static DEFINE_SPINLOCK(pt_sync_lock);
 
+bool_t __read_mostly vmexec_fpu_ctxt_switch = 0;
+
 static long do_hvm_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg);
 static long do_hvm_sched_op(unsigned long op, XEN_GUEST_HANDLE(void) arg);
 

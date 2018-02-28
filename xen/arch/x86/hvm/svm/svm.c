@@ -877,7 +877,8 @@ void svm_ctxt_switch_from(struct vcpu *v)
 #ifndef __UXEN_NOT_YET__
     svm_fpu_leave(v);
 #endif  /* __UXEN_NOT_YET__ */
-    vcpu_save_fpu(v);
+    if (!vmexec_fpu_ctxt_switch)
+        vcpu_save_fpu(v);
 
 #ifndef __UXEN_NOT_YET__
     svm_save_dr(v);
@@ -907,7 +908,8 @@ void svm_ctxt_switch_from(struct vcpu *v)
     if ( cpu_has_rdtscp && hvm_has_rdtscp(v->domain) )
         wrmsrl(MSR_TSC_AUX, this_cpu(host_msr_tsc_aux));
 
-    vcpu_restore_fpu_host(v);
+    if (!vmexec_fpu_ctxt_switch)
+        vcpu_restore_fpu_host(v);
 }
 
 static void sync_host_state(struct vcpu *v)
@@ -957,7 +959,8 @@ void svm_ctxt_switch_to(struct vcpu *v)
     if (v->context_loaded != 0)
         return;
 
-    vcpu_save_fpu_host(v);
+    if (!vmexec_fpu_ctxt_switch)
+        vcpu_save_fpu_host(v);
 
     ASSERT(v->is_running);
 
@@ -2604,8 +2607,10 @@ asmlinkage_abi void svm_trace_vmentry(void)
 asmlinkage_abi void svm_restore_regs(void)
 {
 
-    vcpu_restore_fpu_lazy(current);
-    assert_xcr0_state(XCR0_STATE_VM);
+    if (!vmexec_fpu_ctxt_switch) {
+        vcpu_restore_fpu_lazy(current);
+        assert_xcr0_state(XCR0_STATE_VM);
+    }
 
     pt_maybe_sync_cpu_enter(current->domain);
 }

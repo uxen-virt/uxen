@@ -183,6 +183,8 @@ int ax_setup(void)
             hv_tests_cpuid(&rax, &rbx, &rcx, &rdx);
             ax_l1_invlpg_intercept = !!(rdx & AX_CPUID_VMCB_CHECK_INTERCEPT_INVLPG);
             printk("L1 intercepts INVLPG: %s\n", ax_l1_invlpg_intercept ? "YES" : "NO");
+            vmexec_fpu_ctxt_switch = 1;
+            uxen_info->host_os_is_xmm_clean = 1;
         }
     }
 #endif

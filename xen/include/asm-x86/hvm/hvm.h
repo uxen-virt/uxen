@@ -228,6 +228,7 @@ HVM_FUNCS_proto(svm)
 // #define HVM_FUNCS(fn, args) (svm_ ## fn(args))
 
 extern bool_t hvm_enabled;
+extern bool_t vmexec_fpu_ctxt_switch;
 extern bool_t cpu_has_lmsl;
 #ifndef __UXEN__
 extern s8 hvm_port80_allowed;
