@@ -146,6 +146,7 @@ static struct notifier_block cpu_nfb = {
 static int __init hvm_enable(void)
 {
     struct hvm_function_table *fns = NULL;
+    char *name = "";
 
     BUILD_BUG_ON(UI_HVM_IO_BITMAP_SIZE != IOPM_SIZE);
 
@@ -158,16 +159,18 @@ static int __init hvm_enable(void)
     {
     case X86_VENDOR_INTEL:
         fns = start_vmx();
+        name = "vmx";
         break;
     case X86_VENDOR_AMD:
         fns = start_svm();
+        name = "svm";
         break;
     default:
         break;
     }
 
-    if ( fns == NULL )
-        return 0;
+    if (fns == NULL)
+        panic("HVM: start_%s failed\n", name);
 
     hvm_funcs = *fns;
     hvm_enabled = 1;
