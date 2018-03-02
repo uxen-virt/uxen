@@ -26,7 +26,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -125,12 +125,18 @@ static void p2m_initialise(struct domain *d, struct p2m_domain *p2m)
            (boot_cpu_data.x86_vendor ==  X86_VENDOR_INTEL) ? "intel" :
            ((boot_cpu_data.x86_vendor ==  X86_VENDOR_AMD) ? "amd" :
             "unsupported"));
-    if ( hap_enabled(d) && (boot_cpu_data.x86_vendor == X86_VENDOR_INTEL) )
+
+    if (!hap_enabled(d)) {
+        if (d->domain_id && d->domain_id < DOMID_FIRST_RESERVED)
+            printk(XENLOG_ERR "%s: vm%u: VM without hap\n",
+                   __FUNCTION__, d->domain_id);
+        return;
+    }
+
+    if (boot_cpu_data.x86_vendor == X86_VENDOR_INTEL)
         ept_p2m_init(p2m);
-    else if ( hap_enabled(d) && (boot_cpu_data.x86_vendor == X86_VENDOR_AMD) )
+    else if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD)
         p2m_pt_init(p2m);
-    else
-        if (d->domain_id && d->domain_id < DOMID_FIRST_RESERVED) DEBUG();
 
     return;
 }

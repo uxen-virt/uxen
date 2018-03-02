@@ -571,6 +571,18 @@ int arch_domain_create(struct domain *d, unsigned int domcr_flags)
         is_hvm_domain(d) &&
         hvm_funcs.hap_supported &&
         (domcr_flags & DOMCRF_hap);
+    if (!hap_enabled(d) &&
+        d->domain_id && d->domain_id < DOMID_FIRST_RESERVED) {
+        printk(XENLOG_ERR "%s: vm%u: VM without hap "
+               "(is %shvm domain, hap %ssupported, DOMCRF_hap %sset)\n",
+               __FUNCTION__, d->domain_id,
+               is_hvm_domain(d) ? "" : "not ",
+               hvm_funcs.hap_supported ? "" : "not ",
+               (domcr_flags & DOMCRF_hap) ? "" : "not ");
+        rc = -EINVAL;
+        goto fail;
+    }
+
     d->arch.hvm_domain.mem_sharing_enabled = 0;
 
     d->arch.s3_integrity = !!(domcr_flags & DOMCRF_s3_integrity);
