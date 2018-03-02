@@ -915,7 +915,6 @@ uxen_op_init(struct fd_assoc *fda)
   out:
     if (ret) {
         uxen_info->ui_running = 0;
-        uxen_op_init_free_allocs();
         uxen_devext->de_executing = 0;
         uxen_devext->de_initialised = 0;
     }
