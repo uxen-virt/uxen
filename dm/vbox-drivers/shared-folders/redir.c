@@ -1,5 +1,5 @@
 /*
- * Copyright 2017, Bromium, Inc.
+ * Copyright 2017-2018, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -7,6 +7,7 @@
 #include <dm/config.h>
 #include <dm/debug.h>
 #include <dm/queue.h>
+#include <dm/dm.h>
 #include <wchar.h>
 #include <iprt/alloc.h>
 #include <iprt/err.h>
@@ -91,7 +92,8 @@ sf_redirect_add(wchar_t *sfname, wchar_t *src, wchar_t *dst)
     e = sf_redirect_find(sfname, src);
     if (e) {
         sf_redirect_update_dst(e, dst);
-        debug_printf("shared-folders: updated redirect %ls -> %ls\n", src, dst);
+        if (!hide_log_sensitive_data)
+            debug_printf("shared-folders: updated redirect %ls -> %ls\n", src, dst);
         return 0;
     }
 
@@ -105,7 +107,8 @@ sf_redirect_add(wchar_t *sfname, wchar_t *src, wchar_t *dst)
     critical_section_enter(&redir_lock);
     TAILQ_INSERT_TAIL(&redir_entries, e, entry);
     critical_section_leave(&redir_lock);
-    debug_printf("shared-folders: added redirect %ls -> %ls\n", src, dst);
+    if (!hide_log_sensitive_data)
+        debug_printf("shared-folders: added redirect %ls -> %ls\n", src, dst);
 
     return 0;
 }
@@ -120,7 +123,8 @@ sf_redirect_del(wchar_t *sfname, wchar_t *src)
         critical_section_enter(&redir_lock);
         TAILQ_REMOVE(&redir_entries, e, entry);
         critical_section_leave(&redir_lock);
-        debug_printf("shared-folders: removed redirect %ls -> %ls\n", e->src, e->dst);
+        if (!hide_log_sensitive_data)
+            debug_printf("shared-folders: removed redirect %ls -> %ls\n", e->src, e->dst);
         RTMemFree(e->sfname);
         RTMemFree(e->src);
         RTMemFree(e->dst);

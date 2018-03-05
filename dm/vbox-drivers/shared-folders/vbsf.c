@@ -17,7 +17,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -34,6 +34,7 @@
  */
 
 #include <dm/config.h>
+#include <dm/dm.h>
 #include <winioctl.h>
 #ifdef UNITTEST
 # include "testcase/tstSharedFolderService.h"
@@ -699,7 +700,8 @@ static int vbsfOpenFile(SHFLCLIENTDATA *pClient, SHFLROOT root, const wchar_t *p
         case VERR_TOO_MANY_OPEN_FILES:
             if (cErrors < 32)
             {
-                LogRel(("SharedFolders host service: Cannot open '%s' -- too many open files.\n", pszPath));
+                LogRel(("SharedFolders host service: Cannot open '%s' -- too many open files.\n",
+                    hide_log_sensitive_data ? L"file" : pszPath));
 #if defined RT_OS_LINUX || RT_OS_SOLARIS
                 if (cErrors < 1)
                     LogRel(("SharedFolders host service: Try to increase the limit for open files (ulimit -n)\n"));
@@ -1305,7 +1307,8 @@ test_re_write(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle)
             rc = fch_re_write_file(pClient, root, Handle);
             if (RT_FAILURE(rc)) {
                 LogRel(("shared-folders: rewrite of %ls (%llx) failed with %x\n",
-                        vbsfQueryHandlePath(pClient, Handle), Handle, rc));
+                    hide_log_sensitive_data ? L"file" : vbsfQueryHandlePath(pClient, Handle),
+                    Handle, rc));
                 return rc;
             }
         }
