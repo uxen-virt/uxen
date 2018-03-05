@@ -18,7 +18,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -35,6 +35,7 @@
  */
 
 #include <dm/config.h>
+#include <dm/dm.h>
 #include "os.h"
 #include "shflhandle.h"
 #include <iprt/alloc.h>
@@ -185,11 +186,13 @@ timeout_open(DWORD timeoutms,
         h->crypt = h->to_ctx->crypt;
         return h->to_ctx->rc;
     case WAIT_TIMEOUT:
-        LogRel(("Shared folders: timeout waiting for %ws to reopen\n", filename));
+        LogRel(("Shared folders: timeout waiting for %ws to reopen\n",
+                hide_log_sensitive_data ? L"file" : filename));
         TerminateThread(h, 0);
         return VERR_FILE_NOT_FOUND;
     default:
-        LogRel(("Shared folders: WaitForSingleObject error %d while reopening %ws\n", rc, filename));
+        LogRel(("Shared folders: WaitForSingleObject error %d while reopening %ws\n", rc,
+                hide_log_sensitive_data ? L"file" : filename));
         TerminateThread(h, 0);
         return VERR_FILE_NOT_FOUND;
     }
@@ -214,23 +217,25 @@ reopen_file(SHFLINTHANDLE *h)
 
     fOpen = (fOpen & ~(RTFILE_O_ACTION_MASK|RTFILE_O_TRUNCATE)) |
         RTFILE_O_OPEN; /* Effective OPEN_EXISTING */
-    LogRel(("Shared folders: reopening file %ws (%ws)\n", h->pwszFilename, h->pwszGuestPath));
+    if (!hide_log_sensitive_data)
+        LogRel(("Shared folders: reopening file %ws (%ws)\n", h->pwszFilename, h->pwszGuestPath));
+    else
+        LogRel(("Shared folders: reopening file\n"));
     for (delay = 10;;delay += 10) {
         rc = timeout_open(FILE_REOPEN_TIMEOUT_MS, h,
                           &fh->file.Handle, h->pwszFilename, fOpen, NULL);
         if (rc != VERR_SHARING_VIOLATION)
             break;
         if ((delay % 1000) == 10)
-            LogRel(("Shared folders: reopen file %ws sharing violation\n",
-                    h->pwszFilename));
+            LogRel(("Shared folders: reopen file sharing violation\n"));
         Sleep(delay > 50 ? 50 : delay);
     }
-    LogRel(("Shared folders: reopening file %ws done rc %d\n", h->pwszFilename, rc));
+    LogRel(("Shared folders: reopening file done rc %d\n", rc));
 
     h->pClient = &clientData;
 
     if (RT_FAILURE(rc) && rc != VERR_FILE_NOT_FOUND) {
-        LogRel(("Shared folders: reopen file %ws fails 0x%x\n", h->pwszFilename, rc));
+        LogRel(("Shared folders: reopen file fails 0x%x\n", rc));
         RTMemFree((void*)fh);
         fh = NULL;
 
@@ -246,8 +251,8 @@ reopen_file(SHFLINTHANDLE *h)
     h->pvUserData = (uintptr_t) fh;
 
     if (rc == VERR_FILE_NOT_FOUND) {
-        LogRel(("Shared folders: reopen file %ws fails, file not found - continuing\n",
-                h->pwszFilename, rc));
+        LogRel(("Shared folders: reopen file fails, file not found - continuing\n",
+                rc));
         h->bFileNotFound = 1;
     }
 

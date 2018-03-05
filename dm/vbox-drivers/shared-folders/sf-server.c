@@ -16,7 +16,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -33,6 +33,7 @@
  */
 
 #include <dm/config.h>
+#include <dm/dm.h>
 #include <VBox/shflsvc.h>
 
 
@@ -129,13 +130,14 @@ sf_add_mapping(char *folder, char *name, int writable,
     if (!name_sstr)
         return VERR_NO_MEMORY;
 
-    LogRel(("shared-folders: Host path '%ls', map name '%ls', %s, opts=0x%" PRIx64
-            ", quota=%" PRId64 "\n",
-            folder_sstr->String.ucs2,
-            name_sstr->String.ucs2,
-            writable ? "writable" : "read-only",
-            opts,
-            quota));
+    if (!hide_log_sensitive_data)
+        LogRel(("shared-folders: Host path '%ls', map name '%ls', %s, opts=0x%" PRIx64
+                ", quota=%" PRId64 "\n",
+                folder_sstr->String.ucs2,
+                name_sstr->String.ucs2,
+                writable ? "writable" : "read-only",
+                opts,
+                quota));
 
     /* Execute the function. */
     rc = vbsfMappingsAdd(folder_sstr, name_sstr,

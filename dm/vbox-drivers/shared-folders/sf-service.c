@@ -16,7 +16,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -1193,13 +1193,14 @@ static DECLCALLBACK(int) svcHostCall (void *unused, uint32_t u32Function, uint32
             }
             else
             {
-                LogRel(("    Host path '%ls', map name '%ls', %s, automount=%s, create_symlinks=%s crypt=%s\n",
-                        ((SHFLSTRING *)paParms[0].u.pointer.addr)->String.ucs2,
-                        ((SHFLSTRING *)paParms[1].u.pointer.addr)->String.ucs2,
-                        RT_BOOL(fFlags & SHFL_ADD_MAPPING_F_WRITABLE) ? "writable" : "read-only",
-                        RT_BOOL(fFlags & SHFL_ADD_MAPPING_F_AUTOMOUNT) ? "true" : "false",
-                        RT_BOOL(fFlags & SHFL_ADD_MAPPING_F_CREATE_SYMLINKS) ? "true" : "false",
-                        RT_BOOL(fFlags & SHFL_ADD_MAPPING_F_CRYPT) ? "true" : "false"));
+                if (!hide_log_sensitive_data)
+                    LogRel(("    Host path '%ls', map name '%ls', %s, automount=%s, create_symlinks=%s crypt=%s\n",
+                            ((SHFLSTRING *)paParms[0].u.pointer.addr)->String.ucs2,
+                            ((SHFLSTRING *)paParms[1].u.pointer.addr)->String.ucs2,
+                            RT_BOOL(fFlags & SHFL_ADD_MAPPING_F_WRITABLE) ? "writable" : "read-only",
+                            RT_BOOL(fFlags & SHFL_ADD_MAPPING_F_AUTOMOUNT) ? "true" : "false",
+                            RT_BOOL(fFlags & SHFL_ADD_MAPPING_F_CREATE_SYMLINKS) ? "true" : "false",
+                            RT_BOOL(fFlags & SHFL_ADD_MAPPING_F_CRYPT) ? "true" : "false"));
 
                 /* Execute the function. */
                 rc = vbsfMappingsAdd(pFolderName, pMapName,
