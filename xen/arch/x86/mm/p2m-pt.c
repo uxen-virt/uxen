@@ -58,6 +58,8 @@
 #include <xen/trace.h>
 #include <asm/hvm/nestedhvm.h>
 #include <asm/hvm/svm/amd-iommu-proto.h>
+#include <asm/hvm/ax.h>
+#include <asm/hvm/xen_pv.h>
 
 #include "mm-locks.h"
 
@@ -190,9 +192,22 @@ write_p2m_entry(struct p2m_domain *p2m, unsigned long gfn,
         needs_sync = 0;
 
     safe_write_pte(p, new);
-    if (!_needs_sync && needs_sync &&
-        (level == 1 || (level == 2 && (old_flags & _PAGE_PSE))))
-        pt_sync_domain(d);
+    if (needs_sync) {
+        if (ax_pv_ept)
+            ax_pv_ept_write(p2m, level - 1, gfn, l1e_get_intpte(new),
+                            needs_sync);
+        if (xen_pv_ept)
+            xen_pv_ept_write(p2m, level - 1, gfn, l1e_get_intpte(new),
+                             needs_sync);
+        if (ax_pv_ept || xen_pv_ept)
+            needs_sync = 0;
+        /* call pt_sync_domain here for callers not using the
+         * needs_sync argument -- recheck needs_sync in case
+         * *_pv_ept_writes cleared it above */
+        if (!_needs_sync && needs_sync &&
+            (level == 1 || (level == 2 && (old_flags & _PAGE_PSE))))
+            pt_sync_domain(d);
+    }
 
     if (_needs_sync)
         *_needs_sync = needs_sync;
