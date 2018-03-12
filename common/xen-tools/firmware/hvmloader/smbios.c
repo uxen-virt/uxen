@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  *
@@ -46,6 +46,8 @@
 #include "util.h"
 #include "modules.h"
 #include "hypercall.h"
+
+#define UUID_LEN 16
 
 static int
 write_smbios_tables(void *ep, void *start,
@@ -217,73 +219,100 @@ get_memsize(void)
     return (sz + (1ul << 20) - 1) >> 20;
 }
 
+static void hypervisor_probe_version(
+    uint16_t *major, uint16_t *minor, int version_str_sz, char *version_str,
+    uint8_t *uuid)
+{
+    if (uxen_present) {
+        uint32_t xen_version;
+        char xen_extra_version[XEN_EXTRAVERSION_LEN];
+        /* guess conservatively on buffer length for Xen version string */
+        /* temporary variables used to build up Xen version string */
+        char *p = NULL; /* points to next point of insertion */
+        unsigned len = 0; /* length of string already composed */
+        char tmp[16]; /* holds result of itoa() */
+        unsigned tmp_len; /* length of next string to add */
+
+        hypercall_xen_version(XENVER_guest_handle, uuid);
+        BUILD_BUG_ON(sizeof(xen_domain_handle_t) != 16);
+
+        /* xen_version major and minor */
+        xen_version = hypercall_xen_version(XENVER_version, NULL);
+        *major = (uint16_t) (xen_version >> 16);
+        *minor = (uint16_t) xen_version;
+
+        hypercall_xen_version(XENVER_extraversion, xen_extra_version);
+
+        /* build up human-readable Xen version string */
+        p = version_str;
+        len = 0;
+
+        itoa(tmp, *major);
+        tmp_len = strlen(tmp);
+        len += tmp_len;
+        if ( len >= version_str_sz )
+            goto error_out;
+        strcpy(p, tmp);
+        p += tmp_len;
+
+        len++;
+        if ( len >= version_str_sz )
+            goto error_out;
+        *p = '.';
+        p++;
+
+        itoa(tmp, *minor);
+        tmp_len = strlen(tmp);
+        len += tmp_len;
+        if ( len >= version_str_sz )
+            goto error_out;
+        strcpy(p, tmp);
+        p += tmp_len;
+
+        tmp_len = strlen(xen_extra_version);
+        len += tmp_len;
+        if ( len >= version_str_sz )
+            goto error_out;
+        strcpy(p, xen_extra_version);
+        p += tmp_len;
+
+        version_str[version_str_sz - 1] = '\0';
+    } else if (whp_present) {
+        strcpy(version_str, "UXENDM-WHPX v1");
+        *major = 1;
+        *minor = 0;
+        // FIXME: setup uuid so it's visible in smbios tables
+        memset(uuid, 0, UUID_LEN);
+    } else BUG();
+
+    return;
+
+error_out:
+    BUG();
+}
+
+
 void
 hvm_write_smbios_tables(
     unsigned long ep, unsigned long smbios_start, unsigned long smbios_end)
 {
     xen_domain_handle_t uuid;
-    uint16_t xen_major_version, xen_minor_version;
-    uint32_t xen_version;
-    char xen_extra_version[XEN_EXTRAVERSION_LEN];
-    /* guess conservatively on buffer length for Xen version string */
-    char xen_version_str[80];
-    /* temporary variables used to build up Xen version string */
-    char *p = NULL; /* points to next point of insertion */
-    unsigned len = 0; /* length of string already composed */
-    char tmp[16]; /* holds result of itoa() */
-    unsigned tmp_len; /* length of next string to add */
     unsigned nr_structs = 0, max_struct_size = 0;
+    uint16_t major_version, minor_version;
+    /* guess conservatively on buffer length for Xen version string */
+    char version_str[80];
+    unsigned len;
 
-    hypercall_xen_version(XENVER_guest_handle, uuid);
     BUILD_BUG_ON(sizeof(xen_domain_handle_t) != 16);
 
-    /* xen_version major and minor */
-    xen_version = hypercall_xen_version(XENVER_version, NULL);
-    xen_major_version = (uint16_t) (xen_version >> 16);
-    xen_minor_version = (uint16_t) xen_version;
-
-    hypercall_xen_version(XENVER_extraversion, xen_extra_version);
-
-    /* build up human-readable Xen version string */
-    p = xen_version_str;
-    len = 0;
-
-    itoa(tmp, xen_major_version);
-    tmp_len = strlen(tmp);
-    len += tmp_len;
-    if ( len >= sizeof(xen_version_str) )
-        goto error_out;
-    strcpy(p, tmp);
-    p += tmp_len;
-
-    len++;
-    if ( len >= sizeof(xen_version_str) )
-        goto error_out;
-    *p = '.';
-    p++;
-
-    itoa(tmp, xen_minor_version);
-    tmp_len = strlen(tmp);
-    len += tmp_len;
-    if ( len >= sizeof(xen_version_str) )
-        goto error_out;
-    strcpy(p, tmp);
-    p += tmp_len;
-
-    tmp_len = strlen(xen_extra_version);
-    len += tmp_len;
-    if ( len >= sizeof(xen_version_str) )
-        goto error_out;
-    strcpy(p, xen_extra_version);
-    p += tmp_len;
-
-    xen_version_str[sizeof(xen_version_str)-1] = '\0';
+    hypervisor_probe_version(&major_version, &minor_version,
+        sizeof(version_str), version_str, (void*)uuid);
 
     /* scratch_start is a safe large memory area for scratch. */
     len = write_smbios_tables((void *)ep, (void *)scratch_start,
                               hvm_info->nr_vcpus, get_memsize(),
-                              uuid, xen_version_str,
-                              xen_major_version, xen_minor_version,
+                              uuid, version_str,
+                              major_version, minor_version,
                               &nr_structs, &max_struct_size);
     if ( smbios_start && smbios_start + len > smbios_end )
         goto error_out;

@@ -87,7 +87,7 @@ static void lapic_wait_ready(void)
 
 static void boot_cpu(unsigned int cpu)
 {
-    unsigned int icr2 = SET_APIC_DEST_FIELD(LAPIC_ID(cpu));
+    unsigned int icr2 = SET_APIC_DEST_FIELD(get_lapic_id(cpu));
 
     /* Initialise shared variables. */
     ap_cpuid = cpu;

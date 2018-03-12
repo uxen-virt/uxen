@@ -43,6 +43,9 @@ void xenbus_setup(void)
 {
     xen_hvm_param_t param;
 
+    if (!uxen_present)
+        return;
+
     /* Ask Xen where the xenbus shared page is. */
     param.domid = DOMID_SELF;
     param.index = HVM_PARAM_STORE_PFN;

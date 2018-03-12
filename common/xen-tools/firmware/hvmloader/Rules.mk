@@ -3,7 +3,10 @@
 CFLAGS_debug := $(subst -O2,-O0,$(CFLAGS_debug))
 
 XEN_INCLUDE        = $(abspath $(TOPDIR))/common/include/xen-public
+COMMON_INCLUDE     = $(abspath $(TOPDIR))/common/include
 CFLAGS_xeninclude = -I$(XEN_INCLUDE)
+CFLAGS_commoninclude = -I$(COMMON_INCLUDE)
+
 CFLAGS += -D__XEN_TOOLS__ -DNDEBUG
 CFLAGS += -fno-strict-aliasing
 CFLAGS += -std=gnu99

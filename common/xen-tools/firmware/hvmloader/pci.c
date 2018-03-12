@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -205,32 +205,36 @@ void pci_setup(void)
             ((pci_mem_start << 1) != 0) )
         pci_mem_start <<= 1;
 
-    /* Relocate RAM that overlaps PCI space (in 64k-page chunks). */
-    while ( (pci_mem_start >> PAGE_SHIFT) < hvm_info->low_mem_pgend )
-    {
-        struct xen_add_to_physmap xatp;
-        unsigned int nr_pages = min_t(
-            unsigned int,
-            hvm_info->low_mem_pgend - (pci_mem_start >> PAGE_SHIFT),
-            (1u << 16) - 1);
-        hvm_info->low_mem_pgend -= nr_pages;
-        xatp.domid = DOMID_SELF;
-        xatp.space = XENMAPSPACE_gmfn_range;
+    // FIXME: support RAM/PCI space relocation on WHP as otherwise
+    // guest ram is quite limited
+    if (uxen_present) {
+        /* Relocate RAM that overlaps PCI space (in 64k-page chunks). */
+        while ( (pci_mem_start >> PAGE_SHIFT) < hvm_info->low_mem_pgend )
+        {
+            struct xen_add_to_physmap xatp;
+            unsigned int nr_pages = min_t(
+                unsigned int,
+                hvm_info->low_mem_pgend - (pci_mem_start >> PAGE_SHIFT),
+                (1u << 16) - 1);
+            hvm_info->low_mem_pgend -= nr_pages;
+            xatp.domid = DOMID_SELF;
+            xatp.space = XENMAPSPACE_gmfn_range;
 #if 0 /* ndef __UXEN__ */
-        xatp.idx   = hvm_info->low_mem_pgend;
-        if ( hvm_info->high_mem_pgend == 0 )
-            hvm_info->high_mem_pgend = 1ull << (32 - PAGE_SHIFT);
-        xatp.gpfn  = hvm_info->high_mem_pgend;
-        hvm_info->high_mem_pgend += nr_pages;
+            xatp.idx   = hvm_info->low_mem_pgend;
+            if ( hvm_info->high_mem_pgend == 0 )
+                hvm_info->high_mem_pgend = 1ull << (32 - PAGE_SHIFT);
+            xatp.gpfn  = hvm_info->high_mem_pgend;
+            hvm_info->high_mem_pgend += nr_pages;
 #else  /* __UXEN__ */
-        /* on uxen, don't relocate memory since the mapcache won't
-         * extend to the relocated area */
-        xatp.idx  = /* INVALID_GFN */ -1ULL;
-        xatp.gpfn  = hvm_info->low_mem_pgend;
+            /* on uxen, don't relocate memory since the mapcache won't
+             * extend to the relocated area */
+            xatp.idx  = /* INVALID_GFN */ -1ULL;
+            xatp.gpfn  = hvm_info->low_mem_pgend;
 #endif /* __UXEN__ */
-        xatp.size  = nr_pages;
-        if ( hypercall_memory_op(XENMEM_add_to_physmap, &xatp) != 0 )
-            BUG();
+            xatp.size  = nr_pages;
+            if ( hypercall_memory_op(XENMEM_add_to_physmap, &xatp) != 0 )
+                BUG();
+        }
     }
 
     mem_resource.base = pci_mem_start;

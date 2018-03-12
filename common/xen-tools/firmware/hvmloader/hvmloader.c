@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -48,6 +48,8 @@
 #include "acpi/acpi2_0.h"
 #include <xen/version.h>
 #include <xen/hvm/params.h>
+#include <xen/arch-x86/cpuid.h>
+#include <whpx-shared.h>
 
 #if defined(ENABLE_STDVGA)
 #define ROM_INCLUDE_VGABIOS
@@ -136,11 +138,52 @@ asm (
 
 unsigned long scratch_start = SCRATCH_PHYSICAL_ADDRESS;
 
+int whp_present  = 0;
+int uxen_present = 0;
+
+static void hypervisor_probe(void)
+{
+    uint32_t base = 0x40000000;
+    uint32_t eax, ebx, ecx, edx;
+
+    cpuid(base, &eax, &ebx, &ecx, &edx);
+
+    /* if viridian is enabled, use 0x40000100 */
+    if (ebx == VIRIDIAN_CPUID_SIGNATURE_EBX &&
+        ecx == VIRIDIAN_CPUID_SIGNATURE_ECX &&
+        edx == VIRIDIAN_CPUID_SIGNATURE_EDX)
+    {
+        base = 0x40000100;
+        cpuid(base, &eax, &ebx, &ecx, &edx);
+    }
+
+    uxen_present = (ebx == XEN_CPUID_SIGNATURE_EBX &&
+        ecx == XEN_CPUID_SIGNATURE_ECX &&
+        edx == XEN_CPUID_SIGNATURE_EDX);
+
+    whp_present = (ebx == WHP_CPUID_SIGNATURE_EBX &&
+        ecx == WHP_CPUID_SIGNATURE_ECX &&
+        edx == WHP_CPUID_SIGNATURE_EDX);
+
+    printf("uxen: %d, whp: %d\n", uxen_present, whp_present);
+}
+
+int get_lapic_id(int vcpu_id)
+{
+    /* FIXME: use same lapic id on uxen and whp. Currently there does seem to be
+     * whp smp windows 10 boot issue if we do that though, likely a problem in
+     * qemu's lapic emulation */
+    return whp_present ? vcpu_id : 2*vcpu_id;
+}
+
 static void init_hypercalls(void)
 {
     uint32_t eax, ebx, ecx, edx;
     unsigned long i;
     uint32_t base = 0x40000000;
+
+    if (!uxen_present)
+        return;
 
     cpuid(base, &eax, &ebx, &ecx, &edx);
     /* if viridian is enabled, use 0x40000100 */
@@ -381,7 +424,7 @@ static void apic_setup(void)
 
     /* 8259A ExtInts are delivered through IOAPIC pin 0 (Virtual Wire Mode). */
     ioapic_write(0x10, APIC_DM_EXTINT);
-    ioapic_write(0x11, SET_APIC_ID(LAPIC_ID(0)));
+    ioapic_write(0x11, SET_APIC_ID(get_lapic_id(0)));
 }
 
 struct bios_info {
@@ -445,6 +488,8 @@ int main(void)
     memset((void *)HYPERCALL_PHYSICAL_ADDRESS, 0xc3 /* RET */, PAGE_SIZE);
 
     printf("HVM Loader\n");
+
+    hypervisor_probe();
 
     init_hypercalls();
 

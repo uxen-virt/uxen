@@ -44,7 +44,7 @@ extern struct bios_config seabios_config;
 #define IOAPIC_VERSION      0x11
 
 #define LAPIC_BASE_ADDRESS  0xfee00000
-#define LAPIC_ID(vcpu_id)   ((vcpu_id) * 2)
+int get_lapic_id(int vcpu_id);
 
 #define PCI_ISA_DEVFN       0x08    /* dev 1, fn 0 */
 #define PCI_ISA_IRQ_MASK    0x0c20U /* ISA IRQs 5,10,11 are PCI connected */
@@ -67,6 +67,8 @@ extern unsigned long pci_mem_start, pci_mem_end;
 #define RESERVED_MEMORY_DYNAMIC       0xFC001000
 
 extern unsigned long scratch_start;
+
+extern int whp_present, uxen_present;
 
 #endif /* __HVMLOADER_CONFIG_H__ */
 

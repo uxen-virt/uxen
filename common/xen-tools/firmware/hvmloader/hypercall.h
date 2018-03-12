@@ -120,63 +120,64 @@ static inline int
 hypercall_sched_op(
     int cmd, void *arg)
 {
-    return _hypercall2(int, sched_op, cmd, arg);
+    return uxen_present ? _hypercall2(int, sched_op, cmd, arg) : -1;
 }
 
 static inline int
 hypercall_memory_op(
     unsigned int cmd, void *arg)
 {
-    return _hypercall2(int, memory_op, cmd, arg);
+    return uxen_present ? _hypercall2(int, memory_op, cmd, arg) : -1;
 }
 
 static inline int
 hypercall_multicall(
     void *call_list, int nr_calls)
 {
-    return _hypercall2(int, multicall, call_list, nr_calls);
+    return uxen_present ? _hypercall2(int, multicall, call_list, nr_calls) : -1;
 }
 
 static inline int
 hypercall_event_channel_op(
     int cmd, void *arg)
 {
-    return _hypercall2(int, event_channel_op, cmd, arg);
+    return uxen_present ? _hypercall2(int, event_channel_op, cmd, arg) : -1;
 }
 
 static inline int
 hypercall_xen_version(
     int cmd, void *arg)
 {
-    return _hypercall2(int, xen_version, cmd, arg);
+    return uxen_present ? _hypercall2(int, xen_version, cmd, arg) : -1;
 }
 
 static inline int
 hypercall_console_io(
     int cmd, int count, char *str)
 {
-    return _hypercall3(int, console_io, cmd, count, str);
+    return uxen_present ? _hypercall3(int, console_io, cmd, count, str) : -1;
 }
 
 static inline int
 hypercall_vm_assist(
     unsigned int cmd, unsigned int type)
 {
-    return _hypercall2(int, vm_assist, cmd, type);
+    return uxen_present ? _hypercall2(int, vm_assist, cmd, type) : -1;
 }
 
 static inline int
 hypercall_vcpu_op(
     int cmd, int vcpuid, void *extra_args)
 {
-    return _hypercall3(int, vcpu_op, cmd, vcpuid, extra_args);
+    return uxen_present
+        ? _hypercall3(int, vcpu_op, cmd, vcpuid, extra_args) : -1;
 }
 
 static inline int
 hypercall_hvm_op(
     int cmd, void *arg)
 {
-    return _hypercall2(int, hvm_op, cmd, arg);
+    return uxen_present ? _hypercall2(int, hvm_op, cmd, arg) : -1;
 }
 
 #endif /* __HVMLOADER_HYPERCALL_H__ */

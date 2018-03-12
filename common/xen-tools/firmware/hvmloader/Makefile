@@ -21,7 +21,7 @@
 #
 # uXen changes:
 #
-# Copyright 2012-2015, Bromium, Inc.
+# Copyright 2012-2018, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 # Permission to use, copy, modify, and/or distribute this software for any
@@ -51,7 +51,7 @@ SUBDIRS += acpi
 # The HVM loader is started in 32-bit mode at the address below:
 LOADADDR = 0x100000
 
-CFLAGS += $(CFLAGS_xeninclude)
+CFLAGS += $(CFLAGS_xeninclude) $(CFLAGS_commoninclude)
 
 CPPFLAGS += -I.
 

@@ -18,7 +18,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -190,7 +190,7 @@ static struct acpi_20_madt *construct_madt(struct acpi_info *info)
         lapic->length  = sizeof(*lapic);
         /* Processor ID must match processor-object IDs in the DSDT. */
         lapic->acpi_processor_id = i;
-        lapic->apic_id = LAPIC_ID(i);
+        lapic->apic_id = get_lapic_id(i);
         lapic->flags = ((i < hvm_info->nr_vcpus) &&
                         test_bit(i, hvm_info->vcpu_online)
                         ? ACPI_LOCAL_APIC_ENABLED : 0);
@@ -409,6 +409,7 @@ void acpi_build_tables(struct acpi_config *config, unsigned int physical)
     int                  nr_secondaries, i;
 
     /* Allocate and initialise the acpi info area. */
+    /* hyperv: assume preallocated by dm */
     mem_hole_populate_ram(ACPI_INFO_PHYSICAL_ADDRESS >> PAGE_SHIFT, 1);
     acpi_info = (struct acpi_info *)ACPI_INFO_PHYSICAL_ADDRESS;
     memset(acpi_info, 0, sizeof(*acpi_info));

@@ -20,7 +20,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -43,6 +43,7 @@
 #include <xen/xen.h>
 #include <xen/memory.h>
 #include <xen/sched.h>
+#include <whpx-shared.h>
 
 void wrmsr(uint32_t idx, uint64_t v)
 {
@@ -327,6 +328,10 @@ void mem_hole_populate_ram(xen_pfn_t mfn, uint32_t nr_mfns)
     struct xen_add_to_physmap xatp;
     struct xen_memory_reservation xmr;
 
+    /* on whp, assume pre-populated */
+    if (whp_present)
+        return;
+
     for ( ; nr_mfns-- != 0; mfn++ )
     {
         /* Try to allocate a brand new page in the reserved area. */
@@ -386,6 +391,8 @@ void *mem_alloc(uint32_t size, uint32_t align)
     while ( (reserve >> PAGE_SHIFT) != (e >> PAGE_SHIFT) )
     {
         reserve += PAGE_SIZE;
+        /* on hyper-v, we assume the memory region has been preallocated by dm 
+         * rather than dynamically asking hypervisor to allocate */
         mem_hole_populate_ram(reserve >> PAGE_SHIFT, 1);
     }
 
@@ -656,6 +663,11 @@ struct hvm_info_table *get_hvm_info_table(void)
     return table;
 }
 
+struct whpx_shared_info *get_shared_info_whp(void)
+{
+    return (struct whpx_shared_info*) WHP_SHARED_INFO_ADDR;
+}
+
 struct shared_info *get_shared_info(void) 
 {
     static struct shared_info *shared_info = NULL;
@@ -677,15 +689,20 @@ struct shared_info *get_shared_info(void)
 
 uint16_t get_cpu_mhz(void)
 {
-    struct shared_info *shared_info = get_shared_info();
-    struct vcpu_time_info *info = &shared_info->vcpu_info[0].time;
+    struct shared_info *shared_info;
+    struct vcpu_time_info *info;
     uint64_t cpu_khz;
     uint32_t tsc_to_nsec_mul, version;
     int8_t tsc_shift;
-
     static uint16_t cpu_mhz;
     if ( cpu_mhz != 0 )
         return cpu_mhz;
+
+    if (whp_present)
+        return get_shared_info_whp()->cpu_mhz;
+
+    shared_info = get_shared_info();
+    info = &shared_info->vcpu_info[0].time;
 
     /* Get a consistent snapshot of scale factor (multiplier and shift). */
     do {
