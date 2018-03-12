@@ -14,6 +14,7 @@
 #define INFO_PHYSICAL_ADDRESS 0x00001000
 
 u32 xen_cpuid_base = 0;
+int whp_present = 0;
 
 struct xen_seabios_info {
     char signature[14]; /* XenHVMSeaBIOS\0 */
@@ -46,6 +47,27 @@ static void validate_info(struct xen_seabios_info *t)
         panic("Bad Xen info checksum\n");
 }
 
+static void whp_probe(void)
+{
+    u32 base, eax, ebx, ecx, edx;
+
+    base = 0x40000000;
+    cpuid(base, &eax, &ebx, &ecx, &edx);
+
+    /* if viridian is enabled, use 0x40000100 */
+    if (ebx == VIRIDIAN_CPUID_SIGNATURE_EBX &&
+        ecx == VIRIDIAN_CPUID_SIGNATURE_ECX &&
+        edx == VIRIDIAN_CPUID_SIGNATURE_EDX)
+    {
+        base = 0x40000100;
+        cpuid(base, &eax, &ebx, &ecx, &edx);
+    }
+
+    whp_present = (ebx == WHP_CPUID_SIGNATURE_EBX &&
+        ecx == WHP_CPUID_SIGNATURE_ECX &&
+        edx == WHP_CPUID_SIGNATURE_EDX);
+}
+
 void xen_probe(void)
 {
     u32 base, eax, ebx, ecx, edx;
@@ -53,12 +75,16 @@ void xen_probe(void)
     if (!CONFIG_XEN)
         return;
 
+    whp_probe();
+    if (whp_present)
+        return;
+
     base = 0x40000000;
     cpuid(base, &eax, &ebx, &ecx, &edx);
     /* if viridian is enabled, use 0x40000100 */
-    if (ebx == 0x7263694d &&
-        ecx == 0x666F736F &&
-        edx == 0x76482074)
+    if (ebx == VIRIDIAN_CPUID_SIGNATURE_EBX &&
+        ecx == VIRIDIAN_CPUID_SIGNATURE_ECX &&
+        edx == VIRIDIAN_CPUID_SIGNATURE_EDX)
     {
         base = 0x40000100;
     }

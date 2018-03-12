@@ -33,7 +33,7 @@
 
 void mtrr_setup(void)
 {
-    if (!CONFIG_MTRR_INIT || CONFIG_COREBOOT || usingXen())
+    if (!CONFIG_MTRR_INIT || CONFIG_COREBOOT || usingXen() || usingHv())
         return;
 
     u32 eax, ebx, ecx, edx, cpuid_features;

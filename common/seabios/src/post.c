@@ -161,7 +161,7 @@ init_bios_tables(void)
         coreboot_copy_biostable();
         return;
     }
-    if (usingXen()) {
+    if (usingXen() || usingHv()) {
         xen_copy_biostables();
         return;
     }

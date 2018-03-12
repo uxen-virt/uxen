@@ -3,6 +3,18 @@
 
 #include "util.h"
 
+#define XEN_CPUID_SIGNATURE_EBX 0x6e655875 /* "uXen" */
+#define XEN_CPUID_SIGNATURE_ECX 0x6f6e7369 /* "isno" */
+#define XEN_CPUID_SIGNATURE_EDX 0x6e655874 /* "tXen" */
+
+#define WHP_CPUID_SIGNATURE_EBX 0x78706857 /* "Whpx" */
+#define WHP_CPUID_SIGNATURE_ECX 0x6f6e7369 /* "isno" */
+#define WHP_CPUID_SIGNATURE_EDX 0x6e655874 /* "tXen" */
+
+#define VIRIDIAN_CPUID_SIGNATURE_EBX 0x7263694d
+#define VIRIDIAN_CPUID_SIGNATURE_ECX 0x666f736f
+#define VIRIDIAN_CPUID_SIGNATURE_EDX 0x76482074
+
 extern u32 xen_cpuid_base;
 
 void xen_probe(void);
@@ -10,10 +22,16 @@ void xen_setup(void);
 void xen_init_hypercalls(void);
 void xen_copy_biostables(void);
 
+extern int whp_present;
+
 static inline int usingXen(void) {
     if (!CONFIG_XEN)
         return 0;
     return (xen_cpuid_base != 0);
+}
+
+static inline int usingHv(void) {
+    return whp_present;
 }
 
 unsigned long xen_hypercall_page;

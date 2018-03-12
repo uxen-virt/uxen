@@ -110,7 +110,7 @@ static const struct pci_device_id dram_controller_make_readonly_tbl[] = {
 void
 make_bios_writable(void)
 {
-    if (CONFIG_COREBOOT || usingXen())
+    if (CONFIG_COREBOOT || usingXen() || usingHv())
         return;
 
     dprintf(3, "enabling shadow ram\n");
@@ -134,7 +134,7 @@ make_bios_writable(void)
 void
 make_bios_readonly(void)
 {
-    if (CONFIG_COREBOOT || usingXen())
+    if (CONFIG_COREBOOT || usingXen() || usingHv())
         return;
 
     dprintf(3, "locking shadow ram\n");

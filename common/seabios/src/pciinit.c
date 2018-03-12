@@ -561,7 +561,7 @@ static void pci_bios_map_devices(struct pci_bus *busses)
 void
 pci_setup(void)
 {
-    if (CONFIG_COREBOOT || usingXen()) {
+    if (CONFIG_COREBOOT || usingXen() || usingHv()) {
         // PCI setup already done by coreboot or Xen - just do probe.
         pci_probe_devices();
         return;
