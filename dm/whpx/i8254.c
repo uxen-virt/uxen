@@ -41,12 +41,14 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "hw.h"
-#include "pc.h"
-#include "isa.h"
-#include "qemu-timer.h"
+#include <dm/qemu_glue.h>
+#include <dm/qemu/hw/isa.h>
+#include <dm/mr.h>
+#include <dm/qemu/hw/sysbus.h>
 
 //#define DEBUG_PIT
+
+#define PIT_FREQ 1193182
 
 #define RW_STATE_LSB 1
 #define RW_STATE_MSB 2
@@ -74,10 +76,12 @@ typedef struct PITChannelState {
 } PITChannelState;
 
 typedef struct PITState {
-    ISADevice dev;
+    SysBusDevice dev;
     MemoryRegion ioports;
     uint32_t irq;
     uint32_t iobase;
+    uint32_t dummy_refresh_clock;
+    uint32_t speaker_data_on;
     PITChannelState channels[3];
 } PITState;
 
@@ -143,7 +147,7 @@ static int pit_get_out1(PITChannelState *s, int64_t current_time)
     return out;
 }
 
-int pit_get_out(ISADevice *dev, int channel, int64_t current_time)
+int pit_get_out(SysBusDevice *dev, int channel, int64_t current_time)
 {
     PITState *pit = DO_UPCAST(PITState, dev, dev);
     PITChannelState *s = &pit->channels[channel];
@@ -204,7 +208,7 @@ static int64_t pit_get_next_transition_time(PITChannelState *s,
 }
 
 /* val must be 0 or 1 */
-void pit_set_gate(ISADevice *dev, int channel, int val)
+void pit_set_gate(SysBusDevice *dev, int channel, int val)
 {
     PITState *pit = DO_UPCAST(PITState, dev, dev);
     PITChannelState *s = &pit->channels[channel];
@@ -236,21 +240,21 @@ void pit_set_gate(ISADevice *dev, int channel, int val)
     s->gate = val;
 }
 
-int pit_get_gate(ISADevice *dev, int channel)
+int pit_get_gate(SysBusDevice *dev, int channel)
 {
     PITState *pit = DO_UPCAST(PITState, dev, dev);
     PITChannelState *s = &pit->channels[channel];
     return s->gate;
 }
 
-int pit_get_initial_count(ISADevice *dev, int channel)
+int pit_get_initial_count(SysBusDevice *dev, int channel)
 {
     PITState *pit = DO_UPCAST(PITState, dev, dev);
     PITChannelState *s = &pit->channels[channel];
     return s->count;
 }
 
-int pit_get_mode(ISADevice *dev, int channel)
+int pit_get_mode(SysBusDevice *dev, int channel)
 {
     PITState *pit = DO_UPCAST(PITState, dev, dev);
     PITChannelState *s = &pit->channels[channel];
@@ -275,15 +279,20 @@ static void pit_latch_count(PITChannelState *s)
     }
 }
 
-static void pit_ioport_write(void *opaque, uint32_t addr, uint32_t val)
+static void pit_ioport_write(void *opaque, uint64_t addr, uint64_t val, unsigned size)
 {
     PITState *pit = opaque;
     int channel, access;
     PITChannelState *s;
 
+#ifdef DEBUG_PIT
+    debug_printf("PIT IOPORT write @ %"PRIx64" val=0x%"PRIx64" size=%d\n",
+                 addr, val, size);
+#endif    
     addr &= 3;
     if (addr == 3) {
         channel = val >> 6;
+        assert(channel >= 0 && channel <= 3);
         if (channel == 3) {
             /* read back command */
             for(channel = 0; channel < 3; channel++) {
@@ -340,13 +349,17 @@ static void pit_ioport_write(void *opaque, uint32_t addr, uint32_t val)
     }
 }
 
-static uint32_t pit_ioport_read(void *opaque, uint32_t addr)
+static uint64_t pit_ioport_read(void *opaque, uint64_t addr, unsigned size)
 {
     PITState *pit = opaque;
     int ret, count;
     PITChannelState *s;
 
     addr &= 3;
+#ifdef QEMU_UXEN
+    if (addr == 3)
+        return 0;
+#endif
     s = &pit->channels[addr];
     if (s->status_latched) {
         s->status_latched = 0;
@@ -390,6 +403,10 @@ static uint32_t pit_ioport_read(void *opaque, uint32_t addr)
             break;
         }
     }
+#ifdef DEBUG_PIT    
+    debug_printf("PIT IOPORT read @ %"PRIx64" val=0x%"PRIx64" size=%d\n",
+                 addr, (uint64_t)ret, size);
+#endif
     return ret;
 }
 
@@ -404,7 +421,7 @@ static void pit_irq_timer_update(PITChannelState *s, int64_t current_time)
     irq_level = pit_get_out1(s, current_time);
     qemu_set_irq(s->irq, irq_level);
 #ifdef DEBUG_PIT
-    printf("irq_level=%d next_delay=%f\n",
+    debug_printf("PIT: irq_level=%d next_delay=%f\n",
            irq_level,
            (double)(expire_time - current_time) / get_ticks_per_sec());
 #endif
@@ -446,6 +463,7 @@ static const VMStateDescription vmstate_pit_channel = {
     }
 };
 
+#ifndef QEMU_UXEN
 static int pit_load_old(QEMUFile *f, void *opaque, int version_id)
 {
     PITState *pit = opaque;
@@ -477,16 +495,21 @@ static int pit_load_old(QEMUFile *f, void *opaque, int version_id)
     }
     return 0;
 }
+#endif
 
 static const VMStateDescription vmstate_pit = {
     .name = "i8254",
     .version_id = 2,
     .minimum_version_id = 2,
     .minimum_version_id_old = 1,
+#ifndef QEMU_UXEN
     .load_state_old = pit_load_old,
+#endif
     .fields      = (VMStateField []) {
         VMSTATE_STRUCT_ARRAY(channels, PITState, 3, 2, vmstate_pit_channel, PITChannelState),
         VMSTATE_TIMER(channels[0].irq_timer, PITState),
+        VMSTATE_UINT32(dummy_refresh_clock, PITState),
+        VMSTATE_UINT32(speaker_data_on, PITState),
         VMSTATE_END_OF_LIST()
     }
 };
@@ -527,17 +550,38 @@ void hpet_pit_enable(void)
     pit_load_count(s, 0);
 }
 
-static const MemoryRegionPortio pit_portio[] = {
-    { 0, 4, 1, .write = pit_ioport_write },
-    { 0, 3, 1, .read = pit_ioport_read },
-    PORTIO_END_OF_LIST()
-};
-
 static const MemoryRegionOps pit_ioport_ops = {
-    .old_portio = pit_portio
+    .read = pit_ioport_read,
+    .write = pit_ioport_write,
+    .impl = {
+        .min_access_size = 1,
+        .max_access_size = 1,
+    }
 };
 
-static int pit_initfn(ISADevice *dev)
+static uint32_t pcspk_ioport_read(void *opaque, uint32_t addr)
+{
+    SysBusDevice *dev = (SysBusDevice*)opaque;
+    PITState *pit = DO_UPCAST(PITState, dev, dev);
+    int out;
+
+    pit->dummy_refresh_clock ^= (1 << 4);
+    out = pit_get_out(dev, 2, qemu_get_clock_ns(vm_clock)) << 5;
+
+    return pit_get_gate(dev, 2) | (pit->speaker_data_on << 1) | pit->dummy_refresh_clock | out;
+}
+
+static void pcspk_ioport_write(void *opaque, uint32_t addr, uint32_t val)
+{
+    SysBusDevice *dev = (SysBusDevice*)opaque;
+    PITState *pit = DO_UPCAST(PITState, dev, dev);
+    const int gate = val & 1;
+
+    pit->speaker_data_on = (val >> 1) & 1;
+    pit_set_gate(dev, 2, gate);
+}
+
+static int pit_initfn(SysBusDevice *dev)
 {
     PITState *pit = DO_UPCAST(PITState, dev, dev);
     PITChannelState *s;
@@ -548,19 +592,32 @@ static int pit_initfn(ISADevice *dev)
     s->irq = isa_get_irq(pit->irq);
 
     memory_region_init_io(&pit->ioports, &pit_ioport_ops, pit, "pit", 4);
-    isa_register_ioport(dev, &pit->ioports, pit->iobase);
+    memory_region_add_subregion(system_ioport, pit->iobase, &pit->ioports);
 
+    // pcspkr ports
+    register_ioport_read(0x61, 1, 1, pcspk_ioport_read, dev);
+    register_ioport_write(0x61, 1, 1, pcspk_ioport_write, dev);
+
+#ifndef QEMU_UXEN
     qdev_set_legacy_instance_id(&dev->qdev, pit->iobase, 2);
-
+#endif
     return 0;
 }
 
-static ISADeviceInfo pit_info = {
+void pit_init(void)
+{
+    DeviceState *dev;
+    dev = qdev_create(NULL, "isa-pit");
+    qdev_prop_set_uint32(dev, "iobase", 0x40);
+    qdev_prop_set_uint32(dev, "irq", 0);
+    qdev_init_nofail(dev);
+}
+
+static SysBusDeviceInfo pit_info = {
     .qdev.name     = "isa-pit",
     .qdev.size     = sizeof(PITState),
     .qdev.vmsd     = &vmstate_pit,
     .qdev.reset    = pit_reset,
-    .qdev.no_user  = 1,
     .init          = pit_initfn,
     .qdev.props = (Property[]) {
         DEFINE_PROP_UINT32("irq", PITState, irq,  -1),
@@ -571,6 +628,6 @@ static ISADeviceInfo pit_info = {
 
 static void pit_register(void)
 {
-    isa_qdev_register(&pit_info);
+    sysbus_register_withprop(&pit_info);
 }
 device_init(pit_register)

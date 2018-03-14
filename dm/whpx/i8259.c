@@ -41,18 +41,18 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "hw.h"
-#include "pc.h"
-#include "isa.h"
-#include "monitor.h"
-#include "qemu-timer.h"
+#include <dm/qemu_glue.h>
+#include <dm/qemu/hw/isa.h>
+#include <dm/mr.h>
+#include <dm/qemu/hw/sysbus.h>
+#include <dm/debug.h>
 
 /* debug PIC */
 //#define DEBUG_PIC
 
 #ifdef DEBUG_PIC
 #define DPRINTF(fmt, ...)                                       \
-    do { printf("pic: " fmt , ## __VA_ARGS__); } while (0)
+    do { debug_printf("pic: " fmt , ## __VA_ARGS__); } while (0)
 #else
 #define DPRINTF(fmt, ...)
 #endif
@@ -61,7 +61,7 @@
 //#define DEBUG_IRQ_COUNT
 
 struct PicState {
-    ISADevice dev;
+    SysBusDevice busdev;
     uint8_t last_irr; /* edge detection */
     uint8_t irr; /* interrupt request register */
     uint8_t imr; /* interrupt mask register */
@@ -86,6 +86,8 @@ struct PicState {
     MemoryRegion base_io;
     MemoryRegion elcr_io;
 };
+
+typedef struct PicState PicState;
 
 #if defined(DEBUG_PIC) || defined(DEBUG_IRQ_COUNT)
 static int irq_level[16];
@@ -121,6 +123,7 @@ static int pic_get_irq(PicState *s)
     int mask, cur_priority, priority;
 
     mask = s->irr & ~s->imr;
+    DPRINTF("pic_get_irq irr %x isr %x imr %x mask %x\n", s->irr, s->isr, s->imr, mask);
     priority = get_priority(s, mask);
     if (priority == 8) {
         return -1;
@@ -289,7 +292,7 @@ static void pic_init_reset(PicState *s)
 
 static void pic_reset(DeviceState *dev)
 {
-    PicState *s = container_of(dev, PicState, dev.qdev);
+    PicState *s = DO_UPCAST(PicState, busdev.qdev, dev);
 
     pic_init_reset(s);
     s->elcr = 0;
@@ -415,7 +418,7 @@ static uint64_t pic_ioport_read(void *opaque, target_phys_addr_t addr,
             ret = s->imr;
         }
     }
-    DPRINTF("read: addr=0x%02x val=0x%02x\n", addr, ret);
+    DPRINTF("read: addr=0x%02x val=0x%02x\n", (int)addr, ret);
     return ret;
 }
 
@@ -482,22 +485,33 @@ static const MemoryRegionOps pic_elcr_ioport_ops = {
     },
 };
 
-static int pic_initfn(ISADevice *dev)
+static int pic_initfn(SysBusDevice *dev)
 {
-    PicState *s = DO_UPCAST(PicState, dev, dev);
+    PicState *s = container_of(dev, PicState, busdev);
 
     memory_region_init_io(&s->base_io, &pic_base_ioport_ops, s, "pic", 2);
     memory_region_init_io(&s->elcr_io, &pic_elcr_ioport_ops, s, "elcr", 1);
 
+#ifdef QEMU_UXEN
+    memory_region_add_subregion(system_ioport, s->iobase, &s->base_io);
+
+    if (s->elcr_addr != -1)
+        memory_region_add_subregion(system_ioport, s->elcr_addr, &s->elcr_io);
+#else
     isa_register_ioport(NULL, &s->base_io, s->iobase);
     if (s->elcr_addr != -1) {
         isa_register_ioport(NULL, &s->elcr_io, s->elcr_addr);
     }
+    memory_region_add_subregion(system_ioport, s->iobase, &s->base_io);
+
+    if (s->elcr_addr != -1)
+        memory_region_add_subregion(system_ioport, s->elcr_addr, &s->elcr_io);
 
     qdev_init_gpio_out(&dev->qdev, s->int_out, ARRAY_SIZE(s->int_out));
     qdev_init_gpio_in(&dev->qdev, pic_set_irq, 8);
 
     qdev_set_legacy_instance_id(&dev->qdev, s->iobase, 1);
+#endif
 
     return 0;
 }
@@ -512,7 +526,7 @@ void pic_info(Monitor *mon)
     }
     for (i = 0; i < 2; i++) {
         s = i == 0 ? isa_pic : slave_pic;
-        monitor_printf(mon, "pic%d: irr=%02x imr=%02x isr=%02x hprio=%d "
+        debug_printf("pic%d: irr=%02x imr=%02x isr=%02x hprio=%d "
                        "irq_base=%02x rr_sel=%d elcr=%02x fnm=%d\n",
                        i, s->irr, s->imr, s->isr, s->priority_add,
                        s->irq_base, s->read_reg_select, s->elcr,
@@ -523,65 +537,69 @@ void pic_info(Monitor *mon)
 void irq_info(Monitor *mon)
 {
 #ifndef DEBUG_IRQ_COUNT
-    monitor_printf(mon, "irq statistic code not compiled.\n");
+    debug_printf("irq statistic code not compiled.\n");
 #else
     int i;
     int64_t count;
 
-    monitor_printf(mon, "IRQ statistics:\n");
+    debug_printf("IRQ statistics:\n");
     for (i = 0; i < 16; i++) {
         count = irq_count[i];
         if (count > 0) {
-            monitor_printf(mon, "%2d: %" PRId64 "\n", i, count);
+            debug_printf("%2d: %" PRId64 "\n", i, count);
         }
     }
 #endif
 }
 
-qemu_irq *i8259_init(qemu_irq parent_irq)
+static void __pic_set_irq(void *opaque, int irq, int level)
 {
-    qemu_irq *irq_set;
-    ISADevice *dev;
-    int i;
-
-    irq_set = g_malloc(ISA_NUM_IRQS * sizeof(qemu_irq));
-
-    dev = isa_create("isa-i8259");
-    qdev_prop_set_uint32(&dev->qdev, "iobase", 0x20);
-    qdev_prop_set_uint32(&dev->qdev, "elcr_addr", 0x4d0);
-    qdev_prop_set_uint8(&dev->qdev, "elcr_mask", 0xf8);
-    qdev_prop_set_bit(&dev->qdev, "master", true);
-    qdev_init_nofail(&dev->qdev);
-
-    qdev_connect_gpio_out(&dev->qdev, 0, parent_irq);
-    for (i = 0 ; i < 8; i++) {
-        irq_set[i] = qdev_get_gpio_in(&dev->qdev, i);
-    }
-
-    isa_pic = DO_UPCAST(PicState, dev, dev);
-
-    dev = isa_create("isa-i8259");
-    qdev_prop_set_uint32(&dev->qdev, "iobase", 0xa0);
-    qdev_prop_set_uint32(&dev->qdev, "elcr_addr", 0x4d1);
-    qdev_prop_set_uint8(&dev->qdev, "elcr_mask", 0xde);
-    qdev_init_nofail(&dev->qdev);
-
-    qdev_connect_gpio_out(&dev->qdev, 0, irq_set[2]);
-    for (i = 0 ; i < 8; i++) {
-        irq_set[i + 8] = qdev_get_gpio_in(&dev->qdev, i);
-    }
-
-    slave_pic = DO_UPCAST(PicState, dev, dev);
-
-    return irq_set;
+    PicState *s;
+ 
+    //debug_printf("__pic_set_irq %d to %d\n", irq, level);
+    if (irq >= 8) {
+        irq -= 8;
+        s = slave_pic;
+    } else
+        s = isa_pic;
+    pic_set_irq(s, irq, level);
 }
 
-static ISADeviceInfo i8259_info = {
+qemu_irq *i8259_init(qemu_irq parent_irq)
+{
+    DeviceState *dev;
+    qemu_irq *irq_set;
+ 
+    irq_set = qemu_allocate_irqs(__pic_set_irq, NULL, 16);
+ 
+    dev = qdev_create(NULL, "isa-i8259");
+    qdev_prop_set_uint32(dev, "iobase", 0x20);
+    qdev_prop_set_uint32(dev, "elcr_addr", 0x4d0);
+    qdev_prop_set_uint8(dev, "elcr_mask", 0xf8);
+    qdev_prop_set_bit(dev, "master", true);
+    qdev_init_nofail(dev);
+ 
+    isa_pic = DO_UPCAST(PicState, busdev.qdev, dev);
+    isa_pic->int_out[0] = parent_irq;
+
+    dev = qdev_create(NULL, "isa-i8259");
+    qdev_prop_set_uint32(dev, "iobase", 0xa0);
+    qdev_prop_set_uint32(dev, "elcr_addr", 0x4d1);
+    qdev_prop_set_uint8(dev, "elcr_mask", 0xde);
+    qdev_init_nofail(dev);
+ 
+    slave_pic = DO_UPCAST(PicState, busdev.qdev, dev);
+    /* connect slave output to master line 2 */
+    slave_pic->int_out[0] = irq_set[2];
+ 
+    return irq_set;
+ }
+
+static SysBusDeviceInfo i8259_info = {
     .qdev.name     = "isa-i8259",
     .qdev.size     = sizeof(PicState),
     .qdev.vmsd     = &vmstate_pic,
     .qdev.reset    = pic_reset,
-    .qdev.no_user  = 1,
     .init          = pic_initfn,
     .qdev.props = (Property[]) {
         DEFINE_PROP_HEX32("iobase", PicState, iobase,  -1),
@@ -594,6 +612,7 @@ static ISADeviceInfo i8259_info = {
 
 static void pic_register(void)
 {
-    isa_qdev_register(&i8259_info);
+    sysbus_register_withprop(&i8259_info);
 }
+
 device_init(pic_register)

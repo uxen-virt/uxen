@@ -39,19 +39,17 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "hw.h"
-#include "pc.h"
-#include "apic.h"
-#include "ioapic.h"
-#include "qemu-timer.h"
-#include "host-utils.h"
-#include "sysbus.h"
+#include <dm/qemu_glue.h>
+#include <dm/qemu/hw/sysbus.h>
+#include <dm/whpx/apic.h>
+#include <dm/whpx/ioapic.h>
+#include <dm/debug.h>
 
 //#define DEBUG_IOAPIC
 
 #ifdef DEBUG_IOAPIC
 #define DPRINTF(fmt, ...)                                       \
-    do { printf("ioapic: " fmt , ## __VA_ARGS__); } while (0)
+    do { debug_printf("ioapic: " fmt , ## __VA_ARGS__); } while (0)
 #else
 #define DPRINTF(fmt, ...)
 #endif
@@ -105,13 +103,18 @@ typedef struct IOAPICState IOAPICState;
 
 struct IOAPICState {
     SysBusDevice busdev;
+    MemoryRegion mmio;
     uint8_t id;
     uint8_t ioregsel;
-    uint32_t irr;
+    /* uxen/whpx: nonstandard 64 bit irr used */
+    uint64_t irr;
     uint64_t ioredtbl[IOAPIC_NUM_PINS];
 };
 
 static IOAPICState *ioapics[MAX_IOAPICS];
+
+typedef struct PicState PicState;
+extern PicState *isa_pic;
 
 static void ioapic_service(IOAPICState *s)
 {
@@ -119,13 +122,13 @@ static void ioapic_service(IOAPICState *s)
     uint8_t trig_mode;
     uint8_t vector;
     uint8_t delivery_mode;
-    uint32_t mask;
+    uint64_t mask;
     uint64_t entry;
     uint8_t dest;
     uint8_t dest_mode;
 
     for (i = 0; i < IOAPIC_NUM_PINS; i++) {
-        mask = 1 << i;
+        mask = ((uint64_t)1) << i;
         if (s->irr & mask) {
             entry = s->ioredtbl[i];
             if (!(entry & IOAPIC_LVT_MASKED)) {
@@ -144,6 +147,7 @@ static void ioapic_service(IOAPICState *s)
                 } else {
                     vector = entry & IOAPIC_VECTOR_MASK;
                 }
+                DPRINTF("IOAPIC deliver pin=%d vector %x trig=%d\n", i, vector, trig_mode);
                 apic_deliver_irq(dest, dest_mode, delivery_mode,
                                  vector, trig_mode);
             }
@@ -164,12 +168,9 @@ static void ioapic_set_irq(void *opaque, int vector, int level)
         vector = 2;
     }
     if (vector >= 0 && vector < IOAPIC_NUM_PINS) {
-        uint32_t mask = 1 << vector;
+        uint64_t mask = ((uint64_t)1) << vector;
         uint64_t entry = s->ioredtbl[vector];
 
-        if (entry & (1 << IOAPIC_LVT_POLARITY_SHIFT)) {
-            level = !level;
-        }
         if (((entry >> IOAPIC_LVT_TRIGGER_MODE_SHIFT) & 1) ==
             IOAPIC_TRIGGER_LEVEL) {
             /* level triggered */
@@ -194,8 +195,9 @@ void ioapic_eoi_broadcast(int vector)
 {
     IOAPICState *s;
     uint64_t entry;
-    int i, n;
+    uint64_t i, n;
 
+    DPRINTF("IOAPIC EOI broadcast vector=0x%x\n", vector);
     for (i = 0; i < MAX_IOAPICS; i++) {
         s = ioapics[i];
         if (!s) {
@@ -206,7 +208,7 @@ void ioapic_eoi_broadcast(int vector)
             if ((entry & IOAPIC_LVT_REMOTE_IRR)
                 && (entry & IOAPIC_VECTOR_MASK) == vector) {
                 s->ioredtbl[n] = entry & ~IOAPIC_LVT_REMOTE_IRR;
-                if (!(entry & IOAPIC_LVT_MASKED) && (s->irr & (1 << n))) {
+                if (!(entry & IOAPIC_LVT_MASKED) && (s->irr & (((uint64_t)1) << n))) {
                     ioapic_service(s);
                 }
             }
@@ -214,7 +216,7 @@ void ioapic_eoi_broadcast(int vector)
     }
 }
 
-static uint32_t ioapic_mem_readl(void *opaque, target_phys_addr_t addr)
+static uint32_t ioapic_mem_readl(void *opaque, uint64_t addr)
 {
     IOAPICState *s = opaque;
     int index;
@@ -253,7 +255,7 @@ static uint32_t ioapic_mem_readl(void *opaque, target_phys_addr_t addr)
 }
 
 static void
-ioapic_mem_writel(void *opaque, target_phys_addr_t addr, uint32_t val)
+ioapic_mem_writel(void *opaque, uint64_t addr, uint32_t val)
 {
     IOAPICState *s = opaque;
     int index;
@@ -288,6 +290,20 @@ ioapic_mem_writel(void *opaque, target_phys_addr_t addr, uint32_t val)
     }
 }
 
+static uint64_t
+ioapic_mmio_read(void *opaque, target_phys_addr_t addr, unsigned size)
+{
+    uint64_t val = ioapic_mem_readl(opaque, addr);
+    return val;
+}
+
+static void
+ioapic_mmio_write(void *opaque, target_phys_addr_t addr, uint64_t val,
+                  unsigned size)
+{
+    ioapic_mem_writel(opaque, addr, val);
+}
+
 static int ioapic_post_load(void *opaque, int version_id)
 {
     IOAPICState *s = opaque;
@@ -309,7 +325,7 @@ static const VMStateDescription vmstate_ioapic = {
         VMSTATE_UINT8(id, IOAPICState),
         VMSTATE_UINT8(ioregsel, IOAPICState),
         VMSTATE_UNUSED_V(2, 8), /* to account for qemu-kvm's v2 format */
-        VMSTATE_UINT32_V(irr, IOAPICState, 2),
+        VMSTATE_UINT64_V(irr, IOAPICState, 2),
         VMSTATE_UINT64_ARRAY(ioredtbl, IOAPICState, IOAPIC_NUM_PINS),
         VMSTATE_END_OF_LIST()
     }
@@ -328,34 +344,29 @@ static void ioapic_reset(DeviceState *d)
     }
 }
 
-static CPUReadMemoryFunc * const ioapic_mem_read[3] = {
-    ioapic_mem_readl,
-    ioapic_mem_readl,
-    ioapic_mem_readl,
+static const MemoryRegionOps mmio_ops = {
+    .read = ioapic_mmio_read,
+    .write= ioapic_mmio_write,
 };
 
-static CPUWriteMemoryFunc * const ioapic_mem_write[3] = {
-    ioapic_mem_writel,
-    ioapic_mem_writel,
-    ioapic_mem_writel,
-};
+static void
+mmio_ptr_update(void *ptr, void *opaque)
+{
+}
 
 static int ioapic_init1(SysBusDevice *dev)
 {
     IOAPICState *s = FROM_SYSBUS(IOAPICState, dev);
-    int io_memory;
     static int ioapic_no;
 
     if (ioapic_no >= MAX_IOAPICS) {
         return -1;
     }
 
-    io_memory = cpu_register_io_memory(ioapic_mem_read,
-                                       ioapic_mem_write, s,
-                                       DEVICE_NATIVE_ENDIAN);
-    sysbus_init_mmio(dev, 0x1000, io_memory);
-
-    qdev_init_gpio_in(&dev->qdev, ioapic_set_irq, IOAPIC_NUM_PINS);
+    memory_region_init_io(&s->mmio, &mmio_ops, s, "ioapic.mmio", 0x1000);
+    memory_region_add_ram_range(&s->mmio, 0, 0x1000,
+                                mmio_ptr_update, s);
+    memory_region_add_subregion(system_iomem, 0xfec00000, &s->mmio);
 
     ioapics[ioapic_no++] = s;
 
@@ -368,8 +379,23 @@ static SysBusDeviceInfo ioapic_info = {
     .qdev.size = sizeof(IOAPICState),
     .qdev.vmsd = &vmstate_ioapic,
     .qdev.reset = ioapic_reset,
-    .qdev.no_user = 1,
 };
+
+qemu_irq *ioapic_init(void)
+{
+    DeviceState *dev;
+    qemu_irq *irqs;
+    IOAPICState *s;
+    
+    dev = qdev_create(NULL, "ioapic");
+    qdev_init_nofail(dev);
+
+    s = DO_UPCAST(IOAPICState, busdev.qdev, dev);
+    irqs = qemu_allocate_irqs(ioapic_set_irq, s, IOAPIC_NUM_PINS);
+
+    return irqs;
+}
+
 
 static void ioapic_register_devices(void)
 {

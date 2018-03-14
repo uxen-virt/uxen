@@ -6,7 +6,7 @@
 #ifndef MC146818RTC_H
 #define MC146818RTC_H
 
-#include "isa.h"
+#include <dm/qemu/hw/isa.h>
 
 #define RTC_ISA_IRQ 8
 

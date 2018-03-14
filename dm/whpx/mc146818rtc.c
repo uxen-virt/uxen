@@ -41,16 +41,19 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "hw.h"
-#include "qemu-timer.h"
-#include "sysemu.h"
-#include "pc.h"
-#include "apic.h"
-#include "isa.h"
+#include <dm/qemu_glue.h>
+#include <dm/qemu/hw/isa.h>
+#include <dm/qemu/hw/sysbus.h>
+#include <dm/whpx/apic.h>
+#include <dm/timer.h>
+#include <time.h>
 #include "mc146818rtc.h"
 
 //#define DEBUG_CMOS
 //#define DEBUG_COALESCED
+
+static Clock *rtc_clock;
+static int rtc_td_hack = 0;
 
 #ifdef DEBUG_CMOS
 # define CMOS_DPRINTF(format, ...)      printf(format, ## __VA_ARGS__)
@@ -120,11 +123,33 @@ typedef struct RTCState {
     QEMUTimer *coalesced_timer;
     QEMUTimer *second_timer;
     QEMUTimer *second_timer2;
-    Notifier clock_reset_notifier;
 } RTCState;
 
 static void rtc_set_time(RTCState *s);
 static void rtc_copy_date(RTCState *s);
+
+static int rtc_date_offset = -1;
+static int rtc_utc = 1;
+
+static void qemu_get_timedate(struct tm *tm, int offset)
+{
+    time_t ti;
+    struct tm *ret;
+
+    time(&ti);
+    ti += offset;
+    if (rtc_date_offset == -1) {
+        if (rtc_utc)
+            ret = gmtime(&ti);
+        else
+            ret = localtime(&ti);
+    } else {
+        ti -= rtc_date_offset;
+        ret = gmtime(&ti);
+    }
+
+    memcpy(tm, ret, sizeof(struct tm));
+}
 
 #ifdef TARGET_I386
 static void rtc_coalesced_timer_update(RTCState *s)
@@ -224,7 +249,7 @@ static void rtc_periodic_timer(void *opaque)
     }
 }
 
-static void cmos_ioport_write(void *opaque, uint32_t addr, uint32_t data)
+static void cmos_ioport_write(void *opaque, target_phys_addr_t addr, uint64_t data, unsigned size)
 {
     RTCState *s = opaque;
 
@@ -324,8 +349,6 @@ static void rtc_set_time(RTCState *s)
     tm->tm_mday = rtc_from_bcd(s, s->cmos_data[RTC_DAY_OF_MONTH]);
     tm->tm_mon = rtc_from_bcd(s, s->cmos_data[RTC_MONTH]) - 1;
     tm->tm_year = rtc_from_bcd(s, s->cmos_data[RTC_YEAR]) + s->base_year - 1900;
-
-    rtc_change_mon_event(tm);
 }
 
 static void rtc_copy_date(RTCState *s)
@@ -469,7 +492,7 @@ static void rtc_update_second2(void *opaque)
     qemu_mod_timer(s->second_timer, s->next_second_time);
 }
 
-static uint32_t cmos_ioport_read(void *opaque, uint32_t addr)
+static uint64_t cmos_ioport_read(void *opaque, target_phys_addr_t addr, unsigned size)
 {
     RTCState *s = opaque;
     int ret;
@@ -520,7 +543,7 @@ static uint32_t cmos_ioport_read(void *opaque, uint32_t addr)
     }
 }
 
-void rtc_set_memory(ISADevice *dev, int addr, int val)
+void qemu_rtc_set_memory(ISADevice *dev, int addr, int val)
 {
     RTCState *s = DO_UPCAST(RTCState, dev, dev);
     if (addr >= 0 && addr <= 127)
@@ -549,8 +572,8 @@ static void rtc_set_date_from_host(ISADevice *dev)
     rtc_set_date(dev, &tm);
 
     val = rtc_to_bcd(s, (tm.tm_year / 100) + 19);
-    rtc_set_memory(dev, REG_IBM_CENTURY_BYTE, val);
-    rtc_set_memory(dev, REG_IBM_PS2_CENTURY_BYTE, val);
+    qemu_rtc_set_memory(dev, REG_IBM_CENTURY_BYTE, val);
+    qemu_rtc_set_memory(dev, REG_IBM_PS2_CENTURY_BYTE, val);
 }
 
 static int rtc_post_load(void *opaque, int version_id)
@@ -594,22 +617,6 @@ static const VMStateDescription vmstate_rtc = {
     }
 };
 
-static void rtc_notify_clock_reset(Notifier *notifier, void *data)
-{
-    RTCState *s = container_of(notifier, RTCState, clock_reset_notifier);
-    int64_t now = *(int64_t *)data;
-
-    rtc_set_date_from_host(&s->dev);
-    s->next_second_time = now + (get_ticks_per_sec() * 99) / 100;
-    qemu_mod_timer(s->second_timer2, s->next_second_time);
-    rtc_timer_update(s, now);
-#ifdef TARGET_I386
-    if (rtc_td_hack) {
-        rtc_coalesced_timer_update(s);
-    }
-#endif
-}
-
 static void rtc_reset(void *opaque)
 {
     RTCState *s = opaque;
@@ -625,19 +632,21 @@ static void rtc_reset(void *opaque)
 #endif
 }
 
-static const MemoryRegionPortio cmos_portio[] = {
-    {0, 2, 1, .read = cmos_ioport_read, .write = cmos_ioport_write },
-    PORTIO_END_OF_LIST(),
-};
-
 static const MemoryRegionOps cmos_ops = {
-    .old_portio = cmos_portio
+    .read = cmos_ioport_read,
+    .write = cmos_ioport_write,
+    .impl = {
+        .min_access_size = 1,
+        .max_access_size = 1,
+    },
 };
 
 static int rtc_initfn(ISADevice *dev)
 {
     RTCState *s = DO_UPCAST(RTCState, dev, dev);
     int base = 0x70;
+
+    rtc_clock = rt_clock;
 
     s->cmos_data[RTC_REG_A] = 0x26;
     s->cmos_data[RTC_REG_B] = 0x02;
@@ -655,9 +664,6 @@ static int rtc_initfn(ISADevice *dev)
     s->second_timer = qemu_new_timer_ns(rtc_clock, rtc_update_second, s);
     s->second_timer2 = qemu_new_timer_ns(rtc_clock, rtc_update_second2, s);
 
-    s->clock_reset_notifier.notify = rtc_notify_clock_reset;
-    qemu_register_clock_reset_notifier(rtc_clock, &s->clock_reset_notifier);
-
     s->next_second_time =
         qemu_get_clock_ns(rtc_clock) + (get_ticks_per_sec() * 99) / 100;
     qemu_mod_timer(s->second_timer2, s->next_second_time);
@@ -665,7 +671,9 @@ static int rtc_initfn(ISADevice *dev)
     memory_region_init_io(&s->io, &cmos_ops, s, "rtc", 2);
     isa_register_ioport(dev, &s->io, base);
 
+#ifndef QEMU_UXEN
     qdev_set_legacy_instance_id(&dev->qdev, base, 2);
+#endif
     qemu_register_reset(rtc_reset, s);
     return 0;
 }
@@ -690,7 +698,6 @@ ISADevice *rtc_init(int base_year, qemu_irq intercept_irq)
 static ISADeviceInfo mc146818rtc_info = {
     .qdev.name     = "mc146818rtc",
     .qdev.size     = sizeof(RTCState),
-    .qdev.no_user  = 1,
     .qdev.vmsd     = &vmstate_rtc,
     .init          = rtc_initfn,
     .qdev.props    = (Property[]) {

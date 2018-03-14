@@ -39,8 +39,9 @@
 #ifndef HW_IOAPIC_H
 #define HW_IOAPIC_H
 
-#define IOAPIC_NUM_PINS 24
+#define IOAPIC_NUM_PINS 48
 
+qemu_irq *ioapic_init(void);
 void ioapic_eoi_broadcast(int vector);
 
 #endif /* !HW_IOAPIC_H */
