@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -259,7 +259,8 @@ PixelFormat default_pixelformat(int bpp)
  * Time to wait in ms between vram event and refresh.
  */
 #define REFRESH_TIMEOUT_MS 5
-static uxen_notification_event vram_event;
+uxen_notification_event vram_event;
+
 static struct Timer *vram_timer = NULL;
 
 static void refresh(void *opaque)
@@ -276,7 +277,8 @@ void do_dpy_trigger_refresh(void *opaque)
 {
     uint64_t now = get_clock_ms(vm_clock);
 
-    if (vram_timer)
+    /* do not delay updates infinitely */
+    if (vram_timer && !timer_pending(vram_timer))
         mod_timer(vram_timer, now + REFRESH_TIMEOUT_MS);
 }
 

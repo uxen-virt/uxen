@@ -25,7 +25,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -104,6 +104,36 @@
 /* ioport to monitor cpu add/remove status */
 #define PROC_BASE 0xaf00
 
+#define PM1a_STS_ADDR_V1 (ACPI_PM1A_EVT_BLK_ADDRESS_V1)
+#define PM1a_EN_ADDR_V1 (ACPI_PM1A_EVT_BLK_ADDRESS_V1 + 2)
+#define ACPI_PM_TMR_BLK_ADDRESS_V1 (ACPI_PM1A_EVT_BLK_ADDRESS_V1 + 0x08)
+#define TMR_VAL_ADDR_V1 (ACPI_PM_TMR_BLK_ADDRESS_V1)
+
+/* The interesting bits of the PM1a_STS register */
+#define TMR_STS    (1 << 0)
+#define GBL_STS    (1 << 5)
+#define PWRBTN_STS (1 << 8)
+#define SLPBTN_STS (1 << 9)
+
+/* The same in PM1a_EN */
+#define TMR_EN     (1 << 0)
+#define GBL_EN     (1 << 5)
+#define PWRBTN_EN  (1 << 8)
+#define SLPBTN_EN  (1 << 9)
+
+/* Mask of bits in PM1a_STS that can generate an SCI. */
+#define SCI_MASK (TMR_STS|PWRBTN_STS|SLPBTN_STS|GBL_STS) 
+
+/* SCI IRQ number (must match SCI_INT number in ACPI FADT in hvmloader) */
+#define SCI_IRQ 9
+
+/* We provide a 32-bit counter (must match the TMR_VAL_EXT bit in the FADT) */
+#define TMR_VAL_MASK  (0xffffffff)
+#define TMR_VAL_MSB   (0x80000000)
+
+#define FREQUENCE_PMTIMER  3579545  /* Timer should run at 3.579545 MHz */
+#define SYSTEM_TIME_HZ  1000000000ULL
+
 typedef struct PCIAcpiState {
     PCIDevice dev;
     uint16_t pm1_control; /* pm1a_ECNT_BLK */
@@ -116,6 +146,15 @@ typedef struct GPEState {
     uint8_t gpe0_sts[ACPI_GPE0_BLK_LEN_V0 / 2];
     uint8_t gpe0_en[ACPI_GPE0_BLK_LEN_V0 / 2];
 
+    //FIXME: save/restore pmt
+    uint64_t pmt_last_gtime;  /* Last (guest) time we updated the timer */
+    uint32_t pmt_not_accounted; /* time not accounted at last update */
+    uint64_t pmt_scale; /* Multiplier to get from tsc to timer ticks */
+    Timer *timer;         /* To make sure we send SCIs */
+    uint32_t tmr_val;
+    uint16_t pm1a_sts;
+    uint16_t pm1a_en;
+
     /* CPU bitmap */
     uint8_t cpus_sts[32];
 
@@ -124,6 +163,9 @@ typedef struct GPEState {
 
     uint32_t gpe0_blk_address;
     uint32_t gpe0_blk_half_len;
+
+    MemoryRegion pm1a_io;
+    MemoryRegion pmt_io;
 } GPEState;
 
 static GPEState gpe_state;
@@ -599,6 +641,161 @@ static void gpe_cpus_writeb(void *opaque, uint32_t addr, uint32_t val)
     }
 }
 
+/* --------------- PMTimer/PM btns implementation for WHP --------- */
+
+static void pmt_update_sci(GPEState *s)
+{
+    int v = s->pm1a_en & s->pm1a_sts & SCI_MASK;
+
+    qemu_set_irq(isa_get_irq(SCI_IRQ), v);
+}
+
+static void
+pm1a_ioport_write(void *opaque, target_phys_addr_t addr, uint64_t val,
+                  unsigned size)
+{
+    GPEState *s = opaque;
+    uint64_t data;
+    uint8_t byte;
+    uint64_t off = addr;
+    int i;
+
+    /* Handle this I/O one byte at a time */
+    for ( i = size, data = val;
+          i > 0;
+          i--, off++, data >>= 8 ) {
+        byte = data & 0xff;
+        switch ( off ) {
+            /* PM1a_STS register bits are write-to-clear */
+        case 0 /* PM1a_STS_ADDR */:
+            s->pm1a_sts &= ~byte;
+            break;
+        case 1 /* PM1a_STS_ADDR + 1 */:
+            s->pm1a_sts &= ~(byte << 8);
+            break;
+        case 2 /* PM1a_EN_ADDR */:
+            s->pm1a_en = (s->pm1a_en & 0xff00) | byte;
+            break;
+        case 3 /* PM1a_EN_ADDR + 1 */:
+            s->pm1a_en = (s->pm1a_en & 0xff) | (byte << 8);
+            break;
+        default:
+            debug_printf("Bad ACPI PM register write: %x bytes (%x) at %x\n", 
+                         (int)size, (int)val, (int)addr);
+        }
+    }
+    pmt_update_sci(s);
+}
+
+static uint64_t
+pm1a_ioport_read(void *opaque, target_phys_addr_t addr, unsigned size)
+{
+    GPEState *s = opaque;
+    uint64_t off = addr;
+    uint64_t data;
+
+    data = s->pm1a_sts | (((uint32_t) s->pm1a_en) << 16);
+    data >>= 8 * off;
+    if ( size == 1 ) data &= 0xff;
+    else if ( size == 2 ) data &= 0xffff;
+    return data;
+}
+
+/* Set the correct value in the timer, accounting for time elapsed
+ * since the last time we did that. */
+static void pmt_update_time(GPEState *s)
+{
+    uint64_t curr_gtime, tmp;
+    uint32_t tmr_val = s->tmr_val, msb = tmr_val & TMR_VAL_MSB;
+
+    /* Update the timer */
+    curr_gtime = qemu_get_clock_ns(vm_clock);
+    tmp = ((curr_gtime - s->pmt_last_gtime) * s->pmt_scale) +
+        s->pmt_not_accounted;
+    s->pmt_not_accounted = (uint32_t)tmp;
+    tmr_val += tmp >> 32;
+    tmr_val &= TMR_VAL_MASK;
+    s->pmt_last_gtime = curr_gtime;
+
+    /* Update timer value atomically wrt lock-free reads in handle_pmt_io(). */
+    *(volatile uint32_t *)&s->tmr_val = tmr_val;
+
+    /* If the counter's MSB has changed, set the status bit */
+    if ( (tmr_val & TMR_VAL_MSB) != msb )
+    {
+        s->pm1a_sts |= TMR_STS;
+        pmt_update_sci(s);
+    }
+}
+
+/* This function should be called soon after each time the MSB of the
+ * pmtimer register rolls over, to make sure we update the status
+ * registers and SCI at least once per rollover */
+static void pmt_timer_callback(void *opaque)
+{
+    GPEState *s = opaque;
+    uint32_t pmt_cycles_until_flip;
+    uint64_t time_until_flip;
+
+    /* Recalculate the timer and make sure we get an SCI if we need one */
+    pmt_update_time(s);
+
+    /* How close are we to the next MSB flip? */
+    pmt_cycles_until_flip = TMR_VAL_MSB - (s->tmr_val & (TMR_VAL_MSB - 1));
+
+    /* Overall time between MSB flips */
+    time_until_flip = (1000000000ULL << 23) / FREQUENCE_PMTIMER;
+
+    /* Reduced appropriately */
+    time_until_flip = (time_until_flip * pmt_cycles_until_flip) >> 23;
+
+    /* Wake up again near the next bit-flip */
+    mod_timer_ns(s->timer,
+        qemu_get_clock_ns(vm_clock) + time_until_flip + 1000000ULL /*1ms*/);
+}
+
+static void
+pmt_ioport_write(void *opaque, target_phys_addr_t addr, uint64_t val, unsigned size)
+{
+}
+
+static uint64_t
+pmt_ioport_read(void *opaque, target_phys_addr_t addr, unsigned size)
+{
+    GPEState *s = opaque;
+    uint32_t val = 0;
+
+    if (addr + size > 4) {
+        debug_printf("PMT bad access %"PRIx64"/%d\n", addr, size);
+        return 0;
+    }
+
+    pmt_update_time(s);
+    memcpy(&val, (char*)&s->tmr_val + addr, size);
+
+//    debug_printf("PMT READ[%"PRIx64"/%d]=%d\n", addr, size, val);
+
+    return val;
+}
+
+static const MemoryRegionOps pm1a_ioport_ops = {
+    .read = pm1a_ioport_read,
+    .write = pm1a_ioport_write,
+    .impl = {
+        .min_access_size = 1,
+        .max_access_size = 4,
+    },
+};
+
+static const MemoryRegionOps pmt_ioport_ops = {
+    .read = pmt_ioport_read,
+    .write = pmt_ioport_write,
+    .impl = {
+        .min_access_size = 1,
+        .max_access_size = 4,
+    },
+};
+
 static void gpe_acpi_init(void)
 {
     GPEState *s = &gpe_state;
@@ -642,6 +839,21 @@ static void gpe_acpi_init(void)
                           s);
 
     register_savevm(NULL, "gpe", 0, 2, gpe_save, gpe_load, s);
+
+
+    // for hyperv/whpx, emulate pm1a register (on uxen emulated in hypervisor)
+    if (whpx_enable) {
+      memory_region_init_io(&s->pm1a_io, &pm1a_ioport_ops, s, "pm1a", 4);
+      memory_region_init_io(&s->pmt_io, &pmt_ioport_ops, s, "pmt", 4);
+      memory_region_add_subregion(system_ioport, PM1a_STS_ADDR_V1, &s->pm1a_io);
+      memory_region_add_subregion(system_ioport, TMR_VAL_ADDR_V1, &s->pmt_io);
+      s->pmt_scale = ((uint64_t)FREQUENCE_PMTIMER << 32) / SYSTEM_TIME_HZ;
+      s->pmt_not_accounted = 0;
+      s->timer = qemu_new_timer_ns(vm_clock, pmt_timer_callback, s);
+      pmt_timer_callback(s);
+      //FIXME: save/restore pm1a
+      //FIXME: acpi buttons emulation, pm timer status setting
+    }
 }
 
 #ifdef CONFIG_PASSTHROUGH

@@ -40,6 +40,8 @@
 #include <dm/vm-savefile-simple.h>
 // #include "qmp-commands.h"
 
+#include <dm/whpx/whpx.h>
+
 //#define DEBUG_PCI
 #ifdef DEBUG_PCI
 # define PCI_DPRINTF(format, ...)       printf(format, ## __VA_ARGS__)
@@ -789,10 +791,20 @@ static PCIDevice *do_pci_register_device(PCIDevice *pci_dev, PCIBus *bus,
     pstrcpy(pci_dev->name, sizeof(pci_dev->name), name);
     pci_dev->irq_state = 0;
 
-    if (xen_register_pcidev(pci_dev)) {
-	error_report("PCI: xen_register_pcidev failed for slot %d function %d",
-		     PCI_SLOT(devfn), PCI_FUNC(devfn));
-	return NULL;
+    if (!whpx_enable) {
+        if (xen_register_pcidev(pci_dev)) {
+            error_report(
+                "PCI: xen_register_pcidev failed for slot %d function %d",
+                PCI_SLOT(devfn), PCI_FUNC(devfn));
+            return NULL;
+        }
+    } else {
+        if (whpx_register_pcidev(pci_dev)) {
+            error_report(
+                "PCI: whpx_register_pcidev failed for slot %d function %d",
+                PCI_SLOT(devfn), PCI_FUNC(devfn));
+            return NULL;
+        }
     }
 
     pci_config_alloc(pci_dev);
@@ -1010,11 +1022,14 @@ pcibus_t pci_bar_address(PCIDevice *d, int reg, uint8_t type, pcibus_t size)
     return new_addr;
 }
 
+void
+pci_ram_update_region(PCIDevice *d, PCIIORegion *r, pcibus_t last_addr, pcibus_t new_addr);
+
 static void pci_update_mappings(PCIDevice *d)
 {
     PCIIORegion *r;
     int i;
-    pcibus_t new_addr;
+    pcibus_t new_addr, last_addr;
 
     for(i = 0; i < PCI_NUM_REGIONS; i++) {
         r = &d->io_regions[i];
@@ -1029,6 +1044,8 @@ static void pci_update_mappings(PCIDevice *d)
         if (new_addr == r->addr)
             continue;
 
+        last_addr = r->addr;
+
         /* now do the real mapping */
         if (r->addr != PCI_BAR_UNMAPPED) {
             memory_region_del_subregion(r->address_space, r->memory);
@@ -1041,6 +1058,11 @@ static void pci_update_mappings(PCIDevice *d)
             memory_region_add_subregion_overlap(r->address_space,
                                                 r->addr, r->memory, 1);
         }
+
+        // TODO: this probably makes sense in the general case, not just whpx, though uxen manages w/o
+        // so perhaps best to leave as is
+        if (whpx_enable)
+            pci_ram_update_region(d, r, last_addr, new_addr);
     }
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -1377,7 +1377,8 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
             if (disp_fps_counter)
                 count_fps();
 
-            uxenconsole_disp_ack_rect(disp, current_rect);
+            if (disp)
+              uxenconsole_disp_ack_rect(disp, current_rect);
         }
         return ret;
 

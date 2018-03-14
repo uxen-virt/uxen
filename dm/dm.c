@@ -49,6 +49,7 @@
 
 #if defined(_WIN32)
 #include <filecrypt.h>
+#include "whpx/whpx.h"
 #endif
 
 char *dm_path = ".";
@@ -128,7 +129,7 @@ const char *clipboard_formats_blacklist_vm2host = NULL;
 const char *clipboard_formats_whitelist_vm2host = NULL;
 uint64_t deferred_clipboard = 0;
 
-xc_interface *xc_handle;
+xc_interface *xc_handle = NULL;
 int xen_logdirty_enabled = 0;
 
 FILE *logfile;
@@ -137,6 +138,8 @@ uint64_t hide_log_sensitive_data = 0;
 
 uint64_t log_ratelimit_guest_burst = 0;
 uint64_t log_ratelimit_guest_ms = 0;
+
+uint64_t whpx_enable = 0;
 
 static void
 usage(const char *progname)
@@ -331,14 +334,16 @@ main(int argc, char **argv)
     SetProcessShutdownParameters(process_shutdown_priority, 0);
 #endif
 
-    xc_handle = xc_interface_open(0, 0, 0, dm_path);
-    if (xc_handle == NULL)
-        errx(1, "xc_interface_open");
+    if (!whpx_enable) {
+        xc_handle = xc_interface_open(0, 0, 0, dm_path);
+        if (xc_handle == NULL)
+            errx(1, "xc_interface_open");
 
-    if (uxen_setup((UXEN_HANDLE_T)xc_interface_handle(xc_handle)))
-	err(1, "uxen_setup");
+        if (uxen_setup((UXEN_HANDLE_T)xc_interface_handle(xc_handle)))
+            err(1, "uxen_setup");
 
-    uxen_log_version();
+        uxen_log_version();
+    }
 
     debug_printf("creating vm\n");
     vm_create(vm_restore_mode);
@@ -363,7 +368,12 @@ main(int argc, char **argv)
         errx(1, "Failed to initialize GUI '%s'", console_type);
 
     debug_printf("initializing vm\n");
-    vm_init(vm_loadfile, vm_restore_mode);
+    if (!whpx_enable)
+        vm_init(vm_loadfile, vm_restore_mode);
+    else {
+        if (whpx_vm_init())
+            errx(1, "whpx_init failed\n");
+    }
 
 #ifdef CONFIG_NET
     net_check_clients();
@@ -385,10 +395,13 @@ main(int argc, char **argv)
     ni_start();
 #endif
 
-    vm_start_run();
+    if (!whpx_enable) {
+        vm_start_run();
 
-    if (!vm_start_paused)
-        vm_unpause();
+        if (!vm_start_paused)
+            vm_unpause();
+    } else
+        whpx_vm_start();
 
     if (h264_offload)
         uxenh264_start();

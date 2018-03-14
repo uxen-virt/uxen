@@ -94,4 +94,6 @@ extern uint64_t log_ratelimit_guest_ms;
 
 extern const char *serial_devices[MAX_SERIAL_PORTS];
 
+extern uint64_t whpx_enable;
+
 #endif	/* _DM_H_ */

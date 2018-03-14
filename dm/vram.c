@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2018, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -25,6 +25,8 @@
 //#include <assert.h>
 
 #include "vram.h"
+
+#include <dm/whpx/whpx.h>
 
 #if defined(__APPLE__)
 #define NULL_HANDLE ((uintptr_t)-1)
@@ -274,12 +276,23 @@ vram_unmap(struct vram_desc *v)
         return -1;
 
     if (v->mapped_len) {
-        ret = uxen_unmap_host_pages(uxen_handle, v->view, v->mapped_len);
-        if (ret) {
-            debug_printf("%s: uxen_unmap_host_pages failed: %d,"
-                         " gfn=%x view=%p len=%"PRIdSIZE"\n",
-                         __FUNCTION__, errno, v->gfn, v->view, v->shm_len);
-            return -1;
+        if (!whpx_enable) {
+            ret = uxen_unmap_host_pages(uxen_handle, v->view, v->mapped_len);
+            if (ret) {
+                debug_printf("%s: uxen_unmap_host_pages failed: %d,"
+                    " gfn=%x view=%p len=%"PRIdSIZE"\n",
+                    __FUNCTION__, errno, v->gfn, v->view, v->shm_len);
+                return -1;
+            }
+        } else {
+            ret = whpx_ram_depopulate(v->gfn << PAGE_SHIFT, v->mapped_len, 0);
+            if (ret) {
+                debug_printf("%s: whpx_ram_depopulate failed: %d,"
+                    " gfn=%x view=%p len=%"PRIdSIZE"\n",
+                    __FUNCTION__, errno, v->gfn, v->view, v->shm_len);
+                return -1;
+            }
+            /* FIXME: do we need to repopulate that range with allocated ram? */
         }
         v->mapped_len = 0;
     }
@@ -294,39 +307,60 @@ vram_map(struct vram_desc *v, uint32_t gfn)
     int ret;
 
     if (v->gfn && v->mapped_len) {
-        ret = uxen_unmap_host_pages(uxen_handle, v->view, v->mapped_len);
-        if (ret) {
-            debug_printf("%s: uxen_unmap_host_pages failed: %d,"
-                         " gfn=%x view=%p len=%"PRIdSIZE"\n",
-                         __FUNCTION__, errno, v->gfn, v->view, v->shm_len);
-            return -1;
+        if (!whpx_enable) {
+            ret = uxen_unmap_host_pages(uxen_handle, v->view, v->mapped_len);
+            if (ret) {
+                debug_printf("%s: uxen_unmap_host_pages failed: %d,"
+                    " gfn=%x view=%p len=%"PRIdSIZE"\n",
+                    __FUNCTION__, errno, v->gfn, v->view, v->shm_len);
+                return -1;
+            }
+        } else {
+            ret = whpx_ram_depopulate(v->gfn << PAGE_SHIFT, v->mapped_len, 0);
+            if (ret) {
+                debug_printf("%s: whpx_ram_depopulate failed: %d,"
+                    " gfn=%x view=%p len=%"PRIdSIZE"\n",
+                    __FUNCTION__, errno, v->gfn, v->view, v->shm_len);
+                return -1;
+            }
         }
         v->mapped_len = 0;
         v->gfn = 0;
     }
 
     if (v->shm_len) {
-        uint64_t *gpfns;
-        size_t gpfn_num = v->shm_len >> UXEN_PAGE_SHIFT;
-        int idx;
+        if (!whpx_enable) {
+            uint64_t *gpfns;
+            size_t gpfn_num = v->shm_len >> UXEN_PAGE_SHIFT;
+            int idx;
 
-        gpfns = (uint64_t *)malloc(gpfn_num * sizeof(gpfns[0]));
-        if (!gpfns) {
-            debug_printf("%s: malloc(%"PRIdSIZE") failed", __FUNCTION__,
-                         gpfn_num * sizeof(gpfns[0]));
-            return -1;
-        }
+            gpfns = (uint64_t *)malloc(gpfn_num * sizeof(gpfns[0]));
+            if (!gpfns) {
+                debug_printf("%s: malloc(%"PRIdSIZE") failed", __FUNCTION__,
+                    gpfn_num * sizeof(gpfns[0]));
+                return -1;
+            }
 
-        for (idx = 0; idx < gpfn_num; ++idx)
-            gpfns[idx] = gfn + idx;
+            for (idx = 0; idx < gpfn_num; ++idx)
+                gpfns[idx] = gfn + idx;
 
-        ret = uxen_map_host_pages(uxen_handle, v->view, v->shm_len, gpfns);
-        free(gpfns);
-        if (ret) {
-            debug_printf("%s: uxen_map_host_pages failed: %d,"
-                         " view=%p len=%"PRIdSIZE"\n",
-                         __FUNCTION__, errno, v->view, v->shm_len);
-            return -1;
+            ret = uxen_map_host_pages(uxen_handle, v->view, v->shm_len, gpfns);
+            free(gpfns);
+            if (ret) {
+                debug_printf("%s: uxen_map_host_pages failed: %d,"
+                    " view=%p len=%"PRIdSIZE"\n",
+                    __FUNCTION__, errno, v->view, v->shm_len);
+                return -1;
+            }
+        } else {
+            ret = whpx_ram_populate_with(gfn << PAGE_SHIFT,
+                                         v->shm_len, v->view, 0);
+            if (ret) {
+                debug_printf("%s: whpx_ram_populate_with failed: %d,"
+                    " view=%p len=%"PRIdSIZE"\n",
+                    __FUNCTION__, errno, v->view, v->shm_len);
+                return -1;
+            }
         }
         v->mapped_len = v->shm_len;
     }

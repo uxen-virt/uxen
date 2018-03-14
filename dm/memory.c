@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -49,6 +49,12 @@ memcpy_words(void *dst, void *src, size_t n)
         : "+S" (src), "+D" (dst) : "d" (n) : "ecx", "memory" );
 }
 
+static void warn_mmio_access(uint64_t addr, int len, int is_write)
+{
+    if (whpx_enable)
+        debug_printf("UNHANDLED MMIO %s @ %"PRIx64"/%d\n",
+            is_write ? "write" : "read", addr, len);
+}
 void vm_memory_rw(uint64_t addr, uint8_t *buf, 
 		  int len, int is_write)
 {
@@ -90,7 +96,8 @@ void vm_memory_rw(uint64_t addr, uint8_t *buf,
 		    if (xen_logdirty_enabled)
 			xc_hvm_modified_memory(xc_handle, vm_id,
 					       addr >> UXEN_PAGE_SHIFT, 1);
-		}
+		} else
+                    warn_mmio_access(addr, len, is_write);
 	    }
         } else {
 	    if (l >= 4 && ((addr & 3) == 0)) {
@@ -123,6 +130,7 @@ void vm_memory_rw(uint64_t addr, uint8_t *buf,
 		} else {
 		    /* Neither RAM nor known MMIO space */
 		    memset(buf, 0xff, l); 
+                    warn_mmio_access(addr, len, is_write);
 		}
 	    }
         }

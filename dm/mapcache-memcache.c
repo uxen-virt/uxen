@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -24,6 +24,9 @@
 
 #include <uxen/uxen_memcache_dm.h>
 #include <xen/hvm/e820.h>
+
+#include <dm/qemu_glue.h>
+#include <dm/whpx/whpx.h>
 
 static uint32_t mapcache_end_low_pfn = 0;
 static uint32_t mapcache_start_high_pfn = 0;
@@ -170,7 +173,7 @@ memcache_entry_put(uint32_t pfn, int lock)
 }
 
 uint8_t *
-mapcache_map(uint64_t phys_addr, uint64_t *len, uint8_t lock)
+uxen_mapcache_map(uint64_t phys_addr, uint64_t *len, uint8_t lock)
 {
     uint32_t pfn = phys_addr >> UXEN_PAGE_SHIFT;
     uint32_t end_pfn = ((phys_addr + *len - 1) >> UXEN_PAGE_SHIFT) + 1;
@@ -243,7 +246,7 @@ mapcache_map(uint64_t phys_addr, uint64_t *len, uint8_t lock)
 }
 
 void
-mapcache_unmap(uint64_t phys_addr, uint64_t len, uint8_t lock)
+uxen_mapcache_unmap(uint64_t phys_addr, uint64_t len, uint8_t lock)
 {
     uint32_t pfn = phys_addr >> UXEN_PAGE_SHIFT;
     uint32_t end_pfn = ((phys_addr + len - 1) >> UXEN_PAGE_SHIFT) + 1;
@@ -270,6 +273,21 @@ mapcache_unmap(uint64_t phys_addr, uint64_t len, uint8_t lock)
 	cleared += UXEN_PAGE_SIZE;
 	pfn++;
     }
+}
+
+uint8_t *
+mapcache_map(uint64_t phys_addr, uint64_t *len, uint8_t lock)
+{
+    return !whpx_enable ? uxen_mapcache_map(phys_addr, len, lock)
+        : whpx_ram_map(phys_addr, len);
+}
+
+void
+mapcache_unmap(uint64_t phys_addr, uint64_t len, uint8_t lock)
+{
+    if (!whpx_enable)
+        uxen_mapcache_unmap(phys_addr, len, lock);
+    /* no-op on WHPX */
 }
 
 void

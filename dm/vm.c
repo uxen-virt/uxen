@@ -51,6 +51,8 @@
 #include "hw/uxen_audio_ctrl.h"
 #endif
 
+#include <dm/whpx/whpx.h>
+
 #include "vm-savefile-simple.h"
 
 static struct xc_hvm_oem_info oem_info = { 0 };
@@ -88,6 +90,10 @@ static void dump_stats(void)
     uint64_t vm_now;
     xc_dominfo_t info = { };
     int ret;
+
+    // FIXME: dump stats on whp
+    if (whpx_enable)
+        return;
 
     vm_now = get_clock_ms(vm_clock); 
 
@@ -148,7 +154,6 @@ static void dump_stats(void)
     prevwrops = wrops;
 #endif  /* CONFIG_DUMP_BLOCK_STAT */
 }
-
 #ifdef CONFIG_DUMP_SWAP_STAT
 extern void dump_swapstat(void);
 #endif  /* CONFIG_DUMP_SWAP_STAT */
@@ -157,6 +162,10 @@ static void aperiodic_stats(void *opaque)
 {
     uint64_t now = get_clock_ms(vm_clock);
     uint64_t interval;
+
+    // FIXME: dump stats on whp
+    if (whpx_enable)
+        return;
 
     dump_stats();
 #ifdef CONFIG_DUMP_SWAP_STAT
@@ -177,6 +186,10 @@ static void aperiodic_stats(void *opaque)
 #ifdef CONFIG_DUMP_MEMORY_STAT
 static void dump_periodic_stats_reset(void)
 {
+    // FIXME: dump stats on whp
+    if (whpx_enable)
+        return;
+
     periodic_stats_rep = 129;
     aperiodic_stats(NULL);
 }
@@ -275,7 +288,7 @@ mod_entries(struct fw_list_head *list, size_t *ent_count)
     return entries;
 }
 
-static void
+void
 vm_cleanup_modules(struct xc_hvm_module *modules, size_t count)
 {
     int i;
@@ -287,7 +300,7 @@ vm_cleanup_modules(struct xc_hvm_module *modules, size_t count)
     free(modules);
 }
 
-static struct xc_hvm_module *
+struct xc_hvm_module *
 vm_get_modules(int *mod_count)
 {
     struct xc_hvm_module *modules = NULL;
@@ -423,6 +436,9 @@ vm_create(int restore_mode)
 
     if (v4v_idtoken_is_vm_uuid)
         memcpy(v4v_idtoken, vm_uuid, sizeof(v4v_idtoken));
+
+    if (whpx_enable)
+        return;
 
     ret = uxen_create_vm(uxen_handle, vm_uuid, v4v_idtoken,
                          XEN_DOMCTL_CDF_hvm_guest | XEN_DOMCTL_CDF_hap |
@@ -703,9 +719,12 @@ vm_exit(void *opaque)
     static uint32_t destroy_done = 0;
     static uint32_t ending = 0;
 
-    if (cmpxchg(&destroy_done, 0, 1) == 0)
-        uxen_destroy(vm_uuid);
-
+    if (cmpxchg(&destroy_done, 0, 1) == 0) {
+        if (!whpx_enable)
+            uxen_destroy(vm_uuid);
+        else
+            whpx_destroy();
+    }
     if (running_vcpus)
         return;
 

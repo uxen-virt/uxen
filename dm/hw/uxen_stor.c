@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -1096,6 +1096,9 @@ uxen_stor_add_parasite (BlockDriverState *bs)
     const BlockDevOps *old_dev_ops = bs->dev_ops;
     void *old_dev_opaque = bs->dev_opaque;
 
+    // FIXME: uxenstor on whp
+    if (whpx_enable)
+        return NULL;
 
     bs->dev = NULL;
 

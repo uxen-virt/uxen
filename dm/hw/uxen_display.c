@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -198,15 +198,19 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
     int bank_id = crtc->offset >> UXENDISP_BANK_ORDER;
     uint32_t bank_offset = crtc->offset & (UXENDISP_BANK_SIZE - 1);
     struct bank_state *bank = &s->banks[bank_id];
-    int rc;
     int npages;
-    uint8_t *dirty;
     uint8_t *d;
     int linesize;
 
     int y, y_start;
     uint32_t addr, addr1;
     uint32_t page0, page1, pagei, page_min, page_max;
+
+    /* full screen refreshes on whp */
+    const int full_refresh = whpx_enable;
+
+    int rc;
+    uint8_t *dirty = NULL;
 
     if (crtc->regs && crtc->flush_pending)
         crtc_flush(s, crtc_id, crtc->offset, 0);
@@ -219,13 +223,16 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
         return;
 
     dirty = alloca((npages + 7) / 8);
-
-    rc = xen_hvm_track_dirty_vram(bank->vram.gfn,
-        (s->mode & UXDISP_MODE_PAGE_TRACKING_DISABLED) ? 0 : npages, dirty, 1);
-    if (rc) {
-        DPRINTF("xen_hvm_track_dirty_vram failed: %d\n", errno);
-        return;
-    }
+    if (!whpx_enable) {
+        rc = xen_hvm_track_dirty_vram(bank->vram.gfn,
+            (s->mode & UXDISP_MODE_PAGE_TRACKING_DISABLED)
+            ? 0 : npages, dirty, 1);
+        if (rc) {
+            DPRINTF("xen_hvm_track_dirty_vram failed: %d\n", errno);
+            return;
+        }
+    } else
+        memset(dirty, 0xFF, (npages + 7) / 8);
 
     if (ds_surface_lock(crtc->ds, &d, &linesize))
         return;
@@ -234,14 +241,15 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
     page_min = (uint32_t)-1;
     page_max = 0;
     for (y = 0; y < crtc->yres; y++) {
-        int update = 0;
+        int update;
 
         addr = addr1;
         page0 = addr >> TARGET_PAGE_BITS;
         page1 = (addr + crtc->stride - 1) >> TARGET_PAGE_BITS;
 
-        for (pagei = page0; pagei <= page1; pagei++)
-            update |= dirty[pagei / 8] & (1 << (pagei % 8));
+        update = full_refresh;
+        for (pagei = page0; !update && pagei <= page1; pagei++)
+            update |= (dirty[pagei / 8] & (1 << (pagei % 8)));
 
         if (update) {
             if (y_start < 0)
@@ -265,6 +273,10 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
                     break;
                 case UXDISP_CRTC_FORMAT_BGR_555:
                     draw_line_15(d, bank->vram.view + addr1, crtc->xres);
+                    break;
+                default:
+                    debug_printf("unexpected display format %d\n",
+                        crtc->format);
                     break;
                 }
             }
@@ -1079,10 +1091,13 @@ static int uxendisp_initfn(PCIDevice *dev)
     int i;
 
 #ifdef _WIN32
-    s->vblank_ctx = pv_vblank_init(s, disp_pv_vblank);
-    if (!s->vblank_ctx) {
-        debug_printf("pv vblank init failed\n");
-        return -1;
+    //FIXME: pvblank on whp
+    if (!whpx_enable) {
+        s->vblank_ctx = pv_vblank_init(s, disp_pv_vblank);
+        if (!s->vblank_ctx) {
+            debug_printf("pv vblank init failed\n");
+            return -1;
+        }
     }
 #endif
 
@@ -1145,7 +1160,9 @@ static int uxendisp_exitfn(PCIDevice *dev)
     VGAState *v = &s->vga;
 
 #ifdef _WIN32
-    pv_vblank_cleanup(s->vblank_ctx);
+    // FIXME: pv vblank on whp
+    if (!whpx_enable)
+        pv_vblank_cleanup(s->vblank_ctx);
 #endif
 
     vga_exit(v);

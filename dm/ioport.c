@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -16,6 +16,9 @@
 #include "xen.h"
 
 #include "rbtree.h"
+
+#include <dm/dm.h>
+#include <dm/whpx/whpx.h>
 
 // #define IOPORT_DEBUG_UNUSED
 // #define IOPORT_TRACE
@@ -222,15 +225,23 @@ int
 register_ioport_read(uint32_t start, uint32_t length, uint32_t size,
 		     IOPortReadFunc func, void *opaque)
 {
-    xen_map_iorange(start, length * size, 0, 1);
-    return register_ioport_fn(start, length, size, func, opaque, 0);
+    if (!whpx_enable)
+        xen_map_iorange(start, length * size, 0, 1);
+    else
+        whpx_register_iorange(start, length * size,  0);
+
+  return register_ioport_fn(start, length, size, func, opaque, 0);
 }
 
 int
 register_ioport_write(uint32_t start, uint32_t length, uint32_t size,
 		      IOPortWriteFunc func, void *opaque)
 {
-    xen_map_iorange(start, length * size, 0, 1);
+    if (!whpx_enable)
+        xen_map_iorange(start, length * size, 0, 1);
+    else
+        whpx_register_iorange(start, length * size, 0);
+
     return register_ioport_fn(start, length, size, func, opaque, 1);
 }
 
@@ -241,7 +252,11 @@ register_ioport_list(uint32_t base, const struct ioport_region *list,
     int ret = 0;
 
     while (list->len) {
-	xen_map_iorange(base + list->offset, list->len * list->size, 0, 1);
+        if (!whpx_enable)
+            xen_map_iorange(base + list->offset, list->len * list->size, 0, 1);
+        else
+            whpx_register_iorange(base + list->offset, list->len * list->size, 0);
+
 	if (list->read)
 	    ret |= register_ioport_fn(base + list->offset, list->len,
 				      list->size, list->read, opaque, 0);
@@ -257,8 +272,10 @@ register_ioport_list(uint32_t base, const struct ioport_region *list,
 void
 unregister_ioport(uint32_t start, uint32_t length)
 {
-
-    xen_unmap_iorange(start, length, 0, 1);
+    if (!whpx_enable)
+        xen_unmap_iorange(start, length, 0, 1);
+    else
+        whpx_unregister_iorange(start, length, 0);
 
     unregister_ioport_ops(start, length);
 }

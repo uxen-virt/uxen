@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2018, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -8,18 +8,21 @@
 #include <dm/dm.h>
 #include <dm/mr.h>
 #include <dm/qemu/hw/pci.h>
+#include <dm/whpx/whpx.h>
 #include <xenctrl.h>
 
 #include "pci-ram.h"
 
+/* ------------------ uxen pci ram ------------- */
+
 static int
-unpopulate_ram(pcibus_t addr, size_t len)
+uxen_unpopulate_ram(pcibus_t addr, size_t len)
 {
     return 0;
 }
 
 static int
-populate_ram(pcibus_t addr, size_t len)
+uxen_populate_ram(pcibus_t addr, size_t len)
 {
     xen_pfn_t pfn = addr >> TARGET_PAGE_BITS;
     size_t npages = len >> TARGET_PAGE_BITS;
@@ -42,7 +45,7 @@ populate_ram(pcibus_t addr, size_t len)
 }
 
 static int
-move_ram(pcibus_t last_addr, pcibus_t new_addr, size_t len)
+uxen_move_ram(pcibus_t last_addr, pcibus_t new_addr, size_t len)
 {
     xen_pfn_t last_pfn = last_addr >> TARGET_PAGE_BITS;
     xen_pfn_t new_pfn = new_addr >> TARGET_PAGE_BITS;
@@ -61,7 +64,7 @@ move_ram(pcibus_t last_addr, pcibus_t new_addr, size_t len)
 }
 
 static void *
-map_ram(pcibus_t addr, size_t len)
+uxen_map_ram(pcibus_t addr, size_t len)
 {
     xen_pfn_t pfn = addr >> TARGET_PAGE_BITS;
     size_t npages = len >> TARGET_PAGE_BITS;
@@ -84,32 +87,117 @@ map_ram(pcibus_t addr, size_t len)
 }
 
 static void
-unmap_ram(void *ptr, size_t len)
+uxen_unmap_ram(void *ptr, size_t len)
 {
     size_t npages = len >> TARGET_PAGE_BITS;
 
     xc_munmap(xc_handle, vm_id, ptr, npages);
 }
 
-void
-pci_ram_config_write(PCIDevice *d, uint32_t addr, uint32_t val, int len)
+/* -------------- whp pci ram ------------- */
+
+static int
+whpx_unpopulate_ram(pcibus_t addr, size_t len)
 {
-    int region_num = (addr - PCI_BASE_ADDRESS_0) / 4;
-    PCIIORegion *r = &d->io_regions[region_num];
-    pcibus_t last_addr, new_addr;
+    whpx_ram_depopulate(addr, len, WHPX_RAM_PCI);
+
+    return 0;
+}
+
+static int
+whpx_populate_ram(pcibus_t addr, size_t len)
+{
+    whpx_ram_populate(addr, len, WHPX_RAM_PCI);
+
+    return 0;
+}
+
+static int
+whpx_move_ram(pcibus_t last_addr, pcibus_t new_addr, size_t len)
+{
+    void *map_new, *map_last;
+    uint64_t maplen = len;
+
+    whpx_ram_populate(new_addr, len, WHPX_RAM_PCI);
+
+    map_new = whpx_ram_map(new_addr, &maplen);
+    assert(map_new && maplen == len);
+
+    map_last = whpx_ram_map(new_addr, &maplen);
+    assert(map_last && maplen == len);
+
+    memmove(map_new, map_last, len);
+
+    whpx_ram_unmap(map_new);
+    whpx_ram_unmap(map_last);
+
+    whpx_ram_depopulate(last_addr, len, WHPX_RAM_PCI);
+
+    return 0;
+}
+
+static void *
+whpx_pci_map_ram(pcibus_t addr, size_t len)
+{
+    uint64_t maplen = len;
+    void *ptr;
+
+    ptr = whpx_ram_map(addr, &maplen);
+    assert(ptr && len == maplen);
+
+    return ptr;
+}
+
+static void
+whpx_pci_unmap_ram(void *ptr, size_t len)
+{
+    whpx_ram_unmap(ptr);
+}
+
+/* ----------------------- uxen/whp wrappers ---------------- */
+
+static int
+unpopulate_ram(pcibus_t addr, size_t len)
+{
+    return whpx_enable
+      ? whpx_unpopulate_ram(addr, len)
+      : uxen_unpopulate_ram(addr, len);
+}
+
+static int
+populate_ram(pcibus_t addr, size_t len)
+{
+    return whpx_enable
+      ? whpx_populate_ram(addr, len)
+      : uxen_populate_ram(addr, len);
+}
+
+static int
+move_ram(pcibus_t last_addr, pcibus_t new_addr, size_t len)
+{
+    return whpx_enable
+      ? whpx_move_ram(last_addr, new_addr, len)
+      : uxen_move_ram(last_addr, new_addr, len);
+}
+
+static void *
+map_ram(pcibus_t addr, size_t len)
+{
+    return whpx_enable ?
+        whpx_pci_map_ram(addr, len) : uxen_map_ram(addr, len);
+}
+
+static void
+unmap_ram(void *ptr, size_t len)
+{
+    return whpx_enable ?
+        whpx_pci_unmap_ram(ptr, len) : uxen_unmap_ram(ptr, len);
+}
+
+void
+pci_ram_update_region(PCIDevice *d, PCIIORegion *r, pcibus_t last_addr, pcibus_t new_addr)
+{
     struct ram_range *range;
-
-    if (len != 4 || region_num < 0 || region_num > 5) {
-        pci_default_write_config(d, addr, val, len);
-        return;
-    }
-
-    last_addr = pci_bar_address(d, region_num, r->type, r->size);
-    pci_default_write_config(d, addr, val, len);
-    new_addr = pci_bar_address(d, region_num, r->type, r->size);
-
-    if (last_addr == new_addr)
-        return;
 
     TAILQ_FOREACH(range, &r->memory->ram_map, link) {
         if (last_addr == PCI_BAR_UNMAPPED) {
@@ -128,6 +216,28 @@ pci_ram_config_write(PCIDevice *d, uint32_t addr, uint32_t val, int len)
 
         range->update_ptr(range->ram_ptr, range->opaque);
     }
+}
+
+void
+pci_ram_config_write(PCIDevice *d, uint32_t addr, uint32_t val, int len)
+{
+    int region_num = (addr - PCI_BASE_ADDRESS_0) / 4;
+    PCIIORegion *r = &d->io_regions[region_num];
+    pcibus_t last_addr, new_addr;
+
+    if (len != 4 || region_num < 0 || region_num > 5) {
+        pci_default_write_config(d, addr, val, len);
+        return;
+    }
+
+    last_addr = pci_bar_address(d, region_num, r->type, r->size);
+    pci_default_write_config(d, addr, val, len);
+    new_addr = pci_bar_address(d, region_num, r->type, r->size);
+
+    if (last_addr == new_addr)
+        return;
+
+    pci_ram_update_region(d, r, last_addr, new_addr);
 }
 
 void

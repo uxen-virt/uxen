@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -842,7 +842,9 @@ static UXenPlatformDeviceInfo uxenhid_info = {
 static void
 uxenhid_register_devices(void)
 {
-    uxenplatform_qdev_register(&uxenhid_info);
+    // FIXME: uxenhid on whp
+    if  (!whpx_enable)
+        uxenplatform_qdev_register(&uxenhid_info);
 }
 
 device_init(uxenhid_register_devices);

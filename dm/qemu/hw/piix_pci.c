@@ -32,6 +32,8 @@
 #include <dm/qemu/range.h>
 // #include "xen.h"
 
+#include <dm/whpx/whpx.h>
+
 /*
  * I440FX chipset data sheet.
  * http://download.intel.com/design/chipsets/datashts/29054901.pdf
@@ -94,10 +96,6 @@ struct PCII440FXState {
 #define I440FX_PAM      0x59
 #define I440FX_PAM_SIZE 7
 #define I440FX_SMRAM    0x72
-
-// static void piix3_set_irq(void *opaque, int pirq, int level);
-static void piix3_write_config_xen(PCIDevice *dev,
-                               uint32_t address, uint32_t val, int len);
 
 #if 0
 /* return the global irq number corresponding to a given device irq
@@ -328,19 +326,33 @@ static PCIBus *i440fx_common_init(const char *device_name,
      * the IOAPIC: the four pins of each PCI device on the bus are also
      * connected to the IOAPIC directly.
      * These additional routes can be discovered through ACPI. */
-    if (xen_enabled()) {
-        piix3 = DO_UPCAST(PIIX3State, dev,
+    if (!whpx_enable) {
+        if (xen_enabled()) {
+            piix3 = DO_UPCAST(PIIX3State, dev,
                 pci_create_simple_multifunction(b, -1, true, "PIIX3-xen"));
-        pci_bus_irqs(b, xen_piix3_set_irq, xen_pci_slot_get_pirq,
+            pci_bus_irqs(b, xen_piix3_set_irq, xen_pci_slot_get_pirq,
                 piix3, XEN_PIIX_NUM_PIRQS);
+        } else {
 #if 0
-    } else {
-        piix3 = DO_UPCAST(PIIX3State, dev,
+            piix3 = DO_UPCAST(PIIX3State, dev,
                 pci_create_simple_multifunction(b, -1, true, "PIIX3"));
-        pci_bus_irqs(b, piix3_set_irq, pci_slot_get_pirq, piix3,
+            pci_bus_irqs(b, piix3_set_irq, pci_slot_get_pirq, piix3,
                 PIIX_NUM_PIRQS);
 #endif
+        }
+    } else {
+        /* whpx */
+#if defined(_WIN32)
+        // piix on hyperv, similar to uxen, supporting extra irq routes
+        piix3 = DO_UPCAST(PIIX3State, dev,
+            pci_create_simple_multifunction(b, -1, true, "PIIX3-xen"));
+        pci_bus_irqs(b, whpx_piix3_set_irq, xen_pci_slot_get_pirq,
+            piix3, XEN_PIIX_NUM_PIRQS);
+#else
+        errx(1, "whpx unsupported\n");
+#endif
     }
+
     piix3->pic = pic;
 
     (*pi440fx_state)->piix3 = piix3;
@@ -446,6 +458,22 @@ static void piix3_write_config_xen(PCIDevice *dev,
 {
     xen_piix_pci_write_config_client(address, val, len);
     piix3_write_config(dev, address, val, len);
+}
+
+static void piix3_write_config_whpx(PCIDevice *dev,
+                               uint32_t address, uint32_t val, int len)
+{
+    whpx_piix_pci_write_config_client(address, val, len);
+    piix3_write_config(dev, address, val, len);
+}
+
+static void piix3_write_config_xen_or_whpx(PCIDevice *dev,
+                               uint32_t address, uint32_t val, int len)
+{
+    if (!whpx_enable)
+        piix3_write_config_xen(dev, address, val, len);
+    else
+        piix3_write_config_whpx(dev, address, val, len);
 }
 
 static void piix3_reset(void *opaque)
@@ -566,7 +594,7 @@ static PCIDeviceInfo i440fx_info[] = {
         // .qdev.no_user = 1,
         .no_hotplug   = 1,
         .init         = piix3_initfn,
-        .config_write = piix3_write_config_xen,
+        .config_write = piix3_write_config_xen_or_whpx,
         .vendor_id    = PCI_VENDOR_ID_INTEL,
         .device_id    = PCI_DEVICE_ID_INTEL_82371SB_0, // 82371SB PIIX3 PCI-to-ISA bridge (Step A1)
         .class_id     = PCI_CLASS_BRIDGE_ISA,

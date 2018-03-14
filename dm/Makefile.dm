@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2017, Bromium, Inc.
+# Copyright 2012-2018, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -27,6 +27,7 @@ DM_CONFIG_DUMP_MEMORY_STAT ?= yes
 DM_CONFIG_DUMP_SWAP_STAT ?= yes
 
 COMMONINCLUDEDIR = $(TOPDIR)/common/include
+LIBWINHVDIR = $(TOPDIR)/dm
 LIBELFDIR = $(TOPDIR)/xen/common/libelf
 LIBELFDIR_include = $(TOPDIR)/common/include/xen-public
 LZ4DIR = $(TOPDIR)/common/lz4
@@ -264,6 +265,22 @@ hw_uxen_v4v_win32.o: CPPFLAGS += -I$(XENPUBLICDIR)
 $(OSX)DM_SRCS += hw/uxen_v4v_osx.c
 hw_uxen_v4v_osx.o: CPPFLAGS += -I$(XENPUBLICDIR)
 
+$(WINDOWS)DM_SRCS += whpx/whpx.c
+whpx_whpx.o: CPPFLAGS += -I$(XENDIR_include)
+$(WINDOWS)DM_SRCS += whpx/core.c
+$(WINDOWS)DM_SRCS += whpx/memory.c
+$(WINDOWS)DM_SRCS += whpx/irq.c
+$(WINDOWS)DM_SRCS += whpx/loader.c
+whpx_loader.o: CPPFLAGS += -I$(LIBELF_CPPFLAGS)
+$(WINDOWS)DM_SRCS += whpx/x86_emulate.c
+$(WINDOWS)DM_SRCS += whpx/emulate.c
+$(WINDOWS)DM_SRCS += whpx/util.c
+$(WINDOWS)DM_SRCS += whpx/i8259.c
+$(WINDOWS)DM_SRCS += whpx/i8254.c
+$(WINDOWS)DM_SRCS += whpx/ioapic.c
+$(WINDOWS)DM_SRCS += whpx/apic.c
+$(WINDOWS)DM_SRCS += whpx/mc146818rtc.c
+
 QEMU_CFLAGS += -I$(TOPDIR)
 
 $(OSX_NOT_YET)QEMU_SRCS += audio/audio.c
@@ -487,6 +504,10 @@ block-swap_%.o: block-swap/%.c
 
 hw_%.o: hw/%.c
 	$(_W)echo Compiling - $(subst hw_,hw/,$@)
+	$(_V)$(COMPILE.c) $(EXTRA_CFLAGS) $(DM_CFLAGS) -c $< -o $@
+
+whpx_%.o: whpx/%.c
+	$(_W)echo Compiling - $(subst whpx_,whpx/,$@)
 	$(_V)$(COMPILE.c) $(EXTRA_CFLAGS) $(DM_CFLAGS) -c $< -o $@
 
 $(LIBELF_OBJS): CFLAGS += $(LIBELF_CFLAGS)

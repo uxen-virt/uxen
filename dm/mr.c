@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -13,6 +13,9 @@
 
 #include "mr.h"
 #include "xen.h"
+
+#include <dm/dm.h>
+#include <dm/whpx/whpx.h>
 
 static void
 mr_ioport_ops_1_write(void *opaque, uint32_t address, uint32_t data)
@@ -226,12 +229,22 @@ update_tree_recurse(MemoryRegion *mr, int clear, uint64_t addr, int is_ioport)
     if (mr->ops == NULL && mr->ioport_list == NULL)
 	return;
 
-    if (!clear)
-	xen_map_iorange(addr + mr->parent_offset, mr->size,
-			is_ioport ? 0 : 1, mr->serverid);
-    else
-	xen_unmap_iorange(mr->ops_base, mr->size, is_ioport ? 0 : 1,
-			  mr->serverid);
+    if (!whpx_enable) {
+        if (!clear)
+            xen_map_iorange(addr + mr->parent_offset,
+                mr->size, is_ioport ? 0 : 1, mr->serverid);
+        else
+            xen_unmap_iorange(mr->ops_base,
+                mr->size, is_ioport ? 0 : 1, mr->serverid);
+    } else {
+        if (!clear)
+            whpx_register_iorange(addr + mr->parent_offset,
+                mr->size, is_ioport ? 0 : 1);
+        else
+            whpx_unregister_iorange(mr->ops_base,
+                mr->size, is_ioport ? 0 : 1);
+    }
+
     if (is_ioport && mr->ioport_list) {
         if (!clear) {
 	    mr->ops_base = memory_region_absolute_offset(mr) +
