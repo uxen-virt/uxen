@@ -43,7 +43,7 @@ these four paragraphs for those parts of this code that are retained.
 #endif
 
 #include <inttypes.h>
-#include "config-host.h"
+#include <dm/config.h>
 
 /*----------------------------------------------------------------------------
 | Each of the following `typedef's defines the most convenient type that holds

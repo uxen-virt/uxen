@@ -19,8 +19,7 @@
 #ifndef CPU_I386_H
 #define CPU_I386_H
 
-#include "config.h"
-#include "qemu-common.h"
+#include <dm/config.h>
 
 #ifdef TARGET_X86_64
 #define TARGET_LONG_BITS 64
@@ -42,11 +41,8 @@
 #define ELF_MACHINE	EM_386
 #endif
 
-#define CPUState struct CPUX86State
-
-#include "cpu-defs.h"
-
-#include "softfloat.h"
+#include <dm/qemu/cpu-defs.h>
+#include <dm/qemu/fpu/softfloat.h>
 
 #define R_EAX 0
 #define R_ECX 1
@@ -476,12 +472,14 @@
                                  for syscall instruction */
 
 /* i386-specific interrupt pending bits.  */
+#ifndef QEMU_UXEN
 #define CPU_INTERRUPT_SMI       CPU_INTERRUPT_TGT_EXT_2
 #define CPU_INTERRUPT_NMI       CPU_INTERRUPT_TGT_EXT_3
 #define CPU_INTERRUPT_MCE       CPU_INTERRUPT_TGT_EXT_4
 #define CPU_INTERRUPT_VIRQ      CPU_INTERRUPT_TGT_INT_0
 #define CPU_INTERRUPT_INIT      CPU_INTERRUPT_TGT_INT_1
 #define CPU_INTERRUPT_SIPI      CPU_INTERRUPT_TGT_INT_2
+#endif
 
 
 enum {
@@ -548,6 +546,69 @@ typedef struct SegmentCache {
     uint32_t flags;
 } SegmentCache;
 
+#ifdef QEMU_UXEN
+
+typedef enum TPRAccess {
+    TPR_ACCESS_READ,
+    TPR_ACCESS_WRITE,
+} TPRAccess;
+
+#define MMREG_UNION(n, bits)        \
+    union n {                       \
+        uint8_t  _b_##n[(bits)/8];  \
+        uint16_t _w_##n[(bits)/16]; \
+        uint32_t _l_##n[(bits)/32]; \
+        uint64_t _q_##n[(bits)/64]; \
+        float32  _s_##n[(bits)/32]; \
+        float64  _d_##n[(bits)/64]; \
+    }
+
+typedef union {
+    uint8_t _b[16];
+    uint16_t _w[8];
+    uint32_t _l[4];
+    uint64_t _q[2];
+} XMMReg;
+
+typedef union {
+    uint8_t _b[32];
+    uint16_t _w[16];
+    uint32_t _l[8];
+    uint64_t _q[4];
+} YMMReg;
+
+typedef MMREG_UNION(ZMMReg, 512) ZMMReg;
+typedef MMREG_UNION(MMXReg, 64)  MMXReg;
+
+#ifdef HOST_WORDS_BIGENDIAN
+#define ZMM_B(n) _b_ZMMReg[63 - (n)]
+#define ZMM_W(n) _w_ZMMReg[31 - (n)]
+#define ZMM_L(n) _l_ZMMReg[15 - (n)]
+#define ZMM_S(n) _s_ZMMReg[15 - (n)]
+#define ZMM_Q(n) _q_ZMMReg[7 - (n)]
+#define ZMM_D(n) _d_ZMMReg[7 - (n)]
+
+#define MMX_B(n) _b_MMXReg[7 - (n)]
+#define MMX_W(n) _w_MMXReg[3 - (n)]
+#define MMX_L(n) _l_MMXReg[1 - (n)]
+#define MMX_S(n) _s_MMXReg[1 - (n)]
+#else
+#define ZMM_B(n) _b_ZMMReg[n]
+#define ZMM_W(n) _w_ZMMReg[n]
+#define ZMM_L(n) _l_ZMMReg[n]
+#define ZMM_S(n) _s_ZMMReg[n]
+#define ZMM_Q(n) _q_ZMMReg[n]
+#define ZMM_D(n) _d_ZMMReg[n]
+
+#define MMX_B(n) _b_MMXReg[n]
+#define MMX_W(n) _w_MMXReg[n]
+#define MMX_L(n) _l_MMXReg[n]
+#define MMX_S(n) _s_MMXReg[n]
+#endif
+#define MMX_Q(n) _q_MMXReg[n]
+
+#else /* QEMU_UXEN */
+
 typedef union {
     uint8_t _b[16];
     uint16_t _w[8];
@@ -591,6 +652,8 @@ typedef union {
 #define MMX_S(n) _s[n]
 #endif
 #define MMX_Q(n) q
+
+#endif /* QEMU_UXEN */
 
 typedef union {
     floatx80 d __attribute__((aligned(16)));
@@ -658,8 +721,13 @@ typedef struct CPUX86State {
     float_status mmx_status; /* for 3DNow! float ops */
     float_status sse_status;
     uint32_t mxcsr;
+#ifdef QEMU_UXEN
+    ZMMReg xmm_regs[CPU_NB_REGS];
+    ZMMReg xmm_t0;
+#else
     XMMReg xmm_regs[CPU_NB_REGS];
     XMMReg xmm_t0;
+#endif
     MMXReg mmx_t0;
     target_ulong cc_tmp; /* temporary for rcr/rcl */
 
@@ -771,12 +839,21 @@ typedef struct CPUX86State {
     XMMReg ymmh_regs[CPU_NB_REGS];
 
     uint64_t xcr0;
+
+#ifdef QEMU_UXEN
+    bool vcpu_dirty;
+    void *hax_vcpu;
+    void *env_ptr;
+    TPRAccess tpr_access_type;
+#endif
 } CPUX86State;
 
 CPUX86State *cpu_x86_init(const char *cpu_model);
 int cpu_x86_exec(CPUX86State *s);
 void cpu_x86_close(CPUX86State *s);
+#ifndef QEMU_UXEN
 void x86_cpu_list (FILE *f, fprintf_function cpu_fprintf, const char *optarg);
+#endif
 void x86_cpudef_setup(void);
 int cpu_x86_support_mca_broadcast(CPUState *env);
 
@@ -934,7 +1011,9 @@ uint64_t cpu_get_tsc(CPUX86State *env);
 #define X86_DUMP_FPU  0x0001 /* dump FPU state too */
 #define X86_DUMP_CCOP 0x0002 /* dump qemu flag cache */
 
+#ifndef QEMU_UXEN
 #define TARGET_PAGE_BITS 12
+#endif
 
 #ifdef TARGET_X86_64
 #define TARGET_PHYS_ADDR_SPACE_BITS 52
@@ -1007,6 +1086,7 @@ static inline void cpu_clone_regs(CPUState *env, target_ulong newsp)
 }
 #endif
 
+#ifndef QEMU_UXEN
 #include "cpu-all.h"
 #include "svm.h"
 
@@ -1062,5 +1142,6 @@ void do_smm_enter(CPUState *env1);
 void svm_check_intercept(CPUState *env1, uint32_t type);
 
 uint32_t cpu_cc_compute_all(CPUState *env1, int op);
+#endif
 
 #endif /* CPU_I386_H */

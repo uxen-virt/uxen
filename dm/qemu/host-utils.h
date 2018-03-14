@@ -23,7 +23,12 @@
  * THE SOFTWARE.
  */
 
-#include "compiler.h"   /* QEMU_GNUC_PREREQ */
+#if defined(__GNUC__) && defined(__GNUC_MINOR__)
+# define QEMU_GNUC_PREREQ(maj, min) \
+         ((__GNUC__ << 16) + __GNUC_MINOR__ >= ((maj) << 16) + (min))
+#else
+# define QEMU_GNUC_PREREQ(maj, min) 0
+#endif
 
 #if defined(__x86_64__)
 #define __HAVE_FAST_MULU64__

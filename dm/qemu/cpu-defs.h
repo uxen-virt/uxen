@@ -23,13 +23,11 @@
 #error cpu.h included from common code
 #endif
 
-#include "config.h"
+#include <dm/config.h>
 #include <setjmp.h>
 #include <inttypes.h>
 #include <signal.h>
-#include "osdep.h"
-#include "qemu-queue.h"
-#include "targphys.h"
+#include <dm/qemu/targphys.h>
 
 #ifndef TARGET_LONG_BITS
 #error TARGET_LONG_BITS must be defined before including this header
