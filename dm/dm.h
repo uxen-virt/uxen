@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -64,6 +64,7 @@ extern uint64_t debugkey_level;
 extern uint64_t malloc_limit_bytes;
 extern uint64_t restore_framebuffer_pattern;
 extern dict vm_hvm_params;
+extern uint64_t disable_filename_scrambling;
 extern int *disabled_keys;
 extern size_t disabled_keys_len;
 extern uint64_t ps2_fallback;

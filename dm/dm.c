@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -106,6 +106,7 @@ uint64_t restore_framebuffer_pattern = 0xffffffff;
 dict vm_audio = NULL;
 dict vm_hvm_params = NULL;
 int restore = 0;
+uint64_t disable_filename_scrambling = 0;
 int *disabled_keys = NULL;
 size_t disabled_keys_len = 0;
 uint64_t ps2_fallback = 1;

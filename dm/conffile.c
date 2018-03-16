@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -741,6 +741,7 @@ struct config_option config_options[] = {
     { "debugkey-level", co_set_integer_opt, &debugkey_level },
     { "deferred-clipboard", co_set_boolean_opt, &deferred_clipboard },
     { "device", co_set_device, NULL },
+    { "disable-filename-scrambling", co_set_boolean_opt, &disable_filename_scrambling },
     { "disabled-keys", co_set_disabled_keys, NULL },
     { "disp-fps-counter", co_set_integer_opt, &disp_fps_counter },
     { "disp-pv-vblank", co_set_integer_opt, &disp_pv_vblank },
