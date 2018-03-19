@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, Bromium, Inc.
+ * Copyright 2016-2018, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -435,7 +435,7 @@ vblank_thread_run(PVOID opaque)
 void
 pv_vblank_start(struct vblank_ctx *ctx)
 {
-    if (ctx->vblank_running)
+    if (!ctx || ctx->vblank_running)
         return;
 
     ctx->vblank_exit = 0;
@@ -451,7 +451,7 @@ pv_vblank_start(struct vblank_ctx *ctx)
 void
 pv_vblank_stop(struct vblank_ctx *ctx)
 {
-    if (ctx->vblank_running) {
+    if (ctx && ctx->vblank_running) {
         ctx->vblank_exit = 1;
         wait_thread(ctx->vblank_thread);
         ctx->vblank_running = 0;

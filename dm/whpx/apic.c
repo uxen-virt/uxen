@@ -1135,7 +1135,6 @@ static SysBusDeviceInfo apic_info = {
     .qdev.reset = apic_reset,
     .qdev.props = (Property[]) {
         DEFINE_PROP_UINT8("id", APICState, id, -1),
-        /* FIXME? not sure if need for save/restore */
 #ifndef QEMU_UXEN
         DEFINE_PROP_PTR("cpu_env", APICState, cpu_env),
 #endif

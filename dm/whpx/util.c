@@ -25,6 +25,146 @@ uint64_t count_runvp;
 uint64_t tsum_xlate;
 uint64_t count_xlate;
 
+/* all meaningful registers */
+static const WHV_REGISTER_NAME all_register_names[] = {
+    WHvX64RegisterRax,
+    WHvX64RegisterRcx,
+    WHvX64RegisterRdx,
+    WHvX64RegisterRbx,
+    WHvX64RegisterRsp,
+    WHvX64RegisterRbp,
+    WHvX64RegisterRsi,
+    WHvX64RegisterRdi,
+    WHvX64RegisterR8,
+    WHvX64RegisterR9,
+    WHvX64RegisterR10,
+    WHvX64RegisterR11,
+    WHvX64RegisterR12,
+    WHvX64RegisterR13,
+    WHvX64RegisterR14,
+    WHvX64RegisterR15,
+    WHvX64RegisterRip,
+    WHvX64RegisterRflags,
+    WHvX64RegisterEs,
+    WHvX64RegisterCs,
+    WHvX64RegisterSs,
+    WHvX64RegisterDs,
+    WHvX64RegisterFs,
+    WHvX64RegisterGs,
+    WHvX64RegisterLdtr,
+    WHvX64RegisterTr,
+    WHvX64RegisterIdtr,
+    WHvX64RegisterGdtr,
+    WHvX64RegisterCr0,
+    WHvX64RegisterCr2,
+    WHvX64RegisterCr3,
+    WHvX64RegisterCr4,
+    WHvX64RegisterCr8,
+    WHvX64RegisterDr0,
+    WHvX64RegisterDr1,
+    WHvX64RegisterDr2,
+    WHvX64RegisterDr3,
+    WHvX64RegisterDr6,
+    WHvX64RegisterDr7,
+    WHvX64RegisterXmm0,
+    WHvX64RegisterXmm1,
+    WHvX64RegisterXmm2,
+    WHvX64RegisterXmm3,
+    WHvX64RegisterXmm4,
+    WHvX64RegisterXmm5,
+    WHvX64RegisterXmm6,
+    WHvX64RegisterXmm7,
+    WHvX64RegisterXmm8,
+    WHvX64RegisterXmm9,
+    WHvX64RegisterXmm10,
+    WHvX64RegisterXmm11,
+    WHvX64RegisterXmm12,
+    WHvX64RegisterXmm13,
+    WHvX64RegisterXmm14,
+    WHvX64RegisterXmm15,
+    WHvX64RegisterFpMmx0,
+    WHvX64RegisterFpMmx1,
+    WHvX64RegisterFpMmx2,
+    WHvX64RegisterFpMmx3,
+    WHvX64RegisterFpMmx4,
+    WHvX64RegisterFpMmx5,
+    WHvX64RegisterFpMmx6,
+    WHvX64RegisterFpMmx7,
+    WHvX64RegisterFpControlStatus,
+    WHvX64RegisterXmmControlStatus,
+    WHvX64RegisterTsc,
+    WHvX64RegisterEfer,
+    WHvX64RegisterKernelGsBase,
+    WHvX64RegisterApicBase,
+    WHvX64RegisterPat,
+    WHvX64RegisterSysenterCs,
+    WHvX64RegisterSysenterEip,
+    WHvX64RegisterSysenterEsp,
+    WHvX64RegisterStar,
+    WHvX64RegisterLstar,
+    WHvX64RegisterCstar,
+    WHvX64RegisterSfmask,
+    /* mtrr regs don't seem to be accessible (yet?) */
+/*    WHvX64RegisterMsrMtrrCap,
+    WHvX64RegisterMsrMtrrDefType,
+    WHvX64RegisterMsrMtrrPhysBase0,
+    WHvX64RegisterMsrMtrrPhysBase1,
+    WHvX64RegisterMsrMtrrPhysBase2,
+    WHvX64RegisterMsrMtrrPhysBase3,
+    WHvX64RegisterMsrMtrrPhysBase4,
+    WHvX64RegisterMsrMtrrPhysBase5,
+    WHvX64RegisterMsrMtrrPhysBase6,
+    WHvX64RegisterMsrMtrrPhysBase7,
+    WHvX64RegisterMsrMtrrPhysBase8,
+    WHvX64RegisterMsrMtrrPhysBase9,
+    WHvX64RegisterMsrMtrrPhysBaseA,
+    WHvX64RegisterMsrMtrrPhysBaseB,
+    WHvX64RegisterMsrMtrrPhysBaseC,
+    WHvX64RegisterMsrMtrrPhysBaseD,
+    WHvX64RegisterMsrMtrrPhysBaseE,
+    WHvX64RegisterMsrMtrrPhysBaseF,
+    WHvX64RegisterMsrMtrrPhysMask0,
+    WHvX64RegisterMsrMtrrPhysMask1,
+    WHvX64RegisterMsrMtrrPhysMask2,
+    WHvX64RegisterMsrMtrrPhysMask3,
+    WHvX64RegisterMsrMtrrPhysMask4,
+    WHvX64RegisterMsrMtrrPhysMask5,
+    WHvX64RegisterMsrMtrrPhysMask6,
+    WHvX64RegisterMsrMtrrPhysMask7,
+    WHvX64RegisterMsrMtrrPhysMask8,
+    WHvX64RegisterMsrMtrrPhysMask9,
+    WHvX64RegisterMsrMtrrPhysMaskA,
+    WHvX64RegisterMsrMtrrPhysMaskB,
+    WHvX64RegisterMsrMtrrPhysMaskC,
+    WHvX64RegisterMsrMtrrPhysMaskD,
+    WHvX64RegisterMsrMtrrPhysMaskE,
+    WHvX64RegisterMsrMtrrPhysMaskF,
+    WHvX64RegisterMsrMtrrFix64k00000,
+    WHvX64RegisterMsrMtrrFix16k80000,
+    WHvX64RegisterMsrMtrrFix16kA0000,
+    WHvX64RegisterMsrMtrrFix4kC0000,
+    WHvX64RegisterMsrMtrrFix4kC8000,
+    WHvX64RegisterMsrMtrrFix4kD0000,
+    WHvX64RegisterMsrMtrrFix4kD8000,
+    WHvX64RegisterMsrMtrrFix4kE0000,
+    WHvX64RegisterMsrMtrrFix4kE8000,
+    WHvX64RegisterMsrMtrrFix4kF0000,
+    WHvX64RegisterMsrMtrrFix4kF8000, */
+    WHvX64RegisterTscAux,
+    WHvRegisterPendingInterruption,
+    WHvRegisterInterruptState,
+    WHvRegisterPendingEvent0,
+    WHvRegisterPendingEvent1,
+    WHvX64RegisterDeliverabilityNotifications,
+};
+
+static whpx_reg_list_t all_registers;
+
+whpx_reg_list_t *
+whpx_all_registers(void)
+{
+    return &all_registers;
+}
 
 const char *get_whv_register_name_str(WHV_REGISTER_NAME x)
 {
@@ -106,6 +246,52 @@ const char *get_whv_register_name_str(WHV_REGISTER_NAME x)
     case 0x00002009: return "Lstar";
     case 0x0000200A: return "Cstar";
     case 0x0000200B: return "Sfmask";
+    case 0x0000200D: return "MsrMtrrCap";
+    case 0x0000200E: return "MsrMtrrDefType";
+    case 0x00002010: return "MsrMtrrPhysBase0";
+    case 0x00002011: return "MsrMtrrPhysBase1";
+    case 0x00002012: return "MsrMtrrPhysBase2";
+    case 0x00002013: return "MsrMtrrPhysBase3";
+    case 0x00002014: return "MsrMtrrPhysBase4";
+    case 0x00002015: return "MsrMtrrPhysBase5";
+    case 0x00002016: return "MsrMtrrPhysBase6";
+    case 0x00002017: return "MsrMtrrPhysBase7";
+    case 0x00002018: return "MsrMtrrPhysBase8";
+    case 0x00002019: return "MsrMtrrPhysBase9";
+    case 0x0000201A: return "MsrMtrrPhysBaseA";
+    case 0x0000201B: return "MsrMtrrPhysBaseB";
+    case 0x0000201C: return "MsrMtrrPhysBaseC";
+    case 0x0000201D: return "MsrMtrrPhysBaseD";
+    case 0x0000201E: return "MsrMtrrPhysBaseE";
+    case 0x0000201F: return "MsrMtrrPhysBaseF";
+    case 0x00002040: return "MsrMtrrPhysMask0";
+    case 0x00002041: return "MsrMtrrPhysMask1";
+    case 0x00002042: return "MsrMtrrPhysMask2";
+    case 0x00002043: return "MsrMtrrPhysMask3";
+    case 0x00002044: return "MsrMtrrPhysMask4";
+    case 0x00002045: return "MsrMtrrPhysMask5";
+    case 0x00002046: return "MsrMtrrPhysMask6";
+    case 0x00002047: return "MsrMtrrPhysMask7";
+    case 0x00002048: return "MsrMtrrPhysMask8";
+    case 0x00002049: return "MsrMtrrPhysMask9";
+    case 0x0000204A: return "MsrMtrrPhysMaskA";
+    case 0x0000204B: return "MsrMtrrPhysMaskB";
+    case 0x0000204C: return "MsrMtrrPhysMaskC";
+    case 0x0000204D: return "MsrMtrrPhysMaskD";
+    case 0x0000204E: return "MsrMtrrPhysMaskE";
+    case 0x0000204F: return "MsrMtrrPhysMaskF";
+    case 0x00002070: return "MsrMtrrFix64k00000";
+    case 0x00002071: return "MsrMtrrFix16k80000";
+    case 0x00002072: return "MsrMtrrFix16kA0000";
+    case 0x00002073: return "MsrMtrrFix4kC0000";
+    case 0x00002074: return "MsrMtrrFix4kC8000";
+    case 0x00002075: return "MsrMtrrFix4kD0000";
+    case 0x00002076: return "MsrMtrrFix4kD8000";
+    case 0x00002077: return "MsrMtrrFix4kE0000";
+    case 0x00002078: return "MsrMtrrFix4kE8000";
+    case 0x00002079: return "MsrMtrrFix4kF0000";
+    case 0x0000207A: return "MsrMtrrFix4kF8000";
+    case 0x0000207B: return "TscAux";
     case 0x80000000: return "PendingInterruption";
     case 0x80000001: return "InterruptState";
     case 0x80000002: return "PendingEvent0";
@@ -405,4 +591,6 @@ whpx_initialize_api(void)
     LINK_EMU_API (WHvEmulatorDestroyEmulator);
     LINK_EMU_API (WHvEmulatorTryIoEmulation);
     LINK_EMU_API (WHvEmulatorTryMmioEmulation);
+
+    whpx_reg_list_init(&all_registers, all_register_names);
 }

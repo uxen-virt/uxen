@@ -8,14 +8,17 @@
 #include <dm/os.h>
 #include <dm/cpu.h>
 #include <dm/whpx/apic.h>
+#include <dm/vm.h>
+#include <dm/control.h>
 #include <public/hvm/hvm_info_table.h>
 #include <public/hvm/e820.h>
 #include <whpx-shared.h>
 #include "whpx.h"
-#include "core.h"
 #include "winhvglue.h"
 #include "winhvplatform.h"
+#include "core.h"
 #include "loader.h"
+#include "emulate.h"
 #include "util.h"
 
 /* acpi area */
@@ -29,8 +32,12 @@
 /* apic */
 #define APIC_DEFAULT_PHYS_BASE 0xFEE00000
 
+static uint32_t running_vcpus = 0;
+static int shutdown_reason = 0;
+
 struct cpu_extra {
-    HANDLE halt_ev;
+    HANDLE wake_ev;
+    HANDLE stopped_ev;
 };
 
 #define extra(cpu) ((struct cpu_extra*)cpu->opaque)
@@ -68,6 +75,7 @@ static struct whpx_shared_info *shared_info_page;
 
 void whpx_run_on_cpu(
     CPUState *env,
+    int wait,
     void (*func)(CPUState *state, run_on_cpu_data data),
     run_on_cpu_data data)
 {
@@ -88,14 +96,20 @@ void whpx_run_on_cpu(
         env->queued_work_last->next = &wi;
     env->queued_work_last = &wi;
     wi.next = NULL;
-    wi.ev_done = CreateEvent(NULL, TRUE, FALSE, NULL);
-    if (!wi.ev_done)
-        whpx_panic("failed to create event\n");
+    if (wait) {
+        wi.ev_done = CreateEvent(NULL, TRUE, FALSE, NULL);
+        if (!wi.ev_done)
+            whpx_panic("failed to create event\n");
+    } else
+        wi.ev_done = NULL;
     qemu_cpu_kick(env);
-    ret = WaitForSingleObject(wi.ev_done, INFINITE);
-    if (ret != WAIT_OBJECT_0)
-        debug_printf("%s:%d: unexpected wait rval %d\n", __FUNCTION__, __LINE__, ret);
-    CloseHandle(wi.ev_done);
+
+    if (wait) {
+        ret = WaitForSingleObject(wi.ev_done, INFINITE);
+        if (ret != WAIT_OBJECT_0)
+            debug_printf("%s:%d: unexpected wait rval %d\n", __FUNCTION__, __LINE__, ret);
+        CloseHandle(wi.ev_done);
+    }
 }
 
 static void whpx_flush_queued_work(CPUState *env)
@@ -108,7 +122,8 @@ static void whpx_flush_queued_work(CPUState *env)
     while ((wi = env->queued_work_first)) {
         env->queued_work_first = wi->next;
         wi->func(env, wi->data);
-        SetEvent(wi->ev_done);
+        if (wi->ev_done)
+            SetEvent(wi->ev_done);
     }
     env->queued_work_last = NULL;
 }
@@ -311,8 +326,23 @@ static int cpu_can_run(CPUState *cpu)
 void qemu_cpu_kick(CPUState *cpu)
 {
     cpu->halted = 0;
-    SetEvent(extra(cpu)->halt_ev);
+    SetEvent(extra(cpu)->wake_ev);
     whpx_vcpu_kick(cpu);
+}
+
+static void
+vcpu_stopped_cb(void *opaque)
+{
+    CPUState *cpu = opaque;
+
+    debug_printf("vcpu%d stopped, running vcpus: %d\n", cpu->cpu_index, running_vcpus);
+    if (!running_vcpus) {
+        debug_printf("all vcpus stopped, reason: %d\n", shutdown_reason);
+        if (shutdown_reason == WHPX_SHUTDOWN_SUSPEND)
+            vm_process_suspend(NULL);
+        else
+            vm_set_run_mode(DESTROY_VM);
+    }
 }
 
 void vcpu_create(CPUState *cpu)
@@ -321,12 +351,18 @@ void vcpu_create(CPUState *cpu)
     int err;
 
     cpu->env_ptr = cpu;
+    cpu->stopped = 1;
     ex = calloc(1, sizeof(struct cpu_extra));
     if (!ex)
         whpx_panic("allocation failed\n");
-    ex->halt_ev = CreateEvent(NULL, FALSE, FALSE, NULL);
-    if (!ex->halt_ev)
+    ex->wake_ev = CreateEvent(NULL, FALSE, FALSE, NULL);
+    if (!ex->wake_ev)
         whpx_panic("event creation failed\n");
+    ex->stopped_ev = CreateEvent(NULL, FALSE, FALSE, NULL);
+    if (!ex->stopped_ev)
+        whpx_panic("event creation failed\n");
+    ioh_add_wait_object(&ex->stopped_ev, vcpu_stopped_cb, cpu, NULL);
+
     cpu->opaque = ex;
     /* initial vcpu register state */
     whpx_do_cpu_init(cpu);
@@ -338,11 +374,13 @@ void vcpu_create(CPUState *cpu)
 
 void vcpu_destroy(CPUState *cpu)
 {
-    CloseHandle(extra(cpu)->halt_ev);
-    free(extra(cpu));
-}
+    struct cpu_extra *ex = extra(cpu);
 
-static uint32_t running_vcpus = 0;
+    ioh_del_wait_object(&ex->stopped_ev, NULL);
+    CloseHandle(ex->wake_ev);
+    CloseHandle(ex->stopped_ev);
+    free(ex);
+}
 
 static DWORD WINAPI
 whpx_vcpu_run_thread(PVOID opaque)
@@ -376,7 +414,7 @@ whpx_vcpu_run_thread(PVOID opaque)
 #ifdef DEBUG_CPU
             debug_printf("vcpu%d: halt...\n", s->cpu_index);
 #endif
-            ret = WaitForSingleObject(extra(s)->halt_ev, INFINITE);
+            ret = WaitForSingleObject(extra(s)->wake_ev, INFINITE);
 #ifdef DEBUG_CPU
             debug_printf("vcpu%d: wake...\n", s->cpu_index);
 #endif
@@ -391,28 +429,33 @@ whpx_vcpu_run_thread(PVOID opaque)
         nr = or - 1;
     } while ((r = cmpxchg(&running_vcpus, or, nr)) != or);
 
-    if (s->cpu_index == 0) {
-        // stop other cpus
-        CPUState *cpu = first_cpu;
-        while (cpu != NULL) {
-            cpu->stopped = 1;
-            qemu_cpu_kick(cpu);
-            cpu = cpu->next_cpu;
-        }
-        // delay to let bios gui be seen when quitting on halt
-        Sleep(1000);
-        vm_set_run_mode(DESTROY_VM);
-    }
+    SetEvent(extra(s)->stopped_ev);
+
     debug_printf("vcpu%d exiting\n", s->cpu_index);
-    whpx_destroy_vcpu(s);
-    vcpu_destroy(s);
 
     return 0;
+}
+
+static void
+whpx_vm_cleanup(void)
+{
+    whpx_ram_uninit();
+    VirtualFree(shared_info_page, 0, MEM_RELEASE);
+    shared_info_page = NULL;
 }
 
 void
 whpx_destroy(void)
 {
+    CPUState *cpu = first_cpu;
+
+    debug_printf("destroying whpx\n");
+    whpx_vm_cleanup();
+    while (cpu) {
+        whpx_destroy_vcpu(cpu);
+        vcpu_destroy(cpu);
+        cpu = cpu->next_cpu;
+    }
 }
 
 extern ioh_event vram_event;
@@ -425,7 +468,8 @@ vram_refresh(void *opaque)
     mod_timer(vram_timer, get_clock_ms(vm_clock)+30);
 }
 
-void whpx_vcpu_start(CPUState *s)
+void
+whpx_vcpu_start(CPUState *s)
 {
     HANDLE h;
 
@@ -433,10 +477,12 @@ void whpx_vcpu_start(CPUState *s)
     if (!h)
         whpx_panic("failed to create whpx vcpu thread: %d\n", (int)GetLastError());
     s->thread = h;
+    s->stopped = 0;
     ResumeThread(h);
 }
 
-int whpx_vm_start(void)
+int
+whpx_vm_start(void)
 {
     int i;
 
@@ -771,7 +817,7 @@ int whpx_create_vm_vcpus(void)
     return 0;
 }
 
-int whpx_vm_init(void)
+int whpx_vm_init(const char *loadvm, int restore_mode)
 {
     int ret;
 
@@ -779,9 +825,12 @@ int whpx_vm_init(void)
     whpx_panic("whpx unsupported on 32bit\n");
 #endif
 
-    debug_printf("vm init, thread 0x%x\n", (int)GetCurrentThreadId());
+    debug_printf("vm init, thread 0x%x, restore_mode=%d, file=%s\n", (int)GetCurrentThreadId(),
+      restore_mode, loadvm ? loadvm : "");
 
     whpx_initialize_api();
+
+    emu_init();
 
     critical_section_init(&iothread_cs);
     current_cpu_tls = TlsAlloc();
@@ -793,26 +842,117 @@ int whpx_vm_init(void)
     ret = whpx_ram_init();
     if (ret)
         return ret;
-    ret = whpx_create_vm_memory(vm_mem_mb);
-    if (ret)
-        return ret;
     ret = whpx_create_vm_vcpus();
     if (ret)
       return ret;
+    ret = whpx_create_vm_memory(vm_mem_mb);
+    if (ret)
+        return ret;
 
     // debug out
     register_ioport_write(DEBUG_PORT_NUMBER, 1, 1, ioport_debug_char, NULL);
 
+    if (loadvm) {
+        debug_printf("loading vm\n");
+        ret = vm_load(loadvm, restore_mode);
+        if (ret)
+	    err(1, "vm_load(%s, %s) failed", loadvm,
+		restore_mode == VM_RESTORE_TEMPLATE ? "template" :
+		(restore_mode == VM_RESTORE_CLONE ? "clone" : "load"));
+        if (restore_mode == VM_RESTORE_TEMPLATE) {
+            control_send_status("template", "loaded", NULL);
+            control_flush();
+            errx(0, "template vm setup done");
+        }
+    }
+
+    debug_printf("initialize pc\n");
     pc_init_xen();
 
     pit_init();
 
+    if (loadvm) {
+        debug_printf("finishing vm load\n");
+        ret = vm_load_finish();
+        if (ret)
+            err(1, "vm_load_finish failed");
+    }
+
+    shutdown_reason = 0;
+
     return 0;
 }
 
-void whpx_vm_cleanup(void)
+int
+whpx_vm_shutdown(int reason)
 {
-    VirtualFree(shared_info_page, 0, MEM_RELEASE);
-    shared_info_page = NULL;
-    //FIXME more cleanups
+    CPUState *cpu = first_cpu;
+
+    shutdown_reason = reason;
+
+    while (cpu != NULL) {
+        debug_printf("stopping vcpu%d...\n", cpu->cpu_index);
+        cpu->stopped = 1;
+        qemu_cpu_kick(cpu);
+        cpu = cpu->next_cpu;
+    }
+
+    return 0;
+}
+
+int
+whpx_vm_get_context(void *buffer, size_t buffer_sz)
+{
+    size_t required = sizeof(struct whpx_vm_context) + vm_vcpus * sizeof(struct whpx_vcpu_context);
+    struct whpx_vm_context *ctx = buffer;
+    CPUState *cpu = first_cpu;
+    int i;
+    int r;
+
+    if (!buffer)
+        return required;
+
+    if (buffer_sz < required)
+        return -1;
+
+    ctx->version = 1;
+    ctx->vcpus = vm_vcpus;
+    i = 0;
+    while (cpu) {
+        assert(cpu_is_stopped(cpu));
+        r = whpx_vcpu_get_context(cpu, &ctx->vcpu[i]);
+        if (r)
+            return r;
+        cpu = cpu->next_cpu;
+        i++;
+    }
+
+    return required;
+}
+
+int
+whpx_vm_set_context(void *buffer, size_t buffer_sz)
+{
+    size_t required = sizeof(struct whpx_vm_context) + vm_vcpus * sizeof(struct whpx_vcpu_context);
+    struct whpx_vm_context *ctx = buffer;
+    CPUState *cpu = first_cpu;
+    int i;
+    int r;
+
+    if (buffer_sz < required)
+        return -1;
+
+    if (ctx->vcpus != vm_vcpus)
+        whpx_panic("non-matching number of vcpus: %d != %d\n", ctx->vcpus, (int)vm_vcpus);
+
+    i = 0;
+    while (cpu) {
+        r = whpx_vcpu_set_context(cpu, &ctx->vcpu[i]);
+        if (r)
+            return r;
+        cpu = cpu->next_cpu;
+        i++;
+    }
+
+    return 0;
 }

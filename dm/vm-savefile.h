@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, Bromium, Inc.
+ * Copyright 2016-2018, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -28,6 +28,7 @@
 #define XC_SAVE_ID_FINGERPRINTS       -22
 #define XC_SAVE_ID_CUCKOO_DATA        -23
 #define XC_SAVE_ID_HVM_PARAMS         -24
+#define XC_SAVE_ID_WHP_PAGES          -25
 
 #define MAX_BATCH_SIZE 1023
 

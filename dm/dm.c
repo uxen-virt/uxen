@@ -371,7 +371,7 @@ main(int argc, char **argv)
     if (!whpx_enable)
         vm_init(vm_loadfile, vm_restore_mode);
     else {
-        if (whpx_vm_init())
+        if (whpx_vm_init(vm_loadfile, vm_restore_mode))
             errx(1, "whpx_init failed\n");
     }
 

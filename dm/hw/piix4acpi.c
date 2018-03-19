@@ -180,6 +180,7 @@ typedef struct PHPDevFn {
 
 static void acpi_map(PCIDevice *pci_dev, int region_num,
                      uint32_t addr, uint32_t size, int type);
+static void pmt_timer_callback(void *opaque);
 
 #ifdef CONFIG_PASSTHROUGH
 static PHPDevFn php_devfn;
@@ -612,6 +613,36 @@ static int gpe_load(QEMUFile* f, void* opaque, int version_id)
     return 0;
 }
 
+static void pmt_save(QEMUFile *f, void *opaque)
+{
+    GPEState *s = opaque;
+
+    /* pm1a / pm timer */
+    qemu_put_be64s(f, &s->pmt_last_gtime);
+    qemu_put_be32s(f, &s->pmt_not_accounted);
+    qemu_put_be64s(f, &s->pmt_scale);
+    qemu_put_be32s(f, &s->tmr_val);
+    qemu_put_be16s(f, &s->pm1a_sts);
+    qemu_put_be16s(f, &s->pm1a_en);
+}
+
+static int pmt_load(QEMUFile *f, void *opaque, int version_id)
+{
+    GPEState *s = opaque;
+
+    /* pm1a / pm timer */
+    qemu_get_be64s(f, &s->pmt_last_gtime);
+    qemu_get_be32s(f, &s->pmt_not_accounted);
+    qemu_get_be64s(f, &s->pmt_scale);
+    qemu_get_be32s(f, &s->tmr_val);
+    qemu_get_be16s(f, &s->pm1a_sts);
+    qemu_get_be16s(f, &s->pm1a_en);
+
+    pmt_timer_callback(opaque);
+
+    return 0;
+}
+
 static uint32_t gpe_cpus_readb(void *opaque, uint32_t addr)
 {
     uint32_t val = 0;
@@ -851,8 +882,7 @@ static void gpe_acpi_init(void)
       s->pmt_not_accounted = 0;
       s->timer = qemu_new_timer_ns(vm_clock, pmt_timer_callback, s);
       pmt_timer_callback(s);
-      //FIXME: save/restore pm1a
-      //FIXME: acpi buttons emulation, pm timer status setting
+      register_savevm(NULL, "pmt", 0, 1, pmt_save, pmt_load, s);
     }
 }
 

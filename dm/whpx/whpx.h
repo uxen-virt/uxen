@@ -17,7 +17,8 @@
 //#define DEBUG_MMIO
 //#define DEBUG_EMULATE
 
-#define WHPX_RAM_PCI 0x1
+#define WHPX_RAM_PCI      0x0001
+#define WHPX_RAM_EXTERNAL 0x1000
 
 struct CPUX86State;
 typedef struct CPUX86State CPUState;
@@ -38,6 +39,7 @@ void whpx_piix_pci_write_config_client(uint32_t address, uint32_t val, int len);
  */
 
 int whpx_ram_init(void);
+void whpx_ram_uninit(void);
 
 /* populate guest ram range with preexisting virtual memory */
 int whpx_ram_populate_with(uint64_t phys_addr, uint64_t len, void *va, uint32_t flags);
@@ -53,12 +55,26 @@ void whpx_ram_unmap(void *ptr);
 void whpx_register_iorange(uint64_t start, uint64_t length, int is_mmio);
 void whpx_unregister_iorange(uint64_t start, uint64_t length, int is_mmio);
 
+struct filebuf;
+int whpx_read_pages(struct filebuf *f, char **err_msg);
+int whpx_write_pages(struct filebuf *f, char **err_msg);
+
 /**
  * LIFECYCLE
  */
 
-int whpx_vm_init(void);
+/* shutdown reason values match uxen */
+#define WHPX_SHUTDOWN_POWEROFF 0
+#define WHPX_SHUTDOWN_REBOOT 1
+#define WHPX_SHUTDOWN_SUSPEND 2
+#define WHPX_SHUTDOWN_CRASH 3
+
+int whpx_vm_init(const char *loadvm, int restore_mode);
 int whpx_vm_start(void);
+int whpx_vm_shutdown(int reason);
+int whpx_vm_get_context(void *buffer, size_t buffer_sz);
+int whpx_vm_set_context(void *buffer, size_t buffer_sz);
+
 void whpx_destroy(void);
 
 /**
@@ -84,6 +100,8 @@ static inline void whpx_ram_unmap(void *ptr) { WHPX_UNSUPPORTED; }
 static inline int whpx_ram_populate_with(uint64_t phys_addr, uint64_t len, void *va) { WHPX_UNSUPPORTED; return -1; }
 static inline int whpx_ram_populate(uint64_t phys_addr, uint64_t len) { WHPX_UNSUPPORTED; return -1; }
 static inline int whpx_ram_depopulate(uint64_t phys_addr, uint64_t len) { WHPX_UNSUPPORTED; return -1; }
+static inline int whpx_read_pages(struct filebuf *f, char **err_msg) { WHPX_UNSUPPORTED; return -1; }
+static inline int whpx_write_pages(struct filebuf *f, char **err_msg) { WHPX_UNSUPPORTED; return -1; }
 
 #endif /* _WIN32 */
 

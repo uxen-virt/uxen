@@ -7,6 +7,10 @@
 #include <dm/qemu_glue.h>
 #include "whpx.h"
 #include "core.h"
+#include "util.h"
+#include <dm/vm-save.h>
+#include <dm/vm-savefile.h>
+#include <dm/filebuf.h>
 
 #define VM_VA_RANGE_SIZE 0x100000000ULL
 
@@ -14,17 +18,11 @@
  * memory mapped file for example */
 static uint8_t *vm_ram_base = NULL;
 
-typedef struct pagerange {
-    uint64_t start; /* start page */
-    uint64_t end; /* end page */
-} pagerange_t;
-
 /* vm-mappable block */
 typedef struct mb_entry {
     TAILQ_ENTRY(mb_entry) entry;
 
     pagerange_t r;
-    uint64_t page_count;
     void *va;
     int partition_mapped;
     uint32_t flags;
@@ -33,12 +31,20 @@ typedef struct mb_entry {
 /* sorted list of blocks */
 static TAILQ_HEAD(, mb_entry) mb_entries;
 
+static uint64_t mb_pages(mb_entry_t *mb)
+{
+    return pr_bytes(&mb->r) >> PAGE_SHIFT;
+}
+
 static void
 remap_mb(mb_entry_t *mb, int map)
 {
+    if (mb->partition_mapped == map)
+        return;
+
     whpx_update_mapping(
         mb->r.start << PAGE_SHIFT,
-        mb->page_count << PAGE_SHIFT,
+        mb_pages(mb) << PAGE_SHIFT,
         mb->va,
         map ? 1:0,
         0 /* rom */,
@@ -82,12 +88,10 @@ create_mb(uint64_t phys_addr, uint64_t len, void *va, uint32_t flags)
     if (!entry)
         whpx_panic("out of memory");
     entry->r.start = phys_addr >> PAGE_SHIFT;
-    entry->page_count = len >> PAGE_SHIFT;
-    entry->r.end = entry->r.start + entry->page_count-1;
+    entry->r.end = entry->r.start + (len >> PAGE_SHIFT);
     entry->va = va;
     entry->flags = flags;
 
-    remap_mb(entry, 1);
     insert_mb(entry);
 
     return entry;
@@ -98,225 +102,197 @@ destroy_mb(mb_entry_t *mb)
 {
     if (mb) {
         uint64_t addr_start = mb->r.start << PAGE_SHIFT;
-        uint64_t addr_end = ((mb->r.start + mb->page_count) << PAGE_SHIFT) - 1;
+        uint64_t addr_end =  (mb->r.end << PAGE_SHIFT) - 1;
 
         debug_printf("WHPX: --- memory block %016"PRIx64" - %016"PRIx64
                      " (%d pages) va %p\n",
                      addr_start, addr_end,
-                     (int)mb->page_count, mb->va);
+                     (int)mb_pages(mb), mb->va);
         TAILQ_REMOVE(&mb_entries, mb, entry);
-        // remove mapping
-        remap_mb(mb, 0);
 
         free(mb);
     }
 }
-
-#if 0
-static pagerange_t
-mk_pr(uint64_t addr, uint64_t len)
-{
-    pagerange_t r;
-
-    assert((addr & ~TARGET_PAGE_MASK) == 0);
-    assert((len & ~TARGET_PAGE_MASK) == 0);
-
-    r.start = addr >> PAGE_SHIFT;
-    r.end   = (addr + len - 1) >> PAGE_SHIFT;
-
-    return r;
-}
-#endif
-
-#if 0
-static uint64_t
-pr_bytes(pagerange_t *r)
-{
-    return (r->end - r->start + 1) << PAGE_SHIFT;
-}
-#endif
 
 static mb_entry_t *
 create_mb_from_pr(pagerange_t *pr, void *va, uint32_t flags)
 {
     return create_mb(
       pr->start << PAGE_SHIFT,
-      (pr->end - pr->start + 1) << PAGE_SHIFT,
+      (pr->end - pr->start) << PAGE_SHIFT,
       va, flags);
 }
 
+/* calculate existing memory block intersections with given range and split them into
+ * smaller ones at intersection points */
 static int
-intersect_pr(pagerange_t *a, pagerange_t *b, pagerange_t *out)
-{
-    uint64_t p_start, p_end;
-
-    if (a->start > b->end ||
-        b->start > a->end)
-        return 0; /* no intersection */
-
-    if (a->start >= b->start && a->start <= b->end)
-        p_start = a->start;
-    else if (a->start < b->start)
-        p_start = b->start;
-    else
-        return 0;
-
-    if (a->end >= b->start && a->end <= b->end)
-        p_end = a->end;
-    else if (a->end > b->end)
-        p_end = b->end;
-    else
-        return 0;
-
-    out->start = p_start;
-    out->end = p_end;
-
-    return 1;
-}
-
-#if 0
-// a minus b, returns number of chunks
-static int
-diff_pr(pagerange_t *a, pagerange_t *b, pagerange_t *out)
-{
-    pagerange_t inter;
-    int count = 0;
-    
-    if (!intersect_pr(a, b, &inter)) {
-        *out = *a;
-        return 1;
-    }
-
-    if (a->start < b->start) {
-        out->start = a->start;
-        out->end   = b->start - 1;
-        out++;
-        count++;
-    }
-
-    if (a->end > b->end) {
-        out->start = b->end + 1;
-        out->end   = a->end;
-        out++;
-        count++;
-    }
-
-    return count;
-}
-#endif
-
-/**
- * Map host ram into partition
-  */
-static int
-map_region_to_vm(uint64_t phys_addr, uint64_t len, void *va, uint32_t flags)
+vm_intersect_split(uint64_t phys_addr, uint64_t len)
 {
     mb_entry_t *e, *next;
-    pagerange_t r;
-    uint64_t page_start = phys_addr >> PAGE_SHIFT;
-
-    assert((phys_addr & ~TARGET_PAGE_MASK) == 0);
-    assert((len & ~TARGET_PAGE_MASK) == 0);
-
-    r.start = phys_addr >> PAGE_SHIFT;
-    r.end = (phys_addr + len -1) >> PAGE_SHIFT;
-
-    TAILQ_FOREACH_SAFE(e, &mb_entries, entry, next) {
-        pagerange_t inter;
-
-        if (!(r.start <= r.end))
-            return 0; /* all done */
-
-        if (!intersect_pr(&r, &e->r, &inter))
-            continue; /* region to insert does not intersect 'e', no need to trim it */
-        else {
-            assert(0);
-#if 0
-            pagerange_t diff[2];
-            int n;
-
-            /* intersection - split region to insert into the left-side part & insert it,
-             * and continue processing on the right-side part */
-            n = diff_pr(&r, &e->r, diff);
-
-            if (n == 1) {
-                r = diff[0];
-            } else if (n == 2) {
-                if (!create_mb_from_pr(&diff[0],
-                    (uint8_t*)va + ((diff[0].start - page_start) << PAGE_SHIFT),
-                    flags))
-                    return -1;
-                /* 'r' becomes right-side part */
-                r = diff[1];
-            }
-#endif
-        }
-    }
-
-    /* any leftover part */
-    if (r.start <= r.end)
-        if (!create_mb_from_pr(&r,
-            (uint8_t*)va + ((r.start - page_start) << PAGE_SHIFT),
-            flags))
-            return -1;
-
-    return 0;
-}
-
-/**
- * Unmap host ram from partition. Take special care for partial unmaps since
- * WHP api does not support them.
- * Simulate via unmapping whole range & remapping up to two smaller parts.
- */
-static int
-unmap_region_from_vm(uint64_t phys_addr, uint64_t len, uint32_t flags)
-{
-    mb_entry_t *e, *next;
-    pagerange_t r;
+    pagerange_t r = mk_pr(phys_addr, len);
     int ret = -1;
-
-    assert((phys_addr & ~TARGET_PAGE_MASK) == 0);
-    assert((len & ~TARGET_PAGE_MASK) == 0);
-
-    r.start = phys_addr >> PAGE_SHIFT;
-    r.end = (phys_addr + len - 1) >> PAGE_SHIFT;
 
     TAILQ_FOREACH_SAFE(e, &mb_entries, entry, next) {
         pagerange_t inter;
         pagerange_t new1, new2;
         void *new1va = 0, *new2va = 0;
-        new1.start = new1.end = new2.start = new2.end = -1LL;
 
+        new1.start = new1.end = new2.start = new2.end = -1LL;
         if (intersect_pr(&e->r, &r, &inter)) {
+            if (inter.start == e->r.start &&
+                inter.end == e->r.end)
+                continue;
+
             if (inter.start > e->r.start) {
                 new1.start = e->r.start;
-                new1.end   = inter.start - 1;
+                new1.end   = inter.start;
                 new1va     = e->va;
             }
             if (inter.end < e->r.end) {
-                new2.start = inter.end + 1;
+                new2.start = inter.end;
                 new2.end   = e->r.end;
                 new2va     = (uint8_t*)e->va +
-                  ((inter.end - e->r.start + 1) << PAGE_SHIFT);
+                  ((inter.end - e->r.start) << PAGE_SHIFT);
             }
 
+            int mapped = e->partition_mapped;
+
             // unmap existing block
-            destroy_mb(e);
-            // maybe map smaller blocks
+            remap_mb(e, 0);
+
+            // trim existing intersecting element to intersection
+            e->va = (uint8_t*)e->va + ((inter.start - e->r.start) << PAGE_SHIFT);
+            e->r  = inter;
+
+            // map trimmed block
+            remap_mb(e, mapped);
+            // add elements to left, right of existing one if necessary
             if (new1.start != -1LL) {
-                if (!create_mb_from_pr(&new1, new1va, e->flags))
+                mb_entry_t *new_mb = create_mb_from_pr(&new1, new1va, e->flags);
+                if (!new_mb)
                     goto out;
+                remap_mb(new_mb, mapped);
             }
             if (new2.start != -1LL) {
-                if (!create_mb_from_pr(&new2, new2va, e->flags))
+                mb_entry_t *new_mb = create_mb_from_pr(&new2, new2va, e->flags);
+                if (!new_mb)
                     goto out;
+                remap_mb(new_mb, mapped);
             }
         }
     }
-
     ret = 0;
+
 out:
     return ret;
+}
+
+static void
+vm_intersect_for_each(
+    uint64_t phys_addr, uint64_t len,
+    void (*f)(mb_entry_t *, void *),
+    void *opaque)
+{
+    mb_entry_t *e, *next;
+    pagerange_t r = mk_pr(phys_addr, len);
+
+    TAILQ_FOREACH_SAFE(e, &mb_entries, entry, next) {
+        pagerange_t inter;
+        if (intersect_pr(&e->r, &r, &inter))
+            f(e, opaque);
+    }
+}
+
+static int
+vm_commit_region(uint64_t phys_addr, uint64_t len)
+{
+    if (!VirtualAlloc(vm_ram_base + phys_addr, len, MEM_COMMIT, PAGE_READWRITE))
+        return -1;
+    return 0;
+}
+
+static int
+vm_decommit_region(uint64_t phys_addr, uint64_t len)
+{
+    if (!VirtualFree(vm_ram_base + phys_addr, len, MEM_DECOMMIT))
+        return -1;
+    return 0;
+}
+
+static void
+vm_map_region_remap(mb_entry_t *mb, void *opaque)
+{
+    remap_mb(mb, 1);
+}
+
+static int
+vm_map_region(uint64_t phys_addr, uint64_t len)
+{
+    /* split intersecting blocks */
+    if (vm_intersect_split(phys_addr, len))
+        whpx_panic("vm_intersect_split failed!\n");
+    /* map each intersecting block */
+    vm_intersect_for_each(phys_addr, len, vm_map_region_remap, NULL);
+
+    return 0;
+}
+
+static void
+vm_unmap_region_remap(mb_entry_t *mb, void *opaque)
+{
+    remap_mb(mb, 0);
+}
+
+static int
+vm_unmap_region(uint64_t phys_addr, uint64_t len)
+{
+    /* split intersecting blocks */
+    if (vm_intersect_split(phys_addr, len))
+        whpx_panic("vm_intersect_split failed!\n");
+    /* unmap each intersecting block */
+    vm_intersect_for_each(phys_addr, len, vm_unmap_region_remap, NULL);
+
+    return 0;
+}
+
+static void
+vm_create_region_remove(mb_entry_t *mb, void *opaque)
+{
+    destroy_mb(mb);
+}
+
+static int
+vm_create_region(uint64_t phys_addr, uint64_t len, void *va, uint32_t flags)
+{
+    /* split intersecting blocks */
+    if (vm_intersect_split(phys_addr, len))
+        whpx_panic("vm_intersect_split failed!\n");
+    /* remove each intersecting block */
+    vm_intersect_for_each(phys_addr, len, vm_create_region_remove, NULL);
+    /* insert new block */
+    if (!create_mb(phys_addr, len, va, flags))
+        return -1;
+
+    return 0;
+}
+
+static void
+vm_destroy_region_remove(mb_entry_t *mb, void *opaque)
+{
+    destroy_mb(mb);
+}
+
+static int
+vm_destroy_region(uint64_t phys_addr, uint64_t len)
+{
+    /* split intersecting blocks */
+    if (vm_intersect_split(phys_addr, len))
+        whpx_panic("vm_intersect_split failed!\n");
+
+    /* remove each intersecting block */
+    vm_intersect_for_each(phys_addr, len, vm_destroy_region_remove, NULL);
+
+    return 0;
 }
 
 int
@@ -331,15 +307,21 @@ whpx_ram_populate(uint64_t phys_addr, uint64_t len, uint32_t flags)
     assert((phys_addr & ~TARGET_PAGE_MASK) == 0);
     assert((len & ~TARGET_PAGE_MASK) == 0);
 
-    if (!VirtualAlloc(vm_ram_base + phys_addr, len, MEM_COMMIT, PAGE_READWRITE))
-        whpx_panic("FAILED to commit ram!\n");
-
-    /* remove any stale mem blocks */
-    ret = unmap_region_from_vm(phys_addr, len, flags);
+    /* allocate ram */
+    ret = vm_commit_region(phys_addr, len);
+    if (ret)
+        whpx_panic("FAILED to commit region (%d)!\n", ret);
+    /* remove any previous mapping */
+    ret = vm_unmap_region(phys_addr, len);
     if (ret)
         whpx_panic("FAILED to unmap region (%d)!\n", ret);
-
-    ret = map_region_to_vm(phys_addr, len, vm_ram_base + phys_addr, flags);
+    /* create new region */
+    ret = vm_create_region(phys_addr, len, (uint8_t*)vm_ram_base + phys_addr,
+        flags);
+    if (ret)
+        whpx_panic("FAILED to create region (%d)!\n", ret);
+    /* create new mapping */
+    ret = vm_map_region(phys_addr, len);
     if (ret)
         whpx_panic("FAILED to map region (%d)!\n", ret);
 
@@ -358,14 +340,25 @@ whpx_ram_populate_with(uint64_t phys_addr, uint64_t len, void *va, uint32_t flag
                  " (%d pages) va=%p\n",
                  phys_addr, phys_addr+len-1, (int)(len >> PAGE_SHIFT), va);
 
-    /* remove any stale mem blocks */
-    ret = unmap_region_from_vm(phys_addr, len, flags);
+    /* remove any previous mapping */
+    ret = vm_unmap_region(phys_addr, len);
     if (ret)
         whpx_panic("FAILED to unmap region (%d)!\n", ret);
+    /* free any existing memory at phys_addr */
+    ret = vm_decommit_region(phys_addr, len);
+    if (ret)
+        whpx_panic("FAILED to decommit ram!");
+    /* create new region */
+    ret = vm_create_region(phys_addr, len, va, flags);
+    if (ret)
+        whpx_panic("FAILED to create region (%d)!\n", ret);
+    /* add new mapping */
+    ret = vm_map_region(phys_addr, len);
+    if (ret)
+        whpx_panic("FAILED to map region (%d)!\n", ret);
 
-    return map_region_to_vm(phys_addr, len, va, flags);
+    return 0;
 }
-
 
 int
 whpx_ram_depopulate(uint64_t phys_addr, uint64_t len, uint32_t flags)
@@ -379,13 +372,18 @@ whpx_ram_depopulate(uint64_t phys_addr, uint64_t len, uint32_t flags)
     assert((phys_addr & ~TARGET_PAGE_MASK) == 0);
     assert((len & ~TARGET_PAGE_MASK) == 0);
 
-    ret = unmap_region_from_vm(phys_addr, len, flags);
+    /* remove mapping */
+    ret = vm_unmap_region(phys_addr, len);
     if (ret)
         whpx_panic("FAILED to unmap region (%d)!\n", ret);
-
-    if (!VirtualFree(vm_ram_base + phys_addr, len, MEM_DECOMMIT))
-        whpx_panic("FAILED to decommit ram!");
-
+    /* remove region */
+    ret = vm_destroy_region(phys_addr, len);
+    if (ret)
+        whpx_panic("FAILED to destroy region (%d)!\n", ret);
+    /* free ram */
+    ret = vm_decommit_region(phys_addr, len);
+    if (ret)
+        whpx_panic("FAILED to decommit ram (%d)!", ret);
     return 0;
 }
 
@@ -403,8 +401,8 @@ whpx_ram_map(uint64_t phys_addr, uint64_t *len)
     uint64_t phys_addr_end = phys_addr + (*len) - 1;
 
     TAILQ_FOREACH(e, &mb_entries, entry) {
-        if (page >= e->r.start && page <= e->r.end) {
-            uint64_t mb_max_addr = ((e->r.end+1) << PAGE_SHIFT) - 1;
+        if (page >= e->r.start && page < e->r.end) {
+            uint64_t mb_max_addr = (e->r.end << PAGE_SHIFT) - 1;
 
             if (phys_addr_end > mb_max_addr) {
                 phys_addr_end = mb_max_addr;
@@ -432,8 +430,8 @@ whpx_register_iorange(uint64_t start, uint64_t length, int is_mmio)
         debug_printf("WHPX: +++ mmio range %016"PRIx64" - %016"PRIx64"\n",
             start, start+length-1);
 
-        if (whpx_ram_depopulate(start, length, 0))
-            whpx_panic("depopulate failed\n");
+        if (vm_unmap_region(start, length))
+            whpx_panic("unmap failed\n");
         debug_printf("WHPX: mmio range registered\n");
     } else {
         /* no-op for ioports (no api for that, HV should forward us everything */
@@ -447,13 +445,128 @@ whpx_unregister_iorange(uint64_t start, uint64_t length, int is_mmio)
         debug_printf("WHPX: --- mmio range %016"PRIx64" - %016"PRIx64"\n",
             start, start+length-1);
 
-        /* only way to stop emulated mmio is to give that area some backing ram */
-        if (whpx_ram_populate(start, length, 0))
-            whpx_panic("populate failed\n");
+        if (vm_map_region(start, length))
+            whpx_panic("remap failed\n");
     }
 }
 
-int whpx_ram_init(void)
+static int
+whpx_count_entries(void)
+{
+    mb_entry_t *e;
+    int count = 0;
+
+    TAILQ_FOREACH(e, &mb_entries, entry)
+        count++;
+
+    return count;
+}
+
+int
+whpx_write_pages(struct filebuf *f, char **err_msg)
+{
+    mb_entry_t *e;
+    uint32_t num_entries = 0;
+    uint32_t marker;
+    struct xc_save_generic s;
+
+    vm_save_info.page_batch_offset = filebuf_tell(f);
+
+    s.marker = XC_SAVE_ID_WHP_PAGES;
+    s.size = 0; /* updated later */
+    filebuf_write(f, &s, sizeof(s));
+
+    /* num_entries updated later too */
+    filebuf_write(f, &num_entries, sizeof(num_entries));
+
+    TAILQ_FOREACH(e, &mb_entries, entry) {
+        uint64_t i, len;
+        uint8_t *ram;
+        uint32_t flags;
+
+        len = mb_pages(e) << PAGE_SHIFT;
+        ram = whpx_ram_map(e->r.start << PAGE_SHIFT, &len);
+        assert(ram);
+        assert(len == (mb_pages(e) << PAGE_SHIFT));
+
+        if (e->flags & WHPX_RAM_EXTERNAL)
+            continue; /* don't save external ram for now */
+        filebuf_write(f, &e->r, sizeof(e->r));
+        flags = e->flags;
+        filebuf_write(f, &flags, sizeof(flags));
+        uint64_t pages = mb_pages(e);
+        for (i = 0; i  < pages; i++) {
+            uint8_t *page = ram + PAGE_SIZE * i;
+            filebuf_write(f, page, PAGE_SIZE);
+        }
+        num_entries++;
+    }
+
+    /* update size */
+    off_t size = filebuf_tell(f) - vm_save_info.page_batch_offset;
+    s.size = size;
+    filebuf_seek(f, vm_save_info.page_batch_offset, FILEBUF_SEEK_SET);
+    filebuf_write(f, &s, sizeof(s));
+    /* update number of entries */
+    filebuf_write(f, &num_entries, sizeof(num_entries));
+    filebuf_seek(f, vm_save_info.page_batch_offset + size, FILEBUF_SEEK_SET);
+
+    /* 0: end marker */
+    marker = 0;
+    filebuf_write(f, &marker, sizeof(marker));
+
+    return 0;
+}
+
+int
+whpx_read_pages(struct filebuf *f, char **err_msg)
+{
+    uint32_t num_entries = 0, i;
+    uint32_t sz;
+    mb_entry_t *e, *next;
+
+    /* depopulate any pre-existing ranges - needed because some device initialization functions
+     * called before loading setup preliminary ranges */
+    TAILQ_FOREACH_SAFE(e, &mb_entries, entry, next) {
+        /* remove hyperv mapping + free ram */
+        whpx_ram_depopulate(e->r.start << PAGE_SHIFT, mb_pages(e) << PAGE_SHIFT, 0);
+    }
+
+    /* should be nothing in memory map yet */
+    assert(whpx_count_entries() == 0);
+
+    filebuf_read(f, &sz, sizeof(sz));
+
+    filebuf_read(f, &num_entries, sizeof(num_entries));
+    for (i = 0; i < num_entries; i++) {
+        pagerange_t r;
+        uint64_t len, npages, j, addr;
+        uint8_t *ram;
+        uint32_t flags;
+
+        filebuf_read(f, &r, sizeof(r));
+        filebuf_read(f, &flags, sizeof(flags));
+        npages = r.end - r.start;
+        len = npages << PAGE_SHIFT;
+        addr = r.start << PAGE_SHIFT;
+        /* allocate ram range */
+        whpx_ram_populate(addr, len, flags);
+        ram = whpx_ram_map(addr, &len);
+        assert(ram);
+        assert(len == (npages << PAGE_SHIFT));
+        /* read & populate ram range with data */
+        for (j = 0; j < npages; j++) {
+            uint8_t *page = ram + PAGE_SIZE * j;
+
+            filebuf_read(f, page, PAGE_SIZE);
+        }
+    }
+
+    return 0;
+}
+
+int
+whpx_ram_init(void)
 {
     TAILQ_INIT(&mb_entries);
 
@@ -465,4 +578,18 @@ int whpx_ram_init(void)
     debug_printf("vm_ram_base = 0x%p\n", vm_ram_base);
 
     return 0;
+}
+
+void
+whpx_ram_uninit(void)
+{
+    mb_entry_t *e, *next;
+
+    TAILQ_FOREACH_SAFE(e, &mb_entries, entry, next) {
+        /* remove hyperv mapping + free ram */
+        whpx_ram_depopulate(e->r.start << PAGE_SHIFT, mb_pages(e) << PAGE_SHIFT, 0);
+    }
+
+    /* should have no entries left in rammap after depopulating everything */
+    assert(whpx_count_entries() == 0);
 }

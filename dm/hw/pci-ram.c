@@ -194,7 +194,7 @@ unmap_ram(void *ptr, size_t len)
         whpx_pci_unmap_ram(ptr, len) : uxen_unmap_ram(ptr, len);
 }
 
-void
+static void
 pci_ram_update_region(PCIDevice *d, PCIIORegion *r, pcibus_t last_addr, pcibus_t new_addr)
 {
     struct ram_range *range;

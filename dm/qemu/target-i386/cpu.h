@@ -841,7 +841,6 @@ typedef struct CPUX86State {
     uint64_t xcr0;
 
 #ifdef QEMU_UXEN
-    bool vcpu_dirty;
     void *hax_vcpu;
     void *env_ptr;
     TPRAccess tpr_access_type;

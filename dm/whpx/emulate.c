@@ -71,7 +71,8 @@ enum hvm_access_type {
     hvm_access_write
 };
 
-static WHV_REGISTER_NAME emu_registers[] = {
+/* emulation reads from these registers */
+static WHV_REGISTER_NAME emu_read_register_names[] = {
     /* X64 General purpose registers */
     WHvX64RegisterRax,
     WHvX64RegisterRcx,
@@ -104,6 +105,36 @@ static WHV_REGISTER_NAME emu_registers[] = {
     WHvX64RegisterFs,
     WHvX64RegisterGs,
 };
+
+/* emulation writes to these registers */
+static WHV_REGISTER_NAME emu_write_register_names[] = {
+    /* X64 General purpose registers */
+    WHvX64RegisterRax,
+    WHvX64RegisterRcx,
+    WHvX64RegisterRdx,
+    WHvX64RegisterRbx,
+    WHvX64RegisterRsp,
+    WHvX64RegisterRbp,
+    WHvX64RegisterRsi,
+    WHvX64RegisterRdi,
+    WHvX64RegisterR8,
+    WHvX64RegisterR9,
+    WHvX64RegisterR10,
+    WHvX64RegisterR11,
+    WHvX64RegisterR12,
+    WHvX64RegisterR13,
+    WHvX64RegisterR14,
+    WHvX64RegisterR15,
+    WHvX64RegisterRip,
+    WHvX64RegisterRflags,
+
+    /* X64 Control Registers */
+    WHvX64RegisterCr0,
+    WHvX64RegisterEfer,
+};
+
+static whpx_reg_list_t emu_read_registers;
+static whpx_reg_list_t emu_write_registers;
 
 #define hvm_long_mode_enabled(v)                \
     ((v)->regs.efer & EFER_LMA)
@@ -214,7 +245,7 @@ static int emu_read(
     if ( rc != X86EMUL_OKAY )
         return rc;
 
-#ifdef DEBUG_EMULATE    
+#ifdef DEBUG_EMULATE
     debug_printf("emu read guest linear addr: %"PRIx64", paddr: %"PRIx64", bytes %d\n", addr, paddr, bytes);
 #endif
     vm_memory_rw(paddr, p_data, bytes, 0);
@@ -858,11 +889,18 @@ void inject_exception(int cpu, int trap, int error_code)
     // TODO: implement
 }
 
-WHV_REGISTER_NAME *
-emu_get_hv_register_names(void)
+whpx_reg_list_t *
+emu_get_read_registers(void)
 {
-    return emu_registers;
+    return &emu_read_registers;
 }
+
+whpx_reg_list_t *
+emu_get_write_registers(void)
+{
+    return &emu_write_registers;
+}
+
 
 void
 emu_registers_hv_to_cpustate(CPUState *cpu, WHV_REGISTER_VALUE *values)
@@ -885,19 +923,20 @@ emu_registers_hv_to_cpustate(CPUState *cpu, WHV_REGISTER_VALUE *values)
         cpu->segs[i] = whpx_seg_h2q(&values[idx].Segment);
 }
 
-void
+int
 emu_registers_cpustate_to_hv(CPUState *cpu, size_t maxregs, WHV_REGISTER_NAME *names, WHV_REGISTER_VALUE *values)
 {
     int idx;
+    whpx_reg_list_t *regs = emu_get_write_registers();
 
-    assert(maxregs >= NUM_SET_EMU_REGISTERS);
+    assert(maxregs >= regs->num);
+    assert(sizeof(regs->reg[0]) == sizeof(WHV_REGISTER_NAME));
 
-    memcpy(names, emu_registers, NUM_SET_EMU_REGISTERS * sizeof(WHV_REGISTER_NAME));
+    memcpy(names, &regs->reg[0], regs->num * sizeof(WHV_REGISTER_NAME));
 
     /* Indexes for first 16 registers match between HV and QEMU definitions */
-    for (idx = 0; idx < CPU_NB_REGS64; idx += 1) {
+    for (idx = 0; idx < CPU_NB_REGS64; idx += 1)
         values[idx].Reg64 = cpu->regs[idx];
-    }
 
     /* Same goes for RIP and RFLAGS */
     values[idx++].Reg64 = cpu->eip;
@@ -908,6 +947,7 @@ emu_registers_cpustate_to_hv(CPUState *cpu, size_t maxregs, WHV_REGISTER_NAME *n
     values[idx++].Reg64 = cpu->efer;
 
     /* emulation doesn't modify segment regs */
+    return idx;
 }
 
 static
@@ -981,3 +1021,9 @@ void emu_one(CPUState *cpu_s, void *instr, int instr_max_len)
 #endif
 }
 
+void
+emu_init(void)
+{
+    whpx_reg_list_init(&emu_read_registers, emu_read_register_names);
+    whpx_reg_list_init(&emu_write_registers, emu_write_register_names);
+}

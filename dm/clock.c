@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -17,6 +17,7 @@
 #ifdef RELATIVE_CLOCK
 static int64_t start_time;
 int64_t time_pause_adjust = 0;
+int64_t clock_save_adjust = 0;
 static int64_t clock_paused_time = 0;
 static critical_section clock_lck;
 #else
@@ -63,7 +64,7 @@ int64_t _os_get_clock(int type)
         QueryPerformanceCounter(&ti);
         ret = muldiv64(ti.QuadPart - start_time, CLOCK_BASE, clock_freq);
         if (type == CLOCK_VIRTUAL)
-            ret -= time_pause_adjust;
+            ret -= time_pause_adjust - clock_save_adjust;
     }
     if (type == CLOCK_VIRTUAL)
         vm_clock_unlock();
@@ -84,7 +85,7 @@ int64_t _os_get_clock_ms(int type)
         QueryPerformanceCounter(&ti);
         ret = muldiv64(ti.QuadPart - start_time, CLOCK_BASE, clock_freq);
         if (type == CLOCK_VIRTUAL)
-            ret -= time_pause_adjust;
+            ret -= time_pause_adjust - clock_save_adjust;
     }
     ret /= SCALE_MS;
     if (type == CLOCK_VIRTUAL)
@@ -131,7 +132,7 @@ int64_t _os_get_clock(int type)
     else {
         ret = get_calendar_time() - start_time;
         if (type == CLOCK_VIRTUAL)
-            ret -= time_pause_adjust;
+            ret -= time_pause_adjust - clock_save_adjust;
     }
     if (type == CLOCK_VIRTUAL)
         vm_clock_unlock();
@@ -165,7 +166,7 @@ vm_clock_pause(void)
     vm_clock_lock();
 
     if (!clock_paused_time) {
-        clock_paused_time = _os_get_clock(CLOCK_REALTIME) - time_pause_adjust;
+        clock_paused_time = _os_get_clock(CLOCK_REALTIME) - time_pause_adjust + clock_save_adjust;
         debug_printf("%s\n", __FUNCTION__);
     }
 
