@@ -1433,9 +1433,6 @@ int vbsfWrite(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, uint64_
         return VERR_INVALID_PARAMETER;
     }
 
-    int crypt = !!(vbsfQueryHandleFlags(pClient, Handle) & SHFL_HF_ENCRYPTED);
-    LogRel(("ZONK vbsfWrite 0x%llx offset 0x%llx bytes %x CRYPT=%d\n", Handle, offset, *pcbBuffer, crypt));
-
     /* Is the guest allowed to write to this share?
      * XXX Actually this check was still done in vbsfCreate() -- RTFILE_O_WRITE cannot be set if vbsfMappingsQueryWritable() failed. */
     bool fWritable;
