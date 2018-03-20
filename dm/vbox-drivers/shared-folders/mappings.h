@@ -16,7 +16,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -44,6 +44,7 @@ typedef struct
 {
     wchar_t        *pszFolderName;       /**< directory at the host to share with the guest */
     PSHFLSTRING pMapName;             /**< share name for the guest */
+    wchar_t     *file_suffix;         /* file suffix for shared files, or NULL */
     uint32_t    cMappings;            /**< number of mappings */
     bool        fValid;               /**< mapping entry is used/valid */
     bool        fHostCaseSensitive;   /**< host file name space is case-sensitive */
@@ -61,13 +62,14 @@ void vbsfMappingInit(void);
 
 bool vbsfMappingQuery(uint32_t iMapping, PMAPPING *pMapping);
 
-int vbsfMappingsAdd(PSHFLSTRING pFolderName, PSHFLSTRING pMapName,
+int vbsfMappingsAdd(PSHFLSTRING pFolderName, PSHFLSTRING pMapName, PSHFLSTRING pFileSuffix,
                     bool fWritable, bool fAutoMount, bool fCreateSymlinks,
                     uint64_t opts, uint64_t quota);
 int vbsfMappingsRemove(PSHFLSTRING pMapName);
 
 int vbsfMappingsQuery(PSHFLCLIENTDATA pClient, PSHFLMAPPING pMappings, uint32_t *pcMappings);
 int vbsfMappingsQueryName(PSHFLCLIENTDATA pClient, SHFLROOT root, SHFLSTRING *pString);
+int vbsfMappingsQueryFileSuffix(PSHFLCLIENTDATA pClient, SHFLROOT root, wchar_t **suffix);
 int vbsfMappingsQueryWritable(PSHFLCLIENTDATA pClient, SHFLROOT root, bool *fWritable);
 int vbsfMappingsQueryAutoMount(PSHFLCLIENTDATA pClient, SHFLROOT root, bool *fAutoMount);
 int vbsfMappingsQuerySymlinksCreate(PSHFLCLIENTDATA pClient, SHFLROOT root, bool *fSymlinksCreate);

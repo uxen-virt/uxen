@@ -1203,7 +1203,7 @@ static DECLCALLBACK(int) svcHostCall (void *unused, uint32_t u32Function, uint32
                             RT_BOOL(fFlags & SHFL_ADD_MAPPING_F_CRYPT) ? "true" : "false"));
 
                 /* Execute the function. */
-                rc = vbsfMappingsAdd(pFolderName, pMapName,
+                rc = vbsfMappingsAdd(pFolderName, pMapName, NULL,
                                      RT_BOOL(fFlags & SHFL_ADD_MAPPING_F_WRITABLE),
                                      RT_BOOL(fFlags & SHFL_ADD_MAPPING_F_AUTOMOUNT),
                                      RT_BOOL(fFlags & SHFL_ADD_MAPPING_F_CREATE_SYMLINKS),

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -769,13 +769,25 @@ control_command_sf_set_subfolder_scramble_mode(
     const char *subfolder = dict_get_string(d, "subfolder");
     wchar_t *name_w = _utf8_to_wide(name);
     wchar_t *subfolder_w = _utf8_to_wide(subfolder);
+    uint32_t valid_mask = SF_OPT_SCRAMBLE | SF_OPT_NO_REDIRECTED_SCRAMBLE | SF_OPT_SCRAMBLE_FILENAMES;
 
     int mode = dict_get_integer(d, "mode");
     int rc;
 
-    rc =  mode < 0
-        ? sf_restore_opt(name_w, subfolder_w, SF_OPT_SCRAMBLE)
-        : sf_mod_opt_dynamic(name_w, subfolder_w, SF_OPT_SCRAMBLE, mode ? 1:0);
+    if (mode < 0) {
+        /* restore default options for valid_mask */
+        rc = sf_restore_opt(name_w, subfolder_w, valid_mask);
+    } else {
+        rc = sf_mod_opt_dynamic(name_w, subfolder_w, SF_OPT_SCRAMBLE, (mode & SF_OPT_SCRAMBLE) ? 1:0);
+        if (rc) goto out;
+        rc = sf_mod_opt_dynamic(name_w, subfolder_w, SF_OPT_NO_REDIRECTED_SCRAMBLE,
+            (mode & SF_OPT_NO_REDIRECTED_SCRAMBLE) ? 1:0);
+        if (rc) goto out;
+        rc = sf_mod_opt_dynamic(name_w, subfolder_w, SF_OPT_SCRAMBLE_FILENAMES,
+            (mode & SF_OPT_SCRAMBLE_FILENAMES) ? 1:0);
+        if (rc) goto out;
+    }
+out:
     if (rc)
         control_send_error(cd, opt, id, rc, NULL);
     else

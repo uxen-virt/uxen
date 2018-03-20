@@ -70,6 +70,20 @@ sf_redirect_update_dst(redir_entry_t *e, wchar_t *dst)
     critical_section_leave(&redir_lock);
 }
 
+bool
+sf_is_redirected_path(SHFLROOT root, wchar_t *path)
+{
+    PMAPPING mapping = vbsfMappingGetByRoot(root);
+
+    if (mapping) {
+        redir_entry_t *e = sf_redirect_find(mapping->pMapName->String.ucs2, path);
+
+        return e != NULL;
+    }
+
+    return false;
+}
+
 wchar_t *
 sf_redirect_path(SHFLROOT root, wchar_t *path)
 {

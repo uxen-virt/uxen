@@ -16,7 +16,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -39,6 +39,7 @@
 
 #include "mappings.h"
 #include "mappings-opts.h"
+#include "redir.h"
 #include "util.h"
 #include <iprt/alloc.h>
 #include <iprt/assert.h>
@@ -219,7 +220,7 @@ wchar_t* RTwcsdup(wchar_t*);
 /*
  * We are always executed from one specific HGCM thread. So thread safe.
  */
-int vbsfMappingsAdd(PSHFLSTRING pFolderName, PSHFLSTRING pMapName,
+int vbsfMappingsAdd(PSHFLSTRING pFolderName, PSHFLSTRING pMapName, PSHFLSTRING pFileSuffix,
                     bool fWritable, bool fAutoMount, bool fSymlinksCreate,
                     uint64_t opts, uint64_t quota)
 {
@@ -250,10 +251,22 @@ int vbsfMappingsAdd(PSHFLSTRING pFolderName, PSHFLSTRING pMapName,
             if (!FolderMapping[i].pszFolderName)
                 return VERR_NO_MEMORY;
 
+            FolderMapping[i].file_suffix = NULL;
+            if (pFileSuffix) {
+                FolderMapping[i].file_suffix = RTwcsdup(pFileSuffix->String.ucs2);
+                if (!FolderMapping[i].file_suffix) {
+                    RTMemFree(FolderMapping[i].pszFolderName);
+
+                    return VERR_NO_MEMORY;
+                }
+            }
+
             FolderMapping[i].pMapName = (PSHFLSTRING)RTMemAlloc(ShflStringSizeOfBuffer(pMapName));
             if (!FolderMapping[i].pMapName)
             {
                 RTMemFree(FolderMapping[i].pszFolderName);
+                if (FolderMapping[i].file_suffix)
+                    RTMemFree(FolderMapping[i].file_suffix);
                 AssertFailed();
                 return VERR_NO_MEMORY;
             }
@@ -472,6 +485,21 @@ int vbsfMappingsQueryName(PSHFLCLIENTDATA pClient, SHFLROOT root, SHFLSTRING *pS
     return rc;
 }
 
+int vbsfMappingsQueryFileSuffix(PSHFLCLIENTDATA pClient, SHFLROOT root, wchar_t **suffix)
+{
+    int rc = VINF_SUCCESS;
+    MAPPING *pFolderMapping = vbsfMappingGetByRoot(root);
+
+    AssertReturn(pFolderMapping, VERR_INVALID_PARAMETER);
+
+    if (pFolderMapping->fValid == true)
+        *suffix = pFolderMapping->file_suffix;
+    else
+        rc = VERR_FILE_NOT_FOUND;
+
+    return rc;
+}
+
 int vbsfMappingsQueryWritable(PSHFLCLIENTDATA pClient, SHFLROOT root, bool *fWritable)
 {
     int rc = VINF_SUCCESS;
@@ -611,11 +639,28 @@ int
 vbsfMappingsQueryCrypt(PSHFLCLIENTDATA pClient, SHFLROOT root, wchar_t *path, int *crypt_mode)
 {
     MAPPING *pFolderMapping = vbsfMappingGetByRoot(root);
+    int scramble = 0;
 
     AssertReturn(pFolderMapping, VERR_INVALID_PARAMETER);
     if (!pFolderMapping->fValid)
         return VERR_FILE_NOT_FOUND;
-    *crypt_mode = _sf_has_opt(root, path, SF_OPT_SCRAMBLE);
+
+    uint64_t opt = _sf_get_opt(root, path);
+    scramble = _sf_has_opt(root, path, SF_OPT_SCRAMBLE);
+    debug_printf("ZONK query crypt for path %ls, scramble=%d hasopt=%d opt=%d redir=%d\n",
+      path, scramble, _sf_has_opt(root,path,SF_OPT_NO_REDIRECTED_SCRAMBLE), (int)opt,
+      sf_is_redirected_path(root,path));
+    
+    /* don't scramble redirected files if SF_OPT_NO_REDIRECTED_SCRAMBLE option is set */
+    if (scramble) {
+        if (_sf_has_opt(root, path, SF_OPT_NO_REDIRECTED_SCRAMBLE) &&
+            sf_is_redirected_path(root, path))
+        {
+            scramble = 0;
+        }
+    }
+    *crypt_mode = scramble;
+
     return VINF_SUCCESS;
 }
 
