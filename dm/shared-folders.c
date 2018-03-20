@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -86,6 +86,9 @@ parse_folder_opts(yajl_val v)
         opts |= SF_OPT_NO_FLUSH;
     if (yajl_object_get_integer_default(v, "no-quota", 0))
         opts |= SF_OPT_NO_QUOTA;
+    if (yajl_object_get_integer_default(v, "scramble-filenames", 0))
+        opts |= SF_OPT_SCRAMBLE_FILENAMES;
+
     return opts;
 }
 
@@ -189,7 +192,7 @@ sf_parse_config(yajl_val config)
     yajl_val folders, v;
     int i;
     int rc;
-    const char *name, *folder;
+    const char *name, *folder, *file_suffix;
     const char* folders_path[] = {"folders", NULL};
     int writable;
     uint64_t quota;
@@ -214,10 +217,11 @@ sf_parse_config(yajl_val config)
                 warnx("folder arg missing path or name attribute");
                 return -1;
             }
+            file_suffix = yajl_object_get_string(v, "file-suffix");
             writable = yajl_object_get_integer_default(v, "writable", 0);
             opts = parse_folder_opts(v);
             quota = yajl_object_get_integer_default(v, "quota", 0);
-            rc = sf_add_mapping(folder, name, writable, opts, quota * 1024 * 1024);
+            rc = sf_add_mapping(folder, name, file_suffix, writable, opts, quota * 1024 * 1024);
             if (rc) {
                 warnx("sf_add_mapping folder=%s name=%s error %d", 
                     folder, name, rc);

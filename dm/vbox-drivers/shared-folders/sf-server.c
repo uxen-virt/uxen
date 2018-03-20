@@ -116,10 +116,10 @@ int sf_init()
 }
 
 int
-sf_add_mapping(char *folder, char *name, int writable,
+sf_add_mapping(char *folder, char *name, char *file_suffix, int writable,
                uint64_t opts, uint64_t quota)
 {
-    SHFLSTRING *folder_sstr, *name_sstr;
+    SHFLSTRING *folder_sstr, *name_sstr, *suffix_sstr;
     int rc;
 
     folder_sstr = makeSHFLStringUTF8(folder);
@@ -129,6 +129,13 @@ sf_add_mapping(char *folder, char *name, int writable,
     name_sstr = makeSHFLStringUTF8(name);
     if (!name_sstr)
         return VERR_NO_MEMORY;
+
+    if (file_suffix) {
+        suffix_sstr = makeSHFLStringUTF8(file_suffix);
+        if (!suffix_sstr)
+            return VERR_NO_MEMORY;
+    } else
+        suffix_sstr = NULL;
 
     if (!hide_log_sensitive_data)
         LogRel(("shared-folders: Host path '%ls', map name '%ls', %s, opts=0x%" PRIx64
@@ -140,11 +147,13 @@ sf_add_mapping(char *folder, char *name, int writable,
                 quota));
 
     /* Execute the function. */
-    rc = vbsfMappingsAdd(folder_sstr, name_sstr,
+    rc = vbsfMappingsAdd(folder_sstr, name_sstr, suffix_sstr,
                          writable, 0, 0, opts, quota);
 
     hgcm_free(folder_sstr);
     hgcm_free(name_sstr);
+    if (suffix_sstr)
+        hgcm_free(suffix_sstr);
 
     return rc;
 }

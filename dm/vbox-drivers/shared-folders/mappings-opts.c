@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -31,101 +31,6 @@ typedef struct folder_opt_entry {
 
 static critical_section folder_opt_lock;
 static TAILQ_HEAD(, folder_opt_entry) folder_opt_entries;
-
-static void
-clear_dyn_entries(void)
-{
-    folder_opt_entry_t *e, *next;
-
-    TAILQ_FOREACH_SAFE(e, &folder_opt_entries, entry, next) {
-        if (e->dynamic) {
-            TAILQ_REMOVE(&folder_opt_entries, e, entry);
-            free(e);
-        }
-    }
-}
-
-static void
-put_wstr(QEMUFile *f, wchar_t *s)
-{
-    int len = wcslen(s);
-
-    qemu_put_be32(f, len);
-    qemu_put_buffer(f, (uint8_t*)s, len*2);
-}
-
-static void
-get_wstr(QEMUFile *f, wchar_t *s)
-{
-    int len = qemu_get_be32(f);
-
-    if (len < SUBFOLDER_PATHMAX) {
-        memset(s, 0, SUBFOLDER_PATHMAX * 2);
-        qemu_get_buffer(f, (uint8_t*)s, len*2);
-    }
-}
-
-static void
-state_save(QEMUFile *f, void *opaque)
-{
-    folder_opt_entry_t *e;
-    uint32_t count = 0;
-
-    /* only store dynamicaly added options in the savefile */
-    critical_section_enter(&folder_opt_lock);
-    TAILQ_FOREACH(e, &folder_opt_entries, entry)
-        if (e->dynamic)
-            ++count;
-    qemu_put_be32(f, count);
-    TAILQ_FOREACH(e, &folder_opt_entries, entry) {
-        if (e->dynamic) {
-            put_wstr(f, e->mapname);
-            put_wstr(f, e->subfolder);
-            qemu_put_be64(f, e->opts);
-            qemu_put_byte(f, e->dynamic);
-        }
-    }
-    critical_section_leave(&folder_opt_lock);
-}
-
-static void
-dump_opt_table(void)
-{
-    folder_opt_entry_t *e;
-    int i = 0;
-
-    TAILQ_FOREACH(e, &folder_opt_entries, entry) {
-        debug_printf("shared-folders: option entry %d (%ls, %ls, %"PRIx64", dyn=%d)\n",
-                     i, e->mapname, e->subfolder, e->opts, e->dynamic);
-        ++i;
-    }
-}
-
-static int
-state_load(QEMUFile *f, void *opaque, int version_id)
-{
-    uint32_t count;
-
-    critical_section_enter(&folder_opt_lock);
-    clear_dyn_entries();
-    count = qemu_get_be32(f);
-    while (count--) {
-        folder_opt_entry_t *e = calloc(1, sizeof(*e));
-
-        get_wstr(f, e->mapname);
-        get_wstr(f, e->subfolder);
-        e->opts = qemu_get_be64(f);
-        e->dynamic = qemu_get_byte(f);
-
-        TAILQ_INSERT_TAIL(&folder_opt_entries, e, entry);
-
-        debug_printf("shared-folders: loaded folder option entry (%ls, %ls, %"PRIx64", dyn=%d)\n",
-                     e->mapname, e->subfolder, e->opts, e->dynamic);
-    }
-    dump_opt_table();
-    critical_section_leave(&folder_opt_lock);
-    return 0;
-}
 
 static wchar_t *
 eat_leading_sep(wchar_t *path)
@@ -230,7 +135,7 @@ find_entry_for_path(SHFLROOT root, wchar_t *path)
             {
                 len = wcslen(e->subfolder);
                 if (len >= maxlen) {
-                    len = maxlen;
+                    maxlen = len;
                     found = e;
                 }
             }
@@ -365,6 +270,4 @@ sf_opts_init(void)
 {
     TAILQ_INIT(&folder_opt_entries);
     critical_section_init(&folder_opt_lock);
-    register_savevm(NULL, "shared-folders-opts", 0, 0,
-                    state_save, state_load, NULL);
 }

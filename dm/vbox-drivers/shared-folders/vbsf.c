@@ -65,15 +65,12 @@
 
 #include "rt/rt.h"
 #include "../internal/dir.h"
+#include "util.h"
 #include <dm/shared-folders.h>
 #include <inttypes.h>
 
 #define SHFL_RT_LINK(pClient) ((pClient)->fu32Flags & SHFL_CF_SYMLINKS ? RTPATH_F_ON_LINK : RTPATH_F_FOLLOW_LINK)
 #define CRYPT_HDR_FIXED_SIZE 4096
-#define CRYPT_FILE_SUFFIX L".BSCR"
-#define CRYPT_FILE_SUFFIX_LEN 5
-
-wchar_t *sf_redirect_path(SHFLROOT root, wchar_t*);
 
 static int resize_file(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE handle,
                        uint64_t sz);
@@ -325,24 +322,93 @@ static int vbsfPathCheckUcs(PSHFLSTRING pPath)
     return validate_ads_path(pPath);
 }
 
-static void
-vbsfScrambleHostPathInplace(wchar_t *path)
+static int
+shared_suffix_len(SHFLCLIENTDATA *client, SHFLROOT root)
 {
-    wcscat(path, CRYPT_FILE_SUFFIX);
+    wchar_t *suffix = NULL;
+
+    vbsfMappingsQueryFileSuffix(client, root, &suffix);
+
+    return suffix ? wcslen(suffix) : 0;
+}
+
+static void
+scramble_host_path_inplace(SHFLCLIENTDATA *client, SHFLROOT root, wchar_t *path)
+{
+    wchar_t *suffix = NULL;
+
+    vbsfMappingsQueryFileSuffix(client, root, &suffix);
+    if (suffix)
+        wcscat(path, suffix);
+}
+
+static int
+unscramble_host_path_inplace(SHFLCLIENTDATA *client, SHFLROOT root, wchar_t *path)
+{
+    wchar_t *suffix = NULL;
+    int len = wcslen(path);
+
+    vbsfMappingsQueryFileSuffix(client, root, &suffix);
+    if (suffix) {
+        int suffix_len = wcslen(suffix);
+
+        if (len > suffix_len && !wcscmp(path + len - suffix_len, suffix)) {
+            path[len - suffix_len] = 0;
+
+            return len - suffix_len;
+        }
+    }
+
+    return len;
+}
+
+static int
+create_host_path(
+    SHFLCLIENTDATA *client, SHFLROOT root,
+    const wchar_t *root_path, int root_len,
+    const wchar_t *core_path, int core_len,
+    bool scramble_path,
+    wchar_t **out)
+{
+    int len = root_len + core_len + 1 + 1;
+
+    if (scramble_path)
+        len += shared_suffix_len(client, root);
+
+    wchar_t *full_path = (wchar_t *)RTMemAlloc(2 * len);
+    if (!full_path)
+        return VERR_NO_MEMORY;
+
+    /* root of path */
+    wcscpy(full_path, root_path);
+
+    /* insert separator if missing */
+    if (core_len > 0 && core_path[0] != '\\')
+        wcscat(full_path, L"\\");
+
+    /* core of path */
+    wcscat(full_path, core_path);
+
+    /* possibly scramble suffix */
+    if (scramble_path)
+        scramble_host_path_inplace(client, root, full_path);
+
+    *out = full_path;
+
+    return VINF_SUCCESS;
 }
 
 static int vbsfBuildHostPathEx(
     SHFLCLIENTDATA *client, SHFLROOT root, bool is_file,
     PSHFLSTRING pPath, uint32_t cbPath,
     wchar_t **ppszFullPath, uint32_t *pcbFullPathRoot,
-    bool fWildCard, bool fPreserveLastComponent, bool fDisableNameScramble)
+    bool fWildCard, bool fPreserveLastComponent, bool fDontScrambleFilenames,
+    bool *out_path_is_scrambled)
 {
-    wchar_t *full_path = NULL;
     int rc;
-    int len;
 
-    if (disable_filename_scrambling)
-        fDisableNameScramble = true;
+    if (out_path_is_scrambled)
+        *out_path_is_scrambled = false;
 
     const wchar_t *root_path = vbsfMappingsQueryHostRoot(root);
     if (!root_path) {
@@ -361,6 +427,7 @@ static int vbsfBuildHostPathEx(
     if (redirected_path) {
         *ppszFullPath = redirected_path;
         LogFlow(("vbsfBuildHostPath: redirected %ls -> %ls\n", pPath->String.ucs2, redirected_path));
+
         return VINF_SUCCESS;
     }
 
@@ -379,39 +446,23 @@ static int vbsfBuildHostPathEx(
         is_file = false;
     }
 
-    int crypt = 0;
-    fch_query_crypt_by_path(client, root, pPath->String.ucs2, &crypt);
-    int scramble_name = !fDisableNameScramble && crypt && is_file;
+    int scramble_path = is_file && (fDontScrambleFilenames ?
+        0 : _sf_has_opt(root, pPath->String.ucs2, SF_OPT_SCRAMBLE_FILENAMES));
 
     int root_len = wcslen(root_path);
     if (pcbFullPathRoot)
         *pcbFullPathRoot = root_len;
 
-    len = root_len + path_len + 1 + 1;
-    if (scramble_name)
-        len += CRYPT_FILE_SUFFIX_LEN;
+    rc = create_host_path(client, root, root_path, root_len, pPath->String.ucs2, path_len,
+                          scramble_path, ppszFullPath);
+    if (!RT_SUCCESS(rc))
+        return rc;
 
-    full_path = (wchar_t *)RTMemAlloc(2 * len);
-    if (!full_path)
-        return VERR_NO_MEMORY;
+    if (out_path_is_scrambled)
+        *out_path_is_scrambled = scramble_path;
 
-    /* root of path */
-    wcscpy(full_path, root_path);
+    LogFlow(("vbsfBuildHostPath: mapped %ls -> %ls\n", pPath->String.ucs2, *ppszFullPath));
 
-    /* insert separator if missing */
-    if (pPath->String.ucs2[0] != '\\')
-        wcscat(full_path, L"\\");
-
-    /* core of path */
-    wcscat(full_path, pPath->String.ucs2);
-
-    /* possibly scramble suffix */
-    if (scramble_name)
-        vbsfScrambleHostPathInplace(full_path);
-
-    *ppszFullPath = full_path;
-
-    LogFlow(("vbsfBuildHostPath: mapped %ls -> %ls\n", pPath->String.ucs2, full_path));
     return VINF_SUCCESS;
 }
    
@@ -422,7 +473,7 @@ static int vbsfBuildHostPath(
     bool fWildCard, bool fPreserveLastComponent)
 {
     return vbsfBuildHostPathEx(client, root, is_file, pPath, cbPath,
-        ppszFullPath, pcbFullPathRoot, fWildCard, fPreserveLastComponent, false);
+        ppszFullPath, pcbFullPathRoot, fWildCard, fPreserveLastComponent, false, NULL);
 }
 
 /**
@@ -1122,9 +1173,10 @@ int vbsfCreate(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLSTRING *pPath, uint32
      */
     wchar_t *pszFullPath = NULL;
     uint32_t cbFullPathRoot = 0;
+    bool scrambled_name = false;
 
-    rc = vbsfBuildHostPath(pClient, root, !(pParms->CreateFlags & SHFL_CF_DIRECTORY),
-        pPath, cbPath, &pszFullPath, &cbFullPathRoot, false, false);
+    rc = vbsfBuildHostPathEx(pClient, root, !(pParms->CreateFlags & SHFL_CF_DIRECTORY),
+        pPath, cbPath, &pszFullPath, &cbFullPathRoot, false, false, false, &scrambled_name);
     if (RT_SUCCESS(rc))
     {
         /* Reset return value in case client forgot to do so.
@@ -1136,13 +1188,13 @@ int vbsfCreate(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLSTRING *pPath, uint32
         if (BIT_FLAG(pParms->CreateFlags, SHFL_CF_LOOKUP))
         {
             rc = vbsfLookupFile(pClient, root, pszFullPath, pParms);
-            if (!disable_filename_scrambling && RT_FAILURE(rc)) {
+            if (RT_FAILURE(rc) && scrambled_name) {
                 /* try with unscrambled path */
                 wchar_t *pszFullPath2 = NULL;
                 uint32_t cbFullPathRoot2 = 0;
 
                 rc = vbsfBuildHostPathEx(pClient, root, !(pParms->CreateFlags & SHFL_CF_DIRECTORY),
-                    pPath, cbPath, &pszFullPath2, &cbFullPathRoot2, false, false, true);
+                    pPath, cbPath, &pszFullPath2, &cbFullPathRoot2, false, false, true, NULL);
                 if (RT_SUCCESS(rc)) {
                     rc = vbsfLookupFile(pClient, root, pszFullPath2, pParms);
 
@@ -1162,12 +1214,12 @@ int vbsfCreate(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLSTRING *pPath, uint32
             rc = RTPathQueryInfoExUcs(pszFullPath, &info, RTFSOBJATTRADD_NOTHING, SHFL_RT_LINK(pClient));
             LogFlow(("RTPathQueryInfoEx returned 0x%x\n", rc));
 
-            if (!disable_filename_scrambling && RT_FAILURE(rc)) {
+            if (RT_FAILURE(rc) && scrambled_name) {
                 /* try with unscrambled path */
                 wchar_t *pszFullPath2 = NULL;
                 uint32_t cbFullPathRoot2 = 0;
                 int rc2 = vbsfBuildHostPathEx(pClient, root, !(pParms->CreateFlags & SHFL_CF_DIRECTORY),
-                    pPath, cbPath, &pszFullPath2, &cbFullPathRoot2, false, false, true);
+                    pPath, cbPath, &pszFullPath2, &cbFullPathRoot2, false, false, true, NULL);
                 if (RT_SUCCESS(rc2)) {
                     rc2 = RTPathQueryInfoExUcs(pszFullPath2, &info, RTFSOBJATTRADD_NOTHING, SHFL_RT_LINK(pClient));
                     LogFlow(("secondary RTPathQueryInfoEx returned 0x%x\n", rc));
@@ -1553,7 +1605,6 @@ int vbsfDirList(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, SHFLS
     PSHFLDIRINFO   pSFDEntry;
     PRTUTF16       pwszString;
     PRTDIR         DirHandle;
-    int            crypt_mode;
 
     if (pHandle == 0 || pcbBuffer == 0 || pBuffer == 0)
     {
@@ -1608,9 +1659,10 @@ int vbsfDirList(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, SHFLS
         DirHandle = pHandle->dir.SearchHandle;
     }
 
-    crypt_mode = 0;
-    fch_query_crypt_by_path(pClient, root, vbsfQueryHandleGuestPath(pClient, Handle),
-        &crypt_mode);
+    wchar_t *guest_path = vbsfQueryHandleGuestPath(pClient, Handle);
+    int scramble_filenames = _sf_has_opt(root, guest_path, SF_OPT_SCRAMBLE_FILENAMES);
+    int crypt_mode = 0;
+    fch_query_crypt_by_path(pClient, root, guest_path, &crypt_mode);
 
     while (cbBufferOrg)
     {
@@ -1682,15 +1734,13 @@ int vbsfDirList(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLHANDLE Handle, SHFLS
         pwszString = pSFDEntry->name.String.ucs2;
         wcscpy(pwszString, (wchar_t*)pDirEntry->szName);
 
-        /* adjust reported file name for crypted files similar to length */
-        int len = wcslen(pwszString);
-        if (!disable_filename_scrambling && crypt_mode && len > CRYPT_FILE_SUFFIX_LEN) {
-            if (!wcscmp(pwszString + len - CRYPT_FILE_SUFFIX_LEN, CRYPT_FILE_SUFFIX)) {
-                /* cut suffix */
-                pwszString[len - CRYPT_FILE_SUFFIX_LEN] = 0;
-                len -= CRYPT_FILE_SUFFIX_LEN;
-            }
-        }
+        /* adjust reported file name if we're using filename scrambling */
+        int len;
+        if (scramble_filenames)
+            len = unscramble_host_path_inplace(pClient, root, pwszString);
+        else
+            len = wcslen(pwszString);
+
         pSFDEntry->name.u16Length = len * 2;
         pSFDEntry->name.u16Size = pSFDEntry->name.u16Length + 2;
 
