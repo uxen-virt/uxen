@@ -33,6 +33,7 @@
 #include <asm/hvm/support.h>
 #include <public/sched.h>
 #include <public/hvm/hvm_op.h>
+#include <public/arch-x86/cpuid.h>
 
 /* Viridian MSR numbers. */
 #define VIRIDIAN_MSR_GUEST_OS_ID                0x40000000
@@ -100,9 +101,9 @@ int cpuid_viridian_leaves(unsigned int leaf, unsigned int *eax,
     {
     case 0:
         *eax = 0x40000006; /* Maximum leaf */
-        *ebx = 0x7263694d; /* Magic numbers  */
-        *ecx = 0x666F736F;
-        *edx = 0x76482074;
+        *ebx = VIRIDIAN_CPUID_SIGNATURE_EBX;
+        *ecx = VIRIDIAN_CPUID_SIGNATURE_ECX;
+        *edx = VIRIDIAN_CPUID_SIGNATURE_EDX;
         break;
     case 1:
         *eax = 0x31237648; /* Version number */
