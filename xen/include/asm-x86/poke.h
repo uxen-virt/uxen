@@ -18,6 +18,8 @@ static inline void
 poke_setup_cpu(void)
 {
 
+#ifdef __x86_64__
     if (!this_cpu(poke_ready))
       _poke_setup_cpu();
+#endif /* __x86_64__ */
 }

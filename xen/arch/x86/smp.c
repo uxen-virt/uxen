@@ -10,7 +10,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -397,7 +397,9 @@ void on_selected_cpus(
 	if (cpumask_equal(&call_data.selected, cpumask_of(smp_processor_id())))
 	    goto this_cpu;
         /* KeIpiGenericCall canary */
-	WARNISH();
+#ifdef __x86_64__
+        WARNISH();
+#endif
         UI_HOST_CALL(ui_on_selected_cpus, &call_data.selected,
                      __uxen_smp_call_function_interrupt);
 	goto wait;
@@ -490,6 +492,11 @@ static void __smp_call_function_interrupt(void)
 
     if ( !cpumask_test_cpu(cpu, &call_data.selected) )
         return;
+
+    if (!func) {
+        cpumask_clear_cpu(cpu, &call_data.selected);
+        return;
+    }
 
     irq_enter();
 

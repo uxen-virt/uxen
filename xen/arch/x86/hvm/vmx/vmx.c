@@ -1775,11 +1775,16 @@ ept_sync_domain(struct domain *d)
             spin_unlock_irqrestore(&ept_sync_lock, flags2);
             cpu_irq_restore(flags); 
 
+#ifdef __x86_64__
             for_each_cpu(cpu, d->arch.hvm_domain.vmx.ept_dirty) {
                 if (cpu == smp_processor_id())
                     continue;
                 poke_cpu(cpu);
             }
+#else
+	    cpu = ~0;
+            poke_cpu(cpu);
+#endif /* __x86_64__ */
 
             rep_nop();
             rep_nop();
