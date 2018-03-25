@@ -5898,16 +5898,22 @@ pt_sync_domain(struct domain *d)
                        d->arch.hvm_domain.pt_synced);
 
         while (!cpumask_empty(pt_dirty)) {
+#ifdef __x86_64__
             unsigned int cpu;
+#endif /* __x86_64__ */
 
             spin_unlock_irqrestore(&pt_sync_lock, flags2);
             cpu_irq_restore(flags);
 
+#ifdef __x86_64__
             for_each_cpu(cpu, pt_dirty) {
                 ASSERT(cpu != smp_processor_id());
                 if (!cpumask_test_cpu(cpu, d->arch.hvm_domain.pt_synced))
                     poke_cpu(cpu);
             }
+#else  /* __x86_64__ */
+            send_IPI_mask(pt_dirty, UXEN_NOOP_VECTOR);
+#endif /* __x86_64__ */
 
             rep_nop();
             rep_nop();
