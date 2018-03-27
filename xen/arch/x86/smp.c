@@ -499,6 +499,12 @@ static void __smp_call_function_interrupt(void)
     if ( !cpumask_test_cpu(cpu, &call_data.selected) )
         return;
 
+    if (!func) {
+        mb();
+        cpumask_clear_cpu(cpu, &call_data.selected);
+        return;
+    }
+
     irq_enter();
 
     if ( call_data.wait )
