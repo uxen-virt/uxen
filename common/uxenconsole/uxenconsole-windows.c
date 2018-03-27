@@ -76,7 +76,6 @@ static uint64_t screenshot_interval = 0;
         (((v) * UXENHID_XY_MAX) / (cons->height - 1))
 
 
-#if 0
 static int
 hid_mouse_event(struct console *cons, int x, int y, int wheel, int hwheel, int wParam)
 {
@@ -110,7 +109,6 @@ hid_mouse_event(struct console *cons, int x, int y, int wheel, int hwheel, int w
 
     return ret;
 }
-#endif
 
 static int
 hid_touch_event(struct console *cons, POINTER_TOUCH_INFO *info, UINT32 count)
@@ -332,8 +330,9 @@ window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
             }
 
             /* wParam maps to the flags parameter  */
-            uxenconsole_mouse_event(cons->ctx, cursor.x, cursor.y, dv, dh,
-                                    GET_KEYSTATE_WPARAM(wParam));
+            if (hid_mouse_event(cons, cursor.x, cursor.y, dv, dh, wParam))
+                uxenconsole_mouse_event(cons->ctx, cursor.x, cursor.y, dv, dh,
+                                        GET_KEYSTATE_WPARAM(wParam));
         }
         return 0;
     case WM_MOUSELEAVE:
