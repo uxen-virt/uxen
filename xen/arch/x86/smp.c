@@ -574,6 +574,8 @@ __uxen_dispatch_ipi)(int vector)
         gdb_pause_this_cpu(NULL);
         break;
 #endif
+    case UXEN_NOOP_VECTOR:
+        break;
     default:
         WARN_ONCE();
 	printk("uxen_ipi cpu %d vector %d\n", smp_processor_id(), vector);
@@ -615,6 +617,7 @@ uxen_ipi_mask(const cpumask_t *cpumask, int vector)
 #ifdef CRASH_DEBUG
     case GDB_STOP_VECTOR:
 #endif
+    case UXEN_NOOP_VECTOR:
 	local_irq_save(flags);
 	for_each_cpu(cpu, cpumask) {
 	    if (cpu == smp_processor_id())

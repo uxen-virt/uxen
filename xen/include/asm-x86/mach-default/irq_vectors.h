@@ -9,6 +9,7 @@
 #ifdef CRASH_DEBUG
 #define GDB_STOP_VECTOR		0xfa
 #endif
+#define UXEN_NOOP_VECTOR	0xf9
 
 /*
  * High-priority dynamically-allocated vectors. For interrupts that
