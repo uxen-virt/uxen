@@ -486,6 +486,11 @@ ffs(uint32_t i)
 #define atomic_add(val, ptr) \
     InterlockedAdd(ptr, val)
 
+#ifdef memcmp
+#undef memcmp
+#endif
+#define memcmp(s1, s2, len) (RtlCompareMemory(s1, s2, len) != len)
+
 #if defined(__x86_64__)
 #define affinity_mask(x) ((ULONGLONG)1 << (x))
 #else
