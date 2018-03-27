@@ -647,9 +647,6 @@ vbsfMappingsQueryCrypt(PSHFLCLIENTDATA pClient, SHFLROOT root, wchar_t *path, in
 
     uint64_t opt = _sf_get_opt(root, path);
     scramble = _sf_has_opt(root, path, SF_OPT_SCRAMBLE);
-    debug_printf("ZONK query crypt for path %ls, scramble=%d hasopt=%d opt=%d redir=%d\n",
-      path, scramble, _sf_has_opt(root,path,SF_OPT_NO_REDIRECTED_SCRAMBLE), (int)opt,
-      sf_is_redirected_path(root,path));
     
     /* don't scramble redirected files if SF_OPT_NO_REDIRECTED_SCRAMBLE option is set */
     if (scramble) {
