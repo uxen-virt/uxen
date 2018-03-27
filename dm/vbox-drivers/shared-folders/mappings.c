@@ -645,7 +645,6 @@ vbsfMappingsQueryCrypt(PSHFLCLIENTDATA pClient, SHFLROOT root, wchar_t *path, in
     if (!pFolderMapping->fValid)
         return VERR_FILE_NOT_FOUND;
 
-    uint64_t opt = _sf_get_opt(root, path);
     scramble = _sf_has_opt(root, path, SF_OPT_SCRAMBLE);
     
     /* don't scramble redirected files if SF_OPT_NO_REDIRECTED_SCRAMBLE option is set */
