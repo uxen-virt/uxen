@@ -104,11 +104,11 @@ $(DEBUG_ONLY)uxen_sys_CPPFLAGS += \
 	//DDBG=1 \
 	//DDEPRECATE_DDK_FUNCTIONS=1 //DMSC_NOOPT
 $(DEBUG_ONLY)uxen_sys_CFLAGS += \
-	//Od //Oi
+	//Od
 $(REL_ONLY)uxen_sys_CPPFLAGS += \
 	//DNDEBUG
 $(REL_ONLY)uxen_sys_CFLAGS += \
-	//WX //Oxs
+	//Oxs
 
 uxen_sys_CPPFLAGS += \
 	//DPOOL_NX_OPTIN=1 \
@@ -166,7 +166,7 @@ $(uxen_sys_OBJ_c): %.obj: %.c
 	  $(EWDK_INCLUDES) \
 	  $(uxen_sys_CPPFLAGS) \
 	  $(uxen_sys_CFLAGS) \
-	  //c //Zc:wchar_t- //Zl //Zp8 //Gy \
+	  //c //Zc:wchar_t- //Zl //Zp8 //Gy //Oi \
 	  -cbstring //WX //EHs-c- //GR- //GF //GS //Zi //Zi \
 	  //Fd$(call dospath,.)\\ \
 	  //DKMDF_MAJOR_VERSION_STRING=01 //DKMDF_MINOR_VERSION_STRING=009 \
