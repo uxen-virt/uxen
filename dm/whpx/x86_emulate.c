@@ -40,6 +40,9 @@
  * CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <dm/config.h>
+#undef cmpxchg
+
 #include "x86_emulate.h"
 #include <dm/debug.h>
 #include <stdint.h>
@@ -47,7 +50,6 @@
 #include <string.h>
 #include <err.h>
 #include <inttypes.h>
-#include <assert.h>
 
 #define __UXEN__
 
