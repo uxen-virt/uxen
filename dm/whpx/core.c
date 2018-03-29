@@ -1341,12 +1341,12 @@ whpx_update_mapping(
 
 #if 1
     if (add)
-        debug_printf("WHPX: ADD PA:%p Size:%p, Host:%p, %s, '%s'\n",
-               (void*)start_pa, (void*)size, host_va,
-               (rom ? "ROM" : "RAM"), name);
+        debug_printf("WHPX: ADD PA:%016"PRIx64" Size:%"PRIx64", Host:%p, %s, '%s'\n",
+            start_pa, size, host_va,
+            (rom ? "ROM" : "RAM"), name);
     else
-        debug_printf("WHPX: DEL PA:%p Size:%p, Host:%p,      '%s'\n",
-               (void*)start_pa, (void*)size, host_va, name);
+        debug_printf("WHPX: DEL PA:%016"PRIx64" Size:%"PRIx64", Host:%p,      '%s'\n",
+            start_pa, size, host_va, name);
 #endif
 
     if (add)
