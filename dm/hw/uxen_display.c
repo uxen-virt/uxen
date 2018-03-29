@@ -81,6 +81,7 @@ struct uxendisp_state {
     uint32_t mode;
     uint32_t xtra_ctrl;
     int resumed;
+    int dirty_tracking;
 
     struct vblank_ctx *vblank_ctx;
 };
@@ -206,8 +207,7 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
     uint32_t addr, addr1;
     uint32_t page0, page1, pagei, page_min, page_max;
 
-    /* full screen refreshes on whp */
-    const int full_refresh = whpx_enable;
+    int full_refresh = 0;
 
     int rc;
     uint8_t *dirty = NULL;
@@ -222,17 +222,25 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
     if (npages > (UXENDISP_BANK_SIZE >> TARGET_PAGE_BITS))
         return;
 
-    dirty = alloca((npages + 7) / 8);
-    if (!whpx_enable) {
-        rc = xen_hvm_track_dirty_vram(bank->vram.gfn,
-            (s->mode & UXDISP_MODE_PAGE_TRACKING_DISABLED)
-            ? 0 : npages, dirty, 1);
+    if (!crtc_id &&
+        vm_vram_dirty_tracking &&
+        !(s->mode & UXDISP_MODE_PAGE_TRACKING_DISABLED) &&
+        !whpx_enable) {
+        dirty = alloca((npages + 7) / 8);
+        rc = xen_hvm_track_dirty_vram(bank->vram.gfn, npages, dirty, 1);
         if (rc) {
             DPRINTF("xen_hvm_track_dirty_vram failed: %d\n", errno);
             return;
         }
-    } else
-        memset(dirty, 0xFF, (npages + 7) / 8);
+        s->dirty_tracking = 1;
+    } else {
+        /* with full_refresh == 1, dirty is not accessed below */
+        full_refresh = 1;
+        if (s->dirty_tracking) {
+            xen_hvm_track_dirty_vram(0 , 0, NULL, 0);
+            s->dirty_tracking = 0;
+        }
+    }
 
     if (ds_surface_lock(crtc->ds, &d, &linesize))
         return;
@@ -541,8 +549,10 @@ crtc_flush(struct uxendisp_state *s, int crtc_id, uint32_t offset, int force)
                 memset(dst, 0xff, new_max - curr_max);
         }
 
-        if (s->mode & UXDISP_MODE_PAGE_TRACKING_DISABLED)
+        if (!crtc_id && s->dirty_tracking) {
             xen_hvm_track_dirty_vram(0 , 0, NULL, 0);
+            s->dirty_tracking = 0;
+        }
 
         display_resize_from(crtc->ds, w, h,
                             uxdisp_fmt_to_bpp(fmt),
@@ -748,8 +758,7 @@ uxendisp_mmio_write(void *opaque, target_phys_addr_t addr, uint64_t val,
         return;
     case UXDISP_REG_MODE:
         s->mode = val;
-        if (!vm_vram_dirty_tracking)
-            s->mode |= UXDISP_MODE_PAGE_TRACKING_DISABLED;
+        console_mask_periodic(!!(s->mode & UXDISP_MODE_PAGE_TRACKING_DISABLED));
         crtc_flush(s, 0, s->crtcs[0].offset, 1);
         uxendisp_invalidate(&s->crtcs[0]);
         return;
@@ -1143,10 +1152,8 @@ static int uxendisp_initfn(PCIDevice *dev)
 
     vga_init(v, pci_address_space(dev), pci_address_space_io(dev), s->crtcs[0].ds);
 
-    if (!vm_vram_dirty_tracking) {
+    if (!vm_vram_dirty_tracking)
         debug_printf("%s: vram dirty tracking disabled\n", __FUNCTION__);
-        s->mode |= UXDISP_MODE_PAGE_TRACKING_DISABLED;
-    }
 
     qemu_register_reset(uxendisp_reset, s);
     uxendisp_reset(s);

@@ -257,8 +257,11 @@ PixelFormat default_pixelformat(int bpp)
 
 /*
  * Time to wait in ms between vram event and refresh.
+ * If vm-dirty-tracking is disabled, then this is the period between
+ * refreshes.
  */
-#define REFRESH_TIMEOUT_MS 5
+uint64_t vm_vram_refresh_delay = 5;
+static int vram_refresh_periodic = 0;
 uxen_notification_event vram_event;
 
 static struct Timer *vram_timer = NULL;
@@ -266,6 +269,9 @@ static struct Timer *vram_timer = NULL;
 static void refresh(void *opaque)
 {
     struct display_state *ds;
+
+    if (vram_timer && vram_refresh_periodic)
+        mod_timer(vram_timer, get_clock_ms(vm_clock) + vm_vram_refresh_delay);
 
     critical_section_enter(&desktop_lock);
     TAILQ_FOREACH(ds, &desktop, link)
@@ -279,13 +285,17 @@ void do_dpy_trigger_refresh(void *opaque)
 
     /* do not delay updates infinitely */
     if (vram_timer && !timer_pending(vram_timer))
-        mod_timer(vram_timer, now + REFRESH_TIMEOUT_MS);
+        mod_timer(vram_timer, now + vm_vram_refresh_delay);
 }
 
 void do_dpy_setup_refresh(void)
 {
     vram_timer = new_timer_ms(vm_clock, refresh, NULL);
-    mod_timer(vram_timer, get_clock_ms(vm_clock) + REFRESH_TIMEOUT_MS);
+    if (!vm_vram_dirty_tracking) {
+        /* setup periodic refresh */
+        vram_refresh_periodic = 1;
+        mod_timer(vram_timer, get_clock_ms(vm_clock) + vm_vram_refresh_delay);
+    }
 
     uxen_notification_event_init(&vram_event);
     uxen_notification_add_wait_object(&vram_event, do_dpy_trigger_refresh, NULL,
@@ -405,6 +415,16 @@ console_start(void)
     critical_section_leave(&desktop_lock);
 
     do_dpy_setup_refresh();
+}
+
+void
+console_mask_periodic(int masked)
+{
+    int enable = !vm_vram_dirty_tracking && !masked;
+
+    vram_refresh_periodic = enable;
+    if (vram_timer && !timer_pending(vram_timer))
+        mod_timer(vram_timer, get_clock_ms(vm_clock) + vm_vram_refresh_delay);
 }
 
 struct display_surface *

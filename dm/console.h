@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -8,6 +8,8 @@
 #define _CONSOLE_H_
 
 #include <stdint.h>
+
+extern uint64_t vm_vram_refresh_delay;
 
 #define MOUSE_EVENT_LBUTTON 0x01
 #define MOUSE_EVENT_RBUTTON 0x02
@@ -181,6 +183,8 @@ void vga_hw_invalidate(struct display_state *ds);
 int console_init(const char *name);
 void console_start(void);
 void console_exit(void);
+
+void console_mask_periodic(int masked);
 
 void do_dpy_trigger_refresh(void *opaque);
 void do_dpy_setup_refresh(void);
