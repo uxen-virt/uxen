@@ -31,6 +31,7 @@
 #include "introspection_info.h"
 #include "monitor.h"
 #include "qemu_savevm.h"
+#include "timer.h"
 #include "vm.h"
 #include "vm-save.h"
 #include "vm-savefile.h"
@@ -195,6 +196,7 @@ uxenvm_savevm_write_info(struct filebuf *f, uint8_t *dm_state_buf,
     xc_dominfo_t dom_info[1];
     xc_vcpuinfo_t vcpu_info;
     struct xc_save_version_info s_version_info;
+    struct xc_save_clock_info s_clock_info;
     struct xc_save_tsc_info s_tsc_info;
     struct xc_save_vcpu_info s_vcpu_info;
     struct xc_save_hvm_params s_hvm_params;
@@ -225,6 +227,10 @@ uxenvm_savevm_write_info(struct filebuf *f, uint8_t *dm_state_buf,
     s_version_info.marker = XC_SAVE_ID_VERSION;
     s_version_info.version = SAVE_FORMAT_VERSION;
     filebuf_write(f, &s_version_info, sizeof(s_version_info));
+
+    s_clock_info.marker = XC_SAVE_ID_CLOCK_INFO;
+    s_clock_info.adjust_offset = get_clock_ns(vm_clock);
+    filebuf_write(f, &s_clock_info, sizeof(s_clock_info));
 
     if (!whpx_enable) {
         /* uxen specific */
@@ -1614,6 +1620,7 @@ static int
 uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
 {
     struct xc_save_version_info s_version_info = { };
+    struct xc_save_clock_info s_clock_info = { };
     struct xc_save_tsc_info s_tsc_info = { };
     struct xc_save_vcpu_info s_vcpu_info = { };
     struct xc_save_hvm_params s_hvm_params = { };
@@ -1851,6 +1858,12 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
             APRINTF("fingerprints: %d hashes, skipped %"PRIdSIZE" bytes",
                     s_vm_fingerprints.hashes_nr,
                     s_vm_fingerprints.size - sizeof(s_vm_fingerprints));
+            break;
+        case XC_SAVE_ID_CLOCK_INFO:
+            /* vm_clock offset */
+            uxenvm_load_read_struct(f, s_clock_info, marker, ret,
+                                    err_msg, out);
+            clock_save_adjust = s_clock_info.adjust_offset;
             break;
 	default:
             uxenvm_check_restore_clone(restore_mode);
