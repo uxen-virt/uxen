@@ -242,6 +242,11 @@ crtc_draw(struct uxendisp_state *s, int crtc_id)
         }
     }
 
+    if (full_refresh && ds_vram_surface(crtc->ds->surface)) {
+        dpy_update(crtc->ds, 0, 0, crtc->xres, crtc->yres);
+        return;
+    }
+
     if (ds_surface_lock(crtc->ds, &d, &linesize))
         return;
     addr1 = bank_offset;
