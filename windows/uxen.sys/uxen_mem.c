@@ -115,8 +115,9 @@ set_linear_pt_va(void)
     } except (HOSTDRV_EXCEPTION_EXECUTE_HANDLER(
                   "MmMapLockedPagesSpecifyCache")) {
         addr = NULL;
-        goto out;
     }
+    if (!addr)
+        goto out;
 
     pa = (uxen_pfn_t)MmGetMdlPfnArray(mdl)[0];
     pa <<= PAGE_SHIFT;
