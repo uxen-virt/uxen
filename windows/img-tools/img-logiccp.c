@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2017, Bromium, Inc.
+ * Copyright 2013-2018, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -1194,7 +1194,6 @@ int bfs(Variable *var,
     const size_t info_sz = 4<<20;
     void *info_buf;
     const wchar_t* dn = toplevel_entry->name;
-    assert(min_shallow_size >= SECTOR_SIZE);
     int heap_switch = 0;
     int is_dir;
     wchar_t *symlink = NULL;
@@ -1639,11 +1638,14 @@ static void disk_close(struct disk *disk)
 
 #define LOCK_WAIT_PERIOD 10000 /* 10s */
 
+#define MIN_IO_BUFFER_SIZE 1024 * 50 // 50kb, chosen somewhat arbitrarily 
+#define MIN_SHALLOW_SIZE 100 // must be more than the length of magic_sector_bytes in util.c
 #define MAX_IOS 256
 typedef struct IO {
     HANDLE file;
     ManifestEntry *m;
     void *buffer; // non-NULL if slot in use
+    uint32_t buffer_size;
     uint64_t size;
     uint64_t offset;
     uint32_t securid;
@@ -1759,8 +1761,6 @@ cleanup:
         CloseHandle(io->file);
         io->file = INVALID_HANDLE_VALUE;
     }
-    free(io->buffer);
-    io->buffer = NULL;
     ResetEvent(io->event);
     if (!NT_SUCCESS(status) && io->m->action != MAN_CHANGE) {
         io->m->action = MAN_CHANGE;
@@ -1776,6 +1776,9 @@ static void complete_all_ios(void)
         IO *io = &ios[idx];
         if (io->buffer) {
             complete_io(io);
+            free(io->buffer);
+            io->buffer = NULL;
+            io->buffer_size = 0;
         }
     }
 }
@@ -1785,9 +1788,10 @@ static void copy_file(ManifestEntry *m, HANDLE input, int calculate_shas)
     ntfs_fs_t vol = m->vol;
     const wchar_t *path = m->imgname;
     uint64_t size = m->file_size;
-    size_t buf_size = (low_priority ? 1 : 4) << 20;
+    size_t max_buffer_size = (low_priority ? 1 : 4) << 20;
     uint64_t offset;
     uint64_t take;
+    uint64_t required_buffer_size;
     SHA1_CTX *sha_ctx = NULL;
     if (calculate_shas) {
         sha_ctx = (SHA1_CTX*)malloc(sizeof(SHA1_CTX));
@@ -1814,7 +1818,8 @@ static void copy_file(ManifestEntry *m, HANDLE input, int calculate_shas)
         int idx = (io_idx++) % MAX_IOS;
         IO *io = &ios[idx];
 
-        take = size < buf_size ? size : buf_size;
+        take = size < max_buffer_size ? size : max_buffer_size;
+        required_buffer_size = take < MIN_IO_BUFFER_SIZE ? MIN_IO_BUFFER_SIZE : take;
 
         if (io->buffer) {
             complete_io(io);
@@ -1827,8 +1832,11 @@ static void copy_file(ManifestEntry *m, HANDLE input, int calculate_shas)
         io->sha_ctx = sha_ctx;
         io->securid = m->securid;
 
-        assert(!io->buffer);
-        io->buffer = malloc(take);
+        if (io->buffer_size < required_buffer_size) {
+            free(io->buffer);
+            io->buffer = malloc(required_buffer_size);
+            io->buffer_size = required_buffer_size;
+        }
         io->last = (size == take);
         assert(io->buffer);
 
@@ -2940,7 +2948,7 @@ int shallow_phase(struct disk *disk, Manifest *man, wchar_t *map_idx)
         ManifestEntry *m = &man->entries[i];
 
         if (m->action == MAN_SHALLOW || m->action == MAN_BOOT) {
-            //printf("%d,%d shallow %ls @ %"PRIx64"\n", i, man->n, m->name, m->offset);
+            //printf("%d,%d shallow %ls @ %"PRIx64" size: %d\n", i, man->n, m->name, m->offset, (int)m->file_size);
             wchar_t host_name[MAX_PATH_LEN];
             make_unshadowed_host_path(host_name, m);
             shallow_file(m, host_name);
@@ -3097,6 +3105,10 @@ int copy_phase(struct disk *disk, Manifest *man, int calculate_shas, int retry)
                                             cached_acls[m->cache_index].sdrsz);
                         }
                     }
+
+                    /*printf("copying [%ls] of size [%"PRIu64"]\n",
+                        m->name,
+                        m->file_size);*/
                     copy_file(m, h, calculate_shas);
                     total_size_copied += m->file_size;
                     if (m->action == MAN_FORCE_COPY || m->action == MAN_CHANGE) {
@@ -4180,13 +4192,13 @@ int main(int argc, char **argv)
     }
 
     if (arg_minshallow) {
-        min_shallow_size = ((atoi(arg_minshallow) + (SECTOR_SIZE-1)) / SECTOR_SIZE) * SECTOR_SIZE;
-        if (min_shallow_size < SECTOR_SIZE) {
-            /* We cannot shallow files shorter than 512 bytes, because that is the
-             * size of our memcmp check in util.c. */
-            min_shallow_size = SECTOR_SIZE;
+        min_shallow_size = atoi(arg_minshallow);
+        if (min_shallow_size < MIN_SHALLOW_SIZE) {
+            min_shallow_size = MIN_SHALLOW_SIZE;
         }
     }
+
+    printf("Min shallow size: %d\n", min_shallow_size);
 
     int partition = 1;
     if (arg_partition) {
@@ -4411,7 +4423,7 @@ int main(int argc, char **argv)
         uint64_t journal;
 
         man_sort_by_offset_link_action(&man_out);
-        nchanged = copy_phase(&disk, &man_out, arg_out_manifest != NULL, i);
+        nchanged = copy_phase(&disk, &man_out, calculate_all_hashes, i);
         r = get_next_usn(drive, &end_usn, &journal);
         if (r < 0) {
             err(1, "Unable to record ending USN entry\n");
@@ -4440,7 +4452,7 @@ int main(int argc, char **argv)
          * or if we skipped the retry logic entirely due to SKIP_USN_PHASE.
          */
         man_sort_by_offset_link_action(&man_out);
-        r = copy_phase(&disk, &man_out, arg_out_manifest != NULL, i);
+        r = copy_phase(&disk, &man_out, calculate_all_hashes, i);
         if (r != 0) {
             /* Here we treat any remaining changed files as fatal
              * because there isn't really any remedial action we can take short
