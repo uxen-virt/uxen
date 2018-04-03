@@ -58,6 +58,7 @@ int whpx_vcpu_set_context(CPUState *cpu, struct whpx_vcpu_context *ctx);
 
 int whpx_cpu_is_self(void *env);
 int whpx_cpu_is_stopped(CPUState *env);
+int whpx_cpu_has_work(CPUState *env);
 void whpx_cpu_reset_interrupt(CPUState *env, int mask);
 int whpx_cpu_get_pic_interrupt(CPUState *env);
 void whpx_do_cpu_sipi(CPUState *env);

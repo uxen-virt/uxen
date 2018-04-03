@@ -396,6 +396,20 @@ advance_instr(CPUState *cpu)
                 vcpu->exit_ctx.VpContext.InstructionLength);
 }
 
+int
+whpx_cpu_has_work(CPUState *env)
+{
+    return ((env->interrupt_request & (CPU_INTERRUPT_HARD |
+                                      CPU_INTERRUPT_POLL)) &&
+            (env->eflags & IF_MASK)) ||
+           (env->interrupt_request & (CPU_INTERRUPT_NMI |
+                                     CPU_INTERRUPT_INIT |
+                                     CPU_INTERRUPT_SIPI |
+                                     CPU_INTERRUPT_MCE)) ||
+           ((env->interrupt_request & CPU_INTERRUPT_SMI) &&
+            !(env->hflags & HF_SMM_MASK));
+}
+
 static void whpx_registers_hv_to_cpustate(CPUState *cpu)
 {
     struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
@@ -844,13 +858,10 @@ whpx_handle_portio(CPUState *cpu, WHV_X64_IO_PORT_ACCESS_CONTEXT *ctx)
 static int
 whpx_handle_halt(CPUState *cpu)
 {
-    struct CPUX86State *env = (CPUArchState *)(cpu->env_ptr);
     int ret = 0;
 
     qemu_mutex_lock_iothread();
-    if (!((cpu->interrupt_request & CPU_INTERRUPT_HARD) &&
-          (env->eflags & IF_MASK)) &&
-        !(cpu->interrupt_request & CPU_INTERRUPT_NMI)) {
+    if (!whpx_cpu_has_work(cpu)) {
         cpu->exception_index = EXCP_HLT;
         cpu->halted = true;
         ret = 1;
