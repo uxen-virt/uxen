@@ -70,8 +70,10 @@ int __ioh_add_wait_object(ioh_event *event, WaitObjectFunc *func, void *opaque,
 
     w->num++;
 
+#if !defined(LIBIMG)
     if (whpx_enable && interrupt)
         ioh_wait_interrupt(w);
+#endif
 
     return 0;
 }
