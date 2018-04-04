@@ -168,14 +168,6 @@ static void hypervisor_probe(void)
     printf("uxen: %d, whp: %d\n", uxen_present, whp_present);
 }
 
-int get_lapic_id(int vcpu_id)
-{
-    /* FIXME: use same lapic id on uxen and whp. Currently there does seem to be
-     * whp smp windows 10 boot issue if we do that though, likely a problem in
-     * qemu's lapic emulation */
-    return whp_present ? vcpu_id : 2*vcpu_id;
-}
-
 static void init_hypercalls(void)
 {
     uint32_t eax, ebx, ecx, edx;
@@ -424,7 +416,7 @@ static void apic_setup(void)
 
     /* 8259A ExtInts are delivered through IOAPIC pin 0 (Virtual Wire Mode). */
     ioapic_write(0x10, APIC_DM_EXTINT);
-    ioapic_write(0x11, SET_APIC_ID(get_lapic_id(0)));
+    ioapic_write(0x11, SET_APIC_ID(LAPIC_ID(0)));
 }
 
 struct bios_info {

@@ -8,6 +8,8 @@
 
 #include <dm/cpu.h>
 
+#define WHPX_LAPIC_ID(vcpu_idx) ((vcpu_idx) << 1)
+
 /* i8259.c */
 struct PicState;
 typedef struct PicState PicState;

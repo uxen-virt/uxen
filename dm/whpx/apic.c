@@ -596,6 +596,7 @@ static void apic_deliver(DeviceState *d, uint8_t dest, uint8_t dest_mode,
     uint32_t deliver_bitmask[MAX_APIC_WORDS];
     int dest_shorthand = (s->icr[0] >> 18) & 3;
     APICState *apic_iter;
+    int idx;
 
     switch (dest_shorthand) {
     case 0:
@@ -603,14 +604,28 @@ static void apic_deliver(DeviceState *d, uint8_t dest, uint8_t dest_mode,
         break;
     case 1:
         memset(deliver_bitmask, 0x00, sizeof(deliver_bitmask));
+        /* upstream bugged when s->id != vcpu_id */
+#ifndef QEMU_UXEN
         apic_set_bit(deliver_bitmask, s->id);
+#else
+        idx = apic_find_dest(s->id);
+        if (idx >= 0)
+            apic_set_bit(deliver_bitmask, idx);
+#endif
         break;
     case 2:
         memset(deliver_bitmask, 0xff, sizeof(deliver_bitmask));
         break;
     case 3:
         memset(deliver_bitmask, 0xff, sizeof(deliver_bitmask));
+        /* upstream bugged when s->id != vcpu_id */
+#ifndef QEMU_UXEN
         apic_reset_bit(deliver_bitmask, s->id);
+#else
+        idx = apic_find_dest(s->id);
+        if (idx >= 0)
+            apic_reset_bit(deliver_bitmask, idx);
+#endif
         break;
     }
 
@@ -1153,7 +1168,7 @@ void apic_init(CPUState *env)
     DeviceState *dev = qdev_create(NULL, "apic");
     assert(dev);
     s = DO_UPCAST(APICState, busdev.qdev, dev);
-    s->id = env->cpu_index;
+    s->id = WHPX_LAPIC_ID(env->cpu_index);
     s->cpu_env = env;
     env->apic_state = dev;
     qdev_init_nofail(dev);

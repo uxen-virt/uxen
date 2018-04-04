@@ -190,7 +190,7 @@ static struct acpi_20_madt *construct_madt(struct acpi_info *info)
         lapic->length  = sizeof(*lapic);
         /* Processor ID must match processor-object IDs in the DSDT. */
         lapic->acpi_processor_id = i;
-        lapic->apic_id = get_lapic_id(i);
+        lapic->apic_id = LAPIC_ID(i);
         lapic->flags = ((i < hvm_info->nr_vcpus) &&
                         test_bit(i, hvm_info->vcpu_online)
                         ? ACPI_LOCAL_APIC_ENABLED : 0);
