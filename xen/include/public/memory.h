@@ -338,6 +338,15 @@ typedef struct xen_translate_gpfn_list_for_map
 xen_translate_gpfn_list_for_map_t;
 DEFINE_XEN_GUEST_HANDLE(xen_translate_gpfn_list_for_map_t);
 
+#define XENMEM_clear_mapcache  52
+struct xen_clear_mapcache {
+    domid_t domid;
+    uint32_t cleared;
+};
+typedef struct xen_clear_mapcache
+xen_clear_mapcache_t;
+DEFINE_XEN_GUEST_HANDLE(xen_clear_mapcache_t);
+
 /*
  * Returns the pseudo-physical memory map as it was when the domain
  * was started (specified by XENMEM_set_memory_map).

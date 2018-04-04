@@ -2324,7 +2324,6 @@ static void vcpu_destroy_pagetables(struct vcpu *v)
 
 int domain_relinquish_resources(struct domain *d)
 {
-    int ret;
     struct vcpu *v;
 
     BUG_ON(!cpumask_empty(d->domain_dirty_cpumask));
@@ -2408,20 +2407,14 @@ int domain_relinquish_resources(struct domain *d)
         if ( ret )
             return ret;
 #else  /* __UXEN__ */
-        d->arch.relmem = RELMEM_foreign_pages;
+        d->arch.relmem = RELMEM_foreign_pages_or_mapcache;
         /* fallthrough */
 
-    case RELMEM_foreign_pages:
+    case RELMEM_foreign_pages_or_mapcache:
         if (d->host_pages)
             return -EAGAIN;
-
-        d->arch.relmem = RELMEM_mapcache;
-        /* fallthrough */
-
-    case RELMEM_mapcache:
-        ret = mdm_clear_vm(d);
-        if (ret)
-            return ret;
+        if (d->vm_info_shared && d->vm_info_shared->vmi_mapcache_active)
+            return -EAGAIN;
 
 #endif  /* __UXEN__ */
         d->arch.relmem = RELMEM_done;

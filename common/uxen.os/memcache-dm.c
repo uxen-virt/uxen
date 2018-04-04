@@ -215,12 +215,30 @@ mdm_map(struct uxen_memcachemap_desc *umd, struct fd_assoc *fda)
 }
 
 static int
-mdm_clear_cache(struct mdm_info *mdm)
+mdm_clear_cache(struct vm_info *vmi)
 {
+    struct mdm_info *mdm = &vmi->vmi_shared.vmi_mdm;
+    union uxen_memop_arg umemopa;
+    int ret;
     uint32_t offset;
     int count = 0;
     mdm_mfn_t omfn;
 
+    umemopa.clear_mapcache.domid = vmi->vmi_shared.vmi_domid;
+    umemopa.clear_mapcache.cleared = 0;
+    ret = (int)uxen_dom0_hypercall(
+        &vmi->vmi_shared, &vmi->vmi_mdm_fda->user_mappings,
+        UXEN_UNRESTRICTED_ACCESS_HYPERCALL |
+        UXEN_ADMIN_HYPERCALL |
+        UXEN_SYSTEM_HYPERCALL, __HYPERVISOR_memory_op,
+        (uintptr_t)XENMEM_clear_mapcache, (uintptr_t)&umemopa);
+    uxen_mem_tlb_flush();       /* deferred from mdm_clear_vm */
+    if (!ret)
+        return umemopa.clear_mapcache.cleared;
+
+    fail_msg("XENMEM_clear_mapcache failed: %d", ret);
+
+    /* fallback sanitize the vm space */
     offset = 0;
     while (offset < mdm->mdm_map_pfns) {
         omfn = mdm_unmap_mfn(mdm->mdm_va, offset << PAGE_SHIFT,
@@ -324,15 +342,15 @@ mdm_free_all(struct vm_info *vmi)
 void
 mdm_clear_all(struct vm_info *vmi)
 {
-    struct mdm_info *mdm = &vmi->vmi_shared.vmi_mdm;
     int cleared;
 
-    cleared = mdm_clear_cache(mdm);
+    vmi->vmi_shared.vmi_mapcache_active = 0;
+
+    cleared = mdm_clear_cache(vmi);
     uxen_mem_tlb_flush();
     if (cleared)
         dprintk("%s: vm%u cleared %d entries\n", __FUNCTION__,
                 vmi->vmi_shared.vmi_domid, cleared);
 
-    vmi->vmi_shared.vmi_mapcache_active = 0;
     mdm_free_all(vmi);
 }

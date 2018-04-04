@@ -486,13 +486,11 @@ struct domain
 
     uint32_t mdm_map_pfns;
     uint32_t *mdm_mapped_pfn;
-    uint32_t *mdm_mapped_mfn;
     uint32_t mdm_next_offset;
     volatile uint32_t *mdm_mfn_to_entry;
     uxen_pfn_t mdm_end_low_gpfn;
     uxen_pfn_t mdm_start_high_gpfn;
     uxen_pfn_t mdm_end_high_gpfn;
-    uxen_pfn_t mdm_undefined_mfn;
 
     struct debug_port_state *debug_port;
 

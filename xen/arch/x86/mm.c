@@ -141,6 +141,7 @@
 #ifndef __UXEN__
 #include <asm/mem_sharing.h>
 #endif  /* __UXEN__ */
+#include <uxen/memcache-dm.h>
 
 #ifndef __UXEN__
 /*
@@ -5589,6 +5590,34 @@ long arch_memory_op(int op, XEN_GUEST_HANDLE(void) arg)
             unmap_domain_page(arr);
         if (page)
             free_domheap_page(page);
+        rcu_unlock_domain(d);
+        return rc;
+    }
+
+    case XENMEM_clear_mapcache:
+    {
+        xen_clear_mapcache_t cm;
+        struct domain *d;
+
+        if (!IS_PRIV_SYS())
+            return -EPERM;
+
+        if ( copy_from_guest(&cm, arg, 1) )
+            return -EFAULT;
+
+        rc = rcu_lock_target_domain_by_id(cm.domid, &d);
+        if ( rc != 0 )
+            return rc;
+
+        rc = mdm_clear_vm(d);
+        if (rc >= 0) {
+            cm.cleared = rc;
+            if (copy_to_guest(arg, &cm, 1))
+                rc = -EFAULT;
+            else
+                rc = 0;
+        }
+
         rcu_unlock_domain(d);
         return rc;
     }

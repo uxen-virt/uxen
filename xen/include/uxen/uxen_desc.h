@@ -78,6 +78,7 @@ union uxen_memop_arg {
     xen_machphys_mapping_t machphys_mapping;
     xen_memory_map_t memory_map;
     xen_translate_gpfn_list_for_map_t translate_gpfn_list_for_map;
+    xen_clear_mapcache_t clear_mapcache;
 };
 typedef union uxen_memop_arg uxen_memop_arg_u;
 DEFINE_XEN_GUEST_HANDLE(uxen_memop_arg_u);

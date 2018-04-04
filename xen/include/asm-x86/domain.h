@@ -360,8 +360,7 @@ struct arch_domain
         RELMEM_l3,
         RELMEM_l2,
 #endif  /* __UXEN__ */
-        RELMEM_foreign_pages,
-        RELMEM_mapcache,
+        RELMEM_foreign_pages_or_mapcache,
         RELMEM_done,
     } relmem;
 #ifndef __UXEN__
