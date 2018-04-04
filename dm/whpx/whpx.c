@@ -458,16 +458,6 @@ whpx_destroy(void)
     }
 }
 
-extern ioh_event vram_event;
-static Timer *vram_timer;
-
-static void
-vram_refresh(void *opaque)
-{
-    ioh_event_set(&vram_event);
-    mod_timer(vram_timer, get_clock_ms(vm_clock)+30);
-}
-
 void
 whpx_vcpu_start(CPUState *s)
 {
@@ -493,10 +483,6 @@ whpx_vm_start(void)
     vm_set_run_mode(RUNNING_VM);
     for (i = 0; i < vm_vcpus; i++)
         whpx_vcpu_start(&cpu_state[i]);
-
-    /* refresh vga at fixed rate */
-    vram_timer = new_timer_ms(vm_clock, vram_refresh, NULL);
-    mod_timer(vram_timer, get_clock_ms(vm_clock)+30);
 
     return 0;
 }
@@ -879,6 +865,9 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
     }
 
     shutdown_reason = 0;
+
+    /* dirty tracking unsupported */
+    vm_vram_dirty_tracking = 0;
 
     return 0;
 }
