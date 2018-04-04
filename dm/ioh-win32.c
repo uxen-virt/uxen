@@ -51,13 +51,8 @@ ioh_waitobjects_grow(WaitObjects *w)
     w->desc = realloc(w->desc, sizeof(WaitObjectsDesc) * w->max);
 }
 
-#ifndef DEBUG_WAITOBJECTS
-int ioh_add_wait_object(ioh_event *event, WaitObjectFunc *func, void *opaque,
-                        WaitObjects *w)
-#else
-int _ioh_add_wait_object(ioh_event *event, WaitObjectFunc *func, void *opaque,
-                         WaitObjects *w, const char *func_name)
-#endif
+int __ioh_add_wait_object(ioh_event *event, WaitObjectFunc *func, void *opaque,
+                          WaitObjects *w, const char *func_name, int interrupt)
 {
 
     if (w == NULL)
@@ -75,8 +70,25 @@ int _ioh_add_wait_object(ioh_event *event, WaitObjectFunc *func, void *opaque,
 
     w->num++;
 
+    if (whpx_enable && interrupt)
+        ioh_wait_interrupt(w);
+
     return 0;
 }
+
+#ifndef DEBUG_WAITOBJECTS
+int ioh_add_wait_object(ioh_event *event, WaitObjectFunc *func, void *opaque,
+                        WaitObjects *w)
+{
+    return __ioh_add_wait_object(event, func, opaque, w, NULL, 1);
+}
+#else
+int _ioh_add_wait_object(ioh_event *event, WaitObjectFunc *func, void *opaque,
+                         WaitObjects *w, const char *func_name)
+{
+    return __ioh_add_wait_object(event, func, opaque, w, func_name, 1);
+}
+#endif
 
 void ioh_del_wait_object(ioh_event *event, WaitObjects *w)
 {
@@ -245,7 +257,7 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
         iohq->wait_queue = w;
         critical_section_leave(&iohq->lock);
     }
-    ioh_add_wait_object((ioh_event *)&w->interrupt, NULL, NULL, w);
+    __ioh_add_wait_object((ioh_event *)&w->interrupt, NULL, NULL, w, NULL, 0);
 
 #ifndef LIBIMG
     if (active_timers) {
