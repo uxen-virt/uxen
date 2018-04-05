@@ -1292,6 +1292,9 @@ whpx_vcpu_get_context(CPUState *cpu, struct whpx_vcpu_context *ctx)
     assert(!vcpu->dirty);
 
     ctx->interrupt_request = cpu->interrupt_request;
+    ctx->interrupt_in_flight = vcpu->interrupt_in_flight;
+    ctx->interruptable = vcpu->interruptable;
+
     ctx->nreg = 0;
     whpx_reg_list_t *context_regs = whpx_all_registers();
     for (i = 0; i < context_regs->num; i++) {
@@ -1319,6 +1322,8 @@ whpx_vcpu_set_context(CPUState *cpu, struct whpx_vcpu_context *ctx)
     assert(cpu_is_stopped(cpu));
 
     cpu->interrupt_request = ctx->interrupt_request;
+    vcpu->interrupt_in_flight = ctx->interrupt_in_flight;
+    vcpu->interruptable = ctx->interruptable;
 
     for (i = 0; i < ctx->nreg; i++) {
         WHV_REGISTER_NAME n = ctx->reg[i];
