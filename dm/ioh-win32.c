@@ -385,6 +385,7 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
             ret = 0;
         } else if (ret == WAIT_TIMEOUT) {
 	    trace_waitobjects_print("timeout\n");
+            first += num;
             ret = 0;
 	    break;
         } else if (ret == WAIT_IO_COMPLETION) {
