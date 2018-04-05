@@ -10,6 +10,7 @@
 #include <stdint.h>
 
 extern uint64_t vm_vram_refresh_delay;
+extern uint64_t vm_vram_refresh_period;
 
 #define MOUSE_EVENT_LBUTTON 0x01
 #define MOUSE_EVENT_RBUTTON 0x02
