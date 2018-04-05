@@ -11,6 +11,8 @@
 
 #if defined (_WIN32)
 
+#include <dm/irq.h>
+
 //#define DEBUG_IRQ
 //#define DEBUG_CPU
 //#define DEBUG_IOPORT

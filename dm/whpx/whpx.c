@@ -150,11 +150,6 @@ int whpx_cpu_is_bsp(CPUState *env)
    return env->cpu_index == 0;
 }
 
-void whpx_cpu_reset_interrupt(CPUState *env, int mask)
-{
-    env->interrupt_request &= ~mask;
-}
-
 DeviceState *whpx_cpu_get_current_apic(void)
 {
     CPUState *s = whpx_get_current_cpu();
@@ -325,7 +320,6 @@ static int cpu_can_run(CPUState *cpu)
 
 void qemu_cpu_kick(CPUState *cpu)
 {
-    cpu->halted = 0;
     SetEvent(extra(cpu)->wake_ev);
     whpx_vcpu_kick(cpu);
 }
@@ -391,7 +385,6 @@ whpx_vcpu_run_thread(PVOID opaque)
     debug_printf("execute vcpu%d, thread 0x%x\n", s->cpu_index, (int)GetCurrentThreadId());
     TlsSetValue(current_cpu_tls, s);
 
-    whpx_lock_iothread(); /* whpx_vcpu_exec unlocks it internally as needed */
     while (!s->stopped) {
         int ret;
 
@@ -410,18 +403,16 @@ whpx_vcpu_run_thread(PVOID opaque)
                 s->stopped = 1;
                 break;
             }
-            whpx_unlock_iothread();
 #ifdef DEBUG_CPU
             debug_printf("vcpu%d: halt...\n", s->cpu_index);
 #endif
             ret = WaitForSingleObject(extra(s)->wake_ev, INFINITE);
+            s->halted = false;
 #ifdef DEBUG_CPU
             debug_printf("vcpu%d: wake...\n", s->cpu_index);
 #endif
-            whpx_lock_iothread();
         }
     }
-    whpx_unlock_iothread();
 
     r = running_vcpus;
     do {

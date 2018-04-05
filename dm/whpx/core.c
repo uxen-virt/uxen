@@ -190,6 +190,8 @@ struct whpx_vcpu {
     uint64_t apic_base;
     bool interrupt_in_flight;
 
+    critical_section irq_lock; /* protect cpu->interrupt_request */
+
     /* Must be the last field as it may have a tail */
     WHV_RUN_VP_EXIT_CONTEXT exit_ctx;
 };
@@ -210,6 +212,18 @@ static struct whpx_vcpu *whpx_vcpu(CPUState *cpu)
     return (struct whpx_vcpu *)cpu->hax_vcpu;
 }
 
+void
+whpx_vcpu_irq_lock(CPUState *cpu)
+{
+    critical_section_enter(&whpx_vcpu(cpu)->irq_lock);
+}
+
+void
+whpx_vcpu_irq_unlock(CPUState *cpu)
+{
+    critical_section_leave(&whpx_vcpu(cpu)->irq_lock);
+}
+
 static void whpx_registers_cpustate_to_hv(CPUState *cpu)
 {
     struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
@@ -224,8 +238,10 @@ static void whpx_registers_cpustate_to_hv(CPUState *cpu)
 
     assert(x86_cpu->apic_state);
 
+    whpx_lock_iothread();
     vcpu->tpr = cpu_get_apic_tpr(x86_cpu->apic_state);
     vcpu->apic_base = cpu_get_apic_base(x86_cpu->apic_state);
+    whpx_unlock_iothread();
 
     /* Indexes for first 16 registers match between HV and QEMU definitions */
     for (idx = 0; idx < CPU_NB_REGS64; idx += 1)
@@ -399,7 +415,10 @@ advance_instr(CPUState *cpu)
 int
 whpx_cpu_has_work(CPUState *env)
 {
-    return ((env->interrupt_request & (CPU_INTERRUPT_HARD |
+    int work;
+
+    whpx_vcpu_irq_lock(env);
+    work = ((env->interrupt_request & (CPU_INTERRUPT_HARD |
                                       CPU_INTERRUPT_POLL)) &&
             (env->eflags & IF_MASK)) ||
            (env->interrupt_request & (CPU_INTERRUPT_NMI |
@@ -408,6 +427,9 @@ whpx_cpu_has_work(CPUState *env)
                                      CPU_INTERRUPT_MCE)) ||
            ((env->interrupt_request & CPU_INTERRUPT_SMI) &&
             !(env->hflags & HF_SMM_MASK));
+    whpx_vcpu_irq_unlock(env);
+
+    return work;
 }
 
 static void whpx_registers_hv_to_cpustate(CPUState *cpu)
@@ -473,7 +495,9 @@ static void whpx_registers_hv_to_cpustate(CPUState *cpu)
     tpr = vcxt.values[idx++].Reg64;
     if (tpr != vcpu->tpr) {
         vcpu->tpr = tpr;
+        whpx_lock_iothread();
         cpu_set_apic_tpr(x86_cpu->apic_state, tpr);
+        whpx_unlock_iothread();
     }
 
     /* 8 Debug Registers - Skipped */
@@ -525,8 +549,11 @@ static void whpx_registers_hv_to_cpustate(CPUState *cpu)
     apic_base = vcxt.values[idx++].Reg64;
     if (apic_base != vcpu->apic_base) {
         vcpu->apic_base = apic_base;
-        debug_printf("APIC BASE SET %"PRIx64"\n", apic_base);
+        debug_printf("vcpu%d: apic base change = %"PRIx64"\n",
+            cpu->cpu_index, apic_base);
+        whpx_lock_iothread();
         cpu_set_apic_base(x86_cpu->apic_state, vcpu->apic_base);
+        whpx_unlock_iothread();
     }
 
     /* WHvX64RegisterPat - Skipped */
@@ -754,9 +781,7 @@ whpx_vcpu_fetch_emulation_registers(CPUState *cpu)
     if (FAILED(hr))
         whpx_panic("WHPX: Failed to get emu registers,"
             " hr=%08lx", hr);
-//        qemu_mutex_lock_iothread();
     emu_registers_hv_to_cpustate(cpu, reg_values);
-//        qemu_mutex_unlock_iothread();
 }
 #endif
 
@@ -764,13 +789,14 @@ whpx_vcpu_fetch_emulation_registers(CPUState *cpu)
 static int
 whpx_handle_mmio(CPUState *cpu, WHV_MEMORY_ACCESS_CONTEXT *ctx)
 {
-    qemu_mutex_lock_iothread();
 #ifndef EMU_MICROSOFT
     whpx_vcpu_fetch_emulation_registers(cpu);
+    whpx_lock_iothread();
     if (ctx->InstructionByteCount)
         emu_one(cpu, ctx->InstructionBytes, ctx->InstructionByteCount);
     else
         emu_one(cpu, NULL, 0);
+    whpx_unlock_iothread();
     /* emulator dirtied CPUState */
     whpx_vcpu(cpu)->dirty |= VCPU_DIRTY_EMU;
 #else
@@ -778,8 +804,10 @@ whpx_handle_mmio(CPUState *cpu, WHV_MEMORY_ACCESS_CONTEXT *ctx)
     struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
     WHV_EMULATOR_STATUS emu_status;
 
+    whpx_lock_iothread();
     hr = WHvEmulatorTryMmioEmulation(vcpu->emulator, cpu,
         &vcpu->exit_ctx.VpContext, ctx, &emu_status);
+    whpx_unlock_iothread();
     if (FAILED(hr))
         whpx_panic("WHPX: Failed to parse MMIO access, hr=%08lx", hr);
 
@@ -787,7 +815,6 @@ whpx_handle_mmio(CPUState *cpu, WHV_MEMORY_ACCESS_CONTEXT *ctx)
         whpx_panic("WHPX: Failed to emulate MMIO access");
 
 #endif
-    qemu_mutex_unlock_iothread();
     return 0;
 }
 
@@ -807,12 +834,19 @@ try_simple_portio(CPUState *cpu, WHV_X64_IO_PORT_ACCESS_CONTEXT *ctx)
     assert(instrlen);
 
     if (access->IsWrite) {
+        whpx_lock_iothread();
         emu_simple_port_io(1, port, access->AccessSize, &ctx->Rax);
+        whpx_unlock_iothread();
+
         cpu->eip += instrlen;
         set_ip(cpu, cpu->eip);
     } else {
         uint64_t rax = ctx->Rax;
+
+        whpx_lock_iothread();
         emu_simple_port_io(0, port, access->AccessSize, &rax);
+        whpx_unlock_iothread();
+
         cpu->eip += instrlen;
         set_rax_and_ip(cpu, rax, cpu->eip);
     }
@@ -824,17 +858,18 @@ try_simple_portio(CPUState *cpu, WHV_X64_IO_PORT_ACCESS_CONTEXT *ctx)
 static int
 whpx_handle_portio(CPUState *cpu, WHV_X64_IO_PORT_ACCESS_CONTEXT *ctx)
 {
-    qemu_mutex_lock_iothread();
 #ifndef EMU_MICROSOFT
     /* perhaps can use HyperV forwarded ioport access data for quicker
        emulation */
     if (try_simple_portio(cpu, ctx) != 0) {
         whpx_vcpu_fetch_emulation_registers(cpu);
         /* full emu path */
+        whpx_lock_iothread();
         if (ctx->InstructionByteCount)
             emu_one(cpu, ctx->InstructionBytes, ctx->InstructionByteCount);
         else
             emu_one(cpu, NULL, 0);
+        whpx_unlock_iothread();
         /* emulator dirtied CPUState */
         whpx_vcpu(cpu)->dirty |= VCPU_DIRTY_EMU;
     }
@@ -843,15 +878,16 @@ whpx_handle_portio(CPUState *cpu, WHV_X64_IO_PORT_ACCESS_CONTEXT *ctx)
     struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
     WHV_EMULATOR_STATUS emu_status;
 
+    whpx_lock_iothread();
     hr = WHvEmulatorTryIoEmulation(vcpu->emulator, cpu,
         &vcpu->exit_ctx.VpContext, ctx, &emu_status);
+    whpx_unlock_iothread();
     if (FAILED(hr))
         whpx_panic("WHPX: Failed to parse PortIO access, hr=%08lx", hr);
 
     if (!emu_status.EmulationSuccessful)
         whpx_panic("WHPX: Failed to emulate PortMMIO access");
 #endif
-    qemu_mutex_unlock_iothread();
     return 0;
 }
 
@@ -860,13 +896,11 @@ whpx_handle_halt(CPUState *cpu)
 {
     int ret = 0;
 
-    qemu_mutex_lock_iothread();
     if (!whpx_cpu_has_work(cpu)) {
         cpu->exception_index = EXCP_HLT;
         cpu->halted = true;
         ret = 1;
     }
-    qemu_mutex_unlock_iothread();
 
     return ret;
 }
@@ -875,8 +909,6 @@ void
 whpx_vcpu_flush_dirty(CPUState *cpu)
 {
     struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
-
-    qemu_mutex_lock_iothread();
 
     /* hyper-v state shouldn't be dirtied at the same time as CPUState */
     assert(! ((vcpu->dirty & VCPU_DIRTY_CPUSTATE) &&
@@ -907,8 +939,6 @@ whpx_vcpu_flush_dirty(CPUState *cpu)
             whpx_panic("failed to set emu registers\n");
         vcpu->dirty &= ~VCPU_DIRTY_EMU;
     }
-
-    qemu_mutex_unlock_iothread();
 }
 
 static void
@@ -925,7 +955,7 @@ whpx_vcpu_pre_run(CPUState *cpu)
     WHV_REGISTER_NAME reg_names[3];
     uint8_t tpr;
 
-    qemu_mutex_lock_iothread();
+    whpx_vcpu_irq_lock(cpu);
 
     /* Inject NMI */
     if (!vcpu->interrupt_in_flight &&
@@ -959,11 +989,16 @@ whpx_vcpu_pre_run(CPUState *cpu)
         vcpu->interruptable && (env->eflags & IF_MASK)) {
         assert(!new_int.InterruptionPending);
         if (cpu->interrupt_request & CPU_INTERRUPT_HARD) {
-#ifdef DEBUG_IRQ
-            debug_printf("hardware irq request\n");
-#endif
             cpu->interrupt_request &= ~CPU_INTERRUPT_HARD;
+
+            whpx_vcpu_irq_unlock(cpu);
+            whpx_lock_iothread();
+
             irq = cpu_get_pic_interrupt(env);
+
+            whpx_unlock_iothread();
+            whpx_vcpu_irq_lock(cpu);
+
             if (irq >= 0) {
                 new_int.InterruptionType = WHvX64PendingInterrupt;
                 new_int.InterruptionPending = 1;
@@ -977,7 +1012,7 @@ whpx_vcpu_pre_run(CPUState *cpu)
         WHV_REGISTER_VALUE v = { };
 
 #ifdef DEBUG_IRQ
-        debug_printf("IRQ PENDING type %d vector 0x%x\n",
+        debug_printf("vcpu%d: inject irq type %d vector 0x%x\n", cpu->cpu_index,
             new_int.InterruptionType, new_int.InterruptionVector);
 #endif
 
@@ -988,7 +1023,14 @@ whpx_vcpu_pre_run(CPUState *cpu)
     }
 
     /* Sync the TPR to the CR8 if was modified during the intercept */
+    whpx_vcpu_irq_unlock(cpu);
+    whpx_lock_iothread();
+
     tpr = cpu_get_apic_tpr(x86_cpu->apic_state);
+
+    whpx_vcpu_irq_lock(cpu);
+    whpx_unlock_iothread();
+
     if (tpr != vcpu->tpr) {
         WHV_REGISTER_VALUE v = { };
 
@@ -1012,7 +1054,7 @@ whpx_vcpu_pre_run(CPUState *cpu)
         vcpu->window_registered = 1;
     }
 
-    qemu_mutex_unlock_iothread();
+    whpx_vcpu_irq_unlock(cpu);
 
     if (reg_count) {
         hr = whpx_set_vp_registers(cpu->cpu_index, reg_names,
@@ -1025,8 +1067,6 @@ whpx_vcpu_pre_run(CPUState *cpu)
                 " hr=%08lx", hr);
         }
     }
-
-    return;
 }
 
 static void
@@ -1041,9 +1081,9 @@ whpx_vcpu_post_run(CPUState *cpu)
     env->eflags = vp_ctx->Rflags;
     if (vcpu->tpr != vp_ctx->Cr8) {
         vcpu->tpr = vp_ctx->Cr8;
-        qemu_mutex_lock_iothread();
+        whpx_lock_iothread();
         cpu_set_apic_tpr(x86_cpu->apic_state, vcpu->tpr);
-        qemu_mutex_unlock_iothread();
+        whpx_unlock_iothread();
     }
 
     vcpu->interrupt_in_flight = vp_ctx->ExecutionState.InterruptionPending;
@@ -1057,19 +1097,36 @@ whpx_vcpu_process_async_events(CPUState *cpu)
     X86CPU *x86_cpu = X86_CPU(cpu);
     struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
 
+    whpx_vcpu_irq_lock(cpu);
+
     if (cpu->interrupt_request)
         cpu->halted = false;
 
     if ((cpu->interrupt_request & CPU_INTERRUPT_INIT) &&
         !(env->hflags & HF_SMM_MASK)) {
+
+        whpx_vcpu_irq_unlock(cpu);
+        whpx_lock_iothread();
+
         do_cpu_init(x86_cpu);
+
+        whpx_unlock_iothread();
+        whpx_vcpu_irq_lock(cpu);
+
         vcpu->dirty = VCPU_DIRTY_CPUSTATE;
         vcpu->interruptable = true;
     }
 
     if (cpu->interrupt_request & CPU_INTERRUPT_POLL) {
         cpu->interrupt_request &= ~CPU_INTERRUPT_POLL;
+
+        whpx_vcpu_irq_unlock(cpu);
+        whpx_lock_iothread();
+
         apic_poll_irq(x86_cpu->apic_state);
+
+        whpx_unlock_iothread();
+        whpx_vcpu_irq_lock(cpu);
     }
 
     if (((cpu->interrupt_request & CPU_INTERRUPT_HARD) &&
@@ -1081,7 +1138,15 @@ whpx_vcpu_process_async_events(CPUState *cpu)
     if (cpu->interrupt_request & CPU_INTERRUPT_SIPI) {
         if (!(vcpu->dirty & VCPU_DIRTY_CPUSTATE))
             whpx_registers_hv_to_cpustate(cpu);
+
+        whpx_vcpu_irq_unlock(cpu);
+        whpx_lock_iothread();
+
         do_cpu_sipi(x86_cpu);
+
+        whpx_unlock_iothread();
+        whpx_vcpu_irq_lock(cpu);
+
         vcpu->dirty |= VCPU_DIRTY_CPUSTATE;
     }
 
@@ -1094,7 +1159,7 @@ whpx_vcpu_process_async_events(CPUState *cpu)
 #endif
     }
 
-    return;
+    whpx_vcpu_irq_unlock(cpu);
 }
 
 static int
@@ -1114,7 +1179,6 @@ whpx_vcpu_run(CPUState *cpu)
         return 0;
     }
 
-    qemu_mutex_unlock_iothread();
     do {
         whpx_vcpu_pre_run(cpu);
 
@@ -1184,7 +1248,6 @@ whpx_vcpu_run(CPUState *cpu)
 
     } while (!ret);
 
-    qemu_mutex_lock_iothread();
     cpu->exit_request = 0;
 
     return ret < 0;
@@ -1230,6 +1293,7 @@ int whpx_init_vcpu(CPUState *cpu)
 
     vcpu->interruptable = true;
     vcpu->dirty = VCPU_DIRTY_CPUSTATE;
+    critical_section_init(&vcpu->irq_lock);
 
     cpu->hax_vcpu = (struct hax_vcpu_state *)vcpu;
 
@@ -1262,14 +1326,14 @@ int whpx_vcpu_exec(CPUState *cpu)
 void whpx_destroy_vcpu(CPUState *cpu)
 {
     struct whpx_state *whpx = &whpx_global;
+    struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
 
     WHvDeleteVirtualProcessor(whpx->partition, cpu->cpu_index);
 #ifdef EMU_MICROSOFT
-    struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
     WHvEmulatorDestroyEmulator(vcpu->emulator);
 #endif
+    critical_section_free(&vcpu->irq_lock);
     g_free(cpu->hax_vcpu);
-    return;
 }
 
 void
@@ -1384,10 +1448,21 @@ whpx_update_mapping(
                    (add ? "MAP" : "UNMAP"), name, start_pa, size, host_va, hr);
 }
 
-static void
-whpx_handle_interrupt(CPUState *cpu, int mask)
+void
+whpx_cpu_reset_interrupt(CPUState *cpu, int mask)
 {
+    whpx_vcpu_irq_lock(cpu);
+    cpu->interrupt_request &= ~mask;
+    whpx_vcpu_irq_unlock(cpu);
+}
+
+
+static void
+whpx_cpu_handle_interrupt(CPUState *cpu, int mask)
+{
+    whpx_vcpu_irq_lock(cpu);
     cpu->interrupt_request |= mask;
+    whpx_vcpu_irq_unlock(cpu);
 #ifdef DEBUG_IRQ
     debug_printf("vcpu%d: handle IRQ mask=%x irqreq=%x\n",
         cpu->cpu_index, mask, cpu->interrupt_request);
@@ -1526,7 +1601,7 @@ int whpx_partition_setup(void)
 
     whpx_memory_init();
 
-    cpu_interrupt_handler = whpx_handle_interrupt;
+    cpu_interrupt_handler = whpx_cpu_handle_interrupt;
 
     debug_printf("Windows Hypervisor Platform accelerator is operational\n");
     return 0;

@@ -43,6 +43,24 @@ int trace_waitobjects = 0;
 #define delay_log(fmt, ...) do { ; } while(0)
 #endif
 
+static void
+ioh_waitobjects_lock(WaitObjects *w)
+{
+#if !defined(LIBIMG)
+    if (whpx_enable)
+        critical_section_enter(&w->lock);
+#endif
+}
+
+static void
+ioh_waitobjects_unlock(WaitObjects *w)
+{
+#if !defined(LIBIMG)
+    if (whpx_enable)
+        critical_section_leave(&w->lock);
+#endif
+}
+
 void
 ioh_waitobjects_grow(WaitObjects *w)
 {
@@ -58,6 +76,8 @@ int __ioh_add_wait_object(ioh_event *event, WaitObjectFunc *func, void *opaque,
     if (w == NULL)
 	w = &wait_objects;
 
+    ioh_waitobjects_lock(w);
+
     if (w->num == w->max)
         ioh_waitobjects_grow(w);
     w->events[w->num] = *event;
@@ -69,6 +89,8 @@ int __ioh_add_wait_object(ioh_event *event, WaitObjectFunc *func, void *opaque,
 #endif
 
     w->num++;
+
+    ioh_waitobjects_unlock(w);
 
 #if !defined(LIBIMG)
     if (whpx_enable && interrupt)
@@ -99,11 +121,14 @@ void ioh_del_wait_object(ioh_event *event, WaitObjects *w)
     if (w == NULL)
         w = &wait_objects;
 
+    ioh_waitobjects_lock(w);
+
     for (i = 0; i < w->num; i++)
         if (w->events[i] == *event)
             break;
 
     if (i == w->num) {
+        ioh_waitobjects_unlock(w);
         debug_printf("ioh_del_wait_object: event %p not found in %s\n",
                      event, w == &wait_objects ? "main" : "block");
         debug_break();
@@ -117,6 +142,7 @@ void ioh_del_wait_object(ioh_event *event, WaitObjects *w)
 	memmove(&w->desc[i], &w->desc[i + 1],
 		(w->num - i) * sizeof(w->desc[0]));
     }
+    ioh_waitobjects_unlock(w);
 }
 
 #if defined(CONFIG_NETEVENT)
@@ -166,6 +192,7 @@ void ioh_init_wait_objects(WaitObjects *w)
     w->max = 0;
     w->del_state = WO_OK;
     w->interrupt = (uintptr_t)CreateEvent(NULL, TRUE, FALSE, NULL);
+    critical_section_init(&w->lock);
 }
 
 void ioh_wait_interrupt(WaitObjects *w)

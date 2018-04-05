@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -12,6 +12,9 @@
 #include "bh.h"
 #include "ioh.h"
 #include "queue.h"
+
+#include <dm/dm.h>
+#include <dm/whpx/whpx.h>
 
 static ioh_event bh_schedule_event;
 static critical_section bh_lock;
@@ -92,7 +95,15 @@ int bh_poll(void)
             else
                 bh->idle = 0;
             critical_section_leave(&bh_lock);
+#if !defined(LIBIMG)
+            if (whpx_enable)
+                whpx_lock_iothread();
+#endif
             bh->cb(bh->opaque);
+#if !defined(LIBIMG)
+            if (whpx_enable)
+                whpx_unlock_iothread();
+#endif
             critical_section_enter(&bh_lock);
             if (bh->delete_one_shot)
                 bh->deleted = 1;
