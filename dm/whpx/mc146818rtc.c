@@ -646,7 +646,13 @@ static int rtc_initfn(ISADevice *dev)
     RTCState *s = DO_UPCAST(RTCState, dev, dev);
     int base = 0x70;
 
+#ifndef QEMU_UXEN
     rtc_clock = rt_clock;
+#else
+    /* FIXME: needs further consideration? use vm_clock because rt_clock offsets do not
+     * persist thru save restore */
+    rtc_clock = vm_clock;
+#endif
 
     s->cmos_data[RTC_REG_A] = 0x26;
     s->cmos_data[RTC_REG_B] = 0x02;
