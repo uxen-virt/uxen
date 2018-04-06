@@ -492,6 +492,13 @@ typedef struct {
     volatile int *idx;
 } ACLThreadData;
 
+typedef struct {
+    Variable *var;
+    Manifest *suffixes;
+    Manifest *man_out;
+    struct disk *disk;
+} ScanningPhaseThreadData;
+
 typedef enum {
     ACL_Denied = 0,
     ACL_Allowed = 1,
@@ -678,9 +685,8 @@ wchar_t *path_join(wchar_t *buf, const wchar_t *a, const wchar_t *b)
     return path_join_var(buf, a, b);
 }
 
-static inline wchar_t *prefix(Variable *var, const wchar_t *s)
+static inline wchar_t *prefix(wchar_t *buf, Variable *var, const wchar_t *s)
 {
-    static wchar_t buf[MAX_PATH_LEN];
     path_join(buf, var->path, s);
     normalize_string2(buf);
     return buf;
@@ -1176,7 +1182,9 @@ int path_exists(const wchar_t *fn, uint64_t *file_id, uint64_t *file_size,
 /* Breadth-first search directory scan. This is faster than DFS due to better
  * access locality. */
 
-int files, directories;
+LONG files, directories;
+
+CRITICAL_SECTION scanning_cs;
 
 int bfs(Variable *var,
         Manifest *suffixes,
@@ -1206,7 +1214,8 @@ int bfs(Variable *var,
 
     /* First check if this is a single file that needs to be included
      * in the output manifest by itself. */
-    if (path_exists(prefix(var, dn), &file_id, &file_size, &is_dir, &symlink)) {
+    wchar_t buf[MAX_PATH_LEN];
+    if (path_exists(prefix(buf, var, dn), &file_id, &file_size, &is_dir, &symlink)) {
         if (!is_dir) {
             ManifestEntry *e;
             if (toplevel_entry->excludable_single_file_entry) {
@@ -1216,6 +1225,7 @@ int bfs(Variable *var,
                     return 0;
                 }
             }
+            EnterCriticalSection(&scanning_cs);
             e = man_push_file(out,
                           disk->bootvol,
                           var,
@@ -1224,10 +1234,12 @@ int bfs(Variable *var,
                           file_id,
                           toplevel_entry->imgname,
                           toplevel_entry->action);
+            
             if (symlink) {
                 e->action = MAN_SYMLINK;
                 e->target = symlink;
             }
+            LeaveCriticalSection(&scanning_cs);
             //printf("1.Adding entry [%S]=[%d]=>[%S]\n", e->name, e->action, e->imgname);
             return 0;
         } else {
@@ -1244,14 +1256,18 @@ int bfs(Variable *var,
              * exist.
              */
             uint32_t err = (uint32_t)GetLastError();
+            EnterCriticalSection(&scanning_cs);
             printf("warning: file not found! [%ls%ls] err=%u\n", var->path, dn, err);
+            LeaveCriticalSection(&scanning_cs);
         }
         return 0;
     }
 
     info_buf = malloc(info_sz);
     if (!info_buf) {
+        EnterCriticalSection(&scanning_cs);
         printf("%s: out of memory\n", __FUNCTION__);
+        LeaveCriticalSection(&scanning_cs);
         return -1;
     }
 
@@ -1289,7 +1305,7 @@ int bfs(Variable *var,
 
         q = heap_pop(&heaps[heap_switch]);
 
-        dir = CreateFileW(prefix(var, q.name), GENERIC_READ, FILE_SHARE_READ
+        dir = CreateFileW(prefix(buf, var, q.name), GENERIC_READ, FILE_SHARE_READ
                 | FILE_SHARE_WRITE, NULL, OPEN_EXISTING,
                 FILE_FLAG_BACKUP_SEMANTICS, NULL);
 
@@ -1314,7 +1330,9 @@ int bfs(Variable *var,
 
                     if (!wcscmp(fn, L".")) {
                         if (q.top_level) {
+
                             assert(out);
+                            EnterCriticalSection(&scanning_cs);
                             m = man_push_entry(out, q.name, MAN_MKDIR);
                             m->vol = disk->bootvol;
                             m->var = var;
@@ -1331,6 +1349,7 @@ int bfs(Variable *var,
                             m->name_len = wcslen(m->name);
                             m->file_id = info->FileId.QuadPart;
                             assert(m->file_id);
+                            LeaveCriticalSection(&scanning_cs);
                         }
                         continue;
                     } else if (!he.recurse) {
@@ -1351,6 +1370,7 @@ int bfs(Variable *var,
                         normalize_string(rerooted_full_name);
                     }
 
+                    EnterCriticalSection(&scanning_cs);
                     m = find_by_prefix(var->man, full_name);
                     assert(full_name[1] != ':');
 
@@ -1363,6 +1383,7 @@ int bfs(Variable *var,
                          * action for /windows and a SHALLOW action for
                          * /windows/winsxs. */
                         if (m->action != manifested_action) {
+                            LeaveCriticalSection(&scanning_cs);
                             continue;
                         }
                     } else {
@@ -1373,6 +1394,8 @@ int bfs(Variable *var,
                     file_id = info->FileId.QuadPart;
                     file_size = info->EndOfFile.QuadPart;
                     action = m->action;
+
+                    LeaveCriticalSection(&scanning_cs);
 
                     if ((attr & FILE_ATTRIBUTE_DIRECTORY) ==
                             FILE_ATTRIBUTE_DIRECTORY) {
@@ -1392,12 +1415,12 @@ int bfs(Variable *var,
                         } else {
                             heap_push(&heaps[heap_switch ^ 1], he);
                         }
-                        ++directories;
+                        InterlockedIncrement(&directories);
 
                     } else {
                         /* Check if we should exclude the file based on extension and size. */
                         ManifestEntry *s = find_by_suffix(suffixes, fn);
-                        ++files;
+                        InterlockedIncrement(&files);
                         if (s && file_size >= s->file_size) {
                             printf("info: excluding file by suffix and size: %ls (%"PRIu64" bytes)\n",
                                     full_name, file_size);
@@ -1420,8 +1443,10 @@ int bfs(Variable *var,
                         if (GetFileInformationByHandle(h, &inf)) {
                             attr = inf.dwFileAttributes;
                         } else {
+                            EnterCriticalSection(&scanning_cs);
                             printf("GetFileInformationByHandle(%ls) failed err=%u\n",
                                 full_name, (uint32_t) GetLastError());
+                            LeaveCriticalSection(&scanning_cs);
                         }
 
                         if (attr & FILE_ATTRIBUTE_REPARSE_POINT) {
@@ -1433,9 +1458,11 @@ int bfs(Variable *var,
 
                         if (dest) {
                             wchar_t *rewrite = rerooted_full_name[0] ? rerooted_full_name : NULL;
+                            EnterCriticalSection(&scanning_cs);
                             ManifestEntry *e = man_push_file(out, disk->bootvol, var, full_name,
                                 0, 0, rewrite, MAN_SYMLINK);
                             e->target = dest;
+                            LeaveCriticalSection(&scanning_cs);
                         }
 
                         if (attr & FILE_ATTRIBUTE_REPARSE_POINT) {
@@ -1457,7 +1484,9 @@ int bfs(Variable *var,
                         action = MAN_COPY;
                         follow = follow_links;
                     }
+                    EnterCriticalSection(&scanning_cs);
                     man_push_file(out, disk->bootvol, var, full_name, file_size, file_id, rewrite, action);
+                    LeaveCriticalSection(&scanning_cs);
                     //printf("2.Adding entry [%S]=[%d]=>[%S]\n", e->name, e->action, imgname);
 
                     if (!follow) {
@@ -1473,7 +1502,7 @@ int bfs(Variable *var,
                         length = MAX_PATH_LEN;
                         if (h == INVALID_HANDLE_VALUE) {
                             /* First time through loop */
-                            h = FindFirstFileNameW(prefix(var, full_name), 0, &length, link_name);
+                            h = FindFirstFileNameW(prefix(buf, var, full_name), 0, &length, link_name);
                             if (h == INVALID_HANDLE_VALUE) {
                                 printf("FindFirstFileNameW() failed on %ls with err=%u",
                                         full_name, (uint32_t) GetLastError());
@@ -1510,14 +1539,18 @@ int bfs(Variable *var,
                             rewrite = rerooted_full_name;
                         }
 
+                        EnterCriticalSection(&scanning_cs);
                         man_push_file(out, disk->bootvol, var, link_name,
                                 file_size, file_id, rewrite, action);
+                        LeaveCriticalSection(&scanning_cs);
 
                         /* Possibly create enclosing dirs. */
                         for (;;) {
                             strip_filename(link_name);
+                            EnterCriticalSection(&scanning_cs);
                             if (!*link_name || find_full_name(extra_dirs,
                                         link_name)) {
+                                LeaveCriticalSection(&scanning_cs);
                                 break;
                             }
                             m = man_push_entry(extra_dirs, link_name, MAN_COPY_EMPTY_DIR);
@@ -1525,6 +1558,7 @@ int bfs(Variable *var,
                                 strip_filename(rewrite);
                                 m->imgname = wcsdup(rewrite);
                             }
+                            LeaveCriticalSection(&scanning_cs);
                         }
 
                     }
@@ -1537,11 +1571,15 @@ int bfs(Variable *var,
             }
             uint32_t err = (uint32_t)GetLastError();
             if (err && err != ERROR_NO_MORE_FILES) {
-                printf("Enumeration of [%ls] finished with err=%u\n", prefix(var, q.name), err);
+                EnterCriticalSection(&scanning_cs);
+                printf("Enumeration of [%ls] finished with err=%u\n", prefix(buf, var, q.name), err);
+                LeaveCriticalSection(&scanning_cs);
             }
             CloseHandle(dir);
         } else {
-            printf("Failed to open dir [%ls] err=%u\n", prefix(var, q.name), (uint32_t)GetLastError());
+            EnterCriticalSection(&scanning_cs);
+            printf("Failed to open dir [%ls] err=%u\n", prefix(buf, var, q.name), (uint32_t)GetLastError());
+            LeaveCriticalSection(&scanning_cs);
         }
         free(q.name);
     }
@@ -2130,6 +2168,8 @@ int init_logiccp(void)
         return -1;
     }
 
+    InitializeCriticalSection(&scanning_cs);
+
     return 0;
 }
 
@@ -2142,16 +2182,116 @@ int init_logiccp(void)
 
 #define LEAVE_PHASEN(n) printf("%s %d took %.2fs\n", __FUNCTION__, n, rtc() - _t)
 
+
+static LONG next_unclaimed_scanning_index = 0;
+static int GetNextUnclaimedManifestIndex()
+{
+    return InterlockedIncrement(&next_unclaimed_scanning_index) - 1;
+}
+
+static BOOL UnclaimedScanningIndexesRemain(LONG manifest_size)
+{
+    return InterlockedCompareExchange(&next_unclaimed_scanning_index, manifest_size, manifest_size) != manifest_size;
+}
+
+static DWORD WINAPI scanning_phase_thread(LPVOID lpParam)
+{
+    assert(lpParam != NULL);
+    ScanningPhaseThreadData *td = (ScanningPhaseThreadData*)lpParam;
+    Variable *var = td->var;
+    Manifest *suffixes = td->suffixes;
+    Manifest *man_out = td->man_out;
+    Manifest *man = td->var->man;
+    struct disk *disk = td->disk;
+    int j, r;
+    Manifest extra_dirs;
+    man_init(&extra_dirs);
+
+    double start = rtc();
+
+    EnterCriticalSection(&scanning_cs);
+    printf("Thread %d starting\n", (int)GetCurrentThreadId());
+    LeaveCriticalSection(&scanning_cs);
+
+    while(UnclaimedScanningIndexesRemain(man->n) == TRUE) {
+        ManifestEntry *m = &man->entries[GetNextUnclaimedManifestIndex()];
+        if (!shallow_allowed && (m->action == MAN_SHALLOW)) {
+            m->action = MAN_FORCE_COPY;
+        }
+        if (!shallow_allowed && (m->action == MAN_SHALLOW_FOLLOW_LINKS)) {
+            m->action = MAN_COPY_FOLLOW_LINKS;
+        }
+        switch (m->action) {
+        case MAN_SHALLOW:
+        case MAN_COPY:
+        case MAN_COPY_EMPTY_DIR:
+        case MAN_FORCE_COPY:
+        case MAN_SHALLOW_FOLLOW_LINKS:
+        case MAN_COPY_FOLLOW_LINKS:
+            r = bfs(var, suffixes, man_out, &extra_dirs, disk, m, m->action != MAN_COPY_EMPTY_DIR);
+            if (r < 0) {
+                printf("Failed while processing [%ls] : [%d]\n", m->name, r);
+                return r;
+            }
+            break;
+        default:
+            break;
+        }
+    }
+
+    man_sort_by_name(&extra_dirs);
+    man_uniq_by_name(&extra_dirs);
+    for (j = 0; j < extra_dirs.n; ++j) {
+        ManifestEntry *m = &extra_dirs.entries[j];
+        bfs(var, &extra_dirs, man_out, NULL, disk, m, 0);
+    }
+
+    EnterCriticalSection(&scanning_cs);
+    printf("Thread %d: exit, time running: %.3f\n", (int)GetCurrentThreadId(), rtc() - start);
+    LeaveCriticalSection(&scanning_cs);
+
+    return 0;
+}
+
+// We're applying a bit krypton specific knowledge here in order to minimize the runtime
+// of the scanning phase:
+// We know that the follow links manifest entries are going to take massively longer than
+// any of the other entries (in fact the winsxs entry will span the full length of the
+// scanning phase), so we want have those up front so we start work on them immediately
+// and have them running while the other, smaller, entries are processed by other threads
+void RelocateFollowLinksManifestEntries(Manifest *man)
+{
+    int man_index, relocated_entries_count = 0;
+    ManifestEntry tmp_man_entry;
+    for (man_index = 0; man_index < man->n; ++man_index) {
+        ManifestEntry *m = &man->entries[man_index];
+        if (m->action == MAN_SHALLOW_FOLLOW_LINKS || m->action == MAN_COPY_FOLLOW_LINKS) {
+            tmp_man_entry = man->entries[relocated_entries_count];
+            char *m_name = utf8(m->name);
+            char *tmp_name = utf8(tmp_man_entry.name);
+            printf("Swapping entry %d (%s) and %d (%s)\n", man_index, m_name, relocated_entries_count, tmp_name);
+            man->entries[relocated_entries_count++] = *m;
+            *m = tmp_man_entry;
+            free(m_name);
+            free(tmp_name);
+        }
+    }
+}
+
+// There's currently nothing to be gained from increasing this value
+// any further as the lower limit on the runtime of the scanning
+// phase is set by how long it takes to process the winsxs entry
+#define MAX_SCANNING_THREADS 3
+
 int scanning_phase(struct disk *disk, VarList *vars,
         Manifest *suffixes, Manifest *man_out)
 {
     ENTER_PHASE();
-    int i, r;
+    int i, scanning_thread_count = 0, thread_index;
+    HANDLE h_scanning_threads[MAX_SCANNING_THREADS];
+    ScanningPhaseThreadData thread_data[MAX_SCANNING_THREADS];
 
     for (i = 0; i < vars->n; ++i) {
-        int j;
-        Manifest extra_dirs;
-        man_init(&extra_dirs);
         Variable *var = &vars->entries[i];
         if (!var->path) {
             printf("ignoring manifest entries under ${%ls}\n", var->name);
@@ -2161,12 +2301,12 @@ int scanning_phase(struct disk *disk, VarList *vars,
                 var->name);
             continue;
         }
-        Manifest *man = var->man;
         if (var->path[0]) {
             /* Don't try and open a host volume handle for the dummy var which
              * has no host-side equivalent
              */
-            var->volume = CreateFileW(prefix(var, L""), GENERIC_READ,
+            wchar_t buf[MAX_PATH_LEN];
+            var->volume = CreateFileW(prefix(buf, var, L""), GENERIC_READ,
                     FILE_SHARE_READ, NULL,
                     OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, NULL);
             if (var->volume == INVALID_HANDLE_VALUE) {
@@ -2176,39 +2316,47 @@ int scanning_phase(struct disk *disk, VarList *vars,
             }
         }
 
-        for (j = 0; j < man->n; ++j) {
-            ManifestEntry *m = &man->entries[j];
-            if (!shallow_allowed && (m->action == MAN_SHALLOW)) {
-                m->action = MAN_FORCE_COPY;
+        RelocateFollowLinksManifestEntries(var->man);
+        memset(&thread_data, 0, sizeof(thread_data));
+        for (thread_index = 0; thread_index < MAX_SCANNING_THREADS; ++thread_index) {
+            thread_data[thread_index].var = var;
+            thread_data[thread_index].suffixes = suffixes;
+            thread_data[thread_index].man_out = man_out;
+            thread_data[thread_index].disk = disk;
+
+            h_scanning_threads[thread_index] = CreateThread(NULL, 0, scanning_phase_thread,
+                &thread_data[thread_index], 0, NULL);
+            if (!h_scanning_threads[thread_index]) {
+                printf("CreateThread[%d] failed : [%d]\n", i, (int)GetLastError());
+                break;
             }
-            if (!shallow_allowed && (m->action == MAN_SHALLOW_FOLLOW_LINKS)) {
-                m->action = MAN_COPY_FOLLOW_LINKS;
-            }
-            switch (m->action) {
-                case MAN_SHALLOW:
-                case MAN_COPY:
-                case MAN_COPY_EMPTY_DIR:
-                case MAN_FORCE_COPY:
-                case MAN_SHALLOW_FOLLOW_LINKS:
-                case MAN_COPY_FOLLOW_LINKS:
-                    r = bfs(var, suffixes, man_out, &extra_dirs, disk, m, m->action != MAN_COPY_EMPTY_DIR);
-                    if (r < 0) {
-                        printf("Failed while processing [%ls] : [%d]\n", m->name, r);
-                        return r;
-                    }
-                    break;
-                default:
-                    break;
+            scanning_thread_count++;
+        }
+
+        printf("Created [%d] scanning threads\n", scanning_thread_count);
+
+        if (scanning_thread_count > 0) {
+            printf("Waiting for [%d] threads to complete\n", scanning_thread_count);
+
+            DWORD rc = WaitForMultipleObjects(scanning_thread_count, h_scanning_threads,
+                TRUE, INFINITE);
+            switch (rc) {
+            case WAIT_OBJECT_0:
+                printf("Received termination events from [%d] threads\n",
+                    scanning_thread_count);
+                break;
+            default:
+                printf("Error in waiting for [%d] threads: [%d]\n",
+                    scanning_thread_count, (int)GetLastError());
+                break;
             }
         }
-        man_sort_by_name(&extra_dirs);
-        man_uniq_by_name(&extra_dirs);
-        for (j = 0; j < extra_dirs.n; ++j) {
-            ManifestEntry *m = &extra_dirs.entries[j];
-            bfs(var, &extra_dirs, man_out, NULL, disk, m, 0);
+
+        for (thread_index = 0; thread_index < scanning_thread_count; thread_index++) {
+            CloseHandle(h_scanning_threads[i]);
         }
     }
-    printf("scanned %d files in %d directories\n", files, directories);
+    printf("scanned %d files in %d directories\n", (int)files, (int)directories);
     LEAVE_PHASE();
     return 0;
 }
@@ -2969,7 +3117,8 @@ cleanup:
 static void make_unshadowed_host_path(wchar_t* out, ManifestEntry *m)
 {
     // First get full hostname including path components from the prefix (if any)
-    wchar_t* filename = prefix(m->var, m->name);
+    wchar_t buf[MAX_PATH_LEN];
+    wchar_t* filename = prefix(buf, m->var, m->name);
     wchar_t* path;
     if (bootvol_var && !wcsnicmp(filename, bootvol_var->path, wcslen(bootvol_var->path))) {
         // Now replace the volume prefix with the rootdrive
@@ -3083,6 +3232,7 @@ int copy_phase(struct disk *disk, Manifest *man, int calculate_shas, int retry)
     int base = 0;
     uint64_t total_size_copied = 0;
     uint64_t total_size_force_copied = 0;
+    wchar_t buf[MAX_PATH_LEN];
 
     ENTER_PHASEN(retry);
 
@@ -3097,7 +3247,7 @@ int copy_phase(struct disk *disk, Manifest *man, int calculate_shas, int retry)
                     FILE_FLAG_OVERLAPPED | FILE_FLAG_SEQUENTIAL_SCAN);
                 if (h == INVALID_HANDLE_VALUE) {
                     printf("failed to open %ls by id for copying, retrying by name\n", m->name);
-                    wchar_t *filename = prefix(m->var, m->name);
+                    wchar_t *filename = prefix(buf, m->var, m->name);
                     h = open_file_by_name(filename,
                         FILE_FLAG_OVERLAPPED | FILE_FLAG_SEQUENTIAL_SCAN);
                 }
@@ -3852,10 +4002,11 @@ int hash_shallowed_files_phase(struct disk *disk, Manifest *man)
      * not performance-critical, hence why it is a simple loop rather than using
      * parallel IOs */
     int i;
+    wchar_t buf[MAX_PATH_LEN];
     for (i = 0; i < man->n; i++) {
         ManifestEntry* entry = &man->entries[i];
         if (entry->action == MAN_SHALLOW || entry->action == MAN_BOOT) {
-            wchar_t *host_name = prefix(entry->var, entry->name);
+            wchar_t *host_name = prefix(buf, entry->var, entry->name);
             int err = calculate_sha1_for_file(host_name, entry->sha);
             if (err) {
                 printf("Failed to get SHA1 for %ls\n", host_name);
@@ -4572,6 +4723,8 @@ int main(int argc, char **argv)
             printf("MoveFileExW failed %d\n", r);
         }
     }
+
+    DeleteCriticalSection(&scanning_cs);
 
     printf("done. exit.\n");
     fflush(stderr);
