@@ -971,19 +971,6 @@ whpx_vcpu_pre_run(CPUState *cpu)
             cpu->interrupt_request &= ~CPU_INTERRUPT_SMI;
     }
 
-    /*
-     * Force the VCPU out of its inner loop to process any INIT requests or
-     * commit pending TPR access.
-     */
-    if (cpu->interrupt_request & (CPU_INTERRUPT_INIT | CPU_INTERRUPT_TPR)) {
-        if ((cpu->interrupt_request & CPU_INTERRUPT_INIT) &&
-            !(env->hflags & HF_SMM_MASK)) {
-            cpu->exit_request = 1;
-        }
-        if (cpu->interrupt_request & CPU_INTERRUPT_TPR)
-            cpu->exit_request = 1;
-    }
-
     /* Get pending hard interruption or replay one that was overwritten */
     if (!vcpu->interrupt_in_flight &&
         vcpu->interruptable && (env->eflags & IF_MASK)) {
@@ -1039,7 +1026,6 @@ whpx_vcpu_pre_run(CPUState *cpu)
         reg_values[reg_count] = v;
         reg_names[reg_count] = WHvX64RegisterCr8;
         reg_count += 1;
-        cpu->exit_request = 1;
     }
 
     /* Update the state of the interrupt delivery notification */
@@ -1175,7 +1161,7 @@ whpx_vcpu_run(CPUState *cpu)
     whpx_vcpu_flush_dirty(cpu);
     if (cpu->halted) {
         cpu->exception_index = EXCP_HLT;
-        cpu->exit_request = 0;
+
         return 0;
     }
 
@@ -1247,8 +1233,6 @@ whpx_vcpu_run(CPUState *cpu)
         whpx_vcpu_flush_dirty(cpu);
 
     } while (!ret);
-
-    cpu->exit_request = 0;
 
     return ret < 0;
 }
