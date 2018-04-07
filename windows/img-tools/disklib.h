@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Gianni Tedesco
  * SPDX-License-Identifier: ISC
  */
@@ -132,8 +132,10 @@ int disklib_open_image(char *path, int rw, disk_handle_t *hdd);
 void disklib_close_image(disk_handle_t hdd);
 void disklib_set_slow_flush(disk_handle_t dh);
 
+void init_map_from_file(void *f);
 void set_current_filename(const char *fn, uint64_t file_offset, uint64_t file_id);
 void flush_map_to_file(void *f);
+size_t get_num_map_entries();
 
 int disk_read_sectors(disk_handle_t dh, void *buf, uint64_t sec, unsigned int
         num_sec, void *context);

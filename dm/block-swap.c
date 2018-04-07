@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -40,6 +40,7 @@
 #include "block-swap/dubtree.h"
 #include "block-swap/hashtable.h"
 #include "block-swap/lrucache.h"
+#include "block-swap/swapfmt.h"
 
 #include <lz4.h>
 
@@ -98,18 +99,6 @@ static int swap_backend_active = 0;
 #else
   #define SWAP_LOG_BLOCK_CACHE_LINES 8
 #endif
-
-typedef struct SwapMapTuple {
-    uint32_t end;
-    uint32_t size;
-    uint32_t file_offset;
-    uint32_t name_offset;
-#ifdef _WIN32
-    uint32_t file_id_highpart;
-    uint32_t file_id_lowpart;
-#endif
-} SwapMapTuple;
-
 
 struct heap_elem {
     uint64_t key, value;
