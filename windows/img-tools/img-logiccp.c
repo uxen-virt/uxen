@@ -70,6 +70,8 @@ typedef struct {
     wchar_t Buffer[0];
 } COW_MESSAGE_START_WATCH, *PCOW_MESSAGE_START_WATCH;
 
+#define IS_POWER_OF_TWO(val) (((val) & ((val) - 1)) == 0)
+
 static inline double rtc(void)
 {
     LARGE_INTEGER time;
@@ -1788,7 +1790,12 @@ static void copy_file(ManifestEntry *m, HANDLE input, int calculate_shas)
     ntfs_fs_t vol = m->vol;
     const wchar_t *path = m->imgname;
     uint64_t size = m->file_size;
+#ifdef __x86_64__
     size_t max_buffer_size = (low_priority ? 1 : 4) << 20;
+#else
+    /* On 32-bit we risk running out of address space with 4MB buffers */
+    size_t max_buffer_size = 1 << 20;
+#endif
     uint64_t offset;
     uint64_t take;
     uint64_t required_buffer_size;
@@ -2213,25 +2220,59 @@ int is_same_file(const ManifestEntry *a, const ManifestEntry *b)
     return (same_vol && a->file_id == b->file_id);
 }
 
+typedef struct FileIds {
+    size_t n;
+    uint64_t* buf;
+} FileIds;
+
+static void append_fileid(FileIds* ids, uint64_t id)
+{
+    if (IS_POWER_OF_TWO(ids->n)) {
+        size_t newn = (ids->n ? ids->n * 2 : 1);
+        ids->buf = realloc(ids->buf, newn * sizeof(uint64_t));
+    }
+    ids->buf[ids->n++] = id;
+}
+
+static int cmp_fileids(const void *a, const void *b)
+{
+    const uint64_t *fa = (const uint64_t *) a;
+    const uint64_t *fb = (const uint64_t *) b;
+    /* Can't just subtract as they are unsigned! */
+    if (*fa < *fb)
+        return -1;
+    else if (*fa == *fb)
+        return 0;
+    else
+        return 1;
+}
+
 int stat_files_phase(struct disk *disk, Manifest *man, wchar_t *file_id_list)
 {
     ENTER_PHASE();
     assert(man->order_fn == cmp_id_action);
 
+    int ret = -1;
     int i;
     ManifestEntry *last = NULL;
     uint64_t link_id = 0;
     FILE *file_id_file = NULL;
     uint64_t old_file_id = 0;
     int changed_operations = 0;
+    FileIds ids = {0};
 
     if (shallow_allowed) {
-        file_id_file = _wfopen(file_id_list, L"wb");
-        if (!file_id_file) {
-            printf("unable to open %ls for write\n", file_id_list);
-            return -1;
+        /* Load any preexisting fileids */
+        file_id_file = _wfopen(file_id_list, L"rb");
+        if (file_id_file) {
+            uint64_t id;
+            setvbuf(file_id_file, NULL, _IOFBF, 1 << 20);
+            while (fread(&id, sizeof(uint64_t), 1, file_id_file)) {
+                append_fileid(&ids, id);
+            }
+            fclose(file_id_file);
+            file_id_file = NULL;
         }
-        setvbuf(file_id_file, NULL, _IOFBF, 1 << 20);
     }
 
     for (i = 0; i < man->n; ++i) {
@@ -2266,14 +2307,10 @@ int stat_files_phase(struct disk *disk, Manifest *man, wchar_t *file_id_list)
                 }
             }
 
-            /* The file-ids are sorted. Write unique file-ids into the file_id_list file */
             if (action == MAN_SHALLOW) {
                 assert(shallow_allowed); /* Shouldn't see any shallowed files here */
                 if (old_file_id != m->file_id) {
-                    if (fwrite(&m->file_id, sizeof(uint64_t), 1, file_id_file) != 1) {
-                        printf("Error in writing to file [%ls]\n", file_id_list);
-                        return -1;
-                    }
+                    append_fileid(&ids, m->file_id);
                     old_file_id = m->file_id;
                 }
             }
@@ -2282,15 +2319,31 @@ int stat_files_phase(struct disk *disk, Manifest *man, wchar_t *file_id_list)
         last = m;
     }
 
-    if (file_id_file) {
-        fclose(file_id_file);
+    if (shallow_allowed) {
+        qsort(ids.buf, ids.n, sizeof(uint64_t), cmp_fileids);
+        file_id_file = _wfopen(file_id_list, L"wb");
+        if (!file_id_file) {
+            printf("unable to open %ls for write\n", file_id_list);
+            goto cleanup;
+        }
+        if (fwrite(ids.buf, sizeof(uint64_t), ids.n, file_id_file) != ids.n) {
+            printf("Error in writing to file [%ls]\n", file_id_list);
+            goto cleanup;
+        }
     }
 
     printf("Number of files that have been converted to force-copy = [%d]\n",
         changed_operations);
 
+    ret = 0;
+
+cleanup:
+    if (file_id_file) {
+        fclose(file_id_file);
+    }
+    free(ids.buf);
     LEAVE_PHASE();
-    return 0;
+    return ret;
 }
 
 int mkdir_phase(struct disk *disk, Manifest *man)
@@ -2943,6 +2996,7 @@ int shallow_phase(struct disk *disk, Manifest *man, wchar_t *map_idx)
     int i, j;
     FILE *map_file;
     uint64_t total_size_shallowed = 0;
+    size_t total_map_entries = 0;
 
     for (i = j = 0; i < man->n; ++i) {
         ManifestEntry *m = &man->entries[i];
@@ -2957,13 +3011,16 @@ int shallow_phase(struct disk *disk, Manifest *man, wchar_t *map_idx)
         }
     }
 
-    if (j > 0) {
+    total_map_entries = get_num_map_entries();
+
+    if (total_map_entries > 0) {
         printf("shallowed %d files, total size %"PRIu64" bytes, writing index"
-               " to %ls\n", j, total_size_shallowed, map_idx);
+               " to %ls\n", (int)total_map_entries, total_size_shallowed, map_idx);
         fflush(stdout);
 
         map_file = _wfopen(map_idx, L"wb");
         if (!map_file) {
+            printf("Couldn't open map file: [%ls] err=%d\n", map_idx, errno);
             return -1;
         }
         setvbuf(map_file, NULL, _IOFBF, 16 << 20);
@@ -4259,12 +4316,14 @@ int main(int argc, char **argv)
     strip_filename(location);
 
     wchar_t map_idx[MAX_PATH_LEN] = L"";
+    wchar_t *map_idx_tmp = NULL;
     wchar_t file_id_list[MAX_PATH_LEN] = L"";
     wchar_t cow_dir[MAX_PATH_LEN] = L"";
 
     if (shallow_allowed) {
         unsigned char uuid[16];
         char uuid_str[37];
+        FILE *existing_map_file = NULL;
         r = vd_get_uuid(disk.hdd.vboxhandle, uuid);
         if (r == sizeof(uuid_t)) {
             uuid_unparse_lower(uuid, uuid_str);
@@ -4278,6 +4337,23 @@ int main(int argc, char **argv)
         path_join_var(map_idx, location, L"/swapdata-", wuuid, L"/map.idx");
         path_join_var(file_id_list, location, L"/swapdata-", wuuid,L"/fileidlist.idx");
         path_join_var(cow_dir, location, L"/swapdata-", wuuid, L"/cow");
+
+        /* Check if there's an existing shallow index we need to load. If there
+         * is, we can't overwrite it directly in shallow_phase because it'll be
+         * held open because the disk is open, and the map is tracked separately
+         * during image construction compared to normal block-swap usage, so use
+         * a tmp name and rename after we've closed the disk image.
+         */
+        existing_map_file = _wfopen(map_idx, L"rb");
+        if (existing_map_file) {
+            map_idx_tmp = malloc((wcslen(map_idx) + 1) * sizeof(wchar_t) + sizeof(L".tmp"));
+            wcscpy(map_idx_tmp, map_idx);
+            wcscat(map_idx_tmp, L".tmp");
+
+            init_map_from_file(existing_map_file);
+            fclose(existing_map_file);
+            existing_map_file = NULL;
+        }
     }
 
     /* Read and parse user-supplied manifest. */
@@ -4374,7 +4450,7 @@ int main(int argc, char **argv)
         }
 
         man_sort_by_name(&man_out);
-        if (shallow_phase(&disk, &man_out, map_idx) < 0) {
+        if (shallow_phase(&disk, &man_out, map_idx_tmp ? map_idx_tmp : map_idx) < 0) {
             err(1, "shallow_phase failed");
         }
 
@@ -4487,6 +4563,14 @@ int main(int argc, char **argv)
     if (drive != INVALID_HANDLE_VALUE) {
         CloseHandle(drive);
         drive = INVALID_HANDLE_VALUE;
+    }
+
+    if (map_idx_tmp) {
+        printf("Updating [%ls] from [%ls]\n", map_idx, map_idx_tmp);
+        if (!MoveFileExW(map_idx_tmp, map_idx, MOVEFILE_REPLACE_EXISTING)) {
+            r = GetLastError();
+            printf("MoveFileExW failed %d\n", r);
+        }
     }
 
     printf("done. exit.\n");

@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Gianni Tedesco
  * SPDX-License-Identifier: ISC
  */
@@ -11,11 +11,14 @@
 #include "disklib.h"
 #include "partition.h"
 #include "disklib-internal.h"
+#include "block-swap/swapfmt.h"
 
 #include <windows.h>
 #include <assert.h>
+#include <intrin.h>
 
 #define STACK_SEP ';'
+#define IS_POWER_OF_TWO(val) (((val) & ((val) - 1)) == 0)
 
 #ifdef _WIN32
 char *utf8(const wchar_t* ws)
@@ -378,6 +381,11 @@ typedef struct MAPENTRY {
 static MAPENTRY **map_entries = NULL;
 static size_t num_map_entries = 0;
 
+size_t get_num_map_entries()
+{
+    return num_map_entries;
+}
+
 void set_current_filename(const char *fn, uint64_t file_offset, uint64_t file_id)
 {
     current_filename = fn;
@@ -407,25 +415,26 @@ void flush_map_to_file(void *f)
 
         size_t i;
         uint32_t string_offset = 0;
+        uint32_t num_map_entries_int = (uint32_t)num_map_entries;
         qsort(map_entries, num_map_entries, sizeof(map_entries[0]), map_cmp);
 
-        fwrite(&num_map_entries, sizeof(uint32_t), 1, f);
+        fwrite(&num_map_entries_int, sizeof(uint32_t), 1, f);
 
         for (i = 0; i < num_map_entries; ++i) {
 
             MAPENTRY *m = map_entries[i];
-            uint32_t tuple[6];
+            SwapMapTuple tuple = {0};
             // the line below is buggy and needs to be fixed! m->start is 64-bits while tuples are 32 bits
-            tuple[0] = m->start + m->size; /* index by END not start. */
-            tuple[1] = m->size;
-            tuple[2] = m->file_offset;
-            tuple[3] = string_offset;
+            tuple.end = m->start + m->size; /* index by END not start. */
+            tuple.size = m->size;
+            tuple.file_offset = m->file_offset;
+            tuple.name_offset = string_offset;
 
             LARGE_INTEGER file_id = *((LARGE_INTEGER*)&m->file_id);
-            tuple[4] = file_id.HighPart;
-            tuple[5] = file_id.LowPart;
+            tuple.file_id_highpart = file_id.HighPart;
+            tuple.file_id_lowpart = file_id.LowPart;
 
-            fwrite(tuple, sizeof(tuple), 1, f);
+            fwrite(&tuple, sizeof(tuple), 1, f);
 
             string_offset += strlen(m->name) + 1;
         }
@@ -433,14 +442,85 @@ void flush_map_to_file(void *f)
         for (i = 0; i < num_map_entries; ++i) {
             MAPENTRY *m = map_entries[i];
             fwrite(m->name, strlen(m->name) + 1, 1, f);
-            RTMemFree((void*) m);
+            free(m);
         }
 
 
-        RTMemFree((void*) map_entries);
+        free(map_entries);
         map_entries = NULL;
         num_map_entries = 0;
     }
+}
+
+void init_map_from_file(void *f)
+{
+    size_t flen;
+    char *fbuf;
+    const char *strtab;
+    const SwapMapTuple *tuple_ptr;
+    uint32_t num_map_entries_int;
+    size_t i;
+    size_t num_map_entries_pow;
+
+    assert(map_entries == NULL);
+
+    /* Assume f is at start of file */
+    fseek(f, 0, SEEK_END);
+    flen = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    fbuf = malloc(flen);
+    if (!fbuf) {
+        errx(1, "OOM allocating mapfile buf");
+    }
+    /* Read entire file into memory, much easier */
+    fread(fbuf, flen, 1, f);
+
+    memcpy(&num_map_entries_int, fbuf, sizeof(uint32_t));
+    num_map_entries = num_map_entries_int;
+    if (num_map_entries == 0) {
+        return;
+    }
+
+    /* String table follows immediately from the map entry tuples */
+    strtab = fbuf + sizeof(uint32_t) + (num_map_entries * sizeof(SwapMapTuple));
+
+    /* map_entries must always be alloc'd to the next power of 2 above
+     * num_map_entries otherwise the realloc logic in disk_write_sectors won't
+     * work right. */
+    num_map_entries_pow = num_map_entries;
+    if (!IS_POWER_OF_TWO(num_map_entries)) {
+        unsigned long idx;
+        BitScanReverse(&idx, num_map_entries_int);
+        num_map_entries_pow = 1 << (idx + 1);
+    }
+
+    map_entries = (MAPENTRY**) realloc(map_entries, sizeof(MAPENTRY*) * num_map_entries_pow);
+    if (!map_entries) {
+        errx(1, "Out of memory for map entries pointers!\n");
+    }
+
+    tuple_ptr = (SwapMapTuple*)(fbuf + sizeof(uint32_t));
+    for (i = 0; i < num_map_entries; i++) {
+        /* Before we can alloc m, we need to know the name length in the
+         * strings table */
+        const char *name = strtab + tuple_ptr->name_offset;
+        LARGE_INTEGER file_id;
+        MAPENTRY *m = (MAPENTRY *)malloc(sizeof(MAPENTRY) + strlen(name) + 1);
+        if (!m) {
+            errx(1, "OOM allocating MAPENTRY");
+        }
+        m->start = tuple_ptr->end - tuple_ptr->size;
+        m->size = tuple_ptr->size;
+        m->file_offset = tuple_ptr->file_offset;
+        file_id.HighPart = tuple_ptr->file_id_highpart;
+        file_id.LowPart = tuple_ptr->file_id_lowpart;
+        m->file_id = file_id.QuadPart;
+        strcpy(m->name, name);
+        map_entries[i] = m;
+        tuple_ptr++;
+    }
+    free(fbuf);
 }
 
 static const char magic_sector_bytes[SECTOR_SIZE] = 
@@ -460,7 +540,7 @@ int disk_write_sectors(disk_handle_t dh, const void *buf,
         /* We keep the list of mapped files in memory, so that we can sort it
          * before writing it to the map.txt file on disk. */
 
-        MAPENTRY *m = (MAPENTRY*) RTMemAlloc(sizeof(MAPENTRY) +
+        MAPENTRY *m = (MAPENTRY*) malloc(sizeof(MAPENTRY) +
                 strlen(current_filename) + 1);
 
         if (m == NULL) {
@@ -479,7 +559,7 @@ int disk_write_sectors(disk_handle_t dh, const void *buf,
         strcpy(m->name, current_filename);
 
         /* Is num_map_entries value a power of two? If so we must double the array. */
-        if ((num_map_entries & (num_map_entries - 1)) == 0) {
+        if (IS_POWER_OF_TWO(num_map_entries)) {
 
             size_t n = num_map_entries ? 2 * num_map_entries : 1;
             map_entries = (MAPENTRY**) realloc(map_entries, sizeof(MAPENTRY*) * n);
