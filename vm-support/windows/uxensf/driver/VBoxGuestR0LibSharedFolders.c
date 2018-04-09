@@ -75,10 +75,13 @@
 # define RtlZeroMemory(a, b) memset (a, 0, b)
 #endif
 
+void hgcmcall_init(void);
 
 DECLVBGL(int) vboxInit (void)
 {
     int rc = VINF_SUCCESS;
+
+    hgcmcall_init();
 
     rc = VbglInit ();
     return rc;
