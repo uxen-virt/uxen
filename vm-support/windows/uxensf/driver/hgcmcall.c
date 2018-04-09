@@ -125,18 +125,20 @@ uint32_t size)
     return rc;
 }
 
-KMUTEX g_Mutex;
-static int init_done;
+static KMUTEX g_Mutex;
+
+void
+hgcmcall_init(void)
+{
+    KeInitializeMutex(&g_Mutex, 0);
+}
+
 int VBOXCALL VbglHGCMCall (VBGLHGCMHANDLE handle, VBoxGuestHGCMCallInfo* info, uint32_t size)
 {
     NTSTATUS status, rc;
 
     verify_on_stack(info);
     
-    if (!init_done) {
-        init_done = 1;
-        KeInitializeMutex(&g_Mutex, 0);
-    }
     status = KeWaitForMutexObject(&g_Mutex,
                                   Executive,
                                   KernelMode,
