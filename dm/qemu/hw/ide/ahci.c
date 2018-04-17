@@ -58,6 +58,8 @@ static void ahci_reset_port(AHCIState *s, int port);
 static void ahci_write_fis_d2h(AHCIDevice *ad, uint8_t *cmd_fis);
 static void ahci_init_d2h(AHCIDevice *ad);
 
+extern void simple_map_nerf(void);
+
 static uint32_t  ahci_shadow_port_read(AHCIShadow *n, int port, int offset)
 {
     uint32_t val;
@@ -1470,6 +1472,7 @@ static int ahci_post_load(void *opaque, int version_id)
     AHCIState *s = opaque;
 
     if (vm_use_v4v_disk && vm_v4v_disable_ahci_clones) {
+        simple_map_nerf();
         ahci_shadow(s);
         return 0;
     }

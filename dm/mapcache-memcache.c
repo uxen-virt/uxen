@@ -33,7 +33,7 @@ static uint8_t *memcache_va;
 static mdm_mfn_entry_t *memcache_mfn_to_entry;
 
 uint64_t use_simple_mapping = 1;
-uint64_t simple_map_size = XC_PAGE_SIZE;
+uint64_t simple_map_size = XC_PAGE_SIZE << 9;
 static void simple_init(void);
 
 static critical_section cs;
@@ -228,6 +228,11 @@ simple_mapcache_map(uint64_t pa, uint64_t *len, uint8_t lock)
         return m->base + (pa - m->start_pa);
 
     return NULL;
+}
+
+void simple_map_nerf(void)
+{
+    simple_map_size = XC_PAGE_SIZE;
 }
 
 static void simple_init(void)
