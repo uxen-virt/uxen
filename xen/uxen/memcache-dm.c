@@ -240,7 +240,7 @@ mdm_clear(struct domain *d, xen_pfn_t pfn, int force)
     int ret;
 
     if (!vmis->vmi_mapcache_active)
-        return -1;
+        return 0;
 
     __smap_disable(&aflags);
     if (pfn < d->mdm_end_low_gpfn)
