@@ -751,7 +751,7 @@ whpx_create_vm_memory(int memory_mb)
     vm_cleanup_modules(modules, modules_count);
 #endif
 
-    setup_hvm_info(vm_mapped, memory_mb << 20, vm_vcpus, 0);
+    setup_hvm_info(vm_mapped, ((uint64_t)memory_mb) << 20, vm_vcpus, 0);
 
     return 0;
 }
