@@ -825,7 +825,7 @@ p2m_clear_gpfn_from_mapcache(struct p2m_domain *p2m, unsigned long gfn,
                              mfn_t mfn);
 
 int
-p2m_translate(struct domain *d, xen_pfn_t *arr, int nr, int write, int map);
+p2m_translate(struct domain *d, xen_pfn_t *arr, int nr, int write);
 
 #define NPT_TABLE_ORDER 9
 #define NPT_PAGETABLE_ENTRIES 512

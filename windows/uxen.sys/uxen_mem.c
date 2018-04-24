@@ -1638,7 +1638,7 @@ release_user_mapping_range(xen_pfn_t *mfns, uint32_t num,
         umemopa.translate_gpfn_list_for_map.gpfns_start = 0;
         umemopa.translate_gpfn_list_for_map.gpfns_end = n;
         umemopa.translate_gpfn_list_for_map.map_mode =
-            XENMEM_TRANSLATE_MAP_RELEASE;
+            XENMEM_TRANSLATE_RELEASE;
         set_xen_guest_handle(umemopa.translate_gpfn_list_for_map.mfn_list,
                              &mfns[done]);
         _ret = (int)uxen_dom0_hypercall(
@@ -2069,8 +2069,7 @@ uxen_mem_mmapbatch(struct uxen_mmapbatch_desc *ummapbd, struct fd_assoc *fda)
 	}
 	umemopa.translate_gpfn_list_for_map.gpfns_start = 0;
 	umemopa.translate_gpfn_list_for_map.gpfns_end = n;
-	umemopa.translate_gpfn_list_for_map.map_mode =
-	    XENMEM_TRANSLATE_MAP_NOT;
+	umemopa.translate_gpfn_list_for_map.map_mode = XENMEM_TRANSLATE_MAP;
         ret = copyin(&ummapbd->umd_arr[done], gpfns, n * sizeof(gpfns[0]));
         if (ret) {
             fail_msg("copyin failed: %d/%d/%d", done, n, ummapbd->umd_num);

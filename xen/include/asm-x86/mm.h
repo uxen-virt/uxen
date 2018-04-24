@@ -1,7 +1,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -263,8 +263,8 @@ struct page_info
 #define _PGC_xen_page     PG_shift(2)
 #define PGC_xen_page      PG_mask(1, 2)
 
-#define _PGC_mapcache     PG_shift(3)
-#define PGC_mapcache      PG_mask(1, 3)
+/* #define _PGC_     PG_shift(3) */
+/* #define PGC_      PG_mask(1, 3) */
 
  /* 3-bit PAT/PCD/PWT cache-attribute hint. */
 #define PGC_cacheattr_base PG_shift(6)

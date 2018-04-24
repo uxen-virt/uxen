@@ -170,7 +170,6 @@ XEN_SRCS += uxen/main.c
 
 XEN_SRCS += uxen/kdxinfo.c
 $(TARGET_windows_only)XEN_SRCS += uxen/mapcache.c
-XEN_SRCS += uxen/memcache-dm.c
 XEN_SRCS += uxen/shadow_subst.c
 XEN_SRCS += uxen/time.c
 $(TARGET_pe_only)$(X86_64_only)XEN_SRCS += uxen/unwind/unwind-pe.c

@@ -11,7 +11,6 @@ include $(TOPDIR)/Config.mk
 ifeq (,$(MAKENOW))
 
 VPATH = $(SRCDIR)
-VPATH += :$(TOPDIR)/common/uxen.os
 VPATH += :$(TOPDIR)/common/rbtree
 
 KEXT_BIN = uxen
@@ -23,7 +22,6 @@ CPPFLAGS += -I$(BUILDDIR_xen)/include \
 	    -I$(TOPDIR)/common/include/xen-public \
 	    -I$(TOPDIR)/xen/include \
 	    -I$(TOPDIR)/common \
-	    -I$(TOPDIR)/common/uxen.os \
 	    -I$(TOPDIR)/common/include \
 	    -I$(TOPDIR)/common/include/xen-public/xen \
 	    -I$(TOPDIR)/osx/uxenv4vservice \
@@ -102,7 +100,6 @@ KEXT_OBJS = uxen.o \
 	    uxen_pm.o \
 	    uxen_logging.o \
 	    events.o \
-	    memcache-dm.o \
 	    rbtree.o \
 	    xnu_symbols.o \
 	    dom0_v4v_device.o \

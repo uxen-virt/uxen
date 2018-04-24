@@ -78,7 +78,6 @@ union uxen_memop_arg {
     xen_machphys_mapping_t machphys_mapping;
     xen_memory_map_t memory_map;
     xen_translate_gpfn_list_for_map_t translate_gpfn_list_for_map;
-    xen_clear_mapcache_t clear_mapcache;
 };
 typedef union uxen_memop_arg uxen_memop_arg_u;
 DEFINE_XEN_GUEST_HANDLE(uxen_memop_arg_u);
@@ -111,19 +110,6 @@ struct uxen_targetvm_desc {
 
 struct uxen_destroyvm_desc {
     xen_domain_handle_t udd_vmuuid;
-};
-
-struct uxen_memcacheinit_desc {
-    UXEN_PTR(uint8_t, va);
-    UXEN_PTR(volatile uint32_t, pfn_to_entry);
-    uint32_t end_low_gpfn;
-    uint32_t start_high_gpfn;
-    uint32_t end_high_gpfn;
-};
-
-struct uxen_memcachemap_desc {
-    uint32_t pfn;
-    uint32_t nr_pfn;
 };
 
 struct uxen_queryvm_desc {

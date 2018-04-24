@@ -117,8 +117,6 @@ struct vm_info {
      * defined content */
     uxen_pfn_t vmi_undefined_mfn;
 
-    struct fd_assoc *vmi_mdm_fda;
-
     struct uxen_logging_buffer_desc vmi_logging_desc;
 
     struct vm_vcpu_info vmi_vcpus[];
@@ -435,11 +433,6 @@ int uxen_op_map_host_pages(struct uxen_map_host_pages_desc *,
                            struct fd_assoc *);
 int uxen_op_unmap_host_pages(struct uxen_map_host_pages_desc *,
                              struct fd_assoc *);
-
-/* memcache-dm.c */
-int mdm_init(struct uxen_memcacheinit_desc *, struct fd_assoc *);
-int mdm_map(struct uxen_memcachemap_desc *, struct fd_assoc *);
-void mdm_clear_all(struct vm_info *);
 
 #if defined(__x86_64__)
 /* uxen_xpdata.obj */

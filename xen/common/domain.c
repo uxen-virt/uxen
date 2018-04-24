@@ -58,7 +58,6 @@
 #include <xsm/xsm.h>
 #include <xen/trace.h>
 #include <xen/tmem.h>
-#include <uxen/memcache-dm.h>
 
 #ifndef __UXEN__
 /* Linux config option: propageted to domain0 */
@@ -1112,8 +1111,6 @@ static void complete_domain_destroy(struct rcu_head *head)
     /* Free page used by xen oprofile buffer. */
     free_xenoprof_pages(d);
 #endif  /* __UXEN__ */
-
-    mdm_destroy_vm(d);
 
     for ( i = d->max_vcpus - 1; i >= 0; i-- )
         if ( (v = d->vcpu[i]) != NULL )

@@ -19,7 +19,6 @@
 #endif
 
 #include "uxen_types.h"
-#include "uxen_memcache_dm.h"
 
 /* based on sizeof(ui_cpu_active_mask) */
 #define UXEN_MAXIMUM_PROCESSORS (sizeof(uint64_t) * 8)
@@ -82,8 +81,6 @@
 #define UI_HOST_CALL_ui_notify_vram                 UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_signal_event                UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_check_ioreq                 UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_memcache_dm_enter           UI_HOST_CALL_SAVE_XMM
-#define UI_HOST_CALL_ui_memcache_dm_clear           UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_map_mfn                     UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_user_access_ok              UI_HOST_CALL_SAVE_XMM
 #define UI_HOST_CALL_ui_signal_v4v                  UI_HOST_CALL_SAVE_XMM
@@ -216,10 +213,6 @@ void UI_interface_fn(notify_vram)(struct vm_info_shared *);
 uint64_t UI_interface_fn(signal_event)(struct vm_vcpu_info_shared *,
                                        void *, void * volatile *);
 uint64_t UI_interface_fn(check_ioreq)(struct vm_vcpu_info_shared *);
-uint64_t UI_interface_fn(memcache_dm_enter)(struct vm_info_shared *,
-                                            xen_pfn_t, xen_pfn_t);
-uint64_t UI_interface_fn(memcache_dm_clear)(struct vm_info_shared *,
-                                            xen_pfn_t, int);
 uint64_t UI_interface_fn(map_mfn)(uintptr_t va, xen_pfn_t mfn);
 uint64_t UI_interface_fn(user_access_ok)(void *, void *, uint64_t);
 void UI_interface_fn(signal_v4v)(void);
@@ -310,12 +303,10 @@ struct vm_info_shared {
     domid_t vmi_domid;
     uint32_t vmi_runnable;
     uint32_t vmi_nrpages;
-    uint32_t vmi_mapcache_active;
     uint64_t vmi_msrpm;
     uint32_t vmi_msrpm_size;
     uint64_t vmi_xsave;
     uint32_t vmi_xsave_size;
-    struct mdm_info vmi_mdm;
     void *vmi_domain;
     void *vmi_dmreq;
     void *vmi_dmreq_vcpu_page_va;

@@ -33,7 +33,6 @@
 #include <uxen/uxen_desc.h>
 #include <uxen/uxen_link.h>
 #include <uxen/mapcache.h>
-#include <uxen/memcache-dm.h>
 
 int uxen_verbose = 0;
 

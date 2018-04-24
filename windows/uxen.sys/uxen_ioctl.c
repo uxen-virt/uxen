@@ -96,8 +96,6 @@ release_fd_assoc(void *p)
     aff = uxen_lock();
     vmi = fda->vmi;
     if (vmi) {
-        if (vmi->vmi_mdm_fda == fda)
-            mdm_clear_all(vmi);
         prepare_release_fd_assoc(fda);
         if (fda->vmi_destroy_on_close)
             vmi->vmi_marked_for_destroy = 1;
@@ -512,23 +510,6 @@ uxen_ioctl(__inout DEVICE_OBJECT *DeviceObject, __inout IRP *pIRP)
         UXEN_CHECK_VMI("UXENSETEVENTCHANNEL", vmi);
         DOM0_CALL("UXENSETEVENTCHANNEL", uxen_op_set_event_channel,
                   struct uxen_event_channel_desc, vmi, fda);
-	break;
-    case ICC(UXENMEMCACHEINIT):
-        IOCTL_VM_ADMIN_CHECK("UXENMEMCACHEINIT");
-        UXEN_CHECK_VMI("UXENMEMCACHEINIT", vmi);
-        UXEN_CHECK_OUTPUT_BUFFER("UXENMEMCACHEINIT",
-                                 struct uxen_memcacheinit_desc);
-        ret = init_fd_assoc_user_mappings("UXENMEMCACHEINIT", fda);
-        if (ret)
-            goto out;
-        OP_CALL("UXENMEMCACHEINIT", mdm_init,
-                struct uxen_memcacheinit_desc, fda);
-	break;
-    case ICC(UXENMEMCACHEMAP):
-        IOCTL_VM_ADMIN_CHECK("UXENMEMCACHEMAP");
-        UXEN_CHECK_VMI("UXENMEMCACHEMAP", vmi);
-        OP_CALL("UXENMEMCACHEMAP", mdm_map,
-                struct uxen_memcachemap_desc, fda);
 	break;
     case ICC(UXENQUERYVM):
         IOCTL_ADMIN_CHECK("UXENQUERYVM");

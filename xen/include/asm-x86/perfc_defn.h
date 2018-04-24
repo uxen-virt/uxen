@@ -59,7 +59,6 @@ PERFCOUNTER(p2m_set_entry_walk,       "p2m set entry walk")
 PERFCOUNTER(p2m_set_entry_cached,     "p2m set entry walk cached")
 PERFCOUNTER(mapcache_hash_hit,        "mapcache hash hits")
 PERFCOUNTER(mapcache_hash_miss,       "mapcache hash miss")
-PERFCOUNTER(mdm_enter,                "mapcache-dm entries")
 
 PERFCOUNTER(exception_fixed,        "pre-exception fixed")
 

@@ -139,8 +139,6 @@ release_fd_assoc(struct fd_assoc *fda)
     vmi = fda->vmi;
     if (vmi) {
         aff = uxen_lock();
-        if (vmi->vmi_mdm_fda == fda)
-            mdm_clear_all(vmi);
         prepare_release_fd_assoc(fda);
         if (fda->vmi_destroy_on_close)
             vmi->vmi_marked_for_destroy = 1;
@@ -504,25 +502,6 @@ uxen_ioctl(u_long cmd, struct fd_assoc *fda, struct vm_info *vmi,
         OP_CALL("UXENSIGNALEVENT", uxen_op_signal_event, void *,
                 &fda->user_events);
         break;
-    case UXENMEMCACHEINIT: {
-
-        IOCTL_VM_ADMIN_CHECK("UXENMEMCACHEINIT");
-        CHECK_VMI("UXENMEMCACHEINIT", vmi);
-        ret = init_fd_assoc_user_mappings("UXENMEMCACHEINIT", fda);
-        if (ret)
-            goto out;
-
-        OP_CALL("UXENMEMCACHEINIT", mdm_init,
-                struct uxen_memcacheinit_desc, fda);
-        break;
-        }
-    case UXENMEMCACHEMAP: {
-        IOCTL_VM_ADMIN_CHECK("UXENMEMCACHEMAP");
-        CHECK_VMI("UXENMEMCACHEMAP", vmi);
-        OP_CALL("UUXENMEMCACHEMAP", mdm_map,
-                struct uxen_memcachemap_desc, fda);
-        break;
-    }
     case UXENQUERYVM:
         IOCTL_ADMIN_CHECK("UXENQUERYVM");
         DOM0_CALL("UXENQUERYVM", uxen_op_query_vm, struct uxen_queryvm_desc);

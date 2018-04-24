@@ -78,7 +78,6 @@
 #ifdef CONFIG_COMPAT
 #include <compat/vcpu.h>
 #endif
-#include <uxen/memcache-dm.h>
 
 DEFINE_PER_CPU(struct vcpu *, curr_vcpu);
 DEFINE_PER_CPU(unsigned long, cr4);
@@ -2407,13 +2406,11 @@ int domain_relinquish_resources(struct domain *d)
         if ( ret )
             return ret;
 #else  /* __UXEN__ */
-        d->arch.relmem = RELMEM_foreign_pages_or_mapcache;
+        d->arch.relmem = RELMEM_foreign_pages;
         /* fallthrough */
 
-    case RELMEM_foreign_pages_or_mapcache:
+    case RELMEM_foreign_pages:
         if (d->host_pages)
-            return -EAGAIN;
-        if (d->vm_info_shared && d->vm_info_shared->vmi_mapcache_active)
             return -EAGAIN;
 
 #endif  /* __UXEN__ */

@@ -78,9 +78,6 @@ int uxen_execute(UXEN_HANDLE_T, struct uxen_execute_desc *);
 int uxen_setup_event(UXEN_HANDLE_T, struct uxen_event_desc *);
 int uxen_setup_host_event_channel(UXEN_HANDLE_T,
                                   struct uxen_event_channel_desc *);
-int uxen_memcacheinit(UXEN_HANDLE_T, int, int, int, uint8_t **,
-                      volatile uint32_t **);
-int uxen_memcachemap(UXEN_HANDLE_T, uint32_t, uint32_t, uint32_t);
 int uxen_enum_vms(UXEN_HANDLE_T, int (*)(struct uxen_queryvm_desc *, void *),
                   void *);
 

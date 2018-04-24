@@ -26,7 +26,6 @@ uxen_sys_SRCS = \
 	uxen_logging.c \
 	uxen_mem.c \
 	uxen_ops.c \
-	memcache-dm.c \
 	pagemap.c \
 	rbtree.c \
 	v4v.c \

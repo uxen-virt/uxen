@@ -456,46 +456,6 @@ uxen_setup_host_event_channel(UXEN_HANDLE_T h,
 }
 
 int
-uxen_memcacheinit(UXEN_HANDLE_T h, int end_low_pfn,
-                  int start_high_pfn, int end_high_pfn,
-                  uint8_t **va,
-                  volatile uint32_t **pfn_to_entry)
-{
-    struct uxen_memcacheinit_desc umd = { };
-    int ret;
-
-    umd.end_low_gpfn = end_low_pfn;
-    umd.start_high_gpfn = start_high_pfn;
-    umd.end_high_gpfn = end_high_pfn;
-    ret = uxen_ioctl(h, UXENMEMCACHEINIT, &umd);
-    if (ret) {
-	warn("ioctl(UXENMEMCACHEINIT)");
-        goto out;
-    }
-
-    *va = umd.va;
-    *pfn_to_entry = umd.pfn_to_entry;
-
-  out:
-    return ret;
-}
-
-int
-uxen_memcachemap(UXEN_HANDLE_T h, uint32_t domid, uint32_t pfn, uint32_t nr_pfn)
-{
-    struct uxen_memcachemap_desc umd = { };
-    int ret;
-
-    umd.pfn = pfn;
-    umd.nr_pfn = nr_pfn;
-    ret = uxen_ioctl(h, UXENMEMCACHEMAP, &umd);
-    if (ret)
-	warn("ioctl(UXENMEMCACHEMAP)");
-
-    return ret;
-}
-
-int
 uxen_enum_vms(UXEN_HANDLE_T h, int (*cb)(struct uxen_queryvm_desc *, void *),
               void *cb_opaque)
 {

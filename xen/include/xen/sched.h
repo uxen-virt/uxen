@@ -484,14 +484,6 @@ struct domain
     unsigned long printk_ratelimit_last_msg;
     int printk_ratelimit_missed;
 
-    uint32_t mdm_map_pfns;
-    uint32_t *mdm_mapped_pfn;
-    uint32_t mdm_next_offset;
-    volatile uint32_t *mdm_mfn_to_entry;
-    uxen_pfn_t mdm_end_low_gpfn;
-    uxen_pfn_t mdm_start_high_gpfn;
-    uxen_pfn_t mdm_end_high_gpfn;
-
     struct debug_port_state *debug_port;
 
     rwlock_t v4v_lock;

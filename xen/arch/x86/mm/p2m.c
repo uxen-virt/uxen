@@ -59,7 +59,6 @@
 #include <asm/hvm/nestedhvm.h>
 #include <asm/hvm/svm/amd-iommu-proto.h>
 #endif  /* __UXEN__ */
-#include <uxen/memcache-dm.h>
 #include <asm/hvm/ax.h>
 #include <asm/hvm/xen_pv.h>
 
@@ -524,43 +523,6 @@ void p2m_final_teardown(struct domain *d)
 }
 
 
-static int
-p2m_mapcache_map(struct domain *d, xen_pfn_t gpfn, mfn_t mfn)
-{
-    struct page_info *page;
-    xen_pfn_t omfn;
-
-    page = mfn_to_page(mfn);
-    if (unlikely(!get_page(page, d))) {
-        if (!d->is_dying)
-            gdprintk(XENLOG_INFO,
-                     "%s: mfn %lx for vm%u gpfn %"PRI_xen_pfn" vanished\n",
-                     __FUNCTION__, mfn_x(mfn), d->domain_id, gpfn);
-        return -EINVAL;
-    }
-    spin_lock(&d->page_alloc_lock);
-    if (test_and_set_bit(_PGC_mapcache, &page->count_info))
-        /* This happens when a range of pages is being mapped, and
-         * some of those pages are already mapped -- mdm_enter detects
-         * this and does nothing, returning an invalid omfn -- it does
-         * however honour mdm->mdm_takeref, which is why we still call
-         * it from here after this condition is detected. */
-        put_page(page);
-    omfn = mdm_enter(d, gpfn, mfn_x(mfn));
-    if (__mfn_valid(omfn)) {
-        page = __mfn_to_page(omfn);
-        if (!test_and_clear_bit(_PGC_mapcache, &page->count_info))
-            gdprintk(XENLOG_WARNING,
-                     "%s: mfn %"PRI_xen_pfn" in mapcache for vm%u gpfn"
-                     " %"PRI_xen_pfn" without _PGC_mapcache\n", __FUNCTION__,
-                     omfn, d->domain_id, gpfn);
-        else
-            put_page(page);
-    }
-    spin_unlock(&d->page_alloc_lock);
-    return 0;
-}
-
 static void
 p2m_remove_page(struct p2m_domain *p2m, unsigned long gfn, unsigned long mfn)
 {
@@ -609,9 +571,6 @@ guest_physmap_add_entry(struct domain *d, unsigned long gfn,
                         unsigned long mfn, p2m_type_t t)
 {
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
-    p2m_type_t ot;
-    p2m_access_t a;
-    mfn_t omfn;
     int rc = 0;
 
     if ( !paging_mode_translate(d) )
@@ -638,49 +597,6 @@ guest_physmap_add_entry(struct domain *d, unsigned long gfn,
     if (p2m_debug_more)
     P2M_DEBUG("adding gfn=%#lx mfn=%#lx\n", gfn, mfn);
 
-    /* First, remove mapcache mapping for existing gpfn mapping */
-    omfn = p2m->get_entry(p2m, gfn, &ot, &a, p2m_query, NULL);
-#ifndef __UXEN__
-    if ( p2m_is_grant(ot) )
-    {
-        /* Really shouldn't be unmapping grant maps this way */
-        domain_crash(d);
-        p2m_unlock(p2m);
-
-        return -EINVAL;
-    }
-#endif  /* __UXEN__ */
-    if (p2m_is_ram(ot)) {
-        ASSERT(mfn_valid(omfn));
-        if (test_bit(_PGC_mapcache, &mfn_to_page(omfn)->count_info) &&
-            p2m_clear_gpfn_from_mapcache(p2m, gfn, omfn)) {
-            int ret;
-            /* caller beware that briefly the page seen through
-             * the userspace mapping is the new mapping while the
-             * old mapping is still present in the p2m -- ok since
-             * this operation is only supported while the VM is
-             * suspended */
-            if (!d->is_shutting_down || !__mfn_valid(mfn)) {
-                if (__mfn_valid(mfn))
-                    gdprintk(XENLOG_WARNING,
-                             "%s: can't clear mapcache mapped mfn %lx"
-                             " for vm%u gpfn %lx new mfn %lx\n",
-                             __FUNCTION__, mfn_x(omfn), d->domain_id,
-                             gfn, mfn);
-                domain_crash(d);
-                p2m_unlock(p2m);
-                return -EINVAL;
-            }
-            ret = p2m_mapcache_map(d, gfn, _mfn(mfn));
-            if (ret) {
-                domain_crash(d);
-                p2m_unlock(p2m);
-                return -EINVAL;
-            }
-        }
-    }
-
-    /* Now, actually do the two-way mapping */
     if ( __mfn_valid(mfn) )
     {
         if ( !set_p2m_entry(p2m, gfn, _mfn(mfn), PAGE_ORDER_4K, t,
@@ -1070,19 +986,13 @@ unsigned long paging_gva_to_gfn(struct vcpu *v,
 }
 
 int
-p2m_translate(struct domain *d, xen_pfn_t *arr, int nr, int write, int map)
+p2m_translate(struct domain *d, xen_pfn_t *arr, int nr, int write)
 {
     struct p2m_domain *p2m;
     p2m_type_t pt;
     mfn_t mfn;
     int j;
     int rc;
-
-    if (map) {
-        rc = mdm_init_vm(d);
-        if (rc)
-            return rc;
-    }
 
     p2m = p2m_get_hostp2m(d);
 
@@ -1105,23 +1015,12 @@ p2m_translate(struct domain *d, xen_pfn_t *arr, int nr, int write, int map)
             rc = j;
             goto out;
         }
-        if (map && !mfn_valid(mfn)) {
-            gdprintk(XENLOG_INFO,
-                     "Translate failed for vm%u page %"PRI_xen_pfn"\n",
-                     d->domain_id, arr[j]);
-            rc = -EINVAL;
-            goto out;
-        }
         if (unlikely(is_xen_mfn(mfn_x(mfn))) ||
             unlikely(is_host_mfn(mfn_x(mfn))) ||
             unlikely(mfn_zero_page(mfn_x(mfn))))
             /* don't allow p2m_translate access to xen pages or host pages */
             mfn = _mfn(INVALID_MFN);
-        else if (map) {
-            rc = p2m_mapcache_map(d, arr[j], mfn);
-            if (rc)
-                goto out;
-        } else if (mfn_valid(mfn))  {
+        else if (mfn_valid(mfn))  {
             if (!write && p2m_is_pod(pt)) {
                 /* Populate on demand: cloned shared page. */
                 struct page_info *page = mfn_to_page(mfn);

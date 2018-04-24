@@ -58,7 +58,6 @@
 #include <xen/trace.h>
 #include <lz4.h>
 #include <xen/keyhandler.h>
-#include <uxen/memcache-dm.h>
 
 #include "mm-locks.h"
 
@@ -1465,38 +1464,6 @@ p2m_shared_teardown(struct p2m_domain *p2m)
 }
 
 int
-p2m_clear_gpfn_from_mapcache(struct p2m_domain *p2m, unsigned long gfn,
-                             mfn_t mfn)
-{
-    struct domain *d = p2m->domain;
-    struct page_info *page = mfn_to_page(mfn);
-    int ret;
-
-    spin_lock(&d->page_alloc_lock);
-    ret = mdm_clear(d, gfn, 0);
-    switch (ret) {
-    case 1:
-        perfc_incr(pc17);
-        spin_unlock(&d->page_alloc_lock);
-        return 1;
-    case -1:
-        if (!test_and_clear_bit(_PGC_mapcache, &page->count_info)) {
-            gdprintk(XENLOG_INFO,
-                     "Bad mapcache clear for page %lx in vm%u\n",
-                     gfn, d->domain_id);
-            break;
-        }
-        put_page(page);
-        break;
-    default:
-        break;
-    }
-    spin_unlock(&d->page_alloc_lock);
-
-    return 0;
-}
-
-int
 p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
                    p2m_query_t q, void *entry)
 {
@@ -1542,7 +1509,7 @@ p2m_pod_zero_share(struct p2m_domain *p2m, unsigned long gfn,
 
     if (p2m_is_ram(p2mt)) {
         ASSERT(mfn_valid_page(smfn));
-        if (is_p2m_zeropop(q) || p2m_clear_gpfn_from_mapcache(p2m, gfn, smfn) ||
+        if (is_p2m_zeropop(q) ||
             (mfn_to_page(smfn)->count_info & PGC_count_mask) > 1) {
             char *b = map_domain_page(mfn_x(smfn));
             clear_page(b);
@@ -1623,15 +1590,6 @@ guest_physmap_mark_pod_locked(struct domain *d, unsigned long gfn,
                 rc = -EINVAL;
                 goto out;
             }
-
-            if (test_bit(_PGC_mapcache, &mfn_to_page(omfn)->count_info) &&
-                p2m_clear_gpfn_from_mapcache(p2m, gfn + i, omfn))
-                /* page has an active mapping in the mapcache --
-                 * silently ignore and do nothing, which is arguably
-                 * the equivalent of setting the gpfn to populate on
-                 * demand, populating it with the current contents and
-                 * then recreating the mapping in the mapcache */
-                goto out;
         }
     }
 
