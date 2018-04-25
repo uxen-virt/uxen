@@ -104,6 +104,7 @@ bdrv_prepare(DriveInfo *di)
     return rc;
 }
 
+#ifndef LIBIMG
 int misery_string_match (uint8_t  *d, size_t len, size_t offset, char *match)
 {
     size_t match_len = strlen (match) + 1;
@@ -144,6 +145,7 @@ int is_msft_storage_misery (void *_d, size_t len)
 
     return 1;
 }
+#endif
 
 int
 bdrv_add(yajl_val arg)
