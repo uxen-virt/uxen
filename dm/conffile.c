@@ -791,7 +791,6 @@ struct config_option config_options[] = {
     { "surf-copy-reduction", co_set_boolean_opt, &surf_copy_reduction },
     { "timer-mode", co_set_integer_opt, &vm_timer_mode },
     { "tsc-mode", co_set_integer_opt, &vm_tsc_mode },
-    { "use-fake-ich-props", co_set_integer_opt, &vm_use_fake_ich_props },
     { "use-v4v-disk", co_set_integer_opt, &vm_use_v4v_disk },
     { "use-v4v-net", co_set_integer_opt, &vm_use_v4v_net },
     { "uuid", co_set_uuid, NULL },
