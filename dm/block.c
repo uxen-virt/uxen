@@ -104,6 +104,47 @@ bdrv_prepare(DriveInfo *di)
     return rc;
 }
 
+int misery_string_match (uint8_t  *d, size_t len, size_t offset, char *match)
+{
+    size_t match_len = strlen (match) + 1;
+
+    if (offset > len) return 0;
+
+    len -= offset;
+    d += offset;
+
+    if (match_len > len) return 0;
+
+    return !memcmp (d, match, match_len);
+}
+
+int is_msft_storage_misery (void *_d, size_t len)
+{
+    uint8_t *d = _d;
+    uint32_t o[5];
+
+    if (vm_ignore_storage_space_fix) return 0;
+
+    if (len < sizeof (o)) return 0;
+
+    memcpy (o, d, sizeof (o));
+
+    if (o[0] != 0x28)
+        return 0;
+
+    if (o[1] > len) return 0;
+
+    if (!misery_string_match (d, len, o[3], "Msft"))
+        return 0;
+
+    if (!misery_string_match (d, len, o[4], "Storage Space"))
+        return 0;
+
+    debug_printf ("is_msft_storage_misery returns TRUE - potential misery averted or precipitated\n");
+
+    return 1;
+}
+
 int
 bdrv_add(yajl_val arg)
 {
@@ -213,8 +254,12 @@ bdrv_add(yajl_val arg)
         void *data;
 
         data = base64_decode(properties, &l);
-        if (data)
-            smbios_add_drive_property(data, l);
+        if (data) {
+            if (is_msft_storage_misery(data, l) == 0)
+                smbios_add_drive_property(data, l);
+            else
+                debug_printf ("dropped drive properties because of Microsoft Storage Space misery\n");
+        }
         free(data);
     }
 #endif
