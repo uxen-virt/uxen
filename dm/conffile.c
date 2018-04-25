@@ -758,6 +758,7 @@ struct config_option config_options[] = {
     { "hide-log-sensitive-data", co_set_boolean_opt, &hide_log_sensitive_data },
     { "hpet", co_set_integer_opt, &vm_hpet },
     { "hvm-params", co_set_dict_opt, &vm_hvm_params },
+    { "ignore-storage-space-fix", co_set_dict_opt, &vm_ignore_storage_space_fix },
     { "lava", co_set_string_opt, &lava_options },
     { "lazy-load", co_set_boolean_opt, &vm_lazy_load },
     { "log-ratelimit-guest-burst", co_set_integer_opt,

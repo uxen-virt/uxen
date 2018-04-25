@@ -49,6 +49,7 @@ extern uint64_t vm_zero_page;
 extern uint64_t vm_zero_page_setup;
 extern uint64_t vm_apic;
 extern uint64_t vm_hidden_mem;
+extern uint64_t vm_ignore_storage_space_fix;
 extern uint64_t vm_use_v4v_net;
 extern uint64_t vm_use_v4v_disk;
 extern uint64_t vm_v4v_storage;

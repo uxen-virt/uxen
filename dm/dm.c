@@ -89,6 +89,7 @@ uint64_t vm_zero_page = 1;
 uint64_t vm_zero_page_setup = 1;
 uint64_t vm_apic = 1;
 uint64_t vm_hidden_mem = 1;
+uint64_t vm_ignore_storage_space_fix = 0;
 uint64_t vm_use_v4v_net = 0;
 uint64_t vm_use_v4v_disk = 0;
 uint64_t vm_v4v_storage = 1;
