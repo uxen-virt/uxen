@@ -2507,8 +2507,23 @@ int vbsfRename(SHFLCLIENTDATA *pClient, SHFLROOT root, SHFLSTRING *pSrc, SHFLSTR
         {
             if (flags & SHFL_RENAME_FILE)
             {
-                rc = RTFileMoveUcs(pszFullPathSrc, pszFullPathDest,
-                                  ((flags & SHFL_RENAME_REPLACE_IF_EXISTS) ? RTFILEMOVE_FLAGS_REPLACE : 0));
+                int crypt_mode_src = 0;
+                int crypt_mode_dst = 0;
+                /* do we need to reencrypt the file being moved? */
+                fch_query_crypt_by_path(pClient, root, pSrc->String.ucs2, &crypt_mode_src);
+                fch_query_crypt_by_path(pClient, root, pDest->String.ucs2, &crypt_mode_dst);
+                if (crypt_mode_src == crypt_mode_dst)
+                    rc = RTFileMoveUcs(pszFullPathSrc, pszFullPathDest,
+                        ((flags & SHFL_RENAME_REPLACE_IF_EXISTS) ? RTFILEMOVE_FLAGS_REPLACE : 0));
+                else {
+                    Log(("rename %ls -> %ls with new crypt setting: %d\n", pszFullPathSrc,
+                            pszFullPathDest, crypt_mode_dst));
+                    rc = fch_rename_via_copy(pClient, pszFullPathSrc, pszFullPathDest,
+                        crypt_mode_dst, flags);
+                    if (rc)
+                        LogRel(("failed to rewrite target path with crypt mode %d: rc=%d\n",
+                                crypt_mode_dst, rc));
+                }
             }
             else
             {

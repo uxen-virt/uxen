@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -268,6 +268,8 @@ re_write_loop(wchar_t *srcname,
     rc = fc_read_hdr(src, &iscrypt, &srchdr);
     if (iscrypt && rc)
         return RTErrConvertFromWin32(rc);
+    else
+        rc = 0;
     SetFilePointer(src, srchdr ? srchdr->hdrlen : 0, NULL, FILE_BEGIN);
     for (;;) {
         BOOL read;
@@ -423,14 +425,12 @@ out:
 }
 #endif
 
-int
-fch_re_write_file(SHFLCLIENTDATA *client, SHFLROOT root, SHFLHANDLE src)
+static int
+fch_re_write_path_with_mode(SHFLCLIENTDATA *client, wchar_t *srcname_, int cmode)
 {
     filecrypt_hdr_t *dsthdr = NULL;
-    wchar_t *srcname_ = vbsfQueryHandlePath(client, src);
     wchar_t  srcname[RTPATH_MAX] = { 0 };
     wchar_t  dstname[RTPATH_MAX] = { 0 };
-    int cmode = 0;
     int rc;
     int temppresent = 0;
     HANDLE dst = INVALID_HANDLE_VALUE;
@@ -442,9 +442,6 @@ fch_re_write_file(SHFLCLIENTDATA *client, SHFLROOT root, SHFLHANDLE src)
     if (rc)
         goto out;
     /* desired crypt mode of target file */
-    rc = fch_query_crypt_by_handle(client, root, src, &cmode);
-    if (rc)
-        goto out;
     if (cmode) {
         dsthdr = fc_init_hdr();
         if (!dsthdr) {
@@ -508,4 +505,82 @@ out:
         fc_free_hdr(dsthdr);
 
     return rc;
+}
+
+int
+fch_rename_via_copy(SHFLCLIENTDATA *client, wchar_t *srcpath, wchar_t *dstpath,
+    int crypt_mode, int flags)
+{
+    filecrypt_hdr_t *dsthdr = NULL;
+    HANDLE hdst = INVALID_HANDLE_VALUE;
+    int rc = 0;
+
+    /* desired crypt mode of target file */
+    if (crypt_mode) {
+        dsthdr = fc_init_hdr();
+        if (!dsthdr) {
+            rc = VERR_NO_MEMORY;
+            goto out;
+        }
+    }
+
+    hdst = CreateFileW(
+        dstpath, GENERIC_WRITE,
+        FILE_SHARE_READ, NULL,
+        (flags & SHFL_RENAME_REPLACE_IF_EXISTS) ? CREATE_ALWAYS : CREATE_NEW,
+        FILE_ATTRIBUTE_NORMAL, NULL);
+    if (hdst == INVALID_HANDLE_VALUE) {
+        rc = RTErrConvertFromWin32(GetLastError());
+        goto out;
+    }
+
+    if (dsthdr) {
+        rc = fc_write_hdr(hdst, dsthdr);
+        if (rc) {
+            rc = RTErrConvertFromWin32(rc);
+            warnx("fc_write_hdr failure %x\n", rc);
+            goto out;
+        }
+    }
+
+    /* re-write file contents with target encryption in mind */
+    rc = re_write_loop(srcpath, dsthdr, hdst);
+    if (rc) {
+        warnx("re_write_loop failure %x\n", rc);
+        goto out;
+    }
+    FlushFileBuffers(hdst);
+    CloseHandle(hdst);
+    hdst = INVALID_HANDLE_VALUE;
+
+    /* reopen any existing handles on new file */
+    rc = vbsfReopenPathHandles(client, srcpath, NULL, NULL);
+    if (rc) {
+        warnx("reopen handle failed %x\n", rc);
+        goto out;
+    }
+
+    /* remove source file */
+    RTFileDeleteUcs(srcpath);
+
+out:
+    if (hdst != INVALID_HANDLE_VALUE)
+        CloseHandle(hdst);
+    if (dsthdr)
+        fc_free_hdr(dsthdr);
+    return rc;
+}
+
+int
+fch_re_write_file(SHFLCLIENTDATA *client, SHFLROOT root, SHFLHANDLE src)
+{
+    wchar_t *srcname_ = vbsfQueryHandlePath(client, src);
+    int cmode = 0;
+    int rc;
+
+    /* desired crypt mode of target file */
+    rc = fch_query_crypt_by_handle(client, root, src, &cmode);
+    if (rc)
+        return rc;
+    return fch_re_write_path_with_mode(client, srcname_, cmode);
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -37,5 +37,7 @@ void fch_crypt(SHFLCLIENTDATA *pClient, SHFLHANDLE handle, uint8_t *buf, uint64_
 void fch_decrypt(SHFLCLIENTDATA *pClient, SHFLHANDLE handle, uint8_t *buf, uint64_t off, uint64_t len);
 /* rewrite whole file, possibly with new encryption settings */
 int fch_re_write_file(SHFLCLIENTDATA *client, SHFLROOT root, SHFLHANDLE src);
+int fch_rename_via_copy(SHFLCLIENTDATA *client, wchar_t *srcpath, wchar_t *dstpath,
+    int crypt_mode, int flags);
 
 #endif
