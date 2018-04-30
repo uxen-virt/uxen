@@ -1424,6 +1424,9 @@ map_page_range(int n, uxen_pfn_t *mfn, int mode, enum user_mapping_type type,
     uint32_t max_mfn;
     int i;
 
+    if (n == 0)
+        printk("%s: nothing to map (mfn:%p, fda:%p)\n", __FUNCTION__, mfn, fda);
+
     if (type != USER_MAPPING_MEMORY_MAP && type != USER_MAPPING_USER_MAP) {
         fail_msg("invalid mapping type %d", type);
         return NULL;
@@ -1865,6 +1868,12 @@ user_mmap_xen_mfns(unsigned int num, xen_pfn_t *mfns,
     struct user_mapping *um;
     uint32_t max_mfn;
     unsigned int i;
+
+    if (num == 0) {
+        printk("%s: no pages provided for mapping, bailing (mfns:%p, fda:%p)\n",
+               __FUNCTION__, mfns, fda);
+        return NULL;
+    }
 
     max_mfn = uxen_info ? uxen_info->ui_max_page : -1;
 
