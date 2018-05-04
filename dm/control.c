@@ -1018,9 +1018,8 @@ remote_execute(void *opaque, const char *id, const char *opt,
 static struct Timer *stats_timer = NULL;
 
 static void
-stats_timer_cb(void *opaque)
+stats_do_collection(void *opaque)
 {
-    uint64_t now = get_clock_ms(rt_clock);
     int ret;
     xc_dominfo_t info;
     int balloon_cur, balloon_min, balloon_max;
@@ -1036,7 +1035,7 @@ stats_timer_cb(void *opaque)
     ret = xc_domain_getinfo(xc_handle, vm_id, 1, &info);
     if (ret != 1 || info.domid != vm_id) {
         warn("xc_domain_getinfo failed");
-        goto finish;
+        return;
     }
 
     balloon_cur = balloon_min = balloon_max = 0;
@@ -1086,8 +1085,15 @@ stats_timer_cb(void *opaque)
 
     if (ret)
         warnx("%s: dict_rpc_status", __FUNCTION__);
+}
 
-finish:
+static void
+stats_timer_cb(void *opaque)
+{
+    uint64_t now = get_clock_ms(rt_clock);
+
+    stats_do_collection(opaque);
+
     if (stats_timer)
         mod_timer(stats_timer, now + 1000);
 }
@@ -1115,7 +1121,7 @@ collect_vm_stats_once(void *opaque, const char *id, const char *opt,
 {
     struct control_desc *cd = (struct control_desc *)opaque;
 
-    stats_timer_cb(NULL);
+    stats_do_collection(NULL);
     control_send_ok(cd, opt, id, 0, NULL);
     return 0;
 }
