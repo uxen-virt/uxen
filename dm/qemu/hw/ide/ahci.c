@@ -55,7 +55,7 @@ do { debug_printf("ahci: %s: [%d] ", __FUNCTION__, port); \
 static void check_cmd(AHCIState *s, int port);
 static int handle_cmd(AHCIState *s,int port,int slot);
 static void ahci_reset_port(AHCIState *s, int port);
-static void ahci_write_fis_d2h(AHCIDevice *ad, uint8_t *cmd_fis);
+static int ahci_write_fis_d2h(AHCIDevice *ad, uint8_t *cmd_fis);
 static void ahci_init_d2h(AHCIDevice *ad);
 
 extern void simple_map_nerf(void);
@@ -309,9 +309,11 @@ static void  ahci_port_write(AHCIState *s, int port, int offset, uint32_t val)
             s->dev[port].port.ifs[0].error = (val >> 8) & 0xff;
             s->dev[port].port.ifs[0].status = val & 0xff;
             break;
+#ifdef AHCI_ALLOW_PORT_SIG_WRITES
         case PORT_SIG:
             pr->sig = val;
             break;
+#endif /* AHCI_ALLOW_PORT_SIG_WRITES */
         case PORT_SCR_STAT:
             pr->scr_stat = val;
             break;
@@ -623,6 +625,7 @@ static void ahci_init_d2h(AHCIDevice *ad)
 {
     uint8_t init_fis[0x20];
     IDEState *ide_state = &ad->port.ifs[0];
+    AHCIPortRegs *pr = &ad->port_regs;
 
     memset(init_fis, 0, sizeof(init_fis));
 
@@ -634,7 +637,13 @@ static void ahci_init_d2h(AHCIDevice *ad)
         init_fis[6] = ide_state->hcyl;
     }
 
-    ahci_write_fis_d2h(ad, init_fis);
+    if (ahci_write_fis_d2h(ad, init_fis)) {
+        pr->sig = ((uint32_t)ide_state->hcyl << 24) |
+            (ide_state->lcyl << 16) |
+            (ide_state->sector << 8) |
+            (ide_state->nsector & 0xFF);
+    }
+
 }
 
 static void ahci_reset_port(AHCIState *s, int port)
@@ -743,7 +752,7 @@ static void ahci_write_fis_sdb(AHCIState *s, int port, uint32_t finished)
     ahci_trigger_irq(s, &s->dev[port], PORT_IRQ_STAT_SDBS);
 }
 
-static void ahci_write_fis_d2h(AHCIDevice *ad, uint8_t *cmd_fis)
+static int ahci_write_fis_d2h(AHCIDevice *ad, uint8_t *cmd_fis)
 {
     AHCIPortRegs *pr = &ad->port_regs;
     uint8_t *d2h_fis;
@@ -752,7 +761,7 @@ static void ahci_write_fis_d2h(AHCIDevice *ad, uint8_t *cmd_fis)
     uint64_t tbl_addr = ~0;
 
     if (!ad->res_fis || !(pr->cmd & PORT_CMD_FIS_RX)) {
-        return;
+        return 0;
     }
 
     if (!cmd_fis) {
@@ -796,6 +805,7 @@ static void ahci_write_fis_d2h(AHCIDevice *ad, uint8_t *cmd_fis)
     if (tbl_addr != ~0) {
 	vm_memory_unmap(tbl_addr, cmd_len, 0, 0, cmd_fis, cmd_len);
     }
+    return 1;
 }
 
 static void ahci_descriptor_processed(ScatterGatherEntry *entry, void *opaque)
