@@ -6,7 +6,7 @@
     <?define INSTALLING = (REMOVE = "" AND PREVIOUSVERSIONSINSTALLED = "") ?>
     <?define UNINSTALLING = (REMOVE <> "" AND UPGRADINGPRODUCTCODE = "") ?>
 
-    <Product Name="uXen VM support" Id="856AD792-7FC9-4A3F-83EA-BE15FA743AA7" UpgradeCode="14A05E48-824F-4A2A-9F44-ACB69825C649" Version="1.0.0" Manufacturer="uXen Project" Language="1033">
+    <Product Name="uXen VM support" Id="*" UpgradeCode="14A05E48-824F-4A2A-9F44-ACB69825C649" Version="1.0.0" Manufacturer="uXen Project" Language="1033">
         <Package Id="*" Keywords="Installer" Description="uXen VM support installer" Manufacturer="uXen Project" InstallerVersion="200" Compressed="yes" />
         <Media Id='1' Cabinet='uXenDrvInstaller.cab' EmbedCab='yes' DiskPrompt='uXen Media' />
         <Property Id='DiskPrompt' Value='uXen Install Media' />

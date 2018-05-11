@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2017, Bromium, Inc.
+# Copyright 2012-2018, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -163,6 +163,6 @@ $(INSTALLER): $(INSTALLER_WIXOBJS) $(WIX_DEPS)
 	$(_V)$(call sign,$@,$(LIGHT) $(WIXFLAGS) $(WIX_LIBS) $< -o $@)
 
 %.wixobj: %.wxs
-	$(CANDLE) $(CANDLE_FLAGS) $(WIXFLAGS) $(WIX_INCLUDES) $< -o $@
+	$(_V)$(CANDLE) $(CANDLE_FLAGS) $(WIXFLAGS) $(WIX_INCLUDES) $< -o $@
 
 endif # MAKENOW
