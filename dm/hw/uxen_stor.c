@@ -103,7 +103,7 @@ typedef struct uxen_stor_req {
 #endif
 
 #ifdef _WIN32
-    OVERLAPPED overlapped;
+    v4v_async_t async;
 #endif
 
     uint8_t cdb[MAX_CDB];
@@ -355,29 +355,25 @@ req_remove (uxen_stor_req_list_t *list, uxen_stor_req_t *req)
 static void
 uxen_stor_send_reply (uxen_stor_t *s, uxen_stor_req_t *r)
 {
-
-    r->overlapped.hEvent = s->tx_event;
+    dm_v4v_async_init(&s->v4v, &r->async, s->tx_event);
 
 #if PCAP
     uxen_stor_log_packet (s, &r->packet.xfr, r->reply_size, 1);
 #endif
 
-    /*send reply */
-    if (WriteFile
-        (s->v4v.v4v_handle, &r->packet,
-         r->reply_size + sizeof (v4v_datagram_t), NULL, &r->overlapped)) {
-        Wwarn("%s: fail path 1 seq=%"PRIx64, __FUNCTION__, r->packet.xfr.seq);
+    int ret = dm_v4v_send(
+        &s->v4v, (v4v_datagram_t*) &r->packet,
+        r->reply_size + sizeof (v4v_datagram_t), &r->async);
+    if (ret && ret != ERROR_IO_PENDING) {
+        Wwarn("%s: failed send, seq=%"PRIx64" ret=%d", __FUNCTION__, r->packet.xfr.seq, ret);
         r->state = UXS_STATE_V4V_SENT;
         return;
     }
 
-
-    if (GetLastError () == ERROR_IO_PENDING) {
+    if (ret == ERROR_IO_PENDING)
         r->state = UXS_STATE_V4V_SENDING;
-    } else {
+    else
         r->state = UXS_STATE_V4V_SENT;
-        Wwarn("%s: fail path 2 seq=%"PRIx64, __FUNCTION__, r->packet.xfr.seq);
-    }
 }
 
 #else
@@ -711,7 +707,7 @@ uxen_stor_run_q (uxen_stor_t *s)
 
             case UXS_STATE_V4V_SENDING:
 #ifdef _WIN32
-                if (HasOverlappedIoCompleted (&r->overlapped))
+                if (dm_v4v_async_is_completed (&r->async))
                     r->state = UXS_STATE_V4V_SENT;
 #else
                 last_sent_successfully = 0;
@@ -869,7 +865,7 @@ uxen_stor_read_event (void *_s)
         req_insert_tail (&s->queue, req);
     } while (1);
 
-    v4v_notify(&s->v4v);
+    dm_v4v_notify(&s->v4v);
 
     uxen_stor_run_q (s);
 }
@@ -957,7 +953,7 @@ uxen_stor_cleanup (VLANClientState *nc)
 
     CloseHandle (&s->tx_event);
 
-    v4v_close (&s->v4v);
+    dm_v4v_close (&s->v4v);
 
     s->nic = NULL;
 }
@@ -987,12 +983,12 @@ uxen_stor_initfn (ISADevice *dev)
     }
 #endif
 
-    if (!v4v_have_v4v ()) {
+    if (!dm_v4v_have_v4v ()) {
         debug_printf("%s: no v4v detected on the host\n", __FUNCTION__);
         return -1;
     }
 
-    if (!v4v_open_sync(&s->v4v, RING_SIZE, &error)) {
+    if ((error = dm_v4v_open(&s->v4v, RING_SIZE))) {
         debug_printf("%s: v4v_open failed (%x)\n",
                      __FUNCTION__, error);
         return -1;
@@ -1004,27 +1000,27 @@ uxen_stor_initfn (ISADevice *dev)
     bind.ring_id.partner = V4V_DOMID_UUID;
     memcpy(&bind.partner, v4v_idtoken, sizeof(bind.partner));
 
-    if (!v4v_bind_sync(&s->v4v, &bind, &error)) {
+    if ((error = dm_v4v_bind(&s->v4v, &bind))) {
         debug_printf("%s: v4v_bind failed (%x)\n",
                      __FUNCTION__, error);
-        v4v_close(&s->v4v);
+        dm_v4v_close(&s->v4v);
         return -1;
     }
 
     s->dest.domain = bind.ring_id.partner;
     s->dest.port = bind.ring_id.addr.port;
 
-    s->ring = v4v_ring_map_sync(&s->v4v, &error);
+    error = dm_v4v_ring_map(&s->v4v, &s->ring);
     if (!s->ring) {
         debug_printf("%s: failed to map ring (%x)\n",
                      __FUNCTION__, error);
-        v4v_close(&s->v4v);
+        dm_v4v_close(&s->v4v);
         return -1;
     }
-    if (!v4v_init_tx_event(&s->v4v, &s->tx_event, &error)) {
+    if ((error = dm_v4v_init_tx_event(&s->v4v, &s->tx_event))) {
         debug_printf("%s: failed to create event (%x)\n",
                      __FUNCTION__, error);
-        v4v_close(&s->v4v);
+        dm_v4v_close(&s->v4v);
         return -1;
     }
 
@@ -1035,7 +1031,7 @@ uxen_stor_initfn (ISADevice *dev)
     if (!bs) {
         error_report("uxen-stor: drive property not set");
         ioh_event_close(&s->tx_event);
-        v4v_close(&s->v4v);
+        dm_v4v_close(&s->v4v);
         return -1;
     }
 
@@ -1064,7 +1060,7 @@ uxen_stor_initfn (ISADevice *dev)
     if (!s->scsi_dev) {
         debug_printf("%s: scsi_bus_legacy_add_drive failed\n", __FUNCTION__);
         ioh_event_close(&s->tx_event);
-        v4v_close(&s->v4v);
+        dm_v4v_close(&s->v4v);
         return -1;
     }
 #endif
@@ -1095,10 +1091,6 @@ uxen_stor_add_parasite (BlockDriverState *bs)
     void *old_dev = bs->dev;
     const BlockDevOps *old_dev_ops = bs->dev_ops;
     void *old_dev_opaque = bs->dev_opaque;
-
-    // FIXME: uxenstor on whp
-    if (whpx_enable)
-        return NULL;
 
     bs->dev = NULL;
 

@@ -12,11 +12,7 @@
 #include "shared-folders.h"
 #include <dm/vbox-drivers/heap.h>
 #include <dm/vbox-drivers/shared-folders/redir.h>
-
-#include <windowsx.h>
-#include <winioctl.h>
-#define V4V_USE_INLINE_API
-#include <windows/uxenv4vlib/gh_v4vapi.h>
+#include <dm/hw/uxen_v4v.h>
 
 #define SF_PORT 44444
 #define RING_SIZE 262144
@@ -28,14 +24,14 @@ struct sf_msg {
 };
 
 struct sf_state {
-    v4v_channel_t v4v;
+    v4v_context_t v4v;
     uint32_t partner_id;
     critical_section lock;
     struct io_handler_queue ioh_queue;
     WaitObjects wait_objects;
     ioh_event io_ev, pause_ev;
     int paused;
-    OVERLAPPED ov;
+    v4v_async_t async;
 
     uxen_thread thread;
     bool quit_thread;
@@ -259,72 +255,29 @@ sf_vm_unpause(void)
 }
 
 static int
-wait_ov(struct sf_state *s, char *op, DWORD *bytes)
-{
-    int ret;
-
-    ret = WaitForSingleObject(s->io_ev, SF_TIMEOUT);
-    switch (ret) {
-    case WAIT_TIMEOUT:
-        debug_printf("sf: %s timeout\n", op);
-        break;
-    case WAIT_OBJECT_0:
-        ret = 0;
-        if (!GetOverlappedResult(s->v4v.v4v_handle, &s->ov, bytes, FALSE))
-            ret = (int)GetLastError();
-        break;
-    default:
-        debug_printf("sf: %s wait error %d\n", op, ret);
-        break;
-    }
-    if (ret) {
-        debug_printf("sf: %s operation error %d\n", op, ret);
-        CancelIoEx(s->v4v.v4v_handle, &s->ov);
-    }
-    return ret;
-}
-
-static int
-read_file_timeout(struct sf_state *s, LPVOID buf, DWORD len, DWORD *nout)
-{
-    *nout = 0;
-    ioh_event_reset(&s->io_ev);
-    if (!ReadFile(s->v4v.v4v_handle, buf, len, NULL, &s->ov)) {
-        if (GetLastError() != ERROR_IO_PENDING) {
-            Wwarn("%s: ReadFile error %d", __FUNCTION__, GetLastError());
-            return (int)GetLastError();
-        }
-    }
-    return wait_ov(s, "read", nout);
-}
-
-static int
-write_file_timeout(struct sf_state *s, LPVOID buf, DWORD len, DWORD *nout)
-{
-    *nout = 0;
-    ioh_event_reset(&s->io_ev);
-    if (!WriteFile(s->v4v.v4v_handle, buf, len, NULL, &s->ov)) {
-        if (GetLastError() != ERROR_IO_PENDING) {
-            Wwarn("%s: WriteFile error %d", __FUNCTION__, GetLastError());
-            return (int)GetLastError();
-        }
-    }
-    return wait_ov(s, "write", nout);
-}
-
-static int
 send_bytes(struct sf_state *state, struct sf_msg *msg, int len)
 {
-    DWORD bytes = 0;
-    int ret;
+    size_t bytes = 0;
+    int err;
 
     memset(&msg->dgram, 0, sizeof(msg->dgram));
     msg->dgram.addr.port = SF_PORT;
     msg->dgram.addr.domain = state->partner_id;
     //msg->dgram.flags = V4V_DATAGRAM_FLAG_IGNORE_DLO;
-    if ((ret = write_file_timeout(state, (void *)msg, len, &bytes)))
-        return ret;
 
+    ioh_event_reset(&state->io_ev);
+    dm_v4v_async_init(&state->v4v, &state->async, state->io_ev);
+    err = dm_v4v_send(&state->v4v, (v4v_datagram_t*)msg,
+        len, &state->async);
+    if (err && err != ERROR_IO_PENDING) {
+        debug_printf("%s:%d: error sending = %d\n", __FILE__, __LINE__, err);
+        return err;
+    }
+    err = dm_v4v_async_get_result(&state->async, &bytes, true);
+    if (err) {
+        debug_printf("%s:%d: error getting result = %d\n", __FILE__, __LINE__, err);
+        return err;
+    }
     assert(bytes == len);
 
     return 0;
@@ -363,15 +316,25 @@ handle_req(struct sf_state *state, char *data, int len)
 static int
 receive_req(struct sf_state *state)
 {
-    DWORD bytes = 0;
+    size_t bytes = 0;
+    int err;
 
-    if (read_file_timeout(state,
-                          state->request,
-                          sizeof(struct sf_msg),
-                          &bytes))
-        return -1;
+    ioh_event_reset(&state->io_ev);
+    dm_v4v_async_init(&state->v4v, &state->async, state->io_ev);
+    err = dm_v4v_recv(&state->v4v, (v4v_datagram_t*)state->request,
+        sizeof(struct sf_msg), &state->async);
+    if (err && err != ERROR_IO_PENDING) {
+        debug_printf("%s:%d: error receiving = %d\n", __FILE__, __LINE__, err);
+        return err;
+    }
+    err = dm_v4v_async_get_result(&state->async, &bytes, true);
+    if (err) {
+        debug_printf("%s:%d: error getting result = %d\n", __FILE__, __LINE__, err);
+        return err;
+    }
     assert(bytes < RING_SIZE - 4096);
     state->request_bytes = bytes - sizeof(v4v_datagram_t);
+
     return 0;
 }
 
@@ -460,11 +423,12 @@ static int
 connect_v4v(struct sf_state *s, int domain, int port)
 {
     v4v_bind_values_t bind = { };
+    int err = 0;
 
     ioh_event_reset(&s->io_ev);
-    if (!v4v_open(&s->v4v, RING_SIZE, V4V_FLAG_ASYNC)) {
+    if ((err = dm_v4v_open(&s->v4v, RING_SIZE))) {
         debug_printf("%s: v4v_open failed (%d)\n",
-                     __FUNCTION__, (int)GetLastError());
+            __FUNCTION__, err);
         return -1;
     }
 
@@ -474,10 +438,10 @@ connect_v4v(struct sf_state *s, int domain, int port)
     memcpy(&bind.partner, v4v_idtoken, sizeof(bind.partner));
 
     ioh_event_reset(&s->io_ev);
-    if (!v4v_bind(&s->v4v, &bind)) {
+    if ((err = dm_v4v_bind(&s->v4v, &bind))) {
         debug_printf("%s: v4v_bind failed (%d)\n",
-                     __FUNCTION__, (int)GetLastError());
-        v4v_close(&s->v4v);
+                     __FUNCTION__, err);
+        dm_v4v_close(&s->v4v);
         return -1;
     }
 
@@ -503,8 +467,6 @@ sf_service_start(void)
     ioh_init_wait_objects(&s->wait_objects);
     ioh_event_init(&s->io_ev);
     ioh_event_init(&s->pause_ev);
-    memset(&s->ov, 0, sizeof(s->ov));
-    s->ov.hEvent = s->io_ev;
 
     ioh_add_wait_object(&s->io_ev, NULL, s, &s->wait_objects);
     ioh_add_wait_object(&s->pause_ev, NULL, s, &s->wait_objects);
@@ -521,7 +483,7 @@ sf_service_start(void)
 
     if ( create_thread(&s->thread, __run_thread, s) < 0 ) {
         warnx("%s: create_thread", __FUNCTION__);
-        v4v_close(&s->v4v);
+        dm_v4v_close(&s->v4v);
         hgcm_free(s->request);
         hgcm_free(s->response);
         return -1;
@@ -541,11 +503,12 @@ sf_service_stop_processing(void)
         debug_printf("sf v4v service stopping\n");
 
         s->quit_thread = 1;
+        dm_v4v_async_cancel(&s->async);
         ioh_event_set(&s->io_ev);
         ioh_event_set(&s->pause_ev);
         wait_thread(s->thread);
 
-        v4v_close(&s->v4v);
+        dm_v4v_close(&s->v4v);
         ioh_cleanup_wait_objects(&s->wait_objects);
         ioh_event_close(&s->io_ev);
         ioh_event_close(&s->pause_ev);

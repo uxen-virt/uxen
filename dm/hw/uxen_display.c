@@ -1105,13 +1105,10 @@ static int uxendisp_initfn(PCIDevice *dev)
     int i;
 
 #ifdef _WIN32
-    //FIXME: pvblank on whp
-    if (!whpx_enable) {
-        s->vblank_ctx = pv_vblank_init(s, disp_pv_vblank);
-        if (!s->vblank_ctx) {
-            debug_printf("pv vblank init failed\n");
-            return -1;
-        }
+    s->vblank_ctx = pv_vblank_init(s, disp_pv_vblank);
+    if (!s->vblank_ctx) {
+        debug_printf("pv vblank init failed\n");
+        return -1;
     }
 #endif
 
@@ -1172,9 +1169,7 @@ static int uxendisp_exitfn(PCIDevice *dev)
     VGAState *v = &s->vga;
 
 #ifdef _WIN32
-    // FIXME: pv vblank on whp
-    if (!whpx_enable)
-        pv_vblank_cleanup(s->vblank_ctx);
+    pv_vblank_cleanup(s->vblank_ctx);
 #endif
 
     vga_exit(v);

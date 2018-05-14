@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -36,6 +36,8 @@
 #define PCAP 0
 /* #define LOG_DEBUG 1 */
 
+//#define LOG_QUEUE
+
 typedef struct __attribute__ ((packed))
 {
     v4v_datagram_t dg;
@@ -52,7 +54,7 @@ typedef struct uxen_net_packet {
     uint32_t len;
     uint32_t buf_size;
 #if defined(_WIN32)
-    OVERLAPPED overlapped;
+    v4v_async_t async;
 #endif
     int state;
 } uxen_net_packet_t;
@@ -85,97 +87,6 @@ typedef struct uxen_net {
     int pcap_last_tx_nr;
 #endif
 } uxen_net_t;
-
-/******* debug fns ******/
-
-#if 0
-static char *
-dword_ptr_to_a (DWORD *p)
-{
-    static char ret[128];
-
-    if (!p)
-        return "null";
-
-    sprintf (ret, "&(%u)", (unsigned)*p);
-
-    return ret;
-}
-
-#if 0                           /* unused */
-static BOOLEAN
-wrap_readfile(HANDLE h, void *buf, DWORD bytes_in, DWORD *bytes_out,
-              OVERLAPPED *o)
-{
-    BOOLEAN ret;
-
-    ret = ReadFile(h, buf, bytes_in, bytes_out, o);
-
-    debug_printf("uxn: ReadFile(%p,%p,%u,%s,%p)=%s\n", h, o,
-                 bytes_in, dword_ptr_to_a(bytes_out), o,
-                 ret ? "true" : "false");
-    return ret;
-}
-#endif
-
-static BOOLEAN
-wrap_writefile(HANDLE h, void *buf, DWORD bytes_in, DWORD *bytes_out,
-               OVERLAPPED *o)
-{
-    BOOLEAN ret;
-
-    ret = WriteFile(h, buf, bytes_in, bytes_out, o);
-
-    debug_printf("uxn: WriteFile(%p,%p,%u,%s,%p)=%s\n", h, o,
-                 bytes_in, dword_ptr_to_a(bytes_out), o,
-                 ret ? "true" : "false");
-
-    return ret;
-}
-
-
-static BOOLEAN
-wrap_getoverlappedresult(HANDLE h, OVERLAPPED *o, DWORD *bytes,
-                         BOOLEAN wait)
-{
-    BOOLEAN ret;
-
-    ret = GetOverlappedResult(h, o, bytes, wait);
-
-    debug_printf("uxn: GetOverlappedResult(%p,%p,%s,%s)=%s\n", h, o,
-                 dword_ptr_to_a(bytes), wait ? "true" : "false",
-                 ret ? "true" : "false");
-
-    return ret;
-}
-
-
-static DWORD
-wrap_getlasterror (void)
-{
-    DWORD ret;
-    char *str = "?";
-
-    ret = GetLastError();
-    switch (ret) {
-    case ERROR_IO_INCOMPLETE:
-        str = "ERROR_IO_INCOMPLETE";
-        break;
-    case ERROR_IO_PENDING:
-        str = "ERROR_IO_PENDING";
-        break;
-    }
-    debug_printf("uxn: GetLastError()=0x%x (%s)\n", ret, str);
-
-    return ret;
-}
-
-#define WriteFile wrap_writefile
-#define ReadFile wrap_readfile
-#define GetLastError wrap_getlasterror
-#define GetOverlappedResult wrap_getoverlappedresult
-#endif
-
 
 /******** tcp checksums **********/
 
@@ -586,208 +497,6 @@ static void packet_free_list(uxen_net_packet_list_t *list)
 /******************** TX path ***************************/
 
 
-#if 0
-static int retry_transmit(uxen_net_t *s)
-{
-    DWORD err;
-#if PCAP
-    debug_printf("uxn: packet %d failed to transmit - retransmitting\n",
-                 s->pcap_last_tx_nr);
-#else
-    debug_printf("uxn: packet failed to transmit - retransmitting\n");
-#endif
-    s->write_pending = FALSE;
-
-    if (WriteFile(s->v4v.v4v_handle, s->write_packet, s->write_packet_len,
-                  NULL, &s->write_overlapped)) {
-        Wwarn("uxn: fail path 1");
-        return 1;
-    }
-
-    err = ERROR_IO_INCOMPLETE;
-
-    switch (err) {
-        case ERROR_IO_INCOMPLETE:
-            s->write_pending = TRUE;
-            return 0;
-        default:
-            warnx("uxn: fail path 2 %x", err);
-    }
-
-    return 1;
-}
-
-
-
-static int
-uxen_net_receive_complete (uxen_net_t *s, BOOLEAN wait)
-{
-    DWORD writ, err;
-
-    if (!s->write_pending)
-        return 1;
-
-    if (GetOverlappedResult
-        (s->v4v.v4v_handle, &s->write_overlapped, &writ, wait)) {
-        s->write_pending = FALSE;
-
-        if (writ != s->write_packet_len ) {
-            Wwarn("uxn: fail path 3 %lx");
-            return retry_transmit(s);
-        } else if (!s->guest_has_ring) {
-            warnx("uxn: success - guest now has ring");
-            s->guest_has_ring = TRUE;
-        }
-
-        return 1;
-    }
-
-
-    err = GetLastError();
-
-
-
-    switch (err) {
-        case ERROR_IO_INCOMPLETE:
-            return 0;
-        case ERROR_VC_DISCONNECTED:
-            warnx("uxn: fail path 4 %x", err);
-            return retry_transmit(s);
-    }
-
-    warnx("uxn: fail path 5 %x", err);
-
-    /* XXX: does false mean complete? in this case */
-    s->write_pending = FALSE;
-
-    return 1;
-}
-
-static int
-uxen_net_can_receive (VLANClientState *nc)
-{
-    uxen_net_t *s = DO_UPCAST (NICState, nc, nc)->opaque;
-
-    if ((!s->guest_has_ring) && (s->have_first_packet))
-        return 0;
-
-    return 1;
-}
-
-static void
-uxen_net_startup_timer(void *opaque)
-{
-    uxen_net_t *s = (uxen_net_t *)opaque;
-
-    debug_printf("uxn: timer in wp=%d ghr=%d\n", s->write_pending,
-                 s->guest_has_ring);
-
-    if (s->write_pending)
-        uxen_net_receive_complete (s, FALSE);
-
-    if (!s->write_pending && s->have_first_packet && !s->guest_has_ring)
-        retry_transmit(s);
-
-    if (s->startup_timer && !s->guest_has_ring && s->have_first_packet)
-        qemu_mod_timer(s->startup_timer, qemu_get_clock(rt_clock) + 5);
-
-    debug_printf("uxn: timer out wp=%d ghr=%d\n", s->write_pending,
-                 s->guest_has_ring);
-}
-
-
-static ssize_t
-uxen_net_receive (VLANClientState *nc, const uint8_t *buf, size_t size)
-{
-    uxen_net_t *s = DO_UPCAST (NICState, nc, nc)->opaque;
-    uint8_t c[1024];
-
-    if (s->startup_timer && !s->guest_has_ring)
-        qemu_mod_timer(s->startup_timer, qemu_get_clock(rt_clock) + 5);
-
-    s->have_first_packet = TRUE;
-
-    if ((s->write_pending) && (!uxen_net_receive_complete (s, FALSE))) {
-        warnx("uxn: fail path 6");
-        return -1;
-    }
-
-    s->write_packet->dg.addr = s->dest;
-    s->write_packet->dg.flags = 0;
-
-    if (size > ETH_MTU)
-        size = ETH_MTU;
-
-    if (size < ETH_MINTU) {
-        memcpy (c, buf, size);
-        memset(c + size, 0, ETH_MINTU - size);
-        buf = c;
-        size = ETH_MINTU;
-    }
-
-
-
-
-    memcpy (s->write_packet->data, buf, size);
-    fix_checksum (s->write_packet->data, size);
-
-    memset (&s->write_overlapped, 0, sizeof (OVERLAPPED));
-
-    s->write_packet_len = size + sizeof (uxen_net_packet_api_t);
-
-
-    // debug_printf("v4v-send %d.%d %d\n", s->write_packet->addr.domain,
-    //              s->write_packet->addr.port, len);
-
-#if PCAP
-    s->pcap_last_tx_nr = uxen_net_log_packet(s, s->write_packet->data, size, 0);
-#endif
-
-
-    if (WriteFile(s->v4v.v4v_handle, s->write_packet, s->write_packet_len,
-                  NULL, &s->write_overlapped)) {
-        warnx("uxn: fail path 7");
-        return size;
-    }
-
-    if (GetLastError () == ERROR_IO_PENDING) {
-        s->write_pending = TRUE;
-#if 0
-        uxen_net_receive_complete (s, TRUE);
-#endif
-        return size;
-    }
-
-    warnx("uxn: fail path 8");
-
-    return -1;
-}
-
-
-#if 0
-static ssize_t
-wrap_uxen_net_receive (VLANClientState *nc, const uint8_t *buf, size_t size)
-{
-    struct timeval tv;
-    ssize_t ret = -1;
-    static LONG guard;
-
-    if (InterlockedIncrement (&guard) != 1) {
-        debug_printf("nr: TREATCHERY UNMASKED!\n");
-        InterlockedDecrement (&guard);
-    } else {
-        gettimeofday (&tv, NULL);
-        debug_printf("nr in  %d.%06d\n", (int)tv.tv_sec, (int)tv.tv_usec);
-        ret = uxen_net_receive (nc, buf, size);
-        debug_printf("   out %d.%06d\n", (int)tv.tv_sec, (int)tv.tv_usec);
-        InterlockedDecrement (&guard);
-    }
-
-    return ret;
-}
-#endif
-#endif
-
 /* OSX: keep sending messages in the queue to v4v guest port until destination
  *      ring is full or queue is empty. Unsent packets will be retried later.
  * Windows: If the current packet has been submitted, remove it from the queue
@@ -818,8 +527,8 @@ uxen_net_run_tx_q(uxen_net_t *s)
 {
     uxen_net_packet_t *p;
     unsigned len;
-    DWORD err;
-    DWORD writ;
+    int err;
+    size_t writ;
 
     while ((p = queue.head))  {
 #ifdef LOG_QUEUE
@@ -832,39 +541,27 @@ uxen_net_run_tx_q(uxen_net_t *s)
 
                 p->packet->dg.addr = s->dest;
 
-                memset (&p->overlapped, 0, sizeof (OVERLAPPED));
-                p->overlapped.hEvent = s->tx_event;
+                dm_v4v_async_init(&s->v4v, &p->async, s->tx_event);
 
-                if (WriteFile (s->v4v.v4v_handle, p->packet, len, NULL, &p->overlapped)) {
-                    /* as we're asynchronous, this should never succeed */
-                    warnx("uxn: fail path 1");
-                    packet_remove(&queue, p);
-                    packet_done(p);
-                    queue_len--;
-                    break;
-                }
+                err = dm_v4v_send(
+                    &s->v4v,
+                    (v4v_datagram_t*)p->packet,
+                    len,
+                    &p->async);
 
-                err = GetLastError ();
-
-                if (GetLastError () == ERROR_IO_PENDING) {
-#ifdef LOG_QUEUE
-                    debug_printf("uxn: send, pending\n");
-#endif
-                    /* it's in the send buffer we've done everything we can */
-                    p->state = PACKET_WAITING_COMPLETION;
+                if (err && err != ERROR_IO_PENDING)
+                    /* The transmit failed so we'll leave the packet to
+                     * transmit another time */
                     return;
-                }
-
-                warnx("uxn: fail path 2 err %lx", err);
-
-                /* The transmit failed so we'll leave the packet to
-                 * transmit another time */
-                return;
-
+#ifdef LOG_QUEUE
+                debug_printf("uxn: send, pending\n");
+#endif
+                /* it's in the send buffer we've done everything we can */
+                p->state = PACKET_WAITING_COMPLETION;
                 break;
-            case PACKET_WAITING_COMPLETION:
 
-                if (!HasOverlappedIoCompleted(&p->overlapped))  {
+            case PACKET_WAITING_COMPLETION:
+                if (!dm_v4v_async_is_completed(&p->async)) {
 #ifdef LOG_QUEUE
                     debug_printf("uxn: waiting\n");
 #endif
@@ -873,11 +570,7 @@ uxen_net_run_tx_q(uxen_net_t *s)
                     return;
                 }
 
-
-
-                if (!GetOverlappedResult (s->v4v.v4v_handle, &p->overlapped, &writ, FALSE)) {
-
-                    err = GetLastError ();
+                if ((err = dm_v4v_async_get_result(&p->async, &writ, false))) {
                     if (err == ERROR_IO_INCOMPLETE) {
 #ifdef LOG_QUEUE
                         debug_printf("uxn: waited, waiting\n");
@@ -887,19 +580,17 @@ uxen_net_run_tx_q(uxen_net_t *s)
                         return;
                     }
 
-                    warnx("uxn: fail path 3 err %lx, retrying but next time",
+                    warnx("uxn: fail path 3 err %x, retrying but next time",
                           err);
                     p->state = PACKET_IDLE;
                     return;
                 }
 
-                err = GetLastError ();
-
                 len = p->len + sizeof (uxen_net_packet_api_t);
 
                 if (writ != len) {
-                    warnx("uxn: fail path 4 wrote only %ld of %d bytes err %lx,"
-                          " retrying", writ, len, err);
+                    warnx("uxn: fail path 4 wrote only %d of %d bytes err %x,"
+                        " retrying", (int)writ, len, err);
                     /* We failed to transmit, retry */
                     p->state = PACKET_IDLE;
                     break;
@@ -1028,7 +719,7 @@ uxen_net_read_event (void *_s)
         qemu_send_packet (&s->nic->nc, s->rx_buf, len);
     } while (1);
 
-    if (!v4v_notify(&s->v4v))
+    if (!dm_v4v_notify(&s->v4v))
         return;
     /* XXX: do we really want to run the tx queue here? If it's safe to send
      * some more, surely our tx event would have fired? If we really do want to
@@ -1090,7 +781,7 @@ uxen_net_cleanup (VLANClientState *nc)
 
     ioh_event_close(&s->tx_event);
 
-    v4v_close(&s->v4v);
+    dm_v4v_close(&s->v4v);
     free (s->rx_buf);
 
     s->nic = NULL;
@@ -1124,7 +815,7 @@ uxen_net_initfn (UXenPlatformDevice *dev)
             break;
 #endif
 
-        if (!v4v_have_v4v ()) {
+        if (!dm_v4v_have_v4v ()) {
             debug_printf("uxen_net_isa_initfn - no v4v detected on the host\n");
             break;
         }
@@ -1133,7 +824,7 @@ uxen_net_initfn (UXenPlatformDevice *dev)
         if (!s->rx_buf)
             break;
 
-        if (!v4v_open_sync(&s->v4v, RING_SIZE, &error)) {
+        if ((error = dm_v4v_open(&s->v4v, RING_SIZE))) {
             debug_printf("%s: v4v_open failed (%x)\n",
                          __FUNCTION__, error);
             break;
@@ -1147,8 +838,7 @@ uxen_net_initfn (UXenPlatformDevice *dev)
         bind.ring_id.partner = V4V_DOMID_UUID;
         memcpy(&bind.partner, v4v_idtoken, sizeof(bind.partner));
 
-        if (!v4v_bind_sync(&s->v4v, &bind, &error))
-        {
+        if ((error = dm_v4v_bind(&s->v4v, &bind))) {
             debug_printf("%s: v4v_bind failed (%x)\n",
                          __FUNCTION__, error);
             break;
@@ -1157,14 +847,14 @@ uxen_net_initfn (UXenPlatformDevice *dev)
         s->dest.domain = bind.ring_id.partner;
         s->dest.port = bind.ring_id.addr.port;
 
-        s->ring = v4v_ring_map_sync(&s->v4v, &error);
+        error = dm_v4v_ring_map(&s->v4v, &s->ring);
         if (!s->ring) {
             debug_printf("%s: failed to map v4v ring (%x)\n",
                          __FUNCTION__, error);
             break;
         }
 
-        if (!v4v_init_tx_event(&s->v4v, &s->tx_event, &error)) {
+        if ((error = dm_v4v_init_tx_event(&s->v4v, &s->tx_event))) {
             debug_printf("%s: failed to create transmit event (%x)\n",
                          __FUNCTION__, error);
             break;
@@ -1195,7 +885,7 @@ uxen_net_initfn (UXenPlatformDevice *dev)
     } while (1);
 
     if (v4v_opened)
-        v4v_close (&s->v4v);
+        dm_v4v_close (&s->v4v);
     if (s->rx_buf)
         free (s->rx_buf);
 

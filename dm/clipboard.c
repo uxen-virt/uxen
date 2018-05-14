@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -12,6 +12,7 @@
 #include <dm/yajl.h>
 #include <dm/vbox-drivers/heap.h>
 #include <dm/vbox-drivers/shared-clipboard/clipboard-interface.h>
+#include <dm/hw/uxen_v4v.h>
 #include <dm/clipboard-protocol.h>
 
 #define DEFAULT_CLIPBOARD_FORMAT_WHITELIST "CF_DIB,CF_DIBV5,CF_TEXT,CF_UNICODETEXT,Rich Text Format,Csv,Art::GVML ClipFormat"

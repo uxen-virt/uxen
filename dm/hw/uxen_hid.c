@@ -14,10 +14,7 @@
 #include <stdint.h>
 
 #include <dm/dm.h>
-
-#include <winioctl.h>
-#define V4V_USE_INLINE_API
-#include <windows/uxenv4vlib/gh_v4vapi.h>
+#include <dm/hw/uxen_v4v.h>
 
 #include "uxen_platform.h"
 #include <uxen/platform_interface.h>
@@ -37,7 +34,7 @@ struct uxenhid_state {
     const char *report_descriptor;
     size_t report_descriptor_len;
 
-    v4v_channel_t v4v;
+    v4v_context_t v4v;
     uint32_t partner_id;
     HANDLE rx_event;
     HANDLE tx_event;
@@ -48,7 +45,7 @@ struct uxenhid_state {
     int ready;
 
     struct {
-        OVERLAPPED ovlp;
+        v4v_async_t async;
         struct {
             v4v_datagram_t dgram;
             uint8_t data[UXENHID_MAX_MSG_LEN];
@@ -58,7 +55,7 @@ struct uxenhid_state {
 
 struct async_buf {
     TAILQ_ENTRY(async_buf) link;
-    OVERLAPPED ovlp;
+    v4v_async_t async;
     DWORD len;
     struct {
         v4v_datagram_t dgram;
@@ -268,7 +265,7 @@ alloc_async_buf(DWORD len, void **data, v4v_addr_t addr)
     if (b && data)
         *data = &b->buf.data;
 
-    RtlZeroMemory(&b->ovlp, sizeof (OVERLAPPED));
+    RtlZeroMemory(&b->async, sizeof (v4v_async_t));
     b->buf.dgram.addr = addr;
     b->buf.dgram.flags = 0;
 
@@ -285,30 +282,25 @@ free_async_buf(struct async_buf *b, DWORD len)
 static int
 send_async(struct uxenhid_state *s, struct async_buf *b, DWORD len)
 {
-    BOOL rc;
-    DWORD bytes;
+    int err;
 
     b->len = len + sizeof(v4v_datagram_t);
 
-    b->ovlp.hEvent = s->tx_event;
+    dm_v4v_async_init(&s->v4v, &b->async, s->tx_event);
 
-    rc = WriteFile(s->v4v.v4v_handle, (void *)&b->buf,
-                   b->len, &bytes, &b->ovlp);
-    if (!rc) {
-        if (GetLastError() == ERROR_IO_PENDING) {
+    err = dm_v4v_send(&s->v4v, (v4v_datagram_t*)&b->buf,
+        b->len, &b->async);
+    if (err) {
+        if (err == ERROR_IO_PENDING) {
             critical_section_enter(&s->async_write_lock);
             TAILQ_INSERT_TAIL(&s->async_write_list, b, link);
             critical_section_leave(&s->async_write_lock);
             return 0;
         }
 
-        Wwarn("%s: WriteFile", __FUNCTION__);
+        Wwarn("%s: dm_v4v_send: %d", __FUNCTION__, err);
         free_async_buf(b, len);
 
-        return -1;
-    } else if (bytes != b->len) {
-        debug_printf("%s: short write %ld/%ld\n", __FUNCTION__, bytes, b->len);
-        free_async_buf(b, len);
         return -1;
     }
 
@@ -555,41 +547,51 @@ uxenhid_recv(struct uxenhid_state *s, v4v_datagram_t *dgram,
 static void
 rx_start(struct uxenhid_state *s)
 {
-    DWORD bytes;
-    BOOL rc;
+    int err;
+    size_t bytes;
 
     ResetEvent(s->rx_event);
-    s->async_read.ovlp.hEvent = s->rx_event;
+    dm_v4v_async_init(&s->v4v, &s->async_read.async, s->rx_event);
 
-    do {
-        rc = ReadFile(s->v4v.v4v_handle, &s->async_read.buf,
-                      sizeof (s->async_read.buf), &bytes, &s->async_read.ovlp);
-        if (rc) {
-            if (bytes >= sizeof (v4v_datagram_t))
-                uxenhid_recv(s, &s->async_read.buf.dgram,
-                             (void *)&s->async_read.buf.data,
-                             bytes - sizeof (v4v_datagram_t));
-        } else if (GetLastError() != ERROR_IO_PENDING)
-            Wwarn("%s: ReadFile", __FUNCTION__);
-    } while (rc);
+    for (;;) {
+        err = dm_v4v_recv(&s->v4v, (v4v_datagram_t*)&s->async_read.buf,
+            sizeof(s->async_read.buf), &s->async_read.async);
+        if (err == ERROR_IO_PENDING)
+            break;
+        else if (err) {
+            Wwarn("%s: v4v_recv: %d", __FUNCTION__, err);
+            break;
+        }
+
+        err = dm_v4v_async_get_result(&s->async_read.async, &bytes, false);
+        if (err) {
+            Wwarn("%s: async_get_result: %d", __FUNCTION__, err);
+            break;
+        }
+        if (bytes >= sizeof(v4v_datagram_t))
+            uxenhid_recv(s, &s->async_read.buf.dgram,
+                (void *)&s->async_read.buf.data,
+                bytes - sizeof(v4v_datagram_t));
+    }
 }
 
 static void
 rx_complete(void *opaque)
 {
     struct uxenhid_state *s = opaque;
-    BOOL rc;
-    DWORD bytes;
+    size_t bytes;
+    int err = 0;
 
-    rc = GetOverlappedResult(s->v4v.v4v_handle, &s->async_read.ovlp,
-                             &bytes, FALSE);
-    if (!rc) {
-        if (GetLastError() == ERROR_IO_INCOMPLETE) {
+    err = dm_v4v_async_get_result(&s->async_read.async,
+        &bytes, false);
+
+    if (err) {
+        if (err == ERROR_IO_INCOMPLETE) {
             ResetEvent(s->rx_event);
             return;
         }
 
-        Wwarn("%s: GetOverlappedresult", __FUNCTION__);
+        Wwarn("%s: v4v_async_get_result", __FUNCTION__);
         return;
     }
 
@@ -606,21 +608,21 @@ tx_complete(void *opaque)
 {
     struct uxenhid_state *s = opaque;
     struct async_buf *b, *bn;
-    BOOL rc;
-    DWORD bytes;
+    size_t bytes;
 
     critical_section_enter(&s->async_write_lock);
     TAILQ_FOREACH_SAFE(b, &s->async_write_list, link, bn) {
-        rc = GetOverlappedResult(s->v4v.v4v_handle, &b->ovlp, &bytes,
-                                 FALSE);
-        if (!rc && GetLastError() == ERROR_IO_INCOMPLETE)
+        int err;
+
+        err = dm_v4v_async_get_result(&b->async, &bytes, false);
+        if (err == ERROR_IO_INCOMPLETE)
             continue;
 
-        if (!rc)
+        if (err)
             Wwarn("%s: GetOverlappedResult", __FUNCTION__);
         else if (bytes != b->len)
             debug_printf("%s: short write %ld/%ld\n", __FUNCTION__,
-                         bytes, b->len);
+                (long)bytes, b->len);
 
         TAILQ_REMOVE(&s->async_write_list, b, link);
         free_async_buf(b, b->len);
@@ -636,22 +638,17 @@ uxenhid_exit(UXenPlatformDevice *dev)
 
     critical_section_enter(&s->async_write_lock);
     TAILQ_FOREACH_SAFE(b, &s->async_write_list, link, bn) {
-        DWORD bytes;
-
-        if (CancelIoEx(s->v4v.v4v_handle, &b->ovlp) ||
-            GetLastError() != ERROR_NOT_FOUND)
-            GetOverlappedResult(s->v4v.v4v_handle, &b->ovlp, &bytes, TRUE);
-
+        dm_v4v_async_cancel(&b->async);
         TAILQ_REMOVE(&s->async_write_list, b, link);
         free_async_buf(b, b->len);
     }
     critical_section_leave(&s->async_write_lock);
-    CancelIoEx(s->v4v.v4v_handle, &s->async_read.ovlp);
+    dm_v4v_async_cancel(&s->async_read.async);
 
     ioh_del_wait_object(&s->rx_event, NULL);
     ioh_del_wait_object(&s->tx_event, NULL);
 
-    v4v_close(&s->v4v);
+    dm_v4v_close(&s->v4v);
 
     CloseHandle(s->tx_event);
     CloseHandle(s->rx_event);
@@ -666,10 +663,11 @@ uxenhid_init(UXenPlatformDevice *dev)
 {
     struct uxenhid_state *s = DO_UPCAST(struct uxenhid_state, dev, dev);
     v4v_bind_values_t bind = { };
+    int err;
 
     s->ready = 0;
 
-    if (!v4v_open(&s->v4v, UXENHID_RING_SIZE, V4V_FLAG_ASYNC)) {
+    if ((err = dm_v4v_open(&s->v4v, UXENHID_RING_SIZE))) {
         Wwarn("%s: v4v_open", __FUNCTION__);
         return -1;
     }
@@ -679,9 +677,9 @@ uxenhid_init(UXenPlatformDevice *dev)
     bind.ring_id.partner = V4V_DOMID_UUID;
     memcpy(&bind.partner, v4v_idtoken, sizeof(bind.partner));
 
-    if (!v4v_bind(&s->v4v, &bind)) {
+    if ((err = dm_v4v_bind(&s->v4v, &bind))) {
         Wwarn("%s: v4v_bind port %x", __FUNCTION__, bind.ring_id.addr.port);
-        v4v_close(&s->v4v);
+        dm_v4v_close(&s->v4v);
         return -1;
     }
     s->partner_id = bind.ring_id.partner;
@@ -689,7 +687,7 @@ uxenhid_init(UXenPlatformDevice *dev)
     s->tx_event = CreateEvent(NULL, FALSE, FALSE, NULL);
     if (!s->tx_event) {
         Wwarn("%s: CreateEvent", __FUNCTION__);
-        v4v_close(&s->v4v);
+        dm_v4v_close(&s->v4v);
         return -1;
     }
 
@@ -697,7 +695,7 @@ uxenhid_init(UXenPlatformDevice *dev)
     if (!s->rx_event) {
         Wwarn("%s: CreateEvent", __FUNCTION__);
         CloseHandle(s->tx_event);
-        v4v_close(&s->v4v);
+        dm_v4v_close(&s->v4v);
         return -1;
     }
 
@@ -842,9 +840,7 @@ static UXenPlatformDeviceInfo uxenhid_info = {
 static void
 uxenhid_register_devices(void)
 {
-    // FIXME: uxenhid on whp
-    if  (!whpx_enable)
-        uxenplatform_qdev_register(&uxenhid_info);
+    uxenplatform_qdev_register(&uxenhid_info);
 }
 
 device_init(uxenhid_register_devices);
