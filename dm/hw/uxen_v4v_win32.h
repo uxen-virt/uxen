@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * Author: Phil Dennis-Jordan <phil@philjordan.eu>
  * SPDX-License-Identifier: ISC
  */
@@ -22,5 +22,21 @@ typedef struct v4v_context {
     OVERLAPPED notify_overlapped;
     BOOLEAN notify_pending;
 } v4v_context_t;
+
+typedef struct whpx_v4v_async {
+    ioh_event ev;
+    size_t bytes;
+    int completed, cancelled;
+    void *opaque;
+} whpx_v4v_async_t;
+
+typedef struct v4v_async {
+    v4v_context_t *context;
+    union {
+        OVERLAPPED ov;
+        whpx_v4v_async_t whpx;
+    };
+} v4v_async_t;
+
 
 #endif
