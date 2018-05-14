@@ -34,14 +34,13 @@
 #include "win32-touch.h"
 #include <uxenhid-common.h>
 #include "hw/uxen_hid.h"
-
-#include "uxenconsolelib.h"
+#include "console-dr.h"
 
 #define WM_UXEN_SETCURSOR (WM_USER + 1)
 #define WM_UXEN_EXIT (WM_USER + 2)
 
 static UINT wm_print_surface = 0;
-static disp_context_t disp;
+static console_dr_context_t dr_context;
 static uint64_t current_rect;
 
 struct win_surface
@@ -1377,8 +1376,8 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
             if (disp_fps_counter)
                 count_fps();
 
-            if (disp)
-              uxenconsole_disp_ack_rect(disp, current_rect);
+            if (dr_context)
+                console_dr_ack_rect(dr_context, current_rect);
         }
         return ret;
 
@@ -1622,9 +1621,9 @@ gui_init(char *optstr)
     win_register_class();
     guest_agent_init();
 
-    disp = uxenconsole_disp_init(-1, v4v_idtoken, NULL, disp_inv_rect, 0);
-    if (!disp)
-        Wwarn("%s: uxenconsole_disp_init failed", __FUNCTION__);
+    dr_context = console_dr_init(-1, v4v_idtoken, NULL, disp_inv_rect, 0);
+    if (!dr_context)
+        Wwarn("%s: console_dr_init failed", __FUNCTION__);
 
     return 0;
 }
@@ -1632,8 +1631,8 @@ gui_init(char *optstr)
 static void
 gui_exit(void)
 {
-    uxenconsole_disp_cleanup(disp);
-    disp = NULL;
+    console_dr_cleanup(dr_context);
+    dr_context = NULL;
     guest_agent_cleanup();
 }
 
