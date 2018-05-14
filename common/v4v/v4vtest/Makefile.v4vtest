@@ -1,5 +1,5 @@
 #
-# Copyright 2015, Bromium, Inc.
+# Copyright 2015-2018, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -12,7 +12,7 @@ all: v4vtest$(EXE_SUFFIX) v4vtestrr$(EXE_SUFFIX)
 V4VTEST_OBJS = v4vtest.o
 V4VTESTRR_OBJS = v4vtestrr.o
 
-OBJS = $(V4VTEST_OBJS) ${V4VTEST_OBJS}
+OBJS = $(V4VTEST_OBJS) ${V4VTESTRR_OBJS}
 $(OBJS): .deps/.exists
 
 v4vtest$(EXE_SUFFIX): $(V4VTEST_OBJS) $(LIBXC_DEPS) $(LIBUXENCTL_DEPS)
