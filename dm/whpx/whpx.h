@@ -19,6 +19,10 @@
 //#define DEBUG_MMIO
 //#define DEBUG_EMULATE
 
+#define WHPX_DOMAIN_ID_SELF 1
+
+#define WHPX_MAX_VCPUS 8
+
 #define WHPX_RAM_PCI      0x0001
 #define WHPX_RAM_EXTERNAL 0x1000
 
@@ -54,6 +58,9 @@ int whpx_ram_depopulate(uint64_t phys_addr, uint64_t len, uint32_t flags);
 void *whpx_ram_map(uint64_t phys_addr, uint64_t *len);
 void whpx_ram_unmap(void *ptr);
 
+void whpx_copy_from_guest_va(CPUState *cpu, void *dst, uint64_t src_va, uint64_t len);
+void whpx_copy_to_guest_va(CPUState *cpu, uint64_t dst_va, void *src, uint64_t len);
+
 void whpx_register_iorange(uint64_t start, uint64_t length, int is_mmio);
 void whpx_unregister_iorange(uint64_t start, uint64_t length, int is_mmio);
 
@@ -71,20 +78,27 @@ int whpx_write_pages(struct filebuf *f, char **err_msg);
 #define WHPX_SHUTDOWN_SUSPEND 2
 #define WHPX_SHUTDOWN_CRASH 3
 
+int whpx_early_init(void);
+
 int whpx_vm_init(const char *loadvm, int restore_mode);
 int whpx_vm_start(void);
 int whpx_vm_shutdown(int reason);
 int whpx_vm_get_context(void *buffer, size_t buffer_sz);
 int whpx_vm_set_context(void *buffer, size_t buffer_sz);
 
+int whpx_vm_is_paused(void);
+int whpx_vm_pause(void);
+int whpx_vm_unpause(void);
 void whpx_destroy(void);
 
 /**
  * MISC
  */
 
+CPUState *whpx_get_current_cpu(void);
 void whpx_lock_iothread(void);
 void whpx_unlock_iothread(void);
+void whpx_debug_char(char data);
 
 #else /* _WIN32 */
 

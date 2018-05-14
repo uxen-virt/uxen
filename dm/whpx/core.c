@@ -38,8 +38,13 @@
 #include "winhvplatform.h"
 #include "winhvemulation.h"
 #include "emulate.h"
+#include "viridian.h"
 #include "util.h"
 #include <whpx-shared.h>
+
+#define CPUID_V4VOP 0x35af3466
+#define CPUID_DEBUG_OUT_8  0x54545400
+#define CPUID_DEBUG_OUT_32 0x54545404
 
 //#define EMU_MICROSOFT
 
@@ -52,16 +57,7 @@
 /* hyper-v registers have been dirtied, CPUstate registers need sync */
 #define VCPU_DIRTY_HV            (1UL << 2)
 
-struct whpx_cpuid_leaf {
-    uint32_t fun;
-    uint32_t eax, ebx, ecx, edx;
-};
-
-#define WHPX_MAX_CPUID_LEAVES 32
-
 struct whpx_state {
-    struct whpx_cpuid_leaf cpuid[WHPX_MAX_CPUID_LEAVES];
-    uint32_t cpuid_count;
     uint64_t mem_quota;
     WHV_PARTITION_HANDLE partition;
 };
@@ -403,15 +399,6 @@ set_ip(CPUState *cpu, uint64_t ip)
         whpx_panic("failed to set registers: %lx\n", hr);
 }
 
-static void
-advance_instr(CPUState *cpu)
-{
-    struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
-
-    set_ip(cpu, vcpu->exit_ctx.VpContext.Rip +
-                vcpu->exit_ctx.VpContext.InstructionLength);
-}
-
 int
 whpx_cpu_has_work(CPUState *env)
 {
@@ -595,9 +582,16 @@ int whpx_translate_gva_to_gpa(
         write ? WHvTranslateGvaFlagValidateWrite
               : WHvTranslateGvaFlagValidateRead;
     HRESULT hr;
+    uint64_t t0 = 0;
 
+    if (whpx_perf_stats)
+        t0 = _rdtsc();
     hr = WHvTranslateGva(whpx->partition, cpu->cpu_index,
                          gva, flags, &res, gpa);
+    if (whpx_perf_stats) {
+        tmsum_xlate += _rdtsc() - t0;
+        count_xlate++;
+    }
     if (FAILED(hr))
         whpx_panic("WHPX: Failed to translate GVA, hr=%08lx", hr);
     else {
@@ -905,6 +899,182 @@ whpx_handle_halt(CPUState *cpu)
     return ret;
 }
 
+static int
+whpx_handle_msr_access(CPUState *cpu)
+{
+    struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
+    WHV_X64_MSR_ACCESS_CONTEXT *msr = &vcpu->exit_ctx.MsrAccess;
+    WHV_REGISTER_NAME reg[3] = {
+        WHvX64RegisterRip,
+        WHvX64RegisterRdx,
+        WHvX64RegisterRax
+    };
+    WHV_REGISTER_VALUE val[3];
+    uint32_t msr_index = msr->MsrNumber;
+    uint64_t msr_content = 0;
+    int num_write_regs = 0;
+    HRESULT hr;
+
+    if (msr->AccessInfo.IsWrite) {
+        msr_content = ((uint64_t)msr->Rdx << 32) | (uint32_t)msr->Rax;
+        wrmsr_viridian_regs(msr_index, msr_content);
+        num_write_regs = 1;
+    } else {
+        rdmsr_viridian_regs(msr_index, &msr_content);
+        /* rdx */
+        val[1].Reg64 = msr_content >> 32;
+        /* rax */
+        val[2].Reg64 = msr_content & 0xFFFFFFFF;
+        num_write_regs = 3;
+    }
+
+    /* rip */
+    val[0].Reg64 = vcpu->exit_ctx.VpContext.Rip +
+        vcpu->exit_ctx.VpContext.InstructionLength;
+
+    hr = whpx_set_vp_registers(cpu->cpu_index,
+        reg, num_write_regs, &val[0]);
+    if (FAILED(hr))
+        whpx_panic("WHPX: Failed to set registers, hr=%08lx", hr);
+
+    return 0;
+}
+
+extern int do_v4v_op_cpuid(CPUState *cpu,
+    uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r10, uint64_t r9, uint64_t r8);
+
+static int
+cpuid_viridian_hypercall(uint64_t leaf, uint64_t *eax,
+    uint64_t *ebx, uint64_t *ecx,
+    uint64_t *edx)
+{
+    /* viridian hypercalls are marked with bits 30+31 */
+    leaf &= 0xFFFFFFFF;
+    if (!((leaf & 0xC0000000) == 0xC0000000))
+        return 0;
+
+    /* TODO: handle some hypercalls */
+
+    /* return 0 */
+    *eax = 0;
+
+    return 1;
+}
+
+static int
+whpx_handle_cpuid(CPUState *cpu)
+{
+    struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
+    WHV_X64_CPUID_ACCESS_CONTEXT *cpuid = &vcpu->exit_ctx.CpuidAccess;
+    WHV_REGISTER_NAME regs[10] = {
+        WHvX64RegisterRax,
+        WHvX64RegisterRcx,
+        WHvX64RegisterRdx,
+        WHvX64RegisterRbx,
+        WHvX64RegisterRip,
+
+        /* extra v4v hcall regs */
+        WHvX64RegisterRdi,
+        WHvX64RegisterRsi,
+        WHvX64RegisterR8,
+        WHvX64RegisterR9,
+        WHvX64RegisterR10,
+    };
+    WHV_REGISTER_VALUE values[10];
+    uint64_t rax, rcx, rdx, rbx, rdi, rsi, r8, r9, r10;
+    HRESULT hr;
+
+    hr = whpx_get_vp_registers(cpu->cpu_index,
+        regs, RTL_NUMBER_OF(regs), &values[0]);
+    if (FAILED(hr))
+        whpx_panic("WHPX: Failed to access registers, hr=%08lx", hr);
+
+    rax = values[0].Reg64;
+    rcx = values[1].Reg64;
+    rdx = values[2].Reg64;
+    rbx = values[3].Reg64;
+    rdi = values[5].Reg64;
+    rsi = values[6].Reg64;
+    r8  = values[7].Reg64;
+    r9  = values[8].Reg64;
+    r10 = values[9].Reg64;
+
+    switch (rax) {
+    case 1:
+        rax = cpuid->DefaultResultRax;
+        rcx = cpuid->DefaultResultRcx;
+        rdx = cpuid->DefaultResultRdx;
+        rbx = cpuid->DefaultResultRbx;
+        rcx |= CPUID_EXT_HYPERVISOR;
+        break;
+    case 0x40000000:
+        if (vm_viridian) {
+            rax = 0x40000006; /* Maximum leaf */
+            rcx = VIRIDIAN_CPUID_SIGNATURE_ECX;
+            rdx = VIRIDIAN_CPUID_SIGNATURE_EDX;
+            rbx = VIRIDIAN_CPUID_SIGNATURE_EBX;
+            break;
+        };
+        /* fall through */
+    case 0x40000100:
+        rcx = WHP_CPUID_SIGNATURE_ECX;
+        rdx = WHP_CPUID_SIGNATURE_EDX;
+        rbx = WHP_CPUID_SIGNATURE_EBX;
+        break;
+    case 0x40000001 ... 0x40000004:
+        cpuid_viridian_leaves(rax, &rax, &rbx, &rcx, &rdx);
+        break;
+    case CPUID_DEBUG_OUT_8:
+        whpx_debug_char((char)rcx);
+        break;
+    case CPUID_DEBUG_OUT_32:
+        whpx_debug_char((char)rcx & 0xff);
+        whpx_debug_char((char)((rcx & 0xff00) >> 8));
+        whpx_debug_char((char)((rcx & 0xff0000) >> 16));
+        whpx_debug_char((char)((rcx & 0xff000000) >> 24));
+        break;
+    case CPUID_V4VOP: {
+        uint64_t t0 = 0;
+
+        if (whpx_perf_stats)
+            t0 = _rdtsc();
+        rax = do_v4v_op_cpuid(cpu, rdi, rsi, rdx, r10, r8, r9);
+        if (whpx_perf_stats) {
+            tmsum_v4v += _rdtsc() - t0;
+            count_v4v++;
+        }
+        break;
+    }
+    default:
+        if (!cpuid_viridian_hypercall(rax, &rax, &rbx, &rcx, &rdx)) {
+            rax = cpuid->DefaultResultRax;
+            rcx = cpuid->DefaultResultRcx;
+            rdx = cpuid->DefaultResultRdx;
+            rbx = cpuid->DefaultResultRbx;
+        }
+        break;
+    }
+
+    values[0].Reg64 = rax;
+    values[1].Reg64 = rcx;
+    values[2].Reg64 = rdx;
+    values[3].Reg64 = rbx;
+    values[4].Reg64 = vcpu->exit_ctx.VpContext.Rip +
+        vcpu->exit_ctx.VpContext.InstructionLength;
+    values[5].Reg64 = rdi;
+    values[6].Reg64 = rsi;
+    values[7].Reg64 = r8;
+    values[8].Reg64 = r9;
+    values[9].Reg64 = r10;
+
+    hr = whpx_set_vp_registers(cpu->cpu_index,
+        regs, RTL_NUMBER_OF(regs), &values[0]);
+    if (FAILED(hr))
+        whpx_panic("WHPX: Failed to set registers, hr=%08lx", hr);
+
+    return 0;
+}
+
 void
 whpx_vcpu_flush_dirty(CPUState *cpu)
 {
@@ -1122,8 +1292,8 @@ whpx_vcpu_process_async_events(CPUState *cpu)
     }
 
     if (cpu->interrupt_request & CPU_INTERRUPT_SIPI) {
-        if (!(vcpu->dirty & VCPU_DIRTY_CPUSTATE))
-            whpx_registers_hv_to_cpustate(cpu);
+        whpx_vcpu_flush_dirty(cpu);
+        whpx_registers_hv_to_cpustate(cpu);
 
         whpx_vcpu_irq_unlock(cpu);
         whpx_lock_iothread();
@@ -1133,7 +1303,7 @@ whpx_vcpu_process_async_events(CPUState *cpu)
         whpx_unlock_iothread();
         whpx_vcpu_irq_lock(cpu);
 
-        vcpu->dirty |= VCPU_DIRTY_CPUSTATE;
+        vcpu->dirty = VCPU_DIRTY_CPUSTATE;
     }
 
     if (cpu->interrupt_request & CPU_INTERRUPT_TPR) {
@@ -1155,7 +1325,7 @@ whpx_vcpu_run(CPUState *cpu)
     struct whpx_state *whpx = &whpx_global;
     struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
     int ret = 0;
-    uint64_t t0;
+    uint64_t t0 = 0;
 
     whpx_vcpu_process_async_events(cpu);
     whpx_vcpu_flush_dirty(cpu);
@@ -1171,15 +1341,13 @@ whpx_vcpu_run(CPUState *cpu)
 #ifdef DEBUG_CPU
         whpx_dump_cpu_state(cpu->cpu_index);
 #endif
-        if (PERF_TEST)
+        if (whpx_perf_stats)
             t0 = _rdtsc();
         hr = WHvRunVirtualProcessor(whpx->partition, cpu->cpu_index,
             &vcpu->exit_ctx, sizeof(vcpu->exit_ctx));
-        if (PERF_TEST) {
-            tsum_runvp += _rdtsc() - t0;
+        if (whpx_perf_stats) {
+            tmsum_runvp += _rdtsc() - t0;
             count_runvp++;
-            if (count_runvp % 20000 == 0)
-                whpx_perf_stats();
         }
 
         if (FAILED(hr))
@@ -1191,6 +1359,9 @@ whpx_vcpu_run(CPUState *cpu)
         whpx_dump_cpu_state(cpu->cpu_index);
 #endif
         whpx_vcpu_post_run(cpu);
+
+        if (whpx_perf_stats)
+            t0 = _rdtsc();
 
         switch (vcpu->exit_ctx.ExitReason) {
         case WHvRunVpExitReasonMemoryAccess:
@@ -1215,21 +1386,41 @@ whpx_vcpu_run(CPUState *cpu)
             break;
 
         case WHvRunVpExitReasonX64MsrAccess:
-            advance_instr(cpu);
+            ret = whpx_handle_msr_access(cpu);
+            break;
+
+        case WHvRunVpExitReasonX64Cpuid:
+            ret = whpx_handle_cpuid(cpu);
             break;
 
         case WHvRunVpExitReasonNone:
         case WHvRunVpExitReasonUnrecoverableException:
         case WHvRunVpExitReasonInvalidVpRegisterValue:
-        case WHvRunVpExitReasonX64Cpuid:
         case WHvRunVpExitReasonUnsupportedFeature:
         case WHvRunVpExitReasonException:
-        default:
-            whpx_panic("WHPX: Unexpected VP exit code %d",
-                vcpu->exit_ctx.ExitReason);
+        default: {
+            uint64_t phys_rip = 0;
+            int unmapped = 0;
+            whpx_dump_cpu_state(cpu->cpu_index);
+            whpx_translate_gva_to_gpa(cpu, 0, vcpu->exit_ctx.VpContext.Rip, &phys_rip,
+                &unmapped);
+            dump_phys_mem(phys_rip - 16, 32);
+            whpx_panic("WHPX: Unexpected VP exit code %d @ phys-rip=%"PRIx64,
+              vcpu->exit_ctx.ExitReason, phys_rip);
             break;
         }
+        }
 
+        if (whpx_perf_stats) {
+            int er = vcpu->exit_ctx.ExitReason;
+            if (er >= 0x2000)
+                er = er - 0x2000 + 200;
+            if (er >= 0x1000)
+                er = er - 0x1000 + 100;
+            assert(er < 256);
+            tmsum_vmexit[er] += _rdtsc() - t0;
+            count_vmexit[er]++;
+        }
         whpx_vcpu_flush_dirty(cpu);
 
     } while (!ret);
@@ -1465,61 +1656,6 @@ whpx_memory_init(void)
 {
 }
 
-static void
-whpx_cpuid_add_leaf(uint32_t fun, uint32_t eax, uint32_t ebx, uint32_t ecx,
-    uint32_t edx)
-{
-    struct whpx_state *whpx = &whpx_global;
-
-    assert(whpx->cpuid_count < WHPX_MAX_CPUID_LEAVES);
-
-    whpx->cpuid[whpx->cpuid_count].fun = fun;
-    whpx->cpuid[whpx->cpuid_count].ebx = ebx;
-    whpx->cpuid[whpx->cpuid_count].ecx = ecx;
-    whpx->cpuid[whpx->cpuid_count].edx = edx;
-
-    whpx->cpuid_count++;
-}
-
-static void
-whpx_cpuid_init(void)
-{
-    struct whpx_state *whpx = &whpx_global;
-    WHV_PARTITION_PROPERTY *p;
-    int i;
-    HRESULT hr;
-
-    /* TODO: we should advertise and implement viridian exts */
-    whpx->cpuid_count = 0;
-    whpx_cpuid_add_leaf(0x40000000, 0,
-        WHP_CPUID_SIGNATURE_EBX,
-        WHP_CPUID_SIGNATURE_ECX,
-        WHP_CPUID_SIGNATURE_EDX);
-    whpx_cpuid_add_leaf(0x40000100, 0,
-        WHP_CPUID_SIGNATURE_EBX,
-        WHP_CPUID_SIGNATURE_ECX,
-        WHP_CPUID_SIGNATURE_EDX);
-
-    size_t sz = sizeof(WHV_X64_CPUID_RESULT) * whpx->cpuid_count;
-    p = calloc(1, sz);
-    if (!p)
-        whpx_panic("no memory\n");
-    for (i = 0; i < whpx->cpuid_count; i++) {
-        struct whpx_cpuid_leaf *l = &whpx->cpuid[i];
-        p->CpuidResultList[i].Function = l->fun;
-        p->CpuidResultList[i].Eax = l->eax;
-        p->CpuidResultList[i].Ebx = l->ebx;
-        p->CpuidResultList[i].Ecx = l->ecx;
-        p->CpuidResultList[i].Edx = l->edx;
-    }
-    hr = WHvSetPartitionProperty(whpx->partition,
-        WHvPartitionPropertyCodeCpuidResultList, p, sz);
-    if (FAILED(hr))
-        whpx_panic("failed to set cpuid result list,"
-            " hr=%08lx", hr);
-    free(p);
-}
-
 int whpx_partition_setup(void)
 {
     struct whpx_state *whpx;
@@ -1561,8 +1697,9 @@ int whpx_partition_setup(void)
     }
 
     memset(&prop, 0, sizeof(WHV_PARTITION_PROPERTY));
-    prop.ExtendedVmExits.X64MsrExit = WHPX_MSR_VMEXITS;
-//    prop.ExtendedVmExits.X64CpuidExit = 1;
+    if (vm_viridian)
+        prop.ExtendedVmExits.X64MsrExit = 1;
+    prop.ExtendedVmExits.X64CpuidExit = 1;
     hr = WHvSetPartitionProperty(whpx->partition,
         WHvPartitionPropertyCodeExtendedVmExits,
         &prop, sizeof(WHV_PARTITION_PROPERTY));
@@ -1574,14 +1711,15 @@ int whpx_partition_setup(void)
         goto error;
     }
 
-    whpx_cpuid_init();
-
     hr = WHvSetupPartition(whpx->partition);
     if (FAILED(hr)) {
         error_report("WHPX: Failed to setup partition, hr=%08lx", hr);
         ret = -EINVAL;
         goto error;
     }
+
+    /* FIXME: this likely needs improvement */
+    vm_id = WHPX_DOMAIN_ID_SELF;
 
     whpx_memory_init();
 

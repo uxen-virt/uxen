@@ -13,6 +13,7 @@
 #include "iomem.h"
 #include "mapcache.h"
 #include "memory.h"
+#include <dm/whpx/whpx.h>
 
 #include <xenctrl.h>
 
@@ -238,11 +239,21 @@ vm_memory_map_perm(uint64_t guest_addr, uint32_t len, int prot)
 	return NULL;
     }
 
-    va = xc_map_foreign_range(xc_handle, vm_id,
-			      (len + UXEN_PAGE_SIZE - 1) & UXEN_PAGE_MASK,
-			      prot, guest_addr >> UXEN_PAGE_SHIFT);
-    if (va == NULL)
-	return NULL;
+    if (!whpx_enable) {
+        va = xc_map_foreign_range(xc_handle, vm_id,
+            (len + UXEN_PAGE_SIZE - 1) & UXEN_PAGE_MASK,
+            prot, guest_addr >> UXEN_PAGE_SHIFT);
+        if (va == NULL)
+            return NULL;
 
-    return va + (guest_addr & ~UXEN_PAGE_MASK);
+        return va + (guest_addr & ~UXEN_PAGE_MASK);
+    } else {
+        uint64_t len_ = len;
+
+        va = whpx_ram_map(guest_addr, &len_);
+        assert(!va || len_ == len);
+
+        return va;
+    }
+
 }

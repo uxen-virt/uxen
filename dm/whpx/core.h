@@ -9,11 +9,20 @@
 
 #define DEBUG_PORT_NUMBER 0xe9
 
-#define WHPX_MSR_VMEXITS 0
 #define WHPX_MAX_REGISTERS 256
 
 struct CPUX86State;
 typedef struct CPUX86State CPUState;
+
+struct v4v_domain;
+
+typedef struct domain {
+    uint16_t domain_id;
+    critical_section lock;
+    struct v4v_domain *v4v;
+    int is_host;
+    int is_dying;
+} domain_t;
 
 typedef struct whpx_reg_list {
     uint32_t num;
@@ -79,5 +88,6 @@ void whpx_update_mapping(uint64_t start_pa, uint64_t size,
 int whpx_translate_gva_to_gpa(CPUState *cpu, int write, uint64_t gva, uint64_t *gpa,
                               int *is_unmapped);
 
+int whpx_v4v_signal(struct domain *);
 
 #endif

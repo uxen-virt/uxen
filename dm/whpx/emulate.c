@@ -338,7 +338,10 @@ static int emu_insn_fetch(
     return X86EMUL_UNHANDLEABLE;
 }
 
-#define EMU_UNSUPPORTED whpx_panic("%s: emulation unsupported!\n", __FUNCTION__); return X86EMUL_UNHANDLEABLE;
+#define EMU_UNSUPPORTED \
+  whpx_dump_cpu_state(whpx_get_current_cpu()->cpu_index); \
+  whpx_panic("%s: emulation unsupported!\n", __FUNCTION__); \
+  return X86EMUL_UNHANDLEABLE;
 
 static int emu_cmpxchg(
     enum x86_segment seg,

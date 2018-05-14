@@ -12,10 +12,16 @@
 #include "cpu.h"
 #include "core.h"
 
-#define PERF_TEST 0
-
-extern uint64_t tsum_runvp;
+extern uint64_t tmsum_runvp;
 extern uint64_t count_runvp;
+extern uint64_t tmsum_xlate;
+extern uint64_t count_xlate;
+extern uint64_t tmsum_vmexit[256];
+extern uint64_t count_vmexit[256];
+extern uint64_t tmsum_lapic_access;
+extern uint64_t count_lapic_access;
+extern uint64_t tmsum_v4v;
+extern uint64_t count_v4v;
 
 /* internal whpx utility functions */
 void whpx_initialize_api(void);
@@ -26,6 +32,7 @@ void get_whv_register_descr(WHV_REGISTER_NAME r, WHV_REGISTER_VALUE v, char *buf
 int get_cpu_mhz(void);
 void whpx_dump_cpu_state(int cpu_index);
 void dump_whv_register_list(WHV_REGISTER_NAME *r, WHV_REGISTER_VALUE *v, int count);
+void dump_phys_mem(uint64_t paddr, int len);
 
 WHV_X64_SEGMENT_REGISTER whpx_seg_q2h(const SegmentCache *qs);
 SegmentCache whpx_seg_h2q(const WHV_X64_SEGMENT_REGISTER *hs);
@@ -33,8 +40,8 @@ HRESULT whpx_get_vp_registers(UINT32 VpIndex, const WHV_REGISTER_NAME *RegisterN
     UINT32 RegisterCount,  WHV_REGISTER_VALUE *RegisterValues);
 HRESULT whpx_set_vp_registers(UINT32 VpIndex, const WHV_REGISTER_NAME *RegisterNames,
     UINT32 RegisterCount,  const WHV_REGISTER_VALUE *RegisterValues);
-void whpx_perf_stats(void);
-
+void whpx_dump_perf_stats(void);
+void whpx_reset_perf_stats(void);
 
 /* _rdtsc */
 static inline uint64_t _rdtsc()

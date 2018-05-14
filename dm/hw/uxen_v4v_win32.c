@@ -51,7 +51,7 @@ dm_v4v_bind(v4v_context_t *v4v, v4v_bind_values_t *bind)
         if (!_v4v_bind(&v4v->v4v_channel, bind, NULL))
             return GetLastError();
 
-        return true;
+        return 0;
     } else
         return whpx_v4v_bind(v4v, bind);
 }

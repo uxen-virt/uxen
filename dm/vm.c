@@ -415,8 +415,9 @@ error_template_destroy(void)
 void
 vm_set_vpt_coalesce(int onoff)
 {
-    xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_VPT_COALESCE_NS,
-                     onoff ? vm_vpt_coalesce_period : 0);
+    if (!whpx_enable)
+        xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_VPT_COALESCE_NS,
+            onoff ? vm_vpt_coalesce_period : 0);
 }
 
 void
@@ -653,26 +654,32 @@ vm_init(const char *loadvm, int restore_mode)
 
 int vm_is_paused(void)
 {
-    xc_dominfo_t info;
-    int ret;
+    if (!whpx_enable) {
+        xc_dominfo_t info;
+        int ret;
 
-    ret = xc_domain_getinfo(xc_handle, vm_id, 1, &info);
-    if (ret)
-        return info.paused;
-    return 0;
+        ret = xc_domain_getinfo(xc_handle, vm_id, 1, &info);
+        if (ret)
+            return info.paused;
+        return 0;
+    } else
+        return whpx_vm_is_paused();
 }
 
 int vm_pause(void)
 {
-    return xc_domain_pause(xc_handle, vm_id);
+    if (!whpx_enable)
+        return xc_domain_pause(xc_handle, vm_id);
+    else
+        return whpx_vm_pause();
 }
 
 int vm_unpause(void)
 {
-    int ret;
-
-    ret = xc_domain_unpause(xc_handle, vm_id);
-    return ret;
+    if (!whpx_enable)
+        return xc_domain_unpause(xc_handle, vm_id);
+    else
+        return whpx_vm_unpause();
 }
 
 static uxen_notification_event exceptionEvent;
@@ -956,7 +963,10 @@ vm_poweroff(void)
 {
     int ret;
 
-    ret = xc_domain_shutdown(xc_handle, vm_id, SHUTDOWN_poweroff);
+    if (!whpx_enable)
+        ret = xc_domain_shutdown(xc_handle, vm_id, SHUTDOWN_poweroff);
+    else
+        ret = whpx_vm_shutdown(SHUTDOWN_poweroff);
     if (ret)
         warn("xc_domain_shutdown(poweroff, %d) failed ret = %d", vm_id, ret);
     else

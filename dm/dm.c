@@ -141,6 +141,7 @@ uint64_t log_ratelimit_guest_burst = 0;
 uint64_t log_ratelimit_guest_ms = 0;
 
 uint64_t whpx_enable = 0;
+uint64_t whpx_perf_stats = 0;
 
 static void
 usage(const char *progname)
@@ -344,7 +345,8 @@ main(int argc, char **argv)
             err(1, "uxen_setup");
 
         uxen_log_version();
-    }
+    } else
+        whpx_early_init();
 
     debug_printf("creating vm\n");
     vm_create(vm_restore_mode);

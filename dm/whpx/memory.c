@@ -393,7 +393,9 @@ whpx_ram_map(uint64_t phys_addr, uint64_t *len)
     uint64_t l = *len;
 
     // sanity
-    assert((phys_addr < VM_VA_RANGE_SIZE) && (phys_addr + l < VM_VA_RANGE_SIZE));
+    if (!((phys_addr < VM_VA_RANGE_SIZE) && (phys_addr + l < VM_VA_RANGE_SIZE)))
+        whpx_panic("bad map attempt: addr=0x%"PRIx64" len=0x%"PRIx64"\n",
+            phys_addr, l);
 
     mb_entry_t *e;
     uint64_t page = phys_addr >> PAGE_SHIFT;
@@ -430,9 +432,10 @@ whpx_register_iorange(uint64_t start, uint64_t length, int is_mmio)
         debug_printf("WHPX: +++ mmio range %016"PRIx64" - %016"PRIx64"\n",
             start, start+length-1);
 
+#if 0
         if (vm_unmap_region(start, length))
             whpx_panic("unmap failed\n");
-        debug_printf("WHPX: mmio range registered\n");
+#endif
     } else {
         /* no-op for ioports (no api for that, HV should forward us everything */
     }
@@ -445,10 +448,77 @@ whpx_unregister_iorange(uint64_t start, uint64_t length, int is_mmio)
         debug_printf("WHPX: --- mmio range %016"PRIx64" - %016"PRIx64"\n",
             start, start+length-1);
 
+#if 0
         if (vm_map_region(start, length))
             whpx_panic("remap failed\n");
+#endif
     }
 }
+
+void
+whpx_copy_from_guest_va(CPUState *cpu, void *dst, uint64_t src_va, uint64_t len)
+{
+   void *src_p;
+   int ret;
+   int unmapped;
+
+   assert(cpu);
+
+   while (len) {
+       uint64_t copy_len = len;
+       uint64_t off = src_va & ~TARGET_PAGE_MASK;
+       uint64_t gpa = 0;
+
+       if (copy_len > TARGET_PAGE_SIZE - off)
+           copy_len = TARGET_PAGE_SIZE - off;
+
+       ret = whpx_translate_gva_to_gpa(cpu, 0, src_va, &gpa, &unmapped);
+       if (ret)
+           whpx_panic("failed to translate gva to gpa: gva=%"PRIx64", ret=%d\n",
+               src_va, ret);
+
+       src_p = whpx_ram_map(gpa, &copy_len);
+       assert(src_p != NULL);
+       memcpy(dst, src_p, copy_len);
+
+       len    -= copy_len;
+       dst    += copy_len;
+       src_va += copy_len;
+   }
+}
+
+void
+whpx_copy_to_guest_va(CPUState *cpu, uint64_t dst_va, void *src, uint64_t len)
+{
+   void *dst_p;
+   int ret;
+   int unmapped;
+
+   assert(cpu);
+
+   while (len) {
+       uint64_t copy_len = len;
+       uint64_t off = dst_va & ~TARGET_PAGE_MASK;
+       uint64_t gpa = 0;
+
+       if (copy_len > TARGET_PAGE_SIZE - off)
+           copy_len = TARGET_PAGE_SIZE - off;
+
+       ret = whpx_translate_gva_to_gpa(cpu, 0, dst_va, &gpa, &unmapped);
+       if (ret)
+           whpx_panic("failed to translate gva to gpa: gva=%"PRIx64", ret=%d\n",
+               dst_va, ret);
+
+       dst_p = whpx_ram_map(gpa, &copy_len);
+       assert(dst_p != NULL);
+       memcpy(dst_p, src, copy_len);
+
+       len    -= copy_len;
+       src    += copy_len;
+       dst_va += copy_len;
+   }
+}
+
 
 static int
 whpx_count_entries(void)
@@ -583,6 +653,10 @@ whpx_ram_init(void)
 void
 whpx_ram_uninit(void)
 {
+    /* for now, keep ram mapped/allocated during shutdown because there's some silly
+     * code which accesses mapped memory after vm destroy (ps2 mouse shared
+     * page at least) */
+#if 0
     mb_entry_t *e, *next;
 
     TAILQ_FOREACH_SAFE(e, &mb_entries, entry, next) {
@@ -592,4 +666,5 @@ whpx_ram_uninit(void)
 
     /* should have no entries left in rammap after depopulating everything */
     assert(whpx_count_entries() == 0);
+#endif
 }

@@ -410,9 +410,7 @@ pc_init_xen(void)
     //FIXME
 #ifndef __APPLE__
     int uxenhid_create_devices(void);
-    // FIXME: uxenhid on whp
-    if (!whpx_enable)
-        uxenhid_create_devices();
+    uxenhid_create_devices();
 #endif
 
     isa_create_simple("uxen_debug");

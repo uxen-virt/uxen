@@ -13,17 +13,26 @@
 #include "winhvemulation.h"
 #include "util.h"
 
-uint64_t tsum_setregs;
+uint64_t tmsum_setregs;
 uint64_t count_setregs;
 
-uint64_t tsum_getregs;
+uint64_t tmsum_getregs;
 uint64_t count_getregs;
 
-uint64_t tsum_runvp;
+uint64_t tmsum_runvp;
 uint64_t count_runvp;
 
-uint64_t tsum_xlate;
+uint64_t tmsum_xlate;
 uint64_t count_xlate;
+
+uint64_t tmsum_lapic_access;
+uint64_t count_lapic_access;
+
+uint64_t tmsum_v4v;
+uint64_t count_v4v;
+
+uint64_t tmsum_vmexit[256];
+uint64_t count_vmexit[256];
 
 /* all meaningful registers */
 static const WHV_REGISTER_NAME all_register_names[] = {
@@ -423,6 +432,24 @@ void whpx_dump_cpu_state(int cpu_index)
     debug_printf("\n");
 }
 
+void
+dump_phys_mem(uint64_t paddr, int len)
+{
+    uint64_t l = len;
+    assert(l%4 == 0);
+    uint8 *p = whpx_ram_map(paddr, &l);
+    uint8_t *porg = p;
+    if (p) {
+        while (l) {
+            debug_printf("@%08"PRIx64" = %02x%02x%02x%02x\n", paddr, p[0], p[1], p[2], p[3]);
+            p += 4;
+            paddr += 4;
+            l -= 4;
+        }
+        whpx_ram_unmap(porg);
+    }
+}
+
 WHV_X64_SEGMENT_REGISTER whpx_seg_q2h(const SegmentCache *qs)
 {
     WHV_X64_SEGMENT_REGISTER hs;
@@ -456,13 +483,13 @@ HRESULT whpx_set_vp_registers(
     const WHV_REGISTER_VALUE *RegisterValues
 )
 {
-    uint64_t t0;
-    if (PERF_TEST)
+    uint64_t t0 = 0;
+    if (whpx_perf_stats)
         t0 = _rdtsc();
     HRESULT r = WHvSetVirtualProcessorRegisters(whpx_get_partition(), VpIndex,
         RegisterNames, RegisterCount, RegisterValues);
-    if (PERF_TEST) {
-        tsum_setregs += _rdtsc() - t0;
+    if (whpx_perf_stats) {
+        tmsum_setregs += _rdtsc() - t0;
         count_setregs++;
     }
 
@@ -476,29 +503,53 @@ HRESULT whpx_get_vp_registers(
     WHV_REGISTER_VALUE *RegisterValues
 )
 {
-    uint64_t t0;
-    if (PERF_TEST)
+    uint64_t t0 = 0;
+    if (whpx_perf_stats)
         t0 = _rdtsc();
     HRESULT r = WHvGetVirtualProcessorRegisters(whpx_get_partition(), VpIndex,
         RegisterNames, RegisterCount, RegisterValues);
-    if (PERF_TEST) {
-        tsum_getregs += _rdtsc() - t0;
+    if (whpx_perf_stats) {
+        tmsum_getregs += _rdtsc() - t0;
         count_getregs++;
     }
     return r;
 }
 
 void
-whpx_perf_stats(void)
+whpx_reset_perf_stats(void)
 {
-    debug_printf("PERF STATS:\n");
-    debug_printf("runvp count %"PRId64" avg cycles %"PRId64"\n", count_runvp, count_runvp ? tsum_runvp/count_runvp : 0);
-    debug_printf("getregs count %"PRId64" avg cycles %"PRId64"\n", count_getregs, count_getregs ? tsum_getregs/count_getregs : 0);
-    debug_printf("setregs count %"PRId64" avg cycles %"PRId64"\n", count_setregs, count_setregs ? tsum_setregs/count_setregs : 0);
-    debug_printf("xlate count %"PRId64" avg cycles %"PRId64"\n", count_xlate, count_xlate ? tsum_xlate/count_xlate : 0);
+    count_runvp = count_getregs = count_setregs = count_xlate = count_v4v = 0;
+    tmsum_runvp = tmsum_getregs = tmsum_setregs = tmsum_xlate = tmsum_v4v = 0;
 
-    count_runvp = count_getregs = count_setregs = count_xlate = 0;
-    tsum_runvp = tsum_getregs = tsum_setregs = tsum_xlate = 0;
+    count_lapic_access = 0;
+    tmsum_lapic_access = 0;
+
+    memset(tmsum_vmexit, 0, sizeof(tmsum_vmexit));
+    memset(count_vmexit, 0, sizeof(count_vmexit));
+}
+
+void
+whpx_dump_perf_stats(void)
+{
+    static int iter = 1;
+    debug_printf("/---------------------------------------------------------------------\n");
+    debug_printf("|              WHPX performance stats, iteration=%d:\n", iter++);
+    debug_printf("|\n");
+    debug_printf("| runvp        count %8"PRId64" avg cycles %8"PRId64"\n", count_runvp, count_runvp ? tmsum_runvp/count_runvp : 0);
+    debug_printf("| getregs      count %8"PRId64" avg cycles %8"PRId64"\n", count_getregs, count_getregs ? tmsum_getregs/count_getregs : 0);
+    debug_printf("| setregs      count %8"PRId64" avg cycles %8"PRId64"\n", count_setregs, count_setregs ? tmsum_setregs/count_setregs : 0);
+    debug_printf("| translategva count %8"PRId64" avg cycles %8"PRId64"\n", count_xlate, count_xlate ? tmsum_xlate/count_xlate : 0);
+    debug_printf("| v4vop        count %8"PRId64" avg cycles %8"PRId64"\n", count_v4v, count_v4v ? tmsum_v4v/count_v4v : 0);
+    debug_printf("| lapic access count %8"PRId64" avg cycles %8"PRId64"\n", count_lapic_access, count_lapic_access ? tmsum_lapic_access/count_lapic_access : 0);
+
+    int i;
+    for (i = 0; i < 256; i++) {
+        if (count_vmexit[i]) {
+            debug_printf("| exit[%6d] count %8"PRId64" avg cycles %8"PRId64"\n",
+                i, count_vmexit[i], tmsum_vmexit[i] / count_vmexit[i]);
+        }
+    }
+    debug_printf("\\---------------------------------------------------------------------\n");
 }
 
 int

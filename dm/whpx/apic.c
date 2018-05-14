@@ -39,8 +39,10 @@
 #include <dm/qemu_glue.h>
 #include <dm/qemu/hw/sysbus.h>
 #include <dm/qemu/host-utils.h>
+#include <dm/dm.h>
 #include <dm/whpx/apic.h>
 #include <dm/whpx/ioapic.h>
+#include <dm/whpx/util.h>
 #include <dm/timer.h>
 #include <dm/debug.h>
 
@@ -501,7 +503,7 @@ static void apic_set_irq(APICState *s, int vector_num, int trigger_mode)
     apic_update_irq(s);
 }
 
-static void apic_eoi(APICState *s)
+static void apic_eoi_internal(APICState *s)
 {
     int isrv;
     isrv = get_highest_priority_int(s->isr);
@@ -512,6 +514,13 @@ static void apic_eoi(APICState *s)
         ioapic_eoi_broadcast(isrv);
     }
     apic_update_irq(s);
+}
+
+void apic_eoi(DeviceState *d)
+{
+    APICState *s = DO_UPCAST(APICState, busdev.qdev, d);
+
+    apic_eoi_internal(s);
 }
 
 static int apic_find_dest(uint8_t dest)
@@ -799,12 +808,16 @@ static uint32_t apic_mem_readl(void *opaque, target_phys_addr_t addr)
     APICState *s;
     uint32_t val;
     int index;
+    uint64_t t0 = 0;
 
     d = cpu_get_current_apic();
     if (!d) {
         return 0;
     }
     s = DO_UPCAST(APICState, busdev.qdev, d);
+
+    if (whpx_perf_stats)
+      t0 = _rdtsc();
 
     index = (addr >> 4) & 0xff;
     switch(index) {
@@ -877,6 +890,10 @@ static uint32_t apic_mem_readl(void *opaque, target_phys_addr_t addr)
 #ifndef QEMU_UXEN
     trace_apic_mem_readl(addr, val);
 #endif
+    if (whpx_perf_stats) {
+      tmsum_lapic_access += _rdtsc() - t0;
+      count_lapic_access++;
+    }
 
     return val;
 }
@@ -892,11 +909,59 @@ static void apic_send_msi(target_phys_addr_t addr, uint32_t data)
     apic_deliver_irq(dest, dest_mode, delivery, vector, trigger_mode);
 }
 
+uint8_t apic_get_taskpri(DeviceState *d)
+{
+    APICState *s = DO_UPCAST(APICState, busdev.qdev, d);
+
+    return s->tpr;
+}
+
+uint32_t apic_get_icr(DeviceState *d)
+{
+    APICState *s = DO_UPCAST(APICState, busdev.qdev, d);
+
+    return s->icr[0];
+}
+
+uint32_t apic_get_icr2(DeviceState *d)
+{
+    APICState *s = DO_UPCAST(APICState, busdev.qdev, d);
+
+    return s->icr[1];
+}
+
+void apic_set_taskpri(DeviceState *d, uint8_t val)
+{
+    APICState *s = DO_UPCAST(APICState, busdev.qdev, d);
+
+    s->tpr = val;
+    apic_update_irq(s);
+}
+
+void apic_set_icr(DeviceState *d, uint32_t v)
+{
+    APICState *s = DO_UPCAST(APICState, busdev.qdev, d);
+
+    s->icr[0] = v;
+    apic_deliver(d, (s->icr[1] >> 24) & 0xff, (s->icr[0] >> 11) & 1,
+        (s->icr[0] >> 8) & 7, (s->icr[0] & 0xff),
+        (s->icr[0] >> 15) & 1);
+}
+
+void apic_set_icr2(DeviceState *d, uint32_t v)
+{
+    APICState *s = DO_UPCAST(APICState, busdev.qdev, d);
+
+    s->icr[1] = v;
+}
+
 static void apic_mem_writel(void *opaque, target_phys_addr_t addr, uint32_t val)
 {
     DeviceState *d;
     APICState *s;
     int index = (addr >> 4) & 0xff;
+    uint64_t t0 = 0;
+
     if (addr > 0xfff || !index) {
         /* MSI and MMIO APIC are at the same memory location,
          * but actually not on the global bus: MSI is on PCI bus
@@ -912,6 +977,9 @@ static void apic_mem_writel(void *opaque, target_phys_addr_t addr, uint32_t val)
         return;
     }
     s = DO_UPCAST(APICState, busdev.qdev, d);
+
+    if (whpx_perf_stats)
+      t0 = _rdtsc();
 
 #ifndef QEMU_UXEN
     trace_apic_mem_writel(addr, val);
@@ -936,7 +1004,7 @@ static void apic_mem_writel(void *opaque, target_phys_addr_t addr, uint32_t val)
     case 0x0a:
         break;
     case 0x0b: /* EOI */
-        apic_eoi(s);
+        apic_eoi_internal(s);
         break;
     case 0x0d:
         s->log_dest = val >> 24;
@@ -991,6 +1059,11 @@ static void apic_mem_writel(void *opaque, target_phys_addr_t addr, uint32_t val)
     default:
         s->esr |= ESR_ILLEGAL_ADDRESS;
         break;
+    }
+
+    if (whpx_perf_stats) {
+      tmsum_lapic_access += _rdtsc() - t0;
+      count_lapic_access++;
     }
 }
 

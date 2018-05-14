@@ -180,6 +180,8 @@ $(CONFIG_VBOXDRV)shared-folders.o: CFLAGS += \
 $(CONFIG_VBOXDRV)shared-folders.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 $(CONFIG_VBOXDRV)shared-folders.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
 $(CONFIG_VBOXDRV)DM_SRCS += clipboard.c
+$(CONFIG_VBOXDRV)clipboard.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
+$(CONFIG_VBOXDRV)clipboard.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
 $(CONFIG_VBOXDRV)DM_SRCS += clipboard-protocol.c
 $(CONFIG_VBOXDRV)clipboard-protocol.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 $(CONFIG_VBOXDRV)clipboard-protocol.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
@@ -268,8 +270,13 @@ $(OSX)DM_SRCS += hw/uxen_v4v_osx.c
 hw_uxen_v4v_osx.o: CPPFLAGS += -I$(XENPUBLICDIR)
 
 $(WINDOWS)DM_SRCS += whpx/whpx.c
+whpx_whpx.o: CPPFLAGS += -I$(XENPUBLICDIR)
 whpx_whpx.o: CPPFLAGS += -I$(XENDIR_include)
 $(WINDOWS)DM_SRCS += whpx/core.c
+$(WINDOWS)DM_SRCS += whpx/v4v.c
+whpx_v4v.o: CPPFLAGS += -I$(XENPUBLICDIR)
+$(WINDOWS)DM_SRCS += whpx/v4v-whpx.c
+whpx_v4v-whpx.o: CPPFLAGS += -I$(XENPUBLICDIR)
 $(WINDOWS)DM_SRCS += whpx/memory.c
 whpx_memory.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 whpx_memory.o: CPPFLAGS += $(CUCKOO_CPPFLAGS)
@@ -284,6 +291,7 @@ $(WINDOWS)DM_SRCS += whpx/i8254.c
 $(WINDOWS)DM_SRCS += whpx/ioapic.c
 $(WINDOWS)DM_SRCS += whpx/apic.c
 $(WINDOWS)DM_SRCS += whpx/mc146818rtc.c
+$(WINDOWS)DM_SRCS += whpx/viridian.c
 
 QEMU_CFLAGS += -I$(TOPDIR)
 

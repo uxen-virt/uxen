@@ -10,6 +10,9 @@
 #include <dm/whpx/apic.h>
 #include <dm/vm.h>
 #include <dm/control.h>
+#include <dm/qemu/hw/isa.h>
+#include <dm/shared-folders.h>
+#include <dm/clipboard.h>
 #include <public/hvm/hvm_info_table.h>
 #include <public/hvm/e820.h>
 #include <whpx-shared.h>
@@ -17,6 +20,7 @@
 #include "winhvglue.h"
 #include "winhvplatform.h"
 #include "core.h"
+#include "v4v-whpx.h"
 #include "loader.h"
 #include "emulate.h"
 #include "util.h"
@@ -32,8 +36,11 @@
 /* apic */
 #define APIC_DEFAULT_PHYS_BASE 0xFEE00000
 
-static uint32_t running_vcpus = 0;
+#define PERF_TIMER_PERIOD_MS 1000
+
+static volatile uint32_t running_vcpus = 0;
 static int shutdown_reason = 0;
+static Timer *whpx_perf_timer;
 
 struct cpu_extra {
     HANDLE wake_ev;
@@ -72,6 +79,15 @@ CPUInterruptHandler cpu_interrupt_handler;
 static critical_section iothread_cs;
 static DWORD current_cpu_tls;
 static struct whpx_shared_info *shared_info_page;
+
+/* struct domain for the single guest handled by this uxendm,
+ * as required by v4v code */
+struct domain guest;
+extern int v4v_init(struct domain *);
+extern int v4v_destroy(struct domain *);
+
+/* represents host domain */
+struct domain dom0;
 
 void whpx_run_on_cpu(
     CPUState *env,
@@ -324,6 +340,20 @@ void qemu_cpu_kick(CPUState *cpu)
     whpx_vcpu_kick(cpu);
 }
 
+int
+whpx_v4v_signal(struct domain *domain)
+{
+    if (domain == &guest) {
+        qemu_set_irq(isa_get_irq(7), 1);
+        qemu_set_irq(isa_get_irq(7), 0);
+    } else {
+        assert(domain == &dom0);
+        whpx_v4v_handle_guest_signal();
+    }
+
+    return 0;
+}
+
 static void
 vcpu_stopped_cb(void *opaque)
 {
@@ -428,25 +458,43 @@ whpx_vcpu_run_thread(PVOID opaque)
 }
 
 static void
-whpx_vm_cleanup(void)
+whpx_vm_destroy(void)
 {
-    whpx_ram_uninit();
-    VirtualFree(shared_info_page, 0, MEM_RELEASE);
-    shared_info_page = NULL;
-}
+    /* signal vcpus to exit */
+    if (running_vcpus) {
+        whpx_vm_shutdown(WHPX_SHUTDOWN_POWEROFF);
+        /* wait for cpus to exit */
+        whpx_unlock_iothread();
+        while (running_vcpus)
+            Sleep(25);
+        whpx_lock_iothread();
+    }
 
-void
-whpx_destroy(void)
-{
+    /* destroy cpus */
     CPUState *cpu = first_cpu;
 
-    debug_printf("destroying whpx\n");
-    whpx_vm_cleanup();
     while (cpu) {
         whpx_destroy_vcpu(cpu);
         vcpu_destroy(cpu);
         cpu = cpu->next_cpu;
     }
+
+    /* destroy other */
+    whpx_ram_uninit();
+    VirtualFree(shared_info_page, 0, MEM_RELEASE);
+    shared_info_page = NULL;
+
+    debug_printf("v4v destroy\n");
+    v4v_destroy(&guest);
+    debug_printf("v4v destroy done\n");
+    memset(&guest, 0, sizeof(guest));
+}
+
+void
+whpx_destroy(void)
+{
+    debug_printf("destroying whpx\n");
+    whpx_vm_destroy();
 }
 
 void
@@ -475,6 +523,27 @@ whpx_vm_start(void)
     for (i = 0; i < vm_vcpus; i++)
         whpx_vcpu_start(&cpu_state[i]);
 
+    return 0;
+}
+
+int
+whpx_vm_is_paused(void)
+{
+    //FIXME: implement
+    return 0;
+}
+
+int
+whpx_vm_pause(void)
+{
+    //FIXME: implement
+    return 0;
+}
+
+int
+whpx_vm_unpause(void)
+{
+    //FIXME: implement
     return 0;
 }
 
@@ -713,6 +782,9 @@ whpx_create_vm_memory(int memory_mb)
     if (whpx_ram_populate(0, npages * PAGE_SIZE, 0))
         whpx_panic("whpx_ram_populate");
 
+    /* depopulate VGA hole */
+    if (whpx_ram_depopulate(0xA0000, 0x20000, 0))
+        whpx_panic("whpx_ram_depopulate");
     /* acpi info area */
     if (whpx_ram_populate(ACPI_INFO_PHYSICAL_ADDRESS, npages_acpi * PAGE_SIZE, 0))
         whpx_panic("whpx_ram_populate");
@@ -759,14 +831,14 @@ whpx_create_vm_memory(int memory_mb)
 extern void pit_init(void);
 
 void
-ioport_debug_char(void *opaque, uint32_t addr, uint32_t data)
+whpx_debug_char(char data)
 {
     static char line[2048];
     static int llen = 0;
 
     whpx_lock_iothread();
     if (llen < sizeof(line) - 1)
-        line[llen++] = (char)data;
+        line[llen++] = data;
     if (llen >= sizeof(line) - 1 || data == '\n') {
         line[llen] = 0;
         debug_printf("HVM DEBUG: %s", line);
@@ -775,9 +847,17 @@ ioport_debug_char(void *opaque, uint32_t addr, uint32_t data)
     whpx_unlock_iothread();
 }
 
+static void
+ioport_debug_char(void *opaque, uint32_t addr, uint32_t data)
+{
+    whpx_debug_char((char)data);
+}
+
 int whpx_create_vm_vcpus(void)
 {
     int i;
+
+    assert(vm_vcpus < WHPX_MAX_VCPUS);
 
     for (i = 0; i < vm_vcpus; i++) {
       CPUState *s = &cpu_state[i];
@@ -794,6 +874,35 @@ int whpx_create_vm_vcpus(void)
     return 0;
 }
 
+static void
+perf_timer_notify(void *opaque)
+{
+    whpx_dump_perf_stats();
+    whpx_reset_perf_stats();
+    mod_timer(whpx_perf_timer,
+        get_clock_ms(vm_clock) + PERF_TIMER_PERIOD_MS);
+}
+
+int
+whpx_early_init(void)
+{
+    critical_section_init(&iothread_cs);
+
+    debug_printf("whpx early init\n");
+
+    whpx_initialize_api();
+    emu_init();
+    whpx_v4v_init();
+
+    /* init dom0 domain for v4v */
+    memset(&dom0, 0, sizeof(dom0));
+    dom0.is_host = 1;
+    critical_section_init(&dom0.lock);
+    v4v_init(&dom0);
+
+    return 0;
+}
+
 int whpx_vm_init(const char *loadvm, int restore_mode)
 {
     int ret;
@@ -805,14 +914,10 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
     debug_printf("vm init, thread 0x%x, restore_mode=%d, file=%s\n", (int)GetCurrentThreadId(),
       restore_mode, loadvm ? loadvm : "");
 
-    whpx_initialize_api();
-
-    emu_init();
-
-    critical_section_init(&iothread_cs);
     current_cpu_tls = TlsAlloc();
     if (current_cpu_tls == TLS_OUT_OF_INDEXES)
         whpx_panic("out of tls indexes\n");
+
     ret = whpx_partition_setup();
     if (ret)
         return ret;
@@ -825,6 +930,19 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
     ret = whpx_create_vm_memory(vm_mem_mb);
     if (ret)
         return ret;
+
+#if defined(CONFIG_VBOXDRV)
+    ret = sf_service_start();
+    if (ret) {
+        debug_printf("failed to start sf service\n");
+        return ret;
+    }
+    ret = clip_service_start();
+    if (ret) {
+        debug_printf("failed to start clipboard service\n");
+        return ret;
+    }
+#endif
 
     // debug out
     register_ioport_write(DEBUG_PORT_NUMBER, 1, 1, ioport_debug_char, NULL);
@@ -848,6 +966,12 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
 
     pit_init();
 
+    /* init domain v4v */
+    memset(&guest, 0, sizeof(guest));
+    guest.domain_id = WHPX_DOMAIN_ID_SELF;
+    critical_section_init(&guest.lock);
+    v4v_init(&guest);
+
     if (loadvm) {
         debug_printf("finishing vm load\n");
         ret = vm_load_finish();
@@ -860,6 +984,11 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
     /* dirty tracking unsupported */
     vm_vram_dirty_tracking = 0;
 
+    if (whpx_perf_stats) {
+        whpx_perf_timer = new_timer_ms(vm_clock, perf_timer_notify, NULL);
+        mod_timer(whpx_perf_timer,
+            get_clock_ms(vm_clock) + PERF_TIMER_PERIOD_MS);
+    }
     return 0;
 }
 
