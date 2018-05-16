@@ -63,7 +63,19 @@ uxen_err_vprintf(const char *function, int line,
     {
         enum uxen_logtype printType = uxen_logtype_err;
         int i = 0;  /* Index within the buffer. */
+
+#ifdef __x86_64__
         char buf[log_buf_len];
+#else
+        char *buf = malloc(log_buf_len);
+
+        if (!buf) {
+            /* Really shouldn't happen. Ever. */
+            log_sinker("UNABLE TO ALLOCATE MEMORY FOR WRITING uxenctllib LOGS!\n", uxen_logtype_err);
+            return;
+        }
+#endif
+
         memset(buf, 0, log_buf_len); /* Security. */
 
         /* i += snprintf(buf, log_buf_len, "%s: ", getprogname()); */
@@ -88,6 +100,10 @@ uxen_err_vprintf(const char *function, int line,
             printType = uxen_logtype_warn;
 
         log_sinker(buf, printType);
+
+#ifndef __x86_64__
+        free(buf);
+#endif
     }
     else
     {
