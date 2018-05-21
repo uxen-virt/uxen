@@ -293,8 +293,9 @@ long arch_do_domctl(
                     break;
             }
 
+            page = virt_to_page(arr);
             unmap_domain_page(arr);
-            free_domheap_page(virt_to_page(arr));
+            free_domheap_page(page);
 
             rcu_unlock_domain(d);
             break;
