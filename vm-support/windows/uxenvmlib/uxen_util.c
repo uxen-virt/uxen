@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -10,6 +10,7 @@
 
 #include "uxen_types.h"
 #include "../common/debug.h"
+#include "../../../common/include/whpx-shared.h"
 #include "uxen_hypercall.h"
 #include "uxen_util.h"
 #include "uxen_hypercall_sup.h"
@@ -23,6 +24,10 @@
 
 #define UXEN_DBGPRINT_LOG_DBGVIEW 1
 
+
+#define VIRIDIAN_CPUID_SIGNATURE_EBX 0x7263694d
+#define VIRIDIAN_CPUID_SIGNATURE_ECX 0x666f736f
+#define VIRIDIAN_CPUID_SIGNATURE_EDX 0x76482074
 
 void *
 uxen_malloc_locked_pages(unsigned int nr_pages, unsigned int *mfn_list,
@@ -216,4 +221,36 @@ uxen_get_shared_info(unsigned int *_gpfn)
         *_gpfn = gpfn;
 
     return shared_info;
+}
+
+int
+uxen_is_whp_present_64(void)
+{
+    static int tested = 0;
+    static int whp_present = 0;
+
+    if (!tested) {
+        uint32_t base = 0x40000000;
+        uint32_t eax, ebx, ecx, edx;
+
+        cpuid(base, &eax, &ebx, &ecx, &edx);
+
+        /* if viridian is enabled, use 0x40000100 */
+        if (ebx == VIRIDIAN_CPUID_SIGNATURE_EBX &&
+            ecx == VIRIDIAN_CPUID_SIGNATURE_ECX &&
+            edx == VIRIDIAN_CPUID_SIGNATURE_EDX)
+        {
+            base = 0x40000100;
+            cpuid(base, &eax, &ebx, &ecx, &edx);
+        }
+
+        whp_present = (ebx == WHP_CPUID_SIGNATURE_EBX &&
+            ecx == WHP_CPUID_SIGNATURE_ECX &&
+            edx == WHP_CPUID_SIGNATURE_EDX);
+        KeMemoryBarrier();
+
+        tested = 1;
+    }
+
+    return whp_present;
 }

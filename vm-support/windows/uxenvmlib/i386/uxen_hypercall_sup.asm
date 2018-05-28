@@ -2,7 +2,7 @@
 	;; uxen_hypercall_sup.asm
 	;; uxen
 	;;
-	;; Copyright 2012-2015, Bromium, Inc.
+	;; Copyright 2012-2018, Bromium, Inc.
 	;; SPDX-License-Identifier: ISC
 	;;
 
@@ -131,5 +131,28 @@ _hypercall6	proc NEAR STDCALL, addr1:DWORD, arg1:DWORD, arg2:DWORD, arg3: DWORD,
 
 _hypercall6	endp
 
+        public _whpx_hypercall6
 
-	end
+_whpx_hypercall6	proc NEAR STDCALL, addr1:DWORD, arg1:DWORD, arg2:DWORD, arg3: DWORD, arg4:DWORD, arg5:DWORD, arg6:DWORD
+    push esi
+    push edi
+    push ebx
+    push ebp
+    mov eax, addr1
+    mov ebx, arg1
+    mov ecx, arg2
+    mov edx, arg3
+    mov esi, arg4
+    mov edi, arg5
+    mov ebp, arg6
+    cpuid
+    pop ebp
+    pop ebx
+    pop edi
+    pop esi
+    ret 28
+
+_whpx_hypercall6 endp
+
+    end
+

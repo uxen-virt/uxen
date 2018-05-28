@@ -8,6 +8,7 @@ EXPORTS
 
     uxen_DbgPrint
     uxen_get_shared_info
+    uxen_is_whp_present_64
     uxen_hypercall_init
     uxen_hypercall_memory_op
     uxen_malloc_locked_pages

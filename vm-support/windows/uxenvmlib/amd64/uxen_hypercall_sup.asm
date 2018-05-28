@@ -2,7 +2,7 @@
 	;; uxen_hypercall_sup.asm
 	;; uxen
 	;;
-	;; Copyright 2012-2015, Bromium, Inc.
+	;; Copyright 2012-2018, Bromium, Inc.
 	;; SPDX-License-Identifier: ISC
 	;;
 
@@ -108,4 +108,22 @@ _hypercall6	proc
 
 _hypercall6	endp
 
+        public _whpx_hypercall6
+
+_whpx_hypercall6 proc
+	push	rdi
+	push	rsi
+	mov	rax, rcx
+	mov	rdi, rdx
+	mov	rsi, r8
+	mov	rdx, r9
+	mov	r10, qword ptr [rsp+38h] 
+	mov	r8, qword ptr [rsp+40h] 
+	mov	r9, qword ptr [rsp+48h]
+        cpuid
+	pop	rsi
+	pop	rdi
+	ret
+
+_whpx_hypercall6 endp
 	end

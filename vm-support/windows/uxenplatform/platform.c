@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2016, Bromium, Inc.
+ * Copyright 2013-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -286,10 +286,13 @@ uxp_ev_driver_device_add(IN WDFDRIVER driver, IN PWDFDEVICE_INIT device_init)
         return status;
     }
 
-    status = balloon_init();
-    if (!NT_SUCCESS (status)) {
-        uxen_err("balloon_init failed: 0x%08X", status);
-        return status;
+    // FIXME: whp ballon
+    if (!uxen_is_whp_present()) {
+        status = balloon_init();
+        if (!NT_SUCCESS (status)) {
+            uxen_err("balloon_init failed: 0x%08X", status);
+            return status;
+        }
     }
 
     status = bus_set_info(device);
@@ -391,7 +394,9 @@ uxp_ev_device_prepare_hardware(WDFDEVICE device, WDFCMRESLIST resources,
     if (!NT_SUCCESS(status))
         return status;
 
-    zp_init();
+    // FIXME: WHP zero-page
+    if (!uxen_is_whp_present())
+        zp_init();
 
     return STATUS_SUCCESS;
 }
@@ -592,13 +597,19 @@ uxp_ev_device_io_device_control(IN WDFQUEUE queue, IN WDFREQUEST request,
             goto out;
         }
 
-        status = balloon_get_statistics(d);
-        if (NT_SUCCESS(status)) {
-            d->min_size_mb = fdo_data->balloon_min;
-            d->max_size_mb = fdo_data->balloon_max;
+        //FIXME: WHP balloon
+        if (!uxen_is_whp_present()) {
+            status = balloon_get_statistics(d);
+            if (NT_SUCCESS(status)) {
+                d->min_size_mb = fdo_data->balloon_min;
+                d->max_size_mb = fdo_data->balloon_max;
+                out_bytes = sizeof(*d);
+            }
+        } else {
+            d->min_size_mb = 0;
+            d->max_size_mb = 0;
             out_bytes = sizeof(*d);
         }
-
         break;
     }
     case ICC(IOCTL_UXEN_PLATFORM_BALLOON_SET_CONFIGURATION): {

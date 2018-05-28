@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -36,5 +36,14 @@ uxen_DbgPrint(const char *fmt, ...);
 
 struct shared_info *
 uxen_get_shared_info(unsigned int *);
+
+static __inline int uxen_is_whp_present_32(void) { return 0; }
+int uxen_is_whp_present_64(void);
+
+#ifdef __x86_64__
+#define uxen_is_whp_present uxen_is_whp_present_64
+#else
+#define uxen_is_whp_present uxen_is_whp_present_32
+#endif
 
 #endif	/* _UXEN_UTIL_H_ */

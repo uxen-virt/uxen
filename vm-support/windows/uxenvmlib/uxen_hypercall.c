@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -34,6 +34,9 @@ uxen_hypercall_init(void)
     char signature[13];
     xen_extraversion_t extraversion;
     unsigned int i;
+
+    if (uxen_is_whp_present())
+        return 0; /* nothing to do */
 
     if (hypercall_page != NULL && hypercall_page_mfn != NULL) {
         uxen_msg("hypercall already initialized:");
@@ -156,12 +159,12 @@ uintptr_t uxen_hypercall5(unsigned int nr, uintptr_t a1, uintptr_t a2, uintptr_t
     return _hypercall5(hcall_by_nr(nr), a1, a2, a3, a4, a5);
 }
 
-
 uintptr_t uxen_hypercall6(unsigned int nr, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
 {
-    if (!hypercall_page)
-	return (uintptr_t) -ENOSYS; 
-    return _hypercall6(hcall_by_nr(nr), a1, a2, a3, a4, a5, a6);
+    if (!uxen_is_whp_present()) {
+        if (!hypercall_page)
+            return (uintptr_t) -ENOSYS; 
+        return _hypercall6(hcall_by_nr(nr), a1, a2, a3, a4, a5, a6);
+    } else
+        return _whpx_hypercall6(nr, a1, a2, a3, a4, a5, a6);
 }
- 
- 
