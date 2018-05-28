@@ -1,11 +1,11 @@
 /*
- * Copyright 2013-2016, Bromium, Inc.
+ * Copyright 2013-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
 #include "channel.h"
 #include <windows.h>
-#include <dm/clipboard-protocol.h>
+#include "proto.h"
 #include <iprt/err.h>
 #include <xen/v4v.h>
 

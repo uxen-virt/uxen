@@ -18,7 +18,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2013-2017, Bromium, Inc.
+ * Copyright 2013-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -40,7 +40,7 @@
 #include "channel.h"
 #include "clipboardformats.h"
 #include "uxen_bmp_convert.h"
-#include <dm/clipboard-protocol.h>
+#include "proto.h"
 #include "../common/debug-user.h"
 
 typedef struct _VBOXCLIPBOARDCONTEXT
