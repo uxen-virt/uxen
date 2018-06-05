@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -71,6 +71,7 @@ typedef int ssize_t;
 #define V4V_PFN_LIST_MAGIC  0x91dd6159045b302dULL
 #define V4V_DOMID_SELF      (0x7FF0U)
 #define V4V_DOMID_DM        (0x7FF1U)
+#define V4V_DOMID_HV        (0x7FF2U)
 #define V4V_DOMID_UUID      (0x7FFEU)
 #define V4V_DOMID_INVALID   (0x7FFFU)
 #define V4V_DOMID_NONE	V4V_DOMID_INVALID

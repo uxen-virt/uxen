@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, Bromium, Inc.
+ * Copyright 2016-2018, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -11,11 +11,15 @@
 #include <linux/module.h>
 
 #include <uxen-v4vlib.h>
+#include <uxen-platform.h>
 
-#define V4V_BASE_PORT 44448
-#define V4V_RING_LEN  262144
+#define UXEN_V4V_PORT   44448
+#define UXEN_RING_LEN   262144
 
-#define MIN_KBD_PKT_LEN 24
+#define AX_V4V_PORT	    55559
+#define AX_RING_LEN	    4096
+
+#define UXEN_MIN_KBD_PKT_LEN 24
 
 static unsigned char keycodes[256] = { 0 };
 
@@ -58,8 +62,10 @@ struct ns_event_msg_kbd_input {
 struct uxenkbd_dev {
     struct device dev;
     struct input_dev *idev;
-    uxen_v4v_ring_t *recv_ring;
-    v4v_addr_t dest_addr;
+    uxen_v4v_ring_t *uxen_ring;
+    uxen_v4v_ring_t *ax_ring;
+    v4v_addr_t uxen_dest_addr;
+    v4v_addr_t ax_dest_addr;
     int ready;
     int dev_registered;
     struct tasklet_struct tasklet;
@@ -89,67 +95,113 @@ static inline int is_event_supported(unsigned int code,
 static void uxenkbd_softirq(unsigned long opaque)
 {
     struct uxenkbd_dev *dev = (struct uxenkbd_dev *) opaque;
-    size_t readlen = 0;
+    size_t readlen;
     ssize_t len;
 
     if (!dev->ready || !dev->idev)
         return;
 
-    BUG_ON(dev->recv_ring == NULL);
+    if (!dev->uxen_ring)
+        return;
 
-    while (readlen <= V4V_RING_LEN) {
+    if (dev->ax_ring) {
+        readlen = 0;
+        while (readlen <= AX_RING_LEN) {
+            u8 scancode = 0, trans_keycode;
+
+            len = uxen_v4v_copy_out(dev->ax_ring, NULL, NULL, NULL, 0, 0);
+            if (len < 1)
+                break;
+
+            uxen_v4v_copy_out(dev->ax_ring, NULL, NULL, &scancode, 1, 0);
+
+            input_event(dev->idev, EV_MSC, MSC_SCAN, scancode & 0x7f);
+            trans_keycode = keycodes[scancode & 0x7f];
+            input_report_key(dev->idev, trans_keycode, (scancode & 0x80) ? 0 : 1);
+            input_sync(dev->idev);
+
+            len = uxen_v4v_copy_out(dev->ax_ring, NULL, NULL, NULL, 0, 1);
+            if (len > 0)
+                readlen += len;
+        }
+    }
+
+    readlen = 0;
+    while (readlen <= UXEN_RING_LEN) {
         struct ns_event_msg_kbd_input kdata;
-        u8 trans_keycode;
 
-        len = uxen_v4v_copy_out(dev->recv_ring, NULL, NULL, NULL, 0, 0);
+        len = uxen_v4v_copy_out(dev->uxen_ring, NULL, NULL, NULL, 0, 0);
         if (len <= 0)
             break;
         if (len < sizeof(kdata.hdr))
             goto consume;
-        if (len < MIN_KBD_PKT_LEN)
+        if (len < UXEN_MIN_KBD_PKT_LEN)
             goto consume;
         if (len > sizeof(kdata))
             len = sizeof(kdata);
 
-        uxen_v4v_copy_out(dev->recv_ring, NULL, NULL, &kdata, len, 0);
+
+        uxen_v4v_copy_out(dev->uxen_ring, NULL, NULL, &kdata, len, 0);
         if (kdata.hdr.proto != NS_EVENT_MSG_KBD_INPUT)
             goto consume;
 
-        input_event(dev->idev, EV_MSC, MSC_SCAN, kdata.scancode & 0x7f);
-        trans_keycode = keycodes[kdata.scancode & 0x7f];
-        input_report_key(dev->idev, trans_keycode, (kdata.scancode & 0x80) ? 0 : 1);
-        input_sync(dev->idev);
+        if (!dev->ax_ring) {
+            u8 trans_keycode;
+
+            input_event(dev->idev, EV_MSC, MSC_SCAN, kdata.scancode & 0x7f);
+            trans_keycode = keycodes[kdata.scancode & 0x7f];
+            input_report_key(dev->idev, trans_keycode, (kdata.scancode & 0x80) ? 0 : 1);
+            input_sync(dev->idev);
+        }
 
         consume:
-            len = uxen_v4v_copy_out(dev->recv_ring, NULL, NULL, NULL, 0, 1);
+            len = uxen_v4v_copy_out(dev->uxen_ring, NULL, NULL, NULL, 0, 1);
             if (len > 0)
                 readlen += len;
-        continue;
     }
 
     if (readlen)
         uxen_v4v_notify();
 }
 
-static int v4v_ring_init(struct uxenkbd_dev *dev)
+static int v4v_init_rings(struct uxenkbd_dev *dev)
 {
-    int ret = 0;
+    int ret = -1;
 
-    dev->dest_addr.port = V4V_BASE_PORT;
-    dev->dest_addr.domain = V4V_DOMID_DM;
+    dev->uxen_dest_addr.port = UXEN_V4V_PORT;
+    dev->uxen_dest_addr.domain = V4V_DOMID_DM;
+    dev->ax_dest_addr.port = AX_V4V_PORT;
+    dev->ax_dest_addr.domain = V4V_DOMID_HV;
+
     tasklet_init(&dev->tasklet, uxenkbd_softirq, (unsigned long) dev);
-    dev->recv_ring = uxen_v4v_ring_bind(dev->dest_addr.port, dev->dest_addr.domain,
-                                        V4V_RING_LEN, uxenkbd_irq, dev);
-    if (!dev->recv_ring) {
+
+    dev->uxen_ring = uxen_v4v_ring_bind(dev->uxen_dest_addr.port, dev->uxen_dest_addr.domain,
+                                       UXEN_RING_LEN, uxenkbd_irq, dev);
+    if (!dev->uxen_ring) {
         ret = -ENOMEM;
         goto out;
     }
-    if (IS_ERR(dev->recv_ring)) {
-        ret = PTR_ERR(dev->recv_ring);
-        dev->recv_ring = NULL;
+    if (IS_ERR(dev->uxen_ring)) {
+        ret = PTR_ERR(dev->uxen_ring);
+        dev->uxen_ring = NULL;
         goto out;
     }
 
+    if (protvm_use_secure_keyboard) {
+        dev->ax_ring = uxen_v4v_ring_bind(dev->ax_dest_addr.port, dev->ax_dest_addr.domain,
+                                           AX_RING_LEN, uxenkbd_irq, dev);
+        if (!dev->ax_ring) {
+            ret = -ENOMEM;
+            goto out;
+        }
+        if (IS_ERR(dev->ax_ring)) {
+            ret = PTR_ERR(dev->ax_ring);
+            dev->ax_ring = NULL;
+            goto out;
+        }
+
+        printk("uxenkbd: using secure keyboard\n");
+    }
     ret = 0;
 
 out:
@@ -158,13 +210,16 @@ out:
     return ret;
 }
 
-static void v4v_ring_free(struct uxenkbd_dev *dev)
+static void v4v_rings_free(struct uxenkbd_dev *dev)
 {
-    if (dev->recv_ring) {
-        uxen_v4v_ring_free(dev->recv_ring);
+    if (dev->uxen_ring || dev->ax_ring)
         tasklet_kill(&dev->tasklet);
-    }
-    dev->recv_ring = NULL;
+    if (dev->uxen_ring)
+        uxen_v4v_ring_free(dev->uxen_ring);
+    if (dev->ax_ring)
+        uxen_v4v_ring_free(dev->ax_ring);
+    dev->uxen_ring = NULL;
+    dev->ax_ring = NULL;
 }
 
 static void ukbd_device_release(struct device *dev)
@@ -174,7 +229,7 @@ static void ukbd_device_release(struct device *dev)
 
 static void ukbd_free(void)
 {
-    v4v_ring_free(&ukbd);
+    v4v_rings_free(&ukbd);
     if (ukbd.idev)
         input_unregister_device(ukbd.idev);
     if (ukbd.dev_registered)
@@ -195,7 +250,7 @@ static int __init uxenkbd_init(void)
     }
     ukbd.dev_registered = 1;
 
-    ret = v4v_ring_init(&ukbd);
+    ret = v4v_init_rings(&ukbd);
     if (ret)
         goto cleanup;
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, Bromium, Inc.
+ * Copyright 2016-2018, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -57,5 +57,7 @@ static inline int uxen_device_get_property(struct uxen_device *dev, int prop_id,
 
 int uxen_driver_register(struct uxen_driver *drv);
 void uxen_driver_unregister(struct uxen_driver *drv);
+
+extern int protvm_use_secure_keyboard;
 
 #endif

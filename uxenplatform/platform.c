@@ -81,6 +81,9 @@ static int device_remove(struct device *_dev, void *data)
     return 0;
 }
 
+int protvm_use_secure_keyboard = 0;
+EXPORT_SYMBOL_GPL(protvm_use_secure_keyboard);
+
 static struct bus_type uxen_bus = {
     .name =		"uxen",
     .match =		bus_match,

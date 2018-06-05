@@ -18,6 +18,9 @@ static struct kobject *ax_kobj;
 #define AX_CPUID_QUERYOP 0x35af3471
 #define AX_QUERYOP_TSC_KHZ 1
 #define AX_QUERYOP_SESSION_KEY 2
+#define AX_QUERYOP_FEATURES 3
+
+#define AX_QP_FEATURES_PROT_KBD   (1 << 0)
 
 static
 uint32_t ax_queryop(uint32_t op, uint64_t arg1)
@@ -100,6 +103,7 @@ int ax_platform_init(struct bus_type *uxen_bus)
 {
     int err;
     struct uxen_device *dev;
+    uint32_t features;
 
     use_rdrand = arch_has_random();
     use_rdseed = arch_has_random_seed();
@@ -176,6 +180,11 @@ int ax_platform_init(struct bus_type *uxen_bus)
       printk(KERN_WARNING "%s: failed to create sysfs file: %d\n", __FUNCTION__, err);
       return err;
     }
+
+    features = ax_queryop(AX_QUERYOP_FEATURES, 0);
+    printk("%s: ax features 0x%x\n", __FUNCTION__, (unsigned) features);
+
+    protvm_use_secure_keyboard = !!(features & AX_QP_FEATURES_PROT_KBD);
 
     return 0;
 }
