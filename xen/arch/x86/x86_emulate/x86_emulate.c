@@ -23,7 +23,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -1375,17 +1375,42 @@ x86_emulate(
 #define tb(x) ((x) | (1 << 8))
     if (ctxt->emulation_restricted) {
         if (rep_prefix == REPE_PREFIX /* F3 */ &&  (b|(twobyte<<8)) == tb(0x6f)) {
-            /* KRY-40310 fake emulate two movdqu forms in restricted emu mode, used
-             * for process dmps
-             * nt!memcpy+0xa0:
+            /* KRY-40310 KRY-44734 fake emulate some movdqu forms in restricted
+             * emu mode, used within nt!memcpy during creation of process dmps;
+             * examples of movdqu within memcpy:
              * fffff802`b85dc820 f30f6f040a      movdqu  xmm0,xmmword ptr [rdx+rcx]
              * fffff802`b85dc825 f30f6f4c0a10    movdqu  xmm1,xmmword ptr [rdx+rcx+10h]
+             * fffff801`46398ac0 f30f6f440af0    movdqu  xmm0,xmmword ptr [rdx+rcx-10h]
+             * fffff801`46398ac6 f30f6f4c0ae0    movdqu  xmm1,xmmword ptr [rdx+rcx-20h]
+             * fffff802`12fcaac0 f30f6f0c11      movdqu  xmm1,xmmword ptr [rcx+rdx]
+
+             * we'll fake emulate
+             * movdqu xmm0/1,xmmword ptr [A+B] and
+             * movdqu xmm0/1,xmmword ptr [A+B+disp8]
              */
-            switch (insn_fetch_type(uint8_t)) {
-            case 0x04:
-                if (insn_fetch_type(uint8_t) == 0x0A) {
+            uint8_t modrm = insn_fetch_type(uint8_t);
+            uint8_t mod = (modrm >> 6) & 3;
+            uint8_t reg = (modrm >> 3) & 7;
+            uint8_t rm  = modrm & 7;
+            /* mod = 0 or 1: no displacement or 8-bit displacement */
+            /* rm  = 4     : SIB byte present */
+            if ((mod == 0 || mod == 1) && (rm == 4)) {
+                if (reg == 0 || reg == 1) { /* xmm0 or xmm1 */
+                    uint8_t sib = insn_fetch_type(uint8_t);
+                    uint8_t off;
+
+                    if (mod == 1) /* 8-bit displacement */
+                        off = insn_fetch_type(uint8_t);
+                    else /* no displacement */
+                        off = 0;
+
+                    /* fake the emulation and continue */
                     if (!ctxt->silent_fake_emulation) {
-                        gdprintk(XENLOG_WARNING, "WARN: fake movdqu xmm0,xmmword ptr [rdx+rcx]  rip %p\n",
+                        gdprintk(XENLOG_WARNING,
+                            "WARN: fake movdqu xmm%d,xmmword ptr [...+%xh] sib=%x rip %p\n",
+                            reg,
+                            off,
+                            sib,
                             _p(ctxt->regs->eip));
                         ctxt->silent_fake_emulation = 1;
                     }
@@ -1393,22 +1418,6 @@ x86_emulate(
                     dst.type = OP_NONE;
                     goto writeback;
                 }
-                break;
-            case 0x4C:
-                if (insn_fetch_type(uint8_t) == 0x0A &&
-                    insn_fetch_type(uint8_t) == 0x10) {
-                    if (!ctxt->silent_fake_emulation) {
-                        gdprintk(XENLOG_WARNING, "WARN: fake movdqu xmm1,xmmword ptr [rdx+rcx+10h]  rip %p\n",
-                            _p(ctxt->regs->eip));
-                        ctxt->silent_fake_emulation = 0;
-                    }
-
-                    dst.type = OP_NONE;
-                    goto writeback;
-                }
-                break;
-            default:
-                break;
             }
         }
 
