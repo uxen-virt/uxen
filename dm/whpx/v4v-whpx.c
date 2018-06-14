@@ -42,11 +42,18 @@ typedef struct v4v_connection {
     TAILQ_HEAD(, v4v_pending_send) pending_send;
     int num_pending;
     bool opened;
+    uint32_t flags;
     TAILQ_ENTRY(v4v_connection) entry;
 } v4v_connection_t;
 
 static TAILQ_HEAD(, v4v_connection) connections;
 static critical_section connections_lock;
+
+static bool virq_thread_quit;
+static struct io_handler_queue virq_io_handlers;
+WaitObjects v4v_virq_wait_objects;
+static uxen_thread virq_thread;
+static ioh_event virq_ev;
 
 extern int do_v4v_op_dom0(uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r10,
     uint64_t r9, uint64_t r8);
@@ -144,6 +151,32 @@ do_v4v_send(v4v_context_t *v4v, v4v_datagram_t *dgram, size_t size)
         (uint64_t) (uintptr_t) msg,
         len,
         protocol);
+    if (ret == -ECONNREFUSED && !(flags & V4V_DATAGRAM_FLAG_IGNORE_DLO)) {
+        /* try to create ring */
+        v4v_ring_id_t id;
+
+        id.addr.port = dst.port;
+        id.addr.domain = dst.domain;
+        id.partner = context_conn(v4v)->ring->id.partner;
+
+        debug_printf("create DLO ring domain=%d port=%d\n",
+            id.addr.domain, id.addr.port);
+        ret = do_v4v_op_dom0(V4VOP_create_ring,
+          (uint64_t) (uintptr_t) &id, 0, 0, 0, 0);
+        if (ret) {
+            debug_printf("failed to create DLO ring domain=%d port=%d, err=%d\n",
+                id.addr.domain, id.addr.port, ret);
+            return ret;
+        }
+
+        /* retry send */
+        ret = do_v4v_op_dom0(V4VOP_send,
+            (uint64_t) (uintptr_t) &context_ring(v4v)->id.addr,
+            (uint64_t) (uintptr_t) &dst,
+            (uint64_t) (uintptr_t) msg,
+            len,
+            protocol);
+    }
     if (ret >= 0)
         ret += sizeof(v4v_datagram_t);
 
@@ -170,6 +203,7 @@ connection_alloc(v4v_context_t *v4v, uint32_t ring_size, uint32_t flags)
         whpx_panic("out of memory");
     conn->context = v4v;
     conn->ring = r;
+    conn->flags = flags;
     critical_section_init(&conn->pending_send_lock);
     critical_section_init(&conn->pending_recv_lock);
     TAILQ_INIT(&conn->pending_send);
@@ -182,7 +216,17 @@ async_complete(v4v_async_t *async, int bytes)
 {
     async->whpx.completed = 1;
     async->whpx.bytes = bytes;
-    ioh_event_set(&async->whpx.ev);
+    if (async->whpx.cb)
+        async->whpx.cb(async->whpx.cb_opaque);
+    if (async->whpx.ev)
+        ioh_event_set(&async->whpx.ev);
+}
+
+static void
+free_pending_send(v4v_pending_send_t *send)
+{
+    free(send->datagram);
+    free(send);
 }
 
 static bool
@@ -261,6 +305,8 @@ void
 whpx_v4v_close(v4v_context_t *v4v)
 {
     v4v_connection_t *conn = context_conn(v4v);
+    v4v_pending_send_t *send;
+    int ret;
 
     if (conn) {
         connections_del(conn);
@@ -272,6 +318,17 @@ whpx_v4v_close(v4v_context_t *v4v)
 
         critical_section_free(&conn->pending_send_lock);
         critical_section_free(&conn->pending_recv_lock);
+
+        /* unregister ring */
+        ret = do_v4v_op_dom0(V4VOP_unregister_ring, (uint64_t) (uintptr_t) conn->ring, 0,
+            0, 0, 0);
+        if (ret)
+            debug_printf("unregister ring FAILED, error %d\n", ret);
+
+        /* free pending sends */
+        TAILQ_FOREACH(send, &conn->pending_send, entry)
+            free_pending_send(send);
+
         VirtualFree(conn->ring, 0, MEM_RELEASE);
         free(conn);
     }
@@ -279,23 +336,26 @@ whpx_v4v_close(v4v_context_t *v4v)
 
 #define MAX_NOTIFY_COUNT 64
 
-void
-whpx_v4v_handle_guest_signal(void)
+/* host is notified about pending v4v data */
+static void
+whpx_v4v_handle_signal_work(void *opaque)
 {
     v4v_connection_t *c;
     v4v_context_t *notify[MAX_NOTIFY_COUNT];
     int notify_count = 0;
     int i;
 
+    if (virq_thread_quit)
+        return;
+
+    ioh_event_reset(&virq_ev);
+
     critical_section_enter(&connections_lock);
     TAILQ_FOREACH(c, &connections, entry) {
         if (c->ring->tx_ptr != c->ring->rx_ptr) {
+            /* callback variant is usually faster than event signalling variant */
             if (c->cb) {
-                /* these callbacks would usually expect to be synchronized with main
-                 * thread */
-                whpx_lock_iothread();
                 c->cb(c->cb_opaque);
-                whpx_unlock_iothread();
             } else {
                 try_complete_pending_recv(c->context, NULL);
                 ioh_event_set(&c->context->v4v_channel.recv_event);
@@ -308,6 +368,23 @@ whpx_v4v_handle_guest_signal(void)
 
     for (i = 0; i < notify_count; i++)
         whpx_v4v_notify(notify[i]);
+}
+
+static DWORD WINAPI
+virq_thread_run(void *opaque)
+{
+    while (!virq_thread_quit) {
+        int timeout = 1000;
+        ioh_wait_for_objects(&virq_io_handlers, &v4v_virq_wait_objects, NULL, &timeout, NULL);
+    }
+
+    return 0;
+}
+
+void
+whpx_v4v_handle_signal(void)
+{
+    ioh_event_set(&virq_ev);
 }
 
 int
@@ -449,7 +526,7 @@ resend_to(v4v_context_t *v4v, v4v_ring_data_ent_t *entry)
             if (next->async)
                 async_complete(next->async, ret);
             conn->num_pending--;
-            free(next);
+            free_pending_send(next);
         } else
             whpx_panic("unexpected send error: %d\n", ret);
 
@@ -495,6 +572,18 @@ whpx_v4v_async_init(v4v_context_t *ctx, v4v_async_t *async, ioh_event ev)
     memset(async, 0, sizeof(v4v_async_t));
     async->context = ctx;
     async->whpx.ev = ev;
+
+    return 0;
+}
+
+int
+whpx_v4v_async_init_cb(v4v_context_t *ctx, v4v_async_t *async,
+    void *opaque, void (*cb)(void *))
+{
+    memset(async, 0, sizeof(v4v_async_t));
+    async->context = ctx;
+    async->whpx.cb = cb;
+    async->whpx.cb_opaque = opaque;
 
     return 0;
 }
@@ -619,4 +708,22 @@ whpx_v4v_init(void)
 
     critical_section_init(&connections_lock);
 
+    ioh_event_init(&virq_ev);
+    ioh_queue_init(&virq_io_handlers);
+    ioh_init_wait_objects(&v4v_virq_wait_objects);
+    ioh_add_wait_object(&virq_ev, whpx_v4v_handle_signal_work, NULL, &v4v_virq_wait_objects);
+    virq_thread_quit = false;
+    create_thread(&virq_thread, virq_thread_run, NULL);
+}
+
+void
+whpx_v4v_shutdown(void)
+{
+    debug_printf("whpx v4v: quitting virq thread\n");
+    virq_thread_quit = true;
+    ioh_event_set(&virq_ev);
+    wait_thread(virq_thread);
+    ioh_cleanup_wait_objects(&v4v_virq_wait_objects);
+    ioh_event_close(&virq_ev);
+    debug_printf("whpx v4v: quitting virq thread DONE\n");
 }

@@ -344,11 +344,15 @@ int
 whpx_v4v_signal(struct domain *domain)
 {
     if (domain == &guest) {
-        qemu_set_irq(isa_get_irq(7), 1);
-        qemu_set_irq(isa_get_irq(7), 0);
+        /* this can be called when vm is not yet initialized.. thanks guest-agent */
+        if (vm_id) {
+            qemu_set_irq(isa_get_irq(7), 1);
+            qemu_set_irq(isa_get_irq(7), 0);
+        } else
+            debug_printf("v4v signal w/o initialized vm\n");
     } else {
         assert(domain == &dom0);
-        whpx_v4v_handle_guest_signal();
+        whpx_v4v_handle_signal();
     }
 
     return 0;
@@ -484,6 +488,7 @@ whpx_vm_destroy(void)
     VirtualFree(shared_info_page, 0, MEM_RELEASE);
     shared_info_page = NULL;
 
+    whpx_v4v_shutdown();
     debug_printf("v4v destroy\n");
     v4v_destroy(&guest);
     debug_printf("v4v destroy done\n");
@@ -900,6 +905,14 @@ whpx_early_init(void)
     critical_section_init(&dom0.lock);
     v4v_init(&dom0);
 
+    /* init domain v4v. needs to be done early because
+       some uxendm backends send v4v data before vm is properly initialized
+       and rely on DLO */
+    memset(&guest, 0, sizeof(guest));
+    guest.domain_id = WHPX_DOMAIN_ID_SELF;
+    critical_section_init(&guest.lock);
+    v4v_init(&guest);
+
     return 0;
 }
 
@@ -931,6 +944,8 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
     if (ret)
         return ret;
 
+    extern void whpx_v4v_proxy_init(void);
+    whpx_v4v_proxy_init();
 #if defined(CONFIG_VBOXDRV)
     ret = sf_service_start();
     if (ret) {
@@ -965,12 +980,6 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
     pc_init_xen();
 
     pit_init();
-
-    /* init domain v4v */
-    memset(&guest, 0, sizeof(guest));
-    guest.domain_id = WHPX_DOMAIN_ID_SELF;
-    critical_section_init(&guest.lock);
-    v4v_init(&guest);
 
     if (loadvm) {
         debug_printf("finishing vm load\n");

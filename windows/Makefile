@@ -1,5 +1,5 @@
 #
-# Copyright 2011-2017, Bromium, Inc.
+# Copyright 2011-2018, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -8,6 +8,7 @@ include $(TOPDIR)/Config.mk
 
 SUBDIRS  =
 SUBDIRS += uxenv4vlib
+SUBDIRS += uxenv4vproxy
 SUBDIRS += uxen.sys
 SUBDIRS += uxenctl
 SUBDIRS += vhd-util

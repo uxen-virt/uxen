@@ -780,9 +780,9 @@ v4v_resolve_token(domid_t *id, uint32_t *port, v4v_idtoken_t *token)
     ASSERT(token);
 
 #ifdef WHPX_V4V
-    if (!memcmp(token, &v4v_idtoken, sizeof(v4v_idtoken)))
-        *id = vm_id; // self
-    else {
+    if (!memcmp(token, &v4v_idtoken, sizeof(v4v_idtoken))) {
+        *id = WHPX_DOMAIN_ID_SELF;
+    } else {
         assert(0);
         return -ENOENT;
     }
@@ -831,7 +831,7 @@ v4v_validate_channel(pcpu_t *cpu,
                 __FUNCTION__, d->domain_id, *s_id, *s_port, *d_id, *d_port);
             return -EPERM;
         }
-        if (*d_id == V4V_DOMID_DM)
+        if (*d_id == V4V_DOMID_DM || *d_id == 0)
             *d_id = v4v_dm_domid;
         else {
             printk(XENLOG_G_ERR "%s: !host !DM vm%u:%x -> vm%u:%x\n",
@@ -1242,7 +1242,7 @@ v4v_ring_remove_mfns(struct v4v_ring_info *ring_info, int put_pages)
 {
     int i;
 
-    if (!ring_info->mfns[0] && !ring_info->nmfns)
+    if (!ring_info->mfns)
         return;
     ASSERT(ring_info->mfn_mapping);
 
@@ -1525,7 +1525,6 @@ v4v_ring_add(pcpu_t *cpu, struct domain *d, V4V_GUEST_HANDLE(v4v_ring_t) ring_hn
         ring.id.addr.domain = d->domain_id;
         partner_id = ring.id.partner;
         partner_port = V4V_PORT_NONE;
-        
         if (partner_id == V4V_DOMID_UUID) {
             ret = v4v_copy_from_guest_errno(cpu, &partner_idtoken, idtoken, 1);
             if (ret)
@@ -1542,7 +1541,6 @@ v4v_ring_add(pcpu_t *cpu, struct domain *d, V4V_GUEST_HANDLE(v4v_ring_t) ring_hn
             &partner_id, &partner_port, authorized);
         if (ret)
             break;
-        
         /* return the updated partner id to the caller, unless the
          * requested partner id was V4V_DOMID_DM */
         if (ring.id.partner != V4V_DOMID_DM)

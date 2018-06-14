@@ -168,11 +168,8 @@ console_dr_init(int vm_id, const unsigned char *idtoken,
 
     bind.ring_id.addr.port = UXENDISP_PORT;
     bind.ring_id.addr.domain = V4V_DOMID_ANY;
-    if (vm_id == -1) {
-        bind.ring_id.partner = V4V_DOMID_UUID;
-        memcpy(&bind.partner, idtoken, sizeof(bind.partner));
-    } else
-        bind.ring_id.partner = vm_id;
+    bind.ring_id.partner = V4V_DOMID_UUID;
+    memcpy(&bind.partner, idtoken, sizeof(bind.partner));
 
     err = dm_v4v_bind(&c->v4v, &bind);
     if (err) {

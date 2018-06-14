@@ -1,0 +1,57 @@
+[version]
+signature="$WINDOWS NT$"
+Class       = System
+DYN_VERSION_GUIDS_OFF
+ClassGuid   = {4D36E97D-E325-11CE-BFC1-08002BE10318}
+DYN_VERSION_GUIDS_ON
+Provider=%uXenMfg%
+DriverVer   = DYN_DATE,DYN_VER_MAJ.DYN_VER_MIN.DYN_VER_REV.DYN_VER_BUILD
+CatalogFile= uxenv4vproxy.cat
+
+[ControlFlags]
+ExcludeFromSelect=*
+
+[DestinationDirs]
+DefaultDestDir=11
+uxenv4vproxyInst.NT.Copy=12
+uxenv4vproxyInst.Win7.NT.Copy=12
+
+[SourceDisksFiles]
+uxenv4vproxy.sys=1
+
+[SourceDisksNames]
+1=%DISK_NAME%,
+
+[uxenv4vproxyInst.NT]
+CopyFiles=uxenv4vproxyInst.NT.Copy
+
+[uxenv4vproxyInst.NT.Copy]
+uxenv4vproxy.sys,,,0x100
+
+[uxenv4vproxyInst.NT.Services]
+AddService=uxenv4vproxy,0x00000002,uxenv4vproxyServiceInst
+
+[uxenv4vproxyInst.Win7.NT]
+CopyFiles=uxenv4vproxyInst.Win7.NT.Copy
+
+[uxenv4vproxyInst.Win7.NT.Copy]
+uxenv4vproxy.sys,,,0x100
+
+[uxenv4vproxyInst.Win7.NT.Services]
+AddService=uxenv4vproxy,0x00000002,uxenv4vproxyServiceInst
+
+[uxenv4vproxyServiceInst]
+DisplayName=%uxenv4vproxy.SVCDESC%
+ServiceType=1; SERVICE_KERNEL_DRIVER
+StartType=3; SERVICE_DEMAND_START
+ErrorControl=1; SERVICE_ERROR_NORMAL
+ServiceBinary=%12%\uxenv4vproxy.sys
+LoadOrderGroup=Extended Base
+
+[Strings]
+uXenMfg="uXen Project"
+uxenv4vproxy.SVCDESC="uXen v4v proxy driver"
+uxenv4vproxy.DEVDESC="uXen v4v proxy"
+DISK_NAME="uXen Project Installation Disk #1 (uxenv4vproxy)"
+
+AUTO_VERSION_POISON
