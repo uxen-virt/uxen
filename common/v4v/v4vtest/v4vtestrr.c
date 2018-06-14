@@ -1,14 +1,16 @@
 /*
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
 #define _WIN32_WINNT 0x0600
 #define WINVER 0x0600
 
+#include <uuid/uuid.h>
 #include <windows.h>
 
 #include <stdio.h>
+#include <stdarg.h>
 
 #include <ctype.h>
 #include <errno.h>
@@ -106,8 +108,14 @@ rr (v4v_channel_t *c, v4v_ring_t *ring, int domid, int rx)
     for (;;) {
         ((v4v_datagram_t *) (char *) buf)->flags = V4V_DATAGRAM_FLAG_IGNORE_DLO;
         red = writ = 0;
-        WriteFile (c->v4v_handle, buf, PACKET_SIZE + sizeof (to), &writ, NULL);
-        ReadFile (c->v4v_handle, buf, sizeof (buf), &red, NULL);
+        if (!WriteFile (c->v4v_handle, buf, PACKET_SIZE + sizeof (to), &writ, NULL)) {
+            printf("error writing: %d\n", (int)GetLastError());
+            exit(1);
+        }
+        if (!ReadFile (c->v4v_handle, buf, sizeof (buf), &red, NULL)) {
+            printf("error reading: %d\n", (int)GetLastError());
+            exit(1);
+        }
 
         if ((writ == (PACKET_SIZE + sizeof (to))) && (red == writ))
             ++foo.reqs;
@@ -122,6 +130,13 @@ rr (v4v_channel_t *c, v4v_ring_t *ring, int domid, int rx)
 #endif
 }
 
+enum param {
+  PARAM_NONE,
+  PARAM_PORT,
+  PARAM_DOMID,
+  PARAM_UUID,
+};
+
 int
 main (int argc, char *argv[])
 {
@@ -132,16 +147,49 @@ main (int argc, char *argv[])
 #endif
     v4v_ring_t *ring;
 
-    int rx;
-    int domid;
+    int rx = 0;
+    int domid = 0;
+    int i;
+    int port = 0;
+    char *uuid = NULL;
+    enum param cur_p = PARAM_NONE;
 
+    for (i = 1; i < argc; i++) {
+        char *str = argv[i];
+        if (cur_p == PARAM_NONE) {
+            if (!strcmp(str, "-p"))
+                cur_p = PARAM_PORT;
+            else if (!strcmp(str, "-d"))
+                cur_p = PARAM_DOMID;
+            else if (!strcmp(str, "-u"))
+                cur_p = PARAM_UUID;
+            else if (!strcmp(str, "rx"))
+                rx = 1;
+        } else {
+            if (cur_p == PARAM_PORT)
+                port = atoi(str);
+            else if (cur_p == PARAM_DOMID)
+                domid = atoi(str);
+            else if (cur_p == PARAM_UUID)
+                uuid = str;
+            cur_p = PARAM_NONE;
+        }
+    }
 
-    rx = (argc > 1) ? !strcmp (argv[1], "rx") : 1;
-    domid = (argc == 3) ? atoi (argv[2]) : V4V_DOMID_DM;
+    if (!domid)
+        domid = V4V_DOMID_DM;
 
-    bind.ring_id.addr.port = rx ? PORT : 0;
+    bind.ring_id.addr.port = port;
     bind.ring_id.addr.domain = V4V_DOMID_ANY;
-    bind.ring_id.partner = domid;
+    if (!uuid)
+        bind.ring_id.partner = domid;
+    else {
+        bind.ring_id.partner = V4V_DOMID_UUID;
+        if (uuid_parse(uuid, (uint8_t*)&bind.partner) != 0) {
+            printf ("failed to parse uuid\n");
+            return -1;
+        }
+    }
 
     if (!v4v_open (&c, RING_SIZE, V4V_FLAG_NONE)) {
         printf ("v4v_open failed\n");

@@ -4,7 +4,7 @@
 #
 
 CPPFLAGS += -I$(SRCROOT) $(LIBXC_CPPFLAGS) $(LIBUXENCTL_CPPFLAGS) -I$(TOPDIR)/common/include -I$(TOPDIR) -I$(TOPDIR)/common/include/xen-public
-LDLIBS +=
+LDLIBS += -le2fsprogs-uuid
 CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
 
 all: v4vtest$(EXE_SUFFIX) v4vtestrr$(EXE_SUFFIX)
