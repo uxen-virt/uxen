@@ -3523,8 +3523,13 @@ void hvm_cpuid(unsigned int input, unsigned int *eax, unsigned int *ebx,
     struct vcpu *v = current;
     struct domain *d = v->domain;
     unsigned int count = *ecx;
+    struct segment_register cs;
+    int is_cpl0;
 
-    if ( cpuid_viridian_leaves(input, eax, ebx, ecx, edx) )
+    hvm_get_segment_register(v, x86_seg_cs, &cs);
+    is_cpl0 = (cs.sel & 3) == 0;
+
+    if ( cpuid_viridian_leaves(input, eax, ebx, ecx, edx, is_cpl0) )
         return;
 
     if ( cpuid_hypervisor_leaves(input, count, eax, ebx, ecx, edx) )
@@ -3549,6 +3554,10 @@ void hvm_cpuid(unsigned int input, unsigned int *eax, unsigned int *ebx,
         /* Only provide PSE36 when guest runs in 32bit PAE or in long mode */
         if ( !(hvm_pae_enabled(v) || hvm_long_mode_enabled(v)) )
             *edx &= ~cpufeat_mask(X86_FEATURE_PSE36);
+
+        /* Only allow CPL0 to see hypervisor bit. */
+        if ( !is_cpl0 )
+            *ecx &= 0x7FFFFFFFU;
         break;
     case 0x7:
         if (count == 0) {

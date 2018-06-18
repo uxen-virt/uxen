@@ -228,7 +228,7 @@ static uint32_t viridian_spinlock_retry_count = 2047;
 
 int cpuid_viridian_leaves(unsigned int leaf, unsigned int *eax,
                           unsigned int *ebx, unsigned int *ecx,
-                          unsigned int *edx)
+                          unsigned int *edx, int is_cpl0)
 {
     struct domain *d = current->domain;
 
@@ -238,6 +238,13 @@ int cpuid_viridian_leaves(unsigned int leaf, unsigned int *eax,
     leaf -= 0x40000000;
     if ( leaf > 6 )
         return 0;
+
+    *eax = *ebx = *ecx = *edx = 0;
+
+    if ( !is_cpl0 )
+        return 1;
+    /*  Viridian leaves may only be used from ring 0 code.  */
+    /*  Any other CPL means registers are zeroed and this is considered handled.  */
 
     switch ( leaf )
     {
