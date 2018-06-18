@@ -104,7 +104,8 @@ int cpuid_viridian_leaves(
     unsigned int *eax,
     unsigned int *ebx,
     unsigned int *ecx,
-    unsigned int *edx);
+    unsigned int *edx,
+    int is_cpl0);
 
 int
 wrmsr_viridian_regs(
