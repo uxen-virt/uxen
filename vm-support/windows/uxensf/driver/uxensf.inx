@@ -11,31 +11,31 @@ DriverPackageType=KernelService
 
 [SourceDisksFiles]
 uxensf.sys = 1
-VBoxMRXNP.dll = 1
-VBoxMRXNP32.dll = 1
+uxenMRXNP.dll = 1
+uxenMRXNP32.dll = 1
 
 [DestinationDirs]
 DefaultDestDir      = 11 ; system32
 uxensf_CopyFiles    = 12 ; drivers
-VBoxMRXNP_CopyFiles = 11 ; system32
-VBoxMRXNP32_CopyFiles = 10,SysWOW64 
+uxenMRXNP_CopyFiles = 11 ; system32
+uxenMRXNP32_CopyFiles = 10,SysWOW64 
 
 [DefaultInstall]
-CopyFiles = uxensf_CopyFiles, VBoxMRXNP_CopyFiles, VBoxMRXNP32_CopyFiles
-AddReg = VBoxMRXNP_Add_Reg
+CopyFiles = uxensf_CopyFiles, uxenMRXNP_CopyFiles, uxenMRXNP32_CopyFiles
+AddReg = uxenMRXNP_Add_Reg
 
 [DefaultUninstall]
-DelFiles = uxensf_CopyFiles, VBoxMRXNP_CopyFiles
-DelReg = VBoxMRXNP_Add_Reg
+DelFiles = uxensf_CopyFiles, uxenMRXNP_CopyFiles
+DelReg = uxenMRXNP_Add_Reg
 
 [uxensf_CopyFiles]
 uxensf.sys
 
-[VBoxMRXNP_CopyFiles]
-VBoxMRXNP.dll
+[uxenMRXNP_CopyFiles]
+uxenMRXNP.dll
 
-[VBoxMRXNP32_CopyFiles]
-VBoxMRXNP.dll,VBoxMRXNP32.dll
+[uxenMRXNP32_CopyFiles]
+uxenMRXNP.dll,uxenMRXNP32.dll
 
 [DefaultInstall.Services]
 AddService = uxensf, 0x00000802, uxensf_ServiceInstallSection
@@ -56,13 +56,13 @@ AddReg         = uxensf_Service_Add_Reg
 [uxensf_Service_Add_Reg]
 HKR, NetworkProvider, DeviceName, 0x00000000, "\Device\VBoxMiniRdr"
 HKR, NetworkProvider, Name, 0x00000000, "uXen Hypervisor Shared Folders"
-HKR, NetworkProvider, ProviderPath, 0x00000000, %11%\VBoxMRXNP.dll
+HKR, NetworkProvider, ProviderPath, 0x00000000, %11%\uxenMRXNP.dll
 HKLM, System\CurrentControlSet\Control\NetworkProvider\Order, ProviderOrder, 0x00000000, "uxensf,RDPNP,LanmanWorkstation,webclient"
 
 [Strings]
 uXenMfg = "uXen Project"
 uxensf.DeviceDesc = "uXen Shared Folder"
 uxensf_svcdesc = "uXen Shared Folders Driver"
-VBoxMRXNP_svcdesc = "VirtualBox Network Provider Service"
+uxenMRXNP_svcdesc = "uXen Network Provider Service"
 uxensf.MediaDesc = "uXen installation Media"
 

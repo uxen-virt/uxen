@@ -76,8 +76,8 @@
                     <Component Id="uxensf" Guid="53b5cb0a-b87e-41e9-867b-9904b941433b" Win64="$(var.Win64)">
                         <File Id="uxensf.inf" Name="uxensf.inf" DiskId="1" Source="$(var.uxensfdir)/uxensf.inf" />
                         <File Id="uxensf.sys" Name="uxensf.sys" DiskId="1" Source="$(var.uxensfdir)/uxensf.sys" />
-                        <File Id="VBoxMRXNP.dll" Name="VBoxMRXNP.dll" DiskId="1" Source="$(var.uxensfdir)/VBoxMRXNP.dll" />
-                        <File Id="VBoxMRXNP32.dll" Name="VBoxMRXNP32.dll" DiskId="1" Source="$(var.uxensfdir)/VBoxMRXNP32.dll" />
+                        <File Id="uxenMRXNP.dll" Name="uxenMRXNP.dll" DiskId="1" Source="$(var.uxensfdir)/uxenMRXNP.dll" />
+                        <File Id="uxenMRXNP32.dll" Name="uxenMRXNP32.dll" DiskId="1" Source="$(var.uxensfdir)/uxenMRXNP32.dll" />
                         <difx:Driver Legacy='yes' ForceInstall='yes' Sequence='7'/>
                     </Component>
                 </Directory>

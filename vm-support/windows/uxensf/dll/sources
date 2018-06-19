@@ -1,4 +1,4 @@
-TARGETNAME=VBoxMRXNP
+TARGETNAME=uxenMRXNP
 TARGETTYPE=DYNLINK
 
 !include ../../common/sources.inc
