@@ -36,14 +36,14 @@ BEGIN
       BLOCK "040904b0"
       BEGIN
          VALUE "CompanyName",      VBOX_RC_COMPANY_NAME
-         VALUE "FileDescription",  "VirtualBox Shared Folders Minirdr NP\0"
+         VALUE "FileDescription",  "uXen Shared Folders Minirdr NP\0"
          VALUE "FileVersion",      VBOX_VERSION_MAJOR "." VBOX_VERSION_MINOR "." VBOX_VERSION_BUILD "." VBOX_SVN_REV "\0"
-         VALUE "InternalName",     "VBoxMRXNP.DLL\0"
+         VALUE "InternalName",     "uxenMRXNP.DLL\0"
          VALUE "LegalCopyright",   VBOX_RC_LEGAL_COPYRIGHT
 #ifdef VBOX_WOW64
-         VALUE "OriginalFilename", "VBoxMRXNP-x86.DLL\0"
+         VALUE "OriginalFilename", "uxenMRXNP-x86.DLL\0"
 #else
-         VALUE "OriginalFilename", "VBoxMRXNP.DLL\0"
+         VALUE "OriginalFilename", "uxenMRXNP.DLL\0"
 #endif
          VALUE "ProductName",      VBOX_PRODUCT " Guest Additions\0"
          VALUE "ProductVersion",   VBOX_VERSION_MAJOR "." VBOX_VERSION_MINOR "." VBOX_VERSION_BUILD ".r" VBOX_SVN_REV "\0"

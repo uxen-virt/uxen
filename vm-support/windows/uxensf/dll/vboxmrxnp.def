@@ -10,7 +10,7 @@
 ; hope that it will be useful, but WITHOUT ANY WARRANTY of any kind.
 ;
 
-LIBRARY	VBOXMRXNP
+LIBRARY	UXENMRXNP
 
 EXPORTS
 	NPGetCaps			        @13
