@@ -29,7 +29,11 @@
 struct CPUX86State;
 typedef struct CPUX86State CPUState;
 
-#define whpx_panic(fmt, ...) errx(1, "%s:%d: "fmt, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define whpx_panic(fmt, ...)                                           \
+  {                                                                    \
+    debug_printf("%s:%d: "fmt, __FUNCTION__, __LINE__, ##__VA_ARGS__); \
+    assert(0);                                                         \
+  }
 
 /**
  * PCI / IRQ

@@ -14,10 +14,10 @@
 // this is just for testing
 //#define DEBUG_FORCE_DOM0_PARTNER
 
-#define PROXY_MAX_PACKET_LEN 65536
+#define PROXY_MAX_PACKET_LEN 262144
 #define PROXY_READ_BUFFER_LEN (PROXY_MAX_PACKET_LEN + sizeof(v4v_proxy_complete_read_t))
 #define PROXY_MAX_REQ_LEN (PROXY_MAX_PACKET_LEN + 256)
-#define PROXY_RING_LEN 262144
+#define PROXY_RING_LEN (262144*4)
 #define PROXY_DRIVER_NAME L"uxenv4vproxy"
 
 /* why no define in windows hdrs? */

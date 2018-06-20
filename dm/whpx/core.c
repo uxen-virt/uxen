@@ -592,9 +592,9 @@ int whpx_translate_gva_to_gpa(
         tmsum_xlate += _rdtsc() - t0;
         count_xlate++;
     }
-    if (FAILED(hr))
+    if (FAILED(hr)) {
         whpx_panic("WHPX: Failed to translate GVA, hr=%08lx", hr);
-    else {
+    } else {
         /* API call seems to not give us the page offset component */
         *gpa &= PAGE_MASK;
         *gpa |= gva & ~PAGE_MASK;

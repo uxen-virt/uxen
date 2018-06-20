@@ -317,7 +317,7 @@ uxenvm_savevm_write_info(struct filebuf *f, uint8_t *dm_state_buf,
 
 #if defined(_WIN32)
     /* "set_introspect_info" should be set for template only (last boot)*/
-    if (strstr(lava_options, "set_introspect_info")) {
+    if (!whpx_enable && strstr(lava_options, "set_introspect_info")) {
         struct guest_introspect_info_t *guest_introspect_info;
         guest_introspect_info = get_guest_introspect_info();
         if (guest_introspect_info) {

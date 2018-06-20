@@ -1032,21 +1032,33 @@ stats_do_collection(void *opaque)
         net_rx_rate = 0, net_tx_rate = 0;
     unsigned int net_nav_tx_rate = 0, net_nav_rx_rate = 0;
 
-    ret = xc_domain_getinfo(xc_handle, vm_id, 1, &info);
-    if (ret != 1 || info.domid != vm_id) {
-        warn("xc_domain_getinfo failed");
-        return;
-    }
+    if (!whpx_enable) {
+        ret = xc_domain_getinfo(xc_handle, vm_id, 1, &info);
+        if (ret != 1 || info.domid != vm_id) {
+            warn("xc_domain_getinfo failed");
+            return;
+        }
 
-    balloon_cur = balloon_min = balloon_max = 0;
-    uxen_platform_get_balloon_size(&balloon_cur, &balloon_min, &balloon_max);
-    priv = info.nr_pages * UXEN_PAGE_SIZE;
-    vram = info.nr_host_mapped_pages * UXEN_PAGE_SIZE;
-    highmem = info.nr_hidden_pages * UXEN_PAGE_SIZE;
-    lowmem = priv - highmem;
-    pod = info.nr_pod_pages * UXEN_PAGE_SIZE;
-    tmpl = info.nr_tmpl_shared_pages * UXEN_PAGE_SIZE;
-    zero = info.nr_zero_shared_pages * UXEN_PAGE_SIZE;
+        balloon_cur = balloon_min = balloon_max = 0;
+        uxen_platform_get_balloon_size(&balloon_cur, &balloon_min, &balloon_max);
+        priv = info.nr_pages * UXEN_PAGE_SIZE;
+        vram = info.nr_host_mapped_pages * UXEN_PAGE_SIZE;
+        highmem = info.nr_hidden_pages * UXEN_PAGE_SIZE;
+        lowmem = priv - highmem;
+        pod = info.nr_pod_pages * UXEN_PAGE_SIZE;
+        tmpl = info.nr_tmpl_shared_pages * UXEN_PAGE_SIZE;
+        zero = info.nr_zero_shared_pages * UXEN_PAGE_SIZE;
+    } else {
+        /* FIXME: better whp stats (?) */
+        balloon_cur = balloon_min = balloon_max = 0;
+        priv = vm_mem_mb * 1024 * 1024;
+        vram = 0;
+        highmem = 0;
+        lowmem = priv;
+        pod = 0;
+        tmpl = 0;
+        zero = 0;
+    }
     cpu_usage(&cpu_u, &cpu_k, &cpu_u_total_ms, &cpu_k_total_ms);
     blockstats_getabs(&blk_io_reads, NULL, &blk_io_writes, NULL);
 #if defined(CONFIG_NICKEL)
