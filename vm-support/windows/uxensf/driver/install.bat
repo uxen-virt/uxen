@@ -14,7 +14,7 @@ rem if %errorlevel% neq 0 exit /b %errorlevel%
 sc create %svcname% binpath= system32\drivers\uxensf.sys type= filesys group= NetworkProvider DisplayName= %svcname% start= auto
 if %errorlevel% neq 0 exit /b %errorlevel%
 
-reg add HKLM\SYSTEM\CurrentControlSet\Services\%svcname%\NetworkProvider /v "DeviceName" /d "\Device\VBoxMiniRdr"
+reg add HKLM\SYSTEM\CurrentControlSet\Services\%svcname%\NetworkProvider /v "DeviceName" /d "\Device\uxenMiniRdr"
 reg add HKLM\SYSTEM\CurrentControlSet\Services\%svcname%\NetworkProvider /v "Name" /d "uXen Hypervisor Shared Folders"
 reg add HKLM\SYSTEM\CurrentControlSet\Services\%svcname%\NetworkProvider /v "ProviderPath" /d "%SystemRoot%\system32\uxenMRXNP.dll"
 

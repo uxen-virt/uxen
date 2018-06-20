@@ -19,7 +19,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -253,7 +253,7 @@ DWORD APIENTRY NPAddConnection3(HWND hwndOwner,
         return WN_BAD_NETNAME;
     }
 
-    /* Build connection name: \Device\VBoxMiniRdr\;%DriveLetter%:\vboxsvr\share */
+    /* Build connection name: \Device\uxenMiniRdr\;%DriveLetter%:\vboxsvr\share */
 
     lstrcpy(ConnectionName, DD_MRX_VBOX_FS_DEVICE_NAME_U);
     lstrcat(ConnectionName, L"\\;");
