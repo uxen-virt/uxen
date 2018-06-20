@@ -123,8 +123,8 @@ int cpuid_viridian_leaves(uint64_t leaf, uint64_t *eax,
         break;
     case 3:
         /* Which hypervisor MSRs are available to the guest */
-        *eax = 0;
         *eax = (CPUID3A_MSR_APIC_ACCESS |
+                CPUID3A_MSR_HYPERCALL |
                 CPUID3A_MSR_VP_INDEX);
         *edx = 0;
         break;
@@ -133,13 +133,32 @@ int cpuid_viridian_leaves(uint64_t leaf, uint64_t *eax,
         if ( (viridian.guest_os_id.raw == 0) ||
              (viridian.guest_os_id.fields.os < 4) )
             break;
-        *eax = 0;
         *eax = (CPUID4A_MSR_BASED_APIC |
                 CPUID4A_RELAX_TIMER_INT);
-        // FIXME: maybe use shorter one?
         *ebx = 2047; /* long spin count */
         break;
     }
+
+    return 1;
+}
+
+int
+viridian_hypercall(uint64_t *rax)
+{
+    uint64_t input = *rax;
+    uint64_t callcode = input & 0xFFFF;
+    uint64_t ret = HV_STATUS_SUCCESS;
+
+    switch (callcode) {
+    case HvNotifyLongSpinWait:
+        break;
+    default:
+        //debug_printf("unhandled viridian hypercall: call code=0x%x input=%"PRIx64"\n", (int)callcode, input);
+        ret = HV_STATUS_INVALID_HYPERCALL_CODE;
+        break;
+    }
+
+    *rax = ret;
 
     return 1;
 }
@@ -193,10 +212,8 @@ enable_hypercall_page(void)
     if (p) {
         assert(len == PAGE_SIZE);
 
-        /*
-         * We set the bit 31 & 30 in %eax (reserved field in the Viridian hypercall
-         * calling convention) to differentiate Xen and Viridian hypercalls.
-         */
+        /* We setup hypercall stub such that it invokes cpuid with bits 30&31 set
+         * in eax as a marker */
         *(uint8_t  *)(p + 0) = 0x0d; /* orl $0x80000000, %eax */
         *(uint32_t *)(p + 1) = 0xC0000000;
         *(uint8_t  *)(p + 5) = 0x0f; /* cpuid */

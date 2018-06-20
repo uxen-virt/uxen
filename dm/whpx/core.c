@@ -948,15 +948,12 @@ cpuid_viridian_hypercall(uint64_t leaf, uint64_t *eax,
     uint64_t *ebx, uint64_t *ecx,
     uint64_t *edx)
 {
-    /* viridian hypercalls are marked with bits 30+31 */
+    /* viridian hypercalls are done with cpuid, leaf marked with bits 30+31 */
     leaf &= 0xFFFFFFFF;
     if (!((leaf & 0xC0000000) == 0xC0000000))
         return 0;
 
-    /* TODO: handle some hypercalls */
-
-    /* return 0 */
-    *eax = 0;
+    viridian_hypercall(eax);
 
     return 1;
 }
@@ -1046,6 +1043,8 @@ whpx_handle_cpuid(CPUState *cpu)
         break;
     }
     default:
+        /* check if the cpuid was viridian hypercall, since we setup
+         * viridian hypercall page to invoke calls via cpuid */
         if (!cpuid_viridian_hypercall(rax, &rax, &rbx, &rcx, &rdx)) {
             rax = cpuid->DefaultResultRax;
             rcx = cpuid->DefaultResultRcx;

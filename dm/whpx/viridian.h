@@ -15,6 +15,7 @@ int cpuid_viridian_leaves(
   uint64_t leaf, uint64_t *eax,
   uint64_t *ebx, uint64_t *ecx,
   uint64_t *edx);
+int viridian_hypercall(uint64_t *rax);
 
 int rdmsr_viridian_regs(uint32_t msr, uint64_t *msr_content);
 int wrmsr_viridian_regs(uint32_t msr, uint64_t msr_content);
