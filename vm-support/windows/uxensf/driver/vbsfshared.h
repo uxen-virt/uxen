@@ -19,7 +19,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -45,14 +45,14 @@
 #define MRX_VBOX_FILESYS_NAME_U L"VBoxSharedFolderFS"
 
 /* The redirector device name. */
-#define DD_MRX_VBOX_FS_DEVICE_NAME_U L"\\Device\\VBoxMiniRdr"
+#define DD_MRX_VBOX_FS_DEVICE_NAME_U L"\\Device\\uxenMiniRdr"
 
 #define VBOX_VOLNAME_PREFIX     L"VBOX_"
 #define VBOX_VOLNAME_PREFIX_SIZE  (sizeof(VBOX_VOLNAME_PREFIX) - sizeof(VBOX_VOLNAME_PREFIX[0]))
 
 /* Name of symbolic link, which is used by the user mode dll to open the driver. */
-#define DD_MRX_VBOX_USERMODE_SHADOW_DEV_NAME_U     L"\\??\\VBoxMiniRdrDN"
-#define DD_MRX_VBOX_USERMODE_DEV_NAME_U            L"\\\\.\\VBoxMiniRdrDN"
+#define DD_MRX_VBOX_USERMODE_SHADOW_DEV_NAME_U     L"\\??\\uxenMiniRdrDN"
+#define DD_MRX_VBOX_USERMODE_DEV_NAME_U            L"\\\\.\\uxenMiniRdrDN"
 
 #define IOCTL_MRX_VBOX_BASE FILE_DEVICE_NETWORK_FILE_SYSTEM
 

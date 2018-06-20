@@ -54,7 +54,7 @@ LoadOrderGroup = NetworkProvider
 AddReg         = uxensf_Service_Add_Reg
 
 [uxensf_Service_Add_Reg]
-HKR, NetworkProvider, DeviceName, 0x00000000, "\Device\VBoxMiniRdr"
+HKR, NetworkProvider, DeviceName, 0x00000000, "\Device\uxenMiniRdr"
 HKR, NetworkProvider, Name, 0x00000000, "uXen Hypervisor Shared Folders"
 HKR, NetworkProvider, ProviderPath, 0x00000000, %11%\uxenMRXNP.dll
 HKLM, System\CurrentControlSet\Control\NetworkProvider\Order, ProviderOrder, 0x00000000, "uxensf,RDPNP,LanmanWorkstation,webclient"
