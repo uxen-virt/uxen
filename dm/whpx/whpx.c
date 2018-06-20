@@ -798,10 +798,11 @@ whpx_create_vm_memory(int memory_mb)
     if (whpx_ram_populate(HVMLOADER_ALLOC_ADDR, npages_hvmloader * PAGE_SIZE, 0))
         whpx_panic("whpx_ram_populate");
 
-    /* no-op hpet area since some reads there are done to determine hpet presence */
-    if (whpx_ram_populate(0xFED00000, PAGE_SIZE, 0))
-        whpx_panic("whpx_ram_populate");
-
+    if (!vm_hpet) {
+      /* no-op hpet area since some reads there are done to determine hpet presence */
+      if (whpx_ram_populate(0xFED00000, PAGE_SIZE, 0))
+          whpx_panic("whpx_ram_populate");
+    }
     /* shared info page */
     whpx_shared_info_init();
 
@@ -977,6 +978,12 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
     }
 
     debug_printf("initialize pc\n");
+    if (vm_hpet) {
+        /* FIXME: hpet seems introduce slowness atm, should be better on RS5 with
+         * register access optimizations. */
+        debug_printf("warning: disabling HPET config\n");
+        vm_hpet = 0;
+    }
     pc_init_xen();
 
     pit_init();

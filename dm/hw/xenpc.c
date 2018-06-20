@@ -14,6 +14,7 @@
 #include <dm/firmware.h>
 
 #include <dm/whpx/whpx.h>
+#include <dm/whpx/hpet.h>
 
 #include "xenpc.h"
 #include "xenrtc.h"
@@ -284,6 +285,7 @@ pc_init_xen(void)
     int nr_ide = 0;
     DriveInfo *hd_ich[MAX_ICH_DEVS];
     int nr_ich = 0;
+    qemu_irq rtc_irq = NULL;
 #ifdef HAS_AUDIO
     const char *m;
 #endif
@@ -325,8 +327,10 @@ pc_init_xen(void)
         errx(1, "Error: Initialization failed for pass-through devices");
 #endif
 
+    if (whpx_enable && vm_hpet)
+        hpet_init(pic, &rtc_irq);
     rtc = !whpx_enable ? isa_create_simple("xenrtc")
-                       : rtc_init(2000, NULL);
+                       : rtc_init(2000, rtc_irq);
 
     process_config_devices();
 
