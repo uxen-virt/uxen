@@ -38,7 +38,7 @@ struct hvm_emu_cpu_regs {
     /* cs, ss, es, ds, fs, gs */
     struct segment_register seg_reg[6];
     uint64_t efer;
-    uint64_t cr[1];
+    uint64_t cr[8];
 };
 
 struct hvm_emu_cpu {
@@ -95,6 +95,8 @@ static WHV_REGISTER_NAME emu_read_register_names[] = {
 
     /* X64 Control Registers */
     WHvX64RegisterCr0,
+    WHvX64RegisterCr3,
+    WHvX64RegisterCr4,
     WHvX64RegisterEfer,
 
     /* X64 Segment registers */
@@ -127,10 +129,6 @@ static WHV_REGISTER_NAME emu_write_register_names[] = {
     WHvX64RegisterR15,
     WHvX64RegisterRip,
     WHvX64RegisterRflags,
-
-    /* X64 Control Registers */
-    WHvX64RegisterCr0,
-    WHvX64RegisterEfer,
 };
 
 static whpx_reg_list_t emu_read_registers;
@@ -673,8 +671,9 @@ void readwrite_regs(struct hvm_emu_cpu *cpu, int write)
         from_sreg(&s->segs[R_GS], &r->seg_reg[x86_seg_gs]);
 
         r->efer = s->efer;
-        r->cr[0]  = s->cr[0];
-
+        r->cr[0] = s->cr[0];
+        r->cr[3] = s->cr[3];
+        r->cr[4] = s->cr[4];
     } else {
         s->regs[15] = ur->r15;
         s->regs[14] = ur->r14;
@@ -695,8 +694,11 @@ void readwrite_regs(struct hvm_emu_cpu *cpu, int write)
         s->eflags = ur->rflags;
         s->regs[R_ESP] = ur->rsp;
 
-        s->efer = r->efer;
-        s->cr[0] = r->cr[0];
+        /* emulation should've not modified cr0,cr3,cr4,efer */
+        // assert (s->cr[0] == r->cr[0]);
+        // assert (s->cr[3] == r->cr[3]);
+        // assert (s->cr[4] == r->cr[4]);
+        // assert (s->efer  == r->efer);
 
         /* emulation won't set segment regs */
     }
@@ -918,7 +920,10 @@ emu_registers_hv_to_cpustate(CPUState *cpu, WHV_REGISTER_VALUE *values)
     cpu->eip = values[idx++].Reg64;
     cpu->eflags = values[idx++].Reg64;
 
+    /* cr0,cr3,cr4,efer is necessary for whpx_translate_gva_to_gpa to work */
     cpu->cr[0] = values[idx++].Reg64;
+    cpu->cr[3] = values[idx++].Reg64;
+    cpu->cr[4] = values[idx++].Reg64;
     cpu->efer  = values[idx++].Reg64;
 
     /* Translate 6+4 segment registers. HV and QEMU order matches  */
@@ -945,11 +950,10 @@ emu_registers_cpustate_to_hv(CPUState *cpu, size_t maxregs, WHV_REGISTER_NAME *n
     values[idx++].Reg64 = cpu->eip;
     values[idx++].Reg64 = cpu->eflags;
 
-    /* cr0 & efer */
-    values[idx++].Reg64 = cpu->cr[0];
-    values[idx++].Reg64 = cpu->efer;
+    /* emulation doesn't modify cr0,cr3,cr4,efer */
 
     /* emulation doesn't modify segment regs */
+
     return idx;
 }
 

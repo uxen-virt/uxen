@@ -7,6 +7,7 @@
 #include <dm/qemu_glue.h>
 #include "whpx.h"
 #include "core.h"
+#include "paging.h"
 #include "util.h"
 #include <dm/vm-save.h>
 #include <dm/vm-savefile.h>
@@ -452,6 +453,155 @@ whpx_unregister_iorange(uint64_t start, uint64_t length, int is_mmio)
         if (vm_map_region(start, length))
             whpx_panic("remap failed\n");
 #endif
+    }
+}
+
+typedef enum paging_mode {
+    PM_OFF,
+    PM_32,
+    PM_PAE,
+    PM_64
+} paging_mode_t;
+
+static paging_mode_t
+paging_mode(uint64_t cr0, uint64_t cr4, uint64_t efer)
+{
+    if (! (cr0 & CR0_PG_MASK)) return PM_OFF;
+    if (! (cr4 & CR4_PAE_MASK)) return PM_32;
+    if (! (efer & MSR_EFER_LME)) return PM_PAE;
+    return PM_64;
+}
+
+static int
+gva_to_gpa_pae(CPUState *cpu, uint64_t gva, uint64_t *gpa, int w, int x)
+{
+    pte64_t *pd, pte;
+    uint64_t pa;
+    int level;
+
+    pd = (pte64_t*)(vm_ram_base + (cpu->cr[3] & PAGE_MASK));
+    for (level = 3; ; level--) {
+        pte = pd[PAGE_OFFSET_A(gva, level)];
+        if (!pte.p)
+            return -1;
+        if (level != 3) {
+            if (w && !pte.rw)
+                return -1;
+            if (x && pte.xd)
+                return -1;
+            if ((level && pte.ps) || !level)
+                break;
+        }
+
+        pd = (pte64_t *) (vm_ram_base + ((uint64_t) pte.mfn << PAGE_SHIFT));
+    }
+
+    gva &= LEAF_MASK (level);
+    pa = pte.mfn << PAGE_SHIFT;
+    pa &= ~LEAF_MASK (level);
+
+    gva |= pa;
+
+    if (gpa)
+        *gpa = gva;
+
+    return 0;
+}
+
+static int
+gva_to_gpa_64(CPUState *cpu, uint64_t gva, uint64_t *gpa, int w, int x)
+{
+    pte64_t *pd, pte;
+    uint64_t pa;
+    int level;
+
+    pd = (pte64_t*)(vm_ram_base + (cpu->cr[3] & PAGE_MASK));
+    for (level = 3; ; level--) {
+        pte = pd[PAGE_OFFSET_A(gva, level)];
+        if (!pte.p)
+            return -1;
+        if (level != 3) {
+            if (w && !pte.rw)
+                return -1;
+        if (x && pte.xd)
+            return -1;
+        if ((level && pte.ps) || !level)
+            break;
+        }
+        pd = (pte64_t *) (vm_ram_base + ((uint64_t) pte.mfn << PAGE_SHIFT));
+    }
+
+    gva &= LEAF_MASK (level);
+    pa = pte.mfn << PAGE_SHIFT;
+    pa &= ~LEAF_MASK (level);
+
+    gva |= pa;
+
+    if (gpa)
+        *gpa = gva;
+
+    return 0;
+}
+
+static int
+gva_to_gpa_hv_slow(CPUState *cpu,
+    int write, uint64_t gva, uint64_t *gpa, int *is_unmapped)
+{
+    WHV_TRANSLATE_GVA_RESULT res;
+    WHV_TRANSLATE_GVA_FLAGS flags =
+        write ? WHvTranslateGvaFlagValidateWrite
+              : WHvTranslateGvaFlagValidateRead;
+    HRESULT hr;
+    uint64_t t0 = 0;
+
+    *is_unmapped = 0;
+
+    if (whpx_perf_stats)
+        t0 = _rdtsc();
+    hr = WHvTranslateGva(whpx_get_partition(), cpu->cpu_index,
+                         gva, flags, &res, gpa);
+    if (whpx_perf_stats) {
+        tmsum_xlate += _rdtsc() - t0;
+        count_xlate++;
+    }
+    if (FAILED(hr)) {
+        whpx_panic("WHPX: Failed to translate GVA, hr=%08lx", hr);
+    } else {
+        /* API call seems to not give us the page offset component */
+        *gpa &= PAGE_MASK;
+        *gpa |= gva & ~PAGE_MASK;
+
+        if (res.ResultCode == WHvTranslateGvaResultSuccess)
+            return 0;
+        else if (res.ResultCode == WHvTranslateGvaResultGpaUnmapped) {
+            *is_unmapped = 1;
+            return 0;
+        } else {
+            debug_printf("WHPX: translation fail: code=%d gva=%"PRIx64"\n",
+                res.ResultCode, gva);
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+int
+whpx_translate_gva_to_gpa(CPUState *cpu, int write, uint64_t gva, uint64_t *gpa,
+                              int *is_unmapped)
+{
+    paging_mode_t pm;
+
+    *is_unmapped = 0;
+    pm = paging_mode(cpu->cr[0], cpu->cr[4], cpu->efer);
+    switch (pm) {
+    case PM_64:
+        return gva_to_gpa_64(cpu, gva, gpa, write, 0);
+    case PM_PAE:
+        return gva_to_gpa_pae(cpu, gva, gpa, write, 0);
+    default:
+        /* fallback: use whpx function to translate gva to gpa; extremely slow */
+        return gva_to_gpa_hv_slow(cpu, write, gva, gpa, is_unmapped);
     }
 }
 

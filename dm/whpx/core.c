@@ -569,56 +569,6 @@ static void whpx_registers_hv_to_cpustate(CPUState *cpu)
     return;
 }
 
-int whpx_translate_gva_to_gpa(
-    CPUState *cpu,
-    int write,
-    uint64_t gva,
-    uint64_t *gpa,
-    int *is_unmapped)
-{
-    struct whpx_state *whpx = &whpx_global;
-    WHV_TRANSLATE_GVA_RESULT res;
-    WHV_TRANSLATE_GVA_FLAGS flags =
-        write ? WHvTranslateGvaFlagValidateWrite
-              : WHvTranslateGvaFlagValidateRead;
-    HRESULT hr;
-    uint64_t t0 = 0;
-
-    if (whpx_perf_stats)
-        t0 = _rdtsc();
-    hr = WHvTranslateGva(whpx->partition, cpu->cpu_index,
-                         gva, flags, &res, gpa);
-    if (whpx_perf_stats) {
-        tmsum_xlate += _rdtsc() - t0;
-        count_xlate++;
-    }
-    if (FAILED(hr)) {
-        whpx_panic("WHPX: Failed to translate GVA, hr=%08lx", hr);
-    } else {
-        /* API call seems to not give us the page offset component */
-        *gpa &= PAGE_MASK;
-        *gpa |= gva & ~PAGE_MASK;
-
-        if (res.ResultCode == WHvTranslateGvaResultSuccess) {
-            *is_unmapped = 0;
-            return 0;
-        }
-
-        if (res.ResultCode == WHvTranslateGvaResultGpaUnmapped) {
-            *is_unmapped = 1;
-            return 0;
-        }
-
-        debug_printf("WHPX: translation fail: code=%d gva=%"PRIx64"\n",
-            res.ResultCode, gva);
-        *is_unmapped = 0;
-
-        return -1;
-    }
-
-    return 0;
-}
-
 #ifdef EMU_MICROSOFT
 static HRESULT CALLBACK whpx_emu_ioport_callback(
     void *ctx,
@@ -961,28 +911,36 @@ cpuid_viridian_hypercall(uint64_t leaf, uint64_t *eax,
 static int
 whpx_handle_cpuid(CPUState *cpu)
 {
+#define CPUID_REGS_NUM_READ  14
+#define CPUID_REGS_NUM_WRITE 10
+
     struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
     WHV_X64_CPUID_ACCESS_CONTEXT *cpuid = &vcpu->exit_ctx.CpuidAccess;
-    WHV_REGISTER_NAME regs[10] = {
+    WHV_REGISTER_NAME regs[CPUID_REGS_NUM_READ] = {
+        /* read/write these regs */
         WHvX64RegisterRax,
         WHvX64RegisterRcx,
         WHvX64RegisterRdx,
         WHvX64RegisterRbx,
         WHvX64RegisterRip,
-
-        /* extra v4v hcall regs */
         WHvX64RegisterRdi,
         WHvX64RegisterRsi,
         WHvX64RegisterR8,
         WHvX64RegisterR9,
         WHvX64RegisterR10,
+
+        /* only read these regs */
+        WHvX64RegisterCr0,
+        WHvX64RegisterCr3,
+        WHvX64RegisterCr4,
+        WHvX64RegisterEfer,
     };
-    WHV_REGISTER_VALUE values[10];
+    WHV_REGISTER_VALUE values[CPUID_REGS_NUM_READ];
     uint64_t rax, rcx, rdx, rbx, rdi, rsi, r8, r9, r10;
     HRESULT hr;
 
     hr = whpx_get_vp_registers(cpu->cpu_index,
-        regs, RTL_NUMBER_OF(regs), &values[0]);
+        regs, CPUID_REGS_NUM_READ, &values[0]);
     if (FAILED(hr))
         whpx_panic("WHPX: Failed to access registers, hr=%08lx", hr);
 
@@ -1035,7 +993,17 @@ whpx_handle_cpuid(CPUState *cpu)
 
         if (whpx_perf_stats)
             t0 = _rdtsc();
+
+        /* update paging related registers - v4v will need to resolve
+         * virtual addrs (whpx_translate_gva_to_gpa) */
+        cpu->cr[0] = values[10].Reg64;
+        cpu->cr[3] = values[11].Reg64;
+        cpu->cr[4] = values[12].Reg64;
+        cpu->efer  = values[13].Reg64;
+
+        /* handle v4v op */
         rax = do_v4v_op_cpuid(cpu, rdi, rsi, rdx, r10, r8, r9);
+
         if (whpx_perf_stats) {
             tmsum_v4v += _rdtsc() - t0;
             count_v4v++;
@@ -1067,7 +1035,7 @@ whpx_handle_cpuid(CPUState *cpu)
     values[9].Reg64 = r10;
 
     hr = whpx_set_vp_registers(cpu->cpu_index,
-        regs, RTL_NUMBER_OF(regs), &values[0]);
+        regs, CPUID_REGS_NUM_WRITE, &values[0]);
     if (FAILED(hr))
         whpx_panic("WHPX: Failed to set registers, hr=%08lx", hr);
 
