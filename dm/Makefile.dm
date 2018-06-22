@@ -293,6 +293,7 @@ $(WINDOWS)DM_SRCS += whpx/i8254.c
 $(WINDOWS)DM_SRCS += whpx/ioapic.c
 $(WINDOWS)DM_SRCS += whpx/apic.c
 $(WINDOWS)DM_SRCS += whpx/mc146818rtc.c
+$(WINDOWS)DM_SRCS += whpx/hpet.c
 $(WINDOWS)DM_SRCS += whpx/viridian.c
 
 QEMU_CFLAGS += -I$(TOPDIR)
