@@ -928,6 +928,13 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
     debug_printf("vm init, thread 0x%x, restore_mode=%d, file=%s\n", (int)GetCurrentThreadId(),
       restore_mode, loadvm ? loadvm : "");
 
+    if (vm_hpet) {
+        /* FIXME: hpet seems introduce slowness atm, should be better on RS5 with
+         * register access optimizations. */
+        debug_printf("warning: disabling HPET config\n");
+        vm_hpet = 0;
+    }
+
     current_cpu_tls = TlsAlloc();
     if (current_cpu_tls == TLS_OUT_OF_INDEXES)
         whpx_panic("out of tls indexes\n");
@@ -978,12 +985,6 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
     }
 
     debug_printf("initialize pc\n");
-    if (vm_hpet) {
-        /* FIXME: hpet seems introduce slowness atm, should be better on RS5 with
-         * register access optimizations. */
-        debug_printf("warning: disabling HPET config\n");
-        vm_hpet = 0;
-    }
     pc_init_xen();
 
     pit_init();
