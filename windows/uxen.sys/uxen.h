@@ -176,6 +176,8 @@ extern struct device_extension *uxen_devext;
 extern DRIVER_OBJECT *uxen_drvobj;
 extern uint8_t *uxen_hv;
 extern size_t uxen_size;
+extern int uxen_whp;
+
 affinity_t uxen_lock(void);
 void uxen_unlock(affinity_t);
 affinity_t uxen_exec_dom0_start(void);
@@ -505,5 +507,10 @@ ffs(uint32_t i)
 #define BUILD_BUG_ON(condition) ((void)sizeof(struct { int:-(int)!!(condition); }))
 
 #define ASSERT_IRQL(irql) (ASSERT(KeGetCurrentIrql() <= (irql)))
+
+DECLSPEC_IMPORT void uxen_v4vlib_init_driver_hook(PDRIVER_OBJECT pdo);
+DECLSPEC_IMPORT void uxen_v4vlib_free_driver_unhook(void );
+DECLSPEC_IMPORT void uxen_v4vproxy_init_driver_hook(PDRIVER_OBJECT pdo);
+DECLSPEC_IMPORT void uxen_v4vproxy_free_driver_unhook(void );
 
 #endif  /* _UXEN_H_ */

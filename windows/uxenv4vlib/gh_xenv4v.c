@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -483,14 +483,6 @@ NTSTATUS gh_create_device(PDRIVER_OBJECT driver_object)
 
     uxen_v4v_info("Starting driver...");
 
-    driver_object->MajorFunction[IRP_MJ_CREATE]         = gh_v4v_dispatch_create;
-    driver_object->MajorFunction[IRP_MJ_CLEANUP]        = gh_v4v_dispatch_cleanup;
-    driver_object->MajorFunction[IRP_MJ_CLOSE]          = gh_v4v_dispatch_close;
-    driver_object->MajorFunction[IRP_MJ_DEVICE_CONTROL] = gh_v4v_dispatch_device_control;
-    driver_object->MajorFunction[IRP_MJ_READ]           = gh_v4v_dispatch_read;
-    driver_object->MajorFunction[IRP_MJ_WRITE]          = gh_v4v_dispatch_write;
-
-
     status = gh_add_device(driver_object);
 
     uxen_v4v_verbose("DriverEntry returning 0x%x", status);
@@ -498,6 +490,29 @@ NTSTATUS gh_create_device(PDRIVER_OBJECT driver_object)
     uxen_v4v_verbose("<====");
 
     return status;
+}
+
+NTSTATUS gh_dispatch_init(PDRIVER_OBJECT driver_object)
+{
+    uxen_v4v_verbose("====>");
+
+    PsGetVersion(&g_osMajorVersion, &g_osMinorVersion, NULL, NULL);
+
+    if ((g_osMajorVersion < 5) || ((g_osMajorVersion == 5) && (g_osMinorVersion < 1))) {
+        uxen_v4v_warn("Windows XP or later operating systems supported!");
+        return STATUS_UNSUCCESSFUL;
+    }
+
+    driver_object->MajorFunction[IRP_MJ_CREATE]         = gh_v4v_dispatch_create;
+    driver_object->MajorFunction[IRP_MJ_CLEANUP]        = gh_v4v_dispatch_cleanup;
+    driver_object->MajorFunction[IRP_MJ_CLOSE]          = gh_v4v_dispatch_close;
+    driver_object->MajorFunction[IRP_MJ_DEVICE_CONTROL] = gh_v4v_dispatch_device_control;
+    driver_object->MajorFunction[IRP_MJ_READ]           = gh_v4v_dispatch_read;
+    driver_object->MajorFunction[IRP_MJ_WRITE]          = gh_v4v_dispatch_write;
+
+    uxen_v4v_verbose("<====");
+
+    return STATUS_SUCCESS;
 }
 
 

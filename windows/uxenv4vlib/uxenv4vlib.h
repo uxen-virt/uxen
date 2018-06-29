@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -57,6 +57,7 @@ V4V_DLL_DECL void uxen_v4vlib_set_thread_priority(LONG priority);
 
 V4V_DLL_DECL void uxen_v4vlib_init_driver_hook(PDRIVER_OBJECT pdo);
 V4V_DLL_DECL void uxen_v4vlib_free_driver_unhook(void );
+V4V_DLL_DECL void uxen_v4vlib_start_device(void);
 
 /*Calls from clients*/
 V4V_DLL_DECL int uxen_v4v_ring_create(v4v_addr_t *dst, domid_t partner);

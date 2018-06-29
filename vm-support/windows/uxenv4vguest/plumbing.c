@@ -41,6 +41,7 @@ void uxen_v4v_guest_do_plumbing(PDRIVER_OBJECT pdo)
         uxen_v4vlib_set_hypercall_func(whpx_v4v_hypercall);
     uxen_v4v_test();
     uxen_v4vlib_init_driver(pdo);
+    uxen_v4vlib_start_device();
 }
 
 

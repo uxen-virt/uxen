@@ -1330,19 +1330,27 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
 
     KeSetEvent(&uxen_devext->de_resume_event, 0, FALSE);
 
-    aff = uxen_cpu_pin_first();
-    uxen_call(ret = (int), -EINVAL, STARTXEN_RESERVE, uxen_do_start_xen, &uid,
-              uid_len, &dom0_vmi->vmi_shared, vcis);
-    uxen_cpu_unpin(aff);
-    if (ret) {
-        fail_msg("start xen failed: %d", ret);
-        goto out;
+    if (uid.UXEN_INIT_opt_whp_MASK & UXEN_INIT_opt_whp) {
+        uxen_whp = uid.opt_whp;
+        if (uxen_whp)
+            printk("WHP mode enabled.\n");
     }
 
+    if (!uxen_whp) {
+        aff = uxen_cpu_pin_first();
+        uxen_call(ret = (int), -EINVAL, STARTXEN_RESERVE, uxen_do_start_xen, &uid,
+            uid_len, &dom0_vmi->vmi_shared, vcis);
+        uxen_cpu_unpin(aff);
+        if (ret) {
+            fail_msg("start xen failed: %d", ret);
+            goto out;
+        }
+
 #ifdef __i386__
-    if (use_hidden)
-       add_hidden_memory();
+        if (use_hidden)
+            add_hidden_memory();
 #endif
+    }
 
     /* run idle thread to make it pick up the current timeout */
     uxen_signal_idle_thread(0);
@@ -1402,11 +1410,13 @@ uxen_op_shutdown(void)
 
     printk("%s: shutdown core\n", __FUNCTION__);
 
-    uxen_flush_rcu();
+    if (!uxen_whp) {
+        uxen_flush_rcu();
 
-    aff = uxen_lock();
-    uxen_call(, , NO_RESERVE, uxen_do_shutdown_xen);
-    uxen_unlock(aff);
+        aff = uxen_lock();
+        uxen_call(, , NO_RESERVE, uxen_do_shutdown_xen);
+        uxen_unlock(aff);
+    }
 
     uxen_info->ui_running = 0;
 

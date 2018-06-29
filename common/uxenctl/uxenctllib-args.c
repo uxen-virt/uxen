@@ -97,6 +97,7 @@ static struct uxen_param params[] = {
     UINT_OPTION("crash_on", opt_crash_on),
     UINT_OPTION("v4v_thread_priority", opt_v4v_thread_priority),
     UINT_OPTION("spec_ctrl", opt_spec_ctrl),
+    BOOLEAN_OPTION("whp", opt_whp),
     LAST_OPTION
 };
 

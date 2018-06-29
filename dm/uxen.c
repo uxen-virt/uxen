@@ -2,7 +2,7 @@
  *  uxen.c
  *  uxen
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -50,6 +50,7 @@ uxen_setup(UXEN_HANDLE_T h)
 #ifdef __APPLE__
     char *path;
 #endif
+    struct uxen_init_desc _uid = { };
 
     atexit(close_and_unload);
 
@@ -79,18 +80,25 @@ uxen_setup(UXEN_HANDLE_T h)
 	err(1, "uxen_load");
 #endif /* __APPLE */
 
-    ret = uxen_init(uxen_handle, NULL);
-    if (ret)
-	err(1, "uxen_init");
+    if (!whpx_enable) {
+        ret = uxen_init(uxen_handle, NULL);
+        if (ret)
+            err(1, "uxen_init");
+        uxen_opt_debug = calloc(1, sizeof(xen_opt_debug_t) + 1);
+        if (!uxen_opt_debug)
+            err(1, "calloc(uxen_opt_debug)");
 
-    uxen_opt_debug = calloc(1, sizeof(xen_opt_debug_t) + 1);
-    if (!uxen_opt_debug)
-        err(1, "calloc(uxen_opt_debug)");
-
-    ret = xc_version(xc_handle, XENVER_opt_debug, uxen_opt_debug);
-    if (ret)
-        err(1, "xc_version(XENVER_opt_debug)");
-    debug_printf("%s: opt debug %s\n", __FUNCTION__, uxen_opt_debug);
+        ret = xc_version(xc_handle, XENVER_opt_debug, uxen_opt_debug);
+        if (ret)
+            err(1, "xc_version(XENVER_opt_debug)");
+        debug_printf("%s: opt debug %s\n", __FUNCTION__, uxen_opt_debug);
+    } else {
+        _uid.mask0 |= UXEN_INIT_opt_whp;
+        _uid.opt_whp = 1;
+        ret = uxen_init(uxen_handle, &_uid);
+        if (ret)
+            err(1, "uxen_init");
+    }
 
     return 0;
 }

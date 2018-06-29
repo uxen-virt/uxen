@@ -63,7 +63,8 @@ uxen_sys_INCLUDE = \
 	$(TOPDIR)/common \
 	$(TOPDIR)/common/include \
 	$(TOPDIR)/windows/include \
-	$(TOPDIR)/windows/uxenv4vlib
+	$(TOPDIR)/windows/uxenv4vlib \
+	$(TOPDIR)/windows/uxenv4vproxy
 uxen_sys_INCLUDE_dos := $(foreach include,$(uxen_sys_INCLUDE),//I$(call dospath,$(include)))
 
 ifeq ($(TARGET_HOST_BITS),32)
@@ -81,6 +82,7 @@ uxen_sys_ASFLAGS = \
 	//safeseh //coff //Zm
 uxen_sys_LDOBJS = \
 	..\\uxenv4vlib\\uxenv4vlib.lib \
+	..\\uxenv4vproxy\\uxenv4vproxy.lib \
 	$(BUILDDIR_xen)/uxen-cv.obj
 else
 uxen_sys_CPPFLAGS = \
@@ -96,6 +98,7 @@ uxen_sys_LDFLAGS = \
 	//entry:GsDriverEntry
 uxen_sys_LDOBJS = \
 	..\\uxenv4vlib\\uxenv4vlib.lib \
+	..\\uxenv4vproxy\\uxenv4vproxy.lib \
 	$(BUILDDIR_xen)/uxen-cv.obj $(BUILDDIR_xen)/uxen-xpdata.obj
 uxen_sys_ASFLAGS =
 endif

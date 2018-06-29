@@ -15,6 +15,7 @@
 #include <uxen/uxen_link.h>
 
 #include <uxenv4vlib.h>
+#include <proxy_lib.h>
 
 static void
 host_logger(int lvl, const char *str)
@@ -72,17 +73,25 @@ uxen_sys_v4v_page_notify(uint64_t *pfns, uint32_t npfn, int add)
 
 void uxen_sys_start_v4v(void)
 {
-    uxen_v4vlib_set_logger(host_logger);
-    uxen_v4vlib_we_are_dom0();
-    uxen_v4vlib_set_hypercall_func(uxen_sys_v4v_hypercall);
-    uxen_v4vlib_set_page_notify_func(uxen_sys_v4v_page_notify);
-    uxen_v4v_test();
+    if (!uxen_whp) {
+        uxen_v4vlib_set_logger(host_logger);
+        uxen_v4vlib_we_are_dom0();
+        uxen_v4vlib_set_hypercall_func(uxen_sys_v4v_hypercall);
+        uxen_v4vlib_set_page_notify_func(uxen_sys_v4v_page_notify);
+        uxen_v4vlib_start_device();
+        uxen_v4v_test();
+    } else {
+        uxen_v4vproxy_set_logger(host_logger);
+        uxen_v4vproxy_start_device();
+    }
 }
 
 void uxen_sys_stop_v4v(void)
 {
-    uxen_v4vlib_set_page_notify_func(NULL);
-    uxen_v4vlib_set_hypercall_func(NULL);
+    if (!uxen_whp) {
+        uxen_v4vlib_set_page_notify_func(NULL);
+        uxen_v4vlib_set_hypercall_func(NULL);
+    }
 }
 
 void __cdecl

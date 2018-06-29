@@ -1,0 +1,14 @@
+; uxenv4vproxy: uxenv4vproxy.def ;
+
+NAME uxenv4vproxy.sys
+
+EXPORTS
+    DllInitialize                       PRIVATE
+    DllUnload                           PRIVATE
+
+        uxen_v4vproxy_init_driver_hook
+        uxen_v4vproxy_free_driver_unhook
+        uxen_v4vproxy_set_logger
+        uxen_v4vproxy_start_device
+
+; uxenv4vproxy: uxenv4vproxy.def ;

@@ -6,6 +6,7 @@
 #include "proxy.h"
 #include "version.h"
 #include "log.h"
+#include "proxy_lib.h"
 #include "proxy_api.h"
 
 #define ERROR_IO_PENDING 997
@@ -77,12 +78,15 @@ static WCHAR g_win5Sddl[] = {
     SDDL_ACE_END
 };
 
+uxen_v4vproxy_logger_t proxy_logger = NULL;
+
 // FIXME: should this be modified?
 // {3a523e0a-9b28-46c9-9046-5aaaaf20e51d}
 static const GUID GUID_SD_XENV4V_CONTROL_OBJECT =
 { 0x3a523e0a, 0x9b28, 0x46c9, { 0x90, 0x46, 0x5a, 0xaa, 0xaf, 0x20, 0xe5, 0x1d } };
 
 static PDEVICE_OBJECT g_fdo;
+static PDRIVER_OBJECT g_drvobj;
 
 NTSTATUS
 simple_complete_irp(PIRP irp, NTSTATUS status)
@@ -307,8 +311,11 @@ add_device(PDRIVER_OBJECT drv)
             }
             IoDeleteDevice(fdo);
         }
-    } else
+    } else {
         g_fdo = fdo;
+        proxy_set_notify_fdo(fdo);
+        INFO("proxy device created");
+    }
 
     VERBOSE("<-----");
 
@@ -333,13 +340,6 @@ delete_device(PDRIVER_OBJECT drv)
         return STATUS_UNSUCCESSFUL;
     fdo = g_fdo;
 
-    drv->MajorFunction[IRP_MJ_CREATE]         = NULL;
-    drv->MajorFunction[IRP_MJ_CLEANUP]        = NULL;
-    drv->MajorFunction[IRP_MJ_CLOSE]          = NULL;
-    drv->MajorFunction[IRP_MJ_DEVICE_CONTROL] = NULL;
-    drv->MajorFunction[IRP_MJ_READ]           = NULL;
-    drv->MajorFunction[IRP_MJ_WRITE]          = NULL;
-
     pde = FDO_TO_EXT(fdo);
 
     // Stop our device's IO processing
@@ -348,8 +348,11 @@ delete_device(PDRIVER_OBJECT drv)
     // Then detach and cleanup our device
     IoDeleteSymbolicLink(&pde->symbolic_link);
     IoDeleteDevice(fdo);
+    proxy_set_notify_fdo(NULL);
+    INFO("proxy device deleted");
 
     VERBOSE("<-----");
+
     return status;
 }
 
@@ -1262,21 +1265,28 @@ proxy_device_ioctl(PDEVICE_OBJECT fdo, PIRP irp)
     return status;
 }
 
+PROXY_DLL_EXPORT void uxen_v4vproxy_set_logger(uxen_v4vproxy_logger_t logger)
+{
+    proxy_logger = logger;
+    INFO("logging initialized");
+}
 
 void
-proxy_unload(PDRIVER_OBJECT drvobj)
+proxy_unload(void)
 {
-    delete_device(drvobj);
+    if (!g_drvobj)
+        return;
+    delete_device(g_drvobj);
+    g_drvobj = NULL;
 }
 
 NTSTATUS
-DriverEntry(PDRIVER_OBJECT drvobj, PUNICODE_STRING regpath)
+proxy_load(PDRIVER_OBJECT drvobj)
 {
-    UNREFERENCED_PARAMETER(regpath);
+    if (g_drvobj)
+        return STATUS_SUCCESS;
+    g_drvobj = drvobj;
 
-    VERBOSE("----->");
-
-    drvobj->DriverUnload = proxy_unload;
     drvobj->MajorFunction[IRP_MJ_CREATE] = proxy_create;
     drvobj->MajorFunction[IRP_MJ_CLEANUP] = proxy_cleanup;
     drvobj->MajorFunction[IRP_MJ_CLOSE] = proxy_close;
@@ -1284,6 +1294,43 @@ DriverEntry(PDRIVER_OBJECT drvobj, PUNICODE_STRING regpath)
     drvobj->MajorFunction[IRP_MJ_WRITE] = proxy_write;
     drvobj->MajorFunction[IRP_MJ_DEVICE_CONTROL] = proxy_device_ioctl;
 
-    return add_device(drvobj);
+    return STATUS_SUCCESS;
+}
+
+PROXY_DLL_EXPORT void
+uxen_v4vproxy_start_device(void)
+{
+    if (g_drvobj)
+        add_device(g_drvobj);
+}
+
+/*
+    DriverEntry()
+
+    This is never called.  It has to exist, however, in order to
+    satisfy the build environment (WDK Build).
+*/
+
+NTSTATUS
+DriverEntry (DRIVER_OBJECT *Driver, UNICODE_STRING *ServicesKey)
+{
+    Driver;
+    ServicesKey;
+
+    ExInitializeDriverRuntime(DrvRtPoolNxOptIn);
+
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+DllInitialize (PUNICODE_STRING RegistryPath)
+{
+    return STATUS_SUCCESS;
+}
+
+NTSTATUS
+DllUnload (void)
+{
+    return STATUS_SUCCESS;
 }
 

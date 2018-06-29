@@ -571,135 +571,6 @@ proxy_request_received(void *opaque)
     }
 }
 
-static int
-stop_delete_service(SC_HANDLE scm_handle, SC_HANDLE *scs_handle,
-                    BOOLEAN fail_ok)
-{
-    SERVICE_STATUS service_status;
-    int ret;
-
-    *scs_handle = OpenService(scm_handle, PROXY_DRIVER_NAME,
-                              SERVICE_ALL_ACCESS);
-    if (*scs_handle == NULL) {
-        if (fail_ok) {
-            ret = 0;
-            goto out;
-        }
-        Wwarn("OpenService");
-        ret = -1;
-        goto out;
-    }
-    ret = !ControlService(*scs_handle, SERVICE_CONTROL_STOP,
-                          &service_status);
-    if (ret && GetLastError() != ERROR_SERVICE_NOT_ACTIVE) {
-        if (fail_ok) {
-            ret = 0;
-            goto out;
-        }
-        Wwarn("ControlService");
-        ret = -1;
-        goto out;
-    }
-
-    ret = !DeleteService(*scs_handle);
-    if (ret && GetLastError() != ERROR_SERVICE_MARKED_FOR_DELETE)
-        Wwarn("DeleteService");
-
-    ret = 0;
-  out:
-    return ret;
-}
-
-static int
-proxy_manage_driver(BOOLEAN install, BOOLEAN fail_ok, const char *path)
-{
-    SC_HANDLE scm_handle = NULL;
-    SC_HANDLE scs_handle = NULL;
-    int create_retry = 1;
-    int ret = -1;
-    wchar_t pathbuf[MAX_PATH];
-
-    scm_handle = OpenSCManager(NULL, NULL, SC_MANAGER_ALL_ACCESS);
-    if (!scm_handle) {
-	Wwarn("OpenSCManager");
-	return ret;
-    }
-
-    if (install) {
-        if (path && strcmp(path, ".")) {
-            if (!MultiByteToWideChar(CP_UTF8, 0, path, -1, pathbuf, MAX_PATH)) {
-                Wwarn("MultiByteToWideChar");
-                ret = -1;
-                goto out;
-            }
-        } else {
-            ret = GetCurrentDirectoryW(sizeof(pathbuf), pathbuf);
-            if (ret == 0) {
-                Wwarn("GetCurrentDirectory");
-                ret = -1;
-                goto out;
-            }
-        }
-	(void)wcsncat(pathbuf, L"\\" PROXY_DRIVER_NAME L".sys", sizeof(pathbuf));
-
-      create_again:
-	scs_handle = CreateServiceW(scm_handle, L"" PROXY_DRIVER_NAME,
-				   L"" PROXY_DRIVER_NAME, SERVICE_ALL_ACCESS,
-				   SERVICE_KERNEL_DRIVER, SERVICE_DEMAND_START,
-				   SERVICE_ERROR_NORMAL,
-				   pathbuf, NULL, NULL, NULL, NULL, NULL);
-        if (scs_handle == NULL && GetLastError() ==
-            ERROR_SERVICE_MARKED_FOR_DELETE && create_retry) {
-            ret = stop_delete_service(scm_handle, &scs_handle, fail_ok);
-            if (ret)
-                goto out;
-            CloseServiceHandle(scs_handle);
-            scs_handle = NULL;
-            create_retry = 0;
-            goto create_again;
-        }
-	if (scs_handle) {
-	    CloseServiceHandle(scs_handle);
-	    scs_handle = OpenService(scm_handle, PROXY_DRIVER_NAME,
-				     SERVICE_ALL_ACCESS);
-	}
-	if (scs_handle == NULL && GetLastError() == ERROR_SERVICE_EXISTS)
-	    scs_handle = OpenService(scm_handle, PROXY_DRIVER_NAME,
-				     SERVICE_ALL_ACCESS);
-	if (scs_handle == NULL) {
-	    if (fail_ok) {
-		ret = 0;
-		goto out;
-	    }
-	    Wwarn("CreateService");
-            ret = -1;
-            goto out;
-	}
-	ret = !StartService(scs_handle, 0, NULL);
-	if (ret && GetLastError() != ERROR_SERVICE_ALREADY_RUNNING) {
-	    if (fail_ok) {
-		ret = 0;
-		goto out;
-	    }
-	    Wwarn("StartService %s", pathbuf);
-            ret = -1;
-            goto out;
-	}
-        ret = 0;
-    } else
-        ret = stop_delete_service(scm_handle, &scs_handle, fail_ok);
-
-  out:
-    if (scs_handle) {
-	if (ret)
-	    DeleteService(scs_handle);
-	CloseServiceHandle(scs_handle);
-    }
-    if (scm_handle)
-	CloseServiceHandle(scm_handle);
-    return ret;
-}
-
 extern WaitObjects v4v_virq_wait_objects;
 
 void
@@ -711,13 +582,9 @@ whpx_v4v_proxy_init(void)
     critical_section_init(&proxies_lock);
 
     /* open connection to proxy driver */
-    if (!_v4v_open(&proxy_channel, 0, V4V_FLAG_ASYNC, NULL)) {
-        /* load driver */
-        proxy_manage_driver(TRUE, FALSE, dm_path);
-        /* try again */
-        if (!_v4v_open(&proxy_channel, 0, V4V_FLAG_ASYNC, NULL))
-            whpx_panic("failed to open proxy v4v channel: %d", (int)GetLastError());
-    }
+    if (!_v4v_open(&proxy_channel, 0, V4V_FLAG_ASYNC, NULL))
+      whpx_panic("failed to open proxy v4v channel: %d", (int)GetLastError());
+
     memcpy(&reg.partner, &v4v_idtoken, sizeof(reg.partner));
     if (!_v4v_proxy_register_backend(&proxy_channel, &reg, NULL))
         whpx_panic("failed to register backend: %d", (int)GetLastError());

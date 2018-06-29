@@ -18,6 +18,7 @@ ifneq (n-,$(HOST_WINDOWS))
 
 uxenv4vproxy_sys_SRCS = \
 	csq.c \
+	hook.c \
 	proxy.c \
 	uxenv4vproxy.rc
 
@@ -156,6 +157,8 @@ uxenv4vproxy.sys: override PATH := $(PATH):$(subst $(EWDK_DIR),$(EWDK_DIR_path),
 uxenv4vproxy.sys: $(uxenv4vproxy_sys_RES) $(uxenv4vproxy_sys_OBJ_asm) $(uxenv4vproxy_sys_OBJ_c)
 	$(_W)echo Linking - $@
 	$(_V)$(EWDK_VC_DIR_bin)/link.exe //nologo \
+	  //DEF:$(call dospath,$(SRCDIR)/uxenv4vproxy.def) \
+	  //SECTION:.shared,RWS \
 	  //SECTION:.rsrc,!d \
 	  //MERGE:_PAGE=PAGE \
 	  //MERGE:_TEXT=.text \

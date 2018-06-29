@@ -85,6 +85,7 @@ void gh_signaled(void);
 void gh_set_thread_priority(LONG priority);
 NTSTATUS gh_destroy_device(PDRIVER_OBJECT driver_object);
 NTSTATUS gh_create_device(PDRIVER_OBJECT driver_object);
+NTSTATUS gh_dispatch_init(PDRIVER_OBJECT driver_object);
 
 /* hypercall.c */
 int uxen_v4v_can_make_hypercall(void);

@@ -24,6 +24,8 @@
 #include <public/v4v.h>
 #include "../uxenv4vlib/gh_v4vapi.h"
 
+#define PROXY_DLL_EXPORT
+
 #define PROXY_POOL_TAG 'vprx'
 #define V4V_DEVICE_NAME    L"\\Device\\xenv4v"
 #define V4V_SYMBOLIC_NAME  L"\\DosDevices\\Global\\v4vdev"
@@ -152,5 +154,9 @@ PIRP NTAPI csq_peek_next_irp(PIO_CSQ csq, PIRP irp, PVOID peekContext);
 VOID NTAPI csq_acquire_lock(PIO_CSQ csq, PKIRQL irqlOut);
 VOID NTAPI csq_release_lock(PIO_CSQ csq, KIRQL irql);
 VOID NTAPI csq_complete_canceled_irp(PIO_CSQ csq, PIRP irp);
+
+void proxy_set_notify_fdo(PDEVICE_OBJECT fdo);
+NTSTATUS proxy_load(PDRIVER_OBJECT);
+void proxy_unload(void);
 
 #endif

@@ -338,16 +338,16 @@ main(int argc, char **argv)
     SetProcessShutdownParameters(process_shutdown_priority, 0);
 #endif
 
-    if (!whpx_enable) {
-        xc_handle = xc_interface_open(0, 0, 0, dm_path);
-        if (xc_handle == NULL)
-            errx(1, "xc_interface_open");
+    xc_handle = xc_interface_open(0, 0, 0, dm_path);
+    if (xc_handle == NULL)
+        errx(1, "xc_interface_open");
 
-        if (uxen_setup((UXEN_HANDLE_T)xc_interface_handle(xc_handle)))
-            err(1, "uxen_setup");
+    if (uxen_setup((UXEN_HANDLE_T)xc_interface_handle(xc_handle)))
+        err(1, "uxen_setup");
 
-        uxen_log_version();
-    } else
+    uxen_log_version();
+
+    if (whpx_enable)
         whpx_early_init();
 
     debug_printf("creating vm\n");

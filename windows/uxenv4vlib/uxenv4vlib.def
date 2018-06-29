@@ -23,6 +23,7 @@ EXPORTS
 
 	uxen_v4vlib_init_driver_hook
 	uxen_v4vlib_free_driver_unhook
+        uxen_v4vlib_start_device
 
 	uxen_v4v_ring_create
 

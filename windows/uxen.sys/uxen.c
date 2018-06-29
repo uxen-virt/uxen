@@ -2,7 +2,7 @@
  *  uxen.c
  *  uxen
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -24,10 +24,6 @@ DRIVER_DISPATCH uxen_close;
 __drv_dispatchType(IRP_MJ_CLEANUP)
 DRIVER_DISPATCH uxen_cleanup;
 
-DECLSPEC_IMPORT void uxen_v4vlib_init_driver_hook(PDRIVER_OBJECT pdo);
-DECLSPEC_IMPORT void uxen_v4vlib_free_driver_unhook(void );
-
-
 struct device_extension *uxen_devext = NULL;
 DRIVER_OBJECT *uxen_drvobj = NULL;
 
@@ -35,6 +31,7 @@ static KGUARDED_MUTEX uxen_mutex;
 
 uint8_t *uxen_hv = NULL;
 size_t uxen_size = 0;
+int uxen_whp = 0;
 
 #include <initguid.h>
 //
@@ -261,6 +258,7 @@ uxen_driver_unload(__in PDRIVER_OBJECT DriverObject)
 
     /* We need to unhook first so that DeviceObject only contains one */
     /* thing */
+    uxen_v4vproxy_free_driver_unhook();
     uxen_v4vlib_free_driver_unhook();
 
     devobj = DriverObject->DeviceObject;
@@ -376,6 +374,7 @@ uxen_driver_load(__in PDRIVER_OBJECT DriverObject,
     DriverObject->DriverUnload = uxen_driver_unload;
 
     uxen_v4vlib_init_driver_hook(DriverObject);
+    uxen_v4vproxy_init_driver_hook(DriverObject);
 
     /* register for power state changes. */
 
@@ -473,6 +472,7 @@ uxen_driver_load(__in PDRIVER_OBJECT DriverObject,
         }
         IoDeleteSymbolicLink(&devicename_dos);
         IoDeleteDevice(devobj);
+        uxen_v4vproxy_free_driver_unhook();
         uxen_v4vlib_free_driver_unhook();
     }
 

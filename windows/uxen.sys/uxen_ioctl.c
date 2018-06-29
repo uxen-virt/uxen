@@ -340,6 +340,24 @@ uxen_ioctl(__inout DEVICE_OBJECT *DeviceObject, __inout IRP *pIRP)
     }
     vmi = fda->vmi;
 
+    /* only allow subset of calls on WHP */
+    if (uxen_whp) {
+        switch (IoControlCode) {
+        case ICC(UXENVERSION):
+        case ICC(UXENLOAD):
+        case ICC(UXENUNLOAD):
+        case ICC(UXENINIT):
+        case ICC(UXENSHUTDOWN):
+        case ICC(UXENLOGGING):
+            break; /* allow */
+        default:
+            IOCTL_TRACE("uxen_ioctl(%lx)\n", IoControlCode);
+            IOCTL_FAILURE(STATUS_NOT_IMPLEMENTED,
+                "uxen_ioctl(%lx) not implemented on WHP", IoControlCode);
+            goto out;
+        }
+    }
+
     switch (IoControlCode) {
     case ICC(UXENVERSION):
 	IOCTL_TRACE("uxen_ioctl(UXENVERSION, %p, %x)\n", OutputBuffer,
@@ -367,7 +385,6 @@ uxen_ioctl(__inout DEVICE_OBJECT *DeviceObject, __inout IRP *pIRP)
     case ICC(UXENINIT):
 	IOCTL_TRACE("uxen_ioctl(UXENINIT)\n");
 	UXEN_CHECK_MODE_NOT(UXEN_MODE_FAILED, "UXENINIT");
-        uxen_sys_start_v4v();
         /* uxen_op_init does UXEN_CHECK_INPUT_BUFFER(struct uxen_init_desc) */
         ret = uxen_op_init(fda, (struct uxen_init_desc *)InputBuffer,
                            InputBufferLength, DeviceObject);
@@ -377,6 +394,7 @@ uxen_ioctl(__inout DEVICE_OBJECT *DeviceObject, __inout IRP *pIRP)
                           "uxen_ioctl(UXENINIT) fail: %d", -ret);
             break;
         }
+        uxen_sys_start_v4v();
         SET_UXEN_MODE(UXEN_MODE_INITIALIZED);
 	break;
     case ICC(UXENSHUTDOWN):
