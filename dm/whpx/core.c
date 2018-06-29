@@ -850,6 +850,38 @@ whpx_handle_halt(CPUState *cpu)
 }
 
 static int
+whpx_handle_msr_read(CPUState *cpu, uint32_t msr, uint64_t *content)
+{
+    int handled = 1;
+
+    switch (msr) {
+    default:
+        handled = rdmsr_viridian_regs(msr, content);
+        if (handled)
+            break;
+        debug_printf("unhandled MSR[0x%x] read\n", msr);
+    }
+
+    return handled;
+}
+
+static int
+whpx_handle_msr_write(CPUState *cpu, uint32_t msr, uint64_t content)
+{
+    int handled = 1;
+
+    switch (msr) {
+    default:
+        handled = wrmsr_viridian_regs(msr, content);
+        if (handled)
+            break;
+        debug_printf("unhandled MSR[0x%x] write = %"PRIx64"\n", msr, content);
+    }
+
+    return handled;
+}
+
+static int
 whpx_handle_msr_access(CPUState *cpu)
 {
     struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
@@ -867,10 +899,10 @@ whpx_handle_msr_access(CPUState *cpu)
 
     if (msr->AccessInfo.IsWrite) {
         msr_content = ((uint64_t)msr->Rdx << 32) | (uint32_t)msr->Rax;
-        wrmsr_viridian_regs(msr_index, msr_content);
+        whpx_handle_msr_write(cpu, msr_index, msr_content);
         num_write_regs = 1;
     } else {
-        rdmsr_viridian_regs(msr_index, &msr_content);
+        whpx_handle_msr_read(cpu, msr_index, &msr_content);
         /* rdx */
         val[1].Reg64 = msr_content >> 32;
         /* rax */
