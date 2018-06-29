@@ -1152,8 +1152,8 @@ whpx_vcpu_pre_run(CPUState *cpu)
 
     tpr = cpu_get_apic_tpr(x86_cpu->apic_state);
 
-    whpx_vcpu_irq_lock(cpu);
     whpx_unlock_iothread();
+    whpx_vcpu_irq_lock(cpu);
 
     if (tpr != vcpu->tpr) {
         WHV_REGISTER_VALUE v = { };
