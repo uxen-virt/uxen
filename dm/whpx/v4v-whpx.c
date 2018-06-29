@@ -357,8 +357,10 @@ whpx_v4v_handle_signal_work(void *opaque)
             if (c->cb) {
                 c->cb(c->cb_opaque);
             } else {
-                try_complete_pending_recv(c->context, NULL);
-                ioh_event_set(&c->context->v4v_channel.recv_event);
+                if (c->pending_recv.pending)
+                    try_complete_pending_recv(c->context, NULL);
+                else
+                    ioh_event_set(&c->context->v4v_channel.recv_event);
             }
         }
         assert(notify_count < MAX_NOTIFY_COUNT);
