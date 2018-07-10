@@ -734,7 +734,9 @@ static int prepare_clt_out(struct http_ctx *hp, bool prx_auth)
         if (create_http_header(prx_auth, hp->h.sv_name, use_head,
                      hp->h.daddr.sin_port, &hp->cx->clt_parser->h, auth_header, &hp->clt_out))
             goto out;
-        if (use_head) {
+        if (use_head || (hp->cx->clt_parser->h.method &&
+            strcasecmp(hp->cx->clt_parser->h.method, S_HEAD) == 0)) {
+
             hp->cx->flags |= CXF_HEAD_REQUEST;
             HLOG5("CXF_HEAD_REQUEST");
         }
