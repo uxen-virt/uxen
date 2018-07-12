@@ -1411,12 +1411,7 @@ whpx_vcpu_run(CPUState *cpu)
         }
 
         if (whpx_perf_stats) {
-            int er = vcpu->exit_ctx.ExitReason;
-            if (er >= 0x2000)
-                er = er - 0x2000 + 200;
-            if (er >= 0x1000)
-                er = er - 0x1000 + 100;
-            assert(er < 256);
+            uint8_t er = whpx_er_byte_encode(vcpu->exit_ctx.ExitReason);
             tmsum_vmexit[er] += _rdtsc() - t0;
             count_vmexit[er]++;
         }

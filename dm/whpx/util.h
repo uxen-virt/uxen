@@ -43,6 +43,9 @@ HRESULT whpx_set_vp_registers(UINT32 VpIndex, const WHV_REGISTER_NAME *RegisterN
 void whpx_dump_perf_stats(void);
 void whpx_reset_perf_stats(void);
 
+uint8_t whpx_er_byte_encode(int exit_reason);
+int whpx_er_byte_decode(uint8_t exit_reason_byte);
+
 /* _rdtsc */
 static inline uint64_t _rdtsc()
 {

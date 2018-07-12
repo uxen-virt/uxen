@@ -528,6 +528,51 @@ whpx_reset_perf_stats(void)
     memset(count_vmexit, 0, sizeof(count_vmexit));
 }
 
+uint8_t
+whpx_er_byte_encode(int er)
+{
+    if (er >= 0x2000)
+        er = er - 0x2000 + 200;
+    else if (er >= 0x1000)
+        er = er - 0x1000 + 100;
+    assert(er < 256);
+
+    return (uint8_t) er;
+}
+
+int
+whpx_er_byte_decode(uint8_t exit_reason_byte)
+{
+    int er = exit_reason_byte;
+
+    if (er >= 200)
+        er = er - 200 + 0x2000;
+    else if (er >= 100)
+        er = er - 100 + 0x1000;
+
+    return er;
+}
+
+static
+char *whpx_er_describe(int exit_reason)
+{
+    switch (exit_reason) {
+    case WHvRunVpExitReasonNone: return "none";
+    case WHvRunVpExitReasonMemoryAccess: return "mmio";
+    case WHvRunVpExitReasonX64IoPortAccess: return "portio";
+    case WHvRunVpExitReasonUnrecoverableException: return "uexcp";
+    case WHvRunVpExitReasonInvalidVpRegisterValue: return "invreg";
+    case WHvRunVpExitReasonUnsupportedFeature: return "unsupp";
+    case WHvRunVpExitReasonX64InterruptWindow: return "irqwnd";
+    case WHvRunVpExitReasonX64Halt: return "halt";
+    case WHvRunVpExitReasonX64MsrAccess: return "msr";
+    case WHvRunVpExitReasonX64Cpuid: return "cpuid";
+    case WHvRunVpExitReasonException: return "excp";
+    case WHvRunVpExitReasonCanceled: return "cancel";
+    default: return NULL;
+    }
+}
+
 void
 whpx_dump_perf_stats(void)
 {
@@ -545,8 +590,16 @@ whpx_dump_perf_stats(void)
     int i;
     for (i = 0; i < 256; i++) {
         if (count_vmexit[i]) {
-            debug_printf("| exit[%6d] count %8"PRId64" avg cycles %8"PRId64"\n",
-                i, count_vmexit[i], tmsum_vmexit[i] / count_vmexit[i]);
+            int er = whpx_er_byte_decode(i);
+            char *desc = whpx_er_describe(er);
+            char buf[8] = { 0 };
+
+            if (desc)
+                strncpy(buf, desc, sizeof(buf));
+            else
+                snprintf(buf, sizeof(buf), "0x%x", er);
+            debug_printf("| exit[%-6s] count %8"PRId64" avg cycles %8"PRId64"\n",
+                buf, count_vmexit[i], tmsum_vmexit[i] / count_vmexit[i]);
         }
     }
     debug_printf("\\---------------------------------------------------------------------\n");
