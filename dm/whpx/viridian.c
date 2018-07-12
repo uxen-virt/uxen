@@ -20,6 +20,7 @@
 #include <dm/cpu.h>
 #include <dm/whpx/whpx.h>
 #include <dm/whpx/apic.h>
+#include <dm/whpx/util.h>
 
 /* Viridian MSR numbers. */
 #define HV_X64_MSR_GUEST_OS_ID                   0x40000000
