@@ -20,6 +20,7 @@
 #include "winhvglue.h"
 #include "winhvplatform.h"
 #include "core.h"
+#include "viridian.h"
 #include "v4v-whpx.h"
 #include "loader.h"
 #include "emulate.h"
@@ -898,6 +899,7 @@ whpx_early_init(void)
 
     whpx_initialize_api();
     emu_init();
+    viridian_init();
     whpx_v4v_init();
 
     /* init dom0 domain for v4v */

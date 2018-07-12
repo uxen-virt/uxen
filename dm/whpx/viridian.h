@@ -20,4 +20,6 @@ int viridian_hypercall(uint64_t *rax);
 int rdmsr_viridian_regs(uint32_t msr, uint64_t *msr_content);
 int wrmsr_viridian_regs(uint32_t msr, uint64_t msr_content);
 
+void viridian_init(void);
+
 #endif
