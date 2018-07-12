@@ -322,6 +322,10 @@ int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
         *val = viridian.guest_os_id.raw;
         break;
 
+    case VIRIDIAN_MSR_HYPERCALL:
+        *val =  viridian.hypercall_gpa.raw;
+        break;
+
     case VIRIDIAN_MSR_VP_INDEX:
         *val = cpu->cpu_index;
         break;
@@ -331,6 +335,10 @@ int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
         *val = (((uint64_t)apic_get_icr2(cpu->apic_state) << 32) |
             apic_get_icr(cpu->apic_state));
         whpx_unlock_iothread();
+        break;
+
+    case VIRIDIAN_MSR_TIME_REF_COUNT:
+        *val = get_clock_ns(vm_clock) / 100;
         break;
 
     case VIRIDIAN_MSR_TPR:
