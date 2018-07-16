@@ -1199,6 +1199,8 @@ whpx_vcpu_pre_run(CPUState *cpu)
                 new_int.InterruptionType = WHvX64PendingInterrupt;
                 new_int.InterruptionPending = 1;
                 new_int.InterruptionVector = irq;
+
+                viridian_synic_ack_irq(env, irq);
             }
         }
     }

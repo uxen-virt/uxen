@@ -99,6 +99,7 @@ void whpx_destroy(void);
  * MISC
  */
 
+CPUState *whpx_get_cpu(int cpu);
 CPUState *whpx_get_current_cpu(void);
 void whpx_lock_iothread(void);
 void whpx_unlock_iothread(void);

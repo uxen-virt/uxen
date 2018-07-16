@@ -22,6 +22,64 @@
 #include <dm/whpx/apic.h>
 #include <dm/whpx/util.h>
 
+
+/* Base+Freq viridian feature sets:
+ *
+ * - Hypercall MSRs (HV_X64_MSR_GUEST_OS_ID and HV_X64_MSR_HYPERCALL)
+ * - APIC access MSRs (HV_X64_MSR_EOI, HV_X64_MSR_ICR and HV_X64_MSR_TPR)
+ * - Virtual Processor index MSR (HV_X64_MSR_VP_INDEX)
+ * - Timer frequency MSRs (HV_X64_MSR_TSC_FREQUENCY and
+ *   HV_X64_MSR_APIC_FREQUENCY)
+ */
+#define _HVMPV_base_freq 0
+#define HVMPV_base_freq  (1 << _HVMPV_base_freq)
+
+/* Feature set modifications */
+
+/* Disable timer frequency MSRs (HV_X64_MSR_TSC_FREQUENCY and
+ * HV_X64_MSR_APIC_FREQUENCY).
+ * This modification restores the viridian feature set to the
+ * original 'base' set exposed in releases prior to Xen 4.4.
+ */
+#define _HVMPV_no_freq 1
+#define HVMPV_no_freq  (1 << _HVMPV_no_freq)
+
+/* Enable Partition Time Reference Counter (HV_X64_MSR_TIME_REF_COUNT) */
+#define _HVMPV_time_ref_count 2
+#define HVMPV_time_ref_count  (1 << _HVMPV_time_ref_count)
+
+/* Enable Reference TSC Page (HV_X64_MSR_REFERENCE_TSC) */
+#define _HVMPV_reference_tsc 3
+#define HVMPV_reference_tsc  (1 << _HVMPV_reference_tsc)
+
+/* Use Hypercall for remote TLB flush */
+#define _HVMPV_hcall_remote_tlb_flush 4
+#define HVMPV_hcall_remote_tlb_flush (1 << _HVMPV_hcall_remote_tlb_flush)
+
+/* Use APIC assist */
+#define _HVMPV_apic_assist 5
+#define HVMPV_apic_assist (1 << _HVMPV_apic_assist)
+
+/* Enable crash MSRs */
+#define _HVMPV_crash_ctl 6
+#define HVMPV_crash_ctl (1 << _HVMPV_crash_ctl)
+
+/* Enable Synthetic Timer */
+#define _HVMPV_synth_timer 7
+#define HVMPV_synth_timer (1 << _HVMPV_synth_timer)
+
+const uint64_t HVMPV_feature_mask =
+    (
+//      HVMPV_hcall_remote_tlb_flush |     // todo
+//      HVMPV_crash_ctl |                  // todo
+//      HVMPV_reference_tsc |              // doesn't work very well atm
+        HVMPV_base_freq |
+        HVMPV_no_freq |
+        HVMPV_time_ref_count |
+        HVMPV_synth_timer |
+        HVMPV_apic_assist );
+
+
 /* Viridian MSR numbers. */
 #define HV_X64_MSR_GUEST_OS_ID                   0x40000000
 #define HV_X64_MSR_HYPERCALL                     0x40000001
@@ -164,6 +222,25 @@ typedef union _HV_CRASH_CTL_REG_CONTENTS
     } u;
 } HV_CRASH_CTL_REG_CONTENTS;
 
+typedef struct {
+    union
+    {
+        UINT64 AsUINT64;
+        struct
+        {
+            UINT64 Enable      : 1;
+            UINT64 Periodic    : 1;
+            UINT64 Lazy        : 1;
+            UINT64 AutoEnable  : 1;
+            UINT64 ApicVector  : 8;
+            UINT64 DirectMode  : 1;
+            UINT64 ReservedZ1  : 3;
+            UINT64 SINTx       : 4;
+            UINT64 ReservedZ2  :44;
+        };
+    };
+} HV_X64_MSR_STIMER_CONFIG_CONTENTS;
+
 /* Viridian CPUID leaf 3, Hypervisor Feature Indication */
 #define CPUID3D_CRASH_MSRS (1 << 10)
 
@@ -177,15 +254,24 @@ typedef union _HV_CRASH_CTL_REG_CONTENTS
 #define CPUID6A_MSR_BITMAPS     (1 << 1)
 #define CPUID6A_NESTED_PAGING   (1 << 3)
 
+#define SINT_COUNT 16
+#define TIMER_COUNT 4
+
 /*
  * Version and build number reported by CPUID leaf 2
  *
  * These numbers are chosen to match the version numbers reported by
  * Windows Server 2008.
  */
+
 static uint16_t viridian_major = 6;
 static uint16_t viridian_minor = 0;
 static uint32_t viridian_build = 0x1772;
+
+/* versions corresponding to Windows 10 RS4: */
+//static uint16_t viridian_major = 10;
+//static uint16_t viridian_minor = 0;
+//static uint32_t viridian_build = 0x42ee;
 
 /*
  * Maximum number of retries before the guest will notify of failure
@@ -213,13 +299,69 @@ union viridian_vp_assist
     } fields;
 };
 
+union viridian_sint {
+    uint64_t raw;
+    struct
+    {
+        uint64_t vector:8;
+        uint64_t rsvdp2:8;
+        uint64_t masked:1;
+        uint64_t autoeoi:1;
+        uint64_t polling:1;
+        uint64_t rsvdp:45;
+    } fields;
+};
+
+union viridian_siefp
+{
+    uint64_t raw;
+    struct
+    {
+        uint64_t enabled:1;
+        uint64_t rsvdp:11;
+        uint64_t pfn:48;
+    } fields;
+};
+
+union viridian_simp
+{
+    uint64_t raw;
+    struct
+    {
+        uint64_t enabled:1;
+        uint64_t rsvdp:11;
+        uint64_t pfn:48;
+    } fields;
+};
+
+struct viridian_synic {
+    uint64_t scontrol;
+    uint64_t sversion;
+    union viridian_siefp siefp;
+    union viridian_simp simp;
+    uint64_t eom;
+    union viridian_sint sint[SINT_COUNT];
+    uint64_t sint_irr;
+};
+
+struct viridian_timer {
+    int cpu_index;
+    int timer_index;
+    Timer *timer;
+    HV_X64_MSR_STIMER_CONFIG_CONTENTS config;
+    uint64_t count;
+};
+
 struct viridian_vcpu
 {
+    int index;
     struct {
         union viridian_vp_assist msr;
         void *va;
         bool pending;
     } vp_assist;
+    struct viridian_synic synic;
+    struct viridian_timer timer[TIMER_COUNT];
     uint64_t crash_param[5];
 };
 
@@ -267,60 +409,6 @@ typedef struct viridian {
 
 static viridian_t viridian;
 static struct viridian_vcpu viridian_vcpu[WHPX_MAX_VCPUS];
-
-/* Base+Freq viridian feature sets:
- *
- * - Hypercall MSRs (HV_X64_MSR_GUEST_OS_ID and HV_X64_MSR_HYPERCALL)
- * - APIC access MSRs (HV_X64_MSR_EOI, HV_X64_MSR_ICR and HV_X64_MSR_TPR)
- * - Virtual Processor index MSR (HV_X64_MSR_VP_INDEX)
- * - Timer frequency MSRs (HV_X64_MSR_TSC_FREQUENCY and
- *   HV_X64_MSR_APIC_FREQUENCY)
- */
-#define _HVMPV_base_freq 0
-#define HVMPV_base_freq  (1 << _HVMPV_base_freq)
-
-/* Feature set modifications */
-
-/* Disable timer frequency MSRs (HV_X64_MSR_TSC_FREQUENCY and
- * HV_X64_MSR_APIC_FREQUENCY).
- * This modification restores the viridian feature set to the
- * original 'base' set exposed in releases prior to Xen 4.4.
- */
-#define _HVMPV_no_freq 1
-#define HVMPV_no_freq  (1 << _HVMPV_no_freq)
-
-/* Enable Partition Time Reference Counter (HV_X64_MSR_TIME_REF_COUNT) */
-#define _HVMPV_time_ref_count 2
-#define HVMPV_time_ref_count  (1 << _HVMPV_time_ref_count)
-
-/* Enable Reference TSC Page (HV_X64_MSR_REFERENCE_TSC) */
-#define _HVMPV_reference_tsc 3
-#define HVMPV_reference_tsc  (1 << _HVMPV_reference_tsc)
-
-/* Use Hypercall for remote TLB flush */
-#define _HVMPV_hcall_remote_tlb_flush 4
-#define HVMPV_hcall_remote_tlb_flush (1 << _HVMPV_hcall_remote_tlb_flush)
-
-/* Use APIC assist */
-#define _HVMPV_apic_assist 5
-#define HVMPV_apic_assist (1 << _HVMPV_apic_assist)
-
-/* Enable crash MSRs */
-#define _HVMPV_crash_ctl 6
-#define HVMPV_crash_ctl (1 << _HVMPV_crash_ctl)
-
-
-
-const uint64_t HVMPV_feature_mask =
-    (
-//      HVMPV_hcall_remote_tlb_flush |     // todo
-//      HVMPV_crash_ctl |                  // todo
-//      HVMPV_reference_tsc |              // doesn't work very well atm
-        HVMPV_base_freq |
-        HVMPV_no_freq |
-        HVMPV_time_ref_count |
-        HVMPV_apic_assist );
-
 
 int cpuid_viridian_leaves(uint64_t leaf, uint64_t *eax,
                           uint64_t *ebx, uint64_t *ecx,
@@ -383,6 +471,10 @@ int cpuid_viridian_leaves(uint64_t leaf, uint64_t *eax,
             mask.AccessPartitionReferenceCounter = 1;
         if ( HVMPV_feature_mask & HVMPV_reference_tsc )
             mask.AccessPartitionReferenceTsc = 1;
+        if ( HVMPV_feature_mask & HVMPV_synth_timer ) {
+            mask.AccessSynicRegs = 1;
+            mask.AccessSyntheticTimerRegs = 1;
+        }
 
         u.mask = mask;
 
@@ -592,6 +684,9 @@ initialize_vp_assist(CPUState *cpu)
     uint64_t len = PAGE_SIZE;
     void *p;
 
+    if (!viridian_vcpu[cpu->cpu_index].vp_assist.msr.fields.enabled)
+        return 0;
+
     p = whpx_ram_map(gmfn << PAGE_SHIFT, &len);
     if (p) {
         assert(len == PAGE_SIZE);
@@ -616,6 +711,219 @@ teardown_vp_assist(CPUState *cpu)
 
     viridian_vcpu[cpu->cpu_index].vp_assist.va = NULL;
     whpx_ram_unmap(va);
+}
+
+static void
+viridian_synic_deliver_irq(CPUState *cpu, int sint)
+{
+    struct viridian_synic *ic = &viridian_vcpu[cpu->cpu_index].synic;
+    int vec = ic->sint[sint].fields.vector;
+
+    whpx_lock_iothread();
+    apic_deliver_irq(WHPX_LAPIC_ID(cpu->cpu_index), 0,
+        APIC_DM_FIXED, vec, APIC_TRIGGER_EDGE);
+    whpx_unlock_iothread();
+}
+
+static void
+viridian_synic_update_irq(CPUState *cpu, int sint)
+{
+    struct viridian_synic *ic = &viridian_vcpu[cpu->cpu_index].synic;
+
+    if ((ic->sint_irr & (1ULL << sint)) &&
+        !ic->sint[sint].fields.masked) {
+        viridian_synic_deliver_irq(cpu, sint);
+        ic->sint_irr &= ~(1ULL << sint);
+    }
+}
+
+void
+viridian_synic_assert_irq(CPUState *cpu, int sint)
+{
+    if (!vm_viridian)
+        return;
+
+    if (sint >= 0 && sint < SINT_COUNT) {
+        struct viridian_synic *ic = &viridian_vcpu[cpu->cpu_index].synic;
+
+        ic->sint_irr |= (1ULL << sint);
+        viridian_synic_update_irq(cpu, sint);
+    }
+}
+
+void
+viridian_synic_ack_irq(CPUState *cpu, int vec)
+{
+    struct viridian_synic *ic = &viridian_vcpu[cpu->cpu_index].synic;
+    int eoi = 0;
+    int sint;
+
+    if (!vm_viridian)
+        return;
+
+    for (sint = 0; sint < SINT_COUNT; sint++) {
+        if (ic->sint[sint].fields.vector == vec &&
+            ic->sint[sint].fields.autoeoi) {
+            eoi = 1;
+            break;
+        }
+    }
+
+    if (eoi) {
+        whpx_lock_iothread();
+        apic_eoi(cpu->apic_state);
+        whpx_unlock_iothread();
+    }
+}
+
+static void
+timer_expiry(void *opaque)
+{
+    struct viridian_timer *timer = opaque;
+    int sint = timer->config.SINTx;
+    CPUState *cpu = whpx_get_cpu(timer->cpu_index);
+
+    assert(cpu);
+    assert(sint);
+    viridian_synic_assert_irq(cpu, sint);
+
+    if (timer->config.Periodic) {
+        if (timer->config.Enable)
+            mod_timer_ns(timer->timer, get_clock_ns(vm_clock) + timer->count * 100);
+    } else
+        timer->config.Enable = 0;
+}
+
+static void
+timer_update(
+    struct viridian_timer *timer,
+    HV_X64_MSR_STIMER_CONFIG_CONTENTS config,
+    uint64_t count)
+{
+    whpx_lock_iothread();
+
+    timer->config = config;
+    timer->count  = count;
+    if (config.Enable) {
+        if (config.Periodic)
+            mod_timer_ns(timer->timer, get_clock_ns(vm_clock) + count * 100);
+        else
+            mod_timer_ns(timer->timer, count * 100);
+    } else {
+        del_timer(timer->timer);
+    }
+
+    whpx_unlock_iothread();
+}
+
+static void
+wrmsr_timer_count(CPUState *cpu, int timer_idx, uint64_t val)
+{
+    struct viridian_timer *timer = &viridian_vcpu[cpu->cpu_index].timer[timer_idx];
+    HV_X64_MSR_STIMER_CONFIG_CONTENTS config;
+
+    config.AsUINT64 = timer->config.AsUINT64;
+
+    debug_printf("viridian: cpu%d write timer%d count = %"PRIx64"\n", cpu->cpu_index, timer_idx, val);
+
+    if (!val) {
+        config.Enable = 0;
+    } else {
+        if (config.AutoEnable)
+            config.Enable = 1;
+    }
+    timer_update(timer, config, val);
+}
+
+static void
+wrmsr_timer_config(CPUState *cpu, int timer_idx, uint64_t val)
+{
+    struct viridian_timer *timer = &viridian_vcpu[cpu->cpu_index].timer[timer_idx];
+    HV_X64_MSR_STIMER_CONFIG_CONTENTS v = { .AsUINT64 = val };
+
+    debug_printf("viridian: cpu%d write timer%d config = %"PRIx64
+        " en %d periodic %d lazy %d autoen %d vec %x direct %d SINTx %d\n",
+        cpu->cpu_index, timer_idx, val,
+        v.Enable, v.Periodic, v.Lazy, v.AutoEnable, v.ApicVector, v.DirectMode, v.SINTx);
+
+    if (v.Enable && !v.SINTx)
+        v.Enable = 0;
+
+    timer_update(timer, v, timer->count);
+}
+
+static uint64_t
+rdmsr_timer_count(CPUState *cpu, int timer_idx)
+{
+    return viridian_vcpu[cpu->cpu_index].timer[timer_idx].count;
+}
+
+static uint64_t
+rdmsr_timer_config(CPUState *cpu, int timer_idx)
+{
+    return viridian_vcpu[cpu->cpu_index].timer[timer_idx].config.AsUINT64;
+}
+
+static void
+wrmsr_synic_regs(CPUState *cpu, struct viridian_synic *ic, uint32_t idx, uint64_t val)
+{
+    debug_printf("viridian: synic  write %08x = %08"PRIx64"\n", idx, val);
+    switch (idx) {
+    case HV_X64_MSR_SCONTROL:
+        ic->scontrol = val;
+        break;
+    case HV_X64_MSR_SVERSION:
+        break;
+    case HV_X64_MSR_SIEFP:
+        ic->siefp.raw = val;
+        break;
+    case HV_X64_MSR_SIMP:
+        ic->simp.raw = val;
+        break;
+    case HV_X64_MSR_EOM:
+        break;
+    case HV_X64_MSR_SINT0 ... HV_X64_MSR_SINT15: {
+        int sint = idx - HV_X64_MSR_SINT0;
+        union viridian_sint sint_v = {
+            .raw = val
+        };
+
+        debug_printf("viridian: sint%02d write vec=0x%02x masked=%d autoeoi=%d polling=%d\n",
+            idx - HV_X64_MSR_SINT0, sint_v.fields.vector, sint_v.fields.masked,
+            sint_v.fields.autoeoi, sint_v.fields.polling);
+
+        ic->sint[sint] = sint_v;
+        viridian_synic_update_irq(cpu, sint);
+        break;
+    }
+    default:
+        assert(false);
+    }
+}
+
+static uint64_t
+rdmsr_synic_regs(CPUState *cpu, struct viridian_synic *ic, uint32_t idx)
+{
+    switch (idx) {
+    case HV_X64_MSR_SCONTROL:
+        return ic->scontrol;
+    case HV_X64_MSR_SVERSION:
+        return ic->sversion;
+    case HV_X64_MSR_SIEFP:
+        return ic->siefp.raw;
+    case HV_X64_MSR_SIMP:
+        return ic->simp.raw;
+    case HV_X64_MSR_EOM:
+        return 0;
+    case HV_X64_MSR_SINT0 ... HV_X64_MSR_SINT15: {
+        int sint = idx - HV_X64_MSR_SINT0;
+        return ic->sint[sint].raw;
+    }
+    default:
+        assert(false);
+    }
+
+    return 0;
 }
 
 int
@@ -684,6 +992,25 @@ wrmsr_viridian_regs(uint32_t idx, uint64_t val)
             enable_reference_tsc_page(cpu, viridian.reference_tsc_msr.fields.pfn);
         break;
 
+    case HV_X64_MSR_STIMER0_CONFIG:
+    case HV_X64_MSR_STIMER1_CONFIG:
+    case HV_X64_MSR_STIMER2_CONFIG:
+    case HV_X64_MSR_STIMER3_CONFIG: {
+        int timer = (idx - HV_X64_MSR_STIMER0_CONFIG) / 2;
+        wrmsr_timer_config(cpu, timer, val);
+        break;
+    }
+    case HV_X64_MSR_STIMER0_COUNT:
+    case HV_X64_MSR_STIMER1_COUNT:
+    case HV_X64_MSR_STIMER2_COUNT:
+    case HV_X64_MSR_STIMER3_COUNT: {
+        int timer = (idx - HV_X64_MSR_STIMER0_COUNT) / 2;
+        wrmsr_timer_count(cpu, timer, val);
+        break;
+    }
+    case HV_X64_MSR_SCONTROL ... HV_X64_MSR_SINT15:
+        wrmsr_synic_regs(cpu, &viridian_vcpu[cpu->cpu_index].synic, idx,val);
+        break;
         //TODO
 #if 0
     case HV_X64_MSR_CRASH_P0:
@@ -793,6 +1120,25 @@ int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
         *val = get_clock_ns(vm_clock) / 100;
         break;
 
+    case HV_X64_MSR_STIMER0_CONFIG:
+    case HV_X64_MSR_STIMER1_CONFIG:
+    case HV_X64_MSR_STIMER2_CONFIG:
+    case HV_X64_MSR_STIMER3_CONFIG: {
+        int timer = (idx - HV_X64_MSR_STIMER0_CONFIG) / 2;
+        *val = rdmsr_timer_config(cpu, timer);
+        break;
+    }
+    case HV_X64_MSR_STIMER0_COUNT:
+    case HV_X64_MSR_STIMER1_COUNT:
+    case HV_X64_MSR_STIMER2_COUNT:
+    case HV_X64_MSR_STIMER3_COUNT: {
+        int timer = (idx - HV_X64_MSR_STIMER0_COUNT) / 2;
+        *val = rdmsr_timer_count(cpu, timer);
+        break;
+    }
+    case HV_X64_MSR_SCONTROL ... HV_X64_MSR_SINT15:
+        *val = rdmsr_synic_regs(cpu, &viridian_vcpu[cpu->cpu_index].synic, idx);
+        break;
         // TODO
 #if 0
     case HV_X64_MSR_CRASH_P0:
@@ -829,9 +1175,57 @@ int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
     return 1;
 }
 
+void
+viridian_timers_pause(void)
+{
+    CPUState *cpu = first_cpu;
+
+    if (!vm_viridian)
+        return;
+
+    whpx_lock_iothread();
+    while (cpu) {
+        struct viridian_vcpu *v = &viridian_vcpu[cpu->cpu_index];
+        int i;
+
+        for (i = 0; i < TIMER_COUNT; i++)
+            if (v->timer[i].timer)
+                del_timer(v->timer[i].timer);
+        cpu = cpu->next_cpu;
+    }
+    whpx_unlock_iothread();
+}
+
+void
+viridian_timers_resume(void)
+{
+    CPUState *cpu = first_cpu;
+
+    if (!vm_viridian)
+        return;
+
+    whpx_lock_iothread();
+    while (cpu) {
+        struct viridian_vcpu *v = &viridian_vcpu[cpu->cpu_index];
+        int i;
+
+        for (i = 0; i < TIMER_COUNT; i++)
+            if (v->timer[i].timer)
+                timer_update(&v->timer[i], v->timer[i].config, v->timer[i].count);
+        cpu = cpu->next_cpu;
+    }
+    whpx_unlock_iothread();
+}
+
 static void
 viridian_save(QEMUFile *f, void *opaque)
 {
+    CPUState *cpu = first_cpu;
+    while (cpu) {
+        teardown_vp_assist(cpu);
+        cpu = cpu->next_cpu;
+    }
+
     qemu_put_buffer(f, (uint8_t*) &viridian, sizeof(viridian));
     qemu_put_buffer(f, (uint8_t*) viridian_vcpu, sizeof(viridian_vcpu));
 }
@@ -839,14 +1233,75 @@ viridian_save(QEMUFile *f, void *opaque)
 static int
 viridian_load(QEMUFile *f, void *opaque, int version)
 {
+    int i, j;
+
+    for (i = 0; i < WHPX_MAX_VCPUS; i++) {
+        struct viridian_vcpu *v = &viridian_vcpu[i];
+
+        for (j = 0; j < TIMER_COUNT; j++) {
+            if (v->timer[j].timer) {
+                free_timer(v->timer[j].timer);
+                v->timer[j].timer = NULL;
+            }
+        }
+    }
+
     qemu_get_buffer(f, (uint8_t*) &viridian, sizeof(viridian));
     qemu_get_buffer(f, (uint8_t*) viridian_vcpu, sizeof(viridian_vcpu));
 
+    /* fixup vp assist page va */
+    CPUState *cpu = first_cpu;
+    while (cpu) {
+        initialize_vp_assist(cpu);
+        cpu = cpu->next_cpu;
+    }
+
+    /* recreate timers */
+    for (i = 0; i < WHPX_MAX_VCPUS; i++) {
+        struct viridian_vcpu *v = &viridian_vcpu[i];
+
+        for (j = 0; j < TIMER_COUNT; j++)
+            v->timer[j].timer = new_timer_ns(vm_clock, timer_expiry, &v->timer[i]);
+    }
+
+    viridian_timers_resume();
+
     return 0;
+}
+
+static void
+viridian_init_synic(struct viridian_synic *ic)
+{
+    int i;
+
+    memset(ic, 0, sizeof(*ic));
+    ic->sversion = 1;
+    for (i = 0; i < SINT_COUNT; i++)
+        ic->sint[i].fields.masked = 1;
+}
+
+static void
+viridian_init_timers(struct viridian_vcpu *v)
+{
+    int i;
+
+    for (i = 0; i < TIMER_COUNT; i++) {
+        memset(&v->timer[i], 0, sizeof(v->timer[i]));
+        v->timer[i].cpu_index = v->index;
+        v->timer[i].timer_index = i;
+        v->timer[i].timer = new_timer_ns(vm_clock, timer_expiry, &v->timer[i]);
+    }
 }
 
 void
 viridian_init(void)
 {
+    int i;
+
     register_savevm(NULL, "whpx-viridian", 0, 1, viridian_save, viridian_load, NULL);
+    for (i = 0; i < WHPX_MAX_VCPUS; i++) {
+        viridian_vcpu[i].index = i;
+        viridian_init_synic(&viridian_vcpu[i].synic);
+        viridian_init_timers(&viridian_vcpu[i]);
+    }
 }

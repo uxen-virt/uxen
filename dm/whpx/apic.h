@@ -10,6 +10,22 @@
 
 #define WHPX_LAPIC_ID(vcpu_idx) ((vcpu_idx) << 1)
 
+/* APIC delivery modes */
+#define APIC_DM_FIXED	0
+#define APIC_DM_LOWPRI	1
+#define APIC_DM_SMI	2
+#define APIC_DM_NMI	4
+#define APIC_DM_INIT	5
+#define APIC_DM_SIPI	6
+#define APIC_DM_EXTINT	7
+
+/* APIC destination mode */
+#define APIC_DESTMODE_FLAT	0xf
+#define APIC_DESTMODE_CLUSTER	1
+
+#define APIC_TRIGGER_EDGE  0
+#define APIC_TRIGGER_LEVEL 1
+
 /* i8259.c */
 struct PicState;
 typedef struct PicState PicState;

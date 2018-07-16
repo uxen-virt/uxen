@@ -42,6 +42,7 @@
 static volatile uint32_t running_vcpus = 0;
 static int shutdown_reason = 0;
 static Timer *whpx_perf_timer;
+static int vm_paused;
 
 struct cpu_extra {
     HANDLE wake_ev;
@@ -148,6 +149,19 @@ static void whpx_flush_queued_work(CPUState *env)
 int whpx_cpu_is_stopped(CPUState *env)
 {
     return (vm_get_run_mode() != RUNNING_VM) || env->stopped;
+}
+
+CPUState *whpx_get_cpu(int index)
+{
+    CPUState *env = first_cpu;
+
+    while (env) {
+        if (env->cpu_index == index)
+            break;
+        env = env->next_cpu;
+    }
+
+    return env;
 }
 
 CPUState *whpx_get_current_cpu(void)
@@ -535,21 +549,26 @@ whpx_vm_start(void)
 int
 whpx_vm_is_paused(void)
 {
-    //FIXME: implement
-    return 0;
+    return vm_paused;
 }
 
 int
 whpx_vm_pause(void)
 {
-    //FIXME: implement
+    viridian_timers_pause();
+    vm_paused = 1;
+
+    //FIXME: implement more
     return 0;
 }
 
 int
 whpx_vm_unpause(void)
 {
-    //FIXME: implement
+    viridian_timers_resume();
+    vm_paused = 0;
+
+    //FIXME: implement more
     return 0;
 }
 
