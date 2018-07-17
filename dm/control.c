@@ -31,6 +31,8 @@
 #include "guest-agent.h"
 #include "vbox-drivers/shared-clipboard/clipboard-interface.h"
 
+#include <dm/whpx/whpx.h>
+
 #ifdef CONFIG_VBOXDRV
 #include "vbox-drivers/shared-folders/redir.h"
 #endif
@@ -609,7 +611,9 @@ control_command_inject_trap(void *opaque, const char *id, const char *opt,
     error_code = dict_get_integer_default(d, "error_code", -1);
     cr2 = dict_get_integer_default(d, "cr2", 0);
 
-    ret = xc_hvm_inject_trap(xc_handle, vm_id, vcpu, trap, error_code, cr2);
+    ret = !whpx_enable
+        ? xc_hvm_inject_trap(xc_handle, vm_id, vcpu, trap, error_code, cr2)
+        : whpx_inject_trap(vcpu, trap, error_code, cr2);
     if (ret)
 	control_send_error(cd, opt, id, ret, NULL);
     else

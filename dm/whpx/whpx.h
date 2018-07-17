@@ -103,6 +103,7 @@ CPUState *whpx_get_current_cpu(void);
 void whpx_lock_iothread(void);
 void whpx_unlock_iothread(void);
 void whpx_debug_char(char data);
+int whpx_inject_trap(int cpu, int trap, int error_code, int cr2);
 
 #else /* _WIN32 */
 

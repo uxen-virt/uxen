@@ -175,6 +175,11 @@ struct whpx_register_set {
     WHV_REGISTER_VALUE values[RTL_NUMBER_OF(whpx_register_names)];
 };
 
+struct whpx_nmi_trap {
+    int pending;
+    int trap, error_code, cr2;
+};
+
 struct whpx_vcpu {
 #ifdef EMU_MICROSOFT
     WHV_EMULATOR_HANDLE emulator;
@@ -184,6 +189,7 @@ struct whpx_vcpu {
     unsigned long dirty;
     uint64_t tpr;
     uint64_t apic_base;
+    struct whpx_nmi_trap trap;
     bool interrupt_in_flight;
 
     critical_section irq_lock; /* protect cpu->interrupt_request */
@@ -218,6 +224,27 @@ void
 whpx_vcpu_irq_unlock(CPUState *cpu)
 {
     critical_section_leave(&whpx_vcpu(cpu)->irq_lock);
+}
+
+int
+whpx_inject_trap(int cpuidx, int trap, int error_code, int cr2)
+{
+    CPUState *cpu = whpx_get_cpu(cpuidx);
+    struct whpx_vcpu *v;
+
+    if (cpu) {
+        v = whpx_vcpu(cpu);
+        v->trap.trap = trap;
+        v->trap.error_code = error_code;
+        v->trap.cr2 = cr2;
+        v->trap.pending = 1;
+
+        whpx_vcpu_kick(cpu);
+
+        return 0;
+    }
+
+    return -1;
 }
 
 static void whpx_registers_cpustate_to_hv(CPUState *cpu)
@@ -1126,8 +1153,21 @@ whpx_vcpu_pre_run(CPUState *cpu)
 
     whpx_vcpu_irq_lock(cpu);
 
+    /* Inject user trap */
+    if (!vcpu->interrupt_in_flight && vcpu->trap.pending) {
+        vcpu->trap.pending = false;
+        vcpu->interruptable = false;
+        new_int.InterruptionType = WHvX64PendingNmi;
+        new_int.InterruptionPending = 1;
+        new_int.InterruptionVector = vcpu->trap.trap;
+        if (vcpu->trap.error_code != -1) {
+            new_int.ErrorCode = vcpu->trap.error_code;
+            new_int.DeliverErrorCode = 1;
+        }
+    }
+
     /* Inject NMI */
-    if (!vcpu->interrupt_in_flight &&
+    if (!vcpu->interrupt_in_flight && vcpu->interruptable &&
         cpu->interrupt_request & (CPU_INTERRUPT_NMI | CPU_INTERRUPT_SMI)) {
         if (cpu->interrupt_request & CPU_INTERRUPT_NMI) {
             cpu->interrupt_request &= ~CPU_INTERRUPT_NMI;
