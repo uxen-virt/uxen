@@ -39,6 +39,7 @@ typedef struct whpx_reg_val {
 struct whpx_vcpu_context {
     uint32_t    interrupt_request;
     uint32_t    interrupt_in_flight, interruptable;
+    uint32_t    window_registered, tpr;
     /* hv registers */
     uint32_t    nreg;
     whpx_reg_name_t reg [WHPX_MAX_REGISTERS];

@@ -1569,6 +1569,8 @@ whpx_vcpu_get_context(CPUState *cpu, struct whpx_vcpu_context *ctx)
     ctx->interrupt_request = cpu->interrupt_request;
     ctx->interrupt_in_flight = vcpu->interrupt_in_flight;
     ctx->interruptable = vcpu->interruptable;
+    ctx->window_registered = vcpu->window_registered;
+    ctx->tpr = vcpu->tpr;
 
     ctx->nreg = 0;
     whpx_reg_list_t *context_regs = whpx_all_registers();
@@ -1599,6 +1601,8 @@ whpx_vcpu_set_context(CPUState *cpu, struct whpx_vcpu_context *ctx)
     cpu->interrupt_request = ctx->interrupt_request;
     vcpu->interrupt_in_flight = ctx->interrupt_in_flight;
     vcpu->interruptable = ctx->interruptable;
+    vcpu->window_registered = ctx->window_registered;
+    vcpu->tpr = ctx->tpr;
 
     for (i = 0; i < ctx->nreg; i++) {
         WHV_REGISTER_NAME n = ctx->reg[i];
