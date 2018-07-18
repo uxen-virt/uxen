@@ -40,10 +40,11 @@ struct vblank_ctx {
     v4v_async_t vblank_as; /* must be first member */
     uxen_thread vblank_thread;
     ioh_event vblank_ev;
+    ioh_event vblank_run_ev;
     ioh_event vblank_write_ev;
     ioh_event vblank_read_ev;
-    int vblank_exit;
     int vblank_running;
+    int quit_thread;
     int hw_vblank_present;
     int hw_vblank_failing;
     int precise_soft_vblank;
@@ -57,6 +58,8 @@ struct vblank_ctx {
 
 static void vblank_read_done(void *opaque);
 static void pv_vblank_respond(struct vblank_ctx *ctx, int enabled);
+
+static DWORD WINAPI vblank_thread_run(PVOID opaque);
 
 /* from d3dkmthk.h */
 typedef UINT D3DKMT_HANDLE;
@@ -169,7 +172,8 @@ vblank_event_cb(void *opaque)
     struct vblank_ctx *ctx = opaque;
 
     ioh_event_reset(&ctx->vblank_ev);
-    uxendisp_set_interrupt(ctx->disp_state, UXDISP_INTERRUPT_VBLANK);
+    if (ctx->vblank_running)
+        uxendisp_set_interrupt(ctx->disp_state, UXDISP_INTERRUPT_VBLANK);
 }
 
 struct vblank_ctx *
@@ -208,6 +212,8 @@ pv_vblank_init(struct uxendisp_state *s, int method)
     ioh_event_init(&ctx->vblank_read_ev);
     ioh_event_init(&ctx->vblank_write_ev);
     ioh_event_init(&ctx->vblank_ev);
+    /* auto reset event */
+    ctx->vblank_run_ev = CreateEvent(NULL, FALSE, FALSE, NULL);
 
     ioh_add_wait_object(&ctx->vblank_read_ev, vblank_read_done, ctx, NULL);
     ioh_add_wait_object(&ctx->vblank_ev, vblank_event_cb, ctx, NULL);
@@ -221,6 +227,12 @@ pv_vblank_init(struct uxendisp_state *s, int method)
     dm_v4v_recv(&ctx->v4v, (v4v_datagram_t*)&ctx->query_msg,
         sizeof(ctx->query_msg), &ctx->vblank_as);
 
+    if (create_thread(&ctx->vblank_thread, vblank_thread_run, ctx) < 0) {
+        debug_printf("failed to create vblank thread");
+        goto error;
+    }
+    elevate_thread(ctx->vblank_thread);
+
     return ctx;
 
 error:
@@ -233,7 +245,9 @@ void
 pv_vblank_cleanup(struct vblank_ctx *ctx)
 {
     debug_printf("stopping pv vblank\n");
+    ctx->quit_thread = 1;
     pv_vblank_stop(ctx);
+    wait_thread(ctx->vblank_thread);
     debug_printf("stopped pv vblank\n");
 
     ioh_del_wait_object(&ctx->vblank_ev, NULL);
@@ -241,6 +255,7 @@ pv_vblank_cleanup(struct vblank_ctx *ctx)
     ioh_event_close(&ctx->vblank_ev);
     ioh_event_close(&ctx->vblank_read_ev);
     ioh_event_close(&ctx->vblank_write_ev);
+    ioh_event_close(&ctx->vblank_run_ev);
 
     dm_v4v_close(&ctx->v4v);
 
@@ -370,10 +385,9 @@ soft_wait_vblank(struct vblank_ctx *ctx)
     Sleep(wait_ns / 1000000);
 }
 
-static DWORD WINAPI
-vblank_thread_run(PVOID opaque)
+static void
+vblank_thread_run_one(struct vblank_ctx *ctx)
 {
-    struct vblank_ctx *ctx = (struct vblank_ctx*) opaque;
     NTSTATUS status;
     D3DKMT_WAITFORVERTICALBLANKEVENT we = { };
     int tmr_period_changed = 0;
@@ -384,7 +398,7 @@ vblank_thread_run(PVOID opaque)
 
     hw_vblank_update(ctx, &we);
 
-    while (!ctx->vblank_exit) {
+    while (ctx->vblank_running) {
         int need_soft_blank;
 
         if (ctx->hw_vblank_present) {
@@ -431,6 +445,18 @@ vblank_thread_run(PVOID opaque)
 
     if (tmr_period_changed)
         timeEndPeriod(1);
+}
+
+static DWORD WINAPI
+vblank_thread_run(PVOID opaque)
+{
+    struct vblank_ctx *ctx = (struct vblank_ctx*) opaque;
+
+    while (!ctx->quit_thread) {
+        WaitForSingleObject(ctx->vblank_run_ev, INFINITE);
+        if (ctx->vblank_running)
+            vblank_thread_run_one(ctx);
+    }
 
     return 0;
 }
@@ -438,26 +464,20 @@ vblank_thread_run(PVOID opaque)
 void
 pv_vblank_start(struct vblank_ctx *ctx)
 {
-    if (!ctx || ctx->vblank_running)
+    if (!ctx)
         return;
 
-    ctx->vblank_exit = 0;
     ctx->vblank_running = 1;
-
-    if (create_thread(&ctx->vblank_thread, vblank_thread_run, ctx) < 0) {
-        debug_printf("failed to create vblank thread");
-        return;
-    }
-    elevate_thread(ctx->vblank_thread);
+    ioh_event_set(&ctx->vblank_run_ev);
 }
 
 void
 pv_vblank_stop(struct vblank_ctx *ctx)
 {
-    if (ctx && ctx->vblank_running) {
-        ctx->vblank_exit = 1;
-        wait_thread(ctx->vblank_thread);
-        ctx->vblank_running = 0;
-    }
+    if (!ctx)
+        return;
+
+    ctx->vblank_running = 0;
+    ioh_event_set(&ctx->vblank_run_ev);
 }
 
