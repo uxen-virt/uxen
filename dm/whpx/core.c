@@ -411,7 +411,6 @@ set_rax_and_ip(CPUState *cpu, uint64_t rax, uint64_t rip)
     if (FAILED(hr))
         whpx_panic("failed to set registers: %lx\n", hr);
 }
-#endif
 
 static void
 set_ip(CPUState *cpu, uint64_t ip)
@@ -425,6 +424,7 @@ set_ip(CPUState *cpu, uint64_t ip)
     if (FAILED(hr))
         whpx_panic("failed to set registers: %lx\n", hr);
 }
+#endif
 
 int
 whpx_cpu_has_work(CPUState *env)
@@ -721,10 +721,11 @@ static HRESULT CALLBACK whpx_emu_translate_callback(
 
     hr = WHvTranslateGva(whpx->partition, cpu->cpu_index,
                          Gva, TranslateFlags, &res, Gpa);
-    if (FAILED(hr))
+    if (FAILED(hr)) {
         whpx_panic("WHPX: Failed to translate GVA, hr=%08lx", hr);
-    else
+    } else {
         *TranslationResult = res.ResultCode;
+    }
 
     return hr;
 }
@@ -1445,9 +1446,10 @@ whpx_vcpu_run(CPUState *cpu)
             whpx_dump_cpu_state(cpu->cpu_index);
             whpx_translate_gva_to_gpa(cpu, 0, vcpu->exit_ctx.VpContext.Rip, &phys_rip,
                 &unmapped);
+            debug_printf("WHPX: Unexpected VP exit code %d @ phys-rip=%"PRIx64"\n",
+                vcpu->exit_ctx.ExitReason, phys_rip);
             dump_phys_mem(phys_rip - 16, 32);
-            whpx_panic("WHPX: Unexpected VP exit code %d @ phys-rip=%"PRIx64,
-              vcpu->exit_ctx.ExitReason, phys_rip);
+            assert(false);
             break;
         }
         }
@@ -1458,6 +1460,9 @@ whpx_vcpu_run(CPUState *cpu)
             count_vmexit[er]++;
         }
         whpx_vcpu_flush_dirty(cpu);
+
+        if (cpu->interrupt_request)
+            ret = 1;
 
     } while (!ret);
 
