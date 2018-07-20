@@ -115,6 +115,9 @@ static unsigned int vlapic_lvt_mask[VLAPIC_LVT_NUM] =
 
 #define VEC_POS(v) ((v)%32)
 #define REG_POS(v) (((v)/32) * 0x10)
+
+#define vlapic_test_vector(vec, bitmap)                                 \
+    test_bit(VEC_POS(vec), (const uint32_t *)((bitmap) + REG_POS(vec)))
 #define vlapic_test_and_set_vector(vec, bitmap)                         \
     test_and_set_bit(VEC_POS(vec),                                      \
                      (unsigned long *)((bitmap) + REG_POS(vec)))
@@ -408,11 +411,32 @@ struct vlapic *vlapic_lowest_prio(
 
 void vlapic_EOI_set(struct vlapic *vlapic)
 {
-    int vector = vlapic_find_highest_isr(vlapic);
+    struct vcpu *v = vlapic_vcpu(vlapic);
+    /*
+     * If APIC assist was set then an EOI may have been avoided and
+     * hence this EOI actually relates to a lower priority vector.
+     * Thus it is necessary to first emulate the EOI for the higher
+     * priority vector and then recurse to handle the lower priority
+     * vector.
+     */
+    bool_t missed_eoi = viridian_apic_assist_completed(v);
+    int vector;
+
+again:
+    vector = vlapic_find_highest_isr(vlapic);
 
     /* Some EOI writes may not have a matching to an in-service interrupt. */
     if ( vector == -1 )
         return;
+
+    /*
+     * If APIC assist was set but the guest chose to EOI anyway then
+     * we need to clean up state.
+     * NOTE: It is harmless to call viridian_apic_assist_clear() on a
+     *       recursion, even though it is not necessary.
+     */
+    if ( !missed_eoi )
+        viridian_apic_assist_clear(v);
 
     vlapic_clear_vector(vector, &vlapic->regs->data[APIC_ISR]);
 
@@ -422,6 +446,12 @@ void vlapic_EOI_set(struct vlapic *vlapic)
 #ifndef __UXEN__
     hvm_dpci_msi_eoi(current->domain, vector);
 #endif  /* __UXEN__ */
+
+    if ( missed_eoi )
+    {
+        missed_eoi = 0;
+        goto again;
+    }
 }
 
 int vlapic_ipi(
@@ -1020,9 +1050,29 @@ int vlapic_has_pending_irq(struct vcpu *v)
         return -1;
 
     isr = vlapic_find_highest_isr(vlapic);
-    isr = (isr != -1) ? isr : 0;
-    if ( (isr & 0xf0) >= (irr & 0xf0) )
+
+    /*
+     * If APIC assist was set then an EOI may have been avoided.
+     * If so, we need to emulate the EOI here before comparing ISR
+     * with IRR.
+     */
+    if ( viridian_apic_assist_completed(v) )
+    {
+        vlapic_EOI_set(vlapic);
+        isr = vlapic_find_highest_isr(vlapic);
+    }
+
+    /*
+     * The specification says that if APIC assist is set and a
+     * subsequent interrupt of lower priority occurs then APIC assist
+     * needs to be cleared.
+     */
+    if ( isr >= 0 &&
+         (irr & 0xf0) <= (isr & 0xf0) )
+    {
+        viridian_apic_assist_clear(v);
         return -1;
+    }
 
     return irr;
 }
@@ -1030,7 +1080,25 @@ int vlapic_has_pending_irq(struct vcpu *v)
 int vlapic_ack_pending_irq(struct vcpu *v, int vector)
 {
     struct vlapic *vlapic = vcpu_vlapic(v);
+    int isr;
 
+    /* If there's no chance of using APIC assist then bail now. */
+    if ( !has_viridian_apic_assist(v->domain) ||
+         vlapic_test_vector(vector, &vlapic->regs->data[APIC_TMR]) )
+        goto done;
+
+    isr = vlapic_find_highest_isr(vlapic);
+    if ( isr == -1 && vector > 0x10 )
+    {
+        /*
+         * This vector is edge triggered, not in the legacy range, and no
+         * lower priority vectors are pending in the ISR. Thus we can set
+         * APIC assist to avoid exiting for EOI.
+         */
+        viridian_apic_assist_set(v);
+    }
+
+done:
     vlapic_set_vector(vector, &vlapic->regs->data[APIC_ISR]);
     vlapic_clear_irr(vector, vlapic);
 

@@ -575,13 +575,15 @@ struct hvm_hw_cpu_xsave {
 struct hvm_viridian_domain_context {
     uint64_t hypercall_gpa;
     uint64_t guest_os_id;
-    uint64_t ref_tsc_page_msr;
+    uint64_t reference_tsc;
 };
 
 DECLARE_HVM_SAVE_TYPE(VIRIDIAN_DOMAIN, 15, struct hvm_viridian_domain_context);
 
 struct hvm_viridian_vcpu_context {
-    uint64_t apic_assist;
+    uint64_t vp_assist_msr;
+    uint8_t  vp_assist_pending;
+    uint8_t  _pad[7];
 };
 
 DECLARE_HVM_SAVE_TYPE(VIRIDIAN_VCPU, 17, struct hvm_viridian_vcpu_context);
