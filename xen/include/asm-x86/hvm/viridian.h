@@ -9,7 +9,7 @@
 #ifndef __ASM_X86_HVM_VIRIDIAN_H__
 #define __ASM_X86_HVM_VIRIDIAN_H__
 
-union viridian_apic_assist
+union viridian_vp_assist
 {   uint64_t raw;
     struct
     {
@@ -21,7 +21,13 @@ union viridian_apic_assist
 
 struct viridian_vcpu
 {
-    union viridian_apic_assist apic_assist;
+    struct {
+        union viridian_vp_assist msr;
+        unsigned long mfn, gmfn;
+        void *va;
+        bool_t pending;
+    } vp_assist;
+    uint64_t crash_param[5];
 };
 
 union viridian_guest_os_id
@@ -48,15 +54,52 @@ union viridian_hypercall_gpa
     } fields;
 };
 
+struct viridian_time_ref_count
+{
+    unsigned long flags;
+
+#define _TRC_accessed 0
+#define TRC_accessed (1 << _TRC_accessed)
+#define _TRC_running 1
+#define TRC_running (1 << _TRC_running)
+
+    uint64_t val;
+    int64_t off;
+};
+
+union viridian_reference_tsc
+{
+    uint64_t raw;
+    struct
+    {
+        uint64_t enabled:1;
+        uint64_t reserved_preserved:11;
+        uint64_t pfn:48;
+    } fields;
+};
+
+/*
+ * Type defintion as in Microsoft Hypervisor Top-Level Functional
+ * Specification v4.0a, section 15.4.2.
+ */
+typedef struct _HV_REFERENCE_TSC_PAGE
+{
+    uint32_t TscSequence;
+    uint32_t Reserved1;
+    uint64_t TscScale;
+    int64_t  TscOffset;
+    uint64_t Reserved2[509];
+} HV_REFERENCE_TSC_PAGE, *PHV_REFERENCE_TSC_PAGE;
+
 struct viridian_domain
 {
     union viridian_guest_os_id guest_os_id;
     union viridian_hypercall_gpa hypercall_gpa;
-    uint64_t ref_tsc_page_msr;
+    struct viridian_time_ref_count time_ref_count;
+    union viridian_reference_tsc reference_tsc;
 };
 
-int
-cpuid_viridian_leaves(
+int cpuid_viridian_leaves(
     unsigned int leaf,
     unsigned int *eax,
     unsigned int *ebx,
@@ -76,4 +119,26 @@ rdmsr_viridian_regs(
 int
 viridian_hypercall(struct cpu_user_regs *regs);
 
+void viridian_time_ref_count_freeze(struct domain *d);
+void viridian_time_ref_count_thaw(struct domain *d);
+
+void viridian_vcpu_deinit(struct vcpu *v);
+void viridian_domain_deinit(struct domain *d);
+
+void viridian_apic_assist_set(struct vcpu *v);
+bool_t viridian_apic_assist_completed(struct vcpu *v);
+void viridian_apic_assist_clear(struct vcpu *v);
+
+#define has_viridian_apic_assist is_viridian_domain
+
 #endif /* __ASM_X86_HVM_VIRIDIAN_H__ */
+
+/*
+ * Local variables:
+ * mode: C
+ * c-file-style: "BSD"
+ * c-basic-offset: 4
+ * tab-width: 4
+ * indent-tabs-mode: nil
+ * End:
+ */

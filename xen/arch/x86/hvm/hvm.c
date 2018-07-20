@@ -1013,6 +1013,8 @@ void hvm_domain_relinquish_resources(struct domain *d)
     hvm_destroy_dmreq_vcpu_pages(d);
     hvm_destroy_pci_emul(d);
 
+    viridian_domain_deinit(d);
+
 #ifndef __UXEN__
     msixtbl_pt_cleanup(d);
 #endif  /* __UXEN__ */
@@ -1593,6 +1595,8 @@ int hvm_vcpu_initialise(struct vcpu *v)
 
 void hvm_vcpu_destroy(struct vcpu *v)
 {
+    viridian_vcpu_deinit(v);
+
 #ifndef __UXEN_NOT_YET__
     nestedhvm_vcpu_destroy(v);
 #endif  /* __UXEN_NOT_YET__ */
