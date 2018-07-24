@@ -22,6 +22,7 @@ extern uint64_t tmsum_lapic_access;
 extern uint64_t count_lapic_access;
 extern uint64_t tmsum_v4v;
 extern uint64_t count_v4v;
+extern uint64_t count_longspin;
 
 /* internal whpx utility functions */
 void whpx_initialize_api(void);

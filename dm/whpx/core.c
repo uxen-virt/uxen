@@ -1024,10 +1024,7 @@ whpx_handle_cpuid(CPUState *cpu)
         break;
     case 0x40000000:
         if (vm_viridian) {
-            rax = 0x40000006; /* Maximum leaf */
-            rcx = VIRIDIAN_CPUID_SIGNATURE_ECX;
-            rdx = VIRIDIAN_CPUID_SIGNATURE_EDX;
-            rbx = VIRIDIAN_CPUID_SIGNATURE_EBX;
+            cpuid_viridian_leaves(rax, &rax, &rbx, &rcx, &rdx);
             break;
         };
         /* fall through */
@@ -1036,7 +1033,7 @@ whpx_handle_cpuid(CPUState *cpu)
         rdx = WHP_CPUID_SIGNATURE_EDX;
         rbx = WHP_CPUID_SIGNATURE_EBX;
         break;
-    case 0x40000001 ... 0x40000004:
+    case 0x40000001 ... 0x40000006:
         cpuid_viridian_leaves(rax, &rax, &rbx, &rcx, &rdx);
         break;
     case CPUID_DEBUG_OUT_8:

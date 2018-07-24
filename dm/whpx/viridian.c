@@ -531,9 +531,10 @@ viridian_hypercall(uint64_t *rax)
 
     switch (callcode) {
     case HvNotifyLongSpinWait:
+        count_longspin++;
         break;
     default:
-        //debug_printf("unhandled viridian hypercall: call code=0x%x input=%"PRIx64"\n", (int)callcode, input);
+        debug_printf("unhandled viridian hypercall: call code=0x%x input=%"PRIx64"\n", (int)callcode, input);
         ret = HV_STATUS_INVALID_HYPERCALL_CODE;
         break;
     }
@@ -604,12 +605,14 @@ enable_hypercall_page(void)
 
         /* We setup hypercall stub such that it invokes cpuid with bits 30&31 set
          * in eax as a marker */
-        *(uint8_t  *)(p + 0) = 0x0d; /* orl $0x80000000, %eax */
-        *(uint32_t *)(p + 1) = 0xC0000000;
-        *(uint8_t  *)(p + 5) = 0x0f; /* cpuid */
-        *(uint8_t  *)(p + 6) = 0xA2;
-        *(uint8_t  *)(p + 7) = 0xc3; /* ret */
-        memset(p + 9, 0xcc, PAGE_SIZE - 9); /* int3, int3, ... */
+        *(uint8_t * )(p + 0) = 0x89; /* mov %ecx, %eax */
+        *(uint8_t * )(p + 1) = 0xc8;
+        *(uint8_t  *)(p + 2) = 0x0d; /* orl $0xC0000000, %eax */
+        *(uint32_t *)(p + 3) = 0xC0000000;
+        *(uint8_t  *)(p + 7) = 0x0f; /* cpuid */
+        *(uint8_t  *)(p + 8) = 0xA2;
+        *(uint8_t  *)(p + 9) = 0xc3; /* ret */
+        memset(p + 10, 0xcc, PAGE_SIZE - 9); /* int3, int3, ... */
 
         whpx_ram_unmap(p);
 

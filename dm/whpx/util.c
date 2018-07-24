@@ -34,6 +34,8 @@ uint64_t count_v4v;
 uint64_t tmsum_vmexit[256];
 uint64_t count_vmexit[256];
 
+uint64_t count_longspin;
+
 /* all meaningful registers */
 static const WHV_REGISTER_NAME all_register_names[] = {
     WHvX64RegisterRax,
@@ -524,6 +526,8 @@ whpx_reset_perf_stats(void)
     count_lapic_access = 0;
     tmsum_lapic_access = 0;
 
+    count_longspin = 0;
+
     memset(tmsum_vmexit, 0, sizeof(tmsum_vmexit));
     memset(count_vmexit, 0, sizeof(count_vmexit));
 }
@@ -586,7 +590,7 @@ whpx_dump_perf_stats(void)
     debug_printf("| translategva count %8"PRId64" avg cycles %8"PRId64"\n", count_xlate, count_xlate ? tmsum_xlate/count_xlate : 0);
     debug_printf("| v4vop        count %8"PRId64" avg cycles %8"PRId64"\n", count_v4v, count_v4v ? tmsum_v4v/count_v4v : 0);
     debug_printf("| lapic access count %8"PRId64" avg cycles %8"PRId64"\n", count_lapic_access, count_lapic_access ? tmsum_lapic_access/count_lapic_access : 0);
-
+    debug_printf("| viridianspin count %8"PRId64"\n", count_longspin);
     int i;
     for (i = 0; i < 256; i++) {
         if (count_vmexit[i]) {
