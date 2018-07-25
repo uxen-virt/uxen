@@ -603,6 +603,7 @@ enable_hypercall_page(void)
     if (p) {
         assert(len == PAGE_SIZE);
 
+#define STUB_BYTES 10
         /* We setup hypercall stub such that it invokes cpuid with bits 30&31 set
          * in eax as a marker */
         *(uint8_t * )(p + 0) = 0x89; /* mov %ecx, %eax */
@@ -612,7 +613,7 @@ enable_hypercall_page(void)
         *(uint8_t  *)(p + 7) = 0x0f; /* cpuid */
         *(uint8_t  *)(p + 8) = 0xA2;
         *(uint8_t  *)(p + 9) = 0xc3; /* ret */
-        memset(p + 10, 0xcc, PAGE_SIZE - 9); /* int3, int3, ... */
+        memset(p + STUB_BYTES, 0xcc, PAGE_SIZE - STUB_BYTES); /* int3, int3, ... */
 
         whpx_ram_unmap(p);
 
