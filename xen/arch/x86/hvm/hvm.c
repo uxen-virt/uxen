@@ -5402,15 +5402,31 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
         rc = -EINVAL;
         if ( (a.first_pfn > domain_get_maximum_gpfn(d)) ||
              ((a.first_pfn + a.nr - 1) < a.first_pfn) ||
-             ((a.first_pfn + a.nr - 1) > domain_get_maximum_gpfn(d)) )
+             ((a.first_pfn + a.nr - 1) > domain_get_maximum_gpfn(d)) ) {
+
+            gdprintk(XENLOG_WARNING,
+                     "HVMOP_set_mem_type: range check failed (%x, %x, %x)\n",
+                     a.first_pfn, a.nr, domain_get_maximum_gpfn(d));
+
             goto param_fail4;
+        }
             
-        if ( a.hvmmem_type >= ARRAY_SIZE(memtype) )
+        if ( a.hvmmem_type >= ARRAY_SIZE(memtype) ) {
+            gdprintk(XENLOG_WARNING,
+                     "HVMOP_set_mem_type: mem type check failed (%d)\n",
+                     a.hvmmem_type);
+
             goto param_fail4;
+        }
 
         /* We need HVMMEM_ram_immutable only for now. */
-        if (a.hvmmem_type != HVMMEM_ram_immutable)
+        if (a.hvmmem_type != HVMMEM_ram_immutable) {
+            gdprintk(XENLOG_WARNING,
+                     "HVMOP_set_mem_type: unexpected mem type (%d)\n",
+                     a.hvmmem_type);
+
             goto param_fail4;
+        }
 
         a.hvmmem_type = array_index_nospec(a.hvmmem_type,
                                            (unsigned long)ARRAY_SIZE(memtype));
