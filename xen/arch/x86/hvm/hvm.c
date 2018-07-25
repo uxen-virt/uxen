@@ -5405,7 +5405,7 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
              ((a.first_pfn + a.nr - 1) > domain_get_maximum_gpfn(d)) ) {
 
             gdprintk(XENLOG_WARNING,
-                     "HVMOP_set_mem_type: range check failed (%x, %x, %x)\n",
+                     "HVMOP_set_mem_type: range check failed (0x%"PRIx64", %x, %lx)\n",
                      a.first_pfn, a.nr, domain_get_maximum_gpfn(d));
 
             goto param_fail4;
