@@ -2,7 +2,7 @@
  *  uxen_call.c
  *  uxen
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -210,8 +210,10 @@ _uxen_snoop_hypercall(void *udata, int mode)
             ret = copy((void *)uhd->uhd_arg[1], &a, sizeof(a));
             if (ret)
                 return -ret;
-            if (a.nr > 1024)
+            if (a.nr > 2048) {
+                fail_msg("HVMOP_set_mem_type: size assert (%d)", a.nr);
                 return -EINVAL;
+            }
             pages += a.nr;
             if (pages > 1)
                 mm_dprintk("snooped hvm_op set_mem_type: %d\n", pages);
