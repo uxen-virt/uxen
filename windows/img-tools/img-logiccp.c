@@ -2287,11 +2287,13 @@ int scanning_phase(struct disk *disk, VarList *vars,
         Manifest *suffixes, Manifest *man_out)
 {
     ENTER_PHASE();
-    int i, scanning_thread_count = 0, thread_index;
+    int i, scanning_thread_count, thread_index;
     HANDLE h_scanning_threads[MAX_SCANNING_THREADS];
     ScanningPhaseThreadData thread_data[MAX_SCANNING_THREADS];
 
     for (i = 0; i < vars->n; ++i) {
+        scanning_thread_count = 0;
+        next_unclaimed_scanning_index = 0;
         Variable *var = &vars->entries[i];
         if (!var->path) {
             printf("ignoring manifest entries under ${%ls}\n", var->name);
@@ -2327,7 +2329,7 @@ int scanning_phase(struct disk *disk, VarList *vars,
             h_scanning_threads[thread_index] = CreateThread(NULL, 0, scanning_phase_thread,
                 &thread_data[thread_index], 0, NULL);
             if (!h_scanning_threads[thread_index]) {
-                printf("CreateThread[%d] failed : [%d]\n", i, (int)GetLastError());
+                printf("CreateThread[%d] failed : [%d]\n", thread_index, (int)GetLastError());
                 break;
             }
             scanning_thread_count++;
@@ -2353,7 +2355,7 @@ int scanning_phase(struct disk *disk, VarList *vars,
         }
 
         for (thread_index = 0; thread_index < scanning_thread_count; thread_index++) {
-            CloseHandle(h_scanning_threads[i]);
+            CloseHandle(h_scanning_threads[thread_index]);
         }
     }
     printf("scanned %d files in %d directories\n", (int)files, (int)directories);
