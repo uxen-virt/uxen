@@ -982,6 +982,12 @@ static int handle_cmd(AHCIState *s, int port, int slot)
     tbl_addr = le64_to_cpu(cmd->tbl_addr);
 
     cmd_len = (opts & AHCI_CMD_HDR_CMD_FIS_LEN) * 4;
+
+    if (cmd_len <= 0) {
+        warn("AHCI: 0-length command list!\n");
+        goto out_no_unmap;
+    }
+
     cmd_fis = vm_memory_map(tbl_addr, &cmd_len, 1, 0);
 
     if (!cmd_fis || (cmd_len != (opts & AHCI_CMD_HDR_CMD_FIS_LEN) * 4)) {
@@ -1123,6 +1129,7 @@ static int handle_cmd(AHCIState *s, int port, int slot)
 out:
     vm_memory_unmap(tbl_addr, cmd_len, 1, 0, cmd_fis, cmd_len);
 
+out_no_unmap:
     if (s->dev[port].port.ifs[0].status & (BUSY_STAT|DRQ_STAT)) {
         /* async command, complete later */
         s->dev[port].busy_slot = slot;
