@@ -1698,6 +1698,7 @@ guest_physmap_mark_populate_on_demand_contents(
 }
 
 #define GC_PERIOD (5 * 60)
+static uxen_mfn_t gc_mfns[L1_PAGETABLE_ENTRIES];
 
 void
 p2m_pod_gc_template_pages_work(void *_d)
@@ -1719,6 +1720,9 @@ p2m_pod_gc_template_pages_work(void *_d)
     int nr_per_iter;
     int nr_repod = 0, nr_scrub = 0;
     s_time_t timer_next = SECONDS(1);
+
+    /* all timers execute from cpu0, so we only need one gc_mfns */
+    ASSERT(smp_processor_id() == 0);
 
     p2m_lock_recursive(p2m);
 
@@ -1787,6 +1791,29 @@ p2m_pod_gc_template_pages_work(void *_d)
             goto repod_next;
         }
 
+        l1table = map_domain_page(mfn_x(l1mfn));
+
+        for (i = gpfn - gpfn_aligned; i < L1_PAGETABLE_ENTRIES; i++) {
+            gc_mfns[i] = 0;
+
+            mfn = p2m->parse_entry(l1table, i, &t, &a);
+            if (!mfn_valid_vframe(mfn))
+                continue;
+
+            if (p2m_get_page_data_and_write_lock (p2m, &mfn, &data,
+                                                  &data_size, &offset))
+                continue;
+
+            pdi = (struct page_data_info *)&data[offset];
+
+            gc_mfns[i] = pdi->mfn;
+            nr_per_iter--;
+
+            p2m_put_page_data_with_write_lock (p2m, data, data_size);
+        }
+
+        unmap_domain_page(l1table);
+
         p2m_unlock(p2m);
 
         for_each_domain(c) {
@@ -1807,6 +1834,8 @@ p2m_pod_gc_template_pages_work(void *_d)
             if (mfn_valid_page(l1mfn)) {
                 l1table = map_domain_page(mfn_x(l1mfn));
                 for (i = gpfn - gpfn_aligned; i < L1_PAGETABLE_ENTRIES; i++) {
+                    if (!gc_mfns[i])
+                        continue;
                     cmfn = cp2m->parse_entry(l1table, i, &t, &a);
                     if (mfn_valid_page(cmfn) && p2m_is_pod(t) &&
                         page_get_owner(mfn_to_page(cmfn)) == d) {
