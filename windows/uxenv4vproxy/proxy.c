@@ -815,9 +815,7 @@ proxy_complete_write(proxy_extension_t *pde, proxy_context_t *ctx,
     proxy_qpeek_t peek;
     IRP *pendingIrp;
 
-    VERBOSE("complete write: domain %d port %d",
-        read->datagram.addr.domain,
-        read->datagram.addr.port);
+    VERBOSE("complete write: req id %lld", write->reqid);
 
     /* find pending IRP which we're completing */
     RtlZeroMemory(&peek, sizeof(peek));
@@ -1041,7 +1039,7 @@ proxy_get_req(proxy_extension_t *pde, proxy_context_t *ctx,
 
             VERBOSE("created bind request id %lld domain %d port %d\n",
                 req->req.id,
-                req->bind.addr.domain, req->bind.addr.port);
+                req->bind.ring_id.addr.domain, req->bind.ring_id.addr.port);
 
             return STATUS_SUCCESS;
         } else {
