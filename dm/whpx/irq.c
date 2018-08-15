@@ -93,6 +93,9 @@ void gsi_set_irq(void *opaque, int n, int level)
 {
     struct gsi_state *s = opaque;
 
+    if (vm_get_run_mode() != RUNNING_VM)
+        return;
+
     IRQLOG("%s GSI %d\n", level ? "raising" : "lowering", n);
     if (n < ISA_NUM_IRQS)
         qemu_set_irq(s->i8259_irq[n], level);

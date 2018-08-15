@@ -330,7 +330,7 @@ control_command_save(void *opaque, const char *id, const char *opt,
     filename = dict_get_string(d, "filename");
 
     vm_save_info.filename = filename ? strdup(filename) : NULL;
-
+    vm_save_info.save_via_temp = whpx_enable;
     vm_save_info.compress_mode = VM_SAVE_COMPRESS_NONE;
     c = dict_get_string(d, "compress");
     if (c) {

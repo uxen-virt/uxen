@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2015, Bromium, Inc.
+ * Copyright 2014-2018, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -46,5 +46,8 @@ off_t filebuf_seek(struct filebuf *fb, off_t offset, int whence);
 void filebuf_buffer_max(struct filebuf *fb, size_t new_buffer_max);
 int filebuf_delete_on_close(struct filebuf *fb, int delete);
 void *filebuf_mmap(struct filebuf *fb, off_t offset, size_t len);
+void *filebuf_mmap_cow(struct filebuf *fb, off_t offset, size_t len, void *tgt_va);
+int filebuf_set_sparse(struct filebuf *fb, bool sparse_flag);
+int filebuf_set_zero_data(struct filebuf *fb, off_t offset, size_t len);
 
 #endif  /* __FILEBUF_H_ */

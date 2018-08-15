@@ -31,7 +31,7 @@ typedef struct CPUX86State CPUState;
 
 #define whpx_panic(fmt, ...)                                           \
   {                                                                    \
-    debug_printf("%s:%d: "fmt, __FUNCTION__, __LINE__, ##__VA_ARGS__); \
+    debug_printf("%s:%d: "fmt"\n", __FUNCTION__, __LINE__, ##__VA_ARGS__); \
     assert(0);                                                         \
   }
 
@@ -69,8 +69,9 @@ void whpx_register_iorange(uint64_t start, uint64_t length, int is_mmio);
 void whpx_unregister_iorange(uint64_t start, uint64_t length, int is_mmio);
 
 struct filebuf;
-int whpx_read_pages(struct filebuf *f, char **err_msg);
-int whpx_write_pages(struct filebuf *f, char **err_msg);
+int whpx_clone_pages(struct filebuf *f, uint8_t *template_uuid);
+int whpx_read_pages(struct filebuf *f);
+int whpx_write_pages(struct filebuf *f);
 
 /**
  * LIFECYCLE
@@ -86,6 +87,7 @@ int whpx_early_init(void);
 
 int whpx_vm_init(const char *loadvm, int restore_mode);
 int whpx_vm_start(void);
+int whpx_vm_resume(void);
 int whpx_vm_shutdown(int reason);
 int whpx_vm_get_context(void *buffer, size_t buffer_sz);
 int whpx_vm_set_context(void *buffer, size_t buffer_sz);
@@ -122,8 +124,9 @@ static inline void whpx_ram_unmap(void *ptr) { WHPX_UNSUPPORTED; }
 static inline int whpx_ram_populate_with(uint64_t phys_addr, uint64_t len, void *va) { WHPX_UNSUPPORTED; return -1; }
 static inline int whpx_ram_populate(uint64_t phys_addr, uint64_t len) { WHPX_UNSUPPORTED; return -1; }
 static inline int whpx_ram_depopulate(uint64_t phys_addr, uint64_t len) { WHPX_UNSUPPORTED; return -1; }
-static inline int whpx_read_pages(struct filebuf *f, char **err_msg) { WHPX_UNSUPPORTED; return -1; }
-static inline int whpx_write_pages(struct filebuf *f, char **err_msg) { WHPX_UNSUPPORTED; return -1; }
+static inline int whpx_clone_pages(struct filebuf *f, uint8_t *template_uuid) { WHPX_UNSUPPORTED; return -1; }
+static inline int whpx_read_pages(struct filebuf *f) { WHPX_UNSUPPORTED; return -1; }
+static inline int whpx_write_pages(struct filebuf *f) { WHPX_UNSUPPORTED; return -1; }
 
 #endif /* _WIN32 */
 

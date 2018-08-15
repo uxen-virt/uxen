@@ -226,9 +226,7 @@ parse_options(int argc, char **argv)
 	  console_type = optarg;
 	  break;
       case 'c':
-          /* FIXME: proper cloning on WHP */
-          if (!whpx_enable)
-              vm_restore_mode = VM_RESTORE_CLONE;
+          vm_restore_mode = VM_RESTORE_CLONE;
 	  break;
       case 'l':
 	  vm_loadfile = optarg;

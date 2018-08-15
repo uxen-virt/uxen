@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -28,6 +28,7 @@ struct vm_save_info {
     int awaiting_suspend;
     int save_requested;
     int save_abort;
+    int save_via_temp;
     int safe_to_abort;
     ioh_event save_abort_event;
 
@@ -55,6 +56,7 @@ struct vm_save_info {
 extern struct vm_save_info vm_save_info;
 
 void vm_save(void);
+void vm_save_set_abortable(void);
 void vm_save_abort(void);
 struct xc_dominfo;
 int vm_process_suspend(struct xc_dominfo *info);

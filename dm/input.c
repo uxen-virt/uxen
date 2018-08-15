@@ -1,11 +1,12 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
 
 #include "config.h"
-
+#include "dm.h"
+#include "vm.h"
 #include <err.h>
 #include <stdint.h>
 
@@ -69,6 +70,11 @@ input_set_mouse_handler(input_mouse_fn *fn, int absolute, void *opaque)
 void
 input_mouse_event(int dx, int dy, int dz, int button_state)
 {
+    /* prevent crash during access to mouse shared page in ps2_absolute_event(), when
+     * the page is freed */
+    if (whpx_enable && vm_get_run_mode() != RUNNING_VM)
+        return;
+
     if (mouse_handler)
 	mouse_handler(mouse_opaque, dx, dy, dz, button_state);
 }

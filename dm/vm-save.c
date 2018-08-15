@@ -425,8 +425,8 @@ check_aborted(void)
     return 0;
 }
 
-static void
-set_abortable(void)
+void
+vm_save_set_abortable(void)
 {
     if (cmpxchg(&vm_save_info.safe_to_abort, 0, 1) == 0)
         check_aborted();
@@ -572,7 +572,7 @@ uxenvm_savevm_write_pages(struct filebuf *f, char **err_msg)
     /* store start of batch file offset, to allow restoring page data
      * without parsing the entire save file */
     vm_save_info.page_batch_offset = filebuf_tell(f);
-    set_abortable();
+    vm_save_set_abortable();
 
     pfn = 0;
     while (pfn < p2m_size && !check_aborted()) {
@@ -1584,6 +1584,25 @@ load_cuckoo_pages(struct filebuf *f, int reusing_vm, int simple_mode)
 }
 #endif /* SAVE_CUCKOO_ENABLED */
 
+static int
+load_whp_pages(struct filebuf *f, int restore_mode)
+{
+    int ret;
+
+    debug_printf("load whp pages\n");
+    if (restore_mode == VM_RESTORE_CLONE) {
+        ret = whpx_clone_pages(f, vm_template_uuid);
+        if (!ret) {
+            if (!vm_has_template_uuid)
+                vm_has_template_uuid = 1;
+            //restore_mode = VM_RESTORE_NORMAL;
+        }
+    } else
+        ret = whpx_read_pages(f);
+
+    return ret;
+}
+
 static uint8_t *dm_state_load_buf = NULL;
 static int dm_state_load_size = 0;
 
@@ -1600,7 +1619,7 @@ static int dm_state_load_size = 0;
     } while (0)
 
 #define uxenvm_check_restore_clone(mode) do {                           \
-        if ((mode) == VM_RESTORE_CLONE) {                               \
+        if (!whpx_enable && (mode) == VM_RESTORE_CLONE) {               \
             ret = xc_domain_clone_physmap(xc_handle, vm_id,             \
                                           vm_template_uuid);            \
             if (ret < 0) {                                              \
@@ -1638,6 +1657,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
 #ifdef SAVE_CUCKOO_ENABLED
     struct xc_save_cuckoo_data s_cuckoo = { };
 #endif
+    struct xc_save_whp_pages s_whppages = { };
     struct immutable_range *immutable_ranges = NULL;
     uint8_t *hvm_buf = NULL;
     uint8_t *zero_bitmap = NULL, *zero_bitmap_compressed = NULL;
@@ -1773,6 +1793,14 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
                 goto out;
             break;
 #endif
+        case XC_SAVE_ID_WHP_PAGES:
+            uxenvm_load_read_struct(f, s_whppages, marker, ret, err_msg, out);
+            uxenvm_check_restore_clone(restore_mode);
+            uxenvm_check_mapcache_init();
+            ret = load_whp_pages(f, restore_mode);
+            if (ret)
+                goto out;
+            break;
         case XC_SAVE_ID_VM_TEMPLATE_FILE:
             uxenvm_load_read_struct(f, s_vm_template_file, marker, ret,
                                     err_msg, out);
@@ -1868,16 +1896,13 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
 	default:
             uxenvm_check_restore_clone(restore_mode);
             uxenvm_check_mapcache_init();
-            if (!whpx_enable)
-                ret = uxenvm_load_batch(f, marker, pfn_type, pfn_err, pfn_info,
-                                        &dc, vm_lazy_load, populate_compressed,
-                                        err_msg);
-            else
-                ret = whpx_read_pages(f, err_msg);
-	    if (ret)
-		goto out;
-	    break;
-	}
+            ret = uxenvm_load_batch(f, marker, pfn_type, pfn_err, pfn_info,
+                                    &dc, vm_lazy_load, populate_compressed,
+                                    err_msg);
+            if (ret)
+                goto out;
+            break;
+        }
     }
 #ifdef DECOMPRESS_THREADED
     if (dc.async_op_ctx) {
@@ -2290,6 +2315,13 @@ char *vm_save_file_name(const uuid_t uuid)
     return fn;
 }
 
+char *vm_save_file_temp_filename(char *name)
+{
+    char *fn;
+    asprintf(&fn, "%s.temp", name);
+    return fn;
+}
+
 #define ERRMSG(fmt, ...) do {			 \
 	EPRINTF(fmt, ## __VA_ARGS__);		 \
 	asprintf(&err_msg, fmt, ## __VA_ARGS__); \
@@ -2310,7 +2342,13 @@ vm_save_execute(void)
 
     APRINTF("device model saving state: %s", vm_save_info.filename);
 
-    f = filebuf_open(vm_save_info.filename, "wb");
+    if (!vm_save_info.save_via_temp)
+        f = filebuf_open(vm_save_info.filename, "wb");
+    else {
+        char *temp = vm_save_file_temp_filename(vm_save_info.filename);
+        f = filebuf_open(temp, "wb");
+        free(temp);
+    }
     if (f == NULL) {
 	ret = errno;
 	ERRMSG("filebuf_open(%s) failed", vm_save_info.filename);
@@ -2341,7 +2379,7 @@ vm_save_execute(void)
         off_t o = filebuf_tell(f);
         ret = !whpx_enable
             ? uxenvm_savevm_write_pages(f, &err_msg)
-            : whpx_write_pages(f, &err_msg);
+            : whpx_write_pages(f);
         if (ret && compression_is_cuckoo()) {
             if (ret == -ENOSPC)
                 vm_save_info.compress_mode = VM_SAVE_COMPRESS_LZ4;
@@ -2369,6 +2407,18 @@ vm_save_execute(void)
     if (ret == 0) {
         APRINTF("total file size: %"PRIu64" bytes", (uint64_t)filebuf_tell(f));
         filebuf_flush(f);
+        if (vm_save_info.save_via_temp) {
+            filebuf_delete_on_close(f, 0);
+            filebuf_close(f);
+#ifdef _WIN32
+            char *temp = vm_save_file_temp_filename(vm_save_info.filename);
+            debug_printf("ZONK rename %s => %s\n", temp, vm_save_info.filename);
+            if (!MoveFileEx(temp, vm_save_info.filename, MOVEFILE_REPLACE_EXISTING))
+                debug_printf("MoveFile failed: %x\n", (int)GetLastError());
+#endif
+            /* reopen for potential resume */
+            vm_save_info.f = filebuf_open(vm_save_info.filename, "rb");
+        }
     } else {
         if (f)
             filebuf_close(f);
@@ -2391,7 +2441,6 @@ vm_save_execute(void)
 void
 vm_save_finalize(void)
 {
-
     if (vm_save_info.f) {
         if (!vm_quit_interrupt)
             filebuf_delete_on_close(vm_save_info.f, 0);
@@ -2413,6 +2462,7 @@ vm_restore_memory(void)
 #ifdef SAVE_CUCKOO_ENABLED
     struct xc_save_cuckoo_data s_cuckoo;
 #endif
+    struct xc_save_whp_pages s_whppages;
     char *err_msg = NULL;
 #ifdef VERBOSE
     int count = 0;
@@ -2461,6 +2511,10 @@ vm_restore_memory(void)
             ret = load_cuckoo_pages(f, 1, s_cuckoo.simple_mode);
             goto out;
 #endif
+        case XC_SAVE_ID_WHP_PAGES:
+            uxenvm_load_read_struct(f, s_whppages, marker, ret, &err_msg, out);
+            ret = load_whp_pages(f, vm_restore_mode);
+            goto out;
         default:
             ret = uxenvm_load_batch(f, marker, pfn_type, pfn_err, pfn_info,
                                     &dc, 0 /* lazy_load */, populate_compressed,
@@ -2526,8 +2580,7 @@ vm_load(const char *name, int restore_mode)
         vm_template_file = strdup(name);
 
   out:
-    if (f)
-	filebuf_close(f);
+    filebuf_close(f);
 
     if (ret) {
         _set_errno(-ret);
@@ -2572,7 +2625,9 @@ vm_resume(void)
         vm_save_info.f = NULL;
     }
 
-    ret = xc_domain_resume(xc_handle, vm_id);
+    ret = !whpx_enable
+        ? xc_domain_resume(xc_handle, vm_id)
+        : whpx_vm_resume();
     if (ret) {
         if (!err_msg)
             asprintf(&err_msg, "xc_domain_resume failed");

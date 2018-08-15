@@ -14,10 +14,15 @@
 #include <dm/filebuf.h>
 
 #define VM_VA_RANGE_SIZE 0x100000000ULL
+#define ZERO_RANGE_MIN_PAGES 8
+#define mb_saveable(mb) (!((mb)->flags & WHPX_RAM_EXTERNAL))
+
 
 /* base for ram allocated by uxendm (won't be used if vm runs off
  * memory mapped file for example */
 static uint8_t *vm_ram_base = NULL;
+static bool vm_ram_owned = false;
+static struct filebuf *vm_ram_filebuf = NULL;
 
 /* vm-mappable block */
 typedef struct mb_entry {
@@ -28,6 +33,12 @@ typedef struct mb_entry {
     int partition_mapped;
     uint32_t flags;
 } mb_entry_t;
+
+typedef struct saved_mb_entry {
+    pagerange_t r;
+    uint32_t flags;
+    off_t file_off;
+} saved_mb_entry_t;
 
 /* sorted list of blocks */
 static TAILQ_HEAD(, mb_entry) mb_entries;
@@ -207,6 +218,9 @@ vm_intersect_for_each(
 static int
 vm_commit_region(uint64_t phys_addr, uint64_t len)
 {
+    if (!vm_ram_owned)
+        return 0;
+
     if (!VirtualAlloc(vm_ram_base + phys_addr, len, MEM_COMMIT, PAGE_READWRITE))
         return -1;
     return 0;
@@ -215,6 +229,9 @@ vm_commit_region(uint64_t phys_addr, uint64_t len)
 static int
 vm_decommit_region(uint64_t phys_addr, uint64_t len)
 {
+    if (!vm_ram_owned)
+        return 0;
+
     if (!VirtualFree(vm_ram_base + phys_addr, len, MEM_DECOMMIT))
         return -1;
     return 0;
@@ -385,6 +402,7 @@ whpx_ram_depopulate(uint64_t phys_addr, uint64_t len, uint32_t flags)
     ret = vm_decommit_region(phys_addr, len);
     if (ret)
         whpx_panic("FAILED to decommit ram (%d)!", ret);
+
     return 0;
 }
 
@@ -682,15 +700,132 @@ whpx_count_entries(void)
     return count;
 }
 
+static bool
+page_is_zero(void *p)
+{
+    uint64_t *q = p;
+    uint64_t *end = (uint64_t*)((uint8_t*)p + PAGE_SIZE);
+
+    while (q != end) {
+        if (*q)
+            return false;
+        q++;
+    }
+
+    return true;
+}
+
+static bool
+find_nonzero_pagerange(uint8_t *p, uint64_t npages, pagerange_t *pr)
+{
+    bool in_nonzero = false;
+    uint64_t s, e;
+    uint64_t idx = 0;
+    int zeroc;
+
+    while (npages) {
+        bool is_zero = page_is_zero(p);
+
+        if (in_nonzero) {
+            if (is_zero == false) {
+                e = idx;
+                zeroc = 0;
+            } else
+                zeroc++;
+        } else {
+            if (is_zero == false) {
+                s = e = idx;
+                zeroc = 0;
+                in_nonzero = true;
+            }
+        }
+
+        if (in_nonzero && ((zeroc > ZERO_RANGE_MIN_PAGES) || (npages == 1))) {
+            pr->start = s;
+            pr->end = e+1;
+
+            return true;
+        }
+
+        p += PAGE_SIZE;
+        npages--;
+        idx++;
+    }
+
+    return false;
+}
+
+static int
+save_cancelled(void)
+{
+    return vm_save_info.save_requested &&
+        (vm_save_info.save_abort || vm_quit_interrupt);
+}
+
+static void
+whpx_ram_free(void)
+{
+    mb_entry_t *e, *next;
+
+    debug_printf("freeing vm ram\n");
+    TAILQ_FOREACH_SAFE(e, &mb_entries, entry, next) {
+        /* remove hyperv mapping + free ram */
+        whpx_ram_depopulate(e->r.start << PAGE_SHIFT, mb_pages(e) << PAGE_SHIFT, 0);
+    }
+
+    /* should have no entries left in rammap after depopulating everything */
+    assert(whpx_count_entries() == 0);
+
+    /* free virtual ram */
+    if (vm_ram_base && vm_ram_owned) {
+        VirtualFree(vm_ram_base, 0, MEM_RELEASE | MEM_DECOMMIT);
+        vm_ram_base = NULL;
+    }
+
+    /* free template file */
+    if (vm_ram_filebuf) {
+        filebuf_close(vm_ram_filebuf);
+        vm_ram_filebuf = NULL;
+    }
+}
+
+static int
+whpx_ram_reserve_virtual(void)
+{
+    vm_ram_base = VirtualAlloc(NULL, (SIZE_T)VM_VA_RANGE_SIZE, MEM_RESERVE,
+        PAGE_READWRITE);
+    if (!vm_ram_base)
+        whpx_panic("ram reservation failed\n");
+    debug_printf("vm_ram_base = 0x%p\n", vm_ram_base);
+    vm_ram_owned = true;
+
+    return 0;
+}
+
 int
-whpx_write_pages(struct filebuf *f, char **err_msg)
+whpx_write_pages(struct filebuf *f)
 {
     mb_entry_t *e;
-    uint32_t num_entries = 0;
+    uint32_t num_entries = 0, num_ranges = 0;
     uint32_t marker;
-    struct xc_save_generic s;
+    struct xc_save_whp_pages s;
+    saved_mb_entry_t *saved_entries = NULL;
+    pagerange_t *saved_ranges = NULL;
+    int i,ret=0;
+    off_t pages_start_off;
+    uint64_t max_addr = 0;
+
+    ret = filebuf_set_sparse(f, true);
+    if (ret) {
+        debug_printf("failed to set sparse flag");
+        goto out;
+    }
 
     vm_save_info.page_batch_offset = filebuf_tell(f);
+    vm_save_set_abortable();
+
+    if (save_cancelled())
+        goto out;
 
     s.marker = XC_SAVE_ID_WHP_PAGES;
     s.size = 0; /* updated later */
@@ -700,30 +835,135 @@ whpx_write_pages(struct filebuf *f, char **err_msg)
     filebuf_write(f, &num_entries, sizeof(num_entries));
 
     TAILQ_FOREACH(e, &mb_entries, entry) {
-        uint64_t i, len;
-        uint8_t *ram;
-        uint32_t flags;
-
-        len = mb_pages(e) << PAGE_SHIFT;
-        ram = whpx_ram_map(e->r.start << PAGE_SHIFT, &len);
-        assert(ram);
-        assert(len == (mb_pages(e) << PAGE_SHIFT));
-
-        if (e->flags & WHPX_RAM_EXTERNAL)
-            continue; /* don't save external ram for now */
-        filebuf_write(f, &e->r, sizeof(e->r));
-        flags = e->flags;
-        filebuf_write(f, &flags, sizeof(flags));
-        uint64_t pages = mb_pages(e);
-        for (i = 0; i  < pages; i++) {
-            uint8_t *page = ram + PAGE_SIZE * i;
-            filebuf_write(f, page, PAGE_SIZE);
+        if (mb_saveable(e)) {
+            if (e->r.end << PAGE_SHIFT > max_addr)
+                max_addr = e->r.end << PAGE_SHIFT;
+            num_entries++;
         }
-        num_entries++;
+    }
+
+    size_t saved_entries_sz = num_entries * sizeof(saved_mb_entry_t);
+
+    /* start of page data area, in file */
+    pages_start_off = filebuf_tell(f) + saved_entries_sz;
+    pages_start_off += PAGE_SIZE-1;
+    pages_start_off &= PAGE_MASK;
+
+    saved_entries = malloc(num_entries * sizeof(saved_mb_entry_t));
+    i = 0;
+    TAILQ_FOREACH(e, &mb_entries, entry) {
+        if (mb_saveable(e)) {
+            memset(&saved_entries[i], 0, sizeof(saved_entries[i]));
+            saved_entries[i].r = e->r;
+            saved_entries[i].flags = e->flags;
+            saved_entries[i].file_off =
+                pages_start_off + (saved_entries[i].r.start << PAGE_SHIFT);
+            i++;
+        }
+    }
+
+    /* write saved areas metadata */
+    filebuf_write(f, saved_entries, saved_entries_sz);
+
+    debug_printf("wrote %d memory block entries\n", num_entries);
+
+    /* find saved ranges */
+    TAILQ_FOREACH(e, &mb_entries, entry) {
+        if (mb_saveable(e)) {
+            uint64_t len0 = (e->r.end - e->r.start) << PAGE_SHIFT;
+            uint64_t len = len0;
+
+            uint8_t *ram0 = whpx_ram_map(e->r.start << PAGE_SHIFT, &len);
+            assert(len == len0);
+
+            uint64_t scanoff = 0;
+            while (scanoff < len) {
+                pagerange_t nonz = { };
+
+                if (save_cancelled())
+                    goto out;
+
+                if (!find_nonzero_pagerange(ram0 + scanoff,
+                        (len - scanoff) >> PAGE_SHIFT, &nonz))
+                    break;
+
+                num_ranges++;
+                saved_ranges = realloc(saved_ranges,
+                    num_ranges * sizeof(pagerange_t));
+
+                pagerange_t *r = &saved_ranges[num_ranges-1];
+                r->start = e->r.start + nonz.start + (scanoff >> PAGE_SHIFT);
+                r->end = e->r.start + nonz.end + (scanoff >> PAGE_SHIFT);
+
+                scanoff = (r->end - e->r.start) << PAGE_SHIFT;
+            }
+
+            whpx_ram_unmap(ram0);
+        }
+    }
+
+    debug_printf("found %d non-zero ranges to save\n", num_ranges);
+
+    /* set sparse ranges */
+    uint64_t zero_beg = 0, zero_end = 0;
+    int num_sparse = 0;
+
+    for (i = 0; i < num_ranges+1; i++) {
+        pagerange_t *r = 0;
+
+        if (save_cancelled())
+            goto out;
+
+        if (i != num_ranges) {
+            r = &saved_ranges[i];
+            zero_end = r->start << PAGE_SHIFT;
+        } else
+            zero_end = max_addr;
+
+        if (zero_end - zero_beg > 0) {
+            debug_printf("set zero data %016"PRIx64" - %016"PRIx64"\n",
+                (uint64_t)(pages_start_off + zero_beg),
+                (uint64_t)(pages_start_off + zero_end));
+            ret = filebuf_set_zero_data(f, pages_start_off + zero_beg,
+                zero_end - zero_beg);
+            if (ret) {
+                debug_printf("failed to set zero data");
+                goto out;
+            }
+            num_sparse++;
+        }
+        if (i != num_ranges)
+            zero_beg = r->end << PAGE_SHIFT;
+    }
+
+    debug_printf("set %d zero areas\n", num_sparse);
+
+    /* write non zero data */
+    for (i = 0; i < num_ranges; i++) {
+        uint64_t len;
+        uint8_t *ram;
+        pagerange_t *r = &saved_ranges[i];
+
+        if (save_cancelled())
+            goto out;
+
+        len = pr_bytes(r);
+        ram = whpx_ram_map(r->start << PAGE_SHIFT, &len);
+        assert(ram);
+        assert(len == pr_bytes(r));
+
+        filebuf_seek(f, pages_start_off + (r->start << PAGE_SHIFT), FILEBUF_SEEK_SET);
+        debug_printf("write non-zero range at offset %"PRIx64" r={%"PRIx64"-%"PRIx64"}\n",
+            (uint64_t) filebuf_tell(f),
+            r->start << PAGE_SHIFT,
+            r->end << PAGE_SHIFT);
+        filebuf_write(f, ram, len);
+
+        whpx_ram_unmap(ram);
     }
 
     /* update size */
-    off_t size = filebuf_tell(f) - vm_save_info.page_batch_offset;
+    off_t size = pages_start_off + max_addr;
     s.size = size;
     filebuf_seek(f, vm_save_info.page_batch_offset, FILEBUF_SEEK_SET);
     filebuf_write(f, &s, sizeof(s));
@@ -735,52 +975,125 @@ whpx_write_pages(struct filebuf *f, char **err_msg)
     marker = 0;
     filebuf_write(f, &marker, sizeof(marker));
 
+    filebuf_flush(f);
+
+    if (vm_save_info.free_mem)
+        whpx_ram_free();
+
+out:
+    free(saved_entries);
+    free(saved_ranges);
+    return ret;
+}
+
+saved_mb_entry_t *
+read_mb_entries(struct filebuf *f, uint32_t *out_num_entries, uint64_t *out_max_addr)
+{
+    uint32_t num_entries;
+    uint64_t max_addr = 0;
+    saved_mb_entry_t *saved_entries;
+    int i;
+
+    filebuf_read(f, &num_entries, sizeof(num_entries));
+    saved_entries = malloc(num_entries * sizeof(saved_mb_entry_t));
+    if (!saved_entries)
+        return NULL;
+    for (i = 0; i < num_entries; i++) {
+        saved_mb_entry_t *se = &saved_entries[i];
+
+        filebuf_read(f, &saved_entries[i], sizeof(saved_mb_entry_t));
+        if (se->r.end << PAGE_SHIFT > max_addr)
+            max_addr = se->r.end << PAGE_SHIFT;
+    }
+
+    *out_num_entries = num_entries;
+    *out_max_addr = max_addr;
+
+    return saved_entries;
+
+}
+
+int
+whpx_clone_pages(struct filebuf *f, uint8_t *template_uuid)
+{
+    uint32_t num_entries = 0, i;
+    off_t pages_start_off;
+    uint64_t max_addr = 0;
+    saved_mb_entry_t *saved_entries = NULL;
+
+    debug_printf("clone whp pages\n");
+    /* free any previously used vm memory */
+    whpx_ram_free();
+
+    saved_entries = read_mb_entries(f, &num_entries, &max_addr);
+
+    pages_start_off = filebuf_tell(f);
+    pages_start_off += PAGE_SIZE-1;
+    pages_start_off &= PAGE_MASK;
+
+    /* map full page area CoW as new ram base */
+    debug_printf("mapping cow %016"PRIx64" - %016"PRIx64"\n",
+        (uint64_t)pages_start_off, (uint64_t)(pages_start_off+max_addr));
+    vm_ram_owned = false;
+    vm_ram_base = filebuf_mmap_cow(f, pages_start_off, max_addr, NULL);
+    debug_printf("mmaped new ram base @ %p\n", vm_ram_base);
+    assert(vm_ram_base);
+
+    for (i = 0; i < num_entries; i++) {
+        saved_mb_entry_t *se = &saved_entries[i];
+        uint64_t addr = se->r.start << PAGE_SHIFT;
+
+        whpx_ram_populate_with(
+            addr,
+            pr_bytes(&se->r),
+            vm_ram_base + addr,
+            se->flags);
+    }
+
+    free(saved_entries);
+
+    vm_ram_filebuf = f;
+    /* add reference to filebuf, needs to be kept open since it serves as vm memory backend */
+    filebuf_openref(vm_ram_filebuf);
+
     return 0;
 }
 
 int
-whpx_read_pages(struct filebuf *f, char **err_msg)
+whpx_read_pages(struct filebuf *f)
 {
     uint32_t num_entries = 0, i;
-    uint32_t sz;
-    mb_entry_t *e, *next;
+    saved_mb_entry_t *saved_entries = NULL;
+    uint64_t max_addr;
 
-    /* depopulate any pre-existing ranges - needed because some device initialization functions
-     * called before loading setup preliminary ranges */
-    TAILQ_FOREACH_SAFE(e, &mb_entries, entry, next) {
-        /* remove hyperv mapping + free ram */
-        whpx_ram_depopulate(e->r.start << PAGE_SHIFT, mb_pages(e) << PAGE_SHIFT, 0);
-    }
+    debug_printf("read whp pages\n");
+    /* free any previously used vm memory */
+    whpx_ram_free();
+    /* reserve virtual mem */
+    whpx_ram_reserve_virtual();
 
-    /* should be nothing in memory map yet */
-    assert(whpx_count_entries() == 0);
+    saved_entries = read_mb_entries(f, &num_entries, &max_addr);
 
-    filebuf_read(f, &sz, sizeof(sz));
-
-    filebuf_read(f, &num_entries, sizeof(num_entries));
     for (i = 0; i < num_entries; i++) {
-        pagerange_t r;
-        uint64_t len, npages, j, addr;
+        saved_mb_entry_t *se = &saved_entries[i];
+        uint64_t len, npages, addr;
         uint8_t *ram;
-        uint32_t flags;
 
-        filebuf_read(f, &r, sizeof(r));
-        filebuf_read(f, &flags, sizeof(flags));
-        npages = r.end - r.start;
+        filebuf_seek(f, se->file_off, FILEBUF_SEEK_SET);
+
+        npages = se->r.end - se->r.start;
         len = npages << PAGE_SHIFT;
-        addr = r.start << PAGE_SHIFT;
+        addr = se->r.start << PAGE_SHIFT;
         /* allocate ram range */
-        whpx_ram_populate(addr, len, flags);
+        whpx_ram_populate(addr, len, se->flags);
         ram = whpx_ram_map(addr, &len);
         assert(ram);
         assert(len == (npages << PAGE_SHIFT));
         /* read & populate ram range with data */
-        for (j = 0; j < npages; j++) {
-            uint8_t *page = ram + PAGE_SIZE * j;
-
-            filebuf_read(f, page, PAGE_SIZE);
-        }
+        filebuf_read(f, ram, len);
     }
+
+    free(saved_entries);
 
     return 0;
 }
@@ -791,11 +1104,7 @@ whpx_ram_init(void)
     TAILQ_INIT(&mb_entries);
 
     /* reserve 4GB VA Range for vm use */
-    vm_ram_base = VirtualAlloc(NULL, (SIZE_T)VM_VA_RANGE_SIZE, MEM_RESERVE,
-        PAGE_READWRITE);
-    if (!vm_ram_base)
-        whpx_panic("ram reservation failed\n");
-    debug_printf("vm_ram_base = 0x%p\n", vm_ram_base);
+    whpx_ram_reserve_virtual();
 
     return 0;
 }
@@ -803,18 +1112,5 @@ whpx_ram_init(void)
 void
 whpx_ram_uninit(void)
 {
-    /* for now, keep ram mapped/allocated during shutdown because there's some silly
-     * code which accesses mapped memory after vm destroy (ps2 mouse shared
-     * page at least) */
-#if 0
-    mb_entry_t *e, *next;
-
-    TAILQ_FOREACH_SAFE(e, &mb_entries, entry, next) {
-        /* remove hyperv mapping + free ram */
-        whpx_ram_depopulate(e->r.start << PAGE_SHIFT, mb_pages(e) << PAGE_SHIFT, 0);
-    }
-
-    /* should have no entries left in rammap after depopulating everything */
-    assert(whpx_count_entries() == 0);
-#endif
+    whpx_ram_free();
 }

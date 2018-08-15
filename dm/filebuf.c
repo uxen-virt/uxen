@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2018, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -12,6 +12,10 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#ifdef _WIN32
+#include <winioctl.h>
+#endif
 
 #ifdef __APPLE__
 #include <sys/mman.h>
@@ -409,8 +413,9 @@ filebuf_delete_on_close(struct filebuf *fb, int delete)
 #endif  /* _WIN32 */
 }
 
-void *
-filebuf_mmap(struct filebuf *fb, off_t offset, size_t len)
+static void *
+_filebuf_mmap(struct filebuf *fb, off_t offset, size_t len,
+              bool cow, void *tgt_va)
 {
     static uint64_t align_mask = 0;
     uint64_t aligned_offset;
@@ -428,10 +433,11 @@ filebuf_mmap(struct filebuf *fb, off_t offset, size_t len)
     if (!h)
         Werr(1, "%s: CreateFileMapping failed", __FUNCTION__);
 
-    fb->mapping = MapViewOfFile(h, FILE_MAP_READ,
+    fb->mapping = MapViewOfFileEx(h, !cow ? FILE_MAP_READ : FILE_MAP_COPY,
                                 (uint32_t)(aligned_offset >> 32),
                                 (uint32_t)aligned_offset,
-                                len + offset - aligned_offset);
+                                len + offset - aligned_offset,
+                                tgt_va);
     if (!fb->mapping)
         Werr(1, "%s: MapViewOfFile failed", __FUNCTION__);
 
@@ -454,3 +460,57 @@ filebuf_mmap(struct filebuf *fb, off_t offset, size_t len)
 
     return fb->mapping + offset - aligned_offset;
 }
+
+void *
+filebuf_mmap(struct filebuf *fb, off_t offset, size_t len)
+{
+    return _filebuf_mmap(fb, offset, len, false, NULL);
+}
+
+void *
+filebuf_mmap_cow(struct filebuf *fb, off_t offset, size_t len, void *tgt_va)
+{
+    return _filebuf_mmap(fb, offset, len, true, tgt_va);
+}
+
+int
+filebuf_set_sparse(struct filebuf *fb, bool sparse_flag)
+{
+#ifdef _WIN32
+    FILE_SET_SPARSE_BUFFER fssb = { };
+
+    fssb.SetSparse = sparse_flag;
+    if (!DeviceIoControl(fb->file, FSCTL_SET_SPARSE,
+            &fssb, sizeof(fssb), NULL, 0, NULL, NULL)) {
+        _set_errno(GetLastError());
+        Wwarn("%s: failed to FSCTL_SET_SPARSE: %d", __FUNCTION__, GetLastError());
+        return -1;
+    }
+
+    return 0;
+#else /* _WIN32 */
+    return -1;
+#endif
+}
+
+int
+filebuf_set_zero_data(struct filebuf *fb, off_t offset, size_t len)
+{
+#ifdef _WIN32
+    FILE_ZERO_DATA_INFORMATION fzdi = { };
+
+    fzdi.FileOffset.QuadPart = offset;
+    fzdi.BeyondFinalZero.QuadPart = offset + len + 1;
+    if (!DeviceIoControl(fb->file, FSCTL_SET_ZERO_DATA,
+            &fzdi, sizeof(fzdi), NULL, 0, NULL, NULL)) {
+        _set_errno(GetLastError());
+        Wwarn("%s: failed to FSCTL_SET_ZERO_DATA: %d", __FUNCTION__, GetLastError());
+        return -1;
+    }
+
+    return 0;
+#else /* _WIN32 */
+    return -1;
+#endif
+}
+

@@ -361,9 +361,10 @@ vcpu_stopped_cb(void *opaque)
     debug_printf("vcpu%d stopped, running vcpus: %d\n", cpu->cpu_index, running_vcpus);
     if (!running_vcpus) {
         debug_printf("all vcpus stopped, reason: %d\n", shutdown_reason);
-        if (shutdown_reason == WHPX_SHUTDOWN_SUSPEND)
+        if (shutdown_reason == WHPX_SHUTDOWN_SUSPEND) {
+            v4v_destroy(&guest);
             vm_process_suspend(NULL);
-        else
+        } else
             vm_set_run_mode(DESTROY_VM);
     }
 }
@@ -405,10 +406,9 @@ void vcpu_destroy(CPUState *cpu)
     free(ex);
 }
 
-static DWORD WINAPI
-whpx_vcpu_run_thread(PVOID opaque)
+static void
+run_vcpu(CPUState *s)
 {
-    CPUState *s = (CPUState*) opaque;
     uint32_t r, nr, or;
 
     debug_printf("execute vcpu%d, thread 0x%x\n", s->cpu_index, (int)GetCurrentThreadId());
@@ -417,7 +417,7 @@ whpx_vcpu_run_thread(PVOID opaque)
     while (!s->stopped) {
         int ret;
 
-        whpx_flush_queued_work(opaque);
+        whpx_flush_queued_work(s);
 
         if (cpu_can_run(s)) {
             ret = whpx_vcpu_exec(s);
@@ -457,6 +457,14 @@ whpx_vcpu_run_thread(PVOID opaque)
     SetEvent(extra(s)->stopped_ev);
 
     debug_printf("vcpu%d exiting\n", s->cpu_index);
+}
+
+static DWORD WINAPI
+whpx_vcpu_run_thread(PVOID opaque)
+{
+    CPUState *cpu = opaque;
+
+    run_vcpu(cpu);
 
     return 0;
 }
@@ -580,6 +588,20 @@ whpx_vm_start(void)
         whpx_vcpu_start(&cpu_state[i]);
 
     return 0;
+}
+
+int
+whpx_vm_resume(void)
+{
+    /* init domain v4v. needs to be done early because
+       some uxendm backends send v4v data before vm is properly initialized
+       and rely on DLO */
+    memset(&guest, 0, sizeof(guest));
+    guest.domain_id = WHPX_DOMAIN_ID_SELF;
+    critical_section_init(&guest.lock);
+    v4v_init(&guest);
+
+    return whpx_vm_start();
 }
 
 int

@@ -145,4 +145,10 @@ struct xc_save_clock_info {
     int64_t adjust_offset;
 };
 
+struct xc_save_whp_pages {
+    int32_t marker;
+    uint32_t size;
+    uint8_t data[];
+};
+
 #endif
