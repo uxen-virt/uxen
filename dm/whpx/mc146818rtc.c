@@ -44,7 +44,6 @@
 #include <dm/qemu_glue.h>
 #include <dm/qemu/hw/isa.h>
 #include <dm/qemu/hw/sysbus.h>
-#include <dm/whpx/apic.h>
 #include <dm/timer.h>
 #include <time.h>
 #include "mc146818rtc.h"
@@ -170,15 +169,19 @@ static void rtc_coalesced_timer(void *opaque)
     RTCState *s = opaque;
 
     if (s->irq_coalesced != 0) {
+#ifndef QEMU_UXEN
         apic_reset_irq_delivered();
+#endif
         s->cmos_data[RTC_REG_C] |= 0xc0;
         DPRINTF_C("cmos: injecting from timer\n");
         qemu_irq_raise(s->irq);
+#ifndef QEMU_UXEN
         if (apic_get_irq_delivered()) {
             s->irq_coalesced--;
             DPRINTF_C("cmos: coalesced irqs decreased to %d\n",
                       s->irq_coalesced);
         }
+#endif
     }
 
     rtc_coalesced_timer_update(s);
@@ -229,15 +232,19 @@ static void rtc_periodic_timer(void *opaque)
 #ifdef TARGET_I386
         if(rtc_td_hack) {
             if (s->irq_reinject_on_ack_count >= RTC_REINJECT_ON_ACK_COUNT)
-                s->irq_reinject_on_ack_count = 0;		
+                s->irq_reinject_on_ack_count = 0;
+#ifndef QEMU_UXEN
             apic_reset_irq_delivered();
+#endif
             qemu_irq_raise(s->irq);
+#ifndef QEMU_UXEN
             if (!apic_get_irq_delivered()) {
                 s->irq_coalesced++;
                 rtc_coalesced_timer_update(s);
                 DPRINTF_C("cmos: coalesced irqs increased to %d\n",
                           s->irq_coalesced);
             }
+#endif
         } else
 #endif
         qemu_irq_raise(s->irq);
@@ -519,14 +526,18 @@ static uint64_t cmos_ioport_read(void *opaque, target_phys_addr_t addr, unsigned
             if(s->irq_coalesced &&
                     s->irq_reinject_on_ack_count < RTC_REINJECT_ON_ACK_COUNT) {
                 s->irq_reinject_on_ack_count++;
+#ifndef QEMU_UXEN
                 apic_reset_irq_delivered();
+#endif
                 DPRINTF_C("cmos: injecting on ack\n");
                 qemu_irq_raise(s->irq);
+#ifndef QEMU_UXEN
                 if (apic_get_irq_delivered()) {
                     s->irq_coalesced--;
                     DPRINTF_C("cmos: coalesced irqs decreased to %d\n",
                               s->irq_coalesced);
                 }
+#endif
                 break;
             }
 #endif

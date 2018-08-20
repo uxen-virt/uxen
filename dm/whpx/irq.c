@@ -129,43 +129,20 @@ static void pic_irq_request(void *opaque, int irq, int level)
     CPUState *env = first_cpu;
 
     IRQLOG("pic_irq_request: %s irq %d\n", level? "raise" : "lower", irq);
-    if (env->apic_state) {
-        while (env) {
-            if (apic_accept_pic_intr(env->apic_state)) {
-                apic_deliver_pic_intr(env->apic_state, level);
-            }
-            env = env->next_cpu;
-        }
-    } else {
-        if (level)
-            cpu_interrupt(env, CPU_INTERRUPT_HARD);
-        else
-            cpu_reset_interrupt(env, CPU_INTERRUPT_HARD);
-    }
+    if (level)
+        cpu_interrupt(env, CPU_INTERRUPT_HARD);
+    else
+        cpu_reset_interrupt(env, CPU_INTERRUPT_HARD);
 }
 
 int whpx_cpu_get_pic_interrupt(CPUState *env)
 {
-    int intno;
+    int intno = pic_read_irq(isa_pic);
 
-    assert(env->apic_state);
-
-    intno = apic_get_interrupt(env->apic_state);
-    if (intno >= 0) {
-#ifdef DEBUG_IRQ
-        debug_printf("get_pic_interrupt (apic): %x\n", intno);
-#endif
-        return intno;
-    }
-    /* read the irq from the PIC */
-    if (!apic_accept_pic_intr(env->apic_state)) {
-        return -1;
-    }
-
-    intno = pic_read_irq(isa_pic);
 #ifdef DEBUG_IRQ
     debug_printf("get_pic_interrupt (pic): %x\n", intno);
 #endif
+
     return intno;
 }
 
@@ -173,7 +150,6 @@ qemu_irq *whpx_interrupt_controller_init(void)
 {
     qemu_irq *i8259_irq, *ioapic_irq;
     int i;
-    CPUState *cpu;
 
     memset(&irq, 0, sizeof(irq));
 
@@ -187,13 +163,6 @@ qemu_irq *whpx_interrupt_controller_init(void)
     for (i = 0; i < IOAPIC_NUM_PINS; i++)
         irq.gsi.ioapic_irq[i] = ioapic_irq[i];
     irq.gsi_irq = qemu_allocate_irqs(gsi_set_irq, &irq.gsi, GSI_NUM_PINS);
-
-    cpu = first_cpu;
-    while (cpu) {
-      debug_printf("init apic %d\n", cpu->cpu_index);
-      apic_init(cpu);
-      cpu = cpu->next_cpu;
-    }
 
     return irq.gsi_irq;
 }

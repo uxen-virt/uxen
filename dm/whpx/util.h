@@ -16,6 +16,8 @@ extern uint64_t tmsum_runvp;
 extern uint64_t count_runvp;
 extern uint64_t tmsum_xlate;
 extern uint64_t count_xlate;
+extern uint64_t count_request_irq;
+extern uint64_t tmsum_request_irq;
 extern uint64_t tmsum_vmexit[256];
 extern uint64_t count_vmexit[256];
 extern uint64_t tmsum_lapic_access;
@@ -23,6 +25,8 @@ extern uint64_t count_lapic_access;
 extern uint64_t tmsum_v4v;
 extern uint64_t count_v4v;
 extern uint64_t count_longspin;
+extern uint64_t count_hpet;
+extern uint64_t count_reftime;
 
 /* internal whpx utility functions */
 void whpx_initialize_api(void);
@@ -30,7 +34,7 @@ whpx_reg_list_t *whpx_all_registers(void);
 WHV_PARTITION_HANDLE whpx_get_partition(void);
 const char *get_whv_register_name_str(WHV_REGISTER_NAME x);
 void get_whv_register_descr(WHV_REGISTER_NAME r, WHV_REGISTER_VALUE v, char *buf, int bufsz);
-int get_cpu_mhz(void);
+int get_registry_cpu_mhz(void);
 void whpx_dump_cpu_state(int cpu_index);
 void dump_whv_register_list(WHV_REGISTER_NAME *r, WHV_REGISTER_VALUE *v, int count);
 void dump_phys_mem(uint64_t paddr, int len);

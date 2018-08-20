@@ -40,6 +40,7 @@
 #include "emulate.h"
 #include "viridian.h"
 #include "util.h"
+#include "ioapic.h"
 #include <whpx-shared.h>
 
 #define CPUID_V4VOP 0x35af3466
@@ -62,6 +63,7 @@ struct whpx_state {
     WHV_PARTITION_HANDLE partition;
 };
 
+/* registers synchronized with qemu's CPUState */
 static const WHV_REGISTER_NAME whpx_register_names[] = {
 
     /* X64 General purpose registers */
@@ -103,7 +105,7 @@ static const WHV_REGISTER_NAME whpx_register_names[] = {
     WHvX64RegisterCr2,
     WHvX64RegisterCr3,
     WHvX64RegisterCr4,
-    WHvX64RegisterCr8,
+    // WHvX64RegisterCr8,
 
     /* X64 Debug Registers */
     /*
@@ -144,12 +146,12 @@ static const WHV_REGISTER_NAME whpx_register_names[] = {
     WHvX64RegisterXmmControlStatus,
 
     /* X64 MSRs */
-    WHvX64RegisterTsc,
+//    WHvX64RegisterTsc,
     WHvX64RegisterEfer,
 #ifdef TARGET_X86_64
     WHvX64RegisterKernelGsBase,
 #endif
-    WHvX64RegisterApicBase,
+//    WHvX64RegisterApicBase,
     /* WHvX64RegisterPat, */
     WHvX64RegisterSysenterCs,
     WHvX64RegisterSysenterEip,
@@ -185,14 +187,12 @@ struct whpx_vcpu {
     WHV_EMULATOR_HANDLE emulator;
 #endif
     bool window_registered;
-    bool interruptable;
+    bool ready_for_pic_interrupt;
     unsigned long dirty;
-    uint64_t tpr;
-    uint64_t apic_base;
     struct whpx_nmi_trap trap;
     bool interrupt_in_flight;
 
-    critical_section irq_lock; /* protect cpu->interrupt_request */
+    critical_section irqreq_lock; /* protect cpu->interrupt_request */
 
     /* Must be the last field as it may have a tail */
     WHV_RUN_VP_EXIT_CONTEXT exit_ctx;
@@ -215,15 +215,15 @@ static struct whpx_vcpu *whpx_vcpu(CPUState *cpu)
 }
 
 void
-whpx_vcpu_irq_lock(CPUState *cpu)
+whpx_vcpu_irqreq_lock(CPUState *cpu)
 {
-    critical_section_enter(&whpx_vcpu(cpu)->irq_lock);
+    critical_section_enter(&whpx_vcpu(cpu)->irqreq_lock);
 }
 
 void
-whpx_vcpu_irq_unlock(CPUState *cpu)
+whpx_vcpu_irqreq_unlock(CPUState *cpu)
 {
-    critical_section_leave(&whpx_vcpu(cpu)->irq_lock);
+    critical_section_leave(&whpx_vcpu(cpu)->irqreq_lock);
 }
 
 int
@@ -247,24 +247,51 @@ whpx_inject_trap(int cpuidx, int trap, int error_code, int cr2)
     return -1;
 }
 
+void
+apic_deliver_irq(
+    uint8_t dest, uint8_t dest_mode, uint8_t delivery_mode,
+    uint8_t vector_num, uint8_t trigger_mode)
+{
+    uint64_t t0 = 0;
+
+    WHV_INTERRUPT_CONTROL interrupt = {
+        .Type = delivery_mode, // Values correspond to delivery modes
+        .DestinationMode = dest_mode ?
+              WHvX64InterruptDestinationModeLogical
+            : WHvX64InterruptDestinationModePhysical,
+        .TriggerMode = trigger_mode ?
+              WHvX64InterruptTriggerModeLevel
+            : WHvX64InterruptTriggerModeEdge,
+        .Vector = vector_num,
+        .Destination = dest,
+    };
+
+    if (whpx_perf_stats)
+        t0 = _rdtsc();
+
+    HRESULT hr = WHvRequestInterrupt(whpx_get_partition(),
+        &interrupt, sizeof(interrupt));
+    if (FAILED(hr)) {
+        debug_printf("whpx: IRQ request failed, delivery=%d destm=%d tm=%d "
+            "vec=0x%x dest=%d, error %x\n",
+            delivery_mode, dest_mode, trigger_mode, vector_num, dest, (int)hr);
+    }
+
+    if (whpx_perf_stats) {
+        tmsum_request_irq += _rdtsc() - t0;
+        count_request_irq++;
+    }
+}
+
 static void whpx_registers_cpustate_to_hv(CPUState *cpu)
 {
-    struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
     struct CPUX86State *env = (CPUArchState *)(cpu->env_ptr);
-    X86CPU *x86_cpu = X86_CPU(cpu);
     struct whpx_register_set vcxt = {};
     HRESULT hr;
     int idx = 0;
     int i;
 
     assert(cpu_is_stopped(cpu) || qemu_cpu_is_self(cpu));
-
-    assert(x86_cpu->apic_state);
-
-    whpx_lock_iothread();
-    vcpu->tpr = cpu_get_apic_tpr(x86_cpu->apic_state);
-    vcpu->apic_base = cpu_get_apic_base(x86_cpu->apic_state);
-    whpx_unlock_iothread();
 
     /* Indexes for first 16 registers match between HV and QEMU definitions */
     for (idx = 0; idx < CPU_NB_REGS64; idx += 1)
@@ -307,8 +334,6 @@ static void whpx_registers_cpustate_to_hv(CPUState *cpu)
     vcxt.values[idx++].Reg64 = env->cr[3];
     assert(whpx_register_names[idx] == WHvX64RegisterCr4);
     vcxt.values[idx++].Reg64 = env->cr[4];
-    assert(whpx_register_names[idx] == WHvX64RegisterCr8);
-    vcxt.values[idx++].Reg64 = vcpu->tpr;
 
     /* 8 Debug Registers - Skipped */
 
@@ -350,17 +375,12 @@ static void whpx_registers_cpustate_to_hv(CPUState *cpu)
     idx += 1;
 
     /* MSRs */
-    assert(whpx_register_names[idx] == WHvX64RegisterTsc);
-    vcxt.values[idx++].Reg64 = env->tsc;
     assert(whpx_register_names[idx] == WHvX64RegisterEfer);
     vcxt.values[idx++].Reg64 = env->efer;
 #ifdef TARGET_X86_64
     assert(whpx_register_names[idx] == WHvX64RegisterKernelGsBase);
     vcxt.values[idx++].Reg64 = env->kernelgsbase;
 #endif
-
-    assert(whpx_register_names[idx] == WHvX64RegisterApicBase);
-    vcxt.values[idx++].Reg64 = vcpu->apic_base;
 
     /* WHvX64RegisterPat - Skipped */
 
@@ -431,7 +451,7 @@ whpx_cpu_has_work(CPUState *env)
 {
     int work;
 
-    whpx_vcpu_irq_lock(env);
+    whpx_vcpu_irqreq_lock(env);
     work = ((env->interrupt_request & (CPU_INTERRUPT_HARD |
                                       CPU_INTERRUPT_POLL)) &&
             (env->eflags & IF_MASK)) ||
@@ -441,18 +461,15 @@ whpx_cpu_has_work(CPUState *env)
                                      CPU_INTERRUPT_MCE)) ||
            ((env->interrupt_request & CPU_INTERRUPT_SMI) &&
             !(env->hflags & HF_SMM_MASK));
-    whpx_vcpu_irq_unlock(env);
+    whpx_vcpu_irqreq_unlock(env);
 
     return work;
 }
 
 static void whpx_registers_hv_to_cpustate(CPUState *cpu)
 {
-    struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
     struct CPUX86State *env = (CPUArchState *)(cpu->env_ptr);
-    X86CPU *x86_cpu = X86_CPU(cpu);
     struct whpx_register_set vcxt;
-    uint64_t tpr, apic_base;
     HRESULT hr;
     int idx = 0;
     int i;
@@ -505,14 +522,6 @@ static void whpx_registers_hv_to_cpustate(CPUState *cpu)
     env->cr[3] = vcxt.values[idx++].Reg64;
     assert(whpx_register_names[idx] == WHvX64RegisterCr4);
     env->cr[4] = vcxt.values[idx++].Reg64;
-    assert(whpx_register_names[idx] == WHvX64RegisterCr8);
-    tpr = vcxt.values[idx++].Reg64;
-    if (tpr != vcpu->tpr) {
-        vcpu->tpr = tpr;
-        whpx_lock_iothread();
-        cpu_set_apic_tpr(x86_cpu->apic_state, tpr);
-        whpx_unlock_iothread();
-    }
 
     /* 8 Debug Registers - Skipped */
 
@@ -550,25 +559,12 @@ static void whpx_registers_hv_to_cpustate(CPUState *cpu)
     idx += 1;
 
     /* MSRs */
-    assert(whpx_register_names[idx] == WHvX64RegisterTsc);
-    env->tsc = vcxt.values[idx++].Reg64;
     assert(whpx_register_names[idx] == WHvX64RegisterEfer);
     env->efer = vcxt.values[idx++].Reg64;
 #ifdef TARGET_X86_64
     assert(whpx_register_names[idx] == WHvX64RegisterKernelGsBase);
     env->kernelgsbase = vcxt.values[idx++].Reg64;
 #endif
-
-    assert(whpx_register_names[idx] == WHvX64RegisterApicBase);
-    apic_base = vcxt.values[idx++].Reg64;
-    if (apic_base != vcpu->apic_base) {
-        vcpu->apic_base = apic_base;
-        debug_printf("vcpu%d: apic base change = %"PRIx64"\n",
-            cpu->cpu_index, apic_base);
-        whpx_lock_iothread();
-        cpu_set_apic_base(x86_cpu->apic_state, vcpu->apic_base);
-        whpx_unlock_iothread();
-    }
 
     /* WHvX64RegisterPat - Skipped */
 
@@ -868,6 +864,9 @@ whpx_handle_halt(CPUState *cpu)
 {
     int ret = 0;
 
+    // should not happen with apic virt
+    assert(false);
+
     if (!whpx_cpu_has_work(cpu)) {
         cpu->exception_index = EXCP_HLT;
         cpu->halted = true;
@@ -1141,20 +1140,19 @@ whpx_vcpu_pre_run(CPUState *cpu)
     HRESULT hr;
     struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
     struct CPUX86State *env = (CPUArchState *)(cpu->env_ptr);
-    X86CPU *x86_cpu = X86_CPU(cpu);
     int irq;
     WHV_X64_PENDING_INTERRUPTION_REGISTER new_int = {};
+    WHV_X64_PENDING_EXT_INT_EVENT new_ext_int = {};
     UINT32 reg_count = 0;
-    WHV_REGISTER_VALUE reg_values[3];
-    WHV_REGISTER_NAME reg_names[3];
-    uint8_t tpr;
+    WHV_REGISTER_VALUE reg_values[4] = { };
+    WHV_REGISTER_NAME reg_names[4];
 
-    whpx_vcpu_irq_lock(cpu);
+    whpx_vcpu_irqreq_lock(cpu);
 
     /* Inject user trap */
     if (!vcpu->interrupt_in_flight && vcpu->trap.pending) {
         vcpu->trap.pending = false;
-        vcpu->interruptable = false;
+        vcpu->ready_for_pic_interrupt = false;
         new_int.InterruptionType = WHvX64PendingNmi;
         new_int.InterruptionPending = 1;
         new_int.InterruptionVector = vcpu->trap.trap;
@@ -1164,92 +1162,55 @@ whpx_vcpu_pre_run(CPUState *cpu)
         }
     }
 
-    /* Inject NMI */
-    if (!vcpu->interrupt_in_flight && vcpu->interruptable &&
-        cpu->interrupt_request & (CPU_INTERRUPT_NMI | CPU_INTERRUPT_SMI)) {
-        if (cpu->interrupt_request & CPU_INTERRUPT_NMI) {
-            cpu->interrupt_request &= ~CPU_INTERRUPT_NMI;
-            vcpu->interruptable = false;
-            new_int.InterruptionType = WHvX64PendingNmi;
-            new_int.InterruptionPending = 1;
-            new_int.InterruptionVector = 2;
-        }
-        if (cpu->interrupt_request & CPU_INTERRUPT_SMI)
-            cpu->interrupt_request &= ~CPU_INTERRUPT_SMI;
-    }
+    /* Inject PIC interruption */
+    if (vcpu->ready_for_pic_interrupt &&
+        (cpu->interrupt_request & CPU_INTERRUPT_HARD)) {
+        cpu->interrupt_request &= ~CPU_INTERRUPT_HARD;
+        whpx_vcpu_irqreq_unlock(cpu);
+        whpx_lock_iothread();
+        irq = cpu_get_pic_interrupt(env);
+        whpx_unlock_iothread();
+        whpx_vcpu_irqreq_lock(cpu);
 
-    /* Get pending hard interruption or replay one that was overwritten */
-    if (!vcpu->interrupt_in_flight &&
-        vcpu->interruptable && (env->eflags & IF_MASK)) {
-        assert(!new_int.InterruptionPending);
-        if (cpu->interrupt_request & CPU_INTERRUPT_HARD) {
-            cpu->interrupt_request &= ~CPU_INTERRUPT_HARD;
-
-            whpx_vcpu_irq_unlock(cpu);
-            whpx_lock_iothread();
-
-            irq = cpu_get_pic_interrupt(env);
-
-            whpx_unlock_iothread();
-            whpx_vcpu_irq_lock(cpu);
-
-            if (irq >= 0) {
-                new_int.InterruptionType = WHvX64PendingInterrupt;
-                new_int.InterruptionPending = 1;
-                new_int.InterruptionVector = irq;
-
-                viridian_synic_ack_irq(env, irq);
-            }
+        if (irq >= 0) {
+            new_ext_int = (WHV_X64_PENDING_EXT_INT_EVENT){
+                .EventPending = 1,
+                .EventType = WHvX64PendingEventExtInt,
+                .Vector = irq,
+            };
+#if 0
+            viridian_synic_ack_irq(env, irq);
+#endif
         }
     }
 
     /* Setup interrupt state if new one was prepared */
+
+    /* raw inject */
     if (new_int.InterruptionPending) {
-        WHV_REGISTER_VALUE v = { };
-
-#ifdef DEBUG_IRQ
-        debug_printf("vcpu%d: inject irq type %d vector 0x%x\n", cpu->cpu_index,
-            new_int.InterruptionType, new_int.InterruptionVector);
-#endif
-
-        v.PendingInterruption = new_int;
-        reg_values[reg_count] = v;
         reg_names[reg_count] = WHvRegisterPendingInterruption;
-        reg_count += 1;
+        reg_values[reg_count].PendingInterruption = new_int;
+        reg_count++;
     }
 
-    /* Sync the TPR to the CR8 if was modified during the intercept */
-    whpx_vcpu_irq_unlock(cpu);
-    whpx_lock_iothread();
-
-    tpr = cpu_get_apic_tpr(x86_cpu->apic_state);
-
-    whpx_unlock_iothread();
-    whpx_vcpu_irq_lock(cpu);
-
-    if (tpr != vcpu->tpr) {
-        WHV_REGISTER_VALUE v = { };
-
-        vcpu->tpr = tpr;
-        v.Reg64 = tpr;
-        reg_values[reg_count] = v;
-        reg_names[reg_count] = WHvX64RegisterCr8;
-        reg_count += 1;
+    /* apic ext int inject */
+    if (new_ext_int.EventPending) {
+        reg_names[reg_count] = WHvRegisterPendingEvent;
+        reg_values[reg_count].ExtIntEvent = new_ext_int;
+        reg_count++;
     }
 
     /* Update the state of the interrupt delivery notification */
     if (!vcpu->window_registered &&
         (cpu->interrupt_request & CPU_INTERRUPT_HARD)) {
-        WHV_REGISTER_VALUE v = { };
-
-        v.DeliverabilityNotifications.InterruptNotification = 1;
-        reg_values[reg_count] = v;
         reg_names[reg_count] = WHvX64RegisterDeliverabilityNotifications;
-        reg_count += 1;
+        reg_values[reg_count].DeliverabilityNotifications.InterruptNotification = 1;
+        reg_count++;
         vcpu->window_registered = 1;
     }
 
-    whpx_vcpu_irq_unlock(cpu);
+    whpx_vcpu_irqreq_unlock(cpu);
+    vcpu->ready_for_pic_interrupt = false;
 
     if (reg_count) {
         hr = whpx_set_vp_registers(cpu->cpu_index, reg_names,
@@ -1269,92 +1230,11 @@ whpx_vcpu_post_run(CPUState *cpu)
 {
     struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
     struct CPUX86State *env = (CPUArchState *)(cpu->env_ptr);
-    X86CPU *x86_cpu = X86_CPU(cpu);
     WHV_VP_EXIT_CONTEXT *vp_ctx = &vcpu->exit_ctx.VpContext;
 
     env->eip = vp_ctx->Rip;
     env->eflags = vp_ctx->Rflags;
-    if (vcpu->tpr != vp_ctx->Cr8) {
-        vcpu->tpr = vp_ctx->Cr8;
-        whpx_lock_iothread();
-        cpu_set_apic_tpr(x86_cpu->apic_state, vcpu->tpr);
-        whpx_unlock_iothread();
-    }
-
     vcpu->interrupt_in_flight = vp_ctx->ExecutionState.InterruptionPending;
-    vcpu->interruptable = !vp_ctx->ExecutionState.InterruptShadow;
-}
-
-static void
-whpx_vcpu_process_async_events(CPUState *cpu)
-{
-    struct CPUX86State *env = (CPUArchState *)(cpu->env_ptr);
-    X86CPU *x86_cpu = X86_CPU(cpu);
-    struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
-
-    whpx_vcpu_irq_lock(cpu);
-
-    if (cpu->interrupt_request)
-        cpu->halted = false;
-
-    if ((cpu->interrupt_request & CPU_INTERRUPT_INIT) &&
-        !(env->hflags & HF_SMM_MASK)) {
-
-        whpx_vcpu_irq_unlock(cpu);
-        whpx_lock_iothread();
-
-        do_cpu_init(x86_cpu);
-
-        whpx_unlock_iothread();
-        whpx_vcpu_irq_lock(cpu);
-
-        vcpu->dirty = VCPU_DIRTY_CPUSTATE;
-        vcpu->interruptable = true;
-    }
-
-    if (cpu->interrupt_request & CPU_INTERRUPT_POLL) {
-        cpu->interrupt_request &= ~CPU_INTERRUPT_POLL;
-
-        whpx_vcpu_irq_unlock(cpu);
-        whpx_lock_iothread();
-
-        apic_poll_irq(x86_cpu->apic_state);
-
-        whpx_unlock_iothread();
-        whpx_vcpu_irq_lock(cpu);
-    }
-
-    if (((cpu->interrupt_request & CPU_INTERRUPT_HARD) &&
-         (env->eflags & IF_MASK)) ||
-        (cpu->interrupt_request & CPU_INTERRUPT_NMI)) {
-        cpu->halted = false;
-    }
-
-    if (cpu->interrupt_request & CPU_INTERRUPT_SIPI) {
-        whpx_vcpu_flush_dirty(cpu);
-        whpx_registers_hv_to_cpustate(cpu);
-
-        whpx_vcpu_irq_unlock(cpu);
-        whpx_lock_iothread();
-
-        do_cpu_sipi(x86_cpu);
-
-        whpx_unlock_iothread();
-        whpx_vcpu_irq_lock(cpu);
-
-        vcpu->dirty = VCPU_DIRTY_CPUSTATE;
-    }
-
-    if (cpu->interrupt_request & CPU_INTERRUPT_TPR) {
-        whpx_panic("unimplemented");
-#ifndef QEMU_UXEN
-        cpu->interrupt_request &= ~CPU_INTERRUPT_TPR;
-        apic_handle_tpr_access_report(x86_cpu->apic_state, env->eip,
-                                      env->tpr_access_type);
-#endif
-    }
-
-    whpx_vcpu_irq_unlock(cpu);
 }
 
 static int
@@ -1366,13 +1246,7 @@ whpx_vcpu_run(CPUState *cpu)
     int ret = 0;
     uint64_t t0 = 0;
 
-    whpx_vcpu_process_async_events(cpu);
     whpx_vcpu_flush_dirty(cpu);
-    if (cpu->halted) {
-        cpu->exception_index = EXCP_HLT;
-
-        return 0;
-    }
 
     do {
         whpx_vcpu_pre_run(cpu);
@@ -1412,10 +1286,16 @@ whpx_vcpu_run(CPUState *cpu)
             break;
 
         case WHvRunVpExitReasonX64InterruptWindow:
+            vcpu->ready_for_pic_interrupt = true;
             vcpu->window_registered = 0;
             break;
 
+        case WHvRunVpExitReasonX64ApicEoi:
+            ioapic_eoi_broadcast(vcpu->exit_ctx.ApicEoi.InterruptVector);
+            break;
+
         case WHvRunVpExitReasonX64Halt:
+            debug_printf("VCPU%d HALT!\n", cpu->cpu_index);
             ret = whpx_handle_halt(cpu);
             break;
 
@@ -1504,9 +1384,24 @@ int whpx_init_vcpu(CPUState *cpu)
         return -EINVAL;
     }
 
-    vcpu->interruptable = true;
+    WHV_REGISTER_NAME name = WHvX64RegisterApicId;
+    WHV_REGISTER_VALUE v = { .Reg64 = WHPX_LAPIC_ID(cpu->cpu_index) };
+    hr = whpx_set_vp_registers(cpu->cpu_index,
+        &name, 1, &v);
+    if (FAILED(hr)) {
+        error_report("WHPX: Failed to set processor APIC ID,"
+                      " hr=%08lx", hr);
+#ifdef EMU_MICROSOFT
+        WHvEmulatorDestroyEmulator(vcpu->emulator);
+#endif
+        WHvDeleteVirtualProcessor(whpx->partition, cpu->cpu_index);
+        g_free(vcpu);
+        return -EINVAL;
+    }
+
     vcpu->dirty = VCPU_DIRTY_CPUSTATE;
-    critical_section_init(&vcpu->irq_lock);
+
+    critical_section_init(&vcpu->irqreq_lock);
 
     cpu->hax_vcpu = (struct hax_vcpu_state *)vcpu;
 
@@ -1541,11 +1436,12 @@ void whpx_destroy_vcpu(CPUState *cpu)
     struct whpx_state *whpx = &whpx_global;
     struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
 
+    debug_printf("destroy vcpu %d\n", cpu->cpu_index);
     WHvDeleteVirtualProcessor(whpx->partition, cpu->cpu_index);
 #ifdef EMU_MICROSOFT
     WHvEmulatorDestroyEmulator(vcpu->emulator);
 #endif
-    critical_section_free(&vcpu->irq_lock);
+    critical_section_free(&vcpu->irqreq_lock);
     g_free(cpu->hax_vcpu);
 }
 
@@ -1562,6 +1458,8 @@ whpx_vcpu_get_context(CPUState *cpu, struct whpx_vcpu_context *ctx)
     struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
     HRESULT hr;
     int i;
+    uint32_t irq_bytes, xsave_bytes;
+    uint8_t buf[PAGE_SIZE];
 
     assert(cpu_is_stopped(cpu));
 
@@ -1570,9 +1468,8 @@ whpx_vcpu_get_context(CPUState *cpu, struct whpx_vcpu_context *ctx)
 
     ctx->interrupt_request = cpu->interrupt_request;
     ctx->interrupt_in_flight = vcpu->interrupt_in_flight;
-    ctx->interruptable = vcpu->interruptable;
+    ctx->ready_for_pic_interrupt = vcpu->ready_for_pic_interrupt;
     ctx->window_registered = vcpu->window_registered;
-    ctx->tpr = vcpu->tpr;
 
     ctx->nreg = 0;
     whpx_reg_list_t *context_regs = whpx_all_registers();
@@ -1581,12 +1478,41 @@ whpx_vcpu_get_context(CPUState *cpu, struct whpx_vcpu_context *ctx)
         WHV_REGISTER_VALUE *vp = (WHV_REGISTER_VALUE*)&ctx->regv[i];
 
         ctx->reg[i] = n;
-        hr = whpx_get_vp_registers(cpu->cpu_index, &n, 1, vp);
+        debug_printf("read register %s\n", get_whv_register_name_str(n));
+        hr = whpx_get_vp_registers(cpu->cpu_index, &n, 1, (WHV_REGISTER_VALUE*)buf);
         if (FAILED(hr))
             whpx_panic("failed to access vcpu%d register %s\n",
                 cpu->cpu_index, get_whv_register_name_str(n));
+        memcpy(vp, buf, sizeof(*vp));
     }
     ctx->nreg = i;
+
+    memset(ctx->irq_controller_state, 0, sizeof(ctx->irq_controller_state));
+    hr = WHvGetVirtualProcessorInterruptControllerState(
+        whpx_get_partition(),
+        cpu->cpu_index,
+        ctx->irq_controller_state,
+        sizeof(ctx->irq_controller_state),
+        &irq_bytes);
+    if (FAILED(hr))
+        whpx_panic("failed to get vcpu%d irq controller state: %08lx\n",
+            cpu->cpu_index, hr);
+
+    memset(ctx->xsave_state, 0, sizeof(ctx->xsave_state));
+    hr = WHvGetVirtualProcessorXsaveState(
+        whpx_get_partition(),
+        cpu->cpu_index,
+        ctx->xsave_state,
+        sizeof(ctx->xsave_state),
+        &xsave_bytes);
+    if (FAILED(hr))
+        whpx_panic("failed to get vcpu%d xsave state: %08lx\n",
+            cpu->cpu_index, hr);
+
+    debug_printf("irq state bytes %d, xsave state bytes %d\n",
+      (int)irq_bytes, (int)xsave_bytes);
+
+    whpx_dump_cpu_state(cpu->cpu_index);
 
     return 0;
 }
@@ -1602,9 +1528,8 @@ whpx_vcpu_set_context(CPUState *cpu, struct whpx_vcpu_context *ctx)
 
     cpu->interrupt_request = ctx->interrupt_request;
     vcpu->interrupt_in_flight = ctx->interrupt_in_flight;
-    vcpu->interruptable = ctx->interruptable;
     vcpu->window_registered = ctx->window_registered;
-    vcpu->tpr = ctx->tpr;
+    vcpu->ready_for_pic_interrupt = ctx->ready_for_pic_interrupt;
 
     for (i = 0; i < ctx->nreg; i++) {
         WHV_REGISTER_NAME n = ctx->reg[i];
@@ -1618,7 +1543,26 @@ whpx_vcpu_set_context(CPUState *cpu, struct whpx_vcpu_context *ctx)
                 cpu->cpu_index, get_whv_register_name_str(n));
     }
 
+    hr = WHvSetVirtualProcessorInterruptControllerState(
+        whpx_get_partition(),
+        cpu->cpu_index,
+        ctx->irq_controller_state,
+        sizeof(ctx->irq_controller_state));
+    if (FAILED(hr))
+        whpx_panic("failed to set vcpu%d irq controller state: %08lx\n",
+            cpu->cpu_index, hr);
+
+    hr = WHvSetVirtualProcessorXsaveState(
+        whpx_get_partition(),
+        cpu->cpu_index,
+        ctx->xsave_state,
+        sizeof(ctx->xsave_state));
+    if (FAILED(hr))
+        whpx_panic("failed to set vcpu%d xsave state: %08lx\n",
+            cpu->cpu_index, hr);
+
     vcpu->dirty = VCPU_DIRTY_HV;
+    whpx_dump_cpu_state(cpu->cpu_index);
 
     return 0;
 }
@@ -1668,18 +1612,18 @@ whpx_update_mapping(
 void
 whpx_cpu_reset_interrupt(CPUState *cpu, int mask)
 {
-    whpx_vcpu_irq_lock(cpu);
+    whpx_vcpu_irqreq_lock(cpu);
     cpu->interrupt_request &= ~mask;
-    whpx_vcpu_irq_unlock(cpu);
+    whpx_vcpu_irqreq_unlock(cpu);
 }
 
 
 static void
 whpx_cpu_handle_interrupt(CPUState *cpu, int mask)
 {
-    whpx_vcpu_irq_lock(cpu);
+    whpx_vcpu_irqreq_lock(cpu);
     cpu->interrupt_request |= mask;
-    whpx_vcpu_irq_unlock(cpu);
+    whpx_vcpu_irqreq_unlock(cpu);
 #ifdef DEBUG_IRQ
     debug_printf("vcpu%d: handle IRQ mask=%x irqreq=%x\n",
         cpu->cpu_index, mask, cpu->interrupt_request);
@@ -1704,6 +1648,7 @@ int whpx_partition_setup(void)
     int ret;
     HRESULT hr;
     WHV_CAPABILITY whpx_cap;
+    WHV_CAPABILITY_FEATURES features = { };
     WHV_PARTITION_PROPERTY prop;
     whpx = &whpx_global;
 
@@ -1718,9 +1663,29 @@ int whpx_partition_setup(void)
         goto error;
     }
 
+    hr = WHvGetCapability(WHvCapabilityCodeFeatures, &features,
+        sizeof(features), NULL);
+    if (FAILED(hr) || !features.LocalApicEmulation) {
+        error_report("WHPX: No local apic emulation, hr=%08lx", hr);
+        ret = -EINVAL;
+        goto error;
+    }
+
     hr = WHvCreatePartition(&whpx->partition);
     if (FAILED(hr)) {
         error_report("WHPX: Failed to create partition, hr=%08lx", hr);
+        ret = -EINVAL;
+        goto error;
+    }
+
+    memset(&prop, 0, sizeof(WHV_PARTITION_PROPERTY));
+    prop.LocalApicEmulationMode = WHvX64LocalApicEmulationModeXApic;
+    hr = WHvSetPartitionProperty(whpx->partition,
+        WHvPartitionPropertyCodeLocalApicEmulationMode,
+        &prop,
+        sizeof(prop));
+    if (FAILED(hr)) {
+        error_report("WHPX: Failed to enable local APIC hr=%08lx", hr);
         ret = -EINVAL;
         goto error;
     }

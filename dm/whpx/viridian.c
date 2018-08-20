@@ -19,7 +19,6 @@
 #include <dm/os.h>
 #include <dm/cpu.h>
 #include <dm/whpx/whpx.h>
-#include <dm/whpx/apic.h>
 #include <dm/whpx/util.h>
 
 
@@ -70,14 +69,13 @@
 
 const uint64_t HVMPV_feature_mask =
     (
-//      HVMPV_hcall_remote_tlb_flush |     // todo
-//      HVMPV_crash_ctl |                  // todo
-//      HVMPV_reference_tsc |              // doesn't work very well atm
+//      HVMPV_hcall_remote_tlb_flush |
+//      HVMPV_synth_timer |
+//      HVMPV_apic_assist |
+        HVMPV_crash_ctl |
         HVMPV_base_freq |
         HVMPV_no_freq |
-        HVMPV_time_ref_count |
-        HVMPV_synth_timer |
-        HVMPV_apic_assist );
+        HVMPV_time_ref_count );
 
 
 /* Viridian MSR numbers. */
@@ -469,7 +467,7 @@ int cpuid_viridian_leaves(uint64_t leaf, uint64_t *eax,
             mask.AccessFrequencyRegs = 1;
         if ( HVMPV_feature_mask & HVMPV_time_ref_count )
             mask.AccessPartitionReferenceCounter = 1;
-        if ( HVMPV_feature_mask & HVMPV_reference_tsc )
+        if ( whpx_reftsc )
             mask.AccessPartitionReferenceTsc = 1;
         if ( HVMPV_feature_mask & HVMPV_synth_timer ) {
             mask.AccessSynicRegs = 1;
@@ -495,9 +493,10 @@ int cpuid_viridian_leaves(uint64_t leaf, uint64_t *eax,
         *eax = CPUID4A_RELAX_TIMER_INT;
         if ( HVMPV_feature_mask & HVMPV_hcall_remote_tlb_flush )
             *eax |= CPUID4A_HCALL_REMOTE_TLB_FLUSH;
+#if 0
         /* until APIC virt */
         *eax |= CPUID4A_MSR_BASED_APIC;
-
+#endif
         /*
          * This value is the recommended number of attempts to try to
          * acquire a spinlock before notifying the hypervisor via the
@@ -509,7 +508,7 @@ int cpuid_viridian_leaves(uint64_t leaf, uint64_t *eax,
     case 6:
         /* Detected and in use hardware features. */
         //if ( cpu_has_vmx_virtualize_apic_accesses )
-        //    res->a |= CPUID6A_APIC_OVERLAY;
+        *eax |= CPUID6A_APIC_OVERLAY;
         //if ( cpu_has_vmx_msr_bitmap || (read_efer() & EFER_SVME) )
         //    res->a |= CPUID6A_MSR_BITMAPS;
         //if ( hap_enabled(d) )
@@ -562,6 +561,7 @@ dump_guest_os_id(void)
             viridian.guest_os_id.fields.build_number);
 }
 
+#if 0
 static void
 dump_vp_assist(CPUState *cpu)
 {
@@ -571,6 +571,7 @@ dump_vp_assist(CPUState *cpu)
     debug_printf("\tenabled: %x\n", aa->fields.enabled);
     debug_printf("\tpfn: %"PRIx64"\n", (uint64_t)aa->fields.pfn);
 }
+#endif
 
 static void
 dump_hypercall()
@@ -623,6 +624,9 @@ enable_hypercall_page(void)
     return -1;
 }
 
+//#define CALIBRATE_TSC
+
+#ifdef CALIBRATE_TSC
 static uint64_t
 calibrate_tsc(void)
 {
@@ -639,6 +643,7 @@ calibrate_tsc(void)
 
     return ((_rdtsc() - tsc_start) << 5) / 1000;
 }
+#endif
 
 static uint64_t
 get_tsc_khz(void)
@@ -646,8 +651,12 @@ get_tsc_khz(void)
     static uint64_t tsc_khz = 0;
 
     if (!tsc_khz) {
+#ifdef CALIBRATE_TSC
         tsc_khz = calibrate_tsc();
-        debug_printf("TSC calibrated @ %.3f MHz\n", tsc_khz / 1000.0);
+#else
+        tsc_khz = (uint64_t)get_registry_cpu_mhz() * 1000;
+#endif
+        debug_printf("Host TSC resolution at %.3f MHz\n", tsc_khz / 1000.0);
     }
 
     return tsc_khz;
@@ -717,6 +726,7 @@ teardown_vp_assist(CPUState *cpu)
     whpx_ram_unmap(va);
 }
 
+#if 0
 static void
 viridian_synic_deliver_irq(CPUState *cpu, int sint)
 {
@@ -929,6 +939,7 @@ rdmsr_synic_regs(CPUState *cpu, struct viridian_synic *ic, uint32_t idx)
 
     return 0;
 }
+#endif
 
 int
 wrmsr_viridian_regs(uint32_t idx, uint64_t val)
@@ -955,6 +966,17 @@ wrmsr_viridian_regs(uint32_t idx, uint64_t val)
     case HV_X64_MSR_VP_INDEX:
         break;
 
+    case HV_X64_MSR_REFERENCE_TSC:
+        if ( !whpx_reftsc )
+            return 0;
+
+        viridian.reference_tsc_msr.raw = val;
+        dump_reference_tsc();
+        if ( viridian.reference_tsc_msr.fields.enabled )
+            enable_reference_tsc_page(cpu, viridian.reference_tsc_msr.fields.pfn);
+        break;
+
+#if 0
     case HV_X64_MSR_EOI:
         whpx_lock_iothread();
         apic_eoi(cpu->apic_state);
@@ -986,16 +1008,6 @@ wrmsr_viridian_regs(uint32_t idx, uint64_t val)
             initialize_vp_assist(cpu);
         break;
 
-    case HV_X64_MSR_REFERENCE_TSC:
-        if ( !(HVMPV_feature_mask & HVMPV_reference_tsc) )
-            return 0;
-
-        viridian.reference_tsc_msr.raw = val;
-        dump_reference_tsc();
-        if ( viridian.reference_tsc_msr.fields.enabled )
-            enable_reference_tsc_page(cpu, viridian.reference_tsc_msr.fields.pfn);
-        break;
-
     case HV_X64_MSR_STIMER0_CONFIG:
     case HV_X64_MSR_STIMER1_CONFIG:
     case HV_X64_MSR_STIMER2_CONFIG:
@@ -1015,38 +1027,24 @@ wrmsr_viridian_regs(uint32_t idx, uint64_t val)
     case HV_X64_MSR_SCONTROL ... HV_X64_MSR_SINT15:
         wrmsr_synic_regs(cpu, &viridian_vcpu[cpu->cpu_index].synic, idx,val);
         break;
-        //TODO
-#if 0
+#endif
+
     case HV_X64_MSR_CRASH_P0:
     case HV_X64_MSR_CRASH_P1:
     case HV_X64_MSR_CRASH_P2:
     case HV_X64_MSR_CRASH_P3:
     case HV_X64_MSR_CRASH_P4:
-        BUILD_BUG_ON(HV_X64_MSR_CRASH_P4 - HV_X64_MSR_CRASH_P0 >=
-                     ARRAY_SIZE(v->arch.hvm_vcpu.viridian.crash_param));
-
-        idx -= HV_X64_MSR_CRASH_P0;
-        v->arch.hvm_vcpu.viridian.crash_param[idx] = val;
+        debug_printf("viridian-crash-notification: p%d = %"
+            PRIx64"\n", (idx - HV_X64_MSR_CRASH_P0), val);
         break;
 
     case HV_X64_MSR_CRASH_CTL:
     {
-        HV_CRASH_CTL_REG_CONTENTS ctl;
-
-        ctl.AsUINT64 = val;
-
-        if ( !ctl.u.CrashNotify )
-            break;
-
-        gprintk(XENLOG_WARNING, "VIRIDIAN CRASH: %lx %lx %lx %lx %lx\n",
-                v->arch.hvm_vcpu.viridian.crash_param[0],
-                v->arch.hvm_vcpu.viridian.crash_param[1],
-                v->arch.hvm_vcpu.viridian.crash_param[2],
-                v->arch.hvm_vcpu.viridian.crash_param[3],
-                v->arch.hvm_vcpu.viridian.crash_param[4]);
+        debug_printf("crashing domain\n");
+        vm_set_run_mode(DESTROY_VM);
         break;
     }
-#endif
+
     default:
         if ( idx >= VIRIDIAN_MSR_MIN && idx <= VIRIDIAN_MSR_MAX )
             debug_printf("write to unimplemented MSR %#x\n",
@@ -1079,6 +1077,21 @@ int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
         *val = cpu->cpu_index;
         break;
 
+    case HV_X64_MSR_REFERENCE_TSC:
+        if ( !whpx_reftsc )
+            return 0;
+
+        *val = viridian.reference_tsc_msr.raw;
+        break;
+
+    case HV_X64_MSR_TIME_REF_COUNT:
+        count_reftime++;
+        if ( !(HVMPV_feature_mask & HVMPV_time_ref_count) )
+            return 0;
+
+        *val = get_clock_ns(vm_clock) / 100;
+        break;
+
     case HV_X64_MSR_TSC_FREQUENCY:
         if ( HVMPV_feature_mask & HVMPV_no_freq )
             return 0;
@@ -1093,6 +1106,7 @@ int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
         *val = 1000000000ull / APIC_BUS_CYCLE_NS;
         break;
 
+#if 0
     case HV_X64_MSR_ICR:
         whpx_lock_iothread();
         *val = (((uint64_t)apic_get_icr2(cpu->apic_state) << 32) |
@@ -1108,20 +1122,6 @@ int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
 
     case HV_X64_MSR_VP_ASSIST_PAGE:
         *val = viridian_vcpu[cpu->cpu_index].vp_assist.msr.raw;
-        break;
-
-    case HV_X64_MSR_REFERENCE_TSC:
-        if ( !(HVMPV_feature_mask & HVMPV_reference_tsc) )
-            return 0;
-
-        *val = viridian.reference_tsc_msr.raw;
-        break;
-
-    case HV_X64_MSR_TIME_REF_COUNT:
-        if ( !(HVMPV_feature_mask & HVMPV_time_ref_count) )
-            return 0;
-
-        *val = get_clock_ns(vm_clock) / 100;
         break;
 
     case HV_X64_MSR_STIMER0_CONFIG:
@@ -1143,22 +1143,19 @@ int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
     case HV_X64_MSR_SCONTROL ... HV_X64_MSR_SINT15:
         *val = rdmsr_synic_regs(cpu, &viridian_vcpu[cpu->cpu_index].synic, idx);
         break;
-        // TODO
-#if 0
+#endif
+
     case HV_X64_MSR_CRASH_P0:
     case HV_X64_MSR_CRASH_P1:
     case HV_X64_MSR_CRASH_P2:
     case HV_X64_MSR_CRASH_P3:
     case HV_X64_MSR_CRASH_P4:
-        BUILD_BUG_ON(HV_X64_MSR_CRASH_P4 - HV_X64_MSR_CRASH_P0 >=
-                     ARRAY_SIZE(v->arch.hvm_vcpu.viridian.crash_param));
-
-        idx -= HV_X64_MSR_CRASH_P0;
-        *val = v->arch.hvm_vcpu.viridian.crash_param[idx];
+        *val = 0;
         break;
 
     case HV_X64_MSR_CRASH_CTL:
     {
+        /* crash notify enabled */
         HV_CRASH_CTL_REG_CONTENTS ctl = {
             .u.CrashNotify = 1,
         };
@@ -1166,7 +1163,6 @@ int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
         *val = ctl.AsUINT64;
         break;
     }
-#endif
 
     default:
         if ( idx >= VIRIDIAN_MSR_MIN && idx <= VIRIDIAN_MSR_MAX )
@@ -1182,7 +1178,8 @@ int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
 void
 viridian_timers_pause(void)
 {
-    CPUState *cpu = first_cpu;
+#if 0
+  CPUState *cpu = first_cpu;
 
     if (!vm_viridian)
         return;
@@ -1198,11 +1195,13 @@ viridian_timers_pause(void)
         cpu = cpu->next_cpu;
     }
     whpx_unlock_iothread();
+#endif
 }
 
 void
 viridian_timers_resume(void)
 {
+#if 0
     CPUState *cpu = first_cpu;
 
     if (!vm_viridian)
@@ -1219,6 +1218,7 @@ viridian_timers_resume(void)
         cpu = cpu->next_cpu;
     }
     whpx_unlock_iothread();
+#endif
 }
 
 static void
@@ -1260,6 +1260,7 @@ viridian_load(QEMUFile *f, void *opaque, int version)
         cpu = cpu->next_cpu;
     }
 
+#if 0
     /* recreate timers */
     for (i = 0; i < WHPX_MAX_VCPUS; i++) {
         struct viridian_vcpu *v = &viridian_vcpu[i];
@@ -1267,6 +1268,7 @@ viridian_load(QEMUFile *f, void *opaque, int version)
         for (j = 0; j < TIMER_COUNT; j++)
             v->timer[j].timer = new_timer_ns(vm_clock, timer_expiry, &v->timer[i]);
     }
+#endif
 
     viridian_timers_resume();
 
@@ -1293,7 +1295,9 @@ viridian_init_timers(struct viridian_vcpu *v)
         memset(&v->timer[i], 0, sizeof(v->timer[i]));
         v->timer[i].cpu_index = v->index;
         v->timer[i].timer_index = i;
+#if 0
         v->timer[i].timer = new_timer_ns(vm_clock, timer_expiry, &v->timer[i]);
+#endif
     }
 }
 

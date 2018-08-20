@@ -10,6 +10,7 @@
 #define DEBUG_PORT_NUMBER 0xe9
 
 #define WHPX_MAX_REGISTERS 256
+#define WHPX_MAX_XSAVE_AREA_SIZE 16384
 
 struct CPUX86State;
 typedef struct CPUX86State CPUState;
@@ -38,12 +39,16 @@ typedef struct whpx_reg_val {
 
 struct whpx_vcpu_context {
     uint32_t    interrupt_request;
-    uint32_t    interrupt_in_flight, interruptable;
-    uint32_t    window_registered, tpr;
+    uint32_t    interrupt_in_flight;
+    uint32_t    ready_for_pic_interrupt;
+    uint32_t    window_registered;
     /* hv registers */
     uint32_t    nreg;
     whpx_reg_name_t reg [WHPX_MAX_REGISTERS];
     whpx_reg_val_t  regv[WHPX_MAX_REGISTERS];
+    /* other state */
+    uint8_t irq_controller_state[PAGE_SIZE];
+    uint8_t xsave_state[WHPX_MAX_XSAVE_AREA_SIZE];
 };
 
 struct whpx_vm_context {

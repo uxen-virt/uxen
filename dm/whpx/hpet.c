@@ -52,6 +52,7 @@
 #include <dm/whpx/hpet_emul.h>
 #include <time.h>
 #include <dm/whpx/mc146818rtc.h>
+#include <dm/whpx/util.h>
 
 //#define HPET_DEBUG
 #ifdef HPET_DEBUG
@@ -661,6 +662,7 @@ static CPUWriteMemoryFunc * const hpet_ram_write[] = {
 static uint64_t hpet_mem_read(void *opaque, target_phys_addr_t addr,
                                 unsigned size)
 {
+  count_hpet++;
   switch (size) {
       //case 1: return hpet_ram_readb(opaque, addr);
       //case 2: return hpet_ram_readw(opaque, addr);
@@ -672,6 +674,7 @@ static uint64_t hpet_mem_read(void *opaque, target_phys_addr_t addr,
 static void hpet_mem_write(void *opaque, target_phys_addr_t addr,
                              uint64_t val, unsigned size)
 {
+  count_hpet++;
   switch (size) {
       //case 1: hpet_ram_writeb(opaque, addr, val); break;
       //case 2: hpet_ram_writew(opaque, addr, val); break;

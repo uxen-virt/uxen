@@ -25,6 +25,9 @@ uint64_t count_runvp;
 uint64_t tmsum_xlate;
 uint64_t count_xlate;
 
+uint64_t count_request_irq;
+uint64_t tmsum_request_irq;
+
 uint64_t tmsum_lapic_access;
 uint64_t count_lapic_access;
 
@@ -36,7 +39,11 @@ uint64_t count_vmexit[256];
 
 uint64_t count_longspin;
 
-/* all meaningful registers */
+uint64_t count_hpet;
+
+uint64_t count_reftime;
+
+/* all meaningful registers which are saved in vcpu context */
 static const WHV_REGISTER_NAME all_register_names[] = {
     WHvX64RegisterRax,
     WHvX64RegisterRcx,
@@ -162,13 +169,13 @@ static const WHV_REGISTER_NAME all_register_names[] = {
     WHvX64RegisterMsrMtrrFix4kF0000,
     WHvX64RegisterMsrMtrrFix4kF8000, */
     WHvX64RegisterTscAux,
-    WHvX64RegisterSpecCtrl,
-    WHvX64RegisterPredCmd,
+    //WHvX64RegisterSpecCtrl,
+    //WHvX64RegisterPredCmd,
     WHvX64RegisterApicId,
     WHvX64RegisterApicVersion,
     WHvRegisterPendingInterruption,
     WHvRegisterInterruptState,
-    WHvRegisterPendingEvent,
+    //WHvRegisterPendingEvent,
     WHvX64RegisterDeliverabilityNotifications,
     WHvRegisterInternalActivityState,
 };
@@ -529,11 +536,15 @@ whpx_reset_perf_stats(void)
 {
     count_runvp = count_getregs = count_setregs = count_xlate = count_v4v = 0;
     tmsum_runvp = tmsum_getregs = tmsum_setregs = tmsum_xlate = tmsum_v4v = 0;
+    count_request_irq = 0;
+    tmsum_request_irq = 0;
 
     count_lapic_access = 0;
     tmsum_lapic_access = 0;
 
     count_longspin = 0;
+    count_hpet = 0;
+    count_reftime = 0;
 
     memset(tmsum_vmexit, 0, sizeof(tmsum_vmexit));
     memset(count_vmexit, 0, sizeof(count_vmexit));
@@ -575,6 +586,7 @@ char *whpx_er_describe(int exit_reason)
     case WHvRunVpExitReasonInvalidVpRegisterValue: return "invreg";
     case WHvRunVpExitReasonUnsupportedFeature: return "unsupp";
     case WHvRunVpExitReasonX64InterruptWindow: return "irqwnd";
+    case WHvRunVpExitReasonX64ApicEoi: return "apiceoi";
     case WHvRunVpExitReasonX64Halt: return "halt";
     case WHvRunVpExitReasonX64MsrAccess: return "msr";
     case WHvRunVpExitReasonX64Cpuid: return "cpuid";
@@ -595,9 +607,13 @@ whpx_dump_perf_stats(void)
     debug_printf("| getregs      count %8"PRId64" avg cycles %8"PRId64"\n", count_getregs, count_getregs ? tmsum_getregs/count_getregs : 0);
     debug_printf("| setregs      count %8"PRId64" avg cycles %8"PRId64"\n", count_setregs, count_setregs ? tmsum_setregs/count_setregs : 0);
     debug_printf("| translategva count %8"PRId64" avg cycles %8"PRId64"\n", count_xlate, count_xlate ? tmsum_xlate/count_xlate : 0);
+    debug_printf("| reqirq       count %8"PRId64" avg cycles %8"PRId64"\n", count_request_irq, count_request_irq ? tmsum_request_irq/count_request_irq : 0);
     debug_printf("| v4vop        count %8"PRId64" avg cycles %8"PRId64"\n", count_v4v, count_v4v ? tmsum_v4v/count_v4v : 0);
     debug_printf("| lapic access count %8"PRId64" avg cycles %8"PRId64"\n", count_lapic_access, count_lapic_access ? tmsum_lapic_access/count_lapic_access : 0);
     debug_printf("| viridianspin count %8"PRId64"\n", count_longspin);
+    debug_printf("| hpet         count %8"PRId64"\n", count_hpet);
+    debug_printf("| reftime      count %8"PRId64"\n", count_reftime);
+
     int i;
     for (i = 0; i < 256; i++) {
         if (count_vmexit[i]) {
@@ -617,7 +633,7 @@ whpx_dump_perf_stats(void)
 }
 
 int
-get_cpu_mhz(void)
+get_registry_cpu_mhz(void)
 {
     DWORD dwMHz;
     HKEY hKey;
@@ -665,6 +681,14 @@ DEFINE_WHP_API (WHvRunVirtualProcessor);
 DEFINE_WHP_API (WHvCancelRunVirtualProcessor);
 DEFINE_WHP_API (WHvGetVirtualProcessorRegisters);
 DEFINE_WHP_API (WHvSetVirtualProcessorRegisters);
+DEFINE_WHP_API (WHvGetVirtualProcessorInterruptControllerState);
+DEFINE_WHP_API (WHvSetVirtualProcessorInterruptControllerState);
+DEFINE_WHP_API (WHvRequestInterrupt);
+DEFINE_WHP_API (WHvGetVirtualProcessorXsaveState);
+DEFINE_WHP_API (WHvSetVirtualProcessorXsaveState);
+DEFINE_WHP_API (WHvQueryGpaRangeDirtyBitmap);
+DEFINE_WHP_API (WHvGetPartitionCounters);
+DEFINE_WHP_API (WHvGetVirtualProcessorCounters);
 
 DEFINE_WHP_API (WHvEmulatorCreateEmulator);
 DEFINE_WHP_API (WHvEmulatorDestroyEmulator);
@@ -701,6 +725,14 @@ whpx_initialize_api(void)
     LINK_WHP_API (WHvCancelRunVirtualProcessor);
     LINK_WHP_API (WHvGetVirtualProcessorRegisters);
     LINK_WHP_API (WHvSetVirtualProcessorRegisters);
+    LINK_WHP_API (WHvGetVirtualProcessorInterruptControllerState);
+    LINK_WHP_API (WHvSetVirtualProcessorInterruptControllerState);
+    LINK_WHP_API (WHvRequestInterrupt);
+    LINK_WHP_API (WHvGetVirtualProcessorXsaveState);
+    LINK_WHP_API (WHvSetVirtualProcessorXsaveState);
+    LINK_WHP_API (WHvQueryGpaRangeDirtyBitmap);
+    LINK_WHP_API (WHvGetPartitionCounters);
+    LINK_WHP_API (WHvGetVirtualProcessorCounters);
 
     LINK_EMU_API (WHvEmulatorCreateEmulator);
     LINK_EMU_API (WHvEmulatorDestroyEmulator);

@@ -176,21 +176,6 @@ int whpx_cpu_is_self(void *env)
     return s->thread && (GetThreadId(s->thread) == GetCurrentThreadId());
 }
 
-int whpx_cpu_is_bsp(CPUState *env)
-{
-   return env->cpu_index == 0;
-}
-
-DeviceState *whpx_cpu_get_current_apic(void)
-{
-    CPUState *s = whpx_get_current_cpu();
-
-    assert(s);
-    assert(s->apic_state);
-
-    return s->apic_state;
-}
-
 void whpx_cpu_x86_update_cr0(CPUX86State *env, uint32_t new_cr0)
 {
     int pe_state;
@@ -312,11 +297,6 @@ void whpx_cpu_reset(CPUX86State *env)
 #endif
 }
 
-void whpx_do_cpu_sipi(CPUState *env)
-{
-    apic_sipi(env->apic_state);
-}
-
 void whpx_do_cpu_init(CPUState *env)
 {
     int sipi = env->interrupt_request & CPU_INTERRUPT_SIPI;
@@ -325,8 +305,8 @@ void whpx_do_cpu_init(CPUState *env)
     whpx_cpu_reset(env);
     env->interrupt_request = sipi;
     env->pat = pat;
-    apic_init_reset(env->apic_state);
-    env->halted = !cpu_is_bsp(env);
+    //env->halted = !cpu_is_bsp(env);
+    env->halted = false;
 }
 
 int whpx_register_pcidev(PCIDevice *dev)
@@ -447,11 +427,15 @@ whpx_vcpu_run_thread(PVOID opaque)
                 debug_printf("vcpu%d EXCEPTION: %d\n", s->cpu_index, ret);
             }
         } else {
+            // should not happen with apic virt, halt is handled in HV
+            assert(false);
+#if 0
             if (s->cpu_index == 0 && !(s->eflags & IF_MASK)) {
                 debug_printf("vcpu%d halt with irqs off\n", s->cpu_index);
                 s->stopped = 1;
                 break;
             }
+
 #ifdef DEBUG_CPU
             debug_printf("vcpu%d: halt...\n", s->cpu_index);
 #endif
@@ -459,6 +443,7 @@ whpx_vcpu_run_thread(PVOID opaque)
             s->halted = false;
 #ifdef DEBUG_CPU
             debug_printf("vcpu%d: wake...\n", s->cpu_index);
+#endif
 #endif
         }
     }
@@ -530,16 +515,67 @@ whpx_vcpu_start(CPUState *s)
     ResumeThread(h);
 }
 
+#define MAX_TSC_DESYNC 100000
+#define MAX_TSC_PROPAGATE_ITERS 10000
+
+/* currently in WHP there's no method to set same TSC offset for all vcpus. It does seem to compute TSC offset at the
+ * time we set TSC value for vcpu, though. Therefore until API improvements, workaround by setting TSC value in tight loop
+ * until we think the desync should be in acceptable range */
+static void
+workaround_unreliable_tsc(void)
+{
+    uint64_t tscval = 0;
+    int i,vcpu;
+    HRESULT hr;
+    WHV_REGISTER_NAME name;
+    WHV_REGISTER_VALUE v;
+    uint64_t t0, dt;
+
+    name = WHvX64RegisterTsc;
+    for (i = 0; i < vm_vcpus; i++) {
+        hr = whpx_get_vp_registers(i, &name, 1, &v);
+        if (FAILED(hr))
+            whpx_panic("failed to get TSC value\n");
+        if (v.Reg64 > tscval)
+            tscval = v.Reg64;
+    }
+    debug_printf("tsc value to propagate across vcpus: %"PRId64"\n", tscval);
+    v.Reg64 = tscval;
+
+    i = 0;
+    while (i++ < MAX_TSC_PROPAGATE_ITERS) {
+        t0 = _rdtsc();
+        for (vcpu = 0; vcpu < vm_vcpus; vcpu++) {
+            hr = whpx_set_vp_registers(vcpu, &name, 1, &v);
+            if (FAILED(hr))
+                whpx_panic("failed to set TSC value: %08lx\n", hr);
+        }
+        dt = _rdtsc() - t0;
+        if (dt <= MAX_TSC_DESYNC)
+            break; /* success */
+    }
+    if (i >= MAX_TSC_PROPAGATE_ITERS) {
+        whpx_panic(
+            "FAILED to propagate TSC with reasonably small desync, "
+            "last desync=%"PRId64"\n",dt);
+    } else {
+        debug_printf(
+            "tsc value propagated (%d iterations), expected desync: "
+            "%"PRId64"\n cycles", i, dt);
+    }
+}
+
 int
 whpx_vm_start(void)
 {
     int i;
-
     debug_printf("vm start...\n");
 
     vm_time_offset = 0;
     running_vcpus = vm_vcpus;
     vm_set_run_mode(RUNNING_VM);
+
+    workaround_unreliable_tsc();
     for (i = 0; i < vm_vcpus; i++)
         whpx_vcpu_start(&cpu_state[i]);
 
@@ -788,7 +824,7 @@ whpx_shared_info_init(void)
     if (!shared_info_page)
         whpx_panic("no memory");
 
-    shared_info_page->cpu_mhz = get_cpu_mhz();
+    shared_info_page->cpu_mhz = get_registry_cpu_mhz();
 
     if (whpx_ram_populate_with(WHP_SHARED_INFO_ADDR, PAGE_SIZE, shared_info_page, 0))
         whpx_panic("whpx_ram_populate");
@@ -949,13 +985,6 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
     debug_printf("vm init, thread 0x%x, restore_mode=%d, file=%s\n", (int)GetCurrentThreadId(),
       restore_mode, loadvm ? loadvm : "");
 
-    if (vm_hpet) {
-        /* FIXME: hpet seems introduce slowness atm, should be better on RS5 with
-         * register access optimizations. */
-        debug_printf("warning: disabling HPET config\n");
-        vm_hpet = 0;
-    }
-
     current_cpu_tls = TlsAlloc();
     if (current_cpu_tls == TLS_OUT_OF_INDEXES)
         whpx_panic("out of tls indexes\n");
@@ -975,6 +1004,7 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
 
     extern void whpx_v4v_proxy_init(void);
     whpx_v4v_proxy_init();
+
 #if defined(CONFIG_VBOXDRV)
     ret = sf_service_start();
     if (ret) {
