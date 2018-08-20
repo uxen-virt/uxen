@@ -162,11 +162,15 @@ static const WHV_REGISTER_NAME all_register_names[] = {
     WHvX64RegisterMsrMtrrFix4kF0000,
     WHvX64RegisterMsrMtrrFix4kF8000, */
     WHvX64RegisterTscAux,
+    WHvX64RegisterSpecCtrl,
+    WHvX64RegisterPredCmd,
+    WHvX64RegisterApicId,
+    WHvX64RegisterApicVersion,
     WHvRegisterPendingInterruption,
     WHvRegisterInterruptState,
-    WHvRegisterPendingEvent0,
-    WHvRegisterPendingEvent1,
+    WHvRegisterPendingEvent,
     WHvX64RegisterDeliverabilityNotifications,
+    WHvRegisterInternalActivityState,
 };
 
 static whpx_reg_list_t all_registers;
@@ -180,134 +184,138 @@ whpx_all_registers(void)
 const char *get_whv_register_name_str(WHV_REGISTER_NAME x)
 {
     switch (x) {
-    case 0x00000000: return "Rax";
-    case 0x00000001: return "Rcx";
-    case 0x00000002: return "Rdx";
-    case 0x00000003: return "Rbx";
-    case 0x00000004: return "Rsp";
-    case 0x00000005: return "Rbp";
-    case 0x00000006: return "Rsi";
-    case 0x00000007: return "Rdi";
-    case 0x00000008: return "R8";
-    case 0x00000009: return "R9";
-    case 0x0000000A: return "R10";
-    case 0x0000000B: return "R11";
-    case 0x0000000C: return "R12";
-    case 0x0000000D: return "R13";
-    case 0x0000000E: return "R14";
-    case 0x0000000F: return "R15";
-    case 0x00000010: return "Rip";
-    case 0x00000011: return "Rflags";
-    case 0x00000012: return "Es";
-    case 0x00000013: return "Cs";
-    case 0x00000014: return "Ss";
-    case 0x00000015: return "Ds";
-    case 0x00000016: return "Fs";
-    case 0x00000017: return "Gs";
-    case 0x00000018: return "Ldtr";
-    case 0x00000019: return "Tr";
-    case 0x0000001A: return "Idtr";
-    case 0x0000001B: return "Gdtr";
-    case 0x0000001C: return "Cr0";
-    case 0x0000001D: return "Cr2";
-    case 0x0000001E: return "Cr3";
-    case 0x0000001F: return "Cr4";
-    case 0x00000020: return "Cr8";
-    case 0x00000021: return "Dr0";
-    case 0x00000022: return "Dr1";
-    case 0x00000023: return "Dr2";
-    case 0x00000024: return "Dr3";
-    case 0x00000025: return "Dr6";
-    case 0x00000026: return "Dr7";
-    case 0x00001000: return "Xmm0";
-    case 0x00001001: return "Xmm1";
-    case 0x00001002: return "Xmm2";
-    case 0x00001003: return "Xmm3";
-    case 0x00001004: return "Xmm4";
-    case 0x00001005: return "Xmm5";
-    case 0x00001006: return "Xmm6";
-    case 0x00001007: return "Xmm7";
-    case 0x00001008: return "Xmm8";
-    case 0x00001009: return "Xmm9";
-    case 0x0000100A: return "Xmm10";
-    case 0x0000100B: return "Xmm11";
-    case 0x0000100C: return "Xmm12";
-    case 0x0000100D: return "Xmm13";
-    case 0x0000100E: return "Xmm14";
-    case 0x0000100F: return "Xmm15";
-    case 0x00001010: return "FpMmx0";
-    case 0x00001011: return "FpMmx1";
-    case 0x00001012: return "FpMmx2";
-    case 0x00001013: return "FpMmx3";
-    case 0x00001014: return "FpMmx4";
-    case 0x00001015: return "FpMmx5";
-    case 0x00001016: return "FpMmx6";
-    case 0x00001017: return "FpMmx7";
-    case 0x00001018: return "FpControlStatus";
-    case 0x00001019: return "XmmControlStatus";
-    case 0x00002000: return "Tsc";
-    case 0x00002001: return "Efer";
-    case 0x00002002: return "KernelGsBase";
-    case 0x00002003: return "ApicBase";
-    case 0x00002004: return "Pat";
-    case 0x00002005: return "SysenterCs";
-    case 0x00002006: return "SysenterEip";
-    case 0x00002007: return "SysenterEsp";
-    case 0x00002008: return "Star";
-    case 0x00002009: return "Lstar";
-    case 0x0000200A: return "Cstar";
-    case 0x0000200B: return "Sfmask";
-    case 0x0000200D: return "MsrMtrrCap";
-    case 0x0000200E: return "MsrMtrrDefType";
-    case 0x00002010: return "MsrMtrrPhysBase0";
-    case 0x00002011: return "MsrMtrrPhysBase1";
-    case 0x00002012: return "MsrMtrrPhysBase2";
-    case 0x00002013: return "MsrMtrrPhysBase3";
-    case 0x00002014: return "MsrMtrrPhysBase4";
-    case 0x00002015: return "MsrMtrrPhysBase5";
-    case 0x00002016: return "MsrMtrrPhysBase6";
-    case 0x00002017: return "MsrMtrrPhysBase7";
-    case 0x00002018: return "MsrMtrrPhysBase8";
-    case 0x00002019: return "MsrMtrrPhysBase9";
-    case 0x0000201A: return "MsrMtrrPhysBaseA";
-    case 0x0000201B: return "MsrMtrrPhysBaseB";
-    case 0x0000201C: return "MsrMtrrPhysBaseC";
-    case 0x0000201D: return "MsrMtrrPhysBaseD";
-    case 0x0000201E: return "MsrMtrrPhysBaseE";
-    case 0x0000201F: return "MsrMtrrPhysBaseF";
-    case 0x00002040: return "MsrMtrrPhysMask0";
-    case 0x00002041: return "MsrMtrrPhysMask1";
-    case 0x00002042: return "MsrMtrrPhysMask2";
-    case 0x00002043: return "MsrMtrrPhysMask3";
-    case 0x00002044: return "MsrMtrrPhysMask4";
-    case 0x00002045: return "MsrMtrrPhysMask5";
-    case 0x00002046: return "MsrMtrrPhysMask6";
-    case 0x00002047: return "MsrMtrrPhysMask7";
-    case 0x00002048: return "MsrMtrrPhysMask8";
-    case 0x00002049: return "MsrMtrrPhysMask9";
-    case 0x0000204A: return "MsrMtrrPhysMaskA";
-    case 0x0000204B: return "MsrMtrrPhysMaskB";
-    case 0x0000204C: return "MsrMtrrPhysMaskC";
-    case 0x0000204D: return "MsrMtrrPhysMaskD";
-    case 0x0000204E: return "MsrMtrrPhysMaskE";
-    case 0x0000204F: return "MsrMtrrPhysMaskF";
-    case 0x00002070: return "MsrMtrrFix64k00000";
-    case 0x00002071: return "MsrMtrrFix16k80000";
-    case 0x00002072: return "MsrMtrrFix16kA0000";
-    case 0x00002073: return "MsrMtrrFix4kC0000";
-    case 0x00002074: return "MsrMtrrFix4kC8000";
-    case 0x00002075: return "MsrMtrrFix4kD0000";
-    case 0x00002076: return "MsrMtrrFix4kD8000";
-    case 0x00002077: return "MsrMtrrFix4kE0000";
-    case 0x00002078: return "MsrMtrrFix4kE8000";
-    case 0x00002079: return "MsrMtrrFix4kF0000";
-    case 0x0000207A: return "MsrMtrrFix4kF8000";
-    case 0x0000207B: return "TscAux";
-    case 0x80000000: return "PendingInterruption";
-    case 0x80000001: return "InterruptState";
-    case 0x80000002: return "PendingEvent0";
-    case 0x80000003: return "PendingEvent1";
-    case 0x80000004: return "DeliverabilityNotifications";
+    case WHvX64RegisterRax: return "Rax";
+    case WHvX64RegisterRcx: return "Rcx";
+    case WHvX64RegisterRdx: return "Rdx";
+    case WHvX64RegisterRbx: return "Rbx";
+    case WHvX64RegisterRsp: return "Rsp";
+    case WHvX64RegisterRbp: return "Rbp";
+    case WHvX64RegisterRsi: return "Rsi";
+    case WHvX64RegisterRdi: return "Rdi";
+    case WHvX64RegisterR8: return "R8";
+    case WHvX64RegisterR9: return "R9";
+    case WHvX64RegisterR10: return "R10";
+    case WHvX64RegisterR11: return "R11";
+    case WHvX64RegisterR12: return "R12";
+    case WHvX64RegisterR13: return "R13";
+    case WHvX64RegisterR14: return "R14";
+    case WHvX64RegisterR15: return "R15";
+    case WHvX64RegisterRip: return "Rip";
+    case WHvX64RegisterRflags: return "Rflags";
+    case WHvX64RegisterEs: return "Es";
+    case WHvX64RegisterCs: return "Cs";
+    case WHvX64RegisterSs: return "Ss";
+    case WHvX64RegisterDs: return "Ds";
+    case WHvX64RegisterFs: return "Fs";
+    case WHvX64RegisterGs: return "Gs";
+    case WHvX64RegisterLdtr: return "Ldtr";
+    case WHvX64RegisterTr: return "Tr";
+    case WHvX64RegisterIdtr: return "Idtr";
+    case WHvX64RegisterGdtr: return "Gdtr";
+    case WHvX64RegisterCr0: return "Cr0";
+    case WHvX64RegisterCr2: return "Cr2";
+    case WHvX64RegisterCr3: return "Cr3";
+    case WHvX64RegisterCr4: return "Cr4";
+    case WHvX64RegisterCr8: return "Cr8";
+    case WHvX64RegisterDr0: return "Dr0";
+    case WHvX64RegisterDr1: return "Dr1";
+    case WHvX64RegisterDr2: return "Dr2";
+    case WHvX64RegisterDr3: return "Dr3";
+    case WHvX64RegisterDr6: return "Dr6";
+    case WHvX64RegisterDr7: return "Dr7";
+    case WHvX64RegisterXmm0: return "Xmm0";
+    case WHvX64RegisterXmm1: return "Xmm1";
+    case WHvX64RegisterXmm2: return "Xmm2";
+    case WHvX64RegisterXmm3: return "Xmm3";
+    case WHvX64RegisterXmm4: return "Xmm4";
+    case WHvX64RegisterXmm5: return "Xmm5";
+    case WHvX64RegisterXmm6: return "Xmm6";
+    case WHvX64RegisterXmm7: return "Xmm7";
+    case WHvX64RegisterXmm8: return "Xmm8";
+    case WHvX64RegisterXmm9: return "Xmm9";
+    case WHvX64RegisterXmm10: return "Xmm10";
+    case WHvX64RegisterXmm11: return "Xmm11";
+    case WHvX64RegisterXmm12: return "Xmm12";
+    case WHvX64RegisterXmm13: return "Xmm13";
+    case WHvX64RegisterXmm14: return "Xmm14";
+    case WHvX64RegisterXmm15: return "Xmm15";
+    case WHvX64RegisterFpMmx0: return "FpMmx0";
+    case WHvX64RegisterFpMmx1: return "FpMmx1";
+    case WHvX64RegisterFpMmx2: return "FpMmx2";
+    case WHvX64RegisterFpMmx3: return "FpMmx3";
+    case WHvX64RegisterFpMmx4: return "FpMmx4";
+    case WHvX64RegisterFpMmx5: return "FpMmx5";
+    case WHvX64RegisterFpMmx6: return "FpMmx6";
+    case WHvX64RegisterFpMmx7: return "FpMmx7";
+    case WHvX64RegisterFpControlStatus: return "FpControlStatus";
+    case WHvX64RegisterXmmControlStatus: return "XmmControlStatus";
+    case WHvX64RegisterTsc: return "Tsc";
+    case WHvX64RegisterEfer: return "Efer";
+    case WHvX64RegisterKernelGsBase: return "KernelGsBase";
+    case WHvX64RegisterApicBase: return "ApicBase";
+    case WHvX64RegisterPat: return "Pat";
+    case WHvX64RegisterSysenterCs: return "SysenterCs";
+    case WHvX64RegisterSysenterEip: return "SysenterEip";
+    case WHvX64RegisterSysenterEsp: return "SysenterEsp";
+    case WHvX64RegisterStar: return "Star";
+    case WHvX64RegisterLstar: return "Lstar";
+    case WHvX64RegisterCstar: return "Cstar";
+    case WHvX64RegisterSfmask: return "Sfmask";
+    case WHvX64RegisterMsrMtrrCap: return "MsrMtrrCap";
+    case WHvX64RegisterMsrMtrrDefType: return "MsrMtrrDefType";
+    case WHvX64RegisterMsrMtrrPhysBase0: return "MsrMtrrPhysBase0";
+    case WHvX64RegisterMsrMtrrPhysBase1: return "MsrMtrrPhysBase1";
+    case WHvX64RegisterMsrMtrrPhysBase2: return "MsrMtrrPhysBase2";
+    case WHvX64RegisterMsrMtrrPhysBase3: return "MsrMtrrPhysBase3";
+    case WHvX64RegisterMsrMtrrPhysBase4: return "MsrMtrrPhysBase4";
+    case WHvX64RegisterMsrMtrrPhysBase5: return "MsrMtrrPhysBase5";
+    case WHvX64RegisterMsrMtrrPhysBase6: return "MsrMtrrPhysBase6";
+    case WHvX64RegisterMsrMtrrPhysBase7: return "MsrMtrrPhysBase7";
+    case WHvX64RegisterMsrMtrrPhysBase8: return "MsrMtrrPhysBase8";
+    case WHvX64RegisterMsrMtrrPhysBase9: return "MsrMtrrPhysBase9";
+    case WHvX64RegisterMsrMtrrPhysBaseA: return "MsrMtrrPhysBaseA";
+    case WHvX64RegisterMsrMtrrPhysBaseB: return "MsrMtrrPhysBaseB";
+    case WHvX64RegisterMsrMtrrPhysBaseC: return "MsrMtrrPhysBaseC";
+    case WHvX64RegisterMsrMtrrPhysBaseD: return "MsrMtrrPhysBaseD";
+    case WHvX64RegisterMsrMtrrPhysBaseE: return "MsrMtrrPhysBaseE";
+    case WHvX64RegisterMsrMtrrPhysBaseF: return "MsrMtrrPhysBaseF";
+    case WHvX64RegisterMsrMtrrPhysMask0: return "MsrMtrrPhysMask0";
+    case WHvX64RegisterMsrMtrrPhysMask1: return "MsrMtrrPhysMask1";
+    case WHvX64RegisterMsrMtrrPhysMask2: return "MsrMtrrPhysMask2";
+    case WHvX64RegisterMsrMtrrPhysMask3: return "MsrMtrrPhysMask3";
+    case WHvX64RegisterMsrMtrrPhysMask4: return "MsrMtrrPhysMask4";
+    case WHvX64RegisterMsrMtrrPhysMask5: return "MsrMtrrPhysMask5";
+    case WHvX64RegisterMsrMtrrPhysMask6: return "MsrMtrrPhysMask6";
+    case WHvX64RegisterMsrMtrrPhysMask7: return "MsrMtrrPhysMask7";
+    case WHvX64RegisterMsrMtrrPhysMask8: return "MsrMtrrPhysMask8";
+    case WHvX64RegisterMsrMtrrPhysMask9: return "MsrMtrrPhysMask9";
+    case WHvX64RegisterMsrMtrrPhysMaskA: return "MsrMtrrPhysMaskA";
+    case WHvX64RegisterMsrMtrrPhysMaskB: return "MsrMtrrPhysMaskB";
+    case WHvX64RegisterMsrMtrrPhysMaskC: return "MsrMtrrPhysMaskC";
+    case WHvX64RegisterMsrMtrrPhysMaskD: return "MsrMtrrPhysMaskD";
+    case WHvX64RegisterMsrMtrrPhysMaskE: return "MsrMtrrPhysMaskE";
+    case WHvX64RegisterMsrMtrrPhysMaskF: return "MsrMtrrPhysMaskF";
+    case WHvX64RegisterMsrMtrrFix64k00000: return "MsrMtrrFix64k00000";
+    case WHvX64RegisterMsrMtrrFix16k80000: return "MsrMtrrFix16k80000";
+    case WHvX64RegisterMsrMtrrFix16kA0000: return "MsrMtrrFix16kA0000";
+    case WHvX64RegisterMsrMtrrFix4kC0000: return "MsrMtrrFix4kC0000";
+    case WHvX64RegisterMsrMtrrFix4kC8000: return "MsrMtrrFix4kC8000";
+    case WHvX64RegisterMsrMtrrFix4kD0000: return "MsrMtrrFix4kD0000";
+    case WHvX64RegisterMsrMtrrFix4kD8000: return "MsrMtrrFix4kD8000";
+    case WHvX64RegisterMsrMtrrFix4kE0000: return "MsrMtrrFix4kE0000";
+    case WHvX64RegisterMsrMtrrFix4kE8000: return "MsrMtrrFix4kE8000";
+    case WHvX64RegisterMsrMtrrFix4kF0000: return "MsrMtrrFix4kF0000";
+    case WHvX64RegisterMsrMtrrFix4kF8000: return "MsrMtrrFix4kF8000";
+    case WHvX64RegisterTscAux: return "TscAux";
+    case WHvX64RegisterSpecCtrl: return "SpecCtrl";
+    case WHvX64RegisterPredCmd: return "PredCmd";
+    case WHvX64RegisterApicId: return "ApicId";
+    case WHvX64RegisterApicVersion: return "ApicVersion";
+    case WHvRegisterPendingInterruption: return "PendingInterruption";
+    case WHvRegisterInterruptState: return "InterruptState";
+    case WHvRegisterPendingEvent: return "PendingEvent";
+    case WHvX64RegisterDeliverabilityNotifications: return "DeliverabilityNotifications";
+    case WHvRegisterInternalActivityState: return "InternalActivityState";
     default: return "Unknown";
     }
 }
@@ -406,8 +414,7 @@ static const WHV_REGISTER_NAME dump_regs[] = {
     /* Interrupt / Event Registers */
     WHvRegisterPendingInterruption,
     WHvRegisterInterruptState,
-    WHvRegisterPendingEvent0,
-    WHvRegisterPendingEvent1,
+    WHvRegisterPendingEvent,
     WHvX64RegisterDeliverabilityNotifications,
 };
 

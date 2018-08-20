@@ -1,8 +1,4 @@
-//
-// WHP PLATFORM  HEADERS COMPTIBLE WITH WINDOWS INSIDER RS4 BUILD 17112
-//
-
-/*
+/*++
 
 Copyright (c) Microsoft Corporation.  All rights reserved.
 
@@ -52,9 +48,11 @@ WHP_API (WHvGetCapability,
     );
 
 
+
 WHP_API (WHvCreatePartition,
     _Out_ WHV_PARTITION_HANDLE* Partition
     );
+
 
 
 WHP_API (WHvSetupPartition,
@@ -62,9 +60,11 @@ WHP_API (WHvSetupPartition,
     );
 
 
+
 WHP_API (WHvDeletePartition,
     _In_ WHV_PARTITION_HANDLE Partition
-);
+    );
+
 
 
 WHP_API (WHvGetPartitionProperty,
@@ -74,6 +74,7 @@ WHP_API (WHvGetPartitionProperty,
     _In_ UINT32 PropertyBufferSizeInBytes,
     _Out_opt_ UINT32* WrittenSizeInBytes
     );
+
 
 
 WHP_API (WHvSetPartitionProperty,
@@ -88,6 +89,7 @@ WHP_API (WHvSetPartitionProperty,
 // Memory Management
 //
 
+
 WHP_API (WHvMapGpaRange,
     _In_ WHV_PARTITION_HANDLE Partition,
     _In_ VOID* SourceAddress,
@@ -97,11 +99,13 @@ WHP_API (WHvMapGpaRange,
     );
 
 
+
 WHP_API (WHvUnmapGpaRange,
     _In_ WHV_PARTITION_HANDLE Partition,
     _In_ WHV_GUEST_PHYSICAL_ADDRESS GuestAddress,
     _In_ UINT64 SizeInBytes
     );
+
 
 
 WHP_API (WHvTranslateGva,
@@ -118,6 +122,7 @@ WHP_API (WHvTranslateGva,
 // Virtual Processors
 //
 
+
 WHP_API (WHvCreateVirtualProcessor,
     _In_ WHV_PARTITION_HANDLE Partition,
     _In_ UINT32 VpIndex,
@@ -125,10 +130,12 @@ WHP_API (WHvCreateVirtualProcessor,
     );
 
 
+
 WHP_API (WHvDeleteVirtualProcessor,
     _In_ WHV_PARTITION_HANDLE Partition,
     _In_ UINT32 VpIndex
     );
+
 
 
 WHP_API (WHvRunVirtualProcessor,
@@ -139,11 +146,13 @@ WHP_API (WHvRunVirtualProcessor,
     );
 
 
+
 WHP_API (WHvCancelRunVirtualProcessor,
     _In_ WHV_PARTITION_HANDLE Partition,
     _In_ UINT32 VpIndex,
     _In_ UINT32 Flags
     );
+
 
 
 WHP_API (WHvGetVirtualProcessorRegisters,
@@ -155,12 +164,90 @@ WHP_API (WHvGetVirtualProcessorRegisters,
     );
 
 
+
 WHP_API (WHvSetVirtualProcessorRegisters,
     _In_ WHV_PARTITION_HANDLE Partition,
     _In_ UINT32 VpIndex,
     _In_reads_(RegisterCount) const WHV_REGISTER_NAME* RegisterNames,
     _In_ UINT32 RegisterCount,
     _In_reads_(RegisterCount) const WHV_REGISTER_VALUE* RegisterValues
+    );
+
+
+
+WHP_API (WHvGetVirtualProcessorInterruptControllerState,
+    _In_ WHV_PARTITION_HANDLE Partition,
+    _In_ UINT32 VpIndex,
+    _Out_writes_bytes_to_(StateSize,*WrittenSize) VOID* State,
+    _In_ UINT32 StateSize,
+    _Out_opt_ UINT32* WrittenSize
+    );
+
+
+
+WHP_API (WHvSetVirtualProcessorInterruptControllerState,
+    _In_ WHV_PARTITION_HANDLE Partition,
+    _In_ UINT32 VpIndex,
+    _In_reads_bytes_(StateSize) const VOID* State,
+    _In_ UINT32 StateSize
+    );
+
+
+
+WHP_API (WHvRequestInterrupt,
+    _In_ WHV_PARTITION_HANDLE Partition,
+    _In_ const WHV_INTERRUPT_CONTROL* Interrupt,
+    _In_ UINT32 InterruptControlSize
+    );
+
+
+
+WHP_API (WHvGetVirtualProcessorXsaveState,
+    _In_ WHV_PARTITION_HANDLE Partition,
+    _In_ UINT32 VpIndex,
+    _Out_writes_bytes_to_(BufferSizeInBytes,*BytesWritten) VOID* Buffer,
+    _In_ UINT32 BufferSizeInBytes,
+    _Out_ UINT32* BytesWritten
+    );
+
+
+
+WHP_API (WHvSetVirtualProcessorXsaveState,
+    _In_ WHV_PARTITION_HANDLE Partition,
+    _In_ UINT32 VpIndex,
+    _In_reads_bytes_(BufferSizeInBytes) const VOID* Buffer,
+    _In_ UINT32 BufferSizeInBytes
+    );
+
+
+
+WHP_API (WHvQueryGpaRangeDirtyBitmap,
+    _In_ WHV_PARTITION_HANDLE Partition,
+    _In_ WHV_GUEST_PHYSICAL_ADDRESS GuestAddress,
+    _In_ UINT64 RangeSizeInBytes,
+    _Out_writes_bytes_to_opt_(BitmapSizeInBytes,RangeSizeInBytes / 4096 / 64) UINT64* Bitmap,
+    _In_ UINT32 BitmapSizeInBytes
+    );
+
+
+
+WHP_API (WHvGetPartitionCounters,
+    _In_ WHV_PARTITION_HANDLE Partition,
+    _In_ WHV_PARTITION_COUNTER_SET CounterSet,
+    _Out_writes_bytes_to_(BufferSizeInBytes,*BytesWritten) VOID* Buffer,
+    _In_ UINT32 BufferSizeInBytes,
+    _Out_opt_ UINT32* BytesWritten
+    );
+
+
+
+WHP_API (WHvGetVirtualProcessorCounters,
+    _In_ WHV_PARTITION_HANDLE Partition,
+    _In_ UINT32 VpIndex,
+    _In_ WHV_PROCESSOR_COUNTER_SET CounterSet,
+    _Out_writes_bytes_to_(BufferSizeInBytes,*BytesWritten) VOID* Buffer,
+    _In_ UINT32 BufferSizeInBytes,
+    _Out_opt_ UINT32* BytesWritten
     );
 
 
@@ -172,15 +259,14 @@ WHP_API (WHvSetVirtualProcessorRegisters,
 #if 0
 #pragma endregion
 #endif
-
 #endif // _WINHVAPI_H_
 
 
 
 
 
-#ifndef ext_ms_win_hyperv_hvplatform_l1_1_0_query_routines
-#define ext_ms_win_hyperv_hvplatform_l1_1_0_query_routines
+#ifndef ext_ms_win_hyperv_hvplatform_l1_1_1_query_routines
+#define ext_ms_win_hyperv_hvplatform_l1_1_1_query_routines
 
 
 
@@ -279,6 +365,54 @@ IsWHvGetVirtualProcessorRegistersPresent(
 BOOLEAN
 __stdcall
 IsWHvSetVirtualProcessorRegistersPresent(
+    VOID
+    );
+
+BOOLEAN
+__stdcall
+IsWHvGetVirtualProcessorInterruptControllerStatePresent(
+    VOID
+    );
+
+BOOLEAN
+__stdcall
+IsWHvSetVirtualProcessorInterruptControllerStatePresent(
+    VOID
+    );
+
+BOOLEAN
+__stdcall
+IsWHvRequestInterruptPresent(
+    VOID
+    );
+
+BOOLEAN
+__stdcall
+IsWHvGetVirtualProcessorXsaveStatePresent(
+    VOID
+    );
+
+BOOLEAN
+__stdcall
+IsWHvSetVirtualProcessorXsaveStatePresent(
+    VOID
+    );
+
+BOOLEAN
+__stdcall
+IsWHvQueryGpaRangeDirtyBitmapPresent(
+    VOID
+    );
+
+BOOLEAN
+__stdcall
+IsWHvGetPartitionCountersPresent(
+    VOID
+    );
+
+BOOLEAN
+__stdcall
+IsWHvGetVirtualProcessorCountersPresent(
     VOID
     );
 

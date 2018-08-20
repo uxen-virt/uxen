@@ -16,6 +16,7 @@
 #define _Out_writes_(x)
 #define _Out_writes_bytes_(x)
 #define _Out_writes_bytes_to_(x,y)
+#define _Out_writes_bytes_to_opt_(x,y)
 #define _Out_opt_
 
 #define _Inout_
