@@ -49,6 +49,10 @@
 
 //#define EMU_MICROSOFT
 
+// save/restore broken with Xsave on because the API does not export XCR0 register
+// and it's impossible to properly save/restore it. Disable until added to API
+#define XSAVE_DISABLED_UNTIL_FIXED
+
 /* vcpu dirty states */
 
 /* emulation has dirtied a subset registers in CPUState */
@@ -1702,6 +1706,21 @@ int whpx_partition_setup(void)
         ret = -EINVAL;
         goto error;
     }
+
+#ifdef XSAVE_DISABLED_UNTIL_FIXED
+    memset(&prop, 0, sizeof(WHV_PARTITION_PROPERTY));
+    prop.ProcessorXsaveFeatures.AsUINT64 = 0;
+    hr = WHvSetPartitionProperty(whpx->partition,
+        WHvPartitionPropertyCodeProcessorXsaveFeatures,
+        &prop, sizeof(WHV_PARTITION_PROPERTY));
+
+    if (FAILED(hr)) {
+        error_report("WHPX: Failed to set partition core count to %d,"
+            " hr=%08lx", (int)vm_vcpus, hr);
+        ret = -EINVAL;
+        goto error;
+    }
+#endif
 
     memset(&prop, 0, sizeof(WHV_PARTITION_PROPERTY));
     if (vm_viridian)
