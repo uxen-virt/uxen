@@ -540,12 +540,12 @@ workaround_unreliable_tsc(void)
             tscval = v.Reg64;
     }
     debug_printf("tsc value to propagate across vcpus: %"PRId64"\n", tscval);
-    v.Reg64 = tscval;
 
     i = 0;
     while (i++ < MAX_TSC_PROPAGATE_ITERS) {
         t0 = _rdtsc();
         for (vcpu = 0; vcpu < vm_vcpus; vcpu++) {
+            v.Reg64 = tscval + (_rdtsc() - t0);
             hr = whpx_set_vp_registers(vcpu, &name, 1, &v);
             if (FAILED(hr))
                 whpx_panic("failed to set TSC value: %08lx\n", hr);
