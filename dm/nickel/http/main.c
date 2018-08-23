@@ -1471,6 +1471,14 @@ static void hp_dns_proxy_check_domain_cb(void *opaque)
     struct http_ctx *hp;
 
     hp = dns->hp;
+
+    if (dns->response.cost_ms > 500)
+        HLOG4("%s lookup in %lu ms", dns->domain ? dns->domain : "(null)",
+               (unsigned long) dns->response.cost_ms);
+    else
+        HLOG5("%s lookup in %lu ms", dns->domain ? dns->domain : "(null)",
+               (unsigned long) dns->response.cost_ms);
+
     hp_put(hp);
     if ((hp->flags & HF_CLOSED))
         goto out;
@@ -3767,6 +3775,14 @@ static void dns_proxy_connect_cb(void *opaque)
     struct http_ctx *hp;
 
     hp = dns->hp;
+
+    if (dns->response.cost_ms > 500)
+        HLOG4("%s lookup in %lu ms", dns->domain ? dns->domain : "(null)",
+               (unsigned long) dns->response.cost_ms);
+    else
+        HLOG5("%s lookup in %lu ms", dns->domain ? dns->domain : "(null)",
+               (unsigned long) dns->response.cost_ms);
+
     hp_put(hp);
     if ((hp->flags & HF_CLOSED))
         goto out;
@@ -3818,6 +3834,14 @@ static void dns_direct_connect_cb(void *opaque)
     struct http_ctx *hp;
 
     hp = dns->hp;
+
+    if (dns->response.cost_ms > 500)
+        HLOG4("%s lookup in %lu ms", dns->domain ? dns->domain : "(null)",
+               (unsigned long) dns->response.cost_ms);
+    else
+        HLOG5("%s lookup in %lu ms", dns->domain ? dns->domain : "(null)",
+               (unsigned long) dns->response.cost_ms);
+
     hp_put(hp);
     if ((hp->flags & HF_CLOSED))
         goto out;
