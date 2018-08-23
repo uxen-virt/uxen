@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2017, Bromium, Inc.
+ * Copyright 2014-2018, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -549,6 +549,14 @@ static void dns_lookup_check_continue(void *opaque)
     struct ndns_data *dstate = opaque;
 
     DDNS(dstate, "");
+
+    if (dstate->response.cost_ms > 500)
+        NETLOG4("%s lookup in %lu ms", dstate->dname ? dstate->dname : "(null)",
+               (unsigned long) dstate->response.cost_ms);
+    else
+        NETLOG5("%s lookup in %lu ms", dstate->dname ? dstate->dname : "(null)",
+               (unsigned long) dstate->response.cost_ms);
+
     if (dstate->denied)
         fakedns_deny_ip(dstate->fake_ip);
     else if (!dstate->response.err)
