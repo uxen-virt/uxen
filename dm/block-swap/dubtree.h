@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -35,11 +35,24 @@ typedef void (*read_callback) (void *opaque, int result);
 typedef void *(*malloc_callback) (void *opaque, size_t sz);
 typedef void (*free_callback) (void *opaque, void *ptr);
 
+typedef struct dubtree_pending_read {
+    ioh_event ev;
+    int ioh_registered;
+    void *read_ctx;
+    TAILQ_ENTRY(dubtree_pending_read) entry;
+} dubtree_pending_read_t;
+
 typedef struct DubTree {
     critical_section write_lock;
     DubTreeHeader *header;
     volatile uint64_t *levels;
-
+    uxen_thread read_thread;
+    ioh_event read_thread_event;
+    critical_section pending_read_lock;
+    TAILQ_HEAD(, dubtree_pending_read) pending_reads;
+    bool read_thread_quit;
+    struct io_handler_queue ioh_queue;
+    WaitObjects ioh_wait_objects;
     char *fallbacks[DUBTREE_MAX_FALLBACKS + 1];
     critical_section cache_lock;
     HashTable ht;

@@ -11,13 +11,13 @@
 #include "lrucache.h"
 #include "simpletree.h"
 #include "lz4.h"
+#include <dm/aio.h>
 
 #define DUBTREE_FILE_MAGIC_MMAP 0x73776170
 
 #define DUBTREE_FILE_VERSION 12
 
 #define DUBTREE_MMAPPED_NAME "top.lvl"
-
 
 #ifndef _WIN32
 #include <aio.h>
@@ -29,9 +29,26 @@
 #include <fcntl.h>
 #endif
 
+#ifdef _WIN32
+static DWORD WINAPI dubtree_read_thread(void *opaque);
+#endif
+
 void dubtree_close(DubTree *t)
 {
     char **fb;
+
+#ifdef _WIN32
+    debug_printf("dubtree: wait for read thread to exit\n");
+    t->read_thread_quit = true;
+
+    ioh_event_set(&t->read_thread_event);
+    wait_thread(t->read_thread);
+    debug_printf("dubtree: read thread exited\n");
+
+    ioh_del_wait_object(&t->read_thread_event, &t->ioh_wait_objects);
+    ioh_cleanup_wait_objects(&t->ioh_wait_objects);
+    ioh_event_close(&t->read_thread_event);
+#endif
 
     hashtable_clear(&t->ht);
     lruCacheClose(&t->lru);
@@ -178,6 +195,20 @@ int dubtree_init(DubTree *t, char **fallbacks,
         __sync_synchronize();
     }
 
+#ifdef _WIN32
+    critical_section_init(&t->pending_read_lock);
+    TAILQ_INIT(&t->pending_reads);
+    t->read_thread_quit = false;
+    ioh_event_init(&t->read_thread_event);
+    ioh_queue_init(&t->ioh_queue);
+    ioh_init_wait_objects(&t->ioh_wait_objects);
+    ioh_add_wait_object(&t->read_thread_event, NULL, NULL, &t->ioh_wait_objects);
+
+    if (create_thread(&t->read_thread, dubtree_read_thread, (void*) t) < 0) {
+        Werr(1, "dubtree: unable to create thread!");
+    }
+#endif
+
     /* Check that shared data structure matches current version and
      * configuration. */
     if ((t->header->magic == DUBTREE_FILE_MAGIC_MMAP) &&
@@ -305,7 +336,10 @@ void decrement_counter(CallbackState *cs)
 #ifdef _WIN32
 typedef struct {
     OVERLAPPED o; // first
+    dubtree_pending_read_t pr;
+    ioh_event read_event;
     DubTree *t;
+    dubtree_handle_t *f;
     Read *first;
     int n;
     uint8_t *dst;
@@ -314,7 +348,8 @@ typedef struct {
     CallbackState *cs;
 } ReadContext;
 
-static void CALLBACK read_complete_scatter(DWORD rc, DWORD got, OVERLAPPED *o)
+static void CALLBACK
+read_complete_scatter(DWORD rc, DWORD got, OVERLAPPED *o)
 {
     int i;
     Read *rd;
@@ -339,7 +374,82 @@ static void CALLBACK read_complete_scatter(DWORD rc, DWORD got, OVERLAPPED *o)
     free(ctx);
     decrement_counter(cs);
 }
-#endif
+
+static void
+pending_read_insert(DubTree *t, ReadContext *ctx)
+{
+    dubtree_pending_read_t *pr = &ctx->pr;
+
+    critical_section_enter(&t->pending_read_lock);
+    pr->ev = ctx->o.hEvent;
+    pr->read_ctx = ctx;
+    pr->ioh_registered = 0;
+    TAILQ_INSERT_TAIL(&t->pending_reads, pr, entry);
+    critical_section_leave(&t->pending_read_lock);
+
+    /* read thread will register ioh handler */
+    ioh_event_set(&t->read_thread_event);
+}
+
+static void
+pending_read_remove(DubTree *t, ReadContext *ctx)
+{
+    dubtree_pending_read_t *pr = &ctx->pr;
+
+    ioh_del_wait_object(&pr->ev, &t->ioh_wait_objects);
+    ioh_event_close(&pr->ev);
+    critical_section_enter(&t->pending_read_lock);
+    TAILQ_REMOVE(&t->pending_reads, pr, entry);
+    critical_section_leave(&t->pending_read_lock);
+}
+
+static void
+pending_read_complete_event(void *opaque)
+{
+    ReadContext *ctx = (ReadContext*)opaque;
+    DubTree *t = ctx->t;
+    DWORD got = 0;
+
+    pending_read_remove(t, ctx);
+
+    if (!GetOverlappedResult(ctx->f, &ctx->o, &got, FALSE)) {
+        debug_printf("handle_read_event: overlapped result failed: %d\n",
+            (int)GetLastError());
+        return;
+    }
+
+    read_complete_scatter(0, got, &ctx->o); /* will free ctx */
+}
+
+static DWORD WINAPI
+dubtree_read_thread(void *opaque)
+{
+    DubTree *t = opaque;
+
+    while (!t->read_thread_quit) {
+        dubtree_pending_read_t *r;
+        int timeout = 10000;
+
+        critical_section_enter(&t->pending_read_lock);
+        TAILQ_FOREACH(r, &t->pending_reads, entry) {
+            if (!r->ioh_registered) {
+                ioh_add_wait_object(
+                    &r->ev,
+                    pending_read_complete_event,
+                    (ReadContext*)r->read_ctx,
+                    &t->ioh_wait_objects
+                );
+                r->ioh_registered = 1;
+            }
+        }
+        critical_section_leave(&t->pending_read_lock);
+        ioh_wait_for_objects(&t->ioh_queue, &t->ioh_wait_objects, NULL, &timeout, NULL);
+    }
+
+    return 0;
+}
+
+#endif /* _WIN32 */
 
 static int execute_reads(DubTree *t,
         uint8_t *dst,
@@ -361,6 +471,7 @@ static int execute_reads(DubTree *t,
     }
     ReadContext *ctx = calloc(1, sizeof(*ctx));
     ctx->t = t;
+    ctx->f = f;
     ctx->first = first;
     ctx->n = n;
     ctx->dst = dst;
@@ -378,13 +489,18 @@ static int execute_reads(DubTree *t,
     increment_counter(cs);
 
     ctx->o.Offset = first->src_offset;
-    if (!ReadFileEx(f, ctx->buf ? ctx->buf : dst + first->dst_offset, size,
-                &ctx->o, read_complete_scatter)) {
-        Werr(1, "ReadFileEx failed");
-        return -1;
+    ioh_event_init(&ctx->read_event);
+    ctx->o.hEvent = ctx->read_event;
+    if (!ReadFile(f, ctx->buf ? ctx->buf : dst + first->dst_offset, size,
+            NULL, &ctx->o)) {
+        if (GetLastError() != ERROR_IO_PENDING) {
+            Werr(1, "ReadFile failed");
+            return -1;
+        }
     }
-#else
+    pending_read_insert(t, ctx);
 
+#else
 #ifdef __APPLE__
 
     int r;
