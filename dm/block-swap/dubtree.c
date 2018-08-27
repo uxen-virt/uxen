@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -11,6 +11,7 @@
 #include "lrucache.h"
 #include "simpletree.h"
 #include "lz4.h"
+#include <dm/aio.h>
 
 #define DUBTREE_FILE_MAGIC_MMAP 0x73776170
 
@@ -18,6 +19,9 @@
 
 #define DUBTREE_MMAPPED_NAME "top.lvl"
 
+/* doesn't work on WHP because swap code is executed on vcpu thread which does not do
+ * alertable wait (and we have no control over it) */
+//#define USE_READFILE_CALLBACK
 
 #ifndef _WIN32
 #include <aio.h>
@@ -29,9 +33,35 @@
 #include <fcntl.h>
 #endif
 
+#ifdef _WIN32
+static DWORD WINAPI
+#else
+static void *
+#endif
+dubtree_read_thread(void *opaque)
+{
+    DubTree *t = opaque;
+    while (!t->read_thread_quit) {
+        int timeout = 10000;
+        ioh_wait_for_objects(&t->ioh_queue, &t->ioh_wait_objects, NULL, &timeout, NULL);
+    }
+
+    return 0;
+}
+
 void dubtree_close(DubTree *t)
 {
     char **fb;
+
+    debug_printf("dubtree: wait for read thread to exit\n");
+    t->read_thread_quit = true;
+    ioh_event_set(&t->read_thread_event);
+    wait_thread(t->read_thread);
+    debug_printf("dubtree: read thread exited\n");
+
+    ioh_del_wait_object(&t->read_thread_event, &t->ioh_wait_objects);
+    ioh_cleanup_wait_objects(&t->ioh_wait_objects);
+    ioh_event_close(&t->read_thread_event);
 
     hashtable_clear(&t->ht);
     lruCacheClose(&t->lru);
@@ -169,6 +199,16 @@ int dubtree_init(DubTree *t, char **fallbacks,
         __sync_synchronize();
     }
 
+    t->read_thread_quit = false;
+    ioh_event_init(&t->read_thread_event);
+    ioh_queue_init(&t->ioh_queue);
+    ioh_init_wait_objects(&t->ioh_wait_objects);
+    ioh_add_wait_object(&t->read_thread_event, NULL, NULL, &t->ioh_wait_objects);
+
+    if (create_thread(&t->read_thread, dubtree_read_thread, (void*) t) < 0) {
+        Werr(1, "dubtree: unable to create thread!");
+    }
+
     /* Check that shared data structure matches current version and
      * configuration. */
     if ((t->header->magic == DUBTREE_FILE_MAGIC_MMAP) &&
@@ -295,7 +335,9 @@ void decrement_counter(CallbackState *cs)
 #ifdef _WIN32
 typedef struct {
     OVERLAPPED o; // first
+    ioh_event read_event;
     DubTree *t;
+    dubtree_handle_t *f;
     Read *first;
     int n;
     uint8_t *dst;
@@ -329,7 +371,31 @@ static void CALLBACK read_complete_scatter(DWORD rc, DWORD got, OVERLAPPED *o)
     free(ctx);
     decrement_counter(cs);
 }
-#endif
+
+#ifndef USE_READFILE_CALLBACK
+static void read_complete_event(void *opaque)
+{
+    ReadContext *ctx = opaque;
+    DubTree *t = ctx->t;
+    ioh_event ev = ctx->read_event;
+    DWORD got = 0;
+
+    if (!GetOverlappedResult(ctx->f, &ctx->o, &got, FALSE)) {
+        debug_printf("handle_read_event: overlapped result failed: %d\n",
+            (int)GetLastError());
+        goto out;
+    }
+
+    read_complete_scatter(0, got, &ctx->o); /* will free ctx */
+
+out:
+    ioh_del_wait_object(&ev, &t->ioh_wait_objects);
+    ioh_event_close(&ev);
+}
+
+#endif /* !USE_READFILE_CALLBACK */
+
+#endif /* _WIN32 */
 
 static int execute_reads(DubTree *t,
         uint8_t *dst,
@@ -351,6 +417,7 @@ static int execute_reads(DubTree *t,
     }
     ReadContext *ctx = calloc(1, sizeof(*ctx));
     ctx->t = t;
+    ctx->f = f;
     ctx->first = first;
     ctx->n = n;
     ctx->dst = dst;
@@ -368,10 +435,20 @@ static int execute_reads(DubTree *t,
     increment_counter(cs);
 
     ctx->o.Offset = first->src_offset;
+#ifdef USE_READFILE_CALLBACK
     if (!ReadFileEx(f, ctx->buf ? ctx->buf : dst + first->dst_offset, size,
-                &ctx->o, read_complete_scatter)) {
-        Werr(1, "ReadFileEx failed");
-        return -1;
+            &ctx->o, read_complete_scatter)) {
+#else
+    ioh_event_init(&ctx->read_event);
+    ctx->o.hEvent = ctx->read_event;
+    ioh_add_wait_object(&ctx->o.hEvent, read_complete_event, ctx, &t->ioh_wait_objects);
+    if (!ReadFile(f, ctx->buf ? ctx->buf : dst + first->dst_offset, size,
+            NULL, &ctx->o)) {
+#endif
+        if (GetLastError() != ERROR_IO_PENDING) {
+            Werr(1, "ReadFileEx failed");
+            return -1;
+        }
     }
 #else
 

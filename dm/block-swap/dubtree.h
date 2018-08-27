@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -39,7 +39,11 @@ typedef struct DubTree {
     critical_section write_lock;
     DubTreeHeader *header;
     volatile uint64_t *levels;
-
+    uxen_thread read_thread;
+    ioh_event read_thread_event;
+    bool read_thread_quit;
+    struct io_handler_queue ioh_queue;
+    WaitObjects ioh_wait_objects;
     char *fallbacks[DUBTREE_MAX_FALLBACKS + 1];
     critical_section cache_lock;
     HashTable ht;

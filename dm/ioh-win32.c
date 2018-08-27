@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -39,6 +39,24 @@ int trace_waitobjects = 0;
 #define delay_log(fmt, ...) do { ; } while(0)
 #endif
 
+static void
+ioh_waitobjects_lock(WaitObjects *w)
+{
+#if !defined(LIBIMG)
+    if (whpx_enable)
+        critical_section_enter(&w->lock);
+#endif
+}
+
+static void
+ioh_waitobjects_unlock(WaitObjects *w)
+{
+#if !defined(LIBIMG)
+    if (whpx_enable)
+        critical_section_leave(&w->lock);
+#endif
+}
+
 void
 ioh_waitobjects_grow(WaitObjects *w)
 {
@@ -70,6 +88,13 @@ int _ioh_add_wait_object(ioh_event *event, WaitObjectFunc *func, void *opaque,
 #endif
 
     w->num++;
+
+    ioh_waitobjects_unlock(w);
+
+#if !defined(LIBIMG)
+    if (whpx_enable && interrupt)
+        ioh_wait_interrupt(w);
+#endif
 
     return 0;
 }
