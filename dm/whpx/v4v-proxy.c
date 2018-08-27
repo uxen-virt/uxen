@@ -437,9 +437,19 @@ proxy_request_bind(v4v_proxy_req_bind_t *req_bind)
     v4v_proxy_context_t *p;
     v4v_proxy_complete_bind_t complete = { };
     int err;
+    v4v_addr_t addr = req_bind->bind.ring_id.addr;
 
     /* cleanup any previously dead proxies */
     close_dead_proxies();
+
+    /* check if already bound */
+    if (get_proxy_context_for(addr)) {
+        debug_printf("proxy for domain %d port %d already exists/is bound\n",
+            addr.domain, addr.port);
+        complete.reqid = req_bind->req.id;
+        complete.bind = req_bind->bind;
+        goto complete_bind;
+    }
 
     p = calloc(1, sizeof(v4v_proxy_context_t));
 
@@ -460,7 +470,7 @@ proxy_request_bind(v4v_proxy_req_bind_t *req_bind)
     complete.bind = bind;
 
     if ((err = whpx_v4v_bind(&p->context, &bind))) {
-        debug_printf("failed to bind proxy v4v context: %d", err);
+        debug_printf("failed to bind proxy v4v context: %d, port %d\n", err, bind.ring_id.addr.port);
         complete.status = err;
         free(p);
         goto complete_bind;
@@ -471,6 +481,8 @@ proxy_request_bind(v4v_proxy_req_bind_t *req_bind)
     critical_section_init(&p->read_lock);
     critical_section_init(&p->write_lock);
     TAILQ_INIT(&p->writes);
+
+    critical_section_enter(&proxies_lock);
 
     TAILQ_INSERT_TAIL(&proxies, p, entry);
 
