@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017, Bromium, Inc.
+ * Copyright 2016-2018, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -43,7 +43,7 @@ bool UserVramMapper::init(BASIC_DISPLAY_DRIVER *bdd, PHYSICAL_ADDRESS vram_start
     KeInitializeMutex(&m_map_mutex, 0);
     InitializeListHead(&m_mappings);
 
-    PVOID vram_mem = MmMapIoSpace(vram_start, vram_size, MmNonCached);
+    PVOID vram_mem = MmMapIoSpace(vram_start, vram_size, MmCached);
 
     PMDL vram_mdl = IoAllocateMdl(vram_mem, (ULONG)vram_size, FALSE, FALSE, NULL);
     if (!vram_mdl) {
@@ -155,7 +155,7 @@ void *UserVramMapper::_map(HANDLE pid, void *userptr, bool scratch, bool nomodli
     const char *descr = scratch ? "scratch vram" : "vram";
 
     __try {
-        PVOID p = MmMapLockedPagesSpecifyCache(mdl, UserMode, MmNonCached,
+        PVOID p = MmMapLockedPagesSpecifyCache(mdl, UserMode, MmCached,
                                                userptr, FALSE, NormalPagePriority);
         if (p) {
             if (userptr && p != userptr) {
