@@ -361,7 +361,9 @@ vcpu_stopped_cb(void *opaque)
     debug_printf("vcpu%d stopped, running vcpus: %d\n", cpu->cpu_index, running_vcpus);
     if (!running_vcpus) {
         debug_printf("all vcpus stopped, reason: %d\n", shutdown_reason);
-        if (shutdown_reason == WHPX_SHUTDOWN_SUSPEND) {
+        if (shutdown_reason == WHPX_SHUTDOWN_PAUSE) {
+            vm_set_run_mode(PAUSE_VM);
+        } else if (shutdown_reason == WHPX_SHUTDOWN_SUSPEND) {
             v4v_destroy(&guest);
             vm_process_suspend(NULL);
         } else
@@ -429,22 +431,6 @@ run_vcpu(CPUState *s)
         } else {
             // should not happen with apic virt, halt is handled in HV
             assert(false);
-#if 0
-            if (s->cpu_index == 0 && !(s->eflags & IF_MASK)) {
-                debug_printf("vcpu%d halt with irqs off\n", s->cpu_index);
-                s->stopped = 1;
-                break;
-            }
-
-#ifdef DEBUG_CPU
-            debug_printf("vcpu%d: halt...\n", s->cpu_index);
-#endif
-            ret = WaitForSingleObject(extra(s)->wake_ev, INFINITE);
-            s->halted = false;
-#ifdef DEBUG_CPU
-            debug_printf("vcpu%d: wake...\n", s->cpu_index);
-#endif
-#endif
         }
     }
 
@@ -477,8 +463,7 @@ whpx_vm_destroy(void)
         whpx_vm_shutdown(WHPX_SHUTDOWN_POWEROFF);
         /* wait for cpus to exit */
         whpx_unlock_iothread();
-        while (running_vcpus)
-            Sleep(25);
+        whpx_vm_shutdown_wait();
         whpx_lock_iothread();
     }
 
@@ -579,6 +564,7 @@ whpx_vm_start(void)
     int i;
     debug_printf("vm start...\n");
 
+    shutdown_reason = 0;
     vm_time_offset = 0;
     running_vcpus = vm_vcpus;
     vm_set_run_mode(RUNNING_VM);
@@ -613,20 +599,22 @@ whpx_vm_is_paused(void)
 int
 whpx_vm_pause(void)
 {
+    whpx_vm_shutdown(WHPX_SHUTDOWN_PAUSE);
+    whpx_vm_shutdown_wait();
     viridian_timers_pause();
     vm_paused = 1;
 
-    //FIXME: implement more
     return 0;
 }
 
 int
 whpx_vm_unpause(void)
 {
-    viridian_timers_resume();
-    vm_paused = 0;
-
-    //FIXME: implement more
+    if (vm_paused) {
+        viridian_timers_resume();
+        whpx_vm_start();
+        vm_paused = 0;
+    }
     return 0;
 }
 
@@ -1095,6 +1083,15 @@ whpx_vm_shutdown(int reason)
         qemu_cpu_kick(cpu);
         cpu = cpu->next_cpu;
     }
+
+    return 0;
+}
+
+int
+whpx_vm_shutdown_wait(void)
+{
+    while (running_vcpus)
+        Sleep(25);
 
     return 0;
 }

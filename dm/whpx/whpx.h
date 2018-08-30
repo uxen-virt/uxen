@@ -82,6 +82,7 @@ int whpx_write_pages(struct filebuf *f);
 #define WHPX_SHUTDOWN_REBOOT 1
 #define WHPX_SHUTDOWN_SUSPEND 2
 #define WHPX_SHUTDOWN_CRASH 3
+#define WHPX_SHUTDOWN_PAUSE 100
 
 int whpx_early_init(void);
 
@@ -89,6 +90,7 @@ int whpx_vm_init(const char *loadvm, int restore_mode);
 int whpx_vm_start(void);
 int whpx_vm_resume(void);
 int whpx_vm_shutdown(int reason);
+int whpx_vm_shutdown_wait(void);
 int whpx_vm_get_context(void *buffer, size_t buffer_sz);
 int whpx_vm_set_context(void *buffer, size_t buffer_sz);
 
