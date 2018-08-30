@@ -36,6 +36,9 @@
 #include <public/sched.h>
 #endif
 
+#undef warn
+#define warn debug_printf
+
 struct domain dom0;
 
 //#define V4V_DEBUG

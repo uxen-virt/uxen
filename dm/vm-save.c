@@ -2412,7 +2412,6 @@ vm_save_execute(void)
             filebuf_close(f);
 #ifdef _WIN32
             char *temp = vm_save_file_temp_filename(vm_save_info.filename);
-            debug_printf("ZONK rename %s => %s\n", temp, vm_save_info.filename);
             if (!MoveFileEx(temp, vm_save_info.filename, MOVEFILE_REPLACE_EXISTING))
                 debug_printf("MoveFile failed: %x\n", (int)GetLastError());
 #endif
