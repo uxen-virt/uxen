@@ -12,6 +12,7 @@
 #include <asm/apic.h>
 #include <mach_apic.h>
 #include <asm/setup.h>
+#include <asm/hvm/pvnested.h>
 
 #include "cpu.h"
 
@@ -279,6 +280,10 @@ void __cpuinit generic_identify(struct cpuinfo_x86 * c)
 	}
 
 	early_intel_workaround(c);
+
+#if defined(__x86_64__)
+        pvnested_cpu_fixup(c);
+#endif  /* __x86_64__ */
 
 #ifdef CONFIG_X86_HT
 	c->phys_proc_id = (cpuid_ebx(1) >> 24) & 0xff;

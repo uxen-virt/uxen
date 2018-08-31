@@ -65,6 +65,7 @@
 #include <asm/setup.h>
 #include <xen/cpu.h>
 #include <xen/symbols.h>
+#include <asm/hvm/pvnested.h>
 
 #include <uxen/uxen.h>
 #include <uxen/uxen_desc.h>
@@ -707,6 +708,10 @@ __uxen_start_xen)(
 #else   /* __UXEN__ */
     asm volatile ( "mov %%cr4,%0" : "=r" (this_cpu(cr4)) );
 #endif  /* __UXEN__ */
+
+#if defined(__x86_64__)
+    pvnested_setup();
+#endif  /* __x86_64__ */
 
     smp_prepare_boot_cpu();
 
