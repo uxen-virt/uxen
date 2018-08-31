@@ -862,10 +862,14 @@ static void sync_host_vmcs_state(struct vcpu *v)
     }
 
     cr = read_cr4_cpu();
+    if (pvnested)
+        cr |= X86_CR4_VMXE;
     if (this_cpu(cr4) != cr) {
         printk("%s:%d: cr4 host %"PRIx64" vmcs %lx\n", __FUNCTION__,
                host_processor_id(), cr, this_cpu(cr4));
         this_cpu(cr4) = cr;
+        if (pvnested)
+            cr &= ~X86_CR4_VMXE;
         __vmwrite(HOST_CR4, cr);
     }
 

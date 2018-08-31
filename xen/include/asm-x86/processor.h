@@ -335,6 +335,15 @@ static inline unsigned long read_cr4_cpu(void)
 static inline void write_cr4(unsigned long val)
 {
     this_cpu(cr4) = val;
+
+#if defined(__x86_64__)
+    {
+        extern bool_t pvnested;
+        if (pvnested)
+            val &= ~X86_CR4_VMXE;
+    }
+#endif  /* __x86_64__ */
+
     asm volatile ( "mov %0,%%cr4" : : "r" (val) );
 }
 
