@@ -9,6 +9,9 @@
 
 #if defined(__x86_64__)
 
+#include <pvnested-api/pvnested-constants.h>
+#include <pvnested-api/pvnested-structures.h>
+
 extern bool_t pvnested;
 
 void pvnested_setup(void);
