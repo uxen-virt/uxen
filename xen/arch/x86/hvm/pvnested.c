@@ -28,6 +28,32 @@ pvnested_setup(void)
         sig3 != _FCC('V', 'B', 'o', 'x'))
         return;
 
+    if (pvnested_vmx_info.pvi_sig != PVNESTED_VMX_INFO_SIG_FILLED) {
+        uint64_t rax, rbx, rcx = 0, rdx = 0;
+
+        ASSERT(pvnested_vmx_info.pvi_sig == PVNESTED_VMX_INFO_SIG_1);
+
+        rax = PVNESTED_CPUID_VMX_INFO;
+        rbx = (uintptr_t)&pvnested_vmx_info;
+        cpuid64(rax, rbx, rcx, rdx);
+
+        if (rax != 1) {
+            printk(XENLOG_ERR "%s: PVNESTED_CPUID_VMX_INFO failed: %"PRIx64"\n",
+                   __FUNCTION__, rax);
+            return;
+        }
+
+        if (pvnested_vmx_info.pvi_sig != PVNESTED_VMX_INFO_SIG_FILLED) {
+            printk(XENLOG_ERR
+                   "%s: PVNESTED_CPUID_VMX_INFO mismatch sig: %x\n",
+                   __FUNCTION__, pvnested_vmx_info.pvi_sig);
+            return;
+        }
+
+        printk(XENLOG_INFO "%s: PVNESTED_CPUID_VMX_INFO api version: %x\n",
+               __FUNCTION__, pvnested_vmx_info.pvi_version);
+    }
+
     pvnested = 1;
 }
 

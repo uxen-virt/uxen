@@ -269,6 +269,7 @@ XEN_SRCS += arch/x86/hvm/nestedhvm.c
 XEN_SRCS += arch/x86/hvm/pci_emul.c
 XEN_SRCS += arch/x86/hvm/pmtimer.c
 $(X86_64_only)XEN_SRCS += arch/x86/hvm/pvnested.c
+$(X86_64_only)XEN_SRCS += arch/x86/hvm/pvnested-asm.S
 XEN_SRCS += arch/x86/hvm/rtc.c
 XEN_SRCS += arch/x86/hvm/svm/asid.c
 XEN_SRCS += arch/x86/hvm/svm/emulate.c

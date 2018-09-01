@@ -14,6 +14,8 @@
 
 extern bool_t pvnested;
 
+extern volatile struct pvnested_vmx_info pvnested_vmx_info;
+
 void pvnested_setup(void);
 struct cpuinfo_x86;
 void pvnested_cpu_fixup(struct cpuinfo_x86 *);

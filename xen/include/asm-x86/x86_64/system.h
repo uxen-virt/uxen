@@ -50,4 +50,13 @@
 #define mb()                    \
     asm volatile ( "mfence" : : : "memory" )
 
+#define cpuid64(_rax, _rbx, _rcx, _rdx)         \
+    asm volatile("cpuid"                        \
+                 : "+a" (_rax),                 \
+                   "+b" (_rbx),                 \
+                   "+c" (_rcx),                 \
+                   "+d" (_rdx)                  \
+                 :: "cc"                        \
+        )
+
 #endif /* __X86_64_SYSTEM_H__ */
