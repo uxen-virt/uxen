@@ -25,4 +25,10 @@
 #define PVNESTED_VMX_INFO_REVISION_ID 0x59f4b250
 /* NOTE: must be 31 bit */
 
+#define PVNESTED_CPUID_VMXON 0x4efa861f
+/* vmxon
+ * RBX: maddr of vmxon region
+ * =RAX: 1 on success
+ */
+
 #endif  /* __PVNESTED_CONSTANTS__ */

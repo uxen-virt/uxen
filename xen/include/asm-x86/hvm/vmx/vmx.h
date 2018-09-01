@@ -410,6 +410,10 @@ static inline int __vmxon(u64 addr)
 
     return rc;
 }
+#if defined(__x86_64__)
+#define __vmxon(addr)                                   \
+    (!pvnested) ? __vmxon(addr) : pvnested_vmxon(addr)
+#endif  /* __x86_64__ */
 
 void vmx_inject_hw_exception(int trap, int error_code);
 void vmx_inject_extint(int trap);

@@ -124,3 +124,21 @@ pvnested_wrmsrl(uint32_t msr, uint64_t value)
         break;
     }
 }
+
+int
+pvnested_vmxon(u64 addr)
+{
+    uint64_t rax, rbx, rcx = 0, rdx = 0;
+
+    rax = PVNESTED_CPUID_VMXON;
+    rbx = addr;
+    cpuid64(rax, rbx, rcx, rdx);
+
+    if (rax != 1) {
+        printk(XENLOG_ERR "%s: PVNESTED_CPUID_VMXON failed: %"PRIx64"\n",
+               __FUNCTION__, rax);
+        return -2;              /* #UD or #GP */
+    }
+
+    return 0;
+}
