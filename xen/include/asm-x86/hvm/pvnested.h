@@ -24,6 +24,7 @@ void pvnested_rdmsrl(uint32_t msr, uint64_t *value);
 void pvnested_wrmsrl(uint32_t msr, uint64_t value);
 
 int pvnested_vmxon(u64 addr);
+void pvnested_vmxoff(void);
 
 void pvnested_invept(int type, u64 eptp, u64 gpa);
 

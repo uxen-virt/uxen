@@ -31,6 +31,10 @@
  * =RAX: 1 on success
  */
 
+#define PVNESTED_CPUID_VMXOFF 0x4eb7e472
+/* vmxoff
+ */
+
 #define PVNESTED_CPUID_INVEPT 0x4e32f567
 /* invept
  * RBX: type (INVEPT_{SINGLE,ALL}_CONTEXT)

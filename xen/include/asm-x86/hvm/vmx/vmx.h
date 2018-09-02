@@ -396,6 +396,10 @@ static inline void __vmxoff(void)
         VMXOFF_OPCODE
         : : : "memory" );
 }
+#if defined(__x86_64__)
+#define __vmxoff()                                      \
+    (!pvnested) ? __vmxoff() : pvnested_vmxoff()
+#endif  /* __x86_64__ */
 
 static inline int __vmxon(u64 addr)
 {

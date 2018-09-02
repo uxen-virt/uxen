@@ -144,6 +144,15 @@ pvnested_vmxon(u64 addr)
 }
 
 void
+pvnested_vmxoff(void)
+{
+    uint64_t rax, rbx = 0, rcx = 0, rdx = 0;
+
+    rax = PVNESTED_CPUID_VMXOFF;
+    cpuid64(rax, rbx, rcx, rdx);
+}
+
+void
 pvnested_invept(int type, u64 eptp, u64 gpa)
 {
     uint64_t rax, rbx, rcx, rdx;
