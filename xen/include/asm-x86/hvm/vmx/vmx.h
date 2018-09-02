@@ -28,6 +28,7 @@
 #include <asm/hvm/support.h>
 #include <asm/hvm/trace.h>
 #include <asm/hvm/vmx/vmcs.h>
+#include <asm/hvm/pvnested.h>
 #include <attoxen-api/ax_constants.h>
 
 typedef union {
@@ -332,6 +333,10 @@ static inline void __invept(int type, u64 eptp, u64 gpa)
                    : "a" (&operand), "c" (type)
                    : "memory" );
 }
+#if defined(__x86_64__)
+#define __invept(type, eptp, gpa)                                       \
+    (!pvnested) ? __invept(type, eptp, gpa) : pvnested_invept(type, eptp, gpa)
+#endif  /* __x86_64__ */
 
 static inline void __invvpid(int type, u16 vpid, u64 gva)
 {

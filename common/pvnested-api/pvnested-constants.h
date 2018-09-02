@@ -31,4 +31,11 @@
  * =RAX: 1 on success
  */
 
+#define PVNESTED_CPUID_INVEPT 0x4e32f567
+/* invept
+ * RBX: type (INVEPT_{SINGLE,ALL}_CONTEXT)
+ * RCX: eptp
+ * RDX: gpa
+ */
+
 #endif  /* __PVNESTED_CONSTANTS__ */

@@ -142,3 +142,15 @@ pvnested_vmxon(u64 addr)
 
     return 0;
 }
+
+void
+pvnested_invept(int type, u64 eptp, u64 gpa)
+{
+    uint64_t rax, rbx, rcx, rdx;
+
+    rax = PVNESTED_CPUID_INVEPT;
+    rbx = type;
+    rcx = eptp;
+    rdx = gpa;
+    cpuid64(rax, rbx, rcx, rdx);
+}
