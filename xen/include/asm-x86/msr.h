@@ -35,6 +35,12 @@ static inline void wrmsrl(unsigned int msr, __u64 val)
         wrmsr(msr, lo, hi);
 }
 
+#if !defined(__x86_64__)
+#define pvnested 0
+static inline void pvnested_rdmsrl(uint32_t msr, uint64_t *value) { }
+static inline void pvnested_wrmsrl(uint32_t msr, uint64_t value) { }
+#endif  /* __x86_64__ */
+
 extern bool_t pv_msr;
 
 #define pv_rdmsrl(msr, var, vcpu) do {          \
@@ -42,6 +48,18 @@ extern bool_t pv_msr;
             rdmsrl(msr, var);                   \
         else if (ax_present)                    \
             ax_vmcs_x_rdmsrl(vcpu, msr, &var);  \
+        else if (pvnested)                      \
+            pvnested_rdmsrl(msr, &var);         \
+        else                                    \
+            var = 0;                            \
+    } while (0)
+
+#define pv_rdmsr(msr, low, high, vcpu) do {     \
+        uint64_t val = 0;                       \
+        pv_rdmsrl(msr, val, vcpu);              \
+        low = (uint32_t)val;                    \
+        high = (uint32_t)(val >> 32);           \
+        (void)low; (void)high;                  \
     } while (0)
 
 #define pv_wrmsrl(msr, val, vcpu) do {          \
@@ -49,6 +67,8 @@ extern bool_t pv_msr;
             wrmsrl(msr, val);                   \
         else if (ax_present)                    \
             ax_vmcs_x_wrmsrl(vcpu, msr, val);   \
+        else if (pvnested)                      \
+            pvnested_wrmsrl(msr, val);          \
     } while (0)
 
 /* rdmsr with exception handling */

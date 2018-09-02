@@ -20,6 +20,9 @@ void pvnested_setup(void);
 struct cpuinfo_x86;
 void pvnested_cpu_fixup(struct cpuinfo_x86 *);
 
+void pvnested_rdmsrl(uint32_t msr, uint64_t *value);
+void pvnested_wrmsrl(uint32_t msr, uint64_t value);
+
 #endif  /* __x86_64__ */
 
 #endif  /* __ASM_HVM_PVNESTED_H__ */

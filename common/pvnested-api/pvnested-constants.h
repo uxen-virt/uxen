@@ -22,4 +22,7 @@
 
 #define PVNESTED_VMX_INFO_SIG_FILLED 0x12b622be
 
+#define PVNESTED_VMX_INFO_REVISION_ID 0x59f4b250
+/* NOTE: must be 31 bit */
+
 #endif  /* __PVNESTED_CONSTANTS__ */

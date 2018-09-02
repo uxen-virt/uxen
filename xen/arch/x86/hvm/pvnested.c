@@ -52,6 +52,8 @@ pvnested_setup(void)
 
         printk(XENLOG_INFO "%s: PVNESTED_CPUID_VMX_INFO api version: %x\n",
                __FUNCTION__, pvnested_vmx_info.pvi_version);
+
+        pv_msr = 1;
     }
 
     pvnested = 1;
@@ -63,4 +65,62 @@ pvnested_cpu_fixup(struct cpuinfo_x86 *c)
 
     if (pvnested)
         set_bit(X86_FEATURE_VMXE, &c->x86_capability);
+}
+
+void
+pvnested_rdmsrl(uint32_t msr, uint64_t *value)
+{
+
+    switch (msr) {
+    case MSR_IA32_VMX_CR0_FIXED0:
+        *value = pvnested_vmx_info.pvi_vmx_cr0_fixed0;
+        break;
+    case MSR_IA32_VMX_CR0_FIXED1:
+        *value = pvnested_vmx_info.pvi_vmx_cr0_fixed1;
+        break;
+    case IA32_FEATURE_CONTROL_MSR:
+        *value = pvnested_vmx_info.pvi_feature_control;
+        break;
+    case MSR_IA32_VMX_BASIC:
+        *value = pvnested_vmx_info.pvi_vmx_basic;
+        break;
+    case MSR_IA32_VMX_EPT_VPID_CAP:
+        *value = pvnested_vmx_info.pvi_vmx_ept_vpid_cap;
+        break;
+    case MSR_IA32_VMX_PINBASED_CTLS:
+        *value = pvnested_vmx_info.pvi_vmx_pinbased_ctls;
+        break;
+    case MSR_IA32_VMX_PROCBASED_CTLS:
+        *value = pvnested_vmx_info.pvi_vmx_procbased_ctls;
+        break;
+    case MSR_IA32_VMX_PROCBASED_CTLS2:
+        *value = pvnested_vmx_info.pvi_vmx_procbased_ctls2;
+        break;
+    case MSR_IA32_VMX_TRUE_PROCBASED_CTLS:
+        *value = pvnested_vmx_info.pvi_vmx_true_procbased_ctls;
+        break;
+    case MSR_IA32_VMX_EXIT_CTLS:
+        *value = pvnested_vmx_info.pvi_vmx_exit_ctls;
+        break;
+    case MSR_IA32_VMX_ENTRY_CTLS:
+        *value = pvnested_vmx_info.pvi_vmx_entry_ctls;
+        break;
+    default:
+        rdmsrl(msr, *value);
+        break;
+    }
+}
+
+void
+pvnested_wrmsrl(uint32_t msr, uint64_t value)
+{
+
+    switch (msr) {
+    case IA32_FEATURE_CONTROL_MSR:
+        /* noop */
+        break;
+    default:
+        wrmsrl(msr, value);
+        break;
+    }
 }

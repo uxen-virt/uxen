@@ -78,6 +78,10 @@ void ax_vmcs_x_wrmsrl(struct vcpu *v, uint32_t msr, uint64_t value)
     case MSR_IA32_SPEC_CTRL:
         x->msr_spec_ctrl = value;
         return;
+
+    case IA32_FEATURE_CONTROL_MSR:
+        wrmsrl(msr, value);
+        break;
     }
 }
 
@@ -110,6 +114,20 @@ void ax_vmcs_x_rdmsrl(struct vcpu *v, uint32_t msr, uint64_t *value)
 
     case MSR_IA32_SPEC_CTRL:
         *value = x->msr_spec_ctrl;
+        return;
+
+    case MSR_IA32_VMX_CR0_FIXED0:
+    case MSR_IA32_VMX_CR0_FIXED1:
+    case IA32_FEATURE_CONTROL_MSR:
+    case MSR_IA32_VMX_BASIC:
+    case MSR_IA32_VMX_EPT_VPID_CAP:
+    case MSR_IA32_VMX_PINBASED_CTLS:
+    case MSR_IA32_VMX_PROCBASED_CTLS:
+    case MSR_IA32_VMX_PROCBASED_CTLS2:
+    case MSR_IA32_VMX_TRUE_PROCBASED_CTLS:
+    case MSR_IA32_VMX_EXIT_CTLS:
+    case MSR_IA32_VMX_ENTRY_CTLS:
+        rdmsrl(msr, *value);
         return;
     }
 }

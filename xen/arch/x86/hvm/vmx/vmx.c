@@ -82,6 +82,7 @@
 #endif  /* __UXEN_NOT_YET__ */
 #include <asm/xstate.h>
 #include <asm/hvm/xen_pv.h>
+#include <asm/hvm/pvnested.h>
 
 enum handler_return { HNDL_done, HNDL_unhandled, HNDL_exception_raised };
 

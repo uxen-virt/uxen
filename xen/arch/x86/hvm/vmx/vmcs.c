@@ -59,6 +59,7 @@
 #include <asm/hvm/xen_pv.h>
 #include <asm/shadow.h>
 #include <asm/tboot.h>
+#include <asm/hvm/pvnested.h>
 #include <attoxen-api/ax_attovm.h>
 
 #ifndef __UXEN_NOT_YET__
@@ -145,7 +146,7 @@ static u32 adjust_vmx_controls(
 {
     u32 vmx_msr_low, vmx_msr_high, ctl = ctl_min | ctl_opt;
 
-    rdmsr(msr, vmx_msr_low, vmx_msr_high);
+    pv_rdmsr(msr, vmx_msr_low, vmx_msr_high, NULL);
 
     ctl &= vmx_msr_high; /* bit == 0 in high word ==> must be zero */
     ctl |= vmx_msr_low;  /* bit == 1 in low word  ==> must be one  */
@@ -179,7 +180,7 @@ static int vmx_init_vmcs_config(void)
     u32 _vmx_vmentry_control;
     bool_t mismatch = 0;
 
-    rdmsr(MSR_IA32_VMX_BASIC, vmx_basic_msr_low, vmx_basic_msr_high);
+    pv_rdmsr(MSR_IA32_VMX_BASIC, vmx_basic_msr_low, vmx_basic_msr_high, NULL);
 
     min = (PIN_BASED_EXT_INTR_MASK |
            PIN_BASED_NMI_EXITING);
@@ -240,7 +241,7 @@ static int vmx_init_vmcs_config(void)
     if ( _vmx_secondary_exec_control & (SECONDARY_EXEC_ENABLE_EPT |
                                         SECONDARY_EXEC_ENABLE_VPID) )
     {
-        rdmsrl(MSR_IA32_VMX_EPT_VPID_CAP, _vmx_ept_vpid_cap);
+        pv_rdmsrl(MSR_IA32_VMX_EPT_VPID_CAP, _vmx_ept_vpid_cap, NULL);
 
         /*
          * Additional sanity checking before using EPT:
@@ -277,7 +278,7 @@ static int vmx_init_vmcs_config(void)
         uint32_t must_be_one, must_be_zero, msr = MSR_IA32_VMX_PROCBASED_CTLS;
         if ( vmx_basic_msr_high & (1u << 23) )
             msr = MSR_IA32_VMX_TRUE_PROCBASED_CTLS;
-        rdmsr(msr, must_be_one, must_be_zero);
+        pv_rdmsr(msr, must_be_one, must_be_zero, NULL);
         if ( must_be_one & (CPU_BASED_INVLPG_EXITING |
                             CPU_BASED_CR3_LOAD_EXITING |
                             CPU_BASED_CR3_STORE_EXITING) )
@@ -702,8 +703,8 @@ vmx_cpu_up(enum hvmon hvmon_mode)
      * the requred CRO fixed bits in VMX operation. 
      */
     cr0 = read_cr0();
-    rdmsrl(MSR_IA32_VMX_CR0_FIXED0, vmx_cr0_fixed0);
-    rdmsrl(MSR_IA32_VMX_CR0_FIXED1, vmx_cr0_fixed1);
+    pv_rdmsrl(MSR_IA32_VMX_CR0_FIXED0, vmx_cr0_fixed0, NULL);
+    pv_rdmsrl(MSR_IA32_VMX_CR0_FIXED1, vmx_cr0_fixed1, NULL);
     vmx_cr0_fixed0 &= (u32)-1;
     vmx_cr0_fixed1 &= (u32)-1;
     if ( (~cr0 & vmx_cr0_fixed0) || (cr0 & ~vmx_cr0_fixed1) )
@@ -714,7 +715,7 @@ vmx_cpu_up(enum hvmon hvmon_mode)
         return -EINVAL;
     }
 
-    rdmsr(IA32_FEATURE_CONTROL_MSR, eax, edx);
+    pv_rdmsr(IA32_FEATURE_CONTROL_MSR, eax, edx, NULL);
 
     bios_locked = !!(eax & IA32_FEATURE_CONTROL_MSR_LOCK);
     if ( bios_locked )
@@ -733,7 +734,7 @@ vmx_cpu_up(enum hvmon hvmon_mode)
         eax |= IA32_FEATURE_CONTROL_MSR_ENABLE_VMXON_OUTSIDE_SMX;
         if ( test_bit(X86_FEATURE_SMXE, &boot_cpu_data.x86_capability) )
             eax |= IA32_FEATURE_CONTROL_MSR_ENABLE_VMXON_INSIDE_SMX;
-        wrmsr(IA32_FEATURE_CONTROL_MSR, eax, 0);
+        pv_wrmsrl(IA32_FEATURE_CONTROL_MSR, eax, NULL);
     }
 
     if ( (rc = vmx_init_vmcs_config()) != 0 )
