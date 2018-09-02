@@ -51,7 +51,8 @@ void ax_vmcs_x_flags_set(struct vcpu *v, uint64_t val)
 static inline
 void ax_vmcs_x_wrmsrl(struct vcpu *v, uint32_t msr, uint64_t value)
 {
-    ax_vmcs_extensions_v1_t *x = AX_VMCS_EXTENSIONS_V1(v->arch.hvm_vmx.vmcs);
+    ax_vmcs_extensions_v1_t *x =
+        v ? AX_VMCS_EXTENSIONS_V1(v->arch.hvm_vmx.vmcs) : NULL;
 
     switch (msr) {
     case MSR_SHADOW_GS_BASE:
@@ -83,7 +84,8 @@ void ax_vmcs_x_wrmsrl(struct vcpu *v, uint32_t msr, uint64_t value)
 static inline
 void ax_vmcs_x_rdmsrl(struct vcpu *v, uint32_t msr, uint64_t *value)
 {
-    ax_vmcs_extensions_v1_t *x = AX_VMCS_EXTENSIONS_V1(v->arch.hvm_vmx.vmcs);
+    ax_vmcs_extensions_v1_t *x =
+        v ? AX_VMCS_EXTENSIONS_V1(v->arch.hvm_vmx.vmcs) : NULL;
 
     switch (msr) {
     case MSR_SHADOW_GS_BASE:

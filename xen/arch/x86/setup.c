@@ -149,6 +149,8 @@ struct cpuinfo_x86 __read_mostly boot_cpu_data = { 0, 0, 0, 0, -1 };
 
 unsigned long __read_mostly mmu_cr4_features = X86_CR4_PSE | X86_CR4_PGE | X86_CR4_PAE;
 
+bool_t __read_mostly pv_msr = 0;
+
 #ifndef __UXEN__
 bool_t __initdata acpi_disabled;
 bool_t __initdata acpi_force;
