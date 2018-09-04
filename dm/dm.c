@@ -143,6 +143,7 @@ uint64_t log_ratelimit_guest_ms = 0;
 uint64_t whpx_enable = 0;
 uint64_t whpx_perf_stats = 0;
 uint64_t whpx_reftsc = 1;
+uint64_t whpx_shallow_save = 1;
 
 static void
 usage(const char *progname)

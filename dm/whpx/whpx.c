@@ -1008,9 +1008,11 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
     ret = whpx_create_vm_vcpus();
     if (ret)
       return ret;
-    ret = whpx_create_vm_memory(vm_mem_mb);
-    if (ret)
-        return ret;
+    if (vm_restore_mode == VM_RESTORE_NONE) {
+        ret = whpx_create_vm_memory(vm_mem_mb);
+        if (ret)
+            return ret;
+    }
 
     extern void whpx_v4v_proxy_init(void);
     whpx_v4v_proxy_init();

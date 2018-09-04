@@ -98,5 +98,6 @@ extern const char *serial_devices[MAX_SERIAL_PORTS];
 extern uint64_t whpx_enable;
 extern uint64_t whpx_perf_stats;
 extern uint64_t whpx_reftsc;
+extern uint64_t whpx_shallow_save;
 
 #endif	/* _DM_H_ */

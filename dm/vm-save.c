@@ -1585,20 +1585,21 @@ load_cuckoo_pages(struct filebuf *f, int reusing_vm, int simple_mode)
 #endif /* SAVE_CUCKOO_ENABLED */
 
 static int
-load_whp_pages(struct filebuf *f, int restore_mode)
+load_whp_pages(struct filebuf *f, int restore_mode, struct xc_save_whp_pages *swhp)
 {
     int ret;
+    int no_pages = swhp->no_pages;
 
     debug_printf("load whp pages\n");
     if (restore_mode == VM_RESTORE_CLONE) {
-        ret = whpx_clone_pages(f, vm_template_uuid);
+        ret = whpx_clone_pages(f, vm_template_uuid, no_pages);
         if (!ret) {
             if (!vm_has_template_uuid)
                 vm_has_template_uuid = 1;
             //restore_mode = VM_RESTORE_NORMAL;
         }
     } else
-        ret = whpx_read_pages(f);
+        ret = whpx_read_pages(f, no_pages);
 
     return ret;
 }
@@ -1797,7 +1798,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
             uxenvm_load_read_struct(f, s_whppages, marker, ret, err_msg, out);
             uxenvm_check_restore_clone(restore_mode);
             uxenvm_check_mapcache_init();
-            ret = load_whp_pages(f, restore_mode);
+            ret = load_whp_pages(f, restore_mode, &s_whppages);
             if (ret)
                 goto out;
             break;
@@ -2512,7 +2513,7 @@ vm_restore_memory(void)
 #endif
         case XC_SAVE_ID_WHP_PAGES:
             uxenvm_load_read_struct(f, s_whppages, marker, ret, &err_msg, out);
-            ret = load_whp_pages(f, vm_restore_mode);
+            ret = load_whp_pages(f, vm_restore_mode, &s_whppages);
             goto out;
         default:
             ret = uxenvm_load_batch(f, marker, pfn_type, pfn_err, pfn_info,

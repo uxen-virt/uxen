@@ -148,6 +148,7 @@ struct xc_save_clock_info {
 struct xc_save_whp_pages {
     int32_t marker;
     uint32_t size;
+    uint32_t no_pages;
     uint8_t data[];
 };
 
