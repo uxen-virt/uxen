@@ -270,6 +270,7 @@ int ax_setup(void)
     return 0;
 }
 
+uint64_t ax_cpuid_pv_vmaccess = AX_CPUID_PV_VMACCESS;
 int ax_pv_vmcs_setup(void)
 {
     uint64_t rax, rbx, rcx, rdx;
@@ -277,7 +278,7 @@ int ax_pv_vmcs_setup(void)
 
     if (!ax_has_pv_vmcs) return 0;
 
-    rax = AX_CPUID_PV_VMACCESS;
+    rax = ax_cpuid_pv_vmaccess;
     rbx = 1;
 
     if (!patched

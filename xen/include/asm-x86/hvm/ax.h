@@ -26,6 +26,7 @@ extern int ax_present_intel;
 extern int ax_present_amd;
 extern int ax_pv_ept;
 extern int ax_has_pv_vmcs;
+extern uint64_t ax_cpuid_pv_vmaccess;
 extern int ax_has_attovm;
 extern int ax_pv_vmcs_enabled;
 extern int ax_l1_invlpg_intercept;
