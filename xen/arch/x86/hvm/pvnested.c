@@ -159,6 +159,30 @@ pvnested_vmxoff(void)
 }
 
 void
+pvnested_vmptrld(uint64_t addr)
+{
+    uint64_t rax, rbx, rcx, rdx;
+
+    rax = PVNESTED_CPUID_VMPTRLD;
+    rbx = addr;
+    rcx = 0;
+    rdx = 0;
+    cpuid64(rax, rbx, rcx, rdx);
+}
+
+void
+pvnested_vmpclear(uint64_t addr)
+{
+    uint64_t rax, rbx, rcx, rdx;
+
+    rax = PVNESTED_CPUID_VMPCLEAR;
+    rbx = addr;
+    rcx = 0;
+    rdx = 0;
+    cpuid64(rax, rbx, rcx, rdx);
+}
+
+void
 pvnested_invept(int type, u64 eptp, u64 gpa)
 {
     uint64_t rax, rbx, rcx, rdx;

@@ -245,6 +245,10 @@ static inline void __vmptrld(u64 addr)
                    : "a" (&addr)
                    : "memory");
 }
+#if defined(__x86_64__)
+#define __vmptrld(addr)                                   \
+    (!pvnested) ? __vmptrld(addr) : pvnested_vmptrld(addr)
+#endif  /* __x86_64__ */
 
 static inline void __vmptrst(u64 addr)
 {
@@ -265,6 +269,10 @@ static inline void __vmpclear(u64 addr)
                    : "a" (&addr)
                    : "memory");
 }
+#if defined(__x86_64__)
+#define __vmpclear(addr)                                   \
+    (!pvnested) ? __vmpclear(addr) : pvnested_vmpclear(addr)
+#endif  /* __x86_64__ */
 
 unsigned long __vmread_attovm(unsigned long field);
 unsigned long __vmread_attovm_safe(unsigned long field, int *error);

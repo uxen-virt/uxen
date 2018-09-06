@@ -35,6 +35,18 @@
 /* vmxoff
  */
 
+#define PVNESTED_CPUID_VMPTRLD 0x4e45d0b9
+/* vmptrld
+ * RBX: maddr of vmcs
+ * =RAX: 1 on success
+ */
+
+#define PVNESTED_CPUID_VMPCLEAR 0x4e1d0a0f
+/* vmpclear
+ * RBX: maddr of vmcs
+ * =RAX: 1 on success
+ */
+
 #define PVNESTED_CPUID_INVEPT 0x4e32f567
 /* invept
  * RBX: type (INVEPT_{SINGLE,ALL}_CONTEXT)
