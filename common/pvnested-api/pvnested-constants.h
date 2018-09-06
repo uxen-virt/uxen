@@ -42,4 +42,30 @@
  * RDX: gpa
  */
 
+#define PVNESTED_CPUID_PV_VMACCESS 0x4e455c58
+/* setup pv vmread/vmwrite access
+ * RBX: 1 enable, 0 disable
+ * RCX: 0 or pv_vmread va (va to patch on 1st call)
+ * RDX: 0 or pv_wmwrite va (va to patch on 1st call)
+ * =RAX: 1
+ * =RBX: per-pcpu context
+ */
+
+#define PVNESTED_PV_VMACCESS_SIG_1 0xa5420b0f
+#define PVNESTED_PV_VMACCESS_SIG_2 0x6212bf65
+
+#define PVNESTED_CPUID_VMREAD 0x4e54a5f3
+/* vmread
+ * RBX: field
+ * =RAX: vmread return value
+ * =RBX: value
+ */
+
+#define PVNESTED_CPUID_VMWRITE 0x4e6cf7b2
+/* vmwrite
+ * RBX: field
+ * RCX: value
+ * =RAX: vmwrite return value
+ */
+
 #endif  /* __PVNESTED_CONSTANTS__ */

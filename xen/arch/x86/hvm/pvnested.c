@@ -10,6 +10,7 @@
 #include <xen/sched.h>
 #include <asm/processor.h>
 #include <asm/hvm/pvnested.h>
+#include <asm/hvm/ax.h>
 
 bool_t __read_mostly pvnested = 0;
 
@@ -55,6 +56,11 @@ pvnested_setup(void)
 
         pv_msr = 1;
     }
+
+    BUILD_BUG_ON(PVNESTED_PV_VMACCESS_SIG_1 != AX_PV_VMACCESS_SIG_1);
+    BUILD_BUG_ON(PVNESTED_PV_VMACCESS_SIG_2 != AX_PV_VMACCESS_SIG_2);
+    ax_cpuid_pv_vmaccess = PVNESTED_CPUID_PV_VMACCESS;
+    ax_has_pv_vmcs = 1;
 
     pvnested = 1;
 }
