@@ -51,7 +51,7 @@
 
 // save/restore broken with Xsave on because the API does not export XCR0 register
 // and it's impossible to properly save/restore it. Disable until added to API
-#define XSAVE_DISABLED_UNTIL_FIXED
+//#define XSAVE_DISABLED_UNTIL_FIXED
 
 /* vcpu dirty states */
 
@@ -1543,8 +1543,8 @@ whpx_vcpu_set_context(CPUState *cpu, struct whpx_vcpu_context *ctx)
 
         hr = whpx_set_vp_registers(cpu->cpu_index, &n, 1, &vp);
         if (FAILED(hr))
-            whpx_panic("failed to set vcpu%d register %s\n",
-                cpu->cpu_index, get_whv_register_name_str(n));
+            whpx_panic("failed to set vcpu%d register %s to value %"PRIx64"\n",
+                cpu->cpu_index, get_whv_register_name_str(n), vp.Reg64);
     }
 
     hr = WHvSetVirtualProcessorInterruptControllerState(

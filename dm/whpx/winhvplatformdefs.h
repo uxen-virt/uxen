@@ -414,6 +414,8 @@ typedef enum WHV_REGISTER_NAME
     WHvX64RegisterDr6              = 0x00000025,
     WHvX64RegisterDr7              = 0x00000026,
 
+    WHvX64RegisterXCr0             = 0x00000027,
+
     // X64 Floating Point and Vector Registers
     WHvX64RegisterXmm0             = 0x00001000,
     WHvX64RegisterXmm1             = 0x00001001,

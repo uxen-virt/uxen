@@ -84,6 +84,7 @@ static const WHV_REGISTER_NAME all_register_names[] = {
     WHvX64RegisterDr3,
     WHvX64RegisterDr6,
     WHvX64RegisterDr7,
+    WHvX64RegisterXCr0,
     WHvX64RegisterXmm0,
     WHvX64RegisterXmm1,
     WHvX64RegisterXmm2,
@@ -230,6 +231,7 @@ const char *get_whv_register_name_str(WHV_REGISTER_NAME x)
     case WHvX64RegisterDr3: return "Dr3";
     case WHvX64RegisterDr6: return "Dr6";
     case WHvX64RegisterDr7: return "Dr7";
+    case WHvX64RegisterXCr0: return "XCr0";
     case WHvX64RegisterXmm0: return "Xmm0";
     case WHvX64RegisterXmm1: return "Xmm1";
     case WHvX64RegisterXmm2: return "Xmm2";
@@ -332,7 +334,8 @@ void get_whv_register_descr(WHV_REGISTER_NAME r, WHV_REGISTER_VALUE v, char *buf
     if ((r >= WHvX64RegisterRax && r <= WHvX64RegisterRflags) ||
         (r >= WHvX64RegisterCr0 && r <= WHvX64RegisterCr8) ||
         (r >= WHvX64RegisterTsc && r <= WHvX64RegisterSfmask) ||
-        (r >= WHvRegisterPendingInterruption && r <= WHvX64RegisterDeliverabilityNotifications))
+        (r >= WHvRegisterPendingInterruption && r <= WHvX64RegisterDeliverabilityNotifications) ||
+        (r == WHvX64RegisterXCr0))
     {
         snprintf(buf, bufsz, "%s: %"PRIx64, get_whv_register_name_str(r), v.Reg64);
     } else if (r >= WHvX64RegisterEs && r <= WHvX64RegisterTr) {
@@ -403,6 +406,8 @@ static const WHV_REGISTER_NAME dump_regs[] = {
     WHvX64RegisterCr3,
     WHvX64RegisterCr4,
     WHvX64RegisterCr8,
+
+    WHvX64RegisterXCr0,
 
     /* X64 MSRs */
     WHvX64RegisterTsc,
