@@ -1072,6 +1072,17 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
     return 0;
 }
 
+static void
+kick_cpus(void)
+{
+    CPUState *cpu = first_cpu;
+
+    while (cpu != NULL) {
+        qemu_cpu_kick(cpu);
+        cpu = cpu->next_cpu;
+    }
+}
+
 int
 whpx_vm_shutdown(int reason)
 {
@@ -1082,9 +1093,10 @@ whpx_vm_shutdown(int reason)
     while (cpu != NULL) {
         debug_printf("stopping vcpu%d...\n", cpu->cpu_index);
         cpu->stopped = 1;
-        qemu_cpu_kick(cpu);
         cpu = cpu->next_cpu;
     }
+
+    kick_cpus();
 
     return 0;
 }
@@ -1092,8 +1104,10 @@ whpx_vm_shutdown(int reason)
 int
 whpx_vm_shutdown_wait(void)
 {
-    while (running_vcpus)
+    while (running_vcpus) {
         Sleep(25);
+        kick_cpus();
+    }
 
     return 0;
 }
