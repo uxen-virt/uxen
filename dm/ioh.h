@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -77,6 +77,7 @@ struct WaitObjects {
     int queue_len;
 #endif
     uintptr_t interrupt;
+    critical_section lock;
 };
 
 typedef struct IOHandlerRecord {
