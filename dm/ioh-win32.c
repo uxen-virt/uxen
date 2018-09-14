@@ -21,10 +21,6 @@
 #include "async-op.h"
 #endif
 
-#if !defined(LIBIMG)
-#include <dm/whpx/whpx.h>
-#endif
-
 WaitObjects wait_objects;
 struct io_handler_queue io_handlers;
 
@@ -209,17 +205,6 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
 #endif
     int first;
 
-    /* whp will execute requests coming from vcpus on vcpu threads, unlike uxen
-       where they're executed on main thread. But most request code in uxendm
-       expects to be called from main thread therefore we use lock to
-       synchronize/simulate single thread request handling.
-       This seems significantly faster than alternate approach of posting
-       events to qemu main thread */
-#if !defined(LIBIMG)
-    if (whpx_enable && iohq == &io_handlers)
-        whpx_lock_iothread();
-#endif
-
     if (ret_wait)
         *ret_wait = 0;
 
@@ -310,16 +295,8 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
         if (ret_wait)
             tmp_ts = os_get_clock_ms();
 
-#if !defined(LIBIMG)
-        if (whpx_enable && iohq == &io_handlers)
-            whpx_unlock_iothread();
-#endif
         ret = WaitForMultipleObjectsEx(num, &w->events[first], FALSE,
                                        first ? 0 : *timeout, TRUE);
-#if !defined(LIBIMG)
-        if (whpx_enable && iohq == &io_handlers)
-            whpx_lock_iothread();
-#endif
         if (ret_wait)
             *ret_wait += (int) (os_get_clock_ms() - tmp_ts);
 
@@ -459,10 +436,6 @@ void ioh_wait_for_objects(struct io_handler_queue *iohq,
     }
 #endif
 
-#if !defined(LIBIMG)
-    if (whpx_enable && iohq == &io_handlers)
-        whpx_unlock_iothread();
-#endif
 }
 
 void host_main_loop_wait(int *timeout)
