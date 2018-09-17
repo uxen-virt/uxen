@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -218,8 +218,12 @@ timer_deadline(TimerQueue *active_timers, Clock *clock, int *timeout)
                          get_clock_ms(clock) % 10000, delta);
 #endif
 	delta = 0;
-    } else
+    } else if (delta > 0) {
 	delta /= SCALE_MS;
+        /* minimum timeout if non-zero delta to avoid spinning */
+        if (delta < 1)
+            delta = 1;
+    }
     if (delta < *timeout)
 	*timeout = delta;
 }
