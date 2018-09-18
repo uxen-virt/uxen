@@ -12,6 +12,7 @@
 #include "clock.h"
 #include "timer.h"
 #include "queue.h"
+#include "dm.h"
 
 #if defined(_WIN32)
 #include <mmsystem.h>
@@ -23,6 +24,18 @@ Clock *vm_clock;
 int64_t ticks_per_sec;
 
 TimerQueue main_active_timers[2];
+
+static void
+timer_queue_modified(Timer *ts)
+{
+#ifdef _WIN32
+    /* WHP: some emulation (hpet) which changes main timers is ran from vcpu thread. Therefore
+       after timer modification, the wait in main thread needs to be interrupted
+       to reevaluate timer deadlines */
+    if (whpx_enable && ts->active_timers == main_active_timers)
+        ioh_wait_interrupt(&wait_objects);
+#endif
+}
 
 Timer *_new_timer(TimerQueue *active_timers, Clock *clock, int scale, TimerCB *cb, void *opaque,
 		  const char *fn, int line)
@@ -55,6 +68,8 @@ void del_timer(Timer *ts)
 
     if (TAILQ_ACTIVE(ts, queue))
 	TAILQ_REMOVE(&ts->active_timers[ts->clock->type], ts, queue);
+
+    timer_queue_modified(ts);
 }
 
 void advance_timer(Timer *ts, int64_t expire_time)
@@ -83,6 +98,8 @@ void mod_timer_ns(Timer *ts, int64_t expire_time)
 	TAILQ_INSERT_BEFORE(t, ts, queue);
     else
 	TAILQ_INSERT_TAIL(&ts->active_timers[ts->clock->type], ts, queue);
+
+    timer_queue_modified(ts);
 }
 
 void mod_timer(Timer *ts, int64_t expire_time)
