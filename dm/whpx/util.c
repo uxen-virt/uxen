@@ -601,6 +601,12 @@ char *whpx_er_describe(int exit_reason)
     }
 }
 
+static uint64_t
+safediv(uint64_t a, uint64_t b)
+{
+  return b ? a/b : 0;
+}
+
 void
 whpx_dump_perf_stats(void)
 {
@@ -608,13 +614,13 @@ whpx_dump_perf_stats(void)
     debug_printf("/---------------------------------------------------------------------\n");
     debug_printf("|              WHPX performance stats, iteration=%d:\n", iter++);
     debug_printf("|\n");
-    debug_printf("| runvp        count %8"PRId64" avg cycles %8"PRId64"\n", count_runvp, count_runvp ? tmsum_runvp/count_runvp : 0);
-    debug_printf("| getregs      count %8"PRId64" avg cycles %8"PRId64"\n", count_getregs, count_getregs ? tmsum_getregs/count_getregs : 0);
-    debug_printf("| setregs      count %8"PRId64" avg cycles %8"PRId64"\n", count_setregs, count_setregs ? tmsum_setregs/count_setregs : 0);
-    debug_printf("| translategva count %8"PRId64" avg cycles %8"PRId64"\n", count_xlate, count_xlate ? tmsum_xlate/count_xlate : 0);
-    debug_printf("| reqirq       count %8"PRId64" avg cycles %8"PRId64"\n", count_request_irq, count_request_irq ? tmsum_request_irq/count_request_irq : 0);
-    debug_printf("| v4vop        count %8"PRId64" avg cycles %8"PRId64"\n", count_v4v, count_v4v ? tmsum_v4v/count_v4v : 0);
-    debug_printf("| lapic access count %8"PRId64" avg cycles %8"PRId64"\n", count_lapic_access, count_lapic_access ? tmsum_lapic_access/count_lapic_access : 0);
+    debug_printf("| runvp        count %8"PRId64" avg cycles %8"PRId64"\n", count_runvp, safediv(tmsum_runvp, count_runvp));
+    debug_printf("| getregs      count %8"PRId64" avg cycles %8"PRId64"\n", count_getregs, safediv(tmsum_getregs, count_getregs));
+    debug_printf("| setregs      count %8"PRId64" avg cycles %8"PRId64"\n", count_setregs, safediv(tmsum_setregs, count_setregs));
+    debug_printf("| translategva count %8"PRId64" avg cycles %8"PRId64"\n", count_xlate, safediv(tmsum_xlate, count_xlate));
+    debug_printf("| reqirq       count %8"PRId64" avg cycles %8"PRId64"\n", count_request_irq, safediv(tmsum_request_irq, count_request_irq));
+    debug_printf("| v4vop        count %8"PRId64" avg cycles %8"PRId64"\n", count_v4v, safediv(tmsum_v4v, count_v4v));
+    debug_printf("| lapic access count %8"PRId64" avg cycles %8"PRId64"\n", count_lapic_access, safediv(tmsum_lapic_access, count_lapic_access));
     debug_printf("| viridianspin count %8"PRId64"\n", count_longspin);
     debug_printf("| hpet         count %8"PRId64"\n", count_hpet);
     debug_printf("| reftime      count %8"PRId64"\n", count_reftime);
@@ -631,7 +637,7 @@ whpx_dump_perf_stats(void)
             else
                 snprintf(buf, sizeof(buf), "0x%x", er);
             debug_printf("| exit[%-6s] count %8"PRId64" avg cycles %8"PRId64"\n",
-                buf, count_vmexit[i], tmsum_vmexit[i] / count_vmexit[i]);
+                buf, count_vmexit[i], safediv(tmsum_vmexit[i], count_vmexit[i]));
         }
     }
     debug_printf("\\---------------------------------------------------------------------\n");
