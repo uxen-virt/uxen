@@ -962,6 +962,7 @@ static int swap_init_map(BDRVSwapState *s, char *path, char *cow_backup)
     } else {
         sprintf(vol, "\\\\.\\C:");
     }
+    debug_printf("swap: opening volume\n");
     s->volume = CreateFile(
                     vol,
                     0, /* This needs to be zero else low-privilege processes will get ERROR_ACCESS_DENIED */
@@ -970,6 +971,7 @@ static int swap_init_map(BDRVSwapState *s, char *path, char *cow_backup)
                     OPEN_EXISTING,
                     FILE_FLAG_BACKUP_SEMANTICS,
                     NULL);
+    debug_printf("swap: opening volume done\n");
     if (s->volume == INVALID_HANDLE_VALUE) {
         Wwarn("swap: error opening volume %s", vol);
         return -1;
@@ -1102,25 +1104,31 @@ static int swap_open(BlockDriverState *bs, const char *filename, int flags)
         }
     }
 
+    debug_printf("swap: initializing dubtree\n");
     if (dubtree_init(&s->t, s->fallbacks, swap_malloc, swap_free, s) != 0) {
         warn("swap: failed to init dubtree");
         r = -1;
         goto out;
     }
 
+    debug_printf("swap: resolving map.idx\n");
     map = swap_resolve_via_fallback(s, "map.idx");
+    debug_printf("swap: resolving cow\n");
     cow = swap_resolve_via_fallback(s, "cow");
 
+    debug_printf("swap: initializing map\n");
     /* Try to set up map.idx shallow index mapping, if present. */
     if (swap_init_map(s, map, cow) != 0) {
-        //warn("swap: no map file found at '%s'", map);
+        debug_printf("swap: no map file found at '%s'\n", map);
     }
 
+    debug_printf("swap: initializing hashtable for map\n");
     /* Cache of open shallow file handles. */
     if (hashtable_init(&s->open_files, NULL, NULL) < 0) {
         warn("swap: unable to create hashtable for map");
         return -1;
     }
+    debug_printf("swap: initializing lrucache for map\n");
     if (lru_cache_init(&s->fc, 6) < 0) {
         warn("swap: unable to create lrucache for map");
         return -1;
@@ -1132,6 +1140,7 @@ static int swap_open(BlockDriverState *bs, const char *filename, int flags)
      * helps with e.g. USN journaling from a Windows guest. We cache only
      * blocks we write, on the assumption that the host OS takes care of normal
      * read caching and that decompression with LZ4 is cheap. */
+    debug_printf("swap: initializing wb cache\n");
     if (hashtable_init(&s->cached_blocks, NULL, NULL) < 0) {
         warn("swap: unable to create hashtable for block cache");
         return -1;
@@ -1173,6 +1182,7 @@ static int swap_open(BlockDriverState *bs, const char *filename, int flags)
         }
     }
 
+    debug_printf("swap: creating threads\n");
     if (create_thread(&s->write_thread, swap_write_thread, (void*) s) < 0) {
         Werr(1, "swap: unable to create thread!");
     }

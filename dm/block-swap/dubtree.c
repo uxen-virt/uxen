@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2018, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -81,6 +81,7 @@ int dubtree_init(DubTree *t, char **fallbacks,
     lru_cache_init(&t->lru, 9);
     critical_section_leave(&t->cache_lock);
 
+    debug_printf("dubtree: enum fallbacks\n");
     fb = t->fallbacks;
     while (*fallbacks) {
         if (!(*fb = dubtree_realpath(*fallbacks))) {
@@ -92,21 +93,26 @@ int dubtree_init(DubTree *t, char **fallbacks,
     *fb = NULL;
 
     fn = t->fallbacks[0];
+    debug_printf("dubtree: creating dir %s\n", fn);
     dubtree_mkdir(fn);
 
     char *mn;
     void *m;
     asprintf(&mn, "%s/"DUBTREE_MMAPPED_NAME, fn);
+    debug_printf("dubtree: open existing\n");
     dubtree_handle_t f = dubtree_open_existing(mn);
     if (f == DUBTREE_INVALID_HANDLE) {
+        debug_printf("dubtree: open new\n");
         f = dubtree_open_new(mn, 0);
         if (f == DUBTREE_INVALID_HANDLE) {
             printf("unable to open %s: %s\n", mn, strerror(errno));
             return -1;
         }
+        debug_printf("dubtree: resize file\n");
         dubtree_set_file_size(f, sizeof(DubTreeHeader));
     }
 
+    debug_printf("dubtree: mapping file\n");
 #ifdef _WIN32
     HANDLE h = CreateFileMappingA(f, NULL, PAGE_READWRITE, 0,
                                   sizeof(DubTreeHeader), NULL);
@@ -135,8 +141,9 @@ int dubtree_init(DubTree *t, char **fallbacks,
     t->levels = header->levels;
 
     if (!t->header->dubtree_initialized) {
-
         char **fb = t->fallbacks + 1;
+
+        debug_printf("dubtree: open fallbacks\n");
         f = DUBTREE_INVALID_HANDLE;
         while (f == DUBTREE_INVALID_HANDLE && *fb) {
             asprintf(&fn, "%s/%s", *fb++, DUBTREE_MMAPPED_NAME);
@@ -153,6 +160,8 @@ int dubtree_init(DubTree *t, char **fallbacks,
     }
 
     if (!t->header->dubtree_initialized) {
+        debug_printf("dubtree: setup headers\n");
+
         for (i = 0; i < DUBTREE_MAX_LEVELS; ++i) {
             t->levels[i] = 0;
         }
@@ -181,6 +190,7 @@ int dubtree_init(DubTree *t, char **fallbacks,
                 printf("level %d = %"PRIu64"\n", i, t->levels[i]);
             }
         }
+        debug_printf("dubtree: opened\n");
         return 0;
     } else {
         printf("mismatched dubtree header!\n");
