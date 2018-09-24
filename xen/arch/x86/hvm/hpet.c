@@ -235,7 +235,7 @@ static int hpet_irq(HPETState *h, unsigned int tn)
         return timer_int_route(h, tn);
 }
 
-static void hpet_set_timer(HPETState *h, unsigned int tn)
+static void hpet_set_timer(HPETState *h, unsigned int tn, int dont_wrap_past_values)
 {
     uint64_t tn_cmp, cur_tick, diff;
     unsigned int irq;
@@ -270,9 +270,13 @@ static void hpet_set_timer(HPETState *h, unsigned int tn)
      * for the counter difference to wrap a 32-bit signed integer. We fudge
      * by looking for a 'small' time value in the past.
      */
-    if ( (int64_t)diff < 0 )
-        diff = (timer_is_32bit(h, tn) && (-diff > HPET_TINY_TIME_SPAN))
-            ? (uint32_t)diff : 0;
+    if ( (int64_t)diff < 0 ) {
+        if ( dont_wrap_past_values )
+            diff = 0;
+        else
+            diff = (timer_is_32bit(h, tn) && (-diff > HPET_TINY_TIME_SPAN))
+                ? (uint32_t)diff : 0;
+    }
 
     irq = hpet_irq(h, tn);
 
@@ -482,7 +486,7 @@ static int hpet_write(
     {
         i = find_first_set_bit(start_timers);
         __clear_bit(i, &start_timers);
-        hpet_set_timer(h, i);
+        hpet_set_timer(h, i, 0);
     }
 
     while (update_timers)
@@ -619,7 +623,7 @@ static int hpet_load(struct domain *d, hvm_domain_context_t *h)
     if ( hpet_enabled(hp) )
         for ( i = 0; i < HPET_TIMER_NUM; i++ )
             if ( timer_enabled(hp, i) )
-                hpet_set_timer(hp, i);
+                hpet_set_timer(hp, i, 1);
  
     spin_unlock(&hp->lock);
 
