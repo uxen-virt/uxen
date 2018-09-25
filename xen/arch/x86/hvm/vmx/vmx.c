@@ -2595,6 +2595,8 @@ static int vmx_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
 #endif
         break;
     case IA32_FEATURE_CONTROL_MSR:
+        *msr_content = 1; /* no features enabled and locked off for writes */
+        break;
     case MSR_IA32_VMX_BASIC...MSR_IA32_VMX_TRUE_ENTRY_CTLS:
 #ifndef __UXEN_NOT_YET__
         if ( !nvmx_msr_read_intercept(msr, msr_content) )
