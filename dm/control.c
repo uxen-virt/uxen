@@ -1266,6 +1266,7 @@ struct dict_rpc_command control_commands[] = {
       }, },
 #if defined(CONFIG_VBOXDRV)
     { "sf-add-redirect", control_command_sf_add_redirect,
+      .flags = CONTROL_SUSPEND_OK,
       .args = (struct dict_rpc_arg_desc[]) {
             { "name", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },
             { "src", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },
@@ -1283,6 +1284,7 @@ struct dict_rpc_command control_commands[] = {
         }
     },
     { "sf-del-redirect", control_command_sf_del_redirect,
+      .flags = CONTROL_SUSPEND_OK,
       .args = (struct dict_rpc_arg_desc[]) {
             { "name", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },
             { "src", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },
