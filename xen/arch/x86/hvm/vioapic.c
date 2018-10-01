@@ -339,10 +339,6 @@ static void vioapic_deliver(struct hvm_hw_vioapic *vioapic, int irq,
         }
         else
 #endif
-        if (vcpu_id != VCPUID_ANY) {
-            v = d->vcpu ? d->vcpu[vcpu_id] : NULL;
-            target = v ? vcpu_vlapic(v) : NULL;
-        } else
         {
             for_each_vcpu ( d, v )
                 if ( vlapic_match_dest(vcpu_vlapic(v), NULL,
