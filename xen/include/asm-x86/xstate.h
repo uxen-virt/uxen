@@ -89,6 +89,7 @@ void _set_xcr0(u64 xfeatures);
 uint64_t get_xcr0(void);
 void xsave(struct vcpu *v, uint64_t mask);
 void xrstor(struct vcpu *v, uint64_t mask);
+uint64_t xgetbv(uint32_t index);
 bool_t xsave_enabled(const struct vcpu *v);
 
 #ifndef NDEBUG
