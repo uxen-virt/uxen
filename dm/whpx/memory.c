@@ -16,7 +16,7 @@
 #define VM_VA_RANGE_SIZE 0x100000000ULL
 #define ZERO_RANGE_MIN_PAGES 8
 #define mb_saveable(mb) (!((mb)->flags & WHPX_RAM_EXTERNAL))
-
+#define SAVE_BUFFER_SIZE (1024*1024*64)
 
 /* vm-mappable block */
 typedef struct mb_entry {
@@ -779,8 +779,11 @@ find_nonzero_pageranges(uint8_t *p, uint64_t len, int *count)
 static int
 save_cancelled(void)
 {
-    return vm_save_info.save_requested &&
+    int cancelled = vm_save_info.save_requested &&
         (vm_save_info.save_abort || vm_quit_interrupt);
+    if (cancelled)
+        debug_printf("save cancelled\n");
+    return cancelled;
 }
 
 static int
@@ -845,7 +848,34 @@ whpx_ram_free(void)
 }
 
 static int
-save_mb(struct filebuf *f, saved_mb_entry_t *e)
+cancellable_write(struct filebuf *f, uint8_t *p, size_t len, uint64_t *acclen)
+{
+    const int CHUNK_SIZE = 1024*1024*256;
+    size_t l;
+
+    while (len) {
+        if (save_cancelled())
+            return -1;
+
+        l = len > CHUNK_SIZE ? CHUNK_SIZE : len;
+        filebuf_write(f, p, l);
+
+        *acclen += l;
+        if (*acclen >= CHUNK_SIZE) {
+            *acclen -= CHUNK_SIZE;
+            filebuf_flush(f);
+            FlushFileBuffers(f->file);
+        }
+
+        len -= l;
+        p += l;
+    }
+
+    return 0;
+}
+
+static int
+save_mb(struct filebuf *f, saved_mb_entry_t *e, uint64_t *saved_bytes)
 {
     int num_ranges = 0;
     pagerange_t *saved_ranges = NULL;
@@ -907,6 +937,7 @@ save_mb(struct filebuf *f, saved_mb_entry_t *e)
     }
 
     /* write non zero data */
+    uint64_t acclen = 0;
     for (i = 0; i < num_ranges; i++) {
         uint64_t len, start, end;
         uint8_t *ram;
@@ -925,8 +956,11 @@ save_mb(struct filebuf *f, saved_mb_entry_t *e)
         filebuf_seek(f, e->file_off + start - mb_beg, FILEBUF_SEEK_SET);
         debug_printf("  .. write non-zero range %016"PRIx64" - %016"PRIx64" @ offset %016"PRIx64" len=%"PRIx64" \n",
             start, end, (uint64_t) filebuf_tell(f), len);
-        filebuf_write(f, ram, len);
+        ret = cancellable_write(f, ram, len, &acclen);
+        *saved_bytes += len;
         whpx_ram_unmap(ram);
+        if (ret)
+            goto out;
     }
 
     debug_printf("  .. total %d zero areas, %d non-zero areas\n", num_sparse, num_ranges);
@@ -1014,13 +1048,25 @@ whpx_write_pages(struct filebuf *f)
     if (no_pages)
         goto final_update;
 
+    filebuf_buffer_max(f, SAVE_BUFFER_SIZE);
+
+    uint64_t saved_bytes = 0;
+    LARGE_INTEGER freq, t0, t1;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&t0);
     filebuf_seek(f, pages_start_off, FILEBUF_SEEK_SET);
     for (i = 0; i < num_saved; i++) {
-        ret = save_mb(f, &saved_entries[i]);
+        ret = save_mb(f, &saved_entries[i], &saved_bytes);
         if (ret || save_cancelled())
             goto out;
         size += pr_bytes(&saved_entries[i].r);
     }
+    filebuf_flush(f);
+    FlushFileBuffers(f->file);
+    QueryPerformanceCounter(&t1);
+    debug_printf("wrote %d memory blocks, total %"PRId64"Mb in %.2fs\n",
+        num_saved, saved_bytes / 1024 / 1024,
+        (((t1.QuadPart - t0.QuadPart) * 1000) / freq.QuadPart) / 1000.0f);
 
 final_update:
     /* update size */
