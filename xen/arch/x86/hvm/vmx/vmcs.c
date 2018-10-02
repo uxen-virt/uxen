@@ -904,6 +904,8 @@ void vmx_restore_host_env(void)
 #endif  /* __UXEN__ */
     unsigned long base;
 
+    if (ax_present) return;
+
     rdmsrl(MSR_FS_BASE, base);
     __vmwrite(HOST_FS_BASE, base);
     rdmsrl(MSR_GS_BASE, base);
