@@ -92,16 +92,19 @@ static inline void xsetbv_maybe(u32 index, u64 xfeatures)
     if (this_cpu(xcr0_last) != xfeatures ||
         index != XCR_XFEATURE_ENABLED_MASK) {
         uint64_t xcr0 = xgetbv(XCR_XFEATURE_ENABLED_MASK);
-        u32 hi = xfeatures >> 32;
-        u32 lo = (u32)xfeatures;
+        u32 hi, lo;
 
         if (index == XCR_XFEATURE_ENABLED_MASK ) {
-
             if (!((xcr0 ^ xfeatures) & xfeatures)) {
                 this_cpu(xcr0_last) = xfeatures;
                 return;
             }
+            xfeatures |= xcr0;
         }
+
+
+        hi = xfeatures >> 32;
+        lo = (u32)xfeatures;
 
         asm volatile (".byte 0x0f,0x01,0xd1" :: "c" (index),
                       "a" (lo), "d" (hi));
