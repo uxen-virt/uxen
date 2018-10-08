@@ -709,7 +709,7 @@ find_nonzero_pagerange(uint8_t *p, uint64_t npages, pagerange_t *pr)
     bool in_nonzero = false;
     uint64_t s, e;
     uint64_t idx = 0;
-    int zeroc;
+    int zeroc = 0;
 
     while (npages) {
         bool is_zero = page_is_zero(p);
