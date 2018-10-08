@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2017, Bromium, Inc.
+# Copyright 2012-2018, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -10,7 +10,6 @@ SUBDIRS  =
 SUBDIRS += uxenvmlib
 SUBDIRS += uxenv4vlib
 SUBDIRS += uxendisp/xddm
-SUBDIRS += uxendisp/wddm
 SUBDIRS += uxenmouse
 SUBDIRS += uxenaudio
 SUBDIRS += uxenclipboard
@@ -18,8 +17,6 @@ SUBDIRS += uxenevent
 SUBDIRS += uxendmpdrv
 SUBDIRS += uxenkmdod
 SUBDIRS += uxenplatform
-#SUBDIRS += uxenstorflt
-#SUBDIRS += uxenzeroshare
 SUBDIRS += uxensvc
 SUBDIRS += elevate
 SUBDIRS += uxenv4vguest
@@ -28,8 +25,6 @@ SUBDIRS += uxennet
 SUBDIRS += uxennullnet
 SUBDIRS += uxensf
 SUBDIRS += uxenhid
-SUBDIRS += uxenpatcher
-SUBDIRS += uxenh264
 SUBDIRS += installer
 
 TARGETS = all dist

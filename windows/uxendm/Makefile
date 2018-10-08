@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2017, Bromium, Inc.
+# Copyright 2012-2018, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -14,7 +14,6 @@ $(call include_lib,LIBUXENCTL,../uxenctl)
 $(call include_lib,YAJL,../yajl)
 $(call include_lib,LIBFILECRYPT,../filecrypt)
 $(call include_lib,LIBUXENCONSOLE,../uxenconsole)
-$(call include_lib,LIBUXENH264,../uxenh264)
 
 ifeq (,$(MAKENOW))
 

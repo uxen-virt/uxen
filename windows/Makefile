@@ -14,7 +14,6 @@ SUBDIRS += uxenctl
 SUBDIRS += vhd-util
 SUBDIRS += libxc
 SUBDIRS += filecrypt
-SUBDIRS += uxenh264
 SUBDIRS += uxendm
 SUBDIRS += backtrace
 SUBDIRS += build

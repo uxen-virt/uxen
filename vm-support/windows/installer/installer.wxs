@@ -11,9 +11,6 @@
         <Media Id='1' Cabinet='uXenDrvInstaller.cab' EmbedCab='yes' DiskPrompt='uXen Media' />
         <Property Id='DiskPrompt' Value='uXen Install Media' />
 
-        <CustomAction Id="CA_uxenpatcher"  Directory="TARGETDIR" Execute="deferred" Return="check" Impersonate="no" 
-            ExeCommand="[#uxenpatcher.exe]" />
-
         <!-- disable display turn off in power schemas (doesn't cope with DOD vsync control) -->
         <CustomAction Id="CA_setPowercfg" Property="POWERCFG" Value="[%systemroot]\system32\powercfg.exe"/>
         <CustomAction Id="CA_powercfg1" Impersonate="no" Execute="deferred" ExeCommand="-x -monitor-timeout-ac 0" Return="ignore" Property="POWERCFG"/>
@@ -21,28 +18,7 @@
 
         <Directory Id='TARGETDIR' Name='SourceDir'>
             <Directory Id="SystemFolder" Name="SystemFolder" />
-            <!--
-            <Directory Id="ProgramFilesFolder">
-                <Directory Id="InternetExplorerDir" Name="Internet Explorer">
-                    <Directory Id="IeCopiedFilesDir" Name="iexplore.exe.local">
-                        <Component Id="uxenh264" Guid="B4B7D3FC-576B-4E54-815D-303B1410FA26" Win64="no">
-                            <Condition>VersionNT > 602</Condition>
-                            <File Id="uxenh26432.dll" Name="msmpeg2vdec.dll" DiskId="1" Source="$(var.uxenh264dir)/uxenh26432.dll" />
-                            <CopyFile Id="CopyMsmpeg2vdec.dll" DestinationDirectory="SystemFolder" DestinationName="_msmpeg2vdec.dll" SourceDirectory="SystemFolder" SourceName="msmpeg2vdec.dll" />
-                            <RegistryValue Root="HKLM" Key="Software\Microsoft\Windows NT\CurrentVersion\Image File Execution Options" Type="integer" Name="DevOverrideEnable" Value="1"/>
-                        </Component>
-                    </Directory>
-                </Directory>
-            </Directory> -->
             <Directory Id='INSTALLDIR' Name='uXenGuest'>
-                <Directory Id='uxenpatcher' Name='uxenpatcher'>
-                    <Component Id="uxenpatcher" Guid="a6e0f47f-ef44-4f11-af91-f21f92c87158" Win64="$(var.Win64)">
-                        <File Id="uxenpatcher.exe" Name="uxenpatcher.exe" DiskId="1" Source="$(var.uxenpatcherdir)/uxenpatcher.exe" />
-                        <File Id="makecert.exe" Name="makecert.exe" DiskId="1" Source="$(var.certdir)/makecert.exe" />
-                        <File Id="pvk2pfx.exe" Name="pvk2pfx.exe" DiskId="1" Source="$(var.certdir)/pvk2pfx.exe" />
-                        <File Id="signtool.exe" Name="signtool.exe" DiskId="1" Source="$(var.certdir)/signtool.exe" />
-                    </Component>
-                </Directory>
                 <Directory Id='uxendisp' Name='uxendisp'>
                     <Component Id="uxendisp" Guid="263bd36e-b7df-45eb-a57a-0f8b7154ecae" Win64="$(var.Win64)">
                         <Condition>
@@ -182,10 +158,8 @@
             <ComponentRef Id='uxennet' />
             <ComponentRef Id='uxennullnet' />
             <ComponentRef Id='uxenhid' />
-            <ComponentRef Id='uxenpatcher' />
         </Feature>
         <InstallExecuteSequence>
-            <Custom Action="CA_uxenpatcher" After="InstallFiles">$(var.INSTALLING) AND <![CDATA[VersionNT >= 602]]> AND <![CDATA[&Complex=3]]></Custom>
             <Custom Action="CA_powercfg1" After="InstallFiles">$(var.INSTALLING) AND <![CDATA[VersionNT >= 602]]> AND <![CDATA[&Complex=3]]></Custom>
             <Custom Action="CA_powercfg2" After="CA_powercfg1">$(var.INSTALLING) AND <![CDATA[VersionNT >= 602]]> AND <![CDATA[&Complex=3]]></Custom>
         </InstallExecuteSequence>
