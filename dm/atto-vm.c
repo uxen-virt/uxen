@@ -6,6 +6,7 @@
 
 #include "config.h"
 #include "dm.h"
+#include "console.h"
 #include "ioh.h"
 #include "atto-agent.h"
 #include "queue2.h"
@@ -24,17 +25,22 @@
 #define MAX_DIRPATH_LEN (4 * MAX_PATH)
 #define ATTOVM_IMAGE_EXT ".attovm"
 
-struct win_cursor {
+typedef struct win_cursor {
     LIST_ENTRY(win_cursor) entry;
+    int x11_type;
     uint64_t x11_ptr;
-    HCURSOR cursor;
-    int custom;
-};
+    int w;
+    int h;
+    int hot_x;
+    int hot_y;
+    uint8_t *mask;
+    uint8_t *color;
+} win_cursor;
 
 static LIST_HEAD(, win_cursor) win_cursor_list =
        LIST_HEAD_INITIALIZER(&win_cursor_list);
 
-static HCURSOR current_cursor = NULL;
+static win_cursor *current_cursor = NULL;
 static unsigned current_kbd_layout = 0;
 static int vm_has_keyboard_focus = 0;
 static int host_offer_focus = 0;
@@ -113,19 +119,83 @@ map_x11_to_win_cursor(int x11_cursor)
     return IDC_ARROW;
 }
 
-static HCURSOR
-x11_get_cursor(int x11_type, uint64_t x11_ptr, HCURSOR cursor)
+static void
+delete_cursor(win_cursor *wc)
 {
-    struct win_cursor *wc = NULL, *wc_next;
+    free(wc->mask);
+    free(wc->color);
+    free(wc);
+}
+
+static win_cursor *
+x11_get_cursor(uint64_t x11_ptr)
+{
+    win_cursor *wc = NULL;
+    LIST_FOREACH(wc, &win_cursor_list, entry) {
+        if (wc->x11_ptr != x11_ptr)
+            continue;
+        return wc;
+    }
+    return NULL;
+}
+
+static void
+x11_make_standard_cursor(win_cursor *wc)
+{
+    ICONINFO info;
+    BITMAP mask_info;
+    BITMAP color_info = {0};
+    LONG count;
+    BOOL ok;
+    HCURSOR cursor;
+
+    /* Windows will lie to you about the cursor metrics unless you pretend to be
+       DPI aware. Even if you call LoadImage instead and explicitly request the
+       larger size*/
+    DPI_AWARENESS_CONTEXT old_dpi = Win32_SetThreadDpiAwarenessContext(
+        DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE);
+    cursor = LoadCursor(NULL, map_x11_to_win_cursor(wc->x11_type));
+
+    ok = GetIconInfo(cursor, &info);
+    if (!ok) {
+        debug_printf("Failed to get cursor info err=%d for type %d\n",
+            (int)GetLastError(), wc->x11_type);
+        goto out;
+    }
+    GetObject(info.hbmMask, sizeof(BITMAP), &mask_info);
+    wc->w = mask_info.bmWidth;
+    wc->hot_x = info.xHotspot;
+    wc->hot_y = info.yHotspot;
+    count = mask_info.bmWidthBytes * mask_info.bmHeight;
+    wc->mask = malloc(count);
+    GetBitmapBits(info.hbmMask, count, wc->mask);
+    if (info.hbmColor) {
+        GetObject(info.hbmColor, sizeof(BITMAP), &color_info);
+        count = color_info.bmWidthBytes * color_info.bmHeight;
+        wc->color = malloc(count);
+        GetBitmapBits(info.hbmColor, count, wc->color);
+        wc->h = color_info.bmHeight;
+    } else {
+        /* B&W bitmaps stash the xor mask in there too, doubling the height */
+        wc->h = mask_info.bmHeight / 2;
+    }
+    DeleteObject(info.hbmMask);
+    DeleteObject(info.hbmColor);
+out:
+    Win32_SetThreadDpiAwarenessContext(old_dpi);
+}
+
+static void
+x11_get_or_create_standard_cursor(int x11_type, uint64_t x11_ptr)
+{
+    win_cursor *wc = NULL, *wc_next;
     LIST_FOREACH_SAFE(wc, &win_cursor_list, entry, wc_next) {
         if (wc->x11_ptr != x11_ptr)
             continue;
-        if (!x11_type)
-            return wc->cursor;
+        if (wc->x11_type == x11_type)
+            return; /* Already setup */
         LIST_REMOVE(wc, entry);
-        if (wc->custom && wc->cursor)
-            DestroyCursor(wc->cursor);
-        free(wc);
+        delete_cursor(wc);
         wc = NULL;
         break;
     }
@@ -136,17 +206,12 @@ x11_get_cursor(int x11_type, uint64_t x11_ptr, HCURSOR cursor)
     wc = calloc(1, sizeof(*wc));
     if (!wc) {
         warn("%s: malloc error\n", __FUNCTION__);
-        return NULL;
+        return;
     }
+    wc->x11_type = x11_type;
     wc->x11_ptr = x11_ptr;
-    if (cursor) {
-        wc->cursor = cursor;
-        wc->custom = 1;
-    } else {
-        wc->cursor = LoadCursor(NULL, map_x11_to_win_cursor(x11_type));
-    }
+    x11_make_standard_cursor(wc);
     LIST_INSERT_HEAD(&win_cursor_list, wc, entry);
-    return wc->cursor;
 }
 
 void
@@ -178,61 +243,71 @@ attovm_unmap_x11_cursor(uint64_t x11_ptr)
         if (wc->x11_ptr != x11_ptr)
             continue;
         LIST_REMOVE(wc, entry);
-        if (wc->custom && wc->cursor)
-            DestroyCursor(wc->cursor);
-        free(wc);
+        delete_cursor(wc);
         break;
     }
 }
 
-void
-attovm_set_x11_cursor(uint64_t x11_ptr)
+static void
+report_cursor_change(struct display_state* ds, win_cursor *wc)
 {
-    current_cursor = x11_get_cursor(0, x11_ptr, NULL);
-    SetCursor(current_cursor);
+    if (!wc) {
+        // No cursor yet, probably shouldn't happen...
+        return;
+    }
+    dpy_cursor_shape(ds, wc->w, wc->h, wc->hot_x, wc->hot_y,
+                     wc->mask, wc->color);
 }
 
 void
-attovm_set_current_cursor(void)
+attovm_set_x11_cursor(struct display_state* ds, uint64_t x11_ptr)
 {
-    SetCursor(current_cursor);
+    current_cursor = x11_get_cursor(x11_ptr);
+    report_cursor_change(ds, current_cursor);
+}
+
+void
+attovm_set_current_cursor(struct display_state* ds)
+{
+    report_cursor_change(ds, current_cursor);
 }
 
 void
 attovm_map_x11_cursor(int x11_type, uint64_t x11_ptr)
 {
-    x11_get_cursor(x11_type, x11_ptr, NULL);
+    assert(x11_type != -1);
+    x11_get_or_create_standard_cursor(x11_type, x11_ptr);
 }
 
 void
 attovm_create_custom_cursor(uint64_t x11_ptr, int xhot, int yhot,
                             int x11_nx, int x11_ny,
-                            int nbytes, uint8_t *x11_and, uint8_t *x11_xor)
+                            int nbytes, uint8_t *data)
 {
-    HCURSOR cursor = NULL;
-    struct win_cursor *wc = NULL, *wc_next;
-
-    LIST_FOREACH_SAFE(wc, &win_cursor_list, entry, wc_next) {
+    /* Old behaviour was to do nothing if x11_ptr matched anything */
+    win_cursor *wc = NULL;
+    LIST_FOREACH(wc, &win_cursor_list, entry) {
         if (wc->x11_ptr == x11_ptr) {
-            cursor = wc->cursor;
-            break;
-        }
-    }
-
-    if (!cursor) {
-        cursor = CreateCursor(NULL, xhot, yhot, x11_nx, x11_ny,
-                              x11_and, x11_xor);
-        if (!cursor) {
-            debug_printf("%s: CreateCursor failed, err %d\n", __FUNCTION__,
-                         (int) GetLastError());
             return;
         }
-
-        x11_get_cursor(-1, x11_ptr, cursor);
     }
 
-    current_cursor = cursor;
-    SetCursor(current_cursor);
+    wc = calloc(1, sizeof(*wc));
+    if (!wc) {
+        warn("%s: malloc error\n", __FUNCTION__);
+        return;
+    }
+    wc->x11_type = -1; /* custom */
+    wc->x11_ptr = x11_ptr;
+    wc->hot_x = xhot;
+    wc->hot_y = yhot;
+    wc->w = x11_nx;
+    wc->h = x11_ny;
+    /* It appears that these must always be monochrome */
+    wc->mask = malloc(nbytes);
+    memcpy(wc->mask, data, nbytes);
+    wc->color = NULL;
+    LIST_INSERT_HEAD(&win_cursor_list, wc, entry);
 }
 
 int

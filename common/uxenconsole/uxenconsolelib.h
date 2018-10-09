@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2017, Bromium, Inc.
+ * Copyright 2014-2019, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -118,6 +118,9 @@ int                     uxenconsole_touch_device_hotplug(uxenconsole_context_t c
 
 int                     uxenconsole_set_shared_surface(uxenconsole_context_t ctx,
                                                        file_handle_t surface);
+
+int                     uxenconsole_focus_changed(uxenconsole_context_t ctx,
+                                                  int focus);
 
 hid_context_t           uxenconsole_hid_init(int vm_id, const unsigned char *idtoken);
 void                    uxenconsole_hid_cleanup(hid_context_t context);

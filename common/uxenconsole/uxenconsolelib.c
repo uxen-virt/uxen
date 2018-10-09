@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2017, Bromium, Inc.
+ * Copyright 2014-2019, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -662,6 +662,27 @@ uxenconsole_touch_device_hotplug(uxenconsole_context_t ctx,
     msg.header.type = UXENCONSOLE_MSG_TYPE_TOUCH_DEVICE_HOTPLUG;
     msg.header.len = sizeof (msg);
     msg.plug = plug;
+
+    rc = channel_write(c, &msg, sizeof (msg));
+    if (rc != sizeof (msg))
+        return -1;
+
+    return 0;
+}
+
+int
+uxenconsole_focus_changed(uxenconsole_context_t ctx,
+                          int focus)
+{
+    struct ctx *c = ctx;
+    struct uxenconsole_msg_focus_changed msg;
+    int rc;
+
+    snd_complete(c);
+
+    msg.header.type = UXENCONSOLE_MSG_TYPE_FOCUS_CHANGED;
+    msg.header.len = sizeof (msg);
+    msg.focus = focus;
 
     rc = channel_write(c, &msg, sizeof (msg));
     if (rc != sizeof (msg))

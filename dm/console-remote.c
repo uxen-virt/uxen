@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2017, Bromium, Inc.
+ * Copyright 2014-2019, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -12,6 +12,8 @@
 #include "uxen.h"
 #include "vram.h"
 #include "guest-agent.h"
+#include "atto-agent.h"
+#include "atto-vm.h"
 
 #include "qemu_glue.h"
 
@@ -29,6 +31,8 @@
 
 #include "ipc.h"
 
+#include <uxenhid-common.h>
+#include "hw/uxen_hid.h"
 #include "hw/uxdisp_hw.h"
 
 /* uxenconsolelib */
@@ -105,6 +109,31 @@ static TAILQ_HEAD(, remote_gui_state) heads;
 
 static void gui_resize(struct gui_state *state, int w, int h);
 
+static int
+hid_mouse_event(struct remote_gui_state *s,
+                int x, int y, int wheel, int hwheel, int flags)
+{
+    uint8_t buttons = 0;
+    int ret;
+    int scaled_x, scaled_y;
+
+    if (flags & MOUSE_EVENT_FLAG_LBUTTON_DOWN)
+        buttons |= UXENHID_MOUSE_BUTTON_1;
+    if (flags & MOUSE_EVENT_FLAG_RBUTTON_DOWN)
+        buttons |= UXENHID_MOUSE_BUTTON_2;
+    if (flags & MOUSE_EVENT_FLAG_MBUTTON_DOWN)
+        buttons |= UXENHID_MOUSE_BUTTON_3;
+
+    scaled_x = desktop_width > 1 ?
+        (((x + s->ds->desktop_x) * UXENHID_XY_MAX) / (desktop_width - 1)) : 0;
+    scaled_y = desktop_height> 1 ?
+        (((y + s->ds->desktop_y) * UXENHID_XY_MAX) / (desktop_height - 1)): 0;
+
+    ret = uxenhid_send_mouse_report(buttons, scaled_x, scaled_y,
+                                    wheel / 30, hwheel / 30);
+    return ret;
+}
+
 static void
 handle_message(struct uxenconsole_msg_header *hdr)
 {
@@ -126,7 +155,9 @@ handle_message(struct uxenconsole_msg_header *hdr)
 #endif
 
 #if !defined(__APPLE__)
-            if (guest_agent_mouse_event(msg->x, msg->y, msg->dv, msg->dh,
+            if (hid_mouse_event(s, msg->x, msg->y,
+                                msg->dv, msg->dh, msg->flags) &&
+                guest_agent_mouse_event(msg->x, msg->y, msg->dv, msg->dh,
                                         msg->flags))
 #endif /* !__APPLE */
             {
@@ -178,6 +209,9 @@ handle_message(struct uxenconsole_msg_header *hdr)
             }
 
 #if !defined(__APPLE__)
+            if (vm_attovm_mode == ATTOVM_MODE_AX)
+                attovm_check_keyboard_focus();
+
             if (guest_agent_kbd_event(msg->keycode, msg->repeat, msg->scancode,
                                       msg->flags & 0xffff, nchars,
                                       (wchar_t *)msg->chars, nchars_bare,
@@ -206,7 +240,8 @@ handle_message(struct uxenconsole_msg_header *hdr)
 #if !defined(__APPLE__)
             struct uxenconsole_msg_request_resize *msg = (void *)hdr;
 
-            if (guest_agent_window_event(0, 0x0005 /* WM_SIZE */, msg->flags,
+            if (atto_agent_send_resize_event(msg->width, msg->height) &&
+                guest_agent_window_event(0, 0x0005 /* WM_SIZE */, msg->flags,
                                          ((msg->height & 0xffff) << 16) |
                                          (msg->width & 0xffff)))
 #endif /* !__APPLE */
@@ -245,6 +280,18 @@ handle_message(struct uxenconsole_msg_header *hdr)
             struct ipc_client *c;
             TAILQ_FOREACH(c, &console_svc.clients, link)
                 ipc_client_send(c, msg, sizeof(*msg));
+#endif
+        }
+        break;
+    case UXENCONSOLE_MSG_TYPE_FOCUS_CHANGED:
+        {
+#if !defined(__APPLE__)
+            struct uxenconsole_msg_focus_changed *msg = (void *)hdr;
+            if (vm_attovm_mode == ATTOVM_MODE_AX) {
+                attovm_set_keyboard_focus(msg->focus);
+                attovm_check_keyboard_focus();
+            }
+            break;
 #endif
         }
         break;
@@ -694,6 +741,7 @@ gui_init(char *optstr)
 
 #if !defined(__APPLE__)
     guest_agent_init();
+    atto_agent_init();
 #endif
 
     input_kbd_ledstate_register(console_ledstate_notify, NULL);
@@ -710,6 +758,7 @@ gui_create(struct gui_state *state, struct display_state *ds)
     s->state.height = 480;
 
     s->ds = ds;
+    atto_agent_set_display_state(ds);
     s->cursor_mask_offset = UXDISP_REG_CURSOR_DATA;
     s->cursor_len = s->cursor_mask_offset + UXDISP_CURSOR_WIDTH_MAX * UXDISP_CURSOR_HEIGHT_MAX * 2 / 8;
     s->cursor_view = create_shm_segment(s->cursor_len, &s->cursor_handle);
@@ -731,6 +780,8 @@ static void
 gui_exit(void)
 {
     ipc_service_cleanup(&console_svc);
+    if (vm_attovm_mode)
+        atto_agent_cleanup();
 }
 
 static void

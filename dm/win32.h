@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -428,5 +428,40 @@ void *__wrap_HeapReAlloc(HANDLE heap, DWORD flags, void *ptr, size_t size);
 #define HeapAlloc __wrap_HeapAlloc
 #define HeapReAlloc __wrap_HeapReAlloc
 #endif
+
+typedef int DPI_AWARENESS;
+typedef void *DPI_AWARENESS_CONTEXT;
+#define DPI_AWARENESS_CONTEXT_UNAWARE              ((DPI_AWARENESS_CONTEXT)-1)
+#define DPI_AWARENESS_CONTEXT_SYSTEM_AWARE         ((DPI_AWARENESS_CONTEXT)-2)
+#define DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE    ((DPI_AWARENESS_CONTEXT)-3)
+#define DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 ((DPI_AWARENESS_CONTEXT)-4)
+
+static inline DPI_AWARENESS_CONTEXT
+Win32_SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT dpiContext)
+{
+    typedef DPI_AWARENESS_CONTEXT(WINAPI *PFN_SetThreadDpiAwarenessContext)(DPI_AWARENESS_CONTEXT);
+    static PFN_SetThreadDpiAwarenessContext fn = NULL;
+    if (!fn) {
+        fn = (PFN_SetThreadDpiAwarenessContext)GetProcAddress(
+            LoadLibrary("User32.dll"), "SetThreadDpiAwarenessContext");
+        if (!fn)
+            return DPI_AWARENESS_CONTEXT_UNAWARE;
+    }
+    return fn(dpiContext);
+}
+
+static inline DPI_AWARENESS
+Win32_GetAwarenessFromDpiAwarenessContext(DPI_AWARENESS_CONTEXT dpiContext)
+{
+    typedef DPI_AWARENESS(WINAPI *PFN_GetAwarenessFromDpiAwarenessContext)(DPI_AWARENESS_CONTEXT);
+    static PFN_GetAwarenessFromDpiAwarenessContext fn = NULL;
+    if (!fn) {
+        fn = (PFN_GetAwarenessFromDpiAwarenessContext)GetProcAddress(
+            LoadLibrary("User32.dll"), "GetAwarenessFromDpiAwarenessContext");
+        if (!fn)
+            return 0; // DPI_AWARENESS_UNAWARE;
+    }
+    return fn(dpiContext);
+}
 
 #endif	/* _WIN32_H_ */

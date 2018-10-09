@@ -89,6 +89,7 @@ struct atto_agent_state {
     uint32_t partner_id;
     Timer *resize_timer;
     critical_section cs;
+    struct display_state *ds;
 };
 
 #define RESIZE_BACKOFF_MS 400
@@ -153,7 +154,9 @@ send_latest_resize(struct atto_agent_state *s)
 }
 
 static void
-process_x11_cursor(struct atto_agent_msg *msg, int len)
+process_x11_cursor(struct atto_agent_state *s,
+    struct atto_agent_msg *msg,
+    int len)
 {
     if (msg->ctype == (uint32_t) (-2)) {
         attovm_unmap_x11_cursor(msg->ccursor);
@@ -162,8 +165,6 @@ process_x11_cursor(struct atto_agent_msg *msg, int len)
 
     /* custom x11 cursor */
     if (msg->ctype == (uint32_t) (-1)) {
-        int nbytes;
-
         if (len < (((uint8_t *) msg->bitmap) - ((uint8_t *) msg)) +
                  msg->len) {
 
@@ -171,13 +172,14 @@ process_x11_cursor(struct atto_agent_msg *msg, int len)
                         __FUNCTION__, len);
            return;
         }
-        nbytes = msg->len / 2;
         debug_printf("%s: atto_create_custom_cursor xptr %lx nbytes %u\n",
                      __FUNCTION__, (unsigned long) msg->ccursor,
-                     (unsigned) nbytes);
+                     (unsigned) msg->len);
         attovm_create_custom_cursor(msg->ccursor, msg->xhot, msg->yhot, msg->nx,
-                                    msg->ny, nbytes, (uint8_t *) &msg->bitmap,
-                                    (uint8_t *) &msg->bitmap[nbytes]);
+                                    msg->ny, msg->len, (uint8_t *)&msg->bitmap);
+        /* Apparently we also need to activate in this case */
+        attovm_set_x11_cursor(s->ds, msg->ccursor);
+
         return;
     }
 
@@ -215,10 +217,10 @@ atto_agent_process_msg(struct atto_agent_state *s,
         resp->msg.xres = 0;
         resp->msg.yres = 0;
     } else if (msg->type == ATTO_MSG_CURSOR_TYPE) {
-        process_x11_cursor(msg, len);
+        process_x11_cursor(s, msg, len);
         send_back = 0;
     } else if (msg->type == ATTO_MSG_CURSOR_CHANGE) {
-        attovm_set_x11_cursor(msg->ccursor);
+        attovm_set_x11_cursor(s->ds, msg->ccursor);
         send_back = 0;
     } else if (msg->type == ATTO_MSG_CURSOR_GET_SM) {
         resp->msg.type = ATTO_MSG_CURSOR_GET_SM_RET;
@@ -381,6 +383,12 @@ atto_agent_init(void)
     s->initialized = 1;
 
     return 0;
+}
+
+void
+atto_agent_set_display_state(struct display_state *ds)
+{
+    state.ds = ds;
 }
 
 int

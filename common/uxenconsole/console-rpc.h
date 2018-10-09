@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2017, Bromium, Inc.
+ * Copyright 2014-2019, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -27,6 +27,7 @@ enum uxenconsole_msg_type
     UXENCONSOLE_MSG_TYPE_CLIPBOARD_PERMIT       = 7,
     UXENCONSOLE_MSG_TYPE_TOUCH_DEVICE_HOTPLUG   = 8,
     UXENCONSOLE_MSG_TYPE_SET_SHARED_SURFACE     = 9,
+    UXENCONSOLE_MSG_TYPE_FOCUS_CHANGED          = 10,
 };
 
 struct uxenconsole_msg_resize_surface {
@@ -107,6 +108,11 @@ struct uxenconsole_msg_touch_device_hotplug {
 struct uxenconsole_msg_set_shared_surface {
     struct uxenconsole_msg_header header;
     uintptr_t surface;
+};
+
+struct uxenconsole_msg_focus_changed {
+    struct uxenconsole_msg_header header;
+    uint8_t focus;
 };
 
 #endif /* _CONSOLE_RPC_H_ */

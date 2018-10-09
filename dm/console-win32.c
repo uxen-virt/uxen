@@ -1224,7 +1224,7 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
     switch (message) {
     case WM_SETCURSOR:
         if (vm_attovm_mode && LOWORD(lParam) == HTCLIENT) {
-            attovm_set_current_cursor();
+            attovm_set_current_cursor(s->ds);
             return 0;
         }
         break;
@@ -1666,6 +1666,7 @@ gui_create(struct gui_state *state, struct display_state *ds)
     struct win32_gui_state *s = (void *)state;
 
     s->ds = ds;
+    atto_agent_set_display_state(ds);
     InitializeCriticalSection(&s->surface_lock);
     EnterCriticalSection(&s->surface_lock);
 
