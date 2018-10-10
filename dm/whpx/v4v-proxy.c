@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: ISC
  */
 
-#define UNICODE
+//#define UNICODE
 #include <dm/qemu_glue.h>
 #include <dm/hw/uxen_v4v.h>
 #include <dm/whpx/whpx.h>
