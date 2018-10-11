@@ -59,9 +59,6 @@ uxen_err_vprintf(const char *function, int line,
                  int errval, const char *errdesc,
                  const char *fmt, va_list ap)
 {
-    if (_uxenctllib_stderr == NULL)
-        _uxenctllib_stderr = stderr;
-
     if (log_sinker)
     {
         enum uxen_logtype printType = uxen_logtype_err;
