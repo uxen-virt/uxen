@@ -62,6 +62,11 @@ pvnested_setup(void)
     ax_cpuid_pv_vmaccess = PVNESTED_CPUID_PV_VMACCESS;
     ax_has_pv_vmcs = 1;
 
+    ax_cpuid_pv_ept_write = PVNESTED_CPUID_EPT_WRITE;
+    ax_cpuid_pv_ept_write_valid = PVNESTED_CPUID_EPT_WRITE_VALID;
+    ax_cpuid_pv_ept_write_invept_all = PVNESTED_CPUID_EPT_WRITE_INVEPT_ALL;
+    ax_pv_ept = 1;
+
     pvnested = 1;
 }
 

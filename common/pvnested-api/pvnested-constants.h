@@ -95,4 +95,14 @@
  * =RAX: vmwrite return value
  */
 
+#define PVNESTED_CPUID_EPT_WRITE 0x4e4059d4
+/* ept write notification
+ * RBX: ept base ma
+ * RCX: gfn << PAGE_SHIFT | invept-all | valid | level
+ * RDX: new entry
+ */
+#define PVNESTED_CPUID_EPT_WRITE_LEVEL_MASK 0x07
+#define PVNESTED_CPUID_EPT_WRITE_VALID 0x10
+#define PVNESTED_CPUID_EPT_WRITE_INVEPT_ALL 0x20
+
 #endif  /* __PVNESTED_CONSTANTS__ */

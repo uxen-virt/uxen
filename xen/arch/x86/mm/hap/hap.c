@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -63,7 +63,6 @@
 #include <asm/hvm/nestedhvm.h>
 #endif  /* __UXEN__ */
 #include <asm/hvm/vmx/vmx.h>
-#include <asm/hvm/ax.h>
 
 #include "private.h"
 

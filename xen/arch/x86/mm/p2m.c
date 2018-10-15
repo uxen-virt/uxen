@@ -59,8 +59,7 @@
 #include <asm/hvm/nestedhvm.h>
 #include <asm/hvm/svm/amd-iommu-proto.h>
 #endif  /* __UXEN__ */
-#include <asm/hvm/ax.h>
-#include <asm/hvm/xen_pv.h>
+#include <asm/hvm/pv.h>
 
 #include "mm-locks.h"
 
@@ -490,10 +489,7 @@ int p2m_alloc_table(struct p2m_domain *p2m)
     d->arch.hvm_domain.vmx.ept_control.asr  =
         pagetable_get_pfn(p2m_get_pagetable(p2m));
 
-    if (ax_pv_ept) 
-        ax_pv_ept_flush(p2m);
-    if (xen_pv_ept)
-	xen_pv_ept_flush(p2m);
+    pv_ept_flush(p2m);
 
 #ifndef __UXEN__
     if ( hap_enabled(d) )

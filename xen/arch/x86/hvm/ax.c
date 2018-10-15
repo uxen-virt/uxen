@@ -54,21 +54,24 @@ void ax_pv_ept_flush(struct p2m_domain *p2m)
 #endif
 }
 
+uint64_t ax_cpuid_pv_ept_write = AX_CPUID_PV_EPT_WRITE;
+uint64_t ax_cpuid_pv_ept_write_valid = AX_CPUID_PV_EPT_WRITE_VALID;
+uint64_t ax_cpuid_pv_ept_write_invept_all = AX_CPUID_PV_EPT_WRITE_INVEPT_ALL;
 static inline void ax_pv_ept_write_attocall(struct p2m_domain *p2m, int level, uint64_t gfn, uint64_t new_entry, int invept)
 {
 #ifdef __x86_64__
     uint64_t rax, rbx, rcx, rdx;
 
-    rax = AX_CPUID_PV_EPT_WRITE;
+    rax = ax_cpuid_pv_ept_write;
     rbx = (size_t)pagetable_get_pfn(p2m_get_pagetable(p2m)) << PAGE_SHIFT;
 
     rcx = gfn << PAGE_SHIFT;
 
     rcx |= level;
-    rcx |= AX_CPUID_PV_EPT_WRITE_VALID;
+    rcx |= ax_cpuid_pv_ept_write_valid;
 
     if (invept)
-        rcx |= AX_CPUID_PV_EPT_WRITE_INVEPT_ALL;
+        rcx |= ax_cpuid_pv_ept_write_invept_all;
 
     rdx = new_entry;
 
