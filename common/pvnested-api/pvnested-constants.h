@@ -73,8 +73,23 @@
  * =RBX: value
  */
 
+#define PVNESTED_CPUID_VMREAD_VALIDATE 0x4e9f4a92
+/* vmread validation
+ * RBX: field
+ * RDX: value to validate
+ * =RAX: vmread return value
+ * =RBX: value
+ */
+
 #define PVNESTED_CPUID_VMWRITE 0x4e6cf7b2
 /* vmwrite
+ * RBX: field
+ * RCX: value
+ * =RAX: vmwrite return value
+ */
+
+#define PVNESTED_CPUID_VMWRITE_VALIDATE 0x4e1de5d1
+/* vmwrite validation
  * RBX: field
  * RCX: value
  * =RAX: vmwrite return value
