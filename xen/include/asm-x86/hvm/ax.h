@@ -16,6 +16,7 @@
 #include <attoxen-api/ax_constants.h>
 #include <attoxen-api/ax_structures.h>
 
+DECLARE_PER_CPU(void *, ax_pv_vmcs_ctx);
 
 #define AX_VMCS_EXTENSIONS_V1(v) \
     ((ax_vmcs_extensions_v1_t *)(((uint8_t *)v) + 0x1000 - \

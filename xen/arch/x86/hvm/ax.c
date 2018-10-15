@@ -28,7 +28,7 @@ extern int ax_pv_vmwrite(void *, uint64_t field, uint64_t value);
 typedef int (*pvi_vmread_pfn)(void *, uint64_t field, uint64_t *value);
 typedef int (*pvi_vmwrite_pfn)(void *, uint64_t field, uint64_t value);
 
-static DEFINE_PER_CPU_READ_MOSTLY (void *, ax_pv_vmcs_ctx);
+DEFINE_PER_CPU_READ_MOSTLY (void *, ax_pv_vmcs_ctx);
 
 void ax_pv_ept_flush(struct p2m_domain *p2m)
 {
@@ -309,7 +309,8 @@ int ax_pv_vmcs_setup(void)
 
     patched = 1;
 
-    this_cpu(ax_pv_vmcs_ctx) = (void *) (size_t) rbx;
+    if (rbx)
+        this_cpu(ax_pv_vmcs_ctx) = (void *) (size_t) rbx;
 
     ax_pv_vmcs_enabled = 1;
 

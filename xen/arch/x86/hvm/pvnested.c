@@ -146,6 +146,9 @@ pvnested_vmxon(u64 addr)
         return -2;              /* #UD or #GP */
     }
 
+    ASSERT(addr == virt_to_maddr(this_cpu(vmxon_region)));
+    this_cpu(ax_pv_vmcs_ctx) = this_cpu(vmxon_region);
+
     return 0;
 }
 

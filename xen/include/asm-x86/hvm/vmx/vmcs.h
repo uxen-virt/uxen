@@ -454,6 +454,7 @@ void setup_pv_vmcs_access(void);
 extern uint8_t vmx_vmcs_late_load;
 
 DECLARE_PER_CPU(struct arch_vmx_struct *, current_vmcs_vmx);
+DECLARE_PER_CPU(struct vmcs_struct *, vmxon_region);
 
 void pv_vmcs_flush_dirty(struct arch_vmx_struct *vmcs_vmx, int unload);
 
