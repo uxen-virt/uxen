@@ -317,6 +317,10 @@ main(int argc, char **argv)
         errx(1, "no load file specified for template or clone");
 
     debug_printf("dm path:         %s\n", dm_path);
+    debug_printf("cmd line:       ");
+    for (i = 0; i < argc; i++)
+        debug_printf(" %s", argv[i]);
+    debug_printf("\n");
     debug_printf("boot order:      %s\n", boot_order);
 #ifdef MONITOR
     debug_printf("monitor device:  %s\n", monitor_device);

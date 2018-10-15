@@ -83,6 +83,7 @@ config_load(const char *name)
     buf[sbuf.st_size] = 0;
 
     cf->config_buf = buf;
+    debug_printf("config file %s:\n%s\n", name, buf);
 
     errbuf[0] = 0;
     cf->parser_obj = yajl_tree_parse(cf->config_buf, errbuf, sizeof(errbuf));
