@@ -1095,7 +1095,9 @@ int vlapic_ack_pending_irq(struct vcpu *v, int vector)
          * lower priority vectors are pending in the ISR. Thus we can set
          * APIC assist to avoid exiting for EOI.
          */
+#ifdef __x86_64__
         viridian_apic_assist_set(v);
+#endif
     }
 
 done:
