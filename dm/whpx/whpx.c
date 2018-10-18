@@ -476,15 +476,18 @@ whpx_vm_destroy(void)
         cpu = cpu->next_cpu;
     }
 
-    /* destroy other */
-    whpx_ram_uninit();
-    VirtualFree(shared_info_page, 0, MEM_RELEASE);
-    shared_info_page = NULL;
-
+    /* destroy v4v */
     whpx_v4v_shutdown();
     debug_printf("v4v destroy\n");
     v4v_destroy(&guest);
     debug_printf("v4v destroy done\n");
+
+    /* destroy ram */
+    whpx_ram_uninit();
+
+    VirtualFree(shared_info_page, 0, MEM_RELEASE);
+    shared_info_page = NULL;
+
     memset(&guest, 0, sizeof(guest));
 }
 
