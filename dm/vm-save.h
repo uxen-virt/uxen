@@ -72,4 +72,12 @@ int vm_load_finish(void);
 
 int vm_lazy_load_page(uint32_t gpfn, uint8_t *va, int compressed);
 
+#ifdef SAVE_CUCKOO_ENABLED
+struct page_fingerprint;
+
+int
+save_cuckoo_pages(struct filebuf *f, struct page_fingerprint *hashes,
+                  int n, int simple_mode, char **err_msg);
+#endif
+
 #endif	/* _VM_SAVE_H_ */

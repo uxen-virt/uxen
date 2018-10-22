@@ -148,4 +148,37 @@ diff_pr(pagerange_t *a, pagerange_t *b, pagerange_t *out)
     return count;
 }
 
+/* From Windows 17763 SDK */
+#define PAGE_REVERT_TO_FILE_MAP     0x80000000
+#define MEM_REPLACE_PLACEHOLDER     0x00004000
+#define MEM_RESERVE_PLACEHOLDER     0x00040000
+#define MEM_COALESCE_PLACEHOLDERS   0x00000001
+#define MEM_PRESERVE_PLACEHOLDER    0x00000002
+
+PVOID
+WINAPI
+(*MapViewOfFile3)(
+  HANDLE FileMapping,
+  HANDLE Process,
+  PVOID BaseAddress,
+  ULONG64 Offset,
+  SIZE_T ViewSize,
+  ULONG AllocationType,
+  ULONG PageProtection,
+  PVOID ExtendedParameters,
+  ULONG ParameterCount
+);
+
+PVOID
+WINAPI
+(*VirtualAlloc2)(
+  HANDLE Process,
+  PVOID BaseAddress,
+  SIZE_T Size,
+  ULONG AllocationType,
+  ULONG PageProtection,
+  PVOID ExtendedParameters,
+  ULONG ParameterCount
+);
+
 #endif

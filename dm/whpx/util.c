@@ -751,4 +751,10 @@ whpx_initialize_api(void)
     LINK_EMU_API (WHvEmulatorTryMmioEmulation);
 
     whpx_reg_list_init(&all_registers, all_register_names);
+
+    HMODULE kernel = LoadLibrary("KernelBase.dll");
+    if (!kernel)
+        whpx_panic("failed to load KernelBase module");
+    MapViewOfFile3 = (void*)GetProcAddress(kernel, "MapViewOfFile3");
+    VirtualAlloc2 = (void*)GetProcAddress(kernel, "VirtualAlloc2");
 }

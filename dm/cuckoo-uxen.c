@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -15,6 +15,7 @@
 #include "qemu_savevm.h"
 #include "vm.h"
 #include "vm-save.h"
+#include <dm/whpx/whpx.h>
 
 #include <xc_private.h>
 #include <lz4.h>
@@ -22,7 +23,8 @@
 #define MAX_BATCH_SIZE 1023
 
 struct thread_ctx {
-    xc_hypercall_buffer_t buffer;
+    xc_hypercall_buffer_t buffer_xc;
+    void *buffer_raw;
     xen_memory_capture_gpfn_info_t *gpfn_info_list;
 };
 
@@ -180,7 +182,9 @@ static int capture_pfns(void *opaque, int tid, int n, void *out, uint64_t *pfns)
     uint8_t *p;
     struct ctx *ctx = opaque;
     struct thread_ctx *tc = &ctx->tcs[tid];
-    uint8_t *buf = HYPERCALL_BUFFER_ARGUMENT_BUFFER(&tc->buffer);
+    uint8_t *buf = !whpx_enable
+        ? HYPERCALL_BUFFER_ARGUMENT_BUFFER(&tc->buffer_xc)
+        : tc->buffer_raw;
     xen_memory_capture_gpfn_info_t *gpfn_info_list = tc->gpfn_info_list;
     int ret;
 
@@ -196,9 +200,18 @@ static int capture_pfns(void *opaque, int tid, int n, void *out, uint64_t *pfns)
                                                 XENMEM_MCGI_FLAGS_REMOVE_PFN);
         }
 
-        ret = xc_domain_memory_capture(
+        if (!whpx_enable) {
+            ret = xc_domain_memory_capture(
                 xc_handle, vm_id, take, gpfn_info_list, &got,
-                &tc->buffer, PAGE_SIZE * take);
+                &tc->buffer_xc, PAGE_SIZE * take);
+        } else {
+            BUILD_BUG_ON(
+                sizeof(whpx_memory_capture_gpfn_info_t) !=
+                sizeof(xen_memory_capture_gpfn_info_t));
+            ret = whpx_memory_capture(
+                take, (whpx_memory_capture_gpfn_info_t*)gpfn_info_list, &got,
+                tc->buffer_raw, PAGE_SIZE * take);
+        }
         if (ret || got != take) {
             debug_printf("xc_domain_memory_capture fail/incomplete: ret %d"
                     " errno %d done %ld/%d", ret, errno, got, take);
@@ -235,7 +248,10 @@ static void *get_buffer(void *opaque, int tid, int *max)
     struct ctx *ctx = opaque;
     struct thread_ctx *tc = &ctx->tcs[tid];
     *max = MAX_BATCH_SIZE;
-    return HYPERCALL_BUFFER_ARGUMENT_BUFFER(&tc->buffer);
+    if (!whpx_enable)
+        return HYPERCALL_BUFFER_ARGUMENT_BUFFER(&tc->buffer_xc);
+    else
+        return tc->buffer_raw;
 }
 
 static int populate_pfns(void *opaque, int tid, int n, uint64_t *pfns)
@@ -244,9 +260,14 @@ static int populate_pfns(void *opaque, int tid, int n, uint64_t *pfns)
     struct thread_ctx *tc = &ctx->tcs[tid];
     int ret;
 
-    ret = xc_domain_populate_physmap_from_buffer(xc_handle, vm_id, n, 0,
-                                                 XENMEMF_populate_from_buffer,
-                                                 pfns, &tc->buffer);
+    if (!whpx_enable) {
+        ret = xc_domain_populate_physmap_from_buffer(xc_handle, vm_id, n, 0,
+            XENMEMF_populate_from_buffer,
+            pfns, &tc->buffer_xc);
+    } else {
+        ret = whpx_memory_populate_from_buffer(n, pfns, tc->buffer_raw);
+    }
+
     return ret;
 }
 
@@ -331,13 +352,18 @@ int cuckoo_uxen_init(struct cuckoo_context *cuckoo_context,
 
     for (i = 0; i < CUCKOO_NUM_THREADS; ++i) {
         struct thread_ctx *tc = &ctx->tcs[i];
-        DECLARE_HYPERCALL_BUFFER(uint8_t, pp_buffer);
-        pp_buffer = xc_hypercall_buffer_alloc_pages(
-            xc_handle, pp_buffer, MAX_BATCH_SIZE);
-        if (!pp_buffer) {
-            goto err;
+        if (!whpx_enable) {
+            DECLARE_HYPERCALL_BUFFER(uint8_t, pp_buffer);
+            pp_buffer = xc_hypercall_buffer_alloc_pages(
+                xc_handle, pp_buffer, MAX_BATCH_SIZE);
+            if (!pp_buffer)
+                goto err;
+            tc->buffer_xc = *HYPERCALL_BUFFER(pp_buffer);
+        } else {
+            tc->buffer_raw = alloc_mem(ctx, MAX_BATCH_SIZE * PAGE_SIZE);
+            if (!tc->buffer_raw)
+                goto err;
         }
-        tc->buffer = *HYPERCALL_BUFFER(pp_buffer);
         tc->gpfn_info_list = alloc_mem(ctx, MAX_BATCH_SIZE *
                                        sizeof(tc->gpfn_info_list[0]));
     }
@@ -376,9 +402,13 @@ void cuckoo_uxen_close(struct cuckoo_context *cuckoo_context, void *opaque)
 
     for (i = 0; i < CUCKOO_NUM_THREADS; ++i) {
         struct thread_ctx *tc = &ctx->tcs[i];
-        if (HYPERCALL_BUFFER_ARGUMENT_BUFFER(&tc->buffer)) {
-            xc__hypercall_buffer_free_pages(xc_handle, &tc->buffer,
-                                            MAX_BATCH_SIZE);
+        if (!whpx_enable) {
+            if (HYPERCALL_BUFFER_ARGUMENT_BUFFER(&tc->buffer_xc)) {
+                xc__hypercall_buffer_free_pages(xc_handle, &tc->buffer_xc,
+                    MAX_BATCH_SIZE);
+            }
+        } else {
+            free_mem(ctx, tc->buffer_raw);
         }
         free_mem(ctx, tc->gpfn_info_list);
     }

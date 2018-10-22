@@ -71,9 +71,9 @@ void whpx_register_iorange(uint64_t start, uint64_t length, int is_mmio);
 void whpx_unregister_iorange(uint64_t start, uint64_t length, int is_mmio);
 
 struct filebuf;
-int whpx_clone_pages(struct filebuf *f, uint8_t *template_uuid, int no_pages);
-int whpx_read_pages(struct filebuf *f, int no_pages);
-int whpx_write_pages(struct filebuf *f);
+int whpx_clone_memory(char *template_file);
+int whpx_read_memory(struct filebuf *f, int layout_only);
+int whpx_write_memory(struct filebuf *f);
 
 /**
  * LIFECYCLE
@@ -112,6 +112,32 @@ void whpx_unlock_iothread(void);
 void whpx_debug_char(char data);
 int whpx_inject_trap(int cpu, int trap, int error_code, int cr2);
 
+/* memory capture definitions match uxen's */
+#define WHPX_MCGI_FLAGS_VM         0x0000
+#define WHPX_MCGI_FLAGS_TEMPLATE   0x0001
+#define WHPX_MCGI_FLAGS_REMOVE_PFN 0x0010
+
+#define WHPX_MCGI_TYPE_NOT_PRESENT 0x0000
+#define WHPX_MCGI_TYPE_NORMAL      0x0001
+#define WHPX_MCGI_TYPE_ZERO        0x0003
+
+typedef struct whpx_memory_capture_gpfn_info {
+    union {
+        struct {                /* in */
+            uint32_t gpfn;
+            uint32_t flags;
+        };
+        struct {                /* out */
+            uint32_t type;
+            uint32_t offset;
+        };
+    };
+} whpx_memory_capture_gpfn_info_t;
+
+int whpx_memory_capture(unsigned long nr_pfns, whpx_memory_capture_gpfn_info_t *pfns,
+    unsigned long *nr_done, void *buffer, uint32_t buffer_size);
+int whpx_memory_populate_from_buffer(unsigned long nr_pfns, uint64_t *pfns, void *buffer);
+
 #else /* _WIN32 */
 
 #define WHPX_UNSUPPORTED errx(1, "whpx unsupported on this platform\n");
@@ -128,9 +154,9 @@ static inline void whpx_ram_unmap(void *ptr) { WHPX_UNSUPPORTED; }
 static inline int whpx_ram_populate_with(uint64_t phys_addr, uint64_t len, void *va) { WHPX_UNSUPPORTED; return -1; }
 static inline int whpx_ram_populate(uint64_t phys_addr, uint64_t len) { WHPX_UNSUPPORTED; return -1; }
 static inline int whpx_ram_depopulate(uint64_t phys_addr, uint64_t len) { WHPX_UNSUPPORTED; return -1; }
-static inline int whpx_clone_pages(struct filebuf *f, uint8_t *template_uuid, int no_pages) { WHPX_UNSUPPORTED; return -1; }
-static inline int whpx_read_pages(struct filebuf *f, int no_pages) { WHPX_UNSUPPORTED; return -1; }
-static inline int whpx_write_pages(struct filebuf *f) { WHPX_UNSUPPORTED; return -1; }
+static inline int whpx_clone_memory(char *template_file) { WHPX_UNSUPPORTED; return -1; }
+static inline int whpx_read_memory(struct filebuf *f, int layout_only) { WHPX_UNSUPPORTED; return -1; }
+static inline int whpx_write_memory(struct filebuf *f) { WHPX_UNSUPPORTED; return -1; }
 
 #endif /* _WIN32 */
 

@@ -405,12 +405,6 @@ compression_is_cuckoo(void)
 #endif
 }
 
-#ifdef SAVE_CUCKOO_ENABLED
-static int
-save_cuckoo_pages(struct filebuf *f, struct page_fingerprint *hashes,
-                  int n, int simple_mode, char **err_msg);
-#endif
-
 static int
 check_aborted(void)
 {
@@ -1516,7 +1510,7 @@ out:
     return ret;
 }
 
-static int
+int
 save_cuckoo_pages(struct filebuf *f, struct page_fingerprint *hashes,
                   int n, int simple_mode, char **err_msg)
 {
@@ -1585,22 +1579,38 @@ load_cuckoo_pages(struct filebuf *f, int reusing_vm, int simple_mode)
 #endif /* SAVE_CUCKOO_ENABLED */
 
 static int
-load_whp_pages(struct filebuf *f, int restore_mode, struct xc_save_whp_pages *swhp)
+load_whpx_memory_data(
+    struct filebuf *f, int restore_mode,
+    struct xc_save_whpx_memory_data *memdata, char **err_msg)
 {
     int ret;
-    int no_pages = swhp->no_pages;
+    char *template_file = vm_template_file;
+    extern char *vm_loadfile;
 
-    debug_printf("load whp pages\n");
-    if (restore_mode == VM_RESTORE_CLONE) {
-        ret = whpx_clone_pages(f, vm_template_uuid, no_pages);
-        if (!ret) {
-            if (!vm_has_template_uuid)
-                vm_has_template_uuid = 1;
-            //restore_mode = VM_RESTORE_NORMAL;
+    if (restore_mode == VM_RESTORE_CLONE && !template_file)
+        template_file = vm_loadfile;
+
+    debug_printf("load whpx memory, template %s\n", template_file ? template_file : "<none>");
+    if (template_file) {
+        ret = whpx_clone_memory(template_file);
+        if (ret) {
+            asprintf(err_msg, "clone template failed: %d", ret);
+            goto out;
+        }
+        if (!vm_has_template_uuid)
+            vm_has_template_uuid = 1;
+        restore_mode = VM_RESTORE_NORMAL;
+        ret = filebuf_seek(
+            f, memdata->size - sizeof(*memdata),
+            FILEBUF_SEEK_CUR) != -1 ? 0 : -EIO;
+        if (ret) {
+            asprintf(err_msg, "filebuf_seek(load_whpx_memory_data) failed");
+            goto out;
         }
     } else
-        ret = whpx_read_pages(f, no_pages);
+        ret = whpx_read_memory(f, !memdata->has_page_contents);
 
+out:
     return ret;
 }
 
@@ -1658,7 +1668,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
 #ifdef SAVE_CUCKOO_ENABLED
     struct xc_save_cuckoo_data s_cuckoo = { };
 #endif
-    struct xc_save_whp_pages s_whppages = { };
+    struct xc_save_whpx_memory_data s_whpx_memory = { };
     struct immutable_range *immutable_ranges = NULL;
     uint8_t *hvm_buf = NULL;
     uint8_t *zero_bitmap = NULL, *zero_bitmap_compressed = NULL;
@@ -1794,11 +1804,11 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
                 goto out;
             break;
 #endif
-        case XC_SAVE_ID_WHP_PAGES:
-            uxenvm_load_read_struct(f, s_whppages, marker, ret, err_msg, out);
+        case XC_SAVE_ID_WHPX_MEMORY_DATA:
+            uxenvm_load_read_struct(f, s_whpx_memory, marker, ret, err_msg, out);
             uxenvm_check_restore_clone(restore_mode);
             uxenvm_check_mapcache_init();
-            ret = load_whp_pages(f, restore_mode, &s_whppages);
+            ret = load_whpx_memory_data(f, restore_mode, &s_whpx_memory, err_msg);
             if (ret)
                 goto out;
             break;
@@ -2380,7 +2390,7 @@ vm_save_execute(void)
         off_t o = filebuf_tell(f);
         ret = !whpx_enable
             ? uxenvm_savevm_write_pages(f, &err_msg)
-            : whpx_write_pages(f);
+            : whpx_write_memory(f);
         if (ret && compression_is_cuckoo()) {
             if (ret == -ENOSPC)
                 vm_save_info.compress_mode = VM_SAVE_COMPRESS_LZ4;
@@ -2462,7 +2472,7 @@ vm_restore_memory(void)
 #ifdef SAVE_CUCKOO_ENABLED
     struct xc_save_cuckoo_data s_cuckoo;
 #endif
-    struct xc_save_whp_pages s_whppages;
+    struct xc_save_whpx_memory_data s_whpx_memory;
     char *err_msg = NULL;
 #ifdef VERBOSE
     int count = 0;
@@ -2511,10 +2521,12 @@ vm_restore_memory(void)
             ret = load_cuckoo_pages(f, 1, s_cuckoo.simple_mode);
             goto out;
 #endif
-        case XC_SAVE_ID_WHP_PAGES:
-            uxenvm_load_read_struct(f, s_whppages, marker, ret, &err_msg, out);
-            ret = load_whp_pages(f, vm_restore_mode, &s_whppages);
-            goto out;
+        case XC_SAVE_ID_WHPX_MEMORY_DATA:
+            uxenvm_load_read_struct(f, s_whpx_memory, marker, ret, &err_msg, out);
+            ret = load_whpx_memory_data(f, vm_restore_mode, &s_whpx_memory, &err_msg);
+            if (ret)
+                goto out;
+            break;
         default:
             ret = uxenvm_load_batch(f, marker, pfn_type, pfn_err, pfn_info,
                                     &dc, 0 /* lazy_load */, populate_compressed,
