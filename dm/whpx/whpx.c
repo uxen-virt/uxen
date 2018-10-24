@@ -514,6 +514,23 @@ whpx_vcpu_start(CPUState *s)
 #define MAX_TSC_DESYNC 100000
 #define MAX_TSC_PROPAGATE_ITERS 10000
 
+static int
+check_unreliable_tsc(void)
+{
+    /* it is unreliable if running while vm has not started yet */
+    WHV_REGISTER_NAME name = WHvX64RegisterTsc;
+    WHV_REGISTER_VALUE v0;
+    WHV_REGISTER_VALUE v1;
+
+    if (FAILED(whpx_get_vp_registers(0, &name, 1, &v0)))
+        whpx_panic("failed to get TSC value\n");
+    Sleep(10);
+    if (FAILED(whpx_get_vp_registers(0, &name, 1, &v1)))
+        whpx_panic("failed to get TSC value\n");
+
+    return v0.Reg64 != v1.Reg64;
+}
+
 /* currently in WHP there's no method to set same TSC offset for all vcpus. It does seem to compute TSC offset at the
  * time we set TSC value for vcpu, though. Therefore until API improvements, workaround by setting TSC value in tight loop
  * until we think the desync should be in acceptable range */
@@ -527,6 +544,9 @@ workaround_unreliable_tsc(void)
     WHV_REGISTER_VALUE v;
     uint64_t t0, dt;
 
+    if (!check_unreliable_tsc())
+        return;
+    debug_printf("detected unreliable TSC on WHP! applying workaround\n");
     name = WHvX64RegisterTsc;
     for (i = 0; i < vm_vcpus; i++) {
         hr = whpx_get_vp_registers(i, &name, 1, &v);
@@ -541,7 +561,7 @@ workaround_unreliable_tsc(void)
     while (i++ < MAX_TSC_PROPAGATE_ITERS) {
         t0 = _rdtsc();
         for (vcpu = 0; vcpu < vm_vcpus; vcpu++) {
-            v.Reg64 = tscval + (_rdtsc() - t0);
+            v.Reg64 = tscval;
             hr = whpx_set_vp_registers(vcpu, &name, 1, &v);
             if (FAILED(hr))
                 whpx_panic("failed to set TSC value: %08lx\n", hr);
