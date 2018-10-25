@@ -166,6 +166,7 @@ do_v4v_send(v4v_context_t *v4v, v4v_datagram_t *dgram, size_t size)
         if (ret) {
             debug_printf("failed to create DLO ring domain=%d port=%d, err=%d\n",
                 id.addr.domain, id.addr.port, ret);
+            ret = -ECONNREFUSED;
             return ret;
         }
 
@@ -529,8 +530,13 @@ resend_to(v4v_context_t *v4v, v4v_ring_data_ent_t *entry)
                 async_complete(next->async, ret);
             conn->num_pending--;
             free_pending_send(next);
-        } else
-            whpx_panic("unexpected send error: %d\n", ret);
+        } else {
+            /* fail */
+            if (next->async)
+                async_complete(next->async, ret);
+            conn->num_pending--;
+            free_pending_send(next);
+        }
 
         counter++;
     } while (true);
