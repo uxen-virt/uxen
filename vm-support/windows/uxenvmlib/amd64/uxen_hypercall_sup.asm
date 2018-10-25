@@ -108,6 +108,68 @@ _hypercall6	proc
 
 _hypercall6	endp
 
+        ;; WHPX hypercalls
+
+	public _whpx_hypercall1
+	public _whpx_hypercall2
+	public _whpx_hypercall3
+	
+_whpx_hypercall1:
+_whpx_hypercall2:
+_whpx_hypercall3	proc
+
+	push	rdi
+	push	rsi
+	mov	rax, rcx
+	mov	rdi, rdx
+	mov	rsi, r8
+	mov	rdx, r9
+        cpuid
+	pop	rsi
+	pop	rdi
+	ret
+
+_whpx_hypercall3	endp
+
+
+
+	public _whpx_hypercall4
+_whpx_hypercall4	proc
+
+	push	rdi
+	push	rsi
+	mov	rax, rcx
+	mov	rdi, rdx
+	mov	rsi, r8
+	mov	rdx, r9
+	mov	r10, qword ptr [rsp+38h] 
+        cpuid
+	pop	rsi
+	pop	rdi
+	ret
+
+_whpx_hypercall4	endp
+
+
+
+	public _whpx_hypercall5
+_whpx_hypercall5	proc
+
+	push	rdi
+	push	rsi
+	mov	rax, rcx
+	mov	rdi, rdx
+	mov	rsi, r8
+	mov	rdx, r9
+	mov	r10, qword ptr [rsp+38h] 
+	mov	r8, qword ptr [rsp+40h] 
+        cpuid
+	pop	rsi
+	pop	rdi
+	ret
+
+_whpx_hypercall5	endp
+
         public _whpx_hypercall6
 
 _whpx_hypercall6 proc

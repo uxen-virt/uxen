@@ -18,4 +18,9 @@ struct whpx_shared_info {
 #define WHP_CPUID_SIGNATURE_ECX 0x6f6e7369 /* "isno" */
 #define WHP_CPUID_SIGNATURE_EDX 0x6e655874 /* "tXen" */
 
+/* hypercall CPUIDs */
+#define __WHPX_HYPERVISOR_v4v_op    0x35af3466
+#define __WHPX_HYPERVISOR_memory_op 0x35af3467
+
+
 #endif

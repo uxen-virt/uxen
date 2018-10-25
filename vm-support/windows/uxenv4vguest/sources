@@ -19,7 +19,7 @@ NTTARGETFILE2 = POST
 
 LINKER_FLAGS = $(LINKER_FLAGS) /LTCG:NOSTATUS /SECTION:.rsrc,!d
 
-INCLUDES=..\..\..\common\include\xen-public;..\common;$(UXENV4VLIB_INC)
+INCLUDES=..\..\..\common\include\xen-public;..\..\..\common\include;..\common;$(UXENV4VLIB_INC)
 
 TARGETLIBS=$(UXENVMLIB_LIB) $(UXENV4VLIB_LIB)
 

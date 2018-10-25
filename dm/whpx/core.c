@@ -43,9 +43,16 @@
 #include "ioapic.h"
 #include <whpx-shared.h>
 
-#define CPUID_V4VOP 0x35af3466
 #define CPUID_DEBUG_OUT_8  0x54545400
 #define CPUID_DEBUG_OUT_32 0x54545404
+
+/* matches uxen definitions */
+#define WHPXMEM_share_zero_pages 50
+
+struct whpx_memory_share_zero_pages {
+    uint64_t gpfn_list_gpfn;
+    uint32_t nr_gpfns;
+};
 
 //#define EMU_MICROSOFT
 
@@ -956,6 +963,29 @@ whpx_handle_msr_access(CPUState *cpu)
 extern int do_v4v_op_cpuid(CPUState *cpu,
     uint64_t rdi, uint64_t rsi, uint64_t rdx, uint64_t r10, uint64_t r9, uint64_t r8);
 
+int
+do_memory_op_cpuid(CPUState *cpu, uint64_t rdi, uint64_t rsi)
+{
+    uint64_t cmd = rdi;
+
+    switch (cmd) {
+    case WHPXMEM_share_zero_pages: {
+        struct whpx_memory_share_zero_pages sh = { 0 };
+        whpx_copy_from_guest_va(cpu, &sh, rsi, sizeof(sh));
+        uint64_t len = sh.nr_gpfns * sizeof(uint64_t);
+        uint64_t *pfns = whpx_ram_map(sh.gpfn_list_gpfn << PAGE_SHIFT, &len);
+        assert(pfns);
+        whpx_memory_balloon_grow(sh.nr_gpfns, pfns);
+        whpx_ram_unmap(pfns);
+        break;
+    }
+    default:
+        return -ENOSYS;
+    }
+
+    return 0;
+}
+
 static int
 cpuid_viridian_hypercall(uint64_t leaf, uint64_t *eax,
     uint64_t *ebx, uint64_t *ecx,
@@ -1048,7 +1078,11 @@ whpx_handle_cpuid(CPUState *cpu)
         whpx_debug_char((char)((rcx & 0xff0000) >> 16));
         whpx_debug_char((char)((rcx & 0xff000000) >> 24));
         break;
-    case CPUID_V4VOP: {
+    case __WHPX_HYPERVISOR_memory_op: {
+        rax = do_memory_op_cpuid(cpu, rdi, rsi);
+        break;
+    }
+    case __WHPX_HYPERVISOR_v4v_op: {
         uint64_t t0 = 0;
 
         if (whpx_perf_stats)

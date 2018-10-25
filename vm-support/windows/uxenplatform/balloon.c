@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -16,6 +16,8 @@
 #include <uxen/platform_interface.h>
 
 #include "balloon.h"
+
+#define DBG
 
 #ifdef DBG
 #define UXENPLATFORM_BALLOON_MSG(_exp_) uxen_debug _exp_

@@ -71,6 +71,7 @@ void whpx_register_iorange(uint64_t start, uint64_t length, int is_mmio);
 void whpx_unregister_iorange(uint64_t start, uint64_t length, int is_mmio);
 
 struct filebuf;
+int whpx_memory_balloon_grow(unsigned long nr_pfns, uint64_t *pfns);
 int whpx_clone_memory(char *template_file);
 int whpx_read_memory(struct filebuf *f, int layout_only);
 int whpx_write_memory(struct filebuf *f);

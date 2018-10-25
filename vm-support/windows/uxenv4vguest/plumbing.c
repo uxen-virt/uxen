@@ -4,6 +4,7 @@
  */
 
 #include "uxenv4vguest_private.h"
+#include <whpx-shared.h>
 
 static void
 guest_logger(int lvl, const char *str)
@@ -27,7 +28,7 @@ whpx_v4v_hypercall(uintptr_t privileged,
               uintptr_t a4, uintptr_t a5, uintptr_t a6)
 {
     (void)privileged;
-    return uxen_hypercall6(0x35af3466, a1, a2, a3, a4, a5, a6);
+    return uxen_hypercall6(__WHPX_HYPERVISOR_v4v_op, a1, a2, a3, a4, a5, a6);
 }
 
 void uxen_v4v_guest_do_plumbing(PDRIVER_OBJECT pdo)

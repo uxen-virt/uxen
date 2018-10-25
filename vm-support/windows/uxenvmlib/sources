@@ -13,7 +13,7 @@ DLLDEF             = uxenvmlib.def
 
 NTTARGETFILE2 = POST
 
-INCLUDES=..\..\..\common\include\xen-public;..\common
+INCLUDES=..\..\..\common\include\xen-public;..\..\..\common\include;..\common
 
 TARGETLIBS = \
     $(TARGETLIBS) \

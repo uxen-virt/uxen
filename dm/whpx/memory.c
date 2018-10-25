@@ -1506,6 +1506,31 @@ whpx_read_memory(struct filebuf *f, int layout_only)
 static uint64_t cap_time, cap_cpy_time, pop_time, pop_cpy_time, cap_pages, pop_pages;
 #endif
 
+/* atm this will only work on clones since it relies on reverting to template pages via
+ * PAGE_REVERT_TO_FILE_MAP */
+int
+whpx_memory_balloon_grow(unsigned long nr_pfns, uint64_t *pfns)
+{
+    unsigned long i;
+    mb_entry_t *mb = NULL;
+
+    for (i = 0; i < nr_pfns; i++) {
+        uint64_t pfn = pfns[i];
+        if (!mb || !(pfn >= mb->r.start && pfn < mb->r.end))
+            mb = find_page_mb_entry(pfn);
+        assert(mb);
+        void *page = mb->va + ((pfn - mb->r.start) << PAGE_SHIFT);
+        DWORD oldp;
+        if (!VirtualProtect(page, PAGE_SIZE, PAGE_REVERT_TO_FILE_MAP|PAGE_WRITECOPY, &oldp)) {
+            debug_printf("balloon page add %"PRIx64" via VirtualProtect failed: %d\n",
+                pfn, (int)GetLastError());
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
 int
 whpx_memory_capture(unsigned long nr_pfns, whpx_memory_capture_gpfn_info_t *pfns,
     unsigned long *nr_done, void *buffer, uint32_t buffer_size)
