@@ -17,8 +17,6 @@
 
 #include "balloon.h"
 
-#define DBG
-
 #ifdef DBG
 #define UXENPLATFORM_BALLOON_MSG(_exp_) uxen_debug _exp_
 #define DUMP_PAGES_LIST_NODE(_node_, _recursive_) \
