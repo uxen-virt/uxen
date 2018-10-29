@@ -460,7 +460,7 @@ whpx_ram_map(uint64_t phys_addr, uint64_t *len)
 
     // sanity
     if (!((phys_addr < VM_VA_RANGE_SIZE) && (phys_addr + l < VM_VA_RANGE_SIZE)))
-        whpx_panic("bad map attempt: addr=0x%"PRIx64" len=0x%"PRIx64"\n",
+        debug_printf("bad map attempt: addr=0x%"PRIx64" len=0x%"PRIx64"\n",
             phys_addr, l);
 
     uint64_t page = phys_addr >> PAGE_SHIFT;
