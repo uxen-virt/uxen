@@ -2,7 +2,7 @@
  *  uxen.c
  *  uxen
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2018, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -236,15 +236,14 @@ reg_read_str(PUNICODE_STRING key_name, PWSTR val_name,
 }
 
 static
-void print_uxen_drv_info(PUNICODE_STRING reg_path, char *caller)
+void get_uxen_drv_info(PUNICODE_STRING reg_path, PUNICODE_STRING uxen_path, char *caller)
 {
-    DECLARE_UNICODE_STRING_SIZE(uxen_path, 512);
     CHAR tmp[512];
 
     if (NT_SUCCESS(RtlStringCbPrintfA(tmp, sizeof(tmp), "%wZ", reg_path))) {
         printk("%s: reg: %s\n", caller, tmp);
-        if (!NT_ERROR(reg_read_str(reg_path, L"ImagePath", &uxen_path)) &&
-            NT_SUCCESS(RtlStringCbPrintfA(tmp, sizeof(tmp), "%wZ", &uxen_path)))
+        if (!NT_ERROR(reg_read_str(reg_path, L"ImagePath", uxen_path)) &&
+            NT_SUCCESS(RtlStringCbPrintfA(tmp, sizeof(tmp), "%wZ", uxen_path)))
             printk("%s: bin: %s\n", caller, tmp);
     } else
         printk("%s\n", caller);
@@ -289,6 +288,11 @@ uxen_driver_unload(__in PDRIVER_OBJECT DriverObject)
     (void)RtlInitUnicodeString(&devicename_dos, UXEN_DEVICE_PATH_DOS_U);
     IoDeleteSymbolicLink(&devicename_dos);
     IoDeleteDevice(devobj);
+
+#ifndef __i386__
+    if (!test_ax_pv_vmcs())
+        pvi_unload_driver();
+#endif /* __i386__ */
 
     dprintk("uxen_driver_unload done\n");
 
@@ -438,7 +442,9 @@ uxen_driver_load(__in PDRIVER_OBJECT DriverObject,
         goto out;
     }
 
-    print_uxen_drv_info(RegistryPath, "uxen_driver_load");
+    devext->de_uxen_path.Buffer = devext->_de_uxen_path;
+    devext->de_uxen_path.MaximumLength = UXEN_PATH_MAX_LEN * sizeof(WCHAR);
+    get_uxen_drv_info(RegistryPath, &devext->de_uxen_path, "uxen_driver_load");
 
     rb_tree_init(&uxen_devext->de_vm_info_rbtree, &vm_info_rbtree_ops);
 
@@ -454,6 +460,11 @@ uxen_driver_load(__in PDRIVER_OBJECT DriverObject,
                       FALSE);
     KeInitializeEvent(&uxen_devext->de_suspend_event, NotificationEvent,
                       FALSE);
+
+#ifndef __i386__
+    if (!test_ax_pv_vmcs() && pvi_load_driver(uxen_devext))
+        fail_msg("WARNING: pvi_load_driver() failed - carrying on");
+#endif /* __i386__ */
 
   out:
     dprintk("uxen_driver_load done\n");

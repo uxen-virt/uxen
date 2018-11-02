@@ -36,6 +36,8 @@
 #define UXEN_POOL_TAG 'uxen'
 #define UXEN_MAPPING_TAG 'nexu'
 
+#define UXEN_PATH_MAX_LEN 512
+
 /* Windows timers are set in 100ns units, ie 10,000,000Hz. */
 #define UXEN_HOST_TIMER_FREQUENCY 10000000
 
@@ -154,6 +156,14 @@ struct device_extension {
     LONG volatile de_executing;
     KEVENT de_resume_event;
     KEVENT de_suspend_event;
+
+    WCHAR _de_uxen_path[UXEN_PATH_MAX_LEN];
+    UNICODE_STRING de_uxen_path;
+
+#ifndef __i386__
+    UINT_PTR de_pvi_vmread;
+    UINT_PTR de_pvi_vmwrite;
+#endif /* __i386__ */
 };
 
 struct host_event_channel {
@@ -391,6 +401,9 @@ extern uxen_pfn_t vframes_start, vframes_end;
 ULONG_PTR __stdcall uxen_mem_tlb_flush_fn(ULONG_PTR arg);
 ULONG_PTR __stdcall uxen_mem_tlb_flush_fn_global(ULONG_PTR arg);
 uintptr_t __stdcall read_paging_base(void);
+#ifndef __i386__
+void __stdcall ax_vars_cpuid(uint64_t *rax, uint64_t *rbx, uint64_t *rcx, uint64_t *rdx);
+#endif /* __i386__ */
 
 /* uxen_ops.c */
 extern MDL *map_page_range_mdl;
@@ -449,6 +462,7 @@ int uxen_op_map_host_pages(struct uxen_map_host_pages_desc *,
                            struct fd_assoc *);
 int uxen_op_unmap_host_pages(struct uxen_map_host_pages_desc *,
                              struct fd_assoc *);
+int test_ax_pv_vmcs(void);
 
 /* memcache-dm.c */
 int mdm_init(struct uxen_memcacheinit_desc *, struct fd_assoc *);
@@ -477,6 +491,12 @@ void __cdecl uxen_sys_set_v4v_thread_priority(LONG priority);
 
 /* uxen_stackwalk.c */
 extern void uxen_stacktrace(PCONTEXT);
+
+/* pvl2.c */
+#ifndef __i386__
+extern int pvi_load_driver(struct device_extension *);
+extern void pvi_unload_driver(void);
+#endif /* __i386__ */
 
 static __inline int
 ffs(uint32_t i)

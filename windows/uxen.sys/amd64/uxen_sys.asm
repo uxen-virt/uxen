@@ -60,4 +60,25 @@ read_paging_base	proc
 
 read_paging_base	endp
 
+	; void ax_vars_cpuid(uint64_t *rax, uint64_t *rbx, uint64_t *rcx, uint64_t *rdx)
+ax_vars_cpuid	proc
+        push   rbx
+        mov    r10, rcx
+        mov    r11, rdx
+
+        mov    rax, qword ptr [rcx]
+        mov    rbx, qword ptr [rdx]
+        mov    rcx, qword ptr [r8]
+        mov    rdx, qword ptr [r9]
+        cpuid
+        mov    qword ptr [r10], rax
+        mov    qword ptr [r11], rbx
+        mov    qword ptr [r8 ], rcx
+        mov    qword ptr [r9 ], rdx
+
+        pop    rbx
+        ret
+ax_vars_cpuid	endp
+
+
 	end

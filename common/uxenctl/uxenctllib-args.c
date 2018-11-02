@@ -97,6 +97,8 @@ static struct uxen_param params[] = {
     UINT_OPTION("crash_on", opt_crash_on),
     UINT_OPTION("v4v_thread_priority", opt_v4v_thread_priority),
     UINT_OPTION("spec_ctrl", opt_spec_ctrl),
+    UINT_OPTION("pvi_vmread", pvi_vmread),
+    UINT_OPTION("pvi_vmwrite", pvi_vmwrite),
     LAST_OPTION
 };
 

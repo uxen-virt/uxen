@@ -1,5 +1,5 @@
 #
-# Copyright 2016-2017, Bromium, Inc.
+# Copyright 2016-2018, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -39,6 +39,7 @@ uxen_sys_SRCS += \
 else
 uxen_sys_SRCS += \
 	uxen_stackwalk.c \
+	pvi.c \
 	amd64/uxen_sys.asm \
 	amd64/uxen_debug_sup.asm
 endif

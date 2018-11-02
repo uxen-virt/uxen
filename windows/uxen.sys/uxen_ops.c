@@ -941,6 +941,22 @@ test_ax_compatibility_l2(void)
     return err;
 }
 
+int
+test_ax_pv_vmcs(void)
+{
+    uint32_t ax_masks[] = { AX_FEATURES_AX_PV_VMCS };
+
+    int err = 0;
+
+    err |= test_ax_compatibility_masks(ax_masks,
+                                       sizeof(ax_masks) / sizeof(ax_masks[0]));
+
+    if (!err)
+        printk("AX has PV VMCS\n");
+
+    return err;
+}
+
 static int
 test_ax_compatibility(void)
 {
@@ -1324,6 +1340,13 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
 
     KeResetEvent(&uxen_devext->de_shutdown_done);
     uxen_info->ui_running = 1;
+
+#ifndef __i386__
+    uid.pvi_vmread = uxen_devext->de_pvi_vmread;
+    uid.pvi_vmwrite = uxen_devext->de_pvi_vmwrite;
+    uid.UXEN_INIT_pvi_vmread_MASK |= UXEN_INIT_pvi_vmread;
+    uid.UXEN_INIT_pvi_vmwrite_MASK |= UXEN_INIT_pvi_vmwrite;
+#endif /* __i386__ */
 
     for (host_cpu = 0; host_cpu < max_host_cpu; host_cpu++) {
 	if ((uxen_info->ui_cpu_active_mask & affinity_mask(host_cpu)) == 0)

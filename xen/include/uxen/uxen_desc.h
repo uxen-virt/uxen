@@ -229,7 +229,12 @@ struct uxen_init_desc {
     uint64_t opt_spec_ctrl;
 #     define UXEN_INIT_opt_spec_ctrl			(1ULL << 28)
 #     define UXEN_INIT_opt_spec_ctrl_MASK		mask0
-
+    uint64_t pvi_vmread;
+#     define UXEN_INIT_pvi_vmread       		(1ULL << 29)
+#     define UXEN_INIT_pvi_vmread_MASK			mask0
+    uint64_t pvi_vmwrite;
+#     define UXEN_INIT_pvi_vmwrite       		(1ULL << 30)
+#     define UXEN_INIT_pvi_vmwrite_MASK		mask0
 };
 
 #endif
