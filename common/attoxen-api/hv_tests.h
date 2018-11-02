@@ -173,4 +173,12 @@ static int hv_tests_cpu_has_vmx (void)
   return 0;
 }
 
+static int hv_tests_cpu_has_nx (void)
+{
+    uint64_t rax = 0x80000001, rbx = 0, rcx = 0, rdx = 0;
+
+    hv_tests_cpuid (&rax, &rbx, &rcx, &rdx);
+    return !! (rdx & (1UL << 20));
+}
+
 

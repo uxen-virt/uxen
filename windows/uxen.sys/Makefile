@@ -38,6 +38,7 @@ uxen_sys_SRCS += \
 else
 uxen_sys_SRCS += \
 	uxen_stackwalk.c \
+	pvi.c \
 	amd64/uxen_sys.asm \
 	amd64/uxen_debug_sup.asm
 endif

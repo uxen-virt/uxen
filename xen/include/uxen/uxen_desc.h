@@ -219,6 +219,12 @@ struct uxen_init_desc {
     uint64_t opt_whp;
 #     define UXEN_INIT_opt_whp       			(1ULL << 29)
 #     define UXEN_INIT_opt_whp_MASK			mask0
+    uint64_t pvi_vmread;
+#     define UXEN_INIT_pvi_vmread       		(1ULL << 29)
+#     define UXEN_INIT_pvi_vmread_MASK			mask0
+    uint64_t pvi_vmwrite;
+#     define UXEN_INIT_pvi_vmwrite       		(1ULL << 30)
+#     define UXEN_INIT_pvi_vmwrite_MASK		mask0
 };
 
 #endif

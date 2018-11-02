@@ -161,8 +161,9 @@ stop_delete_service(SC_HANDLE scm_handle, SC_HANDLE *scs_handle,
     return ret;
 }
 
-int
-uxen_manage_driver(BOOLEAN install, BOOLEAN fail_ok, const char *path)
+static int
+uxen_manage_driver_generic(BOOLEAN install, BOOLEAN start, BOOLEAN fail_ok,
+                           const char *path, const wchar_t *drv_name)
 {
     SC_HANDLE scm_handle = NULL;
     SC_HANDLE scs_handle = NULL;
@@ -191,11 +192,13 @@ uxen_manage_driver(BOOLEAN install, BOOLEAN fail_ok, const char *path)
                 goto out;
             }
         }
-	(void)wcsncat(pathbuf, L"\\" UXEN_DRIVER_NAME L".sys", sizeof(pathbuf));
+	(void)wcsncat(pathbuf, L"\\", sizeof(pathbuf));
+	(void)wcsncat(pathbuf, drv_name, sizeof(pathbuf));
+	(void)wcsncat(pathbuf, L".sys", sizeof(pathbuf));
 
       create_again:
-	scs_handle = CreateServiceW(scm_handle, L"" UXEN_DRIVER_NAME,
-				   L"" UXEN_DRIVER_NAME, SERVICE_ALL_ACCESS,
+	scs_handle = CreateServiceW(scm_handle, drv_name,
+				   drv_name, SERVICE_ALL_ACCESS,
 				   SERVICE_KERNEL_DRIVER, SERVICE_DEMAND_START,
 				   SERVICE_ERROR_NORMAL,
 				   pathbuf, NULL, NULL, NULL, NULL, NULL);
@@ -211,11 +214,11 @@ uxen_manage_driver(BOOLEAN install, BOOLEAN fail_ok, const char *path)
         }
 	if (scs_handle) {
 	    CloseServiceHandle(scs_handle);
-	    scs_handle = OpenService(scm_handle, UXEN_DRIVER_NAME,
+	    scs_handle = OpenServiceW(scm_handle, drv_name,
 				     SERVICE_ALL_ACCESS);
 	}
 	if (scs_handle == NULL && GetLastError() == ERROR_SERVICE_EXISTS)
-	    scs_handle = OpenService(scm_handle, UXEN_DRIVER_NAME,
+	    scs_handle = OpenServiceW(scm_handle, drv_name,
 				     SERVICE_ALL_ACCESS);
 	if (scs_handle == NULL) {
 	    if (fail_ok) {
@@ -226,16 +229,18 @@ uxen_manage_driver(BOOLEAN install, BOOLEAN fail_ok, const char *path)
             ret = -1;
             goto out;
 	}
-	ret = !StartService(scs_handle, 0, NULL);
-	if (ret && GetLastError() != ERROR_SERVICE_ALREADY_RUNNING) {
-	    if (fail_ok) {
-		ret = 0;
-		goto out;
-	    }
-	    Wwarn("StartService %s", pathbuf);
-            ret = -1;
-            goto out;
-	}
+        if (start) {
+            ret = !StartService(scs_handle, 0, NULL);
+            if (ret && GetLastError() != ERROR_SERVICE_ALREADY_RUNNING) {
+                if (fail_ok) {
+                    ret = 0;
+                    goto out;
+                }
+                Wwarn("StartService %s", pathbuf);
+                ret = -1;
+                goto out;
+            }
+        }
         ret = 0;
     } else
         ret = stop_delete_service(scm_handle, &scs_handle, fail_ok);
@@ -249,6 +254,15 @@ uxen_manage_driver(BOOLEAN install, BOOLEAN fail_ok, const char *path)
     if (scm_handle)
 	CloseServiceHandle(scm_handle);
     return ret;
+}
+
+int
+uxen_manage_driver(BOOLEAN install, BOOLEAN fail_ok, const char *path)
+{
+    if (install)
+        uxen_manage_driver_generic(TRUE, FALSE, TRUE, path, L"" UXEN_PVI_DRIVER_NAME);
+
+    return uxen_manage_driver_generic(install, TRUE, fail_ok, path, L"" UXEN_DRIVER_NAME);
 }
 
 UXEN_HANDLE_T
