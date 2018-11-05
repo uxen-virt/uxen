@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017, Bromium, Inc.
+ * Copyright 2016-2018, Bromium, Inc.
  * Author: Piotr Foltyn <piotr.foltyn@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -655,6 +655,8 @@ static int get_base_leaf(void)
         cpu_info.signature[12] = 0;
 
         if (!strcmp(cpu_info.signature, "uXenisnotXen"))
+            break;
+        if (!strcmp(cpu_info.signature, "WhpxisnotXen"))
             break;
     }
 

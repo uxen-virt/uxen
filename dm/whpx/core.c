@@ -72,6 +72,8 @@ struct whpx_memory_share_zero_pages {
 struct whpx_state {
     uint64_t mem_quota;
     WHV_PARTITION_HANDLE partition;
+    uint64_t dm_features;
+    uint64_t seed_lo, seed_hi;
 };
 
 /* registers synchronized with qemu's CPUState */
@@ -1001,6 +1003,46 @@ cpuid_viridian_hypercall(uint64_t leaf, uint64_t *eax,
     return 1;
 }
 
+static uint64_t
+cpuid_hypervisor_base_leaf(void)
+{
+    return vm_viridian ? 0x40000100 : 0x40000000;
+}
+
+static int
+cpuid_hypervisor(uint64_t leaf, uint64_t *rax,
+    uint64_t *rbx, uint64_t *rcx,
+    uint64_t *rdx)
+{
+    leaf -= cpuid_hypervisor_base_leaf();
+
+    switch (leaf) {
+    case  1:
+        *rax = 0; /* version number */
+        *rbx = 0;
+        *rcx = 0;
+        *rdx = 0;
+        return 1;
+    case 2:
+        *rax = 0;
+        *rbx = 0;
+        *rcx = 0;
+        *rdx = 0;
+        return 1;
+    case 192:
+        *rax = whpx_global.seed_lo & 0xffffffff;
+        *rbx = whpx_global.seed_lo >> 32;
+        *rcx = whpx_global.seed_hi & 0xffffffff;
+        *rdx = whpx_global.seed_hi >> 32;
+        return 1;
+    case 193:
+        *rax = whpx_global.dm_features;
+        return 1;
+    default:
+        return 0;
+    }
+}
+
 static int
 whpx_handle_cpuid(CPUState *cpu)
 {
@@ -1062,6 +1104,7 @@ whpx_handle_cpuid(CPUState *cpu)
         };
         /* fall through */
     case 0x40000100:
+        rax = cpuid_hypervisor_base_leaf() + 2;
         rcx = WHP_CPUID_SIGNATURE_ECX;
         rdx = WHP_CPUID_SIGNATURE_EDX;
         rbx = WHP_CPUID_SIGNATURE_EBX;
@@ -1105,6 +1148,10 @@ whpx_handle_cpuid(CPUState *cpu)
         break;
     }
     default:
+        /* check if this is hypervisor cpuid */
+        if (cpuid_hypervisor(rax, &rax, &rbx, &rcx, &rdx))
+            break;
+
         /* check if the cpuid was viridian hypercall, since we setup
          * viridian hypercall page to invoke calls via cpuid */
         if (!cpuid_viridian_hypercall(rax, &rax, &rbx, &rcx, &rdx)) {
@@ -1809,4 +1856,17 @@ whpx_partition_destroy(void)
     }
 
     return 0;
+}
+
+void
+whpx_set_dm_features(uint64_t features)
+{
+    whpx_global.dm_features = features;
+}
+
+void
+whpx_set_random_seed(uint64_t lo, uint64_t hi)
+{
+    whpx_global.seed_lo = lo;
+    whpx_global.seed_hi = hi;
 }

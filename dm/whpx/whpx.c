@@ -25,6 +25,7 @@
 #include "loader.h"
 #include "emulate.h"
 #include "util.h"
+#include "dm-features.h"
 
 /* acpi area */
 #define ACPI_INFO_PHYSICAL_ADDRESS 0xFC000000
@@ -1101,6 +1102,17 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
     ret = whpx_create_vm_vcpus();
     if (ret)
       return ret;
+
+    uint64_t rand_seed[2];
+    generate_random_bytes(rand_seed, sizeof(rand_seed));
+    whpx_set_random_seed(rand_seed[0], rand_seed[1]);
+
+    union dm_features ftres;
+    ftres.blob = 0;
+    ftres.bits.run_patcher = (vm_run_patcher) ? 1 : 0;
+    ftres.bits.seed_generation = (!!seed_generation) ? 1 : 0;
+    ftres.bits.surf_copy_reduction = (!!surf_copy_reduction) ? 1 : 0;
+    whpx_set_dm_features(ftres.blob);
 
     if (vm_restore_mode == VM_RESTORE_NONE) {
         ret = whpx_create_vm_memory(vm_mem_mb);

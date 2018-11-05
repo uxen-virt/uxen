@@ -112,6 +112,8 @@ void whpx_lock_iothread(void);
 void whpx_unlock_iothread(void);
 void whpx_debug_char(char data);
 int whpx_inject_trap(int cpu, int trap, int error_code, int cr2);
+void whpx_set_dm_features(uint64_t features);
+void whpx_set_random_seed(uint64_t lo, uint64_t hi);
 
 /* memory capture definitions match uxen's */
 #define WHPX_MCGI_FLAGS_VM         0x0000
