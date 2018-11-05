@@ -84,7 +84,8 @@ void whpx_run_on_cpu(CPUState *env, int wait,
     void (*func)(CPUState *env, void *data),
     void *data);
 
-int whpx_partition_setup(void);
+int whpx_partition_init(void);
+int whpx_partition_destroy(void);
 
 /* low level partition mem mapping update */
 void whpx_update_mapping(uint64_t start_pa, uint64_t size,

@@ -250,6 +250,13 @@ WHP_API (WHvGetVirtualProcessorCounters,
     _Out_opt_ UINT32* BytesWritten
     );
 
+WHP_API (WHvSuspendPartitionTime,
+    _In_ WHV_PARTITION_HANDLE Partition
+    );
+
+WHP_API (WHvResumePartitionTime,
+    _In_ WHV_PARTITION_HANDLE Partition
+    );
 
 #ifdef __cplusplus
 }

@@ -1413,8 +1413,8 @@ int whpx_init_vcpu(CPUState *cpu)
 
     hr = WHvCreateVirtualProcessor(whpx->partition, cpu->cpu_index, 0);
     if (FAILED(hr)) {
-        error_report("WHPX: Failed to create a virtual processor,"
-                     " hr=%08lx", hr);
+        error_report("WHPX: Failed to create a virtual processor part=%p idx=%d,"
+            " hr=%08lx", whpx->partition, cpu->cpu_index, hr);
 #ifdef EMU_MICROSOFT
         WHvEmulatorDestroyEmulator(vcpu->emulator);
 #endif
@@ -1475,7 +1475,10 @@ void whpx_destroy_vcpu(CPUState *cpu)
     struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
 
     debug_printf("destroy vcpu %d\n", cpu->cpu_index);
-    WHvDeleteVirtualProcessor(whpx->partition, cpu->cpu_index);
+    HRESULT hr = WHvDeleteVirtualProcessor(whpx->partition, cpu->cpu_index);
+    if (FAILED(hr))
+      whpx_panic("WHvDeleteVirtualProcessor[%d] failed: %x\n",
+          cpu->cpu_index, (int)hr);
 #ifdef EMU_MICROSOFT
     WHvEmulatorDestroyEmulator(vcpu->emulator);
 #endif
@@ -1675,12 +1678,7 @@ whpx_cpu_handle_interrupt(CPUState *cpu, int mask)
  * Partition support
  */
 
-static void
-whpx_memory_init(void)
-{
-}
-
-int whpx_partition_setup(void)
+int whpx_partition_init(void)
 {
     struct whpx_state *whpx;
     int ret;
@@ -1781,8 +1779,6 @@ int whpx_partition_setup(void)
     /* FIXME: this likely needs improvement */
     vm_id = WHPX_DOMAIN_ID_SELF;
 
-    whpx_memory_init();
-
     cpu_interrupt_handler = whpx_cpu_handle_interrupt;
 
     debug_printf("Windows Hypervisor Platform accelerator is operational\n");
@@ -1797,4 +1793,20 @@ int whpx_partition_setup(void)
 
 
     return ret;
+}
+
+int
+whpx_partition_destroy(void)
+{
+    HRESULT hr;
+    struct whpx_state *whpx = &whpx_global;
+
+    if (whpx->partition) {
+        hr = WHvDeletePartition(whpx->partition);
+        if (FAILED(hr))
+            debug_printf("WHPX: Failed to delete partition, hr=%08lx", hr);
+        whpx->partition = NULL;
+    }
+
+    return 0;
 }

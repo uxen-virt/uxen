@@ -362,8 +362,12 @@ vcpu_stopped_cb(void *opaque)
     if (!running_vcpus) {
         debug_printf("all vcpus stopped, reason: %d\n", shutdown_reason);
         if (shutdown_reason == WHPX_SHUTDOWN_PAUSE) {
+            if (whpx_has_suspend_time)
+                WHvSuspendPartitionTime(whpx_get_partition());
             vm_set_run_mode(PAUSE_VM);
         } else if (shutdown_reason == WHPX_SHUTDOWN_SUSPEND) {
+            if (whpx_has_suspend_time)
+                WHvSuspendPartitionTime(whpx_get_partition());
             v4v_destroy(&guest);
             vm_process_suspend(NULL);
         } else
@@ -485,6 +489,8 @@ whpx_vm_destroy(void)
     /* destroy ram */
     whpx_ram_uninit();
 
+    whpx_partition_destroy();
+
     VirtualFree(shared_info_page, 0, MEM_RELEASE);
     shared_info_page = NULL;
 
@@ -517,7 +523,6 @@ whpx_vcpu_start(CPUState *s)
 static int
 check_unreliable_tsc(void)
 {
-    /* it is unreliable if running while vm has not started yet */
     WHV_REGISTER_NAME name = WHvX64RegisterTsc;
     WHV_REGISTER_VALUE v0;
     WHV_REGISTER_VALUE v1;
@@ -528,25 +533,39 @@ check_unreliable_tsc(void)
     if (FAILED(whpx_get_vp_registers(0, &name, 1, &v1)))
         whpx_panic("failed to get TSC value\n");
 
-    return v0.Reg64 != v1.Reg64;
+    return !(v0.Reg64 == v1.Reg64);
 }
 
-/* currently in WHP there's no method to set same TSC offset for all vcpus. It does seem to compute TSC offset at the
- * time we set TSC value for vcpu, though. Therefore until API improvements, workaround by setting TSC value in tight loop
- * until we think the desync should be in acceptable range */
-static void
-workaround_unreliable_tsc(void)
+static int
+check_uniform_tsc(void)
 {
-    uint64_t tscval = 0;
-    int i,vcpu;
-    HRESULT hr;
+    WHV_REGISTER_NAME name = WHvX64RegisterTsc;
+    WHV_REGISTER_VALUE v0 = { };
+    WHV_REGISTER_VALUE v1 = { };
+    int i;
+
+    for (i = 0; i < vm_vcpus; i++) {
+        if (FAILED(whpx_get_vp_registers(i, &name, 1, &v0)))
+            whpx_panic("failed to get TSC value\n");
+        if (i >= 1) {
+            if (v0.Reg64 != v1.Reg64)
+                return 0;
+        }
+        v1 = v0;
+    }
+
+    return 1;
+}
+
+static uint64_t
+read_max_tsc(void)
+{
     WHV_REGISTER_NAME name;
     WHV_REGISTER_VALUE v;
-    uint64_t t0, dt;
+    HRESULT hr;
+    uint64_t tscval = 0;
+    int i;
 
-    if (!check_unreliable_tsc())
-        return;
-    debug_printf("detected unreliable TSC on WHP! applying workaround\n");
     name = WHvX64RegisterTsc;
     for (i = 0; i < vm_vcpus; i++) {
         hr = whpx_get_vp_registers(i, &name, 1, &v);
@@ -555,30 +574,62 @@ workaround_unreliable_tsc(void)
         if (v.Reg64 > tscval)
             tscval = v.Reg64;
     }
+
+    return tscval;
+}
+
+static void
+set_tsc_across_vcpus(uint64_t val)
+{
+    WHV_REGISTER_NAME name;
+    WHV_REGISTER_VALUE v;
+    HRESULT hr;
+    int i;
+
+    name = WHvX64RegisterTsc;
+    for (i = 0; i < vm_vcpus; i++) {
+        v.Reg64 = val;
+        hr = whpx_set_vp_registers(i, &name, 1, &v);
+        if (FAILED(hr))
+            whpx_panic("failed to set TSC value: %08lx\n", hr);
+    }
+}
+
+/* Sync TSC across vcpus by trying to propagate single value across all of them.
+ * Only works perfectly if the partition has suspended time - older WHP does not have
+ * explicit ability to suspend/resume partition time so this will leave some
+ * undesirable desync */
+static void
+sync_vcpus_tsc(int max_iters, int max_tsc_delta)
+{
+    uint64_t tscval = read_max_tsc();
+    uint64_t t0, dt = 0;
+    int i;
+    bool success = false;
+
     debug_printf("tsc value to propagate across vcpus: %"PRId64"\n", tscval);
 
+    if (!max_iters)
+        max_iters++;
     i = 0;
-    while (i++ < MAX_TSC_PROPAGATE_ITERS) {
+    while (i++ < max_iters) {
         t0 = _rdtsc();
-        for (vcpu = 0; vcpu < vm_vcpus; vcpu++) {
-            v.Reg64 = tscval;
-            hr = whpx_set_vp_registers(vcpu, &name, 1, &v);
-            if (FAILED(hr))
-                whpx_panic("failed to set TSC value: %08lx\n", hr);
-        }
+        set_tsc_across_vcpus(tscval);
         dt = _rdtsc() - t0;
-        if (dt <= MAX_TSC_DESYNC)
-            break; /* success */
+        if (!max_tsc_delta || dt <= max_tsc_delta) {
+            success = true;
+            break;
+        }
     }
-    if (i >= MAX_TSC_PROPAGATE_ITERS) {
-        whpx_panic(
-            "FAILED to propagate TSC with reasonably small desync, "
-            "last desync=%"PRId64"\n",dt);
-    } else {
+
+    if (success)
         debug_printf(
-            "tsc value propagated (%d iterations), expected desync: "
-            "%"PRId64"\n cycles", i, dt);
-    }
+            "tsc value propagated (%d iterations), with delta: "
+            "%"PRId64"\n", i, dt);
+    else
+        whpx_panic(
+            "FAILED to propagate TSC with reasonably small delta, "
+            "last delta=%"PRId64"\n", dt);
 }
 
 int
@@ -590,11 +641,30 @@ whpx_vm_start(void)
     shutdown_reason = 0;
     vm_time_offset = 0;
     running_vcpus = vm_vcpus;
-    vm_set_run_mode(RUNNING_VM);
 
-    workaround_unreliable_tsc();
+    if (check_unreliable_tsc()) {
+        debug_printf("syncing unreliable TSC value\n");
+        sync_vcpus_tsc(MAX_TSC_PROPAGATE_ITERS, MAX_TSC_DESYNC);
+    } else {
+        /* even with MS tsc bugfix which makes it possible to set consistent TSC value, still necessary to at least set initial uniform TSC
+         * value rather than rely on per vcpu value in savefile. Value in
+         * in savefile would typically be different per vcpu -> because it is queried at different time
+         * points during save, and TSC is still progressing even with no vcpu running, and there's no API
+         * to query TSC offset directly */
+        debug_printf("syncing TSC value\n");
+        sync_vcpus_tsc(0, 0);
+
+        if (!check_uniform_tsc())
+            whpx_panic("TSC not uniform after sync");
+    }
+
     for (i = 0; i < vm_vcpus; i++)
         whpx_vcpu_start(&cpu_state[i]);
+
+    if (whpx_has_suspend_time)
+        WHvResumePartitionTime(whpx_get_partition());
+
+    vm_set_run_mode(RUNNING_VM);
 
     return 0;
 }
@@ -1022,7 +1092,7 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
     if (current_cpu_tls == TLS_OUT_OF_INDEXES)
         whpx_panic("out of tls indexes\n");
 
-    ret = whpx_partition_setup();
+    ret = whpx_partition_init();
     if (ret)
         return ret;
     ret = whpx_ram_init();
@@ -1031,6 +1101,7 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
     ret = whpx_create_vm_vcpus();
     if (ret)
       return ret;
+
     if (vm_restore_mode == VM_RESTORE_NONE) {
         ret = whpx_create_vm_memory(vm_mem_mb);
         if (ret)

@@ -28,6 +28,8 @@ extern uint64_t count_longspin;
 extern uint64_t count_hpet;
 extern uint64_t count_reftime;
 
+extern bool whpx_has_suspend_time;
+
 /* internal whpx utility functions */
 void whpx_initialize_api(void);
 whpx_reg_list_t *whpx_all_registers(void);
