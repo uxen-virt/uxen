@@ -1055,8 +1055,11 @@ stats_do_collection(void *opaque)
         tmpl = info.nr_tmpl_shared_pages * UXEN_PAGE_SIZE;
         zero = info.nr_zero_shared_pages * UXEN_PAGE_SIZE;
     } else {
-        /* FIXME: better whp stats (?) */
         balloon_cur = balloon_min = balloon_max = 0;
+        uxen_platform_get_balloon_size(&balloon_cur, &balloon_min, &balloon_max);
+        /* note: it is possible to get accurate amount of private/shared pages via
+         * VirtualQuery, however it takes hundreds of million of cpu cycles when
+         * private ranges are fragmented. */
         priv = vm_mem_mb * 1024 * 1024;
         vram = 0;
         highmem = 0;
