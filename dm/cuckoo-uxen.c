@@ -198,6 +198,10 @@ static int capture_pfns(void *opaque, int tid, int n, void *out, uint64_t *pfns)
                                                 XENMEM_MCGI_FLAGS_TEMPLATE :
                                                 (XENMEM_MCGI_FLAGS_VM |
                                                 XENMEM_MCGI_FLAGS_REMOVE_PFN);
+            /* optimization: no need to remove single pfns on WHP, everything
+             * will be freed after save */
+            if (whpx_enable)
+                gpfn_info_list[j].flags &= ~XENMEM_MCGI_FLAGS_REMOVE_PFN;
         }
 
         if (!whpx_enable) {
