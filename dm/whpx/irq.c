@@ -92,10 +92,6 @@ static
 void gsi_set_irq(void *opaque, int n, int level)
 {
     struct gsi_state *s = opaque;
-    enum vm_run_mode r = vm_get_run_mode();
-
-    if (r != RUNNING_VM && r != PAUSE_VM)
-        return;
 
     IRQLOG("%s GSI %d\n", level ? "raising" : "lowering", n);
     if (n < ISA_NUM_IRQS)
