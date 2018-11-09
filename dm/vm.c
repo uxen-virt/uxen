@@ -890,6 +890,8 @@ vm_set_run_mode(enum vm_run_mode r)
     critical_section_enter(&vm_run_mode_lock);
     switch (run_mode) {
     case PAUSE_VM:
+        if (r == SUSPEND_VM)
+            break;
     case SETUP_VM:
     case SUSPEND_VM:
         if (r == RUNNING_VM)
