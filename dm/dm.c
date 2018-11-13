@@ -372,12 +372,7 @@ main(int argc, char **argv)
         errx(1, "Failed to initialize GUI '%s'", console_type);
 
     debug_printf("initializing vm\n");
-    if (!whpx_enable)
-        vm_init(vm_loadfile, vm_restore_mode);
-    else {
-        if (whpx_vm_init(vm_loadfile, vm_restore_mode))
-            errx(1, "whpx_init failed\n");
-    }
+    vm_init(vm_loadfile, vm_restore_mode);
 
 #ifdef CONFIG_NET
     net_check_clients();

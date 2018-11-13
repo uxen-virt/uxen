@@ -91,15 +91,16 @@ static void dump_stats(void)
     xc_dominfo_t info = { };
     int ret;
 
-    // FIXME: dump stats on whp
-    if (whpx_enable)
-        return;
-
     vm_now = get_clock_ms(vm_clock); 
 
 #ifdef CONFIG_DUMP_MEMORY_STAT
     int bln_sz = 0, bln_min = 0, bln_max = 0;
-    ret = xc_domain_getinfo(xc_handle, vm_id, 1, &info);
+    if (!whpx_enable)
+        ret = xc_domain_getinfo(xc_handle, vm_id, 1, &info);
+    else {
+        ret = 1;
+        info.domid = vm_id;
+    }
     uxen_platform_get_balloon_size(&bln_sz, &bln_min, &bln_max);
 #else  /* CONFIG_DUMP_MEMORY_STAT */
     ret = 1;
@@ -163,10 +164,6 @@ static void aperiodic_stats(void *opaque)
     uint64_t now = get_clock_ms(vm_clock);
     uint64_t interval;
 
-    // FIXME: dump stats on whp
-    if (whpx_enable)
-        return;
-
     dump_stats();
 #ifdef CONFIG_DUMP_SWAP_STAT
     dump_swapstat();
@@ -186,10 +183,6 @@ static void aperiodic_stats(void *opaque)
 #ifdef CONFIG_DUMP_MEMORY_STAT
 static void dump_periodic_stats_reset(void)
 {
-    // FIXME: dump stats on whp
-    if (whpx_enable)
-        return;
-
     periodic_stats_rep = 129;
     aperiodic_stats(NULL);
 }
@@ -454,8 +447,8 @@ vm_create(int restore_mode)
     debug_printf("created vm: domid %d\n", vm_id);
 }
 
-void
-vm_init(const char *loadvm, int restore_mode)
+static void
+uxen_vm_init(const char *loadvm, int restore_mode)
 {
     uint64_t ram_size = vm_mem_mb << 20;
     struct hvm_info_table *hvm_info;
@@ -650,6 +643,19 @@ vm_init(const char *loadvm, int restore_mode)
 #endif  /* CONFIG_DUMP_PERIODIC_STAT */
 
     dev_machine_creation_done();
+}
+
+void
+vm_init(const char *loadvm, int restore_mode)
+{
+    if (!whpx_enable)
+        uxen_vm_init(loadvm, restore_mode);
+    else {
+        whpx_vm_init(loadvm, restore_mode);
+#ifdef CONFIG_DUMP_PERIODIC_STATS
+        dump_periodic_stats_init();
+#endif  /* CONFIG_DUMP_PERIODIC_STAT */
+    }
 }
 
 int vm_is_paused(void)
