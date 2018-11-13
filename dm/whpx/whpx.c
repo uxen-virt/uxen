@@ -44,6 +44,7 @@ static volatile uint32_t running_vcpus = 0;
 static int shutdown_reason = 0;
 static Timer *whpx_perf_timer;
 static int vm_paused;
+static uint64_t paused_tsc_value;
 
 struct cpu_extra {
     HANDLE wake_ev;
@@ -91,6 +92,10 @@ extern int v4v_destroy(struct domain *);
 
 /* represents host domain */
 struct domain dom0;
+
+static void tsc_pause(void);
+static void tsc_resume(void);
+static void tsc_resume_early(void);
 
 void whpx_run_on_cpu(
     CPUState *env,
@@ -363,12 +368,10 @@ vcpu_stopped_cb(void *opaque)
     if (!running_vcpus) {
         debug_printf("all vcpus stopped, reason: %d\n", shutdown_reason);
         if (shutdown_reason == WHPX_SHUTDOWN_PAUSE) {
-            if (whpx_has_suspend_time)
-                WHvSuspendPartitionTime(whpx_get_partition());
+            tsc_pause();
             vm_set_run_mode(PAUSE_VM);
         } else if (shutdown_reason == WHPX_SHUTDOWN_SUSPEND) {
-            if (whpx_has_suspend_time)
-                WHvSuspendPartitionTime(whpx_get_partition());
+            tsc_pause();
             v4v_destroy(&guest);
             vm_process_suspend(NULL);
         } else
@@ -601,9 +604,8 @@ set_tsc_across_vcpus(uint64_t val)
  * explicit ability to suspend/resume partition time so this will leave some
  * undesirable desync */
 static void
-sync_vcpus_tsc(int max_iters, int max_tsc_delta)
+sync_vcpus_tsc(uint64_t tscval, int max_iters, int max_tsc_delta)
 {
-    uint64_t tscval = read_max_tsc();
     uint64_t t0, dt = 0;
     int i;
     bool success = false;
@@ -637,6 +639,8 @@ int
 whpx_vm_start(void)
 {
     int i;
+    uint64_t start_tsc = read_max_tsc();
+
     debug_printf("vm start...\n");
 
     shutdown_reason = 0;
@@ -645,7 +649,7 @@ whpx_vm_start(void)
 
     if (check_unreliable_tsc()) {
         debug_printf("syncing unreliable TSC value\n");
-        sync_vcpus_tsc(MAX_TSC_PROPAGATE_ITERS, MAX_TSC_DESYNC);
+        sync_vcpus_tsc(start_tsc, MAX_TSC_PROPAGATE_ITERS, MAX_TSC_DESYNC);
     } else {
         /* even with MS tsc bugfix which makes it possible to set consistent TSC value, still necessary to at least set initial uniform TSC
          * value rather than rely on per vcpu value in savefile. Value in
@@ -653,21 +657,46 @@ whpx_vm_start(void)
          * points during save, and TSC is still progressing even with no vcpu running, and there's no API
          * to query TSC offset directly */
         debug_printf("syncing TSC value\n");
-        sync_vcpus_tsc(0, 0);
+        sync_vcpus_tsc(start_tsc, 0, 0);
 
         if (!check_uniform_tsc())
             whpx_panic("TSC not uniform after sync");
     }
 
+    tsc_resume_early();
     for (i = 0; i < vm_vcpus; i++)
         whpx_vcpu_start(&cpu_state[i]);
-
-    if (whpx_has_suspend_time)
-        WHvResumePartitionTime(whpx_get_partition());
+    tsc_resume();
 
     vm_set_run_mode(RUNNING_VM);
 
     return 0;
+}
+
+static void
+tsc_pause(void)
+{
+    if (whpx_has_suspend_time)
+        WHvSuspendPartitionTime(whpx_get_partition());
+    else
+        paused_tsc_value = read_max_tsc();
+}
+
+static void
+tsc_resume(void)
+{
+    if (whpx_has_suspend_time)
+        WHvResumePartitionTime(whpx_get_partition());
+}
+
+static void
+tsc_resume_early(void)
+{
+    if (!whpx_has_suspend_time && paused_tsc_value) {
+        debug_printf("propagating pause TSC value %"PRId64"\n", paused_tsc_value);
+        sync_vcpus_tsc(paused_tsc_value, MAX_TSC_PROPAGATE_ITERS, MAX_TSC_DESYNC);
+        paused_tsc_value = 0;
+    }
 }
 
 int
