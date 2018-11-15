@@ -651,7 +651,10 @@ vm_init(const char *loadvm, int restore_mode)
     if (!whpx_enable)
         uxen_vm_init(loadvm, restore_mode);
     else {
-        whpx_vm_init(loadvm, restore_mode);
+        int ret = whpx_vm_init(loadvm, restore_mode);
+
+        if (ret)
+            err(1, "failed to init whpx vm: %d", ret);
 #ifdef CONFIG_DUMP_PERIODIC_STATS
         dump_periodic_stats_init();
 #endif  /* CONFIG_DUMP_PERIODIC_STAT */
