@@ -351,6 +351,8 @@ main(int argc, char **argv)
 
     debug_printf("creating vm\n");
     vm_create(vm_restore_mode);
+    if (vm_restore_mode == VM_RESTORE_TEMPLATE)
+        goto vm_init;
 
     debug_printf("initializing device modules\n");
     module_call_init(MODULE_INIT_DEVICE);
@@ -371,6 +373,7 @@ main(int argc, char **argv)
     if (console_init(console_type))
         errx(1, "Failed to initialize GUI '%s'", console_type);
 
+vm_init:
     debug_printf("initializing vm\n");
     vm_init(vm_loadfile, vm_restore_mode);
 

@@ -36,6 +36,9 @@ dm_v4v_close(v4v_context_t *v4v)
 int
 dm_v4v_open(v4v_context_t *v4v, uint32_t ring_size)
 {
+    if (vm_restore_mode == VM_RESTORE_TEMPLATE)
+        err(1, "v4v_open for template vm");
+
     if (!whpx_enable) {
         if (!_v4v_open(&v4v->v4v_channel, ring_size, V4V_FLAG_ASYNC, NULL))
             return GetLastError();

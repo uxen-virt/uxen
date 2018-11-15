@@ -550,9 +550,11 @@ uxen_vm_init(const char *loadvm, int restore_mode)
     xc_domain_set_time_offset(xc_handle, vm_id, vm_time_offset);
 
 #if defined(CONFIG_VBOXDRV)
-    ret = sf_service_start();
-    if (ret)
-        err(1, "sf_service_start");
+    if (restore_mode != VM_RESTORE_TEMPLATE) {
+        ret = sf_service_start();
+        if (ret)
+            err(1, "sf_service_start");
+    }
 #endif
 
     if (!loadvm) {
