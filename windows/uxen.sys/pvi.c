@@ -125,7 +125,7 @@ int pvi_load_driver(struct device_extension *de)
         dprintk("pvi_load_driver completed - vmread:0x%llx vmwrite:0x%llx %s\n",
                 de->de_pvi_vmread, de->de_pvi_vmwrite, iface[AX_PV_I_HASH_IDX]);
     #else
-        printk("pvi_load_driver completed - %s", iface[AX_PV_I_HASH_IDX]);
+        printk("pvi_load_driver completed - %s\n", iface[AX_PV_I_HASH_IDX]);
     #endif
 
 out:
