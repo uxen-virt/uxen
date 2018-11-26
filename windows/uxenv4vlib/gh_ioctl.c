@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -329,7 +329,7 @@ gh_v4v_dispatch_device_control(PDEVICE_OBJECT fdo, PIRP irp)
                 break;
             }
         case V4V_IOCTL_NOTIFY: {
-                gh_v4v_process_notify(pde);
+                gh_v4v_process_notify(pde, TRUE);
                 status = STATUS_SUCCESS;
                 break;
             }

@@ -161,6 +161,7 @@ gh_v4v_virq_work(xenv4v_extension_t *pde)
     ULONG              count = 0, i;
     KLOCK_QUEUE_HANDLE lqh;
     NTSTATUS status;
+    BOOLEAN notify = FALSE;
 
     check_resume();
 
@@ -169,7 +170,7 @@ gh_v4v_virq_work(xenv4v_extension_t *pde)
 
     // Loop over the contexts and process read IO for each.
     for (i = 0; ((ctx_list != NULL) && (i < count)); i++) {
-        gh_v4v_process_context_reads(pde, ctx_list[i]);
+        gh_v4v_process_context_reads(pde, ctx_list[i], &notify);
     }
 
     // Return the context list and drop the ref count
@@ -179,7 +180,7 @@ gh_v4v_virq_work(xenv4v_extension_t *pde)
     // gh_v4v_process_notify invokes hypercalls and therefore can allocate - low irql needed
     // to benefit from automatic allocation retries
     ASSERT(KeGetCurrentIrql() <= PASSIVE_LEVEL);
-    gh_v4v_process_notify(pde);
+    gh_v4v_process_notify(pde, notify);
 
     uxen_v4v_send_read_callbacks(pde);
 

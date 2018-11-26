@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2018, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -316,7 +316,7 @@ VOID
 gh_v4v_cancel_all_file_irps(xenv4v_extension_t *pde, FILE_OBJECT *pfo);
 
 NTSTATUS
-gh_v4v_process_notify(xenv4v_extension_t *pde);
+gh_v4v_process_notify(xenv4v_extension_t *pde, BOOLEAN notify_otherend);
 
 VOID
 gh_v4v_process_context_writes(xenv4v_extension_t *pde, xenv4v_context_t *ctx);
@@ -325,7 +325,7 @@ VOID
 gh_v4v_process_context_reads_quick(xenv4v_extension_t *pde, xenv4v_context_t *ctx);
 
 VOID
-gh_v4v_process_context_reads(xenv4v_extension_t *pde, xenv4v_context_t *ctx);
+gh_v4v_process_context_reads(xenv4v_extension_t *pde, xenv4v_context_t *ctx, BOOLEAN *pNotify);
 
 VOID
 gh_v4v_process_context_reads_quick(xenv4v_extension_t *pde, xenv4v_context_t *ctx);
