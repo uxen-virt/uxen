@@ -2140,18 +2140,27 @@ uxen_vcpu_thread_fn(struct vm_info *vmi, struct vm_vcpu_info *vci)
             /* Yield run mode means that spin loop was detected in the guest.
              * If another vcpu is executing, go back to spinning otherwise
              * wait for some vcpu to execute for a bit */
-            int num_executing = 0, num_halt = 0, i;
+            int num_executing = 0, num_halt = 0, num_yield = 0, i;
+            int skip_wait;
+
             MemoryBarrier();
             for (i = 0; i < vmi->vmi_nrvcpus; ++i) {
                 struct vm_vcpu_info *v = &vmi->vmi_vcpus[i];
-                if (v->vci_executing &&
-                    v->vci_shared.vci_run_mode != VCI_RUN_MODE_YIELD)
-                    num_executing++;
-                if (v->vci_shared.vci_run_mode == VCI_RUN_MODE_HALT)
-                    num_halt++;
+                if (v->vci_shared.vci_vcpuid != vci->vci_shared.vci_vcpuid) {
+                    if (v->vci_executing &&
+                        v->vci_shared.vci_run_mode != VCI_RUN_MODE_YIELD)
+                        num_executing++;
+                    if (v->vci_shared.vci_run_mode == VCI_RUN_MODE_HALT)
+                        num_halt++;
+                    if (v->vci_shared.vci_run_mode == VCI_RUN_MODE_YIELD)
+                        num_yield++;
+                }
             }
-            if (num_executing == 0 &&
-                num_halt < vmi->vmi_nrvcpus - 1)
+            skip_wait =
+                (num_executing > 0) ||
+                (num_yield > 0) ||
+                (num_halt == vmi->vmi_nrvcpus - 1);
+            if (!skip_wait)
                 EVENT_WAIT(&vmi->vmi_spinloop_wake_event, 1, 20000);
             break;
         }
