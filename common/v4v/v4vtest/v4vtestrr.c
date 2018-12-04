@@ -81,7 +81,7 @@ do_foo (struct foo *foo)
 
 
 static void
-rr (v4v_channel_t *c, v4v_ring_t *ring, int domid, int rx)
+rr (v4v_channel_t *c, v4v_ring_t *ring, int domid, int port, int rx)
 {
 #ifdef MAP
 #error no map, you will not go to space today
@@ -92,7 +92,7 @@ rr (v4v_channel_t *c, v4v_ring_t *ring, int domid, int rx)
 
     memset (&to, 0, sizeof (to));
 
-    to.addr.port = PORT;
+    to.addr.port = port;
     to.addr.domain = domid;
 
     memcpy (buf, &to, sizeof (to));
@@ -218,7 +218,7 @@ main (int argc, char *argv[])
 #endif
 
 
-    rr (&c, ring, domid, rx);
+    rr (&c, ring, domid, port, rx);
 
     return 0;
 }
