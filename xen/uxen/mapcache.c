@@ -153,7 +153,7 @@ mapcache_unmap_page_va(const void *va)
         goto out;
     }
 
-    mfn = (pte & ~0x8000000000000fff) >> PAGE_SHIFT;
+    mfn = (pte & ~0xffff000000000fff) >> PAGE_SHIFT;
     entry = &this_cpu(mapcache_hash)[HASH_FN(mfn)];
     if (entry->slot == slot) {
         ASSERT(entry->refcnt);
@@ -189,5 +189,5 @@ mapcache_mapped_va_mfn(const void *va)
     pte = map_mfn((uintptr_t)va, ~0ULL);
 
     return (pte & _PAGE_PRESENT) ?
-        (pte & ~0x8000000000000fff) >> PAGE_SHIFT : INVALID_MFN;
+        (pte & ~0xffff000000000fff) >> PAGE_SHIFT : INVALID_MFN;
 }
