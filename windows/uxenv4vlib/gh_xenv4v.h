@@ -316,7 +316,7 @@ VOID
 gh_v4v_cancel_all_file_irps(xenv4v_extension_t *pde, FILE_OBJECT *pfo);
 
 NTSTATUS
-gh_v4v_process_notify(xenv4v_extension_t *pde, BOOLEAN notify_otherend);
+gh_v4v_process_notify(xenv4v_extension_t *pde);
 
 VOID
 gh_v4v_process_context_writes(xenv4v_extension_t *pde, xenv4v_context_t *ctx);
@@ -325,7 +325,7 @@ VOID
 gh_v4v_process_context_reads_quick(xenv4v_extension_t *pde, xenv4v_context_t *ctx);
 
 VOID
-gh_v4v_process_context_reads(xenv4v_extension_t *pde, xenv4v_context_t *ctx, BOOLEAN *pNotify);
+gh_v4v_process_context_reads(xenv4v_extension_t *pde, xenv4v_context_t *ctx);
 
 VOID
 gh_v4v_process_context_reads_quick(xenv4v_extension_t *pde, xenv4v_context_t *ctx);

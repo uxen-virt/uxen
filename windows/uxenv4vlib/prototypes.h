@@ -68,10 +68,10 @@ void gh_v4v_link_to_ring_list(xenv4v_extension_t *pde, xenv4v_ring_t *robj);
 /* gh_rw.c */
 void gh_v4v_flush_accepter_queue_data(xenv4v_context_t *ctx);
 void gh_v4v_disconnect_stream_and_signal(xenv4v_extension_t *pde, xenv4v_context_t *ctx);
-NTSTATUS gh_v4v_process_notify(xenv4v_extension_t *pde, BOOLEAN notify_otherend);
+NTSTATUS gh_v4v_process_notify(xenv4v_extension_t *pde);
 void gh_v4v_process_context_writes(xenv4v_extension_t *pde, xenv4v_context_t *ctx);
 NTSTATUS NTAPI gh_v4v_dispatch_write(PDEVICE_OBJECT fdo, PIRP irp);
-VOID gh_v4v_process_context_reads(xenv4v_extension_t *pde, xenv4v_context_t *ctx, BOOLEAN *pNotify);
+VOID gh_v4v_process_context_reads(xenv4v_extension_t *pde, xenv4v_context_t *ctx);
 NTSTATUS NTAPI gh_v4v_dispatch_read(PDEVICE_OBJECT fdo, PIRP irp);
 
 /* gh_send.c */

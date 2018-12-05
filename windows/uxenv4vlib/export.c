@@ -334,7 +334,7 @@ uxen_v4v_notify (void /*hmm */ )
     if (!pde)
         return;
 
-    if (gh_v4v_process_notify (pde, TRUE) == STATUS_NO_MEMORY)
+    if (gh_v4v_process_notify (pde) == STATUS_NO_MEMORY)
         /* notify later from virq thread */
         KeSetEvent(&pde->virq_event, IO_NO_INCREMENT, FALSE);
 

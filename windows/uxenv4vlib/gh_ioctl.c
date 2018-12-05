@@ -329,7 +329,7 @@ gh_v4v_dispatch_device_control(PDEVICE_OBJECT fdo, PIRP irp)
                 break;
             }
         case V4V_IOCTL_NOTIFY: {
-                gh_v4v_process_notify(pde, TRUE);
+                gh_v4v_process_notify(pde);
                 status = STATUS_SUCCESS;
                 break;
             }

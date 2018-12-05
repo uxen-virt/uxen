@@ -263,7 +263,7 @@ gh_v4v_process_destination_writes(xenv4v_extension_t *pde, v4v_ring_data_ent_t *
 }
 
 NTSTATUS
-gh_v4v_process_notify(xenv4v_extension_t *pde, BOOLEAN notify_otherend)
+gh_v4v_process_notify(xenv4v_extension_t *pde)
 {
     NTSTATUS         status;
     ULONG            i;
@@ -276,14 +276,12 @@ gh_v4v_process_notify(xenv4v_extension_t *pde, BOOLEAN notify_otherend)
         return STATUS_UNSUCCESSFUL;
     }
 
-    if (notify_otherend) {
-        // Now do the actual notify
-        status = gh_v4v_notify(ringData);
-        if (!NT_SUCCESS(status)) {
-            // That ain't good
-            uxen_v4v_fast_free(ringData);
-            return status;
-        }
+    // Now do the actual notify
+    status = gh_v4v_notify(ringData);
+    if (!NT_SUCCESS(status)) {
+        // That ain't good
+        uxen_v4v_fast_free(ringData);
+        return status;
     }
 
     // Process each of the destinations
@@ -472,6 +470,7 @@ gh_v4v_process_datagram_reads(xenv4v_extension_t *pde, xenv4v_context_t *ctx, BO
     uint32_t            protocol;
     ssize_t             ret;
 
+
     if (ctx->ring_object->ring_is_mapped) {
         // The ring is mapped so we just signal to userland to do the work
         if (ctx->ring_object->ring->rx_ptr == ctx->ring_object->ring->tx_ptr) {
@@ -558,7 +557,7 @@ gh_v4v_process_context_reads_quick(xenv4v_extension_t *pde, xenv4v_context_t *ct
 
 
 VOID
-gh_v4v_process_context_reads(xenv4v_extension_t *pde, xenv4v_context_t *ctx, BOOLEAN *pNotify)
+gh_v4v_process_context_reads(xenv4v_extension_t *pde, xenv4v_context_t *ctx)
 {
     LONG val;
 
@@ -574,7 +573,7 @@ gh_v4v_process_context_reads(xenv4v_extension_t *pde, xenv4v_context_t *ctx, BOO
             // IRPs for it so just ignore it.
             return;
         case XENV4V_STATE_BOUND:
-            gh_v4v_process_datagram_reads(pde, ctx, pNotify);
+            gh_v4v_process_datagram_reads(pde, ctx, NULL);
             break;
         default:
             // May be freshly opened file that has not been bound, just ignore.
@@ -648,7 +647,7 @@ gh_v4v_dispatch_read(PDEVICE_OBJECT fdo, PIRP irp)
     // If we did a read, we need to notify the v4v backend (and process any writes
     // that are pending while we are at it).
     if (notify) {
-        gh_v4v_process_notify(pde, TRUE);
+        gh_v4v_process_notify(pde);
     }
 
     TraceReadWrite(("<==== '%s'.\n", __FUNCTION__));
