@@ -31,7 +31,7 @@ static DEFINE_PER_CPU(uint32_t[MAPCACHE_SIZE / 32], mapcache_map);
 
 #define map_mfn(va, mfn) UI_HOST_CALL(ui_map_mfn, va, mfn)
 
-#define HASH_ENTRIES 64
+#define HASH_ENTRIES 256
 #define HASH_FN(mfn) ((mfn) & (HASH_ENTRIES - 1))
 
 typedef struct hash_entry {
