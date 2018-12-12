@@ -1860,6 +1860,7 @@ do_v4v_op(int cmd, XEN_GUEST_HANDLE(void) arg1,
         return -EPERM;
 
     domain_lock(d);
+    hvmcopy_cache_enable(1);
     switch (cmd) {
     case V4VOP_register_ring: {
         XEN_GUEST_HANDLE(v4v_ring_t) ring_hnd =
@@ -1997,6 +1998,8 @@ do_v4v_op(int cmd, XEN_GUEST_HANDLE(void) arg1,
         break;
     }
 out:
+    hvmcopy_cache_enable(0);
+    hvmcopy_cache_flush();
     domain_unlock(d);
 #ifdef V4V_DEBUG
     printk(XENLOG_ERR "<-do_v4v_op()=%d\n", (int)rc);

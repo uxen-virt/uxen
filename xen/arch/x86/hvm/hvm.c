@@ -3245,6 +3245,87 @@ void hvm_task_switch(
     hvm_unmap_entry(nptss_desc, nptss_gfn);
 }
 
+typedef struct {
+    unsigned long guest_virt_pfn;
+    unsigned long guest_mfn;
+    p2m_type_t p2mt;
+    void *host_page;
+} hvmcopy_cache_t;
+
+#define HVMCOPY_CACHE_SIZE 16
+
+static DEFINE_PER_CPU(hvmcopy_cache_t[HVMCOPY_CACHE_SIZE], cpu_hvmcopy_cache);
+static DEFINE_PER_CPU(int, cpu_hvmcopy_cache_sz);
+static DEFINE_PER_CPU(int, cpu_hvmcopy_cache_on);
+
+void hvmcopy_cache_enable(int en)
+{
+    this_cpu(cpu_hvmcopy_cache_on) = en;
+}
+
+void hvmcopy_cache_flush(void)
+{
+    int i;
+    int sz = this_cpu(cpu_hvmcopy_cache_sz);
+    hvmcopy_cache_t *cs = &this_cpu(cpu_hvmcopy_cache)[0];
+
+    for (i = 0; i < sz; i++) {
+        hvmcopy_cache_t *c = &cs[i];
+
+        unmap_domain_page(c->host_page);
+        put_gfn(current->domain, c->guest_mfn);
+    }
+    this_cpu(cpu_hvmcopy_cache_sz) = 0;
+}
+
+static int hvmcopy_cache_lookup(unsigned long virt_pfn,
+    unsigned long *guest_mfn,
+    p2m_type_t *p2mt,
+    void **host_page)
+{
+    int i;
+
+    if (!this_cpu(cpu_hvmcopy_cache_on))
+        return 0;
+
+    for (i = 0; i < this_cpu(cpu_hvmcopy_cache_sz); i++) {
+        hvmcopy_cache_t *c = &this_cpu(cpu_hvmcopy_cache)[i];
+
+        if (c->guest_virt_pfn == virt_pfn) {
+            *guest_mfn = c->guest_mfn;
+            *p2mt = c->p2mt;
+            *host_page = c->host_page;
+
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static int hvmcopy_cache_add(unsigned long guest_virt_pfn,
+    unsigned long guest_mfn,
+    p2m_type_t p2mt,
+    void *host_page)
+{
+    hvmcopy_cache_t *c;
+
+    if (!this_cpu(cpu_hvmcopy_cache_on))
+        return 0;
+
+    if (this_cpu(cpu_hvmcopy_cache_sz) >= HVMCOPY_CACHE_SIZE)
+        hvmcopy_cache_flush();
+
+    c = &this_cpu(cpu_hvmcopy_cache)[this_cpu(cpu_hvmcopy_cache_sz)];
+    c->guest_virt_pfn = guest_virt_pfn;
+    c->guest_mfn = guest_mfn;
+    c->p2mt = p2mt;
+    c->host_page = host_page;
+    this_cpu(cpu_hvmcopy_cache_sz)++;
+
+    return 1;
+}
+
 #define HVMCOPY_from_guest (0u<<0)
 #define HVMCOPY_to_guest   (1u<<0)
 #define HVMCOPY_no_fault   (0u<<1)
@@ -3255,10 +3336,12 @@ static enum hvm_copy_result __hvm_copy(
     void *buf, paddr_t addr, int size, unsigned int flags, uint32_t pfec)
 {
     struct vcpu *curr = current;
-    unsigned long gfn, mfn;
+    unsigned long gfn, mfn = 0;
     p2m_type_t p2mt;
     char *p;
     int count, todo = size;
+    int cached;
+    void *page;
 
     /*
      * XXX Disable for 4.1.0: PV-on-HVM drivers will do grant-table ops
@@ -3279,9 +3362,15 @@ static enum hvm_copy_result __hvm_copy(
     while ( todo > 0 )
     {
         count = min_t(int, PAGE_SIZE - (addr & ~PAGE_MASK), todo);
+        cached = 0;
 
         if ( flags & HVMCOPY_virt )
         {
+            if (hvmcopy_cache_lookup(addr >> PAGE_SHIFT, &gfn, &p2mt, &page)) {
+                cached = 1;
+                goto copy;
+            }
+
             gfn = paging_gva_to_gfn(curr, addr, paging_g2g_unshare, &pfec);
             if ( gfn == INVALID_GFN )
             {
@@ -3333,8 +3422,12 @@ static enum hvm_copy_result __hvm_copy(
         }
         ASSERT(mfn_valid(mfn));
 
-        p = (char *)map_domain_page(mfn) + (addr & ~PAGE_MASK);
+        page = map_domain_page(mfn);
+        if ((flags & HVMCOPY_virt) && hvmcopy_cache_add(addr >> PAGE_SHIFT, gfn, p2mt, page))
+            cached = 1;
 
+    copy:
+        p = (char *)page + (addr & ~PAGE_MASK);
         if ( flags & HVMCOPY_to_guest )
         {
             if (p2m_is_readonly(p2mt)) {
@@ -3355,12 +3448,14 @@ static enum hvm_copy_result __hvm_copy(
             memcpy(buf, p, count);
         }
 
-        unmap_domain_page(p);
+        if (!cached) {
+            unmap_domain_page(p);
+            put_gfn(curr->domain, gfn);
+        }
 
         addr += count;
         buf  += count;
         todo -= count;
-        put_gfn(curr->domain, gfn);
     }
 
     return HVMCOPY_okay;

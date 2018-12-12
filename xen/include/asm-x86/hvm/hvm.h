@@ -597,4 +597,9 @@ bool_t nhvm_vmcx_hap_enabled(struct vcpu *v);
 /* interrupt */
 enum hvm_intblk nhvm_interrupt_blocked(struct vcpu *v);
 
+/* hvm copy cache on/off */
+void hvmcopy_cache_enable(int en);
+/* hvm copy cache flush */
+void hvmcopy_cache_flush(void);
+
 #endif /* __ASM_X86_HVM_HVM_H__ */
