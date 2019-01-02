@@ -24,7 +24,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -497,6 +497,8 @@ static int rtc_ioport_write(void *opaque, uint32_t addr, uint32_t data)
     case RTC_DAY_OF_MONTH:
     case RTC_MONTH:
     case RTC_YEAR:
+        printk("RTC time update, cmos idx=%d, value=%d, REG_B=%d\n",
+               s->hw.cmos_index, data, s->hw.cmos_data[RTC_REG_B]);
         /* if in set mode, just write the register */
         if ( (s->hw.cmos_data[RTC_REG_B] & RTC_SET) )
             s->hw.cmos_data[s->hw.cmos_index] = data;
