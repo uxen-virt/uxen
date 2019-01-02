@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2017, Bromium, Inc.
+ * Copyright 2013-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -305,9 +305,19 @@ platform_update_system_time(void)
     }
 
     if (verbose) {
+        DWORD adj = 0, incr = 0;
+        BOOL adj_dis = FALSE;
+
         uxen_msg("updated system time %04d-%02d-%02d %02d:%02d:%02d.%03d %d",
                    st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute,
                    st.wSecond, st.wMilliseconds, st.wDayOfWeek);
+        memset(&st, 0, sizeof(st));
+        GetSystemTime(&st);
+        GetSystemTimeAdjustment(&adj, &incr, &adj_dis);
+        uxen_msg("verified system time after update: %04d-%02d-%02d %02d:%02d:%02d.%03d %d",
+                   st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute,
+                   st.wSecond, st.wMilliseconds, st.wDayOfWeek);
+        uxen_msg("time adjustment settings adj=%d incr=%d dis=%d", adj, incr, adj_dis);
     }
 
     return 0;
