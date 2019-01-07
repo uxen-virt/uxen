@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -123,6 +123,9 @@ const char *console_type = "osx";
 #endif
 static char *control_path = NULL;
 uint64_t h264_offload = 0;
+uint64_t hbmon_period = 0;
+uint64_t hbmon_timeout_period = 2000;
+uint64_t hbmon_verbose = 0;
 
 const char *clipboard_formats_blacklist_host2vm = NULL;
 const char *clipboard_formats_whitelist_host2vm = NULL;

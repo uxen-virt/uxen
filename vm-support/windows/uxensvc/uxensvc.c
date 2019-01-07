@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2017, Bromium, Inc.
+ * Copyright 2013-2019, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -7,6 +7,11 @@
 #include <windows.h>
 #include <tchar.h>
 #include <stdio.h>
+#include <inttypes.h>
+#include <winioctl.h>
+#define V4V_USE_INLINE_API
+#include <windows/uxenv4vlib/gh_v4vapi.h>
+#include <echo-common.h>
 
 errno_t rand_s(   unsigned int* randomValue);
 #include "platform.h"
@@ -19,6 +24,18 @@ wchar_t                         *svc_path;
 static SERVICE_STATUS           svc_status;
 static SERVICE_STATUS_HANDLE    svc_status_handle;
 static HANDLE                   svc_stop_event = NULL;
+
+struct echo_msg {
+    v4v_datagram_t dg;
+    struct uxenecho_msg msg;
+};
+
+static v4v_channel_t v4v;
+static int echo_initialized;
+static HANDLE echo_event, echo_write_event;
+static OVERLAPPED echo_ov, echo_write_ov;
+static struct echo_msg echo_msg;
+
 
 static int
 svc_set_privilege(const char *priv_name)
@@ -113,11 +130,95 @@ svc_ctl_handler(DWORD control, DWORD event_type, void *event_data,
 }
 
 static void
+echo_read(void)
+{
+    memset(&echo_ov, 0, sizeof(echo_ov));
+    echo_ov.hEvent = echo_event;
+
+    if (!ReadFile(v4v.v4v_handle, &echo_msg, sizeof(echo_msg), NULL, &echo_ov)) {
+        switch (GetLastError()) {
+        case ERROR_IO_PENDING:
+            break;
+        default:
+            uxen_err("echo ReadFile failed: %d", GetLastError());
+            break;
+        }
+    }
+}
+
+static void
+echo_dispatch(void)
+{
+    DWORD bytes;
+
+    if (!GetOverlappedResult(v4v.v4v_handle, &echo_ov, &bytes, FALSE)) {
+        switch (GetLastError()) {
+        case ERROR_IO_INCOMPLETE:
+            return;
+        }
+        uxen_err("echo GetOverlappedResult failed err=%d", GetLastError());
+    } else {
+        /* send echo response */
+        memset(&echo_write_ov, 0, sizeof(echo_write_ov));
+        echo_write_ov.hEvent = echo_write_event;
+        if (!WriteFile(v4v.v4v_handle, &echo_msg, sizeof(echo_msg), NULL, &echo_write_ov)) {
+            switch (GetLastError()) {
+            case ERROR_IO_PENDING:
+                break;
+            default:
+                uxen_err("echo WriteFile failed: %d", GetLastError());
+                break;
+            }
+        }
+    }
+    /* read next */
+    echo_read();
+}
+
+static int
+echo_init(void)
+{
+    v4v_bind_values_t bind = { };
+
+    if (!v4v_open(&v4v, UXEN_ECHO_RING_SIZE, V4V_FLAG_ASYNC)) {
+        uxen_err("v4v_open failed");
+        return -1;
+    }
+
+    bind.ring_id.addr.port = UXEN_ECHO_US_PORT;
+    bind.ring_id.addr.domain = V4V_DOMID_ANY;
+    bind.ring_id.partner = V4V_DOMID_DM;
+
+    if (!v4v_bind(&v4v, &bind)) {
+        uxen_err("v4v_bind failed");
+        v4v_close(&v4v);
+        return -1;
+    }
+
+    echo_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+    echo_write_event = CreateEvent(NULL, FALSE, FALSE, NULL);
+    echo_initialized = 1;
+
+    return 0;
+}
+
+static void
+echo_cleanup(void)
+{
+    if (echo_initialized) {
+        CloseHandle(echo_event);
+        CloseHandle(echo_write_event);
+        v4v_close(&v4v);
+        echo_initialized = 0;
+    }
+}
+
+static void
 svc_init(DWORD argc, wchar_t **argv)
 {
     DWORD err = NO_ERROR;
     DWORD active_session;
-    HANDLE events[3] = { NULL, NULL, NULL };
+    HANDLE events[4] = { NULL, NULL, NULL, NULL };
     unsigned int random_wait;
     int rc;
     int i;
@@ -168,6 +269,15 @@ svc_init(DWORD argc, wchar_t **argv)
         goto stop;
     }
 
+    rc = echo_init();
+    if (rc) {
+        uxen_err("echo_init failed (%d)", rc);
+        err = rc;
+        goto stop;
+    }
+
+    events[3] = echo_event;
+
     /* Service balloon driver once on startup. */
     platform_service_balloon();
     /* initial time alignment with the platform */
@@ -178,6 +288,9 @@ svc_init(DWORD argc, wchar_t **argv)
         uxen_msg("Active session %d already present", active_session);
         session_connect(active_session);
     }
+
+    echo_read();
+
     svc_report_status(SERVICE_RUNNING, NO_ERROR, 0);
 
     while (1) {
@@ -186,7 +299,7 @@ svc_init(DWORD argc, wchar_t **argv)
         /* Use timeout to adjust balloon periodically. We make the timeout
          * slightly random to avoid all VMs adjusting their balloons at the
          * same time. */
-        rc = WaitForMultipleObjectsEx(3, events, FALSE, 111 + random_wait,
+        rc = WaitForMultipleObjectsEx(4, events, FALSE, 111 + random_wait,
                 TRUE);
         switch (rc) {
         case WAIT_OBJECT_0:
@@ -196,6 +309,10 @@ svc_init(DWORD argc, wchar_t **argv)
             /* platform event */
             ResetEvent(events[1]);
             platform_update_system_time();
+            break;
+        case WAIT_OBJECT_0 + 3:
+            /* echo event */
+            echo_dispatch();
             break;
         case WAIT_OBJECT_0 + 2:
             /* balloon event */
@@ -212,6 +329,8 @@ svc_init(DWORD argc, wchar_t **argv)
     }
 
 stop:
+    echo_cleanup();
+
     active_session = WTSGetActiveConsoleSessionId();
     if (active_session && active_session != (DWORD)-1)
         session_disconnect(active_session);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -14,7 +14,8 @@
 
 typedef struct _DEVICE_EXTENSION {
     WDFDEVICE Device;
-    WDFINTERRUPT            Interrupt;
+    WDFINTERRUPT Interrupt;
+    uxen_v4v_ring_handle_t *EchoRing;
 }  DEVICE_EXTENSION, *PDEVICE_EXTENSION;
 
 

@@ -1,5 +1,5 @@
 #
-# Copyright 2013-2017, Bromium, Inc.
+# Copyright 2013-2019, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -12,6 +12,7 @@ ifeq (,$(MAKENOW))
 
 VPATH = $(SRCDIR)
 
+CPPFLAGS += -I$(TOPDIR) -I$(TOPDIR)/common/include/xen-public
 CPPFLAGS += -I$(TOPDIR)/windows/include -I.
 LDFLAGS +=
 LDLIBS += -lwtsapi32 -luserenv -ladvapi32 -lpsapi -lsetupapi

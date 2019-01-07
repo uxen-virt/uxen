@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -84,6 +84,7 @@ extern struct xc_interface_core *xc_handle;
 extern int xen_logdirty_enabled;
 extern uint64_t cuckoo_debug_on;
 extern uint64_t h264_offload;
+extern uint64_t hbmon_period, hbmon_timeout_period, hbmon_verbose;
 
 extern FILE *logfile;
 extern int loglevel;

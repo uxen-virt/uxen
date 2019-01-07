@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -31,6 +31,7 @@
 #include "clipboard.h"
 #include "hw/uxen_platform.h"
 #include "dm-features.h"
+#include "hbmon.h"
 
 #if defined(CONFIG_NICKEL)
 #include <dm/libnickel.h>
@@ -549,6 +550,8 @@ uxen_vm_init(const char *loadvm, int restore_mode)
     vm_time_offset = get_timeoffset();
     xc_domain_set_time_offset(xc_handle, vm_id, vm_time_offset);
 
+    hbmon_init();
+
 #if defined(CONFIG_VBOXDRV)
     if (restore_mode != VM_RESTORE_TEMPLATE) {
         ret = sf_service_start();
@@ -785,6 +788,7 @@ vm_exit(void *opaque)
     sf_service_stop();
     clip_service_stop();
 #endif
+    hbmon_cleanup();
 
     console_exit();
     control_exit();

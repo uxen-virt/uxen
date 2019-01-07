@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2018, Bromium, Inc.
+# Copyright 2012-2019, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -141,6 +141,9 @@ DM_SRCS += firmware.c
 $(WINDOWS)DM_SRCS += guest-agent.c
 guest-agent.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 guest-agent.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
+$(WINDOWS)DM_SRCS += hbmon.c
+hbmon.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
+hbmon.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
 DM_SRCS += nickel/http-parser/http_parser.c
 DM_SRCS += input.c
 DM_SRCS += introspection.c

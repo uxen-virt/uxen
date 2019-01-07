@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -749,6 +749,9 @@ struct config_option config_options[] = {
     { "firmware", co_set_firmware, NULL },
     { "guest_drivers_logmask", co_set_integer_opt, &guest_drivers_logmask },
     { "h264-offload", co_set_boolean_opt, &h264_offload },
+    { "hbmon-timeout-period", co_set_integer_opt, &hbmon_timeout_period },
+    { "hbmon-period", co_set_integer_opt, &hbmon_period },
+    { "hbmon-verbose", co_set_boolean_opt, &hbmon_verbose },
 #ifdef _WIN32
     { "hid-touch", co_set_boolean_opt, &hid_touch_enabled },
 #else

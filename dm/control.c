@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -29,6 +29,7 @@
 #include "timer.h"
 #include "block.h"
 #include "guest-agent.h"
+#include "hbmon.h"
 #include "vbox-drivers/shared-clipboard/clipboard-interface.h"
 
 #include <dm/whpx/whpx.h>
@@ -947,6 +948,19 @@ control_command_test(void *opaque, const char *id, const char *opt,
 #endif  /* CONTROL_TEST */
 
 static int
+control_command_hbmon_ping(void *opaque, const char *id, const char *opt,
+                           dict d, void *command_opaque)
+{
+    struct control_desc *cd = (struct control_desc *)opaque;
+
+    hbmon_ping();
+
+    control_send_ok(cd, opt, id, NULL);
+
+    return 0;
+}
+
+static int
 inject_ctrl_alt_delete(void *opaque, const char *id, const char *opt,
                        dict d, void *command_opaque)
 {
@@ -1203,6 +1217,7 @@ struct dict_rpc_command control_commands[] = {
             { "file", DICT_RPC_ARG_TYPE_STRING, .optional = 0 },
             { NULL, },
         }, },
+    { "hbmon-ping", control_command_hbmon_ping, },
     { "inject-ctrl-alt-delete", inject_ctrl_alt_delete, },
     { "inject-trap", control_command_inject_trap,
       .args = (struct dict_rpc_arg_desc[]) {

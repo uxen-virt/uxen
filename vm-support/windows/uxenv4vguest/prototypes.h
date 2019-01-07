@@ -22,5 +22,5 @@ EVT_WDF_INTERRUPT_DISABLE UxvgEvtInterruptDisable;
 NTSTATUS UxvgInterruptCreate( IN PDEVICE_EXTENSION DevExt);
 
 void uxen_v4v_guest_do_plumbing(PDRIVER_OBJECT pdo);
-void uxen_v4v_guest_undo_plumbing(void);
+void uxen_v4v_guest_undo_plumbing(PDRIVER_OBJECT pdo);
 
