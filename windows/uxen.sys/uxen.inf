@@ -36,10 +36,12 @@ ErrorControl  = 1                            ; SERVICE_ERROR_NORMAL
 [uXen.DriverFiles]
 uxen.sys
 uxenv4vlib.sys
+uxenv4vproxy.sys
 
 [SourceDisksFiles]
 uxen.sys = 1,,
 uxenv4vlib.sys = 1,,
+uxenv4vproxy.sys = 1,,
 
 [SourceDisksNames]
 1 = %DiskId1%,,,
