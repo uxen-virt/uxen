@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2018, Bromium, Inc.
+ * Copyright 2017-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -175,10 +175,60 @@ static int hv_tests_cpu_has_vmx (void)
 
 static int hv_tests_cpu_has_nx (void)
 {
-    uint64_t rax = 0x80000001, rbx = 0, rcx = 0, rdx = 0;
+  uint64_t rax = 0x80000001, rbx = 0, rcx = 0, rdx = 0;
 
-    hv_tests_cpuid (&rax, &rbx, &rcx, &rdx);
-    return !! (rdx & (1UL << 20));
+  hv_tests_cpuid (&rax, &rbx, &rcx, &rdx);
+  return !! (rdx & (1UL << 20));
+}
+
+
+#ifdef _WIN32
+# ifndef _KERNEL_MODE
+#  ifndef __UXEN__
+#   define HV_TESTS_TEST_WHPX
+#   include <windows.h>
+#  else
+#   undef HV_TESTS_TEST_WHPX
+#  endif
+# else
+#  undef HV_TESTS_TEST_WHPX
+# endif
+#else
+# undef HV_TESTS_TEST_WHPX
+#endif
+
+static int hv_tests_whpx_operational (void)
+{
+#ifdef HV_TESTS_TEST_WHPX
+  HMODULE whvplatform;
+  int enabled = 0;
+
+  typedef HRESULT (*whvgetcapability_t) (
+    int CapabilityCode,
+    void *CapabilityBuffer,
+    UINT32 CapabilityBufferSizeInBytes,
+    UINT32 * WrittenSizeInBytes);
+
+  whvplatform = LoadLibrary ("winhvplatform.dll");
+
+  if (whvplatform) {
+    whvgetcapability_t whvgetcapability = (whvgetcapability_t)
+                                          GetProcAddress (whvplatform, "WHvGetCapability");
+
+    if (whvgetcapability) {
+      uint64_t cap = 0;
+      HRESULT hr = whvgetcapability (0 /*WHvCapabilityCodeHypervisorPresent*/, &cap,
+                                     sizeof (cap), NULL);
+      enabled = SUCCEEDED (hr) && (cap != 0);
+    }
+
+    FreeLibrary (whvplatform);
+  }
+
+  return enabled;
+#else
+  return -1;
+#endif
 }
 
 
