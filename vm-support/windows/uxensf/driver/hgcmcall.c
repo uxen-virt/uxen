@@ -26,7 +26,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2013-2018, Bromium, Inc.
+ * Copyright 2013-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -59,13 +59,27 @@
 #include "hgcm-simple.h"
 #include "hgcm-limits.h"
 #include "channel.h"
+
 #define MEMTAG_MARSHALL_HEADER ((ULONG)'30rb')
+#define MEMTAG_HGCMBUF ((ULONG)'30hg')
 
 /* Try to use static buffer in a common case, instead of ExAllocatePoolWithTag */
-static char hgcmBuf[RING_SIZE];
+static NPAGED_LOOKASIDE_LIST lookaside_hgcmbuf;
+
+#define HGCMBUF_SIZE RING_SIZE
 #define BUFFER_OVERHEAD 4096
 
 #include "dbghlp.h"
+
+void *hgcmbuf_get(void)
+{
+    return ExAllocateFromNPagedLookasideList(&lookaside_hgcmbuf);
+}
+
+void hgcmbuf_put(void *p)
+{
+    ExFreeToNPagedLookasideList(&lookaside_hgcmbuf, p);
+}
 
 /* This is the equivalent of the Vbox VbglHGCMCall, that transfers data
 over tcp (well, ChannelSend/Recv), instead of real vbox hgcm.
@@ -76,6 +90,8 @@ uint32_t size)
     int rc, sz;
     TcpMarshallHeader header, *resp_hdr=0;
     char *resp_body=0;
+    struct channel_req req;
+    char *hgcmBuf = NULL;
 
     verify_on_stack(info);
 
@@ -83,54 +99,84 @@ uint32_t size)
     header.u32Function = info->u32Function;
     header.u.cParms = info->cParms;
     rc = VbglHGCMCall_tcp_marshall(info, false, true, &header.size, NULL);
-    if (rc)
-        return STATUS_NOT_IMPLEMENTED;
+    if (rc) {
+        rc = STATUS_NOT_IMPLEMENTED;
+        goto out;
+    }
 
-    if ( header.size + sizeof(header) + BUFFER_OVERHEAD > RING_SIZE )
-        return STATUS_BUFFER_OVERFLOW;
+    if ( header.size + sizeof(header) + BUFFER_OVERHEAD > RING_SIZE ) {
+        rc = STATUS_BUFFER_OVERFLOW;
+        goto out;
+    }
+
+    hgcmBuf = hgcmbuf_get();
+    if (!hgcmBuf) {
+        uxen_err("VBOXSF: out of memory while getting hgcm buffer\n");
+        rc = STATUS_NO_MEMORY;
+        goto out;
+    }
 
     VbglHGCMCall_tcp_marshall(info, true, true, &header.size, 
         hgcmBuf + sizeof(header));
 
     *((TcpMarshallHeader*)hgcmBuf) = header;
 
-    ChannelPrepareReq();
-    rc = ChannelSend(hgcmBuf, sizeof(header) + header.size);
+    ChannelPrepareReq(&req, hgcmBuf, HGCMBUF_SIZE, sizeof(header) + header.size);
+    rc = ChannelSendReq(&req);
 
     if (!NT_SUCCESS(rc)) {
-        Log(("VBOXSF: send error 0x%x\n", rc));
-        return rc;
+        ChannelReleaseReq(&req);
+        uxen_err("VBOXSF: send error 0x%x\n", rc);
+        goto out;
     }
 
-    rc = ChannelRecv(hgcmBuf, sizeof(hgcmBuf), &sz);
+    rc = ChannelRecvResp(&req, &sz);
     if (!NT_SUCCESS(rc)) {
-        Log(("VBOXSF: recv error 0x%x\n", rc));
-        return rc;
+        ChannelReleaseReq(&req);
+        uxen_err("VBOXSF: recv error 0x%x\n", rc);
+        goto out;
     }
+
+    ChannelReleaseReq(&req);
 
     resp_hdr = (TcpMarshallHeader*)hgcmBuf;
     resp_body = hgcmBuf + sizeof(TcpMarshallHeader);
 
-    if (resp_hdr->magic != HGCMMagicSimple)
-        return STATUS_INFO_LENGTH_MISMATCH;
+    if (resp_hdr->magic != HGCMMagicSimple) {
+        rc = STATUS_INFO_LENGTH_MISMATCH;
+        goto out;
+    }
 
     verify_on_stack(info);
 
     rc = VbglHGCMCall_tcp_unmarshall(info, resp_body, info->cParms, true, resp_hdr->size);
     if (!NT_SUCCESS(rc))
-        return rc;
+        goto out;
 
     info->result = resp_hdr->u.status;
+
+out:
+    if (hgcmBuf)
+        hgcmbuf_put(hgcmBuf);
 
     return rc;
 }
 
-static KMUTEX g_Mutex;
-
 void
 hgcmcall_init(void)
 {
-    KeInitializeMutex(&g_Mutex, 0);
+    ExInitializeNPagedLookasideList(&lookaside_hgcmbuf,
+        NULL, NULL, 0,
+        HGCMBUF_SIZE, MEMTAG_HGCMBUF, 0);
+    if (!NT_SUCCESS(ChannelConnect()))
+        uxen_err("failed to connect v4v channel\n");
+}
+
+void
+hgcmcall_cleanup(void)
+{
+    ChannelDisconnect();
+    ExDeleteNPagedLookasideList(&lookaside_hgcmbuf);
 }
 
 int VBOXCALL VbglHGCMCall (VBGLHGCMHANDLE handle, VBoxGuestHGCMCallInfo* info, uint32_t size)
@@ -138,19 +184,9 @@ int VBOXCALL VbglHGCMCall (VBGLHGCMHANDLE handle, VBoxGuestHGCMCallInfo* info, u
     NTSTATUS status, rc;
 
     verify_on_stack(info);
-    
-    status = KeWaitForMutexObject(&g_Mutex,
-                                  Executive,
-                                  KernelMode,
-                                  FALSE,
-                                  NULL);
-    if (status) {
-        Log(("BRHVSF: sfdebug: KeWaitForMutexObject error 0x%x\n", status));
-        return status;
-    }
-    verify_on_stack(info);
+
     rc = VbglHGCMCall_worker(handle, info, size);
-    KeReleaseMutex(&g_Mutex, FALSE);
+
     return rc;
 }
 

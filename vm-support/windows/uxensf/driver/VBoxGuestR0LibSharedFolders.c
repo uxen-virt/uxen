@@ -26,7 +26,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2013-2018, Bromium, Inc.
+ * Copyright 2013-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -76,6 +76,7 @@
 #endif
 
 void hgcmcall_init(void);
+void hgcmcall_cleanup(void);
 
 DECLVBGL(int) vboxInit (void)
 {
@@ -90,6 +91,8 @@ DECLVBGL(int) vboxInit (void)
 DECLVBGL(void) vboxUninit (void)
 {
     VbglTerminate ();
+
+    hgcmcall_cleanup();
 }
 
 DECLVBGL(int) vboxConnect (PVBSFCLIENT pClient)
