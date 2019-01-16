@@ -173,7 +173,7 @@ hbmon_init(void)
 {
     int err;
 
-    if (!hbmon_period)
+    if (!hbmon_period || vm_restore_mode == VM_RESTORE_TEMPLATE)
         return 0;
 
     debug_printf("initializing heartbeat monitor\n");
