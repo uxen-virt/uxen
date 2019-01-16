@@ -91,6 +91,18 @@ handle_recv_event(void *opaque)
     }
 }
 
+static void
+handle_tx_event(void *opaque)
+{
+    struct conn *c = opaque;
+    size_t bytes;
+
+    int res = dm_v4v_async_get_result(&c->async, &bytes, false);
+    if (res)
+        debug_printf("hbmon: error sending ping, err=%d, last_id=%"PRId64"\n",
+            (int)GetLastError(), c->last_id);
+}
+
 static int
 hbmon_open_conn(struct conn *c, int port)
 {
@@ -144,6 +156,7 @@ hbmon_open_conn(struct conn *c, int port)
     }
 
     ioh_add_wait_object (&c->v4v.recv_event, handle_recv_event, c, NULL);
+    ioh_add_wait_object (&c->tx_event, handle_tx_event, c, NULL);
 
     c->open = 1;
 
@@ -156,6 +169,7 @@ hbmon_cleanup_conn(struct conn *c)
     if (c->open) {
         free_timer(c->timeout_timer);
         ioh_del_wait_object(&c->v4v.recv_event, NULL);
+        ioh_del_wait_object(&c->tx_event, NULL);
         dm_v4v_close(&c->v4v);
         CloseHandle(c->tx_event);
         c->open = 0;
