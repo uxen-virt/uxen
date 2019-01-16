@@ -1254,6 +1254,9 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
     dprintk("uxen pvi_vmwrite: %p\n", uxen_devext->de_pvi_vmwrite);    
     uxen_info->ui_pvi_vmread = uxen_devext->de_pvi_vmread;
     uxen_info->ui_pvi_vmwrite = uxen_devext->de_pvi_vmwrite;
+#else
+    uxen_info->ui_pvi_vmread = 0;
+    uxen_info->ui_pvi_vmwrite = 0;
 #endif
 
     uxen_info->ui_map_page_range_max_nr = map_page_range_max_nr;
