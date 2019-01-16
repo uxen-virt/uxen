@@ -2,7 +2,7 @@
  *  uxen_info.h
  *  uxen
  *
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -261,6 +261,9 @@ struct /* __WINPACKED__ */ uxen_info {
     uint8_t *ui_xdata_end;
     uint8_t *ui_pdata_start;
     uint8_t *ui_pdata_end;
+    
+    uint64_t ui_pvi_vmread;
+    uint64_t ui_pvi_vmwrite;
 #endif
 
 #if defined(UXEN_HOST_OSX) || defined(__APPLE__)

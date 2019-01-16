@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2018, Bromium, Inc.
+ * Copyright 2017-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -26,11 +26,6 @@ extern int ax_pv_vmwrite(void *, uint64_t field, uint64_t value);
 
 typedef int (*pvi_vmread_pfn)(void *, uint64_t field, uint64_t *value);
 typedef int (*pvi_vmwrite_pfn)(void *, uint64_t field, uint64_t value);
-
-static uint64_t __initdata pvi_vmread = 0;
-integer_param("pvi_vmread", pvi_vmread);
-static uint64_t __initdata pvi_vmwrite = 0;
-integer_param("pvi_vmwrite", pvi_vmwrite);
 
 static DEFINE_PER_CPU_READ_MOSTLY (void *, ax_pv_vmcs_ctx);
 
@@ -168,8 +163,8 @@ unsigned long ax_pv_vmcs_read(unsigned long field)
     uint64_t value;
 
     if (ax_pv_vmcs_enabled) {
-        if (pvi_vmread)
-            ((pvi_vmread_pfn)((intptr_t)pvi_vmread))
+        if (_uxen_info.ui_pvi_vmread)
+            ((pvi_vmread_pfn)((intptr_t)_uxen_info.ui_pvi_vmread))
              (this_cpu(ax_pv_vmcs_ctx), field, &value);
         else
             ax_pv_vmread(this_cpu(ax_pv_vmcs_ctx), field, &value);
@@ -186,8 +181,8 @@ unsigned long ax_pv_vmcs_read_safe(unsigned long field, int *error)
     uint64_t value;
 
     if (ax_pv_vmcs_enabled) {
-        if (pvi_vmread)
-            *error = ((pvi_vmread_pfn)((intptr_t)pvi_vmread))
+        if (_uxen_info.ui_pvi_vmread)
+            *error = ((pvi_vmread_pfn)((intptr_t)_uxen_info.ui_pvi_vmread))
                 (this_cpu(ax_pv_vmcs_ctx), field, &value);
         else
             *error = ax_pv_vmread(this_cpu(ax_pv_vmcs_ctx), field, &value);
@@ -201,8 +196,8 @@ unsigned long ax_pv_vmcs_read_safe(unsigned long field, int *error)
 void ax_pv_vmcs_write(unsigned long field, unsigned long value)
 {
     if (ax_pv_vmcs_enabled) {
-        if (pvi_vmwrite)
-            ((pvi_vmwrite_pfn)((intptr_t)pvi_vmwrite))
+        if (_uxen_info.ui_pvi_vmwrite)
+            ((pvi_vmwrite_pfn)((intptr_t)_uxen_info.ui_pvi_vmwrite))
                 (this_cpu(ax_pv_vmcs_ctx), field, value);
         else
             ax_pv_vmwrite(this_cpu(ax_pv_vmcs_ctx), field, value);
@@ -274,7 +269,7 @@ int ax_pv_vmcs_setup(void)
     rax = AX_CPUID_PV_VMACCESS;
     rbx = 1;
 
-    if (!patched && !(pvi_vmread && pvi_vmwrite)) {
+    if (!patched && !(_uxen_info.ui_pvi_vmread && _uxen_info.ui_pvi_vmwrite)) {
         rcx = (size_t) ax_pv_vmread;
         rdx = (size_t) ax_pv_vmwrite;
     } else {

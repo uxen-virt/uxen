@@ -2,7 +2,7 @@
  *  uxen_ops.c
  *  uxen
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -1249,6 +1249,11 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
     uxen_info->ui_xdata_end = &uxen_xdata_end;
     uxen_info->ui_pdata_start = &uxen_pdata_start;
     uxen_info->ui_pdata_end = &uxen_pdata_end;
+
+    dprintk("uxen pvi_vmread: %p\n", uxen_devext->de_pvi_vmread);
+    dprintk("uxen pvi_vmwrite: %p\n", uxen_devext->de_pvi_vmwrite);    
+    uxen_info->ui_pvi_vmread = uxen_devext->de_pvi_vmread;
+    uxen_info->ui_pvi_vmwrite = uxen_devext->de_pvi_vmwrite;
 #endif
 
     uxen_info->ui_map_page_range_max_nr = map_page_range_max_nr;
@@ -1294,13 +1299,6 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
 
     KeResetEvent(&uxen_devext->de_shutdown_done);
     uxen_info->ui_running = 1;
-
-#ifndef __i386__
-    uid.pvi_vmread = uxen_devext->de_pvi_vmread;
-    uid.pvi_vmwrite = uxen_devext->de_pvi_vmwrite;
-    uid.UXEN_INIT_pvi_vmread_MASK |= UXEN_INIT_pvi_vmread;
-    uid.UXEN_INIT_pvi_vmwrite_MASK |= UXEN_INIT_pvi_vmwrite;
-#endif /* __i386__ */
 
     for (host_cpu = 0; host_cpu < max_host_cpu; host_cpu++) {
 	if ((uxen_info->ui_cpu_active_mask & affinity_mask(host_cpu)) == 0)
