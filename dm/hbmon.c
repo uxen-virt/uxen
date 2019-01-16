@@ -46,7 +46,7 @@ hb_timer_run(void *opaque)
         memset(&c->msg, 0, sizeof(c->msg));
         c->msg.dg.addr.port = c->port;
         c->msg.dg.addr.domain = c->partner_id;
-        c->msg.dg.flags = V4V_DATAGRAM_FLAG_IGNORE_DLO;
+        c->msg.dg.flags = 0; //V4V_DATAGRAM_FLAG_IGNORE_DLO;
         c->msg.msg.id = hb_message_id;
         c->last_id = hb_message_id;
         err = dm_v4v_send(&c->v4v, (v4v_datagram_t*)&c->msg, sizeof(c->msg), &c->async);
