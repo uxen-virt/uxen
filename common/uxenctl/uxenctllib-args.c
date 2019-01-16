@@ -2,7 +2,7 @@
  *  uxenctllib-args.c
  *  uxen
  *
- * Copyright 2013-2018, Bromium, Inc.
+ * Copyright 2013-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -98,8 +98,6 @@ static struct uxen_param params[] = {
     UINT_OPTION("v4v_thread_priority", opt_v4v_thread_priority),
     UINT_OPTION("spec_ctrl", opt_spec_ctrl),
     BOOLEAN_OPTION("whp", opt_whp),
-    UINT_OPTION("pvi_vmread", pvi_vmread),
-    UINT_OPTION("pvi_vmwrite", pvi_vmwrite),
     LAST_OPTION
 };
 
