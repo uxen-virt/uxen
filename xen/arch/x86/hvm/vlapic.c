@@ -20,7 +20,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -1095,7 +1095,7 @@ int vlapic_ack_pending_irq(struct vcpu *v, int vector)
          * lower priority vectors are pending in the ISR. Thus we can set
          * APIC assist to avoid exiting for EOI.
          */
-#ifdef __x86_64__
+#if 0
         viridian_apic_assist_set(v);
 #endif
     }
