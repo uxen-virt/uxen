@@ -161,16 +161,15 @@ static int vlapic_find_highest_irr(struct vlapic *vlapic)
     return vlapic_find_highest_vector(&vlapic->regs->data[APIC_IRR]);
 }
 
+
 int vlapic_set_irq(struct vlapic *vlapic, uint8_t vec, uint8_t trig)
 {
-    int ret;
-
-    ret = !vlapic_test_and_set_irr(vec, vlapic);
     if ( trig )
         vlapic_set_vector(vec, &vlapic->regs->data[APIC_TMR]);
-
+    else
+        vlapic_clear_vector(vec, &vlapic->regs->data[APIC_TMR]);
     /* We may need to wake up target vcpu, besides set pending bit here */
-    return ret;
+    return  !vlapic_test_and_set_irr(vec, vlapic);
 }
 
 static int vlapic_find_highest_isr(struct vlapic *vlapic)
@@ -440,7 +439,7 @@ again:
 
     vlapic_clear_vector(vector, &vlapic->regs->data[APIC_ISR]);
 
-    if ( vlapic_test_and_clear_vector(vector, &vlapic->regs->data[APIC_TMR]) )
+    if ( vlapic_test_vector(vector, &vlapic->regs->data[APIC_TMR]) )
         vioapic_update_EOI(vlapic_domain(vlapic), vector);
 
 #ifndef __UXEN__
