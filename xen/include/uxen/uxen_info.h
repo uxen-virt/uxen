@@ -263,8 +263,10 @@ struct /* __WINPACKED__ */ uxen_info {
     uint8_t *ui_pdata_end;
 #endif
 
+#if defined(__x86_64__)
     uint64_t ui_pvi_vmread;
     uint64_t ui_pvi_vmwrite;
+#endif
 
 #if defined(UXEN_HOST_OSX) || defined(__APPLE__)
     uint32_t ui_smap_enabled;

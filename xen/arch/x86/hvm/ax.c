@@ -163,10 +163,12 @@ unsigned long ax_pv_vmcs_read(unsigned long field)
     uint64_t value;
 
     if (ax_pv_vmcs_enabled) {
+#ifdef __x86_64__
         if (_uxen_info.ui_pvi_vmread)
             ((pvi_vmread_pfn)((intptr_t)_uxen_info.ui_pvi_vmread))
              (this_cpu(ax_pv_vmcs_ctx), field, &value);
         else
+#endif  /* __x86_64__ */
             ax_pv_vmread(this_cpu(ax_pv_vmcs_ctx), field, &value);
     } else {
         vmread(field, &value);
@@ -181,10 +183,12 @@ unsigned long ax_pv_vmcs_read_safe(unsigned long field, int *error)
     uint64_t value;
 
     if (ax_pv_vmcs_enabled) {
+#ifdef __x86_64__
         if (_uxen_info.ui_pvi_vmread)
             *error = ((pvi_vmread_pfn)((intptr_t)_uxen_info.ui_pvi_vmread))
                 (this_cpu(ax_pv_vmcs_ctx), field, &value);
         else
+#endif  /* __x86_64__ */
             *error = ax_pv_vmread(this_cpu(ax_pv_vmcs_ctx), field, &value);
     } else {
         *error = vmread(field, &value);
@@ -196,10 +200,12 @@ unsigned long ax_pv_vmcs_read_safe(unsigned long field, int *error)
 void ax_pv_vmcs_write(unsigned long field, unsigned long value)
 {
     if (ax_pv_vmcs_enabled) {
+#ifdef __x86_64__
         if (_uxen_info.ui_pvi_vmwrite)
             ((pvi_vmwrite_pfn)((intptr_t)_uxen_info.ui_pvi_vmwrite))
                 (this_cpu(ax_pv_vmcs_ctx), field, value);
         else
+#endif  /* __x86_64__ */
             ax_pv_vmwrite(this_cpu(ax_pv_vmcs_ctx), field, value);
     } else {
         vmwrite(field, value);
@@ -269,7 +275,11 @@ int ax_pv_vmcs_setup(void)
     rax = AX_CPUID_PV_VMACCESS;
     rbx = 1;
 
-    if (!patched && !(_uxen_info.ui_pvi_vmread && _uxen_info.ui_pvi_vmwrite)) {
+    if (!patched
+#ifdef __x86_64__
+        && !(_uxen_info.ui_pvi_vmread && _uxen_info.ui_pvi_vmwrite)
+#endif  /* __x86_64__ */
+        ) {
         rcx = (size_t) ax_pv_vmread;
         rdx = (size_t) ax_pv_vmwrite;
     } else {

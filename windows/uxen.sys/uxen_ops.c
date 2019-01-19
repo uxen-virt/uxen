@@ -1249,14 +1249,15 @@ uxen_op_init(struct fd_assoc *fda, struct uxen_init_desc *_uid,
     uxen_info->ui_xdata_end = &uxen_xdata_end;
     uxen_info->ui_pdata_start = &uxen_pdata_start;
     uxen_info->ui_pdata_end = &uxen_pdata_end;
+#endif
 
-    dprintk("uxen pvi_vmread: %p\n", uxen_devext->de_pvi_vmread);
-    dprintk("uxen pvi_vmwrite: %p\n", uxen_devext->de_pvi_vmwrite);    
-    uxen_info->ui_pvi_vmread = uxen_devext->de_pvi_vmread;
-    uxen_info->ui_pvi_vmwrite = uxen_devext->de_pvi_vmwrite;
-#else
-    uxen_info->ui_pvi_vmread = 0;
-    uxen_info->ui_pvi_vmwrite = 0;
+#if defined(__x86_64__)
+    if (uxen_devext->de_pvi_vmread || uxen_devext->de_pvi_vmwrite) {
+        dprintk("uxen pvi_vmread: %p\n", uxen_devext->de_pvi_vmread);
+        dprintk("uxen pvi_vmwrite: %p\n", uxen_devext->de_pvi_vmwrite);
+        uxen_info->ui_pvi_vmread = uxen_devext->de_pvi_vmread;
+        uxen_info->ui_pvi_vmwrite = uxen_devext->de_pvi_vmwrite;
+    }
 #endif
 
     uxen_info->ui_map_page_range_max_nr = map_page_range_max_nr;

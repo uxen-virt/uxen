@@ -2,7 +2,7 @@
  *  uxen.c
  *  uxen
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -460,10 +460,10 @@ uxen_driver_load(__in PDRIVER_OBJECT DriverObject,
     KeInitializeEvent(&uxen_devext->de_suspend_event, NotificationEvent,
                       FALSE);
 
-#ifndef __i386__
+#if defined(__x86_64__)
     if (!test_ax_pv_vmcs() && pvi_load_driver(uxen_devext))
         fail_msg("WARNING: pvi_load_driver() failed - carrying on");
-#endif /* __i386__ */
+#endif /* __x86_64__ */
 
   out:
     dprintk("uxen_driver_load done\n");

@@ -2,7 +2,7 @@
  *  uxen.h
  *  uxen
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -158,10 +158,10 @@ struct device_extension {
     WCHAR _de_uxen_path[UXEN_PATH_MAX_LEN];
     UNICODE_STRING de_uxen_path;
 
-#ifndef __i386__
+#if defined(__x86_64__)
     UINT_PTR de_pvi_vmread;
     UINT_PTR de_pvi_vmwrite;
-#endif /* __i386__ */
+#endif /* __x86_64__ */
 };
 
 struct host_event_channel {
