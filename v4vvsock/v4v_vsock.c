@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, Bromium, Inc.
+ * Copyright 2016-2019, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -163,8 +163,10 @@ static void vsock_bh(unsigned long unused)
 
         sent = false;
         wakeup_send = false;
-        if (uxen_v4v_copy_out(vsk->recv_ring, NULL, NULL, NULL, 0, 0) > 0)
+        if (uxen_v4v_copy_out(vsk->recv_ring, NULL, NULL, NULL, 0, 0) > 0) {
             wake_up_interruptible_all(&vsk->readq);
+            vsk->sk.sk_data_ready(&vsk->sk);
+        }
         if (!vsk->remote_connected) {
             int ok = 0;
 
