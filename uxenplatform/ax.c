@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2018, Bromium, Inc.
+ * Copyright 2016-2019, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -10,35 +10,13 @@
 #include <linux/kobject.h>
 #include <uxen-platform.h>
 #include <uxen/platform_interface.h>
+#include <ax_attovm.h>
+#include <ax_attovm_stub.h>
 
 extern int use_rdrand, use_rdseed;
 static struct kobject *ax_kobj;
 
 #define SESSION_KEY_BYTES 64
-#define AX_CPUID_QUERYOP 0x35af3471
-#define AX_QUERYOP_TSC_KHZ 1
-#define AX_QUERYOP_SESSION_KEY 2
-#define AX_QUERYOP_FEATURES 3
-
-#define AX_QP_FEATURES_PROT_KBD   (1 << 0)
-
-static
-uint32_t ax_queryop(uint32_t op, uint64_t arg1)
-{
-  register void* _rax asm ("rax") = (void*)(uintptr_t)AX_CPUID_QUERYOP;
-  register void* _rcx asm ("rcx") = (void*)(uintptr_t)op;
-  register void* _rdx asm ("rdx") = (void*)(uintptr_t)arg1;
-  register void* _r8  asm ("r8")  = (void*)0;
-
-  asm volatile (
-    "cpuid"
-    : "+r" (_rax), "+r" (_rcx), "+r" (_rdx), "+r" (_r8)
-    :
-    : "cc"
-  );
-
-  return (uint32_t)(uintptr_t)_rax;
-}
 
 static int device_net_get_property(struct uxen_device *dev,
                                    int prop_id, void *prop, size_t *prop_len)
@@ -76,7 +54,7 @@ static ssize_t sessionkey_show(struct kobject *kobj, struct kobj_attribute *attr
     uint8_t sessionkey[SESSION_KEY_BYTES] = { 0 };
     int i, err;
 
-    err = ax_queryop(AX_QUERYOP_SESSION_KEY, (uintptr_t)&sessionkey[0]);
+    err = attovm_call_queryop(ATTOCALL_QUERYOP_SESSION_KEY, (uintptr_t)&sessionkey[0], 0, 0);
     if (err) {
         printk(KERN_WARNING "%s: failed to query session key: %d\n", __FUNCTION__, err);
         return 0;
@@ -181,10 +159,10 @@ int ax_platform_init(struct bus_type *uxen_bus)
       return err;
     }
 
-    features = ax_queryop(AX_QUERYOP_FEATURES, 0);
+    features = attovm_call_queryop(ATTOCALL_QUERYOP_FEATURES, 0, 0, 0);
     printk("%s: ax features 0x%x\n", __FUNCTION__, (unsigned) features);
 
-    protvm_use_secure_keyboard = !!(features & AX_QP_FEATURES_PROT_KBD);
+    protvm_use_secure_keyboard = !!(features & ATTOCALL_QUERYOP_FEATURES_PROT_KBD);
 
     return 0;
 }

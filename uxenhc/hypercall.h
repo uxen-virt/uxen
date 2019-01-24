@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017, Bromium, Inc.
+ * Copyright 2016-2019, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -49,6 +49,8 @@
 #include <asm/pgtable.h>
 
 #include <xen/interface/xen.h>
+#include <ax_attovm.h>
+#include <ax_attovm_stub.h>
 
 /*
  * The hypercall asms have to meet several constraints:
@@ -89,8 +91,6 @@ extern void *uxen_hcbase;
 
 int uxen_hypervisor(void);
 int axen_hypervisor(void);
-
-#define AX_CPUID_V4VOP 0x35af3466
 
 //#define __HYPERCALL_AX		"cpuid" // not yet !
 //#define __HYPERCALL_AX		"call *%%rax"
@@ -274,26 +274,6 @@ int axen_hypervisor(void);
 })
 #endif
 
-static inline uint64_t
-_ax_hypercall6(void *a1, void* a2, void* a3, void* a4, void* a5, void* a6)
-{
-  register void* _rax asm  ("rax") = (void*) AX_CPUID_V4VOP;
-  register void* _a1  asm  ("rdi") = a1;
-  register void* _a2  asm  ("rsi") = a2;
-  register void* _a3  asm  ("rdx") = a3;
-  register void* _a4  asm  ("r10") = a4;
-  register void* _a5  asm  ( "r9") = a5;
-  register void* _a6  asm  ( "r8") = a6;
-
-  asm volatile (
-    "cpuid"
-    : "+r" (_rax), "+r" (_a1), "+r" (_a2), "+r" (_a3), "+r" (_a4), "+r" (_a5), "+r" (_a6)
-    :
-    : "cc"
-  );
-  return (uint64_t)_rax;
-}
-
 static inline int
 HYPERVISOR_memory_op(unsigned int cmd, void *arg)
 {
@@ -325,7 +305,7 @@ static inline int
 HYPERVISOR_v4v_op(int op, void *arg1, void *arg2, void *arg3, void *arg4, void *arg5)
 {
     if (axen)
-        return _ax_hypercall6((void*)(uintptr_t)op, arg1, arg2, arg3, arg4, arg5);
+        return attovm_call_v4vop((void*)(uintptr_t)op, arg1, arg2, arg3, arg4, arg5, NULL);
     else
         return _hypercall6(__HYPERCALL, int, v4v_op, op, arg1, arg2, arg3, arg4, arg5);
 }
