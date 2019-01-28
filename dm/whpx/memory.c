@@ -1,5 +1,5 @@
 /*
- * Copyright 2018, Bromium, Inc.
+ * Copyright 2018-2019, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -1134,7 +1134,7 @@ whpx_write_memory(struct filebuf *f)
     vm_save_set_abortable();
 
     if (save_cancelled())
-        goto out;
+        goto done_or_cancelled;
 
     whpx_memory_data_index.offset = whpx_memory_data_off;
     s.marker = XC_SAVE_ID_WHPX_MEMORY_DATA;
@@ -1185,7 +1185,7 @@ whpx_write_memory(struct filebuf *f)
         for (i = 0; i < num_saved; i++) {
             ret = save_mb(f, &saved_entries[i], &saved_bytes);
             if (ret || save_cancelled())
-                goto out;
+                goto done_or_cancelled;
             size += pr_bytes(&saved_entries[i].r);
         }
         filebuf_flush(f);
@@ -1254,7 +1254,8 @@ whpx_write_memory(struct filebuf *f)
 
     filebuf_flush(f);
 
-    if (vm_save_info.free_mem)
+done_or_cancelled:
+    if (vm_save_info.free_mem && !save_cancelled())
         whpx_ram_free();
     else
         whpx_ram_release_hv_mappings(); /* only release hv mappings */

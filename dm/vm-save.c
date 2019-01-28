@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -2418,7 +2418,7 @@ vm_save_execute(void)
     if (ret == 0) {
         APRINTF("total file size: %"PRIu64" bytes", (uint64_t)filebuf_tell(f));
         filebuf_flush(f);
-        if (vm_save_info.save_via_temp) {
+        if (vm_save_info.save_via_temp && !check_aborted()) {
             filebuf_delete_on_close(f, 0);
             filebuf_close(f);
 #ifdef _WIN32
