@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2018, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -987,6 +987,8 @@ uxendisp_post_load(void *opaque, int version_id)
 
     for (crtc_id = 0; crtc_id < UXDISP_NB_CRTCS; crtc_id++)
         s->crtcs[crtc_id].flush_pending = 1;
+
+    console_mask_periodic(!!(s->mode & UXDISP_MODE_PAGE_TRACKING_DISABLED));
 
 #ifdef _WIN32
     if (s->xtra_ctrl & UXDISP_XTRA_CTRL_PV_VBLANK_ENABLE)
