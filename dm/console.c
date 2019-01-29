@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -289,7 +289,6 @@ void do_dpy_trigger_refresh(void *opaque)
 void do_dpy_setup_refresh(void)
 {
     vram_timer = new_timer_ms(vm_clock, refresh, NULL);
-    mod_timer(vram_timer, get_clock_ms(vm_clock) + 5 /* MS */);
     if (!vm_vram_dirty_tracking)
         /* setup periodic refresh after initial refresh */
         vram_refresh_periodic = 1;
@@ -298,6 +297,9 @@ void do_dpy_setup_refresh(void)
     uxen_notification_add_wait_object(&vram_event, do_dpy_trigger_refresh, NULL,
                                       NULL);
     uxen_ioemu_event(UXEN_IOEMU_EVENT_VRAM, &vram_event);
+
+    /* initial refresh */
+    refresh(NULL);
 }
 
 void
