@@ -260,6 +260,7 @@ uint64_t vm_vram_refresh_delay = 5;
 /* Period between refreshes, when vm-dirty-tracking is disabled. */
 uint64_t vm_vram_refresh_period = 30;
 static int vram_refresh_periodic = 0;
+static int vram_refresh_periodic_initialized = 0;
 uxen_notification_event vram_event;
 
 static struct Timer *vram_timer = NULL;
@@ -289,9 +290,11 @@ void do_dpy_trigger_refresh(void *opaque)
 void do_dpy_setup_refresh(void)
 {
     vram_timer = new_timer_ms(vm_clock, refresh, NULL);
-    if (!vm_vram_dirty_tracking)
+    if (!vm_vram_dirty_tracking && !vram_refresh_periodic_initialized) {
         /* setup periodic refresh after initial refresh */
         vram_refresh_periodic = 1;
+        vram_refresh_periodic_initialized = 1;
+    }
 
     uxen_notification_event_init(&vram_event);
     uxen_notification_add_wait_object(&vram_event, do_dpy_trigger_refresh, NULL,
@@ -422,6 +425,7 @@ console_mask_periodic(int masked)
     int enable = !vm_vram_dirty_tracking && !masked;
 
     vram_refresh_periodic = enable;
+    vram_refresh_periodic_initialized = 1;
     if (vram_timer && !timer_pending(vram_timer))
         mod_timer(vram_timer, get_clock_ms(vm_clock) + 5 /* MS */);
 }
