@@ -124,7 +124,7 @@ uint32_t size)
     ChannelPrepareReq(&req, hgcmBuf, HGCMBUF_SIZE, sizeof(header) + header.size);
     rc = ChannelSendReq(&req);
 
-    if (!NT_SUCCESS(rc)) {
+    if (!NT_SUCCESS(rc) && rc != STATUS_PENDING) {
         ChannelReleaseReq(&req);
         uxen_err("VBOXSF: send error 0x%x\n", rc);
         goto out;

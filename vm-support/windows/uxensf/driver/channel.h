@@ -6,7 +6,7 @@
 #define RING_SIZE 262144
 
 struct channel_req {
-    LIST_ENTRY le;
+    LIST_ENTRY le_sent;
     KEVENT resp_ev;
     void *buf;
     int buf_size;

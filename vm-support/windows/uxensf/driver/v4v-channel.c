@@ -7,14 +7,18 @@
 #include <ndis.h>
 #include <uxenv4vlib.h>
 #include "channel.h"
+#include "../../common/debug.h"
 
 #define PORT 44444
 #define PRIORITY_INCREMENT 4
 #define MEMTAG_HGCMBUF ((ULONG)'30cr')
+#define EAGAIN (11)
+
+NTSTATUS ChannelSendReq(struct channel_req *req);
 
 static uxen_v4v_ring_handle_t *ring;
 static KSPIN_LOCK channel_lock;
-static LIST_ENTRY send_queue;
+static LIST_ENTRY requests_sent;
 
 static ssize_t ndata_in_ring(void)
 {
@@ -59,9 +63,9 @@ static void v4v_callback(uxen_v4v_ring_handle_t *r, void *_a, void *_b)
 
     for (;;) {
         /* responses in ring are ordered, pair with earlier request and notify the waiter */
-        le = RemoveHeadList(&send_queue);
-        if (le && le != &send_queue) {
-            struct channel_req *req = CONTAINING_RECORD(le, struct channel_req, le);
+        le = RemoveHeadList(&requests_sent);
+        if (le && le != &requests_sent) {
+            struct channel_req *req = CONTAINING_RECORD(le, struct channel_req, le_sent);
 
             req->rc = __recv(req->buf, req->buf_size, &req->recv_size);
             uxen_v4v_notify();
@@ -72,7 +76,15 @@ static void v4v_callback(uxen_v4v_ring_handle_t *r, void *_a, void *_b)
                 break; /* no more responses in ring */
         }
     }
+
     KeReleaseInStackQueuedSpinLock(&lqh);
+}
+
+static void send_again_callback(uxen_v4v_ring_handle_t *r, void *_a, void *_b)
+{
+    struct channel_req *req = _a;
+
+    ChannelSendReq(req);
 }
 
 NTSTATUS ChannelConnect(void)
@@ -82,7 +94,7 @@ NTSTATUS ChannelConnect(void)
 
     KeInitializeSpinLock(&channel_lock);
 
-    InitializeListHead(&send_queue);
+    InitializeListHead(&requests_sent);
 
     ring = uxen_v4v_ring_bind(PORT, V4V_DOMID_DM, RING_SIZE, v4v_callback,
                               NULL, NULL);
@@ -119,14 +131,21 @@ NTSTATUS ChannelSendReq(struct channel_req *req)
     KLOCK_QUEUE_HANDLE lqh;
 
     KeAcquireInStackQueuedSpinLock(&channel_lock, &lqh);
-    n = uxen_v4v_send_from_ring(ring, &dst, req->buf, req->send_size, V4V_PROTO_DGRAM);
-    if (n != req->send_size) {
+    n = uxen_v4v_send_from_ring_async(ring, &dst, req->buf, req->send_size, V4V_PROTO_DGRAM,
+        send_again_callback, req, NULL);
+    if (n == -EAGAIN) {
         KeReleaseInStackQueuedSpinLock(&lqh);
+
+        return STATUS_PENDING;
+    } else if (n != req->send_size) {
+        KeReleaseInStackQueuedSpinLock(&lqh);
+
+        uxen_err("send error, n=%d, send_size=%d\n", (int)n, (int)req->send_size);
 
         return STATUS_UNEXPECTED_IO_ERROR;
     }
 
-    InsertTailList(&send_queue, &req->le);
+    InsertTailList(&requests_sent, &req->le_sent);
 
     KeReleaseInStackQueuedSpinLock(&lqh);
 
