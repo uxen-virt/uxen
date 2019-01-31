@@ -75,7 +75,7 @@ $(filter no_,$(DM_CONFIG_DUMP_SWAP_STAT))DM_CFLAGS += \
 DM_SRCS =
 # on OSX constructor functions are invoked in linking order, therefore
 # this needs to be first to setup logging
-$(OSX)DM_SRCS += osx-logging.o
+$(OSX)DM_SRCS += osx-logging.c
 DM_SRCS += aio.c
 DM_SRCS += async-op.c
 DM_SRCS += base64.c
@@ -107,7 +107,7 @@ console-remote.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 console-remote.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
 console-remote.o: CPPFLAGS += -I$(TOPDIR)/common/uxenconsole
 $(CONFIG_VBOXDRV)console-remote.o: CPPFLAGS += -DNOTIFY_CLIPBOARD_SERVICE
-$(UXENDM_VNCSERVER)DM_SRCS += console-vnc.o
+$(UXENDM_VNCSERVER)DM_SRCS += console-vnc.c
 console-vnc.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 console-vnc.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
 console-vnc.o: CPPFLAGS += $(LIBVNCSERVER_CPPFLAGS)
