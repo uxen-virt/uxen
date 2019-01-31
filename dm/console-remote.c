@@ -295,6 +295,16 @@ handle_message(struct uxenconsole_msg_header *hdr)
 #endif
         }
         break;
+    case UXENCONSOLE_MSG_TYPE_KEYBOARD_LAYOUT_CHANGED:
+        {
+#if !defined(__APPLE__)
+            struct uxenconsole_msg_keyboard_layout_changed *msg = (void *)hdr;
+            if (vm_attovm_mode)
+                atto_agent_change_kbd_layout(msg->layout);
+            break;
+#endif
+        }
+        break;
     default:
         break;
     }

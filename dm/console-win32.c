@@ -820,6 +820,19 @@ hid_pen_event(struct win32_gui_state *s, POINTER_PEN_INFO *info, UINT32 count)
 }
 
 static void
+check_kbd_layout()
+{
+    if (vm_attovm_mode) {
+        char layout[KL_NAMELENGTH + 1];
+        memset(layout, 0, sizeof(layout));
+        if (GetKeyboardLayoutName((LPSTR)layout)) {
+            unsigned nlayout = strtoul(layout, NULL, 16);
+            atto_agent_change_kbd_layout(nlayout);
+        }
+    }
+}
+
+static void
 handle_key_event(HWND hwnd, int message, int wParam, int lParam)
 {
     int up = (message == WM_KEYUP) || (message == WM_SYSKEYUP);
@@ -828,7 +841,7 @@ handle_key_event(HWND hwnd, int message, int wParam, int lParam)
     HWND parent_window;
 
     if (vm_attovm_mode)
-        attovm_check_kbd_layout_change();
+        check_kbd_layout();
 
     /* check if key has been blocked by configuration */
     if (bsearch(&wParam, disabled_keys, disabled_keys_len, sizeof(int),

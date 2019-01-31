@@ -41,7 +41,6 @@ static LIST_HEAD(, win_cursor) win_cursor_list =
        LIST_HEAD_INITIALIZER(&win_cursor_list);
 
 static win_cursor *current_cursor = NULL;
-static unsigned current_kbd_layout = 0;
 static int vm_has_keyboard_focus = 0;
 static int host_offer_focus = 0;
 
@@ -212,26 +211,6 @@ x11_get_or_create_standard_cursor(int x11_type, uint64_t x11_ptr)
     wc->x11_ptr = x11_ptr;
     x11_make_standard_cursor(wc);
     LIST_INSERT_HEAD(&win_cursor_list, wc, entry);
-}
-
-void
-attovm_check_kbd_layout_change(void)
-{
-    char layout[KL_NAMELENGTH + 1];
-
-    if (!atto_agent_window_ready())
-        return;
-
-    memset(layout, 0, sizeof(layout));
-    if (GetKeyboardLayoutName((LPSTR)layout)) {
-        unsigned nlayout = 0;
-
-        nlayout = strtoul(layout, NULL, 16);
-        if (current_kbd_layout != nlayout) {
-            atto_agent_change_kbd_layout(nlayout);
-            current_kbd_layout = nlayout;
-        }
-    }
 }
 
 void

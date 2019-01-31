@@ -90,6 +90,7 @@ struct atto_agent_state {
     Timer *resize_timer;
     critical_section cs;
     struct display_state *ds;
+    uint32_t keyboard_layout;
 };
 
 #define RESIZE_BACKOFF_MS 400
@@ -97,6 +98,7 @@ struct atto_agent_state {
 static struct atto_agent_state state;
 
 static int atto_agent_rx_start(struct atto_agent_state *s);
+static void send_latest_keyboard_layout(struct atto_agent_state *s);
 
 static int
 send_message(struct atto_agent_state *s,
@@ -236,6 +238,11 @@ atto_agent_process_msg(struct atto_agent_state *s,
     critical_section_enter(&s->cs);
     send_message(s, resp, resp_len, pkt->dgram.addr.port);
     critical_section_leave(&s->cs);
+
+    if (msg->type == ATTO_MSG_RESIZE && s->keyboard_layout) {
+        /* Then we just became ready to send a pending keyboard layout change */
+        send_latest_keyboard_layout(s);
+    }
 }
 
 static void
@@ -379,6 +386,7 @@ atto_agent_init(void)
     ioh_add_wait_object(&s->rx_event, atto_agent_rx_event, s, NULL);
     ioh_add_wait_object(&s->tx_event, atto_agent_tx_event, s, NULL);
     atto_agent_rx_start(s);
+    s->keyboard_layout = 0;
     debug_printf("atto agent: initialized\n");
     s->initialized = 1;
 
@@ -399,22 +407,32 @@ atto_agent_window_ready(void)
     return s->initialized && s->can_send_resize;
 }
 
-void
-atto_agent_change_kbd_layout(unsigned win_kbd_layout)
+static void
+send_latest_keyboard_layout(struct atto_agent_state *s)
 {
-    struct atto_agent_state *s = &state;
     struct atto_agent_varlen_packet *resp = &s->resp;
 
     critical_section_enter(&s->cs);
     memset(resp, 0, sizeof(*resp));
     resp->msg.type = ATTO_MSG_KBD_LAYOUT_RET;
-    resp->msg.win_kbd_layout = win_kbd_layout;
+    resp->msg.win_kbd_layout = s->keyboard_layout;
 
     if (send_message(s, resp, sizeof(struct atto_agent_packet), 0) == 0) {
         debug_printf("%s: sent keyboard layout changed to 0x%x\n",
-                      __FUNCTION__,  win_kbd_layout);
+                      __FUNCTION__,  s->keyboard_layout);
     }
     critical_section_leave(&s->cs);
+}
+
+void
+atto_agent_change_kbd_layout(unsigned win_kbd_layout)
+{
+    struct atto_agent_state *s = &state;
+    int changed = win_kbd_layout != s->keyboard_layout;
+    s->keyboard_layout = win_kbd_layout;
+    if (changed && atto_agent_window_ready()) {
+        send_latest_keyboard_layout(s);
+    }
 }
 
 void

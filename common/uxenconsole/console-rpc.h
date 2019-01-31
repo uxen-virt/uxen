@@ -28,6 +28,7 @@ enum uxenconsole_msg_type
     UXENCONSOLE_MSG_TYPE_TOUCH_DEVICE_HOTPLUG   = 8,
     UXENCONSOLE_MSG_TYPE_SET_SHARED_SURFACE     = 9,
     UXENCONSOLE_MSG_TYPE_FOCUS_CHANGED          = 10,
+    UXENCONSOLE_MSG_TYPE_KEYBOARD_LAYOUT_CHANGED= 11,
 };
 
 struct uxenconsole_msg_resize_surface {
@@ -113,6 +114,11 @@ struct uxenconsole_msg_set_shared_surface {
 struct uxenconsole_msg_focus_changed {
     struct uxenconsole_msg_header header;
     uint8_t focus;
+};
+
+struct uxenconsole_msg_keyboard_layout_changed {
+    struct uxenconsole_msg_header header;
+    uint32_t layout;
 };
 
 #endif /* _CONSOLE_RPC_H_ */

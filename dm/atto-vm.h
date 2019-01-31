@@ -10,7 +10,6 @@
 struct display_state;
 
 void attovm_set_current_cursor(struct display_state* ds);
-void attovm_check_kbd_layout_change(void);
 void attovm_set_x11_cursor(struct display_state* ds, uint64_t x11_ptr);
 void attovm_map_x11_cursor(int x11_type, uint64_t x11_ptr);
 void attovm_unmap_x11_cursor(uint64_t x11_ptr);

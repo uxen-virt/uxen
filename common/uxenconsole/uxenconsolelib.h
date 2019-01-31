@@ -122,6 +122,9 @@ int                     uxenconsole_set_shared_surface(uxenconsole_context_t ctx
 int                     uxenconsole_focus_changed(uxenconsole_context_t ctx,
                                                   int focus);
 
+int                     uxenconsole_keyboard_layout_changed(uxenconsole_context_t ctx,
+                                                            uint32_t layout);
+
 hid_context_t           uxenconsole_hid_init(int vm_id, const unsigned char *idtoken);
 void                    uxenconsole_hid_cleanup(hid_context_t context);
 int                     uxenconsole_hid_mouse_report(hid_context_t context,

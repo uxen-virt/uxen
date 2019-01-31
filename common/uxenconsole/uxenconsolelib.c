@@ -690,3 +690,25 @@ uxenconsole_focus_changed(uxenconsole_context_t ctx,
 
     return 0;
 }
+
+int
+uxenconsole_keyboard_layout_changed(uxenconsole_context_t ctx,
+                                    uint32_t layout)
+{
+    struct ctx *c = ctx;
+    struct uxenconsole_msg_keyboard_layout_changed msg;
+    int rc;
+
+    snd_complete(c);
+
+    msg.header.type = UXENCONSOLE_MSG_TYPE_KEYBOARD_LAYOUT_CHANGED;
+    msg.header.len = sizeof (msg);
+    msg.layout = layout;
+
+    rc = channel_write(c, &msg, sizeof (msg));
+    if (rc != sizeof (msg))
+        return -1;
+
+    return 0;
+}
+
