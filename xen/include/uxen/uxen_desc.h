@@ -56,6 +56,7 @@ struct uxen_createvm_desc {
     uint32_t ucd_create_flags;      /* xc_domain_create flags */
     uint32_t ucd_create_ssidref;    /* xc_domain_create ssidref */
     uint32_t ucd_max_vcpus;         /* xc_domain_max_vcpus max */
+    uint32_t ucd_nr_pages_hint;     /* nr_pages hint */
     domid_t ucd_domid;              /* returned domain id */
 };
 

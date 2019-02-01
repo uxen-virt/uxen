@@ -323,7 +323,7 @@ int
 uxen_create_vm(UXEN_HANDLE_T h, xen_domain_handle_t vm_uuid,
                xen_domain_handle_t v4v_token,
                uint32_t create_flags, uint32_t create_ssidref,
-               uint32_t max_vcpus, uint32_t *domid)
+               uint32_t max_vcpus, uint32_t nr_pages_hint, uint32_t *domid)
 {
     int ret;
     struct uxen_createvm_desc ucd = { };
@@ -343,6 +343,7 @@ uxen_create_vm(UXEN_HANDLE_T h, xen_domain_handle_t vm_uuid,
     ucd.ucd_create_flags = create_flags;
     ucd.ucd_create_ssidref = create_ssidref;
     ucd.ucd_max_vcpus = max_vcpus;
+    ucd.ucd_nr_pages_hint = nr_pages_hint;
 
     ret = uxen_ioctl(h, UXENCREATEVM, &ucd);
     if (ret) {

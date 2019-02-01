@@ -447,7 +447,8 @@ vm_create(int restore_mode)
                           XEN_DOMCTL_CDF_template : 0) |
                          (vm_hidden_mem == 1 ? XEN_DOMCTL_CDF_hidden_mem : 0) |
                          attovm_cdf,
-                         0, vm_vcpus, &vm_id);
+                         0, vm_vcpus, vm_mem_mb << (20 - UXEN_PAGE_SHIFT),
+                         &vm_id);
     if (ret && errno == EEXIST && restore_mode == VM_RESTORE_TEMPLATE)
         errx(0, "template vm already setup");
     if (ret)
