@@ -21,7 +21,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -365,7 +365,7 @@ void __init arch_init_memory(void)
      * Any Xen-heap pages that we will allow to be mapped will have
      * their domain field set to dom_xen.
      */
-    dom_xen = domain_create_internal(DOMID_XEN, DOMCRF_dummy, 0);
+    dom_xen = domain_create_internal(DOMID_XEN, DOMCRF_dummy, 0, NULL);
     BUG_ON(dom_xen == NULL);
 
     /*
@@ -373,14 +373,14 @@ void __init arch_init_memory(void)
      * This domain owns I/O pages that are within the range of the page_info
      * array. Mappings occur at the priv of the caller.
      */
-    dom_io = domain_create_internal(DOMID_IO, DOMCRF_dummy, 0);
+    dom_io = domain_create_internal(DOMID_IO, DOMCRF_dummy, 0, NULL);
     BUG_ON(dom_io == NULL);
     
     /*
      * Initialise our DOMID_COW domain.
      * This domain owns sharable pages.
      */
-    dom_cow = domain_create_internal(DOMID_COW, DOMCRF_dummy, 0);
+    dom_cow = domain_create_internal(DOMID_COW, DOMCRF_dummy, 0, NULL);
     BUG_ON(dom_cow == NULL);
 
 #ifndef __UXEN__

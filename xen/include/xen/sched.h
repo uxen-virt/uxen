@@ -577,9 +577,10 @@ void domain_update_node_affinity(struct domain *d);
 int
 domain_create(domid_t dom, unsigned int flags, uint32_t ssidref,
               xen_domain_handle_t uuid, xen_domain_handle_t v4v_token,
-              struct domain **_d);
+              struct vm_info_shared *vmi, struct domain **_d);
 struct domain *domain_create_internal(
-    domid_t domid, unsigned int domcr_flags, uint32_t ssidref);
+    domid_t domid, unsigned int domcr_flags, uint32_t ssidref,
+    struct vm_info_shared *vmi);
  /* DOMCRF_hvm: Create an HVM domain, as opposed to a PV domain. */
 #define _DOMCRF_hvm           0
 #define DOMCRF_hvm            (1U<<_DOMCRF_hvm)

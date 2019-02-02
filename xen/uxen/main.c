@@ -197,8 +197,10 @@ do_setup_vm(struct uxen_createvm_desc *ucd, struct vm_info_shared *vmi,
     }
 
     ret = domain_create(ucd->ucd_domid, domcr_flags, ucd->ucd_create_ssidref,
-                        ucd->ucd_vmuuid, ucd->ucd_v4v_token, &d);
+                        ucd->ucd_vmuuid, ucd->ucd_v4v_token, vmi, &d);
     if (ret) {
+        if (d)
+            d->vm_info_shared = NULL;
         domctl_lock_release();
         goto out;
     }

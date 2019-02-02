@@ -1,5 +1,5 @@
 /*
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -54,10 +54,10 @@ hostsched_init(void)
 int
 hostsched_setup_vm(struct domain *d, struct vm_info_shared *vmi)
 {
-    if (d->vm_info_shared)
+
+    if (d->vm_info_shared != vmi || vmi->vmi_domain)
         return -EBUSY;
 
-    d->vm_info_shared = vmi;
     vmi->vmi_domain = d;
     return 0;
 }

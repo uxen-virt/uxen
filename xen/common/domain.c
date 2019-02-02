@@ -293,7 +293,8 @@ domain_array_init(void)
 __initcall(domain_array_init);
 
 struct domain *domain_create_internal(
-    domid_t domid, unsigned int domcr_flags, uint32_t ssidref)
+    domid_t domid, unsigned int domcr_flags, uint32_t ssidref,
+    struct vm_info_shared *vmi)
 {
     struct domain *d, **pd;
     enum { INIT_xsm = 1u<<0, INIT_watchdog = 1u<<1, INIT_rangeset = 1u<<2,
@@ -313,6 +314,8 @@ struct domain *domain_create_internal(
     d->domain_id = domid;
     if (domid < DOMID_FIRST_RESERVED)
         domain_array[domid] = d;
+
+    d->vm_info_shared = vmi;
 
     lock_profile_register_struct(LOCKPROF_TYPE_PERDOM, d, domid, "Domain");
 
@@ -515,7 +518,7 @@ static inline int is_free_domid(domid_t dom)
 int
 domain_create(domid_t dom, unsigned int flags, uint32_t ssidref,
               xen_domain_handle_t uuid, xen_domain_handle_t v4v_token,
-              struct domain **_d)
+              struct vm_info_shared *vmi, struct domain **_d)
 {
     struct domain *d, *d_uuid;
     static domid_t rover = 0;
@@ -546,7 +549,7 @@ domain_create(domid_t dom, unsigned int flags, uint32_t ssidref,
         rover = dom;
     }
 
-    d = domain_create_internal(dom, flags, ssidref);
+    d = domain_create_internal(dom, flags, ssidref, vmi);
     if (!d)
         return -ENOMEM;
 

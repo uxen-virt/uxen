@@ -1,7 +1,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -1528,7 +1528,7 @@ __uxen_start_xen)(
 #endif  /* __UXEN__ */
 
     /* Create initial domain 0. */
-    dom0 = domain_create_internal(0, DOMCRF_s3_integrity, 0);
+    dom0 = domain_create_internal(0, DOMCRF_s3_integrity, 0, vmis);
     if ( (dom0 == NULL) || (alloc_dom0_vcpu0() == NULL) )
         panic("Error creating domain 0\n");
 

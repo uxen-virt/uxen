@@ -15,7 +15,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -1532,7 +1532,7 @@ void __init scheduler_init(void)
         panic("scheduler returned error on init\n");
 #endif  /* __UXEN__ */
 
-    idle_domain = domain_create_internal(DOMID_IDLE, 0, 0);
+    idle_domain = domain_create_internal(DOMID_IDLE, 0, 0, NULL);
     BUG_ON(idle_domain == NULL);
     idle_domain->vcpu = idle_vcpu;
     idle_domain->max_vcpus = nr_cpu_ids;
