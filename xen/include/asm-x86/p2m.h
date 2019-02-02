@@ -26,7 +26,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -713,8 +713,8 @@ static inline int p2m_get_mem_access(struct domain *d, unsigned long pfn,
  * Internal functions, only called by other p2m code
  */
 
-struct page_info *p2m_alloc_ptp(struct p2m_domain *p2m, unsigned long type);
-void p2m_free_ptp(struct p2m_domain *p2m, struct page_info *pg);
+unsigned long p2m_alloc_ptp(struct p2m_domain *p2m, unsigned long type);
+void p2m_free_ptp(struct p2m_domain *p2m, unsigned long mfn);
 
 #if CONFIG_PAGING_LEVELS == 3
 static inline int p2m_gfn_check_limit(

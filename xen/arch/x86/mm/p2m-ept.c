@@ -166,14 +166,14 @@ static void ept_p2m_type_to_flags(ept_entry_t *entry, p2m_type_t type, p2m_acces
 /* Fill in middle levels of ept table */
 static int ept_set_middle_entry(struct p2m_domain *p2m, ept_entry_t *ept_entry)
 {
-    struct page_info *pg;
+    unsigned long mfn;
 
-    pg = p2m_alloc_ptp(p2m, 0);
-    if ( pg == NULL )
+    mfn = p2m_alloc_ptp(p2m, 0);
+    if (!__mfn_valid(mfn))
         return 0;
 
     ept_entry->epte = 0;
-    ept_entry->mfn = __page_to_mfn(pg);
+    ept_entry->mfn = mfn;
     ept_entry->access = p2m->default_access;
 
     ept_entry->r = ept_entry->w = ept_entry->x = 1;
@@ -198,7 +198,7 @@ static void ept_free_entry(struct p2m_domain *p2m, ept_entry_t *ept_entry, int l
         unmap_domain_page(epte);
     }
     
-    p2m_free_ptp(p2m, __mfn_to_page(ept_entry->mfn));
+    p2m_free_ptp(p2m, ept_entry->mfn);
 }
 
 static int

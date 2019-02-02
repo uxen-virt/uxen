@@ -377,7 +377,7 @@ int set_p2m_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     return rc;
 }
 
-struct page_info *p2m_alloc_ptp(struct p2m_domain *p2m, unsigned long type)
+unsigned long p2m_alloc_ptp(struct p2m_domain *p2m, unsigned long type)
 {
     struct page_info *pg;
 
@@ -387,15 +387,16 @@ struct page_info *p2m_alloc_ptp(struct p2m_domain *p2m, unsigned long type)
     ASSERT(p2m->domain->arch.paging.alloc_page);
     pg = p2m->domain->arch.paging.alloc_page(p2m->domain);
     if (pg == NULL)
-        return NULL;
+        return INVALID_MFN;
 
     page_list_add_tail(pg, &p2m->pages);
 
-    return pg;
+    return __page_to_mfn(pg);
 }
 
-void p2m_free_ptp(struct p2m_domain *p2m, struct page_info *pg)
+void p2m_free_ptp(struct p2m_domain *p2m, unsigned long mfn)
 {
+    struct page_info *pg = __mfn_to_page(mfn);
     ASSERT(pg);
     ASSERT(p2m);
     ASSERT(p2m_locked_by_me(p2m));
@@ -417,7 +418,7 @@ void p2m_free_ptp(struct p2m_domain *p2m, struct page_info *pg)
 //
 int p2m_alloc_table(struct p2m_domain *p2m)
 {
-    struct page_info *p2m_top;
+    unsigned long p2m_top;
     struct domain *d = p2m->domain;
 
     p2m_lock(p2m);
@@ -432,13 +433,12 @@ int p2m_alloc_table(struct p2m_domain *p2m)
     P2M_PRINTK("allocating p2m table\n");
 
     p2m_top = p2m_alloc_ptp(p2m, 0);
-    if ( p2m_top == NULL )
-    {
+    if (!__mfn_valid(p2m_top)) {
         p2m_unlock(p2m);
         return -ENOMEM;
     }
 
-    p2m->phys_table = pagetable_from_mfn(page_to_mfn(p2m_top));
+    p2m->phys_table = pagetable_from_pfn(p2m_top);
     d->arch.hvm_domain.vmx.ept_control.asr  =
         pagetable_get_pfn(p2m_get_pagetable(p2m));
 
