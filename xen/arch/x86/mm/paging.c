@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -864,9 +864,6 @@ void paging_teardown(struct domain *d)
     p2m_pod_empty_cache(d);
 #endif  /* __UXEN__ */
 
-    if (is_template_domain(d))
-        kill_timer(&p2m->template.gc_timer);
-
     p2m_teardown_compressed(p2m);
 
     if (!p2m_shared_teardown(p2m))
@@ -876,6 +873,10 @@ void paging_teardown(struct domain *d)
 /* Call once all of the references to the domain have gone away */
 void paging_final_teardown(struct domain *d)
 {
+
+    if (is_template_domain(d))
+        kill_timer(&p2m_get_hostp2m(d)->template.gc_timer);
+
     if ( hap_enabled(d) )
         hap_final_teardown(d);
 #ifndef __UXEN__

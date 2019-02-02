@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -1723,6 +1723,9 @@ p2m_pod_gc_template_pages_work(void *_d)
 
     /* all timers execute from cpu0, so we only need one gc_mfns */
     ASSERT(smp_processor_id() == 0);
+
+    if (d->is_dying)
+        return;
 
     p2m_lock_recursive(p2m);
 
