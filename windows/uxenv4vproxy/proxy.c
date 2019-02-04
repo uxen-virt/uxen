@@ -1,5 +1,5 @@
 /*
- * Copyright 2018, Bromium, Inc.
+ * Copyright 2018-2019, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -366,7 +366,8 @@ find_bound_backend_by_token(proxy_extension_t *pde, v4v_idtoken_t *token)
     ctx = (proxy_context_t *)pde->context_list.Flink;
     while (ctx != (proxy_context_t *)&pde->context_list) {
         if (ctx->state == CTX_STATE_BOUND_BACKEND) {
-            if (RtlEqualMemory(token, &ctx->token, sizeof(v4v_idtoken_t))) {
+            if (RtlCompareMemory(token, &ctx->token, sizeof(v4v_idtoken_t)) ==
+                sizeof(v4v_idtoken_t)) {
                 found = ctx;
                 break;
             }
