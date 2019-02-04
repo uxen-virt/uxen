@@ -1016,6 +1016,8 @@ uxendisp_resume(void *opaque, int version_id)
             return ret;
     }
     s->resumed = 1;
+
+    do_dpy_force_refresh(NULL);
     return 0;
 }
 

@@ -265,7 +265,7 @@ uxen_notification_event vram_event;
 
 static struct Timer *vram_timer = NULL;
 
-static void refresh(void *opaque)
+void do_dpy_force_refresh(void *opaque)
 {
     struct display_state *ds;
 
@@ -289,7 +289,7 @@ void do_dpy_trigger_refresh(void *opaque)
 
 void do_dpy_setup_refresh(void)
 {
-    vram_timer = new_timer_ms(vm_clock, refresh, NULL);
+    vram_timer = new_timer_ms(vm_clock, do_dpy_force_refresh, NULL);
     if (!vm_vram_dirty_tracking && !vram_refresh_periodic_initialized) {
         /* setup periodic refresh after initial refresh */
         vram_refresh_periodic = 1;
@@ -302,7 +302,7 @@ void do_dpy_setup_refresh(void)
     uxen_ioemu_event(UXEN_IOEMU_EVENT_VRAM, &vram_event);
 
     /* initial refresh */
-    refresh(NULL);
+    do_dpy_force_refresh(NULL);
 }
 
 void

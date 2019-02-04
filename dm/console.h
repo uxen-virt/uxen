@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -187,6 +187,7 @@ void console_exit(void);
 
 void console_mask_periodic(int masked);
 
+void do_dpy_force_refresh(void *opaque);
 void do_dpy_trigger_refresh(void *opaque);
 void do_dpy_setup_refresh(void);
 
