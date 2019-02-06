@@ -293,10 +293,30 @@ union p2m_l1_cache {
     struct {
         /* prefix/table for set_entry l1 p2m table page cache */
         uint64_t se_l1_prefix;
-        mfn_t se_l1_mfn;
-        /* prefix/table/lock for get_entry l1 p2m table page cache */
+        union {
+            void *va;
+            /* se_l1.is_mfn is LSB, which is always 0 in se_l1.va;
+             * however we need to wrap the uint64_t bitfield in an
+             * anonymous struct as otherwise union rules apply to
+             * each element of the bitfield, i.e. they end up
+             * overlapped */
+            struct {
+                uint64_t is_mfn : 1,
+                    : 11,
+                    mfn : 52;
+            };
+        } se_l1;
+        /* prefix/table for get_entry l1 p2m table page cache */
         uint64_t ge_l1_prefix[NR_GE_L1_CACHE];
-        mfn_t ge_l1_mfn[NR_GE_L1_CACHE];
+        union {
+            void *va;
+            /* see above re use of an anonymous struct here */
+            struct {
+                uint64_t is_mfn : 1,
+                    : 11,
+                    mfn : 52;
+            };
+        } ge_l1[NR_GE_L1_CACHE];
 #define ge_l1_cache_hash(gfn, p2m)                                      \
         ((((gfn) >> PAGETABLE_ORDER) + (p2m)->p2m_l1_cache_id) &        \
          (NR_GE_L1_CACHE - 1))
@@ -359,6 +379,8 @@ struct p2m_domain {
     /* Pages used to construct the p2m */
     struct page_list_head pages;
 
+    uint16_t pt_page_next;
+
     int                (*set_entry   )(struct p2m_domain *p2m,
                                        unsigned long gfn,
                                        mfn_t mfn, unsigned int page_order,
@@ -418,6 +440,8 @@ struct p2m_domain {
     s64 clone_time;
 
     uint16_t p2m_l1_cache_id;
+
+    uint16_t ptp_idx_bits;
 
     struct dspage_store *dsps;
 
@@ -713,8 +737,9 @@ static inline int p2m_get_mem_access(struct domain *d, unsigned long pfn,
  * Internal functions, only called by other p2m code
  */
 
-unsigned long p2m_alloc_ptp(struct p2m_domain *p2m, unsigned long type);
-void p2m_free_ptp(struct p2m_domain *p2m, unsigned long mfn);
+unsigned long p2m_alloc_ptp(struct p2m_domain *p2m, unsigned long type,
+                            uint16_t *_idx);
+void p2m_free_ptp(struct p2m_domain *p2m, unsigned long mfn, uint16_t idx);
 
 #if CONFIG_PAGING_LEVELS == 3
 static inline int p2m_gfn_check_limit(

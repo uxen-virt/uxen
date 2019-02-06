@@ -313,6 +313,10 @@ struct vm_info_shared {
     uint32_t vmi_msrpm_size;
     uint64_t vmi_xsave;
     uint32_t vmi_xsave_size;
+    uint64_t vmi_pt_pages;
+    uxen_pfn_t *vmi_pt_pages_mfns;
+    uint32_t vmi_pt_pages_size;
+    uint32_t vmi_nr_pt_pages;
     void *vmi_domain;
     void *vmi_dmreq;
     void *vmi_dmreq_vcpu_page_va;

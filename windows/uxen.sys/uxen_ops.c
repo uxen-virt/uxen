@@ -1586,6 +1586,7 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
     struct vm_vcpu_info_shared *vcis[UXEN_MAXIMUM_VCPUS];
     KIRQL irql;
     affinity_t aff;
+    uint32_t pt_pages;
     unsigned int i;
     int ret = 0;
 
@@ -1655,6 +1656,41 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
         }
         vmi->vmi_shared.vmi_xsave_size =
             ucd->ucd_max_vcpus * uxen_info->ui_xsave_cntxt_size;
+    }
+
+    vmi->vmi_shared.vmi_nr_pt_pages = 16; /* for pci hole etc. */
+    pt_pages = ucd->ucd_nr_pages_hint;
+    pt_pages = (pt_pages + 511) >> 9;
+    vmi->vmi_shared.vmi_nr_pt_pages += pt_pages; /* l1 */
+    pt_pages = (pt_pages + 511) >> 9;
+    vmi->vmi_shared.vmi_nr_pt_pages += pt_pages; /* l2 */
+    pt_pages = (pt_pages + 511) >> 9;
+    vmi->vmi_shared.vmi_nr_pt_pages += pt_pages; /* l3 */
+    pt_pages = (pt_pages + 511) >> 9;
+    vmi->vmi_shared.vmi_nr_pt_pages += pt_pages; /* l4 */
+    vmi->vmi_shared.vmi_pt_pages = (uint64_t)kernel_malloc(
+        (vmi->vmi_shared.vmi_nr_pt_pages << PAGE_SHIFT) +
+        ALIGN_PAGE_UP(vmi->vmi_shared.vmi_nr_pt_pages * sizeof(uxen_pfn_t)));
+    if (!vmi->vmi_shared.vmi_pt_pages) {
+        fail_msg("kernel_malloc(vmi_pt_pages, %d) failed",
+                 (vmi->vmi_shared.vmi_nr_pt_pages << PAGE_SHIFT) +
+                 ALIGN_PAGE_UP(vmi->vmi_shared.vmi_nr_pt_pages *
+                               sizeof(uxen_pfn_t)));
+        ret = -ENOMEM;
+        goto out;
+    }
+    vmi->vmi_shared.vmi_pt_pages_size =
+        (vmi->vmi_shared.vmi_nr_pt_pages << PAGE_SHIFT) +
+        ALIGN_PAGE_UP(vmi->vmi_shared.vmi_nr_pt_pages * sizeof(uxen_pfn_t));
+    vmi->vmi_shared.vmi_pt_pages_mfns =
+        (uxen_pfn_t *)(vmi->vmi_shared.vmi_pt_pages +
+                       (vmi->vmi_shared.vmi_nr_pt_pages << PAGE_SHIFT));
+    ret = kernel_query_mfns((void *)vmi->vmi_shared.vmi_pt_pages,
+                            vmi->vmi_shared.vmi_nr_pt_pages,
+                            (uxen_pfn_t *)vmi->vmi_shared.vmi_pt_pages_mfns, 0);
+    if (ret) {
+        fail_msg("kernel_query_mfns(vmi_pt_pages) failed: %d", ret);
+        goto out;
     }
 
     vci = &vmi->vmi_vcpus[0];
@@ -1743,6 +1779,13 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
                             vmi->vmi_shared.vmi_xsave_size);
                 vmi->vmi_shared.vmi_xsave = 0;
                 vmi->vmi_shared.vmi_xsave_size = 0;
+            }
+            if (vmi->vmi_shared.vmi_pt_pages) {
+                kernel_free((void *)vmi->vmi_shared.vmi_pt_pages,
+                            vmi->vmi_shared.vmi_pt_pages_size);
+                vmi->vmi_shared.vmi_pt_pages = 0;
+                vmi->vmi_shared.vmi_pt_pages_size = 0;
+                vmi->vmi_shared.vmi_nr_pt_pages = 0;
             }
             kernel_free(vmi, (size_t)ALIGN_PAGE_UP(
                             sizeof(struct vm_info) +
@@ -1847,6 +1890,14 @@ uxen_vmi_free(struct vm_info *vmi)
                     vmi->vmi_shared.vmi_xsave_size);
         vmi->vmi_shared.vmi_xsave = 0;
         vmi->vmi_shared.vmi_xsave_size = 0;
+    }
+
+    if (vmi->vmi_shared.vmi_pt_pages) {
+        kernel_free((void *)vmi->vmi_shared.vmi_pt_pages,
+                    vmi->vmi_shared.vmi_nr_pt_pages << PAGE_SHIFT);
+        vmi->vmi_shared.vmi_pt_pages = 0;
+        vmi->vmi_shared.vmi_pt_pages_size = 0;
+        vmi->vmi_shared.vmi_nr_pt_pages = 0;
     }
 
     logging_free(&vmi->vmi_logging_desc);

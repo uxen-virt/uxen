@@ -94,6 +94,11 @@
 
 #define NR_GE_L1_CACHE 32
 
+#define PTP_IDX_BITS 10
+#if defined(__i386__)
+#define PTP_IDX_BITS_amd_x86 3
+#endif  /* __i386__ */
+
 /* Linkage for x86 */
 #define __ALIGN .align 16,0x90
 #define __ALIGN_STR ".align 16,0x90"

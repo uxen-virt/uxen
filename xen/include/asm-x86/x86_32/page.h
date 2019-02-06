@@ -122,13 +122,35 @@ static inline void *__maddr_to_virt(unsigned long ma)
      ((va) & (PAGE_SIZE - 1)))
 #endif  /* __UXEN__ */
 
+typedef union {
+    struct {
+        u64 present : 1,  /* bit 0 - present */
+            rw      : 1,  /* bit 1 - rw */
+            user    : 1,  /* bit 2 - user */
+                    : 6,  /* bits 8:3 - global/pse/pat/dirty/accessed/pcd/pwt */
+                    : 3,  /* bits 11:9 - avail[210] */
+            mfn     : 40, /* bits 51:12 - Machine physical frame number */
+                    : 6,  /* bits 57:52 - */
+                    : 4,  /* bits 61:58 - */
+                    : 1,  /* bit 62 - */
+                    : 1;  /* bit 63 - */
+    };
+    u64 e;
+    struct {
+        u64 : 9,
+            ptp_idx: PTP_IDX_BITS_amd_x86,
+            : 40,
+            : 12;
+    };
+} pt_entry_t;
+
 /* read access (should only be used for debug printk's) */
 typedef u64 intpte_t;
 #define PRIpte "016llx"
 
-typedef struct { intpte_t l1; } l1_pgentry_t;
-typedef struct { intpte_t l2; } l2_pgentry_t;
-typedef struct { intpte_t l3; } l3_pgentry_t;
+typedef union { intpte_t l1; pt_entry_t pte; } l1_pgentry_t;
+typedef union { intpte_t l2; pt_entry_t pte; } l2_pgentry_t;
+typedef union { intpte_t l3; pt_entry_t pte; } l3_pgentry_t;
 typedef l3_pgentry_t root_pgentry_t;
 
 extern unsigned int PAGE_HYPERVISOR;

@@ -377,13 +377,57 @@ int set_p2m_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     return rc;
 }
 
-unsigned long p2m_alloc_ptp(struct p2m_domain *p2m, unsigned long type)
+unsigned long
+p2m_alloc_ptp(struct p2m_domain *p2m, unsigned long type, uint16_t *_idx)
 {
     struct page_info *pg;
+    struct domain *d = p2m->domain;
 
     ASSERT(p2m);
     ASSERT(p2m_locked_by_me(p2m));
     ASSERT(p2m->domain);
+
+    do {
+        uint16_t idx;
+
+        if (!_idx)
+            break;
+
+        p2m_lock_recursive(p2m);
+
+        idx = p2m->pt_page_next;
+
+        if (idx >= d->vm_info_shared->vmi_nr_pt_pages) {
+            p2m_unlock(p2m);
+            break;
+        }
+
+        printk(XENLOG_DEBUG "%s: idx %d page next %d mfn %x\n",
+               __FUNCTION__, idx,
+               *(uint16_t *)(uintptr_t)(d->vm_info_shared->vmi_pt_pages +
+                                        (idx << PAGE_SHIFT)),
+               ((uxen_pfn_t *)d->vm_info_shared->vmi_pt_pages_mfns)[idx]);
+
+        p2m->pt_page_next =
+            *(uint16_t *)(uintptr_t)(d->vm_info_shared->vmi_pt_pages +
+                                     (idx << PAGE_SHIFT));
+        *(uint16_t *)(uintptr_t)(d->vm_info_shared->vmi_pt_pages +
+                                 (idx << PAGE_SHIFT)) = 0;
+
+        p2m_unlock(p2m);
+
+        *_idx = idx;
+
+        /* make _idx fit in 1..(1<<p2m->ptp_idx_bits), i.e. leave 0 reserved */
+        while (*(_idx) >= (1 << p2m->ptp_idx_bits))
+            *(_idx) -= (1 << p2m->ptp_idx_bits) - 1;
+
+        return ((uxen_pfn_t *)d->vm_info_shared->vmi_pt_pages_mfns)[idx];
+    } while (0);
+
+    if (_idx)
+        *_idx = 0;
+
     ASSERT(p2m->domain->arch.paging.alloc_page);
     pg = p2m->domain->arch.paging.alloc_page(p2m->domain);
     if (pg == NULL)
@@ -394,17 +438,40 @@ unsigned long p2m_alloc_ptp(struct p2m_domain *p2m, unsigned long type)
     return __page_to_mfn(pg);
 }
 
-void p2m_free_ptp(struct p2m_domain *p2m, unsigned long mfn)
+void p2m_free_ptp(struct p2m_domain *p2m, unsigned long mfn, uint16_t idx)
 {
+    struct domain *d = p2m->domain;
     struct page_info *pg = __mfn_to_page(mfn);
     ASSERT(pg);
     ASSERT(p2m);
     ASSERT(p2m_locked_by_me(p2m));
-    ASSERT(p2m->domain);
-    ASSERT(p2m->domain->arch.paging.free_page);
+    ASSERT(d);
+    ASSERT(d->arch.paging.free_page);
+
+    if (idx) {
+        while (idx < d->vm_info_shared->vmi_nr_pt_pages) {
+            if (((uxen_pfn_t *)d->vm_info_shared->vmi_pt_pages_mfns)[idx] ==
+                mfn)
+                break;
+            idx += (1 << p2m->ptp_idx_bits) - 1;
+        }
+
+        ASSERT(idx < d->vm_info_shared->vmi_nr_pt_pages);
+        if (idx >= d->vm_info_shared->vmi_nr_pt_pages)
+            return;             /* bail in release builds */
+
+        p2m_lock_recursive(p2m);
+        *(uint16_t *)(uintptr_t)(d->vm_info_shared->vmi_pt_pages +
+                                 (idx << PAGE_SHIFT)) = p2m->pt_page_next;
+        p2m->pt_page_next = idx;
+        p2m_unlock(p2m);
+
+        return;
+    }
 
     page_list_del(pg, &p2m->pages);
-    p2m->domain->arch.paging.free_page(p2m->domain, pg);
+
+    d->arch.paging.free_page(d, pg);
 
     return;
 }
@@ -419,7 +486,9 @@ void p2m_free_ptp(struct p2m_domain *p2m, unsigned long mfn)
 int p2m_alloc_table(struct p2m_domain *p2m)
 {
     unsigned long p2m_top;
+    uint16_t p2m_top_idx;
     struct domain *d = p2m->domain;
+    unsigned int i;
 
     p2m_lock(p2m);
 
@@ -430,13 +499,22 @@ int p2m_alloc_table(struct p2m_domain *p2m)
         return -EINVAL;
     }
 
+    printk(XENLOG_INFO "%s: pt_pages %p nr_pt_pages %d mfns %p\n", __FUNCTION__,
+           (void *)(uintptr_t)d->vm_info_shared->vmi_pt_pages,
+           d->vm_info_shared->vmi_nr_pt_pages,
+           (void *)d->vm_info_shared->vmi_pt_pages_mfns);
+    for (i = 0; i < d->vm_info_shared->vmi_nr_pt_pages; i++)
+        *(uint16_t *)(uintptr_t)(d->vm_info_shared->vmi_pt_pages +
+                                 (i << PAGE_SHIFT)) = i + 1;
+
     P2M_PRINTK("allocating p2m table\n");
 
-    p2m_top = p2m_alloc_ptp(p2m, 0);
+    p2m_top = p2m_alloc_ptp(p2m, 0, &p2m_top_idx);
     if (!__mfn_valid(p2m_top)) {
         p2m_unlock(p2m);
         return -ENOMEM;
     }
+    ASSERT(p2m_top_idx == 0);
 
     p2m->phys_table = pagetable_from_pfn(p2m_top);
     d->arch.hvm_domain.vmx.ept_control.asr  =
@@ -1055,9 +1133,9 @@ _p2m_l1_cache_flush(union p2m_l1_cache *l1c)
 {
     int j;
 
-    l1c->se_l1_mfn = _mfn(0);
+    l1c->se_l1.va = NULL;
     for (j = 0; j < NR_GE_L1_CACHE; j++)
-        l1c->ge_l1_mfn[j] = _mfn(0);
+        l1c->ge_l1[j].va = NULL;
 }
 
 static void

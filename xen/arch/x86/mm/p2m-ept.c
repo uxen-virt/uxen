@@ -158,6 +158,78 @@ static void ept_p2m_type_to_flags(ept_entry_t *entry, p2m_type_t type, p2m_acces
     
 }
 
+static ept_entry_t *
+ept_map_asr_ptp(struct p2m_domain *p2m)
+{
+    struct domain *d = p2m->domain;
+
+    if (p2m->pt_page_next) {
+        /* asr is always page with index 0, if any pt pages have been
+         * allocated from vmi_pt_pages */
+        ASSERT(((uxen_pfn_t *)d->vm_info_shared->vmi_pt_pages_mfns)[0] ==
+               ept_get_asr(d));
+        perfc_incr(p2m_map_ptp);
+        return (ept_entry_t *)(uintptr_t)d->vm_info_shared->vmi_pt_pages;
+    }
+
+    perfc_incr(p2m_map_ptp_fallback);
+    return map_domain_page(ept_get_asr(d));
+}
+
+static ept_entry_t *
+ept_map_ptp(struct p2m_domain *p2m, ept_entry_t *e)
+{
+    struct domain *d = p2m->domain;
+
+    do {
+        uint16_t idx = e->ptp_idx;
+
+        if (!idx)
+            break;
+
+        while (idx < d->vm_info_shared->vmi_nr_pt_pages) {
+            if (((uxen_pfn_t *)d->vm_info_shared->vmi_pt_pages_mfns)[idx] ==
+                e->mfn)
+                break;
+            idx += (1 << PTP_IDX_BITS) - 1;
+        }
+
+        /* ensure PTP_IDX_BITS fits in ept_entry */
+        BUILD_BUG_ON(PTP_IDX_BITS > 10);
+
+        /* - in debug builds, trigger assert here since map_domain_page
+         *   will also trigger an assert in debug builds
+         * - in release builds, fallback to map_domain_page */
+        ASSERT(idx < d->vm_info_shared->vmi_nr_pt_pages);
+        if (idx >= d->vm_info_shared->vmi_nr_pt_pages)
+            break;
+
+        perfc_incr(p2m_map_ptp);
+        return (ept_entry_t *)(uintptr_t)(d->vm_info_shared->vmi_pt_pages +
+                                          (idx << PAGE_SHIFT));
+    } while (0);
+
+    perfc_incr(p2m_map_ptp_fallback);
+    return map_domain_page(e->mfn);
+}
+
+#define ept_ptp_mapped(p2m, va) (({                                     \
+                ((uintptr_t)(va) >=                                     \
+                 (uintptr_t)(p2m)->domain->vm_info_shared->vmi_pt_pages && \
+                 (uintptr_t)(va) <                                      \
+                 (uintptr_t)((p2m)->domain->vm_info_shared->vmi_pt_pages + \
+                             ((p2m)->domain->vm_info_shared->vmi_nr_pt_pages \
+                              << PAGE_SHIFT)));                         \
+            }))
+
+static void
+ept_unmap_ptp(struct p2m_domain *p2m, const void *va)
+{
+
+    if (!ept_ptp_mapped(p2m, va))
+        unmap_domain_page(va);
+}
+
 #define GUEST_TABLE_MAP_FAILED  0
 #define GUEST_TABLE_NORMAL_PAGE 1
 #define GUEST_TABLE_SUPER_PAGE  2
@@ -167,16 +239,18 @@ static void ept_p2m_type_to_flags(ept_entry_t *entry, p2m_type_t type, p2m_acces
 static int ept_set_middle_entry(struct p2m_domain *p2m, ept_entry_t *ept_entry)
 {
     unsigned long mfn;
+    uint16_t idx;
 
-    mfn = p2m_alloc_ptp(p2m, 0);
+    mfn = p2m_alloc_ptp(p2m, 0, &idx);
     if (!__mfn_valid(mfn))
         return 0;
 
     ept_entry->epte = 0;
     ept_entry->mfn = mfn;
-    ept_entry->access = p2m->default_access;
 
     ept_entry->r = ept_entry->w = ept_entry->x = 1;
+
+    ept_entry->ptp_idx = idx;
 
     return 1;
 }
@@ -191,13 +265,13 @@ static void ept_free_entry(struct p2m_domain *p2m, ept_entry_t *ept_entry, int l
 
     if ( level > 1 )
     {
-        ept_entry_t *epte = map_domain_page(ept_entry->mfn);
+        ept_entry_t *epte = ept_map_ptp(p2m, ept_entry);
         for ( int i = 0; i < EPT_PAGETABLE_ENTRIES; i++ )
             ept_free_entry(p2m, epte + i, level - 1);
-        unmap_domain_page(epte);
+        ept_unmap_ptp(p2m, epte);
     }
     
-    p2m_free_ptp(p2m, ept_entry->mfn);
+    p2m_free_ptp(p2m, ept_entry->mfn, ept_entry->ptp_idx);
 }
 
 static int
@@ -228,7 +302,7 @@ _ept_split_super_page(struct p2m_domain *p2m, ept_entry_t *ept_entry,
             goto out;
     }
 
-    table = map_domain_page(new_ept.mfn);
+    table = ept_map_ptp(p2m, &new_ept);
     trunk = 1UL << ((level - 1) * EPT_TABLE_ORDER);
 
     for ( int i = 0; i < EPT_PAGETABLE_ENTRIES; i++ )
@@ -271,7 +345,7 @@ _ept_split_super_page(struct p2m_domain *p2m, ept_entry_t *ept_entry,
             break;
     }
 
-    unmap_domain_page(table);
+    ept_unmap_ptp(p2m, table);
 
     if (level == 1 &&
         p2m_is_pod(ept_entry->sa_p2mt) &&
@@ -353,7 +427,6 @@ static int ept_next_level(struct p2m_domain *p2m, bool_t read_only,
                           ept_entry_t **table, unsigned long *gfn_remainder,
                           int next_level)
 {
-    unsigned long mfn;
     ept_entry_t *ept_entry, e;
     u32 shift, index;
 
@@ -389,9 +462,8 @@ static int ept_next_level(struct p2m_domain *p2m, bool_t read_only,
     if ( is_epte_superpage(&e) )
         return GUEST_TABLE_SUPER_PAGE;
 
-    mfn = e.mfn;
-    unmap_domain_page(*table);
-    *table = map_domain_page(mfn);
+    ept_unmap_ptp(p2m, *table);
+    *table = ept_map_ptp(p2m, &e);
     *gfn_remainder &= (1UL << shift) - 1;
     return GUEST_TABLE_NORMAL_PAGE;
 }
@@ -524,12 +596,12 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
            (target == 1 && hvm_hap_has_2mb(d)) ||
            (target == 0));
 
-    if (target || !mfn_valid_page(l1c->se_l1_mfn) ||
+    if (target || !l1c->se_l1.va ||
         p2m_l1_prefix(gfn, p2m) != l1c->se_l1_prefix) {
-        l1c->se_l1_mfn = _mfn(0);
+        l1c->se_l1.va = NULL;
 
         perfc_incr(p2m_set_entry_walk);
-        table = map_domain_page(ept_get_asr(d));
+        table = ept_map_asr_ptp(p2m);
         for ( i = ept_get_wl(d); i > target; i-- )
         {
             ret = ept_next_level(p2m, 0, &table, &gfn_remainder, i);
@@ -539,12 +611,28 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
                 break;
         }
         if (!target && !i && ret == GUEST_TABLE_NORMAL_PAGE) {
+            int mapped = ept_ptp_mapped(p2m, table);
             l1c->se_l1_prefix = p2m_l1_prefix(gfn, p2m);
-            l1c->se_l1_mfn = _mfn(mapped_domain_page_va_pfn(table));
+            if (mapped)
+                l1c->se_l1.va = table;
+            else {
+                l1c->se_l1.mfn = mapped_domain_page_va_pfn(table);
+                l1c->se_l1.is_mfn = 1;
+            }
         }
     } else {
         perfc_incr(p2m_set_entry_cached);
-        table = map_domain_page(mfn_x(l1c->se_l1_mfn));
+        if (!l1c->se_l1.is_mfn) {
+            table = l1c->se_l1.va;
+            perfc_incr(p2m_map_ptp);
+        } else {
+            /* use map_domain_page here since we don't have an
+             * ept_entry, but we also know that ept_map_ptp will
+             * fallback to it anyway, and OK to free via ept_unmap_ptp
+             * below */
+            table = map_domain_page(l1c->se_l1.mfn);
+            perfc_incr(p2m_map_ptp_fallback);
+        }
         gfn_remainder = gfn & ((1UL << EPT_TABLE_ORDER) - 1);
         i = 0;
         ret = GUEST_TABLE_NORMAL_PAGE;
@@ -607,7 +695,7 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     rv = 1;
 
   out:
-    unmap_domain_page(table);
+    ept_unmap_ptp(p2m, table);
 
     if (needs_sync)
         pt_sync_domain(p2m->domain);
@@ -686,7 +774,7 @@ ept_ro_update_l2_entry(struct p2m_domain *p2m, unsigned long gfn,
          (order % EPT_TABLE_ORDER) )
         goto out;
 
-    table = map_domain_page(ept_get_asr(d));
+    table = ept_map_asr_ptp(p2m);
     for ( i = ept_get_wl(d); i > target; i-- )
     {
         /* have ept_next_level populate (2nd argument == 0) when
@@ -737,7 +825,7 @@ ept_ro_update_l2_entry(struct p2m_domain *p2m, unsigned long gfn,
   out:
     *_need_sync = need_sync;
     if (table)
-        unmap_domain_page(table);
+        ept_unmap_ptp(p2m, table);
 
     return rv;
 }
@@ -761,7 +849,7 @@ ept_get_l1_table(struct p2m_domain *p2m, unsigned long gpfn,
     if (gpfn > p2m->max_mapped_pfn)
         return mfn;
 
-    table = map_domain_page(ept_get_asr(d));
+    table = ept_map_asr_ptp(p2m);
     for (i = ept_get_wl(d); i > 1; i--) {
         ret = ept_next_level(p2m, 1, &table, &gpfn, i);
         if (!ret)
@@ -791,7 +879,7 @@ ept_get_l1_table(struct p2m_domain *p2m, unsigned long gpfn,
   out:
     if (page_order)
         *page_order = i * EPT_TABLE_ORDER;
-    unmap_domain_page(table);
+    ept_unmap_ptp(p2m, table);
     return mfn;
 }
 
@@ -842,12 +930,12 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
 
     /* Should check if gfn obeys GAW here. */
 
-    if (!mfn_valid_page(l1c->ge_l1_mfn[ge_l1_cache_slot]) ||
+    if (!l1c->ge_l1[ge_l1_cache_slot].va ||
         p2m_l1_prefix(gfn, p2m) != l1c->ge_l1_prefix[ge_l1_cache_slot]) {
-        l1c->ge_l1_mfn[ge_l1_cache_slot] = _mfn(0);
+        l1c->ge_l1[ge_l1_cache_slot].va = NULL;
 
         perfc_incr(p2m_get_entry_walk);
-        table = map_domain_page(ept_get_asr(d));
+        table = ept_map_asr_ptp(p2m);
         for (i = ept_get_wl(d); i > 0; i--) {
           retry:
             ret = ept_next_level(p2m, 1, &table, &gfn_remainder, i);
@@ -878,15 +966,29 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
         }
 
         if (!i && ret == GUEST_TABLE_NORMAL_PAGE) {
-            if (!mfn_valid_page(l1c->ge_l1_mfn[ge_l1_cache_slot])) {
-                l1c->ge_l1_prefix[ge_l1_cache_slot] = p2m_l1_prefix(gfn, p2m);
-                l1c->ge_l1_mfn[ge_l1_cache_slot] =
-                    _mfn(mapped_domain_page_va_pfn(table));
+            int mapped = ept_ptp_mapped(p2m, table);
+            l1c->ge_l1_prefix[ge_l1_cache_slot] = p2m_l1_prefix(gfn, p2m);
+            if (mapped)
+                l1c->ge_l1[ge_l1_cache_slot].va = table;
+            else {
+                l1c->ge_l1[ge_l1_cache_slot].mfn =
+                    mapped_domain_page_va_pfn(table);
+                l1c->ge_l1[ge_l1_cache_slot].is_mfn = 1;
             }
         }
     } else {
         perfc_incr(p2m_get_entry_cached);
-        table = map_domain_page(mfn_x(l1c->ge_l1_mfn[ge_l1_cache_slot]));
+        if (!l1c->ge_l1[ge_l1_cache_slot].is_mfn) {
+            table = l1c->ge_l1[ge_l1_cache_slot].va;
+            perfc_incr(p2m_map_ptp);
+        } else {
+            /* use map_domain_page here since we don't have an
+             * ept_entry, but we also know that ept_map_ptp will
+             * fallback to it anyway, and OK to free via ept_unmap_ptp
+             * below */
+            table = map_domain_page(l1c->ge_l1[ge_l1_cache_slot].mfn);
+            perfc_incr(p2m_map_ptp_fallback);
+        }
         gfn_remainder = gfn & ((1UL << EPT_TABLE_ORDER) - 1);
         i = 0;
         ret = GUEST_TABLE_NORMAL_PAGE;
@@ -944,7 +1046,7 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
     }
 
 out:
-    unmap_domain_page(table);
+    ept_unmap_ptp(p2m, table);
     return mfn_x(mfn) ? mfn : _mfn(INVALID_MFN);
 }
 
@@ -954,7 +1056,7 @@ out:
 static ept_entry_t ept_get_entry_content(struct p2m_domain *p2m,
     unsigned long gfn, int *level)
 {
-    ept_entry_t *table = map_domain_page(ept_get_asr(p2m->domain));
+    ept_entry_t *table = ept_map_asr_ptp(p2m);
     unsigned long gfn_remainder = gfn;
     ept_entry_t *ept_entry;
     ept_entry_t content = { .epte = 0 };
@@ -982,14 +1084,14 @@ DEBUG();
     *level = i;
 
  out:
-    unmap_domain_page(table);
+    ept_unmap_ptp(p2m, table);
     return content;
 }
 
 void ept_walk_table(struct domain *d, unsigned long gfn)
 {
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
-    ept_entry_t *table = map_domain_page(ept_get_asr(d));
+    ept_entry_t *table = ept_map_asr_ptp(p2m);
     unsigned long gfn_remainder = gfn;
 
     int i;
@@ -1023,16 +1125,16 @@ void ept_walk_table(struct domain *d, unsigned long gfn)
         {
             gfn_remainder &= (1UL << (i*EPT_TABLE_ORDER)) - 1;
 
-            next = map_domain_page(ept_entry->mfn);
+            next = ept_map_ptp(p2m, ept_entry);
 
-            unmap_domain_page(table);
+            ept_unmap_ptp(p2m, table);
 
             table = next;
         }
     }
 
 out:
-    unmap_domain_page(table);
+    ept_unmap_ptp(p2m, table);
     return;
 }
 
@@ -1182,6 +1284,8 @@ void ept_p2m_init(struct p2m_domain *p2m)
     p2m->p2m_l1_cache_id = p2m->domain->domain_id;
     open_softirq(P2M_L1_CACHE_CPU_SOFTIRQ, p2m_l1_cache_flush_softirq);
 
+    p2m->ptp_idx_bits = PTP_IDX_BITS;
+
     p2m->virgin = 1;
 }
 
@@ -1211,7 +1315,7 @@ static void ept_dump_p2m_table(unsigned char key)
         {
             gfn_remainder = gfn;
             mfn = _mfn(INVALID_MFN);
-            table = map_domain_page(ept_get_asr(d));
+            table = ept_map_asr_ptp(p2m);
             for ( i = ept_get_wl(d); i > 0; i-- )
             {
                 ret = ept_next_level(p2m, 1, &table, &gfn_remainder, i);
@@ -1238,7 +1342,7 @@ static void ept_dump_p2m_table(unsigned char key)
                     process_pending_softirqs();
             }
 out:
-            unmap_domain_page(table);
+            ept_unmap_ptp(p2m, table);
         }
     }
 }

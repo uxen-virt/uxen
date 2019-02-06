@@ -50,6 +50,12 @@ typedef union {
         avail3      :   1;  /* bit 63 - Software available 3 */
     };
     u64 epte;
+    struct {
+        u64 : 12,
+            : 40,
+            ptp_idx: PTP_IDX_BITS,
+            : 2;
+    };
 } ept_entry_t;
 
 #define EPT_TABLE_ORDER         9
