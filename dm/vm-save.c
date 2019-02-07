@@ -2069,8 +2069,13 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
             dmreq_init();
         }
     }
-    if (s_hvm_context.marker == XC_SAVE_ID_HVM_CONTEXT)
-        vm_set_context(hvm_buf, s_hvm_context.size);
+    if (s_hvm_context.marker == XC_SAVE_ID_HVM_CONTEXT) {
+        ret = vm_set_context(hvm_buf, s_hvm_context.size);
+        if (ret) {
+            asprintf(err_msg, "vm_set_context returned: %d", ret);
+            goto out;
+        }
+    }
 
     /* XXX pae? */
 
@@ -2594,11 +2599,11 @@ vm_load(const char *name, int restore_mode)
   out:
     filebuf_close(f);
 
-    if (ret) {
+    if (ret < 0) {
         _set_errno(-ret);
         return -1;
     }
-    return 0;
+    return ret;
 }
 
 int

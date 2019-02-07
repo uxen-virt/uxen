@@ -427,6 +427,7 @@ DEFINE_XEN_GUEST_HANDLE(xen_domctl_settimeoffset_t);
 
 /* XEN_DOMCTL_gethvmcontext */
 /* XEN_DOMCTL_sethvmcontext */
+#define XEN_HVMCONTEXT_xsave_area_incompatible 1
 typedef struct xen_domctl_hvmcontext {
     uint32_t size; /* IN/OUT: size of buffer / bytes filled */
     XEN_GUEST_HANDLE_64(uint8) buffer; /* IN/OUT: data, or call

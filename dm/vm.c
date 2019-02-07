@@ -606,11 +606,20 @@ uxen_vm_init(const char *loadvm, int restore_mode)
 
         xc_munmap(xc_handle, vm_id, hvm_info_page, XC_PAGE_SIZE);
     } else {
-	ret = vm_load(loadvm, restore_mode);
-	if (ret)
-	    err(1, "vm_load(%s, %s) failed", loadvm,
-		restore_mode == VM_RESTORE_TEMPLATE ? "template" :
-		(restore_mode == VM_RESTORE_CLONE ? "clone" : "load"));
+        ret = vm_load(loadvm, restore_mode);
+        if (ret) {
+            if (restore_mode == VM_RESTORE_CLONE &&
+                ret == XEN_HVMCONTEXT_xsave_area_incompatible) {
+
+                control_send_status("template", "reinit", NULL);
+                control_flush();
+                debug_printf("uxen_vm_init: template reinit requested\n");
+                errx(1, "vm_load(%s, clone) failed: %d", loadvm, ret);
+            }
+            err(1, "vm_load(%s, %s) failed", loadvm,
+                restore_mode == VM_RESTORE_TEMPLATE ? "template" :
+                (restore_mode == VM_RESTORE_CLONE ? "clone" : "load"));
+        }
         if (restore_mode == VM_RESTORE_TEMPLATE) {
             template_load_failed = false;
             control_send_status("template", "loaded", NULL);

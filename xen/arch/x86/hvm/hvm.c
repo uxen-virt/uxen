@@ -21,7 +21,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -1468,7 +1468,10 @@ static int hvm_load_cpu_xsave_states(struct domain *d, hvm_domain_context_t *h)
                  "saw type %u length %u\n", CPU_XSAVE_CODE,
                  (uint32_t)HVM_CPU_XSAVE_SIZE,
                  desc->typecode, desc->length);
-        return -1;
+        if ( d->clone_of )
+            return XEN_HVMCONTEXT_xsave_area_incompatible;
+        else
+            return -1;
     }
     h->cur += sizeof (*desc);
     /* Checking finished */
@@ -1477,8 +1480,15 @@ static int hvm_load_cpu_xsave_states(struct domain *d, hvm_domain_context_t *h)
     h->cur += desc->length;
 
     _xfeature_mask = ctxt->xfeature_mask;
-    if ( (_xfeature_mask & xfeature_mask) != _xfeature_mask )
-        return -EINVAL;
+    if ( (_xfeature_mask & xfeature_mask) != _xfeature_mask ) {
+        gdprintk(XENLOG_WARNING,
+                 "HVM restore xfeature mask mismatch: expected %"PRIx64", saw %"PRIx64"\n",
+                 (_xfeature_mask & xfeature_mask), _xfeature_mask);
+        if ( d->clone_of )
+            return XEN_HVMCONTEXT_xsave_area_incompatible;
+        else
+            return -EINVAL;
+    }
 
     v->arch.xcr0 = ctxt->xcr0;
     v->arch.xcr0_accum = ctxt->xcr0_accum;
