@@ -18,7 +18,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -694,7 +694,11 @@ ept_ro_update_l2_entry(struct p2m_domain *p2m, unsigned long gfn,
 
     for ( i = ept_get_wl(d); i > target; i-- )
     {
-        ret = ept_next_level(p2m, 0, &table, &gfn_remainder, i);
+        /* have ept_next_level populate (2nd argument == 0) when
+         * setting entries read only, i.e. read_only ? 0 : 1,
+         * i.e. !read_only */
+        ASSERT(!read_only || p2m_locked_by_me(p2m));
+        ret = ept_next_level(p2m, !read_only, &table, &gfn_remainder, i);
         if ( !ret )
             goto out;
         else if ( ret != GUEST_TABLE_NORMAL_PAGE )

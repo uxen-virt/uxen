@@ -27,7 +27,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -317,7 +317,7 @@ npt_split_super_page(struct p2m_domain *p2m, l1_pgentry_t *p2m_entry,
 }
 
 static int
-p2m_next_level(struct p2m_domain *p2m, void **table,
+p2m_next_level(struct p2m_domain *p2m, bool_t read_only, void **table,
                unsigned long *gfn_remainder, unsigned long gfn, u32 shift,
                u32 max, unsigned long type)
 {
@@ -336,6 +336,9 @@ p2m_next_level(struct p2m_domain *p2m, void **table,
     if ( !l1e_get_flags(*p2m_entry) )
     {
         struct page_info *pg;
+
+        if (read_only)
+            return 0;
 
         pg = p2m_alloc_ptp(p2m, type);
         if ( pg == NULL )
@@ -375,6 +378,9 @@ p2m_next_level(struct p2m_domain *p2m, void **table,
         unsigned long flags, pfn;
         struct page_info *pg;
 
+        if (read_only)
+            return 0;
+
         pg = p2m_alloc_ptp(p2m, PGT_l2_page_table);
         if ( pg == NULL )
             return 0;
@@ -399,6 +405,9 @@ p2m_next_level(struct p2m_domain *p2m, void **table,
 
     /* split single 2MB large page into 4KB page in P2M table */
     if (type == PGT_l1_page_table && (l1e_get_flags(*p2m_entry) & _PAGE_PSE)) {
+        if (read_only)
+            return 0;
+
         if (!npt_split_super_page(p2m, p2m_entry, gfn, PGT_l1_page_table))
             return 0;
     }
@@ -538,7 +547,7 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     table = map_domain_page(mfn_x(table_mfn));
 
 #if CONFIG_PAGING_LEVELS >= 4
-    if ( !p2m_next_level(p2m, &table, &gfn_remainder, gfn,
+    if ( !p2m_next_level(p2m, 0, &table, &gfn_remainder, gfn,
                          L4_PAGETABLE_SHIFT - PAGE_SHIFT,
                          L4_PAGETABLE_ENTRIES, PGT_l3_page_table) )
         goto out;
@@ -594,7 +603,7 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
      * in Xen's address space for translated PV guests.
      * When using AMD's NPT on PAE Xen, we are restricted to 4GB.
      */
-    else if ( !p2m_next_level(p2m, &table, &gfn_remainder, gfn,
+    else if ( !p2m_next_level(p2m, 0, &table, &gfn_remainder, gfn,
                               L3_PAGETABLE_SHIFT - PAGE_SHIFT,
                               ((CONFIG_PAGING_LEVELS == 3)
                                ? (hap_enabled(p2m->domain) ? 4 : 8)
@@ -604,7 +613,7 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
 
     if ( page_order == PAGE_ORDER_4K )
     {
-        if ( !p2m_next_level(p2m, &table, &gfn_remainder, gfn,
+        if ( !p2m_next_level(p2m, 0, &table, &gfn_remainder, gfn,
                              L2_PAGETABLE_SHIFT - PAGE_SHIFT,
                              L2_PAGETABLE_ENTRIES, PGT_l1_page_table) )
             goto out;
@@ -723,13 +732,16 @@ pt_ro_update_l2_entry(struct p2m_domain *p2m, unsigned long gfn,
     table_mfn = pagetable_get_mfn(p2m_get_pagetable(p2m));
     table = map_domain_page(mfn_x(table_mfn));
 
+    /* have p2m_next_level populate (2nd argument == 0) when
+     * setting entries read only, i.e. read_only ? 0 : 1,
+     * i.e. !read_only */
 #if CONFIG_PAGING_LEVELS >= 4
-    if ( !p2m_next_level(p2m, &table, &gfn_remainder, gfn,
+    if ( !p2m_next_level(p2m, !read_only, &table, &gfn_remainder, gfn,
                          L4_PAGETABLE_SHIFT - PAGE_SHIFT,
                          L4_PAGETABLE_ENTRIES, PGT_l3_page_table) )
         goto out;
 #endif
-    if ( !p2m_next_level(p2m, &table, &gfn_remainder, gfn,
+    if ( !p2m_next_level(p2m, !read_only, &table, &gfn_remainder, gfn,
                          L3_PAGETABLE_SHIFT - PAGE_SHIFT,
                          ((CONFIG_PAGING_LEVELS == 3)
                           ? (hap_enabled(p2m->domain) ? 4 : 8)

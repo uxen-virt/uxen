@@ -26,7 +26,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -382,6 +382,7 @@ struct page_info *p2m_alloc_ptp(struct p2m_domain *p2m, unsigned long type)
     struct page_info *pg;
 
     ASSERT(p2m);
+    ASSERT(p2m_locked_by_me(p2m));
     ASSERT(p2m->domain);
     ASSERT(p2m->domain->arch.paging.alloc_page);
     pg = p2m->domain->arch.paging.alloc_page(p2m->domain);
@@ -397,6 +398,7 @@ void p2m_free_ptp(struct p2m_domain *p2m, struct page_info *pg)
 {
     ASSERT(pg);
     ASSERT(p2m);
+    ASSERT(p2m_locked_by_me(p2m));
     ASSERT(p2m->domain);
     ASSERT(p2m->domain->arch.paging.free_page);
 
