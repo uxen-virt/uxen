@@ -337,8 +337,6 @@ paging_mark_dirty_check_vram_l2(struct vcpu *v, unsigned long gfn)
 {
     struct domain *d = v->domain;
     struct sh_dirty_vram *dirty_vram = d->arch.hvm_domain.dirty_vram;
-    p2m_type_t p2mt;
-    p2m_access_t p2ma;
     struct p2m_domain *p2m;
     unsigned long gfn_l2;
     int need_sync;
@@ -356,9 +354,9 @@ paging_mark_dirty_check_vram_l2(struct vcpu *v, unsigned long gfn)
     gfn_l2 = gfn & ~((1ul << PAGE_ORDER_2M) - 1);
     for (gfn = gfn_l2; gfn < (gfn_l2 + (1ul << PAGE_ORDER_2M)) &&
              gfn < dirty_vram->end_pfn; gfn++) {
-        get_gfn_type_access(p2m, gfn, &p2mt, &p2ma, p2m_guest, NULL);
+        /* dirty_vram->begin_pfn is l2 aligned */
+        ASSERT(gfn >= dirty_vram->begin_pfn);
         paging_mark_dirty(d, gfn);
-        put_gfn(d, gfn);
     }
 
     /* ro->rw transition - no need to sync */
