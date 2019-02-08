@@ -192,7 +192,6 @@ static void ept_free_entry(struct p2m_domain *p2m, ept_entry_t *ept_entry, int l
     if ( level > 1 )
     {
         ept_entry_t *epte = map_domain_page(ept_entry->mfn);
-        perfc_incr(pc11);
         for ( int i = 0; i < EPT_PAGETABLE_ENTRIES; i++ )
             ept_free_entry(p2m, epte + i, level - 1);
         unmap_domain_page(epte);
@@ -230,7 +229,6 @@ _ept_split_super_page(struct p2m_domain *p2m, ept_entry_t *ept_entry,
     }
 
     table = map_domain_page(new_ept.mfn);
-    perfc_incr(pc11);
     trunk = 1UL << ((level - 1) * EPT_TABLE_ORDER);
 
     for ( int i = 0; i < EPT_PAGETABLE_ENTRIES; i++ )
@@ -394,7 +392,6 @@ static int ept_next_level(struct p2m_domain *p2m, bool_t read_only,
     mfn = e.mfn;
     unmap_domain_page(*table);
     *table = map_domain_page(mfn);
-    perfc_incr(pc11);
     *gfn_remainder &= (1UL << shift) - 1;
     return GUEST_TABLE_NORMAL_PAGE;
 }
@@ -690,8 +687,6 @@ ept_ro_update_l2_entry(struct p2m_domain *p2m, unsigned long gfn,
         goto out;
 
     table = map_domain_page(ept_get_asr(d));
-    perfc_incr(pc11);
-
     for ( i = ept_get_wl(d); i > target; i-- )
     {
         /* have ept_next_level populate (2nd argument == 0) when
@@ -836,8 +831,6 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
     mfn_t mfn = _mfn(0);
     union p2m_l1_cache *l1c = &this_cpu(p2m_l1_cache);
 
-    perfc_incr(pc11);
-
     *t = p2m_mmio_dm;
     *a = p2m_access_n;
     if (page_order)
@@ -969,8 +962,6 @@ static ept_entry_t ept_get_entry_content(struct p2m_domain *p2m,
     int i;
     int ret=0;
 
-    perfc_incr(pc11);
-
 DEBUG();
     /* This pfn is higher than the highest the p2m map currently holds */
     if ( gfn > p2m->max_mapped_pfn )
@@ -1003,8 +994,6 @@ void ept_walk_table(struct domain *d, unsigned long gfn)
 
     int i;
 
-    perfc_incr(pc11);
-
     gdprintk(XENLOG_ERR, "Walking EPT tables for vm%u gfn %lx\n",
              d->domain_id, gfn);
 
@@ -1035,7 +1024,6 @@ void ept_walk_table(struct domain *d, unsigned long gfn)
             gfn_remainder &= (1UL << (i*EPT_TABLE_ORDER)) - 1;
 
             next = map_domain_page(ept_entry->mfn);
-            perfc_incr(pc11);
 
             unmap_domain_page(table);
 
@@ -1133,8 +1121,6 @@ static void ept_change_entry_type_page(mfn_t ept_page_mfn, int ept_page_level,
 {
     ept_entry_t e, *epte = map_domain_page(mfn_x(ept_page_mfn));
 
-    perfc_incr(pc11);
-
     if (ax_pv_ept) {
         printk(KERN_ERR "AX_PV_EPT: changing page type - leaving to async path\n");
         //FIXME Eventually: ax_pv_ept_write(p2m, target, gfn << PAGE_SHIFT, new_entry, needs_sync);
@@ -1226,8 +1212,6 @@ static void ept_dump_p2m_table(unsigned char key)
             gfn_remainder = gfn;
             mfn = _mfn(INVALID_MFN);
             table = map_domain_page(ept_get_asr(d));
-            perfc_incr(pc11);
-
             for ( i = ept_get_wl(d); i > 0; i-- )
             {
                 ret = ept_next_level(p2m, 1, &table, &gfn_remainder, i);
