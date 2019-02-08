@@ -853,7 +853,7 @@ int domain_kill(struct domain *d)
     struct domain *clone_of;
     int rc = 0;
 
-    printk("%s: dom:%p, curr_dom:%p, is_dying:%d\n",
+    printk(XENLOG_WARNING "%s: dom:%p, curr_dom:%p, is_dying:%d\n",
            __FUNCTION__, d, current->domain, d->is_dying);
 
     if ( d == current->domain )
@@ -882,12 +882,13 @@ int domain_kill(struct domain *d)
         {
             BUG_ON(rc != -EAGAIN);
             if (is_template_domain(d)) {
-                /* break links between uxen level template domain and
-                 * driver level structures, which will be freed on
-                 * return from here */
-                printk("%s:%d: sched_destroy_domain() for vm%u\n",
-                       __FUNCTION__, __LINE__, d->domain_id);
-                sched_destroy_domain(d);
+                printk(XENLOG_WARNING "%s: vm%u template still in use\n",
+                       __FUNCTION__, d->domain_id);
+                d->vm_info_shared->vmi_free_deferred = 1;
+                /* clear uuid of template domains, so that the uuid can be
+                 * re-used */
+                atomic_write_domain_handle(&d->handle_atomic,
+                                           &handle_dead_template_domain);
                 rc = 0;
             }
             break;
@@ -896,12 +897,27 @@ int domain_kill(struct domain *d)
          * has been torn down */
         clone_of = d->clone_of;
         if (clone_of) {
-            printk("%s:%d: vm%u before put_domain for template vm%u: "
-                "refcnt=%d tot_pages=%d xenheap_pages=%d vframes=%d\n",
-                __FUNCTION__, __LINE__, d->domain_id, d->clone_of->domain_id,
-                atomic_read(&d->clone_of->refcnt),
-                d->clone_of->tot_pages, d->clone_of->xenheap_pages, d->clone_of->vframes);
+            printk(XENLOG_WARNING "%s: vm%u: template put_domain: "
+                   "refcnt=%d tot_pages=%d xenheap_pages=%d vframes=%d\n",
+                   __FUNCTION__, d->clone_of->domain_id,
+                   atomic_read(&d->clone_of->refcnt), d->clone_of->tot_pages,
+                   d->clone_of->xenheap_pages, d->clone_of->vframes);
             put_domain(clone_of);
+            if (clone_of->is_dying &&
+                domain_relinquish_resources(clone_of) == 0) {
+                d->vm_info_shared->vmi_free_related = clone_of->vm_info_shared;
+                printk(XENLOG_WARNING "%s: vm%u: template "
+                       "sched_destroy_domain()\n", __FUNCTION__,
+                       clone_of->domain_id);
+                sched_destroy_domain(clone_of);
+                clone_of->is_dying = DOMDYING_dead;
+                printk(XENLOG_WARNING "%s: vm%u: template put_domain final: "
+                       "refcnt=%d tot_pages=%d xenheap_pages=%d vframes=%d\n",
+                       __FUNCTION__, clone_of->domain_id,
+                       atomic_read(&clone_of->refcnt), clone_of->tot_pages,
+                       clone_of->xenheap_pages, clone_of->vframes);
+                put_domain(clone_of);
+            }
         }
         d->is_dying = DOMDYING_dead;
 #ifndef __UXEN__
@@ -909,23 +925,14 @@ int domain_kill(struct domain *d)
 #else   /* __UXEN__ */
         hostsched_notify_exception(d);
 #endif  /* __UXEN__ */
-        printk("%s:%d: sched_destroy_domain() for vm%u\n",
-               __FUNCTION__, __LINE__, d->domain_id);
+        printk(XENLOG_WARNING "%s: vm%u sched_destroy_domain()\n",
+               __FUNCTION__, d->domain_id);
         sched_destroy_domain(d);
-        printk("%s:%d: vm%u before put_domain: refcnt=%d tot_pages=%d xenheap_pages=%d vframes=%d\n",
-            __FUNCTION__, __LINE__, d->domain_id,
-            atomic_read(&d->refcnt), d->tot_pages, d->xenheap_pages, d->vframes);
+        printk(XENLOG_WARNING "%s: vm%u: put_domain: refcnt=%d tot_pages=%d "
+               "xenheap_pages=%d vframes=%d\n", __FUNCTION__, d->domain_id,
+               atomic_read(&d->refcnt), d->tot_pages, d->xenheap_pages,
+               d->vframes);
         put_domain(d);
-        if (clone_of && clone_of->is_dying &&
-            domain_relinquish_resources(clone_of) == 0) {
-            clone_of->is_dying = DOMDYING_dead;
-            printk("%s:%d: vm%u before put_domain for template vm%u: "
-                "refcnt=%d tot_pages=%d xenheap_pages=%d vframes=%d\n",
-                __FUNCTION__, __LINE__, d->domain_id, d->clone_of->domain_id,
-                atomic_read(&d->clone_of->refcnt),
-                d->clone_of->tot_pages, d->clone_of->xenheap_pages, d->clone_of->vframes);
-            put_domain(clone_of);
-        }
         /* fallthrough */
     case DOMDYING_dead:
         break;

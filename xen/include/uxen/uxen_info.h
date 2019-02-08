@@ -306,7 +306,8 @@ enum {
 struct vm_info_shared {
     xen_domain_handle_t vmi_uuid;
     domid_t vmi_domid;
-    uint32_t vmi_runnable;
+    uint16_t vmi_runnable;
+    uint16_t vmi_free_deferred;
     uint32_t vmi_nrpages;
     uint64_t vmi_msrpm;
     uint32_t vmi_msrpm_size;
@@ -317,6 +318,7 @@ struct vm_info_shared {
     void *vmi_dmreq_vcpu_page_va;
     void *vmi_dmreq_hec;
     void * volatile vmi_wait_event;
+    void *vmi_free_related;
 };
 
 #define UXEN_PAGE_SHIFT 12

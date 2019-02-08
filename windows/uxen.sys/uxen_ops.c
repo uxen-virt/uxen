@@ -1979,7 +1979,11 @@ uxen_vmi_destroy_vm(struct vm_info *vmi)
     printk("%s: vm%u destroyed\n", __FUNCTION__, vmi->vmi_shared.vmi_domid);
     vmi->vmi_marked_for_destroy = 0;
 
-    uxen_vmi_free(vmi);
+    if (!vmi->vmi_shared.vmi_free_deferred) {
+        if (vmi->vmi_shared.vmi_free_related)
+            uxen_vmi_free(vmi->vmi_shared.vmi_free_related);
+        uxen_vmi_free(vmi);
+    }
 
   out:
     return ret;
