@@ -392,9 +392,13 @@ struct p2m_domain {
                                        p2m_access_t *p2ma,
                                        p2m_query_t q,
                                        unsigned int *page_order);
-    mfn_t              (*get_l1_table)(struct p2m_domain *p2m,
+    void *             (*map_l1_table)(struct p2m_domain *p2m,
                                        unsigned long gpfn,
                                        unsigned int *page_order);
+    void *             (*map_entry_table)(struct p2m_domain *p2m,
+                                          void *entry);
+    void               (*unmap_table)(struct p2m_domain *p2m,
+                                      const void *va);
     mfn_t              (*parse_entry)(void *table, unsigned long index,
                                       p2m_type_t *t, p2m_access_t* a);
     int                (*write_entry)(struct p2m_domain *p2m, void *table,

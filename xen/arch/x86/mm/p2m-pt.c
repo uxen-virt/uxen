@@ -1067,12 +1067,11 @@ out:
 }
 #endif  /* __UXEN__ */
 
-static mfn_t
-npt_get_l1_table(struct p2m_domain *p2m, unsigned long gpfn,
+static void *
+npt_map_l1_table(struct p2m_domain *p2m, unsigned long gpfn,
                  unsigned int *page_order)
 {
     paddr_t addr = ((paddr_t)gpfn) << PAGE_SHIFT;
-    mfn_t mfn = _mfn(INVALID_MFN);
     l2_pgentry_t *l2e;
     pt_entry_t *le;
 
@@ -1081,7 +1080,7 @@ npt_get_l1_table(struct p2m_domain *p2m, unsigned long gpfn,
 
     /* This pfn is higher than the highest the p2m map currently holds */
     if (gpfn > p2m->max_mapped_pfn)
-        return mfn;
+        return NULL;
 
     /* XXX use linear mapping */
 
@@ -1096,7 +1095,7 @@ npt_get_l1_table(struct p2m_domain *p2m, unsigned long gpfn,
             pt_unmap_ptp(p2m, l4e);
             if ( page_order )
                 *page_order = PAGE_ORDER_1G + PAGETABLE_ORDER;
-            return _mfn(INVALID_MFN);
+            return NULL;
         }
         le = pt_map_ptp(p2m, &l4e->pte);
         pt_unmap_ptp(p2m, l4e);
@@ -1119,14 +1118,14 @@ npt_get_l1_table(struct p2m_domain *p2m, unsigned long gpfn,
             pt_unmap_ptp(p2m, l3e);
             if ( page_order )
                 *page_order = PAGE_ORDER_1G;
-            return _mfn(INVALID_MFN);
+            return NULL;
         }
         else if ( (l3e_get_flags(*l3e) & _PAGE_PSE) )
         {
             pt_unmap_ptp(p2m, l3e);
             if ( page_order )
                 *page_order = PAGE_ORDER_1G;
-            return _mfn(INVALID_MFN);
+            return NULL;
         }
         le = pt_map_ptp(p2m, &l3e->pte);
         pt_unmap_ptp(p2m, l3e);
@@ -1140,20 +1139,31 @@ npt_get_l1_table(struct p2m_domain *p2m, unsigned long gpfn,
         pt_unmap_ptp(p2m, l2e);
         if ( page_order )
             *page_order = PAGE_ORDER_2M;
-        return _mfn(INVALID_MFN);
+        return NULL;
     }
     else if ( (l2e_get_flags(*l2e) & _PAGE_PSE) )
     {
         pt_unmap_ptp(p2m, l2e);
         if ( page_order )
             *page_order = PAGE_ORDER_2M;
-        return _mfn(INVALID_MFN);
+        return NULL;
     }
 
-    mfn = _mfn(l2e_get_pfn(*l2e));
+    le = pt_map_ptp(p2m, &l2e->pte);
     pt_unmap_ptp(p2m, l2e);
 
-    return mfn;
+    return le;
+}
+
+static void *
+npt_map_entry_table(struct p2m_domain *p2m, void *_entry)
+{
+    l1_pgentry_t *entry = (l1_pgentry_t *)_entry;
+
+    if (!p2m_is_valid(p2m_flags_to_type(l1e_get_flags(*entry))))
+        return NULL;
+
+    return pt_map_ptp(p2m, &entry->pte);
 }
 
 static mfn_t
@@ -1547,7 +1557,9 @@ void p2m_pt_init(struct p2m_domain *p2m)
 {
     p2m->set_entry = p2m_set_entry;
     p2m->get_entry = p2m_gfn_to_mfn;
-    p2m->get_l1_table = npt_get_l1_table;
+    p2m->map_l1_table = npt_map_l1_table;
+    p2m->map_entry_table= npt_map_entry_table;
+    p2m->unmap_table = pt_unmap_ptp;
     p2m->parse_entry = npt_parse_entry;
     p2m->write_entry = npt_write_entry;
     p2m->change_entry_type_global = p2m_change_type_global;

@@ -1230,9 +1230,6 @@ p2m_clone_l1(struct p2m_domain *op2m, struct p2m_domain *p2m,
              unsigned long gpfn, void *entry, int needs_sync)
 {
     void *otable = NULL, *table = NULL;
-    mfn_t mfn;
-    p2m_type_t t;
-    p2m_access_t a;
     int ret = 0;
 
     ASSERT(p2m_locked_by_me(p2m));
@@ -1242,20 +1239,17 @@ p2m_clone_l1(struct p2m_domain *op2m, struct p2m_domain *p2m,
         !p2m->split_super_page_one(p2m, entry, gpfn, PAGE_ORDER_2M))
         return 0;
 
-    mfn = op2m->get_l1_table(op2m, gpfn, NULL);
-    if (!mfn_valid_page(mfn))
+    otable = op2m->map_l1_table(op2m, gpfn, NULL);
+    if (!otable)
         return 0;
-    otable = map_domain_page(mfn_x(mfn));
 
-    mfn = p2m->parse_entry(entry, 0, &t, &a);
-    if (mfn_valid_page(mfn))
-        table = map_domain_page(mfn_x(mfn));
+    table = p2m->map_entry_table(p2m, entry);
 
     ret = clone_l1_table(op2m, p2m, &gpfn, otable, table, needs_sync);
 
     if (table)
-        unmap_domain_page(table);
-    unmap_domain_page(otable);
+        p2m->unmap_table(p2m, table);
+    op2m->unmap_table(op2m, otable);
     return ret;
 }
 
@@ -1264,8 +1258,6 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
 {
     struct p2m_domain *np2m = p2m_get_hostp2m(nd);
     unsigned long gpfn;
-    mfn_t mfn = _mfn(0);        /* compiler */
-    mfn_t nmfn = _mfn(0);
     unsigned int page_order;
     void *table = NULL, *ntable = NULL;
     int ret = 0;
@@ -1279,20 +1271,26 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
             break;
         }
         if (!(gpfn & ((1UL << PAGETABLE_ORDER) - 1))) {
-            mfn = p2m->get_l1_table(p2m, gpfn, &page_order);
-            if (!mfn_valid_page(mfn)) {
+            if (ntable) {
+                np2m->unmap_table(np2m, ntable);
+                ntable = NULL;
+            }
+            if (table)
+                p2m->unmap_table(p2m, table);
+            table = p2m->map_l1_table(p2m, gpfn, &page_order);
+            if (!table) {
                 gpfn |= ((1 << page_order) - 1);
                 gpfn++;
                 continue;
             }
-            nmfn = np2m->get_l1_table(np2m, gpfn, NULL);
+            ntable = np2m->map_l1_table(np2m, gpfn, NULL);
         }
         if (hvm_hap_has_2mb(d) &&
             (p2m->domain->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] &
              HVM_PARAM_CLONE_L1_lazy_mask)) {
             /* if l1 exists already in clone, clone the rest of the l1
              * immediately */
-            if (mfn_valid_page(nmfn))
+            if (ntable)
                 goto clone_now;
             ret = !set_p2m_entry(np2m, gpfn, _mfn(0), PAGE_ORDER_2M,
                                  p2m_populate_on_demand, np2m->default_access);
@@ -1307,23 +1305,12 @@ p2m_clone(struct p2m_domain *p2m, struct domain *nd)
             continue;
         }
       clone_now:
-        if (!(gpfn & ((1UL << PAGETABLE_ORDER) - 1))) {
-            if (ntable) {
-                unmap_domain_page(ntable);
-                ntable = NULL;
-            }
-            if (table)
-                unmap_domain_page(table);
-            table = map_domain_page(mfn_x(mfn));
-            if (mfn_valid_page(nmfn))
-                ntable = map_domain_page(mfn_x(nmfn));
-        }
         ret = clone_l1_table(p2m, np2m, &gpfn, table, ntable, 1);
     }
     if (ntable)
-        unmap_domain_page(ntable);
+        np2m->unmap_table(np2m, ntable);
     if (table)
-        unmap_domain_page(table);
+        p2m->unmap_table(p2m, table);
     ct += NOW();
     np2m->clone_time += ct;
     p2m_unlock(np2m);
@@ -1402,7 +1389,7 @@ p2m_shared_teardown(struct p2m_domain *p2m)
 {
     struct domain *d = p2m->domain, *owner;
     unsigned long gpfn;
-    mfn_t mfn, l1mfn;
+    mfn_t mfn;
     void *l1table = NULL;
     p2m_type_t t;
     p2m_access_t a;
@@ -1413,14 +1400,13 @@ p2m_shared_teardown(struct p2m_domain *p2m)
 
     for (gpfn = 0; gpfn <= p2m->max_mapped_pfn; gpfn++) {
         if (!(gpfn & ((1UL << PAGETABLE_ORDER) - 1))) {
-            l1mfn = p2m->get_l1_table(p2m, gpfn, &page_order);
-            if (!mfn_valid_page(l1mfn)) {
+            if (l1table)
+                p2m->unmap_table(p2m, l1table);
+            l1table = p2m->map_l1_table(p2m, gpfn, &page_order);
+            if (!l1table) {
                 gpfn |= ((1 << page_order) - 1);
                 continue;
             }
-            if (l1table)
-                unmap_domain_page(l1table);
-            l1table = map_domain_page(mfn_x(l1mfn));
         }
         mfn = p2m->parse_entry(l1table, gpfn & ((1UL << PAGETABLE_ORDER) - 1),
                                &t, &a);
@@ -1454,7 +1440,7 @@ p2m_shared_teardown(struct p2m_domain *p2m)
         p2m_count++;
     }
     if (l1table)
-        unmap_domain_page(l1table);
+        p2m->unmap_table(p2m, l1table);
 
     printk(XENLOG_INFO "%s: vm%u cleared %d p2m entries --"
            " domain=%d shared=%d zero=%d host=%d xen=%d vframe=%d\n",
@@ -1706,7 +1692,7 @@ p2m_pod_gc_template_pages_work(void *_d)
     struct domain *d = (struct domain *)_d;
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
     unsigned long gpfn, gpfn_aligned, scrub_gpfn, scrub_gpfn_end;
-    mfn_t mfn, l1mfn;
+    mfn_t mfn;
     p2m_type_t t;
     p2m_access_t a;
     unsigned int page_order;
@@ -1788,13 +1774,11 @@ p2m_pod_gc_template_pages_work(void *_d)
 
         gpfn_aligned = gpfn & ~((1UL << PAGETABLE_ORDER) - 1);
 
-        l1mfn = p2m->get_l1_table(p2m, gpfn_aligned, NULL);
-        if (!mfn_valid_page(l1mfn)) {
+        l1table = p2m->map_l1_table(p2m, gpfn_aligned, NULL);
+        if (!l1table) {
             gpfn |= ((1UL << PAGETABLE_ORDER) - 1);
             goto repod_next;
         }
-
-        l1table = map_domain_page(mfn_x(l1mfn));
 
         for (i = gpfn - gpfn_aligned; i < L1_PAGETABLE_ENTRIES; i++) {
             gc_mfns[i] = 0;
@@ -1815,7 +1799,7 @@ p2m_pod_gc_template_pages_work(void *_d)
             p2m_put_page_data_with_write_lock (p2m, data, data_size);
         }
 
-        unmap_domain_page(l1table);
+        p2m->unmap_table(p2m, l1table);
 
         p2m_unlock(p2m);
 
@@ -1833,9 +1817,8 @@ p2m_pod_gc_template_pages_work(void *_d)
                 continue;
             }
 
-            l1mfn = cp2m->get_l1_table(cp2m, gpfn_aligned, NULL);
-            if (mfn_valid_page(l1mfn)) {
-                l1table = map_domain_page(mfn_x(l1mfn));
+            l1table = cp2m->map_l1_table(cp2m, gpfn_aligned, NULL);
+            if (l1table) {
                 for (i = gpfn - gpfn_aligned; i < L1_PAGETABLE_ENTRIES; i++) {
                     if (!gc_mfns[i])
                         continue;
@@ -1848,7 +1831,7 @@ p2m_pod_gc_template_pages_work(void *_d)
                         nr_repod++;
                     }
                 }
-                unmap_domain_page(l1table);
+                cp2m->unmap_table(cp2m, l1table);
             }
 
             p2m_unlock(cp2m);
@@ -1878,13 +1861,11 @@ p2m_pod_gc_template_pages_work(void *_d)
 
         gpfn_aligned = scrub_gpfn & ~((1UL << PAGETABLE_ORDER) - 1);
 
-        l1mfn = p2m->get_l1_table(p2m, gpfn_aligned, NULL);
-        if (!mfn_valid_page(l1mfn)) {
+        l1table = p2m->map_l1_table(p2m, gpfn_aligned, NULL);
+        if (!l1table) {
             scrub_gpfn |= ((1UL << PAGETABLE_ORDER) - 1);
             goto scrub_next;
         }
-
-        l1table = map_domain_page(mfn_x(l1mfn));
 
         for (i = scrub_gpfn - gpfn_aligned; i < L1_PAGETABLE_ENTRIES; i++) {
             mfn = p2m->parse_entry(l1table, i, &t, &a);
@@ -1911,7 +1892,7 @@ p2m_pod_gc_template_pages_work(void *_d)
             p2m_put_page_data_with_write_lock(p2m, data, data_size);
         }
 
-        unmap_domain_page(l1table);
+        p2m->unmap_table(p2m, l1table);
 
         scrub_gpfn |= ((1UL << PAGETABLE_ORDER) - 1);
 
@@ -2053,19 +2034,17 @@ p2m_audit_pod_counts(struct domain *d)
     int nr_zero_mapped = 0, nr_tmpl = 0, nr_retry = 0, nr_empty = 0;
     int nr_immutable = 0;
     void *l1table = NULL;
-    mfn_t l1mfn;
 
     p2m_lock(p2m);
     for (gpfn = 0; gpfn <= p2m->max_mapped_pfn; gpfn++) {
         if (!(gpfn & ((1UL << PAGETABLE_ORDER) - 1))) {
-            l1mfn = p2m->get_l1_table(p2m, gpfn, &page_order);
-            if (!mfn_valid_page(l1mfn)) {
+            if (l1table)
+                p2m->unmap_table(p2m, l1table);
+            l1table = p2m->map_l1_table(p2m, gpfn, &page_order);
+            if (!l1table) {
                 gpfn |= ((1 << page_order) - 1);
                 continue;
             }
-            if (l1table)
-                unmap_domain_page(l1table);
-            l1table = map_domain_page(mfn_x(l1mfn));
         }
         mfn = p2m->parse_entry(l1table, gpfn & ((1UL << PAGETABLE_ORDER) - 1),
                                &t, &a);
@@ -2097,7 +2076,7 @@ p2m_audit_pod_counts(struct domain *d)
         }
     }
     if (l1table)
-        unmap_domain_page(l1table);
+        p2m->unmap_table(p2m, l1table);
     printk("vm%d: pages %d/%d pod %d zero %d/%d tmpl %d retry %d\n",
            d->domain_id, nr_pages, nr_xen, nr_pod,
            nr_zero, nr_zero_mapped, nr_tmpl, nr_retry);

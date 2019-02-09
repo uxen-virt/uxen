@@ -830,14 +830,13 @@ ept_ro_update_l2_entry(struct p2m_domain *p2m, unsigned long gfn,
     return rv;
 }
 
-static mfn_t
-ept_get_l1_table(struct p2m_domain *p2m, unsigned long gpfn,
+static void *
+ept_map_l1_table(struct p2m_domain *p2m, unsigned long gpfn,
                  unsigned int *page_order)
 {
     struct domain *d = p2m->domain;
-    mfn_t mfn = _mfn(INVALID_MFN);
     ept_entry_t *ept_entry, e;
-    ept_entry_t *table = NULL;
+    ept_entry_t *table = NULL, *l1t = NULL;
     u32 index;
     int i;
     int ret;
@@ -847,7 +846,7 @@ ept_get_l1_table(struct p2m_domain *p2m, unsigned long gpfn,
 
     /* This pfn is higher than the highest the p2m map currently holds */
     if (gpfn > p2m->max_mapped_pfn)
-        return mfn;
+        return NULL;
 
     table = ept_map_asr_ptp(p2m);
     for (i = ept_get_wl(d); i > 1; i--) {
@@ -874,13 +873,24 @@ ept_get_l1_table(struct p2m_domain *p2m, unsigned long gpfn,
         /* should return state */
         goto out;
 
-    mfn = _mfn(e.mfn);
+    l1t = ept_map_ptp(p2m, &e);
     i = 0;
   out:
     if (page_order)
         *page_order = i * EPT_TABLE_ORDER;
     ept_unmap_ptp(p2m, table);
-    return mfn;
+    return l1t;
+}
+
+static void *
+ept_map_entry_table(struct p2m_domain *p2m, void *_entry)
+{
+    ept_entry_t *entry = (ept_entry_t *)_entry;
+
+    if (entry->epte == 0 || !p2m_is_valid(entry->sa_p2mt))
+        return NULL;
+
+    return ept_map_ptp(p2m, entry);
 }
 
 static mfn_t
@@ -1274,7 +1284,9 @@ void ept_p2m_init(struct p2m_domain *p2m)
 {
     p2m->set_entry = ept_set_entry;
     p2m->get_entry = ept_get_entry;
-    p2m->get_l1_table = ept_get_l1_table;
+    p2m->map_l1_table = ept_map_l1_table;
+    p2m->map_entry_table= ept_map_entry_table;
+    p2m->unmap_table = ept_unmap_ptp;
     p2m->parse_entry = ept_parse_entry;
     p2m->write_entry = ept_write_entry;
     p2m->split_super_page_one = ept_split_super_page_one;
