@@ -2,7 +2,7 @@
  *  pagemap.c
  *  uxen
  *
- * Copyright 2016-2017, Bromium, Inc.
+ * Copyright 2016-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -297,7 +297,7 @@ pagemap_unmap_page_va(const void *va)
         if (!s) {
             fail_msg("unmap of unknown va %p", va);
             KeReleaseSpinLockFromDpcLevel(&pagemap_lock);
-            return -EINVAL;
+            return -1; /* INVALID_MFN */
         }
     }
 
@@ -306,7 +306,7 @@ pagemap_unmap_page_va(const void *va)
         fail_msg("unmap of unknown va %p, not in %p - %p", va,
                  s->va, s->va + (PAGEMAP_SPACE_SIZE << PAGE_SHIFT));
         KeReleaseSpinLockFromDpcLevel(&pagemap_lock);
-        return -EINVAL;
+        return -1; /* INVALID_MFN */
     }
 
     slot = ((uintptr_t)va - s->va) >> PAGE_SHIFT;
