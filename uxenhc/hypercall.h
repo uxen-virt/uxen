@@ -49,8 +49,11 @@
 #include <asm/pgtable.h>
 
 #include <xen/interface/xen.h>
+
+#if LX_TARGET_AX == 1
 #include <ax_attovm.h>
 #include <ax_attovm_stub.h>
+#endif
 
 /*
  * The hypercall asms have to meet several constraints:
@@ -305,7 +308,11 @@ static inline int
 HYPERVISOR_v4v_op(int op, void *arg1, void *arg2, void *arg3, void *arg4, void *arg5)
 {
     if (axen)
+#if LX_TARGET_AX == 1
         return attovm_call_v4vop((void*)(uintptr_t)op, arg1, arg2, arg3, arg4, arg5, NULL);
+#else
+        return -ENOSYS;
+#endif
     else
         return _hypercall6(__HYPERCALL, int, v4v_op, op, arg1, arg2, arg3, arg4, arg5);
 }
