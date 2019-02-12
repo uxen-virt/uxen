@@ -3,3 +3,5 @@ obj-m += uxenplatform.o
 uxenplatform-y := platform.o
 uxenplatform-$(LX_TARGET_AX) += ax.o
 uxenplatform-$(LX_TARGET_UXEN) += pci.o
+
+CFLAGS_ax.o := -I$(ATTOXEN_API_INC)
