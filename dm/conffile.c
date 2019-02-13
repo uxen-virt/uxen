@@ -813,7 +813,6 @@ struct config_option config_options[] = {
     { "vram-dirty-tracking", co_set_boolean_opt, &vm_vram_dirty_tracking },
     { "vram-refresh-delay", co_set_integer_opt, &vm_vram_refresh_delay },
     { "vram-refresh-period", co_set_integer_opt, &vm_vram_refresh_delay },
-    { "whpx", co_set_boolean_opt, &whpx_enable },
     { "whpx-perf-stats", co_set_boolean_opt, &whpx_perf_stats },
     { "whpx-reftsc", co_set_boolean_opt, &whpx_reftsc },
     { "zero-page", co_set_boolean_opt, &vm_zero_page },

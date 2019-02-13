@@ -2,7 +2,7 @@
  *  uxenctllib.c
  *  uxen
  *
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -28,6 +28,7 @@
 #include <sys/stat.h>
 
 #include "uxenctllib.h"
+#include "uxenctllib-args.h"
 
 int uxen_ioctl(UXEN_HANDLE_T h, uint64_t ctl, ...);
 #if defined(_WIN32)
@@ -43,16 +44,23 @@ int uxen_ioctl(UXEN_HANDLE_T h, uint64_t ctl, ...);
 #include <xen/domctl.h>
 #endif
 #include <xen/sysctl.h>
+#include <attoxen-api/hv_tests.h>
 
 int
 uxen_init(UXEN_HANDLE_T h, const struct uxen_init_desc *uid)
 {
     int ret;
     struct uxen_init_desc _uid = { };
+    struct uxen_param *whp_param;
 
-    if (!uid)
-        uid = &_uid;
-    ret = uxen_ioctl(h, UXENINIT, uid);
+    if (uid)
+        memcpy(&_uid, uid, sizeof(_uid));
+
+    whp_param = lookup_uxen_param(WHP_PARAM_NAME);
+    if (whp_param)
+        assign_integer_param(&_uid, whp_param, hv_tests_use_whp());
+
+    ret = uxen_ioctl(h, UXENINIT, &_uid);
     if (ret)
 	warn("ioctl(UXENINIT)");
 
@@ -161,11 +169,31 @@ uxen_unload(UXEN_HANDLE_T h)
 }
 
 int
+uxen_query_whp_mode(UXEN_HANDLE_T h, uint64_t *mode)
+{
+    int ret;
+    struct uxen_status_desc usd = { };
+
+    *mode = 0;
+
+    ret = uxen_ioctl(h, UXENSTATUS, &usd);
+    if (ret) {
+        warn("ioctl(UXENSTATUS)");
+        return -1;
+    }
+
+    *mode = usd.usd_whp_mode;
+
+    return 0;
+}
+
+int
 uxen_output_version_info(UXEN_HANDLE_T h, FILE *f)
 {
     int ret;
     struct uxen_version_desc uvd = { };
     struct uxen_hypercall_desc uhd = { };
+    struct uxen_status_desc usd = { };
     xen_extraversion_t xen_extraversion;
     xen_changeset_info_t xen_chgset;
     void *buf = NULL;
@@ -181,6 +209,17 @@ uxen_output_version_info(UXEN_HANDLE_T h, FILE *f)
 		uvd.uvd_driver_version_major, uvd.uvd_driver_version_minor,
 		uvd.uvd_driver_version_tag[0] ? '-' : '\n',
 		uvd.uvd_driver_version_tag);
+
+    ret = uxen_ioctl(h, UXENSTATUS, &usd);
+    if (ret) {
+        warn("ioctl(UXENSTATUS)");
+        goto out;
+    }
+
+    if (f)
+        fprintf(f, "uxen driver whp mode: %d\n", (int)usd.usd_whp_mode);
+    if (usd.usd_whp_mode)
+        goto out; /* skip uxen core queries */
 
     buf = uxen_malloc(h, 1);
     if (!buf) {
@@ -627,6 +666,13 @@ uxen_physinfo(UXEN_HANDLE_T h, uxen_physinfo_t *up)
     struct uxen_hypercall_desc uhd = { };
     struct xen_sysctl *xs;
     void *buf = NULL;
+    uint64_t whp_mode = 0;
+
+    uxen_query_whp_mode(h, &whp_mode);
+    if (whp_mode) {
+        memset(up, 0, sizeof(*up));
+        return 0;
+    }
 
     buf = uxen_malloc(h, 1);
     if (!buf) {

@@ -2,7 +2,7 @@
  *  uxen.c
  *  uxen
  *
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -47,10 +47,10 @@ int
 uxen_setup(UXEN_HANDLE_T h)
 {
     int ret;
+    uint64_t whp_mode = 0;
 #ifdef __APPLE__
     char *path;
 #endif
-    struct uxen_init_desc _uid = { };
 
     atexit(close_and_unload);
 
@@ -80,10 +80,17 @@ uxen_setup(UXEN_HANDLE_T h)
 	err(1, "uxen_load");
 #endif /* __APPLE */
 
+    ret = uxen_init(uxen_handle, NULL);
+    if (ret)
+        err(1, "uxen_init");
+
+    ret = uxen_query_whp_mode(uxen_handle, &whp_mode);
+    if (ret)
+        err(1, "uxen_query_whp_mode");
+    debug_printf("driver whp mode: %"PRId64"\n", whp_mode);
+    whpx_enable = !!whp_mode;
+
     if (!whpx_enable) {
-        ret = uxen_init(uxen_handle, NULL);
-        if (ret)
-            err(1, "uxen_init");
         uxen_opt_debug = calloc(1, sizeof(xen_opt_debug_t) + 1);
         if (!uxen_opt_debug)
             err(1, "calloc(uxen_opt_debug)");
@@ -92,12 +99,6 @@ uxen_setup(UXEN_HANDLE_T h)
         if (ret)
             err(1, "xc_version(XENVER_opt_debug)");
         debug_printf("%s: opt debug %s\n", __FUNCTION__, uxen_opt_debug);
-    } else {
-        _uid.mask0 |= UXEN_INIT_opt_whp;
-        _uid.opt_whp = 1;
-        ret = uxen_init(uxen_handle, &_uid);
-        if (ret)
-            err(1, "uxen_init");
     }
 
     return 0;

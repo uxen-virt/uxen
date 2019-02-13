@@ -429,6 +429,7 @@ int uxen_op_shutdown(void);
 void uxen_complete_shutdown(void);
 int uxen_op_wait_vm_exit(void);
 int uxen_op_version(struct uxen_version_desc *);
+int uxen_op_status(struct uxen_status_desc *);
 int uxen_op_keyhandler(char *, unsigned int);
 int uxen_op_create_vm(struct uxen_createvm_desc *, struct fd_assoc *);
 int uxen_op_target_vm(struct uxen_targetvm_desc *, struct fd_assoc *);

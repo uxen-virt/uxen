@@ -2,7 +2,7 @@
  *  uxen_ioctl.c
  *  uxen
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -347,6 +347,7 @@ uxen_ioctl(__inout DEVICE_OBJECT *DeviceObject, __inout IRP *pIRP)
         case ICC(UXENINIT):
         case ICC(UXENSHUTDOWN):
         case ICC(UXENLOGGING):
+        case ICC(UXENSTATUS):
             break; /* allow */
         default:
             IOCTL_TRACE("uxen_ioctl(%lx)\n", IoControlCode);
@@ -367,6 +368,16 @@ uxen_ioctl(__inout DEVICE_OBJECT *DeviceObject, __inout IRP *pIRP)
             IOCTL_FAILURE(UXEN_NTSTATUS_FROM_ERRNO(-ret),
                           "uxen_ioctl(UXENVERSION) fail: %d", -ret);
 	break;
+    case ICC(UXENSTATUS):
+        IOCTL_TRACE("uxen_ioctl(UXENSTATUS, %p, %x)\n", OutputBuffer,
+                    OutputBufferLength);
+        UXEN_CHECK_MODE(UXEN_MODE_INITIALIZED, "UXENSTATUS");
+        UXEN_CHECK_OUTPUT_BUFFER("UXENSTATUS", struct uxen_status_desc);
+        ret = uxen_op_status((struct uxen_status_desc *)OutputBuffer);
+        if (ret < 0)
+            IOCTL_FAILURE(UXEN_NTSTATUS_FROM_ERRNO(-ret),
+                          "uxen_ioctl(UXENSTATUS) fail: %d", -ret);
+        break;
     case ICC(UXENLOAD):
 	IOCTL_TRACE("uxen_ioctl(UXENLOAD, %p, %x)\n", InputBuffer,
 		    InputBufferLength);

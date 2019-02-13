@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -16,6 +16,10 @@ struct uxen_version_desc {
 struct uxen_load_desc {
     XEN_GUEST_HANDLE_64(uint8) uld_uvaddr;
     uint32_t uld_size;
+};
+
+struct uxen_status_desc {
+    uint64_t usd_whp_mode;
 };
 
 #define	UXENVERSION		UXEN_IOR(1, struct uxen_version_desc)
@@ -58,5 +62,6 @@ struct uxen_load_desc {
 #ifdef __APPLE__
 #define UXENPOLLEVENT           UXEN_IOR(34, struct uxen_event_poll_desc)
 #endif
+#define UXENSTATUS              UXEN_IOR(35, struct uxen_status_desc)
 
 #endif  /* _UXEN_IOCTL_DEF_H_ */

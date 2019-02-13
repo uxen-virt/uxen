@@ -2,7 +2,7 @@
  *  uxenctllib.h
  *  uxen
  *
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -59,6 +59,7 @@ int uxen_shutdown(UXEN_HANDLE_T);
 int uxen_wait_vm_exit(UXEN_HANDLE_T);
 int uxen_load(UXEN_HANDLE_T, const char *);
 int uxen_unload(UXEN_HANDLE_T);
+int uxen_query_whp_mode(UXEN_HANDLE_T, uint64_t *);
 int uxen_output_version_info(UXEN_HANDLE_T, FILE *);
 int uxen_trigger_keyhandler(UXEN_HANDLE_T, const char *);
 int uxen_power(UXEN_HANDLE_T, uint32_t);
@@ -80,7 +81,6 @@ int uxen_setup_host_event_channel(UXEN_HANDLE_T,
                                   struct uxen_event_channel_desc *);
 int uxen_enum_vms(UXEN_HANDLE_T, int (*)(struct uxen_queryvm_desc *, void *),
                   void *);
-
 #ifdef __APPLE__
 int uxen_load_xnu_symbols(UXEN_HANDLE_T, const char *);
 int uxen_signal_event(UXEN_HANDLE_T, void *);

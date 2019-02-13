@@ -17,6 +17,7 @@
 #include <unistd.h>
 
 #include "uxenctllib.h"
+#include "uxenctllib-args.h"
 
 #include <uxen_ioctl.h>
 
@@ -34,7 +35,7 @@ enum uxen_param_type {
     OPT_LAST
 };
 
-static struct uxen_param {
+struct uxen_param {
     enum uxen_param_type type;
     char name[32];
     uint64_t mask;
@@ -42,7 +43,7 @@ static struct uxen_param {
     size_t mask_offset;
     size_t size;
     int (*parse)(struct uxen_init_desc *, struct uxen_param *, const char *);
-} params[];
+};
 
 #define SIMPLE_OPTION(t, n, f, m, mb) {                          \
         .type = t,                                               \
@@ -97,7 +98,7 @@ static struct uxen_param params[] = {
     UINT_OPTION("crash_on", opt_crash_on),
     UINT_OPTION("v4v_thread_priority", opt_v4v_thread_priority),
     UINT_OPTION("spec_ctrl", opt_spec_ctrl),
-    BOOLEAN_OPTION("whp", opt_whp),
+    BOOLEAN_OPTION(WHP_PARAM_NAME, opt_whp),
     LAST_OPTION
 };
 
@@ -111,7 +112,7 @@ set_mask_bit(struct uxen_init_desc *uid, struct uxen_param *param)
     *(uint64_t *)ptr |= param->mask;
 }
 
-static int
+int
 assign_integer_param(struct uxen_init_desc *uid, struct uxen_param *param,
                      uint64_t val)
 {
@@ -146,7 +147,7 @@ assign_integer_param(struct uxen_init_desc *uid, struct uxen_param *param,
 }
 
 
-static int
+int
 assign_string_param(struct uxen_init_desc *uid, struct uxen_param *param,
                     const char *val)
 {
@@ -221,6 +222,21 @@ parse_bool(const char *s)
     return -1;
 }
 
+struct uxen_param *
+lookup_uxen_param(const char *name)
+{
+    struct uxen_param *param;
+
+    for (param = params; param->type != OPT_LAST; param++) {
+        if (strncmp(param->name, name, sizeof(param->name)))
+            continue;
+
+        return param;
+    }
+
+    return NULL;
+}
+
 int
 uxen_parse_init_arg(struct uxen_init_desc *uid, const char *arg)
 {
@@ -264,10 +280,8 @@ uxen_parse_init_arg(struct uxen_init_desc *uid, const char *arg)
     if (!bool_assert)
         optkey += 3;
 
-    for (param = params; param->type != OPT_LAST; param++) {
-        if (strncmp(param->name, optkey, sizeof(param->name)))
-            continue;
-
+    param = lookup_uxen_param(optkey);
+    if (param) {
         switch (param->type) {
         case OPT_STR:
             return assign_string_param(uid, param, optval);

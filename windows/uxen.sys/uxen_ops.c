@@ -1537,6 +1537,14 @@ uxen_op_version(struct uxen_version_desc *uvd)
 }
 
 int
+uxen_op_status(struct uxen_status_desc *usd)
+{
+    usd->usd_whp_mode = uxen_whp;
+
+    return 0;
+}
+
+int
 uxen_op_keyhandler(char *keys, unsigned int num)
 {
     affinity_t aff;
