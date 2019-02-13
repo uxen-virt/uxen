@@ -7,6 +7,12 @@
 
 #define HV_TESTS_FCC(d,c,b,a) ((((uint32_t) (a)) << 24) | (((uint32_t) (b)) << 16) | (((uint32_t) (c)) << 8) | (((uint32_t) (d)) << 0))
 
+#ifdef __GNUC__
+#define HV_TESTS_POSSIBLY_UNUSED __attribute__ ((unused))
+#else
+#define HV_TESTS_POSSIBLY_UNUSED
+#endif
+
 static void
 hv_tests_cpuid (uint64_t *rax, uint64_t *rbx, uint64_t *rcx, uint64_t *rdx)
 {
@@ -31,7 +37,7 @@ hv_tests_cpuid (uint64_t *rax, uint64_t *rbx, uint64_t *rcx, uint64_t *rdx)
   /* No inline assembly in MSVC*/
   int regs[4]; /*MSDN assures me this is int?! */
 
-  __cpuidex (regs, *rax, *rcx);
+  __cpuidex (regs, (int) *rax, (int) *rcx);
 
   *rax = (unsigned) regs[0];
   *rbx = (unsigned) regs[1];
@@ -65,7 +71,7 @@ static void hv_tests_cpu_vendor (char *vendor)
 
 }
 
-static int hv_tests_cpu_vendor_is (char *want)
+static int hv_tests_cpu_vendor_is (const char *want)
 {
   char is[13], *isptr;
   hv_tests_cpu_vendor (is);
@@ -91,7 +97,7 @@ static int hv_tests_cpu_is_amd (void)
 
 
 
-static int hv_tests_hyperv_running (void)
+HV_TESTS_POSSIBLY_UNUSED static int hv_tests_hyperv_running (void)
 {
   uint64_t rcx = 0, rbx = 0, rax = 0x40000000, rdx = 0;
 
@@ -104,7 +110,7 @@ static int hv_tests_hyperv_running (void)
   return ((rbx == HV_TESTS_FCC ('M', 'i', 'c', 'r')) && (rcx == HV_TESTS_FCC ('o', 's', 'o', 'f')) && (rdx == HV_TESTS_FCC ('t', ' ', 'H', 'v')));
 }
 
-static int hv_tests_vmware_running (void)
+HV_TESTS_POSSIBLY_UNUSED static int hv_tests_vmware_running (void)
 {
   uint64_t rcx = 0, rbx = 0, rax = 0x40000000, rdx = 0;
 
@@ -118,7 +124,7 @@ static int hv_tests_vmware_running (void)
 }
 
 
-static int hv_tests_xen_running (void)
+HV_TESTS_POSSIBLY_UNUSED static int hv_tests_xen_running (void)
 {
   uint64_t rcx = 0, rbx = 0, rax = 0, rdx = 0;
   uint64_t base;
@@ -143,7 +149,7 @@ static int hv_tests_xen_running (void)
   return 0;
 }
 
-static int hv_tests_ax_running (void)
+HV_TESTS_POSSIBLY_UNUSED static int hv_tests_ax_running (void)
 {
   uint64_t rax = AX_CPUID_PRESENCE, rbx = 0, rcx = 0, rdx = 0;
 
@@ -153,7 +159,7 @@ static int hv_tests_ax_running (void)
 }
 
 
-static int hv_tests_cpu_has_vmx (void)
+HV_TESTS_POSSIBLY_UNUSED static int hv_tests_cpu_has_vmx (void)
 {
 
   if (hv_tests_cpu_is_intel()) {
@@ -173,7 +179,7 @@ static int hv_tests_cpu_has_vmx (void)
   return 0;
 }
 
-static int hv_tests_cpu_has_nx (void)
+HV_TESTS_POSSIBLY_UNUSED static int hv_tests_cpu_has_nx (void)
 {
   uint64_t rax = 0x80000001, rbx = 0, rcx = 0, rdx = 0;
 
@@ -197,7 +203,7 @@ static int hv_tests_cpu_has_nx (void)
 # undef HV_TESTS_TEST_WHPX
 #endif
 
-static int hv_tests_whpx_operational (void)
+HV_TESTS_POSSIBLY_UNUSED static int hv_tests_whpx_operational (void)
 {
 #ifdef HV_TESTS_TEST_WHPX
   HMODULE whvplatform;
@@ -209,7 +215,7 @@ static int hv_tests_whpx_operational (void)
     UINT32 CapabilityBufferSizeInBytes,
     UINT32 * WrittenSizeInBytes);
 
-  whvplatform = LoadLibrary ("winhvplatform.dll");
+  whvplatform = LoadLibraryW (L"winhvplatform.dll");
 
   if (whvplatform) {
     whvgetcapability_t whvgetcapability = (whvgetcapability_t)
@@ -231,4 +237,13 @@ static int hv_tests_whpx_operational (void)
 #endif
 }
 
+HV_TESTS_POSSIBLY_UNUSED static int hv_tests_use_whp (void)
+{
+  if (!hv_tests_hyperv_running()) return 0;
 
+  if (hv_tests_ax_running()) return 0;
+
+  if (hv_tests_whpx_operational() != 1) return 0;
+
+  return 1;
+}

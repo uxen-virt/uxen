@@ -56,9 +56,6 @@
 #define AX_CPUID_VMINVGPAS    0x35372de9
 // unknown - tomasz?
 
-#define AX_CPUID_V4V          0x35dcd68c
-// RESERVED - for ax V4V implementation
-
 #define AX_CPUID_GA_LOOKUP    0x352a4ca0
 // Lookup guest accessable symbol information
 // on entry RCX contains the symbol number
@@ -154,9 +151,9 @@
 // CRASH_GUEST
 // on the next available L2 entry, inject an NMI into this cpu. Only in non-production builds.
 
-#define AX_CPUID_PV_MEMORY		0x354ec2f6
+#define AX_CPUID_PV_MEMORY    0x354ec2f6
 // Hand memory to AX for use at this level
-// RBX contains the VA of the base of 
+// RBX contains the VA of the base of
 // RCX bytes of ram that AX may use as it sees fit
 // NB: memory need not be PA contigugous
 // memory must be filled completely with the string yam\0 repeated
@@ -164,14 +161,14 @@
 #define AX_PV_MEMORY_TAG 0x79616d00
 // The above is FOURCC 'yam\0'
 
-#define AX_CPUID_PV_VMACCESS		0x35327f4e
+#define AX_CPUID_PV_VMACCESS    0x35327f4e
 // PV_VMACCESS
 // Currently only supported for L2
 // CPL 0 is required
-// on entry RBX is zero to disable PV_VMACCESS, or one to enable. 
-// The effect is immediate and applies to all CPUs.  
-// RCX contains NULL or a pointer to PAGE of memory that starts and ends 
-// wih AX_PV_VMACCESS_SIG1, AX_PV_VMACCESS_SIG2 and will be replaced with 
+// on entry RBX is zero to disable PV_VMACCESS, or one to enable.
+// The effect is immediate and applies to all CPUs.
+// RCX contains NULL or a pointer to PAGE of memory that starts and ends
+// wih AX_PV_VMACCESS_SIG1, AX_PV_VMACCESS_SIG2 and will be replaced with
 // the pv_vmread code.
 // RDX contains NULL or a pointer to a similar PAGE of memory, and will
 // be replaced with the pv_vmwrite code
@@ -190,12 +187,12 @@
 
 
 // FIXME: document these
-#define AX_CPUID_INVEPT_BASE			0x359ff327
-#define AX_CPUID_SVM_VMRUN			0x35404052
-#define AX_CPUID_VMCB_CHECK_MY			0x355ea363
-#define AX_CPUID_VMCB_CHECK_INTERCEPT_INVLPG	(1UL << 0)
-#define AX_VMCB_OFFSET_V1			0x800
-#define AX_SVM_FLAGS_VMSAVE_ROOT		0x1
+#define AX_CPUID_INVEPT_BASE      0x359ff327
+#define AX_CPUID_SVM_VMRUN      0x35404052
+#define AX_CPUID_VMCB_CHECK_MY      0x355ea363
+#define AX_CPUID_VMCB_CHECK_INTERCEPT_INVLPG  (1UL << 0)
+#define AX_VMCB_OFFSET_V1     0x800
+#define AX_SVM_FLAGS_VMSAVE_ROOT    0x1
 
 
 #define AX_FEATURES_AX_L1_VMX      (1ULL << 0)
@@ -239,6 +236,8 @@
 #define AX_INSTBITS_RAN_BCDBOOT          (1UL <<19) /* The machine was booting by luck and we asked windows to fix that, potentially portending doom. */
 #define AX_INSTBITS_BCDBOOT_FAILED       (1UL <<20) /* The machine was booting by luck and we asked windows to fix that, potentially portending doom. */
 #define AX_INSTBITS_NX_MISSING           (1UL <<21) /* NX is disabled */
+#define AX_INSTBITS_VT_NEEDED            (1UL <<22) /* VT is needed */
+#define AX_INSTBITS_HV_UNHELPFUL         (1UL <<24) /* Hyper-V is unhelpful */
 
 
 #define AX_INTEGRITY_PCR    9
@@ -246,9 +245,12 @@
 
 #define AX_PV_I_GA_VAR_NAME        "ax_pvi_sys"
 #define AX_PV_I_IFACE_NAME         L"\\Callback\\AXPVI"
-#define AX_PV_I_HASH_IDX	   0
-#define AX_PV_I_VMREAD_IDX	   1
-#define AX_PV_I_VMWRITE_IDX	   2
-#define AX_PV_I_MAX_IDX		   3
+#define AX_PV_I_HASH_IDX     0
+#define AX_PV_I_VMREAD_IDX     1
+#define AX_PV_I_VMWRITE_IDX    2
+#define AX_PV_I_MAX_IDX      3
+
+// ATTOVM PV VMCS revisions:
+#define PV_VMCS_ATTOVM_REV 0x4d565841
 
 #endif /* __AX_CONSTANTS_H__ */
