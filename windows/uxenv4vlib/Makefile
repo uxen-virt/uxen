@@ -1,5 +1,5 @@
 #
-# Copyright 2016-2017, Bromium, Inc.
+# Copyright 2016-2019, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -41,6 +41,14 @@ uxenv4vlib_SRCS = \
 	gh_xenv4v.c \
 	uxenv4vlib.rc
 
+ifeq ($(TARGET_HOST_BITS),32)
+uxenv4vlib_SRCS += \
+	i386/ax_hypercall_sup.asm
+else
+uxenv4vlib_SRCS += \
+	amd64/ax_hypercall_sup.asm
+endif
+
 EWDK_INCLUDES = \
 	//I$(call dosdir,$(EWDK_KIT_DIR_include)/um) \
 	//I$(call dosdir,$(EWDK_KIT_DIR_include)/shared) \
@@ -56,7 +64,8 @@ EWDK_LIBS = \
 
 uxenv4vlib_INCLUDE = \
 	$(BUILDDIR_xen)/include \
-	$(TOPDIR)/xen/include
+	$(TOPDIR)/xen/include \
+	$(TOPDIR)/common
 uxenv4vlib_INCLUDE_dos := $(foreach include,$(uxenv4vlib_INCLUDE),//I$(call dospath,$(include)))
 
 ifeq ($(TARGET_HOST_BITS),32)
@@ -71,6 +80,8 @@ uxenv4vlib_LDFLAGS = \
 	//safeseh \
 	//functionpadmin:5 \
 	//entry:GsDriverEntry@8
+uxenv4vlib_ASFLAGS = \
+	//safeseh //coff //Zm
 else
 uxenv4vlib_CPPFLAGS = \
 	//D_WIN64 //D_AMD64_ //DAMD64 //D__x86_64__
@@ -83,6 +94,7 @@ uxenv4vlib_LDFLAGS = \
 	//LTCG:NOSTATUS \
 	//functionpadmin:6 \
 	//entry:GsDriverEntry
+uxenv4vlib_ASFLAGS =
 endif
 
 $(DEBUG_ONLY)uxenv4vlib_CPPFLAGS += \
@@ -141,6 +153,20 @@ $(uxenv4vlib_OBJ_c): %.obj: %.c
 	  //DKMDF_MAJOR_VERSION_STRING=01 //DKMDF_MINOR_VERSION_STRING=009 \
 	  //typedil- //wd4603 //wd4627 \
 	  $(EWDK_INCLUDE_warning) \
+	  $(call dospath,$<)
+
+uxenv4vlib_OBJ_asm = $(patsubst %.asm,%.obj,$(filter %.asm,$(uxenv4vlib_SRCS)))
+
+$(uxenv4vlib_OBJ_asm): %.obj: %.asm
+	$(_W)echo Assembling - $@
+	$(_V)$(EWDK_VC_asm) //nologo \
+	  //c //Cx \
+	  $(uxenv4vlib_INCLUDE_dos) \
+	  $(EWDK_INCLUDES) \
+	  //Zi //Zi \
+	  $(uxenv4vlib_CPPFLAGS) \
+	  $(uxenv4vlib_ASFLAGS) \
+	  //Fo$(call dospath,$@) \
 	  $(call dospath,$<)
 
 uxenv4vlib.sys: override PATH := $(PATH):$(subst $(EWDK_DIR),$(EWDK_DIR_path),$(EWDK_PATH_CRT)):$(subst $(EWDK_DIR),$(EWDK_DIR_path),$(EWDK_PATH_BIN))

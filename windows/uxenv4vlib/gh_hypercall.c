@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -53,23 +53,48 @@
 #define __XEN__
 #include <uxen/uxen_desc.h>
 
-static __declspec(inline) int
-gh_v4v_hypercall_with_priv(
-    unsigned int privileged, unsigned int cmd,
-    void *arg2, void *arg3, void *arg4, ULONG32 arg5, ULONG32 arg6)
+static void
+gh_v4v_signal(uint64_t domid)
 {
-
-    return (int)(uintptr_t)uxen_v4v_hypercall_with_priv(
-        privileged, (void *)(uintptr_t)cmd, arg2, arg3, arg4,
-        (void *)(uintptr_t)arg5, (void *)(uintptr_t)arg6);
+    uxen_v4v_hypercall_with_priv(UXEN_ADMIN_HYPERCALL,
+        (void *)(uintptr_t)V4VOP_signal,
+        NULL, NULL, NULL, (void *)(uintptr_t)domid, NULL);
 }
 
 static __declspec(inline) int
-gh_v4v_hypercall(unsigned int cmd,
-                 void *arg2, void *arg3, void *arg4, ULONG32 arg5, ULONG32 arg6)
+gh_v4v_hypercall_with_priv(
+    unsigned int ax,
+    unsigned int privileged,
+    unsigned int cmd,
+    void *arg2, void *arg3, void *arg4, ULONG32 arg5, ULONG32 arg6)
+{
+    if (!ax)
+        return (int)(uintptr_t)uxen_v4v_hypercall_with_priv(
+            privileged, (void *)(uintptr_t)cmd, arg2, arg3, arg4,
+            (void *)(uintptr_t)arg5, (void *)(uintptr_t)arg6);
+    else if (ax_present) {
+        uint64_t signal_domid = V4V_DOMID_INVALID;
+        int ret = (int)(uintptr_t)ax_v4v_hypercall(
+            (void *)(uintptr_t)cmd, arg2, arg3, arg4,
+            (void *)(uintptr_t)arg5, (void *)(uintptr_t)arg6,
+            (void *)(uintptr_t)&signal_domid);
+        if (signal_domid != V4V_DOMID_INVALID)
+            /* ax returned domain ID to wake, notify uxen to wake up & signal
+               the domain */
+            gh_v4v_signal(signal_domid);
+        return ret;
+    } else
+        return -ENOSYS;
+}
+
+static __declspec(inline) int
+gh_v4v_hypercall(
+    unsigned int ax,
+    unsigned int cmd,
+    void *arg2, void *arg3, void *arg4, ULONG32 arg5, ULONG32 arg6)
 {
 
-    return gh_v4v_hypercall_with_priv(0, cmd, arg2, arg3, arg4, arg5, arg6);
+    return gh_v4v_hypercall_with_priv(ax, 0, cmd, arg2, arg3, arg4, arg5, arg6);
 }
 
 static NTSTATUS
@@ -127,7 +152,7 @@ gh_v4v_register_ring(xenv4v_extension_t *pde, xenv4v_ring_t *robj)
     }
 
   retry:
-    err = gh_v4v_hypercall_with_priv(
+    err = gh_v4v_hypercall_with_priv(robj->ax,
         robj->admin_access ? UXEN_ADMIN_HYPERCALL : 0,
         V4VOP_register_ring, robj->ring, robj->pfn_list,
         &robj->partner, fail_exist, 0);
@@ -178,7 +203,8 @@ gh_v4v_unregister_ring(xenv4v_ring_t *robj)
     int err;
 
 
-    err = gh_v4v_hypercall(V4VOP_unregister_ring, robj->ring, 0, 0, 0, 0);
+    err = gh_v4v_hypercall(robj->ax, V4VOP_unregister_ring,
+      robj->ring, 0, 0, 0, 0);
     if (err != 0) {
         uxen_v4v_err("V4VOP_unregister_ring (vm%u:%x vm%u) failed err %d",
                      robj->ring->id.addr.domain, robj->ring->id.addr.port,
@@ -192,7 +218,7 @@ gh_v4v_unregister_ring(xenv4v_ring_t *robj)
 }
 
 NTSTATUS
-gh_v4v_create_ring(v4v_addr_t *dst, domid_t partner)
+gh_v4v_create_ring(v4v_addr_t *dst, domid_t partner, int ax)
 {
     int err;
 
@@ -202,7 +228,7 @@ gh_v4v_create_ring(v4v_addr_t *dst, domid_t partner)
     id.addr.domain = dst->domain;
     id.partner = partner;
 
-    err = gh_v4v_hypercall(V4VOP_create_ring, &id, 0, 0, 0, 0);
+    err = gh_v4v_hypercall(ax, V4VOP_create_ring, &id, 0, 0, 0, 0);
     if (err != 0) {
         uxen_v4v_err("V4VOP_create_ring (vm%u:%x vm%u) failed err %d",
                      id.addr.domain, id.addr.port, id.partner, err);
@@ -220,11 +246,11 @@ gh_v4v_create_ring(v4v_addr_t *dst, domid_t partner)
 
 
 NTSTATUS
-gh_v4v_notify(v4v_ring_data_t *ringData)
+gh_v4v_notify(v4v_ring_data_t *ringData, int ax)
 {
     int err;
 
-    err = gh_v4v_hypercall(V4VOP_notify, ringData, 0, 0, 0, 0);
+    err = gh_v4v_hypercall(ax, V4VOP_notify, ringData, 0, 0, 0, 0);
     if (err != 0) {
         uxen_v4v_err("V4VOP_notify (nent %d) failed err %d",
                      ringData->nent, err);
@@ -242,7 +268,7 @@ gh_v4v_debug(void)
 {
     int err;
 
-    err = gh_v4v_hypercall(V4VOP_debug, 0, 0, 0, 0, 0);
+    err = gh_v4v_hypercall(0, V4VOP_debug, 0, 0, 0, 0, 0);
     if (err != 0) {
         uxen_v4v_err("V4VOP_debug failed err %d", err);
         return STATUS_UNSUCCESSFUL;
@@ -252,7 +278,7 @@ gh_v4v_debug(void)
 }
 
 NTSTATUS
-gh_v4v_send(v4v_addr_t *src, v4v_addr_t *dest, ULONG32 protocol, VOID *buf, ULONG32 length, ULONG32 *writtenOut)
+gh_v4v_send(v4v_addr_t *src, v4v_addr_t *dest, int ax, ULONG32 protocol, VOID *buf, ULONG32 length, ULONG32 *writtenOut)
 {
     int err;
 
@@ -260,7 +286,7 @@ gh_v4v_send(v4v_addr_t *src, v4v_addr_t *dest, ULONG32 protocol, VOID *buf, ULON
 
     *writtenOut = 0;
 
-    err = gh_v4v_hypercall(V4VOP_send, src, dest, buf, length, protocol);
+    err = gh_v4v_hypercall(ax, V4VOP_send, src, dest, buf, length, protocol);
     if (err >= 0) {
         *writtenOut = (ULONG32)err;
     }
@@ -269,7 +295,7 @@ gh_v4v_send(v4v_addr_t *src, v4v_addr_t *dest, ULONG32 protocol, VOID *buf, ULON
 }
 
 NTSTATUS
-gh_v4v_send_vec(v4v_addr_t *src, v4v_addr_t *dest, v4v_iov_t *iovec, ULONG32 nent, ULONG32 protocol, ULONG32 *writtenOut)
+gh_v4v_send_vec(v4v_addr_t *src, v4v_addr_t *dest, int ax, v4v_iov_t *iovec, ULONG32 nent, ULONG32 protocol, ULONG32 *writtenOut)
 {
     int err;
 
@@ -277,7 +303,7 @@ gh_v4v_send_vec(v4v_addr_t *src, v4v_addr_t *dest, v4v_iov_t *iovec, ULONG32 nen
 
     *writtenOut = 0;
 
-    err = gh_v4v_hypercall(V4VOP_sendv, src, dest, iovec, nent, protocol);
+    err = gh_v4v_hypercall(ax, V4VOP_sendv, src, dest, iovec, nent, protocol);
     if (err >= 0) {
         *writtenOut = (ULONG32)err;
     }

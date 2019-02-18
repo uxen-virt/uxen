@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015-2018, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -93,6 +93,7 @@ typedef struct xenv4v_destination_struct {
     ULONG32    refc;
     ULONG      nextLength;
     PIRP       nextIrp;
+    BOOLEAN    dst_ax;
     v4v_addr_t dst;
 } xenv4v_destination_t;
 
@@ -180,6 +181,9 @@ typedef struct xenv4v_ring_struct {
     // Access control
     BOOLEAN admin_access;
 
+    // ax-based ring
+    BOOLEAN ax;
+
     // Ring bits
     v4v_ring_t     *ring;
     v4v_pfn_list_t *pfn_list;
@@ -237,6 +241,9 @@ typedef struct xenv4v_context_struct {
 
     // A backpointer to the owning file object
     FILE_OBJECT *pfo_parent;
+
+    // file flags
+    ULONG32 flags;
 
     // Safe place to point 0 length write buffer pointers w/ NULL MDLs
     UCHAR safe[4];
@@ -310,7 +317,7 @@ VOID NTAPI
 gh_v4v_csq_complete_canceled_irp(PIO_CSQ csq, PIRP irp);
 
 v4v_ring_data_t *
-gh_v4v_copy_destination_ring_data(xenv4v_extension_t *pde, ULONG *gh_count);
+gh_v4v_copy_destination_ring_data(xenv4v_extension_t *pde, BOOLEAN ax, ULONG *gh_count);
 
 VOID
 gh_v4v_cancel_all_file_irps(xenv4v_extension_t *pde, FILE_OBJECT *pfo);
@@ -338,13 +345,13 @@ NTSTATUS
 gh_v4v_unregister_ring(xenv4v_ring_t *robj);
 
 NTSTATUS
-gh_v4v_notify(v4v_ring_data_t *ringData);
+gh_v4v_notify(v4v_ring_data_t *ringData, int ax);
 
 NTSTATUS
-gh_v4v_send(v4v_addr_t *src, v4v_addr_t *dest, ULONG32 protocol, VOID *buf, ULONG32 length, ULONG32 *writtenOut);
+gh_v4v_send(v4v_addr_t *src, v4v_addr_t *dest, int ax, ULONG32 protocol, VOID *buf, ULONG32 length, ULONG32 *writtenOut);
 
 NTSTATUS
-gh_v4v_send_vec(v4v_addr_t *src, v4v_addr_t *dest, v4v_iov_t *iovec, ULONG32 nent, ULONG32 protocol, ULONG32 *writtenOut);
+gh_v4v_send_vec(v4v_addr_t *src, v4v_addr_t *dest, int ax, v4v_iov_t *iovec, ULONG32 nent, ULONG32 protocol, ULONG32 *writtenOut);
 
 // Ring Routines
 xenv4v_ring_t *

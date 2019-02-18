@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015-2018, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -105,6 +105,7 @@ gh_v4v_do_write(xenv4v_extension_t *pde, xenv4v_context_t *ctx, PIRP irp)
     ULONG_PTR   flags;
     v4v_stream_t  sh;
     v4v_iov_t   iovs[2];
+    int ax = !!(ctx->flags & V4V_FLAG_AX);
 
     // Already checked that the buffer is big enough for a v4v dgram header and not
     // an issue for streams. Also took care of 0 length drgam writes. Call helper to
@@ -116,7 +117,8 @@ gh_v4v_do_write(xenv4v_extension_t *pde, xenv4v_context_t *ctx, PIRP irp)
     if (ctx->ring_object->ring->id.partner != V4V_DOMID_ANY)
         dst.domain = ctx->ring_object->ring->id.partner;
 
-    status = gh_v4v_send(&ctx->ring_object->ring->id.addr, &dst, protocol, msg, len, &written);
+    status = gh_v4v_send(&ctx->ring_object->ring->id.addr, &dst, ax, protocol,
+      msg, len, &written);
 
     if ((status == STATUS_VIRTUAL_CIRCUIT_CLOSED) && (!(dg_flags & V4V_DATAGRAM_FLAG_IGNORE_DLO))) {
         uxen_v4v_warn("ring src (vm%u:%x vm%u) dst (vm%u:%x) - creating placeholder ring",
@@ -126,7 +128,7 @@ gh_v4v_do_write(xenv4v_extension_t *pde, xenv4v_context_t *ctx, PIRP irp)
                       dst.domain,
                       dst.port);
         // Datagram write to a ring which doesn't exist - use the dead letter office to handle it
-        status = gh_v4v_create_ring(&dst, ctx->ring_object->ring->id.addr.domain);
+        status = gh_v4v_create_ring(&dst, ctx->ring_object->ring->id.addr.domain, ax);
         if (!NT_SUCCESS(status)) {
             uxen_v4v_err("ring src (vm%u:%x vm%u) dst (vm%u:%x) - failed to create placeholder ring, status %x",
                          ctx->ring_object->ring->id.addr.domain,
@@ -137,7 +139,7 @@ gh_v4v_do_write(xenv4v_extension_t *pde, xenv4v_context_t *ctx, PIRP irp)
                          status);
             return v4v_simple_complete_irp(irp, status);
         }
-        status = gh_v4v_send(&ctx->ring_object->ring->id.addr, &dst, protocol, msg, len, &written);
+        status = gh_v4v_send(&ctx->ring_object->ring->id.addr, &dst, ax, protocol, msg, len, &written);
     }
 
     // Datagram write, add on the ammount send by caller
@@ -269,30 +271,36 @@ gh_v4v_process_notify(xenv4v_extension_t *pde)
     ULONG            i;
     ULONG        gh_count;
     v4v_ring_data_t *ringData;
+    int ax;
 
-    ringData = gh_v4v_copy_destination_ring_data(pde, &gh_count);
-    if (ringData == NULL) {
+    for (ax = 0; ax <= 1; ax++) {
+      ringData = gh_v4v_copy_destination_ring_data(pde, !!ax, &gh_count);
+      if (ringData == NULL) {
         uxen_v4v_err("gh_v4v_copy_destination_ring_data failed");
         return STATUS_UNSUCCESSFUL;
-    }
+      }
 
-    // Now do the actual notify
-    status = gh_v4v_notify(ringData);
-    if (!NT_SUCCESS(status)) {
+      if (ax && (gh_count == 0))
+        continue;
+
+      // Now do the actual notify
+      status = gh_v4v_notify(ringData, ax);
+      if (!NT_SUCCESS(status)) {
         // That ain't good
         uxen_v4v_fast_free(ringData);
         return status;
-    }
+      }
 
-    // Process each of the destinations
-    for (i = 0; i < gh_count; i++) {
+      // Process each of the destinations
+      for (i = 0; i < gh_count; i++) {
         gh_v4v_process_destination_writes(pde, &ringData->data[i]);
-    }
+      }
 
-    if (ringData->nent > gh_count)
+      if (ringData->nent > gh_count)
         uxen_v4v_notify_process_ring_data(pde,  &ringData->data[gh_count], ringData->nent - gh_count);
 
-    uxen_v4v_fast_free(ringData);
+      uxen_v4v_fast_free(ringData);
+    }
 
     return STATUS_SUCCESS;
 }

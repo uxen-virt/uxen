@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -162,7 +162,12 @@ gh_v4v_csq_link_destination(xenv4v_extension_t *pde, PIRP irp, BOOLEAN front)
     xenv4v_destination_t *idst;
     v4v_addr_t         *dst = NULL;
     PLIST_ENTRY         head, next;
+    PIO_STACK_LOCATION  isl = IoGetCurrentIrpStackLocation(irp);
+    FILE_OBJECT        *pfo;
+    xenv4v_context_t   *ctx;
 
+    pfo = isl->FileObject;
+    ctx = (xenv4v_context_t *)pfo->FsContext;
     // Get the destination and init things we need
     gh_v4v_csq_get_destination(irp, &dst);
     head = &pde->dest_list;
@@ -210,6 +215,7 @@ gh_v4v_csq_link_destination(xenv4v_extension_t *pde, PIRP irp, BOOLEAN front)
     InitializeListHead(&xdst->le);
     xdst->refc = 1;
     xdst->dst = *dst;
+    xdst->dst_ax = !!(ctx->flags & V4V_FLAG_AX);
     xdst->nextIrp = irp;
     xdst->nextLength = xenv4v_payload_data_len(irp);
     InsertTailList(&pde->dest_list, &xdst->le);
@@ -385,25 +391,48 @@ gh_v4v_csq_complete_canceled_irp(PIO_CSQ csq, PIRP irp)
     uxen_v4v_verbose("<====");
 }
 
+static ULONG
+get_matching_dest_count(xenv4v_extension_t *pde, BOOLEAN ax)
+{
+    PLIST_ENTRY head, next;
+    xenv4v_destination_t *xdst;
+    ULONG i;
+    ULONG count = 0;
+
+    head = &pde->dest_list;
+    next = head->Flink;
+
+    for (i = 0; i < (ULONG)pde->dest_count; i++) {
+        ASSERT(next != head);
+        xdst = CONTAINING_RECORD(next, xenv4v_destination_t, le);
+        if (xdst->dst_ax == ax)
+            count++;
+        next = next->Flink;
+    }
+
+    return count;
+}
+
 v4v_ring_data_t *
-gh_v4v_copy_destination_ring_data(xenv4v_extension_t *pde, ULONG *gh_count)
+gh_v4v_copy_destination_ring_data(xenv4v_extension_t *pde, BOOLEAN ax, ULONG *gh_count)
 {
     KIRQL               irql;
     v4v_ring_data_t    *ringData;
     xenv4v_destination_t *xdst;
-    LONG                i;
+    LONG                i, j;
     ULONG               size;
     PLIST_ENTRY         head, next;
-
-    ULONG       extra_count;
+    ULONG               match_gh_count;
+    ULONG               extra_count = 0;
 
     KeAcquireSpinLock(&pde->queue_lock, &irql);
 
-    extra_count = uxen_v4v_notify_count(pde);
+    if (!ax)
+        extra_count = uxen_v4v_notify_count(pde);
+    match_gh_count = get_matching_dest_count(pde, ax);
+    *gh_count = match_gh_count;
 
-    *gh_count = pde->dest_count;
-
-    size = sizeof(v4v_ring_data_t) + (pde->dest_count + extra_count) * sizeof(v4v_ring_data_ent_t);
+    size = sizeof(v4v_ring_data_t) + (match_gh_count + extra_count) * sizeof(v4v_ring_data_ent_t);
     ringData = (v4v_ring_data_t *)uxen_v4v_fast_alloc(size);
     if (ringData == NULL) {
         KeReleaseSpinLock(&pde->queue_lock, irql);
@@ -417,17 +446,22 @@ gh_v4v_copy_destination_ring_data(xenv4v_extension_t *pde, ULONG *gh_count)
     head = &pde->dest_list;
     next = head->Flink;
 
+    j = 0;
     for (i = 0; i < pde->dest_count; i++) {
         ASSERT(next != head);
         xdst = CONTAINING_RECORD(next, xenv4v_destination_t, le);
-        ringData->data[i].ring = xdst->dst;
-        ringData->data[i].space_required = xdst->nextLength;
+        if (xdst->dst_ax == ax) {
+            ringData->data[j].ring = xdst->dst;
+            ringData->data[j].space_required = xdst->nextLength;
+            j++;
+        }
         next = next->Flink;
     }
 
-    extra_count = uxen_v4v_notify_fill_ring_data(pde, &ringData->data[i], extra_count);
+    if (!ax)
+        extra_count = uxen_v4v_notify_fill_ring_data(pde, &ringData->data[i], extra_count);
 
-    ringData->nent = pde->dest_count + extra_count;
+    ringData->nent = match_gh_count + extra_count;
 
     KeReleaseSpinLock(&pde->queue_lock, irql);
 

@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015-2018, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -135,6 +135,8 @@ gh_v4v_ctrl_bind(xenv4v_extension_t *pde, xenv4v_context_t *ctx, v4v_bind_values
         // Inherit admin access
         robj->admin_access = ctx->admin_access;
 
+        robj->ax = !!(ctx->flags & V4V_FLAG_AX);
+
         // Have to grab this outside of lock at IRQL PASSIVE
         port = gh_v4v_random_port(pde);
 
@@ -212,6 +214,7 @@ gh_v4v_ctrl_initialize_file(xenv4v_context_t *ctx, v4v_init_values_t *invs, PIRP
         }
 
         ctx->ring_length = invs->ring_length;
+        ctx->flags = invs->flags;
 
         // Straighten out the ring
         if (ctx->ring_length > PAGE_SIZE) {

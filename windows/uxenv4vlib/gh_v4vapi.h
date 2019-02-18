@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -103,6 +103,7 @@ typedef struct v4v_stream_header v4v_stream_t, *Pv4v_stream_t;
 typedef struct v4v_init_values_struct {
     VOID *rx_event;
     ULONG32 ring_length;
+    ULONG32 flags;
 } v4v_init_values_t;
 
 typedef struct v4v_bind_values_struct {
@@ -166,6 +167,8 @@ typedef struct v4v_poke_values_struct {
 #else
 #define V4V_64BIT 0x000
 #endif
+
+#define V4V_FLAG_AX         0x80000000
 
 /* V4V I/O Control Function Codes */
 #define V4V_FUNC_INITIALIZE 0x10
@@ -278,6 +281,7 @@ static const v4v_ring_id_t V4V_DEFAULT_CONNECT_ID =     \
 #define V4V_FLAG_ASYNC      0x00000001
 
 #define v4v_is_overlapped(channel) ((channel)->flags & V4V_FLAG_OVERLAPPED)
+#define v4v_is_ax(channel) ((channel)->flags & V4V_FLAG_AX)
 
 /* The following structure represents a V4V channel either opened with
  * v4v_open() or returned from a listening V4V channel in a call to
@@ -351,6 +355,7 @@ _v4v_open(v4v_channel_t *channel, ULONG ring_size, ULONG flags, OVERLAPPED *ov)
         return FALSE;
 
     init.ring_length = ring_size;
+    init.flags = flags;
     init.rx_event = CreateEvent(NULL, TRUE, FALSE, NULL);
     if (init.rx_event == NULL) {
         CloseHandle(hd);

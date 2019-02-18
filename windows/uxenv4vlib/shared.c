@@ -1,9 +1,10 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
 #include "uxenv4vlib_private.h"
+#include <attoxen-api/hv_tests.h>
 
 #pragma data_seg(".shared")
 
@@ -17,6 +18,7 @@ int uxen_v4v_am_dom0;
 KDPC *uxen_v4vlib_resume_dpcs[UXEN_V4VLIB_MAX_RESUME_DPCS];
 void *uxen_v4vlib_resume_dpcs_arg1[UXEN_V4VLIB_MAX_RESUME_DPCS];
 uxen_v4v_logger_t uxen_v4v_logger;
+int ax_present;
 
 #pragma data_seg()
 
@@ -31,6 +33,7 @@ void uxen_v4v_init_shared(void)
     }
 
     uxen_v4v_logger = NULL;
+    ax_present = hv_tests_ax_running();
 }
 
 

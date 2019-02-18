@@ -38,16 +38,16 @@ PIRP NTAPI gh_v4v_csq_peek_next_irp(PIO_CSQ csq, PIRP irp, PVOID peekContext);
 void NTAPI gh_v4v_csq_acquire_lock(PIO_CSQ csq, PKIRQL irqlOut);
 void NTAPI gh_v4v_csq_release_lock(PIO_CSQ csq, KIRQL irql);
 void NTAPI gh_v4v_csq_complete_canceled_irp(PIO_CSQ csq, PIRP irp);
-v4v_ring_data_t *gh_v4v_copy_destination_ring_data(xenv4v_extension_t *pde, ULONG *gh_count);
+v4v_ring_data_t *gh_v4v_copy_destination_ring_data(xenv4v_extension_t *pde, BOOLEAN ax, ULONG *gh_count);
 
 /* gh_hypercall.c */
 NTSTATUS gh_v4v_register_ring(xenv4v_extension_t *pde, xenv4v_ring_t *robj);
 NTSTATUS gh_v4v_unregister_ring(xenv4v_ring_t *robj);
-NTSTATUS gh_v4v_create_ring(v4v_addr_t *dst, domid_t partner);
-NTSTATUS gh_v4v_notify(v4v_ring_data_t *ringData);
+NTSTATUS gh_v4v_create_ring(v4v_addr_t *dst, domid_t partner, int ax);
+NTSTATUS gh_v4v_notify(v4v_ring_data_t *ringData, int ax);
 NTSTATUS gh_v4v_debug();
-NTSTATUS gh_v4v_send(v4v_addr_t *src, v4v_addr_t *dest, ULONG32 protocol, void *buf, ULONG32 length, ULONG32 *writtenOut);
-NTSTATUS gh_v4v_send_vec(v4v_addr_t *src, v4v_addr_t *dest, v4v_iov_t *iovec, ULONG32 nent, ULONG32 protocol, ULONG32 *writtenOut);
+NTSTATUS gh_v4v_send(v4v_addr_t *src, v4v_addr_t *dest, int ax, ULONG32 protocol, void *buf, ULONG32 length, ULONG32 *writtenOut);
+NTSTATUS gh_v4v_send_vec(v4v_addr_t *src, v4v_addr_t *dest, int ax, v4v_iov_t *iovec, ULONG32 nent, ULONG32 protocol, ULONG32 *writtenOut);
 
 /* gh_ioctl.c */
 ULONG gh_v4v_get_accept_private(ULONG code, void *buffer, v4v_accept_private_t **ppriv, struct v4v_addr **ppeer);
@@ -91,6 +91,7 @@ NTSTATUS gh_dispatch_init(PDRIVER_OBJECT driver_object);
 int uxen_v4v_can_make_hypercall(void);
 void *uxen_v4v_hypercall_with_priv(int privileged, void *arg1, void *arg2, void *arg3, void *arg4, void *arg5, void *arg6);
 void *uxen_v4v_hypercall(void *arg1, void *arg2, void *arg3, void *arg4, void *arg5, void *arg6);
+void *ax_v4v_hypercall(void *arg1, void *arg2, void *arg3, void *arg4, void *arg5, void *arg6, void *ret1);
 
 /* main.c */
 NTSTATUS DllInitialize(PUNICODE_STRING RegistryPath);
@@ -137,6 +138,7 @@ extern struct uxp_state_bar **state_bar_ptr;
 extern xenv4v_extension_t *uxen_v4v_pde;
 extern KSPIN_LOCK uxen_v4v_pde_lock;
 extern int uxen_v4v_am_dom0;
+extern int ax_present;
 extern KDPC *uxen_v4vlib_resume_dpcs[];
 extern void *uxen_v4vlib_resume_dpcs_arg1[];
 void uxen_v4v_init_shared(void);

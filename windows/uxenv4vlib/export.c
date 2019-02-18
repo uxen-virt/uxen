@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2018, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -72,6 +72,7 @@ V4V_DLL_EXPORT uxen_v4v_ring_handle_t *uxen_v4v_ring_bind (uint32_t local_port,
         ret->ring_object->ring->id.addr.domain = V4V_DOMID_ANY;
         ret->ring_object->ring->id.partner = partner_domain;
 
+        ret->ring_object->ax = FALSE;
         ret->ring_object->direct_access = TRUE;
         ret->ring_object->callback = callback;
         ret->ring_object->callback_data1 = callback_data1;
