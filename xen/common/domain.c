@@ -55,6 +55,7 @@
 #include <public/sched.h>
 #include <public/sysctl.h>
 #include <public/vcpu.h>
+#include <asm/hvm/attovm.h>
 #include <xsm/xsm.h>
 #include <xen/trace.h>
 #include <xen/tmem.h>
@@ -349,6 +350,16 @@ struct domain *domain_create_internal(
 
     if ( domcr_flags & DOMCRF_hvm )
         d->is_hvm = 1;
+    if ( domcr_flags & DOMCRF_attovm_ax ) {
+        if (!ax_present) {
+            printk(XENLOG_ERR "%s: attovm create vm%u: no ax present\n",
+                __FUNCTION__, domid);
+            goto fail;
+        }
+        printk(XENLOG_WARNING "%s: attovm create vm%u\n",
+            __FUNCTION__, domid);
+        d->is_attovm_ax = 1;
+    }
 
     if ( domid == 0 )
     {
@@ -453,6 +464,8 @@ struct domain *domain_create_internal(
     atomic_set(&d->refcnt, DOMAIN_DESTROYED);
     if ( init_status & INIT_arch )
         arch_domain_destroy(d);
+    if (d->is_attovm_ax)
+       attovm_destroy(d);
     if ( init_status & INIT_v4v )
         v4v_destroy(d);
 #ifndef __UXEN_NOT_YET__
@@ -560,6 +573,16 @@ domain_create(domid_t dom, unsigned int flags, uint32_t ssidref,
 
     atomic_write_domain_handle(&d->v4v_token_atomic, (uint128_t *)v4v_token);
     atomic_write_domain_handle(&d->handle_atomic, (uint128_t *)uuid);
+
+    if (d->is_attovm_ax) {
+        if ( attovm_assign_token(d, (uint128_t *)v4v_token) ) {
+            printk(XENLOG_ERR "vm%u: %" PRIuuid " failed to assign token\n",
+                dom, PRIuuid_arg(v4v_token));
+            spin_unlock(&domlist_update_lock);
+            rcu_unlock_domain(d);
+            return -EINVAL;
+        }
+    }
 
     spin_unlock(&domlist_update_lock);
 
@@ -839,6 +862,8 @@ int domain_kill(struct domain *d)
         domain_pause(d);
         d->is_dying = DOMDYING_dying;
         spin_barrier(&d->domain_lock);
+        if (d->is_attovm_ax)
+          attovm_destroy(d);
         v4v_destroy(d);
         evtchn_destroy(d);
 #ifndef __UXEN__
@@ -1173,6 +1198,9 @@ void domain_destroy(struct domain *d)
     rcu_assign_pointer(*pd, d->next_in_hashbucket);
 #endif  /* __UXEN__ */
     spin_unlock(&domlist_update_lock);
+
+    if (d->is_attovm_ax)
+        attovm_destroy(d);
 
     printk("schedule rcu complete_domain_destroy for vm%u\n", d->domain_id);
     /* Schedule RCU asynchronous completion of domain destroy. */

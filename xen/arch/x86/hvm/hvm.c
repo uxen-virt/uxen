@@ -74,6 +74,7 @@
 #include <asm/mce.h>
 #include <asm/hvm/hvm.h>
 #include <asm/hvm/ax.h>
+#include <asm/hvm/attovm.h>
 #include <asm/hvm/vpt.h>
 #include <asm/hvm/support.h>
 #include <asm/hvm/cacheattr.h>
@@ -851,18 +852,14 @@ static int hvm_set_ioreq_page(
     return 0;
 }
 
-static int hvm_print_line(
-    int dir, uint32_t port, uint32_t bytes, uint32_t *val)
+int hvm_print_char(char c)
 {
     struct vcpu *curr = current;
     struct hvm_domain *hd = &curr->domain->arch.hvm_domain;
-    char c = *val;
-
-    BUG_ON(bytes != 1);
 
     /* Accept only printable characters, newline, and horizontal tab. */
     if ( !isprint(c) && (c != '\n') && (c != '\t') )
-        return X86EMUL_OKAY;
+        return -EINVAL;
 
     spin_lock(&hd->pbuf_lock);
     hd->pbuf[hd->pbuf_idx++] = c;
@@ -875,6 +872,18 @@ static int hvm_print_line(
         hd->pbuf_idx = 0;
     }
     spin_unlock(&hd->pbuf_lock);
+
+    return 0;
+}
+
+static int hvm_print_char_io(
+    int dir, uint32_t port, uint32_t bytes, uint32_t *val)
+{
+    char c = *val;
+
+    BUG_ON(bytes != 1);
+
+    hvm_print_char(c);
 
     return X86EMUL_OKAY;
 }
@@ -971,7 +980,7 @@ int hvm_domain_initialise(struct domain *d)
     hvm_init_dmreq_page(d);
     hvm_init_dmreq_vcpu_pages(d);
 
-    register_portio_handler(d, 0xe9, 1, hvm_print_line);
+    register_portio_handler(d, 0xe9, 1, hvm_print_char_io);
 
     hvm_init_debug_port(d);
 
@@ -3996,6 +4005,9 @@ enum hvm_intblk hvm_interrupt_blocked(struct vcpu *v, struct hvm_intack intack)
             return intr;
     }
 #endif  /* __UXEN_NOT_YET__ */
+
+    if (v->domain->is_attovm_ax)
+        return attovm_intblk();
 
     if ( (intack.source != hvm_intsrc_nmi) &&
          !(guest_cpu_user_regs()->eflags & X86_EFLAGS_IF) )

@@ -8,7 +8,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -216,7 +216,8 @@ domctl_createdomain_parse_flags(uint32_t flags)
     if (supervisor_mode_kernel ||
         (flags & ~(XEN_DOMCTL_CDF_hvm_guest | XEN_DOMCTL_CDF_hap |
                    XEN_DOMCTL_CDF_s3_integrity | XEN_DOMCTL_CDF_oos_off |
-                   XEN_DOMCTL_CDF_template | XEN_DOMCTL_CDF_hidden_mem)))
+                   XEN_DOMCTL_CDF_template | XEN_DOMCTL_CDF_hidden_mem |
+                   XEN_DOMCTL_CDF_attovm_ax)))
         return ~0;
 
     domcr_flags = 0;
@@ -234,6 +235,8 @@ domctl_createdomain_parse_flags(uint32_t flags)
     if ( flags & XEN_DOMCTL_CDF_hidden_mem )
         domcr_flags |= DOMCRF_hidden_mem;
 #endif
+    if ( flags & XEN_DOMCTL_CDF_attovm_ax )
+        domcr_flags |= DOMCRF_attovm_ax;
 
     return domcr_flags;
 }

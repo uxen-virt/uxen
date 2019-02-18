@@ -173,7 +173,7 @@ $(TARGET_windows_only)XEN_SRCS += uxen/mapcache.c
 XEN_SRCS += uxen/shadow_subst.c
 XEN_SRCS += uxen/time.c
 $(TARGET_pe_only)$(X86_64_only)XEN_SRCS += uxen/unwind/unwind-pe.c
-
+XEN_SRCS += common/attovm.c
 XEN_SRCS += common/bitmap.c
 XEN_SRCS += common/cpu.c
 XEN_SRCS += common/cpupool.c
@@ -251,6 +251,7 @@ XEN_SRCS += arch/x86/cpu/intel.c
 XEN_SRCS += arch/x86/cpu/intel_cacheinfo.c
 XEN_SRCS += arch/x86/cpu/mtrr/main.c
 XEN_SRCS += arch/x86/hvm/asid.c
+XEN_SRCS += arch/x86/hvm/attovm.c
 XEN_SRCS += arch/x86/hvm/ax.c
 arch/x86/hvm/ax.o: XEN_CFLAGS += -Wno-unused-function
 XEN_SRCS += arch/x86/hvm/ax_pv_vmcs.S

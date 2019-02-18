@@ -111,4 +111,6 @@ bool_t vlapic_match_dest(
     struct vlapic *target, struct vlapic *source,
     int short_hand, uint8_t dest, uint8_t dest_mode);
 
+int vlapic_reg_write(struct vcpu *v, unsigned int offset, unsigned long val);
+
 #endif /* __ASM_X86_HVM_VLAPIC_H__ */

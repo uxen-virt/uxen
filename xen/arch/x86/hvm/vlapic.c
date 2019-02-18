@@ -641,7 +641,7 @@ static void vlapic_tdt_pt_cb(struct vcpu *v, void *data)
     vcpu_vlapic(v)->hw.tdt_msr = 0;
 }
 
-static int vlapic_reg_write(struct vcpu *v,
+int vlapic_reg_write(struct vcpu *v,
                             unsigned int offset, unsigned long val)
 {
     struct vlapic *vlapic = vcpu_vlapic(v);

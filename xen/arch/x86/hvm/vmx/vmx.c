@@ -18,7 +18,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -65,6 +65,7 @@
 #include <asm/hvm/vmx/vmx.h>
 #include <asm/hvm/vmx/vmcs.h>
 #include <asm/hvm/ax.h>
+#include <asm/hvm/attovm.h>
 #include <public/sched.h>
 #include <public/hvm/ioreq.h>
 #include <asm/hvm/vpic.h>
@@ -117,6 +118,9 @@ vmx_domain_initialise(struct domain *d)
     {
         return rc;
     }
+
+    if (d->is_attovm_ax)
+        attovm_initialise(d);
 
     return 0;
 }
@@ -180,12 +184,17 @@ vmx_vcpu_initialise(struct vcpu *v)
     if ( v->vcpu_id == 0 )
         v->arch.user_regs.eax = 1;
 
+    if ( v->domain->is_attovm_ax )
+        attovm_vcpu_initialise(v);
+
     return 0;
 }
 
 void
 vmx_vcpu_destroy(struct vcpu *v)
 {
+    if ( v->domain->is_attovm_ax )
+        attovm_vcpu_destroy(v);
     vmx_destroy_vmcs(v);
 #ifndef __UXEN_NOT_YET__
     vpmu_destroy(v);
@@ -1799,8 +1808,12 @@ void vmx_inject_extint(int trap)
         }
     }
 #endif  /* __UXEN_NOT_YET__ */
-    __vmx_inject_exception(trap, X86_EVENTTYPE_EXT_INTR,
-                           HVM_DELIVER_NO_ERROR_CODE);
+
+    if (current->domain->is_attovm_ax)
+        attovm_inject_extint(trap);
+    else
+        __vmx_inject_exception(trap, X86_EVENTTYPE_EXT_INTR,
+                               HVM_DELIVER_NO_ERROR_CODE);
 }
 
 void vmx_inject_nmi(void)
@@ -2996,8 +3009,16 @@ vmx_do_execute(struct vcpu *v)
 
     ASSERT(v);
 
+    if (current->domain->is_attovm_ax)
+        attovm_prepare_enter(current);
+
     if (vmx_asm_do_vmentry(v))
         return;
+
+    if (v->arch.hvm_vcpu.u.vmx.vmentry_error) {
+        __domain_crash(current->domain);
+        return;
+    }
 
     if ( paging_mode_hap(v->domain) && hvm_paging_enabled(v) )
         v->arch.hvm_vcpu.guest_cr[3] = v->arch.hvm_vcpu.hw_cr[3] =
@@ -3141,6 +3162,9 @@ vmx_do_execute(struct vcpu *v)
 
     switch ( exit_reason )
     {
+    case EXIT_REASON_PV_AX_ASSIST:
+        attovm_assist(v);
+        break;
     case EXIT_REASON_EXCEPTION_NMI:
     {
         /*
@@ -3300,6 +3324,8 @@ vmx_do_execute(struct vcpu *v)
     }
     case EXIT_REASON_CPUID:
         update_guest_eip(); /* Safe: CPUID */
+        if (attovm_do_cpuid(regs))
+            break;
         vmx_do_cpuid(regs);
         break;
     case EXIT_REASON_HLT:
@@ -3682,7 +3708,8 @@ asmlinkage_abi void vm_entry_fail(uintptr_t resume)
     printk("<vm_%s_fail> error code %lx\n",
            resume ? "resume" : "launch", error);
     vmcs_dump_vcpu(current);
-    __domain_crash(current->domain);
+
+    current->arch.hvm_vcpu.u.vmx.vmentry_error = error ? (uint32_t)error : -1;
 }
 
 void

@@ -358,6 +358,8 @@ struct domain
 
     /* Is this an HVM guest? */
     bool_t           is_hvm;
+    /* Is this ax-based attovm guest? */
+    bool_t           is_attovm_ax;
     /* Does this guest need iommu mappings? */
     bool_t           need_iommu;
     /* Which guest this guest has privileges on */
@@ -602,6 +604,9 @@ struct domain *domain_create_internal(
 #define _DOMCRF_hidden_mem    6
 #define DOMCRF_hidden_mem     (1U<<_DOMCRF_hidden_mem)
 #endif
+/* DOMCRF_attovm_ax: Is this attoxen attovm guest? */
+#define _DOMCRF_attovm_ax     7
+#define DOMCRF_attovm_ax      (1U<<_DOMCRF_attovm_ax)
 
 long domain_set_max_vcpus(struct domain *d, unsigned int max);
 

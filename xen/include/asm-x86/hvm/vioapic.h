@@ -67,5 +67,9 @@ void vioapic_reset(struct domain *d);
 void vioapic_irq_positive_edge(struct domain *d, unsigned int irq,
                                uint16_t vcpu_id);
 void vioapic_update_EOI(struct domain *d, int vector);
+int vioapic_write(struct vcpu *v, unsigned long addr,
+                  unsigned long length, unsigned long val);
+int vioapic_read(struct vcpu *v, unsigned long addr,
+                 unsigned long length, unsigned long *pval);
 
 #endif /* __ASM_X86_HVM_VIOAPIC_H__ */

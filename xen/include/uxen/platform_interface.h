@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2016, Bromium, Inc.
+ * Copyright 2013-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -34,6 +34,7 @@ struct uxp_state_bar {
 #define UXENBUS_DEVICE_TYPE_NET         0x0
 #define UXENBUS_DEVICE_TYPE_HID         0x1
 #define UXENBUS_DEVICE_TYPE_NULL_NET    0x2
+#define UXENBUS_DEVICE_TYPE_FB          0x3
 #define UXENBUS_DEVICE_NOT_PRESENT      0xff
 
 #define UXENBUS_PROPERTY_TYPE_MACADDR   0x0
@@ -59,6 +60,7 @@ static const wchar_t * const uxenbus_device_names[] = {
     L"uxennet",
     L"uxenhid",
     L"uxennullnet",
+    L"uxenfb",
 };
 
 #endif  /* _PLATFORM_INTERFACE_H_ */

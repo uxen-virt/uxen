@@ -20,7 +20,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -601,5 +601,8 @@ enum hvm_intblk nhvm_interrupt_blocked(struct vcpu *v);
 void hvmcopy_cache_enable(int en);
 /* hvm copy cache flush */
 void hvmcopy_cache_flush(void);
+
+/* log character from hvm */
+int hvm_print_char(char ch);
 
 #endif /* __ASM_X86_HVM_HVM_H__ */

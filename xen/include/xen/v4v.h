@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -72,6 +72,7 @@ void v4v_destroy(struct domain *d);
 int v4v_init(struct domain *d);
 void v4v_shutdown_for_suspend(struct domain *d);
 void v4v_resume(struct domain *d);
+void v4v_signal_domid(domid_t id);
 long do_v4v_op(int cmd, XEN_GUEST_HANDLE(void) arg1,
                XEN_GUEST_HANDLE(void) arg2, XEN_GUEST_HANDLE(void) arg3,
                uint32_t arg4, uint32_t arg5);

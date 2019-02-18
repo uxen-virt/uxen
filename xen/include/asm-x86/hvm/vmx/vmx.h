@@ -28,6 +28,7 @@
 #include <asm/hvm/support.h>
 #include <asm/hvm/trace.h>
 #include <asm/hvm/vmx/vmcs.h>
+#include <attoxen-api/ax_constants.h>
 
 typedef union {
     struct {
@@ -257,25 +258,42 @@ static inline void __vmpclear(u64 addr)
                    : "memory");
 }
 
+unsigned long __vmread_attovm(unsigned long field);
+unsigned long __vmread_attovm_safe(unsigned long field, int *error);
+void __vmwrite_attovm(unsigned long field, unsigned long v);
+
 extern unsigned long (*__vmread_fn)(unsigned long field);
 extern void (*__vmwrite_fn)(unsigned long field, unsigned long value);
 extern unsigned long (*__vmread_safe_fn)(unsigned long field, int *error);
 
+#define vmx_is_vmcs_revision(rev) \
+    (this_cpu(current_vmcs_vmx)->vmcs->vmcs_revision_id == (rev))
+#define vmx_is_attovm_vmcs() \
+    vmx_is_vmcs_revision(PV_VMCS_ATTOVM_REV)
+
 #ifndef PERF_VMRW
 static inline unsigned long __vmread(unsigned long field)
 {
+    if (vmx_is_attovm_vmcs())
+        return __vmread_attovm(field);
 
     return __vmread_fn(field);
 }
 
 static inline void __vmwrite(unsigned long field, unsigned long value)
 {
+    if (vmx_is_attovm_vmcs()) {
+        __vmwrite_attovm(field, value);
+        return;
+    }
 
     __vmwrite_fn(field, value);
 }
 
 static inline unsigned long __vmread_safe(unsigned long field, int *error)
 {
+    if (vmx_is_attovm_vmcs())
+        return __vmread_attovm_safe(field, error);
 
     return __vmread_safe_fn(field, error);
 }

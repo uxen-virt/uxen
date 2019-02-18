@@ -700,6 +700,7 @@ ENTRY(hypercall_table)
         .long do_kexec_op
         .long do_tmem_op
         .long do_v4v_op
+        .long do_attovm_op
         .rept __HYPERVISOR_arch_0-((.-hypercall_table)/4)
         .long do_ni_hypercall
         .endr
@@ -749,6 +750,7 @@ ENTRY(hypercall_args_table)
         .byte 2 /* do_kexec_op          */
         .byte 1 /* do_tmem_op           */
         .byte 6 /* do_v4v_op            */
+        .byte 2 /* do_attovm_op           */
         .rept __HYPERVISOR_arch_0-(.-hypercall_args_table)
         .byte 0 /* do_ni_hypercall      */
         .endr

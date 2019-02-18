@@ -18,7 +18,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -59,6 +59,7 @@
 #include <asm/hvm/xen_pv.h>
 #include <asm/shadow.h>
 #include <asm/tboot.h>
+#include <attoxen-api/ax_attovm.h>
 
 #ifndef __UXEN_NOT_YET__
 static bool_t __read_mostly opt_vpid_enabled = 1;
@@ -1456,6 +1457,10 @@ int vmx_create_vmcs(struct vcpu *v)
     if ( (arch_vmx->vmcs = vmx_alloc_vmcs()) == NULL )
         return -ENOMEM;
 
+    /* use special pv vmcs for attovms */
+    if (v->domain->is_attovm_ax)
+        arch_vmx->vmcs->vmcs_revision_id = PV_VMCS_ATTOVM_REV;
+
     /* XXX make alloc conditional on using active vmcs shadow */
     arch_vmx->vmcs_shadow = alloc_xenheap_page();
     if (!arch_vmx->vmcs_shadow) {
@@ -1884,6 +1889,63 @@ __vmptrld_safe_direct(u64 addr)
     return error;
 }
 
+unsigned long
+__vmread_attovm(unsigned long field)
+{
+    struct attovm_control *vmc = (struct attovm_control*)
+        this_cpu(current_vmcs_vmx)->vmcs;
+
+    switch (field) {
+    case GUEST_RFLAGS: return vmc->guest_rflags;
+    case VM_EXIT_REASON: return vmc->vm_exit_reason;
+    case VM_EXIT_INSTRUCTION_LEN: return vmc->vm_exit_instruction_len;
+    case VM_EXIT_INTR_INFO: return vmc->vm_exit_intr_info;
+    case VM_EXIT_INTR_ERROR_CODE: return vmc->vm_exit_intr_error_code;
+    default: return 0;
+    }
+}
+
+unsigned long
+__vmread_attovm_safe(unsigned long field, int *error)
+{
+    *error = 0;
+    return __vmread_attovm(field);
+}
+
+void
+__vmwrite_attovm(unsigned long field, unsigned long v)
+{
+    struct attovm_control *vmc = (struct attovm_control*)
+        this_cpu(current_vmcs_vmx)->vmcs;
+
+    switch (field) {
+    case EPT_POINTER: vmc->ept_pointer = v; break;
+    case HOST_ES_SELECTOR: vmc->host_es_selector = v; break;
+    case HOST_CS_SELECTOR: vmc->host_cs_selector = v; break;
+    case HOST_SS_SELECTOR: vmc->host_ss_selector = v; break;
+    case HOST_DS_SELECTOR: vmc->host_ds_selector = v; break;
+    case HOST_FS_SELECTOR: vmc->host_fs_selector = v; break;
+    case HOST_GS_SELECTOR: vmc->host_gs_selector = v; break;
+    case HOST_TR_SELECTOR: vmc->host_tr_selector = v; break;
+    case HOST_PAT: vmc->host_pat = v; break;
+    case HOST_EFER: vmc->host_efer = v; break;
+    case HOST_SYSENTER_CS: vmc->host_sysenter_cs = v; break;
+    case HOST_CR0: vmc->host_cr0 = v; break;
+    case HOST_CR3: vmc->host_cr3 = v; break;
+    case HOST_CR4: vmc->host_cr4 = v; break;
+    case HOST_FS_BASE: vmc->host_fs_base = v; break;
+    case HOST_GS_BASE: vmc->host_gs_base = v; break;
+    case HOST_TR_BASE: vmc->host_tr_base = v; break;
+    case HOST_GDTR_BASE: vmc->host_gdtr_base = v; break;
+    case HOST_IDTR_BASE: vmc->host_idtr_base = v; break;
+    case HOST_SYSENTER_ESP: vmc->host_sysenter_esp = v; break;
+    case HOST_SYSENTER_EIP: vmc->host_sysenter_eip = v; break;
+    case HOST_RSP: vmc->host_rsp = v; break;
+    case HOST_RIP: vmc->host_rip = v; break;
+    default: break;
+    }
+}
+
 unsigned long (*__vmread_fn)(unsigned long field) = __vmread_direct;
 void (*__vmwrite_fn)(unsigned long field, unsigned long value) =
     __vmwrite_direct;
@@ -1904,6 +1966,9 @@ __vmread(unsigned long field)
     offset = _pv_vmcs_get_offset_xen(enc.width, enc.type, enc.index);
     perfc_incra(vmreads, offset);
 
+    if (vmx_is_attovm_vmcs())
+        return __vmread_attovm(field);
+
     return __vmread_fn(field);
 }
 
@@ -1917,6 +1982,11 @@ __vmwrite(unsigned long field, unsigned long value)
     offset = _pv_vmcs_get_offset_xen(enc.width, enc.type, enc.index);
     perfc_incra(vmwrites, offset);
 
+    if (vmx_is_attovm_vmcs()) {
+        __vmwrite_attovm(field, value);
+        return;
+    }
+
     __vmwrite_fn(field, value);
 }
 
@@ -1929,6 +1999,9 @@ __vmread_safe(unsigned long field, int *error)
     enc.word = field;
     offset = _pv_vmcs_get_offset_xen(enc.width, enc.type, enc.index);
     perfc_incra(vmreads, offset);
+
+    if (vmx_is_attovm_vmcs())
+        return __vmread_attovm_safe(field, error);
 
     return __vmread_safe_fn(field, error);
 }

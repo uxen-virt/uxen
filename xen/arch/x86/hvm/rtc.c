@@ -43,6 +43,7 @@
 #include <asm/mc146818rtc.h>
 #include <asm/hvm/vpt.h>
 #include <asm/hvm/io.h>
+#include <asm/hvm/rtc.h>
 #include <asm/hvm/support.h>
 #include <asm/current.h>
 #include <xen/trace.h>
@@ -56,8 +57,6 @@
 #define MIN_PER_HOUR    60
 #define HOUR_PER_DAY    24
 
-#define domain_vrtc(x) (&(x)->arch.hvm_domain.pl_time.vrtc)
-#define vcpu_vrtc(x)   (domain_vrtc((x)->domain))
 #define vrtc_domain(x) (container_of((x), struct domain, \
                                      arch.hvm_domain.pl_time.vrtc))
 #define vrtc_vcpu(x)   (pt_global_vcpu_target(vrtc_domain(x)))
@@ -459,7 +458,7 @@ static void rtc_alarm_cb(void *opaque)
     spin_unlock(&s->lock);
 }
 
-static int rtc_ioport_write(void *opaque, uint32_t addr, uint32_t data)
+int rtc_ioport_write(void *opaque, uint32_t addr, uint32_t data)
 {
     RTCState *s = opaque;
     struct domain *d = vrtc_domain(s);
@@ -678,7 +677,7 @@ static int update_in_progress(RTCState *s)
     return 0;
 }
 
-static uint32_t rtc_ioport_read(RTCState *s, uint32_t addr)
+uint32_t rtc_ioport_read(RTCState *s, uint32_t addr)
 {
     int ret;
     struct domain *d = vrtc_domain(s);

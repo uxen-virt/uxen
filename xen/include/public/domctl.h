@@ -64,6 +64,9 @@ struct xen_domctl_createdomain {
 /* Use hidden memory for domain pages */
 #define _XEN_DOMCTL_CDF_hidden_mem    5
 #define XEN_DOMCTL_CDF_hidden_mem     (1U<<_XEN_DOMCTL_CDF_hidden_mem)
+/* Attoxen attovm guest? */
+#define _XEN_DOMCTL_CDF_attovm_ax     6
+#define XEN_DOMCTL_CDF_attovm_ax      (1U<<_XEN_DOMCTL_CDF_attovm_ax)
     uint32_t flags;
 };
 typedef struct xen_domctl_createdomain xen_domctl_createdomain_t;

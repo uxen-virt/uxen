@@ -2,7 +2,7 @@
  *  uxen_call.c
  *  uxen
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -117,6 +117,9 @@ uxen_dom0_hypercall(struct vm_info_shared *vmis, void *user_access_opaque,
         break;
     case __HYPERVISOR_v4v_op:
         n_arg = 6;
+        break;
+    case __HYPERVISOR_attovm_op:
+        n_arg = 2;
         break;
     default:
         fail_msg("unknown hypercall op: %Id", op);

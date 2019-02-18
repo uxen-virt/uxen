@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2018, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -205,7 +205,6 @@ struct v4v_ring_message_header
 /*Prototype of hypercall is */
 /*long do_v4v_op(int cmd, XEN_GUEST_HANDLE(void), XEN_GUEST_HANDLE(void), XEN_GUEST_HANDLE(void), uint32_t, uint32_t)*/
 
-
 #define V4VOP_register_ring 	1
 /*int, XEN_GUEST_HANDLE(v4v_ring_t) ring, XEN_GUEST_HANDLE(v4v_pfn_list_t) */
 
@@ -272,6 +271,11 @@ struct v4v_ring_message_header
  * -ECONREFUSED, */
 /* call create_ring, then retry the call to send, thus scheduling a
  * notification */
+
+#define V4VOP_signal 8
+/*, , , domid */
+
+/* Wake and signal target domain */
 
 #define V4VOP_test		0x10
 /* Print out the arguments to the xen log to check the various

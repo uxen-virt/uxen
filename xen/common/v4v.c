@@ -3,7 +3,7 @@
  *
  * V4V (2nd cut of v2v)
  *
- * Copyright 2015-2018, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -175,7 +175,8 @@ v4v_signal_domain(struct domain *d)
         return;
     }
 
-    if (!d->v4v)  /* This can happen if the domain is being destroyed */
+    if (!d->is_attovm_ax && !d->v4v)
+        /* This can happen if the domain is being destroyed */
         return;
 
     if (deliver_via_upcall(d))
@@ -192,7 +193,7 @@ v4v_signal_domain(struct domain *d)
     }
 }
 
-static void
+void
 v4v_signal_domid (domid_t id)
 {
     struct domain *d = get_domain_by_id(id);
@@ -1968,6 +1969,17 @@ do_v4v_op(int cmd, XEN_GUEST_HANDLE(void) arg1,
         rc = v4v_ring_create(d, ring_id_hnd);
         break;
     }
+    case V4VOP_signal: {
+        domid_t domid;
+
+        if (!IS_PRIV(d)) {
+            rc = -EPERM;
+            goto out;
+        }
+        domid = (domid_t) arg4;
+        v4v_signal_domid(domid);
+        break;
+    };
 #if 0
     case V4VOP_poke: {
         v4v_addr_t dst;

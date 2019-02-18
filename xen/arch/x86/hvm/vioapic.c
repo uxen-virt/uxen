@@ -90,7 +90,7 @@ static unsigned long vioapic_read_indirect(struct hvm_hw_vioapic *vioapic,
     return result;
 }
 
-static int vioapic_read(
+int vioapic_read(
     struct vcpu *v, unsigned long addr,
     unsigned long length, unsigned long *pval)
 {
@@ -210,7 +210,7 @@ static void vioapic_write_indirect(
     }
 }
 
-static int vioapic_write(
+int vioapic_write(
     struct vcpu *v, unsigned long addr,
     unsigned long length, unsigned long val)
 {

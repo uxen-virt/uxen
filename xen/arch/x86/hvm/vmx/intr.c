@@ -35,6 +35,7 @@
 #include <asm/hvm/vmx/vmcs.h>
 #include <asm/hvm/vpic.h>
 #include <asm/hvm/vlapic.h>
+#include <asm/hvm/ax.h>
 #ifndef __UXEN__
 #include <asm/hvm/nestedhvm.h>
 #endif  /* __UXEN__ */

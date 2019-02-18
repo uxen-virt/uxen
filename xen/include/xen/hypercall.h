@@ -129,6 +129,9 @@ do_tmem_op(
 extern int
 do_xenoprof_op(int op, XEN_GUEST_HANDLE(void) arg);
 
+extern long
+do_attovm_op(int op, XEN_GUEST_HANDLE(void) arg);
+
 #ifdef CONFIG_COMPAT
 
 extern int

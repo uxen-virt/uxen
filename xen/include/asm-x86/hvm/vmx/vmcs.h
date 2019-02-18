@@ -140,6 +140,8 @@ struct arch_vmx_struct {
     uint32_t             vmcs_dirty_bits;
 
     uint32_t             vmentry_gen;
+
+    uint32_t             vmentry_error;
 };
 
 enum {
@@ -228,6 +230,7 @@ extern u32 vmx_vmentry_control;
 #define SECONDARY_EXEC_UNRESTRICTED_GUEST       0x00000080
 #define SECONDARY_EXEC_PAUSE_LOOP_EXITING       0x00000400
 #define SECONDARY_EXEC_ENABLE_INVPCID           0x00001000
+#define SECONDARY_EXEC_ENABLE_VMCS_SHADOWING    0x00004000
 extern u32 vmx_secondary_exec_control;
 
 extern bool_t cpu_has_vmx_ins_outs_instr_info;
@@ -339,6 +342,7 @@ enum vmcs_field {
     GUEST_PDPTR3_HIGH               = 0x00002811,
     HOST_PAT                        = 0x00002c00,
     HOST_PAT_HIGH                   = 0x00002c01,
+    HOST_EFER                       = 0x00002c02,
     PIN_BASED_VM_EXEC_CONTROL       = 0x00004000,
     CPU_BASED_VM_EXEC_CONTROL       = 0x00004002,
     EXCEPTION_BITMAP                = 0x00004004,

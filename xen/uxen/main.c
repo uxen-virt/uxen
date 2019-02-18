@@ -2,7 +2,7 @@
  *  uxen_main.c
  *  uxen
  *
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -747,6 +747,7 @@ do_hypercall(struct uxen_hypercall_desc *uhd)
         HYPERCALL(event_channel_op);
         HYPERCALL(v4v_op);
         HYPERCALL(sysctl);
+        HYPERCALL(attovm_op);
     }
 
     return -ENOSYS;
