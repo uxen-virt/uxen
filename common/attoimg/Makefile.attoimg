@@ -1,0 +1,69 @@
+#
+# Copyright 2019, Bromium, Inc.
+# SPDX-License-Identifier: ISC
+#
+
+all: attoimg$(EXE_SUFFIX) libattoimg.a
+
+libattoimg_SRCS  = libelf-loader.c libelf-tools.c util.c mptables.c attoimg.c
+libattoimg_OBJS  = $(patsubst %.c,%.o,$(libattoimg_SRCS))
+libattoimg_OBJS := $(subst /,_,$(libattoimg_OBJS))
+libattoimg_CPPFLAGS = -I$(TOPDIR)/common -I$(TOPDIR)/common/include/xen-public
+
+attoimg_SRCS  = main.c
+attoimg_OBJS  = $(patsubst %.c,%.o,$(attoimg_SRCS))
+attoimg_OBJS := $(subst /,_,$(attoimg_OBJS))
+attoimg_LIBS = $(LDLIBS) -L. -lattoimg
+
+EXTRA_CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
+
+#install_attoimg.h: attoimg.h $(SDKDIR_include)/.exists
+#	$(_W)echo Installing from $(abspath $(<D)) to $(SDKDIR_include)
+#	$(_W)echo Installing -- $(<F)
+#	$(_V)$(call install_data,$<,$(SDKDIR_include))
+
+#install_libattoimg.a: libattoimg.a $(SDKDIR_lib)/.exists
+#	$(_W)echo Installing from $(abspath $(<D)) to $(SDKDIR_lib)
+#	$(_W)echo Installing -- $(<F)
+#	$(_V)$(call install_lib,$<,$(SDKDIR_lib))
+
+install_attoimg:
+	$(_W)echo Installing -- attoimg
+	$(_V)$(call install_exe,attoimg$(EXE_SUFFIX),$(DISTDIR))
+
+dist: libattoimg.a attoimg$(EXE_SUFFIX) install_attoimg
+
+#dist: attoimg$(EXE_SUFFIX) install_attoimg.h
+#	$(_W)echo Installing from $(abspath $(<D)) to $(DISTDIR)
+#	$(_W)echo Installing -- $(<F)
+#	$(_V)$(call install_exe,$<,$(DISTDIR))
+#$(WINDOWS)dist: install_libattoimg.a
+
+libattoimg.a: $(libattoimg_OBJS) Makefile.lib-LIBATTOIMG
+	$(_W)echo Archiving - $@
+	$(_V)$(AR) rc $@ $(libattoimg_OBJS)
+	$(_V)$(RANLIB) $@
+
+attoimg$(EXE_SUFFIX): $(attoimg_OBJS) libattoimg.a
+	$(_W)echo Linking - $@
+	$(_V)$(LINK.o) -o $@ $^ $(attoimg_LIBS)
+
+$(libattoimg_OBJS): .deps/.exists
+$(libattoimg_OBJS): %.o : $(SRCROOT)/%.c
+	$(_W)echo Compiling - $@
+	$(_V)$(COMPILE.c:-fstack-protector%=) $(EXTRA_CFLAGS) $(libattoimg_CPPFLAGS) $< -o $@
+
+$(attoimg_OBJS): .deps/.exists
+$(attoimg_OBJS): %.o : $(SRCROOT)/%.c
+	$(_W)echo Compiling - $@
+	$(_V)$(COMPILE.c) $(EXTRA_CFLAGS) $(attoimg_CPPFLAGS) $< -o $@
+
+Makefile.lib-LIBATTOIMG:
+	@rm -f $@
+	@(echo "LIBATTOIMG_CPPFLAGS = -I$(SRCROOT)" ;\
+	  echo "LIBATTOIMG_LIBS = -L$(abspath .) -lattoimg" ;\
+	  echo "LIBATTOIMG_DEPS = $(abspath .)/libattoimg.a" ;\
+	  echo "LIBATTOIMG_SRCDIR = $(SRCROOT)" ;\
+	  echo "$(abspath .)/libattoimg.a: $(patsubst %,$(SRCROOT)/%,$(libattoimg_SRCS))" ) >$@
+
+-include .deps/*.d
