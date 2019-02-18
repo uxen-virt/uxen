@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -230,6 +230,8 @@ int xc_hvm_build(xc_interface *xch,
                  struct xc_hvm_module *modules,
                  size_t mod_count,
                  struct xc_hvm_oem_info *oem_info);
+
+/* attovm build flags */
 
 #ifndef __UXEN_TOOLS__
 int xc_hvm_build_target_mem(xc_interface *xch,

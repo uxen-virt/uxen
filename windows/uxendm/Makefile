@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2018, Bromium, Inc.
+# Copyright 2012-2019, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -9,6 +9,7 @@ TOPDIR = $(abspath $(SRCDIR)/../..)
 include $(TOPDIR)/Config.mk
 
 $(call include_lib,LIBVHD,../libvhd)
+$(call include_lib,LIBATTOIMG,../attoimg)
 $(call include_lib,LIBXC,../libxc)
 $(call include_lib,LIBUXENCTL,../uxenctl)
 $(call include_lib,YAJL,../yajl)

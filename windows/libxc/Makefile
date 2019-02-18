@@ -1,5 +1,5 @@
 #
-# Copyright 2013-2015, Bromium, Inc.
+# Copyright 2013-2019, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -7,6 +7,8 @@ BUILDDIR_default = obj
 SRCDIR ?= .
 TOPDIR = $(abspath $(SRCDIR)/../..)
 include $(TOPDIR)/Config.mk
+
+$(call include_lib,LIBATTOIMG,../attoimg)
 
 ifeq (,$(MAKENOW))
 

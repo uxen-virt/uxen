@@ -1,5 +1,5 @@
 #
-# Copyright 2013-2015, Bromium, Inc.
+# Copyright 2013-2019, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -16,12 +16,15 @@ XENFOREIGNDIR = $(TOPDIR)/common/xen-tools/include/xen-foreign
 FOREIGNINCLUDES = include/xen/foreign/x86_32.h \
 		  include/xen/foreign/x86_64.h
 
-CPPFLAGS += -I$(XENPUBLICDIR) -I$(XENDIR_include)
+CPPFLAGS += -I$(XENPUBLICDIR) -I$(XENDIR_include) -I$(TOPDIR)/common
 libxc_CPPFLAGS += -D__XEN_TOOLS__ -D__UXEN_TOOLS__ -DQEMU_UXEN
 libxc_CPPFLAGS += -I$(abspath include)
+libxc_CPPFLAGS += $(LIBATTOIMG_CPPFLAGS)
+
 libxc_SRCS += xc_cpuid_x86.c
 libxc_SRCS += xc_domain.c
 libxc_SRCS += xc_hcall_buf.c
+libxc_SRCS += xc_attovm.c
 libxc_SRCS += xc_hvm_build.c
 libxc_SRCS += xc_foreign_memory.c
 libxc_SRCS += xc_misc.c

@@ -18,7 +18,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -43,6 +43,8 @@
 #include <unistd.h>
 
 #include "xg_private.h"
+#include "xc_attovm.h"
+#include "xc_attovm_private.h"
 
 #if !defined(QEMU_UXEN)
 #include <xen/foreign/x86_32.h>
@@ -51,6 +53,7 @@
 #include <xen/hvm/hvm_info_table.h>
 #include <xen/hvm/params.h>
 #include <xen/hvm/e820.h>
+#include <xen/attovm.h>
 
 #if !defined(QEMU_UXEN)
 #include <xen/libelf/libelf.h>
@@ -58,6 +61,8 @@
 #define NO_XEN_ELF_NOTE
 #include <libelf/libelf.h>
 #endif  /* QEMU_UXEN */
+
+#include <attoxen-api/ax_attovm.h>
 
 #define SUPERPAGE_2MB_SHIFT   9
 #define SUPERPAGE_2MB_NR_PFNS (1UL << SUPERPAGE_2MB_SHIFT)
@@ -382,7 +387,9 @@ static int setup_guest(xc_interface *xch,
                        char *image, unsigned long image_size,
                        struct xc_hvm_module *modules,
                        size_t mod_count,
-                       struct xc_hvm_oem_info *oem_info)
+                       struct xc_hvm_oem_info *oem_info,
+                       const char *attovm_image_file,
+                       struct attovm_definition_v1 *out_attovm_def)
 {
     xen_pfn_t *page_array = NULL;
     unsigned long i;
@@ -401,6 +408,7 @@ static int setup_guest(xc_interface *xch,
     struct hvm_module_info *hmi = NULL;
     size_t modules_len = 0;
     uint32_t modules_base = 0;
+    int attovm = attovm_image_file != NULL;
 
     /* An HVM guest must be initialised with at least 2MB memory. */
     if ( memsize < 2 || target < 2 )
@@ -409,17 +417,20 @@ static int setup_guest(xc_interface *xch,
     if ( memsize > target )
         pod_mode = 1;
 
-    memset(&elf, 0, sizeof(elf));
-    if ( elf_init(&elf, image, image_size) != 0 )
-        goto error_out;
+    if (!attovm) {
+        memset(&elf, 0, sizeof(elf));
+        if ( elf_init(&elf, image, image_size) != 0 )
+            goto error_out;
 
 #if !defined(QEMU_UXEN)
-    xc_elf_set_logfile(xch, &elf, 1);
+        xc_elf_set_logfile(xch, &elf, 1);
 #else   /* QEMU_UXEN */
-    elf_set_log(&elf, elf_log_cb, NULL, 1);
+        elf_set_log(&elf, elf_log_cb, NULL, 1);
 #endif  /* QEMU_UXEN */
 
-    elf_parse_binary(&elf);
+        elf_parse_binary(&elf);
+    }
+
     v_start = 0;
     v_end = (unsigned long long)memsize << 20;
 
@@ -429,29 +440,35 @@ static int setup_guest(xc_interface *xch,
         goto error_out;
     }
 
-    if (mod_count && modules) {
-        /* Align to the next Megabyte */
-        uint32_t base = (elf.pend + (1 << 20) - 1) & ~((1 << 20) - 1);
+    if (!attovm) {
+        if (mod_count && modules) {
+            /* Align to the next Megabyte */
+            uint32_t base = (elf.pend + (1 << 20) - 1) & ~((1 << 20) - 1);
 
-        hmi = modules_init(modules, mod_count, &modules_len);
+            hmi = modules_init(modules, mod_count, &modules_len);
 
-        if (hmi && (base + modules_len) > v_end) {
-            PERROR("Insufficient space to load modules");
-            goto error_out;
+            if (hmi && (base + modules_len) > v_end) {
+                PERROR("Insufficient space to load modules");
+                goto error_out;
+            }
+            if (hmi)
+                modules_base = base;
         }
-        if (hmi)
-            modules_base = base;
-    }
 
-     IPRINTF("VIRTUAL MEMORY ARRANGEMENT:\n"
-             "  Loader:        %016"PRIx64"->%016"PRIx64"\n"
-             "  Modules:       %016"PRIx64"->%016"PRIx64"\n"
-             "  TOTAL:         %016"PRIx64"->%016"PRIx64"\n"
-             "  ENTRY ADDRESS: %016"PRIx64"\n",
-             elf.pstart, elf.pend,
-             (uint64_t)modules_base, (uint64_t)modules_base + modules_len,
-             v_start, v_end,
-             elf_uval(&elf, elf.ehdr, e_entry));
+        IPRINTF("VIRTUAL MEMORY ARRANGEMENT:\n"
+                "  Loader:        %016"PRIx64"->%016"PRIx64"\n"
+                "  Modules:       %016"PRIx64"->%016"PRIx64"\n"
+                "  TOTAL:         %016"PRIx64"->%016"PRIx64"\n"
+                "  ENTRY ADDRESS: %016"PRIx64"\n",
+                elf.pstart, elf.pend,
+                (uint64_t)modules_base, (uint64_t)modules_base + modules_len,
+                v_start, v_end,
+                elf_uval(&elf, elf.ehdr, e_entry));
+    } else {
+        IPRINTF("VIRTUAL MEMORY ARRANGEMENT:\n"
+            "  TOTAL:         %016"PRIx64"->%016"PRIx64"\n",
+            v_start, v_end);
+    }
 
     if ( (page_array = malloc(nr_pages * sizeof(xen_pfn_t))) == NULL )
     {
@@ -580,13 +597,20 @@ static int setup_guest(xc_interface *xch,
             "  1GB PAGES: 0x%016lx\n",
             stat_normal_pages, stat_2mb_pages, stat_1gb_pages);
 
-    if ( loadelfimage(xch, &elf, dom, page_array) != 0 )
-        goto error_out;
+    if (attovm) {
+        if ( attovm_setup_guest(xch, dom, page_array, attovm_image_file, out_attovm_def) ) {
+            ERROR("attovm_setup_guest failed");
+            goto error_out;
+        }
+    } else {
+        if ( loadelfimage(xch, &elf, dom, page_array) != 0 )
+            goto error_out;
 
-    if (modules_base && load_modules(xch, hmi, modules_base, modules_len,
-                                     dom, page_array)) {
-        PERROR("Failed to load hvm modules.");
-        goto error_out;
+        if (modules_base && load_modules(xch, hmi, modules_base, modules_len,
+                                         dom, page_array)) {
+            PERROR("Failed to load hvm modules.");
+            goto error_out;
+        }
     }
 
     if ( (hvm_info_page = xc_map_foreign_range(
@@ -643,17 +667,21 @@ static int setup_guest(xc_interface *xch,
     xc_set_hvm_param(xch, dom, HVM_PARAM_IDENT_PT,
                      special_pfn(SPECIALPAGE_IDENT_PT) << PAGE_SHIFT);
 
-    /* Insert JMP <rel32> instruction at address 0x0 to reach entry point. */
-    entry_eip = elf_uval(&elf, elf.ehdr, e_entry);
-    if ( entry_eip != 0 )
-    {
-        char *page0 = xc_map_foreign_range(
-            xch, dom, PAGE_SIZE, PROT_READ | PROT_WRITE, 0);
-        if ( page0 == NULL )
-            goto error_out;
-        page0[0] = 0xe9;
-        *(uint32_t *)&page0[1] = entry_eip - 5;
-        xc_munmap(xch, dom, page0, PAGE_SIZE);
+    if (!attovm) {
+        /* Insert JMP <rel32> instruction at address 0x0 to reach entry point. */
+        entry_eip = elf_uval(&elf, elf.ehdr, e_entry);
+        if ( entry_eip != 0 )
+        {
+            char *page0 = xc_map_foreign_range(
+                xch, dom, PAGE_SIZE, PROT_READ | PROT_WRITE, 0);
+            if ( page0 == NULL )
+                goto error_out;
+            page0[0] = 0xe9;
+            *(uint32_t *)&page0[1] = entry_eip - 5;
+            xc_munmap(xch, dom, page0, PAGE_SIZE);
+        }
+    } else {
+        /* for attovm execution starts at 0x0 and rest is handled by loaded trampoline */
     }
 
     xc_set_hvm_param(xch, dom, HVM_PARAM_DMREQ_PFN,
@@ -693,7 +721,7 @@ static int xc_hvm_build_internal(xc_interface *xch,
 
     target = 8;
     return setup_guest(xch, domid, memsize, target, nr_vcpus, nr_ioreq_servers,
-                       image, image_size, modules, mod_count, oem_info);
+                       image, image_size, modules, mod_count, oem_info, NULL, NULL);
 }
 
 /* xc_hvm_build:
@@ -726,6 +754,35 @@ int xc_hvm_build(xc_interface *xch,
     free(image);
 
     return sts;
+}
+
+/* xc_attovm_build:
+ * Create a domain for running linux under attoxen */
+int xc_attovm_build(xc_interface *xch,
+    uint32_t domid,
+    uint32_t nr_vcpus,
+    uint32_t memsize_mb,
+    const char *image_filename,
+    int seal)
+{
+    struct attovm_definition_v1 def;
+    int rc;
+
+    memset(&def, 0, sizeof(def));
+    rc = setup_guest(xch, domid, memsize_mb, memsize_mb, nr_vcpus,
+        2, /*FIXME: ioreq servers */
+        NULL, 0, NULL, 0, NULL, image_filename, &def);
+    if (rc)
+        return rc;
+    if (seal) {
+        rc = attovm_seal_guest(xch, domid, &def);
+        if (rc) {
+            ERROR("failed to seal domain %d: rc=%d", domid, rc);
+            return rc;
+        }
+    }
+
+    return 0;
 }
 
 #if !defined(QEMU_UXEN)
