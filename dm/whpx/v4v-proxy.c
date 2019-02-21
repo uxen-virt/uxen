@@ -1,5 +1,5 @@
 /*
- * Copyright 2018, Bromium, Inc.
+ * Copyright 2018-2019, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -443,12 +443,13 @@ proxy_request_bind(v4v_proxy_req_bind_t *req_bind)
     close_dead_proxies();
 
     /* check if already bound */
-    if (get_proxy_context_for(addr)) {
+    if ((p = get_proxy_context_for(addr)) != NULL) {
         debug_printf("proxy for domain %d port %d already exists/is bound\n",
             addr.domain, addr.port);
-        complete.reqid = req_bind->req.id;
-        complete.bind = req_bind->bind;
-        goto complete_bind;
+        /* close existing & recreate */
+        critical_section_enter(&proxies_lock);
+        proxy_close(p);
+        critical_section_leave(&proxies_lock);
     }
 
     p = calloc(1, sizeof(v4v_proxy_context_t));
