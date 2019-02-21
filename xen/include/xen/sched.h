@@ -1,7 +1,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -339,6 +339,7 @@ struct domain
 #endif  /* __UXEN__ */
 
     struct domain_extra_1 *extra_1;
+    struct domain_extra_2 *extra_2;
 
 #ifndef __UXEN__
     /*

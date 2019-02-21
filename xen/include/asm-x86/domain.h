@@ -272,7 +272,6 @@ struct domain_extra_1
     /* XXX UXEN_MAX_VCPUS is sufficient */
     struct vcpu *vcpu[MAX_HVM_VCPUS]; /* d->vcpus */
 
-    char hvm_domain_pbuf[HVM_PBUF_SIZE]; /* d->arch.hvm_domain.pbuf */
     uint64_t hvm_domain_params[HVM_NR_PARAMS]; /* d->arch.hvm_domain.params */
     struct hvm_io_handler hvm_domain_io_handler; /* ...hvm_domain.io_handler */
     struct hvm_vioapic hvm_domain_vioapic;       /* ...hvm_domain.vioapic */
@@ -292,6 +291,11 @@ struct domain_extra_1
 #define zp_nr extra_1->zp_nr
 #define zp_prefix extra_1->zp_prefix
 #define zp_mask extra_1->zp_mask
+};
+
+struct domain_extra_2
+{
+    char hvm_domain_pbuf[HVM_PBUF_SIZE]; /* d->arch.hvm_domain.pbuf */
 };
 
 struct arch_domain

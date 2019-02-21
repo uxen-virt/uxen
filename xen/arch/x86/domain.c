@@ -6,7 +6,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -214,6 +214,7 @@ struct domain *alloc_domain_struct(void)
 #endif  /* __UXEN__ */
     BUILD_BUG_ON(sizeof(*d) > PAGE_SIZE);
     BUILD_BUG_ON(sizeof(*d->extra_1) > PAGE_SIZE);
+    BUILD_BUG_ON(sizeof(*d->extra_2) > PAGE_SIZE);
     BUILD_BUG_ON(sizeof(*d->arch.p2m) > sizeof(d->extra_1->p2m));
 
     /* Maximum we can support with current vLAPIC ID mapping. */
@@ -231,6 +232,14 @@ struct domain *alloc_domain_struct(void)
     }
     clear_page(d->extra_1);
 
+    d->extra_2 = alloc_xenheap_pages(0, MEMF_bits(bits));
+    if (!d->extra_2) {
+        free_xenheap_page(d->extra_1);
+        free_xenheap_page(d);
+        return NULL;
+    }
+    clear_page(d->extra_2);
+
     return d;
 }
 
@@ -239,6 +248,7 @@ void free_domain_struct(struct domain *d)
     lock_profile_deregister_struct(LOCKPROF_TYPE_PERDOM, d);
     if (d->domain_id < DOMID_FIRST_RESERVED)
         domain_array[d->domain_id] = NULL;
+    free_xenheap_page(d->extra_2);
     free_xenheap_page(d->extra_1);
     free_xenheap_page(d);
 }

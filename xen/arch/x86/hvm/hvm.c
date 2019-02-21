@@ -897,7 +897,7 @@ int hvm_domain_initialise(struct domain *d)
     INIT_LIST_HEAD(&d->arch.hvm_domain.msixtbl_list);
     spin_lock_init(&d->arch.hvm_domain.msixtbl_list_lock);
 
-    d->arch.hvm_domain.pbuf = d->extra_1->hvm_domain_pbuf;
+    d->arch.hvm_domain.pbuf = d->extra_2->hvm_domain_pbuf;
     d->arch.hvm_domain.params = d->extra_1->hvm_domain_params;
     d->arch.hvm_domain.io_handler = &d->extra_1->hvm_domain_io_handler;
     d->arch.hvm_domain.io_handler->num_slot = 0;

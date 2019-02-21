@@ -104,7 +104,7 @@ struct hvm_domain {
 #endif  /* __UXEN__ */
 
     /* hvm_print_line() logging. */
-#define HVM_PBUF_SIZE 80
+#define HVM_PBUF_SIZE 512
     char                  *pbuf;
     int                    pbuf_idx;
     spinlock_t             pbuf_lock;
