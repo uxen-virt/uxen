@@ -713,6 +713,18 @@ co_set_vm_save(const char *opt, yajl_val arg, void *opaque)
 }
 
 static int
+co_set_attovm(const char *opt, yajl_val arg, void *opaque)
+{
+    if (!YAJL_IS_OBJECT(arg))
+        errx(1, "config option attovm, wrong type: expected map\n");
+
+    vm_attovm_ax = yajl_object_get_bool_default(arg, "ax", false);
+    vm_attovm_url = (char*) yajl_object_get_string(arg, "url");
+
+    return 0;
+}
+
+static int
 co_ignore(const char *opt, yajl_val arg, void *opaque)
 {
 
@@ -724,6 +736,7 @@ struct config_option config_options[] = {
     { "", co_ignore, NULL },
     { "apic", co_set_integer_opt, &vm_apic },
     { "app-dump-command", co_set_string_opt, &app_dump_command },
+    { "attovm", co_set_attovm, NULL },
     { "audio", co_set_dict_opt, &vm_audio },
     { "balloon-max-size", co_set_integer_opt, &balloon_max_mb },
     { "balloon-min-size", co_set_integer_opt, &balloon_min_mb },
@@ -763,6 +776,7 @@ struct config_option config_options[] = {
     { "hpet", co_set_integer_opt, &vm_hpet },
     { "hvm-params", co_set_dict_opt, &vm_hvm_params },
     { "ignore-storage-space-fix", co_set_dict_opt, &vm_ignore_storage_space_fix },
+    { "image", co_set_string_opt, &vm_image },
     { "lava", co_set_string_opt, &lava_options },
     { "lazy-load", co_set_boolean_opt, &vm_lazy_load },
     { "log-ratelimit-guest-burst", co_set_integer_opt,
@@ -799,6 +813,8 @@ struct config_option config_options[] = {
     { "use-v4v-disk", co_set_integer_opt, &vm_use_v4v_disk },
     { "use-v4v-net", co_set_integer_opt, &vm_use_v4v_net },
     { "uuid", co_set_uuid, NULL },
+    { "uxenfb", co_set_boolean_opt, &vm_uxenfb },
+    { "uxenplatform-nopci", co_set_boolean_opt, &vm_uxenplatform_nopci },
     { "v4v-disable-ahci-clones", co_set_boolean_opt, &vm_v4v_disable_ahci_clones },
     { "v4v-idtoken", co_set_v4v_idtoken, NULL },
     { "v4v-storage", co_set_boolean_opt, &vm_v4v_storage },

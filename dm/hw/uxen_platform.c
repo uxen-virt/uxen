@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -8,6 +8,7 @@
 #include <dm/qemu/hw/irq.h>
 #include <dm/qemu/net.h>
 #include <dm/dm.h>
+#include <dm/sysbus.h>
 #include "pci.h"
 #include "pci-ram.h"
 
@@ -40,7 +41,10 @@ struct platform_bus {
 };
 
 typedef struct PCI_uxen_platform_state {
-    PCIDevice dev;
+    union {
+        PCIDevice dev;
+        SysBusDevice sysdev;
+    };
     MemoryRegion ctl_mmio_bar;
     struct ctl_mmio ctl_mmio;
     BH *balloon_status_bh;
@@ -580,14 +584,29 @@ UXenPlatformDevice *uxenplatform_nic_init(NICInfo *nd, const char *model)
 /* init */
 
 static int
-uxen_platform_initfn(PCIDevice *dev)
+uxen_platform_initfn_common(DeviceState *dev, PCI_uxen_platform_state *s)
+{
+    if (uxp_dev)
+        return EEXIST;
+    uxp_dev = s;
+    s->bus = FROM_QBUS(struct platform_bus,
+                       qbus_create(&platform_bus_info, dev, NULL));
+    s->bus->qbus.allow_hotplug = 1;
+
+    return 0;
+}
+
+
+static int
+uxen_platform_initfn_pci(PCIDevice *dev)
 {
     PCI_uxen_platform_state *d = DO_UPCAST(PCI_uxen_platform_state, dev, dev);
     uint8_t *pci_conf;
+    int err;
 
-    if (uxp_dev)
-        return EEXIST;
-    uxp_dev = d;
+    err = uxen_platform_initfn_common(&dev->qdev, d);
+    if (err)
+        return err;
 
     pci_conf = d->dev.config;
 
@@ -611,10 +630,6 @@ uxen_platform_initfn(PCIDevice *dev)
                                 update_state_pointer, d);
 
     pci_register_bar(&d->dev, 1, PCI_BASE_ADDRESS_SPACE_MEMORY, &d->state_bar);
-
-    d->bus = FROM_QBUS(struct platform_bus,
-                       qbus_create(&platform_bus_info, &dev->qdev, NULL));
-    d->bus->qbus.allow_hotplug = 1;
 
     memory_region_init_io(&d->bus->io, &bus_io_ops, d->bus, "platform.bus_io",
                           UXENBUS_DEVICE_CONFIG_LENGTH * UXENBUS_DEVICE_COUNT);
@@ -640,7 +655,7 @@ uxen_platform_exitfn (PCIDevice * dev)
 
 
 static PCIDeviceInfo uxen_platform_info = {
-    .init = uxen_platform_initfn,
+    .init = uxen_platform_initfn_pci,
     .exit = uxen_platform_exitfn,
     .qdev.name = "uxen-platform",
     .qdev.desc = "uXen platform pci device",
@@ -656,11 +671,49 @@ static PCIDeviceInfo uxen_platform_info = {
     .revision = 1,
 };
 
+static int
+uxen_platform_initfn_sysbus(SysBusDevice *dev)
+{
+    PCI_uxen_platform_state *s =
+        DO_UPCAST(PCI_uxen_platform_state, sysdev, dev);
+
+    return uxen_platform_initfn_common(&dev->qdev, s);
+}
+
+static SysBusDeviceInfo uxen_platform_info_sysbus = {
+    .init = uxen_platform_initfn_sysbus,
+    .qdev.name = "uxen-platform",
+    .qdev.desc = "uXen platform system device",
+    .qdev.size = sizeof(PCI_uxen_platform_state),
+    .qdev.vmsd = &vmstate_uxen_platform,
+};
+
 static void uxen_platform_register(void)
 {
     pci_qdev_register(&uxen_platform_info);
+    sysbus_register_withprop(&uxen_platform_info_sysbus);
 }
 device_init(uxen_platform_register);
+
+int uxenplatform_create_bus(PCIBus *pci_bus)
+{
+    if (!vm_uxenplatform_nopci) {
+        if (!pci_create_simple(pci_bus, -1, "uxen-platform"))
+            return -1;
+        return 0;
+    } else {
+        DeviceState *dev = qdev_create(NULL, "uxen-platform");
+
+        if (!dev)
+            return -1;
+
+        if (qdev_init(dev)) {
+            qdev_free(dev);
+            return -1;
+        }
+        return 0;
+    }
+}
 
 #ifdef MONITOR
 void

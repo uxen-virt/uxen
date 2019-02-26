@@ -13,6 +13,7 @@
 #include <stdio.h>
 
 #include "aio.h"
+#include "atto-vm.h"
 #include "bh.h"
 #include "block.h"
 #include "char.h"
@@ -107,6 +108,12 @@ uint64_t debugkey_level = 0;
 uint64_t malloc_limit_bytes = 0;
 uint64_t restore_framebuffer_pattern = 0xffffffff;
 dict vm_audio = NULL;
+char *vm_image = NULL;
+uint64_t vm_attovm_mode = ATTOVM_MODE_NONE;
+uint64_t vm_attovm_ax = 0;
+char *vm_attovm_url = NULL;
+uint64_t vm_uxenfb = 0;
+uint64_t vm_uxenplatform_nopci = 0;
 dict vm_hvm_params = NULL;
 int restore = 0;
 int *disabled_keys = NULL;
@@ -356,6 +363,15 @@ main(int argc, char **argv)
 
     if (whpx_enable)
         whpx_early_init();
+
+    if (!vm_image) {
+        asprintf(&vm_image, "%s/hvmloader", dm_path);
+        if (!vm_image)
+            err(1, "asprintf(hvmloader)");
+    }
+
+    if (is_attovm_image(vm_image))
+        vm_attovm_mode = vm_attovm_ax ? ATTOVM_MODE_AX : ATTOVM_MODE_UXEN;
 
     debug_printf("creating vm\n");
     vm_create(vm_restore_mode);

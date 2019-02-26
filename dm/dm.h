@@ -58,6 +58,8 @@ extern uint64_t vm_v4v_disable_ahci_clones;
 extern uint64_t vm_vram_dirty_tracking;
 extern uint8_t v4v_idtoken[16];
 extern uint8_t v4v_idtoken_is_vm_uuid;
+extern uint64_t vm_uxenfb;
+extern uint64_t vm_uxenplatform_nopci;
 extern const char *vmsavefile_on_crash;
 extern const char *vmsavefile_on_restricted_pci;
 extern const char *vmsavefile_on_kbd_reboot;
@@ -100,5 +102,14 @@ extern const char *serial_devices[MAX_SERIAL_PORTS];
 extern uint64_t whpx_enable;
 extern uint64_t whpx_perf_stats;
 extern uint64_t whpx_reftsc;
+
+extern char *vm_image; /* hvmloader path or .attovm image path */
+
+#define ATTOVM_MODE_NONE   0
+#define ATTOVM_MODE_AX     1
+#define ATTOVM_MODE_UXEN   2
+extern uint64_t vm_attovm_mode; /* run mode */
+extern uint64_t vm_attovm_ax; /* use ax ? */
+extern char *vm_attovm_url; /* browser url */
 
 #endif	/* _DM_H_ */

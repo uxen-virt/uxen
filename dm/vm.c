@@ -47,6 +47,7 @@
 #undef _IOREQ_H_
 #include <xen/hvm/ioreq.h>
 #include <xenguest.h>
+#include <xc_attovm.h>
 
 #ifdef HAS_AUDIO
 #include "hw/uxen_audio_ctrl.h"
@@ -55,6 +56,7 @@
 #include <dm/whpx/whpx.h>
 
 #include "vm-savefile-simple.h"
+#include <dm/atto-vm.h>
 
 static struct xc_hvm_oem_info oem_info = { 0 };
 static critical_section vm_run_mode_lock;
@@ -419,6 +421,7 @@ vm_create(int restore_mode)
 {
     int i;
     int ret;
+    uint64_t attovm_cdf = 0;
 
     critical_section_init(&vm_run_mode_lock);
     critical_section_init(&vm_pause_lock);
@@ -435,11 +438,15 @@ vm_create(int restore_mode)
     if (whpx_enable)
         return;
 
+    if (vm_attovm_mode == ATTOVM_MODE_AX)
+        attovm_cdf |= XEN_DOMCTL_CDF_attovm_ax;
+
     ret = uxen_create_vm(uxen_handle, vm_uuid, v4v_idtoken,
                          XEN_DOMCTL_CDF_hvm_guest | XEN_DOMCTL_CDF_hap |
                          (restore_mode == VM_RESTORE_TEMPLATE ?
                           XEN_DOMCTL_CDF_template : 0) |
-                         (vm_hidden_mem == 1 ? XEN_DOMCTL_CDF_hidden_mem : 0),
+                         (vm_hidden_mem == 1 ? XEN_DOMCTL_CDF_hidden_mem : 0) |
+                         attovm_cdf,
                          0, vm_vcpus, &vm_id);
     if (ret && errno == EEXIST && restore_mode == VM_RESTORE_TEMPLATE)
         errx(0, "template vm already setup");
@@ -570,16 +577,21 @@ uxen_vm_init(const char *loadvm, int restore_mode)
         if (ret)
             err(1, "mapcache_init");
 
-        asprintf(&hvmloader_path, "%s/hvmloader", dm_path);
-        if (!hvmloader_path)
-            err(1, "asprintf(hvmloader)");
-
         modules = vm_get_modules(&mod_count);
 
-        if (xc_hvm_build(xc_handle, vm_id, ram_size >> 20, vm_vcpus,
-                         NR_IOREQ_SERVERS, hvmloader_path, modules, mod_count,
-                         &oem_info))
-            errx(1, "xc_hvm_build failed");
+        assert(vm_image);
+
+        if (!vm_attovm_mode)
+            ret = xc_hvm_build(xc_handle, vm_id, ram_size >> 20, vm_vcpus,
+                               NR_IOREQ_SERVERS, vm_image, modules,
+                               mod_count, &oem_info);
+        else
+            ret = xc_attovm_build(xc_handle, vm_id, vm_vcpus, ram_size >> 20,
+                                  vm_image,
+                                  vm_attovm_mode == ATTOVM_MODE_AX /* seal */ );
+
+        if (ret)
+            errx(1, "hvm build failed: %d", ret);
 
         if (modules)
             vm_cleanup_modules(modules, mod_count);

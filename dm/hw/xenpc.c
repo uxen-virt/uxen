@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -316,7 +316,14 @@ pc_init_xen(void)
     intel_pch_init(pci_bus);
 #endif
 
-    uxendisp_init(pci_bus);
+    if (!vm_uxenfb)
+      uxendisp_init(pci_bus);
+
+    if (uxenplatform_create_bus(pci_bus))
+        errx(1, "failed to create platform bus");
+
+    if (vm_uxenfb)
+        uxenplatform_create_simple("uxenfb");
 
 #ifdef CONFIG_PASSTHROUGH
     /* Pass-through Initialization
@@ -338,8 +345,6 @@ pc_init_xen(void)
     pci_xen_platform_init(pci_bus);
     platform_fixed_ioport_init();
 #endif
-
-    pci_create_simple(pci_bus, -1, "uxen-platform");
 
     for (i = 0; i < MAX_SERIAL_PORTS; i++)
         if (serial_hds[i]) {
@@ -428,14 +433,17 @@ pc_init_xen(void)
         isa_create_simple("isa-applesmc");
 
 #ifdef HAS_AUDIO
-    m = dict_get_string(vm_audio, "type");
+    /* attovm has no audio support */
+    if (!vm_attovm_mode) {
+        m = dict_get_string(vm_audio, "type");
 
-    if (m && !strcmp(m, "hda")) {
-	int intel_hda_and_codec_init(PCIBus *bus);
-	intel_hda_and_codec_init(pci_bus);
-    } else {
-	int uxenaudio_init(PCIBus *bus);
-	uxenaudio_init(pci_bus);
+        if (m && !strcmp(m, "hda")) {
+            int intel_hda_and_codec_init(PCIBus *bus);
+            intel_hda_and_codec_init(pci_bus);
+        } else {
+            int uxenaudio_init(PCIBus *bus);
+            uxenaudio_init(pci_bus);
+        }
     }
 #endif
 

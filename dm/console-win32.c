@@ -15,7 +15,8 @@
 #include "hw/uxen_platform.h"
 #include "vram.h"
 #include "guest-agent.h"
-
+#include "atto-agent.h"
+#include "atto-vm.h"
 #include "qemu_glue.h"
 
 #include <fcntl.h>
@@ -826,6 +827,9 @@ handle_key_event(HWND hwnd, int message, int wParam, int lParam)
     int rmenu, rwin, lctrl, rctrl;
     HWND parent_window;
 
+    if (vm_attovm_mode)
+        attovm_check_kbd_layout_change();
+
     /* check if key has been blocked by configuration */
     if (bsearch(&wParam, disabled_keys, disabled_keys_len, sizeof(int),
                 comp))
@@ -1193,6 +1197,9 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
     RECT *r;
     POINT pos = { 0, 0 };
 
+    if (vm_attovm_mode == ATTOVM_MODE_AX)
+        attovm_check_keyboard_focus();
+
 #ifdef EVENT_DEBUG
     switch (message) {
     case WM_PAINT:
@@ -1215,6 +1222,12 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 
     /* The actual input processing switch. */
     switch (message) {
+    case WM_SETCURSOR:
+        if (vm_attovm_mode && LOWORD(lParam) == HTCLIENT) {
+            attovm_set_current_cursor();
+            return 0;
+        }
+        break;
     case WM_UXEN_SETCURSOR:
         SetClassLongPtr(hwnd, GCLP_HCURSOR, (LONG_PTR)wParam);
         SetCursor((HCURSOR)wParam);
@@ -1227,6 +1240,8 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         sync_keyboard_state();
         reset_key_modifiers(hwnd, 1);
         guest_agent_window_event(0, message, wParam, lParam);
+        if (vm_attovm_mode)
+            attovm_set_keyboard_focus(1);
         return 0;
 
     case WM_KEYDOWN:
@@ -1255,6 +1270,8 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_KILLFOCUS:
         guest_agent_window_event(0, message, wParam, lParam);
         reset_key_modifiers(hwnd, 0);
+        if (vm_attovm_mode)
+            attovm_set_keyboard_focus(0);
         return 0;
 
     case WM_LBUTTONDOWN:
@@ -1355,6 +1372,7 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         debug_printf("%s: resize %"PRId64"x%"PRId64"\n", __FUNCTION__,
                      lParam & 0xffff, (lParam >> 16) & 0xffff);
 #endif
+        atto_agent_send_resize_event(lParam & 0xffff, (lParam >> 16) & 0xffff);
         return 0;
 
     case WM_PAINT:
@@ -1373,7 +1391,6 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
                 Wwarn("BitBlt failed");
                 ret = -1;
             }
-
             EndPaint (hwnd, &ps);
             LeaveCriticalSection(&s->surface_lock);
 
@@ -1624,6 +1641,7 @@ gui_init(char *optstr)
 {
     win_register_class();
     guest_agent_init();
+    atto_agent_init();
 
     dr_context = console_dr_init(-1, v4v_idtoken, NULL, disp_inv_rect, 0);
     if (!dr_context)
@@ -1638,6 +1656,8 @@ gui_exit(void)
     console_dr_cleanup(dr_context);
     dr_context = NULL;
     guest_agent_cleanup();
+    if (vm_attovm_mode)
+        atto_agent_cleanup();
 }
 
 static int
@@ -1648,8 +1668,9 @@ gui_create(struct gui_state *state, struct display_state *ds)
     s->ds = ds;
     InitializeCriticalSection(&s->surface_lock);
     EnterCriticalSection(&s->surface_lock);
-    s->state.width = 640;
-    s->state.height = 480;
+
+    s->state.width  = vm_attovm_mode ? 1024 : 640;
+    s->state.height = vm_attovm_mode ? 768  : 480;
 
     s->start_event = CreateEvent(NULL, FALSE, FALSE, NULL);
     if (!s->start_event)
