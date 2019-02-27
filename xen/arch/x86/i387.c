@@ -10,7 +10,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -38,7 +38,7 @@
 #include <asm/asm_defns.h>
 
 /* eXtended features mask used by the host. */
-static uint64_t xcr0_host = 0;
+uint64_t xcr0_host = 0;
 
 void fpu_early_init(void)
 {

@@ -7,7 +7,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -72,15 +72,6 @@ static inline void xsetbv(u32 index, u64 xfeatures)
 /* Cached xcr0 to avoid writes */
 DEFINE_PER_CPU(uint64_t, xcr0_last);
 
-uint64_t xgetbv(uint32_t index)
-{
-    uint32_t hi, lo;
-
-    asm volatile ("xgetbv" : "=a" (lo), "=d" (hi) : "c" (index));
-
-    return ((uint64_t)hi << 32) | lo;
-}
-
 /* Danger - this call is used on the hostcall path so you can */
 /* call any host calls like printk here */
 static inline void xsetbv_maybe(u32 index, u64 xfeatures)
@@ -112,6 +103,15 @@ static inline void xsetbv_maybe(u32 index, u64 xfeatures)
         if (index == XCR_XFEATURE_ENABLED_MASK)
             this_cpu(xcr0_last) = xfeatures;
     }
+}
+
+uint64_t xgetbv(uint32_t index)
+{
+    uint32_t hi, lo;
+
+    asm volatile ("xgetbv" : "=a" (lo), "=d" (hi) : "c" (index));
+
+    return ((uint64_t)hi << 32) | lo;
 }
 
 inline void sync_xcr0(void)

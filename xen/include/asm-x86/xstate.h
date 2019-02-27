@@ -83,13 +83,13 @@ struct xsave_struct
 } __attribute__ ((packed, aligned (64)));
 
 /* extended state operations */
+extern uint64_t xcr0_host;
 u64 xgetbv(uint32_t index);
 void sync_xcr0(void);
 void _set_xcr0(u64 xfeatures);
 uint64_t get_xcr0(void);
 void xsave(struct vcpu *v, uint64_t mask);
 void xrstor(struct vcpu *v, uint64_t mask);
-uint64_t xgetbv(uint32_t index);
 bool_t xsave_enabled(const struct vcpu *v);
 
 #ifndef NDEBUG

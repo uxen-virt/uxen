@@ -2271,8 +2271,9 @@ int hvm_handle_xsetbv(u64 new_bv)
     struct vcpu *v = current;
     struct segment_register sreg;
 
-    printk("guest cpu did xsetbv(0, 0x%" PRIx64 "), host value is 0x%"PRIx64 "\n",
-	new_bv, xgetbv(0));
+    gdprintk(XENLOG_WARNING,
+             "xsetbv(0, 0x%"PRIx64"), was 0x%"PRIx64", "
+             "host value 0x%"PRIx64"\n", new_bv, v->arch.xcr0, xcr0_host);
 
     hvm_get_segment_register(v, x86_seg_ss, &sreg);
     if ( sreg.attr.fields.dpl != 0 )
