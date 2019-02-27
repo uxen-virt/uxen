@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2018, Bromium, Inc.
+ * Copyright 2017-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -21,9 +21,9 @@
     ((ax_vmcs_extensions_v1_t *)(((uint8_t *)v) + 0x1000 - \
                                  sizeof(ax_vmcs_extensions_v1_t)))
 
-#define AX_ON_AMD_PRESENT()   (ax_present && (boot_cpu_data.x86_vendor == X86_VENDOR_AMD))
-
 extern int ax_present;
+extern int ax_present_intel;
+extern int ax_present_amd;
 extern int ax_pv_ept;
 extern int ax_has_pv_vmcs;
 extern int ax_pv_vmcs_enabled;
