@@ -3677,12 +3677,18 @@ void hvm_cpuid(unsigned int input, unsigned int *eax, unsigned int *ebx,
         if ( !is_cpl0 )
             *ecx &= 0x7FFFFFFFU;
         break;
+    case 0x6:                   /* doesn't use sub-leafs */
+        *eax &= ~cpufeat_mask(X86_FEATURE_HDC);
+        break;
     case 0x7:
         if (count == 0) {
             if (!cpu_has_smep )
               *ebx &= ~cpufeat_mask(X86_FEATURE_SMEP);
 
             *ebx &= ~cpufeat_mask(X86_FEATURE_MPX);
+            *ebx &= ~cpufeat_mask(X86_FEATURE_AVX512F);
+            *ebx &= ~cpufeat_mask(X86_FEATURE_INTEL_PT);
+            *ecx &= ~cpufeat_mask(X86_FEATURE_PKU);
 
             if (!cpu_has_vmx_invpcid)
                 *ebx &= ~cpufeat_mask(X86_FEATURE_INVPCID);

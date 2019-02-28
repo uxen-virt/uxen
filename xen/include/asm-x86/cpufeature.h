@@ -142,6 +142,14 @@
 #define X86_FEATURE_ERMS	(7*32+ 9) /* Enhanced REP MOVSB/STOSB */
 #define X86_FEATURE_INVPCID     (7*32+10) /* Invalidate Process Context ID */
 #define X86_FEATURE_MPX		(7*32+14) /* Memory Protection eXentions */
+#define X86_FEATURE_AVX512F	(7*32+16) /* AVX-512 Foundation */
+#define X86_FEATURE_INTEL_PT	(7*32+25) /* Intel Processor Trace */
+
+/* cpuid bits defined to manipulate hvm cpuid */
+/* Intel-defined CPU features, CPUID level 0x00000007:0 (ecx) */
+#define X86_FEATURE_PKU		(3)       /* Protection Keys for Userspace */
+/* Intel-defined CPU features, CPUID level 0x00000006 (eax) */
+#define X86_FEATURE_HDC		(13)      /* Hardware Duty Cycle */
 
 #define cpu_has(c, bit)		test_bit(bit, (c)->x86_capability)
 #define boot_cpu_has(bit)	test_bit(bit, boot_cpu_data.x86_capability)
