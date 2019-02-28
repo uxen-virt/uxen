@@ -26,9 +26,20 @@
 #define XSTATE_FP      (1ULL << 0)
 #define XSTATE_SSE     (1ULL << 1)
 #define XSTATE_YMM     (1ULL << 2)
+#define XSTATE_BNDREGS (1ULL << 3)
+#define XSTATE_BNDCSR  (1ULL << 4)
+#define XSTATE_OPMASK  (1ULL << 5)
+#define XSTATE_ZMM_Hi256 (1ULL << 6)
+#define XSTATE_Hi16_ZMM (1ULL << 7)
+#define XSTATE_PT      (1ULL << 8)
+#define XSTATE_PKRU    (1ULL << 9)
+#define XSTATE_HDC     (1ULL << 13)
 #define XSTATE_LWP     (1ULL << 62) /* AMD lightweight profiling */
 #define XSTATE_FP_SSE  (XSTATE_FP | XSTATE_SSE)
-#define XCNTXT_MASK    (XSTATE_FP | XSTATE_SSE | XSTATE_YMM | XSTATE_LWP)
+#define XCNTXT_MASK    (XSTATE_FP | XSTATE_SSE | XSTATE_YMM |           \
+                        XSTATE_BNDREGS | XSTATE_BNDCSR |                \
+                        XSTATE_OPMASK | XSTATE_ZMM_Hi256 | XSTATE_Hi16_ZMM | \
+                        XSTATE_PT | XSTATE_PKRU | XSTATE_HDC | XSTATE_LWP)
 
 #define XSTATE_ALL     (~0)
 #define XSTATE_NONLAZY (XSTATE_LWP)
