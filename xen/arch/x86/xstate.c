@@ -33,9 +33,6 @@
 #include <asm/xstate.h>
 #include <asm/asm_defns.h>
 
-static u64 __devinitdata opt_xfeatures = 0;
-integer_param("xfeatures", opt_xfeatures);
-
 bool_t __read_mostly cpu_has_xsaveopt;
 
 /*
@@ -232,7 +229,7 @@ void xstate_init(void)
     u32 eax, ebx, ecx, edx;
     int cpu = smp_processor_id();
     u32 min_size;
-    u64 curr_xcr0, xcr0;
+    u64 xcr0;
 
     if ( boot_cpu_data.cpuid_level < XSTATE_CPUID )
         return;
@@ -251,15 +248,7 @@ void xstate_init(void)
     BUG_ON(ecx < min_size);
 
     sync_xcr0();
-    curr_xcr0 = this_cpu(xcr0_last);
-    if ( opt_xfeatures ) {
-        set_xcr0((((u64)edx << 32) | eax) & (curr_xcr0 | opt_xfeatures),
-                 XCR0_STATE_UNDEF);
-        cpuid_count(XSTATE_CPUID, 0, &eax, &ebx, &ecx, &edx);
-        xcr0 = xgetbv(XCR_XFEATURE_ENABLED_MASK);
-        set_xcr0(curr_xcr0, XCR0_STATE_HOST);
-    } else
-        xcr0 = curr_xcr0;
+    xcr0 = this_cpu(xcr0_last);
 
     if ( cpu == 0 )
     {

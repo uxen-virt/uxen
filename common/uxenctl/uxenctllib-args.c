@@ -91,7 +91,6 @@ static struct uxen_param params[] = {
     UINT_OPTION("ple_window", ple_window),
     INVBOOLEAN_OPTION("pv_vmx", disable_pv_vmx),
     BOOLEAN_OPTION("sync_console", opt_sync_console),
-    UINT_OPTION("xfeatures", opt_xfeatures),
     BOOLEAN_OPTION("xsave", use_xsave),
     STRING_OPTION("debug", opt_debug),
     BOOLEAN_OPTION("hvmonoff", opt_hvmonoff),

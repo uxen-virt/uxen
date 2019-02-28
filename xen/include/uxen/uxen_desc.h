@@ -198,9 +198,9 @@ struct uxen_init_desc {
     uint64_t disable_pv_vmx;
 #     define UXEN_INIT_disable_pv_vmx       		(1ULL << 22)
 #     define UXEN_INIT_disable_pv_vmx_MASK              mask0
-    uint64_t opt_xfeatures;
-#     define UXEN_INIT_opt_xfeatures			(1ULL << 23)
-#     define UXEN_INIT_opt_xfeatures_MASK		mask0
+    uint64_t __retired1; /* was opt_xfeatures */
+/* #     define UXEN_INIT_opt_xfeatures			(1ULL << 23) */
+/* #     define UXEN_INIT_opt_xfeatures_MASK		mask0 */
     char opt_debug[XEN_OPT_DEBUG_LEN];
 #     define UXEN_INIT_opt_debug			(1ULL << 24)
 #     define UXEN_INIT_opt_debug_MASK			mask0
