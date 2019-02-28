@@ -72,7 +72,7 @@ static inline void xsetbv(u32 index, u64 xfeatures)
 /* Cached xcr0 to avoid writes */
 DEFINE_PER_CPU(uint64_t, xcr0_last);
 
-/* Danger - this call is used on the hostcall path so you can */
+/* Danger - this call is used on the hostcall path so you can NOT */
 /* call any host calls like printk here */
 static inline void xsetbv_maybe(u32 index, u64 xfeatures)
 {
