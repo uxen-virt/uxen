@@ -3703,6 +3703,7 @@ void hvm_cpuid(unsigned int input, unsigned int *eax, unsigned int *ebx,
         break;
     case 0xd:
     {
+#ifndef __UXEN__
         unsigned int sub_leaf, _eax, _ebx, _ecx, _edx;
         /* EBX value of main leaf 0 depends on enabled xsave features */
         if ( count == 0 && v->arch.xcr0 ) 
@@ -3719,6 +3720,12 @@ void hvm_cpuid(unsigned int input, unsigned int *eax, unsigned int *ebx,
                     *ebx = _eax + _ebx;
             }
         }
+#else  /* __UXEN__ */
+        /* set current xsave area size (ebx) to maximum size (ecx),
+         * since we always use the host's xstate feature mask */
+        if (count == 0)
+            *ebx = *ecx;
+#endif  /* __UXEN__ */
         break;
     }
     case 0x80000001:
