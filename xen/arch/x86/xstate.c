@@ -82,17 +82,13 @@ static inline void xsetbv_maybe(u32 index, u64 xfeatures)
 
     if (this_cpu(xcr0_last) != xfeatures ||
         index != XCR_XFEATURE_ENABLED_MASK) {
-        uint64_t xcr0 = xgetbv(XCR_XFEATURE_ENABLED_MASK);
         u32 hi, lo;
 
         if (index == XCR_XFEATURE_ENABLED_MASK ) {
-            if (!((xcr0 ^ xfeatures) & xfeatures)) {
-                this_cpu(xcr0_last) = xfeatures;
+            if (!((xfeatures ^ this_cpu(xcr0_last)) & xfeatures))
                 return;
-            }
-            xfeatures |= xcr0;
+            xfeatures |= this_cpu(xcr0_last);
         }
-
 
         hi = xfeatures >> 32;
         lo = (u32)xfeatures;
@@ -254,9 +250,9 @@ void xstate_init(void)
         min_size += XSTATE_YMM_SIZE;
     BUG_ON(ecx < min_size);
 
-    curr_xcr0 = xgetbv(XCR_XFEATURE_ENABLED_MASK);
+    sync_xcr0();
+    curr_xcr0 = this_cpu(xcr0_last);
     if ( opt_xfeatures ) {
-        sync_xcr0();
         set_xcr0((((u64)edx << 32) | eax) & (curr_xcr0 | opt_xfeatures),
                  XCR0_STATE_UNDEF);
         cpuid_count(XSTATE_CPUID, 0, &eax, &ebx, &ecx, &edx);
