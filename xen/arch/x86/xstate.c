@@ -42,6 +42,12 @@ bool_t __read_mostly cpu_has_xsaveopt;
  */
 u32 xsave_cntxt_size;
 
+/*
+ * size (in bytes) of the XSAVE/XRSTOR save area used in save files,
+ * using only features in XCNTXT_MASK_vmsave.
+ */
+u32 xsave_cntxt_size_vmsave;
+
 /* A 64-bit bitmask of the XSAVE/XRSTOR features supported by processor. */
 u64 xfeature_mask;
 
@@ -52,7 +58,6 @@ DEFINE_PER_CPU(uint64_t, xcr0);
 DEFINE_PER_CPU(int, xcr0_state);
 #endif /* XCR0_STATE_DEBUG */
 
-#ifndef __UXEN__
 /* Because XCR0 is cached for each CPU, xsetbv() is not exposed. Users should 
  * use set_xcr0() instead.
  */
@@ -64,7 +69,6 @@ static inline void xsetbv(u32 index, u64 xfeatures)
     asm volatile (".byte 0x0f,0x01,0xd1" :: "c" (index),
             "a" (lo), "d" (hi));
 }
-#endif  /* __UXEN__ */
 
 /* Cached xcr0 to avoid writes */
 DEFINE_PER_CPU(uint64_t, xcr0_last);
@@ -230,6 +234,7 @@ void xstate_init(void)
     int cpu = smp_processor_id();
     u32 min_size;
     u64 xcr0;
+    unsigned long flags;
 
     if ( boot_cpu_data.cpuid_level < XSTATE_CPUID )
         return;
@@ -275,6 +280,18 @@ void xstate_init(void)
 
         /* XSAVE/XRSTOR requires the save area be 64-byte-boundary aligned. */
         _uxen_info.ui_xsave_cntxt_size = (xsave_cntxt_size + 63) & ~63;
+
+        /* Compute xsave_cntxt_size_vmsave with only
+         * xfeature_mask & XCNTXT_MASK_vmsave features enabled */
+        cpu_irq_save(flags);
+        xsetbv(XCR_XFEATURE_ENABLED_MASK, xfeature_mask & XCNTXT_MASK_vmsave);
+        cpuid_count(XSTATE_CPUID, 0, &eax, &ebx, &ecx, &edx);
+        xsave_cntxt_size_vmsave = ebx;
+        xsetbv(XCR_XFEATURE_ENABLED_MASK, xcr0);
+        cpu_irq_restore(flags);
+        printk(XENLOG_INFO "%s: using vmsave cntxt_size: 0x%x "
+               "and states: 0x%"PRIx64"\n", __func__, xsave_cntxt_size_vmsave,
+               xfeature_mask & XCNTXT_MASK_vmsave);
     }
     else
     {

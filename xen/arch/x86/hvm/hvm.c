@@ -1399,7 +1399,7 @@ static int hvm_load_cpu_ctxt(struct domain *d, hvm_domain_context_t *h)
 HVM_REGISTER_SAVE_RESTORE(CPU, hvm_save_cpu_ctxt, hvm_load_cpu_ctxt,
                           1, HVMSR_PER_VCPU);
 
-#define HVM_CPU_XSAVE_SIZE  (3 * sizeof(uint64_t) + xsave_cntxt_size)
+#define HVM_CPU_XSAVE_SIZE  (3 * sizeof(uint64_t) + xsave_cntxt_size_vmsave)
 
 static int hvm_save_cpu_xsave_states(struct domain *d, hvm_domain_context_t *h)
 {
@@ -1419,12 +1419,14 @@ static int hvm_save_cpu_xsave_states(struct domain *d, hvm_domain_context_t *h)
         h->cur += HVM_CPU_XSAVE_SIZE;
         memset(ctxt, 0, HVM_CPU_XSAVE_SIZE);
 
-        ctxt->xfeature_mask = xfeature_mask;
-        ctxt->xcr0 = v->arch.xcr0;
-        ctxt->xcr0_accum = v->arch.xcr0_accum;
-        if ( v->fpu_initialised )
+        ctxt->xfeature_mask = xfeature_mask & XCNTXT_MASK_vmsave;
+        ctxt->xcr0 = v->arch.xcr0 & XCNTXT_MASK_vmsave;
+        ctxt->xcr0_accum = v->arch.xcr0_accum & XCNTXT_MASK_vmsave;
+        if ( v->fpu_initialised ) {
             memcpy(&ctxt->save_area,
-                v->arch.xsave_area, xsave_cntxt_size);
+                v->arch.xsave_area, xsave_cntxt_size_vmsave);
+            ctxt->save_area.xsave_hdr.xstate_bv &= XCNTXT_MASK_vmsave;
+        }
     }
 
     return 0;
@@ -1489,10 +1491,13 @@ static int hvm_load_cpu_xsave_states(struct domain *d, hvm_domain_context_t *h)
     h->cur += desc->length;
 
     _xfeature_mask = ctxt->xfeature_mask;
-    if ( (_xfeature_mask & xfeature_mask) != _xfeature_mask ) {
+    if ( (_xfeature_mask & xfeature_mask & XCNTXT_MASK_vmsave) !=
+         _xfeature_mask ) {
         gdprintk(XENLOG_WARNING,
-                 "HVM restore xfeature mask mismatch: expected %"PRIx64", saw %"PRIx64"\n",
-                 (_xfeature_mask & xfeature_mask), _xfeature_mask);
+                 "HVM restore xfeature mask mismatch: expected %"PRIx64
+                 ", saw %"PRIx64"\n",
+                 _xfeature_mask & xfeature_mask & XCNTXT_MASK_vmsave,
+                 _xfeature_mask);
         if ( d->clone_of )
             return XEN_HVMCONTEXT_xsave_area_incompatible;
         else
@@ -1501,7 +1506,7 @@ static int hvm_load_cpu_xsave_states(struct domain *d, hvm_domain_context_t *h)
 
     v->arch.xcr0 = ctxt->xcr0;
     v->arch.xcr0_accum = ctxt->xcr0_accum;
-    memcpy(v->arch.xsave_area, &ctxt->save_area, xsave_cntxt_size);
+    memcpy(v->arch.xsave_area, &ctxt->save_area, xsave_cntxt_size_vmsave);
 
     return 0;
 }

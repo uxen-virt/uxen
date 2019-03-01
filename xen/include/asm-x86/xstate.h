@@ -40,6 +40,7 @@
                         XSTATE_BNDREGS | XSTATE_BNDCSR |                \
                         XSTATE_OPMASK | XSTATE_ZMM_Hi256 | XSTATE_Hi16_ZMM | \
                         XSTATE_PT | XSTATE_PKRU | XSTATE_HDC | XSTATE_LWP)
+#define XCNTXT_MASK_vmsave ((uint64_t)(XSTATE_FP | XSTATE_SSE | XSTATE_YMM))
 
 #define XSTATE_ALL     (~0)
 #define XSTATE_NONLAZY (XSTATE_LWP)
@@ -55,6 +56,7 @@
 DECLARE_PER_CPU(uint64_t, xcr0);
 
 extern unsigned int xsave_cntxt_size;
+extern unsigned int xsave_cntxt_size_vmsave;
 extern u64 xfeature_mask;
 
 /* extended state save area */
