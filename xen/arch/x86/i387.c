@@ -66,15 +66,10 @@ void fpu_init(void)
 /* Restore x87 extended state */
 static inline void fpu_xrstor(struct vcpu *v, uint64_t mask)
 {
-#ifndef __UXEN__
     /*
      * XCR0 normally represents what guest OS set. In case of Xen itself, 
      * we set all supported feature mask before doing save/restore.
      */
-    if ( unlikely(v->arch.xcr0_accum != xcr0_host) && 
-         likely(read_cr0() & X86_CR0_TS) )
-        asm volatile ( "movdqu %xmm0,%xmm0" );
-#endif  /* __UXEN__ */
     sync_xcr0();
     set_xcr0(v->arch.xcr0_accum, XCR0_STATE_VMALL);
     xrstor(v, mask);
@@ -144,14 +139,9 @@ static inline void fpu_frstor(struct vcpu *v)
 /* Save x87 extended state */
 static inline void fpu_xsave(struct vcpu *v)
 {
-#ifndef __UXEN__
     /* XCR0 normally represents what guest OS set. In case of Xen itself,
      * we set all accumulated feature mask before doing save/restore.
      */
-    if ( unlikely(v->arch.xcr0_accum != xcr0_host) && 
-         likely(read_cr0() & X86_CR0_TS) )
-        asm volatile ( "movdqu %xmm0,%xmm0" );
-#endif  /* __UXEN__ */
     set_xcr0(v->arch.xcr0_accum, XCR0_STATE_VMALL);
     xsave(v, v->arch.nonlazy_xstate_used ? XSTATE_ALL : XSTATE_LAZY);
 }
@@ -311,11 +301,6 @@ void vcpu_restore_fpu_lazy(struct vcpu *v)
     } else {
         fpu_init();
         if ( xsave_enabled(v) ) {
-#ifndef __UXEN__
-            if ( unlikely(v->arch.xcr0_accum != xcr0_host) && 
-                 likely(read_cr0() & X86_CR0_TS) )
-                asm volatile ( "movdqu %xmm0,%xmm0" );
-#endif  /* __UXEN__ */
             sync_xcr0();
             set_xcr0(v->arch.xcr0_accum, XCR0_STATE_VMALL);
             xrstor(v, 0);           /* init xsave area for xsaveopt */
