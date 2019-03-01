@@ -78,97 +78,104 @@ enum attovm_assist_op {
   ATTOVM_ASSIST_TSC_DEADLINE_RDMSR,
   ATTOVM_ASSIST_TSC_DEADLINE_WRMSR,
   ATTOVM_ASSIST_SUSPEND,
+  ATTOVM_ASSIST_LOG,
 };
 
 struct attovm_assist_signal_domain {
-    uint64_t domain_id;
+  uint64_t domain_id;
 } ATTOVM_API_PACKED;
 
 struct attovm_assist_query_tsc_khz {
-    uint64_t tsc_khz;
+  uint64_t tsc_khz;
 } ATTOVM_API_PACKED;
 
 struct attovm_assist_read_rtc {
-    uint64_t reg;
-    uint64_t value;
+  uint64_t reg;
+  uint64_t value;
 } ATTOVM_API_PACKED;
 
 struct attovm_assist_readwrite_lapic {
-    uint64_t reg;
-    uint64_t value;
+  uint64_t reg;
+  uint64_t value;
 } ATTOVM_API_PACKED;
 
 struct attovm_assist_readwrite_ioapic {
-    uint64_t reg;
-    uint64_t value;
+  uint64_t reg;
+  uint64_t value;
 } ATTOVM_API_PACKED;
 
 struct attovm_assist_readwrite_tsc_deadline {
-    uint64_t value;
+  uint64_t value;
+} ATTOVM_API_PACKED;
+
+struct attovm_assist_log {
+  uint8_t chr;
+  uint8_t pad[3];
 } ATTOVM_API_PACKED;
 
 /* ax -> uxen assist request */
 struct attovm_assist {
-    enum attovm_assist_op op;
-    uint8_t pad[4];
+  enum attovm_assist_op op;
+  uint8_t pad[4];
 
-    union {
-        struct attovm_assist_signal_domain signal_domain;
-        struct attovm_assist_query_tsc_khz query_tsc_khz;
-        struct attovm_assist_read_rtc read_rtc;
-        struct attovm_assist_readwrite_lapic readwrite_lapic;
-        struct attovm_assist_readwrite_ioapic readwrite_ioapic;
-        struct attovm_assist_readwrite_tsc_deadline readwrite_tsc_deadline;
-    } x;
+  union {
+    struct attovm_assist_signal_domain signal_domain;
+    struct attovm_assist_query_tsc_khz query_tsc_khz;
+    struct attovm_assist_read_rtc read_rtc;
+    struct attovm_assist_readwrite_lapic readwrite_lapic;
+    struct attovm_assist_readwrite_ioapic readwrite_ioapic;
+    struct attovm_assist_readwrite_tsc_deadline readwrite_tsc_deadline;
+    struct attovm_assist_log log;
+  } x;
 } ATTOVM_API_PACKED;
 
 /* analog of vmcs for running/serving reqs from ax vms, to be exposed to uxen */
 struct attovm_control {
-    uint32_t revision_id;
-    uint32_t pad1;
+  uint32_t revision_id;
+  uint32_t pad1;
 
-    uint64_t domain_id;
-    uint32_t vcpu_id;
-    uint32_t pad2;
-    struct attovm_assist assist;
+  uint64_t domain_id;
+  uint32_t vcpu_id;
+  uint32_t pad2;
+  struct attovm_assist assist;
 
-    uint8_t  pending_timer;
-    uint8_t  pending_irq_vector;
-    uint8_t  is_irq_vector_pending;
-    uint8_t  pad3[5];
+  uint8_t  pending_timer;
+  uint8_t  pending_irq_vector;
+  uint8_t  is_irq_vector_pending;
+  uint8_t  pad3[5];
 
-    /* cpu state leaked to uxen */
-    uint64_t guest_rflags; /* helpful to know whether HLT was with ints disabled */
-    uint64_t vm_exit_reason;
-    uint64_t vm_exit_instruction_len;
-    uint64_t vm_exit_intr_info;
-    uint64_t vm_exit_intr_error_code;
+  /* cpu state leaked to uxen */
+  uint64_t guest_rflags; /* helpful to know whether HLT was with ints disabled */
+  uint64_t vm_exit_reason;
+  uint64_t vm_exit_instruction_len;
+  uint64_t vm_exit_intr_info;
+  uint64_t vm_exit_intr_error_code;
 
-    /* cpu state provided from uxen - saved host state before vmenter & ept pointer */
-    uint64_t tsc_offset;
-    uint64_t ept_pointer;
-    uint64_t host_es_selector;
-    uint64_t host_cs_selector;
-    uint64_t host_ss_selector;
-    uint64_t host_ds_selector;
-    uint64_t host_fs_selector;
-    uint64_t host_gs_selector;
-    uint64_t host_tr_selector;
-    uint64_t host_pat;
-    uint64_t host_efer;
-    uint64_t host_sysenter_cs;
-    uint64_t host_cr0;
-    uint64_t host_cr3;
-    uint64_t host_cr4;
-    uint64_t host_fs_base;
-    uint64_t host_gs_base;
-    uint64_t host_tr_base;
-    uint64_t host_gdtr_base;
-    uint64_t host_idtr_base;
-    uint64_t host_sysenter_esp;
-    uint64_t host_sysenter_eip;
-    uint64_t host_rsp;
-    uint64_t host_rip;
+  /* cpu state provided from uxen - saved host state before vmenter & ept pointer */
+  uint64_t tsc_offset;
+  uint64_t ept_pointer;
+  uint64_t host_es_selector;
+  uint64_t host_cs_selector;
+  uint64_t host_ss_selector;
+  uint64_t host_ds_selector;
+  uint64_t host_fs_selector;
+  uint64_t host_gs_selector;
+  uint64_t host_tr_selector;
+  uint64_t host_pat;
+  uint64_t host_efer;
+  uint64_t host_sysenter_cs;
+  uint64_t host_cr0;
+  uint64_t host_cr3;
+  uint64_t host_cr4;
+  uint64_t host_fs_base;
+  uint64_t host_gs_base;
+  uint64_t host_tr_base;
+  uint64_t host_gdtr_base;
+  uint64_t host_idtr_base;
+  uint64_t host_sysenter_esp;
+  uint64_t host_sysenter_eip;
+  uint64_t host_rsp;
+  uint64_t host_rip;
 } ATTOVM_API_PACKED;
 
 #undef ATTOVM_API_PACKED

@@ -203,38 +203,93 @@ HV_TESTS_POSSIBLY_UNUSED static int hv_tests_cpu_has_nx (void)
 # undef HV_TESTS_TEST_WHPX
 #endif
 
-HV_TESTS_POSSIBLY_UNUSED static int hv_tests_whpx_operational (void)
-{
 #ifdef HV_TESTS_TEST_WHPX
-  HMODULE whvplatform;
-  int enabled = 0;
+typedef HRESULT (hv_tests_whvgetcapability_t) (int , void *, UINT32 , UINT32 *);;
 
-  typedef HRESULT (*whvgetcapability_t) (
-    int CapabilityCode,
-    void *CapabilityBuffer,
-    UINT32 CapabilityBufferSizeInBytes,
-    UINT32 * WrittenSizeInBytes);
+static HRESULT hv_tests_whvgetcapability (int code, void *buffer, uint32_t buffer_size, uint32_t *written_size)
+{
+  hv_tests_whvgetcapability_t *fn;
+  HMODULE whvplatform;
+  HRESULT ret = -1;
 
   whvplatform = LoadLibraryW (L"winhvplatform.dll");
 
-  if (whvplatform) {
-    whvgetcapability_t whvgetcapability = (whvgetcapability_t)
-                                          GetProcAddress (whvplatform, "WHvGetCapability");
+  if (whvplatform)  {
 
-    if (whvgetcapability) {
-      uint64_t cap = 0;
-      HRESULT hr = whvgetcapability (0 /*WHvCapabilityCodeHypervisorPresent*/, &cap,
-                                     sizeof (cap), NULL);
-      enabled = SUCCEEDED (hr) && (cap != 0);
-    }
+    fn = (hv_tests_whvgetcapability_t *) GetProcAddress (whvplatform, "WHvGetCapability");
 
-    FreeLibrary (whvplatform);
+    if (fn)
+      ret = (*fn) (code, buffer, buffer_size, written_size);
   }
+
+  FreeLibrary (whvplatform);
+
+  return ret;
+
+}
+
+typedef LONG (hv_tests_rtlgetversion_t) (PRTL_OSVERSIONINFOW);
+
+static LONG hv_tests_rtlgetversion (PRTL_OSVERSIONINFOW version_info)
+{
+  hv_tests_rtlgetversion_t *fn;
+  HMODULE ntdll;
+  HRESULT ret = -1;
+
+  ntdll = LoadLibraryW (L"ntdll.dll");
+
+  if (ntdll) {
+    fn = (hv_tests_rtlgetversion_t *)  GetProcAddress (ntdll, "RtlGetVersion");
+
+    if (fn)
+      ret = (*fn) (version_info);
+  }
+
+  FreeLibrary (ntdll);
+
+  return ret;
+}
+
+#endif
+
+
+HV_TESTS_POSSIBLY_UNUSED static int hv_tests_whpx_operational (void)
+{
+#ifdef HV_TESTS_TEST_WHPX
+  int enabled;
+  uint64_t cap = 0;
+
+  HRESULT hr;
+
+  hr = hv_tests_whvgetcapability (0 /*WHvCapabilityCodeHypervisorPresent*/, &cap, sizeof (cap), NULL);
+  enabled = SUCCEEDED (hr) && (cap != 0);
 
   return enabled;
 #else
-  return -1;
+  return 0;
 #endif
+}
+
+
+HV_TESTS_POSSIBLY_UNUSED static int hv_tests_windows_supports_whp (void)
+{
+#ifdef HV_TESTS_TEST_WHPX
+  RTL_OSVERSIONINFOW v;
+  LONG st;
+
+  st = hv_tests_rtlgetversion (&v);
+
+  if (st) return 0;
+
+  if (v.dwMajorVersion > 10) return 1;
+
+  if (v.dwMinorVersion > 0) return 1;
+
+  if (v.dwBuildNumber >= 17763) return 1;
+
+#endif
+
+  return 0;
 }
 
 HV_TESTS_POSSIBLY_UNUSED static int hv_tests_use_whp (void)
@@ -242,6 +297,8 @@ HV_TESTS_POSSIBLY_UNUSED static int hv_tests_use_whp (void)
   if (!hv_tests_hyperv_running()) return 0;
 
   if (hv_tests_ax_running()) return 0;
+
+  if (!hv_tests_windows_supports_whp()) return 0;
 
   if (hv_tests_whpx_operational() != 1) return 0;
 
