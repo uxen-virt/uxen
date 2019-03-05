@@ -338,8 +338,6 @@ static inline void __invvpid(int type, u16 vpid, u64 gva)
         u64 gva;
     } __attribute__ ((packed)) operand = {vpid, 0, gva};
 
-    if (ax_present) return;
-
     /* Fix up #UD exceptions which occur when TLBs are flushed before VMXON. */
     asm volatile ( "1: " INVVPID_OPCODE MODRM_EAX_08
                    /* CF==1 or ZF==1 --> crash (ud2) */
@@ -352,16 +350,12 @@ static inline void __invvpid(int type, u16 vpid, u64 gva)
 
 static inline void ept_sync_all(void)
 {
-    if (!ax_present)
-        __invept(INVEPT_ALL_CONTEXT, 0, 0);
+    __invept(INVEPT_ALL_CONTEXT, 0, 0);
 }
 
 static inline void vpid_sync_vcpu_gva(struct vcpu *v, unsigned long gva)
 {
     int type = INVVPID_INDIVIDUAL_ADDR;
-
-    if (ax_present)
-        return;
 
     /*
      * If individual address invalidation is not supported, we escalate to
@@ -385,8 +379,7 @@ execute_invvpid:
 
 static inline void vpid_sync_all(void)
 {
-    if (!ax_present)
-        __invvpid(INVVPID_ALL_CONTEXT, 0, 0);
+    __invvpid(INVVPID_ALL_CONTEXT, 0, 0);
 }
 
 static inline void __vmxoff(void)

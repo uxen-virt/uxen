@@ -24,6 +24,7 @@
 #include <xen/smp.h>
 #include <xen/percpu.h>
 #include <asm/hvm/asid.h>
+#include <asm/hvm/ax.h>
 
 /*
  * ASIDs partition the physical TLB.  In the current implementation ASIDs are
@@ -146,6 +147,7 @@ bool_t hvm_asid_handle_vmenter(struct hvm_vcpu_asid *asid)
  disabled:
 #endif  /* __UXEN__ */
     asid->asid = 0;
+    BUG_ON(asid->asid && ax_present); /* we'll never support ASIDs on AX */
     return 0;
 }
 
