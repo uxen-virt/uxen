@@ -303,15 +303,11 @@ void __vmwrite(unsigned long field, unsigned long value);
 unsigned long __vmread_safe(unsigned long field, int *error);
 #endif /* PERF_VMRW */
 
-extern int ax_present;
-
 static inline void __invept(int type, u64 eptp, u64 gpa)
 {
     struct {
         u64 eptp, gpa;
     } operand = {eptp, gpa};
-
-    if (ax_present) return;
 
     /*
      * If single context invalidation is not supported, we escalate to

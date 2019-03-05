@@ -995,6 +995,9 @@ int hvm_domain_initialise(struct domain *d)
         goto fail2;
     }
 
+    /* mark all cpus synced at start of day */
+    cpumask_setall(d->arch.hvm_domain.pt_synced);
+
     rc = HVM_FUNCS(domain_initialise, d);
     if ( rc != 0 )
         goto fail3;

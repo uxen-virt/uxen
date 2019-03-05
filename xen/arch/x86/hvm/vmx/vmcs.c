@@ -638,7 +638,7 @@ vmx_cpu_on(void)
 
     hvm_asid_init(cpu_has_vmx_vpid ? (1u << VMCS_VPID_WIDTH) : 0);
 
-    if ( cpu_has_vmx_ept )
+    if ( cpu_has_vmx_ept && !ax_present )
         ept_sync_all();
 
     if ( cpu_has_vmx_vpid )
@@ -774,7 +774,7 @@ vmx_cpu_up(enum hvmon hvmon_mode)
 
     hvm_asid_init(cpu_has_vmx_vpid ? (1u << VMCS_VPID_WIDTH) : 0);
 
-    if ( cpu_has_vmx_ept )
+    if ( cpu_has_vmx_ept && !ax_present )
         ept_sync_all();
 
     if ( cpu_has_vmx_vpid )

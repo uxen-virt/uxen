@@ -56,6 +56,7 @@
 #include <public/sysctl.h>
 #include <public/vcpu.h>
 #include <asm/hvm/attovm.h>
+#include <asm/hvm/ax.h>
 #include <xsm/xsm.h>
 #include <xen/trace.h>
 #include <xen/tmem.h>
