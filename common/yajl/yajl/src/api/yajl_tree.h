@@ -167,9 +167,13 @@ YAJL_API int yajl_tree_array_add_value(yajl_val array, yajl_val value);
 #define YAJL_IS_DOUBLE(v) (YAJL_IS_NUMBER(v) && ((v)->u.number.flags & YAJL_NUMBER_DOUBLE_VALID))
 #define YAJL_IS_OBJECT(v) (((v) != NULL) && ((v)->type == yajl_t_object))
 #define YAJL_IS_ARRAY(v)  (((v) != NULL) && ((v)->type == yajl_t_array ))
-#define YAJL_IS_TRUE(v)   (((v) != NULL) && ((v)->type == yajl_t_true  ))
-#define YAJL_IS_FALSE(v)  (((v) != NULL) && ((v)->type == yajl_t_false ))
 #define YAJL_IS_NULL(v)   (((v) != NULL) && ((v)->type == yajl_t_null  ))
+#define YAJL_IS_TRUE(v)   (((v) != NULL) && (           \
+    ((v)->type == yajl_t_true) ||                       \
+    (YAJL_IS_INTEGER(v) && YAJL_GET_INTEGER(v) != 0)))
+#define YAJL_IS_FALSE(v)  (((v) != NULL) && (           \
+    ((v)->type == yajl_t_false) ||                      \
+    (YAJL_IS_INTEGER(v) && YAJL_GET_INTEGER(v) == 0)))
 
 /** Given a yajl_val_string return a ptr to the bare string it contains,
  *  or NULL if the value is not a string. */
