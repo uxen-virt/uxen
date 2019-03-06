@@ -485,6 +485,7 @@ uxen_vm_init(const char *loadvm, int restore_mode)
 			   0, 0, 0);
 
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_PAE_ENABLED, vm_pae);
+    xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_X2APIC, vm_x2apic);
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_VIRIDIAN, vm_viridian);
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_HPET_ENABLED, vm_hpet);
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_ZERO_PAGE,

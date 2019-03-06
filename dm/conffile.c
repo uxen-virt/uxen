@@ -815,6 +815,7 @@ struct config_option config_options[] = {
     { "vram-refresh-period", co_set_integer_opt, &vm_vram_refresh_delay },
     { "whpx-perf-stats", co_set_boolean_opt, &whpx_perf_stats },
     { "whpx-reftsc", co_set_boolean_opt, &whpx_reftsc },
+    { "x2apic", co_set_integer_opt, &vm_x2apic },
     { "zero-page", co_set_boolean_opt, &vm_zero_page },
     { "zero-page-setup", co_set_boolean_opt, &vm_zero_page_setup },
 };
