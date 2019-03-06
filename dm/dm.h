@@ -42,6 +42,7 @@ extern uint64_t vm_timer_mode;
 extern uint64_t vm_tsc_mode;
 extern uint64_t vm_vga_mb_mapped;
 extern uint64_t vm_pae;
+extern uint64_t vm_x2apic;
 extern uint64_t vm_viridian;
 extern uint64_t vm_virt_mode_change;
 extern uint64_t vm_hpet;

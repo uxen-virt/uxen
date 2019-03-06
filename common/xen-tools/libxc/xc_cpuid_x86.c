@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -294,12 +294,14 @@ static void xc_cpuid_hvm_policy(
     DECLARE_DOMCTL;
     char brand[13];
     uint64_t nestedhvm;
-    uint64_t pae;
-    int is_pae, is_nestedhvm;
+    uint64_t pae, x2apic;
+    int is_pae, is_x2apic, is_nestedhvm;
     uint64_t xfeature_mask;
 
     xc_get_hvm_param(xch, domid, HVM_PARAM_PAE_ENABLED, &pae);
+    xc_get_hvm_param(xch, domid, HVM_PARAM_X2APIC, &x2apic);
     is_pae = !!pae;
+    is_x2apic = !!x2apic;
 
     /* Detecting Xen's atitude towards XSAVE */
     memset(&domctl, 0, sizeof(domctl));
@@ -342,7 +344,7 @@ static void xc_cpuid_hvm_policy(
 
         regs[2] |= (bitmaskof(X86_FEATURE_HYPERVISOR) |
                     bitmaskof(X86_FEATURE_TSC_DEADLINE) |
-                    bitmaskof(X86_FEATURE_X2APIC));
+                    (is_x2apic ? bitmaskof(X86_FEATURE_X2APIC) : 0));
 
         regs[3] &= (bitmaskof(X86_FEATURE_FPU) |
                     bitmaskof(X86_FEATURE_VME) |
