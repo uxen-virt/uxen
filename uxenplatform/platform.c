@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2018, Bromium, Inc.
+ * Copyright 2016-2019, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -13,7 +13,7 @@
 
 #include <uxen-hypercall.h>
 #include <uxen-platform.h>
-#include "ax.h"
+#include "attovm.h"
 #include "pci.h"
 
 static struct task_struct *entropy_thread;
@@ -151,13 +151,10 @@ static int __init uxen_platform_init(void)
         return ret;
     }
 
-#ifndef CONFIG_PCI
-    /* no pci, assume ax vm */
-    ret = ax_platform_init(&uxen_bus);
+#ifdef LX_TARGET_ATTOVM
+    ret = attovm_platform_init(&uxen_bus);
 #else
-    if (axen_hypervisor())
-      ret = ax_platform_init(&uxen_bus);
-    else if (uxen_hypervisor())
+    if (uxen_hypervisor())
       ret = pci_platform_init(&uxen_bus);
     else
       ret = -ENODEV;
@@ -188,12 +185,10 @@ static void __exit uxen_platform_exit(void)
     bus_for_each_dev(&uxen_bus, NULL, NULL, device_remove);
     bus_unregister(&uxen_bus);
 
-#ifndef CONFIG_PCI
-    ax_platform_exit();
+#ifdef LX_TARGET_ATTOVM
+    attovm_platform_exit();
 #else
-    if (axen_hypervisor())
-      ax_platform_exit();
-    else if (uxen_hypervisor())
+    if (uxen_hypervisor())
       pci_platform_exit();
 #endif
 }
