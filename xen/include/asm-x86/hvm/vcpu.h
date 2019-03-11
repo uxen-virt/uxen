@@ -68,6 +68,11 @@ struct hvm_vcpu_io {
     unsigned int mmio_large_write_bytes;
 };
 
+struct attovm_vcpu {
+    /* waiting for device model to provide stor bitmap? */
+    bool_t awaiting_stor_bitmap;
+};
+
 #define VMCX_EADDR    (~0ULL)
 
 struct nestedvcpu {
@@ -193,6 +198,8 @@ struct hvm_vcpu {
     struct viridian_vcpu viridian;
 
     unsigned long zp_pcr_gpfn;
+
+    struct attovm_vcpu attovm;
 };
 
 #endif /* __ASM_X86_HVM_VCPU_H__ */

@@ -79,6 +79,7 @@ enum attovm_assist_op {
   ATTOVM_ASSIST_TSC_DEADLINE_WRMSR,
   ATTOVM_ASSIST_SUSPEND,
   ATTOVM_ASSIST_LOG,
+  ATTOVM_ASSIST_QUERY_STOR_BITMAP,
 };
 
 struct attovm_assist_signal_domain {
@@ -87,6 +88,10 @@ struct attovm_assist_signal_domain {
 
 struct attovm_assist_query_tsc_khz {
   uint64_t tsc_khz;
+} ATTOVM_API_PACKED;
+
+struct attovm_assist_query_stor_bitmap {
+    uint64_t bitmap;
 } ATTOVM_API_PACKED;
 
 struct attovm_assist_read_rtc {
@@ -126,6 +131,7 @@ struct attovm_assist {
     struct attovm_assist_readwrite_ioapic readwrite_ioapic;
     struct attovm_assist_readwrite_tsc_deadline readwrite_tsc_deadline;
     struct attovm_assist_log log;
+    struct attovm_assist_query_stor_bitmap query_stor_bitmap;
   } x;
 } ATTOVM_API_PACKED;
 

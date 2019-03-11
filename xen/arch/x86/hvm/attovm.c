@@ -64,11 +64,17 @@ void
 attovm_prepare_enter(struct vcpu *v)
 {
     struct attovm_control *vmc = vmctrl();
+    struct attovm_assist  *vma = &vmc->assist;
 
     /* domid + vcpu id */
     vmc->domain_id = v->domain->domain_id;
     vmc->vcpu_id = v->vcpu_id;
     vmc->tsc_offset = v->arch.hvm_vcpu.cache_tsc_offset;
+
+    if (v->arch.hvm_vcpu.attovm.awaiting_stor_bitmap) {
+        v->arch.hvm_vcpu.attovm.awaiting_stor_bitmap = 0;
+        vma->x.query_stor_bitmap.bitmap = v->arch.user_regs.eax & 0xffff;
+    }
 }
 
 enum hvm_intblk
@@ -158,6 +164,11 @@ attovm_assist(struct vcpu *v)
     }
     case ATTOVM_ASSIST_LOG: {
         hvm_print_char((char)vma->x.log.chr);
+        break;
+    }
+    case ATTOVM_ASSIST_QUERY_STOR_BITMAP: {
+        if (handle_pio(0x330, 2, IOREQ_READ))
+            v->arch.hvm_vcpu.attovm.awaiting_stor_bitmap = 1;
         break;
     }
     default:
