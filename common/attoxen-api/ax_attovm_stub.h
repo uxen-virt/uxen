@@ -155,6 +155,15 @@ attovm_call_queryop (uint64_t param, uint64_t a1, uint64_t a2, uint64_t a3)
 }
 
 static inline uint64_t
+attovm_call_query_secret_key (void *buffer, uint64_t salt)
+{
+  uint64_t eax = ATTOCALL_QUERYOP, ecx = ATTOCALL_QUERYOP_SECRET_KEY,
+    edx = (uint64_t)(uintptr_t) buffer, r8 = salt, r9 = 0;
+
+  return attovm_call (eax, ecx, edx, r8, r9);
+}
+
+static inline uint64_t
 attovm_call_kbd_focus (uint64_t domid, uint32_t offer_focus)
 {
   uint64_t eax = ATTOCALL_VM_KBD_FOCUS, ecx = domid,

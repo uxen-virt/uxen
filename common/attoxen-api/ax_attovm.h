@@ -7,12 +7,15 @@
 #define _AX_ATTOVM_H_
 
 /* ax vm definition */
-#define ATTOVM_HASH_BYTES 512
-#define ATTOVM_HASHSIG_BYTES 512
+#define ATTOVM_MAX_HASH_BYTES 512
+#define ATTOVM_MAX_HASHSIG_BYTES 512
 #define ATTOVM_MAX_PAGERANGES 64
-
+#define ATTOVM_MAX_HIGHMEM_PAGES 4096
 #define ATTOVM_MAX_VCPU_CONTEXT_SIZE_V1 2048
 #define ATTOVM_MAX_VCPU 4
+
+#define ATTOVM_SESSION_KEY_BYTES 64
+#define ATTOVM_SECRET_KEY_BYTES 64
 
 #if defined(_MSC_VER)
 #define ATTOVM_API_PACKED
@@ -60,8 +63,11 @@ struct attovm_definition_v1 {
   uint8_t pad[3];
   enum attovm_hash_type hash_type;
   enum attovm_sign_type sign_type;
-  uint8_t hash[ATTOVM_HASH_BYTES];
-  uint8_t hashsig[ATTOVM_HASHSIG_BYTES];
+  uint8_t hash[ATTOVM_MAX_HASH_BYTES];
+  uint8_t hashsig[ATTOVM_MAX_HASHSIG_BYTES];
+  /* number of highmem pages used. Highmem pages are not signed,
+   * use them to pass dynamic config */
+  uint64_t num_highmem_pages;
   struct attovm_definition_measured_v1 m;
 } ATTOVM_API_PACKED;
 
@@ -273,9 +279,10 @@ struct attovm_control {
 #define ATTOCALL_QUERYOP_TSC_KHZ      1
 #define ATTOCALL_QUERYOP_SESSION_KEY  2
 #define ATTOCALL_QUERYOP_FEATURES     3
+#define ATTOCALL_QUERYOP_SECRET_KEY   4
 
 #define ATTOCALL_QUERYOP_FEATURES_PROT_KBD     (1 << 0)
-#define ATTOCALL_QUERYOP_FEATURES_DEBUG_GUEST  (1 << 1)
+#define ATTOCALL_QUERYOP_FEATURES_DEBUG_GUEST  (1 << 31)
 
 #define ATTOCALL_APICOP_LAPIC_READ_MEM    1
 #define ATTOCALL_APICOP_LAPIC_WRITE_MEM   2
