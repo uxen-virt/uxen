@@ -586,10 +586,21 @@ uxen_vm_init(const char *loadvm, int restore_mode)
             ret = xc_hvm_build(xc_handle, vm_id, ram_size >> 20, vm_vcpus,
                                NR_IOREQ_SERVERS, vm_image, modules,
                                mod_count, &oem_info);
-        else
+        else {
+            char *appdef = NULL;
+            uint32_t appdef_sz = 0;
+
+            if (vm_attovm_appdef_file) {
+                appdef = attovm_load_appdef(vm_attovm_appdef_file, &appdef_sz);
+                if (!appdef || !appdef_sz)
+                    err(1, "failed to load appdef: %s", vm_attovm_appdef_file);
+            }
+
             ret = xc_attovm_build(xc_handle, vm_id, vm_vcpus, ram_size >> 20,
                                   vm_image,
+                                  appdef, appdef_sz,
                                   vm_attovm_mode == ATTOVM_MODE_AX /* seal */ );
+        }
 
         if (ret)
             errx(1, "hvm build failed: %d", ret);

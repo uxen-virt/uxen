@@ -112,6 +112,7 @@ char *vm_image = NULL;
 uint64_t vm_attovm_mode = ATTOVM_MODE_NONE;
 uint64_t vm_attovm_ax = 0;
 char *vm_attovm_url = NULL;
+char *vm_attovm_appdef_file = NULL;
 uint64_t vm_uxenfb = 0;
 uint64_t vm_uxenplatform_nopci = 0;
 dict vm_hvm_params = NULL;

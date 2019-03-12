@@ -763,6 +763,8 @@ int xc_attovm_build(xc_interface *xch,
     uint32_t nr_vcpus,
     uint32_t memsize_mb,
     const char *image_filename,
+    const char *appdef,
+    uint32_t appdef_len,
     int seal)
 {
     struct attovm_definition_v1 def;
@@ -774,6 +776,11 @@ int xc_attovm_build(xc_interface *xch,
         NULL, 0, NULL, 0, NULL, image_filename, &def);
     if (rc)
         return rc;
+
+    rc = attovm_put_appdef(xch, domid, &def, appdef, appdef_len);
+    if (rc)
+        return rc;
+
     if (seal) {
         rc = attovm_seal_guest(xch, domid, &def);
         if (rc) {

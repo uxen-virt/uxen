@@ -15,6 +15,8 @@ int xc_attovm_build(xc_interface *xch,
   uint32_t nr_vcpus,
   uint32_t memsize_mb,
   const char *image_filename,
+  const char *appdef,
+  uint32_t appdef_len,
   int seal);
 
 int xc_attovm_image_create_from_live_vm(

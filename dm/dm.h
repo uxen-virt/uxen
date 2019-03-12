@@ -111,5 +111,6 @@ extern char *vm_image; /* hvmloader path or .attovm image path */
 extern uint64_t vm_attovm_mode; /* run mode */
 extern uint64_t vm_attovm_ax; /* use ax ? */
 extern char *vm_attovm_url; /* browser url */
+extern char *vm_attovm_appdef_file; /* filename with appdef spec */
 
 #endif	/* _DM_H_ */

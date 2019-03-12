@@ -304,3 +304,50 @@ is_attovm_image(const char *file)
 
     return ext && (strcasecmp(ext, ATTOVM_IMAGE_EXT) == 0);
 }
+
+char *
+attovm_load_appdef(const char *file, uint32_t *out_size)
+{
+    uint32_t sz = 0;
+    uint32_t left;
+    void *buf;
+    void *def = NULL;
+    FILE *f;
+
+    f = fopen(file, "rb");
+    if (!f)
+        goto out;
+    fseek(f, 0, SEEK_END);
+    sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (!sz)
+        goto out;
+    def = malloc(sz);
+    if (!def)
+        goto out;
+
+    left = sz;
+    buf = def;
+    while (left) {
+        uint32_t chunk_read = 0;
+        uint32_t chunk = left;
+
+        if (chunk > 0x10000)
+            chunk = 0x10000;
+        chunk_read = fread(buf, 1, chunk, f);
+        if (chunk_read != chunk) {
+            free(def);
+            def = NULL;
+            goto out;
+        }
+        buf  += chunk;
+        left -= chunk;
+    }
+
+out:
+    if (f)
+        fclose(f);
+    *out_size = sz;
+
+    return def;
+}

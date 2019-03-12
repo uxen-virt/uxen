@@ -9,9 +9,19 @@
 
 #include <attoxen-api/ax_attovm.h>
 
-int attovm_setup_guest(xc_interface *xch, uint32_t domid, xen_pfn_t *pfns,
-  const char *image_file,
-  struct attovm_definition_v1 *out_definition);
-int attovm_seal_guest(xc_interface *xch, uint32_t domid, struct attovm_definition_v1 *definition);
+int attovm_setup_guest(xc_interface *xch,
+    uint32_t domid,
+    xen_pfn_t *pfns,
+    const char *image_file,
+    struct attovm_definition_v1 *out_definition);
+
+int attovm_put_appdef(xc_interface *xch,
+    uint32_t domid,
+    struct attovm_definition_v1 *definition,
+    const char *appdef, uint32_t appdef_len);
+
+int attovm_seal_guest(xc_interface *xch,
+    uint32_t domid,
+    struct attovm_definition_v1 *definition);
 
 #endif
