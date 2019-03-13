@@ -30,6 +30,10 @@ extern "C" {
 
 #define DISP_FLAG_MANUAL_ACK_RECT       0x1
 
+#define CONSOLE_RESIZE_FLAG_NONE        0x0
+#define CONSOLE_RESIZE_FLAG_FORCE       0x1
+#define CONSOLE_RESIZE_FLAG_USE_DLO     0x2
+
 #ifndef QEMU_UXEN
 typedef void *uxenconsole_context_t;
 typedef void *hid_context_t;
@@ -72,11 +76,6 @@ typedef struct uxenconsole_ops {
     void (*enable_write_event)(void *priv, file_handle_t handle, int enable);
     void (*disconnected)(void *priv);
 } ConsoleOps;
-
-typedef enum uxenconsole_resize_flags {
-    CONSOLE_RESIZE_FLAG_NONE  = 0x0,
-    CONSOLE_RESIZE_FLAG_FORCE = 0x1
-} ConsoleResizeFlags;
 
 uxenconsole_context_t   uxenconsole_init(ConsoleOps *console_ops,
                                          void *console_priv,
