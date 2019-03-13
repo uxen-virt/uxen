@@ -380,7 +380,7 @@ handle_resizing(struct win32_gui_state *s, int w, int h)
     }
 
     if (guest_agent_window_event(0, WM_SIZE, SIZE_RESTORED,
-                                 ((h & 0xffff) << 16) | (w & 0xffff)))
+                                 ((h & 0xffff) << 16) | (w & 0xffff), 0))
         return -1;
 
     s->requested_w = w;
@@ -1252,7 +1252,7 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_SETFOCUS:
         sync_keyboard_state();
         reset_key_modifiers(hwnd, 1);
-        guest_agent_window_event(0, message, wParam, lParam);
+        guest_agent_window_event(0, message, wParam, lParam, 0);
         if (vm_attovm_mode)
             attovm_set_keyboard_focus(1);
         return 0;
@@ -1281,7 +1281,7 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         break;
 
     case WM_KILLFOCUS:
-        guest_agent_window_event(0, message, wParam, lParam);
+        guest_agent_window_event(0, message, wParam, lParam, 0);
         reset_key_modifiers(hwnd, 0);
         if (vm_attovm_mode)
             attovm_set_keyboard_focus(0);
@@ -1326,7 +1326,7 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         }
         if (hid_mouse_event(s, x, y, 0, 0, wParam) &&
             (!event_service_mouse_moves ||
-             guest_agent_window_event(0, message, wParam, lParam)))
+             guest_agent_window_event(0, message, wParam, lParam, 0)))
             handle_mouse_event(s, x, y, 0, wParam);
         return 0;
 
@@ -1336,7 +1336,7 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         x = GET_X_LPARAM(lParam);
         y = GET_Y_LPARAM(lParam);
         if (!hid_mouse_event(s, x, y, 0, 0, wParam) ||
-            !guest_agent_window_event(0, message, wParam, lParam))
+            !guest_agent_window_event(0, message, wParam, lParam, 0))
             return TRUE;
         break;
     case WM_MOUSEWHEEL:
@@ -1345,7 +1345,7 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         y = GET_Y_LPARAM(lParam) - pos.y;
         if (hid_mouse_event(s, x, y, GET_WHEEL_DELTA_WPARAM(wParam), 0,
                             wParam) &&
-            guest_agent_window_event(0, message, wParam, lParam)) {
+            guest_agent_window_event(0, message, wParam, lParam, 0)) {
             handle_mouse_event(s, x, y,
                                GET_WHEEL_DELTA_WPARAM(wParam) < 0 ? 1 : -1,
                                GET_KEYSTATE_WPARAM(wParam));
@@ -1357,11 +1357,11 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         y = GET_Y_LPARAM(lParam) - pos.y;
         if (hid_mouse_event(s, x, y, 0, GET_WHEEL_DELTA_WPARAM(wParam),
                             wParam))
-            guest_agent_window_event(0, message, wParam, lParam);
+            guest_agent_window_event(0, message, wParam, lParam, 0);
         break;
     case WM_MOUSELEAVE:
         mouse_left = 1;
-        guest_agent_window_event(0, message, wParam, lParam);
+        guest_agent_window_event(0, message, wParam, lParam, 0);
         return 0;
 
     case WM_CREATE:
@@ -1637,7 +1637,7 @@ mon_resize_screen(struct gui_state *s, Monitor *mon, const dict args)
     h = dict_get_integer(args, "h");
 
     if (guest_agent_window_event(0, WM_SIZE, SIZE_RESTORED,
-                                ((h & 0xffff) << 16) | (w & 0xffff)))
+                                ((h & 0xffff) << 16) | (w & 0xffff), 0))
         debug_printf("screen not resizable\n");
 }
 #endif  /* MONITOR */

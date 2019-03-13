@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2018, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -503,7 +503,7 @@ int guest_agent_mouse_event(uint32_t x, uint32_t y, int32_t dv, int32_t dh,
 
 int
 guest_agent_window_event(uint64_t hwnd, uint64_t message,
-                         uint64_t wParam, uint64_t lParam)
+                         uint64_t wParam, uint64_t lParam, int dlo)
 {
     DECL_V4V_BUF(ns_event_msg_windows_window_proc) buf;
 
@@ -532,7 +532,7 @@ guest_agent_window_event(uint64_t hwnd, uint64_t message,
         break;
     }
 
-    return guest_agent_sendmsg(&buf, sizeof(buf), 0);
+    return guest_agent_sendmsg(&buf, sizeof(buf), dlo);
 }
 
 int

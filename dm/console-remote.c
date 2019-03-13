@@ -239,11 +239,14 @@ handle_message(struct uxenconsole_msg_header *hdr)
         {
 #if !defined(__APPLE__)
             struct uxenconsole_msg_request_resize *msg = (void *)hdr;
+            int dlo = msg->flags & CONSOLE_RESIZE_FLAG_USE_DLO;
+
+            msg->flags &= ~CONSOLE_RESIZE_FLAG_USE_DLO;
 
             if (atto_agent_send_resize_event(msg->width, msg->height) &&
                 guest_agent_window_event(0, 0x0005 /* WM_SIZE */, msg->flags,
                                          ((msg->height & 0xffff) << 16) |
-                                         (msg->width & 0xffff)))
+                                         (msg->width & 0xffff), dlo))
 #endif /* !__APPLE */
             {
                 /* Cancel request by sending a resize message immediately */
