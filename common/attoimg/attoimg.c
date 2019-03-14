@@ -18,6 +18,7 @@
 #include "attoimg.h"
 #include "attoimg-private.h"
 #include "util.h"
+#include "sha256.h"
 
 #include "libelf.h"
 
@@ -605,28 +606,6 @@ out:
     return ret;
 }
 
-/* FIXME: replace with real hashing function */
-static int
-hash_bytes(void *data, size_t count, void *hash)
-{
-    uint64_t *h = hash;
-    uint64_t *d = data;
-    size_t i;
-
-    if (count % 8 != 0)
-        return -1;
-    for (i = 0; i < count/8; i++)
-        *h ^= *d++;
-
-    return 0;
-}
-
-static int
-hash_page(void *page, void *hash)
-{
-    return hash_bytes(page, PAGE_SIZE, hash);
-}
-
 static size_t
 write_bytes(FILE *f, void *buffer, size_t count)
 {
@@ -819,16 +798,13 @@ image_measure(
 )
 {
     struct attoimg_guest_mapper *mapper = builder->mapper;
-    uint64_t hash = 0;
     uint32_t i, j;
-    int ret;
+    SHA256_CTX sha;
+
+    sha256_init(&sha);
 
     /* hash header contents which need to be measured */
-    ret = hash_bytes(&definition->m, sizeof(definition->m), &hash);
-    if (ret) {
-        ERROR("Header hashing error");
-        return ret;
-    }
+    sha256_update(&sha, (uint8_t*) &definition->m, sizeof(definition->m));
 
     /* hash page ranges */
     for (i = 0; i < definition->m.num_pageranges; i++) {
@@ -837,18 +813,14 @@ image_measure(
             range->pfn   << PAGE_SHIFT,
             range->count << PAGE_SHIFT);
         for (j = 0; j < range->count; j++) {
-            ret = hash_page(memory, &hash);
-            if (ret) {
-                ERROR("Hashing error");
-                mapper->unmap(mapper, memory, range->count << PAGE_SHIFT);
-                return ret;
-            }
+            sha256_update(&sha, memory, PAGE_SIZE);
             memory += PAGE_SIZE;
         }
         mapper->unmap(mapper, memory, range->count << PAGE_SHIFT);
     }
 
-    memcpy(definition->hash, &hash, sizeof(hash));
+    sha256_final(&sha, definition->hash);
+    definition->hash_type = ATTOVM_HASHTYPE_SHA256;
 
     return 0;
 }

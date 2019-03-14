@@ -8,7 +8,7 @@ MINOR    = 0
 
 ATTOIMG_SRCS-y       :=
 ATTOIMG_SRCS-y       += libelf-loader.c libelf-tools.c
-ATTOIMG_SRCS-y       += util.c mptables.c attoimg.c
+ATTOIMG_SRCS-y       += util.c mptables.c sha256.c attoimg.c
 
 ATTOIMG_TOOL_SRCS-y :=
 ATTOIMG_TOOL_SRCS-y += main.c

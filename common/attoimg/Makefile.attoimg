@@ -5,7 +5,7 @@
 
 all: attoimg$(EXE_SUFFIX) libattoimg.a
 
-libattoimg_SRCS  = libelf-loader.c libelf-tools.c util.c mptables.c attoimg.c
+libattoimg_SRCS  = libelf-loader.c libelf-tools.c util.c mptables.c sha256.c attoimg.c
 libattoimg_OBJS  = $(patsubst %.c,%.o,$(libattoimg_SRCS))
 libattoimg_OBJS := $(subst /,_,$(libattoimg_OBJS))
 libattoimg_CPPFLAGS = -I$(TOPDIR)/common -I$(TOPDIR)/common/include/xen-public
