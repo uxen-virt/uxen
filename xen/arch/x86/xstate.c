@@ -258,10 +258,10 @@ void xstate_init(void)
     if ( cpu == 0 )
     {
         /*
-         * xsave_cntxt_size is the max size required by enabled features.
+         * xsave_cntxt_size is the max size required by possible features.
          * We know FP/SSE and YMM about eax, and nothing about edx at present.
          */
-        xsave_cntxt_size = ebx;
+        xsave_cntxt_size = ecx;
         xfeature_mask = xcr0;
         printk(XENLOG_WARNING "%s: using cntxt_size: 0x%x "
                "and states: 0x%"PRIx64"\n", __func__, xsave_cntxt_size,
@@ -295,7 +295,7 @@ void xstate_init(void)
     }
     else
     {
-        BUG_ON(xsave_cntxt_size != ebx);
+        BUG_ON(xsave_cntxt_size != ecx);
         BUG_ON(xfeature_mask != (xfeature_mask & XCNTXT_MASK));
     }
 }

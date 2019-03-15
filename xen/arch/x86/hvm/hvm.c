@@ -1402,7 +1402,7 @@ static int hvm_load_cpu_ctxt(struct domain *d, hvm_domain_context_t *h)
 HVM_REGISTER_SAVE_RESTORE(CPU, hvm_save_cpu_ctxt, hvm_load_cpu_ctxt,
                           1, HVMSR_PER_VCPU);
 
-#define HVM_CPU_XSAVE_SIZE  (3 * sizeof(uint64_t) + xsave_cntxt_size_vmsave)
+#define HVM_CPU_XSAVE_SIZE  (4 * sizeof(uint64_t) + xsave_cntxt_size_vmsave)
 
 static int hvm_save_cpu_xsave_states(struct domain *d, hvm_domain_context_t *h)
 {
@@ -1425,6 +1425,7 @@ static int hvm_save_cpu_xsave_states(struct domain *d, hvm_domain_context_t *h)
         ctxt->xfeature_mask = xfeature_mask & XCNTXT_MASK_vmsave;
         ctxt->xcr0 = v->arch.xcr0 & XCNTXT_MASK_vmsave;
         ctxt->xcr0_accum = v->arch.xcr0_accum & XCNTXT_MASK_vmsave;
+        ctxt->xsave_cntxt_size = xsave_cntxt_size;
         if ( v->fpu_initialised ) {
             memcpy(&ctxt->save_area,
                 v->arch.xsave_area, xsave_cntxt_size_vmsave);
@@ -1501,6 +1502,16 @@ static int hvm_load_cpu_xsave_states(struct domain *d, hvm_domain_context_t *h)
                  ", saw %"PRIx64"\n",
                  _xfeature_mask & xfeature_mask & XCNTXT_MASK_vmsave,
                  _xfeature_mask);
+        if ( d->clone_of )
+            return XEN_HVMCONTEXT_xsave_area_incompatible;
+        else
+            return -EINVAL;
+    }
+
+    if (ctxt->xsave_cntxt_size > xsave_cntxt_size) {
+        gdprintk(XENLOG_WARNING,
+                 "HVM restore xsave_cntxt_size too large: maximum %x"
+                 ", saw %"PRIx64"\n", xsave_cntxt_size, ctxt->xsave_cntxt_size);
         if ( d->clone_of )
             return XEN_HVMCONTEXT_xsave_area_incompatible;
         else
@@ -3732,7 +3743,7 @@ void hvm_cpuid(unsigned int input, unsigned int *eax, unsigned int *ebx,
         /* set current xsave area size (ebx) to maximum size (ecx),
          * since we always use the host's xstate feature mask */
         if (count == 0)
-            *ebx = *ecx;
+            *ebx = *ecx = xsave_cntxt_size;
 #endif  /* __UXEN__ */
         break;
     }

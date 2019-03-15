@@ -554,6 +554,7 @@ struct hvm_hw_cpu_xsave {
     uint64_t xfeature_mask;
     uint64_t xcr0;                 /* Updated by XSETBV */
     uint64_t xcr0_accum;           /* Updated by XSETBV */
+    uint64_t xsave_cntxt_size;     /* xsave_cntxt_size = cpuid(0xd,0)[ebx] */
     struct {
         struct { char x[512]; } fpu_sse;
 
