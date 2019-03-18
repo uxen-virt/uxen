@@ -66,6 +66,10 @@ struct hvm_ioreq_server {
 #endif  /* __UXEN__ */
 };
 
+struct hvm_attovm {
+    uint64_t appdef_size;
+};
+
 struct hvm_domain {
     struct hvm_ioreq_page  ioreq;
     struct hvm_ioreq_server *ioreq_server_list;
@@ -131,6 +135,9 @@ struct hvm_domain {
     spinlock_t             msixtbl_list_lock;
 
     struct viridian_domain viridian;
+
+    /* attovm data */
+    struct hvm_attovm      attovm;
 
     bool_t                 hap_enabled;
     bool_t                 mem_sharing_enabled;

@@ -409,10 +409,10 @@ attovm_put_appdef(
     void *mapped = NULL;
     int ret = 0, i;
 
-    alloc_len = PAGE_ALIGN(appdef_len + 8);
+    alloc_len = PAGE_ALIGN(appdef_len);
     npages = alloc_len >> PAGE_SHIFT;
 
-    if (npages > ATTOVM_MAX_HIGHMEM_PAGES) {
+    if (npages > ATTOVM_UNSIGNED_MEM_MAX_PAGES) {
         ATTOVM_ERROR("attovm appdef is too long: %d bytes", appdef_len);
         ret = -ENOMEM;
         goto out;
@@ -425,7 +425,7 @@ attovm_put_appdef(
     }
 
     for (i = 0; i < npages; i++)
-        pfns[i] = (0x100000000ULL >> PAGE_SHIFT) + i;
+        pfns[i] = (ATTOVM_APPDEF_PHYSADDR >> PAGE_SHIFT) + i;
     /* actual allocate of highmem pages */
     ret = xc_domain_populate_physmap_exact(xch,
         domid, npages, 0, 0, &pfns[0]);
@@ -452,11 +452,10 @@ attovm_put_appdef(
     }
 
     memset(mapped, 0, npages << PAGE_SHIFT);
-    *(uint64_t*)mapped = appdef_len;
     if (appdef)
-        memcpy(mapped + 8, appdef, appdef_len);
+        memcpy(mapped, appdef, appdef_len);
 
-    definition->num_highmem_pages = npages;
+    definition->appdef_size = appdef_len;
 
 out:
     if (mapped)

@@ -358,6 +358,8 @@ struct domain
 
     /* Is this an HVM guest? */
     bool_t           is_hvm;
+    /* Is this attovm guest? */
+    bool_t           is_attovm;
     /* Is this ax-based attovm guest? */
     bool_t           is_attovm_ax;
     /* Does this guest need iommu mappings? */

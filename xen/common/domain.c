@@ -362,7 +362,7 @@ struct domain *domain_create_internal(
         }
         printk(XENLOG_WARNING "%s: attovm create vm%u\n",
             __FUNCTION__, domid);
-        d->is_attovm_ax = 1;
+        d->is_attovm = d->is_attovm_ax = 1;
     }
 
     if ( domid == 0 )

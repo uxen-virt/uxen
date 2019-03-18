@@ -598,8 +598,7 @@ uxen_vm_init(const char *loadvm, int restore_mode)
 
             ret = xc_attovm_build(xc_handle, vm_id, vm_vcpus, ram_size >> 20,
                                   vm_image,
-                                  appdef, appdef_sz,
-                                  vm_attovm_mode == ATTOVM_MODE_AX /* seal */ );
+                                  appdef, appdef_sz, 1 /* seal */ );
         }
 
         if (ret)

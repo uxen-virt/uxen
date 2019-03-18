@@ -198,11 +198,17 @@ attovm_seal(struct domain *d, struct attovm_definition_v1 *def)
     dump_hash(def->hashsig, sizeof(def->hashsig));
     printk(XENLOG_WARNING "\n");
 
-    ret = ax_present ? attovm_call_seal(d->domain_id, def) : -ENODEV;
-    if (ret)
-        printk(XENLOG_ERR "FAILED to seal vm%u, error %d\n", d->domain_id, ret);
-    else
-        printk(XENLOG_INFO "seal vm%u SUCCESS\n", d->domain_id);
+    d->is_attovm = 1;
+    d->arch.hvm_domain.attovm.appdef_size = def->appdef_size;
+
+    if (d->is_attovm_ax) {
+        ret = ax_present ? attovm_call_seal(d->domain_id, def) : -ENODEV;
+        if (ret)
+            printk(XENLOG_ERR "FAILED to seal vm%u, error %d\n", d->domain_id, ret);
+        else
+            printk(XENLOG_INFO "seal vm%u SUCCESS\n", d->domain_id);
+    } else
+        ret = 0;
 
     return ret;
 }
@@ -248,12 +254,23 @@ attovm_kbd_focus(struct domain *d, uint32_t offer_focus)
 int
 attovm_do_cpuid(struct cpu_user_regs *regs)
 {
+    if (!current->domain->is_attovm)
+        return 0;
+
     switch (regs->eax) {
     case ATTOCALL_QUERYOP:
-        if (regs->ecx == ATTOCALL_QUERYOP_TSC_KHZ) {
-            regs->eax = current->domain->arch.tsc_khz;
-
+        switch (regs->ecx) {
+        case ATTOCALL_QUERYOP_FEATURES:
+            regs->eax = 0;
             return 1;
+        case ATTOCALL_QUERYOP_TSC_KHZ:
+            regs->eax = current->domain->arch.tsc_khz;
+            return 1;
+        case ATTOCALL_QUERYOP_APPDEF_SIZE:
+            regs->eax = current->domain->arch.hvm_domain.attovm.appdef_size;
+            return 1;
+        default:
+            break;
         }
         break;
     default:
