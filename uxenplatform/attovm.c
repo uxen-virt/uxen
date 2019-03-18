@@ -73,12 +73,11 @@ static int appdef_open(struct inode *inode, struct file *file)
     if (appdef)
         return 0;
 
-    map_size = appdef_size + 8;
-    map_size = (map_size + PAGE_SIZE-1) & ~(PAGE_SIZE-1);
-    mem = ioremap(0x100000000ULL, map_size);
+    map_size = (appdef_size + PAGE_SIZE-1) & ~(PAGE_SIZE-1);
+    mem = ioremap(ATTOVM_APPDEF_PHYSADDR, map_size);
     if (!mem)
         return -ENOMEM;
-    appdef = mem + 8;
+    appdef = mem;
 
     return 0;
 }
@@ -255,8 +254,6 @@ static int init_sysfs(void)
 
 static int init_procfs(void)
 {
-    void *mem;
-
     attovm_proc = proc_mkdir("attovm", NULL);
     if (!attovm_proc)
         return -ENOMEM;
@@ -266,11 +263,7 @@ static int init_procfs(void)
         return -ENOMEM;
 
     /* figure out appdef size */
-    mem = ioremap(0x100000000ULL, PAGE_SIZE);
-    if (!mem)
-        return -ENOMEM;
-    appdef_size = *(uint64_t*)mem;
-    iounmap(mem);
+    appdef_size = attovm_call_queryop(ATTOCALL_QUERYOP_APPDEF_SIZE, 0, 0, 0);
 
     proc_set_size(appdef_proc, appdef_size);
 
