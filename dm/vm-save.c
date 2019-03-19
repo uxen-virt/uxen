@@ -1695,8 +1695,12 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
         goto out;
 
     uxenvm_load_read(f, &marker, sizeof(marker), ret, err_msg, out);
-    if (marker == XC_SAVE_ID_VERSION)
-        uxenvm_load_read_struct(f, s_version_info, marker, ret, err_msg, out);
+    if (marker != XC_SAVE_ID_VERSION) {
+        asprintf(err_msg, "no version info");
+        ret = -EINVAL;
+        goto out;
+    }
+    uxenvm_load_read_struct(f, s_version_info, marker, ret, err_msg, out);
     if (s_version_info.version != SAVE_FORMAT_VERSION) {
         asprintf(err_msg, "version info mismatch: %d != %d",
                  s_version_info.version, SAVE_FORMAT_VERSION);
