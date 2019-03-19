@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -50,6 +50,7 @@ int vm_renderclipboard(int wait);
 #define VM_RESTORE_NORMAL 1
 #define VM_RESTORE_TEMPLATE 2
 #define VM_RESTORE_CLONE 3
+#define VM_RESTORE_VALIDATE 4
 
 void vm_inject_nmi();
 

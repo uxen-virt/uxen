@@ -169,6 +169,7 @@ usage(const char *progname)
 enum {
     OPTION_INDEX_CONFIG,
     OPTION_INDEX_WINDOW_PARENT,
+    OPTION_INDEX_VALIDATE,
 };
 
 void
@@ -191,6 +192,8 @@ parse_options(int argc, char **argv)
           {"paused",       no_argument,       NULL,       'p'},
           {"template",     no_argument,       NULL,       't'},
           {"uuid",         required_argument, NULL,       'u'},
+          {"validate",     no_argument,       &long_index,
+           OPTION_INDEX_VALIDATE},
           {"window-parent", required_argument, &long_index,
            OPTION_INDEX_WINDOW_PARENT},
           {NULL,           0,                 NULL,        0}
@@ -220,6 +223,9 @@ parse_options(int argc, char **argv)
           case OPTION_INDEX_WINDOW_PARENT:
               vm_window_parent =
                   (window_handle)(uintptr_t)strtoull(optarg, NULL, 0);
+              break;
+          case OPTION_INDEX_VALIDATE:
+              vm_restore_mode = VM_RESTORE_VALIDATE;
               break;
 	  }
 	  break;
@@ -323,7 +329,7 @@ main(int argc, char **argv)
     }
 
     if (vm_restore_mode != VM_RESTORE_NONE && !vm_loadfile)
-        errx(1, "no load file specified for template or clone");
+        errx(1, "no load file specified for template or clone or validate");
 
     debug_printf("dm path:         %s\n", dm_path);
     debug_printf("cmd line:       ");
@@ -376,7 +382,8 @@ main(int argc, char **argv)
 
     debug_printf("creating vm\n");
     vm_create(vm_restore_mode);
-    if (vm_restore_mode == VM_RESTORE_TEMPLATE)
+    if (vm_restore_mode == VM_RESTORE_TEMPLATE ||
+        vm_restore_mode == VM_RESTORE_VALIDATE)
         goto vm_init;
 
     debug_printf("initializing device modules\n");

@@ -559,15 +559,16 @@ uxen_vm_init(const char *loadvm, int restore_mode)
     vm_time_offset = get_timeoffset();
     xc_domain_set_time_offset(xc_handle, vm_id, vm_time_offset);
 
-    hbmon_init();
+    if (restore_mode != VM_RESTORE_TEMPLATE &&
+        restore_mode != VM_RESTORE_VALIDATE) {
+        hbmon_init();
 
 #if defined(CONFIG_VBOXDRV)
-    if (restore_mode != VM_RESTORE_TEMPLATE) {
         ret = sf_service_start();
         if (ret)
             err(1, "sf_service_start");
-    }
 #endif
+    }
 
     if (!loadvm) {
         char *hvmloader_path = NULL;
@@ -631,6 +632,8 @@ uxen_vm_init(const char *loadvm, int restore_mode)
         xc_munmap(xc_handle, vm_id, hvm_info_page, XC_PAGE_SIZE);
     } else {
         ret = vm_load(loadvm, restore_mode);
+        if (restore_mode == VM_RESTORE_VALIDATE)
+            errx(ret ? 1 : 0, "vm_load(%s, validate) result: %d", loadvm, ret);
         if (ret) {
             if (restore_mode == VM_RESTORE_CLONE &&
                 ret == XEN_HVMCONTEXT_xsave_area_incompatible) {

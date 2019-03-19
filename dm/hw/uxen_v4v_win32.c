@@ -38,8 +38,9 @@ dm_v4v_open(v4v_context_t *v4v, uint32_t ring_size)
 {
     uint32_t flags = V4V_FLAG_ASYNC;
 
-    if (vm_restore_mode == VM_RESTORE_TEMPLATE)
-        err(1, "v4v_open for template vm");
+    if (vm_restore_mode == VM_RESTORE_TEMPLATE ||
+        vm_restore_mode == VM_RESTORE_VALIDATE)
+        err(1, "v4v_open for template/validate vm");
 
     if (vm_attovm_mode == ATTOVM_MODE_AX)
         flags |= V4V_FLAG_AX;

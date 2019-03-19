@@ -1630,7 +1630,9 @@ static int dm_state_load_size = 0;
     } while (0)
 
 #define uxenvm_check_restore_clone(mode) do {                           \
-        if (!whpx_enable && (mode) == VM_RESTORE_CLONE) {               \
+        if (whpx_enable)                                                \
+            break;                                                      \
+        if ((mode) == VM_RESTORE_CLONE) {                               \
             ret = xc_domain_clone_physmap(xc_handle, vm_id,             \
                                           vm_template_uuid);            \
             if (ret < 0) {                                              \
@@ -1643,7 +1645,8 @@ static int dm_state_load_size = 0;
                 goto skip_mem;                                          \
             }                                                           \
             (mode) = VM_RESTORE_NORMAL;                                 \
-        }                                                               \
+        } else if ((mode) == VM_RESTORE_VALIDATE)                       \
+            goto skip_validate;                                         \
     } while (0)
 
 static int
@@ -1948,6 +1951,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
 
     uxenvm_check_mapcache_init();
 
+  skip_validate:
     if (load_lazy_load_info) {
         uint64_t page_offsets_pos = 0;
 
@@ -2064,7 +2068,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
             xc_set_hvm_param(xc_handle, vm_id, s_hvm_params.params[param].idx,
                              s_hvm_params.params[param].data);
         }
-        if (dmreq_init_state == 2) {
+        if (dmreq_init_state == 2 && restore_mode != VM_RESTORE_VALIDATE) {
             APRINTF("%s: dmreq init\n", __FUNCTION__);
             dmreq_init();
         }
