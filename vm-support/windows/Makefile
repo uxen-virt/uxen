@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2018, Bromium, Inc.
+# Copyright 2012-2019, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -23,6 +23,7 @@ SUBDIRS += uxenv4vguest
 SUBDIRS += uxenstor
 SUBDIRS += uxennet
 SUBDIRS += uxennullnet
+SUBDIRS += uxenpatcher
 SUBDIRS += uxensf
 SUBDIRS += uxenhid
 SUBDIRS += installer

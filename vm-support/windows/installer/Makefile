@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2018, Bromium, Inc.
+# Copyright 2012-2019, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -29,6 +29,7 @@ UXENV4VGUEST_DIR = $(DISTDIR_VM_SUPPORT)/uxenv4vguest
 UXENNET_DIR = $(DISTDIR_VM_SUPPORT)/uxennet
 UXENNULLNET_DIR = $(DISTDIR_VM_SUPPORT)/uxennullnet
 UXENHID_DIR = $(DISTDIR_VM_SUPPORT)/uxenhid
+UXENPATCHER_DIR = $(DISTDIR_VM_SUPPORT)/uxenpatcher
 
 TARGETS = all dist clean
 
@@ -71,7 +72,8 @@ WIX_INCLUDES = -delevatedir=$(ELEVATE_DIR) \
 	       -duxennullnetdir=$(UXENNULLNET_DIR) \
 	       -duxensvcdir=$(UXENSVC_DIR) \
 	       -dWin64=$(WIN64) \
-	       -duxenhiddir=$(UXENHID_DIR)
+	       -duxenhiddir=$(UXENHID_DIR) \
+               -duxenpatcherdir=$(UXENPATCHER_DIR)
 
 
 WIX_DEPS = $(ELEVATE_DIR)/elevate.exe \
@@ -92,7 +94,8 @@ WIX_DEPS = $(ELEVATE_DIR)/elevate.exe \
 	   $(UXENSF_DIR)/uxensf.sys \
 	   $(UXENSTOR_DIR)/uxenstor.sys \
 	   $(UXENSVC_DIR)/uxensvc.exe \
-	   $(UXENHID_DIR)/uxenhid.sys
+	   $(UXENHID_DIR)/uxenhid.sys \
+           $(UXENPATCHER_DIR)/uxenpatcher.exe
 
 $(WIX_DEPS): $(UXENVMLIB_DIR)/uxenvmlib.sys $(UXENV4VLIB_DIR)/uxenv4vlib.sys
 
@@ -144,6 +147,8 @@ $(UXENSVC_DIR)/uxensvc.exe:
 	$(MAKE) -C $(SRCDIR)/../uxensvc dist
 $(ELEVATE_DIR)/elevate.exe:
 	$(MAKE) -C $(SRCDIR)/../elevate dist
+$(UXENPATCHER_DIR)/uxenpatcher.exe:
+	$(MAKE) -C $(SRCDIR)/../uxenpatcher dist
 $(UXENHID_DIR)/uxenhid.sys:
 	$(MAKE) -C $(SRCDIR)/../uxenhid dist
 
