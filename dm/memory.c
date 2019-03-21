@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -255,5 +255,14 @@ vm_memory_map_perm(uint64_t guest_addr, uint32_t len, int prot)
 
         return va;
     }
+}
 
+void
+vm_memory_unmap_perm(uint8_t *va, uint32_t len)
+{
+    if (!whpx_enable)
+        xc_munmap(xc_handle, vm_id, va,
+            (len + UXEN_PAGE_SIZE - 1) & UXEN_PAGE_MASK);
+    else
+        whpx_ram_unmap(va);
 }

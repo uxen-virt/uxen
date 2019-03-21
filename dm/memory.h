@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -21,5 +21,6 @@ void vm_memory_unmap(uint64_t phys_addr, uint64_t len, int is_write, int lock,
 #define VM_MEMORY_MAP_PROT_WRITE 2
 
 uint8_t *vm_memory_map_perm(uint64_t guest_addr, uint32_t len, int prot);
+void vm_memory_unmap_perm(uint8_t *va, uint32_t len);
 
 #endif	/* _MEMORY_H_ */

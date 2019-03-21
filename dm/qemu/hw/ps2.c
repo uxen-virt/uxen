@@ -716,11 +716,25 @@ static int ps2_mouse_post_load(void* opaque, int version_id)
     return 0;
 }
 
+static void
+ps2_mouse_pre_save(void *opaque)
+{
+    PS2MouseState *s = opaque;
+
+    if (s->mouse_shared_page) {
+        vm_memory_unmap_perm((uint8_t*)s->mouse_shared_page,
+                             sizeof(*s->mouse_shared_page));
+        s->mouse_shared_page = NULL;
+    }
+}
+
 static const VMStateDescription vmstate_ps2_mouse = {
     .name = "ps2mouse",
     .version_id = 2,
     .minimum_version_id = 2,
     .minimum_version_id_old = 2,
+    .pre_save = ps2_mouse_pre_save,
+    .resume = ps2_mouse_post_load,
     .post_load = ps2_mouse_post_load,
     .fields      = (VMStateField []) {
         VMSTATE_STRUCT(common, PS2MouseState, 0, vmstate_ps2_common, PS2State),
