@@ -147,6 +147,7 @@ int xen_logdirty_enabled = 0;
 
 FILE *logfile;
 int loglevel = 0;
+uint64_t log_synchronous = 0;
 uint64_t hide_log_sensitive_data = 0;
 
 uint64_t log_ratelimit_guest_burst = 0;

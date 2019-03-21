@@ -91,6 +91,7 @@ extern uint64_t hbmon_period, hbmon_timeout_period, hbmon_verbose;
 
 extern FILE *logfile;
 extern int loglevel;
+extern uint64_t log_synchronous;
 extern uint64_t hide_log_sensitive_data;
 extern uint64_t log_swap_fills;
 

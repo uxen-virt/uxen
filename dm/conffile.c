@@ -783,6 +783,7 @@ struct config_option config_options[] = {
     { "log-ratelimit-guest-burst", co_set_integer_opt,
       &log_ratelimit_guest_burst },
     { "log-ratelimit-guest-ms", co_set_integer_opt, &log_ratelimit_guest_ms },
+    { "log-synchronous", co_set_boolean_opt, &log_synchronous },
     { "malloc-limit", co_set_integer_opt, &malloc_limit_bytes},
     { "memory", co_set_integer_opt, &vm_mem_mb },
     { "monitor", co_set_monitor, NULL },

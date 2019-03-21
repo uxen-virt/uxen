@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2017, Bromium, Inc.
+ * Copyright 2013-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -8,6 +8,7 @@
 #ifdef MONITOR
 #include "monitor.h"
 #endif
+#include "dm.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -170,7 +171,7 @@ debug_vprintf(const char *fmt, va_list ap)
 #endif
     va_end(ap2);
 
-    if (flush)
+    if (flush || log_synchronous)
         fflush(stderr);
 }
 
