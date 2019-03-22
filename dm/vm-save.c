@@ -305,6 +305,7 @@ uxenvm_savevm_write_info(struct filebuf *f, uint8_t *dm_state_buf,
     }
 
     s_hvm_context.marker = XC_SAVE_ID_HVM_CONTEXT;
+    s_hvm_context.whpx = whpx_enable;
     s_hvm_context.size = vm_get_context(hvm_buf, hvm_buf_size);
     if (s_hvm_context.size == -1) {
 	asprintf(err_msg, "vm_get_context(%d) failed", hvm_buf_size);
@@ -1739,6 +1740,11 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
 	    uxenvm_load_read_struct(f, s_hvm_context, marker, ret, err_msg,
 				    out);
 	    APRINTF("hvm rec size %d", s_hvm_context.size);
+            if (s_hvm_context.whpx != whpx_enable) {
+                asprintf(err_msg, "hvm_context for incompatible hypervisor");
+                ret = -EINVAL;
+                goto out;
+            }
 	    hvm_buf = malloc(s_hvm_context.size);
 	    if (hvm_buf == NULL) {
 		asprintf(err_msg, "hvm_buf = malloc(%d) failed",
@@ -1933,7 +1939,7 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
   skip_mem:
     if (vm_quit_interrupt)
         goto out;
-    if (restore_mode == VM_RESTORE_TEMPLATE) {		/* template load */
+    if (!whpx_enable && restore_mode == VM_RESTORE_TEMPLATE) {
         ret = xc_domain_sethandle(xc_handle, vm_id, vm_uuid);
         if (ret < 0) {
             asprintf(err_msg,

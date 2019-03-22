@@ -1,5 +1,5 @@
 /*
- * Copyright 2018, Bromium, Inc.
+ * Copyright 2018-2019, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -1149,19 +1149,21 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
             return ret;
     }
 
-    extern void whpx_v4v_proxy_init(void);
-    whpx_v4v_proxy_init();
+    if (restore_mode != VM_RESTORE_TEMPLATE &&
+        restore_mode != VM_RESTORE_VALIDATE) {
+        whpx_v4v_proxy_init();
 
 #if defined(CONFIG_VBOXDRV)
-    ret = sf_service_start();
-    if (ret) {
-        debug_printf("failed to start sf service\n");
-        return ret;
-    }
-    ret = clip_service_start();
-    if (ret) {
-        debug_printf("failed to start clipboard service\n");
-        return ret;
+        ret = sf_service_start();
+        if (ret) {
+            debug_printf("failed to start sf service\n");
+            return ret;
+        }
+        ret = clip_service_start();
+        if (ret) {
+            debug_printf("failed to start clipboard service\n");
+            return ret;
+        }
     }
 #endif
 
@@ -1171,10 +1173,12 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
     if (loadvm) {
         debug_printf("loading vm\n");
         ret = vm_load(loadvm, restore_mode);
+        if (restore_mode == VM_RESTORE_VALIDATE)
+            errx(ret ? 1 : 0, "vm_load(%s, validate) result: %d", loadvm, ret);
         if (ret)
-	    err(1, "vm_load(%s, %s) failed", loadvm,
-		restore_mode == VM_RESTORE_TEMPLATE ? "template" :
-		(restore_mode == VM_RESTORE_CLONE ? "clone" : "load"));
+	    errx(1, "vm_load(%s, %s) failed", loadvm,
+		 restore_mode == VM_RESTORE_TEMPLATE ? "template" :
+		 (restore_mode == VM_RESTORE_CLONE ? "clone" : "load"));
         if (restore_mode == VM_RESTORE_TEMPLATE) {
             control_send_status("template", "loaded", NULL);
             control_flush();
@@ -1184,7 +1188,6 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
 
     debug_printf("initialize pc\n");
     pc_init_xen();
-
     pit_init();
 
     if (loadvm) {

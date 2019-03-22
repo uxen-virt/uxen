@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2018, Bromium, Inc.
+ * Copyright 2016-2019, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -68,6 +68,7 @@ struct xc_save_hvm_params {
 
 struct xc_save_hvm_context {
     int32_t marker;
+    uint32_t whpx;
     uint32_t size;
     uint8_t context[];
 };
