@@ -29,6 +29,7 @@ CharDriverState *serial_hds[MAX_SERIAL_PORTS];
 static ISADevice *rtc = NULL;
 
 ISADevice *rtc_init(int base_year, qemu_irq intercept_irq);
+void pit_init(void);
 
 void rtc_set_memory(ISADevice *dev, int addr, int val)
 {
@@ -334,10 +335,14 @@ pc_init_xen(void)
         errx(1, "Error: Initialization failed for pass-through devices");
 #endif
 
-    if (whpx_enable && vm_hpet)
-        hpet_init(pic, &rtc_irq);
-    rtc = !whpx_enable ? isa_create_simple("xenrtc")
-                       : rtc_init(2000, rtc_irq);
+    if (!whpx_enable) {
+        rtc = isa_create_simple("xenrtc");
+    } else {
+        if (vm_hpet)
+            hpet_init(pic, &rtc_irq);
+        rtc = rtc_init(2000, rtc_irq);
+        pit_init();
+    }
 
     process_config_devices();
 

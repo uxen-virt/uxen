@@ -403,6 +403,8 @@ static bool template_load_failed = true;
 static void
 error_template_destroy(void)
 {
+    if (whpx_enable)
+        return;
 
     if (template_load_failed)
         uxen_destroy_vm(uxen_handle, vm_uuid); /* ignore errors */
@@ -457,41 +459,32 @@ vm_create(int restore_mode)
 }
 
 static void
-uxen_vm_init(const char *loadvm, int restore_mode)
+vm_setup_dm_features(void)
 {
-    uint64_t ram_size = vm_mem_mb << 20;
-    struct hvm_info_table *hvm_info;
-    uint8_t *hvm_info_page;
-    int i;
-    int ret;
-    uint8_t sum;
     uint64_t rand_seed[2];
     union dm_features ftres;
 
-    if (restore_mode == VM_RESTORE_TEMPLATE)
-        atexit(error_template_destroy);
+    generate_random_bytes(rand_seed, sizeof(rand_seed));
 
-    uxen_notification_event_init(&vm_logging_event);
-    ret = uxen_logging(uxen_handle, vm_logging_buffer_size, vm_logging_event,
-                       &vm_logging_buffer);
-    if (ret)
-        err(1, "vm logging setup failed");
+    ftres.blob = 0;
+    ftres.bits.run_patcher = (vm_run_patcher) ? 1 : 0;
+    ftres.bits.seed_generation = (!!seed_generation) ? 1 : 0;
+    ftres.bits.surf_copy_reduction = (!!surf_copy_reduction) ? 1 : 0;
+    if (!whpx_enable) {
+        xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_RAND_SEED_LO,
+            rand_seed[0]);
+        xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_RAND_SEED_HI,
+            rand_seed[1]);
+        xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_DM_FEATURES, ftres.blob);
+    } else {
+        whpx_set_random_seed(rand_seed[0], rand_seed[1]);
+        whpx_set_dm_features(ftres.blob);
+    }
+}
 
-    uxen_notification_add_wait_object(&vm_logging_event, handle_logging_event,
-                                      NULL, NULL);
-
-    ret = xc_domain_setmaxmem(xc_handle, vm_id,
-                              ((ram_size + (512 << 20)) >> 10) + 1024);
-    /* 1024 = LIBXL_MAXMEM_CONSTANT */
-    if (ret != 0)
-	err(1, "xc_domain_setmaxmem");
-
-    xc_domain_set_introspection_features(xc_handle, vm_id,
-                                         compute_introspection_features());
-
-    xc_domain_set_tsc_info(xc_handle, vm_id, vm_tsc_mode /* info->tsc_mode */,
-			   0, 0, 0);
-
+static void
+uxen_vm_setup_hvm_params(void)
+{
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_PAE_ENABLED, vm_pae);
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_X2APIC, vm_x2apic);
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_VIRIDIAN, vm_viridian);
@@ -513,22 +506,10 @@ uxen_vm_init(const char *loadvm, int restore_mode)
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_VPT_COALESCE_NS,
                      vm_vpt_coalesce_period);
 
-    generate_random_bytes(rand_seed, sizeof(rand_seed));
-    xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_RAND_SEED_LO,
-                     rand_seed[0]);
-    xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_RAND_SEED_HI,
-                     rand_seed[1]);
-
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_LOG_RATELIMIT_GUEST_BURST,
                      log_ratelimit_guest_burst);
     xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_LOG_RATELIMIT_GUEST_MS,
                      log_ratelimit_guest_ms);
-
-    ftres.blob = 0;
-    ftres.bits.run_patcher = (vm_run_patcher) ? 1 : 0;
-    ftres.bits.seed_generation = (!!seed_generation) ? 1 : 0;
-    ftres.bits.surf_copy_reduction = (!!surf_copy_reduction) ? 1 : 0;
-    xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_DM_FEATURES, ftres.blob);
 
     if (vm_hvm_params) {
         const char *k;
@@ -555,9 +536,73 @@ uxen_vm_init(const char *loadvm, int restore_mode)
             xc_set_hvm_param(xc_handle, vm_id, p, YAJL_GET_INTEGER(v));
         }
     }
+}
 
+static void
+uxen_vm_setup_logging(void)
+{
+    int ret;
+
+    uxen_notification_event_init(&vm_logging_event);
+    ret = uxen_logging(uxen_handle, vm_logging_buffer_size, vm_logging_event,
+        &vm_logging_buffer);
+    if (ret)
+        err(1, "vm logging setup failed");
+
+    uxen_notification_add_wait_object(&vm_logging_event, handle_logging_event,
+        NULL, NULL);
+}
+
+static void
+uxen_vm_init(void)
+{
+    uint64_t ram_size = vm_mem_mb << 20;
+    int ret;
+
+    uxen_vm_setup_logging();
+
+    ret = xc_domain_setmaxmem(xc_handle, vm_id,
+                              ((ram_size + (512 << 20)) >> 10) + 1024);
+    /* 1024 = LIBXL_MAXMEM_CONSTANT */
+    if (ret != 0)
+        err(1, "xc_domain_setmaxmem");
+
+    xc_domain_set_introspection_features(xc_handle, vm_id,
+                                         compute_introspection_features());
+
+    xc_domain_set_tsc_info(
+        xc_handle, vm_id, vm_tsc_mode /* info->tsc_mode */,
+        0, 0, 0);
+
+    uxen_vm_setup_hvm_params();
+
+    /* time offset */
     vm_time_offset = get_timeoffset();
     xc_domain_set_time_offset(xc_handle, vm_id, vm_time_offset);
+}
+
+void
+vm_init(const char *loadvm, int restore_mode)
+{
+    uint64_t ram_size = vm_mem_mb << 20;
+    struct hvm_info_table *hvm_info;
+    uint8_t *hvm_info_page;
+    int i;
+    int ret;
+    uint8_t sum;
+
+    if (restore_mode == VM_RESTORE_TEMPLATE)
+        atexit(error_template_destroy);
+
+    if (!whpx_enable)
+        uxen_vm_init();
+    else {
+        ret = whpx_vm_init(restore_mode);
+        if (ret)
+            err(1, "whpx_vm_init");
+    }
+
+    vm_setup_dm_features();
 
     if (restore_mode != VM_RESTORE_TEMPLATE &&
         restore_mode != VM_RESTORE_VALIDATE) {
@@ -583,53 +628,62 @@ uxen_vm_init(const char *loadvm, int restore_mode)
 
         assert(vm_image);
 
-        if (!vm_attovm_mode)
-            ret = xc_hvm_build(xc_handle, vm_id, ram_size >> 20, vm_vcpus,
-                               NR_IOREQ_SERVERS, vm_image, modules,
-                               mod_count, &oem_info);
-        else {
-            char *appdef = NULL;
-            uint32_t appdef_sz = 0;
+        if (!whpx_enable) {
+            if (!vm_attovm_mode)
+                ret = xc_hvm_build(xc_handle, vm_id, ram_size >> 20, vm_vcpus,
+                    NR_IOREQ_SERVERS, vm_image, modules,
+                    mod_count, &oem_info);
+            else {
+                char *appdef = NULL;
+                uint32_t appdef_sz = 0;
 
-            if (vm_attovm_appdef_file) {
-                appdef = attovm_load_appdef(vm_attovm_appdef_file, &appdef_sz);
-                if (!appdef || !appdef_sz)
-                    err(1, "failed to load appdef: %s", vm_attovm_appdef_file);
+                if (vm_attovm_appdef_file) {
+                    appdef = attovm_load_appdef(vm_attovm_appdef_file,
+                                                &appdef_sz);
+                    if (!appdef || !appdef_sz)
+                        err(1, "failed to load appdef: %s",
+                            vm_attovm_appdef_file);
+                }
+
+                ret = xc_attovm_build(xc_handle, vm_id, vm_vcpus,
+                                      ram_size >> 20, vm_image,
+                                      appdef, appdef_sz, 1 /* seal */ );
             }
 
-            ret = xc_attovm_build(xc_handle, vm_id, vm_vcpus, ram_size >> 20,
-                                  vm_image,
-                                  appdef, appdef_sz, 1 /* seal */ );
+            if (ret)
+                errx(1, "hvm build failed: %d", ret);
+        } else {
+            /* FIXME: hvm modules for WHP */
         }
-
-        if (ret)
-            errx(1, "hvm build failed: %d", ret);
 
         if (modules)
             vm_cleanup_modules(modules, mod_count);
 
         free(hvmloader_path);
 
-        dmreq_init();
+        if (!whpx_enable) {
+            dmreq_init();
 
-        hvm_info_page = xc_map_foreign_range(xc_handle, vm_id, XC_PAGE_SIZE,
-                                             PROT_READ | PROT_WRITE,
-                                             HVM_INFO_PFN);
-        if (hvm_info_page == NULL)
-            err(1, "xc_map_foreign_range(HVM_INFO_PFN)");
+            hvm_info_page = xc_map_foreign_range(xc_handle, vm_id, XC_PAGE_SIZE,
+                PROT_READ | PROT_WRITE,
+                HVM_INFO_PFN);
+            if (hvm_info_page == NULL)
+                err(1, "xc_map_foreign_range(HVM_INFO_PFN)");
 
-        hvm_info = (struct hvm_info_table *)(hvm_info_page + HVM_INFO_OFFSET);
+            hvm_info = (struct hvm_info_table *)
+                       (hvm_info_page + HVM_INFO_OFFSET);
 
-        hvm_info->apic_mode = vm_apic;
-        hvm_info->nr_vcpus = vm_vcpus;
-        memcpy(hvm_info->vcpu_online, vm_vcpu_avail,
-               sizeof(hvm_info->vcpu_online));
+            hvm_info->apic_mode = vm_apic;
+            hvm_info->nr_vcpus = vm_vcpus;
+            memcpy(hvm_info->vcpu_online, vm_vcpu_avail,
+                sizeof(hvm_info->vcpu_online));
 
-        for (i = 0, sum = 0; i < hvm_info->length; i++)
-            sum += ((uint8_t *) hvm_info)[i];
-        hvm_info->checksum -= sum;
+            for (i = 0, sum = 0; i < hvm_info->length; i++)
+                sum += ((uint8_t *) hvm_info)[i];
+            hvm_info->checksum -= sum;
 
-        xc_munmap(xc_handle, vm_id, hvm_info_page, XC_PAGE_SIZE);
+            xc_munmap(xc_handle, vm_id, hvm_info_page, XC_PAGE_SIZE);
+        }
     } else {
         ret = vm_load(loadvm, restore_mode);
         if (restore_mode == VM_RESTORE_VALIDATE)
@@ -661,7 +715,8 @@ uxen_vm_init(const char *loadvm, int restore_mode)
     if (vm_quit_interrupt)
         errx(0, "%s quit interrupt", __FUNCTION__);
 
-    ioreq_init();
+    if (!whpx_enable)
+        ioreq_init();
 
     pc_init_xen();
 
@@ -671,7 +726,8 @@ uxen_vm_init(const char *loadvm, int restore_mode)
             err(1, "vm_load_finish failed");
     }
 
-    xc_cpuid_apply_policy(xc_handle, vm_id);
+    if (!whpx_enable)
+        xc_cpuid_apply_policy(xc_handle, vm_id);
 
 #if defined(CONFIG_VBOXDRV)
     ret = clip_service_start();
@@ -684,22 +740,6 @@ uxen_vm_init(const char *loadvm, int restore_mode)
 #endif  /* CONFIG_DUMP_PERIODIC_STAT */
 
     dev_machine_creation_done();
-}
-
-void
-vm_init(const char *loadvm, int restore_mode)
-{
-    if (!whpx_enable)
-        uxen_vm_init(loadvm, restore_mode);
-    else {
-        int ret = whpx_vm_init(loadvm, restore_mode);
-
-        if (ret)
-            err(1, "failed to init whpx vm: %d", ret);
-#ifdef CONFIG_DUMP_PERIODIC_STATS
-        dump_periodic_stats_init();
-#endif  /* CONFIG_DUMP_PERIODIC_STAT */
-    }
 }
 
 int vm_is_paused(void)

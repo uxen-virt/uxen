@@ -1,5 +1,5 @@
 /*
- * Copyright 2018, Bromium, Inc.
+ * Copyright 2018-2019, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -89,7 +89,7 @@ int whpx_write_memory(struct filebuf *f);
 
 int whpx_early_init(void);
 
-int whpx_vm_init(const char *loadvm, int restore_mode);
+int whpx_vm_init(int restore_mode);
 int whpx_vm_start(void);
 int whpx_vm_resume(void);
 int whpx_vm_shutdown(int reason);

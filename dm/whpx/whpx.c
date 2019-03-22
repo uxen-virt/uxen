@@ -1107,7 +1107,8 @@ whpx_early_init(void)
     return 0;
 }
 
-int whpx_vm_init(const char *loadvm, int restore_mode)
+int
+whpx_vm_init(int restore_mode)
 {
     int ret;
 
@@ -1115,8 +1116,8 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
     whpx_panic("whpx unsupported on 32bit\n");
 #endif
 
-    debug_printf("vm init, thread 0x%x, restore_mode=%d, file=%s\n", (int)GetCurrentThreadId(),
-      restore_mode, loadvm ? loadvm : "");
+    debug_printf("vm init, thread 0x%x, restore_mode=%d\n", (int)GetCurrentThreadId(),
+        restore_mode);
 
     current_cpu_tls = TlsAlloc();
     if (current_cpu_tls == TLS_OUT_OF_INDEXES)
@@ -1132,17 +1133,8 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
     if (ret)
       return ret;
 
-    uint64_t rand_seed[2];
-    generate_random_bytes(rand_seed, sizeof(rand_seed));
-    whpx_set_random_seed(rand_seed[0], rand_seed[1]);
-
-    union dm_features ftres;
-    ftres.blob = 0;
-    ftres.bits.run_patcher = (vm_run_patcher) ? 1 : 0;
-    ftres.bits.seed_generation = (!!seed_generation) ? 1 : 0;
-    ftres.bits.surf_copy_reduction = (!!surf_copy_reduction) ? 1 : 0;
-    whpx_set_dm_features(ftres.blob);
-
+    /* only bother to populate initial memory if we're not restoring. If we're
+     * restoring memory comes from savefiles */
     if (vm_restore_mode == VM_RESTORE_NONE) {
         ret = whpx_create_vm_memory(vm_mem_mb);
         if (ret)
@@ -1150,52 +1142,11 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
     }
 
     if (restore_mode != VM_RESTORE_TEMPLATE &&
-        restore_mode != VM_RESTORE_VALIDATE) {
+        restore_mode != VM_RESTORE_VALIDATE)
         whpx_v4v_proxy_init();
-
-#if defined(CONFIG_VBOXDRV)
-        ret = sf_service_start();
-        if (ret) {
-            debug_printf("failed to start sf service\n");
-            return ret;
-        }
-        ret = clip_service_start();
-        if (ret) {
-            debug_printf("failed to start clipboard service\n");
-            return ret;
-        }
-    }
-#endif
 
     // debug out
     register_ioport_write(DEBUG_PORT_NUMBER, 1, 1, ioport_debug_char, NULL);
-
-    if (loadvm) {
-        debug_printf("loading vm\n");
-        ret = vm_load(loadvm, restore_mode);
-        if (restore_mode == VM_RESTORE_VALIDATE)
-            errx(ret ? 1 : 0, "vm_load(%s, validate) result: %d", loadvm, ret);
-        if (ret)
-	    errx(1, "vm_load(%s, %s) failed", loadvm,
-		 restore_mode == VM_RESTORE_TEMPLATE ? "template" :
-		 (restore_mode == VM_RESTORE_CLONE ? "clone" : "load"));
-        if (restore_mode == VM_RESTORE_TEMPLATE) {
-            control_send_status("template", "loaded", NULL);
-            control_flush();
-            errx(0, "template vm setup done");
-        }
-    }
-
-    debug_printf("initialize pc\n");
-    pc_init_xen();
-    pit_init();
-
-    if (loadvm) {
-        debug_printf("finishing vm load\n");
-        ret = vm_load_finish();
-        if (ret)
-            err(1, "vm_load_finish failed");
-    }
 
     shutdown_reason = 0;
 
@@ -1207,6 +1158,7 @@ int whpx_vm_init(const char *loadvm, int restore_mode)
         mod_timer(whpx_perf_timer,
             get_clock_ms(vm_clock) + PERF_TIMER_PERIOD_MS);
     }
+
     return 0;
 }
 
