@@ -835,9 +835,7 @@ ept_map_l1_table(struct p2m_domain *p2m, unsigned long gpfn,
                  unsigned int *page_order)
 {
     struct domain *d = p2m->domain;
-    ept_entry_t *ept_entry, e;
-    ept_entry_t *table = NULL, *l1t = NULL;
-    u32 index;
+    ept_entry_t *table = NULL;
     int i;
     int ret;
 
@@ -849,37 +847,19 @@ ept_map_l1_table(struct p2m_domain *p2m, unsigned long gpfn,
         return NULL;
 
     table = ept_map_asr_ptp(p2m);
-    for (i = ept_get_wl(d); i > 1; i--) {
+    for (i = ept_get_wl(d); i > 0; i--) {
         ret = ept_next_level(p2m, 1, &table, &gpfn, i);
-        if (!ret)
-            goto out;
-        else if (ret == GUEST_TABLE_POD_PAGE)
-            /* should return pod state */
-            goto out;
-        else if (ret == GUEST_TABLE_SUPER_PAGE)
-            /* should return super page state */
-            goto out;
+        if (ret != GUEST_TABLE_NORMAL_PAGE)
+            break;
     }
 
-    ASSERT(i == 1);
-    index = gpfn >> (i * EPT_TABLE_ORDER);
-    ept_entry = table + index;
-
-    e = atomic_read_ept_entry(ept_entry);
-    if (!is_epte_present(&e))
-        /* should return state */
-        goto out;
-    if (is_epte_superpage(&e))
-        /* should return state */
-        goto out;
-
-    l1t = ept_map_ptp(p2m, &e);
-    i = 0;
-  out:
     if (page_order)
         *page_order = i * EPT_TABLE_ORDER;
-    ept_unmap_ptp(p2m, table);
-    return l1t;
+    if (i) {
+        ept_unmap_ptp(p2m, table);
+        table = NULL;
+    }
+    return table;
 }
 
 static void *
