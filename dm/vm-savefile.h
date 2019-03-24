@@ -30,6 +30,7 @@
 #define XC_SAVE_ID_HVM_PARAMS         -24
 #define XC_SAVE_ID_CLOCK_INFO         -25
 #define XC_SAVE_ID_WHPX_MEMORY_DATA   -26
+#define XC_SAVE_ID_WHPX_HVM_CONTEXT   -27
 
 #define MAX_BATCH_SIZE 1023
 
@@ -68,7 +69,6 @@ struct xc_save_hvm_params {
 
 struct xc_save_hvm_context {
     int32_t marker;
-    uint32_t whpx;
     uint32_t size;
     uint8_t context[];
 };
