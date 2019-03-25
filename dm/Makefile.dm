@@ -151,6 +151,7 @@ $(WINDOWS)DM_SRCS += atto-vm.c
 atto-vm.o: CPPFLAGS += $(LIBVHD_CPPFLAGS)
 atto-vm.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 atto-vm.o: CPPFLAGS += $(LIBUXENCTL_CPPFLAGS)
+atto-vm.o: CPPFLAGS += $(LIBATTOIMG_CPPFLAGS)
 DM_SRCS += nickel/http-parser/http_parser.c
 DM_SRCS += input.c
 DM_SRCS += introspection.c

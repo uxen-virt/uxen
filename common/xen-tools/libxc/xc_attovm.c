@@ -14,7 +14,7 @@
 #include "xg_private.h"
 #include "xc_attovm.h"
 
-#include <attoimg.h>
+#include <attoimg/attoimg.h>
 #include <attoxen-api/ax_attovm.h>
 #include <xen/attovm.h>
 

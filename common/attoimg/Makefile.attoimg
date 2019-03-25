@@ -60,7 +60,7 @@ $(attoimg_OBJS): %.o : $(SRCROOT)/%.c
 
 Makefile.lib-LIBATTOIMG:
 	@rm -f $@
-	@(echo "LIBATTOIMG_CPPFLAGS = -I$(SRCROOT)" ;\
+	@(echo "LIBATTOIMG_CPPFLAGS = -I$(TOPDIR)/common" ;\
 	  echo "LIBATTOIMG_LIBS = -L$(abspath .) -lattoimg" ;\
 	  echo "LIBATTOIMG_DEPS = $(abspath .)/libattoimg.a" ;\
 	  echo "LIBATTOIMG_SRCDIR = $(SRCROOT)" ;\

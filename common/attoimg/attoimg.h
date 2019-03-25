@@ -66,7 +66,8 @@ int attoimg_image_sign_existing(
   const char *output_file
 );
 
-/* load image file into memory, using the mapper */
+/* load image file into memory, using the mapper.
+ * if mapper == NULL, then only read vm defintion */
 int attoimg_image_read(
     const char *filename,
     struct attovm_definition_v1 *out_def,

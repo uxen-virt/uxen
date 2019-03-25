@@ -20,6 +20,8 @@
 #include <xenctrl.h>
 #include <xenguest.h>
 #include <xc_attovm.h>
+#include <attoxen-api/ax_attovm.h>
+#include <attoimg/attoimg.h>
 #include "timer.h"
 
 #define MAX_DIRPATH_LEN (4 * MAX_PATH)
@@ -290,19 +292,38 @@ attovm_create_custom_cursor(uint64_t x11_ptr, int xhot, int yhot,
 }
 
 int
-is_attovm_image(const char *file)
+is_attovm_image(const char *image)
 {
     const char *ext = NULL;
 
-    while (file && *file) {
-        file = strchr(file, '.');
-        if (file) {
-            ext = file;
-            file++;
+    while (image && *image) {
+        image = strchr(image, '.');
+        if (image) {
+            ext = image;
+            image++;
         }
     }
 
     return ext && (strcasecmp(ext, ATTOVM_IMAGE_EXT) == 0);
+}
+
+void
+attovm_init_conf(const char *image)
+{
+    struct attovm_definition_v1 def = { };
+    uint64_t memory;
+
+    if (attoimg_image_read(image, &def, NULL))
+        errx(1, "error reading attovm definition from: %s", image);
+
+    /* use vcpus amount from attovm definition */
+    vm_vcpus  = def.m.num_vcpus;
+    /* vm_mem_mb is actually ignored for attovms, but set it here from .attovm
+     * for consistency */
+    memory = (uint64_t)def.m.num_pages << PAGE_SHIFT;
+    if (memory & ((1 << 20) - 1))
+        errx(1, "unexpected memory size: %"PRId64, memory);
+    vm_mem_mb = memory >> 20;
 }
 
 char *

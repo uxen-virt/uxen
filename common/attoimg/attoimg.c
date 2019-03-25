@@ -775,10 +775,12 @@ int attoimg_image_read(
         goto out;
     }
 
-    ret = image_read_page_range_contents(f, mapper, &hdr.definition);
-    if (ret) {
-        ERROR("Failed to read page range contents");
-        goto out;
+    if (mapper) {
+        ret = image_read_page_range_contents(f, mapper, &hdr.definition);
+        if (ret) {
+            ERROR("Failed to read page range contents");
+            goto out;
+        }
     }
 
     /* return definition */

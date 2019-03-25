@@ -332,6 +332,17 @@ main(int argc, char **argv)
     if (vm_restore_mode != VM_RESTORE_NONE && !vm_loadfile)
         errx(1, "no load file specified for template or clone or validate");
 
+    if (!vm_image) {
+        asprintf(&vm_image, "%s/hvmloader", dm_path);
+        if (!vm_image)
+            err(1, "asprintf(hvmloader)");
+    }
+
+    if (is_attovm_image(vm_image)) {
+        vm_attovm_mode = vm_attovm_ax ? ATTOVM_MODE_AX : ATTOVM_MODE_UXEN;
+        attovm_init_conf(vm_image);
+    }
+
     debug_printf("dm path:         %s\n", dm_path);
     debug_printf("cmd line:       ");
     for (i = 0; i < argc; i++)
@@ -371,15 +382,6 @@ main(int argc, char **argv)
 
     if (whpx_enable)
         whpx_early_init();
-
-    if (!vm_image) {
-        asprintf(&vm_image, "%s/hvmloader", dm_path);
-        if (!vm_image)
-            err(1, "asprintf(hvmloader)");
-    }
-
-    if (is_attovm_image(vm_image))
-        vm_attovm_mode = vm_attovm_ax ? ATTOVM_MODE_AX : ATTOVM_MODE_UXEN;
 
     debug_printf("creating vm\n");
     vm_create(vm_restore_mode);
