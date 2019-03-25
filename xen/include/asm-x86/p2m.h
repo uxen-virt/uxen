@@ -751,7 +751,8 @@ void p2m_free_ptp(struct p2m_domain *p2m, unsigned long mfn, uint16_t idx);
 #define PT_WL 4
 
 typedef struct {
-    uint32_t mfn;
+    uint32_t mfn: 31,
+        present: 1;
 } pt_page_t;
 
 #define pt_nr_pages(d) ((d)->vm_info_shared->vmi_nr_pt_pages)
@@ -767,6 +768,74 @@ typedef struct {
     ((gfn) & ((1UL << ((level) * PAGETABLE_ORDER)) - 1))
 #define pt_level_index(gfn, level) \
     (((gfn) >> ((level) * PAGETABLE_ORDER)) & ((1UL << PAGETABLE_ORDER) - 1))
+
+#define _pt_gfn_idx(gfn, level) (({                                     \
+                unsigned long gfn_level_masked =                        \
+                    pt_level_mask((gfn), (level));                      \
+                (4 - (level)) +                                         \
+                    (gfn_level_masked >> (3 * PAGETABLE_ORDER)) +       \
+                    (gfn_level_masked >> (2 * PAGETABLE_ORDER)) +       \
+                    (gfn_level_masked >> PAGETABLE_ORDER);              \
+            }))
+
+static inline unsigned int
+pt_gfn_idx(struct p2m_domain *p2m, unsigned long gfn, unsigned int level)
+{
+    struct domain *d = p2m->domain;
+    unsigned int idx;
+
+    BUILD_BUG_ON(PT_WL != 4);   /* need to fix _pt_gfn_idx */
+
+    if (level > 2 || gfn < 0xc0000 || gfn >= 0x100000) {
+        unsigned long linear_gfn = gfn < 0xc0000 ? gfn : gfn - 0x40000;
+        idx = _pt_gfn_idx(linear_gfn, level);
+
+        if (idx < _pt_gfn_idx(d->vm_info_shared->vmi_nr_pages_hint, 1))
+            return idx;
+
+        return pt_nr_pages(d);
+    }
+
+    idx = _pt_gfn_idx(d->vm_info_shared->vmi_nr_pages_hint, 1);
+
+    /* l2 table for mmio space */
+    if (level == 2 && pt_level_mask(gfn, 2) == 0xc0000)
+        return idx;
+    idx++;
+
+    if (level == 1) {
+        /* ioapic/hpet */
+        if (pt_level_mask(gfn, 1) == 0xfec00)
+            return idx;
+        idx++;
+
+        /* lapic */
+        if (pt_level_mask(gfn, 1) == 0xfee00)
+            return idx;
+        idx++;
+
+        /* pci mem */
+        if (pt_level_mask(gfn, 1) == 0xf0000)
+            return idx;
+        idx++;
+
+        /* acpi */
+        if (pt_level_mask(gfn, 1) == 0xfc000)
+            return idx;
+        idx++;
+
+        /* vram */
+        /* Note: we don't have enough pre-allocated pages to cover the
+         * entire vram, but that's ok since the returned index will be
+         * >= pt_nr_pages and so we'll fall back to allocating
+         * pages */
+        if (gfn >= 0xe0000 && gfn < 0xf0000)
+            return idx + ((gfn - 0xe0000) >> PAGETABLE_ORDER);
+        idx += (0xf0000 - 0xe0000) >> PAGETABLE_ORDER;
+    }
+
+    return pt_nr_pages(d);
+}
 
 #if CONFIG_PAGING_LEVELS == 3
 static inline int p2m_gfn_check_limit(

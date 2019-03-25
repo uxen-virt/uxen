@@ -158,6 +158,15 @@ static void ept_p2m_type_to_flags(ept_entry_t *entry, p2m_type_t type, p2m_acces
     
 }
 
+#define GUEST_TABLE_MAP_FAILED  0
+#define GUEST_TABLE_NORMAL_PAGE 1
+#define GUEST_TABLE_SUPER_PAGE  2
+#define GUEST_TABLE_POD_PAGE    3
+
+static int ept_next_level(struct p2m_domain *p2m, bool_t read_only,
+                          ept_entry_t **table, unsigned long gfn,
+                          int next_level);
+
 static ept_entry_t *
 ept_map_asr_ptp(struct p2m_domain *p2m)
 {
@@ -210,6 +219,59 @@ ept_map_ptp(struct p2m_domain *p2m, ept_entry_t *e)
     return map_domain_page(e->mfn);
 }
 
+static int
+ept_map_ptp_gfn(struct p2m_domain *p2m, bool_t read_only,
+                ept_entry_t **_table, unsigned long gfn, int *_target)
+{
+    struct domain *d = p2m->domain;
+    ept_entry_t *table, *entry;
+    uint16_t idx;
+    unsigned int i;
+    int ret = GUEST_TABLE_MAP_FAILED;
+
+    idx = pt_gfn_idx(p2m, gfn, (*_target) + 1);
+    if (idx < pt_nr_pages(d)) {
+        if (pt_page(d, idx).present) {
+            *_table = (ept_entry_t *)pt_page_va(d, idx);
+            return GUEST_TABLE_NORMAL_PAGE;
+        }
+
+        table = (ept_entry_t *)
+            pt_page_va(d, pt_gfn_idx(p2m, gfn, (*_target) + 2));
+        entry = table + pt_level_index(gfn, (*_target) + 1);
+
+        if (p2m_is_pod(entry->sa_p2mt)) {
+            ASSERT(*_target == 0);
+            *_table = table;
+            *_target = 1;
+            return GUEST_TABLE_POD_PAGE;
+        }
+
+        ASSERT(!entry->epte);
+        if (!read_only)
+            printk(XENLOG_DEBUG "%s: vm%u: top down fill gfn %lx level %d\n",
+                   __FUNCTION__, d->domain_id, gfn, (*_target) + 1);
+    } else {
+        idx = pt_gfn_idx(p2m, gfn, (*_target) + 2);
+        if (idx < pt_nr_pages(d) && pt_page(d, idx).present) {
+            *_table = (ept_entry_t *)pt_page_va(d, idx);
+            (*_target)++;
+            return GUEST_TABLE_MAP_FAILED;
+        }
+    }
+
+    table = ept_map_asr_ptp(p2m);
+    for (i = ept_get_wl(d); i > *_target; i--) {
+        ret = ept_next_level(p2m, read_only, &table, gfn, i);
+        if (ret != GUEST_TABLE_NORMAL_PAGE)
+            break;
+    }
+
+    *_target = i;
+    *_table = table;
+    return ret;
+}
+
 #define ept_ptp_mapped(p2m, va) (({                                     \
                 ((uintptr_t)(va) >= pt_page_va((p2m)->domain, 0) &&     \
                  (uintptr_t)(va) < pt_page_va((p2m)->domain,            \
@@ -223,11 +285,6 @@ ept_unmap_ptp(struct p2m_domain *p2m, const void *va)
     if (!ept_ptp_mapped(p2m, va))
         unmap_domain_page(va);
 }
-
-#define GUEST_TABLE_MAP_FAILED  0
-#define GUEST_TABLE_NORMAL_PAGE 1
-#define GUEST_TABLE_SUPER_PAGE  2
-#define GUEST_TABLE_POD_PAGE    3
 
 /* Fill in middle levels of ept table */
 static int ept_set_middle_entry(struct p2m_domain *p2m, unsigned long gpfn,
@@ -591,15 +648,8 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
         l1c->se_l1.va = NULL;
 
         perfc_incr(p2m_set_entry_walk);
-        table = ept_map_asr_ptp(p2m);
-        for ( i = ept_get_wl(d); i > target; i-- )
-        {
-            ret = ept_next_level(p2m, 0, &table, gfn, i);
-            if ( !ret )
-                goto out;
-            else if ( ret != GUEST_TABLE_NORMAL_PAGE )
-                break;
-        }
+        i = target;
+        ret = ept_map_ptp_gfn(p2m, 0, &table, gfn, &i);
         if (!target && !i && ret == GUEST_TABLE_NORMAL_PAGE) {
             int mapped = ept_ptp_mapped(p2m, table);
             l1c->se_l1_prefix = p2m_l1_prefix(gfn, p2m);
@@ -821,10 +871,8 @@ static void *
 ept_map_l1_table(struct p2m_domain *p2m, unsigned long gpfn,
                  unsigned int *page_order)
 {
-    struct domain *d = p2m->domain;
     ept_entry_t *table = NULL;
     int i;
-    int ret;
 
     if (page_order)
         *page_order = PAGE_ORDER_4K;
@@ -833,12 +881,8 @@ ept_map_l1_table(struct p2m_domain *p2m, unsigned long gpfn,
     if (gpfn > p2m->max_mapped_pfn)
         return NULL;
 
-    table = ept_map_asr_ptp(p2m);
-    for (i = ept_get_wl(d); i > 0; i--) {
-        ret = ept_next_level(p2m, 1, &table, gpfn, i);
-        if (ret != GUEST_TABLE_NORMAL_PAGE)
-            break;
-    }
+    i = 0;
+    ept_map_ptp_gfn(p2m, 1, &table, gpfn, &i);
 
     if (page_order)
         *page_order = i * EPT_TABLE_ORDER;
@@ -912,34 +956,31 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
         l1c->ge_l1[ge_l1_cache_slot].va = NULL;
 
         perfc_incr(p2m_get_entry_walk);
-        table = ept_map_asr_ptp(p2m);
-        for (i = ept_get_wl(d); i > 0; i--) {
-          retry:
-            ret = ept_next_level(p2m, 1, &table, gfn, i);
-            if (!ret) {
-                if (page_order)
-                    *page_order = i * EPT_TABLE_ORDER;
+      retry:
+        i = 0;
+        ret = ept_map_ptp_gfn(p2m, 1, &table, gfn, &i);
+        if (!ret) {
+            if (page_order)
+                *page_order = i * EPT_TABLE_ORDER;
+            goto out;
+        } else if (ret == GUEST_TABLE_POD_PAGE) {
+            index = pt_level_index(gfn, i);
+            ept_entry = table + index;
+
+            if (q == p2m_query) {
+                *t = p2m_populate_on_demand;
+                mfn = _mfn(ept_entry->mfn);
                 goto out;
-            } else if (ret == GUEST_TABLE_POD_PAGE) {
-                index = pt_level_index(gfn, i);
-                ept_entry = table + index;
+            }
 
-                if (q == p2m_query) {
-                    *t = p2m_populate_on_demand;
-                    mfn = _mfn(ept_entry->mfn);
-                    goto out;
-                }
+            /* Populate this superpage */
+            ASSERT(i == 1);
 
-                /* Populate this superpage */
-                ASSERT(i == 1);
-
-                mfn = p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_2M, q,
-                                              ept_entry);
-                if (mfn_x(mfn))
-                    goto out;
-                goto retry;
-            } else if (ret == GUEST_TABLE_SUPER_PAGE)
-                break;
+            mfn = p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_2M, q,
+                                          ept_entry);
+            if (mfn_x(mfn))
+                goto out;
+            goto retry;
         }
 
         if (!i && ret == GUEST_TABLE_NORMAL_PAGE) {

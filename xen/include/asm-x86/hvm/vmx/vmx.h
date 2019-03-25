@@ -51,7 +51,8 @@ typedef union {
     };
     u64 epte;
     struct {
-        u64 : 12,
+        u64 rwx: 3,
+            : 9,
             : 40,
             ptp_idx: PTP_IDX_BITS,
             : 2;

@@ -383,43 +383,27 @@ p2m_alloc_ptp(struct p2m_domain *p2m, unsigned long gfn, int level,
 {
     struct page_info *pg;
     struct domain *d = p2m->domain;
+    uint16_t idx;
 
     ASSERT(p2m);
     ASSERT(p2m_locked_by_me(p2m));
     ASSERT(p2m->domain);
 
-    do {
-        uint16_t idx;
+    idx = pt_gfn_idx(p2m, gfn, level);
 
-        if (!_idx)
-            break;
+    printk(XENLOG_DEBUG "%s: vm%u gfn %lx level %d -> idx %d\n", __FUNCTION__,
+           d->domain_id, gfn, level, idx);
 
-        p2m_lock_recursive(p2m);
-
-        idx = p2m->pt_page_next;
-
-        if (idx >= pt_nr_pages(d)) {
-            p2m_unlock(p2m);
-            break;
-        }
-
-        printk(XENLOG_DEBUG "%s: idx %d page next %d mfn %x\n",
-               __FUNCTION__, idx, *(uint16_t *)pt_page_va(d, idx),
-               pt_page(d, idx).mfn);
-
-        p2m->pt_page_next = *(uint16_t *)pt_page_va(d, idx);
-        *(uint16_t *)pt_page_va(d, idx) = 0;
-
-        p2m_unlock(p2m);
-
+    if (_idx && idx < d->vm_info_shared->vmi_nr_pt_pages) {
         *_idx = idx;
 
         /* make _idx fit in 1..(1<<p2m->ptp_idx_bits), i.e. leave 0 reserved */
         while (*(_idx) >= (1 << p2m->ptp_idx_bits))
             *(_idx) -= (1 << p2m->ptp_idx_bits) - 1;
 
+        pt_page(d, idx).present = 1;
         return pt_page(d, idx).mfn;
-    } while (0);
+    }
 
     if (_idx)
         *_idx = 0;
@@ -452,13 +436,10 @@ void p2m_free_ptp(struct p2m_domain *p2m, unsigned long mfn, uint16_t idx)
         }
 
         ASSERT(idx < pt_nr_pages(d));
-        if (idx >= pt_nr_pages(d))
-            return;             /* bail in release builds */
 
-        p2m_lock_recursive(p2m);
-        *(uint16_t *)pt_page_va(d, idx) = p2m->pt_page_next;
-        p2m->pt_page_next = idx;
-        p2m_unlock(p2m);
+        memset((void *)pt_page_va(d, idx), 0, PAGE_SIZE);
+
+        pt_page(d, idx).present = 0;
 
         return;
     }
@@ -482,7 +463,6 @@ int p2m_alloc_table(struct p2m_domain *p2m)
     unsigned long p2m_top;
     uint16_t p2m_top_idx;
     struct domain *d = p2m->domain;
-    unsigned int i;
 
     p2m_lock(p2m);
 
@@ -496,8 +476,6 @@ int p2m_alloc_table(struct p2m_domain *p2m)
     printk(XENLOG_INFO "%s: nr_pages %x pt_pages %p nr_pt_pages %x mfns %p\n",
            __FUNCTION__, d->vm_info_shared->vmi_nr_pages_hint,
            (void *)pt_page_va(d, 0), pt_nr_pages(d), &pt_page(d, 0));
-    for (i = 0; i < pt_nr_pages(d); i++)
-        *(uint16_t *)pt_page_va(d, i) = i + 1;
 
     P2M_PRINTK("allocating p2m table\n");
 
