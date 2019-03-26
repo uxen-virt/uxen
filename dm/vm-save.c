@@ -2085,7 +2085,8 @@ uxenvm_loadvm_execute(struct filebuf *f, int restore_mode, char **err_msg)
             dmreq_init();
         }
     }
-    if (s_hvm_context.marker == XC_SAVE_ID_HVM_CONTEXT) {
+    if (s_hvm_context.marker == XC_SAVE_ID_HVM_CONTEXT ||
+        s_hvm_context.marker == XC_SAVE_ID_WHPX_HVM_CONTEXT) {
         ret = vm_set_context(hvm_buf, s_hvm_context.size);
         if (ret) {
             asprintf(err_msg, "vm_set_context returned: %d", ret);
