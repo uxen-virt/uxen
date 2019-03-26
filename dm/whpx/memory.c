@@ -481,6 +481,27 @@ whpx_ram_map(uint64_t phys_addr, uint64_t *len)
     return NULL;
 }
 
+void *
+whpx_ram_map_assert(uint64_t phys_addr, uint64_t len)
+{
+    uint64_t mapped_len = len;
+    void *p;
+
+    p = whpx_ram_map(phys_addr, &mapped_len);
+    if (!p)
+        whpx_panic(
+            "no mapping @ addr=0x%"PRIx64" len=0x%"PRIx64"\n",
+            phys_addr, len);
+
+    if (mapped_len != len)
+        whpx_panic(
+            "bad map length @ addr=0x%"PRIx64
+            " len=0x%"PRIx64" mapped_len=0x%"PRIx64"\n",
+            phys_addr, len, mapped_len);
+
+    return p;
+}
+
 void
 whpx_ram_unmap(void *ptr)
 {

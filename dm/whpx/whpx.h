@@ -62,6 +62,8 @@ int whpx_ram_depopulate(uint64_t phys_addr, uint64_t len, uint32_t flags);
 
 /* map guest ram into uxendm process - mostly no-op since using persistent mappings */
 void *whpx_ram_map(uint64_t phys_addr, uint64_t *len);
+/* as above, asserts mapping exists and no short mapping */
+void *whpx_ram_map_assert(uint64_t phys_addr, uint64_t len);
 void whpx_ram_unmap(void *ptr);
 
 void whpx_copy_from_guest_va(CPUState *cpu, void *dst, uint64_t src_va, uint64_t len);
@@ -87,9 +89,16 @@ int whpx_write_memory(struct filebuf *f);
 #define WHPX_SHUTDOWN_CRASH 3
 #define WHPX_SHUTDOWN_PAUSE 100
 
-int whpx_early_init(void);
+struct xc_hvm_module;
+struct xc_hvm_oem_info;
 
+int whpx_early_init(void);
 int whpx_vm_init(int restore_mode);
+int whpx_vm_build(
+    uint64_t memory_mb,
+    const char *imagefile,
+    struct xc_hvm_module *modules, int mod_count,
+    struct xc_hvm_oem_info *oem_info);
 int whpx_vm_start(void);
 int whpx_vm_resume(void);
 int whpx_vm_shutdown(int reason);

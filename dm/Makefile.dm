@@ -288,6 +288,7 @@ hw_uxen_v4v_osx.o: CPPFLAGS += -I$(XENPUBLICDIR)
 $(WINDOWS)DM_SRCS += whpx/whpx.c
 whpx_whpx.o: CPPFLAGS += -I$(XENPUBLICDIR)
 whpx_whpx.o: CPPFLAGS += -I$(XENDIR_include)
+whpx_whpx.o: CPPFLAGS += $(LIBXC_CPPFLAGS)
 $(WINDOWS)DM_SRCS += whpx/core.c
 $(WINDOWS)DM_SRCS += whpx/v4v.c
 whpx_v4v.o: CPPFLAGS += -I$(XENPUBLICDIR)

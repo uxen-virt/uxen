@@ -650,11 +650,11 @@ vm_init(const char *loadvm, int restore_mode)
                                       appdef, appdef_sz, 1 /* seal */ );
             }
 
-            if (ret)
-                errx(1, "hvm build failed: %d", ret);
-        } else {
-            /* FIXME: hvm modules for WHP */
-        }
+        } else
+            ret = whpx_vm_build(ram_size >> 20, vm_image, modules, mod_count, &oem_info);
+
+        if (ret)
+            errx(1, "hvm build failed: %d", ret);
 
         if (modules)
             vm_cleanup_modules(modules, mod_count);

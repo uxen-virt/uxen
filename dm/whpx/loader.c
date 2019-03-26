@@ -1,5 +1,5 @@
 /*
- * Copyright 2018, Bromium, Inc.
+ * Copyright 2018-2019, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -51,15 +51,19 @@ error_out:
 
 /* load hvmloader at membase, return it's start IP and end address */
 void
-load_hvmloader(void *membase, uint64_t *start_rip, uint64_t *hvmloader_end)
+load_hvmloader(
+    const char *imagefile,
+    void *membase,
+    uint64_t *start_rip,
+    uint64_t *hvmloader_end)
 {
     uint8_t *image, *p;
     uint32_t len;
-    FILE *f = fopen("hvmloader", "rb");
+    FILE *f = fopen(imagefile, "rb");
     int i;
 
     if (!f)
-        whpx_panic("failed to open kernel file");
+        whpx_panic("failed to open kernel file: %s", imagefile);
     fseek(f, 0, SEEK_END);
     len = ftell(f);
     fseek(f, 0, SEEK_SET);

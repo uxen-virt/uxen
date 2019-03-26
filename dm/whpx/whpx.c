@@ -27,6 +27,10 @@
 #include "util.h"
 #include "dm-features.h"
 
+/* for xenguest definititions (hvm modules, oem info etc */
+#include <xenctrl.h>
+#include <xenguest.h>
+
 /* acpi area */
 #define ACPI_INFO_PHYSICAL_ADDRESS 0xFC000000
 #define ACPI_INFO_SIZE 0x1000
@@ -45,6 +49,7 @@ static int shutdown_reason = 0;
 static Timer *whpx_perf_timer;
 static int vm_paused;
 static uint64_t paused_tsc_value;
+static uint64_t hvmloader_start, hvmloader_end;
 
 struct cpu_extra {
     HANDLE wake_ev;
@@ -58,23 +63,6 @@ struct qemu_work_item {
     void (*func)(CPUState *s, void *data);
     void *data;
     HANDLE ev_done;
-};
-
-enum xc_hvm_module_type {
-    XC_HVM_MODULE_ACPI = 0,
-    XC_HVM_MODULE_SMBIOS,
-};
-
-struct xc_hvm_mod_entry {
-    int flags;
-    size_t len;
-    void *base;
-};
-
-struct xc_hvm_module {
-    int type;
-    size_t nent; /* Number of entries in the module */
-    struct xc_hvm_mod_entry *entries;
 };
 
 CPUState cpu_state[32];
@@ -741,11 +729,11 @@ whpx_vm_unpause(void)
     return 0;
 }
 
-// TODO: oem info (?)
 static void
-setup_hvm_info(void *base, uint64_t mem_size,
-               uint32_t nr_vcpus, uint32_t modules_base)
-//               struct xc_hvm_oem_info *oem_info)
+setup_hvm_info(
+    void *base, uint64_t mem_size,
+    uint32_t nr_vcpus, uint32_t modules_base,
+    struct xc_hvm_oem_info *oem_info)
 {
     uint64_t lowmem_end = mem_size, highmem_end = 0;
     struct hvm_info_table *hvm_info = base + HVM_INFO_PADDR;
@@ -776,7 +764,6 @@ setup_hvm_info(void *base, uint64_t mem_size,
     /* Modules */
     hvm_info->mod_base = modules_base;
 
-#if 0
     /* OEM info */
     if (oem_info && (oem_info->flags & XC_HVM_OEM_ID))
         memcpy(hvm_info->oem_info.oem_id, oem_info->oem_id, 6);
@@ -812,19 +799,18 @@ setup_hvm_info(void *base, uint64_t mem_size,
         hvm_info->oem_info.smbios_version_minor = oem_info->smbios_version_minor;
     else
         hvm_info->oem_info.smbios_version_minor = 4;
-#endif
+
     /* Finish with the checksum. */
     for ( i = 0, sum = 0; i < hvm_info->length; i++ )
         sum += ((uint8_t *)hvm_info)[i];
     hvm_info->checksum = -sum;
 }
 
-struct xc_hvm_module *vm_get_modules(int *mod_count);
-void vm_cleanup_modules(struct xc_hvm_module *modules, size_t count);
-
-static struct hvm_module_info *modules_init(struct xc_hvm_module *modules,
-                                            size_t mod_count,
-                                            size_t *out_len)
+static struct hvm_module_info *
+modules_init(
+    struct xc_hvm_module *modules,
+    size_t mod_count,
+    size_t *out_len)
 {
     struct hvm_module_info *hmi;
     struct xc_hvm_module *m;
@@ -918,29 +904,27 @@ static int
 load_modules(struct hvm_module_info *hmi,
              uint32_t mod_base, size_t mod_len)
 {
-    uint64_t maplen;
     void *dest;
 
-    maplen = mod_len;
-    dest = whpx_ram_map(mod_base, &maplen);
-    if (!dest)
-        whpx_panic("whpx_ram_map");
-    if (maplen != mod_len)
-        whpx_panic("short whpx_ram_map");
+    dest = whpx_ram_map_assert(mod_base, mod_len);
     debug_printf("copy hvm modules, target_addr=0x%x size = 0x%x\n", mod_base, (int)mod_len);
     memcpy(dest, hmi, mod_len);
     whpx_ram_unmap(dest);
+
     return 0;
 }
 
-void
-add_hvm_modules(struct xc_hvm_module *modules, int count, uint64_t hvmloader_end)
+static void
+add_hvm_modules(struct xc_hvm_module *modules, int count, uint32_t *modules_base)
 {
+    debug_printf("hvm modules count: %d\n", count);
+    uint32_t base = 0;
+
     if (modules && count) {
         size_t modules_len = 0;
         struct hvm_module_info *hmi = NULL;
         /* Align to the next Megabyte */
-        uint32_t base = (hvmloader_end + (1 << 20) - 1) & ~((1 << 20) - 1);
+        base = (hvmloader_end + (1 << 20) - 1) & ~((1 << 20) - 1);
 
         hmi = modules_init(modules, count, &modules_len);
         if (!hmi)
@@ -948,6 +932,8 @@ add_hvm_modules(struct xc_hvm_module *modules, int count, uint64_t hvmloader_end
         if (load_modules(hmi, base, modules_len))
             whpx_panic("failed to load hvm modules");
     }
+
+    *modules_base = base;
 }
 
 static void
@@ -963,22 +949,23 @@ whpx_shared_info_init(void)
         whpx_panic("whpx_ram_populate");
 }
 
-static int
-whpx_create_vm_memory(int memory_mb)
+int
+whpx_vm_build(
+    uint64_t memory_mb,
+    const char *imagefile,
+    struct xc_hvm_module *modules, int mod_count,
+    struct xc_hvm_oem_info *oem_info)
 {
     uint64_t npages = memory_mb << 8;
     uint64_t npages_acpi = ACPI_INFO_SIZE >> PAGE_SHIFT;
     uint64_t npages_hvmloader = HVMLOADER_ALLOC_MAX >> PAGE_SHIFT;
     void *vm_mapped = 0;
-    uint64_t mmap_len;
+    uint32_t modules_base = 0;
 
     /* main memory */
     if (whpx_ram_populate(0, npages * PAGE_SIZE, 0))
         whpx_panic("whpx_ram_populate");
 
-    /* depopulate VGA hole */
-    if (whpx_ram_depopulate(0xA0000, 0x20000, 0))
-        whpx_panic("whpx_ram_depopulate");
     /* acpi info area */
     if (whpx_ram_populate(ACPI_INFO_PHYSICAL_ADDRESS, npages_acpi * PAGE_SIZE, 0))
         whpx_panic("whpx_ram_populate");
@@ -992,33 +979,33 @@ whpx_create_vm_memory(int memory_mb)
       if (whpx_ram_populate(0xFED00000, PAGE_SIZE, 0))
           whpx_panic("whpx_ram_populate");
     }
+
     /* shared info page */
     whpx_shared_info_init();
 
-    mmap_len = npages << PAGE_SHIFT;
-    vm_mapped = whpx_ram_map(0, &mmap_len);
-    if (!vm_mapped)
-        whpx_panic("whpx_ram_map");
+    vm_mapped = whpx_ram_map_assert(0, npages << PAGE_SHIFT);
+
+    /* place kernel / hvmloader */
 
 #ifdef DEBUG_SIMPLE_KERNEL
     load_simple_kernel("kernel.bin", vm_mapped);
 #else
-    uint64_t hvmloader_start = 0, hvmloader_end = 0;
     // hvmloader
-    load_hvmloader(vm_mapped, &hvmloader_start, &hvmloader_end);
+    load_hvmloader(imagefile, vm_mapped, &hvmloader_start, &hvmloader_end);
     // trampoline at 0x0000 to turn on protected mode and jmp to hvmloader
     load_pmode_trampoline(vm_mapped, hvmloader_start);
-
-    struct xc_hvm_module *modules;
-    int modules_count = 0;
-
-    modules = vm_get_modules(&modules_count);
-    debug_printf("hvm modules count: %d\n", modules_count);
-    add_hvm_modules(modules, modules_count, hvmloader_end);
-    vm_cleanup_modules(modules, modules_count);
 #endif
 
-    setup_hvm_info(vm_mapped, ((uint64_t)memory_mb) << 20, vm_vcpus, 0);
+    /* hvm modules, hvm info, oem info */
+    add_hvm_modules(modules, mod_count, &modules_base);
+    setup_hvm_info(vm_mapped, memory_mb << 20,
+        vm_vcpus, modules_base, oem_info);
+
+    whpx_ram_unmap(vm_mapped);
+
+    /* depopulate VGA hole */
+    if (whpx_ram_depopulate(0xA0000, 0x20000, 0))
+        whpx_panic("whpx_ram_depopulate");
 
     return 0;
 }
@@ -1133,18 +1120,6 @@ whpx_vm_init(int restore_mode)
     if (ret)
       return ret;
 
-    /* only bother to populate initial memory if we're not restoring. If we're
-     * restoring memory comes from savefiles */
-    if (vm_restore_mode == VM_RESTORE_NONE) {
-        ret = whpx_create_vm_memory(vm_mem_mb);
-        if (ret)
-            return ret;
-    }
-
-    if (restore_mode != VM_RESTORE_TEMPLATE &&
-        restore_mode != VM_RESTORE_VALIDATE)
-        whpx_v4v_proxy_init();
-
     // debug out
     register_ioport_write(DEBUG_PORT_NUMBER, 1, 1, ioport_debug_char, NULL);
 
@@ -1158,6 +1133,10 @@ whpx_vm_init(int restore_mode)
         mod_timer(whpx_perf_timer,
             get_clock_ms(vm_clock) + PERF_TIMER_PERIOD_MS);
     }
+
+    if (restore_mode != VM_RESTORE_TEMPLATE &&
+        restore_mode != VM_RESTORE_VALIDATE)
+        whpx_v4v_proxy_init();
 
     return 0;
 }
