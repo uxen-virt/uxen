@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -114,6 +114,9 @@ dmreq_init(void)
     xen_pfn_t pfn;
     int i;
     int ret;
+
+    if (whpx_enable)
+        return;
 
     ioh_init_wait_objects(&dmreq_wait_objects);
 

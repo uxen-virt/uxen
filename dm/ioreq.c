@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -158,6 +158,9 @@ ic_ioreq(Monitor *mon)
 void
 ioreq_init(void)
 {
+    if (whpx_enable)
+        return;
+
     default_ioreq_state = ioreq_new_server();
     if (default_ioreq_state == NULL)
         errx(1, "ioreq_new_server failed");

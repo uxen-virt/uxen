@@ -553,7 +553,7 @@ uxen_vm_setup_logging(void)
         NULL, NULL);
 }
 
-static void
+static int
 uxen_vm_init(void)
 {
     uint64_t ram_size = vm_mem_mb << 20;
@@ -579,12 +579,58 @@ uxen_vm_init(void)
     /* time offset */
     vm_time_offset = get_timeoffset();
     xc_domain_set_time_offset(xc_handle, vm_id, vm_time_offset);
+
+    return 0;
+}
+
+static int
+vm_build(void)
+{
+    struct xc_hvm_module *modules;
+    int mod_count = 0;
+    int ret = 0;
+
+    assert(vm_image);
+
+    modules = vm_get_modules(&mod_count);
+
+    if (!whpx_enable) {
+        if (!vm_attovm_mode) {
+            /* normal uxen hvm */
+            ret = xc_hvm_build(xc_handle, vm_id, vm_mem_mb, vm_vcpus,
+                NR_IOREQ_SERVERS, vm_image, modules,
+                mod_count, &oem_info);
+        } else {
+            /* attovm on uxen or ax */
+            char *appdef = NULL;
+            uint32_t appdef_sz = 0;
+
+            if (vm_attovm_appdef_file) {
+                appdef = attovm_load_appdef(vm_attovm_appdef_file,
+                    &appdef_sz);
+                if (!appdef || !appdef_sz)
+                    err(1, "failed to load appdef: %s",
+                        vm_attovm_appdef_file);
+            }
+
+            ret = xc_attovm_build(xc_handle, vm_id, vm_vcpus,
+                vm_mem_mb, vm_image,
+                appdef, appdef_sz, 1 /* seal */ );
+        }
+    } else {
+        /* normal whp hvm */
+        ret = whpx_vm_build(vm_mem_mb, vm_image, modules, mod_count, &oem_info);
+    }
+
+    if (modules)
+        vm_cleanup_modules(modules, mod_count);
+
+    return ret;
 }
 
 void
 vm_init(const char *loadvm, int restore_mode)
 {
-    uint64_t ram_size = vm_mem_mb << 20;
     struct hvm_info_table *hvm_info;
     uint8_t *hvm_info_page;
     int i;
@@ -594,13 +640,10 @@ vm_init(const char *loadvm, int restore_mode)
     if (restore_mode == VM_RESTORE_TEMPLATE)
         atexit(error_template_destroy);
 
-    if (!whpx_enable)
-        uxen_vm_init();
-    else {
-        ret = whpx_vm_init(restore_mode);
-        if (ret)
-            err(1, "whpx_vm_init");
-    }
+    ret = !whpx_enable ? uxen_vm_init()
+                       : whpx_vm_init(restore_mode);
+    if (ret)
+        err(1, "vm_init");
 
     vm_setup_dm_features();
 
@@ -616,59 +659,22 @@ vm_init(const char *loadvm, int restore_mode)
     }
 
     if (!loadvm) {
-        char *hvmloader_path = NULL;
-        struct xc_hvm_module *modules;
-        int mod_count = 0;
+        /* vm build from scratch */
 
         ret = mapcache_init(vm_mem_mb);
         if (ret)
             err(1, "mapcache_init");
 
-        modules = vm_get_modules(&mod_count);
-
-        assert(vm_image);
-
-        if (!whpx_enable) {
-            if (!vm_attovm_mode)
-                ret = xc_hvm_build(xc_handle, vm_id, ram_size >> 20, vm_vcpus,
-                    NR_IOREQ_SERVERS, vm_image, modules,
-                    mod_count, &oem_info);
-            else {
-                char *appdef = NULL;
-                uint32_t appdef_sz = 0;
-
-                if (vm_attovm_appdef_file) {
-                    appdef = attovm_load_appdef(vm_attovm_appdef_file,
-                                                &appdef_sz);
-                    if (!appdef || !appdef_sz)
-                        err(1, "failed to load appdef: %s",
-                            vm_attovm_appdef_file);
-                }
-
-                ret = xc_attovm_build(xc_handle, vm_id, vm_vcpus,
-                                      ram_size >> 20, vm_image,
-                                      appdef, appdef_sz, 1 /* seal */ );
-            }
-
-        } else
-            ret = whpx_vm_build(ram_size >> 20, vm_image, modules, mod_count, &oem_info);
-
+        ret = vm_build();
         if (ret)
             errx(1, "hvm build failed: %d", ret);
 
-        if (modules)
-            vm_cleanup_modules(modules, mod_count);
+        dmreq_init();
 
-        free(hvmloader_path);
-
-        if (!whpx_enable) {
-            dmreq_init();
-
-            hvm_info_page = xc_map_foreign_range(xc_handle, vm_id, XC_PAGE_SIZE,
-                PROT_READ | PROT_WRITE,
-                HVM_INFO_PFN);
-            if (hvm_info_page == NULL)
-                err(1, "xc_map_foreign_range(HVM_INFO_PFN)");
+        hvm_info_page = vm_memory_map_perm(HVM_INFO_PFN << PAGE_SHIFT,
+            XC_PAGE_SIZE, VM_MEMORY_MAP_PROT_WRITE);
+        if (hvm_info_page == NULL)
+            err(1, "vm_memory_map_perm(HVM_INFO_PFN)");
 
             hvm_info = (struct hvm_info_table *)
                        (hvm_info_page + HVM_INFO_OFFSET);
@@ -682,9 +688,10 @@ vm_init(const char *loadvm, int restore_mode)
                 sum += ((uint8_t *) hvm_info)[i];
             hvm_info->checksum -= sum;
 
-            xc_munmap(xc_handle, vm_id, hvm_info_page, XC_PAGE_SIZE);
-        }
+            vm_memory_unmap_perm(hvm_info_page, XC_PAGE_SIZE);
     } else {
+        /* vm load/clone from savefile */
+
         ret = vm_load(loadvm, restore_mode);
         if (restore_mode == VM_RESTORE_VALIDATE)
             errx(ret ? 1 : 0, "vm_load(%s, validate) result: %d", loadvm, ret);
@@ -715,8 +722,7 @@ vm_init(const char *loadvm, int restore_mode)
     if (vm_quit_interrupt)
         errx(0, "%s quit interrupt", __FUNCTION__);
 
-    if (!whpx_enable)
-        ioreq_init();
+    ioreq_init();
 
     pc_init_xen();
 
