@@ -1,5 +1,5 @@
 /*
- * Copyright 2018, Bromium, Inc.
+ * Copyright 2018-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -1433,6 +1433,7 @@ v4v_ring_create(pcpu_t *cpu, struct domain *d, V4V_GUEST_HANDLE(v4v_ring_id_t) r
 //        spin_lock_init(&ring_info->lock);
         ring_info->lock = 0;
 #endif
+        spin_lock(&ring_info->lock);
 
         ring_info->mfns = NULL;
         ring_info->mfn_mapping = NULL;
