@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2017, Bromium, Inc.
+ * Copyright 2014-2019, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -867,17 +867,22 @@ static int tcp_respond_rst(struct nickel *ni, const struct tcp *s_tcp, uint32_t 
     l = sizeof(*tcp);
 
     memset(tcp, 0, sizeof(*tcp));
+
+    tcp->th_flags = TH_RST;
     tcp->th_sport = s_tcp->th_dport;
     tcp->th_dport = s_tcp->th_sport;
     tcp->th_seq = s_tcp->th_ack;
     tcp->th_ack = s_tcp->th_seq;
+    /* correct way of RSTing the SYN-SENT is by RST & ACKing the SYN */
+    if ((s_tcp->th_flags & (TH_SYN | TH_FIN | TH_RST | TH_URG | TH_ACK)) == TH_SYN) {
+        tcp->th_flags |= TH_ACK;
+        tcp->th_ack = NI_HTONL(NI_NTOHL(tcp->th_ack) + 1);
+    }
     tcp->th_off = sizeof(*tcp) >> 2;
     tcp->th_win = 0;
 
     pkt_len -= l;
     off += l;
-
-    tcp->th_flags = TH_RST;
 
     /* checksum */
     tcp_checksum(ip, tcp, tcp_l);
