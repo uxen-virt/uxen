@@ -280,8 +280,10 @@ gh_v4v_process_notify(xenv4v_extension_t *pde)
         return STATUS_UNSUCCESSFUL;
       }
 
-      if (ax && (gh_count == 0))
+      if (ax && (gh_count == 0)) {
+        uxen_v4v_fast_free(ringData);
         continue;
+      }
 
       // Now do the actual notify
       status = gh_v4v_notify(ringData, ax);
