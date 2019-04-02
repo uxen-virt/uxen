@@ -417,15 +417,13 @@ ept_split_super_page_one(struct p2m_domain *p2m, void *entry,
  *   The next entry is marked populate-on-demand.
  */
 static int ept_next_level(struct p2m_domain *p2m, bool_t read_only,
-                          ept_entry_t **table, unsigned long *gfn_remainder,
+                          ept_entry_t **table, unsigned long gfn,
                           int next_level)
 {
     ept_entry_t *ept_entry, e;
-    u32 shift, index;
+    u32 index;
 
-    shift = next_level * EPT_TABLE_ORDER;
-
-    index = *gfn_remainder >> shift;
+    index = pt_level_index(gfn, next_level);
 
     /* index must be falling into the page */
     ASSERT(index < EPT_PAGETABLE_ENTRIES);
@@ -457,7 +455,6 @@ static int ept_next_level(struct p2m_domain *p2m, bool_t read_only,
 
     ept_unmap_ptp(p2m, *table);
     *table = ept_map_ptp(p2m, &e);
-    *gfn_remainder &= (1UL << shift) - 1;
     return GUEST_TABLE_NORMAL_PAGE;
 }
 
@@ -555,7 +552,6 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
               unsigned int order, p2m_type_t p2mt, p2m_access_t p2ma)
 {
     ept_entry_t *table, *ept_entry = NULL;
-    unsigned long gfn_remainder = gfn;
 #ifndef __UXEN__
     unsigned long offset = 0;
 #endif  /* __UXEN__ */
@@ -596,7 +592,7 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
         table = ept_map_asr_ptp(p2m);
         for ( i = ept_get_wl(d); i > target; i-- )
         {
-            ret = ept_next_level(p2m, 0, &table, &gfn_remainder, i);
+            ret = ept_next_level(p2m, 0, &table, gfn, i);
             if ( !ret )
                 goto out;
             else if ( ret != GUEST_TABLE_NORMAL_PAGE )
@@ -625,16 +621,15 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
             table = map_domain_page(l1c->se_l1.mfn);
             perfc_incr(p2m_map_ptp_fallback);
         }
-        gfn_remainder = gfn & ((1UL << EPT_TABLE_ORDER) - 1);
         i = 0;
         ret = GUEST_TABLE_NORMAL_PAGE;
     }
 
     ASSERT(ret != GUEST_TABLE_POD_PAGE || i != target);
 
-    index = gfn_remainder >> (i * EPT_TABLE_ORDER);
+    index = pt_level_index(gfn, i);
 #ifndef __UXEN__
-    offset = gfn_remainder & ((1UL << (i * EPT_TABLE_ORDER)) - 1);
+    offset = pt_level_offset(gfn, i);
 #endif  /* __UXEN__ */
 
     ept_entry = table + index;
@@ -656,11 +651,11 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
 
         /* then move to the level we want to make real changes */
         for ( ; i > target; i-- )
-            ept_next_level(p2m, 0, &table, &gfn_remainder, i);
+            ept_next_level(p2m, 0, &table, gfn, i);
 
         ASSERT(i == target);
 
-        index = gfn_remainder >> (i * EPT_TABLE_ORDER);
+        index = pt_level_index(gfn, i);
         ept_entry = table + index;
     }
 
@@ -746,7 +741,6 @@ ept_ro_update_l2_entry(struct p2m_domain *p2m, unsigned long gfn,
                        int read_only, int *_need_sync)
 {
     ept_entry_t *table = NULL, *ept_entry = NULL;
-    unsigned long gfn_remainder = gfn;
     u32 index;
     int i, target = 1, order = PAGE_ORDER_2M;
     int rv = 0;
@@ -773,7 +767,7 @@ ept_ro_update_l2_entry(struct p2m_domain *p2m, unsigned long gfn,
          * setting entries read only, i.e. read_only ? 0 : 1,
          * i.e. !read_only */
         ASSERT(!read_only || p2m_locked_by_me(p2m));
-        ret = ept_next_level(p2m, !read_only, &table, &gfn_remainder, i);
+        ret = ept_next_level(p2m, !read_only, &table, gfn, i);
         if ( !ret )
             goto out;
         else if ( ret != GUEST_TABLE_NORMAL_PAGE )
@@ -782,8 +776,7 @@ ept_ro_update_l2_entry(struct p2m_domain *p2m, unsigned long gfn,
 
     ASSERT(ret != GUEST_TABLE_POD_PAGE || i != target);
 
-    index = gfn_remainder >> (i * EPT_TABLE_ORDER);
-
+    index = pt_level_index(gfn, i);
     ept_entry = table + index;
 
     if ( i == target )
@@ -840,7 +833,7 @@ ept_map_l1_table(struct p2m_domain *p2m, unsigned long gpfn,
 
     table = ept_map_asr_ptp(p2m);
     for (i = ept_get_wl(d); i > 0; i--) {
-        ret = ept_next_level(p2m, 1, &table, &gpfn, i);
+        ret = ept_next_level(p2m, 1, &table, gpfn, i);
         if (ret != GUEST_TABLE_NORMAL_PAGE)
             break;
     }
@@ -893,7 +886,6 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
 {
     struct domain *d = p2m->domain;
     ept_entry_t *table = NULL;
-    unsigned long gfn_remainder = gfn;
     int ge_l1_cache_slot = ge_l1_cache_hash(gfn, p2m);
     ept_entry_t *ept_entry;
     u32 index;
@@ -921,13 +913,13 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
         table = ept_map_asr_ptp(p2m);
         for (i = ept_get_wl(d); i > 0; i--) {
           retry:
-            ret = ept_next_level(p2m, 1, &table, &gfn_remainder, i);
+            ret = ept_next_level(p2m, 1, &table, gfn, i);
             if (!ret) {
                 if (page_order)
                     *page_order = i * EPT_TABLE_ORDER;
                 goto out;
             } else if (ret == GUEST_TABLE_POD_PAGE) {
-                index = gfn_remainder >> (i * EPT_TABLE_ORDER);
+                index = pt_level_index(gfn, i);
                 ept_entry = table + index;
 
                 if (q == p2m_query) {
@@ -972,12 +964,11 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
             table = map_domain_page(l1c->ge_l1[ge_l1_cache_slot].mfn);
             perfc_incr(p2m_map_ptp_fallback);
         }
-        gfn_remainder = gfn & ((1UL << EPT_TABLE_ORDER) - 1);
         i = 0;
         ret = GUEST_TABLE_NORMAL_PAGE;
     }
 
-    index = gfn_remainder >> (i * EPT_TABLE_ORDER);
+    index = pt_level_index(gfn, i);
     ept_entry = table + index;
 
     mfn = _mfn(INVALID_MFN);
@@ -1038,7 +1029,6 @@ static ept_entry_t ept_get_entry_content(struct p2m_domain *p2m,
     unsigned long gfn, int *level)
 {
     ept_entry_t *table = ept_map_asr_ptp(p2m);
-    unsigned long gfn_remainder = gfn;
     ept_entry_t *ept_entry;
     ept_entry_t content = { .epte = 0 };
     u32 index;
@@ -1052,14 +1042,14 @@ DEBUG();
 
     for ( i = ept_get_wl(p2m->domain); i > 0; i-- )
     {
-        ret = ept_next_level(p2m, 1, &table, &gfn_remainder, i);
+        ret = ept_next_level(p2m, 1, &table, gfn, i);
         if ( !ret || ret == GUEST_TABLE_POD_PAGE )
             goto out;
         else if ( ret == GUEST_TABLE_SUPER_PAGE )
             break;
     }
 
-    index = gfn_remainder >> (i * EPT_TABLE_ORDER);
+    index = pt_level_index(gfn, i);
     ept_entry = table + index;
     content = *ept_entry;
     *level = i;
@@ -1073,7 +1063,6 @@ void ept_walk_table(struct domain *d, unsigned long gfn)
 {
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
     ept_entry_t *table = ept_map_asr_ptp(p2m);
-    unsigned long gfn_remainder = gfn;
 
     int i;
 
@@ -1094,7 +1083,7 @@ void ept_walk_table(struct domain *d, unsigned long gfn)
         u32 index;
 
         /* Stolen from ept_next_level */
-        index = gfn_remainder >> (i*EPT_TABLE_ORDER);
+        index = pt_level_index(gfn, i);
         ept_entry = table + index;
 
         gdprintk(XENLOG_ERR, " epte %"PRIx64"\n", ept_entry->epte);
@@ -1104,8 +1093,6 @@ void ept_walk_table(struct domain *d, unsigned long gfn)
             goto out;
         else
         {
-            gfn_remainder &= (1UL << (i*EPT_TABLE_ORDER)) - 1;
-
             next = ept_map_ptp(p2m, ept_entry);
 
             ept_unmap_ptp(p2m, table);
@@ -1282,7 +1269,7 @@ static void ept_dump_p2m_table(unsigned char key)
     int is_pod;
     int ret = 0;
     unsigned long index;
-    unsigned long gfn, gfn_remainder;
+    unsigned long gfn;
     unsigned long record_counter = 0;
     struct p2m_domain *p2m;
 
@@ -1296,12 +1283,11 @@ static void ept_dump_p2m_table(unsigned char key)
 
         for ( gfn = 0; gfn <= p2m->max_mapped_pfn; gfn += (1 << order) )
         {
-            gfn_remainder = gfn;
             mfn = _mfn(INVALID_MFN);
             table = ept_map_asr_ptp(p2m);
             for ( i = ept_get_wl(d); i > 0; i-- )
             {
-                ret = ept_next_level(p2m, 1, &table, &gfn_remainder, i);
+                ret = ept_next_level(p2m, 1, &table, gfn, i);
                 if ( ret != GUEST_TABLE_NORMAL_PAGE )
                     break;
             }
@@ -1311,7 +1297,7 @@ static void ept_dump_p2m_table(unsigned char key)
             if ( ret == GUEST_TABLE_MAP_FAILED )
                 goto out;
 
-            index = gfn_remainder >> order;
+            index = pt_level_index(gfn, i);
             ept_entry = table + index;
             if (p2m_is_valid(ept_entry->sa_p2mt)) {
                 p2m_is_pod(ept_entry->sa_p2mt) ?
