@@ -745,6 +745,8 @@ unsigned long p2m_alloc_ptp(struct p2m_domain *p2m, unsigned long type,
                             uint16_t *_idx);
 void p2m_free_ptp(struct p2m_domain *p2m, unsigned long mfn, uint16_t idx);
 
+#define PT_WL 4
+
 #if CONFIG_PAGING_LEVELS == 3
 static inline int p2m_gfn_check_limit(
     struct domain *d, unsigned long gfn, unsigned int order)

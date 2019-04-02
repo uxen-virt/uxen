@@ -108,8 +108,8 @@ vmx_domain_initialise(struct domain *d)
     /* Set the memory type used when accessing EPT paging structures. */
     d->arch.hvm_domain.vmx.ept_control.ept_mt = EPT_DEFAULT_MT;
 
-    /* set EPT page-walk length, now it's actual walk length - 1, i.e. 3 */
-    d->arch.hvm_domain.vmx.ept_control.ept_wl = 3;
+    /* set EPT page-walk length, now it's actual walk length - 1 */
+    d->arch.hvm_domain.vmx.ept_control.ept_wl = PT_WL - 1;
 
     d->arch.hvm_domain.vmx.ept_control.asr  =
         pagetable_get_pfn(p2m_get_pagetable(p2m_get_hostp2m(d)));

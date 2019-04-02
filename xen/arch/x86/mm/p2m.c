@@ -537,6 +537,8 @@ int p2m_alloc_table(struct p2m_domain *p2m)
 #ifndef __UXEN__
     p2m->defer_nested_flush = 1;
 #endif  /* __UXEN__ */
+    /* For Intel, see comments at ept_get_wl() -- this needs
+     * ept_get_wl() before ept_wl is set */
     if ( !set_p2m_entry(p2m, 0, _mfn(INVALID_MFN), PAGE_ORDER_4K,
                         p2m_invalid, p2m->default_access) ) {
         p2m_unlock(p2m);

@@ -77,8 +77,10 @@ struct vmx_domain {
     } ept_control;
 };
 
+/* default to PT_WL - 1 if not set, since some callers rely on this
+ * before it gets set */
 #define ept_get_wl(d)   \
-    ((d)->arch.hvm_domain.vmx.ept_control.ept_wl)
+    (((d)->arch.hvm_domain.vmx.ept_control.ept_wl) ? : (PT_WL - 1))
 #define ept_get_asr(d)  \
     ((d)->arch.hvm_domain.vmx.ept_control.asr)
 #define ept_get_eptp(d) \
