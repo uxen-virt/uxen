@@ -335,7 +335,7 @@ npt_split_super_page(struct p2m_domain *p2m, l1_pgentry_t *p2m_entry,
         unsigned long mfn;
         uint16_t idx;
 
-        mfn = p2m_alloc_ptp(p2m, PGT_l1_page_table, &idx);
+        mfn = p2m_alloc_ptp(p2m, gpfn, type, &idx);
         if (!__mfn_valid(mfn))
             return 0;
 
@@ -427,7 +427,7 @@ p2m_next_level(struct p2m_domain *p2m, bool_t read_only, void **table,
         if (read_only)
             return 0;
 
-        mfn = p2m_alloc_ptp(p2m, type, &idx);
+        mfn = p2m_alloc_ptp(p2m, gfn, type, &idx);
         if (!__mfn_valid(mfn))
             return 0;
 
@@ -469,7 +469,7 @@ p2m_next_level(struct p2m_domain *p2m, bool_t read_only, void **table,
         if (read_only)
             return 0;
 
-        mfn = p2m_alloc_ptp(p2m, PGT_l2_page_table, &idx);
+        mfn = p2m_alloc_ptp(p2m, gfn, type, &idx);
         if (!__mfn_valid(mfn))
             return 0;
 

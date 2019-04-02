@@ -230,12 +230,13 @@ ept_unmap_ptp(struct p2m_domain *p2m, const void *va)
 #define GUEST_TABLE_POD_PAGE    3
 
 /* Fill in middle levels of ept table */
-static int ept_set_middle_entry(struct p2m_domain *p2m, ept_entry_t *ept_entry)
+static int ept_set_middle_entry(struct p2m_domain *p2m, unsigned long gpfn,
+                                int level, ept_entry_t *ept_entry)
 {
     unsigned long mfn;
     uint16_t idx;
 
-    mfn = p2m_alloc_ptp(p2m, 0, &idx);
+    mfn = p2m_alloc_ptp(p2m, gpfn, level, &idx);
     if (!__mfn_valid(mfn))
         return 0;
 
@@ -282,7 +283,7 @@ _ept_split_super_page(struct p2m_domain *p2m, ept_entry_t *ept_entry,
 
     ASSERT(is_epte_superpage(ept_entry));
 
-    if ( !ept_set_middle_entry(p2m, &new_ept) )
+    if ( !ept_set_middle_entry(p2m, gpfn, level, &new_ept) )
         return 0;
 
     if (level == 1 &&
@@ -443,7 +444,7 @@ static int ept_next_level(struct p2m_domain *p2m, bool_t read_only,
         if ( read_only )
             return GUEST_TABLE_MAP_FAILED;
 
-        if ( !ept_set_middle_entry(p2m, ept_entry) )
+        if ( !ept_set_middle_entry(p2m, gfn, next_level, ept_entry) )
             return GUEST_TABLE_MAP_FAILED;
         else
             e = atomic_read_ept_entry(ept_entry); /* Refresh */

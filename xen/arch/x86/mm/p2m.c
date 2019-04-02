@@ -378,7 +378,8 @@ int set_p2m_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
 }
 
 unsigned long
-p2m_alloc_ptp(struct p2m_domain *p2m, unsigned long type, uint16_t *_idx)
+p2m_alloc_ptp(struct p2m_domain *p2m, unsigned long gfn, int level,
+              uint16_t *_idx)
 {
     struct page_info *pg;
     struct domain *d = p2m->domain;
@@ -500,7 +501,7 @@ int p2m_alloc_table(struct p2m_domain *p2m)
 
     P2M_PRINTK("allocating p2m table\n");
 
-    p2m_top = p2m_alloc_ptp(p2m, 0, &p2m_top_idx);
+    p2m_top = p2m_alloc_ptp(p2m, 0, PT_WL, &p2m_top_idx);
     if (!__mfn_valid(p2m_top)) {
         p2m_unlock(p2m);
         return -ENOMEM;
