@@ -249,7 +249,7 @@ typedef enum {
 #else  /* __UXEN__ */
 #define p2m_is_ram(_t) (p2m_to_mask(_t) & P2M_RAM_TYPES)
 #define p2m_is_ram_rw(_t) (p2m_to_mask(_t) & p2m_to_mask(p2m_ram_rw))
-// #define p2m_is_mmio(_t) (p2m_to_mask(_t) & P2M_MMIO_TYPES)
+#define p2m_is_mmio(_t) (p2m_to_mask(_t) & P2M_MMIO_TYPES)
 #define p2m_is_readonly(_t) (p2m_to_mask(_t) & P2M_RO_TYPES)
 // #define p2m_is_grant(_t) 0
 // #define p2m_is_grant_ro(_t) 0
@@ -620,6 +620,9 @@ void p2m_change_type_range_l2(struct domain *d,
 /* Compare-exchange the type of a single p2m entry */
 p2m_type_t p2m_change_type(struct domain *d, unsigned long gfn,
                            p2m_type_t ot, p2m_type_t nt);
+
+/* Set mmio addresses in the p2m table (for ioreq) */
+int set_mmio_dm_p2m_entry(struct domain *d, unsigned long gfn, mfn_t mfn);
 
 /* Set mmio addresses in the p2m table (for pass-through) */
 int set_mmio_p2m_entry(struct domain *d, unsigned long gfn, mfn_t mfn);

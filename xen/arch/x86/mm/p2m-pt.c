@@ -542,7 +542,7 @@ npt_write_entry(struct p2m_domain *p2m, void *table, unsigned long gfn,
     old_entry = *p2m_entry;
 
     if (mfn_valid_page(mfn) ||
-        p2m_is_mmio_direct(p2mt) || p2m_is_pod(p2mt))
+        p2m_is_mmio(p2mt) || p2m_is_pod(p2mt))
         entry_content = l1e_from_pfn(mfn_x(mfn),
                                      p2m_type_to_flags(p2mt, mfn));
     else
@@ -670,7 +670,7 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
             old_entry = *p2m_entry;
         }
 
-        ASSERT(!mfn_valid(mfn) || !p2m_is_mmio_direct(p2mt));
+        ASSERT(!mfn_valid(mfn) || !p2m_is_mmio(p2mt));
         l3e_content = (mfn_valid(mfn) || p2m_is_pod(p2mt))
             ? l3e_from_pfn(mfn_x(mfn),
                            p2m_type_to_flags(p2mt, mfn) | _PAGE_PSE)
@@ -745,7 +745,7 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
             old_entry = *p2m_entry;
         }
         
-        ASSERT(!mfn_valid(mfn) || !p2m_is_mmio_direct(p2mt));
+        ASSERT(!mfn_valid(mfn) || !p2m_is_mmio(p2mt));
         if (mfn_valid(mfn) || p2m_is_pod(p2mt))
             l2e_content = l2e_from_pfn(mfn_x(mfn),
                                        p2m_type_to_flags(p2mt, mfn) |

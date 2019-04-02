@@ -465,7 +465,7 @@ ept_write_entry(struct p2m_domain *p2m, void *table, unsigned long gfn,
 {
     struct domain *d = p2m->domain;
     unsigned long index = pt_level_index(gfn, target);
-    bool_t direct_mmio = p2m_is_mmio_direct(p2mt);
+    bool_t mmio = p2m_is_mmio(p2mt);
     uint8_t ipat = 0;
     ept_entry_t *ept_entry = (ept_entry_t *)table + index;
     ept_entry_t old_entry;
@@ -474,7 +474,7 @@ ept_write_entry(struct p2m_domain *p2m, void *table, unsigned long gfn,
     /* Read-then-write is OK because we hold the p2m lock. */
     old_entry = *ept_entry;
 
-    if (mfn_valid_page(mfn) || direct_mmio
+    if (mfn_valid_page(mfn) || mmio
 #ifndef __UXEN__
         || p2m_is_paged(p2mt)
         || p2m_is_paging_in_start(p2mt)
@@ -482,7 +482,8 @@ ept_write_entry(struct p2m_domain *p2m, void *table, unsigned long gfn,
         || p2m_is_pod(p2mt))
     {
         /* Construct the new entry, and then write it once */
-        new_entry.emt = epte_get_entry_emt(d, gfn, mfn, &ipat, direct_mmio);
+        new_entry.emt = epte_get_entry_emt(d, gfn, mfn, &ipat,
+                                           p2m_is_mmio_direct(p2mt));
 
         new_entry.ipat = ipat;
         new_entry.sp = target ? 1 : 0;

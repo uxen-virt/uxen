@@ -40,6 +40,7 @@
 #include <asm/current.h>
 #include <asm/event.h>
 #include <asm/io_apic.h>
+#include <asm/p2m.h>
 
 /* HACK: Route IRQ0 only to VCPU0 to prevent time jumps. */
 #define IRQ0_SPECIAL_ROUTING 1
@@ -470,6 +471,11 @@ int vioapic_init(struct domain *d)
 
     d->arch.hvm_domain.vioapic->domain = d;
     vioapic_reset(d);
+
+    /* Explicitly set p2m entry for vioapic page to p2m_mmio_dm, to
+       speed up {get,set}_p2m_entry. */
+    set_mmio_dm_p2m_entry(d, paddr_to_pfn(VIOAPIC_DEFAULT_BASE_ADDRESS),
+                          _mfn(0));
 
     return 0;
 }

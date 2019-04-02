@@ -23,6 +23,7 @@
 #include <asm/current.h>
 #include <xen/sched.h>
 #include <xen/event.h>
+#include <asm/p2m.h>
 
 #define domain_vhpet(x) (&(x)->arch.hvm_domain.pl_time.vhpet)
 #define vcpu_vhpet(x)   (domain_vhpet((x)->domain))
@@ -660,6 +661,12 @@ void hpet_init(struct vcpu *v)
         h->hpet.timers[i].cmp = ~0ULL;
         h->pt[i].source = PTSRC_isa;
     }
+
+    /* Explicitly set p2m entry for hpet page to p2m_mmio_dm, to speed
+       up {get,set}_p2m_entry. */
+    if (v->vcpu_id == 0)
+        set_mmio_dm_p2m_entry(v->domain, paddr_to_pfn(HPET_BASE_ADDRESS),
+                              _mfn(0));
 }
 
 void hpet_deinit(struct domain *d)

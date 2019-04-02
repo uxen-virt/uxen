@@ -798,6 +798,41 @@ void p2m_change_type_range_l2(struct domain *d,
 
 
 int
+set_mmio_dm_p2m_entry(struct domain *d, unsigned long gfn, mfn_t mfn)
+{
+    int rc = 0;
+    p2m_access_t a;
+    p2m_type_t ot;
+    /* mfn_t omfn; */
+    struct p2m_domain *p2m = p2m_get_hostp2m(d);
+
+    if ( !paging_mode_translate(d) )
+        return 0;
+
+    p2m_lock(p2m);
+    /* omfn = */ p2m->get_entry(p2m, gfn, &ot, &a, p2m_query, NULL);
+#ifndef __UXEN__
+    if ( p2m_is_grant(ot) )
+    {
+        p2m_unlock(p2m);
+        domain_crash(d);
+        return 0;
+    }
+#endif  /* __UXEN__ */
+
+    P2M_DEBUG("set mmio %lx %lx\n", gfn, mfn_x(mfn));
+    rc = set_p2m_entry(p2m, gfn, mfn, PAGE_ORDER_4K, p2m_mmio_dm,
+                       p2m->default_access);
+    audit_p2m(p2m, 1);
+    p2m_unlock(p2m);
+    if ( 0 == rc )
+        gdprintk(XENLOG_ERR,
+            "set_mmio_dm_p2m_entry: set_p2m_entry failed! mfn=%08lx\n",
+            mfn_x(get_gfn_query_unlocked(p2m->domain, gfn, &ot)));
+    return rc;
+}
+
+int
 set_mmio_p2m_entry(struct domain *d, unsigned long gfn, mfn_t mfn)
 {
     int rc = 0;
