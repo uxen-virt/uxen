@@ -747,6 +747,24 @@ void p2m_free_ptp(struct p2m_domain *p2m, unsigned long mfn, uint16_t idx);
 
 #define PT_WL 4
 
+typedef struct {
+    uint32_t mfn;
+} pt_page_t;
+
+#define pt_nr_pages(d) ((d)->vm_info_shared->vmi_nr_pt_pages)
+#define pt_page(d, idx) \
+    (((pt_page_t *)(d)->vm_info_shared->vmi_pt_pages_mfns)[(idx)])
+#define pt_page_va(d, idx)                              \
+    ((uintptr_t)((d)->vm_info_shared->vmi_pt_pages +    \
+                 ((idx) << PAGE_SHIFT)))
+
+#define pt_level_mask(gfn, level)                               \
+    ((gfn) & ~((1UL << ((level) * PAGETABLE_ORDER)) - 1))
+#define pt_level_offset(gfn, level)                             \
+    ((gfn) & ((1UL << ((level) * PAGETABLE_ORDER)) - 1))
+#define pt_level_index(gfn, level) \
+    (((gfn) >> ((level) * PAGETABLE_ORDER)) & ((1UL << PAGETABLE_ORDER) - 1))
+
 #if CONFIG_PAGING_LEVELS == 3
 static inline int p2m_gfn_check_limit(
     struct domain *d, unsigned long gfn, unsigned int order)

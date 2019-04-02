@@ -166,10 +166,9 @@ ept_map_asr_ptp(struct p2m_domain *p2m)
     if (p2m->pt_page_next) {
         /* asr is always page with index 0, if any pt pages have been
          * allocated from vmi_pt_pages */
-        ASSERT(((uxen_pfn_t *)d->vm_info_shared->vmi_pt_pages_mfns)[0] ==
-               ept_get_asr(d));
+        ASSERT(pt_page(d, 0).mfn == ept_get_asr(d));
         perfc_incr(p2m_map_ptp);
-        return (ept_entry_t *)(uintptr_t)d->vm_info_shared->vmi_pt_pages;
+        return (ept_entry_t *)pt_page_va(d, 0);
     }
 
     perfc_incr(p2m_map_ptp_fallback);
@@ -187,9 +186,8 @@ ept_map_ptp(struct p2m_domain *p2m, ept_entry_t *e)
         if (!idx)
             break;
 
-        while (idx < d->vm_info_shared->vmi_nr_pt_pages) {
-            if (((uxen_pfn_t *)d->vm_info_shared->vmi_pt_pages_mfns)[idx] ==
-                e->mfn)
+        while (idx < pt_nr_pages(d)) {
+            if (pt_page(d, idx).mfn == e->mfn)
                 break;
             idx += (1 << PTP_IDX_BITS) - 1;
         }
@@ -200,13 +198,12 @@ ept_map_ptp(struct p2m_domain *p2m, ept_entry_t *e)
         /* - in debug builds, trigger assert here since map_domain_page
          *   will also trigger an assert in debug builds
          * - in release builds, fallback to map_domain_page */
-        ASSERT(idx < d->vm_info_shared->vmi_nr_pt_pages);
-        if (idx >= d->vm_info_shared->vmi_nr_pt_pages)
+        ASSERT(idx < pt_nr_pages(d));
+        if (idx >= pt_nr_pages(d))
             break;
 
         perfc_incr(p2m_map_ptp);
-        return (ept_entry_t *)(uintptr_t)(d->vm_info_shared->vmi_pt_pages +
-                                          (idx << PAGE_SHIFT));
+        return (ept_entry_t *)pt_page_va(d, idx);
     } while (0);
 
     perfc_incr(p2m_map_ptp_fallback);
@@ -214,12 +211,9 @@ ept_map_ptp(struct p2m_domain *p2m, ept_entry_t *e)
 }
 
 #define ept_ptp_mapped(p2m, va) (({                                     \
-                ((uintptr_t)(va) >=                                     \
-                 (uintptr_t)(p2m)->domain->vm_info_shared->vmi_pt_pages && \
-                 (uintptr_t)(va) <                                      \
-                 (uintptr_t)((p2m)->domain->vm_info_shared->vmi_pt_pages + \
-                             ((p2m)->domain->vm_info_shared->vmi_nr_pt_pages \
-                              << PAGE_SHIFT)));                         \
+                ((uintptr_t)(va) >= pt_page_va((p2m)->domain, 0) &&     \
+                 (uintptr_t)(va) < pt_page_va((p2m)->domain,            \
+                                              pt_nr_pages((p2m)->domain))); \
             }))
 
 static void
@@ -296,8 +290,7 @@ _ept_split_super_page(struct p2m_domain *p2m, ept_entry_t *ept_entry,
         !(p2m->domain->arch.hvm_domain.params[HVM_PARAM_CLONE_L1] &
           (HVM_PARAM_CLONE_L1_lazy_populate | HVM_PARAM_CLONE_L1_dynamic))) {
         struct p2m_domain *op2m = p2m_get_hostp2m(p2m->domain->clone_of);
-        rv = !p2m_clone_l1(op2m, p2m, gpfn & ~((1UL << EPT_TABLE_ORDER) - 1),
-                           &new_ept, 0);
+        rv = !p2m_clone_l1(op2m, p2m, pt_level_mask(gpfn, 1), &new_ept, 0);
         if (rv)
             goto out;
     }
@@ -474,8 +467,7 @@ ept_write_entry(struct p2m_domain *p2m, void *table, unsigned long gfn,
                 int *needs_sync)
 {
     struct domain *d = p2m->domain;
-    unsigned long index = (gfn >> (target * EPT_TABLE_ORDER)) &
-        ((1UL << PAGETABLE_ORDER) - 1);
+    unsigned long index = pt_level_index(gfn, target);
     bool_t direct_mmio = p2m_is_mmio_direct(p2mt);
     uint8_t ipat = 0;
     ept_entry_t *ept_entry = (ept_entry_t *)table + index;
@@ -1026,9 +1018,7 @@ static mfn_t ept_get_entry(struct p2m_domain *p2m,
              * We may meet super pages, and to split into 4k pages
              * to emulate p2m table
              */
-            unsigned long split_mfn = mfn_x(mfn) +
-                (gfn_remainder &
-                 ((1 << (i * EPT_TABLE_ORDER)) - 1));
+            unsigned long split_mfn = mfn_x(mfn) + pt_level_offset(gfn, i);
             mfn = _mfn(split_mfn);
         }
 

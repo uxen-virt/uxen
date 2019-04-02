@@ -139,10 +139,9 @@ pt_map_asr_ptp(struct p2m_domain *p2m)
     if (p2m->pt_page_next) {
         /* asr is always page with index 0, if any pt pages have been
          * allocated from vmi_pt_pages */
-        ASSERT(((uxen_pfn_t *)d->vm_info_shared->vmi_pt_pages_mfns)[0] ==
-               pagetable_get_pfn(p2m_get_pagetable(p2m)));
+        ASSERT(pt_page(d, 0).mfn == pagetable_get_pfn(p2m_get_pagetable(p2m)));
         perfc_incr(p2m_map_ptp);
-        return (pt_entry_t *)(uintptr_t)d->vm_info_shared->vmi_pt_pages;
+        return (pt_entry_t *)pt_page_va(d, 0);
     }
 
     perfc_incr(p2m_map_ptp_fallback);
@@ -160,9 +159,8 @@ pt_map_ptp(struct p2m_domain *p2m, pt_entry_t *e)
         if (!idx)
             break;
 
-        while (idx < d->vm_info_shared->vmi_nr_pt_pages) {
-            if (((uxen_pfn_t *)d->vm_info_shared->vmi_pt_pages_mfns)[idx] ==
-                e->mfn)
+        while (idx < pt_nr_pages(d)) {
+            if (pt_page(d, idx).mfn == e->mfn)
                 break;
 #ifdef __x86_64__
             idx += (1 << PTP_IDX_BITS) - 1;
@@ -181,13 +179,12 @@ pt_map_ptp(struct p2m_domain *p2m, pt_entry_t *e)
         /* - in debug builds, trigger assert here since map_domain_page
          *   will also trigger an assert in debug builds
          * - in release builds, fallback to map_domain_page */
-        ASSERT(idx < d->vm_info_shared->vmi_nr_pt_pages);
-        if (idx >= d->vm_info_shared->vmi_nr_pt_pages)
+        ASSERT(idx < pt_nr_pages(d));
+        if (idx >= pt_nr_pages(d))
             break;
 
         perfc_incr(p2m_map_ptp);
-        return (pt_entry_t *)(uintptr_t)(d->vm_info_shared->vmi_pt_pages +
-                                         (idx << PAGE_SHIFT));
+        return (pt_entry_t *)pt_page_va(d, idx);
     } while (0);
 
     perfc_incr(p2m_map_ptp_fallback);
@@ -195,12 +192,9 @@ pt_map_ptp(struct p2m_domain *p2m, pt_entry_t *e)
 }
 
 #define pt_ptp_mapped(p2m, va) (({                                      \
-                ((uintptr_t)(va) >=                                     \
-                 (uintptr_t)(p2m)->domain->vm_info_shared->vmi_pt_pages && \
-                 (uintptr_t)(va) <                                      \
-                 (uintptr_t)((p2m)->domain->vm_info_shared->vmi_pt_pages + \
-                             ((p2m)->domain->vm_info_shared->vmi_nr_pt_pages \
-                              << PAGE_SHIFT)));                         \
+                ((uintptr_t)(va) >= pt_page_va((p2m)->domain, 0) &&     \
+                 (uintptr_t)(va) < pt_page_va((p2m)->domain,            \
+                                              pt_nr_pages((p2m)->domain))); \
             }))
 
 static void
@@ -338,8 +332,7 @@ npt_split_super_page(struct p2m_domain *p2m, l1_pgentry_t *p2m_entry,
               (HVM_PARAM_CLONE_L1_lazy_populate |
                HVM_PARAM_CLONE_L1_dynamic))) {
             struct p2m_domain *op2m = p2m_get_hostp2m(p2m->domain->clone_of);
-            rv = !p2m_clone_l1(op2m, p2m,
-                               gpfn & ~((1UL << PAGETABLE_ORDER) - 1),
+            rv = !p2m_clone_l1(op2m, p2m, pt_level_mask(gpfn, 1),
                                &new_entry, 0);
             if (rv)
                 goto out;
@@ -524,7 +517,7 @@ npt_write_entry(struct p2m_domain *p2m, void *table, unsigned long gfn,
                 int *needs_sync)
 {
     struct domain *d = p2m->domain;
-    unsigned long index = gfn & ((1UL << PAGETABLE_ORDER) - 1);
+    unsigned long index = pt_level_index(gfn, target);
     l1_pgentry_t *p2m_entry = (l1_pgentry_t *)table + index;
     l1_pgentry_t old_entry = l1e_empty();
     l1_pgentry_t entry_content;

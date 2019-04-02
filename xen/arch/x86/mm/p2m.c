@@ -397,22 +397,17 @@ p2m_alloc_ptp(struct p2m_domain *p2m, unsigned long type, uint16_t *_idx)
 
         idx = p2m->pt_page_next;
 
-        if (idx >= d->vm_info_shared->vmi_nr_pt_pages) {
+        if (idx >= pt_nr_pages(d)) {
             p2m_unlock(p2m);
             break;
         }
 
         printk(XENLOG_DEBUG "%s: idx %d page next %d mfn %x\n",
-               __FUNCTION__, idx,
-               *(uint16_t *)(uintptr_t)(d->vm_info_shared->vmi_pt_pages +
-                                        (idx << PAGE_SHIFT)),
-               ((uxen_pfn_t *)d->vm_info_shared->vmi_pt_pages_mfns)[idx]);
+               __FUNCTION__, idx, *(uint16_t *)pt_page_va(d, idx),
+               pt_page(d, idx).mfn);
 
-        p2m->pt_page_next =
-            *(uint16_t *)(uintptr_t)(d->vm_info_shared->vmi_pt_pages +
-                                     (idx << PAGE_SHIFT));
-        *(uint16_t *)(uintptr_t)(d->vm_info_shared->vmi_pt_pages +
-                                 (idx << PAGE_SHIFT)) = 0;
+        p2m->pt_page_next = *(uint16_t *)pt_page_va(d, idx);
+        *(uint16_t *)pt_page_va(d, idx) = 0;
 
         p2m_unlock(p2m);
 
@@ -422,7 +417,7 @@ p2m_alloc_ptp(struct p2m_domain *p2m, unsigned long type, uint16_t *_idx)
         while (*(_idx) >= (1 << p2m->ptp_idx_bits))
             *(_idx) -= (1 << p2m->ptp_idx_bits) - 1;
 
-        return ((uxen_pfn_t *)d->vm_info_shared->vmi_pt_pages_mfns)[idx];
+        return pt_page(d, idx).mfn;
     } while (0);
 
     if (_idx)
@@ -449,20 +444,18 @@ void p2m_free_ptp(struct p2m_domain *p2m, unsigned long mfn, uint16_t idx)
     ASSERT(d->arch.paging.free_page);
 
     if (idx) {
-        while (idx < d->vm_info_shared->vmi_nr_pt_pages) {
-            if (((uxen_pfn_t *)d->vm_info_shared->vmi_pt_pages_mfns)[idx] ==
-                mfn)
+        while (idx < pt_nr_pages(d)) {
+            if (pt_page(d, idx).mfn == mfn)
                 break;
             idx += (1 << p2m->ptp_idx_bits) - 1;
         }
 
-        ASSERT(idx < d->vm_info_shared->vmi_nr_pt_pages);
-        if (idx >= d->vm_info_shared->vmi_nr_pt_pages)
+        ASSERT(idx < pt_nr_pages(d));
+        if (idx >= pt_nr_pages(d))
             return;             /* bail in release builds */
 
         p2m_lock_recursive(p2m);
-        *(uint16_t *)(uintptr_t)(d->vm_info_shared->vmi_pt_pages +
-                                 (idx << PAGE_SHIFT)) = p2m->pt_page_next;
+        *(uint16_t *)pt_page_va(d, idx) = p2m->pt_page_next;
         p2m->pt_page_next = idx;
         p2m_unlock(p2m);
 
@@ -501,12 +494,9 @@ int p2m_alloc_table(struct p2m_domain *p2m)
 
     printk(XENLOG_INFO "%s: nr_pages %x pt_pages %p nr_pt_pages %x mfns %p\n",
            __FUNCTION__, d->vm_info_shared->vmi_nr_pages_hint,
-           (void *)(uintptr_t)d->vm_info_shared->vmi_pt_pages,
-           d->vm_info_shared->vmi_nr_pt_pages,
-           (void *)d->vm_info_shared->vmi_pt_pages_mfns);
-    for (i = 0; i < d->vm_info_shared->vmi_nr_pt_pages; i++)
-        *(uint16_t *)(uintptr_t)(d->vm_info_shared->vmi_pt_pages +
-                                 (i << PAGE_SHIFT)) = i + 1;
+           (void *)pt_page_va(d, 0), pt_nr_pages(d), &pt_page(d, 0));
+    for (i = 0; i < pt_nr_pages(d); i++)
+        *(uint16_t *)pt_page_va(d, i) = i + 1;
 
     P2M_PRINTK("allocating p2m table\n");
 
