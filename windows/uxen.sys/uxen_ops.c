@@ -1658,6 +1658,8 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
             ucd->ucd_max_vcpus * uxen_info->ui_xsave_cntxt_size;
     }
 
+    vmi->vmi_shared.vmi_nr_pages_hint =
+        (ucd->ucd_nr_pages_hint + 511) & ~((1UL << 9) - 1);
     vmi->vmi_shared.vmi_nr_pt_pages = 16; /* for pci hole etc. */
     pt_pages = ucd->ucd_nr_pages_hint;
     pt_pages = (pt_pages + 511) >> 9;

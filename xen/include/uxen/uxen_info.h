@@ -308,7 +308,7 @@ struct vm_info_shared {
     domid_t vmi_domid;
     uint16_t vmi_runnable;
     uint16_t vmi_free_deferred;
-    uint32_t vmi_nrpages;
+    uint32_t vmi_nr_pages_hint;
     uint64_t vmi_msrpm;
     uint32_t vmi_msrpm_size;
     uint64_t vmi_xsave;

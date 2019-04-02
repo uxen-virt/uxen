@@ -499,7 +499,8 @@ int p2m_alloc_table(struct p2m_domain *p2m)
         return -EINVAL;
     }
 
-    printk(XENLOG_INFO "%s: pt_pages %p nr_pt_pages %d mfns %p\n", __FUNCTION__,
+    printk(XENLOG_INFO "%s: nr_pages %x pt_pages %p nr_pt_pages %x mfns %p\n",
+           __FUNCTION__, d->vm_info_shared->vmi_nr_pages_hint,
            (void *)(uintptr_t)d->vm_info_shared->vmi_pt_pages,
            d->vm_info_shared->vmi_nr_pt_pages,
            (void *)d->vm_info_shared->vmi_pt_pages_mfns);
