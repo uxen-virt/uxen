@@ -504,8 +504,11 @@ control_command_throttle(void *opaque, const char *id, const char *opt,
     period = dict_get_integer(d, "period");
     rate = dict_get_integer(d, "rate");
 
-    xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_THROTTLE_PERIOD, period);
-    xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_THROTTLE_RATE, rate);
+    if (!whpx_enable) {
+        xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_THROTTLE_PERIOD, period);
+        xc_set_hvm_param(xc_handle, vm_id, HVM_PARAM_THROTTLE_RATE, rate);
+    } else
+        whpx_set_cpu_throttle(period, rate);
 
     control_send_ok(cd, opt, id, NULL);
 

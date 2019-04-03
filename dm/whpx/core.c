@@ -11,7 +11,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2018, Bromium, Inc.
+ * Copyright 2018-2019, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -42,6 +42,8 @@
 #include "util.h"
 #include "ioapic.h"
 #include <whpx-shared.h>
+
+//#define VCPU_THROTTLING
 
 #define CPUID_DEBUG_OUT_8  0x54545400
 #define CPUID_DEBUG_OUT_32 0x54545404
@@ -74,6 +76,7 @@ struct whpx_state {
     WHV_PARTITION_HANDLE partition;
     uint64_t dm_features;
     uint64_t seed_lo, seed_hi;
+    int64_t throttle_period, throttle_rate;
 };
 
 /* registers synchronized with qemu's CPUState */
@@ -204,6 +207,7 @@ struct whpx_vcpu {
     unsigned long dirty;
     struct whpx_nmi_trap trap;
     bool interrupt_in_flight;
+    int64_t throttle_last_time, throttle_credit;
 
     critical_section irqreq_lock; /* protect cpu->interrupt_request */
 
@@ -1322,6 +1326,63 @@ whpx_vcpu_post_run(CPUState *cpu)
     vcpu->interrupt_in_flight = vp_ctx->ExecutionState.InterruptionPending;
 }
 
+#define MILLISECS(x) ((x)*1000000)
+#define NOW() (get_clock_ns(rt_clock))
+#define THROTTLE_MAX_WAIT_MS 100
+
+static int
+whpx_throttle_pre_run(struct whpx_vcpu *vcpu, int64_t period_ms, int64_t rate_ms)
+{
+    if (!period_ms)
+        return 0;
+
+    int64_t now = NOW();
+    int64_t period = MILLISECS(period_ms);
+    int64_t rate = MILLISECS(rate_ms);
+    int64_t dt = now - vcpu->throttle_last_time;
+
+    if (dt > period)
+        dt = period;
+    vcpu->throttle_credit += dt * rate;
+    if (vcpu->throttle_credit >= period * rate)
+        vcpu->throttle_credit = period * rate;
+    vcpu->throttle_last_time = now;
+
+    if (vcpu->throttle_credit < 0) {
+        int64_t wait = (-vcpu->throttle_credit / rate) / 1000000;
+
+        if (wait > THROTTLE_MAX_WAIT_MS)
+            wait = THROTTLE_MAX_WAIT_MS;
+
+        if (wait) {
+            Sleep(wait);
+
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static void
+whpx_throttle_post_run(struct whpx_vcpu *vcpu, int64_t period_ms, int64_t rate_ms)
+{
+    if (!period_ms)
+        return;
+
+    int64_t now = NOW();
+    int64_t period = MILLISECS(period_ms);
+    int64_t rate = MILLISECS(rate_ms);
+
+    if (now - vcpu->throttle_last_time >= period)
+        vcpu->throttle_credit += period *
+            (rate - period);
+    else
+        vcpu->throttle_credit += (now - vcpu->throttle_last_time) *
+            (rate - period);
+    vcpu->throttle_last_time = now;
+}
+
 static int
 whpx_vcpu_run(CPUState *cpu)
 {
@@ -1339,24 +1400,47 @@ whpx_vcpu_run(CPUState *cpu)
 #ifdef DEBUG_CPU
         whpx_dump_cpu_state(cpu->cpu_index);
 #endif
-        if (whpx_perf_stats)
-            t0 = _rdtsc();
-        hr = WHvRunVirtualProcessor(whpx->partition, cpu->cpu_index,
-            &vcpu->exit_ctx, sizeof(vcpu->exit_ctx));
-        if (whpx_perf_stats) {
-            tmsum_runvp += _rdtsc() - t0;
-            count_runvp++;
-        }
 
-        if (FAILED(hr))
-            whpx_panic("WHPX: Failed to exec a virtual processor,"
-                " hr=%08lx", hr);
-#ifdef DEBUG_CPU
-        debug_printf("vcpu%d EXIT REASON %d\n",
-            cpu->cpu_index, vcpu->exit_ctx.ExitReason);
-        whpx_dump_cpu_state(cpu->cpu_index);
+        uint64_t throttle_period = 0;
+        uint64_t throttle_rate   = 0;
+
+#ifdef VCPU_THROTTLING
+        if (whpx_global.throttle_period) {
+            /* ensure it cannot change while we're reading it */
+            whpx_lock_iothread();
+            throttle_period = whpx_global.throttle_period;
+            throttle_rate = whpx_global.throttle_rate;
+            whpx_unlock_iothread();
+        }
 #endif
+        int throttled = whpx_throttle_pre_run(vcpu,
+            throttle_period, throttle_rate);
+        if (!throttled) {
+            if (whpx_perf_stats)
+                t0 = _rdtsc();
+            hr = WHvRunVirtualProcessor(whpx->partition, cpu->cpu_index,
+                &vcpu->exit_ctx, sizeof(vcpu->exit_ctx));
+            if (whpx_perf_stats) {
+                tmsum_runvp += _rdtsc() - t0;
+                count_runvp++;
+            }
+            if (FAILED(hr))
+                whpx_panic("WHPX: Failed to exec a virtual processor,"
+                    " hr=%08lx", hr);
+#ifdef DEBUG_CPU
+            debug_printf("vcpu%d EXIT REASON %d\n",
+                cpu->cpu_index, vcpu->exit_ctx.ExitReason);
+            whpx_dump_cpu_state(cpu->cpu_index);
+#endif
+            whpx_throttle_post_run(vcpu, throttle_period, throttle_rate);
+        }
         whpx_vcpu_post_run(cpu);
+
+        if (throttled) {
+            cpu->exception_index = EXCP_HLT;
+            ret = 1;
+            goto loop_out;
+        }
 
         if (whpx_perf_stats)
             t0 = _rdtsc();
@@ -1421,6 +1505,8 @@ whpx_vcpu_run(CPUState *cpu)
             tmsum_vmexit[er] += _rdtsc() - t0;
             count_vmexit[er]++;
         }
+
+loop_out:
         whpx_vcpu_flush_dirty(cpu);
 
         if (cpu->interrupt_request)
@@ -1870,3 +1956,10 @@ whpx_set_random_seed(uint64_t lo, uint64_t hi)
     whpx_global.seed_lo = lo;
     whpx_global.seed_hi = hi;
 }
+
+void whpx_set_cpu_throttle(uint64_t period, uint64_t rate)
+{
+    whpx_global.throttle_period = period;
+    whpx_global.throttle_rate = rate;
+}
+

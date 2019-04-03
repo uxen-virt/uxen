@@ -419,10 +419,14 @@ run_vcpu(CPUState *s)
 
         if (cpu_can_run(s)) {
             ret = whpx_vcpu_exec(s);
-            if (ret == EXCP_INTERRUPT) {
-            } else if (ret == EXCP_HLT) {
-            } else {
+
+            switch (ret) {
+            case EXCP_INTERRUPT:
+            case EXCP_HLT:
+                break;
+            default:
                 debug_printf("vcpu%d EXCEPTION: %d\n", s->cpu_index, ret);
+                break;
             }
         } else {
             // should not happen with apic virt, halt is handled in HV
