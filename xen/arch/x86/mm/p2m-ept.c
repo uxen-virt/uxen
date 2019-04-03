@@ -867,7 +867,8 @@ ept_map_entry_table(struct p2m_domain *p2m, void *_entry)
 {
     ept_entry_t *entry = (ept_entry_t *)_entry;
 
-    if (entry->epte == 0 || !p2m_is_valid(entry->sa_p2mt))
+    if (entry->epte == 0 || !p2m_is_valid(entry->sa_p2mt) ||
+        !__mfn_valid_page(entry->mfn))
         return NULL;
 
     return ept_map_ptp(p2m, entry);

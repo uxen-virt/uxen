@@ -1160,7 +1160,8 @@ npt_map_entry_table(struct p2m_domain *p2m, void *_entry)
 {
     l1_pgentry_t *entry = (l1_pgentry_t *)_entry;
 
-    if (!p2m_is_valid(p2m_flags_to_type(l1e_get_flags(*entry))))
+    if (!p2m_is_valid(p2m_flags_to_type(l1e_get_flags(*entry))) ||
+        !__mfn_valid_page(entry->pte.mfn))
         return NULL;
 
     return pt_map_ptp(p2m, &entry->pte);
