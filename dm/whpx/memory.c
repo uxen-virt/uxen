@@ -918,6 +918,7 @@ whpx_ram_release_file_cow_mappings(void)
     return 0;
 }
 
+#if 0
 static void
 whpx_ram_release_hv_mappings(void)
 {
@@ -931,6 +932,7 @@ whpx_ram_release_hv_mappings(void)
     /* should have no entries left in rammap after depopulating everything */
     assert(whpx_count_entries() == 0);
 }
+#endif
 
 static void
 whpx_ram_free(void)
@@ -1144,7 +1146,6 @@ whpx_write_memory(struct filebuf *f)
 
     uint64_t whpx_memory_data_off = filebuf_tell(f);
 
-
     ret = filebuf_set_sparse(f, true);
     if (ret) {
         debug_printf("failed to set sparse flag");
@@ -1152,10 +1153,6 @@ whpx_write_memory(struct filebuf *f)
     }
 
     vm_save_info.page_batch_offset = whpx_memory_data_off;
-    vm_save_set_abortable();
-
-    if (save_cancelled())
-        goto done_or_cancelled;
 
     whpx_memory_data_index.offset = whpx_memory_data_off;
     s.marker = XC_SAVE_ID_WHPX_MEMORY_DATA;
@@ -1194,6 +1191,8 @@ whpx_write_memory(struct filebuf *f)
     raw_pagedata_off &= PAGE_MASK;
 
     size = raw_pagedata_off - whpx_memory_data_off;
+    vm_save_set_abortable();
+
     if (write_page_contents) {
         /* save page contents */
         filebuf_buffer_max(f, SAVE_BUFFER_SIZE);
@@ -1206,7 +1205,7 @@ whpx_write_memory(struct filebuf *f)
         for (i = 0; i < num_saved; i++) {
             ret = save_mb(f, &saved_entries[i], &saved_bytes);
             if (ret || save_cancelled())
-                goto done_or_cancelled;
+                goto out;
             size += pr_bytes(&saved_entries[i].r);
         }
         filebuf_flush(f);
@@ -1275,12 +1274,6 @@ whpx_write_memory(struct filebuf *f)
 
     filebuf_flush(f);
 
-done_or_cancelled:
-    if (vm_save_info.free_mem && !save_cancelled())
-        whpx_ram_free();
-    else
-        whpx_ram_release_hv_mappings(); /* only release hv mappings */
-
 out:
     free(saved_entries);
     free(saved_ranges);
@@ -1288,6 +1281,15 @@ out:
     free(err_msg);
 
     return ret;
+}
+
+void
+whpx_memory_post_save_hook(void)
+{
+    if (vm_save_info.free_mem && !save_cancelled()) {
+        debug_printf("whpx: post save ram free\n");
+        whpx_ram_free();
+    }
 }
 
 saved_mb_entry_t *

@@ -2457,6 +2457,9 @@ vm_save_execute(void)
         f = vm_save_info.f = NULL;
     }
 
+    if (whpx_enable)
+        whpx_memory_post_save_hook();
+
     if (vm_save_info.command_cd)
 	control_command_save_finish(ret, err_msg);
     free(hashes);

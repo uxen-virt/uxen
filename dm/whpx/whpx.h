@@ -78,6 +78,8 @@ int whpx_clone_memory(char *template_file);
 int whpx_read_memory(struct filebuf *f, int layout_only);
 int whpx_write_memory(struct filebuf *f);
 
+void whpx_memory_post_save_hook(void);
+
 /**
  * LIFECYCLE
  */
