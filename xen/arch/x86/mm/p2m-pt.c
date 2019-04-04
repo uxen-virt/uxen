@@ -210,9 +210,25 @@ pt_unmap_ptp(struct p2m_domain *p2m, const void *va)
 // Returns NULL on error.
 //
 static l1_pgentry_t *
-p2m_find_entry(void *table, unsigned long gfn, uint32_t level, uint32_t max)
+p2m_find_entry(struct p2m_domain *p2m, void *table, unsigned long gfn,
+               uint32_t level)
 {
     uint32_t index;
+    uint32_t max;
+
+    max =
+#if CONFIG_PAGING_LEVELS >= 4
+        (level == PGT_l4_page_table) ? L4_PAGETABLE_ENTRIES :
+#endif
+        (level == PGT_l3_page_table) ? (
+#if CONFIG_PAGING_LEVELS == 3
+            (hap_enabled(p2m->domain) ? 4 : 8)
+#else
+            L3_PAGETABLE_ENTRIES
+#endif
+            ) :
+        (level == PGT_l2_page_table) ? L2_PAGETABLE_ENTRIES :
+        L1_PAGETABLE_ENTRIES;
 
     ASSERT(level > 0);
     index = pt_level_index(gfn, level - 1);
@@ -391,16 +407,15 @@ npt_split_super_page(struct p2m_domain *p2m, l1_pgentry_t *p2m_entry,
 
 static int
 p2m_next_level(struct p2m_domain *p2m, bool_t read_only, void **table,
-               unsigned long gfn, uint32_t level, uint32_t max)
+               unsigned long gfn, uint32_t type)
 {
     l1_pgentry_t *l1_entry;
     l1_pgentry_t *p2m_entry;
     l1_pgentry_t new_entry;
     void *next;
-    uint32_t type = level - 1;
     int i;
 
-    if ( !(p2m_entry = p2m_find_entry(*table, gfn, level, max)) )
+    if ( !(p2m_entry = p2m_find_entry(p2m, *table, gfn, type + 1)) )
         return 0;
 
     /* PoD: Not present doesn't imply empty. */
@@ -631,8 +646,7 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     table = pt_map_asr_ptp(p2m);
 
 #if CONFIG_PAGING_LEVELS >= 4
-    if ( !p2m_next_level(p2m, 0, &table, gfn, PGT_l4_page_table,
-                         L4_PAGETABLE_ENTRIES) )
+    if ( !p2m_next_level(p2m, 0, &table, gfn, PGT_l3_page_table) )
         goto out;
 #endif
     /*
@@ -641,8 +655,7 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     if ( page_order == PAGE_ORDER_1G )
     {
         l1_pgentry_t old_entry = l1e_empty();
-        p2m_entry = p2m_find_entry(table, gfn, PGT_l3_page_table,
-                                   L3_PAGETABLE_ENTRIES);
+        p2m_entry = p2m_find_entry(p2m, table, gfn, PGT_l3_page_table);
         ASSERT(p2m_entry);
 
         /* Non-l1 update -- invalidate the get_entry cache */
@@ -685,16 +698,12 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
      * in Xen's address space for translated PV guests.
      * When using AMD's NPT on PAE Xen, we are restricted to 4GB.
      */
-    else if ( !p2m_next_level(p2m, 0, &table, gfn, PGT_l3_page_table,
-                              ((CONFIG_PAGING_LEVELS == 3)
-                               ? (hap_enabled(p2m->domain) ? 4 : 8)
-                               : L3_PAGETABLE_ENTRIES)) )
+    else if ( !p2m_next_level(p2m, 0, &table, gfn, PGT_l2_page_table) )
         goto out;
 
     if ( page_order == PAGE_ORDER_4K )
     {
-        if ( !p2m_next_level(p2m, 0, &table, gfn, PGT_l2_page_table,
-                             L2_PAGETABLE_ENTRIES) )
+        if ( !p2m_next_level(p2m, 0, &table, gfn, PGT_l1_page_table) )
             goto out;
 
         l1c->se_l1_prefix = p2m_l1_prefix(gfn, p2m);
@@ -720,8 +729,7 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     else if ( page_order == PAGE_ORDER_2M )
     {
         l1_pgentry_t old_entry = l1e_empty();
-        p2m_entry = p2m_find_entry(table, gfn, PGT_l2_page_table,
-                                   L2_PAGETABLE_ENTRIES);
+        p2m_entry = p2m_find_entry(p2m, table, gfn, PGT_l2_page_table);
         ASSERT(p2m_entry);
         
         /* Non-l1 update -- invalidate the get_entry cache */
@@ -817,18 +825,13 @@ pt_ro_update_l2_entry(struct p2m_domain *p2m, unsigned long gfn,
      * setting entries read only, i.e. read_only ? 0 : 1,
      * i.e. !read_only */
 #if CONFIG_PAGING_LEVELS >= 4
-    if ( !p2m_next_level(p2m, !read_only, &table, gfn, PGT_l4_page_table,
-                         L4_PAGETABLE_ENTRIES) )
+    if ( !p2m_next_level(p2m, !read_only, &table, gfn, PGT_l3_page_table) )
         goto out;
 #endif
-    if ( !p2m_next_level(p2m, !read_only, &table, gfn, PGT_l3_page_table,
-                         ((CONFIG_PAGING_LEVELS == 3)
-                          ? (hap_enabled(p2m->domain) ? 4 : 8)
-                          : L3_PAGETABLE_ENTRIES)) )
+    if ( !p2m_next_level(p2m, !read_only, &table, gfn, PGT_l2_page_table) )
         goto out;
 
-    p2m_entry = p2m_find_entry(table, gfn, PGT_l2_page_table,
-                               L2_PAGETABLE_ENTRIES);
+    p2m_entry = p2m_find_entry(p2m, table, gfn, PGT_l2_page_table);
     ASSERT(p2m_entry);
 
     mfn = l1e_get_pfn(*p2m_entry);
