@@ -2,7 +2,7 @@
  *  uxen_mem.c
  *  uxen
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -1871,6 +1871,11 @@ user_mmap_xen_mfns(unsigned int num, xen_pfn_t *mfns,
     um = (struct user_mapping *)kernel_malloc(sizeof(struct user_mapping));
     if (!um) {
         fail_msg("kernel_malloc(user_mapping) failed");
+        return NULL;
+    }
+
+    if (!num) {
+        fail_msg("invalid number of pages requested");
         return NULL;
     }
 
