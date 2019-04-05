@@ -412,6 +412,11 @@ attovm_put_appdef(
     alloc_len = PAGE_ALIGN(appdef_len);
     npages = alloc_len >> PAGE_SHIFT;
 
+    if (!appdef || !npages) {
+        definition->appdef_size = 0;
+        goto out; /* nothing to put */
+    }
+
     if (npages > ATTOVM_UNSIGNED_MEM_MAX_PAGES) {
         ATTOVM_ERROR("attovm appdef is too long: %d bytes", appdef_len);
         ret = -ENOMEM;
