@@ -86,9 +86,6 @@ hostsched_dom_destroy(const struct scheduler *ops, struct domain *d)
 
     d->vm_info_shared = NULL;
     printk("%s: vm%u, vmi cleared\n", __FUNCTION__, d->domain_id);
-
-    /* clear uuid of template domains, so that the uuid can be
-     * re-used */
 }
 
 void

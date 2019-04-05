@@ -36,18 +36,25 @@ uxen_hypercall(struct uxen_hypercall_desc *uhd, int snoop_mode,
                struct vm_info_shared *vmis, void *user_access_opaque,
                uint32_t privileged)
 {
+    struct vm_info *vmi = (struct vm_info *)vmis;
     affinity_t aff;
     intptr_t ret = 0;
 
     while (/* CONSTCOND */ 1) {
+        if (vmi && vmi->vmi_marked_for_destroy) {
+            ret = -EINVAL;
+            break;
+        }
         if (uxen_info->ui_pagemap_needs_check &&
             KeGetCurrentIrql() < DISPATCH_LEVEL)
             pagemap_check_space();
 
         aff = uxen_exec_dom0_start();
+        start_execution(vmi);
         uxen_call(ret =, -EINVAL, _uxen_snoop_hypercall(uhd, snoop_mode),
                   uxen_do_hypercall, uhd, vmis, user_access_opaque,
                   privileged);
+        end_execution(vmi);
         if (ret == -EMAPPAGERANGE) {
             /* handle EMAPPAGERANGE on same cpu */
 #ifdef DEBUG_POC_MAP_PAGE_RANGE_RETRY
@@ -64,7 +71,8 @@ uxen_hypercall(struct uxen_hypercall_desc *uhd, int snoop_mode,
         }
         uxen_exec_dom0_end(aff);
 
-        if (ret == -ECONTINUATION && vmis && vmis->vmi_wait_event) {
+        if (ret == -ECONTINUATION && vmis && vmis->vmi_wait_event &&
+            !vmi->vmi_marked_for_destroy) {
             KEVENT *completed = (KEVENT *)vmis->vmi_wait_event;
             NTSTATUS status;
 

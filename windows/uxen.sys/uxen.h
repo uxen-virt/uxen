@@ -59,9 +59,12 @@ typedef KIRQL preemption_t;
 #define spinlock_initialize(lock) ( KeInitializeSpinLock(&(lock)), 0 )
 #define spinlock_free(lock)     /* nothing */
 
-#define start_execution(vmi) InterlockedIncrement(&(vmi)->vmi_running_vcpus)
+#define start_execution(vmi) do {                                       \
+        if ((vmi))                                                      \
+            InterlockedIncrement(&(vmi)->vmi_running_vcpus);            \
+    } while (0)
 #define end_execution(vmi) do {                                         \
-        if (InterlockedDecrement(&(vmi)->vmi_running_vcpus) == 0)       \
+        if ((vmi) && InterlockedDecrement(&(vmi)->vmi_running_vcpus) == 0) \
             KeSetEvent(&(vmi)->vmi_notexecuting, 0, FALSE);             \
     } while (0)
 

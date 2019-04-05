@@ -98,7 +98,7 @@ release_fd_assoc(void *p)
     if (vmi) {
         prepare_release_fd_assoc(fda);
         if (fda->vmi_destroy_on_close)
-            vmi->vmi_marked_for_destroy = 1;
+            InterlockedCompareExchange(&vmi->vmi_marked_for_destroy, 1, 0);
     } else
         prepare_release_fd_assoc(fda);
 

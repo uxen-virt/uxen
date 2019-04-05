@@ -1695,13 +1695,18 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
         goto out;
     }
 
+    KeInitializeEvent(&vmi->vmi_notexecuting, NotificationEvent, FALSE);
+    KeInitializeEvent(&vmi->vmi_spinloop_wake_event, NotificationEvent, FALSE);
+
     vci = &vmi->vmi_vcpus[0];
 
     vci->vci_host_cpu = KeGetCurrentProcessorNumber(); /* VVV */
 
     aff = uxen_cpu_pin_vcpu(vci, vci->vci_host_cpu);
+    start_execution(vmi);
     uxen_call(ret = (int), -EFAULT, SETUPVM_RESERVE, uxen_do_setup_vm,
               ucd, &vmi->vmi_shared, vcis);
+    end_execution(vmi);
     uxen_cpu_unpin(aff);
     if (ret) {
         fail_msg("domain %d: %" PRIuuid " setup vm failed: %d",
@@ -1741,9 +1746,6 @@ uxen_op_create_vm(struct uxen_createvm_desc *ucd, struct fd_assoc *fda)
         KeInitializeEvent(&vci->vci_runnable, NotificationEvent, FALSE);
         vci->vci_shared.vci_runnable = 1;
     }
-
-    KeInitializeEvent(&vmi->vmi_notexecuting, NotificationEvent, FALSE);
-    KeInitializeEvent(&vmi->vmi_spinloop_wake_event, NotificationEvent, FALSE);
 
     ret = kernel_malloc_mfns(1, &vmi->vmi_undefined_mfn, 0);
     if (ret != 1) {
@@ -1924,7 +1926,7 @@ uxen_vmi_cleanup_vm(struct vm_info *vmi)
         dprintk("  vcpu vm%u.%u running %s\n", domid, i,
                 vmi->vmi_vcpus[i].vci_shared.vci_runnable ? "yes" : "no");
 
-    if (vmi->vmi_marked_for_destroy && uxen_vmi_destroy_vm(vmi)) {
+    if (vmi->vmi_marked_for_destroy == 1 && uxen_vmi_destroy_vm(vmi)) {
         printk("%s: vm%u deferred by destroy\n", __FUNCTION__, domid);
         return;
     }
@@ -1990,6 +1992,14 @@ uxen_destroy_vm(struct vm_info *vmi)
 
     printk("%s: vm%u\n", __FUNCTION__, vmi->vmi_shared.vmi_domid);
 
+    if (InterlockedCompareExchange(&vmi->vmi_marked_for_destroy, 1, 0) == 2) {
+        printk("%s: vm%u already destroyed\n", __FUNCTION__,
+               vmi->vmi_shared.vmi_domid);
+        return 0;
+    }
+
+    uxen_vmi_stop_running(vmi);
+
     aff = uxen_exec_dom0_start();
     uxen_call(ret = (int), -EINVAL, NO_RESERVE,
               uxen_do_destroy_vm, vmi->vmi_shared.vmi_uuid);
@@ -1999,6 +2009,8 @@ uxen_destroy_vm(struct vm_info *vmi)
     if (ret)
         printk("%s: vm%u not destroyed: %d\n", __FUNCTION__,
                vmi->vmi_shared.vmi_domid, ret);
+    else
+        InterlockedCompareExchange(&vmi->vmi_marked_for_destroy, 2, 1);
 
     return ret;
 }
@@ -2017,10 +2029,6 @@ uxen_vmi_destroy_vm(struct vm_info *vmi)
     if (InterlockedCompareExchange(&vmi->vmi_alive, 0, 1) == 0)
         return 0;
 
-    vmi->vmi_marked_for_destroy = 1;
-
-    uxen_vmi_stop_running(vmi);
-
     ret = uxen_destroy_vm(vmi);
     if (ret) {
         printk("%s: vm%u not destroyed: %d\n", __FUNCTION__,
@@ -2030,7 +2038,6 @@ uxen_vmi_destroy_vm(struct vm_info *vmi)
     }
 
     printk("%s: vm%u destroyed\n", __FUNCTION__, vmi->vmi_shared.vmi_domid);
-    vmi->vmi_marked_for_destroy = 0;
 
     if (!vmi->vmi_shared.vmi_free_deferred) {
         if (vmi->vmi_shared.vmi_free_related)
