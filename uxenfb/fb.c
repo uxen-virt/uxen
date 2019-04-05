@@ -8,7 +8,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2016-2017, Bromium, Inc.
+ * Copyright 2016-2019, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -531,11 +531,6 @@ uxenfb_set_par(struct fb_info *info)
     par->bpp = info->var.bits_per_pixel;
     par->stride = (par->xres * par->bpp) >> 3;
     info->fix.line_length = par->stride;
-
-    /* clear fb */
-    p = ioremap(info->fix.smem_start, info->fix.line_length * par->yres);
-    memset(p, 0, info->fix.line_length * par->yres);
-    iounmap(p);
 
     if (fb_v4vexts)
         remote_set_mode(par, par->xres, par->yres, par->stride);
