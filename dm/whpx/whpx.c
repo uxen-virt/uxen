@@ -359,8 +359,11 @@ vcpu_stopped_cb(void *opaque)
             tsc_pause();
             vm_set_run_mode(PAUSE_VM);
         } else if (shutdown_reason == WHPX_SHUTDOWN_SUSPEND) {
+            debug_printf("shutdown for suspend - tsc pause\n");
             tsc_pause();
+            debug_printf("shutdown for suspend - v4v destroy\n");
             v4v_destroy(&guest);
+            debug_printf("shutdown for suspend - process suspend\n");
             vm_process_suspend(NULL);
         } else
             vm_set_run_mode(DESTROY_VM);
@@ -440,9 +443,9 @@ run_vcpu(CPUState *s)
         nr = or - 1;
     } while ((r = cmpxchg(&running_vcpus, or, nr)) != or);
 
-    SetEvent(extra(s)->stopped_ev);
-
     debug_printf("vcpu%d exiting\n", s->cpu_index);
+
+    SetEvent(extra(s)->stopped_ev);
 }
 
 static DWORD WINAPI
