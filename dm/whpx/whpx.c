@@ -45,18 +45,12 @@
 #define PERF_TIMER_PERIOD_MS 1000
 
 static volatile uint32_t running_vcpus = 0;
+static ioh_event all_vcpus_stopped_ev;
 static int shutdown_reason = 0;
 static Timer *whpx_perf_timer;
 static int vm_paused;
 static uint64_t paused_tsc_value;
 static uint64_t hvmloader_start, hvmloader_end;
-
-struct cpu_extra {
-    HANDLE wake_ev;
-    HANDLE stopped_ev;
-};
-
-#define extra(cpu) ((struct cpu_extra*)cpu->opaque)
 
 struct qemu_work_item {
     struct qemu_work_item *next;
@@ -325,7 +319,6 @@ static int cpu_can_run(CPUState *cpu)
 
 void qemu_cpu_kick(CPUState *cpu)
 {
-    SetEvent(extra(cpu)->wake_ev);
     whpx_vcpu_kick(cpu);
 }
 
@@ -348,47 +341,31 @@ whpx_v4v_signal(struct domain *domain)
 }
 
 static void
-vcpu_stopped_cb(void *opaque)
+all_vcpus_stopped_cb(void *opaque)
 {
-    CPUState *cpu = opaque;
-
-    debug_printf("vcpu%d stopped, running vcpus: %d\n", cpu->cpu_index, running_vcpus);
-    if (!running_vcpus) {
-        debug_printf("all vcpus stopped, reason: %d\n", shutdown_reason);
-        if (shutdown_reason == WHPX_SHUTDOWN_PAUSE) {
-            tsc_pause();
-            vm_set_run_mode(PAUSE_VM);
-        } else if (shutdown_reason == WHPX_SHUTDOWN_SUSPEND) {
-            debug_printf("shutdown for suspend - tsc pause\n");
-            tsc_pause();
-            debug_printf("shutdown for suspend - v4v destroy\n");
-            v4v_destroy(&guest);
-            debug_printf("shutdown for suspend - process suspend\n");
-            vm_process_suspend(NULL);
-        } else
-            vm_set_run_mode(DESTROY_VM);
-    }
+    debug_printf("all vcpus stopped, reason: %d\n", shutdown_reason);
+    if (shutdown_reason == WHPX_SHUTDOWN_PAUSE) {
+        tsc_pause();
+        vm_set_run_mode(PAUSE_VM);
+    } else if (shutdown_reason == WHPX_SHUTDOWN_SUSPEND) {
+        debug_printf("shutdown for suspend - tsc pause\n");
+        tsc_pause();
+        debug_printf("shutdown for suspend - v4v destroy\n");
+        v4v_destroy(&guest);
+        debug_printf("shutdown for suspend - process suspend\n");
+        vm_process_suspend(NULL);
+    } else
+        vm_set_run_mode(DESTROY_VM);
 }
 
-void vcpu_create(CPUState *cpu)
+static void
+vcpu_create(CPUState *cpu)
 {
-    struct cpu_extra *ex;
     int err;
 
     cpu->env_ptr = cpu;
     cpu->stopped = 1;
-    ex = calloc(1, sizeof(struct cpu_extra));
-    if (!ex)
-        whpx_panic("allocation failed\n");
-    ex->wake_ev = CreateEvent(NULL, FALSE, FALSE, NULL);
-    if (!ex->wake_ev)
-        whpx_panic("event creation failed\n");
-    ex->stopped_ev = CreateEvent(NULL, FALSE, FALSE, NULL);
-    if (!ex->stopped_ev)
-        whpx_panic("event creation failed\n");
-    ioh_add_wait_object(&ex->stopped_ev, vcpu_stopped_cb, cpu, NULL);
 
-    cpu->opaque = ex;
     /* initial vcpu register state */
     whpx_do_cpu_init(cpu);
     /* initial vcpu whpx state */
@@ -397,14 +374,10 @@ void vcpu_create(CPUState *cpu)
         whpx_panic("failed to init whpx vcpu%d: %d\n", cpu->cpu_index, err);
 }
 
-void vcpu_destroy(CPUState *cpu)
+static void
+vcpu_destroy(CPUState *cpu)
 {
-    struct cpu_extra *ex = extra(cpu);
-
-    ioh_del_wait_object(&ex->stopped_ev, NULL);
-    CloseHandle(ex->wake_ev);
-    CloseHandle(ex->stopped_ev);
-    free(ex);
+    whpx_destroy_vcpu(cpu);
 }
 
 static void
@@ -445,7 +418,8 @@ run_vcpu(CPUState *s)
 
     debug_printf("vcpu%d exiting\n", s->cpu_index);
 
-    SetEvent(extra(s)->stopped_ev);
+    if (nr == 0)
+        ioh_event_set(&all_vcpus_stopped_ev);
 }
 
 static DWORD WINAPI
@@ -474,10 +448,11 @@ whpx_vm_destroy(void)
     CPUState *cpu = first_cpu;
 
     while (cpu) {
-        whpx_destroy_vcpu(cpu);
         vcpu_destroy(cpu);
         cpu = cpu->next_cpu;
     }
+
+    ioh_event_close(&all_vcpus_stopped_ev);
 
     /* destroy v4v */
     whpx_v4v_shutdown();
@@ -641,6 +616,7 @@ whpx_vm_start(void)
     shutdown_reason = 0;
     vm_time_offset = 0;
     running_vcpus = vm_vcpus;
+    ioh_event_reset(&all_vcpus_stopped_ev);
 
     if (check_unreliable_tsc()) {
         debug_printf("syncing unreliable TSC value\n");
@@ -1126,6 +1102,9 @@ whpx_vm_init(int restore_mode)
     ret = whpx_create_vm_vcpus();
     if (ret)
       return ret;
+
+    ioh_event_init(&all_vcpus_stopped_ev);
+    ioh_add_wait_object(&all_vcpus_stopped_ev, all_vcpus_stopped_cb, NULL, NULL);
 
     // debug out
     register_ioport_write(DEBUG_PORT_NUMBER, 1, 1, ioport_debug_char, NULL);
