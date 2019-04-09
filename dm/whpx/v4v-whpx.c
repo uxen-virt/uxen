@@ -1,5 +1,5 @@
 /*
- * Copyright 2018, Bromium, Inc.
+ * Copyright 2018-2019, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -159,12 +159,12 @@ do_v4v_send(v4v_context_t *v4v, v4v_datagram_t *dgram, size_t size)
         id.addr.domain = dst.domain;
         id.partner = context_conn(v4v)->ring->id.partner;
 
-        debug_printf("create DLO ring domain=%d port=%d\n",
+        debug_printf("create DLO ring domain=%d port=%x\n",
             id.addr.domain, id.addr.port);
         ret = do_v4v_op_dom0(V4VOP_create_ring,
           (uint64_t) (uintptr_t) &id, 0, 0, 0, 0);
         if (ret) {
-            debug_printf("failed to create DLO ring domain=%d port=%d, err=%d\n",
+            debug_printf("failed to create DLO ring domain=%d port=%x, err=%d\n",
                 id.addr.domain, id.addr.port, ret);
             ret = -ECONNREFUSED;
             return ret;

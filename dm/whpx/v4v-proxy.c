@@ -410,7 +410,7 @@ proxy_close(v4v_proxy_context_t *p)
     /* free proxy */
     TAILQ_REMOVE(&proxies, p, entry);
 
-    debug_printf("closed v4v-proxy domain %d port %d\n",
+    debug_printf("closed v4v-proxy domain %d port %x\n",
         p->bind_addr.domain, p->bind_addr.port);
     free(p);
 }
@@ -444,7 +444,7 @@ proxy_request_bind(v4v_proxy_req_bind_t *req_bind)
 
     /* check if already bound */
     if ((p = get_proxy_context_for(addr)) != NULL) {
-        debug_printf("proxy for domain %d port %d already exists/is bound\n",
+        debug_printf("proxy for domain %d port %x already exists/is bound\n",
             addr.domain, addr.port);
         /* close existing & recreate */
         critical_section_enter(&proxies_lock);
@@ -471,7 +471,7 @@ proxy_request_bind(v4v_proxy_req_bind_t *req_bind)
     complete.bind = bind;
 
     if ((err = whpx_v4v_bind(&p->context, &bind))) {
-        debug_printf("failed to bind proxy v4v context: %d, port %d\n", err, bind.ring_id.addr.port);
+        debug_printf("failed to bind proxy v4v context: %d, port %x\n", err, bind.ring_id.addr.port);
         complete.status = err;
         free(p);
         goto complete_bind;
@@ -487,8 +487,8 @@ proxy_request_bind(v4v_proxy_req_bind_t *req_bind)
 
     TAILQ_INSERT_TAIL(&proxies, p, entry);
 
-    debug_printf("bound new v4v-proxy domain %d port %d\n",
-        p->bind_addr.domain, p->bind_addr.port);
+    debug_printf("bound new v4v-proxy domain %d port %x\n",
+      p->bind_addr.domain, p->bind_addr.port);
 
     critical_section_leave(&proxies_lock);
 
@@ -523,7 +523,7 @@ proxy_request_received(void *opaque)
             v4v_proxy_context_t *proxy = get_proxy_context_for(recv_req->from);
 
             if (!proxy)
-                debug_printf("no v4v-proxy for domain %d port %d\n",
+                debug_printf("no v4v-proxy for domain %d port %x\n",
                     recv_req->from.domain, recv_req->from.port);
             assert(proxy);
             assert(recv_req->buffer_len <= PROXY_MAX_PACKET_LEN);
@@ -557,8 +557,10 @@ proxy_request_received(void *opaque)
             uint32_t datagram_len = send_req->datagram_len;
 
             if (!proxy)
-                debug_printf("no v4v-proxy for domain %d port %d\n",
-                    send_req->from.domain, send_req->from.port);
+                debug_printf("no v4v-proxy for domain %d port %x, "
+                             "send to domain %d port %x\n",
+                    send_req->from.domain, send_req->from.port,
+                    send_req->datagram.addr.domain, send_req->datagram.addr.port);
             assert(proxy);
 
 #ifndef DEBUG_FORCE_DOM0_PARTNER
