@@ -1876,7 +1876,7 @@ user_mmap_xen_mfns(unsigned int num, xen_pfn_t *mfns,
 
     if (!num) {
         fail_msg("invalid number of pages requested");
-        return NULL;
+        goto out;
     }
 
     um->mdl = IoAllocateMdl(NULL, num << PAGE_SHIFT, FALSE, FALSE, NULL);
