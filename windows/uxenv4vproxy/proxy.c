@@ -903,8 +903,12 @@ proxy_complete_bind(proxy_extension_t *pde, proxy_context_t *ctx,
         pendingIrp->IoStatus.Information = sizeof(v4v_bind_values_t);
         pendingIrp->IoStatus.Status = STATUS_SUCCESS;
         IoCompleteRequest(pendingIrp, IO_NO_INCREMENT);
-    } else
-        return winerror_to_ntstatus(status);
+    } else {
+        /* there was an error */
+        pendingIrp->IoStatus.Information = 0;
+        pendingIrp->IoStatus.Status = winerror_to_ntstatus(status);
+        IoCompleteRequest(pendingIrp, IO_NO_INCREMENT);
+    }
 
     return STATUS_SUCCESS;
 }
