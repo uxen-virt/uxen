@@ -424,7 +424,6 @@ close_and_remove_all_proxies(void)
     critical_section_enter(&proxies_lock);
     TAILQ_FOREACH_SAFE(p, &proxies, entry, next) {
         proxy_close(p);
-        TAILQ_REMOVE(&proxies, p, entry);
     }
     critical_section_leave(&proxies_lock);
 }
