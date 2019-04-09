@@ -46,6 +46,7 @@
 
 static volatile uint32_t running_vcpus = 0;
 static ioh_event all_vcpus_stopped_ev;
+static ioh_event v4v_irq_ev;
 static int shutdown_reason = 0;
 static Timer *whpx_perf_timer;
 static int vm_paused;
@@ -325,19 +326,26 @@ void qemu_cpu_kick(CPUState *cpu)
 int
 whpx_v4v_signal(struct domain *domain)
 {
-    if (domain == &guest) {
-        /* this can be called when vm is not yet initialized.. thanks guest-agent */
-        if (vm_id) {
-            qemu_set_irq(isa_get_irq(7), 1);
-            qemu_set_irq(isa_get_irq(7), 0);
-        } else
-            debug_printf("v4v signal w/o initialized vm\n");
-    } else {
+    if (domain == &guest)
+        ioh_event_set(&v4v_irq_ev);
+    else {
         assert(domain == &dom0);
         whpx_v4v_handle_signal();
     }
 
     return 0;
+}
+
+static void
+v4v_irq_cb(void *opaque)
+{
+    ioh_event_reset(&v4v_irq_ev);
+
+    if (vm_id) {
+        qemu_set_irq(isa_get_irq(7), 1);
+        qemu_set_irq(isa_get_irq(7), 0);
+    } else
+        debug_printf("v4v signal w/o initialized vm\n");
 }
 
 static void
@@ -453,6 +461,7 @@ whpx_vm_destroy(void)
     }
 
     ioh_event_close(&all_vcpus_stopped_ev);
+    ioh_event_close(&v4v_irq_ev);
 
     /* destroy v4v */
     whpx_v4v_shutdown();
@@ -1104,7 +1113,10 @@ whpx_vm_init(int restore_mode)
       return ret;
 
     ioh_event_init(&all_vcpus_stopped_ev);
+    ioh_event_init(&v4v_irq_ev);
+
     ioh_add_wait_object(&all_vcpus_stopped_ev, all_vcpus_stopped_cb, NULL, NULL);
+    ioh_add_wait_object(&v4v_irq_ev, v4v_irq_cb, NULL, NULL);
 
     // debug out
     register_ioport_write(DEBUG_PORT_NUMBER, 1, 1, ioport_debug_char, NULL);
