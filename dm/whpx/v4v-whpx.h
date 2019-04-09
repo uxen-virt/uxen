@@ -12,6 +12,7 @@
 #define V4V_FLAG_PROXY (1<<31)
 
 void whpx_v4v_proxy_init(void);
+void whpx_v4v_proxy_shutdown(void);
 void whpx_v4v_init(void);
 void whpx_v4v_shutdown(void);
 bool whpx_v4v_have_v4v(void);

@@ -464,6 +464,7 @@ whpx_vm_destroy(void)
     ioh_event_close(&v4v_irq_ev);
 
     /* destroy v4v */
+    whpx_v4v_proxy_shutdown();
     whpx_v4v_shutdown();
     debug_printf("v4v destroy\n");
     v4v_destroy(&guest);

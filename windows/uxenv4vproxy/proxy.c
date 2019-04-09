@@ -718,11 +718,21 @@ proxy_spare_port_number(proxy_extension_t *pde, uint32_t port)
 
 
 NTSTATUS
-proxy_register_backend(proxy_context_t *ctx, v4v_proxy_register_backend_t *v)
+proxy_register_backend(
+    proxy_extension_t *pde,
+    proxy_context_t *ctx,
+    v4v_proxy_register_backend_t *v)
 {
+    proxy_context_t *exists;
+
     VERBOSE("----->");
     if (ctx->state != CTX_STATE_UNBOUND)
         return STATUS_INVALID_HANDLE;
+
+    if (find_bound_backend_by_token(pde, &v->partner)) {
+        ERROR("duplicate register backend detected");
+        return STATUS_INVALID_PARAMETER;
+    }
 
     ctx->token = v->partner;
     ctx->backend = TRUE;
@@ -1192,7 +1202,7 @@ proxy_device_ioctl(PDEVICE_OBJECT fdo, PIRP irp)
     case V4V_PROXY_IOCTL_REGISTER_BACKEND: {
         v4v_proxy_register_backend_t *v = (v4v_proxy_register_backend_t*) io_buffer;
         if (io_in_len == sizeof(v4v_proxy_register_backend_t)) {
-            status = proxy_register_backend(ctx, v);
+            status = proxy_register_backend(pde, ctx, v);
         } else {
             status = STATUS_INVALID_PARAMETER;
         }

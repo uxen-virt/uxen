@@ -59,6 +59,7 @@ typedef struct v4v_proxy_context {
 static v4v_channel_t proxy_channel;
 static TAILQ_HEAD(, v4v_proxy_context) proxies;
 static critical_section proxies_lock;
+static int initialized;
 
 static BOOLEAN
 _v4v_proxy_register_backend(v4v_channel_t *channel, v4v_proxy_register_backend_t *reg, OVERLAPPED *ov)
@@ -416,6 +417,19 @@ proxy_close(v4v_proxy_context_t *p)
 }
 
 static void
+close_and_remove_all_proxies(void)
+{
+    v4v_proxy_context_t *p, *next;
+
+    critical_section_enter(&proxies_lock);
+    TAILQ_FOREACH_SAFE(p, &proxies, entry, next) {
+        proxy_close(p);
+        TAILQ_REMOVE(&proxies, p, entry);
+    }
+    critical_section_leave(&proxies_lock);
+}
+
+static void
 close_dead_proxies(void)
 {
     v4v_proxy_context_t *p, *next;
@@ -612,4 +626,17 @@ whpx_v4v_proxy_init(void)
     /* we'll run proxy request handler on v4v virq thread */
     ioh_add_wait_object (&proxy_channel.recv_event, proxy_request_received, NULL, &v4v_virq_wait_objects);
 
+    initialized = 1;
 }
+
+void
+whpx_v4v_proxy_shutdown(void)
+{
+    if (initialized) {
+        ioh_del_wait_object(&proxy_channel.recv_event, &v4v_virq_wait_objects);
+        _v4v_close(&proxy_channel);
+        close_and_remove_all_proxies();
+        initialized = 0;
+    }
+}
+
