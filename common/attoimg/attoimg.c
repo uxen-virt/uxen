@@ -32,11 +32,10 @@
 
 #define ROOTDEV "/dev/sda"
 #define VERITYDEV "/dev/sdb"
-#define RESUMEDEV "/dev/sdc"
 #define CMDLINE_ADDR (BOOTDATA_ADDR + 4096)
 #define CMDLINE_SIZE 512
 #define CMDLINE "BOOT_IMAGE=/vmlinuz initrd=/initrd LABEL=boot " \
-  "root="ROOTDEV" verity="VERITYDEV" resume="RESUMEDEV" " \
+  "root="ROOTDEV" verity="VERITYDEV" " \
   "no_console_suspend=1 clocksource=tsc noxsave debug"
 
 #define PAGE_ALIGNED(x) (!((x) & (PAGE_SIZE-1)))
