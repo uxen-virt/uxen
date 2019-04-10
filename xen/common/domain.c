@@ -360,6 +360,11 @@ struct domain *domain_create_internal(
                 __FUNCTION__, domid);
             goto fail;
         }
+        if (!ax_has_attovm) {
+            printk(XENLOG_ERR "%s: attovm create vm%u: no ax attovm support\n",
+                __FUNCTION__, domid);
+            goto fail;
+        }
         printk(XENLOG_WARNING "%s: attovm create vm%u\n",
             __FUNCTION__, domid);
         d->is_attovm = d->is_attovm_ax = 1;

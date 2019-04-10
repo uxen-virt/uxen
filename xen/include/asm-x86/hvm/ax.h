@@ -26,6 +26,7 @@ extern int ax_present_intel;
 extern int ax_present_amd;
 extern int ax_pv_ept;
 extern int ax_has_pv_vmcs;
+extern int ax_has_attovm;
 extern int ax_pv_vmcs_enabled;
 extern int ax_l1_invlpg_intercept;
 extern void ax_mark_ept_dirty(struct domain *d);

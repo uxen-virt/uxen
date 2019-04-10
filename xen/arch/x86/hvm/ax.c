@@ -19,6 +19,7 @@ int ax_present_amd = 0;
 int ax_pv_ept = 0;
 int ax_l1_invlpg_intercept = 0;
 int ax_has_pv_vmcs = 0;
+int ax_has_attovm = 0;
 int ax_pv_vmcs_enabled = 0;
 
 extern int ax_pv_vmread(void *, uint64_t field, uint64_t *value);
@@ -243,6 +244,8 @@ int ax_setup(void)
     ax_pv_ept = !! (AX_FEATURES_AX_SHADOW_EPT & rdx);
     printk("Using PV-HAP %d\n", ax_pv_ept);
 
+    ax_has_attovm = !! (AX_FEATURES_AX_L2_ATTOVM & rdx);
+    printk("AX supports attovm %d\n", ax_has_attovm);
 
     if (cpu_is_intel) {
         ax_present_intel = 1;

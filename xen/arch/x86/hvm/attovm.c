@@ -19,6 +19,8 @@
 #include <asm/hvm/rtc.h>
 #include <public/sched.h>
 
+#define ax_attovm_present() (ax_present && ax_has_attovm)
+
 static inline struct attovm_control *vmctrl(void)
 {
     BUG_ON(this_cpu(current_vmcs_vmx)->vmcs->vmcs_revision_id !=
@@ -30,28 +32,28 @@ static inline struct attovm_control *vmctrl(void)
 void
 attovm_initialise(struct domain *d)
 {
-    if (ax_present)
+    if (ax_attovm_present())
         attovm_call_create(d->domain_id);
 }
 
 int
 attovm_assign_token(struct domain *d, uint128_t *token)
 {
-    return ax_present ? attovm_call_assign_token(d->domain_id, token)
-                      : -ENODEV;
+    return ax_attovm_present() ? attovm_call_assign_token(d->domain_id, token)
+                               : -ENODEV;
 }
 
 void
 attovm_destroy(struct domain *d)
 {
-    if (ax_present)
+    if (ax_attovm_present())
         attovm_call_destroy(d->domain_id);
 }
 
 void
 attovm_vcpu_initialise(struct vcpu *v)
 {
-    if (ax_present)
+    if (ax_attovm_present())
         attovm_call_vcpu_init(v->domain->domain_id, v->vcpu_id);
 }
 
@@ -202,7 +204,7 @@ attovm_seal(struct domain *d, struct attovm_definition_v1 *def)
     d->arch.hvm_domain.attovm.appdef_size = def->appdef_size;
 
     if (d->is_attovm_ax) {
-        ret = ax_present ? attovm_call_seal(d->domain_id, def) : -ENODEV;
+        ret = ax_attovm_present() ? attovm_call_seal(d->domain_id, def) : -ENODEV;
         if (ret)
             printk(XENLOG_ERR "FAILED to seal vm%u, error %d\n", d->domain_id, ret);
         else
@@ -218,9 +220,9 @@ attovm_get_guest_pages(struct domain *d, uint64_t pfn, uint64_t count,
                        XEN_GUEST_HANDLE(void) buffer)
 {
     int ret =
-      ax_present ? attovm_call_get_guest_pages(d->domain_id, pfn,
+      ax_attovm_present() ? attovm_call_get_guest_pages(d->domain_id, pfn,
                                                count, buffer.p)
-                 : -ENODEV;
+                          : -ENODEV;
     if (ret)
         printk(XENLOG_ERR "FAILED to get guest pages vm%u, error %d\n",
             d->domain_id, ret);
@@ -233,9 +235,9 @@ attovm_get_guest_cpu_state(struct domain *d, uint32_t vcpu,
                            XEN_GUEST_HANDLE(void) buffer, uint32_t buffer_size)
 {
     int ret =
-      ax_present ? attovm_call_get_guest_cpu_state(d->domain_id, vcpu,
+      ax_attovm_present() ? attovm_call_get_guest_cpu_state(d->domain_id, vcpu,
                                                    buffer.p, buffer_size)
-                 : -ENODEV;
+                          : -ENODEV;
     if (ret)
         printk(
             XENLOG_ERR "FAILED to get guest vcpu state vm%u.%u, error %d\n",
@@ -247,8 +249,9 @@ attovm_get_guest_cpu_state(struct domain *d, uint32_t vcpu,
 int
 attovm_kbd_focus(struct domain *d, uint32_t offer_focus)
 {
-    return ax_present ? attovm_call_kbd_focus(d->domain_id, offer_focus)
-                      : -ENODEV;
+    return ax_attovm_present()
+        ? attovm_call_kbd_focus(d->domain_id, offer_focus)
+        : -ENODEV;
 }
 
 int
