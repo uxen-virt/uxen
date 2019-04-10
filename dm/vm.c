@@ -715,7 +715,11 @@ vm_init(const char *loadvm, int restore_mode)
 #ifdef CONFIG_DUMP_MEMORY_STAT
             dump_stats();
 #endif  /* CONFIG_DUMP_MEMORY_STAT */
-            errx(0, "template vm setup done");
+            if (vm_template_held) {
+                debug_printf("template vm setup done - template held\n");
+                return;
+            } else
+                errx(0, "template vm setup done");
         }
     }
 
@@ -835,6 +839,7 @@ vm_exit(void *opaque)
         return;
 
 #if defined(CONFIG_NICKEL)
+    if (vm_restore_mode != VM_RESTORE_TEMPLATE)
         ni_suspend_flush();
 #endif
 

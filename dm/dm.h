@@ -32,6 +32,7 @@ extern uint8_t vm_template_uuid[16];
 extern int vm_has_template_uuid;
 extern char *vm_template_file;
 extern int vm_restore_mode;
+extern int vm_template_held;
 extern uint64_t vm_lazy_load;
 extern int vm_status_sent;
 extern window_handle vm_window;

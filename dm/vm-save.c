@@ -1588,7 +1588,9 @@ load_whpx_memory_data(
     char *template_file = vm_template_file;
     extern char *vm_loadfile;
 
-    if (restore_mode == VM_RESTORE_CLONE && !template_file)
+    if (!template_file && (
+        restore_mode == VM_RESTORE_CLONE ||
+        restore_mode == VM_RESTORE_TEMPLATE))
         template_file = vm_loadfile;
 
     debug_printf("load whpx memory, template %s\n", template_file ? template_file : "<none>");

@@ -74,6 +74,7 @@ xen_domain_handle_t vm_template_uuid;
 int vm_has_template_uuid = 0;
 char *vm_template_file = NULL;
 int vm_restore_mode = VM_RESTORE_NONE;
+int vm_template_held = 0;
 uint64_t vm_lazy_load = 0;
 static int vm_start_paused = 0;
 window_handle vm_window = NULL;
@@ -192,6 +193,7 @@ parse_options(int argc, char **argv)
           {"name",         required_argument, NULL,       'n'},
           {"paused",       no_argument,       NULL,       'p'},
           {"template",     no_argument,       NULL,       't'},
+          {"template-held",no_argument,       NULL,       'T'},
           {"uuid",         required_argument, NULL,       'u'},
           {"validate",     no_argument,       &long_index,
            OPTION_INDEX_VALIDATE},
@@ -204,7 +206,7 @@ parse_options(int argc, char **argv)
 
       long_index = 0;
 
-      c = getopt_long(argc, argv, "hcC:F:G:l:n:tp", long_options, &index);
+      c = getopt_long(argc, argv, "hcC:F:G:l:n:tTp", long_options, &index);
       if (c == -1)
 	  break;
 
@@ -262,6 +264,10 @@ parse_options(int argc, char **argv)
       case 't':
 	  vm_restore_mode = VM_RESTORE_TEMPLATE;
 	  break;
+      case 'T':
+          vm_restore_mode = VM_RESTORE_TEMPLATE;
+          vm_template_held = 1;
+          break;
       case 'u':
           ret = uuid_parse(optarg + (optarg[0] == '{' ? 1 : 0), vm_uuid);
           if (ret)
@@ -411,6 +417,8 @@ main(int argc, char **argv)
 vm_init:
     debug_printf("initializing vm\n");
     vm_init(vm_loadfile, vm_restore_mode);
+    if (vm_template_held)
+        goto main_loop;
 
 #ifdef CONFIG_NET
     net_check_clients();
@@ -463,6 +471,7 @@ vm_init:
     free(dom_id_str);
     free(v4v_idtoken_str);
 
+main_loop:
     while (1) {
 	int timeout;
 

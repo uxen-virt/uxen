@@ -1389,6 +1389,20 @@ new_file_mapping(struct filebuf *f, file_mapping_type_t type, pagerange_t r, uin
     return fm->va;
 }
 
+int cache_stamp = 0;
+
+static void
+prefetch_mapping(void *va, int npages)
+{
+    uint8_t *p = va;
+
+    while (npages) {
+        cache_stamp += *p;
+        p += PAGE_SIZE;
+        npages--;
+    }
+}
+
 static int
 whpx_clone_memory_pages(struct filebuf *f)
 {
@@ -1397,6 +1411,7 @@ whpx_clone_memory_pages(struct filebuf *f)
     uint64_t max_addr = 0;
     saved_mb_entry_t *saved_entries = NULL;
     int i;
+    uint64_t t0, dt;
 
     saved_entries = read_mb_entries(f, &num_entries, &max_addr);
 
@@ -1404,11 +1419,15 @@ whpx_clone_memory_pages(struct filebuf *f)
     raw_pagedata_off += PAGE_SIZE-1;
     raw_pagedata_off &= PAGE_MASK;
 
+    t0 = get_clock_ns(rt_clock);
+
     /* read file data & populate vmem */
     for (i = 0; i < num_entries; i++) {
         saved_mb_entry_t *se = &saved_entries[i];
         /* separate readonly mapping for templating/cuckoo */
-        new_file_mapping(f, FMT_RO, se->r, se->file_off);
+        void *rdo = new_file_mapping(f, FMT_RO, se->r, se->file_off);
+        if (vm_restore_mode == VM_RESTORE_TEMPLATE)
+            prefetch_mapping(rdo, pr_bytes(&se->r) >> PAGE_SHIFT);
         /* will either do a new cow mapping or reuse previous */
         void *ram = new_file_mapping(f, FMT_COW, se->r, se->file_off);
         assert(ram);
@@ -1417,6 +1436,9 @@ whpx_clone_memory_pages(struct filebuf *f)
     }
 
     free(saved_entries);
+
+    dt = get_clock_ns(rt_clock) - t0;
+    debug_printf("memory clone took %dms\n", (int)(dt / 1000000));
 
     return 0;
 }
