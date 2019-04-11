@@ -890,6 +890,18 @@ whpx_ram_reserve_virtual(void)
     return 0;
 }
 
+static int
+whpx_count_file_ram_mappings(void)
+{
+    file_mapping_t *e, *next;
+    int num = 0;
+
+    TAILQ_FOREACH_SAFE(e, &file_ram_mappings, entry, next)
+        num++;
+
+    return num;
+}
+
 #if 0
 static int
 whpx_ram_release_file_mappings(void)
@@ -1504,9 +1516,12 @@ whpx_clone_memory_pages(struct filebuf *f)
     uint64_t t0, dt;
     int prefetch = 0;
 
-    if (sti_refcnt_mod(1) == 1)
-        /* first user of template, requires prefetch */
-        prefetch = 1;
+    /* increment template refcnt if we have no mappings to it yet */
+    if (!whpx_count_file_ram_mappings()) {
+        if (sti_refcnt_mod(1) == 1)
+            /* first user of template, requires prefetch */
+            prefetch = 1;
+    }
 
     saved_entries = read_mb_entries(f, &num_entries, &max_addr);
 
@@ -1812,11 +1827,7 @@ whpx_ram_init(void)
 void
 whpx_ram_uninit(void)
 {
-    file_mapping_t *e, *next;
-    int num_mappings = 0;
-
-    TAILQ_FOREACH_SAFE(e, &file_ram_mappings, entry, next)
-        num_mappings++;
+    int num_mappings = whpx_count_file_ram_mappings();
 
     whpx_ram_free();
 
