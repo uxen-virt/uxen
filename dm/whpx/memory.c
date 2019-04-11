@@ -12,6 +12,7 @@
 #include <dm/vm-save.h>
 #include <dm/vm-savefile.h>
 #include <dm/filebuf.h>
+#include <uuid/uuid.h>
 
 #define VM_VA_RANGE_SIZE 0x100000000ULL
 #define ZERO_RANGE_MIN_PAGES 64
@@ -51,6 +52,10 @@ typedef struct file_mapping {
     uint64_t file_off;
 } file_mapping_t;
 
+struct shared_template_info {
+    LONG refcnt;
+};
+
 /* base for ram allocated by uxendm (won't be used if vm runs off
  * memory mapped file for example */
 static uint8_t *vm_ram_base = NULL;
@@ -60,6 +65,9 @@ static bool vm_ram_owned = false;
 static TAILQ_HEAD(, mb_entry) mb_entries;
 /* list of memory file mappings */
 static TAILQ_HEAD(, file_mapping) file_ram_mappings;
+
+static HANDLE sti_handle;
+static struct shared_template_info *sti_ptr;
 
 #define uxenvm_load_read(f, buf, size, ret, err_msg, _out) do {         \
         (ret) = filebuf_read((f), (buf), (size));                       \
@@ -1319,6 +1327,20 @@ read_mb_entries(struct filebuf *f, uint32_t *out_num_entries, uint64_t *out_max_
 
 }
 
+int cache_stamp = 0;
+
+static void
+prefetch_mapping(void *va, int npages)
+{
+    uint8_t *p = va;
+
+    while (npages) {
+        cache_stamp += *p;
+        p += PAGE_SIZE;
+        npages--;
+    }
+}
+
 static file_mapping_t *
 find_file_ram_mapping(pagerange_t r, file_mapping_type_t type)
 {
@@ -1332,8 +1354,83 @@ find_file_ram_mapping(pagerange_t r, file_mapping_type_t type)
     return NULL;
 }
 
+static struct shared_template_info *
+sti_open(void)
+{
+    if (!sti_ptr) {
+        char uuid_str[37];
+        char *mapname = NULL;
+        void *p;
+
+        uuid_unparse_lower(vm_template_uuid, uuid_str);
+        asprintf(&mapname, "uxendm-whpx-template-%s", uuid_str);
+        if (!mapname)
+            return NULL;
+        HANDLE h = CreateFileMapping(INVALID_HANDLE_VALUE, NULL,
+            PAGE_READWRITE, 0, sizeof(struct shared_template_info), mapname);
+        if (!h) {
+            debug_printf("%s: create mapping failed: %d\n", __FUNCTION__,
+                (int)GetLastError());
+            return NULL;
+        }
+        p = MapViewOfFile(h, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0,
+            sizeof(struct shared_template_info));
+        if (!p) {
+            CloseHandle(h);
+            debug_printf("%s: map view failed: %d\n", __FUNCTION__,
+                (int)GetLastError());
+            return NULL;
+        }
+
+        sti_handle = h;
+        sti_ptr = p;
+    }
+
+    return sti_ptr;
+}
+
+static void
+sti_close(void)
+{
+    if (sti_ptr) {
+        UnmapViewOfFile(sti_ptr);
+        sti_ptr = NULL;
+    }
+
+    if (sti_handle) {
+        CloseHandle(sti_handle);
+        sti_handle = NULL;
+    }
+}
+
+static LONG
+sti_refcnt_mod(LONG x)
+{
+    struct shared_template_info *sti;
+    LONG refcnt = 0;
+    char uuid_str[37];
+
+    sti = sti_open();
+    if (sti) {
+        assert(x != 0);
+
+        if (x > 0)
+            refcnt = InterlockedIncrement(&sti->refcnt);
+        else if (x < 0)
+            refcnt = InterlockedDecrement(&sti->refcnt);
+
+        uuid_unparse_lower(vm_template_uuid, uuid_str);
+        debug_printf("template %s %srefcnt = %d\n",
+            uuid_str, (x > 0) ? "++" : "--", (int) refcnt);
+    }
+
+    return refcnt;
+}
+
 static void *
-new_file_mapping(struct filebuf *f, file_mapping_type_t type, pagerange_t r, uint64_t fileoff)
+new_file_mapping(
+    struct filebuf *f, file_mapping_type_t type,
+    pagerange_t r, uint64_t fileoff, int prefetch)
 {
     static uint64_t align_mask = 0;
     uint64_t aligned_off;
@@ -1386,21 +1483,14 @@ new_file_mapping(struct filebuf *f, file_mapping_type_t type, pagerange_t r, uin
     fm->aligned_map_va = map;
     TAILQ_INSERT_TAIL(&file_ram_mappings, fm, entry);
 
-    return fm->va;
-}
-
-int cache_stamp = 0;
-
-static void
-prefetch_mapping(void *va, int npages)
-{
-    uint8_t *p = va;
-
-    while (npages) {
-        cache_stamp += *p;
-        p += PAGE_SIZE;
-        npages--;
+    if (prefetch) {
+        prefetch_mapping(fm->va, pr_bytes(&r) >> PAGE_SHIFT);
+        debug_printf("prefetched %s mapping %016"PRIx64" - %016"PRIx64" file offset %016"PRIx64"\n",
+            type == FILE_MAP_COPY ? "cow" : "rdo",
+            r.start << PAGE_SHIFT, r.end << PAGE_SHIFT, fileoff);
     }
+
+    return fm->va;
 }
 
 static int
@@ -1412,6 +1502,11 @@ whpx_clone_memory_pages(struct filebuf *f)
     saved_mb_entry_t *saved_entries = NULL;
     int i;
     uint64_t t0, dt;
+    int prefetch = 0;
+
+    if (sti_refcnt_mod(1) == 1)
+        /* first user of template, requires prefetch */
+        prefetch = 1;
 
     saved_entries = read_mb_entries(f, &num_entries, &max_addr);
 
@@ -1425,11 +1520,9 @@ whpx_clone_memory_pages(struct filebuf *f)
     for (i = 0; i < num_entries; i++) {
         saved_mb_entry_t *se = &saved_entries[i];
         /* separate readonly mapping for templating/cuckoo */
-        void *rdo = new_file_mapping(f, FMT_RO, se->r, se->file_off);
-        if (vm_restore_mode == VM_RESTORE_TEMPLATE)
-            prefetch_mapping(rdo, pr_bytes(&se->r) >> PAGE_SHIFT);
+        new_file_mapping(f, FMT_RO, se->r, se->file_off, prefetch);
         /* will either do a new cow mapping or reuse previous */
-        void *ram = new_file_mapping(f, FMT_COW, se->r, se->file_off);
+        void *ram = new_file_mapping(f, FMT_COW, se->r, se->file_off, 0);
         assert(ram);
         whpx_ram_populate_with(se->r.start << PAGE_SHIFT, pr_bytes(&se->r), ram, se->flags);
 
@@ -1438,7 +1531,7 @@ whpx_clone_memory_pages(struct filebuf *f)
     free(saved_entries);
 
     dt = get_clock_ns(rt_clock) - t0;
-    debug_printf("memory clone took %dms\n", (int)(dt / 1000000));
+    debug_printf("memory clone took %dms, prefetch=%d\n", (int)(dt / 1000000), prefetch);
 
     return 0;
 }
@@ -1719,5 +1812,16 @@ whpx_ram_init(void)
 void
 whpx_ram_uninit(void)
 {
+    file_mapping_t *e, *next;
+    int num_mappings = 0;
+
+    TAILQ_FOREACH_SAFE(e, &file_ram_mappings, entry, next)
+        num_mappings++;
+
     whpx_ram_free();
+
+    /* if we had mappings it means we're cloned, release template refcnt */
+    if (num_mappings)
+        sti_refcnt_mod(-1);
+    sti_close();
 }
