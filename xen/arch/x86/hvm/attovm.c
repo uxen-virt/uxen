@@ -21,6 +21,8 @@
 
 #define ax_attovm_present() (ax_present && ax_has_attovm)
 
+DEFINE_XEN_GUEST_HANDLE(uint8_t);
+
 static inline struct attovm_control *vmctrl(void)
 {
     BUG_ON(this_cpu(current_vmcs_vmx)->vmcs->vmcs_revision_id !=
@@ -269,6 +271,21 @@ attovm_do_cpuid(struct cpu_user_regs *regs)
         case ATTOCALL_QUERYOP_TSC_KHZ:
             regs->eax = current->domain->arch.tsc_khz;
             return 1;
+        case ATTOCALL_QUERYOP_SECRET_KEY: {
+            // TODO: derive key from hardware config, json & memory measurement etc
+            // guest phys in rdx, salt in r8
+            unsigned long addr = regs->edx;
+            XEN_GUEST_HANDLE(uint8_t) h = { .p = (uint8_t*) addr };
+            uint8_t key[ATTOVM_SECRET_KEY_BYTES];
+
+            regs->eax = -1;
+            memset(key, 0x77, ATTOVM_SECRET_KEY_BYTES);
+            if ( !copy_to_guest(h,
+                                key, ATTOVM_SECRET_KEY_BYTES) )
+                regs->eax = 0; /* copy ok */
+
+            return 1;
+        }
         case ATTOCALL_QUERYOP_APPDEF_SIZE:
             regs->eax = current->domain->arch.hvm_domain.attovm.appdef_size;
             return 1;
