@@ -291,14 +291,12 @@ int attovm_platform_init(struct bus_type *bus)
     if (ret)
         return ret;
 
-    if (axen_hypervisor()) {
-        attovm_secret_dev.minor = MISC_DYNAMIC_MINOR;
-        attovm_secret_dev.name = "attovm_secret";
-        attovm_secret_dev.fops = &attovm_secret_file_ops;
-        ret = misc_register(&attovm_secret_dev);
-        if (ret)
-            return ret;
-    }
+    attovm_secret_dev.minor = MISC_DYNAMIC_MINOR;
+    attovm_secret_dev.name = "attovm_secret";
+    attovm_secret_dev.fops = &attovm_secret_file_ops;
+    ret = misc_register(&attovm_secret_dev);
+    if (ret)
+        return ret;
 
     features = attovm_call_queryop(ATTOCALL_QUERYOP_FEATURES, 0, 0, 0);
     printk("%s: attovm features 0x%x\n", __FUNCTION__, (unsigned) features);
