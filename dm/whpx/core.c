@@ -43,7 +43,7 @@
 #include "ioapic.h"
 #include <whpx-shared.h>
 
-//#define VCPU_THROTTLING
+#define VCPU_THROTTLING
 
 #define CPUID_DEBUG_OUT_8  0x54545400
 #define CPUID_DEBUG_OUT_32 0x54545404
