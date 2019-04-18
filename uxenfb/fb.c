@@ -334,6 +334,7 @@ update_pfn_prot(struct vm_area_struct *vma, unsigned long addr,
     struct mm_struct *mm = vma->vm_mm;
     spinlock_t *ptl;
     pgd_t *pgd;
+    p4d_t *p4d;
     pmd_t *pmd;
     pud_t *pud;
     pte_t *ptep;
@@ -347,7 +348,11 @@ update_pfn_prot(struct vm_area_struct *vma, unsigned long addr,
     if (pgd_none(*pgd) || unlikely(pgd_bad(*pgd)))
         goto out;
 
-    pud = pud_offset(pgd, addr);
+    p4d = p4d_offset(pgd, addr);
+    if (p4d_none(*p4d) || unlikely(p4d_bad(*p4d)))
+        goto out;
+
+    pud = pud_offset(p4d, addr);
     if (pud_none(*pud) || unlikely(pud_bad(*pud)))
         goto out;
 
@@ -423,10 +428,10 @@ uxenfb_dirty_work(struct work_struct *work)
     }
 }
 
-static int
-uxenfb_vm_fault(struct vm_area_struct *vma,
-                struct vm_fault *vmf)
+static vm_fault_t
+uxenfb_vm_fault(struct vm_fault *vmf)
 {
+    struct vm_area_struct *vma = vmf->vma;
     struct fb_info *info = vma->vm_private_data;
     pgprot_t prot = vma->vm_page_prot;
     int ret;
@@ -451,10 +456,10 @@ uxenfb_vm_fault(struct vm_area_struct *vma,
     }
 }
 
-static int
-uxenfb_vm_pfn_mkwrite(struct vm_area_struct *vma,
-                      struct vm_fault *vmf)
+static vm_fault_t
+uxenfb_vm_pfn_mkwrite(struct vm_fault *vmf)
 {
+    struct vm_area_struct *vma = vmf->vma;
     struct fb_info *info = vma->vm_private_data;
     struct uxenfb_par *par = info->par;
     unsigned long offset = vmf->pgoff << PAGE_SHIFT;
@@ -524,7 +529,6 @@ static int
 uxenfb_set_par(struct fb_info *info)
 {
     struct uxenfb_par *par = (struct uxenfb_par*)info->par;
-    void *p;
 
     par->xres = info->var.xres;
     par->yres = info->var.yres;
