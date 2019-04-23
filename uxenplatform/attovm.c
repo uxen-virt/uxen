@@ -10,8 +10,8 @@
 #include <linux/kobject.h>
 #include <linux/proc_fs.h>
 #include <linux/miscdevice.h>
+#include <linux/uaccess.h>
 
-#include <asm/uaccess.h>
 #include <uxen-platform.h>
 #include <uxen-hypercall.h>
 #include <uxen/platform_interface.h>
