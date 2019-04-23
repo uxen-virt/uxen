@@ -535,9 +535,11 @@ proxy_request_received(void *opaque)
             v4v_proxy_req_recv_t *recv_req = (v4v_proxy_req_recv_t*) req;
             v4v_proxy_context_t *proxy = get_proxy_context_for(recv_req->from);
 
-            if (!proxy)
+            if (!proxy) {
                 debug_printf("no v4v-proxy for domain %d port %x\n",
                     recv_req->from.domain, recv_req->from.port);
+                break;
+            }
             assert(proxy);
             assert(recv_req->buffer_len <= PROXY_MAX_PACKET_LEN);
 
@@ -569,11 +571,13 @@ proxy_request_received(void *opaque)
             v4v_proxy_pending_write_t *write;
             uint32_t datagram_len = send_req->datagram_len;
 
-            if (!proxy)
+            if (!proxy) {
                 debug_printf("no v4v-proxy for domain %d port %x, "
                              "send to domain %d port %x\n",
                     send_req->from.domain, send_req->from.port,
                     send_req->datagram.addr.domain, send_req->datagram.addr.port);
+                break;
+            }
             assert(proxy);
 
 #ifndef DEBUG_FORCE_DOM0_PARTNER
