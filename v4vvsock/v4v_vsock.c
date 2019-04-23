@@ -420,7 +420,7 @@ out:
 }
 
 static int vsock_getname(struct socket *sock,
-			 struct sockaddr *addr, int *addr_len, int peer)
+			 struct sockaddr *addr, int peer)
 {
     return -EOPNOTSUPP;
 }
