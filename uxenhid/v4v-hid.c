@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017, Bromium, Inc.
+ * Copyright 2016-2019, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -89,8 +89,8 @@ request_lookup(struct uxenhid_dev *dev, u8 report_id, u8 report_type)
 	// BUG_ON(!spin_is_locked(&dev->req_lock));
 
 	list_for_each_entry(req, &dev->req_list, entry) {
-		if (req->report_id == req->report_id &&
-		    req->report_type == req->report_type)
+		if (req->report_id == report_id &&
+		    req->report_type == report_type)
 		    return req;
 	}
 
