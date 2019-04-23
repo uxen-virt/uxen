@@ -50,6 +50,7 @@ static TAILQ_HEAD(, v4v_connection) connections;
 static critical_section connections_lock;
 
 static bool virq_thread_quit;
+static bool virq_thread_running;
 static struct io_handler_queue virq_io_handlers;
 WaitObjects v4v_virq_wait_objects;
 static uxen_thread virq_thread;
@@ -708,6 +709,30 @@ out:
 void v4v_early_init(void);
 
 void
+whpx_v4v_virq_start(void)
+{
+    if (!virq_thread_running) {
+        virq_thread_quit = false;
+        create_thread(&virq_thread, virq_thread_run, NULL);
+        virq_thread_running = true;
+        debug_printf("v4v virq running\n");
+    }
+}
+
+void
+whpx_v4v_virq_stop(void)
+{
+    if (virq_thread_running) {
+        virq_thread_quit = true;
+        ioh_event_set(&virq_ev);
+        debug_printf("v4v virq stop\n");
+        wait_thread(virq_thread);
+        virq_thread_running = false;
+        debug_printf("v4v virq stopped\n");
+    }
+}
+
+void
 whpx_v4v_init(void)
 {
     v4v_early_init();
@@ -720,18 +745,13 @@ whpx_v4v_init(void)
     ioh_queue_init(&virq_io_handlers);
     ioh_init_wait_objects(&v4v_virq_wait_objects);
     ioh_add_wait_object(&virq_ev, whpx_v4v_handle_signal_work, NULL, &v4v_virq_wait_objects);
-    virq_thread_quit = false;
-    create_thread(&virq_thread, virq_thread_run, NULL);
+    whpx_v4v_virq_start();
 }
 
 void
 whpx_v4v_shutdown(void)
 {
-    debug_printf("whpx v4v: quitting virq thread\n");
-    virq_thread_quit = true;
-    ioh_event_set(&virq_ev);
-    wait_thread(virq_thread);
+    whpx_v4v_virq_stop();
     ioh_cleanup_wait_objects(&v4v_virq_wait_objects);
     ioh_event_close(&virq_ev);
-    debug_printf("whpx v4v: quitting virq thread DONE\n");
 }

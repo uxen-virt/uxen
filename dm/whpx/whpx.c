@@ -79,6 +79,7 @@ struct domain dom0;
 static void tsc_pause(void);
 static void tsc_resume(void);
 static void tsc_resume_early(void);
+static void whpx_vm_shutdown_suspend(void);
 
 void whpx_run_on_cpu(
     CPUState *env,
@@ -356,11 +357,7 @@ all_vcpus_stopped_cb(void *opaque)
         tsc_pause();
         vm_set_run_mode(PAUSE_VM);
     } else if (shutdown_reason == WHPX_SHUTDOWN_SUSPEND) {
-        debug_printf("shutdown for suspend - tsc pause\n");
-        tsc_pause();
-        debug_printf("shutdown for suspend - v4v destroy\n");
-        v4v_destroy(&guest);
-        debug_printf("shutdown for suspend - process suspend\n");
+        whpx_vm_shutdown_suspend();
         vm_process_suspend(NULL);
     } else
         vm_set_run_mode(DESTROY_VM);
@@ -623,6 +620,8 @@ whpx_vm_start(void)
 
     debug_printf("vm start...\n");
 
+    whpx_v4v_virq_start();
+
     shutdown_reason = 0;
     vm_time_offset = 0;
     running_vcpus = vm_vcpus;
@@ -678,6 +677,18 @@ tsc_resume_early(void)
         sync_vcpus_tsc(paused_tsc_value, MAX_TSC_PROPAGATE_ITERS, MAX_TSC_DESYNC);
         paused_tsc_value = 0;
     }
+}
+
+static void
+whpx_vm_shutdown_suspend(void)
+{
+    debug_printf("shutdown for suspend - tsc pause\n");
+    tsc_pause();
+    debug_printf("shutdown for suspend - stop v4v virq\n");
+    whpx_v4v_virq_stop();
+    debug_printf("shutdown for suspend - v4v destroy\n");
+    v4v_destroy(&guest);
+    debug_printf("shutdown for suspend - process suspend\n");
 }
 
 int

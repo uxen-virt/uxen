@@ -15,6 +15,8 @@ void whpx_v4v_proxy_init(void);
 void whpx_v4v_proxy_shutdown(void);
 void whpx_v4v_init(void);
 void whpx_v4v_shutdown(void);
+void whpx_v4v_virq_start(void);
+void whpx_v4v_virq_stop(void);
 bool whpx_v4v_have_v4v(void);
 /* called when host is notified about pending v4v data */
 void whpx_v4v_handle_signal(void);
