@@ -565,6 +565,7 @@ ui_host_needs_preempt(void)
     case 17134:
     case 17655:
     case 17763:
+    case 18362:
         /* Windows10.15063 RS2/CU */
         /* Windows10.16299 RS3/FCU */
         /* Windows10.17083 RS4 preview */
@@ -572,9 +573,16 @@ ui_host_needs_preempt(void)
         /* Windows10.17134 RS4 RC2 */
         /* Windows10.17655 RS5 preview */
         /* Windows10.17763 RS5 RC */
-        // +0x2e69 QuantumEnd       : UChar
-        // +0x2e00 DpcData          : [2] _KDPC_DATA
-        //        +0x018 DpcQueueDepth    : Int4B
+        /* Windows10.18362 RS6/19h1 RC */
+        /*
+            dt _kprcb QuantumEnd; dt _kprcb DpcData; dt _kdpc_data DpcQueueDepth
+            _KPRCB
+               +0x2e69 QuantumEnd : UChar
+            _KPRCB
+               +0x2e00 DpcData : [2] _KDPC_DATA
+            _KDPC_DATA
+               +0x018 DpcQueueDepth : Int4B
+        */
         if (*(kprcb + 0x2e69))
             return 1;
         if (*(uint32_t volatile *)(kprcb + 0x2e00 + 0x018))
