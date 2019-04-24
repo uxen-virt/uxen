@@ -46,6 +46,7 @@
 
 static volatile uint32_t running_vcpus = 0;
 static ioh_event all_vcpus_stopped_ev;
+static ioh_event shutdown_done_ev;
 static ioh_event v4v_irq_ev;
 static int shutdown_reason = 0;
 static Timer *whpx_perf_timer;
@@ -361,6 +362,8 @@ all_vcpus_stopped_cb(void *opaque)
         vm_process_suspend(NULL);
     } else
         vm_set_run_mode(DESTROY_VM);
+
+    ioh_event_set(&shutdown_done_ev);
 }
 
 static void
@@ -445,7 +448,8 @@ whpx_vm_destroy(void)
         whpx_vm_shutdown(WHPX_SHUTDOWN_POWEROFF);
         /* wait for cpus to exit */
         whpx_unlock_iothread();
-        whpx_vm_shutdown_wait();
+        while (running_vcpus)
+            Sleep(25);
         whpx_lock_iothread();
     }
 
@@ -459,6 +463,7 @@ whpx_vm_destroy(void)
 
     ioh_event_close(&all_vcpus_stopped_ev);
     ioh_event_close(&v4v_irq_ev);
+    ioh_event_close(&shutdown_done_ev);
 
     /* destroy v4v */
     whpx_v4v_proxy_shutdown();
@@ -626,6 +631,7 @@ whpx_vm_start(void)
     vm_time_offset = 0;
     running_vcpus = vm_vcpus;
     ioh_event_reset(&all_vcpus_stopped_ev);
+    ioh_event_reset(&shutdown_done_ev);
 
     if (check_unreliable_tsc()) {
         debug_printf("syncing unreliable TSC value\n");
@@ -1126,6 +1132,7 @@ whpx_vm_init(int restore_mode)
 
     ioh_event_init(&all_vcpus_stopped_ev);
     ioh_event_init(&v4v_irq_ev);
+    ioh_event_init(&shutdown_done_ev);
 
     ioh_add_wait_object(&all_vcpus_stopped_ev, all_vcpus_stopped_cb, NULL, NULL);
     ioh_add_wait_object(&v4v_irq_ev, v4v_irq_cb, NULL, NULL);
@@ -1183,10 +1190,9 @@ whpx_vm_shutdown(int reason)
 int
 whpx_vm_shutdown_wait(void)
 {
-    while (running_vcpus) {
-        Sleep(25);
-        kick_cpus();
-    }
+    debug_printf("wait for shutdown event...\n");
+    ioh_event_wait(&shutdown_done_ev);
+    debug_printf("wait for shutdown event DONE\n");
 
     return 0;
 }
