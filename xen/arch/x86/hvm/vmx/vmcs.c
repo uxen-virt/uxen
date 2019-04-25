@@ -704,11 +704,13 @@ vmx_cpu_up(enum hvmon hvmon_mode)
     cr0 = read_cr0();
     rdmsrl(MSR_IA32_VMX_CR0_FIXED0, vmx_cr0_fixed0);
     rdmsrl(MSR_IA32_VMX_CR0_FIXED1, vmx_cr0_fixed1);
+    vmx_cr0_fixed0 &= (u32)-1;
+    vmx_cr0_fixed1 &= (u32)-1;
     if ( (~cr0 & vmx_cr0_fixed0) || (cr0 & ~vmx_cr0_fixed1) )
     {
         printk("CPU%d: some settings of host CR0(0x%"PRIx64") are " 
                "not allowed in VMX operation. CR0_FIXED0(0x%"PRIx64")"
-               " CR0_FIXED(0x%"PRIx64")\n", cpu, cr0, vmx_cr0_fixed0, vmx_cr0_fixed1);
+               " CR0_FIXED1(0x%"PRIx64")\n", cpu, cr0, vmx_cr0_fixed0, vmx_cr0_fixed1);
         return -EINVAL;
     }
 
