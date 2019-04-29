@@ -1811,6 +1811,31 @@ whpx_cpu_handle_interrupt(CPUState *cpu, int mask)
  * Partition support
  */
 
+#define SET_PROPERTY(code, field, value) { \
+    WHV_PARTITION_PROPERTY prop;                                        \
+    memset(&prop, 0, sizeof(WHV_PARTITION_PROPERTY));                   \
+    prop.field = (value);                                               \
+    hr = WHvSetPartitionProperty(whpx->partition,                       \
+        (code), &prop, sizeof(prop));                                   \
+    if (FAILED(hr)) {                                                   \
+        error_report("WHPX: Failed to set property %s hr=%08lx", #code, hr); \
+        ret = -EINVAL;                                                  \
+        goto error;                                                     \
+    } }
+
+#define GET_PROPERTY(code, field, value) { \
+    WHV_PARTITION_PROPERTY prop;                                        \
+    memset(&prop, 0, sizeof(WHV_PARTITION_PROPERTY));                   \
+    hr = WHvGetPartitionProperty(whpx->partition,                       \
+        (code), &prop, sizeof(prop), NULL);                             \
+    if (FAILED(hr)) {                                                   \
+        error_report("WHPX: Failed to get property %s hr=%08lx", #code, hr); \
+        ret = -EINVAL;                                                  \
+        goto error;                                                     \
+    }                                                                   \
+    (value) = prop.field;                                               \
+    }
+
 int whpx_partition_init(void)
 {
     struct whpx_state *whpx;
@@ -1818,7 +1843,6 @@ int whpx_partition_init(void)
     HRESULT hr;
     WHV_CAPABILITY whpx_cap;
     WHV_CAPABILITY_FEATURES features = { };
-    WHV_PARTITION_PROPERTY prop;
     whpx = &whpx_global;
 
     memset(whpx, 0, sizeof(struct whpx_state));
@@ -1847,60 +1871,37 @@ int whpx_partition_init(void)
         goto error;
     }
 
-    memset(&prop, 0, sizeof(WHV_PARTITION_PROPERTY));
-    prop.LocalApicEmulationMode = WHvX64LocalApicEmulationModeXApic;
-    hr = WHvSetPartitionProperty(whpx->partition,
-        WHvPartitionPropertyCodeLocalApicEmulationMode,
-        &prop,
-        sizeof(prop));
-    if (FAILED(hr)) {
-        error_report("WHPX: Failed to enable local APIC hr=%08lx", hr);
-        ret = -EINVAL;
-        goto error;
-    }
+    SET_PROPERTY(WHvPartitionPropertyCodeLocalApicEmulationMode,
+        LocalApicEmulationMode, WHvX64LocalApicEmulationModeXApic);
 
-    memset(&prop, 0, sizeof(WHV_PARTITION_PROPERTY));
-    prop.ProcessorCount = vm_vcpus;
-    hr = WHvSetPartitionProperty(whpx->partition,
-        WHvPartitionPropertyCodeProcessorCount,
-        &prop, sizeof(WHV_PARTITION_PROPERTY));
-
-    if (FAILED(hr)) {
-        error_report("WHPX: Failed to set partition core count to %d,"
-            " hr=%08lx", (int)vm_vcpus, hr);
-        ret = -EINVAL;
-        goto error;
-    }
+    SET_PROPERTY(WHvPartitionPropertyCodeProcessorCount,
+        ProcessorCount, vm_vcpus);
 
 #ifdef XSAVE_DISABLED_UNTIL_FIXED
-    memset(&prop, 0, sizeof(WHV_PARTITION_PROPERTY));
-    prop.ProcessorXsaveFeatures.AsUINT64 = 0;
-    hr = WHvSetPartitionProperty(whpx->partition,
-        WHvPartitionPropertyCodeProcessorXsaveFeatures,
-        &prop, sizeof(WHV_PARTITION_PROPERTY));
-
-    if (FAILED(hr)) {
-        error_report("WHPX: Failed to set partition core count to %d,"
-            " hr=%08lx", (int)vm_vcpus, hr);
-        ret = -EINVAL;
-        goto error;
-    }
+    SET_PROPERTY(WHvPartitionPropertyCodeProcessorXsaveFeatures,
+        ProcessorXsaveFeatures.AsUINT64, 0);
 #endif
 
-    memset(&prop, 0, sizeof(WHV_PARTITION_PROPERTY));
-    if (vm_viridian)
-        prop.ExtendedVmExits.X64MsrExit = 1;
-    prop.ExtendedVmExits.X64CpuidExit = 1;
-    hr = WHvSetPartitionProperty(whpx->partition,
-        WHvPartitionPropertyCodeExtendedVmExits,
-        &prop, sizeof(WHV_PARTITION_PROPERTY));
+    SET_PROPERTY(WHvPartitionPropertyCodeSeparateSecurityDomain,
+        SeparateSecurityDomain, FALSE);
 
-    if (FAILED(hr)) {
-        error_report("WHPX: Failed to set extended vm exits,"
-            " hr=%08lx", hr);
-        ret = -EINVAL;
-        goto error;
-    }
+    /* extended vm exits */
+    WHV_EXTENDED_VM_EXITS vme;
+    memset(&vme, 0, sizeof(vme));
+    if (vm_viridian)
+        vme.X64MsrExit = 1;
+    vme.X64CpuidExit = 1;
+
+    SET_PROPERTY(WHvPartitionPropertyCodeExtendedVmExits,
+        ExtendedVmExits,
+        vme);
+
+    /* log cpu features */
+    WHV_PROCESSOR_FEATURES cpuf;
+
+    GET_PROPERTY(WHvPartitionPropertyCodeProcessorFeatures,
+        ProcessorFeatures, cpuf);
+    debug_printf("processor features: %"PRIx64"\n", (uint64_t)cpuf.AsUINT64);
 
     hr = WHvSetupPartition(whpx->partition);
     if (FAILED(hr)) {
