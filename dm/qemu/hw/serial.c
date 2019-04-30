@@ -593,6 +593,13 @@ static uint32_t serial_ioport_read(void *opaque, uint32_t addr)
         ret = s->scr;
         break;
     }
+
+    /* ioport read doesn't interrupt main loop on whp, interrupt it manually.
+       Otherwise timers are not reevaluated frequently enough for serial to work
+       properly */
+    if (whpx_enable)
+        ioh_wait_interrupt(&wait_objects);
+
     DPRINTF("read addr=0x%02x val=0x%02x\n", addr, ret);
     return ret;
 }
