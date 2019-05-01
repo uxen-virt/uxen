@@ -105,4 +105,10 @@
 #define PVNESTED_CPUID_EPT_WRITE_VALID 0x10
 #define PVNESTED_CPUID_EPT_WRITE_INVEPT_ALL 0x20
 
+/* VMCS virtual fields
+ * Note: virtual fields should have bit 0 cleared, see no_access_type() */
+
+#define PVNESTED_VMCS_FIELD_EPT_WRITE_HINT_GFN 0x4e58cc1c
+#define PVNESTED_VMCS_FIELD_EPT_WRITE_HINT_ENTRY 0x4e502c1e
+
 #endif  /* __PVNESTED_CONSTANTS__ */

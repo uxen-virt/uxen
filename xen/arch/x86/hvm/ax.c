@@ -111,6 +111,8 @@ void ax_remote_tblflush(void)
 #endif
 }
 
+uint64_t pv_ept_write_hint_gfn = 0;
+uint64_t pv_ept_write_hint_entry = 0;
 void ax_pv_ept_write(struct p2m_domain *p2m, int level, uint64_t gfn,
                      uint64_t new_entry, int invept)
 {
@@ -118,8 +120,13 @@ void ax_pv_ept_write(struct p2m_domain *p2m, int level, uint64_t gfn,
     if (p2m->virgin)
         return;
 
-    if (!invept)
+    if (!invept) {
+        if (!level && pv_ept_write_hint_gfn && hvm_is_vmcx_current()) {
+            ax_pv_vmcs_write(pv_ept_write_hint_gfn, gfn);
+            ax_pv_vmcs_write(pv_ept_write_hint_entry, new_entry);
+        }
         return;
+    }
 
     ax_pv_ept_write_attocall(p2m, level, gfn, new_entry, invept);
 #endif

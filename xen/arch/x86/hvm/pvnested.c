@@ -67,6 +67,9 @@ pvnested_setup(void)
     ax_cpuid_pv_ept_write_invept_all = PVNESTED_CPUID_EPT_WRITE_INVEPT_ALL;
     ax_pv_ept = 1;
 
+    pv_ept_write_hint_gfn = PVNESTED_VMCS_FIELD_EPT_WRITE_HINT_GFN;
+    pv_ept_write_hint_entry = PVNESTED_VMCS_FIELD_EPT_WRITE_HINT_ENTRY;
+
     pvnested = 1;
 }
 

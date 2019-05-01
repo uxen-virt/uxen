@@ -29,6 +29,8 @@ extern int ax_pv_ept;
 extern uint64_t ax_cpuid_pv_ept_write;
 extern uint64_t ax_cpuid_pv_ept_write_valid;
 extern uint64_t ax_cpuid_pv_ept_write_invept_all;
+extern uint64_t pv_ept_write_hint_gfn;
+extern uint64_t pv_ept_write_hint_entry;
 extern int ax_has_pv_vmcs;
 extern uint64_t ax_cpuid_pv_vmaccess;
 extern int ax_has_attovm;

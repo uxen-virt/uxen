@@ -538,6 +538,11 @@ void pt_maybe_sync_cpu_enter(struct domain *d);
 void pt_maybe_sync_cpu_leave(struct domain *d);
 void pt_sync_domain(struct domain *d);
 
+#define hvm_is_vmcx_current() (                                  \
+        (boot_cpu_data.x86_vendor == X86_VENDOR_INTEL) ?         \
+        &current->arch.hvm_vmx == this_cpu(current_vmcs_vmx) :   \
+        current->arch.hvm_svm.vmcb != NULL)
+
 #ifdef __x86_64__
 /* Called for current VCPU on crX changes by guest */
 void hvm_memory_event_cr0(unsigned long value, unsigned long old);
