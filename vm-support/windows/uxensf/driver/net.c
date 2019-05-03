@@ -19,7 +19,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2013-2015, Bromium, Inc.
+ * Copyright 2013-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -318,11 +318,11 @@ VOID VBoxMRxExtractNetRootName(IN PUNICODE_STRING FilePathName,
     int iNetRoot;
     int i;
 
-    /* Split "\vboxsvr\share\path" to
+    /* Split "\<MRX_VBOX_SERVER_NAME_U>\share\path" to
      * NetRootName = "\share"
      * RestOfName = "\path"
      *
-     * Note that SrvCall->pSrvCallName contains "\vboxsrv".
+     * Note that SrvCall->pSrvCallName contains "\UXENSVR".
      */
 
     Log(("VBOXSF: MRxExtractNetRootName: [%.*ls], RestOfName %p\n",
@@ -370,14 +370,13 @@ VOID VBoxMRxExtractNetRootName(IN PUNICODE_STRING FilePathName,
 static VOID vbsfExecuteCreateSrvCall(PMRX_SRVCALL_CALLBACK_CONTEXT pCallbackContext)
 {
     NTSTATUS Status;
-    PWCHAR pSrvName = 0;
-    BOOLEAN Verifier;
 
     PMRX_SRVCALL_CALLBACK_CONTEXT SCCBC = pCallbackContext;
     PMRX_SRVCALLDOWN_STRUCTURE SrvCalldownStructure = (PMRX_SRVCALLDOWN_STRUCTURE)(SCCBC->SrvCalldownStructure);
     PMRX_SRV_CALL pSrvCall = SrvCalldownStructure->SrvCall;
+    PUNICODE_STRING pSrvCallName = pSrvCall->pSrvCallName;
 
-    /* Validate the server name with the test name of 'vboxsvr'. */
+    /* Validate the server name with the test name of 'UXENSVR'. */
     Log(("VBOXSF: vbsfExecuteCreateSrvCall: Connection Name %.*ls Length: %d, pSrvCall = %p\n",
          pSrvCall->pSrvCallName->Length / sizeof(WCHAR), pSrvCall->pSrvCallName->Buffer, pSrvCall->pSrvCallName->Length, pSrvCall));
 
@@ -393,35 +392,12 @@ static VOID vbsfExecuteCreateSrvCall(PMRX_SRVCALL_CALLBACK_CONTEXT pCallbackCont
              pSrvCall->pDomainName->Length / sizeof(WCHAR), pSrvCall->pDomainName->Buffer));
     }
 
-    if (pSrvCall->pSrvCallName->Length >= 14)
-    {
-        pSrvName = pSrvCall->pSrvCallName->Buffer;
-
-        Verifier = (pSrvName[0] == L'\\');
-        Verifier &= (pSrvName[1] == L'V') || (pSrvName[1] == L'v');
-        Verifier &= (pSrvName[2] == L'B') || (pSrvName[2] == L'b');
-        Verifier &= (pSrvName[3] == L'O') || (pSrvName[3] == L'o');
-        Verifier &= (pSrvName[4] == L'X') || (pSrvName[4] == L'x');
-        Verifier &= (pSrvName[5] == L'S') || (pSrvName[5] == L's');
-        /* Both vboxsvr & vboxsrv are now accepted */
-        if ((pSrvName[6] == L'V') || (pSrvName[6] == L'v'))
-        {
-            Verifier &= (pSrvName[6] == L'V') || (pSrvName[6] == L'v');
-            Verifier &= (pSrvName[7] == L'R') || (pSrvName[7] == L'r');
-        }
-        else
-        {
-            Verifier &= (pSrvName[6] == L'R') || (pSrvName[6] == L'r');
-            Verifier &= (pSrvName[7] == L'V') || (pSrvName[7] == L'v');
-        }
-        Verifier &= (pSrvName[8] == L'\\') || (pSrvName[8] == 0);
-    }
-    else
-    {
-        Verifier = FALSE;
-    }
-
-    if (Verifier)
+    /* Match \UXENSVR and \UXENSVR\foo */
+    if ((pSrvCallName && pSrvCallName->Buffer && (pSrvCallName->Length / sizeof(WCHAR)) >= MRX_VBOX_SERVER_NAME_LENGTH + 1) &&
+         pSrvCallName->Buffer[0] == L'\\' &&
+        _wcsnicmp(pSrvCallName->Buffer + 1, MRX_VBOX_SERVER_NAME_U, MRX_VBOX_SERVER_NAME_LENGTH) == 0 &&
+        (pSrvCallName->Buffer[MRX_VBOX_SERVER_NAME_LENGTH + 1] == 0 ||
+        ((pSrvCallName->Length / sizeof(WCHAR)) >= MRX_VBOX_SERVER_NAME_LENGTH + 2 && pSrvCallName->Buffer[MRX_VBOX_SERVER_NAME_LENGTH + 1] == L'\\')))
     {
         Log(("VBOXSF: vbsfExecuteCreateSrvCall: Verifier succeeded!\n"));
         Status = STATUS_SUCCESS;
