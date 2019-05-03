@@ -19,7 +19,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2013-2018, Bromium, Inc.
+ * Copyright 2013-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -223,40 +223,24 @@ static void vbsfInitMRxDispatch(void)
 
 static BOOL vboxIsPrefixOK (const WCHAR *FilePathName, ULONG PathNameLength)
 {
-    BOOL PrefixOK;
-
-    /* The FilePathName here looks like: \vboxsrv\... */
-    if (PathNameLength >= 8 * sizeof (WCHAR)) /* Number of bytes in '\vboxsrv' unicode string. */
-    {
-        PrefixOK =  (FilePathName[0] == L'\\');
-        PrefixOK &= (FilePathName[1] == L'V') || (FilePathName[1] == L'v');
-        PrefixOK &= (FilePathName[2] == L'B') || (FilePathName[2] == L'b');
-        PrefixOK &= (FilePathName[3] == L'O') || (FilePathName[3] == L'o');
-        PrefixOK &= (FilePathName[4] == L'X') || (FilePathName[4] == L'x');
-        PrefixOK &= (FilePathName[5] == L'S') || (FilePathName[5] == L's');
-        /* Both vboxsvr & vboxsrv are now accepted */
-        if ((FilePathName[6] == L'V') || (FilePathName[6] == L'v'))
-        {
-            PrefixOK &= (FilePathName[6] == L'V') || (FilePathName[6] == L'v');
-            PrefixOK &= (FilePathName[7] == L'R') || (FilePathName[7] == L'r');
-        }
-        else
-        {
-            PrefixOK &= (FilePathName[6] == L'R') || (FilePathName[6] == L'r');
-            PrefixOK &= (FilePathName[7] == L'V') || (FilePathName[7] == L'v');
-        }
-        if (PathNameLength > 8 * sizeof (WCHAR))
-        {
-            /* There is something after '\vboxsrv'. */
-            PrefixOK &= (FilePathName[8] == L'\\') || (FilePathName[8] == 0);
-        }
-    }
-    else
-    {
-        PrefixOK = FALSE;
+    if (!FilePathName || PathNameLength < (MRX_VBOX_SERVER_NAME_LENGTH + 1)) {
+        return FALSE;
     }
 
-    return PrefixOK;
+    /* The FilePathName here looks like: \uxensrv\... */
+    if (FilePathName[0] != L'\\') {
+        return FALSE;
+    }
+
+    if (_wcsnicmp(FilePathName + 1, MRX_VBOX_SERVER_NAME_U, MRX_VBOX_SERVER_NAME_LENGTH) != 0) {
+        return FALSE;
+    }
+
+    if (FilePathName[MRX_VBOX_SERVER_NAME_LENGTH + 1] != L'\\' && FilePathName[MRX_VBOX_SERVER_NAME_LENGTH + 1] != 0) {
+        return FALSE;
+    }
+
+    return TRUE;
 }
 
 static NTSTATUS VBoxMRXDeviceControl(PDEVICE_OBJECT pDevObj, PIRP pIrp)
@@ -285,7 +269,7 @@ static NTSTATUS VBoxMRXDeviceControl(PDEVICE_OBJECT pDevObj, PIRP pIrp)
         case IOCTL_REDIR_QUERY_PATH:    /* XP and earlier */
         {
             /* This IOCTL is intercepted for 2 reasons:
-             * 1) Claim the vboxsvr and vboxsrv prefixes. All name-based operations for them
+             * 1) Claim the UXENSVR prefix. All name-based operations for it
              *    will be routed to the VBox provider automatically without any prefix resolution
              *    since the prefix is already in the prefix cache.
              * 2) Reject other prefixes immediately to speed up the UNC path resolution a bit,
@@ -571,7 +555,7 @@ NTSTATUS DriverEntry(IN PDRIVER_OBJECT  DriverObject,
 
     pDeviceExtension->hgcmClient = hgcmClient;
 
-    /* The redirector driver must intercept the IOCTL to avoid VBOXSVR name resolution
+    /* The redirector driver must intercept the IOCTL to avoid UXENSVR name resolution
      * by other redirectors. These additional name resolutions cause long delays.
      */
     Log(("VBOXSF: DriverEntry: VBoxMRxDeviceObject = %p, rdbss %p, devext %p\n",

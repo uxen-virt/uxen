@@ -19,7 +19,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2013-2018, Bromium, Inc.
+ * Copyright 2013-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -55,9 +55,6 @@
 #include <VBox/VMMDev.h>
 #include <VBox/VBoxGuestLib.h>
 #include <VBox/Log.h>
-
-#define MRX_VBOX_SERVER_NAME_U     L"VBOXSVR"
-#define MRX_VBOX_SERVER_NAME_ALT_U L"VBOXSRV"
 
 #define WNNC_DRIVER(major, minor) (major * 0x00010000 + minor)
 
@@ -253,7 +250,7 @@ DWORD APIENTRY NPAddConnection3(HWND hwndOwner,
         return WN_BAD_NETNAME;
     }
 
-    /* Build connection name: \Device\uxenMiniRdr\;%DriveLetter%:\vboxsvr\share */
+    /* Build connection name: \Device\uxenMiniRdr\;%DriveLetter%:\<MRX_VBOX_SERVER_NAME_U>\share */
 
     lstrcpy(ConnectionName, DD_MRX_VBOX_FS_DEVICE_NAME_U);
     lstrcat(ConnectionName, L"\\;");
@@ -427,28 +424,9 @@ DWORD APIENTRY NPCancelConnection(LPWSTR lpName,
         }
         else
         {
-            BOOLEAN Verifier;
-
-            Verifier  = ( lpName[0] == L'\\' );
-            Verifier &= ( lpName[1] == L'V' ) || ( lpName[1] == L'v' );
-            Verifier &= ( lpName[2] == L'B' ) || ( lpName[2] == L'b' );
-            Verifier &= ( lpName[3] == L'O' ) || ( lpName[3] == L'o' );
-            Verifier &= ( lpName[4] == L'X' ) || ( lpName[4] == L'x' );
-            Verifier &= ( lpName[5] == L'S' ) || ( lpName[5] == L's' );
-            /* Both vboxsvr & vboxsrv are now accepted */
-            if (( lpName[6] == L'V' ) || ( lpName[6] == L'v'))
-            {
-                Verifier &= ( lpName[6] == L'V' ) || ( lpName[6] == L'v' );
-                Verifier &= ( lpName[7] == L'R' ) || ( lpName[7] == L'r' );
-            }
-            else
-            {
-                Verifier &= ( lpName[6] == L'R' ) || ( lpName[6] == L'r' );
-                Verifier &= ( lpName[7] == L'V' ) || ( lpName[7] == L'v' );
-            }
-            Verifier &= ( lpName[8] == L'\\') || ( lpName[8] == 0 );
-
-            if (Verifier)
+            if (lpName[0] == L'\\' &&
+                _wcsnicmp(lpName + 1, MRX_VBOX_SERVER_NAME_U, MRX_VBOX_SERVER_NAME_LENGTH) == 0 ||
+                (lpName[MRX_VBOX_SERVER_NAME_LENGTH + 1] == L'\\' || lpName[MRX_VBOX_SERVER_NAME_LENGTH + 1] == 0))
             {
                 /* Full remote path */
                 if (lstrlen(DD_MRX_VBOX_FS_DEVICE_NAME_U) + 2 + lstrlen(lpName) + 1 > sizeof(ConnectionName) / sizeof(WCHAR))
@@ -598,21 +576,14 @@ static const WCHAR *vboxSkipServerName(const WCHAR *lpRemoteName)
 
     if (cLeadingBackslashes == 0 || cLeadingBackslashes == 2)
     {
-        const WCHAR *lpAfterPrefix = vboxSkipServerPrefix(lpRemoteName, MRX_VBOX_SERVER_NAME_U);
-
-        if (!lpAfterPrefix)
-        {
-            lpAfterPrefix = vboxSkipServerPrefix(lpRemoteName, MRX_VBOX_SERVER_NAME_ALT_U);
-        }
-
-        return lpAfterPrefix;
+        return vboxSkipServerPrefix(lpRemoteName, MRX_VBOX_SERVER_NAME_U);
     }
 
     return NULL;
 }
 
 /* Enumerate shared folders as hierarchy:
- * VBOXSVR(container)
+ * UXENSVR(container)
  * +--------------------+
  * |                     \
  * Folder1(connectable)  FolderN(connectable)
@@ -707,7 +678,7 @@ DWORD APIENTRY NPOpenEnum(DWORD dwScope,
                 }
                 else
                 {
-                    /* Enumerate lpNetResource->lpRemoteName container, which can be only the VBOXSVR container. */
+                    /* Enumerate lpNetResource->lpRemoteName container, which can be only the UXENSVR container. */
                     const WCHAR *lpAfterName = vboxSkipServerName(lpNetResource->lpRemoteName);
                     if (   lpAfterName == NULL
                         || (*lpAfterName != L'\\' && *lpAfterName != 0))
@@ -908,14 +879,14 @@ DWORD APIENTRY NPEnumResource(HANDLE hEnum,
 
         if (pCtx->fRoot)
         {
-            /* VBOXSVR container. */
+            /* UXENSVR container. */
             if (pCtx->index > 0)
             {
                 dwStatus = WN_NO_MORE_ENTRIES;
             }
             else
             {
-                /* Return VBOXSVR server.
+                /* Return UXENSVR server.
                  * Determine the space needed for this entry.
                  */
                 cbEntry = sizeof(NETRESOURCE);
@@ -961,7 +932,7 @@ DWORD APIENTRY NPEnumResource(HANDLE hEnum,
         }
         else
         {
-            /* Shares of VBOXSVR. */
+            /* Shares of UXENSVR. */
             memset(ConnectionList, 0, sizeof (ConnectionList));
             cbOut = sizeof(ConnectionList);
 
@@ -995,7 +966,7 @@ DWORD APIENTRY NPEnumResource(HANDLE hEnum,
                         /* How many bytes is needed for the current NETRESOURCE data. */
                         cbRemoteName = (lstrlen(RemoteName) + 1) * sizeof(WCHAR);
                         cbEntry = sizeof(NETRESOURCE);
-                        /* Remote name: \\ + vboxsvr + \ + name. */
+                        /* Remote name: \\ + UXENSVR + \ + name. */
                         cbEntry += 2 * sizeof(WCHAR) + sizeof(MRX_VBOX_SERVER_NAME_U) + cbRemoteName;
                         cbEntry += sizeof(MRX_VBOX_PROVIDER_NAME_U);
 
@@ -1264,7 +1235,6 @@ DWORD APIENTRY NPGetResourceInformation(LPNETRESOURCE lpNetResource,
 
     if (lpAfterName[0] == 0 || lpAfterName[1] == 0)
     {
-        /* "\\VBOXSVR" or "\\VBOXSVR\" */
         cbEntry = sizeof(NETRESOURCE);
         cbEntry += 2 * sizeof(WCHAR) + sizeof(MRX_VBOX_SERVER_NAME_U); /* \\ + server name */
         cbEntry += sizeof(MRX_VBOX_PROVIDER_NAME_U); /* provider name */
@@ -1316,7 +1286,7 @@ DWORD APIENTRY NPGetResourceInformation(LPNETRESOURCE lpNetResource,
 
     if (*lp == 0)
     {
-        /* It is a share only: \\vboxsvr\share */
+        /* It is a share only: \\<MRX_VBOX_SERVER_NAME_U>\share */
         cbEntry = sizeof(NETRESOURCE);
         cbEntry += 2 * sizeof(WCHAR) + sizeof(MRX_VBOX_SERVER_NAME_U); /* \\ + server name with trailing nul */
         cbEntry += (DWORD)((lp - lpAfterName) * sizeof(WCHAR)); /* The share name with leading \\ */
@@ -1360,7 +1330,7 @@ DWORD APIENTRY NPGetResourceInformation(LPNETRESOURCE lpNetResource,
         return WN_SUCCESS;
     }
 
-    /* \\vboxsvr\share\path */
+    /* \\<MRX_VBOX_SERVER_NAME_U>\share\path */
     cbEntry = sizeof(NETRESOURCE);
     cbEntry += 2 * sizeof(WCHAR) + sizeof(MRX_VBOX_SERVER_NAME_U); /* \\ + server name with trailing nul */
     cbEntry += (DWORD)((lp - lpAfterName) * sizeof(WCHAR)); /* The share name with leading \\ */
