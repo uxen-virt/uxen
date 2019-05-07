@@ -68,6 +68,9 @@ static critical_section iothread_cs;
 static DWORD current_cpu_tls;
 static struct whpx_shared_info *shared_info_page;
 
+uint64_t whpx_private_mem_query_ts = 0;
+critical_section whpx_private_mem_cs;
+
 /* struct domain for the single guest handled by this uxendm,
  * as required by v4v code */
 struct domain guest;
@@ -633,6 +636,9 @@ whpx_vm_start(void)
     ioh_event_reset(&all_vcpus_stopped_ev);
     ioh_event_reset(&shutdown_done_ev);
 
+    /* reset private mem query timestamp so that next query is unthrottled */
+    whpx_private_mem_query_ts = 0;
+
     if (check_unreliable_tsc()) {
         debug_printf("syncing unreliable TSC value\n");
         sync_vcpus_tsc(start_tsc, MAX_TSC_PROPAGATE_ITERS, MAX_TSC_DESYNC);
@@ -1079,6 +1085,7 @@ int
 whpx_early_init(void)
 {
     critical_section_init(&iothread_cs);
+    critical_section_init(&whpx_private_mem_cs);
 
     debug_printf("whpx early init\n");
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018, Bromium, Inc.
+ * Copyright 2018-2019, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -157,9 +157,8 @@ diff_pr(pagerange_t *a, pagerange_t *b, pagerange_t *out)
 #define MEM_COALESCE_PLACEHOLDERS   0x00000001
 #define MEM_PRESERVE_PLACEHOLDER    0x00000002
 
-PVOID
-WINAPI
-(*MapViewOfFile3)(
+typedef PVOID WINAPI
+(*MapViewOfFile3_t)(
   HANDLE FileMapping,
   HANDLE Process,
   PVOID BaseAddress,
@@ -171,9 +170,8 @@ WINAPI
   ULONG ParameterCount
 );
 
-PVOID
-WINAPI
-(*VirtualAlloc2)(
+typedef PVOID WINAPI
+(*VirtualAlloc2_t)(
   HANDLE Process,
   PVOID BaseAddress,
   SIZE_T Size,
@@ -182,5 +180,9 @@ WINAPI
   PVOID ExtendedParameters,
   ULONG ParameterCount
 );
+
+extern MapViewOfFile3_t       MapViewOfFile3;
+extern VirtualAlloc2_t        VirtualAlloc2;
+
 
 #endif

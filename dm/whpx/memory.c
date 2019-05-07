@@ -19,6 +19,8 @@
 #define mb_saveable(mb) (!((mb)->flags & WHPX_RAM_EXTERNAL))
 #define SAVE_BUFFER_SIZE (1024*1024*64)
 
+#define PRIVATE_MEM_QUERY_INTERVAL_NS (10 * 1000000000ULL)
+
 //#define DEBUG_CAPPOP_TIMES
 
 /* vm-mappable block */
@@ -68,6 +70,11 @@ static TAILQ_HEAD(, file_mapping) file_ram_mappings;
 
 static HANDLE sti_handle;
 static struct shared_template_info *sti_ptr;
+
+extern uint64_t whpx_private_mem_query_ts;
+extern critical_section whpx_private_mem_cs;
+
+static uint64_t private_mem_pages;
 
 #define uxenvm_load_read(f, buf, size, ret, err_msg, _out) do {         \
         (ret) = filebuf_read((f), (buf), (size));                       \
@@ -1810,6 +1817,35 @@ whpx_memory_populate_from_buffer(unsigned long nr_pfns, uint64_t *pfns, void *bu
         pop_cpy_time * 1000 / freq.QuadPart, pop_pages);
 #endif
     return 0;
+}
+
+static void
+calculate_private_memory_cb(uint64_t pfn, uint64_t count, void *opaque)
+{
+    uint64_t *ppages = opaque;
+
+    *ppages += count;
+}
+
+uint64_t
+whpx_get_private_memory_usage(void)
+{
+    uint64_t now = get_clock_ns(rt_clock);
+
+    /* private memory calculation is expensive, throttle to max once per 10s */
+    critical_section_enter(&whpx_private_mem_cs);
+    if (!whpx_private_mem_query_ts ||
+        (now - whpx_private_mem_query_ts) >= PRIVATE_MEM_QUERY_INTERVAL_NS) {
+        uint64_t pages = 0;
+
+        enum_private_ranges(&pages, calculate_private_memory_cb);
+
+        whpx_private_mem_query_ts = now;
+        private_mem_pages = pages;
+    }
+    critical_section_leave(&whpx_private_mem_cs);
+
+    return private_mem_pages << PAGE_SHIFT;
 }
 
 int

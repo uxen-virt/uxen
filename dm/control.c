@@ -1074,10 +1074,7 @@ stats_do_collection(void *opaque)
     } else {
         balloon_cur = balloon_min = balloon_max = 0;
         uxen_platform_get_balloon_size(&balloon_cur, &balloon_min, &balloon_max);
-        /* note: it is possible to get accurate amount of private/shared pages via
-         * VirtualQuery, however it takes hundreds of million of cpu cycles when
-         * private ranges are fragmented. */
-        priv = vm_mem_mb * 1024 * 1024;
+        priv = whpx_get_private_memory_usage();
         vram = 0;
         highmem = 0;
         lowmem = priv;
