@@ -101,7 +101,7 @@ struct attovm_assist_query_tsc_khz {
 } ATTOVM_API_PACKED;
 
 struct attovm_assist_query_stor_bitmap {
-    uint64_t bitmap;
+  uint64_t bitmap;
 } ATTOVM_API_PACKED;
 
 struct attovm_assist_read_rtc {

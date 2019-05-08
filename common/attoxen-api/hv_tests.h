@@ -9,8 +9,18 @@
 
 #ifdef __GNUC__
 #define HV_TESTS_POSSIBLY_UNUSED __attribute__ ((unused))
+#ifdef __i386__
+#define HV_TESTS_STDCALL __attribute__ ((stdcall))
+#else
+#define HV_TESTS_STDCALL
+#endif
 #else
 #define HV_TESTS_POSSIBLY_UNUSED
+#ifdef __i386__
+#define HV_TESTS_STDCALL __stdcall
+#else
+#define HV_TESTS_STDCALL
+#endif
 #endif
 
 static void
@@ -97,7 +107,7 @@ static int hv_tests_cpu_is_amd (void)
 
 
 
-HV_TESTS_POSSIBLY_UNUSED static int hv_tests_hyperv_running (void)
+HV_TESTS_POSSIBLY_UNUSED static int hv_tests_hyperv_or_xen_faking_hyperv_running (void)
 {
   uint64_t rcx = 0, rbx = 0, rax = 0x40000000, rdx = 0;
 
@@ -148,6 +158,23 @@ HV_TESTS_POSSIBLY_UNUSED static int hv_tests_xen_running (void)
 
   return 0;
 }
+
+
+HV_TESTS_POSSIBLY_UNUSED static int hv_tests_hyperv_running (void)
+{
+  uint64_t rcx = 0, rbx = 0, rax = 0x40000000, rdx = 0;
+
+  if (hv_tests_xen_running()) return 0;
+
+  hv_tests_cpuid (&rax, &rbx, &rcx, &rdx);
+
+  rbx &= 0xffffffffUL;
+  rcx &= 0xffffffffUL;
+  rdx &= 0xffffffffUL;
+
+  return ((rbx == HV_TESTS_FCC ('M', 'i', 'c', 'r')) && (rcx == HV_TESTS_FCC ('o', 's', 'o', 'f')) && (rdx == HV_TESTS_FCC ('t', ' ', 'H', 'v')));
+}
+
 
 HV_TESTS_POSSIBLY_UNUSED static int hv_tests_ax_running (void)
 {
@@ -204,7 +231,7 @@ HV_TESTS_POSSIBLY_UNUSED static int hv_tests_cpu_has_nx (void)
 #endif
 
 #ifdef HV_TESTS_TEST_WHPX
-typedef HRESULT (hv_tests_whvgetcapability_t) (int , void *, UINT32 , UINT32 *);;
+typedef HV_TESTS_STDCALL HRESULT (hv_tests_whvgetcapability_t) (int , void *, UINT32 , UINT32 *);;
 
 static HRESULT hv_tests_whvgetcapability (int code, void *buffer, uint32_t buffer_size, uint32_t *written_size)
 {
@@ -228,7 +255,7 @@ static HRESULT hv_tests_whvgetcapability (int code, void *buffer, uint32_t buffe
 
 }
 
-typedef LONG (hv_tests_rtlgetversion_t) (PRTL_OSVERSIONINFOW);
+typedef HV_TESTS_STDCALL LONG (hv_tests_rtlgetversion_t) (PRTL_OSVERSIONINFOW);
 
 static LONG hv_tests_rtlgetversion (PRTL_OSVERSIONINFOW version_info)
 {
@@ -281,11 +308,13 @@ HV_TESTS_POSSIBLY_UNUSED static int hv_tests_windows_supports_whp (void)
 
   if (st) return 0;
 
+  if (v.dwMajorVersion < 10) return 0;
+
   if (v.dwMajorVersion > 10) return 1;
 
   if (v.dwMinorVersion > 0) return 1;
 
-  if (v.dwBuildNumber >= 17763) return 1;
+  if (v.dwBuildNumber >= 18362) return 1;
 
 #endif
 
