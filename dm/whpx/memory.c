@@ -14,6 +14,8 @@
 #include <dm/filebuf.h>
 #include <uuid/uuid.h>
 
+#include <psapi.h>
+
 #define VM_VA_RANGE_SIZE 0x100000000ULL
 #define ZERO_RANGE_MIN_PAGES 64
 #define mb_saveable(mb) (!((mb)->flags & WHPX_RAM_EXTERNAL))
@@ -75,6 +77,8 @@ extern uint64_t whpx_private_mem_query_ts;
 extern critical_section whpx_private_mem_cs;
 
 static uint64_t private_mem_pages;
+static PSAPI_WORKING_SET_INFORMATION *working_set_info;
+static uint64_t working_set_info_sz;
 
 #define uxenvm_load_read(f, buf, size, ret, err_msg, _out) do {         \
         (ret) = filebuf_read((f), (buf), (size));                       \
@@ -1819,30 +1823,59 @@ whpx_memory_populate_from_buffer(unsigned long nr_pfns, uint64_t *pfns, void *bu
     return 0;
 }
 
-static void
-calculate_private_memory_cb(uint64_t pfn, uint64_t count, void *opaque)
-{
-    uint64_t *ppages = opaque;
-
-    *ppages += count;
-}
-
 uint64_t
 whpx_get_private_memory_usage(void)
 {
     uint64_t now = get_clock_ns(rt_clock);
 
+    if (TAILQ_EMPTY(&mb_entries))
+        return 0;
+
     /* private memory calculation is expensive, throttle to max once per 10s */
     critical_section_enter(&whpx_private_mem_cs);
     if (!whpx_private_mem_query_ts ||
         (now - whpx_private_mem_query_ts) >= PRIVATE_MEM_QUERY_INTERVAL_NS) {
-        uint64_t pages = 0;
+        if (!working_set_info_sz) {
+            working_set_info_sz = sizeof(PSAPI_WORKING_SET_INFORMATION);
+            working_set_info = realloc(working_set_info, working_set_info_sz);
+            if (!working_set_info)
+                goto out;
+        }
 
-        enum_private_ranges(&pages, calculate_private_memory_cb);
+        for (;;) {
+            if (!QueryWorkingSet(GetCurrentProcess(),
+                    working_set_info,
+                    working_set_info_sz)) {
+                if (ERROR_BAD_LENGTH == GetLastError()) {
+                    working_set_info_sz = sizeof(PSAPI_WORKING_SET_INFORMATION) +
+                        sizeof(PSAPI_WORKING_SET_BLOCK) * (working_set_info->NumberOfEntries + 1024);
+                    working_set_info = realloc(working_set_info, working_set_info_sz);
+                    if (!working_set_info)
+                        goto out;
+                    continue;
+                } else {
+                    debug_printf("query working set error %x\n", (int)GetLastError());
+                    break;
+                }
+            } else {
+                PSAPI_WORKING_SET_BLOCK *b = &working_set_info->WorkingSetInfo[0];
+                uint64_t shared = 0;
+                uint64_t count = working_set_info->NumberOfEntries;
 
-        whpx_private_mem_query_ts = now;
-        private_mem_pages = pages;
+                while (count--) {
+                    if (b->Shared)
+                        shared++;
+                    b++;
+                }
+
+                whpx_private_mem_query_ts = now;
+                private_mem_pages = working_set_info->NumberOfEntries - shared;
+                break;
+            }
+        }
     }
+
+out:
     critical_section_leave(&whpx_private_mem_cs);
 
     return private_mem_pages << PAGE_SHIFT;

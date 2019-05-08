@@ -447,6 +447,7 @@ $(WINDOWS)LDLIBS += -lole32
 $(WINDOWS)LDLIBS += -ldxguid
 $(WINDOWS)LDLIBS += -lgdi32
 $(WINDOWS)LDLIBS += -lgdiplus
+$(WINDOWS)LDLIBS += -lpsapi
 $(WINDOWS)$(CONFIG_FILECRYPT)LDLIBS += $(LIBFILECRYPT_LIBS)
 
 $(OSX)LDLIBS += -framework AppKit
