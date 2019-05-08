@@ -48,7 +48,7 @@ static ssize_t features_store(struct kobject *kobj, struct kobj_attribute *attr,
 }
 
 static struct kobj_attribute features_attribute =
-  __ATTR(features, 0440, features_show,  features_store);
+  __ATTR(features, 0444, features_show, features_store);
 
 static ssize_t appdef_read(struct file * file, char __user * buf, size_t size, loff_t * ppos)
 {
