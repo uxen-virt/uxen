@@ -85,61 +85,6 @@ static void tsc_resume(void);
 static void tsc_resume_early(void);
 static void whpx_vm_shutdown_suspend(void);
 
-void whpx_run_on_cpu(
-    CPUState *env,
-    int wait,
-    void (*func)(CPUState *state, run_on_cpu_data data),
-    run_on_cpu_data data)
-{
-    struct qemu_work_item wi;
-    int ret;
-
-    if (qemu_cpu_is_self(env)) {
-        func(env, data);
-        return;
-    }
-
-    wi.func = func;
-    wi.data = data;
-    /* FIXME: this doesn't seem thread safe but perhaps it is since its upstream code, verify */
-    if (!env->queued_work_first)
-        env->queued_work_first = &wi;
-    else
-        env->queued_work_last->next = &wi;
-    env->queued_work_last = &wi;
-    wi.next = NULL;
-    if (wait) {
-        wi.ev_done = CreateEvent(NULL, TRUE, FALSE, NULL);
-        if (!wi.ev_done)
-            whpx_panic("failed to create event\n");
-    } else
-        wi.ev_done = NULL;
-    qemu_cpu_kick(env);
-
-    if (wait) {
-        ret = WaitForSingleObject(wi.ev_done, INFINITE);
-        if (ret != WAIT_OBJECT_0)
-            debug_printf("%s:%d: unexpected wait rval %d\n", __FUNCTION__, __LINE__, ret);
-        CloseHandle(wi.ev_done);
-    }
-}
-
-static void whpx_flush_queued_work(CPUState *env)
-{
-    struct qemu_work_item *wi;
-
-    if (!env->queued_work_first)
-        return;
-
-    while ((wi = env->queued_work_first)) {
-        env->queued_work_first = wi->next;
-        wi->func(env, wi->data);
-        if (wi->ev_done)
-            SetEvent(wi->ev_done);
-    }
-    env->queued_work_last = NULL;
-}
-
 int whpx_cpu_is_stopped(CPUState *env)
 {
     return (vm_get_run_mode() != RUNNING_VM) || env->stopped;
@@ -396,8 +341,6 @@ run_vcpu(CPUState *s)
 
     while (!s->stopped) {
         int ret;
-
-        whpx_flush_queued_work(s);
 
         if (cpu_can_run(s)) {
             ret = whpx_vcpu_exec(s);

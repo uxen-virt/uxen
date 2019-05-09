@@ -81,10 +81,6 @@ int whpx_cpu_get_pic_interrupt(CPUState *env);
 void whpx_do_cpu_sipi(CPUState *env);
 void whpx_do_cpu_init(CPUState *env);
 
-void whpx_run_on_cpu(CPUState *env, int wait,
-    void (*func)(CPUState *env, void *data),
-    void *data);
-
 int whpx_partition_init(void);
 int whpx_partition_destroy(void);
 
