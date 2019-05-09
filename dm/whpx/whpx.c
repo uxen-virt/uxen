@@ -47,10 +47,10 @@
 static volatile uint32_t running_vcpus = 0;
 static ioh_event all_vcpus_stopped_ev;
 static ioh_event shutdown_done_ev;
-static ioh_event v4v_irq_ev;
 static int shutdown_reason = 0;
 static Timer *whpx_perf_timer;
 static int vm_paused;
+static int vm_started;
 static uint64_t paused_tsc_value;
 static uint64_t hvmloader_start, hvmloader_end;
 
@@ -328,29 +328,24 @@ void qemu_cpu_kick(CPUState *cpu)
     whpx_vcpu_kick(cpu);
 }
 
-int
-whpx_v4v_signal(struct domain *domain)
+void
+whpx_v4v_signal(struct domain *d)
 {
-    if (domain == &guest)
-        ioh_event_set(&v4v_irq_ev);
-    else {
-        assert(domain == &dom0);
-        whpx_v4v_handle_signal();
-    }
-
-    return 0;
+    d->signalled = 1;
 }
 
-static void
-v4v_irq_cb(void *opaque)
+void
+whpx_v4v_process_signals(void)
 {
-    ioh_event_reset(&v4v_irq_ev);
-
-    if (vm_id) {
+    if (vm_started && cmpxchg(&guest.signalled, 1, 0) == 1) {
+        /* notify guest */
         qemu_set_irq(isa_get_irq(7), 1);
         qemu_set_irq(isa_get_irq(7), 0);
-    } else
-        debug_printf("v4v signal w/o initialized vm\n");
+    }
+    if (cmpxchg(&dom0.signalled, 1, 0) == 1) {
+        /* notify host */
+        whpx_v4v_handle_signal();
+    }
 }
 
 static void
@@ -465,7 +460,6 @@ whpx_vm_destroy(void)
     }
 
     ioh_event_close(&all_vcpus_stopped_ev);
-    ioh_event_close(&v4v_irq_ev);
     ioh_event_close(&shutdown_done_ev);
 
     /* destroy v4v */
@@ -661,6 +655,7 @@ whpx_vm_start(void)
     tsc_resume();
 
     vm_set_run_mode(RUNNING_VM);
+    vm_started = 1;
 
     return 0;
 }
@@ -1138,11 +1133,9 @@ whpx_vm_init(int restore_mode)
       return ret;
 
     ioh_event_init(&all_vcpus_stopped_ev);
-    ioh_event_init(&v4v_irq_ev);
     ioh_event_init(&shutdown_done_ev);
 
     ioh_add_wait_object(&all_vcpus_stopped_ev, all_vcpus_stopped_cb, NULL, NULL);
-    ioh_add_wait_object(&v4v_irq_ev, v4v_irq_cb, NULL, NULL);
 
     // debug out
     register_ioport_write(DEBUG_PORT_NUMBER, 1, 1, ioport_debug_char, NULL);

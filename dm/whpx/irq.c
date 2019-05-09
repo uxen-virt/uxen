@@ -32,6 +32,7 @@ struct irq_state {
 };
 
 static struct irq_state irq;
+static critical_section irq_lock;
 
 static
 void hvm_set_pci_link_route(uint8_t link, uint8_t isa_irq)
@@ -97,9 +98,14 @@ void gsi_set_irq(void *opaque, int n, int level)
         return;
 
     IRQLOG("%s GSI %d\n", level ? "raising" : "lowering", n);
+
+    critical_section_enter(&irq_lock);
+
     if (n < ISA_NUM_IRQS)
         qemu_set_irq(s->i8259_irq[n], level);
     qemu_set_irq(s->ioapic_irq[n], level);
+
+    critical_section_leave(&irq_lock);
 }
 
 void whpx_piix3_set_irq(void *opaque, int irq_num, int level)
@@ -166,6 +172,8 @@ qemu_irq *whpx_interrupt_controller_init(void)
     for (i = 0; i < IOAPIC_NUM_PINS; i++)
         irq.gsi.ioapic_irq[i] = ioapic_irq[i];
     irq.gsi_irq = qemu_allocate_irqs(gsi_set_irq, &irq.gsi, GSI_NUM_PINS);
+
+    critical_section_init(&irq_lock);
 
     return irq.gsi_irq;
 }

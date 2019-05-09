@@ -2040,6 +2040,10 @@ out:
 #ifdef V4V_DEBUG
     warn("<-do_v4v_op()=%d\n", (int)rc);
 #endif
+
+    /* check for any injected signals */
+    whpx_v4v_process_signals();
+
     return rc;
 }
 

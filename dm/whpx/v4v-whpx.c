@@ -388,7 +388,7 @@ virq_thread_run(void *opaque)
 void
 whpx_v4v_handle_signal(void)
 {
-    ioh_event_set(&virq_ev);
+    whpx_v4v_handle_signal_work(NULL);
 }
 
 int

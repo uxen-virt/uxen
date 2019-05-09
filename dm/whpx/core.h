@@ -1,5 +1,5 @@
 /*
- * Copyright 2018, Bromium, Inc.
+ * Copyright 2018-2019, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -23,6 +23,7 @@ typedef struct domain {
     struct v4v_domain *v4v;
     int is_host;
     int is_dying;
+    int signalled;
 } domain_t;
 
 typedef struct whpx_reg_list {
@@ -95,6 +96,7 @@ void whpx_update_mapping(uint64_t start_pa, uint64_t size,
 int whpx_translate_gva_to_gpa(CPUState *cpu, int write, uint64_t gva, uint64_t *gpa,
                               int *is_unmapped);
 
-int whpx_v4v_signal(struct domain *);
+void whpx_v4v_signal(struct domain *);
+void whpx_v4v_process_signals(void);
 
 #endif
