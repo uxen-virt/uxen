@@ -1093,6 +1093,13 @@ whpx_handle_cpuid(CPUState *cpu)
     r9  = values[8].Reg64;
     r10 = values[9].Reg64;
 
+    /* update paging related registers - v4v / memory_op will need to resolve
+     * virtual addrs (whpx_translate_gva_to_gpa) */
+    cpu->cr[0] = values[10].Reg64;
+    cpu->cr[3] = values[11].Reg64;
+    cpu->cr[4] = values[12].Reg64;
+    cpu->efer  = values[13].Reg64;
+
     switch (rax) {
     case 1:
         rax = cpuid->DefaultResultRax;
@@ -1134,13 +1141,6 @@ whpx_handle_cpuid(CPUState *cpu)
 
         if (whpx_perf_stats)
             t0 = _rdtsc();
-
-        /* update paging related registers - v4v will need to resolve
-         * virtual addrs (whpx_translate_gva_to_gpa) */
-        cpu->cr[0] = values[10].Reg64;
-        cpu->cr[3] = values[11].Reg64;
-        cpu->cr[4] = values[12].Reg64;
-        cpu->efer  = values[13].Reg64;
 
         /* handle v4v op */
         rax = do_v4v_op_cpuid(cpu, rdi, rsi, rdx, r10, r8, r9);
