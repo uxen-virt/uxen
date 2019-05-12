@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -55,8 +55,8 @@
 #define XENV4V_DRIVER
 #include <ntddk.h>
 #include <windef.h>
+#include <xen/v4v.h>
 #include "gh_v4vapi.h"
-#include <xen.h>
 
 // A pool tag
 #define XENV4V_TAG              'V4VX'
@@ -127,6 +127,18 @@ uxen_v4v_dev_object(uxen_v4v_t *v4v)
     return status;
 };
 
+#define PRIORITY_INCREMENT 4
+
+static __inline NTSTATUS
+uxen_v4v_irp_completion(PDEVICE_OBJECT devobj, PIRP irp, PVOID context)
+{
+    UNREFERENCED_PARAMETER(devobj);
+    UNREFERENCED_PARAMETER(irp);
+    UNREFERENCED_PARAMETER(context);
+    //KeSetEvent((PKEVENT)context, PRIORITY_INCREMENT, FALSE);
+    return STATUS_MORE_PROCESSING_REQUIRED;
+}
+
 static __inline PIRP
 uxen_v4v_build_ioctl(uxen_v4v_t *v4v, ULONG ioctl, PKEVENT ioctl_handle,
                      PVOID input_buffer, ULONG input_buffer_len,
@@ -140,9 +152,11 @@ uxen_v4v_build_ioctl(uxen_v4v_t *v4v, ULONG ioctl, PKEVENT ioctl_handle,
                                         v4v->dev_object, input_buffer, input_buffer_len,
                                         output_buffer, output_buffer_len, FALSE, ioctl_handle,
                                         &status);
-    if (!irp ) {
+    if (!irp) {
         uxen_v4v_err("IoBuildDeviceIoControlRequest failed error 0x%x", status);
     }
+    IoSetCompletionRoutine(irp, uxen_v4v_irp_completion, NULL, TRUE, TRUE, TRUE);
+
     return irp;
 }
 
@@ -168,7 +182,7 @@ uxen_v4v_create_event(uxen_v4v_t *v4v, PUNICODE_STRING drv_name)
     ULONG           attributes;
     HANDLE          ioctl_handle = 0;
     OBJECT_ATTRIBUTES   oa;
-    BOOLEAN state = TRUE;
+    BOOLEAN state = FALSE;
 
     UNREFERENCED_PARAMETER (v4v);
 
@@ -193,9 +207,11 @@ uxen_v4v_create_kevent(PHANDLE ioctl_handle)
     InitializeObjectAttributes(&oa, &event_name, attributes, NULL, NULL);
     kevent = IoCreateSynchronizationEvent(&event_name, ioctl_handle);
     if (!kevent) {
-        kevent = IoCreateSynchronizationEvent(&event_name, ioctl_handle);
         uxen_v4v_err("IoCreateSynchronizationEvent failed");
         kevent =  NULL;
+    }
+    else {
+        KeResetEvent(kevent);
     }
     return kevent;
 }
@@ -274,7 +290,7 @@ uxen_v4v_connect_wait(uxen_v4v_t *v4v)
         kevent = uxen_v4v_create_kevent(&ioctl_handle);
         irp = uxen_v4v_build_ioctl(v4v, V4V_IOCTL_WAIT, kevent,
                                    &connect, sizeof(v4v_wait_values_t),
-                                   NULL, 0);
+                                   &connect, sizeof(v4v_wait_values_t));
 
         pStack = uxen_v4v_irpstack(v4v, irp);
         status = IoCallDriver(v4v->dev_object, irp);
@@ -306,7 +322,7 @@ uxen_v4v_connect(uxen_v4v_t *v4v, domid_t to_domain, uint32_t port)
         kevent = uxen_v4v_create_kevent(&ioctl_handle);
         irp = uxen_v4v_build_ioctl(v4v, V4V_IOCTL_CONNECT, kevent,
                                    &connect, sizeof(v4v_connect_values_t),
-                                   NULL, 0);
+                                   &connect, sizeof(v4v_connect_values_t));
 
         pStack = uxen_v4v_irpstack(v4v, irp);
         status = IoCallDriver(v4v->dev_object, irp);
@@ -361,6 +377,7 @@ uxen_v4v_close(uxen_v4v_t *v4v)
 {
     NTSTATUS status;
 
+    ObDereferenceObject(v4v->file_object);
     ObDereferenceObject(v4v->channel.recv_event);
 
     do {
@@ -462,7 +479,7 @@ uxen_v4v_bind(uxen_v4v_t *v4v, domid_t to_domain, uint32_t port)
 {
     NTSTATUS            status = STATUS_SUCCESS;
     v4v_ring_id_t       v4vid;
-    v4v_bind_values_t     bind;
+    v4v_bind_values_t   bind = {0};
     PIRP                irp;
     HANDLE              ioctl_handle = 0;
     PKEVENT             kioctl;
@@ -475,11 +492,11 @@ uxen_v4v_bind(uxen_v4v_t *v4v, domid_t to_domain, uint32_t port)
         v4vid.addr.domain = V4V_DOMID_NONE;
         v4vid.addr.port = port;
         v4vid.partner = to_domain;
-        RtlCopyMemory(&bind.ringId, &v4vid, sizeof(v4v_ring_id_t));
+        RtlCopyMemory(&bind.ring_id, &v4vid, sizeof(v4v_ring_id_t));
 
         kioctl = uxen_v4v_create_kevent(&ioctl_handle);
         irp = uxen_v4v_build_ioctl(v4v, V4V_IOCTL_BIND, kioctl, &bind, sizeof(v4v_bind_values_t),
-                                   NULL, 0);
+            &bind, sizeof(v4v_bind_values_t));
         if (!irp)break;
 
         //Call Bind IOCTL
