@@ -127,39 +127,6 @@ uxen_v4v_dev_object(uxen_v4v_t *v4v)
     return status;
 };
 
-#define PRIORITY_INCREMENT 4
-
-static __inline NTSTATUS
-uxen_v4v_irp_completion(PDEVICE_OBJECT devobj, PIRP irp, PVOID context)
-{
-    UNREFERENCED_PARAMETER(devobj);
-    UNREFERENCED_PARAMETER(irp);
-    UNREFERENCED_PARAMETER(context);
-    //KeSetEvent((PKEVENT)context, PRIORITY_INCREMENT, FALSE);
-    return STATUS_MORE_PROCESSING_REQUIRED;
-}
-
-static __inline PIRP
-uxen_v4v_build_ioctl(uxen_v4v_t *v4v, ULONG ioctl, PKEVENT ioctl_handle,
-                     PVOID input_buffer, ULONG input_buffer_len,
-                     PVOID output_buffer, ULONG output_buffer_len
-                    )
-{
-    PIRP    irp;
-    IO_STATUS_BLOCK status;
-
-    irp = IoBuildDeviceIoControlRequest(ioctl,
-                                        v4v->dev_object, input_buffer, input_buffer_len,
-                                        output_buffer, output_buffer_len, FALSE, ioctl_handle,
-                                        &status);
-    if (!irp) {
-        uxen_v4v_err("IoBuildDeviceIoControlRequest failed error 0x%x", status);
-    }
-    IoSetCompletionRoutine(irp, uxen_v4v_irp_completion, NULL, TRUE, TRUE, TRUE);
-
-    return irp;
-}
-
 static __inline  PIO_STACK_LOCATION
 uxen_v4v_irpstack(uxen_v4v_t *v4v, PIRP irp)
 {
@@ -227,6 +194,7 @@ uxen_v4v_init_dev(uxen_v4v_t *v4v, size_t ring_size)
     UNICODE_STRING      drv_name;
     PKEVENT             kioctl;
     PIRP                irp;
+    IO_STATUS_BLOCK     io_status;
 
     do {
 
@@ -243,11 +211,17 @@ uxen_v4v_init_dev(uxen_v4v_t *v4v, size_t ring_size)
         kioctl = uxen_v4v_create_kevent(&ioctl_handle);
         if (!kioctl)
             break;
-        irp = uxen_v4v_build_ioctl(v4v, V4V_IOCTL_INITIALIZE, kioctl, &init, sizeof(init), NULL, 0);
+
+        irp = IoBuildDeviceIoControlRequest(V4V_IOCTL_INITIALIZE, v4v->dev_object, &init, sizeof(init), NULL, 0, FALSE, kioctl, &io_status);
         if (!irp) break;
 
         stack = uxen_v4v_irpstack(v4v, irp);
         status = IoCallDriver(v4v->dev_object, irp);
+
+        if (status == STATUS_PENDING) {
+            status = KeWaitForSingleObject(kioctl, Executive, KernelMode, FALSE, NULL);
+        }
+
         if (status != STATUS_SUCCESS && status != STATUS_PENDING) {
             uxen_v4v_err("IoCallDriver failed error 0x%x", status);
             status = STATUS_UNSUCCESSFUL;
@@ -283,17 +257,22 @@ uxen_v4v_connect_wait(uxen_v4v_t *v4v)
     HANDLE              ioctl_handle = 0;
     PKEVENT             kevent;
     PIO_STACK_LOCATION  pStack;
+    IO_STATUS_BLOCK     io_status;
 
     do {
         RtlZeroMemory(&connect, sizeof(v4v_wait_values_t));
 
         kevent = uxen_v4v_create_kevent(&ioctl_handle);
-        irp = uxen_v4v_build_ioctl(v4v, V4V_IOCTL_WAIT, kevent,
-                                   &connect, sizeof(v4v_wait_values_t),
-                                   &connect, sizeof(v4v_wait_values_t));
+        irp = IoBuildDeviceIoControlRequest(V4V_IOCTL_WAIT, v4v->dev_object,
+            &connect, sizeof(v4v_wait_values_t), &connect, sizeof(v4v_wait_values_t),
+            FALSE, kevent, &io_status);
 
         pStack = uxen_v4v_irpstack(v4v, irp);
         status = IoCallDriver(v4v->dev_object, irp);
+
+        if (status == STATUS_PENDING) {
+            status = KeWaitForSingleObject(kevent, Executive, KernelMode, FALSE, NULL);
+        }
 
         if (status != STATUS_SUCCESS) {
             uxen_v4v_err("IoCallDriver failed error 0x%x", status);
@@ -314,15 +293,16 @@ uxen_v4v_connect(uxen_v4v_t *v4v, domid_t to_domain, uint32_t port)
     HANDLE              ioctl_handle = 0;
     PKEVENT             kevent;
     PIO_STACK_LOCATION  pStack;
+    IO_STATUS_BLOCK     io_status;
 
     do {
         RtlZeroMemory(&connect, sizeof(v4v_connect_values_t));
         connect.ringAddr.domain = to_domain;
         connect.ringAddr.port = port;
         kevent = uxen_v4v_create_kevent(&ioctl_handle);
-        irp = uxen_v4v_build_ioctl(v4v, V4V_IOCTL_CONNECT, kevent,
-                                   &connect, sizeof(v4v_connect_values_t),
-                                   &connect, sizeof(v4v_connect_values_t));
+        irp = IoBuildDeviceIoControlRequest(V4V_IOCTL_CONNECT, v4v->dev_object,
+            &connect, sizeof(v4v_wait_values_t), &connect, sizeof(v4v_wait_values_t),
+            FALSE, kevent, &io_status);
 
         pStack = uxen_v4v_irpstack(v4v, irp);
         status = IoCallDriver(v4v->dev_object, irp);
@@ -348,11 +328,11 @@ uxen_v4v_disconnect(uxen_v4v_t   *v4v)
     PIRP                irp;
     HANDLE              ioctl_handle = 0;
     NTSTATUS            status = STATUS_UNSUCCESSFUL;
+    IO_STATUS_BLOCK     io_status;
 
     do {
         kevent = uxen_v4v_create_kevent(&ioctl_handle);
-        irp = uxen_v4v_build_ioctl(v4v, V4V_IOCTL_DISCONNECT,
-                                   kevent, NULL, 0, NULL, 0);
+        irp = IoBuildDeviceIoControlRequest(V4V_IOCTL_DISCONNECT, v4v->dev_object, NULL, 0, NULL, 0, FALSE, kevent, &io_status);
         pStack = uxen_v4v_irpstack(v4v, irp);
         status = IoCallDriver(v4v->dev_object, irp);
         if (status == STATUS_PENDING) {
@@ -484,6 +464,7 @@ uxen_v4v_bind(uxen_v4v_t *v4v, domid_t to_domain, uint32_t port)
     HANDLE              ioctl_handle = 0;
     PKEVENT             kioctl;
     PIO_STACK_LOCATION  pStack;
+    IO_STATUS_BLOCK     io_status;
 
     do {
 
@@ -495,13 +476,18 @@ uxen_v4v_bind(uxen_v4v_t *v4v, domid_t to_domain, uint32_t port)
         RtlCopyMemory(&bind.ring_id, &v4vid, sizeof(v4v_ring_id_t));
 
         kioctl = uxen_v4v_create_kevent(&ioctl_handle);
-        irp = uxen_v4v_build_ioctl(v4v, V4V_IOCTL_BIND, kioctl, &bind, sizeof(v4v_bind_values_t),
-            &bind, sizeof(v4v_bind_values_t));
+        irp = IoBuildDeviceIoControlRequest(V4V_IOCTL_BIND, v4v->dev_object,
+            &bind, sizeof(v4v_bind_values_t), &bind, sizeof(v4v_bind_values_t), FALSE, kioctl, &io_status);
         if (!irp)break;
 
         //Call Bind IOCTL
         pStack = uxen_v4v_irpstack(v4v, irp);
         status = IoCallDriver(v4v->dev_object, irp);
+
+        if (status == STATUS_PENDING) {
+            status = KeWaitForSingleObject(kioctl, Executive, KernelMode, FALSE, NULL);
+        }
+
         if (status != STATUS_SUCCESS && status != STATUS_PENDING ) {
             uxen_v4v_err("IoCallDriver failed error 0x%x", status);
             status = STATUS_UNSUCCESSFUL;
