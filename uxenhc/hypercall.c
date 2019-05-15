@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2017, Bromium, Inc.
+ * Copyright 2016-2019, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -107,7 +107,6 @@ static int __init uxen_hypercall_init(void)
 {
     int ret = -1;
     u32 eax=0, ebx=0, ecx=0, edx=0;
-    char signature[13];
     u64 addr;
     xen_extraversion_t extraversion;
 
