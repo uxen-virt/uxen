@@ -14,14 +14,12 @@
 #include <dm/filebuf.h>
 #include <uuid/uuid.h>
 
-#include <psapi.h>
-
 #define VM_VA_RANGE_SIZE 0x100000000ULL
 #define ZERO_RANGE_MIN_PAGES 64
 #define mb_saveable(mb) (!((mb)->flags & WHPX_RAM_EXTERNAL))
 #define SAVE_BUFFER_SIZE (1024*1024*64)
 
-#define PRIVATE_MEM_QUERY_INTERVAL_NS (10 * 1000000000ULL)
+#define PRIVATE_MEM_QUERY_INTERVAL_NS (4 * 1000000000ULL)
 
 //#define DEBUG_CAPPOP_TIMES
 
@@ -60,6 +58,15 @@ struct shared_template_info {
     LONG refcnt;
 };
 
+/* partial SYSTEM_PROCESS_INFORMATION */
+struct spi_hdr {
+    ULONG NextEntryOffset;
+    ULONG NumberOfThreads;
+    LARGE_INTEGER WorkingSetPrivateSize;
+    BYTE pad[0x40];
+    HANDLE ProcessId; /* offset 0x50 */
+};
+
 /* base for ram allocated by uxendm (won't be used if vm runs off
  * memory mapped file for example */
 static uint8_t *vm_ram_base = NULL;
@@ -77,8 +84,8 @@ extern uint64_t whpx_private_mem_query_ts;
 extern critical_section whpx_private_mem_cs;
 
 static uint64_t private_mem_pages;
-static PSAPI_WORKING_SET_INFORMATION *working_set_info;
-static uint64_t working_set_info_sz;
+static void *   sys_info;
+static uint64_t sys_info_sz;
 
 #define uxenvm_load_read(f, buf, size, ret, err_msg, _out) do {         \
         (ret) = filebuf_read((f), (buf), (size));                       \
@@ -1484,11 +1491,11 @@ new_file_mapping(
     if (!h)
         Werr(1, "%s: CreateFileMapping failed", __FUNCTION__);
 
-    void *va = VirtualAlloc2(NULL, NULL, len + fileoff - aligned_off,
+    void *va = VirtualAlloc2P(NULL, NULL, len + fileoff - aligned_off,
         MEM_RESERVE|MEM_RESERVE_PLACEHOLDER, PAGE_NOACCESS, NULL, 0);
     if (!va)
         Werr(1, "%s: VirtualAlloc2 failed\n", __FUNCTION__);
-    map = MapViewOfFile3(h, NULL, va,
+    map = MapViewOfFile3P(h, NULL, va,
         aligned_off,
         len + fileoff - aligned_off,
         MEM_REPLACE_PLACEHOLDER,
@@ -1831,50 +1838,46 @@ whpx_get_private_memory_usage(void)
     if (TAILQ_EMPTY(&mb_entries))
         return 0;
 
-    /* private memory calculation is expensive, throttle to max once per 10s */
     critical_section_enter(&whpx_private_mem_cs);
+
+    /* private memory calculation is expensive, throttle to max once per 4s */
     if (!whpx_private_mem_query_ts ||
         (now - whpx_private_mem_query_ts) >= PRIVATE_MEM_QUERY_INTERVAL_NS) {
-        if (!working_set_info_sz) {
-            working_set_info_sz = sizeof(PSAPI_WORKING_SET_INFORMATION);
-            working_set_info = realloc(working_set_info, working_set_info_sz);
-            if (!working_set_info)
-                goto out;
-        }
-
         for (;;) {
-            if (!QueryWorkingSet(GetCurrentProcess(),
-                    working_set_info,
-                    working_set_info_sz)) {
-                if (ERROR_BAD_LENGTH == GetLastError()) {
-                    working_set_info_sz = sizeof(PSAPI_WORKING_SET_INFORMATION) +
-                        sizeof(PSAPI_WORKING_SET_BLOCK) * (working_set_info->NumberOfEntries + 1024);
-                    working_set_info = realloc(working_set_info, working_set_info_sz);
-                    if (!working_set_info)
-                        goto out;
-                    continue;
-                } else {
-                    debug_printf("query working set error %x\n", (int)GetLastError());
-                    break;
-                }
-            } else {
-                PSAPI_WORKING_SET_BLOCK *b = &working_set_info->WorkingSetInfo[0];
-                uint64_t shared = 0;
-                uint64_t count = working_set_info->NumberOfEntries;
-
-                while (count--) {
-                    if (b->Shared)
-                        shared++;
-                    b++;
-                }
-
-                whpx_private_mem_query_ts = now;
-                private_mem_pages = working_set_info->NumberOfEntries - shared;
+            ULONG len = 0;
+            NTSTATUS status = NtQuerySystemInformationP(SystemProcessInformation,
+                sys_info, sys_info_sz, &len);
+            if (!status)
                 break;
+            if (status != STATUS_INFO_LENGTH_MISMATCH) {
+                debug_printf("NtQuerySystemInformation failed with %x\n",
+                    (int) status);
+                goto out;
+            }
+            if (len > sys_info_sz) {
+                sys_info_sz = len + 0x10000;
+                sys_info = realloc(sys_info, sys_info_sz);
+                assert(sys_info);
             }
         }
-    }
 
+        HANDLE pid = (HANDLE) (uintptr_t) GetCurrentProcessId();
+        uint8_t *buf = sys_info;
+
+        for (;;) {
+            struct spi_hdr *spi = (struct spi_hdr*) buf;
+
+            if (pid == spi->ProcessId) {
+                whpx_private_mem_query_ts = now;
+                private_mem_pages =
+                    spi->WorkingSetPrivateSize.QuadPart >> PAGE_SHIFT;
+                break;
+            } else if (!spi->NextEntryOffset)
+                break;
+            else
+                buf += spi->NextEntryOffset;
+        }
+    }
 out:
     critical_section_leave(&whpx_private_mem_cs);
 

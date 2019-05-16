@@ -45,8 +45,9 @@ uint64_t count_reftime;
 
 bool whpx_has_suspend_time = false;
 
-MapViewOfFile3_t       MapViewOfFile3;
-VirtualAlloc2_t        VirtualAlloc2;
+MapViewOfFile3_t MapViewOfFile3P;
+VirtualAlloc2_t VirtualAlloc2P;
+NtQuerySystemInformation_t NtQuerySystemInformationP;
 
 /* all meaningful registers which are saved in vcpu context */
 static const WHV_REGISTER_NAME all_register_names[] = {
@@ -770,11 +771,18 @@ whpx_initialize_api(void)
     if (!kernel)
         whpx_panic("failed to load KernelBase module");
 
-    MapViewOfFile3 = (void*)GetProcAddress(kernel, "MapViewOfFile3");
-    assert(MapViewOfFile3);
+    MapViewOfFile3P = (void*)GetProcAddress(kernel, "MapViewOfFile3");
+    assert(MapViewOfFile3P);
 
-    VirtualAlloc2 = (void*)GetProcAddress(kernel, "VirtualAlloc2");
-    assert(VirtualAlloc2);
+    VirtualAlloc2P = (void*)GetProcAddress(kernel, "VirtualAlloc2");
+    assert(VirtualAlloc2P);
+
+    HMODULE ntdll = LoadLibrary("ntdll.dll");
+    if (!ntdll)
+      whpx_panic("failed to load ntdll module");
+
+    NtQuerySystemInformationP = (void*)GetProcAddress(ntdll, "NtQuerySystemInformation");
+    assert(NtQuerySystemInformationP);
 
     debug_printf("whpx time suspend available: %d\n", whpx_has_suspend_time ? 1:0);
 }

@@ -181,8 +181,23 @@ typedef PVOID WINAPI
   ULONG ParameterCount
 );
 
-extern MapViewOfFile3_t       MapViewOfFile3;
-extern VirtualAlloc2_t        VirtualAlloc2;
+extern MapViewOfFile3_t MapViewOfFile3P;
+extern VirtualAlloc2_t VirtualAlloc2P;
 
+/* from ntdll.dll */
+
+/* for NtQuerySystemInformation */
+#include <winternl.h>
+#define STATUS_INFO_LENGTH_MISMATCH 0xc0000004
+
+typedef WINAPI NTSTATUS
+(*NtQuerySystemInformation_t)(
+  IN SYSTEM_INFORMATION_CLASS SystemInformationClass,
+  OUT PVOID                   SystemInformation,
+  IN ULONG                    SystemInformationLength,
+  OUT PULONG                  ReturnLength
+);
+
+extern NtQuerySystemInformation_t NtQuerySystemInformationP;
 
 #endif
