@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2018, Bromium, Inc.
+ * Copyright 2016-2019, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -19,6 +19,8 @@
 
 #include "winlayouts.h"
 
+#include "prototypes.h"
+
 #define RING_SIZE 262144
 #define V4V_PORT 44449
 
@@ -36,8 +38,13 @@
 #define ATTO_MSG_CURSOR_GET_SM_RET  11
 #define ATTO_MSG_KBD_LAYOUT         12
 #define ATTO_MSG_KBD_LAYOUT_RET     13
+#define ATTO_MSG_KBD_FOCUS          14
+#define ATTO_MSG_KBD_FOCUS_RET      15
 
 #define RESIZE_SCRIPT   "/usr/bin/x-resize.sh"
+
+#undef ARRAY_SIZE
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
 struct atto_agent_msg {
     uint8_t type;
@@ -48,6 +55,7 @@ struct atto_agent_msg {
             uint32_t yres;
         };
         unsigned win_kbd_layout;
+        unsigned offer_kbd_focus;
     };
 } __attribute__((packed));
 
@@ -58,7 +66,53 @@ struct long_msg_t {
     char null;
 } __attribute__((packed));
 
+#define MAX_NUMBER_FDS  256
+
 static struct long_msg_t long_msg;
+static struct pollfd poll_fds[MAX_NUMBER_FDS];
+static int npollfds = 0;
+
+int pollfd_add (int fd)
+{
+    int i;
+
+    for (i = 0; i < ARRAY_SIZE (poll_fds); i++) {
+        if (poll_fds[i].fd == -1) {
+            poll_fds[i].fd = fd;
+            poll_fds[i].events = POLLIN;
+            poll_fds[i].revents = 0;
+            npollfds++;
+            return 0;
+        }
+    }
+
+    return -1;
+}
+
+int pollfd_remove (int fd)
+{
+    int i, j;
+
+    for (i = 0; i < ARRAY_SIZE (poll_fds); i++) {
+        if (poll_fds[i].fd == -1)
+            break;
+        if (poll_fds[i].fd == fd) {
+            poll_fds[i].fd = -1;
+            poll_fds[i].events = 0;
+            poll_fds[i].revents = 0;
+            for (j = i + 1; j < ARRAY_SIZE (poll_fds); j++) {
+                if (poll_fds[j].fd == -1)
+                    break;
+                poll_fds[j-1] = poll_fds[j];
+                poll_fds[j].fd = -1;
+            }
+            npollfds--;
+            return 0;
+        }
+    }
+
+    return -1;
+}
 
 void
 talk(int fd, int request)
@@ -97,12 +151,41 @@ event_loop(int fd)
     static int32_t lastx = 0, lasty = 0;
     int32_t w, h;
     char command[1024];
+    int i, event_fds[MAX_NUMBER_FDS], nevent_fds;
 
     msg.type = ATTO_MSG_RESIZE;
     len = send(fd, &msg, sizeof(msg), 0);
     if (len < 0)
         err(1, "send error %d\n", errno);
+
+    memset (&poll_fds, 0, sizeof (poll_fds));
+    for (i = 0; i < ARRAY_SIZE(poll_fds); i++)
+        poll_fds[i].fd = -1;
+
+    pollfd_add (fd);
+    prot_kbd_init ();
+
     for (;;) {
+        if (poll(poll_fds, npollfds, -1) < 0) {
+            if (errno != EINTR)
+                err(1, "poll %d", (int) errno);
+            continue;
+        }
+
+        nevent_fds = 0;
+        for (i = 1; i < npollfds; i++) {
+            if ((poll_fds[i].revents & POLLIN)) {
+                event_fds[nevent_fds++] = poll_fds[i].fd;
+                poll_fds[i].revents = 0;
+            }
+        }
+
+        for (i = 0; i < nevent_fds; i++)
+            prot_kbd_event(event_fds[i]);
+
+        if (!(poll_fds[0].revents & POLLIN))
+            continue;
+        poll_fds[0].revents = 0;
 
         len = recv(fd, &msg, sizeof(msg), 0);
         if (len < 0)
@@ -161,6 +244,10 @@ event_loop(int fd)
                 }
             }
         }
+        break;
+        case ATTO_MSG_KBD_FOCUS_RET:
+            prot_kbd_focus_request (msg.offer_kbd_focus);
+            break;
         default:
             warnx("unknown message type %d", (int) msg.type);
             break;

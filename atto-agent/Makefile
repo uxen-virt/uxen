@@ -1,13 +1,13 @@
 #
-# Copyright 2016, Bromium, Inc.
+# Copyright 2016-2019, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
 CC ?= gcc
 
-SRC = atto-agent.o
+SRC = atto-agent.o protected-keyboard.c
 
-EXTRA_CFLAGS = -O2 -g -Wall -I../include -I../include/uxen
+EXTRA_CFLAGS = -O2 -g -Wall -I../include -I../include/uxen -I$(ATTOXEN_API_INC)
 
 DEBUG = -DDEBUG
 
