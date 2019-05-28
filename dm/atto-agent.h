@@ -15,5 +15,6 @@ void atto_agent_cleanup(void);
 int atto_agent_send_resize_event(unsigned xres, unsigned yres);
 int atto_agent_window_ready(void);
 void atto_agent_change_kbd_layout(unsigned win_kbd_layout);
+void atto_agent_request_keyboard_focus(unsigned offer);
 
 #endif

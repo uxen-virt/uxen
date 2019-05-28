@@ -35,6 +35,8 @@
 #define ATTO_MSG_CURSOR_GET_SM_RET  11
 #define ATTO_MSG_KBD_LAYOUT         12
 #define ATTO_MSG_KBD_LAYOUT_RET     13
+#define ATTO_MSG_KBD_FOCUS          14
+#define ATTO_MSG_KBD_FOCUS_RET      15
 
 struct atto_agent_msg {
     uint8_t type;
@@ -55,6 +57,7 @@ struct atto_agent_msg {
             uint8_t bitmap[];
         };
         unsigned win_kbd_layout;
+        unsigned offer_kbd_focus;
     };
 } __attribute__((packed));
 
@@ -433,6 +436,26 @@ atto_agent_change_kbd_layout(unsigned win_kbd_layout)
     if (changed && atto_agent_window_ready()) {
         send_latest_keyboard_layout(s);
     }
+}
+
+void
+atto_agent_request_keyboard_focus(unsigned offer)
+{
+    struct atto_agent_state *s = &state;
+    struct atto_agent_varlen_packet *resp = &s->resp;
+
+    critical_section_enter(&s->cs);
+    memset(resp, 0, sizeof(*resp));
+    resp->msg.type = ATTO_MSG_KBD_FOCUS_RET;
+    resp->msg.offer_kbd_focus = offer;
+
+    if (send_message(s, resp, sizeof(struct atto_agent_packet), 0) == 0) {
+#if 0
+        debug_printf("%s: sent kbd focus offer %u\n",
+                      __FUNCTION__,  offer);
+#endif
+    }
+    critical_section_leave(&s->cs);
 }
 
 void
