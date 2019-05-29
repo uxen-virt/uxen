@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2018, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -711,6 +711,12 @@ uxenhid_init(UXenPlatformDevice *dev)
     rx_start(s);
 
     return 0;
+}
+
+int
+uxenhid_is_touch_ready(void)
+{
+    return touch_state && touch_state->ready;
 }
 
 int

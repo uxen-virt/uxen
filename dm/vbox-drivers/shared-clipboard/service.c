@@ -17,7 +17,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -88,6 +88,7 @@
 #include <dm/config.h>
 #include <dm/os.h>
 #include <dm/vbox-drivers/heap.h>
+#include <dm/hw/uxen_hid.h>
 #include "VBoxClipboardSvc.h"
 #include "VBoxClipboardExt.h"
 #include "clipboardformats.h"
@@ -472,9 +473,13 @@ bool isClipboardReadDataAllowed(int fmt)
      * allow that w/o prompt since we don't prompt for EnumClipboardFormats either */
     if (is_metadata(fmt))
         return true;
+    /* uxendm is unable to police this when touch device is used as it doesn't see touch
+     * events, assume OK */
+    if (uxenhid_is_touch_ready())
+        return true;
+
     /* If we haven't seen a mouse click, deny. Apparently Office2007
-    likes to get clipboard on startup.
-    */
+       likes to get clipboard on startup. */
     if (!click_seen)
         return false;
     /* If we're just few seconds from first click, automatically deny. Office likes
@@ -483,18 +488,6 @@ bool isClipboardReadDataAllowed(int fmt)
         (RTTimeSystemMilliTS() - click_timestamp <= 2000))
         return false;
 
-    #if 0
-    It used to be:
-    /*
-    If the last click was right click, deny. When doing right click in
-    IE window, not in text input field, IE fetches clipboard, even
-    though human has not explicitely requested this.
-    */
-    Now the rclick menu is done in the host, at least in IE case, we cannot
-    use this trick.
-    if (!click_seen || last_click_is_right_click)
-        return false;
-    #endif
     if (GetClipboardAccessDecision(false)) { // false == paste access requested
         paste_allowed_timestamp = RTTimeSystemMilliTS();
         return true;
