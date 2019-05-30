@@ -17,6 +17,11 @@
 #include <uxen/platform_interface.h>
 #include <ax_attovm.h>
 #include <ax_attovm_stub.h>
+#include <attocall_dev.h>
+
+#define ATTOCALL_DEV_NAME "attocall"
+#define ATTOCALL_CLASS_NAME "ax"
+
 
 static uint64_t features;
 static uint64_t appdef_size;
@@ -28,6 +33,11 @@ static struct proc_dir_entry *attovm_proc;
 static struct proc_dir_entry *appdef_proc;
 static struct miscdevice attovm_secret_dev;
 extern int use_rdrand, use_rdseed;
+
+int attodev_major = -1;
+struct class *attodev_class = NULL;
+struct device *attodev_dev = NULL;
+
 
 
 /**
@@ -157,6 +167,74 @@ static void device_release(struct device *_dev)
     struct uxen_device *dev = dev_to_uxen(_dev);
 
     kfree(dev);
+}
+
+
+static int attodev_open(struct inode *in, struct file *filep)
+{
+    return 0;
+}
+
+static ssize_t attodev_read(struct file *filep, char *buf, size_t len, loff_t *off)
+{
+    return -ENOSYS;
+}
+
+static ssize_t attodev_write(struct file *filep, const char *buf, size_t len, loff_t *off)
+{
+    struct attocallev_t ev;
+
+    if (len != sizeof (ev))
+        return -EINVAL;
+    if (copy_from_user(&ev, buf, len))
+        return -EFAULT;
+
+    switch (ev.arg0) {
+    case ATTOCALL_KBD_OP:
+        return attovm_call_kbd_op (ev.arg1, ev.arg2);
+    case ATTOCALL_GET_TIMESTAMP_US:
+        return attovm_call_get_timestamp_us();
+    default:
+        return -EPERM;
+    }
+
+    return -EINVAL;
+}
+
+static int attodev_release(struct inode *in, struct file *filep)
+{
+    return 0;
+}
+
+static struct file_operations attodev_fops =
+{
+    .open = attodev_open,
+    .read = attodev_read,
+    .write = attodev_write,
+    .release = attodev_release,
+};
+
+int init_attocall_dev(void)
+{
+    attodev_major = register_chrdev (0, ATTOCALL_DEV_NAME, &attodev_fops);
+    if (attodev_major < 0)
+        return attodev_major;
+
+    attodev_class = class_create(THIS_MODULE, ATTOCALL_CLASS_NAME);
+    if (IS_ERR(attodev_class)) {
+        unregister_chrdev(attodev_major, ATTOCALL_DEV_NAME);
+        return PTR_ERR(attodev_class);
+    }
+
+    attodev_dev = device_create(attodev_class, NULL, MKDEV(attodev_major, 0), NULL,
+                                 ATTOCALL_DEV_NAME);
+    if (IS_ERR(attodev_dev)) {
+        class_destroy(attodev_class);
+        unregister_chrdev(attodev_major, ATTOCALL_DEV_NAME);
+        return PTR_ERR(attodev_dev);
+    }
+
+    return 0;
 }
 
 static int init_devices(struct bus_type *uxen_bus)
@@ -290,6 +368,9 @@ int attovm_platform_init(struct bus_type *bus)
     ret = init_procfs();
     if (ret)
         return ret;
+    ret = init_attocall_dev();
+    if (ret)
+        return ret;
 
     attovm_secret_dev.minor = MISC_DYNAMIC_MINOR;
     attovm_secret_dev.name = "attovm_secret";
@@ -325,6 +406,15 @@ void attovm_platform_exit(void)
 
     if (attovm_kobj)
         kobject_put(attovm_kobj);
+
+    if (attodev_dev)
+        device_destroy(attodev_class, MKDEV(attodev_major, 0));
+
+    if (attodev_class)
+        class_destroy(attodev_class);
+
+    if (attodev_major >= 0)
+        unregister_chrdev(attodev_major, ATTOCALL_DEV_NAME);
 }
 
 
