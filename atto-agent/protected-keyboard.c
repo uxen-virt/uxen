@@ -20,6 +20,7 @@
 #include <uxen-v4vlib.h>
 #include <ax_attovm.h>
 #include <ax_attovm_stub.h>
+#include <attocall_dev.h>
 
 #include "prototypes.h"
 
@@ -55,6 +56,7 @@ typedef struct {
 } keyboard_t;
 
 static int fd_v4v = -1;
+static int attocall_fd = -1;
 static keyboard_t keyboards[MAX_NUMBER_KEYBOARDS];
 
 static const uint8_t ps2hid[] = {
@@ -111,7 +113,7 @@ static int all_keys_up (const uint8_t *buf, size_t len)
 
 static inline uint64_t get_timestamp_us(void)
 {
-    return attovm_call_get_timestamp_us();
+    return user_attocall_get_ts_us(attocall_fd);
 }
 
 static keyboard_t *
@@ -462,12 +464,12 @@ int prot_kbd_event (int fd)
 void prot_kbd_focus_request (unsigned offer)
 {
     if (offer) {
-        attovm_call_kbd_op(ATTOVM_KBCALL_FOCUS_GRANT, 0);
+        user_attocall_kbd_op(attocall_fd, ATTOVM_KBCALL_FOCUS_GRANT, 0);
         return;
     }
 
     if (ax_keyboard_can_release_focus())
-        attovm_call_kbd_op(ATTOVM_KBCALL_FOCUS_RELEASE, 0);
+        user_attocall_kbd_op(attocall_fd, ATTOVM_KBCALL_FOCUS_RELEASE, 0);
 }
 
 int prot_kbd_init (void)
@@ -476,6 +478,10 @@ int prot_kbd_init (void)
 
     fprintf (stderr, "atto protected keyboard init\n");
     memset (&keyboards, 0, sizeof (keyboards));
+
+    attocall_fd = open ("/dev/attocall", O_WRONLY);
+    if (attocall_fd < 0)
+        err(1, "open /dev/attocall");
 
     fd_v4v = socket(AF_VSOCK, SOCK_DGRAM | SOCK_NONBLOCK, 0);
     if (fd_v4v < 0)
@@ -491,7 +497,7 @@ int prot_kbd_init (void)
         err(1, "bind %d", (int) errno);
 
     compiler_mb();
-    attovm_call_kbd_op(ATTOVM_KBCALL_READY, 0);
+    user_attocall_kbd_op(attocall_fd, ATTOVM_KBCALL_READY, 0);
     compiler_mb();
 
     pollfd_add (fd_v4v);
