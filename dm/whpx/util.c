@@ -43,6 +43,10 @@ uint64_t count_hpet;
 
 uint64_t count_reftime;
 
+uint64_t count_synthtimer;
+
+uint64_t count_synthic;
+
 bool whpx_has_suspend_time = false;
 
 MapViewOfFile3_t MapViewOfFile3P;
@@ -557,6 +561,8 @@ whpx_reset_perf_stats(void)
     count_hpet = 0;
     count_reftime = 0;
 
+    count_synthtimer = count_synthic = 0;
+
     memset(tmsum_vmexit, 0, sizeof(tmsum_vmexit));
     memset(count_vmexit, 0, sizeof(count_vmexit));
 }
@@ -629,6 +635,8 @@ whpx_dump_perf_stats(void)
     debug_printf("| lapic access count %8"PRId64" avg cycles %8"PRId64"\n", count_lapic_access, safediv(tmsum_lapic_access, count_lapic_access));
     debug_printf("| viridianspin count %8"PRId64"\n", count_longspin);
     debug_printf("| hpet         count %8"PRId64"\n", count_hpet);
+    debug_printf("| synthtimer   count %8"PRId64"\n", count_synthtimer);
+    debug_printf("| synthic      count %8"PRId64"\n", count_synthic);
     debug_printf("| reftime      count %8"PRId64"\n", count_reftime);
 
     int i;
@@ -642,7 +650,7 @@ whpx_dump_perf_stats(void)
                 strncpy(buf, desc, sizeof(buf));
             else
                 snprintf(buf, sizeof(buf), "0x%x", er);
-            debug_printf("| exit[%-6s] count %8"PRId64" avg cycles %8"PRId64"\n",
+            debug_printf("| ext[%-7s] count %8"PRId64" avg cycles %8"PRId64"\n",
                 buf, count_vmexit[i], safediv(tmsum_vmexit[i], count_vmexit[i]));
         }
     }

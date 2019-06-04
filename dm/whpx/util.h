@@ -27,6 +27,8 @@ extern uint64_t count_v4v;
 extern uint64_t count_longspin;
 extern uint64_t count_hpet;
 extern uint64_t count_reftime;
+extern uint64_t count_synthtimer;
+extern uint64_t count_synthic;
 
 extern bool whpx_has_suspend_time;
 
