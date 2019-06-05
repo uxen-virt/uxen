@@ -370,10 +370,11 @@ whpx_v4v_handle_signal_work(void *opaque)
         assert(notify_count < MAX_NOTIFY_COUNT);
         notify[notify_count++] = c->context;
     }
-    critical_section_leave(&connections_lock);
 
     for (i = 0; i < notify_count; i++)
         whpx_v4v_notify(notify[i]);
+
+    critical_section_leave(&connections_lock);
 }
 
 static DWORD WINAPI
