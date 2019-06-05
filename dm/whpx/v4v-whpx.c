@@ -318,9 +318,6 @@ whpx_v4v_close(v4v_context_t *v4v)
         CloseHandle(v4v->v4v_channel.recv_event);
         v4v->v4v_channel.recv_event = NULL;
 
-        critical_section_free(&conn->pending_send_lock);
-        critical_section_free(&conn->pending_recv_lock);
-
         /* unregister ring */
         ret = do_v4v_op_dom0(V4VOP_unregister_ring, (uint64_t) (uintptr_t) conn->ring, 0,
             0, 0, 0);
@@ -328,8 +325,13 @@ whpx_v4v_close(v4v_context_t *v4v)
             debug_printf("unregister ring FAILED, error %d\n", ret);
 
         /* free pending sends */
+        critical_section_enter(&conn->pending_send_lock);
         TAILQ_FOREACH(send, &conn->pending_send, entry)
             free_pending_send(send);
+        critical_section_leave(&conn->pending_send_lock);
+
+        critical_section_free(&conn->pending_send_lock);
+        critical_section_free(&conn->pending_recv_lock);
 
         VirtualFree(conn->ring, 0, MEM_RELEASE);
         free(conn);
