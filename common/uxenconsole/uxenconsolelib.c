@@ -453,6 +453,7 @@ void
 uxenconsole_disconnect(uxenconsole_context_t ctx)
 {
     struct ctx *c = ctx;
+    DWORD bytes;
 
 #if defined(_WIN32)
     if (c->pipe) {
@@ -461,11 +462,8 @@ uxenconsole_disconnect(uxenconsole_context_t ctx)
         EnterCriticalSection(&c->sndlock);
         b = c->sndlist_first;
         while (b) {
-            DWORD bytes;
-
             bn = b->next;
-            if (CancelIoEx(c->pipe, &b->ovlp) ||
-                GetLastError() != ERROR_NOT_FOUND)
+            if (CancelIoEx(c->pipe, &b->ovlp) || (GetLastError() != ERROR_NOT_FOUND))
                 GetOverlappedResult(c->pipe, &b->ovlp, &bytes, TRUE);
 
             free(b);
@@ -474,6 +472,7 @@ uxenconsole_disconnect(uxenconsole_context_t ctx)
         LeaveCriticalSection(&c->sndlock);
         if (c->pipe) {
             CancelIo(c->pipe);
+            GetOverlappedResult(c->pipe, &c->oread, &bytes, TRUE);
             CloseHandle(c->pipe);
         }
         if (c->oread.hEvent) {
