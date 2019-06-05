@@ -42,6 +42,7 @@
 #include "util.h"
 #include "ioapic.h"
 #include <whpx-shared.h>
+#include <mmsystem.h>
 
 #define VCPU_THROTTLING
 
@@ -50,6 +51,10 @@
 
 /* matches uxen definitions */
 #define WHPXMEM_share_zero_pages 50
+
+#define MILLISECS(x) ((x)*1000000)
+#define NOW() (get_clock_ns(rt_clock))
+#define THROTTLE_MAX_WAIT_MS 100
 
 struct whpx_memory_share_zero_pages {
     uint64_t gpfn_list_gpfn;
@@ -71,12 +76,19 @@ struct whpx_memory_share_zero_pages {
 /* hyper-v registers have been dirtied, CPUstate registers need sync */
 #define VCPU_DIRTY_HV            (1UL << 2)
 
+#define HIGH_LOAD_EXIT_THRESHOLD 1000
+#define HIGH_LOAD_DETECT_PERIOD_NS 1000000000
+
 struct whpx_state {
     uint64_t mem_quota;
     WHV_PARTITION_HANDLE partition;
     uint64_t dm_features;
     uint64_t seed_lo, seed_hi;
     int64_t throttle_period, throttle_rate;
+    critical_section load_eval_lock;
+    uint32_t load_counter;
+    int64_t load_counter_ts;
+    int high_load;
 };
 
 /* registers synchronized with qemu's CPUState */
@@ -1315,7 +1327,55 @@ whpx_vcpu_pre_run(CPUState *cpu)
 }
 
 static void
-whpx_vcpu_post_run(CPUState *cpu)
+whpx_on_load_change(int high_load)
+{
+    if (high_load)
+        timeBeginPeriod(1);
+    else
+        timeEndPeriod(1);
+}
+
+void
+whpx_evaluate_load(int force_off)
+{
+    struct whpx_state *whpx = &whpx_global;
+    int high_load;
+    int64_t now;
+
+    /* Tries to determine if exit rate is high enough to consider vm being
+     * under load, and adjust host timer threshold accordingly. If we're
+     * exiting at least 1000/s, we might just as well set host timer period
+     * to 1ms which significantly improves WHP's performance */
+    critical_section_enter(&whpx->load_eval_lock);
+
+    if (force_off) {
+        high_load = 0;
+        goto set;
+    }
+
+    high_load = whpx->high_load;
+    now = NOW();
+    if (whpx->load_counter >= HIGH_LOAD_EXIT_THRESHOLD) {
+        if (now - whpx->load_counter_ts < HIGH_LOAD_DETECT_PERIOD_NS)
+            high_load = 1;
+        whpx->load_counter = 0;
+        whpx->load_counter_ts = now;
+    } else if (now - whpx->load_counter_ts >= HIGH_LOAD_DETECT_PERIOD_NS) {
+        high_load = 0;
+        whpx->load_counter = 0;
+        whpx->load_counter_ts = now;
+    }
+
+set:
+    if (high_load != whpx->high_load) {
+        whpx->high_load = high_load;
+        whpx_on_load_change(high_load);
+    }
+    critical_section_leave(&whpx->load_eval_lock);
+}
+
+static void
+whpx_vcpu_post_run(CPUState *cpu, int throttled)
 {
     struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
     struct CPUX86State *env = (CPUArchState *)(cpu->env_ptr);
@@ -1324,11 +1384,11 @@ whpx_vcpu_post_run(CPUState *cpu)
     env->eip = vp_ctx->Rip;
     env->eflags = vp_ctx->Rflags;
     vcpu->interrupt_in_flight = vp_ctx->ExecutionState.InterruptionPending;
-}
 
-#define MILLISECS(x) ((x)*1000000)
-#define NOW() (get_clock_ns(rt_clock))
-#define THROTTLE_MAX_WAIT_MS 100
+    if (!throttled)
+        atomic_inc(&whpx_global.load_counter);
+    whpx_evaluate_load(0);
+}
 
 static int
 whpx_throttle_pre_run(struct whpx_vcpu *vcpu, int64_t period_ms, int64_t rate_ms)
@@ -1434,7 +1494,7 @@ whpx_vcpu_run(CPUState *cpu)
 #endif
             whpx_throttle_post_run(vcpu, throttle_period, throttle_rate);
         }
-        whpx_vcpu_post_run(cpu);
+        whpx_vcpu_post_run(cpu, throttled);
 
         if (throttled) {
             cpu->exception_index = EXCP_HLT;
@@ -1847,6 +1907,8 @@ int whpx_partition_init(void)
 
     memset(whpx, 0, sizeof(struct whpx_state));
     whpx->mem_quota = vm_mem_mb << PAGE_SHIFT;
+    whpx->load_counter_ts = NOW();
+    critical_section_init(&whpx->load_eval_lock);
 
     hr = WHvGetCapability(WHvCapabilityCodeHypervisorPresent, &whpx_cap,
         sizeof(whpx_cap), NULL);
@@ -1935,6 +1997,7 @@ whpx_partition_destroy(void)
     HRESULT hr;
     struct whpx_state *whpx = &whpx_global;
 
+    critical_section_free(&whpx->load_eval_lock);
     if (whpx->partition) {
         hr = WHvDeletePartition(whpx->partition);
         if (FAILED(hr))

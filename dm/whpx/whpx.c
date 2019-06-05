@@ -297,6 +297,7 @@ static void
 all_vcpus_stopped_cb(void *opaque)
 {
     debug_printf("all vcpus stopped, reason: %d\n", shutdown_reason);
+    whpx_evaluate_load(1);
     if (shutdown_reason == WHPX_SHUTDOWN_PAUSE) {
         tsc_pause();
         vm_set_run_mode(PAUSE_VM);

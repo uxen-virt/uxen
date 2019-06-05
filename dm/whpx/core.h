@@ -80,6 +80,7 @@ void whpx_cpu_reset_interrupt(CPUState *env, int mask);
 int whpx_cpu_get_pic_interrupt(CPUState *env);
 void whpx_do_cpu_sipi(CPUState *env);
 void whpx_do_cpu_init(CPUState *env);
+void whpx_evaluate_load(int force_off);
 
 int whpx_partition_init(void);
 int whpx_partition_destroy(void);
