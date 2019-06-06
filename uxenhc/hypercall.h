@@ -45,6 +45,7 @@
 #include <linux/string.h>
 #include <linux/types.h>
 
+#include <asm/nospec-branch.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
 
@@ -97,12 +98,8 @@ int axen_hypervisor(void);
 
 //#define __HYPERCALL_AX		"cpuid" // not yet !
 //#define __HYPERCALL_AX		"call *%%rax"
-#ifdef CONFIG_X86_32
-#define __HYPERCALL		"call *%%eax"
-#else
-#define __HYPERCALL		"call *%%rax"
-#endif
-#define __HYPERCALL_ENTRY 	"a" (__hcaddr)
+#define __HYPERCALL		CALL_NOSPEC
+#define __HYPERCALL_ENTRY 	[thunk_target] "a" (__hcaddr)
 
 #ifdef CONFIG_X86_32
 #define __HYPERCALL_RETREG	"eax"
