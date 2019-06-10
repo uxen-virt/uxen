@@ -71,6 +71,7 @@ struct long_msg_t {
 static struct long_msg_t long_msg;
 static struct pollfd poll_fds[MAX_NUMBER_FDS];
 static int npollfds = 0;
+static int polltimeout = -1;
 
 int pollfd_add (int fd)
 {
@@ -166,11 +167,12 @@ event_loop(int fd)
     prot_kbd_init ();
 
     for (;;) {
-        if (poll(poll_fds, npollfds, -1) < 0) {
+        if (poll(poll_fds, npollfds, polltimeout) < 0) {
             if (errno != EINTR)
                 err(1, "poll %d", (int) errno);
             continue;
         }
+        polltimeout = -1;
 
         nevent_fds = 0;
         for (i = 1; i < npollfds; i++) {
@@ -182,6 +184,8 @@ event_loop(int fd)
 
         for (i = 0; i < nevent_fds; i++)
             prot_kbd_event(event_fds[i]);
+
+        prot_kbd_wakeup(&polltimeout);
 
         if (!(poll_fds[0].revents & POLLIN))
             continue;

@@ -192,8 +192,6 @@ static ssize_t attodev_write(struct file *filep, const char *buf, size_t len, lo
     switch (ev.arg0) {
     case ATTOCALL_KBD_OP:
         return attovm_call_kbd_op (ev.arg1, ev.arg2);
-    case ATTOCALL_GET_TIMESTAMP_US:
-        return attovm_call_get_timestamp_us();
     default:
         return -EPERM;
     }

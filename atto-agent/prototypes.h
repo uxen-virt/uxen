@@ -12,4 +12,5 @@ int prot_kbd_event(int fd);
 int pollfd_add(int fd);
 int pollfd_remove(int fd);
 void prot_kbd_focus_request (unsigned offer);
+void prot_kbd_wakeup (int *polltimeout);
 #endif

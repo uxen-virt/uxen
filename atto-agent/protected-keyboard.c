@@ -27,6 +27,8 @@
 #define RING_SIZE (2*4096)
 #define MAX_NUMBER_KEYBOARDS  128
 
+#define MIN_TIME_KEY_RELEASE_FOCUS_MS 800
+
 #define CURRENT_VERSION 1
 
 #undef ARRAY_SIZE
@@ -58,6 +60,8 @@ typedef struct {
 static int fd_v4v = -1;
 static int attocall_fd = -1;
 static keyboard_t keyboards[MAX_NUMBER_KEYBOARDS];
+static int focus_release_request = 0;
+static uint64_t release_focus_ts_ms = 0;
 
 static const uint8_t ps2hid[] = {
     0, 41, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 45, 46, 42, 43,
@@ -111,9 +115,24 @@ static int all_keys_up (const uint8_t *buf, size_t len)
 }
 #endif
 
-static inline uint64_t get_timestamp_us(void)
+static uint64_t get_timestamp_ms(void)
 {
-    return user_attocall_get_ts_us(attocall_fd);
+    struct timeval tv = { 0 };
+    uint64_t ret;
+
+    gettimeofday(&tv, NULL);
+    ret = ((uint64_t) tv.tv_sec * 1000) + ((uint64_t) tv.tv_usec / 1000);
+    if (!ret)
+        ret++;
+
+    return ret;
+}
+
+static void switch_focus (int release)
+{
+    focus_release_request = 0;
+    user_attocall_kbd_op(attocall_fd, release ? ATTOVM_KBCALL_FOCUS_RELEASE :
+                         ATTOVM_KBCALL_FOCUS_GRANT, 0);
 }
 
 static keyboard_t *
@@ -139,8 +158,8 @@ static int ax_keyboard_can_release_focus (void)
         if (!kbd->valid)
             continue;
 
-        if (kbd->last_keys_evt && get_timestamp_us() - kbd->last_keys_evt <
-            500ULL * 1000) {
+        if (kbd->last_keys_evt && get_timestamp_ms() -
+             kbd->last_keys_evt < MIN_TIME_KEY_RELEASE_FOCUS_MS) {
 
             return 0;
         }
@@ -213,7 +232,7 @@ static void process_hid_report (keyboard_t *kbd, uint32_t ep_id, uint8_t *buf, s
   if (len <= sizeof (kbd->last_hid_report))
     memcpy (kbd->last_hid_report, buf, len);
 
-  kbd->last_keys_evt = get_timestamp_us();
+  kbd->last_keys_evt = get_timestamp_ms();
 }
 
 static void process_ps2_scancode (keyboard_t *kbd, uint8_t sc)
@@ -463,13 +482,47 @@ int prot_kbd_event (int fd)
 
 void prot_kbd_focus_request (unsigned offer)
 {
+    uint64_t ts_release_ms;
+
     if (offer) {
-        user_attocall_kbd_op(attocall_fd, ATTOVM_KBCALL_FOCUS_GRANT, 0);
+        switch_focus(0);
         return;
     }
 
-    if (ax_keyboard_can_release_focus())
-        user_attocall_kbd_op(attocall_fd, ATTOVM_KBCALL_FOCUS_RELEASE, 0);
+    if (ax_keyboard_can_release_focus()) {
+        switch_focus(1);
+        return;
+    }
+
+    ts_release_ms = get_timestamp_ms() + MIN_TIME_KEY_RELEASE_FOCUS_MS + 5;
+    focus_release_request = 1;
+    if (!release_focus_ts_ms || release_focus_ts_ms > ts_release_ms)
+        release_focus_ts_ms = ts_release_ms;
+}
+
+void prot_kbd_wakeup (int *polltimeout)
+{
+    uint64_t now;
+    int delta;
+
+    if (!focus_release_request)
+        release_focus_ts_ms = 0;
+
+    if (!release_focus_ts_ms)
+        return;
+
+    now = get_timestamp_ms();
+    if (now > release_focus_ts_ms) {
+        if (ax_keyboard_can_release_focus())
+            switch_focus(1);
+        return;
+    }
+
+    delta = release_focus_ts_ms - now;
+    delta += 5;
+
+    if (*polltimeout < 0 || *polltimeout > delta)
+        *polltimeout = delta;
 }
 
 int prot_kbd_init (void)
