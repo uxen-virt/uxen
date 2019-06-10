@@ -12,6 +12,7 @@
 #include <dm/vm-save.h>
 #include <dm/vm-savefile.h>
 #include <dm/filebuf.h>
+#include <dm/control.h>
 #include <uuid/uuid.h>
 
 #define VM_VA_RANGE_SIZE 0x100000000ULL
@@ -48,14 +49,17 @@ typedef struct file_mapping {
     TAILQ_ENTRY(file_mapping) entry;
 
     file_mapping_type_t type;
+    int is_template; /* ro mapping to template */
     pagerange_t r; /* phys range */
     void *va;
     void *aligned_map_va;
+    uint64_t aligned_size;
     uint64_t file_off;
+    size_t locked; /* amount of virtual locked bytes */
 } file_mapping_t;
 
 struct shared_template_info {
-    LONG refcnt;
+    LONG owner_pid;
 };
 
 /* partial SYSTEM_PROCESS_INFORMATION */
@@ -908,6 +912,7 @@ whpx_ram_reserve_virtual(void)
     return 0;
 }
 
+#if 0
 static int
 whpx_count_file_ram_mappings(void)
 {
@@ -920,7 +925,6 @@ whpx_count_file_ram_mappings(void)
     return num;
 }
 
-#if 0
 static int
 whpx_ram_release_file_mappings(void)
 {
@@ -1357,20 +1361,6 @@ read_mb_entries(struct filebuf *f, uint32_t *out_num_entries, uint64_t *out_max_
 
 }
 
-int cache_stamp = 0;
-
-static void
-prefetch_mapping(void *va, int npages)
-{
-    uint8_t *p = va;
-
-    while (npages) {
-        cache_stamp += *p;
-        p += PAGE_SIZE;
-        npages--;
-    }
-}
-
 static file_mapping_t *
 find_file_ram_mapping(pagerange_t r, file_mapping_type_t type)
 {
@@ -1385,8 +1375,12 @@ find_file_ram_mapping(pagerange_t r, file_mapping_type_t type)
 }
 
 static struct shared_template_info *
-sti_open(void)
+sti_open(int *existed)
 {
+    int existed_ = 0;
+
+    *existed = 0;
+
     if (!sti_ptr) {
         char uuid_str[37];
         char *mapname = NULL;
@@ -1403,6 +1397,12 @@ sti_open(void)
                 (int)GetLastError());
             return NULL;
         }
+        if (GetLastError() == ERROR_ALREADY_EXISTS)
+            existed_ = 1;
+        else
+            /* place mapping in the control pipe owning process so it is reused */
+            control_dup_handle(h);
+
         p = MapViewOfFile(h, FILE_MAP_READ | FILE_MAP_WRITE, 0, 0,
             sizeof(struct shared_template_info));
         if (!p) {
@@ -1415,6 +1415,8 @@ sti_open(void)
         sti_handle = h;
         sti_ptr = p;
     }
+
+    *existed = existed_;
 
     return sti_ptr;
 }
@@ -1433,34 +1435,68 @@ sti_close(void)
     }
 }
 
-static LONG
-sti_refcnt_mod(LONG x)
+static int
+dm_process_exists(DWORD pid)
+{
+    int exists = 0;
+    char current_name[512] = { 0 };
+    char name[512] = { 0 };
+    DWORD sz;
+
+    HANDLE h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!h)
+        return 0;
+
+    sz = sizeof(current_name);
+    QueryFullProcessImageNameA(GetCurrentProcess(), 0, current_name, &sz);
+    sz = sizeof(name);
+    QueryFullProcessImageNameA(h, 0, name, &sz);
+    exists = !strncmp(name, current_name, sizeof(name));
+    CloseHandle(h);
+
+    return exists;
+}
+
+static int
+sti_take_ownership(void)
 {
     struct shared_template_info *sti;
-    LONG refcnt = 0;
     char uuid_str[37];
+    int existed = 0;
+    int attempts = 100;
 
-    sti = sti_open();
-    if (sti) {
-        assert(x != 0);
+    uuid_unparse_lower(vm_template_uuid, uuid_str);
 
-        if (x > 0)
-            refcnt = InterlockedIncrement(&sti->refcnt);
-        else if (x < 0)
-            refcnt = InterlockedDecrement(&sti->refcnt);
-
-        uuid_unparse_lower(vm_template_uuid, uuid_str);
-        debug_printf("template %s %srefcnt = %d\n",
-            uuid_str, (x > 0) ? "++" : "--", (int) refcnt);
+    sti = sti_open(&existed);
+    if (!sti) {
+        debug_printf("failed to open shared template info");
+        return 0;
     }
 
-    return refcnt;
+    LONG pid = GetCurrentProcessId();
+    LONG prev_pid = 0;
+
+    while (attempts--) {
+        LONG cmpold = InterlockedCompareExchange(&sti->owner_pid, pid, prev_pid);
+        if (prev_pid == cmpold) {
+            debug_printf("template %s took ownership pid %d from pid %d\n",
+                uuid_str, (int) pid, (int) prev_pid);
+            return 1;
+        }
+        prev_pid = cmpold;
+        if (prev_pid != 0 && dm_process_exists(prev_pid))
+            break;
+    }
+    debug_printf("template %s already owned by pid %d\n",
+        uuid_str, (int) prev_pid);
+
+    return 0;
 }
 
 static void *
 new_file_mapping(
     struct filebuf *f, file_mapping_type_t type,
-    pagerange_t r, uint64_t fileoff, int prefetch)
+    pagerange_t r, uint64_t fileoff, int is_template)
 {
     static uint64_t align_mask = 0;
     uint64_t aligned_off;
@@ -1511,16 +1547,78 @@ new_file_mapping(
     fm->file_off = fileoff;
     fm->va = map + fileoff - aligned_off;
     fm->aligned_map_va = map;
+    fm->aligned_size = len + fileoff - aligned_off;
+    fm->is_template = is_template;
     TAILQ_INSERT_TAIL(&file_ram_mappings, fm, entry);
 
-    if (prefetch) {
-        prefetch_mapping(fm->va, pr_bytes(&r) >> PAGE_SHIFT);
-        debug_printf("prefetched %s mapping %016"PRIx64" - %016"PRIx64" file offset %016"PRIx64"\n",
-            type == FILE_MAP_COPY ? "cow" : "rdo",
-            r.start << PAGE_SHIFT, r.end << PAGE_SHIFT, fileoff);
+    return fm->va;
+}
+
+static int
+lock_mapping(file_mapping_t *fm)
+{
+    SIZE_T ws_min = 0, ws_max = 0;
+    SIZE_T lock_size = fm->aligned_size;
+    int ws_modified = 0;
+
+    if (fm->locked)
+        return 0;
+
+    if (!GetProcessWorkingSetSize(GetCurrentProcess(), &ws_min, &ws_max)) {
+        debug_printf("%s: GetProcessWorkingSetSize fails\n", __FUNCTION__);
+        goto err;
+    }
+    if (!SetProcessWorkingSetSize(GetCurrentProcess(), ws_min + lock_size,
+                                  ws_max + lock_size)) {
+        debug_printf("%s: SetProcessWorkingSetSize fails\n", __FUNCTION__);
+        goto err;
     }
 
-    return fm->va;
+    ws_modified = 1;
+
+    if (lock_size && !VirtualLock(fm->aligned_map_va, lock_size)) {
+        debug_printf("%s: VirtualLock fails err=%d\n", __FUNCTION__, (int)GetLastError());
+        goto err;
+    }
+    fm->locked = 1;
+
+    debug_printf("locked %s mapping %016"PRIx64" - %016"PRIx64" file offset %016"PRIx64"\n",
+        fm->type == FILE_MAP_COPY ? "cow" : "rdo",
+        fm->r.start << PAGE_SHIFT, fm->r.end << PAGE_SHIFT, fm->file_off);
+
+    return 0;
+
+err:
+    if (ws_modified) {
+        if (!SetProcessWorkingSetSize(GetCurrentProcess(), ws_min, ws_max))
+            whpx_panic("%s: SetProcessWorkingSetSize fails\n", __FUNCTION__);
+    }
+    debug_printf(
+        "FAILED locking %s mapping %016"PRIx64" - %016"PRIx64" file offset %016"PRIx64" mapva %p\n",
+        fm->type == FILE_MAP_COPY ? "cow" : "rdo",
+        fm->r.start << PAGE_SHIFT, fm->r.end << PAGE_SHIFT,
+        fm->file_off,
+        fm->aligned_map_va);
+
+    return -1;
+}
+
+/* one of the running dms locks template in memory */
+static int
+lock_template_mappings(void)
+{
+    file_mapping_t *e, *next;
+
+    if (!sti_take_ownership())
+        /* locked / owned by another uxendm */
+        return 0;
+
+    TAILQ_FOREACH_SAFE(e, &file_ram_mappings, entry, next) {
+        if (e->is_template)
+            lock_mapping(e);
+    }
+
+    return 1;
 }
 
 static int
@@ -1530,16 +1628,8 @@ whpx_clone_memory_pages(struct filebuf *f)
     off_t raw_pagedata_off;
     uint64_t max_addr = 0;
     saved_mb_entry_t *saved_entries = NULL;
-    int i;
+    int i, locked;
     uint64_t t0, dt;
-    int prefetch = 0;
-
-    /* increment template refcnt if we have no mappings to it yet */
-    if (!whpx_count_file_ram_mappings()) {
-        if (sti_refcnt_mod(1) == 1)
-            /* first user of template, requires prefetch */
-            prefetch = 1;
-    }
 
     saved_entries = read_mb_entries(f, &num_entries, &max_addr);
 
@@ -1553,7 +1643,7 @@ whpx_clone_memory_pages(struct filebuf *f)
     for (i = 0; i < num_entries; i++) {
         saved_mb_entry_t *se = &saved_entries[i];
         /* separate readonly mapping for templating/cuckoo */
-        new_file_mapping(f, FMT_RO, se->r, se->file_off, prefetch);
+        new_file_mapping(f, FMT_RO, se->r, se->file_off, 1);
         /* will either do a new cow mapping or reuse previous */
         void *ram = new_file_mapping(f, FMT_COW, se->r, se->file_off, 0);
         assert(ram);
@@ -1563,8 +1653,10 @@ whpx_clone_memory_pages(struct filebuf *f)
 
     free(saved_entries);
 
+    locked = lock_template_mappings();
+
     dt = get_clock_ns(rt_clock) - t0;
-    debug_printf("memory clone took %dms, prefetch=%d\n", (int)(dt / 1000000), prefetch);
+    debug_printf("memory clone took %dms, template lock=%d\n", (int)(dt / 1000000), locked);
 
     return 0;
 }
@@ -1899,12 +1991,6 @@ whpx_ram_init(void)
 void
 whpx_ram_uninit(void)
 {
-    int num_mappings = whpx_count_file_ram_mappings();
-
     whpx_ram_free();
-
-    /* if we had mappings it means we're cloned, release template refcnt */
-    if (num_mappings)
-        sti_refcnt_mod(-1);
     sti_close();
 }
