@@ -36,7 +36,7 @@
 #define CMDLINE_SIZE 512
 #define CMDLINE "BOOT_IMAGE=/vmlinuz initrd=/initrd LABEL=boot " \
   "root="ROOTDEV" verity="VERITYDEV" " \
-  "no_console_suspend=1 clocksource=tsc noxsave debug"
+  "no_console_suspend=1 clocksource=tsc tsc=reliable noxsave debug"
 
 #define PAGE_ALIGNED(x) (!((x) & (PAGE_SIZE-1)))
 #define PAGE_ALIGN(x) (((x) + (PAGE_SIZE-1)) & ~(PAGE_SIZE-1))
