@@ -22,6 +22,10 @@
 #include <string.h>
 
 
+#define UC_DISCONNECTED 0
+#define UC_CONNECTED    1
+#define UC_API_CALL     2
+
 #define BUF_SZ 1024
 
 struct ctx {
@@ -45,11 +49,34 @@ struct ctx {
         size_t len;
     } *sndlist_first, **sndlist_last;
     CRITICAL_SECTION sndlock;
+    LONG ref_cnt;
 #elif defined(__APPLE__)
     int socket;
     int recvd_fd;
 #endif
 };
+
+static int inc_ref_cnt(struct ctx *c)
+{
+    LONG ref_cnt = InterlockedCompareExchange(&c->ref_cnt, UC_API_CALL, UC_CONNECTED);
+    if (ref_cnt == UC_DISCONNECTED)
+        return -1;
+    else if (ref_cnt > UC_CONNECTED)
+        InterlockedIncrement(&c->ref_cnt);
+    return 0;
+}
+
+static void dec_ref_cnt(struct ctx *c)
+{
+    InterlockedDecrement(&c->ref_cnt);
+}
+
+static void wait_ref_zero(struct ctx *c)
+{
+    while (InterlockedCompareExchange(&c->ref_cnt, UC_DISCONNECTED, UC_CONNECTED) > UC_CONNECTED)
+        Sleep(10);
+}
+
 
 uxenconsole_context_t
 uxenconsole_init(ConsoleOps *console_ops, void *console_priv, char *filename)
@@ -282,6 +309,9 @@ snd_complete(struct ctx *c)
     DWORD bytes;
     BOOL rc;
 
+    if (inc_ref_cnt(c))
+        return;
+
     EnterCriticalSection(&c->sndlock);
     b = c->sndlist_first;
     while (b) {
@@ -295,6 +325,7 @@ snd_complete(struct ctx *c)
 
         if (!rc || bytes != b->len) {
             LeaveCriticalSection(&c->sndlock);
+            dec_ref_cnt(c);
             if (c->ops->disconnected)
                 c->ops->disconnected(c->priv);
             uxenconsole_disconnect(c);
@@ -310,6 +341,7 @@ snd_complete(struct ctx *c)
         b = bn;
     }
     LeaveCriticalSection(&c->sndlock);
+    dec_ref_cnt(c);
 }
 #else
 #define snd_complete(c)
@@ -359,6 +391,8 @@ uxenconsole_connect(uxenconsole_context_t ctx)
         return NULL;
     }
 
+    InterlockedExchange(&c->ref_cnt, UC_CONNECTED);
+
     return c->oread.hEvent;
 #elif defined(__APPLE__)
     int rc;
@@ -400,11 +434,15 @@ uxenconsole_channel_event(uxenconsole_context_t ctx, file_handle_t event,
     if (is_write)
         return; /* Not implemented */
 
+    if (inc_ref_cnt(c))
+        return;
+
     rc = GetOverlappedResult(c->pipe, &c->oread, &count, FALSE);
     while (rc == TRUE) {
         channel_read(c, c->read_buf, count);
         rc = ReadFile(c->pipe, c->read_buf, BUF_SZ, &count, &c->oread);
     }
+    dec_ref_cnt(c);
     if (GetLastError() != ERROR_IO_PENDING) {
         if (c->ops->disconnected)
             c->ops->disconnected(c->priv);
@@ -455,14 +493,15 @@ uxenconsole_disconnect(uxenconsole_context_t ctx)
     struct ctx *c = ctx;
 
 #if defined(_WIN32)
+    wait_ref_zero(c);
+
     if (c->pipe) {
         struct sndbuf *b, *bn;
+        DWORD bytes;
 
         EnterCriticalSection(&c->sndlock);
         b = c->sndlist_first;
         while (b) {
-            DWORD bytes;
-
             bn = b->next;
             if (CancelIoEx(c->pipe, &b->ovlp) ||
                 GetLastError() != ERROR_NOT_FOUND)
@@ -473,7 +512,9 @@ uxenconsole_disconnect(uxenconsole_context_t ctx)
         }
         LeaveCriticalSection(&c->sndlock);
         if (c->pipe) {
-            CancelIo(c->pipe);
+            if (CancelIoEx(c->pipe, &c->oread) ||
+                GetLastError() != ERROR_NOT_FOUND)
+                GetOverlappedResult(c->pipe, &c->oread, &bytes, TRUE);
             CloseHandle(c->pipe);
         }
         if (c->oread.hEvent) {
@@ -496,6 +537,8 @@ uxenconsole_cleanup(uxenconsole_context_t ctx)
     struct ctx *c = ctx;
 
 #if defined(_WIN32)
+    wait_ref_zero(c);
+
     if (c->pipe)
         uxenconsole_disconnect(ctx);
     DeleteCriticalSection(&c->sndlock);
@@ -521,6 +564,9 @@ uxenconsole_mouse_event(uxenconsole_context_t ctx,
 
     snd_complete(c);
 
+    if (inc_ref_cnt(c))
+        return -1;
+
     msg.header.type = UXENCONSOLE_MSG_TYPE_MOUSE_EVENT;
     msg.header.len = sizeof (msg);
     msg.x = x;
@@ -530,6 +576,7 @@ uxenconsole_mouse_event(uxenconsole_context_t ctx,
     msg.flags = flags;
 
     rc = channel_write(c, &msg, sizeof (msg));
+    dec_ref_cnt(c);
     if (rc != sizeof (msg))
         return -1;
 
@@ -564,6 +611,9 @@ uxenconsole_keyboard_event(uxenconsole_context_t ctx,
     if (char_bare_len > UXENCONSOLE_MSG_KEYBOARD_MAX_LEN)
         return -2;
 
+    if (inc_ref_cnt(c))
+        return -1;
+
     msg.header.type = UXENCONSOLE_MSG_TYPE_KEYBOARD_EVENT;
     msg.header.len = sizeof msg;
     msg.keycode = keycode;
@@ -576,6 +626,7 @@ uxenconsole_keyboard_event(uxenconsole_context_t ctx,
     memcpy(msg.chars_bare, chars_bare, char_bare_len);
 
     rc = channel_write(c, &msg, sizeof msg);
+    dec_ref_cnt(c);
     if (rc != sizeof msg)
         return -1;
 
@@ -594,6 +645,9 @@ uxenconsole_request_resize(uxenconsole_context_t ctx,
 
     snd_complete(c);
 
+    if (inc_ref_cnt(c))
+        return -1;
+
     msg.header.type = UXENCONSOLE_MSG_TYPE_REQUEST_RESIZE;
     msg.header.len = sizeof (msg);
     msg.width = width;
@@ -601,6 +655,7 @@ uxenconsole_request_resize(uxenconsole_context_t ctx,
     msg.flags = flags;
 
     rc = channel_write(c, &msg, sizeof (msg));
+    dec_ref_cnt(c);
     if (rc != sizeof (msg))
         return -1;
 
@@ -617,11 +672,15 @@ uxenconsole_clipboard_permit(uxenconsole_context_t ctx,
 
     snd_complete(c);
 
+    if (inc_ref_cnt(c))
+        return -1;
+
     msg.header.type = UXENCONSOLE_MSG_TYPE_CLIPBOARD_PERMIT;
     msg.header.len = sizeof (msg);
     msg.permit_type = permit_type;
 
     rc = channel_write(c, &msg, sizeof (msg));
+    dec_ref_cnt(c);
     if (rc != sizeof (msg))
         return -1;
 
@@ -638,11 +697,15 @@ uxenconsole_set_shared_surface(uxenconsole_context_t ctx,
 
     snd_complete(c);
 
+    if (inc_ref_cnt(c))
+        return -1;
+
     msg.header.type = UXENCONSOLE_MSG_TYPE_SET_SHARED_SURFACE;
     msg.header.len = sizeof (msg);
     msg.surface = (uintptr_t)surface;
 
     rc = channel_write(c, &msg, sizeof (msg));
+    dec_ref_cnt(c);
     if (rc != sizeof (msg))
         return -1;
 
@@ -659,11 +722,15 @@ uxenconsole_touch_device_hotplug(uxenconsole_context_t ctx,
 
     snd_complete(c);
 
+    if (inc_ref_cnt(c))
+        return -1;
+
     msg.header.type = UXENCONSOLE_MSG_TYPE_TOUCH_DEVICE_HOTPLUG;
     msg.header.len = sizeof (msg);
     msg.plug = plug;
 
     rc = channel_write(c, &msg, sizeof (msg));
+    dec_ref_cnt(c);
     if (rc != sizeof (msg))
         return -1;
 
@@ -680,11 +747,15 @@ uxenconsole_focus_changed(uxenconsole_context_t ctx,
 
     snd_complete(c);
 
+    if (inc_ref_cnt(c))
+        return -1;
+
     msg.header.type = UXENCONSOLE_MSG_TYPE_FOCUS_CHANGED;
     msg.header.len = sizeof (msg);
     msg.focus = focus;
 
     rc = channel_write(c, &msg, sizeof (msg));
+    dec_ref_cnt(c);
     if (rc != sizeof (msg))
         return -1;
 
@@ -701,11 +772,15 @@ uxenconsole_keyboard_layout_changed(uxenconsole_context_t ctx,
 
     snd_complete(c);
 
+    if (inc_ref_cnt(c))
+        return -1;
+
     msg.header.type = UXENCONSOLE_MSG_TYPE_KEYBOARD_LAYOUT_CHANGED;
     msg.header.len = sizeof (msg);
     msg.layout = layout;
 
     rc = channel_write(c, &msg, sizeof (msg));
+    dec_ref_cnt(c);
     if (rc != sizeof (msg))
         return -1;
 
