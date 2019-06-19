@@ -299,7 +299,8 @@ void do_dpy_setup_refresh(void)
     uxen_notification_event_init(&vram_event);
     uxen_notification_add_wait_object(&vram_event, do_dpy_trigger_refresh, NULL,
                                       NULL);
-    uxen_ioemu_event(UXEN_IOEMU_EVENT_VRAM, &vram_event);
+    if (!whpx_enable)
+        uxen_ioemu_event(UXEN_IOEMU_EVENT_VRAM, &vram_event);
 
     /* initial refresh */
     do_dpy_force_refresh(NULL);

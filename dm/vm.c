@@ -990,9 +990,11 @@ vm_start_run(void)
     uxen_notification_add_wait_object(&exceptionEvent, handle_exception_event,
                                       NULL, NULL);
 
-    ret = uxen_ioemu_event(UXEN_IOEMU_EVENT_EXCEPTION, &exceptionEvent);
-    if (ret)
-        errx(1, "uxen_ioemu_events");
+    if (!whpx_enable) {
+        ret = uxen_ioemu_event(UXEN_IOEMU_EVENT_EXCEPTION, &exceptionEvent);
+        if (ret)
+            errx(1, "uxen_ioemu_events");
+    }
 
     running_vcpus = vm_vcpus;
 

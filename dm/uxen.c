@@ -182,6 +182,9 @@ uxen_log_version(void)
     xen_compile_info_t compile_info;
     int ret;
 
+    if (whpx_enable)
+        return;
+
     ret = xc_version(xc_handle, XENVER_changeset, changeset_info);
     if (ret)
         strncpy(changeset_info, "<unknown>", sizeof(changeset_info));
