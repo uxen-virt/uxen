@@ -455,7 +455,7 @@ uxen_v4v_read(uxen_v4v_t *v4v, PVOID buf, UINT len, PIO_STATUS_BLOCK iosb)
 }
 
 __inline  NTSTATUS
-uxen_v4v_bind(uxen_v4v_t *v4v, domid_t to_domain, uint32_t port)
+uxen_v4v_bind(uxen_v4v_t *v4v, const uint8_t* partner_uuid, domid_t to_domain, uint32_t port)
 {
     NTSTATUS            status = STATUS_SUCCESS;
     v4v_ring_id_t       v4vid;
@@ -473,6 +473,10 @@ uxen_v4v_bind(uxen_v4v_t *v4v, domid_t to_domain, uint32_t port)
         v4vid.addr.domain = V4V_DOMID_NONE;
         v4vid.addr.port = port;
         v4vid.partner = to_domain;
+        if (partner_uuid) {
+            v4vid.partner = V4V_DOMID_UUID;
+            RtlCopyMemory(&bind.partner, partner_uuid, sizeof(bind.partner));
+        }
         RtlCopyMemory(&bind.ring_id, &v4vid, sizeof(v4v_ring_id_t));
 
         kioctl = uxen_v4v_create_kevent(&ioctl_handle);
@@ -500,7 +504,7 @@ uxen_v4v_bind(uxen_v4v_t *v4v, domid_t to_domain, uint32_t port)
 }
 
 __inline  NTSTATUS
-uxen_v4v_open_dgram_port (uxen_v4v_t *v4v, size_t ring_size, domid_t domain, uint32_t port)
+uxen_v4v_open_dgram_port (uxen_v4v_t *v4v, size_t ring_size, const uint8_t* partner_uuid, domid_t domain, uint32_t port)
 {
     NTSTATUS            status;
     OBJECT_ATTRIBUTES   oa;
@@ -539,7 +543,7 @@ uxen_v4v_open_dgram_port (uxen_v4v_t *v4v, size_t ring_size, domid_t domain, uin
         if (status != STATUS_SUCCESS)
             break;
 
-        status = uxen_v4v_bind(v4v, domain, port);
+        status = uxen_v4v_bind(v4v, partner_uuid, domain, port);
         if (status != STATUS_SUCCESS)
             break;
 
@@ -595,7 +599,7 @@ uxen_v4v_open_device(uxen_v4v_t *v4v, size_t ring_size, domid_t domain, uint32_t
         if (status != STATUS_SUCCESS)
             break;
 
-        status = uxen_v4v_bind(v4v, domain, port);
+        status = uxen_v4v_bind(v4v, NULL, domain, port);
         if (status != STATUS_SUCCESS)
             break;
 
