@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * Author: Piotr Foltyn <piotr.foltyn@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -12,6 +12,7 @@ extern "C"
     #include <uxendisp-common.h>
 }
 
+#define DR_BORDER 5
 #define DR_CTX_TAG 'TCRD'
 #define DR_TIMEOUT_MS 10
 #define DR_ONE_MS_IN_HNS 10000
@@ -152,6 +153,11 @@ dr_send(dr_ctx_t context, ULONG m_num, D3DKMT_MOVE_RECT *move_rect,
         rect.right = max(rect.right, dirty_rect[idx].right);
         rect.bottom = max(rect.bottom, dirty_rect[idx].bottom);
     }
+
+    rect.left = max(rect.left - DR_BORDER, 0);
+    rect.top = max(rect.top - DR_BORDER, 0);
+    rect.right = min(rect.right + DR_BORDER, DR_USHRT_MAX);
+    rect.bottom = min(rect.bottom + DR_BORDER, DR_USHRT_MAX);
 
     if ((rect.right > 0) && (rect.bottom > 0)) {
         KIRQL irq;
