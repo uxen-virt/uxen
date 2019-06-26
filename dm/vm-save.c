@@ -1586,6 +1586,7 @@ load_whpx_memory_data(
 {
     int ret;
     char *template_file = vm_template_file;
+    off_t start_off = filebuf_tell(f);
     extern char *vm_loadfile;
 
     if (!template_file && (
@@ -1603,16 +1604,18 @@ load_whpx_memory_data(
         if (!vm_has_template_uuid)
             vm_has_template_uuid = 1;
         restore_mode = VM_RESTORE_NORMAL;
+    } else
+        ret = whpx_read_memory(f, !memdata->has_page_contents);
+
+    if (ret == 0) {
         ret = filebuf_seek(
-            f, memdata->size - sizeof(*memdata),
-            FILEBUF_SEEK_CUR) != -1 ? 0 : -EIO;
+            f, start_off + memdata->size - sizeof(*memdata),
+            FILEBUF_SEEK_SET) != -1 ? 0 : -EIO;
         if (ret) {
             asprintf(err_msg, "filebuf_seek(load_whpx_memory_data) failed");
             goto out;
         }
-    } else
-        ret = whpx_read_memory(f, !memdata->has_page_contents);
-
+    }
 out:
     return ret;
 }
@@ -2462,8 +2465,13 @@ vm_save_execute(void)
     if (whpx_enable)
         whpx_memory_post_save_hook();
 
-    if (vm_save_info.command_cd)
+    if (vm_save_info.command_cd) {
+        if (ret == 0 && vm_save_info.save_abort) {
+            ret = -EINTR;
+            ERRMSG("save aborted");
+        }
 	control_command_save_finish(ret, err_msg);
+    }
     free(hashes);
     if (dm_state_buf)
         free(dm_state_buf);
@@ -2643,18 +2651,26 @@ vm_load_finish(void)
     return ret;
 }
 
+void
+vm_resume_abort(void)
+{
+    vm_save_info.resume_abort = 1;
+}
+
 int
 vm_resume(void)
 {
-    int ret;
+    int ret = 0;
     char *err_msg = NULL;
 
     if (vm_save_info.f) {
-
         filebuf_set_readable(vm_save_info.f);
 
-        if (vm_save_info.free_mem)
-            vm_restore_memory();
+        if (vm_save_info.free_mem) {
+            ret = vm_restore_memory();
+            if (ret)
+                goto out;
+        }
 
         qemu_savevm_resume();
 
@@ -2676,7 +2692,13 @@ vm_resume(void)
     }
 
   out:
+    if (ret == -EINTR) {
+        asprintf(&err_msg, "resume aborted");
+        EPRINTF("%s: ret %d", err_msg, ret);
+    }
+
     if (vm_save_info.resume_cd)
         control_command_resume_finish(ret, err_msg);
+
     return ret;
 }

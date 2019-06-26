@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -22,6 +22,9 @@
 
 #include <lz4.h>
 #include <lz4hc.h>
+
+#include <dm/dm.h>
+#include <dm/whpx/whpx.h>
 
 #include "cuckoo.h"
 #include "filebuf.h"
@@ -773,6 +776,9 @@ decompression_thread(void *_c)
             for (k = 0, p = u->p; k < u->n; ++k, p = nextc(p)) {
                 uint8_t *dst = pages + PAGE_SIZE * i;
 
+                if (ccb->cancelled(opaque))
+                    goto out;
+
                 if (p != ref) {
                     uint16_t size = p->c.size;
                     if (size) {
@@ -824,6 +830,7 @@ skip_template_ident:
             i = 0;
         }
 
+out:
         if (s->buffer) {
             ccb->free(opaque, s->buffer);
             s->buffer = NULL;
@@ -1103,9 +1110,21 @@ execute_plan(struct cuckoo_context *cc,
 
     for (i = 0; i < CUCKOO_NUM_THREADS; ++i) {
         wait_thread(tids[i]);
-        close_thread_handle(tids[i]);
         cuckoo_debug("finished wait for %d\n", i);
     }
+
+    /* last cancel check after threads have finished */
+    cancelled |= ccb->cancelled(opaque);
+    bool decompression_cancelled = !compressing && cancelled;
+
+    for (i = 0; i < CUCKOO_NUM_THREADS; ++i) {
+        /* on uxen, if cancelled, we have to undo each populated pfn. On WHP we
+         * instead release CoW file mappings (whpx_ram_free) bit later */
+        if (!whpx_enable && decompression_cancelled)
+            ccb->undo_populate_pfns(opaque, i);
+        close_thread_handle(tids[i]);
+    }
+
     for (i = 0; i < num_slots; ++i) {
         struct io_slot *s = &slots[i];
         thread_event_close(&s->metadata_ready);
@@ -1116,8 +1135,16 @@ execute_plan(struct cuckoo_context *cc,
             debug_printf("unexpected outstanding i/o (%d) on slot %d\n", (int)s->io_queued, i);
     }
 
+    /* release WHP CoW mappings if cancelled */
+    if (whpx_enable && decompression_cancelled)
+        whpx_ram_free();
+
     debug_printf("%s done, cancelled=%d\n", __FUNCTION__, cancelled);
     filebuf_seek(fb, file_offset, FILEBUF_SEEK_SET);
+
+    if (!compressing && cancelled)
+        return -EINTR;
+
     return errored ? -1 : file_offset - initial_file_offset;
 }
 

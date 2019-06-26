@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -156,6 +156,7 @@ typedef void (*pin_section_callback) (void *, enum cuckoo_section_type,
 typedef int (*capture_pfns_callback) (void *, int, int, void *, uint64_t *);
 typedef void* (*get_buffer_callback) (void *, int, int *);
 typedef int (*populate_pfns_callback) (void *, int, int, uint64_t *);
+typedef int (*undo_populate_pfns_callback) (void *, int);
 typedef void* (*malloc_callback) (void *, size_t );
 typedef void (*free_callback) (void *, void *);
 typedef int (*lock_callback) (void *, enum cuckoo_mutex_type);
@@ -171,6 +172,7 @@ struct cuckoo_callbacks {
     capture_pfns_callback capture_pfns;
     get_buffer_callback get_buffer;
     populate_pfns_callback populate_pfns;
+    undo_populate_pfns_callback undo_populate_pfns;
     malloc_callback malloc;
     free_callback free;
     lock_callback lock;

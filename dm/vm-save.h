@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -31,6 +31,7 @@ struct vm_save_info {
     int save_via_temp;
     int safe_to_abort;
     ioh_event save_abort_event;
+    int resume_abort;
 
     char *filename;
     struct filebuf *f;
@@ -66,6 +67,7 @@ char *vm_save_file_name(const unsigned char *uuid);
 int vm_save_read_dm_offset(void *dst, off_t offset, size_t size);
 
 int vm_resume(void);
+void vm_resume_abort(void);
 
 int vm_load(const char *, int);
 int vm_load_finish(void);

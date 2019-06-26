@@ -976,7 +976,7 @@ whpx_ram_release_hv_mappings(void)
 }
 #endif
 
-static void
+void
 whpx_ram_free(void)
 {
     mb_entry_t *e, *next;

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2018, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -26,6 +26,9 @@ struct thread_ctx {
     xc_hypercall_buffer_t buffer_xc;
     void *buffer_raw;
     xen_memory_capture_gpfn_info_t *gpfn_info_list;
+    uint64_t *populated_pfns;
+    int populated_pfns_max_size;
+    int populated_pfns_idx;
 };
 
 struct ctx {
@@ -61,8 +64,10 @@ static void free_mem(void *opaque, void *ptr)
 
 static int cancelled(void *opaque)
 {
-    return vm_save_info.save_requested &&
-        (vm_save_info.save_abort || vm_quit_interrupt);
+    if (vm_save_info.save_requested)
+        return vm_quit_interrupt || vm_save_info.save_abort;
+    else
+        return vm_quit_interrupt || vm_save_info.resume_abort;
 }
 
 static void *map_section(void *opaque, enum cuckoo_section_type t, size_t sz)
@@ -272,6 +277,66 @@ static int populate_pfns(void *opaque, int tid, int n, uint64_t *pfns)
         ret = whpx_memory_populate_from_buffer(n, pfns, tc->buffer_raw);
     }
 
+    /* save pfns we've populated for potential cancel */
+    if (tc->populated_pfns_max_size < tc->populated_pfns_idx + n) {
+        tc->populated_pfns_max_size += tc->populated_pfns_max_size / 2;
+        if (tc->populated_pfns_max_size < tc->populated_pfns_idx + n)
+            tc->populated_pfns_max_size = tc->populated_pfns_idx + n;
+
+        tc->populated_pfns = priv_realloc(ctx->heap,
+            tc->populated_pfns, tc->populated_pfns_max_size * sizeof(uint64_t));
+    }
+    assert(tc->populated_pfns_max_size >= tc->populated_pfns_idx + n);
+
+    memcpy(&tc->populated_pfns[tc->populated_pfns_idx], pfns, n * sizeof(uint64_t));
+    tc->populated_pfns_idx += n;
+
+    return ret;
+}
+
+static int undo_populate_pfns(void *opaque, int tid)
+{
+    struct ctx *ctx = opaque;
+    struct thread_ctx *tc = &ctx->tcs[tid];
+    int n = tc->populated_pfns_idx;
+    uint64_t *pfns = tc->populated_pfns;
+    int ret = 0;
+
+    debug_printf("undoing populate of %d pfns\n", n);
+
+    if (!whpx_enable) {
+        xen_memory_capture_gpfn_info_t *gpfn_info = calloc(MAX_BATCH_SIZE, sizeof(xen_memory_capture_gpfn_info_t));
+        int i = 0;
+
+        while (n) {
+            unsigned long got;
+            int j;
+            int batch = n < MAX_BATCH_SIZE ? n : MAX_BATCH_SIZE;
+
+            for (j = 0; j < batch; i++, j++) {
+                gpfn_info[j].gpfn = pfns[i];
+                gpfn_info[j].flags = XENMEM_MCGI_FLAGS_VM |
+                                     XENMEM_MCGI_FLAGS_REMOVE_PFN;
+            }
+
+            ret = xc_domain_memory_capture(xc_handle, vm_id, batch, gpfn_info,
+                &got, &tc->buffer_xc, batch * PAGE_SIZE);
+            if (ret) {
+                debug_printf("%s: xc_domain_memory_capture FAILED with %d\n",
+                    __FUNCTION__, ret);
+                break;
+            }
+
+            n -= batch;
+        }
+
+        free(gpfn_info);
+    } else {
+        /* no-op, too slow to do on pfn-by-pfn basis,
+         * if needed free whole memory (whpx_ram_free) at the end of plan execution instead */
+        assert(0);
+    }
+
     return ret;
 }
 
@@ -336,6 +401,7 @@ int cuckoo_uxen_init(struct cuckoo_context *cuckoo_context,
         capture_pfns,
         get_buffer,
         populate_pfns,
+        undo_populate_pfns,
         alloc_mem,
         free_mem,
         lock,
@@ -370,6 +436,9 @@ int cuckoo_uxen_init(struct cuckoo_context *cuckoo_context,
         }
         tc->gpfn_info_list = alloc_mem(ctx, MAX_BATCH_SIZE *
                                        sizeof(tc->gpfn_info_list[0]));
+        tc->populated_pfns_max_size = ((vm_mem_mb / 4) * 1024 * 1024) >> PAGE_SHIFT;
+        tc->populated_pfns_idx = 0;
+        tc->populated_pfns = alloc_mem(ctx, tc->populated_pfns_max_size * sizeof(uint64_t));
     }
 
     for (i = 0; i < cuckoo_num_mutexes; ++i) {
@@ -415,6 +484,7 @@ void cuckoo_uxen_close(struct cuckoo_context *cuckoo_context, void *opaque)
             free_mem(ctx, tc->buffer_raw);
         }
         free_mem(ctx, tc->gpfn_info_list);
+        free_mem(ctx, tc->populated_pfns);
     }
     for (i = 0; i < cuckoo_num_mutexes; ++i) {
         if (ctx->mutexes[i]) {

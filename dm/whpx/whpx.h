@@ -65,6 +65,7 @@ void *whpx_ram_map(uint64_t phys_addr, uint64_t *len);
 /* as above, asserts mapping exists and no short mapping */
 void *whpx_ram_map_assert(uint64_t phys_addr, uint64_t len);
 void whpx_ram_unmap(void *ptr);
+void whpx_ram_free(void);
 
 void whpx_copy_from_guest_va(CPUState *cpu, void *dst, uint64_t src_va, uint64_t len);
 void whpx_copy_to_guest_va(CPUState *cpu, uint64_t dst_va, void *src, uint64_t len);

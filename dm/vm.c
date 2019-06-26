@@ -892,8 +892,13 @@ vm_run_mode_change_cb(void *opaque)
 {
     switch (run_mode) {
     case RUNNING_VM:
-        if (old_run_mode == SUSPEND_VM)
-            vm_resume();
+        if (old_run_mode == SUSPEND_VM) {
+            if (vm_resume() != 0) {
+                /* failed or aborted resume, we're still suspended */
+                run_mode = old_run_mode;
+                break;
+            }
+        }
         vm_time_update();
 #ifdef CONFIG_DUMP_MEMORY_STAT
       dump_periodic_stats_reset();

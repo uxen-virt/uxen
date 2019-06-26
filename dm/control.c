@@ -388,6 +388,7 @@ control_command_resume(void *opaque, const char *id, const char *opt,
 
     vm_save_info.resume_cd = cd;
     vm_save_info.resume_id = id ? strdup(id) : NULL;
+    vm_save_info.resume_abort = 0;
 
     vm_save_abort();
 
@@ -395,6 +396,19 @@ control_command_resume(void *opaque, const char *id, const char *opt,
     /* required here to handle the aborted save case */
     uxen_clipboard_resume();
 #endif
+
+    return 0;
+}
+
+static int
+control_command_resume_abort(void *opaque, const char *id, const char *opt,
+                             dict d, void *command_opaque)
+{
+    struct control_desc *cd = (struct control_desc *)opaque;
+
+    vm_resume_abort();
+
+    control_send_ok(cd, "resume-abort", id, NULL);
 
     return 0;
 }
@@ -1280,6 +1294,7 @@ struct dict_rpc_command control_commands[] = {
               .defval = DICT_RPC_ARG_DEFVAL_BOOLEAN(true) },
             { NULL, },
         }, },
+    { "resume-abort", control_command_resume_abort, },
     { "save", control_command_save,
       .args = (struct dict_rpc_arg_desc[]) {
             { "filename", DICT_RPC_ARG_TYPE_STRING, .optional = 1 },
