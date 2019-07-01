@@ -145,7 +145,7 @@ talk(int fd, int request)
 }
 
 void
-event_loop(int fd)
+event_loop(int fd, int protkbd)
 {
     struct atto_agent_msg msg;
     ssize_t len;
@@ -164,7 +164,8 @@ event_loop(int fd)
         poll_fds[i].fd = -1;
 
     pollfd_add (fd);
-    prot_kbd_init ();
+    if (protkbd)
+        prot_kbd_init ();
 
     for (;;) {
         if (poll(poll_fds, npollfds, polltimeout) < 0) {
@@ -182,10 +183,12 @@ event_loop(int fd)
             }
         }
 
-        for (i = 0; i < nevent_fds; i++)
-            prot_kbd_event(event_fds[i]);
+        if (protkbd) {
+            for (i = 0; i < nevent_fds; i++)
+                prot_kbd_event(event_fds[i]);
 
-        prot_kbd_wakeup(&polltimeout);
+            prot_kbd_wakeup(&polltimeout);
+        }
 
         if (!(poll_fds[0].revents & POLLIN))
             continue;
@@ -250,7 +253,8 @@ event_loop(int fd)
         }
         break;
         case ATTO_MSG_KBD_FOCUS_RET:
-            prot_kbd_focus_request (msg.offer_kbd_focus);
+            if (protkbd)
+                prot_kbd_focus_request (msg.offer_kbd_focus);
             break;
         default:
             warnx("unknown message type %d", (int) msg.type);
@@ -265,6 +269,7 @@ int main(int argc, char **argv)
     struct sockaddr_vm addr;
     int daemon = 0;
     int request = 0;
+    int protkbd = 0;
 
     if (argc < 2)
         err(1, "bad args");
@@ -276,6 +281,9 @@ int main(int argc, char **argv)
         request = ATTO_MSG_RESIZE;
     } else if (!strcmp(argv[1], "daemon")) {
         daemon = 1;
+        if (argc > 2 && !strcmp(argv[2], "--protkbd")) {
+            protkbd = 1;
+        }
     } else
         err(1, "bad args");
 
@@ -298,7 +306,7 @@ int main(int argc, char **argv)
     if (!daemon)
         talk(fd, request);
     else
-        event_loop(fd);
+        event_loop(fd, protkbd);
 
     close(fd);
 
