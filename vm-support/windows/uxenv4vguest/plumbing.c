@@ -73,7 +73,8 @@ echo_init(PDEVICE_EXTENSION ext)
     if (!ext->EchoRing) {
         uxen_err("%s: failed to bind v4v ring", __FUNCTION__);
         return;
-    }
+    } else
+        uxen_msg("hbmon ks echo service started");
 }
 
 static void

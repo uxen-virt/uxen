@@ -199,6 +199,8 @@ echo_init(void)
     echo_write_event = CreateEvent(NULL, FALSE, FALSE, NULL);
     echo_initialized = 1;
 
+    uxen_msg("hbmon us echo service started");
+
     return 0;
 }
 
