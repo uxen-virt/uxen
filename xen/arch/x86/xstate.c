@@ -195,7 +195,7 @@ int xstate_alloc_save_area(struct vcpu *v)
     if (v->domain->domain_id)   /* no vmi_xsave for dom0 */
         save_area = (struct xsave_struct *)(uintptr_t)
             (v->domain->vm_info_shared->vmi_xsave +
-             v->vcpu_id * xsave_cntxt_size);
+             v->vcpu_id * _uxen_info.ui_xsave_cntxt_size);
     else {
         /* XSAVE/XRSTOR requires the save area be 64-byte-boundary aligned. */
         save_area = _xzalloc(xsave_cntxt_size, 64);
@@ -208,6 +208,13 @@ int xstate_alloc_save_area(struct vcpu *v)
     save_area->xsave_hdr.xstate_bv = XSTATE_FP_SSE;
 
     v->arch.xsave_area = save_area;
+
+    if (((size_t)v->arch.xsave_area & 0x3fULL) != 0) {
+        printk(XENLOG_ERR "%s: vm%u.%u: unaligned xsave_area:0x%p\n",
+               __func__, v->domain->domain_id, v->vcpu_id, v->arch.xsave_area);
+        return -EINVAL;
+    }
+
     v->arch.xcr0 = XSTATE_FP_SSE;
 #ifndef UXEN_HOST_OSX
     /* on windows, save SSE plus whatever the VM uses */
