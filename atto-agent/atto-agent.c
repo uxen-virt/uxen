@@ -72,6 +72,46 @@ static struct long_msg_t long_msg;
 static struct pollfd poll_fds[MAX_NUMBER_FDS];
 static int npollfds = 0;
 static int polltimeout = -1;
+static unsigned last_win_kbd_layout = (unsigned) -1;
+
+static int set_kbd_layout(unsigned win_kbd_layout)
+{
+    int i, ret = -1;
+    char command[1024];
+
+    for (i = 0;; i++) {
+        WinKBLayoutRec *lrec;
+
+        lrec = &winKBLayouts[i];
+        if (lrec->winlayout == (unsigned int) (-1) ||
+            lrec->xkbmodel == NULL) {
+
+            break;
+        }
+
+        if (lrec->winlayout == win_kbd_layout) {
+            memset(command, 0, sizeof(command));
+            if (lrec->xkblayout && lrec->xkbvariant) {
+                snprintf(command, sizeof(command) - 1,
+                         "DISPLAY=:0.0 /usr/bin/setxkbmap -model %s -layout %s -variant %s",
+                         lrec->xkbmodel, lrec->xkblayout, lrec->xkbvariant);
+            } else if (lrec->xkblayout) {
+                snprintf(command, sizeof(command) - 1,
+                         "DISPLAY=:0.0 /usr/bin/setxkbmap -model %s -layout %s",
+                         lrec->xkbmodel, lrec->xkblayout);
+            } else {
+                snprintf(command, sizeof(command) - 1,
+                         "DISPLAY=:0.0 /usr/bin/setxkbmap -model %s", lrec->xkbmodel);
+            }
+            system(command);
+            ret = 0;
+            break;
+        }
+    }
+
+    return ret;
+}
+
 
 int pollfd_add (int fd)
 {
@@ -113,6 +153,11 @@ int pollfd_remove (int fd)
     }
 
     return -1;
+}
+
+void atto_agent_reset_kbd_layout(void)
+{
+    set_kbd_layout(last_win_kbd_layout);
 }
 
 void
@@ -219,39 +264,9 @@ event_loop(int fd, int protkbd)
             system(command);
             break;
         case ATTO_MSG_KBD_LAYOUT_RET:
-        {
-            int i;
-
-            for (i = 0;; i++) {
-                WinKBLayoutRec *lrec;
-
-                lrec = &winKBLayouts[i];
-                if (lrec->winlayout == (unsigned int) (-1) ||
-                    lrec->xkbmodel == NULL) {
-
-                    break;
-                }
-
-                if (lrec->winlayout == msg.win_kbd_layout) {
-                    memset(command, 0, sizeof(command));
-                    if (lrec->xkblayout && lrec->xkbvariant) {
-                        snprintf(command, sizeof(command) - 1,
-                                 "DISPLAY=:0.0 /usr/bin/setxkbmap -model %s -layout %s -variant %s",
-                                 lrec->xkbmodel, lrec->xkblayout, lrec->xkbvariant);
-                    } else if (lrec->xkblayout) {
-                        snprintf(command, sizeof(command) - 1,
-                                 "DISPLAY=:0.0 /usr/bin/setxkbmap -model %s -layout %s",
-                                 lrec->xkbmodel, lrec->xkblayout);
-                    } else {
-                        snprintf(command, sizeof(command) - 1,
-                                 "DISPLAY=:0.0 /usr/bin/setxkbmap -model %s", lrec->xkbmodel);
-                    }
-                    system(command);
-                    break;
-                }
-            }
-        }
-        break;
+            set_kbd_layout(msg.win_kbd_layout);
+            last_win_kbd_layout = msg.win_kbd_layout;
+            break;
         case ATTO_MSG_KBD_FOCUS_RET:
             if (protkbd)
                 prot_kbd_focus_request (msg.offer_kbd_focus);

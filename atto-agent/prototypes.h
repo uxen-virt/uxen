@@ -7,6 +7,7 @@
 #ifndef _ATTO_AGENT__H_
 #define _ATTO_AGENT__H_
 
+void atto_agent_reset_kbd_layout(void);
 int prot_kbd_init(void);
 int prot_kbd_event(int fd);
 int pollfd_add(int fd);

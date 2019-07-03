@@ -61,6 +61,7 @@ static int fd_v4v = -1;
 static int attocall_fd = -1;
 static keyboard_t keyboards[MAX_NUMBER_KEYBOARDS];
 static int focus_release_request = 0;
+static int new_kbd_reset_layout = 0;
 static uint64_t release_focus_ts_ms = 0;
 
 static const uint8_t ps2hid[] = {
@@ -146,6 +147,14 @@ get_keyboard_by_id (uint32_t id)
     }
 
     return NULL;
+}
+
+static void fix_kbd_layout(void)
+{
+    if (!new_kbd_reset_layout)
+        return;
+    new_kbd_reset_layout = 0;
+    atto_agent_reset_kbd_layout();
 }
 
 static int ax_keyboard_can_release_focus (void)
@@ -318,6 +327,7 @@ static int process_event (struct attovm_keyboard_event *evt, size_t len)
 
     switch (evt->type) {
     case ATTOVM_KBEVT_INSERTED:
+        new_kbd_reset_layout = 1;
         for (i = 0; i < ARRAY_SIZE(keyboards); i++) {
            if (!keyboards[i].valid) {
                 if (!kbd)
@@ -376,6 +386,7 @@ static int process_event (struct attovm_keyboard_event *evt, size_t len)
                     (unsigned) evt->device_id);
             break;
         }
+        fix_kbd_layout();
         process_hid_report (kbd, evt->endpoint_id, &evt->data[0], evt->data_len);
         break;
     case ATTOVM_KBEVT_FOCUS_REVOKED:
@@ -397,6 +408,7 @@ static int process_event (struct attovm_keyboard_event *evt, size_t len)
             fprintf(stderr, "%s: zero scancode data len\n", __FUNCTION__);
             break;
         }
+        fix_kbd_layout();
         process_ps2_scancode (kbd, evt->data[0]);
         break;
 
