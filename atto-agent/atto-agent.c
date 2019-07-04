@@ -209,8 +209,7 @@ event_loop(int fd, int protkbd)
         poll_fds[i].fd = -1;
 
     pollfd_add (fd);
-    if (protkbd)
-        prot_kbd_init ();
+    kbd_init (protkbd);
 
     for (;;) {
         if (poll(poll_fds, npollfds, polltimeout) < 0) {
@@ -228,12 +227,10 @@ event_loop(int fd, int protkbd)
             }
         }
 
-        if (protkbd) {
-            for (i = 0; i < nevent_fds; i++)
-                prot_kbd_event(event_fds[i]);
+        for (i = 0; i < nevent_fds; i++)
+            kbd_event(event_fds[i]);
 
-            prot_kbd_wakeup(&polltimeout);
-        }
+        kbd_wakeup(&polltimeout);
 
         if (!(poll_fds[0].revents & POLLIN))
             continue;
@@ -268,8 +265,7 @@ event_loop(int fd, int protkbd)
             last_win_kbd_layout = msg.win_kbd_layout;
             break;
         case ATTO_MSG_KBD_FOCUS_RET:
-            if (protkbd)
-                prot_kbd_focus_request (msg.offer_kbd_focus);
+            kbd_focus_request (msg.offer_kbd_focus);
             break;
         default:
             warnx("unknown message type %d", (int) msg.type);

@@ -5,7 +5,7 @@
 
 CC ?= gcc
 
-SRC = atto-agent.o protected-keyboard.c
+SRC = atto-agent.o keyboard.c
 
 EXTRA_CFLAGS = -O2 -g -Wall -I../include -I../include/uxen -I$(ATTOXEN_API_INC)
 

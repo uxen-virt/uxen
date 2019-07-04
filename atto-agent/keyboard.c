@@ -22,6 +22,8 @@
 #include <ax_attovm_stub.h>
 #include <attocall_dev.h>
 
+#include <uxenkbddefs.h>
+
 #include "prototypes.h"
 
 #define RING_SIZE (2*4096)
@@ -57,7 +59,9 @@ typedef struct {
 
 } keyboard_t;
 
-static int fd_v4v = -1;
+static int use_protected_keyboard = 0;
+static int uxen_fd_v4v = -1;
+static int prot_fd_v4v = -1;
 static int attocall_fd = -1;
 static keyboard_t keyboards[MAX_NUMBER_KEYBOARDS];
 static int focus_release_request = 0;
@@ -320,10 +324,74 @@ out:
     kbd->release = 0;
 }
 
-static int process_event (struct attovm_keyboard_event *evt, size_t len)
+static int uxen_v4v_event (void)
+{
+    ssize_t len;
+    struct ns_event_msg_kbd_input kdata;
+
+    for (;;) {
+        len = recv(uxen_fd_v4v, (void*) &kdata, sizeof (kdata), 0);
+        if (len < 0) {
+            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+                return 0;
+            fprintf (stderr, "atto-kbd: uxen ring recv failure errno %d\n", (int) errno);
+            return -1;
+        }
+
+        if (len < UXEN_MIN_KBD_PKT_LEN) {
+            fprintf (stderr, "atto-kbd: uxen ring too short dgram!\n");
+            return -1;
+        }
+
+        break;
+    }
+
+    if (!use_protected_keyboard) {
+        fix_kbd_layout();
+        process_ps2_scancode (&keyboards[0], kdata.scancode);
+    }
+
+    return 0;
+}
+
+static int prot_v4v_event (void)
 {
     int i;
+    ssize_t len;
+    struct attovm_keyboard_event_pk evt_pk;
+    struct attovm_keyboard_event *evt = NULL;
     keyboard_t *kbd = NULL;
+
+    BUILD_BUG_ON (CURRENT_VERSION != ATTOVM_KBEVT_CURRENT_VERSION);
+
+    for (;;) {
+        len = recv(prot_fd_v4v, (void*) &evt_pk, sizeof (evt_pk), 0);
+        if (len < 0) {
+            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK)
+                return 0;
+            fprintf (stderr, "atto-kbd: recv failure errno %d\n", (int) errno);
+            return -1;
+        }
+
+        if (len < sizeof (uint32_t)) {
+            fprintf (stderr, "atto-kbd: too short dgram!\n");
+            return -1;
+        }
+
+        if (evt_pk.header.version != CURRENT_VERSION) {
+            fprintf (stderr, "atto-kbd: bad evt_pk version %u!\n", (unsigned) evt_pk.header.version);
+            return -1;
+        }
+
+        if (len < sizeof (evt_pk.header)) {
+            fprintf (stderr, "atto-kbd: too short packet!\n");
+            return -1;
+        }
+
+        break;
+    }
+
+    evt = &evt_pk.header;
 
     switch (evt->type) {
     case ATTOVM_KBEVT_INSERTED:
@@ -431,43 +499,6 @@ static int process_event (struct attovm_keyboard_event *evt, size_t len)
     return 0;
 }
 
-static int v4v_event_received (void)
-{
-    ssize_t len;
-    struct attovm_keyboard_event_pk evt;
-
-    BUILD_BUG_ON (CURRENT_VERSION != ATTOVM_KBEVT_CURRENT_VERSION);
-
-    for (;;) {
-        len = recv(fd_v4v, (void*) &evt, sizeof (evt), 0);
-        if (len < 0) {
-            if (errno == EINTR)
-                continue;
-            fprintf (stderr, "atto-kbd: recv failure errno %d\n", (int) errno);
-            break;
-        }
-
-        if (len < sizeof (uint32_t)) {
-            fprintf (stderr, "atto-kbd: too short dgram!\n");
-            break;
-        }
-
-        if (evt.header.version != CURRENT_VERSION) {
-            fprintf (stderr, "atto-kbd: bad evt version %u!\n", (unsigned) evt.header.version);
-            break;
-        }
-
-        if (len < sizeof (evt.header)) {
-            fprintf (stderr, "atto-kbd: too short packet!\n");
-            break;
-        }
-
-        break;
-    }
-
-    return process_event(&evt.header, len);
-}
-
 static int uhid_event_received (int fd)
 {
   ssize_t rc;
@@ -484,17 +515,23 @@ static int uhid_event_received (int fd)
   return 0;
 }
 
-int prot_kbd_event (int fd)
+int kbd_event (int fd)
 {
-    if (fd == fd_v4v)
-        return v4v_event_received();
+    if (fd == uxen_fd_v4v)
+        return uxen_v4v_event();
+
+    if (use_protected_keyboard && fd == prot_fd_v4v)
+        return prot_v4v_event();
 
     return uhid_event_received(fd);
 }
 
-void prot_kbd_focus_request (unsigned offer)
+void kbd_focus_request (unsigned offer)
 {
     uint64_t ts_release_ms;
+
+    if (!use_protected_keyboard)
+        return;
 
     if (offer) {
         switch_focus(0);
@@ -512,7 +549,7 @@ void prot_kbd_focus_request (unsigned offer)
         release_focus_ts_ms = ts_release_ms;
 }
 
-void prot_kbd_wakeup (int *polltimeout)
+void kbd_wakeup (int *polltimeout)
 {
     uint64_t now;
     int delta;
@@ -537,35 +574,65 @@ void prot_kbd_wakeup (int *polltimeout)
         *polltimeout = delta;
 }
 
-int prot_kbd_init (void)
+int kbd_init (int protkbd)
 {
     struct sockaddr_vm addr;
+    keyboard_t *kbd = NULL;
 
-    fprintf (stderr, "atto protected keyboard init\n");
+    fprintf (stderr, "atto keyboard init\n");
     memset (&keyboards, 0, sizeof (keyboards));
 
-    attocall_fd = open ("/dev/attocall", O_WRONLY);
-    if (attocall_fd < 0)
-        err(1, "open /dev/attocall");
+    use_protected_keyboard = protkbd;
 
-    fd_v4v = socket(AF_VSOCK, SOCK_DGRAM | SOCK_NONBLOCK, 0);
-    if (fd_v4v < 0)
+    uxen_fd_v4v = socket(AF_VSOCK, SOCK_DGRAM | SOCK_NONBLOCK, 0);
+    if (uxen_fd_v4v < 0)
         err(1, "socket");
 
     memset(&addr, 0, sizeof(addr));
     addr.family = AF_VSOCK;
-    addr.partner = V4V_DOMID_HV;
-    addr.v4v.domain = V4V_DOMID_HV;
-    addr.v4v.port = ATTOVM_KBD_V4V_PORT;
+    addr.partner = V4V_DOMID_DM;
+    addr.v4v.domain = V4V_DOMID_DM;
+    addr.v4v.port = UXEN_V4V_PORT;
 
-    if (bind(fd_v4v, (const struct sockaddr *) &addr, sizeof(addr)) < 0)
+    if (bind(uxen_fd_v4v, (const struct sockaddr *) &addr, sizeof(addr)) < 0)
         err(1, "bind %d", (int) errno);
 
-    compiler_mb();
-    user_attocall_kbd_op(attocall_fd, ATTOVM_KBCALL_READY, 0);
-    compiler_mb();
+    pollfd_add (uxen_fd_v4v);
 
-    pollfd_add (fd_v4v);
+    if (use_protected_keyboard) {
+        attocall_fd = open ("/dev/attocall", O_WRONLY);
+        if (attocall_fd < 0)
+            err(1, "open /dev/attocall");
+
+        prot_fd_v4v = socket(AF_VSOCK, SOCK_DGRAM | SOCK_NONBLOCK, 0);
+        if (prot_fd_v4v < 0)
+            err(1, "socket");
+
+        memset(&addr, 0, sizeof(addr));
+        addr.family = AF_VSOCK;
+        addr.partner = V4V_DOMID_HV;
+        addr.v4v.domain = V4V_DOMID_HV;
+        addr.v4v.port = ATTOVM_KBD_V4V_PORT;
+
+        if (bind(prot_fd_v4v, (const struct sockaddr *) &addr, sizeof(addr)) < 0)
+            err(1, "bind %d", (int) errno);
+
+        compiler_mb();
+        user_attocall_kbd_op(attocall_fd, ATTOVM_KBCALL_READY, 0);
+        compiler_mb();
+
+        pollfd_add (prot_fd_v4v);
+    } else {
+        kbd = &keyboards[0];
+        memset (kbd, 0, sizeof (*kbd));
+        kbd->id = 1;
+        kbd->valid = 1;
+        kbd->interface_type = ATTOVM_KBIFT_PS2;
+        new_kbd_reset_layout = 1;
+        fprintf(stderr, "%s: keyboard %u if type %u inserted\n", __FUNCTION__,
+                (unsigned) kbd->id, (unsigned) kbd->interface_type);
+        process_hid_descriptor (kbd, ps2hid_desc_report, sizeof (ps2hid_desc_report));
+    }
 
     return 0;
 }

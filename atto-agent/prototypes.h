@@ -8,10 +8,10 @@
 #define _ATTO_AGENT__H_
 
 void atto_agent_reset_kbd_layout(void);
-int prot_kbd_init(void);
-int prot_kbd_event(int fd);
+int kbd_init(int protkbd);
+int kbd_event(int fd);
 int pollfd_add(int fd);
 int pollfd_remove(int fd);
-void prot_kbd_focus_request (unsigned offer);
-void prot_kbd_wakeup (int *polltimeout);
+void kbd_focus_request (unsigned offer);
+void kbd_wakeup (int *polltimeout);
 #endif

@@ -12,49 +12,9 @@
 
 #include <uxen-v4vlib.h>
 #include <uxen-platform.h>
-
-#define UXEN_V4V_PORT   44448
-#define UXEN_RING_LEN   262144
-
-#define UXEN_MIN_KBD_PKT_LEN 24
+#include <uxenkbddefs.h>
 
 static unsigned char keycodes[256] = { 0 };
-
-enum ns_event_msg_proto {
-    NS_EVENT_MSG_PROTO_WINDOWS_WINDOW_PROC,
-    NS_EVENT_MSG_PROTO_START_COMMAND_PROMPT,
-    NS_EVENT_MSG_PROTO_WINDOWS_SET_TIME_ZONE_INFORMATION,
-    NS_EVENT_MSG_PROTO_REMOTE_EXECUTE,
-    NS_EVENT_MSG_PROTO_START_PERF_DATA_COLLECTION,
-    NS_EVENT_MSG_PROTO_BLANK_DISPLAY,
-    NS_EVENT_MSG_KBD_INPUT,
-    NS_EVENT_MSG_MOUSE_INPUT,
-    NS_EVENT_MSG_TOUCH_INPUT,
-    NS_EVENT_MSG_NOP,
-    NS_EVENT_MSG_PROTO_WINDOWS_SET_DYNAMIC_TIME_ZONE_INFORMATION,
-
-    NS_EVENT_MSG_PROTO_MAX, /* Not a message ID */
-};
-
-/* FIXME! these need to be placed in a common header */
-#define NS_EVENT_MSG_KBD_INPUT_LEN 32
-struct ns_event_msg_header {
-    u32 proto;
-    u32 len;
-};
-
-struct ns_event_msg_kbd_input {
-    struct ns_event_msg_header hdr;
-    u8 keycode;
-    u16 repeat;
-    u8 scancode;
-    u8 flags;
-    u16 nchars;
-    u8 chars[NS_EVENT_MSG_KBD_INPUT_LEN];
-    u16 nchars_bare;
-    u8 chars_bare[NS_EVENT_MSG_KBD_INPUT_LEN];
-};
-/*							*/
 
 struct uxenkbd_dev {
     struct device dev;
