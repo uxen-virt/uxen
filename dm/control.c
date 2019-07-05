@@ -1294,7 +1294,7 @@ struct dict_rpc_command control_commands[] = {
               .defval = DICT_RPC_ARG_DEFVAL_BOOLEAN(true) },
             { NULL, },
         }, },
-    { "resume-abort", control_command_resume_abort, },
+    { "resume-abort", control_command_resume_abort, .flags = CONTROL_SUSPEND_OK, },
     { "save", control_command_save,
       .args = (struct dict_rpc_arg_desc[]) {
             { "filename", DICT_RPC_ARG_TYPE_STRING, .optional = 1 },
