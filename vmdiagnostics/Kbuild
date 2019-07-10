@@ -1,0 +1,3 @@
+obj-m += vmdiagnostics.o
+
+vmdiagnostics-y := vm_diagnostics.o
