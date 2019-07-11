@@ -209,6 +209,13 @@ static void fix_kbd_layout(void)
 
 static int ax_keyboard_release_focus_ms (void)
 {
+#if 1
+    // NOTE(tomsci): The delay/refusal to release focus logic is disabled
+    // temporarily, because it's causing problems where the host can fail to
+    // regain the keyboard at all. Hopefully we can get to the bottom of that
+    // soon.
+    int ret = 0;
+#else
     int i, ret = 0;
     uint64_t now;
 
@@ -230,6 +237,7 @@ static int ax_keyboard_release_focus_ms (void)
                 ret = diff;
         }
     }
+#endif
 
     return ret;
 }
