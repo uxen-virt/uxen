@@ -243,7 +243,8 @@ atto_agent_process_msg(struct atto_agent_state *s,
     critical_section_leave(&s->cs);
 
     if (msg->type == ATTO_MSG_RESIZE && s->keyboard_layout) {
-        /* Then we just became ready to send a pending keyboard layout change */
+        /* Then we just became ready to send keyboard focus and layout change */
+        attovm_check_keyboard_focus();
         send_latest_keyboard_layout(s);
     }
 }
