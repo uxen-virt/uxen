@@ -66,7 +66,6 @@ static int attocall_fd = -1;
 static keyboard_t keyboards[MAX_NUMBER_KEYBOARDS];
 static int focus_release_request = 0;
 static int new_kbd_reset_layout = 0;
-static uint64_t release_focus_ts_ms = 0;
 
 static const uint8_t ps2hid[] = {
     0, 41, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 45, 46, 42, 43,
@@ -161,24 +160,31 @@ static void fix_kbd_layout(void)
     atto_agent_reset_kbd_layout();
 }
 
-static int ax_keyboard_can_release_focus (void)
+static int ax_keyboard_release_focus_ms (void)
 {
-    int i;
+    int i, ret = 0;
+    uint64_t now;
 
+    now = get_timestamp_ms();
     for (i = 0; i < ARRAY_SIZE(keyboards); i++) {
         keyboard_t *kbd = &keyboards[i];
 
         if (!kbd->valid)
             continue;
 
-        if (kbd->last_keys_evt && get_timestamp_ms() -
-             kbd->last_keys_evt < MIN_TIME_KEY_RELEASE_FOCUS_MS) {
+        if (kbd->last_keys_evt && now < kbd->last_keys_evt +
+                                  MIN_TIME_KEY_RELEASE_FOCUS_MS) {
+            int diff;
 
-            return 0;
+            diff = (int) (kbd->last_keys_evt + MIN_TIME_KEY_RELEASE_FOCUS_MS - now);
+            if (diff < 0)
+                diff = 0;
+            if (ret < diff)
+                ret = diff;
         }
     }
 
-    return 1;
+    return ret;
 }
 
 static int process_keyboard_removed (keyboard_t *kbd)
@@ -528,8 +534,6 @@ int kbd_event (int fd)
 
 void kbd_focus_request (unsigned offer)
 {
-    uint64_t ts_release_ms;
-
     if (!use_protected_keyboard)
         return;
 
@@ -538,40 +542,30 @@ void kbd_focus_request (unsigned offer)
         return;
     }
 
-    if (ax_keyboard_can_release_focus()) {
+    if (ax_keyboard_release_focus_ms() == 0) {
         switch_focus(1);
         return;
     }
-
-    ts_release_ms = get_timestamp_ms() + MIN_TIME_KEY_RELEASE_FOCUS_MS + 5;
     focus_release_request = 1;
-    if (!release_focus_ts_ms || release_focus_ts_ms > ts_release_ms)
-        release_focus_ts_ms = ts_release_ms;
 }
 
 void kbd_wakeup (int *polltimeout)
 {
-    uint64_t now;
-    int delta;
+    int diff_release_ms;
 
     if (!focus_release_request)
-        release_focus_ts_ms = 0;
-
-    if (!release_focus_ts_ms)
         return;
 
-    now = get_timestamp_ms();
-    if (now > release_focus_ts_ms) {
-        if (ax_keyboard_can_release_focus())
-            switch_focus(1);
+    diff_release_ms = ax_keyboard_release_focus_ms();
+    if (!diff_release_ms) {
+        switch_focus(1);
         return;
     }
 
-    delta = release_focus_ts_ms - now;
-    delta += 5;
+    diff_release_ms += 5;
 
-    if (*polltimeout < 0 || *polltimeout > delta)
-        *polltimeout = delta;
+    if (*polltimeout < 0 || *polltimeout > diff_release_ms)
+        *polltimeout = diff_release_ms;
 }
 
 int kbd_init (int protkbd)
