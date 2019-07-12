@@ -1,5 +1,5 @@
 /*
- * Copyright 2016-2018, Bromium, Inc.
+ * Copyright 2016-2019, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -12,60 +12,15 @@
 
 #include <uxen-v4vlib.h>
 #include <uxen-platform.h>
-
-#define UXEN_V4V_PORT   44448
-#define UXEN_RING_LEN   262144
-
-#define AX_V4V_PORT	    55559
-#define AX_RING_LEN	    4096
-
-#define UXEN_MIN_KBD_PKT_LEN 24
+#include <uxenkbddefs.h>
 
 static unsigned char keycodes[256] = { 0 };
-
-enum ns_event_msg_proto {
-    NS_EVENT_MSG_PROTO_WINDOWS_WINDOW_PROC,
-    NS_EVENT_MSG_PROTO_START_COMMAND_PROMPT,
-    NS_EVENT_MSG_PROTO_WINDOWS_SET_TIME_ZONE_INFORMATION,
-    NS_EVENT_MSG_PROTO_REMOTE_EXECUTE,
-    NS_EVENT_MSG_PROTO_START_PERF_DATA_COLLECTION,
-    NS_EVENT_MSG_PROTO_BLANK_DISPLAY,
-    NS_EVENT_MSG_KBD_INPUT,
-    NS_EVENT_MSG_MOUSE_INPUT,
-    NS_EVENT_MSG_TOUCH_INPUT,
-    NS_EVENT_MSG_NOP,
-    NS_EVENT_MSG_PROTO_WINDOWS_SET_DYNAMIC_TIME_ZONE_INFORMATION,
-
-    NS_EVENT_MSG_PROTO_MAX, /* Not a message ID */
-};
-
-/* FIXME! these need to be placed in a common header */
-#define NS_EVENT_MSG_KBD_INPUT_LEN 32
-struct ns_event_msg_header {
-    u32 proto;
-    u32 len;
-};
-
-struct ns_event_msg_kbd_input {
-    struct ns_event_msg_header hdr;
-    u8 keycode;
-    u16 repeat;
-    u8 scancode;
-    u8 flags;
-    u16 nchars;
-    u8 chars[NS_EVENT_MSG_KBD_INPUT_LEN];
-    u16 nchars_bare;
-    u8 chars_bare[NS_EVENT_MSG_KBD_INPUT_LEN];
-};
-/*							*/
 
 struct uxenkbd_dev {
     struct device dev;
     struct input_dev *idev;
     uxen_v4v_ring_t *uxen_ring;
-    uxen_v4v_ring_t *ax_ring;
     v4v_addr_t uxen_dest_addr;
-    v4v_addr_t ax_dest_addr;
     int ready;
     int dev_registered;
     struct tasklet_struct tasklet;
@@ -104,28 +59,6 @@ static void uxenkbd_softirq(unsigned long opaque)
     if (!dev->uxen_ring)
         return;
 
-    if (dev->ax_ring) {
-        readlen = 0;
-        while (readlen <= AX_RING_LEN) {
-            u8 scancode = 0, trans_keycode;
-
-            len = uxen_v4v_copy_out(dev->ax_ring, NULL, NULL, NULL, 0, 0);
-            if (len < 1)
-                break;
-
-            uxen_v4v_copy_out(dev->ax_ring, NULL, NULL, &scancode, 1, 0);
-
-            input_event(dev->idev, EV_MSC, MSC_SCAN, scancode & 0x7f);
-            trans_keycode = keycodes[scancode & 0x7f];
-            input_report_key(dev->idev, trans_keycode, (scancode & 0x80) ? 0 : 1);
-            input_sync(dev->idev);
-
-            len = uxen_v4v_copy_out(dev->ax_ring, NULL, NULL, NULL, 0, 1);
-            if (len > 0)
-                readlen += len;
-        }
-    }
-
     readlen = 0;
     while (readlen <= UXEN_RING_LEN) {
         struct ns_event_msg_kbd_input kdata;
@@ -145,7 +78,7 @@ static void uxenkbd_softirq(unsigned long opaque)
         if (kdata.hdr.proto != NS_EVENT_MSG_KBD_INPUT)
             goto consume;
 
-        if (!dev->ax_ring) {
+        if (!protvm_use_secure_keyboard) {
             u8 trans_keycode;
 
             input_event(dev->idev, EV_MSC, MSC_SCAN, kdata.scancode & 0x7f);
@@ -170,8 +103,6 @@ static int v4v_init_rings(struct uxenkbd_dev *dev)
 
     dev->uxen_dest_addr.port = UXEN_V4V_PORT;
     dev->uxen_dest_addr.domain = V4V_DOMID_DM;
-    dev->ax_dest_addr.port = AX_V4V_PORT;
-    dev->ax_dest_addr.domain = V4V_DOMID_HV;
 
     tasklet_init(&dev->tasklet, uxenkbd_softirq, (unsigned long) dev);
 
@@ -187,21 +118,8 @@ static int v4v_init_rings(struct uxenkbd_dev *dev)
         goto out;
     }
 
-    if (protvm_use_secure_keyboard) {
-        dev->ax_ring = uxen_v4v_ring_bind(dev->ax_dest_addr.port, dev->ax_dest_addr.domain,
-                                           AX_RING_LEN, uxenkbd_irq, dev);
-        if (!dev->ax_ring) {
-            ret = -ENOMEM;
-            goto out;
-        }
-        if (IS_ERR(dev->ax_ring)) {
-            ret = PTR_ERR(dev->ax_ring);
-            dev->ax_ring = NULL;
-            goto out;
-        }
-
+    if (protvm_use_secure_keyboard)
         printk("uxenkbd: using secure keyboard\n");
-    }
     ret = 0;
 
 out:
@@ -212,14 +130,11 @@ out:
 
 static void v4v_rings_free(struct uxenkbd_dev *dev)
 {
-    if (dev->uxen_ring || dev->ax_ring)
+    if (dev->uxen_ring)
         tasklet_kill(&dev->tasklet);
     if (dev->uxen_ring)
         uxen_v4v_ring_free(dev->uxen_ring);
-    if (dev->ax_ring)
-        uxen_v4v_ring_free(dev->ax_ring);
     dev->uxen_ring = NULL;
-    dev->ax_ring = NULL;
 }
 
 static void ukbd_device_release(struct device *dev)

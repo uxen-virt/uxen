@@ -41,6 +41,7 @@ struct vsock {
     struct list_head node;
     struct list_head node_bh;
     int closing;
+    int remote_connecting;
     int remote_connected;
     int bh_process;
     u32 local_port;
@@ -167,7 +168,7 @@ static void vsock_bh(unsigned long unused)
             wake_up_interruptible_all(&vsk->readq);
             vsk->sk.sk_data_ready(&vsk->sk);
         }
-        if (!vsk->remote_connected) {
+        if (vsk->remote_connecting && !vsk->remote_connected) {
             int ok = 0;
 
             if (uxen_v4v_notify_space(vsk->remote_addr.v4v.domain,
@@ -301,6 +302,7 @@ static int vsock_connect(struct socket *sock, struct sockaddr *addr, int addr_le
     vsk = (struct vsock *) sk;
     vsk->remote_addr = *remote_addr;
 
+    vsk->remote_connecting = 1;
     if (uxen_v4v_notify_space(vsk->remote_addr.v4v.domain,
                               vsk->remote_addr.v4v.port, 1, &ok) == 0) {
 
@@ -333,7 +335,7 @@ static unsigned int vsock_poll(struct file *file, struct socket *sock, poll_tabl
     if (uxen_v4v_copy_out(vsk->recv_ring, NULL, NULL, NULL, 0, 0) > 0)
         mask |= POLLIN;
 
-    if (!vsk->remote_connected) {
+    if (vsk->remote_connecting && !vsk->remote_connected) {
         int ok = 0;
         if (uxen_v4v_notify_space(vsk->remote_addr.v4v.domain,
                                   vsk->remote_addr.v4v.port, 1, &ok) == 0) {
