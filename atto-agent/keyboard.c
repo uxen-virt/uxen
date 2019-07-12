@@ -39,6 +39,19 @@
 #undef BUILD_BUG_ON
 #define BUILD_BUG_ON(condition) ((void)sizeof(struct { int:-!!(condition); }))
 
+ssize_t write_retry(int fd, const void *buf, size_t count)
+{
+    ssize_t ret = -1;
+
+    do {
+        ret = write (fd, buf, count);
+        if (ret >= 0)
+            return ret;
+    } while (errno == EINTR);
+
+    return ret;
+}
+
 struct attovm_keyboard_event_pk {
       struct attovm_keyboard_event header;
         uint8_t _data[ATTOVM_KBD_V4V_MAX_DATA_LEN];
@@ -51,6 +64,7 @@ typedef struct {
     uint32_t device_id;
     uint32_t interface_type;
     uint8_t  last_hid_report[256];
+    struct uhid_event hid_create_event;
     uint64_t last_keys_evt;
     int emul;
     int release;
@@ -64,6 +78,7 @@ static int uxen_fd_v4v = -1;
 static int prot_fd_v4v = -1;
 static int attocall_fd = -1;
 static keyboard_t keyboards[MAX_NUMBER_KEYBOARDS];
+static int pvm_keys_dirty = 0;
 static int focus_release_request = 0;
 static int new_kbd_reset_layout = 0;
 
@@ -132,8 +147,40 @@ static uint64_t get_timestamp_ms(void)
     return ret;
 }
 
+static void reset_keyboard (keyboard_t *kbd)
+{
+    struct uhid_event ev;
+
+    if (!kbd->valid || !kbd->created)
+        return;
+
+    memset (&ev, 0, sizeof (ev));
+    ev.type = UHID_DESTROY;
+    write_retry (kbd->fd_uhid, &ev, sizeof (ev));
+    compiler_mb();
+    write_retry (kbd->fd_uhid, &kbd->hid_create_event, sizeof (kbd->hid_create_event));
+
+    kbd->last_keys_evt = 0;
+    memset (kbd->last_hid_report, 0, sizeof (kbd->last_hid_report));
+    new_kbd_reset_layout = 1;
+}
+
 static void switch_focus (int release)
 {
+    if (pvm_keys_dirty && release) {
+        int i;
+
+        for (i = 0; i < ARRAY_SIZE(keyboards); i++) {
+            keyboard_t *kbd = &keyboards[i];
+
+            if (!kbd->valid)
+                continue;
+            reset_keyboard (kbd);
+        }
+        pvm_keys_dirty = 0;
+    }
+
+    compiler_mb();
     focus_release_request = 0;
     user_attocall_kbd_op(attocall_fd, release ? ATTOVM_KBCALL_FOCUS_RELEASE :
                          ATTOVM_KBCALL_FOCUS_GRANT, 0);
@@ -202,6 +249,7 @@ static int process_keyboard_removed (keyboard_t *kbd)
 static int process_hid_descriptor (keyboard_t *kbd, const uint8_t *buf, size_t len)
 {
     int fd;
+    size_t len_descriptor = len;
     struct uhid_event ev;
 
     if (kbd->created)
@@ -218,17 +266,20 @@ static int process_hid_descriptor (keyboard_t *kbd, const uint8_t *buf, size_t l
     pollfd_add (fd);
 
     memset (&ev, 0, sizeof (ev));
-    ev.type = UHID_CREATE;
-    sprintf ((char *) ev.u.create.name, "attokbd-%u", (unsigned) kbd->id);
-    ev.u.create.rd_data = (void *) buf;
-    ev.u.create.rd_size = len;
-    ev.u.create.bus = BUS_USB;
-    ev.u.create.vendor = 0x1f00;
-    ev.u.create.product = kbd->id;
-    ev.u.create.version = 0;
-    ev.u.create.country = 0;
+    ev.type = UHID_CREATE2;
+    sprintf ((char *) ev.u.create2.name, "attokbd-%u", (unsigned) kbd->id);
+    if (len_descriptor > HID_MAX_DESCRIPTOR_SIZE)
+        len_descriptor = HID_MAX_DESCRIPTOR_SIZE;
+    memcpy (&ev.u.create2.rd_data[0], buf, len_descriptor);
+    ev.u.create2.rd_size = len_descriptor;
+    ev.u.create2.bus = BUS_USB;
+    ev.u.create2.vendor = 0x1f00;
+    ev.u.create2.product = kbd->id;
+    ev.u.create2.version = 0;
+    ev.u.create2.country = 0;
 
-    write (fd, &ev, sizeof (ev));
+    memcpy (&kbd->hid_create_event, &ev, sizeof (ev));
+    write_retry (fd, &ev, sizeof (ev));
 
     kbd->created = 1;
     return 0;
@@ -246,7 +297,8 @@ static void process_hid_report (keyboard_t *kbd, uint32_t ep_id, uint8_t *buf, s
   ev.u.input2.size = len;
   memcpy (&ev.u.input2.data[0], buf, len);
 
-  write (kbd->fd_uhid, &ev, sizeof (ev));
+  write_retry (kbd->fd_uhid, &ev, sizeof (ev));
+  pvm_keys_dirty = 1;
 
   if (len <= sizeof (kbd->last_hid_report))
     memcpy (kbd->last_hid_report, buf, len);
