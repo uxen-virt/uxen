@@ -58,9 +58,6 @@ void attovm_check_keyboard_focus(void)
     if (vm_get_run_mode() == DESTROY_VM)
         return;
 
-    if (vm_has_keyboard_focus == host_offer_focus)
-        return;
-
     atto_agent_request_keyboard_focus(host_offer_focus);
     rc = xc_attovm_change_focus(xc_handle, vm_id, host_offer_focus);
 
