@@ -330,7 +330,7 @@ static void process_ps2_scancode (keyboard_t *kbd, uint8_t sc)
         kbd->release = 1;
 
     sc &= 0x7f;
-    if (sc > 0x58)
+    if (sc > 0x70)
       goto out;
 
     if (kbd->emul == 1)
