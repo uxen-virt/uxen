@@ -26,7 +26,6 @@
 
 #include "prototypes.h"
 
-#define RING_SIZE (2*4096)
 #define MAX_NUMBER_KEYBOARDS  128
 
 #define MIN_TIME_KEY_RELEASE_FOCUS_MS 800
@@ -120,19 +119,6 @@ compiler_mb (void)
 {
     asm volatile ("":::"memory");
 }
-
-#if 0
-static int all_keys_up (const uint8_t *buf, size_t len)
-{
-    size_t i;
-
-    for (i = 0; i < len; i++)
-        if (buf[i])
-            return 0;
-
-    return 1;
-}
-#endif
 
 static uint64_t get_timestamp_ms(void)
 {
@@ -646,7 +632,7 @@ int kbd_init (int protkbd)
     addr.family = AF_VSOCK;
     addr.partner = V4V_DOMID_DM;
     addr.v4v.domain = V4V_DOMID_DM;
-    addr.v4v.port = UXEN_V4V_PORT;
+    addr.v4v.port = UXEN_KBD_V4V_PORT;
 
     if (bind(uxen_fd_v4v, (const struct sockaddr *) &addr, sizeof(addr)) < 0)
         err(1, "bind %d", (int) errno);

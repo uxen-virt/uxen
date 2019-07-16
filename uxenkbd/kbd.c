@@ -60,7 +60,7 @@ static void uxenkbd_softirq(unsigned long opaque)
         return;
 
     readlen = 0;
-    while (readlen <= UXEN_RING_LEN) {
+    while (readlen <= UXEN_KBD_RING_LEN) {
         struct ns_event_msg_kbd_input kdata;
 
         len = uxen_v4v_copy_out(dev->uxen_ring, NULL, NULL, NULL, 0, 0);
@@ -101,13 +101,13 @@ static int v4v_init_rings(struct uxenkbd_dev *dev)
 {
     int ret = -1;
 
-    dev->uxen_dest_addr.port = UXEN_V4V_PORT;
+    dev->uxen_dest_addr.port = UXEN_KBD_V4V_PORT;
     dev->uxen_dest_addr.domain = V4V_DOMID_DM;
 
     tasklet_init(&dev->tasklet, uxenkbd_softirq, (unsigned long) dev);
 
     dev->uxen_ring = uxen_v4v_ring_bind(dev->uxen_dest_addr.port, dev->uxen_dest_addr.domain,
-                                       UXEN_RING_LEN, uxenkbd_irq, dev);
+                                       UXEN_KBD_RING_LEN, uxenkbd_irq, dev);
     if (!dev->uxen_ring) {
         ret = -ENOMEM;
         goto out;

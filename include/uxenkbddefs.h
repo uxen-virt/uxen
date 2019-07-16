@@ -7,8 +7,8 @@
 #ifndef _UXENKBDDEF__H_
 #define _UXENKBDDEF__H_
 
-#define UXEN_V4V_PORT   44448
-#define UXEN_RING_LEN   262144
+#define UXEN_KBD_V4V_PORT   44448
+#define UXEN_KBD_RING_LEN   262144
 
 #define UXEN_MIN_KBD_PKT_LEN 24
 

@@ -212,12 +212,13 @@ event_loop(int fd, int protkbd)
     kbd_init (protkbd);
 
     for (;;) {
+        polltimeout = -1;
+        kbd_wakeup(&polltimeout);
         if (poll(poll_fds, npollfds, polltimeout) < 0) {
             if (errno != EINTR)
                 err(1, "poll %d", (int) errno);
             continue;
         }
-        polltimeout = -1;
 
         nevent_fds = 0;
         for (i = 1; i < npollfds; i++) {
@@ -229,8 +230,6 @@ event_loop(int fd, int protkbd)
 
         for (i = 0; i < nevent_fds; i++)
             kbd_event(event_fds[i]);
-
-        kbd_wakeup(&polltimeout);
 
         if (!(poll_fds[0].revents & POLLIN))
             continue;
