@@ -26,7 +26,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2017, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -703,6 +703,46 @@ RTR3DECL(int)  RTFileUnlock(RTFILE hFile, int64_t offLock, uint64_t cbLock)
     return RTErrConvertFromWin32(GetLastError());
 }
 
+static int
+is_file_on_readonly_volume(HANDLE h)
+{
+    wchar_t path[RTPATH_MAX] = { };
+    DWORD flags = 0;
+
+    if (!GetFinalPathNameByHandleW(h, path,
+            sizeof(path) / sizeof(wchar_t) - 1,
+            VOLUME_NAME_GUID)) {
+        Log(("GetFinalPathNameByHandleW failed with %d\n", (int)GetLastError()));
+
+        return 0;
+    }
+
+    if (path[0] == '\\' && path[1] == '\\' && path[2] == '?' &&
+        path[3] == '\\') {
+        int i = 4;
+        int volume_ok = 0;
+
+        while (i < RTPATH_MAX - 1 && path[i]) {
+            if (path[i] == '\\') {
+                volume_ok = 1;
+                path[i+1] = 0;
+                break;
+            }
+            i++;
+        }
+
+        if (volume_ok) {
+            if (!GetVolumeInformationW(path, NULL, 0, NULL, NULL, &flags, NULL, 0)) {
+                Log(("GetVolumeInformationW failed with %d\n", (int)GetLastError()));
+
+                return 0;
+            }
+            return !!(flags & FILE_READ_ONLY_VOLUME);
+        }
+    }
+
+    return 0;
+}
 
 
 RTR3DECL(int) RTFileQueryInfo(RTFILE hFile, PRTFSOBJINFO pObjInfo, RTFSOBJATTRADD enmAdditionalAttribs)
@@ -739,6 +779,10 @@ RTR3DECL(int) RTFileQueryInfo(RTFILE hFile, PRTFSOBJINFO pObjInfo, RTFSOBJATTRAD
         if (dwErr != ERROR_INVALID_HANDLE)
             return RTErrConvertFromWin32(dwErr);
     }
+
+    /* KRY-51783 reflect volume read only status in file attributes */
+    if (is_file_on_readonly_volume((HANDLE)(uintptr_t)RTFileToNative(hFile)))
+        Data.dwFileAttributes |= FILE_ATTRIBUTE_READONLY;
 
     /*
      * Setup the returned data.
