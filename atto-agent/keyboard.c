@@ -147,6 +147,8 @@ static void reset_keyboard (keyboard_t *kbd)
     write_retry (kbd->fd_uhid, &kbd->hid_create_event, sizeof (kbd->hid_create_event));
 
     kbd->last_keys_evt = 0;
+    kbd->emul = 0;
+    kbd->release = 0;
     memset (kbd->last_hid_report, 0, sizeof (kbd->last_hid_report));
     new_kbd_reset_layout = 1;
 }
@@ -400,6 +402,8 @@ static int uxen_v4v_event (void)
 
     if (!use_protected_keyboard) {
         fix_kbd_layout();
+        if ((kdata.flags & 1) /* the key is an extended key */)
+            process_ps2_scancode (&keyboards[0], 0xe0);
         process_ps2_scancode (&keyboards[0], kdata.scancode);
     }
 
