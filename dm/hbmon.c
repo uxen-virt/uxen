@@ -54,6 +54,10 @@ hb_timer_run(void *opaque)
             debug_printf("hbmon: error sending echo ping%d: %d\n", i, err);
         else
             mod_timer(c->timeout_timer, get_clock_ms(vm_clock) + hbmon_timeout_period);
+
+        /* skip userspace ping for attovm */
+        if (vm_attovm_mode)
+            break;
     }
 
     hb_message_id++;
