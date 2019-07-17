@@ -4,12 +4,19 @@
  * SPDX-License-Identifier: ISC
  */
 
+#include <asm-generic/param.h>
+
+#include <linux/cpumask.h>
 #include <linux/err.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
+#include <linux/kernel_stat.h>
 #include <linux/module.h>
+#include <linux/rcupdate.h>
+#include <linux/sched/signal.h>
 #include <linux/slab.h>
 #include <linux/string.h>
+#include <linux/timekeeping.h>
 #include <linux/types.h>
 
 #include <uxen-v4vlib.h>
@@ -21,8 +28,6 @@
 #define VMD_INFO KERN_INFO VMD_PREFIX
 #define VMD_ERR KERN_ERR VMD_PREFIX
 #define VMD_WARNING KERN_WARNING VMD_PREFIX
-
-#define VM_DIAGNOSTICS_V4V_RING_SIZE_BYTES 4096
 
 /*
  * \brief Indicates whether a VM diagnostics message is waiting to being sent.
@@ -128,7 +133,8 @@ static void vmd_send_msg(struct vm_diagnostics_context *context, const v4v_addr_
         return;
     }
 
-    memcpy(&context->v4v_send_addr, addr, sizeof(v4v_addr_t));
+    context->v4v_send_addr.port = addr->port;
+    context->v4v_send_addr.domain = V4V_DOMID_DM;
     context->send_pending = 1;
 
     vmd_flush_send_buffer(context);
@@ -148,6 +154,46 @@ static void vmd_send_invalid_request(struct vm_diagnostics_context *context, con
     {
         vmd_send_msg(context, addr, response);
     }
+}
+
+static void vm_handle_request_stat_system(struct vm_diagnostics_context *context, const v4v_addr_t *addr,
+        uint32_t payload_size, uint8_t *payload)
+{
+    struct timespec64 ts;
+    struct task_struct *task;
+
+    struct vm_diagnostics_stat_system *stat;
+    struct vm_diagnostics_msg *response;
+
+    (void) payload_size;
+    (void) payload;
+
+    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_SYSTEM);
+    if (!response)
+    {
+        return;
+    }
+
+    response->header.payload_size = sizeof(struct vm_diagnostics_stat_system);
+    stat = (struct vm_diagnostics_stat_system *) response->payload;
+
+    stat->ticks_per_second = CLOCKS_PER_SEC;
+    stat->current_time_seconds = ktime_get_real_seconds();
+
+    getboottime64(&ts);
+    stat->boot_time_seconds = ts.tv_sec;
+
+    stat->num_cpus = num_online_cpus();
+
+    stat->num_tasks = 0;
+    rcu_read_lock();
+    for_each_process(task)
+    {
+        ++(stat->num_tasks);
+    }
+    rcu_read_unlock();
+
+    vmd_send_msg(context, addr, response);
 }
 
 /*
@@ -206,6 +252,10 @@ static void vm_diagnostics_softirq(unsigned long data)
 
         switch (request->header.type)
         {
+            case VM_DIAGNOSTICS_MSG_TYPE_STAT_SYSTEM:
+                vm_handle_request_stat_system(context, &from, request->header.payload_size, request->payload);
+                break;
+
             default:
                 vmd_send_invalid_request(context, &from);
         }
