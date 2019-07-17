@@ -11,9 +11,11 @@
 #include <linux/proc_fs.h>
 #include <linux/miscdevice.h>
 #include <linux/uaccess.h>
+#include <linux/interrupt.h>
 
 #include <uxen-platform.h>
 #include <uxen-hypercall.h>
+#include <uxen-v4vlib.h>
 #include <uxen/platform_interface.h>
 #include <ax_attovm.h>
 #include <ax_attovm_stub.h>
@@ -31,6 +33,8 @@ static struct kobject *attovm_kobj;
 static struct kobject *ax_kobj;
 static struct proc_dir_entry *attovm_proc;
 static struct proc_dir_entry *appdef_proc;
+static uxen_v4v_ring_t *echo_ring;
+static struct tasklet_struct echo_tasklet;
 static struct miscdevice attovm_secret_dev;
 extern int use_rdrand, use_rdseed;
 
@@ -38,7 +42,13 @@ int attodev_major = -1;
 struct class *attodev_class = NULL;
 struct device *attodev_dev = NULL;
 
+#define UXEN_ECHO_PORT 8888
+#define UXEN_ECHO_RING_SIZE 4096
+#define UXENECHO_PACKED __attribute__((packed))
 
+struct uxenecho_msg {
+  uint64_t id;
+} UXENECHO_PACKED;
 
 /**
  * sys/kernel/attovm/features
@@ -346,6 +356,66 @@ static int init_procfs(void)
     return 0;
 }
 
+static void echo_irq(void *opaque)
+{
+    tasklet_schedule(&echo_tasklet);
+}
+
+static void echo_softirq(unsigned long opaque)
+{
+    uxen_v4v_ring_t *ring = echo_ring;
+    v4v_addr_t from;
+    uint32_t proto;
+    struct uxenecho_msg msg;
+    int len, err;
+
+    for (;;) {
+        len = uxen_v4v_copy_out(ring, NULL, NULL, NULL, 0, 0);
+        if (len <= 0 || len < sizeof(msg))
+            break;
+        uxen_v4v_copy_out(ring, &from, &proto, &msg, sizeof(msg), 1);
+        uxen_v4v_notify();
+#ifdef ECHO_DEBUG
+        printk("echo: request id=%d received\n", (int)msg.id);
+#endif
+        /* send resp */
+        from.domain = V4V_DOMID_DM;
+        err = uxen_v4v_send_from_ring(ring, &from, &msg, sizeof(msg),
+            V4V_PROTO_DGRAM);
+        if (err != len) {
+            printk(KERN_WARNING "%s: failed to send echo response: %d\n", __FUNCTION__, err);
+            break;
+        }
+    }
+}
+
+int init_echo(void)
+{
+    int ret = 0;
+
+    tasklet_init(&echo_tasklet, echo_softirq, 0);
+
+    echo_ring = uxen_v4v_ring_bind(UXEN_ECHO_PORT, V4V_DOMID_DM, UXEN_ECHO_RING_SIZE,
+        echo_irq, NULL);
+    if (!echo_ring) {
+        ret = -ENOMEM;
+        goto out;
+    }
+    if (IS_ERR(echo_ring)) {
+        ret = PTR_ERR(echo_ring);
+        echo_ring = NULL;
+        goto out;
+    }
+
+    printk("initialized attovm kernel echo\n");
+
+out:
+    if (ret) {
+        tasklet_kill(&echo_tasklet);
+    }
+    return ret;
+}
+
 int attovm_platform_init(struct bus_type *bus)
 {
     int ret;
@@ -370,6 +440,10 @@ int attovm_platform_init(struct bus_type *bus)
     if (ret)
         return ret;
 
+    ret = init_echo();
+    if (ret)
+        return ret;
+
     attovm_secret_dev.minor = MISC_DYNAMIC_MINOR;
     attovm_secret_dev.name = "attovm_secret";
     attovm_secret_dev.fops = &attovm_secret_file_ops;
@@ -387,6 +461,12 @@ int attovm_platform_init(struct bus_type *bus)
 
 void attovm_platform_exit(void)
 {
+    if (echo_ring) {
+        uxen_v4v_ring_free(echo_ring);
+        tasklet_kill(&echo_tasklet);
+        echo_ring = NULL;
+    }
+
     if (axen_hypervisor())
         misc_deregister(&attovm_secret_dev);
 
