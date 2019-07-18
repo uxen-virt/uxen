@@ -392,6 +392,11 @@ static int uxen_v4v_event (void)
             return -1;
         }
 
+        if (kdata.hdr.proto != NS_EVENT_MSG_KBD_INPUT || kdata.hdr.len != sizeof(struct ns_event_msg_kbd_input)) {
+            // Ignore non-keyboard events
+            return 0;
+        }
+
         if (len < UXEN_MIN_KBD_PKT_LEN) {
             fprintf (stderr, "atto-kbd: uxen ring too short dgram!\n");
             return -1;
