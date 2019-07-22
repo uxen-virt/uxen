@@ -4,7 +4,10 @@
  * SPDX-License-Identifier: ISC
  */
 
+#pragma once
+
 #define VM_DIAGNOSTICS_MSG_TYPE_STAT_SYSTEM 0
+#define VM_DIAGNOSTICS_MSG_TYPE_STAT_CPU_SUMMARY 1
 
 #define VM_DIAGNOSTICS_MSG_TYPE_ERROR 0x8000
 #define VM_DIAGNOSTICS_MSG_TYPE_ERROR_INVALID_REQUEST (VM_DIAGNOSTICS_MSG_TYPE_ERROR + 0)
@@ -33,13 +36,31 @@ struct vm_diagnostics_msg
 
 struct vm_diagnostics_stat_system
 {
-    uint64_t ticks_per_second;
+    uint64_t current_time_sec;
+    uint64_t current_time_nsec;
 
-    uint64_t current_time_seconds;
-    uint64_t boot_time_seconds;
+    uint64_t boot_time_sec;
+    uint64_t boot_time_nsec;
 
     uint32_t num_cpus;
     uint32_t num_tasks;
+
+};
+
+struct vm_diagnostics_stat_cpu
+{
+    uint32_t cpu_id;
+
+    uint64_t user_nsec;
+    uint64_t nice_nsec;
+    uint64_t system_nsec;
+    uint64_t idle_nsec;
+    uint64_t iowait_nsec;
+    uint64_t irq_nsec;
+    uint64_t softirq_nsec;
+    uint64_t steal_nsec;
+    uint64_t guest_nsec;
+    uint64_t guest_nice_nsec;
 
 };
 

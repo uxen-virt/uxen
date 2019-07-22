@@ -64,7 +64,7 @@ static struct vm_diagnostics_context *vmd_context;
  * \param type The message type.
  *
  * \return A VM diagnostics message instance that can be used to construct an outgoing message, or NULL if a message is
- * already waiting to be sent.
+ * already waiting to be sent. The memory is zeroed beforehand.
  */
 static struct vm_diagnostics_msg * vmd_get_msg_to_send(struct vm_diagnostics_context *context, uint16_t type)
 {
@@ -177,11 +177,13 @@ static void vm_handle_request_stat_system(struct vm_diagnostics_context *context
     response->header.payload_size = sizeof(struct vm_diagnostics_stat_system);
     stat = (struct vm_diagnostics_stat_system *) response->payload;
 
-    stat->ticks_per_second = CLOCKS_PER_SEC;
-    stat->current_time_seconds = ktime_get_real_seconds();
+    ktime_get_real_ts64(&ts);
+    stat->current_time_sec = ts.tv_sec;
+    stat->current_time_nsec = ts.tv_nsec;
 
     getboottime64(&ts);
-    stat->boot_time_seconds = ts.tv_sec;
+    stat->boot_time_sec = ts.tv_sec;
+    stat->boot_time_nsec = ts.tv_nsec;
 
     stat->num_cpus = num_online_cpus();
 
@@ -192,6 +194,43 @@ static void vm_handle_request_stat_system(struct vm_diagnostics_context *context
         ++(stat->num_tasks);
     }
     rcu_read_unlock();
+
+    vmd_send_msg(context, addr, response);
+}
+
+static void vm_handle_request_stat_cpu_summary(struct vm_diagnostics_context *context, const v4v_addr_t *addr,
+        uint32_t payload_size, uint8_t *payload)
+{
+    struct vm_diagnostics_stat_cpu *summary;
+    struct vm_diagnostics_msg *response;
+
+    int i;
+
+    (void) payload_size;
+    (void) payload;
+
+    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_CPU_SUMMARY);
+    if (!response)
+    {
+        return;
+    }
+
+    response->header.payload_size = sizeof(struct vm_diagnostics_stat_cpu);
+    summary = (struct vm_diagnostics_stat_cpu *) response->payload;
+
+    for_each_online_cpu (i)
+    {
+        summary->user_nsec += kcpustat_cpu(i).cpustat[CPUTIME_USER];
+        summary->nice_nsec += kcpustat_cpu(i).cpustat[CPUTIME_NICE];
+        summary->system_nsec += kcpustat_cpu(i).cpustat[CPUTIME_SYSTEM];
+        summary->idle_nsec += kcpustat_cpu(i).cpustat[CPUTIME_IDLE];
+        summary->iowait_nsec += kcpustat_cpu(i).cpustat[CPUTIME_IOWAIT];
+        summary->irq_nsec += kcpustat_cpu(i).cpustat[CPUTIME_IRQ];
+        summary->softirq_nsec += kcpustat_cpu(i).cpustat[CPUTIME_SOFTIRQ];
+        summary->steal_nsec += kcpustat_cpu(i).cpustat[CPUTIME_STEAL];
+        summary->guest_nsec += kcpustat_cpu(i).cpustat[CPUTIME_GUEST];
+        summary->guest_nice_nsec += kcpustat_cpu(i).cpustat[CPUTIME_GUEST_NICE];
+    }
 
     vmd_send_msg(context, addr, response);
 }
@@ -254,6 +293,10 @@ static void vm_diagnostics_softirq(unsigned long data)
         {
             case VM_DIAGNOSTICS_MSG_TYPE_STAT_SYSTEM:
                 vm_handle_request_stat_system(context, &from, request->header.payload_size, request->payload);
+                break;
+
+            case VM_DIAGNOSTICS_MSG_TYPE_STAT_CPU_SUMMARY:
+                vm_handle_request_stat_cpu_summary(context, &from, request->header.payload_size, request->payload);
                 break;
 
             default:
