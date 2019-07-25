@@ -235,6 +235,50 @@ static void vm_handle_request_stat_cpu_summary(struct vm_diagnostics_context *co
     vmd_send_msg(context, addr, response);
 }
 
+static void vm_handle_request_stat_cpu(struct vm_diagnostics_context *context, const v4v_addr_t *addr,
+        uint32_t payload_size, uint8_t *payload)
+{
+    struct vm_diagnostics_stat_cpu *cpu;
+    struct vm_diagnostics_msg *response;
+
+    uint32_t *cpu_id;
+
+    if (payload_size < sizeof(uint32_t))
+    {
+        vmd_send_invalid_request(context, addr);
+        return;
+    }
+
+    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_CPU);
+    if (!response)
+    {
+        return;
+    }
+
+    /* Only provide a payload if we have a CPU with the requested ID. */
+    cpu_id = (uint32_t *) payload;
+    if (*cpu_id < num_online_cpus())
+    {
+        response->header.payload_size = sizeof(struct vm_diagnostics_stat_cpu);
+        cpu = (struct vm_diagnostics_stat_cpu *) response->payload;
+
+        cpu->cpu_id = *cpu_id;
+
+        cpu->user_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_USER];
+        cpu->nice_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_NICE];
+        cpu->system_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_SYSTEM];
+        cpu->idle_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_IDLE];
+        cpu->iowait_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_IOWAIT];
+        cpu->irq_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_IRQ];
+        cpu->softirq_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_SOFTIRQ];
+        cpu->steal_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_STEAL];
+        cpu->guest_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_GUEST];
+        cpu->guest_nice_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_GUEST_NICE];
+    }
+
+    vmd_send_msg(context, addr, response);
+}
+
 /*
  * \brief Receives V4V event notifications.
  *
@@ -297,6 +341,10 @@ static void vm_diagnostics_softirq(unsigned long data)
 
             case VM_DIAGNOSTICS_MSG_TYPE_STAT_CPU_SUMMARY:
                 vm_handle_request_stat_cpu_summary(context, &from, request->header.payload_size, request->payload);
+                break;
+
+            case VM_DIAGNOSTICS_MSG_TYPE_STAT_CPU:
+                vm_handle_request_stat_cpu(context, &from, request->header.payload_size, request->payload);
                 break;
 
             default:
