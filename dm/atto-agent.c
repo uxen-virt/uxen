@@ -74,12 +74,18 @@ struct atto_agent_varlen_packet {
                        sizeof(struct atto_agent_msg)];
 } __attribute__((packed));
 
+typedef struct atto_agent_pending_send {
+    TAILQ_ENTRY(atto_agent_pending_send) entry;
+    void *buffer;
+    uint32_t len;
+    v4v_async_t async;
+} atto_agent_pending_send_t;
+
 #define MAX_STRING_LEN (sizeof(struct atto_agent_varlen_packet) - \
                         offsetof(struct atto_agent_varlen_packet, msg.string))
 
 struct atto_agent_state {
     int initialized;
-    int tx_busy;
     int can_send_resize;
     uint32_t xres_last;
     uint32_t yres_last;
@@ -94,6 +100,8 @@ struct atto_agent_state {
     critical_section cs;
     struct display_state *ds;
     uint32_t keyboard_layout;
+    TAILQ_HEAD(, atto_agent_pending_send) tx_queue;
+    critical_section tx_queue_lock;
 };
 
 #define RESIZE_BACKOFF_MS 400
@@ -103,6 +111,30 @@ static struct atto_agent_state state;
 static int atto_agent_rx_start(struct atto_agent_state *s);
 static void send_latest_keyboard_layout(struct atto_agent_state *s);
 
+static atto_agent_pending_send_t *
+init_pending_send(struct atto_agent_state *s, void *buffer, size_t len)
+{
+    atto_agent_pending_send_t *ps = calloc(1, sizeof(atto_agent_pending_send_t));
+    assert(ps);
+
+    ps->buffer = malloc(len);;
+    assert(ps->buffer);
+
+    memcpy(ps->buffer, buffer, len);
+    ps->len = len;
+
+    dm_v4v_async_init(&s->v4v, &ps->async, s->tx_event);
+
+    return ps;
+}
+
+static void
+free_pending_send(atto_agent_pending_send_t *ps)
+{
+    free(ps->buffer);
+    free(ps);
+}
+
 static int
 send_message(struct atto_agent_state *s,
     struct atto_agent_varlen_packet *resp,
@@ -111,26 +143,29 @@ send_message(struct atto_agent_state *s,
 {
     int err;
 
-#if 0
-    if (s->tx_busy) {
-        debug_printf("atto-agent: can't send, busy\n");
-        return -1;
-    }
-#endif
     resp->dgram.addr.port = port ? port : V4V_PORT;
     resp->dgram.addr.domain = s->partner_id;
     resp->dgram.flags = 0;
 
-    dm_v4v_async_init(&s->v4v, &s->async, s->tx_event);
+    /* init pending send packet */
+    atto_agent_pending_send_t *ps = init_pending_send(s, resp, resp_len);
+    assert(ps);
+
+    critical_section_enter(&s->tx_queue_lock);
     ioh_event_reset(&s->tx_event);
-    s->tx_busy = 1;
-    err = dm_v4v_send(&s->v4v, (v4v_datagram_t*)resp,
-        resp_len, &s->async);
+    TAILQ_INSERT_TAIL(&s->tx_queue, ps, entry);
+    err = dm_v4v_send(&s->v4v, (v4v_datagram_t*)ps->buffer,
+        ps->len, &ps->async);
     if (err && err != ERROR_IO_PENDING) {
+        TAILQ_REMOVE(&s->tx_queue, ps, entry);
+        free_pending_send(ps);
+        critical_section_leave(&s->tx_queue_lock);
         warnx("%s: dm_v4v_send failed with %d\n", __FUNCTION__, err);
-        s->tx_busy = 0;
+
         return -1;
     }
+
+    critical_section_leave(&s->tx_queue_lock);
 
     return 0;
 }
@@ -255,19 +290,31 @@ atto_agent_tx_event(void *opaque)
     struct atto_agent_state *s = opaque;
     size_t bytes;
     int err;
+    atto_agent_pending_send_t *ps, *ps_next;
 
-    s->tx_busy = 0;
-    err = dm_v4v_async_get_result(&s->async, &bytes, false);
-    if (err) {
-        switch (err) {
-        case ERROR_IO_INCOMPLETE:
-            ioh_event_reset(&s->tx_event);
-            return;
+    critical_section_enter(&s->tx_queue_lock);
+
+    ioh_event_reset(&s->tx_event);
+
+    TAILQ_FOREACH_SAFE(ps, &s->tx_queue, entry, ps_next) {
+        err = dm_v4v_async_get_result(&ps->async, &bytes, false);
+        if (err) {
+            switch (err) {
+            case ERROR_IO_INCOMPLETE:
+                /* still pending */
+                continue;
+            }
+            warnx("%s: dm_v4v_async_get_result failed with %d\n", __FUNCTION__,
+                err);
         }
-        warnx("%s: dm_v4v_async_get_result failed with %d\n", __FUNCTION__,
-              err);
-        return;
+
+        /* async finished, dequeue & free */
+        TAILQ_REMOVE(&s->tx_queue, ps, entry);
+
+        free_pending_send(ps);
     }
+
+    critical_section_leave(&s->tx_queue_lock);
 }
 
 static void
@@ -381,6 +428,9 @@ atto_agent_init(void)
         return -1;
     }
 
+    critical_section_init(&s->tx_queue_lock);
+    TAILQ_INIT(&s->tx_queue);
+
     s->partner_id = bind.ring_id.partner;
     s->resize_timer = new_timer_ms(vm_clock, resize_timer_notify, s);
     ioh_event_init(&s->rx_event);
@@ -459,6 +509,21 @@ atto_agent_request_keyboard_focus(unsigned offer)
     critical_section_leave(&s->cs);
 }
 
+static void
+tx_queue_cleanup(struct atto_agent_state *s)
+{
+    atto_agent_pending_send_t *ps;
+
+    for (;;) {
+        ps = TAILQ_FIRST(&s->tx_queue);
+        if (ps == NULL)
+            break;
+        TAILQ_REMOVE(&s->tx_queue, ps, entry);
+        dm_v4v_async_cancel(&ps->async);
+        free_pending_send(ps);
+    }
+}
+
 void
 atto_agent_cleanup(void)
 {
@@ -471,6 +536,8 @@ atto_agent_cleanup(void)
         dm_v4v_close(&s->v4v);
         ioh_event_close(&s->tx_event);
         ioh_event_close(&s->rx_event);
+        tx_queue_cleanup(s);
+        critical_section_free(&s->tx_queue_lock);
         critical_section_free(&s->cs);
         del_timer(s->resize_timer);
         s->initialized = 0;
