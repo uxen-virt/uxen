@@ -7,12 +7,17 @@
 #include <asm-generic/param.h>
 
 #include <linux/cpumask.h>
+#include <linux/cred.h>
 #include <linux/err.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/kernel_stat.h>
+#include <linux/mm.h>
 #include <linux/module.h>
 #include <linux/rcupdate.h>
+#include <linux/sched.h>
+#include <linux/sched/cputime.h>
+#include <linux/sched/mm.h>
 #include <linux/sched/signal.h>
 #include <linux/slab.h>
 #include <linux/string.h>
@@ -255,7 +260,7 @@ static void vm_handle_request_stat_cpu(struct vm_diagnostics_context *context, c
         return;
     }
 
-    /* Only provide a payload if we have a CPU with the requested ID. */
+    /* Only provide a payload if we have a CPU with the requested ID (index). */
     cpu_id = (uint32_t *) payload;
     if (*cpu_id < num_online_cpus())
     {
@@ -275,6 +280,82 @@ static void vm_handle_request_stat_cpu(struct vm_diagnostics_context *context, c
         cpu->guest_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_GUEST];
         cpu->guest_nice_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_GUEST_NICE];
     }
+
+    vmd_send_msg(context, addr, response);
+}
+
+static void vm_handle_request_stat_task(struct vm_diagnostics_context *context, const v4v_addr_t *addr,
+        uint32_t payload_size, uint8_t *payload)
+{
+    struct vm_diagnostics_stat_task *task_payload;
+    struct vm_diagnostics_msg *response;
+
+    uint32_t *task_id;
+
+    struct task_struct *task;
+
+    if (payload_size < sizeof(uint32_t))
+    {
+        vmd_send_invalid_request(context, addr);
+        return;
+    }
+
+    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_TASK);
+    if (!response)
+    {
+        return;
+    }
+
+    /* Use the task ID as an index into the task list. Only provide a payload if we have a corresponding task. */
+    task_id = (uint32_t *) payload;
+    rcu_read_lock();
+    for_each_process(task)
+    {
+        if (*task_id > 0)
+        {
+            --(*task_id);
+        }
+        else
+        {
+            const struct cred *cred;
+            struct mm_struct *mm;
+
+            response->header.payload_size = sizeof(struct vm_diagnostics_stat_task);
+            task_payload = (struct vm_diagnostics_stat_task *) response->payload;
+
+            /* Use PID values as seen from the init namespace. */
+            task_payload->pid = task_pid_nr(task);
+            task_payload->parent_pid = task_pid_nr(task->real_parent);
+
+            cred = get_task_cred(task);
+            if (cred)
+            {
+                task_payload->uid = cred->uid.val;
+                task_payload->gid = cred->gid.val;
+            }
+
+            get_task_comm(task_payload->name, task);
+ 
+            task_payload->state = task_state_to_char(task);
+            task_payload->num_threads = get_nr_threads(task);
+            task_payload->start_time_nsec = task->real_start_time;
+            task_payload->last_run_cpu_id = task_cpu(task);
+
+            thread_group_cputime_adjusted(task, &task_payload->user_nsec, &task_payload->system_nsec);
+
+            mm = get_task_mm(task);
+            if (mm)
+            {
+                task_payload->user_vm_size_bytes = PAGE_SIZE * mm->total_vm;
+                task_payload->user_rss = get_mm_rss(mm);
+
+                mmput(mm);
+            }
+
+            break;
+        }
+    }
+    rcu_read_unlock();
 
     vmd_send_msg(context, addr, response);
 }
@@ -345,6 +426,10 @@ static void vm_diagnostics_softirq(unsigned long data)
 
             case VM_DIAGNOSTICS_MSG_TYPE_STAT_CPU:
                 vm_handle_request_stat_cpu(context, &from, request->header.payload_size, request->payload);
+                break;
+
+            case VM_DIAGNOSTICS_MSG_TYPE_STAT_TASK:
+                vm_handle_request_stat_task(context, &from, request->header.payload_size, request->payload);
                 break;
 
             default:
