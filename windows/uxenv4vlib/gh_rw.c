@@ -480,7 +480,7 @@ gh_v4v_process_datagram_reads(xenv4v_extension_t *pde, xenv4v_context_t *ctx, BO
     uint32_t            protocol;
     ssize_t             ret;
 
-
+  is_mapped_now:
     if (ctx->ring_object->ring_is_mapped) {
         // The ring is mapped so we just signal to userland to do the work
         if (ctx->ring_object->ring->rx_ptr == ctx->ring_object->ring->tx_ptr) {
@@ -500,6 +500,12 @@ gh_v4v_process_datagram_reads(xenv4v_extension_t *pde, xenv4v_context_t *ctx, BO
     // lock the ring and start popping out pending IRPs either from the read dispatch
     // handler or the VIRQ DPC.
     KeAcquireInStackQueuedSpinLock(&ctx->ring_object->lock, &lqh);
+
+    // Re-check ring_is_mapped with lock held
+    if (ctx->ring_object->ring_is_mapped) {
+        KeReleaseInStackQueuedSpinLock(&lqh);
+        goto is_mapped_now;
+    }
 
     do {
         if (ctx->ring_object->ring->rx_ptr == ctx->ring_object->ring->tx_ptr) {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -75,6 +75,7 @@ static int user_map_exception(void)
 
 NTSTATUS uxen_v4v_mapring(xenv4v_ring_t *robj, v4v_mapring_values_t *mr)
 {
+    KLOCK_QUEUE_HANDLE  lqh;
 
     if (!robj)
         return STATUS_INVALID_PARAMETER;
@@ -85,6 +86,9 @@ NTSTATUS uxen_v4v_mapring(xenv4v_ring_t *robj, v4v_mapring_values_t *mr)
     if (robj->user_map)
         return STATUS_INVALID_PARAMETER;
 
+    KeAcquireInStackQueuedSpinLock(&robj->lock, &lqh);
+    robj->ring_is_mapped = 1;
+    KeReleaseInStackQueuedSpinLock(&lqh);
 
     try {
         robj->user_map = (void *) MmMapLockedPagesSpecifyCache(robj->mdl, UserMode, MmCached, NULL, FALSE, NormalPagePriority);
@@ -92,10 +96,11 @@ NTSTATUS uxen_v4v_mapring(xenv4v_ring_t *robj, v4v_mapring_values_t *mr)
     except (user_map_exception()) {
         robj->user_map = NULL;
     }
-    robj->ring_is_mapped = 1;
 
-    if (!robj->user_map)
+    if (!robj->user_map) {
+        robj->ring_is_mapped = 0;
         return STATUS_INVALID_PARAMETER;
+    }
 
     mr->ring = (v4v_ring_t *) robj->user_map;
 

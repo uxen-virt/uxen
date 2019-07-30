@@ -201,7 +201,7 @@ typedef struct xenv4v_ring_struct {
 
     //Set if the client is responsible for removing things
     //from the ring
-    BOOLEAN ring_is_mapped;
+    volatile BOOLEAN ring_is_mapped;
 } xenv4v_ring_t;
 
 #define XENV4V_INVALID_CONNID      0xffffffffffffffff
