@@ -317,13 +317,15 @@ v4v_mb(void)
 /*************** Utility functions **************/
 
 static V4V_INLINE uint32_t
-v4v_ring_bytes_to_read(volatile struct v4v_ring *r)
+v4v_ring_bytes_to_read(volatile struct v4v_ring *r, uint32_t rxp, uint32_t rlen)
 {
-    int32_t ret;
-    ret = r->tx_ptr - r->rx_ptr;
+    int32_t ret = r->tx_ptr;
+    if (ret < 0 || (uint32_t)ret >= rlen)
+        ret = 0;
+    ret -= rxp;
     if (ret >= 0)
         return ret;
-    return (uint32_t)(r->len + ret);
+    return (uint32_t)(rlen + ret);
 }
 
 
@@ -333,24 +335,29 @@ v4v_ring_bytes_to_read(volatile struct v4v_ring *r)
 
 
 static V4V_INLINE ssize_t
-v4v_copy_out(struct v4v_ring *r, struct v4v_addr *from, uint32_t *protocol,
-             void *_buf, size_t t, int consume)
+v4v_copy_out_safe(struct v4v_ring *r, uint32_t rlen, struct v4v_addr *from,
+                  uint32_t *protocol, void *_buf, size_t t, int consume)
 {
     volatile struct v4v_ring_message_header *mh;
     /* unnecessary cast from void * required by MSVC compiler */
     uint8_t *buf = (uint8_t *)_buf;
-    uint32_t btr = v4v_ring_bytes_to_read(r);
-    uint32_t rxp = r->rx_ptr;
+    uint32_t btr;
+    uint32_t rxp = V4V_ROUNDUP(r->rx_ptr);
     uint32_t bte;
     uint32_t len;
     ssize_t ret;
+
+    if (rxp >= rlen)
+        r->rx_ptr = rxp = 0;
+
+    btr = v4v_ring_bytes_to_read(r, rxp, rlen);
 
     if (btr < sizeof(*mh))
         return -1;
 
 /* Because the message_header is 128 bits long and the ring is 128 bit
  * aligned, we're gaurunteed never to wrap*/
-    mh = (volatile struct v4v_ring_message_header *)&r->ring[r->rx_ptr];
+    mh = (volatile struct v4v_ring_message_header *)&r->ring[rxp];
 
     len = mh->len;
     if (btr < len)
@@ -369,12 +376,12 @@ v4v_copy_out(struct v4v_ring *r, struct v4v_addr *from, uint32_t *protocol,
         *protocol = mh->protocol;
 
     rxp += sizeof(*mh);
-    if (rxp == r->len)
+    if (rxp == rlen)
         rxp = 0;
     len -= sizeof(*mh);
     ret = len;
 
-    bte = r->len - rxp;
+    bte = rlen - rxp;
 
     if (bte < len) {
         if (t < bte) {
@@ -401,7 +408,7 @@ v4v_copy_out(struct v4v_ring *r, struct v4v_addr *from, uint32_t *protocol,
         memcpy(buf, (void *)&r->ring[rxp], (t < len) ? t : len);
 
     rxp += V4V_ROUNDUP(len);
-    if (rxp == r->len)
+    if (rxp == rlen)
         rxp = 0;
 
     v4v_mb();
@@ -410,6 +417,13 @@ v4v_copy_out(struct v4v_ring *r, struct v4v_addr *from, uint32_t *protocol,
         r->rx_ptr = rxp;
 
     return ret;
+}
+
+static V4V_INLINE ssize_t
+v4v_copy_out(struct v4v_ring *r, struct v4v_addr *from, uint32_t *protocol,
+             void *_buf, size_t t, int consume)
+{
+    return v4v_copy_out_safe(r, r->len, from, protocol, _buf, t, consume);
 }
 
 static V4V_INLINE void
@@ -450,11 +464,16 @@ v4v_copy_out_offset(struct v4v_ring *r, struct v4v_addr *from,
     volatile struct v4v_ring_message_header *mh;
     /* unnecessary cast from void * required by MSVC compiler */
     uint8_t *buf = (uint8_t *)_buf;
-    uint32_t btr = v4v_ring_bytes_to_read(r);
-    uint32_t rxp = r->rx_ptr;
+    uint32_t btr;
+    uint32_t rxp = V4V_ROUNDUP(r->rx_ptr);
     uint32_t bte;
     uint32_t len;
     ssize_t ret;
+
+    if (rxp >= r->len)
+        r->rx_ptr = rxp = 0;
+
+    btr = v4v_ring_bytes_to_read(r, rxp, r->len);
 
     buf -= skip;
 
@@ -463,7 +482,7 @@ v4v_copy_out_offset(struct v4v_ring *r, struct v4v_addr *from,
 
 /* Because the message_header is 128 bits long and the ring is 128 bit
  * aligned, we're gaurunteed never to wrap*/
-    mh = (volatile struct v4v_ring_message_header *)&r->ring[r->rx_ptr];
+    mh = (volatile struct v4v_ring_message_header *)&r->ring[rxp];
 
     len = mh->len;
     if (btr < len)

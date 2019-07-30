@@ -527,7 +527,8 @@ gh_v4v_process_datagram_reads(xenv4v_extension_t *pde, xenv4v_context_t *ctx, BO
         src = (v4v_addr_t *)nextIrp->MdlAddress->MappedSystemVa;
         msg = ((UCHAR *)nextIrp->MdlAddress->MappedSystemVa) + sizeof(v4v_datagram_t);
         len = isl->Parameters.Read.Length - sizeof(v4v_datagram_t);
-        ret = v4v_copy_out(ctx->ring_object->ring, src, &protocol, msg, len, 1);
+        ret = v4v_copy_out_safe(ctx->ring_object->ring, ctx->ring_length, src,
+                                &protocol, msg, len, 1);
         if (ret < 0) {
             uxen_v4v_err("ctx %p failure reading data into IRP %p", ctx,
                          nextIrp);
