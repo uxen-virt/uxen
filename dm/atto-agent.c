@@ -205,6 +205,7 @@ process_x11_cursor(struct atto_agent_state *s,
 
     /* custom x11 cursor */
     if (msg->ctype == (uint32_t) (-1)) {
+        int bitmap_len = len - offsetof(struct atto_agent_msg, bitmap);
         if (len < (((uint8_t *) msg->bitmap) - ((uint8_t *) msg)) +
                  msg->len) {
 
@@ -212,11 +213,16 @@ process_x11_cursor(struct atto_agent_state *s,
                         __FUNCTION__, len);
            return;
         }
-        debug_printf("%s: atto_create_custom_cursor xptr %lx nbytes %u\n",
+        if (msg->nx > 256 || msg->ny > 256) {
+            debug_printf("%s: Cursor size %" PRIu32 "x%" PRIu32 " too big\n",
+                         __FUNCTION__, msg->nx, msg->ny);
+            return;
+        }
+        debug_printf("%s: atto_create_custom_cursor xptr %lx bitmap_len %d\n",
                      __FUNCTION__, (unsigned long) msg->ccursor,
-                     (unsigned) msg->len);
+                     (unsigned) bitmap_len);
         attovm_create_custom_cursor(msg->ccursor, msg->xhot, msg->yhot, msg->nx,
-                                    msg->ny, msg->len, (uint8_t *)&msg->bitmap);
+                                    msg->ny, bitmap_len, (uint8_t *)&msg->bitmap);
         /* Apparently we also need to activate in this case */
         attovm_set_x11_cursor(s->ds, msg->ccursor);
 
@@ -224,6 +230,7 @@ process_x11_cursor(struct atto_agent_state *s,
     }
 
     /* normal x11 cursor */
+    /* Note, we don't use these any more because Win32 cursor APIs are so bad */
     attovm_map_x11_cursor(msg->ctype, msg->ccursor);
 }
 

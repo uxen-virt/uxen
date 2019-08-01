@@ -261,9 +261,13 @@ attovm_map_x11_cursor(int x11_type, uint64_t x11_ptr)
 void
 attovm_create_custom_cursor(uint64_t x11_ptr, int xhot, int yhot,
                             int x11_nx, int x11_ny,
-                            int nbytes, uint8_t *data)
+                            int data_len, const uint8_t *data)
 {
-    /* Old behaviour was to do nothing if x11_ptr matched anything */
+    int mono_bits_len = ((x11_nx + 7) >> 3) * x11_ny;
+    int mono_mask_len = mono_bits_len * 2; /* AND mask plus XOR mask */
+    int color_len = x11_nx * x11_ny * 4; /* 32bpp ARGB */
+
+    /* Don't do anything if x11_ptr has already been configured */
     win_cursor *wc = NULL;
     LIST_FOREACH(wc, &win_cursor_list, entry) {
         if (wc->x11_ptr == x11_ptr) {
@@ -282,11 +286,37 @@ attovm_create_custom_cursor(uint64_t x11_ptr, int xhot, int yhot,
     wc->hot_y = yhot;
     wc->w = x11_nx;
     wc->h = x11_ny;
-    /* It appears that these must always be monochrome */
-    wc->mask = malloc(nbytes);
-    memcpy(wc->mask, data, nbytes);
-    wc->color = NULL;
+
+    if (data_len == mono_mask_len + 4 + color_len
+        && *(uint32_t*)(data + mono_mask_len) == 32) {
+        /* This means it's colour */
+        wc->color = malloc(color_len);
+        if (!wc->color)
+            goto fail;
+        memcpy(wc->color, data + mono_mask_len + 4, color_len);
+
+        /* mask should be just the AND mask */
+        wc->mask = malloc(mono_bits_len);
+        if (!wc->mask)
+            goto fail;
+        memcpy(wc->mask, data, mono_bits_len);
+    } else if (data_len >= mono_mask_len) {
+        /* Old pre-color-support guest code would send larger than necessary
+           messages, meaning we cannot require data_len to be a specific value
+        */
+        wc->color = NULL;
+        wc->mask = malloc(mono_mask_len);
+        if (!wc->mask)
+            goto fail;
+        memcpy(wc->mask, data, mono_mask_len);
+    }
     LIST_INSERT_HEAD(&win_cursor_list, wc, entry);
+    return;
+
+fail:
+    free(wc->color);
+    free(wc->mask);
+    free(wc);
 }
 
 int
