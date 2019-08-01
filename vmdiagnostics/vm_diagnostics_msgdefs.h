@@ -7,9 +7,10 @@
 #pragma once
 
 #define VM_DIAGNOSTICS_MSG_TYPE_STAT_SYSTEM 0
-#define VM_DIAGNOSTICS_MSG_TYPE_STAT_CPU_SUMMARY 1
-#define VM_DIAGNOSTICS_MSG_TYPE_STAT_CPU 2
-#define VM_DIAGNOSTICS_MSG_TYPE_STAT_TASK 3
+#define VM_DIAGNOSTICS_MSG_TYPE_STAT_MEMORY 1
+#define VM_DIAGNOSTICS_MSG_TYPE_STAT_CPU_SUMMARY 2
+#define VM_DIAGNOSTICS_MSG_TYPE_STAT_CPU 3
+#define VM_DIAGNOSTICS_MSG_TYPE_STAT_TASK 4
 
 #define VM_DIAGNOSTICS_MSG_TYPE_ERROR 0x8000
 #define VM_DIAGNOSTICS_MSG_TYPE_ERROR_INVALID_REQUEST (VM_DIAGNOSTICS_MSG_TYPE_ERROR + 0)
@@ -51,6 +52,20 @@ struct vm_diagnostics_stat_system
 
 };
 
+struct vm_diagnostics_stat_memory
+{
+    uint32_t page_size_bytes;
+
+    uint64_t total_ram_pages;
+    uint64_t free_ram_pages;
+    uint64_t available_ram_pages;
+    uint64_t shared_ram_pages;
+    uint64_t buffer_ram_pages;
+
+    uint64_t num_file_pages;
+
+};
+
 struct vm_diagnostics_stat_cpu
 {
     uint32_t cpu_id;
@@ -87,7 +102,7 @@ struct vm_diagnostics_stat_task
     uint64_t system_nsec;
 
     uint64_t user_vm_size_bytes;
-    int64_t user_rss;
+    int64_t user_rss_pages;
 
 };
 

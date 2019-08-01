@@ -23,6 +23,7 @@
 #include <linux/string.h>
 #include <linux/timekeeping.h>
 #include <linux/types.h>
+#include <linux/vmstat.h>
 
 #include <uxen-v4vlib.h>
 
@@ -203,6 +204,42 @@ static void vm_handle_request_stat_system(struct vm_diagnostics_context *context
     vmd_send_msg(context, addr, response);
 }
 
+static void vm_handle_request_stat_memory(struct vm_diagnostics_context *context, const v4v_addr_t *addr,
+        uint32_t payload_size, uint8_t *payload)
+{
+    struct sysinfo info;
+
+    struct vm_diagnostics_stat_memory *mem;
+    struct vm_diagnostics_msg *response;
+
+    (void) payload_size;
+    (void) payload;
+
+    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_MEMORY);
+    if (!response)
+    {
+        return;
+    }
+
+    response->header.payload_size = sizeof(struct vm_diagnostics_stat_memory);
+    mem = (struct vm_diagnostics_stat_memory *) response->payload;
+
+    si_meminfo(&info);
+
+    mem->page_size_bytes = info.mem_unit;
+
+    mem->total_ram_pages = info.totalram;
+    mem->free_ram_pages = info.freeram;
+    mem->shared_ram_pages = info.sharedram;
+    mem->buffer_ram_pages = info.bufferram;
+
+    mem->available_ram_pages = si_mem_available();
+
+    mem->num_file_pages = global_node_page_state(NR_FILE_PAGES);
+
+    vmd_send_msg(context, addr, response);
+}
+
 static void vm_handle_request_stat_cpu_summary(struct vm_diagnostics_context *context, const v4v_addr_t *addr,
         uint32_t payload_size, uint8_t *payload)
 {
@@ -347,7 +384,7 @@ static void vm_handle_request_stat_task(struct vm_diagnostics_context *context, 
             if (mm)
             {
                 task_payload->user_vm_size_bytes = PAGE_SIZE * mm->total_vm;
-                task_payload->user_rss = get_mm_rss(mm);
+                task_payload->user_rss_pages = get_mm_rss(mm);
 
                 mmput(mm);
             }
@@ -418,6 +455,10 @@ static void vm_diagnostics_softirq(unsigned long data)
         {
             case VM_DIAGNOSTICS_MSG_TYPE_STAT_SYSTEM:
                 vm_handle_request_stat_system(context, &from, request->header.payload_size, request->payload);
+                break;
+
+            case VM_DIAGNOSTICS_MSG_TYPE_STAT_MEMORY:
+                vm_handle_request_stat_memory(context, &from, request->header.payload_size, request->payload);
                 break;
 
             case VM_DIAGNOSTICS_MSG_TYPE_STAT_CPU_SUMMARY:
