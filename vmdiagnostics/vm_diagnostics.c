@@ -46,6 +46,11 @@
  */
 #define vmd_send_pending(context) (context->send_pending)
 
+/*
+ * \brief Context structure.
+ *
+ * This also contains space for receive and send message buffers.
+ */
 struct vm_diagnostics_context
 {
     uxen_v4v_ring_t *v4v_ring;
@@ -59,6 +64,12 @@ struct vm_diagnostics_context
     uint8_t send_pending;
 };
 
+/*
+ * \brief The context instance used by this module.
+ *
+ * Kernel memory for this instance is allocated during module initialisation, and maintaind for the lifetime of this
+ * module. This instance is global so that it is accessible to the module exit function (which takes no parameters).
+ */
 static struct vm_diagnostics_context *vmd_context;
 
 /*
@@ -68,13 +79,15 @@ static struct vm_diagnostics_context *vmd_context;
  *
  * \param context The struct vm_diagnostics_context instance.
  * \param type The message type.
+ * \param payload_size The payload size.
  *
  * \return A VM diagnostics message instance that can be used to construct an outgoing message, or NULL if a message is
  * already waiting to be sent. The memory is zeroed beforehand.
  */
-static struct vm_diagnostics_msg * vmd_get_msg_to_send(struct vm_diagnostics_context *context, uint16_t type)
+static struct vm_diagnostics_msg * vmd_get_msg_to_send(struct vm_diagnostics_context *context, uint16_t type,
+        uint32_t payload_size)
 {
-    if (context->send_pending)
+    if (unlikely(vmd_send_pending(context)))
     {
         printk(VMD_ERR "message send is pending\n");
         return NULL;
@@ -82,6 +95,7 @@ static struct vm_diagnostics_msg * vmd_get_msg_to_send(struct vm_diagnostics_con
 
     memset(&context->send_buffer, 0, sizeof(struct vm_diagnostics_msg));
     context->send_buffer.header.type = type;
+    context->send_buffer.header.payload_size = payload_size;
 
     return &context->send_buffer;
 }
@@ -98,7 +112,7 @@ static void vmd_flush_send_buffer(struct vm_diagnostics_context *context)
 {
     ssize_t result;
 
-    if (!context->send_pending)
+    if (!vmd_send_pending(context))
     {
         return;
     }
@@ -107,7 +121,7 @@ static void vmd_flush_send_buffer(struct vm_diagnostics_context *context)
             sizeof(struct vm_diagnostics_hdr) + context->send_buffer.header.payload_size, V4V_PROTO_DGRAM);
     if (result != -EAGAIN)
     {
-        if (result < 0)
+        if (unlikely(result < 0))
         {
             printk(VMD_ERR "error %li sending V4V message\n", result);
         }
@@ -128,12 +142,12 @@ static void vmd_flush_send_buffer(struct vm_diagnostics_context *context)
 static void vmd_send_msg(struct vm_diagnostics_context *context, const v4v_addr_t *addr,
         const struct vm_diagnostics_msg *msg)
 {
-    if (msg != &context->send_buffer)
+    if (unlikely(msg != &context->send_buffer))
     {
         printk(VMD_ERR "cannot send invalid message\n");
         return;
     }
-    else if (context->send_pending)
+    else if (unlikely(vmd_send_pending(context)))
     {
         printk(VMD_ERR "cannot send message whilst send is pending\n");
         return;
@@ -147,7 +161,7 @@ static void vmd_send_msg(struct vm_diagnostics_context *context, const v4v_addr_
 }
 
 /*
- * \brief Sends a VM diagonstics message of type VM_DIAGNOSTICS_MSG_TYPE_ERROR_INVALID_REQUEST.
+ * \brief Sends a VM diagnostics message of type VM_DIAGNOSTICS_MSG_TYPE_ERROR_INVALID_REQUEST.
  *
  * \param context The struct vm_diagnostics_context instance.
  * \param addr The V4V address to send this message to.
@@ -155,8 +169,8 @@ static void vmd_send_msg(struct vm_diagnostics_context *context, const v4v_addr_
 static void vmd_send_invalid_request(struct vm_diagnostics_context *context, const v4v_addr_t *addr)
 {
     struct vm_diagnostics_msg *response = vmd_get_msg_to_send(context,
-            VM_DIAGNOSTICS_MSG_TYPE_ERROR_INVALID_REQUEST);
-    if (response)
+            VM_DIAGNOSTICS_MSG_TYPE_ERROR_INVALID_REQUEST, 0);
+    if (likely(response))
     {
         vmd_send_msg(context, addr, response);
     }
@@ -174,13 +188,13 @@ static void vm_handle_request_stat_system(struct vm_diagnostics_context *context
     (void) payload_size;
     (void) payload;
 
-    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_SYSTEM);
-    if (!response)
+    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_SYSTEM,
+            sizeof(struct vm_diagnostics_stat_system));
+    if (unlikely(!response))
     {
         return;
     }
 
-    response->header.payload_size = sizeof(struct vm_diagnostics_stat_system);
     stat = (struct vm_diagnostics_stat_system *) response->payload;
 
     ktime_get_real_ts64(&ts);
@@ -215,13 +229,13 @@ static void vm_handle_request_stat_memory(struct vm_diagnostics_context *context
     (void) payload_size;
     (void) payload;
 
-    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_MEMORY);
-    if (!response)
+    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_MEMORY,
+            sizeof(struct vm_diagnostics_stat_memory));
+    if (unlikely(!response))
     {
         return;
     }
 
-    response->header.payload_size = sizeof(struct vm_diagnostics_stat_memory);
     mem = (struct vm_diagnostics_stat_memory *) response->payload;
 
     si_meminfo(&info);
@@ -251,13 +265,13 @@ static void vm_handle_request_stat_cpu_summary(struct vm_diagnostics_context *co
     (void) payload_size;
     (void) payload;
 
-    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_CPU_SUMMARY);
-    if (!response)
+    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_CPU_SUMMARY,
+            sizeof(struct vm_diagnostics_stat_cpu));
+    if (unlikely(!response))
     {
         return;
     }
 
-    response->header.payload_size = sizeof(struct vm_diagnostics_stat_cpu);
     summary = (struct vm_diagnostics_stat_cpu *) response->payload;
 
     for_each_online_cpu (i)
@@ -270,8 +284,6 @@ static void vm_handle_request_stat_cpu_summary(struct vm_diagnostics_context *co
         summary->irq_nsec += kcpustat_cpu(i).cpustat[CPUTIME_IRQ];
         summary->softirq_nsec += kcpustat_cpu(i).cpustat[CPUTIME_SOFTIRQ];
         summary->steal_nsec += kcpustat_cpu(i).cpustat[CPUTIME_STEAL];
-        summary->guest_nsec += kcpustat_cpu(i).cpustat[CPUTIME_GUEST];
-        summary->guest_nice_nsec += kcpustat_cpu(i).cpustat[CPUTIME_GUEST_NICE];
     }
 
     vmd_send_msg(context, addr, response);
@@ -291,8 +303,8 @@ static void vm_handle_request_stat_cpu(struct vm_diagnostics_context *context, c
         return;
     }
 
-    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_CPU);
-    if (!response)
+    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_CPU, 0);
+    if (unlikely(!response))
     {
         return;
     }
@@ -314,8 +326,6 @@ static void vm_handle_request_stat_cpu(struct vm_diagnostics_context *context, c
         cpu->irq_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_IRQ];
         cpu->softirq_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_SOFTIRQ];
         cpu->steal_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_STEAL];
-        cpu->guest_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_GUEST];
-        cpu->guest_nice_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_GUEST_NICE];
     }
 
     vmd_send_msg(context, addr, response);
@@ -337,8 +347,8 @@ static void vm_handle_request_stat_task(struct vm_diagnostics_context *context, 
         return;
     }
 
-    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_TASK);
-    if (!response)
+    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_TASK, 0);
+    if (unlikely(!response))
     {
         return;
     }
@@ -383,7 +393,7 @@ static void vm_handle_request_stat_task(struct vm_diagnostics_context *context, 
             mm = get_task_mm(task);
             if (mm)
             {
-                task_payload->user_vm_size_bytes = PAGE_SIZE * mm->total_vm;
+                task_payload->user_vm_size_pages = mm->total_vm;
                 task_payload->user_rss_pages = get_mm_rss(mm);
 
                 mmput(mm);
@@ -426,7 +436,7 @@ static void vm_diagnostics_softirq(unsigned long data)
     struct vm_diagnostics_msg *request = &context->receive_buffer;
     uint8_t did_consume = 0;
 
-    if (!context->v4v_ring)
+    if (unlikely(!context->v4v_ring))
     {
         return;
     }
@@ -502,19 +512,19 @@ static int vmd_v4v_init(struct vm_diagnostics_context *context)
 
     context->v4v_ring = uxen_v4v_ring_bind(context->v4v_bind_addr.port, context->v4v_bind_addr.domain,
             VM_DIAGNOSTICS_V4V_RING_SIZE_BYTES, vm_diagnostics_irq, context);
-    if (!context->v4v_ring)
+    if (unlikely(!context->v4v_ring))
     {
         ret = -ENOMEM;
         goto out;
     }
-    if (IS_ERR(context->v4v_ring))
+    if (unlikely(IS_ERR(context->v4v_ring)))
     {
         ret = PTR_ERR(context->v4v_ring);
         goto out;
     }
 
 out:
-    if (ret)
+    if (unlikely(ret))
     {
         tasklet_kill(&context->v4v_tasklet);
         context->v4v_ring = NULL;
@@ -529,7 +539,7 @@ out:
  */
 static void vmd_v4v_free(struct vm_diagnostics_context *context)
 {
-    if (!context->v4v_ring)
+    if (unlikely(!context || !context->v4v_ring))
     {
         return;
     }
@@ -562,15 +572,15 @@ static int __init vm_diagnostics_init(void)
 {
     int ret = 0;
 
-    vmd_context = kmalloc(sizeof(struct vm_diagnostics_context), GFP_KERNEL | __GFP_ZERO);
-    if (!vmd_context)
+    vmd_context = kzalloc(sizeof(struct vm_diagnostics_context), GFP_KERNEL);
+    if (unlikely(!vmd_context))
     {
         printk(VMD_ERR "failed to allocate memory for context\n");
         goto fail;
     }
 
     ret = vmd_v4v_init(vmd_context);
-    if (ret)
+    if (unlikely(ret))
     {
         printk(VMD_ERR "error %i initialising V4V\n", ret);
         goto fail;
