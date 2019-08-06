@@ -117,7 +117,7 @@ char *conf_get_default_confname(void)
 	name = conf_expand_value(conf_defname);
 	env = getenv(SRCTREE);
 	if (env) {
-		sprintf(fullname, "%s/%s", env, name);
+		snprintf(fullname, sizeof(fullname), "%s/%s", env, name);
 		if (!stat(fullname, &buf))
 			return fullname;
 	}
@@ -593,10 +593,11 @@ int conf_write(const char *name)
 	} else
 		basename = conf_get_configname();
 
-	sprintf(newname, "%s%s", dirname, basename);
+	snprintf(newname, sizeof(newname), "%s%s", dirname, basename);
 	env = getenv("KCONFIG_OVERWRITECONFIG");
 	if (!env || !*env) {
-		sprintf(tmpname, "%s.tmpconfig.%d", dirname, (int)getpid());
+		snprintf(tmpname, sizeof(tmpname), "%s.tmpconfig.%d", dirname,
+			 (int)getpid());
 		out = fopen(tmpname, "wb");
 	} else {
 		*tmpname = 0;
