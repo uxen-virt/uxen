@@ -7,7 +7,7 @@
 #
 # uXen changes:
 #
-# Copyright 2012-2015, Bromium, Inc.
+# Copyright 2012-2019, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 # Permission to use, copy, modify, and/or distribute this software for any
@@ -87,10 +87,6 @@ OBJCOPY?=objcopy
 OBJDUMP?=objdump
 PYTHON?=python
 STRIP?=strip
-PYTHON?=python
-
-# don't generate pyc files
-PYTHON := $(PYTHON) -B
 
 # Default targets
 -include $(KCONFIG_CONFIG)

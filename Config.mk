@@ -1,5 +1,5 @@
 #
-# Copyright 2011-2018, Bromium, Inc.
+# Copyright 2011-2019, Bromium, Inc.
 # Author: Christian Limpach <Christian.Limpach@gmail.com>
 # SPDX-License-Identifier: ISC
 #
@@ -104,7 +104,11 @@ HOSTCFLAGS += $(CFLAGS)
 HOSTLDFLAGS += $(LDFLAGS)
 HOSTCFLAGS := $(subst $(CFLAG_OPTIMIZE_DEBUG),$(CFLAG_OPTIMIZE_DEBUG_legacy),$(HOSTCFLAGS))
 
-PYTHON ?= python -B
+# prefer python2, if it exists
+PYTHON ?= $(shell `which python2 >&/dev/null` && echo python2 || echo python)
+export PYTHON
+# don't generate pyc files
+PYTHON := $(subst -B -B,-B,$(PYTHON) -B)
 
 # REMOVEME
 INSTALL_EXE = echo "Fatal: use install_exe function."; false
