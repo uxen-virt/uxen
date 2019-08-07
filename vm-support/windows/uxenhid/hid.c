@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2016, Bromium, Inc.
+ * Copyright 2014-2019, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -91,8 +91,9 @@ hid_v4v_cb(uxen_v4v_ring_handle_t *ring, void *ctx, void *ctx2)
                                                      UXENHID_POOL_TAG);
 
             if (devext->rpt_desc)
-                v4v_copy_out_offset(ring->ring, NULL, NULL, devext->rpt_desc,
-                                    sizeof (hdr) + hdr.msglen, 1, sizeof (hdr));
+                uxen_v4v_copy_out_offset(ring, NULL, NULL, devext->rpt_desc,
+                                         sizeof (hdr) + hdr.msglen, 1,
+                                         sizeof (hdr));
         }
 
         if (hdr.type == UXENHID_FEATURE_REPORT &&
@@ -100,8 +101,9 @@ hid_v4v_cb(uxen_v4v_ring_handle_t *ring, void *ctx, void *ctx2)
             UCHAR report_id;
 
             /* Read report id without consuming */
-            v4v_copy_out_offset(ring->ring, NULL, NULL, &report_id,
-                                sizeof (hdr) + sizeof (report_id), 0, sizeof (hdr));
+            uxen_v4v_copy_out_offset(ring, NULL, NULL, &report_id,
+                                     sizeof (hdr) + sizeof (report_id), 0,
+                                     sizeof (hdr));
 
 
             irp = IoCsqRemoveNextIrp(&devext->pending_feature_query_csq,
@@ -114,8 +116,10 @@ hid_v4v_cb(uxen_v4v_ring_handle_t *ring, void *ctx, void *ctx2)
                     irp->IoStatus.Information = 0;
                     uxen_v4v_copy_out(ring, NULL, NULL, NULL, 0, 1);
                 } else {
-                    v4v_copy_out_offset(ring->ring, NULL, NULL, pkt->reportBuffer,
-                                        sizeof (hdr) + hdr.msglen, 1, sizeof (hdr));
+                    uxen_v4v_copy_out_offset(ring, NULL, NULL,
+                                             pkt->reportBuffer,
+                                             sizeof (hdr) + hdr.msglen, 1,
+                                             sizeof (hdr));
                     irp->IoStatus.Status = STATUS_SUCCESS;
                     irp->IoStatus.Information = hdr.msglen - sizeof (hdr);
                 }
@@ -184,8 +188,9 @@ hid_v4v_cb(uxen_v4v_ring_handle_t *ring, void *ctx, void *ctx2)
                     break;
                 }
 
-                v4v_copy_out_offset(ring->ring, NULL, NULL, irp->UserBuffer,
-                                    sizeof (hdr) + hdr.msglen, 1, sizeof (hdr));
+                uxen_v4v_copy_out_offset(ring, NULL, NULL, irp->UserBuffer,
+                                         sizeof (hdr) + hdr.msglen, 1,
+                                         sizeof (hdr));
                 switch (*(uint8_t*)irp->UserBuffer) {
                 case UXENHID_REPORT_ID_MOUSE: {
                         struct mouse_report* msg = (struct mouse_report*)irp->UserBuffer;

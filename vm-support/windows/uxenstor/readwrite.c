@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -168,11 +168,11 @@ void stor_v4v_callback(uxen_v4v_ring_handle_t *ring, void *ctx, void *ctx2)
                            hdr.pagelist_size == 0 &&
                            hdr.read_size == 0 &&
                            hdr.cdb_size == 0);
-                    v4v_copy_out_offset(ring->ring, NULL, NULL,
-                                        (PUCHAR)srb->SenseInfoBuffer,
-                                        hdr.sense_size + sizeof(hdr),
-                                        1,
-                                        sizeof(hdr));
+                    uxen_v4v_copy_out_offset(ring, NULL, NULL,
+                                             (PUCHAR)srb->SenseInfoBuffer,
+                                             hdr.sense_size + sizeof(hdr),
+                                             1,
+                                             sizeof(hdr));
                     srb->SenseInfoBufferLength = (UCHAR)hdr.sense_size;
 #if DUMP_SENSE_DATA
                     uxen_debug("dumping %d bytes of sense data", 
@@ -219,11 +219,11 @@ void stor_v4v_callback(uxen_v4v_ring_handle_t *ring, void *ctx, void *ctx2)
                                               len - sizeof(hdr));
                 ASSERT(!IS_SCSIOP_READWRITE(srb->Cdb[0]) ||
                        IS_16_ALIGNED(srb->DataTransferLength));
-                v4v_copy_out_offset(ring->ring, NULL, NULL,
-                                    (PUCHAR)buf,
-                                    srb->DataTransferLength + sizeof(hdr),
-                                    1,
-                                    sizeof(hdr));
+                uxen_v4v_copy_out_offset(ring, NULL, NULL,
+                                         (PUCHAR)buf,
+                                         srb->DataTransferLength + sizeof(hdr),
+                                         1,
+                                         sizeof(hdr));
 
                 perfcnt_arr_add(in_bytes, IS_PAGING_IO(srb),
                                 srb->DataTransferLength);

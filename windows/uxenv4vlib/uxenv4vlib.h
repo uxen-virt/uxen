@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2018, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -18,11 +18,14 @@ typedef uintptr_t (uxen_v4vlib_hypercall_func_t)(
     uintptr_t,
     uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t);
 typedef uintptr_t (uxen_v4vlib_page_notify_func_t)(uint64_t *, uint32_t, int);
+
 struct v4v_ring;
+typedef struct uxen_v4v_ring_struct {
+    struct v4v_ring *ring;
+}  uxen_v4v_ring_t;
 
 typedef struct uxen_v4v_ring_handle_struct {
-    struct v4v_ring *ring;
-    struct xenv4v_ring_struct *ring_object;
+    struct uxen_v4v_ring_struct *ring_object;
 }  uxen_v4v_ring_handle_t;
 
 typedef void (uxen_v4v_callback_t)(
@@ -81,12 +84,27 @@ V4V_DLL_DECL ssize_t uxen_v4v_poke(v4v_addr_t *dst);
 V4V_DLL_DECL void uxen_v4vlib_unset_resume_dpc(KDPC *dpc, void *arg1);
 V4V_DLL_DECL void uxen_v4vlib_set_resume_dpc(KDPC *dpc, void *arg1);
 
+static V4V_INLINE struct v4v_ring *
+uxen_v4v_ring(struct uxen_v4v_ring_handle_struct *r)
+{
+    return r->ring_object->ring;
+}
+
 static V4V_INLINE ssize_t
 uxen_v4v_copy_out (struct uxen_v4v_ring_handle_struct *r,
                    struct v4v_addr *from, uint32_t *protocol,
                    void *_buf, size_t t, int consume)
 {
-    return v4v_copy_out(r->ring, from, protocol, _buf, t, consume);
+    return v4v_copy_out(uxen_v4v_ring(r), from, protocol, _buf, t, consume);
+}
+
+static V4V_INLINE ssize_t
+uxen_v4v_copy_out_offset (struct uxen_v4v_ring_handle_struct *r,
+                          struct v4v_addr *from, uint32_t *protocol,
+                          void *_buf, size_t t, int consume, size_t skip)
+{
+    return v4v_copy_out_offset(uxen_v4v_ring(r), from, protocol, _buf, t,
+                               consume, skip);
 }
 
 #endif  /* __UXENV4VLIB_H__ */

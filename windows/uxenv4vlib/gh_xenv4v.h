@@ -168,6 +168,9 @@ typedef struct xenv4v_extension_struct {
 #define xenv4v_ring_t_MULT 16
 
 typedef struct xenv4v_ring_struct {
+    // uxenv4vlib exposed Ring bits
+    uxen_v4v_ring_t;
+
     // List and ref
     LIST_ENTRY le;
     ULONG32    refc:31;
@@ -185,7 +188,6 @@ typedef struct xenv4v_ring_struct {
     BOOLEAN ax;
 
     // Ring bits
-    v4v_ring_t     *ring;
     v4v_pfn_list_t *pfn_list;
     KSPIN_LOCK      lock;
 

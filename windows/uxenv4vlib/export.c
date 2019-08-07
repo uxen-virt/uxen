@@ -37,6 +37,7 @@ V4V_DLL_EXPORT uxen_v4v_ring_handle_t *uxen_v4v_ring_bind (uint32_t local_port,
         void *callback_data1,  void *callback_data2)
 {
     uxen_v4v_ring_handle_t *ret;
+    xenv4v_ring_t *robj;
     xenv4v_extension_t *pde;
     KLOCK_QUEUE_HANDLE lqh;
     NTSTATUS status;
@@ -61,29 +62,28 @@ V4V_DLL_EXPORT uxen_v4v_ring_handle_t *uxen_v4v_ring_bind (uint32_t local_port,
 
     do {
 
-        ret->ring_object = gh_v4v_allocate_ring (ring_size);
-        if (!ret->ring_object)
+        robj = gh_v4v_allocate_ring (ring_size);
+        if (!robj)
             break;
-        ret->ring = ret->ring_object->ring;
 
         /* XXX add interface for admin_access */
 
-        ret->ring_object->ring->id.addr.port = local_port;
-        ret->ring_object->ring->id.addr.domain = V4V_DOMID_ANY;
-        ret->ring_object->ring->id.partner = partner_domain;
+        robj->ring->id.addr.port = local_port;
+        robj->ring->id.addr.domain = V4V_DOMID_ANY;
+        robj->ring->id.partner = partner_domain;
 
-        ret->ring_object->ax = FALSE;
-        ret->ring_object->direct_access = TRUE;
-        ret->ring_object->callback = callback;
-        ret->ring_object->callback_data1 = callback_data1;
-        ret->ring_object->callback_data2 = callback_data2;
+        robj->ax = FALSE;
+        robj->direct_access = TRUE;
+        robj->callback = callback;
+        robj->callback_data1 = callback_data1;
+        robj->callback_data2 = callback_data2;
 
         random_port = gh_v4v_random_port (pde);
 
         KeAcquireInStackQueuedSpinLock (&pde->ring_lock, &lqh);
 
-        if (ret->ring_object->ring->id.addr.port == V4V_PORT_NONE)
-            ret->ring_object->ring->id.addr.port =
+        if (robj->ring->id.addr.port == V4V_PORT_NONE)
+            robj->ring->id.addr.port =
                 gh_v4v_spare_port_number (pde, random_port);
 
         KeReleaseInStackQueuedSpinLock (&lqh);
@@ -93,23 +93,24 @@ V4V_DLL_EXPORT uxen_v4v_ring_handle_t *uxen_v4v_ring_bind (uint32_t local_port,
         if (uxen_v4v_can_make_hypercall()) {
             // low irql needed to benefit from automatic allocation retries
             ASSERT(KeGetCurrentIrql() <= PASSIVE_LEVEL);
-            status = gh_v4v_register_ring (pde, ret->ring_object);
+            status = gh_v4v_register_ring (pde, robj);
             if (!NT_SUCCESS (status)) {
                 uxen_v4v_err("gh_v4v_register_ring failed (vm%u:%x vm%u) "
                              "error: 0x%x",
-                             ret->ring_object->ring->id.addr.domain,
-                             ret->ring_object->ring->id.addr.port,
-                             ret->ring_object->ring->id.partner, status);
+                             robj->ring->id.addr.domain,
+                             robj->ring->id.addr.port,
+                             robj->ring->id.partner, status);
                 break;
             }
         }
 
         KeAcquireInStackQueuedSpinLock (&pde->ring_lock, &lqh);
 
-        ret->ring_object->uxen_ring_handle = ret;
+        robj->uxen_ring_handle = ret;
+        ret->ring_object = (uxen_v4v_ring_t *)robj;
 
         // Link it to the main list and set our pointer to it
-        gh_v4v_link_to_ring_list (pde, ret->ring_object);
+        gh_v4v_link_to_ring_list (pde, robj);
 
         KeReleaseInStackQueuedSpinLock (&lqh);
         check_resume();
@@ -118,9 +119,8 @@ V4V_DLL_EXPORT uxen_v4v_ring_handle_t *uxen_v4v_ring_bind (uint32_t local_port,
         return ret;
     } while (0);
 
-    if (ret->ring_object)
-        gh_v4v_release_ring (pde, ret->ring_object);
-
+    if (robj)
+        gh_v4v_release_ring (pde, robj);
 
     ExFreePoolWithTag (ret, UXEN_V4V_TAG);
 
@@ -132,18 +132,19 @@ V4V_DLL_EXPORT uxen_v4v_ring_handle_t *uxen_v4v_ring_bind (uint32_t local_port,
 V4V_DLL_EXPORT void
 uxen_v4v_ring_free (uxen_v4v_ring_handle_t *ring)
 {
+    xenv4v_ring_t *robj = (xenv4v_ring_t *)ring->ring_object;
     xenv4v_extension_t *pde;
     pde = uxen_v4v_get_pde ();
 
     if (!pde) {
         uxen_v4v_err("Failed to free ring - v. bad");
         /*in order to avoid total death - we'll at least tell the hypervisor and stop callsback */
-        ring->ring_object->callback = NULL;
-        gh_v4v_unregister_ring (ring->ring_object);
+        robj->callback = NULL;
+        gh_v4v_unregister_ring (robj);
         return;
     }
 
-    gh_v4v_release_ring (pde, ring->ring_object);
+    gh_v4v_release_ring (pde, robj);
 
     uxen_v4v_put_pde (pde);
 
@@ -223,12 +224,13 @@ uxen_v4v_send_from_ring (uxen_v4v_ring_handle_t *
                          ring, v4v_addr_t *_dst,
                          void *buf, uint32_t len, uint32_t protocol)
 {
+    xenv4v_ring_t *robj = (xenv4v_ring_t *)ring->ring_object;
     v4v_addr_t dst = *_dst;
 
-    if (ring->ring_object->ring->id.partner != V4V_DOMID_ANY)
-        dst.domain = ring->ring_object->ring->id.partner;
+    if (robj->ring->id.partner != V4V_DOMID_ANY)
+        dst.domain = robj->ring->id.partner;
 
-    return uxen_v4v_send_async (&ring->ring_object->ring->id.addr, &dst,
+    return uxen_v4v_send_async (&robj->ring->id.addr, &dst,
                                 buf, len, protocol, NULL, NULL, NULL);
 }
 
@@ -240,12 +242,13 @@ uxen_v4v_send_from_ring_async (uxen_v4v_ring_handle_t *
                                uxen_v4v_callback_t *callback,
                                void *callback_data1, void *callback_data2)
 {
+    xenv4v_ring_t *robj = (xenv4v_ring_t *)ring->ring_object;
     v4v_addr_t dst = *_dst;
 
-    if (ring->ring_object->ring->id.partner != V4V_DOMID_ANY)
-        dst.domain = ring->ring_object->ring->id.partner;
+    if (robj->ring->id.partner != V4V_DOMID_ANY)
+        dst.domain = robj->ring->id.partner;
 
-    return uxen_v4v_send_async (&ring->ring_object->ring->id.addr, &dst,
+    return uxen_v4v_send_async (&robj->ring->id.addr, &dst,
                                 buf, len, protocol,
                                 callback, callback_data1, callback_data2);
 }
@@ -256,12 +259,13 @@ uxen_v4v_sendv_from_ring (uxen_v4v_ring_handle_t *
                           ring, v4v_addr_t *_dst,
                           v4v_iov_t *iov, uint32_t niov, uint32_t protocol)
 {
+    xenv4v_ring_t *robj = (xenv4v_ring_t *)ring->ring_object;
     v4v_addr_t dst = *_dst;
 
-    if (ring->ring_object->ring->id.partner != V4V_DOMID_ANY)
-        dst.domain = ring->ring_object->ring->id.partner;
+    if (robj->ring->id.partner != V4V_DOMID_ANY)
+        dst.domain = robj->ring->id.partner;
 
-    return uxen_v4v_sendv_async (&ring->ring_object->ring->id.addr, &dst,
+    return uxen_v4v_sendv_async (&robj->ring->id.addr, &dst,
                                  iov, niov,
                                  protocol, NULL, NULL, NULL);
 }
@@ -276,12 +280,13 @@ uxen_v4v_sendv_from_ring_async (uxen_v4v_ring_handle_t *
                                 void *callback_data1, void *callback_data2)
 
 {
+    xenv4v_ring_t *robj = (xenv4v_ring_t *)ring->ring_object;
     v4v_addr_t dst = *_dst;
 
-    if (ring->ring_object->ring->id.partner != V4V_DOMID_ANY)
-        dst.domain = ring->ring_object->ring->id.partner;
+    if (robj->ring->id.partner != V4V_DOMID_ANY)
+        dst.domain = robj->ring->id.partner;
 
-    return uxen_v4v_sendv_async (&ring->ring_object->ring->id.addr, &dst,
+    return uxen_v4v_sendv_async (&robj->ring->id.addr, &dst,
                                  iov, niov,
                                  protocol,
                                  callback, callback_data1, callback_data2);
@@ -292,10 +297,11 @@ V4V_DLL_EXPORT ssize_t
 uxen_v4v_recv (uxen_v4v_ring_handle_t *ring, v4v_addr_t *from, void *buf,
                int buflen, uint32_t *protocol)
 {
+    xenv4v_ring_t *robj = (xenv4v_ring_t *)ring->ring_object;
     ssize_t ret;
 
     ret =
-        v4v_copy_out (ring->ring_object->ring, from, protocol, buf, buflen, 1);
+        v4v_copy_out (robj->ring, from, protocol, buf, buflen, 1);
 
     return ret;
 }

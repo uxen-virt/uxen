@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -176,7 +176,7 @@ void uxen_net_soh(Uxennet *n, PMP_ADAPTER adapter)
     if (q < 100) return;
     q = 0;
     uxen_msg("un: rx_ptr=%u tx_ptr=%u free rcbs? %s",
-             (unsigned) n->recv_ring->ring->rx_ptr,
-             (unsigned) n->recv_ring->ring->tx_ptr,
+             (unsigned) uxen_v4v_ring(n->recv_ring)->rx_ptr,
+             (unsigned) uxen_v4v_ring(n->recv_ring)->tx_ptr,
              IsListEmpty(&adapter->RecvFreeList) ? "No" : "Yes");
 }
