@@ -7,10 +7,16 @@
 #ifndef _UXEN_IOCTL_DEF_H_
 #define _UXEN_IOCTL_DEF_H_
 
-struct uxen_version_desc {
+struct uxen_version_desc_v1 {
     uint32_t uvd_driver_version_major;
     uint32_t uvd_driver_version_minor;
     char uvd_driver_version_tag[32];
+};
+
+struct uxen_version_desc {
+    struct uxen_version_desc_v1;
+
+    char uvd_driver_changeset[64];
 };
 
 struct uxen_load_desc {

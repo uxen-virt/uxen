@@ -362,8 +362,9 @@ uxen_ioctl(__inout DEVICE_OBJECT *DeviceObject, __inout IRP *pIRP)
 	IOCTL_TRACE("uxen_ioctl(UXENVERSION, %p, %x)\n", OutputBuffer,
 		    OutputBufferLength);
         IOCTL_ADMIN_CHECK("UXENVERSION");
-	UXEN_CHECK_OUTPUT_BUFFER("UXENVERSION", struct uxen_version_desc);
-        ret = uxen_op_version((struct uxen_version_desc *)OutputBuffer);
+	UXEN_CHECK_OUTPUT_BUFFER("UXENVERSION", struct uxen_version_desc_v1);
+        ret = uxen_op_version((struct uxen_version_desc *)OutputBuffer,
+                              OutputBufferLength);
         if (ret < 0)
             IOCTL_FAILURE(UXEN_NTSTATUS_FROM_ERRNO(-ret),
                           "uxen_ioctl(UXENVERSION) fail: %d", -ret);

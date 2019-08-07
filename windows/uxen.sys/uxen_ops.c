@@ -1532,14 +1532,29 @@ uxen_op_wait_vm_exit(void)
 }
 
 int
-uxen_op_version(struct uxen_version_desc *uvd)
+uxen_op_version(struct uxen_version_desc *uvd, unsigned long length)
 {
 
-    uvd->uvd_driver_version_major = UXEN_DRIVER_VERSION_MAJOR;
-    uvd->uvd_driver_version_minor = UXEN_DRIVER_VERSION_MINOR;
-    memset(uvd->uvd_driver_version_tag, 0, sizeof(uvd->uvd_driver_version_tag));
-    strncpy_s(uvd->uvd_driver_version_tag, sizeof(uvd->uvd_driver_version_tag),
-	      UXEN_DRIVER_VERSION_TAG, _TRUNCATE);
+    memset(uvd, 0, length);
+
+#define IF_version_field_present(f) \
+    if (offsetof(struct uxen_version_desc, f) + sizeof(uvd->f) > length) \
+        return 0;                                                       \
+    else
+
+    IF_version_field_present(uvd_driver_version_major)
+        uvd->uvd_driver_version_major = UXEN_DRIVER_VERSION_MAJOR;
+    IF_version_field_present(uvd_driver_version_minor)
+        uvd->uvd_driver_version_minor = UXEN_DRIVER_VERSION_MINOR;
+    IF_version_field_present(uvd_driver_version_tag)
+        strncpy_s(uvd->uvd_driver_version_tag,
+                  sizeof(uvd->uvd_driver_version_tag),
+                  UXEN_DRIVER_VERSION_TAG, _TRUNCATE);
+
+    IF_version_field_present(uvd_driver_changeset)
+        strncpy_s(uvd->uvd_driver_changeset,
+                  sizeof(uvd->uvd_driver_changeset),
+                  UXEN_DRIVER_VERSION_CHANGESET, _TRUNCATE);
 
     return 0;
 }

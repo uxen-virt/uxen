@@ -209,6 +209,10 @@ uxen_output_version_info(UXEN_HANDLE_T h, FILE *f)
 		uvd.uvd_driver_version_major, uvd.uvd_driver_version_minor,
 		uvd.uvd_driver_version_tag[0] ? '-' : '\n',
 		uvd.uvd_driver_version_tag);
+    if (f)
+        fprintf(f, "uxen driver changeset %.*s\n",
+		(int)sizeof(uvd.uvd_driver_changeset),
+                uvd.uvd_driver_changeset);
 
     ret = uxen_ioctl(h, UXENSTATUS, &usd);
     if (ret) {
