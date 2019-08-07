@@ -295,6 +295,8 @@ gh_v4v_allocate_ring(uint32_t ring_length)
         return NULL;
     }
 
+    robj->ring_length = ring_length;
+
     return robj;
 }
 

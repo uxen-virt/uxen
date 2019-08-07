@@ -22,6 +22,7 @@ typedef uintptr_t (uxen_v4vlib_page_notify_func_t)(uint64_t *, uint32_t, int);
 struct v4v_ring;
 typedef struct uxen_v4v_ring_struct {
     struct v4v_ring *ring;
+    uint32_t ring_length;
 }  uxen_v4v_ring_t;
 
 typedef struct uxen_v4v_ring_handle_struct {
@@ -90,12 +91,19 @@ uxen_v4v_ring(struct uxen_v4v_ring_handle_struct *r)
     return r->ring_object->ring;
 }
 
+static V4V_INLINE uint32_t
+uxen_v4v_ring_length(struct uxen_v4v_ring_handle_struct *r)
+{
+    return r->ring_object->ring_length;
+}
+
 static V4V_INLINE ssize_t
 uxen_v4v_copy_out (struct uxen_v4v_ring_handle_struct *r,
                    struct v4v_addr *from, uint32_t *protocol,
                    void *_buf, size_t t, int consume)
 {
-    return v4v_copy_out(uxen_v4v_ring(r), from, protocol, _buf, t, consume);
+    return v4v_copy_out_safe(uxen_v4v_ring(r), uxen_v4v_ring_length(r),
+                             from, protocol, _buf, t, consume);
 }
 
 static V4V_INLINE ssize_t
@@ -103,8 +111,8 @@ uxen_v4v_copy_out_offset (struct uxen_v4v_ring_handle_struct *r,
                           struct v4v_addr *from, uint32_t *protocol,
                           void *_buf, size_t t, int consume, size_t skip)
 {
-    return v4v_copy_out_offset(uxen_v4v_ring(r), from, protocol, _buf, t,
-                               consume, skip);
+    return v4v_copy_out_offset(uxen_v4v_ring(r), uxen_v4v_ring_length(r),
+                               from, protocol, _buf, t, consume, skip);
 }
 
 #endif  /* __UXENV4VLIB_H__ */

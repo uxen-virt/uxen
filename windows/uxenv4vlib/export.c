@@ -301,7 +301,8 @@ uxen_v4v_recv (uxen_v4v_ring_handle_t *ring, v4v_addr_t *from, void *buf,
     ssize_t ret;
 
     ret =
-        v4v_copy_out (robj->ring, from, protocol, buf, buflen, 1);
+        v4v_copy_out_safe (robj->ring, robj->ring_length, from, protocol,
+                           buf, buflen, 1);
 
     return ret;
 }

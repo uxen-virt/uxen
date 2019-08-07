@@ -457,7 +457,7 @@ v4v_memcpy_skip(void *_dst, const void *_src, size_t len, size_t *skip)
  * Note: t must include skip, i.e. t is the end of the message subrange to read. */
 
 static V4V_INLINE ssize_t
-v4v_copy_out_offset(struct v4v_ring *r, struct v4v_addr *from,
+v4v_copy_out_offset(struct v4v_ring *r, uint32_t rlen, struct v4v_addr *from,
                     uint32_t * protocol, void *_buf, size_t t, int consume,
                     size_t skip)
 {
@@ -470,10 +470,10 @@ v4v_copy_out_offset(struct v4v_ring *r, struct v4v_addr *from,
     uint32_t len;
     ssize_t ret;
 
-    if (rxp >= r->len)
+    if (rxp >= rlen)
         r->rx_ptr = rxp = 0;
 
-    btr = v4v_ring_bytes_to_read(r, rxp, r->len);
+    btr = v4v_ring_bytes_to_read(r, rxp, rlen);
 
     buf -= skip;
 
@@ -501,12 +501,12 @@ v4v_copy_out_offset(struct v4v_ring *r, struct v4v_addr *from,
         *protocol = mh->protocol;
 
     rxp += sizeof(*mh);
-    if (rxp == r->len)
+    if (rxp == rlen)
         rxp = 0;
     len -= sizeof(*mh);
     ret = len;
 
-    bte = r->len - rxp;
+    bte = rlen - rxp;
 
     if (bte < len) {
         if (t < bte) {
@@ -533,7 +533,7 @@ v4v_copy_out_offset(struct v4v_ring *r, struct v4v_addr *from,
         v4v_memcpy_skip(buf, (void *)&r->ring[rxp], (t < len) ? t : len, &skip);
 
     rxp += V4V_ROUNDUP(len);
-    if (rxp == r->len)
+    if (rxp == rlen)
         rxp = 0;
 
     v4v_mb();
