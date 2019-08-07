@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2018, Bromium, Inc.
+ * Copyright 2013-2019, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -2189,11 +2189,6 @@ static int GetNextUnclaimedManifestIndex()
     return InterlockedIncrement(&next_unclaimed_scanning_index) - 1;
 }
 
-static BOOL UnclaimedScanningIndexesRemain(LONG manifest_size)
-{
-    return InterlockedCompareExchange(&next_unclaimed_scanning_index, manifest_size, manifest_size) != manifest_size;
-}
-
 static DWORD WINAPI scanning_phase_thread(LPVOID lpParam)
 {
     assert(lpParam != NULL);
@@ -2203,7 +2198,7 @@ static DWORD WINAPI scanning_phase_thread(LPVOID lpParam)
     Manifest *man_out = td->man_out;
     Manifest *man = td->var->man;
     struct disk *disk = td->disk;
-    int j, r;
+    int j, r, i;
     Manifest extra_dirs;
     man_init(&extra_dirs);
 
@@ -2213,8 +2208,12 @@ static DWORD WINAPI scanning_phase_thread(LPVOID lpParam)
     printf("Thread %d starting\n", (int)GetCurrentThreadId());
     LeaveCriticalSection(&scanning_cs);
 
-    while(UnclaimedScanningIndexesRemain(man->n) == TRUE) {
-        ManifestEntry *m = &man->entries[GetNextUnclaimedManifestIndex()];
+    while (1) {
+        i = GetNextUnclaimedManifestIndex();
+        if (i >= man->n) {
+            break;
+        }
+        ManifestEntry *m = &man->entries[i];
         if (!shallow_allowed && (m->action == MAN_SHALLOW)) {
             m->action = MAN_FORCE_COPY;
         }
