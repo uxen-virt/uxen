@@ -24,8 +24,8 @@ void uxen_v4v_reregister_all_rings(void)
             /* XXX remove robj from list */
             uxen_v4v_warn(
                 "gh_v4v_register_ring (vm%u:%x vm%u) duplicate ring",
-                robj->ring->id.addr.domain, robj->ring->id.addr.port,
-                robj->ring->id.partner);
+                robj->id.addr.domain, robj->id.addr.port,
+                robj->id.partner);
         }
     }
 

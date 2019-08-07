@@ -207,8 +207,8 @@ gh_v4v_unregister_ring(xenv4v_ring_t *robj)
       robj->ring, 0, 0, 0, 0);
     if (err != 0) {
         uxen_v4v_err("V4VOP_unregister_ring (vm%u:%x vm%u) failed err %d",
-                     robj->ring->id.addr.domain, robj->ring->id.addr.port,
-                     robj->ring->id.partner, err);
+                     robj->id.addr.domain, robj->id.addr.port,
+                     robj->id.partner, err);
         return STATUS_UNSUCCESSFUL;
     }
 

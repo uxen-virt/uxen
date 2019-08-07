@@ -106,6 +106,8 @@ V4V_DLL_EXPORT uxen_v4v_ring_handle_t *uxen_v4v_ring_bind (uint32_t local_port,
 
         KeAcquireInStackQueuedSpinLock (&pde->ring_lock, &lqh);
 
+        robj->id = robj->ring->id;
+
         robj->uxen_ring_handle = ret;
         ret->ring_object = (uxen_v4v_ring_t *)robj;
 
@@ -227,10 +229,10 @@ uxen_v4v_send_from_ring (uxen_v4v_ring_handle_t *
     xenv4v_ring_t *robj = (xenv4v_ring_t *)ring->ring_object;
     v4v_addr_t dst = *_dst;
 
-    if (robj->ring->id.partner != V4V_DOMID_ANY)
-        dst.domain = robj->ring->id.partner;
+    if (robj->id.partner != V4V_DOMID_ANY)
+        dst.domain = robj->id.partner;
 
-    return uxen_v4v_send_async (&robj->ring->id.addr, &dst,
+    return uxen_v4v_send_async (&robj->id.addr, &dst,
                                 buf, len, protocol, NULL, NULL, NULL);
 }
 
@@ -245,10 +247,10 @@ uxen_v4v_send_from_ring_async (uxen_v4v_ring_handle_t *
     xenv4v_ring_t *robj = (xenv4v_ring_t *)ring->ring_object;
     v4v_addr_t dst = *_dst;
 
-    if (robj->ring->id.partner != V4V_DOMID_ANY)
-        dst.domain = robj->ring->id.partner;
+    if (robj->id.partner != V4V_DOMID_ANY)
+        dst.domain = robj->id.partner;
 
-    return uxen_v4v_send_async (&robj->ring->id.addr, &dst,
+    return uxen_v4v_send_async (&robj->id.addr, &dst,
                                 buf, len, protocol,
                                 callback, callback_data1, callback_data2);
 }
@@ -262,10 +264,10 @@ uxen_v4v_sendv_from_ring (uxen_v4v_ring_handle_t *
     xenv4v_ring_t *robj = (xenv4v_ring_t *)ring->ring_object;
     v4v_addr_t dst = *_dst;
 
-    if (robj->ring->id.partner != V4V_DOMID_ANY)
-        dst.domain = robj->ring->id.partner;
+    if (robj->id.partner != V4V_DOMID_ANY)
+        dst.domain = robj->id.partner;
 
-    return uxen_v4v_sendv_async (&robj->ring->id.addr, &dst,
+    return uxen_v4v_sendv_async (&robj->id.addr, &dst,
                                  iov, niov,
                                  protocol, NULL, NULL, NULL);
 }
@@ -283,10 +285,10 @@ uxen_v4v_sendv_from_ring_async (uxen_v4v_ring_handle_t *
     xenv4v_ring_t *robj = (xenv4v_ring_t *)ring->ring_object;
     v4v_addr_t dst = *_dst;
 
-    if (robj->ring->id.partner != V4V_DOMID_ANY)
-        dst.domain = robj->ring->id.partner;
+    if (robj->id.partner != V4V_DOMID_ANY)
+        dst.domain = robj->id.partner;
 
-    return uxen_v4v_sendv_async (&robj->ring->id.addr, &dst,
+    return uxen_v4v_sendv_async (&robj->id.addr, &dst,
                                  iov, niov,
                                  protocol,
                                  callback, callback_data1, callback_data2);

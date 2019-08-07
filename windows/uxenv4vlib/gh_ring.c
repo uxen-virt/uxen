@@ -371,12 +371,12 @@ gh_v4v_port_in_use(xenv4v_extension_t *pde, uint32_t port, uint32_t *maxOut)
     le = pde->ring_list.Flink;
     while (le != &pde->ring_list) {
         robj = CONTAINING_RECORD(le, xenv4v_ring_t, le);
-        if (robj->ring->id.addr.port == port) {
+        if (robj->id.addr.port == port) {
             ret = TRUE; // found one
         }
         // Bump the max
-        if ((maxOut != NULL) && (robj->ring->id.addr.port > *maxOut)) {
-            *maxOut = robj->ring->id.addr.port;
+        if ((maxOut != NULL) && (robj->id.addr.port > *maxOut)) {
+            *maxOut = robj->id.addr.port;
         }
         le = le->Flink;
     }
@@ -418,8 +418,8 @@ gh_v4v_ring_id_in_use(xenv4v_extension_t *pde, struct v4v_ring_id *id)
     le = pde->ring_list.Flink;
     while (le != &pde->ring_list) {
         robj = CONTAINING_RECORD(le, xenv4v_ring_t, le);
-        if ((robj->ring->id.addr.port == id->addr.port) &&
-            (robj->ring->id.partner == id->partner)) {
+        if ((robj->id.addr.port == id->addr.port) &&
+            (robj->id.partner == id->partner)) {
             return TRUE;
         }
         le = le->Flink;

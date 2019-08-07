@@ -114,32 +114,32 @@ gh_v4v_do_write(xenv4v_extension_t *pde, xenv4v_context_t *ctx, PIRP irp)
     flags = (ULONG_PTR)irp->Tail.Overlay.DriverContext[0];
     written = 0;
 
-    if (ctx->ring_object->ring->id.partner != V4V_DOMID_ANY)
-        dst.domain = ctx->ring_object->ring->id.partner;
+    if (ctx->ring_object->id.partner != V4V_DOMID_ANY)
+        dst.domain = ctx->ring_object->id.partner;
 
-    status = gh_v4v_send(&ctx->ring_object->ring->id.addr, &dst, ax, protocol,
+    status = gh_v4v_send(&ctx->ring_object->id.addr, &dst, ax, protocol,
       msg, len, &written);
 
     if ((status == STATUS_VIRTUAL_CIRCUIT_CLOSED) && (!(dg_flags & V4V_DATAGRAM_FLAG_IGNORE_DLO))) {
         uxen_v4v_warn("ring src (vm%u:%x vm%u) dst (vm%u:%x) - creating placeholder ring",
-                      ctx->ring_object->ring->id.addr.domain,
-                      ctx->ring_object->ring->id.addr.port,
-                      ctx->ring_object->ring->id.partner,
+                      ctx->ring_object->id.addr.domain,
+                      ctx->ring_object->id.addr.port,
+                      ctx->ring_object->id.partner,
                       dst.domain,
                       dst.port);
         // Datagram write to a ring which doesn't exist - use the dead letter office to handle it
-        status = gh_v4v_create_ring(&dst, ctx->ring_object->ring->id.addr.domain, ax);
+        status = gh_v4v_create_ring(&dst, ctx->ring_object->id.addr.domain, ax);
         if (!NT_SUCCESS(status)) {
             uxen_v4v_err("ring src (vm%u:%x vm%u) dst (vm%u:%x) - failed to create placeholder ring, status %x",
-                         ctx->ring_object->ring->id.addr.domain,
-                         ctx->ring_object->ring->id.addr.port,
-                         ctx->ring_object->ring->id.partner,
+                         ctx->ring_object->id.addr.domain,
+                         ctx->ring_object->id.addr.port,
+                         ctx->ring_object->id.partner,
                          dst.domain,
                          dst.port,
                          status);
             return v4v_simple_complete_irp(irp, status);
         }
-        status = gh_v4v_send(&ctx->ring_object->ring->id.addr, &dst, ax, protocol, msg, len, &written);
+        status = gh_v4v_send(&ctx->ring_object->id.addr, &dst, ax, protocol, msg, len, &written);
     }
 
     // Datagram write, add on the ammount send by caller
@@ -152,18 +152,18 @@ gh_v4v_do_write(xenv4v_extension_t *pde, xenv4v_context_t *ctx, PIRP irp)
     } else if (status == STATUS_NO_MEMORY) {
         // No memory, retry later
         uxen_v4v_err("ring src (vm%u:%x vm%u) dst (vm%u:%x)- error during send, status %x - no memory",
-                     ctx->ring_object->ring->id.addr.domain,
-                     ctx->ring_object->ring->id.addr.port,
-                     ctx->ring_object->ring->id.partner,
+                     ctx->ring_object->id.addr.domain,
+                     ctx->ring_object->id.addr.port,
+                     ctx->ring_object->id.partner,
                      dst.domain,
                      dst.port,
                      status);
         return status;
     } else if (!NT_SUCCESS(status)) {
         uxen_v4v_err("ring src (vm%u:%x vm%u) dst (vm%u:%x)- error during send, status %x",
-                     ctx->ring_object->ring->id.addr.domain,
-                     ctx->ring_object->ring->id.addr.port,
-                     ctx->ring_object->ring->id.partner,
+                     ctx->ring_object->id.addr.domain,
+                     ctx->ring_object->id.addr.port,
+                     ctx->ring_object->id.partner,
                      dst.domain,
                      dst.port,
                      status);
@@ -240,9 +240,9 @@ gh_v4v_process_destination_writes(xenv4v_extension_t *pde, v4v_ring_data_ent_t *
         } else if (status == STATUS_NO_MEMORY) {
             // Requeue & retry later
             uxen_v4v_err("ring src (vm%u:%x vm%u) no memory - retry later",
-                ctx->ring_object->ring->id.addr.domain,
-                ctx->ring_object->ring->id.addr.port,
-                ctx->ring_object->ring->id.partner);
+                ctx->ring_object->id.addr.domain,
+                ctx->ring_object->id.addr.port,
+                ctx->ring_object->id.partner);
             InsertTailList(&returnIrps, &nextIrp->Tail.Overlay.ListEntry);
             queue_notify++;
             break;
@@ -344,9 +344,9 @@ gh_v4v_process_context_writes(xenv4v_extension_t *pde, xenv4v_context_t *ctx)
             queue_notify++;
         } else if (status == STATUS_NO_MEMORY) {
              uxen_v4v_err("ring src (vm%u:%x vm%u) no memory - retry later",
-                ctx->ring_object->ring->id.addr.domain,
-                ctx->ring_object->ring->id.addr.port,
-                ctx->ring_object->ring->id.partner);
+                ctx->ring_object->id.addr.domain,
+                ctx->ring_object->id.addr.port,
+                ctx->ring_object->id.partner);
            // No memory, put IRP back and retry later
             InsertTailList(&returnIrps, &nextIrp->Tail.Overlay.ListEntry);
             queue_notify++;

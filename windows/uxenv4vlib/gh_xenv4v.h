@@ -180,6 +180,7 @@ typedef struct xenv4v_ring_struct {
     void       *user_map;
 
     v4v_idtoken_t   partner;
+    v4v_ring_id_t   id;
 
     // Access control
     BOOLEAN admin_access;

@@ -82,7 +82,7 @@ gh_v4v_ctrl_get_info(xenv4v_context_t *ctx, v4v_getinfo_values_t *gi)
     if (gi->type == V4V_GET_LOCAL_INFO) {
         if (val & (XENV4V_STATE_BOUND)) {
             KeAcquireInStackQueuedSpinLock(&ctx->ring_object->lock, &lqh);
-            RtlMoveMemory(&gi->ring_info, &ctx->ring_object->ring->id, sizeof(v4v_ring_id_t));
+            RtlMoveMemory(&gi->ring_info, &ctx->ring_object->id, sizeof(v4v_ring_id_t));
             KeReleaseInStackQueuedSpinLock(&lqh);
             status = STATUS_SUCCESS;
         }
@@ -155,17 +155,20 @@ gh_v4v_ctrl_bind(xenv4v_extension_t *pde, xenv4v_context_t *ctx, v4v_bind_values
         if (!NT_SUCCESS(status)) {
             uxen_v4v_err(
                 "gh_v4v_register_ring (vm%u:%x vm%u) failed error 0x%x",
-                robj->ring->id.addr.domain, robj->ring->id.addr.port,
-                robj->ring->id.partner, status);
+                robj->id.addr.domain, robj->id.addr.port,
+                robj->id.partner, status);
             break;
         }
 
         KeAcquireInStackQueuedSpinLock(&pde->ring_lock, &lqh);
+
+        robj->id = robj->ring->id;
+
         // Link it to the main list and set our pointer to it
         gh_v4v_link_to_ring_list(pde, robj);
         ctx->ring_object = robj;
 
-        bvs->ring_id.partner = robj->ring->id.partner;
+        bvs->ring_id.partner = robj->id.partner;
 
         KeReleaseInStackQueuedSpinLock(&lqh);
 
