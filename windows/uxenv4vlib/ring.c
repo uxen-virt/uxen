@@ -8,6 +8,7 @@
 void uxen_v4v_reregister_all_rings(void)
 {
     KLOCK_QUEUE_HANDLE lqh;
+    PLIST_ENTRY le;
     xenv4v_extension_t *pde;
     xenv4v_ring_t *robj;
 
@@ -16,16 +17,15 @@ void uxen_v4v_reregister_all_rings(void)
 
     KeAcquireInStackQueuedSpinLock(&pde->ring_lock, &lqh);
 
-    if (!IsListEmpty(&pde->ring_list)) {
-        for ( robj = (xenv4v_ring_t *)pde->ring_list.Flink; robj != (xenv4v_ring_t *)&pde->ring_list ; robj = (xenv4v_ring_t *)robj->le.Flink) {
-            if (gh_v4v_register_ring(pde, robj) ==
-                STATUS_INVALID_DEVICE_REQUEST) {
-                /* XXX remove robj from list */
-                uxen_v4v_warn(
-                    "gh_v4v_register_ring (vm%u:%x vm%u) duplicate ring",
-                    robj->ring->id.addr.domain, robj->ring->id.addr.port,
-                    robj->ring->id.partner);
-            }
+    for (le = pde->ring_list.Flink; le != &pde->ring_list; le = le->Flink) {
+        robj = CONTAINING_RECORD(le, xenv4v_ring_t, le);
+        if (gh_v4v_register_ring(pde, robj) ==
+            STATUS_INVALID_DEVICE_REQUEST) {
+            /* XXX remove robj from list */
+            uxen_v4v_warn(
+                "gh_v4v_register_ring (vm%u:%x vm%u) duplicate ring",
+                robj->ring->id.addr.domain, robj->ring->id.addr.port,
+                robj->ring->id.partner);
         }
     }
 
@@ -38,6 +38,7 @@ void uxen_v4v_reregister_all_rings(void)
 void uxen_v4v_send_read_callbacks(xenv4v_extension_t *pde)
 {
     KLOCK_QUEUE_HANDLE lqh;
+    PLIST_ENTRY le;
     xenv4v_ring_t *robj;
     LONG gen;
 
@@ -45,22 +46,21 @@ void uxen_v4v_send_read_callbacks(xenv4v_extension_t *pde)
   again:
     gen = InterlockedExchangeAdd(&pde->ring_gen, 0);
 
-    if (!IsListEmpty(&pde->ring_list)) {
-        for ( robj = (xenv4v_ring_t *)pde->ring_list.Flink; robj != (xenv4v_ring_t *)&pde->ring_list ; robj = (xenv4v_ring_t *)robj->le.Flink) {
-            if (!robj->direct_access) continue;
-            if (robj->ring->rx_ptr == robj->ring->tx_ptr) continue;
-            if (robj->callback) {
-                KIRQL irql;
+    for (le = pde->ring_list.Flink; le != &pde->ring_list; le = le->Flink) {
+        robj = CONTAINING_RECORD(le, xenv4v_ring_t, le);
+        if (!robj->direct_access) continue;
+        if (robj->ring->rx_ptr == robj->ring->tx_ptr) continue;
+        if (robj->callback) {
+            KIRQL irql;
 
-                KeReleaseInStackQueuedSpinLock(&lqh);
-                KeRaiseIrql(DISPATCH_LEVEL, &irql);
-                robj->callback(robj->uxen_ring_handle, robj->callback_data1,
-                               robj->callback_data2);
-                KeLowerIrql(irql);
-                KeAcquireInStackQueuedSpinLock(&pde->ring_lock, &lqh);
-                if (gen != InterlockedExchangeAdd(&pde->ring_gen, 0))
-                    goto again;
-            }
+            KeReleaseInStackQueuedSpinLock(&lqh);
+            KeRaiseIrql(DISPATCH_LEVEL, &irql);
+            robj->callback(robj->uxen_ring_handle, robj->callback_data1,
+                           robj->callback_data2);
+            KeLowerIrql(irql);
+            KeAcquireInStackQueuedSpinLock(&pde->ring_lock, &lqh);
+            if (gen != InterlockedExchangeAdd(&pde->ring_gen, 0))
+                goto again;
         }
     }
 

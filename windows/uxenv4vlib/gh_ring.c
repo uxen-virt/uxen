@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -363,20 +363,20 @@ static BOOLEAN
 gh_v4v_port_in_use(xenv4v_extension_t *pde, uint32_t port, uint32_t *maxOut)
 {
     BOOLEAN      ret = FALSE;
-    xenv4v_ring_t *robj = NULL;
+    PLIST_ENTRY le;
+    xenv4v_ring_t *robj;
 
-    if (!IsListEmpty(&pde->ring_list)) {
-        robj = (xenv4v_ring_t *)pde->ring_list.Flink;
-        while (robj != (xenv4v_ring_t *)&pde->ring_list) {
-            if (robj->ring->id.addr.port == port) {
-                ret = TRUE; // found one
-            }
-            // Bump the max
-            if ((maxOut != NULL) && (robj->ring->id.addr.port > *maxOut)) {
-                *maxOut = robj->ring->id.addr.port;
-            }
-            robj = (xenv4v_ring_t *)robj->le.Flink;
+    le = pde->ring_list.Flink;
+    while (le != &pde->ring_list) {
+        robj = CONTAINING_RECORD(le, xenv4v_ring_t, le);
+        if (robj->ring->id.addr.port == port) {
+            ret = TRUE; // found one
         }
+        // Bump the max
+        if ((maxOut != NULL) && (robj->ring->id.addr.port > *maxOut)) {
+            *maxOut = robj->ring->id.addr.port;
+        }
+        le = le->Flink;
     }
 
     return ret;
@@ -410,17 +410,17 @@ gh_v4v_spare_port_number(xenv4v_extension_t *pde, uint32_t port)
 BOOLEAN
 gh_v4v_ring_id_in_use(xenv4v_extension_t *pde, struct v4v_ring_id *id)
 {
-    xenv4v_ring_t *robj = NULL;
+    PLIST_ENTRY le;
+    xenv4v_ring_t *robj;
 
-    if (!IsListEmpty(&pde->ring_list)) {
-        robj = (xenv4v_ring_t *)pde->ring_list.Flink;
-        while (robj != (xenv4v_ring_t *)&pde->ring_list) {
-            if ((robj->ring->id.addr.port == id->addr.port) &&
-                (robj->ring->id.partner == id->partner)) {
-                return TRUE;
-            }
-            robj = (xenv4v_ring_t *)robj->le.Flink;
+    le = pde->ring_list.Flink;
+    while (le != &pde->ring_list) {
+        robj = CONTAINING_RECORD(le, xenv4v_ring_t, le);
+        if ((robj->ring->id.addr.port == id->addr.port) &&
+            (robj->ring->id.partner == id->partner)) {
+            return TRUE;
         }
+        le = le->Flink;
     }
 
     return FALSE;
