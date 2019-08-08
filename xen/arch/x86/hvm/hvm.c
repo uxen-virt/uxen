@@ -3288,6 +3288,7 @@ typedef struct {
     vaddr_t gva;
     unsigned long gpfn;
     p2m_type_t p2mt;
+    unsigned long mfn;
     void *va;
 } hvmcopy_cache_t;
 
@@ -3312,6 +3313,7 @@ void hvmcopy_cache_flush(void)
         hvmcopy_cache_t *c = &cs[i];
 
         unmap_domain_page(c->va);
+        put_page(mfn_to_page(c->mfn));
         put_gfn(current->domain, c->gpfn);
     }
     this_cpu(cpu_hvmcopy_cache_sz) = 0;
@@ -3319,7 +3321,7 @@ void hvmcopy_cache_flush(void)
 
 static int
 hvmcopy_cache_lookup(vaddr_t gva, unsigned long *gpfn, p2m_type_t *p2mt,
-                     void **va)
+                     unsigned long *mfn, void **va)
 {
     int i;
 
@@ -3334,6 +3336,7 @@ hvmcopy_cache_lookup(vaddr_t gva, unsigned long *gpfn, p2m_type_t *p2mt,
         if (c->gva == gva) {
             *gpfn = c->gpfn;
             *p2mt = c->p2mt;
+            *mfn = c->mfn;
             *va = c->va;
 
             return 1;
@@ -3344,7 +3347,8 @@ hvmcopy_cache_lookup(vaddr_t gva, unsigned long *gpfn, p2m_type_t *p2mt,
 }
 
 static int
-hvmcopy_cache_add(vaddr_t gva, unsigned long gpfn, p2m_type_t p2mt, void *va)
+hvmcopy_cache_add(vaddr_t gva, unsigned long gpfn, p2m_type_t p2mt,
+                  unsigned long mfn, void *va)
 {
     hvmcopy_cache_t *c;
 
@@ -3356,10 +3360,14 @@ hvmcopy_cache_add(vaddr_t gva, unsigned long gpfn, p2m_type_t p2mt, void *va)
     if (this_cpu(cpu_hvmcopy_cache_sz) >= HVMCOPY_CACHE_SIZE)
         hvmcopy_cache_flush();
 
+    if (!get_page(mfn_to_page(mfn), current->domain))
+        return 0;
+
     c = &this_cpu(cpu_hvmcopy_cache)[this_cpu(cpu_hvmcopy_cache_sz)];
     c->gva = gva;
     c->gpfn = gpfn;
     c->p2mt = p2mt;
+    c->mfn = mfn;
     c->va = va;
     this_cpu(cpu_hvmcopy_cache_sz)++;
 
@@ -3406,7 +3414,7 @@ static enum hvm_copy_result __hvm_copy(
 
         if ( flags & HVMCOPY_virt )
         {
-            if (hvmcopy_cache_lookup(addr, &gfn, &p2mt, &page)) {
+            if (hvmcopy_cache_lookup(addr, &gfn, &p2mt, &mfn, &page)) {
                 cached = 1;
                 goto copy;
             }
@@ -3464,7 +3472,7 @@ static enum hvm_copy_result __hvm_copy(
 
         page = map_domain_page(mfn);
         if ((flags & HVMCOPY_virt) &&
-            hvmcopy_cache_add(addr, gfn, p2mt, page))
+            hvmcopy_cache_add(addr, gfn, p2mt, mfn, page))
             cached = 1;
 
     copy:
