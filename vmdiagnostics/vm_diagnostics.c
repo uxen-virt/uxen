@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: ISC
  */
 
+#include <asm/unaligned.h>
+
 #include <asm-generic/param.h>
 
 #include <linux/cpumask.h>
@@ -79,13 +81,11 @@ static struct vm_diagnostics_context *vmd_context;
  *
  * \param context The struct vm_diagnostics_context instance.
  * \param type The message type.
- * \param payload_size The payload size.
  *
  * \return A VM diagnostics message instance that can be used to construct an outgoing message, or NULL if a message is
  * already waiting to be sent. The memory is zeroed beforehand.
  */
-static struct vm_diagnostics_msg * vmd_get_msg_to_send(struct vm_diagnostics_context *context, uint16_t type,
-        uint32_t payload_size)
+static struct vm_diagnostics_msg * vmd_get_msg_to_send(struct vm_diagnostics_context *context, uint16_t type)
 {
     if (unlikely(vmd_send_pending(context)))
     {
@@ -95,7 +95,6 @@ static struct vm_diagnostics_msg * vmd_get_msg_to_send(struct vm_diagnostics_con
 
     memset(&context->send_buffer, 0, sizeof(struct vm_diagnostics_msg));
     context->send_buffer.header.type = type;
-    context->send_buffer.header.payload_size = payload_size;
 
     return &context->send_buffer;
 }
@@ -161,6 +160,35 @@ static void vmd_send_msg(struct vm_diagnostics_context *context, const v4v_addr_
 }
 
 /*
+ * \brief Sends an outgoing VM diagnostics message with a payload.
+ *
+ * The payload bytes are copied into the message, which is then sent with vmd_send_msg().
+ *
+ * \param context The struct vm_diagnostics_context instance.
+ * \param addr The V4V address to send this message to.
+ * \param msg The message instance. This must have been provided by vmd_get_msg_to_send().
+ * \param payload The payload bytes to send.
+ * \param payload_size The payload size (in bytes).
+ */
+static void vmd_send_msg_with_payload(struct vm_diagnostics_context *context, const v4v_addr_t *addr,
+        struct vm_diagnostics_msg *msg, const void *payload, uint32_t payload_size)
+{
+    if (payload_size > 0)
+    {
+        if (unlikely(payload_size > VM_DIAGNOSTICS_MSG_MAX_PAYLOAD_BYTES))
+        {
+            printk(VMD_ERR "message payload too large: %u byte(s)\n", payload_size);
+            return;
+        }
+
+        memcpy(msg->payload, payload, payload_size);
+    }
+
+    msg->header.payload_size = payload_size;
+    vmd_send_msg(context, addr, msg);
+}
+
+/*
  * \brief Sends a VM diagnostics message of type VM_DIAGNOSTICS_MSG_TYPE_ERROR_INVALID_REQUEST.
  *
  * \param context The struct vm_diagnostics_context instance.
@@ -168,8 +196,7 @@ static void vmd_send_msg(struct vm_diagnostics_context *context, const v4v_addr_
  */
 static void vmd_send_invalid_request(struct vm_diagnostics_context *context, const v4v_addr_t *addr)
 {
-    struct vm_diagnostics_msg *response = vmd_get_msg_to_send(context,
-            VM_DIAGNOSTICS_MSG_TYPE_ERROR_INVALID_REQUEST, 0);
+    struct vm_diagnostics_msg *response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_ERROR_INVALID_REQUEST);
     if (likely(response))
     {
         vmd_send_msg(context, addr, response);
@@ -182,40 +209,36 @@ static void vm_handle_request_stat_system(struct vm_diagnostics_context *context
     struct timespec64 ts;
     struct task_struct *task;
 
-    struct vm_diagnostics_stat_system *stat;
+    struct vm_diagnostics_stat_system stat = {0};
     struct vm_diagnostics_msg *response;
 
     (void) payload_size;
     (void) payload;
 
-    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_SYSTEM,
-            sizeof(struct vm_diagnostics_stat_system));
+    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_SYSTEM);
     if (unlikely(!response))
     {
         return;
     }
 
-    stat = (struct vm_diagnostics_stat_system *) response->payload;
-
     ktime_get_real_ts64(&ts);
-    stat->current_time_sec = ts.tv_sec;
-    stat->current_time_nsec = ts.tv_nsec;
+    stat.current_time_sec = ts.tv_sec;
+    stat.current_time_nsec = ts.tv_nsec;
 
     getboottime64(&ts);
-    stat->boot_time_sec = ts.tv_sec;
-    stat->boot_time_nsec = ts.tv_nsec;
+    stat.boot_time_sec = ts.tv_sec;
+    stat.boot_time_nsec = ts.tv_nsec;
 
-    stat->num_cpus = num_online_cpus();
+    stat.num_cpus = num_online_cpus();
 
-    stat->num_tasks = 0;
     rcu_read_lock();
     for_each_process(task)
     {
-        ++(stat->num_tasks);
+        ++(stat.num_tasks);
     }
     rcu_read_unlock();
 
-    vmd_send_msg(context, addr, response);
+    vmd_send_msg_with_payload(context, addr, response, &stat, sizeof(struct vm_diagnostics_stat_system));
 }
 
 static void vm_handle_request_stat_memory(struct vm_diagnostics_context *context, const v4v_addr_t *addr,
@@ -223,41 +246,38 @@ static void vm_handle_request_stat_memory(struct vm_diagnostics_context *context
 {
     struct sysinfo info;
 
-    struct vm_diagnostics_stat_memory *mem;
+    struct vm_diagnostics_stat_memory mem = {0};
     struct vm_diagnostics_msg *response;
 
     (void) payload_size;
     (void) payload;
 
-    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_MEMORY,
-            sizeof(struct vm_diagnostics_stat_memory));
+    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_MEMORY);
     if (unlikely(!response))
     {
         return;
     }
 
-    mem = (struct vm_diagnostics_stat_memory *) response->payload;
-
     si_meminfo(&info);
 
-    mem->page_size_bytes = info.mem_unit;
+    mem.page_size_bytes = info.mem_unit;
 
-    mem->total_ram_pages = info.totalram;
-    mem->free_ram_pages = info.freeram;
-    mem->shared_ram_pages = info.sharedram;
-    mem->buffer_ram_pages = info.bufferram;
+    mem.total_ram_pages = info.totalram;
+    mem.free_ram_pages = info.freeram;
+    mem.shared_ram_pages = info.sharedram;
+    mem.buffer_ram_pages = info.bufferram;
 
-    mem->available_ram_pages = si_mem_available();
+    mem.available_ram_pages = si_mem_available();
 
-    mem->num_file_pages = global_node_page_state(NR_FILE_PAGES);
+    mem.num_file_pages = global_node_page_state(NR_FILE_PAGES);
 
-    vmd_send_msg(context, addr, response);
+    vmd_send_msg_with_payload(context, addr, response, &mem, sizeof(struct vm_diagnostics_stat_memory));
 }
 
 static void vm_handle_request_stat_cpu_summary(struct vm_diagnostics_context *context, const v4v_addr_t *addr,
         uint32_t payload_size, uint8_t *payload)
 {
-    struct vm_diagnostics_stat_cpu *summary;
+    struct vm_diagnostics_stat_cpu summary = {0};
     struct vm_diagnostics_msg *response;
 
     int i;
@@ -265,37 +285,36 @@ static void vm_handle_request_stat_cpu_summary(struct vm_diagnostics_context *co
     (void) payload_size;
     (void) payload;
 
-    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_CPU_SUMMARY,
-            sizeof(struct vm_diagnostics_stat_cpu));
+    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_CPU_SUMMARY);
     if (unlikely(!response))
     {
         return;
     }
 
-    summary = (struct vm_diagnostics_stat_cpu *) response->payload;
-
     for_each_online_cpu (i)
     {
-        summary->user_nsec += kcpustat_cpu(i).cpustat[CPUTIME_USER];
-        summary->nice_nsec += kcpustat_cpu(i).cpustat[CPUTIME_NICE];
-        summary->system_nsec += kcpustat_cpu(i).cpustat[CPUTIME_SYSTEM];
-        summary->idle_nsec += kcpustat_cpu(i).cpustat[CPUTIME_IDLE];
-        summary->iowait_nsec += kcpustat_cpu(i).cpustat[CPUTIME_IOWAIT];
-        summary->irq_nsec += kcpustat_cpu(i).cpustat[CPUTIME_IRQ];
-        summary->softirq_nsec += kcpustat_cpu(i).cpustat[CPUTIME_SOFTIRQ];
-        summary->steal_nsec += kcpustat_cpu(i).cpustat[CPUTIME_STEAL];
+        summary.user_nsec += kcpustat_cpu(i).cpustat[CPUTIME_USER];
+        summary.nice_nsec += kcpustat_cpu(i).cpustat[CPUTIME_NICE];
+        summary.system_nsec += kcpustat_cpu(i).cpustat[CPUTIME_SYSTEM];
+        summary.idle_nsec += kcpustat_cpu(i).cpustat[CPUTIME_IDLE];
+        summary.iowait_nsec += kcpustat_cpu(i).cpustat[CPUTIME_IOWAIT];
+        summary.irq_nsec += kcpustat_cpu(i).cpustat[CPUTIME_IRQ];
+        summary.softirq_nsec += kcpustat_cpu(i).cpustat[CPUTIME_SOFTIRQ];
+        summary.steal_nsec += kcpustat_cpu(i).cpustat[CPUTIME_STEAL];
     }
 
-    vmd_send_msg(context, addr, response);
+    vmd_send_msg_with_payload(context, addr, response, &summary, sizeof(struct vm_diagnostics_stat_cpu));
 }
 
 static void vm_handle_request_stat_cpu(struct vm_diagnostics_context *context, const v4v_addr_t *addr,
         uint32_t payload_size, uint8_t *payload)
 {
-    struct vm_diagnostics_stat_cpu *cpu;
+    struct vm_diagnostics_stat_cpu cpu = {0};
+    uint32_t cpu_payload_size = 0;
+
     struct vm_diagnostics_msg *response;
 
-    uint32_t *cpu_id;
+    uint32_t cpu_id;
 
     if (payload_size < sizeof(uint32_t))
     {
@@ -303,41 +322,42 @@ static void vm_handle_request_stat_cpu(struct vm_diagnostics_context *context, c
         return;
     }
 
-    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_CPU, 0);
+    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_CPU);
     if (unlikely(!response))
     {
         return;
     }
 
     /* Only provide a payload if we have a CPU with the requested ID (index). */
-    cpu_id = (uint32_t *) payload;
-    if (*cpu_id < num_online_cpus())
+    cpu_id = get_unaligned((uint32_t *) payload);
+    if (cpu_id < num_online_cpus())
     {
-        response->header.payload_size = sizeof(struct vm_diagnostics_stat_cpu);
-        cpu = (struct vm_diagnostics_stat_cpu *) response->payload;
+        cpu.cpu_id = cpu_id;
 
-        cpu->cpu_id = *cpu_id;
+        cpu.user_nsec = kcpustat_cpu(cpu_id).cpustat[CPUTIME_USER];
+        cpu.nice_nsec = kcpustat_cpu(cpu_id).cpustat[CPUTIME_NICE];
+        cpu.system_nsec = kcpustat_cpu(cpu_id).cpustat[CPUTIME_SYSTEM];
+        cpu.idle_nsec = kcpustat_cpu(cpu_id).cpustat[CPUTIME_IDLE];
+        cpu.iowait_nsec = kcpustat_cpu(cpu_id).cpustat[CPUTIME_IOWAIT];
+        cpu.irq_nsec = kcpustat_cpu(cpu_id).cpustat[CPUTIME_IRQ];
+        cpu.softirq_nsec = kcpustat_cpu(cpu_id).cpustat[CPUTIME_SOFTIRQ];
+        cpu.steal_nsec = kcpustat_cpu(cpu_id).cpustat[CPUTIME_STEAL];
 
-        cpu->user_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_USER];
-        cpu->nice_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_NICE];
-        cpu->system_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_SYSTEM];
-        cpu->idle_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_IDLE];
-        cpu->iowait_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_IOWAIT];
-        cpu->irq_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_IRQ];
-        cpu->softirq_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_SOFTIRQ];
-        cpu->steal_nsec = kcpustat_cpu(*cpu_id).cpustat[CPUTIME_STEAL];
+        cpu_payload_size = sizeof(struct vm_diagnostics_stat_cpu);
     }
 
-    vmd_send_msg(context, addr, response);
+    vmd_send_msg_with_payload(context, addr, response, &cpu, cpu_payload_size);
 }
 
 static void vm_handle_request_stat_task(struct vm_diagnostics_context *context, const v4v_addr_t *addr,
         uint32_t payload_size, uint8_t *payload)
 {
-    struct vm_diagnostics_stat_task *task_payload;
+    struct vm_diagnostics_stat_task task_payload = {0};
+    uint32_t task_payload_size = 0;
+
     struct vm_diagnostics_msg *response;
 
-    uint32_t *task_id;
+    uint32_t task_id;
 
     struct task_struct *task;
 
@@ -347,64 +367,65 @@ static void vm_handle_request_stat_task(struct vm_diagnostics_context *context, 
         return;
     }
 
-    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_TASK, 0);
+    response = vmd_get_msg_to_send(context, VM_DIAGNOSTICS_MSG_TYPE_STAT_TASK);
     if (unlikely(!response))
     {
         return;
     }
 
     /* Use the task ID as an index into the task list. Only provide a payload if we have a corresponding task. */
-    task_id = (uint32_t *) payload;
+    task_id = get_unaligned((uint32_t *) payload);
     rcu_read_lock();
     for_each_process(task)
     {
-        if (*task_id > 0)
+        if (task_id > 0)
         {
-            --(*task_id);
+            --task_id;
         }
         else
         {
             const struct cred *cred;
             struct mm_struct *mm;
-
-            response->header.payload_size = sizeof(struct vm_diagnostics_stat_task);
-            task_payload = (struct vm_diagnostics_stat_task *) response->payload;
+            uint64_t user_nsec, system_nsec;
 
             /* Use PID values as seen from the init namespace. */
-            task_payload->pid = task_pid_nr(task);
-            task_payload->parent_pid = task_pid_nr(task->real_parent);
+            task_payload.pid = task_pid_nr(task);
+            task_payload.parent_pid = task_pid_nr(task->real_parent);
 
             cred = get_task_cred(task);
             if (cred)
             {
-                task_payload->uid = cred->uid.val;
-                task_payload->gid = cred->gid.val;
+                task_payload.uid = cred->uid.val;
+                task_payload.gid = cred->gid.val;
             }
 
-            get_task_comm(task_payload->name, task);
+            get_task_comm(task_payload.name, task);
  
-            task_payload->state = task_state_to_char(task);
-            task_payload->num_threads = get_nr_threads(task);
-            task_payload->start_time_nsec = task->real_start_time;
-            task_payload->last_run_cpu_id = task_cpu(task);
+            task_payload.state = task_state_to_char(task);
+            task_payload.num_threads = get_nr_threads(task);
+            task_payload.start_time_nsec = task->real_start_time;
+            task_payload.last_run_cpu_id = task_cpu(task);
 
-            thread_group_cputime_adjusted(task, &task_payload->user_nsec, &task_payload->system_nsec);
+            thread_group_cputime_adjusted(task, &user_nsec, &system_nsec);
+            task_payload.user_nsec = user_nsec;
+            task_payload.system_nsec = system_nsec;
 
             mm = get_task_mm(task);
             if (mm)
             {
-                task_payload->user_vm_size_pages = mm->total_vm;
-                task_payload->user_rss_pages = get_mm_rss(mm);
+                task_payload.user_vm_size_pages = mm->total_vm;
+                task_payload.user_rss_pages = get_mm_rss(mm);
 
                 mmput(mm);
             }
 
+            task_payload_size = sizeof(struct vm_diagnostics_stat_task);
             break;
         }
     }
     rcu_read_unlock();
 
-    vmd_send_msg(context, addr, response);
+    vmd_send_msg_with_payload(context, addr, response, &task_payload, task_payload_size);
 }
 
 /*
