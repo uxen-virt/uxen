@@ -200,15 +200,18 @@ gh_v4v_register_ring(xenv4v_extension_t *pde, xenv4v_ring_t *robj)
 NTSTATUS
 gh_v4v_unregister_ring(xenv4v_ring_t *robj)
 {
+    v4v_ring_t ring;
     int err;
 
+    /* create local copy of ring header with verified id */
+    ring = *robj->ring;
+    ring.id = robj->id;
 
-    err = gh_v4v_hypercall(robj->ax, V4VOP_unregister_ring,
-      robj->ring, 0, 0, 0, 0);
+    err = gh_v4v_hypercall(robj->ax, V4VOP_unregister_ring, &ring, 0, 0, 0, 0);
     if (err != 0) {
         uxen_v4v_err("V4VOP_unregister_ring (vm%u:%x vm%u) failed err %d",
-                     robj->id.addr.domain, robj->id.addr.port,
-                     robj->id.partner, err);
+                     ring.id.addr.domain, ring.id.addr.port,
+                     ring.id.partner, err);
         return STATUS_UNSUCCESSFUL;
     }
 
