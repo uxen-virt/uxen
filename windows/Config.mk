@@ -1,5 +1,5 @@
 #
-# Copyright 2011-2017, Bromium, Inc.
+# Copyright 2011-2019, Bromium, Inc.
 # Author: Christian Limpach <Christian.Limpach@gmail.com>
 # SPDX-License-Identifier: ISC
 #
@@ -18,10 +18,6 @@ WINDDK_DIR_dos = $(subst \,\\,$(WINDDK_DIR))
 
 EWDK_DIR ?= C:/WinDDK/EnterpriseWDK_rs1_release_14393_20160715-1616
 EWDK_DIR_path = $(shell cd $(EWDK_DIR) && pwd)
-
-ifeq ($(wildcard $(EWDK_DIR)/.*),)
-$(error No EWDK in $(EWDK_DIR))
-endif
 
 # directories added the PATH
 EWDK_PATH_CRT = $(EWDK_DIR)/Program Files/Microsoft Visual Studio 14.0/VC/redist/x86/Microsoft.VC140.CRT/
@@ -71,6 +67,10 @@ DWARFCV ?= $(shell command -v dwarfcv || echo cp)
 
 # everything below only for builds under {vm-support/,}windows/
 ifeq (,$(patsubst $(TARGET_HOST)/%,,$(patsubst vm-support/%,%,$(SUBDIR)/)))
+
+ifeq ($(wildcard $(EWDK_DIR)/.*),)
+$(error No EWDK in $(EWDK_DIR))
+endif
 
 UXEN_WINDOWS_SIGN_FILE := $(call dospath,$(UXEN_WINDOWS_SIGN_FILE))
 
