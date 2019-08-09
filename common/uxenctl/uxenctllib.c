@@ -188,6 +188,29 @@ uxen_query_whp_mode(UXEN_HANDLE_T h, uint64_t *mode)
 }
 
 int
+uxen_driver_changeset(UXEN_HANDLE_T h, char *buf, size_t len)
+{
+    struct uxen_version_desc uvd = { };
+    int ret;
+
+    ret = uxen_ioctl(h, UXENVERSION, &uvd);
+    if (ret) {
+	warn("ioctl(UXENVERSION)");
+	goto out;
+    }
+
+    memset(buf, 0, len);
+
+    if (len > sizeof(uvd.uvd_driver_changeset))
+        len = sizeof(uvd.uvd_driver_changeset);
+
+    memcpy(buf, uvd.uvd_driver_changeset, len);
+
+  out:
+    return ret;
+}
+
+int
 uxen_output_version_info(UXEN_HANDLE_T h, FILE *f)
 {
     int ret;

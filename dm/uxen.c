@@ -182,6 +182,13 @@ uxen_log_version(void)
     xen_compile_info_t compile_info;
     int ret;
 
+    ret = uxen_driver_changeset(uxen_handle, changeset_info,
+                                sizeof(changeset_info));
+    if (ret || !changeset_info[0])
+        strncpy(changeset_info, "<unknown>", sizeof(changeset_info));
+    debug_printf("uxen driver changeset: %.*s\n", (int)sizeof(changeset_info),
+                 changeset_info);
+
     if (whpx_enable)
         return;
 

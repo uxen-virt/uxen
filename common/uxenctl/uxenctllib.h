@@ -60,6 +60,7 @@ int uxen_wait_vm_exit(UXEN_HANDLE_T);
 int uxen_load(UXEN_HANDLE_T, const char *);
 int uxen_unload(UXEN_HANDLE_T);
 int uxen_query_whp_mode(UXEN_HANDLE_T, uint64_t *);
+int uxen_driver_changeset(UXEN_HANDLE_T, char *, size_t);
 int uxen_output_version_info(UXEN_HANDLE_T, FILE *);
 int uxen_trigger_keyhandler(UXEN_HANDLE_T, const char *);
 int uxen_power(UXEN_HANDLE_T, uint32_t);
