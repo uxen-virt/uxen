@@ -891,7 +891,7 @@ extern void audit_p2m(struct p2m_domain *p2m, int strict_m2p);
 int
 p2m_get_compressed_page_data(struct domain *d, mfn_t mfn, uint8_t *data,
                              uint16_t offset, void *target, uint16_t *c_size);
-int
+void
 _p2m_get_page_data(struct p2m_domain *p2m, mfn_t *mfn, uint8_t **data,
                    uint16_t *data_size, uint16_t *offset, int write_lock);
 #define p2m_get_page_data(p2m, mfn, data, data_size, offset) \

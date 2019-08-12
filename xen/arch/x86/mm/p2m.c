@@ -305,10 +305,7 @@ get_gfn_contents(struct domain *d, unsigned long gpfn, p2m_type_t *t,
     while (p2m_is_pod(*t) && p2m_mfn_is_page_data(mfn)) {
         uint16_t offset;
 
-        if (p2m_get_page_data(p2m, &mfn, &data, &data_size, &offset)) {
-            mfn = _mfn(ERROR_MFN);
-            goto out;
-        }
+        p2m_get_page_data(p2m, &mfn, &data, &data_size, &offset);
 
         page = mfn_to_page(mfn);
         if (unlikely(page_get_owner(mfn_to_page(mfn)) != d ||

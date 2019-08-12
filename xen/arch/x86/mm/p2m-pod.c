@@ -418,7 +418,7 @@ p2m_get_compressed_page_data(struct domain *d, mfn_t mfn, uint8_t *data,
     return ret;
 }
 
-int
+void
 _p2m_get_page_data(struct p2m_domain *p2m, mfn_t *mfn, uint8_t **data,
                    uint16_t *data_size, uint16_t *offset, int write_lock)
 {
@@ -433,8 +433,6 @@ _p2m_get_page_data(struct p2m_domain *p2m, mfn_t *mfn, uint8_t **data,
     *data_size = sizeof(struct page_data_info) + pdi->size;
 
     dsps_lock(p2m->domain, *data_size, write_lock);
-
-    return 0;
 }
 
 void
@@ -459,11 +457,8 @@ p2m_pod_get_decompressed_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
     int ret = 1;
 
     p2m_lock_recursive(p2m);
-    if (p2m_get_page_data(p2m, &mfn, &data, &data_size, &offset)) {
-        ret = 0;
-        p2m_unlock(p2m);
-        goto out;
-    }
+
+    p2m_get_page_data(p2m, &mfn, &data, &data_size, &offset);
 
     pdi = (struct page_data_info *)&data[offset];
 
@@ -499,11 +494,8 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
     int ret = 1;
 
     p2m_lock_recursive(p2m);
-    if (p2m_get_page_data(p2m, &mfn, &data, &data_size, &offset)) {
-        ret = 0;
-        p2m_unlock(p2m);
-        goto out;
-    }
+
+    p2m_get_page_data(p2m, &mfn, &data, &data_size, &offset);
 
     pdi = (struct page_data_info *)&data[offset];
 
@@ -534,12 +526,7 @@ p2m_pod_decompress_page(struct p2m_domain *p2m, mfn_t mfn, mfn_t *tmfn,
         data = NULL;
         p2m_lock_recursive(p2m);
         mfn = pmfn;
-        if (p2m_get_page_data_and_write_lock(p2m, &mfn, &data, &data_size,
-                                             &offset)) {
-            ret = 0;
-            p2m_unlock(p2m);
-            goto out;
-        }
+        p2m_get_page_data_and_write_lock(p2m, &mfn, &data, &data_size, &offset);
         wr_lock = 1;
         pdi = (struct page_data_info *)&data[offset];
         if (pdi->mfn && get_page(__mfn_to_page(pdi->mfn), page_owner)) {
@@ -853,11 +840,8 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
                 p2m_unlock(op2m);
                 break;
             }
-            if (p2m_get_page_data_and_write_lock(op2m, &omfn, &data,
-                                                 &data_size, &offset)) {
-                p2m_unlock(op2m);
-                break;
-            }
+            p2m_get_page_data_and_write_lock(op2m, &omfn, &data, &data_size,
+                                             &offset);
             pdi = (struct page_data_info *)&data[offset];
             if (pdi->mfn == mfn_x(smfn)) {
                 ret = change_page_owner(__mfn_to_page(pdi->mfn), d,
@@ -1168,9 +1152,7 @@ p2m_pod_free_page(struct page_info *page, va_list ap)
     if (!p2m_mfn_is_page_data(mfn))
         goto out;
 
-    if (p2m_get_page_data_and_write_lock(p2m, &mfn, &data, &data_size,
-                                         &offset))
-        goto out;
+    p2m_get_page_data_and_write_lock(p2m, &mfn, &data, &data_size, &offset);
 
     pdi = (struct page_data_info *)&data[offset];
     if (pdi->mfn != __page_to_mfn(page))
@@ -1594,9 +1576,8 @@ p2m_pod_gc_template_pages_work(void *_d)
             if (!mfn_valid_vframe(mfn))
                 continue;
 
-            if (p2m_get_page_data_and_write_lock (p2m, &mfn, &data,
-                                                  &data_size, &offset))
-                continue;
+            p2m_get_page_data_and_write_lock (p2m, &mfn, &data, &data_size,
+                                              &offset);
 
             pdi = (struct page_data_info *)&data[offset];
 
@@ -1679,9 +1660,8 @@ p2m_pod_gc_template_pages_work(void *_d)
 
             if (!p2m_mfn_is_page_data(mfn))
                 continue;
-            if (p2m_get_page_data_and_write_lock(p2m, &mfn, &data,
-                                                 &data_size, &offset))
-                continue;
+            p2m_get_page_data_and_write_lock(p2m, &mfn, &data, &data_size,
+                                             &offset);
 
             pdi = (struct page_data_info *)&data[offset];
             if (pdi->mfn &&
