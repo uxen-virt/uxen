@@ -17,8 +17,8 @@
 #include <public/hvm/e820.h>
 #include <whpx-shared.h>
 #include "whpx.h"
-#include "winhvglue.h"
-#include "winhvplatform.h"
+#include "WinHvGlue.h"
+#include "WinHvPlatform.h"
 #include "core.h"
 #include "viridian.h"
 #include "v4v-whpx.h"

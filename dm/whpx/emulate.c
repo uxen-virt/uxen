@@ -1,5 +1,5 @@
 /*
- * Copyright 2018, Bromium, Inc.
+ * Copyright 2018-2019, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -13,8 +13,8 @@
 #include "x86_emulate.h"
 #include "whpx.h"
 #include "core.h"
-#include "winhvglue.h"
-#include "winhvplatform.h"
+#include "WinHvGlue.h"
+#include "WinHvPlatform.h"
 #include "emulate.h"
 #include "util.h"
 #include <inttypes.h>

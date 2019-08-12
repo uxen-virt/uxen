@@ -7,8 +7,8 @@
 #ifndef WHPX_UTIL_H_
 #define WHPX_UTIL_H_
 
-#include "winhvglue.h"
-#include "winhvplatform.h"
+#include "WinHvGlue.h"
+#include "WinHvPlatform.h"
 #include "cpu.h"
 #include "core.h"
 

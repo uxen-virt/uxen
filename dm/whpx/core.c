@@ -34,9 +34,9 @@
 #include <dm/whpx/apic.h>
 #include "whpx.h"
 #include "core.h"
-#include "winhvglue.h"
-#include "winhvplatform.h"
-#include "winhvemulation.h"
+#include "WinHvGlue.h"
+#include "WinHvPlatform.h"
+#include "WinHvEmulation.h"
 #include "emulate.h"
 #include "viridian.h"
 #include "util.h"

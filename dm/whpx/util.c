@@ -8,9 +8,9 @@
 #include <dm/os.h>
 #include <dm/cpu.h>
 #include "whpx.h"
-#include "winhvglue.h"
-#include "winhvplatform.h"
-#include "winhvemulation.h"
+#include "WinHvGlue.h"
+#include "WinHvPlatform.h"
+#include "WinHvEmulation.h"
 #include "util.h"
 
 uint64_t tmsum_setregs;
