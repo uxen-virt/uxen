@@ -11,7 +11,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -400,11 +400,6 @@ static void enable_hypercall_page(struct domain *d)
     unsigned long mfn = get_gfn_untyped(d, gmfn);
     uint8_t *p;
 
-    if (__mfn_retry(mfn)) {
-        put_gfn(d, gmfn);
-        return;
-    }
-
     if ( !mfn_valid(mfn) ||
          !get_page_and_type(mfn_to_page(mfn), d, PGT_writable_page) )
     {
@@ -447,11 +442,6 @@ static void initialize_vp_assist(struct vcpu *v)
      * See section 7.8.7 of the specification for details of this
      * enlightenment.
      */
-
-    if (__mfn_retry(mfn)) {
-        put_gfn(d, gmfn);
-        return;
-    }
 
     if ( !mfn_valid(mfn) ||
          !get_page_and_type(mfn_to_page(mfn), d, PGT_writable_page) )
@@ -549,10 +539,6 @@ static void update_reference_tsc(struct domain *d, bool_t initialize)
     HV_REFERENCE_TSC_PAGE *tsc_ref;
 
     mfn = get_gfn_untyped(d, gmfn);
-    if (__mfn_retry(mfn)) {
-        put_gfn(d, gmfn);
-        goto fail;
-    }
     if (!mfn_valid(mfn) ||
         !get_page_and_type(mfn_to_page(mfn), d, PGT_writable_page)) {
         put_gfn(d, gmfn);

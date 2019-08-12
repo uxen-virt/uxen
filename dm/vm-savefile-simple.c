@@ -1,5 +1,5 @@
 /*
- * Copyright 2016, Bromium, Inc.
+ * Copyright 2016-2019, Bromium, Inc.
  * Author: Paulian Marinca <paulian@marinca.net>
  * SPDX-License-Identifier: ISC
  */
@@ -59,8 +59,6 @@ vmsavefile_save_simple(xc_interface *_xc_handle, const char *savefile,
         { HVM_PARAM_IO_PFN_FIRST, "io pfn first" },
         { HVM_PARAM_IO_PFN_LAST, "io pfn last" },
         { HVM_PARAM_SHARED_INFO_PFN, "shared info pfn" },
-        { HVM_PARAM_DMREQ_VCPU_PFN, "dmreq vcpu pfn" }, /* dmreq vcpu first */
-        { HVM_PARAM_DMREQ_PFN, "dmreq pfn" },
         { HVM_PARAM_RESTRICTED_HYPERCALLS, "restricted_hypercalls" }
     };
     struct xc_save_hvm_context s_hvm_context;

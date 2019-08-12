@@ -137,12 +137,6 @@ struct hvm_vcpu {
     struct hvm_ioreq_page *ioreq_page;
     ioreq_t             ioreq;
 
-    int                 dmreq_port;
-    struct page_info   *dmreq_vcpu_page;
-    void               *dmreq_vcpu_page_va;
-    unsigned long       dmreq_gpfn;
-    uint32_t            dmreq_query;
-
     /* PCI Information */
     uint32_t            pci_cf8;
 

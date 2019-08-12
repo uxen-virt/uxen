@@ -217,10 +217,6 @@ PERFCOUNTER(decompressed_removed, "decompressed pages removed")
 PERFCOUNTER(decompressed_in_vain, "pages decompressed in vain")
 PERFCOUNTER(populated_zero_pages, "populated zero pages")
 PERFCOUNTER(populated_clone_pages, "populated clone pages")
-PERFCOUNTER(dmreq_populated, "dmreq populated pages")
-PERFCOUNTER(dmreq_populated_template, "dmreq populated template pages")
-PERFCOUNTER(dmreq_populated_template_shared,
-            "dmreq populated shared template pages")
 
 PERFCOUNTER(zp_single,                  "zp single calls")
 PERFCOUNTER(zp_multi,                   "zp multi calls")

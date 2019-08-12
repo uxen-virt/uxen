@@ -1018,15 +1018,8 @@ v4v_find_ring_mfn(struct domain *d, v4v_pfn_t pfn, mfn_t *mfn)
         p2m_type_t t;
 
         *mfn = get_gfn_unshare(d, pfn, &t);
-        if (mfn_retry(*mfn)) {
-#ifdef V4V_DEBUG
-            printk(XENLOG_ERR "%s: vm%u retry gpfn %"PRI_xen_pfn
-                   " ring %p seq %d\n", __FUNCTION__, d->domain_id,
-                   pfn, ring_info, i);
-#endif
-            ret = -ECONTINUATION;
-        } else if (!mfn_valid_page(mfn_x(*mfn)) ||
-                   !get_page(mfn_to_page(mfn_x(*mfn)), d))
+        if (!mfn_valid_page(mfn_x(*mfn)) ||
+            !get_page(mfn_to_page(mfn_x(*mfn)), d))
             ret = -EINVAL;
 
         put_gfn(d, pfn);

@@ -11,7 +11,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -127,12 +127,11 @@ static int hvmemul_do_io(
     struct hvm_vcpu_io *vio;
     ioreq_t *p = get_ioreq(curr);
     unsigned long ram_gfn = paddr_to_pfn(ram_gpa);
-    mfn_t mfn;
     p2m_type_t p2mt;
     int rc;
 
     /* Check for paged out page */
-    mfn = get_gfn_unshare(curr->domain, ram_gfn, &p2mt);
+    get_gfn_unshare(curr->domain, ram_gfn, &p2mt);
 #ifndef __UXEN__
     if ( p2m_is_paging(p2mt) )
     {
@@ -143,11 +142,6 @@ static int hvmemul_do_io(
     if ( p2m_is_shared(p2mt) )
     {
         put_gfn(curr->domain, ram_gfn); 
-        return X86EMUL_RETRY;
-    }
-#else  /* __UXEN__ */
-    if (mfn_retry(mfn)) {
-        put_gfn(curr->domain, ram_gfn);
         return X86EMUL_RETRY;
     }
 #endif  /* __UXEN__ */
@@ -763,7 +757,6 @@ static int hvmemul_rep_movs(
     p2m_type_t p2mt;
     int rc, df = !!(ctxt->regs->eflags & X86_EFLAGS_DF);
     char *buf;
-    mfn_t mfn;
 
     rc = hvmemul_virtual_to_linear(
         src_seg, src_offset, bytes_per_rep, reps, hvm_access_read,
@@ -793,9 +786,7 @@ static int hvmemul_rep_movs(
 
     /* Unlocked works here because we get_gfn for real in whatever
      * we call later. */
-    mfn = get_gfn_unlocked(current->domain, sgpa >> PAGE_SHIFT, &p2mt);
-    if (mfn_retry(mfn))
-        return X86EMUL_RETRY;
+    get_gfn_unlocked(current->domain, sgpa >> PAGE_SHIFT, &p2mt);
     if (!p2m_is_ram(p2mt)
 #ifndef __UXEN__
         && !p2m_is_grant(p2mt)
@@ -804,9 +795,7 @@ static int hvmemul_rep_movs(
         return hvmemul_do_mmio(
             sgpa, reps, bytes_per_rep, dgpa, IOREQ_READ, df, NULL);
 
-    mfn = get_gfn_unlocked(current->domain, dgpa >> PAGE_SHIFT, &p2mt);
-    if (mfn_retry(mfn))
-        return X86EMUL_RETRY;
+    get_gfn_unlocked(current->domain, dgpa >> PAGE_SHIFT, &p2mt);
     if (!p2m_is_ram(p2mt)
 #ifndef __UXEN__
         && !p2m_is_grant(p2mt)

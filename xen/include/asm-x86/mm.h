@@ -1,7 +1,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -674,18 +674,13 @@ extern bool_t machine_to_phys_mapping_valid;
 #define SHARED_ZERO_MFN         (0xfffffffffeUL)
 #define COMPRESSED_MFN          (0xfffffffffdUL)
 #define ERROR_MFN               (0xfffffffffcUL)
-#define DMREQ_MFN               (0xfffffffffbUL)
 #else  /* __x86_64__ */
 /* 32 bits */
 #define INVALID_MFN             (0xffffffffUL)
 #define SHARED_ZERO_MFN         (0xfffffffeUL)
 #define COMPRESSED_MFN          (0xfffffffdUL)
 #define ERROR_MFN               (0xfffffffcUL)
-#define DMREQ_MFN               (0xfffffffbUL)
 #endif /* __x86_64__ */
-
-#define __mfn_retry(mfn) ((mfn) == DMREQ_MFN)
-#define mfn_retry(mfn) (__mfn_retry(mfn_x((mfn))))
 
 #define p2m_mfn_is_vframe(mfn) mfn_valid_vframe(mfn)
 #define p2m_mfn_is_page_data(mfn) p2m_mfn_is_vframe(mfn)

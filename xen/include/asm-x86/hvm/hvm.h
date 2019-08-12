@@ -252,8 +252,6 @@ void hvm_vcpu_cacheattr_destroy(struct vcpu *v);
 void hvm_vcpu_reset_state(struct vcpu *v, uint16_t cs, uint16_t ip);
 
 bool_t hvm_send_assist_req(struct vcpu *v);
-bool_t hvm_send_dmreq(struct vcpu *v);
-bool_t hvm_send_dom0_dmreq(struct domain *d);
 
 void hvm_set_zp_prefix(struct domain *d);
 

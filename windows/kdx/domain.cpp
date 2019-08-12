@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2016, Bromium, Inc.
+ * Copyright 2013-2019, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -48,11 +48,10 @@ EXT_COMMAND(
             usym_read_u32(domain, hidden_pages),
             usym_read_u32(domain, xenheap_pages),
             usym_read_u32(domain, host_pages));
-        Out("  pod:%d zero_shared:%d tmpl_shared:%d retry:%d\n",
+        Out("  pod:%d zero_shared:%d tmpl_shared:%d\n",
             usym_read_u32(domain, pod_pages),
             usym_read_u32(domain, zero_shared_pages),
-            usym_read_u32(domain, tmpl_shared_pages),
-            usym_read_u32(domain, retry_pages));
+            usym_read_u32(domain, tmpl_shared_pages));
 
         if (has_page_list) {
             Dml("  page_list_next:<exec cmd=\"!pagelist -v 0x%p\">0x%p</exec>, page_list_tail:<exec cmd=\"!pagelist -v -b 0x%p\">0x%p</exec>\n",

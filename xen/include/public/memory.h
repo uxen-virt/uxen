@@ -26,7 +26,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -78,8 +78,6 @@
 #endif   /* __UXEN__ */
 #define XENMEMF_populate_from_buffer (1<<17)
 #define XENMEMF_populate_from_buffer_compressed (1<<18)
-/* Flag to populate physmap with dmreq populate-on-demand entries */
-#define XENMEMF_populate_on_demand_dmreq (1<<19)
 #endif
 
 struct xen_memory_reservation {

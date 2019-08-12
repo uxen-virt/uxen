@@ -1071,7 +1071,6 @@ int arch_set_info_guest(
     {
         cr3_gfn = xen_cr3_to_pfn(c.nat->ctrlreg[3]);
         cr3_pfn = get_gfn_untyped(d, cr3_gfn);
-#error handle get_gfn retry here
 
         if ( !mfn_valid(cr3_pfn) ||
              (paging_mode_refcounts(d)
@@ -1091,7 +1090,6 @@ int arch_set_info_guest(
         {
             cr3_gfn = xen_cr3_to_pfn(c.nat->ctrlreg[1]);
             cr3_pfn = get_gfn_untyped(d, cr3_gfn);
-#error handle get_gfn retry here
 
             if ( !mfn_valid(cr3_pfn) ||
                  (paging_mode_refcounts(d)
@@ -1126,7 +1124,6 @@ int arch_set_info_guest(
 
         cr3_gfn = compat_cr3_to_pfn(c.cmp->ctrlreg[3]);
         cr3_pfn = get_gfn_untyped(d, cr3_gfn);
-#error handle get_gfn retry here
 
         if ( !mfn_valid(cr3_pfn) ||
              (paging_mode_refcounts(d)
@@ -1234,7 +1231,6 @@ map_vcpu_info(struct vcpu *v, unsigned long gfn, unsigned offset)
         return -EINVAL;
 
     mfn = get_gfn_untyped(d, gfn);
-#error handle get_gfn retry here
     if ( !mfn_valid(mfn) ||
          !get_page_and_type(mfn_to_page(mfn), d, PGT_writable_page) )
     {

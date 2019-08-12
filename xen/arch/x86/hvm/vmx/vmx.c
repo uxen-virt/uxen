@@ -612,7 +612,6 @@ static int vmx_restore_cr0_cr3(
         if ( cr0 & X86_CR0_PG )
         {
             mfn = mfn_x(get_gfn(v->domain, cr3 >> PAGE_SHIFT, &p2mt));
-#error handle get_gfn retry here
             if ( !p2m_is_ram(p2mt) || !get_page(mfn_to_page(mfn), v->domain) )
             {
                 put_gfn(v->domain, cr3 >> PAGE_SHIFT);
@@ -1415,10 +1414,6 @@ static int vmx_load_pdptrs(struct vcpu *v)
         goto crash;
 
     mfn = mfn_x(get_gfn(v->domain, cr3 >> PAGE_SHIFT, &p2mt));
-    if (__mfn_retry(mfn)) {
-        ret = -ECONTINUATION;
-        goto out;
-    }
     if ( !p2m_is_ram(p2mt) )
     {
         put_gfn(v->domain, cr3 >> PAGE_SHIFT);
@@ -1451,7 +1446,6 @@ static int vmx_load_pdptrs(struct vcpu *v)
     vmx_vmcs_exit(v);
 
     unmap_domain_page(p);
-  out:
     put_gfn(v->domain, cr3 >> PAGE_SHIFT);
     return ret;
 

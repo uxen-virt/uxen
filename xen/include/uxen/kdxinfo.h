@@ -2,7 +2,7 @@
  *  kdxinfo.h
  *  uxen
  *
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -55,7 +55,7 @@ struct uxen_kdxinfo {
     uint16_t domain_hidden_pages;
     uint16_t domain_pod_pages;
     uint16_t domain_zero_shared_pages;
-    uint16_t domain_retry_pages;
+    uint16_t __unused1;         /* was domain_retry_pages; */
     uint16_t domain_tmpl_shared_pages;
     uint16_t domain_xenheap_pages;
     uint16_t domain_host_pages;

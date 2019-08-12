@@ -274,8 +274,6 @@ typedef enum {
                 atomic_dec(&(d)->zero_shared_pages);            \
             else if (__mfn_valid_page_or_vframe((omfn)))        \
                 atomic_dec(&(d)->tmpl_shared_pages);            \
-            else if (__mfn_retry((omfn)))                       \
-                atomic_dec(&(d)->retry_pages);                  \
             atomic_dec(&(d)->pod_pages);                        \
         }                                                       \
         if (p2m_is_pod((nt))) {                                 \
@@ -283,8 +281,6 @@ typedef enum {
                 atomic_inc(&(d)->zero_shared_pages);            \
             else if (__mfn_valid_page_or_vframe((nmfn)))        \
                 atomic_inc(&(d)->tmpl_shared_pages);            \
-            else if (__mfn_retry((nmfn)))                       \
-                atomic_inc(&(d)->retry_pages);                  \
             atomic_inc(&(d)->pod_pages);                        \
         }                                                       \
     } while (0)

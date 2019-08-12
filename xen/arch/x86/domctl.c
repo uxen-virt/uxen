@@ -6,7 +6,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -230,11 +230,6 @@ long arch_do_domctl(
                     p2m_type_t pt;
                     unsigned long type = 0, mfn = mfn_x(get_gfn_query(d, arr[j], &pt));
 
-                    if (__mfn_retry(mfn)) {
-                        ret = -ECONTINUATION;
-                        break;
-                    }
-
                     page = mfn_to_page(mfn);
 
                     if (p2m_is_pod(pt)) {
@@ -349,11 +344,6 @@ long arch_do_domctl(
                 struct page_info *page;
                 unsigned long gfn = arr32[j];
                 unsigned long mfn = get_gfn_untyped(d, gfn);
-
-                if (__mfn_retry(mfn)) {
-                    ret = -ECONTINUATION;
-                    break;
-                }
 
                 page = mfn_to_page(mfn);
 
@@ -489,7 +479,6 @@ long arch_do_domctl(
         }
 
         mfn = get_gfn_untyped(d, gmfn);
-#error handle get_gfn retry here
 
         ret = -EACCES;
         if ( !mfn_valid(mfn) ||

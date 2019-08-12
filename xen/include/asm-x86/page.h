@@ -374,7 +374,6 @@ void setup_idle_pagetable(void);
 #define _PAGE_AVAIL    0xE00U
 #define _PAGE_PSE_PAT 0x1000U
 #define _PAGE_PAGED   0x2000U
-#define _PAGE_POPULATE 0x2000U
 #define _PAGE_SHARED  0x4000U
 
 /*

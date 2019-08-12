@@ -766,7 +766,6 @@ int map_ldt_shadow_page(unsigned int off)
 
     gmfn = l1e_get_pfn(l1e);
     mfn = get_gfn_untyped(d, gmfn);
-#error handle get_gfn retry here
     if ( unlikely(!mfn_valid(mfn)) )
     {
         put_gfn(d, gmfn); 
@@ -1938,7 +1937,6 @@ static int mod_l1_entry(l1_pgentry_t *pl1e, l1_pgentry_t nl1e,
         unsigned long mfn, gfn;
         gfn = l1e_get_pfn(nl1e);
         mfn = mfn_x(get_gfn(pg_dom, gfn, &p2mt));
-#error handle get_gfn retry here
         if ( !p2m_is_ram(p2mt) || unlikely(mfn == INVALID_MFN) )
         {
             put_gfn(pg_dom, gfn);
@@ -3303,7 +3301,6 @@ int do_mmuext_op(
                 break;
 
             mfn = get_gfn_untyped(pg_owner, op.arg1.mfn);
-#error handle get_gfn retry here
             rc = get_page_and_type_from_pagenr(mfn, type, pg_owner, 0, 1);
             okay = !rc;
             if ( unlikely(!okay) )
@@ -3364,7 +3361,6 @@ int do_mmuext_op(
                 break;
 
             mfn = get_gfn_untyped(pg_owner, op.arg1.mfn);
-#error handle get_gfn retry here
             if ( unlikely(!(okay = get_page_from_pagenr(mfn, pg_owner))) )
             {
                 put_gfn(pg_owner, op.arg1.mfn);
@@ -3395,7 +3391,6 @@ int do_mmuext_op(
 
         case MMUEXT_NEW_BASEPTR:
             okay = new_guest_cr3(get_gfn_untyped(d, op.arg1.mfn));
-#error handle get_gfn retry here
             put_gfn(d, op.arg1.mfn);
             break;
         
@@ -3404,7 +3399,6 @@ int do_mmuext_op(
             unsigned long old_mfn, mfn;
 
             mfn = get_gfn_untyped(d, op.arg1.mfn);
-#error handle get_gfn retry here
             if ( mfn != 0 )
             {
                 if ( paging_mode_refcounts(d) )
@@ -3541,7 +3535,6 @@ int do_mmuext_op(
             unsigned char *ptr;
 
             mfn = get_gfn_untyped(d, op.arg1.mfn);
-#error handle get_gfn retry here
             okay = !get_page_and_type_from_pagenr(
                 mfn, PGT_writable_page, d, 0, 0);
             if ( unlikely(!okay) )
@@ -3570,7 +3563,6 @@ int do_mmuext_op(
             unsigned long src_mfn, mfn;
 
             src_mfn = get_gfn_untyped(d, op.arg2.src_mfn);
-#error handle get_gfn retry here
             okay = get_page_from_pagenr(src_mfn, d);
             if ( unlikely(!okay) )
             {
@@ -3580,7 +3572,6 @@ int do_mmuext_op(
             }
 
             mfn = get_gfn_untyped(d, op.arg1.mfn);
-#error handle get_gfn retry here
             okay = !get_page_and_type_from_pagenr(
                 mfn, PGT_writable_page, d, 0, 0);
             if ( unlikely(!okay) )
@@ -3793,7 +3784,6 @@ int do_mmu_update(
             req.ptr -= cmd;
             gmfn = req.ptr >> PAGE_SHIFT;
             mfn = mfn_x(get_gfn(pt_owner, gmfn, &p2mt));
-#error handle get_gfn retry here
             if ( !p2m_is_valid(p2mt) )
                 mfn = INVALID_MFN;
 
@@ -3836,7 +3826,6 @@ int do_mmu_update(
                     unsigned long l1egfn = l1e_get_pfn(l1e), l1emfn;
     
                     l1emfn = mfn_x(get_gfn(pg_owner, l1egfn, &l1e_p2mt));
-#error handle get_gfn retry here
 
                     if ( p2m_is_paged(l1e_p2mt) )
                     {
@@ -3885,7 +3874,6 @@ int do_mmu_update(
                     unsigned long l2egfn = l2e_get_pfn(l2e), l2emfn;
 
                     l2emfn = mfn_x(get_gfn(pg_owner, l2egfn, &l2e_p2mt));
-#error handle get_gfn retry here
 
                     if ( p2m_is_paged(l2e_p2mt) )
                     {
@@ -3920,7 +3908,6 @@ int do_mmu_update(
                     unsigned long l3egfn = l3e_get_pfn(l3e), l3emfn;
 
                     l3emfn = mfn_x(get_gfn(pg_owner, l3egfn, &l3e_p2mt));
-#error handle get_gfn retry here
 
                     if ( p2m_is_paged(l3e_p2mt) )
                     {
@@ -3955,7 +3942,6 @@ int do_mmu_update(
                     unsigned long l4egfn = l4e_get_pfn(l4e), l4emfn;
 
                     l4emfn = mfn_x(get_gfn(pg_owner, l4egfn, &l4e_p2mt));
-#error handle get_gfn retry here
 
                     if ( p2m_is_paged(l4e_p2mt) )
                     {
@@ -4091,7 +4077,6 @@ static int create_grant_pte_mapping(
 
     gmfn = pte_addr >> PAGE_SHIFT;
     mfn = get_gfn_untyped(d, gmfn);
-#error handle get_gfn retry here
 
     if ( unlikely(!get_page_from_pagenr(mfn, current->domain)) )
     {
@@ -4149,7 +4134,6 @@ static int destroy_grant_pte_mapping(
 
     gmfn = addr >> PAGE_SHIFT;
     mfn = get_gfn_untyped(d, gmfn);
-#error handle get_gfn retry here
 
     if ( unlikely(!get_page_from_pagenr(mfn, current->domain)) )
     {
@@ -4398,7 +4382,6 @@ static int replace_grant_p2m_mapping(
         return GNTST_general_error;
 
     old_mfn = get_gfn(d, gfn, &type);
-#error handle get_gfn retry here
     if ( !p2m_is_grant(type) || mfn_x(old_mfn) != frame )
     {
         put_gfn(d, gfn);
@@ -4803,7 +4786,6 @@ long set_gdt(struct vcpu *v,
     {
         pfns[i] = frames[i];
         mfn = frames[i] = get_gfn_untyped(d, frames[i]);
-#error handle get_gfn retry here
         if ( !mfn_valid(mfn) ||
              !get_page_and_type(mfn_to_page(mfn), d, PGT_seg_desc_page) )
             goto fail;
@@ -4876,7 +4858,6 @@ long do_update_descriptor(u64 pa, u64 desc)
     *(u64 *)&d = desc;
 
     mfn = get_gfn_untyped(dom, gmfn);
-#error handle get_gfn retry here
     if ( (((unsigned int)pa % sizeof(struct desc_struct)) != 0) ||
          !mfn_valid(mfn) ||
          !check_descriptor(dom, &d) )
@@ -5027,10 +5008,6 @@ static int xenmem_add_to_physmap_once(
                 return -ENOMEM;
             }
 #endif  /* __UXEN__ */
-            if (__mfn_retry(idx)) {
-                put_gfn(d, gfn);
-                return -ECONTINUATION;
-            }
             if (idx == INVALID_MFN) {
                 put_gfn(d, gfn);
                 return -EINVAL;
@@ -5621,11 +5598,6 @@ long arch_memory_op(int op, XEN_GUEST_HANDLE(void) arg)
         }
 
         mfn = get_gfn_unshare(d, list.gpfn_list_gpfn, &pt);
-        if (mfn_retry(mfn)) {
-            put_gfn(d, list.gpfn_list_gpfn);
-            rc = -ECONTINUATION;
-            goto share_zero_pages_out;
-        }
         if (!p2m_is_ram(pt)) {
             put_gfn(d, list.gpfn_list_gpfn);
             rc = -EFAULT;

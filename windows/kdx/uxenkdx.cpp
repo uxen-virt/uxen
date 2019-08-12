@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2016, Bromium, Inc.
+ * Copyright 2013-2019, Bromium, Inc.
  * Author: Kris Uchronski <kuchronski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -287,7 +287,6 @@ EXT_COMMAND(
     set_usym_offset (domain, pod_pages) = kdxinfo.domain_pod_pages;
     set_usym_offset (domain, zero_shared_pages) =
         kdxinfo.domain_zero_shared_pages;
-    set_usym_offset (domain, retry_pages) = kdxinfo.domain_retry_pages;
     set_usym_offset (domain, tmpl_shared_pages) =
         kdxinfo.domain_tmpl_shared_pages;
     set_usym_offset (domain, xenheap_pages) = kdxinfo.domain_xenheap_pages;

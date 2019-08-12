@@ -19,7 +19,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -272,10 +272,6 @@ static int svm_vmcb_restore(struct vcpu *v, struct hvm_hw_cpu *c)
         if ( c->cr0 & X86_CR0_PG )
         {
             mfn = mfn_x(get_gfn(v->domain, c->cr3 >> PAGE_SHIFT, &p2mt));
-            if (__mfn_retry(mfn)) {
-                put_gfn(v->domain, c->cr3 >> PAGE_SHIFT);
-                return -ECONTINUATION;
-            }
             if ( !p2m_is_ram(p2mt) || !get_page(mfn_to_page(mfn), v->domain) )
             {
                 put_gfn(v->domain, c->cr3 >> PAGE_SHIFT);

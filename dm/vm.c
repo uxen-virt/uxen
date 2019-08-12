@@ -16,7 +16,6 @@
 #include "console.h"
 #include "control.h"
 #include "dm.h"
-#include "dmreq.h"
 #include "firmware.h"
 #include "ioh.h"
 #include "ioreq.h"
@@ -669,8 +668,6 @@ vm_init(const char *loadvm, int restore_mode)
         if (ret)
             errx(1, "hvm build failed: %d", ret);
 
-        dmreq_init();
-
         hvm_info_page = vm_memory_map_perm(HVM_INFO_PFN << PAGE_SHIFT,
             XC_PAGE_SIZE, VM_MEMORY_MAP_PROT_WRITE);
         if (hvm_info_page == NULL)
@@ -879,7 +876,6 @@ vm_exit(void *opaque)
 
     console_exit();
     control_exit();
-    dmreq_exit();
 
 #if defined(_WIN32)
     socket_cleanup();

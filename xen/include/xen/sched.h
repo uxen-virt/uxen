@@ -295,7 +295,6 @@ struct domain
 #else  /* __UXEN__ */
     atomic_t         pod_pages;       /* # pages populated on demand */
     atomic_t         zero_shared_pages; /* # pages zero shared      */
-    atomic_t         retry_pages;       /* # pages retry pod        */
     atomic_t         tmpl_shared_pages; /* # pages template shared  */
 #endif  /* __UXEN__ */
     unsigned int     xenheap_pages;   /* # pages allocated from Xen heap    */

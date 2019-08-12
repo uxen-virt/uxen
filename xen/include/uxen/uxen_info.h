@@ -318,9 +318,6 @@ struct vm_info_shared {
     uint32_t vmi_pt_pages_size;
     uint32_t vmi_nr_pt_pages;
     void *vmi_domain;
-    void *vmi_dmreq;
-    void *vmi_dmreq_vcpu_page_va;
-    void *vmi_dmreq_hec;
     void * volatile vmi_wait_event;
     void *vmi_free_related;
 };

@@ -36,13 +36,6 @@
 #include <public/hvm/params.h>
 #include <public/hvm/save.h>
 
-struct dmreq_page;
-struct hvm_dmreq_page {
-    spinlock_t lock;
-    struct page_info *page;
-    struct dmreq_page *va;
-};
-
 struct hvm_ioreq_page {
     spinlock_t lock;
     struct page_info *page;
@@ -75,13 +68,6 @@ struct hvm_domain {
     struct hvm_ioreq_server *ioreq_server_list;
     uint32_t               nr_ioreq_server;
     spinlock_t             ioreq_server_lock;
-
-    struct hvm_dmreq_page  dmreq;
-    int                    dmreq_port;
-    struct page_info      *dmreq_vcpu_page;
-    void                  *dmreq_vcpu_page_va;
-    spinlock_t             dmreq_vcpu_page_lock;
-    uint32_t               dmreq_query;
 
     struct pl_time         pl_time;
 

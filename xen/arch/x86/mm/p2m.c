@@ -1100,10 +1100,6 @@ p2m_translate(struct domain *d, xen_pfn_t *arr, int nr, int write)
             rc = -EINVAL;
             goto out;
         }
-        if (mfn_retry(mfn)) {
-            rc = j;
-            goto out;
-        }
         if (unlikely(is_xen_mfn(mfn_x(mfn))) ||
             unlikely(is_host_mfn(mfn_x(mfn))) ||
             unlikely(mfn_zero_page(mfn_x(mfn))))

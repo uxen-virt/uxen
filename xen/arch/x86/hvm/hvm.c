@@ -85,7 +85,6 @@
 #include <asm/mtrr.h>
 #include <asm/apic.h>
 #include <public/sched.h>
-#include <public/hvm/dmreq.h>
 #include <public/hvm/ioreq.h>
 #include <public/version.h>
 #include <public/memory.h>
@@ -392,13 +391,6 @@ void hvm_do_resume(struct vcpu *v)
     check_wakeup_from_wait();
 #endif  /* __UXEN__ */
 
-    if (dmreq_gpfn_valid(v->arch.hvm_vcpu.dmreq_gpfn)) {
-        p2m_type_t pt;
-        get_gfn_unshare(v->domain, v->arch.hvm_vcpu.dmreq_gpfn, &pt);
-        put_gfn(v->domain, v->arch.hvm_vcpu.dmreq_gpfn);
-        vcpu_end_shutdown_deferral(v);
-    }
-
     p = get_dm_ioreq(v);
 
     /* NB. Optimised for common case (p->state == STATE_IOREQ_NONE). */
@@ -437,220 +429,6 @@ void hvm_do_resume_trap(struct vcpu *v)
                              v->arch.hvm_vcpu.inject_cr2);
         v->arch.hvm_vcpu.inject_trap = -1;
     }
-}
-
-static void
-hvm_init_dmreq_page(struct domain *d)
-{
-    struct hvm_dmreq_page *dmrp = &d->arch.hvm_domain.dmreq;
-
-    memset(dmrp, 0, sizeof(*dmrp));
-    spin_lock_init(&dmrp->lock);
-    domain_pause(d);
-}
-
-static void
-hvm_destroy_dmreq_page(struct domain *d)
-{
-    struct hvm_dmreq_page *dmrp = &d->arch.hvm_domain.dmreq;
-
-    spin_lock(&dmrp->lock);
-
-    ASSERT(d->is_dying);
-
-    if (dmrp->va) {
-        unmap_domain_page_global(dmrp->va);
-        put_page(dmrp->page);
-        dmrp->va = NULL;
-    }
-
-    spin_unlock(&dmrp->lock);
-}
-
-static int
-hvm_set_dmreq_page(struct domain *d, unsigned long gmfn)
-{
-    struct hvm_dmreq_page *dmrp = &d->arch.hvm_domain.dmreq;
-    struct page_info *page;
-    p2m_type_t p2mt;
-    p2m_type_t nt;
-    unsigned long mfn;
-    void *va;
-    int i;
-    int ret = 0;
-
-    mfn = mfn_x(get_gfn_unshare(d, gmfn, &p2mt));
-    if (p2mt != p2m_ram_rw) {
-        put_gfn(d, gmfn);
-        return -EINVAL;
-    }
-    ASSERT(mfn_valid(mfn));
-
-    nt = p2m_change_type(d, gmfn, p2mt, p2m_ram_ro);
-    if (nt != p2mt) {
-        printk(XENLOG_ERR
-               "%s: type of pfn 0x%lx changed from %d to %d while "
-               "we were trying to change it to %d\n", __FUNCTION__,
-               gmfn, p2mt, nt, p2m_ram_ro);
-        put_gfn(d, gmfn);
-        return -EINVAL;
-    }
-
-    page = mfn_to_page(mfn);
-    if (!get_page(page, d)) {
-        put_gfn(d, gmfn);
-        return -EINVAL;
-    }
-
-    va = map_domain_page_global(mfn);
-    if (!va) {
-        put_page(page);
-        put_gfn(d, gmfn);
-        return -ENOMEM;
-    }
-
-    spin_lock(&dmrp->lock);
-
-    if (dmrp->va || d->is_dying) {
-        spin_unlock(&dmrp->lock);
-        unmap_domain_page_global(va);
-        put_page(mfn_to_page(mfn));
-        put_gfn(d, gmfn);
-        return -EINVAL;
-    }
-
-    dmrp->va = va;
-    dmrp->page = page;
-
-    for (i = 0; i < d->max_vcpus; i++) {
-        if (!d->vcpu[i]) {
-            ret = -EINVAL;
-            break;
-        }
-        dmrp->va->dmreq_vcpu[i].dmreq_gpfn = DMREQ_GPFN_UNUSED;
-        dmrp->va->dmreq_vcpu[i].dmreq_gpfn_loaded = DMREQ_GPFN_UNUSED;
-        d->vcpu[i]->arch.hvm_vcpu.dmreq_gpfn = DMREQ_GPFN_UNUSED;
-    }
-    dmrp->va->dmreq_dom0.dmreq_gpfn = DMREQ_GPFN_UNUSED;
-    dmrp->va->dmreq_dom0.dmreq_gpfn_loaded = DMREQ_GPFN_UNUSED;
-
-    spin_unlock(&dmrp->lock);
-    put_gfn(d, gmfn);
-
-    domain_unpause(d);
-
-    return ret;
-}
-
-static void
-hvm_init_dmreq_vcpu_pages(struct domain *d)
-{
-
-    spin_lock_init(&d->arch.hvm_domain.dmreq_vcpu_page_lock);
-    domain_pause(d);
-}
-
-static void
-hvm_destroy_dmreq_vcpu_pages(struct domain *d)
-{
-    int i;
-
-    spin_lock(&d->arch.hvm_domain.dmreq_vcpu_page_lock);
-
-    ASSERT(d->is_dying);
-
-    if (d->arch.hvm_domain.dmreq_vcpu_page_va) {
-        unmap_domain_page_global(d->arch.hvm_domain.dmreq_vcpu_page_va);
-        put_page(d->arch.hvm_domain.dmreq_vcpu_page);
-        d->arch.hvm_domain.dmreq_vcpu_page_va = NULL;
-        if (d->vm_info_shared)
-            d->vm_info_shared->vmi_dmreq_vcpu_page_va = NULL;
-    }
-
-    for (i = 0; i < d->max_vcpus; i++) {
-        if (!d->vcpu[i] || !d->vcpu[i]->arch.hvm_vcpu.dmreq_vcpu_page_va)
-            continue;
-        unmap_domain_page_global(d->vcpu[i]->arch.hvm_vcpu.dmreq_vcpu_page_va);
-        put_page(d->vcpu[i]->arch.hvm_vcpu.dmreq_vcpu_page);
-        d->vcpu[i]->arch.hvm_vcpu.dmreq_vcpu_page_va = NULL;
-    }
-
-    spin_unlock(&d->arch.hvm_domain.dmreq_vcpu_page_lock);
-}
-
-static int
-hvm_set_dmreq_vcpu_pages(struct domain *d, unsigned long gmfn)
-{
-    struct page_info *page;
-    p2m_type_t p2mt;
-    p2m_type_t nt;
-    unsigned long mfn;
-    void *va;
-    int i;
-
-    for (i = 0; i < d->max_vcpus + 1; i++) {
-        mfn = mfn_x(get_gfn_unshare(d, gmfn + i, &p2mt));
-        if (p2mt != p2m_ram_rw) {
-            put_gfn(d, gmfn);
-            return -EINVAL;
-        }
-        ASSERT(mfn_valid(mfn));
-
-        nt = p2m_change_type(d, gmfn + i, p2mt, p2m_ram_ro);
-        if (nt != p2mt) {
-            printk(XENLOG_ERR
-                   "%s: type of pfn 0x%lx changed from %d to %d while "
-                   "we were trying to change it to %d\n", __FUNCTION__,
-                   gmfn + i, p2mt, nt, p2m_ram_ro);
-            put_gfn(d, gmfn + i);
-            return -EINVAL;
-        }
-
-        page = mfn_to_page(mfn);
-        if (!get_page(page, d)) {
-            put_gfn(d, gmfn + i);
-            return -EINVAL;
-        }
-
-        va = map_domain_page_global(mfn);
-        if (!va) {
-            put_page(page);
-            put_gfn(d, gmfn + i);
-            return -ENOMEM;
-        }
-
-        spin_lock(&d->arch.hvm_domain.dmreq_vcpu_page_lock);
-
-        if (i == d->max_vcpus) {
-            if (d->arch.hvm_domain.dmreq_vcpu_page_va || d->is_dying) {
-                spin_unlock(&d->arch.hvm_domain.dmreq_vcpu_page_lock);
-                unmap_domain_page_global(va);
-                put_page(mfn_to_page(mfn));
-                put_gfn(d, gmfn + i);
-                return -EINVAL;
-            }
-            d->arch.hvm_domain.dmreq_vcpu_page_va = va;
-            d->arch.hvm_domain.dmreq_vcpu_page = page;
-            d->vm_info_shared->vmi_dmreq_vcpu_page_va = va;
-        } else {
-            if (!d->vcpu[i] || d->vcpu[i]->arch.hvm_vcpu.dmreq_vcpu_page_va ||
-                d->is_dying) {
-                spin_unlock(&d->arch.hvm_domain.dmreq_vcpu_page_lock);
-                unmap_domain_page_global(va);
-                put_page(mfn_to_page(mfn));
-                put_gfn(d, gmfn + i);
-                return -EINVAL;
-            }
-            d->vcpu[i]->arch.hvm_vcpu.dmreq_vcpu_page_va = va;
-            d->vcpu[i]->arch.hvm_vcpu.dmreq_vcpu_page = page;
-        }
-
-        spin_unlock(&d->arch.hvm_domain.dmreq_vcpu_page_lock);
-        put_gfn(d, gmfn + i);
-    }
-
-    domain_unpause(d);
-    return 0;
 }
 
 static void
@@ -794,11 +572,6 @@ static int hvm_set_ioreq_page(
     }
     if ( p2m_is_shared(p2mt) )
     {
-        put_gfn(d, gmfn);
-        return -ENOENT;
-    }
-#else  /* __UXEN__ */
-    if (__mfn_retry(mfn)) {
         put_gfn(d, gmfn);
         return -ENOENT;
     }
@@ -953,8 +726,6 @@ int hvm_domain_initialise(struct domain *d)
         HVM_PARAM_ZERO_PAGE_enable_setup |
         HVM_PARAM_ZERO_PAGE_enable_load;
 
-    d->arch.hvm_domain.params[HVM_PARAM_TEMPLATE_LAZY_LOAD] = 1;
-
 #ifndef __UXEN__
     hvm_init_cacheattr_region_list(d);
 #endif  /* __UXEN__ */
@@ -977,8 +748,6 @@ int hvm_domain_initialise(struct domain *d)
 
     hvm_init_ioreq_page(d, &d->arch.hvm_domain.ioreq);
     hvm_init_ioreq_servers(d);
-    hvm_init_dmreq_page(d);
-    hvm_init_dmreq_vcpu_pages(d);
 
     register_portio_handler(d, 0xe9, 1, hvm_print_char_io);
 
@@ -1033,8 +802,6 @@ void hvm_domain_relinquish_resources(struct domain *d)
 {
     hvm_destroy_ioreq_servers(d);
     hvm_destroy_ioreq_page(d, &d->arch.hvm_domain.ioreq);
-    hvm_destroy_dmreq_page(d);
-    hvm_destroy_dmreq_vcpu_pages(d);
     hvm_destroy_pci_emul(d);
 
     viridian_domain_deinit(d);
@@ -1564,30 +1331,6 @@ int hvm_vcpu_initialise(struct vcpu *v)
 
     v->arch.hvm_vcpu.ioreq_page = &v->domain->arch.hvm_domain.ioreq;
 
-    /* Create dmreq event channel. */
-    rc = alloc_unbound_xen_event_channel(v, 0);
-    if (rc < 0)
-        goto fail4;
-    /* Register dmreq event channel. */
-    v->arch.hvm_vcpu.dmreq_port = rc;
-
-    /* Create dmreq event for dom0 requests */
-    if (!v->vcpu_id) {
-        rc = alloc_unbound_xen_event_channel(v, 0);
-        if (rc < 0)
-            goto fail4;
-        v->domain->arch.hvm_domain.dmreq_port = rc;
-    }
-
-    spin_lock(&v->domain->arch.hvm_domain.dmreq.lock);
-    if (v->domain->arch.hvm_domain.dmreq.va) {
-        get_dmreq(v)->vp_eport = v->arch.hvm_vcpu.dmreq_port;
-        if (!v->vcpu_id)
-            v->domain->arch.hvm_domain.dmreq.va->dmreq_dom0.vp_eport =
-                v->domain->arch.hvm_domain.dmreq_port;
-    }
-    spin_unlock(&v->domain->arch.hvm_domain.dmreq.lock);
-
     spin_lock_init(&v->arch.hvm_vcpu.tm_lock);
     INIT_LIST_HEAD(&v->arch.hvm_vcpu.tm_list);
 
@@ -1724,40 +1467,6 @@ bool_t hvm_send_assist_req(struct vcpu *v)
     return 1;
 }
 
-bool_t
-hvm_send_dmreq(struct vcpu *v)
-{
-
-    if (unlikely(!vcpu_start_shutdown_deferral(v)))
-        return 0; /* implicitly bins the i/o operation */
-
-    prepare_wait_on_xen_event_channel(v->arch.hvm_vcpu.dmreq_port);
-
-    notify_via_xen_event_channel(v->domain, v->arch.hvm_vcpu.dmreq_port);
-
-    return 1;
-}
-
-bool_t
-hvm_send_dom0_dmreq(struct domain *d)
-{
-    struct dmreq *dmreq;
-
-    if (unlikely(!d || !d->vm_info_shared))
-        return 0; /* implicitly bins the i/o operation */
-
-    dmreq = d->vm_info_shared->vmi_dmreq;
-    if (!d->vm_info_shared->vmi_dmreq_hec)
-        d->vm_info_shared->vmi_dmreq_hec =
-            xen_event_channel_host_opaque(d, dmreq->vp_eport);
-
-    prepare_wait_on_xen_event_channel(dmreq->vp_eport);
-
-    notify_via_xen_event_channel(d, dmreq->vp_eport);
-
-    return 1;
-}
-
 void
 hvm_set_zp_prefix(struct domain *d)
 {
@@ -1874,8 +1583,6 @@ hvm_pod_zp_prefix(struct vcpu *v, unsigned long gpfn, p2m_type_t *t,
             pcr_gpfn = paging_gva_to_gfn(current, seg.base, paging_g2g_unshare,
                                          &pfec);
             if (pcr_gpfn == INVALID_GFN) {
-                if (pfec == PFEC_page_populate)
-                    return hypercall_create_retry_continuation();
                 break;
             }
             v->arch.hvm_vcpu.zp_pcr_gpfn = pcr_gpfn;
@@ -1975,16 +1682,12 @@ hvm_pod_zp_prefix(struct vcpu *v, unsigned long gpfn, p2m_type_t *t,
             pfec = PFEC_page_present;
             p = paging_gva_to_gfn(v, gva, paging_g2g_query, &pfec);
             if (p == INVALID_GFN) {
-                if (pfec == PFEC_page_populate)
-                    return hypercall_create_retry_continuation();
                 return 1;
             }
 
             zmfn = get_gfn_type(d, p, &pt, zeromode);
             put_gfn(d, p);
 
-            if (mfn_retry(zmfn))
-                return hypercall_create_retry_continuation();
             if (!__mfn_zero_page(mfn_x(zmfn)) &&
                 !(mfn_valid_page(mfn_x(zmfn)) && !p2m_is_pod(pt)))
                 return 1;
@@ -1992,10 +1695,6 @@ hvm_pod_zp_prefix(struct vcpu *v, unsigned long gpfn, p2m_type_t *t,
     }
 
     zmfn = get_gfn_type_access(p2m_get_hostp2m(d), gpfn, t, a, zeromode, NULL);
-    if (mfn_retry(zmfn)) {
-        put_gfn(d, gpfn);
-        return hypercall_create_retry_continuation();
-    }
     if (__mfn_zero_page(mfn_x(zmfn)) ||
         (mfn_valid(mfn_x(zmfn)) && !p2m_is_pod(*t))) {
         printk(XENLOG_DEBUG
@@ -2109,7 +1808,6 @@ int hvm_hap_nested_page_fault(unsigned long gpa,
     unsigned long gfn = gpa >> PAGE_SHIFT;
     p2m_type_t p2mt;
     p2m_access_t p2ma;
-    mfn_t mfn;
     struct vcpu *v = current;
     struct domain *d = v->domain;
     struct p2m_domain *p2m;
@@ -2160,13 +1858,8 @@ int hvm_hap_nested_page_fault(unsigned long gpa,
     }
 
     p2m = p2m_get_hostp2m(v->domain);
-    mfn = get_gfn_type_access(p2m, gfn, &p2mt, &p2ma,
-                              access_w ? p2m_guest : p2m_guest_r, NULL);
-
-    if (mfn_retry(mfn)) {
-        rc = 1;
-        goto out_put_gfn;
-    }
+    get_gfn_type_access(p2m, gfn, &p2mt, &p2ma,
+                        access_w ? p2m_guest : p2m_guest_r, NULL);
 
 #ifndef __UXEN__
     /* Check access permissions first, then handle faults */
@@ -2604,7 +2297,6 @@ int hvm_set_cr0(unsigned long value)
             /* The guest CR3 must be pointing to the guest physical. */
             gfn = v->arch.hvm_vcpu.guest_cr[3]>>PAGE_SHIFT;
             mfn = mfn_x(get_gfn(v->domain, gfn, &p2mt));
-#error handle get_gfn retry here
             if ( !p2m_is_ram(p2mt) || !mfn_valid(mfn) ||
                  !get_page(mfn_to_page(mfn), v->domain))
             {
@@ -2708,7 +2400,6 @@ int hvm_set_cr3(unsigned long value)
         /* Shadow-mode CR3 change. Check PDBR and update refcounts. */
         HVM_DBG_LOG(DBG_LEVEL_VMMU, "CR3 value = %lx", value);
         mfn = mfn_x(get_gfn(v->domain, value >> PAGE_SHIFT, &p2mt));
-#error handle get_gfn retry here
         if ( !p2m_is_ram(p2mt) || !mfn_valid(mfn) ||
              !get_page(mfn_to_page(mfn), v->domain) )
         {
@@ -2882,11 +2573,6 @@ static void *__hvm_map_guest_frame(unsigned long gfn, bool_t writable)
     if ( p2m_is_paging(p2mt) )
     {
         p2m_mem_paging_populate(d, gfn);
-        put_gfn(d, gfn);
-        return NULL;
-    }
-#else  /* __UXEN__ */
-    if (__mfn_retry(mfn)) {
         put_gfn(d, gfn);
         return NULL;
     }
@@ -3422,8 +3108,6 @@ static enum hvm_copy_result __hvm_copy(
             gfn = paging_gva_to_gfn(curr, addr, paging_g2g_unshare, &pfec);
             if ( gfn == INVALID_GFN )
             {
-                if (pfec == PFEC_page_populate)
-                    return HVMCOPY_gfn_populate;
                 if ( pfec == PFEC_page_paged )
                     return HVMCOPY_gfn_paged_out;
                 if ( pfec == PFEC_page_shared )
@@ -3456,11 +3140,6 @@ static enum hvm_copy_result __hvm_copy(
         {
             put_gfn(curr->domain, gfn);
             return HVMCOPY_unhandleable;
-        }
-#else  /* __UXEN__ */
-        if (__mfn_retry(mfn)) {
-            put_gfn(curr->domain, gfn);
-            return HVMCOPY_gfn_populate;
         }
 #endif  /* __UXEN__ */
         if ( !p2m_is_ram(p2mt) )
@@ -3631,9 +3310,6 @@ copy_to_hvm_errno(void *to, const void *from, unsigned len)
     case HVMCOPY_okay:
         rc = 0;
         break;
-    case HVMCOPY_gfn_populate:
-        rc = -ECONTINUATION;
-        break;
     default:
         rc = -EFAULT;
         break;
@@ -3653,9 +3329,6 @@ copy_from_hvm_errno(void *to, const void *from, unsigned len)
     switch (rc) {
     case HVMCOPY_okay:
         rc = 0;
-        break;
-    case HVMCOPY_gfn_populate:
-        rc = -ECONTINUATION;
         break;
     default:
         rc = -EFAULT;
@@ -5090,7 +4763,6 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
     case HVMOP_get_param:
     {
         struct xen_hvm_param a;
-        struct hvm_dmreq_page *dmrp;
         struct domain *d;
         struct vcpu *v;
 
@@ -5136,27 +4808,6 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
                        a.domid, a.value);
                 if ((d->arch.hvm_domain.params[HVM_PARAM_IO_PFN_LAST]))
                     rc = -EINVAL;
-                break;
-            case HVM_PARAM_DMREQ_PFN:
-                dmrp = &d->arch.hvm_domain.dmreq;
-                rc = hvm_set_dmreq_page(d, a.value);
-                if (rc)
-                    break;
-                spin_lock(&dmrp->lock);
-                if (dmrp->va) {
-                    /* Initialise evtchn port info if VCPUs already created. */
-                    for_each_vcpu (d, v)
-                        get_dmreq(v)->vp_eport = v->arch.hvm_vcpu.dmreq_port;
-                    d->vm_info_shared->vmi_dmreq = &dmrp->va->dmreq_dom0;
-                    dmrp->va->dmreq_dom0.vp_eport =
-                        d->arch.hvm_domain.dmreq_port;
-                }
-                spin_unlock(&dmrp->lock);
-                break;
-            case HVM_PARAM_DMREQ_VCPU_PFN:
-                rc = hvm_set_dmreq_vcpu_pages(d, a.value);
-                if (rc)
-                    break;
                 break;
             case HVM_PARAM_CALLBACK_IRQ:
                 hvm_set_callback_via(d, a.value);
@@ -5222,7 +4873,6 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
                 rc = 0;
                 domain_pause(d); /* safe to change per-vcpu xen_port */
                 iorp = &d->arch.hvm_domain.ioreq;
-                dmrp = &d->arch.hvm_domain.dmreq;
                 for_each_vcpu ( d, v )
                 {
                     int old_port, new_port;
@@ -5239,10 +4889,6 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
                     if ( iorp->va != NULL )
                         get_ioreq(v)->vp_eport = v->arch.hvm_vcpu.xen_port;
                     spin_unlock(&iorp->lock);
-                    spin_lock(&dmrp->lock);
-                    if (dmrp->va)
-                        get_dmreq(v)->vp_eport = v->arch.hvm_vcpu.dmreq_port;
-                    spin_unlock(&dmrp->lock);
                 }
                 domain_unpause(d);
                 break;
@@ -5493,12 +5139,6 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
             if( p2m_is_shared(t) )
                 gdprintk(XENLOG_WARNING,
                          "shared pfn 0x%lx modified?\n", pfn);
-#else  /* __UXEN__ */
-            if (mfn_retry(mfn)) {
-                put_gfn(d, pfn);
-                rc = -EINVAL;
-                goto param_fail3;
-            }
 #endif  /* __UXEN__ */
             
             if ( mfn_x(mfn) != INVALID_MFN )
@@ -5534,7 +5174,6 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
         if ( is_hvm_domain(d) )
         {
             get_gfn_unshare_unlocked(d, a.pfn, &t);
-#error handle get_gfn retry here
             if ( p2m_is_mmio(t) )
                 a.mem_type =  HVMMEM_mmio_dm;
             else if ( p2m_is_readonly(t) )
@@ -5611,7 +5250,8 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
         {
             p2m_type_t t;
             p2m_type_t nt;
-            mfn_t mfn = get_gfn_unshare(d, pfn, &t);
+
+            get_gfn_unshare(d, pfn, &t);
 #ifndef __UXEN__
             if ( p2m_is_paging(t) )
             {
@@ -5635,12 +5275,6 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
                 goto param_fail4;
             }
             else
-#else  /* __UXEN__ */
-            if (mfn_retry(mfn)) {
-                put_gfn(d, pfn);
-                rc = -EINVAL;
-                goto param_fail4;
-            }
 #endif  /* __UXEN__ */
             {
                 nt = p2m_change_type(d, pfn, t, memtype[a.hvmmem_type]);

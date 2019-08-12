@@ -72,8 +72,6 @@ void vm_resume_abort(void);
 int vm_load(const char *, int);
 int vm_load_finish(void);
 
-int vm_lazy_load_page(uint32_t gpfn, uint8_t *va, int compressed);
-
 #ifdef SAVE_CUCKOO_ENABLED
 struct page_fingerprint;
 

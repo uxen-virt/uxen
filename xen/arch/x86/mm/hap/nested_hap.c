@@ -151,15 +151,13 @@ nestedhap_walk_L0_p2m(struct p2m_domain *p2m, paddr_t L1_gpa, paddr_t *L0_gpa,
     /* walk L0 P2M table */
     mfn = get_gfn_type_access(p2m, L1_gpa >> PAGE_SHIFT, &p2mt, &p2ma, 
                               p2m_query, page_order);
-#error handle get_gfn retry here
 
     rc = NESTEDHVM_PAGEFAULT_MMIO;
     if ( p2m_is_mmio(p2mt) )
         goto out;
 
     rc = NESTEDHVM_PAGEFAULT_ERROR;
-    if (p2m_is_paging(p2mt) || p2m_is_shared(p2mt) || !p2m_is_ram(p2mt)
-         || xxx retry_mfn)
+    if (p2m_is_paging(p2mt) || p2m_is_shared(p2mt) || !p2m_is_ram(p2mt))
         goto out;
 
     rc = NESTEDHVM_PAGEFAULT_ERROR;

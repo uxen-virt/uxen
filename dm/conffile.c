@@ -779,7 +779,6 @@ struct config_option config_options[] = {
     { "ignore-storage-space-fix", co_set_dict_opt, &vm_ignore_storage_space_fix },
     { "image", co_set_string_opt, &vm_image },
     { "lava", co_set_string_opt, &lava_options },
-    { "lazy-load", co_set_boolean_opt, &vm_lazy_load },
     { "log-ratelimit-guest-burst", co_set_integer_opt,
       &log_ratelimit_guest_burst },
     { "log-ratelimit-guest-ms", co_set_integer_opt, &log_ratelimit_guest_ms },

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -41,7 +41,6 @@ def_usym_offset (domain, max_pages) = 0;
 def_usym_offset (domain, hidden_pages) = 0;
 def_usym_offset (domain, pod_pages) = 0;
 def_usym_offset (domain, zero_shared_pages) = 0;
-def_usym_offset (domain, retry_pages) = 0;
 def_usym_offset (domain, tmpl_shared_pages) = 0;
 def_usym_offset (domain, xenheap_pages) = 0;
 def_usym_offset (domain, host_pages) = 0;

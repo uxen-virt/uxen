@@ -2,7 +2,7 @@
  *  kdxinfo.c
  *  uxen
  *
- * Copyright 2015-2016, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -57,7 +57,6 @@ struct uxen_kdxinfo uxen_kdxinfo = {
     .domain_hidden_pages = offsetof(struct domain, hidden_pages),
     .domain_pod_pages = offsetof(struct domain, pod_pages),
     .domain_zero_shared_pages = offsetof(struct domain, zero_shared_pages),
-    .domain_retry_pages = offsetof(struct domain, retry_pages),
     .domain_tmpl_shared_pages = offsetof(struct domain, tmpl_shared_pages),
     .domain_xenheap_pages = offsetof(struct domain, xenheap_pages),
     .domain_host_pages = offsetof(struct domain, host_pages),

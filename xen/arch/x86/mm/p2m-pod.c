@@ -770,198 +770,6 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         ASSERT(p2m_locked_by_me(op2m));
     }
 
-    if (mfn_retry(smfn)) {
-        struct dmreq *dmreq;
-        void *dmreq_vcpu_page = NULL;
-        uint32_t dmreq_gpfn;
-
-        if (current->target_vmis)
-            dmreq = current->target_vmis->vmi_dmreq;
-        else
-            dmreq = get_dmreq(current);
-        dmreq_gpfn = dmreq->dmreq_gpfn;
-        dmreq->dmreq_gpfn = DMREQ_GPFN_UNUSED;
-        if (!dmreq || dmreq_gpfn_error(dmreq->dmreq_gpfn_loaded))
-            return out_fail();
-
-        if (gfn_aligned != dmreq_gpfn ||
-            !dmreq_gpfn_valid(dmreq->dmreq_gpfn_loaded) ||
-            dmreq_gpfn != dmreq->dmreq_gpfn_loaded) {
-            if (gfn_aligned == dmreq_gpfn) {
-                gdprintk(
-                    XENLOG_DEBUG, "%s: vm%u.%s%u dmreq gpfn %lx %s "
-                    "(dmreq_gpfn %x dmreq_gpfn_loaded %x)\n",
-                    __FUNCTION__,
-                    current->target_vmis ? current->target_vmis->vmi_domid :
-                    current->domain->domain_id,
-                    current->target_vmis ? "dom" : "",
-                    current->target_vmis ? 0 : current->vcpu_id, gfn_aligned,
-                    !dmreq_gpfn_valid(dmreq->dmreq_gpfn_loaded) ? "spurious" :
-                    "mismatch", dmreq_gpfn, dmreq->dmreq_gpfn_loaded);
-                /* DEBUG(); */
-            }
-
-            if (op2m_locked) {
-                p2m_unlock(op2m);
-                op2m_locked = 0;
-            }
-
-            dmreq->dmreq_gpfn_loaded = DMREQ_GPFN_UNUSED;
-            dmreq->dmreq_gpfn = gfn_aligned;
-            dmreq->dmreq_gpfn_access =
-                (q != p2m_guest_r && q != p2m_alloc_r) ?
-                DMREQ_GPFN_ACCESS_WRITE : DMREQ_GPFN_ACCESS_READ;
-
-            if (current->target_vmis) {
-                ((struct domain *)current->target_vmis->vmi_domain)
-                    ->arch.hvm_domain.dmreq_query = q;
-                hvm_send_dom0_dmreq(current->target_vmis->vmi_domain);
-            } else {
-                current->arch.hvm_vcpu.dmreq_gpfn = gfn_aligned;
-                current->arch.hvm_vcpu.dmreq_query = q;
-                hvm_send_dmreq(current);
-            }
-            ret = DMREQ_MFN;
-            goto out;
-        }
-
-        ASSERT(dmreq_gpfn == dmreq->dmreq_gpfn_loaded);
-        dmreq->dmreq_gpfn_loaded = DMREQ_GPFN_UNUSED;
-        if (current->target_vmis)
-            dmreq_vcpu_page = current->target_vmis->vmi_dmreq_vcpu_page_va;
-        else
-            dmreq_vcpu_page = current->arch.hvm_vcpu.dmreq_vcpu_page_va;
-
-        if (!d->arch.hvm_domain.params[HVM_PARAM_TEMPLATE_LAZY_LOAD] ||
-            !d->clone_of) {
-          dead_template:
-            if (op2m_locked) {
-                p2m_unlock(op2m);
-                op2m_locked = 0;
-            }
-
-            p = alloc_domheap_page(d, PAGE_ORDER_4K);
-            if (!p)
-                return out_of_memory();
-            mfn = page_to_mfn(p);
-
-            target = map_domain_page_direct(mfn_x(mfn));
-            if (dmreq->dmreq_gpfn_size > PAGE_SIZE)
-                return out_fail();
-            if (dmreq->dmreq_gpfn_size != PAGE_SIZE) {
-                int uc_size;
-                uc_size = LZ4_decompress_safe(dmreq_vcpu_page, target,
-                                              dmreq->dmreq_gpfn_size,
-                                              PAGE_SIZE);
-                if (uc_size != PAGE_SIZE) {
-                    unmap_domain_page_direct(target);
-                    return out_fail();
-                }
-                perfc_incr(pc18);
-            } else
-                memcpy(target, dmreq_vcpu_page, PAGE_SIZE);
-            perfc_incr(pc16);
-            check_immutable(q, d, gfn_aligned);
-            unmap_domain_page_direct(target);
-            perfc_incr(dmreq_populated);
-
-            goto out_reassigned;
-        } else {
-            struct domain *tmpl = d->clone_of;
-            p2m_query_t orig_q;
-
-            if (current->target_vmis)
-                orig_q = ((struct domain *)current->target_vmis->vmi_domain)
-                    ->arch.hvm_domain.dmreq_query;
-            else
-                orig_q = current->arch.hvm_vcpu.dmreq_query;
-
-            p = alloc_domheap_page(tmpl, PAGE_ORDER_4K);
-            if (!p) {
-                if (tmpl->is_dying) {
-                    d->arch.hvm_domain.params[HVM_PARAM_TEMPLATE_LAZY_LOAD] = 0;
-                    goto dead_template;
-                }
-                return out_of_memory();
-            }
-            mfn = page_to_mfn(p);
-
-            if (!op2m_locked) {
-                p2m_lock_recursive(op2m);
-                op2m_locked = 1;
-            }
-
-            smfn = op2m->get_entry(op2m, gfn_aligned, &t, &a, p2m_query, NULL);
-            if (mfn_retry(smfn)) {
-                if (dmreq->dmreq_gpfn_size > PAGE_SIZE) {
-                    put_allocated_page(tmpl, p);
-                    return out_fail();
-                }
-
-                /* compressed + write -> add compressed to template,
-                   then decompress into VM via cow below */
-                if (dmreq->dmreq_gpfn_size <= CSIZE_MAX &&
-                    (orig_q != p2m_guest_r && orig_q != p2m_alloc_r)) {
-                    smfn = p2m_pod_add_compressed_page(
-                        op2m, gfn_aligned, dmreq_vcpu_page,
-                        dmreq->dmreq_gpfn_size, p);
-                } else {
-                    /* compressed + read -> decompress */
-                    if (dmreq->dmreq_gpfn_size != PAGE_SIZE) {
-                        int uc_size;
-
-                        ASSERT(orig_q == p2m_guest_r || orig_q == p2m_alloc_r);
-                        target = map_domain_page_direct(mfn_x(mfn));
-                        uc_size = LZ4_decompress_safe(dmreq_vcpu_page, target,
-                                                      dmreq->dmreq_gpfn_size,
-                                                      PAGE_SIZE);
-                        if (uc_size != PAGE_SIZE) {
-                            unmap_domain_page_direct(target);
-                            put_allocated_page(tmpl, p);
-                            return out_fail();
-                        }
-                    } else {
-                        /* uncompressed */
-                        target = map_domain_page_direct(mfn_x(mfn));
-                        memcpy(target, dmreq_vcpu_page, PAGE_SIZE);
-                    }
-
-                    /* add uncompressed or decompressed to template */
-                    set_p2m_entry_unchecked(op2m, gfn_aligned, mfn, 0,
-                                            p2m_populate_on_demand,
-                                            op2m->default_access);
-
-                    unmap_domain_page_direct(target);
-
-                    p2m_pod_stat_update(tmpl);
-
-                    /* read -> share template with VM */
-                    if (orig_q == p2m_guest_r || orig_q == p2m_alloc_r) {
-                        p2m_unlock(op2m);
-                        op2m_locked = 0;
-                        set_p2m_entry_unchecked(p2m, gfn_aligned, mfn, 0,
-                                                p2m_populate_on_demand,
-                                                p2m->default_access);
-                        put_page(p);
-                        perfc_incr(dmreq_populated_template_shared);
-                        ret = 0;
-                        goto out;
-                    }
-
-                    /* write -> cow into VM */
-                    smfn = mfn;
-                }
-
-                ASSERT(!mfn_x(put_page_parent));
-                put_page_parent = mfn;
-
-                perfc_incr(dmreq_populated_template);
-            } else
-                put_allocated_page(tmpl, p);
-            ASSERT(p2m_locked_by_me(op2m));
-        }
-    }
-
     if (mfn_zero_page(smfn)) {
         if (op2m_locked) {
             p2m_unlock(op2m);
@@ -2030,7 +1838,7 @@ p2m_audit_pod_counts(struct domain *d)
     p2m_access_t a;
     unsigned int page_order;
     int nr_pages = 0, nr_xen = 0, nr_pod = 0, nr_zero = 0;
-    int nr_zero_mapped = 0, nr_tmpl = 0, nr_retry = 0, nr_empty = 0;
+    int nr_zero_mapped = 0, nr_tmpl = 0, nr_empty = 0;
     int nr_immutable = 0;
     void *l1table = NULL;
 
@@ -2057,8 +1865,6 @@ p2m_audit_pod_counts(struct domain *d)
                 nr_zero_mapped++;
             else if (mfn_x(mfn) == SHARED_ZERO_MFN)
                 nr_zero++;
-            else if (mfn_retry(mfn))
-                nr_retry++;
             else if (mfn_x(mfn))
                 nr_tmpl++;
             else
@@ -2075,17 +1881,16 @@ p2m_audit_pod_counts(struct domain *d)
     }
     if (l1table)
         p2m->unmap_table(p2m, l1table);
-    printk("vm%d: pages %d/%d pod %d zero %d/%d tmpl %d retry %d\n",
+    printk("vm%d: pages %d/%d pod %d zero %d/%d tmpl %d\n",
            d->domain_id, nr_pages, nr_xen, nr_pod,
-           nr_zero, nr_zero_mapped, nr_tmpl, nr_retry);
+           nr_zero, nr_zero_mapped, nr_tmpl);
     printk("vm%d: empty %d immutable %d\n", d->domain_id, nr_empty,
            nr_immutable);
-    printk("vm%d: nr=%d pod=%d zero=%d tmpl=%d retry=%d\n",
+    printk("vm%d: nr=%d pod=%d zero=%d tmpl=%d\n",
            d->domain_id, d->tot_pages,
            atomic_read(&d->pod_pages),
            atomic_read(&d->zero_shared_pages),
-           atomic_read(&d->tmpl_shared_pages),
-           atomic_read(&d->retry_pages));
+           atomic_read(&d->tmpl_shared_pages));
     p2m_unlock(p2m);
 }
 
