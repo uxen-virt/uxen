@@ -247,8 +247,12 @@ check_decompress_buffer(void)
 
     if (unlikely(!this_cpu(decompress_buffer))) {
         this_cpu(decompress_buffer) = alloc_xenheap_page();
-        if (unlikely(!this_cpu(decompress_buffer)))
+        if (unlikely(!this_cpu(decompress_buffer))) {
+            printk(XENLOG_ERR "%s: failed on cpu %d from %S\n", __FUNCTION__,
+                   smp_processor_id(),
+                   (printk_symbol)__builtin_return_address(0));
             return 0;
+        }
     }
     return 1;
 }
@@ -400,6 +404,18 @@ p2m_get_compressed_page_data(struct domain *d, mfn_t mfn, uint8_t *data,
         uc_size = LZ4_decompress_safe((const char *)source, target, size,
                                       PAGE_SIZE);
         if (uc_size != PAGE_SIZE) {
+            uint32_t sum32 = 0;
+            int i;
+
+            for (i = 0; i < size / 4; i++)
+                sum32 += ((uint32_t *)source)[i];
+            if (size & 3)
+                sum32 += ((uint32_t *)source)[size / 4] &
+                    (0xffffffU >> (8 * (3 - (size & 3))));
+            printk(XENLOG_ERR "%s: decompress failed: ret %d, "
+                   "compressed size %d offset %d sum32 0x%x span %s\n",
+                   __FUNCTION__, uc_size, size, offset, sum32,
+                   source == this_cpu(decompress_buffer) ? "yes" : "no");
             ret = 0;
             goto out;
         }

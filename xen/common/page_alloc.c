@@ -23,7 +23,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -1250,8 +1250,8 @@ alloc_host_page(int is_xen_page)
     int cpu = smp_processor_id();
 
     if (!_uxen_info.ui_free_pages[cpu].count) {
-        printk("%s: no pages on cpu %d from %S\n", __FUNCTION__, cpu,
-               (printk_symbol)__builtin_return_address(0));
+        printk(XENLOG_ERR "%s: no pages on cpu %d from %S\n", __FUNCTION__,
+               cpu, (printk_symbol)__builtin_return_address(0));
         return NULL;
     }
 
@@ -1811,8 +1811,11 @@ struct page_info *alloc_domheap_pages(
     if (!pg)
 #endif
         pg = alloc_host_page(0);
-    if (!pg)
+    if (!pg) {
+        printk(XENLOG_ERR "%s: alloc_host_page failed from %S\n", __FUNCTION__,
+               (printk_symbol)__builtin_return_address(0));
         return NULL;
+    }
 
 #ifdef DEBUG_STRAY_PAGES
     pg->alloc1 = __builtin_return_address(0);
@@ -1820,6 +1823,9 @@ struct page_info *alloc_domheap_pages(
 
     if ( (d != NULL) && assign_pages(d, pg, order, memflags) )
     {
+        printk(XENLOG_ERR "%s: assign_pages vm%u failed from %S\n",
+               __FUNCTION__, d->domain_id,
+               (printk_symbol)__builtin_return_address(0));
         free_host_heap_page(d, pg);
         return NULL;
     }
