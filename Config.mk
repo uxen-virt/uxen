@@ -105,7 +105,7 @@ HOSTLDFLAGS += $(LDFLAGS)
 HOSTCFLAGS := $(subst $(CFLAG_OPTIMIZE_DEBUG),$(CFLAG_OPTIMIZE_DEBUG_legacy),$(HOSTCFLAGS))
 
 # prefer python2, if it exists
-PYTHON ?= $(shell `which python2 >/dev/null` && echo python2 || echo python)
+PYTHON ?= $(shell `command -v python2 >/dev/null` && echo python2 || echo python)
 export PYTHON
 # don't generate pyc files
 PYTHON := $(subst -B -B,-B,$(PYTHON) -B)
