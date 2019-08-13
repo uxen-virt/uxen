@@ -457,7 +457,7 @@ $(TARGET_elf_only)uxen.check: uxen-prelink.o common/symbols-dummy.o $(UXEN_LDS)
 	$(_V)$(TARGET_LD) $(XEN_LDFLAGS) -Ttext $(UXEN_RELOC_ADDR) -T $(UXEN_LDS) -o $@ $(filter-out $(UXEN_LDS),$^) 2>&1 | grep undefined.ref | tee /dev/tty | (urs=$$(wc -l); echo "$@: undefined references: $$urs"; [ "$$urs" -eq 0 ])
 
 $(TARGET_pe_only)uxen.check: uxen-prelink.o common/symbols-dummy.o $(UXEN_LDS)
-	$(_V)$(TARGET_LD) $(XEN_LDFLAGS) -T $(UXEN_LDS) -o $@ $(filter-out $(UXEN_LDS),$^) 2>&1 | tee /dev/tty | sed -n 's/.* undefined reference to /undefined reference /p' | sort -u | tee /dev/tty | (urs=$$(wc -l); echo "Checking - uxen.obj: undefined references: $$urs"; [ "$$urs" -eq 0 ])
+	$(_V)$(TARGET_LD) $(XEN_LDFLAGS) -T $(UXEN_LDS) -o $@ $(filter-out $(UXEN_LDS),$^) 2>&1 | tee /dev/tty | sed -n 's/.* undefined reference to /undefined reference /p' | sort -u | tee /dev/stderr | (urs=$$(wc -l); echo "Checking - uxen.obj: undefined references: $$urs"; [ "$$urs" -eq 0 ])
 
 uxen-gdb: .phony
 	@[ -e $(TARGET1) ] || $(MAKE) $(TARGET1)
