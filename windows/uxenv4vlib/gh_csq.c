@@ -55,10 +55,10 @@
 // from ntoskrnl - this is bad.
 
 static __inline VOID
-gh_v4v_csq_get_destination(PIRP irp, v4v_addr_t **dstOut)
+gh_v4v_csq_get_destination(PIRP irp, v4v_addr_t *dstOut)
 {
     // Datagrams, destination is in the message
-    *dstOut = (v4v_addr_t *)irp->MdlAddress->MappedSystemVa;
+    *dstOut = * (v4v_addr_t *)irp->MdlAddress->MappedSystemVa;
 }
 
 static BOOLEAN
@@ -160,7 +160,7 @@ gh_v4v_csq_link_destination(xenv4v_extension_t *pde, PIRP irp, BOOLEAN front)
 {
     xenv4v_destination_t *xdst = NULL;
     xenv4v_destination_t *idst;
-    v4v_addr_t         *dst = NULL;
+    v4v_addr_t          dst = { 0 };
     PLIST_ENTRY         head, next;
     PIO_STACK_LOCATION  isl = IoGetCurrentIrpStackLocation(irp);
     FILE_OBJECT        *pfo;
@@ -188,11 +188,11 @@ gh_v4v_csq_link_destination(xenv4v_extension_t *pde, PIRP irp, BOOLEAN front)
     // nextIrp and dst fields.
     idst = (xenv4v_destination_t *)irp->Tail.Overlay.DriverContext[1];
     RtlZeroMemory(idst, sizeof(xenv4v_destination_t));
-    idst->dst = *dst;
+    idst->dst = dst;
 
     while (next != head) {
         xdst = CONTAINING_RECORD(next, xenv4v_destination_t, le);
-        if (XENV4V_ADDR_COMPARE(xdst->dst, (*dst))) {
+        if (XENV4V_ADDR_COMPARE(xdst->dst, (dst))) {
             ASSERT(xdst->refc > 0);
             xdst->refc++;
 
@@ -214,7 +214,7 @@ gh_v4v_csq_link_destination(xenv4v_extension_t *pde, PIRP irp, BOOLEAN front)
     }
     InitializeListHead(&xdst->le);
     xdst->refc = 1;
-    xdst->dst = *dst;
+    xdst->dst = dst;
     xdst->dst_ax = !!(ctx->flags & V4V_FLAG_AX);
     xdst->nextIrp = irp;
     xdst->nextLength = xenv4v_payload_data_len(irp);
@@ -256,10 +256,12 @@ gh_v4v_csq_unlink_destination(xenv4v_extension_t *pde, PIRP irp)
                 ExFreeToNPagedLookasideList(&pde->dest_lookaside_list, xdst);
                 pde->dest_count--;
             }
-            break;
+            return;
         }
         next = next->Flink;
     }
+
+    uxen_v4v_err("failed to unlink IRP!");
 }
 
 NTSTATUS NTAPI
