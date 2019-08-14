@@ -2668,7 +2668,7 @@ vm_resume(void)
 
         if (vm_save_info.free_mem) {
             ret = vm_restore_memory();
-            if (ret)
+            if (ret == -EINTR)
                 goto out;
         }
 
