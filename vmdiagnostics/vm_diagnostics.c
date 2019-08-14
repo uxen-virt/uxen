@@ -388,6 +388,8 @@ static void vm_handle_request_stat_task(struct vm_diagnostics_context *context, 
             struct mm_struct *mm;
             uint64_t user_nsec, system_nsec;
 
+            get_task_struct(task);
+
             /* Use PID values as seen from the init namespace. */
             task_payload.pid = task_pid_nr(task);
             task_payload.parent_pid = task_pid_nr(task->real_parent);
@@ -397,6 +399,8 @@ static void vm_handle_request_stat_task(struct vm_diagnostics_context *context, 
             {
                 task_payload.uid = cred->uid.val;
                 task_payload.gid = cred->gid.val;
+
+                put_cred(cred);
             }
 
             get_task_comm(task_payload.name, task);
@@ -418,6 +422,8 @@ static void vm_handle_request_stat_task(struct vm_diagnostics_context *context, 
 
                 mmput(mm);
             }
+
+            put_task_struct(task);
 
             task_payload_size = sizeof(struct vm_diagnostics_stat_task);
             break;
