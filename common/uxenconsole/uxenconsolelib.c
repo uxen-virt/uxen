@@ -56,6 +56,8 @@ struct ctx {
 #endif
 };
 
+static int uxenconsole_select_head(uxenconsole_context_t ctx, int head);
+
 static int inc_ref_cnt(struct ctx *c)
 {
     LONG ref_cnt = InterlockedCompareExchange(&c->ref_cnt, UC_API_CALL, UC_CONNECTED);
@@ -348,7 +350,7 @@ snd_complete(struct ctx *c)
 #endif
 
 file_handle_t
-uxenconsole_connect(uxenconsole_context_t ctx)
+uxenconsole_connect_head(uxenconsole_context_t ctx, int head)
 {
     struct ctx *c = ctx;
 #if defined(_WIN32)
@@ -393,6 +395,8 @@ uxenconsole_connect(uxenconsole_context_t ctx)
 
     InterlockedExchange(&c->ref_cnt, UC_CONNECTED);
 
+    uxenconsole_select_head(ctx, head);
+
     return c->oread.hEvent;
 #elif defined(__APPLE__)
     int rc;
@@ -418,8 +422,16 @@ uxenconsole_connect(uxenconsole_context_t ctx)
         return -1;
     }
 
+    uxenconsole_select_head(ctx, head);
+
     return c->socket;
 #endif
+}
+
+file_handle_t
+uxenconsole_connect(uxenconsole_context_t ctx)
+{
+    return uxenconsole_connect_head(ctx, 0);
 }
 
 void
@@ -778,6 +790,30 @@ uxenconsole_keyboard_layout_changed(uxenconsole_context_t ctx,
     msg.header.type = UXENCONSOLE_MSG_TYPE_KEYBOARD_LAYOUT_CHANGED;
     msg.header.len = sizeof (msg);
     msg.layout = layout;
+
+    rc = channel_write(c, &msg, sizeof (msg));
+    dec_ref_cnt(c);
+    if (rc != sizeof (msg))
+        return -1;
+
+    return 0;
+}
+
+static int
+uxenconsole_select_head(uxenconsole_context_t ctx, int head)
+{
+    struct ctx *c = ctx;
+    struct uxenconsole_msg_select_head msg;
+    int rc;
+
+    snd_complete(c);
+
+    if (inc_ref_cnt(c))
+        return -1;
+
+    msg.header.type = UXENCONSOLE_MSG_TYPE_SELECT_HEAD;
+    msg.header.len = sizeof (msg);
+    msg.head = head;
 
     rc = channel_write(c, &msg, sizeof (msg));
     dec_ref_cnt(c);

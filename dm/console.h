@@ -34,6 +34,8 @@ typedef struct PixelFormat PixelFormat;
 
 typedef unsigned long console_ch_t;
 
+typedef uint32_t head_id_t;
+
 #define DISPLAYSURFACE_VRAM 0x1
 
 struct display_surface {
@@ -60,6 +62,7 @@ struct display_state {
     void *hw;
     int desktop_x;
     int desktop_y;
+    head_id_t head_id;
 };
 TAILQ_HEAD(display_list, display_state);
 
@@ -165,15 +168,18 @@ static inline void console_write_ch(console_ch_t *dest, uint32_t ch)
     *dest = ch;
 }
 
-struct display_state *display_create(struct console_hw_ops *ops, void *opaque,
-                                     enum DisplayCreateFlags flags);
+struct display_state *display_create(
+    struct console_hw_ops *ops, void *opaque,
+    head_id_t head, enum DisplayCreateFlags flags);
 void display_destroy(struct display_state *ds);
+struct display_state *display_find(head_id_t id);
 void display_resize(struct display_state *ds, int width, int height);
 void display_resize_from(struct display_state *ds, int width, int height,
                          int depth, int linesize,
                          void *vram_ptr,
                          unsigned int vram_offset);
 void display_move(struct display_state *ds, int desktop_x, int desktop_y);
+
 extern int desktop_width;
 extern int desktop_height;
 

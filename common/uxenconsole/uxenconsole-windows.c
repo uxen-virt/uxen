@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2018, Bromium, Inc.
+ * Copyright 2014-2019, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -518,6 +518,12 @@ sendkey:
             }
         }
         break;
+    case WM_ACTIVATE:
+        {
+            int active = wParam != 0;
+            uxenconsole_focus_changed(cons->ctx, active);
+        }
+        break;
     case WM_CLOSE:
         cons->stop = 1;
         return 0;
@@ -1007,6 +1013,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     int domid = 0;
     unsigned char idtoken[16] = { };
     int have_id = 0;
+    int head = 0;
 
     memset(&cons, 0, sizeof (cons));
     cons.instance = hInstance;
@@ -1036,11 +1043,12 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     static const struct option long_options[] = {
         {"interval",         required_argument, NULL, 'i'},
         {"screenshotprefix", required_argument, NULL, 's'},
+        {"head",             required_argument, NULL, 'h'},
         {NULL,               0,                 NULL, 0}
     };
 
     while (1) {
-        int c = getopt_long(argc, argv, "i:s:", long_options, NULL);
+        int c = getopt_long(argc, argv, "i:s:h:", long_options, NULL);
         if (c == -1)
             break;
         switch (c) {
@@ -1057,6 +1065,9 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                     /* screenshot_interval is in ms */
                     screenshot_interval = interval * 1000;
                 }
+                break;
+            case 'h':
+                sscanf(optarg, "%d", &head);
                 break;
             default:
                 break;
@@ -1094,8 +1105,9 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
         cons.hid = NULL;
     }
 
-    printf("Connecting to %s\n", pipename);
-    cons.channel_event = uxenconsole_connect(cons.ctx);
+    printf("Connecting to %s head %d\n", pipename, head);
+    cons.channel_event = uxenconsole_connect_head(cons.ctx, head);
+
     if (!cons.channel_event)
         Werr(1, "uxenconsole_connect");
     printf("Connected\n");

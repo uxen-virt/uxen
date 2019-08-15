@@ -45,6 +45,12 @@ static LIST_HEAD(, win_cursor) win_cursor_list =
 static win_cursor *current_cursor = NULL;
 static int vm_has_keyboard_focus = 0;
 static int host_offer_focus = 0;
+static int focused_head_id = 0;
+
+void attovm_set_head_focus(int head_id)
+{
+    focused_head_id = head_id;
+}
 
 void attovm_set_keyboard_focus(int offer_focus)
 {
@@ -53,23 +59,19 @@ void attovm_set_keyboard_focus(int offer_focus)
 
 void attovm_check_keyboard_focus(void)
 {
-    int rc;
+    int rc = 0;
 
     if (vm_get_run_mode() == DESTROY_VM)
         return;
 
-    atto_agent_request_keyboard_focus(host_offer_focus);
-    rc = xc_attovm_change_focus(xc_handle, vm_id, host_offer_focus);
+    atto_agent_request_keyboard_focus(host_offer_focus, focused_head_id);
+    if (vm_attovm_mode == ATTOVM_MODE_AX)
+        rc = xc_attovm_change_focus(xc_handle, vm_id, host_offer_focus);
 
-    if (host_offer_focus) {
-       if (rc == 0)
-           vm_has_keyboard_focus = 1;
-       return;
-    }
+    if (rc)
+        return;
 
-    // host wants focus
-    if (rc == 0)
-        vm_has_keyboard_focus = 0;
+    vm_has_keyboard_focus = host_offer_focus;
 }
 
 static LPCTSTR

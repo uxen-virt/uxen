@@ -13,6 +13,7 @@
 #include "vm.h"
 #include "uxen.h"
 #include "hw/uxen_platform.h"
+#include "hw/uxen_fb.h"
 #include "vram.h"
 #include "guest-agent.h"
 #include "atto-agent.h"
@@ -1210,9 +1211,6 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
     RECT *r;
     POINT pos = { 0, 0 };
 
-    if (vm_attovm_mode == ATTOVM_MODE_AX)
-        attovm_check_keyboard_focus();
-
 #ifdef EVENT_DEBUG
     switch (message) {
     case WM_PAINT:
@@ -1253,8 +1251,12 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         sync_keyboard_state();
         reset_key_modifiers(hwnd, 1);
         guest_agent_window_event(0, message, wParam, lParam, 0);
-        if (vm_attovm_mode)
+        if (vm_attovm_mode) {
+            attovm_set_head_focus(s->ds->head_id);
             attovm_set_keyboard_focus(1);
+            // FIXME: not called enough
+            attovm_check_keyboard_focus();
+        }
         return 0;
 
     case WM_KEYDOWN:
@@ -1283,8 +1285,10 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
     case WM_KILLFOCUS:
         guest_agent_window_event(0, message, wParam, lParam, 0);
         reset_key_modifiers(hwnd, 0);
-        if (vm_attovm_mode)
+        if (vm_attovm_mode) {
             attovm_set_keyboard_focus(0);
+            attovm_check_keyboard_focus();
+        }
         return 0;
 
     case WM_LBUTTONDOWN:
@@ -1380,13 +1384,14 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         PostQuitMessage(0);
         return 0;
 
-    case WM_SIZE:
+    case WM_SIZE: {
 #ifdef EVENT_DEBUG
         debug_printf("%s: resize %"PRId64"x%"PRId64"\n", __FUNCTION__,
                      lParam & 0xffff, (lParam >> 16) & 0xffff);
 #endif
-        atto_agent_send_resize_event(lParam & 0xffff, (lParam >> 16) & 0xffff);
+        atto_agent_send_resize_event(s->ds->head_id, lParam & 0xffff, (lParam >> 16) & 0xffff);
         return 0;
+    }
 
     case WM_PAINT:
         if (TryEnterCriticalSection(&s->surface_lock)) {
@@ -1679,7 +1684,6 @@ gui_create(struct gui_state *state, struct display_state *ds)
     struct win32_gui_state *s = (void *)state;
 
     s->ds = ds;
-    atto_agent_set_display_state(ds);
     InitializeCriticalSection(&s->surface_lock);
     EnterCriticalSection(&s->surface_lock);
 

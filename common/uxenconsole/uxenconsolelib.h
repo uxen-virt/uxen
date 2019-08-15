@@ -80,6 +80,7 @@ uxenconsole_context_t   uxenconsole_init(ConsoleOps *console_ops,
                                          void *console_priv,
                                          char *filename);
 file_handle_t           uxenconsole_connect(uxenconsole_context_t ctx);
+file_handle_t           uxenconsole_connect_head(uxenconsole_context_t ctx, int head);
 void                    uxenconsole_channel_event(uxenconsole_context_t ctx,
                                                   file_handle_t event,
                                                   int is_write);

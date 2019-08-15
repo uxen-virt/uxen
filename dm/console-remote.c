@@ -34,6 +34,7 @@
 #include <uxenhid-common.h>
 #include "hw/uxen_hid.h"
 #include "hw/uxdisp_hw.h"
+#include "hw/uxen_fb.h"
 
 /* uxenconsolelib */
 #include "uxenconsolelib.h"
@@ -61,6 +62,7 @@ struct console_client
     struct ipc_client client;
     uint8_t buf[MAX_MSG_LEN];
     size_t msg_len;
+    head_id_t head_id;
 };
 
 static struct ipc_service console_svc;
@@ -108,6 +110,7 @@ struct remote_gui_state {
 static TAILQ_HEAD(, remote_gui_state) heads;
 
 static void gui_resize(struct gui_state *state, int w, int h);
+static void console_head_selected(struct ipc_client *c);
 
 static int
 hid_mouse_event(struct remote_gui_state *s,
@@ -134,10 +137,25 @@ hid_mouse_event(struct remote_gui_state *s,
     return ret;
 }
 
-static void
-handle_message(struct uxenconsole_msg_header *hdr)
+static struct remote_gui_state *
+gui_state_by_head(head_id_t id)
 {
-    struct remote_gui_state *s = TAILQ_FIRST(&heads); /* XXX */
+    struct remote_gui_state *s;
+
+    TAILQ_FOREACH(s, &heads, link) {
+        if (s->ds->head_id == id)
+            return s;
+    }
+
+    return NULL;
+}
+
+static void
+handle_message(struct console_client *sender, struct uxenconsole_msg_header *hdr)
+{
+    struct remote_gui_state *s = gui_state_by_head(sender->head_id);
+
+    assert(s);
 
     if (!s) {
         warn("%s: State is NULL. Someone is sending us messages before console start.", __FUNCTION__);
@@ -209,7 +227,7 @@ handle_message(struct uxenconsole_msg_header *hdr)
             }
 
 #if !defined(__APPLE__)
-            if (vm_attovm_mode == ATTOVM_MODE_AX)
+            if (vm_attovm_mode)
                 attovm_check_keyboard_focus();
 
             if (guest_agent_kbd_event(msg->keycode, msg->repeat, msg->scancode,
@@ -243,7 +261,7 @@ handle_message(struct uxenconsole_msg_header *hdr)
 
             msg->flags &= ~CONSOLE_RESIZE_FLAG_USE_DLO;
 
-            if (atto_agent_send_resize_event(msg->width, msg->height) &&
+            if (atto_agent_send_resize_event(sender->head_id, msg->width, msg->height) &&
                 guest_agent_window_event(0, 0x0005 /* WM_SIZE */, msg->flags,
                                          ((msg->height & 0xffff) << 16) |
                                          (msg->width & 0xffff), dlo))
@@ -290,7 +308,9 @@ handle_message(struct uxenconsole_msg_header *hdr)
         {
 #if !defined(__APPLE__)
             struct uxenconsole_msg_focus_changed *msg = (void *)hdr;
-            if (vm_attovm_mode == ATTOVM_MODE_AX) {
+            if (vm_attovm_mode) {
+                if (msg->focus)
+                    attovm_set_head_focus(sender->head_id);
                 attovm_set_keyboard_focus(msg->focus);
                 attovm_check_keyboard_focus();
             }
@@ -308,6 +328,14 @@ handle_message(struct uxenconsole_msg_header *hdr)
 #endif
         }
         break;
+    case UXENCONSOLE_MSG_TYPE_SELECT_HEAD:
+        {
+            struct uxenconsole_msg_select_head *msg = (void *)hdr;
+
+            sender->head_id = msg->head;
+            console_head_selected(&sender->client);
+            break;
+        }
     default:
         break;
     }
@@ -325,17 +353,16 @@ ledstate_update(struct ipc_client *c, int state)
     ipc_client_send(c, &m, sizeof(m));
 }
 
-static int
-console_connect(struct ipc_client *c, void *opaque)
+static void
+console_head_selected(struct ipc_client *c)
 {
     struct remote_gui_state *s;
     struct console_client *client = (void *)c;
 
-    DPRINTF("%s connection detected\n", __FUNCTION__);
-
-    client->msg_len = 0;
-
     TAILQ_FOREACH(s, &heads, link) {
+        if (client->head_id != s->ds->head_id)
+            continue;
+
         if (s->surface) {
             struct uxenconsole_msg_resize_surface m;
 
@@ -379,6 +406,16 @@ console_connect(struct ipc_client *c, void *opaque)
     }
 
     ledstate_update(c, input_get_kbd_ledstate());
+}
+
+static int
+console_connect(struct ipc_client *c, void *opaque)
+{
+    struct console_client *client = (void *)c;
+
+    DPRINTF("%s connection detected\n", __FUNCTION__);
+
+    client->msg_len = 0;
 
     return 0;
 }
@@ -412,7 +449,7 @@ console_data_pending(struct ipc_client *c, void *opaque)
             client->msg_len += rc;
 
         if (client->msg_len >= hdrlen && client->msg_len == hdr->len) {
-            handle_message(hdr);
+            handle_message(client, hdr);
             client->msg_len = 0;
         }
     }
@@ -600,6 +637,7 @@ free_surface(struct gui_state *state, struct display_surface *surface)
 static void
 gui_update(struct gui_state *state, int x, int y, int w, int h)
 {
+    struct remote_gui_state *s = (void *)state;
     struct uxenconsole_msg_invalidate_rect m;
     struct ipc_client *c;
 
@@ -610,8 +648,14 @@ gui_update(struct gui_state *state, int x, int y, int w, int h)
     m.w = w;
     m.h = h;
 
-    TAILQ_FOREACH(c, &console_svc.clients, link)
+    TAILQ_FOREACH(c, &console_svc.clients, link) {
+        struct console_client *client = (struct console_client*) c;
+
+        if (client->head_id != s->ds->head_id)
+            continue;
+
         ipc_client_send(c, &m, sizeof(m));
+    }
 }
 
 static void
@@ -636,6 +680,11 @@ gui_resize(struct gui_state *state, int w, int h)
     m.offset = s->surface->data - s->surface->segment_view;
 
     TAILQ_FOREACH(c, &console_svc.clients, link) {
+        struct console_client *client = (struct console_client*) c;
+
+        if (client->head_id != s->ds->head_id)
+            continue;
+
         m.shm_handle = ipc_client_share(c, (uintptr_t)s->surface->segment_handle);
         ipc_client_send(c, &m, sizeof(m));
     }
@@ -709,8 +758,14 @@ gui_cursor_shape(struct gui_state *state,
 
     if (s->cursor_width == 0 || s->cursor_height == 0) {
         m.flags = CURSOR_UPDATE_FLAG_HIDE;
-        TAILQ_FOREACH(c, &console_svc.clients, link)
+        TAILQ_FOREACH(c, &console_svc.clients, link) {
+            struct console_client *client = (struct console_client*) c;
+
+            if (client->head_id != s->ds->head_id)
+                continue;
+
             ipc_client_send(c, &m, sizeof(m));
+        }
     } else {
         m.w = s->cursor_width;
         m.h = s->cursor_height;
@@ -721,6 +776,11 @@ gui_cursor_shape(struct gui_state *state,
         if (s->cursor_type == CURSOR_TYPE_MONOCHROME)
             m.flags = CURSOR_UPDATE_FLAG_MONOCHROME;
         TAILQ_FOREACH(c, &console_svc.clients, link) {
+            struct console_client *client = (struct console_client*) c;
+
+            if (client->head_id != s->ds->head_id)
+                continue;
+
             m.shm_handle = ipc_client_share(c, (uintptr_t)s->cursor_handle);
             ipc_client_send(c, &m, sizeof(m));
         }
@@ -771,7 +831,6 @@ gui_create(struct gui_state *state, struct display_state *ds)
     s->state.height = 480;
 
     s->ds = ds;
-    atto_agent_set_display_state(ds);
     s->cursor_mask_offset = UXDISP_REG_CURSOR_DATA;
     s->cursor_len = s->cursor_mask_offset + UXDISP_CURSOR_WIDTH_MAX * UXDISP_CURSOR_HEIGHT_MAX * 2 / 8;
     s->cursor_view = create_shm_segment(s->cursor_len, &s->cursor_handle);

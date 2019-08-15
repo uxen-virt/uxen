@@ -59,10 +59,14 @@ static void desktop_refresh(void)
     debug_printf("desktop resize %dx%d\n", max_x, max_y);
 }
 
-struct display_state *display_create(struct console_hw_ops *ops, void *opaque,
-                                     enum DisplayCreateFlags flags)
+struct display_state *display_create(
+    struct console_hw_ops *ops, void *opaque,
+    head_id_t head, enum DisplayCreateFlags flags)
 {
     struct display_state *ds;
+
+    if (display_find(head) != NULL)
+        errx(1, "%s: display head %d already exists", __FUNCTION__, (int) head);
 
     ds = (struct display_state *)calloc(1, sizeof(struct display_state));
     if (!ds)
@@ -72,6 +76,7 @@ struct display_state *display_create(struct console_hw_ops *ops, void *opaque,
     critical_section_init(&ds->resize_lock);
     ds->hw_ops = ops;
     ds->hw = opaque;
+    ds->head_id = head;
 
     critical_section_enter(&desktop_lock);
     desktop_refresh();
@@ -110,6 +115,23 @@ void display_destroy(struct display_state *ds)
     critical_section_leave(&desktop_lock);
 
     free(ds);
+}
+
+struct display_state *display_find(head_id_t id)
+{
+    struct display_state *ds;
+
+    critical_section_enter(&desktop_lock);
+    TAILQ_FOREACH(ds, &desktop, link) {
+        if (ds->head_id == id) {
+            critical_section_leave(&desktop_lock);
+
+            return ds;
+        }
+    }
+    critical_section_leave(&desktop_lock);
+
+    return NULL;
 }
 
 int console_set_forwarded_keys(yajl_val arg)

@@ -29,6 +29,7 @@ enum uxenconsole_msg_type
     UXENCONSOLE_MSG_TYPE_SET_SHARED_SURFACE     = 9,
     UXENCONSOLE_MSG_TYPE_FOCUS_CHANGED          = 10,
     UXENCONSOLE_MSG_TYPE_KEYBOARD_LAYOUT_CHANGED= 11,
+    UXENCONSOLE_MSG_TYPE_SELECT_HEAD            = 12,
 };
 
 struct uxenconsole_msg_resize_surface {
@@ -119,6 +120,11 @@ struct uxenconsole_msg_focus_changed {
 struct uxenconsole_msg_keyboard_layout_changed {
     struct uxenconsole_msg_header header;
     uint32_t layout;
+};
+
+struct uxenconsole_msg_select_head {
+    struct uxenconsole_msg_header header;
+    uint32_t head;
 };
 
 #endif /* _CONSOLE_RPC_H_ */

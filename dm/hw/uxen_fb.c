@@ -11,12 +11,14 @@
 #include <dm/vram.h>
 #include <dm/timer.h>
 #include <dm/hw/uxen_v4v.h>
-
+#include <dm/hw/uxen_fb.h>
 #include "uxen_platform.h"
 #include <uxen/platform_interface.h>
 
-#define FB_ADDR 0xC0000000
-#define FB_SIZEMAX 0x2000000
+#define FB_ADDR_BASE 0x0000000800000000
+#define FB_SIZEMAX   0x0000000002000000
+
+#define FB_ADDR(idx) (FB_ADDR_BASE + (idx)*FB_SIZEMAX)
 
 #define FBLOG(...) debug_printf("uxenfb: " __VA_ARGS__)
 
@@ -27,6 +29,8 @@
 #define UXEN_FB_MSG_SETMODE_RET 2
 #define UXEN_FB_MSG_QUERYCONF 3
 #define UXEN_FB_MSG_QUERYCONF_RET 4
+#define UXEN_FB_MSG_HEADINIT 5
+#define UXEN_FB_MSG_HEADINIT_RET 6
 
 #define DEFAULT_XRES 1024
 #define DEFAULT_YRES 768
@@ -38,9 +42,14 @@
 
 int framebuffer_connected = 0;
 
+struct uxenfb;
+
 struct uxenfb_msg {
-    uint8_t type;
-    uint16_t xres, yres, stride;
+    uint32_t type;
+    uint32_t head;
+    uint32_t status;
+    uint32_t xres, yres;
+    uint32_t stride;
 } __attribute__((packed));
 
 struct uxenfb_packet {
@@ -48,14 +57,21 @@ struct uxenfb_packet {
     struct uxenfb_msg msg;
 } __attribute__((packed));
 
-typedef struct {
+typedef struct uxenfb_head {
+    head_id_t id;
+    struct uxenfb *s;
+    struct display_state *ds;
+    MemoryRegion fbregion;
+    struct vram_desc vram;
+    int xres, yres, stride;
+} uxenfb_head_t;
+
+typedef struct uxenfb {
     UXenPlatformDevice dev;
 
     int xres, yres, stride;
 
-    MemoryRegion fbregion;
-    struct vram_desc vram;
-    struct display_state *ds;
+    struct uxenfb_head *head[FB_HEADMAX];
     Timer *timer;
 
     struct uxenfb_packet packet;
@@ -64,18 +80,21 @@ typedef struct {
     uint32_t partner_id;
     ioh_event tx_event;
     ioh_event rx_event;
-} uxen_fb_t;
+} uxenfb_t;
+
+static struct uxenfb_head * uxen_fb_head_get (uxenfb_t *s, head_id_t id);
+static int uxen_fb_head_init (uxenfb_t *s, head_id_t id);
 
 static void
 uxenfb_update(void *opaque)
 {
 #ifndef USE_DIRTY_RECTS
-    uxen_fb_t *s = (uxen_fb_t*)opaque;
+    struct uxenfb_head *h = opaque;
 
-    if (!s->ds)
+    if (!h->ds)
         return;
 
-    dpy_update(s->ds, 0, 0, s->xres, s->yres);
+    dpy_update(h->ds, 0, 0, h->xres, h->yres);
 #endif
 }
 
@@ -92,32 +111,38 @@ uxenfb_text_update(void *opaque, console_ch_t *chardata)
 static void
 fb_mapping_update(void *opaque)
 {
-    uxen_fb_t *s = opaque;
+    struct uxenfb_head *h = opaque;
     uint32_t gfn;
 
-    gfn = memory_region_absolute_offset(&s->fbregion) >> TARGET_PAGE_BITS;
+    gfn = memory_region_absolute_offset(&h->fbregion) >> TARGET_PAGE_BITS;
     FBLOG("mapping update, gfn=0x%x\n", gfn);
-    vram_map(&s->vram, gfn);
-    display_resize_from(s->ds, s->xres, s->yres,
-                        32, s->stride, s->vram.view, 0);
+    vram_map(&h->vram, gfn);
+    // FIXME? s->ds
+    display_resize_from(h->ds, h->xres, h->yres,
+                        32, h->stride, h->vram.view, 0);
 }
 
 static void
 vram_change(struct vram_desc *v, void *opaque)
 {
-    uxen_fb_t *s = opaque;
+    struct uxenfb_head *h = opaque;
 
     FBLOG("vram change\n");
-    dpy_vram_change(s->ds, v);
+    dpy_vram_change(h->ds, v);
 }
 
 #ifndef USE_DIRTY_RECTS
 static void
 fb_timer(void *opaque)
 {
-    uxen_fb_t *s = opaque;
+    uxenfb_t *s = opaque;
+    int i;
 
-    do_dpy_trigger_refresh(s->ds);
+    for (i = 0; i < FB_HEADMAX; i++) {
+        uxenfb_head_t *h = uxen_fb_head_get(s, i);
+        if (h)
+            do_dpy_trigger_refresh(h->ds);
+    }
 
     qemu_mod_timer(s->timer, get_clock_ms(vm_clock) + 30);
 }
@@ -130,7 +155,7 @@ static struct console_hw_ops uxenfb_console_ops = {
 };
 
 static void
-respond(uxen_fb_t *s, struct uxenfb_packet *resp)
+respond(uxenfb_t *s, struct uxenfb_packet *resp)
 {
     int err;
     size_t bytes;
@@ -160,34 +185,68 @@ respond(uxen_fb_t *s, struct uxenfb_packet *resp)
 }
 
 static void
-fb_recv_msg(uxen_fb_t *s, struct uxenfb_msg *msg)
+fb_recv_msg(uxenfb_t *s, struct uxenfb_msg *msg)
 {
     struct uxenfb_packet resp = { };
 
+    resp.msg.status = -1;
+
     framebuffer_connected = 1;
-    if (msg->type == UXEN_FB_MSG_SETMODE) {
+
+    switch (msg->type) {
+    case UXEN_FB_MSG_SETMODE: {
         if (msg->xres <= MAX_XRES && msg->yres <= MAX_YRES &&
             msg->stride * msg->xres <= FB_SIZEMAX) {
-            s->xres = msg->xres;
-            s->yres = msg->yres;
-            s->stride = msg->stride;
 
-            FBLOG("resizing display %dx%d\n", s->xres, s->yres);
-            display_resize_from(s->ds, s->xres, s->yres,
-                                32, s->stride, s->vram.view,
-                                0);
+            struct uxenfb_head *h = uxen_fb_head_get(s, msg->head);
+            if (h) {
+                FBLOG("resizing display%d %dx%d\n", h->id, s->xres, s->yres);
+                h->xres = msg->xres;
+                h->yres = msg->yres;
+                h->stride = msg->stride;
+                display_resize_from(h->ds, h->xres, h->yres,
+                    32, h->stride, h->vram.view,
+                    0);
 
-            resp.msg.type = UXEN_FB_MSG_SETMODE_RET;
+                resp.msg.type = UXEN_FB_MSG_SETMODE_RET;
+                resp.msg.status = 0;
+            } else {
+                FBLOG("no head: %d\n", msg->head);
+                resp.msg.type = UXEN_FB_MSG_SETMODE_RET;
+                resp.msg.status = -1;
+            }
         } else {
+            resp.msg.type = UXEN_FB_MSG_SETMODE_RET;
+            resp.msg.status = -1;
             FBLOG("invalid mode set attempt\n");
-            return;
         }
-    } else if (msg->type == UXEN_FB_MSG_QUERYCONF) {
-        resp.msg.type = UXEN_FB_MSG_QUERYCONF_RET;
-        resp.msg.xres = s->ds->gui->width;
-        resp.msg.yres = s->ds->gui->height;
-        resp.msg.stride = resp.msg.xres * 4;
-    } else {
+
+        break;
+    }
+
+    case UXEN_FB_MSG_QUERYCONF: {
+        struct uxenfb_head *h = uxen_fb_head_get(s, msg->head);
+
+        if (h) {
+            resp.msg.type = UXEN_FB_MSG_QUERYCONF_RET;
+            resp.msg.status = 0;
+            resp.msg.xres = h->ds->gui->width;
+            resp.msg.yres = h->ds->gui->height;
+            resp.msg.stride = resp.msg.xres * 4;
+        } else {
+            resp.msg.type = UXEN_FB_MSG_QUERYCONF_RET;
+            resp.msg.status = -1;
+        }
+
+        break;
+    }
+
+    case UXEN_FB_MSG_HEADINIT: {
+        resp.msg.type = UXEN_FB_MSG_HEADINIT_RET;
+        resp.msg.status = uxen_fb_head_init(s, msg->head);
+        break;
+    }
+    default:
         FBLOG("unknown message %d\n", msg->type);
         return;
     }
@@ -196,7 +255,7 @@ fb_recv_msg(uxen_fb_t *s, struct uxenfb_msg *msg)
 }
 
 static int
-fb_recv_start(uxen_fb_t *s)
+fb_recv_start(uxenfb_t *s)
 {
     int err;
 
@@ -215,7 +274,7 @@ fb_recv_start(uxen_fb_t *s)
 static void
 fb_recv_event(void *opaque)
 {
-    uxen_fb_t *s = opaque;
+    uxenfb_t *s = opaque;
     size_t bytes;
     int err;
 
@@ -238,7 +297,7 @@ fb_recv_event(void *opaque)
 }
 
 static int
-uxen_fb_init_v4v(uxen_fb_t *s)
+uxen_fb_init_v4v(uxenfb_t *s)
 {
     v4v_bind_values_t bind = { };
     int error;
@@ -270,27 +329,67 @@ uxen_fb_init_v4v(uxen_fb_t *s)
     return fb_recv_start(s);
 }
 
+static struct uxenfb_head *
+uxen_fb_head_get (uxenfb_t *s, head_id_t id)
+{
+    if (id >= 0 && id < FB_HEADMAX)
+        return s->head[id];
+
+    return NULL;
+}
+
+static int
+uxen_fb_head_init (uxenfb_t *s, head_id_t id)
+{
+    struct uxenfb_head *h;
+
+    if (id < 0 || id >= FB_HEADMAX)
+        return -EINVAL;
+
+    if (s->head[id])
+        return 0;
+
+    h = calloc(1, sizeof(*h));
+    h->id = id;
+    h->s = s;
+    h->xres = DEFAULT_XRES;
+    h->yres = DEFAULT_YRES;
+    h->stride = DEFAULT_STRIDE;
+    h->ds = display_create(&uxenfb_console_ops, h, id, DCF_START_GUI);
+
+    vram_init(&h->vram, FB_SIZEMAX);
+    vram_register_change(&h->vram, vram_change, h);
+    vram_alloc(&h->vram, FB_SIZEMAX);
+
+    memory_region_init(&h->fbregion, "fb", FB_SIZEMAX);
+    h->fbregion.map_cb = fb_mapping_update;
+    h->fbregion.map_opaque = h;
+    memory_region_add_subregion(system_iomem, FB_ADDR(id), &h->fbregion);
+    
+    s->head[id] = h;
+
+    return 0;
+}
+
+static void
+uxen_fb_head_free (struct uxenfb_head *h)
+{
+    if (h) {
+        display_destroy(h->ds);
+        vram_release(&h->vram);
+        memory_region_del_subregion(system_iomem, &h->fbregion);
+        memory_region_destroy(&h->fbregion);
+        free(h);
+    }
+}
 
 static int
 uxen_fb_initfn (UXenPlatformDevice *dev)
 {
-    uxen_fb_t *s = DO_UPCAST(uxen_fb_t, dev, dev);
+    uxenfb_t *s = DO_UPCAST(uxenfb_t, dev, dev);
     int err;
 
-    s->ds = display_create(&uxenfb_console_ops, s, DCF_START_GUI);
-    s->xres = DEFAULT_XRES;
-    s->yres = DEFAULT_YRES;
-    s->stride = DEFAULT_STRIDE;
-
-    vram_init(&s->vram, FB_SIZEMAX);
-    vram_register_change(&s->vram, vram_change, s);
-    vram_alloc(&s->vram, FB_SIZEMAX);
-
-    memory_region_init(&s->fbregion, "fb", FB_SIZEMAX);
-    s->fbregion.map_cb = fb_mapping_update;
-    s->fbregion.map_opaque = s;
-
-    memory_region_add_subregion(system_iomem, FB_ADDR, &s->fbregion);
+    uxen_fb_head_init(s, 0);
 
 #ifndef USE_DIRTY_RECTS
     s->timer = new_timer_ms(vm_clock, fb_timer, s);
@@ -309,22 +408,24 @@ uxen_fb_initfn (UXenPlatformDevice *dev)
 static int
 uxen_fb_exitfn (UXenPlatformDevice *dev)
 {
-    uxen_fb_t *s = DO_UPCAST(uxen_fb_t, dev, dev);
+    uxenfb_t *s = DO_UPCAST(uxenfb_t, dev, dev);
+    int i;
 
     dm_v4v_close(&s->v4v);
-    display_destroy(s->ds);
     ioh_event_close(&s->tx_event);
     ioh_event_close(&s->rx_event);
-    vram_release(&s->vram);
-    memory_region_del_subregion(system_iomem, &s->fbregion);
-    memory_region_destroy(&s->fbregion);
+
+    for (i = 0; i < FB_HEADMAX; i++) {
+        uxen_fb_head_free(s->head[i]);
+        s->head[i] = NULL;
+    }
 
     return 0;
 }
 
 static UXenPlatformDeviceInfo uxen_fb_info = {
     .qdev.name = "uxenfb",
-    .qdev.size = sizeof (uxen_fb_t),
+    .qdev.size = sizeof (uxenfb_t),
     .init = uxen_fb_initfn,
     .exit = uxen_fb_exitfn,
     .devtype = UXENBUS_DEVICE_TYPE_FB,

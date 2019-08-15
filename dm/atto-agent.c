@@ -13,9 +13,12 @@
 #include <dm/atto-agent.h>
 #include <dm/atto-vm.h>
 #include <dm/hw/uxen_v4v.h>
+#include <dm/hw/uxen_fb.h>
 
 #include <err.h>
 #include <stdint.h>
+
+//#define AGENT_DEBUG
 
 #define RING_SIZE 262144
 #define V4V_PORT 44449
@@ -40,6 +43,8 @@
 
 struct atto_agent_msg {
     uint8_t type;
+    uint8_t pad[3];
+    uint32_t head_id;
     union {
         char string[512];
         struct {
@@ -56,8 +61,8 @@ struct atto_agent_msg {
             uint32_t len;
             uint8_t bitmap[];
         };
-        unsigned win_kbd_layout;
         unsigned offer_kbd_focus;
+        unsigned win_kbd_layout;
     };
 } __attribute__((packed));
 
@@ -84,11 +89,15 @@ typedef struct atto_agent_pending_send {
 #define MAX_STRING_LEN (sizeof(struct atto_agent_varlen_packet) - \
                         offsetof(struct atto_agent_varlen_packet, msg.string))
 
+struct head_resize {
+    uint32_t xres, yres;
+    int pending;
+};
+
 struct atto_agent_state {
     int initialized;
     int can_send_resize;
-    uint32_t xres_last;
-    uint32_t yres_last;
+    struct head_resize headres[FB_HEADMAX];
     v4v_context_t v4v;
     v4v_async_t async;
     ioh_event rx_event;
@@ -98,7 +107,6 @@ struct atto_agent_state {
     uint32_t partner_id;
     Timer *resize_timer;
     critical_section cs;
-    struct display_state *ds;
     uint32_t keyboard_layout;
     TAILQ_HEAD(, atto_agent_pending_send) tx_queue;
     critical_section tx_queue_lock;
@@ -173,28 +181,35 @@ send_message(struct atto_agent_state *s,
 static void
 send_latest_resize(struct atto_agent_state *s)
 {
+    int i;
+
     critical_section_enter(&s->cs);
-    if (s->xres_last && s->yres_last) {
-        struct atto_agent_varlen_packet *resp = &s->resp;
+    for (i = 0; i < FB_HEADMAX; i++) {
+        struct head_resize *res = &s->headres[i];
+        if (res->pending) {
+            struct atto_agent_varlen_packet *resp = &s->resp;
 
-        memset(resp, 0, sizeof(*resp));
+            memset(resp, 0, sizeof(*resp));
 
-        resp->msg.type = ATTO_MSG_RESIZE_RET;
-        resp->msg.xres = s->xres_last;
-        resp->msg.yres = s->yres_last;
+            resp->msg.type = ATTO_MSG_RESIZE_RET;
+            resp->msg.xres = res->xres;
+            resp->msg.yres = res->yres;
+            resp->msg.head_id = i;
 
-        if (send_message(s, resp, sizeof(struct atto_agent_packet), 0) == 0) {
-            debug_printf("sent resize to %ux%u\n",
-                        (unsigned) s->xres_last, (unsigned) s->yres_last);
-            s->xres_last = 0;
-            s->yres_last = 0;
+            if (send_message(s, resp, sizeof(struct atto_agent_packet), 0) == 0) {
+                debug_printf("sent resize to head %d = %ux%u\n",
+                    i, (unsigned) res->xres, (unsigned) res->yres);
+                res->pending = 0;
+            }
         }
     }
     critical_section_leave(&s->cs);
 }
 
 static void
-process_x11_cursor(struct atto_agent_state *s,
+process_x11_cursor(
+    struct atto_agent_state *s,
+    struct display_state *ds,
     struct atto_agent_msg *msg,
     int len)
 {
@@ -224,7 +239,7 @@ process_x11_cursor(struct atto_agent_state *s,
         attovm_create_custom_cursor(msg->ccursor, msg->xhot, msg->yhot, msg->nx,
                                     msg->ny, bitmap_len, (uint8_t *)&msg->bitmap);
         /* Apparently we also need to activate in this case */
-        attovm_set_x11_cursor(s->ds, msg->ccursor);
+        attovm_set_x11_cursor(ds, msg->ccursor);
 
         return;
     }
@@ -246,6 +261,11 @@ atto_agent_process_msg(struct atto_agent_state *s,
 
     memset(resp, 0, sizeof(*resp));
 
+#ifdef AGENT_DEBUG
+    debug_printf("atto-agent: process message type=%d head=%d\n",
+        msg->type, msg->head_id);
+#endif
+
     if (msg->type == ATTO_MSG_GETURL) {
         char *endp;
         resp->msg.type = ATTO_MSG_GETURL_RET;
@@ -264,10 +284,24 @@ atto_agent_process_msg(struct atto_agent_state *s,
         resp->msg.xres = 0;
         resp->msg.yres = 0;
     } else if (msg->type == ATTO_MSG_CURSOR_TYPE) {
-        process_x11_cursor(s, msg, len);
+        struct display_state *ds = display_find(msg->head_id);
+
+        if (ds)
+            process_x11_cursor(s, ds, msg, len);
+        else
+            debug_printf("%s: could not find display head %d\n",
+                         __FUNCTION__, (int) msg->head_id);
+
         send_back = 0;
     } else if (msg->type == ATTO_MSG_CURSOR_CHANGE) {
-        attovm_set_x11_cursor(s->ds, msg->ccursor);
+        struct display_state *ds = display_find(msg->head_id);
+
+        if (ds)
+            attovm_set_x11_cursor(ds, msg->ccursor);
+        else
+            debug_printf("%s: could not find display head %d\n",
+                         __FUNCTION__, (int) msg->head_id);
+
         send_back = 0;
     } else if (msg->type == ATTO_MSG_CURSOR_GET_SM) {
         resp->msg.type = ATTO_MSG_CURSOR_GET_SM_RET;
@@ -388,9 +422,11 @@ resize_timer_notify(void *opaque)
 }
 
 int
-atto_agent_send_resize_event(unsigned xres, unsigned yres)
+atto_agent_send_resize_event(head_id_t head_id, unsigned xres, unsigned yres)
 {
     struct atto_agent_state *s = &state;
+
+    assert(head_id >= 0 && head_id < FB_HEADMAX);
 
     if (!s->initialized)
         return -1;
@@ -399,8 +435,9 @@ atto_agent_send_resize_event(unsigned xres, unsigned yres)
     mod_timer(s->resize_timer, get_clock_ms(vm_clock) + RESIZE_BACKOFF_MS);
 
     critical_section_enter(&s->cs);
-    s->xres_last = xres;
-    s->yres_last = yres;
+    s->headres[head_id].xres = xres;
+    s->headres[head_id].yres = yres;
+    s->headres[head_id].pending = 1;
     critical_section_leave(&s->cs);
 
     return 0;
@@ -454,12 +491,6 @@ atto_agent_init(void)
     return 0;
 }
 
-void
-atto_agent_set_display_state(struct display_state *ds)
-{
-    state.ds = ds;
-}
-
 int
 atto_agent_window_ready(void)
 {
@@ -497,7 +528,7 @@ atto_agent_change_kbd_layout(unsigned win_kbd_layout)
 }
 
 void
-atto_agent_request_keyboard_focus(unsigned offer)
+atto_agent_request_keyboard_focus(unsigned offer, uint32_t head_id)
 {
     struct atto_agent_state *s = &state;
     struct atto_agent_varlen_packet *resp = &s->resp;
@@ -506,6 +537,7 @@ atto_agent_request_keyboard_focus(unsigned offer)
     memset(resp, 0, sizeof(*resp));
     resp->msg.type = ATTO_MSG_KBD_FOCUS_RET;
     resp->msg.offer_kbd_focus = offer;
+    resp->msg.head_id = head_id;
 
     if (send_message(s, resp, sizeof(struct atto_agent_packet), 0) == 0) {
 #if 0
