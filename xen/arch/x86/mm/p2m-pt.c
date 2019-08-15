@@ -211,14 +211,14 @@ pt_map_ptp_gfn(struct p2m_domain *p2m, bool_t read_only,
     int ret = GUEST_TABLE_MAP_FAILED;
 
     idx = pt_gfn_idx(p2m, gfn, (*_target) + 1);
-    if (idx < pt_nr_pages(d)) {
-        if (pt_page(d, idx).present) {
-            *_table = (pt_entry_t *)pt_page_va(d, idx);
-            return GUEST_TABLE_NORMAL_PAGE;
-        }
+    if (idx < pt_nr_pages(d) && pt_page(d, idx).present) {
+        *_table = (pt_entry_t *)pt_page_va(d, idx);
+        return GUEST_TABLE_NORMAL_PAGE;
+    }
 
-        table = (pt_entry_t *)
-            pt_page_va(d, pt_gfn_idx(p2m, gfn, (*_target) + 2));
+    idx = pt_gfn_idx(p2m, gfn, (*_target) + 2);
+    if (idx < pt_nr_pages(d) && pt_page(d, idx).present) {
+        table = (pt_entry_t *)pt_page_va(d, idx);
         entry = table + pt_level_index(gfn, (*_target) + 1);
 
         if (p2m_is_pod(p2m_flags_to_type(
@@ -229,18 +229,23 @@ pt_map_ptp_gfn(struct p2m_domain *p2m, bool_t read_only,
             return GUEST_TABLE_POD_PAGE;
         }
 
+        if (get_pte_flags(entry->e) & _PAGE_PRESENT) {
+            *_table = pt_map_ptp(p2m, entry);
+            return GUEST_TABLE_NORMAL_PAGE;
+        }
+
         ASSERT(!entry->e);
-        if (!read_only)
-            printk(XENLOG_DEBUG "%s: vm%u: top down fill gfn %lx level %d\n",
-                   __FUNCTION__, d->domain_id, gfn, (*_target) + 1);
-    } else {
-        idx = pt_gfn_idx(p2m, gfn, (*_target) + 2);
-        if (idx < pt_nr_pages(d) && pt_page(d, idx).present) {
-            *_table = (pt_entry_t *)pt_page_va(d, idx);
+
+        if (read_only) {
+            *_table = table;
             (*_target)++;
             return GUEST_TABLE_MAP_FAILED;
         }
     }
+
+    if (!read_only)
+        printk(XENLOG_DEBUG "%s: vm%u: top down fill gfn %lx level %d\n",
+               __FUNCTION__, d->domain_id, gfn, (*_target) + 1);
 
     table = pt_map_asr_ptp(p2m);
     for (i = PT_WL - 1

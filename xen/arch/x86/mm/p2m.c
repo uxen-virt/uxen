@@ -393,7 +393,7 @@ p2m_alloc_ptp(struct p2m_domain *p2m, unsigned long gfn, int level,
     printk(XENLOG_DEBUG "%s: vm%u gfn %lx level %d -> idx %d\n", __FUNCTION__,
            d->domain_id, gfn, level, idx);
 
-    if (_idx && idx < d->vm_info_shared->vmi_nr_pt_pages) {
+    if (_idx && idx < pt_nr_pages(d)) {
         *_idx = idx;
 
         /* make _idx fit in 1..(1<<p2m->ptp_idx_bits), i.e. leave 0 reserved */
