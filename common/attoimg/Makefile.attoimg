@@ -27,17 +27,10 @@ EXTRA_CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
 #	$(_W)echo Installing -- $(<F)
 #	$(_V)$(call install_lib,$<,$(SDKDIR_lib))
 
-install_attoimg:
-	$(_W)echo Installing -- attoimg
-	$(_V)$(call install_exe,attoimg$(EXE_SUFFIX),$(DISTDIR))
-
-dist: libattoimg.a attoimg$(EXE_SUFFIX) install_attoimg
-
-#dist: attoimg$(EXE_SUFFIX) install_attoimg.h
-#	$(_W)echo Installing from $(abspath $(<D)) to $(DISTDIR)
-#	$(_W)echo Installing -- $(<F)
-#	$(_V)$(call install_exe,$<,$(DISTDIR))
-#$(WINDOWS)dist: install_libattoimg.a
+dist: attoimg$(EXE_SUFFIX)
+	$(_W)echo Installing from $(abspath $(<D)) to $(DISTDIR)
+	$(_W)echo Installing -- $(<F)
+	$(_V)$(call install_exe,$<,$(DISTDIR))
 
 libattoimg.a: $(libattoimg_OBJS) Makefile.lib-LIBATTOIMG
 	$(_W)echo Archiving - $@
