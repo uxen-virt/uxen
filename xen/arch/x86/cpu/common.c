@@ -17,9 +17,6 @@
 #include "cpu.h"
 
 static int cachesize_override __cpuinitdata = -1;
-#ifndef __UXEN__
-size_param("cachesize", cachesize_override);
-#endif  /* __UXEN__ */
 
 static bool_t __cpuinitdata use_xsave = 1;
 boolean_param("xsave", use_xsave);
@@ -38,14 +35,6 @@ unsigned int __devinitdata opt_cpuid_mask_ext_edx = ~0u;
 integer_param("cpuid_mask_ext_edx", opt_cpuid_mask_ext_edx);
 
 struct cpu_dev * cpu_devs[X86_VENDOR_NUM] = {};
-
-#ifndef __UXEN__
-/*
- * Default host IA32_CR_PAT value to cover all memory types.
- * BIOS usually sets it to 0x07040600070406.
- */
-u64 host_pat = 0x050100070406;
-#endif  /* __UXEN__ */
 
 static unsigned int __cpuinitdata cleared_caps[NCAPINTS];
 
@@ -290,33 +279,6 @@ void __cpuinit generic_identify(struct cpuinfo_x86 * c)
 #endif
 }
 
-#ifndef __UXEN__
-#ifdef __i386__
-
-static bool_t __cpuinitdata disable_x86_fxsr;
-boolean_param("nofxsr", disable_x86_fxsr);
-
-static bool_t __cpuinitdata disable_x86_serial_nr;
-boolean_param("noserialnumber", disable_x86_serial_nr);
-
-static void __cpuinit squash_the_stupid_serial_number(struct cpuinfo_x86 *c)
-{
-	if (cpu_has(c, X86_FEATURE_PN) && disable_x86_serial_nr ) {
-		/* Disable processor serial number */
-		uint64_t msr_content;
-		rdmsrl(MSR_IA32_BBL_CR_CTL,msr_content);
-		wrmsrl(MSR_IA32_BBL_CR_CTL, msr_content | 0x200000);
-		printk(KERN_NOTICE "CPU serial number disabled.\n");
-		clear_bit(X86_FEATURE_PN, c->x86_capability);
-
-		/* Disabling the serial number may affect the cpuid level */
-		c->cpuid_level = cpuid_eax(0);
-	}
-}
-
-#endif
-#endif  /* __UXEN__ */
-
 /*
  * This does the hard work of actually picking apart the CPU stuff...
  */
@@ -383,22 +345,6 @@ void __cpuinit identify_cpu(struct cpuinfo_x86 *c)
 	 * we do "generic changes."
 	 */
 
-#ifndef __UXEN__
-#ifdef __i386__
-	/* Disable the PN if appropriate */
-	squash_the_stupid_serial_number(c);
-
-	/* FXSR disabled? */
-	if (disable_x86_fxsr) {
-		clear_bit(X86_FEATURE_FXSR, c->x86_capability);
-		if (!cpu_has_xsave) {
-			clear_bit(X86_FEATURE_XMM, c->x86_capability);
-			clear_bit(X86_FEATURE_AES, c->x86_capability);
-		}
-	}
-#endif
-#endif  /* __UXEN__ */
-
 	for (i = 0 ; i < NCAPINTS ; ++i)
 		c->x86_capability[i] &= ~cleared_caps[i];
 
@@ -434,15 +380,6 @@ void __cpuinit identify_cpu(struct cpuinfo_x86 *c)
 		for ( i = 0 ; i < NCAPINTS ; i++ )
 			boot_cpu_data.x86_capability[i] &= c->x86_capability[i];
 
-#ifndef __UXEN__
-		mcheck_init(c, 0);
-#endif  /* __UXEN__ */
-#ifndef __UXEN__
-	} else {
-		mcheck_init(c, 1);
-
-		mtrr_bp_init();
-#endif  /* __UXEN__ */
 	}
 }
 
@@ -605,10 +542,6 @@ void __cpuinit print_cpu_info(unsigned int cpu)
 	printk(" stepping %02x\n", c->x86_mask);
 }
 
-#ifndef __UXEN__
-static cpumask_t cpu_initialized;
-#endif  /* __UXEN__ */
-
 /* This is hacky. :)
  * We're emulating future behavior.
  * In the future, the cpu-specific init functions will be called implicitly
@@ -621,76 +554,5 @@ void __init early_cpu_init(void)
 {
 	intel_cpu_init();
 	amd_init_cpu();
-#ifndef __UXEN__
-#ifdef CONFIG_X86_32
-	cyrix_init_cpu();
-	nsc_init_cpu();
-	centaur_init_cpu();
-	transmeta_init_cpu();
-#endif
-#endif  /* __UXEN__ */
 	early_cpu_detect();
 }
-#ifndef __UXEN__
-/*
- * cpu_init() initializes state that is per-CPU. Some data is already
- * initialized (naturally) in the bootstrap process, such as the GDT
- * and IDT. We reload them nevertheless, this function acts as a
- * 'CPU state barrier', nothing should get across.
- */
-void __cpuinit cpu_init(void)
-{
-	int cpu = smp_processor_id();
-	struct tss_struct *t = &this_cpu(init_tss);
-	struct desc_ptr gdt_desc = {
-		.base = (unsigned long)(this_cpu(gdt_table) - FIRST_RESERVED_GDT_ENTRY),
-		.limit = LAST_RESERVED_GDT_BYTE
-	};
-
-	if (cpumask_test_and_set_cpu(cpu, &cpu_initialized)) {
-		printk(KERN_WARNING "CPU#%d already initialized!\n", cpu);
-		for (;;) local_irq_enable();
-	}
-	if (opt_cpu_info)
-		printk("Initializing CPU#%d\n", cpu);
-
-	if (cpu_has_pat)
-		wrmsrl(MSR_IA32_CR_PAT, host_pat);
-
-	/* Install correct page table. */
-	write_ptbase(current);
-
-	asm volatile ( "lgdt %0" : : "m" (gdt_desc) );
-
-	/* No nested task. */
-	asm volatile ("pushf ; andw $0xbfff,(%"__OP"sp) ; popf" );
-
-	/* Ensure FPU gets initialised for each domain. */
-	stts();
-
-	/* Set up and load the per-CPU TSS and LDT. */
-	t->bitmap = IOBMP_INVALID_OFFSET;
-#if defined(CONFIG_X86_32)
-	t->ss0  = __HYPERVISOR_DS;
-	t->esp0 = get_stack_bottom();
-	if ( supervisor_mode_kernel && cpu_has_sep )
-		wrmsr(MSR_IA32_SYSENTER_ESP, &t->esp1, 0);
-#elif defined(CONFIG_X86_64)
-	/* Bottom-of-stack must be 16-byte aligned! */
-	BUG_ON((get_stack_bottom() & 15) != 0);
-	t->rsp0 = get_stack_bottom();
-#endif
-	load_TR();
-	asm volatile ( "lldt %%ax" : : "a" (0) );
-
-	/* Clear all 6 debug registers: */
-#define CD(register) asm volatile ( "mov %0,%%db" #register : : "r"(0UL) );
-	CD(0); CD(1); CD(2); CD(3); /* no db4 and db5 */; CD(6); CD(7);
-#undef CD
-}
-
-void cpu_uninit(unsigned int cpu)
-{
-	cpumask_clear_cpu(cpu, &cpu_initialized);
-}
-#endif  /* __UXEN__ */

@@ -86,10 +86,8 @@ void vpmu_initialise(struct vcpu *v)
 {
     struct vpmu_struct *vpmu = vcpu_vpmu(v);
     __u8 vendor = current_cpu_data.x86_vendor;
-#ifdef __UXEN_vpmu__
     __u8 family = current_cpu_data.x86;
     __u8 cpu_model = current_cpu_data.x86_model;
-#endif  /* __UXEN_vpmu__ */
 
     if ( !opt_vpmu_enabled )
         return;
@@ -99,7 +97,6 @@ void vpmu_initialise(struct vcpu *v)
 
     switch ( vendor )
     {
-#ifdef __UXEN_vpmu__
     case X86_VENDOR_AMD:
         switch ( family )
         {
@@ -116,9 +113,7 @@ void vpmu_initialise(struct vcpu *v)
             return;
         }
         break;
-#endif  /* __UXEN_vpmu__ */
 
-#ifdef __UXEN_vpmu__
     case X86_VENDOR_INTEL:
         if ( family == 6 )
         {
@@ -140,7 +135,6 @@ void vpmu_initialise(struct vcpu *v)
                    "Intel processor family %d model %d has not "
                    "been supported\n", family, cpu_model);
         break;
-#endif  /* __UXEN_vpmu__ */
 
     default:
         printk("VPMU: Initialization failed. "

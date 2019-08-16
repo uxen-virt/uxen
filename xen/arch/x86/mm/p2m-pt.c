@@ -49,11 +49,6 @@
 #include <asm/paging.h>
 #include <asm/p2m.h>
 #include <xen/iommu.h>
-#ifndef __UXEN__
-#include <asm/mem_event.h>
-#include <public/mem_event.h>
-#include <asm/mem_sharing.h>
-#endif  /* __UXEN__ */
 #include <xen/event.h>
 #include <xen/trace.h>
 #include <asm/hvm/nestedhvm.h>
@@ -75,12 +70,10 @@
 #define page_to_mfn(_pg) _mfn(__page_to_mfn(_pg))
 
 
-#ifdef __UXEN__
 #define PGT_l1_page_table 1
 #define PGT_l2_page_table 2
 #define PGT_l3_page_table 3
 #define PGT_l4_page_table 4
-#endif  /* __UXEN__ */
 
 /* PTE flags for the various types of p2m entry */
 #define P2M_BASE_FLAGS \
@@ -107,19 +100,10 @@ static unsigned long p2m_type_to_flags(p2m_type_t t, mfn_t mfn)
     default:
         return flags;
     case p2m_ram_ro:
-#ifndef __UXEN__
-    case p2m_grant_map_ro:
-#endif  /* __UXEN__ */
     case p2m_ram_logdirty:
-#ifndef __UXEN__
-    case p2m_ram_shared:
-#endif  /* __UXEN__ */
     case p2m_ram_immutable:
         return flags | P2M_BASE_FLAGS;
     case p2m_ram_rw:
-#ifndef __UXEN__
-    case p2m_grant_map_rw:
-#endif  /* __UXEN__ */
         return flags | P2M_BASE_FLAGS | _PAGE_RW;
     case p2m_mmio_direct:
         if ( !rangeset_contains_singleton(mmio_ro_ranges, mfn_x(mfn)) )
@@ -376,10 +360,6 @@ static void p2m_add_iommu_flags(l1_pgentry_t *p2m_entry,
                                 unsigned int nlevel, unsigned int flags)
 {
 #if CONFIG_PAGING_LEVELS == 4
-#ifndef __UXEN__
-    if ( iommu_hap_pt_share )
-        l1e_add_flags(*p2m_entry, iommu_nlevel_to_flags(nlevel, flags));
-#endif  /* __UXEN__ */
 #endif
 }
 
@@ -616,9 +596,6 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     int i, target = page_order / PAGETABLE_ORDER;
     int rv = 0;
     int ret = 0;
-#ifndef __UXEN__
-    unsigned long old_mfn = 0;
-#endif  /* __UXEN__ */
     union p2m_l1_cache *l1c = &this_cpu(p2m_l1_cache);
     int needs_sync = 1;
 
@@ -724,27 +701,6 @@ p2m_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     if (needs_sync)
         pt_sync_domain(p2m->domain);
 
-#ifndef __UXEN__
-    if ( rv && iommu_enabled && need_iommu(p2m->domain) )
-    {
-        if ( iommu_hap_pt_share )
-        {
-            if ( old_mfn && (old_mfn != mfn_x(mfn)) )
-                amd_iommu_flush_pages(p2m->domain, gfn, page_order);
-        }
-        else
-        {
-            if (p2m_is_ram_rw(p2mt))
-                for ( i = 0; i < (1UL << page_order); i++ )
-                    iommu_map_page(p2m->domain, gfn+i, mfn_x(mfn)+i,
-                                   IOMMUF_readable|IOMMUF_writable);
-            else
-                for ( int i = 0; i < (1UL << page_order); i++ )
-                    iommu_unmap_page(p2m->domain, gfn+i);
-        }
-    }
-#endif  /* __UXEN__ */
-
     /* Release the old intermediate tables, if any.  This has to be the
        last thing we do, after the ept_sync_domain() and removal
        from the iommu tables, so as to avoid a potential
@@ -810,192 +766,6 @@ pt_ro_update_l2_entry(struct p2m_domain *p2m, unsigned long gfn,
 
     return rv;
 }
-
-#ifndef __UXEN__
-/* Read the current domain's p2m table (through the linear mapping). */
-static mfn_t p2m_gfn_to_mfn_current(struct p2m_domain *p2m, 
-                                    unsigned long gfn, p2m_type_t *t, 
-                                    p2m_access_t *a, p2m_query_t q,
-                                    unsigned int *page_order)
-{
-    mfn_t mfn = _mfn(0);
-    p2m_type_t p2mt = p2m_mmio_dm;
-    paddr_t addr = ((paddr_t)gfn) << PAGE_SHIFT;
-    /* XXX This is for compatibility with the old model, where anything not 
-     * XXX marked as RAM was considered to be emulated MMIO space.
-     * XXX Once we start explicitly registering MMIO regions in the p2m 
-     * XXX we will return p2m_invalid for unmapped gfns */
-
-    l1_pgentry_t l1e = l1e_empty(), *p2m_entry;
-    l2_pgentry_t l2e = l2e_empty();
-    int ret;
-#if CONFIG_PAGING_LEVELS >= 4
-    l3_pgentry_t l3e = l3e_empty();
-#endif
-
-    ASSERT(gfn < (RO_MPT_VIRT_END - RO_MPT_VIRT_START) 
-           / sizeof(l1_pgentry_t));
-
-#if CONFIG_PAGING_LEVELS >= 4
-    /*
-     * Read & process L3
-     */
-    p2m_entry = (l1_pgentry_t *)
-        &__linear_l2_table[l2_linear_offset(RO_MPT_VIRT_START)
-                           + l3_linear_offset(addr)];
-pod_retry_l3:
-    ret = __copy_from_user(&l3e, p2m_entry, sizeof(l3e));
-
-    if ( ret != 0 || !(l3e_get_flags(l3e) & _PAGE_PRESENT) )
-    {
-        if ((l3e_get_flags(l3e) & _PAGE_PSE) &&
-            p2m_is_pod(p2m_flags_to_type(l3e_get_flags(l3e)))) {
-            /* The read has succeeded, so we know that mapping exists */
-            if ( q != p2m_query )
-            {
-                mfn = p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_1G, q,
-                                              p2m_entry);
-                if (!mfn_x(mfn))
-                    goto pod_retry_l3;
-                p2mt = p2m_invalid;
-                printk("%s: Allocate 1GB failed!\n", __func__);
-                goto out;
-            }
-            else
-            {
-                p2mt = p2m_populate_on_demand;
-                goto out;
-            }
-        }
-        goto pod_retry_l2;
-    }
-
-    if ( l3e_get_flags(l3e) & _PAGE_PSE )
-    {
-        p2mt = p2m_flags_to_type(l3e_get_flags(l3e));
-        ASSERT(l3e_get_pfn(l3e) != INVALID_MFN || !p2m_is_ram(p2mt));
-        if (p2m_is_valid(p2mt) )
-            mfn = _mfn(l3e_get_pfn(l3e) + 
-                       l2_table_offset(addr) * L1_PAGETABLE_ENTRIES + 
-                       l1_table_offset(addr));
-        else
-            p2mt = p2m_mmio_dm;
-            
-        if ( page_order )
-            *page_order = PAGE_ORDER_1G;
-        goto out;
-    }
-#endif
-    /*
-     * Read & process L2
-     */
-    p2m_entry = &__linear_l1_table[l1_linear_offset(RO_MPT_VIRT_START)
-                                   + l2_linear_offset(addr)];
-
-pod_retry_l2:
-    ret = __copy_from_user(&l2e,
-                           p2m_entry,
-                           sizeof(l2e));
-    if ( ret != 0
-         || !(l2e_get_flags(l2e) & _PAGE_PRESENT) )
-    {
-        if ((l2e_get_flags(l2e) & _PAGE_PSE) &&
-            p2m_is_pod(p2m_flags_to_type(l2e_get_flags(l2e)))) {
-            /* The read has succeeded, so we know that the mapping
-             * exits at this point.  */
-            if ( q != p2m_query )
-            {
-                mfn = p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_2M, q,
-                                              p2m_entry);
-                if (!mfn_x(mfn))
-                    goto pod_retry_l2;
-
-                /* Allocate failed. */
-                p2mt = p2m_invalid;
-                printk("%s: Allocate failed!\n", __func__);
-                goto out;
-            }
-            else
-            {
-                p2mt = p2m_populate_on_demand;
-                goto out;
-            }
-        }
-
-        goto pod_retry_l1;
-    }
-        
-    if (l2e_get_flags(l2e) & _PAGE_PSE)
-    {
-        p2mt = p2m_flags_to_type(l2e_get_flags(l2e));
-        ASSERT(l2e_get_pfn(l2e) != INVALID_MFN || !p2m_is_ram(p2mt));
-
-        if ( p2m_is_valid(p2mt) )
-            mfn = _mfn(l2e_get_pfn(l2e) + l1_table_offset(addr));
-        else
-            p2mt = p2m_mmio_dm;
-
-        if ( page_order )
-            *page_order = PAGE_ORDER_2M;
-        goto out;
-    }
-
-    /*
-     * Read and process L1
-     */
-
-    /* Need to __copy_from_user because the p2m is sparse and this
-     * part might not exist */
-pod_retry_l1:
-    p2m_entry = &phys_to_machine_mapping[gfn];
-
-    ret = __copy_from_user(&l1e,
-                           p2m_entry,
-                           sizeof(l1e));
-            
-    if ( ret == 0 ) {
-        p2mt = p2m_flags_to_type(l1e_get_flags(l1e));
-        ASSERT(l1e_get_pfn(l1e) != INVALID_MFN || !p2m_is_ram(p2mt));
-
-        if (p2m_is_pod(p2m_flags_to_type(l1e_get_flags(l1e)))) {
-            /* The read has succeeded, so we know that the mapping
-             * exits at this point.  */
-            if ( q != p2m_query )
-            {
-                mfn = p2m_pod_demand_populate(p2m, gfn, PAGE_ORDER_4K, q,
-                                              p2m_entry);
-                if (!mfn_x(mfn))
-                    goto pod_retry_l1;
-
-                /* Allocate failed. */
-                p2mt = p2m_invalid;
-                goto out;
-            }
-            else
-            {
-                p2mt = p2m_populate_on_demand;
-                goto out;
-            }
-        }
-
-        if (p2m_is_valid(p2mt)
-#ifndef __UXEN__
-            || p2m_is_grant(p2mt)
-#endif  /* __UXEN__ */
-            )
-            mfn = _mfn(l1e_get_pfn(l1e));
-        else 
-            /* XXX see above */
-            p2mt = p2m_mmio_dm;
-    }
-    
-    if ( page_order )
-        *page_order = PAGE_ORDER_4K;
-out:
-    *t = p2mt;
-    return mfn_x(mfn) ? mfn : _mfn(INVALID_MFN);
-}
-#endif  /* __UXEN__ */
 
 static void *
 npt_map_l1_table(struct p2m_domain *p2m, unsigned long gpfn,
@@ -1087,12 +857,6 @@ p2m_gfn_to_mfn(struct p2m_domain *p2m, unsigned long gfn,
     if ( gfn > p2m->max_mapped_pfn )
         /* This pfn is higher than the highest the p2m map currently holds */
         return _mfn(INVALID_MFN);
-
-#ifndef __UXEN__
-    /* Use the fast path with the linear mapping if we can */
-    if ( p2m == p2m_get_hostp2m(current->domain) )
-        return p2m_gfn_to_mfn_current(p2m, gfn, t, a, q, page_order);
-#endif  /* __UXEN__ */
 
     if (!l1c->ge_l1[ge_l1_cache_slot].va ||
         p2m_l1_prefix(gfn, p2m) != l1c->ge_l1_prefix[ge_l1_cache_slot]) {
@@ -1206,9 +970,6 @@ static void p2m_change_type_global(struct p2m_domain *p2m,
 #endif /* CONFIG_PAGING_LEVELS == 4 */
 
 DEBUG();
-#ifndef __UXEN__
-    BUG_ON(p2m_is_grant(ot) || p2m_is_grant(nt));
-#endif  /* __UXEN__ */
     BUG_ON(ot != nt && (p2m_is_mmio_direct(ot) || p2m_is_mmio_direct(nt)));
 
     if ( !paging_mode_translate(p2m->domain) )
@@ -1248,16 +1009,12 @@ DEBUG();
                 if ( p2m_flags_to_type(flags) != ot )
                     continue;
                 mfn = l3e_get_pfn(l3e[i3]);
-#ifndef __UXEN__
-                gfn = get_gpfn_from_mfn(mfn);
-#else  /* __UXEN__ */
                 gfn = ((i3
 #if CONFIG_PAGING_LEVELS >= 4
                     + (i4 * L3_PAGETABLE_ENTRIES)
 #endif
                     )
                     * L2_PAGETABLE_ENTRIES) * L1_PAGETABLE_ENTRIES;
-#endif  /* __UXEN__ */
                 flags = p2m_type_to_flags(nt, _mfn(mfn));
                 l1e_content = l1e_from_pfn(mfn, flags | _PAGE_PSE);
                 write_p2m_entry(p2m, -1, (l1_pgentry_t *)&l3e[i3],
@@ -1342,9 +1099,6 @@ void p2m_pt_init(struct p2m_domain *p2m)
     p2m->write_entry = npt_write_entry;
     p2m->change_entry_type_global = p2m_change_type_global;
     p2m->split_super_page_one = npt_split_super_page_one;
-#ifndef __UXEN__
-    p2m->write_p2m_entry = paging_write_p2m_entry;
-#endif  /* __UXEN__ */
     p2m->ro_update_l2_entry = pt_ro_update_l2_entry;
 
     p2m->p2m_l1_cache_id = p2m->domain->domain_id;
@@ -1578,11 +1332,6 @@ void audit_p2m(struct p2m_domain *p2m, int strict_m2p)
                         m2pfn = get_gpfn_from_mfn(mfn);
                         if ( m2pfn != gfn &&
                              !p2m_is_mmio_direct(type)
-#ifndef __UXEN__
-                             &&
-                             !p2m_is_grant(type) &&
-                             !p2m_is_shared(type)
-#endif  /* __UXEN__ */
                             )
                         {
                             pmbad++;

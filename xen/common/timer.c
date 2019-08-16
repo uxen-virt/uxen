@@ -7,7 +7,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -46,9 +46,6 @@
 
 /* We program the time hardware this far behind the closest deadline. */
 static unsigned int timer_slop __read_mostly = 50000; /* 50 us */
-#ifndef __UXEN__
-integer_param("timer_slop", timer_slop);
-#endif /* __UXEN__ */
 
 static DEFINE_PER_CPU(struct timers, timers);
 
@@ -349,9 +346,7 @@ void init_timer(
     unsigned int  cpu)
 {
     unsigned long flags;
-#ifdef __UXEN__
     cpu = 0;                    /* all cpu timers on cpu 0 */
-#endif  /* __UXEN__ */
     memset(timer, 0, sizeof(*timer));
     timer->function = function;
     timer->data = data;

@@ -61,56 +61,10 @@
 #include <xen/trace.h>
 #include <xen/tmem.h>
 
-#ifndef __UXEN__
-/* Linux config option: propageted to domain0 */
-/* xen_processor_pmbits: xen control Cx, Px, ... */
-unsigned int xen_processor_pmbits = XEN_PROCESSOR_PM_PX;
-
-/* opt_dom0_vcpus_pin: If true, dom0 VCPUs are pinned. */
-static bool_t opt_dom0_vcpus_pin;
-boolean_param("dom0_vcpus_pin", opt_dom0_vcpus_pin);
-
-/* set xen as default cpufreq */
-enum cpufreq_controller cpufreq_controller = FREQCTL_xen;
-
-static void __init setup_cpufreq_option(char *str)
-{
-    char *arg;
-
-    if ( !strcmp(str, "dom0-kernel") )
-    {
-        xen_processor_pmbits &= ~XEN_PROCESSOR_PM_PX;
-        cpufreq_controller = FREQCTL_dom0_kernel;
-        opt_dom0_vcpus_pin = 1;
-        return;
-    }
-
-    if ( !strcmp(str, "none") )
-    {
-        xen_processor_pmbits &= ~XEN_PROCESSOR_PM_PX;
-        cpufreq_controller = FREQCTL_none;
-        return;
-    }
-
-    if ( (arg = strpbrk(str, ",:")) != NULL )
-        *arg++ = '\0';
-
-    if ( !strcmp(str, "xen") )
-        if ( arg && *arg )
-            cpufreq_cmdline_parse(arg);
-}
-custom_param("cpufreq", setup_cpufreq_option);
-#endif  /* __UXEN__ */
-
 /* Protect updates/reads (resp.) of domain_list and domain_hash. */
 DEFINE_SPINLOCK(domlist_update_lock);
 DEFINE_RCU_READ_LOCK(domlist_read_lock);
 
-#ifndef __UXEN__
-#define DOMAIN_HASH_SIZE 256
-#define DOMAIN_HASH(_id) ((int)(_id)&(DOMAIN_HASH_SIZE-1))
-static struct domain *domain_hash[DOMAIN_HASH_SIZE];
-#endif  /* __UXEN__ */
 struct domain *domain_list;
 
 struct domain *dom0;
@@ -148,14 +102,7 @@ static void __domain_finalise_shutdown(struct domain *d)
         v4v_shutdown_for_suspend(d);
 
     d->is_shut_down = 1;
-#ifndef __UXEN__
-    if ( (d->shutdown_code == SHUTDOWN_suspend) && d->suspend_evtchn )
-        evtchn_send(d, d->suspend_evtchn);
-    else
-        send_guest_global_virq(dom0, VIRQ_DOM_EXC);
-#else   /* __UXEN__ */
     hostsched_notify_exception(d);
-#endif  /* __UXEN__ */
 }
 
 static void vcpu_check_shutdown(struct vcpu *v)
@@ -190,13 +137,7 @@ struct vcpu *alloc_vcpu(
     v->vcpu_id = vcpu_id;
 
     spin_lock_init(&v->virq_lock);
-#ifdef __UXEN__
     init_timers(&v->timers);
-#endif  /* __UXEN__ */
-
-#ifndef __UXEN__
-    tasklet_init(&v->continue_hypercall_tasklet, NULL, 0);
-#endif  /* __UXEN__ */
 
     if ( !zalloc_cpumask_var(&v->cpu_affinity) ||
          !zalloc_cpumask_var(&v->cpu_affinity_tmp) ||
@@ -217,9 +158,6 @@ struct vcpu *alloc_vcpu(
                             d, vcpu_info[array_index_nospec(
                                     vcpu_id, XEN_LEGACY_MAX_VCPUS)])
                         : &dummy_vcpu_info);
-#ifndef __UXEN__
-        init_waitqueue_vcpu(v);
-#endif  /* __UXEN__ */
     }
 
     if ( sched_init_vcpu(v, cpu_id) != 0 )
@@ -229,9 +167,6 @@ struct vcpu *alloc_vcpu(
     {
         sched_destroy_vcpu(v);
  fail_wq:
-#ifndef __UXEN__
-        destroy_waitqueue_vcpu(v);
-#endif  /* __UXEN__ */
  fail_free:
         free_cpumask_var(v->cpu_affinity);
         free_cpumask_var(v->cpu_affinity_tmp);
@@ -251,33 +186,14 @@ struct vcpu *alloc_vcpu(
         d->vcpu[prev_id]->next_in_list = v;
     }
 
-#ifdef __UXEN__
     if ( vcpu_id == 0 && is_hvm_domain(d) && !is_template_domain(d) )
         rtc_init_timers(d);
-#endif  /* __UXEN__ */
 
     /* Must be called after making new vcpu visible to for_each_vcpu(). */
     vcpu_check_shutdown(v);
 
-#ifndef __UXEN__
-    domain_update_node_affinity(d);
-#endif  /* __UXEN__ */
-
     return v;
 }
-
-#ifndef __UXEN__
-static unsigned int __read_mostly extra_dom0_irqs = 256;
-static unsigned int __read_mostly extra_domU_irqs = 32;
-static void __init parse_extra_guest_irqs(const char *s)
-{
-    if ( isdigit(*s) )
-        extra_domU_irqs = simple_strtoul(s, &s, 0);
-    if ( *s == ',' && isdigit(*++s) )
-        extra_dom0_irqs = simple_strtoul(s, &s, 0);
-}
-custom_param("extra_guest_irqs", parse_extra_guest_irqs);
-#endif  /* __UXEN__ */
 
 struct domain **domain_array = NULL;
 static int __init
@@ -319,17 +235,6 @@ struct domain *domain_create_internal(
 
     lock_profile_register_struct(LOCKPROF_TYPE_PERDOM, d, domid, "Domain");
 
-#ifndef __UXEN_NOT_YET__
-    if ( xsm_alloc_security_domain(d) != 0 )
-        goto fail;
-    init_status |= INIT_xsm;
-#endif  /* __UXEN_NOT_YET__ */
-
-#ifndef __UXEN_NOT_YET__
-    watchdog_domain_init(d);
-    init_status |= INIT_watchdog;
-#endif  /* __UXEN_NOT_YET__ */
-
     atomic_set(&d->refcnt, 1);
     spin_lock_init_prof(d, domain_lock);
     spin_lock_init_prof(d, page_alloc_lock);
@@ -339,10 +244,6 @@ struct domain *domain_create_internal(
 
     INIT_LIST_HEAD(&d->vcpu_idle_tasklet_list);
     spin_lock_init(&d->vcpu_idle_tasklet_lock);
-
-#ifndef __UXEN__
-    spin_lock_init(&d->node_affinity_lock);
-#endif  /* __UXEN__ */
 
     spin_lock_init(&d->shutdown_lock);
     d->shutdown_code = -1;
@@ -372,21 +273,10 @@ struct domain *domain_create_internal(
 
     if ( domid == 0 )
     {
-#ifndef __UXEN__
-        d->is_pinned = opt_dom0_vcpus_pin;
-        d->disable_migrate = 1;
-#endif  /* __UXEN__ */
     }
 
     rangeset_domain_initialise(d);
     init_status |= INIT_rangeset;
-
-#ifndef __UXEN__
-    d->iomem_caps = rangeset_new(d, "I/O Memory", RANGESETF_prettyprint_hex);
-    d->irq_caps   = rangeset_new(d, "Interrupts", 0);
-    if ( (d->iomem_caps == NULL) || (d->irq_caps == NULL) )
-        goto fail;
-#endif  /* __UXEN__ */
 
     if ( domcr_flags & DOMCRF_dummy )
         return d;
@@ -401,34 +291,13 @@ struct domain *domain_create_internal(
 
     if ( !is_idle_domain(d) )
     {
-#ifndef __UXEN_NOT_YET__
-        if ( xsm_domain_create(d, ssidref) != 0 )
-            goto fail;
-#endif  /* __UXEN_NOT_YET__ */
 
         d->is_paused_by_controller = 1;
         atomic_inc(&d->pause_count);
 
-#ifndef __UXEN__
-        if ( domid )
-            d->nr_pirqs = nr_irqs_gsi + extra_domU_irqs;
-        else
-            d->nr_pirqs = nr_irqs_gsi + extra_dom0_irqs;
-        if ( d->nr_pirqs > nr_irqs )
-            d->nr_pirqs = nr_irqs;
-
-        radix_tree_init(&d->pirq_tree);
-#endif  /* __UXEN__ */
-
         if ( evtchn_init(d) != 0 )
             goto fail;
         init_status |= INIT_evtchn;
-
-#ifndef __UXEN_NOT_YET__
-        if ( grant_table_create(d) != 0 )
-            goto fail;
-        init_status |= INIT_gnttab;
-#endif  /* __UXEN_NOT_YET__ */
 
 
         poolid = 0;
@@ -456,13 +325,7 @@ struct domain *domain_create_internal(
             if ( (*pd)->domain_id > d->domain_id )
                 break;
         d->next_in_list = *pd;
-#ifndef __UXEN__
-        d->next_in_hashbucket = domain_hash[DOMAIN_HASH(domid)];
         rcu_assign_pointer(*pd, d);
-        rcu_assign_pointer(domain_hash[DOMAIN_HASH(domid)], d);
-#else  /* __UXEN__ */
-        rcu_assign_pointer(*pd, d);
-#endif  /* __UXEN__ */
         spin_unlock(&domlist_update_lock);
     }
 
@@ -477,28 +340,13 @@ struct domain *domain_create_internal(
        attovm_destroy(d);
     if ( init_status & INIT_v4v )
         v4v_destroy(d);
-#ifndef __UXEN_NOT_YET__
-    if ( init_status & INIT_gnttab )
-        grant_table_destroy(d);
-#endif  /* __UXEN_NOT_YET__ */
     if ( init_status & INIT_evtchn )
     {
         evtchn_destroy(d);
         evtchn_destroy_final(d);
-#ifndef __UXEN__
-        radix_tree_destroy(&d->pirq_tree, free_pirq_struct);
-#endif  /* __UXEN__ */
     }
     if ( init_status & INIT_rangeset )
         rangeset_domain_destroy(d);
-#ifndef __UXEN_NOT_YET__
-    if ( init_status & INIT_watchdog )
-        watchdog_domain_destroy(d);
-#endif  /* __UXEN_NOT_YET__ */
-#ifndef __UXEN_NOT_YET__
-    if ( init_status & INIT_xsm )
-        xsm_free_security_domain(d);
-#endif  /* __UXEN_NOT_YET__ */
     if (domid < DOMID_FIRST_RESERVED)
         domain_array[domid] = NULL;
     free_cpumask_var(d->domain_dirty_cpumask);
@@ -602,53 +450,7 @@ domain_create(domid_t dom, unsigned int flags, uint32_t ssidref,
 
 static unsigned int default_vcpu0_location(cpumask_t *online)
 {
-#ifndef __UXEN__
-    struct domain *d;
-    struct vcpu   *v;
-    unsigned int   i, cpu, nr_cpus, *cnt;
-    cpumask_t      cpu_exclude_map;
-
-    /* Do an initial CPU placement. Pick the least-populated CPU. */
-    nr_cpus = cpumask_last(&cpu_online_map) + 1;
-    cnt = xzalloc_array(unsigned int, nr_cpus);
-    if ( cnt )
-    {
-        rcu_read_lock(&domlist_read_lock);
-        for_each_domain ( d )
-            for_each_vcpu ( d, v )
-                if ( !test_bit(_VPF_down, &v->pause_flags)
-                     && ((cpu = v->processor) < nr_cpus) )
-                    cnt[cpu]++;
-        rcu_read_unlock(&domlist_read_lock);
-    }
-
-    /*
-     * If we're on a HT system, we only auto-allocate to a non-primary HT. We 
-     * favour high numbered CPUs in the event of a tie.
-     */
-    cpumask_copy(&cpu_exclude_map, per_cpu(cpu_sibling_mask, 0));
-    cpu = cpumask_first(&cpu_exclude_map);
-    if ( cpumask_weight(&cpu_exclude_map) > 1 )
-        cpu = cpumask_next(cpu, &cpu_exclude_map);
-    for_each_cpu(i, online)
-    {
-        if ( cpumask_test_cpu(i, &cpu_exclude_map) )
-            continue;
-        if ( (i == cpumask_first(per_cpu(cpu_sibling_mask, i))) &&
-             (cpumask_weight(per_cpu(cpu_sibling_mask, i)) > 1) )
-            continue;
-        cpumask_or(&cpu_exclude_map, &cpu_exclude_map,
-                   per_cpu(cpu_sibling_mask, i));
-        if ( !cnt || cnt[i] <= cnt[cpu] )
-            cpu = i;
-    }
-
-    xfree(cnt);
-
-    return cpu;
-#else  /* __UXEN__ */
     return smp_processor_id();
-#endif  /* __UXEN__ */
 }
 
 long
@@ -708,29 +510,6 @@ domain_set_max_vcpus(struct domain *d, unsigned int max)
   out:
     return ret;
 }
-
-#ifndef __UXEN__
-void domain_update_node_affinity(struct domain *d)
-{
-    cpumask_t cpumask;
-    nodemask_t nodemask = NODE_MASK_NONE;
-    struct vcpu *v;
-    unsigned int node;
-
-    cpumask_clear(&cpumask);
-    spin_lock(&d->node_affinity_lock);
-
-    for_each_vcpu ( d, v )
-        cpumask_or(&cpumask, &cpumask, v->cpu_affinity);
-
-    for_each_online_node ( node )
-        if ( cpumask_intersects(&node_to_cpumask(node), &cpumask) )
-            node_set(node, nodemask);
-
-    d->node_affinity = nodemask;
-    spin_unlock(&d->node_affinity_lock);
-}
-#endif  /* __UXEN__ */
 
 
 struct domain *get_domain_by_id(domid_t dom)
@@ -875,11 +654,6 @@ int domain_kill(struct domain *d)
           attovm_destroy(d);
         v4v_destroy(d);
         evtchn_destroy(d);
-#ifndef __UXEN__
-        gnttab_release_mappings(d);
-        tmem_destroy(d->tmem);
-        d->tmem = NULL;
-#endif  /* __UXEN__ */
         /* fallthrough */
     case DOMDYING_dying:
         rc = domain_relinquish_resources(d);
@@ -925,11 +699,7 @@ int domain_kill(struct domain *d)
             }
         }
         d->is_dying = DOMDYING_dead;
-#ifndef __UXEN__
-        send_guest_global_virq(dom0, VIRQ_DOM_EXC);
-#else   /* __UXEN__ */
         hostsched_notify_exception(d);
-#endif  /* __UXEN__ */
         printk(XENLOG_WARNING "%s: vm%u sched_destroy_domain()\n",
                __FUNCTION__, d->domain_id);
         sched_destroy_domain(d);
@@ -979,17 +749,8 @@ void __domain_crash(struct domain *d)
 
 void __domain_crash_synchronous(void)
 {
-#ifndef __UXEN__
-    __domain_crash(current->domain);
-
-    vcpu_end_shutdown_deferral(current);
-
-    for ( ; ; )
-        do_softirq();
-#else   /* __UXEN__ */
     BUG();
     for ( ; ; ) ;
-#endif  /* __UXEN__ */
 }
 
 
@@ -1004,11 +765,7 @@ void domain_shutdown(struct domain *d, u8 reason)
     reason = d->shutdown_code;
 
     if ( d->domain_id == 0 )
-#ifndef __UXEN__
-        dom0_shutdown(reason);
-#else   /* __UXEN__ */
         BUG();
-#endif  /* __UXEN__ */
 
     if ( d->is_shutting_down )
     {
@@ -1121,25 +878,11 @@ static void complete_domain_destroy(struct rcu_head *head)
     {
         if ( (v = d->vcpu[i]) == NULL )
             continue;
-#ifndef __UXEN__
-        tasklet_kill(&v->continue_hypercall_tasklet);
-#endif  /* __UXEN__ */
         vcpu_destroy(v);
         sched_destroy_vcpu(v);
-#ifndef __UXEN__
-        destroy_waitqueue_vcpu(v);
-#endif  /* __UXEN__ */
     }
 
-#ifndef __UXEN_NOT_YET__
-    grant_table_destroy(d);
-#endif  /* __UXEN_NOT_YET__ */
-
     arch_domain_destroy(d);
-
-#ifndef __UXEN_NOT_YET__
-    watchdog_domain_destroy(d);
-#endif  /* __UXEN_NOT_YET__ */
 
     rangeset_domain_destroy(d);
 
@@ -1148,11 +891,6 @@ static void complete_domain_destroy(struct rcu_head *head)
     printk("%s:%d: sched_destroy_domain() for vm%u\n",
            __FUNCTION__, __LINE__, d->domain_id);
     sched_destroy_domain(d);
-
-#ifndef __UXEN__
-    /* Free page used by xen oprofile buffer. */
-    free_xenoprof_pages(d);
-#endif  /* __UXEN__ */
 
     for ( i = d->max_vcpus - 1; i >= 0; i-- )
         if ( (v = d->vcpu[i]) != NULL )
@@ -1168,19 +906,9 @@ static void complete_domain_destroy(struct rcu_head *head)
 
     evtchn_destroy_final(d);
 
-#ifndef __UXEN__
-    radix_tree_destroy(&d->pirq_tree, free_pirq_struct);
-#endif  /* __UXEN__ */
-
-#ifndef __UXEN_NOT_YET__
-    xsm_free_security_domain(d);
-#endif  /* __UXEN_NOT_YET__ */
     free_cpumask_var(d->domain_dirty_cpumask);
     free_domain_struct(d);
 
-#ifndef __UXEN__
-    send_guest_global_virq(dom0, VIRQ_DOM_EXC);
-#endif  /* __UXEN__ */
 }
 
 /* Release resources belonging to task @p. */
@@ -1207,12 +935,6 @@ void domain_destroy(struct domain *d)
     while ( *pd != d ) 
         pd = &(*pd)->next_in_list;
     rcu_assign_pointer(*pd, d->next_in_list);
-#ifndef __UXEN__
-    pd = &domain_hash[DOMAIN_HASH(d->domain_id)];
-    while ( *pd != d ) 
-        pd = &(*pd)->next_in_hashbucket;
-    rcu_assign_pointer(*pd, d->next_in_hashbucket);
-#endif  /* __UXEN__ */
     spin_unlock(&domlist_update_lock);
 
     if (d->is_attovm_ax)
@@ -1398,267 +1120,6 @@ void vcpu_reset(struct vcpu *v)
     vcpu_unpause(v);
 }
 
-
-#ifndef __UXEN__
-long do_vcpu_op(int cmd, int vcpuid, XEN_GUEST_HANDLE(void) arg)
-{
-    struct domain *d = current->domain;
-    struct vcpu *v;
-    struct vcpu_guest_context *ctxt;
-    long rc = 0;
-
-    if ( (vcpuid < 0) || (vcpuid >= MAX_VIRT_CPUS) )
-        return -EINVAL;
-
-    if (vcpuid >= d->max_vcpus)
-        return -ENOENT;
-    vcpuid = array_index_nospec(vcpuid, d->max_vcpus);
-    if ((v = d->vcpu[vcpuid]) == NULL)
-        return -ENOENT;
-
-    switch ( cmd )
-    {
-    case VCPUOP_initialise:
-        if ( v->vcpu_info == &dummy_vcpu_info )
-            return -EINVAL;
-
-        if ( (ctxt = alloc_vcpu_guest_context()) == NULL )
-            return -ENOMEM;
-
-        if ( copy_from_guest(ctxt, arg, 1) )
-        {
-            free_vcpu_guest_context(ctxt);
-            return -EFAULT;
-        }
-
-        domain_lock(d);
-        rc = -EEXIST;
-        if ( !v->is_initialised )
-            rc = boot_vcpu(d, vcpuid, ctxt);
-        domain_unlock(d);
-
-        free_vcpu_guest_context(ctxt);
-        break;
-
-    case VCPUOP_up:
-        if ( !v->is_initialised )
-            return -EINVAL;
-
-        if ( test_and_clear_bit(_VPF_down, &v->pause_flags) )
-            vcpu_wake(v);
-
-        break;
-
-    case VCPUOP_down:
-        if ( !test_and_set_bit(_VPF_down, &v->pause_flags) )
-            vcpu_sleep_nosync(v);
-        break;
-
-    case VCPUOP_is_up:
-        rc = !test_bit(_VPF_down, &v->pause_flags);
-        break;
-
-    case VCPUOP_get_runstate_info:
-    {
-        struct vcpu_runstate_info runstate;
-        vcpu_runstate_get(v, &runstate);
-        if ( copy_to_guest(arg, &runstate, 1) )
-            rc = -EFAULT;
-        break;
-    }
-
-    case VCPUOP_set_periodic_timer:
-    {
-        struct vcpu_set_periodic_timer set;
-
-        if ( copy_from_guest(&set, arg, 1) )
-            return -EFAULT;
-
-        if ( set.period_ns < MILLISECS(1) )
-            return -EINVAL;
-
-        v->periodic_period = set.period_ns;
-        vcpu_force_reschedule(v);
-
-        break;
-    }
-
-    case VCPUOP_stop_periodic_timer:
-        v->periodic_period = 0;
-        vcpu_force_reschedule(v);
-        break;
-
-    case VCPUOP_set_singleshot_timer:
-    {
-        struct vcpu_set_singleshot_timer set;
-
-        if ( v != current )
-            return -EINVAL;
-
-        if ( copy_from_guest(&set, arg, 1) )
-            return -EFAULT;
-
-        if ( (set.flags & VCPU_SSHOTTMR_future) &&
-             (set.timeout_abs_ns < NOW()) )
-            return -ETIME;
-
-        migrate_timer(&v->singleshot_timer, smp_processor_id());
-        set_timer(&v->singleshot_timer, set.timeout_abs_ns);
-
-        break;
-    }
-
-    case VCPUOP_stop_singleshot_timer:
-        if ( v != current )
-            return -EINVAL;
-
-        stop_timer(&v->singleshot_timer);
-
-        break;
-
-#ifdef VCPU_TRAP_NMI
-    case VCPUOP_send_nmi:
-        if ( !guest_handle_is_null(arg) )
-            return -EINVAL;
-
-        if ( !test_and_set_bool(v->nmi_pending) )
-            vcpu_kick(v);
-
-        break;
-#endif
-
-    default:
-        rc = arch_do_vcpu_op(cmd, v, arg);
-        break;
-    }
-
-    return rc;
-}
-
-long vm_assist(struct domain *p, unsigned int cmd, unsigned int type)
-{
-    if ( type > MAX_VMASST_TYPE )
-        return -EINVAL;
-
-    switch ( cmd )
-    {
-    case VMASST_CMD_enable:
-        set_bit(type, &p->vm_assist);
-        return 0;
-    case VMASST_CMD_disable:
-        clear_bit(type, &p->vm_assist);
-        return 0;
-    }
-
-    return -ENOSYS;
-}
-
-struct pirq *pirq_get_info(struct domain *d, int pirq)
-{
-    struct pirq *info = pirq_info(d, pirq);
-
-    if ( !info && (info = alloc_pirq_struct(d)) != NULL )
-    {
-        info->pirq = pirq;
-        if ( radix_tree_insert(&d->pirq_tree, pirq, info) )
-        {
-            free_pirq_struct(info);
-            info = NULL;
-        }
-    }
-
-    return info;
-}
-
-static void _free_pirq_struct(struct rcu_head *head)
-{
-    xfree(container_of(head, struct pirq, rcu_head));
-}
-
-void free_pirq_struct(void *ptr)
-{
-    struct pirq *pirq = ptr;
-
-    call_rcu(&pirq->rcu_head, _free_pirq_struct);
-}
-
-struct migrate_info {
-    long (*func)(void *data);
-    void *data;
-    struct vcpu *vcpu;
-    unsigned int cpu;
-    unsigned int nest;
-};
-
-static DEFINE_PER_CPU(struct migrate_info *, continue_info);
-
-static void continue_hypercall_tasklet_handler(unsigned long _info)
-{
-    struct migrate_info *info = (struct migrate_info *)_info;
-    struct vcpu *v = info->vcpu;
-
-    /* Wait for vcpu to sleep so that we can access its register state. */
-    vcpu_sleep_sync(v);
-
-    this_cpu(continue_info) = info;
-    return_reg(v) = (info->cpu == smp_processor_id())
-        ? info->func(info->data) : -EINVAL;
-    this_cpu(continue_info) = NULL;
-
-    if ( info->nest-- == 0 )
-    {
-        xfree(info);
-        vcpu_unpause(v);
-        put_domain(v->domain);
-    }
-}
-
-int continue_hypercall_on_cpu(
-    unsigned int cpu, long (*func)(void *data), void *data)
-{
-    struct migrate_info *info;
-
-    if ( (cpu >= nr_cpu_ids) || !cpu_online(cpu) )
-        return -EINVAL;
-
-    info = this_cpu(continue_info);
-    if ( info == NULL )
-    {
-        struct vcpu *curr = current;
-
-        info = xmalloc(struct migrate_info);
-        if ( info == NULL )
-            return -ENOMEM;
-
-        info->vcpu = curr;
-        info->nest = 0;
-
-        tasklet_kill(
-            &curr->continue_hypercall_tasklet);
-        tasklet_init(
-            &curr->continue_hypercall_tasklet,
-            continue_hypercall_tasklet_handler,
-            (unsigned long)info);
-
-        get_knownalive_domain(curr->domain);
-        vcpu_pause_nosync(curr);
-    }
-    else
-    {
-        BUG_ON(info->nest != 0);
-        info->nest++;
-    }
-
-    info->func = func;
-    info->data = data;
-    info->cpu  = cpu;
-
-    tasklet_schedule_on_cpu(&info->vcpu->continue_hypercall_tasklet, cpu);
-
-    /* Dummy return value will be overwritten by tasklet. */
-    return 0;
-}
-#endif  /* __UXEN__ */
 
 /*
  * Local variables:

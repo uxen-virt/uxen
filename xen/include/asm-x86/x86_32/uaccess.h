@@ -1,24 +1,6 @@
 #ifndef __i386_UACCESS_H
 #define __i386_UACCESS_H
 
-#ifndef __UXEN__
-/*
- * Test whether a block of memory is a valid user space address.
- * Returns 0 if the range is valid, nonzero otherwise.
- *
- * This is equivalent to the following test:
- * (u33)addr + (u33)size >= (u33)HYPERVISOR_VIRT_START
- */
-#define __range_not_ok(addr,size) ({ \
-	unsigned long flag,sum; \
-	asm("addl %3,%1 ; sbbl %0,%0; cmpl %1,%4; sbbl $0,%0" \
-		:"=&r" (flag), "=r" (sum) \
-		:"1" (addr),"g" ((int)(size)),"r" (HYPERVISOR_VIRT_START)); \
-	flag; })
-
-#define access_ok(addr,size) (likely(__range_not_ok(addr,size) == 0))
-#endif  /* __UXEN__ */
-
 #define access_ok(addr, size)                                           \
     (current->always_access_ok ||                                       \
      UI_HOST_CALL(ui_user_access_ok, current->user_access_opaque,       \

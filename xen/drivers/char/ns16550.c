@@ -154,26 +154,6 @@ static void ns_write_reg(struct ns16550 *uart, int reg, char c)
     writeb(c, uart->remapped_io_base + reg);
 }
 
-#ifndef __UXEN__
-static void ns16550_interrupt(
-    int irq, void *dev_id, struct cpu_user_regs *regs)
-{
-    struct serial_port *port = dev_id;
-    struct ns16550 *uart = port->uart;
-
-    uart->intr_works = 1;
-
-    while ( !(ns_read_reg(uart, IIR) & IIR_NOINT) )
-    {
-        char lsr = ns_read_reg(uart, LSR);
-        if ( lsr & LSR_THRE )
-            serial_tx_interrupt(port, regs);
-        if ( lsr & LSR_DR )
-            serial_rx_interrupt(port, regs);
-    }
-}
-#endif  /* __UXEN__ */
-
 /* Safe: ns16550_poll() runs as softirq so not reentrant on a given CPU. */
 static DEFINE_PER_CPU(struct serial_port *, poll_port);
 
@@ -291,12 +271,6 @@ static void __init ns16550_init_preirq(struct serial_port *port)
 {
     struct ns16550 *uart = port->uart;
 
-#ifndef __UXEN__
-    /* I/O ports are distinguished by their size (16 bits). */
-    if ( uart->io_base >= 0x10000 )
-        uart->remapped_io_base = (char *)ioremap(uart->io_base, 8);
-#endif  /* __UXEN__ */
-
     ns16550_setup_preirq(uart);
 
     /* Check this really is a 16550+. Otherwise we have no FIFOs. */
@@ -323,9 +297,6 @@ static void ns16550_setup_postirq(struct ns16550 *uart)
 static void __init ns16550_init_postirq(struct serial_port *port)
 {
     struct ns16550 *uart = port->uart;
-#ifndef __UXEN__
-    int rc;
-#endif  /* __UXEN__ */
     int bits;
 
     if ( uart->irq < 0 )
@@ -339,17 +310,6 @@ static void __init ns16550_init_postirq(struct serial_port *port)
     bits = uart->data_bits + uart->stop_bits + !!uart->parity;
     uart->timeout_ms = max_t(
         unsigned int, 1, (bits * port->tx_fifo_size * 1000) / uart->baud);
-
-#ifndef __UXEN__
-    if ( uart->irq > 0 )
-    {
-        uart->irqaction.handler = ns16550_interrupt;
-        uart->irqaction.name    = "ns16550";
-        uart->irqaction.dev_id  = port;
-        if ( (rc = setup_irq(uart->irq, &uart->irqaction)) != 0 )
-            printk("ERROR: Failed to allocate ns16550 IRQ %d\n", uart->irq);
-    }
-#endif  /* __UXEN__ */
 
     ns16550_setup_postirq(uart);
 }
@@ -393,16 +353,7 @@ static void ns16550_resume(struct serial_port *port)
 #endif  /* __UXEN_serial_pci__ */
 }
 
-#if defined(CONFIG_X86) && !defined(__UXEN__)
-static void __init ns16550_endboot(struct serial_port *port)
-{
-    struct ns16550 *uart = port->uart;
-    if ( ioports_deny_access(dom0, uart->io_base, uart->io_base + 7) != 0 )
-        BUG();
-}
-#else
 #define ns16550_endboot NULL
-#endif
 
 static int ns16550_irq(struct serial_port *port)
 {
@@ -463,13 +414,8 @@ static int __init check_existence(struct ns16550 *uart)
      * We can't poke MMIO UARTs until they get I/O remapped later. Assume that
      * if we're getting MMIO UARTs, the arch code knows what it's doing.
      */
-#ifndef __UXEN__
-    if ( uart->io_base >= 0x10000 )
-        return 1;
-#else  /* __UXEN__ */
     if ( uart->io_base >= 0x10000 )
         return 0;
-#endif  /* __UXEN__ */
 
 #ifdef __UXEN_serial_pci__
     pci_serial_early_init(uart);
@@ -504,64 +450,6 @@ static int __init check_existence(struct ns16550 *uart)
     status = ns_read_reg(uart, MSR) & 0xF0;
     return (status == 0x90);
 }
-
-#ifndef __UXEN__
-static int
-pci_uart_config (struct ns16550 *uart, int skip_amt, int bar_idx)
-{
-    uint16_t class;
-    uint32_t bar, len;
-    int b, d, f;
-
-    /* NB. Start at bus 1 to avoid AMT: a plug-in card cannot be on bus 1. */
-    for ( b = skip_amt ? 1 : 0; b < 0x100; b++ )
-    {
-        for ( d = 0; d < 0x20; d++ )
-        {
-            for ( f = 0; f < 0x8; f++ )
-            {
-                class = pci_conf_read16(0, b, d, f, PCI_CLASS_DEVICE);
-                if ( class != 0x700 )
-                    continue;
-
-                bar = pci_conf_read32(0, b, d, f,
-                                      PCI_BASE_ADDRESS_0 + bar_idx*4);
-
-                /* Not IO */
-                if ( !(bar & 1) )
-                    continue;
-
-                pci_conf_write32(0, b, d, f, PCI_BASE_ADDRESS_0, ~0u);
-                len = pci_conf_read32(0, b, d, f, PCI_BASE_ADDRESS_0);
-                pci_conf_write32(0, b, d, f, PCI_BASE_ADDRESS_0 + bar_idx*4, bar);
-
-                /* Not 8 bytes */
-                if ( (len & 0xffff) != 0xfff9 )
-                    continue;
-
-                uart->pb_bdf[0] = b;
-                uart->pb_bdf[1] = d;
-                uart->pb_bdf[2] = f;
-                uart->bar = bar;
-                uart->bar_idx = bar_idx;
-                uart->io_base = bar & 0xfffe;
-                uart->irq = 0;
-
-                return 0;
-            }
-        }
-    }
-
-    if ( !skip_amt )
-        return -1;
-
-    uart->io_base = 0x3f8;
-    uart->irq = 0;
-    uart->clock_hz  = UART_CLOCK_HZ;
-
-    return 0;
-}
-#endif  /* __UXEN__ */
 
 #define PARSE_ERR(_f, _a...)                 \
     do {                                     \
@@ -611,21 +499,6 @@ static void __init ns16550_parse_port_config(
     if ( *conf == ',' )
     {
         conf++;
-#ifndef __UXEN__
-        if ( strncmp(conf, "pci", 5) == 0 )
-        {
-            if ( pci_uart_config(uart, 1/* skip AMT */, uart - ns16550_com) )
-                return;
-            conf += 3;
-        }
-        else if ( strncmp(conf, "amt", 3) == 0 )
-        {
-            if ( pci_uart_config(uart, 0, uart - ns16550_com) )
-                return;
-            conf += 3;
-        }
-        else
-#endif  /* __UXEN__ */
         {
             uart->io_base = simple_strtoul(conf, &conf, 0);
         }

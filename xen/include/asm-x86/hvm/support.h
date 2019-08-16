@@ -150,9 +150,6 @@ enum hvm_copy_result hvm_fetch_from_guest_virt_nofault(
 
 #define HVM_HCALL_completed  0 /* hypercall completed - no further action */
 #define HVM_HCALL_preempted  1 /* hypercall preempted - re-execute VMCALL */
-#ifndef __UXEN__
-#define HVM_HCALL_invalidate 2 /* invalidate ioemu-dm memory cache        */
-#endif  /* __UXEN__ */
 int hvm_do_hypercall(struct cpu_user_regs *pregs);
 
 void hvm_hlt(unsigned long rflags);

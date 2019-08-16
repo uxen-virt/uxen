@@ -230,13 +230,8 @@ void paging_mark_dirty(struct domain *d, unsigned long pfn)
     i3 = L3_LOGDIRTY_IDX(pfn);
     i4 = L4_LOGDIRTY_IDX(pfn);
 
-#ifndef __UXEN__
-    /* Recursive: this is called from inside the shadow code */
-    paging_lock_recursive(d);
-#else   /* __UXEN__ */
     ASSERT(!paging_locked_by_me(d));
     paging_lock(d);
-#endif  /* __UXEN__ */
 
     if ( unlikely(!mfn_valid(d->arch.paging.log_dirty.top)) ) 
     {
@@ -373,165 +368,6 @@ paging_mark_dirty_check_vram_l2(struct vcpu *v, unsigned long gfn)
     return 1;
 }
 
-
-#ifndef __UXEN__
-/* Is this guest page dirty? */
-int paging_mfn_is_dirty(struct domain *d, mfn_t gmfn)
-{
-    unsigned long pfn;
-    mfn_t mfn, *l4, *l3, *l2;
-    unsigned long *l1;
-    int rv;
-
-DEBUG();
-    ASSERT(paging_locked_by_me(d));
-    ASSERT(paging_mode_log_dirty(d));
-
-    /* We /really/ mean PFN here, even for non-translated guests. */
-    pfn = get_gpfn_from_mfn(mfn_x(gmfn));
-    /* Shared pages are always read-only; invalid pages can't be dirty. */
-    if ( unlikely(SHARED_M2P(pfn) || !VALID_M2P(pfn)) )
-        return 0;
-
-    mfn = d->arch.paging.log_dirty.top;
-    if ( !mfn_valid(mfn) )
-        return 0;
-
-    l4 = map_domain_page(mfn_x(mfn));
-    mfn = l4[L4_LOGDIRTY_IDX(pfn)];
-    unmap_domain_page(l4);
-    if ( !mfn_valid(mfn) )
-        return 0;
-
-    l3 = map_domain_page(mfn_x(mfn));
-    mfn = l3[L3_LOGDIRTY_IDX(pfn)];
-    unmap_domain_page(l3);
-    if ( !mfn_valid(mfn) )
-        return 0;
-
-    l2 = map_domain_page(mfn_x(mfn));
-    mfn = l2[L2_LOGDIRTY_IDX(pfn)];
-    unmap_domain_page(l2);
-    if ( !mfn_valid(mfn) )
-        return 0;
-
-    l1 = map_domain_page(mfn_x(mfn));
-    rv = test_bit(L1_LOGDIRTY_IDX(pfn), l1);
-    unmap_domain_page(l1);
-    return rv;
-}
-
-
-/* Read a domain's log-dirty bitmap and stats.  If the operation is a CLEAN,
- * clear the bitmap and stats as well. */
-int paging_log_dirty_op(struct domain *d, struct xen_domctl_shadow_op *sc)
-{
-    int rv = 0, clean = 0, peek = 1;
-    unsigned long pages = 0;
-    mfn_t *l4, *l3, *l2;
-    unsigned long *l1;
-    int i4, i3, i2;
-
-DEBUG();
-    domain_pause(d);
-    paging_lock(d);
-
-    clean = (sc->op == XEN_DOMCTL_SHADOW_OP_CLEAN);
-
-    PAGING_DEBUG(LOGDIRTY, "log-dirty %s: vm%u faults=%u dirty=%u\n",
-                 (clean) ? "clean" : "peek",
-                 d->domain_id,
-                 d->arch.paging.log_dirty.fault_count,
-                 d->arch.paging.log_dirty.dirty_count);
-
-    sc->stats.fault_count = d->arch.paging.log_dirty.fault_count;
-    sc->stats.dirty_count = d->arch.paging.log_dirty.dirty_count;
-
-    if ( clean )
-    {
-        d->arch.paging.log_dirty.fault_count = 0;
-        d->arch.paging.log_dirty.dirty_count = 0;
-    }
-
-    if ( guest_handle_is_null(sc->dirty_bitmap) )
-        /* caller may have wanted just to clean the state or access stats. */
-        peek = 0;
-
-    if ( unlikely(d->arch.paging.log_dirty.failed_allocs) ) {
-        printk("%s: %d failed page allocs while logging dirty pages\n",
-               __FUNCTION__, d->arch.paging.log_dirty.failed_allocs);
-        rv = -ENOMEM;
-        goto out;
-    }
-
-    pages = 0;
-    l4 = paging_map_log_dirty_bitmap(d);
-
-    for ( i4 = 0;
-          (pages < sc->pages) && (i4 < LOGDIRTY_NODE_ENTRIES);
-          i4++ )
-    {
-        l3 = (l4 && mfn_valid(l4[i4])) ? map_domain_page(mfn_x(l4[i4])) : NULL;
-        for ( i3 = 0;
-              (pages < sc->pages) && (i3 < LOGDIRTY_NODE_ENTRIES);
-              i3++ )
-        {
-            l2 = ((l3 && mfn_valid(l3[i3])) ?
-                  map_domain_page(mfn_x(l3[i3])) : NULL);
-            for ( i2 = 0;
-                  (pages < sc->pages) && (i2 < LOGDIRTY_NODE_ENTRIES);
-                  i2++ )
-            {
-                static unsigned long zeroes[PAGE_SIZE/BYTES_PER_LONG];
-                unsigned int bytes = PAGE_SIZE;
-                l1 = ((l2 && mfn_valid(l2[i2])) ?
-                      map_domain_page(mfn_x(l2[i2])) : zeroes);
-                if ( unlikely(((sc->pages - pages + 7) >> 3) < bytes) )
-                    bytes = (unsigned int)((sc->pages - pages + 7) >> 3);
-                if ( likely(peek) )
-                {
-                    if ( copy_to_guest_offset(sc->dirty_bitmap, pages >> 3,
-                                              (uint8_t *)l1, bytes) != 0 )
-                    {
-                        rv = -EFAULT;
-                        goto out;
-                    }
-                }
-                if ( clean && l1 != zeroes )
-                    clear_page(l1);
-                pages += bytes << 3;
-                if ( l1 != zeroes )
-                    unmap_domain_page(l1);
-            }
-            if ( l2 )
-                unmap_domain_page(l2);
-        }
-        if ( l3 )
-            unmap_domain_page(l3);
-    }
-    if ( l4 )
-        unmap_domain_page(l4);
-
-    if ( pages < sc->pages )
-        sc->pages = pages;
-
-    paging_unlock(d);
-
-    if ( clean )
-    {
-        /* We need to further call clean_dirty_bitmap() functions of specific
-         * paging modes (shadow or hap).  Safe because the domain is paused. */
-        d->arch.paging.log_dirty.clean_dirty_bitmap(d);
-    }
-    domain_unpause(d);
-    return rv;
-
- out:
-    paging_unlock(d);
-    domain_unpause(d);
-    return rv;
-}
-#endif  /* __UXEN__ */
 
 int paging_log_dirty_range(struct domain *d,
                             unsigned long begin_pfn,
@@ -736,13 +572,6 @@ int paging_domain_init(struct domain *d, unsigned int domcr_flags)
 
     mm_lock_init(&d->arch.paging.lock);
 
-#ifndef __UXEN__
-    /* The order of the *_init calls below is important, as the later
-     * ones may rewrite some common fields.  Shadow pagetables are the
-     * default... */
-    shadow_domain_init(d, domcr_flags);
-#endif  /* __UXEN__ */
-
     /* ... but we will use hardware assistance if it's available. */
     if ( hap_enabled(d) )
         hap_domain_init(d);
@@ -755,19 +584,12 @@ void paging_vcpu_init(struct vcpu *v)
 {
     if ( hap_enabled(v->domain) )
         hap_vcpu_init(v);
-#ifndef __UXEN__
-    else
-        shadow_vcpu_init(v);
-#endif  /* __UXEN__ */
 }
 
 
 int paging_domctl(struct domain *d, xen_domctl_shadow_op_t *sc,
                   XEN_GUEST_HANDLE(void) u_domctl)
 {
-#ifndef __UXEN__
-    int rc;
-#endif  /* __UXEN__ */
 
     if ( unlikely(d == current->domain) )
     {
@@ -789,53 +611,7 @@ int paging_domctl(struct domain *d, xen_domctl_shadow_op_t *sc,
         return -EINVAL;
     }
 
-#ifndef __UXEN__
-    rc = xsm_shadow_control(d, sc->op);
-    if ( rc )
-        return rc;
-#endif  /* __UXEN__ */
-
-#ifndef __UXEN__
-    /* Code to handle log-dirty. Note that some log dirty operations
-     * piggy-back on shadow operations. For example, when
-     * XEN_DOMCTL_SHADOW_OP_OFF is called, it first checks whether log dirty
-     * mode is enabled. If does, we disables log dirty and continues with
-     * shadow code. For this reason, we need to further dispatch domctl
-     * to next-level paging code (shadow or hap).
-     */
-    switch ( sc->op )
-    {
-
-    case XEN_DOMCTL_SHADOW_OP_ENABLE:
-        if ( !(sc->mode & XEN_DOMCTL_SHADOW_ENABLE_LOG_DIRTY) )
-            break;
-        /* Else fall through... */
-    case XEN_DOMCTL_SHADOW_OP_ENABLE_LOGDIRTY:
-        if ( hap_enabled(d) )
-            hap_logdirty_init(d);
-        return paging_log_dirty_enable(d);
-
-    case XEN_DOMCTL_SHADOW_OP_OFF:
-        if ( paging_mode_log_dirty(d) )
-            if ( (rc = paging_log_dirty_disable(d)) != 0 )
-                return rc;
-        break;
-
-    case XEN_DOMCTL_SHADOW_OP_CLEAN:
-    case XEN_DOMCTL_SHADOW_OP_PEEK:
-        return paging_log_dirty_op(d, sc);
-    }
-#endif  /* __UXEN__ */
-
-#ifndef __UXEN__
-    /* Here, dispatch domctl to the appropriate paging code */
-    if ( hap_enabled(d) )
-        return hap_domctl(d, sc, u_domctl);
-    else
-        return shadow_domctl(d, sc, u_domctl);
-#else   /* __UXEN__ */
     return 0;
-#endif  /* __UXEN__ */
 }
 
 /* Call when destroying a domain */
@@ -849,18 +625,11 @@ void paging_teardown(struct domain *d)
 
     if ( hap_enabled(d) )
         hap_teardown(d);
-#ifndef __UXEN__
-    else
-        shadow_teardown(d);
-#endif  /* __UXEN__ */
 
     /* clean up log dirty resources. */
     paging_log_dirty_teardown(d);
 
     /* Move populate-on-demand cache back to domain_list for destruction */
-#ifndef __UXEN__
-    p2m_pod_empty_cache(d);
-#endif  /* __UXEN__ */
 
     p2m_teardown_compressed(p2m);
 
@@ -877,10 +646,6 @@ void paging_final_teardown(struct domain *d)
 
     if ( hap_enabled(d) )
         hap_final_teardown(d);
-#ifndef __UXEN__
-    else
-        shadow_final_teardown(d);
-#endif  /* __UXEN__ */
 
     p2m_final_teardown(d);
 }
@@ -891,28 +656,8 @@ int paging_enable(struct domain *d, u32 mode)
 {
     if ( hap_enabled(d) )
         return hap_enable(d, mode | PG_HAP_enable);
-#ifndef __UXEN__
-    else
-        return shadow_enable(d, mode | PG_SH_enable);
-#else   /* __UXEN__ */
     return 0;
-#endif  /* __UXEN__ */
 }
-
-#ifndef __UXEN__
-/* Called from the guest to indicate that a process is being torn down
- * and therefore its pagetables will soon be discarded */
-void pagetable_dying(struct domain *d, paddr_t gpa)
-{
-    struct vcpu *v;
-
-DEBUG();
-    ASSERT(paging_mode_shadow(d));
-
-    v = d->vcpu[0];
-    v->arch.paging.mode->shadow.pagetable_dying(v, gpa);
-}
-#endif  /* __UXEN__ */
 
 /* Print paging-assistance info to the console */
 void paging_dump_domain_info(struct domain *d)
@@ -941,18 +686,6 @@ void paging_dump_vcpu_info(struct vcpu *v)
     if ( paging_mode_enabled(v->domain) )
     {
         printk("    paging assistance: ");
-#ifndef __UXEN__
-        if ( paging_mode_shadow(v->domain) )
-        {
-            if ( paging_get_hostmode(v) )
-                printk("shadowed %u-on-%u\n",
-                       paging_get_hostmode(v)->guest_levels,
-                       paging_get_hostmode(v)->shadow.shadow_levels);
-            else
-                printk("not shadowed\n");
-        }
-        else
-#endif  /* __UXEN__ */
         if ( paging_mode_hap(v->domain) && paging_get_hostmode(v) )
             printk("hap, %u levels\n",
                    paging_get_hostmode(v)->guest_levels);
@@ -960,43 +693,6 @@ void paging_dump_vcpu_info(struct vcpu *v)
             printk("none\n");
     }
 }
-
-#ifndef __UXEN__
-const struct paging_mode *paging_get_mode(struct vcpu *v)
-{
-    if (!nestedhvm_is_n2(v))
-        return paging_get_hostmode(v);
-
-    return paging_get_nestedmode(v);
-}
-
-void paging_update_nestedmode(struct vcpu *v)
-{
-    ASSERT(nestedhvm_enabled(v->domain));
-    if (nestedhvm_paging_mode_hap(v))
-        /* nested-on-nested */
-        v->arch.paging.nestedmode = hap_paging_get_mode(v);
-    else
-        /* TODO: shadow-on-shadow */
-        v->arch.paging.nestedmode = NULL;
-}
-
-void paging_write_p2m_entry(struct p2m_domain *p2m, unsigned long gfn,
-                            l1_pgentry_t *p,
-                            l1_pgentry_t new, unsigned int level)
-{
-    struct domain *d = p2m->domain;
-    struct vcpu *v = current;
-    if ( v->domain != d )
-        v = d->vcpu ? d->vcpu[0] : NULL;
-    if ( likely(v && paging_mode_enabled(d) && paging_get_hostmode(v) != NULL) )
-    {
-        return paging_get_hostmode(v)->write_p2m_entry(v, gfn, p, new, level);
-    }
-    else
-        safe_write_pte(p, new);
-}
-#endif  /* __UXEN__ */
 
 /*
  * Local variables:

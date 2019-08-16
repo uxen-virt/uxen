@@ -210,13 +210,6 @@ mapcache_unmap(uint64_t phys_addr, uint64_t len, uint8_t lock)
     /* no-op on WHPX */
 }
 
-#ifndef __UXEN_TOOLS__
-void
-mapcache_invalidate(void)
-{
-}
-#endif  /* __UXEN_TOOLS__ */
-
 #ifdef MONITOR
 void
 ic_memcache(Monitor *mon)

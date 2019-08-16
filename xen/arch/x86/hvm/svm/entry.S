@@ -117,9 +117,6 @@ ABI_ENTRY(svm_asm_do_vmentry, SIZEOF_REG)
 #endif /* __MS_ABI__ */
 
         call_with_abi(svm_intr_assist,0)
-#ifndef __UXEN_NOT_YET__
-        call_with_abi(nsvm_vcpu_switch, SIZEOF_REG)
-#endif  /* __UXEN_NOT_YET__ */
 
         get_current(r(bx))
         CLGI
@@ -132,17 +129,6 @@ ABI_ENTRY(svm_asm_do_vmentry, SIZEOF_REG)
 	 * See vmexec_irq_enable(). */
         test %eax, %eax
         jne  .Lret_from_svm_asm_do_vmentry
-
-#ifndef __UXEN_NOT_YET__
-        testb $0, VCPU_nsvm_hap_enabled(r(bx))
-UNLIKELY_START(nz, nsvm_hap)
-        mov  VCPU_nhvm_p2m(r(bx)),r(ax)
-        test r(ax),r(ax)
-        sete %al
-        andb VCPU_nhvm_guestmode(r(bx)),%al
-        jnz  .Lsvm_nsvm_no_p2m
-UNLIKELY_END(nsvm_hap)
-#endif  /* __UXEN_NOT_YET__ */
 
         call_with_abi(svm_asid_handle_vmrun, 0)
 
@@ -361,20 +347,3 @@ ABI_ENTRY(svm_asm_ax_vmentry, SIZEOF_REG)
         pop r(bp)
         ret
 
-#ifndef __UXEN__
-.globl svm_stgi_label
-svm_stgi_label:
-        call_with_regs(svm_vmexit_handler)
-        jmp  svm_asm_do_resume
-
-.Lsvm_process_softirqs:
-        STGI
-        call do_softirq
-        jmp  svm_asm_do_resume
-
-.Lsvm_nsvm_no_p2m:
-        /* Someone shot down our nested p2m table; go round again
-         * and nsvm_vcpu_switch() will fix it for us. */
-        STGI
-        jmp  svm_asm_do_resume
-#endif  /* __UXEN__ */

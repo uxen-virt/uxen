@@ -3,10 +3,6 @@
 
 #include <xen/cpumask.h>
 
-#ifndef __UXEN__
-#define NODES_SHIFT 6
-#endif  /* __UXEN__ */
-
 extern int srat_rev;
 
 extern unsigned char cpu_to_node[];

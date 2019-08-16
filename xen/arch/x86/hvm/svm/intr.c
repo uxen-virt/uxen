@@ -33,9 +33,6 @@
 #include <asm/hvm/vlapic.h>
 #include <asm/hvm/svm/svm.h>
 #include <asm/hvm/svm/intr.h>
-#ifndef __UXEN__
-#include <asm/hvm/nestedhvm.h> /* for nestedhvm_vcpu_in_guestmode */
-#endif  /* __UXEN__ */
 #include <xen/event.h>
 #include <xen/kernel.h>
 #include <public/hvm/ioreq.h>
@@ -85,23 +82,6 @@ static void enable_intr_window(struct vcpu *v, struct hvm_intack intack)
     vintr_t intr;
 
     ASSERT(intack.source != hvm_intsrc_none);
-
-#ifndef __UXEN_NOT_YET__
-    if ( nestedhvm_enabled(v->domain) ) {
-        struct nestedvcpu *nv = &vcpu_nestedhvm(v);
-        if ( nv->nv_vmentry_pending ) {
-            struct vmcb_struct *gvmcb = nv->nv_vvmcx;
-
-            /* check if l1 guest injects interrupt into l2 guest via vintr.
-             * return here or l2 guest looses interrupts, otherwise.
-             */
-            ASSERT(gvmcb != NULL);
-            intr = vmcb_get_vintr(gvmcb);
-            if ( intr.fields.irq )
-                return;
-        }
-    }
-#endif  /* __UXEN_NOT_YET__ */
 
     HVMTRACE_3D(INTR_WINDOW, intack.vector, intack.source,
                 vmcb->eventinj.fields.v?vmcb->eventinj.fields.vector:-1);
@@ -153,42 +133,8 @@ asmlinkage_abi void svm_intr_assist(void)
 
         intblk = hvm_interrupt_blocked(v, intack);
         if ( intblk == hvm_intblk_svm_gif ) {
-#ifndef __UXEN_NOT_YET__
-            ASSERT(nestedhvm_enabled(v->domain));
-            return;
-#else  /* __UXEN_NOT_YET__ */
             BUG();
-#endif  /* __UXEN_NOT_YET__ */
         }
-
-#ifndef __UXEN_NOT_YET__
-        /* Interrupts for the nested guest are already
-         * in the vmcb.
-         */
-        if ( nestedhvm_enabled(v->domain) && nestedhvm_vcpu_in_guestmode(v) )
-        {
-            int rc;
-
-            /* l2 guest was running when an interrupt for
-             * the l1 guest occured.
-             */
-            rc = nestedsvm_vcpu_interrupt(v, intack);
-            switch (rc) {
-            case NSVM_INTR_NOTINTERCEPTED:
-                /* Inject interrupt into 2nd level guest directly. */
-                break;	
-            case NSVM_INTR_NOTHANDLED:
-            case NSVM_INTR_FORCEVMEXIT:
-                return;
-            case NSVM_INTR_MASKED:
-                /* Guest already enabled an interrupt window. */
-                return;
-            default:
-                panic("%s: nestedsvm_vcpu_interrupt can't handle value 0x%x\n",
-                    __func__, rc);
-            }
-        }
-#endif  /* __UXEN_NOT_YET__ */
 
         /*
          * Pending IRQs must be delayed if:

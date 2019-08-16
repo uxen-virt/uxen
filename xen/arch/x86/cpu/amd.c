@@ -30,9 +30,6 @@
  * "fam_11_rev_b"
  */
 static char opt_famrev[14];
-#ifndef __UXEN__
-string_param("cpuid_mask_cpu", opt_famrev);
-#endif  /* __UXEN__ */
 
 static inline void wrmsr_amd(unsigned int index, unsigned int lo, 
 		unsigned int hi)
@@ -295,15 +292,6 @@ static void disable_c1e(void *unused)
 		       smp_processor_id(), msr_content);
 }
 
-#ifndef __UXEN__
-static void check_disable_c1e(unsigned int port, u8 value)
-{
-	/* C1E is sometimes enabled during entry to ACPI mode. */
-	if ((port == acpi_smi_cmd) && (value == acpi_enable_value))
-		on_each_cpu(disable_c1e, NULL, 1);
-}
-#endif  /* __UXEN__ */
-
 /*
  * BIOS is expected to clear MtrrFixDramModEn bit. According to AMD BKDG : 
  * "The MtrrFixDramModEn bit should be set to 1 during BIOS initalization of 
@@ -459,10 +447,6 @@ static void __devinit init_amd(struct cpuinfo_x86 *c)
 	case 0x10 ... 0x17:
 		set_bit(X86_FEATURE_K8, c->x86_capability);
 		disable_c1e(NULL);
-#ifndef __UXEN__
-		if (acpi_smi_cmd && (acpi_enable_value | acpi_disable_value))
-			pv_post_outb_hook = check_disable_c1e;
-#endif  /* __UXEN__ */
 		break;
 	}
 
@@ -493,15 +477,7 @@ static void __devinit init_amd(struct cpuinfo_x86 *c)
 	clear_bit(X86_FEATURE_SEP, c->x86_capability);
 
 	if (c->x86 == 0x10) {
-#ifndef __UXEN__
-		/* do this for boot cpu */
-		if (c == &boot_cpu_data)
-			check_enable_amd_mmconf_dmi();
-
-		fam10h_check_enable_mmcfg();
-#else  /* __UXEN__ */
                 printk("%s:%d\n", __FUNCTION__, __LINE__);
-#endif  /* __UXEN__ */
 	}
 #endif
 

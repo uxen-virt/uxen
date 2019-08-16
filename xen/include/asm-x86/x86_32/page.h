@@ -45,40 +45,10 @@
 #include <xen/perfc.h>
 #include <asm/types.h>
 
-#ifndef __UXEN__
-#define __mfn_valid(mfn)        ({                                            \
-    unsigned long __m_f_n = (mfn);                                            \
-    likely(__m_f_n < max_page) &&                                             \
-    likely(test_bit(pfn_to_pdx(__m_f_n) / PDX_GROUP_COUNT, pdx_group_valid)); \
-})
-#endif  /* __UXEN__ */
-
 #define max_pdx                 max_page
 #define pfn_to_pdx(pfn)         (pfn)
 #define pdx_to_pfn(pdx)         (pdx)
-#ifndef __UXEN__
-#define virt_to_pdx(va)         virt_to_mfn(va)
-#define pdx_to_virt(pdx)        mfn_to_virt(pdx)
-#endif  /* __UXEN__ */
 
-#ifndef __UXEN__
-#define pfn_to_sdx(pfn)         ((pfn)>>(SUPERPAGE_SHIFT-PAGE_SHIFT))
-#define sdx_to_pfn(sdx)         ((sdx)<<(SUPERPAGE_SHIFT-PAGE_SHIFT))
-#endif  /* __UXEN__ */
-
-#ifndef __UXEN__
-static inline unsigned long __virt_to_maddr(unsigned long va)
-{
-    ASSERT(va >= DIRECTMAP_VIRT_START && va < DIRECTMAP_VIRT_END);
-    return va - DIRECTMAP_VIRT_START;
-}
-
-static inline void *__maddr_to_virt(unsigned long ma)
-{
-    ASSERT(ma < DIRECTMAP_VIRT_END - DIRECTMAP_VIRT_START);
-    return (void *)(ma + DIRECTMAP_VIRT_START);
-}
-#else   /* __UXEN__ */
 #ifdef DEBUG_MAPCACHE
 #define DEBUG_inc_mapped(_v, _pg) do {                   \
         if (_v) {                                        \
@@ -120,7 +90,6 @@ static inline void *__maddr_to_virt(unsigned long ma)
     (((paddr_t)UI_HOST_CALL(ui_mapped_global_va_pfn,        \
                             (void *)(va)) << PAGE_SHIFT) +  \
      ((va) & (PAGE_SIZE - 1)))
-#endif  /* __UXEN__ */
 
 typedef union {
     struct {

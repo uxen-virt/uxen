@@ -53,71 +53,12 @@ extern void pfn_pdx_hole_setup(unsigned long);
  * Note: These are solely for the use by page_{get,set}_owner(), and
  *       therefore don't need to handle the XEN_VIRT_{START,END} range.
  */
-#ifndef __UXEN__
-#define virt_to_pdx(va)  (((unsigned long)(va) - DIRECTMAP_VIRT_START) >> \
-                          PAGE_SHIFT)
-#define pdx_to_virt(pdx) ((void *)(DIRECTMAP_VIRT_START + \
-                                   ((unsigned long)(pdx) << PAGE_SHIFT)))
-#else   /* __UXEN__ */
 #define virt_to_pdx(va)         virt_to_mfn(va)
 #define pdx_to_virt(pdx)        mfn_to_virt(pdx)
-#endif  /* __UXEN__ */
 
-#ifndef __UXEN__
-extern int __mfn_valid(unsigned long mfn);
-#endif  /* __UXEN__ */
-
-#ifndef __UXEN__
-static inline unsigned long pfn_to_pdx(unsigned long pfn)
-{
-    return (pfn & pfn_pdx_bottom_mask) |
-           ((pfn & pfn_top_mask) >> pfn_pdx_hole_shift);
-}
-
-static inline unsigned long pdx_to_pfn(unsigned long pdx)
-{
-    return (pdx & pfn_pdx_bottom_mask) |
-           ((pdx << pfn_pdx_hole_shift) & pfn_top_mask);
-}
-
-static inline unsigned long pfn_to_sdx(unsigned long pfn)
-{
-    return pfn_to_pdx(pfn) >> (SUPERPAGE_SHIFT-PAGE_SHIFT);
-}
-
-static inline unsigned long sdx_to_pfn(unsigned long sdx)
-{
-    return pdx_to_pfn(sdx << (SUPERPAGE_SHIFT-PAGE_SHIFT));
-}
-#else   /* __UXEN__ */
 #define pfn_to_pdx(pfn)         ((unsigned long)(pfn))
 #define pdx_to_pfn(pdx)         ((unsigned long)(pdx))
-#endif  /* __UXEN__ */
 
-#ifndef __UXEN__
-static inline unsigned long __virt_to_maddr(unsigned long va)
-{
-    ASSERT(va >= XEN_VIRT_START);
-    ASSERT(va < DIRECTMAP_VIRT_END);
-    if ( va >= DIRECTMAP_VIRT_START )
-        va -= DIRECTMAP_VIRT_START;
-    else
-    {
-        ASSERT(va < XEN_VIRT_END);
-        va += xen_phys_start - XEN_VIRT_START;
-    }
-    return (va & ma_va_bottom_mask) |
-           ((va << pfn_pdx_hole_shift) & ma_top_mask);
-}
-
-static inline void *__maddr_to_virt(unsigned long ma)
-{
-    ASSERT(pfn_to_pdx(ma >> PAGE_SHIFT) < (DIRECTMAP_SIZE >> PAGE_SHIFT));
-    return (void *)(DIRECTMAP_VIRT_START +
-                    ((ma & ma_va_bottom_mask) |
-                     ((ma & ma_top_mask) >> pfn_pdx_hole_shift)));
-}
-#else   /* __UXEN__ */
 #define map_xen_page(mfn) (({                                   \
                 struct page_info *_pg;                          \
                 _pg = __mfn_to_page(mfn);                       \
@@ -135,7 +76,6 @@ static inline void *__maddr_to_virt(unsigned long ma)
     (((paddr_t)UI_HOST_CALL(ui_mapped_global_va_pfn,        \
                             (void *)(va)) << PAGE_SHIFT) +  \
      ((va) & (PAGE_SIZE - 1)))
-#endif  /* __UXEN__ */
 
 typedef union {
     struct {

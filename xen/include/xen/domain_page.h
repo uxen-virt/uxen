@@ -8,7 +8,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -120,26 +120,6 @@ domain_mmap_cache_destroy(struct domain_mmap_cache *cache)
 }
 
 #else /* !CONFIG_DOMAIN_PAGE */
-
-#ifndef __UXEN__
-
-#define map_domain_page(mfn)                mfn_to_virt(mfn)
-#define __map_domain_page(pg)               page_to_virt(pg)
-#define unmap_domain_page(va)               ((void)(va))
-
-#define map_domain_page_global(mfn)         mfn_to_virt(mfn)
-#define __map_domain_page_global(pg)        page_to_virt(pg)
-#define unmap_domain_page_global(va)        ((void)(va))
-
-struct domain_mmap_cache { 
-};
-
-#define domain_mmap_cache_init(c)           ((void)(c))
-#define map_domain_page_with_cache(mfn,c)   (map_domain_page(mfn))
-#define unmap_domain_page_with_cache(va,c)  ((void)(va))
-#define domain_mmap_cache_destroy(c)        ((void)(c))
-
-#else   /* __UXEN__ */
 
 static inline void *
 uxen_map_page(unsigned long mfn)
@@ -266,8 +246,6 @@ struct domain_mmap_cache {
 #define unmap_domain_page_with_cache(va,c)  ((void)(va))
 #define domain_mmap_cache_destroy(c)        ((void)(c))
 #endif
-
-#endif  /* __UXEN__ */
 
 #endif /* !CONFIG_DOMAIN_PAGE */
 

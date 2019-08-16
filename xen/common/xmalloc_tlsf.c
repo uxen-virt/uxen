@@ -618,23 +618,8 @@ void xfree(void *p)
 
     if ( b->size > PAGE_SIZE - BHDR_OVERHEAD )
     {
-#ifndef __UXEN__
-        unsigned int i, order = get_order_from_bytes(b->size);
-
-        BUG_ON((unsigned long)b & ((PAGE_SIZE << order) - 1));
-        for ( i = 0; ; ++i )
-        {
-            if ( !(b->size & (PAGE_SIZE << i)) )
-                continue;
-            b->size -= PAGE_SIZE << i;
-            free_xenheap_pages((void *)b + b->size, i);
-            if ( i + 1 >= order )
-                break;
-        }
-#else   /* __UXEN__ */
         BUG_ON(((unsigned long)b & (PAGE_SIZE - 1)));
         free_xenheap_pages((void *)b, get_order_from_bytes(b->size));
-#endif  /* __UXEN__ */
     }
     else
         xmem_pool_free(p, xenpool);

@@ -58,20 +58,12 @@ void free_vframe(struct page_info *pg);
 extern atomic_t vframes_allocated;
 
 /* Xen suballocator. These functions are interrupt-safe. */
-#ifndef __UXEN__
-void init_xenheap_pages(paddr_t ps, paddr_t pe);
-void *alloc_xenheap_pages(unsigned int order, unsigned int memflags);
-void free_xenheap_pages(void *v, unsigned int order);
-#define alloc_xenheap_page() (alloc_xenheap_pages(0,0))
-#define free_xenheap_page(v) (free_xenheap_pages(v,0))
-#else  /* __UXEN__ */
 struct page_info *alloc_host_page(int is_xen_page);
 #define alloc_xenheap_pages(order, memflags)    \
     (alloc_host_pages(1 << (order), memflags))
 #define free_xenheap_pages(v, order) (free_host_pages(v, 1 << (order)))
 #define alloc_xenheap_page() (alloc_host_pages(1, 0))
 #define free_xenheap_page(v) (free_host_pages(v, 1))
-#endif  /* __UXEN__ */
 
 /* Domain suballocator. These functions are *not* interrupt-safe.*/
 void init_domheap_pages(paddr_t ps, paddr_t pe);
@@ -104,14 +96,6 @@ int assign_pages(
 #define  MEMF_no_refcount (1U<<_MEMF_no_refcount)
 #define _MEMF_populate_on_demand 1
 #define  MEMF_populate_on_demand (1U<<_MEMF_populate_on_demand)
-#ifndef __UXEN__
-#define _MEMF_tmem        2
-#define  MEMF_tmem        (1U<<_MEMF_tmem)
-#define _MEMF_no_dma      3
-#define  MEMF_no_dma      (1U<<_MEMF_no_dma)
-#define _MEMF_exact_node  4
-#define  MEMF_exact_node  (1U<<_MEMF_exact_node)
-#else   /* __UXEN__ */
 #define _MEMF_populate_from_buffer 2
 #define  MEMF_populate_from_buffer (1U<<_MEMF_populate_from_buffer)
 #define _MEMF_populate_from_buffer_compressed 3
@@ -119,7 +103,6 @@ int assign_pages(
     (1U<<_MEMF_populate_from_buffer_compressed)
 #define _MEMF_host_page   4
 #define  MEMF_host_page   (1U<<_MEMF_host_page)
-#endif   /* __UXEN__ */
 #define _MEMF_xmalloc     5
 #define  MEMF_xmalloc     (1U<<_MEMF_xmalloc)
 #define _MEMF_multiok     6

@@ -42,16 +42,10 @@ PHDRS
 }
 SECTIONS
 {
-#if !defined(__UXEN__)
-  . = __XEN_VIRT_START + 0x100000;
-#elif defined(__XEN_RELOC_ADDR)
+#if   defined(__XEN_RELOC_ADDR)
   . = __XEN_RELOC_ADDR;
 #endif
-#if defined(__UXEN__)
   _xen_start = .;
-#else
-  _start = .;
-#endif
   .text : {
        _uxen_core_text = .;
        _text_start = .;
@@ -172,11 +166,7 @@ SECTIONS
        _bss_end = .;
   } :text
 
-#if defined(__UXEN__)
   _xen_end = . ;
-#else
-  _end = . ;
-#endif
 
 #ifdef EFI
   . = ALIGN(4);

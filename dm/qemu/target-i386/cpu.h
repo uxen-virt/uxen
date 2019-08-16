@@ -472,14 +472,6 @@
                                  for syscall instruction */
 
 /* i386-specific interrupt pending bits.  */
-#ifndef QEMU_UXEN
-#define CPU_INTERRUPT_SMI       CPU_INTERRUPT_TGT_EXT_2
-#define CPU_INTERRUPT_NMI       CPU_INTERRUPT_TGT_EXT_3
-#define CPU_INTERRUPT_MCE       CPU_INTERRUPT_TGT_EXT_4
-#define CPU_INTERRUPT_VIRQ      CPU_INTERRUPT_TGT_INT_0
-#define CPU_INTERRUPT_INIT      CPU_INTERRUPT_TGT_INT_1
-#define CPU_INTERRUPT_SIPI      CPU_INTERRUPT_TGT_INT_2
-#endif
 
 
 enum {
@@ -546,8 +538,6 @@ typedef struct SegmentCache {
     uint32_t flags;
 } SegmentCache;
 
-#ifdef QEMU_UXEN
-
 typedef enum TPRAccess {
     TPR_ACCESS_READ,
     TPR_ACCESS_WRITE,
@@ -606,54 +596,6 @@ typedef MMREG_UNION(MMXReg, 64)  MMXReg;
 #define MMX_S(n) _s_MMXReg[n]
 #endif
 #define MMX_Q(n) _q_MMXReg[n]
-
-#else /* QEMU_UXEN */
-
-typedef union {
-    uint8_t _b[16];
-    uint16_t _w[8];
-    uint32_t _l[4];
-    uint64_t _q[2];
-    float32 _s[4];
-    float64 _d[2];
-} XMMReg;
-
-typedef union {
-    uint8_t _b[8];
-    uint16_t _w[4];
-    uint32_t _l[2];
-    float32 _s[2];
-    uint64_t q;
-} MMXReg;
-
-#ifdef HOST_WORDS_BIGENDIAN
-#define XMM_B(n) _b[15 - (n)]
-#define XMM_W(n) _w[7 - (n)]
-#define XMM_L(n) _l[3 - (n)]
-#define XMM_S(n) _s[3 - (n)]
-#define XMM_Q(n) _q[1 - (n)]
-#define XMM_D(n) _d[1 - (n)]
-
-#define MMX_B(n) _b[7 - (n)]
-#define MMX_W(n) _w[3 - (n)]
-#define MMX_L(n) _l[1 - (n)]
-#define MMX_S(n) _s[1 - (n)]
-#else
-#define XMM_B(n) _b[n]
-#define XMM_W(n) _w[n]
-#define XMM_L(n) _l[n]
-#define XMM_S(n) _s[n]
-#define XMM_Q(n) _q[n]
-#define XMM_D(n) _d[n]
-
-#define MMX_B(n) _b[n]
-#define MMX_W(n) _w[n]
-#define MMX_L(n) _l[n]
-#define MMX_S(n) _s[n]
-#endif
-#define MMX_Q(n) q
-
-#endif /* QEMU_UXEN */
 
 typedef union {
     floatx80 d __attribute__((aligned(16)));
@@ -721,13 +663,8 @@ typedef struct CPUX86State {
     float_status mmx_status; /* for 3DNow! float ops */
     float_status sse_status;
     uint32_t mxcsr;
-#ifdef QEMU_UXEN
     ZMMReg xmm_regs[CPU_NB_REGS];
     ZMMReg xmm_t0;
-#else
-    XMMReg xmm_regs[CPU_NB_REGS];
-    XMMReg xmm_t0;
-#endif
     MMXReg mmx_t0;
     target_ulong cc_tmp; /* temporary for rcr/rcl */
 
@@ -840,19 +777,14 @@ typedef struct CPUX86State {
 
     uint64_t xcr0;
 
-#ifdef QEMU_UXEN
     void *hax_vcpu;
     void *env_ptr;
     TPRAccess tpr_access_type;
-#endif
 } CPUX86State;
 
 CPUX86State *cpu_x86_init(const char *cpu_model);
 int cpu_x86_exec(CPUX86State *s);
 void cpu_x86_close(CPUX86State *s);
-#ifndef QEMU_UXEN
-void x86_cpu_list (FILE *f, fprintf_function cpu_fprintf, const char *optarg);
-#endif
 void x86_cpudef_setup(void);
 int cpu_x86_support_mca_broadcast(CPUState *env);
 
@@ -1010,10 +942,6 @@ uint64_t cpu_get_tsc(CPUX86State *env);
 #define X86_DUMP_FPU  0x0001 /* dump FPU state too */
 #define X86_DUMP_CCOP 0x0002 /* dump qemu flag cache */
 
-#ifndef QEMU_UXEN
-#define TARGET_PAGE_BITS 12
-#endif
-
 #ifdef TARGET_X86_64
 #define TARGET_PHYS_ADDR_SPACE_BITS 52
 /* ??? This is really 48 bits, sign-extended, but the only thing
@@ -1083,64 +1011,6 @@ static inline void cpu_clone_regs(CPUState *env, target_ulong newsp)
         env->regs[R_ESP] = newsp;
     env->regs[R_EAX] = 0;
 }
-#endif
-
-#ifndef QEMU_UXEN
-#include "cpu-all.h"
-#include "svm.h"
-
-#if !defined(CONFIG_USER_ONLY)
-#include "hw/apic.h"
-#endif
-
-static inline bool cpu_has_work(CPUState *env)
-{
-    return ((env->interrupt_request & CPU_INTERRUPT_HARD) &&
-            (env->eflags & IF_MASK)) ||
-           (env->interrupt_request & (CPU_INTERRUPT_NMI |
-                                      CPU_INTERRUPT_INIT |
-                                      CPU_INTERRUPT_SIPI |
-                                      CPU_INTERRUPT_MCE));
-}
-
-#include "exec-all.h"
-
-static inline void cpu_pc_from_tb(CPUState *env, TranslationBlock *tb)
-{
-    env->eip = tb->pc - tb->cs_base;
-}
-
-static inline void cpu_get_tb_cpu_state(CPUState *env, target_ulong *pc,
-                                        target_ulong *cs_base, int *flags)
-{
-    *cs_base = env->segs[R_CS].base;
-    *pc = *cs_base + env->eip;
-    *flags = env->hflags |
-        (env->eflags & (IOPL_MASK | TF_MASK | RF_MASK | VM_MASK));
-}
-
-void do_cpu_init(CPUState *env);
-void do_cpu_sipi(CPUState *env);
-
-#define MCE_INJECT_BROADCAST    1
-#define MCE_INJECT_UNCOND_AO    2
-
-void cpu_x86_inject_mce(Monitor *mon, CPUState *cenv, int bank,
-                        uint64_t status, uint64_t mcg_status, uint64_t addr,
-                        uint64_t misc, int flags);
-
-/* op_helper.c */
-void do_interrupt(CPUState *env);
-void do_interrupt_x86_hardirq(CPUState *env, int intno, int is_hw);
-void QEMU_NORETURN raise_exception_env(int exception_index, CPUState *nenv);
-void QEMU_NORETURN raise_exception_err_env(CPUState *nenv, int exception_index,
-                                           int error_code);
-
-void do_smm_enter(CPUState *env1);
-
-void svm_check_intercept(CPUState *env1, uint32_t type);
-
-uint32_t cpu_cc_compute_all(CPUState *env1, int op);
 #endif
 
 #endif /* CPU_I386_H */

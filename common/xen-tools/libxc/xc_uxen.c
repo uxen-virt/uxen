@@ -2,7 +2,7 @@
  *  xc_uxen.c
  *  uxen
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -167,9 +167,6 @@ static struct xc_osdep_ops uxen_privcmd_ops = {
 
         .hypercall = &uxen_privcmd_hypercall,
 
-#ifndef __UXEN_TOOLS__
-        .map_foreign_batch = &uxen_privcmd_map_foreign_batch,
-#endif  /* __UXEN_TOOLS__ */
         .map_foreign_bulk = &uxen_privcmd_map_foreign_bulk,
         .map_foreign_range = &uxen_privcmd_map_foreign_range,
         .map_foreign_ranges = &uxen_privcmd_map_foreign_ranges,
@@ -185,14 +182,6 @@ uxen_osdep_init(xc_interface *xch, enum xc_osdep_type type)
     {
     case XC_OSDEP_PRIVCMD:
         return &uxen_privcmd_ops;
-#ifndef __UXEN_TOOLS__
-    case XC_OSDEP_EVTCHN:
-        return &uxen_evtchn_ops;
-    case XC_OSDEP_GNTTAB:
-        return &uxen_gnttab_ops;
-    case XC_OSDEP_GNTSHR:
-        return &uxen_gntshr_ops;
-#endif  /* __UXEN_TOOLS__ */
     default:
         return NULL;
     }

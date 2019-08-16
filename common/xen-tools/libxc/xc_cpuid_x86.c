@@ -596,27 +596,6 @@ static int xc_cpuid_do_domctl(
     return do_domctl(xch, &domctl);
 }
 
-#ifndef __UXEN_TOOLS__
-static char *alloc_str(void)
-{
-    char *s = malloc(33);
-    memset(s, 0, 33);
-    return s;
-}
-
-void xc_cpuid_to_str(const unsigned int *regs, char **strs)
-{
-    int i, j;
-
-    for ( i = 0; i < 4; i++ )
-    {
-        strs[i] = alloc_str();
-        for ( j = 0; j < 32; j++ )
-            strs[i][j] = !!((regs[i] & (1U << (31 - j)))) ? '1' : '0';
-    }
-}
-#endif  /* __UXEN_TOOLS__ */
-
 int xc_cpuid_apply_policy(xc_interface *xch, domid_t domid)
 {
     unsigned int input[2] = { 0, 0 }, regs[4];

@@ -722,105 +722,6 @@ struct xen_domctl_gdbsx_domstatus {
     uint32_t         vcpu_ev;    /* if yes, what event? */
 };
 
-#ifndef __UXEN__
-/*
- * Memory event operations
- */
-
-/* XEN_DOMCTL_mem_event_op */
-
-/*
-* Domain memory paging
- * Page memory in and out. 
- */
-#define XEN_DOMCTL_MEM_EVENT_OP_PAGING            1
-
-#define XEN_DOMCTL_MEM_EVENT_OP_PAGING_ENABLE     0
-#define XEN_DOMCTL_MEM_EVENT_OP_PAGING_DISABLE    1
-#define XEN_DOMCTL_MEM_EVENT_OP_PAGING_NOMINATE   2
-#define XEN_DOMCTL_MEM_EVENT_OP_PAGING_EVICT      3
-#define XEN_DOMCTL_MEM_EVENT_OP_PAGING_PREP       4
-#define XEN_DOMCTL_MEM_EVENT_OP_PAGING_RESUME     5
-
-/*
- * Access permissions.
- *
- * There are HVM hypercalls to set the per-page access permissions of every
- * page in a domain.  When one of these permissions--independent, read, 
- * write, and execute--is violated, the VCPU is paused and a memory event 
- * is sent with what happened.  (See public/mem_event.h)  The memory event 
- * handler can then resume the VCPU and redo the access with an 
- * ACCESS_RESUME mode for the following domctl.
- */
-#define XEN_DOMCTL_MEM_EVENT_OP_ACCESS            2
-
-#define XEN_DOMCTL_MEM_EVENT_OP_ACCESS_ENABLE     0
-#define XEN_DOMCTL_MEM_EVENT_OP_ACCESS_DISABLE    1
-#define XEN_DOMCTL_MEM_EVENT_OP_ACCESS_RESUME     2
-
-struct xen_domctl_mem_event_op {
-    uint32_t       op;           /* XEN_DOMCTL_MEM_EVENT_OP_*_* */
-    uint32_t       mode;         /* XEN_DOMCTL_MEM_EVENT_OP_* */
-
-    /* OP_ENABLE */
-    uint64_aligned_t shared_addr;  /* IN:  Virtual address of shared page */
-    uint64_aligned_t ring_addr;    /* IN:  Virtual address of ring page */
-
-    /* Other OPs */
-    uint64_aligned_t gfn;          /* IN:  gfn of page being operated on */
-};
-typedef struct xen_domctl_mem_event_op xen_domctl_mem_event_op_t;
-DEFINE_XEN_GUEST_HANDLE(xen_domctl_mem_event_op_t);
-
-/*
- * Memory sharing operations
- */
-/* XEN_DOMCTL_mem_sharing_op */
-
-#define XEN_DOMCTL_MEM_EVENT_OP_SHARING                3
-
-#define XEN_DOMCTL_MEM_EVENT_OP_SHARING_CONTROL        0
-#define XEN_DOMCTL_MEM_EVENT_OP_SHARING_NOMINATE_GFN   1
-#define XEN_DOMCTL_MEM_EVENT_OP_SHARING_NOMINATE_GREF  2
-#define XEN_DOMCTL_MEM_EVENT_OP_SHARING_SHARE          3
-#define XEN_DOMCTL_MEM_EVENT_OP_SHARING_RESUME         4
-#define XEN_DOMCTL_MEM_EVENT_OP_SHARING_DEBUG_GFN      5
-#define XEN_DOMCTL_MEM_EVENT_OP_SHARING_DEBUG_MFN      6
-#define XEN_DOMCTL_MEM_EVENT_OP_SHARING_DEBUG_GREF     7
-
-#define XEN_DOMCTL_MEM_SHARING_S_HANDLE_INVALID  (-10)
-#define XEN_DOMCTL_MEM_SHARING_C_HANDLE_INVALID  (-9)
-
-struct xen_domctl_mem_sharing_op {
-    uint8_t op; /* XEN_DOMCTL_MEM_EVENT_OP_* */
-
-    union {
-        uint8_t enable;                   /* OP_CONTROL                */
-
-        struct mem_sharing_op_nominate {  /* OP_NOMINATE_xxx           */
-            union {
-                uint64_aligned_t gfn;     /* IN: gfn to nominate       */
-                uint32_t      grant_ref;  /* IN: grant ref to nominate */
-            } u;
-            uint64_aligned_t  handle;     /* OUT: the handle           */
-        } nominate;
-        struct mem_sharing_op_share {     /* OP_SHARE */
-            uint64_aligned_t source_handle; /* IN: handle to the source page */
-            uint64_aligned_t client_handle; /* IN: handle to the client page */
-        } share; 
-        struct mem_sharing_op_debug {     /* OP_DEBUG_xxx */
-            union {
-                uint64_aligned_t gfn;      /* IN: gfn to debug          */
-                uint64_aligned_t mfn;      /* IN: mfn to debug          */
-                grant_ref_t    gref;       /* IN: gref to debug         */
-            } u;
-        } debug;
-    } u;
-};
-typedef struct xen_domctl_mem_sharing_op xen_domctl_mem_sharing_op_t;
-DEFINE_XEN_GUEST_HANDLE(xen_domctl_mem_sharing_op_t);
-#endif  /* __UXEN__ */
-
 #if defined(__i386__) || defined(__x86_64__)
 /* XEN_DOMCTL_setvcpuextstate */
 /* XEN_DOMCTL_getvcpuextstate */
@@ -977,10 +878,6 @@ struct xen_domctl {
         struct xen_domctl_set_target        set_target;
         struct xen_domctl_subscribe         subscribe;
         struct xen_domctl_debug_op          debug_op;
-#ifndef __UXEN__
-        struct xen_domctl_mem_event_op      mem_event_op;
-        struct xen_domctl_mem_sharing_op    mem_sharing_op;
-#endif  /* __UXEN__ */
 #if defined(__i386__) || defined(__x86_64__)
         struct xen_domctl_cpuid             cpuid;
         struct xen_domctl_vcpuextstate      vcpuextstate;

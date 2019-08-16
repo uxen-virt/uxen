@@ -418,15 +418,6 @@ void vioapic_update_EOI(struct domain *d, int vector)
 
         ent->fields.remote_irr = 0;
 
-#ifndef __UXEN__
-        if ( iommu_enabled )
-        {
-            spin_unlock(&d->arch.hvm_domain.irq_lock);
-            hvm_dpci_eoi(d, gsi, ent);
-            spin_lock(&d->arch.hvm_domain.irq_lock);
-        }
-#endif  /* __UXEN__ */
-
         if ( (ent->fields.trig_mode == VIOAPIC_LEVEL_TRIG) &&
              !ent->fields.mask &&
              hvm_irq->gsi_assert_count[gsi] )

@@ -38,9 +38,6 @@
 #include <public/domctl.h>
 #include <public/sysctl.h>
 #include <public/vcpu.h>
-#ifndef __UXEN__
-#include <public/mem_event.h>
-#endif  /* __UXEN__ */
 
 #ifdef CONFIG_COMPAT
 #include <compat/vcpu.h>
@@ -64,12 +61,6 @@ struct evtchn
 #define ECS_FREE         0 /* Channel is available for use.                  */
 #define ECS_RESERVED     1 /* Channel is reserved.                           */
 #define ECS_UNBOUND      2 /* Channel is waiting to bind to a remote domain. */
-#ifndef __UXEN__
-#define ECS_INTERDOMAIN  3 /* Channel is bound to another domain.            */
-#define ECS_PIRQ         4 /* Channel is bound to a physical IRQ line.       */
-#define ECS_VIRQ         5 /* Channel is bound to a virtual IRQ line.        */
-#define ECS_IPI          6 /* Channel is bound to a virtual IPI line.        */
-#endif  /* __UXEN__ */
 #define ECS_HOST         7 /* Channel is bound to the host.                  */
     u8  state;             /* ECS_* */
     u8  consumer_is_xen;   /* Consumed by Xen or by guest? */
@@ -78,18 +69,6 @@ struct evtchn
         struct {
             domid_t remote_domid;
         } unbound;     /* state == ECS_UNBOUND */
-#ifndef __UXEN__
-        struct {
-            u16            remote_port;
-            struct domain *remote_dom;
-        } interdomain; /* state == ECS_INTERDOMAIN */
-        struct {
-            u16            irq;
-            u16            next_port;
-            u16            prev_port;
-        } pirq;        /* state == ECS_PIRQ */
-        u16 virq;      /* state == ECS_VIRQ */
-#endif  /* __UXEN__ */
         struct {
             void *host_opaque;
         } host;     /* state == ECS_HOST */
@@ -117,18 +96,9 @@ struct vcpu
 
     struct vcpu     *next_in_list;
 
-#ifndef __UXEN__
-    s_time_t         periodic_period;
-    s_time_t         periodic_last_event;
-    struct timer     periodic_timer;
-    struct timer     singleshot_timer;
-
-    struct timer     poll_timer;    /* timeout for SCHEDOP_poll */
-#else  /* __UXEN__ */
     uint64_t         vcpu_throttle_last_time;
     int64_t          vcpu_throttle_credit;
     struct timer     vcpu_throttle_timer;
-#endif  /* __UXEN__ */
 
     union {
         void            *sched_priv;    /* scheduler-specific data */
@@ -230,20 +200,6 @@ struct vcpu
     /* Bitmask of CPUs which are holding onto this VCPU's state. */
     cpumask_var_t    vcpu_dirty_cpumask;
 
-#ifndef __UXEN__
-    /* Tasklet for continue_hypercall_on_cpu(). */
-    struct tasklet   continue_hypercall_tasklet;
-#endif  /* __UXEN__ */
-
-#ifndef __UXEN__
-    /* Multicall information. */
-    struct mc_state  mc_state;
-#endif  /* __UXEN__ */
-
-#ifndef __UXEN__
-    struct waitqueue_vcpu *waitqueue_vcpu;
-#endif  /* __UXEN__ */
-
     struct arch_vcpu arch;
 
     struct vm_info_shared *target_vmis;
@@ -258,24 +214,6 @@ struct vcpu
 #define domain_unlock(d) spin_unlock_recursive(&(d)->domain_lock)
 #define domain_is_locked(d) spin_is_locked(&(d)->domain_lock)
 
-#ifndef __UXEN__
-/* Memory event */
-struct mem_event_domain
-{
-    /* ring lock */
-    spinlock_t ring_lock;
-    unsigned int req_producers;
-    /* shared page */
-    mem_event_shared_page_t *shared_page;
-    /* shared ring page */
-    void *ring_page;
-    /* front-end ring */
-    mem_event_front_ring_t front_ring;
-    /* event channel port (vcpu0 only) */
-    int xen_port;
-};
-#endif  /* __UXEN__ */
-
 struct domain
 {
     domid_t          domain_id;
@@ -289,14 +227,9 @@ struct domain
     unsigned int     tot_pages;       /* number of pages currently possesed */
     unsigned int     max_pages;       /* maximum value for tot_pages        */
     atomic_t         hidden_pages;    /* number of hidden pages             */
-#ifndef __UXEN__
-    atomic_t         shr_pages;       /* number of shared pages             */
-    atomic_t         paged_pages;     /* number of paged-out pages          */
-#else  /* __UXEN__ */
     atomic_t         pod_pages;       /* # pages populated on demand */
     atomic_t         zero_shared_pages; /* # pages zero shared      */
     atomic_t         tmpl_shared_pages; /* # pages template shared  */
-#endif  /* __UXEN__ */
     unsigned int     xenheap_pages;   /* # pages allocated from Xen heap    */
     unsigned int     host_pages;      /* # host pages mapped    */
     unsigned int     vframes;         /* # vframes */
@@ -322,9 +255,6 @@ struct domain
     struct cpupool  *cpupool;
 
     struct domain   *next_in_list;
-#ifndef __UXEN__
-    struct domain   *next_in_hashbucket;
-#endif  /* __UXEN__ */
 
     struct list_head rangesets;
     spinlock_t       rangesets_lock;
@@ -333,27 +263,8 @@ struct domain
     struct evtchn   *evtchn[NR_EVTCHN_BUCKETS];
     spinlock_t       event_lock;
 
-#ifndef __UXEN__
-    struct grant_table *grant_table;
-#endif  /* __UXEN__ */
-
     struct domain_extra_1 *extra_1;
     struct domain_extra_2 *extra_2;
-
-#ifndef __UXEN__
-    /*
-     * Interrupt to event-channel mappings and other per-guest-pirq data.
-     * Protected by the domain's event-channel spinlock.
-     */
-    unsigned int     nr_pirqs;
-    struct radix_tree_root pirq_tree;
-#endif  /* __UXEN__ */
-
-#ifndef __UXEN__
-    /* I/O capabilities (access to IRQs and memory-mapped I/O). */
-    struct rangeset *iomem_caps;
-    struct rangeset *irq_caps;
-#endif  /* __UXEN__ */
 
     /* Is this an HVM guest? */
     bool_t           is_hvm;
@@ -373,10 +284,6 @@ struct domain
     bool_t           is_paused_by_controller;
     /* Domain is paused for suspend */
     bool_t           is_paused_for_suspend;
-#ifndef __UXEN__
-    /* Domain's VCPUs are pinned 1:1 to physical CPUs? */
-    bool_t           is_pinned;
-#endif  /* __UXEN__ */
     /* Domain is a memory template for clones. */
     bool_t           is_template;
 
@@ -438,17 +345,6 @@ struct domain
 
     int32_t time_offset_seconds;
 
-#ifndef __UXEN__
-    /* OProfile support. */
-    struct xenoprof *xenoprof;
-
-    /* Domain watchdog. */
-#define NR_DOMAIN_WATCHDOG_TIMERS 2
-    spinlock_t watchdog_lock;
-    uint32_t watchdog_inuse_map;
-    struct timer watchdog_timer[NR_DOMAIN_WATCHDOG_TIMERS];
-#endif  /* __UXEN__ */
-
     struct rcu_head rcu;
 
     struct list_head vcpu_idle_tasklet_list;
@@ -459,28 +355,6 @@ struct domain
      * cause a deadlock. Acquirers don't spin waiting; they preempt.
      */
     spinlock_t hypercall_deadlock_mutex;
-
-#ifndef __UXEN__
-    /* transcendent memory, auto-allocated on first tmem op by each domain */
-    void *tmem;
-
-    struct lock_profile_qhead profile_head;
-
-    /* Non-migratable and non-restoreable? */
-    bool_t disable_migrate;
-
-    /* Memory sharing support */
-    struct mem_event_domain mem_share;
-    /* Memory paging support */
-    struct mem_event_domain mem_paging;
-    /* Memory access support */
-    struct mem_event_domain mem_access;
-
-    /* Currently computed from union of all vcpu cpu-affinity masks. */
-    nodemask_t node_affinity;
-    unsigned int last_alloc_node;
-    spinlock_t node_affinity_lock;
-#endif  /* __UXEN__ */
 
     uint64_t introspection_features;
 
@@ -835,11 +709,6 @@ static inline struct domain *next_domain_in_cpupool(
  /* VCPU affinity has changed: migrating to a new CPU. */
 #define _VPF_migrating       3
 #define VPF_migrating        (1UL<<_VPF_migrating)
-#ifndef __UXEN__
- /* VCPU is blocked on memory-event ring. */
-#define _VPF_mem_event       4
-#define VPF_mem_event        (1UL<<_VPF_mem_event)
-#endif  /* __UXEN__ */
  /* VCPU yield. */
 #define _VPF_yield           5
 #define VPF_yield            (1UL<<_VPF_yield)

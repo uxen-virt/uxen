@@ -78,11 +78,9 @@ extern int memcmp(const void *,const void *,__kernel_size_t);
 extern void * memchr(const void *,int,__kernel_size_t);
 #endif
 
-#ifdef __UXEN__
 #ifndef __HAVE_ARCH_STRLLCPY
 extern size_t strllcpy(char *, size_t, const char *, size_t);
 #endif
-#endif  /* __UXEN__ */
 
 #ifdef __cplusplus
 }

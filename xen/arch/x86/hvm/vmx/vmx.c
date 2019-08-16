@@ -56,9 +56,6 @@
 #include <asm/spinlock.h>
 #include <asm/paging.h>
 #include <asm/p2m.h>
-#ifndef __UXEN__
-#include <asm/mem_sharing.h>
-#endif  /* __UXEN__ */
 #include <asm/hvm/emulate.h>
 #include <asm/hvm/hvm.h>
 #include <asm/hvm/support.h>
@@ -77,9 +74,6 @@
 #include <asm/xenoprof.h>
 #include <asm/debugger.h>
 #include <asm/apic.h>
-#ifndef __UXEN_NOT_YET__
-#include <asm/hvm/nestedhvm.h>
-#endif  /* __UXEN_NOT_YET__ */
 #include <asm/xstate.h>
 #include <asm/hvm/xen_pv.h>
 #include <asm/hvm/pvnested.h>
@@ -161,12 +155,6 @@ vmx_vcpu_initialise(struct vcpu *v)
     set_bit(VMX_INDEX_MSR_SHADOW_GS_BASE, &v->arch.hvm_vmx.msr_state.flags);
 #endif
 
-#ifndef __UXEN__
-    v->arch.schedule_tail    = vmx_do_resume;
-    v->arch.ctxt_switch_from = vmx_ctxt_switch_from;
-    v->arch.ctxt_switch_to   = vmx_ctxt_switch_to;
-#endif  /* __UXEN__ */
-
     if ( (rc = vmx_create_vmcs(v)) != 0 )
     {
         dprintk(XENLOG_WARNING,
@@ -200,9 +188,6 @@ vmx_vcpu_destroy(struct vcpu *v)
 #ifdef __UXEN_vpmu__
     vpmu_destroy(v);
 #endif  /* __UXEN_vpmu__ */
-#ifndef __UXEN__
-    passive_domain_destroy(v);
-#endif  /* __UXEN__ */
 }
 
 #ifdef __x86_64__
@@ -214,14 +199,6 @@ static u32 msr_index[] =
     MSR_LSTAR, MSR_STAR, MSR_SYSCALL_MASK, MSR_SHADOW_GS_BASE
 };
 
-#ifndef __UXEN__
-#define WRITE_MSR(address)                                              \
-        guest_msr_state->msrs[VMX_INDEX_MSR_ ## address] = msr_content; \
-        set_bit(VMX_INDEX_MSR_ ## address, &guest_msr_state->flags);    \
-        wrmsrl(MSR_ ## address, msr_content);                           \
-        set_bit(VMX_INDEX_MSR_ ## address, &host_msr_state->flags);     \
-        break
-#else   /* __UXEN__ */
 #define WRITE_MSR(address)                                                  \
         guest_msr_state->msrs[VMX_INDEX_MSR_ ## address] = msr_content;     \
         if (!ax_present) {                                                  \
@@ -240,7 +217,6 @@ static u32 msr_index[] =
             set_bit(VMX_INDEX_MSR_ ## address, &guest_msr_state->flags);    \
         pv_wrmsrl(MSR_ ## address, msr_content, v);                         \
         break
-#endif  /* __UXEN__ */
 
 static enum handler_return
 long_mode_do_msr_read(unsigned int msr, uint64_t *msr_content)
@@ -421,16 +397,6 @@ static void vmx_restore_guest_msrs(struct vcpu *v)
     if (ax_present)
         ax_vmcs_x_wrmsrl(v, MSR_IA32_SPEC_CTRL, v->arch.hvm_vcpu.msr_spec_ctrl);
 
-#ifndef __UXEN__
-    if ( (v->arch.hvm_vcpu.guest_efer ^ read_efer()) & EFER_SCE )
-    {
-        HVM_DBG_LOG(DBG_LEVEL_2,
-                    "restore guest's EFER with value %lx",
-                    v->arch.hvm_vcpu.guest_efer);
-        write_efer((read_efer() & ~EFER_SCE) |
-                   (v->arch.hvm_vcpu.guest_efer & EFER_SCE));
-    }
-#endif  /* __UXEN__ */
 }
 
 #else  /* __i386__ */
@@ -456,22 +422,11 @@ long_mode_do_msr_write(unsigned int msr, uint64_t msr_content)
 
 void vmx_update_cpu_exec_control(struct vcpu *v)
 {
-#ifndef __UXEN_NOT_YET__
-    if ( nestedhvm_vcpu_in_guestmode(v) )
-        nvmx_update_exec_control(v, v->arch.hvm_vmx.exec_control);
-    else
-#endif  /* __UXEN_NOT_YET__ */
         __vmwrite(CPU_BASED_VM_EXEC_CONTROL, v->arch.hvm_vmx.exec_control);
 }
 
 static void vmx_update_secondary_exec_control(struct vcpu *v)
 {
-#ifndef __UXEN_NOT_YET__
-    if ( nestedhvm_vcpu_in_guestmode(v) )
-        nvmx_update_secondary_exec_control(v,
-            v->arch.hvm_vmx.secondary_exec_control);
-    else
-#endif  /* __UXEN_NOT_YET__ */
         __vmwrite(SECONDARY_VM_EXEC_CONTROL,
                   v->arch.hvm_vmx.secondary_exec_control);
 }
@@ -493,11 +448,6 @@ void vmx_update_exception_bitmap(struct vcpu *v)
             PFEC_page_present | PFEC_insn_fetch);
     }
 
-#ifndef __UXEN_NOT_YET__
-    if ( nestedhvm_vcpu_in_guestmode(v) )
-        nvmx_update_exception_bitmap(v, v->arch.hvm_vmx.exception_bitmap);
-    else
-#endif  /* __UXEN_NOT_YET__ */
         __vmwrite(EXCEPTION_BITMAP, v->arch.hvm_vmx.exception_bitmap |
                   forced_pf);
 }
@@ -603,31 +553,6 @@ static void vmx_vmcs_save(struct vcpu *v, struct hvm_hw_cpu *c)
 static int vmx_restore_cr0_cr3(
     struct vcpu *v, unsigned long cr0, unsigned long cr3)
 {
-#ifndef __UXEN__
-    unsigned long mfn = 0;
-    p2m_type_t p2mt;
-
-    if ( paging_mode_shadow(v->domain) )
-    {
-        if ( cr0 & X86_CR0_PG )
-        {
-            mfn = mfn_x(get_gfn(v->domain, cr3 >> PAGE_SHIFT, &p2mt));
-            if ( !p2m_is_ram(p2mt) || !get_page(mfn_to_page(mfn), v->domain) )
-            {
-                put_gfn(v->domain, cr3 >> PAGE_SHIFT);
-                gdprintk(XENLOG_ERR, "Invalid CR3 value=0x%lx\n", cr3);
-                return -EINVAL;
-            }
-        }
-
-        if ( hvm_paging_enabled(v) )
-            put_page(pagetable_get_page(v->arch.guest_table));
-
-        v->arch.guest_table = pagetable_from_pfn(mfn);
-        if ( cr0 & X86_CR0_PG )
-            put_gfn(v->domain, cr3 >> PAGE_SHIFT);
-    }
-#endif  /* __UXEN__ */
 
     v->arch.hvm_vcpu.guest_cr[0] = cr0 | X86_CR0_ET;
     v->arch.hvm_vcpu.guest_cr[3] = cr3;
@@ -765,43 +690,11 @@ static void vmx_fpu_enter(struct vcpu *v)
     vmx_update_exception_bitmap(v);
 }
 
-#ifndef __UXEN__
-static void vmx_fpu_leave(struct vcpu *v)
-{
-DEBUG();
-    ASSERT(!v->fpu_dirtied);
-    ASSERT(read_cr0() & X86_CR0_TS);
-
-    if ( !(v->arch.hvm_vmx.host_cr0 & X86_CR0_TS) )
-    {
-        v->arch.hvm_vmx.host_cr0 |= X86_CR0_TS;
-        __vmwrite(HOST_CR0, v->arch.hvm_vmx.host_cr0);
-    }
-
-    /*
-     * If the guest does not have TS enabled then we must cause and handle an
-     * exception on first use of the FPU. If the guest *does* have TS enabled
-     * then this is not necessary: no FPU activity can occur until the guest
-     * clears CR0.TS, and we will initialise the FPU when that happens.
-     */
-    if ( !(v->arch.hvm_vcpu.guest_cr[0] & X86_CR0_TS) )
-    {
-        v->arch.hvm_vcpu.hw_cr[0] |= X86_CR0_TS;
-        __vmwrite(GUEST_CR0, v->arch.hvm_vcpu.hw_cr[0]);
-        v->arch.hvm_vmx.exception_bitmap |= (1u << TRAP_no_device);
-        vmx_update_exception_bitmap(v);
-    }
-}
-#endif  /* __UXEN__ */
-
 void vmx_ctxt_switch_from(struct vcpu *v)
 {
     if (v->context_loaded == 0)
         return;
     v->context_loaded = 0;
-#ifndef __UXEN_NOT_YET__
-    vmx_fpu_leave(v);
-#endif  /* __UXEN_NOT_YET__ */
     vcpu_save_fpu(v);
     vmx_restore_host_msrs(v);
     vmx_restore_host_env();
@@ -1028,13 +921,6 @@ static void sync_host_vmcs_state(struct vcpu *v)
 void vmx_ctxt_switch_to(struct vcpu *v)
 {
     struct domain *d = v->domain;
-#ifndef __UXEN__
-    unsigned long old_cr4 = read_cr4(), new_cr4 = mmu_cr4_features;
-
-    /* HOST_CR4 in VMCS is always mmu_cr4_features. Sync CR4 now. */
-    if ( old_cr4 != new_cr4 )
-        write_cr4(new_cr4);
-#endif  /* __UXEN__ */
     unsigned int cpu = smp_processor_id();
 
 #ifdef DEBUG
@@ -1334,11 +1220,6 @@ vmx_set_tsc_offset(struct vcpu *v, u64 offset)
 {
     vmx_vmcs_enter(v);
 
-#ifndef __UXEN_NOT_YET__
-    if ( nestedhvm_vcpu_in_guestmode(v) )
-        offset += nvmx_get_tsc_offset(v);
-#endif  /* __UXEN_NOT_YET__ */
-
     __vmwrite(TSC_OFFSET, offset);
 #if defined (__i386__)
     __vmwrite(TSC_OFFSET_HIGH, offset >> 32);
@@ -1464,9 +1345,6 @@ vmx_update_host_cr3(struct vcpu *v)
     vmx_vmcs_enter(v);
     __vmwrite(HOST_CR3, v->arch.cr3);
     vmx_vmcs_exit(v);
-#ifndef __UXEN__
-    WARN();
-#endif  /* __UXEN__ */
 }
 
 void vmx_update_debug_state(struct vcpu *v)
@@ -1649,11 +1527,6 @@ vmx_update_guest_efer(struct vcpu *v)
     vmx_vmcs_exit(v);
 #endif
 
-#ifndef __UXEN__
-    if ( v == current )
-        write_efer((read_efer() & ~EFER_SCE) |
-                   (v->arch.hvm_vcpu.guest_efer & EFER_SCE));
-#endif  /* __UXEN__ */
 }
 
 /* Caller must hold pt_sync_lock */
@@ -1670,36 +1543,6 @@ vmx_pt_maybe_sync_cpu_no_lock(struct domain *d, unsigned int cpu)
         p2m->virgin = 1;
     }
 }
-
-#ifndef __UXEN_NOT_YET__
-void nvmx_enqueue_n2_exceptions(struct vcpu *v, 
-            unsigned long intr_fields, int error_code)
-{
-    struct nestedvmx *nvmx = &vcpu_2_nvmx(v);
-
-DEBUG();
-    if ( !(nvmx->intr.intr_info & INTR_INFO_VALID_MASK) ) {
-        /* enqueue the exception till the VMCS switch back to L1 */
-        nvmx->intr.intr_info = intr_fields;
-        nvmx->intr.error_code = error_code;
-        vcpu_nestedhvm(v).nv_vmexit_pending = 1;
-        return;
-    }
-    else
-        gdprintk(XENLOG_ERR, "Double Fault on Nested Guest: exception %lx %x"
-                 "on %lx %x\n", intr_fields, error_code,
-                 nvmx->intr.intr_info, nvmx->intr.error_code);
-}
-
-int
-vmx_nhvm_vcpu_vmexit_trap(struct vcpu *v, unsigned int trapnr,
-                          int errcode, unsigned long cr2)
-{
-DEBUG();
-    nvmx_enqueue_n2_exceptions(v, trapnr, errcode);
-    return NESTEDHVM_VMEXIT_DONE;
-}
-#endif  /* __UXEN_NOT_YET__ */
 
 static void __vmx_inject_exception(int trap, int type, int error_code)
 {
@@ -1735,11 +1578,6 @@ void vmx_inject_hw_exception(int trap, int error_code)
 
     int type = X86_EVENTTYPE_HW_EXCEPTION;
 
-#ifndef __UXEN_NOT_YET__
-    if ( nestedhvm_vcpu_in_guestmode(curr) )
-        intr_info = vcpu_2_nvmx(curr).intr.intr_info;
-    else
-#endif  /* __UXEN_NOT_YET__ */
         intr_info = __vmread(VM_ENTRY_INTR_INFO);
 
     switch ( trap )
@@ -1772,17 +1610,6 @@ void vmx_inject_hw_exception(int trap, int error_code)
             error_code = 0;
     }
 
-#ifndef __UXEN_NOT_YET__
-    if ( nestedhvm_vcpu_in_guestmode(curr) &&
-         nvmx_intercepts_exception(curr, trap, error_code) )
-    {
-        nvmx_enqueue_n2_exceptions (curr, 
-            INTR_INFO_VALID_MASK | (type<<8) | trap,
-            error_code); 
-        return;
-    }
-    else
-#endif  /* __UXEN_NOT_YET__ */
         __vmx_inject_exception(trap, type, error_code);
 
     if ( trap == TRAP_page_fault )
@@ -1794,23 +1621,6 @@ void vmx_inject_hw_exception(int trap, int error_code)
 
 void vmx_inject_extint(int trap)
 {
-#ifndef __UXEN_NOT_YET__
-    struct vcpu *v = current;
-    u32    pin_based_cntrl;
-#endif  /* __UXEN_NOT_YET__ */
-
-#ifndef __UXEN_NOT_YET__
-    if ( nestedhvm_vcpu_in_guestmode(v) ) {
-        pin_based_cntrl = __get_vvmcs(vcpu_nestedhvm(v).nv_vvmcx, 
-                                     PIN_BASED_VM_EXEC_CONTROL);
-        if ( pin_based_cntrl && PIN_BASED_EXT_INTR_MASK ) {
-            nvmx_enqueue_n2_exceptions (v, 
-               INTR_INFO_VALID_MASK | (X86_EVENTTYPE_EXT_INTR<<8) | trap,
-               HVM_DELIVER_NO_ERROR_CODE);
-            return;
-        }
-    }
-#endif  /* __UXEN_NOT_YET__ */
 
     if (current->domain->is_attovm_ax)
         attovm_inject_extint(trap);
@@ -1821,23 +1631,7 @@ void vmx_inject_extint(int trap)
 
 void vmx_inject_nmi(void)
 {
-#ifndef __UXEN_NOT_YET__
-    struct vcpu *v = current;
-    u32    pin_based_cntrl;
-#endif  /* __UXEN_NOT_YET__ */
 
-#ifndef __UXEN_NOT_YET__
-    if ( nestedhvm_vcpu_in_guestmode(v) ) {
-        pin_based_cntrl = __get_vvmcs(vcpu_nestedhvm(v).nv_vvmcx, 
-                                     PIN_BASED_VM_EXEC_CONTROL);
-        if ( pin_based_cntrl && PIN_BASED_NMI_EXITING ) {
-            nvmx_enqueue_n2_exceptions (v, 
-               INTR_INFO_VALID_MASK | (X86_EVENTTYPE_NMI<<8) | TRAP_nmi,
-               HVM_DELIVER_NO_ERROR_CODE);
-            return;
-        }
-    }
-#endif  /* __UXEN_NOT_YET__ */
     __vmx_inject_exception(2, X86_EVENTTYPE_NMI,
                            HVM_DELIVER_NO_ERROR_CODE);
 }
@@ -2267,14 +2061,8 @@ static int vmx_cr_access(unsigned long exit_qualification)
         return hvm_mov_from_cr(cr, gp);
     }
     case VMX_CONTROL_REG_ACCESS_TYPE_CLTS: {
-#ifndef __UXEN__
-        unsigned long old = curr->arch.hvm_vcpu.guest_cr[0];
-#endif  /* __UXEN__ */
         curr->arch.hvm_vcpu.guest_cr[0] &= ~X86_CR0_TS;
         vmx_update_guest_cr(curr, 0);
-#ifndef __UXEN__
-        hvm_memory_event_cr0(curr->arch.hvm_vcpu.guest_cr[0], old);
-#endif  /* __UXEN__ */
         HVMTRACE_0D(CLTS);
         break;
     }
@@ -2422,9 +2210,6 @@ vmx_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
         *msr_content = 1; /* no features enabled and locked off for writes */
         break;
     case MSR_IA32_VMX_BASIC...MSR_IA32_VMX_TRUE_ENTRY_CTLS:
-#ifndef __UXEN_NOT_YET__
-        if ( !nvmx_msr_read_intercept(msr, msr_content) )
-#endif  /* __UXEN_NOT_YET__ */
             goto gp_fault;
         break;
     case MSR_IA32_MISC_ENABLE:
@@ -2455,10 +2240,6 @@ vmx_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
         if ( vpmu_do_rdmsr(msr, msr_content) )
             break;
 #endif  /* __UXEN_vpmu__ */
-#ifndef __UXEN__
-        if ( passive_domain_do_rdmsr(msr, msr_content) )
-            goto done;
-#endif  /* __UXEN__ */
         switch ( long_mode_do_msr_read(msr, msr_content) )
         {
             case HNDL_unhandled:
@@ -2573,9 +2354,6 @@ void vmx_vlapic_msr_changed(struct vcpu *v)
 int
 vmx_msr_write_intercept(unsigned int msr, uint64_t msr_content)
 {
-#ifndef __UXEN__
-    struct vcpu *v = current;
-#endif  /* __UXEN__ */
     int r;
 
     HVM_DBG_LOG(DBG_LEVEL_1, "ecx=%x, msr_value=0x%"PRIx64,
@@ -2627,9 +2405,6 @@ vmx_msr_write_intercept(unsigned int msr, uint64_t msr_content)
     }
     case IA32_FEATURE_CONTROL_MSR:
     case MSR_IA32_VMX_BASIC...MSR_IA32_VMX_TRUE_ENTRY_CTLS:
-#ifndef __UXEN_NOT_YET__
-        if ( !nvmx_msr_write_intercept(msr, msr_content) )
-#endif  /* __UXEN_NOT_YET__ */
             goto gp_fault;
         break;
      case MSR_P6_PERFCTR(0)...MSR_P6_PERFCTR(7):
@@ -2653,10 +2428,6 @@ vmx_msr_write_intercept(unsigned int msr, uint64_t msr_content)
         if ( vpmu_do_wrmsr(msr, msr_content) )
             return X86EMUL_OKAY;
 #endif  /* __UXEN_vpmu__ */
-#ifndef __UXEN__
-        if ( passive_domain_do_wrmsr(msr, msr_content) )
-            return X86EMUL_OKAY;
-#endif  /* __UXEN__ */
 
         r = wrmsr_viridian_regs(msr, msr_content);
         if (r == -1)
@@ -2693,86 +2464,13 @@ gp_fault:
 
 static void vmx_do_extint(struct cpu_user_regs *regs)
 {
-#ifndef __UXEN__
-    unsigned int vector;
-
-    vector = __vmread(VM_EXIT_INTR_INFO);
-    BUG_ON(!(vector & INTR_INFO_VALID_MASK));
-
-    vector &= INTR_INFO_VECTOR_MASK;
-    HVMTRACE_1D(INTR, vector);
-
-    switch ( vector )
-    {
-    case IRQ_MOVE_CLEANUP_VECTOR:
-        smp_irq_move_cleanup_interrupt(regs);
-        break;
-    case LOCAL_TIMER_VECTOR:
-        smp_apic_timer_interrupt(regs);
-        break;
-    case EVENT_CHECK_VECTOR:
-        smp_event_check_interrupt(regs);
-        break;
-    case INVALIDATE_TLB_VECTOR:
-        smp_invalidate_interrupt();
-        break;
-    case CALL_FUNCTION_VECTOR:
-        smp_call_function_interrupt(regs);
-        break;
-    case SPURIOUS_APIC_VECTOR:
-        smp_spurious_interrupt(regs);
-        break;
-    case ERROR_APIC_VECTOR:
-        smp_error_interrupt(regs);
-        break;
-    case CMCI_APIC_VECTOR:
-        smp_cmci_interrupt(regs);
-        break;
-    case PMU_APIC_VECTOR:
-        smp_pmu_apic_interrupt(regs);
-        break;
-#ifdef CONFIG_X86_MCE_THERMAL
-    case THERMAL_APIC_VECTOR:
-        smp_thermal_interrupt(regs);
-        break;
-#endif
-    default:
-        regs->entry_vector = vector;
-        do_IRQ(regs);
-        break;
-    }
-#else   /* __UXEN__ */
     perfc_incr(external_int_exit);
-#endif  /* __UXEN__ */
 }
-
-#ifndef __UXEN__
-static void wbinvd_ipi(void *info)
-{
-DEBUG();
-    wbinvd();
-}
-#endif  /* __UXEN__ */
 
 void
 vmx_wbinvd_intercept(void)
 {
-#ifndef __UXEN__
-    if ( !has_arch_mmios(current->domain) )
-        return;
-
-#ifndef __UXEN__
-    if ( iommu_snoop )
-        return;
-#endif  /* __UXEN__ */
-
-    if ( cpu_has_wbinvd_exiting )
-        on_each_cpu(wbinvd_ipi, NULL, 1);
-    else
-        wbinvd();
-#else  /* __UXEN__ */
     return;
-#endif  /* __UXEN__ */
 }
 
 static void
@@ -3006,9 +2704,7 @@ vmx_do_execute(struct vcpu *v)
 {
     unsigned int exit_reason, idtv_info, intr_info = 0, vector = 0;
     unsigned long exit_qualification, inst_len = 0;
-#ifdef __UXEN__
     struct cpu_user_regs *regs = guest_cpu_user_regs();
-#endif  /* __UXEN__ */
 
     ASSERT(v);
 
@@ -3088,25 +2784,15 @@ vmx_do_execute(struct vcpu *v)
         }
     }
 
-#if defined(__UXEN__)
     if (uxen_dump_vmcs && (exit_reason != EXIT_REASON_IO_INSTRUCTION ||
                            (regs->edx != 0xe9 && regs->edx != 0x3f8 &&
                             regs->edx != 0x3fd))) {
         vmcs_mini_dump_vcpu("debug", v, exit_reason);
         uxen_dump_vmcs--;
     }
-#endif  /* __UXEN__ */
     /* XXX: This looks ugly, but we need a mechanism to ensure
      * any pending vmresume has really happened
      */
-#ifndef __UXEN_NOT_YET__
-    vcpu_nestedhvm(v).nv_vmswitch_in_progress = 0;
-    if ( nestedhvm_vcpu_in_guestmode(v) )
-    {
-        if ( nvmx_n2_vmexit_handler(regs, exit_reason) )
-            goto out;
-    }
-#endif  /* __UXEN_NOT_YET__ */
 
     if ( unlikely(exit_reason & VMX_EXIT_REASONS_FAILED_VMENTRY) )
         return vmx_failed_vmentry(exit_reason, regs);
@@ -3151,15 +2837,8 @@ vmx_do_execute(struct vcpu *v)
         }
     }
 
-#ifndef __UXEN__
-    hvm_maybe_deassert_evtchn_irq();
-#endif  /* __UXEN__ */
-
     idtv_info = __vmread(IDT_VECTORING_INFO);
     if (
-#ifndef __UXEN_NOT_YET__
-         !nestedhvm_vcpu_in_guestmode(v) && 
-#endif  /* __UXEN_NOT_YET__ */
          exit_reason != EXIT_REASON_TASK_SWITCH )
         vmx_idtv_reinject(idtv_info);
 
@@ -3214,20 +2893,8 @@ vmx_do_execute(struct vcpu *v)
                 break;
             }
             else {
-#ifndef __UXEN__
-                int handled = hvm_memory_event_int3(regs->eip);
-                
-                if ( handled < 0 ) 
-                {
-                    vmx_inject_exception(TRAP_int3, HVM_DELIVER_NO_ERROR_CODE, 0);
-                    break;
-                }
-                else if ( handled )
-                    break;
-#else   /* __UXEN__ */
                 vmx_inject_exception(TRAP_int3, HVM_DELIVER_NO_ERROR_CODE, 0);
                 break;
-#endif  /* __UXEN__ */
             }
 
             goto exit_and_crash;
@@ -3288,9 +2955,7 @@ vmx_do_execute(struct vcpu *v)
         /* Already handled above. */
         break;
     case EXIT_REASON_TRIPLE_FAULT:
-#ifdef __UXEN__
         vmcs_mini_dump_vcpu("triple fault", v, exit_reason);
-#endif  /* __UXEN__ */
         hvm_triple_fault();
         break;
     case EXIT_REASON_PENDING_VIRT_INTR:
@@ -3355,10 +3020,6 @@ vmx_do_execute(struct vcpu *v)
         if ( rc != HVM_HCALL_preempted )
         {
             update_guest_eip(); /* Safe: VMCALL */
-#ifndef __UXEN__
-            if ( rc == HVM_HCALL_invalidate )
-                send_invalidate_req();
-#endif  /* __UXEN__ */
         }
         break;
     }
@@ -3394,66 +3055,30 @@ vmx_do_execute(struct vcpu *v)
     }
 
     case EXIT_REASON_VMXOFF:
-#ifndef __UXEN_NOT_YET__
-        if ( nvmx_handle_vmxoff(regs) == X86EMUL_OKAY )
-            update_guest_eip();
-#endif  /* __UXEN_NOT_YET__ */
         break;
 
     case EXIT_REASON_VMXON:
-#ifndef __UXEN_NOT_YET__
-        if ( nvmx_handle_vmxon(regs) == X86EMUL_OKAY )
-            update_guest_eip();
-#endif  /* __UXEN_NOT_YET__ */
         break;
 
     case EXIT_REASON_VMCLEAR:
-#ifndef __UXEN_NOT_YET__
-        if ( nvmx_handle_vmclear(regs) == X86EMUL_OKAY )
-            update_guest_eip();
-#endif  /* __UXEN_NOT_YET__ */
         break;
  
     case EXIT_REASON_VMPTRLD:
-#ifndef __UXEN_NOT_YET__
-        if ( nvmx_handle_vmptrld(regs) == X86EMUL_OKAY )
-            update_guest_eip();
-#endif  /* __UXEN_NOT_YET__ */
         break;
 
     case EXIT_REASON_VMPTRST:
-#ifndef __UXEN_NOT_YET__
-        if ( nvmx_handle_vmptrst(regs) == X86EMUL_OKAY )
-            update_guest_eip();
-#endif  /* __UXEN_NOT_YET__ */
         break;
 
     case EXIT_REASON_VMREAD:
-#ifndef __UXEN_NOT_YET__
-        if ( nvmx_handle_vmread(regs) == X86EMUL_OKAY )
-            update_guest_eip();
-#endif  /* __UXEN_NOT_YET__ */
         break;
  
     case EXIT_REASON_VMWRITE:
-#ifndef __UXEN_NOT_YET__
-        if ( nvmx_handle_vmwrite(regs) == X86EMUL_OKAY )
-            update_guest_eip();
-#endif  /* __UXEN_NOT_YET__ */
         break;
 
     case EXIT_REASON_VMLAUNCH:
-#ifndef __UXEN_NOT_YET__
-        if ( nvmx_handle_vmlaunch(regs) == X86EMUL_OKAY )
-            update_guest_eip();
-#endif  /* __UXEN_NOT_YET__ */
         break;
 
     case EXIT_REASON_VMRESUME:
-#ifndef __UXEN_NOT_YET__
-        if ( nvmx_handle_vmresume(regs) == X86EMUL_OKAY )
-            update_guest_eip();
-#endif  /* __UXEN_NOT_YET__ */
         break;
 
     case EXIT_REASON_MWAIT_INSTRUCTION:
@@ -3533,9 +3158,6 @@ vmx_do_execute(struct vcpu *v)
         v->arch.hvm_vmx.exec_control &= ~CPU_BASED_MONITOR_TRAP_FLAG;
         vmx_update_cpu_exec_control(v);
         if ( v->arch.hvm_vcpu.single_step ) {
-#ifndef __UXEN__
-          hvm_memory_event_single_step(regs->eip);
-#endif  /* __UXEN__ */
           if ( v->domain->debugger_attached )
               domain_pause_for_debugger();
         }
@@ -3569,11 +3191,6 @@ vmx_do_execute(struct vcpu *v)
         break;
     }
 
-#ifndef __UXEN_NOT_YET__
-out:
-    if ( nestedhvm_vcpu_in_guestmode(v) )
-        nvmx_idtv_handling();
-#endif  /* __UXEN_NOT_YET__ */
 }
 
 asmlinkage_abi void vmx_vmenter_helper(void)

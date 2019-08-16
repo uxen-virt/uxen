@@ -20,9 +20,7 @@
 #ifndef __ASSEMBLY__
 # include <asm/types.h>
 # include <xen/lib.h>
-#ifdef __UXEN__
 #  include <uxen/uxen.h>
-#endif  /* __UXEN__ */
 #endif
 
 #if defined(__i386__)
@@ -247,17 +245,10 @@ void copy_page_sse2(void *, const void *);
 #define __pfn_to_paddr(pfn) ((paddr_t)(pfn) << PAGE_SHIFT)
 #define __paddr_to_pfn(pa)  ((unsigned long)((pa) >> PAGE_SHIFT))
 
-#ifndef __UXEN__
-/* Convert between machine frame numbers and spage-info structures. */
-#define __mfn_to_spage(mfn)  (spage_table + pfn_to_sdx(mfn))
-#define __spage_to_mfn(pg)   sdx_to_pfn((unsigned long)((pg) - spage_table))
-#endif  /* __UXEN__ */
-
 /* Convert between page-info structures and spage-info structures. */
 #define page_to_spage(page)  (spage_table+(((page)-frame_table)>>(SUPERPAGE_SHIFT-PAGE_SHIFT)))
 #define spage_to_page(spage)  (frame_table+(((spage)-spage_table)<<(SUPERPAGE_SHIFT-PAGE_SHIFT)))
 
-#ifdef __UXEN__
 #define __mfn_valid(mfn)        ({                                      \
             unsigned long __m_f_n = (mfn);                              \
             likely(__m_f_n < max_page);                                 \
@@ -274,7 +265,6 @@ void copy_page_sse2(void *, const void *);
             unsigned long __m_f_n = (mfn);                              \
             likely(__m_f_n) && likely(__m_f_n < max_vframe);            \
         })
-#endif  /* __UXEN__ */
 
 #define __mfn_zero_page(mfn)                                        \
     ((mfn) == SHARED_ZERO_MFN || (mfn) == mfn_x(shared_zero_page))
@@ -307,9 +297,6 @@ void copy_page_sse2(void *, const void *);
 #define maddr_to_page(ma)   __maddr_to_page(ma)
 #define page_to_maddr(pg)   __page_to_maddr(pg)
 #define virt_to_page(va)    __virt_to_page(va)
-#ifndef __UXEN__
-#define page_to_virt(pg)    __page_to_virt(pg)
-#endif  /* __UXEN__ */
 #define pfn_to_paddr(pfn)   __pfn_to_paddr(pfn)
 #define paddr_to_pfn(pa)    __paddr_to_pfn(pa)
 #define paddr_to_pdx(pa)    pfn_to_pdx(paddr_to_pfn(pa))

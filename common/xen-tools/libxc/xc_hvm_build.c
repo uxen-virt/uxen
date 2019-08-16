@@ -46,21 +46,13 @@
 #include "xc_attovm.h"
 #include "xc_attovm_private.h"
 
-#if !defined(QEMU_UXEN)
-#include <xen/foreign/x86_32.h>
-#include <xen/foreign/x86_64.h>
-#endif  /* QEMU_UXEN */
 #include <xen/hvm/hvm_info_table.h>
 #include <xen/hvm/params.h>
 #include <xen/hvm/e820.h>
 #include <xen/attovm.h>
 
-#if !defined(QEMU_UXEN)
-#include <xen/libelf/libelf.h>
-#else   /* QEMU_UXEN */
 #define NO_XEN_ELF_NOTE
 #include <libelf/libelf.h>
-#endif  /* QEMU_UXEN */
 
 #include <attoxen-api/ax_attovm.h>
 
@@ -70,13 +62,6 @@
 #define SUPERPAGE_1GB_NR_PFNS (1UL << SUPERPAGE_1GB_SHIFT)
 
 #define SPECIALPAGE_IDENT_PT 0
-
-#if !defined(QEMU_UXEN)
-#define SPECIALPAGE_IOREQ    X
-#define SPECIALPAGE_BUFIOREQ X
-#define SPECIALPAGE_XENSTORE X
-#define SPECIALPAGE_CONSOLE  X
-#endif  /* QEMU_UXEN */
 
 /* reverse first/last since special_pfn's indexes allocate in reverse order */
 #define SPECIALPAGE_IOREQ_LAST (SPECIALPAGE_IDENT_PT + 1)
@@ -419,11 +404,7 @@ static int setup_guest(xc_interface *xch,
         if ( elf_init(&elf, image, image_size) != 0 )
             goto error_out;
 
-#if !defined(QEMU_UXEN)
-        xc_elf_set_logfile(xch, &elf, 1);
-#else   /* QEMU_UXEN */
         elf_set_log(&elf, elf_log_cb, NULL, 1);
-#endif  /* QEMU_UXEN */
 
         elf_parse_binary(&elf);
     }
@@ -636,14 +617,6 @@ static int setup_guest(xc_interface *xch,
             goto error_out;
     }
 
-#if !defined(QEMU_UXEN)
-    xc_set_hvm_param(xch, dom, HVM_PARAM_STORE_PFN,
-                     special_pfn(SPECIALPAGE_XENSTORE));
-#endif  /* QEMU_UXEN */
-#if !defined(QEMU_UXEN)
-    xc_set_hvm_param(xch, dom, HVM_PARAM_CONSOLE_PFN,
-                     special_pfn(SPECIALPAGE_CONSOLE));
-#endif  /* QEMU_UXEN */
     xc_set_hvm_param(xch, dom, HVM_PARAM_IO_PFN_FIRST,
                      special_pfn(SPECIALPAGE_IOREQ_FIRST));
     xc_set_hvm_param(xch, dom, HVM_PARAM_IO_PFN_LAST,
@@ -783,81 +756,6 @@ int xc_attovm_build(xc_interface *xch,
 
     return 0;
 }
-
-#if !defined(QEMU_UXEN)
-/* xc_hvm_build_target_mem: 
- * Create a domain for a pre-ballooned virtualized Linux, using
- * files/filenames.  If target < memsize, domain is created with
- * memsize pages marked populate-on-demand, 
- * calculating pod cache size based on target.
- * If target == memsize, pages are populated normally.
- */
-int xc_hvm_build_target_mem(xc_interface *xch,
-                           uint32_t domid,
-                           int memsize,
-                           int target,
-                           uint32_t nr_vcpus,
-                           uint32_t nr_ioreq_servers,
-                           const char *image_name)
-{
-    char *image;
-    int  sts;
-    unsigned long image_size;
-
-    if ( (image_name == NULL) ||
-         ((image = xc_read_image(xch, image_name, &image_size)) == NULL) )
-        return -1;
-
-    sts = xc_hvm_build_internal(xch, domid, memsize, target, nr_vcpus,
-                                nr_ioreq_servers, image, image_size);
-
-    free(image);
-
-    return sts;
-}
-
-/* xc_hvm_build_mem:
- * Create a domain for a virtualized Linux, using memory buffers.
- */
-int xc_hvm_build_mem(xc_interface *xch,
-                     uint32_t domid,
-                     int memsize,
-                     uint32_t nr_vcpus,
-                     uint32_t nr_ioreq_servers,
-                     const char *image_buffer,
-                     unsigned long image_size)
-{
-    int           sts;
-    unsigned long img_len;
-    char         *img;
-
-    /* Validate that there is a kernel buffer */
-
-    if ( (image_buffer == NULL) || (image_size == 0) )
-    {
-        ERROR("kernel image buffer not present");
-        return -1;
-    }
-
-    img = xc_inflate_buffer(xch, image_buffer, image_size, &img_len);
-    if ( img == NULL )
-    {
-        ERROR("unable to inflate ram disk buffer");
-        return -1;
-    }
-
-    sts = xc_hvm_build_internal(xch, domid, memsize, memsize, nr_vcpus,
-                                nr_ioreq_servers, img, img_len);
-
-    /* xc_inflate_buffer may return the original buffer pointer (for
-       for already inflated buffers), so exercise some care in freeing */
-
-    if ( (img != NULL) && (img != image_buffer) )
-        free(img);
-
-    return sts;
-}
-#endif  /* QEMU_UXEN */
 
 /*
  * Local variables:

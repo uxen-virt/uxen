@@ -306,12 +306,6 @@ static void ioreq_pio(ioreq_t *req)
     }
 }
 
-#ifndef __UXEN_TOOLS__
-static void ioreq_timeoffset(ioreq_t *req)
-{
-}
-#endif  /* __UXEN_TOOLS__ */
-
 static void ioreq_move(ioreq_t *req)
 {
     int i, sign;
@@ -379,14 +373,6 @@ static void __handle_ioreq(ioreq_t *req)
     case IOREQ_TYPE_COPY:
         ioreq_move(req);
         break;
-#ifndef __UXEN_TOOLS__
-    case IOREQ_TYPE_TIMEOFFSET:
-        ioreq_timeoffset(req);
-        break;
-    case IOREQ_TYPE_INVALIDATE:
-        mapcache_invalidate();
-        break;
-#endif  /* __UXEN_TOOLS__ */
     case IOREQ_TYPE_PCI_CONFIG:
         ioreq_config_space(req);
         break;

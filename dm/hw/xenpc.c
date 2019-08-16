@@ -459,11 +459,6 @@ pc_init_xen(void)
 	uxen_stor_late_register();
     }
 
-#if !defined(QEMU_UXEN)
-    if (usb_enabled)
-        usb_uhci_piix3_init(pci_bus, piix3_devfn + 2);
-#endif  /* QEMU_UXEN */
-
     /* if (acpi_enabled) */ {
 #if 0
         uint8_t *eeprom_buf = calloc(1, 8 * 256);

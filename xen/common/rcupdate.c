@@ -95,64 +95,11 @@ static int qhimark = 10000;
 static int qlowmark = 100;
 static int rsinterval = 1000;
 
-#ifndef __UXEN__
-struct rcu_barrier_data {
-    struct rcu_head head;
-    atomic_t *cpu_count;
-};
-
-static void rcu_barrier_callback(struct rcu_head *head)
-{
-    struct rcu_barrier_data *data = container_of(
-        head, struct rcu_barrier_data, head);
-    atomic_inc(data->cpu_count);
-}
-
-static int rcu_barrier_action(void *_cpu_count)
-{
-    struct rcu_barrier_data data = { .cpu_count = _cpu_count };
-
-    ASSERT(!local_irq_is_enabled());
-    local_irq_enable();
-
-    /*
-     * When callback is executed, all previously-queued RCU work on this CPU
-     * is completed. When all CPUs have executed their callback, data.cpu_count
-     * will have been incremented to include every online CPU.
-     */
-    call_rcu(&data.head, rcu_barrier_callback);
-
-    while ( atomic_read(data.cpu_count) != num_online_cpus() )
-    {
-        process_pending_softirqs();
-        cpu_relax();
-    }
-
-    local_irq_disable();
-
-    return 0;
-}
-
-int rcu_barrier(void)
-{
-    atomic_t cpu_count = ATOMIC_INIT(0);
-    return stop_machine_run(rcu_barrier_action, &cpu_count, NR_CPUS);
-}
-#endif  /* __UXEN__ */
-
 /* Is batch a before batch b ? */
 static inline int rcu_batch_before(long a, long b)
 {
     return (a - b) < 0;
 }
-
-#ifndef __UXEN__
-/* Is batch a after batch b ? */
-static inline int rcu_batch_after(long a, long b)
-{
-    return (a - b) > 0;
-}
-#endif  /* __UXEN__ */
 
 static void force_quiescent_state(struct rcu_data *rdp,
                                   struct rcu_ctrlblk *rcp)
@@ -397,57 +344,10 @@ int rcu_pending(int cpu)
     return __rcu_pending(&rcu_ctrlblk, &per_cpu(rcu_data, cpu));
 }
 
-#ifndef __UXEN__
-/*
- * Check to see if any future RCU-related work will need to be done
- * by the current CPU, even if none need be done immediately, returning
- * 1 if so.  This function is part of the RCU implementation; it is -not-
- * an exported member of the RCU API.
- */
-int rcu_needs_cpu(int cpu)
-{
-    struct rcu_data *rdp = &per_cpu(rcu_data, cpu);
-
-    return (!!rdp->curlist || rcu_pending(cpu));
-}
-#endif  /* __UXEN__ */
-
 void rcu_check_callbacks(int cpu)
 {
     raise_softirq(RCU_CPU_SOFTIRQ);
 }
-
-#ifndef __UXEN__
-static void rcu_move_batch(struct rcu_data *this_rdp, struct rcu_head *list,
-                           struct rcu_head **tail)
-{
-    local_irq_disable();
-    *this_rdp->nxttail = list;
-    if (list)
-        this_rdp->nxttail = tail;
-    local_irq_enable();
-}
-
-static void rcu_offline_cpu(struct rcu_data *this_rdp,
-                            struct rcu_ctrlblk *rcp, struct rcu_data *rdp)
-{
-    /* If the cpu going offline owns the grace period we can block
-     * indefinitely waiting for it, so flush it here.
-     */
-    spin_lock(&rcp->lock);
-    if (rcp->cur != rcp->completed)
-        cpu_quiet(rdp->cpu, rcp);
-    spin_unlock(&rcp->lock);
-
-    rcu_move_batch(this_rdp, rdp->donelist, rdp->donetail);
-    rcu_move_batch(this_rdp, rdp->curlist, rdp->curtail);
-    rcu_move_batch(this_rdp, rdp->nxtlist, rdp->nxttail);
-
-    local_irq_disable();
-    this_rdp->qlen += rdp->qlen;
-    local_irq_enable();
-}
-#endif  /* __UXEN__ */
 
 static void rcu_init_percpu_data(int cpu, struct rcu_ctrlblk *rcp,
                                  struct rcu_data *rdp)
@@ -475,11 +375,7 @@ static int cpu_callback(
         break;
     case CPU_UP_CANCELED:
     case CPU_DEAD:
-#ifndef __UXEN__
-        rcu_offline_cpu(&this_cpu(rcu_data), &rcu_ctrlblk, rdp);
-#else   /* __UXEN__ */
 	BUG();
-#endif  /* __UXEN__ */
         break;
     default:
         break;

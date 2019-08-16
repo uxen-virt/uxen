@@ -8,9 +8,6 @@
 #include <xen/config.h>
 #include <xen/perfc.h>
 #include <xen/sched.h>
-#ifndef __UXEN__
-#include <compat/xen.h>
-#endif
 #include <asm/fixmap.h>
 #include <asm/hardirq.h>
 #include <xen/multiboot.h>
@@ -62,41 +59,10 @@ void __dummy__(void)
     DEFINE(UREGS_user_sizeof, sizeof(struct cpu_user_regs));
     BLANK();
 
-#ifndef __UXEN__
-    OFFSET(irq_caps_offset, struct domain, irq_caps);
-#endif  /* __UXEN__ */
     OFFSET(next_in_list_offset, struct domain, next_in_list);
     OFFSET(VCPU_processor, struct vcpu, processor);
     OFFSET(VCPU_domain, struct vcpu, domain);
     OFFSET(VCPU_vcpu_info, struct vcpu, vcpu_info);
-#ifndef __UXEN__
-    OFFSET(VCPU_trap_bounce, struct vcpu, arch.pv_vcpu.trap_bounce);
-    OFFSET(VCPU_int80_bounce, struct vcpu, arch.pv_vcpu.int80_bounce);
-    OFFSET(VCPU_thread_flags, struct vcpu, arch.flags);
-    OFFSET(VCPU_event_addr, struct vcpu, arch.pv_vcpu.event_callback_eip);
-    OFFSET(VCPU_event_sel, struct vcpu, arch.pv_vcpu.event_callback_cs);
-    OFFSET(VCPU_failsafe_addr, struct vcpu,
-           arch.pv_vcpu.failsafe_callback_eip);
-    OFFSET(VCPU_failsafe_sel, struct vcpu,
-           arch.pv_vcpu.failsafe_callback_cs);
-    OFFSET(VCPU_syscall_addr, struct vcpu,
-           arch.pv_vcpu.syscall_callback_eip);
-    OFFSET(VCPU_syscall32_addr, struct vcpu,
-           arch.pv_vcpu.syscall32_callback_eip);
-    OFFSET(VCPU_syscall32_sel, struct vcpu,
-           arch.pv_vcpu.syscall32_callback_cs);
-    OFFSET(VCPU_syscall32_disables_events, struct vcpu,
-           arch.pv_vcpu.syscall32_disables_events);
-    OFFSET(VCPU_sysenter_addr, struct vcpu,
-           arch.pv_vcpu.sysenter_callback_eip);
-    OFFSET(VCPU_sysenter_sel, struct vcpu,
-           arch.pv_vcpu.sysenter_callback_cs);
-    OFFSET(VCPU_sysenter_disables_events, struct vcpu,
-           arch.pv_vcpu.sysenter_disables_events);
-    OFFSET(VCPU_trap_ctxt, struct vcpu, arch.pv_vcpu.trap_ctxt);
-    OFFSET(VCPU_kernel_sp, struct vcpu, arch.pv_vcpu.kernel_sp);
-    OFFSET(VCPU_kernel_ss, struct vcpu, arch.pv_vcpu.kernel_ss);
-#endif  /* __UXEN__ */
     OFFSET(VCPU_guest_context_flags, struct vcpu, arch.vgc_flags);
     OFFSET(VCPU_nmi_pending, struct vcpu, nmi_pending);
     OFFSET(VCPU_mce_pending, struct vcpu, mce_pending);
@@ -148,19 +114,7 @@ void __dummy__(void)
     OFFSET(VCPUINFO_upcall_mask, struct vcpu_info, evtchn_upcall_mask);
     BLANK();
 
-#ifndef __UXEN__
-    OFFSET(COMPAT_VCPUINFO_upcall_pending, struct compat_vcpu_info, evtchn_upcall_pending);
-    OFFSET(COMPAT_VCPUINFO_upcall_mask, struct compat_vcpu_info, evtchn_upcall_mask);
-    BLANK();
-#endif
-
-#ifndef __UXEN__
-    OFFSET(CPUINFO_guest_cpu_user_regs, struct cpu_info, guest_cpu_user_regs);
-#endif  /* __UXEN__ */
     OFFSET(CPUINFO_processor_id, struct cpu_info, processor_id);
-#ifndef __UXEN__
-    OFFSET(CPUINFO_current_vcpu, struct cpu_info, current_vcpu);
-#endif  /* __UXEN__ */
     DEFINE(CPUINFO_sizeof, sizeof(struct cpu_info));
     BLANK();
 

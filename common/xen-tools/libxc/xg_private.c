@@ -20,7 +20,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -206,106 +206,6 @@ char *xc_read_image(xc_interface *xch,
     return image;
 #endif
 }
-
-#if !defined(QEMU_UXEN)
-char *xc_inflate_buffer(xc_interface *xch,
-                        const char *in_buf, unsigned long in_size,
-                        unsigned long *out_size)
-{
-    int           sts;
-    z_stream      zStream;
-    unsigned long out_len;
-    char         *out_buf;
-
-    /* Not compressed? Then return the original buffer. */
-    if ( ((unsigned char)in_buf[0] != 0x1F) ||
-         ((unsigned char)in_buf[1] != 0x8B) )
-    {
-        if ( out_size != NULL )
-            *out_size = in_size;
-        return (char *)in_buf;
-    }
-
-    out_len = (unsigned char)in_buf[in_size-4] +
-        (256 * ((unsigned char)in_buf[in_size-3] +
-                (256 * ((unsigned char)in_buf[in_size-2] +
-                        (256 * (unsigned char)in_buf[in_size-1])))));
-
-    memset(&zStream, 0, sizeof(zStream));
-    out_buf = malloc(out_len + 16);        /* Leave a little extra space */
-    if ( out_buf == NULL )
-    {
-        ERROR("Error mallocing buffer\n");
-        return NULL;
-    }
-
-    zStream.next_in = (unsigned char *)in_buf;
-    zStream.avail_in = in_size;
-    zStream.next_out = (unsigned char *)out_buf;
-    zStream.avail_out = out_len+16;
-    sts = inflateInit2(&zStream, (MAX_WBITS+32)); /* +32 means "handle gzip" */
-    if ( sts != Z_OK )
-    {
-        ERROR("inflateInit failed, sts %d\n", sts);
-        free(out_buf);
-        return NULL;
-    }
-
-    /* Inflate in one pass/call */
-    sts = inflate(&zStream, Z_FINISH);
-    inflateEnd(&zStream);
-    if ( sts != Z_STREAM_END )
-    {
-        ERROR("inflate failed, sts %d\n", sts);
-        free(out_buf);
-        return NULL;
-    }
-
-    if ( out_size != NULL )
-        *out_size = out_len;
-
-    return out_buf;
-}
-
-/*******************/
-
-int pin_table(
-    xc_interface *xch, unsigned int type, unsigned long mfn, domid_t dom)
-{
-    struct mmuext_op op;
-
-    op.cmd = type;
-    op.arg1.mfn = mfn;
-
-    if ( xc_mmuext_op(xch, &op, 1, dom) < 0 )
-        return 1;
-
-    return 0;
-}
-
-/* This is shared between save and restore, and may generally be useful. */
-unsigned long csum_page(void *page)
-{
-    int i;
-    unsigned long *p = page;
-    unsigned long long sum=0;
-
-    for ( i = 0; i < (PAGE_SIZE/sizeof(unsigned long)); i++ )
-        sum += p[i];
-
-    return sum ^ (sum>>32);
-}
-
-__attribute__((weak)) 
-    int xc_hvm_build(xc_interface *xch,
-                     uint32_t domid,
-                     int memsize,
-                     const char *image_name)
-{
-    errno = ENOSYS;
-    return -1;
-}
-#endif  /* QEMU_UXEN */
 
 /*
  * Local variables:

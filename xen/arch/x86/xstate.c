@@ -161,10 +161,8 @@ void xrstor(struct vcpu *v, uint64_t mask)
 
     struct xsave_struct *ptr = v->arch.xsave_area;
 
-#ifdef __UXEN__
     xsetbv_maybe(XCR_XFEATURE_ENABLED_MASK,
                  v->domain->domain_id ? v->arch.xcr0_accum : xfeature_mask);
-#endif  /* __UXEN__ */
 
     asm volatile (
         ".byte " REX_PREFIX "0x0f,0xae,0x2f"

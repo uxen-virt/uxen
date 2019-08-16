@@ -48,17 +48,7 @@
 #include <asm/paging.h>
 #include <asm/p2m.h>
 #include <asm/hvm/vmx/vmx.h> /* ept_p2m_init() */
-#ifndef __UXEN__
-#include <xen/iommu.h>
-#include <asm/mem_event.h>
-#include <public/mem_event.h>
-#include <asm/mem_sharing.h>
-#endif  /* __UXEN__ */
 #include <xen/event.h>
-#ifndef __UXEN__
-#include <asm/hvm/nestedhvm.h>
-#include <asm/hvm/svm/amd-iommu-proto.h>
-#endif  /* __UXEN__ */
 #include <asm/hvm/pv.h>
 
 #include "mm-locks.h"
@@ -106,17 +96,10 @@ static void p2m_initialise(struct domain *d, struct p2m_domain *p2m)
 {
     mm_lock_init(&p2m->lock);
     mm_lock_init(&p2m->logdirty_lock);
-#ifndef __UXEN__
-    INIT_LIST_HEAD(&p2m->np2m_list);
-#endif  /* __UXEN__ */
     INIT_PAGE_LIST_HEAD(&p2m->pages);
 
     p2m->domain = d;
     p2m->default_access = p2m_access_rwx;
-
-#ifndef __UXEN__
-    p2m->cr3 = CR3_EADDR;
-#endif  /* __UXEN__ */
 
     printk("vm%u: hap %sabled boot_cpu_data.x86_vendor %s\n",
            d->domain_id, hap_enabled(d) ? "en" : "dis",
@@ -145,29 +128,6 @@ static void p2m_initialise(struct domain *d, struct p2m_domain *p2m)
     return;
 }
 
-#ifndef __UXEN__
-static int
-p2m_init_nestedp2m(struct domain *d)
-{
-    uint8_t i;
-    struct p2m_domain *p2m;
-
-    mm_lock_init(&d->arch.nested_p2m_lock);
-    for (i = 0; i < MAX_NESTEDP2M; i++) {
-        d->arch.nested_p2m[i] = p2m = xzalloc(struct p2m_domain);
-        if (p2m == NULL)
-            return -ENOMEM;
-        if ( !zalloc_cpumask_var(&p2m->dirty_cpumask) )
-            return -ENOMEM;
-        p2m_initialise(d, p2m);
-        p2m->write_p2m_entry = nestedp2m_write_p2m_entry;
-        list_add(&p2m->np2m_list, &p2m_get_hostp2m(d)->np2m_list);
-    }
-
-    return 0;
-}
-#endif  /* __UXEN__ */
-
 int p2m_init(struct domain *d)
 {
     struct p2m_domain *p2m;
@@ -178,16 +138,7 @@ int p2m_init(struct domain *d)
         return -ENOMEM;
     p2m_initialise(d, p2m);
 
-#ifndef __UXEN__
-    /* Must initialise nestedp2m unconditionally
-     * since nestedhvm_enabled(d) returns false here.
-     * (p2m_init runs too early for HVM_PARAM_* options) */
-    rc = p2m_init_nestedp2m(d);
-    if ( rc ) 
-        p2m_final_teardown(d);
-#else   /* __UXEN__ */
     rc = 0;
-#endif  /* __UXEN__ */
     return rc;
 }
 
@@ -228,31 +179,6 @@ mfn_t get_gfn_type_access(struct p2m_domain *p2m, unsigned long gfn,
     }
 
     mfn = p2m->get_entry(p2m, gfn, t, a, q, page_order);
-
-#ifndef __UXEN__
-#ifdef __x86_64__
-    if ( q == p2m_unshare && p2m_is_shared(*t) )
-    {
-#ifndef __UXEN__
-        ASSERT(!p2m_is_nestedp2m(p2m));
-#endif  /* __UXEN__ */
-        mem_sharing_unshare_page(p2m->domain, gfn, 0);
-        mfn = p2m->get_entry(p2m, gfn, t, a, q, page_order);
-    }
-#endif
-#endif  /* __UXEN__ */
-
-#ifndef __UXEN__
-#ifdef __x86_64__
-    if (unlikely((p2m_is_broken(*t))))
-    {
-        /* Return invalid_mfn to avoid caller's access */
-        mfn = _mfn(INVALID_MFN);
-        if (is_p2m_guest_query(q))
-            domain_crash(p2m->domain);
-    }
-#endif
-#endif  /* __UXEN__ */
 
     return mfn;
 }
@@ -488,17 +414,9 @@ int p2m_alloc_table(struct p2m_domain *p2m)
 
     pv_ept_flush(p2m);
 
-#ifndef __UXEN__
-    if ( hap_enabled(d) )
-        iommu_share_p2m_table(d);
-#endif  /* __UXEN__ */
-
     P2M_PRINTK("populating p2m table\n");
 
     /* Initialise physmap tables for slot zero. Other code assumes this. */
-#ifndef __UXEN__
-    p2m->defer_nested_flush = 1;
-#endif  /* __UXEN__ */
     /* For Intel, see comments at ept_get_wl() -- this needs
      * ept_get_wl() before ept_wl is set */
     if ( !set_p2m_entry(p2m, 0, _mfn(INVALID_MFN), PAGE_ORDER_4K,
@@ -507,10 +425,6 @@ int p2m_alloc_table(struct p2m_domain *p2m)
         P2M_PRINTK("failed to initialize p2m table gfn 0\n");
         return -ENOMEM;
     }
-
-#ifndef __UXEN__
-    p2m->defer_nested_flush = 0;
-#endif  /* __UXEN__ */
 
     p2m_unlock(p2m);
 
@@ -541,21 +455,6 @@ void p2m_teardown(struct p2m_domain *p2m)
     dsps_release(d);
 }
 
-#ifndef __UXEN__
-static void p2m_teardown_nestedp2m(struct domain *d)
-{
-    uint8_t i;
-
-    for (i = 0; i < MAX_NESTEDP2M; i++) {
-        if ( !d->arch.nested_p2m[i] )
-            continue;
-        free_cpumask_var(d->arch.nested_p2m[i]->dirty_cpumask);
-        xfree(d->arch.nested_p2m[i]);
-        d->arch.nested_p2m[i] = NULL;
-    }
-}
-#endif  /* __UXEN__ */
-
 void p2m_final_teardown(struct domain *d)
 {
     /* Iterate over all p2m tables per domain */
@@ -565,12 +464,6 @@ void p2m_final_teardown(struct domain *d)
         d->arch.p2m = NULL;
     }
 
-#ifndef __UXEN__
-    /* We must teardown unconditionally because
-     * we initialise them unconditionally.
-     */
-    p2m_teardown_nestedp2m(d);
-#endif  /* __UXEN__ */
 }
 
 
@@ -580,27 +473,12 @@ p2m_remove_page(struct p2m_domain *p2m, unsigned long gfn, unsigned long mfn)
 
     if ( !paging_mode_translate(p2m->domain) )
     {
-#ifndef __UXEN__
-        if ( need_iommu(p2m->domain) )
-            iommu_unmap_page(p2m->domain, mfn);
-#endif  /* __UXEN__ */
         return;
     }
 
     if (p2m_debug_more)
     P2M_DEBUG("removing gfn=%#lx mfn=%#lx\n", gfn, mfn);
 
-#ifndef __UXEN__
-    if ( __mfn_valid(mfn) )
-    {
-        mfn_t mfn_return;
-        p2m_type_t t;
-        p2m_access_t a;
-
-        mfn_return = p2m->get_entry(p2m, gfn, &t, &a, p2m_query, NULL);
-        ASSERT( !p2m_is_valid(t) || mfn == mfn_x(mfn_return) );
-    }
-#endif  /* __UXEN__ */
     set_p2m_entry(p2m, gfn, _mfn(INVALID_MFN), PAGE_ORDER_4K, p2m_invalid,
                   p2m->default_access);
 }
@@ -626,15 +504,6 @@ guest_physmap_add_entry(struct domain *d, unsigned long gfn,
 
     if ( !paging_mode_translate(d) )
     {
-#ifndef __UXEN__
-        if (need_iommu(d) && p2m_is_ram_rw(t)) {
-            rc = iommu_map_page(d, mfn, mfn, IOMMUF_readable|IOMMUF_writable);
-            if ( rc != 0 )
-            {
-                return rc;
-            }
-        }
-#endif  /* __UXEN__ */
         return 0;
     }
 
@@ -684,10 +553,6 @@ p2m_type_t p2m_change_type(struct domain *d, unsigned long gfn,
     mfn_t mfn;
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
 
-#ifndef __UXEN__
-    BUG_ON(p2m_is_grant(ot) || p2m_is_grant(nt));
-#endif  /* __UXEN__ */
-
     p2m_lock(p2m);
 
     mfn = p2m->get_entry(p2m, gfn, &pt, &a, p2m_query, NULL);
@@ -711,14 +576,7 @@ void p2m_change_type_range(struct domain *d,
     mfn_t mfn;
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
 
-#ifndef __UXEN__
-    BUG_ON(p2m_is_grant(ot) || p2m_is_grant(nt));
-#endif  /* __UXEN__ */
-
     p2m_lock(p2m);
-#ifndef __UXEN__
-    p2m->defer_nested_flush = 1;
-#endif  /* __UXEN__ */
 
     for ( gfn = start; gfn < end; gfn++ )
     {
@@ -727,11 +585,6 @@ void p2m_change_type_range(struct domain *d,
             set_p2m_entry(p2m, gfn, mfn, PAGE_ORDER_4K, nt, p2m->default_access);
     }
 
-#ifndef __UXEN__
-    p2m->defer_nested_flush = 0;
-    if ( nestedhvm_enabled(d) )
-        p2m_flush_nestedp2m(d);
-#endif  /* __UXEN__ */
     p2m_unlock(p2m);
 
     if (p2m_is_logdirty(nt))
@@ -747,10 +600,6 @@ void p2m_change_type_range_l2(struct domain *d,
     unsigned long gfn;
     struct p2m_domain *p2m = p2m_get_hostp2m(d);
     int need_sync = 0;
-
-#ifndef __UXEN__
-    BUG_ON(p2m_is_grant(ot) || p2m_is_grant(nt));
-#endif  /* __UXEN__ */
 
     p2m_lock(p2m);
 
@@ -783,14 +632,6 @@ set_mmio_dm_p2m_entry(struct domain *d, unsigned long gfn, mfn_t mfn)
 
     p2m_lock(p2m);
     /* omfn = */ p2m->get_entry(p2m, gfn, &ot, &a, p2m_query, NULL);
-#ifndef __UXEN__
-    if ( p2m_is_grant(ot) )
-    {
-        p2m_unlock(p2m);
-        domain_crash(d);
-        return 0;
-    }
-#endif  /* __UXEN__ */
 
     P2M_DEBUG("set mmio %lx %lx\n", gfn, mfn_x(mfn));
     rc = set_p2m_entry(p2m, gfn, mfn, PAGE_ORDER_4K, p2m_mmio_dm,
@@ -818,14 +659,6 @@ set_mmio_p2m_entry(struct domain *d, unsigned long gfn, mfn_t mfn)
 
     p2m_lock(p2m);
     /* omfn = */ p2m->get_entry(p2m, gfn, &ot, &a, p2m_query, NULL);
-#ifndef __UXEN__
-    if ( p2m_is_grant(ot) )
-    {
-        p2m_unlock(p2m);
-        domain_crash(d);
-        return 0;
-    }
-#endif  /* __UXEN__ */
 
     P2M_DEBUG("set mmio %lx %lx\n", gfn, mfn_x(mfn));
     rc = set_p2m_entry(p2m, gfn, mfn, PAGE_ORDER_4K, p2m_mmio_direct, p2m->default_access);
@@ -868,168 +701,9 @@ out:
     return rc;
 }
 
-#ifndef __UXEN__
-int
-set_shared_p2m_entry(struct domain *d, unsigned long gfn, mfn_t mfn)
-{
-    struct p2m_domain *p2m = p2m_get_hostp2m(d);
-    int rc = 0;
-    p2m_access_t a;
-    p2m_type_t ot;
-    mfn_t omfn;
-
-    if ( !paging_mode_translate(p2m->domain) )
-        return 0;
-
-    p2m_lock(p2m);
-    omfn = p2m->get_entry(p2m, gfn, &ot, &a, p2m_query, NULL);
-    /* At the moment we only allow p2m change if gfn has already been made
-     * sharable first */
-    ASSERT(p2m_is_shared(ot));
-    ASSERT(mfn_valid(omfn));
-    /* XXX: M2P translations have to be handled properly for shared pages */
-    set_gpfn_from_mfn(mfn_x(omfn), INVALID_M2P_ENTRY);
-
-    P2M_DEBUG("set shared %lx %lx\n", gfn, mfn_x(mfn));
-    rc = set_p2m_entry(p2m, gfn, mfn, PAGE_ORDER_4K, p2m_ram_shared, p2m->default_access);
-    p2m_unlock(p2m);
-    if ( 0 == rc )
-        gdprintk(XENLOG_ERR,
-            "set_shared_p2m_entry: set_p2m_entry failed! mfn=%08lx\n",
-            mfn_x(get_gfn_query_unlocked(p2m->domain, gfn, &ot)));
-    return rc;
-}
-
-static struct p2m_domain *
-p2m_getlru_nestedp2m(struct domain *d, struct p2m_domain *p2m)
-{
-    struct list_head *lru_list = &p2m_get_hostp2m(d)->np2m_list;
-    
-    ASSERT(!list_empty(lru_list));
-
-    if ( p2m == NULL )
-        p2m = list_entry(lru_list->prev, struct p2m_domain, np2m_list);
-
-    list_move(&p2m->np2m_list, lru_list);
-
-    return p2m;
-}
-
-/* Reset this p2m table to be empty */
-static void
-p2m_flush_table(struct p2m_domain *p2m)
-{
-    struct page_info *top, *pg;
-    struct domain *d = p2m->domain;
-    void *p;
-
-    p2m_lock(p2m);
-
-    /* "Host" p2m tables can have shared entries &c that need a bit more 
-     * care when discarding them */
-    ASSERT(p2m_is_nestedp2m(p2m));
-
-    /* This is no longer a valid nested p2m for any address space */
-    p2m->cr3 = CR3_EADDR;
-    
-    /* Zap the top level of the trie */
-    top = mfn_to_page(pagetable_get_mfn(p2m_get_pagetable(p2m)));
-    p = __map_domain_page(top);
-    clear_page(p);
-    unmap_domain_page(p);
-
-    /* Make sure nobody else is using this p2m table */
-    nestedhvm_vmcx_flushtlb(p2m);
-
-    /* Free the rest of the trie pages back to the paging pool */
-    while ( (pg = page_list_remove_head(&p2m->pages)) )
-        if ( pg != top ) 
-            d->arch.paging.free_page(d, pg);
-    page_list_add(top, &p2m->pages);
-
-    p2m_unlock(p2m);
-}
-
-void
-p2m_flush(struct vcpu *v, struct p2m_domain *p2m)
-{
-    ASSERT(v->domain == p2m->domain);
-    vcpu_nestedhvm(v).nv_p2m = NULL;
-    p2m_flush_table(p2m);
-    hvm_asid_flush_vcpu(v);
-}
-
-void
-p2m_flush_nestedp2m(struct domain *d)
-{
-    int i;
-    for ( i = 0; i < MAX_NESTEDP2M; i++ )
-        p2m_flush_table(d->arch.nested_p2m[i]);
-}
-
-struct p2m_domain *
-p2m_get_nestedp2m(struct vcpu *v, uint64_t cr3)
-{
-    /* Use volatile to prevent gcc to cache nv->nv_p2m in a cpu register as
-     * this may change within the loop by an other (v)cpu.
-     */
-    volatile struct nestedvcpu *nv = &vcpu_nestedhvm(v);
-    struct domain *d;
-    struct p2m_domain *p2m;
-
-    /* Mask out low bits; this avoids collisions with CR3_EADDR */
-    cr3 &= ~(0xfffull);
-
-    if (nv->nv_flushp2m && nv->nv_p2m) {
-        nv->nv_p2m = NULL;
-    }
-
-    d = v->domain;
-    nestedp2m_lock(d);
-    p2m = nv->nv_p2m;
-    if ( p2m ) 
-    {
-        p2m_lock(p2m);
-        if ( p2m->cr3 == cr3 || p2m->cr3 == CR3_EADDR )
-        {
-            nv->nv_flushp2m = 0;
-            p2m_getlru_nestedp2m(d, p2m);
-            nv->nv_p2m = p2m;
-            if (p2m->cr3 == CR3_EADDR)
-                hvm_asid_flush_vcpu(v);
-            p2m->cr3 = cr3;
-            cpumask_set_cpu(v->processor, p2m->dirty_cpumask);
-            p2m_unlock(p2m);
-            nestedp2m_unlock(d);
-            return p2m;
-        }
-        p2m_unlock(p2m);
-    }
-
-    /* All p2m's are or were in use. Take the least recent used one,
-     * flush it and reuse. */
-    p2m = p2m_getlru_nestedp2m(d, NULL);
-    p2m_flush_table(p2m);
-    p2m_lock(p2m);
-    nv->nv_p2m = p2m;
-    p2m->cr3 = cr3;
-    nv->nv_flushp2m = 0;
-    hvm_asid_flush_vcpu(v);
-    cpumask_set_cpu(v->processor, p2m->dirty_cpumask);
-    p2m_unlock(p2m);
-    nestedp2m_unlock(d);
-
-    return p2m;
-}
-#endif  /* __UXEN__ */
-
 struct p2m_domain *
 p2m_get_p2m(struct vcpu *v)
 {
-#ifndef __UXEN__
-    if (nestedhvm_is_n2(v))
-        return p2m_get_nestedp2m(v, nhvm_vcpu_hostcr3(v));
-#endif  /* __UXEN__ */
 
     return p2m_get_hostp2m(v->domain);
 }
@@ -1046,27 +720,6 @@ unsigned long paging_gva_to_gfn(struct vcpu *v,
         *pfec = 0;
         return INVALID_GFN;
     }
-
-#ifndef __UXEN__
-    if ( is_hvm_domain(v->domain)
-        && paging_mode_hap(v->domain) 
-        && nestedhvm_is_n2(v) )
-    {
-        unsigned long gfn;
-        struct p2m_domain *p2m;
-        const struct paging_mode *mode;
-        uint64_t ncr3 = nhvm_vcpu_hostcr3(v);
-
-        /* translate l2 guest va into l2 guest gfn */
-        p2m = p2m_get_nestedp2m(v, ncr3);
-        mode = paging_get_nestedmode(v);
-        gfn = mode->gva_to_gfn(v, p2m, va, q, pfec);
-
-        /* translate l2 guest gfn into l1 guest gfn */
-        return hostmode->p2m_ga_to_gfn(v, hostp2m, ncr3,
-                                       gfn << PAGE_SHIFT, q, pfec, NULL);
-    }
-#endif  /* __UXEN__ */
 
     return hostmode->gva_to_gfn(v, hostp2m, va, q, pfec);
 }

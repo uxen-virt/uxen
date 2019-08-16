@@ -32,9 +32,6 @@
 #endif
 
 #include "xen.h"
-#ifndef __UXEN__
-#include "domctl.h"
-#endif  /* __UXEN__ */
 
 #define XEN_SYSCTL_INTERFACE_VERSION 0x10000009
 
@@ -159,9 +156,6 @@ struct xen_sysctl_getdomaininfolist {
     /* IN variables. */
     domid_t               first_domain;
     uint32_t              max_domains;
-#ifndef __UXEN__
-    XEN_GUEST_HANDLE_64(xen_domctl_getdomaininfo_t) buffer;
-#endif  /* __UXEN__ */
     /* OUT variables. */
     uint32_t              num_domains;
 };
@@ -599,53 +593,11 @@ DEFINE_XEN_GUEST_HANDLE(xen_sysctl_log_ratelimit_t);
 
 struct xen_sysctl {
     uint32_t cmd;
-#ifndef __UXEN__
-#define XEN_SYSCTL_readconsole                    1
-#define XEN_SYSCTL_tbuf_op                        2
-#endif  /* __UXEN__ */
 #define XEN_SYSCTL_physinfo                       3
-#ifndef __UXEN__
-#define XEN_SYSCTL_sched_id                       4
-#define XEN_SYSCTL_perfc_op                       5
-#define XEN_SYSCTL_getdomaininfolist              6
-#define XEN_SYSCTL_debug_keys                     7
-#define XEN_SYSCTL_getcpuinfo                     8
-#define XEN_SYSCTL_availheap                      9
-#define XEN_SYSCTL_get_pmstat                    10
-#define XEN_SYSCTL_cpu_hotplug                   11
-#define XEN_SYSCTL_pm_op                         12
-#define XEN_SYSCTL_page_offline_op               14
-#define XEN_SYSCTL_lockprof_op                   15
-#define XEN_SYSCTL_topologyinfo                  16
-#define XEN_SYSCTL_numainfo                      17
-#define XEN_SYSCTL_cpupool_op                    18
-#define XEN_SYSCTL_scheduler_op                  19
-#endif  /* __UXEN__ */
 #define XEN_SYSCTL_log_ratelimit                 20
     uint32_t interface_version; /* XEN_SYSCTL_INTERFACE_VERSION */
     union {
-#ifndef __UXEN__
-        struct xen_sysctl_readconsole       readconsole;
-        struct xen_sysctl_tbuf_op           tbuf_op;
-#endif  /* __UXEN__ */
         struct xen_sysctl_physinfo          physinfo;
-#ifndef __UXEN__
-        struct xen_sysctl_topologyinfo      topologyinfo;
-        struct xen_sysctl_numainfo          numainfo;
-        struct xen_sysctl_sched_id          sched_id;
-        struct xen_sysctl_perfc_op          perfc_op;
-        struct xen_sysctl_getdomaininfolist getdomaininfolist;
-        struct xen_sysctl_debug_keys        debug_keys;
-        struct xen_sysctl_getcpuinfo        getcpuinfo;
-        struct xen_sysctl_availheap         availheap;
-        struct xen_sysctl_get_pmstat        get_pmstat;
-        struct xen_sysctl_cpu_hotplug       cpu_hotplug;
-        struct xen_sysctl_pm_op             pm_op;
-        struct xen_sysctl_page_offline_op   page_offline;
-        struct xen_sysctl_lockprof_op       lockprof_op;
-        struct xen_sysctl_cpupool_op        cpupool_op;
-        struct xen_sysctl_scheduler_op      scheduler_op;
-#endif  /* __UXEN__ */
         struct xen_sysctl_log_ratelimit     log_ratelimit;
         uint8_t                             pad[128];
     } u;

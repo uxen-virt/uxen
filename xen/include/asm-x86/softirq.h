@@ -2,15 +2,8 @@
 #define __ASM_SOFTIRQ_H__
 
 enum {
-#ifndef __UXEN__
-    NMI_MCE_SOFTIRQ = NR_COMMON_SOFTIRQS,
-    TIME_CALIBRATE_SOFTIRQ,
-    KICK_VCPU_SOFTIRQ,
-    MACHINE_CHECK_SOFTIRQ,
-#else  /* __UXEN__ */
     /* vcpu */
     KICK_VCPU_SOFTIRQ = NR_COMMON_SOFTIRQS,
-#endif  /* __UXEN__ */
     SYNC_TSC_VCPU_SOFTIRQ,
 
     /* cpu */

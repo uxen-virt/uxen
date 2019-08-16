@@ -24,7 +24,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2018, Bromium, Inc.
+ * Copyright 2018-2019, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -169,19 +169,9 @@ static void rtc_coalesced_timer(void *opaque)
     RTCState *s = opaque;
 
     if (s->irq_coalesced != 0) {
-#ifndef QEMU_UXEN
-        apic_reset_irq_delivered();
-#endif
         s->cmos_data[RTC_REG_C] |= 0xc0;
         DPRINTF_C("cmos: injecting from timer\n");
         qemu_irq_raise(s->irq);
-#ifndef QEMU_UXEN
-        if (apic_get_irq_delivered()) {
-            s->irq_coalesced--;
-            DPRINTF_C("cmos: coalesced irqs decreased to %d\n",
-                      s->irq_coalesced);
-        }
-#endif
     }
 
     rtc_coalesced_timer_update(s);
@@ -233,18 +223,7 @@ static void rtc_periodic_timer(void *opaque)
         if(rtc_td_hack) {
             if (s->irq_reinject_on_ack_count >= RTC_REINJECT_ON_ACK_COUNT)
                 s->irq_reinject_on_ack_count = 0;
-#ifndef QEMU_UXEN
-            apic_reset_irq_delivered();
-#endif
             qemu_irq_raise(s->irq);
-#ifndef QEMU_UXEN
-            if (!apic_get_irq_delivered()) {
-                s->irq_coalesced++;
-                rtc_coalesced_timer_update(s);
-                DPRINTF_C("cmos: coalesced irqs increased to %d\n",
-                          s->irq_coalesced);
-            }
-#endif
         } else
 #endif
         qemu_irq_raise(s->irq);
@@ -526,18 +505,8 @@ static uint64_t cmos_ioport_read(void *opaque, target_phys_addr_t addr, unsigned
             if(s->irq_coalesced &&
                     s->irq_reinject_on_ack_count < RTC_REINJECT_ON_ACK_COUNT) {
                 s->irq_reinject_on_ack_count++;
-#ifndef QEMU_UXEN
-                apic_reset_irq_delivered();
-#endif
                 DPRINTF_C("cmos: injecting on ack\n");
                 qemu_irq_raise(s->irq);
-#ifndef QEMU_UXEN
-                if (apic_get_irq_delivered()) {
-                    s->irq_coalesced--;
-                    DPRINTF_C("cmos: coalesced irqs decreased to %d\n",
-                              s->irq_coalesced);
-                }
-#endif
                 break;
             }
 #endif
@@ -657,13 +626,9 @@ static int rtc_initfn(ISADevice *dev)
     RTCState *s = DO_UPCAST(RTCState, dev, dev);
     int base = 0x70;
 
-#ifndef QEMU_UXEN
-    rtc_clock = rt_clock;
-#else
     /* FIXME: needs further consideration? use vm_clock because rt_clock offsets do not
      * persist thru save restore */
     rtc_clock = vm_clock;
-#endif
 
     s->cmos_data[RTC_REG_A] = 0x26;
     s->cmos_data[RTC_REG_B] = 0x02;
@@ -688,9 +653,6 @@ static int rtc_initfn(ISADevice *dev)
     memory_region_init_io(&s->io, &cmos_ops, s, "rtc", 2);
     isa_register_ioport(dev, &s->io, base);
 
-#ifndef QEMU_UXEN
-    qdev_set_legacy_instance_id(&dev->qdev, base, 2);
-#endif
     qemu_register_reset(rtc_reset, s);
     return 0;
 }

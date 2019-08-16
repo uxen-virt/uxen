@@ -38,19 +38,13 @@
  */
 
 #include "xc_private.h"
-#ifndef __UXEN_TOOLS__
-#include "xg_private.h"
-#include "xc_dom.h"
-#endif  /* __UXEN_TOOLS__ */
 #include <stdarg.h>
 #include <stdlib.h>
 #include <unistd.h>
 /* #include <pthread.h> */
 #include <assert.h>
 
-#if defined(__MINIOS__) || defined(__UXEN_TOOLS__)
 #define __NO_DLFCN
-#endif
 
 #ifndef __NO_DLFCN
 #include <dlfcn.h>
@@ -301,48 +295,6 @@ int do_xen_hypercall(xc_interface *xch, privcmd_hypercall_t *hypercall)
     return xch->ops->u.privcmd.hypercall(xch, xch->ops_handle, hypercall);
 }
 
-#ifndef __UXEN_TOOLS__
-xc_evtchn *xc_evtchn_open(xentoollog_logger *logger,
-                             unsigned open_flags)
-{
-    xc_evtchn *xce;
-
-    xce = xc_interface_open_common(logger, NULL, open_flags,
-                                   XC_OSDEP_EVTCHN, NULL);
-
-    return xce;
-}
-
-int xc_evtchn_close(xc_evtchn *xce)
-{
-    return xc_interface_close_common(xce);
-}
-
-xc_gnttab *xc_gnttab_open(xentoollog_logger *logger,
-                             unsigned open_flags)
-{
-    return xc_interface_open_common(logger, NULL, open_flags,
-                                    XC_OSDEP_GNTTAB, NULL);
-}
-
-int xc_gnttab_close(xc_gnttab *xcg)
-{
-    return xc_interface_close_common(xcg);
-}
-
-xc_gntshr *xc_gntshr_open(xentoollog_logger *logger,
-                             unsigned open_flags)
-{
-    return xc_interface_open_common(logger, NULL, open_flags,
-                                    XC_OSDEP_GNTSHR, NULL);
-}
-
-int xc_gntshr_close(xc_gntshr *xcg)
-{
-    return xc_interface_close_common(xcg);
-}
-#endif  /* __UXEN_TOOLS__ */
-
 
 const xc_error *xc_get_last_error(xc_interface *xch)
 {
@@ -427,30 +379,6 @@ void xc_report_error(xc_interface *xch, int code, const char *fmt, ...)
     va_end(args);
 }
 
-#ifndef __UXEN_TOOLS__
-void xc_osdep_log(xc_interface *xch, xentoollog_level level, int code, const char *fmt, ...)
-{
-    va_list args;
-    va_start(args, fmt);
-    xc_reportv(xch, xch->error_handler, level, code, fmt, args);
-    va_end(args);
-}
-
-void xc_report_progress_start(xc_interface *xch, const char *doing,
-                              unsigned long total) {
-    xch->currently_progress_reporting = doing;
-    xtl_progress(xch->error_handler, "xc", xch->currently_progress_reporting,
-                 0, total);
-}
-
-void xc_report_progress_step(xc_interface *xch,
-                             unsigned long done, unsigned long total) {
-    assert(xch->currently_progress_reporting);
-    xtl_progress(xch->error_handler, "xc", xch->currently_progress_reporting,
-                 done, total);
-}
-#endif  /* __UXEN_TOOLS__ */
-
 int xc_get_pfn_type_batch(xc_interface *xch, uint32_t dom,
                           unsigned int num, xen_pfn_t *arr)
 {
@@ -467,101 +395,6 @@ int xc_get_pfn_type_batch(xc_interface *xch, uint32_t dom,
     xc_hypercall_bounce_post(xch, arr);
     return rc;
 }
-
-#ifndef __UXEN_TOOLS__
-int xc_mmuext_op(
-    xc_interface *xch,
-    struct mmuext_op *op,
-    unsigned int nr_ops,
-    domid_t dom)
-{
-    DECLARE_HYPERCALL;
-    DECLARE_HYPERCALL_BOUNCE(op, nr_ops*sizeof(*op), XC_HYPERCALL_BUFFER_BOUNCE_BOTH);
-    long ret = -EINVAL;
-
-    if ( xc_hypercall_bounce_pre(xch, op) )
-    {
-        PERROR("Could not bounce memory for mmuext op hypercall");
-        goto out1;
-    }
-
-    hypercall.op     = __HYPERVISOR_mmuext_op;
-    hypercall.arg[0] = HYPERCALL_BUFFER_AS_ARG(op);
-    hypercall.arg[1] = (unsigned long)nr_ops;
-    hypercall.arg[2] = (unsigned long)0;
-    hypercall.arg[3] = (unsigned long)dom;
-
-    ret = do_xen_hypercall(xch, &hypercall);
-
-    xc_hypercall_bounce_post(xch, op);
-
- out1:
-    return ret;
-}
-
-static int flush_mmu_updates(xc_interface *xch, struct xc_mmu *mmu)
-{
-    int err = 0;
-    DECLARE_HYPERCALL;
-    DECLARE_NAMED_HYPERCALL_BOUNCE(updates, mmu->updates, mmu->idx*sizeof(*mmu->updates), XC_HYPERCALL_BUFFER_BOUNCE_BOTH);
-
-    if ( mmu->idx == 0 )
-        return 0;
-
-    if ( xc_hypercall_bounce_pre(xch, updates) )
-    {
-        PERROR("flush_mmu_updates: bounce buffer failed");
-        err = 1;
-        goto out;
-    }
-
-    hypercall.op     = __HYPERVISOR_mmu_update;
-    hypercall.arg[0] = HYPERCALL_BUFFER_AS_ARG(updates);
-    hypercall.arg[1] = (unsigned long)mmu->idx;
-    hypercall.arg[2] = 0;
-    hypercall.arg[3] = mmu->subject;
-
-    if ( do_xen_hypercall(xch, &hypercall) < 0 )
-    {
-        ERROR("Failure when submitting mmu updates");
-        err = 1;
-    }
-
-    mmu->idx = 0;
-
-    xc_hypercall_bounce_post(xch, updates);
-
- out:
-    return err;
-}
-
-struct xc_mmu *xc_alloc_mmu_updates(xc_interface *xch, domid_t dom)
-{
-    struct xc_mmu *mmu = malloc(sizeof(*mmu));
-    if ( mmu == NULL )
-        return mmu;
-    mmu->idx     = 0;
-    mmu->subject = dom;
-    return mmu;
-}
-
-int xc_add_mmu_update(xc_interface *xch, struct xc_mmu *mmu,
-                      unsigned long long ptr, unsigned long long val)
-{
-    mmu->updates[mmu->idx].ptr = ptr;
-    mmu->updates[mmu->idx].val = val;
-
-    if ( ++mmu->idx == MAX_MMU_UPDATES )
-        return flush_mmu_updates(xch, mmu);
-
-    return 0;
-}
-
-int xc_flush_mmu_updates(xc_interface *xch, struct xc_mmu *mmu)
-{
-    return flush_mmu_updates(xch, mmu);
-}
-#endif  /* __UXEN_TOOLS__ */
 
 int do_memory_op(xc_interface *xch, int cmd, void *arg, size_t len)
 {
@@ -586,13 +419,6 @@ int do_memory_op(xc_interface *xch, int cmd, void *arg, size_t len)
     return ret;
 }
 
-#ifndef __UXEN_TOOLS__
-long xc_maximum_ram_page(xc_interface *xch)
-{
-    return do_memory_op(xch, XENMEM_maximum_ram_page, NULL, 0);
-}
-#endif  /* __UXEN_TOOLS__ */
-
 #ifdef __UXEN_cpu_usage__
 long long xc_domain_get_cpu_usage( xc_interface *xch, domid_t domid, int vcpu )
 {
@@ -609,90 +435,6 @@ long long xc_domain_get_cpu_usage( xc_interface *xch, domid_t domid, int vcpu )
     return domctl.u.getvcpuinfo.cpu_time;
 }
 #endif  /* __UXEN_cpu_usage__ */
-
-#ifndef __UXEN_TOOLS__
-int xc_machphys_mfn_list(xc_interface *xch,
-			 unsigned long max_extents,
-			 xen_pfn_t *extent_start)
-{
-    int rc;
-    DECLARE_HYPERCALL_BOUNCE(extent_start, max_extents * sizeof(xen_pfn_t), XC_HYPERCALL_BUFFER_BOUNCE_OUT);
-    struct xen_machphys_mfn_list xmml = {
-        .max_extents = max_extents,
-    };
-
-    if ( xc_hypercall_bounce_pre(xch, extent_start) )
-    {
-        PERROR("Could not bounce memory for XENMEM_machphys_mfn_list hypercall");
-        return -1;
-    }
-
-    set_xen_guest_handle(xmml.extent_start, extent_start);
-    rc = do_memory_op(xch, XENMEM_machphys_mfn_list, &xmml, sizeof(xmml));
-    if (rc || xmml.nr_extents != max_extents)
-        rc = -1;
-    else
-        rc = 0;
-
-    xc_hypercall_bounce_post(xch, extent_start);
-
-    return rc;
-}
-
-int xc_get_pfn_list(xc_interface *xch,
-                    uint32_t domid,
-                    uint64_t *pfn_buf,
-                    unsigned long max_pfns)
-{
-    DECLARE_DOMCTL;
-    DECLARE_HYPERCALL_BOUNCE(pfn_buf, max_pfns * sizeof(*pfn_buf), XC_HYPERCALL_BUFFER_BOUNCE_OUT);
-    int ret;
-
-#ifdef VALGRIND
-    memset(pfn_buf, 0, max_pfns * sizeof(*pfn_buf));
-#endif
-
-    if ( xc_hypercall_bounce_pre(xch, pfn_buf) )
-    {
-        PERROR("xc_get_pfn_list: pfn_buf bounce failed");
-        return -1;
-    }
-
-    domctl.cmd = XEN_DOMCTL_getmemlist;
-    domctl.domain   = (domid_t)domid;
-    domctl.u.getmemlist.max_pfns = max_pfns;
-    set_xen_guest_handle(domctl.u.getmemlist.buffer, pfn_buf);
-
-    ret = do_domctl(xch, &domctl);
-
-    xc_hypercall_bounce_post(xch, pfn_buf);
-
-    return (ret < 0) ? -1 : domctl.u.getmemlist.num_pfns;
-}
-
-long xc_get_tot_pages(xc_interface *xch, uint32_t domid)
-{
-    DECLARE_DOMCTL;
-    domctl.cmd = XEN_DOMCTL_getdomaininfo;
-    domctl.domain = (domid_t)domid;
-    return (do_domctl(xch, &domctl) < 0) ?
-        -1 : domctl.u.getdomaininfo.tot_pages;
-}
-
-int xc_copy_to_domain_page(xc_interface *xch,
-                           uint32_t domid,
-                           unsigned long dst_pfn,
-                           const char *src_page)
-{
-    void *vaddr = xc_map_foreign_range(
-        xch, domid, PAGE_SIZE, PROT_WRITE, dst_pfn);
-    if ( vaddr == NULL )
-        return -1;
-    memcpy(vaddr, src_page, PAGE_SIZE);
-    munmap(vaddr, PAGE_SIZE);
-    return 0;
-}
-#endif  /* __UXEN_TOOLS__ */
 
 int xc_clear_domain_page(xc_interface *xch,
                          uint32_t domid,
@@ -784,31 +526,6 @@ int xc_version(xc_interface *xch, int cmd, void *arg)
     return rc;
 }
 
-#ifndef __UXEN_TOOLS__
-unsigned long xc_make_page_below_4G(
-    xc_interface *xch, uint32_t domid, unsigned long mfn)
-{
-    xen_pfn_t old_mfn = mfn;
-    xen_pfn_t new_mfn;
-
-    if ( xc_domain_decrease_reservation_exact(
-        xch, domid, 1, 0, &old_mfn) != 0 )
-    {
-        DPRINTF("xc_make_page_below_4G decrease failed. mfn=%lx\n",mfn);
-        return 0;
-    }
-
-    if ( xc_domain_increase_reservation_exact(
-        xch, domid, 1, 0, XENMEMF_address_bits(32), &new_mfn) != 0 )
-    {
-        DPRINTF("xc_make_page_below_4G increase failed. mfn=%lx\n",mfn);
-        return 0;
-    }
-
-    return new_mfn;
-}
-#endif  /* __UXEN_TOOLS__ */
-
 static xc_tls_key errbuf_pkey;
 
 static void
@@ -862,76 +579,6 @@ const char *xc_strerror(xc_interface *xch, int errcode)
         return errbuf;
     }
 }
-
-#ifndef __UXEN_TOOLS__
-void bitmap_64_to_byte(uint8_t *bp, const uint64_t *lp, int nbits)
-{
-    uint64_t l;
-    int i, j, b;
-
-    for (i = 0, b = 0; nbits > 0; i++, b += sizeof(l)) {
-        l = lp[i];
-        for (j = 0; (j < sizeof(l)) && (nbits > 0); j++) {
-            bp[b+j] = l;
-            l >>= 8;
-            nbits -= 8;
-        }
-    }
-}
-
-void bitmap_byte_to_64(uint64_t *lp, const uint8_t *bp, int nbits)
-{
-    uint64_t l;
-    int i, j, b;
-
-    for (i = 0, b = 0; nbits > 0; i++, b += sizeof(l)) {
-        l = 0;
-        for (j = 0; (j < sizeof(l)) && (nbits > 0); j++) {
-            l |= (uint64_t)bp[b+j] << (j*8);
-            nbits -= 8;
-        }
-        lp[i] = l;
-    }
-}
-
-int read_exact(int fd, void *data, size_t size)
-{
-    size_t offset = 0;
-    ssize_t len;
-
-    while ( offset < size )
-    {
-        len = read(fd, (char *)data + offset, size - offset);
-        if ( (len == -1) && (errno == EINTR) )
-            continue;
-        if ( len == 0 )
-            errno = 0;
-        if ( len <= 0 )
-            return -1;
-        offset += len;
-    }
-
-    return 0;
-}
-
-int write_exact(int fd, const void *data, size_t size)
-{
-    size_t offset = 0;
-    ssize_t len;
-
-    while ( offset < size )
-    {
-        len = write(fd, (const char *)data + offset, size - offset);
-        if ( (len == -1) && (errno == EINTR) )
-            continue;
-        if ( len <= 0 )
-            return -1;
-        offset += len;
-    }
-
-    return 0;
-}
-#endif  /* __UXEN_TOOLS__ */
 
 int xc_ffs8(uint8_t x)
 {

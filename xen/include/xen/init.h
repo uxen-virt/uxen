@@ -4,9 +4,7 @@
 #include <xen/config.h>
 #include <xen/types.h>
 #include <asm/init.h>
-#ifdef __UXEN__
 #include <uxen/uxen_desc.h>
-#endif  /* __UXEN__ */
 
 /*
  * Mark functions and data as being only used at initialization

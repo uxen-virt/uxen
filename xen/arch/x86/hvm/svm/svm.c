@@ -50,9 +50,6 @@
 #include <asm/io.h>
 #include <asm/paging.h>
 #include <asm/p2m.h>
-#ifndef __UXEN__
-#include <asm/mem_sharing.h>
-#endif  /* __UXEN__ */
 #include <asm/regs.h>
 #include <asm/cpufeature.h>
 #include <asm/processor.h>
@@ -73,9 +70,6 @@
 #include <asm/hvm/svm/emulate.h>
 #include <asm/hvm/svm/intr.h>
 #include <asm/hvm/svm/svmdebug.h>
-#ifndef __UXEN_NOT_YET__
-#include <asm/hvm/svm/nestedsvm.h>
-#endif  /* __UXEN_NOT_YET__ */
 #include <asm/hvm/nestedhvm.h>
 #include <asm/x86_emulate.h>
 #include <public/sched.h>
@@ -397,30 +391,6 @@ static void svm_fpu_enter(struct vcpu *v)
         vmcb_get_exception_intercepts(n1vmcb) & ~(1U << TRAP_no_device));
 }
 
-#ifndef __UXEN__
-static void svm_fpu_leave(struct vcpu *v)
-{
-    struct vmcb_struct *n1vmcb = vcpu_nestedhvm(v).nv_n1vmcx;
-
-    ASSERT(!v->fpu_dirtied);
-    ASSERT(read_cr0() & X86_CR0_TS);
-
-    /*
-     * If the guest does not have TS enabled then we must cause and handle an 
-     * exception on first use of the FPU. If the guest *does* have TS enabled 
-     * then this is not necessary: no FPU activity can occur until the guest 
-     * clears CR0.TS, and we will initialise the FPU when that happens.
-     */
-    if ( !(v->arch.hvm_vcpu.guest_cr[0] & X86_CR0_TS) )
-    {
-        vmcb_set_exception_intercepts(
-            n1vmcb,
-            vmcb_get_exception_intercepts(n1vmcb) | (1U << TRAP_no_device));
-        vmcb_set_cr0(n1vmcb, vmcb_get_cr0(n1vmcb) | X86_CR0_TS);
-    }
-}
-#endif  /* __UXEN__ */
-
 unsigned int
 svm_get_interrupt_shadow(struct vcpu *v)
 {
@@ -540,16 +510,6 @@ svm_update_guest_efer(struct vcpu *v)
 
 static void svm_sync_vmcb(struct vcpu *v)
 {
-#ifndef __UXEN__
-    struct arch_svm_struct *arch_svm = &v->arch.hvm_svm;
-
-    if ( arch_svm->vmcb_in_sync )
-        return;
-
-    arch_svm->vmcb_in_sync = 1;
-
-    svm_vmsave(arch_svm->vmcb);
-#endif  /* __UXEN__ */
 }
 
 void
@@ -619,9 +579,6 @@ svm_set_segment_register(struct vcpu *v, enum x86_segment seg,
                          struct segment_register *reg)
 {
     struct vmcb_struct *vmcb = v->arch.hvm_svm.vmcb;
-#ifndef __UXEN__
-    int sync = 0;
-#endif  /* __UXEN__ */
 
     ASSERT((v == current) || !vcpu_runnable(v));
 
@@ -641,18 +598,10 @@ svm_set_segment_register(struct vcpu *v, enum x86_segment seg,
     case x86_seg_gs:
     case x86_seg_tr:
     case x86_seg_ldtr:
-#ifndef __UXEN__
-        sync = (v == current);
-#endif  /* __UXEN__ */
         break;
     default:
         break;
     }
-
-#ifndef __UXEN__
-    if ( sync )
-        svm_sync_vmcb(v);
-#endif  /* __UXEN__ */
 
     switch ( seg )
     {
@@ -693,10 +642,6 @@ svm_set_segment_register(struct vcpu *v, enum x86_segment seg,
         BUG();
     }
 
-#ifndef __UXEN__
-    if ( sync )
-        svm_vmload(vmcb);
-#endif  /* __UXEN__ */
 }
 
 static uint64_t svm_get_tsc_offset(uint64_t host_tsc, uint64_t guest_tsc,
@@ -862,17 +807,11 @@ static inline void svm_tsc_ratio_load(struct vcpu *v)
 
 void svm_ctxt_switch_from(struct vcpu *v)
 {
-#ifndef __UXEN__
-    int cpu = smp_processor_id();
-#endif  /* __UXEN__ */
 
     if (v->context_loaded == 0)
         return;
     v->context_loaded = 0;
 
-#ifndef __UXEN_NOT_YET__
-    svm_fpu_leave(v);
-#endif  /* __UXEN_NOT_YET__ */
     if (!vmexec_fpu_ctxt_switch)
         vcpu_save_fpu(v);
 
@@ -884,20 +823,6 @@ void svm_ctxt_switch_from(struct vcpu *v)
 #endif  /* __UXEN_vpmu__ */
     svm_lwp_save(v);
     svm_tsc_ratio_save(v);
-
-#ifndef __UXEN__
-    svm_sync_vmcb(v);
-    svm_vmload(per_cpu(root_vmcb, cpu));
-#endif  /* __UXEN__ */
-
-#ifndef __UXEN__
-#ifdef __x86_64__
-    /* Resume use of ISTs now that the host TR is reinstated. */
-    idt_tables[cpu][TRAP_double_fault].a  |= IST_DF << 32;
-    idt_tables[cpu][TRAP_nmi].a           |= IST_NMI << 32;
-    idt_tables[cpu][TRAP_machine_check].a |= IST_MCE << 32;
-#endif
-#endif  /* __UXEN__ */
 
     cpumask_clear_cpu(v->processor, v->domain->domain_dirty_cpumask);
     cpumask_clear_cpu(v->processor, v->vcpu_dirty_cpumask);
@@ -927,28 +852,6 @@ void svm_ctxt_switch_to(struct vcpu *v)
 {
     struct vmcb_struct *vmcb = v->arch.hvm_svm.vmcb;
     int cpu = smp_processor_id();
-
-#ifndef __UXEN__
-#ifdef  __x86_64__
-    /* 
-     * This is required, because VMRUN does consistency check
-     * and some of the DOM0 selectors are pointing to 
-     * invalid GDT locations, and cause AMD processors
-     * to shutdown.
-     */
-    set_segment_register(ds, 0);
-    set_segment_register(es, 0);
-    set_segment_register(ss, 0);
-
-    /*
-     * Cannot use ISTs for NMI/#MC/#DF while we are running with the guest TR.
-     * But this doesn't matter: the IST is only req'd to handle SYSCALL/SYSRET.
-     */
-    idt_tables[cpu][TRAP_double_fault].a  &= ~(7UL << 32);
-    idt_tables[cpu][TRAP_nmi].a           &= ~(7UL << 32);
-    idt_tables[cpu][TRAP_machine_check].a &= ~(7UL << 32);
-#endif
-#endif  /* __UXEN__ */
 
 #ifdef DEBUG
     /* ASSERT(!v->context_loaded || v->arch.cr3 == read_cr3()); */
@@ -980,11 +883,7 @@ void svm_ctxt_switch_to(struct vcpu *v)
         ax_svm_vmsave_root(v);
     else
         svm_vmsave(per_cpu(root_vmcb, cpu));
-#ifndef __UXEN__
-    svm_vmload(vmcb);
-#else  /* __UXEN__ */
     v->arch.hvm_svm.root_vmcb_pa = __pa(per_cpu(root_vmcb, cpu));
-#endif  /* __UXEN__ */
     vmcb->cleanbits.bytes = 0;
 #ifdef __UXEN_vpmu__
     vpmu_load(v);
@@ -1043,12 +942,6 @@ static void svm_do_resume(struct vcpu *v)
         vmcb_set_vintr(vmcb, intr);
     }
 
-#ifndef __UXEN__
-    hvm_do_resume(v);
-
-    reset_stack_and_jump(svm_asm_do_resume);
-    BUG();
-#endif  /* __UXEN__ */
 }
 
 int
@@ -1071,12 +964,6 @@ int
 svm_vcpu_initialise(struct vcpu *v)
 {
     int rc;
-
-#ifndef __UXEN__
-    v->arch.schedule_tail    = svm_do_resume;
-    v->arch.ctxt_switch_from = svm_ctxt_switch_from;
-    v->arch.ctxt_switch_to   = svm_ctxt_switch_to;
-#endif  /* __UXEN__ */
 
     v->arch.hvm_svm.launch_core = -1;
 
@@ -1101,9 +988,6 @@ svm_vcpu_destroy(struct vcpu *v)
 #ifdef __UXEN_vpmu__
     vpmu_destroy(v);
 #endif  /* __UXEN_vpmu__ */
-#ifndef __UXEN__
-    passive_domain_destroy(v);
-#endif  /* __UXEN__ */
 }
 
 void
@@ -1398,14 +1282,7 @@ static void svm_do_nested_pgfault(struct vcpu *v,
     case 1:
         return;
     case -1:
-#ifndef __UXEN_NOT_YET__
-        ASSERT(nestedhvm_enabled(v->domain) && nestedhvm_vcpu_in_guestmode(v));
-        /* inject #VMEXIT(NPF) into guest. */
-        nestedsvm_vmexit_defer(v, VMEXIT_NPF, npfec, gpa);
-        return;
-#else  /* __UXEN_NOT_YET__ */
         BUG();
-#endif  /* __UXEN_NOT_YET__ */
     }
 
     if ( p2m == NULL )
@@ -1424,23 +1301,8 @@ svm_fpu_dirty_intercept(void)
 {
     struct vcpu *v = current;
     struct vmcb_struct *vmcb = v->arch.hvm_svm.vmcb;
-#ifndef __UXEN_NOT_YET__
-    struct vmcb_struct *n1vmcb = vcpu_nestedhvm(v).nv_n1vmcx;
-#endif  /* __UXEN_NOT_YET__ */
 
     svm_fpu_enter(v);
-
-#ifndef __UXEN_NOT_YET__
-    if ( vmcb != n1vmcb )
-    {
-       /* Check if l1 guest must make FPU ready for the l2 guest */
-       if ( v->arch.hvm_vcpu.guest_cr[0] & X86_CR0_TS )
-           hvm_inject_exception(TRAP_no_device, HVM_DELIVER_NO_ERROR_CODE, 0);
-       else
-           vmcb_set_cr0(n1vmcb, vmcb_get_cr0(n1vmcb) & ~X86_CR0_TS);
-       return;
-    }
-#endif  /* __UXEN_NOT_YET__ */
 
     if ( !(v->arch.hvm_vcpu.guest_cr[0] & X86_CR0_TS) )
         vmcb_set_cr0(vmcb, vmcb_get_cr0(vmcb) & ~X86_CR0_TS);
@@ -1537,9 +1399,6 @@ static void svm_dr_access(struct vcpu *v, struct cpu_user_regs *regs)
 int
 svm_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
 {
-#ifndef __UXEN_NOT_YET__
-    int ret;
-#endif  /* __UXEN_NOT_YET__ */
     struct vcpu *v = current;
     struct vmcb_struct *vmcb = v->arch.hvm_svm.vmcb;
 
@@ -1633,13 +1492,6 @@ svm_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
         goto gpf;               /* no OSVW */
 
     default:
-#ifndef __UXEN_NOT_YET__
-        ret = nsvm_rdmsr(v, msr, msr_content);
-        if ( ret < 0 )
-            goto gpf;
-        else if ( ret )
-            break;
-#endif  /* __UXEN_NOT_YET__ */
 
         if ( rdmsr_viridian_regs(msr, msr_content) ||
              rdmsr_hypervisor_regs(msr, msr_content) )
@@ -1663,14 +1515,8 @@ svm_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
 int
 svm_msr_write_intercept(unsigned int msr, uint64_t msr_content)
 {
-#ifndef __UXEN_NOT_YET__
-    int ret;
-#endif  /* __UXEN_NOT_YET__ */
     struct vcpu *v = current;
     struct vmcb_struct *vmcb = v->arch.hvm_svm.vmcb;
-#ifndef __UXEN__
-    int sync = 0;
-#endif  /* __UXEN__ */
     int ret = X86EMUL_OKAY;
     int r;
 
@@ -1679,18 +1525,10 @@ svm_msr_write_intercept(unsigned int msr, uint64_t msr_content)
     case MSR_IA32_SYSENTER_CS:
     case MSR_IA32_SYSENTER_ESP:
     case MSR_IA32_SYSENTER_EIP:
-#ifndef __UXEN__
-        sync = 1;
-#endif  /* __UXEN__ */
         break;
     default:
         break;
     }
-
-#ifndef __UXEN__
-    if ( sync )
-        svm_sync_vmcb(v);    
-#endif  /* __UXEN__ */
 
     switch ( msr )
     {
@@ -1780,13 +1618,6 @@ svm_msr_write_intercept(unsigned int msr, uint64_t msr_content)
         break;
 
     default:
-#ifndef __UXEN_NOT_YET__
-        ret = nsvm_wrmsr(v, msr, msr_content);
-        if ( ret < 0 )
-            goto gpf;
-        else if ( ret )
-            break;
-#endif  /* __UXEN_NOT_YET__ */
 
         r = wrmsr_viridian_regs(msr, msr_content);
         if (!r)
@@ -1795,11 +1626,6 @@ svm_msr_write_intercept(unsigned int msr, uint64_t msr_content)
             ret = X86EMUL_RETRY;
         break;
     }
-
-#ifndef __UXEN__
-    if ( sync )
-        svm_vmload(vmcb);
-#endif  /* __UXEN__ */
 
     return ret;
 
@@ -1884,18 +1710,7 @@ svm_vmexit_do_vmrun(struct cpu_user_regs *regs,
         return;
     }
 
-#ifndef __UXEN_NOT_YET__
-    if (!nestedsvm_vmcb_map(v, vmcbaddr)) {
-        gdprintk(XENLOG_ERR, "VMRUN: mapping vmcb failed, injecting #UD\n");
-        hvm_inject_exception(TRAP_invalid_op, HVM_DELIVER_NO_ERROR_CODE, 0);
-        return;
-    }
-
-    vcpu_nestedhvm(v).nv_vmentry_pending = 1;
-    return;
-#else  /* __UXEN_NOT_YET__ */
     BUG();
-#endif  /* __UXEN_NOT_YET__ */
 }
 
 static void
@@ -1905,9 +1720,6 @@ svm_vmexit_do_vmload(struct vmcb_struct *vmcb,
 {
     int ret;
     unsigned int inst_len;
-#ifndef __UXEN_NOT_YET__
-    struct nestedvcpu *nv = &vcpu_nestedhvm(v);
-#endif  /* __UXEN_NOT_YET__ */
 
     if ( (inst_len = __get_instruction_length(v, INSTR_VMLOAD)) == 0 )
         return;
@@ -1918,22 +1730,7 @@ svm_vmexit_do_vmload(struct vmcb_struct *vmcb,
         goto inject;
     }
 
-#ifndef __UXEN_NOT_YET__
-    if (!nestedsvm_vmcb_map(v, vmcbaddr)) {
-        gdprintk(XENLOG_ERR, "VMLOAD: mapping vmcb failed, injecting #UD\n");
-        ret = TRAP_invalid_op;
-        goto inject;
-    }
-
-    svm_vmload(nv->nv_vvmcx);
-    /* State in L1 VMCB is stale now */
-    v->arch.hvm_svm.vmcb_in_sync = 0;
-
-    __update_guest_eip(regs, inst_len);
-    return;
-#else  /* __UXEN_NOT_YET__ */
     BUG();
-#endif  /* __UXEN_NOT_YET__ */
 
  inject:
     hvm_inject_exception(ret, HVM_DELIVER_NO_ERROR_CODE, 0);
@@ -1947,9 +1744,6 @@ svm_vmexit_do_vmsave(struct vmcb_struct *vmcb,
 {
     int ret;
     unsigned int inst_len;
-#ifndef __UXEN_NOT_YET__
-    struct nestedvcpu *nv = &vcpu_nestedhvm(v);
-#endif  /* __UXEN_NOT_YET__ */
 
     if ( (inst_len = __get_instruction_length(v, INSTR_VMSAVE)) == 0 )
         return;
@@ -1960,20 +1754,7 @@ svm_vmexit_do_vmsave(struct vmcb_struct *vmcb,
         goto inject;
     }
 
-#ifndef __UXEN_NOT_YET__
-    if (!nestedsvm_vmcb_map(v, vmcbaddr)) {
-        gdprintk(XENLOG_ERR, "VMSAVE: mapping vmcb failed, injecting #UD\n");
-        ret = TRAP_invalid_op;
-        goto inject;
-    }
-
-    svm_vmsave(nv->nv_vvmcx);
-
-    __update_guest_eip(regs, inst_len);
-    return;
-#else  /* __UXEN_NOT_YET__ */
     BUG();
-#endif  /* __UXEN_NOT_YET__ */
 
  inject:
     hvm_inject_exception(ret, HVM_DELIVER_NO_ERROR_CODE, 0);
@@ -2007,9 +1788,6 @@ static void svm_vmexit_ud_intercept(struct cpu_user_regs *regs)
 static int svm_is_erratum_383(struct cpu_user_regs *regs)
 {
     uint64_t msr_content;
-#ifndef __UXEN__
-    uint32_t i;
-#endif  /* __UXEN__ */
     struct vcpu *v = current;
 
     if ( !amd_erratum383_found )
@@ -2022,12 +1800,6 @@ static int svm_is_erratum_383(struct cpu_user_regs *regs)
     if ( msr_content != 0xb600000000010015ULL )
         return 0;
     
-#ifndef __UXEN__
-    /* Clear MCi_STATUS registers */
-    for (i = 0; i < nr_mce_banks; i++)
-        wrmsrl(MSR_IA32_MCx_STATUS(i), 0ULL);
-#endif  /* __UXEN__ */
-
     rdmsrl(MSR_IA32_MCG_STATUS, msr_content);
     wrmsrl(MSR_IA32_MCG_STATUS, msr_content & ~(1ULL << 2));
 
@@ -2047,20 +1819,9 @@ static void svm_vmexit_mce_intercept(
     }
 }
 
-#ifndef __UXEN__
-static void wbinvd_ipi(void *info)
-{
-    wbinvd();
-}
-#endif  /* __UXEN__ */
-
 void
 svm_wbinvd_intercept(void)
 {
-#ifndef __UXEN__
-    if ( has_arch_mmios(current->domain) )
-        on_each_cpu(wbinvd_ipi, NULL, 1);
-#endif  /* __UXEN__ */
 }
 
 static void svm_vmexit_do_invalidate_cache(struct cpu_user_regs *regs)
@@ -2158,9 +1919,7 @@ svm_do_execute(struct vcpu *v)
     int inst_len, rc;
     vintr_t intr;
     bool_t vcpu_guestmode = 0;
-#ifdef __UXEN__
     struct cpu_user_regs *regs = guest_cpu_user_regs();
-#endif  /* __UXEN__ */
 
     ASSERT(v);
 
@@ -2207,68 +1966,6 @@ svm_do_execute(struct vcpu *v)
                     (uint32_t)regs->eip,
                     0, 0, 0, 0);
 
-#ifndef __UXEN_NOT_YET__
-    if ( vcpu_guestmode ) {
-        enum nestedhvm_vmexits nsret;
-        struct nestedvcpu *nv = &vcpu_nestedhvm(v);
-        struct vmcb_struct *ns_vmcb = nv->nv_vvmcx;
-        uint64_t exitinfo1, exitinfo2;
-
-        paging_update_nestedmode(v);
-
-        /* Write real exitinfo1 back into virtual vmcb.
-         * nestedsvm_check_intercepts() expects to have the correct
-         * exitinfo1 value there.
-         */
-        exitinfo1 = ns_vmcb->exitinfo1;
-        ns_vmcb->exitinfo1 = vmcb->exitinfo1;
-        nsret = nestedsvm_check_intercepts(v, regs, exit_reason);
-        switch (nsret) {
-        case NESTEDHVM_VMEXIT_CONTINUE:
-            BUG();
-            break;
-        case NESTEDHVM_VMEXIT_HOST:
-            break;
-        case NESTEDHVM_VMEXIT_INJECT:
-            /* Switch vcpu from l2 to l1 guest. We must perform
-             * the switch here to have svm_do_resume() working
-             * as intended.
-             */
-            exitinfo1 = vmcb->exitinfo1;
-            exitinfo2 = vmcb->exitinfo2;
-            nv->nv_vmswitch_in_progress = 1;
-            nsret = nestedsvm_vmexit_n2n1(v, regs);
-            nv->nv_vmswitch_in_progress = 0;
-            switch (nsret) {
-            case NESTEDHVM_VMEXIT_DONE:
-                /* defer VMEXIT injection */
-                nestedsvm_vmexit_defer(v, exit_reason, exitinfo1, exitinfo2);
-                goto out;
-            case NESTEDHVM_VMEXIT_FATALERROR:
-                gdprintk(XENLOG_ERR, "unexpected nestedsvm_vmexit() error\n");
-                goto exit_and_crash;
-
-            default:
-                BUG();
-            case NESTEDHVM_VMEXIT_ERROR:
-                break;
-            }
-        case NESTEDHVM_VMEXIT_ERROR:
-            gdprintk(XENLOG_ERR,
-                "nestedsvm_check_intercepts() returned NESTEDHVM_VMEXIT_ERROR\n");
-            goto out;
-        case NESTEDHVM_VMEXIT_FATALERROR:
-            gdprintk(XENLOG_ERR,
-                "unexpected nestedsvm_check_intercepts() error\n");
-            goto exit_and_crash;
-        default:
-            gdprintk(XENLOG_INFO, "nestedsvm_check_intercepts() returned %i\n",
-                nsret);
-            goto exit_and_crash;
-        }
-    }
-#endif  /* __UXEN_NOT_YET__ */
-
     if ( unlikely(exit_reason == VMEXIT_INVALID) )
     {
         svm_vmcb_dump(__func__, vmcb);
@@ -2283,10 +1980,6 @@ svm_do_execute(struct vcpu *v)
             printk("vm%u.%u: 500k reason %d\n", v->domain->domain_id,
                    v->vcpu_id, (uint16_t)exit_reason);
     }
-
-#ifndef __UXEN__
-    hvm_maybe_deassert_evtchn_irq();
-#endif  /* __UXEN__ */
 
     vmcb->cleanbits.bytes = cpu_has_svm_cleanbits ? ~0u : 0u;
 
@@ -2480,10 +2173,6 @@ svm_do_execute(struct vcpu *v)
         if ( rc != HVM_HCALL_preempted )
         {
             __update_guest_eip(regs, inst_len);
-#ifndef __UXEN__
-            if ( rc == HVM_HCALL_invalidate )
-                send_invalidate_req();
-#endif  /* __UXEN__ */
         }
         break;
 
@@ -2578,9 +2267,6 @@ svm_do_execute(struct vcpu *v)
         break;
     }
 
-#ifndef __UXEN_NOT_YET__
-  out:
-#endif  /* __UXEN_NOT_YET__ */
     if ( vcpu_guestmode )
         /* Don't clobber TPR of the nested guest. */
         return;

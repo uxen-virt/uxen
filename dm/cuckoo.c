@@ -34,10 +34,6 @@
 #define PAGE_SIZE 0x1000 /* You knew it */
 #endif
 
-#ifndef QEMU_UXEN
-#define debug_printf printf
-#endif
-
 static const size_t idx_size = (128 << 20);
 static const size_t pin_size = (128 << 20);
 

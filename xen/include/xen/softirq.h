@@ -9,9 +9,6 @@ enum {
     /* vcpu */
     TIMER_VCPU_SOFTIRQ,
     SCHEDULE_VCPU_SOFTIRQ,
-#ifndef __UXEN__
-    NEW_TLBFLUSH_CLOCK_PERIOD_SOFTIRQ,
-#endif  /* __UXEN__ */
 
     /* cpu */
     RCU_CPU_SOFTIRQ,

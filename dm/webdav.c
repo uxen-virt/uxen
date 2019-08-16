@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2018, Bromium, Inc.
+ * Copyright 2013-2019, Bromium, Inc.
  * Author: Michael Dales <michael@digitalflapjack.com>
  * SPDX-License-Identifier: ISC
  */
@@ -32,12 +32,8 @@
 #define __strftime_variant(s, max, f, t, loc) strftime((s), (max), (f), (t))
 #endif
 
-#ifdef QEMU_UXEN
 #include "debug.h"
 #include "nickel/http-parser/http_parser.h"
-#else
-#include "http_parser.h"
-#endif
 
 #include "webdav.h"
 

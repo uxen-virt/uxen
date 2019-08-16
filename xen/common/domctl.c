@@ -48,70 +48,6 @@
 
 static DEFINE_SPINLOCK(domctl_lock);
 
-#ifndef __UXEN__
-int cpumask_to_xenctl_cpumap(
-    struct xenctl_cpumap *xenctl_cpumap, const cpumask_t *cpumask)
-{
-    unsigned int guest_bytes, copy_bytes, i;
-    uint8_t zero = 0;
-    int err = 0;
-    uint8_t *bytemap = xmalloc_array(uint8_t, (nr_cpu_ids + 7) / 8);
-
-    if ( !bytemap )
-        return -ENOMEM;
-
-    guest_bytes = (xenctl_cpumap->nr_cpus + 7) / 8;
-    copy_bytes  = min_t(unsigned int, guest_bytes, (nr_cpu_ids + 7) / 8);
-
-    bitmap_long_to_byte(bytemap, cpumask_bits(cpumask), nr_cpu_ids);
-
-    if ( copy_bytes != 0 )
-        if ( copy_to_guest(xenctl_cpumap->bitmap, bytemap, copy_bytes) )
-            err = -EFAULT;
-
-    for ( i = copy_bytes; !err && i < guest_bytes; i++ )
-        if ( copy_to_guest_offset(xenctl_cpumap->bitmap, i, &zero, 1) )
-            err = -EFAULT;
-
-    xfree(bytemap);
-
-    return err;
-}
-
-int xenctl_cpumap_to_cpumask(
-    cpumask_var_t *cpumask, const struct xenctl_cpumap *xenctl_cpumap)
-{
-    unsigned int guest_bytes, copy_bytes;
-    int err = 0;
-    uint8_t *bytemap = xzalloc_array(uint8_t, (nr_cpu_ids + 7) / 8);
-
-    if ( !bytemap )
-        return -ENOMEM;
-
-    guest_bytes = (xenctl_cpumap->nr_cpus + 7) / 8;
-    copy_bytes  = min_t(unsigned int, guest_bytes, (nr_cpu_ids + 7) / 8);
-
-    if ( copy_bytes != 0 )
-    {
-        if ( copy_from_guest(bytemap, xenctl_cpumap->bitmap, copy_bytes) )
-            err = -EFAULT;
-        if ( (xenctl_cpumap->nr_cpus & 7) && (guest_bytes <= sizeof(bytemap)) )
-            bytemap[guest_bytes-1] &= ~(0xff << (xenctl_cpumap->nr_cpus & 7));
-    }
-
-    if ( err )
-        /* nothing */;
-    else if ( alloc_cpumask_var(cpumask) )
-        bitmap_byte_to_long(cpumask_bits(*cpumask), bytemap, nr_cpu_ids);
-    else
-        err = -ENOMEM;
-
-    xfree(bytemap);
-
-    return err;
-}
-#endif  /* __UXEN__ */
-
 void getdomaininfo(struct domain *d, struct xen_domctl_getdomaininfo *info)
 {
     struct vcpu *v;
@@ -162,17 +98,10 @@ void getdomaininfo(struct domain *d, struct xen_domctl_getdomaininfo *info)
     info->host_pages        = d->host_pages;
     info->max_pages         = d->max_pages;
     info->hidden_pages      = atomic_read(&d->hidden_pages);
-#ifndef __UXEN__
-    info->shr_pages         = atomic_read(&d->shr_pages);
-    info->paged_pages       = atomic_read(&d->paged_pages);
-    info->shared_info_frame = mfn_to_gmfn(d, __pa(d->shared_info)>>PAGE_SHIFT);
-    BUG_ON(SHARED_M2P(info->shared_info_frame));
-#else  /* __UXEN__ */
     info->pod_pages         = atomic_read(&d->pod_pages);
     info->zero_shared_pages = atomic_read(&d->zero_shared_pages);
     info->tmpl_shared_pages = atomic_read(&d->tmpl_shared_pages);
     info->shared_info_frame = d->shared_info_gpfn;
-#endif  /* __UXEN__ */
 
     info->cpupool = d->cpupool ? d->cpupool->cpupool_id : CPUPOOLID_NONE;
 
@@ -262,16 +191,6 @@ do_domctl_max_vcpus(struct domain *d, unsigned int max)
         return ret;
     }
 
-#ifndef __UXEN__
-    /* Until Xenoprof can dynamically grow its vcpu-s array... */
-    if ( d->xenoprof )
-    {
-        rcu_unlock_domain(d);
-        ret = -EAGAIN;
-        return -EAGAIN;
-    }
-#endif  /* __UXEN__ */
-
         /* Needed, for example, to ensure writable p.t. state is synced. */
     domain_pause(d);
 
@@ -294,23 +213,6 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
 
     switch ( op->cmd )
     {
-#ifndef __UXEN__
-    case XEN_DOMCTL_ioport_mapping:
-    case XEN_DOMCTL_memory_mapping:
-    case XEN_DOMCTL_bind_pt_irq:
-    case XEN_DOMCTL_unbind_pt_irq: {
-        struct domain *d;
-        bool_t is_priv = IS_PRIV(current->domain);
-        if ( !is_priv && ((d = rcu_lock_domain_by_id(op->domain)) != NULL) )
-        {
-            is_priv = IS_PRIV_FOR(current->domain, d);
-            rcu_unlock_domain(d);
-        }
-        if ( !is_priv )
-            return -EPERM;
-        break;
-    }
-#endif  /* __UXEN__ */
     default: {
         struct domain *d;
         d = rcu_lock_domain_by_id(op->domain);
@@ -342,71 +244,6 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
 
     switch ( op->cmd )
     {
-
-#ifndef __UXEN__
-    case XEN_DOMCTL_setvcpucontext:
-    {
-        struct domain *d = rcu_lock_domain_by_id(op->domain);
-        vcpu_guest_context_u c = { .nat = NULL };
-        unsigned int vcpu = op->u.vcpucontext.vcpu;
-        struct vcpu *v;
-
-        ret = -ESRCH;
-        if ( d == NULL )
-            break;
-
-        ret = xsm_setvcpucontext(d);
-        if ( ret )
-            goto svc_out;
-
-        ret = -EINVAL;
-        if ((d == current->domain) || /* no domain_pause() */
-            (vcpu >= d->max_vcpus))
-            goto svc_out;
-        vcpu = array_index_nospec(vcpu, d->max_vcpus);
-        if ((v = d->vcpu[vcpu]) == NULL)
-            goto svc_out;
-
-        if ( guest_handle_is_null(op->u.vcpucontext.ctxt) )
-        {
-            vcpu_reset(v);
-            ret = 0;
-            goto svc_out;
-        }
-
-#ifdef CONFIG_COMPAT
-        BUILD_BUG_ON(sizeof(struct vcpu_guest_context)
-                     < sizeof(struct compat_vcpu_guest_context));
-#endif
-        ret = -ENOMEM;
-        if ( (c.nat = alloc_vcpu_guest_context()) == NULL )
-            goto svc_out;
-
-#ifdef CONFIG_COMPAT
-        if ( !is_pv_32on64_vcpu(v) )
-            ret = copy_from_guest(c.nat, op->u.vcpucontext.ctxt, 1);
-        else
-            ret = copy_from_guest(c.cmp,
-                                  guest_handle_cast(op->u.vcpucontext.ctxt,
-                                                    void), 1);
-#else
-        ret = copy_from_guest(c.nat, op->u.vcpucontext.ctxt, 1);
-#endif
-        ret = ret ? -EFAULT : 0;
-
-        if ( ret == 0 )
-        {
-            domain_pause(d);
-            ret = arch_set_info_guest(v, c);
-            domain_unpause(d);
-        }
-
-    svc_out:
-        free_vcpu_guest_context(c.nat);
-        rcu_unlock_domain(d);
-    }
-    break;
-#endif  /* __UXEN__ */
 
     case XEN_DOMCTL_pausedomain:
     {
@@ -472,33 +309,6 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
     }
     break;
 
-#ifndef __UXEN__
-    case XEN_DOMCTL_createdomain:
-    {
-        struct domain *d = NULL;
-        unsigned int domcr_flags;
-
-        ret = -EINVAL;
-        domcr_flags = domctl_createdomain_parse_flags(op->u.createdomain.flags);
-        if (domcr_flags == ~0)
-            break;
-
-        ret = domain_create(op->domain, domcr_flags, op->u.createdomain.ssidref,
-                            op->u.createdomain.handle, &d);
-        if (ret)
-            break;
-
-        ret = 0;
-
-        op->domain = d->domain_id;
-        if ( copy_to_guest(u_domctl, op, 1) )
-            ret = -EFAULT;
-
-        rcu_unlock_domain(d);
-    }
-    break;
-#endif  /* __UXEN__ */
-
     case XEN_DOMCTL_max_vcpus:
     {
         struct domain *d;
@@ -528,77 +338,6 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
         }
     }
     break;
-
-#ifndef __UXEN__
-    case XEN_DOMCTL_setvcpuaffinity:
-    case XEN_DOMCTL_getvcpuaffinity:
-    {
-        domid_t dom = op->domain;
-        struct domain *d = rcu_lock_domain_by_id(dom);
-        struct vcpu *v;
-
-        ret = -ESRCH;
-        if ( d == NULL )
-            break;
-
-        ret = xsm_vcpuaffinity(op->cmd, d);
-        if ( ret )
-            goto vcpuaffinity_out;
-
-        ret = -EINVAL;
-        if ( op->u.vcpuaffinity.vcpu >= d->max_vcpus )
-            goto vcpuaffinity_out;
-
-        op->u.vcpuaffinity.vcpu =
-            array_index_nospec(op->u.vcpuaffinity.vcpu, d->max_vcpus);
-        ret = -ESRCH;
-        if ( (v = d->vcpu[op->u.vcpuaffinity.vcpu]) == NULL )
-            goto vcpuaffinity_out;
-
-        if ( op->cmd == XEN_DOMCTL_setvcpuaffinity )
-        {
-            cpumask_var_t new_affinity;
-
-            ret = xenctl_cpumap_to_cpumask(
-                &new_affinity, &op->u.vcpuaffinity.cpumap);
-            if ( !ret )
-            {
-                ret = vcpu_set_affinity(v, new_affinity);
-                free_cpumask_var(new_affinity);
-            }
-        }
-        else
-        {
-            ret = cpumask_to_xenctl_cpumap(
-                &op->u.vcpuaffinity.cpumap, v->cpu_affinity);
-        }
-
-    vcpuaffinity_out:
-        rcu_unlock_domain(d);
-    }
-    break;
-
-    case XEN_DOMCTL_scheduler_op:
-    {
-        struct domain *d;
-
-        ret = -ESRCH;
-        if ( (d = rcu_lock_domain_by_id(op->domain)) == NULL )
-            break;
-
-        ret = xsm_scheduler(d);
-        if ( ret )
-            goto scheduler_op_out;
-
-        ret = sched_adjust(d, &op->u.scheduler_op);
-        if ( copy_to_guest(u_domctl, op, 1) )
-            ret = -EFAULT;
-
-    scheduler_op_out:
-        rcu_unlock_domain(d);
-    }
-    break;
-#endif  /* __UXEN__ */
 
     case XEN_DOMCTL_getdomaininfo:
     { 
@@ -843,53 +582,6 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
     break;
 #endif  /* __UXEN_debugger__ */
 
-#ifndef __UXEN__
-    case XEN_DOMCTL_irq_permission:
-    {
-        struct domain *d;
-        unsigned int pirq = op->u.irq_permission.pirq;
-
-        ret = -ESRCH;
-        d = rcu_lock_domain_by_id(op->domain);
-        if ( d == NULL )
-            break;
-
-        if ( pirq >= d->nr_pirqs )
-            ret = -EINVAL;
-        else if ( op->u.irq_permission.allow_access )
-            ret = irq_permit_access(d, pirq);
-        else
-            ret = irq_deny_access(d, pirq);
-
-        rcu_unlock_domain(d);
-    }
-    break;
-
-    case XEN_DOMCTL_iomem_permission:
-    {
-        struct domain *d;
-        unsigned long mfn = op->u.iomem_permission.first_mfn;
-        unsigned long nr_mfns = op->u.iomem_permission.nr_mfns;
-
-        ret = -EINVAL;
-        if ( (mfn + nr_mfns - 1) < mfn ) /* wrap? */
-            break;
-
-        ret = -ESRCH;
-        d = rcu_lock_domain_by_id(op->domain);
-        if ( d == NULL )
-            break;
-
-        if ( op->u.iomem_permission.allow_access )
-            ret = iomem_permit_access(d, mfn, mfn + nr_mfns - 1);
-        else
-            ret = iomem_deny_access(d, mfn, mfn + nr_mfns - 1);
-
-        rcu_unlock_domain(d);
-    }
-    break;
-#endif  /* __UXEN__ */
-
     case XEN_DOMCTL_settimeoffset:
     {
         struct domain *d;
@@ -925,73 +617,6 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
         rcu_unlock_domain(d);
         break;
     }
-
-#ifndef __UXEN__
-    case XEN_DOMCTL_set_target:
-    {
-        struct domain *d, *e;
-
-        ret = -ESRCH;
-        d = rcu_lock_domain_by_id(op->domain);
-        if ( d == NULL )
-            break;
-
-        ret = -ESRCH;
-        e = get_domain_by_id(op->u.set_target.target);
-        if ( e == NULL )
-            goto set_target_out;
-
-        ret = -EINVAL;
-        if ( (d == e) || (d->target != NULL) )
-        {
-            put_domain(e);
-            goto set_target_out;
-        }
-
-        ret = xsm_set_target(d, e);
-        if ( ret ) {
-            put_domain(e);
-            goto set_target_out;            
-        }
-
-        /* Hold reference on @e until we destroy @d. */
-        d->target = e;
-
-        ret = 0;
-
-    set_target_out:
-        rcu_unlock_domain(d);
-    }
-    break;
-
-    case XEN_DOMCTL_subscribe:
-    {
-        struct domain *d;
-
-        ret = -ESRCH;
-        d = rcu_lock_domain_by_id(op->domain);
-        if ( d != NULL )
-        {
-            d->suspend_evtchn = op->u.subscribe.port;
-            rcu_unlock_domain(d);
-            ret = 0;
-        }
-    }
-    break;
-
-    case XEN_DOMCTL_disable_migrate:
-    {
-        struct domain *d;
-        ret = -ESRCH;
-        if ( (d = rcu_lock_domain_by_id(op->domain)) != NULL )
-        {
-            d->disable_migrate = op->u.disable_migrate.disable;
-            rcu_unlock_domain(d);
-            ret = 0;
-        }
-    }
-    break;
-#endif  /* __UXEN__ */
 
     default:
         ret = arch_do_domctl(op, u_domctl);

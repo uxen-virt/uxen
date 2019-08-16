@@ -25,9 +25,6 @@
 #define CONFIG_X86_MCE_THERMAL 1
 #define CONFIG_NUMA 1
 #define CONFIG_DISCONTIGMEM 1
-#ifndef __UXEN__
-#define CONFIG_NUMA_EMU 1
-#endif  /* __UXEN__ */
 #define CONFIG_PAGEALLOC_MAX_ORDER (2 * PAGETABLE_ORDER)
 
 /* Intel P4 currently has largest cache line (L2 line size is 128 bytes). */
@@ -36,9 +33,6 @@
 #define CONFIG_ACPI 1
 #define CONFIG_ACPI_BOOT 1
 #define CONFIG_ACPI_SLEEP 1
-#ifndef __UXEN__
-#define CONFIG_ACPI_NUMA 1
-#endif  /* __UXEN__ */
 #define CONFIG_ACPI_SRAT 1
 #define CONFIG_ACPI_CSTATE 1
 
@@ -53,15 +47,6 @@
 
 #define OPT_CONSOLE_STR "vga"
 
-#if !defined(__UXEN__)
-#ifdef MAX_PHYS_CPUS
-#define NR_CPUS MAX_PHYS_CPUS
-#elif defined __i386__
-#define NR_CPUS 128
-#else
-#define NR_CPUS 256
-#endif
-#else   /* __UXEN__ */
 #if defined(__x86_64__)
 #ifdef UXEN_HOST_WINDOWS
 /* Same as KAFFINITY */
@@ -74,7 +59,6 @@
 /* Same as KAFFINITY */
 #define NR_CPUS 32
 #endif  /* __x86_64__ */
-#endif  /* __UXEN__ */
 
 #ifdef __i386__
 /* Maximum number of virtual CPUs in multi-processor guests. */
@@ -149,9 +133,6 @@ extern unsigned char boot_edid_info[128];
 #if defined(__x86_64__)
 
 #define CONFIG_X86_64 1
-#ifndef __UXEN__
-#define CONFIG_COMPAT 1
-#endif
 
 /*
  * Most of the code uses the sysv ABI per default, including stubs in
@@ -235,66 +216,6 @@ extern unsigned char boot_edid_info[128];
  *    Reserved for future use.
  */
 
-
-#ifndef __UXEN__
-#define ROOT_PAGETABLE_FIRST_XEN_SLOT 256
-#define ROOT_PAGETABLE_LAST_XEN_SLOT  271
-#define ROOT_PAGETABLE_XEN_SLOTS \
-    (ROOT_PAGETABLE_LAST_XEN_SLOT - ROOT_PAGETABLE_FIRST_XEN_SLOT + 1)
-
-/* Hypervisor reserves PML4 slots 256 to 271 inclusive. */
-#define HYPERVISOR_VIRT_START   (PML4_ADDR(256))
-#define HYPERVISOR_VIRT_END     (HYPERVISOR_VIRT_START + PML4_ENTRY_BYTES*16)
-/* Slot 256: read-only guest-accessible machine-to-phys translation table. */
-#define RO_MPT_VIRT_START       (PML4_ADDR(256))
-#define MPT_VIRT_SIZE           (PML4_ENTRY_BYTES / 2)
-#define RO_MPT_VIRT_END         (RO_MPT_VIRT_START + MPT_VIRT_SIZE)
-/* Slot 257: ioremap for PCI mmconfig space for 2048 segments (512GB)
- *     - full 16-bit segment support needs 44 bits
- *     - since PML4 slot has 39 bits, we limit segments to 2048 (11-bits)
- */
-#define PCI_MCFG_VIRT_START     (PML4_ADDR(257))
-#define PCI_MCFG_VIRT_END       (PCI_MCFG_VIRT_START + PML4_ENTRY_BYTES)
-/* Slot 258: linear page table (guest table). */
-#define LINEAR_PT_VIRT_START    (PML4_ADDR(258))
-#define LINEAR_PT_VIRT_END      (LINEAR_PT_VIRT_START + PML4_ENTRY_BYTES)
-/* Slot 259: linear page table (shadow table). */
-#define SH_LINEAR_PT_VIRT_START (PML4_ADDR(259))
-#define SH_LINEAR_PT_VIRT_END   (SH_LINEAR_PT_VIRT_START + PML4_ENTRY_BYTES)
-/* Slot 260: per-domain mappings. */
-#define PERDOMAIN_VIRT_START    (PML4_ADDR(260))
-#define PERDOMAIN_VIRT_END      (PERDOMAIN_VIRT_START + (PERDOMAIN_MBYTES<<20))
-#define PERDOMAIN_MBYTES        (PML4_ENTRY_BYTES >> (20 + PAGETABLE_ORDER))
-/* Slot 261: machine-to-phys conversion table (256GB). */
-#define RDWR_MPT_VIRT_START     (PML4_ADDR(261))
-#define RDWR_MPT_VIRT_END       (RDWR_MPT_VIRT_START + MPT_VIRT_SIZE)
-/* Slot 261: ioremap()/fixmap area (16GB). */
-#define IOREMAP_VIRT_START      RDWR_MPT_VIRT_END
-#define IOREMAP_VIRT_END        (IOREMAP_VIRT_START + GB(16))
-/* Slot 261: compatibility machine-to-phys conversion table (1GB). */
-#define RDWR_COMPAT_MPT_VIRT_START IOREMAP_VIRT_END
-#define RDWR_COMPAT_MPT_VIRT_END (RDWR_COMPAT_MPT_VIRT_START + GB(1))
-/* Slot 261: high read-only compat machine-to-phys conversion table (1GB). */
-#define HIRO_COMPAT_MPT_VIRT_START RDWR_COMPAT_MPT_VIRT_END
-#define HIRO_COMPAT_MPT_VIRT_END (HIRO_COMPAT_MPT_VIRT_START + GB(1))
-/* Slot 261: xen text, static data and bss (1GB). */
-#define XEN_VIRT_START          (HIRO_COMPAT_MPT_VIRT_END)
-#define XEN_VIRT_END            (XEN_VIRT_START + GB(1))
-/* Slot 261: superpage information array (20MB). */
-#define SPAGETABLE_VIRT_END     FRAMETABLE_VIRT_START
-#define SPAGETABLE_SIZE         ((DIRECTMAP_SIZE >> SUPERPAGE_SHIFT) * \
-                                 sizeof(struct spage_info))
-#define SPAGETABLE_VIRT_START   (SPAGETABLE_VIRT_END - SPAGETABLE_SIZE)
-/* Slot 261: page-frame information array (40GB). */
-#define FRAMETABLE_VIRT_END     DIRECTMAP_VIRT_START
-#define FRAMETABLE_SIZE         ((DIRECTMAP_SIZE >> PAGE_SHIFT) * \
-                                 sizeof(struct page_info))
-#define FRAMETABLE_VIRT_START   (FRAMETABLE_VIRT_END - FRAMETABLE_SIZE)
-/* Slot 262-271: A direct 1:1 mapping of all of physical memory. */
-#define DIRECTMAP_VIRT_START    (PML4_ADDR(262))
-#define DIRECTMAP_SIZE          (PML4_ENTRY_BYTES*10)
-#define DIRECTMAP_VIRT_END      (DIRECTMAP_VIRT_START + DIRECTMAP_SIZE)
-#endif  /* __UXEN__ */
 
 #ifndef __ASSEMBLY__
 
@@ -412,15 +333,11 @@ extern unsigned char boot_edid_info[128];
 
 #endif /* __i386__ */
 
-#ifndef __UXEN__
-#define SYMBOLS_ORIGIN XEN_VIRT_START
-#else
 #ifndef __ASSEMBLY__
 extern char _xen_start[];
 #define SYMBOLS_ORIGIN (unsigned long)_xen_start
 #else
 #define SYMBOLS_ORIGIN 0
-#endif
 #endif
 
 #ifndef __ASSEMBLY__
@@ -429,31 +346,6 @@ extern unsigned long xen_phys_start;
 extern unsigned long xenheap_phys_end;
 #endif
 #endif
-
-#ifndef __UXEN__
-/* GDT/LDT shadow mapping area. The first per-domain-mapping sub-area. */
-#define GDT_LDT_VCPU_SHIFT       5
-#define GDT_LDT_VCPU_VA_SHIFT    (GDT_LDT_VCPU_SHIFT + PAGE_SHIFT)
-#ifdef MAX_VIRT_CPUS
-#define GDT_LDT_MBYTES           (MAX_VIRT_CPUS >> (20-GDT_LDT_VCPU_VA_SHIFT))
-#else
-#define GDT_LDT_MBYTES           PERDOMAIN_MBYTES
-#define MAX_VIRT_CPUS            (GDT_LDT_MBYTES << (20-GDT_LDT_VCPU_VA_SHIFT))
-#endif
-#define GDT_LDT_VIRT_START       PERDOMAIN_VIRT_START
-#define GDT_LDT_VIRT_END         (GDT_LDT_VIRT_START + (GDT_LDT_MBYTES << 20))
-
-/* The address of a particular VCPU's GDT or LDT. */
-#define GDT_VIRT_START(v)    \
-    (PERDOMAIN_VIRT_START + ((v)->vcpu_id << GDT_LDT_VCPU_VA_SHIFT))
-#define LDT_VIRT_START(v)    \
-    (GDT_VIRT_START(v) + (64*1024))
-
-#define PDPT_L1_ENTRIES       \
-    ((PERDOMAIN_VIRT_END - PERDOMAIN_VIRT_START) >> PAGE_SHIFT)
-#define PDPT_L2_ENTRIES       \
-    ((PDPT_L1_ENTRIES + (1 << PAGETABLE_ORDER) - 1) >> PAGETABLE_ORDER)
-#endif  /* __UXEN__ */
 
 #if defined(__x86_64__)
 #define ELFSIZE 64

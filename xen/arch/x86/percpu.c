@@ -21,18 +21,11 @@ static int init_percpu_area(unsigned int cpu)
     char *p;
     if ( __per_cpu_offset[cpu] != INVALID_PERCPU_AREA )
         return -EBUSY;
-#ifndef __UXEN__
-    if ( (p = alloc_xenheap_pages(PERCPU_ORDER, 0)) == NULL )
-        return -ENOMEM;
-#else
     p = _uxen_info.ui_percpu_area[cpu_physical_id(cpu)];
-#endif
     memset(p, 0, __per_cpu_data_end - __per_cpu_start);
     __per_cpu_offset[cpu] = p - __per_cpu_start;
-#ifdef __UXEN__
     uxen_cpu_info[cpu_physical_id(cpu)].per_cpu_offset =
         __per_cpu_offset[cpu];
-#endif  /* __UXEN__ */
     return 0;
 }
 
@@ -46,10 +39,6 @@ static void _free_percpu_area(struct rcu_head *head)
 {
     struct free_info *info = container_of(head, struct free_info, rcu);
     unsigned int cpu = info->cpu;
-#ifndef __UXEN__
-    char *p = __per_cpu_start + __per_cpu_offset[cpu];
-    free_xenheap_pages(p, PERCPU_ORDER);
-#endif  /* __UXEN__ */
     __per_cpu_offset[cpu] = INVALID_PERCPU_AREA;
 }
 

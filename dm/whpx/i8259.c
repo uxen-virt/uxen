@@ -24,7 +24,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2018, Bromium, Inc.
+ * Copyright 2018-2019, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -492,26 +492,10 @@ static int pic_initfn(SysBusDevice *dev)
     memory_region_init_io(&s->base_io, &pic_base_ioport_ops, s, "pic", 2);
     memory_region_init_io(&s->elcr_io, &pic_elcr_ioport_ops, s, "elcr", 1);
 
-#ifdef QEMU_UXEN
     memory_region_add_subregion(system_ioport, s->iobase, &s->base_io);
 
     if (s->elcr_addr != -1)
         memory_region_add_subregion(system_ioport, s->elcr_addr, &s->elcr_io);
-#else
-    isa_register_ioport(NULL, &s->base_io, s->iobase);
-    if (s->elcr_addr != -1) {
-        isa_register_ioport(NULL, &s->elcr_io, s->elcr_addr);
-    }
-    memory_region_add_subregion(system_ioport, s->iobase, &s->base_io);
-
-    if (s->elcr_addr != -1)
-        memory_region_add_subregion(system_ioport, s->elcr_addr, &s->elcr_io);
-
-    qdev_init_gpio_out(&dev->qdev, s->int_out, ARRAY_SIZE(s->int_out));
-    qdev_init_gpio_in(&dev->qdev, pic_set_irq, 8);
-
-    qdev_set_legacy_instance_id(&dev->qdev, s->iobase, 1);
-#endif
 
     return 0;
 }

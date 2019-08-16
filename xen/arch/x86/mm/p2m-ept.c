@@ -46,9 +46,6 @@
 #include <asm/hvm/vmx/vmx.h>
 #include <asm/hvm/vmx/vmcs.h>
 #include <asm/hvm/pv.h>
-#ifndef __UXEN__
-#include <xen/iommu.h>
-#endif  /* __UXEN__ */
 #include <asm/mtrr.h>
 #include <asm/hvm/cacheattr.h>
 #include <xen/keyhandler.h>
@@ -83,12 +80,6 @@ static void ept_p2m_type_to_flags(ept_entry_t *entry, p2m_type_t type, p2m_acces
     {
         case p2m_invalid:
         case p2m_mmio_dm:
-#ifndef __UXEN__
-        case p2m_ram_paging_out:
-        case p2m_ram_paged:
-        case p2m_ram_paging_in:
-        case p2m_ram_paging_in_start:
-#endif  /* __UXEN__ */
         default:
             entry->r = entry->w = entry->x = 0;
             break;
@@ -107,22 +98,9 @@ static void ept_p2m_type_to_flags(ept_entry_t *entry, p2m_type_t type, p2m_acces
             break;
         case p2m_ram_logdirty:
         case p2m_ram_ro:
-#ifndef __UXEN__
-        case p2m_ram_shared:
-#endif  /* __UXEN__ */
             entry->r = entry->x = 1;
             entry->w = 0;
             break;
-#ifndef __UXEN__
-        case p2m_grant_map_rw:
-            entry->r = entry->w = 1;
-            entry->x = 0;
-            break;
-        case p2m_grant_map_ro:
-            entry->r = 1;
-            entry->w = entry->x = 0;
-            break;
-#endif  /* __UXEN__ */
     }
 
 
@@ -381,11 +359,7 @@ _ept_split_super_page(struct p2m_domain *p2m, ept_entry_t *ept_entry,
         else if (ept_entry->mfn)
             WARN_ONCE();
 #endif  /* NDEBUG */
-#ifndef __UXEN__
-        epte->rsvd2_snp = ( iommu_enabled && iommu_snoop ) ? 1 : 0;
-#else   /* __UXEN__ */
         epte->rsvd2_snp = 0;
-#endif  /* __UXEN__ */
 
         ept_p2m_type_to_flags(epte, epte->sa_p2mt, epte->access);
 
@@ -532,10 +506,6 @@ ept_write_entry(struct p2m_domain *p2m, void *table, unsigned long gfn,
     old_entry = *ept_entry;
 
     if (mfn_valid_page(mfn) || mmio
-#ifndef __UXEN__
-        || p2m_is_paged(p2mt)
-        || p2m_is_paging_in_start(p2mt)
-#endif  /* __UXEN__ */
         || p2m_is_pod(p2mt))
     {
         /* Construct the new entry, and then write it once */
@@ -546,18 +516,9 @@ ept_write_entry(struct p2m_domain *p2m, void *table, unsigned long gfn,
         new_entry.sp = target ? 1 : 0;
         new_entry.sa_p2mt = p2mt;
         new_entry.access = p2ma;
-#ifndef __UXEN__
-        new_entry.rsvd2_snp = (iommu_enabled && iommu_snoop);
-#else   /* __UXEN__ */
         new_entry.rsvd2_snp = 0;
-#endif  /* __UXEN__ */
 
         new_entry.mfn = mfn_x(mfn);
-
-#ifndef __UXEN__
-        if ( old_entry.mfn == new_entry.mfn )
-            need_modify_vtd_table = 0;
-#endif  /* __UXEN__ */
 
         ept_p2m_type_to_flags(&new_entry, p2mt, p2ma);
     }
@@ -603,17 +564,10 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
               unsigned int order, p2m_type_t p2mt, p2m_access_t p2ma)
 {
     ept_entry_t *table, *ept_entry = NULL;
-#ifndef __UXEN__
-    unsigned long offset = 0;
-#endif  /* __UXEN__ */
     u32 index;
     int i, target = order / EPT_TABLE_ORDER;
     int rv = 0;
     int ret = 0;
-#ifndef __UXEN__
-    int need_modify_vtd_table = 1;
-    int vtd_pte_present = 0;
-#endif  /* __UXEN__ */
     int needs_sync = 1;
     struct domain *d = p2m->domain;
     ept_entry_t old_entry = { .epte = 0 };
@@ -672,20 +626,12 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
     ASSERT(ret != GUEST_TABLE_POD_PAGE || i != target);
 
     index = pt_level_index(gfn, i);
-#ifndef __UXEN__
-    offset = pt_level_offset(gfn, i);
-#endif  /* __UXEN__ */
 
     ept_entry = table + index;
 
     /* Non-l1 update -- invalidate the get_entry cache */
     if (target && is_epte_present(ept_entry))
         p2m_ge_l1_cache_invalidate(p2m, gfn, order);
-
-#ifndef __UXEN__
-    /* In case VT-d uses same page table, this flag is needed by VT-d */ 
-    vtd_pte_present = is_epte_present(ept_entry) ? 1 : 0;
-#endif  /* __UXEN__ */
 
     if (i > target) {
         /* If we're here with i > target, we must be at a leaf node, and
@@ -730,43 +676,6 @@ ept_set_entry(struct p2m_domain *p2m, unsigned long gfn, mfn_t mfn,
 
     if (needs_sync)
         pt_sync_domain(p2m->domain);
-
-#ifndef __UXEN__
-    if ( rv && iommu_enabled && need_iommu(p2m->domain) && need_modify_vtd_table )
-    {
-        if ( iommu_hap_pt_share )
-            iommu_pte_flush(d, gfn, (u64*)ept_entry, order, vtd_pte_present);
-        else
-        {
-            if (p2m_is_ram_rw(p2mt)) {
-                if ( order > 0 )
-                {
-                    for ( i = 0; i < (1 << order); i++ )
-                        iommu_map_page(
-                            p2m->domain, gfn - offset + i, mfn_x(mfn) - offset + i,
-                            IOMMUF_readable | IOMMUF_writable);
-                }
-                else if ( !order )
-                    iommu_map_page(
-                        p2m->domain, gfn, mfn_x(mfn), IOMMUF_readable | IOMMUF_writable);
-            }
-            else
-            {
-#ifndef __UXEN__
-                if ( order > 0 )
-                {
-                    for ( i = 0; i < (1 << order); i++ )
-                        iommu_unmap_page(p2m->domain, gfn - offset + i);
-                }
-                else if ( !order )
-                    iommu_unmap_page(p2m->domain, gfn);
-#else   /* __UXEN__ */
-                BUG();
-#endif  /* __UXEN__ */
-            }
-        }
-    }
-#endif  /* __UXEN__ */
 
     /* Release the old intermediate tables, if any.  This has to be the
        last thing we do, after the ept_sync_domain() and removal
@@ -1258,9 +1167,6 @@ DEBUG();
     if ( ept_get_asr(d) == 0 )
         return;
 
-#ifndef __UXEN__
-    BUG_ON(p2m_is_grant(ot) || p2m_is_grant(nt));
-#endif  /* __UXEN__ */
     BUG_ON(ot != nt && (p2m_is_mmio_direct(ot) || p2m_is_mmio_direct(nt)));
 
     ept_change_entry_type_page(_mfn(ept_get_asr(d)), ept_get_wl(d), ot, nt);

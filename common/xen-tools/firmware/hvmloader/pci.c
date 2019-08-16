@@ -219,18 +219,10 @@ void pci_setup(void)
             hvm_info->low_mem_pgend -= nr_pages;
             xatp.domid = DOMID_SELF;
             xatp.space = XENMAPSPACE_gmfn_range;
-#ifndef __UXEN__
-            xatp.idx   = hvm_info->low_mem_pgend;
-            if ( hvm_info->high_mem_pgend == 0 )
-                hvm_info->high_mem_pgend = 1ull << (32 - PAGE_SHIFT);
-            xatp.gpfn  = hvm_info->high_mem_pgend;
-            hvm_info->high_mem_pgend += nr_pages;
-#else  /* __UXEN__ */
             /* on uxen, don't relocate memory since the mapcache won't
              * extend to the relocated area */
             xatp.idx  = /* INVALID_GFN */ -1ULL;
             xatp.gpfn  = hvm_info->low_mem_pgend;
-#endif /* __UXEN__ */
             xatp.size  = nr_pages;
             if ( hypercall_memory_op(XENMEM_add_to_physmap, &xatp) != 0 )
                 BUG();

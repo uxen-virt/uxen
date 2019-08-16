@@ -47,26 +47,9 @@
 #include <xen/hypercall.h> /* for arch_do_domctl */
 #include <xsm/xsm.h>
 #include <xen/iommu.h>
-#ifndef __UXEN__
-#include <asm/mem_event.h>
-#include <public/mem_event.h>
-#include <asm/mem_sharing.h>
-#endif  /* __UXEN__ */
 #include <asm/xstate.h>
 #include <asm/debugger.h>
 #include <xen/pfn.h>
-
-#ifndef __UXEN__
-static int gdbsx_guest_mem_io(
-    domid_t domid, struct xen_domctl_gdbsx_memio *iop)
-{   
-    ulong l_uva = (ulong)iop->uva;
-    iop->remain = dbg_rw_mem(
-        (dbgva_t)iop->gva, (dbgbyte_t *)l_uva, iop->len, domid,
-        iop->gwr, iop->pgd3val);
-    return (iop->remain ? -EFAULT : 0);
-}
-#endif  /* __UXEN__ */
 
 long arch_do_domctl(
     struct xen_domctl *domctl,
@@ -76,49 +59,6 @@ long arch_do_domctl(
 
     switch ( domctl->cmd )
     {
-
-#ifndef __UXEN__
-    case XEN_DOMCTL_shadow_op:
-    {
-        struct domain *d;
-        ret = -ESRCH;
-        d = rcu_lock_domain_by_id(domctl->domain);
-        if ( d != NULL )
-        {
-            ret = paging_domctl(d,
-                                &domctl->u.shadow_op,
-                                guest_handle_cast(u_domctl, void));
-            rcu_unlock_domain(d);
-            copy_to_guest(u_domctl, domctl, 1);
-        } 
-    }
-    break;
-
-    case XEN_DOMCTL_ioport_permission:
-    {
-        struct domain *d;
-        unsigned int fp = domctl->u.ioport_permission.first_port;
-        unsigned int np = domctl->u.ioport_permission.nr_ports;
-
-        ret = -EINVAL;
-        if ( (fp + np) > 65536 )
-            break;
-
-        ret = -ESRCH;
-        if ( unlikely((d = rcu_lock_domain_by_id(domctl->domain)) == NULL) )
-            break;
-
-        if ( np == 0 )
-            ret = 0;
-        else if ( domctl->u.ioport_permission.allow_access )
-            ret = ioports_permit_access(d, fp, fp + np - 1);
-        else
-            ret = ioports_deny_access(d, fp, fp + np - 1);
-
-        rcu_unlock_domain(d);
-    }
-    break;
-#endif  /* __UXEN__ */
 
     case XEN_DOMCTL_getpageframeinfo:
     {
@@ -148,27 +88,6 @@ long arch_do_domctl(
 
             domctl->u.getpageframeinfo.type = XEN_DOMCTL_PFINFO_NOTAB;
 
-#ifndef __UXEN__
-            if ( (page->u.inuse.type_info & PGT_count_mask) != 0 )
-            {
-                switch ( page->u.inuse.type_info & PGT_type_mask )
-                {
-                case PGT_l1_page_table:
-                    domctl->u.getpageframeinfo.type = XEN_DOMCTL_PFINFO_L1TAB;
-                    break;
-                case PGT_l2_page_table:
-                    domctl->u.getpageframeinfo.type = XEN_DOMCTL_PFINFO_L2TAB;
-                    break;
-                case PGT_l3_page_table:
-                    domctl->u.getpageframeinfo.type = XEN_DOMCTL_PFINFO_L3TAB;
-                    break;
-                case PGT_l4_page_table:
-                    domctl->u.getpageframeinfo.type = XEN_DOMCTL_PFINFO_L4TAB;
-                    break;
-                }
-            }
-#endif  /* __UXEN__ */
-            
             put_page(page);
         }
 
@@ -179,10 +98,6 @@ long arch_do_domctl(
     break;
 
     case XEN_DOMCTL_getpageframeinfo3:
-#if defined(__x86_64__) || defined(__UXEN__)
-#ifndef __UXEN__
-        if (!has_32bit_shinfo(current->domain))
-#endif  /* __UXEN__ */
         {
             unsigned int n, j;
             unsigned int num = domctl->u.getpageframeinfo3.num;
@@ -245,26 +160,6 @@ long arch_do_domctl(
                         ;
                     else if ( likely(get_page(page, d)) )
                     {
-#ifndef __UXEN__
-                        switch( page->u.inuse.type_info & PGT_type_mask )
-                        {
-                        case PGT_l1_page_table:
-                            type = XEN_DOMCTL_PFINFO_L1TAB;
-                            break;
-                        case PGT_l2_page_table:
-                            type = XEN_DOMCTL_PFINFO_L2TAB;
-                            break;
-                        case PGT_l3_page_table:
-                            type = XEN_DOMCTL_PFINFO_L3TAB;
-                            break;
-                        case PGT_l4_page_table:
-                            type = XEN_DOMCTL_PFINFO_L4TAB;
-                            break;
-                        }
-
-                        if ( page->u.inuse.type_info & PGT_pinned )
-                            type |= XEN_DOMCTL_PFINFO_LPINTAB;
-#endif  /* __UXEN__ */
 
                         put_page(page);
                     }
@@ -295,7 +190,6 @@ long arch_do_domctl(
             rcu_unlock_domain(d);
             break;
         }
-#endif
         /* fall thru */
     case XEN_DOMCTL_getpageframeinfo2:
     {
@@ -361,26 +255,6 @@ long arch_do_domctl(
                 {
                     unsigned long type = 0;
 
-#ifndef __UXEN__
-                    switch( page->u.inuse.type_info & PGT_type_mask )
-                    {
-                    case PGT_l1_page_table:
-                        type = XEN_DOMCTL_PFINFO_L1TAB;
-                        break;
-                    case PGT_l2_page_table:
-                        type = XEN_DOMCTL_PFINFO_L2TAB;
-                        break;
-                    case PGT_l3_page_table:
-                        type = XEN_DOMCTL_PFINFO_L3TAB;
-                        break;
-                    case PGT_l4_page_table:
-                        type = XEN_DOMCTL_PFINFO_L4TAB;
-                        break;
-                    }
-
-                    if ( page->u.inuse.type_info & PGT_pinned )
-                        type |= XEN_DOMCTL_PFINFO_LPINTAB;
-#endif  /* __UXEN__ */
                     arr32[j] |= type;
                     put_page(page);
                 }
@@ -408,100 +282,6 @@ long arch_do_domctl(
         rcu_unlock_domain(d);
     }
     break;
-
-#ifndef __UXEN__
-    case XEN_DOMCTL_getmemlist:
-    {
-        int i;
-        struct domain *d = rcu_lock_domain_by_id(domctl->domain);
-        unsigned long max_pfns = domctl->u.getmemlist.max_pfns;
-        uint64_t mfn;
-        struct page_info *page;
-
-        ret = -EINVAL;
-        if ( d != NULL )
-        {
-            ret = xsm_getmemlist(d);
-            if ( ret )
-            {
-                rcu_unlock_domain(d);
-                break;
-            }
-
-            spin_lock(&d->page_alloc_lock);
-
-            if ( unlikely(d->is_dying) ) {
-                spin_unlock(&d->page_alloc_lock);
-                goto getmemlist_out;
-            }
-
-            ret = i = 0;
-            page_list_for_each(page, &d->page_list)
-            {
-                if ( i >= max_pfns )
-                    break;
-                mfn = page_to_mfn(page);
-                if ( copy_to_guest_offset(domctl->u.getmemlist.buffer,
-                                          i, &mfn, 1) )
-                {
-                    ret = -EFAULT;
-                    break;
-                }
-                ++i;
-            }
-            
-            spin_unlock(&d->page_alloc_lock);
-
-            domctl->u.getmemlist.num_pfns = i;
-            copy_to_guest(u_domctl, domctl, 1);
-        getmemlist_out:
-            rcu_unlock_domain(d);
-        }
-    }
-    break;
-
-    case XEN_DOMCTL_hypercall_init:
-    {
-        struct domain *d = rcu_lock_domain_by_id(domctl->domain);
-        unsigned long gmfn = domctl->u.hypercall_init.gmfn;
-        unsigned long mfn;
-        void *hypercall_page;
-
-        ret = -ESRCH;
-        if ( unlikely(d == NULL) )
-            break;
-
-        ret = xsm_hypercall_init(d);
-        if ( ret )
-        {
-            rcu_unlock_domain(d);
-            break;
-        }
-
-        mfn = get_gfn_untyped(d, gmfn);
-
-        ret = -EACCES;
-        if ( !mfn_valid(mfn) ||
-             !get_page_and_type(mfn_to_page(mfn), d, PGT_writable_page) )
-        {
-            put_gfn(d, gmfn); 
-            rcu_unlock_domain(d);
-            break;
-        }
-
-        ret = 0;
-
-        hypercall_page = map_domain_page(mfn);
-        hypercall_page_initialise(d, hypercall_page);
-        unmap_domain_page(hypercall_page);
-
-        put_page_and_type(mfn_to_page(mfn));
-
-        put_gfn(d, gmfn); 
-        rcu_unlock_domain(d);
-    }
-    break;
-#endif  /* __UXEN__ */
 
     case XEN_DOMCTL_sethvmcontext:
     { 
@@ -638,42 +418,6 @@ long arch_do_domctl(
     break;
 
 
-#ifndef __UXEN__
-    case XEN_DOMCTL_set_address_size:
-    {
-        struct domain *d;
-
-        ret = -ESRCH;
-        if ( (d = rcu_lock_domain_by_id(domctl->domain)) == NULL )
-            break;
-
-        ret = xsm_address_size(d, domctl->cmd);
-        if ( ret )
-        {
-            rcu_unlock_domain(d);
-            break;
-        }
-
-        switch ( domctl->u.address_size.size )
-        {
-#ifdef CONFIG_COMPAT
-        case 32:
-            ret = switch_compat(d);
-            break;
-        case 64:
-            ret = switch_native(d);
-            break;
-#endif
-        default:
-            ret = (domctl->u.address_size.size == BITS_PER_LONG) ? 0 : -EINVAL;
-            break;
-        }
-
-        rcu_unlock_domain(d);
-    }
-    break;
-#endif  /* __UXEN__ */
-
     case XEN_DOMCTL_get_address_size:
     {
         struct domain *d;
@@ -699,59 +443,6 @@ long arch_do_domctl(
             ret = -EFAULT;
     }
     break;
-
-#ifndef __UXEN__
-    case XEN_DOMCTL_set_machine_address_size:
-    {
-        struct domain *d;
-
-        ret = -ESRCH;
-        if ( (d = rcu_lock_domain_by_id(domctl->domain)) == NULL )
-            break;
-
-        ret = xsm_machine_address_size(d, domctl->cmd);
-        if ( ret )
-            rcu_unlock_domain(d);
-
-        ret = -EBUSY;
-        if ( d->tot_pages > 0 )
-            goto set_machine_address_size_out;
-
-        d->arch.physaddr_bitsize = domctl->u.address_size.size;
-
-        ret = 0;
-    set_machine_address_size_out:
-        rcu_unlock_domain(d);
-    }
-    break;
-
-    case XEN_DOMCTL_get_machine_address_size:
-    {
-        struct domain *d;
-
-        ret = -ESRCH;
-        if ( (d = rcu_lock_domain_by_id(domctl->domain)) == NULL )
-            break;
-
-        ret = xsm_machine_address_size(d, domctl->cmd);
-        if ( ret )
-        {
-            rcu_unlock_domain(d);
-            break;
-        }
-
-        domctl->u.address_size.size = d->arch.physaddr_bitsize;
-
-        ret = 0;
-        rcu_unlock_domain(d);
-
-        if ( copy_to_guest(u_domctl, domctl, 1) )
-            ret = -EFAULT;
-
-
-    }
-    break;
-#endif  /* __UXEN__ */
 
 #ifdef __UXEN_sendtrigger__
     case XEN_DOMCTL_sendtrigger:
@@ -820,320 +511,6 @@ long arch_do_domctl(
     }
     break;
 #endif  /* __UXEN_sendtrigger__ */
-
-#ifndef __UXEN__
-    case XEN_DOMCTL_bind_pt_irq:
-    {
-        struct domain * d;
-        xen_domctl_bind_pt_irq_t * bind;
-
-        ret = -ESRCH;
-        if ( (d = rcu_lock_domain_by_id(domctl->domain)) == NULL )
-            break;
-        bind = &(domctl->u.bind_pt_irq);
-
-        ret = -EINVAL;
-        if ( !is_hvm_domain(d) )
-            goto bind_out;
-
-        ret = xsm_bind_pt_irq(d, bind);
-        if ( ret )
-            goto bind_out;
-
-        ret = -EPERM;
-        if ( !IS_PRIV(current->domain) &&
-             !irq_access_permitted(current->domain, bind->machine_irq) )
-            goto bind_out;
-
-        ret = -ESRCH;
-        if ( iommu_enabled )
-        {
-            spin_lock(&pcidevs_lock);
-            ret = pt_irq_create_bind_vtd(d, bind);
-            spin_unlock(&pcidevs_lock);
-        }
-        if ( ret < 0 )
-            gdprintk(XENLOG_ERR, "pt_irq_create_bind failed!\n");
-
-    bind_out:
-        rcu_unlock_domain(d);
-    }
-    break;    
-
-    case XEN_DOMCTL_unbind_pt_irq:
-    {
-        struct domain * d;
-        xen_domctl_bind_pt_irq_t * bind;
-
-        ret = -ESRCH;
-        if ( (d = rcu_lock_domain_by_id(domctl->domain)) == NULL )
-            break;
-        bind = &(domctl->u.bind_pt_irq);
-
-        ret = -EPERM;
-        if ( !IS_PRIV(current->domain) &&
-             !irq_access_permitted(current->domain, bind->machine_irq) )
-            goto unbind_out;
-
-        if ( iommu_enabled )
-        {
-            spin_lock(&pcidevs_lock);
-            ret = pt_irq_destroy_bind_vtd(d, bind);
-            spin_unlock(&pcidevs_lock);
-        }
-        if ( ret < 0 )
-            gdprintk(XENLOG_ERR, "pt_irq_destroy_bind failed!\n");
-
-    unbind_out:
-        rcu_unlock_domain(d);
-    }
-    break;
-
-    case XEN_DOMCTL_memory_mapping:
-    {
-        struct domain *d;
-        unsigned long gfn = domctl->u.memory_mapping.first_gfn;
-        unsigned long mfn = domctl->u.memory_mapping.first_mfn;
-        unsigned long nr_mfns = domctl->u.memory_mapping.nr_mfns;
-        int i;
-
-        ret = -EINVAL;
-        if ( (mfn + nr_mfns - 1) < mfn ) /* wrap? */
-            break;
-
-        ret = -EPERM;
-        if ( !IS_PRIV(current->domain) &&
-             !iomem_access_permitted(current->domain, mfn, mfn + nr_mfns - 1) )
-            break;
-
-        ret = -ESRCH;
-        if ( unlikely((d = rcu_lock_domain_by_id(domctl->domain)) == NULL) )
-            break;
-
-        ret=0;
-        if ( domctl->u.memory_mapping.add_mapping )
-        {
-            gdprintk(XENLOG_INFO,
-                "memory_map:add: gfn=%lx mfn=%lx nr_mfns=%lx\n",
-                gfn, mfn, nr_mfns);
-
-            ret = iomem_permit_access(d, mfn, mfn + nr_mfns - 1);
-            for ( i = 0; i < nr_mfns; i++ )
-                set_mmio_p2m_entry(d, gfn+i, _mfn(mfn+i));
-        }
-        else
-        {
-            gdprintk(XENLOG_INFO,
-                "memory_map:remove: gfn=%lx mfn=%lx nr_mfns=%lx\n",
-                 gfn, mfn, nr_mfns);
-
-            for ( i = 0; i < nr_mfns; i++ )
-                clear_mmio_p2m_entry(d, gfn+i);
-            ret = iomem_deny_access(d, mfn, mfn + nr_mfns - 1);
-        }
-
-        rcu_unlock_domain(d);
-    }
-    break;
-
-    case XEN_DOMCTL_ioport_mapping:
-    {
-#define MAX_IOPORTS    0x10000
-        struct domain *d;
-        struct hvm_iommu *hd;
-        unsigned int fgp = domctl->u.ioport_mapping.first_gport;
-        unsigned int fmp = domctl->u.ioport_mapping.first_mport;
-        unsigned int np = domctl->u.ioport_mapping.nr_ports;
-        struct g2m_ioport *g2m_ioport;
-        int found = 0;
-
-        ret = -EINVAL;
-        if ( (np == 0) || (fgp > MAX_IOPORTS) || (fmp > MAX_IOPORTS) ||
-            ((fgp + np) > MAX_IOPORTS) || ((fmp + np) > MAX_IOPORTS) )
-        {
-            gdprintk(XENLOG_ERR,
-                "ioport_map:invalid:gport=%x mport=%x nr_ports=%x\n",
-                fgp, fmp, np);
-            break;
-        }
-
-        ret = -EPERM;
-        if ( !IS_PRIV(current->domain) &&
-             !ioports_access_permitted(current->domain, fmp, fmp + np - 1) )
-            break;
-
-        ret = -ESRCH;
-        if ( unlikely((d = rcu_lock_domain_by_id(domctl->domain)) == NULL) )
-            break;
-
-        hd = domain_hvm_iommu(d);
-        if ( domctl->u.ioport_mapping.add_mapping )
-        {
-            gdprintk(XENLOG_INFO,
-                "ioport_map:add f_gport=%x f_mport=%x np=%x\n",
-                fgp, fmp, np);
-
-            list_for_each_entry(g2m_ioport, &hd->g2m_ioport_list, list)
-                if (g2m_ioport->mport == fmp )
-                {
-                    g2m_ioport->gport = fgp;
-                    g2m_ioport->np = np;
-                    found = 1;
-                    break;
-                }
-            if ( !found )
-            {
-                g2m_ioport = xmalloc(struct g2m_ioport);
-                g2m_ioport->gport = fgp;
-                g2m_ioport->mport = fmp;
-                g2m_ioport->np = np;
-                list_add_tail(&g2m_ioport->list, &hd->g2m_ioport_list);
-            }
-            ret = ioports_permit_access(d, fmp, fmp + np - 1);
-        }
-        else
-        {
-            gdprintk(XENLOG_INFO,
-                "ioport_map:remove f_gport=%x f_mport=%x np=%x\n",
-                fgp, fmp, np);
-            list_for_each_entry(g2m_ioport, &hd->g2m_ioport_list, list)
-                if ( g2m_ioport->mport == fmp )
-                {
-                    list_del(&g2m_ioport->list);
-                    xfree(g2m_ioport);
-                    break;
-                }
-            ret = ioports_deny_access(d, fmp, fmp + np - 1);
-        }
-        rcu_unlock_domain(d);
-    }
-    break;
-
-    case XEN_DOMCTL_pin_mem_cacheattr:
-    {
-        struct domain *d;
-
-        ret = -ESRCH;
-        d = rcu_lock_domain_by_id(domctl->domain);
-        if ( d == NULL )
-            break;
-
-        ret = xsm_pin_mem_cacheattr(d);
-        if ( ret )
-            goto pin_out;
-
-        ret = hvm_set_mem_pinned_cacheattr(
-            d, domctl->u.pin_mem_cacheattr.start,
-            domctl->u.pin_mem_cacheattr.end,
-            domctl->u.pin_mem_cacheattr.type);
-
-    pin_out:
-        rcu_unlock_domain(d);
-    }
-    break;
-
-    case XEN_DOMCTL_set_ext_vcpucontext:
-    case XEN_DOMCTL_get_ext_vcpucontext:
-    {
-        struct xen_domctl_ext_vcpucontext *evc;
-        struct domain *d;
-        struct vcpu *v;
-
-        evc = &domctl->u.ext_vcpucontext;
-
-        ret = -ESRCH;
-        d = rcu_lock_domain_by_id(domctl->domain);
-        if ( d == NULL )
-            break;
-
-        ret = xsm_ext_vcpucontext(d, domctl->cmd);
-        if ( ret )
-            goto ext_vcpucontext_out;
-
-        ret = -ESRCH;
-        if (evc->vcpu >= d->max_vcpus)
-            goto ext_vcpucontext_out;
-        evc->vcpu = array_index_nospec(evc->vcpu, d->max_vcpus);
-        if ((v = d->vcpu[evc->vcpu]) == NULL)
-            goto ext_vcpucontext_out;
-
-        if ( domctl->cmd == XEN_DOMCTL_get_ext_vcpucontext )
-        {
-            evc->size = sizeof(*evc);
-#ifndef __UXEN__
-#ifdef __x86_64__
-            if ( !is_hvm_domain(d) )
-            {
-                evc->sysenter_callback_cs      =
-                    v->arch.pv_vcpu.sysenter_callback_cs;
-                evc->sysenter_callback_eip     =
-                    v->arch.pv_vcpu.sysenter_callback_eip;
-                evc->sysenter_disables_events  =
-                    v->arch.pv_vcpu.sysenter_disables_events;
-                evc->syscall32_callback_cs     =
-                    v->arch.pv_vcpu.syscall32_callback_cs;
-                evc->syscall32_callback_eip    =
-                    v->arch.pv_vcpu.syscall32_callback_eip;
-                evc->syscall32_disables_events =
-                    v->arch.pv_vcpu.syscall32_disables_events;
-            }
-            else
-#endif
-#endif  /* __UXEN__ */
-            {
-                evc->sysenter_callback_cs      = 0;
-                evc->sysenter_callback_eip     = 0;
-                evc->sysenter_disables_events  = 0;
-                evc->syscall32_callback_cs     = 0;
-                evc->syscall32_callback_eip    = 0;
-                evc->syscall32_disables_events = 0;
-            }
-        }
-        else
-        {
-            ret = -EINVAL;
-            if ( evc->size != sizeof(*evc) )
-                goto ext_vcpucontext_out;
-#ifndef __UXEN__
-#ifdef __x86_64__
-            if ( !is_hvm_domain(d) )
-            {
-                fixup_guest_code_selector(d, evc->sysenter_callback_cs);
-                v->arch.pv_vcpu.sysenter_callback_cs      =
-                    evc->sysenter_callback_cs;
-                v->arch.pv_vcpu.sysenter_callback_eip     =
-                    evc->sysenter_callback_eip;
-                v->arch.pv_vcpu.sysenter_disables_events  =
-                    evc->sysenter_disables_events;
-                fixup_guest_code_selector(d, evc->syscall32_callback_cs);
-                v->arch.pv_vcpu.syscall32_callback_cs     =
-                    evc->syscall32_callback_cs;
-                v->arch.pv_vcpu.syscall32_callback_eip    =
-                    evc->syscall32_callback_eip;
-                v->arch.pv_vcpu.syscall32_disables_events =
-                    evc->syscall32_disables_events;
-            }
-            else
-#endif
-#endif  /* __UXEN__ */
-            /* We do not support syscall/syscall32/sysenter on 32-bit Xen. */
-            if ( (evc->sysenter_callback_cs & ~3) ||
-                 evc->sysenter_callback_eip ||
-                 (evc->syscall32_callback_cs & ~3) ||
-                 evc->syscall32_callback_eip )
-                goto ext_vcpucontext_out;
-        }
-
-        ret = 0;
-
-    ext_vcpucontext_out:
-        rcu_unlock_domain(d);
-        if ( (domctl->cmd == XEN_DOMCTL_get_ext_vcpucontext) &&
-             copy_to_guest(u_domctl, domctl, 1) )
-            ret = -EFAULT;
-    }
-    break;
-#endif  /* __UXEN__ */
 
     case XEN_DOMCTL_set_cpuid:
     {
@@ -1220,23 +597,6 @@ long arch_do_domctl(
     }
     break;
 
-#ifndef __UXEN__
-    case XEN_DOMCTL_suppress_spurious_page_faults:
-    {
-        struct domain *d;
-
-        ret = -ESRCH;
-        d = rcu_lock_domain_by_id(domctl->domain);
-        if ( d != NULL )
-        {
-            d->arch.suppress_spurious_page_faults = 1;
-            rcu_unlock_domain(d);
-            ret = 0;
-        }
-    }
-    break;
-#endif  /* __UXEN__ */
-
 #ifdef __UXEN_debugger__
     case XEN_DOMCTL_debug_op:
     {
@@ -1267,118 +627,6 @@ long arch_do_domctl(
     }
     break;
 #endif  /* __UXEN_debugger__ */
-
-#ifndef __UXEN__
-    case XEN_DOMCTL_gdbsx_guestmemio:
-    {
-        struct domain *d;
-
-        ret = -ESRCH;
-        if ( (d = rcu_lock_domain_by_id(domctl->domain)) == NULL )
-            break;
-
-        domctl->u.gdbsx_guest_memio.remain =
-            domctl->u.gdbsx_guest_memio.len;
-
-        ret = gdbsx_guest_mem_io(domctl->domain, &domctl->u.gdbsx_guest_memio);
-        if ( !ret && copy_to_guest(u_domctl, domctl, 1) )
-            ret = -EFAULT;
-
-        rcu_unlock_domain(d);
-    }
-    break;
-
-    case XEN_DOMCTL_gdbsx_pausevcpu:
-    {
-        struct domain *d;
-        struct vcpu *v;
-
-        ret = -ESRCH;
-        if ( (d = rcu_lock_domain_by_id(domctl->domain)) == NULL )
-            break;
-
-        ret = -EBUSY;
-        if ( !d->is_paused_by_controller )
-        {
-            rcu_unlock_domain(d);
-            break;
-        }
-        ret = -EINVAL;
-        if ( domctl->u.gdbsx_pauseunp_vcpu.vcpu >= MAX_VIRT_CPUS ||
-             (v = d->vcpu[domctl->u.gdbsx_pauseunp_vcpu.vcpu]) == NULL )
-        {
-            rcu_unlock_domain(d);
-            break;
-        }
-        vcpu_pause(v);
-        ret = 0;
-        rcu_unlock_domain(d);
-    }
-    break;
-
-    case XEN_DOMCTL_gdbsx_unpausevcpu:
-    {
-        struct domain *d;
-        struct vcpu *v;
-
-        ret = -ESRCH;
-        if ( (d = rcu_lock_domain_by_id(domctl->domain)) == NULL )
-            break;
-
-        ret = -EBUSY;
-        if ( !d->is_paused_by_controller )
-        {
-            rcu_unlock_domain(d);
-            break;
-        }
-        ret = -EINVAL;
-        if ( domctl->u.gdbsx_pauseunp_vcpu.vcpu >= MAX_VIRT_CPUS ||
-             (v = d->vcpu[domctl->u.gdbsx_pauseunp_vcpu.vcpu]) == NULL )
-        {
-            rcu_unlock_domain(d);
-            break;
-        }
-        if ( !atomic_read(&v->pause_count) )
-            printk("WARN: Unpausing vcpu:vm%u.%u which is not paused\n",
-                   d->domain_id, v->vcpu_id);
-        vcpu_unpause(v);
-        ret = 0;
-        rcu_unlock_domain(d);
-    }
-    break;
-
-    case XEN_DOMCTL_gdbsx_domstatus:
-    {
-        struct domain *d;
-        struct vcpu *v;
-
-        ret = -ESRCH;
-        if ( (d = rcu_lock_domain_by_id(domctl->domain)) == NULL )
-            break;
-
-        domctl->u.gdbsx_domstatus.vcpu_id = -1;
-        domctl->u.gdbsx_domstatus.paused = d->is_paused_by_controller;
-        if ( domctl->u.gdbsx_domstatus.paused )
-        {
-            for_each_vcpu ( d, v )
-            {
-                if ( v->arch.gdbsx_vcpu_event )
-                {
-                    domctl->u.gdbsx_domstatus.vcpu_id = v->vcpu_id;
-                    domctl->u.gdbsx_domstatus.vcpu_ev =
-                        v->arch.gdbsx_vcpu_event;
-                    v->arch.gdbsx_vcpu_event = 0;
-                    break;
-                }
-            }
-        }
-        ret = 0;
-        if ( copy_to_guest(u_domctl, domctl, 1) )
-            ret = -EFAULT;
-        rcu_unlock_domain(d);
-    }
-    break;
-#endif  /* __UXEN__ */
 
     case XEN_DOMCTL_setvcpuextstate:
     case XEN_DOMCTL_getvcpuextstate:
@@ -1508,69 +756,10 @@ long arch_do_domctl(
     }
     break;
 
-#ifndef __UXEN__
-#ifdef __x86_64__
-    case XEN_DOMCTL_mem_event_op:
-    {
-        struct domain *d;
-
-        ret = -ESRCH;
-        d = rcu_lock_domain_by_id(domctl->domain);
-        if ( d != NULL )
-        {
-            ret = mem_event_domctl(d, &domctl->u.mem_event_op,
-                                   guest_handle_cast(u_domctl, void));
-            rcu_unlock_domain(d);
-            copy_to_guest(u_domctl, domctl, 1);
-        } 
-    }
-    break;
-
-    case XEN_DOMCTL_mem_sharing_op:
-    {
-        struct domain *d;
-
-        ret = -ESRCH;
-        d = rcu_lock_domain_by_id(domctl->domain);
-        if ( d != NULL )
-        {
-            ret = mem_sharing_domctl(d, &domctl->u.mem_sharing_op);
-            rcu_unlock_domain(d);
-            copy_to_guest(u_domctl, domctl, 1);
-        } 
-    }
-    break;
-#endif /* __x86_64__ */
-
-    case XEN_DOMCTL_set_access_required:
-    {
-        struct domain *d;
-        struct p2m_domain* p2m;
-        
-        ret = -EPERM;
-        if ( current->domain->domain_id == domctl->domain )
-            break;
-
-        ret = -ESRCH;
-        d = rcu_lock_domain_by_id(domctl->domain);
-        if ( d != NULL )
-        {
-            p2m = p2m_get_hostp2m(d);
-            p2m->access_required = domctl->u.access_required.access_required;
-            rcu_unlock_domain(d);
-        } 
-    }
-    break;
-#endif  /* __UXEN__ */
-
     default:
-#ifndef __UXEN__
-        ret = iommu_do_domctl(domctl, u_domctl);
-#else   /* __UXEN__ */
         gdprintk(XENLOG_ERR, "unknown domctl %d on vm%u\n", domctl->cmd,
                  domctl->domain);
         ret = -ENOSYS;
-#endif  /* __UXEN__ */
         break;
     }
 
@@ -1606,11 +795,6 @@ void arch_get_info_guest(struct vcpu *v, vcpu_guest_context_u c)
     if ( !compat )
     {
         memcpy(&c.nat->user_regs, &v->arch.user_regs, sizeof(c.nat->user_regs));
-#ifndef __UXEN__
-        if ( !is_hvm_vcpu(v) )
-            memcpy(c.nat->trap_ctxt, v->arch.pv_vcpu.trap_ctxt,
-                   sizeof(c.nat->trap_ctxt));
-#endif  /* __UXEN__ */
     }
 #ifdef CONFIG_COMPAT
     else
@@ -1646,76 +830,6 @@ void arch_get_info_guest(struct vcpu *v, vcpu_guest_context_u c)
         hvm_get_segment_register(v, x86_seg_gs, &sreg);
         c.nat->user_regs.gs = sreg.sel;
     }
-#ifndef __UXEN__
-    else
-    {
-        c(ldt_base = v->arch.pv_vcpu.ldt_base);
-        c(ldt_ents = v->arch.pv_vcpu.ldt_ents);
-        for ( i = 0; i < ARRAY_SIZE(v->arch.pv_vcpu.gdt_frames); ++i )
-            c(gdt_frames[i] = v->arch.pv_vcpu.gdt_frames[i]);
-#ifdef CONFIG_COMPAT
-        BUILD_BUG_ON(ARRAY_SIZE(c.nat->gdt_frames) !=
-                     ARRAY_SIZE(c.cmp->gdt_frames));
-#endif
-        for ( ; i < ARRAY_SIZE(c.nat->gdt_frames); ++i )
-            c(gdt_frames[i] = 0);
-        c(gdt_ents = v->arch.pv_vcpu.gdt_ents);
-        c(kernel_ss = v->arch.pv_vcpu.kernel_ss);
-        c(kernel_sp = v->arch.pv_vcpu.kernel_sp);
-        for ( i = 0; i < ARRAY_SIZE(v->arch.pv_vcpu.ctrlreg); ++i )
-            c(ctrlreg[i] = v->arch.pv_vcpu.ctrlreg[i]);
-        c(event_callback_eip = v->arch.pv_vcpu.event_callback_eip);
-        c(failsafe_callback_eip = v->arch.pv_vcpu.failsafe_callback_eip);
-#ifdef CONFIG_X86_64
-        if ( !compat )
-        {
-            c.nat->syscall_callback_eip = v->arch.pv_vcpu.syscall_callback_eip;
-            c.nat->fs_base = v->arch.pv_vcpu.fs_base;
-            c.nat->gs_base_kernel = v->arch.pv_vcpu.gs_base_kernel;
-            c.nat->gs_base_user = v->arch.pv_vcpu.gs_base_user;
-        }
-        else
-#endif
-        {
-            c(event_callback_cs = v->arch.pv_vcpu.event_callback_cs);
-            c(failsafe_callback_cs = v->arch.pv_vcpu.failsafe_callback_cs);
-        }
-        c(vm_assist = v->arch.pv_vcpu.vm_assist);
-
-        /* IOPL privileges are virtualised: merge back into returned eflags. */
-        BUG_ON((c(user_regs.eflags) & X86_EFLAGS_IOPL) != 0);
-        c(user_regs.eflags |= v->arch.pv_vcpu.iopl << 12);
-
-        if ( !is_pv_32on64_domain(v->domain) )
-        {
-            c.nat->ctrlreg[3] = xen_pfn_to_cr3(
-                pagetable_get_pfn(v->arch.guest_table));
-#ifdef __x86_64__
-            c.nat->ctrlreg[1] =
-                pagetable_is_null(v->arch.guest_table_user) ? 0
-                : xen_pfn_to_cr3(pagetable_get_pfn(v->arch.guest_table_user));
-#endif
-
-            /* Merge shadow DR7 bits into real DR7. */
-            c.nat->debugreg[7] |= c.nat->debugreg[5];
-            c.nat->debugreg[5] = 0;
-        }
-#ifdef CONFIG_COMPAT
-        else
-        {
-            l4_pgentry_t *l4e = __va(pagetable_get_paddr(v->arch.guest_table));
-            c.cmp->ctrlreg[3] = compat_pfn_to_cr3(l4e_get_pfn(*l4e));
-
-            /* Merge shadow DR7 bits into real DR7. */
-            c.cmp->debugreg[7] |= c.cmp->debugreg[5];
-            c.cmp->debugreg[5] = 0;
-        }
-#endif
-
-        if ( guest_kernel_mode(v, &v->arch.user_regs) )
-            c(flags |= VGCF_in_kernel);
-    }
-#endif  /* __UXEN__ */
 
     c(vm_assist = v->domain->vm_assist);
 #undef c

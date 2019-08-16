@@ -617,13 +617,8 @@ static void rtc_set_time(RTCState *s)
     /* if (!independent wall clock) */
     /* d->time_offset_seconds += (after - before); */
     update_domain_wallclock_time(d);
-#ifndef __UXEN__
-    /* Also tell qemu-dm about it so it will be remembered for next boot. */
-    send_timeoffset_req(after - before);
-#else  /* __UXEN__ */
     (void)after;
     (void)before;
-#endif  /* __UXEN__ */
 }
 
 static void rtc_copy_date(RTCState *s)
@@ -748,16 +743,6 @@ static int handle_rtc_io(
 
 void rtc_migrate_timers(struct vcpu *v)
 {
-#ifndef __UXEN__
-    RTCState *s = vcpu_vrtc(v);
-
-    if ( v->vcpu_id == 0 )
-    {
-        migrate_timer(&s->update_timer, v->processor);;
-        migrate_timer(&s->update_timer2, v->processor);;
-        migrate_timer(&s->alarm_timer, v->processor);;
-    }
-#endif
 }
 
 /* Save RTC hardware state */
@@ -819,12 +804,6 @@ void rtc_init(struct domain *d)
     RTCState *s = domain_vrtc(d);
 
     spin_lock_init(&s->lock);
-
-#ifndef __UXEN__
-    init_timer(&s->update_timer, rtc_update_timer, s, smp_processor_id());
-    init_timer(&s->update_timer2, rtc_update_timer2, s, smp_processor_id());
-    init_timer(&s->alarm_timer, rtc_alarm_cb, s, smp_processor_id());
-#endif
 
     register_portio_handler(d, RTC_PORT(0), 2, handle_rtc_io);
 

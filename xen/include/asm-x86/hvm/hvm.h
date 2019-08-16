@@ -191,30 +191,6 @@ extern struct hvm_function_table hvm_funcs;
     void prefix ## _ctxt_switch_from(struct vcpu *v);                   \
     void prefix ## _ctxt_switch_to(struct vcpu *v);
 
-#ifndef __UXEN_NOT_YET__
-    /* Nested HVM */                                                    \
-    int prefix ## _nhvm_vcpu_initialise(struct vcpu *v);                \
-    void prefix ## _nhvm_vcpu_destroy(struct vcpu *v);                  \
-    int prefix ## _nhvm_vcpu_reset(struct vcpu *v);                     \
-    int prefix ## _nhvm_vcpu_hostrestore(struct vcpu *v,                \
-                                         struct cpu_user_regs *regs);   \
-    int prefix ## _nhvm_vcpu_vmexit(struct vcpu *v,                     \
-                                    struct cpu_user_regs *regs,         \
-                                    uint64_t exitcode);                 \
-    int prefix ## _nhvm_vcpu_vmexit_trap(struct vcpu *v,                \
-                                         unsigned int trapnr,           \
-                                         int errcode,                   \
-                                         unsigned long cr2);            \
-    uint64_t prefix ## _nhvm_vcpu_guestcr3(struct vcpu *v);             \
-    uint64_t prefix ## _nhvm_vcpu_hostcr3(struct vcpu *v);              \
-    uint32_t prefix ## _nhvm_vcpu_asid(struct vcpu *v);                 \
-    int prefix ## _nhvm_vmcx_guest_intercepts_trap(struct vcpu *v,      \
-                                                   unsigned int trapnr, \
-                                                   int errcode);        \
-    bool_t prefix ## _nhvm_vmcx_hap_enabled(struct vcpu *v);            \
-    enum hvm_intblk prefix ## _nhvm_intr_blocked(struct vcpu *v);
-#endif  /* __UXEN_NOT_YET__ */
-
 HVM_FUNCS_proto(vmx)
 HVM_FUNCS_proto(svm)
 
@@ -230,11 +206,7 @@ HVM_FUNCS_proto(svm)
 extern bool_t hvm_enabled;
 extern bool_t vmexec_fpu_ctxt_switch;
 extern bool_t cpu_has_lmsl;
-#ifndef __UXEN__
-extern s8 hvm_port80_allowed;
-#else  /* __UXEN__ */
 #define hvm_port80_allowed 1
-#endif  /* __UXEN__ */
 
 extern struct hvm_function_table *start_svm(void);
 extern struct hvm_function_table *start_vmx(void);
@@ -396,13 +368,7 @@ static inline void hvm_execute(struct vcpu *v)
 #define HVM_CR4_HOST_MASK (mmu_cr4_features & \
     (X86_CR4_VMXE | X86_CR4_PAE | X86_CR4_MCE))
 
-#ifndef __UXEN__
-#define HVM_CR4_GUEST_RESERVED_BITS_NESTED(_v)          \
-       ((nestedhvm_enabled((_v)->domain) && cpu_has_vmx)\
-                      ? X86_CR4_VMXE : 0)
-#else   /* __UXEN__ */
 #define HVM_CR4_GUEST_RESERVED_BITS_NESTED(_v) 0
-#endif  /* __UXEN__ */
 
 /* These bits in CR4 cannot be set by the guest. */
 #define HVM_CR4_GUEST_RESERVED_BITS(_v)                 \

@@ -25,7 +25,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -342,9 +342,6 @@ static void acpi_map(PCIDevice *pci_dev, int region_num,
     register_ioport_write(addr + 4, 2, 2, acpiPm1Control_writew, d);
     register_ioport_read(addr + 4, 2, 2, acpiPm1Control_readw, d);
 
-#if !defined(QEMU_UXEN)
-    battery_mgmt_init(pci_dev);
-#endif  /* QEMU_UXEN */
 }
 
 static void acpi_dbg_writel(void *opaque, uint32_t addr, uint32_t val)

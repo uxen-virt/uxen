@@ -48,11 +48,7 @@
 /* #include <sys/mman.h> */
 #include <sys/types.h>
 
-#ifndef __UXEN_TOOLS__
-#include <xen/sys/privcmd.h>
-#else   /* QEMU_UXEN */
 #include <uxen/uxen_desc.h>
-#endif  /* QEMU_UXEN */
 
 enum xc_osdep_type {
     XC_OSDEP_PRIVCMD,
@@ -95,44 +91,6 @@ struct xc_osdep_ops
                                         int nentries);
             int (*munmap)(xc_interface *xch, xc_osdep_handle h, uint32_t dom, void *addr, uint32_t size);
         } privcmd;
-#if !defined(QEMU_UXEN)
-        struct {
-            int (*fd)(xc_evtchn *xce, xc_osdep_handle h);
-
-            int (*notify)(xc_evtchn *xce, xc_osdep_handle h, evtchn_port_t port);
-
-            evtchn_port_or_error_t (*bind_unbound_port)(xc_evtchn *xce, xc_osdep_handle h, int domid);
-            evtchn_port_or_error_t (*bind_interdomain)(xc_evtchn *xce, xc_osdep_handle h, int domid,
-                                                       evtchn_port_t remote_port);
-            evtchn_port_or_error_t (*bind_virq)(xc_evtchn *xce, xc_osdep_handle h, unsigned int virq);
-
-            int (*unbind)(xc_evtchn *xce, xc_osdep_handle h, evtchn_port_t port);
-
-            evtchn_port_or_error_t (*pending)(xc_evtchn *xce, xc_osdep_handle h);
-            int (*unmask)(xc_evtchn *xce, xc_osdep_handle h, evtchn_port_t port);
-        } evtchn;
-        struct {
-#define XC_GRANT_MAP_SINGLE_DOMAIN 0x1
-            void *(*grant_map)(xc_gnttab *xcg, xc_osdep_handle h,
-                               uint32_t count, int flags, int prot,
-                               uint32_t *domids, uint32_t *refs,
-                               uint32_t notify_offset,
-                               evtchn_port_t notify_port);
-            int (*munmap)(xc_gnttab *xcg, xc_osdep_handle h,
-                          void *start_address,
-                          uint32_t count);
-            int (*set_max_grants)(xc_gnttab *xcg, xc_osdep_handle h, uint32_t count);
-        } gnttab;
-        struct {
-            void *(*share_pages)(xc_gntshr *xcg, xc_osdep_handle h,
-                                 uint32_t domid, int count,
-                                 uint32_t *refs, int writable,
-                                 uint32_t notify_offset,
-                                 evtchn_port_t notify_port);
-            int (*munmap)(xc_gntshr *xcg, xc_osdep_handle h,
-                          void *start_address, uint32_t count);
-        } gntshr;
-#endif  /* QEMU_UXEN */
     } u;
 };
 typedef struct xc_osdep_ops xc_osdep_ops;

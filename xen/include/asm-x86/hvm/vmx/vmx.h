@@ -70,15 +70,9 @@ typedef union {
 #define EPTE_EMT_SHIFT          3
 #define EPTE_IGMT_SHIFT         6
 
-#ifndef __UXEN__
-asmlinkage void vmx_asm_vmexit_handler(struct cpu_user_regs);
-void vmx_asm_do_vmentry(void);
-asmlinkage void vmx_intr_assist(void);
-#else   /* __UXEN__ */
 asmlinkage_abi void vmx_asm_vmexit_handler(void);
 asmlinkage_abi int vmx_asm_do_vmentry(struct vcpu *);
 asmlinkage_abi void vmx_intr_assist(void);
-#endif  /* __UXEN__ */
 void vmx_do_resume(struct vcpu *);
 void vmx_vlapic_msr_changed(struct vcpu *v);
 asmlinkage_abi void vmx_realmode(struct cpu_user_regs *regs);

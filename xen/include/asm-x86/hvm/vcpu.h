@@ -164,10 +164,6 @@ struct hvm_vcpu {
         struct arch_svm_struct svm;
     } u;
 
-#ifndef __UXEN__
-    struct tasklet      assert_evtchn_irq_tasklet;
-#endif  /* __UXEN__ */
-
     struct nestedvcpu   nvcpu;
 
     struct mtrr_state   mtrr;

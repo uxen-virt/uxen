@@ -15,7 +15,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2016, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -45,9 +45,6 @@ static bool_t tasklets_initialised;
 DEFINE_PER_CPU(unsigned long, tasklet_work_to_do);
 
 static DEFINE_PER_CPU(struct list_head, tasklet_list);
-#ifndef __UXEN__
-static DEFINE_PER_CPU(struct list_head, softirq_tasklet_list);
-#endif  /* __UXEN__ */
 
 /* Protects all lists and tasklet structures. */
 static DEFINE_SPINLOCK(tasklet_lock);
@@ -57,17 +54,6 @@ static void tasklet_enqueue(struct tasklet *t)
     unsigned int cpu = t->scheduled_on;
 
     ASSERT(!t->is_vcpu_idle);
-#ifndef __UXEN__
-    if ( t->is_softirq )
-    {
-        struct list_head *list = &per_cpu(softirq_tasklet_list, cpu);
-        bool_t was_empty = list_empty(list);
-        list_add_tail(&t->list, list);
-        if ( was_empty )
-            cpu_raise_softirq(cpu, TASKLET_SOFTIRQ);
-    }
-    else
-#endif  /* __UXEN__ */
     {
         unsigned long *work_to_do = &per_cpu(tasklet_work_to_do, cpu);
         list_add_tail(&t->list, &per_cpu(tasklet_list, cpu));
@@ -80,10 +66,8 @@ void tasklet_schedule_on_cpu(struct tasklet *t, unsigned int cpu)
 {
     unsigned long flags;
 
-#ifdef __UXEN__
     if (cpu)
         DEBUG();           /* tasklet only ever on cpu0 */
-#endif  /* __UXEN__ */
 
     spin_lock_irqsave(&tasklet_lock, flags);
 
@@ -103,11 +87,7 @@ void tasklet_schedule_on_cpu(struct tasklet *t, unsigned int cpu)
 void tasklet_schedule(struct tasklet *t)
 {
     tasklet_schedule_on_cpu(t,
-#ifndef __UXEN__
-                            smp_processor_id()
-#else  /* __UXEN__ */
                             0
-#endif  /* __UXEN__ */
         );
 }
 
@@ -140,9 +120,6 @@ static void do_tasklet_work(unsigned int cpu, struct list_head *list)
     t->is_running = 1;
 
     spin_unlock_irq(&tasklet_lock);
-#ifndef __UXEN__
-    sync_local_execstate();
-#endif  /* __UXEN__ */
     t->func(t->data);
     spin_lock_irq(&tasklet_lock);
 
@@ -180,24 +157,6 @@ void do_tasklet(void)
 
     spin_unlock_irq(&tasklet_lock);
 }
-
-#ifndef __UXEN__
-/* Softirq context work */
-static void tasklet_softirq_action(void)
-{
-    unsigned int cpu = smp_processor_id();
-    struct list_head *list = &per_cpu(softirq_tasklet_list, cpu);
-
-    spin_lock_irq(&tasklet_lock);
-
-    do_tasklet_work(cpu, list);
-
-    if ( !list_empty(list) && !cpu_is_offline(cpu) )
-        raise_softirq(TASKLET_SOFTIRQ);
-
-    spin_unlock_irq(&tasklet_lock);
-}
-#endif  /* __UXEN__ */
 
 /* vcpu idle work */
 int
@@ -317,15 +276,6 @@ void tasklet_init(
     t->data = data;
 }
 
-#ifndef __UXEN__
-void softirq_tasklet_init(
-    struct tasklet *t, void (*func)(unsigned long), unsigned long data)
-{
-    tasklet_init(t, func, data);
-    t->is_softirq = 1;
-}
-#endif  /* __UXEN__ */
-
 void
 vcpu_idle_tasklet_init(struct tasklet *t,
                        int (*vcpu_idle_func)(struct vcpu *, unsigned long),
@@ -344,16 +294,10 @@ static int cpu_callback(
     {
     case CPU_UP_PREPARE:
         INIT_LIST_HEAD(&per_cpu(tasklet_list, cpu));
-#ifndef __UXEN__
-        INIT_LIST_HEAD(&per_cpu(softirq_tasklet_list, cpu));
-#endif  /* __UXEN__ */
         break;
     case CPU_UP_CANCELED:
     case CPU_DEAD:
         migrate_tasklets_from_cpu(cpu, &per_cpu(tasklet_list, cpu));
-#ifndef __UXEN__
-        migrate_tasklets_from_cpu(cpu, &per_cpu(softirq_tasklet_list, cpu));
-#endif  /* __UXEN__ */
         break;
     default:
         break;
@@ -398,11 +342,7 @@ void __init tasklet_subsys_init(void)
     void *hcpu = (void *)(long)smp_processor_id();
     cpu_callback(&cpu_nfb, CPU_UP_PREPARE, hcpu);
     register_cpu_notifier(&cpu_nfb);
-#ifndef __UXEN__
-    open_softirq(TASKLET_SOFTIRQ, tasklet_softirq_action);
-#else  /* __UXEN__ */
     open_softirq(TASKLET_SCHEDULE_CPU_SOFTIRQ, tasklet_schedule_action);
-#endif  /* __UXEN__ */
     tasklets_initialised = 1;
 }
 

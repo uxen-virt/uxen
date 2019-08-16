@@ -442,10 +442,6 @@ again:
     if ( vlapic_test_vector(vector, &vlapic->regs->data[APIC_TMR]) )
         vioapic_update_EOI(vlapic_domain(vlapic), vector);
 
-#ifndef __UXEN__
-    hvm_dpci_msi_eoi(current->domain, vector);
-#endif  /* __UXEN__ */
-
     if ( missed_eoi )
     {
         missed_eoi = 0;

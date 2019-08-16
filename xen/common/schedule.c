@@ -55,46 +55,16 @@
 #include <public/sched.h>
 #include <xsm/xsm.h>
 
-#ifndef __UXEN__
-/* opt_sched: scheduler - default to credit */
-static char __initdata opt_sched[10] = "credit";
-string_param("sched", opt_sched);
-#else   /* __UXEN__ */
 #define opt_sched "host"
-#endif  /* __UXEN__ */
 
-#ifndef __UXEN__
-/* if sched_smt_power_savings is set,
- * scheduler will give preferrence to partially idle package compared to
- * the full idle package, when picking pCPU to schedule vCPU.
- */
-bool_t sched_smt_power_savings = 0;
-boolean_param("sched_smt_power_savings", sched_smt_power_savings);
-
-/* Various timer handlers. */
-static void s_timer_fn(void *unused);
-#endif  /* __UXEN__ */
-#ifndef __UXEN__
-static void vcpu_periodic_timer_fn(void *data);
-static void vcpu_singleshot_timer_fn(void *data);
-static void poll_timer_fn(void *data);
-#else  /* __UXEN__ */
 static void vcpu_throttle_timer_fn(void *data);
-#endif  /* __UXEN__ */
 
 /* This is global for now so that private implementations can reach it */
 DEFINE_PER_CPU(struct schedule_data, schedule_data);
 DEFINE_PER_CPU(struct scheduler *, scheduler);
 
 static const struct scheduler *schedulers[] = {
-#ifndef __UXEN__
-    &sched_sedf_def,
-    &sched_credit_def,
-    &sched_credit2_def,
-    &sched_arinc653_def,
-#else   /* __UXEN__ */
     &sched_host_def,
-#endif  /* __UXEN__ */
 };
 
 static struct scheduler __read_mostly ops;
@@ -105,11 +75,6 @@ static struct scheduler __read_mostly ops;
 
 #define DOM2OP(_d)    (((_d)->cpupool == NULL) ? &ops : ((_d)->cpupool->sched))
 #define VCPU2OP(_v)   (DOM2OP((_v)->domain))
-#ifndef __UXEN__
-#define VCPU2ONLINE(_v)                                                    \
-         (((_v)->domain->cpupool == NULL) ? &cpu_online_map                \
-         : (_v)->domain->cpupool->cpu_valid)
-#endif  /* __UXEN__ */
 
 static inline void trace_runstate_change(struct vcpu *v, int new_state)
 {
@@ -128,21 +93,6 @@ static inline void trace_runstate_change(struct vcpu *v, int new_state)
 
     __trace_var(event, 1/*tsc*/, sizeof(d), &d);
 }
-
-#ifndef __UXEN__
-static inline void trace_continue_running(struct vcpu *v)
-{
-    struct { uint32_t vcpu:16, domain:16; } d;
-
-    if ( likely(!tb_init_done) )
-        return;
-
-    d.vcpu = v->vcpu_id;
-    d.domain = v->domain->domain_id;
-
-    __trace_var(TRC_SCHED_CONTINUE_RUNNING, 1/*tsc*/, sizeof(d), &d);
-}
-#endif  /* __UXEN__ */
 
 static inline void vcpu_urgent_count_update(struct vcpu *v)
 {
@@ -207,20 +157,6 @@ void vcpu_runstate_get(struct vcpu *v, struct vcpu_runstate_info *runstate)
         vcpu_schedule_unlock_irq(v);
 }
 
-#ifndef __UXEN__
-uint64_t get_cpu_idle_time(unsigned int cpu)
-{
-    struct vcpu_runstate_info state;
-    struct vcpu *v;
-
-    if ( (v = idle_vcpu[cpu]) == NULL )
-        return 0;
-
-    vcpu_runstate_get(v, &state);
-    return state.time[RUNSTATE_running];
-}
-#endif  /* __UXEN__ */
-
 int sched_init_vcpu(struct vcpu *v, unsigned int processor) 
 {
     struct domain *d = v->domain;
@@ -231,25 +167,12 @@ int sched_init_vcpu(struct vcpu *v, unsigned int processor)
      */
     v->processor = processor;
     if ( is_idle_domain(d)
-#ifndef __UXEN__
-         || d->is_pinned
-#endif  /* __UXEN__ */
          )
         cpumask_copy(v->cpu_affinity, cpumask_of(processor));
     else
         cpumask_setall(v->cpu_affinity);
 
-#ifndef __UXEN__
-    /* Initialise the per-vcpu timers. */
-    init_timer(&v->periodic_timer, vcpu_periodic_timer_fn,
-               v, v->processor);
-    init_timer(&v->singleshot_timer, vcpu_singleshot_timer_fn,
-               v, v->processor);
-    init_timer(&v->poll_timer, poll_timer_fn,
-               v, v->processor);
-#else  /* __UXEN__ */
     init_vcpu_timer(&v->vcpu_throttle_timer, vcpu_throttle_timer_fn, v, v);
-#endif  /* __UXEN__ */
 
     /* Idle VCPUs are scheduled immediately. */
     if ( is_idle_domain(d) )
@@ -260,111 +183,22 @@ int sched_init_vcpu(struct vcpu *v, unsigned int processor)
 
     TRACE_2D(TRC_SCHED_DOM_ADD, v->domain->domain_id, v->vcpu_id);
 
-#ifndef __UXEN__
-    v->sched_priv = SCHED_OP(DOM2OP(d), alloc_vdata, v, d->sched_priv);
-    if ( v->sched_priv == NULL )
-        return 1;
-#endif  /* __UXEN__ */
-
     SCHED_OP(VCPU2OP(v), insert_vcpu, v);
 
     return 0;
 }
 
-#ifndef __UXEN__
-int sched_move_domain(struct domain *d, struct cpupool *c)
-{
-    struct vcpu *v;
-    unsigned int new_p;
-    void **vcpu_priv;
-    void *domdata;
-
-    domdata = SCHED_OP(c->sched, alloc_domdata, d);
-    if ( domdata == NULL )
-        return -ENOMEM;
-
-    vcpu_priv = xzalloc_array(void *, d->max_vcpus);
-    if ( vcpu_priv == NULL )
-    {
-        SCHED_OP(c->sched, free_domdata, domdata);
-        return -ENOMEM;
-    }
-
-    for_each_vcpu ( d, v )
-    {
-        vcpu_priv[v->vcpu_id] = SCHED_OP(c->sched, alloc_vdata, v, domdata);
-        if ( vcpu_priv[v->vcpu_id] == NULL )
-        {
-            for_each_vcpu ( d, v )
-            {
-                if ( vcpu_priv[v->vcpu_id] != NULL )
-                    xfree(vcpu_priv[v->vcpu_id]);
-            }
-            xfree(vcpu_priv);
-            SCHED_OP(c->sched, free_domdata, domdata);
-            return -ENOMEM;
-        }
-    }
-
-    domain_pause(d);
-
-    new_p = cpumask_first(c->cpu_valid);
-    for_each_vcpu ( d, v )
-    {
-        migrate_timer(&v->periodic_timer, new_p);
-        migrate_timer(&v->singleshot_timer, new_p);
-        migrate_timer(&v->poll_timer, new_p);
-
-        SCHED_OP(VCPU2OP(v), remove_vcpu, v);
-        SCHED_OP(VCPU2OP(v), free_vdata, v->sched_priv);
-
-        cpumask_setall(v->cpu_affinity);
-        v->processor = new_p;
-        v->sched_priv = vcpu_priv[v->vcpu_id];
-        evtchn_move_pirqs(v);
-
-        new_p = cpumask_cycle(new_p, c->cpu_valid);
-
-        SCHED_OP(VCPU2OP(v), insert_vcpu, v);
-    }
-    domain_update_node_affinity(d);
-
-    d->cpupool = c;
-    SCHED_OP(DOM2OP(d), free_domdata, d->sched_priv);
-    d->sched_priv = domdata;
-
-    domain_unpause(d);
-
-    xfree(vcpu_priv);
-
-    return 0;
-}
-#endif  /* __UXEN__ */
-
 void sched_destroy_vcpu(struct vcpu *v)
 {
-#ifndef __UXEN__
-    kill_timer(&v->periodic_timer);
-    kill_timer(&v->singleshot_timer);
-    kill_timer(&v->poll_timer);
-#else  /* __UXEN__ */
     kill_timer(&v->vcpu_throttle_timer);
-#endif  /* __UXEN__ */
     if ( test_and_clear_bool(v->is_urgent) )
         atomic_dec(&per_cpu(schedule_data, v->processor).urgent_count);
     SCHED_OP(VCPU2OP(v), remove_vcpu, v);
-#ifndef __UXEN__
-    SCHED_OP(VCPU2OP(v), free_vdata, v->sched_priv);
-#endif  /* __UXEN__ */
 }
 
 int sched_init_domain(struct domain *d)
 {
-#ifndef __UXEN__
-    return SCHED_OP(DOM2OP(d), init_domain, d);
-#else  /* __UXEN__ */
     return 0;
-#endif  /* __UXEN__ */
 }
 
 void sched_destroy_domain(struct domain *d)
@@ -463,239 +297,6 @@ void vcpu_switch_host_cpu(struct vcpu *v)
     }
 }
 
-#ifndef __UXEN__
-static void vcpu_migrate(struct vcpu *v)
-{
-    unsigned long flags;
-    unsigned int old_cpu, new_cpu;
-    spinlock_t *old_lock, *new_lock;
-    bool_t pick_called = 0;
-
-    old_cpu = new_cpu = v->processor;
-    for ( ; ; )
-    {
-        /*
-         * If per-cpu locks for old and new cpu are different, take the one
-         * with the lower lock address first. This avoids dead- or live-locks
-         * when this code is running on both cpus at the same time.
-         * We need another iteration if the pre-calculated lock addresses
-         * are not correct any longer after evaluating old and new cpu holding
-         * the locks.
-         */
-
-        old_lock = per_cpu(schedule_data, old_cpu).schedule_lock;
-        new_lock = per_cpu(schedule_data, new_cpu).schedule_lock;
-
-        if ( old_lock == new_lock )
-        {
-            spin_lock_irqsave(old_lock, flags);
-        }
-        else if ( old_lock < new_lock )
-        {
-            spin_lock_irqsave(old_lock, flags);
-            spin_lock(new_lock);
-        }
-        else
-        {
-            spin_lock_irqsave(new_lock, flags);
-            spin_lock(old_lock);
-        }
-
-        old_cpu = v->processor;
-        if ( old_lock == per_cpu(schedule_data, old_cpu).schedule_lock )
-        {
-            /*
-             * If we selected a CPU on the previosu iteration, check if it
-             * remains suitable for running this vCPU.
-             */
-            if ( pick_called &&
-                 (new_lock == per_cpu(schedule_data, new_cpu).schedule_lock) &&
-                 cpumask_test_cpu(new_cpu, v->cpu_affinity) &&
-                 cpumask_test_cpu(new_cpu, v->domain->cpupool->cpu_valid) )
-                break;
-
-            /* Select a new CPU. */
-            new_cpu = SCHED_OP(VCPU2OP(v), pick_cpu, v);
-            if ( (new_lock == per_cpu(schedule_data, new_cpu).schedule_lock) &&
-                 cpumask_test_cpu(new_cpu, v->domain->cpupool->cpu_valid) )
-                break;
-            pick_called = 1;
-        }
-        else
-        {
-            /*
-             * We do not hold the scheduler lock appropriate for this vCPU.
-             * Thus we cannot select a new CPU on this iteration. Try again.
-             */
-            pick_called = 0;
-        }
-
-        if ( old_lock != new_lock )
-            spin_unlock(new_lock);
-        spin_unlock_irqrestore(old_lock, flags);
-    }
-
-    /*
-     * NB. Check of v->running happens /after/ setting migration flag
-     * because they both happen in (different) spinlock regions, and those
-     * regions are strictly serialised.
-     */
-    if ( v->is_running ||
-         !test_and_clear_bit(_VPF_migrating, &v->pause_flags) )
-    {
-        if ( old_lock != new_lock )
-            spin_unlock(new_lock);
-        spin_unlock_irqrestore(old_lock, flags);
-        return;
-    }
-
-    /*
-     * Transfer urgency status to new CPU before switching CPUs, as once
-     * the switch occurs, v->is_urgent is no longer protected by the per-CPU
-     * scheduler lock we are holding.
-     */
-    if ( unlikely(v->is_urgent) && (old_cpu != new_cpu) )
-    {
-        atomic_inc(&per_cpu(schedule_data, new_cpu).urgent_count);
-        atomic_dec(&per_cpu(schedule_data, old_cpu).urgent_count);
-    }
-
-    /*
-     * Switch to new CPU, then unlock new and old CPU.  This is safe because
-     * the lock pointer cant' change while the current lock is held.
-     */
-    if ( VCPU2OP(v)->migrate )
-        SCHED_OP(VCPU2OP(v), migrate, v, new_cpu);
-    else
-        v->processor = new_cpu;
-
-
-    if ( old_lock != new_lock )
-        spin_unlock(new_lock);
-    spin_unlock_irqrestore(old_lock, flags);
-
-    if ( old_cpu != new_cpu )
-        evtchn_move_pirqs(v);
-
-    /* Wake on new CPU. */
-    vcpu_wake(v);
-}
-
-/*
- * Force a VCPU through a deschedule/reschedule path.
- * For example, using this when setting the periodic timer period means that
- * most periodic-timer state need only be touched from within the scheduler
- * which can thus be done without need for synchronisation.
- */
-void vcpu_force_reschedule(struct vcpu *v)
-{
-    vcpu_schedule_lock_irq(v);
-    if ( v->is_running )
-        set_bit(_VPF_migrating, &v->pause_flags);
-    vcpu_schedule_unlock_irq(v);
-
-    if ( test_bit(_VPF_migrating, &v->pause_flags) )
-    {
-        vcpu_sleep_nosync(v);
-        vcpu_migrate(v);
-    }
-}
-
-/*
- * This function is used by cpu_hotplug code from stop_machine context
- * and from cpupools to switch schedulers on a cpu.
- */
-int cpu_disable_scheduler(unsigned int cpu)
-{
-    struct domain *d;
-    struct vcpu *v;
-    struct cpupool *c;
-    cpumask_t online_affinity;
-    int    ret = 0;
-    bool_t affinity_broken;
-
-    c = per_cpu(cpupool, cpu);
-    if ( c == NULL )
-        return ret;
-
-    for_each_domain_in_cpupool ( d, c )
-    {
-        affinity_broken = 0;
-
-        for_each_vcpu ( d, v )
-        {
-            vcpu_schedule_lock_irq(v);
-
-            cpumask_and(&online_affinity, v->cpu_affinity, c->cpu_valid);
-            if ( cpumask_empty(&online_affinity) &&
-                 cpumask_test_cpu(cpu, v->cpu_affinity) )
-            {
-                printk("Breaking vcpu affinity for vm%u.%u\n",
-                        v->domain->domain_id, v->vcpu_id);
-                cpumask_setall(v->cpu_affinity);
-                affinity_broken = 1;
-            }
-
-            if ( v->processor == cpu )
-            {
-                set_bit(_VPF_migrating, &v->pause_flags);
-                vcpu_schedule_unlock_irq(v);
-                vcpu_sleep_nosync(v);
-                vcpu_migrate(v);
-            }
-            else
-            {
-                vcpu_schedule_unlock_irq(v);
-            }
-
-            /*
-             * A vcpu active in the hypervisor will not be migratable.
-             * The caller should try again after releasing and reaquiring
-             * all locks.
-             */
-            if ( v->processor == cpu )
-                ret = -EAGAIN;
-        }
-
-        if ( affinity_broken )
-            domain_update_node_affinity(d);
-    }
-
-    return ret;
-}
-
-int vcpu_set_affinity(struct vcpu *v, const cpumask_t *affinity)
-{
-    cpumask_t online_affinity;
-    cpumask_t *online;
-
-    if ( v->domain->is_pinned )
-        return -EINVAL;
-    online = VCPU2ONLINE(v);
-    cpumask_and(&online_affinity, affinity, online);
-    if ( cpumask_empty(&online_affinity) )
-        return -EINVAL;
-
-    vcpu_schedule_lock_irq(v);
-
-    cpumask_copy(v->cpu_affinity, affinity);
-    if ( !cpumask_test_cpu(v->processor, v->cpu_affinity) )
-        set_bit(_VPF_migrating, &v->pause_flags);
-
-    vcpu_schedule_unlock_irq(v);
-
-    domain_update_node_affinity(v->domain);
-
-    if ( test_bit(_VPF_migrating, &v->pause_flags) )
-    {
-        vcpu_sleep_nosync(v);
-        vcpu_migrate(v);
-    }
-
-    return 0;
-}
-#endif  /* __UXEN__ */
-
 /* Block the currently-executing domain until a pertinent event occurs. */
 static long do_block(void)
 {
@@ -718,80 +319,6 @@ static long do_block(void)
     return 0;
 }
 
-#ifndef __UXEN__
-static long do_poll(struct sched_poll *sched_poll)
-{
-    struct vcpu   *v = current;
-    struct domain *d = v->domain;
-    evtchn_port_t  port;
-    long           rc;
-    unsigned int   i;
-
-    /* Fairly arbitrary limit. */
-    if ( sched_poll->nr_ports > 128 )
-        return -EINVAL;
-
-    if ( !guest_handle_okay(sched_poll->ports, sched_poll->nr_ports) )
-        return -EFAULT;
-
-    set_bit(_VPF_blocked, &v->pause_flags);
-    v->poll_evtchn = -1;
-    set_bit(v->vcpu_id, d->poll_mask);
-
-#ifndef CONFIG_X86 /* set_bit() implies mb() on x86 */
-    /* Check for events /after/ setting flags: avoids wakeup waiting race. */
-    smp_mb();
-
-    /*
-     * Someone may have seen we are blocked but not that we are polling, or
-     * vice versa. We are certainly being woken, so clean up and bail. Beyond
-     * this point others can be guaranteed to clean up for us if they wake us.
-     */
-    rc = 0;
-    if ( (v->poll_evtchn == 0) ||
-         !test_bit(_VPF_blocked, &v->pause_flags) ||
-         !test_bit(v->vcpu_id, d->poll_mask) )
-        goto out;
-#endif
-
-    rc = 0;
-    if ( local_events_need_delivery() )
-        goto out;
-
-    for ( i = 0; i < sched_poll->nr_ports; i++ )
-    {
-        rc = -EFAULT;
-        if ( __copy_from_guest_offset(&port, sched_poll->ports, i, 1) )
-            goto out;
-
-        rc = -EINVAL;
-        if ( port >= MAX_EVTCHNS(d) )
-            goto out;
-
-        rc = 0;
-        if ( test_bit(port, &shared_info(d, evtchn_pending)) )
-            goto out;
-    }
-
-    if ( sched_poll->nr_ports == 1 )
-        v->poll_evtchn = port;
-
-    if ( sched_poll->timeout != 0 )
-        set_timer(&v->poll_timer, sched_poll->timeout);
-
-    TRACE_2D(TRC_SCHED_BLOCK, d->domain_id, v->vcpu_id);
-    vcpu_raise_softirq(v, SCHEDULE_VCPU_SOFTIRQ);
-
-    return 0;
-
- out:
-    v->poll_evtchn = 0;
-    clear_bit(v->vcpu_id, d->poll_mask);
-    clear_bit(_VPF_blocked, &v->pause_flags);
-    return rc;
-}
-#endif  /* __UXEN__ */
-
 /* Voluntarily yield the processor for this allocation. */
 static long do_yield(void)
 {
@@ -805,113 +332,6 @@ static long do_yield(void)
     vcpu_raise_softirq(v, SCHEDULE_VCPU_SOFTIRQ);
     return 0;
 }
-
-#ifndef __UXEN__
-static void domain_watchdog_timeout(void *data)
-{
-    struct domain *d = data;
-
-    if ( d->is_shutting_down || d->is_dying )
-        return;
-
-    printk("Watchdog timer fired for vm%u\n", d->domain_id);
-    domain_shutdown(d, SHUTDOWN_watchdog);
-}
-
-static long domain_watchdog(struct domain *d, uint32_t id, uint32_t timeout)
-{
-    if ( id > NR_DOMAIN_WATCHDOG_TIMERS )
-        return -EINVAL;
-
-    spin_lock(&d->watchdog_lock);
-
-    if ( id == 0 )
-    {
-        for ( id = 0; id < NR_DOMAIN_WATCHDOG_TIMERS; id++ )
-        {
-            if ( test_and_set_bit(id, &d->watchdog_inuse_map) )
-                continue;
-            set_timer(&d->watchdog_timer[id], NOW() + SECONDS(timeout));
-            break;
-        }
-        spin_unlock(&d->watchdog_lock);
-        return id == NR_DOMAIN_WATCHDOG_TIMERS ? -ENOSPC : id + 1;
-    }
-
-    id -= 1;
-    if ( !test_bit(id, &d->watchdog_inuse_map) )
-    {
-        spin_unlock(&d->watchdog_lock);
-        return -EINVAL;
-    }
-
-    if ( timeout == 0 )
-    {
-        stop_timer(&d->watchdog_timer[id]);
-        clear_bit(id, &d->watchdog_inuse_map);
-    }
-    else
-    {
-        set_timer(&d->watchdog_timer[id], NOW() + SECONDS(timeout));
-    }
-
-    spin_unlock(&d->watchdog_lock);
-    return 0;
-}
-
-void watchdog_domain_init(struct domain *d)
-{
-    unsigned int i;
-
-    spin_lock_init(&d->watchdog_lock);
-
-    d->watchdog_inuse_map = 0;
-
-    for ( i = 0; i < NR_DOMAIN_WATCHDOG_TIMERS; i++ )
-        init_timer(&d->watchdog_timer[i], domain_watchdog_timeout, d, 0);
-}
-
-void watchdog_domain_destroy(struct domain *d)
-{
-    unsigned int i;
-
-    for ( i = 0; i < NR_DOMAIN_WATCHDOG_TIMERS; i++ )
-        kill_timer(&d->watchdog_timer[i]);
-}
-
-long do_sched_op_compat(int cmd, unsigned long arg)
-{
-    long ret = 0;
-
-    switch ( cmd )
-    {
-    case SCHEDOP_yield:
-    {
-        ret = do_yield();
-        break;
-    }
-
-    case SCHEDOP_block:
-    {
-        ret = do_block();
-        break;
-    }
-
-    case SCHEDOP_shutdown:
-    {
-        TRACE_3D(TRC_SCHED_SHUTDOWN,
-                 current->domain->domain_id, current->vcpu_id, arg);
-        domain_shutdown(current->domain, (u8)arg);
-        break;
-    }
-
-    default:
-        ret = -ENOSYS;
-    }
-
-    return ret;
-}
-#endif  /* __UXEN__ */
 
 typedef long ret_t;
 
@@ -973,21 +393,6 @@ ret_t do_sched_op(int cmd, XEN_GUEST_HANDLE(void) arg)
         break;
     }
 
-#ifndef __UXEN__
-    case SCHEDOP_poll:
-    {
-        struct sched_poll sched_poll;
-
-        ret = -EFAULT;
-        if ( copy_from_guest(&sched_poll, arg, 1) )
-            break;
-
-        ret = do_poll(&sched_poll);
-
-        break;
-    }
-#endif  /* __UXEN__ */
-
     case SCHEDOP_remote_shutdown:
     {
         struct domain *d;
@@ -1008,15 +413,6 @@ ret_t do_sched_op(int cmd, XEN_GUEST_HANDLE(void) arg)
             return -EPERM;
         }
 
-#ifndef __UXEN__
-        ret = xsm_schedop_shutdown(current->domain, d);
-        if ( ret )
-        {
-            rcu_unlock_domain(d);
-            return ret;
-        }
-#endif  /* __UXEN__ */
-
         printk("vm%u SCHEDOP_remote_shutdown reason %d\n",
                d->domain_id, (u8)sched_remote_shutdown.reason);
         domain_shutdown(d, (u8)sched_remote_shutdown.reason);
@@ -1027,21 +423,6 @@ ret_t do_sched_op(int cmd, XEN_GUEST_HANDLE(void) arg)
         break;
     }
 
-#ifndef __UXEN__
-    case SCHEDOP_watchdog:
-    {
-        struct sched_watchdog sched_watchdog;
-
-        ret = -EFAULT;
-        if ( copy_from_guest(&sched_watchdog, arg, 1) )
-            break;
-
-        ret = domain_watchdog(
-            current->domain, sched_watchdog.id, sched_watchdog.timeout);
-        break;
-    }
-#endif  /* __UXEN__ */
-
     default:
         ret = -ENOSYS;
     }
@@ -1050,142 +431,6 @@ ret_t do_sched_op(int cmd, XEN_GUEST_HANDLE(void) arg)
 }
 
 #ifndef COMPAT
-
-#ifndef __UXEN__
-/* Per-vcpu oneshot-timer hypercall. */
-long do_set_timer_op(s_time_t timeout)
-{
-    struct vcpu *v = current;
-    s_time_t offset = timeout - NOW();
-
-    if ( timeout == 0 )
-    {
-        stop_timer(&v->singleshot_timer);
-    }
-    else if ( unlikely(timeout < 0) || /* overflow into 64th bit? */
-              unlikely((offset > 0) && ((uint32_t)(offset >> 50) != 0)) )
-    {
-        /*
-         * Linux workaround: occasionally we will see timeouts a long way in 
-         * the future due to wrapping in Linux's jiffy time handling. We check 
-         * for timeouts wrapped negative, and for positive timeouts more than 
-         * about 13 days in the future (2^50ns). The correct fix is to trigger 
-         * an interrupt immediately (since Linux in fact has pending work to 
-         * do in this situation). However, older guests also set a long timeout
-         * when they have *no* pending timers at all: setting an immediate
-         * timeout in this case can burn a lot of CPU. We therefore go for a
-         * reasonable middleground of triggering a timer event in 100ms.
-         */
-        gdprintk(XENLOG_INFO,
-                 "Warning: huge timeout set by vm%u.%u: %"PRIx64"\n",
-                 v->domain->domain_id, v->vcpu_id, (uint64_t)timeout);
-        set_timer(&v->singleshot_timer, NOW() + MILLISECS(100));
-    }
-    else
-    {
-        migrate_timer(&v->singleshot_timer, smp_processor_id());
-        set_timer(&v->singleshot_timer, timeout);
-    }
-
-    return 0;
-}
-
-/* sched_id - fetch ID of current scheduler */
-int sched_id(void)
-{
-    return ops.sched_id;
-}
-
-/* Adjust scheduling parameter for a given domain. */
-long sched_adjust(struct domain *d, struct xen_domctl_scheduler_op *op)
-{
-    struct vcpu *v;
-    long ret;
-    
-    if ( (op->sched_id != DOM2OP(d)->sched_id) ||
-         ((op->cmd != XEN_DOMCTL_SCHEDOP_putinfo) &&
-          (op->cmd != XEN_DOMCTL_SCHEDOP_getinfo)) )
-        return -EINVAL;
-
-    /*
-     * Most VCPUs we can simply pause. If we are adjusting this VCPU then
-     * we acquire the local schedule_lock to guard against concurrent updates.
-     *
-     * We only acquire the local schedule lock after we have paused all other
-     * VCPUs in this domain. There are two reasons for this:
-     * 1- We don't want to hold up interrupts as pausing a VCPU can
-     *    trigger a tlb shootdown.
-     * 2- Pausing other VCPUs involves briefly locking the schedule
-     *    lock of the CPU they are running on. This CPU could be the
-     *    same as ours.
-     */
-
-    for_each_vcpu ( d, v )
-    {
-        if ( v != current )
-            vcpu_pause(v);
-    }
-
-    if ( d == current->domain )
-        vcpu_schedule_lock_irq(current);
-
-    if ( (ret = SCHED_OP(DOM2OP(d), adjust, d, op)) == 0 )
-        TRACE_1D(TRC_SCHED_ADJDOM, d->domain_id);
-
-    if ( d == current->domain )
-        vcpu_schedule_unlock_irq(current);
-
-    for_each_vcpu ( d, v )
-    {
-        if ( v != current )
-            vcpu_unpause(v);
-    }
-
-    return ret;
-}
-
-long sched_adjust_global(struct xen_sysctl_scheduler_op *op)
-{
-    struct cpupool *pool;
-    int rc;
-
-    if ( (op->cmd != XEN_DOMCTL_SCHEDOP_putinfo) &&
-         (op->cmd != XEN_DOMCTL_SCHEDOP_getinfo) )
-        return -EINVAL;
-
-    pool = cpupool_get_by_id(op->cpupool_id);
-    if ( pool == NULL )
-        return -ESRCH;
-
-    rc = ((op->sched_id == pool->sched->sched_id)
-          ? SCHED_OP(pool->sched, adjust_global, op) : -EINVAL);
-
-    cpupool_put(pool);
-
-    return rc;
-}
-
-static void vcpu_periodic_timer_work(struct vcpu *v)
-{
-    s_time_t now = NOW();
-    s_time_t periodic_next_event;
-
-    if ( v->periodic_period == 0 )
-        return;
-
-    periodic_next_event = v->periodic_last_event + v->periodic_period;
-
-    if ( now >= periodic_next_event )
-    {
-        send_timer_event(v);
-        v->periodic_last_event = now;
-        periodic_next_event = now + v->periodic_period;
-    }
-
-    migrate_timer(&v->periodic_timer, smp_processor_id());
-    set_timer(&v->periodic_timer, periodic_next_event);
-}
-#endif  /* __UXEN__ */
 
 static
 void schedule_from_vcpu(struct vcpu *prev)
@@ -1214,117 +459,6 @@ void schedule_from_vcpu(struct vcpu *prev)
 
     spin_unlock_irq(sd->schedule_lock);
 }
-
-#ifndef __UXEN__
-/* 
- * The main function
- * - deschedule the current domain (scheduler independent).
- * - pick a new domain (scheduler dependent).
- */
-static void schedule(void)
-{
-    struct vcpu          *prev = current, *next = NULL;
-    s_time_t              now = NOW();
-    struct scheduler     *sched;
-    unsigned long        *tasklet_work = &this_cpu(tasklet_work_to_do);
-    bool_t                tasklet_work_scheduled = 0;
-    struct schedule_data *sd;
-    struct task_slice     next_slice;
-
-    ASSERT(!in_atomic());
-
-    perfc_incr(sched_run);
-
-    sd = &this_cpu(schedule_data);
-
-    /* Update tasklet scheduling status. */
-    switch ( *tasklet_work )
-    {
-    case TASKLET_enqueued:
-        set_bit(_TASKLET_scheduled, tasklet_work);
-    case TASKLET_enqueued|TASKLET_scheduled:
-        tasklet_work_scheduled = 1;
-        break;
-    case TASKLET_scheduled:
-        clear_bit(_TASKLET_scheduled, tasklet_work);
-    case 0:
-        /*tasklet_work_scheduled = 0;*/
-        break;
-    default:
-        BUG();
-    }
-
-    spin_lock_irq(sd->schedule_lock);
-
-    stop_timer(&sd->s_timer);
-    
-    /* get policy-specific decision on scheduling... */
-    sched = this_cpu(scheduler);
-    next_slice = sched->do_schedule(sched, now, tasklet_work_scheduled);
-
-    next = next_slice.task;
-
-    sd->curr = next;
-
-    if ( next_slice.time >= 0 ) /* -ve means no limit */
-        set_timer(&sd->s_timer, now + next_slice.time);
-
-    if ( unlikely(prev == next) )
-    {
-        spin_unlock_irq(sd->schedule_lock);
-        trace_continue_running(next);
-        return continue_running(prev);
-    }
-
-    TRACE_2D(TRC_SCHED_SWITCH_INFPREV,
-             prev->domain->domain_id,
-             now - prev->runstate.state_entry_time);
-    TRACE_3D(TRC_SCHED_SWITCH_INFNEXT,
-             next->domain->domain_id,
-             (next->runstate.state == RUNSTATE_runnable) ?
-             (now - next->runstate.state_entry_time) : 0,
-             next_slice.time);
-
-    ASSERT(prev->runstate.state == RUNSTATE_running);
-
-    TRACE_4D(TRC_SCHED_SWITCH,
-             prev->domain->domain_id, prev->vcpu_id,
-             next->domain->domain_id, next->vcpu_id);
-
-    vcpu_runstate_change(
-        prev,
-        (test_bit(_VPF_blocked, &prev->pause_flags) ? RUNSTATE_blocked :
-         (vcpu_runnable(prev) ? RUNSTATE_runnable : RUNSTATE_offline)),
-        now);
-    prev->last_run_time = now;
-
-    ASSERT(next->runstate.state != RUNSTATE_running);
-    vcpu_runstate_change(next, RUNSTATE_running, now);
-
-    /*
-     * NB. Don't add any trace records from here until the actual context
-     * switch, else lost_records resume will not work properly.
-     */
-
-    ASSERT(!next->is_running);
-    next->is_running = 1;
-
-    spin_unlock_irq(sd->schedule_lock);
-
-    perfc_incr(sched_ctx);
-
-    stop_timer(&prev->periodic_timer);
-
-    if ( next_slice.migrated )
-        evtchn_move_pirqs(next);
-
-    /* Ensure that the domain has an up-to-date time base. */
-    update_vcpu_system_time(next);
-    vcpu_periodic_timer_work(next);
-
-    context_switch(prev, next);
-}
-#endif  /* __UXEN__ */
 
 int
 schedule_vcpu(struct vcpu *next)
@@ -1360,60 +494,6 @@ schedule_vcpu(struct vcpu *next)
     return 1;
 }
 
-#ifndef __UXEN__
-void context_saved(struct vcpu *prev)
-{
-    /* Clear running flag /after/ writing context to memory. */
-    smp_wmb();
-
-    prev->is_running = 0;
-
-    /* Check for migration request /after/ clearing running flag. */
-    smp_mb();
-
-    SCHED_OP(VCPU2OP(prev), context_saved, prev);
-
-    if ( unlikely(test_bit(_VPF_migrating, &prev->pause_flags)) )
-        vcpu_migrate(prev);
-}
-
-/* The scheduler timer: force a run through the scheduler */
-static void s_timer_fn(void *unused)
-{
-    raise_softirq(SCHEDULE_SOFTIRQ);
-    perfc_incr(sched_irq);
-}
-#endif  /* __UXEN__ */
-
-#ifndef __UXEN__
-/* Per-VCPU periodic timer function: sends a virtual timer interrupt. */
-static void vcpu_periodic_timer_fn(void *data)
-{
-    struct vcpu *v = data;
-    vcpu_periodic_timer_work(v);
-}
-#endif  /* __UXEN__ */
-
-#ifndef __UXEN__
-/* Per-VCPU single-shot timer function: sends a virtual timer interrupt. */
-static void vcpu_singleshot_timer_fn(void *data)
-{
-    struct vcpu *v = data;
-    send_timer_event(v);
-}
-#endif  /* __UXEN__ */
-
-#ifndef __UXEN__
-/* SCHEDOP_poll timeout callback. */
-static void poll_timer_fn(void *data)
-{
-    struct vcpu *v = data;
-
-    if ( test_and_clear_bit(v->vcpu_id, v->domain->poll_mask) )
-        vcpu_unblock(v);
-}
-#endif  /* __UXEN__ */
-
 /* vcpu throttle callback. */
 static void vcpu_throttle_timer_fn(void *data)
 {
@@ -1427,9 +507,6 @@ static int cpu_schedule_up(unsigned int cpu)
     spin_lock_init(&sd->_lock);
     sd->schedule_lock = &sd->_lock;
     sd->curr = idle_vcpu[cpu];
-#ifndef __UXEN__
-    init_timer(&sd->s_timer, s_timer_fn, NULL, cpu);
-#endif  /* __UXEN__ */
     atomic_set(&sd->urgent_count, 0);
 
     /* Boot CPU is dealt with later in schedule_init(). */
@@ -1441,29 +518,10 @@ static int cpu_schedule_up(unsigned int cpu)
     if ( idle_vcpu[cpu] == NULL )
         return -ENOMEM;
 
-#ifndef __UXEN__
-    if ( (ops.alloc_pdata != NULL) &&
-         ((sd->sched_priv = ops.alloc_pdata(&ops, cpu)) == NULL) )
-        return -ENOMEM;
-#else  /* __UXEN__ */
     ASSERT(!ops.alloc_pdata);
-#endif /* __UXEN__ */
 
     return 0;
 }
-
-#ifndef __UXEN__
-static void cpu_schedule_down(unsigned int cpu)
-{
-    struct schedule_data *sd = &per_cpu(schedule_data, cpu);
-
-DEBUG();
-    if ( sd->sched_priv != NULL )
-        SCHED_OP(&ops, free_pdata, sd->sched_priv, cpu);
-
-    kill_timer(&sd->s_timer);
-}
-#endif  /* __UXEN__ */
 
 static int cpu_schedule_callback(
     struct notifier_block *nfb, unsigned long action, void *hcpu)
@@ -1478,9 +536,6 @@ static int cpu_schedule_callback(
         break;
     case CPU_UP_CANCELED:
     case CPU_DEAD:
-#ifndef __UXEN__
-        cpu_schedule_down(cpu);
-#endif  /* __UXEN__ */
         break;
     default:
         break;
@@ -1527,10 +582,6 @@ void __init scheduler_init(void)
     register_cpu_notifier(&cpu_schedule_nfb);
 
     printk("Using scheduler: %s (%s)\n", ops.name, ops.opt_name);
-#ifndef __UXEN__
-    if ( SCHED_OP(&ops, init) )
-        panic("scheduler returned error on init\n");
-#endif  /* __UXEN__ */
 
     idle_domain = domain_create_internal(DOMID_IDLE, 0, 0, NULL);
     BUG_ON(idle_domain == NULL);
@@ -1542,135 +593,6 @@ void __init scheduler_init(void)
          !(this_cpu(schedule_data).sched_priv = ops.alloc_pdata(&ops, 0)) )
         BUG();
 }
-
-#ifndef __UXEN__
-int schedule_cpu_switch(unsigned int cpu, struct cpupool *c)
-{
-    unsigned long flags;
-    struct vcpu *idle;
-    void *ppriv, *ppriv_old, *vpriv, *vpriv_old;
-    struct scheduler *old_ops = per_cpu(scheduler, cpu);
-    struct scheduler *new_ops = (c == NULL) ? &ops : c->sched;
-
-    if ( old_ops == new_ops )
-        return 0;
-
-    idle = idle_vcpu[cpu];
-    ppriv = SCHED_OP(new_ops, alloc_pdata, cpu);
-    if ( ppriv == NULL )
-        return -ENOMEM;
-    vpriv = SCHED_OP(new_ops, alloc_vdata, idle, idle->domain->sched_priv);
-    if ( vpriv == NULL )
-    {
-        SCHED_OP(new_ops, free_pdata, ppriv, cpu);
-        return -ENOMEM;
-    }
-
-    pcpu_schedule_lock_irqsave(cpu, flags);
-
-    SCHED_OP(old_ops, tick_suspend, cpu);
-    vpriv_old = idle->sched_priv;
-    idle->sched_priv = vpriv;
-    per_cpu(scheduler, cpu) = new_ops;
-    ppriv_old = per_cpu(schedule_data, cpu).sched_priv;
-    per_cpu(schedule_data, cpu).sched_priv = ppriv;
-    SCHED_OP(new_ops, tick_resume, cpu);
-    SCHED_OP(new_ops, insert_vcpu, idle);
-
-    pcpu_schedule_unlock_irqrestore(cpu, flags);
-
-    SCHED_OP(old_ops, free_vdata, vpriv_old);
-    SCHED_OP(old_ops, free_pdata, ppriv_old, cpu);
-
-    return 0;
-}
-
-struct scheduler *scheduler_get_default(void)
-{
-    return &ops;
-}
-
-struct scheduler *scheduler_alloc(unsigned int sched_id, int *perr)
-{
-    int i;
-    struct scheduler *sched;
-
-    for ( i = 0; i < ARRAY_SIZE(schedulers); i++ )
-        if ( schedulers[i] && schedulers[i]->sched_id == sched_id )
-            goto found;
-    *perr = -ENOENT;
-    return NULL;
-
- found:
-    *perr = -ENOMEM;
-    if ( (sched = xmalloc(struct scheduler)) == NULL )
-        return NULL;
-    memcpy(sched, schedulers[i], sizeof(*sched));
-    if ( (*perr = SCHED_OP(sched, init)) != 0 )
-    {
-        xfree(sched);
-        sched = NULL;
-    }
-
-    return sched;
-}
-
-void scheduler_free(struct scheduler *sched)
-{
-    BUG_ON(sched == &ops);
-    SCHED_OP(sched, deinit);
-    xfree(sched);
-}
-
-void schedule_dump(struct cpupool *c)
-{
-    int               i;
-    struct scheduler *sched;
-    cpumask_t        *cpus;
-
-    sched = (c == NULL) ? &ops : c->sched;
-    cpus = (c == NULL) ? &cpupool_free_cpus : c->cpu_valid;
-    printk("Scheduler: %s (%s)\n", sched->name, sched->opt_name);
-    SCHED_OP(sched, dump_settings);
-
-    for_each_cpu (i, cpus)
-    {
-        pcpu_schedule_lock(i);
-        printk("CPU[%02d] ", i);
-        SCHED_OP(sched, dump_cpu_state, i);
-        pcpu_schedule_unlock(i);
-    }
-}
-
-void sched_tick_suspend(void)
-{
-    struct scheduler *sched;
-    unsigned int cpu = smp_processor_id();
-
-    sched = per_cpu(scheduler, cpu);
-    SCHED_OP(sched, tick_suspend, cpu);
-}
-
-void sched_tick_resume(void)
-{
-    struct scheduler *sched;
-    unsigned int cpu = smp_processor_id();
-
-    sched = per_cpu(scheduler, cpu);
-    SCHED_OP(sched, tick_resume, cpu);
-}
-
-void wait(void)
-{
-    schedule();
-}
-#endif  /* __UXEN__ */
-
-#ifndef __UXEN__
-#ifdef CONFIG_COMPAT
-#include "compat/schedule.c"
-#endif
-#endif  /* __UXEN__ */
 
 #endif /* !COMPAT */
 

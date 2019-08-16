@@ -53,10 +53,6 @@ struct hvm_ioreq_server {
     struct hvm_io_range *portio_range_list;
     struct hvm_ioreq_server *next;
     struct hvm_ioreq_page ioreq;
-#ifndef __UXEN__
-    struct hvm_ioreq_page buf_ioreq;
-    unsigned int buf_ioreq_evtchn;
-#endif  /* __UXEN__ */
 };
 
 struct hvm_attovm {
@@ -81,17 +77,9 @@ struct hvm_domain {
     struct hvm_irq         irq;
     struct hvm_hw_vpic     vpic[2]; /* 0=master; 1=slave */
     struct hvm_vioapic    *vioapic;
-#ifndef __UXEN__
-    struct hvm_hw_stdvga   stdvga;
-#endif  /* __UXEN__ */
 
     /* VCPU which is current target for 8259 interrupts. */
     struct vcpu           *i8259_target;
-
-#ifndef __UXEN__
-    /* emulated irq to pirq */
-    struct radix_tree_root emuirq_pirq;
-#endif  /* __UXEN__ */
 
     /* hvm_print_line() logging. */
 #define HVM_PBUF_SIZE 512

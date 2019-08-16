@@ -48,9 +48,6 @@
 
 #include <xen/config.h>
 #include <xen/paging.h>
-#ifndef __UXEN__
-#include <asm/mem_sharing.h>
-#endif  /* __UXEN__ */
 #include <asm/page.h>    /* for pagetable_t */
 
 /*
@@ -97,18 +94,6 @@ typedef enum {
     p2m_populate_on_demand = 6, /* Place-holder for empty memory */
     p2m_ram_immutable = 7,      /* Immutable page - warn on write */
 
-#ifndef __UXEN__
-    /* Although these are defined in all builds, they can only
-     * be used in 64-bit builds */
-    p2m_grant_map_rw = 7,         /* Read/write grant mapping */
-    p2m_grant_map_ro = 8,         /* Read-only grant mapping */
-    p2m_ram_paging_out = 9,       /* Memory that is being paged out */
-    p2m_ram_paged = 10,           /* Memory that has been paged out */
-    p2m_ram_paging_in = 11,       /* Memory that is being paged in */
-    p2m_ram_paging_in_start = 12, /* Memory that is being paged in */
-    p2m_ram_shared = 13,          /* Shared or sharable memory */
-    p2m_ram_broken = 14,          /* Broken page, access cause domain crash */
-#endif  /* __UXEN__ */
 } p2m_type_t;
 
 /*
@@ -163,54 +148,6 @@ typedef enum {
 #define p2m_to_mask(_t) (1UL << (_t))
 
 /* RAM types, which map to real machine frames */
-#ifndef __UXEN__
-#define P2M_RAM_TYPES (p2m_to_mask(p2m_ram_rw)                \
-                       | p2m_to_mask(p2m_ram_logdirty)        \
-                       | p2m_to_mask(p2m_ram_ro)              \
-                       | p2m_to_mask(p2m_ram_paging_out)      \
-                       | p2m_to_mask(p2m_ram_paged)           \
-                       | p2m_to_mask(p2m_ram_paging_in_start) \
-                       | p2m_to_mask(p2m_ram_paging_in)       \
-                       | p2m_to_mask(p2m_ram_immutable)       \
-                       | p2m_to_mask(p2m_ram_shared))
-
-/* Grant mapping types, which map to a real machine frame in another
- * VM */
-#define P2M_GRANT_TYPES (p2m_to_mask(p2m_grant_map_rw)  \
-                         | p2m_to_mask(p2m_grant_map_ro) )
-
-/* MMIO types, which don't have to map to anything in the frametable */
-#define P2M_MMIO_TYPES (p2m_to_mask(p2m_mmio_dm)        \
-                        | p2m_to_mask(p2m_mmio_direct))
-
-/* Read-only types, which must have the _PAGE_RW bit clear in their PTEs */
-#define P2M_RO_TYPES (p2m_to_mask(p2m_ram_logdirty)     \
-                      | p2m_to_mask(p2m_ram_ro)         \
-                      | p2m_to_mask(p2m_grant_map_ro)   \
-                      | p2m_to_mask(p2m_ram_shared) )
-
-#define P2M_MAGIC_TYPES (p2m_to_mask(p2m_populate_on_demand))
-
-/* Pageable types */
-#define P2M_PAGEABLE_TYPES (p2m_to_mask(p2m_ram_rw))
-
-#define P2M_PAGING_TYPES (p2m_to_mask(p2m_ram_paging_out)        \
-                          | p2m_to_mask(p2m_ram_paged)           \
-                          | p2m_to_mask(p2m_ram_paging_in_start) \
-                          | p2m_to_mask(p2m_ram_paging_in))
-
-#define P2M_PAGED_TYPES (p2m_to_mask(p2m_ram_paged))
-
-/* Shared types */
-/* XXX: Sharable types could include p2m_ram_ro too, but we would need to
- * reinit the type correctly after fault */
-#define P2M_SHARABLE_TYPES (p2m_to_mask(p2m_ram_rw))
-#define P2M_SHARED_TYPES   (p2m_to_mask(p2m_ram_shared))
-
-/* Broken type: the frame backing this pfn has failed in hardware
- * and must not be touched. */
-#define P2M_BROKEN_TYPES (p2m_to_mask(p2m_ram_broken))
-#else  /* __UXEN__ */
 #define P2M_RAM_TYPES (p2m_to_mask(p2m_ram_rw)                \
                        | p2m_to_mask(p2m_ram_logdirty)        \
                        | p2m_to_mask(p2m_ram_ro)              \
@@ -222,31 +159,10 @@ typedef enum {
 
 /* Read-only types, which must have the _PAGE_RW bit clear in their PTEs */
 #define P2M_RO_TYPES (p2m_to_mask(p2m_ram_ro))
-#endif  /* __UXEN__ */
 
 #define P2M_POD_TYPES (p2m_to_mask(p2m_populate_on_demand))
 
 /* Useful predicates */
-#ifndef __UXEN__
-#define p2m_is_ram(_t) (p2m_to_mask(_t) & P2M_RAM_TYPES)
-#define p2m_is_mmio(_t) (p2m_to_mask(_t) & P2M_MMIO_TYPES)
-#define p2m_is_readonly(_t) (p2m_to_mask(_t) & P2M_RO_TYPES)
-#define p2m_is_magic(_t) (p2m_to_mask(_t) & P2M_MAGIC_TYPES)
-#define p2m_is_grant(_t) (p2m_to_mask(_t) & P2M_GRANT_TYPES)
-#define p2m_is_grant_ro(_t) (p2m_to_mask(_t) & p2m_to_mask(p2m_grant_map_ro))
-/* Grant types are *not* considered valid, because they can be
-   unmapped at any time and, unless you happen to be the shadow or p2m
-   implementations, there's no way of synchronising against that. */
-#define p2m_is_valid(_t) (p2m_to_mask(_t) & (P2M_RAM_TYPES | P2M_MMIO_TYPES))
-#define p2m_has_emt(_t)  (p2m_to_mask(_t) & (P2M_RAM_TYPES | p2m_to_mask(p2m_mmio_direct)))
-#define p2m_is_pageable(_t) (p2m_to_mask(_t) & P2M_PAGEABLE_TYPES)
-#define p2m_is_paging(_t)   (p2m_to_mask(_t) & P2M_PAGING_TYPES)
-#define p2m_is_paged(_t)    (p2m_to_mask(_t) & P2M_PAGED_TYPES)
-#define p2m_is_sharable(_t) (p2m_to_mask(_t) & P2M_SHARABLE_TYPES)
-#define p2m_is_shared(_t)   (p2m_to_mask(_t) & P2M_SHARED_TYPES)
-#define p2m_is_broken(_t)   (p2m_to_mask(_t) & P2M_BROKEN_TYPES)
-#define p2m_is_pod(_t) (p2m_to_mask(_t) & P2M_POD_TYPES)
-#else  /* __UXEN__ */
 #define p2m_is_ram(_t) (p2m_to_mask(_t) & P2M_RAM_TYPES)
 #define p2m_is_ram_rw(_t) (p2m_to_mask(_t) & p2m_to_mask(p2m_ram_rw))
 #define p2m_is_mmio(_t) (p2m_to_mask(_t) & P2M_MMIO_TYPES)
@@ -266,7 +182,6 @@ typedef enum {
 #define p2m_is_mmio_direct(_t) (p2m_to_mask(_t) & p2m_to_mask(p2m_mmio_direct))
 #define p2m_is_logdirty(_t) (p2m_to_mask(_t) & p2m_to_mask(p2m_ram_logdirty))
 #define p2m_is_immutable(_t) (p2m_to_mask(_t) & p2m_to_mask(p2m_ram_immutable))
-#endif  /* __UXEN__ */
 
 #define p2m_update_pod_counts(d, omfn, ot, nmfn, nt) do {       \
         if (p2m_is_pod((ot))) {                                 \
@@ -351,27 +266,6 @@ struct p2m_domain {
 
     struct domain     *domain;   /* back pointer to domain */
 
-#ifndef __UXEN__
-    /* Nested p2ms only: nested-CR3 value that this p2m shadows. 
-     * This can be cleared to CR3_EADDR under the per-p2m lock but
-     * needs both the per-p2m lock and the per-domain nestedp2m lock
-     * to set it to any other value. */
-#define CR3_EADDR     (~0ULL)
-    uint64_t           cr3;
-
-    /* Nested p2ms: linked list of n2pms allocated to this domain. 
-     * The host p2m hasolds the head of the list and the np2ms are 
-     * threaded on in LRU order. */
-    struct list_head np2m_list; 
-
-
-    /* Host p2m: when this flag is set, don't flush all the nested-p2m 
-     * tables on every host-p2m change.  The setter of this flag 
-     * is responsible for performing the full flush before releasing the
-     * host p2m's lock. */
-    int                defer_nested_flush;
-#endif  /* __UXEN__ */
-
     /* Pages used to construct the p2m */
     struct page_list_head pages;
 
@@ -408,13 +302,6 @@ struct p2m_domain {
                                                    p2m_type_t ot,
                                                    p2m_type_t nt);
     
-#ifndef __UXEN__
-    void               (*write_p2m_entry)(struct p2m_domain *p2m,
-                                          unsigned long gfn, l1_pgentry_t *p,
-                                          l1_pgentry_t new,
-                                          unsigned int level);
-#endif  /* __UXEN__ */
-
     int                (*ro_update_l2_entry)(struct p2m_domain *p2m,
                                              unsigned long gfn, int read_only,
                                              int *need_sync);
@@ -544,17 +431,6 @@ static inline void __put_gfn(struct p2m_domain *p2m, unsigned long gfn)
 #define get_gfn_guest_unlocked(d, g, t)   get_gfn_type((d), (g), (t),   \
                                                        p2m_guest_r)
 #define get_gfn_unshare_unlocked(d, g, t) get_gfn_type((d), (g), (t), p2m_unshare)
-
-#ifndef __UXEN__
-/* General conversion function from mfn to gfn */
-static inline unsigned long mfn_to_gfn(struct domain *d, mfn_t mfn)
-{
-    if ( paging_mode_translate(d) )
-        return get_gpfn_from_mfn(mfn_x(mfn));
-    else
-        return mfn_x(mfn);
-}
-#endif  /* __UXEN__ */
 
 /* Init the datastructures for later use by the p2m code */
 int p2m_init(struct domain *d);
@@ -946,11 +822,6 @@ static inline p2m_type_t p2m_flags_to_type(unsigned long flags)
 void p2m_flush(struct vcpu *v, struct p2m_domain *p2m);
 /* Flushes all nested p2m tables */
 void p2m_flush_nestedp2m(struct domain *d);
-
-#ifndef __UXEN_NOT_YET__
-void nestedp2m_write_p2m_entry(struct p2m_domain *p2m, unsigned long gfn,
-    l1_pgentry_t *p, mfn_t table_mfn, l1_pgentry_t new, unsigned int level);
-#endif  /* __UXEN_NOT_YET__ */
 
 int
 p2m_clear_gpfn_from_mapcache(struct p2m_domain *p2m, unsigned long gfn,

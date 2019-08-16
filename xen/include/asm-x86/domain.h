@@ -89,73 +89,6 @@ void toggle_guest_mode(struct vcpu *);
  */
 void hypercall_page_initialise(struct domain *d, void *);
 
-#ifndef __UXEN__
-/************************************************/
-/*          shadow paging extension             */
-/************************************************/
-struct shadow_domain {
-    unsigned int      opt_flags;    /* runtime tunable optimizations on/off */
-    struct page_list_head pinned_shadows;
-
-    /* Memory allocation */
-    struct page_list_head freelist;
-    unsigned int      total_pages;  /* number of pages allocated */
-    unsigned int      free_pages;   /* number of pages on freelists */
-    unsigned int      p2m_pages;    /* number of pages allocates to p2m */
-
-    /* 1-to-1 map for use when HVM vcpus have paging disabled */
-    pagetable_t unpaged_pagetable;
-
-    /* Shadow hashtable */
-    struct page_info **hash_table;
-    int hash_walking;  /* Some function is walking the hash table */
-
-    /* Fast MMIO path heuristic */
-    int has_fast_mmio_entries;
-
-    /* reflect guest table dirty status, incremented by write
-     * emulation and remove write permission
-     */
-    atomic_t          gtable_dirty_version;
-
-    /* OOS */
-    int oos_active;
-    int oos_off;
-
-    int pagetable_dying_op;
-};
-
-struct shadow_vcpu {
-#if CONFIG_PAGING_LEVELS >= 3
-    /* PAE guests: per-vcpu shadow top-level table */
-    l3_pgentry_t l3table[4] __attribute__((__aligned__(32)));
-    /* PAE guests: per-vcpu cache of the top-level *guest* entries */
-    l3_pgentry_t gl3e[4] __attribute__((__aligned__(32)));
-#endif
-    /* Non-PAE guests: pointer to guest top-level pagetable */
-    void *guest_vtable;
-    /* Last MFN that we emulated a write to as unshadow heuristics. */
-    unsigned long last_emulated_mfn_for_unshadow;
-    /* MFN of the last shadow that we shot a writeable mapping in */
-    unsigned long last_writeable_pte_smfn;
-    /* Last frame number that we emulated a write to. */
-    unsigned long last_emulated_frame;
-    /* Last MFN that we emulated a write successfully */
-    unsigned long last_emulated_mfn;
-
-    /* Shadow out-of-sync: pages that this vcpu has let go out of sync */
-    mfn_t oos[SHADOW_OOS_PAGES];
-    mfn_t oos_snapshot[SHADOW_OOS_PAGES];
-    struct oos_fixup {
-        int next;
-        mfn_t smfn[SHADOW_OOS_FIXUPS];
-        unsigned long off[SHADOW_OOS_FIXUPS];
-    } oos_fixup[SHADOW_OOS_PAGES];
-
-    int pagetable_dying;
-};
-#endif  /* __UXEN__ */
-
 /************************************************/
 /*            hardware assisted paging          */
 /************************************************/
@@ -191,12 +124,6 @@ struct paging_domain {
 
     /* flags to control paging operation */
     u32                     mode;
-#ifndef __UXEN__
-    /* extension for shadow paging support */
-    struct shadow_domain    shadow;
-    /* extension for hardware-assited paging */
-    struct hap_domain       hap;
-#endif
     /* log dirty support */
     struct log_dirty_domain log_dirty;
     /* alloc/free pages from the pool for paging-assistance structures
@@ -208,47 +135,16 @@ struct paging_domain {
 struct paging_vcpu {
     /* Pointers to mode-specific entry points. */
     const struct paging_mode *mode;
-#ifndef __UXEN__
-    /* Nested Virtualization: paging mode of nested guest */
-    const struct paging_mode *nestedmode;
-    /* HVM guest: last emulate was to a pagetable */
-    unsigned int last_write_was_pt:1;
-    /* HVM guest: last write emulation succeeds */
-    unsigned int last_write_emul_ok:1;
-    /* Translated guest: virtual TLB */
-    struct shadow_vtlb *vtlb;
-    spinlock_t          vtlb_lock;
-
-    /* paging support extension */
-    struct shadow_vcpu shadow;
-#endif  /* __UXEN__ */
 };
 
 #define MAX_CPUID_INPUT 40
 typedef xen_domctl_cpuid_t cpuid_input_t;
 
-#ifndef __UXEN__
-#define MAX_NESTEDP2M 10
-#endif  /* __UXEN__ */
 struct p2m_domain;
 struct time_scale {
     int shift;
     u32 mul_frac;
 };
-
-#ifndef __UXEN__
-struct pv_domain
-{
-    /* Shared page for notifying that explicit PIRQ EOI is required. */
-    unsigned long *pirq_eoi_map;
-    unsigned long pirq_eoi_map_mfn;
-
-    /* Pseudophysical e820 map (XENMEM_memory_map).  */
-    spinlock_t e820_lock;
-    struct e820entry *e820;
-    unsigned int nr_e820;
-};
-#endif  /* __UXEN__ */
 
 #define P2M_DOMAIN_SIZE                                     \
     (208 + 4 * sizeof(void *) + 2 * sizeof(mfn_t) +         \
@@ -315,19 +211,12 @@ struct arch_domain
 
     bool_t s3_integrity;
 
-#ifndef __UXEN__
-    /* I/O-port admin-specified access capabilities. */
-    struct rangeset *ioport_caps;
-#endif  /* __UXEN__ */
     uint32_t pci_cf8;
     uint8_t cmos_idx;
 
     struct list_head pdev_list;
 
     union {
-#ifndef __UXEN__
-        struct pv_domain pv_domain;
-#endif  /* __UXEN__ */
         struct hvm_domain hvm_domain;
     };
 
@@ -336,12 +225,6 @@ struct arch_domain
     /* To enforce lock ordering in the pod code wrt the 
      * page_alloc lock */
     int page_alloc_unlock_level;
-
-#ifndef __UXEN__
-    /* nestedhvm: translate l2 guest physical to host physical */
-    struct p2m_domain *nested_p2m[MAX_NESTEDP2M];
-    mm_lock_t nested_p2m_lock;
-#endif  /* __UXEN__ */
 
     /* NB. protected by d->event_lock and by irq_desc[irq].lock */
     struct radix_tree_root irq_pirq;
@@ -360,17 +243,9 @@ struct arch_domain
     enum {
         RELMEM_not_started,
         RELMEM_xen,
-#ifndef __UXEN__
-        RELMEM_l4,
-        RELMEM_l3,
-        RELMEM_l2,
-#endif  /* __UXEN__ */
         RELMEM_foreign_pages,
         RELMEM_done,
     } relmem;
-#ifndef __UXEN__
-    struct page_list_head relmem_list;
-#endif  /* __UXEN__ */
 
     cpuid_input_t *cpuids;
 
@@ -506,24 +381,10 @@ struct arch_vcpu
 
     /* other state */
 
-#ifndef __UXEN__
-    struct pae_l3_cache pae_l3_cache;
-#endif  /* __UXEN__ */
-
     unsigned long      flags; /* TF_ */
-
-#ifndef __UXEN__
-    void (*schedule_tail) (struct vcpu *);
-
-    void (*ctxt_switch_from) (struct vcpu *);
-    void (*ctxt_switch_to) (struct vcpu *);
-#endif  /* __UXEN__ */
 
     /* Virtual Machine Extensions */
     union {
-#ifndef __UXEN__
-        struct pv_vcpu pv_vcpu;
-#endif  /* __UXEN__ */
         struct hvm_vcpu hvm_vcpu;
     };
 

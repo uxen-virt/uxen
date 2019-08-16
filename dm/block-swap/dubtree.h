@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -7,11 +7,7 @@
 #ifndef __DUBTREE_H__
 #define __DUBTREE_H__
 
-#if defined (QEMU_UXEN) || defined(LIBIMG)
 #include <dm/config.h>
-#else
-#include "config.h"
-#endif
 
 #include "dubtree_constants.h"
 #include "hashtable.h"

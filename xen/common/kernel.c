@@ -25,132 +25,6 @@
 
 int tainted;
 
-#ifndef __UXEN__
-xen_commandline_t saved_cmdline;
-
-static void __init assign_integer_param(
-    struct kernel_param *param, uint64_t val)
-{
-    switch ( param->len )
-    {
-    case sizeof(uint8_t):
-        *(uint8_t *)param->var = val;
-        break;
-    case sizeof(uint16_t):
-        *(uint16_t *)param->var = val;
-        break;
-    case sizeof(uint32_t):
-        *(uint32_t *)param->var = val;
-        break;
-    case sizeof(uint64_t):
-        *(uint64_t *)param->var = val;
-        break;
-    default:
-        BUG();
-    }
-}
-
-void __init cmdline_parse(char *cmdline)
-{
-    char opt[100], *optval, *optkey, *q;
-    const char *p = cmdline;
-    struct kernel_param *param;
-    int bool_assert;
-
-    safe_strcpy(saved_cmdline, cmdline);
-
-    if ( p == NULL )
-        return;
-
-    for ( ; ; )
-    {
-        /* Skip whitespace. */
-        while ( *p == ' ' )
-            p++;
-        if ( *p == '\0' )
-            break;
-
-        /* Grab the next whitespace-delimited option. */
-        q = optkey = opt;
-        while ( (*p != ' ') && (*p != '\0') )
-        {
-            if ( (q-opt) < (sizeof(opt)-1) ) /* avoid overflow */
-                *q++ = *p;
-            p++;
-        }
-        *q = '\0';
-
-        /* Search for value part of a key=value option. */
-        optval = strchr(opt, '=');
-        if ( optval != NULL )
-            *optval++ = '\0'; /* nul-terminate the option value */
-        else
-            optval = q;       /* default option value is empty string */
-
-        /* Boolean parameters can be inverted with 'no-' prefix. */
-        bool_assert = !!strncmp("no-", optkey, 3);
-        if ( !bool_assert )
-            optkey += 3;
-
-        for ( param = &__setup_start; param <= &__setup_end; param++ )
-        {
-            if ( strcmp(param->name, optkey) )
-                continue;
-
-            switch ( param->type )
-            {
-            case OPT_STR:
-                strlcpy(param->var, optval, param->len);
-                break;
-            case OPT_UINT:
-                assign_integer_param(
-                    param,
-                    simple_strtoll(optval, NULL, 0));
-                break;
-            case OPT_BOOL:
-            case OPT_INVBOOL:
-                if ( !parse_bool(optval) )
-                    bool_assert = !bool_assert;
-                assign_integer_param(
-                    param,
-                    (param->type == OPT_BOOL) == bool_assert);
-                break;
-            case OPT_SIZE:
-                assign_integer_param(
-                    param,
-                    parse_size_and_unit(optval, NULL));
-                break;
-            case OPT_CUSTOM:
-                ((void (*)(const char *))param->var)(optval);
-                break;
-            default:
-                BUG();
-                break;
-            }
-        }
-    }
-}
-
-int __init parse_bool(const char *s)
-{
-    if ( !strcmp("no", s) ||
-         !strcmp("off", s) ||
-         !strcmp("false", s) ||
-         !strcmp("disable", s) ||
-         !strcmp("0", s) )
-        return 0;
-
-    if ( !strcmp("yes", s) ||
-         !strcmp("on", s) ||
-         !strcmp("true", s) ||
-         !strcmp("enable", s) ||
-         !strcmp("1", s) )
-        return 1;
-
-    return -1;
-}
-#endif  /* __UXEN__ */
-
 /**
  *      print_tainted - return a string to represent the kernel taint state.
  *
@@ -330,15 +204,6 @@ DO(xen_version)(int cmd, XEN_GUEST_HANDLE(void) arg)
         return 0;
     }
 
-#ifndef __UXEN__
-    case XENVER_commandline:
-    {
-        if ( copy_to_guest(arg, saved_cmdline, ARRAY_SIZE(saved_cmdline)) )
-            return -EFAULT;
-        return 0;
-    }
-#endif  /* __UXEN__ */
-
     case XENVER_opt_debug:
     {
         if (!IS_HOST(current->domain))
@@ -352,43 +217,6 @@ DO(xen_version)(int cmd, XEN_GUEST_HANDLE(void) arg)
 
     return -ENOSYS;
 }
-
-#ifndef __UXEN__
-DO(nmi_op)(unsigned int cmd, XEN_GUEST_HANDLE(void) arg)
-{
-    struct xennmi_callback cb;
-    long rc = 0;
-
-    switch ( cmd )
-    {
-    case XENNMI_register_callback:
-        rc = -EFAULT;
-        if ( copy_from_guest(&cb, arg, 1) )
-            break;
-        rc = register_guest_nmi_callback(cb.handler_address);
-        break;
-    case XENNMI_unregister_callback:
-        rc = unregister_guest_nmi_callback();
-        break;
-    default:
-        rc = -ENOSYS;
-        break;
-    }
-
-    return rc;
-}
-
-DO(vm_assist)(unsigned int cmd, unsigned int type)
-{
-    return vm_assist(current->domain, cmd, type);
-}
-
-DO(ni_hypercall)(void)
-{
-    /* No-op hypercall. */
-    return -ENOSYS;
-}
-#endif  /* __UXEN__ */
 
 /*
  * Local variables:

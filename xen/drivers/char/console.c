@@ -49,41 +49,13 @@
 static char __initdata opt_console[30] = OPT_CONSOLE_STR;
 string_param("console", opt_console);
 
-#ifndef __UXEN__
-/* conswitch: a character pair controlling console switching. */
-/* Char 1: CTRL+<char1> is used to switch console input between Xen and DOM0 */
-/* Char 2: If this character is 'x', then do not auto-switch to DOM0 when it */
-/*         boots. Any other value, or omitting the char, enables auto-switch */
-static unsigned char __read_mostly opt_conswitch[3] = "a";
-string_param("conswitch", opt_conswitch);
-#endif  /* __UXEN__ */
-
 /* sync_console: force synchronous console output (useful for debugging). */
 static bool_t __initdata opt_sync_console = 1;
 boolean_param("sync_console", opt_sync_console);
 
-#ifndef __UXEN__
-/* console_to_ring: send guest (incl. dom 0) console data to console ring. */
-static bool_t __read_mostly opt_console_to_ring;
-boolean_param("console_to_ring", opt_console_to_ring);
-#endif  /* __UXEN__ */
-
 /* console_timestamps: include a timestamp prefix on every Xen console line. */
 static bool_t __read_mostly opt_console_timestamps;
 boolean_param("console_timestamps", opt_console_timestamps);
-
-#ifndef __UXEN__
-/* conring_size: allows a large console ring than default (16kB). */
-static uint32_t __initdata opt_conring_size;
-size_param("conring_size", opt_conring_size);
-
-#define _CONRING_SIZE 16384
-#define CONRING_IDX_MASK(i) ((i)&(conring_size-1))
-static char __initdata _conring[_CONRING_SIZE];
-static char *__read_mostly conring = _conring;
-static uint32_t __read_mostly conring_size = _CONRING_SIZE;
-static uint32_t conringc, conringp;
-#endif  /* __UXEN__ */
 
 static int __read_mostly sercon_handle = -1;
 
@@ -127,61 +99,7 @@ static int __read_mostly xenlog_lower_thresh = XENLOG_LOWER_THRESHOLD;
 static int __read_mostly xenlog_guest_upper_thresh = XENLOG_GUEST_UPPER_THRESHOLD;
 static int __read_mostly xenlog_guest_lower_thresh = XENLOG_GUEST_LOWER_THRESHOLD;
 
-#ifndef __UXEN__
-static void parse_loglvl(char *s);
-static void parse_guest_loglvl(char *s);
-
-/*
- * <lvl> := none|error|warning|info|debug|all
- * loglvl=<lvl_print_always>[/<lvl_print_ratelimit>]
- *  <lvl_print_always>: log level which is always printed
- *  <lvl_print_rlimit>: log level which is rate-limit printed
- * Similar definitions for guest_loglvl, but applies to guest tracing.
- * Defaults: loglvl=warning ; guest_loglvl=none/warning
- */
-custom_param("loglvl", parse_loglvl);
-custom_param("guest_loglvl", parse_guest_loglvl);
-#endif  /* __UXEN__ */
-
 static atomic_t print_everything = ATOMIC_INIT(0);
-
-#ifndef __UXEN__
-#define ___parse_loglvl(s, ps, lvlstr, lvlnum)          \
-    if ( !strncmp((s), (lvlstr), strlen(lvlstr)) ) {    \
-        *(ps) = (s) + strlen(lvlstr);                   \
-        return (lvlnum);                                \
-    }
-
-static int __init __parse_loglvl(char *s, char **ps)
-{
-    ___parse_loglvl(s, ps, "none",    0);
-    ___parse_loglvl(s, ps, "error",   1);
-    ___parse_loglvl(s, ps, "warning", 2);
-    ___parse_loglvl(s, ps, "info",    3);
-    ___parse_loglvl(s, ps, "debug",   4);
-    ___parse_loglvl(s, ps, "all",     4);
-    return 2; /* sane fallback */
-}
-
-static void __init _parse_loglvl(char *s, int *lower, int *upper)
-{
-    *lower = *upper = __parse_loglvl(s, &s);
-    if ( *s == '/' )
-        *upper = __parse_loglvl(s+1, &s);
-    if ( *upper < *lower )
-        *upper = *lower;
-}
-
-static void __init parse_loglvl(char *s)
-{
-    _parse_loglvl(s, &xenlog_lower_thresh, &xenlog_upper_thresh);
-}
-
-static void __init parse_guest_loglvl(char *s)
-{
-    _parse_loglvl(s, &xenlog_guest_lower_thresh, &xenlog_guest_upper_thresh);
-}
-#endif  /* __UXEN__ */
 
 #ifdef __UXEN_console__
 static char * __init loglvl_str(int lvl)
@@ -198,79 +116,12 @@ static char * __init loglvl_str(int lvl)
 }
 #endif  /* __UXEN_console__ */
 
-#ifndef __UXEN__
-/*
- * ********************************************************
- * *************** ACCESS TO CONSOLE RING *****************
- * ********************************************************
- */
-
-static void putchar_console_ring(int c)
-{
-    ASSERT(spin_is_locked(&console_lock));
-    conring[CONRING_IDX_MASK(conringp++)] = c;
-    if ( (uint32_t)(conringp - conringc) > conring_size )
-        conringc = conringp - conring_size;
-}
-
-long read_console_ring(struct xen_sysctl_readconsole *op)
-{
-    XEN_GUEST_HANDLE(char) str;
-    uint32_t idx, len, max, sofar, c;
-
-    str   = guest_handle_cast(op->buffer, char),
-    max   = op->count;
-    sofar = 0;
-
-    c = conringc;
-    if ( op->incremental && ((int32_t)(op->index - c) > 0) )
-        c = op->index;
-
-    while ( (c != conringp) && (sofar < max) )
-    {
-        idx = CONRING_IDX_MASK(c);
-        len = conringp - c;
-        if ( (idx + len) > conring_size )
-            len = conring_size - idx;
-        if ( (sofar + len) > max )
-            len = max - sofar;
-        if ( copy_to_guest_offset(str, sofar, &conring[idx], len) )
-            return -EFAULT;
-        sofar += len;
-        c += len;
-    }
-
-    if ( op->clear )
-    {
-        spin_lock_irq(&console_lock);
-        if ( (uint32_t)(conringp - c) > conring_size )
-            conringc = conringp - conring_size;
-        else
-            conringc = c;
-        spin_unlock_irq(&console_lock);
-    }
-
-    op->count = sofar;
-    op->index = c;
-
-    return 0;
-}
-#endif  /* __UXEN__ */
-
 
 /*
  * *******************************************************
  * *************** ACCESS TO SERIAL LINE *****************
  * *******************************************************
  */
-
-#ifndef __UXEN__
-/* Characters received over the serial line are buffered for domain 0. */
-#define SERIAL_RX_SIZE 128
-#define SERIAL_RX_MASK(_i) ((_i)&(SERIAL_RX_SIZE-1))
-static char serial_rx_ring[SERIAL_RX_SIZE];
-static unsigned int serial_rx_cons, serial_rx_prod;
-#endif  /* __UXEN__ */
 
 static void (*serial_steal_fn)(const char *);
 
@@ -339,156 +190,17 @@ static void sercon_puts(const char *s)
     }
 }
 
-#ifndef __UXEN__
-/* CTRL-<switch_char> switches input direction between Xen and DOM0. */
-#define switch_code (opt_conswitch[0]-'a'+1)
-static int __read_mostly xen_rx = 1; /* FALSE => serial input passed to domain 0. */
-
-static void switch_serial_input(void)
-{
-    static char *input_str[2] = { "DOM0", "Xen" };
-    xen_rx = !xen_rx;
-    printk("*** Serial input -> %s", input_str[xen_rx]);
-    if ( switch_code )
-        printk(" (type 'CTRL-%c' three times to switch input to %s)",
-               opt_conswitch[0], input_str[!xen_rx]);
-    printk("\n");
-}
-#endif  /* __UXEN__ */
-
 static void __serial_rx(char c, struct cpu_user_regs *regs)
 {
-#ifndef __UXEN__
-    if ( xen_rx )
-        return handle_keypress(c, regs);
-
-    /* Deliver input to guest buffer, unless it is already full. */
-    if ( (serial_rx_prod-serial_rx_cons) != SERIAL_RX_SIZE )
-        serial_rx_ring[SERIAL_RX_MASK(serial_rx_prod++)] = c;
-    /* Always notify the guest: prevents receive path from getting stuck. */
-    send_guest_global_virq(dom0, VIRQ_CONSOLE);
-#else  /* __UXEN__ */
     return handle_keypress(c, regs);
-#endif  /* __UXEN__ */
 }
 
 static void serial_rx(char c, struct cpu_user_regs *regs)
 {
-#ifndef __UXEN__
-    static int switch_code_count = 0;
-
-    if ( switch_code && (c == switch_code) )
-    {
-        /* We eat CTRL-<switch_char> in groups of 3 to switch console input. */
-        if ( ++switch_code_count == 3 )
-        {
-            switch_serial_input();
-            switch_code_count = 0;
-        }
-        return;
-    }
-
-    for ( ; switch_code_count != 0; switch_code_count-- )
-        __serial_rx(switch_code, regs);
-#endif  /* __UXEN__ */
 
     /* Finally process the just-received character. */
     __serial_rx(c, regs);
 }
-
-#ifndef __UXEN__
-static void notify_dom0_con_ring(unsigned long unused)
-{
-    send_guest_global_virq(dom0, VIRQ_CON_RING);
-}
-static DECLARE_SOFTIRQ_TASKLET(notify_dom0_con_ring_tasklet,
-                               notify_dom0_con_ring, 0);
-
-static long guest_console_write(XEN_GUEST_HANDLE(char) buffer, int count)
-{
-    char kbuf[128], *kptr;
-    int kcount;
-
-    while ( count > 0 )
-    {
-        if ( hypercall_preempt_check() )
-            return hypercall_create_continuation(
-                __HYPERVISOR_console_io, "iih",
-                CONSOLEIO_write, count, buffer);
-
-        kcount = min_t(int, count, sizeof(kbuf)-1);
-        if ( copy_from_guest(kbuf, buffer, kcount) )
-            return -EFAULT;
-        kbuf[kcount] = '\0';
-
-        spin_lock_irq(&console_lock);
-
-        sercon_puts(kbuf);
-        vga_puts(kbuf);
-
-        if ( opt_console_to_ring )
-        {
-            for ( kptr = kbuf; *kptr != '\0'; kptr++ )
-                putchar_console_ring(*kptr);
-            tasklet_schedule(&notify_dom0_con_ring_tasklet);
-        }
-
-        spin_unlock_irq(&console_lock);
-
-        guest_handle_add_offset(buffer, kcount);
-        count -= kcount;
-    }
-
-    return 0;
-}
-
-long do_console_io(int cmd, int count, XEN_GUEST_HANDLE(char) buffer)
-{
-    long rc;
-    unsigned int idx, len;
-
-#ifndef VERBOSE
-    /* Only domain 0 may access the emergency console. */
-    if ( current->domain->domain_id != 0 )
-        return -EPERM;
-#endif
-
-    rc = xsm_console_io(current->domain, cmd);
-    if ( rc )
-        return rc;
-
-    switch ( cmd )
-    {
-    case CONSOLEIO_write:
-        rc = guest_console_write(buffer, count);
-        break;
-    case CONSOLEIO_read:
-        rc = 0;
-        while ( (serial_rx_cons != serial_rx_prod) && (rc < count) )
-        {
-            idx = SERIAL_RX_MASK(serial_rx_cons);
-            len = serial_rx_prod - serial_rx_cons;
-            if ( (idx + len) > SERIAL_RX_SIZE )
-                len = SERIAL_RX_SIZE - idx;
-            if ( (rc + len) > count )
-                len = count - rc;
-            if ( copy_to_guest_offset(buffer, rc, &serial_rx_ring[idx], len) )
-            {
-                rc = -EFAULT;
-                break;
-            }
-            rc += len;
-            serial_rx_cons += len;
-        }
-        break;
-    default:
-        rc = -ENOSYS;
-        break;
-    }
-
-    return rc;
-}
-#endif  /* __UXEN__ */
 
 
 /*
@@ -497,29 +209,12 @@ long do_console_io(int cmd, int count, XEN_GUEST_HANDLE(char) buffer)
  * *****************************************************
  */
 
-#ifndef __UXEN__
-static bool_t console_locks_busted;
-#endif  /* __UXEN__ */
-
 static void __putstr(const char *str)
 {
-#ifndef __UXEN__
-    int c;
-#endif  /* __UXEN__ */
 
     ASSERT(spin_is_locked(&console_lock));
 
     sercon_puts(str);
-#ifndef __UXEN__
-    vga_puts(str);
-
-    if ( !console_locks_busted )
-    {
-        while ( (c = *str++) != '\0' )
-            putchar_console_ring(c);
-        tasklet_schedule(&notify_dom0_con_ring_tasklet);
-    }
-#endif  /* __UXEN__ */
 }
 
 static int printk_prefix_check(char *p, char **pp)
@@ -646,11 +341,6 @@ void __init console_init_preirq(void)
     {
         if ( *p == ',' )
             p++;
-#ifndef __UXEN__
-        if ( !strncmp(p, "vga", 3) )
-            vga_init();
-        else
-#endif  /* __UXEN__ */
         if ( strncmp(p, "com", 3) ||
              (sercon_handle = serial_parse_handle(p)) == -1 )
         {
@@ -686,35 +376,9 @@ void __init console_init_preirq(void)
 
 void __init console_init_postirq(void)
 {
-#ifndef __UXEN__
-    char *ring;
-    unsigned int i, order;
-#endif  /* __UXEN__ */
 
     serial_init_postirq();
 
-#ifndef __UXEN__
-    if ( !opt_conring_size )
-        opt_conring_size = num_present_cpus() << (9 + xenlog_lower_thresh);
-
-    order = get_order_from_bytes(max(opt_conring_size, conring_size));
-    while ( (ring = alloc_xenheap_pages(order, 0)) == NULL )
-    {
-        BUG_ON(order == 0);
-        order--;
-    }
-    opt_conring_size = PAGE_SIZE << order;
-
-    spin_lock_irq(&console_lock);
-    for ( i = conringc ; i != conringp; i++ )
-        ring[i & (opt_conring_size - 1)] = conring[i & (conring_size - 1)];
-    conring = ring;
-    wmb(); /* Allow users of console_force_unlock() to see larger buffer. */
-    conring_size = opt_conring_size;
-    spin_unlock_irq(&console_lock);
-
-    printk("Allocated console ring of %u KiB.\n", opt_conring_size >> 10);
-#endif  /* __UXEN__ */
 }
 
 #ifdef __UXEN_console__
@@ -805,9 +469,6 @@ void console_force_unlock(void)
 {
     spin_lock_init(&console_lock);
     serial_force_unlock(sercon_handle);
-#ifndef __UXEN__
-    console_locks_busted = 1;
-#endif  /* __UXEN__ */
     console_start_sync();
 }
 
@@ -1104,74 +765,13 @@ void panic(const char *fmt, ...)
     printk("Panic on CPU %d:\n", smp_processor_id());
     printk("%s", buf);
     printk("****************************************\n\n");
-#ifndef __UXEN__
-    if ( opt_noreboot )
-        printk("Manual reset required ('noreboot' specified)\n");
-    else
-        printk("Reboot in five seconds...\n");
-#endif  /* __UXEN__ */
 
     spin_unlock_irqrestore(&lock, flags);
 
     debugger_trap_immediate();
 
-#ifndef __UXEN__
-    kexec_crash();
-
-    if ( opt_noreboot )
-    {
-        machine_halt();
-    }
-    else
-    {
-        watchdog_disable();
-        machine_restart(5000);
-    }
-#else   /* __UXEN__ */
     BUG();
-#endif  /* __UXEN__ */
 }
-
-#ifndef __UXEN__
-void __bug(char *file, int line)
-{
-    console_start_sync();
-    printk("Xen BUG at %s:%d\n", file, line);
-    dump_execution_state();
-    panic("Xen BUG at %s:%d\n", file, line);
-    for ( ; ; ) ;
-}
-
-void __warn(char *file, int line)
-{
-    printk("Xen WARN at %s:%d\n", file, line);
-    dump_execution_state();
-}
-
-
-/*
- * **************************************************************
- * ****************** Console suspend/resume ********************
- * **************************************************************
- */
-
-static void suspend_steal_fn(const char *str) { }
-static int suspend_steal_id;
-
-int console_suspend(void)
-{
-    suspend_steal_id = console_steal(sercon_handle, suspend_steal_fn);
-    serial_suspend();
-    return 0;
-}
-
-int console_resume(void)
-{
-    serial_resume();
-    console_giveback(suspend_steal_id);
-    return 0;
-}
-#endif  /* __UXEN__ */
 
 /*
  * Local variables:

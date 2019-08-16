@@ -123,16 +123,6 @@ static inline void fpu_fxrstor(struct vcpu *v)
         );
 }
 
-#ifndef __UXEN__
-/* Restore x87 extended state */
-static inline void fpu_frstor(struct vcpu *v)
-{
-    const char *fpu_ctxt = v->arch.fpu_ctxt;
-
-    asm volatile ( "frstor %0" : : "m" (*fpu_ctxt) );
-}
-#endif  /* __UXEN__ */
-
 /*******************************/
 /*      FPU Save Functions     */
 /*******************************/
@@ -170,55 +160,9 @@ static inline void fpu_fxsave(struct vcpu *v)
     if ( unlikely(fpu_ctxt[2] & 0x80) )
         asm volatile ("fnclex");
     
-#ifndef __UXEN__
-    /*
-     * AMD CPUs don't save/restore FDP/FIP/FOP unless an exception
-     * is pending. Clear the x87 state here by setting it to fixed
-     * values. The hypervisor data segment can be sometimes 0 and
-     * sometimes new user value. Both should be ok. Use the FPU saved
-     * data block as a safe address because it should be in L1.
-     */
-    if ( boot_cpu_data.x86_vendor == X86_VENDOR_AMD )
-    {
-        asm volatile (
-            "emms\n\t"  /* clear stack tags */
-            "fildl %0"  /* load to clear state */
-            : : "m" (*fpu_ctxt) );
-    }
-#endif  /* __UXEN__ */
-
     if (boot_cpu_data.x86_vendor == X86_VENDOR_AMD && this_cpu(ffxse_efer))
         write_efer(read_efer() | (u64)EFER_FFXSE);
 }
-
-#ifndef __UXEN__
-/* Save x87 FPU state */
-static inline void fpu_fsave(struct vcpu *v)
-{
-    char *fpu_ctxt = v->arch.fpu_ctxt;
-
-    /* FWAIT is required to make FNSAVE synchronous. */
-    asm volatile ( "fnsave %0 ; fwait" : "=m" (*fpu_ctxt) );
-}
-
-/*******************************/
-/*       VCPU FPU Functions    */
-/*******************************/
-/* Restore FPU state whenever VCPU is schduled in. */
-void vcpu_restore_fpu_eager(struct vcpu *v)
-{
-    ASSERT(!is_idle_vcpu(v));
-    
-    /* save the nonlazy extended state which is not tracked by CR0.TS bit */
-    if ( v->arch.nonlazy_xstate_used )
-    {
-        /* Avoid recursion */
-        clts();        
-        fpu_xrstor(v, XSTATE_NONLAZY);
-        stts();
-    }
-}
-#endif  /* __UXEN__ */
 
 #if defined(__i386__) || defined(UXEN_HOST_OSX)
 DEFINE_PER_CPU(uint8_t, host_cr0_ts);
@@ -291,14 +235,9 @@ void vcpu_restore_fpu_lazy(struct vcpu *v)
             fpu_xrstor(v, XSTATE_LAZY);
         else if ( cpu_has_fxsr )
             fpu_fxrstor(v);
-#ifndef __UXEN__
-        else
-            fpu_frstor(v);
-#else   /* __UXEN__ */
         else
             /* fpu_frstor(v); */
             BUG();
-#endif  /* __UXEN__ */
     } else {
         fpu_init();
         if ( xsave_enabled(v) ) {
@@ -340,14 +279,9 @@ void vcpu_save_fpu(struct vcpu *v)
         fpu_xsave(v);
     else if ( cpu_has_fxsr )
         fpu_fxsave(v);
-#ifndef __UXEN__
-    else
-        fpu_fsave(v);
-#else   /* __UXEN__ */
     else
         /* fpu_fsave(v); */
         BUG();
-#endif  /* __UXEN__ */
 
     v->fpu_dirtied = 0;
 

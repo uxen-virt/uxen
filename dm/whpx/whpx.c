@@ -122,12 +122,6 @@ void whpx_cpu_x86_update_cr0(CPUX86State *env, uint32_t new_cr0)
 #if defined(DEBUG_MMU)
     printf("CR0 update: CR0=0x%08x\n", new_cr0);
 #endif
-#ifndef QEMU_UXEN
-    if ((new_cr0 & (CR0_PG_MASK | CR0_WP_MASK | CR0_PE_MASK)) !=
-        (env->cr[0] & (CR0_PG_MASK | CR0_WP_MASK | CR0_PE_MASK))) {
-        tlb_flush(env, 1);
-    }
-#endif
 
 #ifdef TARGET_X86_64
     if (!(env->cr[0] & CR0_PG_MASK) && (new_cr0 & CR0_PG_MASK) &&
@@ -166,10 +160,6 @@ void whpx_cpu_reset(CPUX86State *env)
     debug_printf("CPU Reset (CPU %d)\n", env->cpu_index);
 
     memset(env, 0, offsetof(CPUX86State, breakpoints));
-
-#ifndef QEMU_UXEN
-    tlb_flush(env, 1);
-#endif
 
     env->old_exception = -1;
 
@@ -230,10 +220,6 @@ void whpx_cpu_reset(CPUX86State *env)
     memset(env->dr, 0, sizeof(env->dr));
     env->dr[6] = DR6_FIXED_1;
     env->dr[7] = DR7_FIXED_1;
-#ifndef QEMU_UXEN
-    cpu_breakpoint_remove_all(env, BP_CPU);
-    cpu_watchpoint_remove_all(env, BP_CPU);
-#endif
 }
 
 void whpx_do_cpu_init(CPUState *env)

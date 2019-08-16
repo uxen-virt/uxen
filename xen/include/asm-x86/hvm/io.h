@@ -28,9 +28,6 @@
 #define MAX_IO_HANDLER             24
 
 #define HVM_PORTIO                  0
-#ifndef __UXEN__
-#define HVM_BUFFERED_IO             2
-#endif  /* __UXEN__ */
 #define HVM_PCICONFIG               3
 
 typedef int (*hvm_mmio_read_t)(struct vcpu *v,
@@ -76,11 +73,7 @@ extern const struct hvm_mmio_handler vlapic_mmio_handler;
 extern const struct hvm_mmio_handler vioapic_mmio_handler;
 extern const struct hvm_mmio_handler msixtbl_mmio_handler;
 
-#ifndef __UXEN__
-#define HVM_MMIO_HANDLER_NR 4
-#else   /* __UXEN__ */
 #define HVM_MMIO_HANDLER_NR 3
-#endif  /* __UXEN__ */
 
 int hvm_io_intercept(ioreq_t *p, int type);
 void register_io_handler(
@@ -95,13 +88,6 @@ static inline int hvm_portio_intercept(ioreq_t *p)
     return hvm_io_intercept(p, HVM_PORTIO);
 }
 
-#ifndef __UXEN__
-static inline int hvm_buffered_io_intercept(ioreq_t *p)
-{
-    return hvm_io_intercept(p, HVM_BUFFERED_IO);
-}
-#endif  /* __UXEN__ */
-
 static inline int
 hvm_pciconfig_intercept(ioreq_t *p)
 {
@@ -109,9 +95,6 @@ hvm_pciconfig_intercept(ioreq_t *p)
 }
 
 int hvm_mmio_intercept(ioreq_t *p);
-#ifndef __UXEN__
-int hvm_buffered_io_send(ioreq_t *p);
-#endif  /* __UXEN__ */
 
 static inline void register_portio_handler(
     struct domain *d, unsigned long addr,
@@ -127,15 +110,6 @@ static inline void relocate_portio_handler(
     relocate_io_handler(d, old_addr, new_addr, size, HVM_PORTIO);
 }
 
-#ifndef __UXEN__
-static inline void register_buffered_io_handler(
-    struct domain *d, unsigned long addr,
-    unsigned long size, mmio_action_t action)
-{
-    register_io_handler(d, addr, size, action, HVM_BUFFERED_IO);
-}
-#endif  /* __UXEN__ */
-
 static inline void register_pciconfig_handler(
     struct domain *d, unsigned long addr,
     unsigned long size, pciconfig_action_t action)
@@ -143,10 +117,6 @@ static inline void register_pciconfig_handler(
     register_io_handler(d, addr, size, action, HVM_PCICONFIG);
 }
 
-#ifndef __UXEN__
-void send_timeoffset_req(unsigned long timeoff);
-void send_invalidate_req(void);
-#endif  /* __UXEN__ */
 void send_introspection_ioreq(int subtype);
 void send_introspection_ioreq_detailed(int subtype, uint64_t addr,
     uint64_t target);

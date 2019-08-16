@@ -26,7 +26,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2018, Bromium, Inc.
+ * Copyright 2018-2019, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -758,12 +758,6 @@ static int hpet_init1(SysBusDevice *dev)
 
     s->hpet_id = hpet_cfg.count++;
 
-#ifndef QEMU_UXEN
-    for (i = 0; i < HPET_NUM_IRQ_ROUTES; i++) {
-        sysbus_init_irq(dev, &s->irqs[i]);
-    }
-#endif
-
     if (s->num_timers < HPET_MIN_TIMERS) {
         s->num_timers = HPET_MIN_TIMERS;
     } else if (s->num_timers > HPET_MAX_TIMERS) {
@@ -781,20 +775,10 @@ static int hpet_init1(SysBusDevice *dev)
     s->capability |= (s->num_timers - 1) << HPET_ID_NUM_TIM_SHIFT;
     s->capability |= ((HPET_CLK_PERIOD) << 32);
 
-#ifndef QEMU_UXEN
-    qdev_init_gpio_in(&dev->qdev, hpet_handle_rtc_irq, 1);
-
-    /* HPET Area */
-    iomemtype = cpu_register_io_memory(hpet_ram_read,
-                                       hpet_ram_write, s,
-                                       DEVICE_NATIVE_ENDIAN);
-    sysbus_init_mmio(dev, 0x400, iomemtype);
-#else
     memory_region_init_io(&s->io_memory, &hpet_io_ops, s, "hpet", 0x400);
     memory_region_add_ram_range(&s->io_memory, 0, 0x400,
                                 mmio_ptr_update, s);
     memory_region_add_subregion(system_iomem, 0xfed00000, &s->io_memory);
-#endif
 
     return 0;
 }

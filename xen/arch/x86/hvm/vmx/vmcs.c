@@ -69,12 +69,7 @@ boolean_param("vpid", opt_vpid_enabled);
 #define opt_vpid_enabled 0
 #endif  /* __UXEN_todo__ */
 
-#ifndef __UXEN__
-static bool_t __read_mostly opt_unrestricted_guest_enabled = 1;
-boolean_param("unrestricted_guest", opt_unrestricted_guest_enabled);
-#else  /* __UXEN__ */
 #define opt_unrestricted_guest_enabled 1
-#endif  /* __UXEN__ */
 
 #define VMCS_ITERATE_NO_XEN_MAPPINGS 1
 #define VMCS_FIRST_FIELD_OFFSET 8
@@ -301,11 +296,7 @@ static int vmx_init_vmcs_config(void)
         _vmx_cpu_based_exec_control &= ~CPU_BASED_TPR_SHADOW;
 #endif
 
-#ifndef __UXEN__
-    min = VM_EXIT_ACK_INTR_ON_EXIT;
-#else   /* __UXEN__ */
     min = 0;
-#endif  /* __UXEN__ */
     opt = VM_EXIT_SAVE_GUEST_PAT | VM_EXIT_LOAD_HOST_PAT;
 #ifdef __x86_64__
     min |= VM_EXIT_IA32E_MODE;
@@ -760,14 +751,9 @@ vmx_cpu_up(enum hvmon hvmon_mode)
             return -EINVAL;
         }
         /* fall through */
-#ifndef __UXEN__
-    case -1: /* CF==1 or ZF==1 */
-#endif  /* __UXEN__ */
         printk("CPU%d: unexpected VMXON failure\n", cpu);
         return -EINVAL;
-#ifdef __UXEN__
     case -1: /* CF==1 or ZF==1 */
-#endif  /* __UXEN__ */
     case 0: /* success */
         printk("CPU%d: vmxon success\n", cpu);
         this_cpu(hvmon) = hvmon_mode;
@@ -883,13 +869,6 @@ void vmx_vmcs_exit(struct vcpu *v)
     }
 }
 
-#ifndef __UXEN__
-struct xgt_desc {
-    unsigned short size;
-    unsigned long address __attribute__((packed));
-};
-#endif  /* __UXEN__ */
-
 void vmx_restore_host_env(void)
 {
 
@@ -904,9 +883,6 @@ void vmx_restore_host_env(void)
 
 /* static */ void vmx_set_host_env(struct vcpu *v)
 {
-#ifndef __UXEN__
-    unsigned int cpu = smp_processor_id();
-#endif  /* __UXEN__ */
     unsigned long base;
 
     if (ax_present) return;
@@ -917,24 +893,11 @@ void vmx_restore_host_env(void)
     __vmwrite(HOST_GS_BASE, base);
     /* XXX also maybe sync: ss, ds, es, fs, gs, cr0, cr4, cs, sysenter, pat */
 
-#ifndef __UXEN__
-    __vmwrite(HOST_GDTR_BASE,
-              (unsigned long)(this_cpu(gdt_table) - FIRST_RESERVED_GDT_ENTRY));
-#else   /* __UXEN__ */
     __asm__ __volatile__ ( "sgdt %0" : "=m" (this_cpu(gdt_save)) );
     __vmwrite(HOST_GDTR_BASE, (*(unsigned long  *)(&this_cpu(gdt_save)[2])));
-#endif  /* __UXEN__ */
-#ifndef __UXEN__
-    __vmwrite(HOST_IDTR_BASE, (unsigned long)idt_tables[cpu]);
-#else   /* __UXEN__ */
     __asm__ __volatile__ ( "sidt %0" : "=m" (this_cpu(idt_save)) );
     __vmwrite(HOST_IDTR_BASE, (*(unsigned long  *)(&this_cpu(idt_save)[2])));
-#endif  /* __UXEN__ */
 
-#ifndef __UXEN__
-    __vmwrite(HOST_TR_SELECTOR, TSS_ENTRY << 3);
-    __vmwrite(HOST_TR_BASE, (unsigned long)&per_cpu(init_tss, cpu));
-#else   /* __UXEN__ */
     {
         uint16_t tr;
         struct desc_struct *table, desc;
@@ -953,28 +916,19 @@ void vmx_restore_host_env(void)
 #endif
         __vmwrite(HOST_TR_BASE, base);
     }
-#endif  /* __UXEN__ */
 
-#ifndef __UXEN__
-    __vmwrite(HOST_SYSENTER_ESP, get_stack_bottom());
-#else   /* __UXEN__ */
     {
         unsigned long sysenter_esp;
 
         rdmsrl(MSR_IA32_SYSENTER_ESP, sysenter_esp);
         __vmwrite(HOST_SYSENTER_ESP, sysenter_esp);
     }
-#endif  /* __UXEN__ */
 
     /*
      * Skip end of cpu_user_regs when entering the hypervisor because the
      * CPU does not save context onto the stack. SS,RSP,CS,RIP,RFLAGS,etc
      * all get saved into the VMCS instead.
      */
-#ifndef __UXEN__
-    __vmwrite(HOST_RSP,
-              (unsigned long)&get_cpu_info()->guest_cpu_user_regs.error_code);
-#endif  /* __UXEN__ */
 }
 
 void vmx_disable_intercept_for_msr(struct vcpu *v, u32 msr)
@@ -1136,15 +1090,6 @@ static int construct_vmcs(struct vcpu *v)
     __vmwrite(IO_BITMAP_B, virt_to_maddr((char *)hvm_io_bitmap + PAGE_SIZE));
 
     /* Host data selectors. */
-#ifndef __UXEN__
-    __vmwrite(HOST_SS_SELECTOR, __HYPERVISOR_DS);
-    __vmwrite(HOST_DS_SELECTOR, __HYPERVISOR_DS);
-    __vmwrite(HOST_ES_SELECTOR, __HYPERVISOR_DS);
-    __vmwrite(HOST_FS_SELECTOR, 0);
-    __vmwrite(HOST_GS_SELECTOR, 0);
-    __vmwrite(HOST_FS_BASE, 0);
-    __vmwrite(HOST_GS_BASE, 0);
-#else   /* __UXEN__ */
     {
 #if !defined(__x86_64__)
         unsigned char gdt_save[10];
@@ -1195,26 +1140,13 @@ static int construct_vmcs(struct vcpu *v)
         __vmwrite(HOST_GS_BASE, base);
 #endif  /* __x86_64__ */
     }
-#endif  /* __UXEN__ */
 
     /* Host control registers. */
-#if defined(__UXEN__)
     v->arch.hvm_vmx.host_cr0 = read_cr0() & ~X86_CR0_TS;
-#else   /* __UXEN__ */
-    v->arch.hvm_vmx.host_cr0 = read_cr0() | X86_CR0_TS;
-#endif  /* __UXEN__ */
     __vmwrite(HOST_CR0, v->arch.hvm_vmx.host_cr0);
-#ifndef __UXEN__
-    __vmwrite(HOST_CR4,
-              mmu_cr4_features | (xsave_enabled(v) ? X86_CR4_OSXSAVE : 0));
-#else   /* __UXEN__ */
     __vmwrite(HOST_CR4, mmu_cr4_features);
-#endif  /* __UXEN__ */
 
     /* Host CS:RIP. */
-#ifndef __UXEN__
-    __vmwrite(HOST_CS_SELECTOR, __HYPERVISOR_CS);
-#else   /* __UXEN__ */
 #ifndef UXEN_HOST_OSX
 /* #if 0 */
     {
@@ -1226,7 +1158,6 @@ static int construct_vmcs(struct vcpu *v)
 #else
     /* __vmwrite(HOST_CS_SELECTOR, 0); */
 #endif
-#endif  /* __UXEN__ */
     __vmwrite(HOST_RIP, (unsigned long)vmx_asm_vmexit_handler);
 
     /* Host SYSENTER CS:RIP. */
@@ -1504,14 +1435,6 @@ void vmx_destroy_vmcs(struct vcpu *v)
     free_xenheap_page(v->arch.hvm_vmx.msr_bitmap);
 }
 
-#ifndef __UXEN__
-static void wbinvd_ipi(void *info)
-{
-DEBUG();
-    wbinvd();
-}
-#endif  /* __UXEN__ */
-
 void vmx_do_resume(struct vcpu *v)
 {
     bool_t debug_state;
@@ -1523,25 +1446,6 @@ void vmx_do_resume(struct vcpu *v)
     }
     else
     {
-#ifndef __UXEN__
-        /*
-         * For pass-through domain, guest PCI-E device driver may leverage the
-         * "Non-Snoop" I/O, and explicitly WBINVD or CLFLUSH to a RAM space.
-         * Since migration may occur before WBINVD or CLFLUSH, we need to
-         * maintain data consistency either by:
-         *  1: flushing cache (wbinvd) when the guest is scheduled out if
-         *     there is no wbinvd exit, or
-         *  2: execute wbinvd on all dirty pCPUs when guest wbinvd exits.
-         * If VT-d engine can force snooping, we don't need to do these.
-         */
-        if ( has_arch_pdevs(v->domain) && !iommu_snoop
-                && !cpu_has_wbinvd_exiting )
-        {
-            int cpu = v->arch.hvm_vmx.active_cpu;
-            if ( cpu != -1 )
-                on_selected_cpus(cpumask_of(cpu), wbinvd_ipi, NULL, 1);
-        }
-#endif  /* __UXEN__ */
 
         vmx_clear_vmcs(v);
         vmx_load_vmcs(v);
@@ -1569,11 +1473,6 @@ void vmx_do_resume(struct vcpu *v)
         vmx_update_debug_state(v);
     }
 
-#ifndef __UXEN__
-    hvm_do_resume(v);
-    reset_stack_and_jump(vmx_asm_do_vmentry);
-    BUG();
-#endif  /* __UXEN__ */
 }
 
 static unsigned long vmr(unsigned long field)

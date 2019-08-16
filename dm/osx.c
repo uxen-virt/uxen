@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -23,13 +23,9 @@
 
 #include "queue.h"
 
-#ifdef QEMU_UXEN
 #include <uxenctllib.h>
-#endif
 
-#ifdef QEMU_UXEN
 extern UXEN_HANDLE_T uxen_handle;
-#endif
 
 int initcall_logging = 0;
 
@@ -303,7 +299,6 @@ ioh_event_close(ioh_event *ev)
     critical_section_free(&ev->lock);
 }
 
-#ifdef QEMU_UXEN
 struct uxen_user_notification_event {
     uint64_t fill;
 };
@@ -417,7 +412,6 @@ uxen_notification_add_wait_object(uxen_notification_event *event,
 
     return 0;
 }
-#endif /* QEMU_UXEN */
 
 int set_nofides(void)
 {

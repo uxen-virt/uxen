@@ -38,28 +38,6 @@ const unsigned long cpu_bit_bitmap[BITS_PER_LONG+1][BITS_TO_LONGS(NR_CPUS)] = {
 
 static DEFINE_SPINLOCK(cpu_add_remove_lock);
 
-#ifndef __UXEN__
-bool_t get_cpu_maps(void)
-{
-    return spin_trylock_recursive(&cpu_add_remove_lock);
-}
-
-void put_cpu_maps(void)
-{
-    spin_unlock_recursive(&cpu_add_remove_lock);
-}
-
-bool_t cpu_hotplug_begin(void)
-{
-    return get_cpu_maps();
-}
-
-void cpu_hotplug_done(void)
-{
-    put_cpu_maps();
-}
-#endif  /* __UXEN__ */
-
 static NOTIFIER_HEAD(cpu_chain);
 
 void __init register_cpu_notifier(struct notifier_block *nb)
@@ -70,75 +48,14 @@ void __init register_cpu_notifier(struct notifier_block *nb)
     spin_unlock(&cpu_add_remove_lock);
 }
 
-#ifndef __UXEN__
-static int take_cpu_down(void *unused)
-{
-    void *hcpu = (void *)(long)smp_processor_id();
-    int notifier_rc = notifier_call_chain(&cpu_chain, CPU_DYING, hcpu, NULL);
-    BUG_ON(notifier_rc != NOTIFY_DONE);
-    __cpu_disable();
-    return 0;
-}
-
-int cpu_down(unsigned int cpu)
-{
-    int err, notifier_rc;
-    void *hcpu = (void *)(long)cpu;
-    struct notifier_block *nb = NULL;
-
-    if ( !cpu_hotplug_begin() )
-        return -EBUSY;
-
-    if ( (cpu >= nr_cpu_ids) || (cpu == 0) || !cpu_online(cpu) )
-    {
-        cpu_hotplug_done();
-        return -EINVAL;
-    }
-
-    notifier_rc = notifier_call_chain(&cpu_chain, CPU_DOWN_PREPARE, hcpu, &nb);
-    if ( notifier_rc != NOTIFY_DONE )
-    {
-        err = notifier_to_errno(notifier_rc);
-        goto fail;
-    }
-
-    if ( (err = stop_machine_run(take_cpu_down, NULL, cpu)) < 0 )
-        goto fail;
-
-    __cpu_die(cpu);
-    BUG_ON(cpu_online(cpu));
-
-    notifier_rc = notifier_call_chain(&cpu_chain, CPU_DEAD, hcpu, NULL);
-    BUG_ON(notifier_rc != NOTIFY_DONE);
-
-    send_guest_global_virq(dom0, VIRQ_PCPU_STATE);
-    cpu_hotplug_done();
-    return 0;
-
- fail:
-    notifier_rc = notifier_call_chain(&cpu_chain, CPU_DOWN_FAILED, hcpu, &nb);
-    BUG_ON(notifier_rc != NOTIFY_DONE);
-    cpu_hotplug_done();
-    return err;
-}
-#endif  /* __UXEN__ */
-
 int cpu_up(unsigned int cpu)
 {
     int notifier_rc, err = 0;
     void *hcpu = (void *)(long)cpu;
     struct notifier_block *nb = NULL;
 
-#ifndef __UXEN__
-    if ( !cpu_hotplug_begin() )
-        return -EBUSY;
-#endif  /* __UXEN__ */
-
     if ( (cpu >= nr_cpu_ids) || cpu_online(cpu) || !cpu_present(cpu) )
     {
-#ifndef __UXEN__
-        cpu_hotplug_done();
-#endif  /* __UXEN__ */
         return -EINVAL;
     }
 
@@ -156,21 +73,11 @@ int cpu_up(unsigned int cpu)
     notifier_rc = notifier_call_chain(&cpu_chain, CPU_ONLINE, hcpu, NULL);
     BUG_ON(notifier_rc != NOTIFY_DONE);
 
-#ifndef __UXEN__
-    send_guest_global_virq(dom0, VIRQ_PCPU_STATE);
-#endif  /* __UXEN__ */
-
-#ifndef __UXEN__
-    cpu_hotplug_done();
-#endif  /* __UXEN__ */
     return 0;
 
  fail:
     notifier_rc = notifier_call_chain(&cpu_chain, CPU_UP_CANCELED, hcpu, &nb);
     BUG_ON(notifier_rc != NOTIFY_DONE);
-#ifndef __UXEN__
-    cpu_hotplug_done();
-#endif  /* __UXEN__ */
     return err;
 }
 
@@ -182,53 +89,3 @@ void notify_cpu_starting(unsigned int cpu)
     BUG_ON(notifier_rc != NOTIFY_DONE);
 }
 
-#ifndef __UXEN__
-static cpumask_t frozen_cpus;
-
-int disable_nonboot_cpus(void)
-{
-    int cpu, error = 0;
-
-    BUG_ON(smp_processor_id() != 0);
-
-    cpumask_clear(&frozen_cpus);
-
-    printk("Disabling non-boot CPUs ...\n");
-
-    for_each_online_cpu ( cpu )
-    {
-        if ( cpu == 0 )
-            continue;
-
-        if ( (error = cpu_down(cpu)) )
-        {
-            BUG_ON(error == -EBUSY);
-            printk("Error taking CPU%d down: %d\n", cpu, error);
-            break;
-        }
-
-        cpumask_set_cpu(cpu, &frozen_cpus);
-    }
-
-    BUG_ON(!error && (num_online_cpus() != 1));
-    return error;
-}
-
-void enable_nonboot_cpus(void)
-{
-    int cpu, error;
-
-    printk("Enabling non-boot CPUs  ...\n");
-
-    for_each_cpu ( cpu, &frozen_cpus )
-    {
-        if ( (error = cpu_up(cpu)) )
-        {
-            BUG_ON(error == -EBUSY);
-            printk("Error taking CPU%d up: %d\n", cpu, error);
-        }
-    }
-
-    cpumask_clear(&frozen_cpus);
-}
-#endif  /* __UXEN__ */

@@ -342,11 +342,7 @@ void pmtimer_init(struct vcpu *v)
     register_portio_handler(v->domain, PM1a_STS_ADDR_V0, 4, handle_evt_io);
 
     /* Set up callback to fire SCIs when the MSB of TMR_VAL changes */
-#ifndef __UXEN__
-    init_timer(&s->timer, pmt_timer_callback, s, v->processor);
-#else   /* __UXEN__ */
     init_vcpu_timer(&s->timer, pmt_timer_callback, s, v);
-#endif  /* __UXEN__ */
     pmt_timer_callback(s);
 }
 

@@ -71,11 +71,7 @@
 #define HVM_PARAM_IO_PFN_FIRST 5
 #define HVM_PARAM_IO_PFN_LAST  6
 
-#if !defined(__UXEN__) && !defined(__UXEN_TOOLS__)
-#define NR_IO_PAGES_PER_SERVER 2
-#else  /* __UXEN__ */
 #define NR_IO_PAGES_PER_SERVER 1
-#endif  /* __UXEN__ */
 
 #ifdef __ia64__
 

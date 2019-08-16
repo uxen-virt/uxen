@@ -98,22 +98,6 @@ static inline void *map_domain_gfn(struct p2m_domain *p2m,
 
     /* Translate the gfn, unsharing if shared */
     *mfn = get_gfn_type_access(p2m, gfn_x(gfn), p2mt, &p2ma, p2m_unshare, NULL);
-#ifndef __UXEN__
-    if ( p2m_is_paging(*p2mt) )
-    {
-        ASSERT(!p2m_is_nestedp2m(p2m));
-        p2m_mem_paging_populate(p2m->domain, gfn_x(gfn));
-        __put_gfn(p2m, gfn_x(gfn));
-        *rc = _PAGE_PAGED;
-        return NULL;
-    }
-    if ( p2m_is_shared(*p2mt) )
-    {
-        __put_gfn(p2m, gfn_x(gfn));
-        *rc = _PAGE_SHARED;
-        return NULL;
-    }
-#endif  /* __UXEN__ */
     if ( !p2m_is_ram(*p2mt) ) 
     {
         __put_gfn(p2m, gfn_x(gfn));

@@ -132,19 +132,6 @@ static int hvmemul_do_io(
 
     /* Check for paged out page */
     get_gfn_unshare(curr->domain, ram_gfn, &p2mt);
-#ifndef __UXEN__
-    if ( p2m_is_paging(p2mt) )
-    {
-        p2m_mem_paging_populate(curr->domain, ram_gfn);
-        put_gfn(curr->domain, ram_gfn); 
-        return X86EMUL_RETRY;
-    }
-    if ( p2m_is_shared(p2mt) )
-    {
-        put_gfn(curr->domain, ram_gfn); 
-        return X86EMUL_RETRY;
-    }
-#endif  /* __UXEN__ */
 
     /*
      * Weird-sized accesses have undefined behaviour: we discard writes
@@ -255,10 +242,6 @@ static int hvmemul_do_io(
         rc = hvm_mmio_intercept(p);
         if (rc == X86EMUL_UNHANDLEABLE)
             rc = hvm_internal_pci_intercept(p, PCI_TYPE_MMIO);
-#ifndef __UXEN__
-        if ( rc == X86EMUL_UNHANDLEABLE )
-            rc = hvm_buffered_io_intercept(p);
-#endif  /* __UXEN__ */
     }
     else
     {
@@ -788,18 +771,12 @@ static int hvmemul_rep_movs(
      * we call later. */
     get_gfn_unlocked(current->domain, sgpa >> PAGE_SHIFT, &p2mt);
     if (!p2m_is_ram(p2mt)
-#ifndef __UXEN__
-        && !p2m_is_grant(p2mt)
-#endif  /* __UXEN__ */
         )
         return hvmemul_do_mmio(
             sgpa, reps, bytes_per_rep, dgpa, IOREQ_READ, df, NULL);
 
     get_gfn_unlocked(current->domain, dgpa >> PAGE_SHIFT, &p2mt);
     if (!p2m_is_ram(p2mt)
-#ifndef __UXEN__
-        && !p2m_is_grant(p2mt)
-#endif  /* __UXEN__ */
         )
         return hvmemul_do_mmio(
             dgpa, reps, bytes_per_rep, sgpa, IOREQ_WRITE, df, NULL);

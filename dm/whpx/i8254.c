@@ -24,7 +24,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2018, Bromium, Inc.
+ * Copyright 2018-2019, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -356,10 +356,8 @@ static uint64_t pit_ioport_read(void *opaque, uint64_t addr, unsigned size)
     PITChannelState *s;
 
     addr &= 3;
-#ifdef QEMU_UXEN
     if (addr == 3)
         return 0;
-#endif
     s = &pit->channels[addr];
     if (s->status_latched) {
         s->status_latched = 0;
@@ -463,48 +461,11 @@ static const VMStateDescription vmstate_pit_channel = {
     }
 };
 
-#ifndef QEMU_UXEN
-static int pit_load_old(QEMUFile *f, void *opaque, int version_id)
-{
-    PITState *pit = opaque;
-    PITChannelState *s;
-    int i;
-
-    if (version_id != 1)
-        return -EINVAL;
-
-    for(i = 0; i < 3; i++) {
-        s = &pit->channels[i];
-        s->count=qemu_get_be32(f);
-        qemu_get_be16s(f, &s->latched_count);
-        qemu_get_8s(f, &s->count_latched);
-        qemu_get_8s(f, &s->status_latched);
-        qemu_get_8s(f, &s->status);
-        qemu_get_8s(f, &s->read_state);
-        qemu_get_8s(f, &s->write_state);
-        qemu_get_8s(f, &s->write_latch);
-        qemu_get_8s(f, &s->rw_mode);
-        qemu_get_8s(f, &s->mode);
-        qemu_get_8s(f, &s->bcd);
-        qemu_get_8s(f, &s->gate);
-        s->count_load_time=qemu_get_be64(f);
-        if (s->irq_timer) {
-            s->next_transition_time=qemu_get_be64(f);
-            qemu_get_timer(f, s->irq_timer);
-        }
-    }
-    return 0;
-}
-#endif
-
 static const VMStateDescription vmstate_pit = {
     .name = "i8254",
     .version_id = 2,
     .minimum_version_id = 2,
     .minimum_version_id_old = 1,
-#ifndef QEMU_UXEN
-    .load_state_old = pit_load_old,
-#endif
     .fields      = (VMStateField []) {
         VMSTATE_STRUCT_ARRAY(channels, PITState, 3, 2, vmstate_pit_channel, PITChannelState),
         VMSTATE_TIMER(channels[0].irq_timer, PITState),
@@ -598,9 +559,6 @@ static int pit_initfn(SysBusDevice *dev)
     register_ioport_read(0x61, 1, 1, pcspk_ioport_read, dev);
     register_ioport_write(0x61, 1, 1, pcspk_ioport_write, dev);
 
-#ifndef QEMU_UXEN
-    qdev_set_legacy_instance_id(&dev->qdev, pit->iobase, 2);
-#endif
     return 0;
 }
 

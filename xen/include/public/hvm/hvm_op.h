@@ -237,18 +237,6 @@ struct xen_hvm_register_ioreq_server {
 typedef struct xen_hvm_register_ioreq_server xen_hvm_register_ioreq_server_t;
 DEFINE_XEN_GUEST_HANDLE(xen_hvm_register_ioreq_server_t);
 
-#ifndef __UXEN__
-#define HVMOP_get_ioreq_server_buf_channel 21
-struct xen_hvm_get_ioreq_server_buf_channel {
-    domid_t domid;	    /* IN - domain to be serviced */
-    servid_t id;	    /* IN - handle from HVMOP_register_ioreq_server */
-    unsigned int channel;   /* OUT - buf ioreq channel */
-};
-typedef struct xen_hvm_get_ioreq_server_buf_channel
-xen_hvm_get_ioreq_server_buf_channel_t;
-DEFINE_XEN_GUEST_HANDLE(xen_hvm_get_ioreq_server_buf_channel_t);
-#endif  /* __UXEN__ */
-
 #define HVMOP_map_io_range_to_ioreq_server 22
 struct xen_hvm_map_io_range_to_ioreq_server {
     domid_t domid;          /* IN - domain to be serviced */

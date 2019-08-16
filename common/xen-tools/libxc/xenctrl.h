@@ -63,19 +63,12 @@
 #include <xen/memory.h>
 #include <xen/grant_table.h>
 #include <xen/hvm/params.h>
-#ifndef __UXEN_TOOLS__
-#include <xen/xsm/flask_op.h>
-#include <xen/tmem.h>
-#endif  /* __UXEN_TOOLS__ */
 
 #include "xentoollog.h"
 
 #if defined(__i386__) || defined(__x86_64__)
 #include <xen/foreign/x86_32.h>
 #include <xen/foreign/x86_64.h>
-#ifndef __UXEN_TOOLS__
-#include <xen/arch-x86/xen-mca.h>
-#endif  /* __UXEN_TOOLS__ */
 #endif
 
 #ifdef __ia64__
@@ -195,17 +188,6 @@ int xc_interface_close(xc_interface *xch);
 int xc_interface_set_handle(xc_interface *xch, uintptr_t h);
 
 uintptr_t xc_interface_handle(xc_interface *xch);
-
-#ifndef __UXEN_TOOLS__
-/**
- * Query the active OS interface (i.e. that which would be returned by
- * xc_interface_open) to find out if it is fake (i.e. backends onto
- * something other than an actual Xen hypervisor).
- *
- * @return 0 is "real", >0 if fake, -1 on error.
- */
-int xc_interface_is_fake(void);
-#endif  /* __UXEN_TOOLS__ */
 
 /*
  * HYPERCALL SAFE MEMORY BUFFER
@@ -347,17 +329,6 @@ void xc__hypercall_buffer_free_pages(xc_interface *xch, xc_hypercall_buffer_t *b
  */
 typedef uint8_t *xc_cpumap_t;
 
-#ifndef __UXEN_TOOLS__
-/* return maximum number of cpus the hypervisor supports */
-int xc_get_max_cpus(xc_interface *xch);
-
-/* return array size for cpumap */
-int xc_get_cpumap_size(xc_interface *xch);
-
-/* allocate a cpumap */
-xc_cpumap_t xc_cpumap_alloc(xc_interface *xch);
-#endif  /* __UXEN_TOOLS__ */
-
 #ifdef __UXEN_debugger__
 /*
  * DOMAIN DEBUGGING FUNCTIONS
@@ -413,26 +384,6 @@ typedef union
 #endif
     vcpu_guest_context_t c;
 } vcpu_guest_context_any_t;
-
-#ifndef __UXEN_TOOLS__
-typedef union
-{
-#if defined(__i386__) || defined(__x86_64__)
-    shared_info_x86_64_t x64;
-    shared_info_x86_32_t x32;
-#endif
-    shared_info_t s;
-} shared_info_any_t;
-
-typedef union
-{
-#if defined(__i386__) || defined(__x86_64__)
-    start_info_x86_64_t x64;
-    start_info_x86_32_t x32;
-#endif
-    start_info_t s;
-} start_info_any_t;
-#endif  /* __UXEN_TOOLS__ */
 
 
 int xc_domain_create(xc_interface *xch,
@@ -513,20 +464,6 @@ int xc_domain_destroy(xc_interface *xch,
                       uint32_t domid);
 
 
-#ifndef __UXEN_TOOLS__
-/**
- * This function resumes a suspended domain. The domain should have
- * been previously suspended.
- *
- * @parm xch a handle to an open hypervisor interface
- * @parm domid the domain id to resume
- * @parm fast use cooperative resume (guest must support this)
- * return 0 on success, -1 on failure
- */
-int xc_domain_resume(xc_interface *xch,
-		     uint32_t domid,
-		     int fast);
-#else  /* __UXEN_TOOLS__ */
 /**
  * This function resumes a suspended domain. The domain should have
  * been previously suspended.
@@ -536,7 +473,6 @@ int xc_domain_resume(xc_interface *xch,
  * return 0 on success, -1 on failure
  */
 int xc_domain_resume(xc_interface *xch, uint32_t domid);
-#endif  /* __UXEN_TOOLS__ */
 
 /**
  * This function will shutdown a domain. This is intended for use in
@@ -552,21 +488,6 @@ int xc_domain_resume(xc_interface *xch, uint32_t domid);
 int xc_domain_shutdown(xc_interface *xch,
                        uint32_t domid,
                        int reason);
-
-#ifndef __UXEN_TOOLS__
-int xc_watchdog(xc_interface *xch,
-		uint32_t id,
-		uint32_t timeout);
-
-int xc_vcpu_setaffinity(xc_interface *xch,
-                        uint32_t domid,
-                        int vcpu,
-                        xc_cpumap_t cpumap);
-int xc_vcpu_getaffinity(xc_interface *xch,
-                        uint32_t domid,
-                        int vcpu,
-                        xc_cpumap_t cpumap);
-#endif  /* __UXEN_TOOLS__ */
 
 /**
  * This function will return information about one or more domains. It is
@@ -589,21 +510,6 @@ int xc_domain_getinfo(xc_interface *xch,
                       xc_dominfo_t *info);
 
 
-#ifndef __UXEN_TOOLS__
-/**
- * This function will set the execution context for the specified vcpu.
- *
- * @parm xch a handle to an open hypervisor interface
- * @parm domid the domain to set the vcpu context for
- * @parm vcpu the vcpu number for the context
- * @parm ctxt pointer to the the cpu context with the values to set
- * @return the number of domains enumerated or -1 on error
- */
-int xc_vcpu_setcontext(xc_interface *xch,
-                       uint32_t domid,
-                       uint32_t vcpu,
-                       vcpu_guest_context_any_t *ctxt);
-#endif  /* __UXEN_TOOLS__ */
 /**
  * This function will return information about one or more domains, using a
  * single hypercall.  The domain information will be stored into the supplied
@@ -700,58 +606,6 @@ long long xc_domain_get_cpu_usage(xc_interface *xch,
 int xc_domain_sethandle(xc_interface *xch, uint32_t domid,
                         xen_domain_handle_t handle);
 
-#ifndef __UXEN_TOOLS__
-typedef xen_domctl_shadow_op_stats_t xc_shadow_op_stats_t;
-int xc_shadow_control(xc_interface *xch,
-                      uint32_t domid,
-                      unsigned int sop,
-                      xc_hypercall_buffer_t *dirty_bitmap,
-                      unsigned long pages,
-                      unsigned long *mb,
-                      uint32_t mode,
-                      xc_shadow_op_stats_t *stats);
-#endif  /* __UXEN_TOOLS__ */
-
-#ifndef __UXEN_TOOLS__
-int xc_sedf_domain_set(xc_interface *xch,
-                       uint32_t domid,
-                       uint64_t period, uint64_t slice,
-                       uint64_t latency, uint16_t extratime,
-                       uint16_t weight);
-
-int xc_sedf_domain_get(xc_interface *xch,
-                       uint32_t domid,
-                       uint64_t* period, uint64_t *slice,
-                       uint64_t *latency, uint16_t *extratime,
-                       uint16_t *weight);
-
-int xc_sched_credit_domain_set(xc_interface *xch,
-                               uint32_t domid,
-                               struct xen_domctl_sched_credit *sdom);
-
-int xc_sched_credit_domain_get(xc_interface *xch,
-                               uint32_t domid,
-                               struct xen_domctl_sched_credit *sdom);
-
-int xc_sched_credit2_domain_set(xc_interface *xch,
-                               uint32_t domid,
-                               struct xen_domctl_sched_credit2 *sdom);
-
-int xc_sched_credit2_domain_get(xc_interface *xch,
-                               uint32_t domid,
-                               struct xen_domctl_sched_credit2 *sdom);
-
-int
-xc_sched_arinc653_schedule_set(
-    xc_interface *xch,
-    struct xen_sysctl_arinc653_schedule *schedule);
-
-int
-xc_sched_arinc653_schedule_get(
-    xc_interface *xch,
-    struct xen_sysctl_arinc653_schedule *schedule);
-#endif  /* __UXEN_TOOLS__ */
-
 #ifdef __UXEN_sendtrigger__
 /**
  * This function sends a trigger to a domain.
@@ -782,297 +636,14 @@ int xc_domain_setdebugging(xc_interface *xch,
                            unsigned int enable);
 #endif  /* __UXEN_debugger__ */
 
-#ifndef __UXEN_TOOLS__
-/**
- * This function sets or clears the requirement that an access memory
- * event listener is required on the domain.
- *
- * @parm xch a handle to an open hypervisor interface
- * @parm domid the domain id to send trigger
- * @parm enable true to require a listener
- * return 0 on success, -1 on failure
- */
-int xc_domain_set_access_required(xc_interface *xch,
-				  uint32_t domid,
-				  unsigned int required);
-
-/*
- * CPUPOOL MANAGEMENT FUNCTIONS
- */
-
-typedef struct xc_cpupoolinfo {
-    uint32_t cpupool_id;
-    uint32_t sched_id;
-    uint32_t n_dom;
-    xc_cpumap_t cpumap;
-} xc_cpupoolinfo_t;
-
-/**
- * Create a new cpupool.
- *
- * @parm xc_handle a handle to an open hypervisor interface
- * @parm ppoolid pointer to the new cpupool id (in/out)
- * @parm sched_id id of scheduler to use for pool
- * return 0 on success, -1 on failure
- */
-int xc_cpupool_create(xc_interface *xch,
-                      uint32_t *ppoolid,
-                      uint32_t sched_id);
-
-/**
- * Destroy a cpupool. Pool must be unused and have no cpu assigned.
- *
- * @parm xc_handle a handle to an open hypervisor interface
- * @parm poolid id of the cpupool to destroy
- * return 0 on success, -1 on failure
- */
-int xc_cpupool_destroy(xc_interface *xch,
-                       uint32_t poolid);
-
-/**
- * Get cpupool info. Returns info for up to the specified number of cpupools
- * starting at the given id.
- * @parm xc_handle a handle to an open hypervisor interface
- * @parm poolid lowest id for which info is returned
- * return cpupool info ptr (to be freed via xc_cpupool_infofree)
- */
-xc_cpupoolinfo_t *xc_cpupool_getinfo(xc_interface *xch,
-                       uint32_t poolid);
-
-/**
- * Free cpupool info. Used to free info obtained via xc_cpupool_getinfo.
- * @parm xc_handle a handle to an open hypervisor interface
- * @parm info area to free
- */
-void xc_cpupool_infofree(xc_interface *xch,
-                         xc_cpupoolinfo_t *info);
-
-/**
- * Add cpu to a cpupool. cpu may be -1 indicating the first unassigned.
- *
- * @parm xc_handle a handle to an open hypervisor interface
- * @parm poolid id of the cpupool
- * @parm cpu cpu number to add
- * return 0 on success, -1 on failure
- */
-int xc_cpupool_addcpu(xc_interface *xch,
-                      uint32_t poolid,
-                      int cpu);
-
-/**
- * Remove cpu from cpupool. cpu may be -1 indicating the last cpu of the pool.
- *
- * @parm xc_handle a handle to an open hypervisor interface
- * @parm poolid id of the cpupool
- * @parm cpu cpu number to remove
- * return 0 on success, -1 on failure
- */
-int xc_cpupool_removecpu(xc_interface *xch,
-                         uint32_t poolid,
-                         int cpu);
-
-/**
- * Move domain to another cpupool.
- *
- * @parm xc_handle a handle to an open hypervisor interface
- * @parm poolid id of the destination cpupool
- * @parm domid id of the domain to move
- * return 0 on success, -1 on failure
- */
-int xc_cpupool_movedomain(xc_interface *xch,
-                          uint32_t poolid,
-                          uint32_t domid);
-
-/**
- * Return map of cpus not in any cpupool.
- *
- * @parm xc_handle a handle to an open hypervisor interface
- * return cpumap array on success, NULL else
- */
-xc_cpumap_t xc_cpupool_freeinfo(xc_interface *xch);
-
-
-/*
- * EVENT CHANNEL FUNCTIONS
- *
- * None of these do any logging.
- */
-
-/* A port identifier is guaranteed to fit in 31 bits. */
-typedef int evtchn_port_or_error_t;
-
-/**
- * This function allocates an unbound port.  Ports are named endpoints used for
- * interdomain communication.  This function is most useful in opening a
- * well-known port within a domain to receive events on.
- * 
- * NOTE: If you are allocating a *local* unbound port, you probably want to
- * use xc_evtchn_bind_unbound_port(). This function is intended for allocating
- * ports *only* during domain creation.
- *
- * @parm xch a handle to an open hypervisor interface
- * @parm dom the ID of the local domain (the 'allocatee')
- * @parm remote_dom the ID of the domain who will later bind
- * @return allocated port (in @dom) on success, -1 on failure
- */
-evtchn_port_or_error_t
-xc_evtchn_alloc_unbound(xc_interface *xch,
-                        uint32_t dom,
-                        uint32_t remote_dom);
-
-int xc_evtchn_reset(xc_interface *xch,
-                    uint32_t dom);
-
-typedef struct evtchn_status xc_evtchn_status_t;
-int xc_evtchn_status(xc_interface *xch, xc_evtchn_status_t *status);
-
-/*
- * Return a handle to the event channel driver, or -1 on failure, in which case
- * errno will be set appropriately.
- *
- * Before Xen pre-4.1 this function would sometimes report errors with perror.
- */
-xc_evtchn *xc_evtchn_open(xentoollog_logger *logger,
-                             unsigned open_flags);
-
-/*
- * Close a handle previously allocated with xc_evtchn_open().
- */
-int xc_evtchn_close(xc_evtchn *xce);
-
-/*
- * Return an fd that can be select()ed on.
- */
-int xc_evtchn_fd(xc_evtchn *xce);
-
-/*
- * Notify the given event channel. Returns -1 on failure, in which case
- * errno will be set appropriately.
- */
-int xc_evtchn_notify(xc_evtchn *xce, evtchn_port_t port);
-
-/*
- * Returns a new event port awaiting interdomain connection from the given
- * domain ID, or -1 on failure, in which case errno will be set appropriately.
- */
-evtchn_port_or_error_t
-xc_evtchn_bind_unbound_port(xc_evtchn *xce, int domid);
-
-/*
- * Returns a new event port bound to the remote port for the given domain ID,
- * or -1 on failure, in which case errno will be set appropriately.
- */
-evtchn_port_or_error_t
-xc_evtchn_bind_interdomain(xc_evtchn *xce, int domid,
-                           evtchn_port_t remote_port);
-
-/*
- * Bind an event channel to the given VIRQ. Returns the event channel bound to
- * the VIRQ, or -1 on failure, in which case errno will be set appropriately.
- */
-evtchn_port_or_error_t
-xc_evtchn_bind_virq(xc_evtchn *xce, unsigned int virq);
-
-/*
- * Unbind the given event channel. Returns -1 on failure, in which case errno
- * will be set appropriately.
- */
-int xc_evtchn_unbind(xc_evtchn *xce, evtchn_port_t port);
-
-/*
- * Return the next event channel to become pending, or -1 on failure, in which
- * case errno will be set appropriately.  
- */
-evtchn_port_or_error_t
-xc_evtchn_pending(xc_evtchn *xce);
-
-/*
- * Unmask the given event channel. Returns -1 on failure, in which case errno
- * will be set appropriately.
- */
-int xc_evtchn_unmask(xc_evtchn *xce, evtchn_port_t port);
-
-int xc_physdev_pci_access_modify(xc_interface *xch,
-                                 uint32_t domid,
-                                 int bus,
-                                 int dev,
-                                 int func,
-                                 int enable);
-
-int xc_readconsolering(xc_interface *xch,
-                       char *buffer,
-                       unsigned int *pnr_chars,
-                       int clear, int incremental, uint32_t *pindex);
-
-int xc_send_debug_keys(xc_interface *xch, char *keys);
-#endif  /* __UXEN_TOOLS__ */
-
 typedef xen_sysctl_physinfo_t xc_physinfo_t;
-#ifndef __UXEN_TOOLS__
-typedef xen_sysctl_topologyinfo_t xc_topologyinfo_t;
-typedef xen_sysctl_numainfo_t xc_numainfo_t;
-
-typedef uint32_t xc_cpu_to_node_t;
-typedef uint32_t xc_cpu_to_socket_t;
-typedef uint32_t xc_cpu_to_core_t;
-typedef uint64_t xc_node_to_memsize_t;
-typedef uint64_t xc_node_to_memfree_t;
-typedef uint32_t xc_node_to_node_dist_t;
-#endif  /* __UXEN_TOOLS__ */
 
 int xc_physinfo(xc_interface *xch, xc_physinfo_t *info);
-#ifndef __UXEN_TOOLS__
-int xc_topologyinfo(xc_interface *xch, xc_topologyinfo_t *info);
-int xc_numainfo(xc_interface *xch, xc_numainfo_t *info);
-
-int xc_sched_id(xc_interface *xch,
-                int *sched_id);
-
-int xc_machphys_mfn_list(xc_interface *xch,
-                         unsigned long max_extents,
-                         xen_pfn_t *extent_start);
-
-typedef xen_sysctl_cpuinfo_t xc_cpuinfo_t;
-int xc_getcpuinfo(xc_interface *xch, int max_cpus,
-                  xc_cpuinfo_t *info, int *nr_cpus); 
-#endif  /* __UXEN_TOOLS__ */
 
 int xc_domain_setmaxmem(xc_interface *xch,
                         uint32_t domid,
                         unsigned int max_memkb);
 
-#ifndef __UXEN_TOOLS__
-int xc_domain_set_memmap_limit(xc_interface *xch,
-                               uint32_t domid,
-                               unsigned long map_limitkb);
-
-#if defined(__i386__) || defined(__x86_64__)
-/*
- * PC BIOS standard E820 types and structure.
- */
-#define E820_RAM          1
-#define E820_RESERVED     2
-#define E820_ACPI         3
-#define E820_NVS          4
-#define E820_UNUSABLE     5
-
-#define E820MAX           (128)
-
-struct e820entry {
-    uint64_t addr;
-    uint64_t size;
-    uint32_t type;
-} __attribute__((packed));
-int xc_domain_set_memory_map(xc_interface *xch,
-                               uint32_t domid,
-                               struct e820entry entries[],
-                               uint32_t nr_entries);
-
-int xc_get_machine_memory_map(xc_interface *xch,
-                              struct e820entry entries[],
-                              uint32_t max_entries);
-#endif
-#endif  /* __UXEN_TOOLS__ */
 int xc_domain_set_time_offset(xc_interface *xch,
                               uint32_t domid,
                               int32_t time_offset_seconds);
@@ -1091,39 +662,7 @@ int xc_domain_get_tsc_info(xc_interface *xch,
                            uint32_t *gtsc_khz,
                            uint32_t *incarnation);
 
-#ifndef __UXEN_TOOLS__
-int xc_domain_disable_migrate(xc_interface *xch, uint32_t domid);
-#endif  /* __UXEN_TOOLS__ */
-
 int xc_domain_maximum_gpfn(xc_interface *xch, domid_t domid);
-
-#ifndef __UXEN_TOOLS__
-int xc_domain_increase_reservation(xc_interface *xch,
-                                   uint32_t domid,
-                                   unsigned long nr_extents,
-                                   unsigned int extent_order,
-                                   unsigned int mem_flags,
-                                   xen_pfn_t *extent_start);
-
-int xc_domain_increase_reservation_exact(xc_interface *xch,
-                                         uint32_t domid,
-                                         unsigned long nr_extents,
-                                         unsigned int extent_order,
-                                         unsigned int mem_flags,
-                                         xen_pfn_t *extent_start);
-
-int xc_domain_decrease_reservation(xc_interface *xch,
-                                   uint32_t domid,
-                                   unsigned long nr_extents,
-                                   unsigned int extent_order,
-                                   xen_pfn_t *extent_start);
-
-int xc_domain_decrease_reservation_exact(xc_interface *xch,
-                                         uint32_t domid,
-                                         unsigned long nr_extents,
-                                         unsigned int extent_order,
-                                         xen_pfn_t *extent_start);
-#endif  /* __UXEN_TOOLS__ */
 
 int xc_domain_add_to_physmap(xc_interface *xch,
                              uint32_t domid,
@@ -1166,76 +705,12 @@ int xc_domain_clone_physmap(xc_interface *xch,
                             uint32_t domid,
                             xen_domain_handle_t parentuuid);
 
-#ifndef __UXEN_TOOLS__
-int xc_domain_memory_exchange_pages(xc_interface *xch,
-                                    int domid,
-                                    unsigned long nr_in_extents,
-                                    unsigned int in_order,
-                                    xen_pfn_t *in_extents,
-                                    unsigned long nr_out_extents,
-                                    unsigned int out_order,
-                                    xen_pfn_t *out_extents);
-#endif  /* __UXEN_TOOLS__ */
-
 int xc_domain_set_pod_target(xc_interface *xch,
                              uint32_t domid,
                              uint64_t target_pages,
                              uint64_t *tot_pages,
                              uint64_t *pod_cache_pages,
                              uint64_t *pod_entries);
-
-#ifndef __UXEN_TOOLS__
-int xc_domain_get_pod_target(xc_interface *xch,
-                             uint32_t domid,
-                             uint64_t *tot_pages,
-                             uint64_t *pod_cache_pages,
-                             uint64_t *pod_entries);
-
-int xc_domain_ioport_permission(xc_interface *xch,
-                                uint32_t domid,
-                                uint32_t first_port,
-                                uint32_t nr_ports,
-                                uint32_t allow_access);
-
-int xc_domain_irq_permission(xc_interface *xch,
-                             uint32_t domid,
-                             uint8_t pirq,
-                             uint8_t allow_access);
-
-int xc_domain_iomem_permission(xc_interface *xch,
-                               uint32_t domid,
-                               unsigned long first_mfn,
-                               unsigned long nr_mfns,
-                               uint8_t allow_access);
-
-int xc_domain_pin_memory_cacheattr(xc_interface *xch,
-                                   uint32_t domid,
-                                   uint64_t start,
-                                   uint64_t end,
-                                   uint32_t type);
-
-unsigned long xc_make_page_below_4G(xc_interface *xch, uint32_t domid,
-                                    unsigned long mfn);
-
-typedef xen_sysctl_perfc_desc_t xc_perfc_desc_t;
-typedef xen_sysctl_perfc_val_t xc_perfc_val_t;
-int xc_perfc_reset(xc_interface *xch);
-int xc_perfc_query_number(xc_interface *xch,
-                          int *nbr_desc,
-                          int *nbr_val);
-int xc_perfc_query(xc_interface *xch,
-                   xc_hypercall_buffer_t *desc,
-                   xc_hypercall_buffer_t *val);
-
-typedef xen_sysctl_lockprof_data_t xc_lockprof_data_t;
-int xc_lockprof_reset(xc_interface *xch);
-int xc_lockprof_query_number(xc_interface *xch,
-                             uint32_t *n_elems);
-int xc_lockprof_query(xc_interface *xch,
-                      uint32_t *n_elems,
-                      uint64_t *time,
-                      xc_hypercall_buffer_t *data);
-#endif  /* __UXEN_TOOLS__ */
 
 /**
  * Memory maps a range within one domain to a local address range.  Mappings
@@ -1301,302 +776,14 @@ unsigned long xc_translate_foreign_address(
     xc_interface *xch, uint32_t dom,
     int vcpu, unsigned long long virt);
 
-#ifndef __UXEN_TOOLS__
-/**
- * DEPRECATED.  Avoid using this, as it does not correctly account for PFNs
- * without a backing MFN.
- */
-int xc_get_pfn_list(xc_interface *xch, uint32_t domid, uint64_t *pfn_buf,
-                    unsigned long max_pfns);
-
-unsigned long xc_ia64_fpsr_default(void);
-
-int xc_copy_to_domain_page(xc_interface *xch, uint32_t domid,
-                           unsigned long dst_pfn, const char *src_page);
-#endif  /* __UXEN_TOOLS__ */
-
 int xc_clear_domain_page(xc_interface *xch, uint32_t domid,
                          unsigned long dst_pfn);
-
-#ifndef __UXEN_TOOLS__
-int xc_mmuext_op(xc_interface *xch, struct mmuext_op *op, unsigned int nr_ops,
-                 domid_t dom);
-
-/* System wide memory properties */
-long xc_maximum_ram_page(xc_interface *xch);
-
-/* Get current total pages allocated to a domain. */
-long xc_get_tot_pages(xc_interface *xch, uint32_t domid);
-
-/**
- * This function retrieves the the number of bytes available
- * in the heap in a specific range of address-widths and nodes.
- * 
- * @parm xch a handle to an open hypervisor interface
- * @parm domid the domain to query
- * @parm min_width the smallest address width to query (0 if don't care)
- * @parm max_width the largest address width to query (0 if don't care)
- * @parm node the node to query (-1 for all)
- * @parm *bytes caller variable to put total bytes counted
- * @return 0 on success, <0 on failure.
- */
-int xc_availheap(xc_interface *xch, int min_width, int max_width, int node,
-                 uint64_t *bytes);
-
-/*
- * Trace Buffer Operations
- */
-
-/**
- * xc_tbuf_enable - enable tracing buffers
- *
- * @parm xch a handle to an open hypervisor interface
- * @parm cnt size of tracing buffers to create (in pages)
- * @parm mfn location to store mfn of the trace buffers to
- * @parm size location to store the size (in bytes) of a trace buffer to
- *
- * Gets the machine address of the trace pointer area and the size of the
- * per CPU buffers.
- */
-int xc_tbuf_enable(xc_interface *xch, unsigned long pages,
-                   unsigned long *mfn, unsigned long *size);
-
-/*
- * Disable tracing buffers.
- */
-int xc_tbuf_disable(xc_interface *xch);
-
-/**
- * This function sets the size of the trace buffers. Setting the size
- * is currently a one-shot operation that may be performed either at boot
- * time or via this interface, not both. The buffer size must be set before
- * enabling tracing.
- *
- * @parm xch a handle to an open hypervisor interface
- * @parm size the size in pages per cpu for the trace buffers
- * @return 0 on success, -1 on failure.
- */
-int xc_tbuf_set_size(xc_interface *xch, unsigned long size);
-
-/**
- * This function retrieves the current size of the trace buffers.
- * Note that the size returned is in terms of bytes, not pages.
-
- * @parm xch a handle to an open hypervisor interface
- * @parm size will contain the size in bytes for the trace buffers
- * @return 0 on success, -1 on failure.
- */
-int xc_tbuf_get_size(xc_interface *xch, unsigned long *size);
-
-int xc_tbuf_set_cpu_mask(xc_interface *xch, uint32_t mask);
-
-int xc_tbuf_set_evt_mask(xc_interface *xch, uint32_t mask);
-#endif  /* __UXEN_TOOLS__ */
 
 int xc_domctl(xc_interface *xch, struct xen_domctl *domctl);
 
 int xc_sysctl(xc_interface *xch, struct xen_sysctl *sysctl);
 
 int xc_version(xc_interface *xch, int cmd, void *arg);
-
-#ifndef __UXEN_TOOLS__
-int xc_flask_op(xc_interface *xch, flask_op_t *op);
-
-/*
- * Subscribe to state changes in a domain via evtchn.
- * Returns -1 on failure, in which case errno will be set appropriately.
- */
-int xc_domain_subscribe_for_suspend(
-    xc_interface *xch, domid_t domid, evtchn_port_t port);
-
-/**************************
- * GRANT TABLE OPERATIONS *
- **************************/
-
-/*
- * These functions sometimes log messages as above, but not always.
- */
-
-/*
- * Return an fd onto the grant table driver.  Logs errors.
- */
-xc_gnttab *xc_gnttab_open(xentoollog_logger *logger,
-			  unsigned open_flags);
-
-/*
- * Close a handle previously allocated with xc_gnttab_open().
- * Never logs errors.
- */
-int xc_gnttab_close(xc_gnttab *xcg);
-
-/*
- * Memory maps a grant reference from one domain to a local address range.
- * Mappings should be unmapped with xc_gnttab_munmap.  Logs errors.
- *
- * @parm xcg a handle on an open grant table interface
- * @parm domid the domain to map memory from
- * @parm ref the grant reference ID to map
- * @parm prot same flag as in mmap()
- */
-void *xc_gnttab_map_grant_ref(xc_gnttab *xcg,
-                              uint32_t domid,
-                              uint32_t ref,
-                              int prot);
-
-/**
- * Memory maps one or more grant references from one or more domains to a
- * contiguous local address range. Mappings should be unmapped with
- * xc_gnttab_munmap.  Logs errors.
- *
- * @parm xcg a handle on an open grant table interface
- * @parm count the number of grant references to be mapped
- * @parm domids an array of @count domain IDs by which the corresponding @refs
- *              were granted
- * @parm refs an array of @count grant references to be mapped
- * @parm prot same flag as in mmap()
- */
-void *xc_gnttab_map_grant_refs(xc_gnttab *xcg,
-                               uint32_t count,
-                               uint32_t *domids,
-                               uint32_t *refs,
-                               int prot);
-
-/**
- * Memory maps one or more grant references from one domain to a
- * contiguous local address range. Mappings should be unmapped with
- * xc_gnttab_munmap.  Logs errors.
- *
- * @parm xcg a handle on an open grant table interface
- * @parm count the number of grant references to be mapped
- * @parm domid the domain to map memory from
- * @parm refs an array of @count grant references to be mapped
- * @parm prot same flag as in mmap()
- */
-void *xc_gnttab_map_domain_grant_refs(xc_gnttab *xcg,
-                                      uint32_t count,
-                                      uint32_t domid,
-                                      uint32_t *refs,
-                                      int prot);
-
-/**
- * Memory maps a grant reference from one domain to a local address range.
- * Mappings should be unmapped with xc_gnttab_munmap. If notify_offset or
- * notify_port are not -1, this version will attempt to set up an unmap
- * notification at the given offset and event channel. When the page is
- * unmapped, the byte at the given offset will be zeroed and a wakeup will be
- * sent to the given event channel.  Logs errors.
- *
- * @parm xcg a handle on an open grant table interface
- * @parm domid the domain to map memory from
- * @parm ref the grant reference ID to map
- * @parm prot same flag as in mmap()
- * @parm notify_offset The byte offset in the page to use for unmap
- *                     notification; -1 for none.
- * @parm notify_port The event channel port to use for unmap notify, or -1
- */
-void *xc_gnttab_map_grant_ref_notify(xc_gnttab *xcg,
-                                     uint32_t domid,
-                                     uint32_t ref,
-                                     int prot,
-                                     uint32_t notify_offset,
-                                     evtchn_port_t notify_port);
-
-/*
- * Unmaps the @count pages starting at @start_address, which were mapped by a
- * call to xc_gnttab_map_grant_ref or xc_gnttab_map_grant_refs. Never logs.
- */
-int xc_gnttab_munmap(xc_gnttab *xcg,
-                     void *start_address,
-                     uint32_t count);
-
-/*
- * Sets the maximum number of grants that may be mapped by the given instance
- * to @count.  Never logs.
- *
- * N.B. This function must be called after opening the handle, and before any
- *      other functions are invoked on it.
- *
- * N.B. When variable-length grants are mapped, fragmentation may be observed,
- *      and it may not be possible to satisfy requests up to the maximum number
- *      of grants.
- */
-int xc_gnttab_set_max_grants(xc_gnttab *xcg,
-			     uint32_t count);
-
-int xc_gnttab_op(xc_interface *xch, int cmd,
-                 void * op, int op_size, int count);
-/* Logs iff hypercall bounce fails, otherwise doesn't. */
-
-int xc_gnttab_get_version(xc_interface *xch, int domid); /* Never logs */
-grant_entry_v1_t *xc_gnttab_map_table_v1(xc_interface *xch, int domid, int *gnt_num);
-grant_entry_v2_t *xc_gnttab_map_table_v2(xc_interface *xch, int domid, int *gnt_num);
-/* Sometimes these don't set errno [fixme], and sometimes they don't log. */
-
-/*
- * Return an fd onto the grant sharing driver.  Logs errors.
- */
-xc_gntshr *xc_gntshr_open(xentoollog_logger *logger,
-			  unsigned open_flags);
-
-/*
- * Close a handle previously allocated with xc_gntshr_open().
- * Never logs errors.
- */
-int xc_gntshr_close(xc_gntshr *xcg);
-
-/*
- * Creates and shares pages with another domain.
- * 
- * @parm xcg a handle to an open grant sharing instance
- * @parm domid the domain to share memory with
- * @parm count the number of pages to share
- * @parm refs the grant references of the pages (output)
- * @parm writable true if the other domain can write to the pages
- * @return local mapping of the pages
- */
-void *xc_gntshr_share_pages(xc_gntshr *xcg, uint32_t domid,
-                            int count, uint32_t *refs, int writable);
-
-/*
- * Creates and shares a page with another domain, with unmap notification.
- * 
- * @parm xcg a handle to an open grant sharing instance
- * @parm domid the domain to share memory with
- * @parm refs the grant reference of the pages (output)
- * @parm writable true if the other domain can write to the page
- * @parm notify_offset The byte offset in the page to use for unmap
- *                     notification; -1 for none.
- * @parm notify_port The event channel port to use for unmap notify, or -1
- * @return local mapping of the page
- */
-void *xc_gntshr_share_page_notify(xc_gntshr *xcg, uint32_t domid,
-                                  uint32_t *ref, int writable,
-                                  uint32_t notify_offset,
-                                  evtchn_port_t notify_port);
-/*
- * Unmaps the @count pages starting at @start_address, which were mapped by a
- * call to xc_gntshr_share_*. Never logs.
- */
-int xc_gntshr_munmap(xc_gntshr *xcg, void *start_address, uint32_t count);
-
-int xc_physdev_map_pirq(xc_interface *xch,
-                        int domid,
-                        int index,
-                        int *pirq);
-
-int xc_physdev_map_pirq_msi(xc_interface *xch,
-                            int domid,
-                            int index,
-                            int *pirq,
-                            int devfn,
-                            int bus,
-                            int entry_nr,
-                            uint64_t table_base);
-
-int xc_physdev_unmap_pirq(xc_interface *xch,
-                          int domid,
-                          int pirq);
-#endif  /* __UXEN_TOOLS__ */
 
 int xc_hvm_set_pci_intx_level(
     xc_interface *xch, domid_t dom,
@@ -1643,22 +830,6 @@ int xc_hvm_modified_memory(
  */
 int xc_hvm_set_mem_type(
     xc_interface *xch, domid_t dom, hvmmem_type_t memtype, uint64_t first_pfn, uint64_t nr);
-
-#ifndef __UXEN_TOOLS__
-/*
- * Set a range of memory to a specific access.
- * Allowed types are HVMMEM_access_default, HVMMEM_access_n, any combination of 
- * HVM_access_ + (rwx), and HVM_access_rx2rw
- */
-int xc_hvm_set_mem_access(
-    xc_interface *xch, domid_t dom, hvmmem_access_t memaccess, uint64_t first_pfn, uint64_t nr);
-
-/*
- * Gets the mem access for the given page (returned in memacess on success)
- */
-int xc_hvm_get_mem_access(
-    xc_interface *xch, domid_t dom, uint64_t pfn, hvmmem_access_t* memaccess);
-#endif  /* __UXEN_TOOLS__ */
 
 /*
  * Injects a hardware/software CPU trap, to take effect the next time the HVM 
@@ -1721,9 +892,6 @@ int xc_hvm_register_ioreq_server(xc_interface *xch, domid_t dom,
                                  unsigned int *id);
 enum xc_hvm_iopage_type {
     XC_HVM_IOPAGE,
-#ifndef __UXEN_TOOLS__
-    XC_HVM_BUFFERED_IOPAGE,
-#endif  /* __UXEN_TOOLS__ */
 };
 xen_pfn_t xc_hvm_iopage(xc_interface *xch, domid_t dom, int serverid,
                         enum xc_hvm_iopage_type type);
@@ -1743,108 +911,6 @@ int xc_hvm_register_pcidev(xc_interface *xch, domid_t dom, unsigned int id,
 
 int xc_domain_set_introspection_features(xc_interface *xch,
                                          uint32_t domid, uint64_t mask);
-
-#ifndef __UXEN_TOOLS__
-/* IA64 specific, nvram save */
-int xc_ia64_save_to_nvram(xc_interface *xch, uint32_t dom);
-
-/* IA64 specific, nvram init */
-int xc_ia64_nvram_init(xc_interface *xch, char *dom_name, uint32_t dom);
-
-/* IA64 specific, set guest OS type optimizations */
-int xc_ia64_set_os_type(xc_interface *xch, char *guest_os_type, uint32_t dom);
-
-/* HVM guest pass-through */
-int xc_assign_device(xc_interface *xch,
-                     uint32_t domid,
-                     uint32_t machine_bdf);
-
-int xc_get_device_group(xc_interface *xch,
-                     uint32_t domid,
-                     uint32_t machine_bdf,
-                     uint32_t max_sdevs,
-                     uint32_t *num_sdevs,
-                     uint32_t *sdev_array);
-
-int xc_test_assign_device(xc_interface *xch,
-                          uint32_t domid,
-                          uint32_t machine_bdf);
-
-int xc_deassign_device(xc_interface *xch,
-                     uint32_t domid,
-                     uint32_t machine_bdf);
-
-int xc_domain_memory_mapping(xc_interface *xch,
-                             uint32_t domid,
-                             unsigned long first_gfn,
-                             unsigned long first_mfn,
-                             unsigned long nr_mfns,
-                             uint32_t add_mapping);
-
-int xc_domain_ioport_mapping(xc_interface *xch,
-                             uint32_t domid,
-                             uint32_t first_gport,
-                             uint32_t first_mport,
-                             uint32_t nr_ports,
-                             uint32_t add_mapping);
-
-int xc_domain_update_msi_irq(
-    xc_interface *xch,
-    uint32_t domid,
-    uint32_t gvec,
-    uint32_t pirq,
-    uint32_t gflags,
-    uint64_t gtable);
-
-int xc_domain_unbind_msi_irq(xc_interface *xch,
-                             uint32_t domid,
-                             uint32_t gvec,
-                             uint32_t pirq,
-                             uint32_t gflags);
-
-int xc_domain_bind_pt_irq(xc_interface *xch,
-                          uint32_t domid,
-                          uint8_t machine_irq,
-                          uint8_t irq_type,
-                          uint8_t bus,
-                          uint8_t device,
-                          uint8_t intx,
-                          uint8_t isa_irq);
-
-int xc_domain_unbind_pt_irq(xc_interface *xch,
-                          uint32_t domid,
-                          uint8_t machine_irq,
-                          uint8_t irq_type,
-                          uint8_t bus,
-                          uint8_t device,
-                          uint8_t intx,
-                          uint8_t isa_irq);
-
-int xc_domain_bind_pt_pci_irq(xc_interface *xch,
-                              uint32_t domid,
-                              uint8_t machine_irq,
-                              uint8_t bus,
-                              uint8_t device,
-                              uint8_t intx);
-
-int xc_domain_bind_pt_isa_irq(xc_interface *xch,
-                              uint32_t domid,
-                              uint8_t machine_irq);
-
-int xc_domain_set_machine_address_size(xc_interface *xch,
-				       uint32_t domid,
-				       unsigned int width);
-int xc_domain_get_machine_address_size(xc_interface *xch,
-				       uint32_t domid);
-
-int xc_domain_suppress_spurious_page_faults(xc_interface *xch,
-					  uint32_t domid);
-
-/* Set the target domain */
-int xc_domain_set_target(xc_interface *xch,
-                         uint32_t domid,
-                         uint32_t target);
-#endif  /* __UXEN_TOOLS__ */
 
 #ifdef __UXEN_debugger__
 /* Control the domain for debug */
@@ -1870,213 +936,6 @@ int xc_cpuid_set(xc_interface *xch,
 #endif  /* __UXEN_cpuid__ */
 int xc_cpuid_apply_policy(xc_interface *xch,
                           domid_t domid);
-#if !defined(__UXEN_TOOLS__)
-void xc_cpuid_to_str(const unsigned int *regs,
-                     char **strs);
-int xc_mca_op(xc_interface *xch, struct xen_mc *mc);
-#endif  /* __UXEN_TOOLS__ */
 #endif
-
-#if !defined(__UXEN_TOOLS__)
-struct xc_px_val {
-    uint64_t freq;        /* Px core frequency */
-    uint64_t residency;   /* Px residency time */
-    uint64_t count;       /* Px transition count */
-};
-
-struct xc_px_stat {
-    uint8_t total;        /* total Px states */
-    uint8_t usable;       /* usable Px states */
-    uint8_t last;         /* last Px state */
-    uint8_t cur;          /* current Px state */
-    uint64_t *trans_pt;   /* Px transition table */
-    struct xc_px_val *pt;
-};
-
-int xc_pm_get_max_px(xc_interface *xch, int cpuid, int *max_px);
-int xc_pm_get_pxstat(xc_interface *xch, int cpuid, struct xc_px_stat *pxpt);
-int xc_pm_reset_pxstat(xc_interface *xch, int cpuid);
-
-struct xc_cx_stat {
-    uint32_t nr;    /* entry nr in triggers & residencies, including C0 */
-    uint32_t last;         /* last Cx state */
-    uint64_t idle_time;    /* idle time from boot */
-    uint64_t *triggers;    /* Cx trigger counts */
-    uint64_t *residencies; /* Cx residencies */
-    uint64_t pc2;
-    uint64_t pc3;
-    uint64_t pc6;
-    uint64_t pc7;
-    uint64_t cc3;
-    uint64_t cc6;
-    uint64_t cc7;
-};
-typedef struct xc_cx_stat xc_cx_stat_t;
-
-int xc_pm_get_max_cx(xc_interface *xch, int cpuid, int *max_cx);
-int xc_pm_get_cxstat(xc_interface *xch, int cpuid, struct xc_cx_stat *cxpt);
-int xc_pm_reset_cxstat(xc_interface *xch, int cpuid);
-
-int xc_cpu_online(xc_interface *xch, int cpu);
-int xc_cpu_offline(xc_interface *xch, int cpu);
-
-/* 
- * cpufreq para name of this structure named 
- * same as sysfs file name of native linux
- */
-typedef xen_userspace_t xc_userspace_t;
-typedef xen_ondemand_t xc_ondemand_t;
-
-struct xc_get_cpufreq_para {
-    /* IN/OUT variable */
-    uint32_t cpu_num;
-    uint32_t freq_num;
-    uint32_t gov_num;
-
-    /* for all governors */
-    /* OUT variable */
-    uint32_t *affected_cpus;
-    uint32_t *scaling_available_frequencies;
-    char     *scaling_available_governors;
-    char scaling_driver[CPUFREQ_NAME_LEN];
-
-    uint32_t cpuinfo_cur_freq;
-    uint32_t cpuinfo_max_freq;
-    uint32_t cpuinfo_min_freq;
-    uint32_t scaling_cur_freq;
-
-    char scaling_governor[CPUFREQ_NAME_LEN];
-    uint32_t scaling_max_freq;
-    uint32_t scaling_min_freq;
-
-    /* for specific governor */
-    union {
-        xc_userspace_t userspace;
-        xc_ondemand_t ondemand;
-    } u;
-
-    int32_t turbo_enabled;
-};
-
-int xc_get_cpufreq_para(xc_interface *xch, int cpuid,
-                        struct xc_get_cpufreq_para *user_para);
-int xc_set_cpufreq_gov(xc_interface *xch, int cpuid, char *govname);
-int xc_set_cpufreq_para(xc_interface *xch, int cpuid,
-                        int ctrl_type, int ctrl_value);
-int xc_get_cpufreq_avgfreq(xc_interface *xch, int cpuid, int *avg_freq);
-
-int xc_set_sched_opt_smt(xc_interface *xch, uint32_t value);
-int xc_set_vcpu_migration_delay(xc_interface *xch, uint32_t value);
-int xc_get_vcpu_migration_delay(xc_interface *xch, uint32_t *value);
-
-int xc_get_cpuidle_max_cstate(xc_interface *xch, uint32_t *value);
-int xc_set_cpuidle_max_cstate(xc_interface *xch, uint32_t value);
-
-int xc_enable_turbo(xc_interface *xch, int cpuid);
-int xc_disable_turbo(xc_interface *xch, int cpuid);
-/**
- * tmem operations
- */
-
-struct tmem_oid {
-    uint64_t oid[3];
-};
-
-int xc_tmem_control_oid(xc_interface *xch, int32_t pool_id, uint32_t subop,
-                        uint32_t cli_id, uint32_t arg1, uint32_t arg2,
-                        struct tmem_oid oid, void *buf);
-int xc_tmem_control(xc_interface *xch,
-                    int32_t pool_id, uint32_t subop, uint32_t cli_id,
-                    uint32_t arg1, uint32_t arg2, uint64_t arg3, void *buf);
-int xc_tmem_auth(xc_interface *xch, int cli_id, char *uuid_str, int arg1);
-int xc_tmem_save(xc_interface *xch, int dom, int live, int fd, int field_marker);
-int xc_tmem_save_extra(xc_interface *xch, int dom, int fd, int field_marker);
-void xc_tmem_save_done(xc_interface *xch, int dom);
-int xc_tmem_restore(xc_interface *xch, int dom, int fd);
-int xc_tmem_restore_extra(xc_interface *xch, int dom, int fd);
-
-/**
- * mem_event operations
- */
-int xc_mem_event_control(xc_interface *xch, domid_t domain_id, unsigned int op,
-                         unsigned int mode, void *shared_page,
-                          void *ring_page, unsigned long gfn);
-
-int xc_mem_paging_enable(xc_interface *xch, domid_t domain_id,
-                        void *shared_page, void *ring_page);
-int xc_mem_paging_disable(xc_interface *xch, domid_t domain_id);
-int xc_mem_paging_nominate(xc_interface *xch, domid_t domain_id,
-                           unsigned long gfn);
-int xc_mem_paging_evict(xc_interface *xch, domid_t domain_id, unsigned long gfn);
-int xc_mem_paging_prep(xc_interface *xch, domid_t domain_id, unsigned long gfn);
-int xc_mem_paging_resume(xc_interface *xch, domid_t domain_id,
-                         unsigned long gfn);
-
-int xc_mem_access_enable(xc_interface *xch, domid_t domain_id,
-                        void *shared_page, void *ring_page);
-int xc_mem_access_disable(xc_interface *xch, domid_t domain_id);
-int xc_mem_access_resume(xc_interface *xch, domid_t domain_id,
-                         unsigned long gfn);
-
-/**
- * memshr operations
- */
-int xc_memshr_control(xc_interface *xch,
-                      uint32_t domid,
-                      int enable);
-int xc_memshr_nominate_gfn(xc_interface *xch,
-                           uint32_t domid,
-                           unsigned long gfn,
-                           uint64_t *handle);
-int xc_memshr_nominate_gref(xc_interface *xch,
-                            uint32_t domid,
-                            grant_ref_t gref,
-                            uint64_t *handle);
-int xc_memshr_share(xc_interface *xch,
-                    uint64_t source_handle,
-                    uint64_t client_handle);
-int xc_memshr_domain_resume(xc_interface *xch,
-                            uint32_t domid);
-int xc_memshr_debug_gfn(xc_interface *xch,
-                        uint32_t domid,
-                        unsigned long gfn);
-int xc_memshr_debug_mfn(xc_interface *xch,
-                        uint32_t domid,
-                        unsigned long mfn);
-int xc_memshr_debug_gref(xc_interface *xch,
-                         uint32_t domid,
-                         grant_ref_t gref);
-
-int xc_flask_load(xc_interface *xc_handle, char *buf, uint32_t size);
-int xc_flask_context_to_sid(xc_interface *xc_handle, char *buf, uint32_t size, uint32_t *sid);
-int xc_flask_sid_to_context(xc_interface *xc_handle, int sid, char *buf, uint32_t size);
-int xc_flask_getenforce(xc_interface *xc_handle);
-int xc_flask_setenforce(xc_interface *xc_handle, int mode);
-int xc_flask_add_pirq(xc_interface *xc_handle, unsigned int pirq, char *scontext);
-int xc_flask_add_ioport(xc_interface *xc_handle, unsigned long low, unsigned long high,
-                      char *scontext);
-int xc_flask_add_iomem(xc_interface *xc_handle, unsigned long low, unsigned long high,
-                     char *scontext);
-int xc_flask_add_device(xc_interface *xc_handle, unsigned long device, char *scontext);
-int xc_flask_del_pirq(xc_interface *xc_handle, unsigned int pirq);
-int xc_flask_del_ioport(xc_interface *xc_handle, unsigned long low, unsigned long high);
-int xc_flask_del_iomem(xc_interface *xc_handle, unsigned long low, unsigned long high);
-int xc_flask_del_device(xc_interface *xc_handle, unsigned long device);
-int xc_flask_access(xc_interface *xc_handle, const char *scon, const char *tcon,
-                  uint16_t tclass, uint32_t req,
-                  uint32_t *allowed, uint32_t *decided,
-                  uint32_t *auditallow, uint32_t *auditdeny,
-                  uint32_t *seqno);
-int xc_flask_avc_cachestats(xc_interface *xc_handle, char *buf, int size);
-int xc_flask_policyvers(xc_interface *xc_handle, char *buf, int size);
-int xc_flask_avc_hashstats(xc_interface *xc_handle, char *buf, int size);
-int xc_flask_getavc_threshold(xc_interface *xc_handle);
-int xc_flask_setavc_threshold(xc_interface *xc_handle, int threshold);
-
-struct elf_binary;
-void xc_elf_set_logfile(xc_interface *xch, struct elf_binary *elf,
-                        int verbose);
-/* Useful for callers who also use libelf. */
-#endif  /* __UXEN_TOOLS__ */
 
 #endif /* XENCTRL_H */

@@ -299,11 +299,6 @@ int hvm_io_intercept(ioreq_t *p, int type)
 
     if ( type == HVM_PORTIO )
     {
-#ifndef __UXEN__
-        int rc = dpci_ioport_intercept(p);
-        if ( (rc == X86EMUL_OKAY) || (rc == X86EMUL_RETRY) )
-            return rc;
-#endif  /* __UXEN__ */
     }
 
     for ( i = 0; i < handler->num_slot; i++ )

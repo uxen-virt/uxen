@@ -18,40 +18,11 @@
 
 #define select_idle_routine(x) ((void)0)
 
-#ifndef __UXEN__
-#ifdef CONFIG_X86_INTEL_USERCOPY
-/*
- * Alignment at which movsl is preferred for bulk memory copies.
- */
-struct movsl_mask movsl_mask __read_mostly;
-#endif
-#endif  /* __UXEN__ */
-
 static unsigned int probe_intel_cpuid_faulting(void)
 {
 	uint64_t x;
 	return !rdmsr_safe(MSR_INTEL_PLATFORM_INFO, x) && (x & (1u<<31));
 }
-
-#ifndef __UXEN__
-static DEFINE_PER_CPU(bool_t, cpuid_faulting_enabled);
-void set_cpuid_faulting(bool_t enable)
-{
-	uint32_t hi, lo;
-
-	if (!cpu_has_cpuid_faulting ||
-	    this_cpu(cpuid_faulting_enabled) == enable )
-		return;
-
-	rdmsr(MSR_INTEL_MISC_FEATURES_ENABLES, lo, hi);
-	lo &= ~1;
-	if (enable)
-		lo |= 1;
-	wrmsr(MSR_INTEL_MISC_FEATURES_ENABLES, lo, hi);
-
-	this_cpu(cpuid_faulting_enabled) = enable;
-}
-#endif  /* __UXEN__ */
 
 /*
  * opt_cpuid_mask_ecx/edx: cpuid.1[ecx, edx] feature mask.

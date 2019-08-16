@@ -242,9 +242,6 @@ ABI_ENTRY(vmx_asm_do_vmentry, SIZEOF_REG)
 #endif /* __MS_ABI__ */
 
         call_with_abi(vmx_intr_assist, 0)
-#ifndef __UXEN__
-        call_with_abi(nvmx_switch_guest, 0)
-#endif  /* __UXEN__ */
 
         get_current(r(bx))
         cli

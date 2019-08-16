@@ -44,16 +44,7 @@
 #include <asm/paging.h>
 #include <asm/p2m.h>
 #include <xen/iommu.h>
-#ifndef __UXEN__
-#include <asm/mem_event.h>
-#include <public/mem_event.h>
-#include <asm/mem_sharing.h>
-#endif  /* __UXEN__ */
 #include <xen/event.h>
-#ifndef __UXEN__
-#include <asm/hvm/nestedhvm.h>
-#include <asm/hvm/svm/amd-iommu-proto.h>
-#endif  /* __UXEN__ */
 #include <xen/guest_access.h>
 #include <xen/trace.h>
 #include <lz4.h>
@@ -90,10 +81,6 @@ static inline void set_p2m_entry_unchecked(
 #define mfn_zero_page(_mfn) __mfn_zero_page(mfn_x(_mfn))
 #undef page_to_mfn
 #define page_to_mfn(_pg) _mfn(__page_to_mfn(_pg))
-
-#ifndef __UXEN__
-#define superpage_aligned(_x)  (((_x)&(SUPERPAGE_PAGES-1))==0)
-#endif  /* __UXEN__ */
 
 /* Enforce lock ordering when grabbing the "external" page_alloc lock */
 static inline void lock_page_alloc(struct p2m_domain *p2m)

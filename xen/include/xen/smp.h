@@ -9,11 +9,6 @@
  */
 extern void smp_send_stop(void);
 
-#ifndef __UXEN__
-extern void smp_send_event_check_mask(const cpumask_t *mask);
-#define smp_send_event_check_cpu(cpu) \
-    smp_send_event_check_mask(cpumask_of(cpu))
-#else   /* __UXEN__ */
 #define smp_send_event_check_mask(mask)                         \
     UI_HOST_CALL(ui_signal_idle_thread, cpumask_bits(mask)[0])
 #define smp_send_event_check_cpu(cpu)                   \
@@ -21,7 +16,6 @@ extern void smp_send_event_check_mask(const cpumask_t *mask);
 extern void hostsched_vcpu_softirq(struct vcpu *);
 #define smp_send_event_check_vcpu(v) \
     hostsched_vcpu_softirq(v)
-#endif  /* __UXEN__ */
 
 extern void smp_send_state_dump(unsigned int cpu);
 

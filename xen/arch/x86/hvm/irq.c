@@ -31,16 +31,6 @@
 /* Must be called with hvm_domain->irq_lock hold */
 static void assert_gsi(struct domain *d, unsigned ioapic_gsi, uint16_t vcpu_id)
 {
-#ifndef __UXEN__
-    struct pirq *pirq =
-        pirq_info(d, domain_emuirq_to_pirq(d, ioapic_gsi));
-
-    if ( hvm_domain_use_pirq(d, pirq) )
-    {
-        send_guest_pirq(d, pirq);
-        return;
-    }
-#endif  /* __UXEN__ */
     vioapic_irq_positive_edge(d, ioapic_gsi, vcpu_id);
 }
 
@@ -54,12 +44,6 @@ static void assert_irq(struct domain *d, unsigned ioapic_gsi, unsigned pic_irq,
 /* Must be called with hvm_domain->irq_lock hold */
 static void deassert_irq(struct domain *d, unsigned isa_irq)
 {
-#ifndef __UXEN__
-    struct pirq *pirq =
-        pirq_info(d, domain_emuirq_to_pirq(d, isa_irq));
-
-    if ( !hvm_domain_use_pirq(d, pirq) )
-#endif  /* __UXEN__ */
         vpic_irq_negative_edge(d, isa_irq);
 }
 
@@ -173,80 +157,6 @@ void hvm_isa_irq_assert_to_cpu(struct domain *d, unsigned int isa_irq,
 
     spin_unlock(&d->arch.hvm_domain.irq_lock);
 }
-
-#ifndef __UXEN__
-static void hvm_set_callback_irq_level(struct vcpu *v)
-{
-    struct domain *d = v->domain;
-    struct hvm_irq *hvm_irq = &d->arch.hvm_domain.irq;
-    unsigned int gsi, pdev, pintx, asserted;
-
-    ASSERT(v->vcpu_id == 0);
-
-    spin_lock(&d->arch.hvm_domain.irq_lock);
-
-    /* NB. Do not check the evtchn_upcall_mask. It is not used in HVM mode. */
-    asserted = !!vcpu_info(v, evtchn_upcall_pending);
-    if ( hvm_irq->callback_via_asserted == asserted )
-        goto out;
-    hvm_irq->callback_via_asserted = asserted;
-
-    /* Callback status has changed. Update the callback via. */
-    switch ( hvm_irq->callback_via_type )
-    {
-    case HVMIRQ_callback_gsi:
-        gsi = hvm_irq->callback_via.gsi;
-        if ( asserted && (hvm_irq->gsi_assert_count[gsi]++ == 0) )
-        {
-            vioapic_irq_positive_edge(d, gsi, VCPUID_ANY);
-            if ( gsi <= 15 )
-                vpic_irq_positive_edge(d, gsi);
-        }
-        else if ( !asserted && (--hvm_irq->gsi_assert_count[gsi] == 0) )
-        {
-            if ( gsi <= 15 )
-                vpic_irq_negative_edge(d, gsi);
-        }
-        break;
-    case HVMIRQ_callback_pci_intx:
-        pdev  = hvm_irq->callback_via.pci.dev;
-        pintx = hvm_irq->callback_via.pci.intx;
-        if ( asserted )
-            __hvm_pci_intx_assert(d, pdev, pintx);
-        else
-            __hvm_pci_intx_deassert(d, pdev, pintx);
-    default:
-        break;
-    }
-
- out:
-    spin_unlock(&d->arch.hvm_domain.irq_lock);
-}
-
-void hvm_maybe_deassert_evtchn_irq(void)
-{
-    struct domain *d = current->domain;
-    struct hvm_irq *hvm_irq = &d->arch.hvm_domain.irq;
-
-    if ( hvm_irq->callback_via_asserted &&
-         !vcpu_info(d->vcpu[0], evtchn_upcall_pending) )
-        hvm_set_callback_irq_level(d->vcpu[0]);
-}
-
-void hvm_assert_evtchn_irq(struct vcpu *v)
-{
-    if ( unlikely(in_irq() || !local_irq_is_enabled()) )
-    {
-        tasklet_schedule(&v->arch.hvm_vcpu.assert_evtchn_irq_tasklet);
-        return;
-    }
-
-    if ( is_hvm_pv_evtchn_vcpu(v) )
-        vcpu_kick(v);
-    else if ( v->vcpu_id == 0 )
-        hvm_set_callback_irq_level(v);
-}
-#endif  /* __UXEN__ */
 
 void hvm_set_pci_link_route(struct domain *d, u8 link, u8 isa_irq)
 {
