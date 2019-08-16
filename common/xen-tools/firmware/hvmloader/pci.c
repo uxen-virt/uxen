@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -219,7 +219,7 @@ void pci_setup(void)
             hvm_info->low_mem_pgend -= nr_pages;
             xatp.domid = DOMID_SELF;
             xatp.space = XENMAPSPACE_gmfn_range;
-#if 0 /* ndef __UXEN__ */
+#ifndef __UXEN__
             xatp.idx   = hvm_info->low_mem_pgend;
             if ( hvm_info->high_mem_pgend == 0 )
                 hvm_info->high_mem_pgend = 1ull << (32 - PAGE_SHIFT);

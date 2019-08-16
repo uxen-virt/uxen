@@ -113,7 +113,7 @@ void hvm_asid_flush_core(void)
 
 bool_t hvm_asid_handle_vmenter(struct hvm_vcpu_asid *asid)
 {
-#ifndef __UXEN__
+#ifdef __UXEN_asid__
     struct hvm_asid_data *data = &this_cpu(hvm_asid_data);
 
     /* On erratum #170 systems we must flush the TLB. 
@@ -145,7 +145,7 @@ bool_t hvm_asid_handle_vmenter(struct hvm_vcpu_asid *asid)
     return (asid->asid == 1);
 
  disabled:
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_asid__ */
     asid->asid = 0;
     BUG_ON(asid->asid && ax_present); /* we'll never support ASIDs on AX */
     return 0;

@@ -12,7 +12,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -181,7 +181,9 @@ static void __init parse_guest_loglvl(char *s)
 {
     _parse_loglvl(s, &xenlog_guest_lower_thresh, &xenlog_guest_upper_thresh);
 }
+#endif  /* __UXEN__ */
 
+#ifdef __UXEN_console__
 static char * __init loglvl_str(int lvl)
 {
     switch ( lvl )
@@ -194,7 +196,9 @@ static char * __init loglvl_str(int lvl)
     }
     return "???";
 }
+#endif  /* __UXEN_console__ */
 
+#ifndef __UXEN__
 /*
  * ********************************************************
  * *************** ACCESS TO CONSOLE RING *****************
@@ -251,6 +255,7 @@ long read_console_ring(struct xen_sysctl_readconsole *op)
 
     return 0;
 }
+#endif  /* __UXEN__ */
 
 
 /*
@@ -259,6 +264,7 @@ long read_console_ring(struct xen_sysctl_readconsole *op)
  * *******************************************************
  */
 
+#ifndef __UXEN__
 /* Characters received over the serial line are buffered for domain 0. */
 #define SERIAL_RX_SIZE 128
 #define SERIAL_RX_MASK(_i) ((_i)&(SERIAL_RX_SIZE-1))
@@ -640,14 +646,13 @@ void __init console_init_preirq(void)
     {
         if ( *p == ',' )
             p++;
-        if ( !strncmp(p, "vga", 3) )
 #ifndef __UXEN__
+        if ( !strncmp(p, "vga", 3) )
             vga_init();
-#else  /* __UXEN__ */
-        /* nothing */;
+        else
 #endif  /* __UXEN__ */
-        else if ( strncmp(p, "com", 3) ||
-                  (sercon_handle = serial_parse_handle(p)) == -1 )
+        if ( strncmp(p, "com", 3) ||
+             (sercon_handle = serial_parse_handle(p)) == -1 )
         {
             char *q = strchr(p, ',');
             if ( q != NULL )
@@ -712,7 +717,7 @@ void __init console_init_postirq(void)
 #endif  /* __UXEN__ */
 }
 
-#ifndef __UXEN__
+#ifdef __UXEN_console__
 void __init console_endboot(void)
 {
     int i, j;
@@ -763,7 +768,7 @@ void __init console_endboot(void)
     /* Serial input is directed to DOM0 by default. */
     switch_serial_input();
 }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_console__ */
 
 int __init console_has(const char *device)
 {
@@ -782,17 +787,17 @@ int __init console_has(const char *device)
 
 void console_start_log_everything(void)
 {
-#ifndef __UXEN__
+#ifdef __UXEN_console__
     serial_start_log_everything(sercon_handle);
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_console__ */
     atomic_inc(&print_everything);
 }
 
 void console_end_log_everything(void)
 {
-#ifndef __UXEN__
+#ifdef __UXEN_console__
     serial_end_log_everything(sercon_handle);
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_console__ */
     atomic_dec(&print_everything);
 }
 
@@ -814,9 +819,9 @@ void console_start_sync(void)
 
 void console_end_sync(void)
 {
-#ifndef __UXEN__
+#ifdef __UXEN_console__
     serial_end_sync(sercon_handle);
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_console__ */
     atomic_dec(&print_everything);
 }
 
@@ -1104,11 +1109,13 @@ void panic(const char *fmt, ...)
         printk("Manual reset required ('noreboot' specified)\n");
     else
         printk("Reboot in five seconds...\n");
+#endif  /* __UXEN__ */
 
     spin_unlock_irqrestore(&lock, flags);
 
     debugger_trap_immediate();
 
+#ifndef __UXEN__
     kexec_crash();
 
     if ( opt_noreboot )
@@ -1121,8 +1128,6 @@ void panic(const char *fmt, ...)
         machine_restart(5000);
     }
 #else   /* __UXEN__ */
-    spin_unlock_irqrestore(&lock, flags);
-
     BUG();
 #endif  /* __UXEN__ */
 }

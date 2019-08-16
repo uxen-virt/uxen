@@ -20,7 +20,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -591,7 +591,9 @@ long xc_maximum_ram_page(xc_interface *xch)
 {
     return do_memory_op(xch, XENMEM_maximum_ram_page, NULL, 0);
 }
+#endif  /* __UXEN_TOOLS__ */
 
+#ifdef __UXEN_cpu_usage__
 long long xc_domain_get_cpu_usage( xc_interface *xch, domid_t domid, int vcpu )
 {
     DECLARE_DOMCTL;
@@ -606,7 +608,9 @@ long long xc_domain_get_cpu_usage( xc_interface *xch, domid_t domid, int vcpu )
     }
     return domctl.u.getvcpuinfo.cpu_time;
 }
+#endif  /* __UXEN_cpu_usage__ */
 
+#ifndef __UXEN_TOOLS__
 int xc_machphys_mfn_list(xc_interface *xch,
 			 unsigned long max_extents,
 			 xen_pfn_t *extent_start)

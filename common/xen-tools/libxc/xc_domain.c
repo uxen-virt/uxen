@@ -22,7 +22,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -297,6 +297,7 @@ int xc_domain_getinfo(xc_interface *xch,
     return nr_doms;
 }
 
+#ifndef __UXEN_TOOLS__
 int xc_domain_getinfolist(xc_interface *xch,
                           uint32_t first_domain,
                           unsigned int max_domains,
@@ -323,6 +324,7 @@ int xc_domain_getinfolist(xc_interface *xch,
 
     return ret;
 }
+#endif  /* __UXEN_TOOLS__ */
 
 /* get info from hvm guest for save */
 int xc_domain_hvm_getcontext(xc_interface *xch,
@@ -460,6 +462,7 @@ int xc_watchdog(xc_interface *xch,
 #endif  /* __UXEN_TOOLS__ */
 
 
+#ifndef __UXEN_TOOLS__
 int xc_shadow_control(xc_interface *xch,
                       uint32_t domid,
                       unsigned int sop,
@@ -494,6 +497,7 @@ int xc_shadow_control(xc_interface *xch,
 
     return (rc == 0) ? domctl.u.shadow_op.pages : rc;
 }
+#endif  /* __UXEN_TOOLS__ */
 
 int xc_domain_setmaxmem(xc_interface *xch,
                         uint32_t domid,
@@ -1209,7 +1213,9 @@ int xc_domain_iomem_permission(xc_interface *xch,
 
     return do_domctl(xch, &domctl);
 }
+#endif  /* __UXEN_TOOLS__ */
 
+#ifdef __UXEN_sendtrigger__
 int xc_domain_send_trigger(xc_interface *xch,
                            uint32_t domid,
                            uint32_t trigger,
@@ -1224,7 +1230,7 @@ int xc_domain_send_trigger(xc_interface *xch,
 
     return do_domctl(xch, &domctl);
 }
-#endif  /* __UXEN_TOOLS__ */
+#endif  /* __UXEN_sendtrigger__ */
 
 int xc_set_hvm_param(xc_interface *handle, domid_t dom, int param, uint64_t value)
 {
@@ -1268,7 +1274,7 @@ int xc_get_hvm_param(xc_interface *handle, domid_t dom, int param, uint64_t *val
     return rc;
 }
 
-#ifndef __UXEN_TOOLS__
+#ifdef __UXEN_debugger__
 int xc_domain_setdebugging(xc_interface *xch,
                            uint32_t domid,
                            unsigned int enable)
@@ -1280,7 +1286,9 @@ int xc_domain_setdebugging(xc_interface *xch,
     domctl.u.setdebugging.enable = enable;
     return do_domctl(xch, &domctl);
 }
+#endif  /* __UXEN_debugger__ */
 
+#ifndef __UXEN_TOOLS__
 int xc_assign_device(
     xc_interface *xch,
     uint32_t domid,
@@ -1607,7 +1615,9 @@ int xc_domain_suppress_spurious_page_faults(xc_interface *xc, uint32_t domid)
     return do_domctl(xc, &domctl);
 
 }
+#endif  /* __UXEN_TOOLS__ */
 
+#ifdef __UXEN_debugger__
 int xc_domain_debug_control(xc_interface *xc, uint32_t domid, uint32_t sop, uint32_t vcpu)
 {
     DECLARE_DOMCTL;
@@ -1620,7 +1630,9 @@ int xc_domain_debug_control(xc_interface *xc, uint32_t domid, uint32_t sop, uint
 
     return do_domctl(xc, &domctl);
 }
+#endif  /* __UXEN_debugger__ */
 
+#ifndef __UXEN_TOOLS__
 int xc_domain_set_access_required(xc_interface *xch,
                                   uint32_t domid,
                                   unsigned int required)
@@ -1676,6 +1688,7 @@ xc_hvm_iopage(xc_interface *xch, domid_t dom, int serverid,
     return pfn;
 }
 
+#ifndef __UXEN_TOOLS__
 int
 xc_hvm_get_ioreq_server_buf_channel(xc_interface *xch, domid_t dom,
                                     servid_t id, unsigned int *channel)
@@ -1706,6 +1719,7 @@ xc_hvm_get_ioreq_server_buf_channel(xc_interface *xch, domid_t dom,
   out:
     return rc;
 }
+#endif  /* __UXEN_TOOLS__ */
 
 int
 xc_hvm_map_io_range_to_ioreq_server(xc_interface *xch, domid_t dom, servid_t id,

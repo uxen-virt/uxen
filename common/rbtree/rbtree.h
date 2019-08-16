@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -51,14 +51,14 @@
 #ifndef _SYS_RBTREE_H_
 #define	_SYS_RBTREE_H_
 
-#if defined(__UXEN__) && !defined(__UXEN_SYS__)
+#if defined(__UXEN_core__)
 #include <xen/types.h>
 #elif defined(_KERNEL) || defined(_STANDALONE) || defined(_WIN32)
 #include <sys/types.h>
-#else
+#else  /* __UXEN_core__ || _KERNEL || _STANDALONE || _WIN32 */
 #include <stdbool.h>
 #include <sys/types.h>
-#endif
+#endif  /* __UXEN_core__ || _KERNEL || _STANDALONE || _WIN32 */
 #if defined(_WIN32)
 #define __BEGIN_DECLS
 #define __END_DECLS

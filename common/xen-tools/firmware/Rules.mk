@@ -3,7 +3,7 @@ override XEN_TARGET_ARCH = x86_64
 XEN_TARGET_ARCH = x86_64
 
 # User-supplied CFLAGS are not useful here.
-CFLAGS = -D__UXEN__
+CFLAGS =
 
 include $(XEN_TOOLS_ROOT)/Rules.mk
 

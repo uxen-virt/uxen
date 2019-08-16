@@ -678,7 +678,7 @@ int xc_cpuid_apply_policy(xc_interface *xch, domid_t domid)
     return 0;
 }
 
-#ifndef __UXEN_TOOLS__
+#ifdef __UXEN_cpuid__
 /*
  * Check whether a VM is allowed to launch on this host's processor type.
  *
@@ -811,4 +811,4 @@ int xc_cpuid_set(
     }
     return rc;
 }
-#endif  /* __UXEN_TOOLS__ */
+#endif  /* __UXEN_cpuid__ */

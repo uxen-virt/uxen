@@ -12,23 +12,23 @@
  * Mark functions and data as being only used at initialization
  * or exit time.
  */
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
 #define __init       \
     __attribute__ ((__section__ (".init.text")))
 #define __exit       \
     __attribute_used__ __attribute__ ((__section__(".exit.text")))
-#else   /* __UXEN__ */
+#else  /* __UXEN_todo__ */
 #define __init
 #define __exit
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_todo__ */
 #define __initdata   \
     __attribute__ ((__section__ (".init.data")))
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
 #define __exitdata   \
     __attribute_used__ __attribute__ ((__section__ (".exit.data")))
-#else   /* __UXEN__ */
+#else  /* __UXEN_todo__ */
 #define __exitdata
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_todo__ */
 #define __initsetup  \
     __attribute_used__ __attribute__ ((__section__ (".init.setup")))
 #define __init_call(lvl)  \

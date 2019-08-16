@@ -10,7 +10,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2015, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -227,7 +227,7 @@ static int ns16550_getc(struct serial_port *port, char *pc)
     return 1;
 }
 
-#ifndef __UXEN__
+#ifdef __UXEN_serial_pci__
 static void pci_serial_early_init(struct ns16550 *uart)
 {
     if ( !uart->ps_bdf_enable )
@@ -242,7 +242,7 @@ static void pci_serial_early_init(struct ns16550 *uart)
     pci_conf_write16(0, uart->ps_bdf[0], uart->ps_bdf[1], uart->ps_bdf[2],
         0x4, 0x1);
 }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_serial_pci__ */
 
 static void ns16550_setup_preirq(struct ns16550 *uart)
 {
@@ -251,9 +251,9 @@ static void ns16550_setup_preirq(struct ns16550 *uart)
 
     uart->intr_works = 0;
 
-#ifndef __UXEN__
+#ifdef __UXEN_serial_pci__
     pci_serial_early_init(uart);
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_serial_pci__ */
 
     lcr = (uart->data_bits - 5) | ((uart->stop_bits - 1) << 2) | uart->parity;
 
@@ -360,7 +360,7 @@ static void ns16550_suspend(struct serial_port *port)
 
     stop_timer(&uart->timer);
 
-#ifndef __UXEN__
+#ifdef __UXEN_serial_pci__
     if ( uart->bar )
     {
        uart->bar = pci_conf_read32(
@@ -370,19 +370,19 @@ static void ns16550_suspend(struct serial_port *port)
            0, uart->pb_bdf[0], uart->pb_bdf[1], uart->pb_bdf[2],
            PCI_COMMAND);
     }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_serial_pci__ */
 }
 
 static void ns16550_resume(struct serial_port *port)
 {
-#ifndef __UXEN__
+#ifdef __UXEN_serial_pci__
     struct ns16550 *uart = port->uart;
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_serial_pci__ */
 
     ns16550_setup_preirq(port->uart);
     ns16550_setup_postirq(port->uart);
 
-#ifndef __UXEN__
+#ifdef __UXEN_serial_pci__
     if ( uart->bar )
     {
        pci_conf_write32(0, uart->pb_bdf[0], uart->pb_bdf[1], uart->pb_bdf[2],
@@ -390,7 +390,7 @@ static void ns16550_resume(struct serial_port *port)
        pci_conf_write32(0, uart->pb_bdf[0], uart->pb_bdf[1], uart->pb_bdf[2],
                         PCI_COMMAND, uart->cr);
     }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_serial_pci__ */
 }
 
 #if defined(CONFIG_X86) && !defined(__UXEN__)
@@ -440,7 +440,7 @@ static int __init parse_parity_char(int c)
     return 0;
 }
 
-#ifndef __UXEN__
+#ifdef __UXEN_serial_pci__
 static void __init parse_pci_bdf(const char **conf, unsigned int bdf[3])
 {
     bdf[0] = simple_strtoul(*conf, conf, 16);
@@ -453,7 +453,7 @@ static void __init parse_pci_bdf(const char **conf, unsigned int bdf[3])
     (*conf)++;
     bdf[2] = simple_strtoul(*conf, conf, 16);
 }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_serial_pci__ */
 
 static int __init check_existence(struct ns16550 *uart)
 {
@@ -471,10 +471,10 @@ static int __init check_existence(struct ns16550 *uart)
         return 0;
 #endif  /* __UXEN__ */
 
-#ifndef __UXEN__
+#ifdef __UXEN_serial_pci__
     pci_serial_early_init(uart);
-#endif  /* __UXEN__ */
-    
+#endif  /* __UXEN_serial_pci__ */
+
     /*
      * Do a simple existence test first; if we fail this,
      * there's no point trying anything else.
@@ -634,7 +634,7 @@ static void __init ns16550_parse_port_config(
         {
             conf++;
             uart->irq = simple_strtoul(conf, &conf, 10);
-#ifndef __UXEN__
+#ifdef __UXEN_serial_pci__
             if ( *conf == ',' )
             {
                 conf++;
@@ -647,7 +647,7 @@ static void __init ns16550_parse_port_config(
                     parse_pci_bdf(&conf, &uart->pb_bdf[0]);
                 }
             }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_serial_pci__ */
         }
     }
 

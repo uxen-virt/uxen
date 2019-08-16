@@ -34,7 +34,6 @@ extern "C" {
 #define CONSOLE_RESIZE_FLAG_FORCE       0x1
 #define CONSOLE_RESIZE_FLAG_USE_DLO     0x2
 
-#ifndef QEMU_UXEN
 typedef void *uxenconsole_context_t;
 typedef void *hid_context_t;
 
@@ -138,7 +137,6 @@ int                     uxenconsole_hid_touch_report(hid_context_t context,
                                                      int x, int y,
                                                      int width, int height,
                                                      int flags);
-#endif /* !QEMU_UXEN */
 
 typedef void (*inv_rect_t)(void *priv, int x, int y, int w, int h, uint64_t rect_id);
 

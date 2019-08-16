@@ -827,12 +827,12 @@ static void biosfn_set_video_mode(mode) Bit8u mode;
 {// mode: Bit 7 is 1 if no clear screen
 
  // Should we clear the screen ?
-#ifndef __UXEN__
+#ifdef __UXEN_clear_vram__
     /* clearing the screen slowly triggers a concurrency bug in windows */
  Bit8u noclearmem=mode&0x80;
-#else  /* __UXEN__ */
+#else  /* __UXEN_clear_vram__ */
  Bit8u noclearmem=0x80;
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_clear_vram__ */
  Bit8u line,mmask,*palette,vpti;
  Bit16u i,twidth,theightm1,cheight;
  Bit8u modeset_ctl,video_ctl,vga_switches;

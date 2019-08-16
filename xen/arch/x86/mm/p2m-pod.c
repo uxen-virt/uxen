@@ -910,9 +910,9 @@ p2m_pod_demand_populate(struct p2m_domain *p2m, unsigned long gfn,
         mfn_x(mfn) != mfn_x(shared_zero_page))
         put_page(mfn_to_page(mfn));
 
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
     paging_mark_dirty(d, gfn_aligned);
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_todo__ */
 
     if ( tb_init_done )
     {

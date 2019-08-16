@@ -444,6 +444,7 @@ void *memchr(const void *s, int c, size_t n)
 #endif  /* __UXEN__ */
 
 #ifdef __UXEN__
+#ifndef __HAVE_ARCH_STRLLCPY
 size_t
 strllcpy(char *dest, size_t d_len, const char *src, size_t s_len)
 {
@@ -457,6 +458,7 @@ strllcpy(char *dest, size_t d_len, const char *src, size_t s_len)
 	return ret;
 }
 #endif
+#endif  /* __UXEN__ */
 
 /*
  * Local variables:

@@ -80,19 +80,23 @@ boolean_param("nosmp", opt_nosmp);
 
 /* maxcpus: maximum number of CPUs to activate. */
 static unsigned int __initdata max_cpus;
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
 integer_param("maxcpus", max_cpus);
-#endif /* __UXEN__ */
+#endif  /* __UXEN_todo__ */
 
 #ifndef __UXEN__
 /* opt_watchdog: If true, run a watchdog NMI on each processor. */
 static bool_t __initdata opt_watchdog;
 boolean_param("watchdog", opt_watchdog);
+#endif  /* __UXEN__ */
 
+#ifdef __UXEN_todo__
 /* smep: Enable/disable Supervisor Mode Execution Protection (default on). */
 static bool_t __initdata disable_smep;
 invbool_param("smep", disable_smep);
+#endif  /* __UXEN_todo__ */
 
+#ifndef __UXEN__
 /* **** Linux config option: propagated to domain0. */
 /* "acpi=off":    Sisables both ACPI table parsing and interpreter. */
 /* "acpi=force":  Override the disable blacklist.                   */
@@ -1606,12 +1610,16 @@ __uxen_start_xen)(
     scrub_heap_pages();
 
     init_trace_bufs();
+#endif  /* __UXEN__ */
 
+#ifdef __UXEN_console__
     console_endboot();
 
     /* Hide UART from DOM0 if we're using it */
     serial_endboot();
+#endif  /* __UXEN_console__ */
 
+#ifndef __UXEN__
     dmi_end_boot();
 
     domain_unpause_by_systemcontroller(dom0);
@@ -1653,7 +1661,7 @@ void arch_get_xen_caps(xen_capabilities_info_t *info)
     }
 }
 
-#if 0 /* SSS */
+#ifndef __UXEN__
 int __init xen_in_range(unsigned long mfn)
 {
     paddr_t start, end;
@@ -1686,7 +1694,7 @@ int __init xen_in_range(unsigned long mfn)
 
     return 0;
 }
-#endif  /* SSS */
+#endif  /* __UXEN__ */
 
 /*
  * Local variables:

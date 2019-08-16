@@ -175,9 +175,9 @@ vmx_vcpu_initialise(struct vcpu *v)
         return rc;
     }
 
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_vpmu__
     vpmu_initialise(v);
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_vpmu__ */
 
     vmx_install_vlapic_mapping(v);
 
@@ -197,9 +197,9 @@ vmx_vcpu_destroy(struct vcpu *v)
     if ( v->domain->is_attovm_ax )
         attovm_vcpu_destroy(v);
     vmx_destroy_vmcs(v);
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_vpmu__
     vpmu_destroy(v);
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_vpmu__ */
 #ifndef __UXEN__
     passive_domain_destroy(v);
 #endif  /* __UXEN__ */
@@ -518,7 +518,7 @@ vmx_guest_x86_mode(struct vcpu *v)
     return (likely(cs_ar_bytes & X86_SEG_AR_DEF_OP_SIZE) ? 4 : 2);
 }
 
-#ifndef __UXEN__
+#ifdef __UXEN_vdr__
 static void vmx_save_dr(struct vcpu *v)
 {
 DEBUG();
@@ -538,7 +538,7 @@ DEBUG();
     /* DR7 must be saved as it is used by vmx_restore_dr(). */
     v->arch.debugreg[7] = __vmread(GUEST_DR7);
 }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_vdr__ */
 
 static void __restore_debug_registers(struct vcpu *v)
 {
@@ -555,7 +555,7 @@ static void __restore_debug_registers(struct vcpu *v)
     /* DR7 is loaded from the VMCS. */
 }
 
-#ifndef __UXEN__
+#ifdef __UXEN_vdr__
 /*
  * DR7 is saved and restored on every vmexit.  Other debug registers only
  * need to be restored if their value is going to affect execution -- i.e.,
@@ -569,7 +569,7 @@ DEBUG();
     if ( unlikely(v->arch.debugreg[7] & DR7_ACTIVE_MASK) )
         __restore_debug_registers(v);
 }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_vdr__ */
 
 static void vmx_vmcs_save(struct vcpu *v, struct hvm_hw_cpu *c)
 {
@@ -805,10 +805,12 @@ void vmx_ctxt_switch_from(struct vcpu *v)
     vcpu_save_fpu(v);
     vmx_restore_host_msrs(v);
     vmx_restore_host_env();
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_vdr__
     vmx_save_dr(v);
+#endif  /* __UXEN_vdr__ */
+#ifdef __UXEN_vpmu__
     vpmu_save(v);
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_vpmu__ */
     cpumask_clear_cpu(v->processor, v->domain->domain_dirty_cpumask);
     cpumask_clear_cpu(v->processor, v->vcpu_dirty_cpumask);
     vmx_unload_vmcs(v);
@@ -1057,10 +1059,12 @@ void vmx_ctxt_switch_to(struct vcpu *v)
     pt_maybe_sync_cpu(d);
 
     vmx_restore_guest_msrs(v);
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_vdr__
     vmx_restore_dr(v);
+#endif  /* __UXEN_vdr__ */
+#ifdef __UXEN_vpmu__
     vpmu_load(v);
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_vpmu__ */
 
     if ( cpu_has_rdtscp && hvm_has_rdtscp(v->domain) ) {
         unsigned long tsc_aux = hvm_msr_tsc_aux(v);
@@ -1858,11 +1862,11 @@ int
 vmx_do_pmu_interrupt(struct cpu_user_regs *regs)
 {
 
-#ifndef __UXEN__
+#ifdef __UXEN_vpmu__
     return vpmu_do_interrupt(regs);
-#else  /* __UXEN_NOT_YET__ */
+#else  /* __UXEN_vpmu__ */
     return 0;
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_vpmu__ */
 }
 
 void
@@ -1974,10 +1978,10 @@ struct hvm_function_table * __init start_vmx(void)
 
         if ( cpu_has_vmx_ept_2mb )
             vmx_function_table.hap_capabilities |= HVM_HAP_SUPERPAGE_2MB;
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_todo__
         if ( cpu_has_vmx_ept_1gb )
             vmx_function_table.hap_capabilities |= HVM_HAP_SUPERPAGE_1GB;
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_todo__ */
 
         setup_ept_dump();
     }
@@ -2447,10 +2451,10 @@ vmx_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
             goto gp_fault;
         break;
     default:
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_vpmu__
         if ( vpmu_do_rdmsr(msr, msr_content) )
             break;
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_vpmu__ */
 #ifndef __UXEN__
         if ( passive_domain_do_rdmsr(msr, msr_content) )
             goto done;
@@ -2465,10 +2469,10 @@ vmx_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
                 goto done;
         }
 
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
         if ( vmx_read_guest_msr(msr, msr_content) == 0 )
             break;
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_todo__ */
 
         if ( is_last_branch_msr(msr) )
         {
@@ -2589,7 +2593,7 @@ vmx_msr_write_intercept(unsigned int msr, uint64_t msr_content)
         __vmwrite(GUEST_SYSENTER_EIP, msr_content);
         break;
     case MSR_IA32_DEBUGCTLMSR: {
-#ifndef __UXEN__
+#ifdef __UXEN_vdebugctlmsr__
         int i, rc = 0;
 
         if ( !msr_content || (msr_content & ~3) )
@@ -2617,7 +2621,7 @@ vmx_msr_write_intercept(unsigned int msr, uint64_t msr_content)
             __vmwrite(GUEST_IA32_DEBUGCTL_HIGH, msr_content >> 32);
 #endif
         }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_vdebugctlmsr__ */
 
         break;
     }
@@ -2645,10 +2649,10 @@ vmx_msr_write_intercept(unsigned int msr, uint64_t msr_content)
             goto gp_fault;
         break;
     default:
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_vpmu__
         if ( vpmu_do_wrmsr(msr, msr_content) )
             return X86EMUL_OKAY;
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_vpmu__ */
 #ifndef __UXEN__
         if ( passive_domain_do_wrmsr(msr, msr_content) )
             return X86EMUL_OKAY;
@@ -2664,9 +2668,9 @@ vmx_msr_write_intercept(unsigned int msr, uint64_t msr_content)
         {
             case HNDL_unhandled:
                 if (
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
                      (vmx_write_guest_msr(msr, msr_content) != 0) &&
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_todo__ */
                      !is_last_branch_msr(msr) ) {
                     if (wrmsr_hypervisor_regs(msr, msr_content) == -1)
                         return X86EMUL_RETRY;

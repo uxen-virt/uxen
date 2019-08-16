@@ -44,17 +44,17 @@ CHECK_t_buf;
 #define compat_t_rec t_rec
 #endif
 
-#ifndef __UXEN__
+#ifdef __UXEN_xentrace__
 /* opt_tbuf_size: trace buffer size (in pages) for each cpu */
 static unsigned int opt_tbuf_size;
 static unsigned int opt_tevt_mask;
 integer_param("tbuf_size", opt_tbuf_size);
 integer_param("tevt_mask", opt_tevt_mask);
-#else  /* __UXEN__ */
+#else  /* __UXEN_xentrace__ */
 #define opt_tbuf_size 0
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_xentrace__ */
 
-#ifndef __UXEN__
+#ifdef __UXEN_xentrace__
 /* Pointers to the meta-data objects for all system trace buffers */
 static struct t_info *t_info;
 static unsigned int t_info_pages;
@@ -70,13 +70,13 @@ static u32 t_buf_highwater;
 /* Number of records lost due to per-CPU trace buffer being full. */
 static DEFINE_PER_CPU(unsigned long, lost_records);
 static DEFINE_PER_CPU(unsigned long, lost_records_first_tsc);
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_xentrace__ */
 
 /* a flag recording whether initialization has been done */
 /* or more properly, if the tbuf subsystem is enabled right now */
 int tb_init_done __read_mostly;
 
-#ifndef __UXEN__
+#ifdef __UXEN_xentrace__
 /* which CPUs tracing is enabled on */
 static cpumask_t tb_cpu_mask;
 
@@ -310,11 +310,11 @@ static int tb_set_size(unsigned int pages)
 
     return alloc_trace_bufs(pages);
 }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_xentrace__ */
 
 int trace_will_trace_event(u32 event)
 {
-#ifndef __UXEN__
+#ifdef __UXEN_xentrace__
     if ( !tb_init_done )
         return 0;
 
@@ -337,12 +337,12 @@ int trace_will_trace_event(u32 event)
         return 0;
 
     return 1;
-#else   /* __UXEN__ */
+#else  /* __UXEN_xentrace__ */
     BUG(); return 0;
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_xentrace__ */
 }
 
-#ifndef __UXEN__
+#ifdef __UXEN_xentrace__
 /**
  * init_trace_bufs - performs initialization of the per-cpu trace buffers.
  *
@@ -675,13 +675,11 @@ static inline void insert_lost_records(struct t_buf *buf)
  */
 static void trace_notify_dom0(unsigned long unused)
 {
-#ifndef __UXEN_NOT_YET__
     send_guest_global_virq(dom0, VIRQ_TBUF);
-#endif  /* __UXEN_NOT_YET__ */
 }
 static DECLARE_SOFTIRQ_TASKLET(trace_notify_dom0_tasklet,
                                trace_notify_dom0, 0);
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_xentrace__ */
 
 /**
  * __trace_var - Enters a trace tuple into the trace buffer for the current CPU.
@@ -695,7 +693,7 @@ static DECLARE_SOFTIRQ_TASKLET(trace_notify_dom0_tasklet,
 void __trace_var(u32 event, bool_t cycles, unsigned int extra,
                  const void *extra_data)
 {
-#ifndef __UXEN__
+#ifdef __UXEN_xentrace__
     struct t_buf *buf;
     unsigned long flags;
     u32 bytes_to_tail, bytes_to_wrap;
@@ -829,7 +827,7 @@ unlock:
          && started_below_highwater
          && (calc_unconsumed_bytes(buf) >= t_buf_highwater) )
         tasklet_schedule(&trace_notify_dom0_tasklet);
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_xentrace__ */
 }
 
 /*

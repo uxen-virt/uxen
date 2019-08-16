@@ -109,9 +109,7 @@ static void rtc_pf_callback(struct vcpu *v, void *opaque)
          && ++(s->pt_dead_ticks) >= 10 )
     {
         /* VM is ignoring its RTC; no point in running the timer */
-#ifndef __UXEN__
         TRACE_0D(TRC_HVM_EMUL_RTC_STOP_TIMER);
-#endif
         destroy_periodic_time(&s->pt);
         s->period = 0;
     }
@@ -174,9 +172,7 @@ static void rtc_timer_update(RTCState *s)
                     delta = period - ((now - s->start_time) % period);
                 if ( s->hw.cmos_data[RTC_REG_B] & RTC_PIE )
                 {
-#ifndef __UXEN__
                     TRACE_2D(TRC_HVM_EMUL_RTC_START_TIMER, delta, period);
-#endif
                     create_periodic_time(v, &s->pt, delta, period,
                                          RTC_IRQ, rtc_pf_callback, s);
                 }
@@ -187,9 +183,7 @@ static void rtc_timer_update(RTCState *s)
         }
         /* fall through */
     default:
-#ifndef __UXEN__
         TRACE_0D(TRC_HVM_EMUL_RTC_STOP_TIMER);
-#endif
         destroy_periodic_time(&s->pt);
         s->period = 0;
         break;
@@ -544,9 +538,7 @@ int rtc_ioport_write(void *opaque, uint32_t addr, uint32_t data)
         rtc_update_irq(s);
         if ( (data ^ orig) & RTC_PIE )
         {
-#ifndef __UXEN__
             TRACE_0D(TRC_HVM_EMUL_RTC_STOP_TIMER);
-#endif
             destroy_periodic_time(&s->pt);
             s->period = 0;
             rtc_timer_update(s);
@@ -816,9 +808,7 @@ void rtc_reset(struct domain *d)
 {
     RTCState *s = domain_vrtc(d);
 
-#ifndef __UXEN__
     TRACE_0D(TRC_HVM_EMUL_RTC_STOP_TIMER);
-#endif
     destroy_periodic_time(&s->pt);
     s->period = 0;
     s->pt.source = PTSRC_isa;
@@ -872,9 +862,7 @@ void rtc_deinit(struct domain *d)
 
     spin_barrier(&s->lock);
 
-#ifndef __UXEN__
     TRACE_0D(TRC_HVM_EMUL_RTC_STOP_TIMER);
-#endif
     destroy_periodic_time(&s->pt);
     kill_timer(&s->update_timer);
     kill_timer(&s->update_timer2);

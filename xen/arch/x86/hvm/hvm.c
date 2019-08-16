@@ -3566,16 +3566,16 @@ int hvm_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
         break;
 
     default:
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_vmce__
         if ( (ret = vmce_rdmsr(msr, msr_content)) < 0 )
             goto gp_fault;
         /* If ret == 0 then this is not an MCE MSR, see other MSRs. */
         ret = ((ret == 0)
                ? HVM_FUNCS(msr_read_intercept, msr, msr_content)
                : X86EMUL_OKAY);
-#else  /* __UXEN_NOT_YET__ */
+#else  /* __UXEN_vmce__ */
         ret = HVM_FUNCS(msr_read_intercept, msr, msr_content);
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_vmce__ */
         break;
     }
 
@@ -3686,16 +3686,16 @@ int hvm_msr_write_intercept(unsigned int msr, uint64_t msr_content)
         break;
 
     default:
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_vmce__
         if ( (ret = vmce_wrmsr(msr, msr_content)) < 0 )
             goto gp_fault;
         /* If ret == 0 then this is not an MCE MSR, see other MSRs. */
         ret = ((ret == 0)
                ? HVM_FUNCS(msr_write_intercept, msr, msr_content)
                : X86EMUL_OKAY);
-#else  /* __UXEN_NOT_YET__ */
+#else  /* __UXEN_vmce__ */
         ret = HVM_FUNCS(msr_write_intercept, msr, msr_content);
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_vmce__ */
         break;
     }
 
@@ -4406,7 +4406,7 @@ static int hvmop_set_pci_link_route(
     return rc;
 }
 
-#ifndef __UXEN__
+#ifdef __UXEN_vmsi__
 static int hvmop_inject_msi(
     XEN_GUEST_HANDLE(xen_hvm_inject_msi_t) uop)
 {
@@ -4414,7 +4414,6 @@ static int hvmop_inject_msi(
     struct domain *d;
     int rc;
 
-DEBUG();
     if ( copy_from_guest(&op, uop, 1) )
         return -EFAULT;
 
@@ -4436,7 +4435,7 @@ DEBUG();
     rcu_unlock_domain(d);
     return rc;
 }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_vmsi__ */
 
 #ifndef __UXEN__
 static int hvmop_flush_tlb_all(void)
@@ -4754,9 +4753,9 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
     struct domain *curr_d = current->domain;
     long rc = 0;
 
-#ifdef __UXEN__
+#ifndef __UXEN_todo__
  again:
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_todo__ */
     switch ( op )
     {
     case HVMOP_set_param:
@@ -4860,7 +4859,7 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
 
                 domctl_lock_release();
                 break;
-#ifndef __UXEN__
+#ifdef __UXEN_dm_domain__
             case HVM_PARAM_DM_DOMAIN:
                 /* Not reflexive, as we must domain_pause(). */
                 rc = -EPERM;
@@ -4892,7 +4891,7 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
                 }
                 domain_unpause(d);
                 break;
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_dm_domain__ */
             case HVM_PARAM_ACPI_S_STATE:
                 /* Not reflexive, as we must domain_pause(). */
                 rc = -EPERM;
@@ -5028,12 +5027,12 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
             guest_handle_cast(arg, xen_hvm_set_isa_irq_level_t));
         break;
 
-#ifndef __UXEN__
+#ifdef __UXEN_vmsi__
     case HVMOP_inject_msi:
         rc = hvmop_inject_msi(
             guest_handle_cast(arg, xen_hvm_inject_msi_t));
         break;
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_vmsi__ */
 
     case HVMOP_set_pci_link_route:
         rc = hvmop_set_pci_link_route(
@@ -5156,7 +5155,7 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
         break;
     }
 
-#ifndef __UXEN__
+#ifdef __UXEN_get_mem_type__
     case HVMOP_get_mem_type:
     {
         struct xen_hvm_get_mem_type a;
@@ -5187,7 +5186,7 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
         rcu_unlock_domain(d);
         break;
     }
-#endif // __UXEN__
+#endif  /* __UXEN_get_mem_type__ */
 
     case HVMOP_set_mem_type:
     {
@@ -5393,7 +5392,9 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
             rc = -EFAULT;
         break;
     }
+#endif  /* __UXEN__ */
 
+#ifdef __UXEN_xentrace__
     case HVMOP_xentrace: {
         xen_hvm_xentrace_t tr;
 
@@ -5409,7 +5410,7 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
                   tr.extra_bytes, tr.extra);
         break;
     }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_xentrace__ */
 
     case HVMOP_inject_trap: 
     {
@@ -5554,16 +5555,16 @@ long do_hvm_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
     }
 
     if ( rc == -EAGAIN )
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
         rc = hypercall_create_continuation(
             __HYPERVISOR_hvm_op, "lh", op, arg);
-#else   /* __UXEN__ */
+#else  /* __UXEN_todo__ */
     {
         gdprintk(XENLOG_WARNING, "do_hvm_op create continuation\n");
         rc = 0;
         goto again;
     }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_todo__ */
 
     return rc;
 }
@@ -5602,7 +5603,7 @@ static long do_hvm_sched_op(unsigned long op, XEN_GUEST_HANDLE(void) arg)
 
 int hvm_debug_op(struct vcpu *v, int32_t op)
 {
-#ifndef __UXEN__
+#ifdef __UXEN_debugger__
     int rc;
 
 DEBUG();
@@ -5625,9 +5626,9 @@ DEBUG();
     }
 
     return rc;
-#else   /* __UXEN__ */
+#else  /* __UXEN_debugger__ */
     BUG(); return 0;
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_debugger__ */
 }
 
 void

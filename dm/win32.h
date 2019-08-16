@@ -420,14 +420,14 @@ void uxenclipboard_gdi_startup_with_atexit();
 int generate_random_bytes(void *buf, size_t len);
 void cpu_usage(float *user, float *kernel, uint64_t *user_total_sec,
                uint64_t *kernel_total_sec);
-#ifdef QEMU_UXEN
+#ifndef LIBIMG
 void *__wrap_VirtualAlloc(void *addr, size_t size, DWORD type, DWORD protect);
 void *__wrap_HeapAlloc(HANDLE heap, DWORD flags, size_t size);
 void *__wrap_HeapReAlloc(HANDLE heap, DWORD flags, void *ptr, size_t size);
 #define VirtualAlloc __wrap_VirtualAlloc
 #define HeapAlloc __wrap_HeapAlloc
 #define HeapReAlloc __wrap_HeapReAlloc
-#endif
+#endif  /* LIBIMG */
 
 typedef int DPI_AWARENESS;
 typedef void *DPI_AWARENESS_CONTEXT;

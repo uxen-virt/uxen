@@ -691,10 +691,10 @@ int arch_domain_create(struct domain *d, unsigned int domcr_flags)
             goto fail;
 #endif  /* __UXEN_NOT_YET__ */
 
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_vmce__
         /* For Guest vMCE MSRs virtualization */
         vmce_init_msr(d);
-#endif  /* __UXEN_NOT_YET__ */ 
+#endif  /* __UXEN_vmce__ */
     }
 
     if ( is_hvm_domain(d) )
@@ -726,9 +726,9 @@ int arch_domain_create(struct domain *d, unsigned int domcr_flags)
 
  fail:
     d->is_dying = DOMDYING_dead;
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_vmce__
     vmce_destroy_msr(d);
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_vmce__ */
 #ifndef __UXEN__
     cleanup_domain_irq_mapping(d);
 #endif  /* __UXEN__ */
@@ -768,8 +768,10 @@ void arch_domain_destroy(struct domain *d)
         xfree(d->arch.pv_domain.e820);
 #endif  /* __UXEN__ */
 
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_vmce__
     vmce_destroy_msr(d);
+#endif  /* __UXEN_vmce__ */
+#ifndef __UXEN_NOT_YET__
     pci_release_devices(d);
 #endif  /* __UXEN_NOT_YET__ */
 #ifndef __UXEN__
@@ -2132,11 +2134,13 @@ int hypercall_xlat_continuation(unsigned int *id, unsigned int mask, ...)
 #endif
 #endif  /* __UXEN__ */
 
-#if defined(__UXEN__) && !defined(CONFIG_COMPAT)
+#ifndef __UXEN__
+#ifndef CONFIG_COMPAT
 int hypercall_xlat_continuation(unsigned int *id, unsigned int mask, ...)
 {
     BUG(); return 0;
 }
+#endif  /* CONFIG_COMPAT */
 #endif  /* __UXEN__ */
 
 #ifndef __UXEN__

@@ -10,7 +10,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -260,10 +260,10 @@ fastcall void smp_invalidate_interrupt(void)
     perfc_incr(ipis);
     this_cpu(irq_count)++;
     irq_enter();
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
     if ( !__sync_local_execstate() ||
          (flush_flags & (FLUSH_TLB_GLOBAL | FLUSH_CACHE)) )
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_todo__ */
         flush_area_local(flush_va, flush_flags);
     cpumask_clear_cpu(smp_processor_id(), &flush_cpumask);
     irq_exit();

@@ -25,7 +25,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -356,7 +356,9 @@ int xc_get_cpumap_size(xc_interface *xch);
 
 /* allocate a cpumap */
 xc_cpumap_t xc_cpumap_alloc(xc_interface *xch);
+#endif  /* __UXEN_TOOLS__ */
 
+#ifdef __UXEN_debugger__
 /*
  * DOMAIN DEBUGGING FUNCTIONS
  */
@@ -372,7 +374,7 @@ typedef struct xc_core_header {
 
 #define XC_CORE_MAGIC     0xF00FEBED
 #define XC_CORE_MAGIC_HVM 0xF00FEBEE
-#endif  /* __UXEN_TOOLS__ */
+#endif  /* __UXEN_debugger__ */
 
 /*
  * DOMAIN MANAGEMENT FUNCTIONS
@@ -440,7 +442,7 @@ int xc_domain_create(xc_interface *xch,
                      uint32_t *pdomid);
 
 
-#ifndef __UXEN_TOOLS__
+#ifndef __UXEN_debugger__
 /* Functions to produce a dump of a given domain
  *  xc_domain_dumpcore - produces a dump to a specified file
  *  xc_domain_dumpcore_via_callback - produces a dump, using a specified
@@ -463,7 +465,7 @@ int xc_domain_dumpcore_via_callback(xc_interface *xch,
                                     uint32_t domid,
                                     void *arg,
                                     dumpcore_rtn_t dump_rtn);
-#endif  /* __UXEN_TOOLS__ */
+#endif  /* __UXEN_debugger__ */
 
 /*
  * This function sets the maximum number of vcpus that a domain may create.
@@ -525,6 +527,14 @@ int xc_domain_resume(xc_interface *xch,
 		     uint32_t domid,
 		     int fast);
 #else  /* __UXEN_TOOLS__ */
+/**
+ * This function resumes a suspended domain. The domain should have
+ * been previously suspended.
+ *
+ * @parm xch a handle to an open hypervisor interface
+ * @parm domid the domain id to resume
+ * return 0 on success, -1 on failure
+ */
 int xc_domain_resume(xc_interface *xch, uint32_t domid);
 #endif  /* __UXEN_TOOLS__ */
 
@@ -681,15 +691,16 @@ int xc_vcpu_getinfo(xc_interface *xch,
                     uint32_t vcpu,
                     xc_vcpuinfo_t *info);
 
-#ifndef __UXEN_TOOLS__
+#ifdef __UXEN_cpu_usage__
 long long xc_domain_get_cpu_usage(xc_interface *xch,
                                   domid_t domid,
                                   int vcpu);
-#endif  /* __UXEN_TOOLS__ */
+#endif  /* __UXEN_cpu_usage__ */
 
 int xc_domain_sethandle(xc_interface *xch, uint32_t domid,
                         xen_domain_handle_t handle);
 
+#ifndef __UXEN_TOOLS__
 typedef xen_domctl_shadow_op_stats_t xc_shadow_op_stats_t;
 int xc_shadow_control(xc_interface *xch,
                       uint32_t domid,
@@ -699,6 +710,7 @@ int xc_shadow_control(xc_interface *xch,
                       unsigned long *mb,
                       uint32_t mode,
                       xc_shadow_op_stats_t *stats);
+#endif  /* __UXEN_TOOLS__ */
 
 #ifndef __UXEN_TOOLS__
 int xc_sedf_domain_set(xc_interface *xch,
@@ -738,7 +750,9 @@ int
 xc_sched_arinc653_schedule_get(
     xc_interface *xch,
     struct xen_sysctl_arinc653_schedule *schedule);
+#endif  /* __UXEN_TOOLS__ */
 
+#ifdef __UXEN_sendtrigger__
 /**
  * This function sends a trigger to a domain.
  *
@@ -752,7 +766,9 @@ int xc_domain_send_trigger(xc_interface *xch,
                            uint32_t domid,
                            uint32_t trigger,
                            uint32_t vcpu);
+#endif  /* __UXEN_sendtrigger__ */
 
+#ifdef __UXEN_debugger__
 /**
  * This function enables or disable debugging of a domain.
  *
@@ -764,7 +780,9 @@ int xc_domain_send_trigger(xc_interface *xch,
 int xc_domain_setdebugging(xc_interface *xch,
                            uint32_t domid,
                            unsigned int enable);
+#endif  /* __UXEN_debugger__ */
 
+#ifndef __UXEN_TOOLS__
 /**
  * This function sets or clears the requirement that an access memory
  * event listener is required on the domain.
@@ -1592,10 +1610,10 @@ int xc_hvm_set_isa_irq_level(
 int xc_hvm_set_pci_link_route(
     xc_interface *xch, domid_t dom, uint8_t link, uint8_t isa_irq);
 
-#ifndef __UXEN_TOOLS__
+#ifdef __UXEN_vmsi__
 int xc_hvm_inject_msi(
     xc_interface *xch, domid_t dom, uint64_t addr, uint32_t data);
-#endif  /* __UXEN_TOOLS__ */
+#endif  /* __UXEN_vmsi__ */
 
 /*
  * Track dirty bit changes in the VRAM area
@@ -1826,18 +1844,20 @@ int xc_domain_suppress_spurious_page_faults(xc_interface *xch,
 int xc_domain_set_target(xc_interface *xch,
                          uint32_t domid,
                          uint32_t target);
+#endif  /* __UXEN_TOOLS__ */
 
+#ifdef __UXEN_debugger__
 /* Control the domain for debug */
 int xc_domain_debug_control(xc_interface *xch,
                             uint32_t domid,
                             uint32_t sop,
                             uint32_t vcpu);
-#endif  /* __UXEN_TOOLS__ */
+#endif  /* __UXEN_debugger__ */
 
 #if defined(__i386__) || defined(__x86_64__)
 void xc_cpuid(const unsigned int *input, unsigned int *regs);
 void xc_cpuid_brand_get(char *str);
-#if !defined(__UXEN_TOOLS__)
+#ifdef __UXEN_cpuid__
 int xc_cpuid_check(xc_interface *xch,
                    const unsigned int *input,
                    const char **config,
@@ -1847,7 +1867,7 @@ int xc_cpuid_set(xc_interface *xch,
                  const unsigned int *input,
                  const char **config,
                  char **config_transformed);
-#endif  /* __UXEN_TOOLS__ */
+#endif  /* __UXEN_cpuid__ */
 int xc_cpuid_apply_policy(xc_interface *xch,
                           domid_t domid);
 #if !defined(__UXEN_TOOLS__)

@@ -767,14 +767,14 @@ unsigned long hypercall_create_continuation(
 unsigned long hypercall_create_retry_continuation(void);
 void hypercall_cancel_continuation(void);
 
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
 #define hypercall_preempt_check() (unlikely(    \
         softirq_pending(smp_processor_id()) |   \
         local_events_need_delivery()            \
     ))
-#else   /* __UXEN__ */
+#else  /* __UXEN_todo__ */
 #define hypercall_preempt_check() 0
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_todo__ */
 
 #define check_free_pages_needed(n)                                  \
     (_uxen_info.ui_free_pages[smp_processor_id()].count < 20 + (n))

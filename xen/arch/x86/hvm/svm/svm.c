@@ -172,7 +172,7 @@ void svm_intercept_msr(struct vcpu *v, uint32_t msr, int enable)
     }
 }
 
-#ifndef __UXEN__
+#ifdef __UXEN_vdr__
 static void svm_save_dr(struct vcpu *v)
 {
     struct vmcb_struct *vmcb = v->arch.hvm_svm.vmcb;
@@ -191,7 +191,7 @@ static void svm_save_dr(struct vcpu *v)
     v->arch.debugreg[6] = vmcb_get_dr6(vmcb);
     v->arch.debugreg[7] = vmcb_get_dr7(vmcb);
 }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_vdr__ */
 
 static void __restore_debug_registers(struct vcpu *v)
 {
@@ -211,7 +211,7 @@ static void __restore_debug_registers(struct vcpu *v)
     vmcb_set_dr7(vmcb, v->arch.debugreg[7]);
 }
 
-#ifndef __UXEN__
+#ifdef __UXEN_vdr__
 /*
  * DR7 is saved and restored on every vmexit.  Other debug registers only
  * need to be restored if their value is going to affect execution -- i.e.,
@@ -223,7 +223,7 @@ static void svm_restore_dr(struct vcpu *v)
     if ( unlikely(v->arch.debugreg[7] & DR7_ACTIVE_MASK) )
         __restore_debug_registers(v);
 }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_vdr__ */
 
 static int svm_vmcb_save(struct vcpu *v, struct hvm_hw_cpu *c)
 {
@@ -876,10 +876,12 @@ void svm_ctxt_switch_from(struct vcpu *v)
     if (!vmexec_fpu_ctxt_switch)
         vcpu_save_fpu(v);
 
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_vdr__
     svm_save_dr(v);
+#endif  /* __UXEN_vdr__ */
+#ifdef __UXEN_vpmu__
     vpmu_save(v);
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_vpmu__ */
     svm_lwp_save(v);
     svm_tsc_ratio_save(v);
 
@@ -970,9 +972,9 @@ void svm_ctxt_switch_to(struct vcpu *v)
 
     pt_maybe_sync_cpu(v->domain);
 
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_vdr__
     svm_restore_dr(v);
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_vdr__ */
 
     if (ax_present)
         ax_svm_vmsave_root(v);
@@ -984,9 +986,9 @@ void svm_ctxt_switch_to(struct vcpu *v)
     v->arch.hvm_svm.root_vmcb_pa = __pa(per_cpu(root_vmcb, cpu));
 #endif  /* __UXEN__ */
     vmcb->cleanbits.bytes = 0;
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_vpmu__
     vpmu_load(v);
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_vpmu__ */
     svm_lwp_load(v);
     svm_tsc_ratio_load(v);
 
@@ -1086,9 +1088,9 @@ svm_vcpu_initialise(struct vcpu *v)
         return rc;
     }
 
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_vpmu__
     vpmu_initialise(v);
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_vpmu__ */
     return 0;
 }
 
@@ -1096,9 +1098,9 @@ void
 svm_vcpu_destroy(struct vcpu *v)
 {
     svm_destroy_vmcb(v);
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_vpmu__
     vpmu_destroy(v);
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_vpmu__ */
 #ifndef __UXEN__
     passive_domain_destroy(v);
 #endif  /* __UXEN__ */
@@ -1172,11 +1174,11 @@ svm_event_pending(struct vcpu *v)
 int
 svm_do_pmu_interrupt(struct cpu_user_regs *regs)
 {
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_vpmu__
     return vpmu_do_interrupt(regs);
-#else  /* __UXEN_NOT_YET__ */
+#else  /* __UXEN_vpmu__ */
     return 0;
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_vpmu__ */
 }
 
 void
@@ -1615,11 +1617,11 @@ svm_msr_read_intercept(unsigned int msr, uint64_t *msr_content)
     case MSR_AMD_FAM15H_EVNTSEL3:
     case MSR_AMD_FAM15H_EVNTSEL4:
     case MSR_AMD_FAM15H_EVNTSEL5:
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_vpmu__
         vpmu_do_rdmsr(msr, msr_content);
-#else  /* __UXEN_NOT_YET__ */
+#else  /* __UXEN_vpmu__ */
         *msr_content = 0;       /* no vPMU */
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_vpmu__ */
         break;
 
     case MSR_AMD64_DR0_ADDRESS_MASK:
@@ -1755,11 +1757,9 @@ svm_msr_write_intercept(unsigned int msr, uint64_t msr_content)
     case MSR_AMD_FAM15H_EVNTSEL3:
     case MSR_AMD_FAM15H_EVNTSEL4:
     case MSR_AMD_FAM15H_EVNTSEL5:
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_vpmu__
         vpmu_do_wrmsr(msr, msr_content);
-#else  /* __UXEN_NOT_YET__ */
-        /* no vPMU */
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_vpmu__ */
         break;
 
      case MSR_AMD64_DR0_ADDRESS_MASK:

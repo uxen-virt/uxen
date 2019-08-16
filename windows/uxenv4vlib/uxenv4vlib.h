@@ -6,7 +6,7 @@
 #ifndef __UXENV4VLIB_H__
 #define __UXENV4VLIB_H__
 
-#if defined(XENV4V_DRIVER) || defined(__UXEN__)
+#if defined(XENV4V_DRIVER) || defined(__UXEN_SYS__)
 #include <public/xen.h>
 #include <public/v4v.h>
 #else

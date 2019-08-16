@@ -1541,7 +1541,7 @@ cirrus_get_start_addr:
   ret
 
 cirrus_clear_vram:
-#ifndef __UXEN__
+#ifdef __UXEN_clear_vram__
 ;; clearing the screen slowly triggers a concurrency bug in windows
   pusha
   push es
@@ -1588,7 +1588,7 @@ cirrus_clear_vram_1:
 
   pop es
   popa
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_clear_vram__ */
   ret
 
 cirrus_extbios_handlers:

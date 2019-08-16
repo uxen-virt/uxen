@@ -961,12 +961,12 @@ Bit16u *AX;Bit16u BX; Bit16u ES;Bit16u DI;
 
         using_lfb=((BX & VBE_MODE_LINEAR_FRAME_BUFFER) == VBE_MODE_LINEAR_FRAME_BUFFER);
         lfb_flag=using_lfb?VBE_DISPI_LFB_ENABLED:0;
-#ifndef __UXEN__
+#ifdef __UXEN_clear_vram__
         /* clearing the screen slowly triggers a concurrency bug in windows */
         no_clear=((BX & VBE_MODE_PRESERVE_DISPLAY_MEMORY) == VBE_MODE_PRESERVE_DISPLAY_MEMORY)?VBE_DISPI_NOCLEARMEM:0;
-#else  /* __UXEN__ */
+#else  /* __UXEN_clear_vram__ */
         no_clear = VBE_DISPI_NOCLEARMEM;
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_clear_vram__ */
 
         BX = (BX & 0x1ff);
 

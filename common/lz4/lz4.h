@@ -56,11 +56,11 @@ extern "C" {
  * Reduced memory usage can improve speed, due to cache effect
  * Default value is 14, for 16KB, which nicely fits into Intel x86 L1 cache
  */
-#ifndef __UXEN__
+#ifndef __UXEN_core__
 #define LZ4_MEMORY_USAGE 14
-#else   /* __UXEN__ */
+#else   /* __UXEN_core__ */
 #define LZ4_MEMORY_USAGE 10
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_core__ */
 
 
 /**************************************

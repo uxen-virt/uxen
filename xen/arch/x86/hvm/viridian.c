@@ -315,9 +315,9 @@ int cpuid_viridian_leaves(unsigned int leaf, unsigned int *eax,
         *eax = CPUID4A_RELAX_TIMER_INT;
         if ( viridian_feature_mask(d) & HVMPV_hcall_remote_tlb_flush )
             *eax |= CPUID4A_HCALL_REMOTE_TLB_FLUSH;
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
         if ( !cpu_has_vmx_apic_reg_virt )
-#endif
+#endif  /* __UXEN_todo__ */
             *eax |= CPUID4A_MSR_BASED_APIC;
 
         /*
@@ -334,12 +334,12 @@ int cpuid_viridian_leaves(unsigned int leaf, unsigned int *eax,
 
     case 6:
         /* Detected and in use hardware features. */
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
         if ( cpu_has_vmx_virtualize_apic_accesses )
             *eax |= CPUID6A_APIC_OVERLAY;
         if ( cpu_has_vmx_msr_bitmap || (read_efer() & EFER_SVME) )
             *eax |= CPUID6A_MSR_BITMAPS;
-#endif
+#endif  /* __UXEN_todo__ */
         if ( hap_enabled(d) )
             *eax |= CPUID6A_NESTED_PAGING;
         break;
@@ -612,9 +612,9 @@ int wrmsr_viridian_regs(uint32_t idx, uint64_t val)
         break;
 
     case HV_X64_MSR_VP_ASSIST_PAGE:
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
         perfc_incr(mshv_wrmsr_apic_msr);
-#endif
+#endif  /* __UXEN_todo__ */
         teardown_vp_assist(v); /* release any previous mapping */
         v->arch.hvm_vcpu.viridian.vp_assist.msr.raw = val;
         dump_vp_assist(v);
@@ -662,7 +662,7 @@ int wrmsr_viridian_regs(uint32_t idx, uint64_t val)
     return 1;
 }
 
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
 static int64_t raw_trc_val(struct domain *d)
 {
     uint64_t tsc;
@@ -695,7 +695,7 @@ void viridian_time_ref_count_thaw(struct domain *d)
          !test_and_set_bit(_TRC_running, &trc->flags) )
         trc->off = (int64_t)trc->val - raw_trc_val(d);
 }
-#endif
+#endif  /* __UXEN_todo__ */
 
 int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
 {
@@ -725,18 +725,18 @@ int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
     case HV_X64_MSR_TSC_FREQUENCY:
         if ( viridian_feature_mask(d) & HVMPV_no_freq )
             return 0;
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
         perfc_incr(mshv_rdmsr_tsc_frequency);
-#endif
+#endif  /* __UXEN_todo__ */
         *val = (uint64_t)d->arch.tsc_khz * 1000ull;
         break;
 
     case HV_X64_MSR_APIC_FREQUENCY:
         if ( viridian_feature_mask(d) & HVMPV_no_freq )
             return 0;
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
         perfc_incr(mshv_rdmsr_apic_frequency);
-#endif
+#endif  /* __UXEN_todo__ */
         *val = 1000000000ull / APIC_BUS_CYCLE_NS;
         break;
 
@@ -752,9 +752,9 @@ int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
         break;
 
     case HV_X64_MSR_VP_ASSIST_PAGE:
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
         perfc_incr(mshv_rdmsr_apic_msr);
-#endif
+#endif  /* __UXEN_todo__ */
         *val = v->arch.hvm_vcpu.viridian.vp_assist.msr.raw;
         break;
 
@@ -762,9 +762,9 @@ int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
         if ( !(viridian_feature_mask(d) & HVMPV_reference_tsc) )
             return 0;
 
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
         perfc_incr(mshv_rdmsr_tsc_msr);
-#endif
+#endif  /* __UXEN_todo__ */
         *val = d->arch.hvm_domain.viridian.reference_tsc.raw;
         break;
 
@@ -773,7 +773,7 @@ int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
         if ( !(viridian_feature_mask(d) & HVMPV_time_ref_count) )
             return 0;
 
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
         struct viridian_time_ref_count *trc;
 
         trc = &d->arch.hvm_domain.viridian.time_ref_count;
@@ -784,10 +784,10 @@ int rdmsr_viridian_regs(uint32_t idx, uint64_t *val)
 
         perfc_incr(mshv_rdmsr_time_ref_count);
         *val = raw_trc_val(d) + trc->off;
-#else /* __UXEN __ */
+#else  /* __UXEN_todo__ */
         perfc_incr(mshv_rdmsr_time_ref_count);
         *val = hvm_get_guest_time(v) / 100;
-#endif
+#endif  /* __UXEN_todo__ */
         break;
     }
 
@@ -820,19 +820,19 @@ void viridian_domain_deinit(struct domain *d)
         teardown_vp_assist(v);
 }
 
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
 static DEFINE_PER_CPU(cpumask_t, ipi_cpumask);
-#endif
+#endif  /* __UXEN_todo__ */
 
 int viridian_hypercall(struct cpu_user_regs *regs)
 {
     struct vcpu *curr = current;
     struct domain *currd = curr->domain;
     int mode = hvm_guest_x86_mode(curr);
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
     unsigned long input_params_gpa;
     unsigned long output_params_gpa;
-#endif
+#endif  /* __UXEN_todo__ */
     uint16_t status = HV_STATUS_SUCCESS;
 
     union hypercall_input {
@@ -864,17 +864,17 @@ int viridian_hypercall(struct cpu_user_regs *regs)
     {
     case 8:
         input.raw = regs->ecx;
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
         input_params_gpa = regs->edx;
         output_params_gpa = regs->r8;
-#endif
+#endif  /* __UXEN_todo__ */
         break;
     case 4:
         input.raw = ((uint64_t)regs->edx << 32) | regs->eax;
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
         input_params_gpa = ((uint64_t)regs->ebx << 32) | regs->ecx;
         output_params_gpa = ((uint64_t)regs->edi << 32) | regs->esi;
-#endif
+#endif  /* __UXEN_todo__ */
         break;
     default:
         goto out;
@@ -891,7 +891,7 @@ int viridian_hypercall(struct cpu_user_regs *regs)
         status = HV_STATUS_SUCCESS;
         break;
 
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
     case HvFlushVirtualAddressSpace:
     case HvFlushVirtualAddressList:
     {
@@ -962,7 +962,7 @@ int viridian_hypercall(struct cpu_user_regs *regs)
         status = HV_STATUS_SUCCESS;
         break;
     }
-#endif /* __UXEN__ */
+#endif  /* __UXEN_todo__ */
 
     default:
         gdprintk(XENLOG_WARNING, "unimplemented hypercall %04x\n",
@@ -997,9 +997,9 @@ out:
 static int viridian_save_domain_ctxt(struct domain *d, hvm_domain_context_t *h)
 {
     struct hvm_viridian_domain_context ctxt = {
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
         .time_ref_count = d->arch.hvm_domain.viridian.time_ref_count.val,
-#endif
+#endif  /* __UXEN_todo__ */
         .hypercall_gpa  = d->arch.hvm_domain.viridian.hypercall_gpa.raw,
         .guest_os_id    = d->arch.hvm_domain.viridian.guest_os_id.raw,
         .reference_tsc  = d->arch.hvm_domain.viridian.reference_tsc.raw,
@@ -1018,9 +1018,9 @@ static int viridian_load_domain_ctxt(struct domain *d, hvm_domain_context_t *h)
     if ( hvm_load_entry_zeroextend(VIRIDIAN_DOMAIN, h, &ctxt) != 0 )
         return -EINVAL;
 
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
     d->arch.hvm_domain.viridian.time_ref_count.val = ctxt.time_ref_count;
-#endif
+#endif  /* __UXEN_todo__ */
     d->arch.hvm_domain.viridian.hypercall_gpa.raw  = ctxt.hypercall_gpa;
     d->arch.hvm_domain.viridian.guest_os_id.raw    = ctxt.guest_os_id;
     d->arch.hvm_domain.viridian.reference_tsc.raw  = ctxt.reference_tsc;

@@ -20,7 +20,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2018, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -361,7 +361,7 @@ ABI_ENTRY(svm_asm_ax_vmentry, SIZEOF_REG)
         pop r(bp)
         ret
 
-#if 0
+#ifndef __UXEN__
 .globl svm_stgi_label
 svm_stgi_label:
         call_with_regs(svm_vmexit_handler)
@@ -377,4 +377,4 @@ svm_stgi_label:
          * and nsvm_vcpu_switch() will fix it for us. */
         STGI
         jmp  svm_asm_do_resume
-#endif
+#endif  /* __UXEN__ */

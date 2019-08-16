@@ -25,7 +25,7 @@
 /* match UXEN_MAXIMUM_PROCESSORS */
 #define UXEN_MAXIMUM_VCPUS (sizeof(uint64_t) * 8)
 
-#if defined(__UXEN__) && !defined(__UXEN_SYS__)
+#ifdef __UXEN_core__
 
 /* Minor quantites of magic here */
 
@@ -143,9 +143,9 @@
 
 #pragma GCC diagnostic pop
 
-#else
+#else  /* __UXEN_core__ */
 #define __host_call
-#endif
+#endif  /* __UXEN_core__ */
 
 #if defined(_MSC_VER)
 #define __interface_fn __cdecl __host_call

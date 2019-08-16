@@ -64,11 +64,11 @@
  * Little Endian or Big Endian ?
  * Overwrite the #define below if you know your architecture endianess
  */
-#ifndef __UXEN__
+#ifndef __UXEN_core__
 #include <stdlib.h>   /* Apparently required to detect endianess */
-#else   /* __UXEN__ */
+#else   /* __UXEN_core__ */
 #include <asm/byteorder.h>
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_core__ */
 #if defined (__GLIBC__)
 #  include <endian.h>
 #  if (__BYTE_ORDER == __BIG_ENDIAN)
@@ -130,15 +130,15 @@
 #  endif
 #  pragma warning(disable : 4127)        /* disable: C4127: conditional expression is constant */
 #else
-# ifdef __UXEN__
+# ifdef __UXEN_core__
 #    define FORCE_INLINE static always_inline
-# else  /* __UXEN__ */
+# else  /* __UXEN_core__ */
 #  ifdef __GNUC__
 #    define FORCE_INLINE static inline __attribute__((always_inline))
 #  else
 #    define FORCE_INLINE static inline
 #  endif
-# endif  /* __UXEN__ */
+# endif  /* __UXEN_core__ */
 #endif
 
 #ifdef _MSC_VER  /* Visual Studio */
@@ -166,14 +166,14 @@
 /**************************************
    Memory routines
 **************************************/
-#ifndef __UXEN__
+#ifndef __UXEN_core__
 #include <stdlib.h>   /* malloc, calloc, free */
 #define ALLOCATOR(n,s) calloc(n,s)
 #define FREEMEM        free
 #include <string.h>   /* memset, memcpy */
-#else   /* __UXEN__ */
+#else   /* __UXEN_core__ */
 #include <asm/string.h>
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_core__ */
 #define MEM_INIT       memset
 
 
@@ -187,11 +187,11 @@
    Basic Types
 **************************************/
 #if defined (__STDC_VERSION__) && (__STDC_VERSION__ >= 199901L)   /* C99 */
-#ifndef __UXEN__
+#ifndef __UXEN_core__
 # include <stdint.h>
-#else   /* __UXEN__ */
+#else   /* __UXEN_core__ */
 # include <xen/types.h>
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_core__ */
   typedef  uint8_t BYTE;
   typedef uint16_t U16;
   typedef uint32_t U32;
@@ -715,7 +715,7 @@ int LZ4_compress_limitedOutput(const char* source, char* dest, int inputSize, in
 }
 
 
-#ifndef __UXEN__
+#ifndef __UXEN_core__
 /*****************************************
    Experimental : Streaming functions
 *****************************************/
@@ -886,7 +886,7 @@ int LZ4_saveDict (void* LZ4_dict, char* safeBuffer, int dictSize)
 
     return 1;
 }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_core__ */
 
 
 
@@ -1092,7 +1092,7 @@ int LZ4_decompress_fast(const char* source, char* dest, int originalSize)
     return LZ4_decompress_generic(source, dest, 0, originalSize, endOnOutputSize, full, 0, withPrefix64k, NULL, 0);
 }
 
-#ifndef __UXEN__
+#ifndef __UXEN_core__
 /* streaming decompression functions */
 
 //#define LZ4_STREAMDECODESIZE_U32 4
@@ -1195,7 +1195,7 @@ int LZ4_decompress_fast_usingDict(const char* source, char* dest, int originalSi
 {
     return LZ4_decompress_generic(source, dest, 0, originalSize, endOnOutputSize, full, 0, usingExtDict, dictStart, dictSize);
 }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_core__ */
 
 
 /***************************************************
@@ -1211,7 +1211,7 @@ int LZ4_uncompress (const char* source, char* dest, int outputSize) { return LZ4
 int LZ4_uncompress_unknownOutputSize (const char* source, char* dest, int isize, int maxOutputSize) { return LZ4_decompress_safe(source, dest, isize, maxOutputSize); }
 
 
-#ifndef __UXEN__
+#ifndef __UXEN_core__
 /* Obsolete Streaming functions */
 
 int LZ4_sizeofStreamState() { return LZ4_STREAMSIZE; }
@@ -1282,4 +1282,4 @@ int LZ4_decompress_fast_withPrefix64k(const char* source, char* dest, int origin
 {
     return LZ4_decompress_generic(source, dest, 0, originalSize, endOnOutputSize, full, 0, withPrefix64k, NULL, 64 KB);
 }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_core__ */

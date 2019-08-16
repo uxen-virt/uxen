@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2015, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -16,8 +16,10 @@ void mapcache_get_params(uint32_t *end_low_pfn,
                          uint32_t *end_high_pfn);
 uint8_t *mapcache_map(uint64_t phys_addr, uint64_t *len, uint8_t lock);
 void mapcache_unmap(uint64_t phys_addr, uint64_t len, uint8_t lock);
+#ifndef __UXEN_TOOLS__
 void mapcache_invalidate_entry(uint8_t *buffer);
 void mapcache_invalidate(void);
+#endif  /* __UXEN_TOOLS__ */
 
 extern int mapcache_lock_cnt;
 

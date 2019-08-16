@@ -63,7 +63,7 @@ static inline int debugger_trap_fatal(
 static inline int debugger_trap_entry(
     unsigned int vector, struct cpu_user_regs *regs)
 {
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_debugger__
     struct vcpu *v = current;
 
     if ( guest_kernel_mode(v, regs) && v->domain->debugger_attached &&
@@ -74,7 +74,7 @@ static inline int debugger_trap_entry(
         domain_pause_for_debugger();
         return 1;
     }
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_debugger__ */
 
     return 0;
 }

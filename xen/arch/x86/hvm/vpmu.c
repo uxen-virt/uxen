@@ -32,12 +32,12 @@
 #include <asm/hvm/svm/svm.h>
 #include <asm/hvm/svm/vmcb.h>
 
-#ifndef __UXEN__
+#ifdef __UXEN_vpmu__
 static bool_t __read_mostly opt_vpmu_enabled;
 boolean_param("vpmu", opt_vpmu_enabled);
-#else  /* __UXEN__ */
+#else  /* __UXEN_vpmu__ */
 #define opt_vpmu_enabled 0
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_vpmu__ */
 
 int vpmu_do_wrmsr(unsigned int msr, uint64_t msr_content)
 {
@@ -86,10 +86,10 @@ void vpmu_initialise(struct vcpu *v)
 {
     struct vpmu_struct *vpmu = vcpu_vpmu(v);
     __u8 vendor = current_cpu_data.x86_vendor;
-#ifndef __UXEN__
+#ifdef __UXEN_vpmu__
     __u8 family = current_cpu_data.x86;
     __u8 cpu_model = current_cpu_data.x86_model;
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_vpmu__ */
 
     if ( !opt_vpmu_enabled )
         return;
@@ -99,7 +99,7 @@ void vpmu_initialise(struct vcpu *v)
 
     switch ( vendor )
     {
-#ifndef __UXEN__
+#ifdef __UXEN_vpmu__
     case X86_VENDOR_AMD:
         switch ( family )
         {
@@ -116,9 +116,9 @@ void vpmu_initialise(struct vcpu *v)
             return;
         }
         break;
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_vpmu__ */
 
-#ifndef __UXEN__
+#ifdef __UXEN_vpmu__
     case X86_VENDOR_INTEL:
         if ( family == 6 )
         {
@@ -140,7 +140,7 @@ void vpmu_initialise(struct vcpu *v)
                    "Intel processor family %d model %d has not "
                    "been supported\n", family, cpu_model);
         break;
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_vpmu__ */
 
     default:
         printk("VPMU: Initialization failed. "

@@ -1089,7 +1089,7 @@ void vcpu_end_shutdown_deferral(struct vcpu *v)
 
 void domain_pause_for_debugger(void)
 {
-#ifndef __UXEN__
+#ifdef __UXEN_debugger__
     struct domain *d = current->domain;
     struct vcpu *v;
 
@@ -1100,14 +1100,14 @@ void domain_pause_for_debugger(void)
     for_each_vcpu ( d, v )
         vcpu_sleep_nosync(v);
 
-#ifndef __UXEN__
+#ifdef __UXEN_debugger__
     send_guest_global_virq(dom0, VIRQ_DEBUGGER);
-#else   /* __UXEN__ */
+#else  /* __UXEN_debugger__ */
     hostsched_notify_exception(d);
-#endif  /* __UXEN__ */
-#else   /* __UXEN__ */
+#endif  /* __UXEN_debugger__ */
+#else  /* __UXEN_debugger__ */
     BUG();
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_debugger__ */
 }
 
 /* Complete domain destroy after RCU readers are not holding old references. */

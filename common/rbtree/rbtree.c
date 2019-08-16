@@ -31,7 +31,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -49,13 +49,13 @@
  */
 
 #if !defined(_KERNEL) && !defined(_STANDALONE)
-#if defined(__UXEN__)
+#ifdef __UXEN_core__
 #include <xen/types.h>
-#else
+#else  /* __UXEN_core__ */
 #include <sys/types.h>
 #include <stddef.h>
 #include <assert.h>
-#endif
+#endif  /* __UXEN_core__ */
 #if !defined(_WIN32)
 #include <stdbool.h>
 #else

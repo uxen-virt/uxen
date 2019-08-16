@@ -63,6 +63,7 @@ XEN_CFLAGS += -fms-extensions
 $(OSX)XEN_CFLAGS += -Wno-microsoft
 XEN_CPPFLAGS += -D__XEN__ -D__UXEN__
 XEN_CPPFLAGS += -D__UXEN_NOT_YET__
+XEN_CPPFLAGS += -D__UXEN_core__
 XEN_CFLAGS += -Wp,-MD,.deps/$(subst /,_,$@).d -Wp,-MT,$@
 XEN_CFLAGS += -DPERF_COUNTERS
 #XEN_CFLAGS += -DPERF_ARRAYS

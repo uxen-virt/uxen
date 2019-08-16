@@ -62,12 +62,12 @@
 #include <asm/hvm/pvnested.h>
 #include <attoxen-api/ax_attovm.h>
 
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_todo__
 static bool_t __read_mostly opt_vpid_enabled = 1;
 boolean_param("vpid", opt_vpid_enabled);
-#else   /* __UXEN_NOT_YET__ */
+#else  /* __UXEN_todo__ */
 #define opt_vpid_enabled 0
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_todo__ */
 
 #ifndef __UXEN__
 static bool_t __read_mostly opt_unrestricted_guest_enabled = 1;
@@ -1353,7 +1353,7 @@ static int construct_vmcs(struct vcpu *v)
     return 0;
 }
 
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
 int vmx_read_guest_msr(u32 msr, u64 *val)
 {
     struct vcpu *curr = current;
@@ -1451,7 +1451,7 @@ int vmx_add_host_load_msr(u32 msr)
 
     return 0;
 }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_todo__ */
 
 int vmx_create_vmcs(struct vcpu *v)
 {

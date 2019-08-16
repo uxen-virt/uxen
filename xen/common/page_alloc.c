@@ -83,13 +83,15 @@ static char __initdata opt_badpage[100] = "";
 string_param("badpage", opt_badpage);
 #endif  /* __UXEN__ */
 
-#if defined(__UXEN__) && defined(__i386__)
+#ifdef __UXEN__
+#ifdef __i386__
 /*
  * no-bootscrub -> Free pages are not zeroed during boot.
  */
 static bool_t opt_bootscrub __initdata = 1;
 boolean_param("bootscrub", opt_bootscrub);
-#endif  /* defined(__UXEN__) && defined(__i386__) */
+#endif  /* __i386__ */
+#endif  /* __UXEN__ */
 
 #ifndef __UXEN__
 /*
@@ -100,10 +102,12 @@ static unsigned int dma_bitsize;
 integer_param("dma_bits", dma_bitsize);
 #endif  /* __UXEN__ */
 
-#if defined(__UXEN__) && defined(__i386__)
+#ifdef __UXEN__
+#ifdef __i386__
 #define round_pgdown(_p)  ((_p)&PAGE_MASK)
 #define round_pgup(_p)    (((_p)+(PAGE_SIZE-1))&PAGE_MASK)
-#endif  /* defined(__UXEN__) && defined(__i386__) */
+#endif  /* __i386__ */
+#endif  /* __UXEN__ */
 
 #ifndef __UXEN__
 /* Offlined page list, protected by heap_lock. */
@@ -249,7 +253,8 @@ unsigned long __init alloc_boot_pages(
 
 
 
-#if defined(__UXEN__) && defined(__i386__)
+#ifdef __UXEN__
+#ifdef __i386__
 /*************************
  * hidden memory allocator
  */
@@ -337,7 +342,8 @@ alloc_hidden_page(unsigned int memflags, struct domain *d)
 
     return pg;
 }
-#endif  /* defined(__UXEN__) && defined(__i386__) */
+#endif  /* __i386__ */
+#endif  /* __UXEN__ */
 
 #ifndef __UXEN__
 /*************************
@@ -1943,7 +1949,7 @@ void free_domheap_pages(struct page_info *pg, unsigned int order)
 
         spin_unlock_recursive(&d->page_alloc_lock);
 
-#ifndef __UXEN_NOT_YET__
+#ifdef __UXEN_todo__
         /*
          * Normally we expect a domain to clear pages before freeing them, if 
          * it cares about the secrecy of their contents. However, after a 
@@ -1952,7 +1958,7 @@ void free_domheap_pages(struct page_info *pg, unsigned int order)
         if ( unlikely(d->is_dying) )
             for ( i = 0; i < (1 << order); i++ )
                 scrub_one_page(&pg[i]);
-#endif  /* __UXEN_NOT_YET__ */
+#endif  /* __UXEN_todo__ */
 
 #ifndef __UXEN__
         free_heap_pages(pg, order);

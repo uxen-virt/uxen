@@ -23,7 +23,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2018, Bromium, Inc.
+ * Copyright 2018-2019, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -50,8 +50,6 @@
 #include <string.h>
 #include <err.h>
 #include <inttypes.h>
-
-#define __UXEN__
 
 /* plenty of inline asm issues on 32-bit */
 #ifdef __x86_64__
@@ -621,7 +619,7 @@ do {                                                                    \
         _regs.eip = (uint32_t)_regs.eip;                                \
 } while (0)
 
-#ifndef __UXEN__
+#ifdef __UXEN_fpu_emul__
 struct fpu_insn_ctxt {
     uint8_t insn_bytes;
     uint8_t exn_raised;
@@ -689,7 +687,7 @@ do{ uint8_t stub[] = { _bytes, 0xc3 };                                  \
     (*(void(*)(void))stub)();                                           \
     put_fpu(&fic);                                                      \
 } while (0)
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_fpu_emul__ */
 
 static uint64_t __get_rep_prefix(
     struct x86_cpu_user_regs *int_regs,
@@ -2271,14 +2269,14 @@ x86_emulate(
         break;
     }
 
-#ifndef __UXEN__
+#ifdef __UXEN_fpu_emul__
     case 0x9b:  /* wait/fwait */
         emulate_fpu_insn("fwait");
         break;
-#else  /* __UXEN__ */
+#else  /* __UXEN_fpu_emul__ */
     case 0x9b:  /* wait/fwait */
         goto cannot_emulate;
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_fpu_emul__ */
 
     case 0x9c: /* pushf */
         src.val = _regs.eflags;
@@ -2665,7 +2663,7 @@ x86_emulate(
         break;
     }
 
-#ifndef __UXEN__
+#ifdef __UXEN_fpu_emul__
     case 0xd8: /* FPU 0xd8 */
         switch ( modrm )
         {
@@ -3150,7 +3148,7 @@ x86_emulate(
             }
         }
         break;
-#else  /* __UXEN__ */
+#else  /* __UXEN_fpu_emul__ */
     case 0xd8: /* FPU 0xd8 */
     case 0xd9: /* FPU 0xd9 */
     case 0xda: /* FPU 0xda */
@@ -3160,7 +3158,7 @@ x86_emulate(
     case 0xde: /* FPU 0xde */
     case 0xdf: /* FPU 0xdf */
         goto cannot_emulate;
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_fpu_emul__ */
 
     case 0xe0 ... 0xe2: /* loop{,z,nz} */ {
         int rel = insn_fetch_type(int8_t);
@@ -4028,7 +4026,7 @@ x86_emulate(
         break;
     }
 
-#ifndef __UXEN__
+#ifdef __UXEN_fpu_emul__
     case 0x6f: /* movq mm/m64,mm */ {
         uint8_t stub[] = { 0x0f, 0x6f, modrm, 0xc3 };
         struct fpu_insn_ctxt fic = { .insn_bytes = sizeof(stub)-1 };
@@ -4068,11 +4066,11 @@ x86_emulate(
         }
         break;
     }
-#else  /* __UXEN__ */
+#else  /* __UXEN_fpu_emul__ */
     case 0x6f: /* movq mm/m64,mm */
     case 0x7f: /* movq mm,mm/m64 */
         goto cannot_emulate;
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_fpu_emul__ */
 
     case 0x80 ... 0x8f: /* jcc (near) */ {
         int rel = ((op_bytes == 2)

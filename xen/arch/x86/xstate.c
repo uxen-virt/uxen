@@ -123,12 +123,12 @@ inline void _set_xcr0(u64 xfeatures)
     xsetbv_maybe(XCR_XFEATURE_ENABLED_MASK, xfeatures);
 }
 
-#ifndef __UXEN__
+#ifdef __UXEN_unused__
 inline uint64_t get_xcr0(void)
 {
     return this_cpu(xcr0);
 }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_unused__ */
 
 
 void xsave(struct vcpu *v, uint64_t mask)

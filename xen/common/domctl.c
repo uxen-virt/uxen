@@ -331,13 +331,13 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
     }
 
     if ( !domctl_lock_acquire() ) {
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
         return hypercall_create_continuation(
             __HYPERVISOR_domctl, "h", u_domctl);
-#else   /* __UXEN__ */
+#else  /* __UXEN_todo__ */
         while (!domctl_lock_acquire())
             cpu_relax();
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_todo__ */
     }
 
     switch ( op->cmd )
@@ -810,7 +810,7 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
     }
     break;
 
-#ifndef __UXEN__
+#ifdef __UXEN_debugger__
     case XEN_DOMCTL_setdebugging:
     {
         struct domain *d;
@@ -841,7 +841,9 @@ long do_domctl(XEN_GUEST_HANDLE(xen_domctl_t) u_domctl)
         ret = 0;
     }
     break;
+#endif  /* __UXEN_debugger__ */
 
+#ifndef __UXEN__
     case XEN_DOMCTL_irq_permission:
     {
         struct domain *d;

@@ -59,13 +59,13 @@ long do_sysctl(XEN_GUEST_HANDLE(xen_sysctl_t) u_sysctl)
      * with this vcpu.
      */
     while ( !spin_trylock(&sysctl_lock) )
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
         if ( hypercall_preempt_check() )
             return hypercall_create_continuation(
                 __HYPERVISOR_sysctl, "h", u_sysctl);
-#else   /* __UXEN__ */
+#else  /* __UXEN_todo__ */
         cpu_relax();
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_todo__ */
 
     switch ( op->cmd )
     {

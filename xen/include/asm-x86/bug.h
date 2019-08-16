@@ -19,13 +19,13 @@ struct bug_frame {
 #define BUGFRAME_assert 3
 #define BUGFRAME_abort  4
 
-#if !defined(__UXEN__) || defined(UXEN_HOST_WINDOWS)
+#ifdef UXEN_HOST_WINDOWS
 #define run_in_exception_handler(fn)               \
     asm volatile (                                 \
         "ud2 ; ret %0" BUG_STR(1)                  \
         : : "i" (BUGFRAME_run_fn),                 \
             "i" (&(fn)) )
-#endif  /* __UXEN__ */
+#endif  /* UXEN_HOST_WINDOWS */
 
 #ifndef UXEN_HOST_OSX
 #define WARN()                                     \

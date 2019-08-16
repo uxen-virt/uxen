@@ -294,7 +294,7 @@ void hvm_set_pci_link_route(struct domain *d, u8 link, u8 isa_irq)
             d->domain_id, link, old_isa_irq, isa_irq);
 }
 
-#ifndef __UXEN__
+#ifdef __UXEN_vmsi__
 void hvm_inject_msi(struct domain *d, uint64_t addr, uint32_t data)
 {
     uint32_t tmp = (uint32_t) addr;
@@ -308,7 +308,7 @@ void hvm_inject_msi(struct domain *d, uint64_t addr, uint32_t data)
 
     vmsi_deliver(d, vector, dest, dest_mode, delivery_mode, trig_mode);
 }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_vmsi__ */
 
 void hvm_set_callback_via(struct domain *d, uint64_t via)
 {

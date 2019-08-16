@@ -296,6 +296,7 @@ void vcpu_restore_fpu_lazy(struct vcpu *v)
             fpu_frstor(v);
 #else   /* __UXEN__ */
         else
+            /* fpu_frstor(v); */
             BUG();
 #endif  /* __UXEN__ */
     } else {
@@ -344,6 +345,7 @@ void vcpu_save_fpu(struct vcpu *v)
         fpu_fsave(v);
 #else   /* __UXEN__ */
     else
+        /* fpu_fsave(v); */
         BUG();
 #endif  /* __UXEN__ */
 

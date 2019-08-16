@@ -751,7 +751,9 @@ long arch_do_domctl(
 
     }
     break;
+#endif  /* __UXEN__ */
 
+#ifdef __UXEN_sendtrigger__
     case XEN_DOMCTL_sendtrigger:
     {
         struct domain *d;
@@ -817,7 +819,9 @@ long arch_do_domctl(
         rcu_unlock_domain(d);
     }
     break;
+#endif  /* __UXEN_sendtrigger__ */
 
+#ifndef __UXEN__
     case XEN_DOMCTL_bind_pt_irq:
     {
         struct domain * d;
@@ -1231,7 +1235,9 @@ long arch_do_domctl(
         }
     }
     break;
+#endif  /* __UXEN__ */
 
+#ifdef __UXEN_debugger__
     case XEN_DOMCTL_debug_op:
     {
         struct domain *d;
@@ -1260,7 +1266,9 @@ long arch_do_domctl(
         rcu_unlock_domain(d);
     }
     break;
+#endif  /* __UXEN_debugger__ */
 
+#ifndef __UXEN__
     case XEN_DOMCTL_gdbsx_guestmemio:
     {
         struct domain *d;

@@ -217,7 +217,7 @@ HV_TESTS_POSSIBLY_UNUSED static int hv_tests_cpu_has_nx (void)
 
 #ifdef _WIN32
 # ifndef _KERNEL_MODE
-#  ifndef __UXEN__
+#  if !defined(__UXEN_core__) && !defined(__UXEN_SYS__)
 #   define HV_TESTS_TEST_WHPX
 #   include <windows.h>
 #  else

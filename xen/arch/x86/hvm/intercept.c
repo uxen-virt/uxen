@@ -20,7 +20,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2017, Bromium, Inc.
+ * Copyright 2011-2019, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -56,9 +56,9 @@ hvm_mmio_handlers[HVM_MMIO_HANDLER_NR] =
     &hpet_mmio_handler,
     &vlapic_mmio_handler,
     &vioapic_mmio_handler,
-#ifndef __UXEN__
+#ifdef __UXEN_vmsi__
     &msixtbl_mmio_handler
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_vmsi__ */
 };
 
 static int hvm_mmio_access(struct vcpu *v,

@@ -2324,7 +2324,7 @@ int get_page(struct page_info *page, struct domain *domain)
     return 0;
 }
 
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
 /*
  * Special version of get_page() to be used exclusively when
  * - a page is known to already have a non-zero reference count
@@ -2346,7 +2346,7 @@ static void get_page_light(struct page_info *page)
     }
     while ( unlikely(y != x) );
 }
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_todo__ */
 
 void
 put_page_destructor(struct page_info *page,

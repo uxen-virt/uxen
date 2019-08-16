@@ -60,9 +60,9 @@ struct domain;
 void cmdline_parse(char *cmdline);
 int parse_bool(const char *s);
 
-#ifndef __UXEN__
+#ifdef __UXEN_todo__
 #define DEBUG_TRACE_DUMP
-#endif  /* __UXEN__ */
+#endif  /* __UXEN_todo__ */
 #ifdef DEBUG_TRACE_DUMP
 extern void debugtrace_dump(void);
 extern void debugtrace_printk(const char *fmt, ...);
