@@ -1,5 +1,5 @@
 #
-# Copyright 2018, Bromium, Inc.
+# Copyright 2018-2019, Bromium, Inc.
 # SPDX-License-Identifier: ISC
 #
 
@@ -13,6 +13,8 @@ ifeq (,$(MAKENOW))
 SRCROOT = $(SRCDIR)
 
 VPATH = $(SRCROOT)
+
+.NOTPARALLEL:
 
 ifneq (n-,$(HOST_WINDOWS))
 

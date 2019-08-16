@@ -14,6 +14,8 @@ SRCROOT = $(SRCDIR)
 
 VPATH = $(SRCROOT)
 
+.NOTPARALLEL:
+
 ifneq (n-,$(HOST_WINDOWS))
 
 DISTDIR_uxenv4vlib ?= $(DISTDIR)

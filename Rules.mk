@@ -1,5 +1,5 @@
 #
-# Copyright 2012-2016, Bromium, Inc.
+# Copyright 2012-2019, Bromium, Inc.
 # Author: Christian Limpach <Christian.Limpach@gmail.com>
 # SPDX-License-Identifier: ISC
 #
@@ -110,12 +110,12 @@ $(HOST_LINUX)HOST = linux
 $(HOST_OSX)HOST = osx
 
 subdirs-all subdirs-dist subdirs-clean subdirs-tests subdirs-install subdirs-distclean: .phony
-	@set -e; for subdir in $(subst /,_,$(SUBDIRS) $(SUBDIRS-y)); do \
+	+@set -e; for subdir in $(subst /,_,$(SUBDIRS) $(SUBDIRS-y)); do \
 		$(call submake,.,subdir-$(patsubst subdirs-%,%,$@)-$$subdir); \
 	done
 
 subdir-all-% subdir-dist-% subdir-clean-% subdir-tests-% subdir-install-%: .phony
-	@$(call submake,$(subst _,/,$*),$(patsubst subdir-%-$*,%,$@))
+	+@$(call submake,$(subst _,/,$*),$(patsubst subdir-%-$*,%,$@))
 
 subdir-distclean-%: .phony
 	$(MAKE) -C $* clean
