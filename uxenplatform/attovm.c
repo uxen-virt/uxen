@@ -369,6 +369,9 @@ static void echo_softirq(unsigned long opaque)
     struct uxenecho_msg msg;
     int len, err;
 
+    if (!ring)
+        return;
+
     for (;;) {
         len = uxen_v4v_copy_out(ring, NULL, NULL, NULL, 0, 0);
         if (len <= 0 || len < sizeof(msg))
