@@ -19,6 +19,7 @@ void attovm_vcpu_destroy(struct vcpu *v);
 void attovm_destroy(struct domain *d);
 void attovm_inject_extint(uint8_t vector);
 enum hvm_intblk attovm_intblk(void);
+int  attovm_map_host_page(struct domain *d, uint64_t gpfn, uint64_t mfn );
 void attovm_prepare_enter(struct vcpu *v);
 void attovm_assist(struct vcpu *v);
 int  attovm_seal(struct domain *d, struct attovm_definition_v1 *def);

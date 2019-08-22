@@ -138,6 +138,7 @@
 #include <xen/trace.h>
 #include <asm/setup.h>
 #include <asm/fixmap.h>
+#include <asm/hvm/attovm.h>
 
 #define MEM_LOG(_f, _a...) gdprintk(XENLOG_WARNING , _f "\n" , ## _a)
 
@@ -716,6 +717,11 @@ static int xenmem_add_to_physmap_once(
 
     /* Map at new location. */
     rc = guest_physmap_add_page(d, xatp->gpfn, mfn);
+    if ( rc == 0 && xatp->space == XENMAPSPACE_host_mfn ) {
+        if ( d->is_attovm_ax )
+            /* Map in ax-based attovm */
+            rc = attovm_map_host_page( d, xatp->gpfn, mfn );
+    }
     put_page(__mfn_to_page(mfn));
 
     /* In the XENMAPSPACE_gmfn, we took a ref and locked the p2m at the top */

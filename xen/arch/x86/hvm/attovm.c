@@ -64,6 +64,27 @@ attovm_vcpu_destroy(struct vcpu *v)
 {
 }
 
+int
+attovm_map_host_page(struct domain *d, uint64_t gpfn, uint64_t mfn )
+{
+    int ret = 0;
+
+    if (ax_attovm_present()) {
+
+        ret = (int) attovm_call_map_host_page (d->domain_id, gpfn, mfn);
+
+        if (ret)
+            printk (
+                XENLOG_ERR "FAILED to map host page vm%u, gpfn %"PRIx64", mfn %"PRIx64","
+                           " error %d\n",
+                d->domain_id, gpfn, mfn, ret
+            );
+    } else
+        ret = -ENODEV;
+
+    return ret;
+}
+
 void
 attovm_prepare_enter(struct vcpu *v)
 {
