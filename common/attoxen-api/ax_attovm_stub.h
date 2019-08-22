@@ -102,6 +102,15 @@ attovm_call_startup_ipi (uint64_t apicid, uint64_t startaddr, uint64_t stackaddr
 }
 
 static inline uint64_t
+attovm_call_map_host_page (uint64_t domid, uint64_t gpfn, uint64_t mfn)
+{
+  uint64_t eax = ATTOCALL_VM_MAP_HOST_PAGE, ecx = domid,
+           edx = gpfn, r8 = mfn, r9 = 0;
+
+  return attovm_call (eax, ecx, edx, r8, r9);
+}
+
+static inline uint64_t
 attovm_call_apicop (uint64_t op, uint64_t addr, uint64_t value)
 {
   uint64_t eax = ATTOCALL_APICOP, ecx = op, edx = addr, r8 = value, r9 = 0;
@@ -158,7 +167,7 @@ static inline uint64_t
 attovm_call_query_secret_key (void *buffer, uint64_t salt)
 {
   uint64_t eax = ATTOCALL_QUERYOP, ecx = ATTOCALL_QUERYOP_SECRET_KEY,
-           edx = (uint64_t) (uintptr_t) buffer, r8 = salt, r9 = 0;
+    edx = (uint64_t)(uintptr_t) buffer, r8 = salt, r9 = 0;
 
   return attovm_call (eax, ecx, edx, r8, r9);
 }
@@ -168,6 +177,15 @@ attovm_call_kbd_focus (uint64_t domid, uint32_t offer_focus)
 {
   uint64_t eax = ATTOCALL_VM_KBD_FOCUS, ecx = domid,
            edx = offer_focus, r8 = 0, r9 = 0;
+
+  return attovm_call (eax, ecx, edx, r8, r9);
+}
+
+static inline uint64_t
+attovm_call_kbd_op (uint32_t type, uint32_t extra)
+{
+  uint64_t eax = ATTOCALL_KBD_OP, ecx = type,
+           edx = extra, r8 = 0, r9 = 0;
 
   return attovm_call (eax, ecx, edx, r8, r9);
 }

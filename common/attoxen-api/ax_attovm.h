@@ -13,10 +13,15 @@
 #define ATTOVM_MAX_VCPU_CONTEXT_SIZE_V1 2048
 #define ATTOVM_MAX_VCPU 4
 
-#define ATTOVM_UNSIGNED_MEM_PHYSADDR   0x800000000ULL
+/* unsigned memory starts at 0x400000000 */
+#define ATTOVM_UNSIGNED_MEM_PHYSADDR   0x400000000ULL
 #define ATTOVM_UNSIGNED_MEM_MAX_PAGES  4096
 
 #define ATTOVM_APPDEF_PHYSADDR         ATTOVM_UNSIGNED_MEM_PHYSADDR
+
+/* unsigned memory at which host can map to starts at 0x800000000 */
+#define ATTOVM_HOSTMAP_MEM_PHYSADDR         0x800000000ULL
+#define ATTOVM_HOSTMAP_MEM_ADDRMASK  0xfffffff800000000ULL
 
 #define ATTOVM_SESSION_KEY_BYTES 32
 #define ATTOVM_MEASUREMENT_BYTES 32
@@ -101,7 +106,7 @@ struct attovm_assist_query_tsc_khz {
 } ATTOVM_API_PACKED;
 
 struct attovm_assist_query_stor_bitmap {
-  uint64_t bitmap;
+    uint64_t bitmap;
 } ATTOVM_API_PACKED;
 
 struct attovm_assist_read_rtc {
@@ -194,6 +199,45 @@ struct attovm_control {
   uint64_t host_rip;
 } ATTOVM_API_PACKED;
 
+/* protected keyboard events */
+#define ATTOVM_KBD_V4V_PORT 55560
+#define ATTOVM_KBEVT_CURRENT_VERSION 1
+#define ATTOVM_KBD_V4V_MAX_DATA_LEN 1024
+enum attovm_keyboard_call_type {
+  ATTOVM_KBCALL_NONE = 0,
+  ATTOVM_KBCALL_READY,
+  ATTOVM_KBCALL_FOCUS_GRANT,
+  ATTOVM_KBCALL_FOCUS_RELEASE,
+};
+enum attovm_keyboard_event_type {
+  ATTOVM_KBEVT_NONE = 0,
+  ATTOVM_KBEVT_INSERTED,
+  ATTOVM_KBEVT_REMOVED,
+  ATTOVM_KBEVT_HID_DESCRIPTORS,
+  ATTOVM_KBEVT_HID_REPORT,
+  ATTOVM_KBEVT_PS2_SCANCODE,
+  ATTOVM_KBEVT_FOCUS_REVOKED,
+};
+
+enum attovm_keyoard_interface_type {
+  ATTOVM_KBIFT_NONE = 0,
+  ATTOVM_KBIFT_PS2,
+  ATTOVM_KBIFT_USB_HID,
+};
+
+struct attovm_keyboard_inserted {
+  uint32_t interface_type;
+} ATTOVM_API_PACKED;
+
+struct attovm_keyboard_event {
+  uint32_t version;
+  uint32_t type;
+  uint32_t device_id;
+  uint32_t endpoint_id;
+  uint32_t data_len;
+  uint8_t data[];
+} ATTOVM_API_PACKED;
+
 #undef ATTOVM_API_PACKED
 #if defined(_MSC_VER)
 #pragma pack(pop)
@@ -213,6 +257,12 @@ struct attovm_control {
 // create atto vm vcpu
 // RCX - domain id
 // RDX - vcpu id
+
+#define ATTOCALL_VM_MAP_HOST_PAGE 0x37fae09a
+// map host (L1/L2) page into unprotected highmem attovm memory area
+// RCX - domain id
+// RDX - guest pfn
+// R8 - host mfn
 
 #define ATTOCALL_VM_SEAL 0x37d457d7
 // seal ax vm
@@ -241,6 +291,13 @@ struct attovm_control {
 // offer/release keyboard/mouse focus
 // RCX - domain id
 // RDX - offer_focus value
+// OUTPUT:
+// RAX - error code (or 0 on success)
+
+#define ATTOCALL_KBD_OP 0x37fddf25
+// pvm keyboard op
+// RCX - type
+// RDX - other
 // OUTPUT:
 // RAX - error code (or 0 on success)
 
