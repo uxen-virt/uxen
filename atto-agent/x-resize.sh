@@ -5,11 +5,12 @@ CVT=/usr/bin/cvt
 
 xres=$1
 yres=$2
+head=$3
 
 #modeline=$($CVT -r $xres $yres | tail -n1 | sed -e 's/^[^"]*"[^"]*"//')
 modeline="60.00 $xres $xres $xres $xres $yres $yres $yres $yres +hsync -vsync"
 
-export DISPLAY=":0.0"
+export DISPLAY=":$head.0"
 omode=0
 if [ "$("$XRANDR" | grep \* | grep mode1)" == "" ]; then
     omode=1

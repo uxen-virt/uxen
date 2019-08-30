@@ -24,7 +24,8 @@
 
 #include <uxenkbddefs.h>
 
-#include "prototypes.h"
+#include "atto-agent.h"
+#include "winlayouts.h"
 
 #define MAX_NUMBER_KEYBOARDS  128
 
@@ -252,7 +253,7 @@ static int process_hid_descriptor (keyboard_t *kbd, const uint8_t *buf, size_t l
         return 0;
 
     kbd->fd_uhid = -1;
-    fd = open ("/dev/uhid", O_RDWR|O_NONBLOCK);
+    fd = open ("/dev/uhid", O_RDWR|O_NONBLOCK|O_CLOEXEC);
     if (fd < 0) {
       fprintf (stderr, "error opening uhid device %d\n", (int) errno);
       return -1;
@@ -576,6 +577,52 @@ static int uhid_event_received (int fd)
   return 0;
 }
 
+kbd_layout_t get_active_kbd_layout(void)
+{
+    return shared_state->active_layout;
+}
+
+int set_active_kbd_layout(kbd_layout_t layout)
+{
+    shared_state->active_layout = layout;
+    return sync_shared_state();
+}
+
+int get_x_update_kbd_layout_command(kbd_layout_t layout, char *buf, size_t bufsz)
+{
+    int i, ret = -1;
+
+    for (i = 0;; i++) {
+        WinKBLayoutRec *lrec;
+
+        lrec = &winKBLayouts[i];
+        if (lrec->winlayout == (unsigned int) (-1) ||
+            lrec->xkbmodel == NULL) {
+
+            break;
+        }
+
+        if (lrec->winlayout == layout) {
+            if (lrec->xkblayout && lrec->xkbvariant) {
+                snprintf(buf, bufsz,
+                         "/usr/bin/setxkbmap -model %s -layout %s -variant %s",
+                         lrec->xkbmodel, lrec->xkblayout, lrec->xkbvariant);
+            } else if (lrec->xkblayout) {
+                snprintf(buf, bufsz,
+                         "/usr/bin/setxkbmap -model %s -layout %s",
+                         lrec->xkbmodel, lrec->xkblayout);
+            } else {
+                snprintf(buf, bufsz,
+                         "/usr/bin/setxkbmap -model %s", lrec->xkbmodel);
+            }
+            ret = 0;
+            break;
+        }
+    }
+
+    return ret;
+}
+
 int kbd_event (int fd)
 {
     if (fd == uxen_fd_v4v)
@@ -649,7 +696,7 @@ int kbd_init (int protkbd)
     pollfd_add (uxen_fd_v4v);
 
     if (use_protected_keyboard) {
-        attocall_fd = open ("/dev/attocall", O_WRONLY);
+        attocall_fd = open ("/dev/attocall", O_WRONLY | O_CLOEXEC);
         if (attocall_fd < 0)
             err(1, "open /dev/attocall");
 

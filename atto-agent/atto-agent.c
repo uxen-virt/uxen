@@ -4,22 +4,25 @@
  * SPDX-License-Identifier: ISC
  */
 
+#define _GNU_SOURCE /* for fallocate */
+
 #include <inttypes.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/time.h>
+#include <sys/mman.h>
+#include <sys/file.h>
 #include <err.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <poll.h>
+#include <fcntl.h>
 
 #include <uxen-v4vlib.h>
 
-#include "winlayouts.h"
-
-#include "prototypes.h"
+#include "atto-agent.h"
 
 #define RING_SIZE 262144
 #define V4V_PORT 44449
@@ -48,14 +51,16 @@
 
 struct atto_agent_msg {
     uint8_t type;
+    uint8_t pad[3];
+    uint32_t head_id;
     union {
         char string[512];
         struct {
             uint32_t xres;
             uint32_t yres;
         };
-        unsigned win_kbd_layout;
         unsigned offer_kbd_focus;
+        unsigned win_kbd_layout;
     };
 } __attribute__((packed));
 
@@ -66,50 +71,37 @@ struct long_msg_t {
     char null;
 } __attribute__((packed));
 
+
 #define MAX_NUMBER_FDS  256
 
-static struct long_msg_t long_msg;
+volatile shared_state_t *shared_state;
+static int shared_state_fd;
+
 static struct pollfd poll_fds[MAX_NUMBER_FDS];
 static int npollfds = 0;
 static int polltimeout = -1;
-static unsigned last_win_kbd_layout = (unsigned) -1;
 
-static int set_kbd_layout(unsigned win_kbd_layout)
+
+static void run_head_cmd(head_id_t head, void *opaque)
 {
-    int i, ret = -1;
-    char command[1024];
+    const char *cmd = opaque;
 
-    for (i = 0;; i++) {
-        WinKBLayoutRec *lrec;
+    headctl_system_cmd(head, cmd);
+}
 
-        lrec = &winKBLayouts[i];
-        if (lrec->winlayout == (unsigned int) (-1) ||
-            lrec->xkbmodel == NULL) {
+static int update_x_kbd_layout(void)
+{
+    kbd_layout_t win_kbd_layout = get_active_kbd_layout();
+    char command[256];
+    int ret;
 
-            break;
-        }
+    ret = get_x_update_kbd_layout_command(win_kbd_layout, command, sizeof(command));
+    if (ret)
+        return ret;
 
-        if (lrec->winlayout == win_kbd_layout) {
-            memset(command, 0, sizeof(command));
-            if (lrec->xkblayout && lrec->xkbvariant) {
-                snprintf(command, sizeof(command) - 1,
-                         "DISPLAY=:0.0 /usr/bin/setxkbmap -model %s -layout %s -variant %s",
-                         lrec->xkbmodel, lrec->xkblayout, lrec->xkbvariant);
-            } else if (lrec->xkblayout) {
-                snprintf(command, sizeof(command) - 1,
-                         "DISPLAY=:0.0 /usr/bin/setxkbmap -model %s -layout %s",
-                         lrec->xkbmodel, lrec->xkblayout);
-            } else {
-                snprintf(command, sizeof(command) - 1,
-                         "DISPLAY=:0.0 /usr/bin/setxkbmap -model %s", lrec->xkbmodel);
-            }
-            system(command);
-            ret = 0;
-            break;
-        }
-    }
+    headctl_for_each_head(run_head_cmd, command);
 
-    return ret;
+    return 0;
 }
 
 
@@ -157,15 +149,64 @@ int pollfd_remove (int fd)
 
 void atto_agent_reset_kbd_layout(void)
 {
-    set_kbd_layout(last_win_kbd_layout);
+    update_x_kbd_layout();
+}
+
+int sync_shared_state(void)
+{
+    return msync((void*)shared_state, sizeof(*shared_state), MS_SYNC | MS_INVALIDATE);
+}
+
+int lock_shared_state(void)
+{
+    return flock(shared_state_fd, LOCK_EX);
+}
+
+void unlock_shared_state(void)
+{
+    flock(shared_state_fd, LOCK_UN);
+}
+
+static void init_shared_state(void)
+{
+    int fd = open(SHARED_STATE_FILE, O_RDWR | O_CLOEXEC);
+    int existed = 1;
+
+    if (fd < 0) {
+        fd = open(SHARED_STATE_FILE, O_RDWR | O_CREAT | O_CLOEXEC, 00644);
+        if (fd < 0)
+            err(1, "open shared state %d", (int) errno);
+
+        if (fallocate(fd, 0, 0, sizeof(*shared_state)))
+            err(1, "fallocated %d", (int) errno);
+
+        existed = 0;
+    }
+
+    shared_state = mmap(NULL, sizeof(*shared_state), PROT_READ | PROT_WRITE,
+        MAP_SHARED, fd, 0);
+    if (!shared_state)
+        err(1, "map shared state %d", (int) errno);
+
+    shared_state_fd = fd;
+
+    if (!existed) {
+        lock_shared_state();
+        memset((void*)shared_state, 0, sizeof(*shared_state));
+        shared_state->active_layout = KBD_LAYOUT_INVALID;
+        sync_shared_state();
+        unlock_shared_state();
+    }
 }
 
 void
 talk(int fd, int request)
 {
+    struct long_msg_t long_msg;
     struct atto_agent_msg *msg = &long_msg.msg;
     ssize_t len;
 
+    memset(&long_msg, 0, sizeof(long_msg));
     msg->type = request;
 
     len = send(fd, msg, sizeof(*msg), 0);
@@ -194,8 +235,7 @@ event_loop(int fd, int protkbd)
 {
     struct atto_agent_msg msg;
     ssize_t len;
-    static int32_t lastx = 0, lasty = 0;
-    int32_t w, h;
+    int32_t w, h, head;
     char command[1024];
     int i, event_fds[MAX_NUMBER_FDS], nevent_fds;
 
@@ -210,10 +250,12 @@ event_loop(int fd, int protkbd)
 
     pollfd_add (fd);
     kbd_init (protkbd);
+    headctl_init ();
 
     for (;;) {
         polltimeout = -1;
         kbd_wakeup(&polltimeout);
+        headctl_wakeup(&polltimeout);
         if (poll(poll_fds, npollfds, polltimeout) < 0) {
             if (errno != EINTR)
                 err(1, "poll %d", (int) errno);
@@ -245,26 +287,25 @@ event_loop(int fd, int protkbd)
         case ATTO_MSG_RESIZE_RET:
             w = (int32_t) msg.xres;
             h = (int32_t) msg.yres;
+            head = (int32_t) msg.head_id;
 
             if (w == 0 || h == 0)
                 continue;
 
-            if (lastx && abs(w-lastx) < 3 && lasty && abs(h-lasty) < 3)
-                continue;
-            lastx = w;
-            lasty = h;
             memset(command, 0, sizeof(command));
             snprintf(command, sizeof(command) - 1,
-                     "%s %d %d", RESIZE_SCRIPT,
-                     (int) w, (int) h);
+                     "%s %d %d %d", RESIZE_SCRIPT,
+                     (int) w, (int) h, (int)head);
             system(command);
             break;
         case ATTO_MSG_KBD_LAYOUT_RET:
-            set_kbd_layout(msg.win_kbd_layout);
-            last_win_kbd_layout = msg.win_kbd_layout;
+            set_active_kbd_layout((kbd_layout_t)msg.win_kbd_layout);
+            update_x_kbd_layout();
             break;
         case ATTO_MSG_KBD_FOCUS_RET:
             kbd_focus_request (msg.offer_kbd_focus);
+            if (msg.offer_kbd_focus)
+                headctl_activate (msg.head_id);
             break;
         default:
             warnx("unknown message type %d", (int) msg.type);
@@ -280,10 +321,15 @@ int main(int argc, char **argv)
     int daemon = 0;
     int request = 0;
     int protkbd = 0;
+    int do_headctl = 0;
+
+    init_shared_state();
 
     if (argc < 2)
         err(1, "bad args");
-    if (!strcmp(argv[1], "get-url")) {
+    if (!strcmp(argv[1], "headctl")) {
+        do_headctl = 1;
+    } else if (!strcmp(argv[1], "get-url")) {
         request = ATTO_MSG_GETURL;
     } else if (!strcmp(argv[1], "get-boot")) {
         request = ATTO_MSG_GETBOOT;
@@ -296,6 +342,11 @@ int main(int argc, char **argv)
         }
     } else
         err(1, "bad args");
+
+    if (do_headctl) {
+        headctl(argc, argv);
+        return 0;
+    }
 
     fd = socket(AF_VSOCK, SOCK_DGRAM, 0);
     if (fd < 0)
