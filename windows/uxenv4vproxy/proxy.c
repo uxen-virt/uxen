@@ -1327,8 +1327,8 @@ uxen_v4vproxy_start_device(void)
 NTSTATUS
 DriverEntry (DRIVER_OBJECT *Driver, UNICODE_STRING *ServicesKey)
 {
-    Driver;
-    ServicesKey;
+    UNREFERENCED_PARAMETER(Driver);
+    UNREFERENCED_PARAMETER(ServicesKey);
 
     ExInitializeDriverRuntime(DrvRtPoolNxOptIn);
 
@@ -1338,6 +1338,10 @@ DriverEntry (DRIVER_OBJECT *Driver, UNICODE_STRING *ServicesKey)
 NTSTATUS
 DllInitialize (PUNICODE_STRING RegistryPath)
 {
+    UNREFERENCED_PARAMETER(RegistryPath);
+
+    ExInitializeDriverRuntime(DrvRtPoolNxOptIn);
+
     return STATUS_SUCCESS;
 }
 
