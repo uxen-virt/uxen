@@ -1,0 +1,3 @@
+obj-m += uxenhid.o
+
+uxenhid-y := v4v-hid.o

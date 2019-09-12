@@ -1,0 +1,421 @@
+#
+# Copyright 2016-2019, Bromium, Inc.
+# Author: Paulian Marinca <paulian@marinca.net>
+# SPDX-License-Identifier: ISC
+#
+
+diff -ruN a/fbdev.c b/fbdev.c
+--- a/fbdev.c	2016-09-08 16:01:01.980731184 +0300
++++ b/fbdev.c	2016-09-08 16:02:59.369871800 +0300
+@@ -7,6 +7,8 @@
+ #include "config.h"
+ #endif
+ 
++#undef XFreeXDGA
++
+ #include <string.h>
+ 
+ /* all driver need this */
+@@ -37,8 +39,26 @@
+ #ifdef XSERVER_LIBPCIACCESS
+ #include <pciaccess.h>
+ #endif
++# include "xf86Crtc.h"
++# include "xf86Modes.h"
++# include "xf86RandR12.h"
++
++//#define DEBUG 1
++#define UXENFB_MAX_WIDTH    4096
++#define UXENFB_MAX_HEIGHT   2160
++#define UXENFB_BPP          32
++#define UXENFB_RAM_SIZE     0x2000000
++#define UXEN_OUTPUT           "uxen"
++static xf86CrtcPtr uxen_crtc = NULL;
++static xf86OutputPtr uxen_output = NULL;
++static DisplayModePtr uxen_modes = NULL;
+ 
+ static Bool debug = 0;
++#ifdef DEBUG
++#define DBG(fmt, ...) do { fprintf(stderr, "(uxenfb) %s: " fmt "\n", __FUNCTION__, ## __VA_ARGS__);  fflush(stderr); } while (1 == 0)
++#else
++#define DBG(fmt, ...) do { } while (1 == 0)
++#endif
+ 
+ #define TRACE_ENTER(str) \
+     do { if (debug) ErrorF("fbdev: " str " %d\n",pScrn->scrnIndex); } while (0)
+@@ -197,6 +217,253 @@
+ 
+ #define FBDEVPTR(p) ((FBDevPtr)((p)->driverPrivate))
+ 
++static void uxen_fb_change_mode(ScrnInfoPtr pScrn, int width, int height)
++{
++
++}
++
++static void uxen_crtc_dpms(xf86CrtcPtr crtc, int mode)
++{
++    ScrnInfoPtr pScrn = crtc->scrn;
++}
++
++static Bool uxen_crtc_lock (xf86CrtcPtr crtc)
++{
++    (void) crtc;
++    return FALSE;
++}
++
++static Bool
++uxen_crtc_mode_fixup (xf86CrtcPtr crtc, DisplayModePtr mode,
++                      DisplayModePtr adjusted_mode)
++{
++  (void) crtc;
++  (void) mode;
++  (void) adjusted_mode;
++
++  return TRUE;
++}
++
++static void uxen_crtc_stub (xf86CrtcPtr crtc)
++{
++    (void) crtc;
++}
++
++static void uxen_crtc_mode_set (xf86CrtcPtr crtc, DisplayModePtr mode,
++                    DisplayModePtr adjusted_mode, int x, int y)
++{
++
++    ScrnInfoPtr pScrn = crtc->scrn;
++
++    fbdevHWSwitchMode(pScrn, adjusted_mode);
++}
++
++static void
++vbox_crtc_gamma_set (xf86CrtcPtr crtc, CARD16 *red,
++                     CARD16 *green, CARD16 *blue, int size)
++{
++    (void) crtc;
++    (void) red;
++    (void) green;
++    (void) blue;
++    (void) size;
++}
++
++static void *
++uxen_crtc_shadow_allocate (xf86CrtcPtr crtc, int width, int height)
++{
++    void *ret;
++    ScreenPtr pScreen = crtc->scrn->pScreen;
++    PixmapPtr rootpix = pScreen->GetScreenPixmap(pScreen);
++
++    DBG("(call) pScreen->CreatePixmap width %d height %d rootdepth %d", width, height,
++        (int)  rootpix->drawable.depth);
++    ret = pScreen->CreatePixmap(pScreen, width, height,
++                                 rootpix->drawable.depth, 0);
++
++    DBG("(end)  pScreen->CreatePixmap");
++    return ret;
++}
++
++static PixmapPtr
++uxen_crtc_shadow_create(xf86CrtcPtr crtc, void *data, int width, int height)
++{
++    DBG("");
++    return (PixmapPtr) data;
++}
++
++static void
++uxen_crtc_shadow_destroy(xf86CrtcPtr crtc, PixmapPtr rotate_pixmap, void *data)
++{
++    ScreenPtr pScreen;
++
++    DBG("");
++    if (rotate_pixmap == NULL)
++        return;
++
++    pScreen = rotate_pixmap->drawable.pScreen;
++    pScreen->DestroyPixmap(rotate_pixmap);
++}
++
++
++static void
++uxen_crtc_gamma_set (xf86CrtcPtr crtc, CARD16 *red,
++                     CARD16 *green, CARD16 *blue, int size)
++{
++    (void) crtc;
++    (void) red;
++    (void) green;
++    (void) blue;
++    (void) size;
++}
++
++static const xf86CrtcFuncsRec uxen_crtc_funcs = {
++    .dpms = uxen_crtc_dpms,
++    .save = NULL, /* These two are never called by the server. */
++    .restore = NULL,
++    .lock = uxen_crtc_lock,
++    .unlock = NULL, /* This will not be invoked if lock returns FALSE. */
++    .mode_fixup = uxen_crtc_mode_fixup,
++    .prepare = uxen_crtc_stub,
++    .mode_set = uxen_crtc_mode_set,
++    .commit = uxen_crtc_stub,
++    .gamma_set = uxen_crtc_gamma_set,
++    .shadow_allocate = uxen_crtc_shadow_allocate,
++    .shadow_create = uxen_crtc_shadow_create,
++    .shadow_destroy = uxen_crtc_shadow_destroy,
++    .set_cursor_colors = NULL, /* We are still using the old cursor API. */
++    .set_cursor_position = NULL,
++    .show_cursor = NULL,
++    .hide_cursor = NULL,
++    .load_cursor_argb = NULL,
++    .destroy = uxen_crtc_stub
++};
++
++static void uxen_output_stub(xf86OutputPtr output)
++{
++    (void) output;
++}
++
++static void uxen_output_dpms(xf86OutputPtr output, int mode)
++{
++    (void)output;
++    (void)mode;
++}
++
++static int uxen_output_mode_valid(xf86OutputPtr output, DisplayModePtr mode)
++{
++    //return mode->type & M_T_BUILTIN ? MODE_BAD : MODE_OK;
++    return MODE_OK;
++}
++
++static Bool
++uxen_output_mode_fixup (xf86OutputPtr output, DisplayModePtr mode,
++                        DisplayModePtr adjusted_mode)
++{
++    (void) output;
++    (void) mode;
++    (void) adjusted_mode;
++
++    return TRUE;
++}
++
++static void
++uxen_output_mode_set (xf86OutputPtr output, DisplayModePtr mode,
++                        DisplayModePtr adjusted_mode)
++{
++    (void) output;
++    (void) mode;
++    (void) adjusted_mode;
++}
++
++/* A virtual monitor is always connected. */
++static xf86OutputStatus uxen_output_detect(xf86OutputPtr output)
++{
++   return XF86OutputStatusConnected;
++}
++
++static DisplayModePtr
++uxen_add_mode(DisplayModePtr modes, const char *name, int x, int y,int is_prefered, int is_userdef)
++{
++    DisplayModePtr pMode = xnfcalloc(1, sizeof(DisplayModeRec));
++    int cRefresh = 60;
++
++    pMode->status        = MODE_OK;
++    pMode->type          = is_userdef ? M_T_USERDEF : M_T_BUILTIN;
++    if (is_prefered)
++        pMode->type     |= M_T_PREFERRED;
++    pMode->HDisplay  = x;
++    pMode->HSyncStart    = pMode->HDisplay + 2;
++    pMode->HSyncEnd      = pMode->HDisplay + 4;
++    pMode->HTotal        = pMode->HDisplay + 6;
++    pMode->VDisplay      = y;
++    pMode->VSyncStart    = pMode->VDisplay + 2;
++    pMode->VSyncEnd      = pMode->VDisplay + 4;
++    pMode->VTotal        = pMode->VDisplay + 6;
++    pMode->Clock         = pMode->HTotal * pMode->VTotal * cRefresh / 1000; /* kHz */
++    if (!name)
++        xf86SetModeDefaultName(pMode);
++    else
++        pMode->name = xnfstrdup(name);
++    modes = xf86ModesAdd(modes, pMode);
++    return modes;
++}
++
++static DisplayModePtr uxen_output_get_modes(xf86OutputPtr output)
++{
++    DisplayModePtr modes = NULL;
++
++    modes = uxen_add_mode(modes, NULL, 1, 1, 0, 1);
++    modes = uxen_add_mode(modes, NULL, 800, 600, 0, 1);
++    modes = uxen_add_mode(modes, NULL, 1024, 769, 0, 1);
++    modes = uxen_add_mode(modes, NULL, 1100, 900, 1, 1);
++    return modes;
++}
++
++static const xf86OutputFuncsRec uxen_output_funcs = {
++    .create_resources = uxen_output_stub,
++    .dpms = uxen_output_dpms,
++    .save = NULL, /* These two are never called by the server. */
++    .restore = NULL,
++    .mode_valid = uxen_output_mode_valid,
++    .mode_fixup = uxen_output_mode_fixup,
++    .prepare = uxen_output_stub,
++    .commit = uxen_output_stub,
++    .mode_set = uxen_output_mode_set,
++    .detect = uxen_output_detect,
++    .get_modes = uxen_output_get_modes,
++     .set_property = NULL,
++    .destroy = uxen_output_stub
++};
++
++Bool uxen_config_resize(ScrnInfoPtr pScrn, int cw, int ch)
++{
++    Bool rc = TRUE;
++    FBDevPtr fPtr = FBDEVPTR(pScrn);
++    PixmapPtr ppix;
++    ScreenPtr screen = xf86ScrnToScreen(pScrn);
++    int pitch;
++
++    pScrn->virtualX = cw;
++    pScrn->virtualY = ch;
++    pScrn->displayWidth = cw;
++
++    pitch = pScrn->displayWidth * (pScrn->bitsPerPixel / 8);
++    DBG("cwxch %dx%d pitch %d depth %d bbp %d", cw, ch, pitch, pScrn->depth,
++         pScrn->bitsPerPixel);
++
++    ppix = screen->GetScreenPixmap(screen);
++    if (ppix)
++        rc = screen->ModifyPixmapHeader(ppix, cw, ch, pScrn->depth, pScrn->bitsPerPixel,
++                                        pitch, fPtr->fbstart);
++
++    return rc;
++}
++
++static const xf86CrtcConfigFuncsRec crtc_funcs = {
++    uxen_config_resize
++};
++
+ static Bool
+ FBDevGetRec(ScrnInfoPtr pScrn)
+ {
+@@ -395,6 +662,7 @@
+ 	int default_depth, fbbpp;
+ 	const char *s;
+ 	int type;
++        Gamma gzeros = {0.0, 0.0, 0.0};
+ 
+ 	if (flags & PROBE_DETECT) return FALSE;
+ 
+@@ -519,29 +787,59 @@
+ 
+ 	/* select video modes */
+ 
+-	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "checking modes against framebuffer device...\n");
+-	fbdevHWSetVideoModes(pScrn);
+-
+-	xf86DrvMsg(pScrn->scrnIndex, X_INFO, "checking modes against monitor...\n");
+-	{
+-		DisplayModePtr mode, first = mode = pScrn->modes;
+-		
+-		if (mode != NULL) do {
+-			mode->status = xf86CheckModeForMonitor(mode, pScrn->monitor);
+-			mode = mode->next;
+-		} while (mode != NULL && mode != first);
+-
+-		xf86PruneDriverModes(pScrn);
+-	}
+-
+-	if (NULL == pScrn->modes)
+-		fbdevHWUseBuildinMode(pScrn);
+-	pScrn->currentMode = pScrn->modes;
++        do {
++            ClockRange* clockRanges;
+ 
+-	/* First approximation, may be refined in ScreenInit */
+-	pScrn->displayWidth = pScrn->virtualX;
+-
+-	xf86PrintModes(pScrn);
++            // virtual monitor
++            pScrn->monitor = pScrn->confScreen->monitor;
++            if (pScrn->monitor) {
++                pScrn->monitor->DDC = NULL;
++                pScrn->monitor->nHsync = 1;
++                pScrn->monitor->hsync[0].lo = 1;
++                pScrn->monitor->hsync[0].hi = 10000;
++                pScrn->monitor->nVrefresh = 1;
++                pScrn->monitor->vrefresh[0].lo = 1;
++                pScrn->monitor->vrefresh[0].hi = 100;
++
++                DBG("monitor configured");
++            }
++
++            // clock ranges
++            clockRanges = xnfcalloc(sizeof(ClockRange), 1);
++            if (!clockRanges)
++                break;
++            clockRanges->next = NULL;
++            clockRanges->minClock = 1;
++            clockRanges->maxClock = 400000000;
++            clockRanges->clockIndex = -1;
++            clockRanges->interlaceAllowed = FALSE;
++            clockRanges->doubleScanAllowed = FALSE;
++            clockRanges->ClockMulFactor = 1;
++            clockRanges->ClockDivFactor = 1;
++
++            pScrn->progClock = TRUE;
++            pScrn->clockRanges = clockRanges;
++
++            uxen_modes = uxen_add_mode(uxen_modes, "default", 1, 1, 0, 0);
++            pScrn->modes = uxen_modes;
++
++            DBG("default modes added modes %p", pScrn->modes);
++
++            break;
++        } while (1 == 0);
++
++        pScrn->currentMode = pScrn->modes;
++        if (pScrn->currentMode) {
++            pScrn->virtualX = pScrn->currentMode->HDisplay;
++            pScrn->virtualY = pScrn->currentMode->VDisplay;
++        }
++        pScrn->displayWidth = pScrn->virtualX;
++
++        xf86PrintModes(pScrn);
++
++        xf86RandR12PreInit(pScrn);
++        /* Set gamma */
++        xf86SetGamma(pScrn, gzeros);
+ 
+ 	/* Set display resolution */
+ 	xf86SetDpi(pScrn, 0, 0);
+@@ -846,6 +1144,31 @@
+ 	xf86SetBlackWhitePixels(pScreen);
+ 	xf86SetBackingStore(pScreen);
+ 
++        xf86CrtcConfigInit(pScrn, &crtc_funcs);
++
++        uxen_crtc = xf86CrtcCreate(pScrn, &uxen_crtc_funcs);
++        if (!uxen_crtc)
++           return FALSE;
++        uxen_output = xf86OutputCreate(pScrn, &uxen_output_funcs, UXEN_OUTPUT);
++        if (!uxen_output)
++           return FALSE;
++        xf86OutputUseScreenMonitor(uxen_output, FALSE);
++        uxen_output->possible_crtcs = 1;
++        xf86CrtcSetSizeRange(pScrn, 1, 1, UXENFB_MAX_WIDTH, UXENFB_MAX_HEIGHT);
++
++        if (!xf86InitialConfiguration(pScrn, TRUE)) {
++            xf86DrvMsg(pScrn->scrnIndex, X_ERROR, "Initial CRTC configuration failed!\n");
++            return FALSE;
++        }
++        if (!xf86CrtcScreenInit(pScreen)) {
++            return FALSE;
++        }
++
++        /* set first video mode */
++        if (!xf86SetDesiredModes(pScrn)) {
++            return FALSE;
++        }
++
+ 	/* software cursor */
+ 	miDCInitialize(pScreen, xf86GetPointerScreenFuncs());
+ 

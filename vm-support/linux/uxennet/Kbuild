@@ -1,0 +1,3 @@
+obj-m += uxennet.o
+
+uxennet-y := net.o

@@ -1,0 +1,7 @@
+obj-m += uxenplatform.o
+
+uxenplatform-y := platform.o
+uxenplatform-$(LX_TARGET_ATTOVM) += attovm.o
+uxenplatform-$(LX_TARGET_STANDARDVM) += pci.o
+
+CFLAGS_attovm.o := -I$(ATTOXEN_API_INC)

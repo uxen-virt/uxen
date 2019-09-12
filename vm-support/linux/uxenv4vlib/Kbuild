@@ -1,0 +1,3 @@
+obj-m += uxenv4vlib.o
+
+uxenv4vlib-y := v4v.o ax.o acpi.o

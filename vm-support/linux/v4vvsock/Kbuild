@@ -1,0 +1,3 @@
+obj-m += v4vvsock.o
+
+v4vvsock-y := v4v_vsock.o

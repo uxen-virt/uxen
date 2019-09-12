@@ -1,0 +1,4 @@
+obj-m += uxenhc.o
+
+uxenhc-y := hypercall.o
+CFLAGS_hypercall.o := -I$(ATTOXEN_API_INC)
