@@ -360,7 +360,40 @@ static int emu_rep_ins(
     uint64_t *reps,
     struct x86_emulate_ctxt *ctxt)
 {
-    EMU_UNSUPPORTED;
+    struct hvm_emu_ctx *ec = container_of(ctxt, struct hvm_emu_ctx, x86_ctx);
+    uint64_t daddr;
+    uint64_t dgpa;
+    uint64_t n;
+    int rc;
+    int width;
+    int unmapped;
+
+    rc = hvmemul_virtual_to_linear(
+        dst_seg, dst_offset, bytes_per_rep, reps, hvm_access_write, ec, &daddr);
+    if ( rc != X86EMUL_OKAY )
+        return rc;
+    rc = hvmemul_gva_to_gpa(ec, hvm_access_write, daddr, &dgpa, &unmapped);
+    if ( rc != X86EMUL_OKAY )
+        return rc;
+#ifdef DEBUG_EMULATE
+    debug_printf("emu rep ins to linear addr: %"PRIx64" (gpa %"PRIx64") from ioport 0x%x "
+                 "bytes-per-rep %d reps %"PRId64"\n",
+                 daddr, dgpa,
+                 (int)src_port,
+                 bytes_per_rep,
+                 *reps);
+#endif
+    n = *reps;
+    width = ioport_width(bytes_per_rep, "rep ins: bad rep size: 0x%x\n", (int)bytes_per_rep);
+    if (bytes_per_rep > sizeof(uint64_t))
+        whpx_panic("bad bytes per rep: %d\n", bytes_per_rep);
+    while (n) {
+        uint64_t v = ioport_read(width, src_port);
+        vm_memory_rw(dgpa, (uint8_t*)&v, bytes_per_rep, 1);
+        dgpa += bytes_per_rep;
+        --n;
+    }
+    return X86EMUL_OKAY;
 }
 
 static int emu_rep_outs(
