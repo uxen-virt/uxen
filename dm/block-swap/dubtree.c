@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2018, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -344,6 +344,7 @@ typedef struct {
     int n;
     uint8_t *dst;
     uint8_t *buf;
+    int offset;
     int size;
     CallbackState *cs;
 } ReadContext;
@@ -403,22 +404,52 @@ pending_read_remove(DubTree *t, ReadContext *ctx)
     critical_section_leave(&t->pending_read_lock);
 }
 
+static int
+pending_read_start(DubTree *t, ReadContext *ctx)
+{
+    ioh_event_init(&ctx->read_event);
+
+    memset(&ctx->o, 0, sizeof(ctx->o));
+    ctx->o.Offset = ctx->offset;
+    ctx->o.hEvent = ctx->read_event;
+
+    if (!ReadFile(ctx->f, ctx->buf ? ctx->buf : ctx->dst + ctx->first->dst_offset,
+                  ctx->size, NULL, &ctx->o)) {
+        if (GetLastError() != ERROR_IO_PENDING) {
+            Werr(1, "ReadFile failed");
+            return -1;
+        }
+    }
+
+    pending_read_insert(t, ctx);
+
+    return 0;
+}
+
 static void
 pending_read_complete_event(void *opaque)
 {
     ReadContext *ctx = (ReadContext*)opaque;
     DubTree *t = ctx->t;
-    DWORD got = 0;
+    DWORD got = 0, err;
 
     pending_read_remove(t, ctx);
 
-    if (!GetOverlappedResult(ctx->f, &ctx->o, &got, FALSE)) {
-        debug_printf("handle_read_event: overlapped result failed: %d\n",
-            (int)GetLastError());
-        return;
-    }
+    if (GetOverlappedResult(ctx->f, &ctx->o, &got, FALSE))
+        read_complete_scatter(0, got, &ctx->o); /* will free ctx */
+    else {
+        err = GetLastError();
+        debug_printf("handle_read_event: overlapped result failed: %d, "
+                     "off 0x%x, size 0x%x\n",
+                     (int)err, ctx->offset, ctx->size);
 
-    read_complete_scatter(0, got, &ctx->o); /* will free ctx */
+        if (err == ERROR_WORKING_SET_QUOTA) {
+            /* temporarily no memory to complete read,
+               pause to give it breathing room and retry */
+            Sleep(10);
+            pending_read_start(t, ctx);
+        }
+    }
 }
 
 static DWORD WINAPI
@@ -484,21 +515,12 @@ static int execute_reads(DubTree *t,
             return -1;
         }
     }
+    ctx->offset = first->src_offset;
     ctx->size = size;
     ctx->cs = cs;
     increment_counter(cs);
 
-    ctx->o.Offset = first->src_offset;
-    ioh_event_init(&ctx->read_event);
-    ctx->o.hEvent = ctx->read_event;
-    if (!ReadFile(f, ctx->buf ? ctx->buf : dst + first->dst_offset, size,
-            NULL, &ctx->o)) {
-        if (GetLastError() != ERROR_IO_PENDING) {
-            Werr(1, "ReadFile failed");
-            return -1;
-        }
-    }
-    pending_read_insert(t, ctx);
+    pending_read_start(t, ctx);
 
 #else
 #ifdef __APPLE__
