@@ -2430,10 +2430,9 @@ vm_load(const char *name, int restore_mode)
   out:
     filebuf_close(f);
 
-    if (ret < 0) {
+    if (ret < 0)
         _set_errno(-ret);
-        return -1;
-    }
+
     return ret;
 }
 

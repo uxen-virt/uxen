@@ -701,9 +701,10 @@ vm_init(const char *loadvm, int restore_mode)
                 debug_printf("uxen_vm_init: template reinit requested\n");
                 errx(1, "vm_load(%s, clone) failed: %d", loadvm, ret);
             }
-            err(1, "vm_load(%s, %s) failed", loadvm,
+            err(ret, "vm_load(%s, %s) failed: %d", loadvm,
                 restore_mode == VM_RESTORE_TEMPLATE ? "template" :
-                (restore_mode == VM_RESTORE_CLONE ? "clone" : "load"));
+               (restore_mode == VM_RESTORE_CLONE ? "clone" : "load"),
+                ret);
         }
         if (restore_mode == VM_RESTORE_TEMPLATE) {
             template_load_failed = false;
