@@ -69,6 +69,7 @@ static int screenshot_idx = 0;
 static const wchar_t *screenshot_path = L"";
 /* Times are in ms */
 static uint64_t screenshot_interval = 0;
+static int g_head_id;
 
 #define SCALE_X(v) \
         (((v) * UXENHID_XY_MAX) / (cons->width - 1))
@@ -717,9 +718,11 @@ console_invalidate_rect_with_id(void *priv,
                         int y,
                         int w,
                         int h,
-                        uint64_t rect_id)
+                        uint64_t rect_id,
+                        uint64_t head_id)
 {
-    console_invalidate_rect(priv, x, y, w, h);
+    if (head_id == g_head_id)
+        console_invalidate_rect(priv, x, y, w, h);
 }
 
 static void
@@ -1106,6 +1109,7 @@ WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     }
 
     printf("Connecting to %s head %d\n", pipename, head);
+    g_head_id = head;
     cons.channel_event = uxenconsole_connect_head(cons.ctx, head);
 
     if (!cons.channel_event)

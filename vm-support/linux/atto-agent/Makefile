@@ -6,7 +6,7 @@
 CC ?= gcc
 
 SRC = atto-agent.o keyboard.c headctl.c
-LIBS = -lX11
+LIBS = -lpthread -lX11 -lXdamage -lXfixes
 
 EXTRA_CFLAGS = -O2 -g -Wall -I../include -I../include/uxen -I$(ATTOXEN_API_INC) -I$(STAGING_INC) -L$(STAGING_LIB)
 EXTRA_CFLAGS += -DDEFAULT_USER_NAME="\"$(ATTOVM_USERS_NORMAL_ACCOUNT)\""

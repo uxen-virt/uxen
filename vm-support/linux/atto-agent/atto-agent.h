@@ -14,8 +14,9 @@ typedef uint32_t kbd_layout_t;
 #define HEADMAX 32
 
 typedef struct head {
-  head_id_t id;
-  char dev[64];
+    head_id_t id;
+    char dev[64];
+    int dr;
 } head_t;
 
 /* state shared between agent daemon and command instances, also persistent across restarts */
@@ -25,6 +26,8 @@ typedef struct shared_state {
     kbd_layout_t active_layout;
     struct head heads[HEADMAX];
     int heads_num;
+    int dr_fd;
+    uint64_t rect_id;
 } shared_state_t;
 
 #define SHARED_STATE_FILE "/tmp/atto-agent-state"

@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * Author: Piotr Foltyn <piotr.foltyn@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -42,6 +42,7 @@ struct dirty_rect_msg {
     int32_t right;
     int32_t bottom;
     uint64_t rect_id;
+    uint64_t head_id;
 } UXENDISP_PACKED;
 
 /* backend -> frontend */

@@ -139,7 +139,8 @@ int                     uxenconsole_hid_touch_report(hid_context_t context,
                                                      int width, int height,
                                                      int flags);
 
-typedef void (*inv_rect_t)(void *priv, int x, int y, int w, int h, uint64_t rect_id);
+typedef void (*inv_rect_t)(void *priv, int x, int y, int w, int h,
+                           uint64_t rect_id, uint64_t head_id);
 
 typedef void *disp_context_t;
 

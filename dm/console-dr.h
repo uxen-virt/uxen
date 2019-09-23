@@ -1,5 +1,5 @@
 /*
- * Copyright 2018, Bromium, Inc.
+ * Copyright 2018-2019, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -7,7 +7,7 @@
 #ifndef CONSOLE_DR_H_
 #define CONSOLE_DR_H_
 
-typedef void (*inv_rect_t)(void *priv, int x, int y, int w, int h, uint64_t rect_id);
+typedef void (*inv_rect_t)(void *priv, int x, int y, int w, int h, uint64_t rect_id, uint64_t head_id);
 
 typedef void *console_dr_context_t;
 

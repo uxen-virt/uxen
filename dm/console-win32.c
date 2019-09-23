@@ -1648,10 +1648,10 @@ mon_resize_screen(struct gui_state *s, Monitor *mon, const dict args)
 #endif  /* MONITOR */
 
 static void
-disp_inv_rect(void *priv, int x, int y, int w, int h, uint64_t rect_id)
+disp_inv_rect(void *priv, int x, int y, int w, int h, uint64_t rect_id, uint64_t head_id)
 {
     current_rect = rect_id;
-    dpy_desktop_update(x, y, w, h);
+    dpy_desktop_update(head_id, x, y, w, h);
 }
 
 static int

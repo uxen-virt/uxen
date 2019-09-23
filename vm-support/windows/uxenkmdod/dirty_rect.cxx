@@ -134,6 +134,8 @@ dr_send(dr_ctx_t context, ULONG m_num, D3DKMT_MOVE_RECT *move_rect,
     if (!ctx->enabled)
         return;
 
+    RtlZeroMemory(&rect, sizeof(rect));
+
     rect.left = DR_USHRT_MAX;
     rect.top = DR_USHRT_MAX;
     rect.right = 0;

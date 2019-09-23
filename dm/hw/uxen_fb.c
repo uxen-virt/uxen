@@ -38,7 +38,7 @@
 #define MAX_XRES 4096
 #define MAX_YRES 2160
 
-//#define USE_DIRTY_RECTS
+#define USE_DIRTY_RECTS
 
 int framebuffer_connected = 0;
 

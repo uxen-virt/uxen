@@ -446,6 +446,9 @@ atto_agent_init(void)
     debug_printf("atto agent: initialized\n");
     s->initialized = 1;
 
+    /* we'll receive dirty rect events from guest atto-agent, mask periodic refresh */
+    console_mask_periodic(1);
+
     return 0;
 }
 

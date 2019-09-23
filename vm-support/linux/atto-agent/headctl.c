@@ -8,14 +8,24 @@
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/file.h>
+#include <sys/socket.h>
 #include <fcntl.h>
+#include <pthread.h>
 #include <err.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <X11/Xlib.h>
+#include <X11/Xutil.h>
+#include <X11/extensions/Xdamage.h>
+#include <X11/extensions/Xfixes.h>
+#include <uxen-v4vlib.h>
 #include "atto-agent.h"
+
+/* dr tracking */
+#include "../../../common/include/uxendisp-common.h"
+
 
 #ifndef DEFAULT_USER_NAME
 #define DEFAULT_USER_NAME "user"
@@ -408,9 +418,90 @@ static void cmd_headctl_device(char *headstr)
     }
 }
 
+static void* run_dr_(void *head_)
+{
+    struct head *head = head_;
+    Display *d = NULL;
+
+    d = connectx_timeout(head->id, X_CONNECT_TIMEOUT_MS);
+    if (!d) {
+        HEADCTL_ERROR("FAILED to connect to X server for head %d\n", head->id);
+        return 0;
+    }
+
+    Window root = DefaultRootWindow(d);
+    int damage_event_base, damage_error;
+    XDamageQueryExtension(d, &damage_event_base, &damage_error);
+    Damage damage = XDamageCreate(d, root, XDamageReportNonEmpty);
+
+    for (;;) {
+        XEvent ev;
+        XNextEvent(d, &ev);
+        if (ev.type == damage_event_base + XDamageNotify) {
+            XDamageNotifyEvent *dev = (XDamageNotifyEvent*) &ev;
+
+            if (dev->damage != damage)
+                continue; // not ours
+
+            XserverRegion region = XFixesCreateRegion(d, NULL, 0);
+            XDamageSubtract(d, damage, None, region);
+            XSync(d, False); /* sync before we start copying or will artifact */
+            int count;
+            XRectangle bounds;
+            XRectangle *rects = XFixesFetchRegionAndBounds(d, region, &count, &bounds);
+            if (rects && count) {
+                int x0 = 0xffff;
+                int y0 = 0xffff;
+                int x1 = 0;
+                int y1 = 0;
+
+                for (int i = 0; i < count; i++) {
+                    int rx0 = rects[i].x;
+                    int ry0 = rects[i].y;
+
+                    int rx1 = rx0 + rects[i].width  - 1;
+                    int ry1 = ry0 + rects[i].height - 1;
+
+                    if (rx0 < x0) x0 = rx0;
+                    if (ry0 < y0) y0 = ry0;
+                    if (rx1 > x1) x1 = rx1;
+                    if (ry1 > y1) y1 = ry1;
+                }
+
+                XFree(rects);
+
+                /* send dr to backend */
+                struct dirty_rect_msg msg;
+                memset(&msg, 0, sizeof(msg));
+                msg.left = x0;
+                msg.top = y0;
+                msg.right = x1 + 1;
+                msg.bottom = y1 + 1;
+                msg.rect_id = __atomic_fetch_add(&shared_state->rect_id, 1, __ATOMIC_SEQ_CST);
+                msg.head_id = head->id;
+                sync_shared_state();
+                ssize_t len = send(shared_state->dr_fd, &msg, sizeof(msg), 0);
+                if (len < 0)
+                    err(1, "send error %d\n", errno);
+            }
+            XFixesDestroyRegion(d, region);
+        }
+    }
+}
+
+static void run_dr(volatile struct head *h)
+{
+    pthread_t tid;
+
+    int err = pthread_create(&tid, NULL, run_dr_, (void*)h);
+    if (err) {
+        HEADCTL_ERROR("couldn't create dr thread for head %d: %d\n", h->id, err);
+    }
+}
+
 void headctl_wakeup(int *timeout)
 {
-    int t = *timeout;
+    int t = *timeout, i, num;
 
     if (shared_state->active_head_request != shared_state->active_head) {
         int err = headctl_activate(shared_state->active_head_request);
@@ -426,11 +517,44 @@ void headctl_wakeup(int *timeout)
         t = 1000;
 
     *timeout = t;
+
+    /* check for missing head dr and run dr tracking if needed */
+    num = shared_state->heads_num;
+    for (i = 0; i < num; i++) {
+        if (!shared_state->heads[i].dr) {
+            shared_state->heads[i].dr = 1;
+            sync_shared_state();
+            run_dr(&shared_state->heads[i]);
+        }
+    }
 }
 
 void headctl_init(void)
 {
+    struct sockaddr_vm addr;
+
     update_heads();
+
+    /* connect DR tracking port */
+    int fd = socket(AF_VSOCK, SOCK_DGRAM, 0);
+    if (fd < 0)
+        err(1, "socket");
+
+    memset(&addr, 0, sizeof(addr));
+    addr.family = AF_VSOCK;
+    addr.partner = V4V_DOMID_DM;
+    addr.v4v.domain = V4V_DOMID_DM;
+    addr.v4v.port = UXENDISP_PORT;
+
+    if (bind(fd, (const struct sockaddr *) &addr, sizeof(addr)) < 0)
+        err(1, "bind %d", (int) errno);
+
+    if (connect(fd, (const struct sockaddr *) &addr, sizeof(addr)) < 0)
+        err(1, "connect %d", (int) errno);
+
+    shared_state->dr_fd = fd;
+    shared_state->rect_id = 0;
+    sync_shared_state();
 }
 
 void headctl(int argc, char **argv)

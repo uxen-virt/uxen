@@ -1,5 +1,5 @@
 /*
- * Copyright 2018, Bromium, Inc.
+ * Copyright 2018-2019, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -15,7 +15,7 @@
 #define ONE_MS_IN_HNS 10000
 #define DUE_TIME_MS 100
 
-typedef void (*inv_rect_t)(void *priv, int x, int y, int w, int h, uint64_t rect_id);
+typedef void (*inv_rect_t)(void *priv, int x, int y, int w, int h, uint64_t rect_id, uint64_t head_id);
 
 struct console_dr_context {
     v4v_async_t as_read;
@@ -80,7 +80,8 @@ parse_message(struct console_dr_context *c, void *buf, int size)
                         rect->top,
                         rect->right - rect->left,
                         rect->bottom - rect->top,
-                        rect->rect_id);
+                        rect->rect_id,
+                        rect->head_id);
 
         return sizeof(struct dirty_rect_msg);
     } else

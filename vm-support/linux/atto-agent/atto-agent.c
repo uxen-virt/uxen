@@ -22,8 +22,7 @@
 
 #include <uxen-v4vlib.h>
 
-#include <atto-agent-api/atto-agent-protocol.h>
-
+#include "../../../common/include/atto-agent-protocol.h"
 #include "atto-agent.h"
 
 #define RING_SIZE 262144

@@ -80,7 +80,7 @@ struct display_state *display_create(
 
     critical_section_enter(&desktop_lock);
     desktop_refresh();
-    ds->desktop_x = desktop_width;
+    ds->desktop_x = 0;
     ds->desktop_y = 0;
 
     if (gui_info && gui_info->create && !ds->gui) {
@@ -514,7 +514,7 @@ dpy_update(struct display_state *ds, int x, int y, int w, int h)
 }
 
 void
-dpy_desktop_update(int x, int y, int w, int h)
+dpy_desktop_update(head_id_t head_id, int x, int y, int w, int h)
 {
     struct display_state *ds;
 
@@ -526,6 +526,10 @@ dpy_desktop_update(int x, int y, int w, int h)
         int y2 = (y + h) - ds->desktop_y;
 
         if (!ds->surface)
+            continue;
+
+        /* head check */
+        if (!(ds->head_id == head_id))
             continue;
 
         /* Overlap check */

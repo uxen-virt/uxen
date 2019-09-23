@@ -7,6 +7,7 @@
 #include "config.h"
 
 #include "console.h"
+#include "console-dr.h"
 #include "dm.h"
 #include "vm.h"
 #include "uxen.h"

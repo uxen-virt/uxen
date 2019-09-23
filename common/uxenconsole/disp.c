@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2017, Bromium, Inc.
+ * Copyright 2015-2019, Bromium, Inc.
  * Author: Piotr Foltyn <piotr.foltyn@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -82,7 +82,8 @@ parse_message(struct disp_context *c, void *buf, int size)
                         rect->top,
                         rect->right - rect->left,
                         rect->bottom - rect->top,
-                        rect->rect_id);
+                        rect->rect_id,
+                        rect->head_id);
 
         return sizeof(struct dirty_rect_msg);
     } else
