@@ -771,8 +771,8 @@ whpx_count_entries(void)
 
 /* enumerate vm private (diverged) page ranges (they're usually PAGE_READWRITE not MEM_PRIVATE for the
  * mapped file case) */
-static void
-enum_private_ranges(void *opaque, void (*cb)(uint64_t pfn, uint64_t count, void *opaque))
+static int
+enum_private_ranges(void *opaque, int (*cb)(uint64_t pfn, uint64_t count, void *opaque))
 {
     mb_entry_t *e, *next;
 
@@ -792,13 +792,18 @@ enum_private_ranges(void *opaque, void (*cb)(uint64_t pfn, uint64_t count, void 
             if (npages > pages_left)
                 npages = pages_left;
             if ((mbi.Protect & PAGE_READWRITE) ||
-                (mbi.Type & MEM_PRIVATE))
-                cb(pfn, npages, opaque);
+                (mbi.Type & MEM_PRIVATE)) {
+                int err = cb(pfn, npages, opaque);
+                if (err)
+                    return err;
+            }
             p += mbi.RegionSize;
             pages_left -= npages;
             pfn += npages;
         }
     }
+
+    return 0;
 }
 
 static bool
@@ -1132,7 +1137,7 @@ struct private_hashes {
     int hashes_nr;
 };
 
-static void
+static int
 calculate_hashes_cb(uint64_t pfn, uint64_t count, void *opaque)
 {
     struct private_hashes *h = opaque;
@@ -1143,6 +1148,9 @@ calculate_hashes_cb(uint64_t pfn, uint64_t count, void *opaque)
     assert(len == (count << PAGE_SHIFT));
 
     while (pfn != end) {
+        if (save_cancelled())
+            return -EINTR;
+
         if (!((h->hashes_nr - 1) & h->hashes_nr)) {
             h->hashes = realloc(h->hashes, sizeof(h->hashes[0]) *
                 (h->hashes_nr ? 2 * h->hashes_nr : 1));
@@ -1156,6 +1164,8 @@ calculate_hashes_cb(uint64_t pfn, uint64_t count, void *opaque)
         h->hashes_nr++;
         pfn++;
     }
+
+    return 0;
 }
 
 int
@@ -1179,12 +1189,6 @@ whpx_write_memory(struct filebuf *f)
     struct xc_save_index whpx_memory_data_index = { 0, XC_SAVE_ID_WHPX_MEMORY_DATA };
 
     write_page_contents = !compression_is_cuckoo();
-
-    /* calculate page hashes */
-    debug_printf("calculating page hashes...\n");
-    memset(&pr_hashes, 0, sizeof(pr_hashes));
-    enum_private_ranges(&pr_hashes, calculate_hashes_cb);
-    debug_printf("calculating page hashes done, %d hashes\n", pr_hashes.hashes_nr);
 
     uint64_t whpx_memory_data_off = filebuf_tell(f);
 
@@ -1234,6 +1238,12 @@ whpx_write_memory(struct filebuf *f)
 
     size = raw_pagedata_off - whpx_memory_data_off;
     vm_save_set_abortable();
+
+    /* calculate page hashes - can be slow operation */
+    debug_printf("calculating page hashes...\n");
+    memset(&pr_hashes, 0, sizeof(pr_hashes));
+    enum_private_ranges(&pr_hashes, calculate_hashes_cb);
+    debug_printf("calculating page hashes done, %d hashes\n", pr_hashes.hashes_nr);
 
     if (write_page_contents) {
         /* save page contents */
