@@ -558,6 +558,21 @@ void headctl_wakeup(int *timeout)
     }
 }
 
+void headctl_event(int fd)
+{
+    if (fd == shared_state->dr_fd) {
+        ssize_t len;
+        struct update_msg msg;
+
+        for (;;) {
+            len = recv(fd, &msg, sizeof (msg), 0);
+            if (len < sizeof(msg))
+                break;
+            /* do nothing with the dr ack message, we just need to be emptying buffer from them */
+        }
+    }
+}
+
 void headctl_init(void)
 {
     struct sockaddr_vm addr;
@@ -583,6 +598,7 @@ void headctl_init(void)
 
     shared_state->dr_fd = fd;
     shared_state->rect_id = 0;
+
     sync_shared_state();
 }
 

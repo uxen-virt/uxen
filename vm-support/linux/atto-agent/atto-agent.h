@@ -46,6 +46,7 @@ void kbd_focus_request (unsigned offer);
 void kbd_wakeup (int *polltimeout);
 
 void headctl_init(void);
+void headctl_event(int fd);
 void headctl(int argc, char **argv);
 void headctl_wakeup(int *timeout);
 int headctl_activate(head_id_t head);

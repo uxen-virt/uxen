@@ -237,8 +237,10 @@ event_loop(int fd, int protkbd)
             }
         }
 
-        for (i = 0; i < nevent_fds; i++)
+        for (i = 0; i < nevent_fds; i++) {
             kbd_event(event_fds[i]);
+            headctl_event(event_fds[i]);
+        }
 
         if (!(poll_fds[0].revents & POLLIN))
             continue;
