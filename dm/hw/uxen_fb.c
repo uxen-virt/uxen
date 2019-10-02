@@ -38,8 +38,6 @@
 #define MAX_XRES 4096
 #define MAX_YRES 2160
 
-#define USE_DIRTY_RECTS
-
 int framebuffer_connected = 0;
 
 struct uxenfb;
@@ -88,14 +86,14 @@ static int uxen_fb_head_init (uxenfb_t *s, head_id_t id);
 static void
 uxenfb_update(void *opaque)
 {
-#ifndef USE_DIRTY_RECTS
-    struct uxenfb_head *h = opaque;
+    if (!vm_attovm_dr_tracking) {
+        struct uxenfb_head *h = opaque;
 
-    if (!h->ds)
-        return;
+        if (!h->ds)
+            return;
 
-    dpy_update(h->ds, 0, 0, h->xres, h->yres);
-#endif
+        dpy_update(h->ds, 0, 0, h->xres, h->yres);
+    }
 }
 
 static void
@@ -131,7 +129,6 @@ vram_change(struct vram_desc *v, void *opaque)
     dpy_vram_change(h->ds, v);
 }
 
-#ifndef USE_DIRTY_RECTS
 static void
 fb_timer(void *opaque)
 {
@@ -146,7 +143,6 @@ fb_timer(void *opaque)
 
     qemu_mod_timer(s->timer, get_clock_ms(vm_clock) + 30);
 }
-#endif
 
 static struct console_hw_ops uxenfb_console_ops = {
     .update = uxenfb_update,
@@ -391,10 +387,10 @@ uxen_fb_initfn (UXenPlatformDevice *dev)
 
     uxen_fb_head_init(s, 0);
 
-#ifndef USE_DIRTY_RECTS
-    s->timer = new_timer_ms(vm_clock, fb_timer, s);
-    qemu_mod_timer(s->timer, get_clock_ms(vm_clock));
-#endif
+    if (!vm_attovm_dr_tracking) {
+        s->timer = new_timer_ms(vm_clock, fb_timer, s);
+        qemu_mod_timer(s->timer, get_clock_ms(vm_clock));
+    }
 
     err = uxen_fb_init_v4v(s);
     if (err)

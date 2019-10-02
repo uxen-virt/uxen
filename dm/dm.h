@@ -111,6 +111,7 @@ extern char *vm_image; /* hvmloader path or .attovm image path */
 #define ATTOVM_MODE_UXEN   2
 extern uint64_t vm_attovm_mode; /* run mode */
 extern uint64_t vm_attovm_ax; /* use ax ? */
+extern uint64_t vm_attovm_dr_tracking; /* use dirty rect tracking ? */
 extern char *vm_attovm_url; /* browser url */
 extern char *vm_attovm_appdef_file; /* filename with appdef spec */
 
