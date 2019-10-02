@@ -418,10 +418,47 @@ static void cmd_headctl_device(char *headstr)
     }
 }
 
+struct drc {
+    int x0, x1, y0, y1;
+};
+
+static int process_damage_ev(Display *d, Damage damage, XDamageNotifyEvent *dev, struct drc *r)
+{
+    if (dev->damage != damage)
+        return -1; // not ours
+
+    XserverRegion region = XFixesCreateRegion(d, NULL, 0);
+    XDamageSubtract(d, damage, None, region);
+    int count = 0;
+    XRectangle bounds;
+    XRectangle *rects = XFixesFetchRegionAndBounds(d, region, &count, &bounds);
+    if (rects) {
+        for (int i = 0; i < count; i++) {
+            int rx0 = rects[i].x;
+            int ry0 = rects[i].y;
+
+            int rx1 = rx0 + rects[i].width  - 1;
+            int ry1 = ry0 + rects[i].height - 1;
+
+            if (rx0 < r->x0) r->x0 = rx0;
+            if (ry0 < r->y0) r->y0 = ry0;
+            if (rx1 > r->x1) r->x1 = rx1;
+            if (ry1 > r->y1) r->y1 = ry1;
+        }
+
+        XFree(rects);
+    }
+    XFixesDestroyRegion(d, region);
+
+    return 0;
+}
+
 static void* run_dr_(void *head_)
 {
     struct head *head = head_;
     Display *d = NULL;
+    struct drc r;
+    int have_rect;
 
     d = connectx_timeout(head->id, X_CONNECT_TIMEOUT_MS);
     if (!d) {
@@ -434,57 +471,49 @@ static void* run_dr_(void *head_)
     XDamageQueryExtension(d, &damage_event_base, &damage_error);
     Damage damage = XDamageCreate(d, root, XDamageReportNonEmpty);
 
+    have_rect = 0;
+    r.x0 = 0xffff;
+    r.y0 = 0xffff;
+    r.x1 = 0;
+    r.y1 = 0;
+
     for (;;) {
-        XEvent ev;
-        XNextEvent(d, &ev);
-        if (ev.type == damage_event_base + XDamageNotify) {
-            XDamageNotifyEvent *dev = (XDamageNotifyEvent*) &ev;
+        do {
+            XEvent ev;
+            XNextEvent(d, &ev);
 
-            if (dev->damage != damage)
-                continue; // not ours
-
-            XserverRegion region = XFixesCreateRegion(d, NULL, 0);
-            XDamageSubtract(d, damage, None, region);
-            XSync(d, False); /* sync before we start copying or will artifact */
-            int count;
-            XRectangle bounds;
-            XRectangle *rects = XFixesFetchRegionAndBounds(d, region, &count, &bounds);
-            if (rects && count) {
-                int x0 = 0xffff;
-                int y0 = 0xffff;
-                int x1 = 0;
-                int y1 = 0;
-
-                for (int i = 0; i < count; i++) {
-                    int rx0 = rects[i].x;
-                    int ry0 = rects[i].y;
-
-                    int rx1 = rx0 + rects[i].width  - 1;
-                    int ry1 = ry0 + rects[i].height - 1;
-
-                    if (rx0 < x0) x0 = rx0;
-                    if (ry0 < y0) y0 = ry0;
-                    if (rx1 > x1) x1 = rx1;
-                    if (ry1 > y1) y1 = ry1;
-                }
-
-                XFree(rects);
-
-                /* send dr to backend */
-                struct dirty_rect_msg msg;
-                memset(&msg, 0, sizeof(msg));
-                msg.left = x0;
-                msg.top = y0;
-                msg.right = x1 + 1;
-                msg.bottom = y1 + 1;
-                msg.rect_id = __atomic_fetch_add(&shared_state->rect_id, 1, __ATOMIC_SEQ_CST);
-                msg.head_id = head->id;
-                sync_shared_state();
-                ssize_t len = send(shared_state->dr_fd, &msg, sizeof(msg), 0);
-                if (len < 0)
-                    err(1, "send error %d\n", errno);
+            if (ev.type == damage_event_base + XDamageNotify) {
+                XDamageNotifyEvent *dev = (XDamageNotifyEvent*) &ev;
+                
+                if (process_damage_ev(d, damage, dev, &r) == 0)
+                    have_rect = 1;
             }
-            XFixesDestroyRegion(d, region);
+        } while (XEventsQueued(d, QueuedAlready) > 0);
+
+        if (have_rect) {
+            XSync(d, False); /* sync before we start copying or will artifact */
+
+            /* send dr to backend */
+            struct dirty_rect_msg msg;
+            memset(&msg, 0, sizeof(msg));
+            msg.left = r.x0;
+            msg.top = r.y0;
+            msg.right = r.x1 + 1;
+            msg.bottom = r.y1 + 1;
+            msg.rect_id = __atomic_fetch_add(&shared_state->rect_id, 1, __ATOMIC_SEQ_CST);
+            msg.head_id = head->id;
+            sync_shared_state();
+            ssize_t len = send(shared_state->dr_fd, &msg, sizeof(msg), 0);
+            if (len < 0) {
+                HEADCTL_ERROR("dr send error %d\n", errno);
+            } else {
+                /* send OK, reset rect */
+                r.x0 = 0xffff;
+                r.y0 = 0xffff;
+                r.x1 = 0;
+                r.y1 = 0;
+                have_rect = 0;
+            }
         }
     }
 }
