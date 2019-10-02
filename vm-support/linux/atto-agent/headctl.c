@@ -26,7 +26,6 @@
 /* dr tracking */
 #include "../../../common/include/uxendisp-common.h"
 
-
 #ifndef DEFAULT_USER_NAME
 #define DEFAULT_USER_NAME "user"
 #endif
@@ -565,8 +564,11 @@ void headctl_event(int fd)
         struct update_msg msg;
 
         for (;;) {
-            len = recv(fd, &msg, sizeof (msg), 0);
-            if (len < sizeof(msg))
+            len = recv(fd, &msg, sizeof (msg), MSG_DONTWAIT);
+            if (len < 0)
+                break;
+
+            if (len < (ssize_t) sizeof(msg))
                 break;
             /* do nothing with the dr ack message, we just need to be emptying buffer from them */
         }
@@ -580,7 +582,7 @@ void headctl_init(void)
     update_heads();
 
     /* connect DR tracking port */
-    int fd = socket(AF_VSOCK, SOCK_DGRAM, 0);
+    int fd = socket(AF_VSOCK, SOCK_DGRAM | SOCK_NONBLOCK, 0);
     if (fd < 0)
         err(1, "socket");
 
@@ -595,6 +597,8 @@ void headctl_init(void)
 
     if (connect(fd, (const struct sockaddr *) &addr, sizeof(addr)) < 0)
         err(1, "connect %d", (int) errno);
+
+    pollfd_add(fd);
 
     shared_state->dr_fd = fd;
     shared_state->rect_id = 0;

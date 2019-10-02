@@ -238,7 +238,9 @@ event_loop(int fd, int protkbd)
         }
 
         for (i = 0; i < nevent_fds; i++) {
-            kbd_event(event_fds[i]);
+            /* FIXME: keyboard stuff should internally check for whether it owns the fd */
+            if (event_fds[i] != shared_state->dr_fd)
+                kbd_event(event_fds[i]);
             headctl_event(event_fds[i]);
         }
 
