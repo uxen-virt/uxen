@@ -29,6 +29,7 @@ extern "C" {
 #define CLIPBOARD_PERMIT_PASTE          0x2
 
 #define DISP_FLAG_MANUAL_ACK_RECT       0x1
+#define DISP_FLAG_AX                    0x2 /* required if we're creating display connection to AX attovm */
 
 #define CONSOLE_RESIZE_FLAG_NONE        0x0
 #define CONSOLE_RESIZE_FLAG_FORCE       0x1

@@ -721,7 +721,7 @@ co_set_attovm(const char *opt, yajl_val arg, void *opaque)
     vm_attovm_ax = yajl_object_get_bool_default(arg, "ax", false);
     vm_attovm_url = (char*) yajl_object_get_string(arg, "url");
     vm_attovm_appdef_file = (char*) yajl_object_get_string(arg, "appdef");
-    vm_attovm_dr_tracking = yajl_object_get_bool_default(arg, "dr", false);
+    vm_attovm_dr_tracking = yajl_object_get_bool_default(arg, "dr", true);
 
     return 0;
 }

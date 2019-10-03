@@ -155,6 +155,7 @@ uxenconsole_disp_init(int vm_id, const unsigned char *idtoken,
 {
     struct disp_context *c;
     v4v_bind_values_t bind = { };
+    uint32_t v4v_flags;
     DWORD err;
     BOOL rc;
 
@@ -164,7 +165,10 @@ uxenconsole_disp_init(int vm_id, const unsigned char *idtoken,
 
     c->thread_id = GetCurrentThreadId();
 
-    if (!v4v_open(&c->v4v, UXENDISP_RING_SIZE, V4V_FLAG_ASYNC)) {
+    v4v_flags = V4V_FLAG_ASYNC;
+    if (flags & DISP_FLAG_AX)
+        v4v_flags |= V4V_FLAG_AX;
+    if (!v4v_open(&c->v4v, UXENDISP_RING_SIZE, flags)) {
         err = GetLastError();
         goto error;
     }
