@@ -168,7 +168,7 @@ uxenconsole_disp_init(int vm_id, const unsigned char *idtoken,
     v4v_flags = V4V_FLAG_ASYNC;
     if (flags & DISP_FLAG_AX)
         v4v_flags |= V4V_FLAG_AX;
-    if (!v4v_open(&c->v4v, UXENDISP_RING_SIZE, flags)) {
+    if (!v4v_open(&c->v4v, UXENDISP_RING_SIZE, v4v_flags)) {
         err = GetLastError();
         goto error;
     }
