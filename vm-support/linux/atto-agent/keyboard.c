@@ -489,7 +489,7 @@ static int prot_v4v_event (void)
             kbd->id = evt->device_id;
             kbd->interface_type = ins->interface_type;
             kbd->valid = 1;
-            fprintf(stderr, "%s: keyboard %u if type %u inserted\n", __FUNCTION__,
+            fprintf(stdout, "%s: keyboard %u if type %u inserted\n", __FUNCTION__,
                     (unsigned) kbd->id, (unsigned) kbd->interface_type);
             if (kbd->interface_type == ATTOVM_KBIFT_PS2)
                 process_hid_descriptor (kbd, ps2hid_desc_report, sizeof (ps2hid_desc_report));
@@ -506,7 +506,7 @@ static int prot_v4v_event (void)
             break;
         }
         process_keyboard_removed (kbd);
-        fprintf(stderr, "%s: keyboard %u removed\n", __FUNCTION__, (unsigned) kbd->id);
+        fprintf(stdout, "%s: keyboard %u removed\n", __FUNCTION__, (unsigned) kbd->id);
         kbd->valid = 0;
         break;
     case ATTOVM_KBEVT_HID_REPORT:
@@ -520,7 +520,7 @@ static int prot_v4v_event (void)
         process_hid_report (kbd, evt->endpoint_id, &evt->data[0], evt->data_len);
         break;
     case ATTOVM_KBEVT_FOCUS_REVOKED:
-        fprintf(stderr, "%s: focus revoked\n", __FUNCTION__);
+        fprintf(stdout, "%s: focus revoked\n", __FUNCTION__);
         break;
 
     case ATTOVM_KBEVT_PS2_SCANCODE:
@@ -573,7 +573,7 @@ static int uhid_event_received (int fd)
   }
 
 
-  fprintf (stderr, "%s: fd %d got event %d\n", __FUNCTION__, fd, (int) ev.type);
+  // fprintf (stderr, "%s: fd %d got event %d\n", __FUNCTION__, fd, (int) ev.type);
   return 0;
 }
 
@@ -675,7 +675,7 @@ int kbd_init (int protkbd)
     struct sockaddr_vm addr;
     keyboard_t *kbd = NULL;
 
-    fprintf (stderr, "atto keyboard init\n");
+    fprintf (stdout, "atto keyboard init\n");
     memset (&keyboards, 0, sizeof (keyboards));
 
     use_protected_keyboard = protkbd;

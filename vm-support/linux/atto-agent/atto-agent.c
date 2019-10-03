@@ -285,6 +285,29 @@ event_loop(int fd, int protkbd)
     }
 }
 
+static void init_syslog(void)
+{
+    /* redirect stderr/stdout to logger */
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
+
+    FILE *f = popen("logger -t atto-agent -p user.err", "w");
+    if (f) {
+        int fd = fileno(f);
+        dup2(fd, STDERR_FILENO);
+    }
+    f = popen("logger -t atto-agent -p user.info", "w");
+    if (f) {
+        int fd = fileno(f);
+        dup2(fd, STDOUT_FILENO);
+    }
+
+    setbuf(stdout, NULL);
+    setbuf(stderr, NULL);
+
+    printf("logging initialized\n");
+}
+
 int main(int argc, char **argv)
 {
     int fd;
@@ -313,6 +336,10 @@ int main(int argc, char **argv)
         }
     } else
         err(1, "bad args");
+
+    if (daemon) {
+        init_syslog();
+    }
 
     if (do_headctl) {
         headctl(argc, argv);
