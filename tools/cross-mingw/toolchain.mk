@@ -4,6 +4,7 @@
 # - MK_BUILD_ENV
 # - MK_HOST_ENV
 # - BUILD_BIN_DIR_host
+# - FAKE_ICONV_PREFIX
 #
 
 CROSS_TARGET ?= x86_64-w64-mingw32
@@ -155,6 +156,7 @@ $(eval $(call goal-configured,gcc,,$$($(MK_BUILD_ENV)), \
 	  --with-gmp=$$(GCC_DEPS_DIR) \
 	  --with-mpfr=$$(GCC_DEPS_DIR) \
 	  --with-mpc=$$(GCC_DEPS_DIR) \
+	  --with-libiconv-prefix=$$(FAKE_ICONV_PREFIX) \
 	))
 $(eval $(call goal-patched,gcc))
 $(eval $(call goal-extracted,gcc))

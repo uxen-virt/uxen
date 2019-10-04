@@ -48,6 +48,9 @@ $(eval $(call goal-configured,binutils,,$$(HOST_TOOLS_ENV), \
 $(eval $(call goal-patched,binutils))
 $(eval $(call goal-extracted,binutils))
 
+FAKE_ICONV_PREFIX=${TOPDIR}/build/fake_iconv_prefix
+FAKE_ICONV_LIB=$(FAKE_ICONV_PREFIX)/lib/libiconv.a
+
 # gcc
 $(eval $(call goal-installed,gcc,,$$(HOST_TOOLS_ENV),install))
 $(eval $(call goal-built,gcc,,$$(HOST_TOOLS_ENV),))
@@ -72,6 +75,7 @@ $(eval $(call goal-configured,gcc,,$$(HOST_TOOLS_ENV), \
 	  --with-gmp=$$(BUILD_HOST_DIR) \
 	  --with-mpfr=$$(BUILD_HOST_DIR) \
 	  --with-mpc=$$(BUILD_HOST_DIR) \
+	  --with-libiconv-prefix=$$(FAKE_ICONV_PREFIX) \
 	))
 $(eval $(call goal-patched,gcc))
 $(eval $(call goal-extracted,gcc))
@@ -119,5 +123,10 @@ $(eval $(call goal-extracted,dwarfcv))
 
 # pkgs
 $(eval $(call packages,$(PKGS)))
+
+$(FAKE_ICONV_LIB):
+	mkdir -p $(FAKE_ICONV_PREFIX)/lib
+	touch $@
+
 
 endif # MAKENOW

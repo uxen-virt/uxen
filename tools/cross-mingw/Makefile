@@ -37,8 +37,11 @@ PKGS += gdb
 PKGS += e2fsprogs
 PKGS += libiconv
 
+FAKE_ICONV_PREFIX=${TOPDIR}/build/fake_iconv_prefix
+FAKE_ICONV_LIB=$(FAKE_ICONV_PREFIX)/lib/libiconv.a
+
 .PHONY: toolchain/mingw
-toolchain/mingw:
+toolchain/mingw: $(FAKE_ICONV_LIB)
 	@mkdir -p $(@D)
 	(cd $(@D) && \
 	  $(MAKE) -f $(SRCDIR)/Makefile.toolchain \
@@ -48,10 +51,11 @@ toolchain/mingw:
 	    MK_BUILD_ENV=HOST_TOOLS_ENV \
 	    MK_HOST_ENV=HOST_TOOLS_ENV \
 	    GCC_DEPS_DIR=$(BUILD_HOST_DIR) \
+	    FAKE_ICONV_PREFIX=$(FAKE_ICONV_PREFIX) \
 	    toolchain)
 
 .PHONY: toolchain/mingw-32
-toolchain/mingw-32: wrapper-m32
+toolchain/mingw-32: wrapper-m32 $(FAKE_ICONV_LIB)
 	@mkdir -p $@
 	(cd $@ && \
 	  $(MAKE) -f $(SRCDIR)/Makefile.toolchain \
@@ -62,12 +66,17 @@ toolchain/mingw-32: wrapper-m32
 	    MK_HOST_ENV=HOST_TOOLS_ENV \
 	    GCC_DEPS_DIR=$(BUILD_HOST_DIR) \
 	    CROSS_TARGET=i686-w64-mingw32 \
+	    FAKE_ICONV_PREFIX=$(FAKE_ICONV_PREFIX) \
 	    binutils-installed)
 	for g in gcc gcc-4.9.3 gcc-ar gcc-nm gcc-ranlib gcov; \
 	do \
 	  install $(filter %/wrapper-m32,$^) \
 	    $(BUILD_BIN_DIR_host)/i686-w64-mingw32-$$g; \
 	done
+
+$(FAKE_ICONV_LIB):
+	mkdir -p $(FAKE_ICONV_PREFIX)/lib
+	touch $@
 
 .PHONY: toolchain/libbfd
 toolchain/libbfd: | toolchain/mingw toolchain/mingw-32

@@ -3,6 +3,7 @@
 # - INSTALL_DIR
 # - MK_ENV
 # - GCC_DEPS_DIR
+# - FAKE_ICONV_PREFIX
 #
 
 CROSS_TARGET = x86_64-elf
@@ -88,6 +89,7 @@ $(eval $(call goal-configured,gcc,,$$($(MK_ENV)), \
 	  --with-gmp=$$(GCC_DEPS_DIR) \
 	  --with-mpfr=$$(GCC_DEPS_DIR) \
 	  --with-mpc=$$(GCC_DEPS_DIR) \
+	  --with-libiconv-prefix=$$(FAKE_ICONV_PREFIX) \
 	))
 
 gcc/.headers: limits.h stdint.h

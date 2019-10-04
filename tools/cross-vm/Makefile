@@ -19,8 +19,11 @@ all: toolchain-elf iasl/.installed
 
 PKGS += iasl
 
+FAKE_ICONV_PREFIX=${TOPDIR}/build/fake_iconv_prefix
+FAKE_ICONV_LIB=$(FAKE_ICONV_PREFIX)/lib/libiconv.a
+
 .PHONY: toolchain-elf
-toolchain-elf:
+toolchain-elf: $($($($(FAKE_ICONV_LIB)
 	@mkdir -p $@
 	(cd $@ && PATH=$(BUILD_BIN_DIR_elf):$(PATH) \
 	  $(MAKE) -f $(SRCDIR)/Makefile.toolchain \
@@ -29,7 +32,12 @@ toolchain-elf:
 	    INSTALL_BIN_DIR=$(INSTALL_BIN_DIR) \
 	    MK_ENV=HOST_TOOLS_ENV \
 	    GCC_DEPS_DIR=$(BUILD_HOST_DIR) \
+	    FAKE_ICONV_PREFIX=$(FAKE_ICONV_PREFIX) \
 	    toolchain)
+
+$(FAKE_ICONV_LIB):
+	mkdir -p $(FAKE_ICONV_PREFIX)/lib
+	touch $@
 
 $(HOST_WINDOWS)iasl/.installed: iasl/.built
 	cd $(@D)/$(iasl_DIR)/source/compiler && $(HOST_TOOLS_ENV) \
