@@ -54,7 +54,7 @@ FAKE_ICONV_LIB=$(FAKE_ICONV_PREFIX)/lib/libiconv.a
 # gcc
 $(eval $(call goal-installed,gcc,,$$(HOST_TOOLS_ENV),install))
 $(eval $(call goal-built,gcc,,$$(HOST_TOOLS_ENV),))
-gcc/.configured: gcc/.headers binutils/.installed
+gcc/.configured: gcc/.headers binutils/.installed $(FAKE_ICONV_LIB)
 $(eval $(call goal-configured,gcc,,$$(HOST_TOOLS_ENV), \
 	  --prefix=$$(INSTALL_DIR) \
 	  --with-sysroot=$$(INSTALL_DIR) \
