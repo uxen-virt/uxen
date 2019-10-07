@@ -12,8 +12,11 @@
 
 #define CUCKOO_LOG_MAX_VMS 9
 #define CUCKOO_MAX_VMS (1<<CUCKOO_LOG_MAX_VMS)
-#define CUCKOO_NUM_THREADS 4
+#define CUCKOO_MIN_THREADS 4
+#define CUCKOO_MAX_THREADS 8
 #define CUCKOO_TEMPLATE_PFN (1ULL << 63ULL)
+
+extern int cuckoo_num_threads;
 
 //#define CUCKOO_VERIFY
 

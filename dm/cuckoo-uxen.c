@@ -34,7 +34,7 @@ struct thread_ctx {
 struct ctx {
     heap_t heap;
     HANDLE cancel_event;
-    struct thread_ctx tcs[CUCKOO_NUM_THREADS];
+    struct thread_ctx tcs[CUCKOO_MAX_THREADS];
     HANDLE mutexes[cuckoo_num_mutexes];
     void *mappings[cuckoo_num_sections];
     SIZE_T ws_min, ws_max;
@@ -420,7 +420,7 @@ int cuckoo_uxen_init(struct cuckoo_context *cuckoo_context,
     }
     ctx->cancel_event = cancel_event;
 
-    for (i = 0; i < CUCKOO_NUM_THREADS; ++i) {
+    for (i = 0; i < cuckoo_num_threads; ++i) {
         struct thread_ctx *tc = &ctx->tcs[i];
         if (!whpx_enable) {
             DECLARE_HYPERCALL_BUFFER(uint8_t, pp_buffer);
@@ -473,7 +473,7 @@ void cuckoo_uxen_close(struct cuckoo_context *cuckoo_context, void *opaque)
 
     cuckoo_debug("uxen close\n");
 
-    for (i = 0; i < CUCKOO_NUM_THREADS; ++i) {
+    for (i = 0; i < cuckoo_num_threads; ++i) {
         struct thread_ctx *tc = &ctx->tcs[i];
         if (!whpx_enable) {
             if (HYPERCALL_BUFFER_ARGUMENT_BUFFER(&tc->buffer_xc)) {

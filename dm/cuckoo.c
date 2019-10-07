@@ -39,6 +39,8 @@ static const size_t pin_size = (128 << 20);
 
 uint64_t cuckoo_debug_on = 0;
 
+int cuckoo_num_threads = 0;
+
 #ifdef _WIN32
 static inline double rtc(void)
 {
@@ -998,8 +1000,8 @@ execute_plan(struct cuckoo_context *cc,
     const int max_template_pfns = 128;
     const int max_pfns = 128;
 
-    uxen_thread tids[CUCKOO_NUM_THREADS];
-    struct thread_context cs[CUCKOO_NUM_THREADS];
+    uxen_thread tids[CUCKOO_MAX_THREADS];
+    struct thread_context cs[CUCKOO_MAX_THREADS];
     int cancelled = 0;
     int errored = 0;
     volatile int shared_i = 0;
@@ -1022,7 +1024,7 @@ execute_plan(struct cuckoo_context *cc,
         thread_event_set(&slots[i].processed);
     }
 
-    for (i = 0; i < CUCKOO_NUM_THREADS; ++i) {
+    for (i = 0; i < cuckoo_num_threads; ++i) {
         struct thread_context *c = &cs[i];
         c->cc = cc;
         c->fb = fb;
@@ -1104,7 +1106,7 @@ execute_plan(struct cuckoo_context *cc,
         ++outstanding;
     }
 
-    for (i = 0; i < CUCKOO_NUM_THREADS; ++i) {
+    for (i = 0; i < cuckoo_num_threads; ++i) {
         wait_thread(tids[i]);
         cuckoo_debug("finished wait for %d\n", i);
     }
@@ -1113,7 +1115,7 @@ execute_plan(struct cuckoo_context *cc,
     cancelled |= ccb->cancelled(opaque);
     bool decompression_cancelled = !compressing && cancelled;
 
-    for (i = 0; i < CUCKOO_NUM_THREADS; ++i) {
+    for (i = 0; i < cuckoo_num_threads; ++i) {
         /* on uxen, if cancelled, we have to undo each populated pfn. On WHP we
          * instead release CoW file mappings (whpx_ram_free) bit later */
         if (!whpx_enable && decompression_cancelled)
@@ -1292,6 +1294,21 @@ int cuckoo_reconstruct_vm(struct cuckoo_context *cc, uuid_t uuid,
 int cuckoo_init(struct cuckoo_context *cc)
 {
     memset(cc, 0, sizeof(*cc));
+
+    if (!cuckoo_num_threads) {
+#ifdef _WIN32
+      SYSTEM_INFO si = { };
+      GetSystemInfo(&si);
+      cuckoo_num_threads = si.dwNumberOfProcessors;
+      if (cuckoo_num_threads < CUCKOO_MIN_THREADS)
+        cuckoo_num_threads = CUCKOO_MIN_THREADS;
+      if (cuckoo_num_threads > CUCKOO_MAX_THREADS)
+        cuckoo_num_threads = CUCKOO_MAX_THREADS;
+#else
+      cuckoo_num_threads = CUCKOO_MIN_THREADS;
+#endif
+    }
+
     return 0;
 }
 
