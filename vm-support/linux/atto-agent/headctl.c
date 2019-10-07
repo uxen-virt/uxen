@@ -9,6 +9,7 @@
 #include <sys/ioctl.h>
 #include <sys/file.h>
 #include <sys/socket.h>
+#include <sys/wait.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <err.h>
@@ -336,7 +337,7 @@ static void stringify_params(char *buf, int bufsz, int count, char **params)
     }
 }
 
-static void cmd_headctl_initx(char *headstr, int num_x_params, char **x_params)
+static void cmd_headctl_initx(char *headstr, int num_x_params, char **x_params, int wait)
 {
     head_id_t head = str_to_head_id(headstr);
     char x_params_str[256] = { 0 };
@@ -359,9 +360,11 @@ static void cmd_headctl_initx(char *headstr, int num_x_params, char **x_params)
 
     pid_t child = fork();
     if (child == 0) {
-        child = fork();
-        if (child == 0)
-            exit(0);
+        if (!wait) {
+            child = fork();
+            if (child == 0)
+                exit(0);
+        }
         x_run_server(head, x_params_str);
     } else {
         /* in parent, wait for X to init */
@@ -382,6 +385,12 @@ static void cmd_headctl_initx(char *headstr, int num_x_params, char **x_params)
             }
             unlock_shared_state();
             XCloseDisplay(d);
+
+            if (wait) {
+                int wstatus;
+
+                waitpid(child, &wstatus, 0);
+            }
         } else {
             HEADCTL_ERROR("FAILED to connect to X server head %d\n", head);
             exit(1);
@@ -628,7 +637,11 @@ void headctl(int argc, char **argv)
     } else if (!strcmp(cmd, "initx")) {
         if (argc < 4)
             headctl_usage();
-        cmd_headctl_initx(argv[3], argc - 4, argv + 4);
+        cmd_headctl_initx(argv[3], argc - 4, argv + 4, 0);
+    }  else if (!strcmp(cmd, "initx-wait")) {
+        if (argc < 4)
+            headctl_usage();
+        cmd_headctl_initx(argv[3], argc - 4, argv + 4, 1);
     } else if (!strcmp(cmd, "activate")) {
         if (argc < 4)
             headctl_usage();
