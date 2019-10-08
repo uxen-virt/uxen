@@ -828,7 +828,7 @@ vm_exit(void *opaque)
         if (!whpx_enable)
             uxen_destroy(vm_uuid);
         else
-            whpx_destroy();
+            whpx_vm_destroy_early();
     }
     if (running_vcpus)
         return;
@@ -881,6 +881,10 @@ vm_exit(void *opaque)
 #if defined(_WIN32)
     socket_cleanup();
 #endif
+
+    if (whpx_enable)
+        whpx_vm_destroy_late();
+
     exit(0);
 }
 

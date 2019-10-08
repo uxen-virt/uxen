@@ -113,7 +113,8 @@ int whpx_vm_set_context(void *buffer, size_t buffer_sz);
 int whpx_vm_is_paused(void);
 int whpx_vm_pause(void);
 int whpx_vm_unpause(void);
-void whpx_destroy(void);
+void whpx_vm_destroy_early(void);
+void whpx_vm_destroy_late(void);
 
 /**
  * MISC
@@ -161,7 +162,8 @@ int whpx_memory_populate_from_buffer(unsigned long nr_pfns, uint64_t *pfns, void
 
 static inline int whpx_vm_init(void) { WHPX_UNSUPPORTED; return -1; }
 static inline int whpx_vm_start(void) { WHPX_UNSUPPORTED; return -1; }
-static inline void whpx_destroy(void) { WHPX_UNSUPPORTED; }
+static inline void whpx_vm_destroy_early(void) { WHPX_UNSUPPORTED; }
+static inline void whpx_vm_destroy_late(void) { WHPX_UNSUPPORTED; }
 static inline void whpx_lock_iothread(void) { WHPX_UNSUPPORTED; }
 static inline void whpx_unlock_iothread(void) { WHPX_UNSUPPORTED; }
 static inline void whpx_register_iorange(uint64_t start, uint64_t length, int is_mmio) { WHPX_UNSUPPORTED; }

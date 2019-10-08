@@ -368,9 +368,11 @@ whpx_vcpu_run_thread(PVOID opaque)
     return 0;
 }
 
-static void
-whpx_vm_destroy(void)
+/* stop and destroy vcpus, v4v */
+void
+whpx_vm_destroy_early(void)
 {
+    debug_printf("whpx early vm destroy\n");
     /* signal vcpus to exit */
     if (running_vcpus) {
         whpx_vm_shutdown(WHPX_SHUTDOWN_POWEROFF);
@@ -399,6 +401,14 @@ whpx_vm_destroy(void)
     v4v_destroy(&guest);
     debug_printf("v4v destroy done\n");
 
+}
+
+/* destroy ram & partition */
+void
+whpx_vm_destroy_late(void)
+{
+    debug_printf("whpx late vm destroy\n");
+
     /* destroy ram */
     whpx_ram_uninit();
 
@@ -408,13 +418,6 @@ whpx_vm_destroy(void)
     shared_info_page = NULL;
 
     memset(&guest, 0, sizeof(guest));
-}
-
-void
-whpx_destroy(void)
-{
-    debug_printf("destroying whpx\n");
-    whpx_vm_destroy();
 }
 
 void
