@@ -623,6 +623,19 @@ int get_x_update_kbd_layout_command(kbd_layout_t layout, char *buf, size_t bufsz
     return ret;
 }
 
+static int is_uhid_fd(int fd)
+{
+    int i;
+
+    for (i = 0; i < MAX_NUMBER_KEYBOARDS; i++) {
+        keyboard_t *k = &keyboards[i];
+        if (k->valid && k->fd_uhid == fd)
+            return 1;
+    }
+
+    return 0;
+}
+
 int kbd_event (int fd)
 {
     if (fd == uxen_fd_v4v)
@@ -631,7 +644,10 @@ int kbd_event (int fd)
     if (use_protected_keyboard && fd == prot_fd_v4v)
         return prot_v4v_event();
 
-    return uhid_event_received(fd);
+    if (is_uhid_fd(fd))
+        return uhid_event_received(fd);
+
+    return 0;
 }
 
 void kbd_focus_request (unsigned offer)

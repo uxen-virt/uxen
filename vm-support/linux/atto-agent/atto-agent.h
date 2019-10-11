@@ -13,10 +13,14 @@ typedef uint32_t kbd_layout_t;
 #define KBD_LAYOUT_INVALID ((kbd_layout_t)-1)
 #define HEADMAX 32
 
+struct drc {
+    int x0, x1, y0, y1;
+};
+
 typedef struct head {
     head_id_t id;
     char dev[64];
-    int dr;
+    int index;
 } head_t;
 
 /* state shared between agent daemon and command instances, also persistent across restarts */

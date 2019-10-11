@@ -11,17 +11,18 @@
 #include <sys/socket.h>
 #include <sys/wait.h>
 #include <fcntl.h>
-#include <pthread.h>
 #include <err.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <uxen-v4vlib.h>
+#include <pthread.h>
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/extensions/Xdamage.h>
 #include <X11/extensions/Xfixes.h>
-#include <uxen-v4vlib.h>
+
 #include "atto-agent.h"
 
 /* dr tracking */
@@ -39,11 +40,25 @@
 
 #define X_CONNECT_TIMEOUT_MS 5000
 
+// 10ms
+#define DR_PERIOD_NS 10000000ULL
+
 /* fb ioctl */
 #define UXEN_FB_IO_HEAD_IDENTIFY 0x5000
 #define UXEN_FB_IO_HEAD_INIT 0x5001
 
 #define HEADCTL_ERROR(fmt, ...) { fprintf(stderr, fmt, ## __VA_ARGS__); fflush(stderr); }
+
+typedef struct head_dr {
+    Display *display;
+    int dr;
+    int dr_pending;
+    struct drc dr_rect;
+    pthread_mutex_t dr_mutex;
+    int64_t dr_ts;
+} head_dr_t;
+
+static head_dr_t head_dr[HEADMAX];
 
 static void headctl_usage(void)
 {
@@ -54,6 +69,15 @@ static void headctl_usage(void)
 static head_id_t str_to_head_id(const char *s)
 {
     return (head_id_t) atoi(s);
+}
+
+static int64_t timestamp_ns(void)
+{
+    struct timespec ts = { 0 };
+
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+
+    return (int64_t)ts.tv_sec * 1000000000ULL + ts.tv_nsec;
 }
 
 static void update_heads(void)
@@ -77,6 +101,7 @@ static void update_heads(void)
             err(1, "head identify failed: %d", ret);
         close(fd);
 
+        h.index = i;
         heads[i] = h;
     }
     shared_state->heads_num = i;
@@ -426,9 +451,18 @@ static void cmd_headctl_device(char *headstr)
     }
 }
 
-struct drc {
-    int x0, x1, y0, y1;
-};
+static int drc_empty(struct drc *r)
+{
+    return (r->x0 > r->x1 || r->y0 > r->y1);
+}
+
+static void drc_reset(struct drc *r)
+{
+    r->x0 = 0xffff;
+    r->y0 = 0xffff;
+    r->x1 = 0;
+    r->y1 = 0;
+}
 
 static int process_damage_ev(Display *d, Damage damage, XDamageNotifyEvent *dev, struct drc *r)
 {
@@ -461,12 +495,60 @@ static int process_damage_ev(Display *d, Damage damage, XDamageNotifyEvent *dev,
     return 0;
 }
 
+static int send_dr(struct head *head, struct drc *r)
+{
+    head_dr_t *hdr = &head_dr[head->index];
+    /* send dr to backend */
+    struct dirty_rect_msg msg;
+    memset(&msg, 0, sizeof(msg));
+    msg.left = r->x0;
+    msg.top = r->y0;
+    msg.right = r->x1 + 1;
+    msg.bottom = r->y1 + 1;
+    msg.rect_id = __atomic_fetch_add(&shared_state->rect_id, 1, __ATOMIC_SEQ_CST);
+    msg.head_id = head->id;
+    hdr->dr_ts = timestamp_ns();
+    sync_shared_state();
+    ssize_t len = send(shared_state->dr_fd, &msg, sizeof(msg), 0);
+    if (len < 0) {
+        HEADCTL_ERROR("dr send error %d\n", errno);
+        return -errno;
+    }
+
+    return 0;
+}
+
+/* send pending dr to backend if needed */
+static void pending_dr_sync(struct head *head)
+{
+    head_dr_t *hdr = &head_dr[head->index];
+    pthread_mutex_lock(&hdr->dr_mutex);
+    if (hdr->dr_pending) {
+        int64_t now = timestamp_ns();
+        if (now - hdr->dr_ts < DR_PERIOD_NS) {
+            /* too early since last send, do nothing and keep rect pending, send later */
+        } else if (drc_empty(&hdr->dr_rect)) {
+            /* empty rect, should not happen */
+            hdr->dr_pending = 0;
+        } else {
+            XSync(hdr->display, False); /* sync before backend starts copying or will artifact */
+
+            /* send dr to backend */
+            if (send_dr(head, &hdr->dr_rect) == 0) {
+                /* send OK, reset pending rectangle */
+                drc_reset(&hdr->dr_rect);
+                hdr->dr_pending = 0;
+            }
+        }
+    }
+    pthread_mutex_unlock(&hdr->dr_mutex);
+}
+
 static void* run_dr_(void *head_)
 {
     struct head *head = head_;
+    head_dr_t *hdr = &head_dr[head->index];
     Display *d = NULL;
-    struct drc r;
-    int have_rect;
 
     d = connectx_timeout(head->id, X_CONNECT_TIMEOUT_MS);
     if (!d) {
@@ -479,11 +561,11 @@ static void* run_dr_(void *head_)
     XDamageQueryExtension(d, &damage_event_base, &damage_error);
     Damage damage = XDamageCreate(d, root, XDamageReportNonEmpty);
 
-    have_rect = 0;
-    r.x0 = 0xffff;
-    r.y0 = 0xffff;
-    r.x1 = 0;
-    r.y1 = 0;
+    pthread_mutex_lock(&hdr->dr_mutex);
+    hdr->dr_pending = 0;
+    hdr->display = d;
+    drc_reset(&hdr->dr_rect);
+    pthread_mutex_unlock(&hdr->dr_mutex);
 
     for (;;) {
         do {
@@ -492,37 +574,15 @@ static void* run_dr_(void *head_)
 
             if (ev.type == damage_event_base + XDamageNotify) {
                 XDamageNotifyEvent *dev = (XDamageNotifyEvent*) &ev;
-                
-                if (process_damage_ev(d, damage, dev, &r) == 0)
-                    have_rect = 1;
-            }
-        } while (XEventsQueued(d, QueuedAlready) > 0);
 
-        if (have_rect) {
-            XSync(d, False); /* sync before we start copying or will artifact */
-
-            /* send dr to backend */
-            struct dirty_rect_msg msg;
-            memset(&msg, 0, sizeof(msg));
-            msg.left = r.x0;
-            msg.top = r.y0;
-            msg.right = r.x1 + 1;
-            msg.bottom = r.y1 + 1;
-            msg.rect_id = __atomic_fetch_add(&shared_state->rect_id, 1, __ATOMIC_SEQ_CST);
-            msg.head_id = head->id;
-            sync_shared_state();
-            ssize_t len = send(shared_state->dr_fd, &msg, sizeof(msg), 0);
-            if (len < 0) {
-                HEADCTL_ERROR("dr send error %d\n", errno);
-            } else {
-                /* send OK, reset rect */
-                r.x0 = 0xffff;
-                r.y0 = 0xffff;
-                r.x1 = 0;
-                r.y1 = 0;
-                have_rect = 0;
+                pthread_mutex_lock(&hdr->dr_mutex);
+                if (process_damage_ev(d, damage, dev, &hdr->dr_rect) == 0)
+                    hdr->dr_pending = 1;
+                pthread_mutex_unlock(&hdr->dr_mutex);
             }
-        }
+        } while (XPending(d));
+
+        pending_dr_sync(head);
     }
 }
 
@@ -553,17 +613,36 @@ void headctl_wakeup(int *timeout)
     if (t == -1 || t > 1000)
         t = 1000;
 
-    *timeout = t;
-
-    /* check for missing head dr and run dr tracking if needed */
     num = shared_state->heads_num;
     for (i = 0; i < num; i++) {
-        if (!shared_state->heads[i].dr) {
-            shared_state->heads[i].dr = 1;
-            sync_shared_state();
-            run_dr(&shared_state->heads[i]);
+        volatile struct head *head = &shared_state->heads[i];
+        head_dr_t *hdr = &head_dr[head->index];
+        /* check for missing head dr and run dr tracking if needed */
+        if (!hdr->dr) {
+            memset(hdr, 0, sizeof(*hdr));
+            pthread_mutex_init((pthread_mutex_t*)&hdr->dr_mutex, NULL);
+            hdr->dr = 1;
+            printf("running dr on head %d\n", head->id);
+            run_dr(head);
+        }
+
+        /* wake pending dr threads if DR_PERIOD_NS elapsed, and shorten global poll timeout
+         * as needed */
+        if (hdr->dr_pending) {
+            int64_t now = timestamp_ns();
+            int64_t dt = now - hdr->dr_ts;
+
+            if (dt >= DR_PERIOD_NS) {
+                pending_dr_sync((struct head*)head);
+            } else {
+                int dt_timeout_ms = (int)((DR_PERIOD_NS - dt) / 1000000);
+                if (dt_timeout_ms < t)
+                    t = dt_timeout_ms;
+            }
         }
     }
+
+    *timeout = t;
 }
 
 void headctl_event(int fd)

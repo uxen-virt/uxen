@@ -317,6 +317,8 @@ int main(int argc, char **argv)
     int protkbd = 0;
     int do_headctl = 0;
 
+    XInitThreads();
+
     init_shared_state();
 
     if (argc < 2)
