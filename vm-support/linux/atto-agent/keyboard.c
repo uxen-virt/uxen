@@ -81,6 +81,8 @@ static keyboard_t keyboards[MAX_NUMBER_KEYBOARDS];
 static int pvm_keys_dirty = 0;
 static int focus_release_request = 0;
 static int new_kbd_reset_layout = 0;
+/* bitmap of owned uhid fds for quick ownership test */
+static fd_set uhid_fd_set;
 
 static const uint8_t ps2hid[] = {
     0, 41, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 45, 46, 42, 43,
@@ -235,6 +237,7 @@ static int process_keyboard_removed (keyboard_t *kbd)
 {
     if (kbd->valid && kbd->fd_uhid >= 0) {
         pollfd_remove (kbd->fd_uhid);
+        FD_CLR(kbd->fd_uhid, &uhid_fd_set);
         fprintf (stderr, "kbd %u removed\n", (unsigned) kbd->id);
         close(kbd->fd_uhid);
         kbd->fd_uhid = -1;
@@ -261,6 +264,7 @@ static int process_hid_descriptor (keyboard_t *kbd, const uint8_t *buf, size_t l
 
     kbd->fd_uhid = fd;
     pollfd_add (fd);
+    FD_SET(fd, &uhid_fd_set);
 
     memset (&ev, 0, sizeof (ev));
     ev.type = UHID_CREATE2;
@@ -625,15 +629,7 @@ int get_x_update_kbd_layout_command(kbd_layout_t layout, char *buf, size_t bufsz
 
 static int is_uhid_fd(int fd)
 {
-    int i;
-
-    for (i = 0; i < MAX_NUMBER_KEYBOARDS; i++) {
-        keyboard_t *k = &keyboards[i];
-        if (k->valid && k->fd_uhid == fd)
-            return 1;
-    }
-
-    return 0;
+    return !!FD_ISSET(fd, &uhid_fd_set);
 }
 
 int kbd_event (int fd)

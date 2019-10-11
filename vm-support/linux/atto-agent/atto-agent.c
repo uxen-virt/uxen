@@ -19,6 +19,7 @@
 #include <string.h>
 #include <poll.h>
 #include <fcntl.h>
+#include <X11/Xlib.h>
 
 #include <uxen-v4vlib.h>
 
@@ -47,7 +48,6 @@ static int shared_state_fd;
 static struct pollfd poll_fds[MAX_NUMBER_FDS];
 static int npollfds = 0;
 static int polltimeout = -1;
-
 
 static void run_head_cmd(head_id_t head, void *opaque)
 {
@@ -238,9 +238,7 @@ event_loop(int fd, int protkbd)
         }
 
         for (i = 0; i < nevent_fds; i++) {
-            /* FIXME: keyboard stuff should internally check for whether it owns the fd */
-            if (event_fds[i] != shared_state->dr_fd)
-                kbd_event(event_fds[i]);
+            kbd_event(event_fds[i]);
             headctl_event(event_fds[i]);
         }
 
