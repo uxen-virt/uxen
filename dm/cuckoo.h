@@ -149,6 +149,8 @@ enum cuckoo_section_type {
     cuckoo_num_sections,
 };
 
+#define CUCKOO_CAPTURE_HINT_LOW_SYSTEM_MEMORY 1
+
 typedef int (*cancelled_callback) (void *);
 typedef void* (*map_section_callback) (void *, enum cuckoo_section_type,
                                        size_t);
@@ -156,7 +158,7 @@ typedef void (*unmap_section_callback) (void *, enum cuckoo_section_type);
 typedef void (*reset_section_callback) (void *, void *, size_t);
 typedef void (*pin_section_callback) (void *, enum cuckoo_section_type,
                                       size_t);
-typedef int (*capture_pfns_callback) (void *, int, int, void *, uint64_t *);
+typedef int (*capture_pfns_callback) (void *, int, int, void *, uint64_t *, uint32_t);
 typedef void* (*get_buffer_callback) (void *, int, int *);
 typedef int (*populate_pfns_callback) (void *, int, int, uint64_t *);
 typedef int (*undo_populate_pfns_callback) (void *, int);

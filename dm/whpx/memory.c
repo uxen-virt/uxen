@@ -1777,7 +1777,8 @@ whpx_read_memory(struct filebuf *f, int layout_only)
 }
 
 #ifdef DEBUG_CAPPOP_TIMES
-static uint64_t cap_time, cap_cpy_time, pop_time, pop_cpy_time, cap_pages, pop_pages;
+static uint64_t cap_time, cap_cpy_time, pop_time, pop_cpy_time, cap_pages, pop_pages, cap_vp_count;
+static uint64_t cap_vp_time;
 #endif
 
 /* atm this will only work on clones since it relies on reverting to template pages via
@@ -1817,7 +1818,7 @@ whpx_memory_capture(unsigned long nr_pfns, whpx_memory_capture_gpfn_info_t *pfns
     *nr_done = 0;
 
 #ifdef DEBUG_CAPPOP_TIMES
-    LARGE_INTEGER t0, freq, t1, cpy_t0, cpy_t1;
+    LARGE_INTEGER t0, freq, t1, cpy_t0, cpy_t1, vp_t0, vp_t1;
     QueryPerformanceFrequency(&freq);
     QueryPerformanceCounter(&t0);
 #endif
@@ -1863,11 +1864,19 @@ whpx_memory_capture(unsigned long nr_pfns, whpx_memory_capture_gpfn_info_t *pfns
 #endif
             if (info->flags & WHPX_MCGI_FLAGS_REMOVE_PFN) {
                 DWORD oldp;
+#ifdef DEBUG_CAPPOP_TIMES
+                QueryPerformanceCounter(&vp_t0);
+#endif
                 /* note: seems fairly slow operation */
                 if (!VirtualProtect(page, PAGE_SIZE, PAGE_REVERT_TO_FILE_MAP|PAGE_WRITECOPY, &oldp)) {
                     debug_printf("remove_pfn %"PRIx64" (flags=%x) via VirtualProtect failed: %d\n",
                         pfn, info->flags, (int)GetLastError());
                 }
+#ifdef DEBUG_CAPPOP_TIMES
+                QueryPerformanceCounter(&vp_t1);
+                cap_vp_time += vp_t1.QuadPart - vp_t0.QuadPart;
+                cap_vp_count++;
+#endif
             }
             info->type = WHPX_MCGI_TYPE_NORMAL;
             info->offset = offset;
@@ -1883,9 +1892,12 @@ whpx_memory_capture(unsigned long nr_pfns, whpx_memory_capture_gpfn_info_t *pfns
     QueryPerformanceCounter(&t1);
     cap_time += (t1.QuadPart - t0.QuadPart);
 
-    debug_printf("capture: total %"PRId64"ms cpy %"PRId64"ms, pages %"PRId64"\n",
+    debug_printf("capture: total %"PRId64"ms cpy %"PRId64"ms vp %"PRId64"ms vppages %"PRId64", pages %"PRId64"\n",
         cap_time * 1000 / freq.QuadPart,
-        cap_cpy_time * 1000 / freq.QuadPart, cap_pages);
+        cap_cpy_time * 1000 / freq.QuadPart,
+        cap_vp_time * 1000 / freq.QuadPart,
+        cap_vp_count,
+        cap_pages);
 #endif
     return 0;
 }

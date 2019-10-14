@@ -34,6 +34,8 @@
 #define PAGE_SIZE 0x1000 /* You knew it */
 #endif
 
+#define LOW_MEMORY_THRESHOLD_BYTES (512ULL * 1024 * 1024)
+
 static const size_t idx_size = (128 << 20);
 static const size_t pin_size = (128 << 20);
 
@@ -725,7 +727,7 @@ decompression_thread(void *_c)
 
         if (num_tpfns) {
             ccb->capture_pfns(opaque, c->tid, num_tpfns, template_pages,
-                              template_pfns);
+                              template_pfns, 0);
         }
 
         if (s->size) {
@@ -862,6 +864,7 @@ compression_thread(void *_c)
     uint8_t *src;
     struct work_unit *u;
     uint32_t buffer_offset;
+    uint32_t cap_flags = 0;
 
     cuckoo_debug("compression thread start %d\n", c->tid);
     for (;;) {
@@ -898,7 +901,15 @@ compression_thread(void *_c)
             }
         }
 
-        ccb->capture_pfns(opaque, c->tid, num_pfns, pages, pfns);
+#ifdef _WIN32
+    MEMORYSTATUSEX ms = { };
+    ms.dwLength = sizeof(ms);
+    GlobalMemoryStatusEx(&ms);
+    if (ms.ullAvailPhys <= LOW_MEMORY_THRESHOLD_BYTES)
+        cap_flags |= CUCKOO_CAPTURE_HINT_LOW_SYSTEM_MEMORY;
+#endif
+
+        ccb->capture_pfns(opaque, c->tid, num_pfns, pages, pfns, cap_flags);
 
         for (u = s->first, src = pages, buffer_offset = 0;
                 u != s->last; ++u) {

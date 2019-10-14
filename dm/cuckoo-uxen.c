@@ -180,7 +180,7 @@ static void reset_section(void *opaque, void *ptr, size_t sz)
     }
 }
 
-static int capture_pfns(void *opaque, int tid, int n, void *out, uint64_t *pfns)
+static int capture_pfns(void *opaque, int tid, int n, void *out, uint64_t *pfns, uint32_t flags)
 {
     unsigned long got;
     int i, j, take;
@@ -204,8 +204,9 @@ static int capture_pfns(void *opaque, int tid, int n, void *out, uint64_t *pfns)
                                                 (XENMEM_MCGI_FLAGS_VM |
                                                 XENMEM_MCGI_FLAGS_REMOVE_PFN);
             /* optimization: no need to remove single pfns on WHP, everything
-             * will be freed after save */
-            if (whpx_enable)
+             * will be freed after save. This is faster. However, still do
+             * incremental single pfn frees if system is currently low on memory */
+            if (whpx_enable && !(flags & CUCKOO_CAPTURE_HINT_LOW_SYSTEM_MEMORY))
                 gpfn_info_list[j].flags &= ~XENMEM_MCGI_FLAGS_REMOVE_PFN;
         }
 
