@@ -54,7 +54,6 @@ typedef struct head_dr {
     int dr;
     int dr_pending;
     struct drc dr_rect;
-    pthread_mutex_t dr_mutex;
     int64_t dr_ts;
 } head_dr_t;
 
@@ -522,7 +521,6 @@ static int send_dr(struct head *head, struct drc *r)
 static void pending_dr_sync(struct head *head)
 {
     head_dr_t *hdr = &head_dr[head->index];
-    pthread_mutex_lock(&hdr->dr_mutex);
     if (hdr->dr_pending) {
         int64_t now = timestamp_ns();
         if (now - hdr->dr_ts < DR_PERIOD_NS) {
@@ -541,7 +539,6 @@ static void pending_dr_sync(struct head *head)
             }
         }
     }
-    pthread_mutex_unlock(&hdr->dr_mutex);
 }
 
 static void* run_dr_(void *head_)
@@ -561,28 +558,50 @@ static void* run_dr_(void *head_)
     XDamageQueryExtension(d, &damage_event_base, &damage_error);
     Damage damage = XDamageCreate(d, root, XDamageReportNonEmpty);
 
-    pthread_mutex_lock(&hdr->dr_mutex);
     hdr->dr_pending = 0;
     hdr->display = d;
     drc_reset(&hdr->dr_rect);
-    pthread_mutex_unlock(&hdr->dr_mutex);
+
+    int xfd = XConnectionNumber(d);
+    fd_set fds;
 
     for (;;) {
-        do {
+        while (XPending(d)) {
             XEvent ev;
             XNextEvent(d, &ev);
-
             if (ev.type == damage_event_base + XDamageNotify) {
                 XDamageNotifyEvent *dev = (XDamageNotifyEvent*) &ev;
 
-                pthread_mutex_lock(&hdr->dr_mutex);
                 if (process_damage_ev(d, damage, dev, &hdr->dr_rect) == 0)
                     hdr->dr_pending = 1;
-                pthread_mutex_unlock(&hdr->dr_mutex);
             }
-        } while (XPending(d));
+        }
 
         pending_dr_sync(head);
+
+        XFlush(d);
+        if (XPending(d))
+            continue;
+
+        int timeout_ms = 10000;
+        if (hdr->dr_pending) {
+            /* short timeout if we have DR pending */
+            int64_t now = timestamp_ns();
+            int64_t dt = now - hdr->dr_ts;
+            if (dt <= DR_PERIOD_NS)
+                timeout_ms = (int)((DR_PERIOD_NS - dt) / 1000000);
+            else
+                timeout_ms = 0;
+        }
+
+        FD_ZERO(&fds);
+        FD_SET(xfd, &fds);
+
+        struct timeval tv;
+        memset(&tv, 0, sizeof(tv));
+        tv.tv_usec = 1000 * timeout_ms;
+
+        select(xfd + 1, &fds, NULL, NULL, &tv);
     }
 }
 
@@ -620,25 +639,9 @@ void headctl_wakeup(int *timeout)
         /* check for missing head dr and run dr tracking if needed */
         if (!hdr->dr) {
             memset(hdr, 0, sizeof(*hdr));
-            pthread_mutex_init((pthread_mutex_t*)&hdr->dr_mutex, NULL);
             hdr->dr = 1;
             printf("running dr on head %d\n", head->id);
             run_dr(head);
-        }
-
-        /* wake pending dr threads if DR_PERIOD_NS elapsed, and shorten global poll timeout
-         * as needed */
-        if (hdr->dr_pending) {
-            int64_t now = timestamp_ns();
-            int64_t dt = now - hdr->dr_ts;
-
-            if (dt >= DR_PERIOD_NS) {
-                pending_dr_sync((struct head*)head);
-            } else {
-                int dt_timeout_ms = (int)((DR_PERIOD_NS - dt) / 1000000);
-                if (dt_timeout_ms < t)
-                    t = dt_timeout_ms;
-            }
         }
     }
 
