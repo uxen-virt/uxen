@@ -62,8 +62,8 @@
 #define UREGS_r(_r) UREGS_r ## _r
 #define SIZEOF_REG 8
 #if defined(__MS_ABI__)
-#define CURRENT_vcpu_stack_offset (0x20)
-#define SCRATCH_area_size (0x20)
+#define CURRENT_vcpu_stack_offset (0x28)
+#define SCRATCH_area_size (0x28)
 #else /* __MS_ABI__ */
 #define CURRENT_vcpu_stack_offset (0)
 #endif /* __MS_ABI__ */
