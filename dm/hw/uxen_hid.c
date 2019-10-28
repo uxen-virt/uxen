@@ -786,7 +786,7 @@ void uxenhid_scale_mouse_pos(struct display_state *ds, uint16_t x, uint16_t y,
     int w = desktop_width;
     int h = desktop_height;
 
-    if (vm_attovm_mode) {
+    if (vm_attovm_mode && ds->surface) {
         w = ds->surface->width;
         h = ds->surface->height;
     }
