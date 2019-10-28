@@ -128,11 +128,7 @@ hid_mouse_event(struct remote_gui_state *s,
     if (flags & MOUSE_EVENT_FLAG_MBUTTON_DOWN)
         buttons |= UXENHID_MOUSE_BUTTON_3;
 
-    scaled_x = desktop_width > 1 ?
-        (((x + s->ds->desktop_x) * UXENHID_XY_MAX) / (desktop_width - 1)) : 0;
-    scaled_y = desktop_height> 1 ?
-        (((y + s->ds->desktop_y) * UXENHID_XY_MAX) / (desktop_height - 1)): 0;
-
+    uxenhid_scale_mouse_pos(s->ds, x, y, &scaled_x, &scaled_y);
     ret = uxenhid_send_mouse_report(buttons, scaled_x, scaled_y,
                                     wheel / 30, hwheel / 30);
     return ret;

@@ -780,6 +780,22 @@ err:
     return ret;
 }
 
+void uxenhid_scale_mouse_pos(struct display_state *ds, uint16_t x, uint16_t y,
+                             int *scaled_x, int *scaled_y)
+{
+    int w = desktop_width;
+    int h = desktop_height;
+
+    if (vm_attovm_mode) {
+        w = ds->surface->width;
+        h = ds->surface->height;
+    }
+    *scaled_x = w > 1 ?
+        (((x + ds->desktop_x) * UXENHID_XY_MAX) / (w - 1)) : 0;
+    *scaled_y = h > 1 ?
+        (((y + ds->desktop_y) * UXENHID_XY_MAX) / (h - 1)): 0;
+}
+
 void hotplug_touch_devices(int plug)
 {
     if (!plug) {
