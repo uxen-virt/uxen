@@ -930,15 +930,28 @@ whpx_vm_build(
     vm_mapped = whpx_ram_map_assert(0, npages << PAGE_SHIFT);
 
     /* place kernel / hvmloader */
+    CPUState *cpu = first_cpu;
+    cpu->eip = 0;
 
 #ifdef DEBUG_SIMPLE_KERNEL
     load_simple_kernel("kernel.bin", vm_mapped);
 #else
-    // hvmloader
-    load_hvmloader(imagefile, vm_mapped, &hvmloader_start, &hvmloader_end);
-    // trampoline at 0x0000 to turn on protected mode and jmp to hvmloader
-    load_pmode_trampoline(vm_mapped, hvmloader_start);
+    if (!vm_attovm_mode) {
+      // hvmloader
+      load_hvmloader(imagefile, vm_mapped, &hvmloader_start, &hvmloader_end);
+
+      cpu->eip = hvmloader_start;
+    }
 #endif
+
+    // initial cpu#0 state: protected mode enabled, no paging
+    cpu_x86_load_seg_cache(cpu, R_CS, 0, 0, 0xffffffff, 0xc09b << DESC_TYPE_SHIFT);
+    cpu_x86_load_seg_cache(cpu, R_SS, 0, 0, 0xffffffff, 0xc093 << DESC_TYPE_SHIFT);
+    cpu_x86_load_seg_cache(cpu, R_DS, 0, 0, 0xffffffff, 0xc093 << DESC_TYPE_SHIFT);
+    cpu_x86_load_seg_cache(cpu, R_ES, 0, 0, 0xffffffff, 0xc093 << DESC_TYPE_SHIFT);
+    cpu_x86_load_seg_cache(cpu, R_FS, 0, 0, 0xffffffff, 0xc093 << DESC_TYPE_SHIFT);
+    cpu_x86_load_seg_cache(cpu, R_GS, 0, 0, 0xffffffff, 0xc093 << DESC_TYPE_SHIFT);
+    cpu->cr[0] |= 1; // PE
 
     /* hvm modules, hvm info, oem info */
     add_hvm_modules(modules, mod_count, &modules_base);
