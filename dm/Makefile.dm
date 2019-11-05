@@ -308,6 +308,8 @@ $(WINDOWS)DM_SRCS += whpx/ioapic.c
 $(WINDOWS)DM_SRCS += whpx/mc146818rtc.c
 $(WINDOWS)DM_SRCS += whpx/hpet.c
 $(WINDOWS)DM_SRCS += whpx/viridian.c
+$(WINDOWS)DM_SRCS += whpx/atto.c
+whpx_atto.o: CPPFLAGS += $(LIBATTOIMG_CPPFLAGS)
 
 QEMU_CFLAGS += -I$(TOPDIR)
 

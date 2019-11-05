@@ -129,18 +129,34 @@ static void
 insert_mb(mb_entry_t *mb)
 {
     mb_entry_t *e;
-    mb_entry_t *after = NULL;
+    mb_entry_t *before = NULL;
 
     TAILQ_FOREACH(e, &mb_entries, entry) {
-        if (e->r.start <= mb->r.start)
-            after = e;
-        else break;
+        if (mb->r.start < e->r.start) {
+            before = e;
+            break;
+        }
     }
 
-    if (after)
-        TAILQ_INSERT_AFTER(&mb_entries, after, mb, entry);
+    if (before)
+        TAILQ_INSERT_BEFORE(before, mb, entry);
     else
         TAILQ_INSERT_TAIL(&mb_entries, mb, entry);
+}
+
+void
+whpx_ram_dump_layout(void)
+{
+    mb_entry_t *e;
+
+    debug_printf("ram layout:\n");
+    TAILQ_FOREACH(e, &mb_entries, entry) {
+        debug_printf("  memory block %016"PRIx64" - %016"PRIx64" va %p flags %x\n",
+            e->r.start << PAGE_SHIFT,
+            e->r.end << PAGE_SHIFT,
+            e->va,
+            e->flags);
+    }
 }
 
 // create memory block at guest physical address
@@ -427,7 +443,7 @@ whpx_ram_populate_with(uint64_t phys_addr, uint64_t len, void *va, uint32_t flag
         /* free any existing memory at phys_addr */
         ret = vm_decommit_region(phys_addr, len);
         if (ret)
-            whpx_panic("FAILED to decommit ram!");
+            debug_printf("warning: failed to decommit ram at phys %016"PRIx64" - not commited?\n", phys_addr);
     }
     /* create new region */
     ret = vm_create_region(phys_addr, len, va, flags);
@@ -465,7 +481,7 @@ whpx_ram_depopulate(uint64_t phys_addr, uint64_t len, uint32_t flags)
         /* free ram */
         ret = vm_decommit_region(phys_addr, len);
         if (ret)
-            whpx_panic("FAILED to decommit ram (%d)!", ret);
+            debug_printf("warning: failed to decommit ram at phys %016"PRIx64" - not commited?\n", phys_addr);
     }
 
     return 0;

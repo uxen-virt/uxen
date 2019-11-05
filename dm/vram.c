@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2018, Bromium, Inc.
+ * Copyright 2014-2019, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -316,7 +316,7 @@ vram_map(struct vram_desc *v, uint32_t gfn)
                 return -1;
             }
         } else {
-            ret = whpx_ram_depopulate(v->gfn << PAGE_SHIFT, v->mapped_len, 0);
+            ret = whpx_ram_depopulate((uint64_t)v->gfn << PAGE_SHIFT, v->mapped_len, 0);
             if (ret) {
                 debug_printf("%s: whpx_ram_depopulate failed: %d,"
                     " gfn=%x view=%p len=%"PRIdSIZE"\n",
@@ -353,7 +353,7 @@ vram_map(struct vram_desc *v, uint32_t gfn)
                 return -1;
             }
         } else {
-            ret = whpx_ram_populate_with(gfn << PAGE_SHIFT,
+            ret = whpx_ram_populate_with((uint64_t)gfn << PAGE_SHIFT,
                                          v->shm_len, v->view, 0);
             if (ret) {
                 debug_printf("%s: whpx_ram_populate_with failed: %d,"

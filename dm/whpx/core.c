@@ -1167,6 +1167,9 @@ whpx_handle_cpuid(CPUState *cpu)
         /* check if this is hypervisor cpuid */
         if (cpuid_hypervisor(rax, &rax, &rbx, &rcx, &rdx))
             break;
+        /* check if this is attovm cpuid */
+        if (whpx_attovm_do_cpuid(cpu, rax, &rax, &rbx, &rcx, &rdx))
+            break;
 
         /* check if the cpuid was viridian hypercall, since we setup
          * viridian hypercall page to invoke calls via cpuid */

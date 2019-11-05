@@ -588,10 +588,22 @@ vm_build(void)
     struct xc_hvm_module *modules;
     int mod_count = 0;
     int ret = 0;
+    char *appdef = NULL;
+    uint32_t appdef_sz = 0;
 
     assert(vm_image);
 
     modules = vm_get_modules(&mod_count);
+
+    if (vm_attovm_mode) {
+        if (vm_attovm_appdef_file) {
+            appdef = attovm_load_appdef(vm_attovm_appdef_file,
+                &appdef_sz);
+            if (!appdef || !appdef_sz)
+                err(1, "failed to load appdef: %s",
+                    vm_attovm_appdef_file);
+        }
+    }
 
     if (!whpx_enable) {
         if (!vm_attovm_mode) {
@@ -601,28 +613,20 @@ vm_build(void)
                 mod_count, &oem_info);
         } else {
             /* attovm on uxen or ax */
-            char *appdef = NULL;
-            uint32_t appdef_sz = 0;
-
-            if (vm_attovm_appdef_file) {
-                appdef = attovm_load_appdef(vm_attovm_appdef_file,
-                    &appdef_sz);
-                if (!appdef || !appdef_sz)
-                    err(1, "failed to load appdef: %s",
-                        vm_attovm_appdef_file);
-            }
-
             ret = xc_attovm_build(xc_handle, vm_id, vm_vcpus,
                 vm_mem_mb, vm_image,
                 appdef, appdef_sz, 1 /* seal */ );
         }
     } else {
-        /* normal whp hvm */
         ret = whpx_vm_build(vm_mem_mb, vm_image, modules, mod_count, &oem_info);
+        if (ret == 0 && vm_attovm_mode)
+            whpx_setup_atto(vm_image, appdef, appdef_sz);
     }
 
     if (modules)
         vm_cleanup_modules(modules, mod_count);
+
+    free(appdef);
 
     return ret;
 }

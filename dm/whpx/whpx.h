@@ -66,6 +66,7 @@ void *whpx_ram_map(uint64_t phys_addr, uint64_t *len);
 void *whpx_ram_map_assert(uint64_t phys_addr, uint64_t len);
 void whpx_ram_unmap(void *ptr);
 void whpx_ram_free(void);
+void whpx_ram_dump_layout(void);
 
 void whpx_copy_from_guest_va(CPUState *cpu, void *dst, uint64_t src_va, uint64_t len);
 void whpx_copy_to_guest_va(CPUState *cpu, uint64_t dst_va, void *src, uint64_t len);
@@ -81,6 +82,8 @@ int whpx_read_memory(struct filebuf *f, int layout_only);
 int whpx_write_memory(struct filebuf *f);
 
 void whpx_memory_post_save_hook(void);
+
+void whpx_setup_atto(const char *image_file, const char *appdef, uint32_t appdef_len);
 
 /**
  * LIFECYCLE

@@ -95,5 +95,8 @@ int whpx_translate_gva_to_gpa(CPUState *cpu, int write, uint64_t gva, uint64_t *
 
 void whpx_v4v_signal(struct domain *);
 void whpx_v4v_process_signals(void);
+int whpx_attovm_do_cpuid(CPUState *cpu, uint64_t leaf,
+                         uint64_t *eax, uint64_t *ebx, uint64_t *ecx, uint64_t *edx);
+
 
 #endif
