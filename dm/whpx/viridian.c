@@ -22,6 +22,7 @@
 #include <dm/whpx/util.h>
 #include <dm/whpx/apic.h>
 
+//#define DEBUG_SYNTHTIMER
 
 /* Base+Freq viridian feature sets:
  *
@@ -245,6 +246,7 @@ typedef struct {
 
 /* Viridian CPUID leaf 3, Hypervisor Feature Indication */
 #define CPUID3D_CRASH_MSRS (1 << 10)
+#define CPUID3D_STIMER_DIRECT_MODE_AVAILABLE (1 << 19);
 
 /* Viridian CPUID leaf 4: Implementation Recommendations. */
 #define CPUID4A_HCALL_REMOTE_TLB_FLUSH (1 << 2)
@@ -467,6 +469,8 @@ int cpuid_viridian_leaves(uint64_t leaf, uint64_t *eax,
             struct { uint32_t lo, hi; };
         } u;
 
+        uint64_t misc_feats = 0;
+
         if ( !(HVMPV_feature_mask & HVMPV_no_freq) )
             mask.AccessFrequencyRegs = 1;
         if ( HVMPV_feature_mask & HVMPV_time_ref_count )
@@ -476,6 +480,7 @@ int cpuid_viridian_leaves(uint64_t leaf, uint64_t *eax,
         if ( HVMPV_feature_mask & HVMPV_synth_timer ) {
             mask.AccessSynicRegs = 1;
             mask.AccessSyntheticTimerRegs = 1;
+            misc_feats |= CPUID3D_STIMER_DIRECT_MODE_AVAILABLE;
         }
 
         u.mask = mask;
@@ -484,8 +489,9 @@ int cpuid_viridian_leaves(uint64_t leaf, uint64_t *eax,
         *ebx = u.hi;
 
         if ( HVMPV_feature_mask & HVMPV_crash_ctl )
-            *edx = CPUID3D_CRASH_MSRS;
+            misc_feats |= CPUID3D_CRASH_MSRS;
 
+        *edx = misc_feats;
         break;
     }
 
@@ -672,6 +678,13 @@ enable_reference_tsc_page(CPUState *cpu, uint64_t gmfn)
     uint64_t len = PAGE_SIZE;
     struct reference_tsc_page *tsc_ref;
 
+    // Partition reference time is in 100ns units. On WHP we base it on vm_clock. Rather than reading
+    // reference time MSR (HV_X64_MSR_TIME_REF_COUNT), guest can more efficiently obtain it via
+    // reading tsc instead (which doesn't vmexit) and then computing
+    //     ReferenceTime =
+    //        ((RDTSC() * ReferenceTscScale) >> 64) + ReferenceTscOffset
+    // For that, we have to provide tsc scale and tsc offset in reference tsc page.
+
     tsc_ref = whpx_ram_map(gmfn << PAGE_SHIFT, &len);
     if (tsc_ref) {
         assert(len == PAGE_SIZE);
@@ -684,7 +697,8 @@ enable_reference_tsc_page(CPUState *cpu, uint64_t gmfn)
             (((10000LL << 32) / viridian.tsc_khz) << 32);
         tsc_ref->tsc_offset = 0;
 
-        debug_printf("TSC scale = %"PRId64"\n", tsc_ref->tsc_scale);
+        debug_printf("TSC scale = %"PRId64" offset=%"PRId64"\n",
+            tsc_ref->tsc_scale, tsc_ref->tsc_offset);
 
         whpx_ram_unmap(tsc_ref);
 
@@ -732,11 +746,8 @@ teardown_vp_assist(CPUState *cpu)
 
 #if 1
 static void
-viridian_synic_deliver_irq(CPUState *cpu, int sint)
+viridian_deliver_irq(CPUState *cpu, int vec)
 {
-    struct viridian_synic *ic = &viridian_vcpu[cpu->cpu_index].synic;
-    int vec = ic->sint[sint].fields.vector;
-
     whpx_lock_iothread();
     apic_deliver_irq(WHPX_LAPIC_ID(cpu->cpu_index), 0,
         APIC_DM_FIXED, vec, APIC_TRIGGER_EDGE);
@@ -750,7 +761,8 @@ viridian_synic_update_irq(CPUState *cpu, int sint)
 
     if ((ic->sint_irr & (1ULL << sint)) &&
         !ic->sint[sint].fields.masked) {
-        viridian_synic_deliver_irq(cpu, sint);
+        int vec = ic->sint[sint].fields.vector;
+        viridian_deliver_irq(cpu, vec);
         ic->sint_irr &= ~(1ULL << sint);
     }
 }
@@ -801,12 +813,18 @@ static void
 timer_expiry(void *opaque)
 {
     struct viridian_timer *timer = opaque;
+    int direct = timer->config.DirectMode;
+    int vec = timer->config.ApicVector;
     int sint = timer->config.SINTx;
     CPUState *cpu = whpx_get_cpu(timer->cpu_index);
 
     assert(cpu);
-    assert(sint);
-    viridian_synic_assert_irq(cpu, sint);
+    assert((!direct && sint) || (direct && vec));
+
+    if (direct)
+        viridian_deliver_irq(cpu, vec);
+    else
+        viridian_synic_assert_irq(cpu, sint);
 
     if (timer->config.Periodic) {
         if (timer->config.Enable)
