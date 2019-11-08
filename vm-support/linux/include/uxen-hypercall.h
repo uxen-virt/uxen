@@ -9,6 +9,7 @@
 
 int uxen_hypervisor(void);
 int axen_hypervisor(void);
+int whpx_hypervisor(void);
 int uxen_hypercall_version(int cmd, void *arg);
 int uxen_hypercall_memory_op(int cmd, void *arg);
 int uxen_hypercall_hvm_op(int cmd, void *arg);

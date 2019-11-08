@@ -91,10 +91,12 @@
 typedef struct { char _entry[32]; } t_hcpage_entry;
 extern int axen;
 extern int uxen;
+extern int whpx;
 extern void *uxen_hcbase;
 
 int uxen_hypervisor(void);
 int axen_hypervisor(void);
+int whpx_hypervisor(void);
 
 //#define __HYPERCALL_AX		"cpuid" // not yet !
 //#define __HYPERCALL_AX		"call *%%rax"
@@ -301,6 +303,8 @@ HYPERVISOR_hvm_op(int op, void *arg)
         return _hypercall2(__HYPERCALL, unsigned long, hvm_op, op, arg);
 }
 
+#define __WHPX_HYPERVISOR_v4v_op    0x35af3466
+
 static inline int
 HYPERVISOR_v4v_op(int op, void *arg1, void *arg2, void *arg3, void *arg4, void *arg5)
 {
@@ -310,8 +314,31 @@ HYPERVISOR_v4v_op(int op, void *arg1, void *arg2, void *arg3, void *arg4, void *
 #else
         return -ENOSYS;
 #endif
-    else
+    else if (uxen)
         return _hypercall6(__HYPERCALL, int, v4v_op, op, arg1, arg2, arg3, arg4, arg5);
+    else if (whpx) {
+#ifdef __x86_64__
+        register void *_rax asm ("rax") = (void *) (uintptr_t)__WHPX_HYPERVISOR_v4v_op;
+        register void *_a1  asm ("rdi") = (void *) (uintptr_t)op;
+        register void *_a2  asm ("rsi") = arg1;
+        register void *_a3  asm ("rdx") = arg2;
+        register void *_a4  asm ("r10") = arg3;
+        register void *_a5  asm ("r8") = arg4;
+        register void *_a6  asm ("r9") = arg5;
+
+        asm volatile (
+            "cpuid"
+            : "+r" (_rax), "+r" (_a1), "+r" (_a2), "+r" (_a3), "+r" (_a4), "+r" (_a5), "+r" (_a6)
+            :
+            : "cc", "rbx", "rcx", "memory"
+        );
+
+        return (uint64_t)_rax;
+#else
+        return 0;
+#endif
+    } else
+        return -ENOSYS;
 }
 
 #endif /* _ASM_X86_XEN_HYPERCALL_H */

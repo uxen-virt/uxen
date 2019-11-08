@@ -26,25 +26,32 @@
 
 #define AX_CPUID_LEAF_BASE 0x50000000
 #define HV_CPUID_LEAF_BASE 0x40000000
+#define HV_CPUID_LEAF_BASE2 0x40000100
 #define HV_CPUID_LEAF_RANGE 0x10000
 #define HV_CPUID_LEAD_SKIP 0x100
 
-int uxen, axen;
+int uxen, axen, whpx;
 
 void *uxen_hcbase;
 EXPORT_SYMBOL_GPL(uxen_hcbase);
 
 int uxen_hypervisor(void)
 {
-  return !!uxen;
+    return !!uxen;
 }
 EXPORT_SYMBOL_GPL(uxen_hypervisor);
 
 int axen_hypervisor(void)
 {
-  return !!axen;
+    return !!axen;
 }
 EXPORT_SYMBOL_GPL(axen_hypervisor);
+
+int whpx_hypervisor(void)
+{
+    return !!whpx;
+}
+EXPORT_SYMBOL_GPL(whpx_hypervisor);
 
 int
 uxen_hypercall_version(int cmd, void *arg)
@@ -83,12 +90,13 @@ uxen_hypercall_v4v_op(int cmd, void *arg1, void *arg2, void *arg3, void *arg4, v
 EXPORT_SYMBOL_GPL(uxen_hypercall_v4v_op);
 
 static void
-detect_ux_ax(void)
+detect_hypervisor(void)
 {
     register void* _rax asm  ("rax") = (void*)HV_CPUID_LEAF_BASE;
     register void* _rcx asm  ("rcx") = 0;
     register void* _rbx asm  ("rbx") = 0;
     register void* _rdx asm  ("rdx") = 0;
+    int hv;
 
     asm volatile (
         "cpuid"
@@ -97,10 +105,27 @@ detect_ux_ax(void)
         : "cc"
     );
 
+    /* check for HyperV sig: Microsoft Hv */
+    hv = (_rbx == (void*)0x7263694d) && (_rcx == (void*)0x666f736f) && (_rdx == (void*)0x76482074);
+    if (hv) {
+        printk(KERN_INFO "detected Hyper-V signature\n");
+        /* redetect at leaf 0x40000100 */
+        _rax = (void*) HV_CPUID_LEAF_BASE2;
+        _rcx = _rbx = _rdx = 0;
+        asm volatile (
+            "cpuid"
+            : "+r" (_rax), "+r" (_rcx), "+r" (_rbx), "+r" (_rdx)
+            :
+            : "cc"
+        );
+
+    }
     /* uXenisnotXen */
     uxen = (_rbx == (void*)0x6e655875) && (_rcx == (void*)0x6f6e7369) && (_rdx == (void*)0x6e655874);
     /* aXenisnotXen */
     axen = (_rbx == (void*)0x6e655861) && (_rcx == (void*)0x6f6e7369) && (_rdx == (void*)0x6e655874);
+    /* WhpxisnotXen */
+    whpx = (_rbx == (void*)0x78706857) && (_rcx == (void*)0x6f6e7369) && (_rdx == (void*)0x6e655874);
 }
 
 static int __init uxen_hypercall_init(void)
@@ -110,11 +135,16 @@ static int __init uxen_hypercall_init(void)
     u64 addr;
     xen_extraversion_t extraversion;
 
-    detect_ux_ax();
+    detect_hypervisor();
 
     if (axen) {
         uxen_hcbase = (void *) (unsigned long) (AX_CPUID_LEAF_BASE + 0x10); // FIXME?
         printk(KERN_INFO "using ax hypervisor\n");
+        ret = 0;
+        goto out;
+    } else if (whpx) {
+        uxen_hcbase = (void *) (unsigned long) (AX_CPUID_LEAF_BASE + 0x10);
+        printk(KERN_INFO "using whpx hypervisor\n");
         ret = 0;
         goto out;
     } else {
@@ -127,7 +157,8 @@ static int __init uxen_hypercall_init(void)
         goto out;
     }
 
-    printk(KERN_INFO "using uxen hypervisor\n");
+    if (uxen)
+        printk(KERN_INFO "using uxen hypervisor\n");
 
     if (!uxen_hcbase) {
         uxen_hcbase =  __vmalloc(PAGE_SIZE, GFP_KERNEL, PAGE_KERNEL_EXEC);

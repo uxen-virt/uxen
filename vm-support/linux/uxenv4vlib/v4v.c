@@ -347,7 +347,7 @@ static int __init uxenv4v_init(void)
 
     if (axen_hypervisor())
         v4v_irq = ax_init_irq_line();
-    else if (uxen_hypervisor())
+    else if (uxen_hypervisor() || whpx_hypervisor())
         v4v_irq = acpi_init_irq_line();
     else
         v4v_irq = -ENODEV;
