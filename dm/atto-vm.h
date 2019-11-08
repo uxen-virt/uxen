@@ -23,5 +23,6 @@ void attovm_check_keyboard_focus(void);
 char *attovm_load_appdef(const char *file, uint32_t *out_size);
 int is_attovm_image(const char *image);
 void attovm_init_conf(const char *image);
+void attovm_init_conf_whpx(void);
 
 #endif

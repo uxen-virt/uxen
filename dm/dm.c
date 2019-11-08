@@ -386,8 +386,10 @@ main(int argc, char **argv)
 
     uxen_log_version();
 
-    if (whpx_enable)
+    if (whpx_enable) {
         whpx_early_init();
+        attovm_init_conf_whpx();
+    }
 
     debug_printf("creating vm\n");
     vm_create(vm_restore_mode);

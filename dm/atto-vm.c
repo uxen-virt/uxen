@@ -356,6 +356,20 @@ attovm_init_conf(const char *image)
     vm_mem_mb = memory >> 20;
 }
 
+void
+attovm_init_conf_whpx(void)
+{
+    /* we leverage viridian synth timers on WHP because MS apic virt does not support
+     * deadline timer which would otherwise be used */
+    if (whpx_enable) {
+        vm_viridian = 1;
+        /* TODO: leverage reference tsc page to optimize access to partition ref time.
+         * Currently causes issues with synchronization between vm_clock and guest tsc when
+         * using absolute viridian timers */
+        whpx_reftsc = 0;
+    }
+}
+
 char *
 attovm_load_appdef(const char *file, uint32_t *out_size)
 {
