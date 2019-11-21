@@ -331,9 +331,17 @@ window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
             }
 
             /* wParam maps to the flags parameter  */
-            if (hid_mouse_event(cons, cursor.x, cursor.y, dv, dh, wParam))
+            if (dv || dh) {
+                /* It is difficult to send wheel delta < 120 via HID driver so
+                 * use guest agent to inject input.
+                 */
                 uxenconsole_mouse_event(cons->ctx, cursor.x, cursor.y, dv, dh,
                                         GET_KEYSTATE_WPARAM(wParam));
+            }
+            else if (hid_mouse_event(cons, cursor.x, cursor.y, dv, dh, wParam)) {
+                uxenconsole_mouse_event(cons->ctx, cursor.x, cursor.y, dv, dh,
+                                        GET_KEYSTATE_WPARAM(wParam));
+            }
         }
         return 0;
     case WM_MOUSELEAVE:

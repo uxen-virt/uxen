@@ -170,10 +170,14 @@ handle_message(struct console_client *sender, struct uxenconsole_msg_header *hdr
 #endif
 
 #if !defined(__APPLE__)
-            if (hid_mouse_event(s, msg->x, msg->y,
-                                msg->dv, msg->dh, msg->flags) &&
-                guest_agent_mouse_event(msg->x, msg->y, msg->dv, msg->dh,
-                                        msg->flags))
+            if (msg->dv || msg->dh) {
+                /* It is difficult to send wheel delta < 120 via HID driver so
+                 * use guest agent to inject input.
+                 */
+                guest_agent_mouse_event(msg->x, msg->y, msg->dv, msg->dh, msg->flags);
+            }
+            else if (hid_mouse_event(s, msg->x, msg->y, msg->dv, msg->dh, msg->flags) &&
+                     guest_agent_mouse_event(msg->x, msg->y, msg->dv, msg->dh, msg->flags))
 #endif /* !__APPLE */
             {
                 struct input_event *input_event;

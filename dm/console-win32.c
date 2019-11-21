@@ -1203,7 +1203,7 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
     struct win32_gui_state *s = (void *)GetWindowLongPtr(hwnd, GWLP_USERDATA);
     PAINTSTRUCT ps ;
     int ret = 0;
-    int x, y, w, h;
+    int x, y, w, h, dv = 0, dh = 0;
     RECT *r;
     POINT pos = { 0, 0 };
 
@@ -1343,21 +1343,32 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         ClientToScreen(hwnd, &pos);
         x = GET_X_LPARAM(lParam) - pos.x;
         y = GET_Y_LPARAM(lParam) - pos.y;
-        if (hid_mouse_event(s, x, y, GET_WHEEL_DELTA_WPARAM(wParam), 0,
-                            wParam) &&
+        dv = GET_WHEEL_DELTA_WPARAM(wParam);
+        if (dv) {
+            /* It is difficult to send wheel delta < 120 via HID driver so
+             * use guest agent to inject input.
+             */
+            guest_agent_window_event(0, message, wParam, lParam, 0);
+        }
+        else if (hid_mouse_event(s, x, y, dv, 0, wParam) &&
             guest_agent_window_event(0, message, wParam, lParam, 0)) {
-            handle_mouse_event(s, x, y,
-                               GET_WHEEL_DELTA_WPARAM(wParam) < 0 ? 1 : -1,
-                               GET_KEYSTATE_WPARAM(wParam));
+            handle_mouse_event(s, x, y, dv < 0 ? 1 : -1, GET_KEYSTATE_WPARAM(wParam));
         }
         return 0;
     case WM_MOUSEHWHEEL:
         ClientToScreen(hwnd, &pos);
         x = GET_X_LPARAM(lParam) - pos.x;
         y = GET_Y_LPARAM(lParam) - pos.y;
-        if (hid_mouse_event(s, x, y, 0, GET_WHEEL_DELTA_WPARAM(wParam),
-                            wParam))
+        dh = GET_WHEEL_DELTA_WPARAM(wParam);
+        if (dh) {
+            /* It is difficult to send wheel delta < 120 via HID driver so
+             * use guest agent to inject input.
+             */
             guest_agent_window_event(0, message, wParam, lParam, 0);
+        }
+        else if (hid_mouse_event(s, x, y, 0, dh, wParam)) {
+            guest_agent_window_event(0, message, wParam, lParam, 0);
+        }
         break;
     case WM_MOUSELEAVE:
         mouse_left = 1;
