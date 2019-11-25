@@ -183,8 +183,21 @@ typedef PVOID WINAPI
   ULONG ParameterCount
 );
 
+typedef struct win32_memory_range_entry {
+  PVOID VirtualAddress;
+  SIZE_T NumberOfBytes;
+} win32_memory_range_entry;
+
+typedef BOOL WINAPI
+(*PrefetchVirtualMemory_t)(
+  HANDLE hProcess,
+  ULONG_PTR NumberOfEntries,
+  win32_memory_range_entry *VirtualAddresses,
+  ULONG Flags);
+
 extern MapViewOfFile3_t MapViewOfFile3P;
 extern VirtualAlloc2_t VirtualAlloc2P;
+extern PrefetchVirtualMemory_t PrefetchVirtualMemoryP;
 
 /* from ntdll.dll */
 

@@ -51,6 +51,7 @@ bool whpx_has_suspend_time = false;
 
 MapViewOfFile3_t MapViewOfFile3P;
 VirtualAlloc2_t VirtualAlloc2P;
+PrefetchVirtualMemory_t PrefetchVirtualMemoryP;
 NtQuerySystemInformation_t NtQuerySystemInformationP;
 
 /* all meaningful registers which are saved in vcpu context */
@@ -784,6 +785,9 @@ whpx_initialize_api(void)
 
     VirtualAlloc2P = (void*)GetProcAddress(kernel, "VirtualAlloc2");
     assert(VirtualAlloc2P);
+
+    PrefetchVirtualMemoryP = (void*)GetProcAddress(kernel, "PrefetchVirtualMemory");
+    assert(PrefetchVirtualMemoryP);
 
     HMODULE ntdll = LoadLibrary("ntdll.dll");
     if (!ntdll)

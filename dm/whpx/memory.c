@@ -1154,14 +1154,10 @@ struct private_hashes {
 };
 
 static int
-calculate_hashes_cb(uint64_t pfn, uint64_t count, void *opaque)
+enum_hashes_cb(uint64_t pfn, uint64_t count, void *opaque)
 {
     struct private_hashes *h = opaque;
     uint64_t end = pfn + count;
-    uint64_t len = count << PAGE_SHIFT;
-    void *data = whpx_ram_map(pfn << PAGE_SHIFT, &len);
-    assert(data);
-    assert(len == (count << PAGE_SHIFT));
 
     while (pfn != end) {
         if (save_cancelled())
@@ -1169,19 +1165,70 @@ calculate_hashes_cb(uint64_t pfn, uint64_t count, void *opaque)
 
         if (!((h->hashes_nr - 1) & h->hashes_nr)) {
             h->hashes = realloc(h->hashes, sizeof(h->hashes[0]) *
-                (h->hashes_nr ? 2 * h->hashes_nr : 1));
+                (h->hashes_nr ? 2 * h->hashes_nr : 32));
             assert(h->hashes);
         }
         h->hashes[h->hashes_nr].pfn = pfn;
-        h->hashes[h->hashes_nr].hash =
-            page_fingerprint(
-                data, &h->hashes[h->hashes_nr].rotate);
-        data += PAGE_SIZE;
         h->hashes_nr++;
         pfn++;
     }
 
     return 0;
+}
+
+#define BATCH_SIZE 1024
+
+static int
+calculate_hashes(struct private_hashes *h)
+{
+    mb_entry_t *mb = NULL;
+    win32_memory_range_entry *mre = malloc(sizeof(win32_memory_range_entry) * BATCH_SIZE);
+    int i, ret = 0;
+    int batch_start = 0, batch_len = 0;
+
+    for (i = 0; i < h->hashes_nr; i++) {
+        struct page_fingerprint *fp = &h->hashes[i];
+        uint64_t pfn = fp->pfn;
+        void *page;
+
+        if (save_cancelled()) {
+            ret = -EINTR;
+            goto out;
+        }
+
+        if (!mb || !(pfn >= mb->r.start && pfn < mb->r.end))
+            mb = find_page_mb_entry(pfn);
+        assert(mb);
+        page = mb->va + ((pfn - mb->r.start) << PAGE_SHIFT);
+        mre[batch_len].VirtualAddress = page;
+        mre[batch_len].NumberOfBytes = PAGE_SIZE;
+        batch_len++;
+
+        if (batch_len == BATCH_SIZE || i == h->hashes_nr - 1) {
+            int j;
+
+           if (!PrefetchVirtualMemoryP(GetCurrentProcess(), batch_len, mre, 0))
+                debug_printf("PrefetchVirtualMemory failed: %d\n", (int)GetLastError());
+            for (j = 0; j < batch_len; j++) {
+                if (save_cancelled()) {
+                    ret = -EINTR;
+                    goto out;
+                }
+
+                h->hashes[batch_start + j].hash = page_fingerprint(
+                    mre[j].VirtualAddress,
+                    &h->hashes[batch_start + j].rotate);
+            }
+
+            batch_start = i + 1;
+            batch_len = 0;
+        }
+    }
+
+out:
+    free(mre);
+
+    return ret;
 }
 
 int
@@ -1258,7 +1305,9 @@ whpx_write_memory(struct filebuf *f)
     /* calculate page hashes - can be slow operation */
     debug_printf("calculating page hashes...\n");
     memset(&pr_hashes, 0, sizeof(pr_hashes));
-    enum_private_ranges(&pr_hashes, calculate_hashes_cb);
+    enum_private_ranges(&pr_hashes, enum_hashes_cb);
+    debug_printf("detected private ranges : %d pages\n", pr_hashes.hashes_nr);
+    calculate_hashes(&pr_hashes);
     debug_printf("calculating page hashes done, %d hashes\n", pr_hashes.hashes_nr);
 
     if (write_page_contents) {
@@ -1830,6 +1879,7 @@ whpx_memory_capture(unsigned long nr_pfns, whpx_memory_capture_gpfn_info_t *pfns
     unsigned long i;
     mb_entry_t *mb = NULL;
     file_mapping_t *template_mapping = NULL;
+    win32_memory_range_entry *mre = NULL;
 
     *nr_done = 0;
 
@@ -1838,15 +1888,15 @@ whpx_memory_capture(unsigned long nr_pfns, whpx_memory_capture_gpfn_info_t *pfns
     QueryPerformanceFrequency(&freq);
     QueryPerformanceCounter(&t0);
 #endif
+
+    mre = malloc(sizeof(win32_memory_range_entry) * nr_pfns);
+    assert(mre);
+
+    /* prefetch vmem */
     for (i = 0; i < nr_pfns; i++) {
         whpx_memory_capture_gpfn_info_t *info;
         uint64_t pfn;
         void *page = NULL;
-
-        if (offset + PAGE_SIZE > buffer_size) {
-            *nr_done = i;
-            return 0;
-        }
 
         info = &pfns[i];
         pfn  = info->gpfn;
@@ -1868,7 +1918,36 @@ whpx_memory_capture(unsigned long nr_pfns, whpx_memory_capture_gpfn_info_t *pfns
         if (!page) {
             info->type = WHPX_MCGI_TYPE_NOT_PRESENT;
             info->offset = offset;
+            mre[i].VirtualAddress = NULL;
+            mre[i].NumberOfBytes = 0;
         } else {
+            mre[i].VirtualAddress = page;
+            mre[i].NumberOfBytes = PAGE_SIZE;
+        }
+        offset += PAGE_SIZE;
+    }
+
+    if (!PrefetchVirtualMemoryP(GetCurrentProcess(), nr_pfns, mre, 0))
+        debug_printf("capture: PrefetchVirtualMemory failed: %d\n", (int)GetLastError());
+
+    offset = 0;
+
+    /* read vmem */
+    for (i = 0; i < nr_pfns; i++) {
+        whpx_memory_capture_gpfn_info_t *info;
+        uint64_t pfn;
+        void *page = NULL;
+
+        if (offset + PAGE_SIZE > buffer_size) {
+            *nr_done = i;
+            goto out;
+        }
+
+        info = &pfns[i];
+        pfn  = info->gpfn;
+        page = mre[i].VirtualAddress;
+
+        if (page) {
 #ifdef DEBUG_CAPPOP_TIMES
             QueryPerformanceCounter(&cpy_t0);
 #endif
@@ -1915,6 +1994,10 @@ whpx_memory_capture(unsigned long nr_pfns, whpx_memory_capture_gpfn_info_t *pfns
         cap_vp_count,
         cap_pages);
 #endif
+
+out:
+    free(mre);
+
     return 0;
 }
 
