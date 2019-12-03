@@ -83,7 +83,9 @@ int whpx_write_memory(struct filebuf *f);
 
 void whpx_memory_post_save_hook(void);
 
-void whpx_setup_atto(const char *image_file, const char *appdef, uint32_t appdef_len);
+struct attovm_definition_v1;
+int whpx_setup_atto(const char *image_file, struct attovm_definition_v1 *out_def);
+int whpx_attovm_seal_guest(struct attovm_definition_v1 *def);
 
 /**
  * LIFECYCLE
@@ -98,6 +100,7 @@ void whpx_setup_atto(const char *image_file, const char *appdef, uint32_t appdef
 
 struct xc_hvm_module;
 struct xc_hvm_oem_info;
+struct attovm_definition_v1;
 
 int whpx_early_init(void);
 int whpx_vm_init(int restore_mode);
@@ -106,6 +109,11 @@ int whpx_vm_build(
     const char *imagefile,
     struct xc_hvm_module *modules, int mod_count,
     struct xc_hvm_oem_info *oem_info);
+int whpx_attovm_build(
+    uint64_t memory_mb,
+    const char *imagefile,
+    struct attovm_definition_v1 *out_def);
+
 int whpx_vm_start(void);
 int whpx_vm_resume(void);
 int whpx_vm_shutdown(int reason);

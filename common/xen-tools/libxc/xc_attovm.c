@@ -150,7 +150,7 @@ out:
 }
 
 int
-attovm_seal_guest(xc_interface *xch, uint32_t domid, struct attovm_definition_v1 *definition)
+xc_attovm_seal_guest(xc_interface *xch, uint32_t domid, struct attovm_definition_v1 *definition)
 {
     struct attovm_op_seal op;
 
@@ -390,83 +390,6 @@ xc_attovm_image_create_from_live_vm(xc_interface *xch,
 out:
     if (mapper)
         attoimg_free_simple_mapper(mapper);
-
-    return ret;
-}
-
-/* we place appdef in highmem memory, which is not signed */
-int
-attovm_put_appdef(
-    xc_interface *xch,
-    uint32_t domid,
-    struct attovm_definition_v1 *definition,
-    const char *appdef,
-    uint32_t appdef_len)
-{
-    uint32_t alloc_len, npages;
-    xen_pfn_t *pfns = NULL;
-    privcmd_mmap_entry_t *mmap_entries = NULL;
-    void *mapped = NULL;
-    int ret = 0, i;
-
-    alloc_len = PAGE_ALIGN(appdef_len);
-    npages = alloc_len >> PAGE_SHIFT;
-
-    if (!appdef || !npages) {
-        definition->appdef_size = 0;
-        goto out; /* nothing to put */
-    }
-
-    if (npages > ATTOVM_UNSIGNED_MEM_MAX_PAGES) {
-        ATTOVM_ERROR("attovm appdef is too long: %d bytes", appdef_len);
-        ret = -ENOMEM;
-        goto out;
-    }
-
-    pfns = calloc(npages, sizeof(xen_pfn_t));
-    if (!pfns) {
-        ret = -ENOMEM;
-        goto out;
-    }
-
-    for (i = 0; i < npages; i++)
-        pfns[i] = (ATTOVM_APPDEF_PHYSADDR >> PAGE_SHIFT) + i;
-    /* actual allocate of highmem pages */
-    ret = xc_domain_populate_physmap_exact(xch,
-        domid, npages, 0, 0, &pfns[0]);
-    if (ret)
-        goto out;
-
-    /* map highmem pages */
-    mmap_entries = calloc(npages, sizeof(privcmd_mmap_entry_t));
-    if (!mmap_entries) {
-        ret = -ENOMEM;
-        goto out;
-    }
-
-    for (i = 0; i < npages; i++)
-        mmap_entries[i].mfn = pfns[i];
-
-    mapped = xc_map_foreign_ranges(xch,
-        domid, npages << PAGE_SHIFT, PROT_READ | PROT_WRITE,
-        1 << PAGE_SHIFT, mmap_entries, npages);
-
-    if (!mapped) {
-        ret = -EINVAL;
-        goto out;
-    }
-
-    memset(mapped, 0, npages << PAGE_SHIFT);
-    if (appdef)
-        memcpy(mapped, appdef, appdef_len);
-
-    definition->appdef_size = appdef_len;
-
-out:
-    if (mapped)
-        xc_munmap(xch, domid, mapped, npages << PAGE_SHIFT);
-    free(pfns);
-    free(mmap_entries);
 
     return ret;
 }

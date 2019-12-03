@@ -25,4 +25,10 @@ int is_attovm_image(const char *image);
 void attovm_init_conf(const char *image);
 void attovm_init_conf_whpx(void);
 
+struct attovm_definition_v1;
+int attovm_put_appdef(struct attovm_definition_v1 *definition,
+    const char *appdef,
+    uint32_t appdef_len);
+int attovm_seal_guest(struct attovm_definition_v1 *definition);
+
 #endif

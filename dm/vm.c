@@ -56,6 +56,7 @@
 
 #include "vm-savefile-simple.h"
 #include <dm/atto-vm.h>
+#include <attoxen-api/ax_attovm.h>
 
 static struct xc_hvm_oem_info oem_info = { 0 };
 static critical_section vm_run_mode_lock;
@@ -583,50 +584,83 @@ uxen_vm_init(void)
 }
 
 static int
+atto_vm_build(void)
+{
+    char *appdef = NULL;
+    uint32_t appdef_sz = 0;
+    struct attovm_definition_v1 attodef = { };
+    int ret = 0;
+
+    assert(vm_image);
+
+    /* load appdef */
+    if (vm_attovm_appdef_file) {
+        appdef = attovm_load_appdef(vm_attovm_appdef_file,
+            &appdef_sz);
+        if (!appdef || !appdef_sz)
+            err(1, "failed to load appdef: %s",
+                vm_attovm_appdef_file);
+    }
+
+    /* build base attovm */
+    if (!whpx_enable) {
+        /* attovm on uxen or ax */
+        ret = xc_attovm_build(xc_handle, vm_id, vm_vcpus,
+            vm_mem_mb, vm_image, &attodef);
+        if (ret) {
+            debug_printf("failed to build attovm domain %d: rc=%d\n", vm_id, ret);
+            goto out;
+        }
+    } else {
+        /* attovm on whpx */
+        ret = whpx_attovm_build(vm_mem_mb, vm_image, &attodef);
+        if (ret) {
+            debug_printf("failed to build whpx attovm: rc=%d\n", ret);
+            goto out;
+        }
+    }
+
+    /* place appdef & seal */
+    ret = attovm_put_appdef(&attodef, appdef, appdef_sz);
+    if (ret) {
+        debug_printf("failed to put appdef domain %d: rc=%d\n", vm_id, ret);
+        goto out;
+    }
+
+    ret = attovm_seal_guest(&attodef);
+    if (ret) {
+        debug_printf("failed to seal domain %d: rc=%d\n", vm_id, ret);
+        goto out;
+    }
+
+out:
+    free(appdef);
+
+    return ret;
+}
+
+static int
 vm_build(void)
 {
     struct xc_hvm_module *modules;
     int mod_count = 0;
     int ret = 0;
-    char *appdef = NULL;
-    uint32_t appdef_sz = 0;
 
     assert(vm_image);
 
     modules = vm_get_modules(&mod_count);
 
-    if (vm_attovm_mode) {
-        if (vm_attovm_appdef_file) {
-            appdef = attovm_load_appdef(vm_attovm_appdef_file,
-                &appdef_sz);
-            if (!appdef || !appdef_sz)
-                err(1, "failed to load appdef: %s",
-                    vm_attovm_appdef_file);
-        }
-    }
-
-    if (!whpx_enable) {
-        if (!vm_attovm_mode) {
-            /* normal uxen hvm */
-            ret = xc_hvm_build(xc_handle, vm_id, vm_mem_mb, vm_vcpus,
-                NR_IOREQ_SERVERS, vm_image, modules,
-                mod_count, &oem_info);
-        } else {
-            /* attovm on uxen or ax */
-            ret = xc_attovm_build(xc_handle, vm_id, vm_vcpus,
-                vm_mem_mb, vm_image,
-                appdef, appdef_sz, 1 /* seal */ );
-        }
-    } else {
+    if (!whpx_enable)
+        /* normal uxen hvm */
+        ret = xc_hvm_build(xc_handle, vm_id, vm_mem_mb, vm_vcpus,
+            NR_IOREQ_SERVERS, vm_image, modules,
+            mod_count, &oem_info);
+    else
+        /* normal whpx hvm */
         ret = whpx_vm_build(vm_mem_mb, vm_image, modules, mod_count, &oem_info);
-        if (ret == 0 && vm_attovm_mode)
-            whpx_setup_atto(vm_image, appdef, appdef_sz);
-    }
 
     if (modules)
         vm_cleanup_modules(modules, mod_count);
-
-    free(appdef);
 
     return ret;
 }
@@ -668,7 +702,7 @@ vm_init(const char *loadvm, int restore_mode)
         if (ret)
             err(1, "mapcache_init");
 
-        ret = vm_build();
+        ret = !vm_attovm_mode ? vm_build() : atto_vm_build();
         if (ret)
             errx(1, "hvm build failed: %d", ret);
 

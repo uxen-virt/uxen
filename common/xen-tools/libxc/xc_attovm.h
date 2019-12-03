@@ -15,9 +15,7 @@ int xc_attovm_build(xc_interface *xch,
   uint32_t nr_vcpus,
   uint32_t memsize_mb,
   const char *image_filename,
-  const char *appdef,
-  uint32_t appdef_len,
-  int seal);
+  struct attovm_definition_v1 *out_attovm_def);
 
 int xc_attovm_image_create_from_live_vm(
   xc_interface *xch,
@@ -26,6 +24,12 @@ int xc_attovm_image_create_from_live_vm(
   uint32_t memsize_mb,
   const char *filename);
 
-int xc_attovm_change_focus(xc_interface *xch, uint32_t domid, uint32_t offer_focus);
+int xc_attovm_seal_guest(
+  xc_interface *xch,
+  uint32_t domid,
+  struct attovm_definition_v1 *definition);
+
+
+  int xc_attovm_change_focus(xc_interface *xch, uint32_t domid, uint32_t offer_focus);
 #endif
 

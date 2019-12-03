@@ -12,11 +12,7 @@
 #include <dm/whpx/whpx.h>
 #include <dm/whpx/util.h>
 
-#define PAGE_ALIGN(x) (((x) + PAGE_SIZE-1) & ~(PAGE_SIZE-1))
-
-// FIXME: free?
-static void *appdef_mem;
-static uint32_t appdef_size;
+static struct attovm_definition_v1 sealed_def;
 static uint32_t tsc_khz;
 
 static void*
@@ -39,27 +35,6 @@ create_mapper(void)
     m->unmap = atto_whpx_unmap;
 
     return m;
-}
-
-static void
-put_appdef(
-    struct attovm_definition_v1 *def,
-    const char *appdef, uint32_t appdef_len)
-{
-    uint32_t alloc_len = PAGE_ALIGN(appdef_len);
-    uint32_t npages = alloc_len >> PAGE_SHIFT;
-
-    if (!appdef || !appdef_len)
-        return;
-
-    if (npages > ATTOVM_UNSIGNED_MEM_MAX_PAGES)
-        whpx_panic("attovm appdef is too long: %d bytes", appdef_len);
-    appdef_mem = VirtualAlloc(NULL, alloc_len, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
-    assert(appdef_mem);
-    memset(appdef_mem, 0, alloc_len);
-    memcpy(appdef_mem, appdef, appdef_len);
-    whpx_ram_populate_with(ATTOVM_APPDEF_PHYSADDR, alloc_len, appdef_mem, WHPX_RAM_NO_DECOMMIT);
-    def->appdef_size = appdef_len;
 }
 
 int
@@ -92,7 +67,7 @@ whpx_attovm_do_cpuid(
             return 1;
         }
         case ATTOCALL_QUERYOP_APPDEF_SIZE:
-            *eax = appdef_size;
+            *eax = sealed_def.appdef_size;
             return 1;
         default:
             break;
@@ -105,7 +80,7 @@ whpx_attovm_do_cpuid(
     return 0;
 }
 
-void whpx_setup_atto(const char *image_file, const char *appdef, uint32_t appdef_len)
+int whpx_setup_atto(const char *image_file, struct attovm_definition_v1 *out_def)
 {
     struct attovm_definition_v1 def;
     struct attoimg_guest_mapper *mapper = create_mapper();
@@ -113,12 +88,18 @@ void whpx_setup_atto(const char *image_file, const char *appdef, uint32_t appdef
     if (attoimg_image_read(image_file, &def, mapper))
         whpx_panic("failed to read atto image file: %s\n", image_file);
 
-    put_appdef(&def, appdef, appdef_len);
-
     free(mapper);
 
     tsc_khz = get_registry_cpu_mhz() * 1000;
-    appdef_size = appdef_len;
+
+    memcpy(out_def, &def, sizeof(*out_def));
+
+    return 0;
 }
 
-  
+int whpx_attovm_seal_guest(struct attovm_definition_v1 *def)
+{
+    sealed_def = *def;
+
+    return 0;
+}

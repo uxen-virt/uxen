@@ -11,21 +11,24 @@
 #include "atto-agent.h"
 #include "queue2.h"
 #include "vm.h"
+#include <dm/whpx/whpx.h>
 #include <err.h>
 #include <stdbool.h>
 #include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <libvhd.h>
 #include <xenctrl.h>
+#include <uxen/uxen_desc.h>
 #include <xenguest.h>
 #include <xc_attovm.h>
+#include <xc_private.h>
 #include <attoxen-api/ax_attovm.h>
 #include <attoimg/attoimg.h>
 #include "timer.h"
 
 #define MAX_DIRPATH_LEN (4 * MAX_PATH)
 #define ATTOVM_IMAGE_EXT ".attovm"
+#define PAGE_ALIGN(x) (((x) + (PAGE_SIZE-1)) & ~(PAGE_SIZE-1))
 
 typedef struct win_cursor {
     LIST_ENTRY(win_cursor) entry;
@@ -46,6 +49,9 @@ static win_cursor *current_cursor = NULL;
 static int vm_has_keyboard_focus = 0;
 static int host_offer_focus = 0;
 static int focused_head_id = 0;
+
+// FIXME: free?
+static void *appdef_mem;
 
 void attovm_set_head_focus(int head_id)
 {
@@ -370,6 +376,116 @@ attovm_init_conf_whpx(void)
     }
 }
 
+static int
+whpx_attovm_put_appdef(
+    struct attovm_definition_v1 *def,
+    const char *appdef,
+    uint32_t appdef_len)
+{
+    uint32_t alloc_len = PAGE_ALIGN(appdef_len);
+    uint32_t npages = alloc_len >> PAGE_SHIFT;
+
+    if (!appdef || !appdef_len)
+        return 0;
+
+    if (npages > ATTOVM_UNSIGNED_MEM_MAX_PAGES)
+        whpx_panic("attovm appdef is too long: %d bytes", appdef_len);
+    appdef_mem = VirtualAlloc(NULL, alloc_len, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    assert(appdef_mem);
+    memset(appdef_mem, 0, alloc_len);
+    memcpy(appdef_mem, appdef, appdef_len);
+    whpx_ram_populate_with(ATTOVM_APPDEF_PHYSADDR, alloc_len, appdef_mem, WHPX_RAM_NO_DECOMMIT);
+    def->appdef_size = appdef_len;
+
+    return 0;
+}
+
+/* we place appdef in highmem memory, which is not signed */
+static int
+uxen_attovm_put_appdef(
+    struct attovm_definition_v1 *definition,
+    const char *appdef,
+    uint32_t appdef_len)
+{
+    uint32_t alloc_len, npages;
+    xen_pfn_t *pfns = NULL;
+    privcmd_mmap_entry_t *mmap_entries = NULL;
+    void *mapped = NULL;
+    int ret = 0, i;
+
+    alloc_len = PAGE_ALIGN(appdef_len);
+    npages = alloc_len >> PAGE_SHIFT;
+
+    if (!appdef || !npages) {
+        definition->appdef_size = 0;
+        goto out; /* nothing to put */
+    }
+
+    if (npages > ATTOVM_UNSIGNED_MEM_MAX_PAGES) {
+        debug_printf("attovm appdef is too long: %d bytes", appdef_len);
+        ret = -ENOMEM;
+        goto out;
+    }
+
+    pfns = calloc(npages, sizeof(xen_pfn_t));
+    if (!pfns) {
+        ret = -ENOMEM;
+        goto out;
+    }
+
+    for (i = 0; i < npages; i++)
+        pfns[i] = (ATTOVM_APPDEF_PHYSADDR >> PAGE_SHIFT) + i;
+    /* actual allocate of highmem pages */
+    ret = xc_domain_populate_physmap_exact(xc_handle,
+        vm_id, npages, 0, 0, &pfns[0]);
+    if (ret)
+        goto out;
+
+    /* map highmem pages */
+    mmap_entries = calloc(npages, sizeof(privcmd_mmap_entry_t));
+    if (!mmap_entries) {
+        ret = -ENOMEM;
+        goto out;
+    }
+
+    for (i = 0; i < npages; i++)
+        mmap_entries[i].mfn = pfns[i];
+
+    mapped = xc_map_foreign_ranges(xc_handle,
+        vm_id, npages << PAGE_SHIFT, PROT_READ | PROT_WRITE,
+        1 << PAGE_SHIFT, mmap_entries, npages);
+
+    if (!mapped) {
+        ret = -EINVAL;
+        goto out;
+    }
+
+    memset(mapped, 0, npages << PAGE_SHIFT);
+    if (appdef)
+        memcpy(mapped, appdef, appdef_len);
+
+    definition->appdef_size = appdef_len;
+
+out:
+    if (mapped)
+        xc_munmap(xc_handle, vm_id, mapped, npages << PAGE_SHIFT);
+    free(pfns);
+    free(mmap_entries);
+
+    return ret;
+}
+
+int attovm_put_appdef(
+    struct attovm_definition_v1 *def,
+    const char *appdef,
+    uint32_t appdef_len)
+{
+    if (!whpx_enable)
+        return uxen_attovm_put_appdef(def, appdef, appdef_len);
+    else
+        return whpx_attovm_put_appdef(def, appdef, appdef_len);
+}
+
 char *
 attovm_load_appdef(const char *file, uint32_t *out_size)
 {
@@ -415,4 +531,13 @@ out:
     *out_size = sz;
 
     return def;
+}
+
+int
+attovm_seal_guest(struct attovm_definition_v1 *def)
+{
+    if (!whpx_enable)
+        return xc_attovm_seal_guest(xc_handle, vm_id, def);
+    else
+        return whpx_attovm_seal_guest(def);
 }

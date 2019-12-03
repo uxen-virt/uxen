@@ -967,6 +967,22 @@ whpx_vm_build(
     return 0;
 }
 
+int whpx_attovm_build(
+    uint64_t memory_mb,
+    const char *imagefile,
+    struct attovm_definition_v1 *out_def)
+{
+    int ret;
+
+    ret = whpx_vm_build(vm_mem_mb, NULL, NULL, 0, NULL);
+    if (ret)
+        goto out;
+    ret = whpx_setup_atto(vm_image, out_def);
+
+out:
+    return ret;
+}
+
 extern void pit_init(void);
 
 void
