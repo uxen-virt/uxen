@@ -373,6 +373,11 @@ attovm_init_conf_whpx(void)
          * Currently causes issues with synchronization between vm_clock and guest tsc when
          * using absolute viridian timers */
         whpx_reftsc = 0;
+        /* ax mode currently unsupported on WHPX */
+        if (vm_attovm_mode == ATTOVM_MODE_AX) {
+            warn("AX attovm mode unsupported on WHPX\n");
+            vm_attovm_mode = ATTOVM_MODE_UXEN;
+        }
     }
 }
 

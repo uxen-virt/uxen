@@ -26,6 +26,8 @@
 #define ATTO_MSG_KBD_LAYOUT_RET     13
 #define ATTO_MSG_KBD_FOCUS          14
 #define ATTO_MSG_KBD_FOCUS_RET      15
+#define ATTO_MSG_HEAD_ACTIVATED     16
+#define ATTO_MSG_HEAD_ACTIVATED_RET 17
 
 struct atto_agent_msg {
     uint8_t type;

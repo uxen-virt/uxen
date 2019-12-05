@@ -10,6 +10,7 @@
 #include <dm/dm.h>
 #include <dm/timer.h>
 #include <dm/console.h>
+#include <dm/control.h>
 #include <dm/atto-agent.h>
 #include <dm/atto-vm.h>
 #include <dm/hw/uxen_v4v.h>
@@ -224,7 +225,8 @@ atto_agent_process_msg(struct atto_agent_state *s,
         msg->type, msg->head_id);
 #endif
 
-    if (msg->type == ATTO_MSG_GETURL) {
+    switch (msg->type) {
+    case ATTO_MSG_GETURL: {
         char *endp;
         resp->msg.type = ATTO_MSG_GETURL_RET;
         if (vm_attovm_url)
@@ -232,16 +234,22 @@ atto_agent_process_msg(struct atto_agent_state *s,
         endp = (char *)resp->msg.string +
                strnlen(resp->msg.string, MAX_STRING_LEN);
         resp_len = max(sizeof(struct atto_agent_packet), endp - (char *)resp);
-    } else if (msg->type == ATTO_MSG_GETBOOT) {
+        break;
+    }
+    case ATTO_MSG_GETBOOT: {
         resp->msg.type = ATTO_MSG_GETBOOT_RET;
         strncpy(resp->msg.string, /*vm_attovm_boot*/ "0",
                 sizeof(resp->msg.string));
-    } else if (msg->type == ATTO_MSG_RESIZE) {
+        break;
+    }
+    case ATTO_MSG_RESIZE: {
         s->can_send_resize = 1;
         resp->msg.type = ATTO_MSG_RESIZE_RET;
         resp->msg.xres = 0;
         resp->msg.yres = 0;
-    } else if (msg->type == ATTO_MSG_CURSOR_TYPE) {
+        break;
+    }
+    case ATTO_MSG_CURSOR_TYPE: {
         struct display_state *ds = display_find(msg->head_id);
 
         if (ds)
@@ -251,7 +259,9 @@ atto_agent_process_msg(struct atto_agent_state *s,
                          __FUNCTION__, (int) msg->head_id);
 
         send_back = 0;
-    } else if (msg->type == ATTO_MSG_CURSOR_CHANGE) {
+        break;
+    }
+    case ATTO_MSG_CURSOR_CHANGE: {
         struct display_state *ds = display_find(msg->head_id);
 
         if (ds)
@@ -261,11 +271,22 @@ atto_agent_process_msg(struct atto_agent_state *s,
                          __FUNCTION__, (int) msg->head_id);
 
         send_back = 0;
-    } else if (msg->type == ATTO_MSG_CURSOR_GET_SM) {
+        break;
+    }
+    case ATTO_MSG_CURSOR_GET_SM: {
         resp->msg.type = ATTO_MSG_CURSOR_GET_SM_RET;
         resp->msg.xres = GetSystemMetrics(SM_CXCURSOR);
         resp->msg.yres = GetSystemMetrics(SM_CYCURSOR);
-    } else {
+        break;
+    }
+    case ATTO_MSG_HEAD_ACTIVATED: {
+        char head_buf[32];
+        snprintf(head_buf, sizeof(head_buf), "%d", msg->head_id);
+        control_send_status("active-head", head_buf, NULL);
+        send_back = 0;
+        break;
+    }
+    default:
         warnx("%s: unknown message %d\n", __FUNCTION__, msg->type);
         return;
     }

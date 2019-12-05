@@ -200,11 +200,12 @@ talk(int fd, int request)
 void
 event_loop(int fd, int protkbd)
 {
-    struct atto_agent_msg msg;
+    struct atto_agent_msg msg = { };
     ssize_t len;
     int32_t w, h, head;
     char command[1024];
     int i, event_fds[MAX_NUMBER_FDS], nevent_fds;
+    int last_active_head = -1;
 
     msg.type = ATTO_MSG_RESIZE;
     len = send(fd, &msg, sizeof(msg), 0);
@@ -220,6 +221,18 @@ event_loop(int fd, int protkbd)
     headctl_init ();
 
     for (;;) {
+        /* notify other end if active head changed */
+        int active_head = shared_state->active_head;
+        if (active_head != last_active_head) {
+            last_active_head = active_head;
+            memset(&msg, 0, sizeof(msg));
+            msg.type = ATTO_MSG_HEAD_ACTIVATED;
+            msg.head_id = active_head;
+            len = send(fd, &msg, sizeof(msg), 0);
+            if (len < 0)
+                err(1, "send error %d\n", errno);
+        }
+
         polltimeout = -1;
         kbd_wakeup(&polltimeout);
         headctl_wakeup(&polltimeout);
