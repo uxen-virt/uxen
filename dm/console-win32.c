@@ -1344,7 +1344,7 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         x = GET_X_LPARAM(lParam) - pos.x;
         y = GET_Y_LPARAM(lParam) - pos.y;
         dv = GET_WHEEL_DELTA_WPARAM(wParam);
-        if (dv) {
+        if (!vm_attovm_mode && dv) {
             /* It is difficult to send wheel delta < 120 via HID driver so
              * use guest agent to inject input.
              */
@@ -1360,7 +1360,7 @@ win_window_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
         x = GET_X_LPARAM(lParam) - pos.x;
         y = GET_Y_LPARAM(lParam) - pos.y;
         dh = GET_WHEEL_DELTA_WPARAM(wParam);
-        if (dh) {
+        if (!vm_attovm_mode && dh) {
             /* It is difficult to send wheel delta < 120 via HID driver so
              * use guest agent to inject input.
              */

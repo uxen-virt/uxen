@@ -170,7 +170,7 @@ handle_message(struct console_client *sender, struct uxenconsole_msg_header *hdr
 #endif
 
 #if !defined(__APPLE__)
-            if (msg->dv || msg->dh) {
+            if (!vm_attovm_mode && (msg->dv || msg->dh)) {
                 /* It is difficult to send wheel delta < 120 via HID driver so
                  * use guest agent to inject input.
                  */
