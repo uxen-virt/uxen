@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2016, Bromium, Inc.
+ * Copyright 2012-2019, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -349,7 +349,9 @@ cpu_usage(float *user, float *kernel, uint64_t *user_total_ms,
     if (!rc)
         return;
 
-    current_time = GetTickCount64() * 10000ULL;
+    /* in 100ns units */
+    if (!QueryUnbiasedInterruptTime(&current_time))
+        current_time = last_time;
 
     if (!last_time || (last_time == current_time)) {
         if (user) *user = .0;
