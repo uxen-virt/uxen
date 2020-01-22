@@ -2,7 +2,7 @@
  *  uxenctllib.h
  *  uxen
  *
- * Copyright 2012-2019, Bromium, Inc.
+ * Copyright 2012-2020, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -99,6 +99,7 @@ int uxen_map_host_pages(UXEN_HANDLE_T, void *, size_t, uint64_t *);
 int uxen_unmap_host_pages(UXEN_HANDLE_T, void *, size_t);
 
 int uxen_physinfo(UXEN_HANDLE_T h, uxen_physinfo_t *up);
+int uxen_machinespec(UXEN_HANDLE_T h, char *, size_t);
 
 int uxen_log_ratelimit(UXEN_HANDLE_T, uint64_t, uint64_t);
 

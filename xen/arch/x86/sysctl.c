@@ -25,6 +25,7 @@
 #include <asm/hvm/support.h>
 #include <asm/processor.h>
 #include <asm/numa.h>
+#include <asm/xstate.h>
 #include <xen/nodemask.h>
 #include <xen/cpu.h>
 #include <xsm/xsm.h>
@@ -78,6 +79,9 @@ long arch_do_sysctl(
         memcpy(pi->hw_cap, boot_cpu_data.x86_capability, NCAPINTS*4);
         if ( hvm_enabled )
             pi->capabilities |= XEN_SYSCTL_PHYSCAP_hvm;
+        pi->xsave_cntxt_size = xsave_cntxt_size;
+        pi->xsave_cntxt_size_vmsave = xsave_cntxt_size_vmsave;
+        pi->xsave_feature_mask = xfeature_mask;
 
         if ( copy_to_guest(u_sysctl, sysctl, 1) )
             ret = -EFAULT;

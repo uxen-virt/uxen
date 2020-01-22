@@ -106,6 +106,11 @@ struct xen_sysctl_physinfo {
     uint64_aligned_t used_hidden_pages;
     uint32_t hw_cap[8];
 
+    /* xsave format */
+    uint32_t xsave_cntxt_size;
+    uint32_t xsave_cntxt_size_vmsave;
+    uint64_aligned_t xsave_feature_mask;
+
     /* XEN_SYSCTL_PHYSCAP_??? */
     uint32_t capabilities;
 };
@@ -599,7 +604,7 @@ struct xen_sysctl {
     union {
         struct xen_sysctl_physinfo          physinfo;
         struct xen_sysctl_log_ratelimit     log_ratelimit;
-        uint8_t                             pad[128];
+        uint8_t                             pad[144];
     } u;
 };
 typedef struct xen_sysctl xen_sysctl_t;

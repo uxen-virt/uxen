@@ -2,7 +2,7 @@
  *  uxenctllib.c
  *  uxen
  *
- * Copyright 2012-2019, Bromium, Inc.
+ * Copyright 2012-2020, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -727,6 +727,39 @@ uxen_physinfo(UXEN_HANDLE_T h, uxen_physinfo_t *up)
   out:
     if (buf)
         uxen_free(h, buf, 1);
+    return ret;
+}
+
+int
+uxen_machinespec(UXEN_HANDLE_T h, char *buffer, size_t len)
+{
+    int ret = 0, ax, cnt;
+    uxen_physinfo_t pi;
+    char xsave_str[64] = { 0 };
+    uint64_t whp_mode = 0;
+
+    ax = hv_tests_ax_running();
+    uxen_query_whp_mode(h, &whp_mode);
+
+    if (!whp_mode) {
+        ret = uxen_physinfo(h, &pi);
+        if (ret)
+            goto out;
+        snprintf(xsave_str, sizeof(xsave_str),
+            "XSAVE_%"PRIx64"_%x_%x",
+            pi.xsave_feature_mask,
+            pi.xsave_cntxt_size,
+            pi.xsave_cntxt_size_vmsave);
+    }
+
+    cnt = snprintf(buffer, len, "%s%s%s",
+        ax ? "AX_" : "",
+        !whp_mode ? "UXEN_" : "WHP",
+        !whp_mode ? xsave_str : "");
+    if (!(cnt >= 0 && cnt < len))
+        ret = -1;
+
+out:
     return ret;
 }
 
