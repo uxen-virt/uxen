@@ -1,5 +1,5 @@
 /*
- * Copyright 2013-2019, Bromium, Inc.
+ * Copyright 2013-2020, Bromium, Inc.
  * Author: Jacob Gorm Hansen <jacobgorm@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -1675,6 +1675,7 @@ static void disk_close(struct disk *disk)
 
 #define STATUS_FILE_LOCK_CONFLICT (0xC0000054UL)
 #define STATUS_END_OF_FILE (0xC0000011UL)
+#define STATUS_DEVICE_DATA_ERROR (0xC000009CUL)
 
 #define LOCK_WAIT_PERIOD 10000 /* 10s */
 
@@ -1771,6 +1772,9 @@ static void complete_io(IO* io)
          * Don't change this logging without also updating tests
          */
         printf("File [%ls] has shrunk!\n", io->m->name);
+        goto cleanup;
+    } else if (status == STATUS_DEVICE_DATA_ERROR) {
+        printf("Read of [%ls] failed due to device data error [%x]!\n", io->m->name, (uint32_t)status);
         goto cleanup;
     } else if (!NT_SUCCESS(status)) {
         err(1, "Read of [%ls] failed with [%x]\n", io->m->name, (uint32_t)status);
