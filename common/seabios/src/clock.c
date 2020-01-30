@@ -55,6 +55,8 @@
 #define PM_READ_VALUE       (1<<4)
 #define PM_READ_STATUS      (2<<4)
 
+#define PMTIMER_HZ 3579545      // Underlying Hz of the PM Timer
+#define PMTIMER_TO_PIT 3        // Ratio of pmtimer rate to pit rate
 
 /****************************************************************
  * TSC timer
@@ -102,10 +104,17 @@ calibrate_tsc(void)
     u64 diff = end - start;
     dprintf(6, "tsc calibrate start=%u end=%u diff=%u\n"
             , (u32)start, (u32)end, (u32)diff);
-    u32 hz = diff * PIT_TICK_RATE / CALIBRATE_COUNT;
-    SET_GLOBAL(cpu_khz, hz / 1000);
+    u8 ShiftTSC = 0;
+    u64 t = DIV_ROUND_UP(diff * PMTIMER_HZ, CALIBRATE_COUNT);
+    while (t >= (1<<24)) {
+        ShiftTSC++;
+        t = (t + 1) >> 1;
+    }
+    u32 timer_khz = DIV_ROUND_UP((u32)t, 1000 * PMTIMER_TO_PIT);
+    u32 khz = timer_khz << ShiftTSC;
+    SET_GLOBAL(cpu_khz, khz);
 
-    dprintf(1, "CPU Mhz=%u\n", hz / 1000000);
+    dprintf(1, "CPU Mhz=%u\n", khz / 1000);
 }
 
 static u64
