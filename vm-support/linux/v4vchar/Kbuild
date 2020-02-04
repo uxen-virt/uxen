@@ -1,0 +1,3 @@
+obj-m += v4vchar.o
+
+v4vchar-y := v4v_char_device.o v4v_char_msg_queue.o v4v_char_v4v.o v4v_char.o
