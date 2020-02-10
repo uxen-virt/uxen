@@ -840,6 +840,12 @@ static int ahci_populate_sglist(AHCIDevice *ad, QEMUSGList *sglist)
 			    sizeof(AHCI_SG), 0);
 
 	addr = le64_to_cpu(tbl.addr & ~0x1ULL);
+        /* KRY-47626 We do not support 64-bit PRDT entries because we
+         * do not advertise bit 31 in control_regs.cap; according to
+         * Serial Ata AHCI Spec 3.1.1 the upper bits need to be then ignored
+         */
+        addr &= 0xFFFFFFFFULL;
+
 	len = le32_to_cpu(tbl.flags_size & 0x3FFFFF);
 	if (tbl.flags_size & (1 << 31))
             cb = ahci_descriptor_processed;
