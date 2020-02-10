@@ -1,5 +1,5 @@
 /*
- * Copyright 2015-2019, Bromium, Inc.
+ * Copyright 2015-2020, Bromium, Inc.
  * Author: Piotr Foltyn <piotr.foltyn@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -37,7 +37,7 @@ struct disp_context {
     uint32_t flags;
 };
 
-static void CALLBACK write_done(DWORD ec, DWORD count, LPOVERLAPPED ovlpd);
+void CALLBACK disp_write_done(DWORD ec, DWORD count, LPOVERLAPPED ovlpd);
 
 static BOOL
 update_msg(struct disp_context *c)
@@ -49,7 +49,7 @@ update_msg(struct disp_context *c)
                        (void *)&c->update_msg,
                        sizeof(c->update_msg),
                        &c->owrite,
-                       write_done);
+                       disp_write_done);
 }
 
 static void CALLBACK
@@ -104,8 +104,8 @@ parse_messages(struct disp_context *c, void *buf, int size)
     }
 }
 
-static void CALLBACK
-read_done(DWORD ec, DWORD count, LPOVERLAPPED ovlpd)
+void CALLBACK
+disp_read_done(DWORD ec, DWORD count, LPOVERLAPPED ovlpd)
 {
     struct disp_context *c =
         CONTAINING_RECORD(ovlpd, struct disp_context, oread);
@@ -122,8 +122,8 @@ read_done(DWORD ec, DWORD count, LPOVERLAPPED ovlpd)
         update_msg(c);
 }
 
-static void CALLBACK
-write_done(DWORD ec, DWORD count, LPOVERLAPPED ovlpd)
+void CALLBACK
+disp_write_done(DWORD ec, DWORD count, LPOVERLAPPED ovlpd)
 {
     struct disp_context *c =
         CONTAINING_RECORD(ovlpd, struct disp_context, owrite);
@@ -144,7 +144,7 @@ write_done(DWORD ec, DWORD count, LPOVERLAPPED ovlpd)
                    c->read_buf,
                    UXENDISP_MAX_MSG_LEN,
                    &c->oread,
-                   read_done);
+                   disp_read_done);
     }
 }
 

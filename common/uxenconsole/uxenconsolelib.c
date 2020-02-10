@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2019, Bromium, Inc.
+ * Copyright 2014-2020, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -823,3 +823,14 @@ uxenconsole_select_head(uxenconsole_context_t ctx, int head)
     return 0;
 }
 
+// Declarations from disp.c
+void CALLBACK disp_read_done(DWORD ec, DWORD count, LPOVERLAPPED ovlpd);
+void CALLBACK disp_write_done(DWORD ec, DWORD count, LPOVERLAPPED ovlpd);
+
+// NULL terminated array of valid call targets, that Krypton
+// then picks up and calls SetProcessValidCallTargets.
+void* UXENCONSOLE_CALL_TARGETS[] = {
+    &disp_read_done,
+    &disp_write_done,
+    NULL
+};

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014-2019, Bromium, Inc.
+ * Copyright 2014-2020, Bromium, Inc.
  * Author: Julian Pidancet <julian@pidancet.net>
  * SPDX-License-Identifier: ISC
  */
@@ -34,6 +34,10 @@ extern "C" {
 #define CONSOLE_RESIZE_FLAG_NONE        0x0
 #define CONSOLE_RESIZE_FLAG_FORCE       0x1
 #define CONSOLE_RESIZE_FLAG_USE_DLO     0x2
+
+// NULL terminated array of valid call targets, that Krypton
+// then picks up and calls SetProcessValidCallTargets.
+extern void* UXENCONSOLE_CALL_TARGETS[];
 
 typedef void *uxenconsole_context_t;
 typedef void *hid_context_t;
