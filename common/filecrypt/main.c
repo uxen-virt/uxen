@@ -1,5 +1,5 @@
 /*
- * Copyright 2015, Bromium, Inc.
+ * Copyright 2015-2020, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -11,7 +11,7 @@
 
 static uint8_t buffer[32768];
 
-static int _write(filecrypt_hdr_t *crypt, HANDLE file, void *buf, int cnt)
+static int crypt_write(filecrypt_hdr_t *crypt, HANDLE file, void *buf, int cnt)
 {
     DWORD part = 0;
     uint8_t *p = (uint8_t*)buf;
@@ -71,7 +71,7 @@ void do_decode(const wchar_t *src, const wchar_t *dst, int inplace)
         if (!nread)
             break; //EOF
         off += nread;
-        if ((rc = _write(NULL, hd, buffer, nread))) {
+        if ((rc = crypt_write(NULL, hd, buffer, nread))) {
             fprintf(stderr, "write error %d\n", rc);
             exit(1);
         }
@@ -140,7 +140,7 @@ void do_encode(const wchar_t *src, const wchar_t *dst, int inplace)
         if (!nread)
             break; //EOF
         off += nread;
-        if ((rc = _write(cr, hd, buffer, nread))) {
+        if ((rc = crypt_write(cr, hd, buffer, nread))) {
             fprintf(stderr, "write error %d\n", rc);
             exit(1);
         }
