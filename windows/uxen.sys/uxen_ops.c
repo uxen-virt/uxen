@@ -2,7 +2,7 @@
  *  uxen_ops.c
  *  uxen
  *
- * Copyright 2011-2019, Bromium, Inc.
+ * Copyright 2011-2020, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -1949,7 +1949,7 @@ uxen_vmi_cleanup_vm(struct vm_info *vmi)
         dprintk("  vcpu vm%u.%u running %s\n", domid, i,
                 vmi->vmi_vcpus[i].vci_shared.vci_runnable ? "yes" : "no");
 
-    if (vmi->vmi_marked_for_destroy == 1 && uxen_vmi_destroy_vm(vmi)) {
+    if (vmi->vmi_marked_for_destroy >= 1 && uxen_vmi_destroy_vm(vmi)) {
         printk("%s: vm%u deferred by destroy\n", __FUNCTION__, domid);
         return;
     }
