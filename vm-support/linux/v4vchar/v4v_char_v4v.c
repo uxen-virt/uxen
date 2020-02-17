@@ -32,7 +32,8 @@ static void v4vc_v4v_flush_locked(struct v4v_char_context *context)
     }
     if (context->v4v_send_addr.port == V4V_PORT_NONE)
     {
-        /* No client to send data to. */
+        /* No client to send data to. Ensure we flush when a client connects. */
+        context->v4v_flush_send_queue = 1;
         return;
     }
 
