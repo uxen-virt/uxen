@@ -56,12 +56,6 @@
 #define NOW() (get_clock_ns(rt_clock))
 #define THROTTLE_MAX_WAIT_MS 100
 
-/* topology defines, we present 1 physical CPUD with up to WHPX_MAXV_VCPUS cores */
-#define FORCE_HT_CAP
-#define MAXIMUM_LOGICAL_PROCESSORS_PER_PACKAGE WHPX_MAX_VCPUS
-#define MAXIMUM_CORES_PER_PACKAGE WHPX_MAX_VCPUS
-#define SIBLINGS_PER_CORE WHPX_MAX_VCPUS
-
 struct whpx_memory_share_zero_pages {
     uint64_t gpfn_list_gpfn;
     uint32_t nr_gpfns;
@@ -1119,49 +1113,12 @@ whpx_handle_cpuid(CPUState *cpu)
     cpu->efer  = values[13].Reg64;
 
     switch (rax) {
-    case 0x00000001:
+    case 1:
         rax = cpuid->DefaultResultRax;
         rcx = cpuid->DefaultResultRcx;
         rdx = cpuid->DefaultResultRdx;
         rbx = cpuid->DefaultResultRbx;
-
-        /* EBX[23:16] is Maximum number of addressable IDs for logical
-         * processors per package.
-         * Handle the fact that for us logical id = 2 * vcpu_id */
-        rbx = (rbx & 0x0000ffff)
-            | (((MAXIMUM_LOGICAL_PROCESSORS_PER_PACKAGE << 1) << 16) & 0x007f0000);
-
-        /* EBX[24:31] is VLAPIC id */
-        rbx = (rbx & 0x00ffffff)
-            | (WHPX_LAPIC_ID(cpu->cpu_index) << 24);
-
-#ifdef FORCE_HT_CAP
-        /* expose hyperthreading capability */
-        rdx |= 1 << 28;
-#endif
-
         rcx |= CPUID_EXT_HYPERVISOR;
-        break;
-    case 0x00000004:
-        rax = cpuid->DefaultResultRax;
-        rcx = cpuid->DefaultResultRcx;
-        rdx = cpuid->DefaultResultRdx;
-        rbx = cpuid->DefaultResultRbx;
-        /*
-         * EAX[31:26] is Maximum Cores Per Package (minus one).
-         * Updated to reflect vLAPIC_ID = vCPU_ID * 2.
-         */
-        if (rcx) {
-            rax &= ~(0x3f << 26);
-            rax |= ((MAXIMUM_CORES_PER_PACKAGE << 1) - 1) << 26;
-        }
-        break;
-    case 0x0000000b:
-        /* Fixup apic id */
-        rax = cpuid->DefaultResultRax;
-        rcx = cpuid->DefaultResultRcx;
-        rdx = WHPX_LAPIC_ID(cpu->cpu_index);
-        rbx = cpuid->DefaultResultRbx;
         break;
     case 0x40000000:
         if (vm_viridian) {
