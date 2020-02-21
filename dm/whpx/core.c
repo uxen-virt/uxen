@@ -56,6 +56,18 @@
 #define NOW() (get_clock_ns(rt_clock))
 #define THROTTLE_MAX_WAIT_MS 100
 
+/* topology defines, we present 1 physical CPUD with up to WHPX_MAXV_VCPUS cores */
+#define FORCE_HT_CAP
+#define MAXIMUM_LOGICAL_PROCESSORS_PER_PACKAGE WHPX_MAX_VCPUS
+#define MAXIMUM_CORES_PER_PACKAGE WHPX_MAX_VCPUS
+
+/* CPUID.00000001:EDX[28] */
+#define CPUID_HT (1 << 28)
+/* CPUID.80000007:EDX[8] */
+#define CPUID_INVARIANT_TSC (1 << 8)
+/* CPUID.80000001:ECX[1] */
+#define CPUID_CMP_LEGACY (1 << 1)
+
 struct whpx_memory_share_zero_pages {
     uint64_t gpfn_list_gpfn;
     uint32_t nr_gpfns;
@@ -1113,12 +1125,48 @@ whpx_handle_cpuid(CPUState *cpu)
     cpu->efer  = values[13].Reg64;
 
     switch (rax) {
-    case 1:
+    case 0x00000001:
         rax = cpuid->DefaultResultRax;
         rcx = cpuid->DefaultResultRcx;
         rdx = cpuid->DefaultResultRdx;
         rbx = cpuid->DefaultResultRbx;
+
+        /* EBX[23:16] is Maximum number of addressable IDs for logical
+         * processors per package.
+         * Handle the fact that for us logical id = 2 * vcpu_id */
+        rbx = (rbx & 0x0000ffff)
+            | (((MAXIMUM_LOGICAL_PROCESSORS_PER_PACKAGE << 1) << 16) & 0x007f0000);
+
+        /* EBX[24:31] is VLAPIC id */
+        rbx = (rbx & 0x00ffffff)
+            | (WHPX_LAPIC_ID(cpu->cpu_index) << 24);
+
+#ifdef FORCE_HT_CAP
+        /* expose hyperthreading capability */
+        rdx |= CPUID_HT;
+#endif
         rcx |= CPUID_EXT_HYPERVISOR;
+        break;
+    case 0x00000004:
+        rax = cpuid->DefaultResultRax;
+        rcx = cpuid->DefaultResultRcx;
+        rdx = cpuid->DefaultResultRdx;
+        rbx = cpuid->DefaultResultRbx;
+        /*
+         * EAX[31:26] is Maximum Cores Per Package (minus one).
+         * Updated to reflect vLAPIC_ID = vCPU_ID * 2.
+         */
+        if (rcx) {
+            rax &= ~(0x3f << 26);
+            rax |= ((MAXIMUM_CORES_PER_PACKAGE << 1) - 1) << 26;
+        }
+        break;
+    case 0x0000000b:
+        /* Fixup apic id */
+        rax = cpuid->DefaultResultRax;
+        rcx = cpuid->DefaultResultRcx;
+        rdx = WHPX_LAPIC_ID(cpu->cpu_index);
+        rbx = cpuid->DefaultResultRbx;
         break;
     case 0x40000000:
         if (vm_viridian) {
@@ -1134,6 +1182,35 @@ whpx_handle_cpuid(CPUState *cpu)
         break;
     case 0x40000001 ... 0x40000006:
         cpuid_viridian_leaves(rax, &rax, &rbx, &rcx, &rdx);
+        break;
+    case 0x80000001:
+        rax = cpuid->DefaultResultRax;
+        rcx = cpuid->DefaultResultRcx;
+        rdx = cpuid->DefaultResultRdx;
+        rbx = cpuid->DefaultResultRbx;
+        // clear CMP_LEGACY
+        rcx &= ~(CPUID_CMP_LEGACY);
+        break;
+    case 0x80000007:
+        rax = cpuid->DefaultResultRax;
+        rcx = cpuid->DefaultResultRcx;
+        rdx = cpuid->DefaultResultRdx;
+        rbx = cpuid->DefaultResultRbx;
+        // force constant tsc
+        rdx |= CPUID_INVARIANT_TSC;
+        break;
+    case 0x80000008:
+        rax = cpuid->DefaultResultRax;
+        rcx = cpuid->DefaultResultRcx;
+        rdx = cpuid->DefaultResultRdx;
+        rbx = cpuid->DefaultResultRbx;
+
+        /*
+         * ECX[15:12] is ApicIdCoreSize: ECX[7:0] is NumberOfCores (minus one).
+         * Updated to reflect vLAPIC_ID = vCPU_ID * 2.
+         */
+        rcx &= ~0xff;
+        rcx |= (MAXIMUM_CORES_PER_PACKAGE << 1) - 1;
         break;
     case CPUID_DEBUG_OUT_8:
         whpx_debug_char((char)rcx);
