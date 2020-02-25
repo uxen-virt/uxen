@@ -13,14 +13,6 @@
 
 #if defined(_WIN32)
 #include <windows.h>
-#undef ERROR
-
-#undef errno
-#define errno (({                               \
-                errno_t e;                      \
-                _get_errno(&e);                 \
-                e;                              \
-            }))
 
 #elif defined(__APPLE__)
 #include <mach/boolean.h>
