@@ -117,10 +117,9 @@ all: $(TARGET)
 SDK_include_files = uxen/uxen_desc.h
 SDK_include_files += xen/xen.h xen/xen-compat.h
 SDK_include_files += xen/features.h xen/version.h
-SDK_include_files += xen/memory.h xen/sysctl.h
+SDK_include_files += xen/memory.h xen/sysctl.h xen/errno.h
 SDK_include_files += xen/arch-x86/xen.h xen/arch-x86/xen-$(XEN_TARGET_ARCH).h
 SDK_include_files += xen/v4v.h
-
 SDK_include_files := $(patsubst %,$(SDKDIR_include)/%,$(SDK_include_files))
 
 dist: $(TARGET) $(SDK_include_files)

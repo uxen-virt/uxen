@@ -1,5 +1,5 @@
-#ifndef _I386_ERRNO_H
-#define _I386_ERRNO_H
+#ifndef __XEN_PUBLIC_ERRNO_H__
+#define __XEN_PUBLIC_ERRNO_H__
 
 #define	EPERM		 1	/* Operation not permitted */
 #define	ENOENT		 2	/* No such file or directory */
@@ -31,8 +31,5 @@
                                  * request */
 #define ERETRY          132     /* pseudo error code: generic retry from
                                    hypercall_create_retry_continuation */
-
-#define is_errno(e) ((e) >= EPERM && (e) <= ERETRY)
-#define is_neg_errno(e) is_errno(-(e))
 
 #endif
