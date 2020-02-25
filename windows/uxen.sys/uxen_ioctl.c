@@ -2,7 +2,7 @@
  *  uxen_ioctl.c
  *  uxen
  *
- * Copyright 2011-2019, Bromium, Inc.
+ * Copyright 2011-2020, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  * 
@@ -351,7 +351,7 @@ uxen_ioctl(__inout DEVICE_OBJECT *DeviceObject, __inout IRP *pIRP)
             break; /* allow */
         default:
             IOCTL_TRACE("uxen_ioctl(%lx)\n", IoControlCode);
-            IOCTL_FAILURE(STATUS_NOT_IMPLEMENTED,
+            IOCTL_FAILURE(UXEN_NTSTATUS_FROM_ERRNO(ENOSYS),
                 "uxen_ioctl(%lx) not implemented on WHP", IoControlCode);
             goto out;
         }
