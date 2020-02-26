@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019, Bromium, Inc.
+ * Copyright 2018-2020, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -89,6 +89,11 @@ int whpx_partition_destroy(void);
 void whpx_update_mapping(uint64_t start_pa, uint64_t size,
     void *host_va, int add, int rom,
     const char *name);
+/* enable/disable mapping into HV partition.
+ * NOTE: having memory mapped into partition slows some operations on it,
+ * such as initial restore CoW on clones. Therefore it is best to keep mappings
+ * disabled until vm needs to run */
+void whpx_partition_mappings_enable(int enable);
 
 int whpx_translate_gva_to_gpa(CPUState *cpu, int write, uint64_t gva, uint64_t *gpa,
                               int *is_unmapped);

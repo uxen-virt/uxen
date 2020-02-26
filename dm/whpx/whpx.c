@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019, Bromium, Inc.
+ * Copyright 2018-2020, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -284,6 +284,9 @@ all_vcpus_stopped_cb(void *opaque)
 {
     debug_printf("all vcpus stopped, reason: %d\n", shutdown_reason);
     whpx_evaluate_load(1);
+    /* ensure memory is unmapped from HyperV partition when not running */
+    whpx_partition_mappings_enable(0);
+
     if (shutdown_reason == WHPX_SHUTDOWN_PAUSE) {
         tsc_pause();
         vm_set_run_mode(PAUSE_VM);
@@ -555,6 +558,10 @@ whpx_vm_start(void)
 
     debug_printf("vm start...\n");
 
+    /* Enable mapping into HyperV partition. The goal is to minimize amount of time the mem is really mapped to
+     * only when vm is running. This reduces amount of remote TLB flushes when doing operations on the VM memory such
+     * as restoring/CoWing clones before vm start */
+    whpx_partition_mappings_enable(1);
     whpx_v4v_virq_start();
 
     shutdown_reason = 0;
@@ -1083,6 +1090,9 @@ whpx_vm_init(int restore_mode)
     current_cpu_tls = TlsAlloc();
     if (current_cpu_tls == TLS_OUT_OF_INDEXES)
         whpx_panic("out of tls indexes\n");
+
+    /* don't allow mapping memory into HyperV partition yet */
+    whpx_partition_mappings_enable(0);
 
     ret = whpx_partition_init();
     if (ret)

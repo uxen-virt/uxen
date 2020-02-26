@@ -1,5 +1,5 @@
 /*
- * Copyright 2018-2019, Bromium, Inc.
+ * Copyright 2018-2020, Bromium, Inc.
  * Author: Tomasz Wroblewski <tomasz.wroblewski@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -30,6 +30,7 @@ typedef struct mb_entry {
 
     pagerange_t r;
     void *va;
+    int partition_map_request;
     int partition_mapped;
     uint32_t flags;
 } mb_entry_t;
@@ -90,6 +91,7 @@ extern critical_section whpx_private_mem_cs;
 static uint64_t private_mem_pages;
 static void *   sys_info;
 static uint64_t sys_info_sz;
+static int partition_mappings_enable;
 
 #define uxenvm_load_read(f, buf, size, ret, err_msg, _out) do {         \
         (ret) = filebuf_read((f), (buf), (size));                       \
@@ -109,10 +111,17 @@ static uint64_t mb_pages(mb_entry_t *mb)
     return pr_bytes(&mb->r) >> PAGE_SHIFT;
 }
 
+/* Request mapping of host memory into WHP partition; actual map can happen
+ * immediately or be delayed if partition mappings are disabled */
 static void
-remap_mb(mb_entry_t *mb, int map)
+request_partition_remap(mb_entry_t *mb, int map)
 {
+    mb->partition_map_request = map;
+
     if (mb->partition_mapped == map)
+        return;
+
+    if (map && !partition_mappings_enable)
         return;
 
     whpx_update_mapping(
@@ -123,6 +132,17 @@ remap_mb(mb_entry_t *mb, int map)
         0 /* rom */,
         NULL);
     mb->partition_mapped = map;
+}
+
+void
+whpx_partition_mappings_enable(int enable)
+{
+    mb_entry_t *e;
+
+    partition_mappings_enable = enable;
+    TAILQ_FOREACH(e, &mb_entries, entry) {
+        request_partition_remap(e, enable ? e->partition_map_request : 0);
+    }
 }
 
 static void
@@ -244,29 +264,29 @@ vm_intersect_split(uint64_t phys_addr, uint64_t len)
                   ((inter.end - e->r.start) << PAGE_SHIFT);
             }
 
-            int mapped = e->partition_mapped;
+            int mapped = e->partition_map_request;
 
             // unmap existing block
-            remap_mb(e, 0);
+            request_partition_remap(e, 0);
 
             // trim existing intersecting element to intersection
             e->va = (uint8_t*)e->va + ((inter.start - e->r.start) << PAGE_SHIFT);
             e->r  = inter;
 
             // map trimmed block
-            remap_mb(e, mapped);
+            request_partition_remap(e, mapped);
             // add elements to left, right of existing one if necessary
             if (new1.start != -1LL) {
                 mb_entry_t *new_mb = create_mb_from_pr(&new1, new1va, e->flags);
                 if (!new_mb)
                     goto out;
-                remap_mb(new_mb, mapped);
+                request_partition_remap(new_mb, mapped);
             }
             if (new2.start != -1LL) {
                 mb_entry_t *new_mb = create_mb_from_pr(&new2, new2va, e->flags);
                 if (!new_mb)
                     goto out;
-                remap_mb(new_mb, mapped);
+                request_partition_remap(new_mb, mapped);
             }
         }
     }
@@ -317,7 +337,7 @@ vm_decommit_region(uint64_t phys_addr, uint64_t len)
 static void
 vm_map_region_remap(mb_entry_t *mb, void *opaque)
 {
-    remap_mb(mb, 1);
+    request_partition_remap(mb, 1);
 }
 
 static int
@@ -335,7 +355,7 @@ vm_map_region(uint64_t phys_addr, uint64_t len)
 static void
 vm_unmap_region_remap(mb_entry_t *mb, void *opaque)
 {
-    remap_mb(mb, 0);
+    request_partition_remap(mb, 0);
 }
 
 static int
