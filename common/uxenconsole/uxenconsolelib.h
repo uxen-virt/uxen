@@ -37,7 +37,7 @@ extern "C" {
 
 // NULL terminated array of valid call targets, that Krypton
 // then picks up and calls SetProcessValidCallTargets.
-extern void* UXENCONSOLE_CALL_TARGETS[];
+extern const void* const UXENCONSOLE_CALL_TARGETS[];
 
 typedef void *uxenconsole_context_t;
 typedef void *hid_context_t;

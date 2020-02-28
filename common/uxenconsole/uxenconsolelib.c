@@ -826,11 +826,13 @@ uxenconsole_select_head(uxenconsole_context_t ctx, int head)
 // Declarations from disp.c
 void CALLBACK disp_read_done(DWORD ec, DWORD count, LPOVERLAPPED ovlpd);
 void CALLBACK disp_write_done(DWORD ec, DWORD count, LPOVERLAPPED ovlpd);
+void CALLBACK timer_done(LPVOID context, DWORD unused1, DWORD unused2);
 
 // NULL terminated array of valid call targets, that Krypton
 // then picks up and calls SetProcessValidCallTargets.
-void* UXENCONSOLE_CALL_TARGETS[] = {
+const void* const UXENCONSOLE_CALL_TARGETS[] = {
     &disp_read_done,
     &disp_write_done,
+    &timer_done,
     NULL
 };

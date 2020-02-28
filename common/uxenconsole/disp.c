@@ -52,7 +52,7 @@ update_msg(struct disp_context *c)
                        disp_write_done);
 }
 
-static void CALLBACK
+void CALLBACK
 timer_done(LPVOID context, DWORD unused1, DWORD unused2)
 {
     struct disp_context *c = (struct disp_context *)context;
