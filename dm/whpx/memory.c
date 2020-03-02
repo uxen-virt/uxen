@@ -114,24 +114,28 @@ static uint64_t mb_pages(mb_entry_t *mb)
 /* Request mapping of host memory into WHP partition; actual map can happen
  * immediately or be delayed if partition mappings are disabled */
 static void
+do_partition_remap(mb_entry_t *mb, int map)
+{
+    if (mb->partition_mapped != map) {
+        whpx_update_mapping(
+            mb->r.start << PAGE_SHIFT,
+            mb_pages(mb) << PAGE_SHIFT,
+            mb->va,
+            map ? 1:0,
+            0 /* rom */,
+            NULL);
+        mb->partition_mapped = map;
+    }
+}
+
+static void
 request_partition_remap(mb_entry_t *mb, int map)
 {
     mb->partition_map_request = map;
-
-    if (mb->partition_mapped == map)
-        return;
-
     if (map && !partition_mappings_enable)
         return;
 
-    whpx_update_mapping(
-        mb->r.start << PAGE_SHIFT,
-        mb_pages(mb) << PAGE_SHIFT,
-        mb->va,
-        map ? 1:0,
-        0 /* rom */,
-        NULL);
-    mb->partition_mapped = map;
+    do_partition_remap(mb, map);
 }
 
 void
@@ -141,7 +145,7 @@ whpx_partition_mappings_enable(int enable)
 
     partition_mappings_enable = enable;
     TAILQ_FOREACH(e, &mb_entries, entry) {
-        request_partition_remap(e, enable ? e->partition_map_request : 0);
+        do_partition_remap(e, enable ? e->partition_map_request : 0);
     }
 }
 
