@@ -111,8 +111,6 @@ static uint64_t mb_pages(mb_entry_t *mb)
     return pr_bytes(&mb->r) >> PAGE_SHIFT;
 }
 
-/* Request mapping of host memory into WHP partition; actual map can happen
- * immediately or be delayed if partition mappings are disabled */
 static void
 do_partition_remap(mb_entry_t *mb, int map)
 {
@@ -128,6 +126,8 @@ do_partition_remap(mb_entry_t *mb, int map)
     }
 }
 
+/* Request mapping of host memory into WHP partition; actual map can happen
+ * immediately or be delayed if partition mappings are disabled */
 static void
 request_partition_remap(mb_entry_t *mb, int map)
 {
