@@ -1196,6 +1196,7 @@ enum_hashes_cb(uint64_t pfn, uint64_t count, void *opaque)
             assert(h->hashes);
         }
         h->hashes[h->hashes_nr].pfn = pfn;
+        h->hashes[h->hashes_nr].hash = ~0ULL;
         h->hashes_nr++;
         pfn++;
     }
