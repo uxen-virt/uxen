@@ -937,6 +937,9 @@ find_nonzero_pageranges(uint8_t *p, uint64_t len, int *count)
 static int
 save_cancelled(void)
 {
+    if (!vm_save_info.safe_to_abort)
+        return 0;
+
     int cancelled = vm_save_info.save_requested &&
         (vm_save_info.save_abort || vm_quit_interrupt);
     if (cancelled)
@@ -1324,13 +1327,15 @@ whpx_write_memory(struct filebuf *f)
     raw_pagedata_off &= PAGE_MASK;
 
     size = raw_pagedata_off - whpx_memory_data_off;
-    vm_save_set_abortable();
 
     /* calculate page hashes - can be slow operation */
     debug_printf("calculating page hashes...\n");
     memset(&pr_hashes, 0, sizeof(pr_hashes));
     enum_private_ranges(&pr_hashes, enum_hashes_cb);
     debug_printf("detected private ranges : %d pages\n", pr_hashes.hashes_nr);
+
+    vm_save_set_abortable();
+
     calculate_hashes(&pr_hashes);
     debug_printf("calculating page hashes done, %d hashes\n", pr_hashes.hashes_nr);
 
