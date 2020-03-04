@@ -91,9 +91,10 @@ struct whpx_memory_share_zero_pages {
 #define HIGH_LOAD_EXIT_THRESHOLD 1000
 #define HIGH_LOAD_DETECT_PERIOD_NS 1000000000
 
-struct whpx_state {
+typedef struct whpx_state {
     uint64_t mem_quota;
     WHV_PARTITION_HANDLE partition;
+    uint64_t cpu_features, xsave_features;
     uint64_t dm_features;
     uint64_t seed_lo, seed_hi;
     int64_t throttle_period, throttle_rate;
@@ -101,7 +102,7 @@ struct whpx_state {
     uint32_t load_counter;
     int64_t load_counter_ts;
     int high_load;
-};
+} whpx_state_t;
 
 /* registers synchronized with qemu's CPUState */
 static const WHV_REGISTER_NAME whpx_register_names[] = {
@@ -239,18 +240,26 @@ struct whpx_vcpu {
     WHV_RUN_VP_EXIT_CONTEXT exit_ctx;
 };
 
-struct whpx_state whpx_global;
+static whpx_state_t whpx_global_state;
 
-WHV_PARTITION_HANDLE whpx_get_partition(void)
+static inline whpx_state_t *
+whpx_state(void)
 {
-    return whpx_global.partition;
+    return &whpx_global_state;
+}
+
+WHV_PARTITION_HANDLE
+whpx_get_partition(void)
+{
+    return whpx_state()->partition;
 }
 
 /*
  * VP support
  */
 
-static struct whpx_vcpu *whpx_vcpu(CPUState *cpu)
+static struct whpx_vcpu *
+whpx_vcpu(CPUState *cpu)
 {
     return (struct whpx_vcpu *)cpu->hax_vcpu;
 }
@@ -752,11 +761,10 @@ static HRESULT CALLBACK whpx_emu_translate_callback(
     WHV_GUEST_PHYSICAL_ADDRESS *Gpa)
 {
     HRESULT hr;
-    struct whpx_state *whpx = &whpx_global;
     CPUState *cpu = (CPUState *)ctx;
     WHV_TRANSLATE_GVA_RESULT res;
 
-    hr = WHvTranslateGva(whpx->partition, cpu->cpu_index,
+    hr = WHvTranslateGva(whpx_state()->partition, cpu->cpu_index,
                          Gva, TranslateFlags, &res, Gpa);
     if (FAILED(hr)) {
         whpx_panic("WHPX: Failed to translate GVA, hr=%08lx", hr);
@@ -1042,6 +1050,8 @@ cpuid_hypervisor(uint64_t leaf, uint64_t *rax,
     uint64_t *rbx, uint64_t *rcx,
     uint64_t *rdx)
 {
+    whpx_state_t *whpx = whpx_state();
+
     leaf -= cpuid_hypervisor_base_leaf();
 
     switch (leaf) {
@@ -1058,13 +1068,13 @@ cpuid_hypervisor(uint64_t leaf, uint64_t *rax,
         *rdx = 0;
         return 1;
     case 192:
-        *rax = whpx_global.seed_lo & 0xffffffff;
-        *rbx = whpx_global.seed_lo >> 32;
-        *rcx = whpx_global.seed_hi & 0xffffffff;
-        *rdx = whpx_global.seed_hi >> 32;
+        *rax = whpx->seed_lo & 0xffffffff;
+        *rbx = whpx->seed_lo >> 32;
+        *rcx = whpx->seed_hi & 0xffffffff;
+        *rdx = whpx->seed_hi >> 32;
         return 1;
     case 193:
-        *rax = whpx_global.dm_features;
+        *rax = whpx->dm_features;
         return 1;
     default:
         return 0;
@@ -1418,7 +1428,7 @@ whpx_on_load_change(int high_load)
 void
 whpx_evaluate_load(int force_off)
 {
-    struct whpx_state *whpx = &whpx_global;
+    whpx_state_t *whpx = whpx_state();
     int high_load;
     int64_t now;
 
@@ -1466,7 +1476,7 @@ whpx_vcpu_post_run(CPUState *cpu, int throttled)
     vcpu->interrupt_in_flight = vp_ctx->ExecutionState.InterruptionPending;
 
     if (!throttled)
-        atomic_inc(&whpx_global.load_counter);
+        atomic_inc(&(whpx_state()->load_counter));
     whpx_evaluate_load(0);
 }
 
@@ -1527,7 +1537,7 @@ static int
 whpx_vcpu_run(CPUState *cpu)
 {
     HRESULT hr;
-    struct whpx_state *whpx = &whpx_global;
+    whpx_state_t *whpx = whpx_state();
     struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
     int ret = 0;
     uint64_t t0 = 0;
@@ -1545,11 +1555,11 @@ whpx_vcpu_run(CPUState *cpu)
         uint64_t throttle_rate   = 0;
 
 #ifdef VCPU_THROTTLING
-        if (whpx_global.throttle_period) {
+        if (whpx->throttle_period) {
             /* ensure it cannot change while we're reading it */
             whpx_lock_iothread();
-            throttle_period = whpx_global.throttle_period;
-            throttle_rate = whpx_global.throttle_rate;
+            throttle_period = whpx->throttle_period;
+            throttle_rate = whpx->throttle_rate;
             whpx_unlock_iothread();
         }
 #endif
@@ -1664,7 +1674,7 @@ loop_out:
 int whpx_init_vcpu(CPUState *cpu)
 {
     HRESULT hr;
-    struct whpx_state *whpx = &whpx_global;
+    whpx_state_t *whpx = whpx_state();
     struct whpx_vcpu *vcpu;
 
     vcpu = g_malloc0(sizeof(struct whpx_vcpu));
@@ -1744,11 +1754,11 @@ int whpx_vcpu_exec(CPUState *cpu)
 
 void whpx_destroy_vcpu(CPUState *cpu)
 {
-    struct whpx_state *whpx = &whpx_global;
     struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
 
     debug_printf("destroy vcpu %d\n", cpu->cpu_index);
-    HRESULT hr = WHvDeleteVirtualProcessor(whpx->partition, cpu->cpu_index);
+    HRESULT hr = WHvDeleteVirtualProcessor(
+        whpx_get_partition(), cpu->cpu_index);
     if (FAILED(hr))
       whpx_panic("WHvDeleteVirtualProcessor[%d] failed: %x\n",
           cpu->cpu_index, (int)hr);
@@ -1762,8 +1772,7 @@ void whpx_destroy_vcpu(CPUState *cpu)
 void
 whpx_vcpu_kick(CPUState *cpu)
 {
-    struct whpx_state *whpx = &whpx_global;
-    WHvCancelRunVirtualProcessor(whpx->partition, cpu->cpu_index, 0);
+    WHvCancelRunVirtualProcessor(whpx_get_partition(), cpu->cpu_index, 0);
 }
 
 int
@@ -1835,6 +1844,7 @@ int
 whpx_vcpu_set_context(CPUState *cpu, struct whpx_vcpu_context *ctx)
 {
     struct whpx_vcpu *vcpu = whpx_vcpu(cpu);
+    whpx_state_t *whpx = whpx_state();
     HRESULT hr;
     int i;
 
@@ -1848,6 +1858,11 @@ whpx_vcpu_set_context(CPUState *cpu, struct whpx_vcpu_context *ctx)
     for (i = 0; i < ctx->nreg; i++) {
         WHV_REGISTER_NAME n = ctx->reg[i];
         WHV_REGISTER_VALUE vp;
+
+        /* touching XCr0 on non-xsave system fails */
+        if ( !whpx->xsave_features &&
+             (n == WHvX64RegisterXCr0))
+            continue;
 
         memcpy(&vp, &ctx->regv[i], sizeof(WHV_REGISTER_VALUE));
 
@@ -1891,7 +1906,7 @@ whpx_update_mapping(
     void *host_va, int add, int rom,
     const char *name)
 {
-    struct whpx_state *whpx = &whpx_global;
+    whpx_state_t *whpx = whpx_state();
     HRESULT hr;
 
 #if 1
@@ -1978,14 +1993,13 @@ whpx_cpu_handle_interrupt(CPUState *cpu, int mask)
 
 int whpx_partition_init(void)
 {
-    struct whpx_state *whpx;
     int ret;
     HRESULT hr;
     WHV_CAPABILITY whpx_cap;
     WHV_CAPABILITY_FEATURES features = { };
-    whpx = &whpx_global;
+    whpx_state_t *whpx = whpx_state();
 
-    memset(whpx, 0, sizeof(struct whpx_state));
+    memset(whpx, 0, sizeof(whpx_state_t));
     whpx->mem_quota = vm_mem_mb << PAGE_SHIFT;
     whpx->load_counter_ts = NOW();
     critical_section_init(&whpx->load_eval_lock);
@@ -2039,11 +2053,20 @@ int whpx_partition_init(void)
         vme);
 
     /* log cpu features */
-    WHV_PROCESSOR_FEATURES cpuf;
+    WHV_PROCESSOR_FEATURES cpuf = { };
+    WHV_PROCESSOR_XSAVE_FEATURES xsavef = { };
 
     GET_PROPERTY(WHvPartitionPropertyCodeProcessorFeatures,
         ProcessorFeatures, cpuf);
-    debug_printf("processor features: %"PRIx64"\n", (uint64_t)cpuf.AsUINT64);
+    whpx->cpu_features = cpuf.AsUINT64;
+
+    GET_PROPERTY(WHvPartitionPropertyCodeProcessorXsaveFeatures,
+        ProcessorXsaveFeatures, xsavef);
+    whpx->xsave_features = xsavef.AsUINT64;
+
+    debug_printf("processor features: %"PRIx64" xsave: %"PRIx64"\n",
+        (uint64_t)cpuf.AsUINT64,
+        (uint64_t)xsavef.AsUINT64);
 
     hr = WHvSetupPartition(whpx->partition);
     if (FAILED(hr)) {
@@ -2075,7 +2098,7 @@ int
 whpx_partition_destroy(void)
 {
     HRESULT hr;
-    struct whpx_state *whpx = &whpx_global;
+    whpx_state_t *whpx = whpx_state();
 
     critical_section_free(&whpx->load_eval_lock);
     if (whpx->partition) {
@@ -2091,19 +2114,19 @@ whpx_partition_destroy(void)
 void
 whpx_set_dm_features(uint64_t features)
 {
-    whpx_global.dm_features = features;
+    whpx_state()->dm_features = features;
 }
 
 void
 whpx_set_random_seed(uint64_t lo, uint64_t hi)
 {
-    whpx_global.seed_lo = lo;
-    whpx_global.seed_hi = hi;
+    whpx_state()->seed_lo = lo;
+    whpx_state()->seed_hi = hi;
 }
 
 void whpx_set_cpu_throttle(uint64_t period, uint64_t rate)
 {
-    whpx_global.throttle_period = period;
-    whpx_global.throttle_rate = rate;
+    whpx_state()->throttle_period = period;
+    whpx_state()->throttle_rate = rate;
 }
 
