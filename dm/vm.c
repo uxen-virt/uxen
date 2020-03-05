@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-2019, Bromium, Inc.
+ * Copyright 2012-2020, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  */
@@ -929,6 +929,8 @@ vm_exit(void *opaque)
 static void
 vm_run_mode_change_cb(void *opaque)
 {
+    debug_printf("run mode change, from %d to %d\n", old_run_mode, run_mode);
+
     switch (run_mode) {
     case RUNNING_VM:
         if (old_run_mode == SUSPEND_VM) {
