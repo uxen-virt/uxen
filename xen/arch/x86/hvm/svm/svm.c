@@ -19,7 +19,7 @@
 /*
  * uXen changes:
  *
- * Copyright 2011-2019, Bromium, Inc.
+ * Copyright 2011-2020, Bromium, Inc.
  * Author: Christian Limpach <Christian.Limpach@gmail.com>
  * SPDX-License-Identifier: ISC
  *
@@ -80,6 +80,7 @@
 #include <asm/debugger.h>
 #include <asm/xstate.h>
 #include <asm/hvm/ax.h>
+#include <asm/hvm/attovm.h>
 
 u32 svm_feature_flags;
 
@@ -1359,6 +1360,9 @@ static void svm_vmexit_do_cpuid(struct cpu_user_regs *regs)
     if ( (inst_len = __get_instruction_length(current, INSTR_CPUID)) == 0 )
         return;
 
+    if (attovm_do_cpuid(regs))
+        goto out;
+
     eax = regs->eax;
     ebx = regs->ebx;
     ecx = regs->ecx;
@@ -1371,6 +1375,7 @@ static void svm_vmexit_do_cpuid(struct cpu_user_regs *regs)
     regs->ecx = ecx;
     regs->edx = edx;
 
+out:
     __update_guest_eip(regs, inst_len);
 }
 
