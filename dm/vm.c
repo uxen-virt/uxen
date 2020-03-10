@@ -939,7 +939,7 @@ vm_run_mode_change_cb(void *opaque)
             if (vm_resume() != 0) {
                 /* failed or aborted resume, we're still suspended */
                 run_mode = old_run_mode;
-                break;
+                return;
             }
         }
         vm_time_update();
