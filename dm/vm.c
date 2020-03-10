@@ -929,9 +929,11 @@ vm_exit(void *opaque)
 static void
 vm_run_mode_change_cb(void *opaque)
 {
-    debug_printf("run mode change, from %d to %d\n", old_run_mode, run_mode);
+    int new_run_mode = run_mode;
 
-    switch (run_mode) {
+    debug_printf("run mode change: %d -> %d\n", old_run_mode, new_run_mode);
+
+    switch (new_run_mode) {
     case RUNNING_VM:
         if (old_run_mode == SUSPEND_VM) {
             if (vm_resume() != 0) {
@@ -969,10 +971,10 @@ vm_run_mode_change_cb(void *opaque)
         break;
     }
 
-    if (run_mode == DESTROY_VM &&
+    if (new_run_mode == DESTROY_VM &&
         !vm_save_info.awaiting_suspend && !vm_save_info.save_requested)
         vm_exit(opaque);
-    old_run_mode = run_mode;
+    old_run_mode = new_run_mode;
 }
 
 static void
@@ -1055,6 +1057,12 @@ vm_start_run(void)
 }
 
 void
+vm_run_mode_changed(void)
+{
+    ioh_event_set(&vm_run_mode_change);
+}
+
+void
 vm_set_run_mode(enum vm_run_mode r)
 {
     if (!vm_init_lk) {
@@ -1101,7 +1109,7 @@ vm_set_run_mode(enum vm_run_mode r)
         break;
     }
 
-    ioh_event_set(&vm_run_mode_change);
+    vm_run_mode_changed();
 }
 
 enum vm_run_mode

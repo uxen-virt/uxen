@@ -499,9 +499,8 @@ main_loop:
 
 	vm_save_info.save_requested = 0;
 
-        /* reset run mode to trigger mode changes suppressed during
-         * save */
-        vm_set_run_mode(vm_get_run_mode());
+        /* trigger mode changes suppressed during save */
+        vm_run_mode_changed();
     }
 
     if (h264_offload)

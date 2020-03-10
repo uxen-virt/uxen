@@ -37,6 +37,7 @@ enum vm_run_mode {
 };
 void vm_set_run_mode(enum vm_run_mode r);
 enum vm_run_mode vm_get_run_mode(void);
+void vm_run_mode_changed(void);
 void vm_set_vpt_coalesce(int onoff);
 void vm_poweroff(void);
 void vm_shutdown_sync(void);
