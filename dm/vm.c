@@ -1055,6 +1055,12 @@ vm_start_run(void)
 }
 
 void
+vm_run_mode_changed(void)
+{
+    ioh_event_set(&vm_run_mode_change);
+}
+
+void
 vm_set_run_mode(enum vm_run_mode r)
 {
     if (!vm_init_lk) {
@@ -1101,7 +1107,7 @@ vm_set_run_mode(enum vm_run_mode r)
         break;
     }
 
-    ioh_event_set(&vm_run_mode_change);
+    vm_run_mode_changed();
 }
 
 enum vm_run_mode
