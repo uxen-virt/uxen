@@ -1,5 +1,5 @@
 /*
- * Copyright 2017-2019, Bromium, Inc.
+ * Copyright 2017-2020, Bromium, Inc.
  * SPDX-License-Identifier: ISC
  */
 
@@ -261,7 +261,7 @@ int ax_setup(void)
 
     if (cpu_is_intel) {
         ax_present_intel = 1;
-        ax_has_pv_vmcs = !! (AX_FEATURES_AX_PV_VMCS);
+        ax_has_pv_vmcs = !! (AX_FEATURES_AX_PV_VMCS & rdx);
         printk("AX has PV VMCS %d\n", ax_has_pv_vmcs);
     } else {
         ax_present_amd = 1;
